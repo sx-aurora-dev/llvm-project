@@ -230,6 +230,18 @@ def PPCbuild_fp128: SDNode<"PPCISD::BUILD_FP128",
                               SDTCisSameAs<1,2>]>,
                            []>;
 
+def PPCbuild_spe64: SDNode<"PPCISD::BUILD_SPE64",
+                           SDTypeProfile<1, 2,
+                             [SDTCisVT<0, f64>, SDTCisVT<1,i32>,
+                             SDTCisVT<1,i32>]>,
+                           []>;
+
+def PPCextract_spe : SDNode<"PPCISD::EXTRACT_SPE",
+                            SDTypeProfile<1, 2,
+                              [SDTCisVT<0, i32>, SDTCisVT<1, f64>,
+                              SDTCisPtrTy<2>]>,
+                              []>;
+
 // These are target-independent nodes, but have target-specific formats.
 def callseq_start : SDNode<"ISD::CALLSEQ_START", SDT_PPCCallSeqStart,
                            [SDNPHasChain, SDNPOutGlue]>;
@@ -374,7 +386,9 @@ def immZExt16  : PatLeaf<(imm), [{
   // field.  Used by instructions like 'ori'.
   return (uint64_t)N->getZExtValue() == (unsigned short)N->getZExtValue();
 }], LO16>;
-def immAnyExt8 : ImmLeaf<i32, [{ return isInt<8>(Imm) || isUInt<8>(Imm); }]>;
+def immNonAllOneAnyExt8 : ImmLeaf<i32, [{ 
+  return (isInt<8>(Imm) && (Imm != -1)) || (isUInt<8>(Imm) && (Imm != 0xFF));
+}]>;
 def immSExt5NonZero : ImmLeaf<i32, [{ return Imm && isInt<5>(Imm); }]>;
 
 // imm16Shifted* - These match immediates where the low 16-bits are zero.  There
@@ -556,10 +570,6 @@ def PPCRegCRRCAsmOperand : AsmOperandClass {
 def crrc : RegisterOperand<CRRC> {
   let ParserMatchClass = PPCRegCRRCAsmOperand;
 }
-def crrc0 : RegisterOperand<CRRC0> {
-  let ParserMatchClass = PPCRegCRRCAsmOperand;
-}
-
 def PPCRegSPERCAsmOperand : AsmOperandClass {
   let Name = "RegSPERC"; let PredicateMethod = "isRegNumber";
 }
@@ -1469,6 +1479,9 @@ let isCall = 1, PPC970_Unit = 7, Defs = [LR] in {
       def BCLn : BForm_4<16, 4, 0, 1, (outs),
                          (ins crbitrc:$bi, condbrtarget:$dst),
                          "bcl 4, $bi, $dst">;
+      def BL_NOP  : IForm_and_DForm_4_zero<18, 0, 1, 24,
+                                           (outs), (ins calltarget:$func),
+                                           "bl $func\n\tnop", IIC_BrB, []>;
     }
   }
   let Uses = [CTR, RM] in {
@@ -2602,7 +2615,7 @@ def MTCTR : XFXForm_7_ext<31, 467, 9, (outs), (ins gprc:$rS),
             PPC970_DGroup_First, PPC970_Unit_FXU;
 }
 let hasSideEffects = 1, isCodeGenOnly = 1, Defs = [CTR] in {
-let Pattern = [(int_ppc_mtctr i32:$rS)] in
+let Pattern = [(int_set_loop_iterations i32:$rS)] in
 def MTCTRloop : XFXForm_7_ext<31, 467, 9, (outs), (ins gprc:$rS),
                               "mtctr $rS", IIC_SprMTSPR>,
                 PPC970_DGroup_First, PPC970_Unit_FXU;
@@ -3029,8 +3042,15 @@ def : Pat<(and (rotl i32:$in, i32:$sh), maskimm32:$imm),
 // Calls
 def : Pat<(PPCcall (i32 tglobaladdr:$dst)),
           (BL tglobaladdr:$dst)>;
+
 def : Pat<(PPCcall (i32 texternalsym:$dst)),
           (BL texternalsym:$dst)>;
+
+// Calls for AIX only
+def : Pat<(PPCcall (i32 mcsym:$dst)),
+          (BL mcsym:$dst)>;
+def : Pat<(PPCcall_nop (i32 mcsym:$dst)),
+          (BL_NOP mcsym:$dst)>;
 
 def : Pat<(PPCtc_return (i32 tglobaladdr:$dst),  imm:$imm),
           (TCRETURNdi tglobaladdr:$dst, imm:$imm)>;
@@ -3143,7 +3163,16 @@ def ADDISdtprelHA32 : PPCEmitTimePseudo<(outs gprc:$rD), (ins gprc_nor0:$reg, s1
 def LWZtoc : PPCEmitTimePseudo<(outs gprc:$rD), (ins tocentry32:$disp, gprc:$reg),
                    "#LWZtoc",
                    [(set i32:$rD,
+                     (PPCtoc_entry tglobaladdr:$disp, i32:$reg))]>;
+def LWZtocL : PPCEmitTimePseudo<(outs gprc:$rD), (ins tocentry32:$disp, gprc_nor0:$reg),
+                    "#LWZtocL",
+                    [(set i32:$rD,
                       (PPCtoc_entry tglobaladdr:$disp, i32:$reg))]>;
+def ADDIStocHA : PPCEmitTimePseudo<(outs gprc:$rD), (ins gprc_nor0:$reg, tocentry32:$disp),
+                       "#ADDIStocHA",
+                       [(set i32:$rD,
+                         (PPCtoc_entry i32:$reg, tglobaladdr:$disp))]>;
+
 // Get Global (GOT) Base Register offset, from the word immediately preceding
 // the function label.
 def UpdateGBR : PPCEmitTimePseudo<(outs gprc:$rD, gprc:$rT), (ins gprc:$rI), "#UpdateGBR", []>;

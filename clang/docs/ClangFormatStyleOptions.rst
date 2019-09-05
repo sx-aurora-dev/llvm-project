@@ -138,7 +138,7 @@ the configuration (without a prefix: ``Auto``).
     <https://llvm.org/docs/CodingStandards.html>`_
   * ``Google``
     A style complying with `Google's C++ style guide
-    <http://google-styleguide.googlecode.com/svn/trunk/cppguide.xml>`_
+    <https://google.github.io/styleguide/cppguide.html>`_
   * ``Chromium``
     A style complying with `Chromium's style guide
     <https://www.chromium.org/developers/coding-style>`_
@@ -215,6 +215,20 @@ the configuration (without a prefix: ``Auto``).
     int         aaaa = 12;
     float       b = 23;
     std::string ccc = 23;
+
+**AlignConsecutiveMacros** (``bool``)
+  If ``true``, aligns consecutive C/C++ preprocessor macros.
+
+  This will align C/C++ preprocessor macros of consecutive lines.
+  Will result in formattings like
+
+  .. code-block:: c++
+
+    #define SHORT_NAME       42
+    #define LONGER_NAME      0x007f
+    #define EVEN_LONGER_NAME (2)
+    #define foo(x)           (x * x)
+    #define bar(y, z)        (y + z)
 
 **AlignEscapedNewlines** (``EscapedNewlineAlignmentStyle``)
   Options for aligning backslashes in escaped newlines.
@@ -330,10 +344,42 @@ the configuration (without a prefix: ``Auto``).
                     int d,
                     int e);
 
-**AllowShortBlocksOnASingleLine** (``bool``)
-  Allows contracting simple braced statements to a single line.
+**AllowShortBlocksOnASingleLine** (``ShortBlockStyle``)
+  Dependent on the value, ``while (true) { continue; }`` can be put on a
+  single line.
 
-  E.g., this allows ``if (a) { return; }`` to be put on a single line.
+  Possible values:
+
+  * ``SBS_Never`` (in configuration: ``Never``)
+    Never merge blocks into a single line.
+
+    .. code-block:: c++
+
+      while (true) {
+      }
+      while (true) {
+        continue;
+      }
+
+  * ``SBS_Empty`` (in configuration: ``Empty``)
+    Only merge empty blocks.
+
+    .. code-block:: c++
+
+      while (true) {}
+      while (true) {
+        continue;
+      }
+
+  * ``SBS_Always`` (in configuration: ``Always``)
+    Always merge short blocks into a single line.
+
+    .. code-block:: c++
+
+      while (true) {}
+      while (true) { continue; }
+
+
 
 **AllowShortCaseLabelsOnASingleLine** (``bool``)
   If ``true``, short case labels will be contracted to a single line.
@@ -1059,19 +1105,28 @@ the configuration (without a prefix: ``Auto``).
 
     .. code-block:: c++
 
-      try {
+      try
+      {
         foo();
       }
-      catch () {
+      catch ()
+      {
       }
       void foo() { bar(); }
-      class foo {
+      class foo
+      {
       };
-      if (foo()) {
+      if (foo())
+      {
       }
-      else {
+      else
+      {
       }
-      enum X : int { A, B };
+      enum X : int
+      {
+        A,
+        B
+      };
 
   * ``BS_GNU`` (in configuration: ``GNU``)
     Always break before braces and add an extra level of indentation to
@@ -1755,6 +1810,19 @@ the configuration (without a prefix: ``Auto``).
 
 
 
+**NamespaceMacros** (``std::vector<std::string>``)
+  A vector of macros which are used to open namespace blocks.
+
+  These are expected to be macros of the form:
+
+  .. code-block:: c++
+
+    NAMESPACE(<namespace-name>, ...) {
+      <namespace-content>
+    }
+
+  For example: TESTSUITE
+
 **ObjCBinPackProtocolList** (``BinPackStyle``)
   Controls bin-packing Objective-C protocol conformance list
   items into as few lines as possible when they go over ``ColumnLimit``.
@@ -1982,8 +2050,8 @@ the configuration (without a prefix: ``Auto``).
   .. code-block:: c++
 
      true:                                  false:
-     int a = 5;                     vs.     int a=5;
-     a += 42                                a+=42;
+     int a = 5;                     vs.     int a= 5;
+     a += 42;                               a+= 42;
 
 **SpaceBeforeCpp11BracedList** (``bool``)
   If ``true``, a space will be inserted before a C++11 braced list
@@ -2079,6 +2147,15 @@ the configuration (without a prefix: ``Auto``).
 
      true:                                  false:
      for (auto v : values) {}       vs.     for(auto v: values) {}
+
+**SpaceInEmptyBlock** (``bool``)
+  If ``true``, spaces will be inserted into ``{}``.
+
+  .. code-block:: c++
+
+     true:                                false:
+     void f() { }                   vs.   void f() {}
+     while (true) { }                     while (true) {}
 
 **SpaceInEmptyParentheses** (``bool``)
   If ``true``, spaces may be inserted into ``()``.
@@ -2186,6 +2263,24 @@ the configuration (without a prefix: ``Auto``).
 
 **TabWidth** (``unsigned``)
   The number of columns used for tab stops.
+
+**TypenameMacros** (``std::vector<std::string>``)
+  A vector of macros that should be interpreted as type declarations
+  instead of as function calls.
+
+  These are expected to be macros of the form:
+
+  .. code-block:: c++
+
+    STACK_OF(...)
+
+  In the .clang-format configuration file, this can be configured like:
+
+  .. code-block:: yaml
+
+    TypenameMacros: ['STACK_OF', 'LIST']
+
+  For example: OpenSSL STACK_OF, BSD LIST_ENTRY.
 
 **UseTab** (``UseTabStyle``)
   The way to use tab characters in the resulting file.

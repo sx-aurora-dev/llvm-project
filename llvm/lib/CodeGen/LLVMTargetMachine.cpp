@@ -139,7 +139,7 @@ bool LLVMTargetMachine::addAsmPrinter(PassManagerBase &PM,
 
     std::unique_ptr<MCAsmBackend> MAB(
         getTarget().createMCAsmBackend(STI, MRI, Options.MCOptions));
-    auto FOut = llvm::make_unique<formatted_raw_ostream>(Out);
+    auto FOut = std::make_unique<formatted_raw_ostream>(Out);
     MCStreamer *S = getTarget().createAsmStreamer(
         Context, std::move(FOut), Options.MCOptions.AsmVerbose,
         Options.MCOptions.MCUseDwarfDirectory, InstPrinter, std::move(MCE),
@@ -201,6 +201,15 @@ bool LLVMTargetMachine::addPassesToEmitFile(PassManagerBase &PM,
     return true;
 
   if (!TargetPassConfig::willCompleteCodeGenPipeline()) {
+    if (this->getTargetTriple().isOSAIX()) {
+      // On AIX, we might manifest MCSymbols during SDAG lowering. For MIR
+      // testing to be meaningful, we need to ensure that the symbols created
+      // are MCSymbolXCOFF variants, which requires that
+      // the TargetLoweringObjectFile instance has been initialized.
+      MCContext &Ctx = MMI->getContext();
+      const_cast<TargetLoweringObjectFile &>(*this->getObjFileLowering())
+          .Initialize(Ctx, *this);
+    }
     PM.add(createPrintMIRPass(Out));
   } else if (addAsmPrinter(PM, Out, DwoOut, FileType, MMI->getContext()))
     return true;

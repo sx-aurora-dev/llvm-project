@@ -8,6 +8,7 @@ add_clang_library(clangTidyBugproneModule
   BugproneTidyModule.cpp
   CopyConstructorInitCheck.cpp
   DanglingHandleCheck.cpp
+  DynamicStaticInitializersCheck.cpp
   ExceptionEscapeCheck.cpp
   FoldInitTypeCheck.cpp
   ForwardDeclarationNamespaceCheck.cpp
@@ -23,6 +24,7 @@ add_clang_library(clangTidyBugproneModule
   MoveForwardingReferenceCheck.cpp
   MultipleStatementMacroCheck.cpp
   ParentVirtualCallCheck.cpp
+  PosixReturnCheck.cpp
   SizeofContainerCheck.cpp
   SizeofExpressionCheck.cpp
   StringConstructorCheck.cpp

@@ -734,6 +734,14 @@ std::error_code status(int FD, file_status &Result) {
   return getStatus(FileHandle, Result);
 }
 
+std::error_code status(file_t FileHandle, file_status &Result) {
+  return getStatus(FileHandle, Result);
+}
+
+unsigned getUmask() {
+  return 0;
+}
+
 std::error_code setPermissions(const Twine &Path, perms Permissions) {
   SmallVector<wchar_t, 128> PathUTF16;
   if (std::error_code EC = widenPath(Path, PathUTF16))
@@ -765,6 +773,11 @@ std::error_code setPermissions(const Twine &Path, perms Permissions) {
   return std::error_code();
 }
 
+std::error_code setPermissions(int FD, perms Permissions) {
+  // FIXME Not implemented.
+  return std::make_error_code(std::errc::not_supported);
+}
+
 std::error_code setLastAccessAndModificationTime(int FD, TimePoint<> AccessTime,
                                                  TimePoint<> ModificationTime) {
   FILETIME AccessFT = toFILETIME(AccessTime);
@@ -775,10 +788,9 @@ std::error_code setLastAccessAndModificationTime(int FD, TimePoint<> AccessTime,
   return std::error_code();
 }
 
-std::error_code mapped_file_region::init(int FD, uint64_t Offset,
-                                         mapmode Mode) {
+std::error_code mapped_file_region::init(sys::fs::file_t OrigFileHandle,
+                                         uint64_t Offset, mapmode Mode) {
   this->Mode = Mode;
-  HANDLE OrigFileHandle = reinterpret_cast<HANDLE>(_get_osfhandle(FD));
   if (OrigFileHandle == INVALID_HANDLE_VALUE)
     return make_error_code(errc::bad_file_descriptor);
 
@@ -845,8 +857,9 @@ std::error_code mapped_file_region::init(int FD, uint64_t Offset,
   return std::error_code();
 }
 
-mapped_file_region::mapped_file_region(int fd, mapmode mode, size_t length,
-                                       uint64_t offset, std::error_code &ec)
+mapped_file_region::mapped_file_region(sys::fs::file_t fd, mapmode mode,
+                                       size_t length, uint64_t offset,
+                                       std::error_code &ec)
     : Size(length), Mapping() {
   ec = init(fd, offset, mode);
   if (ec)
@@ -1196,9 +1209,50 @@ Expected<file_t> openNativeFileForRead(const Twine &Name, OpenFlags Flags,
   return Result;
 }
 
-void closeFile(file_t &F) {
-  ::CloseHandle(F);
+file_t convertFDToNativeFile(int FD) {
+  return reinterpret_cast<HANDLE>(::_get_osfhandle(FD));
+}
+
+file_t getStdinHandle() { return ::GetStdHandle(STD_INPUT_HANDLE); }
+file_t getStdoutHandle() { return ::GetStdHandle(STD_OUTPUT_HANDLE); }
+file_t getStderrHandle() { return ::GetStdHandle(STD_ERROR_HANDLE); }
+
+Expected<size_t> readNativeFileImpl(file_t FileHandle,
+                                    MutableArrayRef<char> Buf,
+                                    OVERLAPPED *Overlap) {
+  // ReadFile can only read 2GB at a time. The caller should check the number of
+  // bytes and read in a loop until termination.
+  DWORD BytesToRead =
+      std::min(size_t(std::numeric_limits<DWORD>::max()), Buf.size());
+  DWORD BytesRead = 0;
+  if (::ReadFile(FileHandle, Buf.data(), BytesToRead, &BytesRead, Overlap))
+    return BytesRead;
+  DWORD Err = ::GetLastError();
+  // EOF is not an error.
+  if (Err == ERROR_BROKEN_PIPE || Err == ERROR_HANDLE_EOF)
+    return BytesRead;
+  return errorCodeToError(mapWindowsError(Err));
+}
+
+Expected<size_t> readNativeFile(file_t FileHandle, MutableArrayRef<char> Buf) {
+  return readNativeFileImpl(FileHandle, Buf, /*Overlap=*/nullptr);
+}
+
+Expected<size_t> readNativeFileSlice(file_t FileHandle,
+                                     MutableArrayRef<char> Buf,
+                                     uint64_t Offset) {
+  OVERLAPPED Overlapped = {};
+  Overlapped.Offset = uint32_t(Offset);
+  Overlapped.OffsetHigh = uint32_t(Offset >> 32);
+  return readNativeFileImpl(FileHandle, Buf, &Overlapped);
+}
+
+std::error_code closeFile(file_t &F) {
+  file_t TmpF = F;
   F = kInvalidFile;
+  if (!::CloseHandle(TmpF))
+    return mapWindowsError(::GetLastError());
+  return std::error_code();
 }
 
 std::error_code remove_directories(const Twine &path, bool IgnoreErrors) {

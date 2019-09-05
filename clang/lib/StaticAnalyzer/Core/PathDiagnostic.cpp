@@ -53,17 +53,6 @@
 using namespace clang;
 using namespace ento;
 
-bool PathDiagnosticMacroPiece::containsEvent() const {
-  for (const auto &P : subPieces) {
-    if (isa<PathDiagnosticEventPiece>(*P))
-      return true;
-    if (const auto *MP = dyn_cast<PathDiagnosticMacroPiece>(P.get()))
-      if (MP->containsEvent())
-        return true;
-  }
-  return false;
-}
-
 static StringRef StripTrailingDots(StringRef s) {
   for (StringRef::size_type i = s.size(); i != 0; --i)
     if (s[i - 1] != '.')
@@ -89,6 +78,8 @@ PathDiagnosticControlFlowPiece::~PathDiagnosticControlFlowPiece() = default;
 PathDiagnosticMacroPiece::~PathDiagnosticMacroPiece() = default;
 
 PathDiagnosticNotePiece::~PathDiagnosticNotePiece() = default;
+
+PathDiagnosticPopUpPiece::~PathDiagnosticPopUpPiece() = default;
 
 void PathPieces::flattenTo(PathPieces &Primary, PathPieces &Current,
                            bool ShouldFlattenMacros) const {
@@ -119,6 +110,7 @@ void PathPieces::flattenTo(PathPieces &Primary, PathPieces &Current,
     case PathDiagnosticPiece::Event:
     case PathDiagnosticPiece::ControlFlow:
     case PathDiagnosticPiece::Note:
+    case PathDiagnosticPiece::PopUp:
       Current.push_back(Piece);
       break;
     }
@@ -369,15 +361,16 @@ static Optional<bool> comparePiece(const PathDiagnosticPiece &X,
     case PathDiagnosticPiece::ControlFlow:
       return compareControlFlow(cast<PathDiagnosticControlFlowPiece>(X),
                                 cast<PathDiagnosticControlFlowPiece>(Y));
-    case PathDiagnosticPiece::Event:
-    case PathDiagnosticPiece::Note:
-      return None;
     case PathDiagnosticPiece::Macro:
       return compareMacro(cast<PathDiagnosticMacroPiece>(X),
                           cast<PathDiagnosticMacroPiece>(Y));
     case PathDiagnosticPiece::Call:
       return compareCall(cast<PathDiagnosticCallPiece>(X),
                          cast<PathDiagnosticCallPiece>(Y));
+    case PathDiagnosticPiece::Event:
+    case PathDiagnosticPiece::Note:
+    case PathDiagnosticPiece::PopUp:
+      return None;
   }
   llvm_unreachable("all cases handled");
 }
@@ -724,7 +717,24 @@ PathDiagnosticLocation::create(const ProgramPoint& P,
   const Stmt* S = nullptr;
   if (Optional<BlockEdge> BE = P.getAs<BlockEdge>()) {
     const CFGBlock *BSrc = BE->getSrc();
-    S = BSrc->getTerminatorCondition();
+    if (BSrc->getTerminator().isVirtualBaseBranch()) {
+      // TODO: VirtualBaseBranches should also appear for destructors.
+      // In this case we should put the diagnostic at the end of decl.
+      return PathDiagnosticLocation::createBegin(
+          P.getLocationContext()->getDecl(), SMng);
+
+    } else {
+      S = BSrc->getTerminatorCondition();
+      if (!S) {
+        // If the BlockEdge has no terminator condition statement but its
+        // source is the entry of the CFG (e.g. a checker crated the branch at
+        // the beginning of a function), use the function's declaration instead.
+        assert(BSrc == &BSrc->getParent()->getEntry() && "CFGBlock has no "
+               "TerminatorCondition and is not the enrty block of the CFG");
+        return PathDiagnosticLocation::createBegin(
+            P.getLocationContext()->getDecl(), SMng);
+      }
+    }
   } else if (Optional<StmtPoint> SP = P.getAs<StmtPoint>()) {
     S = SP->getStmt();
     if (P.getAs<PostStmtPurgeDeadSymbols>())
@@ -759,6 +769,9 @@ PathDiagnosticLocation::create(const ProgramPoint& P,
           NewAllocElt->getAllocatorExpr()->getBeginLoc(), SMng);
     }
     llvm_unreachable("Unexpected CFG element at front of block");
+  } else if (Optional<FunctionExitPoint> FE = P.getAs<FunctionExitPoint>()) {
+    return PathDiagnosticLocation(FE->getStmt(), SMng,
+                                  FE->getLocationContext());
   } else {
     llvm_unreachable("Unexpected ProgramPoint");
   }
@@ -1270,6 +1283,10 @@ void PathDiagnosticNotePiece::Profile(llvm::FoldingSetNodeID &ID) const {
   PathDiagnosticSpotPiece::Profile(ID);
 }
 
+void PathDiagnosticPopUpPiece::Profile(llvm::FoldingSetNodeID &ID) const {
+  PathDiagnosticSpotPiece::Profile(ID);
+}
+
 void PathDiagnostic::Profile(llvm::FoldingSetNodeID &ID) const {
   ID.Add(getLocation());
   ID.AddString(BugType);
@@ -1390,6 +1407,13 @@ LLVM_DUMP_METHOD void PathDiagnosticMacroPiece::dump() const {
 
 LLVM_DUMP_METHOD void PathDiagnosticNotePiece::dump() const {
   llvm::errs() << "NOTE\n--------------\n";
+  llvm::errs() << getString() << "\n";
+  llvm::errs() << " ---- at ----\n";
+  getLocation().dump();
+}
+
+LLVM_DUMP_METHOD void PathDiagnosticPopUpPiece::dump() const {
+  llvm::errs() << "POP-UP\n--------------\n";
   llvm::errs() << getString() << "\n";
   llvm::errs() << " ---- at ----\n";
   getLocation().dump();

@@ -38,7 +38,6 @@
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/Dominators.h"
@@ -559,12 +558,18 @@ bool llvm::isValidAssumeForContext(const Instruction *Inv,
         return true;
   }
 
+  // Don't let an assume affect itself - this would cause the problems
+  // `isEphemeralValueOf` is trying to prevent, and it would also make
+  // the loop below go out of bounds.
+  if (Inv == CxtI)
+    return false;
+
   // The context comes first, but they're both in the same block. Make sure
   // there is nothing in between that might interrupt the control flow.
   for (BasicBlock::const_iterator I =
          std::next(BasicBlock::const_iterator(CxtI)), IE(Inv);
        I != IE; ++I)
-    if (!isSafeToSpeculativelyExecute(&*I) && !isAssumeLikeIntrinsic(&*I))
+    if (!isGuaranteedToTransferExecutionToSuccessor(&*I))
       return false;
 
   return !isEphemeralValueOf(Inv, CxtI);
@@ -1096,7 +1101,8 @@ static void computeKnownBitsFromOperator(const Operator *I, KnownBits &Known,
       // RHS from matchSelectPattern returns the negation part of abs pattern.
       // If the negate has an NSW flag we can assume the sign bit of the result
       // will be 0 because that makes abs(INT_MIN) undefined.
-      if (Q.IIQ.hasNoSignedWrap(cast<Instruction>(RHS)))
+      if (match(RHS, m_Neg(m_Specific(LHS))) &&
+          Q.IIQ.hasNoSignedWrap(cast<Instruction>(RHS)))
         MaxHighZeros = 1;
     }
 
@@ -1367,7 +1373,7 @@ static void computeKnownBitsFromOperator(const Operator *I, KnownBits &Known,
           else if (LR == I)
             L = LL;
           else
-            break;
+            continue; // Check for recurrence with L and R flipped.
           // Ok, we have a PHI of the form L op= R. Check for low
           // zero bits.
           computeKnownBits(R, Known2, Depth + 1, Q);
@@ -1999,6 +2005,15 @@ bool isKnownNonZero(const Value *V, unsigned Depth, const Query &Q) {
       // Must be non-zero due to null test above.
       return true;
 
+    if (auto *CE = dyn_cast<ConstantExpr>(C)) {
+      // See the comment for IntToPtr/PtrToInt instructions below.
+      if (CE->getOpcode() == Instruction::IntToPtr ||
+          CE->getOpcode() == Instruction::PtrToInt)
+        if (Q.DL.getTypeSizeInBits(CE->getOperand(0)->getType()) <=
+            Q.DL.getTypeSizeInBits(CE->getType()))
+          return isKnownNonZero(CE->getOperand(0), Depth, Q);
+    }
+
     // For constant vectors, check that all elements are undefined or known
     // non-zero to determine that the whole vector is known non-zero.
     if (auto *VecTy = dyn_cast<VectorType>(C->getType())) {
@@ -2058,7 +2073,7 @@ bool isKnownNonZero(const Value *V, unsigned Depth, const Query &Q) {
     if (const auto *Call = dyn_cast<CallBase>(V)) {
       if (Call->isReturnNonNull())
         return true;
-      if (const auto *RP = getArgumentAliasingToReturnedPointer(Call))
+      if (const auto *RP = getArgumentAliasingToReturnedPointer(Call, true))
         return isKnownNonZero(RP, Depth, Q);
     }
   }
@@ -3166,7 +3181,7 @@ bool llvm::isKnownNeverNaN(const Value *V, const TargetLibraryInfo *TLI,
   return true;
 }
 
-Value *llvm::isBytewiseValue(Value *V) {
+Value *llvm::isBytewiseValue(Value *V, const DataLayout &DL) {
 
   // All byte-wide stores are splatable, even of arbitrary variables.
   if (V->getType()->isIntegerTy(8))
@@ -3177,6 +3192,10 @@ Value *llvm::isBytewiseValue(Value *V) {
   // Undef don't care.
   auto *UndefInt8 = UndefValue::get(Type::getInt8Ty(Ctx));
   if (isa<UndefValue>(V))
+    return UndefInt8;
+
+  const uint64_t Size = DL.getTypeStoreSize(V->getType());
+  if (!Size)
     return UndefInt8;
 
   Constant *C = dyn_cast<Constant>(V);
@@ -3205,7 +3224,8 @@ Value *llvm::isBytewiseValue(Value *V) {
     else if (CFP->getType()->isDoubleTy())
       Ty = Type::getInt64Ty(Ctx);
     // Don't handle long double formats, which have strange constraints.
-    return Ty ? isBytewiseValue(ConstantExpr::getBitCast(CFP, Ty)) : nullptr;
+    return Ty ? isBytewiseValue(ConstantExpr::getBitCast(CFP, Ty), DL)
+              : nullptr;
   }
 
   // We can handle constant integers that are multiple of 8 bits.
@@ -3215,6 +3235,17 @@ Value *llvm::isBytewiseValue(Value *V) {
       if (!CI->getValue().isSplat(8))
         return nullptr;
       return ConstantInt::get(Ctx, CI->getValue().trunc(8));
+    }
+  }
+
+  if (auto *CE = dyn_cast<ConstantExpr>(C)) {
+    if (CE->getOpcode() == Instruction::IntToPtr) {
+      auto PS = DL.getPointerSizeInBits(
+          cast<PointerType>(CE->getType())->getAddressSpace());
+      return isBytewiseValue(
+          ConstantExpr::getIntegerCast(CE->getOperand(0),
+                                       Type::getIntNTy(Ctx, PS), false),
+          DL);
     }
   }
 
@@ -3233,20 +3264,15 @@ Value *llvm::isBytewiseValue(Value *V) {
   if (ConstantDataSequential *CA = dyn_cast<ConstantDataSequential>(C)) {
     Value *Val = UndefInt8;
     for (unsigned I = 0, E = CA->getNumElements(); I != E; ++I)
-      if (!(Val = Merge(Val, isBytewiseValue(CA->getElementAsConstant(I)))))
+      if (!(Val = Merge(Val, isBytewiseValue(CA->getElementAsConstant(I), DL))))
         return nullptr;
     return Val;
   }
 
-  if (isa<ConstantVector>(C)) {
-    Constant *Splat = cast<ConstantVector>(C)->getSplatValue();
-    return Splat ? isBytewiseValue(Splat) : nullptr;
-  }
-
-  if (isa<ConstantArray>(C) || isa<ConstantStruct>(C)) {
+  if (isa<ConstantAggregate>(C)) {
     Value *Val = UndefInt8;
     for (unsigned I = 0, E = C->getNumOperands(); I != E; ++I)
-      if (!(Val = Merge(Val, isBytewiseValue(C->getOperand(I)))))
+      if (!(Val = Merge(Val, isBytewiseValue(C->getOperand(I), DL))))
         return nullptr;
     return Val;
   }
@@ -3420,57 +3446,6 @@ Value *llvm::FindInsertedValue(Value *V, ArrayRef<unsigned> idx_range,
   // Otherwise, we don't know (such as, extracting from a function return value
   // or load instruction)
   return nullptr;
-}
-
-/// Analyze the specified pointer to see if it can be expressed as a base
-/// pointer plus a constant offset. Return the base and offset to the caller.
-Value *llvm::GetPointerBaseWithConstantOffset(Value *Ptr, int64_t &Offset,
-                                              const DataLayout &DL) {
-  unsigned BitWidth = DL.getIndexTypeSizeInBits(Ptr->getType());
-  APInt ByteOffset(BitWidth, 0);
-
-  // We walk up the defs but use a visited set to handle unreachable code. In
-  // that case, we stop after accumulating the cycle once (not that it
-  // matters).
-  SmallPtrSet<Value *, 16> Visited;
-  while (Visited.insert(Ptr).second) {
-    if (Ptr->getType()->isVectorTy())
-      break;
-
-    if (GEPOperator *GEP = dyn_cast<GEPOperator>(Ptr)) {
-      // If one of the values we have visited is an addrspacecast, then
-      // the pointer type of this GEP may be different from the type
-      // of the Ptr parameter which was passed to this function.  This
-      // means when we construct GEPOffset, we need to use the size
-      // of GEP's pointer type rather than the size of the original
-      // pointer type.
-      APInt GEPOffset(DL.getIndexTypeSizeInBits(Ptr->getType()), 0);
-      if (!GEP->accumulateConstantOffset(DL, GEPOffset))
-        break;
-
-      APInt OrigByteOffset(ByteOffset);
-      ByteOffset += GEPOffset.sextOrTrunc(ByteOffset.getBitWidth());
-      if (ByteOffset.getMinSignedBits() > 64) {
-        // Stop traversal if the pointer offset wouldn't fit into int64_t
-        // (this should be removed if Offset is updated to an APInt)
-        ByteOffset = OrigByteOffset;
-        break;
-      }
-
-      Ptr = GEP->getPointerOperand();
-    } else if (Operator::getOpcode(Ptr) == Instruction::BitCast ||
-               Operator::getOpcode(Ptr) == Instruction::AddrSpaceCast) {
-      Ptr = cast<Operator>(Ptr)->getOperand(0);
-    } else if (GlobalAlias *GA = dyn_cast<GlobalAlias>(Ptr)) {
-      if (GA->isInterposable())
-        break;
-      Ptr = GA->getAliasee();
-    } else {
-      break;
-    }
-  }
-  Offset = ByteOffset.getSExtValue();
-  return Ptr;
 }
 
 bool llvm::isGEPBasedOnPointerToString(const GEPOperator *GEP,
@@ -3683,21 +3658,28 @@ uint64_t llvm::GetStringLength(const Value *V, unsigned CharSize) {
   return Len == ~0ULL ? 1 : Len;
 }
 
-const Value *llvm::getArgumentAliasingToReturnedPointer(const CallBase *Call) {
+const Value *
+llvm::getArgumentAliasingToReturnedPointer(const CallBase *Call,
+                                           bool MustPreserveNullness) {
   assert(Call &&
          "getArgumentAliasingToReturnedPointer only works on nonnull calls");
   if (const Value *RV = Call->getReturnedArgOperand())
     return RV;
   // This can be used only as a aliasing property.
-  if (isIntrinsicReturningPointerAliasingArgumentWithoutCapturing(Call))
+  if (isIntrinsicReturningPointerAliasingArgumentWithoutCapturing(
+          Call, MustPreserveNullness))
     return Call->getArgOperand(0);
   return nullptr;
 }
 
 bool llvm::isIntrinsicReturningPointerAliasingArgumentWithoutCapturing(
-    const CallBase *Call) {
+    const CallBase *Call, bool MustPreserveNullness) {
   return Call->getIntrinsicID() == Intrinsic::launder_invariant_group ||
-         Call->getIntrinsicID() == Intrinsic::strip_invariant_group;
+         Call->getIntrinsicID() == Intrinsic::strip_invariant_group ||
+         Call->getIntrinsicID() == Intrinsic::aarch64_irg ||
+         Call->getIntrinsicID() == Intrinsic::aarch64_tagp ||
+         (!MustPreserveNullness &&
+          Call->getIntrinsicID() == Intrinsic::ptrmask);
 }
 
 /// \p PN defines a loop-variant pointer to an object.  Check if the
@@ -3755,7 +3737,7 @@ Value *llvm::GetUnderlyingObject(Value *V, const DataLayout &DL,
         // because it should be in sync with CaptureTracking. Not using it may
         // cause weird miscompilations where 2 aliasing pointers are assumed to
         // noalias.
-        if (auto *RP = getArgumentAliasingToReturnedPointer(Call)) {
+        if (auto *RP = getArgumentAliasingToReturnedPointer(Call, false)) {
           V = RP;
           continue;
         }
@@ -3948,7 +3930,8 @@ bool llvm::isSafeToSpeculativelyExecute(const Value *V,
       return false;
     const DataLayout &DL = LI->getModule()->getDataLayout();
     return isDereferenceableAndAlignedPointer(LI->getPointerOperand(),
-                                              LI->getAlignment(), DL, CtxI, DT);
+                                              LI->getType(), LI->getAlignment(),
+                                              DL, CtxI, DT);
   }
   case Instruction::Call: {
     auto *CI = cast<const CallInst>(Inst);
@@ -3987,51 +3970,46 @@ bool llvm::mayBeMemoryDependent(const Instruction &I) {
   return I.mayReadOrWriteMemory() || !isSafeToSpeculativelyExecute(&I);
 }
 
+/// Convert ConstantRange OverflowResult into ValueTracking OverflowResult.
+static OverflowResult mapOverflowResult(ConstantRange::OverflowResult OR) {
+  switch (OR) {
+    case ConstantRange::OverflowResult::MayOverflow:
+      return OverflowResult::MayOverflow;
+    case ConstantRange::OverflowResult::AlwaysOverflowsLow:
+      return OverflowResult::AlwaysOverflowsLow;
+    case ConstantRange::OverflowResult::AlwaysOverflowsHigh:
+      return OverflowResult::AlwaysOverflowsHigh;
+    case ConstantRange::OverflowResult::NeverOverflows:
+      return OverflowResult::NeverOverflows;
+  }
+  llvm_unreachable("Unknown OverflowResult");
+}
+
+/// Combine constant ranges from computeConstantRange() and computeKnownBits().
+static ConstantRange computeConstantRangeIncludingKnownBits(
+    const Value *V, bool ForSigned, const DataLayout &DL, unsigned Depth,
+    AssumptionCache *AC, const Instruction *CxtI, const DominatorTree *DT,
+    OptimizationRemarkEmitter *ORE = nullptr, bool UseInstrInfo = true) {
+  KnownBits Known = computeKnownBits(
+      V, DL, Depth, AC, CxtI, DT, ORE, UseInstrInfo);
+  ConstantRange CR1 = ConstantRange::fromKnownBits(Known, ForSigned);
+  ConstantRange CR2 = computeConstantRange(V, UseInstrInfo);
+  ConstantRange::PreferredRangeType RangeType =
+      ForSigned ? ConstantRange::Signed : ConstantRange::Unsigned;
+  return CR1.intersectWith(CR2, RangeType);
+}
+
 OverflowResult llvm::computeOverflowForUnsignedMul(
     const Value *LHS, const Value *RHS, const DataLayout &DL,
     AssumptionCache *AC, const Instruction *CxtI, const DominatorTree *DT,
     bool UseInstrInfo) {
-  // Multiplying n * m significant bits yields a result of n + m significant
-  // bits. If the total number of significant bits does not exceed the
-  // result bit width (minus 1), there is no overflow.
-  // This means if we have enough leading zero bits in the operands
-  // we can guarantee that the result does not overflow.
-  // Ref: "Hacker's Delight" by Henry Warren
-  unsigned BitWidth = LHS->getType()->getScalarSizeInBits();
-  KnownBits LHSKnown(BitWidth);
-  KnownBits RHSKnown(BitWidth);
-  computeKnownBits(LHS, LHSKnown, DL, /*Depth=*/0, AC, CxtI, DT, nullptr,
-                   UseInstrInfo);
-  computeKnownBits(RHS, RHSKnown, DL, /*Depth=*/0, AC, CxtI, DT, nullptr,
-                   UseInstrInfo);
-  // Note that underestimating the number of zero bits gives a more
-  // conservative answer.
-  unsigned ZeroBits = LHSKnown.countMinLeadingZeros() +
-                      RHSKnown.countMinLeadingZeros();
-  // First handle the easy case: if we have enough zero bits there's
-  // definitely no overflow.
-  if (ZeroBits >= BitWidth)
-    return OverflowResult::NeverOverflows;
-
-  // Get the largest possible values for each operand.
-  APInt LHSMax = ~LHSKnown.Zero;
-  APInt RHSMax = ~RHSKnown.Zero;
-
-  // We know the multiply operation doesn't overflow if the maximum values for
-  // each operand will not overflow after we multiply them together.
-  bool MaxOverflow;
-  (void)LHSMax.umul_ov(RHSMax, MaxOverflow);
-  if (!MaxOverflow)
-    return OverflowResult::NeverOverflows;
-
-  // We know it always overflows if multiplying the smallest possible values for
-  // the operands also results in overflow.
-  bool MinOverflow;
-  (void)LHSKnown.One.umul_ov(RHSKnown.One, MinOverflow);
-  if (MinOverflow)
-    return OverflowResult::AlwaysOverflows;
-
-  return OverflowResult::MayOverflow;
+  KnownBits LHSKnown = computeKnownBits(LHS, DL, /*Depth=*/0, AC, CxtI, DT,
+                                        nullptr, UseInstrInfo);
+  KnownBits RHSKnown = computeKnownBits(RHS, DL, /*Depth=*/0, AC, CxtI, DT,
+                                        nullptr, UseInstrInfo);
+  ConstantRange LHSRange = ConstantRange::fromKnownBits(LHSKnown, false);
+  ConstantRange RHSRange = ConstantRange::fromKnownBits(RHSKnown, false);
+  return mapOverflowResult(LHSRange.unsignedMulMayOverflow(RHSRange));
 }
 
 OverflowResult
@@ -4075,33 +4053,6 @@ llvm::computeOverflowForSignedMul(const Value *LHS, const Value *RHS,
       return OverflowResult::NeverOverflows;
   }
   return OverflowResult::MayOverflow;
-}
-
-/// Convert ConstantRange OverflowResult into ValueTracking OverflowResult.
-static OverflowResult mapOverflowResult(ConstantRange::OverflowResult OR) {
-  switch (OR) {
-    case ConstantRange::OverflowResult::MayOverflow:
-      return OverflowResult::MayOverflow;
-    case ConstantRange::OverflowResult::AlwaysOverflows:
-      return OverflowResult::AlwaysOverflows;
-    case ConstantRange::OverflowResult::NeverOverflows:
-      return OverflowResult::NeverOverflows;
-  }
-  llvm_unreachable("Unknown OverflowResult");
-}
-
-/// Combine constant ranges from computeConstantRange() and computeKnownBits().
-static ConstantRange computeConstantRangeIncludingKnownBits(
-    const Value *V, bool ForSigned, const DataLayout &DL, unsigned Depth,
-    AssumptionCache *AC, const Instruction *CxtI, const DominatorTree *DT,
-    OptimizationRemarkEmitter *ORE = nullptr, bool UseInstrInfo = true) {
-  KnownBits Known = computeKnownBits(
-      V, DL, Depth, AC, CxtI, DT, ORE, UseInstrInfo);
-  ConstantRange CR1 = ConstantRange::fromKnownBits(Known, ForSigned);
-  ConstantRange CR2 = computeConstantRange(V, UseInstrInfo);
-  ConstantRange::PreferredRangeType RangeType =
-      ForSigned ? ConstantRange::Signed : ConstantRange::Unsigned;
-  return CR1.intersectWith(CR2, RangeType);
 }
 
 OverflowResult llvm::computeOverflowForUnsignedAdd(
@@ -4282,22 +4233,9 @@ OverflowResult llvm::computeOverflowForSignedAdd(const Value *LHS,
 }
 
 bool llvm::isGuaranteedToTransferExecutionToSuccessor(const Instruction *I) {
-  // A memory operation returns normally if it isn't volatile. A volatile
-  // operation is allowed to trap.
-  //
-  // An atomic operation isn't guaranteed to return in a reasonable amount of
-  // time because it's possible for another thread to interfere with it for an
+  // Note: An atomic operation isn't guaranteed to return in a reasonable amount
+  // of time because it's possible for another thread to interfere with it for an
   // arbitrary length of time, but programs aren't allowed to rely on that.
-  if (const LoadInst *LI = dyn_cast<LoadInst>(I))
-    return !LI->isVolatile();
-  if (const StoreInst *SI = dyn_cast<StoreInst>(I))
-    return !SI->isVolatile();
-  if (const AtomicCmpXchgInst *CXI = dyn_cast<AtomicCmpXchgInst>(I))
-    return !CXI->isVolatile();
-  if (const AtomicRMWInst *RMWI = dyn_cast<AtomicRMWInst>(I))
-    return !RMWI->isVolatile();
-  if (const MemIntrinsic *MII = dyn_cast<MemIntrinsic>(I))
-    return !MII->isVolatile();
 
   // If there is no successor, then execution can't transfer to it.
   if (const auto *CRI = dyn_cast<CleanupReturnInst>(I))
@@ -4317,6 +4255,11 @@ bool llvm::isGuaranteedToTransferExecutionToSuccessor(const Instruction *I) {
     if (!CS.doesNotThrow())
       return false;
 
+    // A function which doens't throw and has "willreturn" attribute will
+    // always return.
+    if (CS.hasFnAttr(Attribute::WillReturn))
+      return true;
+
     // Non-throwing call sites can loop infinitely, call exit/pthread_exit
     // etc. and thus not return.  However, LLVM already assumes that
     //
@@ -4333,10 +4276,7 @@ bool llvm::isGuaranteedToTransferExecutionToSuccessor(const Instruction *I) {
 
     // FIXME: This isn't aggressive enough; a call which only writes to a global
     // is guaranteed to return.
-    return CS.onlyReadsMemory() || CS.onlyAccessesArgMemory() ||
-           match(I, m_Intrinsic<Intrinsic::assume>()) ||
-           match(I, m_Intrinsic<Intrinsic::sideeffect>()) ||
-           match(I, m_Intrinsic<Intrinsic::experimental_widenable_condition>());
+    return CS.onlyReadsMemory() || CS.onlyAccessesArgMemory();
   }
 
   // Other instructions return normally.
@@ -4368,6 +4308,8 @@ bool llvm::isGuaranteedToExecuteForEveryIteration(const Instruction *I,
 }
 
 bool llvm::propagatesFullPoison(const Instruction *I) {
+  // TODO: This should include all instructions apart from phis, selects and
+  // call-like instructions.
   switch (I->getOpcode()) {
   case Instruction::Add:
   case Instruction::Sub:
@@ -4420,9 +4362,20 @@ const Value *llvm::getGuaranteedNonFullPoisonOp(const Instruction *I) {
       return I->getOperand(1);
 
     default:
+      // Note: It's really tempting to think that a conditional branch or
+      // switch should be listed here, but that's incorrect.  It's not
+      // branching off of poison which is UB, it is executing a side effecting
+      // instruction which follows the branch.
       return nullptr;
   }
 }
+
+bool llvm::mustTriggerUB(const Instruction *I,
+                         const SmallSet<const Value *, 16>& KnownPoison) {
+  auto *NotPoison = getGuaranteedNonFullPoisonOp(I);
+  return (NotPoison && KnownPoison.count(NotPoison));
+}
+
 
 bool llvm::programUndefinedIfFullPoison(const Instruction *PoisonI) {
   // We currently only look for uses of poison values within the same basic
@@ -4447,8 +4400,7 @@ bool llvm::programUndefinedIfFullPoison(const Instruction *PoisonI) {
   while (Iter++ < MaxDepth) {
     for (auto &I : make_range(Begin, End)) {
       if (&I != PoisonI) {
-        const Value *NotPoison = getGuaranteedNonFullPoisonOp(&I);
-        if (NotPoison != nullptr && YieldsPoison.count(NotPoison))
+        if (mustTriggerUB(&I, YieldsPoison))
           return true;
         if (!isGuaranteedToTransferExecutionToSuccessor(&I))
           return false;
@@ -5099,11 +5051,19 @@ SelectPatternResult llvm::matchSelectPattern(Value *V, Value *&LHS, Value *&RHS,
   CmpInst *CmpI = dyn_cast<CmpInst>(SI->getCondition());
   if (!CmpI) return {SPF_UNKNOWN, SPNB_NA, false};
 
+  Value *TrueVal = SI->getTrueValue();
+  Value *FalseVal = SI->getFalseValue();
+
+  return llvm::matchDecomposedSelectPattern(CmpI, TrueVal, FalseVal, LHS, RHS,
+                                            CastOp, Depth);
+}
+
+SelectPatternResult llvm::matchDecomposedSelectPattern(
+    CmpInst *CmpI, Value *TrueVal, Value *FalseVal, Value *&LHS, Value *&RHS,
+    Instruction::CastOps *CastOp, unsigned Depth) {
   CmpInst::Predicate Pred = CmpI->getPredicate();
   Value *CmpLHS = CmpI->getOperand(0);
   Value *CmpRHS = CmpI->getOperand(1);
-  Value *TrueVal = SI->getTrueValue();
-  Value *FalseVal = SI->getFalseValue();
   FastMathFlags FMF;
   if (isa<FPMathOperator>(CmpI))
     FMF = CmpI->getFastMathFlags();
@@ -5663,7 +5623,7 @@ static void setLimitsForIntrinsic(const IntrinsicInst &II, APInt &Lower,
 }
 
 static void setLimitsForSelectPattern(const SelectInst &SI, APInt &Lower,
-                                      APInt &Upper) {
+                                      APInt &Upper, const InstrInfoQuery &IIQ) {
   const Value *LHS, *RHS;
   SelectPatternResult R = matchSelectPattern(&SI, LHS, RHS);
   if (R.Flavor == SPF_UNKNOWN)
@@ -5676,7 +5636,8 @@ static void setLimitsForSelectPattern(const SelectInst &SI, APInt &Lower,
     // then the result of abs(X) is [0..SIGNED_MAX],
     // otherwise it is [0..SIGNED_MIN], as -SIGNED_MIN == SIGNED_MIN.
     Lower = APInt::getNullValue(BitWidth);
-    if (cast<Instruction>(RHS)->hasNoSignedWrap())
+    if (match(RHS, m_Neg(m_Specific(LHS))) &&
+        IIQ.hasNoSignedWrap(cast<Instruction>(RHS)))
       Upper = APInt::getSignedMaxValue(BitWidth) + 1;
     else
       Upper = APInt::getSignedMinValue(BitWidth) + 1;
@@ -5730,7 +5691,7 @@ ConstantRange llvm::computeConstantRange(const Value *V, bool UseInstrInfo) {
   else if (auto *II = dyn_cast<IntrinsicInst>(V))
     setLimitsForIntrinsic(*II, Lower, Upper);
   else if (auto *SI = dyn_cast<SelectInst>(V))
-    setLimitsForSelectPattern(*SI, Lower, Upper);
+    setLimitsForSelectPattern(*SI, Lower, Upper, IIQ);
 
   ConstantRange CR = ConstantRange::getNonEmpty(Lower, Upper);
 
@@ -5739,4 +5700,82 @@ ConstantRange llvm::computeConstantRange(const Value *V, bool UseInstrInfo) {
       CR = CR.intersectWith(getConstantRangeFromMetadata(*Range));
 
   return CR;
+}
+
+static Optional<int64_t>
+getOffsetFromIndex(const GEPOperator *GEP, unsigned Idx, const DataLayout &DL) {
+  // Skip over the first indices.
+  gep_type_iterator GTI = gep_type_begin(GEP);
+  for (unsigned i = 1; i != Idx; ++i, ++GTI)
+    /*skip along*/;
+
+  // Compute the offset implied by the rest of the indices.
+  int64_t Offset = 0;
+  for (unsigned i = Idx, e = GEP->getNumOperands(); i != e; ++i, ++GTI) {
+    ConstantInt *OpC = dyn_cast<ConstantInt>(GEP->getOperand(i));
+    if (!OpC)
+      return None;
+    if (OpC->isZero())
+      continue; // No offset.
+
+    // Handle struct indices, which add their field offset to the pointer.
+    if (StructType *STy = GTI.getStructTypeOrNull()) {
+      Offset += DL.getStructLayout(STy)->getElementOffset(OpC->getZExtValue());
+      continue;
+    }
+
+    // Otherwise, we have a sequential type like an array or vector.  Multiply
+    // the index by the ElementSize.
+    uint64_t Size = DL.getTypeAllocSize(GTI.getIndexedType());
+    Offset += Size * OpC->getSExtValue();
+  }
+
+  return Offset;
+}
+
+Optional<int64_t> llvm::isPointerOffset(const Value *Ptr1, const Value *Ptr2,
+                                        const DataLayout &DL) {
+  Ptr1 = Ptr1->stripPointerCasts();
+  Ptr2 = Ptr2->stripPointerCasts();
+
+  // Handle the trivial case first.
+  if (Ptr1 == Ptr2) {
+    return 0;
+  }
+
+  const GEPOperator *GEP1 = dyn_cast<GEPOperator>(Ptr1);
+  const GEPOperator *GEP2 = dyn_cast<GEPOperator>(Ptr2);
+
+  // If one pointer is a GEP and the other isn't, then see if the GEP is a
+  // constant offset from the base, as in "P" and "gep P, 1".
+  if (GEP1 && !GEP2 && GEP1->getOperand(0)->stripPointerCasts() == Ptr2) {
+    auto Offset = getOffsetFromIndex(GEP1, 1, DL);
+    if (!Offset)
+      return None;
+    return -*Offset;
+  }
+
+  if (GEP2 && !GEP1 && GEP2->getOperand(0)->stripPointerCasts() == Ptr1) {
+    return getOffsetFromIndex(GEP2, 1, DL);
+  }
+
+  // Right now we handle the case when Ptr1/Ptr2 are both GEPs with an identical
+  // base.  After that base, they may have some number of common (and
+  // potentially variable) indices.  After that they handle some constant
+  // offset, which determines their offset from each other.  At this point, we
+  // handle no other case.
+  if (!GEP1 || !GEP2 || GEP1->getOperand(0) != GEP2->getOperand(0))
+    return None;
+
+  // Skip any common indices and track the GEP types.
+  unsigned Idx = 1;
+  for (; Idx != GEP1->getNumOperands() && Idx != GEP2->getNumOperands(); ++Idx)
+    if (GEP1->getOperand(Idx) != GEP2->getOperand(Idx))
+      break;
+
+  auto Offset1 = getOffsetFromIndex(GEP1, Idx, DL);
+  auto Offset2 = getOffsetFromIndex(GEP2, Idx, DL);
+  if (!Offset1 || !Offset2)
+    return None;
+  return *Offset2 - *Offset1;
 }

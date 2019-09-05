@@ -123,6 +123,34 @@ void TargetLoweringBase::InitLibcalls(const Triple &TT) {
   for (int LC = 0; LC < RTLIB::UNKNOWN_LIBCALL; ++LC)
     setLibcallCallingConv((RTLIB::Libcall)LC, CallingConv::C);
 
+  // For IEEE quad-precision libcall names, PPC uses "kf" instead of "tf".
+  if (TT.getArch() == Triple::ppc || TT.isPPC64()) {
+    setLibcallName(RTLIB::ADD_F128, "__addkf3");
+    setLibcallName(RTLIB::SUB_F128, "__subkf3");
+    setLibcallName(RTLIB::MUL_F128, "__mulkf3");
+    setLibcallName(RTLIB::DIV_F128, "__divkf3");
+    setLibcallName(RTLIB::FPEXT_F32_F128, "__extendsfkf2");
+    setLibcallName(RTLIB::FPEXT_F64_F128, "__extenddfkf2");
+    setLibcallName(RTLIB::FPROUND_F128_F32, "__trunckfsf2");
+    setLibcallName(RTLIB::FPROUND_F128_F64, "__trunckfdf2");
+    setLibcallName(RTLIB::FPTOSINT_F128_I32, "__fixkfsi");
+    setLibcallName(RTLIB::FPTOSINT_F128_I64, "__fixkfdi");
+    setLibcallName(RTLIB::FPTOUINT_F128_I32, "__fixunskfsi");
+    setLibcallName(RTLIB::FPTOUINT_F128_I64, "__fixunskfdi");
+    setLibcallName(RTLIB::SINTTOFP_I32_F128, "__floatsikf");
+    setLibcallName(RTLIB::SINTTOFP_I64_F128, "__floatdikf");
+    setLibcallName(RTLIB::UINTTOFP_I32_F128, "__floatunsikf");
+    setLibcallName(RTLIB::UINTTOFP_I64_F128, "__floatundikf");
+    setLibcallName(RTLIB::OEQ_F128, "__eqkf2");
+    setLibcallName(RTLIB::UNE_F128, "__nekf2");
+    setLibcallName(RTLIB::OGE_F128, "__gekf2");
+    setLibcallName(RTLIB::OLT_F128, "__ltkf2");
+    setLibcallName(RTLIB::OLE_F128, "__lekf2");
+    setLibcallName(RTLIB::OGT_F128, "__gtkf2");
+    setLibcallName(RTLIB::UO_F128, "__unordkf2");
+    setLibcallName(RTLIB::O_F128, "__unordkf2");
+  }
+
   // A few names are different on particular architectures or environments.
   if (TT.isOSDarwin()) {
     // For f16/f32 conversions, Darwin uses the standard naming scheme, instead
@@ -167,6 +195,11 @@ void TargetLoweringBase::InitLibcalls(const Triple &TT) {
     setLibcallName(RTLIB::SINCOS_F80, "sincosl");
     setLibcallName(RTLIB::SINCOS_F128, "sincosl");
     setLibcallName(RTLIB::SINCOS_PPCF128, "sincosl");
+  }
+
+  if (TT.isPS4CPU()) {
+    setLibcallName(RTLIB::SINCOS_F32, "sincosf");
+    setLibcallName(RTLIB::SINCOS_F64, "sincos");
   }
 
   if (TT.isOSOpenBSD()) {
@@ -550,8 +583,6 @@ TargetLoweringBase::TargetLoweringBase(const TargetMachine &tm) : TM(tm) {
   BooleanFloatContents = UndefinedBooleanContent;
   BooleanVectorContents = UndefinedBooleanContent;
   SchedPreferenceInfo = Sched::ILP;
-  JumpBufSize = 0;
-  JumpBufAlignment = 0;
   MinFunctionAlignment = 0;
   PrefFunctionAlignment = 0;
   PrefLoopAlignment = 0;
@@ -663,6 +694,36 @@ void TargetLoweringBase::initActions() {
       setOperationAction(ISD::ZERO_EXTEND_VECTOR_INREG, VT, Expand);
     }
 
+    // Constrained floating-point operations default to expand.
+    setOperationAction(ISD::STRICT_FADD, VT, Expand);
+    setOperationAction(ISD::STRICT_FSUB, VT, Expand);
+    setOperationAction(ISD::STRICT_FMUL, VT, Expand);
+    setOperationAction(ISD::STRICT_FDIV, VT, Expand);
+    setOperationAction(ISD::STRICT_FREM, VT, Expand);
+    setOperationAction(ISD::STRICT_FMA, VT, Expand);
+    setOperationAction(ISD::STRICT_FSQRT, VT, Expand);
+    setOperationAction(ISD::STRICT_FPOW, VT, Expand);
+    setOperationAction(ISD::STRICT_FPOWI, VT, Expand);
+    setOperationAction(ISD::STRICT_FSIN, VT, Expand);
+    setOperationAction(ISD::STRICT_FCOS, VT, Expand);
+    setOperationAction(ISD::STRICT_FEXP, VT, Expand);
+    setOperationAction(ISD::STRICT_FEXP2, VT, Expand);
+    setOperationAction(ISD::STRICT_FLOG, VT, Expand);
+    setOperationAction(ISD::STRICT_FLOG10, VT, Expand);
+    setOperationAction(ISD::STRICT_FLOG2, VT, Expand);
+    setOperationAction(ISD::STRICT_FRINT, VT, Expand);
+    setOperationAction(ISD::STRICT_FNEARBYINT, VT, Expand);
+    setOperationAction(ISD::STRICT_FCEIL, VT, Expand);
+    setOperationAction(ISD::STRICT_FFLOOR, VT, Expand);
+    setOperationAction(ISD::STRICT_FROUND, VT, Expand);
+    setOperationAction(ISD::STRICT_FTRUNC, VT, Expand);
+    setOperationAction(ISD::STRICT_FMAXNUM, VT, Expand);
+    setOperationAction(ISD::STRICT_FMINNUM, VT, Expand);
+    setOperationAction(ISD::STRICT_FP_ROUND, VT, Expand);
+    setOperationAction(ISD::STRICT_FP_EXTEND, VT, Expand);
+    setOperationAction(ISD::STRICT_FP_TO_SINT, VT, Expand);
+    setOperationAction(ISD::STRICT_FP_TO_UINT, VT, Expand);
+
     // For most targets @llvm.get.dynamic.area.offset just returns 0.
     setOperationAction(ISD::GET_DYNAMIC_AREA_OFFSET, VT, Expand);
 
@@ -713,6 +774,8 @@ void TargetLoweringBase::initActions() {
     setOperationAction(ISD::FROUND,     VT, Expand);
     setOperationAction(ISD::LROUND,     VT, Expand);
     setOperationAction(ISD::LLROUND,    VT, Expand);
+    setOperationAction(ISD::LRINT,      VT, Expand);
+    setOperationAction(ISD::LLRINT,     VT, Expand);
   }
 
   // Default ISD::TRAP to expand (which turns it into abort).
@@ -766,7 +829,8 @@ TargetLoweringBase::getTypeConversion(LLVMContext &Context, EVT VT) const {
     LegalizeTypeAction LA = ValueTypeActions.getTypeAction(SVT);
 
     assert((LA == TypeLegal || LA == TypeSoftenFloat ||
-            ValueTypeActions.getTypeAction(NVT) != TypePromoteInteger) &&
+            (NVT.isVector() ||
+             ValueTypeActions.getTypeAction(NVT) != TypePromoteInteger)) &&
            "Promote may not follow Expand or Promote");
 
     if (LA == TypeSplitVector)
@@ -1223,21 +1287,33 @@ void TargetLoweringBase::computeRegisterProperties(
       LLVM_FALLTHROUGH;
 
     case TypeWidenVector:
-      // Try to widen the vector.
-      for (unsigned nVT = i + 1; nVT <= MVT::LAST_VECTOR_VALUETYPE; ++nVT) {
-        MVT SVT = (MVT::SimpleValueType) nVT;
-        if (SVT.getVectorElementType() == EltVT
-            && SVT.getVectorNumElements() > NElts && isTypeLegal(SVT)) {
-          TransformToType[i] = SVT;
-          RegisterTypeForVT[i] = SVT;
-          NumRegistersForVT[i] = 1;
+      if (isPowerOf2_32(NElts)) {
+        // Try to widen the vector.
+        for (unsigned nVT = i + 1; nVT <= MVT::LAST_VECTOR_VALUETYPE; ++nVT) {
+          MVT SVT = (MVT::SimpleValueType) nVT;
+          if (SVT.getVectorElementType() == EltVT
+              && SVT.getVectorNumElements() > NElts && isTypeLegal(SVT)) {
+            TransformToType[i] = SVT;
+            RegisterTypeForVT[i] = SVT;
+            NumRegistersForVT[i] = 1;
+            ValueTypeActions.setTypeAction(VT, TypeWidenVector);
+            IsLegalWiderType = true;
+            break;
+          }
+        }
+        if (IsLegalWiderType)
+          break;
+      } else {
+        // Only widen to the next power of 2 to keep consistency with EVT.
+        MVT NVT = VT.getPow2VectorType();
+        if (isTypeLegal(NVT)) {
+          TransformToType[i] = NVT;
           ValueTypeActions.setTypeAction(VT, TypeWidenVector);
-          IsLegalWiderType = true;
+          RegisterTypeForVT[i] = NVT;
+          NumRegistersForVT[i] = 1;
           break;
         }
       }
-      if (IsLegalWiderType)
-        break;
       LLVM_FALLTHROUGH;
 
     case TypeSplitVector:
@@ -1418,7 +1494,7 @@ void llvm::GetReturnInfo(CallingConv::ID CC, Type *ReturnType,
       Flags.setZExt();
 
     for (unsigned i = 0; i < NumParts; ++i)
-      Outs.push_back(ISD::OutputArg(Flags, PartVT, VT, /*isFixed=*/true, 0, 0));
+      Outs.push_back(ISD::OutputArg(Flags, PartVT, VT, /*isfixed=*/true, 0, 0));
   }
 }
 
@@ -1434,6 +1510,7 @@ bool TargetLoweringBase::allowsMemoryAccess(LLVMContext &Context,
                                             const DataLayout &DL, EVT VT,
                                             unsigned AddrSpace,
                                             unsigned Alignment,
+                                            MachineMemOperand::Flags Flags,
                                             bool *Fast) const {
   // Check if the specified alignment is sufficient based on the data layout.
   // TODO: While using the data layout works in practice, a better solution
@@ -1449,7 +1526,15 @@ bool TargetLoweringBase::allowsMemoryAccess(LLVMContext &Context,
   }
 
   // This is a misaligned access.
-  return allowsMisalignedMemoryAccesses(VT, AddrSpace, Alignment, Fast);
+  return allowsMisalignedMemoryAccesses(VT, AddrSpace, Alignment, Flags, Fast);
+}
+
+bool TargetLoweringBase::allowsMemoryAccess(LLVMContext &Context,
+                                            const DataLayout &DL, EVT VT,
+                                            const MachineMemOperand &MMO,
+                                            bool *Fast) const {
+  return allowsMemoryAccess(Context, DL, VT, MMO.getAddrSpace(),
+                            MMO.getAlignment(), MMO.getFlags(), Fast);
 }
 
 BranchProbability TargetLoweringBase::getPredictableBranchThreshold() const {

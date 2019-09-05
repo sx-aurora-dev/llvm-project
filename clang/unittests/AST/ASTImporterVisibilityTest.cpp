@@ -31,6 +31,18 @@ struct GetVarPattern {
   using DeclTy = VarDecl;
   BindableMatcher<Decl> operator()() { return varDecl(hasName("v")); }
 };
+struct GetClassPattern {
+  using DeclTy = CXXRecordDecl;
+  BindableMatcher<Decl> operator()() { return cxxRecordDecl(hasName("X")); }
+};
+struct GetEnumPattern {
+  using DeclTy = EnumDecl;
+  BindableMatcher<Decl> operator()() { return enumDecl(hasName("E")); }
+};
+struct GetTypedefNamePattern {
+  using DeclTy = TypedefNameDecl;
+  BindableMatcher<Decl> operator()() { return typedefNameDecl(hasName("T")); }
+};
 
 // Values for the value-parameterized test fixtures.
 // FunctionDecl:
@@ -41,6 +53,17 @@ const auto *AnonF = "namespace { void f(); }";
 const auto *ExternV = "extern int v;";
 const auto *StaticV = "static int v;";
 const auto *AnonV = "namespace { extern int v; }";
+// CXXRecordDecl:
+const auto *ExternC = "class X;";
+const auto *AnonC = "namespace { class X; }";
+// EnumDecl:
+const auto *ExternE = "enum E {};";
+const auto *AnonE = "namespace { enum E {}; }";
+// TypedefNameDecl:
+const auto *ExternTypedef = "typedef int T;";
+const auto *AnonTypedef = "namespace { typedef int T; }";
+const auto *ExternUsing = "using T = int;";
+const auto *AnonUsing = "namespace { using T = int; }";
 
 // First value in tuple: Compile options.
 // Second value in tuple: Source code to be used in the test.
@@ -66,13 +89,13 @@ protected:
     std::string Code = getCode() + getCode();
     auto Pattern = getPattern();
 
-    TranslationUnitDecl *FromTu = getTuDecl(Code, Lang_CXX, "input0.cc");
+    TranslationUnitDecl *FromTu = getTuDecl(Code, Lang_CXX14, "input0.cc");
 
     auto *FromD0 = FirstDeclMatcher<DeclTy>().match(FromTu, Pattern);
     auto *FromD1 = LastDeclMatcher<DeclTy>().match(FromTu, Pattern);
 
-    auto *ToD0 = Import(FromD0, Lang_CXX);
-    auto *ToD1 = Import(FromD1, Lang_CXX);
+    auto *ToD0 = Import(FromD0, Lang_CXX14);
+    auto *ToD1 = Import(FromD1, Lang_CXX14);
 
     EXPECT_TRUE(ToD0);
     ASSERT_TRUE(ToD1);
@@ -84,12 +107,17 @@ protected:
 // Manual instantiation of the fixture with each type.
 using ImportFunctionsVisibilityChain = ImportVisibilityChain<GetFunPattern>;
 using ImportVariablesVisibilityChain = ImportVisibilityChain<GetVarPattern>;
-// Value-parameterized test for the first type.
+using ImportClassesVisibilityChain = ImportVisibilityChain<GetClassPattern>;
+// Value-parameterized test for functions.
 TEST_P(ImportFunctionsVisibilityChain, ImportChain) {
   TypedTest_ImportChain();
 }
-// Value-parameterized test for the second type.
+// Value-parameterized test for variables.
 TEST_P(ImportVariablesVisibilityChain, ImportChain) {
+  TypedTest_ImportChain();
+}
+// Value-parameterized test for classes.
+TEST_P(ImportClassesVisibilityChain, ImportChain) {
   TypedTest_ImportChain();
 }
 
@@ -110,6 +138,11 @@ INSTANTIATE_TEST_CASE_P(
         // provided but they must have the same linkage.  See also the test
         // ImportVariableChainInC which test for this special C Lang case.
         ::testing::Values(ExternV, AnonV)), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportClassesVisibilityChain,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(ExternC, AnonC)), );
 
 // First value in tuple: Compile options.
 // Second value in tuple: Tuple with informations for the test.
@@ -133,13 +166,14 @@ protected:
   BindableMatcher<Decl> getPattern() const { return PatternFactory()(); }
 
   void TypedTest_ImportAfter() {
-    TranslationUnitDecl *ToTu = getToTuDecl(getCode0(), Lang_CXX);
-    TranslationUnitDecl *FromTu = getTuDecl(getCode1(), Lang_CXX, "input1.cc");
+    TranslationUnitDecl *ToTu = getToTuDecl(getCode0(), Lang_CXX14);
+    TranslationUnitDecl *FromTu =
+        getTuDecl(getCode1(), Lang_CXX14, "input1.cc");
 
     auto *ToD0 = FirstDeclMatcher<DeclTy>().match(ToTu, getPattern());
     auto *FromD1 = FirstDeclMatcher<DeclTy>().match(FromTu, getPattern());
 
-    auto *ToD1 = Import(FromD1, Lang_CXX);
+    auto *ToD1 = Import(FromD1, Lang_CXX14);
 
     ASSERT_TRUE(ToD0);
     ASSERT_TRUE(ToD1);
@@ -152,12 +186,14 @@ protected:
   }
 
   void TypedTest_ImportAfterImport() {
-    TranslationUnitDecl *FromTu0 = getTuDecl(getCode0(), Lang_CXX, "input0.cc");
-    TranslationUnitDecl *FromTu1 = getTuDecl(getCode1(), Lang_CXX, "input1.cc");
+    TranslationUnitDecl *FromTu0 =
+        getTuDecl(getCode0(), Lang_CXX14, "input0.cc");
+    TranslationUnitDecl *FromTu1 =
+        getTuDecl(getCode1(), Lang_CXX14, "input1.cc");
     auto *FromD0 = FirstDeclMatcher<DeclTy>().match(FromTu0, getPattern());
     auto *FromD1 = FirstDeclMatcher<DeclTy>().match(FromTu1, getPattern());
-    auto *ToD0 = Import(FromD0, Lang_CXX);
-    auto *ToD1 = Import(FromD1, Lang_CXX);
+    auto *ToD0 = Import(FromD0, Lang_CXX14);
+    auto *ToD1 = Import(FromD1, Lang_CXX14);
     ASSERT_TRUE(ToD0);
     ASSERT_TRUE(ToD1);
     EXPECT_NE(ToD0, ToD1);
@@ -166,9 +202,57 @@ protected:
     else
       EXPECT_FALSE(ToD1->getPreviousDecl());
   }
+
+  void TypedTest_ImportAfterWithMerge() {
+    TranslationUnitDecl *ToTu = getToTuDecl(getCode0(), Lang_CXX14);
+    TranslationUnitDecl *FromTu =
+        getTuDecl(getCode1(), Lang_CXX14, "input1.cc");
+
+    auto *ToF0 = FirstDeclMatcher<DeclTy>().match(ToTu, getPattern());
+    auto *FromF1 = FirstDeclMatcher<DeclTy>().match(FromTu, getPattern());
+
+    auto *ToF1 = Import(FromF1, Lang_CXX14);
+
+    ASSERT_TRUE(ToF0);
+    ASSERT_TRUE(ToF1);
+
+    if (shouldBeLinked())
+      EXPECT_EQ(ToF0, ToF1);
+    else
+      EXPECT_NE(ToF0, ToF1);
+
+    // We expect no (ODR) warning during the import.
+    EXPECT_EQ(0u, ToTu->getASTContext().getDiagnostics().getNumWarnings());
+  }
+
+  void TypedTest_ImportAfterImportWithMerge() {
+    TranslationUnitDecl *FromTu0 =
+        getTuDecl(getCode0(), Lang_CXX14, "input0.cc");
+    TranslationUnitDecl *FromTu1 =
+        getTuDecl(getCode1(), Lang_CXX14, "input1.cc");
+    auto *FromF0 = FirstDeclMatcher<DeclTy>().match(FromTu0, getPattern());
+    auto *FromF1 = FirstDeclMatcher<DeclTy>().match(FromTu1, getPattern());
+    auto *ToF0 = Import(FromF0, Lang_CXX14);
+    auto *ToF1 = Import(FromF1, Lang_CXX14);
+    ASSERT_TRUE(ToF0);
+    ASSERT_TRUE(ToF1);
+    if (shouldBeLinked())
+      EXPECT_EQ(ToF0, ToF1);
+    else
+      EXPECT_NE(ToF0, ToF1);
+
+    // We expect no (ODR) warning during the import.
+    EXPECT_EQ(0u, ToF0->getTranslationUnitDecl()
+                      ->getASTContext()
+                      .getDiagnostics()
+                      .getNumWarnings());
+  }
 };
 using ImportFunctionsVisibility = ImportVisibility<GetFunPattern>;
 using ImportVariablesVisibility = ImportVisibility<GetVarPattern>;
+using ImportClassesVisibility = ImportVisibility<GetClassPattern>;
+using ImportEnumsVisibility = ImportVisibility<GetEnumPattern>;
+using ImportTypedefNameVisibility = ImportVisibility<GetTypedefNamePattern>;
 
 // FunctionDecl.
 TEST_P(ImportFunctionsVisibility, ImportAfter) {
@@ -183,6 +267,27 @@ TEST_P(ImportVariablesVisibility, ImportAfter) {
 }
 TEST_P(ImportVariablesVisibility, ImportAfterImport) {
   TypedTest_ImportAfterImport();
+}
+// CXXRecordDecl.
+TEST_P(ImportClassesVisibility, ImportAfter) {
+  TypedTest_ImportAfter();
+}
+TEST_P(ImportClassesVisibility, ImportAfterImport) {
+  TypedTest_ImportAfterImport();
+}
+// EnumDecl.
+TEST_P(ImportEnumsVisibility, ImportAfter) {
+  TypedTest_ImportAfterWithMerge();
+}
+TEST_P(ImportEnumsVisibility, ImportAfterImport) {
+  TypedTest_ImportAfterImportWithMerge();
+}
+// TypedefNameDecl.
+TEST_P(ImportTypedefNameVisibility, ImportAfter) {
+  TypedTest_ImportAfterWithMerge();
+}
+TEST_P(ImportTypedefNameVisibility, ImportAfterImport) {
+  TypedTest_ImportAfterImportWithMerge();
 }
 
 const bool ExpectLink = true;
@@ -214,6 +319,46 @@ INSTANTIATE_TEST_CASE_P(
                           std::make_tuple(AnonV, ExternV, ExpectNotLink),
                           std::make_tuple(AnonV, StaticV, ExpectNotLink),
                           std::make_tuple(AnonV, AnonV, ExpectNotLink))), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportClassesVisibility,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(std::make_tuple(ExternC, ExternC, ExpectLink),
+                          std::make_tuple(ExternC, AnonC, ExpectNotLink),
+                          std::make_tuple(AnonC, ExternC, ExpectNotLink),
+                          std::make_tuple(AnonC, AnonC, ExpectNotLink))), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportEnumsVisibility,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(std::make_tuple(ExternE, ExternE, ExpectLink),
+                          std::make_tuple(ExternE, AnonE, ExpectNotLink),
+                          std::make_tuple(AnonE, ExternE, ExpectNotLink),
+                          std::make_tuple(AnonE, AnonE, ExpectNotLink))), );
+INSTANTIATE_TEST_CASE_P(
+    ParameterizedTests, ImportTypedefNameVisibility,
+    ::testing::Combine(
+        DefaultTestValuesForRunOptions,
+        ::testing::Values(
+            std::make_tuple(ExternTypedef, ExternTypedef, ExpectLink),
+            std::make_tuple(ExternTypedef, AnonTypedef, ExpectNotLink),
+            std::make_tuple(AnonTypedef, ExternTypedef, ExpectNotLink),
+            std::make_tuple(AnonTypedef, AnonTypedef, ExpectNotLink),
+
+            std::make_tuple(ExternUsing, ExternUsing, ExpectLink),
+            std::make_tuple(ExternUsing, AnonUsing, ExpectNotLink),
+            std::make_tuple(AnonUsing, ExternUsing, ExpectNotLink),
+            std::make_tuple(AnonUsing, AnonUsing, ExpectNotLink),
+
+            std::make_tuple(ExternUsing, ExternTypedef, ExpectLink),
+            std::make_tuple(ExternUsing, AnonTypedef, ExpectNotLink),
+            std::make_tuple(AnonUsing, ExternTypedef, ExpectNotLink),
+            std::make_tuple(AnonUsing, AnonTypedef, ExpectNotLink),
+
+            std::make_tuple(ExternTypedef, ExternUsing, ExpectLink),
+            std::make_tuple(ExternTypedef, AnonUsing, ExpectNotLink),
+            std::make_tuple(AnonTypedef, ExternUsing, ExpectNotLink),
+            std::make_tuple(AnonTypedef, AnonUsing, ExpectNotLink))), );
 
 } // end namespace ast_matchers
 } // end namespace clang

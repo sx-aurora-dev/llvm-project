@@ -17,6 +17,11 @@ let Component = "Common" in {
 def fatal_too_many_errors
   : Error<"too many errors emitted, stopping now">, DefaultFatal;
 
+def warn_stack_exhausted : Warning<
+  "stack nearly exhausted; compilation time may suffer, and "
+  "crashes due to stack overflow are likely">,
+  InGroup<DiagGroup<"stack-exhausted">>, NoSFINAE;
+
 def note_declared_at : Note<"declared here">;
 def note_previous_definition : Note<"previous definition is here">;
 def note_previous_declaration : Note<"previous declaration is here">;
@@ -132,8 +137,8 @@ def err_nullability_conflicting : Error<
 
 // OpenCL Section 6.8.g
 def err_opencl_unknown_type_specifier : Error<
-  "OpenCL %select{C|C++}0 version %1 does not support the '%2' "
-  "%select{type qualifier|storage class specifier}3">;
+  "%select{OpenCL C|C++ for OpenCL}0 version %1 does not support the "
+  "'%2' %select{type qualifier|storage class specifier}3">;
 
 def warn_unknown_attribute_ignored : Warning<
   "unknown attribute %0 ignored">, InGroup<UnknownAttributes>;
@@ -172,6 +177,9 @@ def ext_cxx11_longlong : Extension<
 def warn_cxx98_compat_longlong : Warning<
   "'long long' is incompatible with C++98">,
   InGroup<CXX98CompatPedantic>, DefaultIgnore;
+def warn_cxx20_compat_consteval : Warning<
+  "consteval is incompatible with C++ standards before C++20">,
+  InGroup<CXX2aCompat>, DefaultIgnore;
 def err_integer_literal_too_large : Error<
   "integer literal is too large to be represented in any %select{signed |}0"
   "integer type">;
@@ -265,6 +273,8 @@ def err_opt_not_valid_on_target : Error<
 def err_cannot_open_file : Error<"cannot open file '%0': %1">, DefaultFatal;
 def err_file_modified : Error<
   "file '%0' modified since it was first processed">, DefaultFatal;
+def err_file_too_large : Error<
+  "sorry, unsupported: file '%0' is too large for Clang to process">;
 def err_unsupported_bom : Error<"%0 byte order mark detected in '%1', but "
   "encoding is not supported">, DefaultFatal;
 def err_unable_to_rename_temp : Error<
@@ -286,16 +296,16 @@ def note_mt_message : Note<"[rewriter] %0">;
 def warn_arcmt_nsalloc_realloc : Warning<"[rewriter] call returns pointer to GC managed memory; it will become unmanaged in ARC">;
 def err_arcmt_nsinvocation_ownership : Error<"NSInvocation's %0 is not safe to be used with an object with ownership other than __unsafe_unretained">;
 
-// OpenCL C++.
+// C++ for OpenCL.
 def err_openclcxx_not_supported : Error<
-  "'%0' is not supported in OpenCL C++">;
+  "'%0' is not supported in C++ for OpenCL">;
 
 // OpenMP
 def err_omp_more_one_clause : Error<
   "directive '#pragma omp %0' cannot contain more than one '%1' clause%select{| with '%3' name modifier| with 'source' dependence}2">;
 
 // Static Analyzer Core
-def err_unknown_analyzer_checker : Error<
+def err_unknown_analyzer_checker_or_package : Error<
     "no analyzer checkers or packages are associated with '%0'">;
 def note_suggest_disabling_all_checkers : Note<
     "use -analyzer-disable-all-checks to disable all static analyzer checkers">;

@@ -95,7 +95,7 @@ ParseSingleArgument(llvm::StringRef command) {
   bool arg_complete = false;
   do {
     // Skip over over regular characters and append them.
-    size_t regular = command.find_first_of(" \t\"'`\\");
+    size_t regular = command.find_first_of(" \t\r\"'`\\");
     arg += command.substr(0, regular);
     command = command.substr(regular);
 
@@ -123,6 +123,7 @@ ParseSingleArgument(llvm::StringRef command) {
 
     case ' ':
     case '\t':
+    case '\r':
       // We are not inside any quotes, we just found a space after an argument.
       // We are done.
       arg_complete = true;
@@ -171,8 +172,8 @@ Args::Args(llvm::StringRef command) { SetCommandString(command); }
 Args::Args(const Args &rhs) { *this = rhs; }
 
 Args::Args(const StringList &list) : Args() {
-  for (size_t i = 0; i < list.GetSize(); ++i)
-    AppendArgument(list[i]);
+  for (const std::string &arg : list)
+    AppendArgument(arg);
 }
 
 Args &Args::operator=(const Args &rhs) {
