@@ -68,9 +68,7 @@ using DisplacementSizeMap = std::map<int64_t, unsigned>;
 class X86AvoidSFBPass : public MachineFunctionPass {
 public:
   static char ID;
-  X86AvoidSFBPass() : MachineFunctionPass(ID) {
-    initializeX86AvoidSFBPassPass(*PassRegistry::getPassRegistry());
-  }
+  X86AvoidSFBPass() : MachineFunctionPass(ID) { }
 
   StringRef getPassName() const override {
     return "X86 Avoid Store Forwarding Blocks";
@@ -342,6 +340,8 @@ findPotentialBlockers(MachineInstr *LoadInst) {
   for (auto PBInst = std::next(MachineBasicBlock::reverse_iterator(LoadInst)),
             E = LoadInst->getParent()->rend();
        PBInst != E; ++PBInst) {
+    if (PBInst->isMetaInstruction())
+      continue;
     BlockCount++;
     if (BlockCount >= InspectionLimit)
       break;
@@ -365,6 +365,8 @@ findPotentialBlockers(MachineInstr *LoadInst) {
       for (MachineBasicBlock::reverse_iterator PBInst = PMBB->rbegin(),
                                                PME = PMBB->rend();
            PBInst != PME; ++PBInst) {
+        if (PBInst->isMetaInstruction())
+          continue;
         PredCount++;
         if (PredCount >= LimitLeft)
           break;
@@ -388,7 +390,7 @@ void X86AvoidSFBPass::buildCopy(MachineInstr *LoadInst, unsigned NLoadOpcode,
   MachineMemOperand *LMMO = *LoadInst->memoperands_begin();
   MachineMemOperand *SMMO = *StoreInst->memoperands_begin();
 
-  unsigned Reg1 = MRI->createVirtualRegister(
+  Register Reg1 = MRI->createVirtualRegister(
       TII->getRegClass(TII->get(NLoadOpcode), 0, TRI, *(MBB->getParent())));
   MachineInstr *NewLoad =
       BuildMI(*MBB, LoadInst, LoadInst->getDebugLoc(), TII->get(NLoadOpcode),

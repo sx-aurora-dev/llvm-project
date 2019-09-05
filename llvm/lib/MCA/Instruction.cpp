@@ -18,7 +18,8 @@
 namespace llvm {
 namespace mca {
 
-void WriteState::writeStartEvent(unsigned IID, unsigned RegID, unsigned Cycles) {
+void WriteState::writeStartEvent(unsigned IID, MCPhysReg RegID,
+                                 unsigned Cycles) {
   CRD.IID = IID;
   CRD.RegID = RegID;
   CRD.Cycles = Cycles;
@@ -26,7 +27,7 @@ void WriteState::writeStartEvent(unsigned IID, unsigned RegID, unsigned Cycles) 
   DependentWrite = nullptr;
 }
 
-void ReadState::writeStartEvent(unsigned IID, unsigned RegID, unsigned Cycles) {
+void ReadState::writeStartEvent(unsigned IID, MCPhysReg RegID, unsigned Cycles) {
   assert(DependentWrites);
   assert(CyclesLeft == UNKNOWN_CYCLES);
 
@@ -134,23 +135,24 @@ void WriteRef::dump() const {
 }
 #endif
 
-const CriticalRegDep &InstructionBase::computeCriticalRegDep() {
-  if (CRD.Cycles || (Defs.empty() && Uses.empty()))
-    return CRD;
+const CriticalDependency &Instruction::computeCriticalRegDep() {
+  if (CriticalRegDep.Cycles)
+    return CriticalRegDep;
+
   unsigned MaxLatency = 0;
-  for (const WriteState &WS : Defs) {
-    const CriticalRegDep &WriteCRD = WS.getCriticalRegDep();
+  for (const WriteState &WS : getDefs()) {
+    const CriticalDependency &WriteCRD = WS.getCriticalRegDep();
     if (WriteCRD.Cycles > MaxLatency)
-      CRD = WriteCRD;
+      CriticalRegDep = WriteCRD;
   }
 
-  for (const ReadState &RS : Uses) {
-    const CriticalRegDep &ReadCRD = RS.getCriticalRegDep();
+  for (const ReadState &RS : getUses()) {
+    const CriticalDependency &ReadCRD = RS.getCriticalRegDep();
     if (ReadCRD.Cycles > MaxLatency)
-      CRD = ReadCRD;
+      CriticalRegDep = ReadCRD;
   }
 
-  return CRD;
+  return CriticalRegDep;
 }
 
 void Instruction::dispatch(unsigned RCUToken) {

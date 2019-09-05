@@ -127,6 +127,19 @@ def : WaitPatGlobalAddrOffOnly<i64, int_wasm_atomic_wait_i64, ATOMIC_WAIT_I64>;
 } // Predicates = [HasAtomics]
 
 //===----------------------------------------------------------------------===//
+// Atomic fences
+//===----------------------------------------------------------------------===//
+
+// A compiler fence instruction that prevents reordering of instructions.
+let Defs = [ARGUMENTS] in {
+let isPseudo = 1, hasSideEffects = 1 in
+defm COMPILER_FENCE : ATOMIC_NRI<(outs), (ins), [], "compiler_fence">;
+let hasSideEffects = 1 in
+defm ATOMIC_FENCE : ATOMIC_NRI<(outs), (ins i8imm:$flags), [], "atomic.fence",
+                               0x03>;
+} // Defs = [ARGUMENTS]
+
+//===----------------------------------------------------------------------===//
 // Atomic loads
 //===----------------------------------------------------------------------===//
 

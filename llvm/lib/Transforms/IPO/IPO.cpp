@@ -45,6 +45,7 @@ void llvm::initializeIPO(PassRegistry &Registry) {
   initializeLowerTypeTestsPass(Registry);
   initializeMergeFunctionsPass(Registry);
   initializePartialInlinerLegacyPassPass(Registry);
+  initializeAttributorLegacyPassPass(Registry);
   initializePostOrderFunctionAttrsLegacyPassPass(Registry);
   initializeReversePostOrderFunctionAttrsLegacyPassPass(Registry);
   initializePruneEHPass(Registry);
@@ -118,6 +119,15 @@ void LLVMAddInternalizePass(LLVMPassManagerRef PM, unsigned AllButMain) {
     return AllButMain && GV.getName() == "main";
   };
   unwrap(PM)->add(createInternalizePass(PreserveMain));
+}
+
+void LLVMAddInternalizePassWithMustPreservePredicate(
+    LLVMPassManagerRef PM,
+    void *Context,
+    LLVMBool (*Pred)(LLVMValueRef, void *)) {
+  unwrap(PM)->add(createInternalizePass([=](const GlobalValue &GV) {
+    return Pred(wrap(&GV), Context) == 0 ? false : true;
+  }));
 }
 
 void LLVMAddStripDeadPrototypesPass(LLVMPassManagerRef PM) {

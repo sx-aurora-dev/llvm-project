@@ -58,14 +58,12 @@ static inline
 bool
 is_equal(const std::type_info* x, const std::type_info* y, bool use_strcmp)
 {
-#ifndef _WIN32
+    // Use std::type_info's default comparison unless we've explicitly asked
+    // for strcmp.
     if (!use_strcmp)
-        return x == y;
-    return strcmp(x->name(), y->name()) == 0;
-#else
-    (void) use_strcmp;
-    return (x == y) || (strcmp(x->name(), y->name()) == 0);
-#endif
+        return *x == *y;
+    // Still allow pointer equality to short circut.
+    return x == y || strcmp(x->name(), y->name()) == 0;
 }
 
 namespace __cxxabiv1
@@ -620,7 +618,6 @@ __dynamic_cast(const void *static_ptr, const __class_type_info *static_type,
                const __class_type_info *dst_type,
                std::ptrdiff_t src2dst_offset) {
     // Possible future optimization:  Take advantage of src2dst_offset
-    // Currently clang always sets src2dst_offset to -1 (no hint).
 
     // Get (dynamic_ptr, dynamic_type) from static_ptr
     void **vtable = *static_cast<void ** const *>(static_ptr);

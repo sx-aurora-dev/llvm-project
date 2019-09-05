@@ -85,6 +85,7 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
   RegInfo = &MF->getRegInfo();
   const TargetFrameLowering *TFI = MF->getSubtarget().getFrameLowering();
   unsigned StackAlign = TFI->getStackAlignment();
+  DA = DAG->getDivergenceAnalysis();
 
   // Check whether the function can return without sret-demotion.
   SmallVector<ISD::OutputArg, 4> Outs;
@@ -150,7 +151,7 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
           auto Iter = CatchObjects.find(AI);
           if (Iter != CatchObjects.end() && TLI->needsFixedCatchObjects()) {
             FrameIndex = MF->getFrameInfo().CreateFixedObject(
-                TySize, 0, /*Immutable=*/false, /*isAliased=*/true);
+                TySize, 0, /*IsImmutable=*/false, /*isAliased=*/true);
             MF->getFrameInfo().setObjectAlignment(FrameIndex, Align);
           } else {
             FrameIndex =
@@ -345,9 +346,9 @@ void FunctionLoweringInfo::clear() {
 }
 
 /// CreateReg - Allocate a single virtual register for the given type.
-unsigned FunctionLoweringInfo::CreateReg(MVT VT) {
+unsigned FunctionLoweringInfo::CreateReg(MVT VT, bool isDivergent) {
   return RegInfo->createVirtualRegister(
-      MF->getSubtarget().getTargetLowering()->getRegClassFor(VT));
+      MF->getSubtarget().getTargetLowering()->getRegClassFor(VT, isDivergent));
 }
 
 /// CreateRegs - Allocate the appropriate number of virtual registers of
@@ -357,7 +358,7 @@ unsigned FunctionLoweringInfo::CreateReg(MVT VT) {
 /// In the case that the given value has struct or array type, this function
 /// will assign registers for each member or element.
 ///
-unsigned FunctionLoweringInfo::CreateRegs(Type *Ty) {
+unsigned FunctionLoweringInfo::CreateRegs(Type *Ty, bool isDivergent) {
   const TargetLowering *TLI = MF->getSubtarget().getTargetLowering();
 
   SmallVector<EVT, 4> ValueVTs;
@@ -370,11 +371,16 @@ unsigned FunctionLoweringInfo::CreateRegs(Type *Ty) {
 
     unsigned NumRegs = TLI->getNumRegisters(Ty->getContext(), ValueVT);
     for (unsigned i = 0; i != NumRegs; ++i) {
-      unsigned R = CreateReg(RegisterVT);
+      unsigned R = CreateReg(RegisterVT, isDivergent);
       if (!FirstReg) FirstReg = R;
     }
   }
   return FirstReg;
+}
+
+unsigned FunctionLoweringInfo::CreateRegs(const Value *V) {
+  return CreateRegs(V->getType(), DA && !TLI->requiresUniformRegister(*MF, V) &&
+                                      DA->isDivergent(V));
 }
 
 /// GetLiveOutRegInfo - Gets LiveOutInfo for a register, returning NULL if the
@@ -418,7 +424,7 @@ void FunctionLoweringInfo::ComputePHILiveOutRegInfo(const PHINode *PN) {
   unsigned BitWidth = IntVT.getSizeInBits();
 
   unsigned DestReg = ValueMap[PN];
-  if (!TargetRegisterInfo::isVirtualRegister(DestReg))
+  if (!Register::isVirtualRegister(DestReg))
     return;
   LiveOutRegInfo.grow(DestReg);
   LiveOutInfo &DestLOI = LiveOutRegInfo[DestReg];
@@ -439,7 +445,7 @@ void FunctionLoweringInfo::ComputePHILiveOutRegInfo(const PHINode *PN) {
     assert(ValueMap.count(V) && "V should have been placed in ValueMap when its"
                                 "CopyToReg node was created.");
     unsigned SrcReg = ValueMap[V];
-    if (!TargetRegisterInfo::isVirtualRegister(SrcReg)) {
+    if (!Register::isVirtualRegister(SrcReg)) {
       DestLOI.IsValid = false;
       return;
     }
@@ -474,7 +480,7 @@ void FunctionLoweringInfo::ComputePHILiveOutRegInfo(const PHINode *PN) {
     assert(ValueMap.count(V) && "V should have been placed in ValueMap when "
                                 "its CopyToReg node was created.");
     unsigned SrcReg = ValueMap[V];
-    if (!TargetRegisterInfo::isVirtualRegister(SrcReg)) {
+    if (!Register::isVirtualRegister(SrcReg)) {
       DestLOI.IsValid = false;
       return;
     }

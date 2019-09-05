@@ -23,6 +23,19 @@ if( CMAKE_SYSTEM MATCHES "FreeBSD-9.2-RELEASE" AND
   list(APPEND CMAKE_REQUIRED_LIBRARIES "cxxrt")
 endif()
 
+# Do checks with _XOPEN_SOURCE and large-file API on AIX, because we will build
+# with those too.
+if (UNIX AND ${CMAKE_SYSTEM_NAME} MATCHES "AIX")
+          list(APPEND CMAKE_REQUIRED_DEFINITIONS "-D_XOPEN_SOURCE=700")
+          list(APPEND CMAKE_REQUIRED_DEFINITIONS "-D_LARGE_FILE_API")
+endif()
+
+# Do checks with _FILE_OFFSET_BITS=64 on Solaris, because we will build
+# with those too.
+if (UNIX AND ${CMAKE_SYSTEM_NAME} MATCHES "SunOS")
+          list(APPEND CMAKE_REQUIRED_DEFINITIONS "-D_FILE_OFFSET_BITS=64")
+endif()
+
 # include checks
 check_include_file(dlfcn.h HAVE_DLFCN_H)
 check_include_file(errno.h HAVE_ERRNO_H)

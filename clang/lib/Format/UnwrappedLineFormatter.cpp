@@ -134,20 +134,29 @@ private:
   unsigned Indent = 0;
 };
 
-bool isNamespaceDeclaration(const AnnotatedLine *Line) {
-  const FormatToken *NamespaceTok = Line->First;
-  return NamespaceTok && NamespaceTok->getNamespaceToken();
-}
-
-bool isEndOfNamespace(const AnnotatedLine *Line,
-                      const SmallVectorImpl<AnnotatedLine *> &AnnotatedLines) {
+const FormatToken *getMatchingNamespaceToken(
+    const AnnotatedLine *Line,
+    const SmallVectorImpl<AnnotatedLine *> &AnnotatedLines) {
   if (!Line->startsWith(tok::r_brace))
-    return false;
+    return nullptr;
   size_t StartLineIndex = Line->MatchingOpeningBlockLineIndex;
   if (StartLineIndex == UnwrappedLine::kInvalidIndex)
-    return false;
+    return nullptr;
   assert(StartLineIndex < AnnotatedLines.size());
-  return isNamespaceDeclaration(AnnotatedLines[StartLineIndex]);
+  return AnnotatedLines[StartLineIndex]->First->getNamespaceToken();
+}
+
+StringRef getNamespaceTokenText(const AnnotatedLine *Line) {
+  const FormatToken *NamespaceToken = Line->First->getNamespaceToken();
+  return NamespaceToken ? NamespaceToken->TokenText : StringRef();
+}
+
+StringRef getMatchingNamespaceTokenText(
+    const AnnotatedLine *Line,
+    const SmallVectorImpl<AnnotatedLine *> &AnnotatedLines) {
+  const FormatToken *NamespaceToken =
+      getMatchingNamespaceToken(Line, AnnotatedLines);
+  return NamespaceToken ? NamespaceToken->TokenText : StringRef();
 }
 
 class LineJoiner {
@@ -249,10 +258,11 @@ private:
          TheLine->Level != 0);
 
     if (Style.CompactNamespaces) {
-      if (isNamespaceDeclaration(TheLine)) {
+      if (auto nsToken = TheLine->First->getNamespaceToken()) {
         int i = 0;
         unsigned closingLine = TheLine->MatchingClosingBlockLineIndex - 1;
-        for (; I + 1 + i != E && isNamespaceDeclaration(I[i + 1]) &&
+        for (; I + 1 + i != E &&
+               nsToken->TokenText == getNamespaceTokenText(I[i + 1]) &&
                closingLine == I[i + 1]->MatchingClosingBlockLineIndex &&
                I[i + 1]->Last->TotalLength < Limit;
              i++, closingLine--) {
@@ -264,10 +274,12 @@ private:
         return i;
       }
 
-      if (isEndOfNamespace(TheLine, AnnotatedLines)) {
+      if (auto nsToken = getMatchingNamespaceToken(TheLine, AnnotatedLines)) {
         int i = 0;
         unsigned openingLine = TheLine->MatchingOpeningBlockLineIndex - 1;
-        for (; I + 1 + i != E && isEndOfNamespace(I[i + 1], AnnotatedLines) &&
+        for (; I + 1 + i != E &&
+               nsToken->TokenText ==
+                   getMatchingNamespaceTokenText(I[i + 1], AnnotatedLines) &&
                openingLine == I[i + 1]->MatchingOpeningBlockLineIndex;
              i++, openingLine--) {
           // No space between consecutive braces
@@ -288,7 +300,7 @@ private:
     // Try to merge a control statement block with left brace unwrapped
     if (TheLine->Last->is(tok::l_brace) && TheLine->First != TheLine->Last &&
         TheLine->First->isOneOf(tok::kw_if, tok::kw_while, tok::kw_for)) {
-      return Style.AllowShortBlocksOnASingleLine
+      return Style.AllowShortBlocksOnASingleLine != FormatStyle::SBS_Never
                  ? tryMergeSimpleBlock(I, E, Limit)
                  : 0;
     }
@@ -305,7 +317,7 @@ private:
         I != AnnotatedLines.begin() &&
         I[-1]->First->isOneOf(tok::kw_if, tok::kw_while, tok::kw_for)) {
       unsigned MergedLines = 0;
-      if (Style.AllowShortBlocksOnASingleLine) {
+      if (Style.AllowShortBlocksOnASingleLine != FormatStyle::SBS_Never) {
         MergedLines = tryMergeSimpleBlock(I - 1, E, Limit);
         // If we managed to merge the block, discard the first merged line
         // since we are merging starting from I.
@@ -399,7 +411,8 @@ private:
     if (Limit == 0)
       return 0;
     if (Style.BraceWrapping.AfterControlStatement &&
-        (I[1]->First->is(tok::l_brace) && !Style.AllowShortBlocksOnASingleLine))
+        I[1]->First->is(tok::l_brace) &&
+        Style.AllowShortBlocksOnASingleLine == FormatStyle::SBS_Never)
       return 0;
     if (I[1]->InPPDirective != (*I)->InPPDirective ||
         (I[1]->InPPDirective && I[1]->First->HasUnescapedNewline))
@@ -499,7 +512,7 @@ private:
     if (Line.First->isOneOf(tok::kw_if, tok::kw_while, tok::kw_do, tok::kw_try,
                             tok::kw___try, tok::kw_catch, tok::kw___finally,
                             tok::kw_for, tok::r_brace, Keywords.kw___except)) {
-      if (!Style.AllowShortBlocksOnASingleLine)
+      if (Style.AllowShortBlocksOnASingleLine == FormatStyle::SBS_Never)
         return 0;
       // Don't merge when we can't except the case when
       // the control statement block is empty
@@ -539,7 +552,7 @@ private:
           (Tok->getNextNonComment() == nullptr ||
            Tok->getNextNonComment()->is(tok::semi))) {
         // We merge empty blocks even if the line exceeds the column limit.
-        Tok->SpacesRequiredBefore = 0;
+        Tok->SpacesRequiredBefore = Style.SpaceInEmptyBlock ? 1 : 0;
         Tok->CanBreakBefore = true;
         return 1;
       } else if (Limit != 0 && !Line.startsWithNamespace() &&
@@ -595,7 +608,7 @@ private:
         return 0;
       Limit -= 2;
       unsigned MergedLines = 0;
-      if (Style.AllowShortBlocksOnASingleLine ||
+      if (Style.AllowShortBlocksOnASingleLine != FormatStyle::SBS_Never ||
           (I[1]->First == I[1]->Last && I + 2 != E &&
            I[2]->First->is(tok::r_brace))) {
         MergedLines = tryMergeSimpleBlock(I + 1, E, Limit);
@@ -821,7 +834,7 @@ public:
     LineState State =
         Indenter->getInitialState(FirstIndent, FirstStartColumn, &Line, DryRun);
     while (State.NextToken) {
-      formatChildren(State, /*Newline=*/false, DryRun, Penalty);
+      formatChildren(State, /*NewLine=*/false, DryRun, Penalty);
       Indenter->addTokenToState(
           State, /*Newline=*/State.NextToken->MustBreakBefore, DryRun);
     }
