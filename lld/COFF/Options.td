@@ -162,11 +162,15 @@ def help : F<"help">;
 def help_q : Flag<["/??", "-??", "/?", "-?"], "">, Alias<help>;
 
 // LLD extensions
+def end_lib : F<"end-lib">,
+  HelpText<"End a grouping of objects that should be treated as if they were together in an archive">;
 def exclude_all_symbols : F<"exclude-all-symbols">;
 def export_all_symbols : F<"export-all-symbols">;
 defm demangle : B<"demangle",
     "Demangle symbols in output (default)",
     "Do not demangle symbols in output">;
+def include_optional : Joined<["/", "-", "/?", "-?"], "includeoptional:">,
+    HelpText<"Add symbol as undefined, but allow it to remain undefined">;
 def kill_at : F<"kill-at">;
 def lldmingw : F<"lldmingw">;
 def output_def : Joined<["/", "-", "/?", "-?"], "output-def:">;
@@ -174,6 +178,26 @@ def pdb_source_path : P<"pdbsourcepath",
                         "Base path used to make relative source file path absolute in PDB">;
 def rsp_quoting : Joined<["--"], "rsp-quoting=">,
   HelpText<"Quoting style for response files, 'windows' (default) or 'posix'">;
+def start_lib : F<"start-lib">,
+  HelpText<"Start a grouping of objects that should be treated as if they were together in an archive">;
+def thinlto_emit_imports_files :
+    F<"thinlto-emit-imports-files">,
+    HelpText<"Emit .imports files with -thinlto-index-only">;
+def thinlto_index_only :
+    F<"thinlto-index-only">,
+    HelpText<"Instead of linking, emit ThinLTO index files">;
+def thinlto_index_only_arg : P<
+    "thinlto-index-only",
+    "-thinlto-index-only and also write native module names to file">;
+def thinlto_object_suffix_replace : P<
+    "thinlto-object-suffix-replace",
+    "'old;new' replace old suffix with new suffix in ThinLTO index">;
+def thinlto_prefix_replace: P<
+    "thinlto-prefix-replace",
+    "'old;new' replace old prefix with new prefix in ThinLTO outputs">;
+def lto_obj_path : P<
+    "lto-obj-path",
+    "output native object for merged LTO unit to this path">;
 def dash_dash_version : Flag<["--"], "version">,
   HelpText<"Print version information">;
 defm threads: B<"threads",

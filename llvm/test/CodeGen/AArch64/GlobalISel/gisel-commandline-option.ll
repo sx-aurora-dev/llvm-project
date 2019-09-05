@@ -43,6 +43,7 @@
 
 ; ENABLED:       IRTranslator
 ; VERIFY-NEXT:   Verify generated machine code
+; ENABLED-NEXT:  Analysis for ComputingKnownBits
 ; ENABLED-NEXT:  PreLegalizerCombiner
 ; VERIFY-NEXT:   Verify generated machine code
 ; ENABLED-NEXT:  Analysis containing CSE Info
@@ -52,6 +53,7 @@
 ; VERIFY-NEXT:   Verify generated machine code
 ; ENABLED-O0-NEXT:  Localizer
 ; VERIFY-O0-NEXT:   Verify generated machine code
+; ENABLED-NEXT: Analysis for ComputingKnownBits
 ; ENABLED-NEXT:  InstructionSelect
 ; VERIFY-NEXT:   Verify generated machine code
 ; ENABLED-NEXT:  ResetMachineFunction
@@ -62,7 +64,7 @@
 ; DISABLED-NOT: IRTranslator
 
 ; DISABLED: AArch64 Instruction Selection
-; DISABLED: Expand ISel Pseudo-instructions
+; DISABLED: Finalize ISel and expand pseudo-instructions
 
 define void @empty() {
   ret void

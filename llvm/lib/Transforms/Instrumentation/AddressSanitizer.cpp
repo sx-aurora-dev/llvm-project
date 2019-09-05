@@ -94,9 +94,6 @@ static const uint64_t kDefaultShadowOffset32 = 1ULL << 29;
 static const uint64_t kDefaultShadowOffset64 = 1ULL << 44;
 static const uint64_t kDynamicShadowSentinel =
     std::numeric_limits<uint64_t>::max();
-static const uint64_t kIOSShadowOffset32 = 1ULL << 30;
-static const uint64_t kIOSSimShadowOffset32 = 1ULL << 30;
-static const uint64_t kIOSSimShadowOffset64 = kDefaultShadowOffset64;
 static const uint64_t kSmallX86_64ShadowOffsetBase = 0x7FFFFFFF;  // < 2G.
 static const uint64_t kSmallX86_64ShadowOffsetAlignMask = ~0xFFFULL;
 static const uint64_t kLinuxKasan_ShadowOffset64 = 0xdffffc0000000000;
@@ -112,6 +109,7 @@ static const uint64_t kNetBSD_ShadowOffset64 = 1ULL << 46;
 static const uint64_t kNetBSDKasan_ShadowOffset64 = 0xdfff900000000000;
 static const uint64_t kPS4CPU_ShadowOffset64 = 1ULL << 40;
 static const uint64_t kWindowsShadowOffset32 = 3ULL << 28;
+static const uint64_t kEmscriptenShadowOffset = 0;
 
 static const uint64_t kMyriadShadowScale = 5;
 static const uint64_t kMyriadMemoryOffset32 = 0x80000000ULL;
@@ -131,6 +129,8 @@ static const uintptr_t kRetiredStackFrameMagic = 0x45E0360E;
 static const char *const kAsanModuleCtorName = "asan.module_ctor";
 static const char *const kAsanModuleDtorName = "asan.module_dtor";
 static const uint64_t kAsanCtorAndDtorPriority = 1;
+// On Emscripten, the system needs more than one priorities for constructors.
+static const uint64_t kAsanEmscriptenCtorAndDtorPriority = 50;
 static const char *const kAsanReportErrorTemplate = "__asan_report_";
 static const char *const kAsanRegisterGlobalsName = "__asan_register_globals";
 static const char *const kAsanUnregisterGlobalsName =
@@ -192,6 +192,11 @@ static cl::opt<bool> ClRecover(
     "asan-recover",
     cl::desc("Enable recovery mode (continue-after-error)."),
     cl::Hidden, cl::init(false));
+
+static cl::opt<bool> ClInsertVersionCheck(
+    "asan-guard-against-version-mismatch",
+    cl::desc("Guard against compiler/runtime version mismatch."),
+    cl::Hidden, cl::init(true));
 
 // This flag may need to be replaced with -f[no-]asan-reads.
 static cl::opt<bool> ClInstrumentReads("asan-instrument-reads",
@@ -428,7 +433,6 @@ static ShadowMapping getShadowMapping(Triple &TargetTriple, int LongSize,
   bool IsPPC64 = TargetTriple.getArch() == Triple::ppc64 ||
                  TargetTriple.getArch() == Triple::ppc64le;
   bool IsSystemZ = TargetTriple.getArch() == Triple::systemz;
-  bool IsX86 = TargetTriple.getArch() == Triple::x86;
   bool IsX86_64 = TargetTriple.getArch() == Triple::x86_64;
   bool IsMIPS32 = TargetTriple.isMIPS32();
   bool IsMIPS64 = TargetTriple.isMIPS64();
@@ -437,6 +441,7 @@ static ShadowMapping getShadowMapping(Triple &TargetTriple, int LongSize,
   bool IsWindows = TargetTriple.isOSWindows();
   bool IsFuchsia = TargetTriple.isOSFuchsia();
   bool IsMyriad = TargetTriple.getVendor() == llvm::Triple::Myriad;
+  bool IsEmscripten = TargetTriple.isOSEmscripten();
 
   ShadowMapping Mapping;
 
@@ -455,10 +460,11 @@ static ShadowMapping getShadowMapping(Triple &TargetTriple, int LongSize,
     else if (IsNetBSD)
       Mapping.Offset = kNetBSD_ShadowOffset32;
     else if (IsIOS)
-      // If we're targeting iOS and x86, the binary is built for iOS simulator.
-      Mapping.Offset = IsX86 ? kIOSSimShadowOffset32 : kIOSShadowOffset32;
+      Mapping.Offset = kDynamicShadowSentinel;
     else if (IsWindows)
       Mapping.Offset = kWindowsShadowOffset32;
+    else if (IsEmscripten)
+      Mapping.Offset = kEmscriptenShadowOffset;
     else if (IsMyriad) {
       uint64_t ShadowOffset = (kMyriadMemoryOffset32 + kMyriadMemorySize32 -
                                (kMyriadMemorySize32 >> Mapping.Scale));
@@ -495,10 +501,7 @@ static ShadowMapping getShadowMapping(Triple &TargetTriple, int LongSize,
     } else if (IsMIPS64)
       Mapping.Offset = kMIPS64_ShadowOffset64;
     else if (IsIOS)
-      // If we're targeting iOS and x86, the binary is built for iOS simulator.
-      // We are using dynamic shadow offset on the 64-bit devices.
-      Mapping.Offset =
-        IsX86_64 ? kIOSSimShadowOffset64 : kDynamicShadowSentinel;
+      Mapping.Offset = kDynamicShadowSentinel;
     else if (IsAArch64)
       Mapping.Offset = kAArch64_ShadowOffset64;
     else
@@ -532,6 +535,14 @@ static size_t RedzoneSizeForScale(int MappingScale) {
   // Redzone used for stack and globals is at least 32 bytes.
   // For scales 6 and 7, the redzone has to be 64 and 128 bytes respectively.
   return std::max(32U, 1U << MappingScale);
+}
+
+static uint64_t GetCtorAndDtorPriority(Triple &TargetTriple) {
+  if (TargetTriple.isOSEmscripten()) {
+    return kAsanEmscriptenCtorAndDtorPriority;
+  } else {
+    return kAsanCtorAndDtorPriority;
+  }
 }
 
 namespace {
@@ -1335,7 +1346,7 @@ Value *AddressSanitizer::isInterestingMemoryAccess(Instruction *I,
                                                    unsigned *Alignment,
                                                    Value **MaybeMask) {
   // Skip memory accesses inserted by another instrumentation.
-  if (I->getMetadata("nosanitize")) return nullptr;
+  if (I->hasMetadata("nosanitize")) return nullptr;
 
   // Do not instrument the load fetching the dynamic shadow address.
   if (LocalDynamicShadow == I)
@@ -1781,7 +1792,8 @@ void ModuleAddressSanitizer::createInitializerPoisonCalls(
       if (F->getName() == kAsanModuleCtorName) continue;
       ConstantInt *Priority = dyn_cast<ConstantInt>(CS->getOperand(0));
       // Don't instrument CTORs that will run before asan.module_ctor.
-      if (Priority->getLimitedValue() <= kAsanCtorAndDtorPriority) continue;
+      if (Priority->getLimitedValue() <= GetCtorAndDtorPriority(TargetTriple))
+        continue;
       poisonOneInitializer(*F, ModuleName);
     }
   }
@@ -1923,7 +1935,12 @@ StringRef ModuleAddressSanitizer::getGlobalMetadataSection() const {
   case Triple::COFF:  return ".ASAN$GL";
   case Triple::ELF:   return "asan_globals";
   case Triple::MachO: return "__DATA,__asan_globals,regular";
-  default: break;
+  case Triple::Wasm:
+  case Triple::XCOFF:
+    report_fatal_error(
+        "ModuleAddressSanitizer not implemented for object file format.");
+  case Triple::UnknownObjectFormat:
+    break;
   }
   llvm_unreachable("unsupported object format");
 }
@@ -2414,8 +2431,9 @@ bool ModuleAddressSanitizer::instrumentModule(Module &M) {
 
   // Create a module constructor. A destructor is created lazily because not all
   // platforms, and not all modules need it.
+  std::string AsanVersion = std::to_string(GetAsanVersion(M));
   std::string VersionCheckName =
-      kAsanVersionCheckNamePrefix + std::to_string(GetAsanVersion(M));
+      ClInsertVersionCheck ? (kAsanVersionCheckNamePrefix + AsanVersion) : "";
   std::tie(AsanCtorFunction, std::ignore) = createSanitizerCtorAndInitFunctions(
       M, kAsanModuleCtorName, kAsanInitName, /*InitArgTypes=*/{},
       /*InitArgs=*/{}, VersionCheckName);
@@ -2428,22 +2446,22 @@ bool ModuleAddressSanitizer::instrumentModule(Module &M) {
     Changed |= InstrumentGlobals(IRB, M, &CtorComdat);
   }
 
+  const uint64_t Priority = GetCtorAndDtorPriority(TargetTriple);
+
   // Put the constructor and destructor in comdat if both
   // (1) global instrumentation is not TU-specific
   // (2) target is ELF.
   if (UseCtorComdat && TargetTriple.isOSBinFormatELF() && CtorComdat) {
     AsanCtorFunction->setComdat(M.getOrInsertComdat(kAsanModuleCtorName));
-    appendToGlobalCtors(M, AsanCtorFunction, kAsanCtorAndDtorPriority,
-                        AsanCtorFunction);
+    appendToGlobalCtors(M, AsanCtorFunction, Priority, AsanCtorFunction);
     if (AsanDtorFunction) {
       AsanDtorFunction->setComdat(M.getOrInsertComdat(kAsanModuleDtorName));
-      appendToGlobalDtors(M, AsanDtorFunction, kAsanCtorAndDtorPriority,
-                          AsanDtorFunction);
+      appendToGlobalDtors(M, AsanDtorFunction, Priority, AsanDtorFunction);
     }
   } else {
-    appendToGlobalCtors(M, AsanCtorFunction, kAsanCtorAndDtorPriority);
+    appendToGlobalCtors(M, AsanCtorFunction, Priority);
     if (AsanDtorFunction)
-      appendToGlobalDtors(M, AsanDtorFunction, kAsanCtorAndDtorPriority);
+      appendToGlobalDtors(M, AsanDtorFunction, Priority);
   }
 
   return Changed;
@@ -2668,7 +2686,7 @@ bool AddressSanitizer::instrumentFunction(Function &F,
         if (CS) {
           // A call inside BB.
           TempsToInstrument.clear();
-          if (CS.doesNotReturn() && !CS->getMetadata("nosanitize"))
+          if (CS.doesNotReturn() && !CS->hasMetadata("nosanitize"))
             NoReturnCalls.push_back(CS.getInstruction());
         }
         if (CallInst *CI = dyn_cast<CallInst>(&Inst))

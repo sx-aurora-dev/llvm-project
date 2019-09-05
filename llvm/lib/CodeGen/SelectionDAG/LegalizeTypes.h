@@ -419,6 +419,7 @@ private:
   void ExpandIntRes_FP_TO_SINT        (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_FP_TO_UINT        (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_LLROUND           (SDNode *N, SDValue &Lo, SDValue &Hi);
+  void ExpandIntRes_LLRINT            (SDNode *N, SDValue &Lo, SDValue &Hi);
 
   void ExpandIntRes_Logical           (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_ADDSUB            (SDNode *N, SDValue &Lo, SDValue &Hi);
@@ -556,6 +557,8 @@ private:
   SDValue SoftenFloatOp_FP_TO_XINT(SDNode *N);
   SDValue SoftenFloatOp_LROUND(SDNode *N);
   SDValue SoftenFloatOp_LLROUND(SDNode *N);
+  SDValue SoftenFloatOp_LRINT(SDNode *N);
+  SDValue SoftenFloatOp_LLRINT(SDNode *N);
   SDValue SoftenFloatOp_SELECT(SDNode *N);
   SDValue SoftenFloatOp_SELECT_CC(SDNode *N);
   SDValue SoftenFloatOp_SETCC(SDNode *N);
@@ -617,6 +620,8 @@ private:
   SDValue ExpandFloatOp_FP_TO_UINT(SDNode *N);
   SDValue ExpandFloatOp_LROUND(SDNode *N);
   SDValue ExpandFloatOp_LLROUND(SDNode *N);
+  SDValue ExpandFloatOp_LRINT(SDNode *N);
+  SDValue ExpandFloatOp_LLRINT(SDNode *N);
   SDValue ExpandFloatOp_SELECT_CC(SDNode *N);
   SDValue ExpandFloatOp_SETCC(SDNode *N);
   SDValue ExpandFloatOp_STORE(SDNode *N, unsigned OpNo);
@@ -710,6 +715,7 @@ private:
   bool ScalarizeVectorOperand(SDNode *N, unsigned OpNo);
   SDValue ScalarizeVecOp_BITCAST(SDNode *N);
   SDValue ScalarizeVecOp_UnaryOp(SDNode *N);
+  SDValue ScalarizeVecOp_UnaryOp_StrictFP(SDNode *N);
   SDValue ScalarizeVecOp_CONCAT_VECTORS(SDNode *N);
   SDValue ScalarizeVecOp_EXTRACT_VECTOR_ELT(SDNode *N);
   SDValue ScalarizeVecOp_VSELECT(SDNode *N);
@@ -762,6 +768,7 @@ private:
   void SplitVecRes_SETCC(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_VECTOR_SHUFFLE(ShuffleVectorSDNode *N, SDValue &Lo,
                                   SDValue &Hi);
+  void SplitVecRes_VAARG(SDNode *N, SDValue &Lo, SDValue &Hi);
 
   // Vector Operand Splitting: <128 x ty> -> 2 x <64 x ty>.
   bool SplitVectorOperand(SDNode *N, unsigned OpNo);
@@ -824,6 +831,7 @@ private:
   SDValue WidenVecRes_Ternary(SDNode *N);
   SDValue WidenVecRes_Binary(SDNode *N);
   SDValue WidenVecRes_BinaryCanTrap(SDNode *N);
+  SDValue WidenVecRes_BinaryWithExtraScalarOp(SDNode *N);
   SDValue WidenVecRes_StrictFP(SDNode *N);
   SDValue WidenVecRes_OverflowOp(SDNode *N, unsigned ResNo);
   SDValue WidenVecRes_Convert(SDNode *N);
@@ -851,6 +859,11 @@ private:
   SDValue WidenVecOp_Convert(SDNode *N);
   SDValue WidenVecOp_FCOPYSIGN(SDNode *N);
   SDValue WidenVecOp_VECREDUCE(SDNode *N);
+
+  /// Helper function to generate a set of operations to perform
+  /// a vector operation for a wider type.
+  ///
+  SDValue UnrollVectorOp_StrictFP(SDNode *N, unsigned ResNE);
 
   //===--------------------------------------------------------------------===//
   // Vector Widening Utilities Support: LegalizeVectorTypes.cpp
@@ -921,6 +934,8 @@ private:
   void SplitRes_SELECT      (SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitRes_SELECT_CC   (SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitRes_UNDEF       (SDNode *N, SDValue &Lo, SDValue &Hi);
+
+  void SplitVSETCC(const SDNode *N);
 
   //===--------------------------------------------------------------------===//
   // Generic Expansion: LegalizeTypesGeneric.cpp

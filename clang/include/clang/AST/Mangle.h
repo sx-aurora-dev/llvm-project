@@ -170,6 +170,8 @@ public:
   virtual void mangleCXXDtorComdat(const CXXDestructorDecl *D,
                                    raw_ostream &) = 0;
 
+  virtual void mangleLambdaSig(const CXXRecordDecl *Lambda, raw_ostream &) = 0;
+
   static bool classof(const MangleContext *C) {
     return C->getKind() == MK_Itanium;
   }
@@ -242,6 +244,19 @@ public:
 
   static MicrosoftMangleContext *create(ASTContext &Context,
                                         DiagnosticsEngine &Diags);
+};
+
+class ASTNameGenerator {
+public:
+  explicit ASTNameGenerator(ASTContext &Ctx);
+  ~ASTNameGenerator();
+  bool writeName(const Decl *D, raw_ostream &OS);
+  std::string getName(const Decl *D);
+  std::vector<std::string> getAllManglings(const Decl *D);
+
+private:
+  class Implementation;
+  std::unique_ptr<Implementation> Impl;
 };
 }
 

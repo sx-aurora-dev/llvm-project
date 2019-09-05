@@ -100,6 +100,8 @@
 #include "llvm/MC/SectionKind.h"
 #include "llvm/Pass.h"
 #include "llvm/Remarks/Remark.h"
+#include "llvm/Remarks/RemarkFormat.h"
+#include "llvm/Remarks/RemarkStringTable.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Compiler.h"
@@ -160,8 +162,9 @@ static gcp_map_type &getGCMap(void *&P) {
 /// getGVAlignmentLog2 - Return the alignment to use for the specified global
 /// value in log2 form.  This rounds up to the preferred alignment if possible
 /// and legal.
-static unsigned getGVAlignmentLog2(const GlobalValue *GV, const DataLayout &DL,
-                                   unsigned InBits = 0) {
+unsigned AsmPrinter::getGVAlignmentLog2(const GlobalValue *GV,
+                                        const DataLayout &DL,
+                                        unsigned InBits) {
   unsigned NumBits = 0;
   if (const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV))
     NumBits = DL.getPreferredAlignmentLog(GVar);
@@ -309,7 +312,7 @@ bool AsmPrinter::doInitialization(Module &M) {
   if (MAI->doesSupportDebugInformation()) {
     bool EmitCodeView = MMI->getModule()->getCodeViewFlag();
     if (EmitCodeView && TM.getTargetTriple().isOSWindows()) {
-      Handlers.emplace_back(llvm::make_unique<CodeViewDebug>(this),
+      Handlers.emplace_back(std::make_unique<CodeViewDebug>(this),
                             DbgTimerName, DbgTimerDescription,
                             CodeViewLineTablesGroupName,
                             CodeViewLineTablesGroupDescription);
@@ -378,7 +381,7 @@ bool AsmPrinter::doInitialization(Module &M) {
 
   if (mdconst::extract_or_null<ConstantInt>(
           MMI->getModule()->getModuleFlag("cfguardtable")))
-    Handlers.emplace_back(llvm::make_unique<WinCFGuard>(this), CFGuardName,
+    Handlers.emplace_back(std::make_unique<WinCFGuard>(this), CFGuardName,
                           CFGuardDescription, DWARFGroupName,
                           DWARFGroupDescription);
 
@@ -494,7 +497,7 @@ void AsmPrinter::EmitGlobalVariable(const GlobalVariable *GV) {
   SectionKind GVKind = TargetLoweringObjectFile::getKindForGlobal(GV, TM);
 
   const DataLayout &DL = GV->getParent()->getDataLayout();
-  uint64_t Size = DL.getTypeAllocSize(GV->getType()->getElementType());
+  uint64_t Size = DL.getTypeAllocSize(GV->getValueType());
 
   // If the alignment is specified, we *must* obey it.  Overaligning a global
   // with a specified alignment is a prompt way to break globals emitted to
@@ -781,7 +784,7 @@ static void emitComments(const MachineInstr &MI, raw_ostream &CommentOS) {
 /// emitImplicitDef - This method emits the specified machine instruction
 /// that is an implicit def.
 void AsmPrinter::emitImplicitDef(const MachineInstr *MI) const {
-  unsigned RegNo = MI->getOperand(0).getReg();
+  Register RegNo = MI->getOperand(0).getReg();
 
   SmallString<128> Str;
   raw_svector_ostream OS(Str);
@@ -908,7 +911,8 @@ static bool emitDebugLabelComment(const MachineInstr *MI, AsmPrinter &AP) {
   OS << "DEBUG_LABEL: ";
 
   const DILabel *V = MI->getDebugLabel();
-  if (auto *SP = dyn_cast<DISubprogram>(V->getScope())) {
+  if (auto *SP = dyn_cast<DISubprogram>(
+          V->getScope()->getNonLexicalBlockFileScope())) {
     StringRef Name = SP->getName();
     if (!Name.empty())
       OS << Name << ":";
@@ -1022,7 +1026,7 @@ void AsmPrinter::EmitFunctionBody() {
     // Get MachineDominatorTree or compute it on the fly if it's unavailable
     MDT = getAnalysisIfAvailable<MachineDominatorTree>();
     if (!MDT) {
-      OwnedMDT = make_unique<MachineDominatorTree>();
+      OwnedMDT = std::make_unique<MachineDominatorTree>();
       OwnedMDT->getBase().recalculate(*MF);
       MDT = OwnedMDT.get();
     }
@@ -1030,7 +1034,7 @@ void AsmPrinter::EmitFunctionBody() {
     // Get MachineLoopInfo or compute it on the fly if it's unavailable
     MLI = getAnalysisIfAvailable<MachineLoopInfo>();
     if (!MLI) {
-      OwnedMLI = make_unique<MachineLoopInfo>();
+      OwnedMLI = std::make_unique<MachineLoopInfo>();
       OwnedMLI->getBase().analyze(MDT->getBase());
       MLI = OwnedMLI.get();
     }
@@ -1299,7 +1303,7 @@ void AsmPrinter::emitGlobalIndirectSymbol(Module &M,
   else
     assert(GIS.hasLocalLinkage() && "Invalid alias or ifunc linkage");
 
-  bool IsFunction = GIS.getType()->getPointerElementType()->isFunctionTy();
+  bool IsFunction = GIS.getValueType()->isFunctionTy();
 
   // Treat bitcasts of functions as functions also. This is important at least
   // on WebAssembly where object and function addresses can't alias each other.
@@ -1311,11 +1315,10 @@ void AsmPrinter::emitGlobalIndirectSymbol(Module &M,
 
   // Set the symbol type to function if the alias has a function type.
   // This affects codegen when the aliasee is not a function.
-  if (IsFunction) {
-    OutStreamer->EmitSymbolAttribute(Name, MCSA_ELF_TypeFunction);
-    if (isa<GlobalIFunc>(GIS))
-      OutStreamer->EmitSymbolAttribute(Name, MCSA_ELF_TypeIndFunction);
-  }
+  if (IsFunction)
+    OutStreamer->EmitSymbolAttribute(Name, isa<GlobalIFunc>(GIS)
+                                               ? MCSA_ELF_TypeIndFunction
+                                               : MCSA_ELF_TypeFunction);
 
   EmitVisibility(Name, GIS.getVisibility());
 
@@ -1347,55 +1350,25 @@ void AsmPrinter::emitRemarksSection(Module &M) {
   RemarkStreamer *RS = M.getContext().getRemarkStreamer();
   if (!RS)
     return;
+  remarks::RemarkSerializer &RemarkSerializer = RS->getSerializer();
+
+  StringRef FilenameRef = RS->getFilename();
+  SmallString<128> Filename = FilenameRef;
+  sys::fs::make_absolute(Filename);
+  assert(!Filename.empty() && "The filename can't be empty.");
+
+  std::string Buf;
+  raw_string_ostream OS(Buf);
+  std::unique_ptr<remarks::MetaSerializer> MetaSerializer =
+      RemarkSerializer.metaSerializer(OS, StringRef(Filename));
+  MetaSerializer->emit();
 
   // Switch to the right section: .remarks/__remarks.
   MCSection *RemarksSection =
       OutContext.getObjectFileInfo()->getRemarksSection();
   OutStreamer->SwitchSection(RemarksSection);
 
-  // Emit the magic number.
-  OutStreamer->EmitBytes(remarks::Magic);
-  // Explicitly emit a '\0'.
-  OutStreamer->EmitIntValue(/*Value=*/0, /*Size=*/1);
-
-  // Emit the version number: little-endian uint64_t.
-  // The version number is located at the offset 0x0 in the section.
-  std::array<char, 8> Version;
-  support::endian::write64le(Version.data(), remarks::Version);
-  OutStreamer->EmitBinaryData(StringRef(Version.data(), Version.size()));
-
-  // Emit the string table in the section.
-  // Note: we need to use the streamer here to emit it in the section. We can't
-  // just use the serialize function with a raw_ostream because of the way
-  // MCStreamers work.
-  const remarks::StringTable &StrTab = RS->getStringTable();
-  std::vector<StringRef> StrTabStrings = StrTab.serialize();
-  uint64_t StrTabSize = StrTab.SerializedSize;
-  // Emit the total size of the string table (the size itself excluded):
-  // little-endian uint64_t.
-  // The total size is located after the version number.
-  std::array<char, 8> StrTabSizeBuf;
-  support::endian::write64le(StrTabSizeBuf.data(), StrTabSize);
-  OutStreamer->EmitBinaryData(
-      StringRef(StrTabSizeBuf.data(), StrTabSizeBuf.size()));
-  // Emit a list of null-terminated strings.
-  // Note: the order is important here: the ID used in the remarks corresponds
-  // to the position of the string in the section.
-  for (StringRef Str : StrTabStrings) {
-    OutStreamer->EmitBytes(Str);
-    // Explicitly emit a '\0'.
-    OutStreamer->EmitIntValue(/*Value=*/0, /*Size=*/1);
-  }
-
-  // Emit the null-terminated absolute path to the remark file.
-  // The path is located at the offset 0x4 in the section.
-  StringRef FilenameRef = RS->getFilename();
-  SmallString<128> Filename = FilenameRef;
-  sys::fs::make_absolute(Filename);
-  assert(!Filename.empty() && "The filename can't be empty.");
-  OutStreamer->EmitBytes(Filename);
-  // Explicitly emit a '\0'.
-  OutStreamer->EmitIntValue(/*Value=*/0, /*Size=*/1);
+  OutStreamer->EmitBinaryData(OS.str());
 }
 
 bool AsmPrinter::doFinalization(Module &M) {
@@ -1600,8 +1573,7 @@ bool AsmPrinter::doFinalization(Module &M) {
              "expected llvm.used to be an array type");
       if (const auto *A = cast<ConstantArray>(LU->getInitializer())) {
         for (const Value *Op : A->operands()) {
-          const auto *GV =
-              cast<GlobalValue>(Op->stripPointerCastsNoFollowAliases());
+          const auto *GV = cast<GlobalValue>(Op->stripPointerCasts());
           // Global symbols with internal or private linkage are not visible to
           // the linker, and thus would cause an error when the linker tried to
           // preserve the symbol due to the `/include:` directive.
@@ -1630,6 +1602,24 @@ bool AsmPrinter::doFinalization(Module &M) {
           !GV.hasDLLImportStorageClass() && !GV.getName().startswith("llvm.") &&
           !GV.hasAtLeastLocalUnnamedAddr())
         OutStreamer->EmitAddrsigSym(getSymbol(&GV));
+  }
+
+  // Emit symbol partition specifications (ELF only).
+  if (TM.getTargetTriple().isOSBinFormatELF()) {
+    unsigned UniqueID = 0;
+    for (const GlobalValue &GV : M.global_values()) {
+      if (!GV.hasPartition() || GV.isDeclarationForLinker() ||
+          GV.getVisibility() != GlobalValue::DefaultVisibility)
+        continue;
+
+      OutStreamer->SwitchSection(OutContext.getELFSection(
+          ".llvm_sympart", ELF::SHT_LLVM_SYMPART, 0, 0, "", ++UniqueID));
+      OutStreamer->EmitBytes(GV.getPartition());
+      OutStreamer->EmitZeros(1);
+      OutStreamer->EmitValue(
+          MCSymbolRefExpr::create(getSymbol(&GV), OutContext),
+          MAI->getCodePointerSize());
+    }
   }
 
   // Allow the target to emit any magic that it wants at the end of the file,
@@ -2645,7 +2635,7 @@ static void handleIndirectSymViaGOTPCRel(AsmPrinter &AP, const MCExpr **ME,
   const GlobalValue *FinalGV = dyn_cast<GlobalValue>(GV->getOperand(0));
   const MCSymbol *FinalSym = AP.getSymbol(FinalGV);
   *ME = AP.getObjFileLowering().getIndirectSymViaGOTPCRel(
-      FinalSym, MV, Offset, AP.MMI, *AP.OutStreamer);
+      FinalGV, FinalSym, MV, Offset, AP.MMI, *AP.OutStreamer);
 
   // Update GOT equivalent usage information
   --NumUses;
@@ -2775,7 +2765,7 @@ MCSymbol *AsmPrinter::GetBlockAddressSymbol(const BasicBlock *BB) const {
 
 /// GetCPISymbol - Return the symbol for the specified constant pool entry.
 MCSymbol *AsmPrinter::GetCPISymbol(unsigned CPID) const {
-  if (getSubtargetInfo().getTargetTriple().isKnownWindowsMSVCEnvironment()) {
+  if (getSubtargetInfo().getTargetTriple().isWindowsMSVCEnvironment()) {
     const MachineConstantPoolEntry &CPE =
         MF->getConstantPool()->getConstants()[CPID];
     if (!CPE.isMachineConstantPoolEntry()) {
@@ -2905,7 +2895,7 @@ void AsmPrinter::setupCodePaddingContext(const MachineBasicBlock &MBB,
 /// EmitBasicBlockStart - This method prints the label for the specified
 /// MachineBasicBlock, an alignment (if present) and a comment describing
 /// it if appropriate.
-void AsmPrinter::EmitBasicBlockStart(const MachineBasicBlock &MBB) const {
+void AsmPrinter::EmitBasicBlockStart(const MachineBasicBlock &MBB) {
   // End the previous funclet and start a new one.
   if (MBB.isEHFuncletEntry()) {
     for (const HandlerInfo &HI : Handlers) {

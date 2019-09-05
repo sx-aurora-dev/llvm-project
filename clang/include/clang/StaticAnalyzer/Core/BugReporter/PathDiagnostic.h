@@ -125,6 +125,13 @@ public:
   };
 
   virtual PathGenerationScheme getGenerationScheme() const { return Minimal; }
+
+  bool shouldGenerateDiagnostics() const {
+    return getGenerationScheme() != None;
+  }
+
+  bool shouldAddPathEdges() const { return getGenerationScheme() == Extensive; }
+
   virtual bool supportsLogicalOpControlFlow() const { return false; }
 
   /// Return true if the PathDiagnosticConsumer supports individual
@@ -367,7 +374,7 @@ public:
 
 class PathDiagnosticPiece: public llvm::FoldingSetNode {
 public:
-  enum Kind { ControlFlow, Event, Macro, Call, Note };
+  enum Kind { ControlFlow, Event, Macro, Call, Note, PopUp };
   enum DisplayHint { Above, Below };
 
 private:
@@ -446,7 +453,9 @@ public:
   virtual void dump() const = 0;
 };
 
-class PathPieces : public std::list<std::shared_ptr<PathDiagnosticPiece>> {
+using PathDiagnosticPieceRef = std::shared_ptr<PathDiagnosticPiece>;
+
+class PathPieces : public std::list<PathDiagnosticPieceRef> {
   void flattenTo(PathPieces &Primary, PathPieces &Current,
                  bool ShouldFlattenMacros) const;
 
@@ -482,7 +491,7 @@ public:
 
   static bool classof(const PathDiagnosticPiece *P) {
     return P->getKind() == Event || P->getKind() == Macro ||
-           P->getKind() == Note;
+           P->getKind() == Note || P->getKind() == PopUp;
   }
 };
 
@@ -726,8 +735,6 @@ public:
 
   PathPieces subPieces;
 
-  bool containsEvent() const;
-
   void flattenLocations() override {
     PathDiagnosticSpotPiece::flattenLocations();
     for (const auto &I : subPieces)
@@ -746,12 +753,28 @@ public:
 class PathDiagnosticNotePiece: public PathDiagnosticSpotPiece {
 public:
   PathDiagnosticNotePiece(const PathDiagnosticLocation &Pos, StringRef S,
-                               bool AddPosRange = true)
+                          bool AddPosRange = true)
       : PathDiagnosticSpotPiece(Pos, S, Note, AddPosRange) {}
   ~PathDiagnosticNotePiece() override;
 
   static bool classof(const PathDiagnosticPiece *P) {
     return P->getKind() == Note;
+  }
+
+  void dump() const override;
+
+  void Profile(llvm::FoldingSetNodeID &ID) const override;
+};
+
+class PathDiagnosticPopUpPiece: public PathDiagnosticSpotPiece {
+public:
+  PathDiagnosticPopUpPiece(const PathDiagnosticLocation &Pos, StringRef S,
+                           bool AddPosRange = true)
+      : PathDiagnosticSpotPiece(Pos, S, PopUp, AddPosRange) {}
+  ~PathDiagnosticPopUpPiece() override;
+
+  static bool classof(const PathDiagnosticPiece *P) {
+    return P->getKind() == PopUp;
   }
 
   void dump() const override;
@@ -820,7 +843,7 @@ public:
 
   bool isWithinCall() const { return !pathStack.empty(); }
 
-  void setEndOfPath(std::shared_ptr<PathDiagnosticPiece> EndPiece) {
+  void setEndOfPath(PathDiagnosticPieceRef EndPiece) {
     assert(!Loc.isValid() && "End location already set!");
     Loc = EndPiece->getLocation();
     assert(Loc.isValid() && "Invalid location for end-of-path piece");
@@ -901,7 +924,6 @@ public:
 };
 
 } // namespace ento
-
 } // namespace clang
 
 #endif // LLVM_CLANG_STATICANALYZER_CORE_BUGREPORTER_PATHDIAGNOSTIC_H

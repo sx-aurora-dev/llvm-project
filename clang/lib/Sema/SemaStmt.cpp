@@ -196,6 +196,25 @@ static bool DiagnoseUnusedComparison(Sema &S, const Expr *E) {
   return true;
 }
 
+static bool DiagnoseNoDiscard(Sema &S, const WarnUnusedResultAttr *A,
+                              SourceLocation Loc, SourceRange R1,
+                              SourceRange R2, bool IsCtor) {
+  if (!A)
+    return false;
+  StringRef Msg = A->getMessage();
+
+  if (Msg.empty()) {
+    if (IsCtor)
+      return S.Diag(Loc, diag::warn_unused_constructor) << A << R1 << R2;
+    return S.Diag(Loc, diag::warn_unused_result) << A << R1 << R2;
+  }
+
+  if (IsCtor)
+    return S.Diag(Loc, diag::warn_unused_constructor_msg) << A << Msg << R1
+                                                          << R2;
+  return S.Diag(Loc, diag::warn_unused_result_msg) << A << Msg << R1 << R2;
+}
+
 void Sema::DiagnoseUnusedExprResult(const Stmt *S) {
   if (const LabelStmt *Label = dyn_cast_or_null<LabelStmt>(S))
     return DiagnoseUnusedExprResult(Label->getSubStmt());
@@ -254,14 +273,19 @@ void Sema::DiagnoseUnusedExprResult(const Stmt *S) {
     return;
 
   E = WarnExpr;
+  if (const auto *Cast = dyn_cast<CastExpr>(E))
+    if (Cast->getCastKind() == CK_NoOp ||
+        Cast->getCastKind() == CK_ConstructorConversion)
+      E = Cast->getSubExpr()->IgnoreImpCasts();
+
   if (const CallExpr *CE = dyn_cast<CallExpr>(E)) {
     if (E->getType()->isVoidType())
       return;
 
-    if (const Attr *A = CE->getUnusedResultAttr(Context)) {
-      Diag(Loc, diag::warn_unused_result) << A << R1 << R2;
+    if (DiagnoseNoDiscard(*this, cast_or_null<WarnUnusedResultAttr>(
+                                     CE->getUnusedResultAttr(Context)),
+                          Loc, R1, R2, /*isCtor=*/false))
       return;
-    }
 
     // If the callee has attribute pure, const, or warn_unused_result, warn with
     // a more specific message to make it clear what is happening. If the call
@@ -279,9 +303,24 @@ void Sema::DiagnoseUnusedExprResult(const Stmt *S) {
         return;
       }
     }
+  } else if (const auto *CE = dyn_cast<CXXConstructExpr>(E)) {
+    if (const CXXConstructorDecl *Ctor = CE->getConstructor()) {
+      const auto *A = Ctor->getAttr<WarnUnusedResultAttr>();
+      A = A ? A : Ctor->getParent()->getAttr<WarnUnusedResultAttr>();
+      if (DiagnoseNoDiscard(*this, A, Loc, R1, R2, /*isCtor=*/true))
+        return;
+    }
+  } else if (const auto *ILE = dyn_cast<InitListExpr>(E)) {
+    if (const TagDecl *TD = ILE->getType()->getAsTagDecl()) {
+
+      if (DiagnoseNoDiscard(*this, TD->getAttr<WarnUnusedResultAttr>(), Loc, R1,
+                            R2, /*isCtor=*/false))
+        return;
+    }
   } else if (ShouldSuppress)
     return;
 
+  E = WarnExpr;
   if (const ObjCMessageExpr *ME = dyn_cast<ObjCMessageExpr>(E)) {
     if (getLangOpts().ObjCAutoRefCount && ME->isDelegateInitCall()) {
       Diag(Loc, diag::err_arc_unused_init_message) << R1;
@@ -289,10 +328,9 @@ void Sema::DiagnoseUnusedExprResult(const Stmt *S) {
     }
     const ObjCMethodDecl *MD = ME->getMethodDecl();
     if (MD) {
-      if (const auto *A = MD->getAttr<WarnUnusedResultAttr>()) {
-        Diag(Loc, diag::warn_unused_result) << A << R1 << R2;
+      if (DiagnoseNoDiscard(*this, MD->getAttr<WarnUnusedResultAttr>(), Loc, R1,
+                            R2, /*isCtor=*/false))
         return;
-      }
     }
   } else if (const PseudoObjectExpr *POE = dyn_cast<PseudoObjectExpr>(E)) {
     const Expr *Source = POE->getSyntacticForm();
@@ -1041,9 +1079,8 @@ Sema::ActOnFinishSwitchStmt(SourceLocation SwitchLoc, Stmt *Switch,
 
         // Find the smallest value >= the lower bound.  If I is in the
         // case range, then we have overlap.
-        CaseValsTy::iterator I = std::lower_bound(CaseVals.begin(),
-                                                  CaseVals.end(), CRLo,
-                                                  CaseCompareFunctor());
+        CaseValsTy::iterator I =
+            llvm::lower_bound(CaseVals, CRLo, CaseCompareFunctor());
         if (I != CaseVals.end() && I->first < CRHi) {
           OverlapVal  = I->first;   // Found overlap with scalar.
           OverlapStmt = I->second;
@@ -2448,7 +2485,7 @@ StmtResult Sema::BuildCXXForRangeStmt(SourceLocation ForLoc,
 
         ExprResult SizeOfVLAExprR = ActOnUnaryExprOrTypeTraitExpr(
             EndVar->getLocation(), UETT_SizeOf,
-            /*isType=*/true,
+            /*IsType=*/true,
             CreateParsedType(VAT->desugar(), Context.getTrivialTypeSourceInfo(
                                                  VAT->desugar(), RangeLoc))
                 .getAsOpaquePtr(),
@@ -2458,7 +2495,7 @@ StmtResult Sema::BuildCXXForRangeStmt(SourceLocation ForLoc,
 
         ExprResult SizeOfEachElementExprR = ActOnUnaryExprOrTypeTraitExpr(
             EndVar->getLocation(), UETT_SizeOf,
-            /*isType=*/true,
+            /*IsType=*/true,
             CreateParsedType(VAT->desugar(),
                              Context.getTrivialTypeSourceInfo(
                                  VAT->getElementType(), RangeLoc))
@@ -3693,7 +3730,8 @@ StmtResult Sema::BuildReturnStmt(SourceLocation ReturnLoc, Expr *RetValExp) {
     }
 
     if (FD)
-      Diag(ReturnLoc, DiagID) << FD->getIdentifier() << 0/*fn*/;
+      Diag(ReturnLoc, DiagID)
+          << FD->getIdentifier() << 0 /*fn*/ << FD->isConsteval();
     else
       Diag(ReturnLoc, DiagID) << getCurMethodDecl()->getDeclName() << 1/*meth*/;
 
@@ -4223,30 +4261,46 @@ Sema::CreateCapturedStmtRecordDecl(CapturedDecl *&CD, SourceLocation Loc,
   return RD;
 }
 
-static void
-buildCapturedStmtCaptureList(SmallVectorImpl<CapturedStmt::Capture> &Captures,
-                             SmallVectorImpl<Expr *> &CaptureInits,
-                             ArrayRef<sema::Capture> Candidates) {
-  for (const sema::Capture &Cap : Candidates) {
+static bool
+buildCapturedStmtCaptureList(Sema &S, CapturedRegionScopeInfo *RSI,
+                             SmallVectorImpl<CapturedStmt::Capture> &Captures,
+                             SmallVectorImpl<Expr *> &CaptureInits) {
+  for (const sema::Capture &Cap : RSI->Captures) {
+    if (Cap.isInvalid())
+      continue;
+
+    // Form the initializer for the capture.
+    ExprResult Init = S.BuildCaptureInit(Cap, Cap.getLocation(),
+                                         RSI->CapRegionKind == CR_OpenMP);
+
+    // FIXME: Bail out now if the capture is not used and the initializer has
+    // no side-effects.
+
+    // Create a field for this capture.
+    FieldDecl *Field = S.BuildCaptureField(RSI->TheRecordDecl, Cap);
+
+    // Add the capture to our list of captures.
     if (Cap.isThisCapture()) {
       Captures.push_back(CapturedStmt::Capture(Cap.getLocation(),
                                                CapturedStmt::VCK_This));
-      CaptureInits.push_back(Cap.getInitExpr());
-      continue;
     } else if (Cap.isVLATypeCapture()) {
       Captures.push_back(
           CapturedStmt::Capture(Cap.getLocation(), CapturedStmt::VCK_VLAType));
-      CaptureInits.push_back(nullptr);
-      continue;
-    }
+    } else {
+      assert(Cap.isVariableCapture() && "unknown kind of capture");
 
-    Captures.push_back(CapturedStmt::Capture(Cap.getLocation(),
-                                             Cap.isReferenceCapture()
-                                                 ? CapturedStmt::VCK_ByRef
-                                                 : CapturedStmt::VCK_ByCopy,
-                                             Cap.getVariable()));
-    CaptureInits.push_back(Cap.getInitExpr());
+      if (S.getLangOpts().OpenMP && RSI->CapRegionKind == CR_OpenMP)
+        S.setOpenMPCaptureKind(Field, Cap.getVariable(), RSI->OpenMPLevel);
+
+      Captures.push_back(CapturedStmt::Capture(Cap.getLocation(),
+                                               Cap.isReferenceCapture()
+                                                   ? CapturedStmt::VCK_ByRef
+                                                   : CapturedStmt::VCK_ByCopy,
+                                               Cap.getVariable()));
+    }
+    CaptureInits.push_back(Init.get());
   }
+  return false;
 }
 
 void Sema::ActOnCapturedRegionStart(SourceLocation Loc, Scope *CurScope,
@@ -4280,7 +4334,8 @@ void Sema::ActOnCapturedRegionStart(SourceLocation Loc, Scope *CurScope,
 
 void Sema::ActOnCapturedRegionStart(SourceLocation Loc, Scope *CurScope,
                                     CapturedRegionKind Kind,
-                                    ArrayRef<CapturedParamNameType> Params) {
+                                    ArrayRef<CapturedParamNameType> Params,
+                                    unsigned OpenMPCaptureLevel) {
   CapturedDecl *CD = nullptr;
   RecordDecl *RD = CreateCapturedStmtRecordDecl(CD, Loc, Params.size());
 
@@ -4325,7 +4380,7 @@ void Sema::ActOnCapturedRegionStart(SourceLocation Loc, Scope *CurScope,
     CD->setContextParam(ParamNum, Param);
   }
   // Enter the capturing scope for this captured region.
-  PushCapturedRegionScope(CurScope, CD, RD, Kind);
+  PushCapturedRegionScope(CurScope, CD, RD, Kind, OpenMPCaptureLevel);
 
   if (CurScope)
     PushDeclContext(CurScope, CD);
@@ -4339,25 +4394,31 @@ void Sema::ActOnCapturedRegionStart(SourceLocation Loc, Scope *CurScope,
 void Sema::ActOnCapturedRegionError() {
   DiscardCleanupsInEvaluationContext();
   PopExpressionEvaluationContext();
+  PopDeclContext();
+  PoppedFunctionScopePtr ScopeRAII = PopFunctionScopeInfo();
+  CapturedRegionScopeInfo *RSI = cast<CapturedRegionScopeInfo>(ScopeRAII.get());
 
-  CapturedRegionScopeInfo *RSI = getCurCapturedRegion();
   RecordDecl *Record = RSI->TheRecordDecl;
   Record->setInvalidDecl();
 
   SmallVector<Decl*, 4> Fields(Record->fields());
   ActOnFields(/*Scope=*/nullptr, Record->getLocation(), Record, Fields,
               SourceLocation(), SourceLocation(), ParsedAttributesView());
-
-  PopDeclContext();
-  PopFunctionScopeInfo();
 }
 
 StmtResult Sema::ActOnCapturedRegionEnd(Stmt *S) {
-  CapturedRegionScopeInfo *RSI = getCurCapturedRegion();
+  // Leave the captured scope before we start creating captures in the
+  // enclosing scope.
+  DiscardCleanupsInEvaluationContext();
+  PopExpressionEvaluationContext();
+  PopDeclContext();
+  PoppedFunctionScopePtr ScopeRAII = PopFunctionScopeInfo();
+  CapturedRegionScopeInfo *RSI = cast<CapturedRegionScopeInfo>(ScopeRAII.get());
 
   SmallVector<CapturedStmt::Capture, 4> Captures;
   SmallVector<Expr *, 4> CaptureInits;
-  buildCapturedStmtCaptureList(Captures, CaptureInits, RSI->Captures);
+  if (buildCapturedStmtCaptureList(*this, RSI, Captures, CaptureInits))
+    return StmtError();
 
   CapturedDecl *CD = RSI->TheCapturedDecl;
   RecordDecl *RD = RSI->TheRecordDecl;
@@ -4368,12 +4429,6 @@ StmtResult Sema::ActOnCapturedRegionEnd(Stmt *S) {
 
   CD->setBody(Res->getCapturedStmt());
   RD->completeDefinition();
-
-  DiscardCleanupsInEvaluationContext();
-  PopExpressionEvaluationContext();
-
-  PopDeclContext();
-  PopFunctionScopeInfo();
 
   return Res;
 }

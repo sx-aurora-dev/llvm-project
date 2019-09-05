@@ -20,13 +20,8 @@ using namespace lldb;
 using namespace lldb_private;
 
 // CommandObjectSettingsSet
-
-static constexpr OptionDefinition g_settings_set_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_2, false, "global", 'g', OptionParser::eNoArgument, nullptr, {}, 0, eArgTypeNone, "Apply the new value to the global default value." },
-  { LLDB_OPT_SET_2, false, "force",  'f', OptionParser::eNoArgument, nullptr, {}, 0, eArgTypeNone, "Force an empty value to be accepted as the default." }
-    // clang-format on
-};
+#define LLDB_OPTIONS_settings_set
+#include "CommandOptions.inc"
 
 class CommandObjectSettingsSet : public CommandObjectRaw {
 public:
@@ -109,9 +104,7 @@ insert-before or insert-after.");
         m_global = true;
         break;
       default:
-        error.SetErrorStringWithFormat("unrecognized options '%c'",
-                                       short_option);
-        break;
+        llvm_unreachable("Unimplemented option");
       }
 
       return error;
@@ -131,9 +124,9 @@ insert-before or insert-after.");
     bool m_force;
   };
 
-  int HandleArgumentCompletion(
-      CompletionRequest &request,
-      OptionElementVector &opt_element_vector) override {
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
 
     const size_t argc = request.GetParsedLine().GetArgumentCount();
     const char *arg = nullptr;
@@ -149,27 +142,27 @@ insert-before or insert-after.");
       CommandCompletions::InvokeCommonCompletionCallbacks(
           GetCommandInterpreter(), CommandCompletions::eSettingsNameCompletion,
           request, nullptr);
-    } else {
+      return;
+    }
       arg =
           request.GetParsedLine().GetArgumentAtIndex(request.GetCursorIndex());
 
-      if (arg) {
-        if (arg[0] == '-') {
-          // Complete option name
-        } else {
-          // Complete setting value
-          const char *setting_var_name =
-              request.GetParsedLine().GetArgumentAtIndex(setting_var_idx);
-          Status error;
-          lldb::OptionValueSP value_sp(GetDebugger().GetPropertyValue(
-              &m_exe_ctx, setting_var_name, false, error));
-          if (value_sp) {
-            value_sp->AutoComplete(m_interpreter, request);
-          }
-        }
-      }
-    }
-    return request.GetNumberOfMatches();
+      if (!arg)
+        return;
+
+      // Complete option name
+      if (arg[0] != '-')
+        return;
+
+      // Complete setting value
+      const char *setting_var_name =
+          request.GetParsedLine().GetArgumentAtIndex(setting_var_idx);
+      Status error;
+      lldb::OptionValueSP value_sp(GetDebugger().GetPropertyValue(
+          &m_exe_ctx, setting_var_name, false, error));
+      if (!value_sp)
+        return;
+      value_sp->AutoComplete(m_interpreter, request);
   }
 
 protected:
@@ -276,13 +269,12 @@ public:
 
   ~CommandObjectSettingsShow() override = default;
 
-  int HandleArgumentCompletion(
-      CompletionRequest &request,
-      OptionElementVector &opt_element_vector) override {
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
     CommandCompletions::InvokeCommonCompletionCallbacks(
         GetCommandInterpreter(), CommandCompletions::eSettingsNameCompletion,
         request, nullptr);
-    return request.GetNumberOfMatches();
   }
 
 protected:
@@ -311,13 +303,8 @@ protected:
 };
 
 // CommandObjectSettingsWrite -- Write settings to file
-
-static constexpr OptionDefinition g_settings_write_options[] = {
-    // clang-format off
-  { LLDB_OPT_SET_ALL, true,  "file",  'f', OptionParser::eRequiredArgument, nullptr, {}, CommandCompletions::eDiskFileCompletion, eArgTypeFilename,    "The file into which to write the settings." },
-  { LLDB_OPT_SET_ALL, false, "append",'a', OptionParser::eNoArgument,       nullptr, {}, 0,                                       eArgTypeNone,        "Append to saved settings file if it exists."},
-    // clang-format on
-};
+#define LLDB_OPTIONS_settings_write
+#include "CommandOptions.inc"
 
 class CommandObjectSettingsWrite : public CommandObjectParsed {
 public:
@@ -367,9 +354,7 @@ public:
         m_append = true;
         break;
       default:
-        error.SetErrorStringWithFormat("unrecognized option '%c'",
-                                       short_option);
-        break;
+        llvm_unreachable("Unimplemented option");
       }
 
       return error;
@@ -436,12 +421,8 @@ private:
 };
 
 // CommandObjectSettingsRead -- Read settings from file
-
-static constexpr OptionDefinition g_settings_read_options[] = {
-    // clang-format off
-  {LLDB_OPT_SET_ALL, true, "file",'f', OptionParser::eRequiredArgument, nullptr, {}, CommandCompletions::eDiskFileCompletion, eArgTypeFilename,       "The file from which to read the breakpoints." },
-    // clang-format on
-};
+#define LLDB_OPTIONS_settings_read
+#include "CommandOptions.inc"
 
 class CommandObjectSettingsRead : public CommandObjectParsed {
 public:
@@ -472,9 +453,7 @@ public:
         m_filename.assign(option_arg);
         break;
       default:
-        error.SetErrorStringWithFormat("unrecognized option '%c'",
-                                       short_option);
-        break;
+        llvm_unreachable("Unimplemented option");
       }
 
       return error;
@@ -541,13 +520,12 @@ public:
 
   ~CommandObjectSettingsList() override = default;
 
-  int HandleArgumentCompletion(
-      CompletionRequest &request,
-      OptionElementVector &opt_element_vector) override {
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
     CommandCompletions::InvokeCommonCompletionCallbacks(
         GetCommandInterpreter(), CommandCompletions::eSettingsNameCompletion,
         request, nullptr);
-    return request.GetNumberOfMatches();
   }
 
 protected:
@@ -627,14 +605,15 @@ public:
 
   ~CommandObjectSettingsRemove() override = default;
 
-  int HandleArgumentCompletion(
-      CompletionRequest &request,
-      OptionElementVector &opt_element_vector) override {
+  bool WantsCompletion() override { return true; }
+
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
     if (request.GetCursorIndex() < 2)
       CommandCompletions::InvokeCommonCompletionCallbacks(
           GetCommandInterpreter(), CommandCompletions::eSettingsNameCompletion,
           request, nullptr);
-    return request.GetNumberOfMatches();
   }
 
 protected:
@@ -650,8 +629,8 @@ protected:
 
     const size_t argc = cmd_args.GetArgumentCount();
     if (argc == 0) {
-      result.AppendError("'settings set' takes an array or dictionary item, or "
-                         "an array followed by one or more indexes, or a "
+      result.AppendError("'settings remove' takes an array or dictionary item, "
+                         "or an array followed by one or more indexes, or a "
                          "dictionary followed by one or more key names to "
                          "remove");
       result.SetStatus(eReturnStatusFailed);
@@ -661,7 +640,7 @@ protected:
     const char *var_name = cmd_args.GetArgumentAtIndex(0);
     if ((var_name == nullptr) || (var_name[0] == '\0')) {
       result.AppendError(
-          "'settings set' command requires a valid variable name");
+          "'settings remove' command requires a valid variable name");
       result.SetStatus(eReturnStatusFailed);
       return false;
     }
@@ -740,16 +719,14 @@ public:
   // !WantsRawCommandString.
   bool WantsCompletion() override { return true; }
 
-  int HandleArgumentCompletion(
-      CompletionRequest &request,
-      OptionElementVector &opt_element_vector) override {
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
     // Attempting to complete variable name
     if (request.GetCursorIndex() < 2)
       CommandCompletions::InvokeCommonCompletionCallbacks(
           GetCommandInterpreter(), CommandCompletions::eSettingsNameCompletion,
           request, nullptr);
-
-    return request.GetNumberOfMatches();
   }
 
 protected:
@@ -838,16 +815,14 @@ public:
   // !WantsRawCommandString.
   bool WantsCompletion() override { return true; }
 
-  int HandleArgumentCompletion(
-      CompletionRequest &request,
-      OptionElementVector &opt_element_vector) override {
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
     // Attempting to complete variable name
     if (request.GetCursorIndex() < 2)
       CommandCompletions::InvokeCommonCompletionCallbacks(
           GetCommandInterpreter(), CommandCompletions::eSettingsNameCompletion,
           request, nullptr);
-
-    return request.GetNumberOfMatches();
   }
 
 protected:
@@ -941,16 +916,14 @@ public:
   // !WantsRawCommandString.
   bool WantsCompletion() override { return true; }
 
-  int HandleArgumentCompletion(
-      CompletionRequest &request,
-      OptionElementVector &opt_element_vector) override {
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
     // Attempting to complete variable name
     if (request.GetCursorIndex() < 2)
       CommandCompletions::InvokeCommonCompletionCallbacks(
           GetCommandInterpreter(), CommandCompletions::eSettingsNameCompletion,
           request, nullptr);
-
-    return request.GetNumberOfMatches();
   }
 
 protected:
@@ -1033,16 +1006,14 @@ public:
   // !WantsRawCommandString.
   bool WantsCompletion() override { return true; }
 
-  int HandleArgumentCompletion(
-      CompletionRequest &request,
-      OptionElementVector &opt_element_vector) override {
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
     // Attempting to complete variable name
     if (request.GetCursorIndex() < 2)
       CommandCompletions::InvokeCommonCompletionCallbacks(
           GetCommandInterpreter(), CommandCompletions::eSettingsNameCompletion,
           request, nullptr);
-
-    return request.GetNumberOfMatches();
   }
 
 protected:
@@ -1112,16 +1083,14 @@ public:
 
   ~CommandObjectSettingsClear() override = default;
 
-  int HandleArgumentCompletion(
-      CompletionRequest &request,
-      OptionElementVector &opt_element_vector) override {
+  void
+  HandleArgumentCompletion(CompletionRequest &request,
+                           OptionElementVector &opt_element_vector) override {
     // Attempting to complete variable name
     if (request.GetCursorIndex() < 2)
       CommandCompletions::InvokeCommonCompletionCallbacks(
           GetCommandInterpreter(), CommandCompletions::eSettingsNameCompletion,
           request, nullptr);
-
-    return request.GetNumberOfMatches();
   }
 
 protected:
