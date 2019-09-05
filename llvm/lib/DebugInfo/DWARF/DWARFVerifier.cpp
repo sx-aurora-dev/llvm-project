@@ -203,7 +203,7 @@ unsigned DWARFVerifier::verifyUnitContents(DWARFUnit &Unit) {
 }
 
 unsigned DWARFVerifier::verifyDebugInfoCallSite(const DWARFDie &Die) {
-  if (Die.getTag() != DW_TAG_call_site)
+  if (Die.getTag() != DW_TAG_call_site && Die.getTag() != DW_TAG_GNU_call_site)
     return 0;
 
   DWARFDie Curr = Die.getParent();
@@ -223,7 +223,9 @@ unsigned DWARFVerifier::verifyDebugInfoCallSite(const DWARFDie &Die) {
 
   Optional<DWARFFormValue> CallAttr =
       Curr.find({DW_AT_call_all_calls, DW_AT_call_all_source_calls,
-                 DW_AT_call_all_tail_calls});
+                 DW_AT_call_all_tail_calls, DW_AT_GNU_all_call_sites,
+                 DW_AT_GNU_all_source_call_sites,
+                 DW_AT_GNU_all_tail_call_sites});
   if (!CallAttr) {
     error() << "Subprogram with call site entry has no DW_AT_call attribute:";
     Curr.dump(OS);
@@ -294,7 +296,7 @@ unsigned DWARFVerifier::verifyUnitSection(const DWARFSection &S,
       switch (UnitType) {
       case dwarf::DW_UT_type:
       case dwarf::DW_UT_split_type: {
-        Unit = TypeUnitVector.addUnit(llvm::make_unique<DWARFTypeUnit>(
+        Unit = TypeUnitVector.addUnit(std::make_unique<DWARFTypeUnit>(
             DCtx, S, Header, DCtx.getDebugAbbrev(), &DObj.getRangesSection(),
             &DObj.getLocSection(), DObj.getStrSection(),
             DObj.getStrOffsetsSection(), &DObj.getAppleObjCSection(),
@@ -308,7 +310,7 @@ unsigned DWARFVerifier::verifyUnitSection(const DWARFSection &S,
       case dwarf::DW_UT_partial:
       // UnitType = 0 means that we are verifying a compile unit in DWARF v4.
       case 0: {
-        Unit = CompileUnitVector.addUnit(llvm::make_unique<DWARFCompileUnit>(
+        Unit = CompileUnitVector.addUnit(std::make_unique<DWARFCompileUnit>(
             DCtx, S, Header, DCtx.getDebugAbbrev(), &DObj.getRangesSection(),
             &DObj.getLocSection(), DObj.getStrSection(),
             DObj.getStrOffsetsSection(), &DObj.getAppleObjCSection(),
@@ -466,9 +468,9 @@ unsigned DWARFVerifier::verifyDebugInfoAttribute(const DWARFDie &Die,
     ReportError("DIE has invalid DW_AT_stmt_list encoding:");
     break;
   case DW_AT_location: {
-    auto VerifyLocationExpr = [&](StringRef D) {
+    auto VerifyLocationExpr = [&](ArrayRef<uint8_t> D) {
       DWARFUnit *U = Die.getDwarfUnit();
-      DataExtractor Data(D, DCtx.isLittleEndian(), 0);
+      DataExtractor Data(toStringRef(D), DCtx.isLittleEndian(), 0);
       DWARFExpression Expression(Data, U->getVersion(),
                                  U->getAddressByteSize());
       bool Error = llvm::any_of(Expression, [](DWARFExpression::Operation &Op) {
@@ -479,7 +481,7 @@ unsigned DWARFVerifier::verifyDebugInfoAttribute(const DWARFDie &Die,
     };
     if (Optional<ArrayRef<uint8_t>> Expr = AttrValue.Value.getAsBlock()) {
       // Verify inlined location.
-      VerifyLocationExpr(llvm::toStringRef(*Expr));
+      VerifyLocationExpr(*Expr);
     } else if (auto LocOffset = AttrValue.Value.getAsSectionOffset()) {
       // Verify location list.
       if (auto DebugLoc = DCtx.getDebugLoc())
@@ -499,6 +501,9 @@ unsigned DWARFVerifier::verifyDebugInfoAttribute(const DWARFDie &Die,
       if (DieTag == DW_TAG_inlined_subroutine && RefTag == DW_TAG_subprogram)
         break;
       if (DieTag == DW_TAG_variable && RefTag == DW_TAG_member)
+        break;
+      // This might be reference to a function declaration.
+      if (DieTag == DW_TAG_GNU_call_site && RefTag == DW_TAG_subprogram)
         break;
       ReportError("DIE with tag " + TagString(DieTag) + " has " +
                   AttributeString(Attr) +
@@ -1277,9 +1282,9 @@ static bool isVariableIndexable(const DWARFDie &Die, DWARFContext &DCtx) {
   if (!Location)
     return false;
 
-  auto ContainsInterestingOperators = [&](StringRef D) {
+  auto ContainsInterestingOperators = [&](ArrayRef<uint8_t> D) {
     DWARFUnit *U = Die.getDwarfUnit();
-    DataExtractor Data(D, DCtx.isLittleEndian(), U->getAddressByteSize());
+    DataExtractor Data(toStringRef(D), DCtx.isLittleEndian(), U->getAddressByteSize());
     DWARFExpression Expression(Data, U->getVersion(), U->getAddressByteSize());
     return any_of(Expression, [](DWARFExpression::Operation &Op) {
       return !Op.isError() && (Op.getCode() == DW_OP_addr ||
@@ -1290,7 +1295,7 @@ static bool isVariableIndexable(const DWARFDie &Die, DWARFContext &DCtx) {
 
   if (Optional<ArrayRef<uint8_t>> Expr = Location->getAsBlock()) {
     // Inlined location.
-    if (ContainsInterestingOperators(toStringRef(*Expr)))
+    if (ContainsInterestingOperators(*Expr))
       return true;
   } else if (Optional<uint64_t> Offset = Location->getAsSectionOffset()) {
     // Location list.

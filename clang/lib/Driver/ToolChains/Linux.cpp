@@ -1037,8 +1037,6 @@ SanitizerMask Linux::getSupportedSanitizers() const {
     Res |= SanitizerKind::HWAddress;
     Res |= SanitizerKind::KernelHWAddress;
   }
-  if (IsAArch64)
-    Res |= SanitizerKind::MemTag;
   return Res;
 }
 

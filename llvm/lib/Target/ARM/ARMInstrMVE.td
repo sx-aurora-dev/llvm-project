@@ -221,7 +221,9 @@ def t2am_imm7shift0OffsetAsmOperand : t2am_imm7shiftOffsetAsmOperand<0>;
 def t2am_imm7shift1OffsetAsmOperand : t2am_imm7shiftOffsetAsmOperand<1>;
 def t2am_imm7shift2OffsetAsmOperand : t2am_imm7shiftOffsetAsmOperand<2>;
 
-class t2am_imm7_offset<int shift> : MemOperand {
+class t2am_imm7_offset<int shift> : MemOperand,
+      ComplexPattern<i32, 1, "SelectT2AddrModeImm7Offset<"#shift#">",
+                     [], [SDNPWantRoot]> {
   // They are printed the same way as the imm8 version
   let PrintMethod = "printT2AddrModeImm8OffsetOperand";
   let ParserMatchClass =
@@ -546,6 +548,19 @@ defm MVE_VADDVs32 : MVE_VADDV_A<"s32", 0b0, 0b10>;
 defm MVE_VADDVu8  : MVE_VADDV_A<"u8",  0b1, 0b00>;
 defm MVE_VADDVu16 : MVE_VADDV_A<"u16", 0b1, 0b01>;
 defm MVE_VADDVu32 : MVE_VADDV_A<"u32", 0b1, 0b10>;
+
+let Predicates = [HasMVEInt] in {
+  def : Pat<(i32 (vecreduce_add (v4i32 MQPR:$src))), (i32 (MVE_VADDVu32no_acc $src))>;
+  def : Pat<(i32 (vecreduce_add (v8i16 MQPR:$src))), (i32 (MVE_VADDVu16no_acc $src))>;
+  def : Pat<(i32 (vecreduce_add (v16i8 MQPR:$src))), (i32 (MVE_VADDVu8no_acc $src))>;
+  def : Pat<(i32 (add (i32 (vecreduce_add (v4i32 MQPR:$src1))), (i32 tGPR:$src2))),
+            (i32 (MVE_VADDVu32acc $src2, $src1))>;
+  def : Pat<(i32 (add (i32 (vecreduce_add (v8i16 MQPR:$src1))), (i32 tGPR:$src2))),
+            (i32 (MVE_VADDVu16acc $src2, $src1))>;
+  def : Pat<(i32 (add (i32 (vecreduce_add (v16i8 MQPR:$src1))), (i32 tGPR:$src2))),
+            (i32 (MVE_VADDVu8acc $src2, $src1))>;
+
+}
 
 class MVE_VADDLV<string iname, string suffix, dag iops, string cstr,
                bit A, bit U, list<dag> pattern=[]>
@@ -1331,8 +1346,12 @@ let Predicates = [HasMVEInt] in {
 
   def : Pat<(insertelt (v8f16 MQPR:$src1), HPR:$src2, imm:$lane),
             (MVE_VMOV_to_lane_16 MQPR:$src1, (COPY_TO_REGCLASS HPR:$src2, rGPR), imm:$lane)>;
-  def : Pat<(extractelt (v8f16 MQPR:$src), imm:$lane),
-            (COPY_TO_REGCLASS (MVE_VMOV_from_lane_u16 MQPR:$src, imm:$lane), HPR)>;
+  def : Pat<(extractelt (v8f16 MQPR:$src), imm_even:$lane),
+            (EXTRACT_SUBREG MQPR:$src, (SSubReg_f16_reg imm_even:$lane))>;
+  def : Pat<(extractelt (v8f16 MQPR:$src), imm_odd:$lane),
+            (COPY_TO_REGCLASS
+              (VMOVH (EXTRACT_SUBREG MQPR:$src, (SSubReg_f16_reg imm_odd:$lane))),
+              HPR)>;
 
   def : Pat<(v4f32 (scalar_to_vector SPR:$src)),
             (INSERT_SUBREG (v4f32 (IMPLICIT_DEF)), SPR:$src, ssub_0)>;
@@ -2646,6 +2665,13 @@ let Predicates = [HasMVEFloat, UseFusedMAC] in {
             (v4f32 (MVE_VFMSf32 $src1, $src2, $src3))>;
 }
 
+let Predicates = [HasMVEFloat] in {
+  def : Pat<(v8f16 (fma (v8f16 MQPR:$src1), (v8f16 MQPR:$src2), (v8f16 MQPR:$src3))),
+            (v8f16 (MVE_VFMAf16 $src3, $src1, $src2))>;
+  def : Pat<(v4f32 (fma (v4f32 MQPR:$src1), (v4f32 MQPR:$src2), (v4f32 MQPR:$src3))),
+            (v4f32 (MVE_VFMAf32 $src3, $src1, $src2))>;
+}
+
 
 def MVE_VADDf32 : MVE_VADDSUBFMA_fp<"vadd", "f32", 0b0, 0b0, 0b1, 0b0>;
 def MVE_VADDf16 : MVE_VADDSUBFMA_fp<"vadd", "f16", 0b1, 0b0, 0b1, 0b0>;
@@ -3756,6 +3782,21 @@ def MVE_VMLAS_qr_u8    : MVE_VFMAMLA_qr<"vmlas", "u8",  0b1, 0b00, 0b1>;
 def MVE_VMLAS_qr_u16   : MVE_VFMAMLA_qr<"vmlas", "u16", 0b1, 0b01, 0b1>;
 def MVE_VMLAS_qr_u32   : MVE_VFMAMLA_qr<"vmlas", "u32", 0b1, 0b10, 0b1>;
 
+let Predicates = [HasMVEInt] in {
+  def : Pat<(v4i32 (add (v4i32 MQPR:$src1),
+                        (v4i32 (mul (v4i32 MQPR:$src2),
+                                    (v4i32 (ARMvdup (i32 rGPR:$x))))))),
+            (v4i32 (MVE_VMLA_qr_u32 $src1, $src2, $x))>;
+  def : Pat<(v8i16 (add (v8i16 MQPR:$src1),
+                        (v8i16 (mul (v8i16 MQPR:$src2),
+                                    (v8i16 (ARMvdup (i32 rGPR:$x))))))),
+            (v8i16 (MVE_VMLA_qr_u16 $src1, $src2, $x))>;
+  def : Pat<(v16i8 (add (v16i8 MQPR:$src1),
+                        (v16i8 (mul (v16i8 MQPR:$src2),
+                                    (v16i8 (ARMvdup (i32 rGPR:$x))))))),
+            (v16i8 (MVE_VMLA_qr_u8 $src1, $src2, $x))>;
+}
+
 let Predicates = [HasMVEFloat] in {
   def MVE_VFMA_qr_f16  : MVE_VFMAMLA_qr<"vfma",  "f16", 0b1, 0b11, 0b0>;
   def MVE_VFMA_qr_f32  : MVE_VFMAMLA_qr<"vfma",  "f32", 0b0, 0b11, 0b0>;
@@ -4657,6 +4698,13 @@ let Predicates = [HasMVEInt] in {
             (v8i16 (MVE_VPSEL (MVE_VMOVimmi16 1), (MVE_VMOVimmi16 0), 0, VCCR:$pred))>;
   def : Pat<(v4i32 (anyext  (v4i1  VCCR:$pred))),
             (v4i32 (MVE_VPSEL (MVE_VMOVimmi32 1), (MVE_VMOVimmi32 0), 0, VCCR:$pred))>;
+
+  def : Pat<(v16i1 (trunc (v16i8 MQPR:$v1))),
+            (v16i1 (MVE_VCMPi32r (v16i8 MQPR:$v1), ZR, 1))>;
+  def : Pat<(v8i1 (trunc (v8i16  MQPR:$v1))),
+            (v8i1 (MVE_VCMPi32r (v8i16 MQPR:$v1), ZR, 1))>;
+  def : Pat<(v4i1 (trunc (v4i32  MQPR:$v1))),
+            (v4i1 (MVE_VCMPi32r (v4i32 MQPR:$v1), ZR, 1))>;
 }
 
 let Predicates = [HasMVEFloat] in {
@@ -4773,67 +4821,161 @@ def MVE_LCTP : MVE_loltp_end<(outs), (ins pred:$p), "lctp${p}", ""> {
 // Patterns
 //===----------------------------------------------------------------------===//
 
-class MVE_unpred_vector_store_typed<ValueType Ty, Instruction RegImmInst,
+class MVE_vector_store_typed<ValueType Ty, Instruction RegImmInst,
+                             PatFrag StoreKind, int shift>
+  : Pat<(StoreKind (Ty MQPR:$val), t2addrmode_imm7<shift>:$addr),
+        (RegImmInst (Ty MQPR:$val), t2addrmode_imm7<shift>:$addr)>;
+
+multiclass MVE_vector_store<Instruction RegImmInst, PatFrag StoreKind,
+                            int shift> {
+  def : MVE_vector_store_typed<v16i8, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_store_typed<v8i16, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_store_typed<v8f16, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_store_typed<v4i32, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_store_typed<v4f32, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_store_typed<v2i64, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_store_typed<v2f64, RegImmInst, StoreKind, shift>;
+}
+
+class MVE_vector_load_typed<ValueType Ty, Instruction RegImmInst,
+                            PatFrag LoadKind, int shift>
+  : Pat<(Ty (LoadKind t2addrmode_imm7<shift>:$addr)),
+        (Ty (RegImmInst t2addrmode_imm7<shift>:$addr))>;
+
+multiclass MVE_vector_load<Instruction RegImmInst, PatFrag LoadKind,
+                           int shift> {
+  def : MVE_vector_load_typed<v16i8, RegImmInst, LoadKind, shift>;
+  def : MVE_vector_load_typed<v8i16, RegImmInst, LoadKind, shift>;
+  def : MVE_vector_load_typed<v8f16, RegImmInst, LoadKind, shift>;
+  def : MVE_vector_load_typed<v4i32, RegImmInst, LoadKind, shift>;
+  def : MVE_vector_load_typed<v4f32, RegImmInst, LoadKind, shift>;
+  def : MVE_vector_load_typed<v2i64, RegImmInst, LoadKind, shift>;
+  def : MVE_vector_load_typed<v2f64, RegImmInst, LoadKind, shift>;
+}
+
+class MVE_vector_offset_store_typed<ValueType Ty, Instruction Opcode,
                                     PatFrag StoreKind, int shift>
-      : Pat<(StoreKind (Ty MQPR:$val), t2addrmode_imm7<shift>:$addr),
-           (RegImmInst (Ty MQPR:$val), t2addrmode_imm7<shift>:$addr)>;
+  : Pat<(StoreKind (Ty MQPR:$Rt), tGPR:$Rn, t2am_imm7_offset<shift>:$addr),
+        (Opcode MQPR:$Rt, tGPR:$Rn, t2am_imm7_offset<shift>:$addr)>;
 
-multiclass MVE_unpred_vector_store<Instruction RegImmInst, PatFrag StoreKind,
+multiclass MVE_vector_offset_store<Instruction RegImmInst, PatFrag StoreKind,
                                    int shift> {
-  def : MVE_unpred_vector_store_typed<v16i8, RegImmInst, StoreKind, shift>;
-  def : MVE_unpred_vector_store_typed<v8i16, RegImmInst, StoreKind, shift>;
-  def : MVE_unpred_vector_store_typed<v8f16, RegImmInst, StoreKind, shift>;
-  def : MVE_unpred_vector_store_typed<v4i32, RegImmInst, StoreKind, shift>;
-  def : MVE_unpred_vector_store_typed<v4f32, RegImmInst, StoreKind, shift>;
-  def : MVE_unpred_vector_store_typed<v2i64, RegImmInst, StoreKind, shift>;
-  def : MVE_unpred_vector_store_typed<v2f64, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_offset_store_typed<v16i8, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_offset_store_typed<v8i16, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_offset_store_typed<v8f16, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_offset_store_typed<v4i32, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_offset_store_typed<v4f32, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_offset_store_typed<v2i64, RegImmInst, StoreKind, shift>;
+  def : MVE_vector_offset_store_typed<v2f64, RegImmInst, StoreKind, shift>;
 }
 
-class MVE_unpred_vector_load_typed<ValueType Ty, Instruction RegImmInst,
-                                   PatFrag LoadKind, int shift>
-      : Pat<(Ty (LoadKind t2addrmode_imm7<shift>:$addr)),
-          (Ty (RegImmInst t2addrmode_imm7<shift>:$addr))>;
-
-multiclass MVE_unpred_vector_load<Instruction RegImmInst, PatFrag LoadKind,
-                                  int shift> {
-  def : MVE_unpred_vector_load_typed<v16i8, RegImmInst, LoadKind, shift>;
-  def : MVE_unpred_vector_load_typed<v8i16, RegImmInst, LoadKind, shift>;
-  def : MVE_unpred_vector_load_typed<v8f16, RegImmInst, LoadKind, shift>;
-  def : MVE_unpred_vector_load_typed<v4i32, RegImmInst, LoadKind, shift>;
-  def : MVE_unpred_vector_load_typed<v4f32, RegImmInst, LoadKind, shift>;
-  def : MVE_unpred_vector_load_typed<v2i64, RegImmInst, LoadKind, shift>;
-  def : MVE_unpred_vector_load_typed<v2f64, RegImmInst, LoadKind, shift>;
-}
+def aligned32_pre_store : PatFrag<(ops node:$val, node:$ptr, node:$offset),
+                                  (pre_store node:$val, node:$ptr, node:$offset), [{
+  return cast<StoreSDNode>(N)->getAlignment() >= 4;
+}]>;
+def aligned32_post_store : PatFrag<(ops node:$val, node:$ptr, node:$offset),
+                                   (post_store node:$val, node:$ptr, node:$offset), [{
+  return cast<StoreSDNode>(N)->getAlignment() >= 4;
+}]>;
+def aligned16_pre_store : PatFrag<(ops node:$val, node:$ptr, node:$offset),
+                                  (pre_store node:$val, node:$ptr, node:$offset), [{
+  return cast<StoreSDNode>(N)->getAlignment() >= 2;
+}]>;
+def aligned16_post_store : PatFrag<(ops node:$val, node:$ptr, node:$offset),
+                                   (post_store node:$val, node:$ptr, node:$offset), [{
+  return cast<StoreSDNode>(N)->getAlignment() >= 2;
+}]>;
 
 let Predicates = [HasMVEInt, IsLE] in {
-  defm : MVE_unpred_vector_store<MVE_VSTRBU8, byte_alignedstore, 0>;
-  defm : MVE_unpred_vector_store<MVE_VSTRHU16, hword_alignedstore, 1>;
-  defm : MVE_unpred_vector_store<MVE_VSTRWU32, alignedstore32, 2>;
+  // Stores
+  defm : MVE_vector_store<MVE_VSTRBU8, byte_alignedstore, 0>;
+  defm : MVE_vector_store<MVE_VSTRHU16, hword_alignedstore, 1>;
+  defm : MVE_vector_store<MVE_VSTRWU32, alignedstore32, 2>;
 
-  defm : MVE_unpred_vector_load<MVE_VLDRBU8, byte_alignedload, 0>;
-  defm : MVE_unpred_vector_load<MVE_VLDRHU16, hword_alignedload, 1>;
-  defm : MVE_unpred_vector_load<MVE_VLDRWU32, alignedload32, 2>;
+  // Loads
+  defm : MVE_vector_load<MVE_VLDRBU8, byte_alignedload, 0>;
+  defm : MVE_vector_load<MVE_VLDRHU16, hword_alignedload, 1>;
+  defm : MVE_vector_load<MVE_VLDRWU32, alignedload32, 2>;
 
+  // Pre/post inc stores
+  defm : MVE_vector_offset_store<MVE_VSTRBU8_pre, pre_store, 0>;
+  defm : MVE_vector_offset_store<MVE_VSTRBU8_post, post_store, 0>;
+  defm : MVE_vector_offset_store<MVE_VSTRHU16_pre, aligned16_pre_store, 1>;
+  defm : MVE_vector_offset_store<MVE_VSTRHU16_post, aligned16_post_store, 1>;
+  defm : MVE_vector_offset_store<MVE_VSTRWU32_pre, aligned32_pre_store, 2>;
+  defm : MVE_vector_offset_store<MVE_VSTRWU32_post, aligned32_post_store, 2>;
+}
+
+let Predicates = [HasMVEInt, IsBE] in {
+  // Aligned Stores
+  def : MVE_vector_store_typed<v16i8, MVE_VSTRBU8, store, 0>;
+  def : MVE_vector_store_typed<v8i16, MVE_VSTRHU16, alignedstore16, 1>;
+  def : MVE_vector_store_typed<v8f16, MVE_VSTRHU16, alignedstore16, 1>;
+  def : MVE_vector_store_typed<v4i32, MVE_VSTRWU32, alignedstore32, 2>;
+  def : MVE_vector_store_typed<v4f32, MVE_VSTRWU32, alignedstore32, 2>;
+
+  // Aligned Loads
+  def : MVE_vector_load_typed<v16i8, MVE_VLDRBU8, load, 0>;
+  def : MVE_vector_load_typed<v8i16, MVE_VLDRHU16, alignedload16, 1>;
+  def : MVE_vector_load_typed<v8f16, MVE_VLDRHU16, alignedload16, 1>;
+  def : MVE_vector_load_typed<v4i32, MVE_VLDRWU32, alignedload32, 2>;
+  def : MVE_vector_load_typed<v4f32, MVE_VLDRWU32, alignedload32, 2>;
+
+  // Other unaligned loads/stores need to go though a VREV
+  def : Pat<(v2f64 (load t2addrmode_imm7<0>:$addr)),
+            (v2f64 (MVE_VREV64_8 (MVE_VLDRBU8 t2addrmode_imm7<0>:$addr)))>;
+  def : Pat<(v2i64 (load t2addrmode_imm7<0>:$addr)),
+            (v2i64 (MVE_VREV64_8 (MVE_VLDRBU8 t2addrmode_imm7<0>:$addr)))>;
+  def : Pat<(v4i32 (load t2addrmode_imm7<0>:$addr)),
+            (v4i32 (MVE_VREV32_8 (MVE_VLDRBU8 t2addrmode_imm7<0>:$addr)))>;
+  def : Pat<(v4f32 (load t2addrmode_imm7<0>:$addr)),
+            (v4f32 (MVE_VREV32_8 (MVE_VLDRBU8 t2addrmode_imm7<0>:$addr)))>;
+  def : Pat<(v8i16 (load t2addrmode_imm7<0>:$addr)),
+            (v8i16 (MVE_VREV16_8 (MVE_VLDRBU8 t2addrmode_imm7<0>:$addr)))>;
+  def : Pat<(v8f16 (load t2addrmode_imm7<0>:$addr)),
+            (v8f16 (MVE_VREV16_8 (MVE_VLDRBU8 t2addrmode_imm7<0>:$addr)))>;
+  def : Pat<(store (v2f64 MQPR:$val), t2addrmode_imm7<0>:$addr),
+            (MVE_VSTRBU8 (MVE_VREV64_8 MQPR:$val), t2addrmode_imm7<0>:$addr)>;
+  def : Pat<(store (v2i64 MQPR:$val), t2addrmode_imm7<0>:$addr),
+            (MVE_VSTRBU8 (MVE_VREV64_8 MQPR:$val), t2addrmode_imm7<0>:$addr)>;
+  def : Pat<(store (v4i32 MQPR:$val), t2addrmode_imm7<0>:$addr),
+            (MVE_VSTRBU8 (MVE_VREV32_8 MQPR:$val), t2addrmode_imm7<0>:$addr)>;
+  def : Pat<(store (v4f32 MQPR:$val), t2addrmode_imm7<0>:$addr),
+            (MVE_VSTRBU8 (MVE_VREV32_8 MQPR:$val), t2addrmode_imm7<0>:$addr)>;
+  def : Pat<(store (v8i16 MQPR:$val), t2addrmode_imm7<0>:$addr),
+            (MVE_VSTRBU8 (MVE_VREV16_8 MQPR:$val), t2addrmode_imm7<0>:$addr)>;
+  def : Pat<(store (v8f16 MQPR:$val), t2addrmode_imm7<0>:$addr),
+            (MVE_VSTRBU8 (MVE_VREV16_8 MQPR:$val), t2addrmode_imm7<0>:$addr)>;
+
+  // Pre/Post inc stores
+  def : MVE_vector_offset_store_typed<v16i8, MVE_VSTRBU8_pre, pre_store, 0>;
+  def : MVE_vector_offset_store_typed<v16i8, MVE_VSTRBU8_post, post_store, 0>;
+  def : MVE_vector_offset_store_typed<v8i16, MVE_VSTRHU16_pre, aligned16_pre_store, 1>;
+  def : MVE_vector_offset_store_typed<v8i16, MVE_VSTRHU16_post, aligned16_post_store, 1>;
+  def : MVE_vector_offset_store_typed<v8f16, MVE_VSTRHU16_pre, aligned16_pre_store, 1>;
+  def : MVE_vector_offset_store_typed<v8f16, MVE_VSTRHU16_post, aligned16_post_store, 1>;
+  def : MVE_vector_offset_store_typed<v4i32, MVE_VSTRWU32_pre, aligned32_pre_store, 2>;
+  def : MVE_vector_offset_store_typed<v4i32, MVE_VSTRWU32_post, aligned32_post_store, 2>;
+  def : MVE_vector_offset_store_typed<v4f32, MVE_VSTRWU32_pre, aligned32_pre_store, 2>;
+  def : MVE_vector_offset_store_typed<v4f32, MVE_VSTRWU32_post, aligned32_post_store, 2>;
+}
+
+let Predicates = [HasMVEInt] in {
+  // Predicate loads
   def  : Pat<(v16i1 (load t2addrmode_imm7<2>:$addr)),
              (v16i1 (VLDR_P0_off t2addrmode_imm7<2>:$addr))>;
   def  : Pat<(v8i1 (load t2addrmode_imm7<2>:$addr)),
              (v8i1 (VLDR_P0_off t2addrmode_imm7<2>:$addr))>;
   def  : Pat<(v4i1 (load t2addrmode_imm7<2>:$addr)),
              (v4i1 (VLDR_P0_off t2addrmode_imm7<2>:$addr))>;
-}
 
-let Predicates = [HasMVEInt, IsBE] in {
-  def : MVE_unpred_vector_store_typed<v16i8, MVE_VSTRBU8, store, 0>;
-  def : MVE_unpred_vector_store_typed<v8i16, MVE_VSTRHU16, alignedstore16, 1>;
-  def : MVE_unpred_vector_store_typed<v8f16, MVE_VSTRHU16, alignedstore16, 1>;
-  def : MVE_unpred_vector_store_typed<v4i32, MVE_VSTRWU32, alignedstore32, 2>;
-  def : MVE_unpred_vector_store_typed<v4f32, MVE_VSTRWU32, alignedstore32, 2>;
-
-  def : MVE_unpred_vector_load_typed<v16i8, MVE_VLDRBU8, load, 0>;
-  def : MVE_unpred_vector_load_typed<v8i16, MVE_VLDRHU16, alignedload16, 1>;
-  def : MVE_unpred_vector_load_typed<v8f16, MVE_VLDRHU16, alignedload16, 1>;
-  def : MVE_unpred_vector_load_typed<v4i32, MVE_VLDRWU32, alignedload32, 2>;
-  def : MVE_unpred_vector_load_typed<v4f32, MVE_VLDRWU32, alignedload32, 2>;
+  // Predicate stores
+  def  : Pat<(store (v4i1 VCCR:$val), t2addrmode_imm7<2>:$addr),
+             (VSTR_P0_off VCCR:$val, t2addrmode_imm7<2>:$addr)>;
+  def  : Pat<(store (v8i1 VCCR:$val), t2addrmode_imm7<2>:$addr),
+             (VSTR_P0_off VCCR:$val, t2addrmode_imm7<2>:$addr)>;
+  def  : Pat<(store (v16i1 VCCR:$val), t2addrmode_imm7<2>:$addr),
+             (VSTR_P0_off VCCR:$val, t2addrmode_imm7<2>:$addr)>;
 }
 
 
@@ -4842,15 +4984,33 @@ let Predicates = [HasMVEInt, IsBE] in {
 let MinAlignment = 2 in {
   def truncstorevi16_align2 : PatFrag<(ops node:$val, node:$ptr),
                                       (truncstorevi16 node:$val, node:$ptr)>;
+  def post_truncstvi16_align2 : PatFrag<(ops node:$val, node:$base, node:$offset),
+                                        (post_truncstvi16 node:$val, node:$base, node:$offset)>;
+  def pre_truncstvi16_align2 : PatFrag<(ops node:$val, node:$base, node:$offset),
+                                       (pre_truncstvi16 node:$val, node:$base, node:$offset)>;
 }
 
 let Predicates = [HasMVEInt] in {
-  def : Pat<(truncstorevi8  (v8i16 MQPR:$val), t2addrmode_imm7<0>:$addr),
-             (MVE_VSTRB16 MQPR:$val, t2addrmode_imm7<0>:$addr)>;
-  def : Pat<(truncstorevi8  (v4i32 MQPR:$val), t2addrmode_imm7<0>:$addr),
-             (MVE_VSTRB32 MQPR:$val, t2addrmode_imm7<0>:$addr)>;
+  def : Pat<(truncstorevi8 (v8i16 MQPR:$val), t2addrmode_imm7<0>:$addr),
+            (MVE_VSTRB16 MQPR:$val, t2addrmode_imm7<0>:$addr)>;
+  def : Pat<(truncstorevi8 (v4i32 MQPR:$val), t2addrmode_imm7<0>:$addr),
+            (MVE_VSTRB32 MQPR:$val, t2addrmode_imm7<0>:$addr)>;
   def : Pat<(truncstorevi16_align2 (v4i32 MQPR:$val), t2addrmode_imm7<1>:$addr),
-             (MVE_VSTRH32 MQPR:$val, t2addrmode_imm7<1>:$addr)>;
+            (MVE_VSTRH32 MQPR:$val, t2addrmode_imm7<1>:$addr)>;
+
+  def : Pat<(post_truncstvi8 (v8i16 MQPR:$Rt), tGPR:$Rn, t2am_imm7_offset<0>:$addr),
+            (MVE_VSTRB16_post MQPR:$Rt, tGPR:$Rn, t2am_imm7_offset<0>:$addr)>;
+  def : Pat<(post_truncstvi8 (v4i32 MQPR:$Rt), tGPR:$Rn, t2am_imm7_offset<0>:$addr),
+            (MVE_VSTRB32_post MQPR:$Rt, tGPR:$Rn, t2am_imm7_offset<0>:$addr)>;
+  def : Pat<(post_truncstvi16_align2 (v4i32 MQPR:$Rt), tGPR:$Rn, t2am_imm7_offset<1>:$addr),
+            (MVE_VSTRH32_post MQPR:$Rt, tGPR:$Rn, t2am_imm7_offset<1>:$addr)>;
+
+  def : Pat<(pre_truncstvi8 (v8i16 MQPR:$Rt), tGPR:$Rn, t2am_imm7_offset<0>:$addr),
+            (MVE_VSTRB16_pre MQPR:$Rt, tGPR:$Rn, t2am_imm7_offset<0>:$addr)>;
+  def : Pat<(pre_truncstvi8 (v4i32 MQPR:$Rt), tGPR:$Rn, t2am_imm7_offset<0>:$addr),
+            (MVE_VSTRB32_pre MQPR:$Rt, tGPR:$Rn, t2am_imm7_offset<0>:$addr)>;
+  def : Pat<(pre_truncstvi16_align2 (v4i32 MQPR:$Rt), tGPR:$Rn, t2am_imm7_offset<1>:$addr),
+            (MVE_VSTRH32_pre MQPR:$Rt, tGPR:$Rn, t2am_imm7_offset<1>:$addr)>;
 }
 
 
@@ -4887,102 +5047,102 @@ let Predicates = [HasMVEInt] in {
 // Bit convert patterns
 
 let Predicates = [HasMVEInt] in {
-  def : Pat<(v2f64 (bitconvert (v2i64 QPR:$src))), (v2f64 QPR:$src)>;
-  def : Pat<(v2i64 (bitconvert (v2f64 QPR:$src))), (v2i64 QPR:$src)>;
+  def : Pat<(v2f64 (bitconvert (v2i64 MQPR:$src))), (v2f64 MQPR:$src)>;
+  def : Pat<(v2i64 (bitconvert (v2f64 MQPR:$src))), (v2i64 MQPR:$src)>;
 
-  def : Pat<(v4i32 (bitconvert (v4f32 QPR:$src))), (v4i32 QPR:$src)>;
-  def : Pat<(v4f32 (bitconvert (v4i32 QPR:$src))), (v4f32 QPR:$src)>;
+  def : Pat<(v4i32 (bitconvert (v4f32 MQPR:$src))), (v4i32 MQPR:$src)>;
+  def : Pat<(v4f32 (bitconvert (v4i32 MQPR:$src))), (v4f32 MQPR:$src)>;
 
-  def : Pat<(v8i16 (bitconvert (v8f16 QPR:$src))), (v8i16  QPR:$src)>;
-  def : Pat<(v8f16 (bitconvert (v8i16 QPR:$src))), (v8f16  QPR:$src)>;
+  def : Pat<(v8i16 (bitconvert (v8f16 MQPR:$src))), (v8i16  MQPR:$src)>;
+  def : Pat<(v8f16 (bitconvert (v8i16 MQPR:$src))), (v8f16  MQPR:$src)>;
 }
 
 let Predicates = [IsLE,HasMVEInt] in {
-  def : Pat<(v2f64 (bitconvert (v4f32 QPR:$src))), (v2f64 QPR:$src)>;
-  def : Pat<(v2f64 (bitconvert (v4i32 QPR:$src))), (v2f64 QPR:$src)>;
-  def : Pat<(v2f64 (bitconvert (v8f16 QPR:$src))), (v2f64 QPR:$src)>;
-  def : Pat<(v2f64 (bitconvert (v8i16 QPR:$src))), (v2f64 QPR:$src)>;
-  def : Pat<(v2f64 (bitconvert (v16i8 QPR:$src))), (v2f64 QPR:$src)>;
+  def : Pat<(v2f64 (bitconvert (v4f32 MQPR:$src))), (v2f64 MQPR:$src)>;
+  def : Pat<(v2f64 (bitconvert (v4i32 MQPR:$src))), (v2f64 MQPR:$src)>;
+  def : Pat<(v2f64 (bitconvert (v8f16 MQPR:$src))), (v2f64 MQPR:$src)>;
+  def : Pat<(v2f64 (bitconvert (v8i16 MQPR:$src))), (v2f64 MQPR:$src)>;
+  def : Pat<(v2f64 (bitconvert (v16i8 MQPR:$src))), (v2f64 MQPR:$src)>;
 
-  def : Pat<(v2i64 (bitconvert (v4f32 QPR:$src))), (v2i64 QPR:$src)>;
-  def : Pat<(v2i64 (bitconvert (v4i32 QPR:$src))), (v2i64 QPR:$src)>;
-  def : Pat<(v2i64 (bitconvert (v8f16 QPR:$src))), (v2i64 QPR:$src)>;
-  def : Pat<(v2i64 (bitconvert (v8i16 QPR:$src))), (v2i64 QPR:$src)>;
-  def : Pat<(v2i64 (bitconvert (v16i8 QPR:$src))), (v2i64 QPR:$src)>;
+  def : Pat<(v2i64 (bitconvert (v4f32 MQPR:$src))), (v2i64 MQPR:$src)>;
+  def : Pat<(v2i64 (bitconvert (v4i32 MQPR:$src))), (v2i64 MQPR:$src)>;
+  def : Pat<(v2i64 (bitconvert (v8f16 MQPR:$src))), (v2i64 MQPR:$src)>;
+  def : Pat<(v2i64 (bitconvert (v8i16 MQPR:$src))), (v2i64 MQPR:$src)>;
+  def : Pat<(v2i64 (bitconvert (v16i8 MQPR:$src))), (v2i64 MQPR:$src)>;
 
-  def : Pat<(v4f32 (bitconvert (v2f64 QPR:$src))), (v4f32 QPR:$src)>;
-  def : Pat<(v4f32 (bitconvert (v2i64 QPR:$src))), (v4f32 QPR:$src)>;
-  def : Pat<(v4f32 (bitconvert (v8f16 QPR:$src))), (v4f32 QPR:$src)>;
-  def : Pat<(v4f32 (bitconvert (v8i16 QPR:$src))), (v4f32 QPR:$src)>;
-  def : Pat<(v4f32 (bitconvert (v16i8 QPR:$src))), (v4f32 QPR:$src)>;
+  def : Pat<(v4f32 (bitconvert (v2f64 MQPR:$src))), (v4f32 MQPR:$src)>;
+  def : Pat<(v4f32 (bitconvert (v2i64 MQPR:$src))), (v4f32 MQPR:$src)>;
+  def : Pat<(v4f32 (bitconvert (v8f16 MQPR:$src))), (v4f32 MQPR:$src)>;
+  def : Pat<(v4f32 (bitconvert (v8i16 MQPR:$src))), (v4f32 MQPR:$src)>;
+  def : Pat<(v4f32 (bitconvert (v16i8 MQPR:$src))), (v4f32 MQPR:$src)>;
 
-  def : Pat<(v4i32 (bitconvert (v2f64 QPR:$src))), (v4i32 QPR:$src)>;
-  def : Pat<(v4i32 (bitconvert (v2i64 QPR:$src))), (v4i32 QPR:$src)>;
-  def : Pat<(v4i32 (bitconvert (v8f16 QPR:$src))), (v4i32 QPR:$src)>;
-  def : Pat<(v4i32 (bitconvert (v8i16 QPR:$src))), (v4i32 QPR:$src)>;
-  def : Pat<(v4i32 (bitconvert (v16i8 QPR:$src))), (v4i32 QPR:$src)>;
+  def : Pat<(v4i32 (bitconvert (v2f64 MQPR:$src))), (v4i32 MQPR:$src)>;
+  def : Pat<(v4i32 (bitconvert (v2i64 MQPR:$src))), (v4i32 MQPR:$src)>;
+  def : Pat<(v4i32 (bitconvert (v8f16 MQPR:$src))), (v4i32 MQPR:$src)>;
+  def : Pat<(v4i32 (bitconvert (v8i16 MQPR:$src))), (v4i32 MQPR:$src)>;
+  def : Pat<(v4i32 (bitconvert (v16i8 MQPR:$src))), (v4i32 MQPR:$src)>;
 
-  def : Pat<(v8f16 (bitconvert (v2f64 QPR:$src))), (v8f16 QPR:$src)>;
-  def : Pat<(v8f16 (bitconvert (v2i64 QPR:$src))), (v8f16 QPR:$src)>;
-  def : Pat<(v8f16 (bitconvert (v4f32 QPR:$src))), (v8f16 QPR:$src)>;
-  def : Pat<(v8f16 (bitconvert (v4i32 QPR:$src))), (v8f16 QPR:$src)>;
-  def : Pat<(v8f16 (bitconvert (v16i8 QPR:$src))), (v8f16 QPR:$src)>;
+  def : Pat<(v8f16 (bitconvert (v2f64 MQPR:$src))), (v8f16 MQPR:$src)>;
+  def : Pat<(v8f16 (bitconvert (v2i64 MQPR:$src))), (v8f16 MQPR:$src)>;
+  def : Pat<(v8f16 (bitconvert (v4f32 MQPR:$src))), (v8f16 MQPR:$src)>;
+  def : Pat<(v8f16 (bitconvert (v4i32 MQPR:$src))), (v8f16 MQPR:$src)>;
+  def : Pat<(v8f16 (bitconvert (v16i8 MQPR:$src))), (v8f16 MQPR:$src)>;
 
-  def : Pat<(v8i16 (bitconvert (v2f64 QPR:$src))), (v8i16 QPR:$src)>;
-  def : Pat<(v8i16 (bitconvert (v2i64 QPR:$src))), (v8i16 QPR:$src)>;
-  def : Pat<(v8i16 (bitconvert (v4f32 QPR:$src))), (v8i16 QPR:$src)>;
-  def : Pat<(v8i16 (bitconvert (v4i32 QPR:$src))), (v8i16 QPR:$src)>;
-  def : Pat<(v8i16 (bitconvert (v16i8 QPR:$src))), (v8i16 QPR:$src)>;
+  def : Pat<(v8i16 (bitconvert (v2f64 MQPR:$src))), (v8i16 MQPR:$src)>;
+  def : Pat<(v8i16 (bitconvert (v2i64 MQPR:$src))), (v8i16 MQPR:$src)>;
+  def : Pat<(v8i16 (bitconvert (v4f32 MQPR:$src))), (v8i16 MQPR:$src)>;
+  def : Pat<(v8i16 (bitconvert (v4i32 MQPR:$src))), (v8i16 MQPR:$src)>;
+  def : Pat<(v8i16 (bitconvert (v16i8 MQPR:$src))), (v8i16 MQPR:$src)>;
 
-  def : Pat<(v16i8 (bitconvert (v2f64 QPR:$src))), (v16i8 QPR:$src)>;
-  def : Pat<(v16i8 (bitconvert (v2i64 QPR:$src))), (v16i8 QPR:$src)>;
-  def : Pat<(v16i8 (bitconvert (v4f32 QPR:$src))), (v16i8 QPR:$src)>;
-  def : Pat<(v16i8 (bitconvert (v4i32 QPR:$src))), (v16i8 QPR:$src)>;
-  def : Pat<(v16i8 (bitconvert (v8f16 QPR:$src))), (v16i8 QPR:$src)>;
-  def : Pat<(v16i8 (bitconvert (v8i16 QPR:$src))), (v16i8 QPR:$src)>;
+  def : Pat<(v16i8 (bitconvert (v2f64 MQPR:$src))), (v16i8 MQPR:$src)>;
+  def : Pat<(v16i8 (bitconvert (v2i64 MQPR:$src))), (v16i8 MQPR:$src)>;
+  def : Pat<(v16i8 (bitconvert (v4f32 MQPR:$src))), (v16i8 MQPR:$src)>;
+  def : Pat<(v16i8 (bitconvert (v4i32 MQPR:$src))), (v16i8 MQPR:$src)>;
+  def : Pat<(v16i8 (bitconvert (v8f16 MQPR:$src))), (v16i8 MQPR:$src)>;
+  def : Pat<(v16i8 (bitconvert (v8i16 MQPR:$src))), (v16i8 MQPR:$src)>;
 }
 
 let Predicates = [IsBE,HasMVEInt] in {
-  def : Pat<(v2f64 (bitconvert (v4f32 QPR:$src))), (v2f64 (MVE_VREV64_32 QPR:$src))>;
-  def : Pat<(v2f64 (bitconvert (v4i32 QPR:$src))), (v2f64 (MVE_VREV64_32 QPR:$src))>;
-  def : Pat<(v2f64 (bitconvert (v8f16 QPR:$src))), (v2f64 (MVE_VREV64_16 QPR:$src))>;
-  def : Pat<(v2f64 (bitconvert (v8i16 QPR:$src))), (v2f64 (MVE_VREV64_16 QPR:$src))>;
-  def : Pat<(v2f64 (bitconvert (v16i8 QPR:$src))), (v2f64 (MVE_VREV64_8 QPR:$src))>;
+  def : Pat<(v2f64 (bitconvert (v4f32 MQPR:$src))), (v2f64 (MVE_VREV64_32 MQPR:$src))>;
+  def : Pat<(v2f64 (bitconvert (v4i32 MQPR:$src))), (v2f64 (MVE_VREV64_32 MQPR:$src))>;
+  def : Pat<(v2f64 (bitconvert (v8f16 MQPR:$src))), (v2f64 (MVE_VREV64_16 MQPR:$src))>;
+  def : Pat<(v2f64 (bitconvert (v8i16 MQPR:$src))), (v2f64 (MVE_VREV64_16 MQPR:$src))>;
+  def : Pat<(v2f64 (bitconvert (v16i8 MQPR:$src))), (v2f64 (MVE_VREV64_8 MQPR:$src))>;
 
-  def : Pat<(v2i64 (bitconvert (v4f32 QPR:$src))), (v2i64 (MVE_VREV64_32 QPR:$src))>;
-  def : Pat<(v2i64 (bitconvert (v4i32 QPR:$src))), (v2i64 (MVE_VREV64_32 QPR:$src))>;
-  def : Pat<(v2i64 (bitconvert (v8f16 QPR:$src))), (v2i64 (MVE_VREV64_16 QPR:$src))>;
-  def : Pat<(v2i64 (bitconvert (v8i16 QPR:$src))), (v2i64 (MVE_VREV64_16 QPR:$src))>;
-  def : Pat<(v2i64 (bitconvert (v16i8 QPR:$src))), (v2i64 (MVE_VREV64_8 QPR:$src))>;
+  def : Pat<(v2i64 (bitconvert (v4f32 MQPR:$src))), (v2i64 (MVE_VREV64_32 MQPR:$src))>;
+  def : Pat<(v2i64 (bitconvert (v4i32 MQPR:$src))), (v2i64 (MVE_VREV64_32 MQPR:$src))>;
+  def : Pat<(v2i64 (bitconvert (v8f16 MQPR:$src))), (v2i64 (MVE_VREV64_16 MQPR:$src))>;
+  def : Pat<(v2i64 (bitconvert (v8i16 MQPR:$src))), (v2i64 (MVE_VREV64_16 MQPR:$src))>;
+  def : Pat<(v2i64 (bitconvert (v16i8 MQPR:$src))), (v2i64 (MVE_VREV64_8 MQPR:$src))>;
 
-  def : Pat<(v4f32 (bitconvert (v2f64 QPR:$src))), (v4f32 (MVE_VREV64_32 QPR:$src))>;
-  def : Pat<(v4f32 (bitconvert (v2i64 QPR:$src))), (v4f32 (MVE_VREV64_32 QPR:$src))>;
-  def : Pat<(v4f32 (bitconvert (v8f16 QPR:$src))), (v4f32 (MVE_VREV32_16 QPR:$src))>;
-  def : Pat<(v4f32 (bitconvert (v8i16 QPR:$src))), (v4f32 (MVE_VREV32_16 QPR:$src))>;
-  def : Pat<(v4f32 (bitconvert (v16i8 QPR:$src))), (v4f32 (MVE_VREV32_8 QPR:$src))>;
+  def : Pat<(v4f32 (bitconvert (v2f64 MQPR:$src))), (v4f32 (MVE_VREV64_32 MQPR:$src))>;
+  def : Pat<(v4f32 (bitconvert (v2i64 MQPR:$src))), (v4f32 (MVE_VREV64_32 MQPR:$src))>;
+  def : Pat<(v4f32 (bitconvert (v8f16 MQPR:$src))), (v4f32 (MVE_VREV32_16 MQPR:$src))>;
+  def : Pat<(v4f32 (bitconvert (v8i16 MQPR:$src))), (v4f32 (MVE_VREV32_16 MQPR:$src))>;
+  def : Pat<(v4f32 (bitconvert (v16i8 MQPR:$src))), (v4f32 (MVE_VREV32_8 MQPR:$src))>;
 
-  def : Pat<(v4i32 (bitconvert (v2f64 QPR:$src))), (v4i32 (MVE_VREV64_32 QPR:$src))>;
-  def : Pat<(v4i32 (bitconvert (v2i64 QPR:$src))), (v4i32 (MVE_VREV64_32 QPR:$src))>;
-  def : Pat<(v4i32 (bitconvert (v8f16 QPR:$src))), (v4i32 (MVE_VREV32_16 QPR:$src))>;
-  def : Pat<(v4i32 (bitconvert (v8i16 QPR:$src))), (v4i32 (MVE_VREV32_16 QPR:$src))>;
-  def : Pat<(v4i32 (bitconvert (v16i8 QPR:$src))), (v4i32 (MVE_VREV32_8 QPR:$src))>;
+  def : Pat<(v4i32 (bitconvert (v2f64 MQPR:$src))), (v4i32 (MVE_VREV64_32 MQPR:$src))>;
+  def : Pat<(v4i32 (bitconvert (v2i64 MQPR:$src))), (v4i32 (MVE_VREV64_32 MQPR:$src))>;
+  def : Pat<(v4i32 (bitconvert (v8f16 MQPR:$src))), (v4i32 (MVE_VREV32_16 MQPR:$src))>;
+  def : Pat<(v4i32 (bitconvert (v8i16 MQPR:$src))), (v4i32 (MVE_VREV32_16 MQPR:$src))>;
+  def : Pat<(v4i32 (bitconvert (v16i8 MQPR:$src))), (v4i32 (MVE_VREV32_8 MQPR:$src))>;
 
-  def : Pat<(v8f16 (bitconvert (v2f64 QPR:$src))), (v8f16 (MVE_VREV64_16 QPR:$src))>;
-  def : Pat<(v8f16 (bitconvert (v2i64 QPR:$src))), (v8f16 (MVE_VREV64_16 QPR:$src))>;
-  def : Pat<(v8f16 (bitconvert (v4f32 QPR:$src))), (v8f16 (MVE_VREV32_16 QPR:$src))>;
-  def : Pat<(v8f16 (bitconvert (v4i32 QPR:$src))), (v8f16 (MVE_VREV32_16 QPR:$src))>;
-  def : Pat<(v8f16 (bitconvert (v16i8 QPR:$src))), (v8f16 (MVE_VREV16_8 QPR:$src))>;
+  def : Pat<(v8f16 (bitconvert (v2f64 MQPR:$src))), (v8f16 (MVE_VREV64_16 MQPR:$src))>;
+  def : Pat<(v8f16 (bitconvert (v2i64 MQPR:$src))), (v8f16 (MVE_VREV64_16 MQPR:$src))>;
+  def : Pat<(v8f16 (bitconvert (v4f32 MQPR:$src))), (v8f16 (MVE_VREV32_16 MQPR:$src))>;
+  def : Pat<(v8f16 (bitconvert (v4i32 MQPR:$src))), (v8f16 (MVE_VREV32_16 MQPR:$src))>;
+  def : Pat<(v8f16 (bitconvert (v16i8 MQPR:$src))), (v8f16 (MVE_VREV16_8 MQPR:$src))>;
 
-  def : Pat<(v8i16 (bitconvert (v2f64 QPR:$src))), (v8i16 (MVE_VREV64_16 QPR:$src))>;
-  def : Pat<(v8i16 (bitconvert (v2i64 QPR:$src))), (v8i16 (MVE_VREV64_16 QPR:$src))>;
-  def : Pat<(v8i16 (bitconvert (v4f32 QPR:$src))), (v8i16 (MVE_VREV32_16 QPR:$src))>;
-  def : Pat<(v8i16 (bitconvert (v4i32 QPR:$src))), (v8i16 (MVE_VREV32_16 QPR:$src))>;
-  def : Pat<(v8i16 (bitconvert (v16i8 QPR:$src))), (v8i16 (MVE_VREV16_8 QPR:$src))>;
+  def : Pat<(v8i16 (bitconvert (v2f64 MQPR:$src))), (v8i16 (MVE_VREV64_16 MQPR:$src))>;
+  def : Pat<(v8i16 (bitconvert (v2i64 MQPR:$src))), (v8i16 (MVE_VREV64_16 MQPR:$src))>;
+  def : Pat<(v8i16 (bitconvert (v4f32 MQPR:$src))), (v8i16 (MVE_VREV32_16 MQPR:$src))>;
+  def : Pat<(v8i16 (bitconvert (v4i32 MQPR:$src))), (v8i16 (MVE_VREV32_16 MQPR:$src))>;
+  def : Pat<(v8i16 (bitconvert (v16i8 MQPR:$src))), (v8i16 (MVE_VREV16_8 MQPR:$src))>;
 
-  def : Pat<(v16i8 (bitconvert (v2f64 QPR:$src))), (v16i8 (MVE_VREV64_8 QPR:$src))>;
-  def : Pat<(v16i8 (bitconvert (v2i64 QPR:$src))), (v16i8 (MVE_VREV64_8 QPR:$src))>;
-  def : Pat<(v16i8 (bitconvert (v4f32 QPR:$src))), (v16i8 (MVE_VREV32_8 QPR:$src))>;
-  def : Pat<(v16i8 (bitconvert (v4i32 QPR:$src))), (v16i8 (MVE_VREV32_8 QPR:$src))>;
-  def : Pat<(v16i8 (bitconvert (v8f16 QPR:$src))), (v16i8 (MVE_VREV16_8 QPR:$src))>;
-  def : Pat<(v16i8 (bitconvert (v8i16 QPR:$src))), (v16i8 (MVE_VREV16_8 QPR:$src))>;
+  def : Pat<(v16i8 (bitconvert (v2f64 MQPR:$src))), (v16i8 (MVE_VREV64_8 MQPR:$src))>;
+  def : Pat<(v16i8 (bitconvert (v2i64 MQPR:$src))), (v16i8 (MVE_VREV64_8 MQPR:$src))>;
+  def : Pat<(v16i8 (bitconvert (v4f32 MQPR:$src))), (v16i8 (MVE_VREV32_8 MQPR:$src))>;
+  def : Pat<(v16i8 (bitconvert (v4i32 MQPR:$src))), (v16i8 (MVE_VREV32_8 MQPR:$src))>;
+  def : Pat<(v16i8 (bitconvert (v8f16 MQPR:$src))), (v16i8 (MVE_VREV16_8 MQPR:$src))>;
+  def : Pat<(v16i8 (bitconvert (v8i16 MQPR:$src))), (v16i8 (MVE_VREV16_8 MQPR:$src))>;
 }

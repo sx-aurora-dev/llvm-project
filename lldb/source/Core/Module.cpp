@@ -292,7 +292,7 @@ ObjectFile *Module::GetMemoryObjectFile(const lldb::ProcessSP &process_sp,
     std::lock_guard<std::recursive_mutex> guard(m_mutex);
     if (process_sp) {
       m_did_load_objfile = true;
-      auto data_up = llvm::make_unique<DataBufferHeap>(size_to_read, 0);
+      auto data_up = std::make_unique<DataBufferHeap>(size_to_read, 0);
       Status readmem_error;
       const size_t bytes_read =
           process_sp->ReadMemory(header_addr, data_up->GetBytes(),
@@ -1037,28 +1037,30 @@ size_t Module::FindTypes(
   return num_matches;
 }
 
-SymbolVendor *Module::GetSymbolVendor(bool can_create,
-                                      lldb_private::Stream *feedback_strm) {
-  if (!m_did_load_symbol_vendor.load()) {
+size_t Module::FindTypes(llvm::ArrayRef<CompilerContext> pattern,
+                         LanguageSet languages, bool append, TypeMap &types) {
+  static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
+  Timer scoped_timer(func_cat, LLVM_PRETTY_FUNCTION);
+  if (SymbolFile *symbols = GetSymbolFile())
+    return symbols->FindTypes(pattern, languages, append, types);
+  return 0;
+}
+
+SymbolFile *Module::GetSymbolFile(bool can_create, Stream *feedback_strm) {
+  if (!m_did_load_symfile.load()) {
     std::lock_guard<std::recursive_mutex> guard(m_mutex);
-    if (!m_did_load_symbol_vendor.load() && can_create) {
+    if (!m_did_load_symfile.load() && can_create) {
       ObjectFile *obj_file = GetObjectFile();
       if (obj_file != nullptr) {
         static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
         Timer scoped_timer(func_cat, LLVM_PRETTY_FUNCTION);
         m_symfile_up.reset(
             SymbolVendor::FindPlugin(shared_from_this(), feedback_strm));
-        m_did_load_symbol_vendor = true;
+        m_did_load_symfile = true;
       }
     }
   }
-  return m_symfile_up.get();
-}
-
-SymbolFile *Module::GetSymbolFile(bool can_create, Stream *feedback_strm) {
-  if (SymbolVendor *vendor = GetSymbolVendor(can_create, feedback_strm))
-    return vendor->GetSymbolFile();
-  return nullptr;
+  return m_symfile_up ? m_symfile_up->GetSymbolFile() : nullptr;
 }
 
 Symtab *Module::GetSymtab() {
@@ -1304,7 +1306,7 @@ UnwindTable &Module::GetUnwindTable() {
 
 SectionList *Module::GetUnifiedSectionList() {
   if (!m_sections_up)
-    m_sections_up = llvm::make_unique<SectionList>();
+    m_sections_up = std::make_unique<SectionList>();
   return m_sections_up.get();
 }
 
@@ -1467,7 +1469,7 @@ void Module::SetSymbolFileFileSpec(const FileSpec &file) {
   }
   m_symfile_spec = file;
   m_symfile_up.reset();
-  m_did_load_symbol_vendor = false;
+  m_did_load_symfile = false;
 }
 
 bool Module::IsExecutable() {

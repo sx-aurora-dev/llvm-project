@@ -1527,6 +1527,9 @@ bool CursorVisitor::VisitBuiltinTypeLoc(BuiltinTypeLoc TL) {
   case BuiltinType::OCLClkEvent:
   case BuiltinType::OCLQueue:
   case BuiltinType::OCLReserveID:
+#define SVE_TYPE(Name, Id, SingletonId) \
+  case BuiltinType::Id:
+#include "clang/Basic/AArch64SVEACLETypes.def"
 #define BUILTIN_TYPE(Id, SingletonId)
 #define SIGNED_TYPE(Id, SingletonId) case BuiltinType::Id:
 #define UNSIGNED_TYPE(Id, SingletonId) case BuiltinType::Id:
@@ -3414,6 +3417,8 @@ clang_parseTranslationUnit_Impl(CXIndex CIdx, const char *source_filename,
     = options & CXTranslationUnit_IncludeBriefCommentsInCodeCompletion;
   bool SingleFileParse = options & CXTranslationUnit_SingleFileParse;
   bool ForSerialization = options & CXTranslationUnit_ForSerialization;
+  bool RetainExcludedCB = options &
+    CXTranslationUnit_RetainExcludedConditionalBlocks;
   SkipFunctionBodiesScope SkipFunctionBodies = SkipFunctionBodiesScope::None;
   if (options & CXTranslationUnit_SkipFunctionBodies) {
     SkipFunctionBodies =
@@ -3514,7 +3519,7 @@ clang_parseTranslationUnit_Impl(CXIndex CIdx, const char *source_filename,
       /*RemappedFilesKeepOriginalName=*/true, PrecompilePreambleAfterNParses,
       TUKind, CacheCodeCompletionResults, IncludeBriefCommentsInCodeCompletion,
       /*AllowPCHWithCompilerErrors=*/true, SkipFunctionBodies, SingleFileParse,
-      /*UserFilesAreVolatile=*/true, ForSerialization,
+      /*UserFilesAreVolatile=*/true, ForSerialization, RetainExcludedCB,
       CXXIdx->getPCHContainerOperations()->getRawReader().getFormat(),
       &ErrUnit));
 
@@ -3789,7 +3794,7 @@ static const ExprEvalResult* evaluateExpr(Expr *expr, CXCursor C) {
 
   QualType rettype;
   CallExpr *callExpr;
-  auto result = llvm::make_unique<ExprEvalResult>();
+  auto result = std::make_unique<ExprEvalResult>();
   result->EvalType = CXEval_UnExposed;
   result->IsUnsignedInt = false;
 

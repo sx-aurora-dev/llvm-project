@@ -697,6 +697,22 @@ llvm::DIType *CGDebugInfo::CreateType(const BuiltinType *BT) {
   case BuiltinType::Id: \
     return getOrCreateStructPtrType("opencl_" #ExtType, Id##Ty);
 #include "clang/Basic/OpenCLExtensionTypes.def"
+  // TODO: real support for SVE types requires more infrastructure
+  // to be added first.  The types have a variable length and are
+  // represented in debug info as types whose length depends on a
+  // target-specific pseudo register.
+#define SVE_TYPE(Name, Id, SingletonId) \
+  case BuiltinType::Id:
+#include "clang/Basic/AArch64SVEACLETypes.def"
+  {
+    unsigned DiagID = CGM.getDiags().getCustomDiagID(
+        DiagnosticsEngine::Error,
+        "cannot yet generate debug info for SVE type '%0'");
+    auto Name = BT->getName(CGM.getContext().getPrintingPolicy());
+    CGM.getDiags().Report(DiagID) << Name;
+    // Return something safe.
+    return CreateType(cast<const BuiltinType>(CGM.getContext().IntTy));
+  }
 
   case BuiltinType::UChar:
   case BuiltinType::Char_U:
@@ -3105,7 +3121,8 @@ llvm::DICompositeType *CGDebugInfo::CreateLimitedType(const RecordType *Ty) {
 
   SmallString<256> Identifier = getTypeIdentifier(Ty, CGM, TheCU);
 
-  // Explicitly record the calling convention for C++ records.
+  // Explicitly record the calling convention and export symbols for C++
+  // records.
   auto Flags = llvm::DINode::FlagZero;
   if (auto CXXRD = dyn_cast<CXXRecordDecl>(RD)) {
     if (CGM.getCXXABI().getRecordArgABI(CXXRD) == CGCXXABI::RAA_Indirect)
@@ -3116,6 +3133,10 @@ llvm::DICompositeType *CGDebugInfo::CreateLimitedType(const RecordType *Ty) {
     // Record if a C++ record is non-trivial type.
     if (!CXXRD->isTrivial())
       Flags |= llvm::DINode::FlagNonTrivial;
+
+    // Record exports it symbols to the containing structure.
+    if (CXXRD->isAnonymousStructOrUnion())
+        Flags |= llvm::DINode::FlagExportSymbols;
   }
 
   llvm::DICompositeType *RealDecl = DBuilder.createReplaceableCompositeType(

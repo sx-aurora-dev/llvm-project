@@ -174,12 +174,13 @@ struct OutgoingArgHandler : public CallLowering::ValueHandler {
   bool assignArg(unsigned ValNo, MVT ValVT, MVT LocVT,
                  CCValAssign::LocInfo LocInfo,
                  const CallLowering::ArgInfo &Info,
+                 ISD::ArgFlagsTy Flags,
                  CCState &State) override {
     bool Res;
     if (Info.IsFixed)
-      Res = AssignFn(ValNo, ValVT, LocVT, LocInfo, Info.Flags, State);
+      Res = AssignFn(ValNo, ValVT, LocVT, LocInfo, Flags, State);
     else
-      Res = AssignFnVarArg(ValNo, ValVT, LocVT, LocInfo, Info.Flags, State);
+      Res = AssignFnVarArg(ValNo, ValVT, LocVT, LocInfo, Flags, State);
 
     StackSize = State.getNextStackOffset();
     return Res;
@@ -208,7 +209,7 @@ void AArch64CallLowering::splitToValueTypes(
     // No splitting to do, but we want to replace the original type (e.g. [1 x
     // double] -> double).
     SplitArgs.emplace_back(OrigArg.Regs[0], SplitVTs[0].getTypeForEVT(Ctx),
-                           OrigArg.Flags, OrigArg.IsFixed);
+                           OrigArg.Flags[0], OrigArg.IsFixed);
     return;
   }
 
@@ -219,13 +220,13 @@ void AArch64CallLowering::splitToValueTypes(
       OrigArg.Ty, CallConv, false);
   for (unsigned i = 0, e = SplitVTs.size(); i < e; ++i) {
     Type *SplitTy = SplitVTs[i].getTypeForEVT(Ctx);
-    SplitArgs.emplace_back(OrigArg.Regs[i], SplitTy, OrigArg.Flags,
+    SplitArgs.emplace_back(OrigArg.Regs[i], SplitTy, OrigArg.Flags[0],
                            OrigArg.IsFixed);
     if (NeedsRegBlock)
-      SplitArgs.back().Flags.setInConsecutiveRegs();
+      SplitArgs.back().Flags[0].setInConsecutiveRegs();
   }
 
-  SplitArgs.back().Flags.setInConsecutiveRegsLast();
+  SplitArgs.back().Flags[0].setInConsecutiveRegsLast();
 }
 
 bool AArch64CallLowering::lowerReturn(MachineIRBuilder &MIRBuilder,
@@ -403,39 +404,39 @@ bool AArch64CallLowering::lowerFormalArguments(
 }
 
 bool AArch64CallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
-                                    CallingConv::ID CallConv,
-                                    const MachineOperand &Callee,
-                                    const ArgInfo &OrigRet,
-                                    ArrayRef<ArgInfo> OrigArgs,
-                                    Register SwiftErrorVReg,
-                                    const MDNode *KnownCallees) const {
+                                    CallLoweringInfo &Info) const {
   MachineFunction &MF = MIRBuilder.getMF();
   const Function &F = MF.getFunction();
   MachineRegisterInfo &MRI = MF.getRegInfo();
   auto &DL = F.getParent()->getDataLayout();
 
+  if (Info.IsMustTailCall) {
+    LLVM_DEBUG(dbgs() << "Cannot lower musttail calls yet.\n");
+    return false;
+  }
+
   SmallVector<ArgInfo, 8> SplitArgs;
-  for (auto &OrigArg : OrigArgs) {
-    splitToValueTypes(OrigArg, SplitArgs, DL, MRI, CallConv);
+  for (auto &OrigArg : Info.OrigArgs) {
+    splitToValueTypes(OrigArg, SplitArgs, DL, MRI, Info.CallConv);
     // AAPCS requires that we zero-extend i1 to 8 bits by the caller.
     if (OrigArg.Ty->isIntegerTy(1))
-      SplitArgs.back().Flags.setZExt();
+      SplitArgs.back().Flags[0].setZExt();
   }
 
   // Find out which ABI gets to decide where things go.
   const AArch64TargetLowering &TLI = *getTLI<AArch64TargetLowering>();
   CCAssignFn *AssignFnFixed =
-      TLI.CCAssignFnForCall(CallConv, /*IsVarArg=*/false);
+      TLI.CCAssignFnForCall(Info.CallConv, /*IsVarArg=*/false);
   CCAssignFn *AssignFnVarArg =
-      TLI.CCAssignFnForCall(CallConv, /*IsVarArg=*/true);
+      TLI.CCAssignFnForCall(Info.CallConv, /*IsVarArg=*/true);
 
   auto CallSeqStart = MIRBuilder.buildInstr(AArch64::ADJCALLSTACKDOWN);
 
   // Create a temporarily-floating call instruction so we can add the implicit
   // uses of arg registers.
-  auto MIB = MIRBuilder.buildInstrNoInsert(Callee.isReg() ? AArch64::BLR
-                                                          : AArch64::BL);
-  MIB.add(Callee);
+  auto MIB = MIRBuilder.buildInstrNoInsert(Info.Callee.isReg() ? AArch64::BLR
+                                                               : AArch64::BL);
+  MIB.add(Info.Callee);
 
   // Tell the call which registers are clobbered.
   auto TRI = MF.getSubtarget<AArch64Subtarget>().getRegisterInfo();
@@ -460,28 +461,29 @@ bool AArch64CallLowering::lowerCall(MachineIRBuilder &MIRBuilder,
   // If Callee is a reg, since it is used by a target specific
   // instruction, it must have a register class matching the
   // constraint of that instruction.
-  if (Callee.isReg())
+  if (Info.Callee.isReg())
     MIB->getOperand(0).setReg(constrainOperandRegClass(
         MF, *TRI, MRI, *MF.getSubtarget().getInstrInfo(),
-        *MF.getSubtarget().getRegBankInfo(), *MIB, MIB->getDesc(), Callee, 0));
+        *MF.getSubtarget().getRegBankInfo(), *MIB, MIB->getDesc(), Info.Callee,
+        0));
 
   // Finally we can copy the returned value back into its virtual-register. In
   // symmetry with the arugments, the physical register must be an
   // implicit-define of the call instruction.
   CCAssignFn *RetAssignFn = TLI.CCAssignFnForReturn(F.getCallingConv());
-  if (!OrigRet.Ty->isVoidTy()) {
+  if (!Info.OrigRet.Ty->isVoidTy()) {
     SplitArgs.clear();
 
-    splitToValueTypes(OrigRet, SplitArgs, DL, MRI, F.getCallingConv());
+    splitToValueTypes(Info.OrigRet, SplitArgs, DL, MRI, F.getCallingConv());
 
     CallReturnHandler Handler(MIRBuilder, MRI, MIB, RetAssignFn);
     if (!handleAssignments(MIRBuilder, SplitArgs, Handler))
       return false;
   }
 
-  if (SwiftErrorVReg) {
+  if (Info.SwiftErrorVReg) {
     MIB.addDef(AArch64::X21, RegState::Implicit);
-    MIRBuilder.buildCopy(SwiftErrorVReg, Register(AArch64::X21));
+    MIRBuilder.buildCopy(Info.SwiftErrorVReg, Register(AArch64::X21));
   }
 
   CallSeqStart.addImm(Handler.StackSize).addImm(0);
