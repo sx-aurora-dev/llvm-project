@@ -8834,6 +8834,25 @@ def vmrg_vsvmvl : RV<0xd6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$
   let DisableEncoding = "$vl";
 }
 
+// VMRG vmrg vmrg_vIvml
+def vmrg_vIvml : RV<0xd6, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, I32:$vl),
+       "vmrg $vx,$I,$vz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMRG vmrg vmrg_vIvmvl
+def vmrg_vIvmvl : RV<0xd6, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
+       "vmrg $vx,$I,$vz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMRG vmrg.w vmrgw_vvvMl
 def vmrgw_vvvMl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, I32:$vl),
        "vmrg.w $vx,$vy,$vz,$vm", [], NoItinerary>

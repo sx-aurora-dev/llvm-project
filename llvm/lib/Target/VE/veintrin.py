@@ -537,66 +537,6 @@ class TestFunc:
     def decl(self):
         return "extern {};".format(self.header_)
 
-class TestGeneratorVMRG:
-    def gen(self, I):
-
-        p = {'type' : 'unsigned long int*',
-             'stride' : 256, 'vm' : '__vm', 'vfmk' : '_vel_vfmkwgt_mvl',
-             'vld' : '_vel_vldlzx_vssl(4, pvm, l)' }
-        p['lvl'] = 'n - i < 256 ? n - i : 256'
-        if I.ins[2].isMask512():
-            p = {'type' : 'unsigned int*',
-                 'stride': 512, 'vm' : '__vm512',
-                 'vfmk' : '_vel_pvfmkwgt_Mvl', 'vld' : '_vel_vld_vssl(8, pvm, l)'}
-            p['lvl'] = 'n - i < 512 ? (n - i) / 2UL : 256'
-
-        args = ", ".join(["{} {}{}".format(op.ctype(), ("" if op.isSReg() else "p"), op.regName()) for op in I.outs + I.ins if not op.isVL()])
-
-        #header = "void {f}({ty} px, {ty} py, {ty} pz, unsigned int* pm, int n)".format(f=I.intrinsicName(), ty=p['type'], args=args)
-        header = "void {f}({args}, int n)".format(f=I.intrinsicName(), args=args)
-
-        load = ""
-        for op in I.ins:
-            if op.isVReg() and (not op.isMask()) and (not op.isVL()):
-                load += "        __vr {} = _vel_vld_vssl(8, p{}, l);\n".format(op.regName(), op.regName())
-
-        args = ", ".join([op.regName() for op in I.ins if not op.isVL()])
-
-        incy = ""
-        if I.ins[0].isVReg():
-            incy = "pvy += {};".format(p['stride'])
-
-        func = '''#include <velintrin.h>
-{header}
-{{
-    for (int i = 0; i < n; i += {stride}) {{
-        int l = {lvl};
-{load}
-        __vr tmp = {vld};
-        {vm} vm = {vfmk}(tmp, l);
-        __vr vx = _vel_{intrin}({args}, l);
-        _vel_vst_vssl(vx, 8, pvx, l);
-        pvx += {stride};
-        {incy}
-        pvz += {stride};
-        pvm += {stride};
-    }}
-}}'''.format(header=header, vm=p['vm'], vfmk=p['vfmk'], vld=p['vld'], stride=p['stride'], lvl=p['lvl'], intrin=I.intrinsicName(), args=args, load=load, incy=incy)
-
-        if I.ins[0].isVReg():
-            y = "pvy[i]"
-        else: # SReg
-            y = "sy"
-
-        ref = '''{header}
-{{
-    for (int i = 0; i < n; ++i) {{
-        pvx[i] = pvm[i] > 0 ? pvz[i] : {y};
-    }}
-}}'''.format(header=header, y=y)
-
-        return TestFunc(header, func, ref)
-
 class TestGeneratorMask:
     def gen(self, I):
         intrinsicName = re.sub(r'[IN]', 's', I.intrinsicName())
@@ -799,8 +739,6 @@ class TestGenerator:
         return TestFunc(self.funcHeader(I), self.test_(I), self.reference(I));
 
 def getTestGenerator(I):
-    if (I.inst() == 'VMRG'):
-        return TestGeneratorVMRG()
     if len(I.outs) > 0 and I.outs[0].isMask():
         return TestGeneratorMask()
     return TestGenerator()
@@ -1503,6 +1441,7 @@ def createInstructionTable(isVL):
     T.Section("Table 3-20 Vector Mask Arithmetic Instructions", 34)
     T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), VY(T_u64), VZ(T_u64), VM]]).noTest()
     T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), SY(T_u64), VZ(T_u64), VM]]).noTest()
+    T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), ImmI(T_u64), VZ(T_u64), VM]]).noTest()
     T.Def(0xD6, "VMRG", "p", "vmrg.w", [[VX(T_u32), VY(T_u32), VZ(T_u32), VM512]]).noTest()
     T.Def(0xD6, "VMRG", "p", "vmrg.w", [[VX(T_u32), SY(T_u32), VZ(T_u32), VM512]]).noTest()
     T.Def(0xBC, "VSHF", "", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])

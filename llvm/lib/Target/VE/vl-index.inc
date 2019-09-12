@@ -910,6 +910,8 @@ case VE::vmrg_vvvml: return 4;
 case VE::vmrg_vvvmvl: return 5;
 case VE::vmrg_vsvml: return 4;
 case VE::vmrg_vsvmvl: return 5;
+case VE::vmrg_vIvml: return 4;
+case VE::vmrg_vIvmvl: return 5;
 case VE::vmrgw_vvvMl: return 4;
 case VE::vmrgw_vvvMvl: return 5;
 case VE::vmrgw_vsvMl: return 4;
