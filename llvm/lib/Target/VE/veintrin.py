@@ -1025,8 +1025,11 @@ class InstTable(object):
     def VSTm(self, opc, inst, asm):
         O_rr = [None, VX(T_u64), SY(T_u64), SZ(T_voidp)]
         O_ir = [None, VX(T_u64), ImmI(T_u64), SZ(T_voidp)]
-        self.Def(opc, inst, "", asm, [O_rr, O_ir]).noTest().writeMem()
-        self.Def(opc, inst, "ot", asm+".ot", [O_rr, O_ir]).oldLowering().noTest().writeMem()
+        #self.Def(opc, inst, "", asm, [O_rr, O_ir]).noTest().writeMem()
+        #self.Def(opc, inst, "ot", asm+".ot", [O_rr, O_ir]).oldLowering().noTest().writeMem()
+        O = self.addMask([O_rr, O_ir], addVD=False)
+        self.Def(opc, inst, "", asm, O).noTest().writeMem()
+        self.Def(opc, inst, "ot", asm+".ot", O).oldLowering().noTest().writeMem()
 
     def VBRDm(self, opc, isVL):
         expr = "{0} = {1}"
@@ -1662,7 +1665,7 @@ def main():
     parser.add_argument('--mktest', dest="opt_mktest", action="store_true")
     parser.add_argument('-l', dest="opt_lowering", action="store_true")
     parser.add_argument('--vl', action="store_true")
-    parser.add_argument('--test-dir', default="../llvm-test/intrinsic/gen/tests")
+    parser.add_argument('--test-dir', default="../../llvm-ve-intrinsic-test/gen/tests")
     parser.add_argument('--vl-index', action="store_true");
     args, others = parser.parse_known_args()
     
