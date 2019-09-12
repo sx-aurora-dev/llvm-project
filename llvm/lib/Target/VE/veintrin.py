@@ -547,20 +547,25 @@ class TestGeneratorVMRG:
         if I.ins[2].isMask512():
             p = {'type' : 'unsigned int*',
                  'stride': 512, 'vm' : '__vm512',
-                 'vfmk' : '_vel_pvfmkw_Mvl', 'vld' : '_vel_vld_vssl(8, pvm, l)'}
+                 'vfmk' : '_vel_pvfmkwgt_Mvl', 'vld' : '_vel_vld_vssl(8, pvm, l)'}
             p['lvl'] = 'n - i < 512 ? (n - i) / 2UL : 256'
 
-        args = ", ".join(["{} p{}".format(op.ctype(), op.regName()) for op in I.outs + I.ins if not op.isVL()])
+        args = ", ".join(["{} {}{}".format(op.ctype(), ("" if op.isSReg() else "p"), op.regName()) for op in I.outs + I.ins if not op.isVL()])
 
         #header = "void {f}({ty} px, {ty} py, {ty} pz, unsigned int* pm, int n)".format(f=I.intrinsicName(), ty=p['type'], args=args)
         header = "void {f}({args}, int n)".format(f=I.intrinsicName(), args=args)
 
         load = ""
         for op in I.ins:
-            if not op.isMask() and not op.isVL():
+            if op.isVReg() and (not op.isMask()) and (not op.isVL()):
                 load += "        __vr {} = _vel_vld_vssl(8, p{}, l);\n".format(op.regName(), op.regName())
 
         args = ", ".join([op.regName() for op in I.ins if not op.isVL()])
+
+        incy = ""
+        if I.ins[0].isVReg():
+            incy = "pvy += {};".format(p['stride'])
+
         func = '''#include <velintrin.h>
 {header}
 {{
@@ -572,18 +577,23 @@ class TestGeneratorVMRG:
         __vr vx = _vel_{intrin}({args}, l);
         _vel_vst_vssl(vx, 8, pvx, l);
         pvx += {stride};
-        pvy += {stride};
+        {incy}
         pvz += {stride};
         pvm += {stride};
     }}
-}}'''.format(header=header, vm=p['vm'], vfmk=p['vfmk'], vld=p['vld'], stride=p['stride'], lvl=p['lvl'], intrin=I.intrinsicName(), args=args, load=load)
+}}'''.format(header=header, vm=p['vm'], vfmk=p['vfmk'], vld=p['vld'], stride=p['stride'], lvl=p['lvl'], intrin=I.intrinsicName(), args=args, load=load, incy=incy)
+
+        if I.ins[0].isVReg():
+            y = "pvy[i]"
+        else: # SReg
+            y = "sy"
 
         ref = '''{header}
 {{
     for (int i = 0; i < n; ++i) {{
-        pvx[i] = pvm[i] > 0 ? pvz[i] : pvy[i];
+        pvx[i] = pvm[i] > 0 ? pvz[i] : {y};
     }}
-}}'''.format(header=header)
+}}'''.format(header=header, y=y)
 
         return TestFunc(header, func, ref)
 
@@ -1025,8 +1035,6 @@ class InstTable(object):
     def VSTm(self, opc, inst, asm):
         O_rr = [None, VX(T_u64), SY(T_u64), SZ(T_voidp)]
         O_ir = [None, VX(T_u64), ImmI(T_u64), SZ(T_voidp)]
-        #self.Def(opc, inst, "", asm, [O_rr, O_ir]).noTest().writeMem()
-        #self.Def(opc, inst, "ot", asm+".ot", [O_rr, O_ir]).oldLowering().noTest().writeMem()
         O = self.addMask([O_rr, O_ir], addVD=False)
         self.Def(opc, inst, "", asm, O).noTest().writeMem()
         self.Def(opc, inst, "ot", asm+".ot", O).oldLowering().noTest().writeMem()
@@ -1394,8 +1402,6 @@ def createInstructionTable(isVL):
     T.Def(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True).noTest()
     T.VBRDm(0x8C, isVL)
     T.VMVm()
-    #T.Def(0x9C, "VMV", "", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
-    #T.Def(0x9C, "VMV", "", "vmv", [[VX(T_u64), UImm7(T_u32), VZ(T_u64)]]).noTest()
     
     O_VMPD = [[VX(T_i64), VY(T_i32), VZ(T_i32)], 
               [VX(T_i64), SY(T_i32), VZ(T_i32)], 
@@ -1495,8 +1501,10 @@ def createInstructionTable(isVL):
     T.Def(0x9F, "VCVS", "", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
     
     T.Section("Table 3-20 Vector Mask Arithmetic Instructions", 34)
-    T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), VY(T_u64), VZ(T_u64), VM]])
-    T.Def(0xD6, "VMRG", "p", "vmrg.w", [[VX(T_u32), VY(T_u32), VZ(T_u32), VM512]])
+    T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), VY(T_u64), VZ(T_u64), VM]]).noTest()
+    T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), SY(T_u64), VZ(T_u64), VM]]).noTest()
+    T.Def(0xD6, "VMRG", "p", "vmrg.w", [[VX(T_u32), VY(T_u32), VZ(T_u32), VM512]]).noTest()
+    T.Def(0xD6, "VMRG", "p", "vmrg.w", [[VX(T_u32), SY(T_u32), VZ(T_u32), VM512]]).noTest()
     T.Def(0xBC, "VSHF", "", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])
     T.Def(0x8D, "VCP", "", "vcp", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
     T.Def(0x9D, "VEX", "", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()

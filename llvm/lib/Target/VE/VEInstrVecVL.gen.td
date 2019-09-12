@@ -8815,6 +8815,25 @@ def vmrg_vvvmvl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM_:$vm, V64:$
   let DisableEncoding = "$vl";
 }
 
+// VMRG vmrg vmrg_vsvml
+def vmrg_vsvml : RV<0xd6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, I32:$vl),
+       "vmrg $vx,$sy,$vz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMRG vmrg vmrg_vsvmvl
+def vmrg_vsvmvl : RV<0xd6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
+       "vmrg $vx,$sy,$vz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VMRG vmrg.w vmrgw_vvvMl
 def vmrgw_vvvMl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, I32:$vl),
        "vmrg.w $vx,$vy,$vz,$vm", [], NoItinerary>
@@ -8827,6 +8846,25 @@ def vmrgw_vvvMl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, I3
 // VMRG vmrg.w vmrgw_vvvMvl
 def vmrgw_vvvMvl : RV<0xd6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
        "vmrg.w $vx,$vy,$vz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMRG vmrg.w vmrgw_vsvMl
+def vmrgw_vsvMl : RV<0xd6, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM512_:$vm, I32:$vl),
+       "vmrg.w $vx,$sy,$vz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMRG vmrg.w vmrgw_vsvMvl
+def vmrgw_vsvMvl : RV<0xd6, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM512_:$vm, V64:$vd, I32:$vl),
+       "vmrg.w $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
