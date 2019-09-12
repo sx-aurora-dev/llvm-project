@@ -64,6 +64,7 @@
 #define _vel_pvbrd_vsMvl __builtin_ve_vl_pvbrd_vsMvl
 #define _vel_vmv_vsvl __builtin_ve_vl_vmv_vsvl
 #define _vel_vmv_vsvvl __builtin_ve_vl_vmv_vsvvl
+#define _vel_vmv_vsvmvl __builtin_ve_vl_vmv_vsvmvl
 #define _vel_vaddul_vvvl __builtin_ve_vl_vaddul_vvvl
 #define _vel_vaddul_vvvvl __builtin_ve_vl_vaddul_vvvvl
 #define _vel_vaddul_vsvl __builtin_ve_vl_vaddul_vsvl

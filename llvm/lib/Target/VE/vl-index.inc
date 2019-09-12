@@ -103,6 +103,8 @@ case VE::vmv_vsvl: return 3;
 case VE::vmv_vsvvl: return 4;
 case VE::vmv_vIvl: return 3;
 case VE::vmv_vIvvl: return 4;
+case VE::vmv_vsvmvl: return 5;
+case VE::vmv_vIvmvl: return 5;
 case VE::vaddul_vvvl: return 3;
 case VE::vaddul_vvvvl: return 4;
 case VE::vaddul_vsvl: return 3;

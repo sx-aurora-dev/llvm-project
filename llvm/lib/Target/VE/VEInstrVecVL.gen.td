@@ -1041,6 +1041,26 @@ def vmv_vIvvl : RV<0x9c, (outs V64:$vx), (ins simm7Op32:$N, V64:$vz, V64:$vd, I3
   let DisableEncoding = "$vl";
 }
 
+// VMV vmv vmv_vsvmvl
+def vmv_vsvmvl : RV<0x9c, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
+       "vmv $vx,$sy,$vz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// VMV vmv vmv_vIvmvl
+def vmv_vIvmvl : RV<0x9c, (outs V64:$vx), (ins simm7Op32:$N, V64:$vz, VM_:$vm, V64:$vd, I32:$vl),
+       "vmv $vx,$N,$vz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // VADD vaddu.l vaddul_vvvl
 def vaddul_vvvl : RV<0xc8, (outs V64:$vx), (ins V64:$vy, V64:$vz, I32:$vl),
        "vaddu.l $vx,$vy,$vz", [], NoItinerary>

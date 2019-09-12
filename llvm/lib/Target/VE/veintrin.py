@@ -1058,6 +1058,12 @@ class InstTable(object):
             self.add(I(0x8C, "VBRD", "pvbrd", "pvbrd_vs_i64",   [VX(T_u32)], [SY(T_u64)], packed=True, expr=expr, subop="p"))
             self.add(I(0x8C, "VBRD", "pvbrd", "pvbrd_vsMv_i64", [VX(T_u32)], [SY(T_u64), VM512, VD(T_u32)], packed=True, expr=expr, subop="pm"))
 
+    def VMVm(self):
+        O_s = [VX(T_u64), SY(T_u32), VZ(T_u64)]
+        O_i = [VX(T_u64), UImm7(T_u32), VZ(T_u64)]
+        O = self.addMask([O_s, O_i])
+        self.Def(0x9C, "VMV", "", "vmv", O).noTest()
+
     def LVSm(self, opc, isVL):
         I = self.InstClass
         if isVL:
@@ -1387,8 +1393,9 @@ def createInstructionTable(isVL):
     T.Def(None, "SVM", "pr", "svm", [[SX(T_u64), VMZ512, SY(T_u64)]], noVL=True).noTest().NYI()
     T.Def(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True).noTest()
     T.VBRDm(0x8C, isVL)
-    T.Def(0x9C, "VMV", "", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
-    T.Def(0x9C, "VMV", "", "vmv", [[VX(T_u64), UImm7(T_u32), VZ(T_u64)]]).noTest()
+    T.VMVm()
+    #T.Def(0x9C, "VMV", "", "vmv", [[VX(T_u64), SY(T_u32), VZ(T_u64)]]).noTest()
+    #T.Def(0x9C, "VMV", "", "vmv", [[VX(T_u64), UImm7(T_u32), VZ(T_u64)]]).noTest()
     
     O_VMPD = [[VX(T_i64), VY(T_i32), VZ(T_i32)], 
               [VX(T_i64), SY(T_i32), VZ(T_i32)], 
