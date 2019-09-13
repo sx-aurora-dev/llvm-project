@@ -699,7 +699,7 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
               auto &AuroraTC =
                 ToolChains[TT.str() + "/" + HostTC->getTriple().normalize()];
               if (!AuroraTC)
-                AuroraTC = llvm::make_unique<toolchains::NECAuroraOffloadToolChain>(
+                AuroraTC = std::make_unique<toolchains::NECAuroraOffloadToolChain>(
                   *this, TT, *HostTC, C.getInputArgs());
               TC = AuroraTC.get();
             }
