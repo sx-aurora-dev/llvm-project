@@ -968,14 +968,17 @@ class InstTable(object):
         #O.append([VX(T_u64), SY(T_u64), ImmZ(T_voidcp)])
         #O.append([VX(T_u64), ImmI(T_u64), ImmZ(T_voidcp)])
 
-        return self.Def(opc, inst, subop, asm, O).noTest().readMem()
+        self.Def(opc, inst, subop, asm, O).noTest().readMem()
+        self.Def(opc, inst, subop+"nc", asm+".nc", O).noTest().readMem()
 
     def VSTm(self, opc, inst, asm):
         O_rr = [None, VX(T_u64), SY(T_u64), SZ(T_voidp)]
         O_ir = [None, VX(T_u64), ImmI(T_u64), SZ(T_voidp)]
         O = self.addMask([O_rr, O_ir], addVD=False)
         self.Def(opc, inst, "", asm, O).noTest().writeMem()
+        self.Def(opc, inst, "nc", asm+".nc", O).noTest().writeMem()
         self.Def(opc, inst, "ot", asm+".ot", O).oldLowering().noTest().writeMem()
+        self.Def(opc, inst, "otnc", asm+".ot.nc", O).oldLowering().noTest().writeMem()
 
     def VBRDm(self, opc, isVL):
         expr = "{0} = {1}"
@@ -1164,6 +1167,7 @@ class InstTable(object):
             O_vm = [VX(T_u64), VY(T_u64), VM]
             O = [O_v, O_vm]
         self.Def(opc, inst, subop, asm, O).noTest().readMem()
+        self.Def(opc, inst, subop+"nc", asm+".nc", O).noTest().readMem()
 
     def VSCm(self, opc, inst0, inst, asm, isVL):
         if isVL:
@@ -1179,7 +1183,9 @@ class InstTable(object):
             #O_s = [VX(T_u64), SW(T_u64)]
             O = [O_v, O_vm]
         self.Def(opc, inst0, "", asm, O).noTest().writeMem()
+        self.Def(opc, inst0, "nc", asm+".nc", O).noTest().writeMem()
         self.Def(opc, inst0, "ot", asm+".ot", O).noTest().writeMem().oldLowering()
+        self.Def(opc, inst0, "otnc", asm+".ot.nc", O).noTest().writeMem().oldLowering()
 
     def VSUM(self, opc, inst, subop, asm, baseOps):
         OL = []
@@ -1328,6 +1334,8 @@ def createInstructionTable(isVL):
     T.VSTm(0xD3, "VSTL2D", "vstl2d")
     T.Def(0x80, "PFCHV", "", "pfchv", [[None, SY(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
     T.Def(0x80, "PFCHV", "", "pfchv", [[None, ImmI(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
+    T.Def(0x80, "PFCHV", "nc", "pfchv.nc", [[None, SY(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
+    T.Def(0x80, "PFCHV", "nc", "pfchv.nc", [[None, ImmI(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
     T.Def(0x8E, "LSV", "", "lsv", [[VX(T_u64), VD(T_u64), SY(T_u32), SZ(T_u64)]], noVL=True).noTest()
     T.LVSm(0x9E, isVL)
     T.Def(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True).noTest().NYI()
