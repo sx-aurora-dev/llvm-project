@@ -4,10 +4,15 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 # Find NEC target compiler.
-find_program(NECAURORA_TARGET_COMPILER ncc
+find_program(NECAURORA_TARGET_COMPILER
+  NAMES
+    ncc
+    ncc-2.3.1
+    ncc-2.3.0
   DOC "NEC target compiler."
   PATHS
-    "/opt/nec/ve/bin/")
+    "/opt/nec/ve/bin/"
+    ENV PATH)
 
 if(NOT NECAURORA_TARGET_COMPILER)
   message(STATUS "NEC target compiler could not be found, defaulting to GCC.")
