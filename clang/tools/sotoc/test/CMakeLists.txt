@@ -23,16 +23,11 @@ if(NOT PYTHONINTERP_FOUND)
 endif()
 
 
-find_program(SOTOC_LLVM_LIT_EXECUTABLE
-  NAMES llvm-lit lit.py lit
-  PATHS ${SOTOC_LLVM_TOOLS_DIR})
-
-if(NOT SOTOC_LLVM_LIT_EXECUTABLE)
-    message(WARNING "Cannot find llvm-lit.")
-    message(WARNING "Please put llvm-lit in your PATH, set SOTOC_LLVM_LIT_EXECUTABLE to its full path or point SOTOC_LLVM_TOOLS_DIR to its directory")
-    message(WARNING "The check-sotoc target will not be available!")
-    return()
-endif()
+set(SOTOC_LLVM_LIT_EXE
+    ${LLVM_TOOLS_BINARY_DIR}/llvm-lit${CMAKE_EXECUTABLE_SUFFIX}
+    CACHE
+    FILEPATH
+    "Path to the llvm-lit utility. Should be build together with the other LLVM utilities")
 
 set(SOTOC_LIT_ARGS "-v;--no-progress-bar;-j 1")
 
@@ -40,7 +35,7 @@ set(SOTOC_LIT_ARGS "-v;--no-progress-bar;-j 1")
 set(SOTOC_FILECHECK_EXE ${LLVM_TOOLS_BINARY_DIR}/FileCheck${CMAKE_EXECUTABLE_SUFFIX} CACHE FILEPATH "Path to FileCheck utility. Should be built together with other LLVM utilities")
 
 add_custom_target(check-sotoc
-  COMMAND ${PYTHON_EXECUTABLE} ${SOTOC_LLVM_LIT_EXECUTABLE} ${SOTOC_LIT_ARGS} ${CMAKE_CURRENT_BINARY_DIR}
+  COMMAND ${PYTHON_EXECUTABLE} ${SOTOC_LLVM_LIT_EXE} ${SOTOC_LIT_ARGS} ${CMAKE_CURRENT_BINARY_DIR}
     DEPENDS sotoc
     COMMENT "Running sotoc tests"
     ${cmake_3_2_USES_TERMINAL}
