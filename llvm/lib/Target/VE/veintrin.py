@@ -978,7 +978,7 @@ class InstTable(object):
         self.Def(opc, inst, "", asm, O).noTest().writeMem()
         self.Def(opc, inst, "nc", asm+".nc", O).noTest().writeMem()
         self.Def(opc, inst, "ot", asm+".ot", O).oldLowering().noTest().writeMem()
-        self.Def(opc, inst, "otnc", asm+".ot.nc", O).oldLowering().noTest().writeMem()
+        self.Def(opc, inst, "ncot", asm+".nc.ot", O).oldLowering().noTest().writeMem()
 
     def VBRDm(self, opc, isVL):
         expr = "{0} = {1}"
@@ -1185,7 +1185,7 @@ class InstTable(object):
         self.Def(opc, inst0, "", asm, O).noTest().writeMem()
         self.Def(opc, inst0, "nc", asm+".nc", O).noTest().writeMem()
         self.Def(opc, inst0, "ot", asm+".ot", O).noTest().writeMem().oldLowering()
-        self.Def(opc, inst0, "otnc", asm+".ot.nc", O).noTest().writeMem().oldLowering()
+        self.Def(opc, inst0, "ncot", asm+".nc.ot", O).noTest().writeMem().oldLowering()
 
     def VSUM(self, opc, inst, subop, asm, baseOps):
         OL = []

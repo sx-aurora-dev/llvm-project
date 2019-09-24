@@ -714,36 +714,36 @@ def vstot_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm
   let DisableEncoding = "$vl";
 }
 
-// VST vst.ot.nc vstotnc_vssl
-def vstotnc_vssl : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
-       "vst.ot.nc $vx,$sy,$sz", [], NoItinerary>
+// VST vst.nc.ot vstncot_vssl
+def vstncot_vssl : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
+       "vst.nc.ot $vx,$sy,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VST vst.ot.nc vstotnc_vIsl
-def vstotnc_vIsl : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
-       "vst.ot.nc $vx,$I,$sz", [], NoItinerary>
+// VST vst.nc.ot vstncot_vIsl
+def vstncot_vIsl : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vst.nc.ot $vx,$I,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VST vst.ot.nc vstotnc_vssml
-def vstotnc_vssml : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
-       "vst.ot.nc $vx,$sy,$sz,$vm", [], NoItinerary>
+// VST vst.nc.ot vstncot_vssml
+def vstncot_vssml : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vst.nc.ot $vx,$sy,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VST vst.ot.nc vstotnc_vIsml
-def vstotnc_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
-       "vst.ot.nc $vx,$I,$sz,$vm", [], NoItinerary>
+// VST vst.nc.ot vstncot_vIsml
+def vstncot_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vst.nc.ot $vx,$I,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -858,36 +858,36 @@ def vstuot_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
-// VSTU vstu.ot.nc vstuotnc_vssl
-def vstuotnc_vssl : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
-       "vstu.ot.nc $vx,$sy,$sz", [], NoItinerary>
+// VSTU vstu.nc.ot vstuncot_vssl
+def vstuncot_vssl : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
+       "vstu.nc.ot $vx,$sy,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTU vstu.ot.nc vstuotnc_vIsl
-def vstuotnc_vIsl : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
-       "vstu.ot.nc $vx,$I,$sz", [], NoItinerary>
+// VSTU vstu.nc.ot vstuncot_vIsl
+def vstuncot_vIsl : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vstu.nc.ot $vx,$I,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTU vstu.ot.nc vstuotnc_vssml
-def vstuotnc_vssml : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
-       "vstu.ot.nc $vx,$sy,$sz,$vm", [], NoItinerary>
+// VSTU vstu.nc.ot vstuncot_vssml
+def vstuncot_vssml : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vstu.nc.ot $vx,$sy,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTU vstu.ot.nc vstuotnc_vIsml
-def vstuotnc_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
-       "vstu.ot.nc $vx,$I,$sz,$vm", [], NoItinerary>
+// VSTU vstu.nc.ot vstuncot_vIsml
+def vstuncot_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vstu.nc.ot $vx,$I,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -1002,36 +1002,36 @@ def vstlot_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$v
   let DisableEncoding = "$vl";
 }
 
-// VSTL vstl.ot.nc vstlotnc_vssl
-def vstlotnc_vssl : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
-       "vstl.ot.nc $vx,$sy,$sz", [], NoItinerary>
+// VSTL vstl.nc.ot vstlncot_vssl
+def vstlncot_vssl : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
+       "vstl.nc.ot $vx,$sy,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTL vstl.ot.nc vstlotnc_vIsl
-def vstlotnc_vIsl : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
-       "vstl.ot.nc $vx,$I,$sz", [], NoItinerary>
+// VSTL vstl.nc.ot vstlncot_vIsl
+def vstlncot_vIsl : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vstl.nc.ot $vx,$I,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTL vstl.ot.nc vstlotnc_vssml
-def vstlotnc_vssml : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
-       "vstl.ot.nc $vx,$sy,$sz,$vm", [], NoItinerary>
+// VSTL vstl.nc.ot vstlncot_vssml
+def vstlncot_vssml : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vstl.nc.ot $vx,$sy,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTL vstl.ot.nc vstlotnc_vIsml
-def vstlotnc_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
-       "vstl.ot.nc $vx,$I,$sz,$vm", [], NoItinerary>
+// VSTL vstl.nc.ot vstlncot_vIsml
+def vstlncot_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vstl.nc.ot $vx,$I,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -1146,36 +1146,36 @@ def vst2dot_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$
   let DisableEncoding = "$vl";
 }
 
-// VST2D vst2d.ot.nc vst2dotnc_vssl
-def vst2dotnc_vssl : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
-       "vst2d.ot.nc $vx,$sy,$sz", [], NoItinerary>
+// VST2D vst2d.nc.ot vst2dncot_vssl
+def vst2dncot_vssl : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
+       "vst2d.nc.ot $vx,$sy,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VST2D vst2d.ot.nc vst2dotnc_vIsl
-def vst2dotnc_vIsl : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
-       "vst2d.ot.nc $vx,$I,$sz", [], NoItinerary>
+// VST2D vst2d.nc.ot vst2dncot_vIsl
+def vst2dncot_vIsl : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vst2d.nc.ot $vx,$I,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VST2D vst2d.ot.nc vst2dotnc_vssml
-def vst2dotnc_vssml : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
-       "vst2d.ot.nc $vx,$sy,$sz,$vm", [], NoItinerary>
+// VST2D vst2d.nc.ot vst2dncot_vssml
+def vst2dncot_vssml : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vst2d.nc.ot $vx,$sy,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VST2D vst2d.ot.nc vst2dotnc_vIsml
-def vst2dotnc_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
-       "vst2d.ot.nc $vx,$I,$sz,$vm", [], NoItinerary>
+// VST2D vst2d.nc.ot vst2dncot_vIsml
+def vst2dncot_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vst2d.nc.ot $vx,$I,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -1290,36 +1290,36 @@ def vstu2dot_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:
   let DisableEncoding = "$vl";
 }
 
-// VSTU2D vstu2d.ot.nc vstu2dotnc_vssl
-def vstu2dotnc_vssl : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
-       "vstu2d.ot.nc $vx,$sy,$sz", [], NoItinerary>
+// VSTU2D vstu2d.nc.ot vstu2dncot_vssl
+def vstu2dncot_vssl : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
+       "vstu2d.nc.ot $vx,$sy,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTU2D vstu2d.ot.nc vstu2dotnc_vIsl
-def vstu2dotnc_vIsl : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
-       "vstu2d.ot.nc $vx,$I,$sz", [], NoItinerary>
+// VSTU2D vstu2d.nc.ot vstu2dncot_vIsl
+def vstu2dncot_vIsl : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vstu2d.nc.ot $vx,$I,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTU2D vstu2d.ot.nc vstu2dotnc_vssml
-def vstu2dotnc_vssml : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
-       "vstu2d.ot.nc $vx,$sy,$sz,$vm", [], NoItinerary>
+// VSTU2D vstu2d.nc.ot vstu2dncot_vssml
+def vstu2dncot_vssml : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vstu2d.nc.ot $vx,$sy,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTU2D vstu2d.ot.nc vstu2dotnc_vIsml
-def vstu2dotnc_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
-       "vstu2d.ot.nc $vx,$I,$sz,$vm", [], NoItinerary>
+// VSTU2D vstu2d.nc.ot vstu2dncot_vIsml
+def vstu2dncot_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vstu2d.nc.ot $vx,$I,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -1434,36 +1434,36 @@ def vstl2dot_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:
   let DisableEncoding = "$vl";
 }
 
-// VSTL2D vstl2d.ot.nc vstl2dotnc_vssl
-def vstl2dotnc_vssl : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
-       "vstl2d.ot.nc $vx,$sy,$sz", [], NoItinerary>
+// VSTL2D vstl2d.nc.ot vstl2dncot_vssl
+def vstl2dncot_vssl : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
+       "vstl2d.nc.ot $vx,$sy,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTL2D vstl2d.ot.nc vstl2dotnc_vIsl
-def vstl2dotnc_vIsl : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
-       "vstl2d.ot.nc $vx,$I,$sz", [], NoItinerary>
+// VSTL2D vstl2d.nc.ot vstl2dncot_vIsl
+def vstl2dncot_vIsl : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vstl2d.nc.ot $vx,$I,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTL2D vstl2d.ot.nc vstl2dotnc_vssml
-def vstl2dotnc_vssml : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
-       "vstl2d.ot.nc $vx,$sy,$sz,$vm", [], NoItinerary>
+// VSTL2D vstl2d.nc.ot vstl2dncot_vssml
+def vstl2dncot_vssml : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vstl2d.nc.ot $vx,$sy,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSTL2D vstl2d.ot.nc vstl2dotnc_vIsml
-def vstl2dotnc_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
-       "vstl2d.ot.nc $vx,$I,$sz,$vm", [], NoItinerary>
+// VSTL2D vstl2d.nc.ot vstl2dncot_vIsml
+def vstl2dncot_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vstl2d.nc.ot $vx,$I,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -14251,72 +14251,72 @@ def vscot_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7O
   let DisableEncoding = "$vl";
 }
 
-// VSC vsc.ot.nc vscotnc_vvssl
-def vscotnc_vvssl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32:$vl),
-       "vsc.ot.nc $vx,$vy,$sy,$sz", [], NoItinerary>
+// VSC vsc.nc.ot vscncot_vvssl
+def vscncot_vvssl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32:$vl),
+       "vsc.nc.ot $vx,$vy,$sy,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSC vsc.ot.nc vscotnc_vvsZl
-def vscotnc_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
-       "vsc.ot.nc $vx,$vy,$sy,$Z", [], NoItinerary>
+// VSC vsc.nc.ot vscncot_vvsZl
+def vscncot_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+       "vsc.nc.ot $vx,$vy,$sy,$Z", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSC vsc.ot.nc vscotnc_vvIsl
-def vscotnc_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
-       "vsc.ot.nc $vx,$vy,$I,$sz", [], NoItinerary>
+// VSC vsc.nc.ot vscncot_vvIsl
+def vscncot_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vsc.nc.ot $vx,$vy,$I,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSC vsc.ot.nc vscotnc_vvIZl
-def vscotnc_vvIZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
-       "vsc.ot.nc $vx,$vy,$I,$Z", [], NoItinerary>
+// VSC vsc.nc.ot vscncot_vvIZl
+def vscncot_vvIZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+       "vsc.nc.ot $vx,$vy,$I,$Z", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSC vsc.ot.nc vscotnc_vvssml
-def vscotnc_vvssml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
-       "vsc.ot.nc $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
+// VSC vsc.nc.ot vscncot_vvssml
+def vscncot_vvssml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vsc.nc.ot $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSC vsc.ot.nc vscotnc_vvsZml
-def vscotnc_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, I32:$vl),
-       "vsc.ot.nc $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+// VSC vsc.nc.ot vscncot_vvsZml
+def vscncot_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vsc.nc.ot $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSC vsc.ot.nc vscotnc_vvIsml
-def vscotnc_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
-       "vsc.ot.nc $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+// VSC vsc.nc.ot vscncot_vvIsml
+def vscncot_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vsc.nc.ot $vx,$vy,$I,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSC vsc.ot.nc vscotnc_vvIZml
-def vscotnc_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, I32:$vl),
-       "vsc.ot.nc $vx,$vy,$I,$Z,$vm", [], NoItinerary>
+// VSC vsc.nc.ot vscncot_vvIZml
+def vscncot_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vsc.nc.ot $vx,$vy,$I,$Z,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -14539,72 +14539,72 @@ def vscuot_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7
   let DisableEncoding = "$vl";
 }
 
-// VSCU vscu.ot.nc vscuotnc_vvssl
-def vscuotnc_vvssl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32:$vl),
-       "vscu.ot.nc $vx,$vy,$sy,$sz", [], NoItinerary>
+// VSCU vscu.nc.ot vscuncot_vvssl
+def vscuncot_vvssl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32:$vl),
+       "vscu.nc.ot $vx,$vy,$sy,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCU vscu.ot.nc vscuotnc_vvsZl
-def vscuotnc_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
-       "vscu.ot.nc $vx,$vy,$sy,$Z", [], NoItinerary>
+// VSCU vscu.nc.ot vscuncot_vvsZl
+def vscuncot_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+       "vscu.nc.ot $vx,$vy,$sy,$Z", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCU vscu.ot.nc vscuotnc_vvIsl
-def vscuotnc_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
-       "vscu.ot.nc $vx,$vy,$I,$sz", [], NoItinerary>
+// VSCU vscu.nc.ot vscuncot_vvIsl
+def vscuncot_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vscu.nc.ot $vx,$vy,$I,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCU vscu.ot.nc vscuotnc_vvIZl
-def vscuotnc_vvIZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
-       "vscu.ot.nc $vx,$vy,$I,$Z", [], NoItinerary>
+// VSCU vscu.nc.ot vscuncot_vvIZl
+def vscuncot_vvIZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+       "vscu.nc.ot $vx,$vy,$I,$Z", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCU vscu.ot.nc vscuotnc_vvssml
-def vscuotnc_vvssml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
-       "vscu.ot.nc $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
+// VSCU vscu.nc.ot vscuncot_vvssml
+def vscuncot_vvssml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vscu.nc.ot $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCU vscu.ot.nc vscuotnc_vvsZml
-def vscuotnc_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, I32:$vl),
-       "vscu.ot.nc $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+// VSCU vscu.nc.ot vscuncot_vvsZml
+def vscuncot_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vscu.nc.ot $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCU vscu.ot.nc vscuotnc_vvIsml
-def vscuotnc_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
-       "vscu.ot.nc $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+// VSCU vscu.nc.ot vscuncot_vvIsml
+def vscuncot_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vscu.nc.ot $vx,$vy,$I,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCU vscu.ot.nc vscuotnc_vvIZml
-def vscuotnc_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, I32:$vl),
-       "vscu.ot.nc $vx,$vy,$I,$Z,$vm", [], NoItinerary>
+// VSCU vscu.nc.ot vscuncot_vvIZml
+def vscuncot_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vscu.nc.ot $vx,$vy,$I,$Z,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -14827,72 +14827,72 @@ def vsclot_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7
   let DisableEncoding = "$vl";
 }
 
-// VSCL vscl.ot.nc vsclotnc_vvssl
-def vsclotnc_vvssl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32:$vl),
-       "vscl.ot.nc $vx,$vy,$sy,$sz", [], NoItinerary>
+// VSCL vscl.nc.ot vsclncot_vvssl
+def vsclncot_vvssl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32:$vl),
+       "vscl.nc.ot $vx,$vy,$sy,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCL vscl.ot.nc vsclotnc_vvsZl
-def vsclotnc_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
-       "vscl.ot.nc $vx,$vy,$sy,$Z", [], NoItinerary>
+// VSCL vscl.nc.ot vsclncot_vvsZl
+def vsclncot_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+       "vscl.nc.ot $vx,$vy,$sy,$Z", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCL vscl.ot.nc vsclotnc_vvIsl
-def vsclotnc_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
-       "vscl.ot.nc $vx,$vy,$I,$sz", [], NoItinerary>
+// VSCL vscl.nc.ot vsclncot_vvIsl
+def vsclncot_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+       "vscl.nc.ot $vx,$vy,$I,$sz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCL vscl.ot.nc vsclotnc_vvIZl
-def vsclotnc_vvIZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
-       "vscl.ot.nc $vx,$vy,$I,$Z", [], NoItinerary>
+// VSCL vscl.nc.ot vsclncot_vvIZl
+def vsclncot_vvIZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+       "vscl.nc.ot $vx,$vy,$I,$Z", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCL vscl.ot.nc vsclotnc_vvssml
-def vsclotnc_vvssml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
-       "vscl.ot.nc $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
+// VSCL vscl.nc.ot vsclncot_vvssml
+def vsclncot_vvssml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM_:$vm, I32:$vl),
+       "vscl.nc.ot $vx,$vy,$sy,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCL vscl.ot.nc vsclotnc_vvsZml
-def vsclotnc_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, I32:$vl),
-       "vscl.ot.nc $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
+// VSCL vscl.nc.ot vsclncot_vvsZml
+def vsclncot_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vscl.nc.ot $vx,$vy,$sy,$Z,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCL vscl.ot.nc vsclotnc_vvIsml
-def vsclotnc_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
-       "vscl.ot.nc $vx,$vy,$I,$sz,$vm", [], NoItinerary>
+// VSCL vscl.nc.ot vsclncot_vvIsml
+def vsclncot_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM_:$vm, I32:$vl),
+       "vscl.nc.ot $vx,$vy,$I,$sz,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// VSCL vscl.ot.nc vsclotnc_vvIZml
-def vsclotnc_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, I32:$vl),
-       "vscl.ot.nc $vx,$vy,$I,$Z,$vm", [], NoItinerary>
+// VSCL vscl.nc.ot vsclncot_vvIZml
+def vsclncot_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM_:$vm, I32:$vl),
+       "vscl.nc.ot $vx,$vy,$I,$Z,$vm", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
