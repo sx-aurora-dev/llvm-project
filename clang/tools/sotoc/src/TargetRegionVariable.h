@@ -12,15 +12,18 @@
 /// is passed to the target region, whether it is a slice or array and how it's
 /// dimensionality is declared
 class TargetRegionVariable {
+
   clang::VarDecl *Decl;
   std::string VarName;
   std::string TypeName;
   std::vector<std::string> DimensionSizes;
   std::vector<unsigned int> VarSizedDimensions;
-
-  void determineDimensionSizes(const clang::ArrayType *T);
+  void determineDimensionSizes(const clang::ArrayType *T,
+                               unsigned int CurrentDimension);
 
 public:
+  using const_clause_kind_multimap =
+      std::multimap<clang::Decl *, clang::OpenMPClauseKind>;
   /// Const range over strings that specify the size of each dimension of an
   /// array.
   using const_dimension_sizes_range =
@@ -28,6 +31,12 @@ public:
   /// Const size over indices of variable sized dimensions.
   using variable_sized_dimensions_range =
       llvm::iterator_range<std::vector<unsigned int>::const_iterator>;
+
+private:
+  const_clause_kind_multimap &OmpClauseMap;
+  const std::map<clang::Decl *, std::string> &OmpMappingLowerBound;
+
+public:
   /// The name of the variable
   llvm::StringRef name() { return llvm::StringRef(VarName); }
   /// The name of the type variable
@@ -63,5 +72,11 @@ public:
                                        DimensionSizes.cend());
   }
 
-  TargetRegionVariable(clang::VarDecl *Decl);
-}
+  bool operator==(const TargetRegionVariable &Other) {
+    return Decl == Other.Decl;
+  }
+
+  TargetRegionVariable(
+      clang::VarDecl *Decl, const_clause_kind_multimap &OmpClauses,
+      const std::map<clang::Decl *, std::string> MappingLowerBounds);
+};

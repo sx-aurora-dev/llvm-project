@@ -74,17 +74,4 @@ private:
   void generateFunctionEpilogue(TargetCodeRegion *TCR, llvm::raw_ostream &Out);
   /// Generate a function name for a target region.
   std::string generateFunctionName(TargetCodeRegion *TCR);
-
-  /// This function recursively handles constant and variable-length array types
-  /// and any mixed forms. Incomplete array types are not supported at the
-  /// moment.
-  /// \param t The (n-dimensional) array
-  /// \param DimString A list of string which returns one entry per dimension
-  /// \param dim The dimension count
-  /// \param TCR The target code region
-  /// \param returns the last element type (i.e., the type of the array)
-  void handleArrays(const clang::ArrayType **t,
-                    std::list<std::string> &DimString, int &dim,
-                    std::vector<int> &VariableDimensions, TargetCodeRegion *TCR,
-                    std::string &elemType, const std::string &ArrayName);
 };
