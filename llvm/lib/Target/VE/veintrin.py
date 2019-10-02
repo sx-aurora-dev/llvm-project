@@ -184,7 +184,6 @@ class Inst(object):
         self.hasTest_ = True
         self.prop_ = ["IntrNoMem"]
         self.hasBuiltin_ = True
-        self.oldLowering_ = False
         self.hasPat_ = True
         self.hasLLVMInstDefine_ = True
         self.hasIntrinsicDef_ = True
@@ -310,18 +309,6 @@ class Inst(object):
         s += "}\n"
         return s
 
-    def pattern(self):
-        s = None
-        if self.hasInst()and self.hasPat():
-            argsL = ", ".join([op.dagOp() for op in self.ins])
-            argsR = ", ".join([op.dagOp() for op in self.ins])
-            tmp = re.sub(r'[INZ]', 's', self.llvmIntrinName()) # replace Imm to s
-            l = "({} {})".format(tmp, argsL)
-            r = "({} {}, (GetVL (i32 0)))".format(self.llvmInst(), argsR)
-            if self.isOldLowering() and (not self.hasMask()):
-                s = "def : Pat<{}, {}>;".format(l, r)
-        return s
-
     # to be included from IntrinsicsVE.td
     def intrinsicDefine(self):
         outs = ", ".join(["{}".format(op.intrinDefType()) for op in self.outs])
@@ -362,9 +349,6 @@ class Inst(object):
 
     def hasExpr(self): return self.expr() != None
 
-    def oldLowering(self): self.oldLowering_ = True; return self
-    def isOldLowering(self): return self.oldLowering_
-
     def noPat(self): self.hasPat_ = False
     def hasPat(self): return self.hasPat_
 
@@ -395,7 +379,6 @@ class InstVEL(Inst):
 
         super(InstVEL, self).__init__(opc, inst, asm, intrinsicName, outs, ins, **kwargs)
 
-        self.oldLowering_ = True
         self.funcPrefix_ = "_vel_"
         self.llvmIntrinsicPrefix_ = "_ve_vl_" # we have to start from "_ve_" in LLVM
 
@@ -407,8 +390,7 @@ class InstVEL(Inst):
             tmp = re.sub(r'[INZ]', 's', self.llvmIntrinName()) # replace Imm to s
             l = "({} {})".format(tmp, argsL)
             r = "({} {})".format(self.llvmInst(), argsR)
-            if self.isOldLowering(): #and (not self.hasMask()):
-                s = "def : Pat<{}, {}>;".format(l, r)
+            s = "def : Pat<{}, {}>;".format(l, r)
         return s
 
 
@@ -866,8 +848,8 @@ class InstTable(object):
         O = self.addMask([O_rr, O_ir], addVD=False)
         self.Def(opc, inst, "", asm, O).noTest().writeMem()
         self.Def(opc, inst, "nc", asm+".nc", O).noTest().writeMem()
-        self.Def(opc, inst, "ot", asm+".ot", O).oldLowering().noTest().writeMem()
-        self.Def(opc, inst, "ncot", asm+".nc.ot", O).oldLowering().noTest().writeMem()
+        self.Def(opc, inst, "ot", asm+".ot", O).noTest().writeMem()
+        self.Def(opc, inst, "ncot", asm+".nc.ot", O).noTest().writeMem()
 
     def VBRDm(self, opc):
         expr = "{0} = {1}"
@@ -1040,8 +1022,8 @@ class InstTable(object):
         O = self.addMask(O, VM, False)
         self.Def(opc, inst0, "", asm, O).noTest().writeMem()
         self.Def(opc, inst0, "nc", asm+".nc", O).noTest().writeMem()
-        self.Def(opc, inst0, "ot", asm+".ot", O).noTest().writeMem().oldLowering()
-        self.Def(opc, inst0, "ncot", asm+".nc.ot", O).noTest().writeMem().oldLowering()
+        self.Def(opc, inst0, "ot", asm+".ot", O).noTest().writeMem()
+        self.Def(opc, inst0, "ncot", asm+".nc.ot", O).noTest().writeMem()
 
     def VSUM(self, opc, inst, subop, asm, baseOps):
         OL = []
