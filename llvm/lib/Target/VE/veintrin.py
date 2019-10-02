@@ -1139,14 +1139,6 @@ def gen_veintrin_h(insts):
         if (not I.hasImmOp()) and I.hasBuiltin():
             print(I.veintrin())
 
-def gen_mktest(insts):
-    for I in insts:
-        if I.hasTest() and I.asm():
-            intrin = I.intrinsicName()
-            print("python mktest.py {name} gen/tests/{name}.ll"
-                  " gen/tests/{name}.s {asm} > tmp/gen-intrin-{name}.ll"
-                  .format(name=intrin, asm=I.asm()))
-
 def gen_vl_index(insts):
     print("default: return -1;")
     for I in insts:
@@ -1436,7 +1428,6 @@ def main():
     parser.add_argument('-a', dest="opt_all", action="store_true")
     parser.add_argument('--html', dest="opt_html", action="store_true")
     parser.add_argument('--html-no-link', action="store_true")
-    parser.add_argument('--mktest', dest="opt_mktest", action="store_true")
     parser.add_argument('-l', dest="opt_lowering", action="store_true")
     parser.add_argument('--test-dir', default="../../llvm-ve-intrinsic-test/gen/tests")
     parser.add_argument('--vl-index', action="store_true");
@@ -1503,8 +1494,6 @@ def main():
         HtmlManualPrinter().printAll(T, False)
     if args.html_no_link:
         HtmlManualPrinter().printAll(T, True)
-    if args.opt_mktest:
-        gen_mktest(insts)
     if args.vl_index:
         gen_vl_index(insts)
     
