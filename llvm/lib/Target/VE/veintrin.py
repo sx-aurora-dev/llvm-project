@@ -4,8 +4,6 @@ import re
 import sys
 from functools import partial
 
-llvmIntrinsicPrefix = "ve"
-
 class Type:
     def __init__(self, ValueType, builtinCode, intrinDefType, ctype, elemType = None):
         self.ValueType = ValueType  # v256f64, f64, f32, i64, ...
@@ -19,8 +17,7 @@ class Type:
 
     def stride(self):
         if self.isVectorType():
-            t = self.elemType
-            if t == T_f64 or t == T_i64 or t == T_u64:
+            if self.elemType in [T_f64, T_i64, T_u64]:
                 return 8
             else:
                 return 4
@@ -32,7 +29,7 @@ T_i64     = Type("i64",     "Li",     "LLVMType<i64>", "long int")
 T_i32     = Type("i32",     "i",      "LLVMType<i32>", "int", "I32")
 T_u64     = Type("i64",     "LUi",    "LLVMType<i64>", "unsigned long int")
 T_u32     = Type("i32",     "Ui",     "LLVMType<i32>", "unsigned int")
-T_voidp   = Type("i64",     "v*",     "llvm_ptr_ty",   "void*", "I64")
+T_voidp   = Type("i64",     "v*",     "llvm_ptr_ty",   "void*")
 T_voidcp   = Type("i64",    "vC*",    "llvm_ptr_ty",   "void const*")
 
 T_v256f64 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "double*", T_f64)
@@ -127,7 +124,6 @@ def VZ(ty): return VOp(ty, "vz")
 def VW(ty): return VOp(ty, "vw")
 def VD(ty): return VOp(ty, "vd")
 
-#VL = Op("l", T_u32, "vl", "VLS")
 VL = Op("l", T_u32, "vl", "I32")
 VM = Op("m", T_v4u64, "vm", "VM_")
 VMX = Op("m", T_v4u64, "vmx", "VM_")
@@ -282,7 +278,6 @@ class Inst(object):
         outs = fmtOps(self.outs)
         ins = fmtOps(self.ins)
         tmp = [op for op in self.ins if op.regName() not in ["vd", "vl", "vmd"]]
-        ins2 = fmtOps(tmp)
         asmArgs = ",".join(["${}".format(op.regName()) for op in self.outs + tmp])
 
         instName = self.llvmInst()
@@ -1269,7 +1264,7 @@ def gen_pattern(insts):
             if s:
                 print(s)
 
-def gen_bulitin(insts):
+def gen_builtin(insts):
     for I in insts:
         if (not I.hasImmOp()) and I.hasBuiltin():
             print(I.builtin())
@@ -1620,7 +1615,6 @@ def main():
     parser.add_argument('-t', dest="opt_test", action="store_true")
     parser.add_argument('-r', dest="opt_reference", action="store_true")
     parser.add_argument('-f', dest="opt_filter", action="store")
-    parser.add_argument('-m', dest="opt_manual", action="store_true")
     parser.add_argument('-a', dest="opt_all", action="store_true")
     parser.add_argument('--html', dest="opt_html", action="store_true")
     parser.add_argument('--html-no-link', action="store_true")
@@ -1630,10 +1624,6 @@ def main():
     parser.add_argument('--test-dir', default="../../llvm-ve-intrinsic-test/gen/tests")
     parser.add_argument('--vl-index', action="store_true");
     args, others = parser.parse_known_args()
-    
-    global llvmIntrinsicPrefix
-    if args.vl:
-        llvmIntrinsicPrefix = "ve_vl"
     
     T = createInstructionTable(args.vl)
     insts = T.insts()
@@ -1661,7 +1651,7 @@ def main():
     if args.opt_pat:
         gen_pattern(insts)
     if args.opt_builtin:
-        gen_bulitin(insts)
+        gen_builtin(insts)
     if args.opt_veintrin:
         gen_veintrin_h(insts)
     if args.opt_decl:
@@ -1702,9 +1692,6 @@ def main():
         gen_lowering(insts)
     if args.vl_index:
         gen_vl_index(insts)
-    
-    if args.opt_manual:
-        ManualInstPrinter().printAll(insts)
     
 if __name__ == "__main__":
     main()
