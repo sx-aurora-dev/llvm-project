@@ -383,15 +383,11 @@ class InstVEL(Inst):
         self.llvmIntrinsicPrefix_ = "_ve_vl_" # we have to start from "_ve_" in LLVM
 
     def pattern(self):
-        s = None
-        if self.hasInst()and self.hasPat():
-            argsL = ", ".join([op.dagOp() for op in self.ins])
-            argsR = ", ".join([op.dagOp() for op in self.ins])
-            tmp = re.sub(r'[INZ]', 's', self.llvmIntrinName()) # replace Imm to s
-            l = "({} {})".format(tmp, argsL)
-            r = "({} {})".format(self.llvmInst(), argsR)
-            s = "def : Pat<{}, {}>;".format(l, r)
-        return s
+        args = ", ".join([op.dagOp() for op in self.ins])
+        tmp = re.sub(r'[INZ]', 's', self.llvmIntrinName()) # replace Imm to s
+        l = "({} {})".format(tmp, args)
+        r = "({} {})".format(self.llvmInst(), args)
+        return "def : Pat<{}, {}>;".format(l, r)
 
 
 class TestFunc:
@@ -1099,9 +1095,7 @@ def gen_intrinsic_def(insts):
 def gen_pattern(insts):
     for I in insts:
         if I.hasInst()and I.hasPat():
-            s = I.pattern()
-            if s:
-                print(s)
+            print(I.pattern())
 
 def gen_builtin(insts):
     for I in insts:
