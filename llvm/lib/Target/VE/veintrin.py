@@ -185,7 +185,6 @@ class Inst(object):
         self.prop_ = ["IntrNoMem"]
         self.hasBuiltin_ = True
         self.oldLowering_ = False
-        self.hasMaskBaseReg_ = True
         self.hasPat_ = True
         self.hasLLVMInstDefine_ = True
         self.hasIntrinsicDef_ = True
@@ -233,7 +232,7 @@ class Inst(object):
         self.hasBuiltin_ = False
         return self
 
-    def hasDummyOp(self): return any([op.regName() == "vd" for op in self.ins])
+    def hasPassThroughOp(self): return any([op.regName() == "vd" for op in self.ins])
     def hasDummyMaskOp(self): return any([op.regName() == "vmd" for op in self.ins])
     def hasImmOp(self): return any([op.isImm() for op in self.ins])
     def hasVLOp(self): return any([op.isVL() for op in self.ins])
@@ -300,7 +299,7 @@ class Inst(object):
 #            if self.isMasked():
 #                s += '  bits<4> vm;\n'
 #                s += '  let m = vm;\n'
-        if self.hasDummyOp():
+        if self.hasPassThroughOp():
             s += '  let Constraints = "${} = $vd";\n'.format(self.outs[0].regName())
         if self.hasDummyMaskOp():
             s += '  let Constraints = "${} = $vmd";\n'.format(self.outs[0].regName())
@@ -365,9 +364,6 @@ class Inst(object):
 
     def oldLowering(self): self.oldLowering_ = True; return self
     def isOldLowering(self): return self.oldLowering_
-
-    def noMaskBaseReg(self): self.hasMaskBaseReg_ = False; return self
-    def hasMaskBaseReg(self): return self.hasMask() and self.hasMaskBaseReg_
 
     def noPat(self): self.hasPat_ = False
     def hasPat(self): return self.hasPat_
@@ -564,10 +560,6 @@ class TestGenerator:
             stride = I.stride(op)
             body += indent + "__vr {} = _vel_{}({}, p{}, l);\n".format(op.regName(), vld, stride, op.regName())
             body += indent + "{} = _vel_{}({}, l);\n".format(out.regName(), intrinsicName, ', '.join(args))
-            #if I.hasMaskBaseReg():
-            #    body += indent + "{} = _vel_{}({}, l);\n".format(out.regName(), intrinsicName, ', '.join(args + [op.regName()]))
-            #else:
-            #    body += indent + "{} = _vel_{}({}, l);\n".format(out.regName(), intrinsicName, ', '.join(args))
         else:
             body += indent + "__vr {} = _vel_{}({}, l);\n".format(out.regName(), intrinsicName, ', '.join(args))
     
@@ -1056,7 +1048,7 @@ class InstTable(object):
         for op in baseOps:
             OL.append(op)
             OL.append(op + [VM])
-        self.Def(opc, inst, subop, asm, OL, noBase=True).noMaskBaseReg()
+        self.Def(opc, inst, subop, asm, OL, noPassThrough=True)
 
     def VFIX(self, opc, inst, subop, asm, OL, ty):
         expr = "{0} = (" + ty + ")({1}+0.5)"
@@ -1089,9 +1081,9 @@ class InstTableVEL(InstTable):
             ins = args[1:]
             if ('noVL' not in kwargs) or (not kwargs['noVL']):
                 newary.append(outs + ins + [VL])
-                noBase = ('noBase' in kwargs) and (kwargs['noBase'])
-                hasDummyOp = any([op.regName() == "vd" for op in ins])
-                if (not noBase) and (not hasDummyOp) and (outs[0] and outs[0].kind == "v"):
+                noPassThrough = ('noPassThrough' in kwargs) and (kwargs['noPassThrough'])
+                hasPassThroughOp = any([op.regName() == "vd" for op in ins])
+                if (not noPassThrough) and (not hasPassThroughOp) and (outs[0] and outs[0].kind == "v"):
                     newary.append(outs + ins + [VD(outs[0].elemType()), VL])
             else:
                 newary.append(args)
@@ -1102,7 +1094,7 @@ def gen_test(insts, directory):
     for I in insts:
         if I.isNotYetImplemented():
             continue
-        if I.hasDummyOp() and (not I.hasMask()):
+        if I.hasPassThroughOp() and (not I.hasMask()):
             continue
         if I.hasTest():
             data = getTestGenerator(I).gen(I).definition()
@@ -1386,13 +1378,13 @@ def createInstructionTable():
     T.Dummy(0x30, "SVOB", "void _vel_svob(void)", "svob");
 
     T.Section("Approximate Operations", None)
-    T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}", noBase=True).noLLVM()
-    T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}", noBase=True).noLLVM()
-    T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), VY(T_f32), SZ(T_f32)]], expr="{0} = {1} / {2}", noBase=True).noLLVM()
-    T.Def(None, None, "", "approx_vfdivd", [[VX(T_f64), SY(T_f64), VZ(T_f64)]], expr="{0} = {1} / {2}", noBase=True).noLLVM()
-    T.Def(None, None, "", "approx_pvfdiv", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}", noBase=True).noLLVM()
-    T.Def(None, None, "", "approx_vfsqrtd", [[VX(T_f64), VY(T_f64)]], expr="{0} = sqrtf({1})", noBase=True).noLLVM()
-    T.Def(None, None, "", "approx_vfsqrts", [[VX(T_f32), VY(T_f32)]], expr="{0} = sqrtf({1})", noBase=True).noLLVM()
+    T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}", noPassThrough=True).noLLVM()
+    T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), SY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}", noPassThrough=True).noLLVM()
+    T.Def(None, None, "", "approx_vfdivs", [[VX(T_f32), VY(T_f32), SZ(T_f32)]], expr="{0} = {1} / {2}", noPassThrough=True).noLLVM()
+    T.Def(None, None, "", "approx_vfdivd", [[VX(T_f64), SY(T_f64), VZ(T_f64)]], expr="{0} = {1} / {2}", noPassThrough=True).noLLVM()
+    T.Def(None, None, "", "approx_pvfdiv", [[VX(T_f32), VY(T_f32), VZ(T_f32)]], expr="{0} = {1} / {2}", noPassThrough=True).noLLVM()
+    T.Def(None, None, "", "approx_vfsqrtd", [[VX(T_f64), VY(T_f64)]], expr="{0} = sqrtf({1})", noPassThrough=True).noLLVM()
+    T.Def(None, None, "", "approx_vfsqrts", [[VX(T_f32), VY(T_f32)]], expr="{0} = sqrtf({1})", noPassThrough=True).noLLVM()
 
     T.Section("Others", None)
     T.Dummy(None, "", "unsigned long int _vel_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
