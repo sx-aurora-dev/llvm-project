@@ -1147,19 +1147,6 @@ def gen_mktest(insts):
                   " gen/tests/{name}.s {asm} > tmp/gen-intrin-{name}.ll"
                   .format(name=intrin, asm=I.asm()))
 
-def gen_lowering(insts):
-    ary = []
-    for I in insts:
-        if I.hasMask() and I.isOldLowering():
-            ary.append("case Intrinsic::ve_{}: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::{});"
-                       .format(I.intrinsicName(), I.llvmInst(), len(I.ins)))
-#            print("case Intrinsic::ve_{}: return LowerIntrinsicWithMaskAndVL(Op, DAG, Subtarget, VE::{});"
-#                  .format(I.intrinsicName(), I.instName, len(I.ins)))
-    # uniq because multiple Insts have the same intrinsic. ex VSTotrr and VSTotir
-    ary = list(set(ary)) 
-    for l in ary:
-        print(l)
-
 def gen_vl_index(insts):
     print("default: return -1;")
     for I in insts:
@@ -1518,8 +1505,6 @@ def main():
         HtmlManualPrinter().printAll(T, True)
     if args.opt_mktest:
         gen_mktest(insts)
-    if args.opt_lowering:
-        gen_lowering(insts)
     if args.vl_index:
         gen_vl_index(insts)
     
