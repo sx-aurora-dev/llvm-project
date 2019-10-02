@@ -129,12 +129,12 @@ VM = Op("m", T_v4u64, "vm", "VM_")
 VMX = Op("m", T_v4u64, "vmx", "VM_")
 VMY = Op("m", T_v4u64, "vmy", "VM_")
 VMZ = Op("m", T_v4u64, "vmz", "VM_")
-VMD = Op("m", T_v4u64, "vmd", "VM_")
+VMD = Op("m", T_v4u64, "vmd", "VM_") # pass through
 VM512 = Op("M", T_v8u64, "vm", "VM512_")
 VMX512 = Op("M", T_v8u64, "vmx", "VM512_")
 VMY512 = Op("M", T_v8u64, "vmy", "VM512_")
 VMZ512 = Op("M", T_v8u64, "vmz", "VM512_")
-VMD512 = Op("M", T_v8u64, "vmd", "VM512_")
+VMD512 = Op("M", T_v8u64, "vmd", "VM512_") # pass through
 CCOp = Op("c", T_u32, "cc", "CCOp")
 
 class ImmOp(Op):
@@ -232,7 +232,7 @@ class Inst(object):
         return self
 
     def hasPassThroughOp(self): return any([op.regName() == "vd" for op in self.ins])
-    def hasDummyMaskOp(self): return any([op.regName() == "vmd" for op in self.ins])
+    def hasPassThroughMaskOp(self): return any([op.regName() == "vmd" for op in self.ins])
     def hasImmOp(self): return any([op.isImm() for op in self.ins])
     def hasVLOp(self): return any([op.isVL() for op in self.ins])
 
@@ -300,7 +300,7 @@ class Inst(object):
 #                s += '  let m = vm;\n'
         if self.hasPassThroughOp():
             s += '  let Constraints = "${} = $vd";\n'.format(self.outs[0].regName())
-        if self.hasDummyMaskOp():
+        if self.hasPassThroughMaskOp():
             s += '  let Constraints = "${} = $vmd";\n'.format(self.outs[0].regName())
         s += '  let DecoderNamespace = "VEL";\n'
         s += '  let isCodeGenOnly = 1;\n'
