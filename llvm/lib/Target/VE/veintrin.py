@@ -63,8 +63,6 @@ class Op(object):
     def dagOp(self):
         if self.kind == 'I' or self.kind == 'Z':
             return "({} {}:${})".format(self.ty_.ValueType, self.immType, self.name_)
-        elif self.kind == 'c':
-            return "({} uimm6:${})".format(self.ty_.ValueType, self.name_)
         else:
             return "{}:${}".format(self.ty_.ValueType, self.name_)
 
@@ -75,7 +73,6 @@ class Op(object):
     def isMask(self): return self.kind == 'm' or self.kind == 'M'
     def isMask256(self): return self.kind == 'm'
     def isMask512(self): return self.kind == 'M'
-    def isCC(self): return self.kind == 'c'
     def isVL(self): return self.kind == 'l'
 
     def regName(self):
@@ -135,7 +132,6 @@ VMX512 = Op("M", T_v8u64, "vmx", "VM512_")
 VMY512 = Op("M", T_v8u64, "vmy", "VM512_")
 VMZ512 = Op("M", T_v8u64, "vmz", "VM512_")
 VMD512 = Op("M", T_v8u64, "vmd", "VM512_") # pass through
-CCOp = Op("c", T_u32, "cc", "CCOp")
 
 class ImmOp(Op):
     def __init__(self, kind, ty, name, immType):
@@ -497,8 +493,6 @@ class TestGenerator:
     
         #body += indent + "_ve_lvl(l);\n"
     
-        cond = "VECC_G"
-    
         ins = I.ins
         if I.hasMask() and I.ins[-1].isVReg(): # remove vd when vm, vd
             ins = I.ins[0:-1]
@@ -525,8 +519,6 @@ class TestGenerator:
                 args.append(op.regName())
             elif op.isImm():
                 args.append("3")
-            elif op.isCC():
-                args.append(op.name)
 
         if I.hasMask():
             op = I.outs[0]
@@ -652,8 +644,6 @@ class ManualInstPrinter:
             elif op.isImm():
                 ins.append("{} {}".format(op.ctype(), op.regName()))
                 v.append("{}".format(op.regName()))
-            elif op.isCC():
-                ins.append("int cc".format(op.ctype()))
             elif op.isVL():
                 ins.append("int vl".format(op.ctype()))
             else:
@@ -990,10 +980,6 @@ class InstTable(object):
     def FLm(self, opc, inst, subop, asm, args):
         self.Def(opc, inst, subop.format(fl="f"), asm.format(fl=".fst"), args)
         self.Def(opc, inst, subop.format(fl="l"), asm.format(fl=".lst"), args).noTest()
-
-    def VFMKm(self, opc, inst, subop, asm):
-        self.Def(opc, inst, subop, asm, [[VM, CCOp, VZ(T_i64)]]).noTest()
-        self.Def(opc, inst, subop, asm, [[VMX, CCOp, VZ(T_i64), VM]]).noTest()
 
     def VGTm(self, opc, inst, subop, asm):
         O = []
