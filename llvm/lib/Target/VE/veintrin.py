@@ -240,10 +240,7 @@ class Inst(object):
     def hasMask(self):
         if len(self.outs) > 0 and self.outs[0].isMask():
             return True
-        for op in self.ins:
-            if op.isMask():
-                return True
-        return False
+        return any([op.isMask() for op in self.ins])
 
     def readMem(self):
         self.prop_ = ["IntrReadMem"]
@@ -266,7 +263,7 @@ class Inst(object):
     def hasInst(self): return self.inst_ != None
 
     def instDefine(self):
-        print("// {} {} {}".format(self.inst(), self.asm(), self.intrinsicName()))
+        print("// inst={} asm={} intrisic={}".format(self.inst(), self.asm(), self.intrinsicName()))
 
         def fmtOps(ops):
             return ", ".join(["{}:${}".format(op.regClass(), op.regName()) for op in ops])
@@ -340,10 +337,7 @@ class Inst(object):
         return self.hasTest_
 
     def stride(self, op):
-        if self.isPacked():
-            return 8;
-        else:
-            return op.stride()
+        return 8 if self.isPacked() else op.stride()
 
     def hasExpr(self): return self.expr() != None
 
@@ -483,15 +477,11 @@ class TestGenerator:
         #print(I.instName)
     
         if I.isPacked():
-            #stride = 8
             step = 512
             body += indent + "int l = n - i < 512 ? (n - i) / 2UL : 256;\n"
         else:
-            #stride = I.outs[0].ty.stride()
             step = 256
             body += indent + "int l = n - i < 256 ? n - i : 256;\n"
-    
-        #body += indent + "_ve_lvl(l);\n"
     
         ins = I.ins
         if I.hasMask() and I.ins[-1].isVReg(): # remove vd when vm, vd
@@ -1016,19 +1006,6 @@ class InstTable(object):
         expr = "{0} = (" + ty + ")({1})"
         self.DefM(opc, inst, subop + "rz", asm+".rz", OL, expr)
 
-def cmpwrite(filename, data):
-    need_write = True
-    try:
-        with open(filename, "r") as f:
-            old = f.read()
-            need_write = old != data
-    except:
-        pass
-    if need_write:
-        print("write " + filename)
-        with open(filename, "w") as f:
-            f.write(data)
-
 class InstTableVEL(InstTable):
     def __init__(self):
         super(InstTableVEL, self).__init__(InstVEL)
@@ -1049,52 +1026,6 @@ class InstTableVEL(InstTable):
                 newary.append(args)
 
         return super(InstTableVEL, self).Def(opc, inst, subop, asm, newary, expr, **kwargs)
-
-def gen_test(insts, directory):
-    for I in insts:
-        if I.hasPassThroughOp() and (not I.hasMask()):
-            continue
-        if I.hasTest():
-            data = getTestGenerator(I).gen(I).definition()
-            if directory and (directory != "-"):
-                filename = "{}/{}.c".format(directory, I.intrinsicName())
-                if I.hasImmOp():
-                    filename = "{}/{}_imm.c".format(directory, I.intrinsicName())
-                cmpwrite(filename, data)
-            else:
-                print(data)
-
-def gen_inst_def(insts):
-    for I in insts:
-        if I.hasLLVMInstDefine():
-            print(I.instDefine())
-
-def gen_intrinsic_def(insts):
-    for I in insts:
-        if not I.hasImmOp() and I.hasIntrinsicDef():
-            print(I.intrinsicDefine())
-
-def gen_pattern(insts):
-    for I in insts:
-        if I.hasInst()and I.hasPat():
-            print(I.pattern())
-
-def gen_builtin(insts):
-    for I in insts:
-        if (not I.hasImmOp()) and I.hasBuiltin():
-            print(I.builtin())
-
-def gen_veintrin_h(insts):
-    for I in insts:
-        if (not I.hasImmOp()) and I.hasBuiltin():
-            print(I.veintrin())
-
-def gen_vl_index(insts):
-    print("default: return -1;")
-    for I in insts:
-        if I.hasLLVMInstDefine() and I.hasVLOp():
-            index = len(I.outs) + I.ins.index(VL)
-            print("case VE::{}: return {};".format(I.llvmInst(), index))
 
 def createInstructionTable():
     T = InstTableVEL()
@@ -1360,6 +1291,67 @@ def createInstructionTable():
 #
 # End of instruction definition
 #
+
+def cmpwrite(filename, data):
+    need_write = True
+    try:
+        with open(filename, "r") as f:
+            old = f.read()
+            need_write = old != data
+    except:
+        pass
+    if need_write:
+        print("write " + filename)
+        with open(filename, "w") as f:
+            f.write(data)
+
+
+def gen_test(insts, directory):
+    for I in insts:
+        if I.hasPassThroughOp() and (not I.hasMask()):
+            continue
+        if I.hasTest():
+            data = getTestGenerator(I).gen(I).definition()
+            if directory and (directory != "-"):
+                filename = "{}/{}.c".format(directory, I.intrinsicName())
+                if I.hasImmOp():
+                    filename = "{}/{}_imm.c".format(directory, I.intrinsicName())
+                cmpwrite(filename, data)
+            else:
+                print(data)
+
+def gen_inst_def(insts):
+    for I in insts:
+        if I.hasLLVMInstDefine():
+            print(I.instDefine())
+
+def gen_intrinsic_def(insts):
+    for I in insts:
+        if not I.hasImmOp() and I.hasIntrinsicDef():
+            print(I.intrinsicDefine())
+
+def gen_pattern(insts):
+    for I in insts:
+        if I.hasInst()and I.hasPat():
+            print(I.pattern())
+
+def gen_builtin(insts):
+    for I in insts:
+        if (not I.hasImmOp()) and I.hasBuiltin():
+            print(I.builtin())
+
+def gen_veintrin_h(insts):
+    for I in insts:
+        if (not I.hasImmOp()) and I.hasBuiltin():
+            print(I.veintrin())
+
+def gen_vl_index(insts):
+    print("default: return -1;")
+    for I in insts:
+        if I.hasLLVMInstDefine() and I.hasVLOp():
+            index = len(I.outs) + I.ins.index(VL)
+            print("case VE::{}: return {};".format(I.llvmInst(), index))
+
 
 import argparse
 
