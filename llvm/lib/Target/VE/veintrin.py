@@ -187,7 +187,7 @@ class Inst(object):
         self.hasPat_ = True
         self.hasLLVMInstDefine_ = True
         self.hasIntrinsicDef_ = True
-        self.notYetImplemented = False
+        self.notYetImplemented_ = False
         self.Obsolete_ = False
 
     def inst(self): return self.inst_
@@ -201,9 +201,11 @@ class Inst(object):
         return "__builtin{}{}".format(self.llvmIntrinsicPrefix_, self.intrinsicName())
     def llvmIntrinName(self):
         return "int{}{}".format(self.llvmIntrinsicPrefix_, self.intrinsicName())
-    def isNotYetImplemented(self): return self.notYetImplemented
+    def isNotYetImplemented(self): return self.notYetImplemented_
     def NYI(self, flag = True): 
-        self.notYetImplemented = flag
+        self.notYetImplemented_ = flag
+        if flag:
+            self.hasTest_ = False
         return self
     def Obsolete(self): self.Obsolete_ = True
     def isObsolete(self): return self.Obsolete_
@@ -356,15 +358,9 @@ class DummyInst(Inst):
     def __init__(self, opc, inst, func, asm, **kwargs):
         kwargs['llvmInst'] = None
         super(DummyInst, self).__init__(opc, inst, asm, func, None, None, **kwargs)
-        #self.opc = opc
-        #self.inst_ = inst
-        #self.asm_ = asm
         self.func_ = func
-    #def inst(self): return self.inst_
-    #def asm(self): return self.asm_
     def func(self): return self.func_
     def isDummy(self): return True
-    #def hasInst(self): return self.inst_ != None
 
 class InstVEL(Inst):
     def __init__(self, opc, inst, asm, intrinsicName, outs, ins, **kwargs):
@@ -384,8 +380,7 @@ class InstVEL(Inst):
 
     def pattern(self):
         args = ", ".join([op.dagOp() for op in self.ins])
-        tmp = re.sub(r'[INZ]', 's', self.llvmIntrinName()) # replace Imm to s
-        l = "({} {})".format(tmp, args)
+        l = "({} {})".format(self.llvmIntrinName(), args)
         r = "({} {})".format(self.llvmInst(), args)
         return "def : Pat<{}, {}>;".format(l, r)
 
@@ -410,7 +405,6 @@ class TestFunc:
 
 class TestGeneratorMask:
     def gen(self, I):
-        intrinsicName = re.sub(r'[IN]', 's', I.intrinsicName())
         header = "void {}(unsigned long int* px, unsigned long int const* py, unsigned long int* pz, int n)".format(I.intrinsicName())
 
         args = ", ".join([op.regName() for op in I.ins])
@@ -443,7 +437,7 @@ class TestGeneratorMask:
 
 {svm}
 }}
-'''.format(header=header, inst=intrinsicName, args=args, vm=vm, lvm=lvm, svm=svm)
+'''.format(header=header, inst=I.intrinsicName(), args=args, vm=vm, lvm=lvm, svm=svm)
 
         if I.hasExpr():
             args = ["px[i]", "py[i]", "pz[i]"]
@@ -465,7 +459,11 @@ class TestGenerator:
         tmp = [i for i in (I.outs + I.ins) if (not i.isImm()) and (not i.isVL())]
         args = ["{} {}".format(i.ctype(), i.formalName()) for i in tmp]
 
-        return "void {name}({args}, int n)".format(name=I.intrinsicName(), args=", ".join(args))
+        name = I.intrinsicName()
+        if I.hasImmOp():
+            name = name + "_imm"
+
+        return "void {name}({args}, int n)".format(name=name, args=", ".join(args))
 
     def get_vld_vst_inst(self, I, op):
         vld = "vld_vssl"
@@ -530,16 +528,14 @@ class TestGenerator:
             elif op.isCC():
                 args.append(op.name)
 
-        intrinsicName = re.sub(r'[IN]', 's', I.intrinsicName())
-    
         if I.hasMask():
             op = I.outs[0]
             vld, vst = self.get_vld_vst_inst(I, op)
             stride = I.stride(op)
             body += indent + "__vr {} = _vel_{}({}, p{}, l);\n".format(op.regName(), vld, stride, op.regName())
-            body += indent + "{} = _vel_{}({}, l);\n".format(out.regName(), intrinsicName, ', '.join(args))
+            body += indent + "{} = _vel_{}({}, l);\n".format(out.regName(), I.intrinsicName(), ', '.join(args))
         else:
-            body += indent + "__vr {} = _vel_{}({}, l);\n".format(out.regName(), intrinsicName, ', '.join(args))
+            body += indent + "__vr {} = _vel_{}({}, l);\n".format(out.regName(), I.intrinsicName(), ', '.join(args))
     
         if out.isVReg():
             stride = I.stride(out)
@@ -663,8 +659,7 @@ class ManualInstPrinter:
             else:
                 raise Exception("unknown register kind: {}".format(op.kind))
         
-        funcName = re.sub(r'[INZ]', 's', I.funcName())
-        func = "{} {}({})".format(outType, funcName, ", ".join(ins))
+        func = "{} {}({})".format(outType, I.funcName(), ", ".join(ins))
 
         #if outType:
         #    func = "{} _ve_{}({})".format(outType, intrinsicName, ", ".join(ins))
@@ -804,6 +799,7 @@ class InstTable(object):
         for args in ary:
             func_suffix = "_" + "".join([op.kind for op in args if op])
             intrinsicName = baseIntrinName + func_suffix
+            intrinsicName = re.sub(r'[INZ]', 's', intrinsicName) # replace Imm to s
             outs = [args[0]] if args[0] else []
             ins = args[1:]
             kwargs['packed'] = 'p' in subop
@@ -1070,14 +1066,14 @@ class InstTableVEL(InstTable):
 
 def gen_test(insts, directory):
     for I in insts:
-        if I.isNotYetImplemented():
-            continue
         if I.hasPassThroughOp() and (not I.hasMask()):
             continue
         if I.hasTest():
             data = getTestGenerator(I).gen(I).definition()
             if directory and (directory != "-"):
                 filename = "{}/{}.c".format(directory, I.intrinsicName())
+                if I.hasImmOp():
+                    filename = "{}/{}_imm.c".format(directory, I.intrinsicName())
                 cmpwrite(filename, data)
             else:
                 print(data)
@@ -1344,7 +1340,6 @@ def createInstructionTable():
     T.Def(0xA4, "PCVM", "", "pcvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA5, "LZVM", "", "lzvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA6, "TOVM", "", "tovm", [[SX(T_u64), VMY]]).noTest();
-    
     
     T.Section("Table 3-24 Vector Control Instructions", 37)
     T.NoImpl("SMVL")
