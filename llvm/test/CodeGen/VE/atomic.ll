@@ -346,13 +346,22 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_exchange_1() {
 ; CHECK-LABEL: test_atomic_exchange_1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  lea %s34, c@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
-; CHECK-NEXT:  or %s35, 10, (0)1
-; CHECK-NEXT:  ts1am.w %s35, (%s34), 1
+; CHECK-NEXT:  and %s34, -4, %s34
+; CHECK-NEXT:  ldl.sx %s35, (,%s34)
+; CHECK-NEXT:  lea %s36, -256
+; CHECK-NEXT:  .LBB{{[0-9]+}}_1:                               # %atomicrmw.start
+; CHECK-NEXT:                                          # =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:  or %s37, 0, %s35
+; CHECK-NEXT:  and %s35, %s35, %s36
+; CHECK-NEXT:  or %s35, 10, %s35
+; CHECK-NEXT:  cas.w %s35, (%s34), %s37
+; CHECK-NEXT:  brne.w %s35, %s37, .LBB20_1
+; CHECK-NEXT:  # %bb.2:                                # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  sla.w.sx %s34, %s35, 24
 ; CHECK-NEXT:  sra.w.sx %s0, %s34, 24
@@ -365,13 +374,23 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_exchange_2() {
 ; CHECK-LABEL: test_atomic_exchange_2:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  lea %s34, s@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, s@hi(%s34)
-; CHECK-NEXT:  lea %s35, 28672
-; CHECK-NEXT:  ts1am.w %s35, (%s34), 3
+; CHECK-NEXT:  and %s34, -4, %s34
+; CHECK-NEXT:  ldl.sx %s35, (,%s34)
+; CHECK-NEXT:  lea %s36, -65536
+; CHECK-NEXT:  lea %s37, 28672
+; CHECK-NEXT:  .LBB{{[0-9]+}}_1:                               # %atomicrmw.start
+; CHECK-NEXT:                                          # =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:  or %s38, 0, %s35
+; CHECK-NEXT:  and %s35, %s35, %s36
+; CHECK-NEXT:  or %s35, %s35, %s37
+; CHECK-NEXT:  cas.w %s35, (%s34), %s38
+; CHECK-NEXT:  brne.w %s35, %s38, .LBB21_1
+; CHECK-NEXT:  # %bb.2:                                # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  sla.w.sx %s34, %s35, 16
 ; CHECK-NEXT:  sra.w.sx %s0, %s34, 16
