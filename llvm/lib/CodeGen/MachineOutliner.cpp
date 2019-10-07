@@ -846,8 +846,8 @@ struct MachineOutliner : public ModulePass {
   StringRef getPassName() const override { return "Machine Outliner"; }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
-    AU.addRequired<MachineModuleInfo>();
-    AU.addPreserved<MachineModuleInfo>();
+    AU.addRequired<MachineModuleInfoWrapperPass>();
+    AU.addPreserved<MachineModuleInfoWrapperPass>();
     AU.setPreservesAll();
     ModulePass::getAnalysisUsage(AU);
   }
@@ -1128,7 +1128,7 @@ MachineOutliner::createOutlinedFunction(Module &M, OutlinedFunction &OF,
   IRBuilder<> Builder(EntryBB);
   Builder.CreateRetVoid();
 
-  MachineModuleInfo &MMI = getAnalysis<MachineModuleInfo>();
+  MachineModuleInfo &MMI = getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
   MachineFunction &MF = MMI.getOrCreateMachineFunction(*F);
   MachineBasicBlock &MBB = *MF.CreateMachineBasicBlock();
   const TargetSubtargetInfo &STI = MF.getSubtarget();
@@ -1303,6 +1303,12 @@ void MachineOutliner::populateMapper(InstructionMapper &Mapper, Module &M,
     if (F.empty())
       continue;
 
+    // Disable outlining from noreturn functions right now. Noreturn requires
+    // special handling for the case where what we are outlining could be a
+    // tail call.
+    if (F.hasFnAttribute(Attribute::NoReturn))
+      continue;
+
     // There's something in F. Check if it has a MachineFunction associated with
     // it.
     MachineFunction *MF = MMI.getMachineFunction(F);
@@ -1421,7 +1427,7 @@ bool MachineOutliner::runOnModule(Module &M) {
   if (M.empty())
     return false;
 
-  MachineModuleInfo &MMI = getAnalysis<MachineModuleInfo>();
+  MachineModuleInfo &MMI = getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
 
   // If the user passed -enable-machine-outliner=always or
   // -enable-machine-outliner, the pass will run on all functions in the module.
