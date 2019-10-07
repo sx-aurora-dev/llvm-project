@@ -201,7 +201,7 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
     case clang::OpenMPClauseKind::OMPC_firstprivate:
     case clang::OpenMPClauseKind::OMPC_shared:
     case clang::OpenMPClauseKind::OMPC_reduction:
-    case clang::OpenMPClauseKind::OMPC_thread_limit:
+    // case clang::OpenMPClauseKind::OMPC_thread_limit:
     case clang::OpenMPClauseKind::OMPC_lastprivate:
     case clang::OpenMPClauseKind::OMPC_collapse:
     case clang::OpenMPClauseKind::OMPC_dist_schedule:
@@ -226,7 +226,7 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
     case clang::OpenMPClauseKind::OMPC_shared:
     case clang::OpenMPClauseKind::OMPC_reduction:
     case clang::OpenMPClauseKind::OMPC_schedule:
-    case clang::OpenMPClauseKind::OMPC_thread_limit:
+    /* case clang::OpenMPClauseKind::OMPC_thread_limit: */
       return true;
     default:
       return false;
@@ -253,7 +253,7 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
     case clang::OpenMPClauseKind::OMPC_aligned:
     case clang::OpenMPClauseKind::OMPC_safelen:
     case clang::OpenMPClauseKind::OMPC_simdlen:
-    case clang::OpenMPClauseKind::OMPC_thread_limit:
+    /* case clang::OpenMPClauseKind::OMPC_thread_limit: */
       return true;
     default:
       return false;
@@ -268,7 +268,7 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
     case clang::OpenMPClauseKind::OMPC_firstprivate:
     case clang::OpenMPClauseKind::OMPC_shared:
     case clang::OpenMPClauseKind::OMPC_reduction:
-    case clang::OpenMPClauseKind::OMPC_thread_limit:
+    /* case clang::OpenMPClauseKind::OMPC_thread_limit: */
     case clang::OpenMPClauseKind::OMPC_lastprivate:
     case clang::OpenMPClauseKind::OMPC_collapse:
     case clang::OpenMPClauseKind::OMPC_dist_schedule:

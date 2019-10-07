@@ -33,7 +33,9 @@ void TargetCodeRegion::addCapturedVar(clang::VarDecl *Var) {
 }
 
 void TargetCodeRegion::addOpenMPClause(clang::OMPClause *Clause) {
-  addClauseVars(Clause);
+  if (Clause->getClauseKind() != clang::OMPC_device)
+    addClauseVars(Clause);
+
   OMPClauses.push_back(Clause);
 
 }
@@ -66,7 +68,8 @@ void TargetCodeRegion::addClauseVars(clang::OMPClause *Clause) {
   }
 
   for (auto v : CapturedVars) {
-    tmpSet.erase(tmpSet.find(v));
+    if (tmpSet.find(v) != tmpSet.end())
+      tmpSet.erase(tmpSet.find(v));
   }
 
   for (auto v: tmpSet) {
