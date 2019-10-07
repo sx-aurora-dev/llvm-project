@@ -78,10 +78,11 @@ using namespace llvm;
 
 #define DEBUG_TYPE "codegen"
 
-static cl::opt<unsigned>
-AlignAllFunctions("align-all-functions",
-                  cl::desc("Force the alignment of all functions."),
-                  cl::init(0), cl::Hidden);
+static cl::opt<unsigned> AlignAllFunctions(
+    "align-all-functions",
+    cl::desc("Force the alignment of all functions in log2 format (e.g. 4 "
+             "means align on 16B boundaries)."),
+    cl::init(0), cl::Hidden);
 
 static const char *getPropertyName(MachineFunctionProperties::Property Prop) {
   using P = MachineFunctionProperties::Property;
@@ -181,7 +182,7 @@ void MachineFunction::init() {
                          STI->getTargetLowering()->getPrefFunctionAlignment());
 
   if (AlignAllFunctions)
-    Alignment = AlignAllFunctions;
+    Alignment = Align(1ULL << AlignAllFunctions);
 
   JumpTableInfo = nullptr;
 
@@ -882,13 +883,13 @@ unsigned MachineJumpTableInfo::getEntryAlignment(const DataLayout &TD) const {
   // alignment.
   switch (getEntryKind()) {
   case MachineJumpTableInfo::EK_BlockAddress:
-    return TD.getPointerABIAlignment(0);
+    return TD.getPointerABIAlignment(0).value();
   case MachineJumpTableInfo::EK_GPRel64BlockAddress:
-    return TD.getABIIntegerTypeAlignment(64);
+    return TD.getABIIntegerTypeAlignment(64).value();
   case MachineJumpTableInfo::EK_GPRel32BlockAddress:
   case MachineJumpTableInfo::EK_LabelDifference32:
   case MachineJumpTableInfo::EK_Custom32:
-    return TD.getABIIntegerTypeAlignment(32);
+    return TD.getABIIntegerTypeAlignment(32).value();
   case MachineJumpTableInfo::EK_Inline:
     return 1;
   }

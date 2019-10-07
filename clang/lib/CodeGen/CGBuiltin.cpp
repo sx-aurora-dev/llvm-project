@@ -2366,7 +2366,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
             .toCharUnitsFromBits(TI.getSuitableAlign())
             .getQuantity();
     AllocaInst *AI = Builder.CreateAlloca(Builder.getInt8Ty(), Size);
-    AI->setAlignment(SuitableAlignmentInBytes);
+    AI->setAlignment(MaybeAlign(SuitableAlignmentInBytes));
     initializeAlloca(*this, AI, Size, SuitableAlignmentInBytes);
     return RValue::get(AI);
   }
@@ -2379,7 +2379,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     unsigned AlignmentInBytes =
         CGM.getContext().toCharUnitsFromBits(AlignmentInBits).getQuantity();
     AllocaInst *AI = Builder.CreateAlloca(Builder.getInt8Ty(), Size);
-    AI->setAlignment(AlignmentInBytes);
+    AI->setAlignment(MaybeAlign(AlignmentInBytes));
     initializeAlloca(*this, AI, Size, AlignmentInBytes);
     return RValue::get(AI);
   }
@@ -3791,7 +3791,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
         -> std::tuple<llvm::Value *, llvm::Value *, llvm::Value *> {
       llvm::APInt ArraySize(32, NumArgs - First);
       QualType SizeArrayTy = getContext().getConstantArrayType(
-          getContext().getSizeType(), ArraySize, ArrayType::Normal,
+          getContext().getSizeType(), ArraySize, nullptr, ArrayType::Normal,
           /*IndexTypeQuals=*/0);
       auto Tmp = CreateMemTemp(SizeArrayTy, "block_sizes");
       llvm::Value *TmpPtr = Tmp.getPointer();
@@ -11193,7 +11193,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
     // Unaligned nontemporal store of the scalar value.
     StoreInst *SI = Builder.CreateDefaultAlignedStore(Src, BC);
     SI->setMetadata(CGM.getModule().getMDKindID("nontemporal"), Node);
-    SI->setAlignment(1);
+    SI->setAlignment(llvm::Align::None());
     return SI;
   }
   // Rotate is a special case of funnel shift - 1st 2 args are the same.
@@ -14195,6 +14195,63 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     }
     Function *Callee = CGM.getIntrinsic(IntNo, A->getType());
     return Builder.CreateCall(Callee, {A, B, C});
+  }
+  case WebAssembly::BI__builtin_wasm_narrow_s_i8x16_i16x8:
+  case WebAssembly::BI__builtin_wasm_narrow_u_i8x16_i16x8:
+  case WebAssembly::BI__builtin_wasm_narrow_s_i16x8_i32x4:
+  case WebAssembly::BI__builtin_wasm_narrow_u_i16x8_i32x4: {
+    Value *Low = EmitScalarExpr(E->getArg(0));
+    Value *High = EmitScalarExpr(E->getArg(1));
+    unsigned IntNo;
+    switch (BuiltinID) {
+    case WebAssembly::BI__builtin_wasm_narrow_s_i8x16_i16x8:
+    case WebAssembly::BI__builtin_wasm_narrow_s_i16x8_i32x4:
+      IntNo = Intrinsic::wasm_narrow_signed;
+      break;
+    case WebAssembly::BI__builtin_wasm_narrow_u_i8x16_i16x8:
+    case WebAssembly::BI__builtin_wasm_narrow_u_i16x8_i32x4:
+      IntNo = Intrinsic::wasm_narrow_unsigned;
+      break;
+    default:
+      llvm_unreachable("unexpected builtin ID");
+    }
+    Function *Callee =
+        CGM.getIntrinsic(IntNo, {ConvertType(E->getType()), Low->getType()});
+    return Builder.CreateCall(Callee, {Low, High});
+  }
+  case WebAssembly::BI__builtin_wasm_widen_low_s_i16x8_i8x16:
+  case WebAssembly::BI__builtin_wasm_widen_high_s_i16x8_i8x16:
+  case WebAssembly::BI__builtin_wasm_widen_low_u_i16x8_i8x16:
+  case WebAssembly::BI__builtin_wasm_widen_high_u_i16x8_i8x16:
+  case WebAssembly::BI__builtin_wasm_widen_low_s_i32x4_i16x8:
+  case WebAssembly::BI__builtin_wasm_widen_high_s_i32x4_i16x8:
+  case WebAssembly::BI__builtin_wasm_widen_low_u_i32x4_i16x8:
+  case WebAssembly::BI__builtin_wasm_widen_high_u_i32x4_i16x8: {
+    Value *Vec = EmitScalarExpr(E->getArg(0));
+    unsigned IntNo;
+    switch (BuiltinID) {
+    case WebAssembly::BI__builtin_wasm_widen_low_s_i16x8_i8x16:
+    case WebAssembly::BI__builtin_wasm_widen_low_s_i32x4_i16x8:
+      IntNo = Intrinsic::wasm_widen_low_signed;
+      break;
+    case WebAssembly::BI__builtin_wasm_widen_high_s_i16x8_i8x16:
+    case WebAssembly::BI__builtin_wasm_widen_high_s_i32x4_i16x8:
+      IntNo = Intrinsic::wasm_widen_high_signed;
+      break;
+    case WebAssembly::BI__builtin_wasm_widen_low_u_i16x8_i8x16:
+    case WebAssembly::BI__builtin_wasm_widen_low_u_i32x4_i16x8:
+      IntNo = Intrinsic::wasm_widen_low_unsigned;
+      break;
+    case WebAssembly::BI__builtin_wasm_widen_high_u_i16x8_i8x16:
+    case WebAssembly::BI__builtin_wasm_widen_high_u_i32x4_i16x8:
+      IntNo = Intrinsic::wasm_widen_high_unsigned;
+      break;
+    default:
+      llvm_unreachable("unexpected builtin ID");
+    }
+    Function *Callee =
+        CGM.getIntrinsic(IntNo, {ConvertType(E->getType()), Vec->getType()});
+    return Builder.CreateCall(Callee, Vec);
   }
   default:
     return nullptr;

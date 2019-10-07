@@ -32,6 +32,7 @@ DefinedData *WasmSym::dsoHandle;
 DefinedData *WasmSym::dataEnd;
 DefinedData *WasmSym::globalBase;
 DefinedData *WasmSym::heapBase;
+DefinedData *WasmSym::initMemoryFlag;
 GlobalSymbol *WasmSym::stackPointer;
 GlobalSymbol *WasmSym::tlsBase;
 GlobalSymbol *WasmSym::tlsSize;
@@ -303,8 +304,7 @@ std::string lld::toString(const wasm::Symbol &sym) {
 
 std::string lld::maybeDemangleSymbol(StringRef name) {
   if (config->demangle)
-    if (Optional<std::string> s = demangleItanium(name))
-      return *s;
+    return demangleItanium(name);
   return name;
 }
 

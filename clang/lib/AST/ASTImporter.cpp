@@ -1098,14 +1098,16 @@ ASTNodeImporter::VisitMemberPointerType(const MemberPointerType *T) {
 
 ExpectedType
 ASTNodeImporter::VisitConstantArrayType(const ConstantArrayType *T) {
-  ExpectedType ToElementTypeOrErr = import(T->getElementType());
-  if (!ToElementTypeOrErr)
-    return ToElementTypeOrErr.takeError();
+  QualType ToElementType;
+  const Expr *ToSizeExpr;
+  if (auto Imp = importSeq(T->getElementType(), T->getSizeExpr()))
+    std::tie(ToElementType, ToSizeExpr) = *Imp;
+  else
+    return Imp.takeError();
 
-  return Importer.getToContext().getConstantArrayType(*ToElementTypeOrErr,
-                                                      T->getSize(),
-                                                      T->getSizeModifier(),
-                                               T->getIndexTypeCVRQualifiers());
+  return Importer.getToContext().getConstantArrayType(
+      ToElementType, T->getSize(), ToSizeExpr, T->getSizeModifier(),
+      T->getIndexTypeCVRQualifiers());
 }
 
 ExpectedType
@@ -3244,7 +3246,7 @@ ExpectedDecl ASTNodeImporter::VisitFunctionDecl(FunctionDecl *D) {
     if (GetImportedOrCreateDecl<CXXDestructorDecl>(
         ToFunction, D, Importer.getToContext(), cast<CXXRecordDecl>(DC),
         ToInnerLocStart, NameInfo, T, TInfo, D->isInlineSpecified(),
-        D->isImplicit()))
+        D->isImplicit(), D->getConstexprKind()))
       return ToFunction;
 
     CXXDestructorDecl *ToDtor = cast<CXXDestructorDecl>(ToFunction);
@@ -5638,17 +5640,16 @@ ASTNodeImporter::VisitFunctionTemplateDecl(FunctionTemplateDecl *D) {
         continue;
 
       if (auto *FoundTemplate = dyn_cast<FunctionTemplateDecl>(FoundDecl)) {
-        if (FoundTemplate->hasExternalFormalLinkage() &&
-            D->hasExternalFormalLinkage()) {
-          if (IsStructuralMatch(D, FoundTemplate)) {
-            FunctionTemplateDecl *TemplateWithDef =
-                getTemplateDefinition(FoundTemplate);
-            if (D->isThisDeclarationADefinition() && TemplateWithDef) {
-              return Importer.MapImported(D, TemplateWithDef);
-            }
-            FoundByLookup = FoundTemplate;
-            break;
-          }
+        if (!hasSameVisibilityContext(FoundTemplate, D))
+          continue;
+        if (IsStructuralMatch(D, FoundTemplate)) {
+          FunctionTemplateDecl *TemplateWithDef =
+              getTemplateDefinition(FoundTemplate);
+          if (D->isThisDeclarationADefinition() && TemplateWithDef)
+            return Importer.MapImported(D, TemplateWithDef);
+
+          FoundByLookup = FoundTemplate;
+          break;
           // TODO: handle conflicting names
         }
       }

@@ -351,6 +351,8 @@ public:
   Instruction *visitOr(BinaryOperator &I);
   Instruction *visitXor(BinaryOperator &I);
   Instruction *visitShl(BinaryOperator &I);
+  Instruction *foldVariableSignZeroExtensionOfVariableHighBitExtract(
+      BinaryOperator &OldAShr);
   Instruction *visitAShr(BinaryOperator &I);
   Instruction *visitLShr(BinaryOperator &I);
   Instruction *commonShiftTransforms(BinaryOperator &I);
@@ -868,7 +870,7 @@ private:
   Instruction *foldICmpWithConstant(ICmpInst &Cmp);
   Instruction *foldICmpInstWithConstant(ICmpInst &Cmp);
   Instruction *foldICmpInstWithConstantNotInt(ICmpInst &Cmp);
-  Instruction *foldICmpBinOp(ICmpInst &Cmp);
+  Instruction *foldICmpBinOp(ICmpInst &Cmp, const SimplifyQuery &SQ);
   Instruction *foldICmpEquality(ICmpInst &Cmp);
   Instruction *foldIRemByPowerOfTwoToBitTest(ICmpInst &I);
   Instruction *foldICmpWithZero(ICmpInst &Cmp);
@@ -891,6 +893,8 @@ private:
                                    const APInt &C);
   Instruction *foldICmpShrConstant(ICmpInst &Cmp, BinaryOperator *Shr,
                                    const APInt &C);
+  Instruction *foldICmpSRemConstant(ICmpInst &Cmp, BinaryOperator *UDiv,
+                                    const APInt &C);
   Instruction *foldICmpUDivConstant(ICmpInst &Cmp, BinaryOperator *UDiv,
                                     const APInt &C);
   Instruction *foldICmpDivConstant(ICmpInst &Cmp, BinaryOperator *Div,
