@@ -1535,10 +1535,11 @@ let cx = 1 in
 defm TS1AMW : RRCASm<"ts1am.w", 0x42, add, I32, i32, simm7Op32, uimm6Op32>;
 
 // Atomic swap
-def : Pat<(i32 (atomic_swap_8  ADDRri:$src, i32:$new)),
-          (TS1AMWasi MEMASri:$src, 1, $new)>;
-def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
-          (TS1AMWasi MEMASri:$src, 3, $new)>;
+// FIXME: Assign 4 byte align address to $src
+// def : Pat<(i32 (atomic_swap_8  ADDRri:$src, i32:$new)),
+//           (TS1AMWasi MEMASri:$src, 1, $new)>;
+// def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
+//           (TS1AMWasi MEMASri:$src, 3, $new)>;
 def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
           (TS1AMWasi MEMASri:$src, 15, $new)>;
 def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),

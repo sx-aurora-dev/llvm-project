@@ -1048,9 +1048,13 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
 }
 
 TargetLowering::AtomicExpansionKind VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
-  if (AI->getOperation() == AtomicRMWInst::Xchg)
+  if (AI->getOperation() == AtomicRMWInst::Xchg){
+    const DataLayout &DL = AI->getModule()->getDataLayout();
+    if (DL.getTypeStoreSize(AI->getValOperand()->getType())
+       < (VETargetLowering::getMinCmpXchgSizeInBits() / 8))
+      return AtomicExpansionKind::CmpXChg; // Uses cas instruction for 1byte or 2byte atomic_swap
     return AtomicExpansionKind::None; // Uses ts1am instruction
-
+  }
   return AtomicExpansionKind::CmpXChg;
 }
 
@@ -1200,6 +1204,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // Atomics are supported on VE.
   setMaxAtomicSizeInBitsSupported(64);
   setMinCmpXchgSizeInBits(32);
+  setSupportsUnalignedAtomics(false);
 
   // Use custom inserter, LowerATOMIC_FENCE, for ATOMIC_FENCE.
   setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
