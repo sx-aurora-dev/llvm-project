@@ -561,6 +561,10 @@ void CGDebugInfo::CreateCompileUnit() {
   if (LO.CPlusPlus) {
     if (LO.ObjC)
       LangTag = llvm::dwarf::DW_LANG_ObjC_plus_plus;
+    else if (LO.CPlusPlus14)
+      LangTag = llvm::dwarf::DW_LANG_C_plus_plus_14;
+    else if (LO.CPlusPlus11)
+      LangTag = llvm::dwarf::DW_LANG_C_plus_plus_11;
     else
       LangTag = llvm::dwarf::DW_LANG_C_plus_plus;
   } else if (LO.ObjC) {
@@ -878,6 +882,8 @@ llvm::DIType *CGDebugInfo::CreateType(const PointerType *Ty,
 static bool hasCXXMangling(const TagDecl *TD, llvm::DICompileUnit *TheCU) {
   switch (TheCU->getSourceLanguage()) {
   case llvm::dwarf::DW_LANG_C_plus_plus:
+  case llvm::dwarf::DW_LANG_C_plus_plus_11:
+  case llvm::dwarf::DW_LANG_C_plus_plus_14:
     return true;
   case llvm::dwarf::DW_LANG_ObjC_plus_plus:
     return isa<CXXRecordDecl>(TD) || isa<EnumDecl>(TD);
@@ -1693,7 +1699,7 @@ void CGDebugInfo::CollectCXXBasesAux(
   const ASTRecordLayout &RL = CGM.getContext().getASTRecordLayout(RD);
   for (const auto &BI : Bases) {
     const auto *Base =
-        cast<CXXRecordDecl>(BI.getType()->getAs<RecordType>()->getDecl());
+        cast<CXXRecordDecl>(BI.getType()->castAs<RecordType>()->getDecl());
     if (!SeenTypes.insert(Base).second)
       continue;
     auto *BaseTy = getOrCreateType(BI.getType(), Unit);
@@ -2711,6 +2717,8 @@ llvm::DIType *CGDebugInfo::CreateType(const MemberPointerType *Ty,
         break;
       case MSInheritanceAttr::Keyword_unspecified_inheritance:
         break;
+      case MSInheritanceAttr::SpellingNotCalculated:
+        llvm_unreachable("Spelling not yet calculated");
       }
     }
   }
@@ -2994,7 +3002,7 @@ llvm::DIType *CGDebugInfo::CreateTypeNode(QualType Ty, llvm::DIFile *Unit) {
 #define ABSTRACT_TYPE(Class, Base)
 #define NON_CANONICAL_TYPE(Class, Base)
 #define DEPENDENT_TYPE(Class, Base) case Type::Class:
-#include "clang/AST/TypeNodes.def"
+#include "clang/AST/TypeNodes.inc"
     llvm_unreachable("Dependent types cannot show up in debug information");
 
   case Type::ExtVector:
@@ -3268,8 +3276,8 @@ void CGDebugInfo::collectVarDeclProps(const VarDecl *VD, llvm::DIFile *&Unit,
     llvm::APInt ConstVal(32, 1);
     QualType ET = CGM.getContext().getAsArrayType(T)->getElementType();
 
-    T = CGM.getContext().getConstantArrayType(ET, ConstVal, ArrayType::Normal,
-                                              0);
+    T = CGM.getContext().getConstantArrayType(ET, ConstVal, nullptr,
+                                              ArrayType::Normal, 0);
   }
 
   Name = VD->getName();
@@ -3865,8 +3873,8 @@ CGDebugInfo::EmitTypeForVarWithBlocksAttr(const VarDecl *VD,
 
     if (NumPaddingBytes.isPositive()) {
       llvm::APInt pad(32, NumPaddingBytes.getQuantity());
-      FType = CGM.getContext().getConstantArrayType(CGM.getContext().CharTy,
-                                                    pad, ArrayType::Normal, 0);
+      FType = CGM.getContext().getConstantArrayType(
+          CGM.getContext().CharTy, pad, nullptr, ArrayType::Normal, 0);
       EltTys.push_back(CreateMemberType(Unit, FType, "", &FieldOffset));
     }
   }
