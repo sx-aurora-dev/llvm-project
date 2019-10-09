@@ -1550,8 +1550,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   setStackPointerRegisterToSaveRestore(VE::SX11);
 
-  // Set function alignment to 16 bytes (4 bits)
-  setMinFunctionAlignment(Align(4));
+  // Set function alignment to 16 bytes
+  setMinFunctionAlignment(Align(16));
 
   // VE stores all argument by 8 bytes alignment
   setMinStackArgumentAlignment(Align(8));
