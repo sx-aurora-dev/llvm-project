@@ -16,8 +16,8 @@
 #include "ByteCodeEmitter.h"
 #include "EvalEmitter.h"
 #include "Pointer.h"
+#include "PrimType.h"
 #include "Record.h"
-#include "Type.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/StmtVisitor.h"
@@ -166,13 +166,6 @@ private:
   /// Emits a zero initializer.
   bool visitZeroInitializer(PrimType T, const Expr *E);
 
-  /// Fetches a member of a structure given by a pointer.
-  bool visitIndirectMember(const BinaryOperator *E);
-
-  /// Emits a cast between two types.
-  bool emitConv(PrimType From, QualType FromTy, PrimType To, QualType ToTy,
-                const Expr *Cast);
-
   enum class DerefKind {
     /// Value is read and pushed to stack.
     Read,
@@ -208,8 +201,6 @@ private:
     return emitConst(*Ctx.classify(Ty), NumBits, WrappedValue, E);
   }
 
-  /// Visits a constant function invocation.
-  bool getPtrConstFn(const FunctionDecl *FD, const Expr *E);
   /// Returns a pointer to a variable declaration.
   bool getPtrVarDecl(const VarDecl *VD, const Expr *E);
 

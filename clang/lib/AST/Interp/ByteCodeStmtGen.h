@@ -13,12 +13,12 @@
 #ifndef LLVM_CLANG_AST_INTERP_BYTECODESTMTGEN_H
 #define LLVM_CLANG_AST_INTERP_BYTECODESTMTGEN_H
 
-#include "ByteCodeExprGen.h"
 #include "ByteCodeEmitter.h"
+#include "ByteCodeExprGen.h"
 #include "EvalEmitter.h"
 #include "Pointer.h"
+#include "PrimType.h"
 #include "Record.h"
-#include "Type.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/StmtVisitor.h"

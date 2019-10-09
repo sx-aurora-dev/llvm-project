@@ -2269,7 +2269,8 @@ GetScratchRegister(bool Is64Bit, bool IsLP64, const MachineFunction &MF, bool Pr
   bool IsNested = HasNestArgument(&MF);
 
   if (CallingConvention == CallingConv::X86_FastCall ||
-      CallingConvention == CallingConv::Fast) {
+      CallingConvention == CallingConv::Fast ||
+      CallingConvention == CallingConv::Tail) {
     if (IsNested)
       report_fatal_error("Segmented stacks does not support fastcall with "
                          "nested function.");
@@ -2552,8 +2553,8 @@ static unsigned getHiPELiteral(
 
 // Return true if there are no non-ehpad successors to MBB and there are no
 // non-meta instructions between MBBI and MBB.end().
-bool blockEndIsUnreachable(const MachineBasicBlock &MBB,
-                           MachineBasicBlock::const_iterator MBBI) {
+static bool blockEndIsUnreachable(const MachineBasicBlock &MBB,
+                                  MachineBasicBlock::const_iterator MBBI) {
   return std::all_of(
              MBB.succ_begin(), MBB.succ_end(),
              [](const MachineBasicBlock *Succ) { return Succ->isEHPad(); }) &&

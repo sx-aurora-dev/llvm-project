@@ -416,9 +416,8 @@ void SIRegisterInfo::resolveFrameIndex(MachineInstr &MI, unsigned BaseReg,
   assert(FIOp && FIOp->isFI() && "frame index must be address operand");
   assert(TII->isMUBUF(MI));
   assert(TII->getNamedOperand(MI, AMDGPU::OpName::soffset)->getReg() ==
-         MF->getInfo<SIMachineFunctionInfo>()->getFrameOffsetReg() &&
-         "should only be seeing frame offset relative FrameIndex");
-
+         MF->getInfo<SIMachineFunctionInfo>()->getStackPtrOffsetReg() &&
+         "should only be seeing stack pointer offset relative FrameIndex");
 
   MachineOperand *OffsetOp = TII->getNamedOperand(MI, AMDGPU::OpName::offset);
   int64_t NewOffset = OffsetOp->getImm() + Offset;
@@ -618,6 +617,7 @@ static bool buildMUBUFOffsetLoadStore(const SIInstrInfo *TII,
           .addImm(0) // slc
           .addImm(0) // tfe
           .addImm(0) // dlc
+          .addImm(0) // swz
           .cloneMemRefs(*MI);
 
   const MachineOperand *VDataIn = TII->getNamedOperand(*MI,
@@ -738,6 +738,7 @@ void SIRegisterInfo::buildSpillLoadStore(MachineBasicBlock::iterator MI,
         .addImm(0) // slc
         .addImm(0) // tfe
         .addImm(0) // dlc
+        .addImm(0) // swz
         .addMemOperand(NewMMO);
 
       if (!IsStore && TmpReg != AMDGPU::NoRegister)
@@ -1273,35 +1274,70 @@ void SIRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator MI,
         if (Offset == 0) {
           // XXX - This never happens because of emergency scavenging slot at 0?
           BuildMI(*MBB, MI, DL, TII->get(AMDGPU::V_LSHRREV_B32_e64), ResultReg)
-            .addImm(Log2_32(ST.getWavefrontSize()))
+            .addImm(ST.getWavefrontSizeLog2())
             .addReg(DiffReg);
         } else {
-          Register ScaledReg =
-            RS->scavengeRegister(&AMDGPU::VGPR_32RegClass, MI, 0);
+          if (auto MIB = TII->getAddNoCarry(*MBB, MI, DL, ResultReg, *RS)) {
+            Register ScaledReg =
+              RS->scavengeRegister(&AMDGPU::VGPR_32RegClass, MIB, 0);
 
-          // FIXME: Assusmed VGPR use.
-          BuildMI(*MBB, MI, DL, TII->get(AMDGPU::V_LSHRREV_B32_e64), ScaledReg)
-            .addImm(Log2_32(ST.getWavefrontSize()))
-            .addReg(DiffReg, RegState::Kill);
+            BuildMI(*MBB, *MIB, DL, TII->get(AMDGPU::V_LSHRREV_B32_e64),
+                    ScaledReg)
+              .addImm(ST.getWavefrontSizeLog2())
+              .addReg(DiffReg, RegState::Kill);
 
-          // TODO: Fold if use instruction is another add of a constant.
-          if (AMDGPU::isInlinableLiteral32(Offset, ST.hasInv2PiInlineImm())) {
+            const bool IsVOP2 = MIB->getOpcode() == AMDGPU::V_ADD_U32_e32;
 
-            // FIXME: This can fail
-            TII->getAddNoCarry(*MBB, MI, DL, ResultReg, *RS)
-              .addImm(Offset)
-              .addReg(ScaledReg, RegState::Kill)
-              .addImm(0); // clamp bit
+            // TODO: Fold if use instruction is another add of a constant.
+            if (IsVOP2 || AMDGPU::isInlinableLiteral32(Offset, ST.hasInv2PiInlineImm())) {
+              // FIXME: This can fail
+              MIB.addImm(Offset);
+              MIB.addReg(ScaledReg, RegState::Kill);
+              if (!IsVOP2)
+                MIB.addImm(0); // clamp bit
+            } else {
+              Register ConstOffsetReg =
+                RS->scavengeRegister(&AMDGPU::SReg_32_XM0RegClass, MIB, 0, false);
+
+              // This should always be able to use the unused carry out.
+              assert(ConstOffsetReg && "this scavenge should not be able to fail");
+
+              BuildMI(*MBB, *MIB, DL, TII->get(AMDGPU::S_MOV_B32), ConstOffsetReg)
+                .addImm(Offset);
+              MIB.addReg(ConstOffsetReg, RegState::Kill);
+              MIB.addReg(ScaledReg, RegState::Kill);
+              MIB.addImm(0); // clamp bit
+            }
           } else {
-            Register ConstOffsetReg =
-              RS->scavengeRegister(&AMDGPU::SReg_32_XM0RegClass, MI, 0, false);
+            // We have to produce a carry out, and we there isn't a free SGPR
+            // pair for it. We can keep the whole computation on the SALU to
+            // avoid clobbering an additional register at the cost of an extra
+            // mov.
 
-            BuildMI(*MBB, MI, DL, TII->get(AMDGPU::S_MOV_B32), ConstOffsetReg)
-              .addImm(Offset);
-            TII->getAddNoCarry(*MBB, MI, DL, ResultReg, *RS)
-              .addReg(ConstOffsetReg, RegState::Kill)
+            // We may have 1 free scratch SGPR even though a carry out is
+            // unavailable. Only one additional mov is needed.
+            Register TmpScaledReg =
+                RS->scavengeRegister(&AMDGPU::SReg_32_XM0RegClass, MI, 0, false);
+            Register ScaledReg = TmpScaledReg.isValid() ? TmpScaledReg : DiffReg;
+
+            BuildMI(*MBB, MI, DL, TII->get(AMDGPU::S_LSHR_B32), ScaledReg)
+              .addReg(DiffReg, RegState::Kill)
+              .addImm(ST.getWavefrontSizeLog2());
+            BuildMI(*MBB, MI, DL, TII->get(AMDGPU::S_ADD_U32), ScaledReg)
               .addReg(ScaledReg, RegState::Kill)
-              .addImm(0); // clamp bit
+              .addImm(Offset);
+            BuildMI(*MBB, MI, DL, TII->get(AMDGPU::COPY), ResultReg)
+              .addReg(ScaledReg, RegState::Kill);
+
+            // If there were truly no free SGPRs, we need to undo everything.
+            if (!TmpScaledReg.isValid()) {
+              BuildMI(*MBB, MI, DL, TII->get(AMDGPU::S_SUB_U32), ScaledReg)
+                .addReg(ScaledReg, RegState::Kill)
+                .addImm(Offset);
+            BuildMI(*MBB, MI, DL, TII->get(AMDGPU::S_LSHL_B32), ScaledReg)
+              .addReg(DiffReg, RegState::Kill)
+              .addImm(ST.getWavefrontSizeLog2());
+            }
           }
         }
 
@@ -1406,8 +1442,6 @@ const TargetRegisterClass *SIRegisterInfo::getPhysRegClass(unsigned Reg) const {
 // TargetRegisterClass to mark which classes are VGPRs to make this trivial.
 bool SIRegisterInfo::hasVGPRs(const TargetRegisterClass *RC) const {
   unsigned Size = getRegSizeInBits(*RC);
-  if (Size < 32)
-    return false;
   switch (Size) {
   case 32:
     return getCommonSubClass(&AMDGPU::VGPR_32RegClass, RC) != nullptr;
@@ -1425,8 +1459,11 @@ bool SIRegisterInfo::hasVGPRs(const TargetRegisterClass *RC) const {
     return getCommonSubClass(&AMDGPU::VReg_512RegClass, RC) != nullptr;
   case 1024:
     return getCommonSubClass(&AMDGPU::VReg_1024RegClass, RC) != nullptr;
+  case 1:
+    return getCommonSubClass(&AMDGPU::VReg_1RegClass, RC) != nullptr;
   default:
-    llvm_unreachable("Invalid register class size");
+    assert(Size < 32 && "Invalid register class size");
+    return false;
   }
 }
 
@@ -1474,6 +1511,8 @@ const TargetRegisterClass *SIRegisterInfo::getEquivalentVGPRClass(
     return &AMDGPU::VReg_512RegClass;
   case 1024:
     return &AMDGPU::VReg_1024RegClass;
+  case 1:
+    return &AMDGPU::VReg_1RegClass;
   default:
     llvm_unreachable("Invalid register class size");
   }
@@ -1937,6 +1976,9 @@ SIRegisterInfo::getRegClassForSizeOnBank(unsigned Size,
   case 512:
     return RB.getID() == AMDGPU::VGPRRegBankID ? &AMDGPU::VReg_512RegClass :
                                                  &AMDGPU::SReg_512RegClass;
+  case 1024:
+    return RB.getID() == AMDGPU::VGPRRegBankID ? &AMDGPU::VReg_1024RegClass :
+                                                 &AMDGPU::SReg_1024RegClass;
   default:
     if (Size < 32)
       return RB.getID() == AMDGPU::VGPRRegBankID ? &AMDGPU::VGPR_32RegClass :

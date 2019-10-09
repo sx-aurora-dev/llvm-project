@@ -8,8 +8,8 @@
 
 #include "Descriptor.h"
 #include "Pointer.h"
+#include "PrimType.h"
 #include "Record.h"
-#include "Type.h"
 
 using namespace clang;
 using namespace clang::interp;

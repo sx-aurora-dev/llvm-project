@@ -330,6 +330,11 @@ public:
     return nullptr;
   };
 
+  /// It includes all the names that have samples either in outline instance
+  /// or inline instance.
+  virtual std::vector<StringRef> *getNameTable() { return nullptr; }
+  virtual bool dumpSectionInfo(raw_ostream &OS = dbgs()) { return false; };
+
 protected:
   /// Map every function to its associated profile.
   ///
@@ -386,6 +391,10 @@ public:
 
   /// Read sample profiles from the associated file.
   std::error_code read() override;
+
+  /// It includes all the names that have samples either in outline instance
+  /// or inline instance.
+  virtual std::vector<StringRef> *getNameTable() override { return &NameTable; }
 
 protected:
   /// Read a numeric value of type T from the profile.
@@ -479,6 +488,14 @@ public:
 /// possible to define other types of profile inherited from
 /// SampleProfileReaderExtBinaryBase/SampleProfileWriterExtBinaryBase.
 class SampleProfileReaderExtBinaryBase : public SampleProfileReaderBinary {
+private:
+  std::error_code decompressSection(const uint8_t *SecStart,
+                                    const uint64_t SecSize,
+                                    const uint8_t *&DecompressBuf,
+                                    uint64_t &DecompressBufSize);
+
+  BumpPtrAllocator Allocator;
+
 protected:
   std::vector<SecHdrTableEntry> SecHdrTable;
   std::unique_ptr<ProfileSymbolList> ProfSymList;
@@ -496,6 +513,12 @@ public:
 
   /// Read sample profiles in extensible format from the associated file.
   std::error_code read() override;
+
+  /// Get the total size of all \p Type sections.
+  uint64_t getSectionSize(SecType Type);
+  /// Get the total size of header and all sections.
+  uint64_t getFileSize();
+  virtual bool dumpSectionInfo(raw_ostream &OS = dbgs()) override;
 };
 
 class SampleProfileReaderExtBinary : public SampleProfileReaderExtBinaryBase {
@@ -503,7 +526,7 @@ private:
   virtual std::error_code verifySPMagic(uint64_t Magic) override;
   virtual std::error_code readOneSection(const uint8_t *Start, uint64_t Size,
                                          SecType Type) override;
-  std::error_code readProfileSymbolList();
+  std::error_code readProfileSymbolList(uint64_t Size);
 
 public:
   SampleProfileReaderExtBinary(std::unique_ptr<MemoryBuffer> B, LLVMContext &C,

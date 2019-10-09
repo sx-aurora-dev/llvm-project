@@ -6,10 +6,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "Block.h"
 #include "Pointer.h"
+#include "Block.h"
 #include "Function.h"
-#include "Type.h"
+#include "PrimType.h"
 
 using namespace clang;
 using namespace clang::interp;

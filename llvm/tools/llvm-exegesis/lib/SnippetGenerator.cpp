@@ -10,6 +10,7 @@
 #include <string>
 
 #include "Assembler.h"
+#include "Error.h"
 #include "MCInstrDescView.h"
 #include "SnippetGenerator.h"
 #include "Target.h"
@@ -32,33 +33,58 @@ std::vector<CodeTemplate> getSingleton(CodeTemplate &&CT) {
 SnippetGeneratorFailure::SnippetGeneratorFailure(const llvm::Twine &S)
     : llvm::StringError(S, llvm::inconvertibleErrorCode()) {}
 
-SnippetGenerator::SnippetGenerator(const LLVMState &State) : State(State) {}
+SnippetGenerator::SnippetGenerator(const LLVMState &State, const Options &Opts)
+    : State(State), Opts(Opts) {}
 
 SnippetGenerator::~SnippetGenerator() = default;
 
 llvm::Expected<std::vector<BenchmarkCode>>
-SnippetGenerator::generateConfigurations(const Instruction &Instr) const {
-  if (auto E = generateCodeTemplates(Instr)) {
-    const auto &RATC = State.getRATC();
+SnippetGenerator::generateConfigurations(
+    const Instruction &Instr, const llvm::BitVector &ExtraForbiddenRegs) const {
+  llvm::BitVector ForbiddenRegs = State.getRATC().reservedRegisters();
+  ForbiddenRegs |= ExtraForbiddenRegs;
+  // If the instruction has memory registers, prevent the generator from
+  // using the scratch register and its aliasing registers.
+  if (Instr.hasMemoryOperands()) {
+    const auto &ET = State.getExegesisTarget();
+    unsigned ScratchSpacePointerInReg =
+        ET.getScratchMemoryRegister(State.getTargetMachine().getTargetTriple());
+    if (ScratchSpacePointerInReg == 0)
+      return make_error<Failure>(
+          "Infeasible : target does not support memory instructions");
+    const auto &ScratchRegAliases =
+        State.getRATC().getRegister(ScratchSpacePointerInReg).aliasedBits();
+    // If the instruction implicitly writes to ScratchSpacePointerInReg , abort.
+    // FIXME: We could make a copy of the scratch register.
+    for (const auto &Op : Instr.Operands) {
+      if (Op.isDef() && Op.isImplicitReg() &&
+          ScratchRegAliases.test(Op.getImplicitReg()))
+        return make_error<Failure>(
+            "Infeasible : memory instruction uses scratch memory register");
+    }
+    ForbiddenRegs |= ScratchRegAliases;
+  }
+
+  if (auto E = generateCodeTemplates(Instr, ForbiddenRegs)) {
     std::vector<BenchmarkCode> Output;
     for (CodeTemplate &CT : E.get()) {
-      const llvm::BitVector &ForbiddenRegs =
-          CT.ScratchSpacePointerInReg
-              ? RATC.getRegister(CT.ScratchSpacePointerInReg).aliasedBits()
-              : RATC.emptyRegisters();
       // TODO: Generate as many BenchmarkCode as needed.
       {
         BenchmarkCode BC;
         BC.Info = CT.Info;
         for (InstructionTemplate &IT : CT.Instructions) {
           randomizeUnsetVariables(State.getExegesisTarget(), ForbiddenRegs, IT);
-          BC.Instructions.push_back(IT.build());
+          BC.Key.Instructions.push_back(IT.build());
         }
         if (CT.ScratchSpacePointerInReg)
           BC.LiveIns.push_back(CT.ScratchSpacePointerInReg);
-        BC.RegisterInitialValues =
+        BC.Key.RegisterInitialValues =
             computeRegisterInitialValues(CT.Instructions);
+        BC.Key.Config = CT.Config;
         Output.push_back(std::move(BC));
+        if (Output.size() >= Opts.MaxConfigsPerOpcode)
+          return Output; // Early exit if we exceeded the number of allowed
+                         // configs.
       }
     }
     return Output;

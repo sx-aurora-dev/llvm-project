@@ -17,9 +17,9 @@
 #include "Context.h"
 #include "InterpStack.h"
 #include "InterpState.h"
+#include "PrimType.h"
 #include "Program.h"
 #include "Source.h"
-#include "Type.h"
 #include "llvm/Support/Error.h"
 
 namespace clang {

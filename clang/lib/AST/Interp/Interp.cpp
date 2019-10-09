@@ -7,21 +7,21 @@
 //===----------------------------------------------------------------------===//
 
 #include "Interp.h"
+#include <limits>
+#include <vector>
 #include "Function.h"
 #include "InterpFrame.h"
 #include "InterpStack.h"
 #include "Opcode.h"
+#include "PrimType.h"
 #include "Program.h"
 #include "State.h"
-#include "Type.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/CXXInheritance.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "llvm/ADT/APSInt.h"
-#include <limits>
-#include <vector>
 
 using namespace clang;
 using namespace clang::interp;
@@ -275,7 +275,7 @@ bool CheckMutable(InterpState &S, CodePtr OpPC, const Pointer &Ptr) {
 
   const SourceInfo &Loc = S.Current->getSource(OpPC);
   const FieldDecl *Field = Ptr.getField();
-  S.FFDiag(Loc, diag::note_constexpr_ltor_mutable, 1) << Field;
+  S.FFDiag(Loc, diag::note_constexpr_access_mutable, 1) << AK_Read << Field;
   S.Note(Field->getLocation(), diag::note_declared_at);
   return false;
 }

@@ -7,6 +7,7 @@ include(CheckCSourceCompiles)
 check_library_exists(c fopen "" LIBCXXABI_HAS_C_LIB)
 if (NOT LIBCXXABI_USE_COMPILER_RT)
   check_library_exists(gcc_s __gcc_personality_v0 "" LIBCXXABI_HAS_GCC_S_LIB)
+  check_library_exists(gcc __aeabi_uldivmod "" LIBCXXABI_HAS_GCC_LIB)
 endif ()
 
 # libc++abi is built with -nodefaultlibs, so we want all our checks to also
@@ -29,8 +30,13 @@ if (LIBCXXABI_HAS_NODEFAULTLIBS_FLAG)
     # CMAKE_REQUIRED_LIBRARIES is not used to link libc++abi.so, so
     # append builtins to LIBCXXABI_SHARED_LIBRARIES too
     list(APPEND LIBCXXABI_SHARED_LIBRARIES "${LIBCXXABI_BUILTINS_LIBRARY}")
-  elseif (LIBCXXABI_HAS_GCC_S_LIB)
-    list(APPEND CMAKE_REQUIRED_LIBRARIES gcc_s)
+  else ()
+    if (LIBCXXABI_HAS_GCC_S_LIB)
+      list(APPEND CMAKE_REQUIRED_LIBRARIES gcc_s)
+    endif ()
+    if (LIBCXXABI_HAS_GCC_LIB)
+      list(APPEND CMAKE_REQUIRED_LIBRARIES gcc)
+    endif ()
   endif ()
   if (MINGW)
     # Mingw64 requires quite a few "C" runtime libraries in order for basic
@@ -72,3 +78,4 @@ check_library_exists(dl dladdr "" LIBCXXABI_HAS_DL_LIB)
 check_library_exists(pthread pthread_once "" LIBCXXABI_HAS_PTHREAD_LIB)
 check_library_exists(c __cxa_thread_atexit_impl ""
   LIBCXXABI_HAS_CXA_THREAD_ATEXIT_IMPL)
+check_library_exists(System write "" LIBCXXABI_HAS_SYSTEM_LIB)

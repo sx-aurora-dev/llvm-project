@@ -11,9 +11,9 @@
 #include "ByteCodeGenError.h"
 #include "Context.h"
 #include "Function.h"
+#include "PrimType.h"
 #include "Program.h"
 #include "State.h"
-#include "Type.h"
 
 using namespace clang;
 using namespace clang::interp;

@@ -7,15 +7,15 @@
 //===----------------------------------------------------------------------===//
 
 #include "Context.h"
+#include "ByteCodeEmitter.h"
 #include "ByteCodeExprGen.h"
 #include "ByteCodeStmtGen.h"
 #include "EvalEmitter.h"
 #include "Interp.h"
 #include "InterpFrame.h"
 #include "InterpStack.h"
-#include "ByteCodeEmitter.h"
+#include "PrimType.h"
 #include "Program.h"
-#include "Type.h"
 #include "clang/AST/Expr.h"
 
 using namespace clang;
