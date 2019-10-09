@@ -647,8 +647,8 @@ VETargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
 
 // FIXME? Maybe this could be a TableGen attribute on some registers and
 // this table could be generated automatically from RegInfo.
-unsigned VETargetLowering::getRegisterByName(const char* RegName, EVT VT,
-                                               SelectionDAG &DAG) const {
+Register VETargetLowering::
+getRegisterByName(const char* RegName, EVT VT, const MachineFunction &MF) const {
   unsigned Reg = StringSwitch<unsigned>(RegName)
     .Case("sp", VE::SX11)        // Stack pointer
     .Case("fp", VE::SX9)         // Frame pointer
@@ -1551,10 +1551,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setStackPointerRegisterToSaveRestore(VE::SX11);
 
   // Set function alignment to 16 bytes (4 bits)
-  setMinFunctionAlignment(4);
+  setMinFunctionAlignment(Align(4));
 
   // VE stores all argument by 8 bytes alignment
-  setMinStackArgumentAlignment(8);
+  setMinStackArgumentAlignment(Align(8));
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
 

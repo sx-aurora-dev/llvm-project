@@ -502,8 +502,8 @@ namespace llvm {
       return MVT::i32;
     }
 
-    unsigned getRegisterByName(const char* RegName, EVT VT,
-                               SelectionDAG &DAG) const override;
+    Register getRegisterByName(const char* RegName, EVT VT,
+                               const MachineFunction &MF) const override;
 
     /// Override to support customized stack guard loading.
     bool useLoadStackGuardNode() const override;
