@@ -15,8 +15,8 @@
 #ifndef LLVM_TOOLS_LLVM_EXEGESIS_BENCHMARKRESULT_H
 #define LLVM_TOOLS_LLVM_EXEGESIS_BENCHMARKRESULT_H
 
-#include "BenchmarkCode.h"
 #include "LlvmState.h"
+#include "RegisterValue.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/MC/MCInst.h"
@@ -66,6 +66,8 @@ struct InstructionBenchmark {
   // The number of instructions inside the repeated snippet. For example, if a
   // snippet of 3 instructions is repeated 4 times, this is 12.
   int NumRepetitions = 0;
+  enum RepetitionModeE { Duplicate, Loop };
+  RepetitionModeE RepetitionMode;
   // Note that measurements are per instruction.
   std::vector<BenchmarkMeasure> Measurements;
   std::string Error;

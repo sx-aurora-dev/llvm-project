@@ -10,8 +10,8 @@
 #include "Function.h"
 #include "Interp.h"
 #include "InterpStack.h"
+#include "PrimType.h"
 #include "Program.h"
-#include "Type.h"
 #include "clang/AST/DeclCXX.h"
 
 using namespace clang;

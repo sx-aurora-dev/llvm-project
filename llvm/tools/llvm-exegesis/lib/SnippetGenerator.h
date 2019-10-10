@@ -51,13 +51,18 @@ public:
 // Common code for all benchmark modes.
 class SnippetGenerator {
 public:
-  explicit SnippetGenerator(const LLVMState &State);
+  struct Options {
+    unsigned MaxConfigsPerOpcode = 1;
+  };
+
+  explicit SnippetGenerator(const LLVMState &State, const Options &Opts);
 
   virtual ~SnippetGenerator();
 
   // Calls generateCodeTemplate and expands it into one or more BenchmarkCode.
   llvm::Expected<std::vector<BenchmarkCode>>
-  generateConfigurations(const Instruction &Instr) const;
+  generateConfigurations(const Instruction &Instr,
+                         const llvm::BitVector &ExtraForbiddenRegs) const;
 
   // Given a snippet, computes which registers the setup code needs to define.
   std::vector<RegisterValue> computeRegisterInitialValues(
@@ -65,11 +70,13 @@ public:
 
 protected:
   const LLVMState &State;
+  const Options Opts;
 
 private:
   // API to be implemented by subclasses.
   virtual llvm::Expected<std::vector<CodeTemplate>>
-  generateCodeTemplates(const Instruction &Instr) const = 0;
+  generateCodeTemplates(const Instruction &Instr,
+                        const BitVector &ForbiddenRegisters) const = 0;
 };
 
 // A global Random Number Generator to randomize configurations.

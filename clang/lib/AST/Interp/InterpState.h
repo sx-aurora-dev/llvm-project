@@ -53,8 +53,8 @@ public:
   ASTContext &getCtx() const override { return Parent.getCtx(); }
 
   // Forward status checks and updates to the walker.
-  bool checkingForOverflow() const override {
-    return Parent.checkingForOverflow();
+  bool checkingForUndefinedBehavior() const override {
+    return Parent.checkingForUndefinedBehavior();
   }
   bool keepEvaluatingAfterFailure() const override {
     return Parent.keepEvaluatingAfterFailure();

@@ -25,12 +25,15 @@ namespace clang {
 /// same set of semantic restrictions.
 enum AccessKinds {
   AK_Read,
+  AK_ReadObjectRepresentation,
   AK_Assign,
   AK_Increment,
   AK_Decrement,
   AK_MemberCall,
   AK_DynamicCast,
   AK_TypeId,
+  AK_Construct,
+  AK_Destroy,
 };
 
 // The order of this enum is important for diagnostics.
@@ -53,7 +56,7 @@ class State {
 public:
   virtual ~State();
 
-  virtual bool checkingForOverflow() const = 0;
+  virtual bool checkingForUndefinedBehavior() const = 0;
   virtual bool checkingPotentialConstantExpression() const = 0;
   virtual bool noteUndefinedBehavior() = 0;
   virtual bool keepEvaluatingAfterFailure() const = 0;

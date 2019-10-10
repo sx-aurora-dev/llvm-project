@@ -13,14 +13,16 @@
 #ifndef LLVM_CLANG_AST_INTERP_INTERP_H
 #define LLVM_CLANG_AST_INTERP_INTERP_H
 
+#include <limits>
+#include <vector>
 #include "Function.h"
 #include "InterpFrame.h"
 #include "InterpStack.h"
 #include "InterpState.h"
 #include "Opcode.h"
+#include "PrimType.h"
 #include "Program.h"
 #include "State.h"
-#include "Type.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
 #include "clang/AST/CXXInheritance.h"
@@ -28,8 +30,6 @@
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APSInt.h"
 #include "llvm/Support/Endian.h"
-#include <limits>
-#include <vector>
 
 namespace clang {
 namespace interp {
@@ -117,7 +117,7 @@ bool AddSubMulHelper(InterpState &S, CodePtr OpPC, unsigned Bits, const T &LHS,
   // Report undefined behaviour, stopping if required.
   const Expr *E = S.Current->getExpr(OpPC);
   QualType Type = E->getType();
-  if (S.checkingForOverflow()) {
+  if (S.checkingForUndefinedBehavior()) {
     auto Trunc = Value.trunc(Result.bitWidth()).toString(10);
     auto Loc = E->getExprLoc();
     S.report(Loc, diag::warn_integer_constant_overflow) << Trunc << Type;

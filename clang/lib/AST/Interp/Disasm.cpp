@@ -12,8 +12,8 @@
 
 #include "Function.h"
 #include "Opcode.h"
+#include "PrimType.h"
 #include "Program.h"
-#include "Type.h"
 #include "clang/AST/DeclCXX.h"
 #include "llvm/Support/Compiler.h"
 
