@@ -28,54 +28,12 @@
 #include "OmpPragma.h"
 #include "TargetCodeFragment.h"
 
-void TargetCodeRegion::addCapturedVar(clang::VarDecl *Var) {
-  CapturedVars.push_back(Var);
+void TargetCodeRegion::addCapture(const clang::CapturedStmt::Capture *Capture) {
+  CapturedVars.push_back(TargetRegionVariable(Capture, CapturedLowerBounds));
 }
 
-void TargetCodeRegion::addOpenMPClause(clang::OMPClause *Clause) {
-  if (Clause->getClauseKind() != clang::OMPC_device)
-    addClauseVars(Clause);
-
+void TargetCodeRegion::addOMPClause(clang::OMPClause *Clause) {
   OMPClauses.push_back(Clause);
-
-}
-
-void TargetCodeRegion::hAddClauseVars(std::set<clang::VarDecl *> *tmpSet, clang::Stmt* Cc) {
-  if (llvm::isa<clang::DeclRefExpr>(Cc)) {
-    tmpSet->insert(llvm::dyn_cast_or_null<clang::VarDecl>(llvm::dyn_cast_or_null<clang::DeclRefExpr>(Cc)->getDecl()));
-  }
-  for (auto *Ccc : Cc->children()) {
-    if (llvm::isa<clang::ImplicitCastExpr>(Ccc)) {
-      for (auto *Cccc : Ccc->children()) {
-        hAddClauseVars(tmpSet,Cccc);
-      }
-    }
-  }
-}
-
-void TargetCodeRegion::addClauseVars(clang::OMPClause *Clause) {
-  std::set<clang::VarDecl *> tmpSet;
-
-  // If an Clause uses an variable then find them and add
-  for (auto *C : Clause->children()) {
-    if (llvm::isa<clang::ImplicitCastExpr>(C)) {
-      for (auto *Cc : C->children()) {
-        for (auto *Ccc : llvm::dyn_cast_or_null<clang::VarDecl>(llvm::dyn_cast_or_null<clang::DeclRefExpr>(Cc)->getDecl())->getInit()->children()){
-          hAddClauseVars(&tmpSet,Ccc);
-        }
-      }
-    }
-  }
-
-  for (auto v : CapturedVars) {
-    if (tmpSet.find(v) != tmpSet.end())
-      tmpSet.erase(tmpSet.find(v));
-  }
-
-  for (auto v: tmpSet) {
-    addCapturedVar(v);
-  }
-
 }
 
 static bool hasRegionCompoundStmt(const clang::Stmt *S) {
@@ -212,49 +170,6 @@ clang::SourceRange TargetCodeRegion::getInnerRange() {
   auto InnerLocStart = getStartLoc();
   auto InnerLocEnd = getEndLoc();
   return clang::SourceRange(InnerLocStart, InnerLocEnd);
-}
-
-std::string TargetCodeRegion::PrintLocalVarsFromClauses() {
-  std::stringstream Out;
-  std::set<std::string> Printed;
-  for (auto C : OMPClauses) {
-    if (C->getClauseKind() == clang::OpenMPClauseKind::OMPC_private) {
-      auto PC = llvm::dyn_cast<clang::OMPPrivateClause>(C);
-      for (auto Var : PC->varlists()) {
-
-        // If the variable is already captured -> do not print
-        if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(Var)) {
-          auto *VarDecl = DRE->getDecl();
-          if(std::find(CapturedVars.begin(), CapturedVars.end(), VarDecl) != CapturedVars.end()) {
-            continue;
-          }
-        }
-        std::string PrettyStr = "";
-        llvm::raw_string_ostream PrettyOS(PrettyStr);
-        Var->printPretty(PrettyOS, NULL, PP);
-        std::string VarName = PrettyOS.str();
-        if (!Printed.count(VarName)) {
-          Out << "  " << Var->getType().getAsString() << " " << VarName
-              << ";\n";
-          Printed.insert(VarName);
-        }
-      }
-    }
-  }
-  return Out.str();
-}
-
-clang::OMPClause *TargetCodeRegion::GetReferredOMPClause(clang::VarDecl *i) {
-  for (auto C : OMPClauses) {
-    for (auto CC : C->children()) {
-      if (auto CC_DeclRefExpr =
-              llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
-        if (i->getCanonicalDecl() == CC_DeclRefExpr->getDecl())
-          return C;
-      }
-    }
-  }
-  return NULL;
 }
 
 class TargetRegionPrinterHelper : public clang::PrinterHelper {

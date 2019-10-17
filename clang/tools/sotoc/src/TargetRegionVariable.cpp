@@ -12,15 +12,31 @@
 ///
 //===----------------------------------------------------------------------===//
 
-TargetRegionVariable::TargetRegionVariable(
-    clang::VarDecl *Decl, const_clause_kind_multimap &OmpClauses,
-    const std::map<clang::Decl *, std::string> MappingLowerBounds)
-    : Decl(Decl), OmpClauseMap(OmpClauses),
+
+#include "clang/AST/Decl.h"
+#include "clang/AST/Expr.h"
+#include "clang/AST/Type.h"
+
+#include "TargetRegionVariable.h"
+
+TargetRegionVariable::TargetRegionVariable(const clang::CapturedStmt::Capture *Capture, const std::map<clang::VarDecl *, clang::Expr *> &MappingLowerBounds)
+    : Capture(Capture), Decl(Capture->getCapturedVar()),
       OmpMappingLowerBound(MappingLowerBounds) {
   VarName = Decl->getDeclName().getAsString();
-  TypeName = Decl->getType().getAsString();
-  if (auto ArrayDecl = llvm : dyn_cast<clang::ArrayType>(Decl)) {
-    determineDimensionSizes(ArrayDecl, 0);
+  
+  auto DeclType = Decl->getType();
+  // If Decl is an array: get to the base type
+  if (auto *AT = llvm::dyn_cast<clang::ArrayType>(DeclType.getTypePtr())) {
+    while (auto *NAT =  llvm::dyn_cast<clang::ArrayType>(AT->getElementType().getTypePtr())) {
+      AT = NAT;
+    }
+    TypeName = AT->getElementType().getAsString();
+  } else {
+    TypeName = DeclType.getAsString();
+  }
+
+  if (auto ArrayType = llvm::dyn_cast<clang::ArrayType>(Decl->getType().getTypePtr())) {
+    determineDimensionSizes(ArrayType, 0);
   }
 }
 
@@ -40,41 +56,29 @@ void TargetRegionVariable::determineDimensionSizes(
   }
 
   CurrentDimension++;
-  auto *NextDimensionArray = clang::dyn_cast_or_null<clang::arrayType>(
+  auto *NextDimensionArray = clang::dyn_cast_or_null<clang::ArrayType>(
       T->getElementType().getTypePtr());
   if (NextDimensionArray) {
     determineDimensionSizes(NextDimensionArray, CurrentDimension);
   }
 }
 
-bool TargetRegionVariable::isArray() {
-  return llvm::isa<clang::ArrayType>(Decl);
+bool TargetRegionVariable::isArray() const {
+  return llvm::isa<clang::ArrayType>(Decl->getType().getTypePtr());
 }
 
-bool TargetRegionVariable::passedByPointer() {
+bool TargetRegionVariable::passedByPointer() const {
   if (isArray()) {
     // Arrays are always passed by pointer
     return true;
   }
+  return Capture->capturesVariable();
+}
 
-  if (Decl->getType().getTypePtr()->isPointerType()) {
-    // Pointers are already pointers and thus do not need to be converted to
-    // pointers
-    // TODO: Check if this is true. We hadn't had a use case for passing plain
-    // pointers (i.e. not arrays), yet.
-    return false;
+llvm::Optional<clang::Expr *> TargetRegionVariable::arrayLowerBound() const {
+  auto FindBound = OmpMappingLowerBound.find(Decl);
+  if (FindBound != OmpMappingLowerBound.cend()) {
+    return llvm::Optional<clang::Expr *>(FindBound->second);
   }
-
-  // We have a scalar. Check if it is mapped as private or firstprivate.
-  // TODO: Is this the correct handling. This is the way it was handled prior
-  // to refactoring. But what about private/lastprivate?
-  auto ClauseFindIter = OmpClausesMap.find(Decl);
-  for (auto I = ClauseFindIter; I != OmpClauseMap.cend(); ++I) {
-    if ((*I) == clang::OpenMPClauseKind::OMPC_private ||
-        (*I) == clang::OpenMPClauseKind::OMPC_fristprivate) {
-      return false;
-    }
-  }
-  // TODO: the default should be false and we catch lastprivate + shared
-  return true;
+  return llvm::Optional<clang::Expr *>();
 }

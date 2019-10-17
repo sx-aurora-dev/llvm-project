@@ -140,7 +140,7 @@ public:
   bool VisitStmt(clang::Stmt *S) {
     if (auto *OED = llvm::dyn_cast<clang::OMPExecutableDirective>(S)) {
       for (auto *Clause : OED->clauses()) {
-        TCR->addOpenMPClause(Clause);
+        TCR->addOMPClause(Clause);
       }
     }
     return true;
@@ -166,13 +166,10 @@ bool FindTargetCodeVisitor::processTargetRegion(
       // if the target region cannot be added we dont want to parse its args
       if (TargetCodeInfo.addCodeFragment(TCR)) {
 
-        FindArraySectionVisitor ArraySectionVisitor(TCR->CapturedLowerBounds);
-        ArraySectionVisitor.TraverseStmt(TargetDirective);
+        FindArraySectionVisitor(TCR->CapturedLowerBounds).TraverseStmt(TargetDirective);
 
-        // look for nested clause
-        CollectOMPClausesVisitor(TCR).TraverseStmt(CS);
         for (auto C : TargetDirective->clauses()) {
-          TCR->addOpenMPClause(C);
+          TCR->addOMPClause(C);
         }
 
         // For more complex data types (like structs) we need to traverse the
@@ -194,9 +191,8 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
   DEBUGP("Add target region args");
   for (const auto &i : S->captures()) {
     if (!(i.capturesVariableArrayType())) {
-      clang::VarDecl *var = i.getCapturedVar();
-      DEBUGP("captured Var: " + var->getNameAsString());
-      TCR->addCapturedVar(var);
+      DEBUGP("captured Var: " + i.getCapturedVar()->getNameAsString());
+      TCR->addCapture(&i);
     } else {
       // Not sure what exactly is caputred here. It looks like we have an
       // additional capture in cases of VATs.
@@ -204,7 +200,21 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
     }
   }
 
-  FindLoopStmtVisitor FindLoopVisitor;
+  // Find all not locally declared variables in the region
+  FindPrivateVariablesVisitor PrivateVarsVisitor(S->getBeginLoc(),
+                                                 Context.getSourceManager());
+  PrivateVarsVisitor.TraverseStmt(S);
+
+  // Remove any not locally declared variables which are already captured
+  auto VarSet = PrivateVarsVisitor.getVarSet();
+  for (auto &CapturedVar : TCR->capturedVars()) {
+    VarSet.erase(CapturedVar.getDecl());
+  }
+
+  // Add non-local, non-capured variable as private variables
+  TCR->setPrivateVars(VarSet);
+
+  /*FindLoopStmtVisitor FindLoopVisitor;
   FindLoopVisitor.TraverseStmt(S);
 
   std::unordered_set<clang::VarDecl *> tmpSet;
@@ -218,7 +228,7 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
       tmpSet.insert(i);
       continue;
     }
-    for (auto j : *TCR->getOMPClauses()) {
+    for (auto j : TCR->getOMPClauses()) {
       for (auto CC : j->children()) {
         if (auto CC_DeclRefExpr =
                 llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
@@ -250,7 +260,7 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
   for (const auto i : *FindLoopVisitor.getVarSet()) {
     // i->print(llvm::outs());
     TCR->addCapturedVar(i);
-  }
+  }*/
 }
 
 bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
@@ -406,6 +416,27 @@ bool FindArraySectionVisitor::VisitExpr(clang::Expr *E) {
           }
         }
         LowerBoundsMap.emplace(VarDecl, LowerBound);
+      }
+    }
+  }
+  return true;
+}
+
+bool FindPrivateVariablesVisitor::VisitExpr(clang::Expr *E) {
+  if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(E)) {
+    if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
+      // We do not collect variables in 'collect target' declarations.
+      for (auto &attr : VD->attrs()) {
+        if (attr->getKind() == clang::attr::OMPDeclareTargetDecl) {
+          return true;
+        }
+      }    
+
+      // If the variable is declared outside of the target region it may be a
+      // private variable
+      if (SM.isBeforeInTranslationUnit(VD->getLocation(), RegionTopSourceLocation)) {
+        // Add the Variable to our set
+        VarSet.insert(VD);
       }
     }
   }

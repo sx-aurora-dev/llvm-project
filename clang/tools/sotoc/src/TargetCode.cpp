@@ -116,14 +116,19 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
     first = false;
 
     if (Var.isArray()) {
-      for (const unsigned int &d : Var.variableSizedArrayDimensions()) {
-        Out << "unsinged long long __sotoc_vla_dim" << d << "_" << Var.name()
+      for (const unsigned int &d : Var.variabledSizedArrayDimensions()) {
+        Out << "unsigned long long __sotoc_vla_dim" << d << "_" << Var.name()
             << ", ";
       }
     }
     // Because arrays are passed by reference and (for our purposes) their type
     // is 'void', the rest of their handling ist the same as for scalars.
-    Out << Var.typeName() << " ";
+    if (Var.isArray()) {
+      Out << "void ";
+    } else {
+      Out << Var.typeName() << " ";
+    }
+
     if (Var.passedByPointer()) {
       Out << "*__sotoc_var_";
     }
@@ -135,7 +140,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
   // bring captured scalars into scope
   for (auto &Var : TCR->capturedVars()) {
     // Ignore everything not passed by reference here
-    if (Var->passedByPointer()) {
+    if (Var.passedByPointer()) {
       // Handle multi-dimensional arrays
       if (Var.isArray()) {
         // Declare the arrays as a pointer. This way we can assign it a pointer
@@ -154,17 +159,18 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
             continue;
           }
           Out << "[" << dimensionSize << "]";
-
-          // After we have declare the array, we also need to assign it.
-          // We may also have to adjust the array bounds if we only get a slice
-          // of the array (in the first dimesion. All other dimensions should
-          // not require adjustment as their slicing is ignored)
-          Out << " __sotoc_var_" << Var.name();
-          if ((auto LowerBound = Var.arrayLowerBound()) != 0) {
-            Out << " - " << LowerBound;
-          }
-          Out << ";";
         }
+        // After we have declare the array, we also need to assign it.
+        // We may also have to adjust the array bounds if we only get a slice
+        // of the array (in the first dimesion. All other dimensions should
+        // not require adjustment as their slicing is ignored)
+        Out << " =  __sotoc_var_" << Var.name();
+        auto LowerBound = Var.arrayLowerBound();
+        if (LowerBound.hasValue()) {
+          Out << " - ";
+          LowerBound.getValue()->printPretty(Out, NULL, TCR->getPP());
+        }
+        Out << ";\n";
 
       } else {
         // Handle all other types passed by reference
@@ -175,7 +181,10 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
   }
 
   // Generate local declarations.
-  Out << TCR->PrintLocalVarsFromClauses();
+  for (auto privateVar: TCR->privateVars()) {
+    privateVar->print(Out);
+    Out << "\n";
+  }
 
   // The runtime can decide to only create one team.
   // Therfore, replace target teams constructs.
