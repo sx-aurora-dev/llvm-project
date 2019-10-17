@@ -90,7 +90,7 @@ class Op(object):
         elif self.isMask512():
             return "__vm512"
         elif self.isMask():
-            return "__vm"
+            return "__vm256"
         raise Exception("not a vector type: {}".format(self.kind))
 
 def VOp(ty, name):
@@ -406,7 +406,7 @@ class TestGeneratorMask:
             m = "M"
             l = 8
         else:
-            vm = "__vm"
+            vm = "__vm256"
             m = "m"
             l = 4
 
@@ -504,7 +504,7 @@ class TestGenerator:
                 stride = I.stride(op)
                 #vld, vst = self.get_vld_vst_inst(I, op)
                 body += indent + "__vr {}0 = _vel_vldlzx_vssl(4, p{}, l);\n".format(op.regName(), op.regName(), stride)
-                body += indent + "__vm {} = _vel_vfmkwgt_mvl({}0, l);\n".format(op.regName(), op.regName())
+                body += indent + "__vm256 {} = _vel_vfmkwgt_mvl({}0, l);\n".format(op.regName(), op.regName())
             if op.isReg() or op.isMask():
                 args.append(op.regName())
             elif op.isImm():
@@ -1281,10 +1281,10 @@ def createInstructionTable():
  
     T.Def(None, None, "", "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin().noLLVMInstDefine().NYI()
     T.Def(None, None, "", "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin().noLLVMInstDefine().NYI()
-    T.Dummy(None, "", "__vm _vel_extract_vm512u(__vm512 vm)", "")
-    T.Dummy(None, "", "__vm _vel_extract_vm512l(__vm512 vm)", "")
-    T.Dummy(None, "", "__vm512 _vel_insert_vm512u(__vm512 vmx, __vm vmy)", "")
-    T.Dummy(None, "", "__vm512 _vel_insert_vm512l(__vm512 vmx, __vm vmy)", "")
+    T.Dummy(None, "", "__vm256 _vel_extract_vm512u(__vm512 vm)", "")
+    T.Dummy(None, "", "__vm256 _vel_extract_vm512l(__vm512 vm)", "")
+    T.Dummy(None, "", "__vm512 _vel_insert_vm512u(__vm512 vmx, __vm256 vmy)", "")
+    T.Dummy(None, "", "__vm512 _vel_insert_vm512l(__vm512 vmx, __vm256 vmy)", "")
 
     return T
 
