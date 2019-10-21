@@ -1049,9 +1049,8 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
 TargetLowering::AtomicExpansionKind VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
   if (AI->getOperation() == AtomicRMWInst::Xchg){
     const DataLayout &DL = AI->getModule()->getDataLayout();
-    if (DL.getTypeStoreSize(AI->getValOperand()->getType())
-       < (VETargetLowering::getMinCmpXchgSizeInBits() / 8))
-      return AtomicExpansionKind::CmpXChg; // Uses cas instruction for 1byte or 2byte atomic_swap
+    if (DL.getTypeStoreSize(AI->getValOperand()->getType()) == 2)
+      return AtomicExpansionKind::CmpXChg; // Uses cas instruction for 2byte atomic_swap
     return AtomicExpansionKind::None; // Uses ts1am instruction
   }
   return AtomicExpansionKind::CmpXChg;
