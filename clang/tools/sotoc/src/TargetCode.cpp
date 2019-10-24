@@ -145,7 +145,9 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
           if (C->getClauseKind() !=
                 clang::OpenMPClauseKind::OMPC_firstprivate &&
               C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_private) {
+                clang::OpenMPClauseKind::OMPC_private &&
+              C->getClauseKind() !=
+                clang::OpenMPClauseKind::OMPC_depend) {
             Out << "*__sotoc_var_";
           }
         }
@@ -196,7 +198,9 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
           if (C->getClauseKind() !=
                 clang::OpenMPClauseKind::OMPC_firstprivate &&
               C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_private) {
+                clang::OpenMPClauseKind::OMPC_private &&
+              C->getClauseKind() !=
+                clang::OpenMPClauseKind::OMPC_depend) {
             auto VarName = (*I)->getDeclName().getAsString();
             Out << "  " << (*I)->getType().getAsString() << " " << VarName
                 << " = "
@@ -248,7 +252,9 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
           if (C->getClauseKind() !=
                 clang::OpenMPClauseKind::OMPC_firstprivate &&
               C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_private) {
+                clang::OpenMPClauseKind::OMPC_private &&
+              C->getClauseKind() !=
+                clang::OpenMPClauseKind::OMPC_depend) {
             auto VarName = (*I)->getDeclName().getAsString();
             Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
           }
