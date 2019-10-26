@@ -8,7 +8,7 @@ int main() {
 #pragma omp parallel
   {
 #pragma omp target
-    { printf("DEBUG\n"); } // End target
+    { printf("DEBUG\n"); fflush(0); } // End target
   }
   return 0;
 }
