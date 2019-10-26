@@ -131,22 +131,6 @@ bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
   return true;
 }
 
-class CollectOMPClausesVisitor
-    : public clang::RecursiveASTVisitor<CollectOMPClausesVisitor> {
-  std::shared_ptr<TargetCodeRegion> TCR;
-
-public:
-  CollectOMPClausesVisitor(std::shared_ptr<TargetCodeRegion> &TCR) : TCR(TCR){};
-  bool VisitStmt(clang::Stmt *S) {
-    if (auto *OED = llvm::dyn_cast<clang::OMPExecutableDirective>(S)) {
-      for (auto *Clause : OED->clauses()) {
-        TCR->addOMPClause(Clause);
-      }
-    }
-    return true;
-  };
-};
-
 class CollectOMPClauseParamsVarsVisitor
     : public clang::RecursiveASTVisitor<CollectOMPClauseParamsVarsVisitor> {
   std::shared_ptr<TargetCodeRegion> TCR;
@@ -166,8 +150,8 @@ public:
 
 class CollectOMPClauseParamsVisitor
     : public clang::RecursiveASTVisitor<CollectOMPClauseParamsVisitor> {
-  //std::shared_ptr<TargetCodeRegion> TCR;
-  CollectOMPClauseParamsVarsVisitor VarsVisitor;
+  
+      CollectOMPClauseParamsVarsVisitor VarsVisitor;
   bool InExplicitCast;
 public:
   CollectOMPClauseParamsVisitor(std::shared_ptr<TargetCodeRegion> &TCR)
@@ -265,54 +249,6 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
 
   // Add non-local, non-capured variable as private variables
   TCR->setPrivateVars(VarSet);
-
-  /*FindLoopStmtVisitor FindLoopVisitor;
-  FindLoopVisitor.TraverseStmt(S);
-
-  std::unordered_set<clang::VarDecl *> tmpSet;
-
-  // printf("%lu \n", FindLoopVisitor.getVarSet()->size());
-  for (const auto i : *FindLoopVisitor.getVarSet()) {
-    DEBUGP("Iterating var set");
-    // i->print(llvm::outs());
-    if (Context.getSourceManager().isBeforeInTranslationUnit(
-            S->getBeginLoc(), i->getSourceRange().getBegin())) {
-      tmpSet.insert(i);
-      continue;
-    }
-    for (auto j : TCR->getOMPClauses()) {
-      for (auto CC : j->children()) {
-        if (auto CC_DeclRefExpr =
-                llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
-          // CC_DeclRefExpr->dumpColor();
-          if (i->getCanonicalDecl() == CC_DeclRefExpr->getDecl())
-            tmpSet.insert(i);
-        }
-      }
-    }
-
-    for (auto j = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
-         j != e; ++j) {
-      if (i->getCanonicalDecl() == *j) {
-        // i->print(llvm::outs());
-        DEBUGPDECL(i, "Add captured var: ");
-        // FindLoopVisitor.getVarSet()->erase(i);
-        tmpSet.insert(i);
-      }
-    }
-  }
-
-  for (const auto i : tmpSet) {
-    FindLoopVisitor.getVarSet()->erase(FindLoopVisitor.getVarSet()->find(i));
-  }
-
-  tmpSet.clear();
-
-  // printf("%lu \n", FindLoopVisitor.getVarSet()->size());
-  for (const auto i : *FindLoopVisitor.getVarSet()) {
-    // i->print(llvm::outs());
-    TCR->addCapturedVar(i);
-  }*/
 }
 
 bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
@@ -342,27 +278,17 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
 
 bool FindLoopStmtVisitor::VisitStmt(clang::Stmt *S) {
   if (auto LS = llvm::dyn_cast<clang::ForStmt>(S)) {
-    // LS->getInit()->dumpColor();
     FindDeclRefVisitor.TraverseStmt(LS->getInit());
   }
-  // else if (auto LS = llvm::dyn_cast<clang::DoStmt>(S)) {
-  //   FindDeclRefVisitor.TraverseStmt(LS);
-  // } else if (auto LS = llvm::dyn_cast<clang::WhileStmt>(S)) {
-  //   FindDeclRefVisitor.TraverseStmt(LS);
-  // }
   return true;
 }
 
 
 bool FindDeclRefExprVisitor::VisitStmt(clang::Stmt *S) {
-  // printf("VisitStmt\n");
-  // S->dumpColor();
   if (auto DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
     if (auto DD = llvm::dyn_cast<clang::DeclaratorDecl>(DRE->getDecl())) {
       if (auto VD = llvm::dyn_cast<clang::VarDecl>(DD)) {
         if (VD->getNameAsString() != ".reduction.lhs") {
-          // printf("VarDecl\n");
-          // VD->print(llvm::outs());
           VarSet.insert(VD);
         }
       }

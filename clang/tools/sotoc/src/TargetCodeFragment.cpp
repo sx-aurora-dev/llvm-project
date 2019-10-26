@@ -225,11 +225,6 @@ std::string TargetCodeRegion::PrintPretty() {
 }
 
 clang::SourceRange TargetCodeDecl::getRealRange() {
-  // return DeclNode->getSourceRange();
-  // return DeclNode->getSourceRange();
-  // auto &SM = DeclNode->getASTContext().getSourceManager();
-  // return clang::SourceRange(SM.getSpellingLoc(DeclNode->getBeginLoc()),
-  //                          SM.getSpellingLoc(DeclNode->getEndLoc()));
   return DeclNode->getSourceRange();
 }
 
