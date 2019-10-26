@@ -148,6 +148,7 @@ private:
   /// Finds and adds all variables required by the target regions as arguments
   /// to the generated function.
   void addTargetRegionArgs(clang::CapturedStmt *S,
+                           clang::OMPExecutableDirective *TargetDirective,
                            std::shared_ptr<TargetCodeRegion> TCR);
 };
 

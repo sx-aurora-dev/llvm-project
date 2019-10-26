@@ -25,11 +25,27 @@
 #include "clang/Lex/Lexer.h"
 #include "clang/Lex/Token.h"
 
+#include "Debug.h"
 #include "OmpPragma.h"
 #include "TargetCodeFragment.h"
 
 void TargetCodeRegion::addCapture(const clang::CapturedStmt::Capture *Capture) {
   CapturedVars.push_back(TargetRegionVariable(Capture, CapturedLowerBounds));
+}
+
+void TargetCodeRegion::addOMPClauseParam(clang::VarDecl *Param) {
+  for (auto &CV : capturedVars()) {
+    if (CV.getDecl() == Param) {
+      return;
+    }
+  }
+
+  if (std::find(OMPClausesParams.begin(), OMPClausesParams.end(), Param) != OMPClausesParams.end()) {
+    return;
+  }
+
+  DEBUGP("Adding variable " << Param->getName() << "as OpenMP clause parameter");
+  OMPClausesParams.push_back(Param);
 }
 
 void TargetCodeRegion::addOMPClause(clang::OMPClause *Clause) {

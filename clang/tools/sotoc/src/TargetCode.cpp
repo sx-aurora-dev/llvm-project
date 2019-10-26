@@ -135,6 +135,27 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
     Out << Var.name();
   }
 
+  for (auto *ClauseVar : TCR->ompClausesParams()) {
+    if (!first) {
+      Out << ", ";
+    } else {
+      first = false;
+    }
+
+    // TODO: this is the same code as in TargetRegionVariable.cpp, so we might
+    // want to deduplicated this.
+    auto *ClauseVarType = ClauseVar->getType().getTypePtr();
+    if (auto *AT = llvm::dyn_cast<clang::ArrayType>(ClauseVarType)) {
+      while (auto *NAT =  llvm::dyn_cast<clang::ArrayType>(AT->getElementType().getTypePtr())) {
+        AT = NAT;
+      }
+      Out << AT->getElementType().getAsString() << " *";
+    } else {
+      Out << ClauseVar->getType().getAsString() << " ";
+    }
+    Out << ClauseVar->getName();
+  }
+
   Out << ")\n{\n";
 
   // bring captured scalars into scope
@@ -146,7 +167,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
         // Declare the arrays as a pointer. This way we can assign it a pointer
         // However, this also means we have to ignore the first array
         // dimension.
-        Out << Var.typeName() << " (*" << Var.name() << ")";
+        Out << "  " << Var.typeName() << " (*" << Var.name() << ")";
 
         // For every array dimension other then the first: declare them by
         // adding the array brackets ('[', ']') to the declaration. Also add
@@ -164,14 +185,14 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
         // We may also have to adjust the array bounds if we only get a slice
         // of the array (in the first dimesion. All other dimensions should
         // not require adjustment as their slicing is ignored)
-        Out << " =  __sotoc_var_" << Var.name();
+        Out << " =  __sotoc_var_" << Var.name() << ";\n";
+        // Move the bounds if we have a slice
         auto LowerBound = Var.arrayLowerBound();
         if (LowerBound.hasValue()) {
-          Out << " - ";
+          Out << "  " << Var.name() << " = " << Var.name() << " - ";
           LowerBound.getValue()->printPretty(Out, NULL, TCR->getPP());
+          Out << ";\n";
         }
-        Out << ";\n";
-
       } else {
         // Handle all other types passed by reference
         Out << Var.typeName() << " " << Var.name() << " = "
@@ -181,9 +202,9 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
   }
 
   // Generate local declarations.
-  for (auto privateVar: TCR->privateVars()) {
-    privateVar->print(Out);
-    Out << "\n";
+  for (auto *privateVar: TCR->privateVars()) {
+    Out << "  " << privateVar->getType().getAsString() << " "
+        << privateVar->getName() << ";\n";
   }
 
   // The runtime can decide to only create one team.
@@ -208,7 +229,7 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
   // copy values from scalars from scoped vars back into pointers
   for (auto &Var : TCR->capturedVars()) {
     if (Var.passedByPointer() && !Var.isArray()) {
-      Out << "\n  __sotoc_var_" << Var.name() << " = " << Var.name() << ";";
+      Out << "\n  *__sotoc_var_" << Var.name() << " = " << Var.name() << ";";
     }
   }
 

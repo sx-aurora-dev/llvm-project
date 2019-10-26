@@ -87,7 +87,7 @@ llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
 bool FindTargetCodeVisitor::TraverseDecl(clang::Decl *D) {
   if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
     LastVisitedFuncDecl.push(FD);
-  } 
+  }
   bool ret = clang::RecursiveASTVisitor<FindTargetCodeVisitor>::TraverseDecl(D);
   if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
     LastVisitedFuncDecl.pop();
@@ -147,6 +147,53 @@ public:
   };
 };
 
+class CollectOMPClauseParamsVarsVisitor
+    : public clang::RecursiveASTVisitor<CollectOMPClauseParamsVarsVisitor> {
+  std::shared_ptr<TargetCodeRegion> TCR;
+public:
+  CollectOMPClauseParamsVarsVisitor(std::shared_ptr<TargetCodeRegion> &TCR)
+    : TCR(TCR) {};
+
+  bool VisitStmt(clang::Stmt *S) {
+    if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
+      if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
+        TCR->addOMPClauseParam(VD->getCanonicalDecl());
+      }
+    }
+    return true;
+  };
+};
+
+class CollectOMPClauseParamsVisitor
+    : public clang::RecursiveASTVisitor<CollectOMPClauseParamsVisitor> {
+  //std::shared_ptr<TargetCodeRegion> TCR;
+  CollectOMPClauseParamsVarsVisitor VarsVisitor;
+  bool InExplicitCast;
+public:
+  CollectOMPClauseParamsVisitor(std::shared_ptr<TargetCodeRegion> &TCR)
+    : VarsVisitor(TCR), InExplicitCast(false) {};
+  bool VisitStmt(clang::Stmt *S) {
+    // THis relies on the captured statement being the last child
+    if (llvm::isa<clang::CapturedStmt>(S)) {
+        return false;
+    }
+
+    if (llvm::isa<clang::ImplicitCastExpr>(S)) {
+      InExplicitCast = true;
+      return true;
+    }
+
+    auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(S);
+    if (DRE && InExplicitCast) {
+      if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
+        VarsVisitor.TraverseStmt(VD->getInit());
+      }
+    }
+    InExplicitCast = false;
+    return true;
+  };
+};
+
 bool FindTargetCodeVisitor::processTargetRegion(
     clang::OMPExecutableDirective *TargetDirective) {
   // TODO: Not sure why to iterate the children, because I think there
@@ -176,7 +223,7 @@ bool FindTargetCodeVisitor::processTargetRegion(
         // tree
         DiscoverTypeVisitor.TraverseStmt(CS);
         DiscoverFunctionVisitor.TraverseStmt(CS);
-        addTargetRegionArgs(CS, TCR);
+        addTargetRegionArgs(CS, TargetDirective, TCR);
         TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
         TCR->TargetCodeKind = TargetDirective->getDirectiveKind();
       }
@@ -186,7 +233,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
 }
 
 void FindTargetCodeVisitor::addTargetRegionArgs(
-    clang::CapturedStmt *S, std::shared_ptr<TargetCodeRegion> TCR) {
+    clang::CapturedStmt *S, clang::OMPExecutableDirective *TargetDirective,
+    std::shared_ptr<TargetCodeRegion> TCR) {
 
   DEBUGP("Add target region args");
   for (const auto &i : S->captures()) {
@@ -210,6 +258,10 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
   for (auto &CapturedVar : TCR->capturedVars()) {
     VarSet.erase(CapturedVar.getDecl());
   }
+
+  // Add variables used in OMP clauses which are not captured as first-private
+  // variables
+  CollectOMPClauseParamsVisitor(TCR).TraverseStmt(TargetDirective);
 
   // Add non-local, non-capured variable as private variables
   TCR->setPrivateVars(VarSet);
@@ -301,11 +353,6 @@ bool FindLoopStmtVisitor::VisitStmt(clang::Stmt *S) {
   return true;
 }
 
-// bool FindDeclRefExprVisitor::VisitDecl(clang::Decl *D) {
-//   printf("VisitDecl\n");
-//   D->dumpColor();
-//   return true;
-// }
 
 bool FindDeclRefExprVisitor::VisitStmt(clang::Stmt *S) {
   // printf("VisitStmt\n");
@@ -430,7 +477,7 @@ bool FindPrivateVariablesVisitor::VisitExpr(clang::Expr *E) {
         if (attr->getKind() == clang::attr::OMPDeclareTargetDecl) {
           return true;
         }
-      }    
+      }
 
       // If the variable is declared outside of the target region it may be a
       // private variable
