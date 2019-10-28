@@ -22,8 +22,9 @@
 TargetRegionVariable::TargetRegionVariable(const clang::CapturedStmt::Capture *Capture, const std::map<clang::VarDecl *, clang::Expr *> &MappingLowerBounds)
     : Capture(Capture), Decl(Capture->getCapturedVar()),
       OmpMappingLowerBound(MappingLowerBounds) {
+
   VarName = Decl->getDeclName().getAsString();
-  
+
   auto DeclType = Decl->getType();
   // If Decl is an array: get to the base type
   if (auto *AT = llvm::dyn_cast<clang::ArrayType>(DeclType.getTypePtr())) {
