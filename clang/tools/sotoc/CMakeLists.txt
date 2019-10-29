@@ -28,6 +28,7 @@ set(USE_CLANG_LIBS clangFrontend
 set(SOTOC_SOURCES src/main.cpp
                   src/TargetCode.cpp
                   src/TargetCodeFragment.cpp
+                  src/TargetRegionVariable.cpp
                   src/Visitors.cpp
                   src/DeclResolver.cpp
                   src/OmpPragma.cpp)

@@ -108,112 +108,104 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
   std::string elemType;
   bool first = true;
   Out << "void " << generateFunctionName(TCR) << "(";
-  for (auto i = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
-       i != e; ++i) {
-    std::string VarName = (*i)->getDeclName().getAsString();
-    auto C = TCR->GetReferredOMPClause(*i);
+
+  for (auto &Var : TCR->capturedVars()) {
     if (!first) {
       Out << ", ";
     }
     first = false;
 
-    // check for constant or variable length arrays, because of
-    // AST representation and naive getType
-    if (auto t = clang::dyn_cast_or_null<clang::ArrayType>(
-            (*i)->getType().getTypePtr())) {
-      DEBUGP("Generating code for array type");
-      int dim = 0;
-
-      std::vector<int> VariableDimensions;
-      handleArrays(&t, DimString, dim, VariableDimensions, TCR, elemType,
-                   VarName);
-
-      for (int d : VariableDimensions) {
-        Out << "unsigned long long __sotoc_vla_dim" << d << "_" << VarName
+    if (Var.isArray()) {
+      for (const unsigned int &d : Var.variabledSizedArrayDimensions()) {
+        Out << "unsigned long long __sotoc_vla_dim" << d << "_" << Var.name()
             << ", ";
       }
-
-      // set type to void* to avoid warnings from the compiler
-      Out << "void *__sotoc_var_";
-      nDim.push_back(dim); // push total number of dimensions
-    } else {
-      Out << (*i)->getType().getAsString() << " ";
-      if (!(*i)->getType().getTypePtr()->isPointerType()) {
-        if (C) {
-          // Parameters which are not first private (e.g., explicit mapped vars)
-          // are passed by reference, all others by value.
-          if (C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_firstprivate &&
-              C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_private &&
-              C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_depend) {
-            Out << "*__sotoc_var_";
-          }
-        }
-      }
     }
-    Out << VarName;
+    // Because arrays are passed by reference and (for our purposes) their type
+    // is 'void', the rest of their handling ist the same as for scalars.
+    if (Var.isArray()) {
+      Out << "void ";
+    } else {
+      Out << Var.typeName() << " ";
+    }
+
+    if (Var.passedByPointer()) {
+      Out << "*__sotoc_var_";
+    }
+    Out << Var.name();
   }
+
+  for (auto *ClauseVar : TCR->ompClausesParams()) {
+    if (!first) {
+      Out << ", ";
+    } else {
+      first = false;
+    }
+
+    // TODO: this is the same code as in TargetRegionVariable.cpp, so we might
+    // want to deduplicated this.
+    auto *ClauseVarType = ClauseVar->getType().getTypePtr();
+    if (auto *AT = llvm::dyn_cast<clang::ArrayType>(ClauseVarType)) {
+      while (auto *NAT =  llvm::dyn_cast<clang::ArrayType>(AT->getElementType().getTypePtr())) {
+        AT = NAT;
+      }
+      Out << AT->getElementType().getAsString() << " *";
+    } else {
+      Out << ClauseVar->getType().getAsString() << " ";
+    }
+    Out << ClauseVar->getName();
+  }
+
   Out << ")\n{\n";
 
   // bring captured scalars into scope
-  for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
-       I != E; ++I) {
-    auto C = TCR->GetReferredOMPClause(*I);
-    // again check for constant and variable-length arrays
-    if (auto t = clang::dyn_cast_or_null<clang::ArrayType>(
-            (*I)->getType().getTypePtr())) {
-      auto VarName = (*I)->getDeclName().getAsString();
+  for (auto &Var : TCR->capturedVars()) {
+    // Ignore everything not passed by reference here
+    if (Var.passedByPointer()) {
+      // Handle multi-dimensional arrays
+      if (Var.isArray()) {
+        // Declare the arrays as a pointer. This way we can assign it a pointer
+        // However, this also means we have to ignore the first array
+        // dimension.
+        Out << "  " << Var.typeName() << " (*" << Var.name() << ")";
 
-      do {
-        t = clang::dyn_cast_or_null<clang::ArrayType>(
-            t->getElementType().getTypePtr());
-      } while (t != NULL);
-
-      Out << "  " << elemType << " (*" << VarName << ")";
-
-      // Get number of Dimensions(nDim) and write sizes(DimString)
-      for (int i = 1; i < nDim.front(); i++) {
-        DimString.pop_front();
-        Out << "[" << DimString.front() << "]";
-      }
-      DimString.pop_front(); // remove last size
-      nDim.pop_front();      // remove number of dimensions of last variable
-
-      Out << " = __sotoc_var_" << VarName << ";\n";
-
-      auto LowerBound = TCR->CapturedLowerBounds.find(*I);
-      if (LowerBound != TCR->CapturedLowerBounds.end()) {
-        Out << VarName << " = " << VarName << " - (";
-        LowerBound->second->printPretty(Out, NULL, TCR->getPP());
-        Out << ");\n";
-      }
-
-    } else {
-      if (!(*I)->getType().getTypePtr()->isPointerType()) {
-        if (C) {
-          // Parameters which are not first private (e.g., explicit mapped vars)
-          // are passed by reference, all others by value.
-          if (C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_firstprivate &&
-              C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_private &&
-              C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_depend) {
-            auto VarName = (*I)->getDeclName().getAsString();
-            Out << "  " << (*I)->getType().getAsString() << " " << VarName
-                << " = "
-                << "*__sotoc_var_" << VarName << ";\n";
+        // For every array dimension other then the first: declare them by
+        // adding the array brackets ('[', ']') to the declaration. Also add
+        // the size of this dimension if we have it.
+        bool first = true;
+        for (auto &dimensionSize: Var.arrayDimensionSizes()) {
+          //We need to discard the first element
+          if (first) {
+            first = false;
+            continue;
           }
+          Out << "[" << dimensionSize << "]";
         }
+        // After we have declare the array, we also need to assign it.
+        // We may also have to adjust the array bounds if we only get a slice
+        // of the array (in the first dimesion. All other dimensions should
+        // not require adjustment as their slicing is ignored)
+        Out << " =  __sotoc_var_" << Var.name() << ";\n";
+        // Move the bounds if we have a slice
+        auto LowerBound = Var.arrayLowerBound();
+        if (LowerBound.hasValue()) {
+          Out << "  " << Var.name() << " = " << Var.name() << " - ";
+          LowerBound.getValue()->printPretty(Out, NULL, TCR->getPP());
+          Out << ";\n";
+        }
+      } else {
+        // Handle all other types passed by reference
+        Out << Var.typeName() << " " << Var.name() << " = "
+            << "*__sotoc_var_" << Var.name() << ";\n";
       }
     }
   }
-  Out << "\n";
 
   // Generate local declarations.
-  Out << TCR->PrintLocalVarsFromClauses();
+  for (auto *privateVar: TCR->privateVars()) {
+    Out << "  " << privateVar->getType().getAsString() << " "
+        << privateVar->getName() << ";\n";
+  }
 
   // The runtime can decide to only create one team.
   // Therfore, replace target teams constructs.
@@ -235,31 +227,9 @@ void TargetCode::generateFunctionEpilogue(TargetCodeRegion *TCR,
 
   Out << "\n";
   // copy values from scalars from scoped vars back into pointers
-  for (auto I = TCR->getCapturedVarsBegin(), E = TCR->getCapturedVarsEnd();
-       I != E; ++I) {
-    auto C = TCR->GetReferredOMPClause(*I);
-
-    // if array then already pointer
-    if (auto t = clang::dyn_cast_or_null<clang::ArrayType>(
-            (*I)->getType().getTypePtr())) {
-      auto VarName = (*I)->getDeclName().getAsString();
-      Out << "\n  __sotoc_var_" << VarName << " = " << VarName << ";";
-    } else {
-      if (!(*I)->getType().getTypePtr()->isPointerType()) {
-        if (C) {
-          // Parameters which are not first private (e.g., explicit mapped vars)
-          // are passed by reference, all others by value.
-          if (C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_firstprivate &&
-              C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_private &&
-              C->getClauseKind() !=
-                clang::OpenMPClauseKind::OMPC_depend) {
-            auto VarName = (*I)->getDeclName().getAsString();
-            Out << "\n  *__sotoc_var_" << VarName << " = " << VarName << ";";
-          }
-        }
-      }
+  for (auto &Var : TCR->capturedVars()) {
+    if (Var.passedByPointer() && !Var.isArray()) {
+      Out << "\n  *__sotoc_var_" << Var.name() << " = " << Var.name() << ";";
     }
   }
 
@@ -282,49 +252,4 @@ std::string TargetCode::generateFunctionName(TargetCodeRegion *TCR) {
       << llvm::format("_%x_", FileID) << TCR->getParentFuncName() << "_l"
       << LineNum;
   return FunctionName;
-}
-
-void TargetCode::handleArrays(const clang::ArrayType **t,
-                              std::list<std::string> &DimString, int &dim,
-                              std::vector<int> &VariableDims,
-                              TargetCodeRegion *TCR, std::string &elemType,
-                              const std::string &ArrayName) {
-  auto OrigT = *t;
-
-  if (!t) {
-    return;
-  } else {
-    // We just remember the last element type
-    elemType = OrigT->getElementType().getAsString();
-    DEBUGP("The last QualType of the array is: " + elemType);
-  }
-
-  if (auto t1 = clang::dyn_cast_or_null<clang::ConstantArrayType>(OrigT)) {
-    DEBUGP("ArrayType is CAT");
-    DimString.push_back(t1->getSize().toString(10, false));
-    ++dim;
-
-  } else if (auto t1 =
-                 clang::dyn_cast_or_null<clang::VariableArrayType>(OrigT)) {
-    DEBUGP("ArrayType VAT");
-    std::string PrettyStr = "";
-    llvm::raw_string_ostream PrettyOS(PrettyStr);
-    PrettyOS << "__sotoc_vla_dim" << dim << "_" << ArrayName;
-    DimString.push_back(PrettyOS.str());
-    VariableDims.push_back(dim);
-    ++dim;
-
-  } else {
-    DEBUGP("No more array dimensions");
-    // Restore t if we dont have an array type anymore
-    *t = OrigT;
-    return;
-  }
-
-  (*t) = clang::dyn_cast_or_null<clang::ArrayType>(
-      OrigT->getElementType().getTypePtr());
-  if (*t) {
-    // Recursively handle all dimensions
-    handleArrays(t, DimString, dim, VariableDims, TCR, elemType, ArrayName);
-  }
 }

@@ -148,6 +148,7 @@ private:
   /// Finds and adds all variables required by the target regions as arguments
   /// to the generated function.
   void addTargetRegionArgs(clang::CapturedStmt *S,
+                           clang::OMPExecutableDirective *TargetDirective,
                            std::shared_ptr<TargetCodeRegion> TCR);
 };
 
@@ -161,4 +162,21 @@ public:
       std::map<clang::VarDecl *, clang::Expr *> &LowerBoundsMap)
       : LowerBoundsMap(LowerBoundsMap) {}
   bool VisitExpr(clang::Expr *E);
+};
+
+class FindPrivateVariablesVisitor
+    : public clang::RecursiveASTVisitor<FindPrivateVariablesVisitor> {
+
+  clang::SourceManager &SM;
+  clang::SourceLocation RegionTopSourceLocation;
+  std::set<clang::VarDecl *> VarSet;
+
+public:
+  FindPrivateVariablesVisitor(clang::SourceLocation TopSourceLocation, clang::SourceManager &SM)
+      : RegionTopSourceLocation(TopSourceLocation), SM(SM) {}
+
+  bool VisitExpr(clang::Expr *E);
+  std::set<clang::VarDecl *> &getVarSet() {
+    return VarSet;
+  }
 };

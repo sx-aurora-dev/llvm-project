@@ -87,7 +87,7 @@ llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
 bool FindTargetCodeVisitor::TraverseDecl(clang::Decl *D) {
   if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
     LastVisitedFuncDecl.push(FD);
-  } 
+  }
   bool ret = clang::RecursiveASTVisitor<FindTargetCodeVisitor>::TraverseDecl(D);
   if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
     LastVisitedFuncDecl.pop();
@@ -131,18 +131,49 @@ bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
   return true;
 }
 
-class CollectOMPClausesVisitor
-    : public clang::RecursiveASTVisitor<CollectOMPClausesVisitor> {
+class CollectOMPClauseParamsVarsVisitor
+    : public clang::RecursiveASTVisitor<CollectOMPClauseParamsVarsVisitor> {
   std::shared_ptr<TargetCodeRegion> TCR;
-
 public:
-  CollectOMPClausesVisitor(std::shared_ptr<TargetCodeRegion> &TCR) : TCR(TCR){};
+  CollectOMPClauseParamsVarsVisitor(std::shared_ptr<TargetCodeRegion> &TCR)
+    : TCR(TCR) {};
+
   bool VisitStmt(clang::Stmt *S) {
-    if (auto *OED = llvm::dyn_cast<clang::OMPExecutableDirective>(S)) {
-      for (auto *Clause : OED->clauses()) {
-        TCR->addOpenMPClause(Clause);
+    if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
+      if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
+        TCR->addOMPClauseParam(VD->getCanonicalDecl());
       }
     }
+    return true;
+  };
+};
+
+class CollectOMPClauseParamsVisitor
+    : public clang::RecursiveASTVisitor<CollectOMPClauseParamsVisitor> {
+  
+      CollectOMPClauseParamsVarsVisitor VarsVisitor;
+  bool InExplicitCast;
+public:
+  CollectOMPClauseParamsVisitor(std::shared_ptr<TargetCodeRegion> &TCR)
+    : VarsVisitor(TCR), InExplicitCast(false) {};
+  bool VisitStmt(clang::Stmt *S) {
+    // THis relies on the captured statement being the last child
+    if (llvm::isa<clang::CapturedStmt>(S)) {
+        return false;
+    }
+
+    if (llvm::isa<clang::ImplicitCastExpr>(S)) {
+      InExplicitCast = true;
+      return true;
+    }
+
+    auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(S);
+    if (DRE && InExplicitCast) {
+      if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
+        VarsVisitor.TraverseStmt(VD->getInit());
+      }
+    }
+    InExplicitCast = false;
     return true;
   };
 };
@@ -166,20 +197,17 @@ bool FindTargetCodeVisitor::processTargetRegion(
       // if the target region cannot be added we dont want to parse its args
       if (TargetCodeInfo.addCodeFragment(TCR)) {
 
-        FindArraySectionVisitor ArraySectionVisitor(TCR->CapturedLowerBounds);
-        ArraySectionVisitor.TraverseStmt(TargetDirective);
+        FindArraySectionVisitor(TCR->CapturedLowerBounds).TraverseStmt(TargetDirective);
 
-        // look for nested clause
-        CollectOMPClausesVisitor(TCR).TraverseStmt(CS);
         for (auto C : TargetDirective->clauses()) {
-          TCR->addOpenMPClause(C);
+          TCR->addOMPClause(C);
         }
 
         // For more complex data types (like structs) we need to traverse the
         // tree
         DiscoverTypeVisitor.TraverseStmt(CS);
         DiscoverFunctionVisitor.TraverseStmt(CS);
-        addTargetRegionArgs(CS, TCR);
+        addTargetRegionArgs(CS, TargetDirective, TCR);
         TCR->NeedsSemicolon = stmtNeedsSemicolon(CS);
         TCR->TargetCodeKind = TargetDirective->getDirectiveKind();
       }
@@ -189,14 +217,14 @@ bool FindTargetCodeVisitor::processTargetRegion(
 }
 
 void FindTargetCodeVisitor::addTargetRegionArgs(
-    clang::CapturedStmt *S, std::shared_ptr<TargetCodeRegion> TCR) {
+    clang::CapturedStmt *S, clang::OMPExecutableDirective *TargetDirective,
+    std::shared_ptr<TargetCodeRegion> TCR) {
 
   DEBUGP("Add target region args");
   for (const auto &i : S->captures()) {
     if (!(i.capturesVariableArrayType())) {
-      clang::VarDecl *var = i.getCapturedVar();
-      DEBUGP("captured Var: " + var->getNameAsString());
-      TCR->addCapturedVar(var);
+      DEBUGP("captured Var: " + i.getCapturedVar()->getNameAsString());
+      TCR->addCapture(&i);
     } else {
       // Not sure what exactly is caputred here. It looks like we have an
       // additional capture in cases of VATs.
@@ -204,53 +232,23 @@ void FindTargetCodeVisitor::addTargetRegionArgs(
     }
   }
 
-  FindLoopStmtVisitor FindLoopVisitor;
-  FindLoopVisitor.TraverseStmt(S);
+  // Find all not locally declared variables in the region
+  FindPrivateVariablesVisitor PrivateVarsVisitor(S->getBeginLoc(),
+                                                 Context.getSourceManager());
+  PrivateVarsVisitor.TraverseStmt(S);
 
-  std::unordered_set<clang::VarDecl *> tmpSet;
-
-  // printf("%lu \n", FindLoopVisitor.getVarSet()->size());
-  for (const auto i : *FindLoopVisitor.getVarSet()) {
-    DEBUGP("Iterating var set");
-    // i->print(llvm::outs());
-    if (Context.getSourceManager().isBeforeInTranslationUnit(
-            S->getBeginLoc(), i->getSourceRange().getBegin())) {
-      tmpSet.insert(i);
-      continue;
-    }
-    for (auto j : *TCR->getOMPClauses()) {
-      for (auto CC : j->children()) {
-        if (auto CC_DeclRefExpr =
-                llvm::dyn_cast_or_null<clang::DeclRefExpr>(CC)) {
-          // CC_DeclRefExpr->dumpColor();
-          if (i->getCanonicalDecl() == CC_DeclRefExpr->getDecl())
-            tmpSet.insert(i);
-        }
-      }
-    }
-
-    for (auto j = TCR->getCapturedVarsBegin(), e = TCR->getCapturedVarsEnd();
-         j != e; ++j) {
-      if (i->getCanonicalDecl() == *j) {
-        // i->print(llvm::outs());
-        DEBUGPDECL(i, "Add captured var: ");
-        // FindLoopVisitor.getVarSet()->erase(i);
-        tmpSet.insert(i);
-      }
-    }
+  // Remove any not locally declared variables which are already captured
+  auto VarSet = PrivateVarsVisitor.getVarSet();
+  for (auto &CapturedVar : TCR->capturedVars()) {
+    VarSet.erase(CapturedVar.getDecl());
   }
 
-  for (const auto i : tmpSet) {
-    FindLoopVisitor.getVarSet()->erase(FindLoopVisitor.getVarSet()->find(i));
-  }
+  // Add variables used in OMP clauses which are not captured as first-private
+  // variables
+  CollectOMPClauseParamsVisitor(TCR).TraverseStmt(TargetDirective);
 
-  tmpSet.clear();
-
-  // printf("%lu \n", FindLoopVisitor.getVarSet()->size());
-  for (const auto i : *FindLoopVisitor.getVarSet()) {
-    // i->print(llvm::outs());
-    TCR->addCapturedVar(i);
-  }
+  // Add non-local, non-capured variable as private variables
+  TCR->setPrivateVars(VarSet);
 }
 
 bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
@@ -280,32 +278,17 @@ bool FindTargetCodeVisitor::VisitDecl(clang::Decl *D) {
 
 bool FindLoopStmtVisitor::VisitStmt(clang::Stmt *S) {
   if (auto LS = llvm::dyn_cast<clang::ForStmt>(S)) {
-    // LS->getInit()->dumpColor();
     FindDeclRefVisitor.TraverseStmt(LS->getInit());
   }
-  // else if (auto LS = llvm::dyn_cast<clang::DoStmt>(S)) {
-  //   FindDeclRefVisitor.TraverseStmt(LS);
-  // } else if (auto LS = llvm::dyn_cast<clang::WhileStmt>(S)) {
-  //   FindDeclRefVisitor.TraverseStmt(LS);
-  // }
   return true;
 }
 
-// bool FindDeclRefExprVisitor::VisitDecl(clang::Decl *D) {
-//   printf("VisitDecl\n");
-//   D->dumpColor();
-//   return true;
-// }
 
 bool FindDeclRefExprVisitor::VisitStmt(clang::Stmt *S) {
-  // printf("VisitStmt\n");
-  // S->dumpColor();
   if (auto DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
     if (auto DD = llvm::dyn_cast<clang::DeclaratorDecl>(DRE->getDecl())) {
       if (auto VD = llvm::dyn_cast<clang::VarDecl>(DD)) {
         if (VD->getNameAsString() != ".reduction.lhs") {
-          // printf("VarDecl\n");
-          // VD->print(llvm::outs());
           VarSet.insert(VD);
         }
       }
@@ -406,6 +389,27 @@ bool FindArraySectionVisitor::VisitExpr(clang::Expr *E) {
           }
         }
         LowerBoundsMap.emplace(VarDecl, LowerBound);
+      }
+    }
+  }
+  return true;
+}
+
+bool FindPrivateVariablesVisitor::VisitExpr(clang::Expr *E) {
+  if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(E)) {
+    if (auto *VD = llvm::dyn_cast<clang::VarDecl>(DRE->getDecl())) {
+      // We do not collect variables in 'collect target' declarations.
+      for (auto &attr : VD->attrs()) {
+        if (attr->getKind() == clang::attr::OMPDeclareTargetDecl) {
+          return true;
+        }
+      }
+
+      // If the variable is declared outside of the target region it may be a
+      // private variable
+      if (SM.isBeforeInTranslationUnit(VD->getLocation(), RegionTopSourceLocation)) {
+        // Add the Variable to our set
+        VarSet.insert(VD);
       }
     }
   }

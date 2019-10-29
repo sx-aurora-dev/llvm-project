@@ -37,7 +37,7 @@ class OmpPragma {
 
 public:
   OmpPragma(TargetCodeRegion *TCR)
-      : PP(TCR->getPP()), Clauses(*TCR->getOMPClauses()),
+      : PP(TCR->getPP()), Clauses(TCR->getOMPClauses()),
         Kind(TCR->getTargetCodeKind()){};
   OmpPragma(clang::OMPExecutableDirective *Directive, clang::PrintingPolicy PP)
       : PP(PP), Clauses(Directive->clauses()),
