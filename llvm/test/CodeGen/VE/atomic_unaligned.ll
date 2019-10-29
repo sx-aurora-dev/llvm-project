@@ -1,11 +1,18 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
+%struct.sci = type <{ i8, i32 }>
+%struct.scl = type <{ i8, i64 }>
+%struct.sil = type <{ i32, i64 }>
+
 @c = common global i8 0, align 1
 @s = common global i16 0, align 1
 @i = common global i32 0, align 1
 @l = common global i64 0, align 1
 @it= common global i128 0, align 1
 @ui = common global i32 0, align 1
+@sci1 = common global %struct.sci <{ i8 0, i32 0 }>, align 1
+@scl1 = common global %struct.scl <{ i8 0, i64 0 }>, align 1
+@sil1 = common global %struct.sil <{ i32 0, i64 0 }>, align 1
 
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_1() {
@@ -441,6 +448,24 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
+define i32 @test_atomic_exchange_4_align1() {
+; CHECK-LABEL: test_atomic_exchange_4_align1
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  lea %s34, sci1@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, sci1@hi(%s34)
+; CHECK-NEXT:  lea %s0, 1886417008
+; FIXME:       Bus Error occurred due to unaligned ts1am instruction
+; CHECK-NEXT:  ts1am.w %s0, 1(%s34), 15
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %0 = atomicrmw xchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 1886417008 seq_cst
+  ret i32 %0
+}
+
+; Function Attrs: norecurse nounwind
 define i64 @test_atomic_exchange_8() {
 ; CHECK-LABEL: test_atomic_exchange_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -454,6 +479,42 @@ define i64 @test_atomic_exchange_8() {
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i64* @l, i64 8102099357864587376 acquire
+  ret i64 %0
+}
+
+; Function Attrs: norecurse nounwind
+define i64 @test_atomic_exchange_8_align1() {
+; CHECK-LABEL: test_atomic_exchange_8_align1
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  lea %s34, scl1@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, scl1@hi(%s34)
+; CHECK-NEXT:  lea %s35, 1886417008
+; CHECK-NEXT:  lea.sl %s0, 1886417008(%s35)
+; FIXME:       Bus Error occurred due to unaligned ts1am instruction
+; CHECK-NEXT:  ts1am.l %s0, 1(%s34), 127
+; CHECK-NEXT:  fencem 2
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %0 = atomicrmw xchg i64* getelementptr inbounds (%struct.scl, %struct.scl* @scl1, i32 0, i32 1), i64 8102099357864587376 acquire
+  ret i64 %0
+}
+
+; Function Attrs: norecurse nounwind
+define i64 @test_atomic_exchange_8_align4() {
+; CHECK-LABEL: test_atomic_exchange_8_align4
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  lea %s34, sil1@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, sil1@hi(%s34)
+; CHECK-NEXT:  lea %s35, 1886417008
+; CHECK-NEXT:  lea.sl %s0, 1886417008(%s35)
+; FIXME:       Bus Error occurred due to unaligned ts1am instruction
+; CHECK-NEXT:  ts1am.l %s0, 4(%s34), 127
+; CHECK-NEXT:  fencem 2
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %0 = atomicrmw xchg i64* getelementptr inbounds (%struct.sil, %struct.sil* @sil1, i32 0, i32 1), i64 8102099357864587376 acquire
   ret i64 %0
 }
 
@@ -507,7 +568,7 @@ define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-NEXT:  cas.w %s39, (%s37), %s40
 ; CHECK-NEXT:  breq.w %s39, %s40, .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.2:                                # %partword.cmpxchg.failure
-; CHECK-NEXT:  #   in Loop: Header=BB25_1 Depth=1
+; CHECK-NEXT:  #   in Loop: Header=BB{{[0-9]+}}_1 Depth=1
 ; CHECK-NEXT:  or %s41, 0, %s42
 ; CHECK-NEXT:  adds.w.sx %s42, %s34, (0)1
 ; CHECK-NEXT:  and %s42, 3, %s42
@@ -558,7 +619,7 @@ define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-NEXT:  cas.w %s39, (%s37), %s40
 ; CHECK-NEXT:  breq.w %s39, %s40, .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.2:                                # %partword.cmpxchg.failure
-; CHECK-NEXT:                                  #   in Loop: Header=BB26_1 Depth=1
+; CHECK-NEXT:  #   in Loop: Header=BB{{[0-9]+}}_1 Depth=1
 ; CHECK-NEXT:  or %s41, 0, %s42
 ; CHECK-NEXT:  adds.w.sx %s42, %s34, (0)1
 ; CHECK-NEXT:  and %s42, 3, %s42
@@ -603,6 +664,29 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
+define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
+; CHECK-LABEL: test_atomic_compare_exchange_4_align1
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  lea %s34, sci1@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, sci1@hi(%s34)
+; FIXME:       Bus Error occurred due to unaligned cas instruction
+; CHECK-NEXT:  cas.w %s1, 1(%s34), %s0
+; CHECK-NEXT:  cmps.w.sx %s34, %s1, %s0
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  or %s0, 0, (0)1
+; CHECK-NEXT:  cmov.w.eq %s0, (63)0, %s34
+; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %2 = cmpxchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 %0, i32 %1 seq_cst seq_cst
+  %3 = extractvalue { i32, i1 } %2, 1
+  %conv = zext i1 %3 to i32
+  ret i32 %conv
+}
+
+; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -618,6 +702,52 @@ define i64 @test_atomic_compare_exchange_8(i64, i64) {
 ; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry: %2 = cmpxchg i64* @l, i64 %0, i64 %1 seq_cst seq_cst
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
+  ret i64 %conv
+}
+
+; Function Attrs: norecurse nounwind
+define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
+; CHECK-LABEL: test_atomic_compare_exchange_8_align1
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  lea %s34, scl1@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, scl1@hi(%s34)
+; FIXME:       Bus Error occurred due to unaligned cas instruction
+; CHECK-NEXT:  cas.l %s1, 1(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
+; CHECK-NEXT:  or %s35, 0, (0)1
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
+; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %2 = cmpxchg i64* getelementptr inbounds (%struct.scl, %struct.scl* @scl1, i32 0, i32 1), i64 %0, i64 %1 seq_cst seq_cst
+  %3 = extractvalue { i64, i1 } %2, 1
+  %conv = zext i1 %3 to i64
+  ret i64 %conv
+}
+
+; Function Attrs: norecurse nounwind
+define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
+; CHECK-LABEL: test_atomic_compare_exchange_8_align4
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  lea %s34, sil1@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, sil1@hi(%s34)
+; FIXME:       Bus Error occurred due to unaligned cas instruction
+; CHECK-NEXT:  cas.l %s1, 4(%s34), %s0
+; CHECK-NEXT:  cmps.l %s34, %s1, %s0
+; CHECK-NEXT:  or %s35, 0, (0)1
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  cmov.l.eq %s35, (63)0, %s34
+; CHECK-NEXT:  adds.w.zx %s0, %s35, (0)1
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %2 = cmpxchg i64* getelementptr inbounds (%struct.sil, %struct.sil* @sil1, i32 0, i32 1), i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
   %conv = zext i1 %3 to i64
   ret i64 %conv
