@@ -82,26 +82,17 @@ std::string generateSymTabCode(const std::vector<std::string> &symbols) {
   out << "#include <string.h>\n";
 
   for (std::string s : symbols) {
-    out << "extern unsigned long " << s << ";" << std::endl;
+    out << "extern unsigned long " << s << ";\n";
   }
 
-  out << std::endl;
-  out << "typedef struct { char *n; unsigned long v; } SYM;\n";
-  out << "SYM *_veo_static_symtable = NULL;\n";
-  out << std::endl;
-  out << "void _init_static_symtable(void) {\n";
-  out << "  int i = 0;\n";
-  out << "  _veo_static_symtable = (SYM *)malloc((" << symbols.size()
-      << "+1) * sizeof(SYM));\n";
-  out << "  SYM *s = _veo_static_symtable;\n";
-  out << std::endl;
+  out << "typedef struct { const char *n; void *v; } static_sym_t;\n";
+  out << "static_sym_t _veo_static_symtable[] = {\n";
 
   for (auto s : symbols) {
-    out << "  s[i].n = strdup(\"" << s << "\");";
-    out << " s[i++].v = (unsigned long)&" << s << ";" << std::endl;
+    out << " { .n = \"" << s << "\", .v = &" << s << " },\n";
   }
-  out << "  s[i].n = NULL; s[i++].v = 0UL;\n";
-  out << "}\n";
+  out << "{ .n = 0, .v = 0 },\n";
+  out << "};\n";
 
   return writeTmpFile(out.str(), "veorun", ".c");
 }
@@ -135,7 +126,9 @@ int runStaticLinker(const std::vector<const char *> &ObjectFiles,
 
   int ret = std::system(CmdLine.str().c_str());
 
-  std::remove(SymTabPath.c_str());
+  if (!KeepTransformedFilesDir) {
+    std::remove(SymTabPath.c_str());
+  }
   return ret;
 #endif
 }
