@@ -100,13 +100,8 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
 
 void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
                                           llvm::raw_ostream &Out) {
-
-  std::string Prologue;
-
-  std::list<int> nDim;
-  std::list<std::string> DimString;
-  std::string elemType;
   bool first = true;
+
   Out << "void " << generateFunctionName(TCR) << "(";
 
   for (auto &Var : TCR->capturedVars()) {
