@@ -8,6 +8,7 @@
 
 #include "clang/Driver/Driver.h"
 #include "InputInfo.h"
+#include "ToolChains/AIX.h"
 #include "ToolChains/AMDGPU.h"
 #include "ToolChains/AVR.h"
 #include "ToolChains/Ananas.h"
@@ -178,6 +179,7 @@ void Driver::setDriverModeFromOption(StringRef Opt) {
                    .Case("g++", GXXMode)
                    .Case("cpp", CPPMode)
                    .Case("cl", CLMode)
+                   .Case("flang", FlangMode)
                    .Default(None))
     Mode = *M;
   else
@@ -292,7 +294,7 @@ phases::ID Driver::getFinalPhase(const DerivedArgList &DAL,
     FinalPhase = phases::Compile;
 
   // clang interface stubs
-  } else if ((PhaseArg = DAL.getLastArg(options::OPT_emit_iterface_stubs))) {
+  } else if ((PhaseArg = DAL.getLastArg(options::OPT_emit_interface_stubs))) {
     FinalPhase = phases::IfsMerge;
 
   // -S only runs up to the backend.
@@ -1012,6 +1014,11 @@ Compilation *Driver::BuildCompilation(ArrayRef<const char *> ArgList) {
         }
     }
   }
+
+  // Check for working directory option before accessing any files
+  if (Arg *WD = Args.getLastArg(options::OPT_working_directory))
+    if (VFS->setCurrentWorkingDirectory(WD->getValue()))
+      Diag(diag::err_drv_unable_to_set_working_directory) << WD->getValue();
 
   // FIXME: This stuff needs to go into the Compilation, not the driver.
   bool CCCPrintPhases;
@@ -1798,23 +1805,36 @@ bool Driver::HandleImmediateArgs(const Compilation &C) {
   return true;
 }
 
+enum {
+  TopLevelAction = 0,
+  HeadSibAction = 1,
+  OtherSibAction = 2,
+};
+
 // Display an action graph human-readably.  Action A is the "sink" node
 // and latest-occuring action. Traversal is in pre-order, visiting the
 // inputs to each action before printing the action itself.
 static unsigned PrintActions1(const Compilation &C, Action *A,
-                              std::map<Action *, unsigned> &Ids) {
+                              std::map<Action *, unsigned> &Ids,
+                              Twine Indent = {}, int Kind = TopLevelAction) {
   if (Ids.count(A)) // A was already visited.
     return Ids[A];
 
   std::string str;
   llvm::raw_string_ostream os(str);
 
+  auto getSibIndent = [](int K) -> Twine {
+    return (K == HeadSibAction) ? "   " : (K == OtherSibAction) ? "|  " : "";
+  };
+
+  Twine SibIndent = Indent + getSibIndent(Kind);
+  int SibKind = HeadSibAction;
   os << Action::getClassName(A->getKind()) << ", ";
   if (InputAction *IA = dyn_cast<InputAction>(A)) {
     os << "\"" << IA->getInputArg().getValue() << "\"";
   } else if (BindArchAction *BIA = dyn_cast<BindArchAction>(A)) {
     os << '"' << BIA->getArchName() << '"' << ", {"
-       << PrintActions1(C, *BIA->input_begin(), Ids) << "}";
+       << PrintActions1(C, *BIA->input_begin(), Ids, SibIndent, SibKind) << "}";
   } else if (OffloadAction *OA = dyn_cast<OffloadAction>(A)) {
     bool IsFirst = true;
     OA->doOnEachDependence(
@@ -1837,8 +1857,9 @@ static unsigned PrintActions1(const Compilation &C, Action *A,
             os << ":" << BoundArch;
           os << ")";
           os << '"';
-          os << " {" << PrintActions1(C, A, Ids) << "}";
+          os << " {" << PrintActions1(C, A, Ids, SibIndent, SibKind) << "}";
           IsFirst = false;
+          SibKind = OtherSibAction;
         });
   } else {
     const ActionList *AL = &A->getInputs();
@@ -1846,8 +1867,9 @@ static unsigned PrintActions1(const Compilation &C, Action *A,
     if (AL->size()) {
       const char *Prefix = "{";
       for (Action *PreRequisite : *AL) {
-        os << Prefix << PrintActions1(C, PreRequisite, Ids);
+        os << Prefix << PrintActions1(C, PreRequisite, Ids, SibIndent, SibKind);
         Prefix = ", ";
+        SibKind = OtherSibAction;
       }
       os << "}";
     } else
@@ -1868,9 +1890,13 @@ static unsigned PrintActions1(const Compilation &C, Action *A,
     }
   }
 
+  auto getSelfIndent = [](int K) -> Twine {
+    return (K == HeadSibAction) ? "+- " : (K == OtherSibAction) ? "|- " : "";
+  };
+
   unsigned Id = Ids.size();
   Ids[A] = Id;
-  llvm::errs() << Id << ": " << os.str() << ", "
+  llvm::errs() << Indent + getSelfIndent(Kind) << Id << ": " << os.str() << ", "
                << types::getTypeName(A->getType()) << offload_os.str() << "\n";
 
   return Id;
@@ -1994,20 +2020,11 @@ bool Driver::DiagnoseInputExistence(const DerivedArgList &Args, StringRef Value,
   if (Value == "-")
     return true;
 
-  SmallString<64> Path(Value);
-  if (Arg *WorkDir = Args.getLastArg(options::OPT_working_directory)) {
-    if (!llvm::sys::path::is_absolute(Path)) {
-      SmallString<64> Directory(WorkDir->getValue());
-      llvm::sys::path::append(Directory, Value);
-      Path.assign(Directory);
-    }
-  }
-
-  if (getVFS().exists(Path))
+  if (getVFS().exists(Value))
     return true;
 
   if (IsCLMode()) {
-    if (!llvm::sys::path::is_absolute(Twine(Path)) &&
+    if (!llvm::sys::path::is_absolute(Twine(Value)) &&
         llvm::sys::Process::FindInEnvPath("LIB", Value))
       return true;
 
@@ -2033,12 +2050,12 @@ bool Driver::DiagnoseInputExistence(const DerivedArgList &Args, StringRef Value,
     if (getOpts().findNearest(Value, Nearest, IncludedFlagsBitmask,
                               ExcludedFlagsBitmask) <= 1) {
       Diag(clang::diag::err_drv_no_such_file_with_suggestion)
-          << Path << Nearest;
+          << Value << Nearest;
       return false;
     }
   }
 
-  Diag(clang::diag::err_drv_no_such_file) << Path;
+  Diag(clang::diag::err_drv_no_such_file) << Value;
   return false;
 }
 
@@ -2287,6 +2304,9 @@ class OffloadingActionBuilder final {
 
     /// Append top level actions generated by the builder.
     virtual void appendTopLevelActions(ActionList &AL) {}
+
+    /// Append linker actions generated by the builder.
+    virtual void appendLinkActions(ActionList &AL) {}
 
     /// Append linker actions generated by the builder.
     virtual void appendLinkDependences(OffloadAction::DeviceDependences &DA) {}
@@ -2891,7 +2911,7 @@ class OffloadingActionBuilder final {
       OpenMPDeviceActions.clear();
     }
 
-    void appendLinkDependences(OffloadAction::DeviceDependences &DA) override {
+    void appendLinkActions(ActionList &AL) override {
       assert(ToolChains.size() == DeviceLinkerInputs.size() &&
              "Toolchains and linker inputs sizes do not match.");
 
@@ -2900,11 +2920,17 @@ class OffloadingActionBuilder final {
       for (auto &LI : DeviceLinkerInputs) {
         auto *DeviceLinkAction =
             C.MakeAction<LinkJobAction>(LI, types::TY_Image);
-        DA.add(*DeviceLinkAction, **TC, /*BoundArch=*/nullptr,
-               Action::OFK_OpenMP);
+        OffloadAction::DeviceDependences DeviceLinkDeps;
+        DeviceLinkDeps.add(*DeviceLinkAction, **TC, /*BoundArch=*/nullptr,
+		        Action::OFK_OpenMP);
+        AL.push_back(C.MakeAction<OffloadAction>(DeviceLinkDeps,
+            DeviceLinkAction->getType()));
         ++TC;
       }
+      DeviceLinkerInputs.clear();
     }
+
+    void appendLinkDependences(OffloadAction::DeviceDependences &DA) override {}
 
     bool initialize() override {
       // Get the OpenMP toolchains. If we don't get any, the action builder will
@@ -3128,6 +3154,25 @@ public:
       HostAction->propagateHostOffloadInfo(InputArgToOffloadKindMap[InputArg],
                                            /*BoundArch=*/nullptr);
     return false;
+  }
+
+  Action* makeHostLinkAction() {
+    // Build a list of device linking actions.
+    ActionList DeviceAL;
+    for (DeviceActionBuilder *SB : SpecializedBuilders) {
+      if (!SB->isValid())
+        continue;
+      SB->appendLinkActions(DeviceAL);
+    }
+
+    if (DeviceAL.empty())
+      return nullptr;
+
+    // Create wrapper bitcode from the result of device link actions and compile
+    // it to an object which will be added to the host link command.
+    auto *BC = C.MakeAction<OffloadWrapperJobAction>(DeviceAL, types::TY_LLVM_BC);
+    auto *ASM = C.MakeAction<BackendJobAction>(BC, types::TY_PP_Asm);
+    return C.MakeAction<AssembleJobAction>(ASM, types::TY_Object);
   }
 
   /// Processes the host linker action. This currently consists of replacing it
@@ -3435,6 +3480,8 @@ void Driver::BuildActions(Compilation &C, DerivedArgList &Args,
 
   // Add a link action if necessary.
   if (!LinkerInputs.empty()) {
+    if (Action *Wrapper = OffloadBuilder.makeHostLinkAction())
+      LinkerInputs.push_back(Wrapper);
     Action *LA = C.MakeAction<LinkJobAction>(LinkerInputs, types::TY_Image);
     LA = OffloadBuilder.processHostLinkAction(LA);
     Actions.push_back(LA);
@@ -3546,7 +3593,7 @@ Action *Driver::ConstructPhaseAction(
       return C.MakeAction<CompileJobAction>(Input, types::TY_ModuleFile);
     if (Args.hasArg(options::OPT_verify_pch))
       return C.MakeAction<VerifyPCHJobAction>(Input, types::TY_Nothing);
-    if (Args.hasArg(options::OPT_emit_iterface_stubs))
+    if (Args.hasArg(options::OPT_emit_interface_stubs))
       return C.MakeAction<CompileJobAction>(Input, types::TY_IFS_CPP);
     return C.MakeAction<CompileJobAction>(Input, types::TY_LLVM_BC);
   }
@@ -3821,18 +3868,8 @@ class ToolSelector final {
     if (!AJ || !BJ)
       return nullptr;
 
-    // Retrieve the compile job, backend action must always be preceded by one.
-    ActionList CompileJobOffloadActions;
-    auto *CJ = getPrevDependentAction(BJ->getInputs(), CompileJobOffloadActions,
-                                      /*CanBeCollapsed=*/false);
-    if (!AJ || !BJ || !CJ)
-      return nullptr;
-
-    assert(isa<CompileJobAction>(CJ) &&
-           "Expecting compile job preceding backend job.");
-
-    // Get compiler tool.
-    const Tool *T = TC.SelectTool(*CJ);
+    // Get backend tool.
+    const Tool *T = TC.SelectTool(*BJ);
     if (!T)
       return nullptr;
 
@@ -4237,6 +4274,13 @@ InputInfo Driver::BuildJobsForActionNoCache(
         A->getOffloadingDeviceKind(), TC->getTriple().normalize(),
         /*CreatePrefixForHost=*/!!A->getOffloadingHostActiveKinds() &&
             !AtTopLevel);
+    if (isa<OffloadWrapperJobAction>(JA)) {
+      OffloadingPrefix += "-wrapper";
+      if (Arg *FinalOutput = C.getArgs().getLastArg(options::OPT_o))
+        BaseInput = FinalOutput->getValue();
+      else
+        BaseInput = getDefaultImageName();
+    }
     Result = InputInfo(A, GetNamedOutputPath(C, *JA, BaseInput, BoundArch,
                                              AtTopLevel, MultipleArchs,
                                              OffloadingPrefix),
@@ -4420,11 +4464,22 @@ const char *Driver::GetNamedOutputPath(Compilation &C, const JobAction &JA,
           MakeCLOutputFilename(C.getArgs(), "", BaseName, types::TY_Image);
     } else {
       SmallString<128> Output(getDefaultImageName());
+      // HIP image for device compilation with -fno-gpu-rdc is per compilation
+      // unit.
+      bool IsHIPNoRDC = JA.getOffloadingDeviceKind() == Action::OFK_HIP &&
+                        !C.getArgs().hasFlag(options::OPT_fgpu_rdc,
+                                             options::OPT_fno_gpu_rdc, false);
+      if (IsHIPNoRDC) {
+        Output = BaseName;
+        llvm::sys::path::replace_extension(Output, "");
+      }
       Output += OffloadingPrefix;
       if (MultipleArchs && !BoundArch.empty()) {
         Output += "-";
         Output.append(BoundArch);
       }
+      if (IsHIPNoRDC)
+        Output += ".out";
       NamedOutput = C.getArgs().MakeArgString(Output.c_str());
     }
   } else if (JA.getType() == types::TY_PCH && IsCLMode()) {
@@ -4647,6 +4702,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
   auto &TC = ToolChains[Target.str()];
   if (!TC) {
     switch (Target.getOS()) {
+    case llvm::Triple::AIX:
+      TC = std::make_unique<toolchains::AIX>(*this, Target, Args);
+      break;
     case llvm::Triple::Haiku:
       TC = std::make_unique<toolchains::Haiku>(*this, Target, Args);
       break;
@@ -4820,6 +4878,19 @@ bool Driver::ShouldUseClangCompiler(const JobAction &JA) const {
   // And say "no" if this is not a kind of action clang understands.
   if (!isa<PreprocessJobAction>(JA) && !isa<PrecompileJobAction>(JA) &&
       !isa<CompileJobAction>(JA) && !isa<BackendJobAction>(JA))
+    return false;
+
+  return true;
+}
+
+bool Driver::ShouldUseFlangCompiler(const JobAction &JA) const {
+  // Say "no" if there is not exactly one input of a type flang understands.
+  if (JA.size() != 1 ||
+      !types::isFortran((*JA.input_begin())->getType()))
+    return false;
+
+  // And say "no" if this is not a kind of action flang understands.
+  if (!isa<PreprocessJobAction>(JA) && !isa<CompileJobAction>(JA) && !isa<BackendJobAction>(JA))
     return false;
 
   return true;

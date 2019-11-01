@@ -11,6 +11,7 @@
 #include "ToolChains/Arch/ARM.h"
 #include "ToolChains/Clang.h"
 #include "ToolChains/InterfaceStubs.h"
+#include "ToolChains/Flang.h"
 #include "clang/Basic/ObjCRuntime.h"
 #include "clang/Basic/Sanitizers.h"
 #include "clang/Config/config.h"
@@ -151,6 +152,7 @@ static const DriverSuffix *FindDriverSuffix(StringRef ProgName, size_t &Pos) {
       {"cpp", "--driver-mode=cpp"},
       {"cl", "--driver-mode=cl"},
       {"++", "--driver-mode=g++"},
+      {"flang", "--driver-mode=flang"},
   };
 
   for (size_t i = 0; i < llvm::array_lengthof(DriverSuffixes); ++i) {
@@ -254,6 +256,12 @@ Tool *ToolChain::getClang() const {
   return Clang.get();
 }
 
+Tool *ToolChain::getFlang() const {
+  if (!Flang)
+    Flang.reset(new tools::Flang(*this));
+  return Flang.get();
+}
+
 Tool *ToolChain::buildAssembler() const {
   return new tools::ClangAs(*this);
 }
@@ -292,6 +300,12 @@ Tool *ToolChain::getOffloadBundler() const {
   return OffloadBundler.get();
 }
 
+Tool *ToolChain::getOffloadWrapper() const {
+  if (!OffloadWrapper)
+    OffloadWrapper.reset(new tools::OffloadWrapper(*this));
+  return OffloadWrapper.get();
+}
+
 Tool *ToolChain::getTool(Action::ActionClass AC) const {
   switch (AC) {
   case Action::AssembleJobClass:
@@ -324,6 +338,9 @@ Tool *ToolChain::getTool(Action::ActionClass AC) const {
   case Action::OffloadBundlingJobClass:
   case Action::OffloadUnbundlingJobClass:
     return getOffloadBundler();
+
+  case Action::OffloadWrapperJobClass:
+    return getOffloadWrapper();
   }
 
   llvm_unreachable("Invalid tool kind.");
@@ -484,6 +501,7 @@ bool ToolChain::needsGCovInstrumentation(const llvm::opt::ArgList &Args) {
 }
 
 Tool *ToolChain::SelectTool(const JobAction &JA) const {
+  if (D.IsFlangMode() && getDriver().ShouldUseFlangCompiler(JA)) return getFlang();
   if (getDriver().ShouldUseClangCompiler(JA)) return getClang();
   Action::ActionClass AC = JA.getKind();
   if (AC == Action::AssembleJobClass && useIntegratedAs())
@@ -532,7 +550,15 @@ std::string ToolChain::GetLinkerPath() const {
 }
 
 types::ID ToolChain::LookupTypeForExtension(StringRef Ext) const {
-  return types::lookupTypeForExtension(Ext);
+  types::ID id = types::lookupTypeForExtension(Ext);
+
+  // Flang always runs the preprocessor and has no notion of "preprocessed
+  // fortran". Here, TY_PP_Fortran is coerced to TY_Fortran to avoid treating
+  // them differently.
+  if (D.IsFlangMode() && id == types::TY_PP_Fortran)
+    id = types::TY_Fortran;
+
+  return id;
 }
 
 bool ToolChain::HasNativeLLVMSupport() const {

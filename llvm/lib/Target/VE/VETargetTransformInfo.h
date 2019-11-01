@@ -43,7 +43,8 @@ public:
       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
         TLI(ST->getTargetLowering()){}
 
-  unsigned getNumberOfRegisters(bool Vector) {
+  unsigned getNumberOfRegisters(unsigned ClassID) const {
+    bool Vector = (ClassID == 1);
     if (Vector) {
       return 64;
     }
@@ -59,7 +60,7 @@ public:
 
   unsigned getMinVectorRegisterBitWidth() const { return 256*64; }
 
-  bool isLegalMaskedLoad(Type *DataType) {
+  bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) {
 #if 1
     // Enabling masked load causes "Cannot select ...masked_load..."
     // error in test-suite/SingleSource/Benchmarks/BenchmarkGame/fannkuch.c.

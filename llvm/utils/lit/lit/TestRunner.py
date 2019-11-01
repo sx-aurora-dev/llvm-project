@@ -1,7 +1,5 @@
 from __future__ import absolute_import
-import difflib
 import errno
-import functools
 import io
 import itertools
 import getopt
@@ -262,6 +260,27 @@ def updateEnv(env, args):
         env.env[key] = val
     return args[arg_idx_next:]
 
+def executeBuiltinCd(cmd, shenv):
+    """executeBuiltinCd - Change the current directory."""
+    if len(cmd.args) != 2:
+        raise InternalShellError("'cd' supports only one argument")
+    newdir = cmd.args[1]
+    # Update the cwd in the parent environment.
+    if os.path.isabs(newdir):
+        shenv.cwd = newdir
+    else:
+        shenv.cwd = os.path.realpath(os.path.join(shenv.cwd, newdir))
+    # The cd builtin always succeeds. If the directory does not exist, the
+    # following Popen calls will fail instead.
+    return ShellCommandResult(cmd, "", "", 0, False)
+
+def executeBuiltinExport(cmd, shenv):
+    """executeBuiltinExport - Set an environment variable."""
+    if len(cmd.args) != 2:
+        raise InternalShellError("'export' supports only one argument")
+    updateEnv(shenv, cmd.args)
+    return ShellCommandResult(cmd, "", "", 0, False)
+
 def executeBuiltinEcho(cmd, shenv):
     """Interpret a redirected echo command"""
     opened_files = []
@@ -321,9 +340,8 @@ def executeBuiltinEcho(cmd, shenv):
     for (name, mode, f, path) in opened_files:
         f.close()
 
-    if not is_redirected:
-        return stdout.getvalue()
-    return ""
+    output = "" if is_redirected else stdout.getvalue()
+    return ShellCommandResult(cmd, output, "", 0, False)
 
 def executeBuiltinMkdir(cmd, cmd_shenv):
     """executeBuiltinMkdir - Create new directories."""
@@ -360,218 +378,6 @@ def executeBuiltinMkdir(cmd, cmd_shenv):
                 stderr.write("Error: 'mkdir' command failed, %s\n" % str(err))
                 exitCode = 1
     return ShellCommandResult(cmd, "", stderr.getvalue(), exitCode, False)
-
-def executeBuiltinDiff(cmd, cmd_shenv):
-    """executeBuiltinDiff - Compare files line by line."""
-    args = expand_glob_expressions(cmd.args, cmd_shenv.cwd)[1:]
-    try:
-        opts, args = getopt.gnu_getopt(args, "wbur", ["strip-trailing-cr"])
-    except getopt.GetoptError as err:
-        raise InternalShellError(cmd, "Unsupported: 'diff':  %s" % str(err))
-
-    filelines, filepaths, dir_trees = ([] for i in range(3))
-    ignore_all_space = False
-    ignore_space_change = False
-    unified_diff = False
-    recursive_diff = False
-    strip_trailing_cr = False
-    for o, a in opts:
-        if o == "-w":
-            ignore_all_space = True
-        elif o == "-b":
-            ignore_space_change = True
-        elif o == "-u":
-            unified_diff = True
-        elif o == "-r":
-            recursive_diff = True
-        elif o == "--strip-trailing-cr":
-            strip_trailing_cr = True
-        else:
-            assert False, "unhandled option"
-
-    if len(args) != 2:
-        raise InternalShellError(cmd, "Error:  missing or extra operand")
-
-    def getDirTree(path, basedir=""):
-        # Tree is a tuple of form (dirname, child_trees).
-        # An empty dir has child_trees = [], a file has child_trees = None.
-        child_trees = []
-        for dirname, child_dirs, files in os.walk(os.path.join(basedir, path)):
-            for child_dir in child_dirs:
-                child_trees.append(getDirTree(child_dir, dirname))
-            for filename in files:
-                child_trees.append((filename, None))
-            return path, sorted(child_trees)
-
-    def compareTwoFiles(filepaths):
-        compare_bytes = False
-        encoding = None
-        filelines = []
-        for file in filepaths:
-            try:
-                with open(file, 'r') as f:
-                    filelines.append(f.readlines())
-            except UnicodeDecodeError:
-                try:
-                    with io.open(file, 'r', encoding="utf-8") as f:
-                        filelines.append(f.readlines())
-                    encoding = "utf-8"
-                except:
-                    compare_bytes = True
-
-        if compare_bytes:
-            return compareTwoBinaryFiles(filepaths)
-        else:
-            return compareTwoTextFiles(filepaths, encoding)
-
-    def compareTwoBinaryFiles(filepaths):
-        filelines = []
-        for file in filepaths:
-            with open(file, 'rb') as f:
-                filelines.append(f.readlines())
-
-        exitCode = 0
-        if hasattr(difflib, 'diff_bytes'):
-            # python 3.5 or newer
-            diffs = difflib.diff_bytes(difflib.unified_diff, filelines[0], filelines[1], filepaths[0].encode(), filepaths[1].encode())
-            diffs = [diff.decode() for diff in diffs]
-        else:
-            # python 2.7
-            func = difflib.unified_diff if unified_diff else difflib.context_diff
-            diffs = func(filelines[0], filelines[1], filepaths[0], filepaths[1])
-
-        for diff in diffs:
-            stdout.write(diff)
-            exitCode = 1
-        return exitCode
-
-    def compareTwoTextFiles(filepaths, encoding):
-        filelines = []
-        for file in filepaths:
-            if encoding is None:
-                with open(file, 'r') as f:
-                    filelines.append(f.readlines())
-            else:
-                with io.open(file, 'r', encoding=encoding) as f:
-                    filelines.append(f.readlines())
-
-        exitCode = 0
-        def compose2(f, g):
-            return lambda x: f(g(x))
-
-        f = lambda x: x
-        if strip_trailing_cr:
-            f = compose2(lambda line: line.rstrip('\r'), f)
-        if ignore_all_space or ignore_space_change:
-            ignoreSpace = lambda line, separator: separator.join(line.split())
-            ignoreAllSpaceOrSpaceChange = functools.partial(ignoreSpace, separator='' if ignore_all_space else ' ')
-            f = compose2(ignoreAllSpaceOrSpaceChange, f)
-
-        for idx, lines in enumerate(filelines):
-            filelines[idx]= [f(line) for line in lines]
-
-        func = difflib.unified_diff if unified_diff else difflib.context_diff
-        for diff in func(filelines[0], filelines[1], filepaths[0], filepaths[1]):
-            stdout.write(diff)
-            exitCode = 1
-        return exitCode
-
-    def printDirVsFile(dir_path, file_path):
-        if os.path.getsize(file_path):
-            msg = "File %s is a directory while file %s is a regular file"
-        else:
-            msg = "File %s is a directory while file %s is a regular empty file"
-        stdout.write(msg % (dir_path, file_path) + "\n")
-
-    def printFileVsDir(file_path, dir_path):
-        if os.path.getsize(file_path):
-            msg = "File %s is a regular file while file %s is a directory"
-        else:
-            msg = "File %s is a regular empty file while file %s is a directory"
-        stdout.write(msg % (file_path, dir_path) + "\n")
-
-    def printOnlyIn(basedir, path, name):
-        stdout.write("Only in %s: %s\n" % (os.path.join(basedir, path), name))
-
-    def compareDirTrees(dir_trees, base_paths=["", ""]):
-        # Dirnames of the trees are not checked, it's caller's responsibility,
-        # as top-level dirnames are always different. Base paths are important
-        # for doing os.walk, but we don't put it into tree's dirname in order
-        # to speed up string comparison below and while sorting in getDirTree.
-        left_tree, right_tree = dir_trees[0], dir_trees[1]
-        left_base, right_base = base_paths[0], base_paths[1]
-
-        # Compare two files or report file vs. directory mismatch.
-        if left_tree[1] is None and right_tree[1] is None:
-            return compareTwoFiles([os.path.join(left_base, left_tree[0]),
-                                    os.path.join(right_base, right_tree[0])])
-
-        if left_tree[1] is None and right_tree[1] is not None:
-            printFileVsDir(os.path.join(left_base, left_tree[0]),
-                           os.path.join(right_base, right_tree[0]))
-            return 1
-
-        if left_tree[1] is not None and right_tree[1] is None:
-            printDirVsFile(os.path.join(left_base, left_tree[0]),
-                           os.path.join(right_base, right_tree[0]))
-            return 1
-
-        # Compare two directories via recursive use of compareDirTrees.
-        exitCode = 0
-        left_names = [node[0] for node in left_tree[1]]
-        right_names = [node[0] for node in right_tree[1]]
-        l, r = 0, 0
-        while l < len(left_names) and r < len(right_names):
-            # Names are sorted in getDirTree, rely on that order.
-            if left_names[l] < right_names[r]:
-                exitCode = 1
-                printOnlyIn(left_base, left_tree[0], left_names[l])
-                l += 1
-            elif left_names[l] > right_names[r]:
-                exitCode = 1
-                printOnlyIn(right_base, right_tree[0], right_names[r])
-                r += 1
-            else:
-                exitCode |= compareDirTrees([left_tree[1][l], right_tree[1][r]],
-                                            [os.path.join(left_base, left_tree[0]),
-                                            os.path.join(right_base, right_tree[0])])
-                l += 1
-                r += 1
-
-        # At least one of the trees has ended. Report names from the other tree.
-        while l < len(left_names):
-            exitCode = 1
-            printOnlyIn(left_base, left_tree[0], left_names[l])
-            l += 1
-        while r < len(right_names):
-            exitCode = 1
-            printOnlyIn(right_base, right_tree[0], right_names[r])
-            r += 1
-        return exitCode
-
-    stderr = StringIO()
-    stdout = StringIO()
-    exitCode = 0
-    try:
-        for file in args:
-            if not os.path.isabs(file):
-                file = os.path.realpath(os.path.join(cmd_shenv.cwd, file))
-    
-            if recursive_diff:
-                dir_trees.append(getDirTree(file))
-            else:
-                filepaths.append(file)
-
-        if not recursive_diff:
-            exitCode = compareTwoFiles(filepaths)
-        else:
-            exitCode = compareDirTrees(dir_trees)
-
-    except IOError as err:
-        stderr.write("Error: 'diff' command failed, %s\n" % str(err))
-        exitCode = 1
-
-    return ShellCommandResult(cmd, stdout.getvalue(), stderr.getvalue(), exitCode, False)
 
 def executeBuiltinRm(cmd, cmd_shenv):
     """executeBuiltinRm - Removes (deletes) files or directories."""
@@ -669,6 +475,10 @@ def executeBuiltinRm(cmd, cmd_shenv):
             stderr.write("Error: 'rm' command failed, %s" % str(err))
             exitCode = 1
     return ShellCommandResult(cmd, "", stderr.getvalue(), exitCode, False)
+
+def executeBuiltinColon(cmd, cmd_shenv):
+    """executeBuiltinColon - Discard arguments and exit with status 0."""
+    return ShellCommandResult(cmd, "", "", 0, False)
 
 def processRedirects(cmd, stdin_source, cmd_shenv, opened_files):
     """Return the standard fds for cmd after applying redirects
@@ -795,79 +605,19 @@ def _executeShCmd(cmd, shenv, results, timeoutHelper):
         raise ValueError('Unknown shell command: %r' % cmd.op)
     assert isinstance(cmd, ShUtil.Pipeline)
 
-    # Handle shell builtins first.
-    if cmd.commands[0].args[0] == 'cd':
-        if len(cmd.commands) != 1:
-            raise ValueError("'cd' cannot be part of a pipeline")
-        if len(cmd.commands[0].args) != 2:
-            raise ValueError("'cd' supports only one argument")
-        newdir = cmd.commands[0].args[1]
-        # Update the cwd in the parent environment.
-        if os.path.isabs(newdir):
-            shenv.cwd = newdir
-        else:
-            shenv.cwd = os.path.realpath(os.path.join(shenv.cwd, newdir))
-        # The cd builtin always succeeds. If the directory does not exist, the
-        # following Popen calls will fail instead.
-        return 0
-
-    # Handle "echo" as a builtin if it is not part of a pipeline. This greatly
-    # speeds up tests that construct input files by repeatedly echo-appending to
-    # a file.
-    # FIXME: Standardize on the builtin echo implementation. We can use a
-    # temporary file to sidestep blocking pipe write issues.
-    if cmd.commands[0].args[0] == 'echo' and len(cmd.commands) == 1:
-        output = executeBuiltinEcho(cmd.commands[0], shenv)
-        results.append(ShellCommandResult(cmd.commands[0], output, "", 0,
-                                          False))
-        return 0
-
-    if cmd.commands[0].args[0] == 'export':
-        if len(cmd.commands) != 1:
-            raise ValueError("'export' cannot be part of a pipeline")
-        if len(cmd.commands[0].args) != 2:
-            raise ValueError("'export' supports only one argument")
-        updateEnv(shenv, cmd.commands[0].args)
-        return 0
-
-    if cmd.commands[0].args[0] == 'mkdir':
-        if len(cmd.commands) != 1:
-            raise InternalShellError(cmd.commands[0], "Unsupported: 'mkdir' "
-                                     "cannot be part of a pipeline")
-        cmdResult = executeBuiltinMkdir(cmd.commands[0], shenv)
-        results.append(cmdResult)
-        return cmdResult.exitCode
-
-    if cmd.commands[0].args[0] == 'diff':
-        if len(cmd.commands) != 1:
-            raise InternalShellError(cmd.commands[0], "Unsupported: 'diff' "
-                                     "cannot be part of a pipeline")
-        cmdResult = executeBuiltinDiff(cmd.commands[0], shenv)
-        results.append(cmdResult)
-        return cmdResult.exitCode
-
-    if cmd.commands[0].args[0] == 'rm':
-        if len(cmd.commands) != 1:
-            raise InternalShellError(cmd.commands[0], "Unsupported: 'rm' "
-                                     "cannot be part of a pipeline")
-        cmdResult = executeBuiltinRm(cmd.commands[0], shenv)
-        results.append(cmdResult)
-        return cmdResult.exitCode
-
-    if cmd.commands[0].args[0] == ':':
-        if len(cmd.commands) != 1:
-            raise InternalShellError(cmd.commands[0], "Unsupported: ':' "
-                                     "cannot be part of a pipeline")
-        results.append(ShellCommandResult(cmd.commands[0], '', '', 0, False))
-        return 0;
-
     procs = []
     default_stdin = subprocess.PIPE
     stderrTempFiles = []
     opened_files = []
     named_temp_files = []
-    builtin_commands = set(['cat'])
+    builtin_commands = set(['cat', 'diff'])
     builtin_commands_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "builtin_commands")
+    inproc_builtins = {'cd': executeBuiltinCd,
+                       'export': executeBuiltinExport,
+                       'echo': executeBuiltinEcho,
+                       'mkdir': executeBuiltinMkdir,
+                       'rm': executeBuiltinRm,
+                       ':': executeBuiltinColon}
     # To avoid deadlock, we use a single stderr stream for piped
     # output. This is null until we have seen some output using
     # stderr.
@@ -884,6 +634,27 @@ def _executeShCmd(cmd, shenv, results, timeoutHelper):
             if not args:
                 raise InternalShellError(j,
                                          "Error: 'env' requires a subcommand")
+
+        # Handle in-process builtins.
+        #
+        # Handle "echo" as a builtin if it is not part of a pipeline. This
+        # greatly speeds up tests that construct input files by repeatedly
+        # echo-appending to a file.
+        # FIXME: Standardize on the builtin echo implementation. We can use a
+        # temporary file to sidestep blocking pipe write issues.
+        inproc_builtin = inproc_builtins.get(args[0], None)
+        if inproc_builtin and (args[0] != 'echo' or len(cmd.commands) == 1):
+            # env calling an in-process builtin is useless, so we take the safe
+            # approach of complaining.
+            if not cmd_shenv is shenv:
+                raise InternalShellError(j, "Error: 'env' cannot call '{}'"
+                                            .format(args[0]))
+            if len(cmd.commands) != 1:
+                raise InternalShellError(j, "Unsupported: '{}' cannot be part"
+                                            " of a pipeline".format(args[0]))
+            result = inproc_builtin(j, cmd_shenv)
+            results.append(result)
+            return result.exitCode
 
         stdin, stdout, stderr = processRedirects(j, default_stdin, cmd_shenv,
                                                  opened_files)
@@ -937,6 +708,8 @@ def _executeShCmd(cmd, shenv, results, timeoutHelper):
         args = expand_glob_expressions(args, cmd_shenv.cwd)
         if is_builtin_cmd:
             args.insert(0, sys.executable)
+            cmd_shenv.env['PYTHONPATH'] = \
+                os.path.dirname(os.path.abspath(__file__))
             args[1] = os.path.join(builtin_commands_dir ,args[1] + ".py")
 
         # On Windows, do our own command line quoting for better compatibility

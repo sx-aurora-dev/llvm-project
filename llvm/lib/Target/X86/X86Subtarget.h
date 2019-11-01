@@ -432,7 +432,7 @@ protected:
 
   /// The minimum alignment known to hold of the stack frame on
   /// entry to the function and which must be maintained by every function.
-  unsigned stackAlignment = 4;
+  Align stackAlignment = Align(4);
 
   /// Max. memset / memcpy size that is turned into rep/movs, rep/stos ops.
   ///
@@ -444,6 +444,9 @@ protected:
 
   /// Indicates target prefers 256 bit instructions.
   bool Prefer256Bit = false;
+
+  /// Indicates target prefers AVX512 mask registers.
+  bool PreferMaskRegisters = false;
 
   /// Threeway branch is profitable in this subtarget.
   bool ThreewayBranchProfitable = false;
@@ -459,7 +462,7 @@ protected:
 
 private:
   /// Override the stack alignment.
-  unsigned StackAlignOverride;
+  MaybeAlign StackAlignOverride;
 
   /// Preferred vector width from function attribute.
   unsigned PreferVectorWidthOverride;
@@ -496,7 +499,7 @@ public:
   /// of the specified triple.
   ///
   X86Subtarget(const Triple &TT, StringRef CPU, StringRef FS,
-               const X86TargetMachine &TM, unsigned StackAlignOverride,
+               const X86TargetMachine &TM, MaybeAlign StackAlignOverride,
                unsigned PreferVectorWidthOverride,
                unsigned RequiredVectorWidth);
 
@@ -521,7 +524,7 @@ public:
   /// Returns the minimum alignment known to hold of the
   /// stack frame on entry to the function and which must be maintained by every
   /// function for this subtarget.
-  unsigned getStackAlignment() const { return stackAlignment; }
+  Align getStackAlignment() const { return stackAlignment; }
 
   /// Returns the maximum memset / memcpy size
   /// that still makes it profitable to inline the call.
@@ -706,6 +709,7 @@ public:
     return UseRetpolineIndirectBranches;
   }
   bool useRetpolineExternalThunk() const { return UseRetpolineExternalThunk; }
+  bool preferMaskRegisters() const { return PreferMaskRegisters; }
 
   unsigned getPreferVectorWidth() const { return PreferVectorWidth; }
   unsigned getRequiredVectorWidth() const { return RequiredVectorWidth; }

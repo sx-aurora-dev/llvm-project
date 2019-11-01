@@ -1,6 +1,7 @@
 set(LLVM_LINK_COMPONENTS
   BinaryFormat
   Option
+  ProfileData
   Support
   )
 
@@ -31,6 +32,7 @@ add_clang_library(clangDriver
   ToolChains/Arch/SystemZ.cpp
   ToolChains/Arch/X86.cpp
   ToolChains/Arch/VE.cpp
+  ToolChains/AIX.cpp
   ToolChains/Ananas.cpp
   ToolChains/AMDGPU.cpp
   ToolChains/AVR.cpp
@@ -43,6 +45,7 @@ add_clang_library(clangDriver
   ToolChains/Cuda.cpp
   ToolChains/Darwin.cpp
   ToolChains/DragonFly.cpp
+  ToolChains/Flang.cpp
   ToolChains/FreeBSD.cpp
   ToolChains/Fuchsia.cpp
   ToolChains/Gnu.cpp

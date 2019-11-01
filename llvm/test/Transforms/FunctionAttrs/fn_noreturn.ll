@@ -124,4 +124,16 @@ cond.end:                                         ; preds = %cond.false, %cond.t
   ret i32 %cond
 }
 
+
+; TEST 6: willreturn means *not* no-return
+; CHECK:      Function Attrs: nofree norecurse nosync nounwind readnone willreturn
+; CHECK-NEXT: define i32 @endless_loop_but_willreturn
+define i32 @endless_loop_but_willreturn(i32 %a) willreturn {
+entry:
+  br label %while.body
+
+while.body:                                       ; preds = %entry, %while.body
+  br label %while.body
+}
+
 attributes #0 = { noinline nounwind uwtable }

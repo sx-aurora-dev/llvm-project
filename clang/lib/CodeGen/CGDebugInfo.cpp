@@ -235,8 +235,7 @@ PrintingPolicy CGDebugInfo::getPrintingPolicy() const {
     PP.MSVCFormatting = true;
 
   // Apply -fdebug-prefix-map.
-  PP.RemapFilePaths = true;
-  PP.remapPath = [this](StringRef Path) { return remapDIPath(Path); };
+  PP.Callbacks = &PrintCB;
   return PP;
 }
 
@@ -314,7 +313,9 @@ StringRef CGDebugInfo::getClassName(const RecordDecl *RD) {
   if (isa<ClassTemplateSpecializationDecl>(RD)) {
     SmallString<128> Name;
     llvm::raw_svector_ostream OS(Name);
-    RD->getNameForDiagnostic(OS, getPrintingPolicy(),
+    PrintingPolicy PP = getPrintingPolicy();
+    PP.PrintCanonicalTypes = true;
+    RD->getNameForDiagnostic(OS, PP,
                              /*Qualified*/ false);
 
     // Copy this name on the side and use its reference.
@@ -537,11 +538,11 @@ void CGDebugInfo::CreateCompileUnit() {
   // file to determine the real absolute path for the file.
   std::string MainFileDir;
   if (const FileEntry *MainFile = SM.getFileEntryForID(SM.getMainFileID())) {
-    MainFileDir = remapDIPath(MainFile->getDir()->getName());
-    if (MainFileDir != ".") {
+    MainFileDir = MainFile->getDir()->getName();
+    if (!llvm::sys::path::is_absolute(MainFileName)) {
       llvm::SmallString<1024> MainFileDirSS(MainFileDir);
       llvm::sys::path::append(MainFileDirSS, MainFileName);
-      MainFileName = MainFileDirSS.str();
+      MainFileName = llvm::sys::path::remove_leading_dotslash(MainFileDirSS);
     }
     // If the main file name provided is identical to the input file name, and
     // if the input file is a preprocessed source, use the module name for
@@ -1605,6 +1606,31 @@ llvm::DISubprogram *CGDebugInfo::CreateCXXMemberFunction(
     ContainingType = RecordTy;
   }
 
+  // We're checking for deleted C++ special member functions
+  // [Ctors,Dtors, Copy/Move]
+  auto checkAttrDeleted = [&SPFlags](const auto *Method) {
+    if (Method->getCanonicalDecl()->isDeleted())
+      SPFlags |= llvm::DISubprogram::SPFlagDeleted;
+  };
+
+  switch (Method->getKind()) {
+
+  case Decl::CXXConstructor:
+  case Decl::CXXDestructor:
+    checkAttrDeleted(Method);
+    break;
+  case Decl::CXXMethod:
+    if (Method->isCopyAssignmentOperator() ||
+        Method->isMoveAssignmentOperator())
+      checkAttrDeleted(Method);
+    break;
+  default:
+    break;
+  }
+
+  if (Method->isNoReturn())
+    Flags |= llvm::DINode::FlagNoReturn;
+
   if (Method->isStatic())
     Flags |= llvm::DINode::FlagStaticMember;
   if (Method->isImplicit())
@@ -1791,6 +1817,7 @@ CGDebugInfo::CollectTemplateParams(const TemplateParameterList *TPList,
               CGM.getContext().toCharUnitsFromBits((int64_t)fieldOffset);
           V = CGM.getCXXABI().EmitMemberDataPointer(MPT, chars);
         }
+        assert(V && "Failed to find template parameter pointer");
         V = V->stripPointerCasts();
       }
       TemplateParams.push_back(DBuilder.createTemplateValueParameter(
@@ -3327,13 +3354,13 @@ llvm::DISubprogram *CGDebugInfo::getFunctionFwdDeclOrStub(GlobalDecl GD,
   unsigned Line = getLineNumber(Loc);
   collectFunctionDeclProps(GD, Unit, Name, LinkageName, DContext, TParamsArray,
                            Flags);
-  auto *FD = dyn_cast<FunctionDecl>(GD.getDecl());
+  auto *FD = cast<FunctionDecl>(GD.getDecl());
 
   // Build function type.
   SmallVector<QualType, 16> ArgTypes;
-  if (FD)
-    for (const ParmVarDecl *Parm : FD->parameters())
-      ArgTypes.push_back(Parm->getType());
+  for (const ParmVarDecl *Parm : FD->parameters())
+    ArgTypes.push_back(Parm->getType());
+
   CallingConv CC = FD->getType()->castAs<FunctionType>()->getCallConv();
   QualType FnType = CGM.getContext().getFunctionType(
       FD->getReturnType(), ArgTypes, FunctionProtoType::ExtProtoInfo(CC));
@@ -3706,8 +3733,7 @@ void CGDebugInfo::EmitFuncDeclForCallSite(llvm::CallBase *CallOrInvoke,
                                           const FunctionDecl *CalleeDecl) {
   auto &CGOpts = CGM.getCodeGenOpts();
   if (!CGOpts.EnableDebugEntryValues || !CGM.getLangOpts().Optimize ||
-      !CallOrInvoke ||
-      CGM.getCodeGenOpts().getDebugInfo() < codegenoptions::LimitedDebugInfo)
+      !CallOrInvoke)
     return;
 
   auto *Func = CallOrInvoke->getCalledFunction();
