@@ -13,24 +13,15 @@
 
 // The format of this database matches clang/Basic/Builtins.def.
 
-// dummy builtins (needs to define at least one here)
-//BUILTIN(__builtin_dummy, "Si", "nc")
+BUILTIN(__builtin_ve_vl_svob, "v", "n")
+BUILTIN(__builtin_ve_vl_pack_f32p, "ULifC*fC*", "n")
+BUILTIN(__builtin_ve_vl_pack_f32a, "ULifC*", "n")
 
-BUILTIN(__builtin_ve_lvl, "vUi", "n")
-BUILTIN(__builtin_ve_svob, "v", "n")
-//BUILTIN(__builtin_ve_lsv_vss, "V256dV256dUiULi", "n")
+BUILTIN(__builtin_ve_vl_extract_vm512u, "V4ULiV8ULi", "n")
+BUILTIN(__builtin_ve_vl_extract_vm512l, "V4ULiV8ULi", "n")
+BUILTIN(__builtin_ve_vl_insert_vm512u, "V8ULiV8ULiV4ULi", "n")
+BUILTIN(__builtin_ve_vl_insert_vm512l, "V8ULiV8ULiV4ULi", "n")
 
-BUILTIN(__builtin_ve_pack_f32p, "ULifC*fC*", "n")
-BUILTIN(__builtin_ve_pack_f32a, "ULifC*", "n")
-
-BUILTIN(__builtin_ve_vec_call, "V256dV256dvC*", "n")
-
-BUILTIN(__builtin_ve_extract_vm512u, "V4ULiV8ULi", "n")
-BUILTIN(__builtin_ve_extract_vm512l, "V4ULiV8ULi", "n")
-BUILTIN(__builtin_ve_insert_vm512u, "V8ULiV8ULiV4ULi", "n")
-BUILTIN(__builtin_ve_insert_vm512l, "V8ULiV8ULiV4ULi", "n")
-
-#include "clang/Basic/BuiltinsVE2.def"
-#include "clang/Basic/BuiltinsVEVL.def"
+#include "clang/Basic/BuiltinsVEVL.gen.def"
 
 #undef BUILTIN
