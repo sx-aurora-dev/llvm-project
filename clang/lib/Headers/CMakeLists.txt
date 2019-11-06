@@ -120,7 +120,6 @@ set(files
   xsaveoptintrin.h
   xsavesintrin.h
   xtestintrin.h
-  veintrin_common.h
   velintrin.h
   velintrin_gen.h
   velintrin_approx.h
