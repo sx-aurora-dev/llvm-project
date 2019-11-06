@@ -12,7 +12,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "VEISelLowering.h"
+#ifdef OBSOLETE_VE_INTRIN
 #include "VEIntrinsicsInfo.h"
+#endif
 #include "VEInstrBuilder.h"
 #include "MCTargetDesc/VEMCExpr.h"
 #include "VEMachineFunctionInfo.h"
@@ -1558,7 +1560,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
 
+#ifdef OBSOLETE_VE_INTRIN
   verifyIntrinsicTables();
+#endif
 }
 
 const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
@@ -2723,6 +2727,7 @@ Instruction *VETargetLowering::emitTrailingFence(IRBuilder<> &Builder,
   llvm_unreachable("Unknown fence ordering in emitTrailingFence");
 }
 
+#ifdef OBSOLETE_VE_INTRIN
 static SDValue LowerIntrinsicWithMaskAndVL(SDValue Intrin,
                                            SelectionDAG& DAG,
                                            const VESubtarget *Subtarget,
@@ -2774,11 +2779,13 @@ static SDValue LowerIntrinsicWithMaskAndVL(SDValue Intrin,
 
   return SDValue(DAG.getMachineNode(Opc, dl, Intrin.getValueType(), Ops), 0);
 }
+#endif // OBSOLETE_VE_INTRIN
 
 SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                                                   SelectionDAG &DAG) const {
   SDLoc dl(Op);
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
+#ifdef OBSOLETE_VE_INTRIN
   const IntrinsicData* IntrData = getIntrinsicWithoutChain(IntNo);
   if (IntrData) {
     switch (IntrData->Type) {
@@ -2943,6 +2950,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     }
     }
   }
+#endif // OBSOLETE_VE_INTRIN
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
   case Intrinsic::thread_pointer: {
@@ -2976,6 +2984,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
                           VEMCExpr::VK_VE_LO32, DAG);
     }
   }
+#ifdef OBSOLETE_VE_INTRIN
   case Intrinsic::ve_vfdivsA_vvv: {
 /*
     600000000b98:       00 00 01 05     vrcp.s          %v5,%v1,%vm1
@@ -3126,10 +3135,11 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     SDValue RV = DAG.getCopyFromReg(Chain, dl, VE::V0, MVT::v256f64, InGlue);
     return RV;
   }
-#include "VEISelLoweringIntrinsic.inc"
+#endif // OBSOLETE_VE_INTRIN
   }
 }
 
+#ifdef OBSOLETE_VE_INTRIN
 SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
                                                  SelectionDAG &DAG) const {
   SDLoc dl(Op);
@@ -3206,7 +3216,6 @@ SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   }
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
-#include "VEISelLoweringIntrinsic.inc"
   }
 }
 
@@ -3295,9 +3304,9 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
   }
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
-#include "VEISelLoweringIntrinsic.inc"
   }
 }
+#endif // OBSOLETE_VE_INTRIN
 
 // Should we expand the build vector with shuffles?
 bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
@@ -3633,8 +3642,10 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::UMULO:
   case ISD::SMULO:              return LowerUMULO_SMULO(Op, DAG, *this);
   case ISD::ATOMIC_FENCE:       return LowerATOMIC_FENCE(Op, DAG);
+#ifdef OBSOLETE_VE_INTRIN
   case ISD::INTRINSIC_VOID:     return LowerINTRINSIC_VOID(Op, DAG);
   case ISD::INTRINSIC_W_CHAIN:  return LowerINTRINSIC_W_CHAIN(Op, DAG);
+#endif
   case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
   case ISD::BUILD_VECTOR:       return LowerBUILD_VECTOR(Op, DAG);
   case ISD::INSERT_VECTOR_ELT:  return LowerINSERT_VECTOR_ELT(Op, DAG);

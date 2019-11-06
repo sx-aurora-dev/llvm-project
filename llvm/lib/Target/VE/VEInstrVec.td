@@ -701,10 +701,6 @@ let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, isCodeGenOnly = 1, hasSideEffects = 
 def LVSf32r : RR<0x9E, (outs F32:$sx), (ins V64:$vx, I32:$sy),
   "lvs ${sx},${vx}(${sy})", []>;
 
-def : Pat<(f32 (int_ve_lvs_svs_f32 v256f64:$vx, i32:$sy)), 
-          (EXTRACT_SUBREG (LVSr v256f64:$vx,
-            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32)), sub_f32)>;
-
 let cy = 1 in
 def LVMr : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
   "lvm $vmx,$sy,$sz", []> {

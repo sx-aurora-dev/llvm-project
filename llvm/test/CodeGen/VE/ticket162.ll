@@ -15,10 +15,10 @@ entry:
   %0 = bitcast float* %pValue to i8*
   %add.ptr = getelementptr inbounds float, float* %pValue, i64 %distance
   %1 = bitcast float* %add.ptr to i8*
-  %2 = tail call i64 @llvm.ve.pack.f32p(i8* %0, i8* %1)
+  %2 = tail call i64 @llvm.ve.vl.pack.f32p(i8* %0, i8* %1)
   ret i64 %2
 }
 
 ; Function Attrs: nounwind readonly
-declare i64 @llvm.ve.pack.f32p(i8*, i8*)
+declare i64 @llvm.ve.vl.pack.f32p(i8*, i8*)
 
