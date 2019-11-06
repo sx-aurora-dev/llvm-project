@@ -3508,8 +3508,8 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
   for (int i = 0; i < block; i++) {
     //set blocks to all 0s
     SDValue mask = inv_order ? DAG.getConstant(0xffffffffffffffff, dl, i64) : DAG.getConstant(0, dl, i64);
-    SDValue index = DAG.getConstant(i, dl, i64);
-    Mask = DAG.getNode(VEISD::INT_LVM, dl, v256i1, {Mask, index, mask});
+    SDValue index = DAG.getTargetConstant(i, dl, i64);
+    Mask = SDValue(DAG.getMachineNode(VE::LVMi, dl, v256i1, {Mask, index, mask}), 0);
   }
 
   SDValue mask = DAG.getConstant(0xffffffffffffffff, dl, i64);
@@ -3517,13 +3517,13 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
     mask = DAG.getNode(ISD::SRL, dl, i64, {mask, DAG.getConstant(secondblock, dl, i64)});
   else
     mask = DAG.getNode(ISD::SHL, dl, i64, {mask, DAG.getConstant(64 - secondblock, dl, i64)});
-  Mask = DAG.getNode(VEISD::INT_LVM, dl, v256i1, {Mask, DAG.getConstant(block, dl, i64), mask});
+  Mask = SDValue(DAG.getMachineNode(VE::LVMi, dl, v256i1, {Mask, DAG.getTargetConstant(block, dl, i64), mask}), 0);
 
   for (int i = block + 1; i < 4; i++) {
     //set blocks to all 1s
     SDValue mask = inv_order ? DAG.getConstant(0, dl, i64) : DAG.getConstant(0xffffffffffffffff, dl, i64);
-    SDValue index = DAG.getConstant(i, dl, i64);
-    Mask = DAG.getNode(VEISD::INT_LVM, dl, v256i1, {Mask, index, mask});
+    SDValue index = DAG.getTargetConstant(i, dl, i64);
+    Mask = SDValue(DAG.getMachineNode(VE::LVMi, dl, v256i1, {Mask, index, mask}), 0);
   }
 
   SDValue returnValue = SDValue(DAG.getMachineNode(VE::VMRGvm, dl, Op.getSimpleValueType(), {firstrotated, secondrotated, Mask, resultSizeVal}), 0);

@@ -2276,7 +2276,7 @@ include "VEInstrVec.td"
 include "VEInstrFragmentsVec.td"
 
 // generic vector instruction patterns
-//include "VEInstrPatternsVec.td"
+include "VEInstrPatternsVec.td"
 
 // vevlintrin
 include "VEInstrVecVL.td"
