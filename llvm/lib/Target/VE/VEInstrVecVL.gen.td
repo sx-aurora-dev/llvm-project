@@ -1506,15 +1506,6 @@ def pfchvnc_Isl : RV<0x80, (outs ), (ins simm7Op64:$I, I64:$sz, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// inst=LSV asm=lsv intrisic=lsv_vvss
-def lsv_vvss : RV<0x8e, (outs V64:$vx), (ins V64:$vd, I32:$sy, I64:$sz),
-       "lsv $vx,$sy,$sz", [], NoItinerary>
-{
-  let Constraints = "$vx = $vd";
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-}
-
 // inst=LVM asm=lvm intrisic=lvm_mmss
 def lvm_mmss : RV<0xb7, (outs VM_:$vmx), (ins VM_:$vmd, I64:$sy, I64:$sz),
        "lvm $vmx,$sy,$sz", [], NoItinerary>
