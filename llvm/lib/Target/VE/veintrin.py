@@ -1133,7 +1133,6 @@ def createInstructionTable():
     T.Inst3f(0xDC, "vfsub", "VFSB", "", "{0} = {1} - {2}")
     T.Inst3f(0xCD, "vfmul", "VFMP", "", "{0} = {1} * {2}")
     T.Inst3f(0xDD, "vfdiv", "VFDV", "", "{0} = {1} / {2}", False)
-    T.Def(None, None, "", "vfdivdA", [[VX(T_f64), SY(T_f64), VZ(T_f64)]], expr="{0} = {1} / {2}").noLLVM().Obsolete()
     T.Inst2f(0xED, "vfsqrt", "VFSQRT", "{0} = std::sqrt({1})", False)
     T.Inst3f(0xFC, "vfcmp", "VFCP", "", "{0} = compare({1}, {2})")
     T.Inst3f(0xBD, "vfmax", "VFCM", "a", "{0} = max({1}, {2})")
