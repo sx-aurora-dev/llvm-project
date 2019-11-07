@@ -1519,14 +1519,14 @@ static void emitAlignedClause(CodeGenFunction &CGF,
   if (!CGF.HaveInsertPoint())
     return;
   for (const auto *Clause : D.getClausesOfKind<OMPAlignedClause>()) {
-    unsigned ClauseAlignment = 0;
+    llvm::APInt ClauseAlignment(64, 0);
     if (const Expr *AlignmentExpr = Clause->getAlignment()) {
       auto *AlignmentCI =
           cast<llvm::ConstantInt>(CGF.EmitScalarExpr(AlignmentExpr));
-      ClauseAlignment = static_cast<unsigned>(AlignmentCI->getZExtValue());
+      ClauseAlignment = AlignmentCI->getValue();
     }
     for (const Expr *E : Clause->varlists()) {
-      unsigned Alignment = ClauseAlignment;
+      llvm::APInt Alignment(ClauseAlignment);
       if (Alignment == 0) {
         // OpenMP [2.8.1, Description]
         // If no optional parameter is specified, implementation-defined default
@@ -1537,12 +1537,13 @@ static void emitAlignedClause(CodeGenFunction &CGF,
                     E->getType()->getPointeeType()))
                 .getQuantity();
       }
-      assert((Alignment == 0 || llvm::isPowerOf2_32(Alignment)) &&
+      assert((Alignment == 0 || Alignment.isPowerOf2()) &&
              "alignment is not power of 2");
       if (Alignment != 0) {
         llvm::Value *PtrValue = CGF.EmitScalarExpr(E);
         CGF.EmitAlignmentAssumption(
-            PtrValue, E, /*No second loc needed*/ SourceLocation(), Alignment);
+            PtrValue, E, /*No second loc needed*/ SourceLocation(),
+            llvm::ConstantInt::get(CGF.getLLVMContext(), Alignment));
       }
     }
   }
@@ -3123,7 +3124,8 @@ void CodeGenFunction::EmitOMPTaskBasedDirective(
   llvm::Function *OutlinedFn = CGM.getOpenMPRuntime().emitTaskOutlinedFunction(
       S, *I, *PartId, *TaskT, S.getDirectiveKind(), CodeGen, Data.Tied,
       Data.NumberOfParts);
-  OMPLexicalScope Scope(*this, S);
+  OMPLexicalScope Scope(*this, S, llvm::None,
+                        !isOpenMPParallelDirective(S.getDirectiveKind()));
   TaskGen(*this, OutlinedFn, Data);
 }
 
@@ -5015,8 +5017,10 @@ void CodeGenFunction::EmitOMPTaskLoopBasedDirective(const OMPLoopDirective &S) {
       CGF.incrementProfileCounter(&S);
     }
 
-    if (isOpenMPSimdDirective(S.getDirectiveKind()))
+    if (isOpenMPSimdDirective(S.getDirectiveKind())) {
       CGF.EmitOMPSimdInit(S);
+      (void)CGF.EmitOMPLinearClauseInit(S);
+    }
 
     OMPPrivateScope LoopScope(CGF);
     // Emit helper vars inits.
@@ -5034,6 +5038,7 @@ void CodeGenFunction::EmitOMPTaskLoopBasedDirective(const OMPLoopDirective &S) {
     mapParam(CGF, cast<DeclRefExpr>(S.getIsLastIterVariable()), *LIP,
              LoopScope);
     CGF.EmitOMPPrivateLoopCounters(S, LoopScope);
+    CGF.EmitOMPLinearClause(S, LoopScope);
     bool HasLastprivateClause = CGF.EmitOMPLastprivateClauseInit(S, LoopScope);
     (void)LoopScope.Privatize();
     // Emit the loop iteration variable.
@@ -5071,6 +5076,11 @@ void CodeGenFunction::EmitOMPTaskLoopBasedDirective(const OMPLoopDirective &S) {
               CGF.GetAddrOfLocalVar(*LIP), /*Volatile=*/false,
               (*LIP)->getType(), S.getBeginLoc())));
     }
+    CGF.EmitOMPLinearClauseFinal(S, [LIP, &S](CodeGenFunction &CGF) {
+      return CGF.Builder.CreateIsNotNull(
+          CGF.EmitLoadOfScalar(CGF.GetAddrOfLocalVar(*LIP), /*Volatile=*/false,
+                               (*LIP)->getType(), S.getBeginLoc()));
+    });
   };
   auto &&TaskGen = [&S, SharedsTy, CapturedStruct,
                     IfCond](CodeGenFunction &CGF, llvm::Function *OutlinedFn,
@@ -5107,6 +5117,58 @@ void CodeGenFunction::EmitOMPTaskLoopDirective(const OMPTaskLoopDirective &S) {
 void CodeGenFunction::EmitOMPTaskLoopSimdDirective(
     const OMPTaskLoopSimdDirective &S) {
   EmitOMPTaskLoopBasedDirective(S);
+}
+
+void CodeGenFunction::EmitOMPMasterTaskLoopDirective(
+    const OMPMasterTaskLoopDirective &S) {
+  auto &&CodeGen = [this, &S](CodeGenFunction &CGF, PrePostActionTy &Action) {
+    Action.Enter(CGF);
+    EmitOMPTaskLoopBasedDirective(S);
+  };
+  OMPLexicalScope Scope(*this, S, llvm::None, /*EmitPreInitStmt=*/false);
+  CGM.getOpenMPRuntime().emitMasterRegion(*this, CodeGen, S.getBeginLoc());
+}
+
+void CodeGenFunction::EmitOMPMasterTaskLoopSimdDirective(
+    const OMPMasterTaskLoopSimdDirective &S) {
+  auto &&CodeGen = [this, &S](CodeGenFunction &CGF, PrePostActionTy &Action) {
+    Action.Enter(CGF);
+    EmitOMPTaskLoopBasedDirective(S);
+  };
+  OMPLexicalScope Scope(*this, S, llvm::None, /*EmitPreInitStmt=*/false);
+  CGM.getOpenMPRuntime().emitMasterRegion(*this, CodeGen, S.getBeginLoc());
+}
+
+void CodeGenFunction::EmitOMPParallelMasterTaskLoopDirective(
+    const OMPParallelMasterTaskLoopDirective &S) {
+  auto &&CodeGen = [this, &S](CodeGenFunction &CGF, PrePostActionTy &Action) {
+    auto &&TaskLoopCodeGen = [&S](CodeGenFunction &CGF,
+                                  PrePostActionTy &Action) {
+      Action.Enter(CGF);
+      CGF.EmitOMPTaskLoopBasedDirective(S);
+    };
+    OMPLexicalScope Scope(CGF, S, llvm::None, /*EmitPreInitStmt=*/false);
+    CGM.getOpenMPRuntime().emitMasterRegion(CGF, TaskLoopCodeGen,
+                                            S.getBeginLoc());
+  };
+  emitCommonOMPParallelDirective(*this, S, OMPD_master_taskloop, CodeGen,
+                                 emitEmptyBoundParameters);
+}
+
+void CodeGenFunction::EmitOMPParallelMasterTaskLoopSimdDirective(
+    const OMPParallelMasterTaskLoopSimdDirective &S) {
+  auto &&CodeGen = [this, &S](CodeGenFunction &CGF, PrePostActionTy &Action) {
+    auto &&TaskLoopCodeGen = [&S](CodeGenFunction &CGF,
+                                  PrePostActionTy &Action) {
+      Action.Enter(CGF);
+      CGF.EmitOMPTaskLoopBasedDirective(S);
+    };
+    OMPLexicalScope Scope(CGF, S, OMPD_parallel, /*EmitPreInitStmt=*/false);
+    CGM.getOpenMPRuntime().emitMasterRegion(CGF, TaskLoopCodeGen,
+                                            S.getBeginLoc());
+  };
+  emitCommonOMPParallelDirective(*this, S, OMPD_master_taskloop_simd, CodeGen,
+                                 emitEmptyBoundParameters);
 }
 
 // Generate the instructions for '#pragma omp target update' directive.

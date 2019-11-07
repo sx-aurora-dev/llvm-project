@@ -15,6 +15,7 @@
 #include "TokenAnnotator.h"
 #include "FormatToken.h"
 #include "clang/Basic/SourceManager.h"
+#include "clang/Basic/TokenKinds.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Support/Debug.h"
 
@@ -65,7 +66,7 @@ public:
   AnnotatingParser(const FormatStyle &Style, AnnotatedLine &Line,
                    const AdditionalKeywords &Keywords)
       : Style(Style), Line(Line), CurrentToken(Line.First), AutoFound(false),
-        TrailingReturnFound(false), Keywords(Keywords) {
+        Keywords(Keywords) {
     Contexts.push_back(Context(tok::unknown, 1, /*IsExpression=*/false));
     resetTokenMetadata(CurrentToken);
   }
@@ -844,7 +845,6 @@ private:
       break;
     case tok::kw_if:
     case tok::kw_while:
-      assert(!Line.startsWith(tok::hash));
       if (Tok->is(tok::kw_if) && CurrentToken &&
           CurrentToken->isOneOf(tok::kw_constexpr, tok::identifier))
         next();
@@ -1397,11 +1397,7 @@ private:
                !Current.Previous->is(tok::kw_operator)) {
       // not auto operator->() -> xxx;
       Current.Type = TT_TrailingReturnArrow;
-      TrailingReturnFound = true;
-    } else if (Current.is(tok::star) ||
-               (Current.isOneOf(tok::amp, tok::ampamp) &&
-                (Current.NestingLevel != 0 || !Line.MightBeFunctionDecl ||
-                 TrailingReturnFound))) {
+    } else if (Current.isOneOf(tok::star, tok::amp, tok::ampamp)) {
       Current.Type = determineStarAmpUsage(Current,
                                            Contexts.back().CanBeExpression &&
                                                Contexts.back().IsExpression,
@@ -1424,8 +1420,6 @@ private:
         Current.Type = TT_ConditionalExpr;
       }
     } else if (Current.isBinaryOperator() &&
-               !(Line.MightBeFunctionDecl && Current.NestingLevel == 0 &&
-                 Current.isOneOf(tok::amp, tok::ampamp)) &&
                (!Current.Previous || Current.Previous->isNot(tok::l_square)) &&
                (!Current.is(tok::greater) &&
                 Style.Language != FormatStyle::LK_TextProto)) {
@@ -1500,12 +1494,11 @@ private:
       // colon after this, this is the only place which annotates the identifier
       // as a selector.)
       Current.Type = TT_SelectorName;
-    } else if (Current.isOneOf(tok::identifier, tok::kw_const, tok::amp,
-                               tok::ampamp) &&
+    } else if (Current.isOneOf(tok::identifier, tok::kw_const,
+                               tok::kw_noexcept) &&
                Current.Previous &&
                !Current.Previous->isOneOf(tok::equal, tok::at) &&
-               Line.MightBeFunctionDecl && !TrailingReturnFound &&
-               Contexts.size() == 1) {
+               Line.MightBeFunctionDecl && Contexts.size() == 1) {
       // Line.MightBeFunctionDecl can only be true after the parentheses of a
       // function declaration have been found.
       Current.Type = TT_TrailingAnnotation;
@@ -1614,8 +1607,9 @@ private:
     // Functions which end with decorations like volatile, noexcept are unlikely
     // to be casts.
     if (Tok.Next->isOneOf(tok::kw_noexcept, tok::kw_volatile, tok::kw_const,
-                          tok::kw_throw, tok::l_square, tok::arrow,
-                          Keywords.kw_override, Keywords.kw_final))
+                          tok::kw_throw, tok::arrow, Keywords.kw_override,
+                          Keywords.kw_final) ||
+        isCpp11AttributeSpecifier(*Tok.Next))
       return false;
 
     // As Java has no function types, a "(" after the ")" likely means that this
@@ -1689,7 +1683,8 @@ private:
 
     const FormatToken *NextToken = Tok.getNextNonComment();
     if (!NextToken ||
-        NextToken->isOneOf(tok::arrow, tok::equal, tok::kw_const) ||
+        NextToken->isOneOf(tok::arrow, tok::equal, tok::kw_const,
+                           tok::kw_noexcept) ||
         (NextToken->is(tok::l_brace) && !NextToken->getNextNonComment()))
       return TT_PointerOrReference;
 
@@ -1762,7 +1757,7 @@ private:
     // Use heuristics to recognize unary operators.
     if (PrevToken->isOneOf(tok::equal, tok::l_paren, tok::comma, tok::l_square,
                            tok::question, tok::colon, tok::kw_return,
-                           tok::kw_case, tok::at, tok::l_brace))
+                           tok::kw_case, tok::at, tok::l_brace, tok::kw_throw))
       return TT_UnaryOperator;
 
     // There can't be two consecutive binary operators.
@@ -1790,7 +1785,6 @@ private:
   AnnotatedLine &Line;
   FormatToken *CurrentToken;
   bool AutoFound;
-  bool TrailingReturnFound;
   const AdditionalKeywords &Keywords;
 
   // Set of "<" tokens that do not open a template parameter list. If parseAngle
@@ -2573,7 +2567,7 @@ bool TokenAnnotator::spaceRequiredBetween(const AnnotatedLine &Line,
     return Left.Tok.isLiteral() || (Left.is(tok::identifier) && Left.Previous &&
                                     Left.Previous->is(tok::kw_case));
   if (Left.is(tok::l_square) && Right.is(tok::amp))
-    return false;
+    return Style.SpacesInSquareBrackets;
   if (Right.is(TT_PointerOrReference)) {
     if (Left.is(tok::r_paren) && Line.MightBeFunctionDecl) {
       if (!Left.MatchingParen)

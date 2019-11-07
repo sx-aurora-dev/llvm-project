@@ -19,6 +19,7 @@ intermediate LLVM representation.
    Benchmarking
    BigEndianNEON
    BuildingADistribution
+   CFIVerify
    CMake
    CMakePrimer
    CodeGenerator
@@ -37,6 +38,7 @@ intermediate LLVM representation.
    LinkTimeOptimization
    LoopTerminology
    MarkdownQuickstartTemplate
+   MemorySSA
    MergeFunctions
    MCJITDesignAndImplementation
    NVPTXUsage
@@ -44,8 +46,9 @@ intermediate LLVM representation.
    Passes
    ReportingGuide
    Remarks
-   StackSafetyAnalysis
    SourceLevelDebugging
+   StackSafetyAnalysis
+   SupportLibrary
    TableGen/index
    TableGenFundamentals
    Vectorizers
@@ -73,6 +76,9 @@ Clang
 :doc:`CoverageMappingFormat`
   This describes the format and encoding used for LLVM’s code coverage mapping.
 
+:doc:`CFIVerify`
+  A description of the verification tool for Control Flow Integrity.
+
 LLVM Builds and Distributions
 -----------------------------
 
@@ -86,6 +92,10 @@ LLVM Builds and Distributions
 
 :doc:`Docker`
    A reference for using Dockerfiles provided with LLVM.
+
+:doc:`Support Library <SupportLibrary>`
+   This document describes the LLVM Support Library (``lib/Support``) and
+   how to keep LLVM source code portable
 
 Optimizations
 -------------
@@ -106,6 +116,9 @@ Optimizations
 :doc:`AliasAnalysis`
    Information on how to write a new alias analysis implementation or how to
    use existing analyses.
+
+:doc:`MemorySSA`
+   Information about the MemorySSA utility in LLVM, as well as how to use it.
 
 :doc:`LoopTerminology`
   A document describing Loops and associated terms as used in LLVM.

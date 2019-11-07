@@ -77,6 +77,7 @@ class X86TTIImpl : public BasicTTIImplBase<X86TTIImpl> {
       X86::FeatureSlowSHLD,
       X86::FeatureSlowTwoMemOps,
       X86::FeatureSlowUAMem16,
+      X86::FeaturePreferMaskRegisters,
 
       // Perf-tuning flags.
       X86::FeatureHasFastGather,
@@ -116,7 +117,7 @@ public:
   /// \name Vector TTI Implementations
   /// @{
 
-  unsigned getNumberOfRegisters(bool Vector);
+  unsigned getNumberOfRegisters(unsigned ClassID) const;
   unsigned getRegisterBitWidth(bool Vector) const;
   unsigned getLoadStoreVecRegBitWidth(unsigned AS) const;
   unsigned getMaxInterleaveFactor(unsigned VF);
@@ -133,7 +134,7 @@ public:
   int getCmpSelInstrCost(unsigned Opcode, Type *ValTy, Type *CondTy,
                          const Instruction *I = nullptr);
   int getVectorInstrCost(unsigned Opcode, Type *Val, unsigned Index);
-  int getMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
+  int getMemoryOpCost(unsigned Opcode, Type *Src, MaybeAlign Alignment,
                       unsigned AddressSpace, const Instruction *I = nullptr);
   int getMaskedMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
                             unsigned AddressSpace);
@@ -185,8 +186,8 @@ public:
   bool isLSRCostLess(TargetTransformInfo::LSRCost &C1,
                      TargetTransformInfo::LSRCost &C2);
   bool canMacroFuseCmp();
-  bool isLegalMaskedLoad(Type *DataType);
-  bool isLegalMaskedStore(Type *DataType);
+  bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment);
+  bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment);
   bool isLegalNTLoad(Type *DataType, Align Alignment);
   bool isLegalNTStore(Type *DataType, Align Alignment);
   bool isLegalMaskedGather(Type *DataType);

@@ -143,7 +143,7 @@ public:
       }
   }
 
-  void printStats() {
+  void getStats(ScopedString *Str) {
     // TODO(kostyak): get the RSS per region.
     uptr TotalMapped = 0;
     uptr PoppedBlocks = 0;
@@ -154,11 +154,11 @@ public:
       PoppedBlocks += Sci->Stats.PoppedBlocks;
       PushedBlocks += Sci->Stats.PushedBlocks;
     }
-    Printf("Stats: SizeClassAllocator32: %zuM mapped in %zu allocations; "
-           "remains %zu\n",
-           TotalMapped >> 20, PoppedBlocks, PoppedBlocks - PushedBlocks);
+    Str->append("Stats: SizeClassAllocator32: %zuM mapped in %zu allocations; "
+                "remains %zu\n",
+                TotalMapped >> 20, PoppedBlocks, PoppedBlocks - PushedBlocks);
     for (uptr I = 0; I < NumClasses; I++)
-      printStats(I, 0);
+      getStats(Str, I, 0);
   }
 
   uptr releaseToOS() {
@@ -197,7 +197,7 @@ private:
 
   struct ALIGNED(SCUDO_CACHE_LINE_SIZE) SizeClassInfo {
     HybridMutex Mutex;
-    IntrusiveList<TransferBatch> FreeList;
+    SinglyLinkedList<TransferBatch> FreeList;
     SizeClassStats Stats;
     bool CanRelease;
     u32 RandState;
@@ -328,17 +328,17 @@ private:
     return B;
   }
 
-  void printStats(uptr ClassId, uptr Rss) {
+  void getStats(ScopedString *Str, uptr ClassId, uptr Rss) {
     SizeClassInfo *Sci = getSizeClassInfo(ClassId);
     if (Sci->AllocatedUser == 0)
       return;
     const uptr InUse = Sci->Stats.PoppedBlocks - Sci->Stats.PushedBlocks;
     const uptr AvailableChunks = Sci->AllocatedUser / getSizeByClassId(ClassId);
-    Printf("  %02zu (%6zu): mapped: %6zuK popped: %7zu pushed: %7zu inuse: %6zu"
-           " avail: %6zu rss: %6zuK\n",
-           ClassId, getSizeByClassId(ClassId), Sci->AllocatedUser >> 10,
-           Sci->Stats.PoppedBlocks, Sci->Stats.PushedBlocks, InUse,
-           AvailableChunks, Rss >> 10);
+    Str->append("  %02zu (%6zu): mapped: %6zuK popped: %7zu pushed: %7zu "
+                "inuse: %6zu avail: %6zu rss: %6zuK\n",
+                ClassId, getSizeByClassId(ClassId), Sci->AllocatedUser >> 10,
+                Sci->Stats.PoppedBlocks, Sci->Stats.PushedBlocks, InUse,
+                AvailableChunks, Rss >> 10);
   }
 
   NOINLINE uptr releaseToOSMaybe(SizeClassInfo *Sci, uptr ClassId,
@@ -376,7 +376,7 @@ private:
     for (uptr I = MinRegionIndex; I <= MaxRegionIndex; I++) {
       if (PossibleRegions[I] == ClassId) {
         ReleaseRecorder Recorder(I * RegionSize);
-        releaseFreeMemoryToOS(&Sci->FreeList, I * RegionSize,
+        releaseFreeMemoryToOS(Sci->FreeList, I * RegionSize,
                               RegionSize / PageSize, BlockSize, &Recorder);
         if (Recorder.getReleasedRangesCount() > 0) {
           Sci->ReleaseInfo.PushedBlocksAtLastRelease = Sci->Stats.PushedBlocks;

@@ -35,7 +35,7 @@ DisableLeafProc("disable-ve-leaf-proc",
 
 VEFrameLowering::VEFrameLowering(const VESubtarget &ST)
     : TargetFrameLowering(TargetFrameLowering::StackGrowsDown,
-                          16, 0, 16) {}
+                          Align(16), 0, Align(16)) {}
 
 void VEFrameLowering::emitPrologueInsns(
     MachineFunction &MF, MachineBasicBlock &MBB,

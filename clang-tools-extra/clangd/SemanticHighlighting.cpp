@@ -37,6 +37,14 @@ bool canHighlightName(DeclarationName Name) {
 
 llvm::Optional<HighlightingKind> kindForType(const Type *TP);
 llvm::Optional<HighlightingKind> kindForDecl(const NamedDecl *D) {
+  if (auto *USD = dyn_cast<UsingShadowDecl>(D)) {
+    if (auto *Target = USD->getTargetDecl())
+      D = Target;
+  }
+  if (auto *TD = dyn_cast<TemplateDecl>(D)) {
+    if (auto *Templated = TD->getTemplatedDecl())
+      D = Templated;
+  }
   if (auto *TD = dyn_cast<TypedefNameDecl>(D)) {
     // We try to highlight typedefs as their underlying type.
     if (auto K = kindForType(TD->getUnderlyingType().getTypePtrOrNull()))
@@ -45,7 +53,7 @@ llvm::Optional<HighlightingKind> kindForDecl(const NamedDecl *D) {
     return HighlightingKind::Typedef;
   }
   // We highlight class decls, constructor decls and destructor decls as
-  // `Class` type. The destructor decls are handled in `VisitTypeLoc` (we
+  // `Class` type. The destructor decls are handled in `VisitTagTypeLoc` (we
   // will visit a TypeLoc where the underlying Type is a CXXRecordDecl).
   if (auto *RD = llvm::dyn_cast<RecordDecl>(D)) {
     // We don't want to highlight lambdas like classes.
@@ -94,6 +102,19 @@ llvm::Optional<HighlightingKind> kindForType(const Type *TP) {
   if (auto *TD = TP->getAsTagDecl())
     return kindForDecl(TD);
   return llvm::None;
+}
+// Given a set of candidate declarations, if the declarations all have the same
+// highlighting kind, return that highlighting kind, otherwise return None.
+template <typename IteratorRange>
+llvm::Optional<HighlightingKind> kindForCandidateDecls(IteratorRange Decls) {
+  llvm::Optional<HighlightingKind> Result;
+  for (NamedDecl *Decl : Decls) {
+    auto Kind = kindForDecl(Decl);
+    if (!Kind || (Result && Kind != Result))
+      return llvm::None;
+    Result = Kind;
+  }
+  return Result;
 }
 
 // Collects all semantic tokens in an ASTContext.
@@ -152,9 +173,35 @@ public:
     return true;
   }
 
+  bool VisitOverloadExpr(OverloadExpr *E) {
+    if (canHighlightName(E->getName()))
+      addToken(E->getNameLoc(),
+               kindForCandidateDecls(E->decls())
+                   .getValueOr(HighlightingKind::DependentName));
+    return true;
+  }
+
+  bool VisitDependentScopeDeclRefExpr(DependentScopeDeclRefExpr *E) {
+    if (canHighlightName(E->getDeclName()))
+      addToken(E->getLocation(), HighlightingKind::DependentName);
+    return true;
+  }
+
+  bool VisitCXXDependentScopeMemberExpr(CXXDependentScopeMemberExpr *E) {
+    if (canHighlightName(E->getMember()))
+      addToken(E->getMemberLoc(), HighlightingKind::DependentName);
+    return true;
+  }
+
   bool VisitNamedDecl(NamedDecl *ND) {
     if (canHighlightName(ND->getDeclName()))
       addToken(ND->getLocation(), ND);
+    return true;
+  }
+
+  bool VisitUsingDecl(UsingDecl *UD) {
+    if (auto K = kindForCandidateDecls(UD->shadows()))
+      addToken(UD->getLocation(), *K);
     return true;
   }
 
@@ -176,20 +223,27 @@ public:
     return true;
   }
 
-  bool WalkUpFromTagTypeLoc(TagTypeLoc L) {
+  bool VisitTagTypeLoc(TagTypeLoc L) {
     if (L.isDefinition())
       return true; // Definition will be highligthed by VisitNamedDecl.
-    return RecursiveASTVisitor::WalkUpFromTagTypeLoc(L);
-  }
-
-  bool WalkUpFromElaboratedTypeLoc(ElaboratedTypeLoc L) {
-    // Avoid highlighting 'struct' or 'enum' keywords.
+    if (auto K = kindForType(L.getTypePtr()))
+      addToken(L.getBeginLoc(), *K);
     return true;
   }
 
-  bool VisitTypeLoc(TypeLoc TL) {
-    if (auto K = kindForType(TL.getTypePtr()))
-      addToken(TL.getBeginLoc(), *K);
+  bool VisitDecltypeTypeLoc(DecltypeTypeLoc L) {
+    if (auto K = kindForType(L.getTypePtr()))
+      addToken(L.getBeginLoc(), *K);
+    return true;
+  }
+
+  bool VisitDependentNameTypeLoc(DependentNameTypeLoc L) {
+    addToken(L.getNameLoc(), HighlightingKind::DependentType);
+    return true;
+  }
+
+  bool VisitTemplateTypeParmTypeLoc(TemplateTypeParmTypeLoc TL) {
+    addToken(TL.getBeginLoc(), HighlightingKind::TemplateParameter);
     return true;
   }
 
@@ -339,6 +393,10 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, HighlightingKind K) {
     return OS << "EnumConstant";
   case HighlightingKind::Typedef:
     return OS << "Typedef";
+  case HighlightingKind::DependentType:
+    return OS << "DependentType";
+  case HighlightingKind::DependentName:
+    return OS << "DependentName";
   case HighlightingKind::Namespace:
     return OS << "Namespace";
   case HighlightingKind::TemplateParameter:
@@ -468,6 +526,10 @@ llvm::StringRef toTextMateScope(HighlightingKind Kind) {
     return "variable.other.enummember.cpp";
   case HighlightingKind::Typedef:
     return "entity.name.type.typedef.cpp";
+  case HighlightingKind::DependentType:
+    return "entity.name.type.dependent.cpp";
+  case HighlightingKind::DependentName:
+    return "entity.name.other.dependent.cpp";
   case HighlightingKind::Namespace:
     return "entity.name.namespace.cpp";
   case HighlightingKind::TemplateParameter:

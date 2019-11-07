@@ -32,7 +32,8 @@ using namespace llvm;
 #include "VEGenRegisterInfo.inc"
 
 static MCAsmInfo *createVEMCAsmInfo(const MCRegisterInfo &MRI,
-                                       const Triple &TT) {
+                                    const Triple &TT,
+                                    const MCTargetOptions &Options) {
   MCAsmInfo *MAI = new VEELFMCAsmInfo(TT);
   unsigned Reg = MRI.getDwarfRegNum(VE::SX11, true);
   MCCFIInstruction Inst = MCCFIInstruction::createDefCfa(nullptr, Reg, 0);
