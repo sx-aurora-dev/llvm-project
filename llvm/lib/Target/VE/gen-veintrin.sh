@@ -1,18 +1,24 @@
 #! /bin/sh
 
+#set -v
+
 F=lib/Target/VE/veintrin.py
 
-set -v
+if test ! -f $F; then
+	echo "Error. Run in llvm directory"
+	exit
+fi
 
-mkdir -p tmp
 
-python $F -p > tmp/VEInstrIntrinsic.td
-python $F -i > tmp/IntrinsicsVE2.td
-python $F -b > tmp/BuiltinsVE2.def
-python $F --veintrin > tmp/veintrin2.h
-python $F --decl > tmp/decl.h
-python $F -l > tmp/VEISelLoweringIntrinsic.inc
+python $F --inst > lib/Target/VE/VEInstrVecVL.gen.td
+python $F -p > lib/Target/VE/VEInstrIntrinsicVL.gen.td
+python $F -i > include/llvm/IR/IntrinsicsVEVL.gen.td
+python $F -b > ../clang/include/clang/Basic/BuiltinsVEVL.gen.def
+python $F --veintrin > ../clang/lib/Headers/velintrin_gen.h
+python $F --vl-index > lib/Target/VE/vl-index.inc
 
+#python $F --html > velintrin.html
+
+#python $F -r  > ../../llvm-ve-intrinsic-test/gen/ref.cc
+#python $F --decl  > ../../llvm-ve-intrinsic-test/decl.h
 #python $F -t
-python $F -r > tmp/ref.cc
-python $F --html > tmp/intrinsics.html

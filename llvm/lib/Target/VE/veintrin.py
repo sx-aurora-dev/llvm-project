@@ -690,8 +690,7 @@ class HtmlManualPrinter(ManualInstPrinter):
                     rowspan[inst] = 1
                 asm = I.asm() if I.opc else ""
                 if not opt_no_link:
-                    asm = "<a href=\"VectorEngine-as-manual-v1.2.pdf#page={}\">{}</a>".format(s.page, asm)
-                    #asm = "<a href=\"Aurora-as-manual-v3.2.pdf#page={}\">{}</a>".format(s.page, asm)
+                    asm = "<a href=\"@ASM_MANUAL@#page={}\">{}</a>".format(s.page, asm)
                 if I.isNotYetImplemented():
                     func = '<font color="darkgray">' + func + '</font><a href="#ft1">[1]</a>'
                 if I.isObsolete():
@@ -1034,7 +1033,7 @@ def createInstructionTable():
     # Start of instruction definition
     #
     
-    T.Section("Table 3-15 Vector Transfer Instructions", 21)
+    T.Section("Table 3-15 Vector Transfer Instructions", 22)
     T.VLDm(0x81, "VLD", "", "vld")
     T.VLDm(0x82, "VLDU", "", "vldu")
     T.VLDm(0x83, "VLDL", "sx", "vldl.sx")
@@ -1097,7 +1096,7 @@ def createInstructionTable():
     T.Inst3l(0x9A, "vmaxs", "VCMX", "a", "{0} = max({1}, {2})")
     T.Inst3l(0x9A, "vmins", "VCMX", "i", "{0} = min({1}, {2})")
     
-    T.Section("Table 3-17 Vector Logical Arithmetic Operation Instructions", 23)
+    T.Section("Table 3-17 Vector Logical Arithmetic Operation Instructions", 25)
     T.Logical(0xC4, "vand", "VAND", "{0} = {1} & {2}")
     T.Logical(0xC5, "vor",  "VOR",  "{0} = {1} | {2}")
     T.Logical(0xC6, "vxor", "VXOR", "{0} = {1} ^ {2}")
@@ -1128,7 +1127,7 @@ def createInstructionTable():
     O_vsfa = T.addMask(O_vsfa)
     T.Def(0xD7, "VSFA", "", "vsfa", O_vsfa, "{0} = ({1} << ({2} & 0x7)) + {3}")
     
-    T.Section("Table 3-19 Vector Floating-Point Operation Instructions", 29)
+    T.Section("Table 3-19 Vector Floating-Point Operation Instructions", 28)
     T.Inst3f(0xCC, "vfadd", "VFAD", "", "{0} = {1} + {2}")
     T.Inst3f(0xDC, "vfsub", "VFSB", "", "{0} = {1} - {2}")
     T.Inst3f(0xCD, "vfmul", "VFMP", "", "{0} = {1} * {2}")
@@ -1156,7 +1155,7 @@ def createInstructionTable():
     T.Def(0x8F, "VCVD", "", "vcvt.d.s", [[VX(T_f64), VY(T_f32)]], "{0} = (double){1}")
     T.Def(0x9F, "VCVS", "", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
     
-    T.Section("Table 3-20 Vector Mask Arithmetic Instructions", 34)
+    T.Section("Table 3-20 Vector Mask Arithmetic Instructions", 32)
     T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), VY(T_u64), VZ(T_u64), VM]]).noTest()
     T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), SY(T_u64), VZ(T_u64), VM]]).noTest()
     T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), ImmI(T_u64), VZ(T_u64), VM]]).noTest()
@@ -1204,7 +1203,7 @@ def createInstructionTable():
       T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32)]]).noTest() # Pseudo
       T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32), VM512]]).noTest() # Pseudo
    
-    T.Section("Table 3-21 Vector Recursive Relation Instructions", 35)
+    T.Section("Table 3-21 Vector Recursive Relation Instructions", 32)
     T.VSUM(0xEA, "VSUMS", "sx", "vsum.w.sx", [[VX(T_i32), VY(T_i32)]])
     T.VSUM(0xEA, "VSUMS", "zx", "vsum.w.zx", [[VX(T_i32), VY(T_i32)]])
     T.VSUM(0xAA, "VSUMX", "", "vsum.l", [[VX(T_i64), VY(T_i64)]])
@@ -1231,7 +1230,7 @@ def createInstructionTable():
     T.NoImpl("VFIMA")
     T.NoImpl("VFIMS")
     
-    T.Section("Table 3-22 Vector Gathering/Scattering Instructions", 36)
+    T.Section("Table 3-22 Vector Gathering/Scattering Instructions", 34)
     T.VGTm(0xA1, "VGT", "", "vgt")
     T.VGTm(0xA2, "VGTU", "", "vgtu")
     T.VGTm(0xA3, "VGTL", "sx", "vgtl.sx")
@@ -1240,7 +1239,7 @@ def createInstructionTable():
     T.VSCm(0xB2, "VSCU", "VSCU", "vscu")
     T.VSCm(0xB3, "VSCL", "VSCL", "vscl")
     
-    T.Section("Table 3-23 Vector Mask Register Instructions", 36)
+    T.Section("Table 3-23 Vector Mask Register Instructions", 34)
     T.Def(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}", noVL=True)
     T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}", noVL=True)
     T.Def(0x85, "ORM", "",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}", noVL=True)
@@ -1257,11 +1256,11 @@ def createInstructionTable():
     T.Def(0xA5, "LZVM", "", "lzvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA6, "TOVM", "", "tovm", [[SX(T_u64), VMY]]).noTest();
     
-    T.Section("Table 3-24 Vector Control Instructions", 37)
+    T.Section("Table 3-24 Vector Control Instructions", 35)
     T.NoImpl("SMVL")
     T.NoImpl("LVIX")
     
-    T.Section("Table 3-25 Control Instructions", 37)
+    T.Section("Table 3-25 Control Instructions", 35)
     T.Dummy(0x30, "SVOB", "void _vel_svob(void)", "svob");
 
     T.Section("Approximate Operations", None)
