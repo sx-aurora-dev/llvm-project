@@ -874,7 +874,7 @@ defm : vbrd_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Sequence
 
-def : Pat<(v512i32 (vec_seq (i32 1))), (VSEQpv 256)>;
+//def : Pat<(v512i32 (vec_seq (i32 1))), (VSEQpv 256)>;
 
 multiclass vseq_for_vector_length<int length, ValueType vi32, ValueType vi64> {
   def : Pat<(vi32 (vec_seq (i32 1))),
