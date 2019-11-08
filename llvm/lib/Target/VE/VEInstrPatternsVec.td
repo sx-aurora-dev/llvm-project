@@ -1273,16 +1273,16 @@ defm : shift_for_vector_length<2, v2i32, v2i64>;
 //
 // trunc from vXi64 to vXi32.
 
-multiclass trunc_for_vector_length<int length, ValueType vi32, ValueType vi64> {
-  def : Pat<(vi32 (trunc vi64:$val)),
-            (VANDli0 32, $val, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-}
-
-defm : trunc_for_vector_length<256, v256i32, v256i64>;
-defm : trunc_for_vector_length<128, v128i32, v128i64>;
-defm : trunc_for_vector_length<64, v64i32, v64i64>;
-defm : trunc_for_vector_length<32, v32i32, v32i64>;
-defm : trunc_for_vector_length<16, v16i32, v16i64>;
-defm : trunc_for_vector_length<8, v8i32, v8i64>;
-defm : trunc_for_vector_length<4, v4i32, v4i64>;
-defm : trunc_for_vector_length<2, v2i32, v2i64>;
+//multiclass trunc_for_vector_length<int length, ValueType vi32, ValueType vi64> {
+//  def : Pat<(vi32 (trunc vi64:$val)),
+//            (VANDli0 32, $val, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+//}
+//
+//defm : trunc_for_vector_length<256, v256i32, v256i64>;
+//defm : trunc_for_vector_length<128, v128i32, v128i64>;
+//defm : trunc_for_vector_length<64, v64i32, v64i64>;
+//defm : trunc_for_vector_length<32, v32i32, v32i64>;
+//defm : trunc_for_vector_length<16, v16i32, v16i64>;
+//defm : trunc_for_vector_length<8, v8i32, v8i64>;
+//defm : trunc_for_vector_length<4, v4i32, v4i64>;
+//defm : trunc_for_vector_length<2, v2i32, v2i64>;
