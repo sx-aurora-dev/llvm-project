@@ -1095,61 +1095,43 @@ multiclass arith_for_vector_length<int length, ValueType vi32, ValueType vi64> {
   def : Pat<(add vi32:$vy, vi32:$vz),
             (vaddswsx_vvvl vi32:$vy, vi32:$vz, (LEA32zzi length))>;
   def : Pat<(add vi64:$vy, vi64:$vz),
-            (VADXlv vi64:$vy, vi64:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vaddsl_vvvl vi64:$vy, vi64:$vz, (LEA32zzi length))>;
   def : Pat<(add (vi32 (vec_broadcast i32:$sy)), vi32:$vz),
-            (VADSwsxr i32:$sy, vi32:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vaddswsx_vsvl i32:$sy, vi32:$vz, (LEA32zzi length))>;
   def : Pat<(add (vi64 (vec_broadcast i64:$sy)), vi64:$vz),
-            (VADXlr i64:$sy, vi64:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vaddsl_vsvl i64:$sy, vi64:$vz, (LEA32zzi length))>;
   def : Pat<(sub vi32:$vy, vi32:$vz),
-            (VSBSwsxv vi32:$vy, vi32:$vz,
-                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vsubswsx_vvvl vi32:$vy, vi32:$vz, (LEA32zzi length))>;
   def : Pat<(sub vi64:$vy, vi64:$vz),
-            (VSBXlv vi64:$vy, vi64:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vsubsl_vvvl vi64:$vy, vi64:$vz, (LEA32zzi length))>;
   def : Pat<(sub (vi32 (vec_broadcast i32:$sy)), vi32:$vz),
-            (VSBSwsxr i32:$sy, vi32:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vsubswsx_vsvl i32:$sy, vi32:$vz, (LEA32zzi length))>;
   def : Pat<(sub (vi64 (vec_broadcast i64:$sy)), vi64:$vz),
-            (VSBXlr i64:$sy, vi64:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vsubsl_vsvl i64:$sy, vi64:$vz, (LEA32zzi length))>;
   def : Pat<(mul vi32:$vy, vi32:$vz),
-            (VMPSwsxv vi32:$vy, vi32:$vz,
-                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vmulswsx_vvvl vi32:$vy, vi32:$vz, (LEA32zzi length))>;
   def : Pat<(mul vi64:$vy, vi64:$vz),
-            (VMPXlv vi64:$vy, vi64:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vmulsl_vvvl vi64:$vy, vi64:$vz, (LEA32zzi length))>;
   def : Pat<(mul (vi32 (vec_broadcast i32:$sy)), vi32:$vz),
             (vmulswsx_vsvl i32:$sy, vi32:$vz, (LEA32zzi length))>;
   def : Pat<(mul (vi64 (vec_broadcast i64:$sy)), vi64:$vz),
-            (VMPXlr i64:$sy, vi64:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vmulsl_vsvl i64:$sy, vi64:$vz, (LEA32zzi length))>;
   def : Pat<(sdiv vi32:$vy, vi32:$vz),
-            (VDVSwsxv vi32:$vy, vi32:$vz,
-                      (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vdivswsx_vvvl vi32:$vy, vi32:$vz, (LEA32zzi length))>;
   def : Pat<(sdiv vi64:$vy, vi64:$vz),
-            (VDVXlv vi64:$vy, vi64:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vdivsl_vvvl vi64:$vy, vi64:$vz, (LEA32zzi length))>;
   def : Pat<(sdiv (vi32 (vec_broadcast i32:$sy)), vi32:$vz),
-            (VDVSwsxr i32:$sy, vi32:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vdivswsx_vsvl i32:$sy, vi32:$vz, (LEA32zzi length))>;
   def : Pat<(sdiv (vi64 (vec_broadcast i64:$sy)), vi64:$vz),
-            (VDVXlr i64:$sy, vi64:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vdivsl_vsvl i64:$sy, vi64:$vz, (LEA32zzi length))>;
   def : Pat<(udiv vi32:$vy, vi32:$vz),
-            (VDIVwv vi32:$vy, vi32:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vdivuw_vvvl vi32:$vy, vi32:$vz, (LEA32zzi length))>;
   def : Pat<(udiv vi64:$vy, vi64:$vz),
-            (VDIVlv vi64:$vy, vi64:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vdivul_vvvl vi64:$vy, vi64:$vz, (LEA32zzi length))>;
   def : Pat<(udiv (vi32 (vec_broadcast i32:$sy)), vi32:$vz),
-            (VDIVwr i32:$sy, vi32:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vdivuw_vsvl i32:$sy, vi32:$vz, (LEA32zzi length))>;
   def : Pat<(udiv (vi64 (vec_broadcast i64:$sy)), vi64:$vz),
-            (VDIVlr i64:$sy, vi64:$vz,
-                    (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vdivul_vsvl i64:$sy, vi64:$vz, (LEA32zzi length))>;
 }
 
 defm : arith_for_vector_length<256, v256i32, v256i64>;
