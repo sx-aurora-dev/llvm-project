@@ -21,6 +21,7 @@
 #include <string>
 #include <sys/stat.h>
 #include <ve_offload.h>
+#include <veosinfo/veosinfo.h>
 #include <vector>
 
 #ifndef TARGET_ELF_ID
@@ -69,6 +70,7 @@ public:
   std::vector<struct veo_thr_ctxt *> Contexts;
   std::vector<uint64_t> LibraryHandles;
   std::list<DynLibTy> DynLibs;
+  unsigned int NumDevices;
 
   void buildOffloadTableFromHost(int32_t device_id, uint64_t VeoLibHandle,
                                  __tgt_offload_entry *HostBegin,
@@ -102,13 +104,8 @@ public:
     // we want to return __tgt_target_table, which contains a pointer to the
     // the element after the last entry in the table.
     // If we didnt own the memory then we would have undefined behaviour
-    // if (!(T.capacity() > T.size())) {
-      // DP("DEBUG_2 %zx \n",T.size());
-      __tgt_offload_entry DummyEntry = {NULL, NULL, 0, 0, 0};
-      T.push_back(DummyEntry);
-    // }
-
-    // DP("DEBUG_1 %zx, %d \n",T.size(),T.capacity());
+    __tgt_offload_entry DummyEntry = {NULL, NULL, 0, 0, 0};
+    T.push_back(DummyEntry);
 
     FuncOrGblEntry[device_id].Table.EntriesBegin = &T.front();
     FuncOrGblEntry[device_id].Table.EntriesEnd = &T.back();
@@ -118,20 +115,31 @@ public:
     return &FuncOrGblEntry[device_id].Table;
   }
 
-  RTLDeviceInfoTy(int32_t num_devices)
-      : ProcHandles(num_devices, NULL), Contexts(num_devices, NULL),
-        FuncOrGblEntry(num_devices), LibraryHandles(num_devices) {
+  RTLDeviceInfoTy() {
     // TODO: some debug code here
 #ifdef OMPTARGET_DEBUG
     if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
       DebugLevel = std::stoi(envStr);
     }
 #endif // OMPTARGET_DEBUG
+
+    // Dynamically check how many devices we have
+    // For the moment we assume that VEO device IDs are consecutive
+    struct ve_nodeinfo node_info;
+    ve_node_info(&node_info);
+    DP("Found %i VE devices\n", node_info.total_node_count);
+    NumDevices = node_info.total_node_count;
+    ProcHandles.resize(NumDevices, NULL);
+    Contexts.resize(NumDevices, NULL);
+    FuncOrGblEntry.resize(NumDevices);
+    LibraryHandles.resize(NumDevices);
   }
 
   ~RTLDeviceInfoTy() {
     for (auto &hdl : ProcHandles) {
-      // TODO: Do we need to destroch the proc handles?
+      if (hdl != NULL) {
+        veo_proc_destroy(hdl);
+      }
     }
 
     for (auto &ctx : Contexts) {
@@ -150,7 +158,7 @@ public:
   }
 };
 
-static RTLDeviceInfoTy DeviceInfo(NUMBER_OF_DEVICES);
+static RTLDeviceInfoTy DeviceInfo;
 
 static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
                                     struct veo_args *args, uint64_t *RetVal) {
@@ -184,7 +192,9 @@ extern "C" {
 
 // Return the number of available devices of the type supported by the
 // target RTL.
-int32_t __tgt_rtl_number_of_devices(void) { return NUMBER_OF_DEVICES; }
+int32_t __tgt_rtl_number_of_devices(void) {
+  return DeviceInfo.NumDevices;
+}
 
 // Return an integer different from zero if the provided device image can be
 // supported by the runtime. The functionality is similar to comparing the
@@ -212,7 +222,6 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
     return -2;
   }
   DP("Available VEO version: %i (supported)\n", veo_version);
-// we will try to use 1 context per device
 
 // TODO: At the moment we do not initilize the device here, but in
 // "__tgt_rtl_load_binary". The reason is that we need to set an the
@@ -221,28 +230,6 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
 // convinient to set the ENV here (sentenv()). However, we do not know where
 // the tgt_binary (ELF) for that which we dont have at this point. :-(.
 // Thus, we do nothing here for now.
-#if 0
-  struct veo_proc_handle *proc_handle = veo_proc_create(ID);
-  if (!proc_handle) {
-    //TODO: errno does not seem to be set by VEO
-    //DP("veo_proc_create() failed: %s\n", std::strerror(errno));
-    DP("veo_proc_create() failed for device %d\n",ID);
-    return 1;
-  }
-
-  struct veo_thr_ctxt *ctx = veo_context_open(proc_handle);
-  if (!ctx) {
-    //TODO: errno does not seem to be set by VEO
-    DP("veo_context_open() failed: %s\n", std::strerror(errno));
-    return 2;
-  }
-
-  DeviceInfo.ProcHandles[ID] = proc_handle;
-  DeviceInfo.Contexts[ID] = ctx;
-
-  DP("Aurora device successfully initialized: proc_handle=%p, ctx=%p\n",
-     proc_handle, ctx);
-#endif
   return 0;
 }
 
