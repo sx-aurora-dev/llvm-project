@@ -160,33 +160,33 @@ defm : load_for_vector_length<8>;
 defm : load_for_vector_length<4>;
 defm : load_for_vector_length<2>;
 
-def : Pat<(store v512i32:$vx, I64:$addr),
-          (VSTir v512i32:$vx, 8, $addr, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
-def : Pat<(store v512f32:$vx, I64:$addr),
-          (VSTir v512f32:$vx, 8, $addr, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+//def : Pat<(store v512i32:$vx, I64:$addr),
+//          (VSTir v512i32:$vx, 8, $addr, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+//
+//def : Pat<(store v512f32:$vx, I64:$addr),
+//          (VSTir v512f32:$vx, 8, $addr, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
 multiclass store_for_vector_length<int length> {
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
                    I64:$addr),
 	      (vstl_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
                     4, $addr, (LEA32zzi length))>;
-  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
-                   I64:$addr),
-            (VSTUir !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
-                    4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-                   I64:$addr),
-            (VSTir !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-                    8, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+//  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
+//                   I64:$addr),
+//            (VSTUir !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
+//                    4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+//  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
+//                   I64:$addr),
+//            (VSTir !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
+//                    8, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
                    I64:$addr),
-            (VSTir !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-                    8, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-  def : Pat<(!cast<PatFrag>("truncstorev" # !cast<string>(length) # "i32")
-               !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-               I64:$addr),
-            (VSTLir $vx, 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
+                    8, $addr, (LEA32zzi length))>;
+//  def : Pat<(!cast<PatFrag>("truncstorev" # !cast<string>(length) # "i32")
+//               !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
+//               I64:$addr),
+//            (VSTLir $vx, 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
 }
 
 defm : store_for_vector_length<256>;
@@ -594,7 +594,7 @@ multiclass vbrd_for_vector_length<int length, ValueType vi32, ValueType vi64,
   def : Pat<(vf32 (vec_broadcast f32:$sy)),
             (VBRDf32r f32:$sy, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
   def : Pat<(vi64 (vec_broadcast i64:$sy)),
-            (VBRDr i64:$sy, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vbrd_vsl i64:$sy, (LEA32zzi length))>;
   def : Pat<(vf64 (vec_broadcast f64:$sy)),
             (VBRDf64r f64:$sy, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
 }
