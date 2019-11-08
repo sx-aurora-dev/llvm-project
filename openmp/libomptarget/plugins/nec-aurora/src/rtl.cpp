@@ -286,29 +286,28 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   fclose(ftmp);
 
   // See comment in "__tgt_rtl_init_device"
-#if 1
   bool is_dyn = true;
   if (DeviceInfo.ProcHandles[ID] == NULL){
-  struct veo_proc_handle *proc_handle;
-  is_dyn = elf_is_dynamic(Image);
-  // If we have a dynamically linked image, we create the process handle, then
-  // the thread, and then load the image.
-  // If we have a statically linked image, we need to create the process handle
-  // and load the image at the same time with veo_proc_create_static().
-  if (is_dyn) {
-    proc_handle = veo_proc_create(ID);
-    if (!proc_handle) {
-      DP("veo_proc_create() failed for device %d\n", ID);
-      return NULL;
+    struct veo_proc_handle *proc_handle;
+    is_dyn = elf_is_dynamic(Image);
+    // If we have a dynamically linked image, we create the process handle, then
+    // the thread, and then load the image.
+    // If we have a statically linked image, we need to create the process handle
+    // and load the image at the same time with veo_proc_create_static().
+    if (is_dyn) {
+      proc_handle = veo_proc_create(ID);
+      if (!proc_handle) {
+        DP("veo_proc_create() failed for device %d\n", ID);
+        return NULL;
+      }
+    } else {
+      proc_handle = veo_proc_create_static(ID, tmp_name);
+      if (!proc_handle) {
+        DP("veo_proc_create_static() failed for device %d, image=%s\n", ID, tmp_name);
+        return NULL;
+      }
     }
-  } else {
-    proc_handle = veo_proc_create_static(ID, tmp_name);
-    if (!proc_handle) {
-      DP("veo_proc_create_static() failed for device %d, image=%s\n", ID, tmp_name);
-      return NULL;
-    }
-  }
-  DeviceInfo.ProcHandles[ID] = proc_handle;
+    DeviceInfo.ProcHandles[ID] = proc_handle;
   }
 
   struct veo_thr_ctxt *ctx = veo_context_open(DeviceInfo.ProcHandles[ID]);
@@ -322,7 +321,6 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 
   DP("Aurora device successfully initialized: proc_handle=%p, ctx=%p\n",
      DeviceInfo.ProcHandles[ID] , ctx);
-#endif
 
   uint64_t LibHandle = 0UL;
   if (is_dyn) {
