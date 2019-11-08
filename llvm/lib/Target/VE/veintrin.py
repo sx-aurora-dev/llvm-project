@@ -921,6 +921,8 @@ class InstTable(object):
         ArgsP = self.addMask(ArgsP, VM512)
 
         self.Def(opc, instName, "", name, Args, expr)
+        self.Def(opc, instName, "p", "p"+name+".lo", ArgsP, expr)
+        self.Def(opc, instName, "p", "p"+name+".up", ArgsP, expr)
         self.Def(opc, instName, "p", "p"+name, ArgsP, expr)
 
     def Shift(self, opc, name, instName, ty, expr):
@@ -940,6 +942,8 @@ class InstTable(object):
         OL = [O_vvv, O_vvs]
         OL = self.addMask(OL, VM512)
 
+        self.Def(opc, instName, "p", "p"+name+".lo", OL, expr)
+        self.Def(opc, instName, "p", "p"+name+".up", OL, expr)
         self.Def(opc, instName, "p", "p"+name, OL, expr)
 
     def Inst4f(self, opc, name, instName, expr):
