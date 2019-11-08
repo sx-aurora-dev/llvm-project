@@ -537,40 +537,40 @@ defm : eve_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 def vec_seq         : SDNode<"VEISD::VEC_SEQ",       SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
 def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 1, [SDTCisVec<0>]>>;
 
-def vec_scatter   : SDNode<"VEISD::VEC_SCATTER", SDTypeProfile<0, 2, [SDTCisVec<0>, SDTCisVec<1>]>, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
-def vec_gather   : SDNode<"VEISD::VEC_GATHER", SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>]>, [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+//def vec_scatter   : SDNode<"VEISD::VEC_SCATTER", SDTypeProfile<0, 2, [SDTCisVec<0>, SDTCisVec<1>]>, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
+//def vec_gather   : SDNode<"VEISD::VEC_GATHER", SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisVec<1>]>, [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 
-def vec_lvl   : SDNode<"VEISD::VEC_LVL", SDTypeProfile<0, 1, []>, [SDNPHasChain]>;
+//def vec_lvl   : SDNode<"VEISD::VEC_LVL", SDTypeProfile<0, 1, []>, [SDNPHasChain]>;
 
-def vec_rotate   : SDNode<"VEISD::VEC_VMV", SDTypeProfile<1, 2, []>>;
-def : Pat<(v256f64 (vec_rotate i32:$sy, v256f64:$vz)),
-          (VMVr i32:$sy, v256f64:$vz,
-                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(v256f64 (vec_rotate (i32 simm7:$I), v256f64:$vz)),
-          (VMVi (i32 simm7:$I), v256f64:$vz,
-                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+//def vec_rotate   : SDNode<"VEISD::VEC_VMV", SDTypeProfile<1, 2, []>>;
+//def : Pat<(v256f64 (vec_rotate i32:$sy, v256f64:$vz)),
+//          (VMVr i32:$sy, v256f64:$vz,
+//                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+//def : Pat<(v256f64 (vec_rotate (i32 simm7:$I), v256f64:$vz)),
+//          (VMVi (i32 simm7:$I), v256f64:$vz,
+//                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
 // Shuffle
 // TODO
 
 // Scatter
-def : Pat<(vec_scatter v256i64:$vx, v256i64:$vy),
-          (VSCv v256i64:$vx, v256i64:$vy,
-                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(vec_scatter v256f64:$vx, v256i64:$vy),
-          (VSCv v256f64:$vx, v256i64:$vy,
-                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-
-// Gather
-def : Pat<(v256i64 (vec_gather v256i64:$vy)),
-          (VGTv v256i64:$vy,
-                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
-def : Pat<(v256f64 (vec_gather v256i64:$vy)),
-          (VGTv v256i64:$vy,
-                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+//def : Pat<(vec_scatter v256i64:$vx, v256i64:$vy),
+//          (VSCv v256i64:$vx, v256i64:$vy,
+//                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+//def : Pat<(vec_scatter v256f64:$vx, v256i64:$vy),
+//          (VSCv v256f64:$vx, v256i64:$vy,
+//                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+//
+//// Gather
+//def : Pat<(v256i64 (vec_gather v256i64:$vy)),
+//          (VGTv v256i64:$vy,
+//                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+//def : Pat<(v256f64 (vec_gather v256i64:$vy)),
+//          (VGTv v256i64:$vy,
+//                (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 
 // LVL
-def : Pat<(vec_lvl i32:$sy), (LVL i32:$sy)>;
+//def : Pat<(vec_lvl i32:$sy), (LVL i32:$sy)>;
 
 // Broadcast
 
