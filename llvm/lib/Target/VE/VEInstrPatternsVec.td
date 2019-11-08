@@ -424,26 +424,26 @@ defm : ext_for_vector_length<2, v2i32, v2i64, v2i1>;
 //       high 32 bits (0..31) first.
 
 def: Pat<(v512i32 (scalar_to_vector i32:$val)),
-         (v512i32 (LSVi (v512i32 (IMPLICIT_DEF)), 0,
+         (v512i32 (lsv_vvss (v512i32 (IMPLICIT_DEF)), 0,
                         (SLLri
                            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
                            32)))>;
 def: Pat<(v512f32 (scalar_to_vector f32:$val)),
-         (v512f32 (LSVi (v512f32 (IMPLICIT_DEF)), 0,
+         (v512f32 (lsv_vvss (v512f32 (IMPLICIT_DEF)), 0,
                         (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
 
 multiclass s2v_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                  ValueType vf32, ValueType vf64> {
   def: Pat<(vi32 (scalar_to_vector i32:$val)),
-           (LSVi (vi32 (IMPLICIT_DEF)), 0,
+           (lsv_vvss (vi32 (IMPLICIT_DEF)), 0,
                  (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
   def: Pat<(vi64 (scalar_to_vector i64:$val)),
-           (LSVi (vi64 (IMPLICIT_DEF)), 0, $val)>;
+           (lsv_vvss (vi64 (IMPLICIT_DEF)), 0, $val)>;
   def: Pat<(vf32 (scalar_to_vector f32:$val)),
-           (LSVi (vf32 (IMPLICIT_DEF)), 0,
+           (lsv_vvss (vf32 (IMPLICIT_DEF)), 0,
                  (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
   def: Pat<(vf64 (scalar_to_vector f64:$val)),
-           (LSVi (vf64 (IMPLICIT_DEF)), 0,
+           (lsv_vvss (vf64 (IMPLICIT_DEF)), 0,
                  (COPY_TO_REGCLASS $val, I64))>;
 }
 
@@ -462,31 +462,31 @@ defm : s2v_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 multiclass ive_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                  ValueType vf32, ValueType vf64> {
   def: Pat<(vi32 (insertelt vi32:$vec, i32:$val, uimm7:$idx)),
-           (LSVi vi32:$vec, imm:$idx,
+           (lsv_vvss vi32:$vec, imm:$idx,
                  (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
   def: Pat<(vi32 (insertelt vi32:$vec, i32:$val, i64:$idx)),
-           (LSVr vi32:$vec,
+           (lsv_vvss vi32:$vec,
                  (EXTRACT_SUBREG $idx, sub_i32),
                  (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
-  def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, uimm7:$idx)),
-           (LSVi vi64:$vec, imm:$idx, $val)>;
-  def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, i64:$idx)),
-           (LSVr vi64:$vec,
-                 (EXTRACT_SUBREG $idx, sub_i32), $val)>;
-  def: Pat<(vf32 (insertelt vf32:$vec, f32:$val, uimm7:$idx)),
-           (LSVi vf32:$vec, imm:$idx,
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
-  def: Pat<(vf32 (insertelt vf32:$vec, f32:$val, i64:$idx)),
-           (LSVr vf32:$vec,
-                 (EXTRACT_SUBREG $idx, sub_i32),
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
-  def: Pat<(vf64 (insertelt vf64:$vec, f64:$val, uimm7:$idx)),
-           (LSVi vf64:$vec, imm:$idx,
-                 (COPY_TO_REGCLASS $val, I64))>;
-  def: Pat<(vf64 (insertelt vf64:$vec, f64:$val, i64:$idx)),
-           (LSVr vf64:$vec,
-                 (EXTRACT_SUBREG $idx, sub_i32),
-                 (COPY_TO_REGCLASS $val, I64))>;
+//  def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, uimm7:$idx)),
+//           (LSVi vi64:$vec, imm:$idx, $val)>;
+//  def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, i64:$idx)),
+//           (LSVr vi64:$vec,
+//                 (EXTRACT_SUBREG $idx, sub_i32), $val)>;
+//  def: Pat<(vf32 (insertelt vf32:$vec, f32:$val, uimm7:$idx)),
+//           (LSVi vf32:$vec, imm:$idx,
+//                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
+//  def: Pat<(vf32 (insertelt vf32:$vec, f32:$val, i64:$idx)),
+//           (LSVr vf32:$vec,
+//                 (EXTRACT_SUBREG $idx, sub_i32),
+//                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
+//  def: Pat<(vf64 (insertelt vf64:$vec, f64:$val, uimm7:$idx)),
+//           (LSVi vf64:$vec, imm:$idx,
+//                 (COPY_TO_REGCLASS $val, I64))>;
+//  def: Pat<(vf64 (insertelt vf64:$vec, f64:$val, i64:$idx)),
+//           (LSVr vf64:$vec,
+//                 (EXTRACT_SUBREG $idx, sub_i32),
+//                 (COPY_TO_REGCLASS $val, I64))>;
 }
 
 defm : ive_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
@@ -504,21 +504,21 @@ defm : ive_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 multiclass eve_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                  ValueType vf32, ValueType vf64> {
   def: Pat<(i32 (extractelt vi32:$vec, uimm7:$idx)),
-           (EXTRACT_SUBREG (LVSi vi32:$vec, imm:$idx), sub_i32)>;
-  def: Pat<(i32 (extractelt vi32:$vec, i64:$idx)),
-           (EXTRACT_SUBREG (LVSr vi32:$vec, $idx), sub_i32)>;
-  def: Pat<(i64 (extractelt vi64:$vec, uimm7:$idx)),
-           (LVSi vi64:$vec, imm:$idx)>;
-  def: Pat<(i64 (extractelt vi64:$vec, i64:$idx)),
-           (LVSr vi64:$vec, $idx)>;
-  def: Pat<(f32 (extractelt vf32:$vec, uimm7:$idx)),
-           (EXTRACT_SUBREG (LVSi vf32:$vec, imm:$idx), sub_f32)>;
-  def: Pat<(f32 (extractelt vf32:$vec, i64:$idx)),
-           (EXTRACT_SUBREG (LVSr vf32:$vec, $idx), sub_f32)>;
-  def: Pat<(f64 (extractelt vf64:$vec, uimm7:$idx)),
-           (LVSi vf64:$vec, imm:$idx)>;
-  def: Pat<(f64 (extractelt vf64:$vec, i64:$idx)),
-           (LVSr vf64:$vec, $idx)>;
+           (EXTRACT_SUBREG (lvsl_svs vi32:$vec, imm:$idx), sub_i32)>;
+//  def: Pat<(i32 (extractelt vi32:$vec, i64:$idx)),
+//           (EXTRACT_SUBREG (LVSr vi32:$vec, $idx), sub_i32)>;
+//  def: Pat<(i64 (extractelt vi64:$vec, uimm7:$idx)),
+//           (LVSi vi64:$vec, imm:$idx)>;
+//  def: Pat<(i64 (extractelt vi64:$vec, i64:$idx)),
+//           (LVSr vi64:$vec, $idx)>;
+//  def: Pat<(f32 (extractelt vf32:$vec, uimm7:$idx)),
+//           (EXTRACT_SUBREG (LVSi vf32:$vec, imm:$idx), sub_f32)>;
+//  def: Pat<(f32 (extractelt vf32:$vec, i64:$idx)),
+//           (EXTRACT_SUBREG (LVSr vf32:$vec, $idx), sub_f32)>;
+//  def: Pat<(f64 (extractelt vf64:$vec, uimm7:$idx)),
+//           (LVSi vf64:$vec, imm:$idx)>;
+//  def: Pat<(f64 (extractelt vf64:$vec, i64:$idx)),
+//           (LVSr vf64:$vec, $idx)>;
 }
 
 defm : eve_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
