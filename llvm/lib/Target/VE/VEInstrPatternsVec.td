@@ -575,28 +575,28 @@ def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 1, [SDTCis
 // Broadcast
 
 def: Pat<(v512i32 (vec_broadcast i32:$val)),
-         (VBRDpr
+         (pvbrd_vsl
             (ORrr
               (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
               (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32)),
-            (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+            (LEA32zzi 256))>;
 def: Pat<(v512f32 (vec_broadcast f32:$val)),
-         (VBRDpr 
+         (pvbrd_vsl
             (ORrr
               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
-            (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+            (LEA32zzi 256))>;
 
 multiclass vbrd_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                   ValueType vf32, ValueType vf64> {
   def : Pat<(vi32 (vec_broadcast i32:$sy)),
             (vbrdl_vsl i32:$sy, (LEA32zzi length))>;
   def : Pat<(vf32 (vec_broadcast f32:$sy)),
-            (VBRDf32r f32:$sy, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vbrdu_vsl f32:$sy, (LEA32zzi length))>;
   def : Pat<(vi64 (vec_broadcast i64:$sy)),
             (vbrd_vsl i64:$sy, (LEA32zzi length))>;
   def : Pat<(vf64 (vec_broadcast f64:$sy)),
-            (VBRDf64r f64:$sy, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vbrd_vsl f64:$sy, (LEA32zzi length))>;
 }
 
 defm : vbrd_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
