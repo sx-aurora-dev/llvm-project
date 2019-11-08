@@ -130,25 +130,25 @@ multiclass load_for_vector_length<int length> {
             (vldlsx_vIsl 4, $addr, (LEA32zzi length))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f32")
               (load I64:$addr)),
-            (VLDUir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vldu_vIsl 4, $addr, (LEA32zzi length))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f64")
               (load I64:$addr)),
-            (VLDir 8, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vld_vIsl 8, $addr, (LEA32zzi length))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
               (load I64:$addr)),
-            (VLDir 8, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (!cast<PatFrag>("extloadv" # !cast<string>(length) # "i32")
-                 I64:$addr)),
-            (VLDLzxir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (!cast<PatFrag>("sextloadv" # !cast<string>(length) # "i32")
-                 I64:$addr)),
-            (VLDLsxir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (!cast<PatFrag>("zextloadv" # !cast<string>(length) # "i32")
-                 I64:$addr)),
-            (VLDLzxir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+            (vld_vIsl 8, $addr, (LEA32zzi length))>;
+//  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
+//              (!cast<PatFrag>("extloadv" # !cast<string>(length) # "i32")
+//                 I64:$addr)),
+//            (VLDLzxir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+//  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
+//              (!cast<PatFrag>("sextloadv" # !cast<string>(length) # "i32")
+//                 I64:$addr)),
+//            (VLDLsxir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
+//  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
+//              (!cast<PatFrag>("zextloadv" # !cast<string>(length) # "i32")
+//                 I64:$addr)),
+//            (VLDLzxir 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
 }
 
 defm : load_for_vector_length<256>;
