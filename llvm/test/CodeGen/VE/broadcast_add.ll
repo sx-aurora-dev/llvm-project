@@ -24,8 +24,8 @@ define x86_regcallcc <512 x float> @addbrdv512f32(<512 x float>, float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:  srl %s34, %s0, 32
-; CHECK-NEXT:  lea %s35, 256
 ; CHECK-NEXT:  or %s34, %s0, %s34
+; CHECK-NEXT:  lea %s35, 256
 ; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  pvfadd %v0,%s34,%v0
 ; CHECK-NEXT:  or %s11, 0, %s9
