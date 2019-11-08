@@ -33,7 +33,9 @@ else()
   add_subdirectory(libveoshim)
 endif()
 
-set(additional_libs ${LIBOMPTARGET_DEP_VEO_LIBRARIES} ${additional_libs})
+set(additional_libs ${LIBOMPTARGET_DEP_VEO_LIBRARIES}
+                    ${LIBOMPTARGET_DEP_VEOSINFO_LIBRARIES}
+                    ${additional_libs})
 
 set(tmachine_name "necaurora")
 set(tmachine_libname "necaurora")

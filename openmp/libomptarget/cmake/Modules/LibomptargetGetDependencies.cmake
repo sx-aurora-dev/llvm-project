@@ -193,11 +193,25 @@ find_library (
     ENV LIBRARY_PATH
     ENV LD_LIBRARY_PATH)
 
+find_library(
+  LIBOMPTARGET_DEP_VEOSINFO_LIBRARIES
+  NAMES
+    veosinfo
+  PATHS
+    /usr/lib
+    /usr/local/lib
+    /opt/local/lib
+    /sw/lib
+    /opt/nec/ve/veos/lib64
+    ENV LIBRARY_PATH
+    ENV LD_LIBRARY_PATH)
+
 set(LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS ${LIBOMPTARGET_DEP_VEO_INCLUDE_DIR})
 find_package_handle_standard_args(
   LIBOMPTARGET_DEP_VEO 
   DEFAULT_MSG
   LIBOMPTARGET_DEP_VEO_LIBRARIES
+  LIBOMPTARGET_DEP_VEOSINFO_LIBRARIES
   LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS)
 
 mark_as_advanced(
