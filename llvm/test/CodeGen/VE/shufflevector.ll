@@ -23,9 +23,9 @@ define x86_regcallcc <8 x i32> @__regcall3__svv512i32(<4 x i32>) {
 define x86_regcallcc <8 x i32> @__regcall3__svv512i32_brd2(<4 x i32>) {
 ; CHECK-LABEL: svv512i32_brd2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 8
-; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  lvs %s34,%v0(2)
+; CHECK-NEXT:  lea %s35, 8
+; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  vbrdl %v0,%s34
 ; CHECK-NEXT:  or %s11, 0, %s9
   %2 = shufflevector <4 x i32> %0, <4 x i32> zeroinitializer, <8 x i32> <i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2>
@@ -36,9 +36,9 @@ define x86_regcallcc <8 x i32> @__regcall3__svv512i32_brd2(<4 x i32>) {
 define x86_regcallcc <8 x i32> @__regcall3__svv512i32_brd7(<4 x i32>, <4 x i32>) {
 ; CHECK-LABEL: svv512i32_brd7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 8
-; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  lvs %s34,%v1(3)
+; CHECK-NEXT:  lea %s35, 8
+; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  vbrdl %v0,%s34
 ; CHECK-NEXT:  or %s11, 0, %s9
   %3 = shufflevector <4 x i32> %0, <4 x i32> %1, <8 x i32> <i32 7, i32 7, i32 7, i32 7, i32 7, i32 7, i32 7, i32 7>
