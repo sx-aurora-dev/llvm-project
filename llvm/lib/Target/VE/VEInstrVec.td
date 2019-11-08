@@ -664,9 +664,9 @@ multiclass VSTm<string opcStr, bits<8> opc> {
 }
 
 defm VLD : VLDm<"vld", 0x81>;
-defm VLDU : VLDm<"vldu", 0x82>;
-let cx = 0 in defm VLDLsx : VLDm<"vldl.sx", 0x83>;
-let cx = 1 in defm VLDLzx : VLDm<"vldl.zx", 0x83>;
+//defm VLDU : VLDm<"vldu", 0x82>;
+//let cx = 0 in defm VLDLsx : VLDm<"vldl.sx", 0x83>;
+//let cx = 1 in defm VLDLzx : VLDm<"vldl.zx", 0x83>;
 
 //defm VLD2D  : VLDm<"vld2d", 0xC1>;
 //defm VLDU2D : VLDm<"vldu2d", 0xC2>;
@@ -681,37 +681,37 @@ defm VSTL : VSTm<"vstl", 0x93>;
 //defm VSTU2D : VSTm<"vstu2d", 0xD2>;
 //defm VSTL2D : VSTm<"vstl2d", 0xD3>;
 
-def LSVr : RR<0x8E, (outs V64:$dst), (ins V64:$vx, I32:$sy, I64:$sz), 
-  "lsv ${vx}(${sy}),$sz", []> {
-    let cy = 1;
-    let Constraints = "$dst = $vx";
-    let hasSideEffects = 0;
-}
-def LSVi : RR<0x8E, (outs V64:$dst), (ins V64:$vx, simm7Op32:$sy, I64:$sz),
-  "lsv ${vx}(${sy}),$sz", []> {
-    let Constraints = "$dst = $vx";
-    let hasSideEffects = 0;
-}
-
-let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, hasSideEffects = 0 in
-def LVSr : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I64:$sy),
-  "lvs ${sx},${vx}(${sy})", []>;
-
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
-def LVSi : RR<0x9E, (outs I64:$sx), (ins V64:$vx, simm7Op64:$sy),
-  "lvs ${sx},${vx}(${sy})", []>;
-
-let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, isCodeGenOnly = 1, hasSideEffects = 0 in
-def LVSi64r : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I32:$sy),
-  "lvs ${sx},${vx}(${sy})", []>;
-
-let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, isCodeGenOnly = 1, hasSideEffects = 0 in
-def LVSf64r : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I32:$sy),
-  "lvs ${sx},${vx}(${sy})", []>;
-
-let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, isCodeGenOnly = 1, hasSideEffects = 0 in
-def LVSf32r : RR<0x9E, (outs F32:$sx), (ins V64:$vx, I32:$sy),
-  "lvs ${sx},${vx}(${sy})", []>;
+//def LSVr : RR<0x8E, (outs V64:$dst), (ins V64:$vx, I32:$sy, I64:$sz), 
+//  "lsv ${vx}(${sy}),$sz", []> {
+//    let cy = 1;
+//    let Constraints = "$dst = $vx";
+//    let hasSideEffects = 0;
+//}
+//def LSVi : RR<0x8E, (outs V64:$dst), (ins V64:$vx, simm7Op32:$sy, I64:$sz),
+//  "lsv ${vx}(${sy}),$sz", []> {
+//    let Constraints = "$dst = $vx";
+//    let hasSideEffects = 0;
+//}
+//
+//let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, hasSideEffects = 0 in
+//def LVSr : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I64:$sy),
+//  "lvs ${sx},${vx}(${sy})", []>;
+//
+//let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
+//def LVSi : RR<0x9E, (outs I64:$sx), (ins V64:$vx, simm7Op64:$sy),
+//  "lvs ${sx},${vx}(${sy})", []>;
+//
+//let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, isCodeGenOnly = 1, hasSideEffects = 0 in
+//def LVSi64r : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I32:$sy),
+//  "lvs ${sx},${vx}(${sy})", []>;
+//
+//let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, isCodeGenOnly = 1, hasSideEffects = 0 in
+//def LVSf64r : RR<0x9E, (outs I64:$sx), (ins V64:$vx, I32:$sy),
+//  "lvs ${sx},${vx}(${sy})", []>;
+//
+//let cx = 0, sx = 0, cy = 1, cz = 0, sz = 0, isCodeGenOnly = 1, hasSideEffects = 0 in
+//def LVSf32r : RR<0x9E, (outs F32:$sx), (ins V64:$vx, I32:$sy),
+//  "lvs ${sx},${vx}(${sy})", []>;
 
 let cy = 1 in
 def LVMr : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
@@ -1447,35 +1447,35 @@ defm VMRG : VMRGm<"vmrg", 0xD6>;
 
 // 5.3.2.15. Vector Mask Register Instructions
 
-class VMR3<bits<8> op, string asm> 
-  : RV<op, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz),
-        !strconcat(asm, " $vmx,$vmy,$vmz"), []> {
-  let sy = 0;
-  let vw = 0;
-  let m = 0;
-}
+//class VMR3<bits<8> op, string asm> 
+//  : RV<op, (outs VM:$vmx), (ins VM:$vmy, VM:$vmz),
+//        !strconcat(asm, " $vmx,$vmy,$vmz"), []> {
+//  let sy = 0;
+//  let vw = 0;
+//  let m = 0;
+//}
+//
+//class VMR2<bits<8> op, string asm> 
+//  : RV<op, (outs VM:$vmx), (ins VM:$vmy),
+//        !strconcat(asm, " $vmx,$vmy"), []> {
+//  let sy = 0;
+//  let vz = 0;
+//  let vw = 0;
+//  let m = 0;
+//}
+//
+//class VMR1VL<bits<8> op, string asm> 
+//  : RV<op, (outs I64:$sx), (ins VM:$vmy, VLS:$vl),
+//       !strconcat(asm, " $sx,$vmy"),  []> {
+//    bits<7> sx;
+//    bits<4> vmy;
+//    let Inst{15-9} = sx;
+//    let Inst{47-44} = vmy;
+//    let DisableEncoding = "$vl";
+//}
 
-class VMR2<bits<8> op, string asm> 
-  : RV<op, (outs VM:$vmx), (ins VM:$vmy),
-        !strconcat(asm, " $vmx,$vmy"), []> {
-  let sy = 0;
-  let vz = 0;
-  let vw = 0;
-  let m = 0;
-}
-
-class VMR1VL<bits<8> op, string asm> 
-  : RV<op, (outs I64:$sx), (ins VM:$vmy, VLS:$vl),
-       !strconcat(asm, " $sx,$vmy"),  []> {
-    bits<7> sx;
-    bits<4> vmy;
-    let Inst{15-9} = sx;
-    let Inst{47-44} = vmy;
-    let DisableEncoding = "$vl";
-}
-
-let hasSideEffects = 0 in {
-def ANDM : VMR3<0x84, "andm">;
+//let hasSideEffects = 0 in {
+//def ANDM : VMR3<0x84, "andm">;
 //def ORM :  VMR3<0x85, "orm">;
 //def XORM : VMR3<0x86, "xorm">;
 //def EQVM : VMR3<0x87, "eqvm">;
@@ -1491,7 +1491,7 @@ def ANDM : VMR3<0x84, "andm">;
 //def EQVMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
 //def NNDMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy, VM512:$vmz), "", []>;
 //def NEGMp : PseudoVec<(outs VM512:$vmx), (ins VM512:$vmy), "", []>;
-}
+//}
 
 // 5.3.2.16. Vector Control Instructions
 // SVL

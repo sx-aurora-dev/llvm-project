@@ -76,6 +76,7 @@ namespace {
                                            const MCSubtargetInfo &STI);
     void LowerEH_SJLJ_LONGJMPAndEmitMCInsts(const MachineInstr *MI,
                                             const MCSubtargetInfo &STI);
+#ifdef OBSOLETE_VE_VECTOR
     void LowerVM2VAndEmitMCInsts(const MachineInstr *MI,
                                  const MCSubtargetInfo &STI);
     void LowerVMP2VAndEmitMCInsts(const MachineInstr *MI,
@@ -84,6 +85,7 @@ namespace {
                                  const MCSubtargetInfo &STI);
     void LowerV2VMPAndEmitMCInsts(const MachineInstr *MI,
                                   const MCSubtargetInfo &STI);
+#endif
 
   };
 } // end of anonymous namespace
@@ -454,6 +456,7 @@ void VEAsmPrinter::LowerEH_SJLJ_LONGJMPAndEmitMCInsts(
   return;
 }
 
+#ifdef OBSOLETE_VE_VECTOR
 void VEAsmPrinter::LowerVM2VAndEmitMCInsts(
     const MachineInstr *MI, const MCSubtargetInfo &STI) {
   // FIXME: using sx16 as a temporary register.
@@ -587,6 +590,7 @@ void VEAsmPrinter::LowerV2VMPAndEmitMCInsts(
       .addReg(VE::SX16));
   }
 }
+#endif // OBSOLETE_VE_VECTOR
 
 void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
 {
@@ -615,6 +619,7 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
   case VE::EH_SjLj_LongJmp:
     LowerEH_SJLJ_LONGJMPAndEmitMCInsts(MI, getSubtargetInfo());
     return;
+#ifdef OBSOLETE_VE_VECTOR
   case VE::VM2V:
     LowerVM2VAndEmitMCInsts(MI, getSubtargetInfo());
     return;
@@ -627,6 +632,7 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
   case VE::V2VMP:
     LowerV2VMPAndEmitMCInsts(MI, getSubtargetInfo());
     return;
+#endif
   }
   MachineBasicBlock::const_instr_iterator I = MI->getIterator();
   MachineBasicBlock::const_instr_iterator E = MI->getParent()->instr_end();

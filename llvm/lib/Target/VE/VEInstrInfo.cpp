@@ -367,7 +367,7 @@ void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
       MachineInstrBuilder MIB = BuildMI(MBB, I, DL, MCID, SubDest)
           .addReg(SubSrc).addImm(0);
       MovMI = MIB.getInstr();
-    } else if (MCID.getOpcode() == VE::ANDM) {
+    } else if (MCID.getOpcode() == VE::andm_mmm) {
       // generate "ANDM, dest, vm0, src" instruction.
       MachineInstrBuilder MIB = BuildMI(MBB, I, DL, MCID, SubDest)
           .addReg(VE::VM0).addReg(SubSrc);
@@ -427,14 +427,14 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
       .addReg(SaveReg, getKillRegState(true));
   }
   else if (VE::VMRegClass.contains(DestReg, SrcReg))
-    BuildMI(MBB, I, DL, get(VE::ANDM), DestReg)
+    BuildMI(MBB, I, DL, get(VE::andm_mmm), DestReg)
         .addReg(VE::VM0)
         .addReg(SrcReg, getKillRegState(KillSrc));
   else if (VE::VM512RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
     const unsigned subRegIdx[] = { VE::sub_vm_even, VE::sub_vm_odd };
     unsigned int numSubRegs = 2;
-    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDM),
+    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::andm_mmm),
                     numSubRegs, subRegIdx);
   } else if (VE::F128RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.

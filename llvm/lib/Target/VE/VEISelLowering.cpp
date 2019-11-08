@@ -3363,7 +3363,7 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
       SDValue HighMask = DAG.getConstant(0xFFFFFFFF00000000, dl, i64);
       SDValue HalfIdx = DAG.getNode(ISD::SRL, dl, i64,
         { Idx, OneConst });
-      SDValue PackedVal = SDValue(DAG.getMachineNode(VE::LVSi, dl, i64,
+      SDValue PackedVal = SDValue(DAG.getMachineNode(VE::lvsl_svI, dl, i64,
         { Vec, HalfIdx }), 0);
       SDValue IdxLSB = DAG.getNode(ISD::AND, dl, i64,
         { Idx, OneConst });
@@ -3384,7 +3384,7 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
         { I64Val, ShiftIdx });
       SDValue CombinedVal = DAG.getNode(ISD::OR, dl, i64,
         { ShiftedVal, MaskedVal });
-      Result = SDValue(DAG.getMachineNode(VE::LSVi, dl,
+      Result = SDValue(DAG.getMachineNode(VE::lsv_vvIs, dl,
         Vec.getSimpleValueType(),
         { Vec, HalfIdx, CombinedVal }), 0);
     }
@@ -3561,7 +3561,7 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
       SDValue LowBits = DAG.getConstant(0xFFFFFFFF, dl, i64);
       SDValue HalfIdx = DAG.getNode(ISD::SRL, dl, i64,
         { Idx, OneConst });
-      SDValue PackedVal = SDValue(DAG.getMachineNode(VE::LVSi, dl, i64,
+      SDValue PackedVal = SDValue(DAG.getMachineNode(VE::lvsl_svI, dl, i64,
         { Vec, HalfIdx }), 0);
       SDValue IdxLSB = DAG.getNode(ISD::AND, dl, i64,
         { Idx, OneConst });
