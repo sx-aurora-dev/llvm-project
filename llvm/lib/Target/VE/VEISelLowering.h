@@ -77,6 +77,7 @@ namespace llvm {
       /// MCSymbol and TargetBlockAddress.
       Wrapper,
 
+#ifdef OBSOLETE_VE_INTRIN
       // Intrinsics
       INT_LVM,      // for int_ve_lvm_mmss or int_ve_lvm_MMss
       INT_SVM,      // for int_ve_svm_sms or int_ve_svm_sMs
@@ -449,6 +450,7 @@ namespace llvm {
       INT_LVS,          // for int_lvs_svs_u64, int_lvs_svs_f64, and
                         // int_ve_lvs_svs_f32
       INT_PFCHV,        // for int_ve_pfchv
+#endif // OBSOLETE_VE_INTRIN
     };
   }
 

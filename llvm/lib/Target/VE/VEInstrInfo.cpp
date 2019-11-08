@@ -694,6 +694,7 @@ static void buildVMRInst_VL(MachineInstr& MI, const MCInstrDesc& MCID) {
 }
 #endif
 
+#ifdef OBSOLETE_VE_VECTOR
 static void expandPseudoVFMK(const TargetInstrInfo& TI, MachineInstr& MI)
 {
     // replace to pvfmk.w.up and pvfmk.w.lo (VFMSpv)
@@ -763,6 +764,7 @@ static void expandPseudoVFMK(const TargetInstrInfo& TI, MachineInstr& MI)
 
     MI.eraseFromParent();
 }
+#endif // OBSOLETE_VE_VECTOR
 
 static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
 {
@@ -926,6 +928,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     return true;
   }
 #endif
+#ifdef OBSOLETE_VE_VECTOR
   case VE::VFMSpv:
   case VE::VFMFpv:
   case VE::VFMSpvm:
@@ -982,6 +985,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::EQVMp: buildVMRInst(MI, get(VE::EQVM)); return true;
   case VE::NNDMp: buildVMRInst(MI, get(VE::NNDM)); return true;
   case VE::NEGMp: buildVMRInst(MI, get(VE::NEGM)); return true;
+#endif // OBSOLETE_VE_VECTOR
 
   case VE::andm_MMM: buildVMRInst(MI, get(VE::andm_mmm)); return true;
   case VE::orm_MMM:  buildVMRInst(MI, get(VE::orm_mmm)); return true;

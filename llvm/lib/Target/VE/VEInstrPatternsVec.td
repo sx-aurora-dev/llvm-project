@@ -202,15 +202,15 @@ defm : store_for_vector_length<2>;
 // v256i1, v512i1
 
 def : Pat<(v256i1 (load I64:$addr)),
-          (v256i1 (LVMi (LVMi (LVMi (LVMi (v256i1 (IMPLICIT_DEF)), 
+          (v256i1 (lvm_mmIs (lvm_mmIs (lvm_mmIs (lvm_mmIs (v256i1 (IMPLICIT_DEF)), 
                       0, (LDSri $addr, 0)),
                       1, (LDSri $addr, 8)),
                       2, (LDSri $addr, 16)),
                       3, (LDSri $addr, 24)))>;
 
 def : Pat<(v512i1 (load I64:$addr)),
-          (v512i1 (LVMpi (LVMpi (LVMpi (LVMpi
-                  (LVMpi (LVMpi (LVMpi (LVMpi (v512i1 (IMPLICIT_DEF)), 
+          (v512i1 (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs
+                  (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs (v512i1 (IMPLICIT_DEF)), 
                       0, (LDSri $addr, 0)),
                       1, (LDSri $addr, 8)),
                       2, (LDSri $addr, 16)),

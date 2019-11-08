@@ -1605,6 +1605,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::VEC_SCATTER:     return "VEISD::VEC_SCATTER";
   case VEISD::VEC_GATHER:      return "VEISD::VEC_GATHER";
   case VEISD::Wrapper:         return "VEISD::Wrapper";
+#ifdef OBSOLETE_VE_INTRIN
   case VEISD::INT_LVM:         return "VEISD::INT_LVM";
   case VEISD::INT_SVM:         return "VEISD::INT_SVM";
   case VEISD::INT_ANDM:        return "VEISD::INT_ANDM";
@@ -1940,6 +1941,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::INT_LSV:         return "VEISD::INT_LSV";
   case VEISD::INT_LVS:         return "VEISD::INT_LVS";
   case VEISD::INT_PFCHV:       return "VEISD::INT_PFCHV";
+#endif
   }
   return nullptr;
 }
@@ -2544,7 +2546,7 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
   if (MemVT == MVT::v256i1) {
     SDValue OutChains[4];
     for (int i = 0; i < 4; ++i) {
-      SDNode *V = DAG.getMachineNode(VE::SVMi, dl, MVT::i64,
+      SDNode *V = DAG.getMachineNode(VE::svm_smI, dl, MVT::i64,
                                      StNode->getValue(),
                                      DAG.getTargetConstant(i, dl, MVT::i64));
       SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
@@ -2559,7 +2561,7 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
   } else if (MemVT == MVT::v512i1) {
     SDValue OutChains[8];
     for (int i = 0; i < 8; ++i) {
-      SDNode *V = DAG.getMachineNode(VE::SVMpi, dl, MVT::i64,
+      SDNode *V = DAG.getMachineNode(VE::svm_sMI, dl, MVT::i64,
                                      StNode->getValue(),
                                      DAG.getTargetConstant(i, dl, MVT::i64));
       SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,

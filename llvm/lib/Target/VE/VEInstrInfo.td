@@ -2271,6 +2271,7 @@ def : Pat<(i32 (and i32:$lhs, 0xffffffff)),
 
 // vector instructions
 include "VEInstrVec.td"
+include "VEInstrVecVL.td"
 
 // vector instruction fragments (glue beteen instruction and intrinsics)
 include "VEInstrFragmentsVec.td"
@@ -2279,5 +2280,4 @@ include "VEInstrFragmentsVec.td"
 include "VEInstrPatternsVec.td"
 
 // vevlintrin
-include "VEInstrVecVL.td"
 include "VEInstrIntrinsicVL.td"
