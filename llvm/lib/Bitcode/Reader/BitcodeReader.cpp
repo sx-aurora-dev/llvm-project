@@ -1300,6 +1300,15 @@ static uint64_t getRawAttributeMask(Attribute::AttrKind Val) {
   case Attribute::SanitizeMemTag:
     llvm_unreachable("sanitize_memtag attribute not supported in raw format");
     break;
+  case Attribute::Mask:
+    llvm_unreachable("mask attribute not supported in raw format");
+    break;
+  case Attribute::VectorLength:
+    llvm_unreachable("vlen attribute not supported in raw format");
+    break;
+  case Attribute::Passthru:
+    llvm_unreachable("passthru attribute not supported in raw format");
+    break;
   }
   llvm_unreachable("Unsupported attribute type");
 }
@@ -1314,6 +1323,9 @@ static void addRawAttributeValue(AttrBuilder &B, uint64_t Val) {
         I == Attribute::DereferenceableOrNull ||
         I == Attribute::ArgMemOnly ||
         I == Attribute::AllocSize ||
+        I == Attribute::Mask ||
+        I == Attribute::VectorLength ||
+        I == Attribute::Passthru ||
         I == Attribute::NoSync)
       continue;
     if (uint64_t A = (Val & getRawAttributeMask(I))) {
@@ -1439,6 +1451,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::InReg;
   case bitc::ATTR_KIND_JUMP_TABLE:
     return Attribute::JumpTable;
+  case bitc::ATTR_KIND_MASK:
+    return Attribute::Mask;
   case bitc::ATTR_KIND_MIN_SIZE:
     return Attribute::MinSize;
   case bitc::ATTR_KIND_NAKED:
@@ -1487,6 +1501,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::OptimizeForSize;
   case bitc::ATTR_KIND_OPTIMIZE_NONE:
     return Attribute::OptimizeNone;
+  case bitc::ATTR_KIND_PASSTHRU:
+    return Attribute::Passthru;
   case bitc::ATTR_KIND_READ_NONE:
     return Attribute::ReadNone;
   case bitc::ATTR_KIND_READ_ONLY:
@@ -1533,6 +1549,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::UWTable;
   case bitc::ATTR_KIND_WILLRETURN:
     return Attribute::WillReturn;
+  case bitc::ATTR_KIND_VECTORLENGTH:
+    return Attribute::VectorLength;
   case bitc::ATTR_KIND_WRITEONLY:
     return Attribute::WriteOnly;
   case bitc::ATTR_KIND_Z_EXT:

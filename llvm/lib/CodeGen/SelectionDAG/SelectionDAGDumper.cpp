@@ -439,6 +439,65 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
   case ISD::VECREDUCE_UMIN:             return "vecreduce_umin";
   case ISD::VECREDUCE_FMAX:             return "vecreduce_fmax";
   case ISD::VECREDUCE_FMIN:             return "vecreduce_fmin";
+
+  // Explicit Vector Length erxtension
+  // VP Memory
+  case ISD::VP_LOAD:                   return "vp_load";
+  case ISD::VP_STORE:                  return "vp_store";
+  case ISD::VP_GATHER:                 return "vp_gather";
+  case ISD::VP_SCATTER:                return "vp_scatter";
+
+  // VP Unary operators
+  case ISD::VP_FNEG:                   return "vp_fneg";
+
+  // VP Binary operators
+  case ISD::VP_ADD:                    return "vp_add";
+  case ISD::VP_SUB:                    return "vp_sub";
+  case ISD::VP_MUL:                    return "vp_mul";
+  case ISD::VP_SDIV:                   return "vp_sdiv";
+  case ISD::VP_UDIV:                   return "vp_udiv";
+  case ISD::VP_SREM:                   return "vp_srem";
+  case ISD::VP_UREM:                   return "vp_urem";
+  case ISD::VP_AND:                    return "vp_and";
+  case ISD::VP_OR:                     return "vp_or";
+  case ISD::VP_XOR:                    return "vp_xor";
+  case ISD::VP_SHL:                    return "vp_shl";
+  case ISD::VP_SRA:                    return "vp_sra";
+  case ISD::VP_SRL:                    return "vp_srl";
+  case ISD::VP_FADD:                   return "vp_fadd";
+  case ISD::VP_FSUB:                   return "vp_fsub";
+  case ISD::VP_FMUL:                   return "vp_fmul";
+  case ISD::VP_FDIV:                   return "vp_fdiv";
+  case ISD::VP_FREM:                   return "vp_frem";
+
+  // VP comparison
+  case ISD::VP_SETCC:                  return "vp_setcc";
+
+  // VP ternary operators
+  case ISD::VP_FMA:                    return "vp_fma";
+
+  // VP shuffle
+  case ISD::VP_VSHIFT:                 return "vp_vshift";
+  case ISD::VP_COMPRESS:               return "vp_compress";
+  case ISD::VP_EXPAND:                 return "vp_expand";
+
+  case ISD::VP_COMPOSE:                return "vp_compose";
+  case ISD::VP_SELECT:                 return "vp_select";
+
+  // VP reduction operators
+  case ISD::VP_REDUCE_FADD:            return "vp_reduce_fadd";
+  case ISD::VP_REDUCE_FMUL:            return "vp_reduce_fmul";
+  case ISD::VP_REDUCE_ADD:             return "vp_reduce_add";
+  case ISD::VP_REDUCE_MUL:             return "vp_reduce_mul";
+  case ISD::VP_REDUCE_AND:             return "vp_reduce_and";
+  case ISD::VP_REDUCE_OR:              return "vp_reduce_or";
+  case ISD::VP_REDUCE_XOR:             return "vp_reduce_xor";
+  case ISD::VP_REDUCE_SMAX:            return "vp_reduce_smax";
+  case ISD::VP_REDUCE_SMIN:            return "vp_reduce_smin";
+  case ISD::VP_REDUCE_UMAX:            return "vp_reduce_umax";
+  case ISD::VP_REDUCE_UMIN:            return "vp_reduce_umin";
+  case ISD::VP_REDUCE_FMAX:            return "vp_reduce_fmax";
+  case ISD::VP_REDUCE_FMIN:            return "vp_reduce_fmin";
   }
 }
 

@@ -1126,6 +1126,20 @@ public:
                           SDValue Offset, ISD::MemIndexedMode AM);
 
   /// Returns sum of the base pointer and offset.
+  SDValue getLoadVP(EVT VT, const SDLoc &dl, SDValue Chain, SDValue Ptr, 
+                        SDValue Mask, SDValue VLen, EVT MemVT,
+                        MachineMemOperand *MMO, ISD::LoadExtType);
+  SDValue getStoreVP(SDValue Chain, const SDLoc &dl, SDValue Val,
+                         SDValue Ptr, SDValue Mask, SDValue VLen, EVT MemVT,
+                         MachineMemOperand *MMO, bool IsTruncating = false);
+  SDValue getGatherVP(SDVTList VTs, EVT VT, const SDLoc &dl,
+                          ArrayRef<SDValue> Ops, MachineMemOperand *MMO,
+                          ISD::MemIndexType IndexType);
+  SDValue getScatterVP(SDVTList VTs, EVT VT, const SDLoc &dl,
+                           ArrayRef<SDValue> Ops, MachineMemOperand *MMO,
+                           ISD::MemIndexType IndexType);
+
+  /// Returns sum of the base pointer and offset.
   SDValue getMemBasePlusOffset(SDValue Base, unsigned Offset, const SDLoc &DL);
 
   SDValue getMaskedLoad(EVT VT, const SDLoc &dl, SDValue Chain, SDValue Ptr,

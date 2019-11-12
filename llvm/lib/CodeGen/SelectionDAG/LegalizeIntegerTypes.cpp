@@ -992,7 +992,7 @@ SDValue DAGTypeLegalizer::PromoteIntRes_UADDSUBO(SDNode *N, unsigned ResNo) {
 }
 
 // Handle promotion for the ADDE/SUBE/ADDCARRY/SUBCARRY nodes. Notice that
-// the third operand of ADDE/SUBE nodes is carry flag, which differs from 
+// the third operand of ADDE/SUBE nodes is carry flag, which differs from
 // the ADDCARRY/SUBCARRY nodes in that the third operand is carry Boolean.
 SDValue DAGTypeLegalizer::PromoteIntRes_ADDSUBCARRY(SDNode *N, unsigned ResNo) {
   if (ResNo == 1)
@@ -1144,6 +1144,9 @@ bool DAGTypeLegalizer::PromoteIntegerOperand(SDNode *N, unsigned OpNo) {
     return false;
   }
 
+  if (N->isVP()) {
+    Res = PromoteIntOp_VP(N, OpNo);
+  } else {
   switch (N->getOpcode()) {
     default:
   #ifndef NDEBUG
@@ -1221,6 +1224,7 @@ bool DAGTypeLegalizer::PromoteIntegerOperand(SDNode *N, unsigned OpNo) {
   case ISD::VECREDUCE_SMIN:
   case ISD::VECREDUCE_UMAX:
   case ISD::VECREDUCE_UMIN: Res = PromoteIntOp_VECREDUCE(N); break;
+  }
   }
 
   // If the result is null, the sub-method took care of registering results etc.
@@ -1500,6 +1504,25 @@ SDValue DAGTypeLegalizer::PromoteIntOp_MSTORE(MaskedStoreSDNode *N,
   return DAG.getMaskedStore(N->getChain(), dl, DataOp, N->getBasePtr(), Mask,
                             N->getMemoryVT(), N->getMemOperand(),
                             TruncateStore, N->isCompressingStore());
+}
+
+SDValue DAGTypeLegalizer::PromoteIntOp_VP(SDNode *N, unsigned OpNo) {
+  EVT DataVT;
+  switch (N->getOpcode()) {
+    default:
+      DataVT = N->getValueType(0);
+    break;
+
+    case ISD::VP_STORE:
+    case ISD::VP_SCATTER:
+      llvm_unreachable("TODO implement VP memory nodes");
+  }
+
+  // TODO assert that \p OpNo is the mask
+  SDValue Mask = PromoteTargetBoolean(N->getOperand(OpNo), DataVT);
+  SmallVector<SDValue, 4> NewOps(N->op_begin(), N->op_end());
+  NewOps[OpNo] = Mask;
+  return SDValue(DAG.UpdateNodeOperands(N, NewOps), 0);
 }
 
 SDValue DAGTypeLegalizer::PromoteIntOp_MLOAD(MaskedLoadSDNode *N,

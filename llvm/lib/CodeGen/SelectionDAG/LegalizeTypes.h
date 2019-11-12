@@ -341,6 +341,7 @@ private:
   SDValue PromoteIntRes_VECREDUCE(SDNode *N);
   SDValue PromoteIntRes_ABS(SDNode *N);
 
+
   // Integer Operand Promotion.
   bool PromoteIntegerOperand(SDNode *N, unsigned OpNo);
   SDValue PromoteIntOp_ANY_EXTEND(SDNode *N);
@@ -376,6 +377,7 @@ private:
   SDValue PromoteIntOp_MULFIX(SDNode *N);
   SDValue PromoteIntOp_FPOWI(SDNode *N);
   SDValue PromoteIntOp_VECREDUCE(SDNode *N);
+  SDValue PromoteIntOp_VP(SDNode *N, unsigned OpNo);
 
   void PromoteSetCCOperands(SDValue &LHS,SDValue &RHS, ISD::CondCode Code);
 
