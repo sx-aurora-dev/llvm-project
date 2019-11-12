@@ -189,6 +189,18 @@ ElementCount VPIntrinsic::getVectorLength() const {
   return GetVectorLengthOfType(VPMask->getType());
 }
 
+void VPIntrinsic::setMaskParam(Value *NewMask) {
+  auto MaskPos = GetMaskParamPos(getIntrinsicID());
+  assert(MaskPos.hasValue());
+  this->setOperand(MaskPos.getValue(), NewMask);
+}
+
+void VPIntrinsic::setVectorLengthParam(Value *NewVL) {
+  auto VLPos = GetVectorLengthParamPos(getIntrinsicID());
+  assert(VLPos.hasValue());
+  this->setOperand(VLPos.getValue(), NewVL);
+}
+
 Value *VPIntrinsic::getMaskParam() const {
   auto maskPos = GetMaskParamPos(getIntrinsicID());
   if (maskPos)
@@ -290,6 +302,21 @@ bool VPIntrinsic::canIgnoreVectorLengthParam() const {
   // Cannot ignore vlen param by default.
   return false;
 }
+
+bool VPIntrinsic::isBinaryOp() const { return IsBinaryVPOp(getIntrinsicID()); }
+
+bool VPIntrinsic::IsBinaryVPOp(Intrinsic::ID VPID) {
+  switch (VPID) {
+  default:
+    return false;
+
+#define HANDLE_VP_IS_BINARY(VPID)                                              \
+  case Intrinsic::VPID:                                                        \
+    return true;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
 
 Instruction::BinaryOps BinaryOpIntrinsic::getBinaryOp() const {
   switch (getIntrinsicID()) {
