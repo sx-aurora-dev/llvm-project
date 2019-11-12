@@ -93,6 +93,7 @@
 #include "llvm/IR/ModuleSlotTracker.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Statepoint.h"
+#include "llvm/IR/FPEnv.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
 #include "llvm/IR/User.h"
@@ -477,6 +478,7 @@ private:
   void visitUserOp2(Instruction &I) { visitUserOp1(I); }
   void visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call);
   void visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI);
+  void visitVPIntrinsic(VPIntrinsic &FPI);
   void visitDbgIntrinsic(StringRef Kind, DbgVariableIntrinsic &DII);
   void visitDbgLabelIntrinsic(StringRef Kind, DbgLabelInst &DLI);
   void visitAtomicCmpXchgInst(AtomicCmpXchgInst &CXI);
@@ -1705,11 +1707,14 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
   if (Attrs.isEmpty())
     return;
 
+  bool SawMask = false;
   bool SawNest = false;
+  bool SawPassthru = false;
   bool SawReturned = false;
   bool SawSRet = false;
   bool SawSwiftSelf = false;
   bool SawSwiftError = false;
+  bool SawVectorLength = false;
 
   // Verify return value attributes.
   AttributeSet RetAttrs = Attrs.getRetAttributes();
@@ -1778,11 +1783,32 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
       SawSwiftError = true;
     }
 
+    if (ArgAttrs.hasAttribute(Attribute::VectorLength)) {
+      Assert(!SawVectorLength, "Cannot have multiple 'vlen' parameters!",
+             V);
+      SawVectorLength = true;
+    }
+
+    if (ArgAttrs.hasAttribute(Attribute::Passthru)) {
+      Assert(!SawPassthru, "Cannot have multiple 'passthru' parameters!",
+             V);
+      SawPassthru = true;
+    }
+
+    if (ArgAttrs.hasAttribute(Attribute::Mask)) {
+      Assert(!SawMask, "Cannot have multiple 'mask' parameters!",
+             V);
+      SawMask = true;
+    }
+
     if (ArgAttrs.hasAttribute(Attribute::InAlloca)) {
       Assert(i == FT->getNumParams() - 1,
              "inalloca isn't on the last parameter!", V);
     }
   }
+
+  Assert(!SawPassthru || SawMask,
+      "Cannot have 'passthru' parameter without 'mask' parameter!", V);
 
   if (!Attrs.hasAttributes(AttributeList::FunctionIndex))
     return;
@@ -4369,6 +4395,13 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
 #include "llvm/IR/ConstrainedOps.def"
     visitConstrainedFPIntrinsic(cast<ConstrainedFPIntrinsic>(Call));
     break;
+
+#define REGISTER_VP_INTRINSIC(VPID,MASKPOS,VLENPOS) \
+  case Intrinsic::VPID:
+#include "llvm/IR/VPIntrinsics.def"
+    visitVPIntrinsic(cast<VPIntrinsic>(Call));
+    break;
+
   case Intrinsic::dbg_declare: // llvm.dbg.declare
     Assert(isa<MetadataAsValue>(Call.getArgOperand(0)),
            "invalid llvm.dbg.declare intrinsic call 1", Call);
@@ -4809,6 +4842,18 @@ static DISubprogram *getSubprogram(Metadata *LocalScope) {
   // Just return null; broken scope chains are checked elsewhere.
   assert(!isa<DILocalScope>(LocalScope) && "Unknown type of local scope");
   return nullptr;
+}
+
+void Verifier::visitVPIntrinsic(VPIntrinsic &VPI) {
+  Assert(!VPI.isConstrainedOp(),
+         "VP intrinsics only support the default fp environment for now "
+         "(round.tonearest; fpexcept.ignore).");
+  if (VPI.isConstrainedOp()) {
+    Assert(VPI.getExceptionBehavior() != None,
+           "invalid exception behavior argument", &VPI);
+    Assert(VPI.getRoundingMode() != None, "invalid rounding mode argument",
+           &VPI);
+  }
 }
 
 void Verifier::visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI) {

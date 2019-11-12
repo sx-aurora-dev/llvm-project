@@ -21,9 +21,71 @@
 #define REGISTER_VP_INTRINSIC(VPID, MASKPOS, VLENPOS)
 #endif
 
+// This is a reduction intrinsic with accumulator arg at ACCUPOS, reduced vector
+// arg at VECTORPOS.
+#ifndef HANDLE_VP_REDUCTION
+#define HANDLE_VP_REDUCTION(VPID, ACCUPOS, VECTORPOS)
+#endif
+
+// The intrinsic VPID of llvm.vp.* functionally corresponds to the intrinsic
+// CFPID of llvm.experimental.constrained.*.
+#ifndef HANDLE_VP_TO_CONSTRAINED_INTRIN
+#define HANDLE_VP_TO_CONSTRAINED_INTRIN(VPID, CPFID)
+#endif
+
+// This VP intrinsic has constraint fp params.
+// Rounding mode arg pos is ROUNDPOS, exception behavior arg pos is EXCEPT POS.
+#ifndef HANDLE_VP_FPCONSTRAINT
+#define HANDLE_VP_FPCONSTRAINT(VPID, ROUNDPOS, EXCEPTPOS)
+#endif
+
 // Map this VP intrinsic to its functional Opcode
 #ifndef HANDLE_VP_TO_OC
 #define HANDLE_VP_TO_OC(VPID, OC)
+#endif
+
+// Map this VP intrinsic to its cannonical functional intrinsic.
+#ifndef HANDLE_VP_TO_INTRIN
+#define HANDLE_VP_TO_INTRIN(VPID, ID)
+#endif
+
+// This VP Intrinsic is a unary operator
+// (only count data params)
+#ifndef HANDLE_VP_IS_UNARY
+#define HANDLE_VP_IS_UNARY(VPID)
+#endif
+
+// This VP Intrinsic is a binary operator
+// (only count data params)
+#ifndef HANDLE_VP_IS_BINARY
+#define HANDLE_VP_IS_BINARY(VPID)
+#endif
+
+// This VP Intrinsic is a ternary operator
+// (only count data params)
+#ifndef HANDLE_VP_IS_TERNARY
+#define HANDLE_VP_IS_TERNARY(VPID)
+#endif
+
+// This VP Intrinsic is a comparison
+// (only count data params)
+#ifndef HANDLE_VP_IS_XCMP
+#define HANDLE_VP_IS_XCMP(VPID)
+#endif
+
+// This VP Intrinsic is a memory operation
+// The pointer arg is at POINTERPOS and the data arg is at DATAPOS.
+#ifndef HANDLE_VP_IS_MEMOP
+#define HANDLE_VP_IS_MEMOP(VPID, POINTERPOS, DATAPOS)
+#endif
+
+#ifndef REGISTER_VP_SDNODE
+#define REGISTER_VP_SDNODE(NODEID, MASKPOS, VLENPOS, NAME)
+#endif
+
+/// This VP Intrinsic lowers to this VP SDNode.
+#ifndef HANDLE_VP_TO_SDNODE
+#define HANDLE_VP_TO_SDNODE(VPID,NODEID)
 #endif
 
 ///// Integer Arithmetic /////
@@ -31,54 +93,527 @@
 // llvm.vp.add(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_add, 2, 3)
 HANDLE_VP_TO_OC(vp_add, Add)
+HANDLE_VP_IS_BINARY(vp_add)
+REGISTER_VP_SDNODE(VP_ADD,"vp_add", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_add,VP_ADD)
 
 // llvm.vp.and(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_and, 2, 3)
 HANDLE_VP_TO_OC(vp_and, And)
+HANDLE_VP_IS_BINARY(vp_and)
+REGISTER_VP_SDNODE(VP_AND,"vp_and", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_and,VP_AND)
 
 // llvm.vp.ashr(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_ashr, 2, 3)
 HANDLE_VP_TO_OC(vp_ashr, AShr)
+HANDLE_VP_IS_BINARY(vp_ashr)
+REGISTER_VP_SDNODE(VP_SRA,"vp_sra", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_ashr,VP_SRA)
 
 // llvm.vp.lshr(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_lshr, 2, 3)
 HANDLE_VP_TO_OC(vp_lshr, LShr)
+HANDLE_VP_IS_BINARY(vp_lshr)
+REGISTER_VP_SDNODE(VP_SRL,"vp_srl", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_lshr,VP_SRL)
 
 // llvm.vp.mul(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_mul, 2, 3)
 HANDLE_VP_TO_OC(vp_mul, Mul)
+HANDLE_VP_IS_BINARY(vp_mul)
+REGISTER_VP_SDNODE(VP_MUL,"vp_mul", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_mul,VP_MUL)
 
 // llvm.vp.or(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_or, 2, 3)
 HANDLE_VP_TO_OC(vp_or, Or)
+HANDLE_VP_IS_BINARY(vp_or)
+REGISTER_VP_SDNODE(VP_OR,"vp_or", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_or,VP_OR)
 
 // llvm.vp.sdiv(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_sdiv, 2, 3)
 HANDLE_VP_TO_OC(vp_sdiv, SDiv)
+HANDLE_VP_IS_BINARY(vp_sdiv)
+REGISTER_VP_SDNODE(VP_SDIV,"vp_sdiv", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_sdiv,VP_SDIV)
 
 // llvm.vp.shl(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_shl, 2, 3)
 HANDLE_VP_TO_OC(vp_shl, Shl)
+HANDLE_VP_IS_BINARY(vp_shl)
+REGISTER_VP_SDNODE(VP_SHL,"vp_shl", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_shl,VP_SHL)
 
 // llvm.vp.srem(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_srem, 2, 3)
 HANDLE_VP_TO_OC(vp_srem, SRem)
+HANDLE_VP_IS_BINARY(vp_srem)
+REGISTER_VP_SDNODE(VP_SREM,"vp_srem", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_srem,VP_SREM)
 
 // llvm.vp.sub(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_sub, 2, 3)
 HANDLE_VP_TO_OC(vp_sub, Sub)
+HANDLE_VP_IS_BINARY(vp_sub)
+REGISTER_VP_SDNODE(VP_SUB,"vp_sub", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_sub,VP_SUB)
 
 // llvm.vp.udiv(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_udiv, 2, 3)
 HANDLE_VP_TO_OC(vp_udiv, UDiv)
+HANDLE_VP_IS_BINARY(vp_udiv)
+REGISTER_VP_SDNODE(VP_UDIV,"vp_udiv", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_udiv,VP_UDIV)
 
 // llvm.vp.urem(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_urem, 2, 3)
 HANDLE_VP_TO_OC(vp_urem, URem)
+HANDLE_VP_IS_BINARY(vp_urem)
+REGISTER_VP_SDNODE(VP_UREM,"vp_urem", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_urem,VP_UREM)
 
 // llvm.vp.xor(x,y,mask,vlen)
 REGISTER_VP_INTRINSIC(vp_xor, 2, 3)
 HANDLE_VP_TO_OC(vp_xor, Xor)
+HANDLE_VP_IS_BINARY(vp_xor)
+REGISTER_VP_SDNODE(VP_XOR,"vp_xor", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_xor,VP_XOR)
+
+///// FP Arithmetic /////
+
+// llvm.vp.fadd(x,y,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fadd, 4, 5)
+HANDLE_VP_FPCONSTRAINT(vp_fadd, 2, 3)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_fadd, experimental_constrained_fadd)
+HANDLE_VP_TO_OC(vp_fadd, FAdd)
+HANDLE_VP_IS_BINARY(vp_fadd)
+REGISTER_VP_SDNODE(VP_FADD,"vp_fadd", 4, 5)
+HANDLE_VP_TO_SDNODE(vp_fadd,VP_FADD)
+
+// llvm.vp.fdiv(x,y,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fdiv, 4, 5)
+HANDLE_VP_FPCONSTRAINT(vp_fdiv, 2, 3)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_fdiv, experimental_constrained_fdiv)
+HANDLE_VP_TO_OC(vp_fdiv, FDiv)
+HANDLE_VP_IS_BINARY(vp_fdiv)
+REGISTER_VP_SDNODE(VP_FDIV,"vp_fdiv", 4, 5)
+HANDLE_VP_TO_SDNODE(vp_fdiv,VP_FDIV)
+
+// llvm.vp.fmul(x,y,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fmul, 4, 5)
+HANDLE_VP_FPCONSTRAINT(vp_fmul, 2, 3)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_fmul, experimental_constrained_fmul)
+HANDLE_VP_TO_OC(vp_fmul, FMul)
+HANDLE_VP_IS_BINARY(vp_fmul)
+REGISTER_VP_SDNODE(VP_FMUL,"vp_fmul", 4, 5)
+HANDLE_VP_TO_SDNODE(vp_fmul,VP_FMUL)
+
+// llvm.vp.fneg(x,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fneg, 2, 3)
+HANDLE_VP_FPCONSTRAINT(vp_fneg, None, 1)
+HANDLE_VP_TO_OC(vp_fneg, FNeg)
+HANDLE_VP_IS_UNARY(vp_fneg)
+REGISTER_VP_SDNODE(VP_FNEG, "vp_fneg", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_fneg,VP_FNEG)
+
+// llvm.vp.frem(x,y,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_frem, 4, 5)
+HANDLE_VP_FPCONSTRAINT(vp_frem, 2, 3)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_frem, experimental_constrained_frem)
+HANDLE_VP_TO_OC(vp_frem, FRem)
+HANDLE_VP_IS_BINARY(vp_frem)
+REGISTER_VP_SDNODE(VP_FREM, "vp_frem", 4, 5)
+HANDLE_VP_TO_SDNODE(vp_frem,VP_FREM)
+
+// llvm.vp.fsub(x,y,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fsub, 4, 5)
+HANDLE_VP_FPCONSTRAINT(vp_fsub, 2, 3)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_fsub, experimental_constrained_fsub)
+HANDLE_VP_TO_OC(vp_fsub, FSub)
+HANDLE_VP_IS_BINARY(vp_fsub)
+REGISTER_VP_SDNODE(VP_FSUB, "vp_fsub", 4, 5)
+HANDLE_VP_TO_SDNODE(vp_fsub,VP_FSUB)
+
+// llvm.vp.fma(x,y,z.round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fma, 5, 6)
+HANDLE_VP_FPCONSTRAINT(vp_fma, 3, 4)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_fma, experimental_constrained_fma)
+HANDLE_VP_TO_INTRIN(vp_fma, fma)
+HANDLE_VP_IS_TERNARY(vp_fma)
+REGISTER_VP_SDNODE(VP_FMA, "vp_fma", 5, 6)
+HANDLE_VP_TO_SDNODE(vp_fma,VP_FMA)
+
+///// Cast, Extend & Round /////
+
+// llvm.vp.ceil(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_ceil, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_ceil, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_ceil, experimental_constrained_ceil)
+HANDLE_VP_TO_INTRIN(vp_ceil, ceil)
+REGISTER_VP_SDNODE(VP_FCEIL, "vp_fceil", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_ceil,VP_FCEIL)
+
+// llvm.vp.trunc(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_trunc, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_trunc, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_trunc, experimental_constrained_trunc)
+HANDLE_VP_TO_INTRIN(vp_trunc, trunc)
+REGISTER_VP_SDNODE(VP_FTRUNC, "vp_ftrunc", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_trunc,VP_FTRUNC)
+
+// llvm.vp.floor(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_floor, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_floor, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_floor, experimental_constrained_floor)
+HANDLE_VP_TO_INTRIN(vp_floor, floor)
+REGISTER_VP_SDNODE(VP_FFLOOR, "vp_ffloor", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_floor,VP_FFLOOR)
+
+// llvm.vp.fpext(x,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fpext, 2, 3)
+HANDLE_VP_FPCONSTRAINT(vp_fpext, None, 1)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_fpext, experimental_constrained_fpext)
+HANDLE_VP_TO_OC(vp_fpext, FPExt)
+REGISTER_VP_SDNODE(VP_FP_EXTEND, "vp_fpext", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_fpext,VP_FP_EXTEND)
+
+// llvm.vp.fptrunc(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fptrunc, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_fptrunc, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_fptrunc, experimental_constrained_fptrunc)
+HANDLE_VP_TO_OC(vp_fptrunc, FPTrunc)
+HANDLE_VP_TO_SDNODE(vp_fptrunc,VP_FTRUNC)
+
+// llvm.vp.fptoui(x,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fptoui, 2, 3)
+HANDLE_VP_FPCONSTRAINT(vp_fptoui, None, 1)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_fptoui, experimental_constrained_fptoui)
+HANDLE_VP_TO_OC(vp_fptoui, FPToUI)
+REGISTER_VP_SDNODE(VP_FP_TO_UINT, "vp_fp_to_uint", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_fptoui,VP_FP_TO_UINT)
+
+// llvm.vp.fptosi(x,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fptosi, 2, 3)
+HANDLE_VP_FPCONSTRAINT(vp_fptosi, None, 1)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_fptosi, experimental_constrained_fptosi)
+HANDLE_VP_TO_OC(vp_fptosi, FPToSI)
+REGISTER_VP_SDNODE(VP_FP_TO_SINT, "vp_fp_to_sint", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_fptosi,VP_FP_TO_SINT)
+
+// llvm.vp.uitofp(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_uitofp, 3, 4)
+HANDLE_VP_TO_OC(vp_uitofp, UIToFP)
+HANDLE_VP_FPCONSTRAINT(vp_uitofp, 1, 2)
+REGISTER_VP_SDNODE(VP_UINT_TO_FP, "vp_uint_to_fp", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_uitofp,VP_UINT_TO_FP)
+// HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_uitofp,experimental_constrained_uitofp)
+
+// llvm.vp.sitofp(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_sitofp, 3, 4)
+HANDLE_VP_TO_OC(vp_sitofp, SIToFP)
+HANDLE_VP_FPCONSTRAINT(vp_sitofp, 1, 2)
+REGISTER_VP_SDNODE(VP_SINT_TO_FP, "vp_sint_to_fp", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_sitofp,VP_SINT_TO_FP)
+// HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_sitofp,experimental_constrained_sitofp)
+
+// llvm.vp.round(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_round, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_round, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_round, experimental_constrained_round)
+HANDLE_VP_TO_INTRIN(vp_round, round)
+REGISTER_VP_SDNODE(VP_FROUND, "vp_fround", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_round,VP_FROUND)
+
+// llvm.vp.rint(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_rint, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_rint, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_rint, experimental_constrained_rint)
+HANDLE_VP_TO_INTRIN(vp_rint, rint)
+REGISTER_VP_SDNODE(VP_FRINT, "vp_frint", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_rint,VP_FRINT)
+
+// llvm.vp.nearbyint(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_nearbyint, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_nearbyint, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_nearbyint,
+                                experimental_constrained_nearbyint)
+HANDLE_VP_TO_INTRIN(vp_nearbyint, nearbyint)
+REGISTER_VP_SDNODE(VP_FNEARBYINT, "vp_fnearbyint", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_nearbyint,VP_FNEARBYINT)
+
+///// Math Funcs /////
+
+// llvm.vp.sqrt(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_sqrt, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_sqrt, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_sqrt, experimental_constrained_sqrt)
+HANDLE_VP_TO_INTRIN(vp_sqrt, sqrt)
+REGISTER_VP_SDNODE(VP_FSQRT, "vp_fsqrt", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_sqrt,VP_FSQRT)
+
+// llvm.vp.pow(x,y,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_pow, 4, 5)
+HANDLE_VP_FPCONSTRAINT(vp_pow, 2, 3)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_pow, experimental_constrained_pow)
+HANDLE_VP_TO_INTRIN(vp_pow, pow)
+REGISTER_VP_SDNODE(VP_FPOW, "vp_fpow", 4, 5)
+HANDLE_VP_TO_SDNODE(vp_pow,VP_FPOW)
+
+// llvm.vp.powi(x,y,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_powi, 4, 5)
+HANDLE_VP_FPCONSTRAINT(vp_powi, 2, 3)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_powi, experimental_constrained_powi)
+HANDLE_VP_TO_INTRIN(vp_powi, powi)
+REGISTER_VP_SDNODE(VP_FPOWI, "vp_fpowi", 4, 5)
+HANDLE_VP_TO_SDNODE(vp_powi,VP_FPOWI)
+
+// llvm.vp.maxnum(x,y,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_maxnum, 4, 5)
+HANDLE_VP_FPCONSTRAINT(vp_maxnum, 2, 3)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_maxnum, experimental_constrained_maxnum)
+HANDLE_VP_TO_INTRIN(vp_maxnum, maxnum)
+REGISTER_VP_SDNODE(VP_FMAXNUM, "vp_fmaxnum", 4, 5)
+HANDLE_VP_TO_SDNODE(vp_maxnum,VP_FMAXNUM)
+
+// llvm.vp.minnum(x,y,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_minnum, 4, 5)
+HANDLE_VP_FPCONSTRAINT(vp_minnum, 2, 3)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_minnum, experimental_constrained_minnum)
+HANDLE_VP_TO_INTRIN(vp_minnum, minnum)
+REGISTER_VP_SDNODE(VP_FMINNUM, "vp_fminnum", 4, 5)
+HANDLE_VP_TO_SDNODE(vp_minnum,VP_FMINNUM)
+
+// llvm.vp.sin(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_sin, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_sin, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_sin, experimental_constrained_sin)
+HANDLE_VP_TO_INTRIN(vp_sin, sin)
+REGISTER_VP_SDNODE(VP_FSIN, "vp_fsin", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_sin,VP_FSIN)
+
+// llvm.vp.cos(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_cos, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_cos, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_cos, experimental_constrained_cos)
+HANDLE_VP_TO_INTRIN(vp_cos, cos)
+REGISTER_VP_SDNODE(VP_FCOS, "vp_fcos", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_cos,VP_FCOS)
+
+// llvm.vp.log(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_log, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_log, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_log, experimental_constrained_log)
+HANDLE_VP_TO_INTRIN(vp_log, log)
+REGISTER_VP_SDNODE(VP_FLOG, "vp_flog", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_log,VP_FLOG)
+
+// llvm.vp.log10(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_log10, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_log10, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_log10, experimental_constrained_log10)
+HANDLE_VP_TO_INTRIN(vp_log10, log10)
+REGISTER_VP_SDNODE(VP_FLOG10, "vp_flog10", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_log10,VP_FLOG10)
+
+// llvm.vp.log2(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_log2, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_log2, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_log2, experimental_constrained_log2)
+HANDLE_VP_TO_INTRIN(vp_log2, log2)
+REGISTER_VP_SDNODE(VP_FLOG2, "vp_flog2", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_log2,VP_FLOG2)
+
+// llvm.vp.exp(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_exp, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_exp, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_exp, experimental_constrained_exp)
+HANDLE_VP_TO_INTRIN(vp_exp, exp)
+REGISTER_VP_SDNODE(VP_FEXP, "vp_fexp", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_exp,VP_FEXP)
+
+// llvm.vp.exp2(x,round,except,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_exp2, 3, 4)
+HANDLE_VP_FPCONSTRAINT(vp_exp2, 1, 2)
+HANDLE_VP_TO_CONSTRAINED_INTRIN(vp_exp2, experimental_constrained_exp2)
+HANDLE_VP_TO_INTRIN(vp_exp2, exp2)
+REGISTER_VP_SDNODE(VP_FEXP2, "vp_fexp2", 3, 4)
+HANDLE_VP_TO_SDNODE(vp_exp2,VP_FEXP2)
+
+///// Comparison /////
+
+// llvm.vp.fcmp(x,y,pred,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_fcmp, 3, 4)
+HANDLE_VP_TO_OC(vp_fcmp, FCmp)
+HANDLE_VP_IS_XCMP(vp_fcmp)
+
+// llvm.vp.icmp(x,y,cmp_pred,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_icmp, 3, 4)
+HANDLE_VP_TO_OC(vp_icmp, ICmp)
+HANDLE_VP_IS_XCMP(vp_icmp)
+
+REGISTER_VP_SDNODE(VP_SETCC, "vp_setcc", 3, 4)
+
+///// Memory Operations /////
+
+// llvm.vp.store(ptr,val,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_store, 2, 3)
+HANDLE_VP_TO_OC(vp_store, Store)
+HANDLE_VP_TO_INTRIN(vp_store, masked_store)
+HANDLE_VP_IS_MEMOP(vp_store, 1, 0)
+REGISTER_VP_SDNODE(VP_STORE, "vp_store", 3, 4)
+
+// llvm.vp.scatter(ptr,val,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_scatter, 2, 3)
+HANDLE_VP_TO_INTRIN(vp_scatter, masked_scatter)
+HANDLE_VP_IS_MEMOP(vp_scatter, 1, 0)
+REGISTER_VP_SDNODE(VP_SCATTER, "vp_scatter", 3, 4)
+
+// llvm.vp.load(ptr,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_load, 1, 2)
+HANDLE_VP_TO_OC(vp_load, Load)
+HANDLE_VP_TO_INTRIN(vp_load, masked_load)
+HANDLE_VP_IS_MEMOP(vp_load, 0, None)
+REGISTER_VP_SDNODE(VP_LOAD, "vp_load", 2, 3)
+
+// llvm.vp.gather(ptr,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_gather, 1, 2)
+HANDLE_VP_TO_INTRIN(vp_gather, masked_gather)
+HANDLE_VP_IS_MEMOP(vp_gather, 0, None)
+REGISTER_VP_SDNODE(VP_GATHER, "vp_gather", 1, 2)
+
+///// Shuffle & Blend /////
+
+// llvm.vp.compress(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_compress, 1, 2)
+REGISTER_VP_SDNODE(VP_COMPRESS, "vp_compress", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_compress,VP_COMPRESS)
+
+// llvm.vp.expand(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_expand, 1, 2)
+REGISTER_VP_SDNODE(VP_EXPAND, "vp_expand", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_expand,VP_EXPAND)
+
+// llvm.vp.vshift(x,amount,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_vshift, 2, 3)
+REGISTER_VP_SDNODE(VP_VSHIFT, "vp_vshift", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_vshift,VP_VSHIFT)
+
+// llvm.vp.select(mask,on_true,on_false,vlen)
+REGISTER_VP_INTRINSIC(vp_select, 0, 3)
+HANDLE_VP_TO_OC(vp_select, Select)
+REGISTER_VP_SDNODE(VP_SELECT, "vp_select", 0, 3)
+HANDLE_VP_TO_SDNODE(vp_select,VP_SELECT)
+
+// llvm.vp.compose(x,y,pivot,vlen)
+REGISTER_VP_INTRINSIC(vp_compose, None, 3)
+REGISTER_VP_SDNODE(VP_COMPOSE, "vp_compose", None, 3)
+HANDLE_VP_TO_SDNODE(vp_compose,VP_COMPOSE)
+
+///// Reduction /////
+
+// llvm.vp.reduce.add(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_add, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_add, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_add, experimental_vector_reduce_add)
+REGISTER_VP_SDNODE(VP_REDUCE_ADD, "vp_reduce_add", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_add,VP_REDUCE_ADD)
+
+// llvm.vp.reduce.mul(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_mul, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_mul, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_mul, experimental_vector_reduce_mul)
+REGISTER_VP_SDNODE(VP_REDUCE_MUL, "vp_reduce_mul", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_mul,VP_REDUCE_MUL)
+
+// llvm.vp.reduce.and(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_and, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_and, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_and, experimental_vector_reduce_and)
+REGISTER_VP_SDNODE(VP_REDUCE_AND, "vp_reduce_and", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_and,VP_REDUCE_AND)
+
+// llvm.vp.reduce.or(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_or, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_or, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_or, experimental_vector_reduce_or)
+REGISTER_VP_SDNODE(VP_REDUCE_OR, "vp_reduce_or", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_or,VP_REDUCE_OR)
+
+// llvm.vp.reduce.xor(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_xor, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_xor, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_xor, experimental_vector_reduce_xor)
+REGISTER_VP_SDNODE(VP_REDUCE_XOR, "vp_reduce_xor", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_xor,VP_REDUCE_XOR)
+
+// llvm.vp.reduce.smin(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_smin, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_smin, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_smin, experimental_vector_reduce_smin)
+REGISTER_VP_SDNODE(VP_REDUCE_SMIN, "vp_reduce_smin", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_smin,VP_REDUCE_SMIN)
+
+// llvm.vp.reduce.smax(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_smax, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_smax, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_smax, experimental_vector_reduce_smax)
+REGISTER_VP_SDNODE(VP_REDUCE_SMAX, "vp_reduce_smax", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_smax,VP_REDUCE_SMAX)
+
+// llvm.vp.reduce.umin(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_umin, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_umin, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_umin, experimental_vector_reduce_umin)
+REGISTER_VP_SDNODE(VP_REDUCE_UMIN, "vp_reduce_umin", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_umin,VP_REDUCE_UMIN)
+
+// llvm.vp.reduce.umax(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_umax, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_umax, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_umax, experimental_vector_reduce_umax)
+REGISTER_VP_SDNODE(VP_REDUCE_UMAX, "vp_reduce_umax", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_umax,VP_REDUCE_UMAX)
+
+// llvm.vp.reduce.fadd(accu,x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_fadd, 2, 3)
+HANDLE_VP_REDUCTION(vp_reduce_fadd, 0, 1)
+HANDLE_VP_TO_INTRIN(vp_reduce_fadd, experimental_vector_reduce_v2_fadd)
+REGISTER_VP_SDNODE(VP_REDUCE_FADD, "vp_reduce_fadd", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_reduce_fadd,VP_REDUCE_FADD)
+
+// llvm.vp.reduce.fmul(accu,x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_fmul, 2, 3)
+HANDLE_VP_REDUCTION(vp_reduce_fmul, 0, 1)
+HANDLE_VP_TO_INTRIN(vp_reduce_fmul, experimental_vector_reduce_v2_fmul)
+REGISTER_VP_SDNODE(VP_REDUCE_FMUL, "vp_reduce_fmul", 2, 3)
+HANDLE_VP_TO_SDNODE(vp_reduce_fmul,VP_REDUCE_FMUL)
+
+// llvm.vp.reduce.fmin(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_fmin, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_fmin, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_fmin, experimental_vector_reduce_fmin)
+REGISTER_VP_SDNODE(VP_REDUCE_FMIN, "vp_reduce_fmin", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_fmin,VP_REDUCE_FMIN)
+
+// llvm.vp.reduce.fmax(x,mask,vlen)
+REGISTER_VP_INTRINSIC(vp_reduce_fmax, 1, 2)
+HANDLE_VP_REDUCTION(vp_reduce_fmax, None, 0)
+HANDLE_VP_TO_INTRIN(vp_reduce_fmax, experimental_vector_reduce_fmax)
+REGISTER_VP_SDNODE(VP_REDUCE_FMAX, "vp_reduce_fmax", 1, 2)
+HANDLE_VP_TO_SDNODE(vp_reduce_fmax,VP_REDUCE_FMAX)
 
 #undef REGISTER_VP_INTRINSIC
+#undef REGISTER_VP_SDNODE
+#undef HANDLE_VP_IS_UNARY
+#undef HANDLE_VP_IS_BINARY
+#undef HANDLE_VP_IS_TERNARY
+#undef HANDLE_VP_IS_XCMP
+#undef HANDLE_VP_IS_MEMOP
 #undef HANDLE_VP_TO_OC
+#undef HANDLE_VP_TO_CONSTRAINED_INTRIN
+#undef HANDLE_VP_TO_INTRIN
+#undef HANDLE_VP_FPCONSTRAINT
+#undef HANDLE_VP_REDUCTION
+#undef HANDLE_VP_TO_SDNODE

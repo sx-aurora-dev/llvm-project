@@ -444,6 +444,213 @@ ISD::CondCode ISD::getSetCCAndOperation(ISD::CondCode Op1, ISD::CondCode Op2,
 }
 
 //===----------------------------------------------------------------------===//
+//                           SDNode VP Support
+//===----------------------------------------------------------------------===//
+
+int
+ISD::GetMaskPosVP(unsigned OpCode) {
+  switch (OpCode) {
+    default: return -1;
+
+    case ISD::VP_FNEG:
+      return 1;
+
+    case ISD::VP_ADD:
+    case ISD::VP_SUB:
+    case ISD::VP_MUL:
+    case ISD::VP_SDIV:
+    case ISD::VP_SREM:
+    case ISD::VP_UDIV:
+    case ISD::VP_UREM:
+
+    case ISD::VP_AND:
+    case ISD::VP_OR:
+    case ISD::VP_XOR:
+    case ISD::VP_SHL:
+    case ISD::VP_SRA:
+    case ISD::VP_SRL:
+
+    case ISD::VP_FADD:
+    case ISD::VP_FMUL:
+    case ISD::VP_FSUB:
+    case ISD::VP_FDIV:
+    case ISD::VP_FREM:
+      return 2;
+
+    case ISD::VP_FMA:
+    case ISD::VP_SELECT:
+      return 3;
+
+    case VP_REDUCE_ADD:
+    case VP_REDUCE_MUL:
+    case VP_REDUCE_AND:
+    case VP_REDUCE_OR:
+    case VP_REDUCE_XOR:
+    case VP_REDUCE_SMAX:
+    case VP_REDUCE_SMIN:
+    case VP_REDUCE_UMAX:
+    case VP_REDUCE_UMIN:
+    case VP_REDUCE_FMAX:
+    case VP_REDUCE_FMIN:
+      return 1;
+
+    case VP_REDUCE_FADD:
+    case VP_REDUCE_FMUL:
+      return 2;
+
+    /// FMIN/FMAX nodes can have flags, for NaN/NoNaN variants.
+    // (implicit) case ISD::VP_COMPOSE: return -1
+  }
+}
+
+int
+ISD::GetVectorLengthPosVP(unsigned OpCode) {
+  switch (OpCode) {
+    default: return -1;
+
+    case VP_SELECT:
+      return 0;
+
+    case VP_FNEG:
+      return 2;
+
+    case VP_ADD:
+    case VP_SUB:
+    case VP_MUL:
+    case VP_SDIV:
+    case VP_SREM:
+    case VP_UDIV:
+    case VP_UREM:
+
+    case VP_AND:
+    case VP_OR:
+    case VP_XOR:
+    case VP_SHL:
+    case VP_SRA:
+    case VP_SRL:
+
+    case VP_FADD:
+    case VP_FMUL:
+    case VP_FDIV:
+    case VP_FREM:
+      return 3;
+
+    case VP_FMA:
+      return 4;
+
+    case VP_COMPOSE:
+      return 3;
+
+    case VP_REDUCE_ADD:
+    case VP_REDUCE_MUL:
+    case VP_REDUCE_AND:
+    case VP_REDUCE_OR:
+    case VP_REDUCE_XOR:
+    case VP_REDUCE_SMAX:
+    case VP_REDUCE_SMIN:
+    case VP_REDUCE_UMAX:
+    case VP_REDUCE_UMIN:
+    case VP_REDUCE_FMAX:
+    case VP_REDUCE_FMIN:
+      return 2;
+
+    case VP_REDUCE_FADD:
+    case VP_REDUCE_FMUL:
+      return 3;
+
+  }
+}
+
+unsigned
+ISD::GetFunctionOpCodeForVP(unsigned OpCode, bool hasFPExcept) {
+  switch (OpCode) {
+    default: return OpCode;
+
+    case VP_SELECT: return ISD::VSELECT;
+    case VP_ADD:    return ISD::ADD;
+    case VP_SUB:    return ISD::SUB;
+    case VP_MUL:    return ISD::MUL;
+    case VP_SDIV:   return ISD::SDIV;
+    case VP_SREM:   return ISD::SREM;
+    case VP_UDIV:   return ISD::UDIV;
+    case VP_UREM:   return ISD::UREM;
+
+    case VP_AND:    return ISD::AND;
+    case VP_OR:     return ISD::OR;
+    case VP_XOR:    return ISD::XOR;
+    case VP_SHL:    return ISD::SHL;
+    case VP_SRA:    return ISD::SRA;
+    case VP_SRL:    return ISD::SRL;
+
+    case VP_FNEG:   return ISD::FNEG;
+    case VP_FADD:   return hasFPExcept ? ISD::STRICT_FADD : ISD::FADD;
+    case VP_FSUB:   return hasFPExcept ? ISD::STRICT_FSUB : ISD::FSUB;
+    case VP_FMUL:   return hasFPExcept ? ISD::STRICT_FMUL : ISD::FMUL;
+    case VP_FDIV:   return hasFPExcept ? ISD::STRICT_FDIV : ISD::FDIV;
+    case VP_FREM:   return hasFPExcept ? ISD::STRICT_FREM : ISD::FREM;
+
+    case VP_REDUCE_AND:   return VECREDUCE_AND;
+    case VP_REDUCE_OR:    return VECREDUCE_OR;
+    case VP_REDUCE_XOR:   return VECREDUCE_XOR;
+    case VP_REDUCE_ADD:   return VECREDUCE_ADD;
+    case VP_REDUCE_FADD:  return VECREDUCE_FADD;
+    case VP_REDUCE_FMUL:  return VECREDUCE_FMUL;
+    case VP_REDUCE_FMAX:  return VECREDUCE_FMAX;
+    case VP_REDUCE_FMIN:  return VECREDUCE_FMIN;
+    case VP_REDUCE_UMAX:  return VECREDUCE_UMAX;
+    case VP_REDUCE_UMIN:  return VECREDUCE_UMIN;
+    case VP_REDUCE_SMAX:  return VECREDUCE_SMAX;
+    case VP_REDUCE_SMIN:  return VECREDUCE_SMIN;
+
+    case VP_STORE:        return ISD::MSTORE;
+    case VP_LOAD:         return ISD::MLOAD;
+    case VP_GATHER:       return ISD::MGATHER;
+    case VP_SCATTER:      return ISD::MSCATTER;
+
+    case VP_FMA:    return hasFPExcept ? ISD::STRICT_FMA : ISD::FMA;
+  }
+}
+
+unsigned
+ISD::GetVPForFunctionOpCode(unsigned OpCode) {
+  switch (OpCode) {
+    default: llvm_unreachable("can not translate this Opcode to VP");
+
+    case VSELECT:  return ISD::VP_SELECT;
+    case ADD:      return ISD::VP_ADD;
+    case SUB:      return ISD::VP_SUB;
+    case MUL:      return ISD::VP_MUL;
+    case SDIV:     return ISD::VP_SDIV;
+    case SREM:     return ISD::VP_SREM;
+    case UDIV:     return ISD::VP_UDIV;
+    case UREM:     return ISD::VP_UREM;
+
+    case AND:      return ISD::VP_AND;
+    case OR:       return ISD::VP_OR;
+    case XOR:      return ISD::VP_XOR;
+    case SHL:      return ISD::VP_SHL;
+    case SRA:      return ISD::VP_SRA;
+    case SRL:      return ISD::VP_SRL;
+
+    case FNEG:     return ISD::VP_FNEG;
+    case STRICT_FADD:
+    case FADD:     return ISD::VP_FADD;
+    case STRICT_FSUB:
+    case FSUB:     return ISD::VP_FSUB;
+    case STRICT_FMUL:
+    case FMUL:     return ISD::VP_FMUL;
+    case STRICT_FDIV:
+    case FDIV:     return ISD::VP_FDIV;
+    case STRICT_FREM:
+    case FREM:     return ISD::VP_FREM;
+
+    case STRICT_FMA:
+    case FMA:      return ISD::VP_FMA;
+  }
+}
+
+
+//===----------------------------------------------------------------------===//
 //                           SDNode Profile Support
 //===----------------------------------------------------------------------===//
 
@@ -571,6 +778,34 @@ static void AddNodeIDCustom(FoldingSetNodeID &ID, const SDNode *N) {
     ID.AddInteger(ST->getMemoryVT().getRawBits());
     ID.AddInteger(ST->getRawSubclassData());
     ID.AddInteger(ST->getPointerInfo().getAddrSpace());
+    break;
+  }
+  case ISD::VP_LOAD: {
+    const VPLoadSDNode *ELD = cast<VPLoadSDNode>(N);
+    ID.AddInteger(ELD->getMemoryVT().getRawBits());
+    ID.AddInteger(ELD->getRawSubclassData());
+    ID.AddInteger(ELD->getPointerInfo().getAddrSpace());
+    break;
+  }
+  case ISD::VP_STORE: {
+    const VPStoreSDNode *EST = cast<VPStoreSDNode>(N);
+    ID.AddInteger(EST->getMemoryVT().getRawBits());
+    ID.AddInteger(EST->getRawSubclassData());
+    ID.AddInteger(EST->getPointerInfo().getAddrSpace());
+    break;
+  }
+  case ISD::VP_GATHER: {
+    const VPGatherSDNode *EG = cast<VPGatherSDNode>(N);
+    ID.AddInteger(EG->getMemoryVT().getRawBits());
+    ID.AddInteger(EG->getRawSubclassData());
+    ID.AddInteger(EG->getPointerInfo().getAddrSpace());
+    break;
+  }
+  case ISD::VP_SCATTER: {
+    const VPScatterSDNode *ES = cast<VPScatterSDNode>(N);
+    ID.AddInteger(ES->getMemoryVT().getRawBits());
+    ID.AddInteger(ES->getRawSubclassData());
+    ID.AddInteger(ES->getPointerInfo().getAddrSpace());
     break;
   }
   case ISD::MLOAD: {
@@ -7116,6 +7351,143 @@ SDValue SelectionDAG::getIndexedMaskedLoad(SDValue OrigLoad, const SDLoc &dl,
                        Offset, LD->getMask(), LD->getPassThru(),
                        LD->getMemoryVT(), LD->getMemOperand(), AM,
                        LD->getExtensionType(), LD->isExpandingLoad());
+}
+
+
+SDValue SelectionDAG::getLoadVP(EVT VT, const SDLoc &dl, SDValue Chain,
+                                    SDValue Ptr, SDValue Mask, SDValue VLen, 
+                                    EVT MemVT, MachineMemOperand *MMO,
+                                    ISD::LoadExtType ExtTy) {
+  SDVTList VTs = getVTList(VT, MVT::Other);
+  SDValue Ops[] = { Chain, Ptr, Mask, VLen };
+  FoldingSetNodeID ID;
+  AddNodeIDNode(ID, ISD::VP_LOAD, VTs, Ops);
+  ID.AddInteger(VT.getRawBits());
+  ID.AddInteger(getSyntheticNodeSubclassData<VPLoadSDNode>(
+      dl.getIROrder(), VTs, ExtTy, MemVT, MMO));
+  ID.AddInteger(MMO->getPointerInfo().getAddrSpace());
+  void *IP = nullptr;
+  if (SDNode *E = FindNodeOrInsertPos(ID, dl, IP)) {
+    cast<VPLoadSDNode>(E)->refineAlignment(MMO);
+    return SDValue(E, 0);
+  }
+  auto *N = newSDNode<VPLoadSDNode>(dl.getIROrder(), dl.getDebugLoc(), VTs,
+                                        ExtTy, MemVT, MMO);
+  createOperands(N, Ops);
+
+  CSEMap.InsertNode(N, IP);
+  InsertNode(N);
+  SDValue V(N, 0);
+  NewSDValueDbgMsg(V, "Creating new node: ", this);
+  return V;
+}
+
+
+SDValue SelectionDAG::getStoreVP(SDValue Chain, const SDLoc &dl,
+                                     SDValue Val, SDValue Ptr, SDValue Mask,
+				     SDValue VLen, EVT MemVT, MachineMemOperand *MMO,
+                                     bool IsTruncating) {
+  assert(Chain.getValueType() == MVT::Other &&
+        "Invalid chain type");
+  SDVTList VTs = getVTList(MVT::Other);
+  SDValue Ops[] = { Chain, Val, Ptr, Mask, VLen };
+  FoldingSetNodeID ID;
+  AddNodeIDNode(ID, ISD::MSTORE, VTs, Ops);
+  ID.AddInteger(MemVT.getRawBits());
+  ID.AddInteger(getSyntheticNodeSubclassData<VPStoreSDNode>(
+      dl.getIROrder(), VTs, IsTruncating, MemVT, MMO));
+  ID.AddInteger(MMO->getPointerInfo().getAddrSpace());
+  void *IP = nullptr;
+  if (SDNode *E = FindNodeOrInsertPos(ID, dl, IP)) {
+    cast<VPStoreSDNode>(E)->refineAlignment(MMO);
+    return SDValue(E, 0);
+  }
+  auto *N = newSDNode<VPStoreSDNode>(dl.getIROrder(), dl.getDebugLoc(), VTs,
+                                         IsTruncating, MemVT, MMO);
+  createOperands(N, Ops);
+
+  CSEMap.InsertNode(N, IP);
+  InsertNode(N);
+  SDValue V(N, 0);
+  NewSDValueDbgMsg(V, "Creating new node: ", this);
+  return V;
+}
+
+SDValue SelectionDAG::getGatherVP(SDVTList VTs, EVT VT, const SDLoc &dl,
+                                      ArrayRef<SDValue> Ops,
+                                      MachineMemOperand *MMO,
+	                              ISD::MemIndexType IndexType) {
+  assert(Ops.size() == 6 && "Incompatible number of operands");
+
+  FoldingSetNodeID ID;
+  AddNodeIDNode(ID, ISD::VP_GATHER, VTs, Ops);
+  ID.AddInteger(VT.getRawBits());
+  ID.AddInteger(getSyntheticNodeSubclassData<VPGatherSDNode>(
+      dl.getIROrder(), VTs, VT, MMO, IndexType));
+  ID.AddInteger(MMO->getPointerInfo().getAddrSpace());
+  void *IP = nullptr;
+  if (SDNode *E = FindNodeOrInsertPos(ID, dl, IP)) {
+    cast<VPGatherSDNode>(E)->refineAlignment(MMO);
+    return SDValue(E, 0);
+  }
+
+  auto *N = newSDNode<VPGatherSDNode>(dl.getIROrder(), dl.getDebugLoc(),
+                                          VTs, VT, MMO, IndexType);
+  createOperands(N, Ops);
+
+  assert(N->getMask().getValueType().getVectorNumElements() ==
+             N->getValueType(0).getVectorNumElements() &&
+         "Vector width mismatch between mask and data");
+  assert(N->getIndex().getValueType().getVectorNumElements() >=
+             N->getValueType(0).getVectorNumElements() &&
+         "Vector width mismatch between index and data");
+  assert(isa<ConstantSDNode>(N->getScale()) &&
+         cast<ConstantSDNode>(N->getScale())->getAPIntValue().isPowerOf2() &&
+         "Scale should be a constant power of 2");
+
+  CSEMap.InsertNode(N, IP);
+  InsertNode(N);
+  SDValue V(N, 0);
+  NewSDValueDbgMsg(V, "Creating new node: ", this);
+  return V;
+}
+
+SDValue SelectionDAG::getScatterVP(SDVTList VTs, EVT VT, const SDLoc &dl,
+                                       ArrayRef<SDValue> Ops,
+                                       MachineMemOperand *MMO,
+                                       ISD::MemIndexType IndexType) {
+  assert(Ops.size() == 7 && "Incompatible number of operands");
+
+  FoldingSetNodeID ID;
+  AddNodeIDNode(ID, ISD::VP_SCATTER, VTs, Ops);
+  ID.AddInteger(VT.getRawBits());
+  ID.AddInteger(getSyntheticNodeSubclassData<VPScatterSDNode>(
+      dl.getIROrder(), VTs, VT, MMO, IndexType));
+  ID.AddInteger(MMO->getPointerInfo().getAddrSpace());
+  void *IP = nullptr;
+  if (SDNode *E = FindNodeOrInsertPos(ID, dl, IP)) {
+    cast<VPScatterSDNode>(E)->refineAlignment(MMO);
+    return SDValue(E, 0);
+  }
+  auto *N = newSDNode<VPScatterSDNode>(dl.getIROrder(), dl.getDebugLoc(),
+                                           VTs, VT, MMO, IndexType);
+  createOperands(N, Ops);
+
+  assert(N->getMask().getValueType().getVectorNumElements() ==
+             N->getValue().getValueType().getVectorNumElements() &&
+         "Vector width mismatch between mask and data");
+  assert(N->getIndex().getValueType().getVectorNumElements() >=
+             N->getValue().getValueType().getVectorNumElements() &&
+         "Vector width mismatch between index and data");
+  assert(isa<ConstantSDNode>(N->getScale()) &&
+         cast<ConstantSDNode>(N->getScale())->getAPIntValue().isPowerOf2() &&
+         "Scale should be a constant power of 2");
+
+  CSEMap.InsertNode(N, IP);
+  InsertNode(N);
+  SDValue V(N, 0);
+  NewSDValueDbgMsg(V, "Creating new node: ", this);
+  return V;
 }
 
 SDValue SelectionDAG::getMaskedStore(SDValue Chain, const SDLoc &dl,

@@ -330,6 +330,8 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
     return "builtin";
   if (hasAttribute(Attribute::Convergent))
     return "convergent";
+  if (hasAttribute(Attribute::VectorLength))
+    return "vlen";
   if (hasAttribute(Attribute::SwiftError))
     return "swifterror";
   if (hasAttribute(Attribute::SwiftSelf))
@@ -346,6 +348,10 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
     return "inreg";
   if (hasAttribute(Attribute::JumpTable))
     return "jumptable";
+  if (hasAttribute(Attribute::Mask))
+    return "mask";
+  if (hasAttribute(Attribute::Passthru))
+    return "passthru";
   if (hasAttribute(Attribute::MinSize))
     return "minsize";
   if (hasAttribute(Attribute::Naked))

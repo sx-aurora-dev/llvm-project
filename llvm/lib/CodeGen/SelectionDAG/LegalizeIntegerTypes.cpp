@@ -126,6 +126,13 @@ void DAGTypeLegalizer::PromoteIntegerResult(SDNode *N, unsigned ResNo) {
 
   case ISD::FLT_ROUNDS_: Res = PromoteIntRes_FLT_ROUNDS(N); break;
 
+  case ISD::VP_REDUCE_MUL:
+  case ISD::VP_REDUCE_ADD:
+  case ISD::VP_REDUCE_AND:
+  case ISD::VP_REDUCE_XOR:
+  case ISD::VP_REDUCE_OR:
+                         Res = PromoteIntRes_VP_REDUCE_nostart(N); break;
+
   case ISD::AND:
   case ISD::OR:
   case ISD::XOR:
@@ -1164,7 +1171,7 @@ SDValue DAGTypeLegalizer::PromoteIntRes_UADDSUBO(SDNode *N, unsigned ResNo) {
 }
 
 // Handle promotion for the ADDE/SUBE/ADDCARRY/SUBCARRY nodes. Notice that
-// the third operand of ADDE/SUBE nodes is carry flag, which differs from 
+// the third operand of ADDE/SUBE nodes is carry flag, which differs from
 // the ADDCARRY/SUBCARRY nodes in that the third operand is carry Boolean.
 SDValue DAGTypeLegalizer::PromoteIntRes_ADDSUBCARRY(SDNode *N, unsigned ResNo) {
   if (ResNo == 1)
@@ -1322,6 +1329,9 @@ bool DAGTypeLegalizer::PromoteIntegerOperand(SDNode *N, unsigned OpNo) {
     return false;
   }
 
+  if (N->isVP()) {
+    Res = PromoteIntOp_VP(N, OpNo);
+  } else {
   switch (N->getOpcode()) {
     default:
   #ifndef NDEBUG
@@ -1405,6 +1415,7 @@ bool DAGTypeLegalizer::PromoteIntegerOperand(SDNode *N, unsigned OpNo) {
   case ISD::VECREDUCE_SMIN:
   case ISD::VECREDUCE_UMAX:
   case ISD::VECREDUCE_UMIN: Res = PromoteIntOp_VECREDUCE(N); break;
+  }
   }
 
   // If the result is null, the sub-method took care of registering results etc.
@@ -1697,6 +1708,25 @@ SDValue DAGTypeLegalizer::PromoteIntOp_MSTORE(MaskedStoreSDNode *N,
                             N->getOffset(), Mask, N->getMemoryVT(),
                             N->getMemOperand(), N->getAddressingMode(),
                             TruncateStore, N->isCompressingStore());
+}
+
+SDValue DAGTypeLegalizer::PromoteIntOp_VP(SDNode *N, unsigned OpNo) {
+  EVT DataVT;
+  switch (N->getOpcode()) {
+    default:
+      DataVT = N->getValueType(0);
+    break;
+
+    case ISD::VP_STORE:
+    case ISD::VP_SCATTER:
+      llvm_unreachable("TODO implement VP memory nodes");
+  }
+
+  // TODO assert that \p OpNo is the mask
+  SDValue Mask = PromoteTargetBoolean(N->getOperand(OpNo), DataVT);
+  SmallVector<SDValue, 4> NewOps(N->op_begin(), N->op_end());
+  NewOps[OpNo] = Mask;
+  return SDValue(DAG.UpdateNodeOperands(N, NewOps), 0);
 }
 
 SDValue DAGTypeLegalizer::PromoteIntOp_MLOAD(MaskedLoadSDNode *N,
@@ -4393,6 +4423,31 @@ SDValue DAGTypeLegalizer::PromoteIntRes_SCALAR_TO_VECTOR(SDNode *N) {
   SDValue Op = DAG.getNode(ISD::ANY_EXTEND, dl, NOutVTElem, N->getOperand(0));
 
   return DAG.getNode(ISD::SCALAR_TO_VECTOR, dl, NOutVT, Op);
+}
+
+SDValue DAGTypeLegalizer::PromoteIntRes_VP_REDUCE_nostart(SDNode *N) {
+  SDLoc dl(N);
+
+  SDValue VecVal = N->getOperand(0);
+  SDValue MaskVal = N->getOperand(1);
+  SDValue LenVal = N->getOperand(2);
+  
+  EVT VecVT = VecVal.getValueType();
+
+  assert(VecVal.getValueType().isVector() && "Input must be a vector");
+  assert(MaskVal.getValueType().isVector() && "Mask must be a vector");
+  assert(!LenVal.getValueType().isVector() && "Vector length must be a scalar");
+
+  EVT OutVT = N->getValueType(0);
+  EVT NOutVT = TLI.getTypeToTransformTo(*DAG.getContext(), OutVT);
+  assert(NOutVT.isScalarInteger() && "Type must be promoted to a scalar integer type");
+  EVT NVecVT = TLI.getTypeToTransformTo(*DAG.getContext(), VecVT);
+  // EVT NVecVT = EVT::getVectorVT(*DAG.getContext(), NOutVT, VecVT.getVectorNumElements(), VecVT.isScalableVector());
+
+  // extend operand along with result type
+  SDValue ExtVecVal = (NVecVT == VecVT) ? VecVal : DAG.getNode(ISD::ANY_EXTEND, dl, NVecVT, VecVal);
+
+  return DAG.getNode(N->getOpcode(), dl, NOutVT, {ExtVecVal, MaskVal, LenVal});
 }
 
 SDValue DAGTypeLegalizer::PromoteIntRes_SPLAT_VECTOR(SDNode *N) {

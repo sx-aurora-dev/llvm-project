@@ -53,6 +53,10 @@ class Type;
 class Value;
 class MDNode;
 class BinaryOperator;
+class VPIntrinsic;
+namespace PatternMatch {
+  struct PredicatedContext;
+}
 
 /// InstrInfoQuery provides an interface to query additional information for
 /// instructions like metadata or keywords like nsw, which provides conservative
@@ -137,6 +141,13 @@ Value *SimplifyFAddInst(Value *LHS, Value *RHS, FastMathFlags FMF,
 /// Given operands for an FSub, fold the result or return null.
 Value *SimplifyFSubInst(Value *LHS, Value *RHS, FastMathFlags FMF,
                         const SimplifyQuery &Q);
+
+/// Given operands for an FSub, fold the result or return null.
+Value *SimplifyFSubInst(Value *LHS, Value *RHS, FastMathFlags FMF,
+                        const SimplifyQuery &Q);
+Value *SimplifyPredicatedFSubInst(Value *LHS, Value *RHS,
+                        FastMathFlags FMF, const SimplifyQuery &Q,
+                        PatternMatch::PredicatedContext & PC);
 
 /// Given operands for an FMul, fold the result or return null.
 Value *SimplifyFMulInst(Value *LHS, Value *RHS, FastMathFlags FMF,
@@ -262,6 +273,9 @@ Value *SimplifyCall(CallBase *Call, const SimplifyQuery &Q);
 /// Given an operand for a Freeze, see if we can fold the result.
 /// If not, this returns null.
 Value *SimplifyFreezeInst(Value *Op, const SimplifyQuery &Q);
+
+/// Given a VP intrinsic function, fold the result or return null.
+Value *SimplifyVPIntrinsic(VPIntrinsic & VPInst, const SimplifyQuery &Q);
 
 /// See if we can compute a simplified version of this instruction. If not,
 /// return null.
