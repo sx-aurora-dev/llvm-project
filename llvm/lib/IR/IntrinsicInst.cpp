@@ -178,6 +178,119 @@ bool ConstrainedFPIntrinsic::classof(const IntrinsicInst *I) {
   }
 }
 
+ElementCount VPIntrinsic::getVectorLength() const {
+  auto GetVectorLengthOfType = [](const Type *T) -> ElementCount {
+    auto VT = cast<VectorType>(T);
+    auto ElemCount = VT->getElementCount();
+    return ElemCount;
+  };
+
+  auto VPMask = getMaskParam();
+  return GetVectorLengthOfType(VPMask->getType());
+}
+
+Value *VPIntrinsic::getMaskParam() const {
+  auto maskPos = GetMaskParamPos(getIntrinsicID());
+  if (maskPos)
+    return getArgOperand(maskPos.getValue());
+  return nullptr;
+}
+
+Value *VPIntrinsic::getVectorLengthParam() const {
+  auto vlenPos = GetVectorLengthParamPos(getIntrinsicID());
+  if (vlenPos)
+    return getArgOperand(vlenPos.getValue());
+  return nullptr;
+}
+
+Optional<int> VPIntrinsic::GetMaskParamPos(Intrinsic::ID IntrinsicID) {
+  switch (IntrinsicID) {
+  default:
+    return None;
+
+#define REGISTER_VP_INTRINSIC(VPID, MASKPOS, VLENPOS)                          \
+  case Intrinsic::VPID:                                                        \
+    return MASKPOS;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
+Optional<int> VPIntrinsic::GetVectorLengthParamPos(Intrinsic::ID IntrinsicID) {
+  switch (IntrinsicID) {
+  default:
+    return None;
+
+#define REGISTER_VP_INTRINSIC(VPID, MASKPOS, VLENPOS)                          \
+  case Intrinsic::VPID:                                                        \
+    return VLENPOS;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
+bool VPIntrinsic::IsVPIntrinsic(Intrinsic::ID ID) {
+  switch (ID) {
+  default:
+    return false;
+
+#define REGISTER_VP_INTRINSIC(VPID, MASKPOS, VLENPOS)                          \
+  case Intrinsic::VPID:                                                        \
+    break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return true;
+}
+
+// Equivalent non-predicated opcode
+unsigned VPIntrinsic::GetFunctionalOpcodeForVP(Intrinsic::ID ID) {
+  switch (ID) {
+  default:
+    return Instruction::Call;
+
+#define HANDLE_VP_TO_OC(VPID, OC)                                              \
+  case Intrinsic::VPID:                                                        \
+    return Instruction::OC;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
+Intrinsic::ID VPIntrinsic::GetForOpcode(unsigned OC) {
+  switch (OC) {
+  default:
+    return Intrinsic::not_intrinsic;
+
+#define HANDLE_VP_TO_OC(VPID, OC)                                              \
+  case Instruction::OC:                                                        \
+    return Intrinsic::VPID;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
+bool VPIntrinsic::canIgnoreVectorLengthParam() const {
+  // No vlen param - no lanes masked-off by it.
+  auto *VLParam = getVectorLengthParam();
+  if (!VLParam)
+    return true;
+
+  // Can ignore if MSB of vlen is set.
+  auto VLConst = dyn_cast<ConstantInt>(VLParam);
+  if (VLConst && VLConst->getSExtValue() < 0)
+    return true;
+
+  // Vlen param greater-equal type vlen - no lanes masked-off.
+  if (VLConst) {
+    auto ElemCount = getVectorLength();
+    if (ElemCount.Scalable)
+      return false;
+
+    uint64_t VLNum = VLConst->getZExtValue();
+    if (VLNum >= ElemCount.Min)
+      return true;
+  }
+
+  // Cannot ignore vlen param by default.
+  return false;
+}
+
 Instruction::BinaryOps BinaryOpIntrinsic::getBinaryOp() const {
   switch (getIntrinsicID()) {
     case Intrinsic::uadd_with_overflow:

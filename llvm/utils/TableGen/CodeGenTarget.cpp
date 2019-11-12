@@ -616,6 +616,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
   isCommutative = false;
   canThrow = false;
   isNoReturn = false;
+  isNoSync = false;
   isWillReturn = false;
   isCold = false;
   isNoDuplicate = false;
@@ -735,8 +736,7 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
       // variants with iAny types; otherwise, if the intrinsic is not
       // overloaded, all the types can be specified directly.
       assert(((!TyEl->isSubClassOf("LLVMExtendedType") &&
-               !TyEl->isSubClassOf("LLVMTruncatedType") &&
-               !TyEl->isSubClassOf("LLVMScalarOrSameVectorWidth")) ||
+               !TyEl->isSubClassOf("LLVMTruncatedType")) ||
               VT == MVT::iAny || VT == MVT::vAny) &&
              "Expected iAny or vAny type");
     } else
@@ -781,6 +781,8 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R) {
       isConvergent = true;
     else if (Property->getName() == "IntrNoReturn")
       isNoReturn = true;
+    else if (Property->getName() == "IntrNoSync")
+      isNoSync = true;
     else if (Property->getName() == "IntrWillReturn")
       isWillReturn = true;
     else if (Property->getName() == "IntrCold")
