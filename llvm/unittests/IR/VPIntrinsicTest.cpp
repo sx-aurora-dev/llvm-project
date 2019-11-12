@@ -32,19 +32,74 @@ protected:
 
   std::unique_ptr<Module> CreateVPDeclarationModule() {
       return parseAssemblyString(
-" declare <8 x i32> @llvm.vp.add.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) "
-" declare <8 x i32> @llvm.vp.sub.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) "
-" declare <8 x i32> @llvm.vp.mul.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) "
-" declare <8 x i32> @llvm.vp.sdiv.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) "
-" declare <8 x i32> @llvm.vp.srem.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) "
-" declare <8 x i32> @llvm.vp.udiv.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) "
-" declare <8 x i32> @llvm.vp.urem.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) "
-" declare <8 x i32> @llvm.vp.and.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) "
-" declare <8 x i32> @llvm.vp.xor.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) "
-" declare <8 x i32> @llvm.vp.or.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) "
-" declare <8 x i32> @llvm.vp.ashr.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32)  "
-" declare <8 x i32> @llvm.vp.lshr.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32)  "
-" declare <8 x i32> @llvm.vp.shl.v8i32(<8 x i32>, <8 x i32>, <8 x i1>, i32) ",
+" declare <8 x double> @llvm.vp.fadd.v8f64(<8 x double>, <8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.fsub.v8f64(<8 x double>, <8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.fmul.v8f64(<8 x double>, <8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.fdiv.v8f64(<8 x double>, <8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.frem.v8f64(<8 x double>, <8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.fma.v8f64(<8 x double>, <8 x double>, <8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.fneg.v8f64(<8 x double>, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.minnum.v8f64(<8 x double>, <8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.maxnum.v8f64(<8 x double>, <8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.add.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.sub.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.mul.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.sdiv.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.srem.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.udiv.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.urem.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.and.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.xor.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.or.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare <8 x i32> @llvm.vp.ashr.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen)  "
+" declare <8 x i32> @llvm.vp.lshr.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen)  "
+" declare <8 x i32> @llvm.vp.shl.v8i32(<8 x i32>, <8 x i32>, <8 x i1> mask, i32 vlen) "
+" declare void @llvm.vp.store.v16i32.p0v16i32(<16 x i32>, <16 x i32>*, <16 x i1> mask, i32 vlen) "
+" declare void @llvm.vp.scatter.v16i32.v16p0i32(<16 x i32>, <16 x i32*>, <16 x i1> mask, i32 vlen) "
+" declare <16 x i32> @llvm.vp.load.v16i32.p0v16i32(<16 x i32>*, <16 x i1> mask, i32 vlen) "
+" declare <16 x i32> @llvm.vp.gather.v16i32.v16p0i32(<16 x i32*>, <16 x i1> mask, i32 vlen) "
+" declare float @llvm.vp.reduce.fadd.v16f32(float, <16 x float>, <16 x i1> mask, i32 vlen)  "
+" declare float @llvm.vp.reduce.fmul.v16f32(float, <16 x float>, <16 x i1> mask, i32 vlen) "
+" declare float @llvm.vp.reduce.fmin.v16f32(<16 x float>, <16 x i1> mask, i32 vlen) "
+" declare float @llvm.vp.reduce.fmax.v16f32(<16 x float>, <16 x i1> mask, i32 vlen) "
+" declare i32 @llvm.vp.reduce.add.v16i32(<16 x i32>, <16 x i1> mask, i32 vlen) "
+" declare i32 @llvm.vp.reduce.mul.v16i32(<16 x i32>, <16 x i1> mask, i32 vlen) "
+" declare i32 @llvm.vp.reduce.and.v16i32(<16 x i32>, <16 x i1> mask, i32 vlen) "
+" declare i32 @llvm.vp.reduce.xor.v16i32(<16 x i32>, <16 x i1> mask, i32 vlen) "
+" declare i32 @llvm.vp.reduce.or.v16i32(<16 x i32>, <16 x i1> mask, i32 vlen) "
+" declare i32 @llvm.vp.reduce.smin.v16i32(<16 x i32>, <16 x i1> mask, i32 vlen) "
+" declare i32 @llvm.vp.reduce.smax.v16i32(<16 x i32>, <16 x i1> mask, i32 vlen) "
+" declare i32 @llvm.vp.reduce.umin.v16i32(<16 x i32>, <16 x i1> mask, i32 vlen) "
+" declare i32 @llvm.vp.reduce.umax.v16i32(<16 x i32>, <16 x i1> mask, i32 vlen) "
+" declare <16 x float> @llvm.vp.select.v16f32(<16 x i1>, <16 x float>, <16 x float>, i32 vlen) "
+" declare <16 x float> @llvm.vp.compose.v16f32(<16 x float>, <16 x float>, i32, i32 vlen) "
+" declare <16 x float> @llvm.vp.vshift.v16f32(<16 x float>, i32, <16 x i1>, i32 vlen) "
+" declare <16 x float> @llvm.vp.compress.v16f32(<16 x float>, <16 x i1>, i32 vlen) "
+" declare <16 x float> @llvm.vp.expand.v16f32(<16 x float>, <16 x i1> mask, i32 vlen) "
+" declare <16 x i1> @llvm.vp.icmp.v16i32(<16 x i32>, <16 x i32>, i8, <16 x i1> mask, i32 vlen) "
+" declare <16 x i1> @llvm.vp.fcmp.v16f32(<16 x float>, <16 x float>, i8, <16 x i1> mask, i32 vlen) "
+" declare <8 x i64> @llvm.vp.fptosi.v8i64v8f64(<8 x double>, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x i64> @llvm.vp.fptoui.v8i64v8f64(<8 x double>, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.sitofp.v8f64v8i64(<8 x i64>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.uitofp.v8f64v8i64(<8 x i64>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.rint.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.round.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.nearbyint.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.ceil.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.floor.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.trunc.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x float> @llvm.vp.fptrunc.v8f32v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.fpext.v8f64v8f32(<8 x float>, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.pow.v8f64(<8 x double>, <8 x double> %y, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.powi.v8f64(<8 x double>, i32 %y, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.sqrt.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.sin.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.cos.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.log.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.log10.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.log2.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.exp.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) "
+" declare <8 x double> @llvm.vp.exp2.v8f64(<8 x double>, metadata, metadata, <8 x i1> mask, i32 vlen) ",
           Err, C);
   }
 };
@@ -115,6 +170,24 @@ TEST_F(VPIntrinsicTest, GetParamPos) {
     if (VecLenParamPos.hasValue()) {
       Type *VecLenParamType = F.getArg(VecLenParamPos.getValue())->getType();
       ASSERT_TRUE(VecLenParamType->isIntegerTy(32));
+    }
+
+    Optional<int> MemPtrParamPos = VPIntrinsic::GetMemoryPointerParamPos(F.getIntrinsicID());
+    if (MemPtrParamPos.hasValue()) {
+      Type *MemPtrParamType = F.getArg(MemPtrParamPos.getValue())->getType();
+      ASSERT_TRUE(MemPtrParamType->isPtrOrPtrVectorTy());
+    }
+
+    Optional<int> RoundingParamPos = VPIntrinsic::GetRoundingModeParamPos(F.getIntrinsicID());
+    if (RoundingParamPos.hasValue()) {
+      Type *RoundingParamType = F.getArg(RoundingParamPos.getValue())->getType();
+      ASSERT_TRUE(RoundingParamType->isMetadataTy());
+    }
+
+    Optional<int> ExceptParamPos = VPIntrinsic::GetExceptionBehaviorParamPos(F.getIntrinsicID());
+    if (ExceptParamPos.hasValue()) {
+      Type *ExceptParamType = F.getArg(ExceptParamPos.getValue())->getType();
+      ASSERT_TRUE(ExceptParamType->isMetadataTy());
     }
   }
 }

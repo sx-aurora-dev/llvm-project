@@ -15303,7 +15303,7 @@ the range:
 
 ::
 
-      0 <= %evl <= W,  where W is the number of vector elements
+      0 <= %evl <= W,  where W is the (total) number of vector elements
 
 Note that for :ref:`scalable vector types <t_vector>` ``W`` is the runtime
 length of the vector.
@@ -15954,6 +15954,98 @@ Examples:
 
       %t = xor <4 x i32> %a, %b
       %also.r = select <4 x i1> %mask, <4 x i32> %t, <4 x i32> undef
+
+
+
+.. _int_vp_compose:
+
+'``llvm.vp.compose.*``' Intrinsics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+This is an overloaded intrinsic.
+
+::
+
+      declare <16 x float>  @llvm.vp.compose.v16f32 (<16 x float> <lanes_below_pivot>, <16 x float> <lanes_ge_pivot>, i32 <pivot>, i32 <vector_length>)
+
+Overview:
+"""""""""
+
+The compose intrinsic blends two input vectors based on a pivot value.
+
+
+Arguments:
+""""""""""
+
+The first operand is the vector whose elements are selected below the pivot. The second operand is the vector whose values are selected starting from the pivot position. The third operand is the pivot value. The fourth operand it the explicit vector length of the operation
+
+
+Semantics:
+""""""""""
+
+The '``llvm.vp.compose``' intrinsic is designed for conditional blending of two vectors based on a pivot number. All lanes below the pivot are taken from the first operand, all elements at greated and equal positions are taken from the second operand. It is useful for targets that support an explicit vector length and guarantee that vector instructions preserve the contents of vector registers above the AVL of the operation. Other targets may support this intrinsic differently, for example by lowering it into a select with a bitmask that represents the pivot comparison.
+The result of this operation is equivalent to a select with an equivalent predicate mask based on the pivot operand. However, as for all VP intrinsics all lanes above the explicit vector length are undefined.
+
+
+Examples:
+"""""""""
+
+.. code-block:: llvm
+
+      %r = call <4 x i32> @llvm.vp.compose.v4i32(<4 x i32> %a, <4 x i32> %b, i32 %pivot, i32 %evl)
+      ;; lanes of %r at positions >= %evl are undef
+
+      ;; except for %r is equivalent to %also.r
+      %tmp = insertelement <4 x i32> undef, %pivot, 0
+      %pivot.splat = shufflevector <4 x i32> %tmp, <4 x i32> undef, <4 x i32> zeroinitializer
+      %pivot.mask = icmp ult i1 <4 x i32> <i32 0, i32 1, i32 2, i32 3>, %pivot.splat
+      %also.r = select <4 x i1> %pivot.mask, <4 x i32> %a, <4 x i32> %b
+
+
+
+.. _int_vp_select:
+
+'``llvm.vp.select.*``' Intrinsics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+This is an overloaded intrinsic.
+
+::
+
+      declare <16 x i32>  @llvm.vp.select.v16i32 (<16 x i1> <mask>, <16 x i32> <left_op>, <16 x i32> <right_op>, i32 <vector_length>)
+      declare <256 x double>  @llvm.vp.select.v256f64 (<256 x i1> <mask>, <256 x double> <left_op>, <256 x double> <right_op>, i32 <vector_length>)
+
+Overview:
+"""""""""
+
+Conditional select with an explicit vector length.
+
+
+Arguments:
+""""""""""
+
+The first three operand and the result are vector types of the same length. The second and third operand, and the result have the same vector type. The fourth operand is the explicit vector length.
+
+Semantics:
+""""""""""
+
+The '``llvm.vp.select``' intrinsic performs conditional select (:ref:`select <i_select>`) of the second and thirs vector operand on each enabled lane.
+If the explicit vector length (the fourth operand) is effective, the result is undefined on lanes at positions greater-equal-than the explicit vector length.
+
+Examples:
+"""""""""
+
+.. code-block:: llvm
+
+      %r = call <4 x i32> @llvm.vp.select.v4i32(<4 x i1> %mask, <4 x i32> %onTrue, <4 x i32> %onFalse, i32 %avl)
+      ;; For all lanes below %avl, %r is lane-wise equivalent to %also.r
+
+      %also.r = select <4 x i1> %mask, <4 x i32> %onTrue, <4 x i32> %onFalse
+
 
 
 .. _int_mload_mstore:

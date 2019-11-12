@@ -615,6 +615,15 @@ public:
     return VF;
   }
 
+  bool
+  shouldFoldVectorLengthIntoMask(const PredicatedInstruction &PredInst) const {
+    return true;
+  }
+
+  bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
+    return false;
+  }
+
   bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
                              TTI::ReductionFlags Flags) const {
     return false;

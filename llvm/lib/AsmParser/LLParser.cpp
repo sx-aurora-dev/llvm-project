@@ -1341,15 +1341,18 @@ bool LLParser::ParseFnAttributeValuePairs(AttrBuilder &B,
     case lltok::kw_dereferenceable:
     case lltok::kw_dereferenceable_or_null:
     case lltok::kw_inalloca:
+    case lltok::kw_mask:
     case lltok::kw_nest:
     case lltok::kw_noalias:
     case lltok::kw_nocapture:
     case lltok::kw_nonnull:
+    case lltok::kw_passthru:
     case lltok::kw_returned:
     case lltok::kw_sret:
     case lltok::kw_swifterror:
     case lltok::kw_swiftself:
     case lltok::kw_immarg:
+    case lltok::kw_vlen:
       HaveError |=
         Error(Lex.getLoc(),
               "invalid use of parameter-only attribute on a function");
@@ -1636,11 +1639,13 @@ bool LLParser::ParseOptionalParamAttrs(AttrBuilder &B) {
     }
     case lltok::kw_inalloca:        B.addAttribute(Attribute::InAlloca); break;
     case lltok::kw_inreg:           B.addAttribute(Attribute::InReg); break;
+    case lltok::kw_mask:            B.addAttribute(Attribute::Mask); break;
     case lltok::kw_nest:            B.addAttribute(Attribute::Nest); break;
     case lltok::kw_noalias:         B.addAttribute(Attribute::NoAlias); break;
     case lltok::kw_nocapture:       B.addAttribute(Attribute::NoCapture); break;
     case lltok::kw_nofree:          B.addAttribute(Attribute::NoFree); break;
     case lltok::kw_nonnull:         B.addAttribute(Attribute::NonNull); break;
+    case lltok::kw_passthru:        B.addAttribute(Attribute::Passthru); break;
     case lltok::kw_readnone:        B.addAttribute(Attribute::ReadNone); break;
     case lltok::kw_readonly:        B.addAttribute(Attribute::ReadOnly); break;
     case lltok::kw_returned:        B.addAttribute(Attribute::Returned); break;
@@ -1648,6 +1653,7 @@ bool LLParser::ParseOptionalParamAttrs(AttrBuilder &B) {
     case lltok::kw_sret:            B.addAttribute(Attribute::StructRet); break;
     case lltok::kw_swifterror:      B.addAttribute(Attribute::SwiftError); break;
     case lltok::kw_swiftself:       B.addAttribute(Attribute::SwiftSelf); break;
+    case lltok::kw_vlen:            B.addAttribute(Attribute::VectorLength); break;
     case lltok::kw_writeonly:       B.addAttribute(Attribute::WriteOnly); break;
     case lltok::kw_zeroext:         B.addAttribute(Attribute::ZExt); break;
     case lltok::kw_immarg:          B.addAttribute(Attribute::ImmArg); break;
@@ -1740,13 +1746,16 @@ bool LLParser::ParseOptionalReturnAttrs(AttrBuilder &B) {
     // Error handling.
     case lltok::kw_byval:
     case lltok::kw_inalloca:
+    case lltok::kw_mask:
     case lltok::kw_nest:
     case lltok::kw_nocapture:
+    case lltok::kw_passthru:
     case lltok::kw_returned:
     case lltok::kw_sret:
     case lltok::kw_swifterror:
     case lltok::kw_swiftself:
     case lltok::kw_immarg:
+    case lltok::kw_vlen:
       HaveError |= Error(Lex.getLoc(), "invalid use of parameter-only attribute");
       break;
 

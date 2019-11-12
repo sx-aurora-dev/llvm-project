@@ -1049,6 +1049,20 @@ public:
     return getNode(ISD::SETCC, DL, VT, LHS, RHS, getCondCode(Cond));
   }
 
+  /// Helper function to make it easier to build VP_SetCC's if you just have an
+  /// ISD::CondCode instead of an SDValue.
+  SDValue getVPSetCC(const SDLoc &DL, EVT VT, SDValue LHS, SDValue RHS,
+                     ISD::CondCode Cond, SDValue Mask, SDValue EVL) {
+    assert(LHS.getValueType().isVector() == RHS.getValueType().isVector() &&
+           "Cannot compare scalars to vectors");
+    assert(LHS.getValueType().isVector() == VT.isVector() &&
+           "Cannot compare scalars to vectors");
+    assert(Cond != ISD::SETCC_INVALID &&
+           "Cannot create a setCC of an invalid node.");
+    return getNode(ISD::VP_SETCC, DL, VT, LHS, RHS, getCondCode(Cond), Mask,
+                   EVL);
+  }
+
   /// Helper function to make it easier to build Select's if you just have
   /// operands and don't want to check for vector.
   SDValue getSelect(const SDLoc &DL, EVT VT, SDValue Cond, SDValue LHS,
@@ -1189,6 +1203,20 @@ public:
                         SDValue Ptr, EVT SVT, MachineMemOperand *MMO);
   SDValue getIndexedStore(SDValue OrigStore, const SDLoc &dl, SDValue Base,
                           SDValue Offset, ISD::MemIndexedMode AM);
+
+  /// Returns sum of the base pointer and offset.
+  SDValue getLoadVP(EVT VT, const SDLoc &dl, SDValue Chain, SDValue Ptr, 
+                        SDValue Mask, SDValue VLen, EVT MemVT,
+                        MachineMemOperand *MMO, ISD::LoadExtType);
+  SDValue getStoreVP(SDValue Chain, const SDLoc &dl, SDValue Val,
+                         SDValue Ptr, SDValue Mask, SDValue VLen, EVT MemVT,
+                         MachineMemOperand *MMO, bool IsTruncating = false);
+  SDValue getGatherVP(SDVTList VTs, EVT VT, const SDLoc &dl,
+                          ArrayRef<SDValue> Ops, MachineMemOperand *MMO,
+                          ISD::MemIndexType IndexType);
+  SDValue getScatterVP(SDVTList VTs, EVT VT, const SDLoc &dl,
+                           ArrayRef<SDValue> Ops, MachineMemOperand *MMO,
+                           ISD::MemIndexType IndexType);
 
   SDValue getMaskedLoad(EVT VT, const SDLoc &dl, SDValue Chain, SDValue Base,
                         SDValue Offset, SDValue Mask, SDValue Src0, EVT MemVT,

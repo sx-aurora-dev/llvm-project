@@ -39,6 +39,7 @@
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/PredicatedInst.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsX86.h"
@@ -1816,6 +1817,14 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     return &CI;
   }
 
+  // Predicated instruction patterns
+  auto * VPInst = dyn_cast<VPIntrinsic>(&CI);
+  if (VPInst) {
+    auto * PredInst = cast<PredicatedInstruction>(VPInst);
+    auto Result = visitPredicatedInstruction(PredInst);
+    if (Result) return Result;
+  }
+
   IntrinsicInst *II = dyn_cast<IntrinsicInst>(&CI);
   if (!II) return visitCallBase(CI);
 
@@ -1892,7 +1901,8 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     if (Changed) return II;
   }
 
-  // For vector result intrinsics, use the generic demanded vector support.
+  // For vector result intrinsics, use the generic demanded vector support to
+  // simplify any operands before moving on to the per-intrinsic rules.
   if (II->getType()->isVectorTy()) {
     auto VWidth = II->getType()->getVectorNumElements();
     APInt UndefElts(VWidth, 0);

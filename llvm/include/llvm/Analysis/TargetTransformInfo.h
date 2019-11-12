@@ -45,6 +45,7 @@ class BranchInst;
 class Function;
 class GlobalValue;
 class IntrinsicInst;
+class PredicatedInstruction;
 class LoadInst;
 class LoopAccessInfo;
 class Loop;
@@ -1159,6 +1160,15 @@ public:
   bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
                              ReductionFlags Flags) const;
 
+  /// \returns True if the vector length parameter should be folded into the
+  /// vector mask.
+  bool
+  shouldFoldVectorLengthIntoMask(const PredicatedInstruction &PredInst) const;
+
+  /// \returns False if this VP op should be replaced by a non-VP op or an
+  /// unpredicated op plus a select.
+  bool supportsVPOperation(const PredicatedInstruction &PredInst) const;
+
   /// \returns True if the target wants to expand the given reduction intrinsic
   /// into a shuffle sequence.
   bool shouldExpandReduction(const IntrinsicInst *II) const;
@@ -1425,6 +1435,10 @@ public:
   virtual unsigned getStoreVectorFactor(unsigned VF, unsigned StoreSize,
                                         unsigned ChainSizeInBytes,
                                         VectorType *VecTy) const = 0;
+  virtual bool shouldFoldVectorLengthIntoMask(
+      const PredicatedInstruction &PredInst) const = 0;
+  virtual bool
+  supportsVPOperation(const PredicatedInstruction &PredInst) const = 0;
   virtual bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
                                      ReductionFlags) const = 0;
   virtual bool shouldExpandReduction(const IntrinsicInst *II) const = 0;
@@ -1910,6 +1924,14 @@ public:
                                 unsigned ChainSizeInBytes,
                                 VectorType *VecTy) const override {
     return Impl.getStoreVectorFactor(VF, StoreSize, ChainSizeInBytes, VecTy);
+  }
+  bool shouldFoldVectorLengthIntoMask(
+      const PredicatedInstruction &PredInst) const override {
+    return Impl.shouldFoldVectorLengthIntoMask(PredInst);
+  }
+  bool
+  supportsVPOperation(const PredicatedInstruction &PredInst) const override {
+    return Impl.supportsVPOperation(PredInst);
   }
   bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
                              ReductionFlags Flags) const override {
