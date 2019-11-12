@@ -47,6 +47,7 @@ add_llvm_library(LLVMCore
   PassManager.cpp
   PassRegistry.cpp
   PassTimingInfo.cpp
+  PredicatedInst.cpp
   RemarkStreamer.cpp
   SafepointIRVerifier.cpp
   ProfileSummary.cpp
@@ -58,7 +59,6 @@ add_llvm_library(LLVMCore
   Value.cpp
   ValueSymbolTable.cpp
   Verifier.cpp
-
   ADDITIONAL_HEADER_DIRS
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/IR
 

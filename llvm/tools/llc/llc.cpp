@@ -315,6 +315,7 @@ int main(int argc, char **argv) {
   initializeVectorization(*Registry);
   initializeScalarizeMaskedMemIntrinPass(*Registry);
   initializeExpandReductionsPass(*Registry);
+  initializeExpandVectorPredicationPass(*Registry);
   initializeHardwareLoopsPass(*Registry);
 
   // Initialize debugging passes.

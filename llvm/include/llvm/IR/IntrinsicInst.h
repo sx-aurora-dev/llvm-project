@@ -218,6 +218,15 @@ namespace llvm {
     // Whether \p ID is a VP intrinsic ID.
     static bool IsVPIntrinsic(Intrinsic::ID);
 
+    /// set the mask parameter.
+    /// this asserts if the underlying intrinsic has no mask parameter.
+    void setMaskParam(Value *);
+
+    /// set the vector length parameter.
+    /// this asserts if the underlying intrinsic has no vector length
+    /// parameter.
+    void setVectorLengthParam(Value *);
+
     /// \return the mask parameter or nullptr.
     Value *getMaskParam() const;
 
@@ -230,6 +239,9 @@ namespace llvm {
     /// \return the static element count (vector number of elements) the vector
     /// length parameter applies to.
     ElementCount getVectorLength() const;
+
+    bool isBinaryOp() const;
+    static bool IsBinaryVPOp(Intrinsic::ID);
 
     // Methods for support type inquiry through isa, cast, and dyn_cast:
     static bool classof(const IntrinsicInst *I) {
