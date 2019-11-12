@@ -678,6 +678,12 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_READ_ONLY;
   case Attribute::Returned:
     return bitc::ATTR_KIND_RETURNED;
+  case Attribute::Mask:
+    return bitc::ATTR_KIND_MASK;
+  case Attribute::VectorLength:
+    return bitc::ATTR_KIND_VECTORLENGTH;
+  case Attribute::Passthru:
+    return bitc::ATTR_KIND_PASSTHRU;
   case Attribute::ReturnsTwice:
     return bitc::ATTR_KIND_RETURNS_TWICE;
   case Attribute::SExt:

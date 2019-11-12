@@ -1897,7 +1897,8 @@ public:
       const PredicatedInstruction &PredInst) const override {
     return Impl.shouldFoldVectorLengthIntoMask(PredInst);
   }
-  bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
+  bool
+  supportsVPOperation(const PredicatedInstruction &PredInst) const override {
     return Impl.supportsVPOperation(PredInst);
   }
   bool useReductionIntrinsic(unsigned Opcode, Type *Ty,

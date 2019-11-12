@@ -16,7 +16,6 @@
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/IR/Constants.h"
-#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstIterator.h"
@@ -28,7 +27,6 @@
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Transforms/Utils/LoopUtils.h"
 
 using namespace llvm;
 
@@ -36,6 +34,66 @@ using namespace llvm;
 
 STATISTIC(NumFoldedVL, "Number of folded vector length params");
 STATISTIC(numLoweredVPOps, "Number of folded vector predication operations");
+
+/// \returns Whether the vector mask \p MaskVal has all lane bits set.
+static bool IsAllTrueMask(Value *MaskVal) {
+  auto ConstVec = dyn_cast<ConstantVector>(MaskVal);
+  if (!ConstVec)
+    return false;
+  return ConstVec->isAllOnesValue();
+}
+
+/// \returns The constant \p ConstVal broadcasted to \p VecTy.
+static Value *BroadcastConstant(Constant *ConstVal, VectorType *VecTy) {
+  return ConstantDataVector::getSplat(VecTy->getVectorNumElements(), ConstVal);
+}
+
+/// \returns The neutral element of the reduction \p VPRedID.
+static Value *GetNeutralElementVector(Intrinsic::ID VPRedID,
+                                      VectorType *VecTy) {
+  unsigned ElemBits = VecTy->getScalarSizeInBits();
+
+  switch (VPRedID) {
+  default:
+    abort(); // invalid vp reduction intrinsic
+
+  case Intrinsic::vp_reduce_add:
+  case Intrinsic::vp_reduce_or:
+  case Intrinsic::vp_reduce_xor:
+  case Intrinsic::vp_reduce_umax:
+    return Constant::getNullValue(VecTy);
+
+  case Intrinsic::vp_reduce_mul:
+    return BroadcastConstant(
+        ConstantInt::get(VecTy->getElementType(), 1, false), VecTy);
+
+  case Intrinsic::vp_reduce_and:
+  case Intrinsic::vp_reduce_umin:
+    return Constant::getAllOnesValue(VecTy);
+
+  case Intrinsic::vp_reduce_smin:
+    return BroadcastConstant(
+        ConstantInt::get(VecTy->getContext(),
+                         APInt::getSignedMaxValue(ElemBits)),
+        VecTy);
+  case Intrinsic::vp_reduce_smax:
+    return BroadcastConstant(
+        ConstantInt::get(VecTy->getContext(),
+                         APInt::getSignedMinValue(ElemBits)),
+        VecTy);
+
+  case Intrinsic::vp_reduce_fmin:
+  case Intrinsic::vp_reduce_fmax:
+    return BroadcastConstant(ConstantFP::getQNaN(VecTy->getElementType()),
+                             VecTy);
+  case Intrinsic::vp_reduce_fadd:
+    return BroadcastConstant(ConstantFP::get(VecTy->getElementType(), 0.0),
+                             VecTy);
+  case Intrinsic::vp_reduce_fmul:
+    return BroadcastConstant(ConstantFP::get(VecTy->getElementType(), 1.0),
+                             VecTy);
+  }
+}
 
 namespace {
 
@@ -98,11 +156,37 @@ Constant *GetSafeDivisor(Type *DivTy) {
   llvm_unreachable("Not a valid type for division");
 }
 
+/// Transfer operation properties from \p OldVPI to \p NewVal.
+void TransferDecorations(Value *NewVal, VPIntrinsic *OldVPI) {
+  auto NewInst = dyn_cast<Instruction>(NewVal);
+  if (!NewInst || !isa<FPMathOperator>(NewVal))
+    return;
+
+  auto OldFMOp = dyn_cast<FPMathOperator>(OldVPI);
+  if (!OldFMOp)
+    return;
+
+  NewInst->setFastMathFlags(OldFMOp->getFastMathFlags());
+}
+
 /// Transfer all properties from \p OldOp to \p NewOp and replace all uses.
 /// OldVP gets erased.
 void ReplaceOperation(Value *NewOp, VPIntrinsic *OldOp) {
+  TransferDecorations(NewOp, OldOp);
   OldOp->replaceAllUsesWith(NewOp);
   OldOp->eraseFromParent();
+}
+
+/// \brief Lower this vector-predicated operator into standard IR.
+void LowerVPUnaryOperator(VPIntrinsic *VPI) {
+  assert(VPI->canIgnoreVectorLengthParam());
+  auto OC = VPI->getFunctionalOpcode();
+  auto FirstOp = VPI->getOperand(0);
+  assert(OC == Instruction::FNeg);
+  auto I = cast<Instruction>(VPI);
+  IRBuilder<> Builder(I);
+  auto NewFNeg = Builder.CreateFNegFMF(FirstOp, I, I->getName());
+  ReplaceOperation(NewFNeg, VPI);
 }
 
 /// \brief Lower this VP binary operator to a non-VP binary operator.
@@ -118,19 +202,24 @@ void LowerVPBinaryOperator(VPIntrinsic *VPI) {
   IRBuilder<> Builder(OldBinOp);
   auto Mask = VPI->getMaskParam();
 
-  switch (VPI->getFunctionalOpcode()) {
-  default:
-    // can safely ignore the predicate
-    break;
+  // Blend in safe operands
+  if (!IsAllTrueMask(Mask)) {
+    switch (VPI->getFunctionalOpcode()) {
+    default:
+      // can safely ignore the predicate
+      break;
 
-  // Division operators need a safe divisor on masked-off lanes (1.0)
-  case Instruction::UDiv:
-  case Instruction::SDiv:
-  case Instruction::URem:
-  case Instruction::SRem:
-    // 2nd operand must not be zero
-    auto SafeDivisor = GetSafeDivisor(VPI->getType());
-    SndOp = Builder.CreateSelect(Mask, SndOp, SafeDivisor);
+    // Division operators need a safe divisor on masked-off lanes (1.0)
+    case Instruction::FDiv:
+    case Instruction::FRem:
+    case Instruction::UDiv:
+    case Instruction::SDiv:
+    case Instruction::URem:
+    case Instruction::SRem:
+      // 2nd operand must not be zero
+      auto SafeDivisor = GetSafeDivisor(VPI->getType());
+      SndOp = Builder.CreateSelect(Mask, SndOp, SafeDivisor);
+    }
   }
 
   auto NewBinOp = Builder.CreateBinOp(
@@ -140,17 +229,284 @@ void LowerVPBinaryOperator(VPIntrinsic *VPI) {
   ReplaceOperation(NewBinOp, VPI);
 }
 
-/// \returns Whether the vector mask \p MaskVal has all lane bits set.
-static bool IsAllTrueMask(Value *MaskVal) {
-  auto ConstVec = dyn_cast<ConstantVector>(MaskVal);
-  if (!ConstVec)
-    return false;
-  return ConstVec->isAllOnesValue();
+/// \brief Lower this vector-predicated cast operator.
+void LowerVPCastOperator(VPIntrinsic *VPI) {
+  assert(VPI->canIgnoreVectorLengthParam());
+  assert(!VPI->isConstrainedOp());
+  auto OC = VPI->getFunctionalOpcode();
+  IRBuilder<> Builder(cast<Instruction>(VPI));
+  auto NewCast =
+      Builder.CreateCast(static_cast<Instruction::CastOps>(OC),
+                         VPI->getArgOperand(0), VPI->getType(), VPI->getName());
+
+  ReplaceOperation(NewCast, VPI);
 }
 
-/// \returns The constant \p ConstVal broadcasted to \p VecTy.
-static Value *BroadcastConstant(Constant *ConstVal, VectorType *VecTy) {
-  return ConstantDataVector::getSplat(VecTy->getVectorNumElements(), ConstVal);
+/// \brief Lower llvm.vp.compose.* into a select instruction
+void LowerVPCompose(VPIntrinsic *VPI) {
+  auto ElemBits = GetFunctionalVectorElementSize();
+  ElementCount ElemCount = VPI->getVectorLength();
+  assert(!ElemCount.Scalable && "TODO scalable type support");
+
+  IRBuilder<> Builder(cast<Instruction>(VPI));
+  auto PivotMask =
+      ConvertVLToMask(Builder, VPI->getOperand(2), ElemBits, ElemCount.Min);
+  auto NewCompose = Builder.CreateSelect(PivotMask, VPI->getOperand(0),
+                                         VPI->getOperand(1), VPI->getName());
+
+  ReplaceOperation(NewCompose, VPI);
+}
+
+/// \brief Lower this llvm.vp.fma intrinsic to a llvm.fma intrinsic.
+void LowerToIntrinsic(VPIntrinsic *VPI) {
+  assert(VPI->canIgnoreVectorLengthParam());
+
+  auto I = cast<Instruction>(VPI);
+  auto M = I->getParent()->getModule();
+  IRBuilder<> Builder(I);
+  Intrinsic::ID IID = VPI->getFunctionalIntrinsicID();
+  assert(IID != Intrinsic::not_intrinsic && "cannot lower to non-VP intrinsic");
+  assert(!VPI->isConstrainedOp() &&
+         "TODO implement lowering to constrained fp");
+  assert(!VPIntrinsic::IsVPIntrinsic(IID));
+
+  SmallVector<Type *, 2> IntrinTypeVec;
+  IntrinTypeVec.push_back(VPI->getType()); // TODO simplify
+
+  // Implicitly assumes that the return type is sufficient for disambiguation.
+  Function *IntrinFunc = Intrinsic::getDeclaration(M, IID, IntrinTypeVec);
+  assert(IntrinFunc);
+
+  LLVM_DEBUG(dbgs() << "Using " << *IntrinFunc << " to lower "
+                    << VPI->getCalledFunction() << "\n");
+
+  // Construct argument vector.
+  assert(!IntrinFunc->getFunctionType()->isVarArg());
+  unsigned NumIntrinParams = IntrinFunc->getFunctionType()->getNumParams();
+  SmallVector<Value *, 4> IntrinArgs;
+  for (unsigned i = 0; i < NumIntrinParams; ++i) {
+    IntrinArgs.push_back(VPI->getArgOperand(i));
+  }
+
+  auto NewIntrin = Builder.CreateCall(IntrinFunc, IntrinArgs, VPI->getName());
+
+  ReplaceOperation(NewIntrin, VPI);
+}
+
+/// \brief Lower this llvm.vp.reduce.* intrinsic to a llvm.experimental.reduce.*
+/// intrinsic.
+void LowerVPReduction(VPIntrinsic *VPI) {
+  assert(VPI->canIgnoreVectorLengthParam());
+  assert(VPI->isReductionOp());
+
+  auto &I = *cast<Instruction>(VPI);
+  IRBuilder<> Builder(&I);
+  auto M = Builder.GetInsertBlock()->getModule();
+  assert(M && "No module to declare reduction intrinsic in!");
+
+  SmallVector<Value *, 3> Args;
+
+  Value *RedVectorParam = VPI->getReductionVectorParam();
+  Value *RedAccuParam = VPI->getReductionAccuParam();
+  Value *MaskParam = VPI->getMaskParam();
+  auto FunctionalID = VPI->getFunctionalIntrinsicID();
+
+  // Insert neutral element in masked-out positions
+  bool IsUnmasked = IsAllTrueMask(VPI->getMaskParam());
+  if (!IsUnmasked) {
+    auto *NeutralVector = GetNeutralElementVector(
+        VPI->getIntrinsicID(), cast<VectorType>(RedVectorParam->getType()));
+    RedVectorParam =
+        Builder.CreateSelect(MaskParam, RedVectorParam, NeutralVector);
+  }
+
+  auto VecTypeArg = RedVectorParam->getType();
+
+  Value *NewReduct;
+  switch (FunctionalID) {
+  default: {
+    auto RedIntrinFunc = Intrinsic::getDeclaration(M, FunctionalID, VecTypeArg);
+    NewReduct = Builder.CreateCall(RedIntrinFunc, RedVectorParam, I.getName());
+    assert(!RedAccuParam && "accu dropped");
+  } break;
+
+  case Intrinsic::experimental_vector_reduce_v2_fadd:
+  case Intrinsic::experimental_vector_reduce_v2_fmul: {
+    auto TypeArg = RedAccuParam->getType();
+    auto RedIntrinFunc =
+        Intrinsic::getDeclaration(M, FunctionalID, {TypeArg, VecTypeArg});
+    NewReduct = Builder.CreateCall(RedIntrinFunc,
+                                   {RedAccuParam, RedVectorParam}, I.getName());
+  } break;
+  }
+
+  TransferDecorations(NewReduct, VPI);
+  I.replaceAllUsesWith(NewReduct);
+  I.eraseFromParent();
+}
+
+/// \brief Lower this llvm.vp.(load|store|gather|scatter) to a non-vp
+/// instruction.
+void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
+  assert(VPI->canIgnoreVectorLengthParam());
+  auto &I = cast<Instruction>(*VPI);
+
+  auto MaskParam = VPI->getMaskParam();
+  auto PtrParam = VPI->getMemoryPointerParam();
+  auto DataParam = VPI->getMemoryDataParam();
+  bool IsUnmasked = IsAllTrueMask(MaskParam);
+
+  IRBuilder<> Builder(&I);
+  auto &DL = Builder.GetInsertBlock()->getModule()->getDataLayout();
+  MaybeAlign AlignOpt = VPI->getPointerAlignment();
+
+  Value *NewMemoryInst = nullptr;
+  switch (VPI->getIntrinsicID()) {
+  default:
+    abort(); // not a VP memory intrinsic
+
+  case Intrinsic::vp_store: {
+    if (IsUnmasked) {
+      StoreInst *NewStore = Builder.CreateStore(DataParam, PtrParam, false);
+      if (AlignOpt.hasValue())
+        NewStore->setAlignment(AlignOpt.getValue());
+      NewMemoryInst = NewStore;
+    } else {
+      NewMemoryInst = Builder.CreateMaskedStore(
+          DataParam, PtrParam, AlignOpt.valueOrOne().value(), MaskParam);
+    }
+  } break;
+
+  case Intrinsic::vp_load: {
+    if (IsUnmasked) {
+      LoadInst *NewLoad = Builder.CreateLoad(PtrParam, false);
+      if (AlignOpt.hasValue())
+        NewLoad->setAlignment(AlignOpt.getValue());
+      NewMemoryInst = NewLoad;
+    } else {
+      Align MayAlign = PtrParam->getPointerAlignment(DL).valueOrOne();
+      NewMemoryInst =
+          Builder.CreateMaskedLoad(PtrParam, MayAlign.value(), MaskParam);
+    }
+  } break;
+
+  case Intrinsic::vp_scatter: {
+    // if (IsUnmasked) {
+    //   StoreInst *NewStore = Builder.CreateStore(DataParam, PtrParam, false);
+    //   if (AlignOpt.hasValue()) NewStore->setAlignment(AlignOpt.getValue());
+    //   NewMemoryInst = NewStore;
+    // } else {
+    Align MayAlign; // FIXME = PtrParam->getPointerAlignment(DL).valueOrOne();
+    NewMemoryInst = Builder.CreateMaskedScatter(DataParam, PtrParam,
+                                                MayAlign.value(), MaskParam);
+    // }
+  } break;
+
+  case Intrinsic::vp_gather: {
+    // if (IsUnmasked) {
+    //   LoadInst *NewLoad = Builder.CreateLoad(I.getType(), PtrParam, false);
+    //   if (AlignOpt.hasValue()) NewLoad->setAlignment(AlignOpt.getValue());
+    //   NewMemoryInst = NewLoad;
+    // } else {
+    Align MayAlign; // FIXME = PtrParam->getPointerAlignment(DL).valueOrOne();
+    NewMemoryInst = Builder.CreateMaskedGather(PtrParam, MayAlign.value(),
+                                               MaskParam, nullptr, I.getName());
+    // }
+  } break;
+  }
+
+  assert(NewMemoryInst);
+  ReplaceOperation(NewMemoryInst, VPI);
+}
+
+/// \brief Lower llvm.vp.select.* to a select instruction.
+void LowerVPSelectInst(VPIntrinsic *VPI) {
+  auto I = cast<Instruction>(VPI);
+
+  auto NewSelect = SelectInst::Create(VPI->getMaskParam(), VPI->getOperand(1),
+                                      VPI->getOperand(2), I->getName(), I, I);
+  ReplaceOperation(NewSelect, VPI);
+}
+
+/// \brief Lower llvm.vp.(icmp|fcmp) to an icmp or fcmp instruction.
+void LowerVPCompare(VPIntrinsic *VPI) {
+  auto NewCmp = CmpInst::Create(
+      static_cast<Instruction::OtherOps>(VPI->getFunctionalOpcode()),
+      VPI->getCmpPredicate(), VPI->getOperand(0), VPI->getOperand(1),
+      VPI->getName(), cast<Instruction>(VPI));
+  ReplaceOperation(NewCmp, VPI);
+}
+
+/// \brief Try to lower this vp_vshift operation.
+bool TryLowerVShift(VPIntrinsic *VPI) {
+  // vshift(vec, amount, mask, vlen)
+
+  // cannot lower dynamic shift amount
+  auto *SrcVal = VPI->getArgOperand(0);
+  auto *AmountVal = VPI->getArgOperand(1);
+  if (!isa<ConstantInt>(AmountVal))
+    return false;
+  int64_t Amount = cast<ConstantInt>(AmountVal)->getSExtValue();
+
+  // cannot lower scalable vector size
+  auto ElemCount = VPI->getType()->getVectorElementCount();
+  if (ElemCount.Scalable)
+    return false;
+  int VecWidth = ElemCount.Min;
+
+  auto IntTy = Type::getInt32Ty(VPI->getContext());
+
+  // constitute shuffle mask.
+  std::vector<Constant *> Elems;
+  for (int i = 0; i < (int)ElemCount.Min; ++i) {
+    int64_t SrcLane = i - Amount;
+    if (SrcLane < 0 || SrcLane >= VecWidth)
+      Elems.push_back(UndefValue::get(IntTy));
+    else
+      Elems.push_back(ConstantInt::get(IntTy, SrcLane));
+  }
+  auto *ShuffleMask = ConstantVector::get(Elems);
+
+  auto *V2 = UndefValue::get(SrcVal->getType());
+
+  // Translate to a shuffle
+  auto NewI = new ShuffleVectorInst(SrcVal, V2, ShuffleMask, VPI->getName(),
+                                    cast<Instruction>(VPI));
+  ReplaceOperation(NewI, VPI);
+  return true;
+}
+
+/// \brief Lower a llvm.vp.* intrinsic that is not functionally equivalent to a
+/// standard IR instruction.
+void LowerUnmatchedVPIntrinsic(VPIntrinsic *VPI) {
+  if (VPI->isReductionOp())
+    return LowerVPReduction(VPI);
+
+  switch (VPI->getIntrinsicID()) {
+  default:
+    LowerToIntrinsic(VPI);
+    break;
+
+  // Shuffles
+  case Intrinsic::vp_compress:
+  case Intrinsic::vp_expand:
+  case Intrinsic::vp_vshift:
+    if (TryLowerVShift(VPI))
+      return;
+
+    LLVM_DEBUG(dbgs() << "Silently keeping VP intrinsic: can not substitute: "
+                      << *VPI << "\n");
+    return;
+
+  case Intrinsic::vp_compose:
+    LowerVPCompose(VPI);
+    break;
+
+  case Intrinsic::vp_gather:
+  case Intrinsic::vp_scatter:
+    LowerVPMemoryIntrinsic(VPI);
+    break;
+  }
 }
 
 /// \brief Expand llvm.vp.* intrinsics as requested by \p TTI.
@@ -208,7 +564,7 @@ bool expandVectorPredication(Function &F, const TargetTransformInfo *TTI) {
     LLVM_DEBUG(dbgs() << "OLD vlen: " << *OldVLParam << '\n');
     LLVM_DEBUG(dbgs() << "OLD mask: " << *OldMaskParam << '\n');
 
-   // Determine the lane bit size that should be used to lower this op
+    // Determine the lane bit size that should be used to lower this op
     auto ElemBits = GetFunctionalVectorElementSize();
     ElementCount ElemCount = VPI->getVectorLength();
     assert(!ElemCount.Scalable && "TODO scalable vector support");
@@ -257,8 +613,38 @@ bool expandVectorPredication(Function &F, const TargetTransformInfo *TTI) {
       LowerVPBinaryOperator(VPI);
       continue;
     }
+    if (FirstUnOp <= OC && OC <= LastUnOp) {
+      LowerVPUnaryOperator(VPI);
+      continue;
+    }
+    if (FirstCastOp <= OC && OC <= LastCastOp) {
+      LowerVPCastOperator(VPI);
+      continue;
+    }
 
-    llvm_unreachable("cannot lower this VP operation");
+    // Lower to a non-VP intrinsic.
+    switch (OC) {
+    default:
+      abort(); // unexpected intrinsic
+
+    case Instruction::Call:
+      LowerUnmatchedVPIntrinsic(VPI);
+      break;
+
+    case Instruction::Select:
+      LowerVPSelectInst(VPI);
+      break;
+
+    case Instruction::Store:
+    case Instruction::Load:
+      LowerVPMemoryIntrinsic(VPI);
+      break;
+
+    case Instruction::ICmp:
+    case Instruction::FCmp:
+      LowerVPCompare(VPI);
+      break;
+    }
   }
 
   return Changed;

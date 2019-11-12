@@ -149,7 +149,10 @@ struct CodeGenIntrinsic {
     ReadOnly,
     WriteOnly,
     ReadNone,
-    ImmArg
+    ImmArg,
+    Mask,
+    VectorLength,
+    Passthru
   };
 
   std::vector<std::pair<unsigned, ArgAttribute>> ArgumentAttributes;
