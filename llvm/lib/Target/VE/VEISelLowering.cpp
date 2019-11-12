@@ -3491,6 +3491,7 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
   EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
   EVT v256i1 = EVT::getVectorVT(*DAG.getContext(), EVT::getIntegerVT(*DAG.getContext(), 1), 256);
 
+#ifdef OBSOLETE_VE_VECTOR
   // Initialize vector length register by 256
   SDValue RC = DAG.getTargetConstant(VE::VLSRegClass.getID(), dl, MVT::i64);
   SDValue resultSizeVal =
@@ -3529,6 +3530,49 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
   }
 
   SDValue returnValue = SDValue(DAG.getMachineNode(VE::VMRGvm, dl, Op.getSimpleValueType(), {firstrotated, secondrotated, Mask, resultSizeVal}), 0);
+#else
+  SDValue VL = SDValue(DAG.getMachineNode(VE::LEA32zzi, dl, MVT::i32, DAG.getTargetConstant(resultSize, dl, MVT::i32)), 0);
+  //SDValue VL = DAG.getTargetConstant(resultSize, dl, MVT::i32);
+  SDValue firstrotated
+	  = firstrot % 256 != 0
+	  ? SDValue(DAG.getMachineNode(VE::vmv_vIvl, dl, firstVec.getSimpleValueType(),
+				  {DAG.getConstant(firstrot % 256, dl, i32), firstVec, VL}), 0)
+	  : firstVec;
+  SDValue secondrotated
+	  = secondrot % 256 != 0
+	  ? SDValue(DAG.getMachineNode(VE::vmv_vIvl, dl, secondVec.getSimpleValueType(),
+				  {DAG.getConstant(secondrot % 256, dl, i32), secondVec, VL}), 0)
+	  : secondVec;
+
+  int block = firstsecond / 64;
+  int secondblock = firstsecond % 64;
+
+  SDValue Mask = DAG.getUNDEF(v256i1);
+
+  for (int i = 0; i < block; i++) {
+    //set blocks to all 0s
+    SDValue mask = inv_order ? DAG.getConstant(0xffffffffffffffff, dl, i64) : DAG.getConstant(0, dl, i64);
+    SDValue index = DAG.getTargetConstant(i, dl, i64);
+    Mask = SDValue(DAG.getMachineNode(VE::lvm_mmIs, dl, v256i1, {Mask, index, mask}), 0);
+  }
+
+  SDValue mask = DAG.getConstant(0xffffffffffffffff, dl, i64);
+  if (!inv_order)
+    mask = DAG.getNode(ISD::SRL, dl, i64, {mask, DAG.getConstant(secondblock, dl, i64)});
+  else
+    mask = DAG.getNode(ISD::SHL, dl, i64, {mask, DAG.getConstant(64 - secondblock, dl, i64)});
+  Mask = SDValue(DAG.getMachineNode(VE::lvm_mmIs, dl, v256i1, {Mask, DAG.getTargetConstant(block, dl, i64), mask}), 0);
+
+  for (int i = block + 1; i < 4; i++) {
+    //set blocks to all 1s
+    SDValue mask = inv_order ? DAG.getConstant(0, dl, i64) : DAG.getConstant(0xffffffffffffffff, dl, i64);
+    SDValue index = DAG.getTargetConstant(i, dl, i64);
+    Mask = SDValue(DAG.getMachineNode(VE::lvm_mmIs, dl, v256i1, {Mask, index, mask}), 0);
+  }
+
+  SDValue returnValue = SDValue(DAG.getMachineNode(VE::vmrg_vvvml, dl, Op.getSimpleValueType(), 
+			  {firstrotated, secondrotated, Mask, VL}), 0);
+#endif
   return returnValue;
 }
 

@@ -674,8 +674,8 @@ defm VLD : VLDm<"vld", 0x81>;
 //let cx = 1 in defm VLDL2Dzx : VLDm<"vldl2d.zx", 0xC3>;
 
 defm VST : VSTm<"vst", 0x91>;
-defm VSTU : VSTm<"vstu", 0x92>;
-defm VSTL : VSTm<"vstl", 0x93>;
+//defm VSTU : VSTm<"vstu", 0x92>;
+//defm VSTL : VSTm<"vstl", 0x93>;
 
 //defm VST2D  : VSTm<"vst2d", 0xD1>;
 //defm VSTU2D : VSTm<"vstu2d", 0xD2>;
@@ -713,12 +713,12 @@ defm VSTL : VSTm<"vstl", 0x93>;
 //def LVSf32r : RR<0x9E, (outs F32:$sx), (ins V64:$vx, I32:$sy),
 //  "lvs ${sx},${vx}(${sy})", []>;
 
-let cy = 1 in
-def LVMr : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
-  "lvm $vmx,$sy,$sz", []> {
-  let Constraints = "$vmx = $vmd";
-  let hasSideEffects = 0;
-}
+//let cy = 1 in
+//def LVMr : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
+//  "lvm $vmx,$sy,$sz", []> {
+//  let Constraints = "$vmx = $vmd";
+//  let hasSideEffects = 0;
+//}
 
 let cy = 0 in
 def LVMi : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, uimm6Op64:$sy, I64:$sz),
@@ -727,11 +727,11 @@ def LVMi : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, uimm6Op64:$sy, I64:$sz),
   let hasSideEffects = 0;
 }
 
-def LVMpi : Pseudo<(outs VM512:$vmx), (ins VM512:$vmd, uimm6Op64:$sy, I64:$sz),
-  "# lvm $vmx,$sy,$sz", []> {
-  let Constraints = "$vmx = $vmd";
-  let hasSideEffects = 0;
-}
+//def LVMpi : Pseudo<(outs VM512:$vmx), (ins VM512:$vmd, uimm6Op64:$sy, I64:$sz),
+//  "# lvm $vmx,$sy,$sz", []> {
+//  let Constraints = "$vmx = $vmd";
+//  let hasSideEffects = 0;
+//}
 
 let cy = 1, hasSideEffects = 0 in
 def SVMr : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, I64:$sy), "svm $sx,$vmx,$sy", []>;
@@ -739,8 +739,8 @@ def SVMr : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, I64:$sy), "svm $sx,$vmx,$sy", 
 let cy = 0, hasSideEffects = 0 in 
 def SVMi : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, uimm6Op64:$sy), "svm $sx,$vmx,$sy", []>;
 
-let hasSideEffects = 0 in
-def SVMpi : Pseudo<(outs I64:$sx), (ins VM512:$vmx, uimm6Op64:$sy), "# svm+svm", []>;
+//let hasSideEffects = 0 in
+//def SVMpi : Pseudo<(outs I64:$sx), (ins VM512:$vmx, uimm6Op64:$sy), "# svm+svm", []>;
 
 //multiclass VBRDm<string opcStr, bits<8> opc, RegisterClass MaskRC, RegisterClass RCi, Operand immOp> {
 //  def r : RV2<opc, (outs V64:$vx), (ins RCi:$sy, VLS:$vl), 
@@ -790,40 +790,40 @@ def SVMpi : Pseudo<(outs I64:$sx), (ins VM512:$vmx, uimm6Op64:$sy), "# svm+svm",
 //let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDf32 : VBRDm<"vbrdu", 0x8C, VM, F32, simm7Op64>;
 //let cx = 0, cx2 = 0, isCodeGenOnly = 1 in defm VBRDi32 : VBRDm<"vbrdl", 0x8C, VM, I32, simm7Op32>;
 
-multiclass VMVm<string opcStr, bits<8> opc> {
-  def r : RV<opc, (outs V64:$vx), (ins I32:$sy, V64:$vz, VLS:$vl),
-             !strconcat(opcStr, " $vx,$sy,$vz"), []> {
-    let cy = 1;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
-  }
-  def i : RVM<opc, (outs V64:$vx), (ins uimm7Op32:$sy, V64:$vz, VLS:$vl),
-              !strconcat(opcStr, " $vx,$sy,$vz"), []> {
-    let cy = 0;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
-  }
-  def rm : RV<opc, (outs V64:$vx),
-              (ins I32:$sy, V64:$vz, VM:$vm, VLS:$vl),
-              !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
-    bits<4> vm;
-    let cy = 1;
-    let m = vm;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
-  }
-  def im : RVM<opc, (outs V64:$vx),
-               (ins uimm7Op32:$sy, V64:$vz, VM:$vm, VLS:$vl),
-               !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
-    bits<4> vm;
-    let cy = 0;
-    let m = vm;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
-  }
-}
+//multiclass VMVm<string opcStr, bits<8> opc> {
+//  def r : RV<opc, (outs V64:$vx), (ins I32:$sy, V64:$vz, VLS:$vl),
+//             !strconcat(opcStr, " $vx,$sy,$vz"), []> {
+//    let cy = 1;
+//    let DisableEncoding = "$vl";
+//    let hasSideEffects = 0;
+//  }
+//  def i : RVM<opc, (outs V64:$vx), (ins uimm7Op32:$sy, V64:$vz, VLS:$vl),
+//              !strconcat(opcStr, " $vx,$sy,$vz"), []> {
+//    let cy = 0;
+//    let DisableEncoding = "$vl";
+//    let hasSideEffects = 0;
+//  }
+//  def rm : RV<opc, (outs V64:$vx),
+//              (ins I32:$sy, V64:$vz, VM:$vm, VLS:$vl),
+//              !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
+//    bits<4> vm;
+//    let cy = 1;
+//    let m = vm;
+//    let DisableEncoding = "$vl";
+//    let hasSideEffects = 0;
+//  }
+//  def im : RVM<opc, (outs V64:$vx),
+//               (ins uimm7Op32:$sy, V64:$vz, VM:$vm, VLS:$vl),
+//               !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
+//    bits<4> vm;
+//    let cy = 0;
+//    let m = vm;
+//    let DisableEncoding = "$vl";
+//    let hasSideEffects = 0;
+//  }
+//}
 
-defm VMV : VMVm<"vmv", 0x9C>;
+//defm VMV : VMVm<"vmv", 0x9C>;
 
 //let hasSideEffects = 0, DisableEncoding = "$vl" in {
 //  def PFCHVr : RVM<0x80, (outs), (ins I64:$sy, I64:$sz, VLS:$vl),
@@ -1149,64 +1149,64 @@ defm VOR  : RVLOGm<"vor", 0xC5>;
 // 5.3.2.12. Vector Mask Arithmetic Instructions
 
 // i64, packed i32
-multiclass RV3VL_wobase_m<string opcStr, bits<8> opc, RegisterClass ScalarRC,
-                  RegisterClass MaskRC, Operand immOp> {
-  def i : RV3<opc, (outs V64:$vx), (ins immOp:$sy, V64:$vz, VLS:$vl),
-              !strconcat(opcStr, " $vx,$sy,$vz"), []> {
-    let cs = 1;
-    let cy = 0;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
-  }
-  def r : RV3<opc, (outs V64:$vx), (ins ScalarRC:$sy, V64:$vz, VLS:$vl),
-              !strconcat(opcStr, " $vx,$sy,$vz"), []> {
-    let cs = 1;
-    let cy = 1;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
-  }
-  def v : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VLS:$vl),
-              !strconcat(opcStr, " $vx,$vy,$vz"), []> {
-    let cs = 0;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
-  }
-  def im : RV3<opc, (outs V64:$vx),
-               (ins immOp:$sy, V64:$vz, MaskRC:$vm, VLS:$vl),
-               !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
-    let cs = 1;
-    let cy = 0;
-    bits<4> vm;
-    let m = vm;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
-  }
-  def rm : RV3<opc, (outs V64:$vx),
-               (ins ScalarRC:$sy, V64:$vz, MaskRC:$vm, VLS:$vl),
-               !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
-    let cs = 1;
-    let cy = 1;
-    bits<4> vm;
-    let m = vm;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
-  }
-  def vm : RV3<opc, (outs V64:$vx),
-               (ins V64:$vy, V64:$vz, MaskRC:$vm, VLS:$vl),
-               !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
-    let cs = 0;
-    bits<4> vm;
-    let m = vm;
-    let DisableEncoding = "$vl";
-    let hasSideEffects = 0;
-  }
-}
-
-multiclass VMRGm<string opcStr, bits<8> opc> {
-  let cx = 0 in defm "" : RV3VL_wobase_m<opcStr, opc, I64, VM, simm7Op64>; // i64
-  let cx = 1 in defm p : RV3VL_wobase_m<opcStr # ".w", opc, I64, VM512, simm7Op64>; // packed i32
-}
-defm VMRG : VMRGm<"vmrg", 0xD6>;
+//multiclass RV3VL_wobase_m<string opcStr, bits<8> opc, RegisterClass ScalarRC,
+//                  RegisterClass MaskRC, Operand immOp> {
+//  def i : RV3<opc, (outs V64:$vx), (ins immOp:$sy, V64:$vz, VLS:$vl),
+//              !strconcat(opcStr, " $vx,$sy,$vz"), []> {
+//    let cs = 1;
+//    let cy = 0;
+//    let DisableEncoding = "$vl";
+//    let hasSideEffects = 0;
+//  }
+//  def r : RV3<opc, (outs V64:$vx), (ins ScalarRC:$sy, V64:$vz, VLS:$vl),
+//              !strconcat(opcStr, " $vx,$sy,$vz"), []> {
+//    let cs = 1;
+//    let cy = 1;
+//    let DisableEncoding = "$vl";
+//    let hasSideEffects = 0;
+//  }
+//  def v : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VLS:$vl),
+//              !strconcat(opcStr, " $vx,$vy,$vz"), []> {
+//    let cs = 0;
+//    let DisableEncoding = "$vl";
+//    let hasSideEffects = 0;
+//  }
+//  def im : RV3<opc, (outs V64:$vx),
+//               (ins immOp:$sy, V64:$vz, MaskRC:$vm, VLS:$vl),
+//               !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
+//    let cs = 1;
+//    let cy = 0;
+//    bits<4> vm;
+//    let m = vm;
+//    let DisableEncoding = "$vl";
+//    let hasSideEffects = 0;
+//  }
+//  def rm : RV3<opc, (outs V64:$vx),
+//               (ins ScalarRC:$sy, V64:$vz, MaskRC:$vm, VLS:$vl),
+//               !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
+//    let cs = 1;
+//    let cy = 1;
+//    bits<4> vm;
+//    let m = vm;
+//    let DisableEncoding = "$vl";
+//    let hasSideEffects = 0;
+//  }
+//  def vm : RV3<opc, (outs V64:$vx),
+//               (ins V64:$vy, V64:$vz, MaskRC:$vm, VLS:$vl),
+//               !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
+//    let cs = 0;
+//    bits<4> vm;
+//    let m = vm;
+//    let DisableEncoding = "$vl";
+//    let hasSideEffects = 0;
+//  }
+//}
+//
+//multiclass VMRGm<string opcStr, bits<8> opc> {
+//  let cx = 0 in defm "" : RV3VL_wobase_m<opcStr, opc, I64, VM, simm7Op64>; // i64
+//  let cx = 1 in defm p : RV3VL_wobase_m<opcStr # ".w", opc, I64, VM512, simm7Op64>; // packed i32
+//}
+//defm VMRG : VMRGm<"vmrg", 0xD6>;
 
 //let cy = 0 in
 //def VSHFi : RV3<0xBC, (outs V64:$vx),
