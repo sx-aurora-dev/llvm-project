@@ -453,6 +453,11 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
   case ISD::VECREDUCE_UMIN:             return "vecreduce_umin";
   case ISD::VECREDUCE_FMAX:             return "vecreduce_fmax";
   case ISD::VECREDUCE_FMIN:             return "vecreduce_fmin";
+
+  // Vector Predication
+#define REGISTER_VP_SDNODE(NODEID,NAME,MASKPOS,VLENPOS) \
+  case ISD::NODEID: return NAME;
+#include "llvm/IR/VPIntrinsics.def"
   }
 }
 
