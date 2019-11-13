@@ -102,8 +102,6 @@ public:
                             const TargetRegisterInfo *TRI) const override;
 
   unsigned getGlobalBaseReg(MachineFunction *MF) const;
-  unsigned getVectorLengthReg(MachineFunction *MF) const;
-  unsigned createVectorLengthReg(MachineFunction *MF) const;
 
   // Lower pseudo instructions after register allocation.
   bool expandPostRAPseudo(MachineInstr &MI) const override;

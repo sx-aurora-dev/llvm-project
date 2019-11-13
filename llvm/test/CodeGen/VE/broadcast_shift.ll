@@ -7,9 +7,9 @@ define x86_regcallcc <512 x i32> @brd_shl_v512i32(<512 x i32>, i32) {
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:  and %s34, %s0, (32)0
 ; CHECK-NEXT:  sll %s35, %s0, 32
-; CHECK-NEXT:  lea %s36, 256
 ; CHECK-NEXT:  or %s34, %s35, %s34
-; CHECK-NEXT:  lvl %s36
+; CHECK-NEXT:  lea %s35, 256
+; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  pvsll %v0,%v0,%s34
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
@@ -25,9 +25,9 @@ define x86_regcallcc <512 x i32> @brd_lshr_v512i32(<512 x i32>, i32) {
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:  and %s34, %s0, (32)0
 ; CHECK-NEXT:  sll %s35, %s0, 32
-; CHECK-NEXT:  lea %s36, 256
 ; CHECK-NEXT:  or %s34, %s35, %s34
-; CHECK-NEXT:  lvl %s36
+; CHECK-NEXT:  lea %s35, 256
+; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  pvsrl %v0,%v0,%s34
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
@@ -43,9 +43,9 @@ define x86_regcallcc <512 x i32> @brd_ashr_v512i32(<512 x i32>, i32) {
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:  and %s34, %s0, (32)0
 ; CHECK-NEXT:  sll %s35, %s0, 32
-; CHECK-NEXT:  lea %s36, 256
 ; CHECK-NEXT:  or %s34, %s35, %s34
-; CHECK-NEXT:  lvl %s36
+; CHECK-NEXT:  lea %s35, 256
+; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  pvsra %v0,%v0,%s34
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
@@ -100,8 +100,8 @@ define x86_regcallcc <256 x i64> @brd_ashr_v256i64(<256 x i64>, i64) {
 define x86_regcallcc <256 x i32> @brd_shl_v256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: brd_shl_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 256
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:  lea %s34, 256
 ; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  pvsla.lo %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
@@ -115,8 +115,8 @@ define x86_regcallcc <256 x i32> @brd_shl_v256i32(<256 x i32>, i32) {
 define x86_regcallcc <256 x i32> @brd_lshr_v256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: brd_lshr_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 256
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:  lea %s34, 256
 ; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  pvsrl.lo %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
@@ -130,8 +130,8 @@ define x86_regcallcc <256 x i32> @brd_lshr_v256i32(<256 x i32>, i32) {
 define x86_regcallcc <256 x i32> @brd_ashr_v256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: brd_ashr_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 256
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:  lea %s34, 256
 ; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  pvsra.lo %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9

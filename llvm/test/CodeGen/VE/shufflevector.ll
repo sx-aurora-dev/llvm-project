@@ -23,9 +23,9 @@ define x86_regcallcc <8 x i32> @__regcall3__svv512i32(<4 x i32>) {
 define x86_regcallcc <8 x i32> @__regcall3__svv512i32_brd2(<4 x i32>) {
 ; CHECK-LABEL: svv512i32_brd2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 8
-; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  lvs %s34,%v0(2)
+; CHECK-NEXT:  lea %s35, 8
+; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  vbrdl %v0,%s34
 ; CHECK-NEXT:  or %s11, 0, %s9
   %2 = shufflevector <4 x i32> %0, <4 x i32> zeroinitializer, <8 x i32> <i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2>
@@ -36,9 +36,9 @@ define x86_regcallcc <8 x i32> @__regcall3__svv512i32_brd2(<4 x i32>) {
 define x86_regcallcc <8 x i32> @__regcall3__svv512i32_brd7(<4 x i32>, <4 x i32>) {
 ; CHECK-LABEL: svv512i32_brd7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 8
-; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  lvs %s34,%v1(3)
+; CHECK-NEXT:  lea %s35, 8
+; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  vbrdl %v0,%s34
 ; CHECK-NEXT:  or %s11, 0, %s9
   %3 = shufflevector <4 x i32> %0, <4 x i32> %1, <8 x i32> <i32 7, i32 7, i32 7, i32 7, i32 7, i32 7, i32 7, i32 7>
@@ -91,15 +91,15 @@ define x86_regcallcc <256 x i32> @__regcall3__svv512i32_vmrg1(<256 x i32>, <256 
 ; CHECK-LABEL: svv512i32_vmrg1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea %s34, 256
+; CHECK-NEXT:  or %s35, 16, (0)1
 ; CHECK-NEXT:  lvl %s34
-; CHECK-NEXT:  or %s34, 16, (0)1
-; CHECK-NEXT:  vmv %v1,%s34,%v1
-; CHECK-NEXT:  or %s34, 0, (0)1
-; CHECK-NEXT:  lvm %vm1,0,%s34
-; CHECK-NEXT:  lvm %vm1,1,%s34
-; CHECK-NEXT:  lvm %vm1,2,%s34
-; CHECK-NEXT:  lea %s34, 255
-; CHECK-NEXT:  lvm %vm1,3,%s34
+; CHECK-NEXT:  vmv %v1,%s35,%v1
+; CHECK-NEXT:  or %s35, 0, (0)1
+; CHECK-NEXT:  lvm %vm1,0,%s35
+; CHECK-NEXT:  lvm %vm1,1,%s35
+; CHECK-NEXT:  lvm %vm1,2,%s35
+; CHECK-NEXT:  lea %s35, 255
+; CHECK-NEXT:  lvm %vm1,3,%s35
 ; CHECK-NEXT:  vmrg %v0,%v0,%v1,%vm1
 ; CHECK-NEXT:  or %s11, 0, %s9
   %3 = shufflevector <256 x i32> %0, <256 x i32> %1, <256 x i32>
@@ -143,17 +143,17 @@ define x86_regcallcc <256 x i32> @__regcall3__svv512i32_vmrg2(<256 x i32>, <256 
 ; CHECK-LABEL: svv512i32_vmrg2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea %s34, 256
+; CHECK-NEXT:  or %s35, 16, (0)1
 ; CHECK-NEXT:  lvl %s34
-; CHECK-NEXT:  or %s34, 16, (0)1
-; CHECK-NEXT:  vmv %v1,%s34,%v1
-; CHECK-NEXT:  or %s34, 8, (0)1
-; CHECK-NEXT:  vmv %v0,%s34,%v0
-; CHECK-NEXT:  or %s34, 0, (0)1
-; CHECK-NEXT:  lvm %vm1,0,%s34
-; CHECK-NEXT:  lvm %vm1,1,%s34
-; CHECK-NEXT:  lvm %vm1,2,%s34
-; CHECK-NEXT:  lea %s34, 255
-; CHECK-NEXT:  lvm %vm1,3,%s34
+; CHECK-NEXT:  vmv %v1,%s35,%v1
+; CHECK-NEXT:  or %s35, 8, (0)1
+; CHECK-NEXT:  vmv %v0,%s35,%v0
+; CHECK-NEXT:  or %s35, 0, (0)1
+; CHECK-NEXT:  lvm %vm1,0,%s35
+; CHECK-NEXT:  lvm %vm1,1,%s35
+; CHECK-NEXT:  lvm %vm1,2,%s35
+; CHECK-NEXT:  lea %s35, 255
+; CHECK-NEXT:  lvm %vm1,3,%s35
 ; CHECK-NEXT:  vmrg %v0,%v0,%v1,%vm1
 ; CHECK-NEXT:  or %s11, 0, %s9
   %3 = shufflevector <256 x i32> %0, <256 x i32> %1, <256 x i32>

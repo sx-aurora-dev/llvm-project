@@ -110,7 +110,6 @@ public:
 
   void addIRPasses() override;
   bool addInstSelector() override;
-  void addPreRegAlloc() override;
   void addPreEmitPass() override;
 };
 } // namespace
@@ -127,10 +126,6 @@ void VEPassConfig::addIRPasses() {
 bool VEPassConfig::addInstSelector() {
   addPass(createVEISelDag(getVETargetMachine()));
   return false;
-}
-
-void VEPassConfig::addPreRegAlloc() {
-  addPass(createVEPromoteToI1Pass());
 }
 
 void VEPassConfig::addPreEmitPass(){

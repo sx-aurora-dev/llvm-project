@@ -7,9 +7,9 @@ define x86_regcallcc <512 x i32> @addbrdv512i32(<512 x i32>, i32) {
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:  and %s34, %s0, (32)0
 ; CHECK-NEXT:  sll %s35, %s0, 32
-; CHECK-NEXT:  lea %s36, 256
 ; CHECK-NEXT:  or %s34, %s35, %s34
-; CHECK-NEXT:  lvl %s36
+; CHECK-NEXT:  lea %s35, 256
+; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  pvadds %v0,%s34,%v0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
@@ -24,8 +24,8 @@ define x86_regcallcc <512 x float> @addbrdv512f32(<512 x float>, float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:  srl %s34, %s0, 32
-; CHECK-NEXT:  lea %s35, 256
 ; CHECK-NEXT:  or %s34, %s0, %s34
+; CHECK-NEXT:  lea %s35, 256
 ; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  pvfadd %v0,%s34,%v0
 ; CHECK-NEXT:  or %s11, 0, %s9

@@ -43,23 +43,6 @@ define x86_regcallcc <512 x i32> @udivbrdv512i32(<512 x i32>, i32) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <512 x float> @divbrdv512f32(<512 x float>, float) {
-; CHECK-LABEL: divbrdv512f32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  # kill: def $sf0 killed $sf0 def $sx0
-; CHECK-NEXT:  srl %s34, %s0, 32
-; CHECK-NEXT:  lea %s35, 256
-; CHECK-NEXT:  or %s34, %s0, %s34
-; CHECK-NEXT:  lvl %s35
-; CHECK-NEXT:  pvfdiv %v0,%s34,%v0
-; CHECK-NEXT:  or %s11, 0, %s9
-  %vec0 = insertelement <512 x float> undef, float %1, i32 0
-  %vec = shufflevector <512 x float> %vec0, <512 x float> undef, <512 x i32> zeroinitializer
-  %ret = fdiv <512 x float> %vec, %0
-  ret <512 x float> %ret
-}
-
-; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i64> @sdivbrdv256i64(<256 x i64>, i64) {
 ; CHECK-LABEL: sdivbrdv256i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:

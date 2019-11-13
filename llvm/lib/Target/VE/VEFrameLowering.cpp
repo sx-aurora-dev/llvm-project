@@ -420,30 +420,10 @@ bool VEFrameLowering::isLeafProc(MachineFunction &MF) const
            || hasFP(MF));                  // need %fp
 }
 
-static void addScavengingSlotFor(RegScavenger* RS,
-                                 const TargetRegisterClass& RC,
-                                 const TargetRegisterInfo& TRI,
-                                 MachineFrameInfo& MFI) {
-  unsigned Size = TRI.getSpillSize(RC);
-  unsigned Align = TRI.getSpillAlignment(RC);
-  int FI = MFI.CreateStackObject(Size, Align, false);
-  RS->addScavengingFrameIndex(FI);
-}
-
 void VEFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                            BitVector &SavedRegs,
                                            RegScavenger *RS) const {
   TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
-  // If we use VL in this function, create an emergency spill slot for VL.
-  if (MF.getRegInfo().isPhysRegUsed(VE::VL)) {
-    MachineFrameInfo &MFI = MF.getFrameInfo();
-    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
-    // We need several emergency slots:
-    //    one VLS for spill/restore V64 registers (for implicitly using VL)
-    //    one I64 for spill/restore V64 registers (for address calculation)
-    addScavengingSlotFor(RS, VE::VLSRegClass, *TRI, MFI);
-    addScavengingSlotFor(RS, VE::I64RegClass, *TRI, MFI);
-  }
 
   if (!DisableLeafProc && isLeafProc(MF)) {
     VEMachineFunctionInfo *MFI = MF.getInfo<VEMachineFunctionInfo>();

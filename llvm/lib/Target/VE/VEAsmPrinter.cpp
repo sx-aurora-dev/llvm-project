@@ -76,15 +76,6 @@ namespace {
                                            const MCSubtargetInfo &STI);
     void LowerEH_SJLJ_LONGJMPAndEmitMCInsts(const MachineInstr *MI,
                                             const MCSubtargetInfo &STI);
-    void LowerVM2VAndEmitMCInsts(const MachineInstr *MI,
-                                 const MCSubtargetInfo &STI);
-    void LowerVMP2VAndEmitMCInsts(const MachineInstr *MI,
-                                  const MCSubtargetInfo &STI);
-    void LowerV2VMAndEmitMCInsts(const MachineInstr *MI,
-                                 const MCSubtargetInfo &STI);
-    void LowerV2VMPAndEmitMCInsts(const MachineInstr *MI,
-                                  const MCSubtargetInfo &STI);
-
   };
 } // end of anonymous namespace
 
@@ -454,140 +445,6 @@ void VEAsmPrinter::LowerEH_SJLJ_LONGJMPAndEmitMCInsts(
   return;
 }
 
-void VEAsmPrinter::LowerVM2VAndEmitMCInsts(
-    const MachineInstr *MI, const MCSubtargetInfo &STI) {
-  // FIXME: using sx16 as a temporary register.
-  // SVMi %sx16, $src, 0
-  // LSVi $dest, $dest, 0, %sx16
-  // SVMi %sx16, $src, 1
-  // LSVi $dest, $dest, 1, %sx16
-  // SVMi %sx16, $src, 2
-  // LSVi $dest, $dest, 2, %sx16
-  // SVMi %sx16, $src, 3
-  // LSVi $dest, $dest, 3, %sx16
-
-  unsigned DestReg = MI->getOperand(0).getReg();
-  unsigned SrcReg = MI->getOperand(1).getReg();
-
-  for (int i = 0; i < 4; ++i) {
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::SVMi)
-      .addReg(VE::SX16)
-      .addReg(SrcReg)
-      .addImm(i));
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LSVi)
-      .addReg(DestReg)
-      .addReg(DestReg)
-      .addImm(i)
-      .addReg(VE::SX16));
-  }
-}
-
-void VEAsmPrinter::LowerV2VMAndEmitMCInsts(
-    const MachineInstr *MI, const MCSubtargetInfo &STI) {
-  // FIXME: using sx16 as a temporary register.
-  // LVSi %sx16, $src, 0
-  // LVMi $dest, $dest, 0, %sx16
-  // LVSi %sx16, $src, 1
-  // LVMi $dest, $dest, 1, %sx16
-  // LVSi %sx16, $src, 2
-  // LVMi $dest, $dest, 2, %sx16
-  // LVSi %sx16, $src, 3
-  // LVMi $dest, $dest, 3, %sx16
-
-  unsigned DestReg = MI->getOperand(0).getReg();
-  unsigned SrcReg = MI->getOperand(1).getReg();
-
-  for (int i = 0; i < 4; ++i) {
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LVSi)
-      .addReg(VE::SX16)
-      .addReg(SrcReg)
-      .addImm(i));
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LVMi)
-      .addReg(DestReg)
-      .addReg(DestReg)
-      .addImm(i)
-      .addReg(VE::SX16));
-  }
-}
-
-void VEAsmPrinter::LowerVMP2VAndEmitMCInsts(
-    const MachineInstr *MI, const MCSubtargetInfo &STI) {
-  // FIXME: using sx16 as a temporary register.
-  // SVMi %sx16, $src+1, i
-  // LSVi $dest, $dest, i, %sx16        x 4
-  // SVMi %sx16, $src, i
-  // LSVi $dest, $dest, i+4, %sx16      x 4
-
-  unsigned DestReg = MI->getOperand(0).getReg();
-  unsigned SrcReg = MI->getOperand(1).getReg();
-  const MachineFunction &MF = *MI->getParent()->getParent();
-  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
-  unsigned SrcRegLo = TRI->getSubReg(SrcReg, VE::sub_vm_odd);
-  unsigned SrcRegHi = TRI->getSubReg(SrcReg, VE::sub_vm_even);
-
-  for (int i = 0; i < 4; ++i) {
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::SVMi)
-      .addReg(VE::SX16)
-      .addReg(SrcRegLo)
-      .addImm(i));
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LSVi)
-      .addReg(DestReg)
-      .addReg(DestReg)
-      .addImm(i)
-      .addReg(VE::SX16));
-  }
-  for (int i = 0; i < 4; ++i) {
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::SVMi)
-      .addReg(VE::SX16)
-      .addReg(SrcRegHi)
-      .addImm(i));
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LSVi)
-      .addReg(DestReg)
-      .addReg(DestReg)
-      .addImm(i+4)
-      .addReg(VE::SX16));
-  }
-}
-
-void VEAsmPrinter::LowerV2VMPAndEmitMCInsts(
-    const MachineInstr *MI, const MCSubtargetInfo &STI) {
-  // FIXME: using sx16 as a temporary register.
-  // LVSi %sx16, $src, i
-  // LVMi $dest+1, $dest+1, i, %sx16        x 4
-  // LVSi %sx16, $src, i+4
-  // LVMi $dest, $dest, i, %sx16    x 4
-
-  unsigned DestReg = MI->getOperand(0).getReg();
-  unsigned SrcReg = MI->getOperand(1).getReg();
-  const MachineFunction &MF = *MI->getParent()->getParent();
-  const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
-  unsigned DestRegLo = TRI->getSubReg(DestReg, VE::sub_vm_odd);
-  unsigned DestRegHi = TRI->getSubReg(DestReg, VE::sub_vm_even);
-
-  for (int i = 0; i < 4; ++i) {
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LVSi)
-      .addReg(VE::SX16)
-      .addReg(SrcReg)
-      .addImm(i));
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LVMi)
-      .addReg(DestRegLo)
-      .addReg(DestRegLo)
-      .addImm(i)
-      .addReg(VE::SX16));
-  }
-  for (int i = 0; i < 4; ++i) {
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LVSi)
-      .addReg(VE::SX16)
-      .addReg(SrcReg)
-      .addImm(i+4));
-    EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LVMi)
-      .addReg(DestRegHi)
-      .addReg(DestRegHi)
-      .addImm(i)
-      .addReg(VE::SX16));
-  }
-}
-
 void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
 {
 
@@ -614,18 +471,6 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
     return;
   case VE::EH_SjLj_LongJmp:
     LowerEH_SJLJ_LONGJMPAndEmitMCInsts(MI, getSubtargetInfo());
-    return;
-  case VE::VM2V:
-    LowerVM2VAndEmitMCInsts(MI, getSubtargetInfo());
-    return;
-  case VE::VMP2V:
-    LowerVMP2VAndEmitMCInsts(MI, getSubtargetInfo());
-    return;
-  case VE::V2VM:
-    LowerV2VMAndEmitMCInsts(MI, getSubtargetInfo());
-    return;
-  case VE::V2VMP:
-    LowerV2VMPAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   }
   MachineBasicBlock::const_instr_iterator I = MI->getIterator();
