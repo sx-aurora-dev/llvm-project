@@ -224,6 +224,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
   // Replace frame index with a temporal register if the instruction is
   // vector load/store.
   if (MI.getOpcode() == VE::LDVRri || MI.getOpcode() == VE::STVRri) {
+#ifdef OBSOLETE_VE_VECTOR
     // Original MI is:
     //   STVRri frame-index, offset, reg, 256 (, memory operand)
     // or
@@ -268,6 +269,44 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     MI.getOperand(1).ChangeToImmediate(8);
     MI.getOperand(2).ChangeToRegister(Tmp1, false, false, true);
     MI.getOperand(3).ChangeToRegister(VLReg, false, false, true);
+#else
+    // Original MI is:
+    //   STVRri frame-index, offset, reg, vl (, memory operand)
+    // or
+    //   LDVRri reg, frame-index, offset, vl (, memory operand)
+    // Convert it to:
+    //   LEA       tmp-reg, frame-reg, offset
+    //   vst_vIsl  reg, 8, tmp-reg, vl (ignored)
+    // or
+    //   vld_vIsl  reg, 8, tmp-reg, vl (ignored)
+    int opc = MI.getOpcode() == VE::LDVRri ? VE::vld_vIsl : VE::vst_vIsl;
+    int regi = MI.getOpcode() == VE::LDVRri ? 0 : 2;
+    const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+    unsigned Reg = MI.getOperand(regi).getReg();
+    bool isDef = MI.getOperand(regi).isDef();
+    bool isKill = MI.getOperand(regi).isKill();
+
+    // Prepare for VL
+    unsigned VLReg;
+    if (MI.getOperand(3).isImm()) {
+      int64_t val = MI.getOperand(3).getImm();
+      // TODO: if 'val' is already assigned to a register, then use it
+      VLReg = MF.getRegInfo().createVirtualRegister(&VE::I32RegClass);
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEA32zzi), VLReg).addImm(val);
+    } else {
+      VLReg = MI.getOperand(3).getReg();
+    }
+
+    unsigned Tmp1 = MF.getRegInfo().createVirtualRegister(&VE::I64RegClass);
+    BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEAasx), Tmp1)
+      .addReg(FramePtr).addImm(Offset);
+
+    MI.setDesc(TII.get(opc));
+    MI.getOperand(0).ChangeToRegister(Reg, isDef, false, isKill);
+    MI.getOperand(1).ChangeToImmediate(8);
+    MI.getOperand(2).ChangeToRegister(Tmp1, false, false, true);
+    MI.getOperand(3).ChangeToRegister(VLReg, false, false, true);
+#endif
     return;
   }
 

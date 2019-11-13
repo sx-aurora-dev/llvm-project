@@ -20,9 +20,9 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    lea %s19, 256
 ; CHECK-NEXT:    lvl %s19
 ; CHECK-NEXT:    vld %v0,8,%s18
-; CHECK-NEXT:    lea %s34, 256
-; CHECK-NEXT:    lvl %s34
+; CHECK-NEXT:    lea %s35, 256
 ; CHECK-NEXT:    lea %s34,-4096(,%s9)
+; CHECK-NEXT:    lvl %s35
 ; CHECK-NEXT:    vst %v0,8,%s34                  # 2048-byte Folded Spill
 ; CHECK-NEXT:    lea %s34, puts@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
@@ -31,10 +31,11 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    and %s34, %s34, (32)0
 ; CHECK-NEXT:    lea.sl %s0, .Lstr@hi(%s34)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
-; CHECK-NEXT:    lea %s34, 256
-; CHECK-NEXT:    lvl %s34
+; CHECK-NEXT:    lea %s35, 256
 ; CHECK-NEXT:    lea %s34,-4096(,%s9)
+; CHECK-NEXT:    lvl %s35
 ; CHECK-NEXT:    vld %v0,8,%s34                  # 2048-byte Folded Reload
+; CHECK-NEXT:    lvl %s19
 ; CHECK-NEXT:    vadds.w.sx %v0,3,%v0
   %1 = alloca [256 x i64], align 8
   %2 = bitcast [256 x i64]* %1 to i8*

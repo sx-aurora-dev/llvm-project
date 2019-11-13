@@ -3141,11 +3141,11 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   }
 }
 
-#ifdef OBSOLETE_VE_INTRIN
 SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
                                                  SelectionDAG &DAG) const {
   SDLoc dl(Op);
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+#ifdef OBSOLETE_VE_INTRIN
   const IntrinsicData* IntrData = getIntrinsicWithChain(IntNo);
   if (IntrData) {
     switch (IntrData->Type) {
@@ -3216,6 +3216,7 @@ SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
     }
     }
   }
+#endif // OBSOLETE_VE_INTRIN
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
   }
@@ -3225,6 +3226,7 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
                                               SelectionDAG &DAG) const {
   SDLoc dl(Op);
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
+#ifdef OBSOLETE_VE_INTRIN
   const IntrinsicData* IntrData = getIntrinsicVoid(IntNo);
   if (IntrData) {
     switch (IntrData->Type) {
@@ -3304,11 +3306,11 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
     }
     }
   }
+#endif // OBSOLETE_VE_INTRIN
   switch (IntNo) {
   default: return SDValue();    // Don't custom lower most intrinsics.
   }
 }
-#endif // OBSOLETE_VE_INTRIN
 
 // Should we expand the build vector with shuffles?
 bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
@@ -3688,10 +3690,8 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::UMULO:
   case ISD::SMULO:              return LowerUMULO_SMULO(Op, DAG, *this);
   case ISD::ATOMIC_FENCE:       return LowerATOMIC_FENCE(Op, DAG);
-#ifdef OBSOLETE_VE_INTRIN
   case ISD::INTRINSIC_VOID:     return LowerINTRINSIC_VOID(Op, DAG);
   case ISD::INTRINSIC_W_CHAIN:  return LowerINTRINSIC_W_CHAIN(Op, DAG);
-#endif
   case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
   case ISD::BUILD_VECTOR:       return LowerBUILD_VECTOR(Op, DAG);
   case ISD::INSERT_VECTOR_ELT:  return LowerINSERT_VECTOR_ELT(Op, DAG);
