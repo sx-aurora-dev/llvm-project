@@ -22,6 +22,7 @@ namespace {
   int getVLIndex(unsigned op) {
     switch (op) {
 #include "vl-index.inc"
+    case VE::vor_v1vl: return 3;
     }
   }
 

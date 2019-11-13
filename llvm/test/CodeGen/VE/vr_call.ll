@@ -61,24 +61,18 @@ define x86_regcallcc <256 x i32> @__regcall3__calc4(<256 x i32>, <256 x i32>, <2
 ; CHECK-NEXT:  lea %s34,-2048(,%s9)
 ; CHECK-NEXT:  lvl %s35
 ; CHECK-NEXT:  vst %v18,8,%s34                 # 2048-byte Folded Spill
-; CHECK-NEXT:  svl %s16
 ; CHECK-NEXT:  lea %s12, 256
 ; CHECK-NEXT:  lvl %s12
 ; CHECK-NEXT:  vor %v18,(0)1,%v0
-; CHECK-NEXT:  lvl %s16
 ; CHECK-NEXT:  lea %s34, __regcall3__calc1@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s12, __regcall3__calc1@hi(%s34)
-; CHECK-NEXT:  svl %s16
 ; CHECK-NEXT:  lea %s12, 256
 ; CHECK-NEXT:  lvl %s12
 ; CHECK-NEXT:  vor %v0,(0)1,%v1
-; CHECK-NEXT:  lvl %s16
-; CHECK-NEXT:  svl %s16
 ; CHECK-NEXT:  lea %s12, 256
 ; CHECK-NEXT:  lvl %s12
 ; CHECK-NEXT:  vor %v1,(0)1,%v2
-; CHECK-NEXT:  lvl %s16
 ; CHECK-NEXT:  bsic %lr, (,%s12)
 ; CHECK-NEXT:  lea %s34, 256
 ; CHECK-NEXT:  lvl %s34

@@ -403,6 +403,7 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
   else if (VE::V64RegClass.contains(DestReg, SrcReg)) {
+#ifdef OBSOLETE_VE_VECTOR
     // Generate following instructions
     //   svl %s16               ; save VL to s16
     //   lea %s12, 256          ; retrieve MVL to s12
@@ -425,6 +426,18 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         .addReg(VLReg, getKillRegState(true));
     BuildMI(MBB, I, DL, get(VE::LVL), VLReg)
       .addReg(SaveReg, getKillRegState(true));
+#else
+    // Generate following instructions
+    //   LEA32zzi %vl, 256
+    //   vor_v1vl %dest, (0)1, %src, %vl
+    // TODO: reuse a register if vl is already assigned to a register
+    unsigned TmpReg = VE::SX12;
+    BuildMI(MBB, I, DL, get(VE::LEA32zzi), TmpReg).addImm(256);
+    BuildMI(MBB, I, DL, get(VE::vor_v1vl), DestReg)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(KillSrc))
+        .addReg(TmpReg, getKillRegState(true));
+#endif
   }
   else if (VE::VMRegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::andm_mmm), DestReg)
