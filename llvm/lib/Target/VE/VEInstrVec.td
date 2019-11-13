@@ -70,4 +70,4 @@ def STVM512ri : Pseudo<
 // 5.3.2.16. Vector Control Instructions
 
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, hasSideEffects = 0, isCodeGenOnly = 1 in
-def LVL2 : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
+def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;

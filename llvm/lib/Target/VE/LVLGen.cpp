@@ -108,7 +108,7 @@ bool LVLGen::runOnMachineFunction(MachineFunction &F)
 
   const VESubtarget& Subtarget = F.getSubtarget<VESubtarget>();
   const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-  LVLInstDesc = TII->get(VE::LVL2);
+  LVLInstDesc = TII->get(VE::LVL);
 
   for (MachineFunction::iterator FI = F.begin(), FE = F.end();
        FI != FE; ++FI)
