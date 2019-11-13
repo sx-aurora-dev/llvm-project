@@ -110,7 +110,9 @@ public:
 
   void addIRPasses() override;
   bool addInstSelector() override;
+#ifdef OBSOLETE_VE_VM
   void addPreRegAlloc() override;
+#endif
   void addPreEmitPass() override;
 };
 } // namespace
@@ -129,9 +131,11 @@ bool VEPassConfig::addInstSelector() {
   return false;
 }
 
+#ifdef OBSOLETE_VE_VM
 void VEPassConfig::addPreRegAlloc() {
   addPass(createVEPromoteToI1Pass());
 }
+#endif
 
 void VEPassConfig::addPreEmitPass(){
   // LVLGen should be called after scheduling and register allocation

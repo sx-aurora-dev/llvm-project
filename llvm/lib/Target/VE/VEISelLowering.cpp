@@ -1113,6 +1113,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v2i64, &VE::V64RegClass);
   addRegisterClass(MVT::v2f32, &VE::V64RegClass);
   addRegisterClass(MVT::v2f64, &VE::V64RegClass);
+#ifdef OBSOLETE_VE_VM
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
   addRegisterClass(MVT::v128i1, &VE::VMRegClass);
   addRegisterClass(MVT::v64i1, &VE::VMRegClass);
@@ -1122,6 +1123,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v4i1, &VE::VMRegClass);
   addRegisterClass(MVT::v2i1, &VE::VMRegClass);
   addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+#endif
+  addRegisterClass(MVT::v256i1, &VE::VM_RegClass);
+  addRegisterClass(MVT::v512i1, &VE::VM512_RegClass);
 
   if (Subtarget->vectorize()) {
     // We want to use any of vectorization oppotunities in llvm.

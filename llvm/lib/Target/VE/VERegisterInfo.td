@@ -180,11 +180,11 @@ def V64 : RegisterClass<"VE",
                          v2i64,   v2i32,   v2f32,   v2f64],
                         64, (sequence "V%u", 0, 63)>;
 // vm0 is reserved for always true
-def VM : RegisterClass<"VE",
-                       [v256i1, v128i1, v64i1, v32i1,
-                        v16i1, v8i1, v4i1, v2i1],
-                       64, (sequence "VM%u", 0, 15)>;
-def VM512 : RegisterClass<"VE", [v512i1], 64, (sequence "VMP%u", 0, 7)>;
+//def VM : RegisterClass<"VE",
+//                       [v256i1, v128i1, v64i1, v32i1,
+//                        v16i1, v8i1, v4i1, v2i1],
+//                       64, (sequence "VM%u", 0, 15)>;
+//def VM512 : RegisterClass<"VE", [v512i1], 64, (sequence "VMP%u", 0, 7)>;
 
 def VM_ : RegisterClass<"VE", [v256i1, v4i64], 64, (sequence "VM%u", 0, 15)>;
 def VM512_ : RegisterClass<"VE", [v512i1, v8i64], 64, (sequence "VMP%u", 0, 7)>;

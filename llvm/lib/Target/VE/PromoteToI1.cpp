@@ -1,3 +1,4 @@
+#ifdef OBSOLETE_VE_VM
 //===-- PromoteToI1.cpp - Promote to vector mask register -----------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
@@ -373,3 +374,4 @@ bool Promoter::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
   }
   return Changed;
 }
+#endif // OBSOLETE_VE_VM

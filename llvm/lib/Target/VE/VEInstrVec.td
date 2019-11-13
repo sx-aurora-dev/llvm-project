@@ -720,12 +720,12 @@ class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 //  let hasSideEffects = 0;
 //}
 
-let cy = 0 in
-def LVMi : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, uimm6Op64:$sy, I64:$sz),
-  "lvm $vmx,$sy,$sz", []> {
-  let Constraints = "$vmx = $vmd";
-  let hasSideEffects = 0;
-}
+//let cy = 0 in
+//def LVMi : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, uimm6Op64:$sy, I64:$sz),
+//  "lvm $vmx,$sy,$sz", []> {
+//  let Constraints = "$vmx = $vmd";
+//  let hasSideEffects = 0;
+//}
 
 //def LVMpi : Pseudo<(outs VM512:$vmx), (ins VM512:$vmd, uimm6Op64:$sy, I64:$sz),
 //  "# lvm $vmx,$sy,$sz", []> {
@@ -733,11 +733,11 @@ def LVMi : RR<0xB7, (outs VM:$vmx), (ins VM:$vmd, uimm6Op64:$sy, I64:$sz),
 //  let hasSideEffects = 0;
 //}
 
-let cy = 1, hasSideEffects = 0 in
-def SVMr : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, I64:$sy), "svm $sx,$vmx,$sy", []>;
-
-let cy = 0, hasSideEffects = 0 in 
-def SVMi : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, uimm6Op64:$sy), "svm $sx,$vmx,$sy", []>;
+//let cy = 1, hasSideEffects = 0 in
+//def SVMr : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, I64:$sy), "svm $sx,$vmx,$sy", []>;
+//
+//let cy = 0, hasSideEffects = 0 in 
+//def SVMi : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, uimm6Op64:$sy), "svm $sx,$vmx,$sy", []>;
 
 //let hasSideEffects = 0 in
 //def SVMpi : Pseudo<(outs I64:$sx), (ins VM512:$vmx, uimm6Op64:$sy), "# svm+svm", []>;
@@ -851,11 +851,17 @@ let mayLoad = 1, hasSideEffects = 0 in {
 def LDVRri : Pseudo<
     (outs V64:$vx), (ins MEMri:$addr, I32:$vl),
     "# pseudo ldvr $vx, $addr, $vl", []>;
+//def LDVMri : Pseudo<
+//    (outs VM:$vmx), (ins MEMri:$addr),
+//    "# pseudo ldvm $vmx, $addr", []>;
+//def LDVM512ri : Pseudo<
+//    (outs VM512:$vmx), (ins MEMri:$addr),
+//    "# pseudo ldvm512 $vmx, $addr", []>;
 def LDVMri : Pseudo<
-    (outs VM:$vmx), (ins MEMri:$addr),
+    (outs VM_:$vmx), (ins MEMri:$addr),
     "# pseudo ldvm $vmx, $addr", []>;
 def LDVM512ri : Pseudo<
-    (outs VM512:$vmx), (ins MEMri:$addr),
+    (outs VM512_:$vmx), (ins MEMri:$addr),
     "# pseudo ldvm512 $vmx, $addr", []>;
 //def LDVLri : Pseudo<
 //    (outs VLS:$vl), (ins MEMri:$addr),
@@ -865,11 +871,17 @@ let mayStore = 1, hasSideEffects = 0 in {
 def STVRri : Pseudo<
     (outs), (ins MEMri:$addr, V64:$vx, I32:$vl),
     "# pseudo stvr $addr, $vx, $vl", []>;
+//def STVMri : Pseudo<
+//    (outs), (ins MEMri:$addr, VM:$vmx),
+//    "# pseudo stvm $addr, $vmx", []>;
+//def STVM512ri : Pseudo<
+//    (outs), (ins MEMri:$addr, VM512:$vmx),
+//    "# pseudo stvm512 $addr, $vmx", []>;
 def STVMri : Pseudo<
-    (outs), (ins MEMri:$addr, VM:$vmx),
+    (outs), (ins MEMri:$addr, VM_:$vmx),
     "# pseudo stvm $addr, $vmx", []>;
 def STVM512ri : Pseudo<
-    (outs), (ins MEMri:$addr, VM512:$vmx),
+    (outs), (ins MEMri:$addr, VM512_:$vmx),
     "# pseudo stvm512 $addr, $vmx", []>;
 //def STVLri : Pseudo<
 //    (outs), (ins MEMri:$addr, VLS:$vl),
@@ -1509,17 +1521,17 @@ def LVL2 : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 
 // Pseudo instructions for bitconvert
 
-let hasSideEffects = 0 in {
-def VM2V : Pseudo<(outs V64:$vx), (ins VM:$vmy),
-  "# vm2v $vx,$vmy", []>;
-
-def VMP2V : Pseudo<(outs V64:$vx), (ins VM512:$vmy),
-  "# vmp2v $vx,$vmy", []>;
-
-def V2VM : Pseudo<(outs VM:$vmx), (ins V64:$vy),
-  "# v2vm $vmx,$vy", []>;
-
-def V2VMP : Pseudo<(outs VM512:$vmx), (ins V64:$vy),
-  "# v2vmp $vmx,$vy", []>;
-}
+//let hasSideEffects = 0 in {
+//def VM2V : Pseudo<(outs V64:$vx), (ins VM:$vmy),
+//  "# vm2v $vx,$vmy", []>;
+//
+//def VMP2V : Pseudo<(outs V64:$vx), (ins VM512:$vmy),
+//  "# vmp2v $vx,$vmy", []>;
+//
+//def V2VM : Pseudo<(outs VM:$vmx), (ins V64:$vy),
+//  "# v2vm $vmx,$vy", []>;
+//
+//def V2VMP : Pseudo<(outs VM512:$vmx), (ins V64:$vy),
+//  "# v2vmp $vmx,$vy", []>;
+//}
 
