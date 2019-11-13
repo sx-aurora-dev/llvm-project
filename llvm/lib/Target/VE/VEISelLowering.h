@@ -634,7 +634,9 @@ namespace llvm {
                                              MachineBasicBlock *BB) const;
     void SetupEntryBlockForSjLj(MachineInstr &MI, MachineBasicBlock *MBB,
                                 MachineBasicBlock *DispatchBB, int FI) const;
+#ifdef OBSOLETE_VE_VL
     void updateVL(MachineFunction &MF) const;
+#endif
     void finalizeLowering(MachineFunction &MF) const override;
 
   private:

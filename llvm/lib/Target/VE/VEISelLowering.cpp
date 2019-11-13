@@ -4508,6 +4508,7 @@ void VETargetLowering::insertSSPDeclarations(Module &M) const {
     return TargetLowering::insertSSPDeclarations(M);
 }
 
+#ifdef OBSOLETE_VE_VL
 void VETargetLowering::updateVL(MachineFunction& MF) const {
   // This MachineFunction is using VL, so need to patch among the
   // instructions using and defining VL.
@@ -4635,13 +4636,16 @@ void VETargetLowering::updateVL(MachineFunction& MF) const {
   LLVM_DEBUG(dbgs() << "Updated VLReg and insns\n");
   LLVM_DEBUG(MF.dump());
 }
+#endif // OBSOLETE_VE_VL
 
 void VETargetLowering::finalizeLowering(MachineFunction& MF) const {
+#ifdef OBSOLETE_VE_VL
   // Directly fetch VL to avoid new allocation
   VEMachineFunctionInfo *VEFI = MF.getInfo<VEMachineFunctionInfo>();
   unsigned VLReg = VEFI->getVectorLengthReg();
   if (VLReg != 0) {
     updateVL(MF);
   }
+#endif
   TargetLoweringBase::finalizeLowering(MF);
 }

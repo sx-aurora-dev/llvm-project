@@ -849,7 +849,7 @@ def SVMi : RR<0xA7, (outs I64:$sx), (ins VM:$vmx, uimm6Op64:$sy), "svm $sx,$vmx,
 
 let mayLoad = 1, hasSideEffects = 0 in {
 def LDVRri : Pseudo<
-    (outs V64:$vx), (ins MEMri:$addr, VLS:$vl),
+    (outs V64:$vx), (ins MEMri:$addr, I32:$vl),
     "# pseudo ldvr $vx, $addr, $vl", []>;
 def LDVMri : Pseudo<
     (outs VM:$vmx), (ins MEMri:$addr),
@@ -857,13 +857,13 @@ def LDVMri : Pseudo<
 def LDVM512ri : Pseudo<
     (outs VM512:$vmx), (ins MEMri:$addr),
     "# pseudo ldvm512 $vmx, $addr", []>;
-def LDVLri : Pseudo<
-    (outs VLS:$vl), (ins MEMri:$addr),
-    "# pseudo ldvls $vl, $addr", []>;
+//def LDVLri : Pseudo<
+//    (outs VLS:$vl), (ins MEMri:$addr),
+//    "# pseudo ldvls $vl, $addr", []>;
 }
 let mayStore = 1, hasSideEffects = 0 in {
 def STVRri : Pseudo<
-    (outs), (ins MEMri:$addr, V64:$vx, VLS:$vl),
+    (outs), (ins MEMri:$addr, V64:$vx, I32:$vl),
     "# pseudo stvr $addr, $vx, $vl", []>;
 def STVMri : Pseudo<
     (outs), (ins MEMri:$addr, VM:$vmx),
@@ -871,9 +871,9 @@ def STVMri : Pseudo<
 def STVM512ri : Pseudo<
     (outs), (ins MEMri:$addr, VM512:$vmx),
     "# pseudo stvm512 $addr, $vmx", []>;
-def STVLri : Pseudo<
-    (outs), (ins MEMri:$addr, VLS:$vl),
-    "# pseudo stvl $addr, $vl", []>;
+//def STVLri : Pseudo<
+//    (outs), (ins MEMri:$addr, VLS:$vl),
+//    "# pseudo stvl $addr, $vl", []>;
 }
 
 // 5.3.2.8. Vector Fixed-Point Arithmetic Operation Instructions
@@ -1498,14 +1498,14 @@ def STVLri : Pseudo<
 // SMVL
 // LVIX
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
-def LVL : RR<0xBF, (outs VLS:$vl), (ins I32:$sy), "lvl $sy", []>;
+//let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
+//def LVL : RR<0xBF, (outs VLS:$vl), (ins I32:$sy), "lvl $sy", []>;
 
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, hasSideEffects = 0, isCodeGenOnly = 1 in
 def LVL2 : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
 
-let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
-def SVL : RR<0x2F, (outs I32:$sx), (ins VLS:$vl), "svl $sx", []>;
+//let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, DisableEncoding = "$vl", hasSideEffects = 0 in
+//def SVL : RR<0x2F, (outs I32:$sx), (ins VLS:$vl), "svl $sx", []>;
 
 // Pseudo instructions for bitconvert
 

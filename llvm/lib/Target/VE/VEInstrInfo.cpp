@@ -60,8 +60,11 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
       MI.getOpcode() == VE::LDQri ||            // F128 (pseudo)
       MI.getOpcode() == VE::LDVRri ||           // V64 (pseudo)
       MI.getOpcode() == VE::LDVMri ||           // VM (pseudo)
-      MI.getOpcode() == VE::LDVM512ri ||        // VM512 (pseudo)
-      MI.getOpcode() == VE::LDVLri) {           // VL (pseudo)
+      MI.getOpcode() == VE::LDVM512ri           // VM512 (pseudo)
+#ifdef OBSOLETE_VE_VL
+      || MI.getOpcode() == VE::LDVLri
+#endif
+      ) {           // VL (pseudo)
     if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
         MI.getOperand(2).getImm() == 0) {
       FrameIndex = MI.getOperand(1).getIndex();
@@ -84,8 +87,11 @@ unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
       MI.getOpcode() == VE::STQri ||            // F128 (pseudo)
       MI.getOpcode() == VE::STVRri ||           // V64 (pseudo)
       MI.getOpcode() == VE::STVMri ||           // VM (pseudo)
-      MI.getOpcode() == VE::STVM512ri ||        // VM512 (pseudo)
-      MI.getOpcode() == VE::STVLri) {           // VL (pseudo)
+      MI.getOpcode() == VE::STVM512ri           // VM512 (pseudo)
+#ifdef OBSOLETE_VE_VL
+      || MI.getOpcode() == VE::STVLri
+#endif
+      ) {           // VL (pseudo)
     if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
         MI.getOperand(1).getImm() == 0) {
       FrameIndex = MI.getOperand(0).getIndex();
@@ -455,6 +461,7 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     unsigned int numSubRegs = 2;
     copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ORri),
                     numSubRegs, subRegIdx);
+#ifdef OBSOLETE_VE_VL
   } else if (VE::VLSRegClass.contains(DestReg, SrcReg)) {
     // FIXME: use SX16 as a temporary register
     unsigned TmpReg = VE::SX16;
@@ -468,6 +475,7 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   } else if (VE::VLSRegClass.contains(DestReg)) {
     BuildMI(MBB, I, DL, get(VE::LVL), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc));
+#endif
   } else {
     const TargetRegisterInfo *TRI = &getRegisterInfo();
     dbgs() << "Impossible reg-to-reg copy from " << printReg(SrcReg, TRI) << " to " << printReg(DestReg, TRI) << "\n";
@@ -486,8 +494,10 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - V64\n";
+#ifdef OBSOLETE_VE_VL
     } else if (RC == &VE::VLSRegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - VLS\n";
+#endif
     } else if (RC == &VE::VMRegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
@@ -523,9 +533,11 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   else if (VE::VM512RegClass.hasSubClassEq(RC))
     BuildMI(MBB, I, DL, get(VE::STVM512ri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
+#ifdef OBSOLETE_VE_VL
   else if (RC == &VE::VLSRegClass)
     BuildMI(MBB, I, DL, get(VE::STVLri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
+#endif
   else
     report_fatal_error("Can't store this register to stack slot");
 }
@@ -541,8 +553,10 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - V64\n";
+#ifdef OBSOLETE_VE_VL
     } else if (RC == &VE::VLSRegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - VLS\n";
+#endif
     } else if (RC == &VE::VMRegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
@@ -577,9 +591,11 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   else if (VE::VM512RegClass.hasSubClassEq(RC))
     BuildMI(MBB, I, DL, get(VE::LDVM512ri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
+#ifdef OBSOLETE_VE_VL
   else if (RC == &VE::VLSRegClass)
     BuildMI(MBB, I, DL, get(VE::LDVLri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
+#endif
   else
     report_fatal_error("Can't load this register from stack slot");
 }
@@ -603,6 +619,7 @@ unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const {
   return GlobalBaseReg;
 }
 
+#ifdef OBSOLETE_VE_VL
 unsigned VEInstrInfo::getVectorLengthReg(MachineFunction *MF) const {
   VEMachineFunctionInfo *VEFI = MF->getInfo<VEMachineFunctionInfo>();
   unsigned VectorLengthReg = VEFI->getVectorLengthReg();
@@ -641,6 +658,7 @@ unsigned VEInstrInfo::createVectorLengthReg(MachineFunction *MF) const {
 
   return VL;
 }
+#endif // OBSOLETE_VE_VL
 
 static int GetVM512Upper(int no)
 {

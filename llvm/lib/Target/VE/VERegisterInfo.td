@@ -124,7 +124,7 @@ def VMP6 : VMp<12, "VM12", [VM12, VM13]>;
 def VMP7 : VMp<14, "VM14", [VM14, VM15]>;
 
 // Vector Lenght Register
-def VL : VEReg<0, "VL">;
+//def VL : VEReg<0, "VL">;
 
 
 // Aliases of the S* registers used to hold 128-bit for values (long doubles).
@@ -165,8 +165,8 @@ def Misc : RegisterClass<"VE", [i64], 64,
                               (sequence "PMCR%u", 0, 3),
                               (sequence "PMC%u", 0, 14))>;
 
-def VLS : RegisterClass<"VE", [i32], 64,
-                         (add VL)>;
+//def VLS : RegisterClass<"VE", [i32], 64,
+//                         (add VL)>;
 
 def V64 : RegisterClass<"VE",
                         [v512i32, v512f32,

@@ -420,6 +420,7 @@ bool VEFrameLowering::isLeafProc(MachineFunction &MF) const
            || hasFP(MF));                  // need %fp
 }
 
+#ifdef OBSOLETE_VE_VL
 static void addScavengingSlotFor(RegScavenger* RS,
                                  const TargetRegisterClass& RC,
                                  const TargetRegisterInfo& TRI,
@@ -429,11 +430,13 @@ static void addScavengingSlotFor(RegScavenger* RS,
   int FI = MFI.CreateStackObject(Size, Align, false);
   RS->addScavengingFrameIndex(FI);
 }
+#endif // OBSOLETE_VE_VL
 
 void VEFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                            BitVector &SavedRegs,
                                            RegScavenger *RS) const {
   TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
+#ifdef OBSOLETE_VE_VL
   // If we use VL in this function, create an emergency spill slot for VL.
   if (MF.getRegInfo().isPhysRegUsed(VE::VL)) {
     MachineFrameInfo &MFI = MF.getFrameInfo();
@@ -444,6 +447,7 @@ void VEFrameLowering::determineCalleeSaves(MachineFunction &MF,
     addScavengingSlotFor(RS, VE::VLSRegClass, *TRI, MFI);
     addScavengingSlotFor(RS, VE::I64RegClass, *TRI, MFI);
   }
+#endif
 
   if (!DisableLeafProc && isLeafProc(MF)) {
     VEMachineFunctionInfo *MFI = MF.getInfo<VEMachineFunctionInfo>();

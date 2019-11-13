@@ -33,11 +33,13 @@ using namespace llvm;
 // VE uses %s10 == %lp to keep return address
 VERegisterInfo::VERegisterInfo() : VEGenRegisterInfo(VE::SX10) {
 
+#ifdef OBSOLETE_VE_VL
   // Initialize VLSPSetID
   const int* PSet = getRegClassPressureSets(&VE::VLSRegClass);
   assert(*PSet != -1);
   VLSPSetID = *PSet++;
   assert(*PSet == -1);
+#endif
 }
 
 bool VERegisterInfo::requiresRegisterScavenging(
@@ -506,6 +508,7 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     MI.getOperand(0).ChangeToRegister(TmpReg, true);
     BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVMi), DestHiReg)
       .addReg(DestHiReg).addImm(3).addReg(TmpReg, getKillRegState(true));
+#ifdef OBSOLETE_VE_VL
   } else if (MI.getOpcode() == VE::STVLri) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
     unsigned SrcReg = MI.getOperand(2).getReg();
@@ -524,6 +527,7 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     // MI.getOperand(0).setReg(TmpReg);
     BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVL), DestReg)
       .addReg(TmpReg, getKillRegState(true));
+#endif
   }
 
   replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);
@@ -531,6 +535,7 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
 unsigned VERegisterInfo::getRegPressureSetLimit(const MachineFunction &MF,
                                                 unsigned Idx) const {
+#ifdef OBSOLETE_VE_VL
   // VE has only one single physical VL register, but considering VL
   // register presssure in MI scheduling cause many vector registers
   // spills/restores and decrease performance of generated codes.
@@ -538,6 +543,7 @@ unsigned VERegisterInfo::getRegPressureSetLimit(const MachineFunction &MF,
   // forgets about VL register in MI scheduling.
   if (Idx == VLSPSetID)
     return 128;
+#endif
 
   return VEGenRegisterInfo::getRegPressureSetLimit(MF, Idx);
 }
