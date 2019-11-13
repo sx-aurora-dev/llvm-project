@@ -61,10 +61,7 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
       MI.getOpcode() == VE::LDVRri ||           // V64 (pseudo)
       MI.getOpcode() == VE::LDVMri ||           // VM (pseudo)
       MI.getOpcode() == VE::LDVM512ri           // VM512 (pseudo)
-#ifdef OBSOLETE_VE_VL
-      || MI.getOpcode() == VE::LDVLri
-#endif
-      ) {           // VL (pseudo)
+      ) {
     if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
         MI.getOperand(2).getImm() == 0) {
       FrameIndex = MI.getOperand(1).getIndex();
@@ -88,10 +85,7 @@ unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
       MI.getOpcode() == VE::STVRri ||           // V64 (pseudo)
       MI.getOpcode() == VE::STVMri ||           // VM (pseudo)
       MI.getOpcode() == VE::STVM512ri           // VM512 (pseudo)
-#ifdef OBSOLETE_VE_VL
-      || MI.getOpcode() == VE::STVLri
-#endif
-      ) {           // VL (pseudo)
+      ) {
     if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
         MI.getOperand(1).getImm() == 0) {
       FrameIndex = MI.getOperand(0).getIndex();
@@ -409,30 +403,6 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
       .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
   else if (VE::V64RegClass.contains(DestReg, SrcReg)) {
-#ifdef OBSOLETE_VE_VECTOR
-    // Generate following instructions
-    //   svl %s16               ; save VL to s16
-    //   lea %s12, 256          ; retrieve MVL to s12
-    //   lvl %s12               ; set VL to MVL
-    //   vor %dest, (0)1, %src  ; copy vector register using MVL
-    //   lvl %s16               ; restore VL
-    // FIXME: using SX16 and SX12 as a temporary register
-    unsigned VLReg = VE::VL;
-    unsigned SaveReg = VE::SX16;
-    unsigned TmpReg = VE::SX12;
-    BuildMI(MBB, I, DL, get(VE::SVL), SaveReg)
-      .addReg(VLReg, getKillRegState(KillSrc));
-    BuildMI(MBB, I, DL, get(VE::LEAzzi), TmpReg)
-      .addImm(256);
-    BuildMI(MBB, I, DL, get(VE::LVL), VLReg)
-      .addReg(TmpReg, getKillRegState(true));
-    BuildMI(MBB, I, DL, get(VE::VORi1), DestReg)
-        .addImm(0)
-        .addReg(SrcReg, getKillRegState(KillSrc))
-        .addReg(VLReg, getKillRegState(true));
-    BuildMI(MBB, I, DL, get(VE::LVL), VLReg)
-      .addReg(SaveReg, getKillRegState(true));
-#else
     // Generate following instructions
     //   LEA32zzi %vl, 256
     //   vor_v1vl %dest, (0)1, %src, %vl
@@ -443,21 +413,7 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         .addImm(0)
         .addReg(SrcReg, getKillRegState(KillSrc))
         .addReg(TmpReg, getKillRegState(true));
-#endif
   }
-#ifdef OBSOLETE_VE_VM
-  else if (VE::VMRegClass.contains(DestReg, SrcReg))
-    BuildMI(MBB, I, DL, get(VE::andm_mmm), DestReg)
-        .addReg(VE::VM0)
-        .addReg(SrcReg, getKillRegState(KillSrc));
-  else if (VE::VM512RegClass.contains(DestReg, SrcReg)) {
-    // Use two instructions.
-    const unsigned subRegIdx[] = { VE::sub_vm_even, VE::sub_vm_odd };
-    unsigned int numSubRegs = 2;
-    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::andm_mmm),
-                    numSubRegs, subRegIdx);
-  }
-#endif
   else if (VE::VM_RegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::andm_mmm), DestReg)
         .addReg(VE::VM0)
@@ -474,21 +430,6 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     unsigned int numSubRegs = 2;
     copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ORri),
                     numSubRegs, subRegIdx);
-#ifdef OBSOLETE_VE_VL
-  } else if (VE::VLSRegClass.contains(DestReg, SrcReg)) {
-    // FIXME: use SX16 as a temporary register
-    unsigned TmpReg = VE::SX16;
-    BuildMI(MBB, I, DL, get(VE::SVL), TmpReg)
-      .addReg(SrcReg, getKillRegState(KillSrc));
-    BuildMI(MBB, I, DL, get(VE::LVL), DestReg)
-      .addReg(TmpReg, getKillRegState(true));
-  } else if (VE::VLSRegClass.contains(SrcReg)) {
-    BuildMI(MBB, I, DL, get(VE::SVL), DestReg)
-      .addReg(SrcReg, getKillRegState(KillSrc));
-  } else if (VE::VLSRegClass.contains(DestReg)) {
-    BuildMI(MBB, I, DL, get(VE::LVL), DestReg)
-      .addReg(SrcReg, getKillRegState(KillSrc));
-#endif
   } else {
     const TargetRegisterInfo *TRI = &getRegisterInfo();
     dbgs() << "Impossible reg-to-reg copy from " << printReg(SrcReg, TRI) << " to " << printReg(DestReg, TRI) << "\n";
@@ -507,16 +448,6 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - V64\n";
-#ifdef OBSOLETE_VE_VL
-    } else if (RC == &VE::VLSRegClass) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VLS\n";
-#endif
-#ifdef OBSOLETE_VE_VM
-    } else if (RC == &VE::VMRegClass) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM\n";
-    } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
-      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM512\n";
-#endif
     } else if (RC == &VE::VM_RegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM\n";
     } else if (VE::VM512_RegClass.hasSubClassEq(RC)) {
@@ -546,25 +477,12 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   else if (RC == &VE::V64RegClass)
     BuildMI(MBB, I, DL, get(VE::STVRri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addImm(256).addMemOperand(MMO);
-#ifdef OBSOLETE_VE_VM
-  else if (RC == &VE::VMRegClass)
-    BuildMI(MBB, I, DL, get(VE::STVMri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (VE::VM512RegClass.hasSubClassEq(RC))
-    BuildMI(MBB, I, DL, get(VE::STVM512ri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-#endif
   else if (RC == &VE::VM_RegClass)
     BuildMI(MBB, I, DL, get(VE::STVMri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
   else if (VE::VM512_RegClass.hasSubClassEq(RC))
     BuildMI(MBB, I, DL, get(VE::STVM512ri)).addFrameIndex(FI).addImm(0)
       .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-#ifdef OBSOLETE_VE_VL
-  else if (RC == &VE::VLSRegClass)
-    BuildMI(MBB, I, DL, get(VE::STVLri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-#endif
   else
     report_fatal_error("Can't store this register to stack slot");
 }
@@ -580,16 +498,6 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - V64\n";
-#ifdef OBSOLETE_VE_VL
-    } else if (RC == &VE::VLSRegClass) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - VLS\n";
-#endif
-#ifdef OBSOLETE_VE_VM
-    } else if (RC == &VE::VMRegClass) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - VM\n";
-    } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
-      dbgs() << "restore " << printReg(DestReg, TRI) << " - VM512\n";
-#endif
     } else if (RC == &VE::VM_RegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - VM\n";
     } else if (VE::VM512_RegClass.hasSubClassEq(RC)) {
@@ -618,25 +526,12 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
   else if (RC == &VE::V64RegClass)
     BuildMI(MBB, I, DL, get(VE::LDVRri), DestReg).addFrameIndex(FI).addImm(0)
       .addImm(256).addMemOperand(MMO);
-#ifdef OBSOLETE_VE_VM
-  else if (RC == &VE::VMRegClass)
-    BuildMI(MBB, I, DL, get(VE::LDVMri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else if (VE::VM512RegClass.hasSubClassEq(RC))
-    BuildMI(MBB, I, DL, get(VE::LDVM512ri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-#endif
   else if (RC == &VE::VM_RegClass)
     BuildMI(MBB, I, DL, get(VE::LDVMri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
   else if (VE::VM512_RegClass.hasSubClassEq(RC))
     BuildMI(MBB, I, DL, get(VE::LDVM512ri), DestReg).addFrameIndex(FI).addImm(0)
       .addMemOperand(MMO);
-#ifdef OBSOLETE_VE_VL
-  else if (RC == &VE::VLSRegClass)
-    BuildMI(MBB, I, DL, get(VE::LDVLri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-#endif
   else
     report_fatal_error("Can't load this register from stack slot");
 }
@@ -659,47 +554,6 @@ unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const {
   VEFI->setGlobalBaseReg(GlobalBaseReg);
   return GlobalBaseReg;
 }
-
-#ifdef OBSOLETE_VE_VL
-unsigned VEInstrInfo::getVectorLengthReg(MachineFunction *MF) const {
-  VEMachineFunctionInfo *VEFI = MF->getInfo<VEMachineFunctionInfo>();
-  unsigned VectorLengthReg = VEFI->getVectorLengthReg();
-  if (VectorLengthReg != 0)
-    return VectorLengthReg;
-
-  unsigned VL = MF->addLiveIn(VE::VL, &VE::VLSRegClass);
-  VEFI->setVectorLengthReg(VL);
-
-  return VL;
-}
-
-unsigned VEInstrInfo::createVectorLengthReg(MachineFunction *MF) const {
-  // Create the register. FIXME: The code to initialize it might be required...
-#if 0
-  MachineRegisterInfo &RegInfo = MF->getRegInfo();
-  // try to register VL to livein
-  unsigned PVL = VE::VL;
-  unsigned VL;
-  if (!RegInfo.isLiveIn(PVL)) {
-    VL = RegInfo.createVirtualRegister(&VE::VLSRegClass);
-    RegInfo.addLiveIn(PVL, VL);
-  } else {
-    VL = RegInfo.getLiveInVirtReg(PVL);
-  }
-#else
-#if 1
-  MachineRegisterInfo &RegInfo = MF->getRegInfo();
-  unsigned VL = RegInfo.createVirtualRegister(&VE::VLSRegClass);
-#else
-  unsigned VL = MF->addLiveIn(VE::VL, &VE::VLSRegClass);
-#endif
-#endif
-  VEMachineFunctionInfo *VEFI = MF->getInfo<VEMachineFunctionInfo>();
-  VEFI->setVectorLengthReg(VL);
-
-  return VL;
-}
-#endif // OBSOLETE_VE_VL
 
 static int GetVM512Upper(int no)
 {
@@ -728,9 +582,6 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
       break;
   }
-#ifdef OBSOLETE_VE_VECTOR
-  case VE::NEGMp:
-#endif
   case VE::negm_MM:
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu);
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl);
@@ -738,107 +589,6 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
   }
   MI.eraseFromParent();
 }
-
-#if 0
-static void buildVMRInst_VL(MachineInstr& MI, const MCInstrDesc& MCID) {
-  MachineBasicBlock* MBB = MI.getParent();
-  DebugLoc dl = MI.getDebugLoc();
-
-  unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
-  unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
-  unsigned VMYu = GetVM512Upper(MI.getOperand(1).getReg());
-  unsigned VMYl = GetVM512Lower(MI.getOperand(1).getReg());
-
-  unsigned VL = MI.getOperand(MI.getNumOperands() - 1).getReg();
-
-  switch (MI.getOpcode()) {
-  default: {
-      unsigned VMZu = GetVM512Upper(MI.getOperand(2).getReg());
-      unsigned VMZl = GetVM512Lower(MI.getOperand(2).getReg());
-      BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu).addUse(VL);
-      BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl).addUse(VL);
-      break;
-  }
-  case VE::NEGMp:
-      BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VL);
-      BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VL);
-      break;
-  }
-  MI.eraseFromParent();
-}
-#endif
-
-#ifdef OBSOLETE_VE_VECTOR
-static void expandPseudoVFMK(const TargetInstrInfo& TI, MachineInstr& MI)
-{
-    // replace to pvfmk.w.up and pvfmk.w.lo (VFMSpv)
-    // replace to pvfmk.s.up and pvfmk.s.lo (VFMFpv)
-
-    unsigned Opcode = MI.getOpcode();
-
-    // change VMP to VM
-    unsigned VMu = GetVM512Upper(MI.getOperand(0).getReg());
-    unsigned VMl = GetVM512Lower(MI.getOperand(0).getReg());
-
-    unsigned OpcodeUpper;
-    unsigned OpcodeLower;
-    bool hasCond = true;
-    bool hasMask = false;
-    if (Opcode == VE::VFMSpv) {
-        OpcodeUpper = VE::VFMSuv;
-        OpcodeLower = VE::VFMSv;
-    } else if (Opcode == VE::VFMFpv) {
-        OpcodeUpper = VE::VFMFsv;
-        OpcodeLower = VE::VFMFlv;
-    } else if (Opcode == VE::VFMKpat) {
-        OpcodeUpper = VE::VFMSuat;
-        OpcodeLower = VE::VFMSlat;
-        hasCond = false;
-    } else if (Opcode == VE::VFMKpaf) {
-        OpcodeUpper = VE::VFMSuaf;
-        OpcodeLower = VE::VFMSlaf;
-        hasCond = false;
-    } else if (Opcode == VE::VFMSpvm) {
-        OpcodeUpper = VE::VFMSuvm;
-        OpcodeLower = VE::VFMSvm;
-        hasMask = true;
-    } else if (Opcode == VE::VFMFpvm) {
-        OpcodeUpper = VE::VFMFsvm;
-        OpcodeLower = VE::VFMFlvm;
-        hasMask = true;
-    }
-
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, TI.get(OpcodeUpper), VMu);
-    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower), VMl);
-
-    if (hasCond) {
-        unsigned Cond = MI.getOperand(2).getReg();
-        Bu = Bu.addImm(MI.getOperand(1).getImm()).addReg(Cond);
-        Bl = Bl.addImm(MI.getOperand(1).getImm()).addReg(Cond);
-        if (hasMask) {
-            unsigned VMu3 = GetVM512Upper(MI.getOperand(3).getReg());
-            unsigned VMl3 = GetVM512Lower(MI.getOperand(3).getReg());
-            Bu.addReg(VMu3);
-            Bl.addReg(VMl3);
-            unsigned VL = MI.getOperand(4).getReg();
-            Bu.addReg(VL);
-            Bl.addReg(VL);
-        } else {
-            unsigned VL = MI.getOperand(3).getReg();
-            Bu.addReg(VL);
-            Bl.addReg(VL);
-        }
-    } else {
-        unsigned VL = MI.getOperand(1).getReg();
-        Bu.addReg(VL);
-        Bl.addReg(VL);
-    }
-
-    MI.eraseFromParent();
-}
-#endif // OBSOLETE_VE_VECTOR
 
 static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
 {
@@ -1002,64 +752,6 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     return true;
   }
 #endif
-#ifdef OBSOLETE_VE_VECTOR
-  case VE::VFMSpv:
-  case VE::VFMFpv:
-  case VE::VFMSpvm:
-  case VE::VFMFpvm:
-  case VE::VFMKpat:
-  case VE::VFMKpaf: {
-    expandPseudoVFMK(*this, MI);
-    return true;
-    }
-  case VE::LVMpi: {
-    unsigned VMXu = (MI.getOperand(0).getReg() - VE::VMP0) * 2 + VE::VM0; 
-    unsigned VMXl = VMXu + 1;
-    unsigned VMDu = (MI.getOperand(1).getReg() - VE::VMP0) * 2 + VE::VM0; 
-    unsigned VMDl = VMDu + 1;
-    int64_t imm = MI.getOperand(2).getImm();
-    unsigned VMX = VMXl;
-    unsigned VMD = VMDl;
-    if (imm >= 4) {
-        VMX = VMXu;
-        VMD = VMDu;
-        imm -= 4;
-    }
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::LVMi))
-      .addDef(VMX)
-      .addReg(VMD)
-      .addImm(imm)
-      .addReg(MI.getOperand(3).getReg());
-    MI.eraseFromParent();
-    return true;
-  }
-  case VE::SVMpi: {
-    unsigned VMZu = (MI.getOperand(1).getReg() - VE::VMP0) * 2 + VE::VM0; 
-    unsigned VMZl = VMZu + 1;
-    int64_t imm = MI.getOperand(2).getImm();
-    unsigned VMZ = VMZl;
-    if (imm >= 4) {
-        VMZ = VMZu;
-        imm -= 4;
-    }
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::SVMi))
-      .add(MI.getOperand(0))
-      .addReg(VMZ)
-      .addImm(imm);
-    MI.eraseFromParent();
-    return true;
-  }
-  case VE::ANDMp: buildVMRInst(MI, get(VE::ANDM)); return true;
-  case VE::ORMp:  buildVMRInst(MI, get(VE::ORM)); return true;
-  case VE::XORMp: buildVMRInst(MI, get(VE::XORM)); return true;
-  case VE::EQVMp: buildVMRInst(MI, get(VE::EQVM)); return true;
-  case VE::NNDMp: buildVMRInst(MI, get(VE::NNDM)); return true;
-  case VE::NEGMp: buildVMRInst(MI, get(VE::NEGM)); return true;
-#endif // OBSOLETE_VE_VECTOR
 
   case VE::andm_MMM: buildVMRInst(MI, get(VE::andm_mmm)); return true;
   case VE::orm_MMM:  buildVMRInst(MI, get(VE::orm_mmm)); return true;

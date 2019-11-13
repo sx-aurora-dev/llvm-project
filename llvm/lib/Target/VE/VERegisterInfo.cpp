@@ -32,14 +32,6 @@ using namespace llvm;
 
 // VE uses %s10 == %lp to keep return address
 VERegisterInfo::VERegisterInfo() : VEGenRegisterInfo(VE::SX10) {
-
-#ifdef OBSOLETE_VE_VL
-  // Initialize VLSPSetID
-  const int* PSet = getRegClassPressureSets(&VE::VLSRegClass);
-  assert(*PSet != -1);
-  VLSPSetID = *PSet++;
-  assert(*PSet == -1);
-#endif
 }
 
 bool VERegisterInfo::requiresRegisterScavenging(
@@ -226,52 +218,6 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
   // Replace frame index with a temporal register if the instruction is
   // vector load/store.
   if (MI.getOpcode() == VE::LDVRri || MI.getOpcode() == VE::STVRri) {
-#ifdef OBSOLETE_VE_VECTOR
-    // Original MI is:
-    //   STVRri frame-index, offset, reg, 256 (, memory operand)
-    // or
-    //   LDVRri reg, frame-index, offset, 256 (, memory operand)
-    // Convert it to:
-    //   LEA    tmp-reg, frame-reg, offset
-    //   VSTir  reg, 8, tmp-reg, 256 (ignored)
-    // or
-    //   VLDir  reg, 8, tmp-reg, 256 (ignored)
-    int opc = MI.getOpcode() == VE::LDVRri ? VE::VLDir : VE::VSTir;
-    int regi = MI.getOpcode() == VE::LDVRri ? 0 : 2;
-    const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
-    unsigned Reg = MI.getOperand(regi).getReg();
-    bool isDef = MI.getOperand(regi).isDef();
-    bool isKill = MI.getOperand(regi).isKill();
-
-    // Prepare for VL
-    unsigned VLReg = MF.getRegInfo().createVirtualRegister(&VE::VLSRegClass);
-    if (MI.getOperand(3).isImm()) {
-      int64_t val = MI.getOperand(3).getImm();
-      if (val >= 0 && val < 64) {
-        BuildMI(*MI.getParent(), II, dl, TII.get(VE::LVL), VLReg)
-          .addImm(val);
-      } else {
-        unsigned Tmp1 = MF.getRegInfo().createVirtualRegister(&VE::I32RegClass);
-        BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEAzzi), Tmp1)
-          .addImm(val);
-        BuildMI(*MI.getParent(), II, dl, TII.get(VE::COPY), VLReg)
-          .addReg(Tmp1, getKillRegState(true));
-      }
-    } else {
-      BuildMI(*MI.getParent(), II, dl, TII.get(VE::COPY), VLReg)
-        .add(MI.getOperand(3));
-    }
-
-    unsigned Tmp1 = MF.getRegInfo().createVirtualRegister(&VE::I64RegClass);
-    BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEAasx), Tmp1)
-      .addReg(FramePtr).addImm(Offset);
-
-    MI.setDesc(TII.get(opc));
-    MI.getOperand(0).ChangeToRegister(Reg, isDef, false, isKill);
-    MI.getOperand(1).ChangeToImmediate(8);
-    MI.getOperand(2).ChangeToRegister(Tmp1, false, false, true);
-    MI.getOperand(3).ChangeToRegister(VLReg, false, false, true);
-#else
     // Original MI is:
     //   STVRri frame-index, offset, reg, vl (, memory operand)
     // or
@@ -308,7 +254,6 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     MI.getOperand(1).ChangeToImmediate(8);
     MI.getOperand(2).ChangeToRegister(Tmp1, false, false, true);
     MI.getOperand(3).ChangeToRegister(VLReg, false, false, true);
-#endif
     return;
   }
 
@@ -508,27 +453,6 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     MI.getOperand(0).ChangeToRegister(TmpReg, true);
     BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::lvm_mmIs), DestHiReg)
       .addReg(DestHiReg).addImm(3).addReg(TmpReg, getKillRegState(true));
-//#endif // OBSOLETE_VE_VM
-#ifdef OBSOLETE_VE_VL
-  } else if (MI.getOpcode() == VE::STVLri) {
-    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
-    unsigned SrcReg = MI.getOperand(2).getReg();
-    bool isKill = MI.getOperand(2).isKill();
-    unsigned TmpReg = MF.getRegInfo().createVirtualRegister(&VE::I32RegClass);
-    BuildMI(*MI.getParent(), II, dl, TII.get(VE::SVL), TmpReg)
-      .addReg(SrcReg, getKillRegState(isKill));
-    MI.setDesc(TII.get(VE::STLri));
-    MI.getOperand(2).setReg(TmpReg);
-  } else if (MI.getOpcode() == VE::LDVLri) {
-    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
-    unsigned DestReg = MI.getOperand(0).getReg();
-    unsigned TmpReg = MF.getRegInfo().createVirtualRegister(&VE::I32RegClass);
-    MI.setDesc(TII.get(VE::LDLri));
-    MI.getOperand(0).ChangeToRegister(TmpReg, true);
-    // MI.getOperand(0).setReg(TmpReg);
-    BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVL), DestReg)
-      .addReg(TmpReg, getKillRegState(true));
-#endif
   }
 
   replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);
@@ -536,16 +460,6 @@ VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
 unsigned VERegisterInfo::getRegPressureSetLimit(const MachineFunction &MF,
                                                 unsigned Idx) const {
-#ifdef OBSOLETE_VE_VL
-  // VE has only one single physical VL register, but considering VL
-  // register presssure in MI scheduling cause many vector registers
-  // spills/restores and decrease performance of generated codes.
-  // Therefore, we pretend having 128 VL registers.  This way, llvm
-  // forgets about VL register in MI scheduling.
-  if (Idx == VLSPSetID)
-    return 128;
-#endif
-
   return VEGenRegisterInfo::getRegPressureSetLimit(MF, Idx);
 }
 

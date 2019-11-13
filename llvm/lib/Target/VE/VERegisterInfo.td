@@ -123,10 +123,6 @@ def VMP5 : VMp<10, "VM10", [VM10, VM11]>;
 def VMP6 : VMp<12, "VM12", [VM12, VM13]>;
 def VMP7 : VMp<14, "VM14", [VM14, VM15]>;
 
-// Vector Lenght Register
-//def VL : VEReg<0, "VL">;
-
-
 // Aliases of the S* registers used to hold 128-bit for values (long doubles).
 // Following foreach represents something like:
 //   def Q0 : Rq<0, "S0", [S0, S1]>;
@@ -165,9 +161,6 @@ def Misc : RegisterClass<"VE", [i64], 64,
                               (sequence "PMCR%u", 0, 3),
                               (sequence "PMC%u", 0, 14))>;
 
-//def VLS : RegisterClass<"VE", [i32], 64,
-//                         (add VL)>;
-
 def V64 : RegisterClass<"VE",
                         [v512i32, v512f32,
                          v256i64, v256i32, v256f32, v256f64,
@@ -180,11 +173,6 @@ def V64 : RegisterClass<"VE",
                          v2i64,   v2i32,   v2f32,   v2f64],
                         64, (sequence "V%u", 0, 63)>;
 // vm0 is reserved for always true
-//def VM : RegisterClass<"VE",
-//                       [v256i1, v128i1, v64i1, v32i1,
-//                        v16i1, v8i1, v4i1, v2i1],
-//                       64, (sequence "VM%u", 0, 15)>;
-//def VM512 : RegisterClass<"VE", [v512i1], 64, (sequence "VMP%u", 0, 7)>;
 
 def VM_ : RegisterClass<"VE", [v256i1, v4i64], 64, (sequence "VM%u", 0, 15)>;
 def VM512_ : RegisterClass<"VE", [v512i1, v8i64], 64, (sequence "VMP%u", 0, 7)>;
