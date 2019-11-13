@@ -65,11 +65,11 @@ class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 //  }
 //}
 
-class RV3<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
-          InstrItinClass itin = NoItinerary> 
-      : RV<opVal, outs, ins, asmstr, pattern, itin> {
-  let vw = 0;
-}
+//class RV3<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
+//          InstrItinClass itin = NoItinerary> 
+//      : RV<opVal, outs, ins, asmstr, pattern, itin> {
+//  let vw = 0;
+//}
 
 //multiclass RV3m<string opcStr, bits<8> opc, RegisterClass ScalarRC, RegisterClass MaskRC, Operand immOp> {
 //  // (set V64:$vx, (op (simm7:$sy or I64:$sy or V64:$vz), V64:$vz))
@@ -421,91 +421,91 @@ class RV3<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 //  let cx = 1, cx2 = 1 in defm p : RV4m<"p" # opcStr, opc, I64, VM512>; // packed
 //}
 
-multiclass RVLOGCm<string opcStr, bits<8> opc> {
-  def v : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VLS:$vl),
-              !strconcat(opcStr, " $vx,$vy,$vz"), []> {
-    let cs = 0;
-    let hasSideEffects = 0;
-  }
-  def r : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VLS:$vl),
-              !strconcat(opcStr, " $vx,$sy,$vz"), []> {
-    let cs = 1;
-    let cy = 1;
-    let hasSideEffects = 0;
-  }
-  def i0 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz, VLS:$vl),
-               !strconcat(opcStr, " $vx,(${sy})0,$vz"), []> {
-    let cs = 1;
-    let cy = 0;
-    let sy{6} = 1;
-    let hasSideEffects = 0;
-  }
-  def i1 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz, VLS:$vl),
-               !strconcat(opcStr, " $vx,(${sy})1,$vz"), []> {
-    let cs = 1;
-    let cy = 0;
-    let sy{6} = 0;
-    let hasSideEffects = 0;
-  }
-}
-
-multiclass RVLOGMm<string opcStr, bits<8> opc, RegisterClass MaskRC> {
-  def vm : RV3<opc, (outs V64:$vx),
-               (ins V64:$vy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
-               !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
-    bits<4> vm;
-    let cs = 0;
-    let m = vm;
-    let Constraints = "$vx = $vd";
-    let hasSideEffects = 0;
-  }
-  def rm : RV3<opc, (outs V64:$vx),
-               (ins I64:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
-               !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
-    bits<4> vm;
-    let cs = 1;
-    let cy = 1;
-    let m = vm;
-    let Constraints = "$vx = $vd";
-    let hasSideEffects = 0;
-  }
-  def i0m : RV3<opc, (outs V64:$vx),
-                (ins uimm6Op64:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
-                !strconcat(opcStr, " $vx,(${sy})0,$vz,$vm"), []> {
-    bits<4> vm;
-    let cs = 1;
-    let cy = 0;
-    let sy{6} = 1;
-    let m = vm;
-    let Constraints = "$vx = $vd";
-    let hasSideEffects = 0;
-  }
-  def i1m : RV3<opc, (outs V64:$vx),
-                (ins uimm6Op64:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
-                !strconcat(opcStr, " $vx,(${sy})1,$vz,$vm"), []> {
-    bits<4> vm;
-    let cs = 1;
-    let cy = 0;
-    let sy{6} = 0;
-    let m = vm;
-    let Constraints = "$vx = $vd";
-    let hasSideEffects = 0;
-  }
-}
-
-multiclass RVLOGm<string opcStr, bits<8> opc> {
-  let cx = 0, cx2 = 0 in defm "" : RVLOGCm<opcStr, opc>;
-  let cx = 0, cx2 = 1 in defm l : RVLOGCm<!strconcat("p", opcStr, ".lo"), opc>;
-  let cx = 1, cx2 = 0 in defm u : RVLOGCm<!strconcat("p", opcStr, ".up"), opc>;
-  let cx = 1, cx2 = 1 in defm p : RVLOGCm<!strconcat("p", opcStr), opc>;
-  let cx = 0, cx2 = 0 in defm "" : RVLOGMm<opcStr, opc, VM>;
-  let cx = 0, cx2 = 1 in defm l : RVLOGMm<!strconcat("p", opcStr, ".lo"),
-                                          opc, VM>;
-  let cx = 1, cx2 = 0 in defm u : RVLOGMm<!strconcat("p", opcStr, ".up"),
-                                          opc, VM>;
-  let cx = 1, cx2 = 1 in defm p : RVLOGMm<!strconcat("p", opcStr),
-                                          opc, VM512>;
-}
+//multiclass RVLOGCm<string opcStr, bits<8> opc> {
+//  def v : RV3<opc, (outs V64:$vx), (ins V64:$vy, V64:$vz, VLS:$vl),
+//              !strconcat(opcStr, " $vx,$vy,$vz"), []> {
+//    let cs = 0;
+//    let hasSideEffects = 0;
+//  }
+//  def r : RV3<opc, (outs V64:$vx), (ins I64:$sy, V64:$vz, VLS:$vl),
+//              !strconcat(opcStr, " $vx,$sy,$vz"), []> {
+//    let cs = 1;
+//    let cy = 1;
+//    let hasSideEffects = 0;
+//  }
+//  def i0 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz, VLS:$vl),
+//               !strconcat(opcStr, " $vx,(${sy})0,$vz"), []> {
+//    let cs = 1;
+//    let cy = 0;
+//    let sy{6} = 1;
+//    let hasSideEffects = 0;
+//  }
+//  def i1 : RV3<opc, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz, VLS:$vl),
+//               !strconcat(opcStr, " $vx,(${sy})1,$vz"), []> {
+//    let cs = 1;
+//    let cy = 0;
+//    let sy{6} = 0;
+//    let hasSideEffects = 0;
+//  }
+//}
+//
+//multiclass RVLOGMm<string opcStr, bits<8> opc, RegisterClass MaskRC> {
+//  def vm : RV3<opc, (outs V64:$vx),
+//               (ins V64:$vy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
+//               !strconcat(opcStr, " $vx,$vy,$vz,$vm"), []> {
+//    bits<4> vm;
+//    let cs = 0;
+//    let m = vm;
+//    let Constraints = "$vx = $vd";
+//    let hasSideEffects = 0;
+//  }
+//  def rm : RV3<opc, (outs V64:$vx),
+//               (ins I64:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
+//               !strconcat(opcStr, " $vx,$sy,$vz,$vm"), []> {
+//    bits<4> vm;
+//    let cs = 1;
+//    let cy = 1;
+//    let m = vm;
+//    let Constraints = "$vx = $vd";
+//    let hasSideEffects = 0;
+//  }
+//  def i0m : RV3<opc, (outs V64:$vx),
+//                (ins uimm6Op64:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
+//                !strconcat(opcStr, " $vx,(${sy})0,$vz,$vm"), []> {
+//    bits<4> vm;
+//    let cs = 1;
+//    let cy = 0;
+//    let sy{6} = 1;
+//    let m = vm;
+//    let Constraints = "$vx = $vd";
+//    let hasSideEffects = 0;
+//  }
+//  def i1m : RV3<opc, (outs V64:$vx),
+//                (ins uimm6Op64:$sy, V64:$vz, MaskRC:$vm, V64:$vd, VLS:$vl),
+//                !strconcat(opcStr, " $vx,(${sy})1,$vz,$vm"), []> {
+//    bits<4> vm;
+//    let cs = 1;
+//    let cy = 0;
+//    let sy{6} = 0;
+//    let m = vm;
+//    let Constraints = "$vx = $vd";
+//    let hasSideEffects = 0;
+//  }
+//}
+//
+//multiclass RVLOGm<string opcStr, bits<8> opc> {
+//  let cx = 0, cx2 = 0 in defm "" : RVLOGCm<opcStr, opc>;
+//  let cx = 0, cx2 = 1 in defm l : RVLOGCm<!strconcat("p", opcStr, ".lo"), opc>;
+//  let cx = 1, cx2 = 0 in defm u : RVLOGCm<!strconcat("p", opcStr, ".up"), opc>;
+//  let cx = 1, cx2 = 1 in defm p : RVLOGCm<!strconcat("p", opcStr), opc>;
+//  let cx = 0, cx2 = 0 in defm "" : RVLOGMm<opcStr, opc, VM>;
+//  let cx = 0, cx2 = 1 in defm l : RVLOGMm<!strconcat("p", opcStr, ".lo"),
+//                                          opc, VM>;
+//  let cx = 1, cx2 = 0 in defm u : RVLOGMm<!strconcat("p", opcStr, ".up"),
+//                                          opc, VM>;
+//  let cx = 1, cx2 = 1 in defm p : RVLOGMm<!strconcat("p", opcStr),
+//                                          opc, VM512>;
+//}
 
 //class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 //        InstrItinClass itin = NoItinerary> 
@@ -906,7 +906,7 @@ def STVLri : Pseudo<
 
 // 5.3.2.9. Vector Logical Arithmetic Operation Instructions
 //defm VAND : RVLOGm<"vand", 0xC4>;
-defm VOR  : RVLOGm<"vor", 0xC5>;
+//defm VOR  : RVLOGm<"vor", 0xC5>;
 //defm VXOR : RVLOGm<"vxor", 0xC6>;
 //defm VEQV : RVLOGm<"veqv", 0xC7>;
 
