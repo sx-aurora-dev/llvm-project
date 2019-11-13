@@ -3627,6 +3627,7 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
       }
     }
     return Result;
+#ifdef OBSOLETE_VE_VECTOR
   } else if (VT.getVectorElementType() == MVT::i1) {
     //   (EXTRACT_SUBREG
     //       (SRLrr
@@ -3653,6 +3654,7 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
     V = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, dl,
                                    MVT::i32, V, SubRegI32), 0);
     return V;
+#endif // OBSOLETE_VE_VECTOR
   }
 
   // Extraction is legal for other V64 types.
