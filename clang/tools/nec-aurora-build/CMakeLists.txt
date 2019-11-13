@@ -14,10 +14,12 @@ find_program(NECAURORA_TARGET_COMPILER
     "/opt/nec/ve/bin/"
     ENV PATH)
 
-if(NOT NECAURORA_TARGET_COMPILER)
-  message(STATUS "NEC target compiler could not be found, defaulting to GCC.")
-  # Use a separate variable to print this message every time.
-  find_program(NECAURORA_TARGET_COMPILER_GCC gcc)
+# if ncc was not found and gcc is not set stop
+if(NOT NECAURORA_TARGET_COMPILER AND NOT NECAURORA_TARGET_COMPILER_GCC)
+  message(FATAL_ERROR "NEC target compiler not found and GCC not set, exiting.")
+# if ncc was not found vut gcc is set, use gcc
+elseif(NOT NECAURORA_TARGET_COMPILER)
+  message(STATUS "NEC target compiler not found but GCC is set, using GCC.")
   set(NECAURORA_TARGET_COMPILER "${NECAURORA_TARGET_COMPILER_GCC}")
 endif()
 

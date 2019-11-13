@@ -150,14 +150,14 @@ public:
 
 class CollectOMPClauseParamsVisitor
     : public clang::RecursiveASTVisitor<CollectOMPClauseParamsVisitor> {
-  
+
       CollectOMPClauseParamsVarsVisitor VarsVisitor;
   bool InExplicitCast;
 public:
   CollectOMPClauseParamsVisitor(std::shared_ptr<TargetCodeRegion> &TCR)
     : VarsVisitor(TCR), InExplicitCast(false) {};
   bool VisitStmt(clang::Stmt *S) {
-    // THis relies on the captured statement being the last child
+    // This relies on the captured statement being the last child
     if (llvm::isa<clang::CapturedStmt>(S)) {
         return false;
     }
