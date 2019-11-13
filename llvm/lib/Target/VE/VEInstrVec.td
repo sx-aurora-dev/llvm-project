@@ -48,10 +48,10 @@ def LDVRri : Pseudo<
     (outs V64:$vx), (ins MEMri:$addr, I32:$vl),
     "# pseudo ldvr $vx, $addr, $vl", []>;
 def LDVMri : Pseudo<
-    (outs VM_:$vmx), (ins MEMri:$addr),
+    (outs VM:$vmx), (ins MEMri:$addr),
     "# pseudo ldvm $vmx, $addr", []>;
 def LDVM512ri : Pseudo<
-    (outs VM512_:$vmx), (ins MEMri:$addr),
+    (outs VM512:$vmx), (ins MEMri:$addr),
     "# pseudo ldvm512 $vmx, $addr", []>;
 }
 let mayStore = 1, hasSideEffects = 0 in {
@@ -59,10 +59,10 @@ def STVRri : Pseudo<
     (outs), (ins MEMri:$addr, V64:$vx, I32:$vl),
     "# pseudo stvr $addr, $vx, $vl", []>;
 def STVMri : Pseudo<
-    (outs), (ins MEMri:$addr, VM_:$vmx),
+    (outs), (ins MEMri:$addr, VM:$vmx),
     "# pseudo stvm $addr, $vmx", []>;
 def STVM512ri : Pseudo<
-    (outs), (ins MEMri:$addr, VM512_:$vmx),
+    (outs), (ins MEMri:$addr, VM512:$vmx),
     "# pseudo stvm512 $addr, $vmx", []>;
 }
 

@@ -1110,8 +1110,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v2i64, &VE::V64RegClass);
   addRegisterClass(MVT::v2f32, &VE::V64RegClass);
   addRegisterClass(MVT::v2f64, &VE::V64RegClass);
-  addRegisterClass(MVT::v256i1, &VE::VM_RegClass);
-  addRegisterClass(MVT::v512i1, &VE::VM512_RegClass);
+  addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
 
   if (Subtarget->vectorize()) {
     // We want to use any of vectorization oppotunities in llvm.
@@ -1130,8 +1130,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     // FIXME:
     // llvm-ve uses v4i64/v8i64 for a mask temporally until llvm supports
     // v256i1/v512i1.
-    addRegisterClass(MVT::v4i64, &VE::VM_RegClass);
-    addRegisterClass(MVT::v8i64, &VE::VM512_RegClass);
+    addRegisterClass(MVT::v4i64, &VE::VMRegClass);
+    addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
   }
 
   // Turn FP extload into load/fpextend

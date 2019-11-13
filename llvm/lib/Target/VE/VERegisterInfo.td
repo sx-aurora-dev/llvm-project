@@ -174,5 +174,5 @@ def V64 : RegisterClass<"VE",
                         64, (sequence "V%u", 0, 63)>;
 // vm0 is reserved for always true
 
-def VM_ : RegisterClass<"VE", [v256i1, v4i64], 64, (sequence "VM%u", 0, 15)>;
-def VM512_ : RegisterClass<"VE", [v512i1, v8i64], 64, (sequence "VMP%u", 0, 7)>;
+def VM : RegisterClass<"VE", [v256i1, v4i64], 64, (sequence "VM%u", 0, 15)>;
+def VM512 : RegisterClass<"VE", [v512i1, v8i64], 64, (sequence "VMP%u", 0, 7)>;

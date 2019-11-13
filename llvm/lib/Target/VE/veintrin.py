@@ -122,16 +122,16 @@ def VW(ty): return VOp(ty, "vw")
 def VD(ty): return VOp(ty, "vd") # pass through
 
 VL = Op("l", T_u32, "vl", "I32")
-VM = Op("m", T_v4u64, "vm", "VM_")
-VMX = Op("m", T_v4u64, "vmx", "VM_")
-VMY = Op("m", T_v4u64, "vmy", "VM_")
-VMZ = Op("m", T_v4u64, "vmz", "VM_")
-VMD = Op("m", T_v4u64, "vmd", "VM_") # pass through
-VM512 = Op("M", T_v8u64, "vm", "VM512_")
-VMX512 = Op("M", T_v8u64, "vmx", "VM512_")
-VMY512 = Op("M", T_v8u64, "vmy", "VM512_")
-VMZ512 = Op("M", T_v8u64, "vmz", "VM512_")
-VMD512 = Op("M", T_v8u64, "vmd", "VM512_") # pass through
+VM = Op("m", T_v4u64, "vm", "VM")
+VMX = Op("m", T_v4u64, "vmx", "VM")
+VMY = Op("m", T_v4u64, "vmy", "VM")
+VMZ = Op("m", T_v4u64, "vmz", "VM")
+VMD = Op("m", T_v4u64, "vmd", "VM") # pass through
+VM512 = Op("M", T_v8u64, "vm", "VM512")
+VMX512 = Op("M", T_v8u64, "vmx", "VM512")
+VMY512 = Op("M", T_v8u64, "vmy", "VM512")
+VMZ512 = Op("M", T_v8u64, "vmz", "VM512")
+VMD512 = Op("M", T_v8u64, "vmd", "VM512") # pass through
 
 class ImmOp(Op):
     def __init__(self, kind, ty, name, immType):
