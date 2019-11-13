@@ -300,8 +300,10 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 
   // See comment in "__tgt_rtl_init_device"
 #if 1
+  bool is_dyn = true;
+  if (DeviceInfo.ProcHandles[ID] == NULL){
   struct veo_proc_handle *proc_handle;
-  bool is_dyn = elf_is_dynamic(Image);
+  is_dyn = elf_is_dynamic(Image);
   // If we have a dynamically linked image, we create the process handle, then
   // the thread, and then load the image.
   // If we have a statically linked image, we need to create the process handle
@@ -319,20 +321,20 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
       return NULL;
     }
   }
+  DeviceInfo.ProcHandles[ID] = proc_handle;
+  }
 
-
-  struct veo_thr_ctxt *ctx = veo_context_open(proc_handle);
+  struct veo_thr_ctxt *ctx = veo_context_open(DeviceInfo.ProcHandles[ID]);
   if (!ctx) {
     // TODO: errno does not seem to be set by VEO
     DP("veo_context_open() failed: %s\n", std::strerror(errno));
     return NULL;
   }
 
-  DeviceInfo.ProcHandles[ID] = proc_handle;
   DeviceInfo.Contexts[ID] = ctx;
 
   DP("Aurora device successfully initialized: proc_handle=%p, ctx=%p\n",
-     proc_handle, ctx);
+     DeviceInfo.ProcHandles[ID] , ctx);
 #endif
 
   uint64_t LibHandle = 0UL;
@@ -375,9 +377,21 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
   uint64_t ret;
   uint64_t addr;
 
+  if (DeviceInfo.ProcHandles[ID] == NULL) {
+    struct veo_proc_handle *proc_handle;
+    proc_handle = veo_proc_create(ID);
+    if (!proc_handle) {
+      DP("veo_proc_create() failed for device %d\n", ID);
+      return NULL;
+    }
+    DeviceInfo.ProcHandles[ID] = proc_handle;
+    DP("Aurora device successfully initialized: proc_handle=%p", proc_handle);
+ }
+
+  DP("Store dev addr to: target addr=%p \n", &addr);
+  ret = veo_alloc_mem(DeviceInfo.ProcHandles[ID], &addr, Size);
   DP("Allocate target memory: device=%d, target addr=%p, size=%" PRIu64 "\n",
      ID, (void *)addr, Size);
-  ret = veo_alloc_mem(DeviceInfo.ProcHandles[ID], &addr, Size);
   if (ret != 0) {
     DP("veo_alloc_mem(%d, %p, %" PRIu64 ") failed with error code %" PRIu64
        "\n",
