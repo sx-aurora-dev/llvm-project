@@ -42,3 +42,15 @@ define x86_regcallcc void @storev256i64com(<256 x i64>) {
   store <256 x i64> %0, <256 x i64>* @v256i64, align 16
   ret void
 }
+
+; Function Attrs: norecurse nounwind readonly
+define x86_regcallcc void @storev256f64(<256 x double>* nocapture, <256 x double>) {
+; CHECK-LABEL: storev256f64:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  lea %s34, 256
+; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  vst %v0,8,%s0
+; CHECK-NEXT:  or %s11, 0, %s9
+  store <256 x double> %1, <256 x double>* %0, align 16
+  ret void
+}
