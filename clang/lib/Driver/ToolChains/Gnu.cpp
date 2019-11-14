@@ -304,6 +304,8 @@ static const char *getLDMOption(const llvm::Triple &T, const ArgList &Args) {
     if (T.getEnvironment() == llvm::Triple::GNUX32)
       return "elf32_x86_64";
     return "elf_x86_64";
+  case llvm::Triple::ve:
+    return "elf64ve";
   default:
     return nullptr;
   }
@@ -355,6 +357,8 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   const llvm::Triple::ArchType Arch = ToolChain.getArch();
   const bool isAndroid = ToolChain.getTriple().isAndroid();
   const bool IsIAMCU = ToolChain.getTriple().isOSIAMCU();
+  const bool IsVE = ToolChain.getTriple().isVE();
+  const bool IsMusl = ToolChain.getTriple().isMusl();
   const bool IsPIE = getPIE(Args, ToolChain);
   const bool IsStaticPIE = getStaticPIE(Args, ToolChain);
   const bool IsStatic = getStatic(Args);
@@ -475,6 +479,11 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crti.o")));
     }
 
+    if (IsVE) {
+      CmdArgs.push_back("-z");
+      CmdArgs.push_back("max-page-size=0x4000000");
+    }
+
     if (IsIAMCU)
       CmdArgs.push_back(Args.MakeArgString(ToolChain.GetFilePath("crt0.o")));
     else if (HasCRTBeginEndFiles) {
@@ -570,7 +579,7 @@ void tools::gnutools::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
       AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
 
-      if (WantPthread && !isAndroid)
+      if (WantPthread && !isAndroid && !(IsVE && IsMusl))
         CmdArgs.push_back("-lpthread");
 
       if (Args.hasArg(options::OPT_fsplit_stack))
@@ -646,6 +655,7 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
   llvm::Reloc::Model RelocationModel;
   unsigned PICLevel;
   bool IsPIE;
+  const char *DefaultAssembler = "as";
   std::tie(RelocationModel, PICLevel, IsPIE) =
       ParsePICArgs(getToolChain(), Args);
 
@@ -866,6 +876,8 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
     CmdArgs.push_back(Args.MakeArgString("-march=" + CPUName));
     break;
   }
+  case llvm::Triple::ve:
+    DefaultAssembler = "nas";
   }
 
   for (const Arg *A : Args.filtered(options::OPT_ffile_prefix_map_EQ,
@@ -890,7 +902,8 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
   for (const auto &II : Inputs)
     CmdArgs.push_back(II.getFilename());
 
-  const char *Exec = Args.MakeArgString(getToolChain().GetProgramPath("as"));
+  const char *Exec =
+      Args.MakeArgString(getToolChain().GetProgramPath(DefaultAssembler));
   C.addCommand(std::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
 
   // Handle the debug info splitting at object creation time if we're

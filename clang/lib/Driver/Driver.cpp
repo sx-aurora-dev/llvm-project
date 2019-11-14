@@ -45,6 +45,7 @@
 #include "ToolChains/TCE.h"
 #include "ToolChains/WebAssembly.h"
 #include "ToolChains/XCore.h"
+#include "ToolChains/VE.h"
 #include "clang/Basic/Version.h"
 #include "clang/Config/config.h"
 #include "clang/Driver/Action.h"
@@ -4824,17 +4825,19 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
     case llvm::Triple::Linux:
     case llvm::Triple::ELFIAMCU:
       if (Target.getArch() == llvm::Triple::hexagon)
-        TC = std::make_unique<toolchains::HexagonToolChain>(*this, Target,
-                                                             Args);
+        TC =
+            std::make_unique<toolchains::HexagonToolChain>(*this, Target, Args);
+      else if (Target.getArch() == llvm::Triple::ve)
+        TC = std::make_unique<toolchains::VEToolChain>(*this, Target, Args);
       else if ((Target.getVendor() == llvm::Triple::MipsTechnologies) &&
                !Target.hasEnvironment())
         TC = std::make_unique<toolchains::MipsLLVMToolChain>(*this, Target,
-                                                              Args);
+                                                             Args);
       else if (Target.getArch() == llvm::Triple::ppc ||
                Target.getArch() == llvm::Triple::ppc64 ||
                Target.getArch() == llvm::Triple::ppc64le)
         TC = std::make_unique<toolchains::PPCLinuxToolChain>(*this, Target,
-                                                              Args);
+                                                             Args);
       else
         TC = std::make_unique<toolchains::Linux>(*this, Target, Args);
       break;
@@ -4924,6 +4927,9 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       case llvm::Triple::riscv32:
       case llvm::Triple::riscv64:
         TC = std::make_unique<toolchains::RISCVToolChain>(*this, Target, Args);
+        break;
+      case llvm::Triple::ve:
+        TC = std::make_unique<toolchains::VEToolChain>(*this, Target, Args);
         break;
       default:
         if (Target.getVendor() == llvm::Triple::Myriad)
