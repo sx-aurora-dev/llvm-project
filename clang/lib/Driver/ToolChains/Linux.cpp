@@ -518,6 +518,7 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
 
   if (Triple.isMusl()) {
     std::string ArchName;
+    std::string Path = "/lib/";
     bool IsArm = false;
 
     switch (Arch) {
@@ -531,6 +532,10 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
       ArchName = "armeb";
       IsArm = true;
       break;
+    case llvm::Triple::ve:
+      Path = "/opt/nec/ve/musl/lib/";
+      ArchName = "ve";
+      break;
     default:
       ArchName = Triple.getArchName().str();
     }
@@ -539,7 +544,7 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
          tools::arm::getARMFloatABI(*this, Args) == tools::arm::FloatABI::Hard))
       ArchName += "hf";
 
-    return "/lib/ld-musl-" + ArchName + ".so.1";
+    return Path + "ld-musl-" + ArchName + ".so.1";
   }
 
   std::string LibDir;
@@ -638,6 +643,9 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
     Loader = X32 ? "ld-linux-x32.so.2" : "ld-linux-x86-64.so.2";
     break;
   }
+  case llvm::Triple::ve:
+    return "/opt/nec/ve/lib/ld-linux-ve.so.1";
+    break;
   }
 
   if (Distro == Distro::Exherbo &&
