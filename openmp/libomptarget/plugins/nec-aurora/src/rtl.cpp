@@ -136,12 +136,6 @@ public:
   }
 
   ~RTLDeviceInfoTy() {
-    for (auto &hdl : ProcHandles) {
-      if (hdl != NULL) {
-        veo_proc_destroy(hdl);
-      }
-    }
-
     for (auto &ctx : Contexts) {
       if (ctx != NULL) {
         if (veo_context_close(ctx) != 0) {
@@ -149,6 +143,12 @@ public:
         }
       }
     }
+
+    /*for (auto &hdl : ProcHandles) {
+      if (hdl != NULL) {
+        veo_proc_destroy(hdl);
+      }
+    }*/
 
     for (auto &lib : DynLibs) {
       if (lib.FileName) {
