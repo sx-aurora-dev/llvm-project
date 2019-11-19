@@ -1671,3 +1671,10 @@ case VE::vsclncot_vvIZml: return 5;
 case VE::pcvm_sml: return 2;
 case VE::lzvm_sml: return 2;
 case VE::tovm_sml: return 2;
+// custom
+case VE::vfmkl_mvIml: return 4;
+case VE::vfmkl_mvIl: return 3;
+case VE::vfmkw_mvIml: return 4;
+case VE::vfmkw_mvIl: return 3;
+// case VE::vfmkd_mvIml: return 3;
+// case VE::vfmks_mvIml: return 3;

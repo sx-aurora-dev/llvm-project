@@ -114,7 +114,7 @@ foreach I = 0-15 in
   def VM#I : VM<I, "VM"#I>, DwarfRegNum<[!add(128,I)]>;
 
 // Aliases of VMs to use as a pair of two VM for packed instructions
-def VMP0 : VMp<0, "VM0", []>;
+def VMP0 : VEReg<0, "VM0">;
 def VMP1 : VMp<2, "VM2", [VM2, VM3]>;
 def VMP2 : VMp<4, "VM4", [VM4, VM5]>;
 def VMP3 : VMp<6, "VM6", [VM6, VM7]>;

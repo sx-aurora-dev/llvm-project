@@ -20,6 +20,9 @@
 #include "VETargetMachine.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/PredicatedInst.h"
+#include "llvm/IR/Type.h"
 
 namespace llvm {
 
@@ -60,6 +63,52 @@ public:
   };
   bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
     return false;
+  }
+
+  /// LLVM-VP Support
+  /// {
+
+  /// \returns True if the vector length parameter should be folded into the
+  /// vector mask.
+  bool
+  shouldFoldVectorLengthIntoMask(const PredicatedInstruction &PredInst) const {
+    return false; // FIXME (return true for masking operations)
+  }
+
+  /// \returns False if this VP op should be replaced by a non-VP op or an
+  /// unpredicated op plus a select.
+  bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
+    switch (PredInst.getOpcode()) {
+    default:
+      break;
+
+    // Non-opcode VP ops
+    case Instruction::Call:
+      // vp mask operations unsupported
+      if (PredInst.isVectorReduction())
+        return !PredInst.getType()->isIntOrIntVectorTy(1);
+      break;
+
+    // vp mask operations unsupported
+    case Instruction::And:
+    case Instruction::Or:
+    case Instruction::Xor:
+      auto ITy = PredInst.getType();
+      if (!ITy->isVectorTy())
+        break;
+      if (!ITy->isIntOrIntVectorTy(1))
+        break;
+      return false;
+    }
+
+    // be optimistic by default
+    return true;
+  }
+
+  /// }
+
+  bool shouldExpandReduction(const IntrinsicInst *II) const {
+    return false; // never expand reductions
   }
 };
 

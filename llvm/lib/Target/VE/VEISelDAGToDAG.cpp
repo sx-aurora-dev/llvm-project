@@ -133,6 +133,36 @@ void VEDAGToDAGISel::Select(SDNode *N) {
   case VEISD::GLOBAL_BASE_REG:
     ReplaceNode(N, getGlobalBaseReg());
     return;
+
+  // Custom lowering code for constant-zero regs
+  case VEISD::VEC_BROADCAST:
+    MVT SplatResTy = N->getSimpleValueType(0);
+    if (SplatResTy.getVectorElementType() != MVT::i1)
+      break;
+
+    // broadcasting true?
+    auto BConst = dyn_cast<ConstantSDNode>(N->getOperand(0));
+    if (!BConst)
+      break;
+    bool BCTrueMask = (BConst->getSExtValue() != 0);
+
+    // Decode the register
+    SDValue New;
+    if (SplatResTy.getVectorNumElements() == 256) {
+      New = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VE::VM0,
+                                   MVT::v256i1);
+    } else if (SplatResTy.getVectorNumElements() == 512) {
+      New = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VE::VMP0,
+                                   MVT::v512i1);
+    } else
+      break;
+
+    // do we need to negate the node?
+    if (!BCTrueMask)
+      New = CurDAG->getNOT(SDLoc(N), New, New->getSimpleValueType(0));
+
+    ReplaceNode(N, New.getNode());
+    return;
   }
 
   SelectCode(N);

@@ -24,11 +24,28 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
+// Custom ISDs
+// VEISD::VEC_SEQ - represents a vector sequence where the operand is the stride
+// VEISD::VEC_BROADCAST - represents a vector splat of a scalar value into all vector lanes.
+
+def vec_vmv         : SDNode<"VEISD::VEC_VMV",       SDTypeProfile<1, 4, [SDTCisSameAs<0, 1>, SDTCisVec<0>, SDTCisVec<3>, SDTCisSameNumEltsAs<3,1>, SDTCisInt<4>]>>;
+def vec_seq         : SDNode<"VEISD::VEC_SEQ",       SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
+def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 1, [SDTCisVec<0>]>>;
+def vec_popcount    : SDNode<"VEISD::VEC_POPCOUNT",  SDTypeProfile<1, 2,  [SDTCisInt<0>, SDTCisVec<1>, SDTCisInt<2>]>>;
+def register        : SDNode<"ISD::Register",        SDTypeProfile<1, 0,  []>, [], "RegisterSDNode">;
+
+// whether the avl is ineffective
+def no_avl_256    : PatLeaf<(imm), [{ return (N->getSExtValue() < 0) || (N->getSExtValue() >= 256); }]>;
+
+// whether the mask is all true
+def true_mask     : PatLeaf<(register), [{ return (N->getReg() == VE::VM0) || (N->getReg() == VE::VMP0); }]>;
+
 def simm7       : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def uimm6       : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
 def uimm7       : PatLeaf<(imm), [{ return isUInt<7>(N->getZExtValue()); }]>;
+def true        : PatLeaf<(imm), [{ return N->getSExtValue() !=0 ; }]>;
 def zero        : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
                                       == 0; }]>;
@@ -1441,6 +1458,11 @@ def : Pat<(i64 simm7:$val), (ORim1 imm:$val, 0)>;
 def : Pat<(i32 simm32:$val), (LEA32zzi imm:$val)>;
 def : Pat<(i64 simm32:$val), (LEAzzi imm:$val)>;
 def : Pat<(i64 uimm32:$val), (ANDrm0 (LEAzzi imm:$val), 32)>;
+
+// reg-ify immediates
+def lea_imm32 : OutPatFrag<(ops node:$val), (LEA32zzi $val)>;
+
+
 // Arbitrary immediates.
 def : Pat<(i64 lozero:$val),
           (LEASLzzi (HI32 imm:$val))>;
@@ -2060,3 +2082,42 @@ include "VEInstrPatternsVec.td"
 
 // vevlintrin
 include "VEInstrIntrinsicVL.td"
+
+// TODO multiclass
+// with mask
+def vfmkl_mvIml : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
+       "vfmk.l.${cf} $vmx,$vz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+def vfmkw_mvIml : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
+       "vfmk.w.${cf} $vmx,$vz,$vm", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// w/o m
+def vfmkl_mvIl : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "vfmk.l.${cf} $vmx,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+def vfmkw_mvIl : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "vfmk.w.${cf} $vmx,$vz", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+
+// VP intrinsics (llvm.vp.*)
+include "VEVPIntrinsic.td"

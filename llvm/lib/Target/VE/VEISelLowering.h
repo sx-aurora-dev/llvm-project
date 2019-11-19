@@ -66,11 +66,16 @@ enum NodeType : unsigned {
                  // 0: the broadcast register)
   VEC_SEQ,       // sequence vector match (Operand 0: the constant stride)
 
-  VEC_VMV,
+  VEC_VMV,       // custom lowering for vp_vshift
+
+  //// Horizontal operations
+  VEC_REDUCE_ANY,
+  VEC_POPCOUNT,
 
   /// Scatter and gather instructions.
-  VEC_GATHER,
-  VEC_SCATTER,
+  VEC_MSTORE,  // (value, ptr, mask)
+  VEC_GATHER,  // (ptrVec, mask),
+  VEC_SCATTER, // (value, ptrVec, mask)
 
   VEC_LVL,
 
@@ -104,6 +109,7 @@ public:
     return MVT::i32;
   }
 
+  // inline asm
   ConstraintType getConstraintType(StringRef Constraint) const override;
   ConstraintWeight
   getSingleConstraintMatchWeight(AsmOperandInfo &info,
@@ -122,6 +128,7 @@ public:
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                StringRef Constraint, MVT VT) const override;
 
+  // scalar ops
   bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
 
   Register getRegisterByName(const char *RegName, LLT VT,
@@ -145,7 +152,6 @@ public:
                                   const SmallVectorImpl<ISD::InputArg> &Ins,
                                   const SDLoc &dl, SelectionDAG &DAG,
                                   SmallVectorImpl<SDValue> &InVals) const;
-
   SDValue LowerCall(TargetLowering::CallLoweringInfo &CLI,
                     SmallVectorImpl<SDValue> &InVals) const override;
 
@@ -174,23 +180,36 @@ public:
   SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
 
+  // SjLj
+  SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
+
+  // Custom Operations
+  SDValue CreateBroadcast(SDLoc dl, MVT ResTy, SDValue S, SelectionDAG &DAG) const;
+
+  // Vector Operations
   SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBitcast(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerMLOAD(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+
+  SDValue LowerVECREDUCE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSETCC(llvm::SDValue, llvm::SelectionDAG &) const;
+  SDValue LowerSELECT_CC(llvm::SDValue, llvm::SelectionDAG &) const;
+  SDValue LowerVSELECT(llvm::SDValue, llvm::SelectionDAG &) const;
+  SDValue LowerTRUNCATE(llvm::SDValue, llvm::SelectionDAG &) const;
+
+  SDValue LowerVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
   // Should we expand the build vector with shuffles?
   bool
   shouldExpandBuildVectorWithShuffles(EVT VT,
                                       unsigned DefinedValues) const override;
 
-  SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
-
-  SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
-
+  // Other
   SDValue LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
@@ -200,6 +219,7 @@ public:
   SDValue LowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
 
   bool isFPImmLegal(const APFloat &Imm, EVT VT,
@@ -260,6 +280,9 @@ public:
                                   EVT VT) const override {
     return VT.isVector();
   }
+
+  /// Return the preferred vector type legalization action.
+  LegalizeTypeAction getPreferredVectorAction(MVT VT) const override;
 };
 } // namespace llvm
 
