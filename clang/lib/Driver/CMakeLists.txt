@@ -31,6 +31,7 @@ add_clang_library(clangDriver
   ToolChains/Arch/Sparc.cpp
   ToolChains/Arch/SystemZ.cpp
   ToolChains/Arch/X86.cpp
+  ToolChains/Arch/VE.cpp
   ToolChains/AIX.cpp
   ToolChains/Ananas.cpp
   ToolChains/AMDGPU.cpp
@@ -70,6 +71,7 @@ add_clang_library(clangDriver
   ToolChains/XCore.cpp
   ToolChains/PPCLinux.cpp
   ToolChains/InterfaceStubs.cpp
+  ToolChains/VE.cpp
   Types.cpp
   XRayArgs.cpp
 
