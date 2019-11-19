@@ -88,21 +88,177 @@ VETargetLowering::LowerBitcast(SDValue Op, SelectionDAG &DAG) const {
 }
 
 SDValue
+VETargetLowering::LowerTRUNCATE(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Simpliying vector TRUNCATE\n");
+
+  // eliminate redundant truncates of "i1"
+  MVT Ty = Op.getSimpleValueType();
+  if (!Ty.isVector()) return Op;
+
+  // truncate $vr to i1  ---> $vr
+  MVT OpTy = Op.getOperand(0).getSimpleValueType();
+  if (OpTy.getVectorElementType() != MVT::i1) return Op;
+  return Op;
+}
+
+SDValue
+VETargetLowering::LowerVSELECT(SDValue Op, SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  LLVM_DEBUG(dbgs() << "Lowering VSELECT\n");
+
+  // only lower mask blends this way
+  MVT Ty = Op.getSimpleValueType();
+  if (!Ty.isVector()) return Op;
+  if (Ty.getVectorElementType() != MVT::i1) return Op;
+
+  SDValue Mask = Op.getOperand(0);
+  SDValue A = Op.getOperand(1);
+  SDValue B = Op.getOperand(2);
+
+  auto MaskTy = Op.getSimpleValueType();
+
+  auto NotMask = DAG.getNode(ISD::XOR, dl, MaskTy, {Mask, DAG.getConstant(0, dl, MaskTy)});
+
+  auto Result =
+    DAG.getNode(ISD::OR, dl, MaskTy, {
+      DAG.getNode(ISD::AND, dl, MaskTy, {NotMask, B}),
+      DAG.getNode(ISD::AND, dl, MaskTy, {Mask, A})
+    });
+
+  return Result;
+}
+
+SDValue
+VETargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  LLVM_DEBUG(dbgs() << "Lowering SELECT_CC\n");
+
+  // only lower mask blends this way
+  MVT Ty = Op.getSimpleValueType();
+  if (!Ty.isVector()) return Op;
+  if (Ty.getVectorElementType() != MVT::i1) return Op;
+
+  SDValue A = Op.getOperand(0);
+  SDValue B = Op.getOperand(1);
+  SDValue X = Op.getOperand(2);
+  SDValue Y = Op.getOperand(3);
+  SDValue CC = Op.getOperand(4);
+
+  assert(A.getSimpleValueType() == MVT::i64);
+  assert (X.getSimpleValueType() == MVT::v256i1);
+
+  MVT CastVecTy = MVT::v256i64; // FIXME vectorize scalar type for broadcast
+  MVT VecTy = Op.getSimpleValueType();
+
+  // lift to a vector compare
+  SDValue Abc = DAG.getNode(VEISD::VEC_BROADCAST, dl, CastVecTy, {A});
+  SDValue Bbc = DAG.getNode(VEISD::VEC_BROADCAST, dl, CastVecTy, {B});
+
+  auto VecCmp = DAG.getNode(ISD::SETCC, dl, MVT::v256i1, {Abc, Bbc, CC});
+  return DAG.getSelect(dl, VecTy, VecCmp, X, Y);
+}
+
+
+SDValue
+VETargetLowering::LowerVectorArithmetic(SDValue Op, SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+  LLVM_DEBUG(dbgs() << "Lowering Vector Arithmetic\n");
+
+  // this only applies to vector yielding operations that are not v256i1
+  MVT Ty = Op.getSimpleValueType();
+  if (!Ty.isVector()) return Op;
+  if (Ty.getVectorElementType() == MVT::i1) return Op;
+
+
+  // only create an integer expansion if requested to do so
+  std::vector<SDValue> FixedOperandList;
+  bool NeededExpansion = false;
+
+  for (size_t i = 0; i < Op->getNumOperands(); ++i) {
+    // check whether this is an v256i1 SETCC
+    auto Operand = Op->getOperand(i);
+    if ((Operand->getOpcode() != ISD::SETCC) ||
+        (Operand.getSimpleValueType() != MVT::v256i1)) {
+      FixedOperandList.push_back(Operand);
+      continue;
+    }
+
+    MVT ElemTy = Ty.getScalarType();
+
+    // errs() << "Needs expansion: "; Operand.dump(); errs() << " for user: "; Op.dump();
+
+    // materialize an integer expansion
+    // vselect (MaskReplacement, VEC_BROADCAST(1), VEC_BROADCAST(0))
+    auto ConstZero = DAG.getConstant(0, dl, ElemTy);
+    auto ZeroBroadcast = DAG.getNode(VEISD::VEC_BROADCAST, dl, Ty, ConstZero);
+
+    auto ConstOne = DAG.getConstant(1, dl, ElemTy);
+    auto OneBroadcast = DAG.getNode(VEISD::VEC_BROADCAST, dl, Ty, ConstOne);
+
+    auto Expanded = DAG.getSelect(dl, Ty, Operand, OneBroadcast, ZeroBroadcast);
+    FixedOperandList.push_back(Expanded);
+    NeededExpansion = true;
+  }
+
+  if (!NeededExpansion) return Op;
+
+  // re-materialize the operator
+  return DAG.getNode(Op.getOpcode(), dl, Op.getSimpleValueType(), FixedOperandList);
+}
+
+SDValue
+VETargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
+  SDLoc dl(Op);
+
+  // re-adjust vector SETCCs to a v256i1 type
+  MVT Ty = Op.getSimpleValueType();
+  if (!Ty.isVector()) return Op;
+
+  if (Ty.getVectorElementType() == MVT::i1) return Op;
+
+  LLVM_DEBUG(dbgs() << "Translating vector SETCC to vector mask register\n");
+
+  // this may cause incosistencies in users that needed SETCC to have a v256i64 type
+  // we fix those up again in ::LowerVectorArithmetic by selecting based on the SETCC result.
+  return DAG.getNode(ISD::SETCC, dl, MVT::v256i1, Op.getOperand(0), Op.getOperand(1), Op.getOperand(2));
+}
+
+SDValue
 VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering gather or scatter\n");
   SDLoc dl(Op);
   //dbgs() << "\nNext Instr:\n";
   //Op.dumpr(&DAG);
 
-  MaskedGatherScatterSDNode *N = cast<MaskedGatherScatterSDNode>(Op.getNode());
+  // FIXME translate MGATHER / MSCATTER to VP_GATHER / VP_SCATTER
 
-  SDValue Index = N->getIndex();
-  SDValue BasePtr = N->getBasePtr();
-  SDValue Mask = N->getMask();
-  SDValue Chain = N->getChain();
-
+  SDValue Index;
+  SDValue BasePtr;
+  SDValue Mask;
+  SDValue Chain;
+  SDValue Scale;
   SDValue PassThru;
   SDValue Source;
+
+  if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::MSCATTER) {
+    MaskedGatherScatterSDNode *N = cast<MaskedGatherScatterSDNode>(Op.getNode());
+
+    Index = N->getIndex();
+    BasePtr = N->getBasePtr();
+    Mask = N->getMask();
+    Chain = N->getChain();
+    Scale = N->getScale();
+  // } else if (Op.getOpcode() == ISD::VP_GATHER || Op.getOpcode() == ISD::VP_SCATTER) {
+  //   VPGatherScatterSDNode *N = cast<VPGatherScatterSDNode>(Op.getNode());
+
+  //   Index = N->getIndex();
+  //   BasePtr = N->getBasePtr();
+  //   Mask = N->getMask();
+  //   Chain = N->getChain();
+  //   Scale = N->getScale();
+  } else {
+    llvm_unreachable("Unexpected SDNode in lowering function");
+  }
 
   if (Op.getOpcode() == ISD::MGATHER) {
     MaskedGatherSDNode *N = cast<MaskedGatherSDNode>(Op.getNode());
@@ -110,52 +266,49 @@ VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const {
   } else if (Op.getOpcode() == ISD::MSCATTER) {
     MaskedScatterSDNode *N = cast<MaskedScatterSDNode>(Op.getNode());
     Source = N->getValue();
-  } else {
-    return SDValue();
+  } else if (Op.getOpcode() == ISD::VP_GATHER) {
+    VPGatherSDNode *N = cast<VPGatherSDNode>(Op.getNode());
+    PassThru = DAG.getUNDEF(Op.getValueType());
+  } else if (Op.getOpcode() == ISD::VP_SCATTER) {
+    VPScatterSDNode *N = cast<VPScatterSDNode>(Op.getNode());
+    Source = N->getValue();
   }
 
   MVT IndexVT = Index.getSimpleValueType();
-  //MVT MaskVT = Mask.getSimpleValueType();
-  //MVT BasePtrVT = BasePtr.getSimpleValueType();
 
-  // vindex = vindex + baseptr;
-  SDValue BaseBroadcast = DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, BasePtr);
-  SDValue ScaleBroadcast = DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, N->getScale());
-
-  SDValue index_addr = DAG.getNode(ISD::MUL, dl, IndexVT, {Index, ScaleBroadcast});
-
-  SDValue addresses = DAG.getNode(ISD::ADD, dl, IndexVT, {BaseBroadcast, index_addr});
-
-  // TODO: vmx = svm (mask);
-  //Mask.dumpr(&DAG);
-  if (Mask.getOpcode() != ISD::BUILD_VECTOR || Mask.getNumOperands() != 256) {
-    LLVM_DEBUG(dbgs() << "Cannot handle gathers with complex masks.\n");
-    return SDValue();
-  }
-  for (unsigned i = 0; i < 256; i++) {
-    const SDValue Operand = Mask.getOperand(i);
-    if (Operand.getOpcode() != ISD::Constant) {
-      LLVM_DEBUG(dbgs() << "Cannot handle gather masks with complex elements.\n");
-      return SDValue();
-    }
-    if (Mask.getConstantOperandVal(i) != 1) {
-      LLVM_DEBUG(dbgs() << "Cannot handle gather masks with elements != 1.\n");
-      return SDValue();
-    }
+  // apply scale
+  SDValue ScaledIndex;
+  if (isOneConstant(Scale)) {
+    ScaledIndex = Index;
+  } else {
+    SDValue ScaleBroadcast = DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, Scale);
+    ScaledIndex = DAG.getNode(ISD::MUL, dl, IndexVT, {Index, ScaleBroadcast});
   }
 
-  if (Op.getOpcode() == ISD::MGATHER) {
+  // add basePtr
+  SDValue addresses;
+  if (isNullConstant(BasePtr)) {
+    addresses = ScaledIndex;
+  } else {
+    // re-constitute pointer vector (basePtr + index * scale)
+    SDValue BaseBroadcast = DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, BasePtr);
+    addresses = DAG.getNode(ISD::ADD, dl, IndexVT, {BaseBroadcast, ScaledIndex});
+  }
+
+  if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::VP_GATHER) {
     // vt = vgt (vindex, vmx, cs=0, sx=0, sy=0, sw=0);
-    SDValue load = DAG.getNode(VEISD::VEC_GATHER, dl, Op.getNode()->getVTList(), {Chain, addresses});
+    SDValue load = DAG.getNode(VEISD::VEC_GATHER, dl, Op.getNode()->getVTList(), {Chain, addresses, Mask});
     //load.dumpr(&DAG);
 
-    // TODO: merge (vt, default, vmx);
-    //PassThru.dumpr(&DAG);
-    // We can safely ignore PassThru right now, the mask is guaranteed to be constant 1s.
+    if (PassThru.isUndef()) {
+      return load;
+    }
 
-    return load;
+    // re-introduce passthru as a select
+    return DAG.getSelect(dl, Op.getSimpleValueType(), Mask, load, PassThru);
+
   } else {
-    SDValue store = DAG.getNode(VEISD::VEC_SCATTER, dl, Op.getNode()->getVTList(), {Chain, Source, addresses});
+    SDValue store = DAG.getNode(VEISD::VEC_SCATTER, dl, Op.getNode()->getVTList(), {Chain, Source, addresses, Mask});
     //store.dumpr(&DAG);
     return store;
   }
@@ -167,6 +320,9 @@ VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(Op.dumpr(&DAG));
   SDLoc dl(Op);
 
+  //abort(); // TODO implement properly!
+  errs() << "VE WARNING! Using gather for masked load!\n";
+
   MaskedLoadSDNode *N = cast<MaskedLoadSDNode>(Op.getNode());
 
   SDValue BasePtr = N->getBasePtr();
@@ -174,50 +330,56 @@ VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
   SDValue Chain = N->getChain();
   SDValue PassThru = N->getPassThru();
 
-  MachinePointerInfo info = N->getPointerInfo();
+  auto CastPtr = DAG.getNode(VEISD::VEC_BROADCAST, dl, MVT::v256i64, BasePtr);
+  auto ConstStride = DAG.getConstant(8, dl, MVT::i64);
+  auto Offsets = DAG.getNode(VEISD::VEC_SEQ, dl, MVT::v256i64, ConstStride);
+  auto PtrVec = DAG.getNode(ISD::ADD, dl, MVT::v256i64, {CastPtr, Offsets});
 
-  if (Mask.getOpcode() != ISD::BUILD_VECTOR || Mask.getNumOperands() != 256) {
-    LLVM_DEBUG(dbgs() << "Cannot handle gathers with complex masks.\n");
-    return SDValue();
+  auto load = DAG.getNode(VEISD::VEC_GATHER, dl, Op.getNode()->getVTList(), {Chain, PtrVec, Mask});
+
+  if (PassThru.isUndef()) {
+    return load;
+  } else {
+    // re-introduce passthru as a select
+    return DAG.getSelect(dl, Op.getSimpleValueType(), Mask, load, PassThru);
+  }
+}
+
+SDValue
+VETargetLowering::LowerBroadcast(SDValue Chain, SelectionDAG & DAG) const {
+  SDLoc dl(Chain);
+
+  // only use custom lowering for masks
+  auto chainTy = Chain.getSimpleValueType();
+  if (chainTy != MVT::v256i1 && chainTy != MVT::v512i1) return Chain; // TODO implement this for v512i1 (simply using VMP0)
+  if (Chain.getOpcode() != VEISD::VEC_BROADCAST) return Chain;
+
+  // generate VM from VRegs if the mask bit is non-constant
+  auto bcConst = dyn_cast<ConstantSDNode>(Chain.getOperand(0));
+  if (!bcConst) {
+    auto boolTy = Chain.getOperand(0).getSimpleValueType();
+    assert(boolTy == MVT::i32);
+
+    // cast to i64
+    SDValue asDoubleElem = DAG.getSExtOrTrunc(Chain.getOperand(0), dl, MVT::i64);
+
+    // broadcast to vector
+    SDValue dataVec = DAG.getNode(VEISD::VEC_BROADCAST, dl, MVT::v256i64, {asDoubleElem});
+    SDValue zeroVec = DAG.getNode(VEISD::VEC_BROADCAST, dl, MVT::v256i64, {DAG.getConstant(0, dl, MVT::i64)});
+
+    // broadcast(Data) != broadcast(0)
+    return DAG.getSetCC(dl, MVT::v256i1, dataVec, zeroVec, ISD::CondCode::SETNE);
   }
 
-  int firstzero = 256;
+  // use the hard-wired vm0/vmp0 registers
+  unsigned TrueRegClass = chainTy == MVT::v256i1 ? VE::VM0 : VE::VMP0;
+  SDValue TrueMaskReg = DAG.getCopyFromReg(DAG.getEntryNode(),
+                                           dl, TrueRegClass, chainTy);
 
-  for (unsigned i = 0; i < 256; i++) {
-    const SDValue Operand = Mask.getOperand(i);
-    if (Operand.getOpcode() != ISD::Constant) {
-      LLVM_DEBUG(dbgs() << "Cannot handle load masks with complex elements.\n");
-      return SDValue();
-    }
-    if (Mask.getConstantOperandVal(i) != 1) {
-      if (firstzero == 256)
-        firstzero = i;
-      if (!PassThru.isUndef() && !PassThru.getOperand(i).isUndef()) {
-        LLVM_DEBUG(dbgs() << "Cannot handle passthru.\n");
-        return SDValue();
-      }
-    } else {
-      if (firstzero != 256) {
-        LLVM_DEBUG(dbgs() << "Cannot handle mixed load masks.\n");
-        return SDValue();
-      }
-    }
-  }
+  bool genTrueMask = (bool) bcConst->getSExtValue();
 
-  EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
-
-  // FIXME: LVL instruction has output VL now, need to update VEC_LVL too.
-  Chain = DAG.getNode(VEISD::VEC_LVL, dl, MVT::Other, {Chain, DAG.getConstant(firstzero, dl, i32)});
-
-  SDValue load = DAG.getLoad(Op.getSimpleValueType(), dl, Chain, BasePtr, info);
-
-  // FIXME: LVL instruction has output VL now, need to update VEC_LVL too.
-  Chain = DAG.getNode(VEISD::VEC_LVL, dl, MVT::Other, {load.getValue(1), DAG.getConstant(256, dl, i32)});
-
-  SDValue merge = DAG.getMergeValues({load, Chain}, dl);
-  LLVM_DEBUG(dbgs() << "Becomes\n");
-  LLVM_DEBUG(merge.dumpr(&DAG));
-  return merge;
+  if (genTrueMask) return TrueMaskReg;
+  return DAG.getNOT(dl, {TrueMaskReg}, chainTy);
 }
 
 static bool isBroadCastOrS2V(BuildVectorSDNode *BVN,
@@ -247,7 +409,7 @@ static bool isBroadCastOrS2V(BuildVectorSDNode *BVN,
       if (S2V)
         return true;
   }
-  // Check boradcast
+  // Check broadcast
   for (unsigned i = FirstDef + 1; i < BVN->getNumOperands(); ++i) {
     if (BVN->getOperand(FirstDef) != BVN->getOperand(i) &&
         !BVN->getOperand(i).isUndef()) {
@@ -450,6 +612,78 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
     );
   }
   return newVector;
+}
+
+static SDValue PeekThroughCasts(SDValue Op) {
+  switch (Op.getOpcode()) {
+    default:
+      return Op;
+
+    case ISD::ZERO_EXTEND:
+    case ISD::SIGN_EXTEND:
+    case ISD::TRUNCATE:
+      return PeekThroughCasts(Op.getOperand(0));
+  }
+}
+
+SDValue
+VETargetLowering::LowerVECREDUCE(SDValue Op, SelectionDAG &DAG) const {
+  ////  def : Pat<(vecreduce_add v256i1:$vy), (PCVM v256i1:$vy,
+  ////                     (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+  ////
+  ////  // "any" mask test // TODO do we need to set sign bit proper?
+  ////  def : Pat<(vecreduce_or v256i1:$vy), (vecreduce_add v256i1:$vy))>;
+
+  SDLoc dl(Op);
+
+  auto AVL = DAG.getConstant(256, dl, MVT::i64);
+
+  SDValue Result;
+  switch (Op->getOpcode()) {
+    default:
+      llvm_unreachable("TODO implement!");
+
+    // case ISD::VECREDUCE_ADD: // "popcnt" case
+
+    case ISD::VECREDUCE_OR: // reduce "any" case to PopCnt(V) != 0
+    {
+      assert(Op.getOperand(0).getSimpleValueType() == MVT::v256i1);
+      SDValue popCount = DAG.getNode(VEISD::VEC_POPCOUNT, dl, MVT::i64, {Op.getOperand(0), AVL});
+      Result = DAG.getSetCC(dl, MVT::i32, popCount, DAG.getConstant(0, dl, MVT::i64),
+                     ISD::CondCode::SETNE);
+
+      break;
+    }
+
+    case ISD::VECREDUCE_ADD: // reduce "add" case to popcount
+    {
+      auto VecOp = PeekThroughCasts(Op->getOperand(0));
+
+      if (VecOp.getSimpleValueType() != MVT::v256i1)
+          return Op;
+
+      Result = DAG.getNode(VEISD::VEC_POPCOUNT, dl, MVT::i64, {VecOp, AVL});
+      break;
+    }
+  }
+
+  // cast type as required
+  auto resTy = Op.getSimpleValueType();
+  if (Result.getSimpleValueType() != resTy) {
+    assert(resTy == MVT::i32);
+
+    // SDValue SubReg32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
+
+    // extract subreg as required
+    SDValue Lo32 = DAG.getTargetExtractSubreg(VE::sub_i32,
+                                      dl,
+                                      MVT::i32,
+                                      Result);
+    return Lo32;
+
+  }
+
+  return Result;
 }
 
 SDValue
@@ -1354,6 +1588,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::STORE, MVT::f128, Custom);
 
   for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::SELECT_CC,    VT, Custom);
     if (VT.getVectorElementType() == MVT::i1 ||
         VT.getVectorElementType() == MVT::i8 ||
         VT.getVectorElementType() == MVT::i16) {
@@ -1383,6 +1618,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
       // STORE for vXi1 needs to be custom lowered to expand multiple
       // instructions.
+
+      /// Vector mask operations
       if (VT.getVectorElementType() == MVT::i1)
         setOperationAction(ISD::STORE, VT, Custom);
 
@@ -1420,7 +1657,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       // VE doesn't have instructions for fp<->uint, so expand them by llvm
       setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
       setOperationAction(ISD::UINT_TO_FP, VT, Promote); // use i64
+
     } else {
+      /// fp/int vector operations
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);
       setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Custom);
       setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
@@ -1448,10 +1687,20 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::SDIV,  VT, Legal);
       setOperationAction(ISD::UDIV,  VT, Legal);
 
+      setOperationAction(ISD::MULHS,  VT, Expand);
+      setOperationAction(ISD::MULHU,  VT, Expand);
+
       setOperationAction(ISD::SHL,   VT, Legal);
+      setOperationAction(ISD::VP_SHL,   VT, Legal);
+      setOperationAction(ISD::SRL,   VT, Legal);
+      setOperationAction(ISD::VP_SRL,   VT, Legal);
+      setOperationAction(ISD::SRA,   VT, Legal);
+      setOperationAction(ISD::VP_SRA,   VT, Legal);
 
       setOperationAction(ISD::MSCATTER,   VT, Custom);
       setOperationAction(ISD::MGATHER,   VT, Custom);
+      setOperationAction(ISD::VP_SCATTER,   VT, Legal); // FIXME Expand for illegal types!
+      setOperationAction(ISD::VP_GATHER,   VT, Legal); // FIXME Expand for illegal types!
       setOperationAction(ISD::MLOAD, VT, Custom);
 
       // VE vector unit supports only setcc and vselect
@@ -1467,6 +1716,32 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       }
     }
   }
+
+// CUSTOM HANDLERS FOR VECTOR INSTRUCTIONS
+  // horizontal reductions
+  setOperationAction(ISD::VECREDUCE_ADD, MVT::i32, Custom);
+  setOperationAction(ISD::VECREDUCE_ADD, MVT::i64, Custom);
+
+  setOperationAction(ISD::VECREDUCE_OR, MVT::i32, Custom);
+  setOperationAction(ISD::VECREDUCE_OR, MVT::i64, Custom);
+
+  // re-write vector setcc to use a predicate mask
+  setOperationAction(ISD::SETCC,     MVT::v256i64, Custom);
+  setOperationAction(ISD::SETCC,     MVT::v256i32, Custom);
+
+  // truncate of X to i1 -> X
+  setOperationAction(ISD::TRUNCATE,     MVT::v256i32, Custom);
+  setOperationAction(ISD::VSELECT,      MVT::v256i1, Custom);
+
+  // repair the setcc as operand of arithmetic pattern
+  // TODO extend this list as necessary (possibly shifts)
+  setOperationAction(ISD::ADD,      MVT::v256i64, Custom);
+  setOperationAction(ISD::MUL,      MVT::v256i64, Custom);
+  setOperationAction(ISD::SUB,      MVT::v256i64, Custom);
+  setOperationAction(ISD::ADD,      MVT::v256i32, Custom);
+  setOperationAction(ISD::MUL,      MVT::v256i32, Custom);
+  setOperationAction(ISD::SUB,      MVT::v256i32, Custom);
+
 
   // VE has no packed MUL, SDIV, or UDIV operations.
   for (MVT VT : { MVT::v512i32, MVT::v512f32 }) {
@@ -1590,6 +1865,11 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   case VEISD::VEC_VMV:         return "VEISD::VEC_VMV";
   case VEISD::VEC_SCATTER:     return "VEISD::VEC_SCATTER";
   case VEISD::VEC_GATHER:      return "VEISD::VEC_GATHER";
+  case VEISD::VEC_MSTORE:      return "VEISD::VEC_MSTORE";
+
+  case VEISD::VEC_REDUCE_ANY:  return "VEISD::VEC_REDUCE_ANY";
+  case VEISD::VEC_POPCOUNT:    return "VEISD::VEC_POPCOUNT";
+
   case VEISD::Wrapper:         return "VEISD::Wrapper";
   }
   return nullptr;
@@ -2762,6 +3042,19 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::MSCATTER:
   case ISD::MGATHER:            return LowerMGATHER_MSCATTER(Op, DAG);
 
+  // if a SETCC result is used by vector arithmetic, convert it back into v256i64 (from the v256i1 created in the SETCC lowering)
+  // TODO extend this list as necessary (possibly shifts)
+  case ISD::MUL:
+  case ISD::ADD:
+  case ISD::SUB:
+                                return LowerVectorArithmetic(Op, DAG);
+
+  // modify the return type of SETCC on vectors to v256i1
+  case ISD::SETCC:              return LowerSETCC(Op, DAG);
+  case ISD::SELECT_CC:          return LowerSELECT_CC(Op, DAG);
+  case ISD::VSELECT:            return LowerVSELECT(Op, DAG);
+
+  case ISD::TRUNCATE:           return LowerTRUNCATE(Op, DAG);
   case ISD::MLOAD:              return LowerMLOAD(Op, DAG);
   }
 }

@@ -43,6 +43,19 @@ public:
       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
         TLI(ST->getTargetLowering()){}
 
+  /// \returns True if the vector length parameter should be folded into the
+  /// vector mask.
+  bool
+  shouldFoldVectorLengthIntoMask(const PredicatedInstruction &PredInst) const {
+    return false; // FIXME (return true for masking operations)
+  }
+
+  /// \returns False if this VP op should be replaced by a non-VP op or an
+  /// unpredicated op plus a select.
+  bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
+    return true; // FIXME
+  }
+
   unsigned getNumberOfRegisters(unsigned ClassID) const {
     bool Vector = (ClassID == 1);
     if (Vector) {

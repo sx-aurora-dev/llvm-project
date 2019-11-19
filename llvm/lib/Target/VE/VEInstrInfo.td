@@ -2278,3 +2278,6 @@ include "VEInstrPatternsVec.td"
 
 // vevlintrin
 include "VEInstrIntrinsicVL.td"
+
+// VP intrinsics (llvm.vp.*)
+include "VEVPIntrinsic.td"
