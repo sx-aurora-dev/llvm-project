@@ -121,6 +121,10 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
     if (Var.isArray()) {
       Out << "void ";
     } else {
+      // In cases where we get a first-private float, we want to recieve the
+      // full 64 bit we input into veo. We then later can change the type back
+      // to float. I suspect some weirdness with IEEE 754 and the change of
+      // variable length from 32 to 64 and back to 32 bit.
       if (!Var.passedByPointer() && Var.typeName() == "float") {
         Out << "unsigned long long __sotoc_conv_var_";
       } else {
@@ -198,6 +202,9 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
         Out << Var.typeName() << " " << Var.name() << " = "
             << "*__sotoc_var_" << Var.name() << ";\n";
       }
+      // After recieving floats as unsigned long long we want to change them
+      // back to floats but without conversion as they already are formated
+      // according to 32 bit floating point spec.
     } else if (!Var.isArray() && !Var.passedByPointer() && Var.typeName() == "float") {
         Out << "float " << Var.name() << " = *(float*)&(__sotoc_conv_var_"
             << Var.name() << ");\n";
