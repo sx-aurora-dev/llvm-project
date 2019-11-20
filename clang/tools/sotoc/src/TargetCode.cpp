@@ -121,11 +121,16 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
     if (Var.isArray()) {
       Out << "void ";
     } else {
-      Out << Var.typeName() << " ";
+      if (!Var.passedByPointer() && Var.typeName() == "float") {
+        Out << "unsigned long long __sotoc_conv_var_";
+      } else {
+        Out << Var.typeName() << " ";
+      }
     }
 
     if (Var.passedByPointer()) {
       Out << "*__sotoc_var_";
+    
     }
     Out << Var.name();
   }
@@ -193,6 +198,9 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
         Out << Var.typeName() << " " << Var.name() << " = "
             << "*__sotoc_var_" << Var.name() << ";\n";
       }
+    } else if (!Var.isArray() && !Var.passedByPointer() && Var.typeName() == "float") {
+        Out << "float " << Var.name() << " = *(float*)&(__sotoc_conv_var_"
+            << Var.name() << ");\n";
     }
   }
 
