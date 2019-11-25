@@ -23,8 +23,8 @@ class VPBuilder {
   int StaticVectorLength;
 
   // get a valid mask/evl argument for the current predication contet
-  Value& GetMaskForType(VectorType & VecTy);
-  Value& GetEVLForType(VectorType & VecTy);
+  Value& RequestPred();
+  Value& RequestEVL();
 
 public:
   VPBuilder(IRBuilder<> & _builder)
