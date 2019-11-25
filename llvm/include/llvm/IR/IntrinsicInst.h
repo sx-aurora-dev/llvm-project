@@ -220,7 +220,7 @@ namespace llvm {
     using ShortTypeVec = SmallVector<Type *, 4>;
 
     /// \brief Declares a llvm.vp.* intrinsic in \p M that matches the parameters \p Params.
-    static Function* GetDeclarationForParams(Module *M, Intrinsic::ID, ArrayRef<Value *> Params);
+    static Function* GetDeclarationForParams(Module *M, Intrinsic::ID, ArrayRef<Value *> Params, Type* VecRetTy = nullptr);
 
     // Type tokens required to instantiate this intrinsic.
     static TypeTokenVec GetTypeTokens(Intrinsic::ID);

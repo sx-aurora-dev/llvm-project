@@ -241,8 +241,7 @@ bool VPIntrinsic::IsVPIntrinsic(Intrinsic::ID ID) {
   return true;
 }
 
-Intrinsic::ID
-VPIntrinsic::GetConstrainedIntrinsicForVP(Intrinsic::ID VPID)  {
+Intrinsic::ID VPIntrinsic::GetConstrainedIntrinsicForVP(Intrinsic::ID VPID) {
   switch (VPID) {
   default:
     return Intrinsic::not_intrinsic;
@@ -254,8 +253,7 @@ VPIntrinsic::GetConstrainedIntrinsicForVP(Intrinsic::ID VPID)  {
   }
 }
 
-Intrinsic::ID
-VPIntrinsic::GetFunctionalIntrinsicForVP(Intrinsic::ID VPID) {
+Intrinsic::ID VPIntrinsic::GetFunctionalIntrinsicForVP(Intrinsic::ID VPID) {
   switch (VPID) {
   default:
     return Intrinsic::not_intrinsic;
@@ -430,7 +428,8 @@ Optional<int> VPIntrinsic::GetMemoryDataParamPos(Intrinsic::ID VPID) {
 }
 
 Function *VPIntrinsic::GetDeclarationForParams(Module *M, Intrinsic::ID VPID,
-                                               ArrayRef<Value *> Params) {
+                                               ArrayRef<Value *> Params,
+                                               Type *VecRetTy) {
   assert(VPID != Intrinsic::not_intrinsic && "todo dispatch to default insts");
 
   bool IsArithOp = VPIntrinsic::IsBinaryVPOp(VPID) ||
@@ -445,31 +444,25 @@ Function *VPIntrinsic::GetDeclarationForParams(Module *M, Intrinsic::ID VPID,
   bool IsMemoryOp =
       (VPID == Intrinsic::vp_store) || (VPID == Intrinsic::vp_load) ||
       (VPID == Intrinsic::vp_store) || (VPID == Intrinsic::vp_load);
+  bool IsCastOp =
+      (VPID == Intrinsic::vp_fptosi) || (VPID == Intrinsic::vp_fptoui) ||
+      (VPID == Intrinsic::vp_sitofp) || (VPID == Intrinsic::vp_uitofp) ||
+      (VPID == Intrinsic::vp_fpext)  || (VPID == Intrinsic::vp_fptrunc);
 
   Type *VecTy = nullptr;
-  Type *VecRetTy = nullptr;
   Type *VecPtrTy = nullptr;
 
-  if (IsArithOp || IsCmpOp) {
+  if (IsArithOp || IsCmpOp || IsCastOp) {
     Value &FirstOp = *Params[0];
 
     // Fetch the VP intrinsic
     VecTy = cast<VectorType>(FirstOp.getType());
-    VecRetTy = VecTy;
 
   } else if (IsReduceOp) {
     auto VectorPosOpt = GetReductionVectorParamPos(VPID);
-    auto AccuPosOpt = GetReductionAccuParamPos(VPID);
     Value *VectorParam = Params[VectorPosOpt.getValue()];
 
     VecTy = VectorParam->getType();
-
-    if (AccuPosOpt.hasValue()) {
-      Value *AccuParam = Params[AccuPosOpt.getValue()];
-      VecRetTy = AccuParam->getType();
-    } else {
-      VecRetTy = VecTy;
-    }
 
   } else if (IsMemoryOp) {
     auto DataPosOpt = VPIntrinsic::GetMemoryDataParamPos(VPID);
@@ -487,7 +480,6 @@ Function *VPIntrinsic::GetDeclarationForParams(Module *M, Intrinsic::ID VPID,
   } else if (IsShuffleOp) {
     VecTy = (VPID == Intrinsic::vp_select) ? Params[1]->getType()
                                            : Params[0]->getType();
-    VecRetTy = VecTy;
   }
 
   auto TypeTokens = VPIntrinsic::GetTypeTokens(VPID);
@@ -520,6 +512,20 @@ VPIntrinsic::TypeTokenVec VPIntrinsic::GetTypeTokens(Intrinsic::ID ID) {
   case Intrinsic::vp_rint:
   case Intrinsic::vp_nearbyint:
 
+  case Intrinsic::vp_and:
+  case Intrinsic::vp_or:
+  case Intrinsic::vp_xor:
+  case Intrinsic::vp_ashr:
+  case Intrinsic::vp_lshr:
+  case Intrinsic::vp_shl:
+  case Intrinsic::vp_add:
+  case Intrinsic::vp_sub:
+  case Intrinsic::vp_mul:
+  case Intrinsic::vp_sdiv:
+  case Intrinsic::vp_udiv:
+  case Intrinsic::vp_srem:
+  case Intrinsic::vp_urem:
+
   case Intrinsic::vp_fadd:
   case Intrinsic::vp_fsub:
   case Intrinsic::vp_fmul:
@@ -529,6 +535,8 @@ VPIntrinsic::TypeTokenVec VPIntrinsic::GetTypeTokens(Intrinsic::ID ID) {
   case Intrinsic::vp_powi:
   case Intrinsic::vp_maxnum:
   case Intrinsic::vp_minnum:
+
+  case Intrinsic::vp_select:
     return TypeTokenVec{VPTypeToken::Returned};
 
   case Intrinsic::vp_reduce_and:
@@ -560,15 +568,13 @@ VPIntrinsic::TypeTokenVec VPIntrinsic::GetTypeTokens(Intrinsic::ID ID) {
   case Intrinsic::vp_fptrunc:
   case Intrinsic::vp_fptoui:
   case Intrinsic::vp_fptosi:
-    return TypeTokenVec{VPTypeToken::Returned, VPTypeToken::Vector};
-
   case Intrinsic::vp_sitofp:
   case Intrinsic::vp_uitofp:
-    return TypeTokenVec{VPTypeToken::Vector, VPTypeToken::Returned};
+    return TypeTokenVec{VPTypeToken::Returned, VPTypeToken::Vector};
 
   case Intrinsic::vp_icmp:
   case Intrinsic::vp_fcmp:
-    return TypeTokenVec{VPTypeToken::Mask, VPTypeToken::Vector};
+    return TypeTokenVec{VPTypeToken::Vector};
   }
 }
 
@@ -728,34 +734,34 @@ VPIntrinsic::EncodeTypeTokens(VPIntrinsic::TypeTokenVec TTVec, Type *VecRetTy,
 
 Instruction::BinaryOps BinaryOpIntrinsic::getBinaryOp() const {
   switch (getIntrinsicID()) {
-    case Intrinsic::uadd_with_overflow:
-    case Intrinsic::sadd_with_overflow:
-    case Intrinsic::uadd_sat:
-    case Intrinsic::sadd_sat:
-      return Instruction::Add;
-    case Intrinsic::usub_with_overflow:
-    case Intrinsic::ssub_with_overflow:
-    case Intrinsic::usub_sat:
-    case Intrinsic::ssub_sat:
-      return Instruction::Sub;
-    case Intrinsic::umul_with_overflow:
-    case Intrinsic::smul_with_overflow:
-      return Instruction::Mul;
-    default:
-      llvm_unreachable("Invalid intrinsic");
+  case Intrinsic::uadd_with_overflow:
+  case Intrinsic::sadd_with_overflow:
+  case Intrinsic::uadd_sat:
+  case Intrinsic::sadd_sat:
+    return Instruction::Add;
+  case Intrinsic::usub_with_overflow:
+  case Intrinsic::ssub_with_overflow:
+  case Intrinsic::usub_sat:
+  case Intrinsic::ssub_sat:
+    return Instruction::Sub;
+  case Intrinsic::umul_with_overflow:
+  case Intrinsic::smul_with_overflow:
+    return Instruction::Mul;
+  default:
+    llvm_unreachable("Invalid intrinsic");
   }
 }
 
 bool BinaryOpIntrinsic::isSigned() const {
   switch (getIntrinsicID()) {
-    case Intrinsic::sadd_with_overflow:
-    case Intrinsic::ssub_with_overflow:
-    case Intrinsic::smul_with_overflow:
-    case Intrinsic::sadd_sat:
-    case Intrinsic::ssub_sat:
-      return true;
-    default:
-      return false;
+  case Intrinsic::sadd_with_overflow:
+  case Intrinsic::ssub_with_overflow:
+  case Intrinsic::smul_with_overflow:
+  case Intrinsic::sadd_sat:
+  case Intrinsic::ssub_sat:
+    return true;
+  default:
+    return false;
   }
 }
 
