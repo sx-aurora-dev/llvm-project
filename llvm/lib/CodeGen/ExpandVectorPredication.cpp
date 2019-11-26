@@ -35,6 +35,66 @@ using namespace llvm;
 STATISTIC(NumFoldedVL, "Number of folded vector length params");
 STATISTIC(numLoweredVPOps, "Number of folded vector predication operations");
 
+/// \returns Whether the vector mask \p MaskVal has all lane bits set.
+static bool IsAllTrueMask(Value *MaskVal) {
+  auto ConstVec = dyn_cast<ConstantVector>(MaskVal);
+  if (!ConstVec)
+    return false;
+  return ConstVec->isAllOnesValue();
+}
+
+/// \returns The constant \p ConstVal broadcasted to \p VecTy.
+static Value *BroadcastConstant(Constant *ConstVal, VectorType *VecTy) {
+  return ConstantDataVector::getSplat(VecTy->getVectorNumElements(), ConstVal);
+}
+
+/// \returns The neutral element of the reduction \p VPRedID.
+static Value *GetNeutralElementVector(Intrinsic::ID VPRedID,
+                                      VectorType *VecTy) {
+  unsigned ElemBits = VecTy->getScalarSizeInBits();
+
+  switch (VPRedID) {
+  default:
+    abort(); // invalid vp reduction intrinsic
+
+  case Intrinsic::vp_reduce_add:
+  case Intrinsic::vp_reduce_or:
+  case Intrinsic::vp_reduce_xor:
+  case Intrinsic::vp_reduce_umax:
+    return Constant::getNullValue(VecTy);
+
+  case Intrinsic::vp_reduce_mul:
+    return BroadcastConstant(
+        ConstantInt::get(VecTy->getElementType(), 1, false), VecTy);
+
+  case Intrinsic::vp_reduce_and:
+  case Intrinsic::vp_reduce_umin:
+    return Constant::getAllOnesValue(VecTy);
+
+  case Intrinsic::vp_reduce_smin:
+    return BroadcastConstant(
+        ConstantInt::get(VecTy->getContext(),
+                         APInt::getSignedMaxValue(ElemBits)),
+        VecTy);
+  case Intrinsic::vp_reduce_smax:
+    return BroadcastConstant(
+        ConstantInt::get(VecTy->getContext(),
+                         APInt::getSignedMinValue(ElemBits)),
+        VecTy);
+
+  case Intrinsic::vp_reduce_fmin:
+  case Intrinsic::vp_reduce_fmax:
+    return BroadcastConstant(ConstantFP::getQNaN(VecTy->getElementType()),
+                             VecTy);
+  case Intrinsic::vp_reduce_fadd:
+    return BroadcastConstant(ConstantFP::get(VecTy->getElementType(), 0.0),
+                             VecTy);
+  case Intrinsic::vp_reduce_fmul:
+    return BroadcastConstant(ConstantFP::get(VecTy->getElementType(), 1.0),
+                             VecTy);
+  }
+}
+
 namespace {
 
 /// \brief The logical vector element size of this operation.
@@ -142,21 +202,24 @@ void LowerVPBinaryOperator(VPIntrinsic *VPI) {
   IRBuilder<> Builder(OldBinOp);
   auto Mask = VPI->getMaskParam();
 
-  switch (VPI->getFunctionalOpcode()) {
-  default:
-    // can safely ignore the predicate
-    break;
+  // Blend in safe operands
+  if (!IsAllTrueMask(Mask)) {
+    switch (VPI->getFunctionalOpcode()) {
+    default:
+      // can safely ignore the predicate
+      break;
 
-  // Division operators need a safe divisor on masked-off lanes (1.0)
-  case Instruction::FDiv:
-  case Instruction::FRem:
-  case Instruction::UDiv:
-  case Instruction::SDiv:
-  case Instruction::URem:
-  case Instruction::SRem:
-    // 2nd operand must not be zero
-    auto SafeDivisor = GetSafeDivisor(VPI->getType());
-    SndOp = Builder.CreateSelect(Mask, SndOp, SafeDivisor);
+    // Division operators need a safe divisor on masked-off lanes (1.0)
+    case Instruction::FDiv:
+    case Instruction::FRem:
+    case Instruction::UDiv:
+    case Instruction::SDiv:
+    case Instruction::URem:
+    case Instruction::SRem:
+      // 2nd operand must not be zero
+      auto SafeDivisor = GetSafeDivisor(VPI->getType());
+      SndOp = Builder.CreateSelect(Mask, SndOp, SafeDivisor);
+    }
   }
 
   auto NewBinOp = Builder.CreateBinOp(
@@ -230,66 +293,6 @@ void LowerToIntrinsic(VPIntrinsic *VPI) {
   ReplaceOperation(NewIntrin, VPI);
 }
 
-/// \returns Whether the vector mask \p MaskVal has all lane bits set.
-static bool IsAllTrueMask(Value *MaskVal) {
-  auto ConstVec = dyn_cast<ConstantVector>(MaskVal);
-  if (!ConstVec)
-    return false;
-  return ConstVec->isAllOnesValue();
-}
-
-/// \returns The constant \p ConstVal broadcasted to \p VecTy.
-static Value *BroadcastConstant(Constant *ConstVal, VectorType *VecTy) {
-  return ConstantDataVector::getSplat(VecTy->getVectorNumElements(), ConstVal);
-}
-
-/// \returns The neutral element of the reduction \p VPRedID.
-static Value *GetNeutralElementVector(Intrinsic::ID VPRedID,
-                                      VectorType *VecTy) {
-  unsigned ElemBits = VecTy->getScalarSizeInBits();
-
-  switch (VPRedID) {
-  default:
-    abort(); // invalid vp reduction intrinsic
-
-  case Intrinsic::vp_reduce_add:
-  case Intrinsic::vp_reduce_or:
-  case Intrinsic::vp_reduce_xor:
-  case Intrinsic::vp_reduce_umax:
-    return Constant::getNullValue(VecTy);
-
-  case Intrinsic::vp_reduce_mul:
-    return BroadcastConstant(
-        ConstantInt::get(VecTy->getElementType(), 1, false), VecTy);
-
-  case Intrinsic::vp_reduce_and:
-  case Intrinsic::vp_reduce_umin:
-    return Constant::getAllOnesValue(VecTy);
-
-  case Intrinsic::vp_reduce_smin:
-    return BroadcastConstant(
-        ConstantInt::get(VecTy->getContext(),
-                         APInt::getSignedMaxValue(ElemBits)),
-        VecTy);
-  case Intrinsic::vp_reduce_smax:
-    return BroadcastConstant(
-        ConstantInt::get(VecTy->getContext(),
-                         APInt::getSignedMinValue(ElemBits)),
-        VecTy);
-
-  case Intrinsic::vp_reduce_fmin:
-  case Intrinsic::vp_reduce_fmax:
-    return BroadcastConstant(ConstantFP::getQNaN(VecTy->getElementType()),
-                             VecTy);
-  case Intrinsic::vp_reduce_fadd:
-    return BroadcastConstant(ConstantFP::get(VecTy->getElementType(), 0.0),
-                             VecTy);
-  case Intrinsic::vp_reduce_fmul:
-    return BroadcastConstant(ConstantFP::get(VecTy->getElementType(), 1.0),
-                             VecTy);
-  }
-}
-
 /// \brief Lower this llvm.vp.reduce.* intrinsic to a llvm.experimental.reduce.*
 /// intrinsic.
 void LowerVPReduction(VPIntrinsic *VPI) {
@@ -355,6 +358,7 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
 
   IRBuilder<> Builder(&I);
   auto &DL = Builder.GetInsertBlock()->getModule()->getDataLayout();
+  MaybeAlign AlignOpt = VPI->getPointerAlignment();
 
   Value *NewMemoryInst = nullptr;
   switch (VPI->getIntrinsicID()) {
@@ -363,17 +367,20 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
 
   case Intrinsic::vp_store: {
     if (IsUnmasked) {
-      NewMemoryInst = Builder.CreateStore(DataParam, PtrParam, false);
+      StoreInst *NewStore = Builder.CreateStore(DataParam, PtrParam, false);
+      if (AlignOpt.hasValue()) NewStore->setAlignment(AlignOpt.getValue());
+      NewMemoryInst = NewStore;
     } else {
-      Align MayAlign = PtrParam->getPointerAlignment(DL).valueOrOne();
       NewMemoryInst = Builder.CreateMaskedStore(DataParam, PtrParam,
-                                                MayAlign.value(), MaskParam);
+                                                AlignOpt.valueOrOne().value(), MaskParam);
     }
   } break;
 
   case Intrinsic::vp_load: {
     if (IsUnmasked) {
-      NewMemoryInst = Builder.CreateLoad(PtrParam, false);
+      LoadInst *NewLoad = Builder.CreateLoad(PtrParam, false);
+      if (AlignOpt.hasValue()) NewLoad->setAlignment(AlignOpt.getValue());
+      NewMemoryInst = NewLoad;
     } else {
       Align MayAlign = PtrParam->getPointerAlignment(DL).valueOrOne();
       NewMemoryInst =
@@ -382,23 +389,27 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
   } break;
 
   case Intrinsic::vp_scatter: {
-    if (IsUnmasked) {
-      NewMemoryInst = Builder.CreateStore(DataParam, PtrParam, false);
-    } else {
+    // if (IsUnmasked) {
+    //   StoreInst *NewStore = Builder.CreateStore(DataParam, PtrParam, false);
+    //   if (AlignOpt.hasValue()) NewStore->setAlignment(AlignOpt.getValue());
+    //   NewMemoryInst = NewStore;
+    // } else {
       Align MayAlign; // FIXME = PtrParam->getPointerAlignment(DL).valueOrOne();
       NewMemoryInst = Builder.CreateMaskedScatter(DataParam, PtrParam,
                                                   MayAlign.value(), MaskParam);
-    }
+    // }
   } break;
 
   case Intrinsic::vp_gather: {
-    if (IsUnmasked) {
-      NewMemoryInst = Builder.CreateLoad(I.getType(), PtrParam, false);
-    } else {
+    // if (IsUnmasked) {
+    //   LoadInst *NewLoad = Builder.CreateLoad(I.getType(), PtrParam, false);
+    //   if (AlignOpt.hasValue()) NewLoad->setAlignment(AlignOpt.getValue());
+    //   NewMemoryInst = NewLoad;
+    // } else {
       Align MayAlign; // FIXME = PtrParam->getPointerAlignment(DL).valueOrOne();
       NewMemoryInst = Builder.CreateMaskedGather(
           PtrParam, MayAlign.value(), MaskParam, nullptr, I.getName());
-    }
+    // }
   } break;
   }
 
