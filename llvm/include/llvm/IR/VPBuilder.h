@@ -50,10 +50,10 @@ public:
   Value* CreateVectorCopy(Instruction & Inst, ValArray VecOpArray);
 
   // Memory
-  Value& CreateContiguousStore(Value & Val, Value & Pointer, Align Alignment);
-  Value& CreateContiguousLoad(Value & Pointer, Align Alignment);
-  Value& CreateScatter(Value & Val, Value & PointerVec, Align Alignment);
-  Value& CreateGather(Value & PointerVec, Align Alignment);
+  Value& CreateContiguousStore(Value & Val, Value & Pointer, MaybeAlign Alignment);
+  Value& CreateContiguousLoad(Value & Pointer, MaybeAlign Alignment);
+  Value& CreateScatter(Value & Val, Value & PointerVec, MaybeAlign Alignment);
+  Value& CreateGather(Value & PointerVec, MaybeAlign Alignment);
 };
 
 
