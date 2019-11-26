@@ -340,11 +340,28 @@ struct PredicatedContext {
     if (!PI) {
       VectorLength = nullptr;
       Mask = nullptr;
-      Mod = nullptr;
-    } else {
-      VectorLength = PI->getVectorLengthParam();
-      Mask = PI->getMaskParam();
-      Mod = PI->getParent()->getParent()->getParent();
+      return;
+    }
+    VectorLength = PI->getVectorLengthParam();
+    Mask = PI->getMaskParam();
+
+    if (Mod) return;
+
+    // try to get a hold of the Module
+    auto *BB = PI->getParent();
+    if (BB) {
+      auto *Func = BB->getParent();
+      if (Func) {
+        Mod = Func->getParent();
+      }
+    }
+
+    if (Mod) return;
+
+    // try to infer the module from a call
+    auto CallI = dyn_cast<CallInst>(V);
+    if (CallI && CallI->getCalledFunction()) {
+      Mod = CallI->getCalledFunction()->getParent();
     }
   }
 
@@ -377,7 +394,7 @@ struct PredicatedContext {
   /// context is valid.
   bool mergeContext(PredicatedContext PC) const { return acceptContext(PC); }
 
-  /// match \p P in a new contest for \p Val.
+  /// match \p P in a new contesx for \p Val.
   template <typename Val, typename Pattern>
   bool reset_match(Val *V, const Pattern &P) {
     reset(V);
