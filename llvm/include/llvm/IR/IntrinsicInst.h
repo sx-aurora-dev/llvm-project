@@ -276,6 +276,10 @@ namespace llvm {
     /// \return whether the vector length param can be ignored.
     bool canIgnoreVectorLengthParam() const;
 
+    /// \return the alignment of the pointer used by this load/store/gather or scatter.
+    MaybeAlign getPointerAlignment() const;
+    // MaybeAlign setPointerAlignment(Align NewAlign); // TODO
+
     /// \return The pointer operand of this load,store, gather or scatter.
     Value *getMemoryPointerParam() const;
     static Optional<int> GetMemoryPointerParamPos(Intrinsic::ID);

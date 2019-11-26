@@ -387,6 +387,18 @@ Optional<int> VPIntrinsic::GetReductionAccuParamPos(Intrinsic::ID VPID) {
   }
 }
 
+/// \return the alignment of the pointer used by this load/store/gather or
+/// scatter.
+MaybeAlign VPIntrinsic::getPointerAlignment() const {
+  Optional<int> PtrParamOpt = GetMemoryPointerParamPos(getIntrinsicID());
+  assert(PtrParamOpt.hasValue() && "no pointer argument!");
+  unsigned AlignVal = this->getParamAlignment(PtrParamOpt.getValue());
+  if (AlignVal) {
+    return MaybeAlign(AlignVal);
+  }
+  return None;
+}
+
 /// \return The pointer operand of this load,store, gather or scatter.
 Value *VPIntrinsic::getMemoryPointerParam() const {
   auto PtrParamOpt = GetMemoryPointerParamPos(getIntrinsicID());
@@ -447,7 +459,7 @@ Function *VPIntrinsic::GetDeclarationForParams(Module *M, Intrinsic::ID VPID,
   bool IsCastOp =
       (VPID == Intrinsic::vp_fptosi) || (VPID == Intrinsic::vp_fptoui) ||
       (VPID == Intrinsic::vp_sitofp) || (VPID == Intrinsic::vp_uitofp) ||
-      (VPID == Intrinsic::vp_fpext)  || (VPID == Intrinsic::vp_fptrunc);
+      (VPID == Intrinsic::vp_fpext) || (VPID == Intrinsic::vp_fptrunc);
 
   Type *VecTy = nullptr;
   Type *VecPtrTy = nullptr;
