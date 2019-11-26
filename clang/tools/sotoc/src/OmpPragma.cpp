@@ -119,7 +119,6 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
   case clang::OpenMPDirectiveKind::OMPD_target_parallel: {
     switch (Clause->getClauseKind()) {
     // case clang::OpenMPClauseKind::OMPC_map:
-    case clang::OpenMPClauseKind::OMPC_if:
     case clang::OpenMPClauseKind::OMPC_num_threads:
     case clang::OpenMPClauseKind::OMPC_default:
     case clang::OpenMPClauseKind::OMPC_proc_bind:
@@ -130,12 +129,18 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
       return true;
     default:
       return false;
+    case clang::OpenMPClauseKind::OMPC_if:
+      clang::OMPIfClause* IC = llvm::dyn_cast_or_null<clang::OMPIfClause>(Clause);
+      if ((IC->getNameModifier()) == clang::OpenMPDirectiveKind::OMPD_target) {
+        return false;
+      } else {
+        return true;
+      }
     }
   }
   case clang::OpenMPDirectiveKind::OMPD_target_parallel_for: {
     switch (Clause->getClauseKind()) {
     // case clang::OpenMPClauseKind::OMPC_map:
-    case clang::OpenMPClauseKind::OMPC_if:
     case clang::OpenMPClauseKind::OMPC_num_threads:
     case clang::OpenMPClauseKind::OMPC_default:
     case clang::OpenMPClauseKind::OMPC_proc_bind:
@@ -151,12 +156,18 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
       return true;
     default:
       return false;
+    case clang::OpenMPClauseKind::OMPC_if:
+      clang::OMPIfClause* IC = llvm::dyn_cast_or_null<clang::OMPIfClause>(Clause);
+      if ((IC->getNameModifier()) == clang::OpenMPDirectiveKind::OMPD_target) {
+        return false;
+      } else {
+        return true;
+      }
     }
   }
   case clang::OpenMPDirectiveKind::OMPD_target_parallel_for_simd: {
     switch (Clause->getClauseKind()) {
     // case clang::OpenMPClauseKind::OMPC_map:
-    case clang::OpenMPClauseKind::OMPC_if:
     case clang::OpenMPClauseKind::OMPC_num_threads:
     case clang::OpenMPClauseKind::OMPC_default:
     case clang::OpenMPClauseKind::OMPC_proc_bind:
@@ -175,6 +186,13 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
       return true;
     default:
       return false;
+    case clang::OpenMPClauseKind::OMPC_if:
+      clang::OMPIfClause* IC = llvm::dyn_cast_or_null<clang::OMPIfClause>(Clause);
+      if ((IC->getNameModifier()) == clang::OpenMPDirectiveKind::OMPD_target) {
+        return false;
+      } else {
+        return true;
+      }
     }
   }
   case clang::OpenMPDirectiveKind::OMPD_target_simd: {
@@ -218,7 +236,6 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
     case clang::OpenMPClauseKind::OMPC_lastprivate:
     case clang::OpenMPClauseKind::OMPC_collapse:
     case clang::OpenMPClauseKind::OMPC_dist_schedule:
-    case clang::OpenMPClauseKind::OMPC_if:
     case clang::OpenMPClauseKind::OMPC_num_threads:
     case clang::OpenMPClauseKind::OMPC_default:
     case clang::OpenMPClauseKind::OMPC_proc_bind:
@@ -230,7 +247,14 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
       return true;
     default:
       return false;
-    }
+    case clang::OpenMPClauseKind::OMPC_if:
+      clang::OMPIfClause* IC = llvm::dyn_cast_or_null<clang::OMPIfClause>(Clause);
+      if ((IC->getNameModifier()) == clang::OpenMPDirectiveKind::OMPD_target) {
+        return false;
+      } else {
+        return true;
+      }
+   }
   }
   case clang::OpenMPDirectiveKind::OMPD_teams_distribute_parallel_for_simd:
   case clang::OpenMPDirectiveKind::
@@ -241,7 +265,6 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
     case clang::OpenMPClauseKind::OMPC_lastprivate:
     case clang::OpenMPClauseKind::OMPC_collapse:
     case clang::OpenMPClauseKind::OMPC_dist_schedule:
-    case clang::OpenMPClauseKind::OMPC_if:
     case clang::OpenMPClauseKind::OMPC_num_threads:
     case clang::OpenMPClauseKind::OMPC_default:
     case clang::OpenMPClauseKind::OMPC_proc_bind:
@@ -257,6 +280,13 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
       return true;
     default:
       return false;
+    case clang::OpenMPClauseKind::OMPC_if:
+      clang::OMPIfClause* IC = llvm::dyn_cast_or_null<clang::OMPIfClause>(Clause);
+      if ((IC->getNameModifier()) == clang::OpenMPDirectiveKind::OMPD_target) {
+        return false;
+      } else {
+        return true;
+      }
     }
   }
   case clang::OpenMPDirectiveKind::OMPD_teams_distribute_simd:
@@ -279,6 +309,13 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
       return true;
     default:
       return false;
+    case clang::OpenMPClauseKind::OMPC_if:
+      clang::OMPIfClause* IC = llvm::dyn_cast_or_null<clang::OMPIfClause>(Clause);
+      if ((IC->getNameModifier()) == clang::OpenMPDirectiveKind::OMPD_target) {
+        return false;
+      } else {
+        return true;
+      }
     }
   }
   default:
