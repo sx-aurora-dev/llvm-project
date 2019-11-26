@@ -107,9 +107,11 @@ Value &VPBuilder::CreateContiguousStore(Value &Val, Value &ElemPointer,
                                               {&VecTy, VecPtrTy});
   ShortValueVec Args{&Val, VecPtr, &RequestPred(), &RequestEVL()};
   CallInst &StoreCall = *Builder.CreateCall(StoreFunc, Args);
-  if (AlignOpt.hasValue())
+  if (AlignOpt.hasValue()) {
+    unsigned PtrPos = VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_store).getValue();
     StoreCall.addParamAttr(
-        1, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+  }
   return StoreCall;
 }
 
@@ -124,9 +126,11 @@ Value &VPBuilder::CreateContiguousLoad(Value &ElemPointer,
                                              {&VecTy, VecPtrTy});
   ShortValueVec Args{VecPtr, &RequestPred(), &RequestEVL()};
   CallInst &LoadCall = *Builder.CreateCall(LoadFunc, Args);
-  if (AlignOpt.hasValue())
+  if (AlignOpt.hasValue()) {
+    unsigned PtrPos = VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_load).getValue();
     LoadCall.addParamAttr(
-        1, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+  }
   return LoadCall;
 }
 
@@ -137,9 +141,12 @@ Value &VPBuilder::CreateScatter(Value &Val, Value &PointerVec,
                                 {Val.getType(), PointerVec.getType()});
   ShortValueVec Args{&Val, &PointerVec, &RequestPred(), &RequestEVL()};
   CallInst &ScatterCall = *Builder.CreateCall(ScatterFunc, Args);
-  if (AlignOpt.hasValue())
+  if (AlignOpt.hasValue()) {
+    unsigned PtrPos = VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_scatter).getValue();
     ScatterCall.addParamAttr(
-        1, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+        PtrPos,
+        Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+  }
   return ScatterCall;
 }
 
@@ -153,9 +160,11 @@ Value &VPBuilder::CreateGather(Value &PointerVec, MaybeAlign AlignOpt) {
 
   ShortValueVec Args{&PointerVec, &RequestPred(), &RequestEVL()};
   CallInst &GatherCall = *Builder.CreateCall(GatherFunc, Args);
-  if (AlignOpt.hasValue())
+  if (AlignOpt.hasValue()) {
+    unsigned PtrPos = VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_gather).getValue();
     GatherCall.addParamAttr(
-        0, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+  }
   return GatherCall;
 }
 
