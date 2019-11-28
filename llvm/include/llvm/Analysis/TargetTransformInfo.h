@@ -627,6 +627,9 @@ public:
   /// Return true if target doesn't mind addresses in vectors.
   bool prefersVectorizedAddressing() const;
 
+  /// Whether LLVMs builtin LV does the right thing for this target.
+  bool enableLoopVectorizer() const;
+
   /// Return the cost of the scaling factor used in the addressing
   /// mode represented by AM for this target, for a load/store
   /// of the specified type.
@@ -1249,6 +1252,7 @@ public:
   virtual bool hasDivRemOp(Type *DataType, bool IsSigned) = 0;
   virtual bool hasVolatileVariant(Instruction *I, unsigned AddrSpace) = 0;
   virtual bool prefersVectorizedAddressing() = 0;
+  virtual bool enableLoopVectorizer() const = 0;
   virtual int getScalingFactorCost(Type *Ty, GlobalValue *BaseGV,
                                    int64_t BaseOffset, bool HasBaseReg,
                                    int64_t Scale, unsigned AddrSpace) = 0;
@@ -1563,6 +1567,9 @@ public:
   }
   bool prefersVectorizedAddressing() override {
     return Impl.prefersVectorizedAddressing();
+  }
+  bool enableLoopVectorizer() const override {
+    return Impl.enableLoopVectorizer();
   }
   int getScalingFactorCost(Type *Ty, GlobalValue *BaseGV, int64_t BaseOffset,
                            bool HasBaseReg, int64_t Scale,

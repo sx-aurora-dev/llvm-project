@@ -292,6 +292,8 @@ public:
 
   bool prefersVectorizedAddressing() { return true; }
 
+  bool enableLoopVectorizer() const { return true; }
+
   int getScalingFactorCost(Type *Ty, GlobalValue *BaseGV, int64_t BaseOffset,
                            bool HasBaseReg, int64_t Scale, unsigned AddrSpace) {
     // Guess that all legal addressing mode are free.
