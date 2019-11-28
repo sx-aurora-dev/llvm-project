@@ -1305,6 +1305,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setBooleanVectorContents(ZeroOrOneBooleanContent);
 
   // Set up the register classes.
+  addRegisterClass(MVT::i1,  &VE::I64RegClass); // i1 has to be legal or build_vector of i1s is messed up...
   addRegisterClass(MVT::i32, &VE::I32RegClass);
   addRegisterClass(MVT::i64, &VE::I64RegClass);
   addRegisterClass(MVT::f32, &VE::F32RegClass);
@@ -1589,8 +1590,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   for (MVT VT : MVT::vector_valuetypes()) {
     setOperationAction(ISD::SELECT_CC,    VT, Custom);
-    if (VT.getVectorElementType() == MVT::i1 ||
-        VT.getVectorElementType() == MVT::i8 ||
+
+
+    if (VT.getVectorElementType() == MVT::i8 ||
         VT.getVectorElementType() == MVT::i16) {
       // VE uses vXi1 types but has no generic operations.
       // VE doesn't support vXi8 and vXi16 value types.
@@ -1603,26 +1605,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         setLoadExtAction(ISD::ZEXTLOAD, OuterVT, VT, Expand);
         setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Expand);
       }
-      // SExt i1 and ZExt i1 are legal.
-      if (VT.getVectorElementType() == MVT::i1) {
-        setOperationAction(ISD::SIGN_EXTEND, VT, Legal);
-        setOperationAction(ISD::ZERO_EXTEND, VT, Legal);
-        setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
-        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
-      } else {
-        setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
-        setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
-        setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
-        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Expand);
-      }
-
-      // STORE for vXi1 needs to be custom lowered to expand multiple
-      // instructions.
+      setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
+      setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+      setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
+      setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Expand);
 
       /// Vector mask operations
-      if (VT.getVectorElementType() == MVT::i1)
-        setOperationAction(ISD::STORE, VT, Custom);
-
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Expand);
       setOperationAction(ISD::BUILD_VECTOR,       VT, Expand);
       setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
@@ -1657,6 +1645,27 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       // VE doesn't have instructions for fp<->uint, so expand them by llvm
       setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
       setOperationAction(ISD::UINT_TO_FP, VT, Promote); // use i64
+
+    } else if (VT.getVectorElementType() == MVT::i1) {
+        // Mask producing operations
+        // SExt i1 and ZExt i1 are legal.
+        setOperationAction(ISD::SIGN_EXTEND, VT, Legal);
+        setOperationAction(ISD::ZERO_EXTEND, VT, Legal);
+        setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
+        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+        setOperationAction(ISD::STORE, VT, Custom);
+
+        setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
+
+#if 0
+	// i1 <> anything is legal
+        for (MVT OuterVT : MVT::vector_valuetypes()) {
+          setTruncStoreAction(OuterVT, VT, Legal);
+          setLoadExtAction(ISD::SEXTLOAD, OuterVT, VT, Legal);
+          setLoadExtAction(ISD::ZEXTLOAD, OuterVT, VT, Legal);
+          setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Legal);
+         }
+#endif
 
     } else {
       /// fp/int vector operations
@@ -3842,6 +3851,20 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
     LLVM_DEBUG(N->dumpr(&DAG));
     llvm_unreachable("Do not know how to custom type legalize this operation!");
   }
+}
+
+VETargetLowering::LegalizeTypeAction
+VETargetLowering::getPreferredVectorAction(MVT VT) const {
+  // The default action for one element vectors is to scalarize
+  if (VT.getVectorNumElements() == 1)
+    return TypeScalarizeVector;
+
+  // The default action for an odd-width vector is to widen.
+  if (!VT.isPow2VectorType())
+    return TypeWidenVector;
+
+  // The default action for other vectors is to split
+  return TypeSplitVector;
 }
 
 // Override to enable LOAD_STACK_GUARD lowering on Linux.

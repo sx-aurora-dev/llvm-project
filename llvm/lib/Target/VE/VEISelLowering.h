@@ -281,6 +281,10 @@ namespace llvm {
                                 MachineBasicBlock *DispatchBB, int FI) const;
     void finalizeLowering(MachineFunction &MF) const override;
 
+  /// Return the preferred vector type legalization action.
+    LegalizeTypeAction
+    getPreferredVectorAction(MVT VT) const override;
+
   private:
     // VE supports only vector FMA
     bool isFMAFasterThanFMulAndFAdd(EVT VT) const override { return VT.isVector() ? true : false; }
