@@ -352,41 +352,23 @@ void VEDAGToDAGISel::Select(SDNode *N) {
     ReplaceNode(N, getGlobalBaseReg());
     return;
 
-#if 0
-  case ISD::SDIV:
-  case ISD::UDIV: {
-    // sdivx / udivx handle 64-bit divides.
-    if (N->getValueType(0) == MVT::i64)
-      break;
-    // FIXME: should use a custom expander to expose the SRA to the dag.
-    SDValue DivLHS = N->getOperand(0);
-    SDValue DivRHS = N->getOperand(1);
-
-    // Set the Y register to the high-part.
-    SDValue TopPart;
-    if (N->getOpcode() == ISD::SDIV) {
-      TopPart = SDValue(CurDAG->getMachineNode(SP::SRAri, dl, MVT::i32, DivLHS,
-                                   CurDAG->getTargetConstant(31, dl, MVT::i32)),
-                        0);
-    } else {
-      TopPart = CurDAG->getRegister(SP::G0, MVT::i32);
+  // Custom lowering code for constant-zero regs
+  case VEISD::VEC_BROADCAST:
+    MVT SplatResTy = N->getSimpleValueType(0);
+    if (SplatResTy.getVectorElementType() == MVT::i1) {
+      if (SplatResTy.getVectorNumElements() == 256) {
+	SDValue New = CurDAG->getCopyFromReg(CurDAG->getEntryNode(),
+                                             SDLoc(N), VE::VM0, MVT::v256i1);
+        ReplaceNode(N, New.getNode());
+	return;
+      } else if (SplatResTy.getVectorNumElements() == 512) {
+	SDValue New = CurDAG->getCopyFromReg(CurDAG->getEntryNode(),
+                                             SDLoc(N), VE::VMP0, MVT::v512i1);
+        ReplaceNode(N, New.getNode());
+	return;
+      }
     }
-    TopPart = CurDAG->getCopyToReg(CurDAG->getEntryNode(), dl, SP::Y, TopPart,
-                                   SDValue())
-                  .getValue(1);
-
-    // FIXME: Handle div by immediate.
-    unsigned Opcode = N->getOpcode() == ISD::SDIV ? SP::SDIVrr : SP::UDIVrr;
-    // SDIV is a hardware erratum on some LEON2 processors. Replace it with SDIVcc here.
-    if (((VETargetMachine&)TM).getSubtargetImpl()->performSDIVReplace()
-        &&
-        Opcode == SP::SDIVrr) {
-      Opcode = SP::SDIVCCrr;
-    }
-    CurDAG->SelectNodeTo(N, Opcode, MVT::i32, DivLHS, DivRHS, TopPart);
-    return;
-  }
-#endif
+    break;
   }
 
   SelectCode(N);
