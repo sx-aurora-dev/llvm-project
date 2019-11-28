@@ -7458,37 +7458,19 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
   SDVTList VTs = DAG.getVTList(ValueVTs);
 
   // ValueVTs.push_back(MVT::Other); // Out chain
-
-  SDValue Result;
-
-  switch (VPIntrin.getNumArgOperands()) {
-  default:
-    llvm_unreachable("unexpected number of arguments to evl intrinsic");
-  case 3:
-    Result = DAG.getNode(Opcode, sdl, VTs,
-                         {getValue(VPIntrin.getArgOperand(0)),
-                          getValue(VPIntrin.getArgOperand(1)),
-                          getValue(VPIntrin.getArgOperand(2))});
-    break;
-
-  case 4:
-    Result = DAG.getNode(Opcode, sdl, VTs,
-                         {getValue(VPIntrin.getArgOperand(0)),
-                          getValue(VPIntrin.getArgOperand(1)),
-                          getValue(VPIntrin.getArgOperand(2)),
-                          getValue(VPIntrin.getArgOperand(3))});
-    break;
-
-  case 5:
-    Result = DAG.getNode(Opcode, sdl, VTs,
-                         {getValue(VPIntrin.getArgOperand(0)),
-                          getValue(VPIntrin.getArgOperand(1)),
-                          getValue(VPIntrin.getArgOperand(2)),
-                          getValue(VPIntrin.getArgOperand(3)),
-                          getValue(VPIntrin.getArgOperand(4))});
-    break;
+  
+  // Request Operands
+  SmallVector<SDValue,7> OpValues;
+  auto ExceptPosOpt = VPIntrinsic::GetExceptionBehaviorParamPos(VPIntrin.getIntrinsicID());
+  auto RoundingModePosOpt = VPIntrinsic::GetRoundingModeParamPos(VPIntrin.getIntrinsicID());
+  for (int i = 0; i < (int) VPIntrin.getNumArgOperands(); ++i) {
+    if (ExceptPosOpt && (i == ExceptPosOpt.getValue())) continue;
+    if (RoundingModePosOpt && (i == RoundingModePosOpt.getValue())) continue;
+    OpValues.push_back(getValue(VPIntrin.getArgOperand(i)));
   }
+  SDValue Result = DAG.getNode(Opcode, sdl, VTs, OpValues);
 
+  // Attach chain
   if (Result.getNode()->getNumValues() == 2) {
     // this VP node has a chain
     SDValue OutChain = Result.getValue(1);
