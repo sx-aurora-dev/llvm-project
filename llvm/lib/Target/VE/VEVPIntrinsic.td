@@ -20,7 +20,6 @@ def NOOPdm : NOOP<(outs V64:$out), (ins VM:$m, V64:$in)> { let Constraints = "$o
 def NOOPmi : NOOP<(outs VM:$out), (ins I32:$a, VM:$in)> { let Constraints = "$out = $in"; }
 def NOOPmm : NOOP<(outs VM:$out), (ins VM:$m, VM:$in)> { let Constraints = "$out = $in"; }
 
-
 /////// Vector Load ///////
 
 // (masked)
@@ -43,9 +42,9 @@ def : Pat<(v256f64 (vp_load i64:$addr, v256i1:$mask, i32:$avl)),
 
 // (unmasked)
 // 256 x i64
-def : Pat<(v256i64 (vp_load i64:$addr, (v256i1 m_alltrue), i32:$avl)), (vld_vIsl 4, $addr, $avl)>;
+def : Pat<(v256i64 (vp_load i64:$addr, (v256i1 true_mask), i32:$avl)), (vld_vIsl 4, $addr, $avl)>;
 // 256 x f64
-def : Pat<(v256f64 (vp_load i64:$addr, (v256i1 m_alltrue), i32:$avl)), (vld_vIsl 4, $addr, $avl)>;
+def : Pat<(v256f64 (vp_load i64:$addr, (v256i1 true_mask), i32:$avl)), (vld_vIsl 4, $addr, $avl)>;
 
 
 // 256 x i32
@@ -58,7 +57,7 @@ def : Pat<(v256i32 (vp_load i64:$addr, v256i1:$mask, i32:$avl)),
                      $avl
                    )>;
 // (unmasked)
-def : Pat<(v256i32 (vp_load i64:$addr, (v256i1 m_alltrue), i32:$avl)), (vldlzx_vIsl 4, $addr, $avl)>;
+def : Pat<(v256i32 (vp_load i64:$addr, (v256i1 true_mask), i32:$avl)), (vldlzx_vIsl 4, $addr, $avl)>;
 
 // 256 x f32
 // (masked)
@@ -70,7 +69,7 @@ def : Pat<(v256f32 (vp_load i64:$addr, v256i1:$mask, i32:$avl)),
                      $avl
                    )>;
 // (unmasked)
-def : Pat<(v256f32 (vp_load i64:$addr, (v256i1 m_alltrue), i32:$avl)), (vldu_vIsl 4, $addr, $avl)>;
+def : Pat<(v256f32 (vp_load i64:$addr, (v256i1 true_mask), i32:$avl)), (vldu_vIsl 4, $addr, $avl)>;
 
 
 
@@ -279,9 +278,9 @@ def : Pat<(v256i32 (vp_and v256i32:$vx, v256i32:$vy, v256i1:$mask, i32:$avl)), (
 def : Pat<(v256i32 (vp_or  v256i32:$vx, v256i32:$vy, v256i1:$mask, i32:$avl)), (vor_vvvmvl  $vx, $vy, $mask, (v256i32 (IMPLICIT_DEF)),   $avl)>;
 def : Pat<(v256i32 (vp_xor v256i32:$vx, v256i32:$vy, v256i1:$mask, i32:$avl)), (vxor_vvvmvl $vx, $vy, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
 
-def : Pat<(v256i1 (vp_and v256i1:$ma, v256i1:$mb, v256i1:$mask, i32:$avl)), (NOOPmi $avl, (NOOPmm $mask, (ANDM $ma, $mb)))>;
-def : Pat<(v256i1 (vp_or  v256i1:$ma, v256i1:$mb, v256i1:$mask, i32:$avl)), (NOOPmi $avl, (NOOPmm $mask, (ORM $ma, $mb)))>;
-def : Pat<(v256i1 (vp_xor v256i1:$ma, v256i1:$mb, v256i1:$mask, i32:$avl)), (NOOPmi $avl, (NOOPmm $mask, (XORM $ma, $mb)))>;
+def : Pat<(v256i1 (vp_and v256i1:$ma, v256i1:$mb, (v256i1 true_mask), (i32 no_avl_256))), (ANDM $ma, $mb)>;
+def : Pat<(v256i1 (vp_or  v256i1:$ma, v256i1:$mb, (v256i1 true_mask), (i32 no_avl_256))), (ORM $ma, $mb)>;
+def : Pat<(v256i1 (vp_xor v256i1:$ma, v256i1:$mb, (v256i1 true_mask), (i32 no_avl_256))), (XORM $ma, $mb)>;
 
 // Shifts
 

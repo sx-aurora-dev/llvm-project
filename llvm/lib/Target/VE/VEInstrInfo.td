@@ -24,15 +24,26 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
-def SDTVectorLeaf : SDTypeProfile<1, 0, [SDTCisVec<0>]>;         // for 'vector'.
-def vector        : SDNode<"VEISD::VEC_BROADCAST"  , SDTVectorLeaf>;// , [], "ConstantSDNode">;
+// Custom ISDs
+// VEISD::VEC_SEQ - represents a vector sequence where the operand is the stride
+// VEISD::VEC_BROADCAST - represents a vector splat of a scalar value into all vector lanes.
 
-def m_alltrue   : PatLeaf<(vector), [{ return isAllTrueMask(N); }]>;
+def vec_seq         : SDNode<"VEISD::VEC_SEQ",       SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
+def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 1, [SDTCisVec<0>]>>;
+def register        : SDNode<"ISD::Register"      , SDTypeProfile<1, 0, []>, [], "RegisterSDNode">;
+
+// whether the avl is ineffective
+def no_avl_256    : PatLeaf<(imm), [{ return (N->getSExtValue() < 0) || (N->getSExtValue() >= 256); }]>;
+
+// whether the mask is all true
+def true_mask     : PatLeaf<(register), [{ return (N->getReg() == VE::VM0) || (N->getReg() == VE::VMP0); }]>;
+
 def simm7       : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def uimm6       : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
 def uimm7       : PatLeaf<(imm), [{ return isUInt<7>(N->getZExtValue()); }]>;
+def true        : PatLeaf<(imm), [{ return N->getSExtValue() !=0 ; }]>;
 def zero        : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
                                       == 0; }]>;
@@ -2272,6 +2283,7 @@ def : Pat<(i32 (and i32:$lhs, 0xffff)),
           (AND32rm0 $lhs, 48)>;
 def : Pat<(i32 (and i32:$lhs, 0xffffffff)),
           (AND32rm0 $lhs, 32)>;
+
 
 // vector instructions
 include "VEInstrVec.td"

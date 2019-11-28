@@ -293,13 +293,6 @@ defm : eve_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
 defm : eve_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
 defm : eve_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
-// Custom ISDs
-// VEISD::VEC_SEQ - represents a vector sequence where the operand is the stride
-// VEISD::VEC_BROADCAST - represents a vector splat of a scalar value into all vector lanes.
-
-def vec_seq         : SDNode<"VEISD::VEC_SEQ",       SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
-def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 1, [SDTCisVec<0>]>>;
-
 // Broadcast
 
 def: Pat<(v512i32 (vec_broadcast i32:$val)),
