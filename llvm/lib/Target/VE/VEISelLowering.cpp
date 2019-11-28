@@ -1305,7 +1305,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setBooleanVectorContents(ZeroOrOneBooleanContent);
 
   // Set up the register classes.
-  addRegisterClass(MVT::i1,  &VE::I64RegClass); // i1 has to be legal or build_vector of i1s is messed up...
+  // addRegisterClass(MVT::i1,  &VE::I64RegClass); // i1 has to be legal or build_vector of i1s is messed up...
   addRegisterClass(MVT::i32, &VE::I32RegClass);
   addRegisterClass(MVT::i64, &VE::I64RegClass);
   addRegisterClass(MVT::f32, &VE::F32RegClass);
@@ -3858,6 +3858,10 @@ VETargetLowering::getPreferredVectorAction(MVT VT) const {
   // The default action for one element vectors is to scalarize
   if (VT.getVectorNumElements() == 1)
     return TypeScalarizeVector;
+
+  // The default action for mask vectors is to promote
+  if ((VT.getVectorElementType() == MVT::i1) && (VT.getVectorNumElements() <= 512))
+    return TypePromoteInteger;
 
   // The default action for an odd-width vector is to widen.
   if (!VT.isPow2VectorType())
