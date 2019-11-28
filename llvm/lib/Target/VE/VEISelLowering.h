@@ -84,12 +84,6 @@ namespace llvm {
     };
   }
 
-  // used in VEInstInfo.td
-  static bool isAllTrueMask(SDNode *N) { return true;
-    N->dump();
-    return true;
-  } // TODO implement
-
   class VETargetLowering : public TargetLowering {
     const VESubtarget *Subtarget;
   public:
