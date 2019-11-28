@@ -3,6 +3,7 @@
 %struct.sci = type <{ i8, i32 }>
 %struct.scl = type <{ i8, i64 }>
 %struct.sil = type <{ i32, i64 }>
+%struct.siiii = type { i8, i8, i8, i8 }
 
 @c = common global i8 0, align 1
 @s = common global i16 0, align 1
@@ -13,6 +14,7 @@
 @sci1 = common global %struct.sci <{ i8 0, i32 0 }>, align 1
 @scl1 = common global %struct.scl <{ i8 0, i64 0 }>, align 1
 @sil1 = common global %struct.sil <{ i32 0, i64 0 }>, align 1
+@siiii1 = common global %struct.siiii { i8 0, i8 0, i8 0, i8 0 }, align 1
 
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_1() {
@@ -353,40 +355,143 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_exchange_1() {
 ; CHECK-LABEL: test_atomic_exchange_1:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  lea %s34, c@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, c@hi(%s34)
-; CHECK-NEXT:  and %s35, -4, %s34
-; CHECK-NEXT:  ldl.sx %s38, (,%s35)
-; CHECK-NEXT:  lea %s36, 255
+; CHECK-NEXT:  and %s35, 3, %s34
+; CHECK-NEXT:  or %s36, 1, (0)1
+; CHECK-NEXT:  sla.w.sx %s36, %s36, %s35
+; CHECK-NEXT:  sla.w.sx %s35, %s35, 3
 ; CHECK-NEXT:  or %s37, 10, (0)1
-; CHECK-NEXT:  .LBB{{[0-9]+}}_1:                               # %atomicrmw.start
-; CHECK-NEXT:                                    # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:  or %s39, 0, %s38
-; CHECK-NEXT:  adds.w.sx %s38, %s34, (0)1
-; CHECK-NEXT:  and %s38, 3, %s38
-; CHECK-NEXT:  sla.w.sx %s38, %s38, 3
-; CHECK-NEXT:  sla.w.sx %s40, %s36, %s38
-; CHECK-NEXT:  xor %s40, -1, %s40
-; CHECK-NEXT:  and %s40, %s39, %s40
-; CHECK-NEXT:  sla.w.sx %s38, %s37, %s38
-; CHECK-NEXT:  or %s38, %s40, %s38
-; CHECK-NEXT:  cas.w %s38, (%s35), %s39
-; CHECK-NEXT:  brne.w %s38, %s39, .LBB{{[0-9]+}}_1
-; CHECK-NEXT:  # %bb.2:                                # %atomicrmw.end
-; CHECK-NEXT:  and %s35, %s38, (32)0
-; CHECK-NEXT:  adds.w.sx %s34, %s34, (0)1
-; CHECK-NEXT:  and %s34, 3, %s34
-; CHECK-NEXT:  sla.w.sx %s34, %s34, 3
-; CHECK-NEXT:  srl %s34, %s35, %s34
+; CHECK-NEXT:  sla.w.sx %s37, %s37, %s35
+; CHECK-NEXT:  and %s34, -4, %s34
+; CHECK-NEXT:  ts1am.w %s37, 0(%s34), %s36
+; CHECK-NEXT:  subs.w.sx %s34, 24, %s35
+; CHECK-NEXT:  sla.w.sx %s34, %s37, %s34
+; CHECK-NEXT:  sra.w.sx %s34, %s34, 24
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  sla.w.sx %s34, %s34, 24
 ; CHECK-NEXT:  sra.w.sx %s0, %s34, 24
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i8* @c, i8 10 seq_cst
+  ret i8 %0
+}
+
+; Function Attrs: norecurse nounwind
+define signext i8 @test_atomic_exchange_1_0() {
+; CHECK-LABEL: test_atomic_exchange_1_0:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  lea %s34, siiii1@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s34, siiii1@hi(%s34)
+; CHECK-NEXT:  and %s35, 3, %s34
+; CHECK-NEXT:  or %s36, 1, (0)1
+; CHECK-NEXT:  sla.w.sx %s36, %s36, %s35
+; CHECK-NEXT:  sla.w.sx %s35, %s35, 3
+; CHECK-NEXT:  or %s37, 14, (0)1
+; CHECK-NEXT:  sla.w.sx %s37, %s37, %s35
+; CHECK-NEXT:  and %s34, -4, %s34
+; CHECK-NEXT:  ts1am.w %s37, 0(%s34), %s36
+; CHECK-NEXT:  subs.w.sx %s34, 24, %s35
+; CHECK-NEXT:  sla.w.sx %s34, %s37, %s34
+; CHECK-NEXT:  sra.w.sx %s34, %s34, 24
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  sla.w.sx %s34, %s34, 24
+; CHECK-NEXT:  sra.w.sx %s0, %s34, 24
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 0), i8 14 seq_cst
+  ret i8 %0
+}
+
+; Function Attrs: norecurse nounwind
+define signext i8 @test_atomic_exchange_1_1() {
+; CHECK-LABEL: test_atomic_exchange_1_1:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  lea %s34, siiii1@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s35, siiii1@hi
+; CHECK-NEXT:  lea %s34, 1(%s35, %s34)
+; CHECK-NEXT:  and %s35, 3, %s34
+; CHECK-NEXT:  or %s36, 1, (0)1
+; CHECK-NEXT:  sla.w.sx %s36, %s36, %s35
+; CHECK-NEXT:  sla.w.sx %s35, %s35, 3
+; CHECK-NEXT:  or %s37, 15, (0)1
+; CHECK-NEXT:  sla.w.sx %s37, %s37, %s35
+; CHECK-NEXT:  and %s34, -4, %s34
+; CHECK-NEXT:  ts1am.w %s37, 0(%s34), %s36
+; CHECK-NEXT:  subs.w.sx %s34, 24, %s35
+; CHECK-NEXT:  sla.w.sx %s34, %s37, %s34
+; CHECK-NEXT:  sra.w.sx %s34, %s34, 24
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  sla.w.sx %s34, %s34, 24
+; CHECK-NEXT:  sra.w.sx %s0, %s34, 24
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 1), i8 15 seq_cst
+  ret i8 %0
+}
+
+; Function Attrs: norecurse nounwind
+define signext i8 @test_atomic_exchange_1_2() {
+; CHECK-LABEL: test_atomic_exchange_1_2:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  lea %s34, siiii1@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s35, siiii1@hi
+; CHECK-NEXT:  lea %s34, 2(%s35, %s34)
+; CHECK-NEXT:  and %s35, 3, %s34
+; CHECK-NEXT:  or %s36, 1, (0)1
+; CHECK-NEXT:  sla.w.sx %s36, %s36, %s35
+; CHECK-NEXT:  sla.w.sx %s35, %s35, 3
+; CHECK-NEXT:  lea %s37, -86
+; CHECK-NEXT:  sla.w.sx %s37, %s37, %s35
+; CHECK-NEXT:  and %s34, -4, %s34
+; CHECK-NEXT:  ts1am.w %s37, 0(%s34), %s36
+; CHECK-NEXT:  subs.w.sx %s34, 24, %s35
+; CHECK-NEXT:  sla.w.sx %s34, %s37, %s34
+; CHECK-NEXT:  sra.w.sx %s34, %s34, 24
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  sla.w.sx %s34, %s34, 24
+; CHECK-NEXT:  sra.w.sx %s0, %s34, 24
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 2), i8 170 seq_cst
+  ret i8 %0
+}
+
+; Function Attrs: norecurse nounwind
+define signext i8 @test_atomic_exchange_1_3() {
+; CHECK-LABEL: test_atomic_exchange_1_3:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  lea %s34, siiii1@lo
+; CHECK-NEXT:  and %s34, %s34, (32)0
+; CHECK-NEXT:  lea.sl %s35, siiii1@hi
+; CHECK-NEXT:  lea %s34, 3(%s35, %s34)
+; CHECK-NEXT:  and %s35, 3, %s34
+; CHECK-NEXT:  or %s36, 1, (0)1
+; CHECK-NEXT:  sla.w.sx %s36, %s36, %s35
+; CHECK-NEXT:  sla.w.sx %s35, %s35, 3
+; CHECK-NEXT:  lea %s37, -69
+; CHECK-NEXT:  sla.w.sx %s37, %s37, %s35
+; CHECK-NEXT:  and %s34, -4, %s34
+; CHECK-NEXT:  ts1am.w %s37, 0(%s34), %s36
+; CHECK-NEXT:  subs.w.sx %s34, 24, %s35
+; CHECK-NEXT:  sla.w.sx %s34, %s37, %s34
+; CHECK-NEXT:  sra.w.sx %s34, %s34, 24
+; CHECK-NEXT:  fencem 3
+; CHECK-NEXT:  sla.w.sx %s34, %s34, 24
+; CHECK-NEXT:  sra.w.sx %s0, %s34, 24
+; CHECK-NEXT:  or %s11, 0, %s9
+entry:
+  %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 3), i8 187 seq_cst
   ret i8 %0
 }
 

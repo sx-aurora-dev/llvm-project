@@ -443,7 +443,7 @@ multiclass RMNDm<string opcStr, bits<8>opc, SDNode OpNode,
   }
 }
 
-let Constraints = "$sx = $sd", DisableEncoding = "$sd" in
+let Constraints = "$sx = $sd", DisableEncoding = "$sd", mayStore=1 in
 multiclass RRCASm<string opcStr, bits<8>opc, SDNode OpNode,
                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
   def asr : RM<
@@ -462,6 +462,14 @@ multiclass RRCASm<string opcStr, bits<8>opc, SDNode OpNode,
   }
   def rir : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32, RC:$sy, RC:$sd),
+    !strconcat(opcStr, " $sx, ${imm32}(${sz}), $sy"), []> {
+    let cy = 1;
+    let cz = 1;
+    let isCodeGenOnly = 1;
+    let hasSideEffects = 0;
+  }
+  def r64ir : RM<
+    opc, (outs RC:$sx), (ins I64:$sz, immOp2:$imm32, RC:$sy, RC:$sd),
     !strconcat(opcStr, " $sx, ${imm32}(${sz}), $sy"), []> {
     let cy = 1;
     let cz = 1;
@@ -1535,9 +1543,23 @@ let cx = 1 in
 defm TS1AMW : RRCASm<"ts1am.w", 0x42, add, I32, i32, simm7Op32, uimm6Op32>;
 
 // Atomic swap
-// FIXME: Assign 4 byte align address to $src
-// def : Pat<(i32 (atomic_swap_8  ADDRri:$src, i32:$new)),
-//           (TS1AMWasi MEMASri:$src, 1, $new)>;
+//   AND $newsrc, $src, -4      ; 4 byte align address
+//   AND $frac, $src, 3         ; $src position in $newsrc
+//   ADD $flag, 0, 1            ; set 1
+//   SLA $flag, $flag, $frac    ; shift 1 for 1byte ts1am
+//   SLA $tmp, $flac, 3         ; calc shift bits for next SLA
+//   SLA $new, $new, $tmp       ; shift $new for 1byte ts1am
+//   TS1AM $new, 0($newsrc), $flag ; 1byte ts1am
+def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
+         (SRArr
+            (SLArr
+               (TS1AMWr64ir
+                  (ANDri $src, -4), 0,
+                  (SLArr (OR32im1 1, 0), (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3)),
+                  (SLArr $new, (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
+               (SBSri 24, (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
+            24
+         )>;
 // def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
 //           (TS1AMWasi MEMASri:$src, 3, $new)>;
 def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
