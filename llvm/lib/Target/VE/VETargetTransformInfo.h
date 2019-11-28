@@ -25,6 +25,9 @@
 //#include "llvm/IR/Function.h"
 //#include "llvm/IR/Intrinsics.h"
 //#include <cstdint>
+#include "llvm/IR/PredicatedInst.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/Type.h"
 
 namespace llvm {
 
@@ -53,6 +56,20 @@ public:
   /// \returns False if this VP op should be replaced by a non-VP op or an
   /// unpredicated op plus a select.
   bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
+    switch (PredInst.getOpcode()) {
+      default: break;
+
+    // Legalize mask arithmetic
+      case Instruction::And:
+      case Instruction::Or:
+      case Instruction::Xor:
+        auto ITy = PredInst.getType();
+	if (!ITy->isVectorTy()) break;
+        if (!ITy->isIntOrIntVectorTy(1)) break;
+	return false;
+    }
+
+   // Otw
     return true; // FIXME
   }
 
