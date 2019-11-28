@@ -56,6 +56,10 @@ public:
     return true; // FIXME
   }
 
+  bool enableLoopVectorizer() const {
+    return false; // LV does not understand this target
+  }
+
   unsigned getNumberOfRegisters(unsigned ClassID) const {
     bool Vector = (ClassID == 1);
     if (Vector) {
