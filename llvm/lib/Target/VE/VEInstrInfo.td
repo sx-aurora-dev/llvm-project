@@ -24,6 +24,10 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
+def SDTVectorLeaf : SDTypeProfile<1, 0, [SDTCisVec<0>]>;         // for 'vector'.
+def vector        : SDNode<"VEISD::VEC_BROADCAST"  , SDTVectorLeaf>;// , [], "ConstantSDNode">;
+
+def m_alltrue   : PatLeaf<(vector), [{ return isAllTrueMask(N); }]>;
 def simm7       : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
