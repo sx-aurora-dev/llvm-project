@@ -224,6 +224,28 @@ def : Pat<(vp_scatter v256i64:$val, i64:$base, v256i64:$index, i64:$scale, v256i
             $mask,
             $avl
           )>;
+// 256 x f64 // TODO use multiclass
+def : Pat<(vp_scatter v256f64:$val, (i64 zero), v256i64:$index, i64:$scale, v256i1:$mask, i32:$avl),
+          (vsc_vvssml
+            $val,
+            (vmulul_vsvmvl $scale, $index, $mask, (IMPLICIT_DEF), $avl),
+            0, 0,
+            $mask,
+            $avl
+          )>;
+def : Pat<(vp_scatter v256f64:$val, i64:$base, v256i64:$index, i64:$scale, v256i1:$mask, i32:$avl),
+          (vsc_vvssml
+            $val,
+            (vaddul_vsvmvl $base,
+              (vmulul_vsvmvl $scale, $index, $mask, (IMPLICIT_DEF), $avl),
+              $mask,
+              (IMPLICIT_DEF), 
+              $avl),
+            0, 0,
+            $mask,
+            $avl
+          )>;
+
 
 
 // Vector Store
