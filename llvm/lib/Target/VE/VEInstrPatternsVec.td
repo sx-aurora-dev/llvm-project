@@ -153,9 +153,17 @@ multiclass store_for_vector_length<int length> {
                    I64:$addr),
 	      (vstl_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
                     4, $addr, (LEA32zzi length))>;
+  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
+                   I64:$addr),
+	      (vstu_vIsl !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
+                    4, $addr, (LEA32zzi length))>;
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
                    I64:$addr),
             (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
+                    8, $addr, (LEA32zzi length))>;
+  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
+                   I64:$addr),
+            (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
                     8, $addr, (LEA32zzi length))>;
 }
 
