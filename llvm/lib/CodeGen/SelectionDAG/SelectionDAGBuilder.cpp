@@ -6351,60 +6351,8 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     visitConstrainedFPIntrinsic(cast<ConstrainedFPIntrinsic>(I));
     return;
 
-  case Intrinsic::vp_and:
-  case Intrinsic::vp_or:
-  case Intrinsic::vp_xor:
-  case Intrinsic::vp_ashr:
-  case Intrinsic::vp_lshr:
-  case Intrinsic::vp_shl:
-
-  case Intrinsic::vp_select:
-  case Intrinsic::vp_compose:
-  case Intrinsic::vp_compress:
-  case Intrinsic::vp_expand:
-  case Intrinsic::vp_vshift:
-
-  case Intrinsic::vp_load:
-  case Intrinsic::vp_store:
-  case Intrinsic::vp_gather:
-  case Intrinsic::vp_scatter:
-
-  case Intrinsic::vp_fneg:
-
-  case Intrinsic::vp_fadd:
-  case Intrinsic::vp_fsub:
-  case Intrinsic::vp_fmul:
-  case Intrinsic::vp_fdiv:
-  case Intrinsic::vp_frem:
-
-  case Intrinsic::vp_fma:
-
-  case Intrinsic::vp_add:
-  case Intrinsic::vp_sub:
-  case Intrinsic::vp_mul:
-  case Intrinsic::vp_udiv:
-  case Intrinsic::vp_sdiv:
-  case Intrinsic::vp_urem:
-  case Intrinsic::vp_srem:
-
-  case Intrinsic::vp_fcmp:
-  case Intrinsic::vp_icmp:
-
-  case Intrinsic::vp_reduce_and:
-  case Intrinsic::vp_reduce_or:
-  case Intrinsic::vp_reduce_xor:
-
-  case Intrinsic::vp_reduce_fadd:
-  case Intrinsic::vp_reduce_fmax:
-  case Intrinsic::vp_reduce_fmin:
-  case Intrinsic::vp_reduce_fmul:
-
-  case Intrinsic::vp_reduce_add:
-  case Intrinsic::vp_reduce_mul:
-  case Intrinsic::vp_reduce_umax:
-  case Intrinsic::vp_reduce_umin:
-  case Intrinsic::vp_reduce_smax:
-  case Intrinsic::vp_reduce_smin:
+#define REGISTER_VP_INTRINSIC(VPID,MASKPOS,VLENPOS) case Intrinsic::VPID:
+#include "llvm/IR/VPIntrinsics.def"
     visitVectorPredicationIntrinsic(cast<VPIntrinsic>(I));
     return;
 
@@ -7435,6 +7383,12 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     break;
   case Intrinsic::vp_reduce_fmul:
     Opcode = ISD::VP_REDUCE_FMUL;
+    break;
+  case Intrinsic::vp_reduce_fmin:
+    Opcode = ISD::VP_REDUCE_UMAX;
+    break;
+  case Intrinsic::vp_reduce_fmax:
+    Opcode = ISD::VP_REDUCE_UMIN;
     break;
   case Intrinsic::vp_reduce_smax:
     Opcode = ISD::VP_REDUCE_SMAX;
