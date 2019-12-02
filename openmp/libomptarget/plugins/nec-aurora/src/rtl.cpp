@@ -46,10 +46,8 @@ static int DebugLevel = 0;
 
 #include "../../common/elf_common.c"
 
-#define NUMBER_OF_DEVICES 8 // TODO: find out how many nodes we can have
-
 #define VEO_MIN_VERSION 4
-#define VEO_MAX_VERSION 4
+#define VEO_MAX_VERSION 7
 
 struct DynLibTy {
   char *FileName;
@@ -63,7 +61,7 @@ struct FuncOrGblEntryTy {
 };
 
 class RTLDeviceInfoTy {
-  std::vector<FuncOrGblEntryTy> FuncOrGblEntry;
+  std::vector<std::list<FuncOrGblEntryTy>> FuncOrGblEntry;
 
 public:
   std::vector<struct veo_proc_handle *> ProcHandles;
@@ -75,9 +73,9 @@ public:
   void buildOffloadTableFromHost(int32_t device_id, uint64_t VeoLibHandle,
                                  __tgt_offload_entry *HostBegin,
                                  __tgt_offload_entry *HostEnd) {
-    std::vector<__tgt_offload_entry> &T = FuncOrGblEntry[device_id].Entries;
+    FuncOrGblEntry[device_id].emplace_back();
+    std::vector<__tgt_offload_entry> &T = FuncOrGblEntry[device_id].back().Entries;
     T.clear();
-
     for (__tgt_offload_entry *i = HostBegin; i != HostEnd; ++i) {
       char *SymbolName = i->name;
       // we have not enough access to the target memory to conveniently parse
@@ -107,12 +105,12 @@ public:
     __tgt_offload_entry DummyEntry = {NULL, NULL, 0, 0, 0};
     T.push_back(DummyEntry);
 
-    FuncOrGblEntry[device_id].Table.EntriesBegin = &T.front();
-    FuncOrGblEntry[device_id].Table.EntriesEnd = &T.back();
+    FuncOrGblEntry[device_id].back().Table.EntriesBegin = &T.front();
+    FuncOrGblEntry[device_id].back().Table.EntriesEnd = &T.back();
   }
 
   __tgt_target_table *getOffloadTable(int32_t device_id) {
-    return &FuncOrGblEntry[device_id].Table;
+    return &FuncOrGblEntry[device_id].back().Table;
   }
 
   RTLDeviceInfoTy() {
@@ -243,7 +241,7 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   DP("Dev %d: load binary from " DPxMOD " image\n", ID,
      DPxPTR(Image->ImageStart));
 
-  assert(ID >= 0 && ID < NUMBER_OF_DEVICES && "bad dev id");
+  assert(ID >= 0 && "bad dev id");
 
   size_t ImageSize = (size_t)Image->ImageEnd - (size_t)Image->ImageStart;
   size_t NumEntries = (size_t)(Image->EntriesEnd - Image->EntriesBegin);
@@ -310,17 +308,20 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
     DeviceInfo.ProcHandles[ID] = proc_handle;
   }
 
-  struct veo_thr_ctxt *ctx = veo_context_open(DeviceInfo.ProcHandles[ID]);
-  if (!ctx) {
-    // TODO: errno does not seem to be set by VEO
-    DP("veo_context_open() failed: %s\n", std::strerror(errno));
-    return NULL;
+  if (DeviceInfo.Contexts[ID] == NULL) {
+    struct veo_thr_ctxt *ctx = veo_context_open(DeviceInfo.ProcHandles[ID]);
+
+    if (!ctx) {
+      // TODO: errno does not seem to be set by VEO
+      DP("veo_context_open() failed: %s\n", std::strerror(errno));
+      return NULL;
+    }
+
+    DeviceInfo.Contexts[ID] = ctx;
   }
 
-  DeviceInfo.Contexts[ID] = ctx;
-
-  DP("Aurora device successfully initialized: proc_handle=%p, ctx=%p\n",
-     DeviceInfo.ProcHandles[ID] , ctx);
+  DP("Aurora device successfully initialized with loaded binary: proc_handle=%p, ctx=%p\n",
+     DeviceInfo.ProcHandles[ID] , DeviceInfo.Contexts[ID]);
 
   uint64_t LibHandle = 0UL;
   if (is_dyn) {
