@@ -47,7 +47,7 @@ static int DebugLevel = 0;
 #include "../../common/elf_common.c"
 
 #define VEO_MIN_VERSION 4
-#define VEO_MAX_VERSION 4
+#define VEO_MAX_VERSION 7
 
 struct DynLibTy {
   char *FileName;
