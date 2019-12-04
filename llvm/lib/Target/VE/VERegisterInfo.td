@@ -48,6 +48,23 @@ class Rq<bits<7> Enc, string n, list<Register> subregs> : VEReg<Enc, n> {
   let CoveredBySubRegs = 1;
 }
 
+// Vector Registers are identified with 7-bit ID numbers.
+// VR - 64-bit wide 256 elements integer or floating-point registers
+class VR<bits<7> Enc, string n> : VEReg<Enc, n>;
+
+// Vector Mask Registers are identified with 5-bit ID numbers.
+// VM - 256-bit wide mask registers
+class VM<bits<7> Enc, string n> : VEReg<Enc, n>;
+
+// Pseudo 512b mask register using two 256b physical mask register.
+// Two 256b mask register has to be sequential and start from even register
+// such as (VM2, VM3). Even register is used for upper(0:31) bit in packed
+// vector instructions, and odd register is used for lower(32:63).
+class VMp<bits<7> Enc, string n, list<Register> subregs> : VEReg<Enc, n> {
+  let SubRegs = subregs;
+  let SubRegIndices = [sub_vm_even, sub_vm_odd];
+}
+
 // Miscellaneous Registers
 def UCC : VEMiscReg<0, "UCC">;       // User clock counter
 def PSW : VEMiscReg<1, "PSW">;       // Program status word
@@ -87,6 +104,24 @@ let SubRegIndices = [sub_i32, sub_f32], CoveredBySubRegs = 1 in
 foreach I = 0-63 in
   def SX#I : R<I, "S"#I, [!cast<R>("SW"#I), !cast<R>("SF"#I)]>,
              DwarfRegNum<[I]>;
+
+// Vector registers - 64 bits wide 256 elements
+foreach I = 0-63 in
+  def V#I : VR<I, "V"#I>, DwarfRegNum<[!add(64,I)]>;
+
+// Vector mask registers - 256 bits wide
+foreach I = 0-15 in
+  def VM#I : VM<I, "VM"#I>, DwarfRegNum<[!add(128,I)]>;
+
+// Aliases of VMs to use as a pair of two VM for packed instructions
+def VMP0 : VMp<0, "VM0", []>;
+def VMP1 : VMp<2, "VM2", [VM2, VM3]>;
+def VMP2 : VMp<4, "VM4", [VM4, VM5]>;
+def VMP3 : VMp<6, "VM6", [VM6, VM7]>;
+def VMP4 : VMp<8, "VM8", [VM8, VM9]>;
+def VMP5 : VMp<10, "VM10", [VM10, VM11]>;
+def VMP6 : VMp<12, "VM12", [VM12, VM13]>;
+def VMP7 : VMp<14, "VM14", [VM14, VM15]>;
 
 // Aliases of the S* registers used to hold 128-bit for values (long doubles).
 // Following foreach represents something like:
@@ -131,3 +166,19 @@ def Misc : RegisterClass<"VE", [i64], 64,
                          (add UCC, PSW, SAR, PMMR,
                               (sequence "PMCR%u", 0, 3),
                               (sequence "PMC%u", 0, 14))>;
+
+def V64 : RegisterClass<"VE",
+                        [v512i32, v512f32,
+                         v256i64, v256i32, v256f32, v256f64,
+                         v128i64, v128i32, v128f32, v128f64,
+                         v64i64,  v64i32,  v64f32,  v64f64,
+                         v32i64,  v32i32,  v32f32,  v32f64,
+                         v16i64,  v16i32,  v16f32,  v16f64,
+                         v8i64,   v8i32,   v8f32,   v8f64,
+                         v4i64,   v4i32,   v4f32,   v4f64,
+                         v2i64,   v2i32,   v2f32,   v2f64],
+                        64, (sequence "V%u", 0, 63)>;
+// vm0 is reserved for always true
+
+def VM : RegisterClass<"VE", [v256i1, v4i64], 64, (sequence "VM%u", 0, 15)>;
+def VM512 : RegisterClass<"VE", [v512i1, v8i64], 64, (sequence "VMP%u", 0, 7)>;

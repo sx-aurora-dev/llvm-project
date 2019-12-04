@@ -49,7 +49,7 @@ public:
 
   bool enableLoopVectorizer() const { return false; }
 
-  unsigned getMinVectorRegisterBitWidth() const { return 64; }
+  unsigned getMinVectorRegisterBitWidth() const { return 256 * 64; }
 
   bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) { return false; }
   bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment) {

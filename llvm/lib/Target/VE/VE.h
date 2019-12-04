@@ -28,6 +28,7 @@ class MachineInstr;
 
 FunctionPass *createVEISelDag(VETargetMachine &TM);
 FunctionPass *createVEPromoteToI1Pass();
+FunctionPass *createLVLGenPass();
 
 void LowerVEMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
                                  AsmPrinter &AP);
@@ -39,30 +40,30 @@ namespace llvm {
 namespace VECC {
 enum CondCodes {
   // Integer comparison
-  CC_IG =  0,  // Greater
-  CC_IL =  1,  // Less
+  CC_IG = 0,  // Greater
+  CC_IL = 1,  // Less
   CC_INE = 2, // Not Equal
   CC_IEQ = 3, // Equal
   CC_IGE = 4, // Greater or Equal
   CC_ILE = 5, // Less or Equal
 
   // Floating point comparison
-  CC_AF =     0 + 6, // Never
-  CC_G =      1 + 6, // Greater
-  CC_L =      2 + 6, // Less
-  CC_NE =     3 + 6, // Not Equal
-  CC_EQ =     4 + 6, // Equal
-  CC_GE =     5 + 6, // Greater or Equal
-  CC_LE =     6 + 6, // Less or Equal
-  CC_NUM =    7 + 6, // Number
-  CC_NAN =    8 + 6, // NaN
-  CC_GNAN =   9 + 6, // Greater or NaN
-  CC_LNAN =  10 + 6, // Less or NaN
+  CC_AF = 0 + 6,     // Never
+  CC_G = 1 + 6,      // Greater
+  CC_L = 2 + 6,      // Less
+  CC_NE = 3 + 6,     // Not Equal
+  CC_EQ = 4 + 6,     // Equal
+  CC_GE = 5 + 6,     // Greater or Equal
+  CC_LE = 6 + 6,     // Less or Equal
+  CC_NUM = 7 + 6,    // Number
+  CC_NAN = 8 + 6,    // NaN
+  CC_GNAN = 9 + 6,   // Greater or NaN
+  CC_LNAN = 10 + 6,  // Less or NaN
   CC_NENAN = 11 + 6, // Not Equal or NaN
   CC_EQNAN = 12 + 6, // Equal or NaN
   CC_GENAN = 13 + 6, // Greater or Equal or NaN
   CC_LENAN = 14 + 6, // Less or Equal or NaN
-  CC_AT =    15 + 6, // Always
+  CC_AT = 15 + 6,    // Always
 };
 }
 

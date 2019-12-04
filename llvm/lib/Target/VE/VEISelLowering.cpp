@@ -74,6 +74,408 @@ bool VETargetLowering::CanLowerReturn(
   return CCInfo.CheckReturn(Outs, RetCC);
 }
 
+SDValue VETargetLowering::LowerBitcast(SDValue Op, SelectionDAG &DAG) const {
+  if (Op.getSimpleValueType() == MVT::v256i64 &&
+      Op.getOperand(0).getSimpleValueType() == MVT::v256f64) {
+    LLVM_DEBUG(dbgs() << "Lowering bitcast of similar types.\n");
+    return Op.getOperand(0);
+  } else {
+    return Op;
+  }
+}
+
+SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
+                                                SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering gather or scatter\n");
+  SDLoc dl(Op);
+  // dbgs() << "\nNext Instr:\n";
+  // Op.dumpr(&DAG);
+
+  MaskedGatherScatterSDNode *N = cast<MaskedGatherScatterSDNode>(Op.getNode());
+
+  SDValue Index = N->getIndex();
+  SDValue BasePtr = N->getBasePtr();
+  SDValue Mask = N->getMask();
+  SDValue Chain = N->getChain();
+
+  SDValue PassThru;
+  SDValue Source;
+
+  if (Op.getOpcode() == ISD::MGATHER) {
+    MaskedGatherSDNode *N = cast<MaskedGatherSDNode>(Op.getNode());
+    PassThru = N->getPassThru();
+  } else if (Op.getOpcode() == ISD::MSCATTER) {
+    MaskedScatterSDNode *N = cast<MaskedScatterSDNode>(Op.getNode());
+    Source = N->getValue();
+  } else {
+    return SDValue();
+  }
+
+  MVT IndexVT = Index.getSimpleValueType();
+  // MVT MaskVT = Mask.getSimpleValueType();
+  // MVT BasePtrVT = BasePtr.getSimpleValueType();
+
+  // vindex = vindex + baseptr;
+  SDValue BaseBroadcast =
+      DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, BasePtr);
+  SDValue ScaleBroadcast =
+      DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, N->getScale());
+
+  SDValue index_addr =
+      DAG.getNode(ISD::MUL, dl, IndexVT, {Index, ScaleBroadcast});
+
+  SDValue addresses =
+      DAG.getNode(ISD::ADD, dl, IndexVT, {BaseBroadcast, index_addr});
+
+  // TODO: vmx = svm (mask);
+  // Mask.dumpr(&DAG);
+  if (Mask.getOpcode() != ISD::BUILD_VECTOR || Mask.getNumOperands() != 256) {
+    LLVM_DEBUG(dbgs() << "Cannot handle gathers with complex masks.\n");
+    return SDValue();
+  }
+  for (unsigned i = 0; i < 256; i++) {
+    const SDValue Operand = Mask.getOperand(i);
+    if (Operand.getOpcode() != ISD::Constant) {
+      LLVM_DEBUG(
+          dbgs() << "Cannot handle gather masks with complex elements.\n");
+      return SDValue();
+    }
+    if (Mask.getConstantOperandVal(i) != 1) {
+      LLVM_DEBUG(dbgs() << "Cannot handle gather masks with elements != 1.\n");
+      return SDValue();
+    }
+  }
+
+  if (Op.getOpcode() == ISD::MGATHER) {
+    // vt = vgt (vindex, vmx, cs=0, sx=0, sy=0, sw=0);
+    SDValue load = DAG.getNode(VEISD::VEC_GATHER, dl, Op.getNode()->getVTList(),
+                               {Chain, addresses});
+    // load.dumpr(&DAG);
+
+    // TODO: merge (vt, default, vmx);
+    // PassThru.dumpr(&DAG);
+    // We can safely ignore PassThru right now, the mask is guaranteed to be
+    // constant 1s.
+
+    return load;
+  } else {
+    SDValue store =
+        DAG.getNode(VEISD::VEC_SCATTER, dl, Op.getNode()->getVTList(),
+                    {Chain, Source, addresses});
+    // store.dumpr(&DAG);
+    return store;
+  }
+}
+
+SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering MLOAD\n");
+  LLVM_DEBUG(Op.dumpr(&DAG));
+  SDLoc dl(Op);
+
+  MaskedLoadSDNode *N = cast<MaskedLoadSDNode>(Op.getNode());
+
+  SDValue BasePtr = N->getBasePtr();
+  SDValue Mask = N->getMask();
+  SDValue Chain = N->getChain();
+  SDValue PassThru = N->getPassThru();
+
+  MachinePointerInfo info = N->getPointerInfo();
+
+  if (Mask.getOpcode() != ISD::BUILD_VECTOR || Mask.getNumOperands() != 256) {
+    LLVM_DEBUG(dbgs() << "Cannot handle gathers with complex masks.\n");
+    return SDValue();
+  }
+
+  int firstzero = 256;
+
+  for (unsigned i = 0; i < 256; i++) {
+    const SDValue Operand = Mask.getOperand(i);
+    if (Operand.getOpcode() != ISD::Constant) {
+      LLVM_DEBUG(dbgs() << "Cannot handle load masks with complex elements.\n");
+      return SDValue();
+    }
+    if (Mask.getConstantOperandVal(i) != 1) {
+      if (firstzero == 256)
+        firstzero = i;
+      if (!PassThru.isUndef() && !PassThru.getOperand(i).isUndef()) {
+        LLVM_DEBUG(dbgs() << "Cannot handle passthru.\n");
+        return SDValue();
+      }
+    } else {
+      if (firstzero != 256) {
+        LLVM_DEBUG(dbgs() << "Cannot handle mixed load masks.\n");
+        return SDValue();
+      }
+    }
+  }
+
+  EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
+
+  // FIXME: LVL instruction has output VL now, need to update VEC_LVL too.
+  Chain = DAG.getNode(VEISD::VEC_LVL, dl, MVT::Other,
+                      {Chain, DAG.getConstant(firstzero, dl, i32)});
+
+  SDValue load = DAG.getLoad(Op.getSimpleValueType(), dl, Chain, BasePtr, info);
+
+  // FIXME: LVL instruction has output VL now, need to update VEC_LVL too.
+  Chain = DAG.getNode(VEISD::VEC_LVL, dl, MVT::Other,
+                      {load.getValue(1), DAG.getConstant(256, dl, i32)});
+
+  SDValue merge = DAG.getMergeValues({load, Chain}, dl);
+  LLVM_DEBUG(dbgs() << "Becomes\n");
+  LLVM_DEBUG(merge.dumpr(&DAG));
+  return merge;
+}
+
+static bool isBroadCastOrS2V(BuildVectorSDNode *BVN, bool &AllUndef, bool &S2V,
+                             unsigned &FirstDef) {
+  // Check UNDEF or FirstDef
+  AllUndef = true;
+  S2V = false;
+  FirstDef = 0;
+  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
+    if (!BVN->getOperand(i).isUndef()) {
+      AllUndef = false;
+      FirstDef = i;
+      break;
+    }
+  }
+  if (AllUndef)
+    return true;
+  // Check scalar_to_vector (single def at first, and the rests are undef)
+  if (FirstDef == 0) {
+    S2V = true;
+    for (unsigned i = FirstDef + 1; i < BVN->getNumOperands(); ++i) {
+      if (!BVN->getOperand(i).isUndef()) {
+        S2V = false;
+        break;
+      }
+    }
+    if (S2V)
+      return true;
+  }
+  // Check boradcast
+  for (unsigned i = FirstDef + 1; i < BVN->getNumOperands(); ++i) {
+    if (BVN->getOperand(FirstDef) != BVN->getOperand(i) &&
+        !BVN->getOperand(i).isUndef()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
+                                            SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering BUILD_VECTOR\n");
+  BuildVectorSDNode *BVN = cast<BuildVectorSDNode>(Op.getNode());
+
+  SDLoc DL(Op);
+
+  // match VEC_BROADCAST
+  bool AllUndef;
+  bool S2V;
+  unsigned FirstDef;
+  if (isBroadCastOrS2V(BVN, AllUndef, S2V, FirstDef)) {
+    if (AllUndef) {
+      LLVM_DEBUG(dbgs() << "AllUndef: VEC_BROADCAST ");
+      LLVM_DEBUG(BVN->getOperand(0)->dump());
+      return DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                         BVN->getOperand(0));
+    } else if (S2V) {
+      LLVM_DEBUG(dbgs() << "isS2V: scalar_to_vector ");
+      LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
+      return DAG.getNode(ISD::SCALAR_TO_VECTOR, DL, Op.getSimpleValueType(),
+                         BVN->getOperand(FirstDef));
+    } else {
+      LLVM_DEBUG(dbgs() << "isBroadCast: VEC_BROADCAST ");
+      LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
+      return DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                         BVN->getOperand(FirstDef));
+    }
+  }
+
+#if 0
+  if (BVN->isConstant()) {
+    // All values are either a constant value or undef, so optimize it...
+  }
+#endif
+
+  // match VEC_SEQ(stride) patterns
+  // identify a constant stride vector
+  bool hasConstantStride = true;
+
+  // whether the constant is a repetition of ascending indices, eg <0, 1, 2, 3,
+  // 0, 1, 2, 3, ..>
+  bool hasBlockStride = false;
+
+  // whether the constant is an ascending sequence of repeated indices, eg <0,
+  // 0, 1, 1, 2, 2, 3, 3 ..>
+  bool hasBlockStride2 = false;
+
+  bool firstStride = true;
+  int64_t blockLength = 0;
+  int64_t stride = 0;
+  int64_t lastElemValue = 0;
+  MVT elemTy;
+
+  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
+    if (hasBlockStride) {
+      if (i % blockLength == 0)
+        stride = 1;
+      else
+        stride = 0;
+    }
+
+    if (BVN->getOperand(i).isUndef()) {
+      if (hasBlockStride2 && i % blockLength == 0)
+        lastElemValue = 0;
+      else
+        lastElemValue += stride;
+      continue;
+    }
+
+    // is this an immediate constant value?
+    auto *constNumElem = dyn_cast<ConstantSDNode>(BVN->getOperand(i));
+    if (!constNumElem) {
+      hasConstantStride = false;
+      hasBlockStride = false;
+      hasBlockStride2 = false;
+      break;
+    }
+
+    // read value
+    int64_t elemValue = constNumElem->getSExtValue();
+    elemTy = constNumElem->getSimpleValueType(0);
+
+    if (i == FirstDef) {
+      // FIXME: Currently, this code requies that first value of vseq
+      // is zero.  This is possible to enhance like thses instructions:
+      //        VSEQ $v0
+      //        VBRD $v1, 2
+      //        VADD $v0, $v0, $v1
+      if (elemValue != 0) {
+        hasConstantStride = false;
+        hasBlockStride = false;
+        hasBlockStride2 = false;
+        break;
+      }
+    } else if (i > FirstDef && firstStride) {
+      // first stride
+      stride = (elemValue - lastElemValue) / (i - FirstDef);
+      firstStride = false;
+    } else if (i > FirstDef) {
+      // later stride
+      if (hasBlockStride2 && elemValue == 0 && i % blockLength == 0) {
+        lastElemValue = 0;
+        continue;
+      }
+      int64_t thisStride = elemValue - lastElemValue;
+      if (thisStride != stride) {
+        hasConstantStride = false;
+        if (!hasBlockStride && thisStride == 1 && stride == 0 &&
+            lastElemValue == 0) {
+          hasBlockStride = true;
+          blockLength = i;
+        } else if (!hasBlockStride2 && elemValue == 0 &&
+                   lastElemValue + 1 == i) {
+          hasBlockStride2 = true;
+          blockLength = i;
+        } else {
+          // not blockStride anymore.  e.g. { 0, 1, 2, 3, 0, 0, 0, 0 }
+          hasBlockStride = false;
+          hasBlockStride2 = false;
+          break;
+        }
+      }
+    }
+
+    // track last elem value
+    lastElemValue = elemValue;
+  }
+
+  // detected a proper stride pattern
+  if (hasConstantStride) {
+    SDValue seq = DAG.getNode(
+        VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
+        DAG.getConstant(1, DL, elemTy)); // TODO draw strideTy from elements
+    if (stride == 1) {
+      LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
+      LLVM_DEBUG(seq.dump());
+      return seq;
+    }
+
+    SDValue const_stride =
+        DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                    DAG.getConstant(stride, DL, elemTy));
+    SDValue ret =
+        DAG.getNode(ISD::MUL, DL, Op.getSimpleValueType(), {seq, const_stride});
+    LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST\n");
+    LLVM_DEBUG(const_stride.dump());
+    LLVM_DEBUG(ret.dump());
+    return ret;
+  }
+
+  // codegen for <0, 0, .., 0, 0, 1, 1, .., 1, 1, .....> constant patterns
+  // constant == VSEQ >> log2(blockLength)
+  if (hasBlockStride) {
+    int64_t blockLengthLog = log2(blockLength);
+
+    if (pow(2, blockLengthLog) == blockLength) {
+      SDValue sequence =
+          DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
+                      DAG.getConstant(1, DL, elemTy));
+      SDValue shiftbroadcast =
+          DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                      DAG.getConstant(blockLengthLog, DL, elemTy));
+
+      SDValue shift = DAG.getNode(ISD::SRL, DL, Op.getSimpleValueType(),
+                                  {sequence, shiftbroadcast});
+      LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST\n");
+      LLVM_DEBUG(sequence.dump());
+      LLVM_DEBUG(shiftbroadcast.dump());
+      LLVM_DEBUG(shift.dump());
+      return shift;
+    }
+  }
+
+  // codegen for <0, 1, .., 15, 0, 1, .., ..... > constant patterns
+  // constant == VSEQ % blockLength
+  if (hasBlockStride2) {
+    int64_t blockLengthLog = log2(blockLength);
+
+    if (pow(2, blockLengthLog) == blockLength) {
+      SDValue sequence =
+          DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
+                      DAG.getConstant(1, DL, elemTy));
+      SDValue modulobroadcast =
+          DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                      DAG.getConstant(blockLength - 1, DL, elemTy));
+
+      SDValue modulo = DAG.getNode(ISD::AND, DL, Op.getSimpleValueType(),
+                                   {sequence, modulobroadcast});
+
+      LLVM_DEBUG(dbgs() << "BlockStride2: VEC_SEQ & VEC_BROADCAST\n");
+      LLVM_DEBUG(sequence.dump());
+      LLVM_DEBUG(modulobroadcast.dump());
+      LLVM_DEBUG(modulo.dump());
+      return modulo;
+    }
+  }
+
+  // Otherwise, generate element-wise insertions.
+  SDValue newVector = SDValue(DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL,
+                                                 Op.getSimpleValueType()),
+                              0);
+
+  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
+    newVector = DAG.getNode(
+        ISD::INSERT_VECTOR_ELT, DL, Op.getSimpleValueType(), newVector,
+        BVN->getOperand(i),
+        DAG.getConstant(i, DL, EVT::getIntegerVT(*DAG.getContext(), 64)));
+  }
+  return newVector;
+}
+
 SDValue
 VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
                               bool IsVarArg,
@@ -522,6 +924,10 @@ bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
                                                       unsigned Align,
                                                       MachineMemOperand::Flags,
                                                       bool *Fast) const {
+  // VE requires aligned accesses for vector accesses
+  if (VT.isVector())
+    return false;
+
   if (Fast) {
     // It's fast anytime on VE
     *Fast = true;
@@ -531,6 +937,14 @@ bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
 
 bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
                                         const SelectionDAG &DAG) const {
+  // VE's vectorization is experimental, so disable to use vector stores
+  // if vectorize feature is disabled.
+  if (!Subtarget->vectorize()) {
+    if (MemVT.isVector()) {
+      return false;
+    }
+  }
+
   // Do not merge to float value size (128 bytes) if no implicit
   // float attribute is set.
   bool NoFloat = DAG.getMachineFunction().getFunction().hasFnAttribute(
@@ -573,6 +987,63 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f32, &VE::F32RegClass);
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
+  addRegisterClass(MVT::v512i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v512f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v256i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v256i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v256f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v256f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v128i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v128i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v128f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v128f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v64i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v64i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v64f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v64f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v32i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v32i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v32f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v32f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v16i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v16i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v16f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v16f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v8i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v8i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v8f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v8f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v4i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v4i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v4f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v4f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v2i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v2i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v2f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v2f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+
+  if (Subtarget->vectorize()) {
+    // We want to use any of vectorization oppotunities in llvm.
+    // So, try to use llvm's SIMD style vectorizations here.
+    //
+    // However, this requires intrinsics with vector mask to use
+    // following bitcast in order to convert between v4i64/v8i64 and
+    // v256i1/v512i1 respectively since C doesn't have 1 bit data types.
+    //
+    //   e.g. (i256i1 (bitcast (v4i64 (llvm.ve.vfmkw.mcv ...))))
+    //                ^^^^^^^^^^^^^^^ this bitcast is needed
+    //
+    addRegisterClass(MVT::v4i64, &VE::V64RegClass);
+    addRegisterClass(MVT::v8i64, &VE::V64RegClass);
+  } else {
+    // FIXME:
+    // llvm-ve uses v4i64/v8i64 for a mask temporally until llvm supports
+    // v256i1/v512i1.
+    addRegisterClass(MVT::v4i64, &VE::VMRegClass);
+    addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
+  }
 
   /// Load & Store {
   for (MVT FPVT : MVT::fp_valuetypes()) {
@@ -738,6 +1209,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::SMULO, MVT::i64, Custom);
   }
 
+  // FIXME: temporary disabling Custom BITCAST since such BITCAST
+  // is generated by only LowerBUILD_VECTOR temporary disabled.
+#if 0
+  // Bits operations
+  setOperationAction(ISD::BITCAST, MVT::v256i64, Custom);
+#endif
+
   setOperationAction(ISD::BITREVERSE, MVT::i32, Legal);
   setOperationAction(ISD::BITREVERSE, MVT::i64, Legal);
   setOperationAction(ISD::BSWAP, MVT::i32, Legal);
@@ -771,6 +1249,136 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // LOAD/STORE for f128 needs to be custom lowered to expand two loads/stores
   setOperationAction(ISD::LOAD, MVT::f128, Custom);
   setOperationAction(ISD::STORE, MVT::f128, Custom);
+
+  for (MVT VT : MVT::vector_valuetypes()) {
+    if (VT.getVectorElementType() == MVT::i1 ||
+        VT.getVectorElementType() == MVT::i8 ||
+        VT.getVectorElementType() == MVT::i16) {
+      // VE uses vXi1 types but has no generic operations.
+      // VE doesn't support vXi8 and vXi16 value types.
+      // So, we mark them all as expanded.
+
+      // Expand all vector-i8/i16-vector truncstore and extload
+      for (MVT OuterVT : MVT::vector_valuetypes()) {
+        setTruncStoreAction(OuterVT, VT, Expand);
+        setLoadExtAction(ISD::SEXTLOAD, OuterVT, VT, Expand);
+        setLoadExtAction(ISD::ZEXTLOAD, OuterVT, VT, Expand);
+        setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Expand);
+      }
+      // SExt i1 and ZExt i1 are legal.
+      if (VT.getVectorElementType() == MVT::i1) {
+        setOperationAction(ISD::SIGN_EXTEND, VT, Legal);
+        setOperationAction(ISD::ZERO_EXTEND, VT, Legal);
+        setOperationAction(ISD::INSERT_VECTOR_ELT, VT, Expand);
+        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+      } else {
+        setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
+        setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
+        setOperationAction(ISD::INSERT_VECTOR_ELT, VT, Expand);
+        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Expand);
+      }
+
+      // STORE for vXi1 needs to be custom lowered to expand multiple
+      // instructions.
+      if (VT.getVectorElementType() == MVT::i1)
+        setOperationAction(ISD::STORE, VT, Custom);
+
+      setOperationAction(ISD::SCALAR_TO_VECTOR, VT, Expand);
+      setOperationAction(ISD::BUILD_VECTOR, VT, Expand);
+      setOperationAction(ISD::CONCAT_VECTORS, VT, Expand);
+      setOperationAction(ISD::INSERT_SUBVECTOR, VT, Expand);
+      setOperationAction(ISD::EXTRACT_SUBVECTOR, VT, Expand);
+      setOperationAction(ISD::VECTOR_SHUFFLE, VT, Expand);
+
+      setOperationAction(ISD::FP_EXTEND, VT, Expand);
+      setOperationAction(ISD::FP_ROUND, VT, Expand);
+
+      setOperationAction(ISD::FABS, VT, Expand);
+      setOperationAction(ISD::FNEG, VT, Expand);
+      setOperationAction(ISD::FADD, VT, Expand);
+      setOperationAction(ISD::FSUB, VT, Expand);
+      setOperationAction(ISD::FMUL, VT, Expand);
+      setOperationAction(ISD::FDIV, VT, Expand);
+      setOperationAction(ISD::ADD, VT, Expand);
+      setOperationAction(ISD::SUB, VT, Expand);
+      setOperationAction(ISD::MUL, VT, Expand);
+      setOperationAction(ISD::SDIV, VT, Expand);
+      setOperationAction(ISD::UDIV, VT, Expand);
+
+      setOperationAction(ISD::SHL, VT, Expand);
+
+      setOperationAction(ISD::MSCATTER, VT, Expand);
+      setOperationAction(ISD::MGATHER, VT, Expand);
+      setOperationAction(ISD::MLOAD, VT, Expand);
+
+      // VE vector unit supports only setcc and vselect
+      setOperationAction(ISD::SELECT_CC, VT, Expand);
+
+      // VE doesn't have instructions for fp<->uint, so expand them by llvm
+      setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
+      setOperationAction(ISD::UINT_TO_FP, VT, Promote); // use i64
+    } else {
+      setOperationAction(ISD::SCALAR_TO_VECTOR, VT, Legal);
+      setOperationAction(ISD::INSERT_VECTOR_ELT, VT, Custom);
+      setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+      setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
+      setOperationAction(ISD::CONCAT_VECTORS, VT, Expand);
+      setOperationAction(ISD::INSERT_SUBVECTOR, VT, Expand);
+      setOperationAction(ISD::EXTRACT_SUBVECTOR, VT, Expand);
+      setOperationAction(ISD::VECTOR_SHUFFLE, VT, Custom);
+
+      setOperationAction(ISD::FP_EXTEND, VT, Legal);
+      setOperationAction(ISD::FP_ROUND, VT, Legal);
+
+      // currently unsupported math functions
+      setOperationAction(ISD::FABS, VT, Expand);
+
+      // supported calculations
+      setOperationAction(ISD::FNEG, VT, Legal);
+      setOperationAction(ISD::FADD, VT, Legal);
+      setOperationAction(ISD::FSUB, VT, Legal);
+      setOperationAction(ISD::FMUL, VT, Legal);
+      setOperationAction(ISD::FDIV, VT, Legal);
+      setOperationAction(ISD::ADD, VT, Legal);
+      setOperationAction(ISD::SUB, VT, Legal);
+      setOperationAction(ISD::MUL, VT, Legal);
+      setOperationAction(ISD::SDIV, VT, Legal);
+      setOperationAction(ISD::UDIV, VT, Legal);
+
+      setOperationAction(ISD::SHL, VT, Legal);
+
+      setOperationAction(ISD::MSCATTER, VT, Custom);
+      setOperationAction(ISD::MGATHER, VT, Custom);
+      setOperationAction(ISD::MLOAD, VT, Custom);
+
+      // VE vector unit supports only setcc and vselect
+      setOperationAction(ISD::SELECT_CC, VT, Expand);
+
+      // VE doesn't have instructions for fp<->uint, so expand them by llvm
+      if (VT.getVectorElementType() == MVT::i32) {
+        setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
+        setOperationAction(ISD::UINT_TO_FP, VT, Promote); // use i64
+      } else {
+        setOperationAction(ISD::FP_TO_UINT, VT, Expand);
+        setOperationAction(ISD::UINT_TO_FP, VT, Expand);
+      }
+    }
+  }
+
+  // VE has no packed MUL, SDIV, or UDIV operations.
+  for (MVT VT : {MVT::v512i32, MVT::v512f32}) {
+    setOperationAction(ISD::MUL, VT, Expand);
+    setOperationAction(ISD::SDIV, VT, Expand);
+    setOperationAction(ISD::UDIV, VT, Expand);
+  }
+
+  // VE has no REM or DIVREM operations.
+  for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::UREM, VT, Expand);
+    setOperationAction(ISD::SREM, VT, Expand);
+    setOperationAction(ISD::SDIVREM, VT, Expand);
+    setOperationAction(ISD::UDIVREM, VT, Expand);
+  }
 
   // VE has FAQ, FSQ, FMQ, and FCQ
   setOperationAction(ISD::FADD, MVT::f128, Legal);
@@ -829,6 +1437,37 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
   /// } Conversion
 
+  // vector fma // TESTING
+  for (MVT VT : MVT::vector_valuetypes()) {
+    setOperationAction(ISD::FMA, VT, Legal);
+    // setOperationAction(ISD::FMAD, VT, Legal);
+    setOperationAction(ISD::FMAD, VT, Expand);
+    setOperationAction(ISD::FREM, VT, Expand);
+    setOperationAction(ISD::FNEG, VT, Expand);
+    setOperationAction(ISD::FABS, VT, Expand);
+    setOperationAction(ISD::FSQRT, VT, Expand);
+    setOperationAction(ISD::FSIN, VT, Expand);
+    setOperationAction(ISD::FCOS, VT, Expand);
+    setOperationAction(ISD::FPOWI, VT, Expand);
+    setOperationAction(ISD::FPOW, VT, Expand);
+    setOperationAction(ISD::FLOG, VT, Expand);
+    setOperationAction(ISD::FLOG2, VT, Expand);
+    setOperationAction(ISD::FLOG10, VT, Expand);
+    setOperationAction(ISD::FEXP, VT, Expand);
+    setOperationAction(ISD::FEXP2, VT, Expand);
+    setOperationAction(ISD::FCEIL, VT, Expand);
+    setOperationAction(ISD::FTRUNC, VT, Expand);
+    setOperationAction(ISD::FRINT, VT, Expand);
+    setOperationAction(ISD::FNEARBYINT, VT, Expand);
+    setOperationAction(ISD::FROUND, VT, Expand);
+    setOperationAction(ISD::FFLOOR, VT, Expand);
+    setOperationAction(ISD::FMINNUM, VT, Expand);
+    setOperationAction(ISD::FMAXNUM, VT, Expand);
+    setOperationAction(ISD::FMINIMUM, VT, Expand);
+    setOperationAction(ISD::FMAXIMUM, VT, Expand);
+    setOperationAction(ISD::FSINCOS, VT, Expand);
+  }
+
   setStackPointerRegisterToSaveRestore(VE::SX11);
 
   // Set function alignment to 16 bytes
@@ -877,6 +1516,12 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(RET_FLAG)
     TARGET_NODE_CASE(GLOBAL_BASE_REG)
     TARGET_NODE_CASE(FLUSHW)
+    TARGET_NODE_CASE(VEC_BROADCAST)
+    TARGET_NODE_CASE(VEC_LVL)
+    TARGET_NODE_CASE(VEC_SEQ)
+    TARGET_NODE_CASE(VEC_VMV)
+    TARGET_NODE_CASE(VEC_SCATTER)
+    TARGET_NODE_CASE(VEC_GATHER)
     TARGET_NODE_CASE(Wrapper)
   }
 #undef TARGET_NODE_CASE
@@ -1417,6 +2062,65 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
 }
 
+// Lower a vXi1 store into following instructions
+//   SVMi  %1, %vm, 0
+//   STSri %1, (,%addr)
+//   SVMi  %2, %vm, 1
+//   STSri %2, 8(,%addr)
+//   ...
+static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
+  SDLoc dl(Op);
+  StoreSDNode *StNode = dyn_cast<StoreSDNode>(Op.getNode());
+  assert(StNode && StNode->getOffset().isUndef() && "Unexpected node type");
+
+  SDValue BasePtr = StNode->getBasePtr();
+  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
+    // For the case of frame index, expanding it here cause dependency
+    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
+    return Op;
+  }
+
+  unsigned alignment = StNode->getAlignment();
+  if (alignment > 8)
+    alignment = 8;
+  EVT addrVT = BasePtr.getValueType();
+  EVT MemVT = StNode->getMemoryVT();
+  if (MemVT == MVT::v256i1) {
+    SDValue OutChains[4];
+    for (int i = 0; i < 4; ++i) {
+      SDNode *V =
+          DAG.getMachineNode(VE::svm_smI, dl, MVT::i64, StNode->getValue(),
+                             DAG.getTargetConstant(i, dl, MVT::i64));
+      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, dl, addrVT));
+      OutChains[i] =
+          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
+                       MachinePointerInfo(), alignment,
+                       StNode->isVolatile() ? MachineMemOperand::MOVolatile
+                                            : MachineMemOperand::MONone);
+    }
+    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
+  } else if (MemVT == MVT::v512i1) {
+    SDValue OutChains[8];
+    for (int i = 0; i < 8; ++i) {
+      SDNode *V =
+          DAG.getMachineNode(VE::svm_sMI, dl, MVT::i64, StNode->getValue(),
+                             DAG.getTargetConstant(i, dl, MVT::i64));
+      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, dl, addrVT));
+      OutChains[i] =
+          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
+                       MachinePointerInfo(), alignment,
+                       StNode->isVolatile() ? MachineMemOperand::MOVolatile
+                                            : MachineMemOperand::MONone);
+    }
+    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
+  } else {
+    // Otherwise, ask llvm to expand it.
+    return SDValue();
+  }
+}
+
 static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG) {
   SDLoc dl(Op);
   StoreSDNode *St = cast<StoreSDNode>(Op.getNode());
@@ -1424,6 +2128,8 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG) {
   EVT MemVT = St->getMemoryVT();
   if (MemVT == MVT::f128)
     return LowerF128Store(Op, DAG);
+  if (MemVT == MVT::v256i1 || MemVT == MVT::v512i1)
+    return LowerI1Store(Op, DAG);
 
   // Otherwise, ask llvm to expand it.
   return SDValue();
@@ -1577,6 +2283,313 @@ SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
   }
 }
 
+// Should we expand the build vector with shuffles?
+bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
+    EVT VT, unsigned DefinedValues) const {
+#if 1
+  // FIXME: Change this to true or expression once we implement custom
+  // expansion of VECTOR_SHUFFLE completely.
+
+  // Not use VECTOR_SHUFFLE to expand BUILD_VECTOR atm.  Because, it causes
+  // infinity expand loop between both instructions since VECTOR_SHUFFLE
+  // is not implemented completely yet.
+  return false;
+#else
+  return DefinedValues < 3;
+#endif
+}
+
+SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
+                                                 SelectionDAG &DAG) const {
+  assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");
+  EVT VT = Op.getOperand(0).getValueType();
+
+  // Special treatements for packed V64 types.
+  if (VT == MVT::v512i32 || VT == MVT::v512f32) {
+    // Example of codes:
+    //   %packed_v = extractelt %vr, %idx / 2
+    //   %packed_v &= 0xffffffff << ((%idx % 2) ? 0 : 32)
+    //   %packed_v |= %val << (%idx % 2 * 32)
+    //   %vr = insertelt %vr, %packed_v, %idx / 2
+
+    SDValue Vec = Op.getOperand(0);
+    SDValue Val = Op.getOperand(1);
+    SDValue Idx = Op.getOperand(2);
+    EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
+    EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
+    SDLoc dl(Op);
+    // In v512i32 and v512f32, both i32 and f32 values are placed from Low32,
+    // therefore convert f32 to i32 first.
+    SDValue I32Val = Val;
+    if (VT == MVT::v512f32) {
+      I32Val = DAG.getBitcast(i32, Val);
+    }
+    SDValue Result = Op;
+    if (0 /* Idx->isConstant()*/) {
+      // FIXME: optimized implementation using constant values
+    } else {
+      SDValue SetEq = DAG.getCondCode(ISD::SETEQ);
+      // SDValue CcEq = DAG.getConstant(VECC::CC_IEQ, dl, i64);
+      SDValue ZeroConst = DAG.getConstant(0, dl, i64);
+      SDValue OneConst = DAG.getConstant(1, dl, i64);
+      SDValue ThirtyTwoConst = DAG.getConstant(32, dl, i64);
+      SDValue HighMask = DAG.getConstant(0xFFFFFFFF00000000, dl, i64);
+      SDValue HalfIdx = DAG.getNode(ISD::SRL, dl, i64, {Idx, OneConst});
+      SDValue PackedVal =
+          SDValue(DAG.getMachineNode(VE::lvsl_svI, dl, i64, {Vec, HalfIdx}), 0);
+      SDValue IdxLSB = DAG.getNode(ISD::AND, dl, i64, {Idx, OneConst});
+      SDValue ShiftIdx =
+          DAG.getNode(ISD::SELECT_CC, dl, i64,
+                      {IdxLSB, ZeroConst, ZeroConst, ThirtyTwoConst, SetEq});
+      SDValue Mask = DAG.getNode(ISD::SRL, dl, i64, {HighMask, ShiftIdx});
+      SDValue MaskedVal = DAG.getNode(ISD::AND, dl, i64, {PackedVal, Mask});
+      SDValue BaseVal = SDValue(
+          DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, dl, MVT::i64), 0);
+      // In v512i32 and v512f32, Both i32 and f32 values are placed from Low32.
+      SDValue SubLow32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
+      SDValue I64Val =
+          SDValue(DAG.getMachineNode(TargetOpcode::INSERT_SUBREG, dl, MVT::i64,
+                                     BaseVal, I32Val, SubLow32),
+                  0);
+      SDValue ShiftedVal = DAG.getNode(ISD::SHL, dl, i64, {I64Val, ShiftIdx});
+      SDValue CombinedVal =
+          DAG.getNode(ISD::OR, dl, i64, {ShiftedVal, MaskedVal});
+      Result =
+          SDValue(DAG.getMachineNode(VE::lsv_vvIs, dl, Vec.getSimpleValueType(),
+                                     {Vec, HalfIdx, CombinedVal}),
+                  0);
+    }
+    return Result;
+  }
+
+  // Insertion is legal for other V64 types.
+  return Op;
+}
+
+SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering Shuffle\n");
+  SDLoc dl(Op);
+  ShuffleVectorSDNode *ShuffleInstr = cast<ShuffleVectorSDNode>(Op.getNode());
+
+  SDValue firstVec = ShuffleInstr->getOperand(0);
+  int firstVecLength = firstVec.getSimpleValueType().getVectorNumElements();
+  SDValue secondVec = ShuffleInstr->getOperand(1);
+  int secondVecLength = secondVec.getSimpleValueType().getVectorNumElements();
+
+  MVT ElementType = Op.getSimpleValueType().getScalarType();
+  int resultSize = Op.getSimpleValueType().getVectorNumElements();
+
+  if (ShuffleInstr->isSplat()) {
+    int index = ShuffleInstr->getSplatIndex();
+    if (index >= firstVecLength) {
+      index -= firstVecLength;
+      SDValue elem = DAG.getNode(
+          ISD::EXTRACT_VECTOR_ELT, dl, ElementType,
+          {secondVec,
+           DAG.getConstant(index, dl,
+                           EVT::getIntegerVT(*DAG.getContext(), 64))});
+      return DAG.getNode(VEISD::VEC_BROADCAST, dl, Op.getSimpleValueType(),
+                         elem);
+    } else {
+      SDValue elem = DAG.getNode(
+          ISD::EXTRACT_VECTOR_ELT, dl, ElementType,
+          {firstVec, DAG.getConstant(
+                         index, dl, EVT::getIntegerVT(*DAG.getContext(), 64))});
+      return DAG.getNode(VEISD::VEC_BROADCAST, dl, Op.getSimpleValueType(),
+                         elem);
+    }
+  }
+
+  // Supports v256 shuffles only atm.
+  if (firstVecLength != 256 || secondVecLength != 256 || resultSize != 256) {
+    LLVM_DEBUG(dbgs() << "Invalid vector lengths\n");
+    return SDValue();
+  }
+
+  int firstrot = 256;
+  int secondrot = 256;
+  int firstsecond = 256;
+  bool inv_order;
+
+  if (ShuffleInstr->getMaskElt(0) < 256) {
+    inv_order = false;
+  } else {
+    inv_order = true;
+  }
+
+  for (int i = 0; i < 256; i++) {
+    int mask_value = ShuffleInstr->getMaskElt(i);
+
+    if (mask_value < 0) // Undef
+      continue;
+
+    if (mask_value < 256) {
+      if (firstsecond != 256 && !inv_order) {
+        LLVM_DEBUG(dbgs() << "Mixing\n");
+        return SDValue();
+      }
+
+      if (firstsecond == 256 && inv_order)
+        firstsecond = i;
+
+      if (firstrot == 256)
+        firstrot = i - mask_value;
+      else if (firstrot != i - mask_value) {
+        LLVM_DEBUG(dbgs() << "Bad first rot\n");
+        return SDValue();
+      }
+    } else { // mask_value >= 256
+      if (firstsecond != 256 && inv_order) {
+        LLVM_DEBUG(dbgs() << "Mixing\n");
+        return SDValue();
+      }
+
+      if (firstsecond == 256 && !inv_order)
+        firstsecond = i;
+
+      mask_value -= 256;
+
+      if (secondrot == 256)
+        secondrot = i - mask_value;
+      else if (secondrot != i - mask_value) {
+        LLVM_DEBUG(dbgs() << "Bad second rot\n");
+        return SDValue();
+      }
+    }
+  }
+
+  if (firstrot < 0)
+    firstrot *= -1;
+  else
+    firstrot = 256 - firstrot;
+  if (secondrot < 0)
+    secondrot *= -1;
+  else
+    secondrot = 256 - secondrot;
+
+  EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
+  EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
+  EVT v256i1 = EVT::getVectorVT(*DAG.getContext(),
+                                EVT::getIntegerVT(*DAG.getContext(), 1), 256);
+
+  SDValue VL = SDValue(
+      DAG.getMachineNode(VE::LEA32zzi, dl, MVT::i32,
+                         DAG.getTargetConstant(resultSize, dl, MVT::i32)),
+      0);
+  // SDValue VL = DAG.getTargetConstant(resultSize, dl, MVT::i32);
+  SDValue firstrotated =
+      firstrot % 256 != 0
+          ? SDValue(
+                DAG.getMachineNode(
+                    VE::vmv_vIvl, dl, firstVec.getSimpleValueType(),
+                    {DAG.getConstant(firstrot % 256, dl, i32), firstVec, VL}),
+                0)
+          : firstVec;
+  SDValue secondrotated =
+      secondrot % 256 != 0
+          ? SDValue(
+                DAG.getMachineNode(
+                    VE::vmv_vIvl, dl, secondVec.getSimpleValueType(),
+                    {DAG.getConstant(secondrot % 256, dl, i32), secondVec, VL}),
+                0)
+          : secondVec;
+
+  int block = firstsecond / 64;
+  int secondblock = firstsecond % 64;
+
+  SDValue Mask = DAG.getUNDEF(v256i1);
+
+  for (int i = 0; i < block; i++) {
+    // set blocks to all 0s
+    SDValue mask = inv_order ? DAG.getConstant(0xffffffffffffffff, dl, i64)
+                             : DAG.getConstant(0, dl, i64);
+    SDValue index = DAG.getTargetConstant(i, dl, i64);
+    Mask = SDValue(
+        DAG.getMachineNode(VE::lvm_mmIs, dl, v256i1, {Mask, index, mask}), 0);
+  }
+
+  SDValue mask = DAG.getConstant(0xffffffffffffffff, dl, i64);
+  if (!inv_order)
+    mask = DAG.getNode(ISD::SRL, dl, i64,
+                       {mask, DAG.getConstant(secondblock, dl, i64)});
+  else
+    mask = DAG.getNode(ISD::SHL, dl, i64,
+                       {mask, DAG.getConstant(64 - secondblock, dl, i64)});
+  Mask = SDValue(
+      DAG.getMachineNode(VE::lvm_mmIs, dl, v256i1,
+                         {Mask, DAG.getTargetConstant(block, dl, i64), mask}),
+      0);
+
+  for (int i = block + 1; i < 4; i++) {
+    // set blocks to all 1s
+    SDValue mask = inv_order ? DAG.getConstant(0, dl, i64)
+                             : DAG.getConstant(0xffffffffffffffff, dl, i64);
+    SDValue index = DAG.getTargetConstant(i, dl, i64);
+    Mask = SDValue(
+        DAG.getMachineNode(VE::lvm_mmIs, dl, v256i1, {Mask, index, mask}), 0);
+  }
+
+  SDValue returnValue =
+      SDValue(DAG.getMachineNode(VE::vmrg_vvvml, dl, Op.getSimpleValueType(),
+                                 {firstrotated, secondrotated, Mask, VL}),
+              0);
+  return returnValue;
+}
+
+SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
+                                                  SelectionDAG &DAG) const {
+  assert(Op.getOpcode() == ISD::EXTRACT_VECTOR_ELT && "Unknown opcode!");
+  EVT VT = Op.getOperand(0).getValueType();
+
+  // Special treatements for packed V64 types.
+  if (VT == MVT::v512i32 || VT == MVT::v512f32) {
+    // Example of codes:
+    //   %packed_v = extractelt %vr, %idx / 2
+    //   %v = %packed_v >> (%idx % 2 * 32)
+    //   %res = %v & 0xffffffff
+
+    SDValue Vec = Op.getOperand(0);
+    SDValue Idx = Op.getOperand(1);
+    EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
+    EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
+    EVT f32 = EVT::getFloatingPointVT(32);
+    SDLoc dl(Op);
+    SDValue Result = Op;
+    if (0 /* Idx->isConstant() */) {
+      // FIXME: optimized implementation using constant values
+    } else {
+      SDValue SetEq = DAG.getCondCode(ISD::SETEQ);
+      SDValue ZeroConst = DAG.getConstant(0, dl, i64);
+      SDValue OneConst = DAG.getConstant(1, dl, i64);
+      SDValue ThirtyTwoConst = DAG.getConstant(32, dl, i64);
+      SDValue LowBits = DAG.getConstant(0xFFFFFFFF, dl, i64);
+      SDValue HalfIdx = DAG.getNode(ISD::SRL, dl, i64, {Idx, OneConst});
+      SDValue PackedVal =
+          SDValue(DAG.getMachineNode(VE::lvsl_svI, dl, i64, {Vec, HalfIdx}), 0);
+      SDValue IdxLSB = DAG.getNode(ISD::AND, dl, i64, {Idx, OneConst});
+      SDValue ShiftIdx =
+          DAG.getNode(ISD::SELECT_CC, dl, i64,
+                      {IdxLSB, ZeroConst, ZeroConst, ThirtyTwoConst, SetEq});
+      SDValue ShiftedVal =
+          DAG.getNode(ISD::SRL, dl, i64, {PackedVal, ShiftIdx});
+      SDValue MaskedVal = DAG.getNode(ISD::AND, dl, i64, {ShiftedVal, LowBits});
+      // In v512i32 and v512f32, Both i32 and f32 values are placed from Low32.
+      SDValue SubLow32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
+      Result = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, dl, i32,
+                                          MaskedVal, SubLow32),
+                       0);
+      if (VT == MVT::v512f32) {
+        Result = DAG.getBitcast(f32, Result);
+      }
+    }
+    return Result;
+  }
+
+  // Extraction is legal for other V64 types.
+  return Op;
+}
+
 SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
   switch (Op.getOpcode()) {
@@ -1621,6 +2634,25 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerINTRINSIC_W_CHAIN(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN:
     return LowerINTRINSIC_WO_CHAIN(Op, DAG);
+  case ISD::BUILD_VECTOR:
+    return LowerBUILD_VECTOR(Op, DAG);
+  case ISD::INSERT_VECTOR_ELT:
+    return LowerINSERT_VECTOR_ELT(Op, DAG);
+  case ISD::EXTRACT_VECTOR_ELT:
+    return LowerEXTRACT_VECTOR_ELT(Op, DAG);
+
+  case ISD::BITCAST:
+    return LowerBitcast(Op, DAG);
+
+  case ISD::VECTOR_SHUFFLE:
+    return LowerVECTOR_SHUFFLE(Op, DAG);
+
+  case ISD::MSCATTER:
+  case ISD::MGATHER:
+    return LowerMGATHER_MSCATTER(Op, DAG);
+
+  case ISD::MLOAD:
+    return LowerMLOAD(Op, DAG);
   }
 }
 
@@ -2161,6 +3193,15 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
   SDLoc dl(N);
 
   switch (N->getOpcode()) {
+  case ISD::BUILD_VECTOR:
+  case ISD::INSERT_VECTOR_ELT:
+  case ISD::EXTRACT_VECTOR_ELT:
+  case ISD::VECTOR_SHUFFLE:
+  case ISD::MSCATTER:
+  case ISD::MGATHER:
+  case ISD::MLOAD:
+    // ask llvm to expand vector related instructions if those are not legal.
+    return;
   default:
     LLVM_DEBUG(N->dumpr(&DAG));
     llvm_unreachable("Do not know how to custom type legalize this operation!");
