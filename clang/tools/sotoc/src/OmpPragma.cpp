@@ -14,8 +14,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/PrettyPrinter.h"
+#include <ctype.h>
 
 #include "OmpPragma.h"
+
+int ClauseParamCounter = -1;
 
 void OmpPragma::printReplacement(llvm::raw_ostream &Out) {
 
@@ -243,7 +246,7 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
     case clang::OpenMPClauseKind::OMPC_shared:
     case clang::OpenMPClauseKind::OMPC_reduction:
     case clang::OpenMPClauseKind::OMPC_schedule:
-    /* case clang::OpenMPClauseKind::OMPC_thread_limit: */
+    // case clang::OpenMPClauseKind::OMPC_thread_limit:
       return true;
     default:
       return false;
@@ -276,7 +279,7 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
     case clang::OpenMPClauseKind::OMPC_aligned:
     case clang::OpenMPClauseKind::OMPC_safelen:
     case clang::OpenMPClauseKind::OMPC_simdlen:
-    /* case clang::OpenMPClauseKind::OMPC_thread_limit: */
+    // case clang::OpenMPClauseKind::OMPC_thread_limit:
       return true;
     default:
       return false;
@@ -298,7 +301,7 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
     case clang::OpenMPClauseKind::OMPC_firstprivate:
     case clang::OpenMPClauseKind::OMPC_shared:
     case clang::OpenMPClauseKind::OMPC_reduction:
-    /* case clang::OpenMPClauseKind::OMPC_thread_limit: */
+    // case clang::OpenMPClauseKind::OMPC_thread_limit:
     case clang::OpenMPClauseKind::OMPC_lastprivate:
     case clang::OpenMPClauseKind::OMPC_collapse:
     case clang::OpenMPClauseKind::OMPC_dist_schedule:
@@ -325,15 +328,45 @@ bool OmpPragma::isClausePrintable(clang::OMPClause *Clause) {
 }
 
 void OmpPragma::printClauses(llvm::raw_ostream &Out) {
-  clang::OMPClausePrinter Printer(Out, PP);
+  std::string InString;
+  llvm::raw_string_ostream In(InString);
+  clang::OMPClausePrinter Printer(In, PP);
+
   for (auto C : Clauses) {
     // Only print clauses that are both printable (for us) and are actually in
     // the users code (is explicit)
     if (isClausePrintable(C) && !C->isImplicit()) {
       Printer.Visit(C);
-      Out << " ";
+
+      In.str();
+      size_t inp = InString.find("(")+1;
+      size_t paramlength = InString.length()-inp-1;
+      std::string param = InString.substr(inp,paramlength);
+      InString.erase(inp,paramlength);
+
+      rewriteParam(C, &param);
+      Out << InString.insert(inp,param) << " ";
+      InString.clear();
     }
   }
+}
+
+void OmpPragma::rewriteParam(clang::OMPClause *Clause,std::string *In) {
+
+if (Clause->getClauseKind() == clang::OpenMPClauseKind::OMPC_num_threads) {
+  bool isNumerical = true;
+
+  for (auto i : *In) {
+    if (!isdigit(i)) {
+    isNumerical = false;
+    }
+  }
+
+  if (!isNumerical) {
+    ClauseParamCounter++;
+    *In = "__sotoc_clause_param_" + std::to_string(ClauseParamCounter);
+  }
+}
 }
 
 bool OmpPragma::needsStructuredBlock() {

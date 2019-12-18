@@ -15,6 +15,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <sstream>
+#include <string>
 
 #include "clang/AST/Decl.h"
 #include "clang/AST/PrettyPrinter.h"
@@ -138,7 +139,21 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
     }
     Out << Var.name();
   }
+ 
+  int i = -1; 
+  for (auto C : TCR->getOMPClauses()){
+    if ((C->getClauseKind() == clang::OpenMPClauseKind::OMPC_num_threads) && !C->isImplicit()) {
+    i++;
+    if (!first) {
+      Out << ", ";
+    } else {
+      first = false;
+    }
+    Out << "int __sotoc_clause_param_" << std::to_string(i) << " ";
+    }
+  }
 
+  /*  
   for (auto *ClauseVar : TCR->ompClausesParams()) {
     if (!first) {
       Out << ", ";
@@ -159,6 +174,7 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
     }
     Out << ClauseVar->getName();
   }
+*/
 
   Out << ")\n{\n";
 

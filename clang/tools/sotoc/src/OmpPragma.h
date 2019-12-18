@@ -15,7 +15,9 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include "TargetCodeFragment.h"
+#include <vector>
 
+  extern int ClauseParamCounter;
 /// A helper class to rewrite some "pragma omp" (mostly teams and similar
 /// combined constructs), which are not supported by sotoc.
 /// We currently only support one team to be run on the target because ncc does
@@ -52,5 +54,6 @@ public:
   static bool needsAdditionalPragma(clang::OMPExecutableDirective *Directive);
 private:
   bool isClausePrintable(clang::OMPClause *Clause);
+  void rewriteParam(clang::OMPClause *Clause, std::string *In);
   void printClauses(llvm::raw_ostream &Out);
 };
