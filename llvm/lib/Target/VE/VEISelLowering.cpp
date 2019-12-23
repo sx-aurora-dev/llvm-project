@@ -1098,11 +1098,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v16f32, &VE::V64RegClass);
   addRegisterClass(MVT::v16f64, &VE::V64RegClass);
   addRegisterClass(MVT::v8i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v8i64, &VE::V64RegClass);
+  //addRegisterClass(MVT::v8i64, &VE::V64RegClass);
   addRegisterClass(MVT::v8f32, &VE::V64RegClass);
   addRegisterClass(MVT::v8f64, &VE::V64RegClass);
   addRegisterClass(MVT::v4i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v4i64, &VE::V64RegClass);
+  //addRegisterClass(MVT::v4i64, &VE::V64RegClass);
   addRegisterClass(MVT::v4f32, &VE::V64RegClass);
   addRegisterClass(MVT::v4f64, &VE::V64RegClass);
   addRegisterClass(MVT::v2i32, &VE::V64RegClass);

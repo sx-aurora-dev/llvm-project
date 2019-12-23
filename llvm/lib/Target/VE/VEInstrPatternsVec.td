@@ -176,7 +176,7 @@ defm : store_for_vector_length<2>;
 // v256i1, v512i1
 
 def : Pat<(v256i1 (load I64:$addr)),
-          (v256i1 (lvm_mmIs (lvm_mmIs (lvm_mmIs (lvm_mmIs (v256i1 (IMPLICIT_DEF)), 
+          (v256i1 (lvm_mmIs (lvm_mmIs (lvm_mmIs (lvm_mmIs (v256i1 (IMPLICIT_DEF)),
                       0, (LDSri $addr, 0)),
                       1, (LDSri $addr, 8)),
                       2, (LDSri $addr, 16)),
@@ -184,7 +184,7 @@ def : Pat<(v256i1 (load I64:$addr)),
 
 def : Pat<(v512i1 (load I64:$addr)),
           (v512i1 (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs
-                  (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs (v512i1 (IMPLICIT_DEF)), 
+                  (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs (v512i1 (IMPLICIT_DEF)),
                       0, (LDSri $addr, 0)),
                       1, (LDSri $addr, 8)),
                       2, (LDSri $addr, 16)),
@@ -331,14 +331,36 @@ multiclass vbrd_for_vector_length<int length, ValueType vi32, ValueType vi64,
             (vbrd_vsl f64:$sy, (LEA32zzi length))>;
 }
 
+multiclass vbrd_for_vector_length2<int length, ValueType vi32,
+                                  ValueType vf32, ValueType vf64> {
+  def : Pat<(vi32 (vec_broadcast i32:$sy)),
+            (vbrdl_vsl i32:$sy, (LEA32zzi length))>;
+  def : Pat<(vf32 (vec_broadcast f32:$sy)),
+            (vbrdu_vsl f32:$sy, (LEA32zzi length))>;
+  def : Pat<(vf64 (vec_broadcast f64:$sy)),
+            (vbrd_vsl f64:$sy, (LEA32zzi length))>;
+}
+
 defm : vbrd_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
 defm : vbrd_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
 defm : vbrd_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
 defm : vbrd_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
 defm : vbrd_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
-defm : vbrd_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
-defm : vbrd_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+defm : vbrd_for_vector_length2<8, v8i32, v8f32, v8f64>;
+defm : vbrd_for_vector_length2<4, v4i32, v4f32, v4f64>;
 defm : vbrd_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
+
+// Boardcast for vector mask register
+
+def : Pat<(v4i64 (vec_broadcast i64:$sy)),
+    (lvm_mmIs (lvm_mmIs (lvm_mmIs (lvm_mmIs 
+      (v4i64 (IMPLICIT_DEF)), 0, $sy), 1, $sy), 2, $sy), 3, $sy)>;
+
+def : Pat<(v8i64 (vec_broadcast i64:$sy)),
+    (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs 
+      (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs
+        (v8i64 (IMPLICIT_DEF)), 0, $sy), 1, $sy), 2, $sy), 3, $sy),
+          4, $sy), 5, $sy), 6, $sy), 7, $sy)>;
 
 // Sequence
 
