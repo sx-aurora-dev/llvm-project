@@ -39,8 +39,22 @@ public:
                                 MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator I) const override;
 
-  bool hasReservedCallFrame(const MachineFunction &MF) const override;
-  bool hasFP(const MachineFunction &MF) const override;
+  // VE always has a frame pointer.
+  // TODO: Optimize to not create FP in leaf-function.
+  //       In order to do so, we need to check gdb backtracking implementation
+  //       whether it requires a FP for backtracking or not...
+  bool keepFramePointer(const MachineFunction &MF) const {
+    return true;
+  }
+  // VE reserves a stack frame and calculate a FP in each funtion.
+  bool hasFP(const MachineFunction &MF) const override {
+    return true;
+  }
+  // VE reserves argument space always for call sites in the function
+  // immediately on entry of the current function.
+  bool hasReservedCallFrame(const MachineFunction &MF) const override {
+    return true;
+  }
   void determineCalleeSaves(MachineFunction &MF, BitVector &SavedRegs,
                             RegScavenger *RS = nullptr) const override;
 
@@ -60,11 +74,6 @@ public:
     NumEntries = array_lengthof(Offsets);
     return Offsets;
   }
-
-  /// targetHandlesStackFrameRounding - Returns true if the target is
-  /// responsible for rounding up the stack frame (probably at emitPrologue
-  /// time).
-  bool targetHandlesStackFrameRounding() const override { return true; }
 
 private:
   // Returns true if MF is a leaf procedure.

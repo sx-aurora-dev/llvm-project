@@ -920,12 +920,16 @@ bool VEInstrInfo::expandGetStackTopPseudo(MachineInstr &MI) const {
 
   // Create following instruction
   //
-  //   dst = %sp + stack_size
+  //   dst = %sp + target specific frame + the size of parameter area
 
   const MachineFrameInfo &MFI = MF.getFrameInfo();
-
   const TargetFrameLowering* TFL = MF.getSubtarget().getFrameLowering();
-  unsigned NumBytes = 176;
+
+  // The VE ABI requires a reserved 176 bytes area at the top
+  // of stack as described in VESubtarget.cpp.  So, we adjust it here.
+  unsigned NumBytes = Subtarget.getAdjustedFrameSize(0);
+
+  // Also adds the size of parameter area.
   if (MFI.adjustsStack() && TFL->hasReservedCallFrame(MF))
     NumBytes += MFI.getMaxCallFrameSize();
 

@@ -91,7 +91,6 @@ int VESubtarget::getAdjustedFrameSize(int frameSize) const {
   //         +----------------------------------------------+
 
   frameSize += 176;                     // for RSA, RA, and FP
-  frameSize = alignTo(frameSize, 16);   // requires 16 bytes alignment
 
   return frameSize;
 }
