@@ -19,7 +19,7 @@ define x86_regcallcc void @storev256i64stk(<256 x i64>) {
 ; CHECK-LABEL: storev256i64stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lea %s35,{{[0-9]+}}(,%s11)
+; CHECK-NEXT:  lea %s35,-2048(,%s9)
 ; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  vst %v0,8,%s35
 ; CHECK-NEXT:  or %s11, 0, %s9

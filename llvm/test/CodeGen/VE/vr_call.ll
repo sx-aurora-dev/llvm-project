@@ -15,10 +15,10 @@ define <256 x i32> @calc2(<256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: calc2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lea %s35,416(,%s11)
+; CHECK-NEXT:  lea %s35,240(,%s9)
 ; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  vldl.sx %v0,4,%s35
-; CHECK-NEXT:  lea %s35,1440(,%s11)
+; CHECK-NEXT:  lea %s35,1264(,%s9)
 ; CHECK-NEXT:  vldl.sx %v1,4,%s35
 ; CHECK-NEXT:  vadds.w.sx %v0,%v1,%v0
 ; CHECK-NEXT:  vstl %v0,4,%s0
@@ -31,7 +31,7 @@ define x86_regcallcc <256 x i32> @__regcall3__calc3(<256 x i32>, <256 x i32>, <2
 ; CHECK-LABEL: __regcall3__calc3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lea %s35,416(,%s11)
+; CHECK-NEXT:  lea %s35,240(,%s9)
 ; CHECK-NEXT:  lvl %s34
 ; CHECK-NEXT:  vldl.sx %v8,4,%s35
 ; CHECK-NEXT:  vadds.w.sx %v0,%v1,%v0
