@@ -195,27 +195,9 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
       return;
   }
 #endif
-  // The SPARC ABI is a bit odd in that it requires a reserved 92-byte
-  // (128 in v9) area in the user's stack, starting at %sp. Thus, the
-  // first part of the stack that can actually be used is located at
-  // %sp + 92.
-  //
-  // We therefore need to add that offset to the total stack size
-  // after all the stack objects are placed by
-  // PrologEpilogInserter calculateFrameObjectOffsets. However, since the stack needs to be
-  // aligned *after* the extra size is added, we need to disable
-  // calculateFrameObjectOffsets's built-in stack alignment, by having
-  // targetHandlesStackFrameRounding return true.
 
-
-  // Add the extra call frame stack size, if needed. (This is the same
-  // code as in PrologEpilogInserter, but also gets disabled by
-  // targetHandlesStackFrameRounding)
-  if (MFI.adjustsStack() && hasReservedCallFrame(MF))
-    NumBytes += MFI.getMaxCallFrameSize();
-
-  // Adds the SPARC subtarget-specific spill area to the stack
-  // size. Also ensures target-required alignment.
+  // The VE ABI requires a reserved 176 bytes area at the top
+  // of stack as described in VESubtarget.cpp.  So, we adjust it here.
   NumBytes = Subtarget.getAdjustedFrameSize(NumBytes);
 
   // Finally, ensure that the size is sufficiently aligned for the
@@ -329,14 +311,11 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
   emitEpilogueInsns(MF, MBB, MBBI, NumBytes, true);
 }
 
-bool VEFrameLowering::hasReservedCallFrame(const MachineFunction &MF) const {
-  // Reserve call frame if there are no variable sized objects on the stack.
-  return !MF.getFrameInfo().hasVarSizedObjects();
-}
-
 // hasFP - Return true if the specified function should have a dedicated frame
-// pointer register.  This is true if the function has variable sized allocas or
-// if frame pointer elimination is disabled.
+// pointer register.  This is true if the function has variable sized allocas
+// or if frame pointer elimination is disabled.  For the case of VE, we don't
+// implement FP eliminator yet, but we returns false from this function to
+// not refer fp from generated code.
 bool VEFrameLowering::hasFP(const MachineFunction &MF) const {
   const TargetRegisterInfo *RegInfo = MF.getSubtarget().getRegisterInfo();
 
@@ -346,7 +325,6 @@ bool VEFrameLowering::hasFP(const MachineFunction &MF) const {
       MFI.hasVarSizedObjects() ||
       MFI.isFrameAddressTaken();
 }
-
 
 int VEFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
                                                unsigned &FrameReg) const {
