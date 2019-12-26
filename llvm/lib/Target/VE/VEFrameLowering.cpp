@@ -96,7 +96,8 @@ void VEFrameLowering::emitEpilogueInsns(
 void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
                                        MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator MBBI,
-                                       int NumBytes) const {
+                                       int64_t NumBytes,
+                                       int Align) const {
   DebugLoc dl;
   const VEInstrInfo &TII =
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
@@ -118,12 +119,17 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
     .addReg(VE::SX13).addImm(32);
   BuildMI(MBB, MBBI, dl, TII.get(VE::LEASLrri), VE::SX11)
     .addReg(VE::SX11).addReg(VE::SX13).addImm(HI32(NumBytes));
+
+  if (Align != 0) {
+    // and %sp, %sp, Align-1
+    BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm1), VE::SX11)
+      .addReg(VE::SX11).addImm(64 - Log2_64(Align));
+  }
 }
 
 void VEFrameLowering::emitSPExtend(MachineFunction &MF,
                                    MachineBasicBlock &MBB,
-                                   MachineBasicBlock::iterator MBBI,
-                                   int NumBytes) const {
+                                   MachineBasicBlock::iterator MBBI) const {
   DebugLoc dl;
   const VEInstrInfo &TII =
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
@@ -188,7 +194,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
                        "(probably because it has a dynamic alloca).");
 
   // Get the number of bytes to allocate from the FrameInfo
-  int NumBytes = (int) MFI.getStackSize();
+  int64_t NumBytes = (int64_t) MFI.getStackSize();
 #if 0
   if (FuncInfo->isLeafProc()) {
     if (NumBytes == 0)
@@ -213,10 +219,11 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   emitPrologueInsns(MF, MBB, MBBI, NumBytes, true);
 
   // emit stack adjust instructions
-  emitSPAdjustment(MF, MBB, MBBI, -NumBytes);
+  int RuntimeAlign = NeedsStackRealignment ? MFI.getMaxAlignment() : 0;
+  emitSPAdjustment(MF, MBB, MBBI, -NumBytes, RuntimeAlign);
 
   // emit stack extend instructions
-  emitSPExtend(MF, MBB, MBBI, -NumBytes);
+  emitSPExtend(MF, MBB, MBBI);
 
   unsigned regFP = RegInfo.getDwarfRegNum(VE::SX9, true);
 
@@ -240,13 +247,6 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
       .addCFIIndex(CFIIndex);
 #endif
-
-  if (NeedsStackRealignment) {
-    // and %sp, %sp, MaxAlign-1
-    int MaxAlign = MFI.getMaxAlignment();
-    BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm1), VE::SX11)
-      .addReg(VE::SX11).addImm(64 - Log2_64(MaxAlign));
-  }
 }
 
 MachineBasicBlock::iterator VEFrameLowering::
@@ -254,7 +254,7 @@ eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I) const {
   if (!hasReservedCallFrame(MF)) {
     MachineInstr &MI = *I;
-    int Size = MI.getOperand(0).getImm();
+    int64_t Size = MI.getOperand(0).getImm();
     if (MI.getOpcode() == VE::ADJCALLSTACKDOWN)
       Size = -Size;
 

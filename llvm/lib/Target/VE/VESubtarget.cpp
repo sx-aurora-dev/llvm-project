@@ -44,7 +44,7 @@ VESubtarget::VESubtarget(const Triple &TT, const std::string &CPU,
       InstrInfo(initializeSubtargetDependencies(CPU, FS)), TLInfo(TM, *this),
       FrameLowering(*this) {}
 
-int VESubtarget::getAdjustedFrameSize(int frameSize) const {
+uint64_t VESubtarget::getAdjustedFrameSize(uint64_t frameSize) const {
 
   // VE stack frame:
   //
