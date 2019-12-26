@@ -28,12 +28,12 @@ define void @storeq(fp128* nocapture, fp128) {
 define void @ld_l_arg(i8*, fp128, i64, i64, i64, fp128, i64, fp128, i64) {
 ; CHECK-LABEL: ld_l_arg:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s34, 288(,%s9)
-; CHECK-NEXT:    ld %s37, 272(,%s9)
-; CHECK-NEXT:    ld %s36, 280(,%s9)
-; CHECK-NEXT:    ld %s35, 256(,%s9)
-; CHECK-NEXT:    ld %s39, 240(,%s9)
-; CHECK-NEXT:    ld %s38, 248(,%s9)
+; CHECK-NEXT:    ld %s34, 464(,%s11)
+; CHECK-NEXT:    ld %s37, 448(,%s11)
+; CHECK-NEXT:    ld %s36, 456(,%s11)
+; CHECK-NEXT:    ld %s35, 432(,%s11)
+; CHECK-NEXT:    ld %s39, 416(,%s11)
+; CHECK-NEXT:    ld %s38, 424(,%s11)
 ; CHECK-NEXT:    st %s2, 8(,%s0)
 ; CHECK-NEXT:    st %s3, (,%s0)
 ; CHECK-NEXT:    st %s4, (,%s0)

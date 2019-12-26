@@ -24,7 +24,7 @@ define x86_regcallcc <256 x i1> @loadv256i1(<256 x i1>* nocapture readonly) {
 define x86_regcallcc <256 x i1> @loadv256i1stk() {
 ; CHECK-LABEL: loadv256i1stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34,-32(,%s9)
+; CHECK-NEXT:  lea %s34,176(,%s11)
 ; CHECK-NEXT:  ld %s35, (,%s34)
 ; CHECK-NEXT:  ld %s36, 8(,%s34)
 ; CHECK-NEXT:  ld %s37, 16(,%s34)
@@ -88,7 +88,7 @@ define x86_regcallcc <512 x i1> @loadv512i1(<512 x i1>* nocapture readonly) {
 define x86_regcallcc <512 x i1> @loadv512i1stk() {
 ; CHECK-LABEL: loadv512i1stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34,-64(,%s9)
+; CHECK-NEXT:  lea %s34,176(,%s11)
 ; CHECK-NEXT:  ld %s35, (,%s34)
 ; CHECK-NEXT:  ld %s36, 8(,%s34)
 ; CHECK-NEXT:  ld %s37, 16(,%s34)

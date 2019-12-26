@@ -4,7 +4,7 @@
 define void @func(i32* nocapture) {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea %s34,-1024(,%s9)
+; CHECK-NEXT:  lea %s34,176(,%s11)
 ; CHECK-NEXT:  lea %s34, 16(%s34)
 ; CHECK-NEXT:  or %s35, 0, (0)1
   %2 = alloca [256 x i32], align 16
