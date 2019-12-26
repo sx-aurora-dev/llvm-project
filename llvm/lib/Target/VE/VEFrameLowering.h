@@ -74,13 +74,12 @@ private:
   void emitSPAdjustment(MachineFunction &MF,
                         MachineBasicBlock &MBB,
                         MachineBasicBlock::iterator MBBI,
-                        int NumBytes) const;
+                        int64_t NumBytes, int Align = 0) const;
 
   // Emits code for extending SP in function prologue/epilogue.
   void emitSPExtend(MachineFunction &MF,
                     MachineBasicBlock &MBB,
-                    MachineBasicBlock::iterator MBBI,
-                    int NumBytes) const;
+                    MachineBasicBlock::iterator MBBI) const;
 
 };
 
