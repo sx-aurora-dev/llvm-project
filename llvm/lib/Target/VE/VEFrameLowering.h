@@ -39,17 +39,7 @@ public:
                                 MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator I) const override;
 
-  // VE always has a frame pointer.
-  // TODO: Optimize to not create FP in leaf-function.
-  //       In order to do so, we need to check gdb backtracking implementation
-  //       whether it requires a FP for backtracking or not...
-  bool keepFramePointer(const MachineFunction &MF) const {
-    return true;
-  }
-  // VE reserves a stack frame and calculate a FP in each funtion.
-  bool hasFP(const MachineFunction &MF) const override {
-    return true;
-  }
+  bool hasFP(const MachineFunction &MF) const override;
   // VE reserves argument space always for call sites in the function
   // immediately on entry of the current function.
   bool hasReservedCallFrame(const MachineFunction &MF) const override {

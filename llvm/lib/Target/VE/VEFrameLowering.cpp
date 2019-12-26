@@ -311,6 +311,21 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
   emitEpilogueInsns(MF, MBB, MBBI, NumBytes, true);
 }
 
+// hasFP - Return true if the specified function should have a dedicated frame
+// pointer register.  This is true if the function has variable sized allocas
+// or if frame pointer elimination is disabled.  For the case of VE, we don't
+// implement FP eliminator yet, but we returns false from this function to
+// not refer fp from generated code.
+bool VEFrameLowering::hasFP(const MachineFunction &MF) const {
+  const TargetRegisterInfo *RegInfo = MF.getSubtarget().getRegisterInfo();
+
+  const MachineFrameInfo &MFI = MF.getFrameInfo();
+  return MF.getTarget().Options.DisableFramePointerElim(MF) ||
+      RegInfo->needsStackRealignment(MF) ||
+      MFI.hasVarSizedObjects() ||
+      MFI.isFrameAddressTaken();
+}
+
 int VEFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
                                                unsigned &FrameReg) const {
   const VESubtarget &Subtarget = MF.getSubtarget<VESubtarget>();
