@@ -242,21 +242,10 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 #endif
 
   if (NeedsStackRealignment) {
-#if 0
-    unsigned regUnbiased;
-    regUnbiased = VE::SX11; // %sp
-
-    // andn %regUnbiased, MaxAlign-1, %regUnbiased
+    // and %sp, %sp, MaxAlign-1
     int MaxAlign = MFI.getMaxAlignment();
-    BuildMI(MBB, MBBI, dl, TII.get(VE::ANDNri), regUnbiased)
-      .addReg(regUnbiased).addImm(MaxAlign - 1);
-
-    if (Bias) {
-      // add %g1, -BIAS, %o6
-      BuildMI(MBB, MBBI, dl, TII.get(VE::ADXri), VE::SX11)
-        .addReg(regUnbiased).addImm(-Bias);
-    }
-#endif
+    BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm1), VE::SX11)
+      .addReg(VE::SX11).addImm(64 - Log2_64(MaxAlign));
   }
 }
 
