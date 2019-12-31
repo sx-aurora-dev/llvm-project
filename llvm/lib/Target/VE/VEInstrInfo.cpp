@@ -83,17 +83,9 @@ static bool isUncondBranchOpcode(int Opc) {
 
 static bool isCondBranchOpcode(int Opc) {
   return Opc == VE::BCRLrr  || Opc == VE::BCRLir  ||
-         Opc == VE::BCRLrm0 || Opc == VE::BCRLrm1 ||
-         Opc == VE::BCRLim0 || Opc == VE::BCRLim1 ||
          Opc == VE::BCRWrr  || Opc == VE::BCRWir  ||
-         Opc == VE::BCRWrm0 || Opc == VE::BCRWrm1 ||
-         Opc == VE::BCRWim0 || Opc == VE::BCRWim1 ||
          Opc == VE::BCRDrr  || Opc == VE::BCRDir  ||
-         Opc == VE::BCRDrm0 || Opc == VE::BCRDrm1 ||
-         Opc == VE::BCRDim0 || Opc == VE::BCRDim1 ||
-         Opc == VE::BCRSrr  || Opc == VE::BCRSir  ||
-         Opc == VE::BCRSrm0 || Opc == VE::BCRSrm1 ||
-         Opc == VE::BCRSim0 || Opc == VE::BCRSim1;
+         Opc == VE::BCRSrr  || Opc == VE::BCRSir;
 }
 
 static bool isIndirectBranchOpcode(int Opc) {

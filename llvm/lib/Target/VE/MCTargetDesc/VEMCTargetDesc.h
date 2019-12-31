@@ -32,17 +32,14 @@ class StringRef;
 class raw_pwrite_stream;
 class raw_ostream;
 
-#if 0
 MCCodeEmitter *createVEMCCodeEmitter(const MCInstrInfo &MCII,
-                                        const MCRegisterInfo &MRI,
-                                        MCContext &Ctx);
+                                     const MCRegisterInfo &MRI,
+                                     MCContext &Ctx);
 MCAsmBackend *createVEAsmBackend(const Target &T, const MCSubtargetInfo &STI,
-                                    const MCRegisterInfo &MRI,
-                                    const MCTargetOptions &Options);
-std::unique_ptr<MCObjectWriter>
-createVEELFObjectWriter(raw_pwrite_stream &OS, bool Is64Bit,
-                           bool IsLIttleEndian, uint8_t OSABI);
-#endif
+                                 const MCRegisterInfo &MRI,
+                                 const MCTargetOptions &Options);
+std::unique_ptr<MCObjectTargetWriter> createVEELFObjectWriter(bool Is64Bit,
+                                                              uint8_t OSABI);
 } // namespace llvm
 
 // Defines symbolic names for VE registers.  This defines a mapping from

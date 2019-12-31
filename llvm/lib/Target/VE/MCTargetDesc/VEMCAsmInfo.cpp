@@ -49,7 +49,7 @@ VEELFMCAsmInfo::getExprForPersonalitySymbol(const MCSymbol *Sym,
                                                MCStreamer &Streamer) const {
   if (Encoding & dwarf::DW_EH_PE_pcrel) {
     MCContext &Ctx = Streamer.getContext();
-    return VEMCExpr::create(VEMCExpr::VK_VE_R_DISP32,
+    return VEMCExpr::create(VEMCExpr::VK_VE_PC_LO32,
                                MCSymbolRefExpr::create(Sym, Ctx), Ctx);
   }
 
@@ -62,7 +62,7 @@ VEELFMCAsmInfo::getExprForFDESymbol(const MCSymbol *Sym,
                                        MCStreamer &Streamer) const {
   if (Encoding & dwarf::DW_EH_PE_pcrel) {
     MCContext &Ctx = Streamer.getContext();
-    return VEMCExpr::create(VEMCExpr::VK_VE_R_DISP32,
+    return VEMCExpr::create(VEMCExpr::VK_VE_PC_LO32,
                                MCSymbolRefExpr::create(Sym, Ctx), Ctx);
   }
   return MCAsmInfo::getExprForFDESymbol(Sym, Encoding, Streamer);

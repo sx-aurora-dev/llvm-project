@@ -145,6 +145,13 @@ StringRef llvm::object::getELFRelocationTypeName(uint32_t Machine,
       break;
     }
     break;
+  case ELF::EM_VE:
+    switch (Type) {
+#include "llvm/BinaryFormat/ELFRelocs/VE.def"
+    default:
+      break;
+    }
+    break;
   default:
     break;
   }
@@ -191,6 +198,8 @@ uint32_t llvm::object::getELFRelativeRelocationType(uint32_t Machine) {
     break;
   case ELF::EM_BPF:
     break;
+  case ELF::EM_VE:
+    return ELF::R_VE_RELATIVE;
   default:
     break;
   }

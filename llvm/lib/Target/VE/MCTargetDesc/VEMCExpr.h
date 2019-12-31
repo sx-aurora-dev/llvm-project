@@ -24,7 +24,6 @@ class VEMCExpr : public MCTargetExpr {
 public:
   enum VariantKind {
     VK_VE_None,
-    VK_VE_R_DISP32,
     VK_VE_HI32,
     VK_VE_LO32,
     VK_VE_PC_HI32,

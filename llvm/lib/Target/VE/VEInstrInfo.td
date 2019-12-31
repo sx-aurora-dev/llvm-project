@@ -197,15 +197,10 @@ def MEMASri : Operand<iPTR> {
 
 // Branch targets have OtherVT type.
 def brtarget32 : Operand<OtherVT> {
-  let EncoderMethod = "getBranchTarget32OpValue";
+  let EncoderMethod = "getBranchTargetOpValue";
 }
 
 def TLSSym : Operand<iPTR>;
-
-// Branch targets have OtherVT type.
-def brtarget : Operand<OtherVT> {
-  let EncoderMethod = "getBranchTargetOpValue";
-}
 
 def calltarget : Operand<i64> {
   let EncoderMethod = "getCallTargetOpValue";
@@ -230,10 +225,6 @@ def simm32Op32 : Operand<i32> {
 
 def simm32Op64 : Operand<i64> {
   let DecoderMethod = "DecodeSIMM32";
-}
-
-def uimm7Op32 : Operand<i32> {
-  let DecoderMethod = "DecodeUIMM6";
 }
 
 def uimm6Op32 : Operand<i32> {
@@ -741,10 +732,10 @@ multiclass RRI2m<string opcStr, bits<8>opc,
   }
 }
 
-// Branch multiclass
+// Branch relative multiclass
 let isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
 multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
-                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
+                RegisterClass RC, ValueType Ty, Operand immOp> {
   def rr : CF<
     opc, (outs),
     (ins CCOp:$cf, RC:$sy, RC:$sz, brtarget32:$imm32),
@@ -761,36 +752,6 @@ multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
     let cz = 1;
     let hasSideEffects = 0;
   }
-  def rm0 : CF<
-    opc, (outs), (ins CCOp:$cf, RC:$sy, immOp2:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, (${sz})0, $imm32")> {
-    let cy = 1;
-    let cz = 0;
-    let sz{6} = 1;
-    let hasSideEffects = 0;
-  }
-  def rm1 : CF<
-    opc, (outs), (ins CCOp:$cf, RC:$sy, immOp2:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, (${sz})1, $imm32")> {
-    let cy = 1;
-    let cz = 0;
-    let hasSideEffects = 0;
-  }
-  def im0 : CF<
-    opc, (outs), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, (${sz})0, $imm32")> {
-    let cy = 0;
-    let cz = 0;
-    let sz{6} = 1;
-    let hasSideEffects = 0;
-  }
-  def im1 : CF<
-    opc, (outs), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, (${sz})1, $imm32")> {
-    let cy = 0;
-    let cz = 0;
-    let hasSideEffects = 0;
-  }
   def a : CF<
     opc, (outs), (ins brtarget32:$imm32),
     !strconcat(opcStrAt, " $imm32")> {
@@ -798,6 +759,38 @@ multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
     let sy = 0;
     let cz = 0;
     let sz = 0;
+    let cf = 15;  /* AT */
+    let isBarrier = 1;
+    let hasSideEffects = 0;
+  }
+}
+
+// Branch multiclass
+let isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
+multiclass BCm<string opcStr, string opcStrAt, bits<8> opc,
+               RegisterClass RC, ValueType Ty, Operand immOp> {
+  def r : CF<
+    opc, (outs),
+    (ins CCOp:$cf, RC:$sy, RC:$sz, brtarget32:$imm32),
+    !strconcat(opcStr, " $sy, ${imm32}(,${sz})"), []> {
+    let cy = 1;
+    let cz = 1;
+    let hasSideEffects = 0;
+  }
+  def i : CF<
+    opc, (outs),
+    (ins CCOp:$cf, immOp:$sy, RC:$sz, brtarget32:$imm32),
+    !strconcat(opcStr, " $sy, ${imm32}(,${sz})"), []> {
+    let cy = 0;
+    let cz = 1;
+    let hasSideEffects = 0;
+  }
+  def a : CF<
+    opc, (outs), (ins RC:$sz, brtarget32:$imm32),
+    !strconcat(opcStrAt, " ${imm32}(,${sz})"), []> {
+    let cy = 0;
+    let sy = 0;
+    let cz = 1;
     let cf = 15;  /* AT */
     let isBarrier = 1;
     let hasSideEffects = 0;
@@ -846,12 +839,12 @@ let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
 def NOP : RR<0x79, (outs), (ins), "nop">;
 
 // LEA and LEASL instruction (load 32 bit imm to low or high part)
-let cx = 0 in
+let cx = 0, DecoderMethod = "DecodeLoadI64" in
 defm LEA : RMm<"lea", 0x06, I64, i64, simm7Op64, simm32Op64, add>;
-let cx = 1 in
+let cx = 1, DecoderMethod = "DecodeLoadI64" in
 defm LEASL : RMm<"lea.sl", 0x06, I64, i64, simm7Op64, simm32Op64>;
 let isCodeGenOnly = 1 in {
-let cx = 0 in
+let cx = 0, DecoderMethod = "DecodeLoadI32" in
 defm LEA32 : RMm<"lea", 0x06, I32, i32, simm7Op32, simm32Op32, add>;
 }
 
@@ -1100,71 +1093,76 @@ let cz = 0, sz = 0 in {
 // As 1st step, only uses sz and imm32 to represent $addr
 let mayLoad = 1, hasSideEffects = 0 in {
 let cy = 0, sy = 0, cz = 1 in {
-let cx = 0 in
+let cx = 0, DecoderMethod = "DecodeLoadI64" in
 def LDSri : RM<
-    0x01, (outs I64:$sx), (ins MEMri:$addr),
-    "ld $sx, $addr",
-    [(set i64:$sx, (load ADDRri:$addr))]>;
-let cx = 0 in
+    0x01, (outs I64:$dest), (ins MEMri:$addr),
+    "ld $dest, $addr",
+    [(set i64:$dest, (load ADDRri:$addr))]>;
+let cx = 0, DecoderMethod = "DecodeLoadF32" in
 def LDUri : RM<
-    0x02, (outs F32:$sx), (ins MEMri:$addr),
-    "ldu $sx, $addr",
-    [(set f32:$sx, (load ADDRri:$addr))]>;
-let cx = 0 in
+    0x02, (outs F32:$dest), (ins MEMri:$addr),
+    "ldu $dest, $addr",
+    [(set f32:$dest, (load ADDRri:$addr))]>;
+let cx = 0, DecoderMethod = "DecodeLoadI32" in
 def LDLri : RM<
-    0x03, (outs I32:$sx), (ins MEMri:$addr),
-    "ldl.sx $sx, $addr",
-    [(set i32:$sx, (load ADDRri:$addr))]>;
-let cx = 1 in
+    0x03, (outs I32:$dest), (ins MEMri:$addr),
+    "ldl.sx $dest, $addr",
+    [(set i32:$dest, (load ADDRri:$addr))]>;
+let cx = 1, DecoderMethod = "DecodeLoadI32" in
 def LDLUri : RM<
-    0x03, (outs I32:$sx), (ins MEMri:$addr),
-    "ldl.zx $sx, $addr",
-    [(set i32:$sx, (load ADDRri:$addr))]>;
-let cx = 0 in
+    0x03, (outs I32:$dest), (ins MEMri:$addr),
+    "ldl.zx $dest, $addr",
+    [(set i32:$dest, (load ADDRri:$addr))]>;
+let cx = 0, DecoderMethod = "DecodeLoadI16" in
 def LD2Bri : RM<
-    0x04, (outs I32:$sx), (ins MEMri:$addr),
-    "ld2b.sx $sx, $addr",
-    [(set i32:$sx, (sextloadi16 ADDRri:$addr))]>;
-let cx = 1 in
+    0x04, (outs I32:$dest), (ins MEMri:$addr),
+    "ld2b.sx $dest, $addr",
+    [(set i32:$dest, (sextloadi16 ADDRri:$addr))]>;
+let cx = 1, DecoderMethod = "DecodeLoadI16" in
 def LD2BUri : RM<
-    0x04, (outs I32:$sx), (ins MEMri:$addr),
-    "ld2b.zx $sx, $addr",
-    [(set i32:$sx, (zextloadi16 ADDRri:$addr))]>;
-let cx = 0 in
+    0x04, (outs I32:$dest), (ins MEMri:$addr),
+    "ld2b.zx $dest, $addr",
+    [(set i32:$dest, (zextloadi16 ADDRri:$addr))]>;
+let cx = 0, DecoderMethod = "DecodeLoadI8" in
 def LD1Bri : RM<
-    0x05, (outs I32:$sx), (ins MEMri:$addr),
-    "ld1b.sx $sx, $addr",
-    [(set i32:$sx, (sextloadi8 ADDRri:$addr))]>;
-let cx = 1 in
+    0x05, (outs I32:$dest), (ins MEMri:$addr),
+    "ld1b.sx $dest, $addr",
+    [(set i32:$dest, (sextloadi8 ADDRri:$addr))]>;
+let cx = 1, DecoderMethod = "DecodeLoadI8" in
 def LD1BUri : RM<
-    0x05, (outs I32:$sx), (ins MEMri:$addr),
-    "ld1b.zx $sx, $addr",
-    [(set i32:$sx, (zextloadi8 ADDRri:$addr))]>;
+    0x05, (outs I32:$dest), (ins MEMri:$addr),
+    "ld1b.zx $dest, $addr",
+    [(set i32:$dest, (zextloadi8 ADDRri:$addr))]>;
 }
 def LDQri : Pseudo<
-    (outs F128:$sx), (ins MEMri:$addr),
-    "# pseudo ldq $sx, $addr",
-    [(set f128:$sx, (load ADDRri:$addr))]>;
+    (outs F128:$dest), (ins MEMri:$addr),
+    "# pseudo ldq $dest, $addr",
+    [(set f128:$dest, (load ADDRri:$addr))]>;
 }
 
 let mayStore = 1, hasSideEffects = 0 in {
 let cx = 0, cy = 0, sy = 0, cz = 1 in {
+let DecoderMethod = "DecodeStoreI64" in
 def STSri : RM<
     0x11, (outs), (ins MEMri:$addr, I64:$sx),
     "st $sx, $addr",
     [(store i64:$sx, ADDRri:$addr)]>;
+let DecoderMethod = "DecodeStoreF32" in
 def STUri : RM<
     0x12, (outs), (ins MEMri:$addr, F32:$sx),
     "stu $sx, $addr",
     [(store f32:$sx, ADDRri:$addr)]>;
+let DecoderMethod = "DecodeStoreI32" in
 def STLri : RM<
     0x13, (outs), (ins MEMri:$addr, I32:$sx),
     "stl $sx, $addr",
     [(store i32:$sx, ADDRri:$addr)]>;
+let DecoderMethod = "DecodeStoreI16" in
 def ST2Bri : RM<
     0x14, (outs), (ins MEMri:$addr, I32:$sx),
     "st2b $sx, $addr",
     [(truncstorei16 i32:$sx, ADDRri:$addr)]>;
+let DecoderMethod = "DecodeStoreI8" in
 def ST1Bri : RM<
     0x15, (outs), (ins MEMri:$addr, I32:$sx),
     "st1b $sx, $addr",
@@ -1177,7 +1175,7 @@ def STQri : Pseudo<
 }
 
 def : Pat<(f64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;
-def : Pat<(store f64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, $sx)>;
+def : Pat<(store f64:$src, ADDRri:$addr), (STSri ADDRri:$addr, $src)>;
 
 // Patterns for unaligned load
 
@@ -1206,14 +1204,14 @@ def unaligned8store : PatFrag<(ops node:$val, node:$ptr),
                               (store node:$val, node:$ptr), [{
   return cast<StoreSDNode>(N)->getAlignment() < 8;
 }]>;
-def : Pat<(unaligned4store i32:$sx, ADDRri:$addr),
-          (STLri ADDRri:$addr, $sx)>;
-def : Pat<(unaligned4store f32:$sx, ADDRri:$addr),
-          (STUri ADDRri:$addr, $sx)>;
-def : Pat<(unaligned8store i64:$sx, ADDRri:$addr),
-          (STSri ADDRri:$addr, $sx)>;
-def : Pat<(unaligned8store f64:$sx, ADDRri:$addr),
-          (STSri ADDRri:$addr, $sx)>;
+def : Pat<(unaligned4store i32:$src, ADDRri:$addr),
+          (STLri ADDRri:$addr, $src)>;
+def : Pat<(unaligned4store f32:$src, ADDRri:$addr),
+          (STUri ADDRri:$addr, $src)>;
+def : Pat<(unaligned8store i64:$src, ADDRri:$addr),
+          (STSri ADDRri:$addr, $src)>;
+def : Pat<(unaligned8store f64:$src, ADDRri:$addr),
+          (STSri ADDRri:$addr, $src)>;
 
 // Patterns for unaligned sextload/zextload/extload
 
@@ -1258,19 +1256,17 @@ def unaligned8truncstorei32 : PatFrag<(ops node:$val, node:$ptr),
                                    (truncstorei32 node:$val, node:$ptr), [{
   return cast<StoreSDNode>(N)->getAlignment() < 8;
 }]>;
-def : Pat<(unaligned4truncstorei16 i64:$sx, ADDRri:$addr),
-          (ST2Bri ADDRri:$addr, (EXTRACT_SUBREG $sx, sub_i32))>;
-def : Pat<(unaligned8truncstorei32 i64:$sx, ADDRri:$addr),
-          (STLri ADDRri:$addr, (EXTRACT_SUBREG $sx, sub_i32))>;
+def : Pat<(unaligned4truncstorei16 i64:$src, ADDRri:$addr),
+          (ST2Bri ADDRri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+def : Pat<(unaligned8truncstorei32 i64:$src, ADDRri:$addr),
+          (STLri ADDRri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
 
 // Control-flow
 
 // Jump instruction
-let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cy = 1, cz = 1,
+let cx = 0, cx2 = 0, bpf = 0 /* NONE */,
     isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0 in
-def BC : CF<
-    0x19, (outs), (ins CCOp:$cf, I64:$sy, brtarget32:$imm32),
-    "b.${cf}.l $sy, $imm32">;
+defm BC : BCm<"b${cf}.l", "b.l", 0x19, I64, i64, simm7Op64>;
 
 // Jump always instruction is treated as a special case of jump in order
 // to make finding unconditional jump easy.
@@ -1292,13 +1288,11 @@ def BAri : CF<
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 0 /* AF */, cy = 1, sy = 0,
     cz = 1,
     isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0 in
-def BN : CF<
-    0x19, (outs), (ins brtarget32:$imm32),
-    "b.af.l $imm32">;
+def BN : CF<0x19, (outs), (ins brtarget32:$imm32), "baf.l $imm32">;
 
 // Return instruction is also a special case of jump.
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
-    cz = 1, sz = 0x10 /* SX10 */, imm32 = 0, Uses = [SX10],
+    cz = 1, sz = 10 /* SX10 */, imm32 = 0, Uses = [SX10],
     isReturn = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1,
     isCodeGenOnly = 1, hasSideEffects = 0 in
 def RET : CF<
@@ -1313,55 +1307,43 @@ def BSIC : RM<0x08, (outs), (ins I64:$sx, I64:$sz), "bsic $sx, (, ${sz})">;
 
 // Branch instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */ in
-defm BCRL : BCRm<"br${cf}.l", "br.l", 0x18, I64, i64, simm7Op64, uimm6Op64>;
+defm BCRL : BCRm<"br${cf}.l", "br.l", 0x18, I64, i64, simm7Op64>;
 let cx = 1, cx2 = 0, bpf = 0 /* NONE */ in
-defm BCRW : BCRm<"br${cf}.w", "br.w", 0x18, I32, i32, simm7Op32, uimm6Op32>;
+defm BCRW : BCRm<"br${cf}.w", "br.w", 0x18, I32, i32, simm7Op32>;
 let cx = 0, cx2 = 1, bpf = 0 /* NONE */ in
-defm BCRD : BCRm<"br${cf}.d", "br.d", 0x18, I64, f64, simm7Op64, uimm6Op64>;
+defm BCRD : BCRm<"br${cf}.d", "br.d", 0x18, I64, f64, simm7Op64>;
 let cx = 1, cx2 = 1, bpf = 0 /* NONE */ in
-defm BCRS : BCRm<"br${cf}.s", "br.s", 0x18, F32, f32, simm7Op32, uimm6Op32>;
+defm BCRS : BCRm<"br${cf}.s", "br.s", 0x18, F32, f32, simm7Op32>;
 
 // Load and Store host memory instructions
-let cx = 0, cy = 0, cz = 1, hasSideEffects = 0 in {
-let sy = 3 in
-def LHMri : RM<
-    0x21, (outs I64:$sx), (ins MEMASri:$addr),
-    "lhm.l $sx, $addr",
-    []>;
-let sy = 2 in
-def LHMLri : RM<
-    0x21, (outs I32:$sx), (ins MEMASri:$addr),
-    "lhm.w $sx, $addr",
-    []>;
-let sy = 1 in
-def LHM2Bri : RM<
-    0x21, (outs I16:$sx), (ins MEMASri:$addr),
-    "lhm.h $sx, $addr",
-    []>;
-let sy = 0 in
-def LHM1Bri : RM<
-    0x21, (outs I8:$sx), (ins MEMASri:$addr),
-    "lhm.b $sx, $addr",
-    []>;
+let cx = 0, cz = 1, hasSideEffects = 0 in {
+let ry = 3 in
+def LHMri : RRMHM<0x21, (outs I64:$dest), (ins MEMASri:$addr),
+                  "lhm.l $dest, $addr">;
+let ry = 2 in
+def LHMLri : RRMHM<0x21, (outs I32:$dest), (ins MEMASri:$addr),
+                   "lhm.w $dest, $addr">;
+let ry = 1 in
+def LHM2Bri : RRMHM<0x21, (outs I16:$dest), (ins MEMASri:$addr),
+                    "lhm.h $dest, $addr">;
+let ry = 0 in
+def LHM1Bri : RRMHM<0x21, (outs I8:$dest), (ins MEMASri:$addr),
+                    "lhm.b $dest, $addr">;
 }
 
-let cx = 0, cy = 0, cz = 1, hasSideEffects = 0 in {
-let sy = 3 in
-def SHMri : RM<
-    0x31, (outs), (ins MEMASri:$addr, I64:$sx),
-    "shm.l $sx, $addr">;
-let sy = 2 in
-def SHMLri : RM<
-    0x31, (outs), (ins MEMASri:$addr, I32:$sx),
-    "shm.w $sx, $addr">;
-let sy = 1 in
-def SHM2Bri : RM<
-    0x31, (outs), (ins MEMASri:$addr, I16:$sx),
-    "shm.h $sx, $addr">;
-let sy = 0 in
-def SHM1Bri : RM<
-    0x31, (outs), (ins MEMASri:$addr, I8:$sx),
-    "shm.b $sx, $addr">;
+let cx = 0, cz = 1, hasSideEffects = 0 in {
+let ry = 3, DecoderMethod = "DecodeStoreASI64" in
+def SHMri : RRMHM<0x31, (outs), (ins MEMASri:$addr, I64:$sx),
+                  "shm.l $sx, $addr">;
+let ry = 2, DecoderMethod = "DecodeStoreASI32" in
+def SHMLri : RRMHM<0x31, (outs), (ins MEMASri:$addr, I32:$sx),
+                   "shm.w $sx, $addr">;
+let ry = 1, DecoderMethod = "DecodeStoreASI16" in
+def SHM2Bri : RRMHM<0x31, (outs), (ins MEMASri:$addr, I16:$sx),
+                    "shm.h $sx, $addr">;
+let ry = 0, DecoderMethod = "DecodeStoreASI8" in
+def SHM1Bri : RRMHM<0x31, (outs), (ins MEMASri:$addr, I8:$sx),
+                    "shm.b $sx, $addr">;
 }
 
 let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
