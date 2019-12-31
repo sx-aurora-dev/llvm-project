@@ -22,7 +22,7 @@ class MCAsmBackend;
 class MCCodeEmitter;
 class MCContext;
 class MCInstrInfo;
-class MCObjectWriter;
+class MCObjectTargetWriter;
 class MCRegisterInfo;
 class MCSubtargetInfo;
 class MCTargetOptions;
@@ -31,8 +31,6 @@ class Triple;
 class StringRef;
 class raw_pwrite_stream;
 class raw_ostream;
-
-Target &getTheVETarget();
 
 #if 0
 MCCodeEmitter *createVEMCCodeEmitter(const MCInstrInfo &MCII,

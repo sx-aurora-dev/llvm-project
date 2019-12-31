@@ -8,6 +8,7 @@
 
 #include "MCTargetDesc/VEMCExpr.h"
 #include "MCTargetDesc/VEMCTargetDesc.h"
+#include "TargetInfo/VETargetInfo.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"

@@ -17,6 +17,7 @@
 #include "VE.h"
 #include "VEInstrInfo.h"
 #include "VETargetMachine.h"
+#include "TargetInfo/VETargetInfo.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineModuleInfoImpls.h"
