@@ -18,7 +18,6 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/Version.h"
 #include "clang/Format/Format.h"
-#include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
@@ -76,9 +75,9 @@ static cl::opt<std::string>
 
 static cl::opt<std::string> AssumeFileName(
     "assume-filename",
-    cl::desc("When reading from stdin, clang-format assumes this\n"
-             "filename to look for a style config file (with\n"
-             "-style=file) and to determine the language."),
+    cl::desc("Override filename used to determine the language.\n"
+             "When reading from stdin, clang-format assumes this\n"
+             "filename to determine the language."),
     cl::init("<stdin>"), cl::cat(ClangFormatCategory));
 
 static cl::opt<bool> Inplace("i",
@@ -293,45 +292,28 @@ static void outputReplacementsXML(const Replacements &Replaces) {
 static bool
 emitReplacementWarnings(const Replacements &Replaces, StringRef AssumedFileName,
                         const std::unique_ptr<llvm::MemoryBuffer> &Code) {
-  if (Replaces.empty()) {
+  if (Replaces.empty())
     return false;
-  }
-
-  IntrusiveRefCntPtr<DiagnosticOptions> DiagOpts = new DiagnosticOptions();
-  DiagOpts->ShowColors = (ShowColors && !NoShowColors);
-
-  TextDiagnosticPrinter *DiagsBuffer =
-      new TextDiagnosticPrinter(llvm::errs(), &*DiagOpts, false);
-
-  IntrusiveRefCntPtr<DiagnosticIDs> DiagID(new DiagnosticIDs());
-  IntrusiveRefCntPtr<DiagnosticsEngine> Diags(
-      new DiagnosticsEngine(DiagID, &*DiagOpts, DiagsBuffer));
-
-  IntrusiveRefCntPtr<llvm::vfs::InMemoryFileSystem> InMemoryFileSystem(
-      new llvm::vfs::InMemoryFileSystem);
-  FileManager Files(FileSystemOptions(), InMemoryFileSystem);
-  SourceManager Sources(*Diags, Files);
-  FileID FileID = createInMemoryFile(AssumedFileName, Code.get(), Sources,
-                                     Files, InMemoryFileSystem.get());
-
-  const unsigned ID = Diags->getCustomDiagID(
-      WarningsAsErrors ? clang::DiagnosticsEngine::Error
-                       : clang::DiagnosticsEngine::Warning,
-      "code should be clang-formatted [-Wclang-format-violations]");
 
   unsigned Errors = 0;
-  DiagsBuffer->BeginSourceFile(LangOptions(), nullptr);
   if (WarnFormat && !NoWarnFormat) {
+    llvm::SourceMgr Mgr;
+    const char *StartBuf = Code->getBufferStart();
+
+    Mgr.AddNewSourceBuffer(
+        MemoryBuffer::getMemBuffer(StartBuf, AssumedFileName), SMLoc());
     for (const auto &R : Replaces) {
-      Diags->Report(
-          Sources.getLocForStartOfFile(FileID).getLocWithOffset(R.getOffset()),
-          ID);
-      Errors++;
-      if (ErrorLimit && Errors >= ErrorLimit)
+      SMDiagnostic Diag = Mgr.GetMessage(
+          SMLoc::getFromPointer(StartBuf + R.getOffset()),
+          WarningsAsErrors ? SourceMgr::DiagKind::DK_Error
+                           : SourceMgr::DiagKind::DK_Warning,
+          "code should be clang-formatted [-Wclang-format-violations]");
+
+      Diag.print(nullptr, llvm::errs(), (ShowColors && !NoShowColors));
+      if (ErrorLimit && ++Errors >= ErrorLimit)
         break;
     }
   }
-  DiagsBuffer->EndSourceFile();
   return WarningsAsErrors;
 }
 
@@ -390,6 +372,10 @@ static bool format(StringRef FileName) {
   if (fillRanges(Code.get(), Ranges))
     return true;
   StringRef AssumedFileName = (FileName == "-") ? AssumeFileName : FileName;
+  if (AssumedFileName.empty()) {
+    llvm::errs() << "error: empty filenames are not allowed\n";
+    return true;
+  }
 
   llvm::Expected<FormatStyle> FormatStyle =
       getStyle(Style, AssumedFileName, FallbackStyle, Code->getBuffer());

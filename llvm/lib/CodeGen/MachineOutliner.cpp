@@ -68,6 +68,7 @@
 #include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Mangler.h"
+#include "llvm/InitializePasses.h"
 #include "llvm/Support/Allocator.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -252,7 +253,7 @@ private:
   /// Ukkonen's algorithm.
   struct ActiveState {
     /// The next node to insert at.
-    SuffixTreeNode *Node;
+    SuffixTreeNode *Node = nullptr;
 
     /// The index of the first character in the substring currently being added.
     unsigned Idx = EmptyIdx;
@@ -312,24 +313,31 @@ private:
   /// respective suffixes.
   ///
   /// \param[in] CurrNode The node currently being visited.
-  /// \param CurrNodeLen The concatenation of all node sizes from the root to
-  /// this node. Used to produce suffix indices.
-  void setSuffixIndices(SuffixTreeNode &CurrNode, unsigned CurrNodeLen) {
+  void setSuffixIndices() {
+    // List of nodes we need to visit along with the current length of the
+    // string.
+    std::vector<std::pair<SuffixTreeNode *, unsigned>> ToVisit;
 
-    bool IsLeaf = CurrNode.Children.size() == 0 && !CurrNode.isRoot();
+    // Current node being visited.
+    SuffixTreeNode *CurrNode = Root;
 
-    // Store the concatenation of lengths down from the root.
-    CurrNode.ConcatLen = CurrNodeLen;
-    // Traverse the tree depth-first.
-    for (auto &ChildPair : CurrNode.Children) {
-      assert(ChildPair.second && "Node had a null child!");
-      setSuffixIndices(*ChildPair.second,
-                       CurrNodeLen + ChildPair.second->size());
+    // Sum of the lengths of the nodes down the path to the current one.
+    unsigned CurrNodeLen = 0;
+    ToVisit.push_back({CurrNode, CurrNodeLen});
+    while (!ToVisit.empty()) {
+      std::tie(CurrNode, CurrNodeLen) = ToVisit.back();
+      ToVisit.pop_back();
+      CurrNode->ConcatLen = CurrNodeLen;
+      for (auto &ChildPair : CurrNode->Children) {
+        assert(ChildPair.second && "Node had a null child!");
+        ToVisit.push_back(
+            {ChildPair.second, CurrNodeLen + ChildPair.second->size()});
+      }
+
+      // No children, so we are at the end of the string.
+      if (CurrNode->Children.size() == 0 && !CurrNode->isRoot())
+        CurrNode->SuffixIdx = Str.size() - CurrNodeLen;
     }
-
-    // Is this node a leaf? If it is, give it a suffix index.
-    if (IsLeaf)
-      CurrNode.SuffixIdx = Str.size() - CurrNodeLen;
   }
 
   /// Construct the suffix tree for the prefix of the input ending at
@@ -472,7 +480,6 @@ public:
     // Keep track of the number of suffixes we have to add of the current
     // prefix.
     unsigned SuffixesToAdd = 0;
-    Active.Node = Root;
 
     // Construct the suffix tree iteratively on each prefix of the string.
     // PfxEndIdx is the end index of the current prefix.
@@ -486,7 +493,7 @@ public:
 
     // Set the suffix indices of each leaf.
     assert(Root && "Root node can't be nullptr!");
-    setSuffixIndices(*Root, 0);
+    setSuffixIndices();
   }
 
   /// Iterator for finding all repeated substrings in the suffix tree.
@@ -763,7 +770,7 @@ struct InstructionMapper {
     std::vector<unsigned> UnsignedVecForMBB;
     std::vector<MachineBasicBlock::iterator> InstrListForMBB;
 
-    for (MachineBasicBlock::iterator Et = MBB.end(); It != Et; It++) {
+    for (MachineBasicBlock::iterator Et = MBB.end(); It != Et; ++It) {
       // Keep track of where this instruction is in the module.
       switch (TII.getOutliningType(It, Flags)) {
       case InstrType::Illegal:
@@ -904,10 +911,10 @@ struct MachineOutliner : public ModulePass {
   /// Return a DISubprogram for OF if one exists, and null otherwise. Helper
   /// function for remark emission.
   DISubprogram *getSubprogramOrNull(const OutlinedFunction &OF) {
-    DISubprogram *SP;
     for (const Candidate &C : OF.Candidates)
-      if (C.getMF() && (SP = C.getMF()->getFunction().getSubprogram()))
-        return SP;
+      if (MachineFunction *MF = C.getMF())
+        if (DISubprogram *SP = MF->getFunction().getSubprogram())
+          return SP;
     return nullptr;
   }
 

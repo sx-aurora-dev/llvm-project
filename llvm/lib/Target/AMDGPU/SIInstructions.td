@@ -86,7 +86,7 @@ defm V_INTERP_MOV_F32 : VINTRP_m <
 //===----------------------------------------------------------------------===//
 def ATOMIC_FENCE : SPseudoInstSI<
   (outs), (ins i32imm:$ordering, i32imm:$scope),
-  [(atomic_fence (i32 imm:$ordering), (i32 imm:$scope))],
+  [(atomic_fence (i32 timm:$ordering), (i32 timm:$scope))],
   "ATOMIC_FENCE $ordering, $scope"> {
   let hasSideEffects = 1;
   let maybeAtomic = 1;
@@ -782,13 +782,14 @@ defm : FMADPat <f32, V_MAC_F32_e64>;
 
 class FMADModsPat<Instruction inst, SDPatternOperator mad_opr, ValueType Ty>
   : GCNPat<
-  (Ty (mad_opr (VOP3Mods Ty:$src0, i32:$src0_mod),
-  (VOP3Mods Ty:$src1, i32:$src1_mod),
-  (VOP3Mods Ty:$src2, i32:$src2_mod))),
+  (Ty (mad_opr (Ty (VOP3Mods Ty:$src0, i32:$src0_mod)),
+               (Ty (VOP3Mods Ty:$src1, i32:$src1_mod)),
+               (Ty (VOP3Mods Ty:$src2, i32:$src2_mod)))),
   (inst $src0_mod, $src0, $src1_mod, $src1,
   $src2_mod, $src2, DSTCLAMP.NONE, DSTOMOD.NONE)
 >;
 
+// FIXME: This should select to V_MAC_F32
 def : FMADModsPat<V_MAD_F32, AMDGPUfmad_ftz, f32>;
 def : FMADModsPat<V_MAD_F16, AMDGPUfmad_ftz, f16> {
   let SubtargetPredicate = Has16BitInsts;

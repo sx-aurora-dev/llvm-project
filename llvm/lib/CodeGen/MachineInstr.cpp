@@ -1701,12 +1701,13 @@ void MachineInstr::print(raw_ostream &OS, ModuleSlotTracker &MST,
     OS << " post-instr-symbol ";
     MachineOperand::printSymbol(OS, *PostInstrSymbol);
   }
-  if (/*MDNode *HeapAllocMarker =*/getHeapAllocMarker()) {
+  if (MDNode *HeapAllocMarker = getHeapAllocMarker()) {
     if (!FirstOp) {
       FirstOp = false;
       OS << ',';
     }
-    OS << " heap-alloc-marker";
+    OS << " heap-alloc-marker ";
+    HeapAllocMarker->printAsOperand(OS, MST);
   }
 
   if (!SkipDebugLoc) {
@@ -1976,7 +1977,7 @@ void MachineInstr::setPhysRegsDeadExcept(ArrayRef<Register> UsedRegs,
 unsigned
 MachineInstrExpressionTrait::getHashValue(const MachineInstr* const &MI) {
   // Build up a buffer of hash code components.
-  SmallVector<size_t, 8> HashComponents;
+  SmallVector<size_t, 16> HashComponents;
   HashComponents.reserve(MI->getNumOperands() + 1);
   HashComponents.push_back(MI->getOpcode());
   for (const MachineOperand &MO : MI->operands()) {

@@ -429,6 +429,29 @@ static bool tryAddToFoldList(SmallVectorImpl<FoldCandidate> &FoldList,
     return true;
   }
 
+  // Check the case where we might introduce a second constant operand to a
+  // scalar instruction
+  if (TII->isSALU(MI->getOpcode())) {
+    const MCInstrDesc &InstDesc = MI->getDesc();
+    const MCOperandInfo &OpInfo = InstDesc.OpInfo[OpNo];
+    const SIRegisterInfo &SRI = TII->getRegisterInfo();
+
+    // Fine if the operand can be encoded as an inline constant
+    if (OpToFold->isImm()) {
+      if (!SRI.opCanUseInlineConstant(OpInfo.OperandType) ||
+          !TII->isInlineConstant(*OpToFold, OpInfo)) {
+        // Otherwise check for another constant
+        for (unsigned i = 0, e = InstDesc.getNumOperands(); i != e; ++i) {
+          auto &Op = MI->getOperand(i);
+          if (OpNo != i &&
+              TII->isLiteralConstantLike(Op, OpInfo)) {
+            return false;
+          }
+        }
+      }
+    }
+  }
+
   appendFoldCandidate(FoldList, MI, OpNo, OpToFold);
   return true;
 }
@@ -1208,6 +1231,7 @@ void SIFoldOperands::foldInstOperand(MachineInstr &MI,
     Copy->addImplicitDefUseOperands(*MF);
 
   for (FoldCandidate &Fold : FoldList) {
+    assert(!Fold.isReg() || Fold.OpToFold);
     if (Fold.isReg() && Register::isVirtualRegister(Fold.OpToFold->getReg())) {
       Register Reg = Fold.OpToFold->getReg();
       MachineInstr *DefMI = Fold.OpToFold->getParent();
@@ -1358,8 +1382,8 @@ SIFoldOperands::isOMod(const MachineInstr &MI) const {
   case AMDGPU::V_MUL_F32_e64:
   case AMDGPU::V_MUL_F16_e64: {
     // If output denormals are enabled, omod is ignored.
-    if ((Op == AMDGPU::V_MUL_F32_e64 && ST->hasFP32Denormals()) ||
-        (Op == AMDGPU::V_MUL_F16_e64 && ST->hasFP16Denormals()))
+    if ((Op == AMDGPU::V_MUL_F32_e64 && MFI->getMode().FP32Denormals) ||
+        (Op == AMDGPU::V_MUL_F16_e64 && MFI->getMode().FP64FP16Denormals))
       return std::make_pair(nullptr, SIOutMods::NONE);
 
     const MachineOperand *RegOp = nullptr;
@@ -1388,8 +1412,8 @@ SIFoldOperands::isOMod(const MachineInstr &MI) const {
   case AMDGPU::V_ADD_F32_e64:
   case AMDGPU::V_ADD_F16_e64: {
     // If output denormals are enabled, omod is ignored.
-    if ((Op == AMDGPU::V_ADD_F32_e64 && ST->hasFP32Denormals()) ||
-        (Op == AMDGPU::V_ADD_F16_e64 && ST->hasFP16Denormals()))
+    if ((Op == AMDGPU::V_ADD_F32_e64 && MFI->getMode().FP32Denormals) ||
+        (Op == AMDGPU::V_ADD_F16_e64 && MFI->getMode().FP64FP16Denormals))
       return std::make_pair(nullptr, SIOutMods::NONE);
 
     // Look through the DAGCombiner canonicalization fmul x, 2 -> fadd x, x

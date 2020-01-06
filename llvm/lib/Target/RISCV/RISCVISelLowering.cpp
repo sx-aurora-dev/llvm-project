@@ -30,6 +30,7 @@
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
+#include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -581,10 +582,7 @@ SDValue RISCVTargetLowering::lowerGlobalTLSAddress(SDValue Op,
   int64_t Offset = N->getOffset();
   MVT XLenVT = Subtarget.getXLenVT();
 
-  // Non-PIC TLS lowering should always use the LocalExec model.
-  TLSModel::Model Model = isPositionIndependent()
-                              ? getTargetMachine().getTLSModel(N->getGlobal())
-                              : TLSModel::LocalExec;
+  TLSModel::Model Model = getTargetMachine().getTLSModel(N->getGlobal());
 
   SDValue Addr;
   switch (Model) {
@@ -2018,10 +2016,6 @@ bool RISCVTargetLowering::isEligibleForTailCallOptimization(
   auto &Caller = MF.getFunction();
   auto CallerCC = Caller.getCallingConv();
 
-  // Do not tail call opt functions with "disable-tail-calls" attribute.
-  if (Caller.getFnAttribute("disable-tail-calls").getValueAsString() == "true")
-    return false;
-
   // Exception-handling functions need a special set of instructions to
   // indicate a return to the hardware. Tail-calling another function would
   // probably break this.
@@ -2893,4 +2887,23 @@ bool RISCVTargetLowering::shouldExtendTypeInLibCall(EVT Type) const {
     return false;
 
   return true;
+}
+
+#define GET_REGISTER_MATCHER
+#include "RISCVGenAsmMatcher.inc"
+
+Register
+RISCVTargetLowering::getRegisterByName(const char *RegName, EVT VT,
+                                       const MachineFunction &MF) const {
+  Register Reg = MatchRegisterAltName(RegName);
+  if (Reg == RISCV::NoRegister)
+    Reg = MatchRegisterName(RegName);
+  if (Reg == RISCV::NoRegister)
+    report_fatal_error(
+        Twine("Invalid register name \"" + StringRef(RegName) + "\"."));
+  BitVector ReservedRegs = Subtarget.getRegisterInfo()->getReservedRegs(MF);
+  if (!ReservedRegs.test(Reg) && !Subtarget.isRegisterReservedByUser(Reg))
+    report_fatal_error(Twine("Trying to obtain non-reserved register \"" +
+                             StringRef(RegName) + "\"."));
+  return Reg;
 }

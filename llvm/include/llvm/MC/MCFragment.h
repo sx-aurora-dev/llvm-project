@@ -16,6 +16,7 @@
 #include "llvm/ADT/ilist_node.h"
 #include "llvm/MC/MCFixup.h"
 #include "llvm/MC/MCInst.h"
+#include "llvm/Support/Alignment.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/SMLoc.h"
 #include <cstdint>
@@ -41,7 +42,7 @@ public:
     FT_Dwarf,
     FT_DwarfFrame,
     FT_LEB,
-    FT_Padding,
+    FT_BoundaryAlign,
     FT_SymbolId,
     FT_CVInlineLines,
     FT_CVDefRange,
@@ -55,14 +56,13 @@ protected:
   bool HasInstructions;
 
 private:
-  /// LayoutOrder - The layout order of this fragment.
+  /// The layout order of this fragment.
   unsigned LayoutOrder;
 
   /// The data for the section this fragment is in.
   MCSection *Parent;
 
-  /// Atom - The atom this fragment is in, as represented by its defining
-  /// symbol.
+  /// The atom this fragment is in, as represented by its defining symbol.
   const MCSymbol *Atom;
 
   /// \name Assembler Backend Data
@@ -70,7 +70,7 @@ private:
   //
   // FIXME: This could all be kept private to the assembler implementation.
 
-  /// Offset - The offset of this fragment in its section. This is ~0 until
+  /// The offset of this fragment in its section. This is ~0 until
   /// initialized.
   uint64_t Offset;
 
@@ -79,8 +79,6 @@ private:
 protected:
   MCFragment(FragmentType Kind, bool HasInstructions,
              MCSection *Parent = nullptr);
-
-  ~MCFragment();
 
 public:
   MCFragment() = delete;
@@ -135,8 +133,8 @@ protected:
                     MCSection *Sec)
       : MCFragment(FType, HasInstructions, Sec) {}
 
-  /// STI - The MCSubtargetInfo in effect when the instruction was encoded.
-  /// must be non-null for instructions.
+  /// The MCSubtargetInfo in effect when the instruction was encoded.
+  /// It must be non-null for instructions.
   const MCSubtargetInfo *STI = nullptr;
 
 public:
@@ -206,7 +204,7 @@ template<unsigned ContentsSize, unsigned FixupsSize>
 class MCEncodedFragmentWithFixups :
   public MCEncodedFragmentWithContents<ContentsSize> {
 
-  /// Fixups - The list of fixups in this fragment.
+  /// The list of fixups in this fragment.
   SmallVector<MCFixup, FixupsSize> Fixups;
 
 protected:
@@ -271,7 +269,7 @@ public:
 ///
 class MCRelaxableFragment : public MCEncodedFragmentWithFixups<8, 1> {
 
-  /// Inst - The instruction this is a fragment for.
+  /// The instruction this is a fragment for.
   MCInst Inst;
 
 public:
@@ -289,21 +287,21 @@ public:
 };
 
 class MCAlignFragment : public MCFragment {
-  /// Alignment - The alignment to ensure, in bytes.
+  /// The alignment to ensure, in bytes.
   unsigned Alignment;
 
-  /// EmitNops - Flag to indicate that (optimal) NOPs should be emitted instead
+  /// Flag to indicate that (optimal) NOPs should be emitted instead
   /// of using the provided value. The exact interpretation of this flag is
   /// target dependent.
   bool EmitNops : 1;
 
-  /// Value - Value to use for filling padding bytes.
+  /// Value to use for filling padding bytes.
   int64_t Value;
 
-  /// ValueSize - The size of the integer (in bytes) of \p Value.
+  /// The size of the integer (in bytes) of \p Value.
   unsigned ValueSize;
 
-  /// MaxBytesToEmit - The maximum number of bytes to emit; if the alignment
+  /// The maximum number of bytes to emit; if the alignment
   /// cannot be satisfied in this width then this fragment is ignored.
   unsigned MaxBytesToEmit;
 
@@ -331,98 +329,6 @@ public:
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_Align;
-  }
-};
-
-/// Fragment for adding required padding.
-/// This fragment is always inserted before an instruction, and holds that
-/// instruction as context information (as well as a mask of kinds) for
-/// determining the padding size.
-///
-class MCPaddingFragment : public MCFragment {
-  /// A mask containing all the kinds relevant to this fragment. i.e. the i'th
-  /// bit will be set iff kind i is relevant to this fragment.
-  uint64_t PaddingPoliciesMask;
-  /// A boolean indicating if this fragment will actually hold padding. If its
-  /// value is false, then this fragment serves only as a placeholder,
-  /// containing data to assist other insertion point in their decision making.
-  bool IsInsertionPoint;
-
-  uint64_t Size;
-
-  struct MCInstInfo {
-    bool IsInitialized;
-    MCInst Inst;
-    /// A boolean indicating whether the instruction pointed by this fragment is
-    /// a fixed size instruction or a relaxable instruction held by a
-    /// MCRelaxableFragment.
-    bool IsImmutableSizedInst;
-    union {
-      /// If the instruction is a fixed size instruction, hold its size.
-      size_t InstSize;
-      /// Otherwise, hold a pointer to the MCRelaxableFragment holding it.
-      MCRelaxableFragment *InstFragment;
-    };
-  };
-  MCInstInfo InstInfo;
-
-public:
-  static const uint64_t PFK_None = UINT64_C(0);
-
-  enum MCPaddingFragmentKind {
-    // values 0-7 are reserved for future target independet values.
-
-    FirstTargetPerfNopFragmentKind = 8,
-
-    /// Limit range of target MCPerfNopFragment kinds to fit in uint64_t
-    MaxTargetPerfNopFragmentKind = 63
-  };
-
-  MCPaddingFragment(MCSection *Sec = nullptr)
-      : MCFragment(FT_Padding, false, Sec), PaddingPoliciesMask(PFK_None),
-        IsInsertionPoint(false), Size(UINT64_C(0)),
-        InstInfo({false, MCInst(), false, {0}}) {}
-
-  bool isInsertionPoint() const { return IsInsertionPoint; }
-  void setAsInsertionPoint() { IsInsertionPoint = true; }
-  uint64_t getPaddingPoliciesMask() const { return PaddingPoliciesMask; }
-  void setPaddingPoliciesMask(uint64_t Value) { PaddingPoliciesMask = Value; }
-  bool hasPaddingPolicy(uint64_t PolicyMask) const {
-    assert(isPowerOf2_64(PolicyMask) &&
-           "Policy mask must contain exactly one policy");
-    return (getPaddingPoliciesMask() & PolicyMask) != PFK_None;
-  }
-  const MCInst &getInst() const {
-    assert(isInstructionInitialized() && "Fragment has no instruction!");
-    return InstInfo.Inst;
-  }
-  size_t getInstSize() const {
-    assert(isInstructionInitialized() && "Fragment has no instruction!");
-    if (InstInfo.IsImmutableSizedInst)
-      return InstInfo.InstSize;
-    assert(InstInfo.InstFragment != nullptr &&
-           "Must have a valid InstFragment to retrieve InstSize from");
-    return InstInfo.InstFragment->getContents().size();
-  }
-  void setInstAndInstSize(const MCInst &Inst, size_t InstSize) {
-	InstInfo.IsInitialized = true;
-    InstInfo.IsImmutableSizedInst = true;
-    InstInfo.Inst = Inst;
-    InstInfo.InstSize = InstSize;
-  }
-  void setInstAndInstFragment(const MCInst &Inst,
-                              MCRelaxableFragment *InstFragment) {
-    InstInfo.IsInitialized = true;
-    InstInfo.IsImmutableSizedInst = false;
-    InstInfo.Inst = Inst;
-    InstInfo.InstFragment = InstFragment;
-  }
-  uint64_t getSize() const { return Size; }
-  void setSize(uint64_t Value) { Size = Value; }
-  bool isInstructionInitialized() const { return InstInfo.IsInitialized; }
-
-  static bool classof(const MCFragment *F) {
-    return F->getKind() == MCFragment::FT_Padding;
   }
 };
 
@@ -485,10 +391,10 @@ public:
 };
 
 class MCLEBFragment : public MCFragment {
-  /// Value - The value this fragment should contain.
+  /// The value this fragment should contain.
   const MCExpr *Value;
 
-  /// IsSigned - True if this is a sleb128, false if uleb128.
+  /// True if this is a sleb128, false if uleb128.
   bool IsSigned;
 
   SmallString<8> Contents;
@@ -517,11 +423,11 @@ public:
 };
 
 class MCDwarfLineAddrFragment : public MCEncodedFragmentWithFixups<8, 1> {
-  /// LineDelta - the value of the difference between the two line numbers
+  /// The value of the difference between the two line numbers
   /// between two .loc dwarf directives.
   int64_t LineDelta;
 
-  /// AddrDelta - The expression for the difference of the two symbols that
+  /// The expression for the difference of the two symbols that
   /// make up the address delta between two .loc dwarf directives.
   const MCExpr *AddrDelta;
 
@@ -546,7 +452,7 @@ public:
 };
 
 class MCDwarfCallFrameFragment : public MCEncodedFragmentWithFixups<8, 1> {
-  /// AddrDelta - The expression for the difference of the two symbols that
+  /// The expression for the difference of the two symbols that
   /// make up the address delta between two .cfi_* dwarf directives.
   const MCExpr *AddrDelta;
 
@@ -658,6 +564,47 @@ public:
   }
 };
 
+/// Represents required padding such that a particular other set of fragments
+/// does not cross a particular power-of-two boundary. The other fragments must
+/// follow this one within the same section.
+class MCBoundaryAlignFragment : public MCFragment {
+private:
+  /// The size of the fragment.  The size is lazily set during relaxation, and
+  /// is not meaningful before that.
+  uint64_t Size = 0;
+  /// The alignment requirement of the branch to be aligned.
+  Align AlignBoundary;
+  /// Flag to indicate whether the branch is fused.  Use in determining the
+  /// region of fragments being aligned.
+  bool Fused : 1;
+  /// Flag to indicate whether NOPs should be emitted.
+  bool EmitNops : 1;
+
+public:
+  MCBoundaryAlignFragment(Align AlignBoundary, bool Fused = false,
+                          bool EmitNops = false, MCSection *Sec = nullptr)
+      : MCFragment(FT_BoundaryAlign, false, Sec), AlignBoundary(AlignBoundary),
+        Fused(Fused), EmitNops(EmitNops) {}
+
+  /// \name Accessors
+  /// @{
+  uint64_t getSize() const { return Size; }
+  void setSize(uint64_t Value) { Size = Value; }
+
+  Align getAlignment() const { return AlignBoundary; }
+
+  bool isFused() const { return Fused; }
+  void setFused(bool Value) { Fused = Value; }
+
+  bool canEmitNops() const { return EmitNops; }
+  void setEmitNops(bool Value) { EmitNops = Value; }
+  /// @}
+  //
+
+  static bool classof(const MCFragment *F) {
+    return F->getKind() == MCFragment::FT_BoundaryAlign;
+  }
+};
 } // end namespace llvm
 
 #endif // LLVM_MC_MCFRAGMENT_H

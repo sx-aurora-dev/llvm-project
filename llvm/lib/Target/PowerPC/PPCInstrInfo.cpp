@@ -108,7 +108,7 @@ ScheduleHazardRecognizer *
 PPCInstrInfo::CreateTargetHazardRecognizer(const TargetSubtargetInfo *STI,
                                            const ScheduleDAG *DAG) const {
   unsigned Directive =
-      static_cast<const PPCSubtarget *>(STI)->getDarwinDirective();
+      static_cast<const PPCSubtarget *>(STI)->getCPUDirective();
   if (Directive == PPC::DIR_440 || Directive == PPC::DIR_A2 ||
       Directive == PPC::DIR_E500mc || Directive == PPC::DIR_E5500) {
     const InstrItineraryData *II =
@@ -125,7 +125,7 @@ ScheduleHazardRecognizer *
 PPCInstrInfo::CreateTargetPostRAHazardRecognizer(const InstrItineraryData *II,
                                                  const ScheduleDAG *DAG) const {
   unsigned Directive =
-      DAG->MF.getSubtarget<PPCSubtarget>().getDarwinDirective();
+      DAG->MF.getSubtarget<PPCSubtarget>().getCPUDirective();
 
   // FIXME: Leaving this as-is until we have POWER9 scheduling info
   if (Directive == PPC::DIR_PWR7 || Directive == PPC::DIR_PWR8)
@@ -202,7 +202,7 @@ int PPCInstrInfo::getOperandLatency(const InstrItineraryData *ItinData,
 
     // On some cores, there is an additional delay between writing to a condition
     // register, and using it from a branch.
-    unsigned Directive = Subtarget.getDarwinDirective();
+    unsigned Directive = Subtarget.getCPUDirective();
     switch (Directive) {
     default: break;
     case PPC::DIR_7400:
@@ -469,7 +469,7 @@ void PPCInstrInfo::insertNoop(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator MI) const {
   // This function is used for scheduling, and the nop wanted here is the type
   // that terminates dispatch groups on the POWER cores.
-  unsigned Directive = Subtarget.getDarwinDirective();
+  unsigned Directive = Subtarget.getCPUDirective();
   unsigned Opcode;
   switch (Directive) {
   default:            Opcode = PPC::NOP; break;
@@ -903,15 +903,15 @@ static unsigned getCRBitValue(unsigned CRBit) {
 
 void PPCInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                MachineBasicBlock::iterator I,
-                               const DebugLoc &DL, unsigned DestReg,
-                               unsigned SrcReg, bool KillSrc) const {
+                               const DebugLoc &DL, MCRegister DestReg,
+                               MCRegister SrcReg, bool KillSrc) const {
   // We can end up with self copies and similar things as a result of VSX copy
   // legalization. Promote them here.
   const TargetRegisterInfo *TRI = &getRegisterInfo();
   if (PPC::F8RCRegClass.contains(DestReg) &&
       PPC::VSRCRegClass.contains(SrcReg)) {
-    unsigned SuperReg =
-      TRI->getMatchingSuperReg(DestReg, PPC::sub_64, &PPC::VSRCRegClass);
+    MCRegister SuperReg =
+        TRI->getMatchingSuperReg(DestReg, PPC::sub_64, &PPC::VSRCRegClass);
 
     if (VSXSelfCopyCrash && SrcReg == SuperReg)
       llvm_unreachable("nop VSX copy");
@@ -919,8 +919,8 @@ void PPCInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     DestReg = SuperReg;
   } else if (PPC::F8RCRegClass.contains(SrcReg) &&
              PPC::VSRCRegClass.contains(DestReg)) {
-    unsigned SuperReg =
-      TRI->getMatchingSuperReg(SrcReg, PPC::sub_64, &PPC::VSRCRegClass);
+    MCRegister SuperReg =
+        TRI->getMatchingSuperReg(SrcReg, PPC::sub_64, &PPC::VSRCRegClass);
 
     if (VSXSelfCopyCrash && DestReg == SuperReg)
       llvm_unreachable("nop VSX copy");
@@ -931,7 +931,7 @@ void PPCInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   // Different class register copy
   if (PPC::CRBITRCRegClass.contains(SrcReg) &&
       PPC::GPRCRegClass.contains(DestReg)) {
-    unsigned CRReg = getCRFromCRBit(SrcReg);
+    MCRegister CRReg = getCRFromCRBit(SrcReg);
     BuildMI(MBB, I, DL, get(PPC::MFOCRF), DestReg).addReg(CRReg);
     getKillRegState(KillSrc);
     // Rotate the CR bit in the CR fields to be the least significant bit and
@@ -1836,8 +1836,8 @@ bool PPCInstrInfo::optimizeCompareInstr(MachineInstr &CmpInstr, unsigned SrcReg,
 
   int NewOpC = -1;
   int MIOpC = MI->getOpcode();
-  if (MIOpC == PPC::ANDIo || MIOpC == PPC::ANDIo8 ||
-      MIOpC == PPC::ANDISo || MIOpC == PPC::ANDISo8)
+  if (MIOpC == PPC::ANDIo || MIOpC == PPC::ANDI8o ||
+      MIOpC == PPC::ANDISo || MIOpC == PPC::ANDIS8o)
     NewOpC = MIOpC;
   else {
     NewOpC = PPC::getRecordFormOpcode(MIOpC);
@@ -1945,7 +1945,7 @@ bool PPCInstrInfo::optimizeCompareInstr(MachineInstr &CmpInstr, unsigned SrcReg,
         Mask >>= MBInLoHWord ? 0 : 16;
         NewOpC = MIOpC == PPC::RLWINM ?
           (MBInLoHWord ? PPC::ANDIo : PPC::ANDISo) :
-          (MBInLoHWord ? PPC::ANDIo8 :PPC::ANDISo8);
+          (MBInLoHWord ? PPC::ANDI8o :PPC::ANDIS8o);
       } else if (MRI->use_empty(GPRRes) && (ME == 31) &&
                  (ME - MB + 1 == SH) && (MB >= 16)) {
         // If we are rotating by the exact number of bits as are in the mask
@@ -1953,7 +1953,7 @@ bool PPCInstrInfo::optimizeCompareInstr(MachineInstr &CmpInstr, unsigned SrcReg,
         // that's just an andis. (as long as the GPR result has no uses).
         Mask = ((1LLU << 32) - 1) & ~((1LLU << (32 - SH)) - 1);
         Mask >>= 16;
-        NewOpC = MIOpC == PPC::RLWINM ? PPC::ANDISo :PPC::ANDISo8;
+        NewOpC = MIOpC == PPC::RLWINM ? PPC::ANDISo :PPC::ANDIS8o;
       }
       // If we've set the mask, we can transform.
       if (Mask != ~0LLU) {
@@ -1966,7 +1966,7 @@ bool PPCInstrInfo::optimizeCompareInstr(MachineInstr &CmpInstr, unsigned SrcReg,
       int64_t MB = MI->getOperand(3).getImm();
       if (MB >= 48) {
         uint64_t Mask = (1LLU << (63 - MB + 1)) - 1;
-        NewOpC = PPC::ANDIo8;
+        NewOpC = PPC::ANDI8o;
         MI->RemoveOperand(3);
         MI->getOperand(2).setImm(Mask);
         NumRcRotatesConvertedToRcAnd++;
@@ -2306,7 +2306,7 @@ void PPCInstrInfo::replaceInstrWithLI(MachineInstr &MI,
 
   // Replace the instruction.
   if (LII.SetCR) {
-    MI.setDesc(get(LII.Is64Bit ? PPC::ANDIo8 : PPC::ANDIo));
+    MI.setDesc(get(LII.Is64Bit ? PPC::ANDI8o : PPC::ANDIo));
     // Set the immediate.
     MachineInstrBuilder(*MI.getParent()->getParent(), MI)
         .addImm(LII.Imm).addReg(PPC::CR0, RegState::ImplicitDefine);
@@ -3083,7 +3083,7 @@ bool PPCInstrInfo::instrHasImmForm(unsigned Opc, bool IsVFReg,
     switch(Opc) {
     default: llvm_unreachable("Unknown opcode");
     case PPC::ANDo: III.ImmOpcode = PPC::ANDIo; break;
-    case PPC::AND8o: III.ImmOpcode = PPC::ANDIo8; break;
+    case PPC::AND8o: III.ImmOpcode = PPC::ANDI8o; break;
     case PPC::OR: III.ImmOpcode = PPC::ORI; break;
     case PPC::OR8: III.ImmOpcode = PPC::ORI8; break;
     case PPC::XOR: III.ImmOpcode = PPC::XORI; break;
@@ -3757,8 +3757,10 @@ bool PPCInstrInfo::transformToImmFormFedByLI(MachineInstr &MI,
     ForwardKilledOperandReg = MI.getOperand(ConstantOpNo).getReg();
 
   unsigned Opc = MI.getOpcode();
-  bool SpecialShift32 =
-    Opc == PPC::SLW || Opc == PPC::SLWo || Opc == PPC::SRW || Opc == PPC::SRWo;
+  bool SpecialShift32 = Opc == PPC::SLW || Opc == PPC::SLWo ||
+                        Opc == PPC::SRW || Opc == PPC::SRWo ||
+                        Opc == PPC::SLW8 || Opc == PPC::SLW8o ||
+                        Opc == PPC::SRW8 || Opc == PPC::SRW8o;
   bool SpecialShift64 =
     Opc == PPC::SLD || Opc == PPC::SLDo || Opc == PPC::SRD || Opc == PPC::SRDo;
   bool SetCR = Opc == PPC::SLWo || Opc == PPC::SRWo ||
@@ -4065,8 +4067,8 @@ PPCInstrInfo::isSignOrZeroExtended(const MachineInstr &MI, bool SignExt,
   case PPC::ORIS:
   case PPC::XORI:
   case PPC::XORIS:
-  case PPC::ANDIo8:
-  case PPC::ANDISo8:
+  case PPC::ANDI8o:
+  case PPC::ANDIS8o:
   case PPC::ORI8:
   case PPC::ORIS8:
   case PPC::XORI8:
@@ -4261,12 +4263,10 @@ MachineInstr *PPCInstrInfo::findLoopInstr(
 // Return true if get the base operand, byte offset of an instruction and the
 // memory width. Width is the size of memory that is being loaded/stored.
 bool PPCInstrInfo::getMemOperandWithOffsetWidth(
-  const MachineInstr &LdSt,
-  const MachineOperand *&BaseReg,
-  int64_t &Offset,
-  unsigned &Width,
-  const TargetRegisterInfo *TRI) const {
-  assert(LdSt.mayLoadOrStore() && "Expected a memory operation.");
+    const MachineInstr &LdSt, const MachineOperand *&BaseReg, int64_t &Offset,
+    unsigned &Width, const TargetRegisterInfo *TRI) const {
+  if (!LdSt.mayLoadOrStore())
+    return false;
 
   // Handle only loads/stores with base register followed by immediate offset.
   if (LdSt.getNumExplicitOperands() != 3)

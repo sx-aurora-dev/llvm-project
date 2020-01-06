@@ -131,7 +131,6 @@ private:
   uint64_t IsAbsolute : 1;
 };
 
-using BlockOrdinal = unsigned;
 using SectionOrdinal = unsigned;
 
 /// An Addressable with content and edges.
@@ -140,10 +139,9 @@ class Block : public Addressable {
 
 private:
   /// Create a zero-fill defined addressable.
-  Block(Section &Parent, BlockOrdinal Ordinal, JITTargetAddress Size,
-        JITTargetAddress Address, uint64_t Alignment, uint64_t AlignmentOffset)
-      : Addressable(Address, true), Parent(Parent), Size(Size),
-        Ordinal(Ordinal) {
+  Block(Section &Parent, JITTargetAddress Size, JITTargetAddress Address,
+        uint64_t Alignment, uint64_t AlignmentOffset)
+      : Addressable(Address, true), Parent(Parent), Size(Size) {
     assert(isPowerOf2_64(Alignment) && "Alignment must be power of 2");
     assert(AlignmentOffset < Alignment &&
            "Alignment offset cannot exceed alignment");
@@ -154,10 +152,10 @@ private:
   }
 
   /// Create a defined addressable for the given content.
-  Block(Section &Parent, BlockOrdinal Ordinal, StringRef Content,
-        JITTargetAddress Address, uint64_t Alignment, uint64_t AlignmentOffset)
+  Block(Section &Parent, StringRef Content, JITTargetAddress Address,
+        uint64_t Alignment, uint64_t AlignmentOffset)
       : Addressable(Address, true), Parent(Parent), Data(Content.data()),
-        Size(Content.size()), Ordinal(Ordinal) {
+        Size(Content.size()) {
     assert(isPowerOf2_64(Alignment) && "Alignment must be power of 2");
     assert(AlignmentOffset < Alignment &&
            "Alignment offset cannot exceed alignment");
@@ -179,9 +177,6 @@ public:
 
   /// Return the parent section for this block.
   Section &getSection() const { return Parent; }
-
-  /// Return the ordinal for this block.
-  BlockOrdinal getOrdinal() const { return Ordinal; }
 
   /// Returns true if this is a zero-fill block.
   ///
@@ -263,7 +258,6 @@ private:
   Section &Parent;
   const char *Data = nullptr;
   size_t Size = 0;
-  BlockOrdinal Ordinal = 0;
   std::vector<Edge> Edges;
 };
 
@@ -330,14 +324,14 @@ private:
   }
 
   static Symbol &constructExternal(void *SymStorage, Addressable &Base,
-                                   StringRef Name, JITTargetAddress Size) {
+                                   StringRef Name, JITTargetAddress Size,
+                                   Linkage L) {
     assert(SymStorage && "Storage cannot be null");
     assert(!Base.isDefined() &&
            "Cannot create external symbol from defined block");
     assert(!Name.empty() && "External symbol name cannot be empty");
     auto *Sym = reinterpret_cast<Symbol *>(SymStorage);
-    new (Sym) Symbol(Base, 0, Name, Size, Linkage::Strong, Scope::Default,
-                     false, false);
+    new (Sym) Symbol(Base, 0, Name, Size, L, Scope::Default, false, false);
     return *Sym;
   }
 
@@ -357,6 +351,7 @@ private:
                                   JITTargetAddress Size, bool IsCallable,
                                   bool IsLive) {
     assert(SymStorage && "Storage cannot be null");
+    assert(Offset < Base.getSize() && "Symbol offset is outside block");
     auto *Sym = reinterpret_cast<Symbol *>(SymStorage);
     new (Sym) Symbol(Base, Offset, StringRef(), Size, Linkage::Strong,
                      Scope::Local, IsLive, IsCallable);
@@ -368,6 +363,7 @@ private:
                                    JITTargetAddress Size, Linkage L, Scope S,
                                    bool IsLive, bool IsCallable) {
     assert(SymStorage && "Storage cannot be null");
+    assert(Offset < Base.getSize() && "Symbol offset is outside block");
     assert(!Name.empty() && "Name cannot be empty");
     auto *Sym = reinterpret_cast<Symbol *>(SymStorage);
     new (Sym) Symbol(Base, Offset, Name, Size, L, S, IsLive, IsCallable);
@@ -481,7 +477,7 @@ public:
 
   /// Set the linkage for this Symbol.
   void setLinkage(Linkage L) {
-    assert((L == Linkage::Strong || (Base->isDefined() && !Name.empty())) &&
+    assert((L == Linkage::Strong || (!Base->isAbsolute() && !Name.empty())) &&
            "Linkage can only be applied to defined named symbols");
     this->L = static_cast<uint8_t>(L);
   }
@@ -585,12 +581,6 @@ public:
   /// Return the number of symbols in this section.
   SymbolSet::size_type symbols_size() { return Symbols.size(); }
 
-  /// Return true if this section contains no symbols.
-  bool symbols_empty() const { return Symbols.empty(); }
-
-  /// Returns the ordinal for the next block.
-  BlockOrdinal getNextBlockOrdinal() { return NextBlockOrdinal++; }
-
 private:
   void addSymbol(Symbol &Sym) {
     assert(!Symbols.count(&Sym) && "Symbol is already in this section");
@@ -615,7 +605,6 @@ private:
   StringRef Name;
   sys::Memory::ProtectionFlags Prot;
   SectionOrdinal SecOrdinal = 0;
-  BlockOrdinal NextBlockOrdinal = 0;
   BlockSet Blocks;
   SymbolSet Symbols;
 };
@@ -626,21 +615,21 @@ class SectionRange {
 public:
   SectionRange() = default;
   SectionRange(const Section &Sec) {
-    if (Sec.symbols_empty())
+    if (llvm::empty(Sec.blocks()))
       return;
-    First = Last = *Sec.symbols().begin();
-    for (auto *Sym : Sec.symbols()) {
-      if (Sym->getAddress() < First->getAddress())
-        First = Sym;
-      if (Sym->getAddress() > Last->getAddress())
-        Last = Sym;
+    First = Last = *Sec.blocks().begin();
+    for (auto *B : Sec.blocks()) {
+      if (B->getAddress() < First->getAddress())
+        First = B;
+      if (B->getAddress() > Last->getAddress())
+        Last = B;
     }
   }
-  Symbol *getFirstSymbol() const {
+  Block *getFirstBlock() const {
     assert((!Last || First) && "First can not be null if end is non-null");
     return First;
   }
-  Symbol *getLastSymbol() const {
+  Block *getLastBlock() const {
     assert((First || !Last) && "Last can not be null if start is non-null");
     return Last;
   }
@@ -649,17 +638,16 @@ public:
     return !First;
   }
   JITTargetAddress getStart() const {
-    return First ? First->getBlock().getAddress() : 0;
+    return First ? First->getAddress() : 0;
   }
   JITTargetAddress getEnd() const {
-    return Last ? Last->getBlock().getAddress() + Last->getBlock().getSize()
-                : 0;
+    return Last ? Last->getAddress() + Last->getSize() : 0;
   }
   uint64_t getSize() const { return getEnd() - getStart(); }
 
 private:
-  Symbol *First = nullptr;
-  Symbol *Last = nullptr;
+  Block *First = nullptr;
+  Block *Last = nullptr;
 };
 
 class LinkGraph {
@@ -815,15 +803,13 @@ public:
   Block &createContentBlock(Section &Parent, StringRef Content,
                             uint64_t Address, uint64_t Alignment,
                             uint64_t AlignmentOffset) {
-    return createBlock(Parent, Parent.getNextBlockOrdinal(), Content, Address,
-                       Alignment, AlignmentOffset);
+    return createBlock(Parent, Content, Address, Alignment, AlignmentOffset);
   }
 
   /// Create a zero-fill block.
   Block &createZeroFillBlock(Section &Parent, uint64_t Size, uint64_t Address,
                              uint64_t Alignment, uint64_t AlignmentOffset) {
-    return createBlock(Parent, Parent.getNextBlockOrdinal(), Size, Address,
-                       Alignment, AlignmentOffset);
+    return createBlock(Parent, Size, Address, Alignment, AlignmentOffset);
   }
 
   /// Cache type for the splitBlock function.
@@ -841,20 +827,32 @@ public:
   /// is assumed to contain the list of Symbols pointing at B, sorted in
   /// descending order of offset.
   ///
-  /// Note: The cache is not automatically updated if new symbols are introduced
-  ///       between calls to splitBlock. Any newly introduced symbols may be
-  ///       added to the cache manually (descending offset order must be
-  ///       preserved), or the cache can be set to None and rebuilt by
-  ///       splitBlock on the next call.
+  /// Notes:
+  ///
+  /// 1. The newly introduced block will have a new ordinal which will be
+  ///    higher than any other ordinals in the section. Clients are responsible
+  ///    for re-assigning block ordinals to restore a compatible order if
+  ///    needed.
+  ///
+  /// 2. The cache is not automatically updated if new symbols are introduced
+  ///    between calls to splitBlock. Any newly introduced symbols may be
+  ///    added to the cache manually (descending offset order must be
+  ///    preserved), or the cache can be set to None and rebuilt by
+  ///    splitBlock on the next call.
   Block &splitBlock(Block &B, size_t SplitIndex,
                     SplitBlockCache *Cache = nullptr);
 
   /// Add an external symbol.
   /// Some formats (e.g. ELF) allow Symbols to have sizes. For Symbols whose
   /// size is not known, you should substitute '0'.
-  Symbol &addExternalSymbol(StringRef Name, uint64_t Size) {
-    auto &Sym = Symbol::constructExternal(
-        Allocator.Allocate<Symbol>(), createAddressable(0, false), Name, Size);
+  /// For external symbols Linkage determines whether the symbol must be
+  /// present during lookup: Externals with strong linkage must be found or
+  /// an error will be emitted. Externals with weak linkage are permitted to
+  /// be undefined, in which case they are assigned a value of 0.
+  Symbol &addExternalSymbol(StringRef Name, uint64_t Size, Linkage L) {
+    auto &Sym =
+        Symbol::constructExternal(Allocator.Allocate<Symbol>(),
+                                  createAddressable(0, false), Name, Size, L);
     ExternalSymbols.insert(&Sym);
     return Sym;
   }
@@ -875,9 +873,8 @@ public:
                           uint64_t Alignment, bool IsLive) {
     auto &Sym = Symbol::constructCommon(
         Allocator.Allocate<Symbol>(),
-        createBlock(Section, Section.getNextBlockOrdinal(), Address, Size,
-                    Alignment, 0),
-        Name, Size, S, IsLive);
+        createBlock(Section, Size, Address, Alignment, 0), Name, Size, S,
+        IsLive);
     Section.addSymbol(Sym);
     return Sym;
   }
@@ -1019,6 +1016,145 @@ private:
   ExternalSymbolSet AbsoluteSymbols;
 };
 
+/// Enables easy lookup of blocks by addresses.
+class BlockAddressMap {
+public:
+  using AddrToBlockMap = std::map<JITTargetAddress, Block *>;
+  using const_iterator = AddrToBlockMap::const_iterator;
+
+  /// A block predicate that always adds all blocks.
+  static bool includeAllBlocks(const Block &B) { return true; }
+
+  /// A block predicate that always includes blocks with non-null addresses.
+  static bool includeNonNull(const Block &B) { return B.getAddress(); }
+
+  BlockAddressMap() = default;
+
+  /// Add a block to the map. Returns an error if the block overlaps with any
+  /// existing block.
+  template <typename PredFn = decltype(includeAllBlocks)>
+  Error addBlock(Block &B, PredFn Pred = includeAllBlocks) {
+    if (!Pred(B))
+      return Error::success();
+
+    auto I = AddrToBlock.upper_bound(B.getAddress());
+
+    // If we're not at the end of the map, check for overlap with the next
+    // element.
+    if (I != AddrToBlock.end()) {
+      if (B.getAddress() + B.getSize() > I->second->getAddress())
+        return overlapError(B, *I->second);
+    }
+
+    // If we're not at the start of the map, check for overlap with the previous
+    // element.
+    if (I != AddrToBlock.begin()) {
+      auto &PrevBlock = *std::prev(I)->second;
+      if (PrevBlock.getAddress() + PrevBlock.getSize() > B.getAddress())
+        return overlapError(B, PrevBlock);
+    }
+
+    AddrToBlock.insert(I, std::make_pair(B.getAddress(), &B));
+    return Error::success();
+  }
+
+  /// Add a block to the map without checking for overlap with existing blocks.
+  /// The client is responsible for ensuring that the block added does not
+  /// overlap with any existing block.
+  void addBlockWithoutChecking(Block &B) { AddrToBlock[B.getAddress()] = &B; }
+
+  /// Add a range of blocks to the map. Returns an error if any block in the
+  /// range overlaps with any other block in the range, or with any existing
+  /// block in the map.
+  template <typename BlockPtrRange,
+            typename PredFn = decltype(includeAllBlocks)>
+  Error addBlocks(BlockPtrRange &&Blocks, PredFn Pred = includeAllBlocks) {
+    for (auto *B : Blocks)
+      if (auto Err = addBlock(*B, Pred))
+        return Err;
+    return Error::success();
+  }
+
+  /// Add a range of blocks to the map without checking for overlap with
+  /// existing blocks. The client is responsible for ensuring that the block
+  /// added does not overlap with any existing block.
+  template <typename BlockPtrRange>
+  void addBlocksWithoutChecking(BlockPtrRange &&Blocks) {
+    for (auto *B : Blocks)
+      addBlockWithoutChecking(*B);
+  }
+
+  /// Iterates over (Address, Block*) pairs in ascending order of address.
+  const_iterator begin() const { return AddrToBlock.begin(); }
+  const_iterator end() const { return AddrToBlock.end(); }
+
+  /// Returns the block starting at the given address, or nullptr if no such
+  /// block exists.
+  Block *getBlockAt(JITTargetAddress Addr) const {
+    auto I = AddrToBlock.find(Addr);
+    if (I == AddrToBlock.end())
+      return nullptr;
+    return I->second;
+  }
+
+  /// Returns the block covering the given address, or nullptr if no such block
+  /// exists.
+  Block *getBlockCovering(JITTargetAddress Addr) const {
+    auto I = AddrToBlock.upper_bound(Addr);
+    if (I == AddrToBlock.begin())
+      return nullptr;
+    auto *B = std::prev(I)->second;
+    if (Addr < B->getAddress() + B->getSize())
+      return B;
+    return nullptr;
+  }
+
+private:
+  Error overlapError(Block &NewBlock, Block &ExistingBlock) {
+    auto NewBlockEnd = NewBlock.getAddress() + NewBlock.getSize();
+    auto ExistingBlockEnd =
+        ExistingBlock.getAddress() + ExistingBlock.getSize();
+    return make_error<JITLinkError>(
+        "Block at " +
+        formatv("{0:x16} -- {1:x16}", NewBlock.getAddress(), NewBlockEnd) +
+        " overlaps " +
+        formatv("{0:x16} -- {1:x16}", ExistingBlock.getAddress(),
+                ExistingBlockEnd));
+  }
+
+  AddrToBlockMap AddrToBlock;
+};
+
+/// A map of addresses to Symbols.
+class SymbolAddressMap {
+public:
+  using SymbolVector = SmallVector<Symbol *, 1>;
+
+  /// Add a symbol to the SymbolAddressMap.
+  void addSymbol(Symbol &Sym) {
+    AddrToSymbols[Sym.getAddress()].push_back(&Sym);
+  }
+
+  /// Add all symbols in a given range to the SymbolAddressMap.
+  template <typename SymbolPtrCollection>
+  void addSymbols(SymbolPtrCollection &&Symbols) {
+    for (auto *Sym : Symbols)
+      addSymbol(*Sym);
+  }
+
+  /// Returns the list of symbols that start at the given address, or nullptr if
+  /// no such symbols exist.
+  const SymbolVector *getSymbolsAt(JITTargetAddress Addr) const {
+    auto I = AddrToSymbols.find(Addr);
+    if (I == AddrToSymbols.end())
+      return nullptr;
+    return &I->second;
+  }
+
+private:
+  std::map<JITTargetAddress, SymbolVector> AddrToSymbols;
+};
+
 /// A function for mutating LinkGraphs.
 using LinkGraphPassFunction = std::function<Error(LinkGraph &)>;
 
@@ -1054,6 +1190,14 @@ struct PassConfiguration {
   LinkGraphPassList PostFixupPasses;
 };
 
+/// Flags for symbol lookup.
+///
+/// FIXME: These basically duplicate orc::SymbolLookupFlags -- We should merge
+///        the two types once we have an OrcSupport library.
+enum class SymbolLookupFlags { RequiredSymbol, WeaklyReferencedSymbol };
+
+raw_ostream &operator<<(raw_ostream &OS, const SymbolLookupFlags &LF);
+
 /// A map of symbol names to resolved addresses.
 using AsyncLookupResult = DenseMap<StringRef, JITEvaluatedSymbol>;
 
@@ -1088,6 +1232,8 @@ createLookupContinuation(Continuation Cont) {
 /// Holds context for a single jitLink invocation.
 class JITLinkContext {
 public:
+  using LookupMap = DenseMap<StringRef, SymbolLookupFlags>;
+
   /// Destroy a JITLinkContext.
   virtual ~JITLinkContext();
 
@@ -1105,7 +1251,7 @@ public:
   /// Called by JITLink to resolve external symbols. This method is passed a
   /// lookup continutation which it must call with a result to continue the
   /// linking process.
-  virtual void lookup(const DenseSet<StringRef> &Symbols,
+  virtual void lookup(const LookupMap &Symbols,
                       std::unique_ptr<JITLinkAsyncLookupContinuation> LC) = 0;
 
   /// Called by JITLink once all defined symbols in the graph have been assigned

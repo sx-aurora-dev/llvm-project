@@ -876,6 +876,52 @@ void X86MCInstLower::Lower(const MachineInstr *MI, MCInst &OutMI) const {
   case X86::MOVSX64rr32:
     SimplifyMOVSX(OutMI);
     break;
+
+  case X86::VCMPPDrri:
+  case X86::VCMPPDYrri:
+  case X86::VCMPPSrri:
+  case X86::VCMPPSYrri:
+  case X86::VCMPSDrr:
+  case X86::VCMPSSrr: {
+    // Swap the operands if it will enable a 2 byte VEX encoding.
+    // FIXME: Change the immediate to improve opportunities?
+    if (!X86II::isX86_64ExtendedReg(OutMI.getOperand(1).getReg()) &&
+        X86II::isX86_64ExtendedReg(OutMI.getOperand(2).getReg())) {
+      unsigned Imm = MI->getOperand(3).getImm() & 0x7;
+      switch (Imm) {
+      default: break;
+      case 0x00: // EQUAL
+      case 0x03: // UNORDERED
+      case 0x04: // NOT EQUAL
+      case 0x07: // ORDERED
+        std::swap(OutMI.getOperand(1), OutMI.getOperand(2));
+        break;
+      }
+    }
+    break;
+  }
+
+  case X86::VMOVHLPSrr:
+  case X86::VUNPCKHPDrr:
+    // These are not truly commutable so hide them from the default case.
+    break;
+
+  default: {
+    // If the instruction is a commutable arithmetic instruction we might be
+    // able to commute the operands to get a 2 byte VEX prefix.
+    uint64_t TSFlags = MI->getDesc().TSFlags;
+    if (MI->getDesc().isCommutable() &&
+        (TSFlags & X86II::EncodingMask) == X86II::VEX &&
+        (TSFlags & X86II::OpMapMask) == X86II::TB &&
+        (TSFlags & X86II::FormMask) == X86II::MRMSrcReg &&
+        !(TSFlags & X86II::VEX_W) && (TSFlags & X86II::VEX_4V) &&
+        OutMI.getNumOperands() == 3) {
+      if (!X86II::isX86_64ExtendedReg(OutMI.getOperand(1).getReg()) &&
+          X86II::isX86_64ExtendedReg(OutMI.getOperand(2).getReg()))
+        std::swap(OutMI.getOperand(1), OutMI.getOperand(2));
+    }
+    break;
+  }
   }
 }
 
@@ -1148,7 +1194,10 @@ void X86AsmPrinter::LowerSTATEPOINT(const MachineInstr &MI,
 
   // Record our statepoint node in the same section used by STACKMAP
   // and PATCHPOINT
-  SM.recordStatepoint(MI);
+  auto &Ctx = OutStreamer->getContext();
+  MCSymbol *MILabel = Ctx.createTempSymbol();
+  OutStreamer->EmitLabel(MILabel);
+  SM.recordStatepoint(*MILabel, MI);
 }
 
 void X86AsmPrinter::LowerFAULTING_OP(const MachineInstr &FaultingMI,
@@ -1163,8 +1212,12 @@ void X86AsmPrinter::LowerFAULTING_OP(const MachineInstr &FaultingMI,
   unsigned Opcode = FaultingMI.getOperand(3).getImm();
   unsigned OperandsBeginIdx = 4;
 
+  auto &Ctx = OutStreamer->getContext();
+  MCSymbol *FaultingLabel = Ctx.createTempSymbol();
+  OutStreamer->EmitLabel(FaultingLabel);
+
   assert(FK < FaultMaps::FaultKindMax && "Invalid Faulting Kind!");
-  FM.recordFaultingOp(FK, HandlerLabel);
+  FM.recordFaultingOp(FK, FaultingLabel, HandlerLabel);
 
   MCInst MI;
   MI.setOpcode(Opcode);
@@ -1236,7 +1289,12 @@ void X86AsmPrinter::LowerPATCHABLE_OP(const MachineInstr &MI,
 // <id>, <shadowBytes>, ...
 void X86AsmPrinter::LowerSTACKMAP(const MachineInstr &MI) {
   SMShadowTracker.emitShadowPadding(*OutStreamer, getSubtargetInfo());
-  SM.recordStackMap(MI);
+
+  auto &Ctx = OutStreamer->getContext();
+  MCSymbol *MILabel = Ctx.createTempSymbol();
+  OutStreamer->EmitLabel(MILabel);
+
+  SM.recordStackMap(*MILabel, MI);
   unsigned NumShadowBytes = MI.getOperand(1).getImm();
   SMShadowTracker.reset(NumShadowBytes);
 }
@@ -1249,7 +1307,10 @@ void X86AsmPrinter::LowerPATCHPOINT(const MachineInstr &MI,
 
   SMShadowTracker.emitShadowPadding(*OutStreamer, getSubtargetInfo());
 
-  SM.recordPatchPoint(MI);
+  auto &Ctx = OutStreamer->getContext();
+  MCSymbol *MILabel = Ctx.createTempSymbol();
+  OutStreamer->EmitLabel(MILabel);
+  SM.recordPatchPoint(*MILabel, MI);
 
   PatchPointOpers opers(&MI);
   unsigned ScratchIdx = opers.getNextScratchIdx();

@@ -51,8 +51,8 @@ opt<bool> DisableCTRLoops("disable-ppc-ctrloops", cl::Hidden,
                         cl::desc("Disable CTR loops for PPC"));
 
 static cl::
-opt<bool> DisablePreIncPrep("disable-ppc-preinc-prep", cl::Hidden,
-                            cl::desc("Disable PPC loop preinc prep"));
+opt<bool> DisableInstrFormPrep("disable-ppc-instr-form-prep", cl::Hidden,
+                            cl::desc("Disable PPC loop instr form prep"));
 
 static cl::opt<bool>
 VSXFMAMutateEarly("schedule-ppc-vsx-fma-mutation-early",
@@ -77,7 +77,7 @@ EnableGEPOpt("ppc-gep-opt", cl::Hidden,
 
 static cl::opt<bool>
 EnablePrefetch("enable-ppc-prefetching",
-                  cl::desc("disable software prefetching on PPC"),
+                  cl::desc("enable software prefetching on PPC"),
                   cl::init(false), cl::Hidden);
 
 static cl::opt<bool>
@@ -104,7 +104,7 @@ extern "C" void LLVMInitializePowerPCTarget() {
 #ifndef NDEBUG
   initializePPCCTRLoopsVerifyPass(PR);
 #endif
-  initializePPCLoopPreIncPrepPass(PR);
+  initializePPCLoopInstrFormPrepPass(PR);
   initializePPCTOCRegDepsPass(PR);
   initializePPCEarlyReturnPass(PR);
   initializePPCVSXCopyPass(PR);
@@ -119,6 +119,7 @@ extern "C" void LLVMInitializePowerPCTarget() {
   initializePPCPreEmitPeepholePass(PR);
   initializePPCTLSDynamicCallPass(PR);
   initializePPCMIPeepholePass(PR);
+  initializePPCLowerMASSVEntriesPass(PR);
 }
 
 /// Return the datalayout string of a subtarget.
@@ -401,6 +402,9 @@ void PPCPassConfig::addIRPasses() {
     addPass(createPPCBoolRetToIntPass());
   addPass(createAtomicExpandPass());
 
+  // Lower generic MASSV routines to PowerPC subtarget-specific entries.
+  addPass(createPPCLowerMASSVEntriesPass());
+  
   // For the BG/Q (or if explicitly requested), add explicit data prefetch
   // intrinsics.
   bool UsePrefetching = TM->getTargetTriple().getVendor() == Triple::BGQ &&
@@ -427,8 +431,8 @@ void PPCPassConfig::addIRPasses() {
 }
 
 bool PPCPassConfig::addPreISel() {
-  if (!DisablePreIncPrep && getOptLevel() != CodeGenOpt::None)
-    addPass(createPPCLoopPreIncPrepPass(getPPCTargetMachine()));
+  if (!DisableInstrFormPrep && getOptLevel() != CodeGenOpt::None)
+    addPass(createPPCLoopInstrFormPrepPass(getPPCTargetMachine()));
 
   if (!DisableCTRLoops && getOptLevel() != CodeGenOpt::None)
     addPass(createHardwareLoopsPass());

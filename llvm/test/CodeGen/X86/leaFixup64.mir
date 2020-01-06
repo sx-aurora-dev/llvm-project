@@ -873,7 +873,6 @@ body:             |
     ; CHECK: liveins: $rax, $rbp, $rbx
     ; CHECK: $rbx = MOV64rr $rbp
     ; CHECK: $rbx = ADD64rr $rbx, $rbp, implicit-def $eflags
-    ; CHECK: $rbx = LEA64r killed $rbp, 1, $rbp, 0, $noreg
     ; CHECK: RETQ $ebx
     $rbx = LEA64r killed $rbp, 1, $rbp, 0, $noreg
     RETQ $ebx
@@ -1169,7 +1168,7 @@ body:             |
     ; CHECK: NOOP
     ; CHECK: NOOP
     ; CHECK: NOOP
-    ; CHECK: $ebp = LEA64_32r killed $rbp, 1, killed $rax, 0, $noreg
+    ; CHECK: $ebp = ADD32rr $ebp, $eax, implicit-def $eflags, implicit $rbp, implicit $rax
     ; CHECK: NOOP
     ; CHECK: NOOP
     ; CHECK: NOOP

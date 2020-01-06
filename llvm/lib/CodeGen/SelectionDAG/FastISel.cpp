@@ -410,8 +410,8 @@ unsigned FastISel::materializeConstant(const Value *V, MVT VT) {
   else if (isa<ConstantPointerNull>(V))
     // Translate this as an integer zero so that it can be
     // local-CSE'd with actual integer zeros.
-    Reg = getRegForValue(
-        Constant::getNullValue(DL.getIntPtrType(V->getContext())));
+    Reg =
+        getRegForValue(Constant::getNullValue(DL.getIntPtrType(V->getType())));
   else if (const auto *CF = dyn_cast<ConstantFP>(V)) {
     if (CF->isNullValue())
       Reg = fastMaterializeFloatZero(CF);
@@ -1276,6 +1276,10 @@ bool FastISel::lowerCall(const CallInst *CI) {
   bool IsTailCall = CI->isTailCall();
   if (IsTailCall && !isInTailCallPosition(CS, TM))
     IsTailCall = false;
+  if (IsTailCall && MF->getFunction()
+                            .getFnAttribute("disable-tail-calls")
+                            .getValueAsString() == "true")
+    IsTailCall = false;
 
   CallLoweringInfo CLI;
   CLI.setCallee(RetTy, FuncTy, CI->getCalledValue(), std::move(Args), CS)
@@ -1927,7 +1931,8 @@ FastISel::FastISel(FunctionLoweringInfo &FuncInfo,
       TII(*MF->getSubtarget().getInstrInfo()),
       TLI(*MF->getSubtarget().getTargetLowering()),
       TRI(*MF->getSubtarget().getRegisterInfo()), LibInfo(LibInfo),
-      SkipTargetIndependentISel(SkipTargetIndependentISel) {}
+      SkipTargetIndependentISel(SkipTargetIndependentISel),
+      LastLocalValue(nullptr), EmitStartPt(nullptr) {}
 
 FastISel::~FastISel() = default;
 

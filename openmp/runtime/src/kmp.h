@@ -2256,7 +2256,7 @@ typedef struct kmp_tasking_flags { /* Total struct must be exactly 32 bits */
   unsigned started : 1; /* 1==started, 0==not started     */
   unsigned executing : 1; /* 1==executing, 0==not executing */
   unsigned complete : 1; /* 1==complete, 0==not complete   */
-  unsigned freed : 1; /* 1==freed, 0==allocateed        */
+  unsigned freed : 1; /* 1==freed, 0==allocated        */
   unsigned native : 1; /* 1==gcc-compiled task, 0==intel */
   unsigned reserved31 : 7; /* reserved for library use */
 
@@ -3118,7 +3118,6 @@ extern void __kmp_internal_begin(void);
 extern void __kmp_internal_end_library(int gtid);
 extern void __kmp_internal_end_thread(int gtid);
 extern void __kmp_internal_end_atexit(void);
-extern void __kmp_internal_end_fini(void);
 extern void __kmp_internal_end_dtor(void);
 extern void __kmp_internal_end_dest(void *);
 

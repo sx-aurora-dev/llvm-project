@@ -213,6 +213,13 @@ public:
     return false;
   }
 
+  bool preferPredicateOverEpilogue(Loop *L, LoopInfo *LI, ScalarEvolution &SE,
+                                   AssumptionCache &AC, TargetLibraryInfo *TLI,
+                                   DominatorTree *DT,
+                                   const LoopAccessInfo *LAI) const {
+    return false;
+  }
+
   void getUnrollingPreferences(Loop *, ScalarEvolution &,
                                TTI::UnrollingPreferences &) {}
 
@@ -265,9 +272,13 @@ public:
     return Alignment >= DataSize && isPowerOf2_32(DataSize);
   }
 
-  bool isLegalMaskedScatter(Type *DataType) { return false; }
+  bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
+    return false;
+  }
 
-  bool isLegalMaskedGather(Type *DataType) { return false; }
+  bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment) {
+    return false;
+  }
 
   bool isLegalMaskedCompressStore(Type *DataType) { return false; }
 
@@ -348,13 +359,13 @@ public:
 
   unsigned getIntImmCost(const APInt &Imm, Type *Ty) { return TTI::TCC_Basic; }
 
-  unsigned getIntImmCost(unsigned Opcode, unsigned Idx, const APInt &Imm,
-                         Type *Ty) {
+  unsigned getIntImmCostInst(unsigned Opcode, unsigned Idx, const APInt &Imm,
+                             Type *Ty) {
     return TTI::TCC_Free;
   }
 
-  unsigned getIntImmCost(Intrinsic::ID IID, unsigned Idx, const APInt &Imm,
-                         Type *Ty) {
+  unsigned getIntImmCostIntrin(Intrinsic::ID IID, unsigned Idx,
+                               const APInt &Imm, Type *Ty) {
     return TTI::TCC_Free;
   }
 
@@ -423,7 +434,8 @@ public:
                                   TTI::OperandValueKind Opd2Info,
                                   TTI::OperandValueProperties Opd1PropInfo,
                                   TTI::OperandValueProperties Opd2PropInfo,
-                                  ArrayRef<const Value *> Args) {
+                                  ArrayRef<const Value *> Args,
+                                  const Instruction *CxtI = nullptr) {
     return 1;
   }
 

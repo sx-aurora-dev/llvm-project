@@ -7,7 +7,7 @@
 declare dso_local fastcc float @bar(%struct.wobble* noalias, <8 x i32>) unnamed_addr
 
 define %struct.zot @widget(<8 x i32> %arg) local_unnamed_addr {
-; CHECK-LABEL: define {{[^@]+}}@widget(
+; CHECK-LABEL: @widget(
 ; CHECK-NEXT:  bb:
 ; CHECK-NEXT:    ret [[STRUCT_ZOT:%.*]] undef
 ;
@@ -16,7 +16,7 @@ bb:
 }
 
 define void @baz(<8 x i32> %arg) local_unnamed_addr {
-; CHECK-LABEL: define {{[^@]+}}@baz(
+; CHECK-LABEL: @baz(
 ; CHECK-NEXT:  bb:
 ; CHECK-NEXT:    [[TMP:%.*]] = call [[STRUCT_ZOT:%.*]] @widget(<8 x i32> [[ARG:%.*]])
 ; CHECK-NEXT:    [[TMP1:%.*]] = extractvalue [[STRUCT_ZOT]] %tmp, 0, 0

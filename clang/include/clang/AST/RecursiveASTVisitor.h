@@ -1162,11 +1162,13 @@ DEF_TRAVERSE_TYPELOC(LValueReferenceType,
 DEF_TRAVERSE_TYPELOC(RValueReferenceType,
                      { TRY_TO(TraverseTypeLoc(TL.getPointeeLoc())); })
 
-// FIXME: location of base class?
 // We traverse this in the type case as well, but how is it not reached through
 // the pointee type?
 DEF_TRAVERSE_TYPELOC(MemberPointerType, {
-  TRY_TO(TraverseType(QualType(TL.getTypePtr()->getClass(), 0)));
+  if (auto *TSI = TL.getClassTInfo())
+    TRY_TO(TraverseTypeLoc(TSI->getTypeLoc()));
+  else
+    TRY_TO(TraverseType(QualType(TL.getTypePtr()->getClass(), 0)));
   TRY_TO(TraverseTypeLoc(TL.getPointeeLoc()));
 })
 
@@ -1434,6 +1436,10 @@ DEF_TRAVERSE_DECL(CapturedDecl, {
 })
 
 DEF_TRAVERSE_DECL(EmptyDecl, {})
+
+DEF_TRAVERSE_DECL(LifetimeExtendedTemporaryDecl, {
+  TRY_TO(TraverseStmt(D->getTemporaryExpr()));
+})
 
 DEF_TRAVERSE_DECL(FileScopeAsmDecl,
                   { TRY_TO(TraverseStmt(D->getAsmString())); })
@@ -2351,7 +2357,7 @@ bool RecursiveASTVisitor<Derived>::TraverseInitListExpr(
 // generic associations).
 DEF_TRAVERSE_STMT(GenericSelectionExpr, {
   TRY_TO(TraverseStmt(S->getControllingExpr()));
-  for (const GenericSelectionExpr::Association &Assoc : S->associations()) {
+  for (const GenericSelectionExpr::Association Assoc : S->associations()) {
     if (TypeSourceInfo *TSI = Assoc.getTypeSourceInfo())
       TRY_TO(TraverseTypeLoc(TSI->getTypeLoc()));
     TRY_TO_TRAVERSE_OR_ENQUEUE_STMT(Assoc.getAssociationExpr());
@@ -2632,10 +2638,16 @@ DEF_TRAVERSE_STMT(SizeOfPackExpr, {})
 DEF_TRAVERSE_STMT(SubstNonTypeTemplateParmPackExpr, {})
 DEF_TRAVERSE_STMT(SubstNonTypeTemplateParmExpr, {})
 DEF_TRAVERSE_STMT(FunctionParmPackExpr, {})
-DEF_TRAVERSE_STMT(MaterializeTemporaryExpr, {})
 DEF_TRAVERSE_STMT(CXXFoldExpr, {})
 DEF_TRAVERSE_STMT(AtomicExpr, {})
 
+DEF_TRAVERSE_STMT(MaterializeTemporaryExpr, {
+  if (S->getLifetimeExtendedTemporaryDecl()) {
+    TRY_TO(TraverseLifetimeExtendedTemporaryDecl(
+        S->getLifetimeExtendedTemporaryDecl()));
+    ShouldVisitChildren = false;
+  }
+})
 // For coroutines expressions, traverse either the operand
 // as written or the implied calls, depending on what the
 // derived class requests.
@@ -2740,6 +2752,9 @@ DEF_TRAVERSE_STMT(OMPParallelForDirective,
                   { TRY_TO(TraverseOMPExecutableDirective(S)); })
 
 DEF_TRAVERSE_STMT(OMPParallelForSimdDirective,
+                  { TRY_TO(TraverseOMPExecutableDirective(S)); })
+
+DEF_TRAVERSE_STMT(OMPParallelMasterDirective,
                   { TRY_TO(TraverseOMPExecutableDirective(S)); })
 
 DEF_TRAVERSE_STMT(OMPParallelSectionsDirective,
@@ -3356,6 +3371,16 @@ template <typename Derived>
 bool RecursiveASTVisitor<Derived>::VisitOMPIsDevicePtrClause(
     OMPIsDevicePtrClause *C) {
   TRY_TO(VisitOMPClauseList(C));
+  return true;
+}
+
+template <typename Derived>
+bool RecursiveASTVisitor<Derived>::VisitOMPNontemporalClause(
+    OMPNontemporalClause *C) {
+  TRY_TO(VisitOMPClauseList(C));
+  for (auto *E : C->private_refs()) {
+    TRY_TO(TraverseStmt(E));
+  }
   return true;
 }
 

@@ -609,7 +609,7 @@ MatchTableRecord MatchTable::LineBreak = {
 void MatchTableRecord::emit(raw_ostream &OS, bool LineBreakIsNextAfterThis,
                             const MatchTable &Table) const {
   bool UseLineComment =
-      LineBreakIsNextAfterThis | (Flags & MTRF_LineBreakFollows);
+      LineBreakIsNextAfterThis || (Flags & MTRF_LineBreakFollows);
   if (Flags & (MTRF_JumpTarget | MTRF_CommaFollows))
     UseLineComment = false;
 
@@ -620,7 +620,7 @@ void MatchTableRecord::emit(raw_ostream &OS, bool LineBreakIsNextAfterThis,
   if (Flags & MTRF_Label)
     OS << ": @" << Table.getLabelIndex(LabelID);
 
-  if (Flags & MTRF_Comment && !UseLineComment)
+  if ((Flags & MTRF_Comment) && !UseLineComment)
     OS << "*/";
 
   if (Flags & MTRF_JumpTarget) {
@@ -1181,7 +1181,7 @@ public:
     TypeIDValues.clear();
 
     unsigned ID = 0;
-    for (const LLTCodeGen LLTy : KnownTypes)
+    for (const LLTCodeGen &LLTy : KnownTypes)
       TypeIDValues[LLTy] = ID++;
   }
 
@@ -1707,7 +1707,7 @@ public:
   }
 
   StringRef getOpcode() const { return I->TheDef->getName(); }
-  unsigned getNumOperands() const { return I->Operands.size(); }
+  bool isVariadicNumOperands() const { return I->Operands.isVariadic; }
 
   StringRef getOperandType(unsigned OpIdx) const {
     return I->Operands[OpIdx].OperandType;
@@ -2153,7 +2153,7 @@ public:
         return false;
     }
 
-    for (const auto &Operand : zip(Operands, B.Operands)) {
+    for (auto Operand : zip(Operands, B.Operands)) {
       if (std::get<0>(Operand)->isHigherPriorityThan(*std::get<1>(Operand)))
         return true;
       if (std::get<1>(Operand)->isHigherPriorityThan(*std::get<0>(Operand)))
@@ -2273,7 +2273,7 @@ void InstructionMatcher::optimize() {
 
   Stash.push_back(predicates_pop_front());
   if (Stash.back().get() == &OpcMatcher) {
-    if (NumOperandsCheck && OpcMatcher.getNumOperands() < getNumOperands())
+    if (NumOperandsCheck && OpcMatcher.isVariadicNumOperands())
       Stash.emplace_back(
           new InstructionNumOperandsMatcher(InsnVarID, getNumOperands()));
     NumOperandsCheck = false;
@@ -3159,7 +3159,7 @@ bool RuleMatcher::isHigherPriorityThan(const RuleMatcher &B) const {
   if (Matchers.size() < B.Matchers.size())
     return false;
 
-  for (const auto &Matcher : zip(Matchers, B.Matchers)) {
+  for (auto Matcher : zip(Matchers, B.Matchers)) {
     if (std::get<0>(Matcher)->isHigherPriorityThan(*std::get<1>(Matcher)))
       return true;
     if (std::get<1>(Matcher)->isHigherPriorityThan(*std::get<0>(Matcher)))
@@ -5129,6 +5129,14 @@ void GlobalISelEmitter::run(raw_ostream &OS) {
   SubtargetFeatureInfo::emitComputeAvailableFeatures(
       Target.getName(), "InstructionSelector", "computeAvailableModuleFeatures",
       ModuleFeatures, OS);
+
+  if (Target.getName() == "X86" || Target.getName() == "AArch64") {
+    // TODO: Implement PGSO.
+    OS << "static bool shouldOptForSize(const MachineFunction *MF) {\n";
+    OS << "    return MF->getFunction().hasOptSize();\n";
+    OS << "}\n\n";
+  }
+
   SubtargetFeatureInfo::emitComputeAvailableFeatures(
       Target.getName(), "InstructionSelector",
       "computeAvailableFunctionFeatures", FunctionFeatures, OS,
@@ -5168,7 +5176,7 @@ void GlobalISelEmitter::run(raw_ostream &OS) {
       return true;
     if (A.size() > B.size())
       return false;
-    for (const auto &Pair : zip(A, B)) {
+    for (auto Pair : zip(A, B)) {
       if (std::get<0>(Pair)->getName() < std::get<1>(Pair)->getName())
         return true;
       if (std::get<0>(Pair)->getName() > std::get<1>(Pair)->getName())

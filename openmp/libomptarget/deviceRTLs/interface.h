@@ -19,6 +19,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __AMDGCN__
+#include "amdgcn/src/amdgcn_interface.h"
+#endif
 #ifdef __CUDACC__
 #include "nvptx/src/nvptx_interface.h"
 #endif
@@ -27,7 +30,6 @@
 // OpenMP interface
 ////////////////////////////////////////////////////////////////////////////////
 
-typedef uint32_t omp_lock_t;      /* arbitrary type of the right length */
 typedef uint64_t omp_nest_lock_t; /* arbitrary type of the right length */
 
 typedef enum omp_sched_t {
