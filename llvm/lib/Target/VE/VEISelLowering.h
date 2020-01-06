@@ -263,7 +263,9 @@ namespace llvm {
 
   private:
     // VE supports only vector FMA
-    bool isFMAFasterThanFMulAndFAdd(EVT VT) const override { return VT.isVector() ? true : false; }
+    bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
+                                    EVT VT) const override
+    { return VT.isVector() ? true : false; }
   };
 } // end namespace llvm
 

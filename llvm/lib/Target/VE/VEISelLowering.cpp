@@ -32,6 +32,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsVE.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 using namespace llvm;

@@ -71,7 +71,7 @@ public:
 #endif
   }
 
-  bool isLegalMaskedGather(Type *DataType) {
+  bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment) {
       //if (DataType->getVectorNumElements() != 256) {
       //  return false;
       //}
@@ -85,7 +85,7 @@ public:
 #endif
   };
 
-  bool isLegalMaskedScatter(Type *DataType) {
+  bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
       //if (DataType->getVectorNumElements() != 256) {
       //  return false;
       //}
