@@ -122,11 +122,23 @@ static uint32_t fileWriter(ProfDataWriter *This, ProfDataIOVec *IOVecs,
                            uint32_t NumIOVecs) {
   uint32_t I;
   FILE *File = (FILE *)This->WriterCtx;
+  char Zeroes[sizeof(uint64_t)] = {0};
   for (I = 0; I < NumIOVecs; I++) {
     if (IOVecs[I].Data) {
       if (fwrite(IOVecs[I].Data, IOVecs[I].ElmSize, IOVecs[I].NumElm, File) !=
           IOVecs[I].NumElm)
         return 1;
+    } else if (IOVecs[I].UseZeroPadding) {
+      size_t BytesToWrite = IOVecs[I].ElmSize * IOVecs[I].NumElm;
+      while (BytesToWrite > 0) {
+        size_t PartialWriteLen =
+            (sizeof(uint64_t) > BytesToWrite) ? BytesToWrite : sizeof(uint64_t);
+        if (fwrite(Zeroes, sizeof(uint8_t), PartialWriteLen, File) !=
+            PartialWriteLen) {
+          return 1;
+        }
+        BytesToWrite -= PartialWriteLen;
+      }
     } else {
       if (fseek(File, IOVecs[I].ElmSize * IOVecs[I].NumElm, SEEK_CUR) == -1)
         return 1;
@@ -171,6 +183,59 @@ static void setupIOBuffer() {
   }
 }
 
+/* Get the size of the profile file. If there are any errors, print the
+ * message under the assumption that the profile is being read for merging
+ * purposes, and return -1. Otherwise return the file size in the inout param
+ * \p ProfileFileSize. */
+static int getProfileFileSizeForMerging(FILE *ProfileFile,
+                                        uint64_t *ProfileFileSize) {
+  if (fseek(ProfileFile, 0L, SEEK_END) == -1) {
+    PROF_ERR("Unable to merge profile data, unable to get size: %s\n",
+             strerror(errno));
+    return -1;
+  }
+  *ProfileFileSize = ftell(ProfileFile);
+
+  /* Restore file offset.  */
+  if (fseek(ProfileFile, 0L, SEEK_SET) == -1) {
+    PROF_ERR("Unable to merge profile data, unable to rewind: %s\n",
+             strerror(errno));
+    return -1;
+  }
+
+  if (*ProfileFileSize > 0 &&
+      *ProfileFileSize < sizeof(__llvm_profile_header)) {
+    PROF_WARN("Unable to merge profile data: %s\n",
+              "source profile file is too small.");
+    return -1;
+  }
+  return 0;
+}
+
+/* mmap() \p ProfileFile for profile merging purposes, assuming that an
+ * exclusive lock is held on the file and that \p ProfileFileSize is the
+ * length of the file. Return the mmap'd buffer in the inout variable
+ * \p ProfileBuffer. Returns -1 on failure. On success, the caller is
+ * responsible for unmapping the mmap'd buffer in \p ProfileBuffer. */
+static int mmapProfileForMerging(FILE *ProfileFile, uint64_t ProfileFileSize,
+                                 char **ProfileBuffer) {
+  *ProfileBuffer = mmap(NULL, ProfileFileSize, PROT_READ, MAP_SHARED | MAP_FILE,
+                        fileno(ProfileFile), 0);
+  if (*ProfileBuffer == MAP_FAILED) {
+    PROF_ERR("Unable to merge profile data, mmap failed: %s\n",
+             strerror(errno));
+    return -1;
+  }
+
+  if (__llvm_profile_check_compatibility(*ProfileBuffer, ProfileFileSize)) {
+    (void)munmap(*ProfileBuffer, ProfileFileSize);
+    PROF_WARN("Unable to merge profile data: %s\n",
+              "source profile file is not compatible.");
+    return -1;
+  }
+  return 0;
+}
+
 /* Read profile data in \c ProfileFile and merge with in-memory
    profile counters. Returns -1 if there is fatal error, otheriwse
    0 is returned. Returning 0 does not mean merge is actually
@@ -180,42 +245,18 @@ static int doProfileMerging(FILE *ProfileFile, int *MergeDone) {
   uint64_t ProfileFileSize;
   char *ProfileBuffer;
 
-  if (fseek(ProfileFile, 0L, SEEK_END) == -1) {
-    PROF_ERR("Unable to merge profile data, unable to get size: %s\n",
-             strerror(errno));
+  /* Get the size of the profile on disk. */
+  if (getProfileFileSizeForMerging(ProfileFile, &ProfileFileSize) == -1)
     return -1;
-  }
-  ProfileFileSize = ftell(ProfileFile);
-
-  /* Restore file offset.  */
-  if (fseek(ProfileFile, 0L, SEEK_SET) == -1) {
-    PROF_ERR("Unable to merge profile data, unable to rewind: %s\n",
-             strerror(errno));
-    return -1;
-  }
 
   /* Nothing to merge.  */
-  if (ProfileFileSize < sizeof(__llvm_profile_header)) {
-    if (ProfileFileSize)
-      PROF_WARN("Unable to merge profile data: %s\n",
-                "source profile file is too small.");
+  if (!ProfileFileSize)
     return 0;
-  }
 
-  ProfileBuffer = mmap(NULL, ProfileFileSize, PROT_READ, MAP_SHARED | MAP_FILE,
-                       fileno(ProfileFile), 0);
-  if (ProfileBuffer == MAP_FAILED) {
-    PROF_ERR("Unable to merge profile data, mmap failed: %s\n",
-             strerror(errno));
+  /* mmap() the profile and check that it is compatible with the data in
+   * the current image. */
+  if (mmapProfileForMerging(ProfileFile, ProfileFileSize, &ProfileBuffer) == -1)
     return -1;
-  }
-
-  if (__llvm_profile_check_compatibility(ProfileBuffer, ProfileFileSize)) {
-    (void)munmap(ProfileBuffer, ProfileFileSize);
-    PROF_WARN("Unable to merge profile data: %s\n",
-              "source profile file is not compatible.");
-    return 0;
-  }
 
   /* Now start merging */
   __llvm_profile_merge_from_buffer(ProfileBuffer, ProfileFileSize);
@@ -351,11 +392,6 @@ static void truncateCurrentFile(void) {
   if (!Filename)
     return;
 
-  /* By pass file truncation to allow online raw profile
-   * merging. */
-  if (lprofCurFilename.MergePoolSize)
-    return;
-
   /* Only create the profile directory and truncate an existing profile once.
    * In continuous mode, this is necessary, as the profile is written-to by the
    * runtime initializer. */
@@ -368,7 +404,13 @@ static void truncateCurrentFile(void) {
   setenv(LPROF_INIT_ONCE_ENV, LPROF_INIT_ONCE_ENV, 1);
 #endif
 
+  /* Create the profile dir (even if online merging is enabled), so that
+   * the profile file can be set up if continuous mode is enabled. */
   createProfileDir(Filename);
+
+  /* By pass file truncation to allow online raw profile merging. */
+  if (lprofCurFilename.MergePoolSize)
+    return;
 
   /* Truncate the file.  Later we'll reopen and append. */
   File = fopen(Filename, "w");
@@ -377,13 +419,42 @@ static void truncateCurrentFile(void) {
   fclose(File);
 }
 
+#ifndef _MSC_VER
+static void assertIsZero(int *i) {
+  if (*i)
+    PROF_WARN("Expected flag to be 0, but got: %d\n", *i);
+}
+#endif
+
+#if !defined(__Fuchsia__) && !defined(_WIN32)
+/* Write a partial profile to \p Filename, which is required to be backed by
+ * the open file object \p File. */
+static int writeProfileWithFileObject(const char *Filename, FILE *File) {
+  setProfileFile(File);
+  int rc = writeFile(Filename);
+  if (rc)
+    PROF_ERR("Failed to write file \"%s\": %s\n", Filename, strerror(errno));
+  setProfileFile(NULL);
+  return rc;
+}
+
+/* Unlock the profile \p File and clear the unlock flag. */
+static void unlockProfile(int *ProfileRequiresUnlock, FILE *File) {
+  if (!*ProfileRequiresUnlock) {
+    PROF_WARN("%s", "Expected to require profile unlock\n");
+  }
+  lprofUnlockFileHandle(File);
+  *ProfileRequiresUnlock = 0;
+}
+#endif // !defined(__Fuchsia__) && !defined(_WIN32)
+
 static void initializeProfileForContinuousMode(void) {
-#if defined(__Fuchsia__) || defined(_WIN32)
-  PROF_ERR("%s\n", "Continuous mode not yet supported on Fuchsia or Windows.");
-#else // defined(__Fuchsia__) || defined(_WIN32)
   if (!__llvm_profile_is_continuous_mode_enabled())
     return;
 
+#if defined(__Fuchsia__) || defined(_WIN32)
+  PROF_ERR("%s\n", "Continuous mode not yet supported on Fuchsia or Windows.");
+#else // defined(__Fuchsia__) || defined(_WIN32)
   /* Get the sizes of various profile data sections. Taken from
    * __llvm_profile_get_size_for_buffer(). */
   const __llvm_profile_data *DataBegin = __llvm_profile_begin_data();
@@ -409,27 +480,71 @@ static void initializeProfileForContinuousMode(void) {
     return;
   }
 
-  /* Open the raw profile in append mode. */
   int Length = getCurFilenameLength();
   char *FilenameBuf = (char *)COMPILER_RT_ALLOCA(Length + 1);
   const char *Filename = getCurFilename(FilenameBuf, 0);
   if (!Filename)
     return;
-  FILE *File = fopen(Filename, "a+b");
-  if (!File)
-    return;
+
+  FILE *File = NULL;
+  off_t CurrentFileOffset = 0;
+  off_t OffsetModPage = 0;
+
+  /* Whether an exclusive lock on the profile must be dropped after init.
+   * Use a cleanup to warn if the unlock does not occur. */
+  COMPILER_RT_CLEANUP(assertIsZero) int ProfileRequiresUnlock = 0;
+
+  if (!doMerging()) {
+    /* We are not merging profiles, so open the raw profile in append mode. */
+    File = fopen(Filename, "a+b");
+    if (!File)
+      return;
+
+    /* Check that the offset within the file is page-aligned. */
+    CurrentFileOffset = ftello(File);
+    OffsetModPage = CurrentFileOffset % PageSize;
+    if (OffsetModPage != 0) {
+      PROF_ERR("Continuous counter sync mode is enabled, but raw profile is not"
+               "page-aligned. CurrentFileOffset = %" PRIu64 ", pagesz = %u.\n",
+               (uint64_t)CurrentFileOffset, PageSize);
+      return;
+    }
+
+    /* Grow the profile so that mmap() can succeed.  Leak the file handle, as
+     * the file should stay open. */
+    if (writeProfileWithFileObject(Filename, File) != 0)
+      return;
+  } else {
+    /* We are merging profiles. Map the counter section as shared memory into
+     * the profile, i.e. into each participating process. An increment in one
+     * process should be visible to every other process with the same counter
+     * section mapped. */
+    File = lprofOpenFileEx(Filename);
+    if (!File)
+      return;
+
+    ProfileRequiresUnlock = 1;
+
+    uint64_t ProfileFileSize;
+    if (getProfileFileSizeForMerging(File, &ProfileFileSize) == -1)
+      return unlockProfile(&ProfileRequiresUnlock, File);
+
+    if (ProfileFileSize == 0) {
+      /* Grow the profile so that mmap() can succeed.  Leak the file handle, as
+       * the file should stay open. */
+      if (writeProfileWithFileObject(Filename, File) != 0)
+        return unlockProfile(&ProfileRequiresUnlock, File);
+    } else {
+      /* The merged profile has a non-zero length. Check that it is compatible
+       * with the data in this process. */
+      char *ProfileBuffer;
+      if (mmapProfileForMerging(File, ProfileFileSize, &ProfileBuffer) == -1 ||
+          munmap(ProfileBuffer, ProfileFileSize) == -1)
+        return unlockProfile(&ProfileRequiresUnlock, File);
+    }
+  }
 
   int Fileno = fileno(File);
-
-  /* Check that the offset within the file is page-aligned. */
-  off_t CurrentFileOffset = ftello(File);
-  off_t OffsetModPage = CurrentFileOffset % PageSize;
-  if (OffsetModPage != 0) {
-    PROF_ERR("Continuous counter sync mode is enabled, but raw profile is not"
-             "page-aligned. CurrentFileOffset = %" PRIu64 ", pagesz = %u.\n",
-             (uint64_t) CurrentFileOffset, PageSize);
-    return;
-  }
 
   /* Determine how much padding is needed before/after the counters and after
    * the names. */
@@ -445,14 +560,6 @@ static void initializeProfileForContinuousMode(void) {
       CurrentFileOffset + sizeof(__llvm_profile_header) +
       (DataSize * sizeof(__llvm_profile_data)) + PaddingBytesBeforeCounters;
 
-  /* Write the partial profile. This grows the file to a point where the mmap()
-   * can succeed. Leak the file handle, as the file should stay open. */
-  setProfileFile(File);
-  int rc = writeFile(Filename);
-  if (rc)
-    PROF_ERR("Failed to write file \"%s\": %s\n", Filename, strerror(errno));
-  setProfileFile(NULL);
-
   uint64_t *CounterMmap = (uint64_t *)mmap(
       (void *)CountersBegin, PageAlignedCountersLength, PROT_READ | PROT_WRITE,
       MAP_FIXED | MAP_SHARED, Fileno, FileOffsetToCounters);
@@ -465,8 +572,9 @@ static void initializeProfileForContinuousMode(void) {
         "  - FileOffsetToCounters: %" PRIu64 "\n",
         strerror(errno), CountersBegin, PageAlignedCountersLength, Fileno,
         FileOffsetToCounters);
-    return;
   }
+
+  unlockProfile(&ProfileRequiresUnlock, File);
 #endif // defined(__Fuchsia__) || defined(_WIN32)
 }
 
@@ -539,24 +647,12 @@ static int parseFilenamePattern(const char *FilenamePat,
                     FilenamePat);
           return -1;
         }
-        if (MergingEnabled) {
-          PROF_WARN("%%c specifier can not be used with profile merging (%%m) "
-                    "in %s.\n",
-                    FilenamePat);
-          return -1;
-        }
 
         __llvm_profile_enable_continuous_mode();
         I++; /* advance to 'c' */
       } else if (containsMergeSpecifier(FilenamePat, I)) {
         if (MergingEnabled) {
           PROF_WARN("%%m specifier can only be specified once in %s.\n",
-                    FilenamePat);
-          return -1;
-        }
-        if (__llvm_profile_is_continuous_mode_enabled()) {
-          PROF_WARN("%%c specifier can not be used with profile merging (%%m) "
-                    "in %s.\n",
                     FilenamePat);
           return -1;
         }

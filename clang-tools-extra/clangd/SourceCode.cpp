@@ -17,6 +17,7 @@
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TokenKinds.h"
+#include "clang/Driver/Types.h"
 #include "clang/Format/Format.h"
 #include "clang/Lex/Lexer.h"
 #include "clang/Lex/Preprocessor.h"
@@ -221,14 +222,6 @@ bool isSpelledInSource(SourceLocation Loc, const SourceManager &SM) {
       return false;
   }
   return true;
-}
-
-SourceLocation spellingLocIfSpelled(SourceLocation Loc,
-                                    const SourceManager &SM) {
-  if (!isSpelledInSource(Loc, SM))
-    // Use the expansion location as spelling location is not interesting.
-    return SM.getExpansionRange(Loc).getBegin();
-  return SM.getSpellingLoc(Loc);
 }
 
 llvm::Optional<Range> getTokenRange(const SourceManager &SM,
@@ -719,39 +712,52 @@ cleanupAndFormat(StringRef Code, const tooling::Replacements &Replaces,
   return formatReplacements(Code, std::move(*CleanReplaces), Style);
 }
 
-void lex(llvm::StringRef Code, const format::FormatStyle &Style,
-         llvm::function_ref<void(const clang::Token &, Position)> Action) {
+static void
+lex(llvm::StringRef Code, const LangOptions &LangOpts,
+    llvm::function_ref<void(const clang::Token &, const SourceManager &SM)>
+        Action) {
   // FIXME: InMemoryFileAdapter crashes unless the buffer is null terminated!
   std::string NullTerminatedCode = Code.str();
   SourceManagerForFile FileSM("dummy.cpp", NullTerminatedCode);
   auto &SM = FileSM.get();
   auto FID = SM.getMainFileID();
-  Lexer Lex(FID, SM.getBuffer(FID), SM, format::getFormattingLangOpts(Style));
+  // Create a raw lexer (with no associated preprocessor object).
+  Lexer Lex(FID, SM.getBuffer(FID), SM, LangOpts);
   Token Tok;
 
   while (!Lex.LexFromRawLexer(Tok))
-    Action(Tok, sourceLocToPosition(SM, Tok.getLocation()));
+    Action(Tok, SM);
   // LexFromRawLexer returns true after it lexes last token, so we still have
   // one more token to report.
-  Action(Tok, sourceLocToPosition(SM, Tok.getLocation()));
+  Action(Tok, SM);
 }
 
 llvm::StringMap<unsigned> collectIdentifiers(llvm::StringRef Content,
                                              const format::FormatStyle &Style) {
   llvm::StringMap<unsigned> Identifiers;
-  lex(Content, Style, [&](const clang::Token &Tok, Position) {
-    switch (Tok.getKind()) {
-    case tok::identifier:
-      ++Identifiers[Tok.getIdentifierInfo()->getName()];
-      break;
-    case tok::raw_identifier:
+  auto LangOpt = format::getFormattingLangOpts(Style);
+  lex(Content, LangOpt, [&](const clang::Token &Tok, const SourceManager &) {
+    if (Tok.getKind() == tok::raw_identifier)
       ++Identifiers[Tok.getRawIdentifier()];
-      break;
-    default:
-      break;
-    }
   });
   return Identifiers;
+}
+
+std::vector<Range> collectIdentifierRanges(llvm::StringRef Identifier,
+                                           llvm::StringRef Content,
+                                           const LangOptions &LangOpts) {
+  std::vector<Range> Ranges;
+  lex(Content, LangOpts, [&](const clang::Token &Tok, const SourceManager &SM) {
+    if (Tok.getKind() != tok::raw_identifier)
+      return;
+    if (Tok.getRawIdentifier() != Identifier)
+      return;
+    auto Range = getTokenRange(SM, LangOpts, Tok.getLocation());
+    if (!Range)
+      return;
+    Ranges.push_back(*Range);
+  });
+  return Ranges;
 }
 
 namespace {
@@ -786,8 +792,9 @@ void parseNamespaceEvents(llvm::StringRef Code,
   std::string NSName;
 
   NamespaceEvent Event;
-  lex(Code, Style, [&](const clang::Token &Tok, Position P) {
-    Event.Pos = std::move(P);
+  lex(Code, format::getFormattingLangOpts(Style),
+      [&](const clang::Token &Tok,const SourceManager &SM) {
+    Event.Pos = sourceLocToPosition(SM, Tok.getLocation());
     switch (Tok.getKind()) {
     case tok::raw_identifier:
       // In raw mode, this could be a keyword or a name.
@@ -1106,6 +1113,18 @@ EligibleRegion getEligiblePoints(llvm::StringRef Code,
     ER.EligiblePoints.emplace_back(offsetToPosition(Code, Code.size()));
   }
   return ER;
+}
+
+bool isHeaderFile(llvm::StringRef FileName,
+                  llvm::Optional<LangOptions> LangOpts) {
+  // Respect the langOpts, for non-file-extension cases, e.g. standard library
+  // files.
+  if (LangOpts && LangOpts->IsHeaderFile)
+    return true;
+  namespace types = clang::driver::types;
+  auto Lang = types::lookupTypeForExtension(
+      llvm::sys::path::extension(FileName).substr(1));
+  return Lang != types::TY_INVALID && types::onlyPrecompileType(Lang);
 }
 
 } // namespace clangd

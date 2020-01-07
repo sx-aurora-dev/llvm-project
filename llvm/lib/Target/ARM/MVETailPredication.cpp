@@ -21,6 +21,8 @@
 /// - A loop containing multiple VCPT instructions, predicating multiple VPT
 ///   blocks of instructions operating on different vector types.
 
+#include "ARM.h"
+#include "ARMSubtarget.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopPass.h"
 #include "llvm/Analysis/ScalarEvolution.h"
@@ -28,20 +30,19 @@
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
-#include "llvm/IR/Instructions.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IntrinsicsARM.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
-#include "ARM.h"
-#include "ARMSubtarget.h"
 
 using namespace llvm;
 
 #define DEBUG_TYPE "mve-tail-predication"
 #define DESC "Transform predicated vector loops to use MVE tail predication"
 
-static cl::opt<bool>
+cl::opt<bool>
 DisableTailPredication("disable-mve-tail-predication", cl::Hidden,
                        cl::init(true),
                        cl::desc("Disable MVE Tail Predication"));
@@ -208,7 +209,7 @@ bool MVETailPredication::isTailPredicate(Instruction *I, Value *NumElements) {
   // The vector icmp
   if (!match(I, m_ICmp(Pred, m_Instruction(Induction),
                        m_Instruction(Shuffle))) ||
-      Pred != ICmpInst::ICMP_ULE || !L->isLoopInvariant(Shuffle))
+      Pred != ICmpInst::ICMP_ULE)
     return false;
 
   // First find the stuff outside the loop which is setting up the limit
@@ -230,7 +231,7 @@ bool MVETailPredication::isTailPredicate(Instruction *I, Value *NumElements) {
   if (!match(BECount, m_Add(m_Value(TripCount), m_AllOnes())))
     return false;
 
-  if (TripCount != NumElements)
+  if (TripCount != NumElements || !L->isLoopInvariant(BECount))
     return false;
 
   // Now back to searching inside the loop body...
@@ -299,7 +300,7 @@ bool MVETailPredication::IsPredicatedVectorLoop() {
         // MVE vectors are 128-bit, but don't support 128 x i1.
         // TODO: Can we support vectors larger than 128-bits?
         unsigned MaxWidth = TTI->getRegisterBitWidth(true); 
-        if (Lanes * ElementWidth != MaxWidth || Lanes == MaxWidth)
+        if (Lanes * ElementWidth > MaxWidth || Lanes == MaxWidth)
           return false;
         MaskedInsts.push_back(cast<IntrinsicInst>(&I));
       } else if (auto *Int = dyn_cast<IntrinsicInst>(&I)) {
@@ -485,10 +486,15 @@ bool MVETailPredication::TryConvert(Value *TripCount) {
     switch (VecTy->getNumElements()) {
     default:
       llvm_unreachable("unexpected number of lanes");
-    case 2:  VCTPID = Intrinsic::arm_vctp64; break;
-    case 4:  VCTPID = Intrinsic::arm_vctp32; break;
-    case 8:  VCTPID = Intrinsic::arm_vctp16; break;
-    case 16: VCTPID = Intrinsic::arm_vctp8; break;
+    case 4:  VCTPID = Intrinsic::arm_mve_vctp32; break;
+    case 8:  VCTPID = Intrinsic::arm_mve_vctp16; break;
+    case 16: VCTPID = Intrinsic::arm_mve_vctp8; break;
+
+      // FIXME: vctp64 currently not supported because the predicate
+      // vector wants to be <2 x i1>, but v2i1 is not a legal MVE
+      // type, so problems happen at isel time.
+      // Intrinsic::arm_mve_vctp64 exists for ACLE intrinsics
+      // purposes, but takes a v4i1 instead of a v2i1.
     }
     Function *VCTP = Intrinsic::getDeclaration(M, VCTPID);
     Value *TailPredicate = Builder.CreateCall(VCTP, Processed);

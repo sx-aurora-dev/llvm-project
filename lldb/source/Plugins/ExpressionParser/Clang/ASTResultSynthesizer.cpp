@@ -448,13 +448,17 @@ void ASTResultSynthesizer::RecordPersistentDecl(NamedDecl *D) {
 }
 
 void ASTResultSynthesizer::CommitPersistentDecls() {
+  PersistentExpressionState *state =
+      m_target.GetPersistentExpressionStateForLanguage(lldb::eLanguageTypeC);
+  auto *persistent_vars = llvm::cast<ClangPersistentVariables>(state);
+  ClangASTContext *scratch_ctx = ClangASTContext::GetScratch(m_target);
+
   for (clang::NamedDecl *decl : m_decls) {
     StringRef name = decl->getName();
     ConstString name_cs(name.str().c_str());
 
     Decl *D_scratch = m_target.GetClangASTImporter()->DeportDecl(
-        m_target.GetScratchClangASTContext()->getASTContext(), m_ast_context,
-        decl);
+        &scratch_ctx->getASTContext(), decl);
 
     if (!D_scratch) {
       Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS));
@@ -472,10 +476,8 @@ void ASTResultSynthesizer::CommitPersistentDecls() {
     }
 
     if (NamedDecl *NamedDecl_scratch = dyn_cast<NamedDecl>(D_scratch))
-      llvm::cast<ClangPersistentVariables>(
-          m_target.GetPersistentExpressionStateForLanguage(
-              lldb::eLanguageTypeC))
-          ->RegisterPersistentDecl(name_cs, NamedDecl_scratch);
+      persistent_vars->RegisterPersistentDecl(name_cs, NamedDecl_scratch,
+                                              scratch_ctx);
   }
 }
 

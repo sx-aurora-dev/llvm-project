@@ -15,7 +15,7 @@
 ;===------------------------------------------------------------------------===;
 
 [common]
-subdirectories = AsmParser InstPrinter MCTargetDesc TargetInfo
+subdirectories = AsmParser MCTargetDesc TargetInfo
 
 [component_0]
 type = TargetGroup
@@ -28,6 +28,6 @@ has_asmprinter = 1
 type = Library
 name = VECodeGen
 parent = VE
-required_libraries = Analysis AsmPrinter CodeGen Core MC SelectionDAG VEAsmPrinter
+required_libraries = Analysis AsmPrinter CodeGen Core MC SelectionDAG
                      VEDesc VEInfo Support Target
 add_to_library_groups = VE

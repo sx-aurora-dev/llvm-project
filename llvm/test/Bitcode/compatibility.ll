@@ -1369,7 +1369,7 @@ define void @instructions.conversions() {
 }
 
 ; Instructions -- Other Operations
-define void @instructions.other(i32 %op1, i32 %op2, half %fop1, half %fop2) {
+define void @instructions.other(i32 %op1, i32 %op2, half %fop1, half %fop2, <2 x i32> %vop, i8* %pop) {
 entry:
   icmp eq  i32 %op1, %op2
   ; CHECK: icmp eq  i32 %op1, %op2
@@ -1449,6 +1449,16 @@ exit:
   tail call ghccc nonnull i32* @f.nonnull() minsize
   ; CHECK: tail call ghccc nonnull i32* @f.nonnull() #7
 
+  freeze i32 %op1
+  ; CHECK: freeze i32 %op1
+  freeze i32 10
+  ; CHECK: freeze i32 10
+  freeze half %fop1
+  ; CHECK: freeze half %fop1
+  freeze <2 x i32> %vop
+  ; CHECK: freeze <2 x i32> %vop
+  freeze i8* %pop
+  ; CHECK: freeze i8* %pop
   ret void
 }
 

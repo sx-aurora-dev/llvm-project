@@ -1636,6 +1636,7 @@ bool LLParser::ParseOptionalParamAttrs(AttrBuilder &B) {
     case lltok::kw_nest:            B.addAttribute(Attribute::Nest); break;
     case lltok::kw_noalias:         B.addAttribute(Attribute::NoAlias); break;
     case lltok::kw_nocapture:       B.addAttribute(Attribute::NoCapture); break;
+    case lltok::kw_nofree:          B.addAttribute(Attribute::NoFree); break;
     case lltok::kw_nonnull:         B.addAttribute(Attribute::NonNull); break;
     case lltok::kw_readnone:        B.addAttribute(Attribute::ReadNone); break;
     case lltok::kw_readonly:        B.addAttribute(Attribute::ReadOnly); break;
@@ -1930,6 +1931,7 @@ void LLParser::ParseOptionalDLLStorageClass(unsigned &Res) {
 ///   ::= 'arm_aapcscc'
 ///   ::= 'arm_aapcs_vfpcc'
 ///   ::= 'aarch64_vector_pcs'
+///   ::= 'aarch64_sve_vector_pcs'
 ///   ::= 'msp430_intrcc'
 ///   ::= 'avr_intrcc'
 ///   ::= 'avr_signalcc'
@@ -1976,6 +1978,9 @@ bool LLParser::ParseOptionalCallingConv(unsigned &CC) {
   case lltok::kw_arm_aapcscc:    CC = CallingConv::ARM_AAPCS; break;
   case lltok::kw_arm_aapcs_vfpcc:CC = CallingConv::ARM_AAPCS_VFP; break;
   case lltok::kw_aarch64_vector_pcs:CC = CallingConv::AArch64_VectorCall; break;
+  case lltok::kw_aarch64_sve_vector_pcs:
+    CC = CallingConv::AArch64_SVE_VectorCall;
+    break;
   case lltok::kw_msp430_intrcc:  CC = CallingConv::MSP430_INTR; break;
   case lltok::kw_avr_intrcc:     CC = CallingConv::AVR_INTR; break;
   case lltok::kw_avr_signalcc:   CC = CallingConv::AVR_SIGNAL; break;
@@ -4816,19 +4821,19 @@ bool LLParser::ParseDIMacroFile(MDNode *&Result, bool IsDistinct) {
 
 /// ParseDIModule:
 ///   ::= !DIModule(scope: !0, name: "SomeModule", configMacros: "-DNDEBUG",
-///                 includePath: "/usr/include", isysroot: "/")
+///                 includePath: "/usr/include", sysroot: "/")
 bool LLParser::ParseDIModule(MDNode *&Result, bool IsDistinct) {
 #define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
   REQUIRED(scope, MDField, );                                                  \
   REQUIRED(name, MDStringField, );                                             \
   OPTIONAL(configMacros, MDStringField, );                                     \
   OPTIONAL(includePath, MDStringField, );                                      \
-  OPTIONAL(isysroot, MDStringField, );
+  OPTIONAL(sysroot, MDStringField, );
   PARSE_MD_FIELDS();
 #undef VISIT_MD_FIELDS
 
   Result = GET_OR_DISTINCT(DIModule, (Context, scope.Val, name.Val,
-                           configMacros.Val, includePath.Val, isysroot.Val));
+                           configMacros.Val, includePath.Val, sysroot.Val));
   return false;
 }
 
@@ -5824,6 +5829,7 @@ int LLParser::ParseInstruction(Instruction *&Inst, BasicBlock *BB,
     return 0;
   }
   case lltok::kw_landingpad:     return ParseLandingPad(Inst, PFS);
+  case lltok::kw_freeze:         return ParseFreeze(Inst, PFS);
   // Call.
   case lltok::kw_call:     return ParseCall(Inst, PFS, CallInst::TCK_None);
   case lltok::kw_tail:     return ParseCall(Inst, PFS, CallInst::TCK_Tail);
@@ -6744,6 +6750,18 @@ bool LLParser::ParseLandingPad(Instruction *&Inst, PerFunctionState &PFS) {
   }
 
   Inst = LP.release();
+  return false;
+}
+
+/// ParseFreeze
+///   ::= 'freeze' Type Value
+bool LLParser::ParseFreeze(Instruction *&Inst, PerFunctionState &PFS) {
+  LocTy Loc;
+  Value *Op;
+  if (ParseTypeAndValue(Op, Loc, PFS))
+    return true;
+
+  Inst = new FreezeInst(Op);
   return false;
 }
 
@@ -8245,6 +8263,8 @@ bool LLParser::ParseFlag(unsigned &Val) {
 ///        [',' 'readOnly' ':' Flag]? [',' 'noRecurse' ':' Flag]?
 ///        [',' 'returnDoesNotAlias' ':' Flag]? ')'
 ///        [',' 'noInline' ':' Flag]? ')'
+///        [',' 'alwaysInline' ':' Flag]? ')'
+
 bool LLParser::ParseOptionalFFlags(FunctionSummary::FFlags &FFlags) {
   assert(Lex.getKind() == lltok::kw_funcFlags);
   Lex.Lex();
@@ -8285,6 +8305,12 @@ bool LLParser::ParseOptionalFFlags(FunctionSummary::FFlags &FFlags) {
       if (ParseToken(lltok::colon, "expected ':'") || ParseFlag(Val))
         return true;
       FFlags.NoInline = Val;
+      break;
+    case lltok::kw_alwaysInline:
+      Lex.Lex();
+      if (ParseToken(lltok::colon, "expected ':'") || ParseFlag(Val))
+        return true;
+      FFlags.AlwaysInline = Val;
       break;
     default:
       return Error(Lex.getLoc(), "expected function flag type");

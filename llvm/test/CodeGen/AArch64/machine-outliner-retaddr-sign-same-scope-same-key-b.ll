@@ -1,11 +1,10 @@
 ; RUN: llc -verify-machineinstrs -enable-machine-outliner -mtriple \
 ; RUN: aarch64-arm-none-eabi %s -o - | FileCheck %s
 
-define void @a() "sign-return-address"="all" "sign-return-address-key"="b_key" {
+define void @a() "sign-return-address"="all" "sign-return-address-key"="b_key" nounwind {
 ; CHECK-LABEL:      a:                                     // @a
-; CHECK:                .cfi_b_key_frame
+; CHECK-NEXT:       // %bb.0:
 ; CHECK-NEXT:           pacibsp
-; CHECK-NEXT:           .cfi_negate_ra_state
   %1 = alloca i32, align 4
   %2 = alloca i32, align 4
   %3 = alloca i32, align 4
@@ -20,14 +19,12 @@ define void @a() "sign-return-address"="all" "sign-return-address-key"="b_key" {
   store i32 6, i32* %6, align 4
 ; CHECK:              autibsp
   ret void
-; CHECK:              .cfi_endproc
 }
 
-define void @b() "sign-return-address"="all" "sign-return-address-key"="b_key" {
+define void @b() "sign-return-address"="all" "sign-return-address-key"="b_key" nounwind {
 ; CHECK-LABEL:      b:                                     // @b
-; CHECK:                .cfi_b_key_frame
+; CHECK-NEXT:       // %bb.0:
 ; CHECK-NEXT:           pacibsp
-; CHECK-NEXT:           .cfi_negate_ra_state
   %1 = alloca i32, align 4
   %2 = alloca i32, align 4
   %3 = alloca i32, align 4
@@ -42,14 +39,12 @@ define void @b() "sign-return-address"="all" "sign-return-address-key"="b_key" {
   store i32 6, i32* %6, align 4
 ; CHECK:                autibsp
   ret void
-; CHECK:                .cfi_endproc
 }
 
-define void @c() "sign-return-address"="all" "sign-return-address-key"="b_key" {
+define void @c() "sign-return-address"="all" "sign-return-address-key"="b_key" nounwind {
 ; CHECK-LABEL:      c:                                     // @c
-; CHECK:                .cfi_b_key_frame
+; CHECK-NEXT:       // %bb.0:
 ; CHECK-NEXT:           pacibsp
-; CHECK-NEXT:           .cfi_negate_ra_state
   %1 = alloca i32, align 4
   %2 = alloca i32, align 4
   %3 = alloca i32, align 4
@@ -64,11 +59,11 @@ define void @c() "sign-return-address"="all" "sign-return-address-key"="b_key" {
   store i32 6, i32* %6, align 4
 ; CHECK:                autibsp
   ret void
-; CHECK:                .cfi_endproc
 }
 
 ; CHECK-LABEL:      OUTLINED_FUNCTION_0:
-; CHECK:                .cfi_b_key_frame
+; CHECK:            // %bb.0:
+; CHECK-NEXT:           .cfi_b_key_frame
 ; CHECK-NEXT:           pacibsp
 ; CHECK-NEXT:           .cfi_negate_ra_state
 ; CHECK:                autibsp

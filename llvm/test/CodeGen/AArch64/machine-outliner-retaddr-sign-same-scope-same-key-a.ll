@@ -1,10 +1,9 @@
 ; RUN: llc -verify-machineinstrs -enable-machine-outliner -mtriple \
 ; RUN: aarch64-arm-none-eabi %s -o - | FileCheck %s
 
-define void @a() "sign-return-address"="all" "sign-return-address-key"="a_key" {
+define void @a() "sign-return-address"="all" "sign-return-address-key"="a_key" nounwind {
 ; CHECK-LABEL:      a:                                     // @a
 ; CHECK:                paciasp
-; CHECK-NEXT:           .cfi_negate_ra_state
   %1 = alloca i32, align 4
   %2 = alloca i32, align 4
   %3 = alloca i32, align 4
@@ -19,13 +18,11 @@ define void @a() "sign-return-address"="all" "sign-return-address-key"="a_key" {
   store i32 6, i32* %6, align 4
 ; CHECK:              autiasp
   ret void
-; CHECK:              .cfi_endproc
 }
 
-define void @b() "sign-return-address"="all" {
+define void @b() "sign-return-address"="all" nounwind {
 ; CHECK-LABEL:      b:                                     // @b
 ; CHECK:                paciasp
-; CHECK-NEXT:           .cfi_negate_ra_state
   %1 = alloca i32, align 4
   %2 = alloca i32, align 4
   %3 = alloca i32, align 4
@@ -40,13 +37,11 @@ define void @b() "sign-return-address"="all" {
   store i32 6, i32* %6, align 4
 ; CHECK:                autiasp
   ret void
-; CHECK:                .cfi_endproc
 }
 
-define void @c() "sign-return-address"="all" {
+define void @c() "sign-return-address"="all" nounwind {
 ; CHECK-LABEL:      c:                                     // @c
 ; CHECK:                paciasp
-; CHECK-NEXT:           .cfi_negate_ra_state
   %1 = alloca i32, align 4
   %2 = alloca i32, align 4
   %3 = alloca i32, align 4
@@ -61,11 +56,9 @@ define void @c() "sign-return-address"="all" {
   store i32 6, i32* %6, align 4
 ; CHECK:              autiasp
   ret void
-; CHECK:              .cfi_endproc
 }
 
 ; CHECK-LABEL:      OUTLINED_FUNCTION_0:
 ; CHECK:              paciasp
-; CHECK-NEXT:         .cfi_negate_ra_state
 ; CHECK:              autiasp
 ; CHECK-NEXT:         ret

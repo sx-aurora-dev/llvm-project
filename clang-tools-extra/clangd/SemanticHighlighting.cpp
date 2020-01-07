@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "SemanticHighlighting.h"
+#include "FindTarget.h"
 #include "Logger.h"
 #include "ParsedAST.h"
 #include "Protocol.h"
@@ -15,10 +16,17 @@
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclarationName.h"
+#include "clang/AST/ExprCXX.h"
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/Type.h"
 #include "clang/AST/TypeLoc.h"
+#include "clang/Basic/LangOptions.h"
 #include "clang/Basic/SourceLocation.h"
+#include "clang/Basic/SourceManager.h"
+#include "llvm/ADT/None.h"
+#include "llvm/ADT/Optional.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/Support/Casting.h"
 #include <algorithm>
 
 namespace clang {
@@ -103,12 +111,12 @@ llvm::Optional<HighlightingKind> kindForType(const Type *TP) {
     return kindForDecl(TD);
   return llvm::None;
 }
-// Given a set of candidate declarations, if the declarations all have the same
-// highlighting kind, return that highlighting kind, otherwise return None.
-template <typename IteratorRange>
-llvm::Optional<HighlightingKind> kindForCandidateDecls(IteratorRange Decls) {
+
+llvm::Optional<HighlightingKind> kindForReference(const ReferenceLoc &R) {
   llvm::Optional<HighlightingKind> Result;
-  for (NamedDecl *Decl : Decls) {
+  for (const NamedDecl *Decl : R.Targets) {
+    if (!canHighlightName(Decl->getDeclName()))
+      return llvm::None;
     auto Kind = kindForDecl(Decl);
     if (!Kind || (Result && Kind != Result))
       return llvm::None;
@@ -117,27 +125,49 @@ llvm::Optional<HighlightingKind> kindForCandidateDecls(IteratorRange Decls) {
   return Result;
 }
 
-// Collects all semantic tokens in an ASTContext.
-class HighlightingTokenCollector
-    : public RecursiveASTVisitor<HighlightingTokenCollector> {
-  std::vector<HighlightingToken> Tokens;
-  ParsedAST &AST;
-
+/// Consumes source locations and maps them to text ranges for highlightings.
+class HighlightingsBuilder {
 public:
-  HighlightingTokenCollector(ParsedAST &AST) : AST(AST) {}
+  HighlightingsBuilder(const SourceManager &SourceMgr,
+                       const LangOptions &LangOpts)
+      : SourceMgr(SourceMgr), LangOpts(LangOpts) {}
 
-  std::vector<HighlightingToken> collectTokens() {
-    Tokens.clear();
-    TraverseAST(AST.getASTContext());
-    // Add highlightings for macro expansions as they are not traversed by the
-    // visitor.
-    for (const auto &M : AST.getMacros().Ranges)
-      Tokens.push_back({HighlightingKind::Macro, M});
+  void addToken(HighlightingToken T) { Tokens.push_back(T); }
+
+  void addToken(SourceLocation Loc, HighlightingKind Kind) {
+    if (Loc.isInvalid())
+      return;
+    if (Loc.isMacroID()) {
+      // Only intereseted in highlighting arguments in macros (DEF_X(arg)).
+      if (!SourceMgr.isMacroArgExpansion(Loc))
+        return;
+      Loc = SourceMgr.getSpellingLoc(Loc);
+    }
+
+    // Non top level decls that are included from a header are not filtered by
+    // topLevelDecls. (example: method declarations being included from
+    // another file for a class from another file).
+    // There are also cases with macros where the spelling loc will not be in
+    // the main file and the highlighting would be incorrect.
+    if (!isInsideMainFile(Loc, SourceMgr))
+      return;
+
+    auto Range = getTokenRange(SourceMgr, LangOpts, Loc);
+    if (!Range) {
+      // R should always have a value, if it doesn't something is very wrong.
+      elog("Tried to add semantic token with an invalid range");
+      return;
+    }
+    Tokens.push_back(HighlightingToken{Kind, *Range});
+  }
+
+  std::vector<HighlightingToken> collect(ParsedAST &AST) && {
     // Initializer lists can give duplicates of tokens, therefore all tokens
     // must be deduplicated.
     llvm::sort(Tokens);
     auto Last = std::unique(Tokens.begin(), Tokens.end());
     Tokens.erase(Last, Tokens.end());
+
     // Macros can give tokens that have the same source range but conflicting
     // kinds. In this case all tokens sharing this source range should be
     // removed.
@@ -158,158 +188,97 @@ public:
       // the end of the Tokens).
       TokRef = TokRef.drop_front(Conflicting.size());
     }
+    // Add tokens indicating lines skipped by the preprocessor.
+    for (const Range &R : AST.getMacros().SkippedRanges) {
+      // Create one token for each line in the skipped range, so it works
+      // with line-based diffing.
+      assert(R.start.line <= R.end.line);
+      for (int Line = R.start.line; Line < R.end.line; ++Line) {
+        // Don't bother computing the offset for the end of the line, just use
+        // zero. The client will treat this highlighting kind specially, and
+        // highlight the entire line visually (i.e. not just to where the text
+        // on the line ends, but to the end of the screen).
+        NonConflicting.push_back({HighlightingKind::InactiveCode,
+                                  {Position{Line, 0}, Position{Line, 0}}});
+      }
+    }
+    // Re-sort the tokens because that's what the diffing expects.
+    llvm::sort(NonConflicting);
     return NonConflicting;
   }
 
-  bool VisitNamespaceAliasDecl(NamespaceAliasDecl *NAD) {
-    // The target namespace of an alias can not be found in any other way.
-    addToken(NAD->getTargetNameLoc(), NAD->getAliasedNamespace());
+private:
+  const SourceManager &SourceMgr;
+  const LangOptions &LangOpts;
+  std::vector<HighlightingToken> Tokens;
+};
+
+/// Produces highlightings, which are not captured by findExplicitReferences,
+/// e.g. highlights dependent names and 'auto' as the underlying type.
+class CollectExtraHighlightings
+    : public RecursiveASTVisitor<CollectExtraHighlightings> {
+public:
+  CollectExtraHighlightings(HighlightingsBuilder &H) : H(H) {}
+
+  bool VisitDecltypeTypeLoc(DecltypeTypeLoc L) {
+    if (auto K = kindForType(L.getTypePtr()))
+      H.addToken(L.getBeginLoc(), *K);
     return true;
   }
 
-  bool VisitMemberExpr(MemberExpr *ME) {
-    if (canHighlightName(ME->getMemberNameInfo().getName()))
-      addToken(ME->getMemberLoc(), ME->getMemberDecl());
+  bool VisitDeclaratorDecl(DeclaratorDecl *D) {
+    auto *AT = D->getType()->getContainedAutoType();
+    if (!AT)
+      return true;
+    if (auto K = kindForType(AT->getDeducedType().getTypePtrOrNull()))
+      H.addToken(D->getTypeSpecStartLoc(), *K);
     return true;
   }
 
   bool VisitOverloadExpr(OverloadExpr *E) {
-    if (canHighlightName(E->getName()))
-      addToken(E->getNameLoc(),
-               kindForCandidateDecls(E->decls())
-                   .getValueOr(HighlightingKind::DependentName));
-    return true;
-  }
-
-  bool VisitDependentScopeDeclRefExpr(DependentScopeDeclRefExpr *E) {
-    if (canHighlightName(E->getDeclName()))
-      addToken(E->getLocation(), HighlightingKind::DependentName);
+    if (!E->decls().empty())
+      return true; // handled by findExplicitReferences.
+    H.addToken(E->getNameLoc(), HighlightingKind::DependentName);
     return true;
   }
 
   bool VisitCXXDependentScopeMemberExpr(CXXDependentScopeMemberExpr *E) {
-    if (canHighlightName(E->getMember()))
-      addToken(E->getMemberLoc(), HighlightingKind::DependentName);
+    H.addToken(E->getMemberNameInfo().getLoc(),
+               HighlightingKind::DependentName);
     return true;
   }
 
-  bool VisitNamedDecl(NamedDecl *ND) {
-    if (canHighlightName(ND->getDeclName()))
-      addToken(ND->getLocation(), ND);
-    return true;
-  }
-
-  bool VisitUsingDecl(UsingDecl *UD) {
-    if (auto K = kindForCandidateDecls(UD->shadows()))
-      addToken(UD->getLocation(), *K);
-    return true;
-  }
-
-  bool VisitDeclRefExpr(DeclRefExpr *Ref) {
-    if (canHighlightName(Ref->getNameInfo().getName()))
-      addToken(Ref->getLocation(), Ref->getDecl());
-    return true;
-  }
-
-  bool VisitTypedefTypeLoc(TypedefTypeLoc TL) {
-    addToken(TL.getBeginLoc(), TL.getTypedefNameDecl());
-    return true;
-  }
-
-  bool VisitTemplateSpecializationTypeLoc(TemplateSpecializationTypeLoc TL) {
-    if (const TemplateDecl *TD =
-            TL.getTypePtr()->getTemplateName().getAsTemplateDecl())
-      addToken(TL.getBeginLoc(), TD);
-    return true;
-  }
-
-  bool VisitTagTypeLoc(TagTypeLoc L) {
-    if (L.isDefinition())
-      return true; // Definition will be highligthed by VisitNamedDecl.
-    if (auto K = kindForType(L.getTypePtr()))
-      addToken(L.getBeginLoc(), *K);
-    return true;
-  }
-
-  bool VisitDecltypeTypeLoc(DecltypeTypeLoc L) {
-    if (auto K = kindForType(L.getTypePtr()))
-      addToken(L.getBeginLoc(), *K);
+  bool VisitDependentScopeDeclRefExpr(DependentScopeDeclRefExpr *E) {
+    H.addToken(E->getNameInfo().getLoc(), HighlightingKind::DependentName);
     return true;
   }
 
   bool VisitDependentNameTypeLoc(DependentNameTypeLoc L) {
-    addToken(L.getNameLoc(), HighlightingKind::DependentType);
+    H.addToken(L.getNameLoc(), HighlightingKind::DependentType);
     return true;
   }
 
-  bool VisitTemplateTypeParmTypeLoc(TemplateTypeParmTypeLoc TL) {
-    addToken(TL.getBeginLoc(), HighlightingKind::TemplateParameter);
+  bool VisitDependentTemplateSpecializationTypeLoc(
+      DependentTemplateSpecializationTypeLoc L) {
+    H.addToken(L.getTemplateNameLoc(), HighlightingKind::DependentType);
     return true;
   }
 
-  bool TraverseNestedNameSpecifierLoc(NestedNameSpecifierLoc NNSLoc) {
-    if (auto *NNS = NNSLoc.getNestedNameSpecifier()) {
-      if (NNS->getKind() == NestedNameSpecifier::Namespace ||
-          NNS->getKind() == NestedNameSpecifier::NamespaceAlias)
-        addToken(NNSLoc.getLocalBeginLoc(), HighlightingKind::Namespace);
+  // findExplicitReferences will walk nested-name-specifiers and
+  // find anything that can be resolved to a Decl. However, non-leaf
+  // components of nested-name-specifiers which are dependent names
+  // (kind "Identifier") cannot be resolved to a decl, so we visit
+  // them here.
+  bool TraverseNestedNameSpecifierLoc(NestedNameSpecifierLoc Q) {
+    if (NestedNameSpecifier *NNS = Q.getNestedNameSpecifier()) {
+      if (NNS->getKind() == NestedNameSpecifier::Identifier)
+        H.addToken(Q.getLocalBeginLoc(), HighlightingKind::DependentType);
     }
-    return RecursiveASTVisitor<
-        HighlightingTokenCollector>::TraverseNestedNameSpecifierLoc(NNSLoc);
-  }
-
-  bool TraverseConstructorInitializer(CXXCtorInitializer *CI) {
-    if (const FieldDecl *FD = CI->getMember())
-      addToken(CI->getSourceLocation(), FD);
-    return RecursiveASTVisitor<
-        HighlightingTokenCollector>::TraverseConstructorInitializer(CI);
-  }
-
-  bool VisitDeclaratorDecl(DeclaratorDecl *D) {
-    // Highlight 'auto' with its underlying type.
-    auto *AT = D->getType()->getContainedAutoType();
-    if (!AT)
-      return true;
-    auto K = kindForType(AT->getDeducedType().getTypePtrOrNull());
-    if (!K)
-      return true;
-    addToken(D->getTypeSpecStartLoc(), *K);
-    return true;
+    return RecursiveASTVisitor::TraverseNestedNameSpecifierLoc(Q);
   }
 
 private:
-  void addToken(SourceLocation Loc, HighlightingKind Kind) {
-    if (Loc.isInvalid())
-      return;
-    const auto &SM = AST.getSourceManager();
-    if (Loc.isMacroID()) {
-      // Only intereseted in highlighting arguments in macros (DEF_X(arg)).
-      if (!SM.isMacroArgExpansion(Loc))
-        return;
-      Loc = SM.getSpellingLoc(Loc);
-    }
-
-    // Non top level decls that are included from a header are not filtered by
-    // topLevelDecls. (example: method declarations being included from
-    // another file for a class from another file).
-    // There are also cases with macros where the spelling loc will not be in
-    // the main file and the highlighting would be incorrect.
-    if (!isInsideMainFile(Loc, SM))
-      return;
-
-    auto R = getTokenRange(SM, AST.getASTContext().getLangOpts(), Loc);
-    if (!R) {
-      // R should always have a value, if it doesn't something is very wrong.
-      elog("Tried to add semantic token with an invalid range");
-      return;
-    }
-
-    Tokens.push_back({Kind, R.getValue()});
-  }
-
-  void addToken(SourceLocation Loc, const NamedDecl *D) {
-    if (auto K = kindForDecl(D))
-      addToken(Loc, *K);
-  }
+  HighlightingsBuilder &H;
 };
 
 // Encode binary data into base64.
@@ -367,6 +336,28 @@ takeLine(ArrayRef<HighlightingToken> AllTokens,
 }
 } // namespace
 
+std::vector<HighlightingToken> getSemanticHighlightings(ParsedAST &AST) {
+  auto &C = AST.getASTContext();
+  // Add highlightings for AST nodes.
+  HighlightingsBuilder Builder(AST.getSourceManager(), C.getLangOpts());
+  // Highlight 'decltype' and 'auto' as their underlying types.
+  CollectExtraHighlightings(Builder).TraverseAST(C);
+  // Highlight all decls and references coming from the AST.
+  findExplicitReferences(C, [&](ReferenceLoc R) {
+    if (auto Kind = kindForReference(R))
+      Builder.addToken(R.NameLoc, *Kind);
+  });
+  // Add highlightings for macro references.
+  for (const auto &SIDToRefs : AST.getMacros().MacroRefs) {
+    for (const auto &M : SIDToRefs.second)
+      Builder.addToken({HighlightingKind::Macro, M});
+  }
+  for (const auto &M : AST.getMacros().UnknownMacros)
+    Builder.addToken({HighlightingKind::Macro, M});
+
+  return std::move(Builder).collect(AST);
+}
+
 llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, HighlightingKind K) {
   switch (K) {
   case HighlightingKind::Variable:
@@ -405,6 +396,8 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, HighlightingKind K) {
     return OS << "Primitive";
   case HighlightingKind::Macro:
     return OS << "Macro";
+  case HighlightingKind::InactiveCode:
+    return OS << "InactiveCode";
   }
   llvm_unreachable("invalid HighlightingKind");
 }
@@ -449,8 +442,19 @@ diffHighlightings(ArrayRef<HighlightingToken> New,
        LineNumber = NextLineNumber()) {
     NewLine = takeLine(New, NewLine.end(), LineNumber);
     OldLine = takeLine(Old, OldLine.end(), LineNumber);
-    if (NewLine != OldLine)
-      DiffedLines.push_back({LineNumber, NewLine});
+    if (NewLine != OldLine) {
+      DiffedLines.push_back({LineNumber, NewLine, /*IsInactive=*/false});
+
+      // Turn a HighlightingKind::InactiveCode token into the IsInactive flag.
+      auto &AddedLine = DiffedLines.back();
+      llvm::erase_if(AddedLine.Tokens, [&](const HighlightingToken &T) {
+        if (T.Kind == HighlightingKind::InactiveCode) {
+          AddedLine.IsInactive = true;
+          return true;
+        }
+        return false;
+      });
+    }
   }
 
   return DiffedLines;
@@ -464,10 +468,6 @@ bool operator<(const HighlightingToken &L, const HighlightingToken &R) {
 }
 bool operator==(const LineHighlightings &L, const LineHighlightings &R) {
   return std::tie(L.Line, L.Tokens) == std::tie(R.Line, R.Tokens);
-}
-
-std::vector<HighlightingToken> getSemanticHighlightings(ParsedAST &AST) {
-  return HighlightingTokenCollector(AST).collectTokens();
 }
 
 std::vector<SemanticHighlightingInformation>
@@ -493,7 +493,7 @@ toSemanticHighlightingInformation(llvm::ArrayRef<LineHighlightings> Tokens) {
       write16be(static_cast<int>(Token.Kind), OS);
     }
 
-    Lines.push_back({Line.Line, encodeBase64(LineByteTokens)});
+    Lines.push_back({Line.Line, encodeBase64(LineByteTokens), Line.IsInactive});
   }
 
   return Lines;
@@ -538,6 +538,8 @@ llvm::StringRef toTextMateScope(HighlightingKind Kind) {
     return "storage.type.primitive.cpp";
   case HighlightingKind::Macro:
     return "entity.name.function.preprocessor.cpp";
+  case HighlightingKind::InactiveCode:
+    return "meta.disabled";
   }
   llvm_unreachable("unhandled HighlightingKind");
 }

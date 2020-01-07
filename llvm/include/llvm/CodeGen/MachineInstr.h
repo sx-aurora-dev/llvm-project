@@ -718,7 +718,7 @@ public:
   /// block.  The TargetInstrInfo::AnalyzeBranch method can be used to get more
   /// information about this branch.
   bool isConditionalBranch(QueryType Type = AnyInBundle) const {
-    return isBranch(Type) & !isBarrier(Type) & !isIndirectBranch(Type);
+    return isBranch(Type) && !isBarrier(Type) && !isIndirectBranch(Type);
   }
 
   /// Return true if this is a branch which always
@@ -726,7 +726,7 @@ public:
   /// TargetInstrInfo::AnalyzeBranch method can be used to get more information
   /// about this branch.
   bool isUnconditionalBranch(QueryType Type = AnyInBundle) const {
-    return isBranch(Type) & isBarrier(Type) & !isIndirectBranch(Type);
+    return isBranch(Type) && isBarrier(Type) && !isIndirectBranch(Type);
   }
 
   /// Return true if this instruction has a predicate operand that
@@ -1651,7 +1651,8 @@ public:
   /// Add all implicit def and use operands to this instruction.
   void addImplicitDefUseOperands(MachineFunction &MF);
 
-  /// Scan instructions following MI and collect any matching DBG_VALUEs.
+  /// Scan instructions immediately following MI and collect any matching
+  /// DBG_VALUEs.
   void collectDebugValues(SmallVectorImpl<MachineInstr *> &DbgValues);
 
   /// Find all DBG_VALUEs that point to the register def in this instruction

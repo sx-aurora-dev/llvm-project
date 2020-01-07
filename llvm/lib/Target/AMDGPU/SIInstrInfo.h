@@ -192,7 +192,7 @@ public:
                                int64_t Offset1, unsigned NumLoads) const override;
 
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-                   const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
+                   const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg,
                    bool KillSrc) const override;
 
   unsigned calculateLDSSpillAddress(MachineBasicBlock &MBB, MachineInstr &MI,
@@ -977,7 +977,7 @@ public:
   MachineInstr *createPHISourceCopy(MachineBasicBlock &MBB,
                                     MachineBasicBlock::iterator InsPt,
                                     const DebugLoc &DL, Register Src,
-                                    Register SrcSubReg,
+                                    unsigned SrcSubReg,
                                     Register Dst) const override;
 
   bool isWave32() const;
@@ -1016,6 +1016,10 @@ public:
   /// Return -1 if the target-specific opcode for the pseudo instruction does
   /// not exist. If Opcode is not a pseudo instruction, this is identity.
   int pseudoToMCOpcode(int Opcode) const;
+
+  /// \brief Check if this instruction should only be used by assembler.
+  /// Return true if this opcode should not be used by codegen.
+  bool isAsmOnlyOpcode(int MCOp) const;
 
   const TargetRegisterClass *getRegClass(const MCInstrDesc &TID, unsigned OpNum,
                                          const TargetRegisterInfo *TRI,

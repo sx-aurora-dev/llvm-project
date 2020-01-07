@@ -510,6 +510,13 @@ public:
     return BaseT::isHardwareLoopProfitable(L, SE, AC, LibInfo, HWLoopInfo);
   }
 
+  bool preferPredicateOverEpilogue(Loop *L, LoopInfo *LI, ScalarEvolution &SE,
+                                   AssumptionCache &AC, TargetLibraryInfo *TLI,
+                                   DominatorTree *DT,
+                                   const LoopAccessInfo *LAI) {
+    return BaseT::preferPredicateOverEpilogue(L, LI, SE, AC, TLI, DT, LAI);
+  }
+
   int getInstructionLatency(const Instruction *I) {
     if (isa<LoadInst>(I))
       return getST()->getSchedModel().DefaultLoadLatency;
@@ -626,7 +633,8 @@ public:
       TTI::OperandValueKind Opd2Info = TTI::OK_AnyValue,
       TTI::OperandValueProperties Opd1PropInfo = TTI::OP_None,
       TTI::OperandValueProperties Opd2PropInfo = TTI::OP_None,
-      ArrayRef<const Value *> Args = ArrayRef<const Value *>()) {
+      ArrayRef<const Value *> Args = ArrayRef<const Value *>(),
+      const Instruction *CxtI = nullptr) {
     // Check if any of the operands are vector operands.
     const TargetLoweringBase *TLI = getTLI();
     int ISD = TLI->InstructionOpcodeToISD(Opcode);
@@ -774,9 +782,10 @@ public:
       // cost of the split itself. Count that as 1, to be consistent with
       // TLI->getTypeLegalizationCost().
       if ((TLI->getTypeAction(Src->getContext(), TLI->getValueType(DL, Src)) ==
-           TargetLowering::TypeSplitVector) ||
-          (TLI->getTypeAction(Dst->getContext(), TLI->getValueType(DL, Dst)) ==
-           TargetLowering::TypeSplitVector)) {
+               TargetLowering::TypeSplitVector ||
+           TLI->getTypeAction(Dst->getContext(), TLI->getValueType(DL, Dst)) ==
+               TargetLowering::TypeSplitVector) &&
+          Src->getVectorNumElements() > 1 && Dst->getVectorNumElements() > 1) {
         Type *SplitDst = VectorType::get(Dst->getVectorElementType(),
                                          Dst->getVectorNumElements() / 2);
         Type *SplitSrc = VectorType::get(Src->getVectorElementType(),

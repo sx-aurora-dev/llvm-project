@@ -7,7 +7,6 @@ define i32 @a() #0 {
 ; CHECK-LABEL:  a:                                      // @a
 ; CHECK:        // %bb.0:                               // %entry
 ; CHECK-NEXT:       paciasp
-; CHECK:            bl [[OUTLINED_1:OUTLINED_FUNCTION_[0-9]+]]
 ; CHECK:            autiasp
 ; CHECK-NEXT:       ret
 entry:
@@ -21,7 +20,6 @@ define i32 @b() #0 {
 ; CHECK:        // %bb.0:                               // %entry
 ; CHECK-NEXT:       paciasp
 ; CHECK-NEXT:       .cfi_negate_ra_state
-; CHECK:            bl [[OUTLINED_1]]
 ; CHECK:            autiasp
 ; CHECK-NEXT:       ret
 entry:
@@ -35,7 +33,6 @@ define hidden i32 @c(i32 (i32, i32, i32, i32)* %fptr) #0 {
 ; CHECK:        // %bb.0:                               // %entry
 ; CHECK-NEXT:       paciasp
 ; CHECK-NEXT:       .cfi_negate_ra_state
-; CHECK:            bl [[OUTLINED_2:OUTLINED_FUNCTION_[0-9]+]]
 ; CHECK:            autiasp
 ; CHECK-NEXT:       ret
 entry:
@@ -49,7 +46,6 @@ define hidden i32 @d(i32 (i32, i32, i32, i32)* %fptr) #0 {
 ; CHECK:        // %bb.0:                               // %entry
 ; CHECK-NEXT:       paciasp
 ; CHECK-NEXT:       .cfi_negate_ra_state
-; CHECK:            bl [[OUTLINED_2]]
 ; CHECK:            autiasp
 ; CHECK-NEXT:       ret
 entry:
@@ -60,7 +56,7 @@ entry:
 
 attributes #0 = { "sign-return-address"="non-leaf" }
 
-; CHECK:        [[OUTLINED_1]]
+; CHECK-NOT:        [[OUTLINED_FUNCTION_{{.*}}]]
 ; CHECK-NOT:         .cfi_b_key_frame
 ; CHECK-NOT:         paci{{[a,b]}}sp
 ; CHECK-NOT:         .cfi_negate_ra_state

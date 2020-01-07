@@ -39,8 +39,9 @@
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Instructions.h"
-#include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/Intrinsics.h"
+#include "llvm/IR/IntrinsicsHexagon.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
@@ -232,12 +233,7 @@ HexagonTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 
 bool HexagonTargetLowering::mayBeEmittedAsTailCall(const CallInst *CI) const {
   // If either no tail call or told not to tail call at all, don't.
-  auto Attr =
-      CI->getParent()->getParent()->getFnAttribute("disable-tail-calls");
-  if (!CI->isTailCall() || Attr.getValueAsString() == "true")
-    return false;
-
-  return true;
+  return CI->isTailCall();
 }
 
 Register HexagonTargetLowering::getRegisterByName(
@@ -407,10 +403,6 @@ HexagonTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   else
     CCInfo.AnalyzeCallOperands(Outs, CC_Hexagon);
 
-  auto Attr = MF.getFunction().getFnAttribute("disable-tail-calls");
-  if (Attr.getValueAsString() == "true")
-    CLI.IsTailCall = false;
-
   if (CLI.IsTailCall) {
     bool StructAttrFlag = MF.getFunction().hasStructRetAttr();
     CLI.IsTailCall = IsEligibleForTailCallOptimization(Callee, CallConv,
@@ -475,7 +467,7 @@ HexagonTargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       MemAddr = DAG.getNode(ISD::ADD, dl, MVT::i32, StackPtr, MemAddr);
       if (ArgAlign)
         LargestAlignSeen = std::max(LargestAlignSeen,
-                                    VA.getLocVT().getStoreSizeInBits() >> 3);
+                             (unsigned)VA.getLocVT().getStoreSizeInBits() >> 3);
       if (Flags.isByVal()) {
         // The argument is a struct passed by value. According to LLVM, "Arg"
         // is a pointer.
@@ -1535,6 +1527,10 @@ HexagonTargetLowering::HexagonTargetLowering(const TargetMachine &TM,
   setLoadExtAction(ISD::ZEXTLOAD, MVT::v4i16, MVT::v4i8, Legal);
   setLoadExtAction(ISD::SEXTLOAD, MVT::v4i16, MVT::v4i8, Legal);
 
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v2i8,  Legal);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v2i16, Legal);
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::v2i32, Legal);
+
   // Types natively supported:
   for (MVT NativeVT : {MVT::v8i1, MVT::v4i1, MVT::v2i1, MVT::v4i8,
                        MVT::v8i8, MVT::v2i16, MVT::v4i16, MVT::v2i32}) {
@@ -1909,7 +1905,8 @@ bool HexagonTargetLowering::isTruncateFree(EVT VT1, EVT VT2) const {
   return VT1.getSimpleVT() == MVT::i64 && VT2.getSimpleVT() == MVT::i32;
 }
 
-bool HexagonTargetLowering::isFMAFasterThanFMulAndFAdd(EVT VT) const {
+bool HexagonTargetLowering::isFMAFasterThanFMulAndFAdd(
+    const MachineFunction &MF, EVT VT) const {
   return isOperationLegalOrCustom(ISD::FMA, VT);
 }
 

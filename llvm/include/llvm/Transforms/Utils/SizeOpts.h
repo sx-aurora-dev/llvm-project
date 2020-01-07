@@ -21,6 +21,8 @@ using namespace llvm;
 
 extern cl::opt<bool> EnablePGSO;
 extern cl::opt<bool> PGSOLargeWorkingSetSizeOnly;
+extern cl::opt<bool> PGSOIRPassOrTestOnly;
+extern cl::opt<bool> PGSOColdCodeOnly;
 extern cl::opt<bool> ForcePGSO;
 extern cl::opt<int> PgsoCutoffInstrProf;
 extern cl::opt<int> PgsoCutoffSampleProf;
@@ -32,9 +34,15 @@ class BlockFrequencyInfo;
 class Function;
 class ProfileSummaryInfo;
 
+enum class PGSOQueryType {
+  IRPass, // A query call from an IR-level transform pass.
+  Test,   // A query call from a unit test.
+  Other,  // Others.
+};
+
 template<typename AdapterT, typename FuncT, typename BFIT>
 bool shouldFuncOptimizeForSizeImpl(const FuncT *F, ProfileSummaryInfo *PSI,
-                                   BFIT *BFI) {
+                                   BFIT *BFI, PGSOQueryType QueryType) {
   assert(F);
   if (!PSI || !BFI || !PSI->hasProfileSummary())
     return false;
@@ -42,7 +50,13 @@ bool shouldFuncOptimizeForSizeImpl(const FuncT *F, ProfileSummaryInfo *PSI,
     return true;
   if (!EnablePGSO)
     return false;
-  if (PGSOLargeWorkingSetSizeOnly && !PSI->hasLargeWorkingSetSize()) {
+  // Temporarily enable size optimizations only for the IR pass or test query
+  // sites for gradual commit/rollout. This is to be removed later.
+  if (PGSOIRPassOrTestOnly && !(QueryType == PGSOQueryType::IRPass ||
+                                QueryType == PGSOQueryType::Test))
+    return false;
+  if (PGSOColdCodeOnly ||
+      (PGSOLargeWorkingSetSizeOnly && !PSI->hasLargeWorkingSetSize())) {
     // Even if the working set size isn't large, size-optimize cold code.
     return AdapterT::isFunctionColdInCallGraph(F, PSI, *BFI);
   }
@@ -53,7 +67,7 @@ bool shouldFuncOptimizeForSizeImpl(const FuncT *F, ProfileSummaryInfo *PSI,
 
 template<typename AdapterT, typename BlockT, typename BFIT>
 bool shouldOptimizeForSizeImpl(const BlockT *BB, ProfileSummaryInfo *PSI,
-                               BFIT *BFI) {
+                               BFIT *BFI, PGSOQueryType QueryType) {
   assert(BB);
   if (!PSI || !BFI || !PSI->hasProfileSummary())
     return false;
@@ -61,7 +75,13 @@ bool shouldOptimizeForSizeImpl(const BlockT *BB, ProfileSummaryInfo *PSI,
     return true;
   if (!EnablePGSO)
     return false;
-  if (PGSOLargeWorkingSetSizeOnly && !PSI->hasLargeWorkingSetSize()) {
+  // Temporarily enable size optimizations only for the IR pass or test query
+  // sites for gradual commit/rollout. This is to be removed later.
+  if (PGSOIRPassOrTestOnly && !(QueryType == PGSOQueryType::IRPass ||
+                                QueryType == PGSOQueryType::Test))
+    return false;
+  if (PGSOColdCodeOnly ||
+      (PGSOLargeWorkingSetSizeOnly && !PSI->hasLargeWorkingSetSize())) {
     // Even if the working set size isn't large, size-optimize cold code.
     return AdapterT::isColdBlock(BB, PSI, BFI);
   }
@@ -70,15 +90,17 @@ bool shouldOptimizeForSizeImpl(const BlockT *BB, ProfileSummaryInfo *PSI,
       BB, PSI, BFI);
 }
 
-/// Returns true if function \p F is suggested to be size-optimized base on the
+/// Returns true if function \p F is suggested to be size-optimized based on the
 /// profile.
 bool shouldOptimizeForSize(const Function *F, ProfileSummaryInfo *PSI,
-                           BlockFrequencyInfo *BFI);
+                           BlockFrequencyInfo *BFI,
+                           PGSOQueryType QueryType = PGSOQueryType::Other);
 
-/// Returns true if basic block \p BB is suggested to be size-optimized base
-/// on the profile.
+/// Returns true if basic block \p BB is suggested to be size-optimized based on
+/// the profile.
 bool shouldOptimizeForSize(const BasicBlock *BB, ProfileSummaryInfo *PSI,
-                           BlockFrequencyInfo *BFI);
+                           BlockFrequencyInfo *BFI,
+                           PGSOQueryType QueryType = PGSOQueryType::Other);
 
 } // end namespace llvm
 

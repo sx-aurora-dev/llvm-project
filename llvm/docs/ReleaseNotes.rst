@@ -58,6 +58,9 @@ Non-comprehensive list of changes in this release
 * The BasicBlockPass, BBPassManager and all their uses were deleted in
   `this revision <https://reviews.llvm.org/rG9f0ff0b2634bab6a5be8dace005c9eb24d386dd1>`_.
 
+* The LLVM_BUILD_LLVM_DYLIB and LLVM_LINK_LLVM_DYLIB CMake options are no longer
+  available on Windows.
+
 .. NOTE
    If you would like to document a larger change, then you can add a
    subsection about it right here. You can copy the following boilerplate
@@ -81,14 +84,19 @@ Non-comprehensive list of changes in this release
   Undefined Behaviour Sanitizer ``-fsanitize=pointer-overflow`` check
   will now catch such cases.
 
-* The Loop Idiom Recognition (``-loop-idiom``) pass has learned to recognize
-  ``bcmp`` pattern, and convert it into a call to ``bcmp`` (or ``memcmp``)
-  function.
 
 * Windows Control Flow Guard: the ``-cfguard`` option now emits CFG checks on
   indirect function calls. The previous behavior is still available with the 
   ``-cfguard-nochecks`` option. Note that this feature should always be used 
   with optimizations enabled.
+
+* ``Callbacks`` have been added to ``CommandLine Options``.  These can
+  be used to validate of selectively enable other options.
+
+* The function attributes ``no-frame-pointer-elim`` and
+  ``no-frame-pointer-elim-non-leaf`` have been replaced by ``frame-pointer``,
+  which has 3 values: ``none``, ``non-leaf``, and ``all``. The values mean what
+  functions should retain frame pointers.
 
 Changes to the LLVM IR
 ----------------------
@@ -137,6 +145,13 @@ Changes to the X86 Target
   Intel CPUs. This tries to limit the use of 512-bit registers which can cause a
   decrease in CPU frequency on these CPUs. This can be re-enabled by passing
   -mprefer-vector-width=512 to clang or passing -mattr=-prefer-256-bit to llc.
+* Deprecated the mpx feature flag for the Intel MPX instructions. There were no
+  intrinsics for this feature. This change only this effects the results
+  returned by getHostCPUFeatures on CPUs that implement the MPX instructions.
+* The feature flag fast-partial-ymm-or-zmm-write which previously disabled
+  vzeroupper insertion has been removed. It has been replaced with a vzeroupper
+  feature flag which has the opposite polarity. So -vzeroupper has the same
+  effect as +fast-partial-ymm-or-zmm-write.
 
 Changes to the AMDGPU Target
 -----------------------------
@@ -145,10 +160,6 @@ Changes to the AVR Target
 -----------------------------
 
  During this release ...
-
-* Deprecated the mpx feature flag for the Intel MPX instructions. There were no
-  intrinsics for this feature. This change only this effects the results
-  returned by getHostCPUFeatures on CPUs that implement the MPX instructions.
 
 Changes to the WebAssembly Target
 ---------------------------------
@@ -163,6 +174,16 @@ Changes to the OCaml bindings
 
 Changes to the C API
 --------------------
+* C DebugInfo API ``LLVMDIBuilderCreateTypedef`` is updated to include an extra
+  argument ``AlignInBits``, to facilitate / propagate specified Alignment information
+  present in a ``typedef`` to Debug information in LLVM IR.
+
+
+Changes to the Go bindings
+--------------------------
+* Go DebugInfo API ``CreateTypedef`` is updated to include an extra argument ``AlignInBits``,
+  to facilitate / propagate specified Alignment information present in a ``typedef``
+  to Debug information in LLVM IR.
 
 
 Changes to the DAG infrastructure

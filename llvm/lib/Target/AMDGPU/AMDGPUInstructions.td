@@ -77,28 +77,39 @@ class ILFormat<dag outs, dag ins, string asmstr, list<dag> pattern>
 
 def TruePredicate : Predicate<"">;
 
+// Add a predicate to the list if does not already exist to deduplicate it.
+class PredConcat<list<Predicate> lst, Predicate pred> {
+  list<Predicate> ret =
+    !foldl([pred], lst, acc, cur,
+           !listconcat(acc, !if(!eq(!cast<string>(cur),!cast<string>(pred)),
+                                [], [cur])));
+}
+
 class PredicateControl {
   Predicate SubtargetPredicate = TruePredicate;
-  list<Predicate> AssemblerPredicates = [];
   Predicate AssemblerPredicate = TruePredicate;
   Predicate WaveSizePredicate = TruePredicate;
   list<Predicate> OtherPredicates = [];
-  list<Predicate> Predicates = !listconcat([SubtargetPredicate,
-                                            AssemblerPredicate,
-                                            WaveSizePredicate],
-                                            AssemblerPredicates,
-                                            OtherPredicates);
+  list<Predicate> Predicates = PredConcat<
+                                 PredConcat<PredConcat<OtherPredicates,
+                                                       SubtargetPredicate>.ret,
+                                            AssemblerPredicate>.ret,
+                                 WaveSizePredicate>.ret;
 }
+
 class AMDGPUPat<dag pattern, dag result> : Pat<pattern, result>,
       PredicateControl;
 
-def FP16Denormals : Predicate<"Subtarget->hasFP16Denormals()">;
-def FP32Denormals : Predicate<"Subtarget->hasFP32Denormals()">;
-def FP64Denormals : Predicate<"Subtarget->hasFP64Denormals()">;
-def NoFP16Denormals : Predicate<"!Subtarget->hasFP16Denormals()">;
-def NoFP32Denormals : Predicate<"!Subtarget->hasFP32Denormals()">;
-def NoFP64Denormals : Predicate<"!Subtarget->hasFP64Denormals()">;
+let RecomputePerFunction = 1 in {
+def FP16Denormals : Predicate<"MF->getInfo<SIMachineFunctionInfo>()->getMode().FP64FP16Denormals">;
+def FP32Denormals : Predicate<"MF->getInfo<SIMachineFunctionInfo>()->getMode().FP32Denormals">;
+def FP64Denormals : Predicate<"MF->getInfo<SIMachineFunctionInfo>()->getMode().FP64FP16Denormals">;
+def NoFP16Denormals : Predicate<"!MF->getInfo<SIMachineFunctionInfo>()->getMode().FP64FP16Denormals">;
+def NoFP32Denormals : Predicate<"!MF->getInfo<SIMachineFunctionInfo>()->getMode().FP32Denormals">;
+def NoFP64Denormals : Predicate<"!MF->getInfo<SIMachineFunctionInfo>()->getMode().FP64FP16Denormals">;
 def UnsafeFPMath : Predicate<"TM.Options.UnsafeFPMath">;
+}
+
 def FMA : Predicate<"Subtarget->hasFMA()">;
 
 def InstFlag : OperandWithDefaultOps <i32, (ops (i32 0))>;

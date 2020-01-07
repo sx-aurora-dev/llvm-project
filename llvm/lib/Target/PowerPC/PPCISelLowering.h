@@ -102,10 +102,6 @@ namespace llvm {
       ///
       VECINSERT,
 
-      /// XXREVERSE - The PPC VSX reverse instruction
-      ///
-      XXREVERSE,
-
       /// VECSHL - The PPC vector shift left instruction
       ///
       VECSHL,
@@ -174,7 +170,8 @@ namespace llvm {
       BCTRL,
 
       /// CHAIN,FLAG = BCTRL(CHAIN, ADDR, INFLAG) - The combination of a bctrl
-      /// instruction and the TOC reload required on SVR4 PPC64.
+      /// instruction and the TOC reload required on 64-bit ELF, 32-bit AIX
+      /// and 64-bit AIX.
       BCTRL_LOAD_TOC,
 
       /// Return with a flag operand, matched by 'blr'
@@ -650,6 +647,10 @@ namespace llvm {
       return true;
     }
 
+    bool isEqualityCmpFoldedWithSignedCmp() const override {
+      return false;
+    }
+
     bool hasAndNotCompare(SDValue) const override {
       return true;
     }
@@ -903,7 +904,8 @@ namespace llvm {
     /// than a pair of fmul and fadd instructions. fmuladd intrinsics will be
     /// expanded to FMAs when this method returns true, otherwise fmuladd is
     /// expanded to fmul + fadd.
-    bool isFMAFasterThanFMulAndFAdd(EVT VT) const override;
+    bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
+                                    EVT VT) const override;
 
     const MCPhysReg *getScratchRegisters(CallingConv::ID CC) const override;
 
@@ -1116,6 +1118,10 @@ namespace llvm {
                               SelectionDAG &DAG, SDValue ArgVal,
                               const SDLoc &dl) const;
 
+    SDValue LowerFormalArguments_AIX(
+        SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
+        const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &dl,
+        SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const;
     SDValue LowerFormalArguments_Darwin(
         SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
         const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &dl,

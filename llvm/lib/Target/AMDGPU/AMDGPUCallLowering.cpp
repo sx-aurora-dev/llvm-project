@@ -356,7 +356,7 @@ Register AMDGPUCallLowering::lowerParameterPtr(MachineIRBuilder &B,
   Register OffsetReg = MRI.createGenericVirtualRegister(LLT::scalar(64));
   B.buildConstant(OffsetReg, Offset);
 
-  B.buildGEP(DstReg, KernArgSegmentVReg, OffsetReg);
+  B.buildPtrAdd(DstReg, KernArgSegmentVReg, OffsetReg);
 
   return DstReg;
 }
@@ -368,8 +368,7 @@ void AMDGPUCallLowering::lowerParameter(MachineIRBuilder &B,
   MachineFunction &MF = B.getMF();
   const Function &F = MF.getFunction();
   const DataLayout &DL = F.getParent()->getDataLayout();
-  PointerType *PtrTy = PointerType::get(ParamTy, AMDGPUAS::CONSTANT_ADDRESS);
-  MachinePointerInfo PtrInfo(UndefValue::get(PtrTy));
+  MachinePointerInfo PtrInfo(AMDGPUAS::CONSTANT_ADDRESS);
   unsigned TypeSize = DL.getTypeStoreSize(ParamTy);
   Register PtrReg = lowerParameterPtr(B, ParamTy, Offset);
 

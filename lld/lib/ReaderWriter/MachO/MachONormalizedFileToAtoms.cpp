@@ -316,7 +316,7 @@ llvm::Error processSymboledSection(DefinedAtom::ContentType atomType,
             });
 
   // Debug logging of symbols.
-  //for (const Symbol *sym : symbols)
+  // for (const Symbol *sym : symbols)
   //  llvm::errs() << "  sym: "
   //    << llvm::format("0x%08llx ", (uint64_t)sym->value)
   //    << ", " << sym->name << "\n";
@@ -879,11 +879,11 @@ readCompUnit(const NormalizedFile &normalizedFile,
   llvm::dwarf::DwarfFormat Format = llvm::dwarf::DwarfFormat::DWARF32;
   auto infoData = dataExtractorFromSection(normalizedFile, info);
   uint32_t length = infoData.getU32(&offset);
-  if (length == 0xffffffff) {
+  if (length == llvm::dwarf::DW_LENGTH_DWARF64) {
     Format = llvm::dwarf::DwarfFormat::DWARF64;
     infoData.getU64(&offset);
   }
-  else if (length > 0xffffff00)
+  else if (length >= llvm::dwarf::DW_LENGTH_lo_reserved)
     return llvm::make_error<GenericError>("Malformed DWARF in " + path);
 
   uint16_t version = infoData.getU16(&offset);

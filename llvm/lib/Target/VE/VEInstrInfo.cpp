@@ -349,8 +349,8 @@ bool VEInstrInfo::reverseBranchCondition(
 
 void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
                                   MachineBasicBlock::iterator I,
-                                  const DebugLoc &DL, unsigned DestReg,
-                                  unsigned SrcReg, bool KillSrc,
+                                  const DebugLoc &DL, MCRegister DestReg,
+                                  MCRegister SrcReg, bool KillSrc,
                                   const MCInstrDesc &MCID,
                                   unsigned int numSubRegs,
                                   const unsigned* subRegIdx) const {
@@ -384,8 +384,8 @@ void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
 
 void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I,
-                              const DebugLoc &DL, unsigned DestReg,
-                              unsigned SrcReg, bool KillSrc) const {
+                              const DebugLoc &DL, MCRegister DestReg,
+                              MCRegister SrcReg, bool KillSrc) const {
 
   // For the case of VE, I32, I64, and F32 uses the identical
   // registers %s0-%s63, so no need to check other register classes

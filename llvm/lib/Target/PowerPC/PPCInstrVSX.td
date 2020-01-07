@@ -152,7 +152,6 @@ def HasOnlySwappingMemOps : Predicate<"!PPCSubTarget->hasP9Vector()">;
 let Predicates = [HasVSX] in {
 let AddedComplexity = 400 in { // Prefer VSX patterns over non-VSX patterns.
 let hasSideEffects = 0 in { // VSX instructions don't have side effects.
-let Uses = [RM] in {
 
   // Load indexed instructions
   let mayLoad = 1, mayStore = 0 in {
@@ -214,6 +213,7 @@ let Uses = [RM] in {
     }
   } // mayStore
 
+  let Uses = [RM] in {
   // Add/Mul Instructions
   let isCommutable = 1 in {
     def XSADDDP : XX3Form<60, 32,
@@ -1961,7 +1961,7 @@ def VectorExtractions {
       - The order of elements after the move to GPR is reversed, so we invert
         the bits of the index prior to truncating to the range 0-7
   */
-  dag BE_VBYTE_PERM_VEC = (v16i8 (LVSL ZERO8, (ANDIo8 $Idx, 8)));
+  dag BE_VBYTE_PERM_VEC = (v16i8 (LVSL ZERO8, (ANDI8o $Idx, 8)));
   dag BE_VBYTE_PERMUTE = (v16i8 (VPERM $S, $S, BE_VBYTE_PERM_VEC));
   dag BE_MV_VBYTE = (MFVSRD
                       (EXTRACT_SUBREG
@@ -1980,7 +1980,7 @@ def VectorExtractions {
         the bits of the index prior to truncating to the range 0-3
   */
   dag BE_VHALF_PERM_VEC = (v16i8 (LVSL ZERO8,
-                                       (RLDICR (ANDIo8 $Idx, 4), 1, 62)));
+                                       (RLDICR (ANDI8o $Idx, 4), 1, 62)));
   dag BE_VHALF_PERMUTE = (v16i8 (VPERM $S, $S, BE_VHALF_PERM_VEC));
   dag BE_MV_VHALF = (MFVSRD
                       (EXTRACT_SUBREG
@@ -1998,7 +1998,7 @@ def VectorExtractions {
         the bits of the index prior to truncating to the range 0-1
   */
   dag BE_VWORD_PERM_VEC = (v16i8 (LVSL ZERO8,
-                                       (RLDICR (ANDIo8 $Idx, 2), 2, 61)));
+                                       (RLDICR (ANDI8o $Idx, 2), 2, 61)));
   dag BE_VWORD_PERMUTE = (v16i8 (VPERM $S, $S, BE_VWORD_PERM_VEC));
   dag BE_MV_VWORD = (MFVSRD
                       (EXTRACT_SUBREG
@@ -2014,7 +2014,7 @@ def VectorExtractions {
       element indices.
   */
   dag BE_VDWORD_PERM_VEC = (v16i8 (LVSL ZERO8,
-                                        (RLDICR (ANDIo8 $Idx, 1), 3, 60)));
+                                        (RLDICR (ANDI8o $Idx, 1), 3, 60)));
   dag BE_VDWORD_PERMUTE = (v16i8 (VPERM $S, $S, BE_VDWORD_PERM_VEC));
   dag BE_VARIABLE_DWORD =
         (MFVSRD (EXTRACT_SUBREG
@@ -2526,6 +2526,43 @@ def : Pat<(i64 (bitconvert f64:$S)),
 // (move to FPR, nothing else needed)
 def : Pat<(f64 (bitconvert i64:$S)),
           (f64 (MTVSRD $S))>;
+
+// Rounding to integer.
+def : Pat<(i64 (lrint f64:$S)),
+          (i64 (MFVSRD (FCTID $S)))>;
+def : Pat<(i64 (lrint f32:$S)),
+          (i64 (MFVSRD (FCTID (COPY_TO_REGCLASS $S, F8RC))))>;
+def : Pat<(i64 (llrint f64:$S)),
+          (i64 (MFVSRD (FCTID $S)))>;
+def : Pat<(i64 (llrint f32:$S)),
+          (i64 (MFVSRD (FCTID (COPY_TO_REGCLASS $S, F8RC))))>;
+def : Pat<(i64 (lround f64:$S)),
+          (i64 (MFVSRD (FCTID (XSRDPI $S))))>;
+def : Pat<(i64 (lround f32:$S)),
+          (i64 (MFVSRD (FCTID (XSRDPI (COPY_TO_REGCLASS $S, VSFRC)))))>;
+def : Pat<(i64 (llround f64:$S)),
+          (i64 (MFVSRD (FCTID (XSRDPI $S))))>;
+def : Pat<(i64 (llround f32:$S)),
+          (i64 (MFVSRD (FCTID (XSRDPI (COPY_TO_REGCLASS $S, VSFRC)))))>;
+}
+
+let Predicates = [HasVSX] in {
+// Rounding for single precision.
+def : Pat<(f32 (fround f32:$S)),
+          (f32 (COPY_TO_REGCLASS (XSRDPI
+                                   (COPY_TO_REGCLASS $S, VSFRC)), VSSRC))>;
+def : Pat<(f32 (fnearbyint f32:$S)),
+          (f32 (COPY_TO_REGCLASS (XSRDPIC
+                                   (COPY_TO_REGCLASS $S, VSFRC)), VSSRC))>;
+def : Pat<(f32 (ffloor f32:$S)),
+          (f32 (COPY_TO_REGCLASS (XSRDPIM
+                                   (COPY_TO_REGCLASS $S, VSFRC)), VSSRC))>;
+def : Pat<(f32 (fceil f32:$S)),
+          (f32 (COPY_TO_REGCLASS (XSRDPIP
+                                   (COPY_TO_REGCLASS $S, VSFRC)), VSSRC))>;
+def : Pat<(f32 (ftrunc f32:$S)),
+          (f32 (COPY_TO_REGCLASS (XSRDPIZ
+                                   (COPY_TO_REGCLASS $S, VSFRC)), VSSRC))>;
 }
 
 // Materialize a zero-vector of long long
@@ -2948,18 +2985,16 @@ let AddedComplexity = 400, Predicates = [HasP9Vector] in {
 
   // Vector Byte-Reverse H/W/D/Q Word
   def XXBRH : XX2_XT6_XO5_XB6<60,  7, 475, "xxbrh", vsrc, []>;
-  def XXBRW : XX2_XT6_XO5_XB6<60, 15, 475, "xxbrw", vsrc, []>;
-  def XXBRD : XX2_XT6_XO5_XB6<60, 23, 475, "xxbrd", vsrc, []>;
+  def XXBRW : XX2_XT6_XO5_XB6<60, 15, 475, "xxbrw", vsrc,
+    [(set v4i32:$XT, (bswap v4i32:$XB))]>;
+  def XXBRD : XX2_XT6_XO5_XB6<60, 23, 475, "xxbrd", vsrc,
+    [(set v2i64:$XT, (bswap v2i64:$XB))]>;
   def XXBRQ : XX2_XT6_XO5_XB6<60, 31, 475, "xxbrq", vsrc, []>;
 
   // Vector Reverse
-  def : Pat<(v8i16 (PPCxxreverse v8i16 :$A)),
+  def : Pat<(v8i16 (bswap v8i16 :$A)),
             (v8i16 (COPY_TO_REGCLASS (XXBRH (COPY_TO_REGCLASS $A, VSRC)), VRRC))>;
-  def : Pat<(v4i32 (PPCxxreverse v4i32 :$A)),
-            (v4i32 (XXBRW $A))>;
-  def : Pat<(v2i64 (PPCxxreverse v2i64 :$A)),
-            (v2i64 (XXBRD $A))>;
-  def : Pat<(v1i128 (PPCxxreverse v1i128 :$A)),
+  def : Pat<(v1i128 (bswap v1i128 :$A)),
             (v1i128 (COPY_TO_REGCLASS (XXBRQ (COPY_TO_REGCLASS $A, VSRC)), VRRC))>;
 
   // Vector Permute
@@ -3924,8 +3959,20 @@ def DblToULongLoad {
   dag A = (i64 (PPCmfvsr (PPCfctiduz (f64 (load xoaddr:$A)))));
 }
 
+// FP load dags (for f32 -> v4f32)
+def LoadFP {
+  dag A = (f32 (load xoaddr:$A));
+  dag B = (f32 (load xoaddr:$B));
+  dag C = (f32 (load xoaddr:$C));
+  dag D = (f32 (load xoaddr:$D));
+}
+
 // FP merge dags (for f32 -> v4f32)
 def MrgFP {
+  dag LD32A = (COPY_TO_REGCLASS (LIWZX xoaddr:$A), VSRC);
+  dag LD32B = (COPY_TO_REGCLASS (LIWZX xoaddr:$B), VSRC);
+  dag LD32C = (COPY_TO_REGCLASS (LIWZX xoaddr:$C), VSRC);
+  dag LD32D = (COPY_TO_REGCLASS (LIWZX xoaddr:$D), VSRC);
   dag AC = (XVCVDPSP (XXPERMDI (COPY_TO_REGCLASS $A, VSRC),
                                (COPY_TO_REGCLASS $C, VSRC), 0));
   dag BD = (XVCVDPSP (XXPERMDI (COPY_TO_REGCLASS $B, VSRC),
@@ -4081,7 +4128,18 @@ let AddedComplexity = 400 in {
               (v2f64 (XXPERMDI
                         (COPY_TO_REGCLASS $A, VSRC),
                         (COPY_TO_REGCLASS $B, VSRC), 0))>;
-
+    // Using VMRGEW to assemble the final vector would be a lower latency
+    // solution. However, we choose to go with the slightly higher latency
+    // XXPERMDI for 2 reasons:
+    // 1. This is likely to occur in unrolled loops where regpressure is high,
+    //    so we want to use the latter as it has access to all 64 VSX registers.
+    // 2. Using Altivec instructions in this sequence would likely cause the
+    //    allocation of Altivec registers even for the loads which in turn would
+    //    force the use of LXSIWZX for the loads, adding a cycle of latency to
+    //    each of the loads which would otherwise be able to use LFIWZX.
+    def : Pat<(v4f32 (build_vector LoadFP.A, LoadFP.B, LoadFP.C, LoadFP.D)),
+              (v4f32 (XXPERMDI (XXMRGHW MrgFP.LD32A, MrgFP.LD32B),
+                               (XXMRGHW MrgFP.LD32C, MrgFP.LD32D), 3))>;
     def : Pat<(v4f32 (build_vector f32:$A, f32:$B, f32:$C, f32:$D)),
               (VMRGEW MrgFP.AC, MrgFP.BD)>;
     def : Pat<(v4f32 (build_vector DblToFlt.A0, DblToFlt.A1,
@@ -4148,7 +4206,18 @@ let AddedComplexity = 400 in {
               (v2f64 (XXPERMDI
                         (COPY_TO_REGCLASS $B, VSRC),
                         (COPY_TO_REGCLASS $A, VSRC), 0))>;
-
+    // Using VMRGEW to assemble the final vector would be a lower latency
+    // solution. However, we choose to go with the slightly higher latency
+    // XXPERMDI for 2 reasons:
+    // 1. This is likely to occur in unrolled loops where regpressure is high,
+    //    so we want to use the latter as it has access to all 64 VSX registers.
+    // 2. Using Altivec instructions in this sequence would likely cause the
+    //    allocation of Altivec registers even for the loads which in turn would
+    //    force the use of LXSIWZX for the loads, adding a cycle of latency to
+    //    each of the loads which would otherwise be able to use LFIWZX.
+    def : Pat<(v4f32 (build_vector LoadFP.A, LoadFP.B, LoadFP.C, LoadFP.D)),
+              (v4f32 (XXPERMDI (XXMRGHW MrgFP.LD32D, MrgFP.LD32C),
+                               (XXMRGHW MrgFP.LD32B, MrgFP.LD32A), 3))>;
     def : Pat<(v4f32 (build_vector f32:$D, f32:$C, f32:$B, f32:$A)),
               (VMRGEW MrgFP.AC, MrgFP.BD)>;
     def : Pat<(v4f32 (build_vector DblToFlt.A0, DblToFlt.A1,
