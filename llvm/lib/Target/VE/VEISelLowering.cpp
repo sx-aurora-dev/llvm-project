@@ -1945,8 +1945,20 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(
   //   ret = GETSTACKTOP;        // pseudo instruction
   SDLoc dl(Op);
 
-  SDValue Size  = Op.getOperand(1);  // Legalize the size.
-  EVT VT = Size->getValueType(0);
+  // Get the inputs.
+  SDNode *Node = Op.getNode();
+  SDValue Chain = Op.getOperand(0);
+  SDValue Size  = Op.getOperand(1);
+  MaybeAlign Alignment(Op.getConstantOperandVal(2));
+  EVT VT = Node->getValueType(0);
+
+  // Chain the dynamic stack allocation so that it doesn't modify the stack
+  // pointer when other instructions are using the stack.
+  Chain = DAG.getCALLSEQ_START(Chain, 0, 0, dl);
+
+  const TargetFrameLowering &TFI = *Subtarget->getFrameLowering();
+  const Align StackAlign(TFI.getStackAlignment());
+  bool NeedsAlign = Alignment && Alignment > StackAlign;
 
   // Prepare arguments
   TargetLowering::ArgListTy Args;
@@ -1954,21 +1966,43 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(
   Entry.Node = Size;
   Entry.Ty = Entry.Node.getValueType().getTypeForEVT(*DAG.getContext());
   Args.push_back(Entry);
+  if (NeedsAlign) {
+    Entry.Node = DAG.getConstant(~(Alignment->value() - 1ULL), dl, VT);
+    Entry.Ty = Entry.Node.getValueType().getTypeForEVT(*DAG.getContext());
+    Args.push_back(Entry);
+  }
   Type* RetTy = Type::getVoidTy(*DAG.getContext());
 
   EVT PtrVT = getPointerTy(DAG.getDataLayout());
-  SDValue Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack", PtrVT, 0);
+  SDValue Callee;
+  if (NeedsAlign) {
+    Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack_align", PtrVT, 0);
+  } else {
+    Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack", PtrVT, 0);
+  }
 
+  SDValue Result;
   TargetLowering::CallLoweringInfo CLI(DAG);
   CLI.setDebugLoc(dl)
-      .setChain(DAG.getEntryNode())
+      .setChain(Chain)
       .setCallee(CallingConv::VE_LLVM_GROW_STACK, RetTy,
                  Callee, std::move(Args))
       .setDiscardResult(true);
   std::pair<SDValue, SDValue> pair = LowerCallTo(CLI);
-  SDValue Chain = pair.second;
-  SDValue Value =  DAG.getNode(VEISD::GETSTACKTOP, dl, VT, Chain);
-  SDValue Ops[2] = {Value, Chain};
+  Chain = pair.second;
+  Result =  DAG.getNode(VEISD::GETSTACKTOP, dl, VT, Chain);
+  if (NeedsAlign) {
+    Result = DAG.getNode(ISD::ADD, dl, VT, Result,
+                         DAG.getConstant((Alignment->value() - 1ULL), dl, VT));
+    Result = DAG.getNode(ISD::AND, dl, VT, Result,
+                         DAG.getConstant(~(Alignment->value() - 1ULL), dl, VT));
+  }
+//  Chain = Result.getValue(1);
+  Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(0, dl, true),
+                             DAG.getIntPtrConstant(0, dl, true), SDValue(), dl);
+
+  SDValue Ops[2] = {Result, Chain};
+  return DAG.getMergeValues(Ops, dl);
   return DAG.getMergeValues(Ops, dl);
 }
 
