@@ -14,9 +14,9 @@
 
 .text
 .p2align        4
-DEFINE_COMPILERRT_FUNCTION(__llvm_grow_stack)
+DEFINE_COMPILERRT_FUNCTION(__llvm_grow_stack_align)
         subu.l          %sp, %sp, %s0           # sp -= alloca size
-        and             %sp, -16, %sp           # align sp
+        and             %sp, %sp, %s1           # align sp
         brge.l.t        %sp, %sl, 1f
         ld              %s63, 0x18(,%tp)        # load param area
         lea             %s62, 0x13b             # syscall # of grow
@@ -26,6 +26,6 @@ DEFINE_COMPILERRT_FUNCTION(__llvm_grow_stack)
         monc
 1:
         b.l             (,%lr)
-END_COMPILERRT_FUNCTION(__llvm_grow_stack)
+END_COMPILERRT_FUNCTION(__llvm_grow_stack_align)
 
 #endif // __ve__

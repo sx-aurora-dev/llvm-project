@@ -39,6 +39,7 @@ public:
                                 MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator I) const override;
 
+  bool hasBP(const MachineFunction &MF) const;
   bool hasFP(const MachineFunction &MF) const override;
   // VE reserves argument space always for call sites in the function
   // immediately on entry of the current function.
@@ -64,6 +65,9 @@ public:
     NumEntries = array_lengthof(Offsets);
     return Offsets;
   }
+
+protected:
+  const VESubtarget &STI;
 
 private:
   // Returns true if MF is a leaf procedure.
