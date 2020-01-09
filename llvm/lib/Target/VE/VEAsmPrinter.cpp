@@ -72,10 +72,6 @@ namespace {
                                       const MCSubtargetInfo &STI);
     void LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
                                        const MCSubtargetInfo &STI);
-    void LowerEH_SJLJ_SETJMPAndEmitMCInsts(const MachineInstr *MI,
-                                           const MCSubtargetInfo &STI);
-    void LowerEH_SJLJ_LONGJMPAndEmitMCInsts(const MachineInstr *MI,
-                                            const MCSubtargetInfo &STI);
   };
 } // end of anonymous namespace
 
@@ -376,75 +372,6 @@ void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   EmitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
-void VEAsmPrinter::LowerEH_SJLJ_SETJMPAndEmitMCInsts(
-    const MachineInstr *MI, const MCSubtargetInfo &STI) {
-  //   sic $dest
-  //   lea $dest, 32($dest)     // $dest points 0f
-  //   st $dest, 8(,$src)
-  //   lea $dest, 0
-  //   br.l 16                  // br 1f
-  // 0:
-  //   lea $dest, 1
-  // 1:
-
-  unsigned DestReg = MI->getOperand(0).getReg();
-  unsigned SrcReg = MI->getOperand(1).getReg();
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::SIC)
-    .addReg(DestReg));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LEArzi)
-    .addReg(DestReg)
-    .addReg(DestReg)
-    .addImm(32));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::STSri)
-    .addReg(SrcReg)
-    .addImm(8)
-    .addReg(DestReg));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LEAzzi)
-    .addReg(DestReg)
-    .addImm(0));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::BCRLa)
-    .addImm(16));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LEAzzi)
-    .addReg(DestReg)
-    .addImm(1));
-}
-
-void VEAsmPrinter::LowerEH_SJLJ_LONGJMPAndEmitMCInsts(
-    const MachineInstr *MI, const MCSubtargetInfo &STI) {
-  // ld %s9, (, $src)           // s9  = fp
-  // ld %s10, 8(, $src)         // s10 = lr
-  // ld %s11, 16(, $src)        // s11 = sp
-  // b.l (%s10)
-
-  unsigned SrcReg = MI->getOperand(0).getReg();
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LDSri)
-    .addReg(VE::SX9)
-    .addReg(SrcReg)
-    .addImm(0));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LDSri)
-    .addReg(VE::SX10)
-    .addReg(SrcReg)
-    .addImm(8));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::LDSri)
-    .addReg(VE::SX11)
-    .addReg(SrcReg)
-    .addImm(16));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::BAri)
-    .addReg(VE::SX10)
-    .addImm(0));
-  return;
-}
-
 void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
 {
 
@@ -465,12 +392,6 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
   // Emit nothing here but a comment if we can.
   case VE::MEMBARRIER:
     OutStreamer->emitRawComment("MEMBARRIER");
-    return;
-  case VE::EH_SjLj_SetJmp:
-    LowerEH_SJLJ_SETJMPAndEmitMCInsts(MI, getSubtargetInfo());
-    return;
-  case VE::EH_SjLj_LongJmp:
-    LowerEH_SJLJ_LONGJMPAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   }
   MachineBasicBlock::const_instr_iterator I = MI->getIterator();

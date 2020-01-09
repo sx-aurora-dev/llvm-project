@@ -2877,6 +2877,210 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
 }
 
 MachineBasicBlock *
+VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
+                                   MachineBasicBlock *MBB) const {
+  DebugLoc DL = MI.getDebugLoc();
+  MachineFunction *MF = MBB->getParent();
+  const TargetInstrInfo *TII = Subtarget->getInstrInfo();
+  const TargetRegisterInfo *TRI = Subtarget->getRegisterInfo();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+
+  const BasicBlock *BB = MBB->getBasicBlock();
+  MachineFunction::iterator I = ++MBB->getIterator();
+
+  // Memory Reference
+  SmallVector<MachineMemOperand *, 2> MMOs(MI.memoperands_begin(),
+                                           MI.memoperands_end());
+  unsigned BufReg = MI.getOperand(1).getReg();
+
+  unsigned DstReg;
+  unsigned MemOpndSlot = 0;
+
+  unsigned CurOp = 0;
+
+  DstReg = MI.getOperand(CurOp++).getReg();
+  const TargetRegisterClass *RC = MRI.getRegClass(DstReg);
+  assert(TRI->isTypeLegalForClass(*RC, MVT::i32) && "Invalid destination!");
+  (void)TRI;
+  Register mainDstReg = MRI.createVirtualRegister(RC);
+  Register restoreDstReg = MRI.createVirtualRegister(RC);
+
+  MemOpndSlot = CurOp;
+
+  // For v = setjmp(buf), we generate
+  //
+  // thisMBB:
+  //  buf[3] = %s17 iff %s17 is used as BP
+  //  buf[1] = restoreMBB
+  //  SjLjSetup restoreMBB
+  //
+  // mainMBB:
+  //  v_main = 0
+  //
+  // sinkMBB:
+  //  v = phi(main, restore)
+  //
+  // restoreMBB:
+  //  %s17 = buf[3] = iff %s17 is used as BP
+  //  v_restore = 1
+
+  MachineBasicBlock *thisMBB = MBB;
+  MachineBasicBlock *mainMBB = MF->CreateMachineBasicBlock(BB);
+  MachineBasicBlock *sinkMBB = MF->CreateMachineBasicBlock(BB);
+  MachineBasicBlock *restoreMBB = MF->CreateMachineBasicBlock(BB);
+  MF->insert(I, mainMBB);
+  MF->insert(I, sinkMBB);
+  MF->push_back(restoreMBB);
+  restoreMBB->setHasAddressTaken();
+
+  // Transfer the remainder of BB and its successor edges to sinkMBB.
+  sinkMBB->splice(sinkMBB->begin(), MBB,
+                  std::next(MachineBasicBlock::iterator(MI)), MBB->end());
+  sinkMBB->transferSuccessorsAndUpdatePHIs(MBB);
+
+  // thisMBB:
+  unsigned LabelReg = MRI.createVirtualRegister(&VE::I64RegClass);
+  unsigned Tmp1 = MRI.createVirtualRegister(&VE::I64RegClass);
+  unsigned Tmp2 = MRI.createVirtualRegister(&VE::I64RegClass);
+
+  if (isPositionIndependent()) {
+    // Create following instructions for local linkage PIC code.
+    //     lea %Tmp1, restoreMBB@gotoff_lo
+    //     and %Tmp2, %Tmp1, (32)0
+    //     lea.sl %Tmp3, restoreMBB@gotoff_hi(%Tmp2)
+    //     adds.l %LabelReg, %s15, %Tmp3                  ; %s15 is GOT
+    // FIXME: use lea.sl %BReg, .LJTI0_0@gotoff_hi(%Tmp2, %s15)
+    unsigned Tmp3 = MRI.createVirtualRegister(&VE::I64RegClass);
+    BuildMI(*MBB, MI, DL, TII->get(VE::LEAzzi), Tmp1)
+        .addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_LO32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
+        .addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrzi), Tmp3)
+        .addReg(Tmp2).addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_HI32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ADXrr), LabelReg)
+        .addReg(VE::SX15).addReg(Tmp3);
+  } else {
+    // lea     %Tmp1, restoreMBB@lo
+    // and     %Tmp2, %Tmp1, (32)0
+    // lea.sl  %LabelReg, restoreMBB@hi(%Tmp2)
+    BuildMI(*MBB, MI, DL, TII->get(VE::LEAzzi), Tmp1)
+        .addMBB(restoreMBB, VEMCExpr::VK_VE_LO32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
+        .addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrzi), LabelReg)
+        .addReg(Tmp2).addMBB(restoreMBB, VEMCExpr::VK_VE_HI32);
+  }
+
+  // Store BP
+  const VEFrameLowering *TFI = Subtarget->getFrameLowering();
+  if (TFI->hasBP(*MF)) {
+    // store BP in buf[3]
+    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, TII->get(VE::STSri));
+    MIB.addReg(BufReg);
+    MIB.addImm(24);
+    MIB.addReg(VE::SX17);
+    MIB.setMemRefs(MMOs);
+  }
+
+  // Store IP
+  MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, TII->get(VE::STSri));
+  MIB.add(MI.getOperand(1));
+  MIB.addImm(8);
+  MIB.addReg(LabelReg);
+  MIB.setMemRefs(MMOs);
+
+  // SP/FP are already stored in jmpbuf before `llvm.eh.sjlj.setjmp`.
+
+  // Setup
+  MIB = BuildMI(*thisMBB, MI, DL, TII->get(VE::EH_SjLj_Setup))
+          .addMBB(restoreMBB);
+
+  const VERegisterInfo *RegInfo = Subtarget->getRegisterInfo();
+  MIB.addRegMask(RegInfo->getNoPreservedMask());
+  thisMBB->addSuccessor(mainMBB);
+  thisMBB->addSuccessor(restoreMBB);
+
+  // mainMBB:
+  BuildMI(mainMBB, DL, TII->get(VE::LEAzzi), mainDstReg).addImm(0);
+  mainMBB->addSuccessor(sinkMBB);
+
+  // sinkMBB:
+  BuildMI(*sinkMBB, sinkMBB->begin(), DL,
+          TII->get(VE::PHI), DstReg)
+    .addReg(mainDstReg).addMBB(mainMBB)
+    .addReg(restoreDstReg).addMBB(restoreMBB);
+
+  // restoreMBB:
+  if (TFI->hasBP(*MF)) {
+    // Restore BP from buf[3].  The address of buf is in SX10.
+    // FIXME: Better to not use SX10 here
+    MachineInstrBuilder MIB = BuildMI(restoreMBB, DL, TII->get(VE::LDSri),
+        VE::SX17);
+    MIB.addReg(VE::SX10);
+    MIB.addImm(24);
+    MIB.setMemRefs(MMOs);
+  }
+  BuildMI(restoreMBB, DL, TII->get(VE::LEAzzi), restoreDstReg).addImm(1);
+  BuildMI(restoreMBB, DL, TII->get(VE::BCRLa)).addMBB(sinkMBB);
+  restoreMBB->addSuccessor(sinkMBB);
+
+  MI.eraseFromParent();
+  return sinkMBB;
+}
+
+MachineBasicBlock *
+VETargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
+                                    MachineBasicBlock *MBB) const {
+  DebugLoc DL = MI.getDebugLoc();
+  MachineFunction *MF = MBB->getParent();
+  const TargetInstrInfo *TII = Subtarget->getInstrInfo();
+  MachineRegisterInfo &MRI = MF->getRegInfo();
+
+  // Memory Reference
+  SmallVector<MachineMemOperand *, 2> MMOs(MI.memoperands_begin(),
+                                           MI.memoperands_end());
+  unsigned BufReg = MI.getOperand(0).getReg();
+
+  Register Tmp = MRI.createVirtualRegister(&VE::I64RegClass);
+  // Since FP is only updated here but NOT referenced, it's treated as GPR.
+  unsigned FP = VE::SX9;
+  unsigned SP = VE::SX11;
+
+  MachineInstrBuilder MIB;
+
+  MachineBasicBlock *thisMBB = MBB;
+
+  // Reload FP
+  MIB = BuildMI(*thisMBB, MI, DL, TII->get(VE::LDSri), FP);
+  MIB.addReg(BufReg);
+  MIB.addImm(0);
+  MIB.setMemRefs(MMOs);
+
+  // Reload IP
+  MIB = BuildMI(*thisMBB, MI, DL, TII->get(VE::LDSri), Tmp);
+  MIB.addReg(BufReg);
+  MIB.addImm(8);
+  MIB.setMemRefs(MMOs);
+
+  // Copy BufReg to SX10 for later use in setjmp
+  // FIXME: Better to not use SX10 here
+  BuildMI(*thisMBB, MI, DL, TII->get(VE::ORri), VE::SX10)
+      .addReg(BufReg).addImm(0);
+
+  // Reload SP
+  MIB = BuildMI(*thisMBB, MI, DL, TII->get(VE::LDSri), SP);
+  MIB.add(MI.getOperand(0));  // we can preserve the kill flags here.
+  MIB.addImm(16);
+  MIB.setMemRefs(MMOs);
+
+  // Jump
+  BuildMI(*thisMBB, MI, DL, TII->get(VE::BAri)).addReg(Tmp).addImm(0);
+
+  MI.eraseFromParent();
+  return thisMBB;
+}
+
+MachineBasicBlock *
 VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
                                         MachineBasicBlock *BB) const {
   DebugLoc DL = MI.getDebugLoc();
@@ -3222,209 +3426,12 @@ VETargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   default: llvm_unreachable("Unknown Custom Instruction!");
   case VE::EH_SjLj_Setup_Dispatch:
     return EmitSjLjDispatchBlock(MI, BB);
+  case VE::EH_SjLj_LongJmp:
+    return emitEHSjLjLongJmp(MI, BB);
+  case VE::EH_SjLj_SetJmp:
+    return emitEHSjLjSetJmp(MI, BB);
   }
 }
-
-#if 0
-MachineBasicBlock *
-VETargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
-                                       MachineBasicBlock *MBB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  const TargetInstrInfo *TII = Subtarget->getInstrInfo();
-
-  MachineFunction *MF = MBB->getParent();
-  MachineRegisterInfo &MRI = MF->getRegInfo();
-  MachineInstrBuilder MIB;
-
-  MVT PVT = getPointerTy(MF->getDataLayout());
-  unsigned RegSize = PVT.getStoreSize();
-  assert(PVT == MVT::i32 && "Invalid Pointer Size!");
-
-  unsigned Buf = MI.getOperand(0).getReg();
-  unsigned JmpLoc = MRI.createVirtualRegister(&SP::I64RegClass);
-
-  // TO DO: If we do 64-bit handling, this perhaps should be FLUSHW, not TA 3
-  MIB = BuildMI(*MBB, MI, DL, TII->get(SP::TRAPri), SP::G0).addImm(3).addImm(SPCC::ICC_A);
-
-  // Instruction to restore FP
-  const unsigned FP  = SP::I6;
-  MIB = BuildMI(*MBB, MI, DL, TII->get(SP::LDri))
-            .addReg(FP)
-            .addReg(Buf)
-            .addImm(0);
-
-  // Instruction to load jmp location
-  MIB = BuildMI(*MBB, MI, DL, TII->get(SP::LDri))
-            .addReg(JmpLoc, RegState::Define)
-            .addReg(Buf)
-            .addImm(RegSize);
-
-  // Instruction to restore SP
-  const unsigned SP  = VE::SX11;
-  MIB = BuildMI(*MBB, MI, DL, TII->get(SP::LDri))
-            .addReg(SP)
-            .addReg(Buf)
-            .addImm(2 * RegSize);
-
-  // Instruction to restore I7
-  MIB = BuildMI(*MBB, MI, DL, TII->get(SP::LDri))
-            .addReg(SP::I7)
-            .addReg(Buf, RegState::Kill)
-            .addImm(3 * RegSize);
-
-  // Jump to JmpLoc
-  BuildMI(*MBB, MI, DL, TII->get(SP::JMPLrr)).addReg(SP::G0).addReg(JmpLoc, RegState::Kill).addReg(SP::G0);
-
-  MI.eraseFromParent();
-  return MBB;
-}
-
-MachineBasicBlock *
-VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
-                                      MachineBasicBlock *MBB) const {
-  DebugLoc DL = MI.getDebugLoc();
-  const TargetInstrInfo *TII = Subtarget->getInstrInfo();
-  const TargetRegisterInfo *TRI = Subtarget->getRegisterInfo();
-
-  MachineFunction *MF = MBB->getParent();
-  MachineRegisterInfo &MRI = MF->getRegInfo();
-  MachineInstrBuilder MIB;
-
-  MVT PVT = getPointerTy(MF->getDataLayout());
-  unsigned RegSize = PVT.getStoreSize();
-  assert(PVT == MVT::i32 && "Invalid Pointer Size!");
-
-  unsigned DstReg = MI.getOperand(0).getReg();
-  const TargetRegisterClass *RC = MRI.getRegClass(DstReg);
-  assert(TRI->isTypeLegalForClass(*RC, MVT::i32) && "Invalid destination!");
-  (void)TRI;
-  unsigned mainDstReg = MRI.createVirtualRegister(RC);
-  unsigned restoreDstReg = MRI.createVirtualRegister(RC);
-
-  // For v = setjmp(buf), we generate
-  //
-  // thisMBB:
-  //  buf[0] = FP
-  //  buf[RegSize] = restoreMBB <-- takes address of restoreMBB
-  //  buf[RegSize * 2] = O6
-  //  buf[RegSize * 3] = I7
-  //  Ensure restoreMBB remains in the relocations list (done using a bn instruction)
-  //  b mainMBB
-  //
-  // mainMBB:
-  //  v_main = 0
-  //  b sinkMBB
-  //
-  // restoreMBB:
-  //  v_restore = 1
-  //  --fall through--
-  //
-  // sinkMBB:
-  //  v = phi(main, restore)
-
-  const BasicBlock *BB = MBB->getBasicBlock();
-  MachineFunction::iterator It = ++MBB->getIterator();
-  MachineBasicBlock *thisMBB = MBB;
-  MachineBasicBlock *mainMBB = MF->CreateMachineBasicBlock(BB);
-  MachineBasicBlock *restoreMBB = MF->CreateMachineBasicBlock(BB);
-  MachineBasicBlock *sinkMBB = MF->CreateMachineBasicBlock(BB);
-
-  MF->insert(It, mainMBB);
-  MF->insert(It, restoreMBB);
-  MF->insert(It, sinkMBB);
-  restoreMBB->setHasAddressTaken();
-
-  // Transfer the remainder of BB and its successor edges to sinkMBB.
-  sinkMBB->splice(sinkMBB->begin(), MBB,
-                  std::next(MachineBasicBlock::iterator(MI)),
-                  MBB->end());
-  sinkMBB->transferSuccessorsAndUpdatePHIs(MBB);
-
-  unsigned LabelReg = MRI.createVirtualRegister(&SP::I64RegClass);
-  unsigned LabelReg2 = MRI.createVirtualRegister(&SP::I64RegClass);
-  unsigned BufReg = MI.getOperand(1).getReg();
-
-  // Instruction to store FP
-  const unsigned FP  = SP::I6;
-  MIB = BuildMI(thisMBB, DL, TII->get(SP::STri))
-            .addReg(BufReg)
-            .addImm(0)
-            .addReg(FP);
-
-  // Instructions to store jmp location
-  MIB = BuildMI(thisMBB, DL, TII->get(SP::SETHIi))
-            .addReg(LabelReg, RegState::Define)
-            .addMBB(restoreMBB, VEMCExpr::VK_VE_HI32);
-
-  MIB = BuildMI(thisMBB, DL, TII->get(SP::ORri))
-            .addReg(LabelReg2, RegState::Define)
-            .addReg(LabelReg, RegState::Kill)
-            .addMBB(restoreMBB, VEMCExpr::VK_VE_LO32);
-
-  MIB = BuildMI(thisMBB, DL, TII->get(SP::STri))
-            .addReg(BufReg)
-            .addImm(RegSize)
-            .addReg(LabelReg2, RegState::Kill);
-
-  // Instruction to store SP
-  const unsigned SP  = VE::SX11;
-  MIB = BuildMI(thisMBB, DL, TII->get(SP::STri))
-            .addReg(BufReg)
-            .addImm(2 * RegSize)
-            .addReg(SP);
-
-  // Instruction to store I7
-  MIB = BuildMI(thisMBB, DL, TII->get(SP::STri))
-            .addReg(BufReg)
-            .addImm(3 * RegSize)
-            .addReg(SP::I7);
-
-
-  // FIX ME: This next instruction ensures that the restoreMBB block address remains
-  // valid through optimization passes and serves no other purpose. The ICC_N ensures
-  // that the branch is never taken. This commented-out code here was an alternative
-  // attempt to achieve this which brought myriad problems.
-  //MIB = BuildMI(thisMBB, DL, TII->get(SP::EH_SjLj_Setup)).addMBB(restoreMBB, VEMCExpr::VK_VE_None);
-  MIB = BuildMI(thisMBB, DL, TII->get(SP::BCOND))
-              .addMBB(restoreMBB)
-              .addImm(SPCC::ICC_N);
-
-  MIB = BuildMI(thisMBB, DL, TII->get(SP::BCOND))
-              .addMBB(mainMBB)
-              .addImm(SPCC::ICC_A);
-
-  thisMBB->addSuccessor(mainMBB);
-  thisMBB->addSuccessor(restoreMBB);
-
-
-  // mainMBB:
-  MIB = BuildMI(mainMBB, DL, TII->get(SP::ORrr))
-             .addReg(mainDstReg, RegState::Define)
-             .addReg(SP::G0)
-             .addReg(SP::G0);
-  MIB = BuildMI(mainMBB, DL, TII->get(SP::BCOND)).addMBB(sinkMBB).addImm(SPCC::ICC_A);
-
-  mainMBB->addSuccessor(sinkMBB);
-
-
-  // restoreMBB:
-  MIB = BuildMI(restoreMBB, DL, TII->get(SP::ORri))
-              .addReg(restoreDstReg, RegState::Define)
-              .addReg(SP::G0)
-              .addImm(1);
-  //MIB = BuildMI(restoreMBB, DL, TII->get(SP::BCOND)).addMBB(sinkMBB).addImm(SPCC::ICC_A);
-  restoreMBB->addSuccessor(sinkMBB);
-
-  // sinkMBB:
-  MIB = BuildMI(*sinkMBB, sinkMBB->begin(), DL,
-                TII->get(SP::PHI), DstReg)
-             .addReg(mainDstReg).addMBB(mainMBB)
-             .addReg(restoreDstReg).addMBB(restoreMBB);
-
-  MI.eraseFromParent();
-  return sinkMBB;
-}
-#endif
 
 //===----------------------------------------------------------------------===//
 //                         VE Inline Assembly Support

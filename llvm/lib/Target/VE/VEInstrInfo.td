@@ -1609,7 +1609,8 @@ def MEMBARRIER : Pseudo<(outs), (ins), "# MEMBARRIER",
 // SJLJ Exception handling intrinsics
 //===----------------------------------------------------------------------===//
 
-let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1 in {
+let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1,
+    usesCustomInserter = 1 in {
   def EH_SjLj_SetJmp  : Pseudo<(outs I32:$dst), (ins I64:$buf),
                                "# EH_SJLJ_SETJMP",
                                [(set I32:$dst, (VEeh_sjlj_setjmp I64:$buf))]>;
@@ -1623,6 +1624,10 @@ let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1 in {
 let isBarrier = 1, hasSideEffects = 1, usesCustomInserter = 1 in
   def EH_SjLj_Setup_Dispatch : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
                                       [(VEeh_sjlj_setup_dispatch)]>;
+
+let isBranch = 1, isTerminator = 1, isCodeGenOnly = 1 in
+  def EH_SjLj_Setup : Pseudo<(outs), (ins brtarget32:$dst),
+                             "# EH_SJlJ_SETUP $dst", []>;
 
 //===----------------------------------------------------------------------===//
 // Dummy instruction for CPU flow control
