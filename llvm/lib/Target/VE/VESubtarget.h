@@ -43,7 +43,7 @@ public:
               const std::string &FS, const TargetMachine &TM);
 
   const VEInstrInfo *getInstrInfo() const override { return &InstrInfo; }
-  const TargetFrameLowering *getFrameLowering() const override {
+  const VEFrameLowering *getFrameLowering() const override {
     return &FrameLowering;
   }
   const VERegisterInfo *getRegisterInfo() const override {

@@ -7,19 +7,22 @@
 ; Function Attrs: noinline nounwind optnone
 define i32 @t_setjmp() {
 ; CHECK-LABEL: t_setjmp:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, buf@lo
+; CHECK:       lea %s34, buf@lo
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, buf@hi(%s34)
 ; CHECK-NEXT:  st %s9, (,%s34)
 ; CHECK-NEXT:  st %s11, 16(,%s34)
-; CHECK-NEXT:  sic %s0
-; CHECK-NEXT:  lea %s0, 32(%s0)
-; CHECK-NEXT:  st %s0, 8(,%s34)
+; CHECK-NEXT:  lea %s35, .LBB{{[0-9]+}}_3@lo
+; CHECK-NEXT:  and %s35, %s35, (32)0
+; CHECK-NEXT:  lea.sl %s35, .LBB{{[0-9]+}}_3@hi(%s35)
+; CHECK-NEXT:  st %s35, 8(,%s34)
+; CHECK-NEXT:  # EH_SJlJ_SETUP .LBB{{[0-9]+}}_3
+; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:  lea %s0, 0
-; CHECK-NEXT:  br.l 16
+; CHECK-NEXT:  br.l .LBB{{[0-9]+}}_2
+; CHECK-NEXT:  .LBB{{[0-9]+}}_3:
 ; CHECK-NEXT:  lea %s0, 1
-; CHECK-NEXT:  or %s11, 0, %s9
+; CHECK-NEXT:  .LBB{{[0-9]+}}_2:
   %1 = call i8* @llvm.frameaddress(i32 0)
   store i8* %1, i8** bitcast ([1 x %struct.__jmp_buf_tag]* @buf to i8**), align 8
   %2 = call i8* @llvm.stacksave()
@@ -45,9 +48,10 @@ define void @t_longjmp() {
 ; CHECK-NEXT:  and %s34, %s34, (32)0
 ; CHECK-NEXT:  lea.sl %s34, buf@hi(%s34)
 ; CHECK-NEXT:  ld %s9, (,%s34)
-; CHECK-NEXT:  ld %s10, 8(,%s34)
+; CHECK-NEXT:  ld %s35, 8(,%s34)
+; CHECK-NEXT:  or %s10, 0, %s34
 ; CHECK-NEXT:  ld %s11, 16(,%s34)
-; CHECK-NEXT:  b.l (,%s10)
+; CHECK-NEXT:  b.l (,%s35)
   call void @llvm.eh.sjlj.longjmp(i8* bitcast ([1 x %struct.__jmp_buf_tag]* @buf to i8*))
   unreachable
                                                   ; No predecessors!
