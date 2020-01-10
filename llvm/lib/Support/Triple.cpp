@@ -23,6 +23,7 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
   case aarch64:        return "aarch64";
   case aarch64_be:     return "aarch64_be";
   case aarch64_32:     return "aarch64_32";
+  case aurora:         return "aurora";
   case arm:            return "arm";
   case armeb:          return "armeb";
   case arc:            return "arc";
@@ -83,6 +84,8 @@ StringRef Triple::getArchTypePrefix(ArchType Kind) {
   case aarch64:
   case aarch64_be:
   case aarch64_32:  return "aarch64";
+
+  case aurora: return "aurora";
 
   case arc:         return "arc";
 
@@ -160,6 +163,7 @@ StringRef Triple::getVendorTypeName(VendorType Kind) {
   case IBM: return "ibm";
   case ImaginationTechnologies: return "img";
   case MipsTechnologies: return "mti";
+  case NEC: return "nec";
   case NVIDIA: return "nvidia";
   case CSR: return "csr";
   case Myriad: return "myriad";
@@ -203,6 +207,7 @@ StringRef Triple::getOSTypeName(OSType Kind) {
   case PS4: return "ps4";
   case ELFIAMCU: return "elfiamcu";
   case TvOS: return "tvos";
+  case VEORT: return "veort";
   case WatchOS: return "watchos";
   case Mesa3D: return "mesa3d";
   case Contiki: return "contiki";
@@ -271,6 +276,7 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
     .Case("arm64_32", aarch64_32)
     .Case("arm", arm)
     .Case("armeb", armeb)
+    .Case("aurora", aurora)
     .Case("avr", avr)
     .StartsWith("bpf", BPFArch)
     .Case("mips", mips)
@@ -402,6 +408,7 @@ static Triple::ArchType parseArch(StringRef ArchName) {
     .Case("arm64_32", Triple::aarch64_32)
     .Case("arm", Triple::arm)
     .Case("armeb", Triple::armeb)
+    .Case("aurora", Triple::aurora)
     .Case("thumb", Triple::thumb)
     .Case("thumbeb", Triple::thumbeb)
     .Case("avr", Triple::avr)
@@ -469,6 +476,7 @@ static Triple::VendorType parseVendor(StringRef VendorName) {
     .Case("ibm", Triple::IBM)
     .Case("img", Triple::ImaginationTechnologies)
     .Case("mti", Triple::MipsTechnologies)
+    .Case("nec", Triple::NEC)
     .Case("nvidia", Triple::NVIDIA)
     .Case("csr", Triple::CSR)
     .Case("myriad", Triple::Myriad)
@@ -509,6 +517,7 @@ static Triple::OSType parseOS(StringRef OSName) {
     .StartsWith("ps4", Triple::PS4)
     .StartsWith("elfiamcu", Triple::ELFIAMCU)
     .StartsWith("tvos", Triple::TvOS)
+    .StartsWith("veort", Triple::VEORT)
     .StartsWith("watchos", Triple::WatchOS)
     .StartsWith("mesa3d", Triple::Mesa3D)
     .StartsWith("contiki", Triple::Contiki)
@@ -667,6 +676,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::amdil:
   case Triple::amdil64:
   case Triple::armeb:
+  case Triple::aurora:
   case Triple::avr:
   case Triple::bpfeb:
   case Triple::bpfel:
@@ -1267,6 +1277,7 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::aarch64:
   case llvm::Triple::aarch64_be:
   case llvm::Triple::amdgcn:
+  case llvm::Triple::aurora:
   case llvm::Triple::bpfel:
   case llvm::Triple::bpfeb:
   case llvm::Triple::le64:
@@ -1306,6 +1317,7 @@ Triple Triple::get32BitArchVariant() const {
   switch (getArch()) {
   case Triple::UnknownArch:
   case Triple::amdgcn:
+  case Triple::aurora:
   case Triple::avr:
   case Triple::bpfel:
   case Triple::bpfeb:
@@ -1386,6 +1398,7 @@ Triple Triple::get64BitArchVariant() const {
 
   case Triple::aarch64:
   case Triple::aarch64_be:
+  case Triple::aurora:
   case Triple::bpfel:
   case Triple::bpfeb:
   case Triple::le64:
@@ -1439,6 +1452,7 @@ Triple Triple::getBigEndianArchVariant() const {
   case Triple::amdgcn:
   case Triple::amdil64:
   case Triple::amdil:
+  case Triple::aurora:
   case Triple::avr:
   case Triple::hexagon:
   case Triple::hsail64:
@@ -1524,6 +1538,7 @@ bool Triple::isLittleEndian() const {
   case Triple::amdil:
   case Triple::arm:
   case Triple::avr:
+  case Triple::aurora:
   case Triple::bpfel:
   case Triple::hexagon:
   case Triple::hsail64:
