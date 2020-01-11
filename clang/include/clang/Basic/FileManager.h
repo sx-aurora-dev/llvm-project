@@ -222,8 +222,8 @@ class FileManager : public RefCountedBase<FileManager> {
                   llvm::BumpPtrAllocator>
       SeenFileEntries;
 
-  /// The canonical names of directories.
-  llvm::DenseMap<const DirectoryEntry *, llvm::StringRef> CanonicalDirNames;
+  /// The canonical names of files and directories .
+  llvm::DenseMap<const void *, llvm::StringRef> CanonicalNames;
 
   /// Storage for canonical names that we have computed.
   llvm::BumpPtrAllocator CanonicalNameStorage;
@@ -231,10 +231,6 @@ class FileManager : public RefCountedBase<FileManager> {
   /// Each FileEntry we create is assigned a unique ID #.
   ///
   unsigned NextFileUID;
-
-  // Statistics.
-  unsigned NumDirLookups, NumFileLookups;
-  unsigned NumDirCacheMisses, NumFileCacheMisses;
 
   // Caching.
   std::unique_ptr<FileSystemStatCache> StatCache;
@@ -424,6 +420,13 @@ public:
   /// and should only be used when the physical layout of the file system is
   /// required, which is (almost) never.
   StringRef getCanonicalName(const DirectoryEntry *Dir);
+
+  /// Retrieve the canonical name for a given file.
+  ///
+  /// This is a very expensive operation, despite its results being cached,
+  /// and should only be used when the physical layout of the file system is
+  /// required, which is (almost) never.
+  StringRef getCanonicalName(const FileEntry *File);
 
   void PrintStats() const;
 };

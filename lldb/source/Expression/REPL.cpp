@@ -283,6 +283,8 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
 
       PersistentExpressionState *persistent_state =
           m_target.GetPersistentExpressionStateForLanguage(GetLanguage());
+      if (!persistent_state)
+        return;
 
       const size_t var_count_before = persistent_state->GetSize();
 
@@ -423,7 +425,7 @@ void REPL::IOHandlerInputComplete(IOHandler &io_handler, std::string &code) {
               .SetBaseLineNumber(m_code.GetSize() + 1);
         }
         if (extra_line) {
-          fprintf(output_sp->GetFile().GetStream(), "\n");
+          output_sp->Printf("\n");
         }
       }
     }

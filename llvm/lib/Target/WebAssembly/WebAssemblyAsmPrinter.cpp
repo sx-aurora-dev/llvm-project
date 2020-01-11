@@ -96,8 +96,11 @@ void WebAssemblyAsmPrinter::EmitEndOfAsmFile(Module &M) {
   }
 
   for (const auto &F : M) {
+    if (F.isIntrinsic())
+      continue;
+
     // Emit function type info for all undefined functions
-    if (F.isDeclarationForLinker() && !F.isIntrinsic()) {
+    if (F.isDeclarationForLinker()) {
       SmallVector<MVT, 4> Results;
       SmallVector<MVT, 4> Params;
       computeSignatureVTs(F.getFunctionType(), F, TM, Params, Results);
@@ -129,6 +132,13 @@ void WebAssemblyAsmPrinter::EmitEndOfAsmFile(Module &M) {
         Sym->setImportName(Name);
         getTargetStreamer()->emitImportName(Sym, Name);
       }
+    }
+
+    if (F.hasFnAttribute("wasm-export-name")) {
+      auto *Sym = cast<MCSymbolWasm>(getSymbol(&F));
+      StringRef Name = F.getFnAttribute("wasm-export-name").getValueAsString();
+      Sym->setExportName(Name);
+      getTargetStreamer()->emitExportName(Sym, Name);
     }
   }
 
@@ -332,43 +342,15 @@ void WebAssemblyAsmPrinter::EmitInstruction(const MachineInstr *MI) {
     // These represent values which are live into the function entry, so there's
     // no instruction to emit.
     break;
-  case WebAssembly::FALLTHROUGH_RETURN_I32:
-  case WebAssembly::FALLTHROUGH_RETURN_I32_S:
-  case WebAssembly::FALLTHROUGH_RETURN_I64:
-  case WebAssembly::FALLTHROUGH_RETURN_I64_S:
-  case WebAssembly::FALLTHROUGH_RETURN_F32:
-  case WebAssembly::FALLTHROUGH_RETURN_F32_S:
-  case WebAssembly::FALLTHROUGH_RETURN_F64:
-  case WebAssembly::FALLTHROUGH_RETURN_F64_S:
-  case WebAssembly::FALLTHROUGH_RETURN_v16i8:
-  case WebAssembly::FALLTHROUGH_RETURN_v16i8_S:
-  case WebAssembly::FALLTHROUGH_RETURN_v8i16:
-  case WebAssembly::FALLTHROUGH_RETURN_v8i16_S:
-  case WebAssembly::FALLTHROUGH_RETURN_v4i32:
-  case WebAssembly::FALLTHROUGH_RETURN_v4i32_S:
-  case WebAssembly::FALLTHROUGH_RETURN_v2i64:
-  case WebAssembly::FALLTHROUGH_RETURN_v2i64_S:
-  case WebAssembly::FALLTHROUGH_RETURN_v4f32:
-  case WebAssembly::FALLTHROUGH_RETURN_v4f32_S:
-  case WebAssembly::FALLTHROUGH_RETURN_v2f64:
-  case WebAssembly::FALLTHROUGH_RETURN_v2f64_S: {
+  case WebAssembly::FALLTHROUGH_RETURN: {
     // These instructions represent the implicit return at the end of a
-    // function body. Always pops one value off the stack.
+    // function body.
     if (isVerbose()) {
-      OutStreamer->AddComment("fallthrough-return-value");
+      OutStreamer->AddComment("fallthrough-return");
       OutStreamer->AddBlankLine();
     }
     break;
   }
-  case WebAssembly::FALLTHROUGH_RETURN_VOID:
-  case WebAssembly::FALLTHROUGH_RETURN_VOID_S:
-    // This instruction represents the implicit return at the end of a
-    // function body with no return value.
-    if (isVerbose()) {
-      OutStreamer->AddComment("fallthrough-return-void");
-      OutStreamer->AddBlankLine();
-    }
-    break;
   case WebAssembly::COMPILER_FENCE:
     // This is a compiler barrier that prevents instruction reordering during
     // backend compilation, and should not be emitted.

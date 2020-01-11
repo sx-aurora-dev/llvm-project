@@ -42,6 +42,7 @@ add_clang_unittest(ToolingTests
   RecursiveASTVisitorTests/LambdaDefaultCapture.cpp
   RecursiveASTVisitorTests/LambdaExpr.cpp
   RecursiveASTVisitorTests/LambdaTemplateParams.cpp
+  RecursiveASTVisitorTests/MemberPointerTypeLoc.cpp
   RecursiveASTVisitorTests/NestedNameSpecifiers.cpp
   RecursiveASTVisitorTests/ParenExpr.cpp
   RecursiveASTVisitorTests/TemplateArgumentLocTraverser.cpp
@@ -75,6 +76,7 @@ clang_target_link_libraries(ToolingTests
   clangToolingCore
   clangToolingInclusions
   clangToolingRefactoring
+  clangTransformer
   )
 
 target_link_libraries(ToolingTests

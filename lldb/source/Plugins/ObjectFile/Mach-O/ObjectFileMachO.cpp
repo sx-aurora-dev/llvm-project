@@ -479,12 +479,13 @@ public:
       switch (flavor) {
       case GPRAltRegSet:
       case GPRRegSet:
-        for (uint32_t i = 0; i < count; ++i) {
+        // On ARM, the CPSR register is also included in the count but it is
+        // not included in gpr.r so loop until (count-1).
+        for (uint32_t i = 0; i < (count - 1); ++i) {
           gpr.r[i] = data.GetU32(&offset);
         }
-
-        // Note that gpr.cpsr is also copied by the above loop; this loop
-        // technically extends one element past the end of the gpr.r[] array.
+        // Save cpsr explicitly.
+        gpr.cpsr = data.GetU32(&offset);
 
         SetError(GPRRegSet, Read, 0);
         offset = next_thread_state;
@@ -1140,6 +1141,7 @@ AddressClass ObjectFileMachO::GetAddressClass(lldb::addr_t file_addr) {
         case eSectionTypeDWARFDebugPubTypes:
         case eSectionTypeDWARFDebugRanges:
         case eSectionTypeDWARFDebugRngLists:
+        case eSectionTypeDWARFDebugRngListsDwo:
         case eSectionTypeDWARFDebugStr:
         case eSectionTypeDWARFDebugStrDwo:
         case eSectionTypeDWARFDebugStrOffsets:
@@ -1863,9 +1865,15 @@ public:
           m_section_infos[n_sect].vm_range.SetByteSize(
               section_sp->GetByteSize());
         } else {
+          const char *filename = "<unknown>";
+          SectionSP first_section_sp(m_section_list->GetSectionAtIndex(0));
+          if (first_section_sp)
+            filename = first_section_sp->GetObjectFile()->GetFileSpec().GetPath().c_str();
+
           Host::SystemLog(Host::eSystemLogError,
-                          "error: unable to find section for section %u\n",
-                          n_sect);
+                          "error: unable to find section %d for a symbol in %s, corrupt file?\n",
+                          n_sect, 
+                          filename);
         }
       }
       if (m_section_infos[n_sect].vm_range.Contains(file_addr)) {
@@ -1895,18 +1903,6 @@ protected:
 };
 
 struct TrieEntry {
-  TrieEntry()
-      : name(), address(LLDB_INVALID_ADDRESS), flags(0), other(0),
-        import_name() {}
-
-  void Clear() {
-    name.Clear();
-    address = LLDB_INVALID_ADDRESS;
-    flags = 0;
-    other = 0;
-    import_name.Clear();
-  }
-
   void Dump() const {
     printf("0x%16.16llx 0x%16.16llx 0x%16.16llx \"%s\"",
            static_cast<unsigned long long>(address),
@@ -1918,9 +1914,9 @@ struct TrieEntry {
       printf("\n");
   }
   ConstString name;
-  uint64_t address;
-  uint64_t flags;
-  uint64_t other;
+  uint64_t address = LLDB_INVALID_ADDRESS;
+  uint64_t flags = 0;
+  uint64_t other = 0;
   ConstString import_name;
 };
 
@@ -2038,18 +2034,21 @@ UUID ObjectFileMachO::GetSharedCacheUUID(FileSpec dyld_shared_cache,
   return dsc_uuid;
 }
 
-static bool ParseNList(DataExtractor &nlist_data,
-                       lldb::offset_t &nlist_data_offset,
-                       size_t nlist_byte_size, struct nlist_64 &nlist) {
+static llvm::Optional<struct nlist_64>
+ParseNList(DataExtractor &nlist_data, lldb::offset_t &nlist_data_offset,
+           size_t nlist_byte_size) {
+  struct nlist_64 nlist;
   if (!nlist_data.ValidOffsetForDataOfSize(nlist_data_offset, nlist_byte_size))
-    return false;
+    return {};
   nlist.n_strx = nlist_data.GetU32_unchecked(&nlist_data_offset);
   nlist.n_type = nlist_data.GetU8_unchecked(&nlist_data_offset);
   nlist.n_sect = nlist_data.GetU8_unchecked(&nlist_data_offset);
   nlist.n_desc = nlist_data.GetU16_unchecked(&nlist_data_offset);
   nlist.n_value = nlist_data.GetAddress_unchecked(&nlist_data_offset);
-  return true;
+  return nlist;
 }
+
+enum { DebugSymbols = true, NonDebugSymbols = false };
 
 size_t ObjectFileMachO::ParseSymtab() {
   static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
@@ -2068,9 +2067,9 @@ size_t ObjectFileMachO::ParseSymtab() {
   uint32_t i;
   FileSpecList dylib_files;
   Log *log(lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_SYMBOLS));
-  static const llvm::StringRef g_objc_v2_prefix_class("_OBJC_CLASS_$_");
-  static const llvm::StringRef g_objc_v2_prefix_metaclass("_OBJC_METACLASS_$_");
-  static const llvm::StringRef g_objc_v2_prefix_ivar("_OBJC_IVAR_$_");
+  llvm::StringRef g_objc_v2_prefix_class("_OBJC_CLASS_$_");
+  llvm::StringRef g_objc_v2_prefix_metaclass("_OBJC_METACLASS_$_");
+  llvm::StringRef g_objc_v2_prefix_ivar("_OBJC_IVAR_$_");
 
   for (i = 0; i < m_header.ncmds; ++i) {
     const lldb::offset_t cmd_offset = offset;
@@ -2487,8 +2486,8 @@ size_t ObjectFileMachO::ParseSymtab() {
   std::vector<uint32_t> N_BRAC_indexes;
   std::vector<uint32_t> N_COMM_indexes;
   typedef std::multimap<uint64_t, uint32_t> ValueToSymbolIndexMap;
-  typedef std::map<uint32_t, uint32_t> NListIndexToSymbolIndexMap;
-  typedef std::map<const char *, uint32_t> ConstNameToSymbolIndexMap;
+  typedef llvm::DenseMap<uint32_t, uint32_t> NListIndexToSymbolIndexMap;
+  typedef llvm::DenseMap<const char *, uint32_t> ConstNameToSymbolIndexMap;
   ValueToSymbolIndexMap N_FUN_addr_to_sym_idx;
   ValueToSymbolIndexMap N_STSYM_addr_to_sym_idx;
   ConstNameToSymbolIndexMap N_GSYM_name_to_sym_idx;
@@ -2547,8 +2546,7 @@ size_t ObjectFileMachO::ParseSymtab() {
 
     // Next we need to determine the correct path for the dyld shared cache.
 
-    ArchSpec header_arch;
-    GetArchitecture(header_arch);
+    ArchSpec header_arch = GetArchitecture();
     char dsc_path[PATH_MAX];
     char dsc_path_development[PATH_MAX];
 
@@ -2698,8 +2696,8 @@ size_t ObjectFileMachO::ParseSymtab() {
 
             offset = 0;
 
-            typedef std::map<ConstString, uint16_t> UndefinedNameToDescMap;
-            typedef std::map<uint32_t, ConstString> SymbolIndexToName;
+            typedef llvm::DenseMap<ConstString, uint16_t> UndefinedNameToDescMap;
+            typedef llvm::DenseMap<uint32_t, ConstString> SymbolIndexToName;
             UndefinedNameToDescMap undefined_name_to_desc;
             SymbolIndexToName reexport_shlib_needs_fixup;
 
@@ -2746,9 +2744,12 @@ size_t ObjectFileMachO::ParseSymtab() {
                      nlist_index++) {
                   /////////////////////////////
                   {
-                    struct nlist_64 nlist;
-                    if (!ParseNList(dsc_local_symbols_data, nlist_data_offset, nlist_byte_size, nlist)
+                    llvm::Optional<struct nlist_64> nlist_maybe =
+                        ParseNList(dsc_local_symbols_data, nlist_data_offset,
+                                   nlist_byte_size);
+                    if (!nlist_maybe)
                       break;
+                    struct nlist_64 nlist = *nlist_maybe;
 
                     SymbolType type = eSymbolTypeInvalid;
                     const char *symbol_name = dsc_local_symbols_data.PeekCStr(
@@ -3323,13 +3324,13 @@ size_t ObjectFileMachO::ParseSymtab() {
                                 if (symbol_name) {
                                   llvm::StringRef symbol_name_ref(symbol_name);
                                   if (symbol_name_ref.startswith("_OBJC_")) {
-                                    static const llvm::StringRef
+                                    llvm::StringRef
                                         g_objc_v2_prefix_class(
                                             "_OBJC_CLASS_$_");
-                                    static const llvm::StringRef
+                                    llvm::StringRef
                                         g_objc_v2_prefix_metaclass(
                                             "_OBJC_METACLASS_$_");
-                                    static const llvm::StringRef
+                                    llvm::StringRef
                                         g_objc_v2_prefix_ivar("_OBJC_IVAR_$_");
                                     if (symbol_name_ref.startswith(
                                             g_objc_v2_prefix_class)) {
@@ -3379,7 +3380,7 @@ size_t ObjectFileMachO::ParseSymtab() {
                               type = eSymbolTypeRuntime;
                               if (symbol_name && symbol_name[0] == '.') {
                                 llvm::StringRef symbol_name_ref(symbol_name);
-                                static const llvm::StringRef
+                                llvm::StringRef
                                     g_objc_v1_prefix_class(".objc_class_name_");
                                 if (symbol_name_ref.startswith(
                                         g_objc_v1_prefix_class)) {
@@ -3496,15 +3497,11 @@ size_t ObjectFileMachO::ParseSymtab() {
                           // matches, then we can merge the two into just the
                           // function symbol to avoid duplicate entries in
                           // the symbol table
-                          std::pair<ValueToSymbolIndexMap::const_iterator,
-                                    ValueToSymbolIndexMap::const_iterator>
-                              range;
-                          range =
+                          auto range =
                               N_FUN_addr_to_sym_idx.equal_range(nlist.n_value);
                           if (range.first != range.second) {
                             bool found_it = false;
-                            for (ValueToSymbolIndexMap::const_iterator pos =
-                                     range.first;
+                            for (const auto pos = range.first;
                                  pos != range.second; ++pos) {
                               if (sym[sym_idx].GetMangled().GetName(
                                       lldb::eLanguageTypeUnknown,
@@ -3545,15 +3542,11 @@ size_t ObjectFileMachO::ParseSymtab() {
                           // matches, then we can merge the two into just the
                           // Static symbol to avoid duplicate entries in the
                           // symbol table
-                          std::pair<ValueToSymbolIndexMap::const_iterator,
-                                    ValueToSymbolIndexMap::const_iterator>
-                              range;
-                          range = N_STSYM_addr_to_sym_idx.equal_range(
+                          auto range = N_STSYM_addr_to_sym_idx.equal_range(
                               nlist.n_value);
                           if (range.first != range.second) {
                             bool found_it = false;
-                            for (ValueToSymbolIndexMap::const_iterator pos =
-                                     range.first;
+                            for (const auto pos = range.first;
                                  pos != range.second; ++pos) {
                               if (sym[sym_idx].GetMangled().GetName(
                                       lldb::eLanguageTypeUnknown,
@@ -3676,16 +3669,24 @@ size_t ObjectFileMachO::ParseSymtab() {
       nlist_idx = 0;
     }
 
-    typedef std::map<ConstString, uint16_t> UndefinedNameToDescMap;
-    typedef std::map<uint32_t, ConstString> SymbolIndexToName;
+    typedef llvm::DenseMap<ConstString, uint16_t> UndefinedNameToDescMap;
+    typedef llvm::DenseMap<uint32_t, ConstString> SymbolIndexToName;
     UndefinedNameToDescMap undefined_name_to_desc;
     SymbolIndexToName reexport_shlib_needs_fixup;
-    for (; nlist_idx < symtab_load_command.nsyms; ++nlist_idx) {
-      struct nlist_64 nlist;
-      if (!ParseNList(nlist_data, nlist_data_offset, nlist_byte_size, nlist))
-        break;
 
-      SymbolType type = eSymbolTypeInvalid;
+    // Symtab parsing is a huge mess. Everything is entangled and the code
+    // requires access to a ridiculous amount of variables. LLDB depends
+    // heavily on the proper merging of symbols and to get that right we need
+    // to make sure we have parsed all the debug symbols first. Therefore we
+    // invoke the lambda twice, once to parse only the debug symbols and then
+    // once more to parse the remaining symbols.
+    auto ParseSymbolLambda = [&](struct nlist_64 &nlist, uint32_t nlist_idx,
+                                 bool debug_only) {
+      const bool is_debug = ((nlist.n_type & N_STAB) != 0);
+      if (is_debug != debug_only)
+        return true;
+
+      const char *symbol_name_non_abi_mangled = nullptr;
       const char *symbol_name = nullptr;
 
       if (have_strtab_data) {
@@ -3699,7 +3700,7 @@ size_t ObjectFileMachO::ParseSymtab() {
                           "0x%x in %s, ignoring symbol\n",
                           nlist_idx, nlist.n_strx,
                           module_sp->GetFileSpec().GetPath().c_str());
-          continue;
+          return true;
         }
         if (symbol_name[0] == '\0')
           symbol_name = nullptr;
@@ -3710,17 +3711,16 @@ size_t ObjectFileMachO::ParseSymtab() {
                                            str_error))
           symbol_name = memory_symbol_name.c_str();
       }
-      const char *symbol_name_non_abi_mangled = nullptr;
 
+      SymbolType type = eSymbolTypeInvalid;
       SectionSP symbol_section;
       lldb::addr_t symbol_byte_size = 0;
       bool add_nlist = true;
       bool is_gsym = false;
-      bool is_debug = ((nlist.n_type & N_STAB) != 0);
       bool demangled_is_synthesized = false;
       bool set_value = true;
-      assert(sym_idx < num_syms);
 
+      assert(sym_idx < num_syms);
       sym[sym_idx].SetDebug(is_debug);
 
       if (is_debug) {
@@ -4073,7 +4073,6 @@ size_t ObjectFileMachO::ParseSymtab() {
           break;
         }
       } else {
-        // uint8_t n_pext    = N_PEXT & nlist.n_type;
         uint8_t n_type = N_TYPE & nlist.n_type;
         sym[sym_idx].SetExternal((N_EXT & nlist.n_type) != 0);
 
@@ -4209,11 +4208,11 @@ size_t ObjectFileMachO::ParseSymtab() {
                   if (symbol_name) {
                     llvm::StringRef symbol_name_ref(symbol_name);
                     if (symbol_name_ref.startswith("_OBJC_")) {
-                      static const llvm::StringRef g_objc_v2_prefix_class(
+                      llvm::StringRef g_objc_v2_prefix_class(
                           "_OBJC_CLASS_$_");
-                      static const llvm::StringRef g_objc_v2_prefix_metaclass(
+                      llvm::StringRef g_objc_v2_prefix_metaclass(
                           "_OBJC_METACLASS_$_");
-                      static const llvm::StringRef g_objc_v2_prefix_ivar(
+                      llvm::StringRef g_objc_v2_prefix_ivar(
                           "_OBJC_IVAR_$_");
                       if (symbol_name_ref.startswith(g_objc_v2_prefix_class)) {
                         symbol_name_non_abi_mangled = symbol_name + 1;
@@ -4253,7 +4252,7 @@ size_t ObjectFileMachO::ParseSymtab() {
                 type = eSymbolTypeRuntime;
                 if (symbol_name && symbol_name[0] == '.') {
                   llvm::StringRef symbol_name_ref(symbol_name);
-                  static const llvm::StringRef g_objc_v1_prefix_class(
+                  llvm::StringRef g_objc_v1_prefix_class(
                       ".objc_class_name_");
                   if (symbol_name_ref.startswith(g_objc_v1_prefix_class)) {
                     symbol_name_non_abi_mangled = symbol_name;
@@ -4271,7 +4270,7 @@ size_t ObjectFileMachO::ParseSymtab() {
 
       if (!add_nlist) {
         sym[sym_idx].Clear();
-        continue;
+        return true;
       }
 
       uint64_t symbol_value = nlist.n_value;
@@ -4362,7 +4361,6 @@ size_t ObjectFileMachO::ParseSymtab() {
               range;
           range = N_FUN_addr_to_sym_idx.equal_range(nlist.n_value);
           if (range.first != range.second) {
-            bool found_it = false;
             for (ValueToSymbolIndexMap::const_iterator pos = range.first;
                  pos != range.second; ++pos) {
               if (sym[sym_idx].GetMangled().GetName(lldb::eLanguageTypeUnknown,
@@ -4379,12 +4377,9 @@ size_t ObjectFileMachO::ParseSymtab() {
                     resolver_addresses.end())
                   sym[pos->second].SetType(eSymbolTypeResolver);
                 sym[sym_idx].Clear();
-                found_it = true;
-                break;
+                return true;
               }
             }
-            if (found_it)
-              continue;
           } else {
             if (resolver_addresses.find(nlist.n_value) !=
                 resolver_addresses.end())
@@ -4402,7 +4397,6 @@ size_t ObjectFileMachO::ParseSymtab() {
               range;
           range = N_STSYM_addr_to_sym_idx.equal_range(nlist.n_value);
           if (range.first != range.second) {
-            bool found_it = false;
             for (ValueToSymbolIndexMap::const_iterator pos = range.first;
                  pos != range.second; ++pos) {
               if (sym[sym_idx].GetMangled().GetName(lldb::eLanguageTypeUnknown,
@@ -4416,12 +4410,9 @@ size_t ObjectFileMachO::ParseSymtab() {
                 sym[pos->second].SetExternal(sym[sym_idx].IsExternal());
                 sym[pos->second].SetFlags(nlist.n_type << 16 | nlist.n_desc);
                 sym[sym_idx].Clear();
-                found_it = true;
-                break;
+                return true;
               }
             }
-            if (found_it)
-              continue;
           } else {
             // Combine N_GSYM stab entries with the non stab symbol.
             const char *gsym_name = sym[sym_idx]
@@ -4444,7 +4435,7 @@ size_t ObjectFileMachO::ParseSymtab() {
                 // the symbol table.
                 sym[GSYM_sym_idx].SetFlags(nlist.n_type << 16 | nlist.n_desc);
                 sym[sym_idx].Clear();
-                continue;
+                return true;
               }
             }
           }
@@ -4468,6 +4459,36 @@ size_t ObjectFileMachO::ParseSymtab() {
         sym[sym_idx].SetDemangledNameIsSynthesized(true);
 
       ++sym_idx;
+      return true;
+    };
+
+    // First parse all the nlists but don't process them yet. See the next
+    // comment for an explanation why.
+    std::vector<struct nlist_64> nlists;
+    nlists.reserve(symtab_load_command.nsyms);
+    for (; nlist_idx < symtab_load_command.nsyms; ++nlist_idx) {
+      if (auto nlist =
+              ParseNList(nlist_data, nlist_data_offset, nlist_byte_size))
+        nlists.push_back(*nlist);
+      else
+        break;
+    }
+
+    // Now parse all the debug symbols. This is needed to merge non-debug
+    // symbols in the next step. Non-debug symbols are always coalesced into
+    // the debug symbol. Doing this in one step would mean that some symbols
+    // won't be merged.
+    nlist_idx = 0;
+    for (auto &nlist : nlists) {
+      if (!ParseSymbolLambda(nlist, nlist_idx++, DebugSymbols))
+        break;
+    }
+
+    // Finally parse all the non debug symbols.
+    nlist_idx = 0;
+    for (auto &nlist : nlists) {
+      if (!ParseSymbolLambda(nlist, nlist_idx++, NonDebugSymbols))
+        break;
     }
 
     for (const auto &pos : reexport_shlib_needs_fixup) {
@@ -5178,6 +5199,7 @@ lldb_private::Address ObjectFileMachO::GetEntryPointAddress() {
             }
             break;
           case llvm::MachO::CPU_TYPE_ARM64:
+          case llvm::MachO::CPU_TYPE_ARM64_32:
             if (flavor == 6) // ARM_THREAD_STATE64 from mach/arm/thread_status.h
             {
               offset += 256; // This is the offset of pc in the GPR thread state
@@ -5264,8 +5286,9 @@ lldb_private::Address ObjectFileMachO::GetEntryPointAddress() {
       if (module_sp) {
         SymbolContextList contexts;
         SymbolContext context;
-        if (module_sp->FindSymbolsWithNameAndType(ConstString("start"),
-                                                  eSymbolTypeCode, contexts)) {
+        module_sp->FindSymbolsWithNameAndType(ConstString("start"),
+                                              eSymbolTypeCode, contexts);
+        if (contexts.GetSize()) {
           if (contexts.GetContextAtIndex(0, context))
             m_entry_point_address = context.symbol->GetAddress();
         }
@@ -5458,6 +5481,7 @@ ObjectFileMachO::GetThreadContextAtIndex(uint32_t idx,
 
       switch (m_header.cputype) {
       case llvm::MachO::CPU_TYPE_ARM64:
+      case llvm::MachO::CPU_TYPE_ARM64_32:
         reg_ctx_sp =
             std::make_shared<RegisterContextDarwin_arm64_Mach>(thread, data);
         break;
@@ -6018,6 +6042,7 @@ bool ObjectFileMachO::SaveCore(const lldb::ProcessSP &process_sp,
     bool make_core = false;
     switch (target_arch.GetMachine()) {
     case llvm::Triple::aarch64:
+    case llvm::Triple::aarch64_32:
     case llvm::Triple::arm:
     case llvm::Triple::thumb:
     case llvm::Triple::x86:
@@ -6120,6 +6145,7 @@ bool ObjectFileMachO::SaveCore(const lldb::ProcessSP &process_sp,
           if (thread_sp) {
             switch (mach_header.cputype) {
             case llvm::MachO::CPU_TYPE_ARM64:
+            case llvm::MachO::CPU_TYPE_ARM64_32:
               RegisterContextDarwin_arm64_Mach::Create_LC_THREAD(
                   thread_sp.get(), LC_THREAD_datas[thread_idx]);
               break;

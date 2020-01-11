@@ -40,6 +40,7 @@
 #include "lldb/Core/StreamFile.h"
 #include "lldb/Core/StructuredDataImpl.h"
 #include "lldb/DataFormatters/DataVisualization.h"
+#include "lldb/Host/Config.h"
 #include "lldb/Host/XML.h"
 #include "lldb/Initialization/SystemLifetimeManager.h"
 #include "lldb/Interpreter/CommandInterpreter.h"
@@ -292,6 +293,11 @@ void SBDebugger::SetInputFileHandle(FILE *fh, bool transfer_ownership) {
   SetInputFile((FileSP)std::make_shared<NativeFile>(fh, transfer_ownership));
 }
 
+SBError SBDebugger::SetInputFile(FileSP file_sp) {
+  LLDB_RECORD_METHOD(SBError, SBDebugger, SetInputFile, (FileSP), file_sp);
+  return LLDB_RECORD_RESULT(SetInputFile(SBFile(file_sp)));
+}
+
 // Shouldn't really be settable after initialization as this could cause lots
 // of problems; don't want users trying to switch modes in the middle of a
 // debugging session.
@@ -301,7 +307,7 @@ SBError SBDebugger::SetInputFile(SBFile file) {
   SBError error;
   if (!m_opaque_sp) {
     error.ref().SetErrorString("invalid debugger");
-    return error;
+    return LLDB_RECORD_RESULT(error);
   }
 
   repro::DataRecorder *recorder = nullptr;
@@ -310,8 +316,9 @@ SBError SBDebugger::SetInputFile(SBFile file) {
 
   FileSP file_sp = file.m_opaque_sp;
 
-  static std::unique_ptr<repro::CommandLoader> loader =
-      repro::CommandLoader::Create(repro::Reproducer::Instance().GetLoader());
+  static std::unique_ptr<repro::MultiLoader<repro::CommandProvider>> loader =
+      repro::MultiLoader<repro::CommandProvider>::Create(
+          repro::Reproducer::Instance().GetLoader());
   if (loader) {
     llvm::Optional<std::string> nextfile = loader->GetNextFile();
     FILE *fh = nextfile ? FileSystem::Instance().Fopen(nextfile->c_str(), "r")
@@ -325,11 +332,16 @@ SBError SBDebugger::SetInputFile(SBFile file) {
 
   if (!file_sp || !file_sp->IsValid()) {
     error.ref().SetErrorString("invalid file");
-    return error;
+    return LLDB_RECORD_RESULT(error);
   }
 
   m_opaque_sp->SetInputFile(file_sp, recorder);
-  return error;
+  return LLDB_RECORD_RESULT(error);
+}
+
+SBError SBDebugger::SetOutputFile(FileSP file_sp) {
+  LLDB_RECORD_METHOD(SBError, SBDebugger, SetOutputFile, (FileSP), file_sp);
+  return LLDB_RECORD_RESULT(SetOutputFile(SBFile(file_sp)));
 }
 
 void SBDebugger::SetOutputFileHandle(FILE *fh, bool transfer_ownership) {
@@ -343,14 +355,14 @@ SBError SBDebugger::SetOutputFile(SBFile file) {
   SBError error;
   if (!m_opaque_sp) {
     error.ref().SetErrorString("invalid debugger");
-    return error;
+    return LLDB_RECORD_RESULT(error);
   }
   if (!file) {
     error.ref().SetErrorString("invalid file");
-    return error;
+    return LLDB_RECORD_RESULT(error);
   }
   m_opaque_sp->SetOutputFile(file.m_opaque_sp);
-  return error;
+  return LLDB_RECORD_RESULT(error);
 }
 
 void SBDebugger::SetErrorFileHandle(FILE *fh, bool transfer_ownership) {
@@ -359,19 +371,24 @@ void SBDebugger::SetErrorFileHandle(FILE *fh, bool transfer_ownership) {
   SetErrorFile((FileSP)std::make_shared<NativeFile>(fh, transfer_ownership));
 }
 
+SBError SBDebugger::SetErrorFile(FileSP file_sp) {
+  LLDB_RECORD_METHOD(SBError, SBDebugger, SetErrorFile, (FileSP), file_sp);
+  return LLDB_RECORD_RESULT(SetErrorFile(SBFile(file_sp)));
+}
+
 SBError SBDebugger::SetErrorFile(SBFile file) {
   LLDB_RECORD_METHOD(SBError, SBDebugger, SetErrorFile, (SBFile file), file);
   SBError error;
   if (!m_opaque_sp) {
     error.ref().SetErrorString("invalid debugger");
-    return error;
+    return LLDB_RECORD_RESULT(error);
   }
   if (!file) {
     error.ref().SetErrorString("invalid file");
-    return error;
+    return LLDB_RECORD_RESULT(error);
   }
   m_opaque_sp->SetErrorFile(file.m_opaque_sp);
-  return error;
+  return LLDB_RECORD_RESULT(error);
 }
 
 FILE *SBDebugger::GetInputFileHandle() {
@@ -380,7 +397,7 @@ FILE *SBDebugger::GetInputFileHandle() {
     File &file_sp = m_opaque_sp->GetInputFile();
     return LLDB_RECORD_RESULT(file_sp.GetStream());
   }
-  return nullptr;
+  return LLDB_RECORD_RESULT(nullptr);
 }
 
 SBFile SBDebugger::GetInputFile() {
@@ -397,7 +414,7 @@ FILE *SBDebugger::GetOutputFileHandle() {
     StreamFile &stream_file = m_opaque_sp->GetOutputStream();
     return LLDB_RECORD_RESULT(stream_file.GetFile().GetStream());
   }
-  return nullptr;
+  return LLDB_RECORD_RESULT(nullptr);
 }
 
 SBFile SBDebugger::GetOutputFile() {
@@ -416,7 +433,7 @@ FILE *SBDebugger::GetErrorFileHandle() {
     StreamFile &stream_file = m_opaque_sp->GetErrorStream();
     return LLDB_RECORD_RESULT(stream_file.GetFile().GetStream());
   }
-  return nullptr;
+  return LLDB_RECORD_RESULT(nullptr);
 }
 
 SBFile SBDebugger::GetErrorFile() {
@@ -430,14 +447,14 @@ SBFile SBDebugger::GetErrorFile() {
 }
 
 void SBDebugger::SaveInputTerminalState() {
-  LLDB_RECORD_METHOD_NO_ARGS(void, SBDebugger, SaveInputTerminalState);
+  LLDB_RECORD_DUMMY_NO_ARGS(void, SBDebugger, SaveInputTerminalState);
 
   if (m_opaque_sp)
     m_opaque_sp->SaveInputTerminalState();
 }
 
 void SBDebugger::RestoreInputTerminalState() {
-  LLDB_RECORD_METHOD_NO_ARGS(void, SBDebugger, RestoreInputTerminalState);
+  LLDB_RECORD_DUMMY_NO_ARGS(void, SBDebugger, RestoreInputTerminalState);
 
   if (m_opaque_sp)
     m_opaque_sp->RestoreInputTerminalState();
@@ -467,10 +484,8 @@ void SBDebugger::HandleCommand(const char *command) {
 
     sb_interpreter.HandleCommand(command, result, false);
 
-    if (GetErrorFileHandle() != nullptr)
-      result.PutError(GetErrorFileHandle());
-    if (GetOutputFileHandle() != nullptr)
-      result.PutOutput(GetOutputFileHandle());
+    result.PutError(m_opaque_sp->GetErrorStream().GetFileSP());
+    result.PutOutput(m_opaque_sp->GetOutputStream().GetFileSP());
 
     if (!m_opaque_sp->GetAsyncExecution()) {
       SBProcess process(GetCommandInterpreter().GetProcess());
@@ -481,8 +496,7 @@ void SBDebugger::HandleCommand(const char *command) {
         while (lldb_listener_sp->GetEventForBroadcaster(
             process_sp.get(), event_sp, std::chrono::seconds(0))) {
           SBEvent event(event_sp);
-          HandleProcessEvent(process, event, GetOutputFileHandle(),
-                             GetErrorFileHandle());
+          HandleProcessEvent(process, event, GetOutputFile(), GetErrorFile());
         }
       }
     }
@@ -500,12 +514,37 @@ SBListener SBDebugger::GetListener() {
 }
 
 void SBDebugger::HandleProcessEvent(const SBProcess &process,
+                                    const SBEvent &event, SBFile out,
+                                    SBFile err) {
+  LLDB_RECORD_METHOD(
+      void, SBDebugger, HandleProcessEvent,
+      (const lldb::SBProcess &, const lldb::SBEvent &, SBFile, SBFile), process,
+      event, out, err);
+
+  return HandleProcessEvent(process, event, out.m_opaque_sp, err.m_opaque_sp);
+}
+
+void SBDebugger::HandleProcessEvent(const SBProcess &process,
                                     const SBEvent &event, FILE *out,
                                     FILE *err) {
   LLDB_RECORD_METHOD(
       void, SBDebugger, HandleProcessEvent,
       (const lldb::SBProcess &, const lldb::SBEvent &, FILE *, FILE *), process,
       event, out, err);
+
+  FileSP outfile = std::make_shared<NativeFile>(out, false);
+  FileSP errfile = std::make_shared<NativeFile>(err, false);
+  return HandleProcessEvent(process, event, outfile, errfile);
+}
+
+void SBDebugger::HandleProcessEvent(const SBProcess &process,
+                                    const SBEvent &event, FileSP out_sp,
+                                    FileSP err_sp) {
+
+  LLDB_RECORD_METHOD(
+      void, SBDebugger, HandleProcessEvent,
+      (const lldb::SBProcess &, const lldb::SBEvent &, FileSP, FileSP), process,
+      event, out_sp, err_sp);
 
   if (!process.IsValid())
     return;
@@ -524,16 +563,16 @@ void SBDebugger::HandleProcessEvent(const SBProcess &process,
       (Process::eBroadcastBitSTDOUT | Process::eBroadcastBitStateChanged)) {
     // Drain stdout when we stop just in case we have any bytes
     while ((len = process.GetSTDOUT(stdio_buffer, sizeof(stdio_buffer))) > 0)
-      if (out != nullptr)
-        ::fwrite(stdio_buffer, 1, len, out);
+      if (out_sp)
+        out_sp->Write(stdio_buffer, len);
   }
 
   if (event_type &
       (Process::eBroadcastBitSTDERR | Process::eBroadcastBitStateChanged)) {
     // Drain stderr when we stop just in case we have any bytes
     while ((len = process.GetSTDERR(stdio_buffer, sizeof(stdio_buffer))) > 0)
-      if (err != nullptr)
-        ::fwrite(stdio_buffer, 1, len, err);
+      if (err_sp)
+        err_sp->Write(stdio_buffer, len);
   }
 
   if (event_type & Process::eBroadcastBitStateChanged) {
@@ -544,7 +583,7 @@ void SBDebugger::HandleProcessEvent(const SBProcess &process,
 
     bool is_stopped = StateIsStoppedState(event_state);
     if (!is_stopped)
-      process.ReportEventState(event, out);
+      process.ReportEventState(event, out_sp);
   }
 }
 
@@ -644,13 +683,21 @@ SBStructuredData SBDebugger::GetBuildConfiguration() {
   AddBoolConfigEntry(
       *config_up, "xml", XMLDocument::XMLEnabled(),
       "A boolean value that indicates if XML support is enabled in LLDB");
-  bool have_curses = true;
-#ifdef LLDB_DISABLE_CURSES
-  have_curses = false;
-#endif
   AddBoolConfigEntry(
-      *config_up, "curses", have_curses,
+      *config_up, "curses", LLDB_ENABLE_CURSES,
       "A boolean value that indicates if curses support is enabled in LLDB");
+  AddBoolConfigEntry(
+      *config_up, "editline", LLDB_ENABLE_LIBEDIT,
+      "A boolean value that indicates if editline support is enabled in LLDB");
+  AddBoolConfigEntry(
+      *config_up, "lzma", LLDB_ENABLE_LZMA,
+      "A boolean value that indicates if lzma support is enabled in LLDB");
+  AddBoolConfigEntry(
+      *config_up, "python", LLDB_ENABLE_PYTHON,
+      "A boolean value that indicates if python support is enabled in LLDB");
+  AddBoolConfigEntry(
+      *config_up, "lua", LLDB_ENABLE_LUA,
+      "A boolean value that indicates if lua support is enabled in LLDB");
   AddLLVMTargets(*config_up);
 
   SBStructuredData data;
@@ -1093,7 +1140,7 @@ void SBDebugger::DispatchInput(const void *data, size_t data_len) {
 }
 
 void SBDebugger::DispatchInputInterrupt() {
-  LLDB_RECORD_METHOD_NO_ARGS(void, SBDebugger, DispatchInputInterrupt);
+  LLDB_RECORD_DUMMY_NO_ARGS(void, SBDebugger, DispatchInputInterrupt);
 
   if (m_opaque_sp)
     m_opaque_sp->DispatchInputInterrupt();
@@ -1253,8 +1300,7 @@ uint32_t SBDebugger::GetTerminalWidth() const {
 }
 
 void SBDebugger::SetTerminalWidth(uint32_t term_width) {
-  LLDB_RECORD_METHOD(void, SBDebugger, SetTerminalWidth, (uint32_t),
-                     term_width);
+  LLDB_RECORD_DUMMY(void, SBDebugger, SetTerminalWidth, (uint32_t), term_width);
 
   if (m_opaque_sp)
     m_opaque_sp->SetTerminalWidth(term_width);
@@ -1579,6 +1625,8 @@ static void SetFileHandleRedirect(SBDebugger *, FILE *, bool) {
 
 static SBError SetFileRedirect(SBDebugger *, SBFile file) { return SBError(); }
 
+static SBError SetFileRedirect(SBDebugger *, FileSP file) { return SBError(); }
+
 static bool GetDefaultArchitectureRedirect(char *arch_name,
                                            size_t arch_name_len) {
   // The function is writing to its argument. Without the redirect it would
@@ -1607,6 +1655,16 @@ template <> void RegisterMethods<SBDebugger>(Registry &R) {
              &SetFileRedirect);
   R.Register(&invoke<SBError (SBDebugger::*)(
                  SBFile)>::method<&SBDebugger::SetErrorFile>::doit,
+             &SetFileRedirect);
+
+  R.Register(&invoke<SBError (SBDebugger::*)(
+                 FileSP)>::method<&SBDebugger::SetInputFile>::doit,
+             &SetFileRedirect);
+  R.Register(&invoke<SBError (SBDebugger::*)(
+                 FileSP)>::method<&SBDebugger::SetOutputFile>::doit,
+             &SetFileRedirect);
+  R.Register(&invoke<SBError (SBDebugger::*)(
+                 FileSP)>::method<&SBDebugger::SetErrorFile>::doit,
              &SetFileRedirect);
 
   LLDB_REGISTER_CONSTRUCTOR(SBDebugger, ());
@@ -1645,6 +1703,12 @@ template <> void RegisterMethods<SBDebugger>(Registry &R) {
   LLDB_REGISTER_METHOD(
       void, SBDebugger, HandleProcessEvent,
       (const lldb::SBProcess &, const lldb::SBEvent &, FILE *, FILE *));
+  LLDB_REGISTER_METHOD(
+      void, SBDebugger, HandleProcessEvent,
+      (const lldb::SBProcess &, const lldb::SBEvent &, SBFile, SBFile));
+  LLDB_REGISTER_METHOD(
+      void, SBDebugger, HandleProcessEvent,
+      (const lldb::SBProcess &, const lldb::SBEvent &, FileSP, FileSP));
   LLDB_REGISTER_METHOD(lldb::SBSourceManager, SBDebugger, GetSourceManager, ());
   LLDB_REGISTER_STATIC_METHOD(bool, SBDebugger, SetDefaultArchitecture,
                               (const char *));

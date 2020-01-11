@@ -13,13 +13,17 @@
 #include "llvm/DebugInfo/GSYM/FileEntry.h"
 #include "llvm/DebugInfo/GSYM/FileWriter.h"
 #include "llvm/DebugInfo/GSYM/FunctionInfo.h"
+#include "llvm/DebugInfo/GSYM/GsymCreator.h"
+#include "llvm/DebugInfo/GSYM/GsymReader.h"
 #include "llvm/DebugInfo/GSYM/InlineInfo.h"
 #include "llvm/DebugInfo/GSYM/Range.h"
 #include "llvm/DebugInfo/GSYM/StringTable.h"
 #include "llvm/Support/DataExtractor.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Testing/Support/Error.h"
 
 #include "gtest/gtest.h"
+#include "gmock/gmock.h"
 #include <string>
 
 using namespace llvm;
@@ -851,7 +855,9 @@ TEST(GSYMTest, TestLineTable) {
   // Test that two empty line tables are equal and neither are less than
   // each other.
   ASSERT_EQ(LT1, LT2);
+  ASSERT_FALSE(LT1 < LT1);
   ASSERT_FALSE(LT1 < LT2);
+  ASSERT_FALSE(LT2 < LT1);
   ASSERT_FALSE(LT2 < LT2);
 
   // Test that a line table with less number of line entries is less than a
@@ -1045,4 +1051,353 @@ TEST(GSYMTest, TestHeaderEncodeDecode) {
   InitHeader(H);
   TestHeaderEncodeDecode(H, llvm::support::little);
   TestHeaderEncodeDecode(H, llvm::support::big);
+}
+
+static void TestGsymCreatorEncodeError(llvm::support::endianness ByteOrder,
+                                       const GsymCreator &GC,
+                                       std::string ExpectedErrorMsg) {
+  SmallString<512> Str;
+  raw_svector_ostream OutStrm(Str);
+  FileWriter FW(OutStrm, ByteOrder);
+  llvm::Error Err = GC.encode(FW);
+  ASSERT_TRUE(bool(Err));
+  checkError(ExpectedErrorMsg, std::move(Err));
+}
+
+TEST(GSYMTest, TestGsymCreatorEncodeErrors) {
+  const uint8_t ValidUUID[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+                               14, 15, 16};
+  const uint8_t InvalidUUID[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
+                                 14, 15, 16, 17, 18, 19, 20, 21};
+  // Verify we get an error when trying to encode an GsymCreator with no
+  // function infos. We shouldn't be saving a GSYM file in this case since
+  // there is nothing inside of it.
+  GsymCreator GC;
+  TestGsymCreatorEncodeError(llvm::support::little, GC,
+                             "no functions to encode");
+  const uint64_t FuncAddr = 0x1000;
+  const uint64_t FuncSize = 0x100;
+  const uint32_t FuncName = GC.insertString("foo");
+  // Verify we get an error trying to encode a GsymCreator that isn't
+  // finalized.
+  GC.addFunctionInfo(FunctionInfo(FuncAddr, FuncSize, FuncName));
+  TestGsymCreatorEncodeError(llvm::support::little, GC,
+                             "GsymCreator wasn't finalized prior to encoding");
+  std::string finalizeIssues;
+  raw_string_ostream OS(finalizeIssues);
+  llvm::Error finalizeErr = GC.finalize(OS);
+  ASSERT_FALSE(bool(finalizeErr));
+  finalizeErr = GC.finalize(OS);
+  ASSERT_TRUE(bool(finalizeErr));
+  checkError("already finalized", std::move(finalizeErr));
+  // Verify we get an error trying to encode a GsymCreator with a UUID that is
+  // too long.
+  GC.setUUID(InvalidUUID);
+  TestGsymCreatorEncodeError(llvm::support::little, GC,
+                             "invalid UUID size 21");
+  GC.setUUID(ValidUUID);
+  // Verify errors are propagated when we try to encoding an invalid line
+  // table.
+  GC.forEachFunctionInfo([](FunctionInfo &FI) -> bool {
+    FI.OptLineTable = LineTable(); // Invalid line table.
+    return false; // Stop iterating
+  });
+  TestGsymCreatorEncodeError(llvm::support::little, GC,
+                             "attempted to encode invalid LineTable object");
+  // Verify errors are propagated when we try to encoding an invalid inline
+  // info.
+  GC.forEachFunctionInfo([](FunctionInfo &FI) -> bool {
+    FI.OptLineTable = llvm::None;
+    FI.Inline = InlineInfo(); // Invalid InlineInfo.
+    return false; // Stop iterating
+  });
+  TestGsymCreatorEncodeError(llvm::support::little, GC,
+                             "attempted to encode invalid InlineInfo object");
+}
+
+static void Compare(const GsymCreator &GC, const GsymReader &GR) {
+  // Verify that all of the data in a GsymCreator is correctly decoded from
+  // a GsymReader. To do this, we iterator over
+  GC.forEachFunctionInfo([&](const FunctionInfo &FI) -> bool {
+    auto DecodedFI = GR.getFunctionInfo(FI.Range.Start);
+    EXPECT_TRUE(bool(DecodedFI));
+    EXPECT_EQ(FI, *DecodedFI);
+    return true; // Keep iterating over all FunctionInfo objects.
+  });
+}
+
+static void TestEncodeDecode(const GsymCreator &GC,
+                             support::endianness ByteOrder, uint16_t Version,
+                             uint8_t AddrOffSize, uint64_t BaseAddress,
+                             uint32_t NumAddresses, ArrayRef<uint8_t> UUID) {
+  SmallString<512> Str;
+  raw_svector_ostream OutStrm(Str);
+  FileWriter FW(OutStrm, ByteOrder);
+  llvm::Error Err = GC.encode(FW);
+  ASSERT_FALSE((bool)Err);
+  Expected<GsymReader> GR = GsymReader::copyBuffer(OutStrm.str());
+  ASSERT_TRUE(bool(GR));
+  const Header &Hdr = GR->getHeader();
+  EXPECT_EQ(Hdr.Version, Version);
+  EXPECT_EQ(Hdr.AddrOffSize, AddrOffSize);
+  EXPECT_EQ(Hdr.UUIDSize, UUID.size());
+  EXPECT_EQ(Hdr.BaseAddress, BaseAddress);
+  EXPECT_EQ(Hdr.NumAddresses, NumAddresses);
+  EXPECT_EQ(ArrayRef<uint8_t>(Hdr.UUID, Hdr.UUIDSize), UUID);
+  Compare(GC, GR.get());
+}
+
+TEST(GSYMTest, TestGsymCreator1ByteAddrOffsets) {
+  uint8_t UUID[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+  GsymCreator GC;
+  GC.setUUID(UUID);
+  constexpr uint64_t BaseAddr = 0x1000;
+  constexpr uint8_t AddrOffSize = 1;
+  const uint32_t Func1Name = GC.insertString("foo");
+  const uint32_t Func2Name = GC.insertString("bar");
+  GC.addFunctionInfo(FunctionInfo(BaseAddr+0x00, 0x10, Func1Name));
+  GC.addFunctionInfo(FunctionInfo(BaseAddr+0x20, 0x10, Func2Name));
+  Error Err = GC.finalize(llvm::nulls());
+  ASSERT_FALSE(Err);
+  TestEncodeDecode(GC, llvm::support::little,
+                   GSYM_VERSION,
+                   AddrOffSize,
+                   BaseAddr,
+                   2, // NumAddresses
+                   ArrayRef<uint8_t>(UUID));
+  TestEncodeDecode(GC, llvm::support::big,
+                   GSYM_VERSION,
+                   AddrOffSize,
+                   BaseAddr,
+                   2, // NumAddresses
+                   ArrayRef<uint8_t>(UUID));
+}
+
+TEST(GSYMTest, TestGsymCreator2ByteAddrOffsets) {
+  uint8_t UUID[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+  GsymCreator GC;
+  GC.setUUID(UUID);
+  constexpr uint64_t BaseAddr = 0x1000;
+  constexpr uint8_t AddrOffSize = 2;
+  const uint32_t Func1Name = GC.insertString("foo");
+  const uint32_t Func2Name = GC.insertString("bar");
+  GC.addFunctionInfo(FunctionInfo(BaseAddr+0x000, 0x100, Func1Name));
+  GC.addFunctionInfo(FunctionInfo(BaseAddr+0x200, 0x100, Func2Name));
+  Error Err = GC.finalize(llvm::nulls());
+  ASSERT_FALSE(Err);
+  TestEncodeDecode(GC, llvm::support::little,
+                   GSYM_VERSION,
+                   AddrOffSize,
+                   BaseAddr,
+                   2, // NumAddresses
+                   ArrayRef<uint8_t>(UUID));
+  TestEncodeDecode(GC, llvm::support::big,
+                   GSYM_VERSION,
+                   AddrOffSize,
+                   BaseAddr,
+                   2, // NumAddresses
+                   ArrayRef<uint8_t>(UUID));
+}
+
+TEST(GSYMTest, TestGsymCreator4ByteAddrOffsets) {
+  uint8_t UUID[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+  GsymCreator GC;
+  GC.setUUID(UUID);
+  constexpr uint64_t BaseAddr = 0x1000;
+  constexpr uint8_t AddrOffSize = 4;
+  const uint32_t Func1Name = GC.insertString("foo");
+  const uint32_t Func2Name = GC.insertString("bar");
+  GC.addFunctionInfo(FunctionInfo(BaseAddr+0x000, 0x100, Func1Name));
+  GC.addFunctionInfo(FunctionInfo(BaseAddr+0x20000, 0x100, Func2Name));
+  Error Err = GC.finalize(llvm::nulls());
+  ASSERT_FALSE(Err);
+  TestEncodeDecode(GC, llvm::support::little,
+                   GSYM_VERSION,
+                   AddrOffSize,
+                   BaseAddr,
+                   2, // NumAddresses
+                   ArrayRef<uint8_t>(UUID));
+  TestEncodeDecode(GC, llvm::support::big,
+                   GSYM_VERSION,
+                   AddrOffSize,
+                   BaseAddr,
+                   2, // NumAddresses
+                   ArrayRef<uint8_t>(UUID));
+}
+
+TEST(GSYMTest, TestGsymCreator8ByteAddrOffsets) {
+  uint8_t UUID[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+  GsymCreator GC;
+  GC.setUUID(UUID);
+  constexpr uint64_t BaseAddr = 0x1000;
+  constexpr uint8_t AddrOffSize = 8;
+  const uint32_t Func1Name = GC.insertString("foo");
+  const uint32_t Func2Name = GC.insertString("bar");
+  GC.addFunctionInfo(FunctionInfo(BaseAddr+0x000, 0x100, Func1Name));
+  GC.addFunctionInfo(FunctionInfo(BaseAddr+0x100000000, 0x100, Func2Name));
+  Error Err = GC.finalize(llvm::nulls());
+  ASSERT_FALSE(Err);
+  TestEncodeDecode(GC, llvm::support::little,
+                   GSYM_VERSION,
+                   AddrOffSize,
+                   BaseAddr,
+                   2, // NumAddresses
+                   ArrayRef<uint8_t>(UUID));
+  TestEncodeDecode(GC, llvm::support::big,
+                   GSYM_VERSION,
+                   AddrOffSize,
+                   BaseAddr,
+                   2, // NumAddresses
+                   ArrayRef<uint8_t>(UUID));
+}
+
+static void VerifyFunctionInfo(const GsymReader &GR, uint64_t Addr,
+                               const FunctionInfo &FI) {
+  auto ExpFI = GR.getFunctionInfo(Addr);
+  ASSERT_TRUE(bool(ExpFI));
+  ASSERT_EQ(FI, ExpFI.get());
+}
+
+static void VerifyFunctionInfoError(const GsymReader &GR, uint64_t Addr,
+                                    std::string ErrMessage) {
+  auto ExpFI = GR.getFunctionInfo(Addr);
+  ASSERT_FALSE(bool(ExpFI));
+  checkError(ErrMessage, ExpFI.takeError());
+}
+
+TEST(GSYMTest, TestGsymReader) {
+  uint8_t UUID[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+  GsymCreator GC;
+  GC.setUUID(UUID);
+  constexpr uint64_t BaseAddr = 0x1000;
+  constexpr uint64_t Func1Addr = BaseAddr;
+  constexpr uint64_t Func2Addr = BaseAddr+0x20;
+  constexpr uint64_t FuncSize = 0x10;
+  const uint32_t Func1Name = GC.insertString("foo");
+  const uint32_t Func2Name = GC.insertString("bar");
+  const auto ByteOrder = support::endian::system_endianness();
+  GC.addFunctionInfo(FunctionInfo(Func1Addr, FuncSize, Func1Name));
+  GC.addFunctionInfo(FunctionInfo(Func2Addr, FuncSize, Func2Name));
+  Error FinalizeErr = GC.finalize(llvm::nulls());
+  ASSERT_FALSE(FinalizeErr);
+  SmallString<512> Str;
+  raw_svector_ostream OutStrm(Str);
+  FileWriter FW(OutStrm, ByteOrder);
+  llvm::Error Err = GC.encode(FW);
+  ASSERT_FALSE((bool)Err);
+  if (auto ExpectedGR = GsymReader::copyBuffer(OutStrm.str())) {
+    const GsymReader &GR = ExpectedGR.get();
+    VerifyFunctionInfoError(GR, Func1Addr-1, "address 0xfff not in GSYM");
+
+    FunctionInfo Func1(Func1Addr, FuncSize, Func1Name);
+    VerifyFunctionInfo(GR, Func1Addr, Func1);
+    VerifyFunctionInfo(GR, Func1Addr+1, Func1);
+    VerifyFunctionInfo(GR, Func1Addr+FuncSize-1, Func1);
+    VerifyFunctionInfoError(GR, Func1Addr+FuncSize,
+                            "address 0x1010 not in GSYM");
+    VerifyFunctionInfoError(GR, Func2Addr-1, "address 0x101f not in GSYM");
+    FunctionInfo Func2(Func2Addr, FuncSize, Func2Name);
+    VerifyFunctionInfo(GR, Func2Addr, Func2);
+    VerifyFunctionInfo(GR, Func2Addr+1, Func2);
+    VerifyFunctionInfo(GR, Func2Addr+FuncSize-1, Func2);
+    VerifyFunctionInfoError(GR, Func2Addr+FuncSize,
+                            "address 0x1030 not in GSYM");
+  }
+}
+
+TEST(GSYMTest, TestGsymLookups) {
+  // Test creating a GSYM file with a function that has a inline information.
+  // Verify that lookups work correctly. Lookups do not decode the entire
+  // FunctionInfo or InlineInfo, they only extract information needed for the
+  // lookup to happen which avoids allocations which can slow down
+  // symbolication.
+  GsymCreator GC;
+  FunctionInfo FI(0x1000, 0x100, GC.insertString("main"));
+  const auto ByteOrder = support::endian::system_endianness();
+  FI.OptLineTable = LineTable();
+  const uint32_t MainFileIndex = GC.insertFile("/tmp/main.c");
+  const uint32_t FooFileIndex = GC.insertFile("/tmp/foo.h");
+  FI.OptLineTable->push(LineEntry(0x1000, MainFileIndex, 5));
+  FI.OptLineTable->push(LineEntry(0x1010, FooFileIndex, 10));
+  FI.OptLineTable->push(LineEntry(0x1012, FooFileIndex, 20));
+  FI.OptLineTable->push(LineEntry(0x1014, FooFileIndex, 11));
+  FI.OptLineTable->push(LineEntry(0x1016, FooFileIndex, 30));
+  FI.OptLineTable->push(LineEntry(0x1018, FooFileIndex, 12));
+  FI.OptLineTable->push(LineEntry(0x1020, MainFileIndex, 8));
+  FI.Inline = InlineInfo();
+
+  FI.Inline->Name = GC.insertString("inline1");
+  FI.Inline->CallFile = MainFileIndex;
+  FI.Inline->CallLine = 6;
+  FI.Inline->Ranges.insert(AddressRange(0x1010, 0x1020));
+  InlineInfo Inline2;
+  Inline2.Name = GC.insertString("inline2");
+  Inline2.CallFile = FooFileIndex;
+  Inline2.CallLine = 33;
+  Inline2.Ranges.insert(AddressRange(0x1012, 0x1014));
+  FI.Inline->Children.emplace_back(Inline2);
+  InlineInfo Inline3;
+  Inline3.Name = GC.insertString("inline3");
+  Inline3.CallFile = FooFileIndex;
+  Inline3.CallLine = 35;
+  Inline3.Ranges.insert(AddressRange(0x1016, 0x1018));
+  FI.Inline->Children.emplace_back(Inline3);
+  GC.addFunctionInfo(std::move(FI));
+  Error FinalizeErr = GC.finalize(llvm::nulls());
+  ASSERT_FALSE(FinalizeErr);
+  SmallString<512> Str;
+  raw_svector_ostream OutStrm(Str);
+  FileWriter FW(OutStrm, ByteOrder);
+  llvm::Error Err = GC.encode(FW);
+  ASSERT_FALSE((bool)Err);
+  Expected<GsymReader> GR = GsymReader::copyBuffer(OutStrm.str());
+  ASSERT_TRUE(bool(GR));
+
+  // Verify inline info is correct when doing lookups.
+  auto LR = GR->lookup(0x1000);
+  ASSERT_THAT_EXPECTED(LR, Succeeded());
+  EXPECT_THAT(LR->Locations,
+    testing::ElementsAre(SourceLocation{"main", "/tmp", "main.c", 5}));
+  LR = GR->lookup(0x100F);
+  ASSERT_THAT_EXPECTED(LR, Succeeded());
+  EXPECT_THAT(LR->Locations,
+    testing::ElementsAre(SourceLocation{"main", "/tmp", "main.c", 5}));
+
+  LR = GR->lookup(0x1010);
+  ASSERT_THAT_EXPECTED(LR, Succeeded());
+
+  EXPECT_THAT(LR->Locations,
+    testing::ElementsAre(SourceLocation{"inline1", "/tmp", "foo.h", 10},
+                         SourceLocation{"main", "/tmp", "main.c", 6}));
+
+  LR = GR->lookup(0x1012);
+  ASSERT_THAT_EXPECTED(LR, Succeeded());
+  EXPECT_THAT(LR->Locations,
+    testing::ElementsAre(SourceLocation{"inline2", "/tmp", "foo.h", 20},
+                         SourceLocation{"inline1", "/tmp", "foo.h", 33},
+                         SourceLocation{"main", "/tmp", "main.c", 6}));
+
+  LR = GR->lookup(0x1014);
+  ASSERT_THAT_EXPECTED(LR, Succeeded());
+  EXPECT_THAT(LR->Locations,
+    testing::ElementsAre(SourceLocation{"inline1", "/tmp", "foo.h", 11},
+                         SourceLocation{"main", "/tmp", "main.c", 6}));
+
+  LR = GR->lookup(0x1016);
+  ASSERT_THAT_EXPECTED(LR, Succeeded());
+  EXPECT_THAT(LR->Locations,
+    testing::ElementsAre(SourceLocation{"inline3", "/tmp", "foo.h", 30},
+                         SourceLocation{"inline1", "/tmp", "foo.h", 35},
+                         SourceLocation{"main", "/tmp", "main.c", 6}));
+
+  LR = GR->lookup(0x1018);
+  ASSERT_THAT_EXPECTED(LR, Succeeded());
+  EXPECT_THAT(LR->Locations,
+    testing::ElementsAre(SourceLocation{"inline1", "/tmp", "foo.h", 12},
+                         SourceLocation{"main", "/tmp", "main.c", 6}));
+
+  LR = GR->lookup(0x1020);
+  ASSERT_THAT_EXPECTED(LR, Succeeded());
+  EXPECT_THAT(LR->Locations,
+    testing::ElementsAre(SourceLocation{"main", "/tmp", "main.c", 8}));
 }

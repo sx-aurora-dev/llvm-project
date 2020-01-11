@@ -8,6 +8,7 @@
 
 #include "Plugins/ObjectFile/ELF/ObjectFileELF.h"
 #include "Plugins/SymbolFile/Symtab/SymbolFileSymtab.h"
+#include "TestingSupport/SubsystemRAII.h"
 #include "TestingSupport/TestUtilities.h"
 
 #include "lldb/Core/Mangled.h"
@@ -29,9 +30,7 @@ using namespace lldb_private;
 
 TEST(MangledTest, ResultForValidName) {
   ConstString MangledName("_ZN1a1b1cIiiiEEvm");
-  bool IsMangled = true;
-
-  Mangled TheMangled(MangledName, IsMangled);
+  Mangled TheMangled(MangledName);
   ConstString TheDemangled =
       TheMangled.GetDemangledName(eLanguageTypeC_plus_plus);
 
@@ -39,11 +38,20 @@ TEST(MangledTest, ResultForValidName) {
   EXPECT_STREQ(ExpectedResult.GetCString(), TheDemangled.GetCString());
 }
 
+TEST(MangledTest, ResultForBlockInvocation) {
+  ConstString MangledName("___Z1fU13block_pointerFviE_block_invoke");
+  Mangled TheMangled(MangledName);
+  ConstString TheDemangled =
+      TheMangled.GetDemangledName(eLanguageTypeC_plus_plus);
+
+  ConstString ExpectedResult(
+      "invocation function for block in f(void (int) block_pointer)");
+  EXPECT_STREQ(ExpectedResult.GetCString(), TheDemangled.GetCString());
+}
+
 TEST(MangledTest, EmptyForInvalidName) {
   ConstString MangledName("_ZN1a1b1cmxktpEEvm");
-  bool IsMangled = true;
-
-  Mangled TheMangled(MangledName, IsMangled);
+  Mangled TheMangled(MangledName);
   ConstString TheDemangled =
       TheMangled.GetDemangledName(eLanguageTypeC_plus_plus);
 
@@ -51,10 +59,8 @@ TEST(MangledTest, EmptyForInvalidName) {
 }
 
 TEST(MangledTest, NameIndexes_FindFunctionSymbols) {
-  FileSystem::Initialize();
-  HostInfo::Initialize();
-  ObjectFileELF::Initialize();
-  SymbolFileSymtab::Initialize();
+  SubsystemRAII<FileSystem, HostInfo, ObjectFileELF, SymbolFileSymtab>
+      subsystems;
 
   auto ExpectedFile = TestFile::fromYaml(R"(
 --- !ELF
@@ -167,7 +173,8 @@ Symbols:
 
   auto Count = [M](const char *Name, FunctionNameType Type) -> int {
     SymbolContextList SymList;
-    return M->FindFunctionSymbols(ConstString(Name), Type, SymList);
+    M->FindFunctionSymbols(ConstString(Name), Type, SymList);
+    return SymList.GetSize();
   };
 
   // Unmangled
@@ -243,9 +250,4 @@ Symbols:
   EXPECT_EQ(0, Count("_Z12undemangableEvx42", eFunctionNameTypeMethod));
   EXPECT_EQ(0, Count("undemangable", eFunctionNameTypeBase));
   EXPECT_EQ(0, Count("undemangable", eFunctionNameTypeMethod));
-
-  SymbolFileSymtab::Terminate();
-  ObjectFileELF::Terminate();
-  HostInfo::Terminate();
-  FileSystem::Terminate();
 }

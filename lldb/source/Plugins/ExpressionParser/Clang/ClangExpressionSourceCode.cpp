@@ -302,7 +302,8 @@ bool ClangExpressionSourceCode::GetText(
 
   Target *target = exe_ctx.GetTargetPtr();
   if (target) {
-    if (target->GetArchitecture().GetMachine() == llvm::Triple::aarch64) {
+    if (target->GetArchitecture().GetMachine() == llvm::Triple::aarch64 ||
+        target->GetArchitecture().GetMachine() == llvm::Triple::aarch64_32) {
       target_specific_defines = "typedef bool BOOL;\n";
     }
     if (target->GetArchitecture().GetMachine() == llvm::Triple::x86_64) {
@@ -314,12 +315,10 @@ bool ClangExpressionSourceCode::GetText(
       }
     }
 
-    if (ClangModulesDeclVendor *decl_vendor =
-            target->GetClangModulesDeclVendor()) {
-      ClangPersistentVariables *persistent_vars =
-          llvm::cast<ClangPersistentVariables>(
-              target->GetPersistentExpressionStateForLanguage(
-                  lldb::eLanguageTypeC));
+    ClangModulesDeclVendor *decl_vendor = target->GetClangModulesDeclVendor();
+    auto *persistent_vars = llvm::cast<ClangPersistentVariables>(
+        target->GetPersistentExpressionStateForLanguage(lldb::eLanguageTypeC));
+    if (decl_vendor && persistent_vars) {
       const ClangModulesDeclVendor::ModuleVector &hand_imported_modules =
           persistent_vars->GetHandLoadedClangModules();
       ClangModulesDeclVendor::ModuleVector modules_for_macros;

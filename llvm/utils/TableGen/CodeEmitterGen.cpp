@@ -367,7 +367,8 @@ void CodeEmitterGen::emitInstructionBaseValues(
     if (const RecordVal *RV = R->getValue("EncodingInfos")) {
       if (auto *DI = dyn_cast_or_null<DefInit>(RV->getValue())) {
         EncodingInfoByHwMode EBM(DI->getDef(), HWM);
-        EncodingDef = EBM.get(HwMode);
+        if (EBM.hasMode(HwMode))
+          EncodingDef = EBM.get(HwMode);
       }
     }
     BitsInit *BI = EncodingDef->getValueAsBitsInit("Inst");
@@ -562,7 +563,7 @@ void CodeEmitterGen::run(raw_ostream &o) {
       return true;
     if (A.size() > B.size())
       return false;
-    for (const auto &Pair : zip(A, B)) {
+    for (auto Pair : zip(A, B)) {
       if (std::get<0>(Pair)->getName() < std::get<1>(Pair)->getName())
         return true;
       if (std::get<0>(Pair)->getName() > std::get<1>(Pair)->getName())

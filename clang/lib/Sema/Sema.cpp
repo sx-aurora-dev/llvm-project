@@ -38,6 +38,7 @@
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/TemplateDeduction.h"
 #include "clang/Sema/TemplateInstCallback.h"
+#include "clang/Sema/TypoCorrection.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/Support/TimeProfiler.h"
@@ -136,7 +137,7 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
       OriginalLexicalContext(nullptr), MSStructPragmaOn(false),
       MSPointerToMemberRepresentationMethod(
           LangOpts.getMSPointerToMemberRepresentationMethod()),
-      VtorDispStack(MSVtorDispAttr::Mode(LangOpts.VtorDispMode)), PackStack(0),
+      VtorDispStack(LangOpts.getVtorDispMode()), PackStack(0),
       DataSegStack(nullptr), BSSSegStack(nullptr), ConstSegStack(nullptr),
       CodeSegStack(nullptr), CurInitSeg(nullptr), VisContext(nullptr),
       PragmaAttributeCurrentTargetDecl(nullptr),
@@ -187,6 +188,9 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
   PP.addPPCallbacks(std::move(Callbacks));
   SemaPPCallbackHandler->set(*this);
 }
+
+// Anchor Sema's type info to this TU.
+void Sema::anchor() {}
 
 void Sema::addImplicitTypedef(StringRef Name, QualType T) {
   DeclarationName DN = &Context.Idents.get(Name);
@@ -383,8 +387,6 @@ Sema::~Sema() {
   // Detach from the PP callback handler which outlives Sema since it's owned
   // by the preprocessor.
   SemaPPCallbackHandler->reset();
-
-  assert(DelayedTypos.empty() && "Uncorrected typos!");
 }
 
 void Sema::warnStackExhausted(SourceLocation Loc) {
@@ -922,8 +924,7 @@ void Sema::ActOnEndOfTranslationUnitFragment(TUFragmentKind Kind) {
   }
 
   {
-    llvm::TimeTraceScope TimeScope("PerformPendingInstantiations",
-                                   StringRef(""));
+    llvm::TimeTraceScope TimeScope("PerformPendingInstantiations");
     PerformPendingInstantiations();
   }
 
@@ -934,6 +935,15 @@ void Sema::ActOnEndOfTranslationUnitFragment(TUFragmentKind Kind) {
   assert(LateParsedInstantiations.empty() &&
          "end of TU template instantiation should not create more "
          "late-parsed templates");
+
+  // Report diagnostics for uncorrected delayed typos. Ideally all of them
+  // should have been corrected by that time, but it is very hard to cover all
+  // cases in practice.
+  for (const auto &Typo : DelayedTypos) {
+    // We pass an empty TypoCorrection to indicate no correction was performed.
+    Typo.second.DiagHandler(TypoCorrection());
+  }
+  DelayedTypos.clear();
 }
 
 /// ActOnEndOfTranslationUnit - This is called at the very end of the
@@ -1126,6 +1136,13 @@ void Sema::ActOnEndOfTranslationUnit() {
       Consumer.CompleteTentativeDefinition(VD);
   }
 
+  for (auto D : ExternalDeclarations) {
+    if (!D || D->isInvalidDecl() || D->getPreviousDecl() || !D->isUsed())
+      continue;
+
+    Consumer.CompleteExternalDeclaration(D);
+  }
+
   // If there were errors, disable 'unused' warnings since they will mostly be
   // noise. Don't warn for a use from a module: either we should warn on all
   // file-scope declarations in modules or not at all, but whether the
@@ -1277,6 +1294,12 @@ NamedDecl *Sema::getCurFunctionOrMethodDecl() {
   if (isa<ObjCMethodDecl>(DC) || isa<FunctionDecl>(DC))
     return cast<NamedDecl>(DC);
   return nullptr;
+}
+
+LangAS Sema::getDefaultCXXMethodAddrSpace() const {
+  if (getLangOpts().OpenCL)
+    return LangAS::opencl_generic;
+  return LangAS::Default;
 }
 
 void Sema::EmitCurrentDiagnostic(unsigned DiagID) {
@@ -1894,6 +1917,7 @@ void Sema::ActOnComment(SourceRange Comment) {
 
 // Pin this vtable to this file.
 ExternalSemaSource::~ExternalSemaSource() {}
+char ExternalSemaSource::ID;
 
 void ExternalSemaSource::ReadMethodPool(Selector Sel) { }
 void ExternalSemaSource::updateOutOfDateSelector(Selector Sel) { }

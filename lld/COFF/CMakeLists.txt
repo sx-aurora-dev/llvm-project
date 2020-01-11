@@ -28,6 +28,7 @@ add_lld_library(lldCOFF
   BinaryFormat
   Core
   DebugInfoCodeView
+  DebugInfoDWARF
   DebugInfoMSF
   DebugInfoPDB
   Demangle
@@ -36,8 +37,8 @@ add_lld_library(lldCOFF
   MC
   Object
   Option
+  Passes
   Support
-  Symbolize
   WindowsManifest
 
   LINK_LIBS

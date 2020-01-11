@@ -675,7 +675,6 @@ define i1 @allones_v4i32_sign(<4 x i32> %arg) {
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vpmovd2m %xmm0, %k0
 ; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    andb $15, %al
 ; SKX-NEXT:    cmpb $15, %al
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
@@ -714,8 +713,7 @@ define i1 @allzeros_v4i32_sign(<4 x i32> %arg) {
 ; SKX-LABEL: allzeros_v4i32_sign:
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vpmovd2m %xmm0, %k0
-; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    testb $15, %al
+; SKX-NEXT:    kortestb %k0, %k0
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
   %tmp = icmp slt <4 x i32> %arg, zeroinitializer
@@ -963,7 +961,6 @@ define i1 @allones_v4i64_sign(<4 x i64> %arg) {
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vpmovq2m %ymm0, %k0
 ; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    andb $15, %al
 ; SKX-NEXT:    cmpb $15, %al
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    vzeroupper
@@ -1005,8 +1002,7 @@ define i1 @allzeros_v4i64_sign(<4 x i64> %arg) {
 ; SKX-LABEL: allzeros_v4i64_sign:
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vpmovq2m %ymm0, %k0
-; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    testb $15, %al
+; SKX-NEXT:    kortestb %k0, %k0
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    vzeroupper
 ; SKX-NEXT:    retq
@@ -1019,48 +1015,11 @@ define i1 @allzeros_v4i64_sign(<4 x i64> %arg) {
 define i1 @allones_v8i64_sign(<8 x i64> %arg) {
 ; SSE2-LABEL: allones_v8i64_sign:
 ; SSE2:       # %bb.0:
-; SSE2-NEXT:    movdqa {{.*#+}} xmm4 = [2147483648,2147483648]
-; SSE2-NEXT:    pxor %xmm4, %xmm3
-; SSE2-NEXT:    movdqa %xmm4, %xmm5
-; SSE2-NEXT:    pcmpgtd %xmm3, %xmm5
-; SSE2-NEXT:    pshufd {{.*#+}} xmm6 = xmm5[0,0,2,2]
-; SSE2-NEXT:    pcmpeqd %xmm4, %xmm3
-; SSE2-NEXT:    pshufd {{.*#+}} xmm3 = xmm3[1,1,3,3]
-; SSE2-NEXT:    pand %xmm6, %xmm3
-; SSE2-NEXT:    pshufd {{.*#+}} xmm5 = xmm5[1,1,3,3]
-; SSE2-NEXT:    por %xmm3, %xmm5
-; SSE2-NEXT:    pxor %xmm4, %xmm2
-; SSE2-NEXT:    movdqa %xmm4, %xmm3
-; SSE2-NEXT:    pcmpgtd %xmm2, %xmm3
-; SSE2-NEXT:    pshufd {{.*#+}} xmm6 = xmm3[0,0,2,2]
-; SSE2-NEXT:    pcmpeqd %xmm4, %xmm2
-; SSE2-NEXT:    pshufd {{.*#+}} xmm7 = xmm2[1,1,3,3]
-; SSE2-NEXT:    pand %xmm6, %xmm7
-; SSE2-NEXT:    pshufd {{.*#+}} xmm2 = xmm3[1,1,3,3]
-; SSE2-NEXT:    por %xmm7, %xmm2
-; SSE2-NEXT:    packssdw %xmm5, %xmm2
-; SSE2-NEXT:    pxor %xmm4, %xmm1
-; SSE2-NEXT:    movdqa %xmm4, %xmm3
-; SSE2-NEXT:    pcmpgtd %xmm1, %xmm3
-; SSE2-NEXT:    pshufd {{.*#+}} xmm5 = xmm3[0,0,2,2]
-; SSE2-NEXT:    pcmpeqd %xmm4, %xmm1
-; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm1[1,1,3,3]
-; SSE2-NEXT:    pand %xmm5, %xmm1
-; SSE2-NEXT:    pshufd {{.*#+}} xmm3 = xmm3[1,1,3,3]
-; SSE2-NEXT:    por %xmm1, %xmm3
-; SSE2-NEXT:    pxor %xmm4, %xmm0
-; SSE2-NEXT:    movdqa %xmm4, %xmm1
-; SSE2-NEXT:    pcmpgtd %xmm0, %xmm1
-; SSE2-NEXT:    pshufd {{.*#+}} xmm5 = xmm1[0,0,2,2]
-; SSE2-NEXT:    pcmpeqd %xmm4, %xmm0
-; SSE2-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[1,1,3,3]
-; SSE2-NEXT:    pand %xmm5, %xmm0
-; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm1[1,1,3,3]
-; SSE2-NEXT:    por %xmm0, %xmm1
-; SSE2-NEXT:    packssdw %xmm3, %xmm1
-; SSE2-NEXT:    packssdw %xmm2, %xmm1
-; SSE2-NEXT:    packsswb %xmm0, %xmm1
-; SSE2-NEXT:    pmovmskb %xmm1, %eax
+; SSE2-NEXT:    packssdw %xmm3, %xmm2
+; SSE2-NEXT:    packssdw %xmm1, %xmm0
+; SSE2-NEXT:    packssdw %xmm2, %xmm0
+; SSE2-NEXT:    packsswb %xmm0, %xmm0
+; SSE2-NEXT:    pmovmskb %xmm0, %eax
 ; SSE2-NEXT:    cmpb $-1, %al
 ; SSE2-NEXT:    sete %al
 ; SSE2-NEXT:    retq
@@ -1117,48 +1076,11 @@ define i1 @allones_v8i64_sign(<8 x i64> %arg) {
 define i1 @allzeros_v8i64_sign(<8 x i64> %arg) {
 ; SSE2-LABEL: allzeros_v8i64_sign:
 ; SSE2:       # %bb.0:
-; SSE2-NEXT:    movdqa {{.*#+}} xmm4 = [2147483648,2147483648]
-; SSE2-NEXT:    pxor %xmm4, %xmm3
-; SSE2-NEXT:    movdqa %xmm4, %xmm5
-; SSE2-NEXT:    pcmpgtd %xmm3, %xmm5
-; SSE2-NEXT:    pshufd {{.*#+}} xmm6 = xmm5[0,0,2,2]
-; SSE2-NEXT:    pcmpeqd %xmm4, %xmm3
-; SSE2-NEXT:    pshufd {{.*#+}} xmm3 = xmm3[1,1,3,3]
-; SSE2-NEXT:    pand %xmm6, %xmm3
-; SSE2-NEXT:    pshufd {{.*#+}} xmm5 = xmm5[1,1,3,3]
-; SSE2-NEXT:    por %xmm3, %xmm5
-; SSE2-NEXT:    pxor %xmm4, %xmm2
-; SSE2-NEXT:    movdqa %xmm4, %xmm3
-; SSE2-NEXT:    pcmpgtd %xmm2, %xmm3
-; SSE2-NEXT:    pshufd {{.*#+}} xmm6 = xmm3[0,0,2,2]
-; SSE2-NEXT:    pcmpeqd %xmm4, %xmm2
-; SSE2-NEXT:    pshufd {{.*#+}} xmm7 = xmm2[1,1,3,3]
-; SSE2-NEXT:    pand %xmm6, %xmm7
-; SSE2-NEXT:    pshufd {{.*#+}} xmm2 = xmm3[1,1,3,3]
-; SSE2-NEXT:    por %xmm7, %xmm2
-; SSE2-NEXT:    packssdw %xmm5, %xmm2
-; SSE2-NEXT:    pxor %xmm4, %xmm1
-; SSE2-NEXT:    movdqa %xmm4, %xmm3
-; SSE2-NEXT:    pcmpgtd %xmm1, %xmm3
-; SSE2-NEXT:    pshufd {{.*#+}} xmm5 = xmm3[0,0,2,2]
-; SSE2-NEXT:    pcmpeqd %xmm4, %xmm1
-; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm1[1,1,3,3]
-; SSE2-NEXT:    pand %xmm5, %xmm1
-; SSE2-NEXT:    pshufd {{.*#+}} xmm3 = xmm3[1,1,3,3]
-; SSE2-NEXT:    por %xmm1, %xmm3
-; SSE2-NEXT:    pxor %xmm4, %xmm0
-; SSE2-NEXT:    movdqa %xmm4, %xmm1
-; SSE2-NEXT:    pcmpgtd %xmm0, %xmm1
-; SSE2-NEXT:    pshufd {{.*#+}} xmm5 = xmm1[0,0,2,2]
-; SSE2-NEXT:    pcmpeqd %xmm4, %xmm0
-; SSE2-NEXT:    pshufd {{.*#+}} xmm0 = xmm0[1,1,3,3]
-; SSE2-NEXT:    pand %xmm5, %xmm0
-; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm1[1,1,3,3]
-; SSE2-NEXT:    por %xmm0, %xmm1
-; SSE2-NEXT:    packssdw %xmm3, %xmm1
-; SSE2-NEXT:    packssdw %xmm2, %xmm1
-; SSE2-NEXT:    packsswb %xmm0, %xmm1
-; SSE2-NEXT:    pmovmskb %xmm1, %eax
+; SSE2-NEXT:    packssdw %xmm3, %xmm2
+; SSE2-NEXT:    packssdw %xmm1, %xmm0
+; SSE2-NEXT:    packssdw %xmm2, %xmm0
+; SSE2-NEXT:    packsswb %xmm0, %xmm0
+; SSE2-NEXT:    pmovmskb %xmm0, %eax
 ; SSE2-NEXT:    testb %al, %al
 ; SSE2-NEXT:    sete %al
 ; SSE2-NEXT:    retq
@@ -1971,7 +1893,6 @@ define i1 @allones_v4i32_and1(<4 x i32> %arg) {
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmd {{.*}}(%rip){1to4}, %xmm0, %k0
 ; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    andb $15, %al
 ; SKX-NEXT:    cmpb $15, %al
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
@@ -2012,8 +1933,7 @@ define i1 @allzeros_v4i32_and1(<4 x i32> %arg) {
 ; SKX-LABEL: allzeros_v4i32_and1:
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmd {{.*}}(%rip){1to4}, %xmm0, %k0
-; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    testb $15, %al
+; SKX-NEXT:    kortestb %k0, %k0
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
   %tmp = and <4 x i32> %arg, <i32 1, i32 1, i32 1, i32 1>
@@ -2310,7 +2230,6 @@ define i1 @allones_v2i64_and1(<2 x i64> %arg) {
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmq {{.*}}(%rip), %xmm0, %k0
 ; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    andb $3, %al
 ; SKX-NEXT:    cmpb $3, %al
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
@@ -2352,8 +2271,7 @@ define i1 @allzeros_v2i64_and1(<2 x i64> %arg) {
 ; SKX-LABEL: allzeros_v2i64_and1:
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmq {{.*}}(%rip), %xmm0, %k0
-; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    testb $3, %al
+; SKX-NEXT:    kortestb %k0, %k0
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
   %tmp = and <2 x i64> %arg, <i64 1, i64 1>
@@ -2410,7 +2328,6 @@ define i1 @allones_v4i64_and1(<4 x i64> %arg) {
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmq {{.*}}(%rip){1to4}, %ymm0, %k0
 ; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    andb $15, %al
 ; SKX-NEXT:    cmpb $15, %al
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    vzeroupper
@@ -2467,8 +2384,7 @@ define i1 @allzeros_v4i64_and1(<4 x i64> %arg) {
 ; SKX-LABEL: allzeros_v4i64_and1:
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmq {{.*}}(%rip){1to4}, %ymm0, %k0
-; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    testb $15, %al
+; SKX-NEXT:    kortestb %k0, %k0
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    vzeroupper
 ; SKX-NEXT:    retq
@@ -3380,7 +3296,6 @@ define i1 @allones_v4i32_and4(<4 x i32> %arg) {
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmd {{.*}}(%rip){1to4}, %xmm0, %k0
 ; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    andb $15, %al
 ; SKX-NEXT:    cmpb $15, %al
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
@@ -3421,8 +3336,7 @@ define i1 @allzeros_v4i32_and4(<4 x i32> %arg) {
 ; SKX-LABEL: allzeros_v4i32_and4:
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmd {{.*}}(%rip){1to4}, %xmm0, %k0
-; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    testb $15, %al
+; SKX-NEXT:    kortestb %k0, %k0
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
   %tmp = and <4 x i32> %arg, <i32 4, i32 4, i32 4, i32 4>
@@ -3719,7 +3633,6 @@ define i1 @allones_v2i64_and4(<2 x i64> %arg) {
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmq {{.*}}(%rip), %xmm0, %k0
 ; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    andb $3, %al
 ; SKX-NEXT:    cmpb $3, %al
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
@@ -3761,8 +3674,7 @@ define i1 @allzeros_v2i64_and4(<2 x i64> %arg) {
 ; SKX-LABEL: allzeros_v2i64_and4:
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmq {{.*}}(%rip), %xmm0, %k0
-; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    testb $3, %al
+; SKX-NEXT:    kortestb %k0, %k0
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
   %tmp = and <2 x i64> %arg, <i64 4, i64 4>
@@ -3819,7 +3731,6 @@ define i1 @allones_v4i64_and4(<4 x i64> %arg) {
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmq {{.*}}(%rip){1to4}, %ymm0, %k0
 ; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    andb $15, %al
 ; SKX-NEXT:    cmpb $15, %al
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    vzeroupper
@@ -3876,8 +3787,7 @@ define i1 @allzeros_v4i64_and4(<4 x i64> %arg) {
 ; SKX-LABEL: allzeros_v4i64_and4:
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vptestmq {{.*}}(%rip){1to4}, %ymm0, %k0
-; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    testb $15, %al
+; SKX-NEXT:    kortestb %k0, %k0
 ; SKX-NEXT:    sete %al
 ; SKX-NEXT:    vzeroupper
 ; SKX-NEXT:    retq
@@ -4457,8 +4367,8 @@ define i1 @movmsk_v4i32(<4 x i32> %x, <4 x i32> %y) {
   ret i1 %u1
 }
 
-define i1 @movmsk_v2i64(<2 x i64> %x, <2 x i64> %y) {
-; SSE2-LABEL: movmsk_v2i64:
+define i1 @movmsk_and_v2i64(<2 x i64> %x, <2 x i64> %y) {
+; SSE2-LABEL: movmsk_and_v2i64:
 ; SSE2:       # %bb.0:
 ; SSE2-NEXT:    pcmpeqd %xmm1, %xmm0
 ; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm0[1,0,3,2]
@@ -4469,7 +4379,7 @@ define i1 @movmsk_v2i64(<2 x i64> %x, <2 x i64> %y) {
 ; SSE2-NEXT:    sete %al
 ; SSE2-NEXT:    retq
 ;
-; AVX-LABEL: movmsk_v2i64:
+; AVX-LABEL: movmsk_and_v2i64:
 ; AVX:       # %bb.0:
 ; AVX-NEXT:    vpcmpeqq %xmm1, %xmm0, %xmm0
 ; AVX-NEXT:    vmovmskpd %xmm0, %eax
@@ -4478,32 +4388,72 @@ define i1 @movmsk_v2i64(<2 x i64> %x, <2 x i64> %y) {
 ; AVX-NEXT:    sete %al
 ; AVX-NEXT:    retq
 ;
-; KNL-LABEL: movmsk_v2i64:
+; KNL-LABEL: movmsk_and_v2i64:
 ; KNL:       # %bb.0:
 ; KNL-NEXT:    # kill: def $xmm1 killed $xmm1 def $zmm1
 ; KNL-NEXT:    # kill: def $xmm0 killed $xmm0 def $zmm0
 ; KNL-NEXT:    vpcmpneqq %zmm1, %zmm0, %k0
-; KNL-NEXT:    kshiftrw $1, %k0, %k1
-; KNL-NEXT:    kmovw %k1, %ecx
 ; KNL-NEXT:    kmovw %k0, %eax
-; KNL-NEXT:    andb %cl, %al
-; KNL-NEXT:    # kill: def $al killed $al killed $eax
+; KNL-NEXT:    andb $3, %al
+; KNL-NEXT:    cmpb $3, %al
+; KNL-NEXT:    sete %al
 ; KNL-NEXT:    vzeroupper
 ; KNL-NEXT:    retq
 ;
-; SKX-LABEL: movmsk_v2i64:
+; SKX-LABEL: movmsk_and_v2i64:
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vpcmpneqq %xmm1, %xmm0, %k0
-; SKX-NEXT:    kshiftrb $1, %k0, %k1
-; SKX-NEXT:    kmovd %k1, %ecx
 ; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    andb %cl, %al
-; SKX-NEXT:    # kill: def $al killed $al killed $eax
+; SKX-NEXT:    cmpb $3, %al
+; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
   %cmp = icmp ne <2 x i64> %x, %y
   %e1 = extractelement <2 x i1> %cmp, i32 0
   %e2 = extractelement <2 x i1> %cmp, i32 1
   %u1 = and i1 %e1, %e2
+  ret i1 %u1
+}
+
+define i1 @movmsk_or_v2i64(<2 x i64> %x, <2 x i64> %y) {
+; SSE2-LABEL: movmsk_or_v2i64:
+; SSE2:       # %bb.0:
+; SSE2-NEXT:    pcmpeqd %xmm1, %xmm0
+; SSE2-NEXT:    pshufd {{.*#+}} xmm1 = xmm0[1,0,3,2]
+; SSE2-NEXT:    pand %xmm0, %xmm1
+; SSE2-NEXT:    movmskpd %xmm1, %eax
+; SSE2-NEXT:    xorb $3, %al
+; SSE2-NEXT:    setne %al
+; SSE2-NEXT:    retq
+;
+; AVX-LABEL: movmsk_or_v2i64:
+; AVX:       # %bb.0:
+; AVX-NEXT:    vpcmpeqq %xmm1, %xmm0, %xmm0
+; AVX-NEXT:    vmovmskpd %xmm0, %eax
+; AVX-NEXT:    xorb $3, %al
+; AVX-NEXT:    setne %al
+; AVX-NEXT:    retq
+;
+; KNL-LABEL: movmsk_or_v2i64:
+; KNL:       # %bb.0:
+; KNL-NEXT:    # kill: def $xmm1 killed $xmm1 def $zmm1
+; KNL-NEXT:    # kill: def $xmm0 killed $xmm0 def $zmm0
+; KNL-NEXT:    vpcmpneqq %zmm1, %zmm0, %k0
+; KNL-NEXT:    kmovw %k0, %eax
+; KNL-NEXT:    testb $3, %al
+; KNL-NEXT:    setne %al
+; KNL-NEXT:    vzeroupper
+; KNL-NEXT:    retq
+;
+; SKX-LABEL: movmsk_or_v2i64:
+; SKX:       # %bb.0:
+; SKX-NEXT:    vpcmpneqq %xmm1, %xmm0, %k0
+; SKX-NEXT:    kortestb %k0, %k0
+; SKX-NEXT:    setne %al
+; SKX-NEXT:    retq
+  %cmp = icmp ne <2 x i64> %x, %y
+  %e1 = extractelement <2 x i1> %cmp, i32 0
+  %e2 = extractelement <2 x i1> %cmp, i32 1
+  %u1 = or i1 %e1, %e2
   ret i1 %u1
 }
 
@@ -4566,8 +4516,8 @@ define i1 @movmsk_v4f32(<4 x float> %x, <4 x float> %y) {
   ret i1 %u2
 }
 
-define i1 @movmsk_v2f64(<2 x double> %x, <2 x double> %y) {
-; SSE2-LABEL: movmsk_v2f64:
+define i1 @movmsk_and_v2f64(<2 x double> %x, <2 x double> %y) {
+; SSE2-LABEL: movmsk_and_v2f64:
 ; SSE2:       # %bb.0:
 ; SSE2-NEXT:    cmplepd %xmm0, %xmm1
 ; SSE2-NEXT:    movmskpd %xmm1, %eax
@@ -4575,7 +4525,7 @@ define i1 @movmsk_v2f64(<2 x double> %x, <2 x double> %y) {
 ; SSE2-NEXT:    sete %al
 ; SSE2-NEXT:    retq
 ;
-; AVX-LABEL: movmsk_v2f64:
+; AVX-LABEL: movmsk_and_v2f64:
 ; AVX:       # %bb.0:
 ; AVX-NEXT:    vcmplepd %xmm0, %xmm1, %xmm0
 ; AVX-NEXT:    vmovmskpd %xmm0, %eax
@@ -4583,32 +4533,70 @@ define i1 @movmsk_v2f64(<2 x double> %x, <2 x double> %y) {
 ; AVX-NEXT:    sete %al
 ; AVX-NEXT:    retq
 ;
-; KNL-LABEL: movmsk_v2f64:
+; KNL-LABEL: movmsk_and_v2f64:
 ; KNL:       # %bb.0:
 ; KNL-NEXT:    # kill: def $xmm1 killed $xmm1 def $zmm1
 ; KNL-NEXT:    # kill: def $xmm0 killed $xmm0 def $zmm0
 ; KNL-NEXT:    vcmplepd %zmm0, %zmm1, %k0
-; KNL-NEXT:    kshiftrw $1, %k0, %k1
-; KNL-NEXT:    kmovw %k1, %ecx
 ; KNL-NEXT:    kmovw %k0, %eax
-; KNL-NEXT:    andb %cl, %al
-; KNL-NEXT:    # kill: def $al killed $al killed $eax
+; KNL-NEXT:    andb $3, %al
+; KNL-NEXT:    cmpb $3, %al
+; KNL-NEXT:    sete %al
 ; KNL-NEXT:    vzeroupper
 ; KNL-NEXT:    retq
 ;
-; SKX-LABEL: movmsk_v2f64:
+; SKX-LABEL: movmsk_and_v2f64:
 ; SKX:       # %bb.0:
 ; SKX-NEXT:    vcmplepd %xmm0, %xmm1, %k0
-; SKX-NEXT:    kshiftrb $1, %k0, %k1
-; SKX-NEXT:    kmovd %k1, %ecx
 ; SKX-NEXT:    kmovd %k0, %eax
-; SKX-NEXT:    andb %cl, %al
-; SKX-NEXT:    # kill: def $al killed $al killed $eax
+; SKX-NEXT:    cmpb $3, %al
+; SKX-NEXT:    sete %al
 ; SKX-NEXT:    retq
   %cmp = fcmp oge <2 x double> %x, %y
   %e1 = extractelement <2 x i1> %cmp, i32 0
   %e2 = extractelement <2 x i1> %cmp, i32 1
   %u1 = and i1 %e1, %e2
+  ret i1 %u1
+}
+
+define i1 @movmsk_or_v2f64(<2 x double> %x, <2 x double> %y) {
+; SSE2-LABEL: movmsk_or_v2f64:
+; SSE2:       # %bb.0:
+; SSE2-NEXT:    cmplepd %xmm0, %xmm1
+; SSE2-NEXT:    movmskpd %xmm1, %eax
+; SSE2-NEXT:    testb %al, %al
+; SSE2-NEXT:    setne %al
+; SSE2-NEXT:    retq
+;
+; AVX-LABEL: movmsk_or_v2f64:
+; AVX:       # %bb.0:
+; AVX-NEXT:    vcmplepd %xmm0, %xmm1, %xmm0
+; AVX-NEXT:    vmovmskpd %xmm0, %eax
+; AVX-NEXT:    testb %al, %al
+; AVX-NEXT:    setne %al
+; AVX-NEXT:    retq
+;
+; KNL-LABEL: movmsk_or_v2f64:
+; KNL:       # %bb.0:
+; KNL-NEXT:    # kill: def $xmm1 killed $xmm1 def $zmm1
+; KNL-NEXT:    # kill: def $xmm0 killed $xmm0 def $zmm0
+; KNL-NEXT:    vcmplepd %zmm0, %zmm1, %k0
+; KNL-NEXT:    kmovw %k0, %eax
+; KNL-NEXT:    testb $3, %al
+; KNL-NEXT:    setne %al
+; KNL-NEXT:    vzeroupper
+; KNL-NEXT:    retq
+;
+; SKX-LABEL: movmsk_or_v2f64:
+; SKX:       # %bb.0:
+; SKX-NEXT:    vcmplepd %xmm0, %xmm1, %k0
+; SKX-NEXT:    kortestb %k0, %k0
+; SKX-NEXT:    setne %al
+; SKX-NEXT:    retq
+  %cmp = fcmp oge <2 x double> %x, %y
+  %e1 = extractelement <2 x i1> %cmp, i32 0
+  %e2 = extractelement <2 x i1> %cmp, i32 1
+  %u1 = or i1 %e1, %e2
   ret i1 %u1
 }
 

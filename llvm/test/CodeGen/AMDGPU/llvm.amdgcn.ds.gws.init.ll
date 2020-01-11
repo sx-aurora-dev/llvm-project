@@ -2,7 +2,7 @@
 ; RUN: llc -mtriple=amdgcn-mesa-mesa3d -mcpu=hawaii -o - -verify-machineinstrs < %s | FileCheck -enable-var-scope -check-prefixes=GCN,LOOP %s
 ; RUN: llc -mtriple=amdgcn-mesa-mesa3d -mcpu=fiji -o - -verify-machineinstrs < %s | FileCheck -enable-var-scope -check-prefixes=GCN,LOOP %s
 ; RUN: llc -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx900 -o - -verify-machineinstrs < %s | FileCheck -enable-var-scope -check-prefixes=GCN,NOLOOP %s
-; RUN: llc -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx1010 -o - -verify-machineinstrs < %s | FileCheck -enable-var-scope -check-prefixes=GCN,NOLOOP %s
+; RUN: llc -mtriple=amdgcn-mesa-mesa3d -mcpu=gfx1010 -asm-verbose=0 -o - -verify-machineinstrs < %s | FileCheck -enable-var-scope -check-prefixes=GCN,NOLOOP %s
 
 ; Minimum offset
 ; GCN-LABEL: {{^}}gws_init_offset0:
@@ -114,7 +114,7 @@ define amdgpu_kernel void @gws_init_vgpr_offset_add(i32 %val) #0 {
 ; LOOP: s_mov_b32 m0, -1
 ; LOOP: ds_write_b32
 define amdgpu_kernel void @gws_init_save_m0_init_constant_offset(i32 %val) #0 {
-  store i32 1, i32 addrspace(3)* @lds
+  store volatile i32 1, i32 addrspace(3)* @lds
   call void @llvm.amdgcn.ds.gws.init(i32 %val, i32 10)
   store i32 2, i32 addrspace(3)* @lds
   ret void

@@ -492,6 +492,10 @@ class Instruction : InstructionEncoding {
   // Added complexity passed onto matching pattern.
   int AddedComplexity  = 0;
 
+  // Indicates if this is a pre-isel opcode that should be
+  // legalized/regbankselected/selected.
+  bit isPreISelOpcode = 0;
+
   // These bits capture information about the high-level semantics of the
   // instruction.
   bit isReturn     = 0;     // Is this instruction a return instruction?
@@ -1206,7 +1210,7 @@ def PATCHABLE_TAIL_CALL : StandardPseudoInstruction {
 }
 def PATCHABLE_EVENT_CALL : StandardPseudoInstruction {
   let OutOperandList = (outs);
-  let InOperandList = (ins ptr_rc:$event, i8imm:$size);
+  let InOperandList = (ins ptr_rc:$event, unknown:$size);
   let AsmString = "# XRay Custom Event Log.";
   let usesCustomInserter = 1;
   let isCall = 1;
@@ -1216,7 +1220,7 @@ def PATCHABLE_EVENT_CALL : StandardPseudoInstruction {
 }
 def PATCHABLE_TYPED_EVENT_CALL : StandardPseudoInstruction {
   let OutOperandList = (outs);
-  let InOperandList = (ins i16imm:$type, ptr_rc:$event, i32imm:$size);
+  let InOperandList = (ins unknown:$type, ptr_rc:$event, unknown:$size);
   let AsmString = "# XRay Typed Event Log.";
   let usesCustomInserter = 1;
   let isCall = 1;
@@ -1288,7 +1292,7 @@ class AsmParser {
   // ReportMultipleNearMisses -
   // When 0, the assembly matcher reports an error for one encoding or operand
   // that did not match the parsed instruction.
-  // When 1, the assmebly matcher returns a list of encodings that were close
+  // When 1, the assembly matcher returns a list of encodings that were close
   // to matching the parsed instruction, so to allow more detailed error
   // messages.
   bit ReportMultipleNearMisses = 0;

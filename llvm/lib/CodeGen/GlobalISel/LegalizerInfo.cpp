@@ -128,24 +128,26 @@ static bool mutationIsSane(const LegalizeRule &Rule,
 
   switch (Rule.getAction()) {
   case FewerElements:
-  case MoreElements: {
     if (!OldTy.isVector())
       return false;
-
+    LLVM_FALLTHROUGH;
+  case MoreElements: {
+    // MoreElements can go from scalar to vector.
+    const unsigned OldElts = OldTy.isVector() ? OldTy.getNumElements() : 1;
     if (NewTy.isVector()) {
       if (Rule.getAction() == FewerElements) {
         // Make sure the element count really decreased.
-        if (NewTy.getNumElements() >= OldTy.getNumElements())
+        if (NewTy.getNumElements() >= OldElts)
           return false;
       } else {
         // Make sure the element count really increased.
-        if (NewTy.getNumElements() <= OldTy.getNumElements())
+        if (NewTy.getNumElements() <= OldElts)
           return false;
       }
     }
 
     // Make sure the element type didn't change.
-    return NewTy.getScalarType() == OldTy.getElementType();
+    return NewTy.getScalarType() == OldTy.getScalarType();
   }
   case NarrowScalar:
   case WidenScalar: {
@@ -433,7 +435,7 @@ LegalizeRuleSet &LegalizerInfo::getActionDefinitionsBuilder(
     std::initializer_list<unsigned> Opcodes) {
   unsigned Representative = *Opcodes.begin();
 
-  assert(!empty(Opcodes) && Opcodes.begin() + 1 != Opcodes.end() &&
+  assert(!llvm::empty(Opcodes) && Opcodes.begin() + 1 != Opcodes.end() &&
          "Initializer list must have at least two opcodes");
 
   for (auto I = Opcodes.begin() + 1, E = Opcodes.end(); I != E; ++I)
@@ -683,6 +685,10 @@ bool LegalizerInfo::legalizeIntrinsic(MachineInstr &MI,
                                       MachineRegisterInfo &MRI,
                                       MachineIRBuilder &MIRBuilder) const {
   return true;
+}
+
+unsigned LegalizerInfo::getExtOpcodeForWideningConstant(LLT SmallTy) const {
+  return SmallTy.isByteSized() ? TargetOpcode::G_SEXT : TargetOpcode::G_ZEXT;
 }
 
 /// \pre Type indices of every opcode form a dense set starting from 0.
