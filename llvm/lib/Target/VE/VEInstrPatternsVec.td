@@ -346,21 +346,29 @@ defm : vbrd_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
 defm : vbrd_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
 defm : vbrd_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
 defm : vbrd_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
-defm : vbrd_for_vector_length2<8, v8i32, v8f32, v8f64>;
-defm : vbrd_for_vector_length2<4, v4i32, v4f32, v4f64>;
+let Predicates = [IsVectorizeSubTarget] in {
+  defm : vbrd_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+  defm : vbrd_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+}
+let Predicates = [IsNotVectorizeSubTarget] in {
+  defm : vbrd_for_vector_length2<8, v8i32, v8f32, v8f64>;
+  defm : vbrd_for_vector_length2<4, v4i32, v4f32, v4f64>;
+}
 defm : vbrd_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Boardcast for vector mask register
 
-def : Pat<(v4i64 (vec_broadcast i64:$sy)),
-    (lvm_mmIs (lvm_mmIs (lvm_mmIs (lvm_mmIs 
-      (v4i64 (IMPLICIT_DEF)), 0, $sy), 1, $sy), 2, $sy), 3, $sy)>;
+let Predicates = [IsNotVectorizeSubTarget] in {
+  def : Pat<(v4i64 (vec_broadcast i64:$sy)),
+      (lvm_mmIs (lvm_mmIs (lvm_mmIs (lvm_mmIs
+        (v4i64 (IMPLICIT_DEF)), 0, $sy), 1, $sy), 2, $sy), 3, $sy)>;
 
-def : Pat<(v8i64 (vec_broadcast i64:$sy)),
-    (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs 
+  def : Pat<(v8i64 (vec_broadcast i64:$sy)),
       (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs
-        (v8i64 (IMPLICIT_DEF)), 0, $sy), 1, $sy), 2, $sy), 3, $sy),
-          4, $sy), 5, $sy), 6, $sy), 7, $sy)>;
+        (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs
+          (v8i64 (IMPLICIT_DEF)), 0, $sy), 1, $sy), 2, $sy), 3, $sy),
+            4, $sy), 5, $sy), 6, $sy), 7, $sy)>;
+}
 
 // Sequence
 

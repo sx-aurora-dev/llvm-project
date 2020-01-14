@@ -23,6 +23,8 @@ def FeatureVectorize
   : SubtargetFeature<"vec", "Vectorize", "true",
                      "Try to vectorize (experimental)">;
 
+def IsVectorizeSubTarget : Predicate<"Subtarget->vectorize()">;
+def IsNotVectorizeSubTarget : Predicate<"!Subtarget->vectorize()">;
 
 //===----------------------------------------------------------------------===//
 // Register File, Calling Conv, Instruction Descriptions

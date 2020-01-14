@@ -14,6 +14,18 @@
 // Aurora VE
 //===----------------------------------------------------------------------===//
 
+/// CCIfSubtarget - Match if the current subtarget has a feature F.
+class CCIfSubtarget<string F, CCAction A>
+    : CCIf<!strconcat("static_cast<const VESubtarget&>"
+                       "(State.getMachineFunction().getSubtarget()).", F),
+           A>;
+
+/// CCIfNotSubtarget - Match if the current subtarget doesn't has a feature F.
+class CCIfNotSubtarget<string F, CCAction A>
+    : CCIf<!strconcat("!static_cast<const VESubtarget&>"
+                       "(State.getMachineFunction().getSubtarget()).", F),
+           A>;
+
 def CC_VE_C_Stack: CallingConv<[
   // F128 are assigned to the stack in 16-byte aligned units
   CCIfType<[f128], CCAssignToStackWithShadow<16, 16, [SX7]>>,
@@ -42,14 +54,25 @@ def CC_VE_RegCall : CallingConv<[
             v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
 
+  CCIfSubtarget<"vectorize()",
+    CCIfType<[v4i64, v8i64],
+             CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
+
   // vector mask --> generic vector mask registers
   CCIfType<[v256i1, v4i64],
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>,
 
+  CCIfNotSubtarget<"vectorize()",
+    CCIfType<[v4i64],
+             CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
+
   // pair of vector mask --> generic vector mask registers
   CCIfType<[v512i1, v8i64],
-           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
-                                   [VM1, VM1, VM3]>>,
+           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>,
+
+  CCIfNotSubtarget<"vectorize()",
+    CCIfType<[v8i64],
+             CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>>,
 
   // Alternatively, they are assigned to the stack in 8-byte aligned units.
   CCDelegateTo<CC_VE_C_Stack>
@@ -118,14 +141,26 @@ def RetCC_VE_RegCall : CallingConv<[
             v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
 
+  CCIfSubtarget<"vectorize()",
+    CCIfType<[v4i64, v8i64],
+             CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
+
   // vector mask --> generic vector mask registers
   CCIfType<[v256i1, v4i64],
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>,
 
+  CCIfNotSubtarget<"vectorize()",
+    CCIfType<[v4i64],
+             CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
+
   // pair of vector mask --> generic vector mask registers
   CCIfType<[v512i1, v8i64],
            CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
-                                   [VM1, VM1, VM3]>>
+                                   [VM1, VM1, VM3]>>,
+
+  CCIfNotSubtarget<"vectorize()",
+    CCIfType<[v8i64],
+             CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>>,
 ]>;
 
 def RetCC_VE : CallingConv<[
