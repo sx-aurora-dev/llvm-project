@@ -261,6 +261,8 @@ namespace llvm {
                                 MachineBasicBlock *DispatchBB, int FI) const;
     void finalizeLowering(MachineFunction &MF) const override;
 
+    bool isVectorMaskType(EVT VT) const;
+
   private:
     // VE supports only vector FMA
     bool isFMAFasterThanFMulAndFAdd(EVT VT) const override { return VT.isVector() ? true : false; }

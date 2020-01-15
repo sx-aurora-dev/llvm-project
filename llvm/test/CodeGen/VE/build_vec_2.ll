@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vec | FileCheck %s
 
 ; Function Attrs: nounwind
 define i32 @bv_v2i32() {

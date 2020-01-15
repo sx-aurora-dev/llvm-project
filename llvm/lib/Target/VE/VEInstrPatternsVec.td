@@ -144,8 +144,31 @@ defm : load_for_vector_length<128>;
 defm : load_for_vector_length<64>;
 defm : load_for_vector_length<32>;
 defm : load_for_vector_length<16>;
-defm : load_for_vector_length<8>;
-defm : load_for_vector_length<4>;
+let Predicates = [IsVectorizeSubTarget] in {
+  defm : load_for_vector_length<8>;
+  defm : load_for_vector_length<4>;
+}
+// v4i64 and v8i64 is used for mask.
+let Predicates = [IsNotVectorizeSubTarget] in {
+def : Pat<(v4i64 (load I64:$addr)),
+          (v4i64 (lvm_mmIs (lvm_mmIs (lvm_mmIs (lvm_mmIs (v256i1 (IMPLICIT_DEF)),
+                      0, (LDSri $addr, 0)),
+                      1, (LDSri $addr, 8)),
+                      2, (LDSri $addr, 16)),
+                      3, (LDSri $addr, 24)))>;
+
+def : Pat<(v8i64 (load I64:$addr)),
+          (v8i64 (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs
+                  (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs (v512i1 (IMPLICIT_DEF)),
+                      0, (LDSri $addr, 0)),
+                      1, (LDSri $addr, 8)),
+                      2, (LDSri $addr, 16)),
+                      3, (LDSri $addr, 24)),
+                      4, (LDSri $addr, 32)),
+                      5, (LDSri $addr, 40)),
+                      6, (LDSri $addr, 48)),
+                      7, (LDSri $addr, 56)))>;
+}
 defm : load_for_vector_length<2>;
 
 multiclass store_for_vector_length<int length> {
@@ -168,8 +191,18 @@ defm : store_for_vector_length<128>;
 defm : store_for_vector_length<64>;
 defm : store_for_vector_length<32>;
 defm : store_for_vector_length<16>;
-defm : store_for_vector_length<8>;
-defm : store_for_vector_length<4>;
+let Predicates = [IsVectorizeSubTarget] in {
+  defm : store_for_vector_length<8>;
+  defm : store_for_vector_length<4>;
+}
+// v4i64 and v8i64 is used for mask.
+let Predicates = [IsNotVectorizeSubTarget] in {
+def : Pat<(store v4i64:$vx, ADDRri:$addr),
+          (STVMri ADDRri:$addr, $vx)>;
+
+def : Pat<(store v8i64:$vx, ADDRri:$addr),
+          (STVM512ri ADDRri:$addr, $vx)>;
+}
 defm : store_for_vector_length<2>;
 
 // Load for

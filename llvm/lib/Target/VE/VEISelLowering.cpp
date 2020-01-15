@@ -1352,6 +1352,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::LOAD, MVT::f128, Custom);
   setOperationAction(ISD::STORE, MVT::f128, Custom);
 
+  if (!Subtarget->vectorize()) {
+    setOperationAction(ISD::STORE, MVT::v4i64, Custom);
+    setOperationAction(ISD::STORE, MVT::v8i64, Custom);
+  }
+
   for (MVT VT : MVT::vector_valuetypes()) {
     if (VT.getVectorElementType() == MVT::i1 ||
         VT.getVectorElementType() == MVT::i8 ||
@@ -2191,7 +2196,7 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
     alignment = 8;
   EVT addrVT = BasePtr.getValueType();
   EVT MemVT = StNode->getMemoryVT();
-  if (MemVT == MVT::v256i1) {
+  if (MemVT == MVT::v256i1 || MemVT == MVT::v4i64) {
     SDValue OutChains[4];
     for (int i = 0; i < 4; ++i) {
       SDNode *V = DAG.getMachineNode(VE::svm_smI, dl, MVT::i64,
@@ -2206,7 +2211,7 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
                                               MachineMemOperand::MONone);
     }
     return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
-  } else if (MemVT == MVT::v512i1) {
+  } else if (MemVT == MVT::v512i1 || MemVT == MVT::v8i64) {
     SDValue OutChains[8];
     for (int i = 0; i < 8; ++i) {
       SDNode *V = DAG.getMachineNode(VE::svm_sMI, dl, MVT::i64,
@@ -2227,7 +2232,8 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
   }
 }
 
-static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
+static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG,
+                          const VETargetLowering &TLI)
 {
   SDLoc dl(Op);
   StoreSDNode *St = cast<StoreSDNode>(Op.getNode());
@@ -2235,7 +2241,7 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG)
   EVT MemVT = St->getMemoryVT();
   if (MemVT == MVT::f128)
     return LowerF128Store(Op, DAG);
-  if (MemVT == MVT::v256i1 || MemVT == MVT::v512i1)
+  if (TLI.isVectorMaskType(MemVT))
     return LowerI1Store(Op, DAG);
 
   // Otherwise, ask llvm to expand it.
@@ -2743,7 +2749,7 @@ LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::DYNAMIC_STACKALLOC: return LowerDYNAMIC_STACKALLOC(Op, DAG);
 
   case ISD::LOAD:               return LowerLOAD(Op, DAG);
-  case ISD::STORE:              return LowerSTORE(Op, DAG);
+  case ISD::STORE:              return LowerSTORE(Op, DAG, *this);
   case ISD::UMULO:
   case ISD::SMULO:              return LowerUMULO_SMULO(Op, DAG, *this);
   case ISD::ATOMIC_FENCE:       return LowerATOMIC_FENCE(Op, DAG);
@@ -3565,4 +3571,14 @@ void VETargetLowering::insertSSPDeclarations(Module &M) const {
 
 void VETargetLowering::finalizeLowering(MachineFunction& MF) const {
   TargetLoweringBase::finalizeLowering(MF);
+}
+
+bool VETargetLowering::isVectorMaskType(EVT VT) const {
+  if (Subtarget->vectorize()) {
+    return (VT == MVT::v256i1 || VT == MVT::v512i1);
+  } else {
+    // In default subtarget, v4i64 and v8i64 are dedicated for vector mask
+    return (VT == MVT::v256i1 || VT == MVT::v512i1
+            || VT == MVT::v4i64 || VT == MVT::v8i64);
+  }
 }
