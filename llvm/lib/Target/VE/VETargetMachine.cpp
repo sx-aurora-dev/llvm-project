@@ -11,6 +11,7 @@
 
 #include "VETargetMachine.h"
 #include "VE.h"
+// #include "VETargetObjectFile.h"
 #include "VETargetTransformInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
@@ -22,7 +23,7 @@ using namespace llvm;
 
 #define DEBUG_TYPE "ve"
 
-extern "C" void LLVMInitializeVETarget() {
+extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeVETarget() {
   // Register the target.
   RegisterTargetMachine<VETargetMachine> X(getTheVETarget());
 }
@@ -95,7 +96,9 @@ public:
     return getTM<VETargetMachine>();
   }
 
+  void addIRPasses() override;
   bool addInstSelector() override;
+  void addPreEmitPass() override;
 };
 } // namespace
 
@@ -103,7 +106,14 @@ TargetPassConfig *VETargetMachine::createPassConfig(PassManagerBase &PM) {
   return new VEPassConfig(*this, PM);
 }
 
+void VEPassConfig::addIRPasses() {
+  addPass(createAtomicExpandPass());
+  TargetPassConfig::addIRPasses();
+}
+
 bool VEPassConfig::addInstSelector() {
   addPass(createVEISelDag(getVETargetMachine()));
   return false;
 }
+
+void VEPassConfig::addPreEmitPass() {}

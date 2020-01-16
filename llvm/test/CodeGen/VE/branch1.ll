@@ -288,3 +288,101 @@ join:
   %r = phi i32 [ %ret.val, %on.true ], [ 0, %entry ]
   ret i32 %r
 }
+
+define i32 @func11(fp128 %a, fp128 %b) {
+; CHECK-LABEL: func11:
+; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK-NEXT:    fcmp.q %s0, %s2, %s0
+; CHECK-NEXT:    brlenan.d 0, %s0, .LBB10_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB10_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = fcmp ogt fp128 %a, %b
+  br i1 %cmp, label %on.true, label %join
+
+on.true:
+  %r.val = tail call i32 @ret(i32 2)
+  br label %join
+
+join:
+  %r = phi i32 [ %r.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
+}
+
+; Function Attrs: nounwind
+define i32 @func12(i128 %a, i128 %b) {
+; CHECK-LABEL: func12:
+; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK-NEXT:    or %s4, 0, (0)1
+; CHECK-NEXT:    cmps.l %s1, %s1, %s3
+; CHECK-NEXT:    or %s3, 0, %s4
+; CHECK-NEXT:    cmov.l.le %s3, (63)0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s2
+; CHECK-NEXT:    cmov.l.le %s4, (63)0, %s0
+; CHECK-NEXT:    cmov.l.eq %s3, %s4, %s1
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK-NEXT:    brne.w %s3, %s0, .LBB11_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = icmp sgt i128 %a, %b
+  br i1 %cmp, label %on.true, label %join
+
+on.true:
+  %r.val = tail call i32 @ret(i32 2)
+  br label %join
+
+join:
+  %r = phi i32 [ %r.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
+}
+
+; Function Attrs: nounwind
+define i32 @func13(i128 %a, i128 %b) {
+; CHECK-LABEL: func13:
+; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK-NEXT:    cmps.l %s4, %s1, %s3
+; CHECK-NEXT:    or %s5, 0, (0)1
+; CHECK-NEXT:    cmpu.l %s1, %s1, %s3
+; CHECK-NEXT:    or %s3, 0, %s5
+; CHECK-NEXT:    cmov.l.le %s3, (63)0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s2
+; CHECK-NEXT:    cmov.l.le %s5, (63)0, %s0
+; CHECK-NEXT:    cmov.l.eq %s3, %s5, %s4
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK-NEXT:    brne.w %s3, %s0, .LBB12_2
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = icmp ugt i128 %a, %b
+  br i1 %cmp, label %on.true, label %join
+
+on.true:  
+  %r.val = tail call i32 @ret(i32 2)
+  br label %join
+
+join:
+  %r = phi i32 [ %r.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
+}

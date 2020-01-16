@@ -12,6 +12,7 @@
 
 #include "VERegisterInfo.h"
 #include "VE.h"
+#include "VEMachineFunctionInfo.h"
 #include "VESubtarget.h"
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/STLExtras.h"
@@ -32,14 +33,37 @@ using namespace llvm;
 // VE uses %s10 == %lp to keep return address
 VERegisterInfo::VERegisterInfo() : VEGenRegisterInfo(VE::SX10) {}
 
+bool VERegisterInfo::requiresRegisterScavenging(
+    const MachineFunction &MF) const {
+  return true;
+}
+
+bool VERegisterInfo::requiresFrameIndexScavenging(
+    const MachineFunction &MF) const {
+  return true;
+}
+
 const MCPhysReg *
 VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  return CSR_SaveList;
+  const Function &F = MF->getFunction();
+  CallingConv::ID CC = F.getCallingConv();
+
+  switch (CC) {
+  default:
+    return CSR_SaveList;
+  }
 }
 
 const uint32_t *VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                                      CallingConv::ID CC) const {
-  return CSR_RegMask;
+  switch (CC) {
+  case CallingConv::VE_VEC_EXPF:
+    return CSR_vec_expf_RegMask;
+  case CallingConv::VE_LLVM_GROW_STACK:
+    return CSR_llvm_grow_stack_RegMask;
+  default:
+    return CSR_RegMask;
+  }
 }
 
 const uint32_t *VERegisterInfo::getNoPreservedMask() const {
@@ -63,8 +87,36 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
       VE::SX15, // Global offset table register
       VE::SX16, // Procedure linkage table register
       VE::SX17, // Linkage-area register
-                // sx18-sx33 are callee-saved registers
-                // sx34-sx63 are temporary registers
+      // sx18-sx33 are callee-saved registers
+      // sx34-sx63 are temporary registers
+
+      VE::UCC,  // User clock counter
+      VE::PSW,  // Program status word
+      VE::SAR,  // Store adress
+      VE::PMMR, // Performance monitor mode
+
+      // Performance monitor configuration
+      VE::PMCR0,
+      VE::PMCR1,
+      VE::PMCR2,
+      VE::PMCR3,
+
+      // Performance monitor counter
+      VE::PMC0,
+      VE::PMC1,
+      VE::PMC2,
+      VE::PMC3,
+      VE::PMC4,
+      VE::PMC5,
+      VE::PMC6,
+      VE::PMC7,
+      VE::PMC8,
+      VE::PMC9,
+      VE::PMC10,
+      VE::PMC11,
+      VE::PMC12,
+      VE::PMC13,
+      VE::PMC14,
   };
 
   for (auto R : ReservedRegs)
@@ -75,7 +127,12 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
-bool VERegisterInfo::isConstantPhysReg(unsigned PhysReg) const { return false; }
+bool VERegisterInfo::isConstantPhysReg(unsigned PhysReg) const {
+  switch (PhysReg) {
+  default:
+    return false;
+  }
+}
 
 const TargetRegisterClass *
 VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
@@ -102,6 +159,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   DebugLoc dl = MI.getDebugLoc();
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
   MachineFunction &MF = *MI.getParent()->getParent();
+  const VESubtarget &Subtarget = MF.getSubtarget<VESubtarget>();
   const VEFrameLowering *TFI = getFrameLowering(MF);
 
   unsigned FrameReg;
@@ -109,6 +167,36 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   Offset = TFI->getFrameIndexReference(MF, FrameIndex, FrameReg);
 
   Offset += MI.getOperand(FIOperandNum + 1).getImm();
+
+  if (MI.getOpcode() == VE::STQri) {
+    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    unsigned SrcReg = MI.getOperand(2).getReg();
+    unsigned SrcHiReg = getSubReg(SrcReg, VE::sub_even);
+    unsigned SrcLoReg = getSubReg(SrcReg, VE::sub_odd);
+    // VE stores HiReg to 8(addr) and LoReg to 0(addr)
+    MachineInstr *StMI = BuildMI(*MI.getParent(), II, dl, TII.get(VE::STSri))
+                             .addReg(FrameReg)
+                             .addImm(0)
+                             .addReg(SrcLoReg);
+    replaceFI(MF, II, *StMI, dl, 0, Offset, FrameReg);
+    MI.setDesc(TII.get(VE::STSri));
+    MI.getOperand(2).setReg(SrcHiReg);
+    Offset += 8;
+  } else if (MI.getOpcode() == VE::LDQri) {
+    const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
+    unsigned DestReg = MI.getOperand(0).getReg();
+    unsigned DestHiReg = getSubReg(DestReg, VE::sub_even);
+    unsigned DestLoReg = getSubReg(DestReg, VE::sub_odd);
+    // VE loads HiReg from 8(addr) and LoReg from 0(addr)
+    MachineInstr *StMI =
+        BuildMI(*MI.getParent(), II, dl, TII.get(VE::LDSri), DestLoReg)
+            .addReg(FrameReg)
+            .addImm(0);
+    replaceFI(MF, II, *StMI, dl, 1, Offset, FrameReg);
+    MI.setDesc(TII.get(VE::LDSri));
+    MI.getOperand(0).setReg(DestHiReg);
+    Offset += 8;
+  }
 
   replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);
 }

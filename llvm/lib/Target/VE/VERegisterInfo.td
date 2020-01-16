@@ -16,11 +16,21 @@ class VEReg<bits<7> Enc, string n> : Register<n> {
   let Namespace = "VE";
 }
 
+class VEMiscReg<bits<5> Enc, string n>: Register<n> {
+  let HWEncoding{15-5} = 0;
+  let HWEncoding{4-0} = Enc;
+  let Namespace = "VE";
+}
+
 let Namespace = "VE" in {
   def sub_i8      : SubRegIndex<8, 56>;         // Low 8 bit (56..63)
   def sub_i16     : SubRegIndex<16, 48>;        // Low 16 bit (48..63)
   def sub_i32     : SubRegIndex<32, 32>;        // Low 32 bit (32..63)
   def sub_f32     : SubRegIndex<32>;            // High 32 bit (0..31)
+  def sub_even    : SubRegIndex<64>;            // High 64 bit (0..63)
+  def sub_odd     : SubRegIndex<64, 64>;        // Low 64 bit (64..127)
+  def sub_vm_even : SubRegIndex<256>;           // High 256 bit (0..255)
+  def sub_vm_odd  : SubRegIndex<256, 256>;      // Low 256 bit (256..511)
 }
 
 // Registers are identified with 7-bit ID numbers.
@@ -30,6 +40,27 @@ class R<bits<7> Enc, string n, list<Register> subregs = [],
   let SubRegs = subregs;
   let Aliases = aliases;
 }
+
+// Rq - Slots in the register file for 128-bit floating-point values.
+class Rq<bits<7> Enc, string n, list<Register> subregs> : VEReg<Enc, n> {
+  let SubRegs = subregs;
+  let SubRegIndices = [sub_even, sub_odd];
+  let CoveredBySubRegs = 1;
+}
+
+// Miscellaneous Registers
+def UCC : VEMiscReg<0, "UCC">;       // User clock counter
+def PSW : VEMiscReg<1, "PSW">;       // Program status word
+def SAR : VEMiscReg<2, "SAR">;       // Store address register
+def PMMR : VEMiscReg<7, "PMMR">;     // Performance monitor mode register
+
+// Performance monitor configuration registers
+foreach I = 0-3 in
+  def PMCR#I : VEMiscReg<!add(8,I), "PMCR"#I>;
+
+// Performance monitor counter
+foreach I = 0-14 in
+  def PMC#I : VEMiscReg<!add(16,I), "PMC"#I>;
 
 // Generic integer registers - 8 bits wide
 foreach I = 0-63 in
@@ -57,6 +88,16 @@ foreach I = 0-63 in
   def SX#I : R<I, "S"#I, [!cast<R>("SW"#I), !cast<R>("SF"#I)]>,
              DwarfRegNum<[I]>;
 
+// Aliases of the S* registers used to hold 128-bit for values (long doubles).
+// Following foreach represents something like:
+//   def Q0 : Rq<0, "S0", [S0, S1]>;
+//   def Q1 : Rq<2, "S2", [S2, S3]>;
+//   ...
+foreach I = 0-31 in
+  def Q#I : Rq<!shl(I,1),  "S"#!shl(I,1),
+               [!cast<R>("SX"#!shl(I,1)),
+                !cast<R>("SX"#!add(!shl(I,1),1))]>;
+
 // Register classes.
 //
 // The register order is defined in terms of the preferred
@@ -81,3 +122,12 @@ def F32 : RegisterClass<"VE", [f32], 32,
                         (add (sequence "SF%u", 0, 7),
                              (sequence "SF%u", 34, 63),
                              (sequence "SF%u", 8, 33))>;
+def F128 : RegisterClass<"VE", [f128], 128,
+                        (add (sequence "Q%u", 0, 3),
+                             (sequence "Q%u", 17, 31),
+                             (sequence "Q%u", 4, 16))>;
+
+def Misc : RegisterClass<"VE", [i64], 64,
+                         (add UCC, PSW, SAR, PMMR,
+                              (sequence "PMCR%u", 0, 3),
+                              (sequence "PMC%u", 0, 14))>;

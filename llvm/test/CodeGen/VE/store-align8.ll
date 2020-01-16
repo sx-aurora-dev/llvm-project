@@ -4,8 +4,22 @@
 @vi16 = common dso_local local_unnamed_addr global i16 0, align 8
 @vi32 = common dso_local local_unnamed_addr global i32 0, align 8
 @vi64 = common dso_local local_unnamed_addr global i64 0, align 8
+@vi128 = common dso_local local_unnamed_addr global i128 0, align 8
 @vf32 = common dso_local local_unnamed_addr global float 0.000000e+00, align 8
 @vf64 = common dso_local local_unnamed_addr global double 0.000000e+00, align 8
+@vf128 = common dso_local local_unnamed_addr global fp128 0xL00000000000000000000000000000000, align 8
+
+; Function Attrs: norecurse nounwind readonly
+define void @storef128stk(fp128 %0) {
+; CHECK-LABEL: storef128stk:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    st %s1, 176(,%s11)
+; CHECK-NEXT:    st %s0, 184(,%s11)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %addr = alloca fp128, align 8
+  store fp128 %0, fp128* %addr, align 8
+  ret void
+}
 
 ; Function Attrs: norecurse nounwind readonly
 define void @storef64stk(double %0) {
@@ -26,6 +40,18 @@ define void @storef32stk(float %0) {
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca float, align 8
   store float %0, float* %addr, align 8
+  ret void
+}
+
+; Function Attrs: norecurse nounwind readonly
+define void @storei128stk(i128 %0) {
+; CHECK-LABEL: storei128stk:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    st %s1, 184(,%s11)
+; CHECK-NEXT:    st %s0, 176(,%s11)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %addr = alloca i128, align 8
+  store i128 %0, i128* %addr, align 8
   ret void
 }
 
@@ -74,6 +100,20 @@ define void @storei8stk(i8 %0) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
+define void @storef128com(fp128 %0) {
+; CHECK-LABEL: storef128com:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, vf128@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s2, vf128@hi(%s2)
+; CHECK-NEXT:    st %s0, 8(,%s2)
+; CHECK-NEXT:    st %s1, (,%s2)
+; CHECK-NEXT:    or %s11, 0, %s9
+  store fp128 %0, fp128* @vf128, align 8
+  ret void
+}
+
+; Function Attrs: norecurse nounwind readonly
 define void @storef64com(double %0) {
 ; CHECK-LABEL: storef64com:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -96,6 +136,20 @@ define void @storef32com(float %0) {
 ; CHECK-NEXT:    stu %s0, (,%s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
   store float %0, float* @vf32, align 8
+  ret void
+}
+
+; Function Attrs: norecurse nounwind readonly
+define void @storei128com(i128 %0) {
+; CHECK-LABEL: storei128com:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, vi128@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s2, vi128@hi(%s2)
+; CHECK-NEXT:    st %s1, 8(,%s2)
+; CHECK-NEXT:    st %s0, (,%s2)
+; CHECK-NEXT:    or %s11, 0, %s9
+  store i128 %0, i128* @vi128, align 8
   ret void
 }
 
@@ -150,4 +204,3 @@ define void @storei8com(i8 %0) {
   store i8 %0, i8* @vi8, align 8
   ret void
 }
-

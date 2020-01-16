@@ -39,12 +39,17 @@ void VEInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
   OS << '%' << StringRef(getRegisterName(RegNo)).lower();
 }
 
-void VEInstPrinter::printInst(const MCInst *MI, uint64_t Address,
-                              StringRef Annot, const MCSubtargetInfo &STI,
-                              raw_ostream &OS) {
-  if (!printAliasInstr(MI, STI, OS))
-    printInstruction(MI, Address, STI, OS);
-  printAnnotation(OS, Annot);
+void VEInstPrinter::printInst(const MCInst *MI, uint64_t Address, StringRef Annot,
+               const MCSubtargetInfo &STI, raw_ostream &O) {
+  if (!printAliasInstr(MI, STI, O) && !printVEAliasInstr(MI, STI, O))
+    printInstruction(MI, Address, STI, O);
+  printAnnotation(O, Annot);
+}
+
+bool VEInstPrinter::printVEAliasInstr(const MCInst *MI,
+                                      const MCSubtargetInfo &STI,
+                                      raw_ostream &O) {
+  return false;
 }
 
 void VEInstPrinter::printOperand(const MCInst *MI, int opNum,
@@ -114,4 +119,10 @@ void VEInstPrinter::printCCOperand(const MCInst *MI, int opNum,
                                    const MCSubtargetInfo &STI, raw_ostream &O) {
   int CC = (int)MI->getOperand(opNum).getImm();
   O << VECondCodeToString((VECC::CondCodes)CC);
+}
+
+bool VEInstPrinter::printGetGOT(const MCInst *MI, unsigned opNum,
+                                const MCSubtargetInfo &STI, raw_ostream &O) {
+  llvm_unreachable("FIXME: Implement VEInstPrinter::printGetGOT.");
+  return true;
 }

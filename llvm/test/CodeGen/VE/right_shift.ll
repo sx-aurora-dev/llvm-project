@@ -43,6 +43,19 @@ define i64 @func4(i64 %0, i64 %1) {
   ret i64 %3
 }
 
+define i128 @func6(i128, i128) {
+; CHECK-LABEL: func6:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s2, %s2, (0)1
+; CHECK-NEXT:    lea %s3, __ashrti3@lo
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    lea.sl %s12, __ashrti3@hi(%s3)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %3 = ashr i128 %0, %1
+  ret i128 %3
+}
+
 define zeroext i8 @func7(i8 zeroext %0, i8 zeroext %1) {
 ; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -95,6 +108,19 @@ define i64 @func10(i64 %0, i64 %1) {
   ret i64 %3
 }
 
+define i128 @func11(i128 %0, i128 %1) {
+; CHECK-LABEL: func11:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s2, %s2, (0)1
+; CHECK-NEXT:    lea %s3, __lshrti3@lo
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    lea.sl %s12, __lshrti3@hi(%s3)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %3 = lshr i128 %0, %1
+  ret i128 %3
+}
+
 define signext i8 @func12(i8 signext %0) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -129,6 +155,18 @@ define i64 @func15(i64 %0) {
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = ashr i64 %0, 5
   ret i64 %2
+}
+
+define i128 @func16(i128 %0) {
+; CHECK-LABEL: func16:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    sll %s2, %s1, 59
+; CHECK-NEXT:    srl %s0, %s0, 5
+; CHECK-NEXT:    or %s0, %s0, %s2
+; CHECK-NEXT:    sra.l %s1, %s1, 5
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = ashr i128 %0, 5
+  ret i128 %2
 }
 
 define zeroext i8 @func17(i8 zeroext %0) {
@@ -176,3 +214,14 @@ define i64 @func20(i64 %0) {
   ret i64 %2
 }
 
+define i128 @func21(i128 %0) {
+; CHECK-LABEL: func21:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    sll %s2, %s1, 59
+; CHECK-NEXT:    srl %s0, %s0, 5
+; CHECK-NEXT:    or %s0, %s0, %s2
+; CHECK-NEXT:    sra.l %s1, %s1, 5
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = ashr i128 %0, 5
+  ret i128 %2
+}

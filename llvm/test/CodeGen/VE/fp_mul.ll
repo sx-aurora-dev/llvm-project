@@ -18,6 +18,15 @@ define double @func2(double %a, double %b) {
   ret double %r
 }
 
+define fp128 @func3(fp128 %a, fp128 %b) {
+; CHECK-LABEL: func3:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    fmul.q %s0, %s0, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fmul fp128 %a, %b
+  ret fp128 %r
+}
+
 define float @func4(float %a) {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -38,6 +47,21 @@ define double @func5(double %a) {
   %r = fmul double %a, 5.000000e+00
   ret double %r
 }
+
+define fp128 @func6(fp128 %a) {
+; CHECK-LABEL: func6:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, .LCPI5_0@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s2, .LCPI5_0@hi(%s2)
+; CHECK-NEXT:    ld %s4, 8(,%s2)
+; CHECK-NEXT:    ld %s5, (,%s2)
+; CHECK-NEXT:    fmul.q %s0, %s0, %s4
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fmul fp128 %a, 0xL00000000000000004001400000000000
+  ret fp128 %r
+}
+
 
 define float @func7(float %a) {
 ; CHECK-LABEL: func7:
@@ -60,4 +84,18 @@ define double @func8(double %a) {
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = fmul double %a, 0x7FEFFFFFFFFFFFFF
   ret double %r
+}
+
+define fp128 @func9(fp128 %a) {
+; CHECK-LABEL: func9:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, .LCPI8_0@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s2, .LCPI8_0@hi(%s2)
+; CHECK-NEXT:    ld %s4, 8(,%s2)
+; CHECK-NEXT:    ld %s5, (,%s2)
+; CHECK-NEXT:    fmul.q %s0, %s0, %s4
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fmul fp128 %a, 0xLFFFFFFFFFFFFFFFF7FFEFFFFFFFFFFFF
+  ret fp128 %r
 }

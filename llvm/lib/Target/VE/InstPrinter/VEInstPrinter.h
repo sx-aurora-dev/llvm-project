@@ -31,6 +31,12 @@ public:
   bool printAliasInstr(const MCInst *, const MCSubtargetInfo &, raw_ostream &);
   void printInstruction(const MCInst *, uint64_t, const MCSubtargetInfo &,
                         raw_ostream &);
+  bool printVEAliasInstr(const MCInst *MI, const MCSubtargetInfo &STI,
+                         raw_ostream &OS);
+
+  void printCustomAliasOperand(const MCInst *MI, unsigned OpIdx,
+                               unsigned PrintMethodIdx,
+                               const MCSubtargetInfo &STI, raw_ostream &O);
   static const char *getRegisterName(unsigned RegNo);
 
   void printOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
@@ -43,6 +49,8 @@ public:
                          const char *Modifier = nullptr);
   void printCCOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                       raw_ostream &OS);
+  bool printGetGOT(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
+                   raw_ostream &OS);
 };
 } // namespace llvm
 

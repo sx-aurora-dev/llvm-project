@@ -40,9 +40,25 @@ public:
 
   unsigned getNumberOfRegisters(unsigned ClassID) const { return 64; }
 
-  unsigned getRegisterBitWidth(bool Vector) const { return 64; }
+  unsigned getRegisterBitWidth(bool Vector) const {
+    if (Vector) {
+      return 256 * 64;
+    }
+    return 64;
+  }
 
   unsigned getMinVectorRegisterBitWidth() const { return 64; }
+
+  bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) { return false; }
+  bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment) {
+    return false;
+  }
+  bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment) {
+    return false;
+  };
+  bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
+    return false;
+  }
 };
 
 } // namespace llvm

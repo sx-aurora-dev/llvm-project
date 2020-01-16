@@ -123,8 +123,14 @@ define i64 @remi64ri(i64 %a, i64 %b) {
 define i32 @remi32ri(i32 %a, i32 %b) {
 ; CHECK-LABEL: remi32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 3, (0)1
-; CHECK-NEXT:    divs.w.sx %s1, %s0, %s1
+; CHECK-NEXT:    adds.w.sx %s1, %s0, (0)1
+; CHECK-NEXT:    lea %s2, 1431655766
+; CHECK-NEXT:    muls.l %s1, %s1, %s2
+; CHECK-NEXT:    srl %s2, %s1, 63
+; CHECK-NEXT:    adds.w.sx %s2, %s2, (0)1
+; CHECK-NEXT:    srl %s1, %s1, 32
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
+; CHECK-NEXT:    adds.w.sx %s1, %s1, %s2
 ; CHECK-NEXT:    muls.w.sx %s1, 3, %s1
 ; CHECK-NEXT:    subs.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -149,8 +155,12 @@ define i64 @remu64ri(i64 %a, i64 %b) {
 define i32 @remu32ri(i32 %a, i32 %b) {
 ; CHECK-LABEL: remu32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 3, (0)1
-; CHECK-NEXT:    divu.w %s1, %s0, %s1
+; CHECK-NEXT:    adds.w.zx %s1, %s0, (0)1
+; CHECK-NEXT:    lea %s2, -1431655765
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    muls.l %s1, %s1, %s2
+; CHECK-NEXT:    srl %s1, %s1, 33
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    muls.w.sx %s1, 3, %s1
 ; CHECK-NEXT:    subs.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -204,4 +214,93 @@ define i32 @remu32li(i32 %a, i32 %b) {
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = urem i32 3, %b
   ret i32 %r
+}
+
+define i128 @remi128(i128 %a, i128 %b) {
+; CHECK-LABEL: remi128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s4, __modti3@lo
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    lea.sl %s12, __modti3@hi(%s4)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = srem i128 %a, %b
+  ret i128 %r
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @remu128(i128 %a, i128 %b) {
+; CHECK-LABEL: remu128:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s4, __umodti3@lo
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    lea.sl %s12, __umodti3@hi(%s4)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = urem i128 %a, %b
+  ret i128 %r
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @remi128ri(i128 %a) {
+; CHECK-LABEL: remi128ri:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, __modti3@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s12, __modti3@hi(%s2)
+; CHECK-NEXT:    or %s2, 3, (0)1
+; CHECK-NEXT:    or %s3, 0, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = srem i128 %a, 3
+  ret i128 %r
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @remu128ri(i128 %a) {
+; CHECK-LABEL: remu128ri:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, __umodti3@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s12, __umodti3@hi(%s2)
+; CHECK-NEXT:    or %s2, 3, (0)1
+; CHECK-NEXT:    or %s3, 0, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = urem i128 %a, 3
+  ret i128 %r
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @remi128li(i128 %a) {
+; CHECK-LABEL: remi128li:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s3, 0, %s1
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    lea %s0, __modti3@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, __modti3@hi(%s0)
+; CHECK-NEXT:    or %s0, 3, (0)1
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = srem i128 3, %a
+  ret i128 %r
+}
+
+; Function Attrs: norecurse nounwind readnone
+define i128 @remu128li(i128 %a) {
+; CHECK-LABEL: remu128li:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s3, 0, %s1
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    lea %s0, __umodti3@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, __umodti3@hi(%s0)
+; CHECK-NEXT:    or %s0, 3, (0)1
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = urem i128 3, %a
+  ret i128 %r
 }

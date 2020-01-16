@@ -28,6 +28,11 @@
 
 using namespace llvm;
 
+static cl::opt<bool>
+    DisableLeafProc("disable-ve-leaf-proc", cl::init(false),
+                    cl::desc("Disable VE leaf procedure optimization."),
+                    cl::Hidden);
+
 VEFrameLowering::VEFrameLowering(const VESubtarget &ST)
     : TargetFrameLowering(TargetFrameLowering::StackGrowsDown, Align(16), 0,
                           Align(16)) {}
@@ -336,6 +341,22 @@ int VEFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
   return FrameOffset + MF.getFrameInfo().getStackSize();
 }
 
+static bool LLVM_ATTRIBUTE_UNUSED
+verifyLeafProcRegUse(MachineRegisterInfo *MRI) {
+
+  // If any of parameter registers are used, this is not leaf function.
+  for (unsigned reg = VE::SX0; reg <= VE::SX7; ++reg)
+    if (MRI->isPhysRegUsed(reg))
+      return false;
+
+  // If any of callee-saved registers are used, this is not leaf function.
+  for (unsigned reg = VE::SX18; reg <= VE::SX33; ++reg)
+    if (MRI->isPhysRegUsed(reg))
+      return false;
+
+  return true;
+}
+
 bool VEFrameLowering::isLeafProc(MachineFunction &MF) const {
 
   MachineRegisterInfo &MRI = MF.getRegInfo();
@@ -353,7 +374,7 @@ void VEFrameLowering::determineCalleeSaves(MachineFunction &MF,
                                            RegScavenger *RS) const {
   TargetFrameLowering::determineCalleeSaves(MF, SavedRegs, RS);
 
-  if (isLeafProc(MF)) {
+  if (!DisableLeafProc && isLeafProc(MF)) {
     VEMachineFunctionInfo *MFI = MF.getInfo<VEMachineFunctionInfo>();
     MFI->setLeafProc(true);
   }

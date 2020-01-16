@@ -173,3 +173,79 @@ define i64 @func18(i64 %a) {
   %r = shl nsw i64 %a, 31
   ret i64 %r
 }
+
+define i128 @func19(i128 %a, i128 %b) {
+; CHECK-LABEL: func19:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s4, 0, %s1
+; CHECK-NEXT:    or %s5, 0, %s0
+; CHECK-NEXT:    lea %s0, __multi3@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, __multi3@hi(%s0)
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s2, 0, %s5
+; CHECK-NEXT:    or %s3, 0, %s4
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = mul i128 %b, %a
+  ret i128 %r
+}
+
+define i128 @func20(i128 %a, i128 %b) {
+; CHECK-LABEL: func20:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s4, 0, %s1
+; CHECK-NEXT:    or %s5, 0, %s0
+; CHECK-NEXT:    lea %s0, __multi3@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, __multi3@hi(%s0)
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s2, 0, %s5
+; CHECK-NEXT:    or %s3, 0, %s4
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = mul nsw i128 %b, %a
+  ret i128 %r
+}
+
+define i128 @func21(i128 %a) {
+; CHECK-LABEL: func21:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, __multi3@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s12, __multi3@hi(%s2)
+; CHECK-NEXT:    or %s2, 5, (0)1
+; CHECK-NEXT:    or %s3, 0, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = mul nsw i128 %a, 5
+  ret i128 %r
+}
+
+define i128 @func22(i128 %a) {
+; CHECK-LABEL: func22:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, __multi3@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s12, __multi3@hi(%s2)
+; CHECK-NEXT:    or %s2, 5, (0)1
+; CHECK-NEXT:    or %s3, 0, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = mul i128 %a, 5
+  ret i128 %r
+}
+
+define i128 @func23(i128 %a) {
+; CHECK-LABEL: func23:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    srl %s2, %s0, 33
+; CHECK-NEXT:    sll %s1, %s1, 31
+; CHECK-NEXT:    or %s1, %s1, %s2
+; CHECK-NEXT:    sll %s0, %s0, 31
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = shl nsw i128 %a, 31
+  ret i128 %r
+}

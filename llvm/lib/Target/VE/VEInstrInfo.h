@@ -55,15 +55,24 @@ public:
   reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
   /// } Branch Analysis & Modification
 
+  /// Register Copy {
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                    const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg,
                    bool KillSrc) const override;
+
+  void copyPhysSubRegs(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                       const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
+                       bool KillSrc, const MCInstrDesc &MCID,
+                       unsigned int numSubRegs,
+                       const unsigned *subRegIdx) const;
+  /// } Register Copy
 
   /// Stack Spill & Reload {
   unsigned isLoadFromStackSlot(const MachineInstr &MI,
                                int &FrameIndex) const override;
   unsigned isStoreToStackSlot(const MachineInstr &MI,
                               int &FrameIndex) const override;
+
   void storeRegToStackSlot(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator MBBI, Register SrcReg,
                            bool isKill, int FrameIndex,
@@ -76,10 +85,13 @@ public:
                             const TargetRegisterInfo *TRI) const override;
   /// } Stack Spill & Reload
 
+  unsigned getGlobalBaseReg(MachineFunction *MF) const;
+
   // Lower pseudo instructions after register allocation.
   bool expandPostRAPseudo(MachineInstr &MI) const override;
 
   bool expandExtendStackPseudo(MachineInstr &MI) const;
+  bool expandGetStackTopPseudo(MachineInstr &MI) const;
 };
 
 } // namespace llvm

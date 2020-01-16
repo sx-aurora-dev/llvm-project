@@ -47,6 +47,20 @@ define i64 @func4(i64 %0, i64 %1) {
   ret i64 %3
 }
 
+; Function Attrs: norecurse nounwind readnone
+define i128 @func5(i128 %0, i128 %1) {
+; CHECK-LABEL: func5:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s2, %s2, (0)1
+; CHECK-NEXT:    lea %s3, __ashlti3@lo
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    lea.sl %s12, __ashlti3@hi(%s3)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %3 = shl i128 %0, %1
+  ret i128 %3
+}
+
 define zeroext i8 @func6(i8 zeroext %0, i8 zeroext %1) {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -92,6 +106,20 @@ define i64 @func9(i64 %0, i64 %1) {
   ret i64 %3
 }
 
+; Function Attrs: norecurse nounwind readnone
+define i128 @func10(i128 %0, i128 %1) {
+; CHECK-LABEL: func10:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s2, %s2, (0)1
+; CHECK-NEXT:    lea %s3, __ashlti3@lo
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    lea.sl %s12, __ashlti3@hi(%s3)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    or %s11, 0, %s9
+  %3 = shl i128 %0, %1
+  ret i128 %3
+}
+
 define signext i8 @func11(i8 signext %0) {
 ; CHECK-LABEL: func11:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -132,6 +160,19 @@ define i64 @func14(i64 %0) {
   ret i64 %2
 }
 
+; Function Attrs: norecurse nounwind readnone
+define i128 @func15(i128 %0) {
+; CHECK-LABEL: func15:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    srl %s2, %s0, 59
+; CHECK-NEXT:    sll %s1, %s1, 5
+; CHECK-NEXT:    or %s1, %s1, %s2
+; CHECK-NEXT:    sll %s0, %s0, 5
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = shl i128 %0, 5
+  ret i128 %2
+}
+
 define zeroext i8 @func16(i8 zeroext %0) {
 ; CHECK-LABEL: func16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -170,3 +211,15 @@ define i64 @func19(i64 %0) {
   ret i64 %2
 }
 
+; Function Attrs: norecurse nounwind readnone
+define i128 @func20(i128 %0) {
+; CHECK-LABEL: func20:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    srl %s2, %s0, 59
+; CHECK-NEXT:    sll %s1, %s1, 5
+; CHECK-NEXT:    or %s1, %s1, %s2
+; CHECK-NEXT:    sll %s0, %s0, 5
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = shl i128 %0, 5
+  ret i128 %2
+}

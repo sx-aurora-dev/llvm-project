@@ -20,19 +20,40 @@ class VEMachineFunctionInfo : public MachineFunctionInfo {
   virtual void anchor();
 
 private:
+  unsigned GlobalBaseReg;
+
+  /// VectorLengthReg - Holds the virtual register for VL register.
+  unsigned VectorLengthReg;
+
   /// VarArgsFrameOffset - Frame offset to start of varargs area.
   int VarArgsFrameOffset;
+
+  /// SRetReturnReg - Holds the virtual register into which the sret
+  /// argument is passed.
+  unsigned SRetReturnReg;
 
   /// IsLeafProc - True if the function is a leaf procedure.
   bool IsLeafProc;
 
 public:
-  VEMachineFunctionInfo() : VarArgsFrameOffset(0), IsLeafProc(false) {}
+  VEMachineFunctionInfo()
+      : GlobalBaseReg(0), VectorLengthReg(0), VarArgsFrameOffset(0),
+        SRetReturnReg(0), IsLeafProc(false) {}
   explicit VEMachineFunctionInfo(MachineFunction &MF)
-      : VarArgsFrameOffset(0), IsLeafProc(false) {}
+      : GlobalBaseReg(0), VectorLengthReg(0), VarArgsFrameOffset(0),
+        SRetReturnReg(0), IsLeafProc(false) {}
+
+  unsigned getGlobalBaseReg() const { return GlobalBaseReg; }
+  void setGlobalBaseReg(unsigned Reg) { GlobalBaseReg = Reg; }
+
+  unsigned getVectorLengthReg() const { return VectorLengthReg; }
+  void setVectorLengthReg(unsigned Reg) { VectorLengthReg = Reg; }
 
   int getVarArgsFrameOffset() const { return VarArgsFrameOffset; }
   void setVarArgsFrameOffset(int Offset) { VarArgsFrameOffset = Offset; }
+
+  unsigned getSRetReturnReg() const { return SRetReturnReg; }
+  void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
 
   void setLeafProc(bool rhs) { IsLeafProc = rhs; }
   bool isLeafProc() const { return IsLeafProc; }
