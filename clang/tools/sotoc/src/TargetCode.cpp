@@ -32,6 +32,8 @@
 #include "OmpPragma.h"
 #include "TargetCode.h"
 
+int clauseparam = -1;
+
 bool TargetCode::addCodeFragment(std::shared_ptr<TargetCodeFragment> Frag,
                                  bool PushFront) {
   for (auto &F : CodeFragments) {
@@ -140,16 +142,15 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
     Out << Var.name();
   }
  
-  int i = -1; 
   for (auto C : TCR->getOMPClauses()){
     if ((C->getClauseKind() == clang::OpenMPClauseKind::OMPC_num_threads) && !C->isImplicit()) {
-    i++;
+    clauseparam++;
     if (!first) {
       Out << ", ";
     } else {
       first = false;
     }
-    Out << "int __sotoc_clause_param_" << std::to_string(i) << " ";
+    Out << "int __sotoc_clause_param_" << std::to_string(clauseparam) << " ";
     }
   }
 

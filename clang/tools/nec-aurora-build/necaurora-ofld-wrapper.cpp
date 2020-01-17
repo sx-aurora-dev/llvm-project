@@ -40,6 +40,12 @@ enum class ToolMode {
   Passthrough,
 };
 
+/* 
+  Parse command line arguments and decide which to pass to the device compiler and which to
+  sotoc.
+  e.g.: Add defines to sotoc and ncc
+*/
+
 int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
                  std::string &InputFile, std::string &cArgs, std::string &sArgs, bool &Verbose,
                  bool &SaveTemps, std::vector<const char *> &ObjectFiles,
@@ -51,7 +57,6 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
   bool SaveTempsFlag = false;
   bool OFlag = false;
   SotocPath = "sotoc";
-  // TODO make this more flexible
   InputFile = argv[1];
   if (strcmp(argv[1] + strlen(argv[1]) -2, ".o") == 0) {
     ObjectFiles.push_back(argv[1]);

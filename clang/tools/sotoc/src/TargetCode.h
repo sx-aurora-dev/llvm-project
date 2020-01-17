@@ -24,6 +24,7 @@ class SourceManager;
 
 using TargetCodeFragmentDeque = std::deque<std::shared_ptr<TargetCodeFragment>>;
 
+  extern int clauseparam;
 /// A collection of all code from the input file that needs to be copied to the
 /// target source file.
 class TargetCode {
