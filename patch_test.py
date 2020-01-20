@@ -1,22 +1,25 @@
 #!/usr/bin/env/python3
 import sys
 import re
+from glob import glob
 
-out_path = sys.argv[1]
-in_path = sys.argv[2]
+out_suffix=".PATCHED"
 
 def parse_reg(reg_txt):
   return int(reg_txt[2:])  # strip leading '%s'
 
 reg_map={}
 
-def clean_patch(out_path, in_path):
+def clean_patch(in_path, out_path):
   print("IN: {} // OUT: {}".format(in_path, out_path))
   in_func = False
   past_first_block = False
   past_sp_copy = False
+
+  raw_lines = [raw_line for raw_line in open(in_path, 'r')]
+
   with open(out_path, 'w') as out:
-    for raw_line in open(in_path, 'r'):
+    for raw_line in raw_lines:
       line=raw_line.strip()
       print(line)
 
@@ -46,7 +49,11 @@ def clean_patch(out_path, in_path):
       # block -> rewrite into generic form
       if line.startswith("; CHECK-NEXT:  .LBB"):
         #  ; CHECK:       .LBB{{[0-9]+}}_2:
-        idx_part = line.split('_')[-1]
+
+        # strip trailing comments
+        idx_suffix = line.split('_')[-1]
+        idx_suffix_parts = idx_suffix.split()
+        idx_part = idx_suffix_parts[0]
         print("IDX: {}".format(idx_part))
         generic_bb_check="; CHECK:       .LBB{{[0-9]+}}_"
         bb_check=generic_bb_check + idx_part
@@ -86,4 +93,5 @@ def clean_patch(out_path, in_path):
         print("DEFINE {}".format(out_reg))
         continue
 
-clean_patch(out_path, in_path)
+for in_file in glob(sys.argv[1]):
+  clean_patch(in_file, in_file)
