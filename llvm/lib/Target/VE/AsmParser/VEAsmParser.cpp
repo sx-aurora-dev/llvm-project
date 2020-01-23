@@ -101,11 +101,6 @@ class VEAsmParser : public MCTargetAsmParser {
     return getSTI().getTargetTriple().getArch() == Triple::sparcv9;
   }
 
-#if 0
-  bool expandSET(MCInst &Inst, SMLoc IDLoc,
-                 SmallVectorImpl<MCInst> &Instructions);
-#endif
-
 public:
   VEAsmParser(const MCSubtargetInfo &sti, MCAsmParser &parser,
                 const MCInstrInfo &MII,
@@ -501,113 +496,19 @@ public:
 
 } // end anonymous namespace
 
-#if 0
-bool VEAsmParser::expandSET(MCInst &Inst, SMLoc IDLoc,
-                               SmallVectorImpl<MCInst> &Instructions) {
-  MCOperand MCRegOp = Inst.getOperand(0);
-  MCOperand MCValOp = Inst.getOperand(1);
-  assert(MCRegOp.isReg());
-  assert(MCValOp.isImm() || MCValOp.isExpr());
-
-  // the imm operand can be either an expression or an immediate.
-  bool IsImm = Inst.getOperand(1).isImm();
-  int64_t RawImmValue = IsImm ? MCValOp.getImm() : 0;
-
-  // Allow either a signed or unsigned 32-bit immediate.
-  if (RawImmValue < -2147483648LL || RawImmValue > 4294967295LL) {
-    return Error(IDLoc,
-                 "set: argument must be between -2147483648 and 4294967295");
-  }
-
-  // If the value was expressed as a large unsigned number, that's ok.
-  // We want to see if it "looks like" a small signed number.
-  int32_t ImmValue = RawImmValue;
-  // For 'set' you can't use 'or' with a negative operand on V9 because
-  // that would splat the sign bit across the upper half of the destination
-  // register, whereas 'set' is defined to zero the high 32 bits.
-  bool IsEffectivelyImm13 =
-      IsImm && ((is64Bit() ? 0 : -4096) <= ImmValue && ImmValue < 4096);
-  const MCExpr *ValExpr;
-  if (IsImm)
-    ValExpr = MCConstantExpr::create(ImmValue, getContext());
-  else
-    ValExpr = MCValOp.getExpr();
-
-  // FIXME: need to collect this S31
-  MCOperand PrevReg = MCOperand::createReg(VE::S31);
-
-  // FIXME: need lea.sl
-  // If not just a signed imm13 value, then either we use a 'sethi' with a
-  // following 'or', or a 'sethi' by itself if there are no more 1 bits.
-  // In either case, start with the 'sethi'.
-  if (!IsEffectivelyImm13) {
-    MCInst TmpInst;
-    const MCExpr *Expr = adjustPICRelocation(VEMCExpr::VK_VE_HI, ValExpr);
-    TmpInst.setLoc(IDLoc);
-    TmpInst.setOpcode(SP::SETHIi);
-    TmpInst.addOperand(MCRegOp);
-    TmpInst.addOperand(MCOperand::createExpr(Expr));
-    Instructions.push_back(TmpInst);
-    PrevReg = MCRegOp;
-  }
-
-  // The low bits require touching in 3 cases:
-  // * A non-immediate value will always require both instructions.
-  // * An effectively imm13 value needs only an 'or' instruction.
-  // * Otherwise, an immediate that is not effectively imm13 requires the
-  //   'or' only if bits remain after clearing the 22 bits that 'sethi' set.
-  // If the low bits are known zeros, there's nothing to do.
-  // In the second case, and only in that case, must we NOT clear
-  // bits of the immediate value via the %lo() assembler function.
-  // Note also, the 'or' instruction doesn't mind a large value in the case
-  // where the operand to 'set' was 0xFFFFFzzz - it does exactly what you mean.
-  if (!IsImm || IsEffectivelyImm13 || (ImmValue & 0x3ff)) {
-    MCInst TmpInst;
-    const MCExpr *Expr;
-    if (IsEffectivelyImm13)
-      Expr = ValExpr;
-    else
-      Expr = adjustPICRelocation(VEMCExpr::VK_VE_LO, ValExpr);
-    TmpInst.setLoc(IDLoc);
-    TmpInst.setOpcode(SP::ORri);
-    TmpInst.addOperand(MCRegOp);
-    TmpInst.addOperand(PrevReg);
-    TmpInst.addOperand(MCOperand::createExpr(Expr));
-    Instructions.push_back(TmpInst);
-  }
-  return false;
-}
-#endif
-
 bool VEAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
                                              OperandVector &Operands,
                                              MCStreamer &Out,
                                              uint64_t &ErrorInfo,
                                              bool MatchingInlineAsm) {
   MCInst Inst;
-  SmallVector<MCInst, 8> Instructions;
   unsigned MatchResult = MatchInstructionImpl(Operands, Inst, ErrorInfo,
                                               MatchingInlineAsm);
   switch (MatchResult) {
-  case Match_Success: {
-#if 0
-    switch (Inst.getOpcode()) {
-    default:
-      Inst.setLoc(IDLoc);
-      Instructions.push_back(Inst);
-      break;
-    case SP::SET:
-      if (expandSET(Inst, IDLoc, Instructions))
-        return true;
-      break;
-    }
-#endif
-
-    for (const MCInst &I : Instructions) {
-      Out.EmitInstruction(I, getSTI());
-    }
+  case Match_Success:
+    Inst.setLoc(IDLoc);
+    Out.EmitInstruction(Inst, getSTI());
     return false;
-  }
 
   case Match_MissingFeature:
     return Error(IDLoc,
