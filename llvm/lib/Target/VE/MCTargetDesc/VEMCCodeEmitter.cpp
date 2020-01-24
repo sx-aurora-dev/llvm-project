@@ -79,6 +79,9 @@ public:
   uint64_t getCCOpValue(const MCInst &MI, unsigned OpNo,
                         SmallVectorImpl<MCFixup> &Fixups,
                         const MCSubtargetInfo &STI) const;
+  uint64_t getBPOpValue(const MCInst &MI, unsigned OpNo,
+                        SmallVectorImpl<MCFixup> &Fixups,
+                        const MCSubtargetInfo &STI) const;
 
 private:
   FeatureBitset computeAvailableFeatures(const FeatureBitset &FB) const;
@@ -193,7 +196,17 @@ uint64_t VEMCCodeEmitter::getCCOpValue(const MCInst &MI, unsigned OpNo,
                                        const MCSubtargetInfo &STI) const {
   const MCOperand &MO = MI.getOperand(OpNo);
   if (MO.isImm())
-    return VECondCodeToVal(static_cast<VECC::CondCodes>(
+    return VECondCodeToVal(static_cast<VECC::CondCode>(
+        getMachineOpValue(MI, MO, Fixups, STI)));
+  return 0;
+}
+
+uint64_t VEMCCodeEmitter::getBPOpValue(const MCInst &MI, unsigned OpNo,
+                                       SmallVectorImpl<MCFixup> &Fixups,
+                                       const MCSubtargetInfo &STI) const {
+  const MCOperand &MO = MI.getOperand(OpNo);
+  if (MO.isImm())
+    return VEBPToVal(static_cast<VEBP::Prediction>(
         getMachineOpValue(MI, MO, Fixups, STI)));
   return 0;
 }

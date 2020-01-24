@@ -47,7 +47,7 @@ VEInstrInfo::VEInstrInfo(VESubtarget &ST)
 
 static bool IsIntegerCC(unsigned CC) { return (CC < VECC::CC_AF); }
 
-static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC) {
+static VECC::CondCode GetOppositeBranchCondition(VECC::CondCode CC) {
   switch(CC) {
   case VECC::CC_IG:     return VECC::CC_ILE;
   case VECC::CC_IL:     return VECC::CC_IGE;
@@ -71,25 +71,44 @@ static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC) {
   case VECC::CC_GENAN:  return VECC::CC_L;
   case VECC::CC_LENAN:  return VECC::CC_G;
   case VECC::CC_AT:     return VECC::CC_AF;
+  case VECC::UNKNOWN:   break;;
   }
   llvm_unreachable("Invalid cond code");
+  return VECC::UNKNOWN;
 }
 
-// Treat br.l [BCR AT] as unconditional branch
+// Treat br.l [BRCF AT] as unconditional branch
 static bool isUncondBranchOpcode(int Opc) {
-  return Opc == VE::BCRLa || Opc == VE::BCRWa ||
-         Opc == VE::BCRDa || Opc == VE::BCRSa;
+  return Opc == VE::BRCFLa    || Opc == VE::BRCFWa    ||
+         Opc == VE::BRCFLa_nt || Opc == VE::BRCFWa_nt ||
+         Opc == VE::BRCFLa_t  || Opc == VE::BRCFWa_t  ||
+         Opc == VE::BRCFDa    || Opc == VE::BRCFSa    ||
+         Opc == VE::BRCFDa_nt || Opc == VE::BRCFSa_nt ||
+         Opc == VE::BRCFDa_t  || Opc == VE::BRCFSa_t;
 }
 
 static bool isCondBranchOpcode(int Opc) {
-  return Opc == VE::BCRLrr  || Opc == VE::BCRLir  ||
-         Opc == VE::BCRWrr  || Opc == VE::BCRWir  ||
-         Opc == VE::BCRDrr  || Opc == VE::BCRDir  ||
-         Opc == VE::BCRSrr  || Opc == VE::BCRSir;
+  return Opc == VE::BRCFLrr    || Opc == VE::BRCFLir    ||
+         Opc == VE::BRCFLrr_nt || Opc == VE::BRCFLir_nt ||
+         Opc == VE::BRCFLrr_t  || Opc == VE::BRCFLir_t  ||
+         Opc == VE::BRCFWrr    || Opc == VE::BRCFWir    ||
+         Opc == VE::BRCFWrr_nt || Opc == VE::BRCFWir_nt ||
+         Opc == VE::BRCFWrr_t  || Opc == VE::BRCFWir_t  ||
+         Opc == VE::BRCFDrr    || Opc == VE::BRCFDir    ||
+         Opc == VE::BRCFDrr_nt || Opc == VE::BRCFDir_nt ||
+         Opc == VE::BRCFDrr_t  || Opc == VE::BRCFDir_t  ||
+         Opc == VE::BRCFSrr    || Opc == VE::BRCFSir    ||
+         Opc == VE::BRCFSrr_nt || Opc == VE::BRCFSir_nt ||
+         Opc == VE::BRCFSrr_t  || Opc == VE::BRCFSir_t;
 }
 
 static bool isIndirectBranchOpcode(int Opc) {
-  return Opc == VE::BAri;
+  return Opc == VE::BCFLari    || Opc == VE::BCFLari    ||
+         Opc == VE::BCFLari_nt || Opc == VE::BCFLari_nt ||
+         Opc == VE::BCFLari_t  || Opc == VE::BCFLari_t  ||
+         Opc == VE::BCFLari    || Opc == VE::BCFLari    ||
+         Opc == VE::BCFLari_nt || Opc == VE::BCFLari_nt ||
+         Opc == VE::BCFLari_t  || Opc == VE::BCFLari_t;
 }
 
 static void parseCondBranch(MachineInstr *LastInst, MachineBasicBlock *&Target,
@@ -193,13 +212,13 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
   if (Cond.empty()) {
     // Uncondition branch
     assert(!FBB && "Unconditional branch with multiple successors!");
-    BuildMI(&MBB, DL, get(VE::BCRLa))
+    BuildMI(&MBB, DL, get(VE::BRCFLa_t))
         .addMBB(TBB);
     return 1;
   }
 
   // Conditional branch
-  //   (BCRir CC sy sz addr)
+  //   (BRCFir CC sy sz addr)
   assert(Cond[0].isImm() && Cond[2].isReg() && "not implemented");
 
   unsigned opc[2];
@@ -209,19 +228,19 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
   unsigned Reg = Cond[2].getReg();
   if (IsIntegerCC(Cond[0].getImm())) {
     if (TRI->getRegSizeInBits(Reg, MRI) == 32) {
-      opc[0] = VE::BCRWir;
-      opc[1] = VE::BCRWrr;
+      opc[0] = VE::BRCFWir;
+      opc[1] = VE::BRCFWrr;
     } else {
-      opc[0] = VE::BCRLir;
-      opc[1] = VE::BCRLrr;
+      opc[0] = VE::BRCFLir;
+      opc[1] = VE::BRCFLrr;
     }
   } else {
     if (TRI->getRegSizeInBits(Reg, MRI) == 32) {
-      opc[0] = VE::BCRSir;
-      opc[1] = VE::BCRSrr;
+      opc[0] = VE::BRCFSir;
+      opc[1] = VE::BRCFSrr;
     } else {
-      opc[0] = VE::BCRDir;
-      opc[1] = VE::BCRDrr;
+      opc[0] = VE::BRCFDir;
+      opc[1] = VE::BRCFDrr;
     }
   }
   if (Cond[1].isImm()) {
@@ -241,7 +260,7 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
   if (!FBB)
     return 1;
 
-  BuildMI(&MBB, DL, get(VE::BCRLa))
+  BuildMI(&MBB, DL, get(VE::BRCFLa_t))
       .addMBB(FBB);
   return 2;
 }
@@ -271,7 +290,7 @@ unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
 
 bool VEInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
-  VECC::CondCodes CC = static_cast<VECC::CondCodes>(Cond[0].getImm());
+  VECC::CondCode CC = static_cast<VECC::CondCode>(Cond[0].getImm());
   Cond[0].setImm(GetOppositeBranchCondition(CC));
   return false;
 }
@@ -907,7 +926,7 @@ bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
   // Next, add the true and fallthrough blocks as its successors.
   BB->addSuccessor(syscallMBB);
   BB->addSuccessor(sinkMBB);
-  BuildMI(BB, dl, TII.get(VE::BCRLrr))
+  BuildMI(BB, dl, TII.get(VE::BRCFLrr_t))
       .addImm(VECC::CC_IGE)
       .addReg(VE::SX11) // %sp
       .addReg(VE::SX8)  // %sl

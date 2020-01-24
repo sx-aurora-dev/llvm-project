@@ -17,6 +17,7 @@
 #include "MCTargetDesc/VEMCTargetDesc.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/ADT/StringSwitch.h"
 
 namespace llvm {
 class FunctionPass;
@@ -38,7 +39,7 @@ namespace llvm {
 // Enums corresponding to VE condition codes, both icc's and fcc's.  These
 // values must be kept in sync with the ones in the .td file.
 namespace VECC {
-enum CondCodes {
+enum CondCode {
   // Integer comparison
   CC_IG =  0,  // Greater
   CC_IL =  1,  // Less
@@ -64,10 +65,20 @@ enum CondCodes {
   CC_GENAN = 13 + 6, // Greater or Equal or NaN
   CC_LENAN = 14 + 6, // Less or Equal or NaN
   CC_AT =    15 + 6, // Always
+  UNKNOWN
+};
+}
+// Enums corresponding to VE Branch Prediction.  These values must be kept in
+// sync with the ones in the .td file.
+namespace VEBP {
+enum Prediction {
+  BP_NONE =  0,
+  BP_NOT_TAKEN = 2,
+  BP_TAKEN = 3,
 };
 }
 
-inline static const char *VECondCodeToString(VECC::CondCodes CC) {
+inline static const char *VECondCodeToString(VECC::CondCode CC) {
   switch (CC) {
   case VECC::CC_IG:    return "gt";
   case VECC::CC_IL:    return "lt";
@@ -91,11 +102,48 @@ inline static const char *VECondCodeToString(VECC::CondCodes CC) {
   case VECC::CC_GENAN: return "genan";
   case VECC::CC_LENAN: return "lenan";
   case VECC::CC_AT:    return "at";
+  default:
+    llvm_unreachable("Invalid cond code");
   }
-  llvm_unreachable("Invalid cond code");
 }
 
-inline static unsigned VECondCodeToVal(VECC::CondCodes CC) {
+inline static VECC::CondCode stringToVEICondCode(StringRef S) {
+  return StringSwitch<VECC::CondCode>(S)
+      .Case("gt", VECC::CC_IG)
+      .Case("lt", VECC::CC_IL)
+      .Case("ne", VECC::CC_INE)
+      .Case("eq", VECC::CC_IEQ)
+      .Case("ge", VECC::CC_IGE)
+      .Case("le", VECC::CC_ILE)
+      .Case("af", VECC::CC_AF)
+      .Case("at", VECC::CC_AT)
+      .Case("", VECC::CC_AT)
+      .Default(VECC::UNKNOWN);
+}
+
+inline static VECC::CondCode stringToVEFCondCode(StringRef S) {
+  return StringSwitch<VECC::CondCode>(S)
+      .Case("gt", VECC::CC_G)
+      .Case("lt", VECC::CC_L)
+      .Case("ne", VECC::CC_NE)
+      .Case("eq", VECC::CC_EQ)
+      .Case("ge", VECC::CC_GE)
+      .Case("le", VECC::CC_LE)
+      .Case("num", VECC::CC_NUM)
+      .Case("nan", VECC::CC_NAN)
+      .Case("gtnan", VECC::CC_GNAN)
+      .Case("ltnan", VECC::CC_LNAN)
+      .Case("nenan", VECC::CC_NENAN)
+      .Case("eqnan", VECC::CC_EQNAN)
+      .Case("genan", VECC::CC_GENAN)
+      .Case("lenan", VECC::CC_LENAN)
+      .Case("af", VECC::CC_AF)
+      .Case("at", VECC::CC_AT)
+      .Case("", VECC::CC_AT)
+      .Default(VECC::UNKNOWN);
+}
+
+inline static unsigned VECondCodeToVal(VECC::CondCode CC) {
   switch (CC) {
   case VECC::CC_IG:    return 1;
   case VECC::CC_IL:    return 2;
@@ -119,11 +167,13 @@ inline static unsigned VECondCodeToVal(VECC::CondCodes CC) {
   case VECC::CC_GENAN: return 13;
   case VECC::CC_LENAN: return 14;
   case VECC::CC_AT:    return 15;
+  default:
+    llvm_unreachable("Invalid cond code");
   }
-  llvm_unreachable("Invalid cond code");
+  return 0;
 }
 
-inline static VECC::CondCodes VEValToCondCode(unsigned Val, bool IsInteger) {
+inline static VECC::CondCode VEValToCondCode(unsigned Val, bool IsInteger) {
   if (IsInteger) {
     switch (Val) {
     case 0: return VECC::CC_AF;
@@ -157,6 +207,35 @@ inline static VECC::CondCodes VEValToCondCode(unsigned Val, bool IsInteger) {
   }
   llvm_unreachable("Invalid cond code");
   return VECC::CC_AF;
+}
+
+inline static const char *VEBPToString(VEBP::Prediction P) {
+  switch (P) {
+  case VEBP::BP_NONE: return "";
+  case VEBP::BP_NOT_TAKEN: return ".nt";
+  case VEBP::BP_TAKEN: return ".t";
+  }
+  llvm_unreachable("Invalid branch predicate");
+}
+
+inline static unsigned VEBPToVal(VEBP::Prediction P) {
+  switch (P) {
+  case VEBP::BP_NONE: return 0;
+  case VEBP::BP_NOT_TAKEN: return 2;
+  case VEBP::BP_TAKEN: return 3;
+  }
+  llvm_unreachable("Invalid branch predicates");
+  return 0;
+}
+
+inline static VEBP::Prediction VEValToBP(unsigned Val) {
+  switch (Val) {
+  case 0: return VEBP::BP_NONE;
+  case 2: return VEBP::BP_NOT_TAKEN;
+  case 3: return VEBP::BP_TAKEN;;
+  }
+  llvm_unreachable("Invalid branch predicates");
+  return VEBP::BP_NONE;
 }
 
 } // namespace llvm

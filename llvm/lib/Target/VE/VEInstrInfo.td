@@ -115,7 +115,7 @@ def zext_imm : SDNodeXForm<imm, [{
 }]>;
 
 def icond2cc : SDNodeXForm<cond, [{
-  VECC::CondCodes cc;
+  VECC::CondCode cc;
   switch (N->get()) {
   default:          llvm_unreachable("Unknown integer condition code!");
   case ISD::SETEQ:  cc = VECC::CC_IEQ; break;
@@ -133,7 +133,7 @@ def icond2cc : SDNodeXForm<cond, [{
 }]>;
 
 def icond2ccSwap : SDNodeXForm<cond, [{
-  VECC::CondCodes cc;
+  VECC::CondCode cc;
   switch (N->get()) {
   default:          llvm_unreachable("Unknown integer condition code!");
   case ISD::SETEQ:  cc = VECC::CC_IEQ; break;
@@ -151,7 +151,7 @@ def icond2ccSwap : SDNodeXForm<cond, [{
 }]>;
 
 def fcond2cc : SDNodeXForm<cond, [{
-  VECC::CondCodes cc;
+  VECC::CondCode cc;
   switch (N->get()) {
   default:          llvm_unreachable("Unknown float condition code!");
   case ISD::SETFALSE: cc = VECC::CC_AF;    break;
@@ -181,7 +181,7 @@ def fcond2cc : SDNodeXForm<cond, [{
 }]>;
 
 def fcond2ccSwap : SDNodeXForm<cond, [{
-  VECC::CondCodes cc;
+  VECC::CondCode cc;
   switch (N->get()) {
   default:          llvm_unreachable("Unknown float condition code!");
   case ISD::SETFALSE: cc = VECC::CC_AF;    break;
@@ -285,11 +285,11 @@ def MEMzii : Operand<iPTR> {
 // AS assembly instrcution format:
 def VEMEMriAsmOperand : AsmOperandClass {
   let Name = "MEMri";
-  let ParserMethod = "parseMEMOperand";
+  let ParserMethod = "parseMEMAsOperand";
 }
 def VEMEMziAsmOperand : AsmOperandClass {
   let Name = "MEMzi";
-  let ParserMethod = "parseMEMOperand";
+  let ParserMethod = "parseMEMAsOperand";
 }
 // AS generic assembly instruction format:
 def MEMriASX : Operand<iPTR> {
@@ -328,13 +328,14 @@ def MEMziHM : Operand<iPTR> {
 // Branch targets have OtherVT type.
 def brtarget32 : Operand<OtherVT> {
   let EncoderMethod = "getBranchTargetOpValue";
+  let DecoderMethod = "DecodeSIMM32";
 }
 
 def TLSSym : Operand<iPTR>;
 
 def calltarget : Operand<i64> {
   let EncoderMethod = "getCallTargetOpValue";
-  let DecoderMethod = "DecodeCall";
+  let DecoderMethod = "DecodeCallTarget";
 }
 
 def simm7Op32 : Operand<i32> {
@@ -358,22 +359,30 @@ def simm32Op64 : Operand<i64> {
 }
 
 def uimm6Op32 : Operand<i32> {
-  let DecoderMethod = "DecodeUIMM6";
 }
 
 def uimm6Op64 : Operand<i64> {
-  let DecoderMethod = "DecodeUIMM6";
 }
 
 def uimm6Op128 : Operand<i128> {
-  let DecoderMethod = "DecodeUIMM6";
 }
 
 // Operand for printing out a condition code.
+def CCOpAsmOperand : AsmOperandClass {
+  let Name = "CCOp";
+}
 def CCOp : Operand<i32> {
   let PrintMethod = "printCCOperand";
   let DecoderMethod = "DecodeCCOperand";
   let EncoderMethod = "getCCOpValue";
+  let ParserMatchClass = CCOpAsmOperand;
+}
+
+// Operand for printing out a branch prediction code.
+def BPOp : Operand<i32> {
+  let PrintMethod = "printBPOperand";
+  let DecoderMethod = "DecodeBPOperand";
+  let EncoderMethod = "getBPOpValue";
 }
 
 def VEhi    : SDNode<"VEISD::Hi", SDTIntUnaryOp>;
@@ -788,67 +797,6 @@ multiclass RRI2m<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
     let cy = 1;
     let cz = 0;
     let mz = 0;
-  }
-}
-
-// Branch relative multiclass
-let isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
-multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
-                RegisterClass RC, ValueType Ty, Operand immOp> {
-  def rr : CF<
-    opc, (outs),
-    (ins CCOp:$cf, RC:$sy, RC:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, $sz, $imm32")> {
-    let cy = 1;
-    let cz = 1;
-    let hasSideEffects = 0;
-  }
-  def ir : CF<
-    opc, (outs),
-    (ins CCOp:$cf, immOp:$sy, RC:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, $sz, $imm32")> {
-    let cy = 0;
-    let cz = 1;
-    let hasSideEffects = 0;
-  }
-  def a : CF<
-    opc, (outs), (ins brtarget32:$imm32),
-    !strconcat(opcStrAt, " $imm32")> {
-    let cy = 0;
-    let sy = 0;
-    let cz = 0;
-    let sz = 0;
-    let cf = 15;  /* AT */
-    let isBarrier = 1;
-    let hasSideEffects = 0;
-  }
-}
-
-// Branch multiclass
-let isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
-multiclass BCm<string opcStr, string opcStrAt, bits<8> opc,
-               RegisterClass RC, ValueType Ty, Operand immOp> {
-  def r : CF<
-    opc, (outs),
-    (ins CCOp:$cond, RC:$comp, MEMriASX:$addr),
-    !strconcat(opcStr, " $comp, $addr"), []> {
-    let hasSideEffects = 0;
-  }
-  def i : CF<
-    opc, (outs),
-    (ins CCOp:$cond, immOp:$comp, MEMriASX:$addr),
-    !strconcat(opcStr, " $comp, $addr"), []> {
-    let cy = 0;
-    let hasSideEffects = 0;
-  }
-  def a : CF<
-    opc, (outs), (ins MEMriASX:$addr),
-    !strconcat(opcStrAt, " $addr"), []> {
-    let cy = 0;
-    let sy = 0;
-    let cf = 15;  /* AT */
-    let isBarrier = 1;
-    let hasSideEffects = 0;
   }
 }
 
@@ -1301,56 +1249,101 @@ let cz = 0, sz = 0 in {
   defm CVQS : CVTm<"cvt.q.s", 0x2D, F128, f128, F32, f32, simm7Op32, fpextend>;
 }
 
-// Control-flow
+//-----------------------------------------------------------------------------
+// Section 8.8 - Branch instructions
+//-----------------------------------------------------------------------------
 
-// Jump instruction
-let cx = 0, cx2 = 0, bpf = 0 /* NONE */,
-    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0,
-    DecoderMethod = "DecodeBranchCondition" in
-defm BC : BCm<"b${cond}.l", "b.l", 0x19, I64, i64, simm7Op64>;
-
-// Jump always instruction is treated as a special case of jump in order
-// to make finding unconditional jump easy.
-let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
-    cz = 1,
-    isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1,
-    hasDelaySlot = 1, isCodeGenOnly = 1, hasSideEffects = 0 in {
-def BAri : CF<
-    0x19, (outs), (ins MEMriASX:$addr),
-    "b.l $addr",
-    [(brind ADDRri:$addr)]>;
+// Branch multiclass
+let isBranch = 1, isTerminator = 1, isIndirectBranch = 1 in
+multiclass BCbpfm<string opcStr, string cmpStr, bits<8> opc, dag cond,
+                  Operand ADDR> {
+  let bpf = 0 /* NONE */ in
+  def "" : CF<opc, (outs), !con(cond, (ins ADDR:$addr)),
+              !strconcat(opcStr, " ", cmpStr, "$addr")>;
+  let bpf = 2 /* NOT TaKEN */ in
+  def _nt : CF<opc, (outs), !con(cond, (ins ADDR:$addr)),
+               !strconcat(opcStr, ".nt ", cmpStr, "$addr")>;
+  let bpf = 3 /* TaKEN */ in
+  def _t : CF<opc, (outs), !con(cond, (ins ADDR:$addr)),
+              !strconcat(opcStr, ".t ", cmpStr, "$addr")>;
+}
+multiclass BCtgm<string opcStr, string cmpStr, bits<8> opc, dag cond> {
+  defm ri : BCbpfm<opcStr, cmpStr, opc, cond, MEMriASX>;
+  let cz = 0 in defm zi : BCbpfm<opcStr, cmpStr, opc, cond, MEMziASX>;
+}
+multiclass BCm<string opcStr, string opcStrAt, string opcStrAf, bits<8> opc,
+               RegisterClass RC, Operand immOp> {
+  let DecoderMethod = "DecodeBranchCondition" in
+  defm r : BCtgm<opcStr, "$comp, ", opc, (ins CCOp:$cond, RC:$comp)>;
+  let DecoderMethod = "DecodeBranchCondition", cy = 0 in
+  defm i : BCtgm<opcStr, "$comp, ", opc, (ins CCOp:$cond, immOp:$comp)>;
+  let DecoderMethod = "DecodeBranchConditionAlways", cy = 0, sy = 0,
+      cf = 15 /* AT */, isBarrier = 1 in
+  defm a : BCtgm<opcStrAt, "", opc, (ins)>;
+  let DecoderMethod = "DecodeBranchConditionAlways", cy = 0, sy = 0,
+      cf = 0 /* AF */ in
+  defm na : BCtgm<opcStrAf, "", opc, (ins)>;
 }
 
-// Jump never instruction is also a special case of jump.
-let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 0 /* AF */, cy = 1, sy = 0,
-    cz = 1,
-    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0 in
-def BN : CF<0x19, (outs), (ins brtarget32:$imm32), "baf.l $imm32">;
+// Branch relative multiclass
+let isBranch = 1, isTerminator = 1 in
+multiclass BCRbpfm<string opcStr, string cmpStr, bits<8> opc, dag cond> {
+  let bpf = 0 /* NONE */ in
+  def "" : CF<opc, (outs), !con(cond, (ins brtarget32:$imm32)),
+              !strconcat(opcStr, " ", cmpStr, "$imm32")>;
+  let bpf = 2 /* NOT TaKEN */ in
+  def _nt : CF<opc, (outs), !con(cond, (ins brtarget32:$imm32)),
+               !strconcat(opcStr, ".nt ", cmpStr, "$imm32")>;
+  let bpf = 3 /* TaKEN */ in
+  def _t : CF<opc, (outs), !con(cond, (ins brtarget32:$imm32)),
+              !strconcat(opcStr, ".t ", cmpStr, "$imm32")>;
+}
+multiclass BCRm<string opcStr, string opcStrAt, string opcStrAf, bits<8> opc,
+               RegisterClass RC, Operand immOp> {
+  defm rr : BCRbpfm<opcStr, "$sy, $sz, ", opc, (ins CCOp:$cf, RC:$sy, RC:$sz)>;
+  let cy = 0 in
+  defm ir : BCRbpfm<opcStr, "$sy, $sz, ", opc, (ins CCOp:$cf, immOp:$sy, RC:$sz)>;
+  let cy = 0, sy = 0, cz = 0, sz = 0, cf = 15 /* AT */, isBarrier = 1 in
+  defm a : BCRbpfm<opcStrAt, "", opc, (ins)>;
+  let cy = 0, sy = 0, cz = 0, sz = 0, cf = 0 /* AF */ in
+  defm na : BCRbpfm<opcStrAf, "", opc, (ins)>;
+}
 
-// Return instruction is also a special case of jump.
-let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
-    cz = 1, sz = 10 /* SX10 */, imm32 = 0, Uses = [SX10],
-    isReturn = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1,
-    isCodeGenOnly = 1, hasSideEffects = 0 in
-def RET : CF<
-    0x19, (outs), (ins),
-    "b.l (, %lr)",
-    [(retflag)]>;
+// Section 8.8.1 - BC (Branch on Codition)
+defm BCFL : BCm<"b${cond}.l", "b.l", "baf.l", 0x19, I64, simm7Op32>;
+
+// Indirect branch aliases
+def : Pat<(brind I64:$reg), (BCFLari_t $reg, 0)>;
+def : Pat<(brind tblockaddress:$imm), (BCFLazi_t 0, $imm)>;
+
+// Return instruction is a special case of jump.
+let Uses = [SX10], bpf = 3 /* TAKEN */, cf = 15 /* AT */, cy = 0, sy = 0,
+    sz = 10 /* SX10 */, imm32 = 0, isReturn = 1, isTerminator = 1,
+    isBarrier = 1, isCodeGenOnly = 1 in
+def RET : CF<0x19, (outs), (ins), "b.l.t (, %lr)", [(retflag)]>;
+
+// Section 8.8.2 - BCS (Branch on Condition Single)
+defm BCFW : BCm<"b${cond}.w", "b.w", "baf.w", 0x1B, I32, simm7Op32>;
+
+// Section 8.8.3 - BCF (Branch on Condition Floating Point)
+defm BCFD : BCm<"b${cond}.d", "b.d", "baf.d", 0x1C, I64, simm7Op32>;
+let cx = 1 in
+defm BCFS : BCm<"b${cond}.s", "b.s", "baf.s", 0x1C, F32, simm7Op32>;
+
+// Section 8.8.4 - BCR (Branch on Condition Relative)
+let cx = 0, cx2 = 0 in
+defm BRCFL : BCRm<"br${cf}.l", "br.l", "braf.l", 0x18, I64, simm7Op32>;
+let cx = 1, cx2 = 0 in
+defm BRCFW : BCRm<"br${cf}.w", "br.w", "braf.w", 0x18, I32, simm7Op32>;
+let cx = 0, cx2 = 1 in
+defm BRCFD : BCRm<"br${cf}.d", "br.d", "braf.d", 0x18, I64, simm7Op32>;
+let cx = 1, cx2 = 1 in
+defm BRCFS : BCRm<"br${cf}.s", "br.s", "braf.s", 0x18, F32, simm7Op32>;
 
 // Branch and Save IC
 
 let cx = 0, cy = 0, cy = 0, cz = 1, hasSideEffects = 0 /* , Uses = [IC] */ in
 def BSIC : RM<0x08, (outs), (ins I64:$sx, I64:$sz), "bsic $sx, (, ${sz})">;
-
-// Branch instruction
-let cx = 0, cx2 = 0, bpf = 0 /* NONE */ in
-defm BCRL : BCRm<"br${cf}.l", "br.l", 0x18, I64, i64, simm7Op64>;
-let cx = 1, cx2 = 0, bpf = 0 /* NONE */ in
-defm BCRW : BCRm<"br${cf}.w", "br.w", 0x18, I32, i32, simm7Op32>;
-let cx = 0, cx2 = 1, bpf = 0 /* NONE */ in
-defm BCRD : BCRm<"br${cf}.d", "br.d", 0x18, I64, f64, simm7Op64>;
-let cx = 1, cx2 = 1, bpf = 0 /* NONE */ in
-defm BCRS : BCRm<"br${cf}.s", "br.s", 0x18, F32, f32, simm7Op32>;
 
 // Load and Store host memory instructions
 let cx = 0, cz = 1, hasSideEffects = 0 in {
@@ -1770,7 +1763,7 @@ def : Pat<(call i64:$dst),
           (CALLr i64:$dst)>;
 
 // Branches
-def : Pat<(br bb:$addr), (BCRLa bb:$addr)>;
+def : Pat<(br bb:$addr), (BRCFLa bb:$addr)>;
 
 // brcc
 // integer brcc
@@ -1788,8 +1781,8 @@ multiclass BRCCIm<ValueType ty, SDPatternOperator BrOpNode1,
   def : Pat<(brcc CCUIOp:$cond, ty:$l, ty:$r, bb:$addr),
             (BrOpNode2 (icond2cc $cond), 0, (CmpOpNode1 $r, $l), bb:$addr)>;
 }
-defm : BRCCIm<i32, BCRWrr, BCRWir, CMPUWrr, CMPUWir>;
-defm : BRCCIm<i64, BCRLrr, BCRLir, CMPrr, CMPir>;
+defm : BRCCIm<i32, BRCFWrr, BRCFWir, CMPUWrr, CMPUWir>;
+defm : BRCCIm<i64, BRCFLrr, BRCFLir, CMPrr, CMPir>;
 
 // floating point brcc
 multiclass BRCCFm<ValueType ty, SDPatternOperator BrOpNode1,
@@ -1799,14 +1792,14 @@ multiclass BRCCFm<ValueType ty, SDPatternOperator BrOpNode1,
   def : Pat<(brcc cond:$cond, ty:$l, ty:$r, bb:$addr),
             (BrOpNode1 (fcond2cc $cond), $l, $r, bb:$addr)>;
 }
-defm : BRCCFm<f32, BCRSrr, BCRSir>;
-defm : BRCCFm<f64, BCRDrr, BCRDir>;
+defm : BRCCFm<f32, BRCFSrr, BRCFSir>;
+defm : BRCCFm<f64, BRCFDrr, BRCFDir>;
 // FIXME: fpzero doesn't work with f128 since f128 is separated
 //        to INSERT_SUBREG stuff before performing ISEL.
 def : Pat<(brcc cond:$cond, f128:$l, fpzero:$r, bb:$addr),
-          (BCRDrr (fcond2cc $cond), 0, (FCQir (LOFP32 $r), $l), bb:$addr)>;
+          (BRCFDrr (fcond2cc $cond), 0, (FCQir (LOFP32 $r), $l), bb:$addr)>;
 def : Pat<(brcc cond:$cond, f128:$l, f128:$r, bb:$addr),
-          (BCRDrr (fcond2cc $cond), 0, (FCQrr $r, $l), bb:$addr)>;
+          (BRCFDrr (fcond2cc $cond), 0, (FCQrr $r, $l), bb:$addr)>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions

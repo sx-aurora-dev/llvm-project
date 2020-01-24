@@ -3035,7 +3035,7 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
   }
   BuildMI(restoreMBB, DL, TII->get(VE::LEAzii), restoreDstReg)
       .addImm(0).addImm(0).addImm(1);
-  BuildMI(restoreMBB, DL, TII->get(VE::BCRLa)).addMBB(sinkMBB);
+  BuildMI(restoreMBB, DL, TII->get(VE::BRCFLa_t)).addMBB(sinkMBB);
   restoreMBB->addSuccessor(sinkMBB);
 
   MI.eraseFromParent();
@@ -3091,7 +3091,7 @@ VETargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
   MIB.setMemRefs(MMOs);
 
   // Jump
-  BuildMI(*thisMBB, MI, DL, TII->get(VE::BAri))
+  BuildMI(*thisMBB, MI, DL, TII->get(VE::BCFLari_t))
       .addReg(Tmp)
       .addImm(0);
 
@@ -3182,24 +3182,6 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   const VERegisterInfo &RI = TII->getRegisterInfo();
   // Add a register mask with no preserved registers.  This results in all
   // registers being marked as clobbered.
-#if 0
-  if (RI.hasBasePointer(*MF)) {
-    const bool FPIs64Bit =
-        Subtarget.isTarget64BitLP64() || Subtarget.isTargetNaCl64();
-    X86MachineFunctionInfo *MFI = MF->getInfo<X86MachineFunctionInfo>();
-    MFI->setRestoreBasePointer(MF);
-
-    unsigned FP = RI.getFrameRegister(*MF);
-    unsigned BP = RI.getBaseRegister();
-    unsigned Op = FPIs64Bit ? X86::MOV64rm : X86::MOV32rm;
-    addRegOffset(BuildMI(DispatchBB, DL, TII->get(Op), BP), FP, true,
-                 MFI->getRestoreBasePointerOffset())
-        .addRegMask(RI.getNoPreservedMask());
-  } else {
-    BuildMI(DispatchBB, DL, TII->get(X86::NOOP))
-        .addRegMask(RI.getNoPreservedMask());
-  }
-#endif
   BuildMI(DispatchBB, DL, TII->get(VE::NOP))
       .addRegMask(RI.getNoPreservedMask());
 
@@ -3213,14 +3195,14 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   unsigned IReg = MRI->createVirtualRegister(&VE::I64RegClass);
   addFrameReference(BuildMI(DispatchBB, DL, TII->get(VE::LDLZXrii), IReg), FI, 8);
   if (LPadList.size() < 64) {
-    BuildMI(DispatchBB, DL, TII->get(VE::BCRLir)).addImm(VECC::CC_ILE)
+    BuildMI(DispatchBB, DL, TII->get(VE::BRCFLir)).addImm(VECC::CC_ILE)
         .addImm(LPadList.size()).addReg(IReg).addMBB(TrapBB);
   } else {
     assert(LPadList.size() <= 0x7FFFFFFF && "Too large Landing Pad!");
     unsigned TmpReg = MRI->createVirtualRegister(&VE::I64RegClass);
     BuildMI(DispatchBB, DL, TII->get(VE::LEAzii), TmpReg)
         .addImm(0).addImm(0).addImm(LPadList.size());
-    BuildMI(DispatchBB, DL, TII->get(VE::BCRLrr)).addImm(VECC::CC_ILE)
+    BuildMI(DispatchBB, DL, TII->get(VE::BRCFLrr)).addImm(VECC::CC_ILE)
         .addReg(TmpReg).addReg(IReg).addMBB(TrapBB);
   }
 
@@ -3284,7 +3266,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0);
 
     // jmpq *(TReg)
-    BuildMI(DispContBB, DL, TII->get(VE::BAri))
+    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t))
         .addReg(TReg)
         .addImm(0);
     break;
@@ -3319,7 +3301,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addReg(OReg)
         .addReg(BReg);
     // jmpq *(TReg)
-    BuildMI(DispContBB, DL, TII->get(VE::BAri))
+    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t))
         .addReg(TReg)
         .addImm(0);
     break;
@@ -3377,7 +3359,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addReg(OReg)
         .addReg(BReg2);
     // jmpq *(TReg)
-    BuildMI(DispContBB, DL, TII->get(VE::BAri))
+    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t))
         .addReg(TReg)
         .addImm(0);
     break;
