@@ -262,17 +262,17 @@ bool VEDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
 
   if (Addr.getOpcode() == ISD::ADD) {
     if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1)))
-      if (isInt<13>(CN->getSExtValue()))
+      if (isInt<32>(CN->getSExtValue()))
         return false; // Let the reg+imm pattern catch this!
     if (Addr.getOperand(0).getOpcode() == VEISD::Lo ||
         Addr.getOperand(1).getOpcode() == VEISD::Lo)
-      return false; // Let the reg+imm pattern catch this!
+      return false; // Let the reg+imm(=0) pattern catch this!
     R1 = Addr.getOperand(0);
     R2 = Addr.getOperand(1);
     return true;
   }
 
-  return false; // Let the reg+imm pattern catch this!
+  return false; // Let the reg+imm(=0) pattern catch this!
 }
 
 bool VEDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
@@ -290,7 +290,7 @@ bool VEDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
 
   if (CurDAG->isBaseWithConstantOffset(Addr)) {
     ConstantSDNode *CN = cast<ConstantSDNode>(Addr.getOperand(1));
-    if (isInt<13>(CN->getSExtValue())) {
+    if (isInt<32>(CN->getSExtValue())) {
       if (FrameIndexSDNode *FIN =
               dyn_cast<FrameIndexSDNode>(Addr.getOperand(0))) {
         // Constant offset from frame ref.
