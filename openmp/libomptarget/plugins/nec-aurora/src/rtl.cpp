@@ -114,7 +114,6 @@ public:
   }
 
   RTLDeviceInfoTy() {
-    // TODO: some debug code here
 #ifdef OMPTARGET_DEBUG
     if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
       DebugLevel = std::stoi(envStr);
@@ -142,11 +141,11 @@ public:
       }
     }
 
-    /*for (auto &hdl : ProcHandles) {
+    for (auto &hdl : ProcHandles) {
       if (hdl != NULL) {
         veo_proc_destroy(hdl);
       }
-    }*/
+    }
 
     for (auto &lib : DynLibs) {
       if (lib.FileName) {
@@ -178,7 +177,6 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
   if (ret != 0) {
     DP("Waiting for entry point %p failed (Error code %d)\n",
        reinterpret_cast<void *>(FuncAddr), ret);
-    // TODO: Do something with return value?
     return -1;
   }
   return 0;
@@ -221,13 +219,13 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
   }
   DP("Available VEO version: %i (supported)\n", veo_version);
 
-// TODO: At the moment we do not initilize the device here, but in
-// "__tgt_rtl_load_binary". The reason is that we need to set an the
-// ENV VEORUN_BIN to the static bin. As long as we dont have any possibilty
-// to to pass the location of the binary to veo_proc_create it is much more
-// convinient to set the ENV here (sentenv()). However, we do not know where
-// the tgt_binary (ELF) for that which we dont have at this point. :-(.
-// Thus, we do nothing here for now.
+  // At the moment we do not really initialize (i.e. creaete a process or
+  // context on) the device here, but in "__tgt_rtl_load_binary".
+  // The reason for this is, that, when we create a process for a statically
+  // linked binary, the VEO api needs us to already supply the binary (but we
+  // can load a dynamically linked binary later, after we create the process).
+  // At this stage, we cannot check if we have a dynamically or statically
+  // linked binary so we defer process creation until we know.
   return 0;
 }
 
@@ -259,7 +257,6 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   //
   // 1) Create tmp file with the library contents.
   // 2) Use dlopen to load the file and dlsym to retrieve the symbols.
-  // TODO: Remove hard-coded "/tmp"
   char tmp_name[] = "/tmp/tmpfile_XXXXXX";
   int tmp_fd = mkstemp(tmp_name);
 
@@ -374,7 +371,6 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
     DP("Aurora device successfully initialized: proc_handle=%p", proc_handle);
  }
 
-  DP("Store dev addr to: target addr=%p \n", &addr);
   ret = veo_alloc_mem(DeviceInfo.ProcHandles[ID], &addr, Size);
   DP("Allocate target memory: device=%d, target addr=%p, size=%" PRIu64 "\n",
      ID, (void *)addr, Size);
@@ -414,8 +410,6 @@ int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
 // De-allocate the data referenced by target ptr on the device. In case of
 // success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr) {
-  uint64_t ret;
-
   return veo_free_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr);
 }
 
