@@ -253,9 +253,13 @@ public:
   bool isToken() const override { return Kind == k_Token; }
   bool isReg() const override { return Kind == k_Register; }
   bool isImm() const override { return Kind == k_Immediate; }
-  bool isMem() const override { return isMEMrr() || isMEMri(); }
-  bool isMEMrr() const { return Kind == k_MemoryReg; }
-  bool isMEMri() const { return Kind == k_MemoryImm; }
+  bool isMem() const override
+  { return isMEMrri() || isMEMrii() || isMEMzii() || isMEMri() || isMEMzi(); }
+  bool isMEMrri() const { return Kind == k_MemoryReg; }
+  bool isMEMrii() const { return Kind == k_MemoryReg; }
+  bool isMEMzii() const { return Kind == k_MemoryImm; }
+  bool isMEMri() const { return Kind == k_MemoryReg; }
+  bool isMEMzi() const { return Kind == k_MemoryImm; }
 
   bool isIntReg() const {
     return (Kind == k_Register && Reg.Kind == rk_IntReg);
@@ -348,19 +352,52 @@ public:
       Inst.addOperand(MCOperand::createExpr(Expr));
   }
 
-  void addMEMrrOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 2 && "Invalid number of operands!");
+  void addMEMrriOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 3 && "Invalid number of operands!");
 
     Inst.addOperand(MCOperand::createReg(getMemBase()));
 
-    assert(getMemOffsetReg() != 0 && "Invalid offset");
+    assert(getMemOffsetReg() != 0 && "Invalid index");
     Inst.addOperand(MCOperand::createReg(getMemOffsetReg()));
+
+    Inst.addOperand(MCOperand::createImm(0));
+  }
+
+  void addMEMriiOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 3 && "Invalid number of operands!");
+
+    Inst.addOperand(MCOperand::createReg(getMemBase()));
+    Inst.addOperand(MCOperand::createImm(0));
+
+    const MCExpr *Expr = getMemOff();
+    addExpr(Inst, Expr);
+  }
+
+  void addMEMziiOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 3 && "Invalid number of operands!");
+
+    Inst.addOperand(MCOperand::createImm(0));
+    Inst.addOperand(MCOperand::createImm(0));
+
+    const MCExpr *Expr = getMemOff();
+    addExpr(Inst, Expr);
   }
 
   void addMEMriOperands(MCInst &Inst, unsigned N) const {
-    assert(N == 2 && "Invalid number of operands!");
+    assert(N == 3 && "Invalid number of operands!");
 
     Inst.addOperand(MCOperand::createReg(getMemBase()));
+    Inst.addOperand(MCOperand::createImm(0));
+
+    const MCExpr *Expr = getMemOff();
+    addExpr(Inst, Expr);
+  }
+
+  void addMEMziOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 3 && "Invalid number of operands!");
+
+    Inst.addOperand(MCOperand::createImm(0));
+    Inst.addOperand(MCOperand::createImm(0));
 
     const MCExpr *Expr = getMemOff();
     addExpr(Inst, Expr);

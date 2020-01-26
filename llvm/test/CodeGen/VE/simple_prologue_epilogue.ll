@@ -10,7 +10,7 @@ define void @func() {
 ; CHECK-NEXT:  or %s9, 0, %s11
 ; CHECK-NEXT:  lea %s13, -176
 ; CHECK-NEXT:  and %s13, %s13, (32)0
-; CHECK-NEXT:  lea.sl %s11, -1(%s11, %s13)
+; CHECK-NEXT:  lea.sl %s11, -1(%s13, %s11)
 ; CHECK-NEXT:  brge.l %s11, %s8, .LBB0_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:  ld %s61, 24(, %s14)
@@ -41,7 +41,7 @@ define i64 @func1(i64) {
 ; CHECK-NEXT:  or %s9, 0, %s11
 ; CHECK-NEXT:  lea %s13, -176
 ; CHECK-NEXT:  and %s13, %s13, (32)0
-; CHECK-NEXT:  lea.sl %s11, -1(%s11, %s13)
+; CHECK-NEXT:  lea.sl %s11, -1(%s13, %s11)
 ; CHECK-NEXT:  brge.l %s11, %s8, .LBB1_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:  ld %s61, 24(, %s14)
@@ -72,7 +72,7 @@ define i64 @func2(i64, i64, i64, i64, i64) {
 ; CHECK-NEXT:  or %s9, 0, %s11
 ; CHECK-NEXT:  lea %s13, -176
 ; CHECK-NEXT:  and %s13, %s13, (32)0
-; CHECK-NEXT:  lea.sl %s11, -1(%s11, %s13)
+; CHECK-NEXT:  lea.sl %s11, -1(%s13, %s11)
 ; CHECK-NEXT:  brge.l %s11, %s8, .LBB2_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:  ld %s61, 24(, %s14)

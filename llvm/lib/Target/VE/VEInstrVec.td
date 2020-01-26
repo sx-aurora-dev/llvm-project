@@ -12,25 +12,25 @@
 // Specifies hasSideEffects = 0 to disable UnmodeledSideEffects.
 
 let mayLoad = 1, hasSideEffects = 0 in {
-def LDVRri : Pseudo<
-    (outs V64:$vx), (ins MEMri:$addr, I32:$vl),
+def LDVRrii : Pseudo<
+    (outs V64:$vx), (ins MEMrii:$addr, I32:$vl),
     "# pseudo ldvr $vx, $addr, $vl", []>;
-def LDVMri : Pseudo<
-    (outs VM:$vmx), (ins MEMri:$addr),
+def LDVMrii : Pseudo<
+    (outs VM:$vmx), (ins MEMrii:$addr),
     "# pseudo ldvm $vmx, $addr", []>;
-def LDVM512ri : Pseudo<
-    (outs VM512:$vmx), (ins MEMri:$addr),
+def LDVM512rii : Pseudo<
+    (outs VM512:$vmx), (ins MEMrii:$addr),
     "# pseudo ldvm512 $vmx, $addr", []>;
 }
 let mayStore = 1, hasSideEffects = 0 in {
-def STVRri : Pseudo<
-    (outs), (ins MEMri:$addr, V64:$vx, I32:$vl),
+def STVRrii : Pseudo<
+    (outs), (ins MEMrii:$addr, V64:$vx, I32:$vl),
     "# pseudo stvr $addr, $vx, $vl", []>;
-def STVMri : Pseudo<
-    (outs), (ins MEMri:$addr, VM:$vmx),
+def STVMrii : Pseudo<
+    (outs), (ins MEMrii:$addr, VM:$vmx),
     "# pseudo stvm $addr, $vmx", []>;
-def STVM512ri : Pseudo<
-    (outs), (ins MEMri:$addr, VM512:$vmx),
+def STVM512rii : Pseudo<
+    (outs), (ins MEMrii:$addr, VM512:$vmx),
     "# pseudo stvm512 $addr, $vmx", []>;
 }
 

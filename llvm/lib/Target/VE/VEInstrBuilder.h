@@ -31,7 +31,7 @@ namespace llvm {
 static inline const MachineInstrBuilder&
 addFrameReference(const MachineInstrBuilder &MIB, int FI, int Offset = 0,
                   bool mem = true) {
-  return MIB.addFrameIndex(FI).addImm(Offset);
+  return MIB.addFrameIndex(FI).addImm(0).addImm(Offset);
 }
 
 } // End llvm namespace

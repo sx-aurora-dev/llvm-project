@@ -57,25 +57,30 @@ void VEFrameLowering::emitPrologueInsns(MachineFunction &MF,
   //    st %s17, 40(,%sp) iff this function is using s17 as BP
   //    or %fp, 0, %sp
 
-  BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
+  BuildMI(MBB, MBBI, dl, TII.get(VE::STrii))
       .addReg(VE::SX11)
       .addImm(0)
+      .addImm(0)
       .addReg(VE::SX9);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
+  BuildMI(MBB, MBBI, dl, TII.get(VE::STrii))
       .addReg(VE::SX11)
+      .addImm(0)
       .addImm(8)
       .addReg(VE::SX10);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
+  BuildMI(MBB, MBBI, dl, TII.get(VE::STrii))
       .addReg(VE::SX11)
+      .addImm(0)
       .addImm(24)
       .addReg(VE::SX15);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
+  BuildMI(MBB, MBBI, dl, TII.get(VE::STrii))
       .addReg(VE::SX11)
+      .addImm(0)
       .addImm(32)
       .addReg(VE::SX16);
   if (hasBP(MF))
-    BuildMI(MBB, MBBI, dl, TII.get(VE::STSri))
+    BuildMI(MBB, MBBI, dl, TII.get(VE::STrii))
         .addReg(VE::SX11)
+        .addImm(0)
         .addImm(40)
         .addReg(VE::SX17);
   BuildMI(MBB, MBBI, dl, TII.get(VE::ORri), VE::SX9)
@@ -105,20 +110,25 @@ void VEFrameLowering::emitEpilogueInsns(MachineFunction &MF,
       .addReg(VE::SX9)
       .addImm(0);
   if (hasBP(MF))
-    BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX17)
+    BuildMI(MBB, MBBI, dl, TII.get(VE::LDrii), VE::SX17)
         .addReg(VE::SX11)
+        .addImm(0)
         .addImm(40);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX16)
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDrii), VE::SX16)
       .addReg(VE::SX11)
+      .addImm(0)
       .addImm(32);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX15)
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDrii), VE::SX15)
       .addReg(VE::SX11)
+      .addImm(0)
       .addImm(24);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX10)
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDrii), VE::SX10)
       .addReg(VE::SX11)
+      .addImm(0)
       .addImm(8);
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LDSri), VE::SX9)
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LDrii), VE::SX9)
       .addReg(VE::SX11)
+      .addImm(0)
       .addImm(0);
 }
 
@@ -143,7 +153,9 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
   //   lea     %s13,%lo(NumBytes)
   //   and     %s13,%s13,(32)0
   //   lea.sl  %sp,%hi(NumBytes)(%sp, %s13)
-  BuildMI(MBB, MBBI, dl, TII.get(VE::LEAzzi), VE::SX13)
+  BuildMI(MBB, MBBI, dl, TII.get(VE::LEAzii), VE::SX13)
+      .addImm(0)
+      .addImm(0)
       .addImm(Lo_32(NumBytes));
   BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm0), VE::SX13)
       .addReg(VE::SX13)

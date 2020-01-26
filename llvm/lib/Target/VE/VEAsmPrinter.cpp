@@ -113,8 +113,11 @@ static void EmitLEAzzi(MCStreamer &OutStreamer,
                     const MCSubtargetInfo &STI)
 {
   MCInst LEAInst;
-  LEAInst.setOpcode(VE::LEAzzi);
+  LEAInst.setOpcode(VE::LEAzii);
   LEAInst.addOperand(RD);
+  MCOperand czero = MCOperand::createImm(0);
+  LEAInst.addOperand(czero);
+  LEAInst.addOperand(czero);
   LEAInst.addOperand(Imm);
   OutStreamer.EmitInstruction(LEAInst, STI);
 }
@@ -124,8 +127,11 @@ static void EmitLEASLzzi(MCStreamer &OutStreamer,
                       const MCSubtargetInfo &STI)
 {
   MCInst LEASLInst;
-  LEASLInst.setOpcode(VE::LEASLzzi);
+  LEASLInst.setOpcode(VE::LEASLzii);
   LEASLInst.addOperand(RD);
+  MCOperand czero = MCOperand::createImm(0);
+  LEASLInst.addOperand(czero);
+  LEASLInst.addOperand(czero);
   LEASLInst.addOperand(Imm);
   OutStreamer.EmitInstruction(LEASLInst, STI);
 }
@@ -137,21 +143,23 @@ static void EmitLEAzii(MCStreamer &OutStreamer,
   MCInst LEAInst;
   LEAInst.setOpcode(VE::LEAzii);
   LEAInst.addOperand(RD);
+  MCOperand czero = MCOperand::createImm(0);
+  LEAInst.addOperand(czero);
   LEAInst.addOperand(RS1);
   LEAInst.addOperand(Imm);
   OutStreamer.EmitInstruction(LEAInst, STI);
 }
 
 static void EmitLEASLrri(MCStreamer &OutStreamer,
-                         MCOperand &RS1, MCOperand &RS2,
-                         MCOperand &Imm, MCOperand &RD,
+                         MCOperand &Dest, MCOperand &Base,
+                         MCOperand &Index, MCOperand &Imm,
                          const MCSubtargetInfo &STI)
 {
   MCInst LEASLInst;
   LEASLInst.setOpcode(VE::LEASLrri);
-  LEASLInst.addOperand(RS1);
-  LEASLInst.addOperand(RS2);
-  LEASLInst.addOperand(RD);
+  LEASLInst.addOperand(Dest);
+  LEASLInst.addOperand(Base);
+  LEASLInst.addOperand(Index);
   LEASLInst.addOperand(Imm);
   OutStreamer.EmitInstruction(LEASLInst, STI);
 }
@@ -241,7 +249,7 @@ void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
   // lea %got, _GLOBAL_OFFSET_TABLE_@PC_LO(-24)
   // and %got, %got, (32)0
   // sic %plt
-  // lea.sl %got, _GLOBAL_OFFSET_TABLE_@PC_HI(%got, %plt)
+  // lea.sl %got, _GLOBAL_OFFSET_TABLE_@PC_HI(%plt, %got)
   MCOperand cim24 = MCOperand::createImm(-24);
   MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PC_LO32,
                                        GOTLabel,
@@ -253,7 +261,7 @@ void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
   MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PC_HI32,
                                        GOTLabel,
                                        OutContext);
-  EmitLEASLrri(*OutStreamer, RegGOT, RegPLT, hiImm, MCRegOP, STI);
+  EmitLEASLrri(*OutStreamer, RegGOT, MCRegOP, RegPLT, hiImm, STI);
 }
 
 void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
@@ -292,7 +300,7 @@ void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
   // lea %dst, %plt_lo(func)(-24)
   // and %dst, %dst, (32)0
   // sic %plt                            ; FIXME: is it safe to use %plt here?
-  // lea.sl %dst, %plt_hi(func)(%dst, %plt)
+  // lea.sl %dst, %plt_hi(func)(%plt, %dst)
   MCOperand cim24 = MCOperand::createImm(-24);
   MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32,
                                        AddrSym,
@@ -304,7 +312,7 @@ void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
   MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32,
                                        AddrSym,
                                        OutContext);
-  EmitLEASLrri(*OutStreamer, MCRegOP, RegPLT, hiImm, MCRegOP, STI);
+  EmitLEASLrri(*OutStreamer, MCRegOP, MCRegOP, RegPLT, hiImm, STI);
 }
 
 void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
@@ -340,10 +348,10 @@ void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   // lea %s0, sym@tls_gd_lo(-24)
   // and %s0, %s0, (32)0
   // sic %lr
-  // lea.sl %s0, sym@tls_gd_hi(%s0, %lr)
+  // lea.sl %s0, sym@tls_gd_hi(%lr, %s0)
   // lea %s12, __tls_get_addr@plt_lo(8)
   // and %s12, %s12, (32)0
-  // lea.sl %s12, __tls_get_addr@plt_hi(%s12, %lr)
+  // lea.sl %s12, __tls_get_addr@plt_hi(%lr, %s12)
   // bsic %lr, (, %s12)
   MCOperand cim24 = MCOperand::createImm(-24);
   MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_LO32,
@@ -356,7 +364,7 @@ void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_HI32,
                                        AddrSym,
                                        OutContext);
-  EmitLEASLrri(*OutStreamer, RegS0, RegLR, hiImm, RegS0, STI);
+  EmitLEASLrri(*OutStreamer, RegS0, RegS0, RegLR, hiImm, STI);
   MCOperand ci8 = MCOperand::createImm(8);
   MCOperand loImm2 = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32,
                                         GetTLSLabel,
@@ -366,7 +374,7 @@ void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   MCOperand hiImm2 = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32,
                                         GetTLSLabel,
                                         OutContext);
-  EmitLEASLrri(*OutStreamer, RegS12, RegLR, hiImm2, RegS12, STI);
+  EmitLEASLrri(*OutStreamer, RegS12, RegS12, RegLR, hiImm2, STI);
   EmitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
@@ -505,15 +513,39 @@ void VEAsmPrinter::printMemASXOperand(const MachineInstr *MI, int opNum,
     return;
   }
 
-  if (MI->getOperand(opNum+1).isImm() &&
-      MI->getOperand(opNum+1).getImm() == 0) {
+  if (MI->getOperand(opNum+2).isImm() &&
+      MI->getOperand(opNum+2).getImm() == 0) {
     // don't print "+0"
   } else {
-    printOperand(MI, opNum+1, O);
+    printOperand(MI, opNum+2, O);
   }
-  O << "(,";
-  printOperand(MI, opNum, O);
-  O << ")";
+  if (MI->getOperand(opNum+1).isImm() &&
+      MI->getOperand(opNum+1).getImm() == 0 &&
+      MI->getOperand(opNum).isImm() &&
+      MI->getOperand(opNum).getImm() == 0) {
+    if (MI->getOperand(opNum+2).isImm() &&
+        MI->getOperand(opNum+2).getImm() == 0) {
+      O << "0";
+    } else {
+      // don't print "(0)"
+    }
+  } else {
+    O << "(";
+    if (MI->getOperand(opNum+1).isImm() &&
+        MI->getOperand(opNum+1).getImm() == 0) {
+      // don't print "+0"
+    } else {
+      printOperand(MI, opNum+1, O);
+    }
+    if (MI->getOperand(opNum).isImm() &&
+        MI->getOperand(opNum).getImm() == 0) {
+      // don't print "+0"
+    } else {
+      O << ", ";
+      printOperand(MI, opNum, O);
+    }
+    O << ")";
+  }
 }
 
 void VEAsmPrinter::printMemASOperand(const MachineInstr *MI, int opNum,
@@ -522,19 +554,32 @@ void VEAsmPrinter::printMemASOperand(const MachineInstr *MI, int opNum,
   if (Modifier && !strcmp(Modifier, "arith")) {
     printOperand(MI, opNum, O);
     O << ", ";
-    printOperand(MI, opNum+1, O);
+    printOperand(MI, opNum+2, O);
     return;
   }
 
-  if (MI->getOperand(opNum+1).isImm() &&
-      MI->getOperand(opNum+1).getImm() == 0) {
+  if (MI->getOperand(opNum+2).isImm() &&
+      MI->getOperand(opNum+2).getImm() == 0) {
     // don't print "+0"
   } else {
-    printOperand(MI, opNum+1, O);
+    printOperand(MI, opNum+2, O);
   }
-  O << "(";
-  printOperand(MI, opNum, O);
-  O << ")";
+  assert(MI->getOperand(opNum+1).isImm() &&
+         MI->getOperand(opNum+1).getImm() == 0 &&
+         "AS format must have 0 index");
+  if (MI->getOperand(opNum).isImm() &&
+      MI->getOperand(opNum).getImm() == 0) {
+    if (MI->getOperand(opNum+2).isImm() &&
+        MI->getOperand(opNum+2).getImm() == 0) {
+      O << "0";
+    } else {
+      // don't print "(0)"
+    }
+  } else {
+    O << "(";
+    printOperand(MI, opNum, O);
+    O << ")";
+  }
 }
 
 /// PrintAsmOperand - Print out an operand for an inline asm expression.

@@ -516,7 +516,7 @@ define signext i8 @test_atomic_exchange_1() {
 ; CHECK-NEXT:  or %s3, 10, (0)1
 ; CHECK-NEXT:  sla.w.sx %s3, %s3, %s1
 ; CHECK-NEXT:  and %s0, -4, %s0
-; CHECK-NEXT:  ts1am.w %s3, 0(%s0), %s2
+; CHECK-NEXT:  ts1am.w %s3, (%s0), %s2
 ; CHECK-NEXT:  subs.w.sx %s0, 24, %s1
 ; CHECK-NEXT:  sla.w.sx %s0, %s3, %s0
 ; CHECK-NEXT:  sra.w.sx %s0, %s0, 24
@@ -543,7 +543,7 @@ define signext i8 @test_atomic_exchange_1_relaxed() {
 ; CHECK-NEXT:  or %s3, 10, (0)1
 ; CHECK-NEXT:  sla.w.sx %s3, %s3, %s1
 ; CHECK-NEXT:  and %s0, -4, %s0
-; CHECK-NEXT:  ts1am.w %s3, 0(%s0), %s2
+; CHECK-NEXT:  ts1am.w %s3, (%s0), %s2
 ; CHECK-NEXT:  subs.w.sx %s0, 24, %s1
 ; CHECK-NEXT:  sla.w.sx %s0, %s3, %s0
 ; CHECK-NEXT:  sra.w.sx %s0, %s0, 24
@@ -569,7 +569,7 @@ define signext i8 @test_atomic_exchange_1_acquire() {
 ; CHECK-NEXT:  or %s3, 10, (0)1
 ; CHECK-NEXT:  sla.w.sx %s3, %s3, %s1
 ; CHECK-NEXT:  and %s0, -4, %s0
-; CHECK-NEXT:  ts1am.w %s3, 0(%s0), %s2
+; CHECK-NEXT:  ts1am.w %s3, (%s0), %s2
 ; CHECK-NEXT:  subs.w.sx %s0, 24, %s1
 ; CHECK-NEXT:  sla.w.sx %s0, %s3, %s0
 ; CHECK-NEXT:  sra.w.sx %s0, %s0, 24
@@ -597,7 +597,7 @@ define signext i8 @test_atomic_exchange_1_release() {
 ; CHECK-NEXT:  or %s3, 10, (0)1
 ; CHECK-NEXT:  sla.w.sx %s3, %s3, %s1
 ; CHECK-NEXT:  and %s0, -4, %s0
-; CHECK-NEXT:  ts1am.w %s3, 0(%s0), %s2
+; CHECK-NEXT:  ts1am.w %s3, (%s0), %s2
 ; CHECK-NEXT:  subs.w.sx %s0, 24, %s1
 ; CHECK-NEXT:  sla.w.sx %s0, %s3, %s0
 ; CHECK-NEXT:  sra.w.sx %s0, %s0, 24
@@ -624,7 +624,7 @@ define signext i8 @test_atomic_exchange_1_acq_rel () {
 ; CHECK-NEXT:  or %s3, 10, (0)1
 ; CHECK-NEXT:  sla.w.sx %s3, %s3, %s1
 ; CHECK-NEXT:  and %s0, -4, %s0
-; CHECK-NEXT:  ts1am.w %s3, 0(%s0), %s2
+; CHECK-NEXT:  ts1am.w %s3, (%s0), %s2
 ; CHECK-NEXT:  subs.w.sx %s0, 24, %s1
 ; CHECK-NEXT:  sla.w.sx %s0, %s3, %s0
 ; CHECK-NEXT:  sra.w.sx %s0, %s0, 24
@@ -1508,7 +1508,7 @@ define signext i8 @test_atomic_fetch_add_1() {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s3, 0, %s2
-; CHECK-NEXT:  lea %s2, 1(, %s2)
+; CHECK-NEXT:  adds.w.sx %s2, 1, %s2
 ; CHECK-NEXT:  and %s2, %s2, (56)0
 ; CHECK-NEXT:  and %s4, %s3, %s1
 ; CHECK-NEXT:  or %s2, %s4, %s2
@@ -1538,7 +1538,7 @@ define signext i16 @test_atomic_fetch_add_2() {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s3, 0, %s2
-; CHECK-NEXT:  lea %s2, 1(, %s2)
+; CHECK-NEXT:  adds.w.sx %s2, 1, %s2
 ; CHECK-NEXT:  and %s2, %s2, (48)0
 ; CHECK-NEXT:  and %s4, %s3, %s1
 ; CHECK-NEXT:  or %s2, %s4, %s2
@@ -1566,7 +1566,7 @@ define i32 @test_atomic_fetch_add_4() {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s2, 0, %s0
-; CHECK-NEXT:  lea %s0, 1(, %s0)
+; CHECK-NEXT:  adds.w.sx %s0, 1, %s0
 ; CHECK-NEXT:  cas.w %s0, (%s1), %s2
 ; CHECK-NEXT:  brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
@@ -1634,7 +1634,7 @@ define signext i8 @test_atomic_fetch_sub_1() {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s3, 0, %s2
-; CHECK-NEXT:  lea %s2, -1(, %s2)
+; CHECK-NEXT:  adds.w.sx %s2, -1, %s2
 ; CHECK-NEXT:  and %s2, %s2, (56)0
 ; CHECK-NEXT:  and %s4, %s3, %s1
 ; CHECK-NEXT:  or %s2, %s4, %s2
@@ -1664,7 +1664,7 @@ define signext i16 @test_atomic_fetch_sub_2() {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s3, 0, %s2
-; CHECK-NEXT:  lea %s2, -1(, %s2)
+; CHECK-NEXT:  adds.w.sx %s2, -1, %s2
 ; CHECK-NEXT:  and %s2, %s2, (48)0
 ; CHECK-NEXT:  and %s4, %s3, %s1
 ; CHECK-NEXT:  or %s2, %s4, %s2
@@ -1692,7 +1692,7 @@ define i32 @test_atomic_fetch_sub_4() {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s2, 0, %s0
-; CHECK-NEXT:  lea %s0, -1(, %s0)
+; CHECK-NEXT:  adds.w.sx %s0, -1, %s0
 ; CHECK-NEXT:  cas.w %s0, (%s1), %s2
 ; CHECK-NEXT:  brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end

@@ -38,9 +38,15 @@ public:
   void printMemASXOperand(const MCInst *MI, int opNum,
                           const MCSubtargetInfo &STI, raw_ostream &OS,
                           const char *Modifier = nullptr);
-  void printMemASOperand(const MCInst *MI, int opNum,
-                         const MCSubtargetInfo &STI, raw_ostream &OS,
-                         const char *Modifier = nullptr);
+  void printMemASOperandASX(const MCInst *MI, int opNum,
+                            const MCSubtargetInfo &STI, raw_ostream &OS,
+                            const char *Modifier = nullptr);
+  void printMemASOperandRRM(const MCInst *MI, int opNum,
+                            const MCSubtargetInfo &STI, raw_ostream &OS,
+                            const char *Modifier = nullptr);
+  void printMemASOperandHM(const MCInst *MI, int opNum,
+                           const MCSubtargetInfo &STI, raw_ostream &OS,
+                           const char *Modifier = nullptr);
   void printCCOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                       raw_ostream &OS);
   bool printGetGOT(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
