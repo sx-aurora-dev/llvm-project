@@ -2110,12 +2110,9 @@ def : Pat<(i32 (bswap i32:$src)),
 
 // Several special pattern matches to optimize code
 
-def : Pat<(i32 (and i32:$lhs, 0xff)),
-          (AND32rm0 $lhs, 56)>;
-def : Pat<(i32 (and i32:$lhs, 0xffff)),
-          (AND32rm0 $lhs, 48)>;
-def : Pat<(i32 (and i32:$lhs, 0xffffffff)),
-          (AND32rm0 $lhs, 32)>;
+def : Pat<(i32 (and i32:$val, 0xff)), (AND32rm0 $val, 56)>;
+def : Pat<(i32 (and i32:$val, 0xffff)), (AND32rm0 $val, 48)>;
+def : Pat<(i64 (and i64:$val, 0xffffffff)), (ANDrm0 $val, 32)>;
 
 // vector instructions
 include "VEInstrVec.td"
