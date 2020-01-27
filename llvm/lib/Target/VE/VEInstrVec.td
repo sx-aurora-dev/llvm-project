@@ -2,9 +2,8 @@
 // Vector Instructions
 //===----------------------------------------------------------------------===//
 
-class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
-        InstrItinClass itin = NoItinerary> 
-    : InstVE<outs, ins, asmstr, pattern, itin> {
+class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern=[]>
+    : InstVE<outs, ins, asmstr, pattern> {
     bits<1> cx = 0;
     bits<1> cx2 = 0;
     bits<1> cs = 0;   // y operand is scalar(1) or vector(0)
@@ -46,28 +45,28 @@ class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 let mayLoad = 1, hasSideEffects = 0 in {
 def LDVRri : Pseudo<
     (outs V64:$vx), (ins MEMri:$addr, I32:$vl),
-    "# pseudo ldvr $vx, $addr, $vl", []>;
+    "# pseudo ldvr $vx, $addr, $vl">;
 def LDVMri : Pseudo<
     (outs VM:$vmx), (ins MEMri:$addr),
-    "# pseudo ldvm $vmx, $addr", []>;
+    "# pseudo ldvm $vmx, $addr">;
 def LDVM512ri : Pseudo<
     (outs VM512:$vmx), (ins MEMri:$addr),
-    "# pseudo ldvm512 $vmx, $addr", []>;
+    "# pseudo ldvm512 $vmx, $addr">;
 }
 let mayStore = 1, hasSideEffects = 0 in {
 def STVRri : Pseudo<
     (outs), (ins MEMri:$addr, V64:$vx, I32:$vl),
-    "# pseudo stvr $addr, $vx, $vl", []>;
+    "# pseudo stvr $addr, $vx, $vl">;
 def STVMri : Pseudo<
     (outs), (ins MEMri:$addr, VM:$vmx),
-    "# pseudo stvm $addr, $vmx", []>;
+    "# pseudo stvm $addr, $vmx">;
 def STVM512ri : Pseudo<
     (outs), (ins MEMri:$addr, VM512:$vmx),
-    "# pseudo stvm512 $addr, $vmx", []>;
+    "# pseudo stvm512 $addr, $vmx">;
 }
 
 
 // 5.3.2.16. Vector Control Instructions
 
 let cx = 0, sx = 0, cy = 0, cz = 0, sz = 0, hasSideEffects = 0, isCodeGenOnly = 1 in
-def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy", []>;
+def LVL : RR<0xBF, (outs), (ins I32:$sy), "lvl $sy">;
