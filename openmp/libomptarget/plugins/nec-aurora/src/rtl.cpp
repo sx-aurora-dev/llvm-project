@@ -21,8 +21,8 @@
 #include <string>
 #include <sys/stat.h>
 #include <ve_offload.h>
-#include <veosinfo/veosinfo.h>
 #include <vector>
+#include <veosinfo/veosinfo.h>
 
 #ifndef TARGET_ELF_ID
 #define TARGET_ELF_ID 0
@@ -74,7 +74,8 @@ public:
                                  __tgt_offload_entry *HostBegin,
                                  __tgt_offload_entry *HostEnd) {
     FuncOrGblEntry[device_id].emplace_back();
-    std::vector<__tgt_offload_entry> &T = FuncOrGblEntry[device_id].back().Entries;
+    std::vector<__tgt_offload_entry> &T =
+        FuncOrGblEntry[device_id].back().Entries;
     T.clear();
     for (__tgt_offload_entry *i = HostBegin; i != HostEnd; ++i) {
       char *SymbolName = i->name;
@@ -188,9 +189,7 @@ extern "C" {
 
 // Return the number of available devices of the type supported by the
 // target RTL.
-int32_t __tgt_rtl_number_of_devices(void) {
-  return DeviceInfo.NumDevices;
-}
+int32_t __tgt_rtl_number_of_devices(void) { return DeviceInfo.NumDevices; }
 
 // Return an integer different from zero if the provided device image can be
 // supported by the runtime. The functionality is similar to comparing the
@@ -211,10 +210,14 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
   // First of all: check the veo API version
   int veo_version = veo_api_version();
   if (veo_version < VEO_MIN_VERSION) {
-    DP("veo_get_version() reported version %i. Minimum supported veo api version is %i\n", veo_version, VEO_MIN_VERSION);
+    DP("veo_get_version() reported version %i. Minimum supported veo api "
+       "version is %i\n",
+       veo_version, VEO_MIN_VERSION);
     return -1;
   } else if (veo_version > VEO_MAX_VERSION) {
-    DP("veo_get_version() reported version %i, Maximum supported veo api version is %i\n", veo_version, VEO_MAX_VERSION);
+    DP("veo_get_version() reported version %i, Maximum supported veo api "
+       "version is %i\n",
+       veo_version, VEO_MAX_VERSION);
     return -2;
   }
   DP("Available VEO version: %i (supported)\n", veo_version);
@@ -282,13 +285,13 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 
   // See comment in "__tgt_rtl_init_device"
   bool is_dyn = true;
-  if (DeviceInfo.ProcHandles[ID] == NULL){
+  if (DeviceInfo.ProcHandles[ID] == NULL) {
     struct veo_proc_handle *proc_handle;
     is_dyn = elf_is_dynamic(Image);
     // If we have a dynamically linked image, we create the process handle, then
     // the thread, and then load the image.
-    // If we have a statically linked image, we need to create the process handle
-    // and load the image at the same time with veo_proc_create_static().
+    // If we have a statically linked image, we need to create the process
+    // handle and load the image at the same time with veo_proc_create_static().
     if (is_dyn) {
       proc_handle = veo_proc_create(ID);
       if (!proc_handle) {
@@ -298,7 +301,8 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
     } else {
       proc_handle = veo_proc_create_static(ID, tmp_name);
       if (!proc_handle) {
-        DP("veo_proc_create_static() failed for device %d, image=%s\n", ID, tmp_name);
+        DP("veo_proc_create_static() failed for device %d, image=%s\n", ID,
+           tmp_name);
         return NULL;
       }
     }
@@ -317,8 +321,9 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
     DeviceInfo.Contexts[ID] = ctx;
   }
 
-  DP("Aurora device successfully initialized with loaded binary: proc_handle=%p, ctx=%p\n",
-     DeviceInfo.ProcHandles[ID] , DeviceInfo.Contexts[ID]);
+  DP("Aurora device successfully initialized with loaded binary: "
+     "proc_handle=%p, ctx=%p\n",
+     DeviceInfo.ProcHandles[ID], DeviceInfo.Contexts[ID]);
 
   uint64_t LibHandle = 0UL;
   if (is_dyn) {
@@ -333,7 +338,8 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 
     DP("Successfully loaded library dynamically\n");
   } else {
-    DP("Symbol table is expected to have been created by veo_create_proc_static()\n");
+    DP("Symbol table is expected to have been created by "
+       "veo_create_proc_static()\n");
   }
 
   DynLibTy Lib = {tmp_name, LibHandle};
@@ -369,7 +375,7 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
     }
     DeviceInfo.ProcHandles[ID] = proc_handle;
     DP("Aurora device successfully initialized: proc_handle=%p", proc_handle);
- }
+  }
 
   ret = veo_alloc_mem(DeviceInfo.ProcHandles[ID], &addr, Size);
   DP("Allocate target memory: device=%d, target addr=%p, size=%" PRIu64 "\n",
