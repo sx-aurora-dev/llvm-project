@@ -17,7 +17,6 @@
 #include "TargetCodeFragment.h"
 #include <vector>
 
-  extern int ClauseParamCounter;
 /// A helper class to rewrite some "pragma omp" (mostly teams and similar
 /// combined constructs), which are not supported by sotoc.
 /// We currently only support one team to be run on the target because ncc does
@@ -36,14 +35,15 @@ class OmpPragma {
   clang::PrintingPolicy PP;
   llvm::ArrayRef<clang::OMPClause *> Clauses;
   clang::OpenMPDirectiveKind Kind;
+  unsigned int ClauseParamCounter;
 
 public:
   OmpPragma(TargetCodeRegion *TCR)
       : PP(TCR->getPP()), Clauses(TCR->getOMPClauses()),
-        Kind(TCR->getTargetCodeKind()){};
+        Kind(TCR->getTargetCodeKind()), ClauseParamCounter(0) {};
   OmpPragma(clang::OMPExecutableDirective *Directive, clang::PrintingPolicy PP)
       : PP(PP), Clauses(Directive->clauses()),
-        Kind(Directive->getDirectiveKind()){};
+        Kind(Directive->getDirectiveKind()), ClauseParamCounter(0) {};
   /// Returns true if the omp pragma encapsulated, needs to be followed by a
   /// structured block (i.e. {...}).
   bool needsStructuredBlock();

@@ -363,8 +363,8 @@ if (Clause->getClauseKind() == clang::OpenMPClauseKind::OMPC_num_threads) {
   }
 
   if (!isNumerical) {
-    ClauseParamCounter++;
     *In = "__sotoc_clause_param_" + std::to_string(ClauseParamCounter);
+    ClauseParamCounter++;
   }
 }
 }
