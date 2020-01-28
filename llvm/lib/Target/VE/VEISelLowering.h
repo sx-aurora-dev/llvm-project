@@ -79,6 +79,10 @@ enum NodeType : unsigned {
 
   VEC_LVL,
 
+
+  // Internal VVP nodes
+  VVP_FADD,
+
   /// A wrapper node for TargetConstantPool, TargetJumpTable,
   /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
   /// MCSymbol and TargetBlockAddress.
@@ -203,6 +207,7 @@ public:
   SDValue LowerVSELECT(llvm::SDValue, llvm::SelectionDAG &) const;
   SDValue LowerTRUNCATE(llvm::SDValue, llvm::SelectionDAG &) const;
 
+  SDValue LowerToVVP(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
   // Should we expand the build vector with shuffles?
   bool

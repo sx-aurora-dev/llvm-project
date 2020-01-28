@@ -245,6 +245,42 @@ SDValue VETargetLowering::LowerVectorArithmetic(SDValue Op,
                      FixedOperandList);
 }
 
+SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering to VVP node\n");
+
+  switch (Op->getOpcode()) {
+  default:
+    return SDValue(); // default on this node
+
+  case ISD::FADD:
+    break;
+  }
+
+  EVT ResTy = Op->getValueType(0);
+
+  // not a vector operation // TODO adjust for reductions
+  if (!ResTy.isVector())
+    return SDValue();
+
+  // break-up oversized vector opers
+  if (ResTy.getVectorNumElements() > 256)
+    return SDValue();
+
+  // Decide on a new result type
+  MVT NativeResTy =
+      MVT::getVectorVT(ResTy.getVectorElementType().getSimpleVT(), 256);
+
+  SDLoc dl(Op);
+
+  MVT MaskTy = MVT::getVectorVT(MVT::i32, ResTy.getVectorNumElements());
+  SDValue MaskVal = CreateBroadcast(
+      dl, MaskTy, DAG.getBoolConstant(true, dl, MVT::i1, MVT::i1), DAG);
+  SDValue LenVal = DAG.getConstant(ResTy.getVectorNumElements(), dl, MVT::i32);
+
+  return DAG.getNode(VEISD::VVP_FADD, dl, NativeResTy,
+                     {Op->getOperand(0), Op->getOperand(1), MaskVal, LenVal});
+}
+
 SDValue VETargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
 
@@ -1467,7 +1503,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
       setOperationAction(ISD::FABS, VT, Expand);
       setOperationAction(ISD::FNEG, VT, Expand);
-      setOperationAction(ISD::FADD, VT, Expand);
+      // setOperationAction(ISD::FADD, VT, Expand);
       setOperationAction(ISD::FSUB, VT, Expand);
       setOperationAction(ISD::FMUL, VT, Expand);
       setOperationAction(ISD::FDIV, VT, Expand);
@@ -1534,7 +1570,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
       // supported calculations
       setOperationAction(ISD::FNEG, VT, Legal);
-      setOperationAction(ISD::FADD, VT, Legal);
+      setOperationAction(ISD::FADD, VT, Custom); // Lower TO VVP_FADD
       setOperationAction(ISD::FSUB, VT, Legal);
       setOperationAction(ISD::FMUL, VT, Legal);
       setOperationAction(ISD::FDIV, VT, Legal);
@@ -1730,6 +1766,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(VEC_MSTORE)
     TARGET_NODE_CASE(VEC_REDUCE_ANY)
     TARGET_NODE_CASE(VEC_POPCOUNT)
+    TARGET_NODE_CASE(VVP_FADD)
     TARGET_NODE_CASE(Wrapper)
   }
   return nullptr;
@@ -2809,6 +2846,10 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::ADD:
   case ISD::SUB:
     return LowerVectorArithmetic(Op, DAG);
+
+  // Lower this operation to an internal VVP_* node
+  case ISD::FADD:
+    return LowerToVVP(Op, DAG);
 
   // modify the return type of SETCC on vectors to v256i1
   case ISD::SETCC:

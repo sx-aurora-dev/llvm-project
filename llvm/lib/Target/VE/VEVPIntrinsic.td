@@ -352,3 +352,17 @@ def : Pat<(i64 (vp_reduce_xor v256i64:$val, v256i1:$mask, i32:$avl)), (lvsl_svs 
 def : Pat<(f64 (vp_reduce_fadd f64:$start, v256f64:$val, v256i1:$mask, i32:$avl)), (FADrr $start, (lvsl_svs (vfsumd_vvml $val, $mask, $avl), 0))>; // TODO only acceptable if may reassociate
 // def : Pat<(f64 (vp_reduce_fmin v256f64:$val, v256i1:$mask, i32:$avl)), (lvsl_svs (vfsumd_vvml $val, $mask, $avl), 0)>; // TODO masked vfrmax instruction missing
 // def : Pat<(f64 (vp_reduce_fmax v256f64:$val, v256i1:$mask, i32:$avl)), (lvsl_svs (vfmaxd_vvml $val, $mask, $avl), 0)>; // TODO masked vfrmin instruction missing
+
+
+
+
+// V(E) - VP internal nodes // experimenting
+def SDTFPBinOpVVP : SDTypeProfile<1, 4, [   // vp_fadd, etc.
+  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisFP<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 3>, SDTCisInt<4>
+]>;
+
+def vvp_fadd       : SDNode<"VEISD::VVP_FADD"       , SDTFPBinOpVP>;
+
+def : Pat<(v256f64 (vvp_fadd v256f64:$vx, v256f64:$vy, v256i1:$mask, i32:$avl)), (vfaddd_vvvmvl $vx, $vy, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
+def : Pat<(v256f32 (vvp_fadd v256f32:$vx, v256f32:$vy, v256i1:$mask, i32:$avl)), (vfadds_vvvmvl $vx, $vy, $mask, (v256f32 (IMPLICIT_DEF)), $avl)>;
+// TODO more
