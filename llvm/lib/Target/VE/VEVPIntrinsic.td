@@ -377,6 +377,15 @@ def : Pat<(v256f64 (vvp_load i64:$addr, v256i1:$mask, i32:$avl)),
                      $mask,
                      $avl
                    )>;
+// 256 x f32
+// (masked)
+def : Pat<(v256f32 (vvp_load i64:$addr, v256i1:$mask, i32:$avl)),
+                   (vgtu_vvssml
+                     (vaddul_vsvmvl $addr, (vmulul_vIvmvl 8, (vseq_vl $avl), $mask, (IMPLICIT_DEF), $avl), $mask, (IMPLICIT_DEF), $avl),
+                     0, 0,
+                     $mask,
+                     $avl
+                   )>;
 
 // TODO pattern w/o mask
 def : Pat<(v256f64 (vvp_fadd v256f64:$vx, v256f64:$vy, v256i1:$mask, i32:$avl)), (vfaddd_vvvmvl $vx, $vy, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
