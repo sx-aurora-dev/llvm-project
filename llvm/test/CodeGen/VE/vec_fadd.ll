@@ -13,7 +13,7 @@ define <2 x double> @vec_add_v2f64(<2 x double> %a, <2 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <3 x double> @vec_add_v3f63(<3 x double> %a, <3 x double> %b) {
+define <3 x double> @vec_add_v3f64(<3 x double> %a, <3 x double> %b) {
   %r = fadd <3 x double> %a, %b
   ret <3 x double> %r
 }
@@ -92,7 +92,7 @@ define <2 x float> @vec_add_v2f32(<2 x float> %a, <2 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <3 x float> @vec_add_v3f63(<3 x float> %a, <3 x float> %b) {
+define <3 x float> @vec_add_v3f32(<3 x float> %a, <3 x float> %b) {
   %r = fadd <3 x float> %a, %b
   ret <3 x float> %r
 }
