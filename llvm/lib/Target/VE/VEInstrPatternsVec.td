@@ -617,7 +617,7 @@ defm : shift_for_vector_length<4, v4i32, v4i64>;
 defm : shift_for_vector_length<2, v2i32, v2i64>;
 
 // element extraction and insertion
-def : Pat<(extractelt v256f64:$vx, i32:$sy),
-          (lvsl_svs v256f64:$vx, i32:$sy)>;
+def : Pat<(extractelt v256f64:$vx, i64:$sy),
+          (lvsl_svs v256f64:$vx, (EXTRACT_SUBREG i64:$sy, sub_i32))>;
 // def : Pat<(insertelt v256f64:$vx, i32:$sy, f64:$sz), // FIXME does not build
 //           (lsv_vvss v256f64:$vx, i32:$sy, f64:$sz)>;
