@@ -82,6 +82,7 @@ enum NodeType : unsigned {
 
   // Internal VVP nodes
   VVP_LOAD,
+  VVP_STORE,
   VVP_FADD,
 
   /// A wrapper node for TargetConstantPool, TargetJumpTable,
@@ -203,6 +204,7 @@ public:
   SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerLOAD(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVECREDUCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSETCC(llvm::SDValue, llvm::SelectionDAG &) const;
   SDValue LowerSELECT_CC(llvm::SDValue, llvm::SelectionDAG &) const;
