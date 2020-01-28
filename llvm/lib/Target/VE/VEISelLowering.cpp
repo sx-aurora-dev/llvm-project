@@ -262,19 +262,21 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
   if (!ResTy.isVector())
     return SDValue();
 
+  const unsigned NativeVectorWidth = 256;
+
   // break-up oversized vector opers
-  if (ResTy.getVectorNumElements() > 256)
+  if (ResTy.getVectorNumElements() > NativeVectorWidth)
     return SDValue();
 
   // Decide on a new result type
   MVT NativeResTy =
-      MVT::getVectorVT(ResTy.getVectorElementType().getSimpleVT(), 256);
+      MVT::getVectorVT(ResTy.getVectorElementType().getSimpleVT(), NativeVectorWidth);
 
   SDLoc dl(Op);
 
-  MVT MaskTy = MVT::getVectorVT(MVT::i32, ResTy.getVectorNumElements());
+  MVT NativeMaskTy = MVT::getVectorVT(MVT::i32, NativeVectorWidth);
   SDValue MaskVal = CreateBroadcast(
-      dl, MaskTy, DAG.getConstant(-1, dl, MVT::i1, MVT::i32), DAG); // cannonical type for i1
+      dl, NativeMaskTy, DAG.getConstant(-1, dl, MVT::i1, MVT::i32), DAG); // cannonical type for i1
   SDValue LenVal = DAG.getConstant(ResTy.getVectorNumElements(), dl, MVT::i32);
 
   return DAG.getNode(VEISD::VVP_FADD, dl, NativeResTy,
