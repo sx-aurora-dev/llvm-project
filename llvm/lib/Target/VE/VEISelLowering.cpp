@@ -294,8 +294,14 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
   if (isLoadOp) {
     SDValue ChainVal = Op->getOperand(0);
     SDValue PtrVal = Op->getOperand(1);
-    return DAG.getNode(VEISD::VVP_LOAD, dl, NativeResTy,
-                       {ChainVal, PtrVal, MaskVal, LenVal});
+    SDVTList ResWithChainTy = DAG.getVTList(NativeResTy, MVT::Other);
+
+    return DAG.getNode(VEISD::VVP_LOAD, dl, ResWithChainTy,
+                      {ChainVal, PtrVal, MaskVal, LenVal});
+
+    // SDValue OutChain = DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
+    // SDValue Ops[2] = {SDValue(InFP128, 0), OutChain};
+    // return DAG.getMergeValues(Ops, dl);
   }
 
   llvm_unreachable("Cannot lower this op to VVP");
