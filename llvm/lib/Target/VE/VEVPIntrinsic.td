@@ -361,8 +361,24 @@ def SDTFPBinOpVVP : SDTypeProfile<1, 4, [   // vp_fadd, etc.
   SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisFP<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 3>, SDTCisInt<4>
 ]>;
 
-def vvp_fadd       : SDNode<"VEISD::VVP_FADD"       , SDTFPBinOpVP>;
+def SDTLoadVVP : SDTypeProfile<1, 3, [       // vp load
+  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisSameNumEltsAs<0, 2>, SDTCisInt<3> 
+]>;
 
+def vvp_load    : SDNode<"ISD::VVP_LOAD",   SDTLoadVVP, [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def vvp_fadd    : SDNode<"VEISD::VVP_FADD", SDTFPBinOpVVP>;
+
+// 256 x f64
+// TODO pattern w/o mask
+def : Pat<(v256f64 (vp_load i64:$addr, v256i1:$mask, i32:$avl)),
+                   (vgt_vvssml
+                     (vaddul_vsvmvl $addr, (vmulul_vIvmvl 8, (vseq_vl $avl), $mask, (IMPLICIT_DEF), $avl), $mask, (IMPLICIT_DEF), $avl),
+                     0, 0,
+                     $mask,
+                     $avl
+                   )>;
+
+// TODO pattern w/o mask
+def : Pat<(v256f64 (vvp_fadd v256f64:$vx, v256f64:$vy, v256i1:$mask, i32:$avl)), (vfaddd_vvvmvl $vx, $vy, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
 def : Pat<(v256f64 (vvp_fadd v256f64:$vx, v256f64:$vy, v256i1:$mask, i32:$avl)), (vfaddd_vvvmvl $vx, $vy, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
 def : Pat<(v256f32 (vvp_fadd v256f32:$vx, v256f32:$vy, v256i1:$mask, i32:$avl)), (vfadds_vvvmvl $vx, $vy, $mask, (v256f32 (IMPLICIT_DEF)), $avl)>;
-// TODO more

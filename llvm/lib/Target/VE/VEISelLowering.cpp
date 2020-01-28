@@ -248,11 +248,18 @@ SDValue VETargetLowering::LowerVectorArithmetic(SDValue Op,
 SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering to VVP node\n");
 
+  bool isBinaryOp = false;
+  bool isLoadOp = false;
+
   switch (Op->getOpcode()) {
   default:
     return SDValue(); // default on this node
 
+  case ISD::LOAD:
+    isLoadOp = true;
+    break;
   case ISD::FADD:
+    isBinaryOp = true;
     break;
   }
 
@@ -274,13 +281,24 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
 
   SDLoc dl(Op);
 
-  MVT NativeMaskTy = MVT::getVectorVT(MVT::i32, NativeVectorWidth);
+  MVT NativeMaskTy = MVT::getVectorVT(MVT::i1, NativeVectorWidth);
   SDValue MaskVal = CreateBroadcast(
       dl, NativeMaskTy, DAG.getConstant(-1, dl, MVT::i1, MVT::i32), DAG); // cannonical type for i1
   SDValue LenVal = DAG.getConstant(ResTy.getVectorNumElements(), dl, MVT::i32);
 
-  return DAG.getNode(VEISD::VVP_FADD, dl, NativeResTy,
-                     {Op->getOperand(0), Op->getOperand(1), MaskVal, LenVal});
+  if (isBinaryOp) {
+    return DAG.getNode(VEISD::VVP_FADD, dl, NativeResTy,
+                       {Op->getOperand(0), Op->getOperand(1), MaskVal, LenVal});
+  }
+
+  if (isLoadOp) {
+    SDValue ChainVal = Op->getOperand(0);
+    SDValue PtrVal = Op->getOperand(1);
+    return DAG.getNode(VEISD::VVP_LOAD, dl, NativeResTy,
+                       {ChainVal, PtrVal, MaskVal, LenVal});
+  }
+
+  llvm_unreachable("Cannot lower this op to VVP");
 }
 
 SDValue VETargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
@@ -1570,9 +1588,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       // currently unsupported math functions
       setOperationAction(ISD::FABS, VT, Expand);
 
+      // Experimental VVP lowering
+      setOperationAction(ISD::FADD, VT, Custom); // Lower TO VVP_FADD
+      setOperationAction(ISD::LOAD, VT, Custom); // Lower TO VVP_LOAD
+
       // supported calculations
       setOperationAction(ISD::FNEG, VT, Legal);
-      setOperationAction(ISD::FADD, VT, Custom); // Lower TO VVP_FADD
       setOperationAction(ISD::FSUB, VT, Legal);
       setOperationAction(ISD::FMUL, VT, Legal);
       setOperationAction(ISD::FDIV, VT, Legal);
@@ -1769,6 +1790,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(VEC_REDUCE_ANY)
     TARGET_NODE_CASE(VEC_POPCOUNT)
     TARGET_NODE_CASE(VVP_FADD)
+    TARGET_NODE_CASE(VVP_LOAD)
     TARGET_NODE_CASE(Wrapper)
   }
   return nullptr;
@@ -2255,8 +2277,10 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG) {
   return DAG.getMergeValues(Ops, dl);
 }
 
-static SDValue LowerLOAD(SDValue Op, SelectionDAG &DAG) {
+SDValue VETargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   LoadSDNode *LdNode = cast<LoadSDNode>(Op.getNode());
+
+  if (Op->getValueType(0).isVector()) return LowerToVVP(Op, DAG);
 
   EVT MemVT = LdNode->getMemoryVT();
   if (MemVT == MVT::f128)
