@@ -274,7 +274,7 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
 
   MVT MaskTy = MVT::getVectorVT(MVT::i32, ResTy.getVectorNumElements());
   SDValue MaskVal = CreateBroadcast(
-      dl, MaskTy, DAG.getBoolConstant(true, dl, MVT::i1, MVT::i1), DAG);
+      dl, MaskTy, DAG.getConstant(-1, dl, MVT::i1, MVT::i32), DAG); // cannonical type for i1
   SDValue LenVal = DAG.getConstant(ResTy.getVectorNumElements(), dl, MVT::i32);
 
   return DAG.getNode(VEISD::VVP_FADD, dl, NativeResTy,
