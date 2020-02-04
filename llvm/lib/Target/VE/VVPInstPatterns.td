@@ -1,19 +1,14 @@
-///// V(E) - VP internal nodes // experimenting
-def SDTFPBinOpVVP : SDTypeProfile<1, 4, [   // vp_fadd, etc.
-  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisFP<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 3>, SDTCisInt<4>
-]>;
+// The backend translates VP and regular vector operations into vvp_* nodes
+// This file defines the isel patterns
+// The vvp_nodes are defined in..
 
-def SDTLoadVVP : SDTypeProfile<1, 3, [       // vvp load
-  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisSameNumEltsAs<0, 2>, SDTCisInt<3> 
-]>;
+include "VVPInstrInfo.td"
 
-def SDTStoreVVP: SDTypeProfile<0, 4, [       // vvp store
-  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<0, 2>, SDTCisInt<3>
-]>;
 
-def vvp_load    : SDNode<"VEISD::VVP_LOAD",  SDTLoadVVP, [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
-def vvp_store   : SDNode<"VEISD::VVP_STORE", SDTStoreVVP, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
-def vvp_fadd    : SDNode<"VEISD::VVP_FADD",  SDTFPBinOpVVP>;
+// TODO
+// ====
+// * fold select/vp.select into patterns to match passthru
+// * fold broadcast into op
 
 
 // Vector Load and Store
@@ -52,18 +47,64 @@ defm : VectorStore<v256i32, i64, v256i1, 4, vstl_vIsml, vstl_vIsl>;
 
 // Floating-point arithmetic
 
-multiclass VectorBinaryArith<SDPatternOperator OpNode, ValueType DataVT, ValueType ScalarVT, ValueType MaskVT, SDNode OpWithMask, SDNode OpNoMask> {
+multiclass VectorBinaryArith<SDPatternOperator OpNode, ValueType DataVT, ValueType ScalarVT, ValueType MaskVT, string OpBaseName> {
+  // w/o mask, broadcast
+  def : Pat<(OpNode (DataVT (vec_broadcast ScalarVT:$sx)), DataVT:$vy, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vsvl") $sx, $vy, $avl)>;
   // w/o mask
   def : Pat<(OpNode DataVT:$vx, DataVT:$vy, (MaskVT true_mask), i32:$avl),
-            (OpNoMask $vx, $vy, $avl)>;
+            (!cast<Instruction>(OpBaseName#"_vvvl") $vx, $vy, $avl)>;
+
+  // with mask, broadcast
+  def : Pat<(OpNode (DataVT (vec_broadcast ScalarVT:$sx)), DataVT:$vy, MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vsvmvl") $sx, $vy, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
   // with mask
   def : Pat<(OpNode DataVT:$vx, DataVT:$vy, MaskVT:$mask, i32:$avl),
-            (OpWithMask $vx, $vy, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
+            (!cast<Instruction>(OpBaseName#"_vvvmvl") $vx, $vy, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
+  // TODO fold select into op
+  // TODO commutative operators
 }
 
-// TODO fold select into operation
-defm : VectorBinaryArith<vvp_fadd, v256f64, f64, v256i1, vfaddd_vvvmvl, vfaddd_vvvl>;
-defm : VectorBinaryArith<vvp_fadd, v256f32, f32, v256i1, vfadds_vvvmvl, vfadds_vvvl>;
+// Expand both 64bit and 32 bit variant (256 elements)
+multiclass VectorBinaryArith_ShortLong<SDPatternOperator OpNode, ValueType LongDataVT, ValueType LongScalarVT, string LongOpBaseName, ValueType ShortDataVT, ValueType ShortScalarVT, string ShortOpBaseName> {
+  defm : VectorBinaryArith<OpNode, LongDataVT, LongScalarVT, v256i1, LongOpBaseName>;
+  defm : VectorBinaryArith<OpNode, ShortDataVT, ShortScalarVT, v256i1, ShortOpBaseName>;
+}
 
-// def : Pat<(v256f64 (vvp_fadd v256f64:$vx, v256f64:$vy, v256i1:$mask, i32:$avl)), (vfaddd_vvvmvl $vx, $vy, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
-// def : Pat<(v256f32 (vvp_fadd v256f32:$vx, v256f32:$vy, v256i1:$mask, i32:$avl)), (vfadds_vvvmvl $vx, $vy, $mask, (v256f32 (IMPLICIT_DEF)), $avl)>;
+multiclass VectorTernaryArith<SDPatternOperator OpNode, ValueType DataVT, ValueType ScalarVT, ValueType MaskVT, string OpBaseName> {
+  // w/o mask, broadcast first
+  def : Pat<(OpNode (DataVT (vec_broadcast ScalarVT:$sx)), DataVT:$vy, DataVT:$vz, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vsvvl") $sx, $vy, $vz, $avl)>;
+  // w/o mask, broadcast second
+  def : Pat<(OpNode DataVT:$vx, (DataVT (vec_broadcast ScalarVT:$sy)), DataVT:$vz, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vvsvl") $vx, $sy, $vz, $avl)>;
+  // w/o mask
+  def : Pat<(OpNode DataVT:$vx, DataVT:$vy, DataVT:$vz, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vvvvl") $vx, $vy, $vz, $avl)>;
+
+  // with mask, broadcast first
+  def : Pat<(OpNode (DataVT (vec_broadcast ScalarVT:$sx)), DataVT:$vy, DataVT:$vz, MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vsvvmvl") $sx, $vy, $vz, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
+  // with mask, broadcast second
+  def : Pat<(OpNode DataVT:$vx, (DataVT (vec_broadcast ScalarVT:$sy)), DataVT:$vz, MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vvsvmvl") $vx, $sy, $vz, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
+  // with mask
+  def : Pat<(OpNode DataVT:$vx, DataVT:$vy, DataVT:$vz, MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vvvvmvl") $vx, $vy, $vz, $mask, (v256f64 (IMPLICIT_DEF)), $avl)>;
+  // TODO fold select
+  // TODO commutativity
+}
+
+// Expand both 64bit and 32 bit variant (256 elements)
+multiclass VectorTernaryArith_ShortLong<SDPatternOperator OpNode, ValueType LongDataVT, ValueType LongScalarVT, string LongOpBaseName, ValueType ShortDataVT, ValueType ShortScalarVT, string ShortOpBaseName> {
+  defm : VectorTernaryArith<OpNode, LongDataVT, LongScalarVT, v256i1, LongOpBaseName>;
+  defm : VectorTernaryArith<OpNode, ShortDataVT, ShortScalarVT, v256i1, ShortOpBaseName>;
+}
+
+// Floating-point arithmetic (256 elements)
+defm : VectorBinaryArith_ShortLong<vvp_fadd, v256f64, f64, "vfaddd", v256f32, f32, "vfadds">;
+defm : VectorBinaryArith_ShortLong<vvp_fsub, v256f64, f64, "vfsubd", v256f32, f32, "vfsubs">;
+defm : VectorBinaryArith_ShortLong<vvp_fmul, v256f64, f64, "vfmuld", v256f32, f32, "vfmuls">;
+defm : VectorBinaryArith_ShortLong<vvp_fdiv, v256f64, f64, "vfdivd", v256f32, f32, "vfdivs">;
+
+defm : VectorTernaryArith_ShortLong<vvp_ffma, v256f64, f64, "vfmadd", v256f32, f32, "vfmads">;

@@ -83,7 +83,12 @@ enum NodeType : unsigned {
   // Internal VVP nodes
   VVP_LOAD,
   VVP_STORE,
+
   VVP_FADD,
+  VVP_FSUB,
+  VVP_FMUL,
+  VVP_FDIV,
+  VVP_FFMA,
 
   /// A wrapper node for TargetConstantPool, TargetJumpTable,
   /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
