@@ -311,8 +311,6 @@ private:
 
   /// Set the suffix indices of the leaves to the start indices of their
   /// respective suffixes.
-  ///
-  /// \param[in] CurrNode The node currently being visited.
   void setSuffixIndices() {
     // List of nodes we need to visit along with the current length of the
     // string.
@@ -1306,12 +1304,6 @@ void MachineOutliner::populateMapper(InstructionMapper &Mapper, Module &M,
     if (F.empty())
       continue;
 
-    // Disable outlining from noreturn functions right now. Noreturn requires
-    // special handling for the case where what we are outlining could be a
-    // tail call.
-    if (F.hasFnAttribute(Attribute::NoReturn))
-      continue;
-
     // There's something in F. Check if it has a MachineFunction associated with
     // it.
     MachineFunction *MF = MMI.getMachineFunction(F);
@@ -1385,7 +1377,7 @@ void MachineOutliner::emitInstrCountChangedRemark(
     if (!MF)
       continue;
 
-    std::string Fname = F.getName();
+    std::string Fname = std::string(F.getName());
     unsigned FnCountAfter = MF->getInstructionCount();
     unsigned FnCountBefore = 0;
 

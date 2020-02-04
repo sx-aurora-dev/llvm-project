@@ -47,13 +47,11 @@ public:
     return TLOF.get();
   }
 
-  bool isMachineVerifierClean() const override {
-    return false;
-  }
+  bool isMachineVerifierClean() const override { return false; }
 
   TargetTransformInfo getTargetTransformInfo(const Function &F) override;
 };
 
-} // end namespace llvm
+} // namespace llvm
 
 #endif

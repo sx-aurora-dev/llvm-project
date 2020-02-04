@@ -7,15 +7,15 @@
 ; Function Attrs: noinline nounwind optnone
 define i32 @t_setjmp() {
 ; CHECK-LABEL: t_setjmp:
-; CHECK:       lea %s34, buf@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, buf@hi(%s34)
-; CHECK-NEXT:  st %s9, (,%s34)
-; CHECK-NEXT:  st %s11, 16(,%s34)
-; CHECK-NEXT:  lea %s35, .LBB{{[0-9]+}}_3@lo
-; CHECK-NEXT:  and %s35, %s35, (32)0
-; CHECK-NEXT:  lea.sl %s35, .LBB{{[0-9]+}}_3@hi(%s35)
-; CHECK-NEXT:  st %s35, 8(,%s34)
+; CHECK:       lea %s0, buf@lo
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s0, buf@hi(%s0)
+; CHECK-NEXT:  st %s9, (,%s0)
+; CHECK-NEXT:  st %s11, 16(,%s0)
+; CHECK-NEXT:  lea %s1, .LBB{{[0-9]+}}_3@lo
+; CHECK-NEXT:  and %s1, %s1, (32)0
+; CHECK-NEXT:  lea.sl %s1, .LBB{{[0-9]+}}_3@hi(%s1)
+; CHECK-NEXT:  st %s1, 8(,%s0)
 ; CHECK-NEXT:  # EH_SJlJ_SETUP .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:  lea %s0, 0
@@ -44,14 +44,14 @@ declare i32 @llvm.eh.sjlj.setjmp(i8*)
 define void @t_longjmp() {
 ; CHECK-LABEL: t_longjmp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, buf@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, buf@hi(%s34)
-; CHECK-NEXT:  ld %s9, (,%s34)
-; CHECK-NEXT:  ld %s35, 8(,%s34)
-; CHECK-NEXT:  or %s10, 0, %s34
-; CHECK-NEXT:  ld %s11, 16(,%s34)
-; CHECK-NEXT:  b.l (,%s35)
+; CHECK-NEXT:  lea %s0, buf@lo
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s0, buf@hi(%s0)
+; CHECK-NEXT:  ld %s9, (,%s0)
+; CHECK-NEXT:  ld %s1, 8(,%s0)
+; CHECK-NEXT:  or %s10, 0, %s0
+; CHECK-NEXT:  ld %s11, 16(,%s0)
+; CHECK-NEXT:  b.l (,%s1)
   call void @llvm.eh.sjlj.longjmp(i8* bitcast ([1 x %struct.__jmp_buf_tag]* @buf to i8*))
   unreachable
                                                   ; No predecessors!

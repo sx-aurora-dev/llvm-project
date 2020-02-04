@@ -17,6 +17,7 @@
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/CodeGen/TargetLowering.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Target/TargetMachine.h"
 
 #define DEBUG_TYPE "gi-combiner"
@@ -239,8 +240,7 @@ bool CombinerHelper::matchCombineShuffleVector(MachineInstr &MI,
   // vectors.
   unsigned NumConcat = DstNumElts / SrcNumElts;
   SmallVector<int, 8> ConcatSrcs(NumConcat, -1);
-  SmallVector<int, 8> Mask;
-  ShuffleVectorInst::getShuffleMask(MI.getOperand(3).getShuffleMask(), Mask);
+  ArrayRef<int> Mask = MI.getOperand(3).getShuffleMask();
   for (unsigned i = 0; i != DstNumElts; ++i) {
     int Idx = Mask[i];
     // Undef value.
@@ -1338,6 +1338,76 @@ bool CombinerHelper::tryCombineMemCpyFamily(MachineInstr &MI, unsigned MaxLen) {
   if (ID == Intrinsic::memset)
     return optimizeMemset(MI, Dst, Src, KnownLen, DstAlign, IsVolatile);
   return false;
+}
+
+bool CombinerHelper::matchPtrAddImmedChain(MachineInstr &MI,
+                                           PtrAddChain &MatchInfo) {
+  // We're trying to match the following pattern:
+  //   %t1 = G_PTR_ADD %base, G_CONSTANT imm1
+  //   %root = G_PTR_ADD %t1, G_CONSTANT imm2
+  // -->
+  //   %root = G_PTR_ADD %base, G_CONSTANT (imm1 + imm2)
+
+  if (MI.getOpcode() != TargetOpcode::G_PTR_ADD)
+    return false;
+
+  Register Add2 = MI.getOperand(1).getReg();
+  Register Imm1 = MI.getOperand(2).getReg();
+  auto MaybeImmVal = getConstantVRegValWithLookThrough(Imm1, MRI);
+  if (!MaybeImmVal)
+    return false;
+
+  MachineInstr *Add2Def = MRI.getUniqueVRegDef(Add2);
+  if (!Add2Def || Add2Def->getOpcode() != TargetOpcode::G_PTR_ADD)
+    return false;
+
+  Register Base = Add2Def->getOperand(1).getReg();
+  Register Imm2 = Add2Def->getOperand(2).getReg();
+  auto MaybeImm2Val = getConstantVRegValWithLookThrough(Imm2, MRI);
+  if (!MaybeImm2Val)
+    return false;
+
+  // Pass the combined immediate to the apply function.
+  MatchInfo.Imm = MaybeImmVal->Value + MaybeImm2Val->Value;
+  MatchInfo.Base = Base;
+  return true;
+}
+
+bool CombinerHelper::applyPtrAddImmedChain(MachineInstr &MI,
+                                           PtrAddChain &MatchInfo) {
+  assert(MI.getOpcode() == TargetOpcode::G_PTR_ADD && "Expected G_PTR_ADD");
+  MachineIRBuilder MIB(MI);
+  LLT OffsetTy = MRI.getType(MI.getOperand(2).getReg());
+  auto NewOffset = MIB.buildConstant(OffsetTy, MatchInfo.Imm);
+  Observer.changingInstr(MI);
+  MI.getOperand(1).setReg(MatchInfo.Base);
+  MI.getOperand(2).setReg(NewOffset.getReg(0));
+  Observer.changedInstr(MI);
+  return true;
+}
+
+bool CombinerHelper::matchCombineMulToShl(MachineInstr &MI,
+                                          unsigned &ShiftVal) {
+  assert(MI.getOpcode() == TargetOpcode::G_MUL && "Expected a G_MUL");
+  auto MaybeImmVal =
+      getConstantVRegValWithLookThrough(MI.getOperand(2).getReg(), MRI);
+  if (!MaybeImmVal || !isPowerOf2_64(MaybeImmVal->Value))
+    return false;
+  ShiftVal = Log2_64(MaybeImmVal->Value);
+  return true;
+}
+
+bool CombinerHelper::applyCombineMulToShl(MachineInstr &MI,
+                                          unsigned &ShiftVal) {
+  assert(MI.getOpcode() == TargetOpcode::G_MUL && "Expected a G_MUL");
+  MachineIRBuilder MIB(MI);
+  LLT ShiftTy = MRI.getType(MI.getOperand(0).getReg());
+  auto ShiftCst = MIB.buildConstant(ShiftTy, ShiftVal);
+  Observer.changingInstr(MI);
+  MI.setDesc(MIB.getTII().get(TargetOpcode::G_SHL));
+  MI.getOperand(2).setReg(ShiftCst.getReg(0));
+  Observer.changedInstr(MI);
+  return true;
 }
 
 bool CombinerHelper::tryCombine(MachineInstr &MI) {

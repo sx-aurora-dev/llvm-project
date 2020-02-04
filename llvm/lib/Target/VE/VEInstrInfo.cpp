@@ -21,11 +21,11 @@
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/TargetRegistry.h"
-#include "llvm/Support/Debug.h"
 
-#define DEBUG_TYPE "ve"
+#define DEBUG_TYPE "ve-instr-info"
 
 using namespace llvm;
 
@@ -34,8 +34,6 @@ static cl::opt<bool> ShowSpillMessageVec(
   cl::init(false),
   cl::desc("Enable diagnostic message for spill/restore of vector or vector mask registers."),
   cl::Hidden);
-
-using namespace llvm;
 
 #define GET_INSTRINFO_CTOR_DTOR
 #include "VEGenInstrInfo.inc"
@@ -95,13 +93,9 @@ unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
   return 0;
 }
 
-static bool IsIntegerCC(unsigned CC)
-{
-  return  (CC < VECC::CC_AF);
-}
+static bool IsIntegerCC(unsigned CC) { return (CC < VECC::CC_AF); }
 
-static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC)
-{
+static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC) {
   switch(CC) {
   case VECC::CC_IG:     return VECC::CC_ILE;
   case VECC::CC_IL:     return VECC::CC_IGE;
@@ -151,10 +145,7 @@ static bool isCondBranchOpcode(int Opc) {
 }
 
 static bool isIndirectBranchOpcode(int Opc) {
-#if 0
-  return Opc == SP::BINDrr || Opc == SP::BINDri;
-#endif
-  report_fatal_error("isIndirectBranchOpcode is not implemented yet");
+  return Opc == VE::BArr || Opc == VE::BAri;
 }
 
 static void parseCondBranch(MachineInstr *LastInst, MachineBasicBlock *&Target,
@@ -210,10 +201,9 @@ bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
         // Return now the only terminator is an unconditional branch.
         TBB = LastInst->getOperand(0).getMBB();
         return false;
-      } else {
-        SecondLastInst = &*I;
-        SecondLastOpc = SecondLastInst->getOpcode();
       }
+      SecondLastInst = &*I;
+      SecondLastOpc = SecondLastInst->getOpcode();
     }
   }
 
@@ -261,13 +251,13 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
   if (Cond.empty()) {
     // Uncondition branch
     assert(!FBB && "Unconditional branch with multiple successors!");
-    BuildMI(&MBB, DL, get(VE::BCRLa)).addMBB(TBB);
+    BuildMI(&MBB, DL, get(VE::BCRLa))
+        .addMBB(TBB);
     return 1;
   }
 
   // Conditional branch
   //   (BCRir CC sy sz addr)
-
   assert(Cond[0].isImm() && Cond[2].isReg() && "not implemented");
 
   unsigned opc[2];
@@ -295,7 +285,7 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
   if (Cond[1].isImm()) {
       BuildMI(&MBB, DL, get(opc[0]))
           .add(Cond[0]) // condition code
-          .add(Cond[1]) // lhs 
+          .add(Cond[1]) // lhs
           .add(Cond[2]) // rhs
           .addMBB(TBB);
   } else {
@@ -308,12 +298,14 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
 
   if (!FBB)
     return 1;
-  BuildMI(&MBB, DL, get(VE::BCRLa)).addMBB(FBB);
+
+  BuildMI(&MBB, DL, get(VE::BCRLa))
+      .addMBB(FBB);
   return 2;
 }
 
 unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
-                                      int *BytesRemoved) const {
+                                   int *BytesRemoved) const {
   assert(!BytesRemoved && "code size not handled");
 
   MachineBasicBlock::iterator I = MBB.end();
@@ -333,15 +325,10 @@ unsigned VEInstrInfo::removeBranch(MachineBasicBlock &MBB,
     ++Count;
   }
   return Count;
-
-  //report_fatal_error("removeBranch is not implemented yet");
 }
 
 bool VEInstrInfo::reverseBranchCondition(
     SmallVectorImpl<MachineOperand> &Cond) const {
-#if 0
-  assert(Cond.size() == 1);
-#endif
   VECC::CondCodes CC = static_cast<VECC::CondCodes>(Cond[0].getImm());
   Cond[0].setImm(GetOppositeBranchCondition(CC));
   return false;
@@ -382,27 +369,22 @@ void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
     MovMI->addRegisterKilled(SrcReg, TRI);
 }
 
-void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
-                              MachineBasicBlock::iterator I,
-                              const DebugLoc &DL, MCRegister DestReg,
-                              MCRegister SrcReg, bool KillSrc) const {
+static bool IsAliasOfSX(Register Reg) {
+  return VE::I8RegClass.contains(Reg) || VE::I16RegClass.contains(Reg) ||
+         VE::I32RegClass.contains(Reg) || VE::I64RegClass.contains(Reg) ||
+         VE::F32RegClass.contains(Reg);
+}
 
-  // For the case of VE, I32, I64, and F32 uses the identical
-  // registers %s0-%s63, so no need to check other register classes
-  // here
-  if (VE::I32RegClass.contains(DestReg, SrcReg))
+void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator I, const DebugLoc &DL,
+                              MCRegister DestReg, MCRegister SrcReg,
+                              bool KillSrc) const {
+
+  if (IsAliasOfSX(SrcReg) && IsAliasOfSX(DestReg)) {
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
-      .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
-  // any scaler to any scaler
-  else if ((VE::I32RegClass.contains(SrcReg) ||
-            VE::F32RegClass.contains(SrcReg) ||
-            VE::I64RegClass.contains(SrcReg)) &&
-           (VE::I32RegClass.contains(DestReg) ||
-            VE::F32RegClass.contains(DestReg) ||
-            VE::I64RegClass.contains(DestReg)))
-    BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
-      .addReg(SrcReg, getKillRegState(KillSrc)).addImm(0);
-  else if (VE::V64RegClass.contains(DestReg, SrcReg)) {
+        .addReg(SrcReg, getKillRegState(KillSrc))
+        .addImm(0);
+  } else if (VE::V64RegClass.contains(DestReg, SrcReg)) {
     // Generate following instructions
     //   LEA32zzi %vl, 256
     //   vor_v1vl %dest, (0)1, %src, %vl
@@ -413,8 +395,7 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         .addImm(0)
         .addReg(SrcReg, getKillRegState(KillSrc))
         .addReg(TmpReg, getKillRegState(true));
-  }
-  else if (VE::VMRegClass.contains(DestReg, SrcReg))
+  } else if (VE::VMRegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::andm_mmm), DestReg)
         .addReg(VE::VM0)
         .addReg(SrcReg, getKillRegState(KillSrc));
@@ -432,7 +413,8 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                     numSubRegs, subRegIdx);
   } else {
     const TargetRegisterInfo *TRI = &getRegisterInfo();
-    dbgs() << "Impossible reg-to-reg copy from " << printReg(SrcReg, TRI) << " to " << printReg(DestReg, TRI) << "\n";
+    dbgs() << "Impossible reg-to-reg copy from " << printReg(SrcReg, TRI)
+           << " to " << printReg(DestReg, TRI) << "\n";
     llvm_unreachable("Impossible reg-to-reg copy");
   }
 }
@@ -881,8 +863,8 @@ bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
   BB->addSuccessor(sinkMBB);
   BuildMI(BB, dl, TII.get(VE::BCRLrr))
       .addImm(VECC::CC_IGE)
-      .addReg(VE::SX11)                          // %sp
-      .addReg(VE::SX8)                           // %sl
+      .addReg(VE::SX11) // %sp
+      .addReg(VE::SX8)  // %sl
       .addMBB(sinkMBB);
 
   BB = syscallMBB;
@@ -891,21 +873,30 @@ bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
   BB->addSuccessor(sinkMBB);
 
   BuildMI(BB, dl, TII.get(VE::LDSri), VE::SX61)
-    .addReg(VE::SX14).addImm(0x18);
+      .addReg(VE::SX14)
+      .addImm(0x18);
   BuildMI(BB, dl, TII.get(VE::ORri), VE::SX62)
-    .addReg(VE::SX0).addImm(0);
+      .addReg(VE::SX0)
+      .addImm(0);
   BuildMI(BB, dl, TII.get(VE::LEAzzi), VE::SX63)
-    .addImm(0x13b);
+      .addImm(0x13b);
   BuildMI(BB, dl, TII.get(VE::SHMri))
-    .addReg(VE::SX61).addImm(0).addReg(VE::SX63);
+      .addReg(VE::SX61)
+      .addImm(0)
+      .addReg(VE::SX63);
   BuildMI(BB, dl, TII.get(VE::SHMri))
-    .addReg(VE::SX61).addImm(8).addReg(VE::SX8);
+      .addReg(VE::SX61)
+      .addImm(8)
+      .addReg(VE::SX8);
   BuildMI(BB, dl, TII.get(VE::SHMri))
-    .addReg(VE::SX61).addImm(16).addReg(VE::SX11);
+      .addReg(VE::SX61)
+      .addImm(16)
+      .addReg(VE::SX11);
   BuildMI(BB, dl, TII.get(VE::MONC));
 
   BuildMI(BB, dl, TII.get(VE::ORri), VE::SX0)
-    .addReg(VE::SX62).addImm(0);
+      .addReg(VE::SX62)
+      .addImm(0);
 
   MI.eraseFromParent(); // The pseudo instruction is gone now.
   return true;

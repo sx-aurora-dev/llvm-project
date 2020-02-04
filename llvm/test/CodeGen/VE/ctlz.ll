@@ -3,13 +3,13 @@
 define i128 @func0(i128){
 ; CHECK-LABEL: func0:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s34, 0, (0)1
-; CHECK-NEXT:    cmps.l %s35, %s1, %s34
-; CHECK-NEXT:    ldz %s36, %s1
-; CHECK-NEXT:    ldz %s37, %s0
-; CHECK-NEXT:    lea %s0, 64(%s37)
-; CHECK-NEXT:    cmov.l.ne %s0, %s36, %s35
-; CHECK-NEXT:    or %s1, 0, %s34
+; CHECK-NEXT:    or %s2, 0, (0)1
+; CHECK-NEXT:    cmps.l %s3, %s1, %s2
+; CHECK-NEXT:    ldz %s1, %s1
+; CHECK-NEXT:    ldz %s0, %s0
+; CHECK-NEXT:    lea %s0, 64(%s0)
+; CHECK-NEXT:    cmov.l.ne %s0, %s1, %s3
+; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = tail call i128 @llvm.ctlz.i128(i128 %0, i1 true)
   ret i128 %2
@@ -32,8 +32,8 @@ define i32 @func2(i32) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    sll %s34, %s0, 32
-; CHECK-NEXT:    ldz %s0, %s34
+; CHECK-NEXT:    sll %s0, %s0, 32
+; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = tail call i32 @llvm.ctlz.i32(i32 %0, i1 true), !range !3
@@ -45,10 +45,10 @@ declare i32 @llvm.ctlz.i32(i32, i1)
 define i16 @func3(i16) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    and %s34, %s0, (48)0
-; CHECK-NEXT:    sll %s34, %s34, 32
-; CHECK-NEXT:    ldz %s34, %s34
-; CHECK-NEXT:    lea %s0, -16(%s34)
+; CHECK-NEXT:    and %s0, %s0, (48)0
+; CHECK-NEXT:    sll %s0, %s0, 32
+; CHECK-NEXT:    ldz %s0, %s0
+; CHECK-NEXT:    lea %s0, -16(%s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = tail call i16 @llvm.ctlz.i16(i16 %0, i1 true), !range !4
   ret i16 %2
@@ -59,10 +59,10 @@ declare i16 @llvm.ctlz.i16(i16, i1)
 define i8 @func4(i8) {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    and %s34, %s0, (56)0
-; CHECK-NEXT:    sll %s34, %s34, 32
-; CHECK-NEXT:    ldz %s34, %s34
-; CHECK-NEXT:    lea %s0, -24(%s34)
+; CHECK-NEXT:    and %s0, %s0, (56)0
+; CHECK-NEXT:    sll %s0, %s0, 32
+; CHECK-NEXT:    ldz %s0, %s0
+; CHECK-NEXT:    lea %s0, -24(%s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = tail call i8 @llvm.ctlz.i8(i8 %0, i1 true), !range !5
   ret i8 %2

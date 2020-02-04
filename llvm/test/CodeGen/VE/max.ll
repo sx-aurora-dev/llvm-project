@@ -24,8 +24,8 @@ define double @max2f64(double, double) {
 define double @maxuf64(double, double) {
 ; CHECK-LABEL: maxuf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
-; CHECK-NEXT:    cmov.d.gtnan %s1, %s0, %s34
+; CHECK-NEXT:    fcmp.d %s2, %s0, %s1
+; CHECK-NEXT:    cmov.d.gtnan %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp ugt double %0, %1
@@ -37,8 +37,8 @@ define double @maxuf64(double, double) {
 define double @max2uf64(double, double) {
 ; CHECK-LABEL: max2uf64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    fcmp.d %s34, %s0, %s1
-; CHECK-NEXT:    cmov.d.genan %s1, %s0, %s34
+; CHECK-NEXT:    fcmp.d %s2, %s0, %s1
+; CHECK-NEXT:    cmov.d.genan %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp uge double %0, %1
@@ -71,8 +71,8 @@ define float @maxuf32(float, float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf1 killed $sf1 def $sx1
 ; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
-; CHECK-NEXT:    fcmp.s %s34, %s0, %s1
-; CHECK-NEXT:    cmov.s.gtnan %s1, %s0, %s34
+; CHECK-NEXT:    fcmp.s %s2, %s0, %s1
+; CHECK-NEXT:    cmov.s.gtnan %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp ugt float %0, %1
@@ -85,8 +85,8 @@ define float @max2uf32(float, float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sf1 killed $sf1 def $sx1
 ; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
-; CHECK-NEXT:    fcmp.s %s34, %s0, %s1
-; CHECK-NEXT:    cmov.s.genan %s1, %s0, %s34
+; CHECK-NEXT:    fcmp.s %s2, %s0, %s1
+; CHECK-NEXT:    cmov.s.genan %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp uge float %0, %1
@@ -117,8 +117,8 @@ define i64 @max2i64(i64, i64) {
 define i64 @maxu64(i64, i64) {
 ; CHECK-LABEL: maxu64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
-; CHECK-NEXT:    cmov.l.gt %s1, %s0, %s34
+; CHECK-NEXT:    cmpu.l %s2, %s0, %s1
+; CHECK-NEXT:    cmov.l.gt %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp ugt i64 %0, %1
@@ -129,8 +129,8 @@ define i64 @maxu64(i64, i64) {
 define i64 @max2u64(i64, i64) {
 ; CHECK-LABEL: max2u64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    cmpu.l %s34, %s0, %s1
-; CHECK-NEXT:    cmov.l.ge %s1, %s0, %s34
+; CHECK-NEXT:    cmpu.l %s2, %s0, %s1
+; CHECK-NEXT:    cmov.l.ge %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp uge i64 %0, %1
@@ -163,8 +163,8 @@ define i32 @maxu32(i32, i32) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    cmpu.w %s34, %s0, %s1
-; CHECK-NEXT:    cmov.w.gt %s1, %s0, %s34
+; CHECK-NEXT:    cmpu.w %s2, %s0, %s1
+; CHECK-NEXT:    cmov.w.gt %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp ugt i32 %0, %1
@@ -177,8 +177,8 @@ define i32 @max2u32(i32, i32) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    cmpu.w %s34, %s0, %s1
-; CHECK-NEXT:    cmov.w.ge %s1, %s0, %s34
+; CHECK-NEXT:    cmpu.w %s2, %s0, %s1
+; CHECK-NEXT:    cmov.w.ge %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp uge i32 %0, %1
@@ -189,9 +189,9 @@ define i32 @max2u32(i32, i32) {
 define fp128 @maxf128(fp128, fp128) {
 ; CHECK-LABEL: maxf128:                                # @maxf128
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s34, %s0, %s2
-; CHECK-NEXT:  cmov.d.gt %s2, %s0, %s34
-; CHECK-NEXT:  cmov.d.gt %s3, %s1, %s34
+; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:  cmov.d.gt %s2, %s0, %s4
+; CHECK-NEXT:  cmov.d.gt %s3, %s1, %s4
 ; CHECK-NEXT:  or %s0, 0, %s2
 ; CHECK-NEXT:  or %s1, 0, %s3
 ; CHECK-NEXT:  or %s11, 0, %s9
@@ -208,9 +208,9 @@ define fp128 @maxf128(fp128, fp128) {
 define fp128 @max2f128(fp128, fp128) {
 ; CHECK-LABEL: max2f128:                               # @max2f128
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s34, %s0, %s2
-; CHECK-NEXT:  cmov.d.ge %s2, %s0, %s34
-; CHECK-NEXT:  cmov.d.ge %s3, %s1, %s34
+; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:  cmov.d.ge %s2, %s0, %s4
+; CHECK-NEXT:  cmov.d.ge %s3, %s1, %s4
 ; CHECK-NEXT:  or %s0, 0, %s2
 ; CHECK-NEXT:  or %s1, 0, %s3
 ; CHECK-NEXT:  or %s11, 0, %s9
@@ -227,9 +227,9 @@ define fp128 @max2f128(fp128, fp128) {
 define fp128 @maxuf128(fp128, fp128) {
 ; CHECK-LABEL: maxuf128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s34, %s0, %s2
-; CHECK-NEXT:  cmov.d.gtnan %s2, %s0, %s34
-; CHECK-NEXT:  cmov.d.gtnan %s3, %s1, %s34
+; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:  cmov.d.gtnan %s2, %s0, %s4
+; CHECK-NEXT:  cmov.d.gtnan %s3, %s1, %s4
 ; CHECK-NEXT:  or %s0, 0, %s2
 ; CHECK-NEXT:  or %s1, 0, %s3
 ; CHECK-NEXT:  or %s11, 0, %s9
@@ -246,9 +246,9 @@ define fp128 @maxuf128(fp128, fp128) {
 define fp128 @max2uf128(fp128, fp128) {
 ; CHECK-LABEL: max2uf128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s34, %s0, %s2
-; CHECK-NEXT:  cmov.d.genan %s2, %s0, %s34
-; CHECK-NEXT:  cmov.d.genan %s3, %s1, %s34
+; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:  cmov.d.genan %s2, %s0, %s4
+; CHECK-NEXT:  cmov.d.genan %s3, %s1, %s4
 ; CHECK-NEXT:  or %s0, 0, %s2
 ; CHECK-NEXT:  or %s1, 0, %s3
 ; CHECK-NEXT:  or %s11, 0, %s9
@@ -262,12 +262,11 @@ define fp128 @max2uf128(fp128, fp128) {
   ret fp128 %4
 }
 
-
 define zeroext i1 @maxi1(i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: maxi1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s34, %s0, %s1
-; CHECK-NEXT:    or %s0, %s1, %s34
+; CHECK-NEXT:    or %s0, %s0, %s1
+; CHECK-NEXT:    or %s0, %s1, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = xor i1 %1, true
   %4 = and i1 %3, %0

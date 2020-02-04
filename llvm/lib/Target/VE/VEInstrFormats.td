@@ -28,7 +28,7 @@ class InstVE<dag outs, dag ins, string asmstr, list<dag> pattern,
   let Itinerary = itin;
 }
 
-class RM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
+class RM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern = [],
          InstrItinClass itin = NoItinerary>
    : InstVE<outs, ins, asmstr, pattern, itin> {
   bits<1>  cx = 0;
@@ -48,7 +48,7 @@ class RM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
   let Inst{63-32}  = imm32;
 }
 
-class RR<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
+class RR<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern = [],
          InstrItinClass itin = NoItinerary>
    : RM<opVal, outs, ins, asmstr, pattern, itin> {
   bits<1> cw = 0;
@@ -61,8 +61,8 @@ class RR<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
   let imm32{28-31} = cfw;
 }
 
-class RRFENCE<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
-              InstrItinClass itin = NoItinerary>
+class RRFENCE<bits<8>opVal, dag outs, dag ins, string asmstr,
+              list<dag> pattern = [], InstrItinClass itin = NoItinerary>
    : InstVE<outs, ins, asmstr, pattern, itin> {
   bits<1> avo = 0;
   bits<1> lf = 0;
@@ -83,7 +83,7 @@ class RRFENCE<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
   let Inst{63-32} = 0;
 }
 
-class CF<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
+class CF<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern = [],
          InstrItinClass itin = NoItinerary>
    : RM<opVal, outs, ins, asmstr, pattern, itin> {
   bits<1>  cx2;
@@ -96,7 +96,7 @@ class CF<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern,
 }
 
 // Pseudo instructions.
-class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern>
+class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern = []>
    : InstVE<outs, ins, asmstr, pattern> {
   let isCodeGenOnly = 1;
   let isPseudo = 1;

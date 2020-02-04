@@ -199,7 +199,7 @@ public:
   }
 
   void addAliasForDirective(StringRef Directive, StringRef Alias) override {
-    DirectiveKindMap[Directive] = DirectiveKindMap[Alias];
+    DirectiveKindMap[Directive.lower()] = DirectiveKindMap[Alias.lower()];
   }
 
   /// @name MCAsmParser Interface
@@ -1750,7 +1750,7 @@ bool AsmParser::parseStatement(ParseStatementInfo &Info,
   // have to do this so that .endif isn't skipped in a ".if 0" block for
   // example.
   StringMap<DirectiveKind>::const_iterator DirKindIt =
-      DirectiveKindMap.find(IDVal);
+      DirectiveKindMap.find(IDVal.lower());
   DirectiveKind DirKind = (DirKindIt == DirectiveKindMap.end())
 
                               ? DK_NO_DIRECTIVE
@@ -2358,7 +2358,7 @@ void AsmParser::DiagHandler(const SMDiagnostic &Diag, void *Context) {
   // Use the CppHashFilename and calculate a line number based on the
   // CppHashInfo.Loc and CppHashInfo.LineNumber relative to this Diag's SMLoc
   // for the diagnostic.
-  const std::string &Filename = Parser->CppHashInfo.Filename;
+  const std::string &Filename = std::string(Parser->CppHashInfo.Filename);
 
   int DiagLocLineNo = DiagSrcMgr.FindLineNumber(DiagLoc, DiagBuf);
   int CppHashLocLineNo =
@@ -3130,8 +3130,9 @@ bool AsmParser::parseRealValue(const fltSemantics &Semantics, APInt &Res) {
       Value = APFloat::getNaN(Semantics, false, ~0);
     else
       return TokError("invalid floating point literal");
-  } else if (Value.convertFromString(IDVal, APFloat::rmNearestTiesToEven) ==
-             APFloat::opInvalidOp)
+  } else if (errorToBool(
+                 Value.convertFromString(IDVal, APFloat::rmNearestTiesToEven)
+                     .takeError()))
     return TokError("invalid floating point literal");
   if (IsNeg)
     Value.changeSign();
@@ -5319,6 +5320,12 @@ bool AsmParser::parseDirectiveEndIf(SMLoc DirectiveLoc) {
 }
 
 void AsmParser::initializeDirectiveKindMap() {
+  /* Lookup will be done with the directive
+   * converted to lower case, so all these
+   * keys should be lower case.
+   * (target specific directives are handled
+   *  elsewhere)
+   */
   DirectiveKindMap[".set"] = DK_SET;
   DirectiveKindMap[".equ"] = DK_EQU;
   DirectiveKindMap[".equiv"] = DK_EQUIV;
@@ -5844,7 +5851,7 @@ bool AsmParser::parseMSInlineAsm(
         InputDecls.push_back(OpDecl);
         InputDeclsAddressOf.push_back(Operand.needAddressOf());
         InputConstraints.push_back(Constraint.str());
-        if (Operand.isCallOperand())
+        if (Desc.OpInfo[i - 1].isBranchTarget())
           AsmStrRewrites.emplace_back(AOK_CallInput, Start, SymName.size());
         else
           AsmStrRewrites.emplace_back(AOK_Input, Start, SymName.size());

@@ -45,7 +45,7 @@ std::unique_ptr<MCObjectWriter>
 createVEELFObjectWriter(raw_pwrite_stream &OS, bool Is64Bit,
                            bool IsLIttleEndian, uint8_t OSABI);
 #endif
-} // End llvm namespace
+} // namespace llvm
 
 // Defines symbolic names for VE registers.  This defines a mapping from
 // register name to register number.

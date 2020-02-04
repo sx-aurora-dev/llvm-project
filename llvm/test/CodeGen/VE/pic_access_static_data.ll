@@ -11,19 +11,19 @@ define void @func() {
 ; CHECK-NEXT:  and %s15, %s15, (32)0
 ; CHECK-NEXT:  sic %s16
 ; CHECK-NEXT:  lea.sl %s15, _GLOBAL_OFFSET_TABLE_@pc_hi(%s16, %s15)
-; CHECK-NEXT:  lea %s34, src@gotoff_lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, src@gotoff_hi(%s34)
-; CHECK-NEXT:  adds.l %s34, %s15, %s34
-; CHECK-NEXT:  ld1b.zx %s34, (,%s34)
-; CHECK-NEXT:  or %s35, 0, (0)1
-; CHECK-NEXT:  lea %s36, 100
-; CHECK-NEXT:  cmov.w.ne %s35, %s36, %s34
-; CHECK-NEXT:  lea %s34, dst@gotoff_lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, dst@gotoff_hi(%s34)
-; CHECK-NEXT:  adds.l %s34, %s15, %s34
-; CHECK-NEXT:  stl %s35, (,%s34)
+; CHECK-NEXT:  lea %s0, src@gotoff_lo
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s0, src@gotoff_hi(%s0)
+; CHECK-NEXT:  adds.l %s0, %s15, %s0
+; CHECK-NEXT:  ld1b.zx %s0, (,%s0)
+; CHECK-NEXT:  or %s1, 0, (0)1
+; CHECK-NEXT:  lea %s2, 100
+; CHECK-NEXT:  cmov.w.ne %s1, %s2, %s0
+; CHECK-NEXT:  lea %s0, dst@gotoff_lo
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s0, dst@gotoff_hi(%s0)
+; CHECK-NEXT:  adds.l %s0, %s15, %s0
+; CHECK-NEXT:  stl %s1, (,%s0)
 
   %1 = load i1, i1* @src, align 4
   %2 = select i1 %1, i32 100, i32 0

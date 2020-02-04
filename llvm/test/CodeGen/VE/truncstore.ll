@@ -55,8 +55,8 @@ declare void @func_in(i32*)
 define void @func3(i8 signext) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
-; CHECK-NEXT:    st %s34, -8(,%s9)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    st %s0, -8(,%s9)
   %2 = alloca i64, align 8
   %3 = bitcast i64* %2 to i8*
   call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %3)
@@ -72,12 +72,10 @@ declare void @func_lo(i64*)
 define void @func4(i8 signext) {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
-; CHECK-NEXT:    sra.l %s35, %s34, 63
-; CHECK-NEXT:    lea %s0,-16(,%s9)
-; CHECK-NEXT:    or %s36, 8, %s0
-; CHECK-NEXT:    st %s35, (,%s36)
-; CHECK-NEXT:    st %s34, -16(,%s9)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    st %s0, -16(,%s9)
+; CHECK-NEXT:    st %s1, -8(,%s9)
   %2 = alloca i128, align 16
   %3 = bitcast i128* %2 to i8*
   call void @llvm.lifetime.start.p0i8(i64 16, i8* nonnull %3)
@@ -107,8 +105,8 @@ define void @func5(i16 signext) {
 define void @func6(i16 signext) {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
-; CHECK-NEXT:    st %s34, -8(,%s9)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    st %s0, -8(,%s9)
   %2 = alloca i64, align 8
   %3 = bitcast i64* %2 to i8*
   call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %3)
@@ -122,12 +120,10 @@ define void @func6(i16 signext) {
 define void @func7(i16 signext) {
 ; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
-; CHECK-NEXT:    sra.l %s35, %s34, 63
-; CHECK-NEXT:    lea %s0,-16(,%s9)
-; CHECK-NEXT:    or %s36, 8, %s0
-; CHECK-NEXT:    st %s35, (,%s36)
-; CHECK-NEXT:    st %s34, -16(,%s9)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    st %s0, -16(,%s9)
+; CHECK-NEXT:    st %s1, -8(,%s9)
   %2 = alloca i128, align 16
   %3 = bitcast i128* %2 to i8*
   call void @llvm.lifetime.start.p0i8(i64 16, i8* nonnull %3)
@@ -141,8 +137,8 @@ define void @func7(i16 signext) {
 define void @func8(i32) {
 ; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
-; CHECK-NEXT:    st %s34, -8(,%s9)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    st %s0, -8(,%s9)
   %2 = alloca i64, align 8
   %3 = bitcast i64* %2 to i8*
   call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %3)
@@ -156,12 +152,10 @@ define void @func8(i32) {
 define void @func9(i32) {
 ; CHECK-LABEL: func9:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s34, %s0, (0)1
-; CHECK-NEXT:    sra.l %s35, %s34, 63
-; CHECK-NEXT:    lea %s0,-16(,%s9)
-; CHECK-NEXT:    or %s36, 8, %s0
-; CHECK-NEXT:    st %s35, (,%s36)
-; CHECK-NEXT:    st %s34, -16(,%s9)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    sra.l %s1, %s0, 63
+; CHECK-NEXT:    st %s0, -16(,%s9)
+; CHECK-NEXT:    st %s1, -8(,%s9)
   %2 = alloca i128, align 16
   %3 = bitcast i128* %2 to i8*
   call void @llvm.lifetime.start.p0i8(i64 16, i8* nonnull %3)
@@ -175,11 +169,9 @@ define void @func9(i32) {
 define void @func10(i64) {
 ; CHECK-LABEL: func10:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    sra.l %s35, %s0, 63
-; CHECK-NEXT:    lea %s34,-16(,%s9)
-; CHECK-NEXT:    or %s36, 8, %s34
-; CHECK-NEXT:    st %s35, (,%s36)
+; CHECK-NEXT:    sra.l %s1, %s0, 63
 ; CHECK-NEXT:    st %s0, -16(,%s9)
+; CHECK-NEXT:    st %s1, -8(,%s9)
   %2 = alloca i128, align 16
   %3 = bitcast i128* %2 to i8*
   call void @llvm.lifetime.start.p0i8(i64 16, i8* nonnull %3)

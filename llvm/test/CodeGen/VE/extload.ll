@@ -3,13 +3,13 @@
 define double @func1() {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, func_fl@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, func_fl@hi(%s34)
+; CHECK-NEXT:    lea %s0, func_fl@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, func_fl@hi(%s0)
 ; CHECK-NEXT:    lea %s0,-4(,%s9)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
-; CHECK-NEXT:    ldu %s34, -4(,%s9)
-; CHECK-NEXT:    cvt.d.s %s0, %s34
+; CHECK-NEXT:    ldu %s0, -4(,%s9)
+; CHECK-NEXT:    cvt.d.s %s0, %s0
   %1 = alloca float, align 4
   %2 = bitcast float* %1 to i8*
   call void @llvm.lifetime.start.p0i8(i64 4, i8* nonnull %2)
@@ -27,13 +27,13 @@ declare void @llvm.lifetime.end.p0i8(i64, i8* nocapture)
 define fp128 @func2() {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, func_fl@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, func_fl@hi(%s34)
+; CHECK-NEXT:    lea %s0, func_fl@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, func_fl@hi(%s0)
 ; CHECK-NEXT:    lea %s0,-4(,%s9)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
-; CHECK-NEXT:    ldu %s34, -4(,%s9)
-; CHECK-NEXT:    cvt.q.s %s0, %s34
+; CHECK-NEXT:    ldu %s0, -4(,%s9)
+; CHECK-NEXT:    cvt.q.s %s0, %s0
   %1 = alloca float, align 4
   %2 = bitcast float* %1 to i8*
   call void @llvm.lifetime.start.p0i8(i64 4, i8* nonnull %2)
@@ -47,13 +47,13 @@ define fp128 @func2() {
 define fp128 @func3() {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, func_db@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, func_db@hi(%s34)
+; CHECK-NEXT:    lea %s0, func_db@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, func_db@hi(%s0)
 ; CHECK-NEXT:    lea %s0,-8(,%s9)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
-; CHECK-NEXT:    ld %s34, -8(,%s9)
-; CHECK-NEXT:    cvt.q.d %s0, %s34
+; CHECK-NEXT:    ld %s0, -8(,%s9)
+; CHECK-NEXT:    cvt.q.d %s0, %s0
   %1 = alloca double, align 8
   %2 = bitcast double* %1 to i8*
   call void @llvm.lifetime.start.p0i8(i64 8, i8* nonnull %2)

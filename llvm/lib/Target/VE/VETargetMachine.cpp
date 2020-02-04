@@ -18,6 +18,7 @@
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Support/TargetRegistry.h"
+
 using namespace llvm;
 
 extern "C" void LLVMInitializeVETarget() {
@@ -70,24 +71,22 @@ class VEELFTargetObjectFile : public TargetLoweringObjectFileELF {
   }
 };
 
-static std::unique_ptr<TargetLoweringObjectFile> createTLOF()
-{
-    return std::make_unique<VEELFTargetObjectFile>();
+static std::unique_ptr<TargetLoweringObjectFile> createTLOF() {
+  return std::make_unique<VEELFTargetObjectFile>();
 }
 
 /// Create an Aurora VE architecture model
-VETargetMachine::VETargetMachine(
-    const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
-    const TargetOptions &Options, Optional<Reloc::Model> RM,
-    Optional<CodeModel::Model> CM, CodeGenOpt::Level OL, bool JIT)
-    : LLVMTargetMachine(
-          T, computeDataLayout(TT), TT, CPU, FS, Options,
-          getEffectiveRelocModel(RM),
-          getEffectiveCodeModel(CM, CodeModel::Small),
-          OL),
-      //TLOF(make_unique<TargetLoweringObjectFileELF>()),
+VETargetMachine::VETargetMachine(const Target &T, const Triple &TT,
+                                 StringRef CPU, StringRef FS,
+                                 const TargetOptions &Options,
+                                 Optional<Reloc::Model> RM,
+                                 Optional<CodeModel::Model> CM,
+                                 CodeGenOpt::Level OL, bool JIT)
+    : LLVMTargetMachine(T, computeDataLayout(TT), TT, CPU, FS, Options,
+                        getEffectiveRelocModel(RM),
+                        getEffectiveCodeModel(CM, CodeModel::Small), OL),
       TLOF(createTLOF()),
-      Subtarget(TT, CPU, FS, *this) {
+      Subtarget(TT, std::string(CPU), std::string(FS), *this) {
   initAsmInfo();
 }
 
@@ -102,7 +101,7 @@ namespace {
 class VEPassConfig : public TargetPassConfig {
 public:
   VEPassConfig(VETargetMachine &TM, PassManagerBase &PM)
-    : TargetPassConfig(TM, PM) {}
+      : TargetPassConfig(TM, PM) {}
 
   VETargetMachine &getVETargetMachine() const {
     return getTM<VETargetMachine>();
@@ -135,4 +134,3 @@ void VEPassConfig::addPreEmitPass(){
   addPass(createVEDelaySlotFillerPass());
 #endif
 }
-

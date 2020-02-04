@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-//
+// This class implements VE-specific bits of TargetFrameLowering class.
 //
 //===----------------------------------------------------------------------===//
 
@@ -28,15 +28,14 @@ public:
   void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
   void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
   void emitPrologueInsns(MachineFunction &MF, MachineBasicBlock &MBB,
-                         MachineBasicBlock::iterator MBBI,
-                         int NumBytes, bool RequireFPUpdate) const;
+                         MachineBasicBlock::iterator MBBI, int NumBytes,
+                         bool RequireFPUpdate) const;
   void emitEpilogueInsns(MachineFunction &MF, MachineBasicBlock &MBB,
-                         MachineBasicBlock::iterator MBBI,
-                         int NumBytes, bool RequireFPUpdate) const;
+                         MachineBasicBlock::iterator MBBI, int NumBytes,
+                         bool RequireFPUpdate) const;
 
   MachineBasicBlock::iterator
-  eliminateCallFramePseudoInstr(MachineFunction &MF,
-                                MachineBasicBlock &MBB,
+  eliminateCallFramePseudoInstr(MachineFunction &MF, MachineBasicBlock &MBB,
                                 MachineBasicBlock::iterator I) const override;
 
   bool hasBP(const MachineFunction &MF) const;
@@ -52,16 +51,14 @@ public:
   int getFrameIndexReference(const MachineFunction &MF, int FI,
                              unsigned &FrameReg) const override;
 
-  const SpillSlot *getCalleeSavedSpillSlots(unsigned &NumEntries)
-      const override {
+  const SpillSlot *
+  getCalleeSavedSpillSlots(unsigned &NumEntries) const override {
     static const SpillSlot Offsets[] = {
-      { VE::SX17,  40 }, { VE::SX18,  48 }, { VE::SX19,  56 },
-      { VE::SX20,  64 }, { VE::SX21,  72 }, { VE::SX22,  80 },
-      { VE::SX23,  88 }, { VE::SX24,  96 }, { VE::SX25, 104 },
-      { VE::SX26, 112 }, { VE::SX27, 120 }, { VE::SX28, 128 },
-      { VE::SX29, 136 }, { VE::SX30, 144 }, { VE::SX31, 152 },
-      { VE::SX32, 160 }, { VE::SX33, 168 }
-    };
+        {VE::SX17, 40},  {VE::SX18, 48},  {VE::SX19, 56},  {VE::SX20, 64},
+        {VE::SX21, 72},  {VE::SX22, 80},  {VE::SX23, 88},  {VE::SX24, 96},
+        {VE::SX25, 104}, {VE::SX26, 112}, {VE::SX27, 120}, {VE::SX28, 128},
+        {VE::SX29, 136}, {VE::SX30, 144}, {VE::SX31, 152}, {VE::SX32, 160},
+        {VE::SX33, 168}};
     NumEntries = array_lengthof(Offsets);
     return Offsets;
   }
@@ -73,20 +70,16 @@ private:
   // Returns true if MF is a leaf procedure.
   bool isLeafProc(MachineFunction &MF) const;
 
-
   // Emits code for adjusting SP in function prologue/epilogue.
-  void emitSPAdjustment(MachineFunction &MF,
-                        MachineBasicBlock &MBB,
-                        MachineBasicBlock::iterator MBBI,
-                        int64_t NumBytes, int Align = 0) const;
+  void emitSPAdjustment(MachineFunction &MF, MachineBasicBlock &MBB,
+                        MachineBasicBlock::iterator MBBI, int64_t NumBytes,
+                        int Align = 0) const;
 
   // Emits code for extending SP in function prologue/epilogue.
-  void emitSPExtend(MachineFunction &MF,
-                    MachineBasicBlock &MBB,
+  void emitSPExtend(MachineFunction &MF, MachineBasicBlock &MBB,
                     MachineBasicBlock::iterator MBBI) const;
-
 };
 
-} // End llvm namespace
+} // namespace llvm
 
 #endif

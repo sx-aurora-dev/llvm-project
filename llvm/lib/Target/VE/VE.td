@@ -65,7 +65,7 @@ def VEAsmWriter : AsmWriter {
 def VE : Target {
   // Pull in Instruction Info:
   let InstructionSet = VEInstrInfo;
-  let AssemblyParsers  = [VEAsmParser];
+  let AssemblyParsers = [VEAsmParser];
   let AssemblyWriters = [VEAsmWriter];
   let AllowRegisterRenaming = 1;
 }

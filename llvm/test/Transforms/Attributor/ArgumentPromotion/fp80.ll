@@ -17,8 +17,6 @@ define void @run() {
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    [[TMP0:%.*]] = call i64 @CaptureAStruct(%struct.Foo* nofree nonnull readonly align 8 dereferenceable(16) @a)
 ; CHECK-NEXT:    unreachable
-; CHECK:       entry.split:
-; CHECK-NEXT:    unreachable
 ;
 entry:
   tail call i8 @UseLongDoubleUnsafely(%union.u* byval align 16 bitcast (%struct.s* @b to %union.u*))
@@ -50,7 +48,7 @@ define internal i64 @AccessPaddingOfStruct(%struct.Foo* byval %a) {
 
 define internal i64 @CaptureAStruct(%struct.Foo* byval %a) {
 ; CHECK-LABEL: define {{[^@]+}}@CaptureAStruct
-; CHECK-SAME: (%struct.Foo* nofree nonnull byval align 8 dereferenceable(16) [[A:%.*]])
+; CHECK-SAME: (%struct.Foo* noalias nofree nonnull byval align 8 dereferenceable(16) [[A:%.*]])
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    [[A_PTR:%.*]] = alloca %struct.Foo*
 ; CHECK-NEXT:    br label [[LOOP:%.*]]

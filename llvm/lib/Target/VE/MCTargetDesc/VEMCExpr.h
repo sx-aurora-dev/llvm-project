@@ -53,7 +53,7 @@ public:
   /// @{
 
   static const VEMCExpr *create(VariantKind Kind, const MCExpr *Expr,
-                                 MCContext &Ctx);
+                                MCContext &Ctx);
   /// @}
   /// @name Accessors
   /// @{
@@ -69,8 +69,7 @@ public:
 
   /// @}
   void printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const override;
-  bool evaluateAsRelocatableImpl(MCValue &Res,
-                                 const MCAsmLayout *Layout,
+  bool evaluateAsRelocatableImpl(MCValue &Res, const MCAsmLayout *Layout,
                                  const MCFixup *Fixup) const override;
   void visitUsedExpr(MCStreamer &Streamer) const override;
   MCFragment *findAssociatedFragment() const override {
@@ -91,6 +90,6 @@ public:
   static VE::Fixups getFixupKind(VariantKind Kind);
 };
 
-} // end namespace llvm.
+} // namespace llvm
 
 #endif

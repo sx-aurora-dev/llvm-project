@@ -5,12 +5,12 @@ define x86_regcallcc <512 x i32> @brd_shl_v512i32(<512 x i32>, i32) {
 ; CHECK-LABEL: brd_shl_v512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:  and %s34, %s0, (32)0
-; CHECK-NEXT:  sll %s35, %s0, 32
-; CHECK-NEXT:  or %s34, %s35, %s34
-; CHECK-NEXT:  lea %s35, 256
-; CHECK-NEXT:  lvl %s35
-; CHECK-NEXT:  pvsll %v0,%v0,%s34
+; CHECK-NEXT:  and %s1, %s0, (32)0
+; CHECK-NEXT:  sll %s0, %s0, 32
+; CHECK-NEXT:  or %s0, %s0, %s1
+; CHECK-NEXT:  lea %s1, 256
+; CHECK-NEXT:  lvl %s1
+; CHECK-NEXT:  pvsll %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
@@ -23,12 +23,12 @@ define x86_regcallcc <512 x i32> @brd_lshr_v512i32(<512 x i32>, i32) {
 ; CHECK-LABEL: brd_lshr_v512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:  and %s34, %s0, (32)0
-; CHECK-NEXT:  sll %s35, %s0, 32
-; CHECK-NEXT:  or %s34, %s35, %s34
-; CHECK-NEXT:  lea %s35, 256
-; CHECK-NEXT:  lvl %s35
-; CHECK-NEXT:  pvsrl %v0,%v0,%s34
+; CHECK-NEXT:  and %s1, %s0, (32)0
+; CHECK-NEXT:  sll %s0, %s0, 32
+; CHECK-NEXT:  or %s0, %s0, %s1
+; CHECK-NEXT:  lea %s1, 256
+; CHECK-NEXT:  lvl %s1
+; CHECK-NEXT:  pvsrl %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
@@ -41,12 +41,12 @@ define x86_regcallcc <512 x i32> @brd_ashr_v512i32(<512 x i32>, i32) {
 ; CHECK-LABEL: brd_ashr_v512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:  and %s34, %s0, (32)0
-; CHECK-NEXT:  sll %s35, %s0, 32
-; CHECK-NEXT:  or %s34, %s35, %s34
-; CHECK-NEXT:  lea %s35, 256
-; CHECK-NEXT:  lvl %s35
-; CHECK-NEXT:  pvsra %v0,%v0,%s34
+; CHECK-NEXT:  and %s1, %s0, (32)0
+; CHECK-NEXT:  sll %s0, %s0, 32
+; CHECK-NEXT:  or %s0, %s0, %s1
+; CHECK-NEXT:  lea %s1, 256
+; CHECK-NEXT:  lvl %s1
+; CHECK-NEXT:  pvsra %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
@@ -58,8 +58,8 @@ define x86_regcallcc <512 x i32> @brd_ashr_v512i32(<512 x i32>, i32) {
 define x86_regcallcc <256 x i64> @brd_shl_v256i64(<256 x i64>, i64) {
 ; CHECK-LABEL: brd_shl_v256i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 256
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  vsla.l %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <256 x i64> undef, i64 %1, i32 0
@@ -72,8 +72,8 @@ define x86_regcallcc <256 x i64> @brd_shl_v256i64(<256 x i64>, i64) {
 define x86_regcallcc <256 x i64> @brd_lshr_v256i64(<256 x i64>, i64) {
 ; CHECK-LABEL: brd_lshr_v256i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 256
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  vsrl %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <256 x i64> undef, i64 %1, i32 0
@@ -86,8 +86,8 @@ define x86_regcallcc <256 x i64> @brd_lshr_v256i64(<256 x i64>, i64) {
 define x86_regcallcc <256 x i64> @brd_ashr_v256i64(<256 x i64>, i64) {
 ; CHECK-LABEL: brd_ashr_v256i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 256
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  vsra.l %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <256 x i64> undef, i64 %1, i32 0
@@ -101,8 +101,8 @@ define x86_regcallcc <256 x i32> @brd_shl_v256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: brd_shl_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 256
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  pvsla.lo %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <256 x i32> undef, i32 %1, i32 0
@@ -116,8 +116,8 @@ define x86_regcallcc <256 x i32> @brd_lshr_v256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: brd_lshr_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 256
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  pvsrl.lo %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <256 x i32> undef, i32 %1, i32 0
@@ -131,8 +131,8 @@ define x86_regcallcc <256 x i32> @brd_ashr_v256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: brd_ashr_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:  lea %s34, 256
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 256
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  pvsra.lo %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <256 x i32> undef, i32 %1, i32 0
@@ -145,8 +145,8 @@ define x86_regcallcc <256 x i32> @brd_ashr_v256i32(<256 x i32>, i32) {
 define x86_regcallcc <128 x i64> @brd_shl_v128i64(<128 x i64>, i64) {
 ; CHECK-LABEL: brd_shl_v128i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 128
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 128
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  vsla.l %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <128 x i64> undef, i64 %1, i32 0
@@ -159,8 +159,8 @@ define x86_regcallcc <128 x i64> @brd_shl_v128i64(<128 x i64>, i64) {
 define x86_regcallcc <64 x i64> @brd_shl_v64i64(<64 x i64>, i64) {
 ; CHECK-LABEL: brd_shl_v64i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 64
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 64
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  vsla.l %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <64 x i64> undef, i64 %1, i32 0
@@ -173,8 +173,8 @@ define x86_regcallcc <64 x i64> @brd_shl_v64i64(<64 x i64>, i64) {
 define x86_regcallcc <32 x i64> @brd_shl_v32i64(<32 x i64>, i64) {
 ; CHECK-LABEL: brd_shl_v32i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 32
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 32
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  vsla.l %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <32 x i64> undef, i64 %1, i32 0
@@ -187,8 +187,8 @@ define x86_regcallcc <32 x i64> @brd_shl_v32i64(<32 x i64>, i64) {
 define x86_regcallcc <16 x i64> @brd_shl_v16i64(<16 x i64>, i64) {
 ; CHECK-LABEL: brd_shl_v16i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 16
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 16
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  vsla.l %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <16 x i64> undef, i64 %1, i32 0
@@ -201,8 +201,8 @@ define x86_regcallcc <16 x i64> @brd_shl_v16i64(<16 x i64>, i64) {
 define x86_regcallcc <8 x i64> @brd_shl_v8i64(<8 x i64>, i64) {
 ; CHECK-LABEL: brd_shl_v8i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 8
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 8
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  vsla.l %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <8 x i64> undef, i64 %1, i32 0
@@ -215,8 +215,8 @@ define x86_regcallcc <8 x i64> @brd_shl_v8i64(<8 x i64>, i64) {
 define x86_regcallcc <4 x i64> @brd_shl_v4i64(<4 x i64>, i64) {
 ; CHECK-LABEL: brd_shl_v4i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 4
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 4
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  vsla.l %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <4 x i64> undef, i64 %1, i32 0
@@ -229,8 +229,8 @@ define x86_regcallcc <4 x i64> @brd_shl_v4i64(<4 x i64>, i64) {
 define x86_regcallcc <2 x i64> @brd_shl_v2i64(<2 x i64>, i64) {
 ; CHECK-LABEL: brd_shl_v2i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 2
-; CHECK-NEXT:  lvl %s34
+; CHECK-NEXT:  lea %s1, 2
+; CHECK-NEXT:  lvl %s1
 ; CHECK-NEXT:  vsla.l %v0,%v0,%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %vec0 = insertelement <2 x i64> undef, i64 %1, i32 0

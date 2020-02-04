@@ -17,18 +17,18 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "sparc-subtarget"
+#define DEBUG_TYPE "ve-subtarget"
 
 #define GET_SUBTARGETINFO_TARGET_DESC
 #define GET_SUBTARGETINFO_CTOR
 #include "VEGenSubtargetInfo.inc"
 
-void VESubtarget::anchor() { }
+void VESubtarget::anchor() {}
 
 VESubtarget &VESubtarget::initializeSubtargetDependencies(StringRef CPU,
                                                           StringRef FS) {
   // Determine default and user specified characteristics
-  std::string CPUName = CPU;
+  std::string CPUName = std::string(CPU);
   if (CPUName.empty())
     CPUName = "ve";
 
@@ -95,6 +95,4 @@ uint64_t VESubtarget::getAdjustedFrameSize(uint64_t frameSize) const {
   return frameSize;
 }
 
-bool VESubtarget::enableMachineScheduler() const {
-  return true;
-}
+bool VESubtarget::enableMachineScheduler() const { return true; }

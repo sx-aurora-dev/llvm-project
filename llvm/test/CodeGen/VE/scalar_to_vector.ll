@@ -5,8 +5,8 @@ define x86_regcallcc <512 x i32> @s2vv512i32(i32) {
 ; CHECK-LABEL: s2vv512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:  sll %s34, %s0, 32
-; CHECK-NEXT:  lsv %v0(0),%s34
+; CHECK-NEXT:  sll %s0, %s0, 32
+; CHECK-NEXT:  lsv %v0(0),%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   %ret = insertelement <512 x i32> undef, i32 %0, i32 0
   ret <512 x i32> %ret

@@ -149,7 +149,7 @@ public:
   ///
   /// The node's base type should be in NodeBaseType or it will be unaccessible.
   void addNode(StringRef ID, const ast_type_traits::DynTypedNode& DynNode) {
-    NodeMap[ID] = DynNode;
+    NodeMap[std::string(ID)] = DynNode;
   }
 
   /// Returns the AST node bound to \c ID.
@@ -362,6 +362,10 @@ public:
     /// Matches nodes for which at least one of the provided matchers
     /// matches, but doesn't stop at the first match.
     VO_EachOf,
+
+    /// Matches any node but executes all inner matchers to find result
+    /// bindings.
+    VO_Optionally,
 
     /// Matches nodes that do not match the provided matcher.
     ///

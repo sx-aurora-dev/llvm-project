@@ -1,6 +1,6 @@
 //===- LowerABIAttributesPass.cpp - Decorate composite type ---------------===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -191,9 +191,7 @@ FuncOpLowering::matchAndRewrite(FuncOp funcOp, ArrayRef<Value> operands,
           spirv::ConstantOp::getZero(indexType, funcOp.getLoc(), &rewriter);
       auto loadPtr = rewriter.create<spirv::AccessChainOp>(
           funcOp.getLoc(), replacement, zero.constant());
-      replacement = rewriter.create<spirv::LoadOp>(funcOp.getLoc(), loadPtr,
-                                                   /*memory_access=*/nullptr,
-                                                   /*alignment=*/nullptr);
+      replacement = rewriter.create<spirv::LoadOp>(funcOp.getLoc(), loadPtr);
     }
     signatureConverter.remapInput(argType.index(), replacement);
   }
@@ -217,16 +215,16 @@ void LowerABIAttributesPass::runOnOperation() {
   OwningRewritePatternList patterns;
   patterns.insert<FuncOpLowering>(context, typeConverter);
 
-  ConversionTarget target(*context);
-  target.addLegalDialect<spirv::SPIRVDialect>();
+  std::unique_ptr<ConversionTarget> target = spirv::SPIRVConversionTarget::get(
+      spirv::lookupTargetEnvOrDefault(module), context);
   auto entryPointAttrName = spirv::getEntryPointABIAttrName();
-  target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
+  target->addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
     return op.getAttrOfType<spirv::EntryPointABIAttr>(entryPointAttrName) &&
            op.getNumResults() == 0 && op.getNumArguments() == 0;
   });
-  target.addLegalOp<ReturnOp>();
+  target->addLegalOp<ReturnOp>();
   if (failed(
-          applyPartialConversion(module, target, patterns, &typeConverter))) {
+          applyPartialConversion(module, *target, patterns, &typeConverter))) {
     return signalPassFailure();
   }
 

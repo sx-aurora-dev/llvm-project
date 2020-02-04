@@ -28,8 +28,8 @@ define signext i16 @func3(i16 signext) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    bswp %s34, %s0, 1
-; CHECK-NEXT:    sra.w.sx %s0, %s34, 16
+; CHECK-NEXT:    bswp %s0, %s0, 1
+; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = tail call i16 @llvm.bswap.i16(i16 %0)
   ret i16 %2
@@ -61,9 +61,9 @@ define zeroext i16 @func6(i16 zeroext) {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    bswp %s34, %s0, 1
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    srl %s0, %s34, 16
+; CHECK-NEXT:    bswp %s0, %s0, 1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 16
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = tail call i16 @llvm.bswap.i16(i16 %0)

@@ -1,110 +1,110 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define float @func1(float, float) {
+define float @func1(float %a, float %b) {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fdiv.s %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = fdiv float %0, %1
-  ret float %3
+  %r = fdiv float %a, %b
+  ret float %r
 }
 
-define double @func2(double, double) {
+define double @func2(double %a, double %b) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fdiv.d %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = fdiv double %0, %1
-  ret double %3
+  %r = fdiv double %a, %b
+  ret double %r
 }
 
-define fp128 @func3(fp128, fp128) {
+define fp128 @func3(fp128 %a, fp128 %b) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, __divtf3@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(%s34)
+; CHECK-NEXT:    lea %s4, __divtf3@lo
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(%s4)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = fdiv fp128 %0, %1
-  ret fp128 %3
+  %r = fdiv fp128 %a, %b
+  ret fp128 %r
 }
 
-define float @func4(float) {
+define float @func4(float %a) {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, 1084227584
-; CHECK-NEXT:  or %s34, 0, %s34
-; CHECK-NEXT:  fdiv.s %s0, %s0, %s34
-; CHECK-NEXT:  or %s11, 0, %s9
-  %2 = fdiv float %0, 5.000000e+00
-  ret float %2
+; CHECK-NEXT:    lea.sl %s1, 1084227584
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    fdiv.s %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fdiv float %a, 5.000000e+00
+  ret float %r
 }
 
-define double @func5(double) {
-; CHECK-LABEL: func5
+define double @func5(double %a) {
+; CHECK-LABEL: func5:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, 1075052544
-; CHECK-NEXT:  fdiv.d %s0, %s0, %s34
-; CHECK-NEXT:  or %s11, 0, %s9
-  %2 = fdiv double %0, 5.000000e+00
-  ret double %2
+; CHECK-NEXT:    lea.sl %s1, 1075052544
+; CHECK-NEXT:    fdiv.d %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fdiv double %a, 5.000000e+00
+  ret double %r
 }
 
-define fp128 @func6(fp128) {
+define fp128 @func6(fp128 %a) {
 ; CHECK-LABEL: func6
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ld %s2, 8(,%s34)
-; CHECK-NEXT:    ld %s3, (,%s34)
-; CHECK-NEXT:    lea %s34, __divtf3@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(%s34)
+; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s4, .LCPI{{[0-9]+}}_0@hi(%s2)
+; CHECK-NEXT:    ld %s2, 8(,%s4)
+; CHECK-NEXT:    ld %s3, (,%s4)
+; CHECK-NEXT:    lea %s4, __divtf3@lo
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(%s4)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %2 = fdiv fp128 %0, 0xL00000000000000004001400000000000
-  ret fp128 %2
+  %r = fdiv fp128 %a, 0xL00000000000000004001400000000000
+  ret fp128 %r
 }
 
-define float @func7(float) {
-; CHECK-LABEL: func7
+define float @func7(float %a) {
+; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, 2139095039
-; CHECK-NEXT:  or %s34, 0, %s34
-; CHECK-NEXT:  fdiv.s %s0, %s0, %s34
-; CHECK-NEXT:  or %s11, 0, %s9
-  %2 = fdiv float %0, 0x47EFFFFFE0000000
-  ret float %2
+; CHECK-NEXT:    lea.sl %s1, 2139095039
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    fdiv.s %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fdiv float %a, 0x47EFFFFFE0000000
+  ret float %r
 }
 
-define double @func8(double) {
-; CHECK-LABEL: func8
+define double @func8(double %a) {
+; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, -1
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, 2146435071(%s34)
-; CHECK-NEXT:  fdiv.d %s0, %s0, %s34
-; CHECK-NEXT:  or %s11, 0, %s9
-  %2 = fdiv double %0, 0x7FEFFFFFFFFFFFFF
-  ret double %2
+; CHECK-NEXT:    lea %s1, -1
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s1, 2146435071(%s1)
+; CHECK-NEXT:    fdiv.d %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fdiv double %a, 0x7FEFFFFFFFFFFFFF
+  ret double %r
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define fp128 @func9(fp128) {
+define fp128 @func9(fp128 %a) {
 ; CHECK-LABEL: func9
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:    ld %s2, 8(,%s34)
-; CHECK-NEXT:    ld %s3, (,%s34)
-; CHECK-NEXT:    lea %s34, __divtf3@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(%s34)
+; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s4, .LCPI{{[0-9]+}}_0@hi(%s2)
+; CHECK-NEXT:    ld %s2, 8(,%s4)
+; CHECK-NEXT:    ld %s3, (,%s4)
+; CHECK-NEXT:    lea %s4, __divtf3@lo
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(%s4)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %2 = fdiv fp128 %0, 0xLFFFFFFFFFFFFFFFF7FFEFFFFFFFFFFFF
-  ret fp128 %2
+  %r = fdiv fp128 %a, 0xLFFFFFFFFFFFFFFFF7FFEFFFFFFFFFFFF
+  ret fp128 %r
 }

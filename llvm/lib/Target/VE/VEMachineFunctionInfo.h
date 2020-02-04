@@ -16,48 +16,51 @@
 
 namespace llvm {
 
-  class VEMachineFunctionInfo : public MachineFunctionInfo {
-    virtual void anchor();
-  private:
-    unsigned GlobalBaseReg;
+class VEMachineFunctionInfo : public MachineFunctionInfo {
+  virtual void anchor();
 
-    /// VectorLengthReg - Holds the virtual register for VL register.
-    unsigned VectorLengthReg;
+private:
+  // GlobalBaseReg - Holds the physical reigster for the base register.
+  unsigned GlobalBaseReg;
 
-    /// VarArgsFrameOffset - Frame offset to start of varargs area.
-    int VarArgsFrameOffset;
+  /// VectorLengthReg - Holds the virtual register for VL register.
+  unsigned VectorLengthReg;
 
-    /// SRetReturnReg - Holds the virtual register into which the sret
-    /// argument is passed.
-    unsigned SRetReturnReg;
+  /// VarArgsFrameOffset - Frame offset to start of varargs area.
+  int VarArgsFrameOffset;
 
-    /// IsLeafProc - True if the function is a leaf procedure.
-    bool IsLeafProc;
-  public:
-    VEMachineFunctionInfo()
-      : GlobalBaseReg(0), VectorLengthReg(0),
-        VarArgsFrameOffset(0), SRetReturnReg(0),
-        IsLeafProc(false) {}
-    explicit VEMachineFunctionInfo(MachineFunction &MF)
-      : GlobalBaseReg(0), VectorLengthReg(0),
-        VarArgsFrameOffset(0), SRetReturnReg(0),
-        IsLeafProc(false) {}
+  /// SRetReturnReg - Holds the virtual register into which the sret
+  /// argument is passed.
+  unsigned SRetReturnReg;
 
-    unsigned getGlobalBaseReg() const { return GlobalBaseReg; }
-    void setGlobalBaseReg(unsigned Reg) { GlobalBaseReg = Reg; }
+  /// IsLeafProc - True if the function is a leaf procedure.
+  bool IsLeafProc;
 
-    unsigned getVectorLengthReg() const { return VectorLengthReg; }
-    void setVectorLengthReg(unsigned Reg) { VectorLengthReg = Reg; }
+public:
+  VEMachineFunctionInfo()
+    : GlobalBaseReg(0), VectorLengthReg(0),
+      VarArgsFrameOffset(0), SRetReturnReg(0),
+      IsLeafProc(false) {}
+  explicit VEMachineFunctionInfo(MachineFunction &MF)
+    : GlobalBaseReg(0), VectorLengthReg(0),
+      VarArgsFrameOffset(0), SRetReturnReg(0),
+      IsLeafProc(false) {}
 
-    int getVarArgsFrameOffset() const { return VarArgsFrameOffset; }
-    void setVarArgsFrameOffset(int Offset) { VarArgsFrameOffset = Offset; }
+  unsigned getGlobalBaseReg() const { return GlobalBaseReg; }
+  void setGlobalBaseReg(unsigned Reg) { GlobalBaseReg = Reg; }
 
-    unsigned getSRetReturnReg() const { return SRetReturnReg; }
-    void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
+  unsigned getVectorLengthReg() const { return VectorLengthReg; }
+  void setVectorLengthReg(unsigned Reg) { VectorLengthReg = Reg; }
 
-    void setLeafProc(bool rhs) { IsLeafProc = rhs; }
-    bool isLeafProc() const { return IsLeafProc; }
-  };
-}
+  int getVarArgsFrameOffset() const { return VarArgsFrameOffset; }
+  void setVarArgsFrameOffset(int Offset) { VarArgsFrameOffset = Offset; }
+
+  unsigned getSRetReturnReg() const { return SRetReturnReg; }
+  void setSRetReturnReg(unsigned Reg) { SRetReturnReg = Reg; }
+
+  void setLeafProc(bool rhs) { IsLeafProc = rhs; }
+  bool isLeafProc() const { return IsLeafProc; }
+};
+} // namespace llvm
 
 #endif

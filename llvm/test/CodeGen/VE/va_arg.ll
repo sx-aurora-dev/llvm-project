@@ -110,18 +110,18 @@ define i32 @caller() {
 ; CHECK-NEXT:  st %s18, 48(,%s9)               # 8-byte Folded Spill
 ; CHECK-NEXT:  or %s7, 0, (0)1
 ; CHECK-NEXT:  st %s7, 280(,%s11)
-; CHECK-NEXT:  or %s34, 11, (0)1
-; CHECK-NEXT:  st %s34, 272(,%s11)
+; CHECK-NEXT:  or %s0, 11, (0)1
+; CHECK-NEXT:  st %s0, 272(,%s11)
 ; CHECK-NEXT:  st %s7, 264(,%s11)
-; CHECK-NEXT:  or %s34, 10, (0)1
-; CHECK-NEXT:  st %s34, 256(,%s11)
-; CHECK-NEXT:  lea.sl %s34, 1075970048
-; CHECK-NEXT:  st %s34, 248(,%s11)
-; CHECK-NEXT:  or %s34, 8, (0)1
-; CHECK-NEXT:  st %s34, 240(,%s11)
+; CHECK-NEXT:  or %s0, 10, (0)1
+; CHECK-NEXT:  st %s0, 256(,%s11)
+; CHECK-NEXT:  lea.sl %s0, 1075970048
+; CHECK-NEXT:  st %s0, 248(,%s11)
+; CHECK-NEXT:  or %s0, 8, (0)1
+; CHECK-NEXT:  st %s0, 240(,%s11)
 ; CHECK-NEXT:  st %s7, 232(,%s11)
-; CHECK-NEXT:  lea %s34, 1086324736
-; CHECK-NEXT:  stl %s34, 228(,%s11)
+; CHECK-NEXT:  lea %s0, 1086324736
+; CHECK-NEXT:  stl %s0, 228(,%s11)
 ; CHECK-NEXT:  or %s5, 5, (0)1
 ; CHECK-NEXT:  stl %s5, 216(,%s11)
 ; CHECK-NEXT:  or %s4, 4, (0)1
@@ -133,12 +133,12 @@ define i32 @caller() {
 ; CHECK-NEXT:  or %s1, 1, (0)1
 ; CHECK-NEXT:  stl %s1, 184(,%s11)
 ; CHECK-NEXT:  or %s18, 0, (0)1
-; CHECK-NEXT:  lea %s34, func@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s12, func@hi(%s34)
-; CHECK-NEXT:  lea.sl %s34, 1086324736
+; CHECK-NEXT:  lea %s0, func@lo
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s12, func@hi(%s0)
+; CHECK-NEXT:  lea.sl %s0, 1086324736
 ; CHECK-NEXT:  stl %s18, 176(,%s11)
-; CHECK-NEXT:  or %s6, 0, %s34
+; CHECK-NEXT:  or %s6, 0, %s0
 ; CHECK-NEXT:  or %s0, 0, %s18
 ; CHECK-NEXT:  bsic %lr, (,%s12)
 ; CHECK-NEXT:  or %s0, 0, %s18

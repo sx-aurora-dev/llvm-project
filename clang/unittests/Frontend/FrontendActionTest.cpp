@@ -272,7 +272,8 @@ TEST(GeneratePCHFrontendAction, CacheGeneratedPCH) {
         MemoryBuffer::getMemBuffer("int foo(void) { return 1; }\n").release());
     Invocation->getFrontendOpts().Inputs.push_back(
         FrontendInputFile("test.h", Language::C));
-    Invocation->getFrontendOpts().OutputFile = StringRef(PCHFilename);
+    Invocation->getFrontendOpts().OutputFile =
+        std::string(StringRef(PCHFilename));
     Invocation->getFrontendOpts().ProgramAction = frontend::GeneratePCH;
     Invocation->getTargetOpts().Triple = "x86_64-apple-darwin19.0.0";
     CompilerInstance Compiler;
@@ -284,11 +285,9 @@ TEST(GeneratePCHFrontendAction, CacheGeneratedPCH) {
 
     // Check whether the PCH was cached.
     if (ShouldCache)
-      EXPECT_EQ(InMemoryModuleCache::Final,
-                Compiler.getModuleCache().getPCMState(PCHFilename));
+      EXPECT_TRUE(Compiler.getModuleCache().isPCMFinal(PCHFilename));
     else
-      EXPECT_EQ(InMemoryModuleCache::Unknown,
-                Compiler.getModuleCache().getPCMState(PCHFilename));
+      EXPECT_EQ(nullptr, Compiler.getModuleCache().lookupPCM(PCHFilename));
   }
 }
 

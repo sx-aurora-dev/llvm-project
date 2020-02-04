@@ -423,3 +423,128 @@ func @vector_print_vector(%arg0: vector<2x2xf32>) {
 //       CHECK:    llvm.call @print_close() : () -> ()
 //       CHECK:    llvm.call @print_close() : () -> ()
 //       CHECK:    llvm.call @print_newline() : () -> ()
+
+func @strided_slice1(%arg0: vector<4xf32>) -> vector<2xf32> {
+  %0 = vector.strided_slice %arg0 {offsets = [2], sizes = [2], strides = [1]} : vector<4xf32> to vector<2xf32>
+  return %0 : vector<2xf32>
+}
+// CHECK-LABEL: llvm.func @strided_slice1
+//       CHECK:    llvm.mlir.constant(0.000000e+00 : f32) : !llvm.float
+//       CHECK:    llvm.mlir.constant(dense<0.000000e+00> : vector<2xf32>) : !llvm<"<2 x float>">
+//       CHECK:    llvm.mlir.constant(2 : index) : !llvm.i64
+//       CHECK:    llvm.extractelement %{{.*}}[%{{.*}} : !llvm.i64] : !llvm<"<4 x float>">
+//       CHECK:    llvm.mlir.constant(0 : index) : !llvm.i64
+//       CHECK:    llvm.insertelement %{{.*}}, %{{.*}}[%{{.*}} : !llvm.i64] : !llvm<"<2 x float>">
+//       CHECK:    llvm.mlir.constant(3 : index) : !llvm.i64
+//       CHECK:    llvm.extractelement %{{.*}}[%{{.*}} : !llvm.i64] : !llvm<"<4 x float>">
+//       CHECK:    llvm.mlir.constant(1 : index) : !llvm.i64
+//       CHECK:    llvm.insertelement %{{.*}}, %{{.*}}[%{{.*}} : !llvm.i64] : !llvm<"<2 x float>">
+
+func @strided_slice2(%arg0: vector<4x8xf32>) -> vector<2x8xf32> {
+  %0 = vector.strided_slice %arg0 {offsets = [2], sizes = [2], strides = [1]} : vector<4x8xf32> to vector<2x8xf32>
+  return %0 : vector<2x8xf32>
+}
+// CHECK-LABEL: llvm.func @strided_slice2
+//       CHECK:    llvm.mlir.constant(0.000000e+00 : f32) : !llvm.float
+//       CHECK:    llvm.mlir.constant(dense<0.000000e+00> : vector<2x8xf32>) : !llvm<"[2 x <8 x float>]">
+//       CHECK:    llvm.extractvalue %{{.*}}[2] : !llvm<"[4 x <8 x float>]">
+//       CHECK:    llvm.insertvalue %{{.*}}, %{{.*}}[0] : !llvm<"[2 x <8 x float>]">
+//       CHECK:    llvm.extractvalue %{{.*}}[3] : !llvm<"[4 x <8 x float>]">
+//       CHECK:    llvm.insertvalue %{{.*}}, %{{.*}}[1] : !llvm<"[2 x <8 x float>]">
+
+func @strided_slice3(%arg0: vector<4x8xf32>) -> vector<2x2xf32> {
+  %0 = vector.strided_slice %arg0 {offsets = [2, 2], sizes = [2, 2], strides = [1, 1]} : vector<4x8xf32> to vector<2x2xf32>
+  return %0 : vector<2x2xf32>
+}
+// CHECK-LABEL: llvm.func @strided_slice3
+//       CHECK:    llvm.mlir.constant(0.000000e+00 : f32) : !llvm.float
+//       CHECK:    llvm.mlir.constant(dense<0.000000e+00> : vector<2x2xf32>) : !llvm<"[2 x <2 x float>]">
+//
+// Subvector vector<8xf32> @2
+//       CHECK:    llvm.extractvalue {{.*}}[2] : !llvm<"[4 x <8 x float>]">
+//       CHECK:    llvm.mlir.constant(0.000000e+00 : f32) : !llvm.float
+//       CHECK:    llvm.mlir.constant(dense<0.000000e+00> : vector<2xf32>) : !llvm<"<2 x float>">
+//       CHECK:    llvm.mlir.constant(2 : index) : !llvm.i64
+//       CHECK:    llvm.extractelement {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<8 x float>">
+//       CHECK:    llvm.mlir.constant(0 : index) : !llvm.i64
+//       CHECK:    llvm.insertelement {{.*}}, {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<2 x float>">
+//       CHECK:    llvm.mlir.constant(3 : index) : !llvm.i64
+//       CHECK:    llvm.extractelement {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<8 x float>">
+//       CHECK:    llvm.mlir.constant(1 : index) : !llvm.i64
+//       CHECK:    llvm.insertelement {{.*}}, {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<2 x float>">
+//       CHECK:    llvm.insertvalue {{.*}}, {{.*}}[0] : !llvm<"[2 x <2 x float>]">
+//
+// Subvector vector<8xf32> @3
+//       CHECK:    llvm.extractvalue {{.*}}[3] : !llvm<"[4 x <8 x float>]">
+//       CHECK:    llvm.mlir.constant(0.000000e+00 : f32) : !llvm.float
+//       CHECK:    llvm.mlir.constant(dense<0.000000e+00> : vector<2xf32>) : !llvm<"<2 x float>">
+//       CHECK:    llvm.mlir.constant(2 : index) : !llvm.i64
+//       CHECK:    llvm.extractelement {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<8 x float>">
+//       CHECK:    llvm.mlir.constant(0 : index) : !llvm.i64
+//       CHECK:    llvm.insertelement {{.*}}, {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<2 x float>">
+//       CHECK:    llvm.mlir.constant(3 : index) : !llvm.i64
+//       CHECK:    llvm.extractelement {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<8 x float>">
+//       CHECK:    llvm.mlir.constant(1 : index) : !llvm.i64
+//       CHECK:    llvm.insertelement {{.*}}, {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<2 x float>">
+//       CHECK:    llvm.insertvalue {{.*}}, {{.*}}[1] : !llvm<"[2 x <2 x float>]">
+
+func @insert_strided_slice1(%b: vector<4x4xf32>, %c: vector<4x4x4xf32>) -> vector<4x4x4xf32> {
+  %0 = vector.insert_strided_slice %b, %c {offsets = [2, 0, 0], strides = [1, 1]} : vector<4x4xf32> into vector<4x4x4xf32>
+  return %0 : vector<4x4x4xf32>
+}
+// CHECK-LABEL: @insert_strided_slice1
+//       CHECK:    llvm.extractvalue {{.*}}[2] : !llvm<"[4 x [4 x <4 x float>]]">
+//  CHECK-NEXT:    llvm.insertvalue {{.*}}, {{.*}}[2] : !llvm<"[4 x [4 x <4 x float>]]">
+
+func @insert_strided_slice2(%a: vector<2x2xf32>, %b: vector<4x4xf32>) -> vector<4x4xf32> {
+  %0 = vector.insert_strided_slice %a, %b {offsets = [2, 2], strides = [1, 1]} : vector<2x2xf32> into vector<4x4xf32>
+  return %0 : vector<4x4xf32>
+}
+// CHECK-LABEL: @insert_strided_slice2
+//
+// Subvector vector<2xf32> @0 into vector<4xf32> @2
+//       CHECK:    llvm.extractvalue {{.*}}[0] : !llvm<"[2 x <2 x float>]">
+//  CHECK-NEXT:    llvm.extractvalue {{.*}}[2] : !llvm<"[4 x <4 x float>]">
+// Element @0 -> element @2
+//  CHECK-NEXT:    llvm.mlir.constant(0 : index) : !llvm.i64
+//  CHECK-NEXT:    llvm.extractelement {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<2 x float>">
+//  CHECK-NEXT:    llvm.mlir.constant(2 : index) : !llvm.i64
+//  CHECK-NEXT:    llvm.insertelement {{.*}}, {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<4 x float>">
+// Element @1 -> element @3
+//  CHECK-NEXT:    llvm.mlir.constant(1 : index) : !llvm.i64
+//  CHECK-NEXT:    llvm.extractelement {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<2 x float>">
+//  CHECK-NEXT:    llvm.mlir.constant(3 : index) : !llvm.i64
+//  CHECK-NEXT:    llvm.insertelement {{.*}}, {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<4 x float>">
+//  CHECK-NEXT:    llvm.insertvalue {{.*}}, {{.*}}[2] : !llvm<"[4 x <4 x float>]">
+//
+// Subvector vector<2xf32> @1 into vector<4xf32> @3
+//       CHECK:    llvm.extractvalue {{.*}}[1] : !llvm<"[2 x <2 x float>]">
+//  CHECK-NEXT:    llvm.extractvalue {{.*}}[3] : !llvm<"[4 x <4 x float>]">
+// Element @0 -> element @2
+//  CHECK-NEXT:    llvm.mlir.constant(0 : index) : !llvm.i64
+//  CHECK-NEXT:    llvm.extractelement {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<2 x float>">
+//  CHECK-NEXT:    llvm.mlir.constant(2 : index) : !llvm.i64
+//  CHECK-NEXT:    llvm.insertelement {{.*}}, {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<4 x float>">
+// Element @1 -> element @3
+//  CHECK-NEXT:    llvm.mlir.constant(1 : index) : !llvm.i64
+//  CHECK-NEXT:    llvm.extractelement {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<2 x float>">
+//  CHECK-NEXT:    llvm.mlir.constant(3 : index) : !llvm.i64
+//  CHECK-NEXT:    llvm.insertelement {{.*}}, {{.*}}[{{.*}} : !llvm.i64] : !llvm<"<4 x float>">
+//  CHECK-NEXT:    llvm.insertvalue {{.*}}, {{.*}}[3] : !llvm<"[4 x <4 x float>]">
+
+func @extract_strides(%arg0: vector<3x3xf32>) -> vector<1x1xf32> {
+  %0 = vector.extract_slices %arg0, [2, 2], [1, 1]
+    : vector<3x3xf32> into tuple<vector<2x2xf32>, vector<2x1xf32>, vector<1x2xf32>, vector<1x1xf32>>
+  %1 = vector.tuple_get %0, 3 : tuple<vector<2x2xf32>, vector<2x1xf32>, vector<1x2xf32>, vector<1x1xf32>>
+  return %1 : vector<1x1xf32>
+}
+// CHECK-LABEL: extract_strides(%arg0: !llvm<"[3 x <3 x float>]">)
+//      CHECK: %[[s0:.*]] = llvm.mlir.constant(dense<0.000000e+00> : vector<1x1xf32>) : !llvm<"[1 x <1 x float>]">
+//      CHECK: %[[s1:.*]] = llvm.extractvalue %arg0[2] : !llvm<"[3 x <3 x float>]">
+//      CHECK: %[[s3:.*]] = llvm.mlir.constant(dense<0.000000e+00> : vector<1xf32>) : !llvm<"<1 x float>">
+//      CHECK: %[[s4:.*]] = llvm.mlir.constant(2 : index) : !llvm.i64
+//      CHECK: %[[s5:.*]] = llvm.extractelement %[[s1]][%[[s4]] : !llvm.i64] : !llvm<"<3 x float>">
+//      CHECK: %[[s6:.*]] = llvm.mlir.constant(0 : index) : !llvm.i64
+//      CHECK: %[[s7:.*]] = llvm.insertelement %[[s5]], %[[s3]][%[[s6]] : !llvm.i64] : !llvm<"<1 x float>">
+//      CHECK: %[[s8:.*]] = llvm.insertvalue %[[s7]], %[[s0]][0] : !llvm<"[1 x <1 x float>]">
+//      CHECK: llvm.return %[[s8]] : !llvm<"[1 x <1 x float>]">

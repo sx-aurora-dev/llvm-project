@@ -259,7 +259,7 @@ void BTFTypeStruct::emitType(MCStreamer &OS) {
   }
 }
 
-std::string BTFTypeStruct::getName() { return STy->getName(); }
+std::string BTFTypeStruct::getName() { return std::string(STy->getName()); }
 
 /// The Func kind represents both subprogram and pointee of function
 /// pointers. If the FuncName is empty, it represents a pointee of function
@@ -308,10 +308,11 @@ void BTFTypeFuncProto::emitType(MCStreamer &OS) {
   }
 }
 
-BTFTypeFunc::BTFTypeFunc(StringRef FuncName, uint32_t ProtoTypeId)
+BTFTypeFunc::BTFTypeFunc(StringRef FuncName, uint32_t ProtoTypeId,
+    uint32_t Scope)
     : Name(FuncName) {
   Kind = BTF::BTF_KIND_FUNC;
-  BTFType.Info = Kind << 24;
+  BTFType.Info = (Kind << 24) | Scope;
   BTFType.Type = ProtoTypeId;
 }
 
@@ -373,7 +374,7 @@ uint32_t BTFStringTable::addString(StringRef S) {
   // Not find, add to the string table.
   uint32_t Offset = Size;
   OffsetToIdMap[Offset] = Table.size();
-  Table.push_back(S);
+  Table.push_back(std::string(S));
   Size += S.size() + 1;
   return Offset;
 }
@@ -666,7 +667,7 @@ std::string BTFDebug::populateFileContent(const DISubprogram *SP) {
   if (!File->getFilename().startswith("/") && File->getDirectory().size())
     FileName = File->getDirectory().str() + "/" + File->getFilename().str();
   else
-    FileName = File->getFilename();
+    FileName = std::string(File->getFilename());
 
   // No need to populate the contends if it has been populated!
   if (FileContent.find(FileName) != FileContent.end())
@@ -685,7 +686,7 @@ std::string BTFDebug::populateFileContent(const DISubprogram *SP) {
     Buf = std::move(*BufOrErr);
   if (Buf)
     for (line_iterator I(*Buf, false), E; I != E; ++I)
-      Content.push_back(*I);
+      Content.push_back(std::string(*I));
 
   FileContent[FileName] = Content;
   return FileName;
@@ -897,8 +898,9 @@ void BTFDebug::beginFunctionImpl(const MachineFunction *MF) {
   visitSubroutineType(SP->getType(), true, FuncArgNames, ProtoTypeId);
 
   // Construct subprogram func type
+  uint8_t Scope = SP->isLocalToUnit() ? BTF::FUNC_STATIC : BTF::FUNC_GLOBAL;
   auto FuncTypeEntry =
-      std::make_unique<BTFTypeFunc>(SP->getName(), ProtoTypeId);
+      std::make_unique<BTFTypeFunc>(SP->getName(), ProtoTypeId, Scope);
   uint32_t FuncTypeId = addType(std::move(FuncTypeEntry));
 
   for (const auto &TypeEntry : TypeEntries)
@@ -953,8 +955,8 @@ void BTFDebug::generateFieldReloc(const MCSymbol *ORSym, DIType *RootTy,
   FieldReloc.Label = ORSym;
   FieldReloc.OffsetNameOff = addString(IndexPattern);
   FieldReloc.TypeID = RootId;
-  FieldReloc.RelocKind = std::stoull(RelocKindStr);
-  PatchImms[AccessPattern.str()] = std::stoul(PatchImmStr);
+  FieldReloc.RelocKind = std::stoull(std::string(RelocKindStr));
+  PatchImms[AccessPattern.str()] = std::stoul(std::string(PatchImmStr));
   FieldRelocTable[SecNameOff].push_back(FieldReloc);
 }
 
@@ -1012,6 +1014,12 @@ void BTFDebug::beginInstruction(const MachineInstr *MI) {
              MI->getOpcode() == BPF::CORE_SHIFT) {
     // relocation insn is a load, store or shift insn.
     processReloc(MI->getOperand(3));
+  } else if (MI->getOpcode() == BPF::JAL) {
+    // check extern function references
+    const MachineOperand &MO = MI->getOperand(0);
+    if (MO.isGlobal()) {
+      processFuncPrototypes(dyn_cast<Function>(MO.getGlobal()));
+    }
   }
 
   // Skip this instruction if no DebugLoc or the DebugLoc
@@ -1111,15 +1119,17 @@ void BTFDebug::processGlobals(bool ProcessingMapDef) {
     assert(!SecName.empty());
 
     // Find or create a DataSec
-    if (DataSecEntries.find(SecName) == DataSecEntries.end()) {
-      DataSecEntries[SecName] = std::make_unique<BTFKindDataSec>(Asm, SecName);
+    if (DataSecEntries.find(std::string(SecName)) == DataSecEntries.end()) {
+      DataSecEntries[std::string(SecName)] =
+          std::make_unique<BTFKindDataSec>(Asm, std::string(SecName));
     }
 
     // Calculate symbol size
     const DataLayout &DL = Global.getParent()->getDataLayout();
     uint32_t Size = DL.getTypeAllocSize(Global.getType()->getElementType());
 
-    DataSecEntries[SecName]->addVar(VarId, Asm->getSymbol(&Global), Size);
+    DataSecEntries[std::string(SecName)]->addVar(VarId, Asm->getSymbol(&Global),
+                                                 Size);
   }
 }
 
@@ -1162,32 +1172,27 @@ bool BTFDebug::InstLower(const MachineInstr *MI, MCInst &OutMI) {
   return false;
 }
 
-void BTFDebug::processFuncPrototypes() {
-  const Module *M = MMI->getModule();
-  for (const Function &F : M->functions()) {
-    const DISubprogram *SP = F.getSubprogram();
-    if (!SP || SP->isDefinition())
-      continue;
+void BTFDebug::processFuncPrototypes(const Function *F) {
+  if (!F)
+    return;
 
-    uint32_t ProtoTypeId;
-    const std::unordered_map<uint32_t, StringRef> FuncArgNames;
-    visitSubroutineType(SP->getType(), false, FuncArgNames, ProtoTypeId);
+  const DISubprogram *SP = F->getSubprogram();
+  if (!SP || SP->isDefinition())
+    return;
 
-    auto VarEntry =
-        std::make_unique<BTFKindVar>(SP->getName(), ProtoTypeId,
-                                     BTF::VAR_GLOBAL_EXTERNAL);
-    uint32_t VarId = addType(std::move(VarEntry));
+  // Do not emit again if already emitted.
+  if (ProtoFunctions.find(F) != ProtoFunctions.end())
+    return;
+  ProtoFunctions.insert(F);
 
-    StringRef SecName = F.getSection();
-    if (SecName.empty())
-      SecName = ".extern";
+  uint32_t ProtoTypeId;
+  const std::unordered_map<uint32_t, StringRef> FuncArgNames;
+  visitSubroutineType(SP->getType(), false, FuncArgNames, ProtoTypeId);
 
-    if (DataSecEntries.find(SecName) == DataSecEntries.end()) {
-      DataSecEntries[SecName] = std::make_unique<BTFKindDataSec>(Asm, SecName);
-    }
-
-    DataSecEntries[SecName]->addVar(VarId, Asm->getSymbol(&F), 8);
-  }
+  uint8_t Scope = BTF::FUNC_EXTERN;
+  auto FuncTypeEntry =
+      std::make_unique<BTFTypeFunc>(SP->getName(), ProtoTypeId, Scope);
+  addType(std::move(FuncTypeEntry));
 }
 
 void BTFDebug::endModule() {
@@ -1199,8 +1204,6 @@ void BTFDebug::endModule() {
 
   // Collect global types/variables except MapDef globals.
   processGlobals(false);
-
-  processFuncPrototypes();
 
   for (auto &DataSec : DataSecEntries)
     addType(std::move(DataSec.second));

@@ -45,7 +45,7 @@ define i128 @func4() {
 define zeroext i16 @func5() {
 ; CHECK-LABEL: func5:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.sx %s34, 191(,%s11)
+; CHECK-NEXT:    ld1b.sx %s0, 191(,%s11)
   %1 = alloca i8, align 1
   %2 = load i8, i8* %1, align 1, !tbaa !2
   %3 = sext i8 %2 to i16
@@ -393,9 +393,9 @@ define i128 @func36() {
 define signext i8 @func37() {
 ; CHECK-LABEL: func37:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.zx %s34, 191(,%s11)
-; CHECK-NEXT:     sla.w.sx %s34, %s34, 31
-; CHECK-NEXT:     sra.w.sx %s0, %s34, 31
+; CHECK-NEXT:    ld1b.zx %s0, 191(,%s11)
+; CHECK-NEXT:     sla.w.sx %s0, %s0, 31
+; CHECK-NEXT:     sra.w.sx %s0, %s0, 31
   %1 = alloca i1, align 1
   %2 = load i1, i1* %1, align 1, !tbaa !2
   %3 = sext i1 %2 to i8
@@ -405,9 +405,9 @@ define signext i8 @func37() {
 define signext i16 @func38() {
 ; CHECK-LABEL: func38:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.zx %s34, 191(,%s11)
-; CHECK-NEXT:     sla.w.sx %s34, %s34, 31
-; CHECK-NEXT:     sra.w.sx %s0, %s34, 31
+; CHECK-NEXT:    ld1b.zx %s0, 191(,%s11)
+; CHECK-NEXT:     sla.w.sx %s0, %s0, 31
+; CHECK-NEXT:     sra.w.sx %s0, %s0, 31
   %1 = alloca i1, align 1
   %2 = load i1, i1* %1, align 1, !tbaa !2
   %3 = sext i1 %2 to i16
@@ -417,9 +417,9 @@ define signext i16 @func38() {
 define signext i32 @func39() {
 ; CHECK-LABEL: func39:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.zx %s34, 191(,%s11)
-; CHECK-NEXT:     sla.w.sx %s34, %s34, 31
-; CHECK-NEXT:     sra.w.sx %s0, %s34, 31
+; CHECK-NEXT:    ld1b.zx %s0, 191(,%s11)
+; CHECK-NEXT:     sla.w.sx %s0, %s0, 31
+; CHECK-NEXT:     sra.w.sx %s0, %s0, 31
   %1 = alloca i1, align 1
   %2 = load i1, i1* %1, align 1, !tbaa !2
   %3 = sext i1 %2 to i32
@@ -429,9 +429,9 @@ define signext i32 @func39() {
 define signext i64 @func40() {
 ; CHECK-LABEL: func40:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.zx %s34, 191(,%s11)
-; CHECK-NEXT:     sll %s34, %s34, 63
-; CHECK-NEXT:     sra.l %s0, %s34, 63
+; CHECK-NEXT:    ld1b.zx %s0, 191(,%s11)
+; CHECK-NEXT:     sll %s0, %s0, 63
+; CHECK-NEXT:     sra.l %s0, %s0, 63
   %1 = alloca i1, align 1
   %2 = load i1, i1* %1, align 1, !tbaa !2
   %3 = sext i1 %2 to i64
@@ -441,9 +441,9 @@ define signext i64 @func40() {
 define signext i128 @func41() {
 ; CHECK-LABEL: func41:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.zx %s34, 191(,%s11)
-; CHECK-NEXT:     sll %s34, %s34, 63
-; CHECK-NEXT:     sra.l %s0, %s34, 63
+; CHECK-NEXT:    ld1b.zx %s0, 191(,%s11)
+; CHECK-NEXT:     sll %s0, %s0, 63
+; CHECK-NEXT:     sra.l %s0, %s0, 63
   %1 = alloca i1, align 1
   %2 = load i1, i1* %1, align 1, !tbaa !2
   %3 = sext i1 %2 to i128

@@ -49,6 +49,21 @@
 ; CHECK: llvm.mlir.global external @external() : !llvm.i32
 @external = external global i32
 
+;
+; Sequential constants.
+;
+
+; CHECK: llvm.mlir.global internal constant @vector_constant(dense<[1, 2]> : vector<2xi32>) : !llvm<"<2 x i32>">
+@vector_constant = internal constant <2 x i32> <i32 1, i32 2>
+; CHECK: llvm.mlir.global internal constant @array_constant(dense<[1.000000e+00, 2.000000e+00]> : tensor<2xf32>) : !llvm<"[2 x float]">
+@array_constant = internal constant [2 x float] [float 1., float 2.]
+; CHECK: llvm.mlir.global internal constant @nested_array_constant(dense<[{{\[}}1, 2], [3, 4]]> : tensor<2x2xi32>) : !llvm<"[2 x [2 x i32]]">
+@nested_array_constant = internal constant [2 x [2 x i32]] [[2 x i32] [i32 1, i32 2], [2 x i32] [i32 3, i32 4]]
+; CHECK: llvm.mlir.global internal constant @nested_array_constant3(dense<[{{\[}}[1, 2], [3, 4]]]> : tensor<1x2x2xi32>) : !llvm<"[1 x [2 x [2 x i32]]]">
+@nested_array_constant3 = internal constant [1 x [2 x [2 x i32]]] [[2 x [2 x i32]] [[2 x i32] [i32 1, i32 2], [2 x i32] [i32 3, i32 4]]]
+; CHECK: llvm.mlir.global internal constant @nested_array_vector(dense<[{{\[}}[1, 2], [3, 4]]]> : vector<1x2x2xi32>) : !llvm<"[1 x [2 x <2 x i32>]]">
+@nested_array_vector = internal constant [1 x [2 x <2 x i32>]] [[2 x <2 x i32>] [<2 x i32> <i32 1, i32 2>, <2 x i32> <i32 3, i32 4>]]
+
 ; CHECK: llvm.func @fe(!llvm.i32) -> !llvm.float
 declare float @fe(i32)
 
@@ -208,4 +223,40 @@ define void @FPArithmetic(float %a, float %b, double %c, double %d) {
   ; CHECK: %[[a13:[0-9]+]] = llvm.frem %arg2, %arg3 : !llvm.double
   %11 = frem double %c, %d
   ret void
+}
+
+;
+; Functions as constants.
+;
+
+; Calling the function that has not been defined yet.
+; CHECK-LABEL: @precaller
+define i32 @precaller() {
+  %1 = alloca i32 ()*
+  ; CHECK: %[[func:.*]] = llvm.mlir.constant(@callee) : !llvm<"i32 ()*">
+  ; CHECK: llvm.store %[[func]], %[[loc:.*]]
+  store i32 ()* @callee, i32 ()** %1
+  ; CHECK: %[[indir:.*]] = llvm.load %[[loc]]
+  %2 = load i32 ()*, i32 ()** %1
+  ; CHECK: llvm.call %[[indir]]()
+  %3 = call i32 %2()
+  ret i32 %3
+}
+
+define i32 @callee() {
+  ret i32 42
+}
+
+; Calling the function that has been defined.
+; CHECK-LABEL: @postcaller
+define i32 @postcaller() {
+  %1 = alloca i32 ()*
+  ; CHECK: %[[func:.*]] = llvm.mlir.constant(@callee) : !llvm<"i32 ()*">
+  ; CHECK: llvm.store %[[func]], %[[loc:.*]]
+  store i32 ()* @callee, i32 ()** %1
+  ; CHECK: %[[indir:.*]] = llvm.load %[[loc]]
+  %2 = load i32 ()*, i32 ()** %1
+  ; CHECK: llvm.call %[[indir]]()
+  %3 = call i32 %2()
+  ret i32 %3
 }
