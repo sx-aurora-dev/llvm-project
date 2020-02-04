@@ -1014,9 +1014,9 @@ StmtResult Parser::ParseCompoundStatementBody(bool isStmtExpr) {
                                 Tok.getLocation(),
                                 "in compound statement ('{}')");
 
-  // Record the state of the FP_CONTRACT pragma, restore on leaving the
+  // Record the state of the FPFeatures, restore on leaving the
   // compound statement.
-  Sema::FPContractStateRAII SaveFPContractState(Actions);
+  Sema::FPFeaturesStateRAII SaveFPContractState(Actions);
 
   InMessageExpressionRAIIObject InMessage(*this, false);
   BalancedDelimiterTracker T(*this, tok::l_brace);
@@ -1272,10 +1272,12 @@ struct MisleadingIndentationChecker {
 
     if (PrevColNum != 0 && CurColNum != 0 && StmtColNum != 0 &&
         ((PrevColNum > StmtColNum && PrevColNum == CurColNum) ||
-         !Tok.isAtStartOfLine()) && SM.getPresumedLineNumber(StmtLoc) !=
-          SM.getPresumedLineNumber(Tok.getLocation())) {
-      P.Diag(Tok.getLocation(), diag::warn_misleading_indentation)
-          << Kind;
+         !Tok.isAtStartOfLine()) &&
+        SM.getPresumedLineNumber(StmtLoc) !=
+            SM.getPresumedLineNumber(Tok.getLocation()) &&
+        (Tok.isNot(tok::identifier) ||
+         P.getPreprocessor().LookAhead(0).isNot(tok::colon))) {
+      P.Diag(Tok.getLocation(), diag::warn_misleading_indentation) << Kind;
       P.Diag(StmtLoc, diag::note_previous_statement);
     }
   }

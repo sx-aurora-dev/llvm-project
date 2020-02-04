@@ -1866,6 +1866,27 @@ TEST(EachOf, BehavesLikeAnyOfUnlessBothMatch) {
                       has(fieldDecl(hasName("b")).bind("v"))))));
 }
 
+TEST(Optionally, SubmatchersDoNotMatch) {
+  EXPECT_TRUE(matchAndVerifyResultFalse(
+      "class A { int a; int b; };",
+      recordDecl(optionally(has(fieldDecl(hasName("c")).bind("v")),
+                            has(fieldDecl(hasName("d")).bind("v")))),
+      std::make_unique<VerifyIdIsBoundTo<FieldDecl>>("v")));
+}
+
+TEST(Optionally, SubmatchersMatch) {
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "class A { int a; int c; };",
+      recordDecl(optionally(has(fieldDecl(hasName("a")).bind("v")),
+                            has(fieldDecl(hasName("b")).bind("v")))),
+      std::make_unique<VerifyIdIsBoundTo<FieldDecl>>("v", 1)));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "class A { int c; int b; };",
+      recordDecl(optionally(has(fieldDecl(hasName("c")).bind("v")),
+                            has(fieldDecl(hasName("b")).bind("v")))),
+      std::make_unique<VerifyIdIsBoundTo<FieldDecl>>("v", 2)));
+}
+
 TEST(IsTemplateInstantiation, MatchesImplicitClassTemplateInstantiation) {
   // Make sure that we can both match the class by name (::X) and by the type
   // the template was instantiated with (via a field).
@@ -2481,6 +2502,13 @@ TEST(HasDefinition, MatchesUnionDefinition) {
 TEST(IsScopedEnum, MatchesScopedEnum) {
   EXPECT_TRUE(matches("enum class X {};", enumDecl(isScoped())));
   EXPECT_TRUE(notMatches("enum X {};", enumDecl(isScoped())));
+}
+
+TEST(TagDeclKind, MatchesTagDeclKind) {
+  EXPECT_TRUE(matches("struct X {};", tagDecl(isStruct())));
+  EXPECT_TRUE(matches("class C {};", tagDecl(isClass())));
+  EXPECT_TRUE(matches("union U {};", tagDecl(isUnion())));
+  EXPECT_TRUE(matches("enum E {};", tagDecl(isEnum())));
 }
 
 TEST(HasTrailingReturn, MatchesTrailingReturn) {

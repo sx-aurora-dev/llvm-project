@@ -22,7 +22,7 @@ VETargetStreamer::VETargetStreamer(MCStreamer &S) : MCTargetStreamer(S) {}
 void VETargetStreamer::anchor() {}
 
 VETargetAsmStreamer::VETargetAsmStreamer(MCStreamer &S,
-                                               formatted_raw_ostream &OS)
+                                         formatted_raw_ostream &OS)
     : VETargetStreamer(S), OS(OS) {}
 
 void VETargetAsmStreamer::emitVERegisterIgnore(unsigned reg) {
@@ -37,8 +37,7 @@ void VETargetAsmStreamer::emitVERegisterScratch(unsigned reg) {
      << ", #scratch\n";
 }
 
-VETargetELFStreamer::VETargetELFStreamer(MCStreamer &S)
-    : VETargetStreamer(S) {}
+VETargetELFStreamer::VETargetELFStreamer(MCStreamer &S) : VETargetStreamer(S) {}
 
 MCELFStreamer &VETargetELFStreamer::getStreamer() {
   return static_cast<MCELFStreamer &>(Streamer);

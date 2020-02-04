@@ -113,6 +113,9 @@ public:
 
   ProfileSummaryInfo *PSI;
 
+  /// The symbol for the entry in __patchable_function_entires.
+  MCSymbol *CurrentPatchableFunctionEntrySym = nullptr;
+
   /// The symbol for the current function. This is recalculated at the beginning
   /// of each call to runOnMachineFunction().
   MCSymbol *CurrentFnSym = nullptr;
@@ -244,6 +247,11 @@ public:
 
   MCSymbol *getSymbol(const GlobalValue *GV) const;
 
+  /// Similar to getSymbol() but preferred for references. On ELF, this uses a
+  /// local symbol if a reference to GV is guaranteed to be resolved to the
+  /// definition in the same module.
+  MCSymbol *getSymbolPreferLocal(const GlobalValue &GV) const;
+
   //===------------------------------------------------------------------===//
   // XRay instrumentation implementation.
   //===------------------------------------------------------------------===//
@@ -285,6 +293,9 @@ public:
 
   /// Emit a table with all XRay instrumentation points.
   void emitXRayTable();
+
+  DenseMap<const MCSection *, unsigned> PatchableFunctionEntryID;
+  void emitPatchableFunctionEntries();
 
   //===------------------------------------------------------------------===//
   // MachineFunctionPass Implementation.
@@ -445,6 +456,9 @@ public:
   /// Targets can override this to customize the output of IMPLICIT_DEF
   /// instructions in verbose mode.
   virtual void emitImplicitDef(const MachineInstr *MI) const;
+
+  /// Emit N NOP instructions.
+  void emitNops(unsigned N);
 
   //===------------------------------------------------------------------===//
   // Symbol Lowering Routines.
@@ -650,7 +664,7 @@ public:
 
   /// Return the alignment for the specified \p GV.
   static Align getGVAlignment(const GlobalValue *GV, const DataLayout &DL,
-                              Align InAlign = Align::None());
+                              Align InAlign = Align(1));
 
 private:
   /// Private state for PrintSpecial()

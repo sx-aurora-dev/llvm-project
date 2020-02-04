@@ -856,6 +856,90 @@ Value *InstCombiner::dyn_castNegVal(Value *V) const {
   return nullptr;
 }
 
+/// Get negated V (that is 0-V) without increasing instruction count,
+/// assuming that the original V will become unused.
+Value *InstCombiner::freelyNegateValue(Value *V) {
+  if (Value *NegV = dyn_castNegVal(V))
+    return NegV;
+
+  Instruction *I = dyn_cast<Instruction>(V);
+  if (!I)
+    return nullptr;
+
+  unsigned BitWidth = I->getType()->getScalarSizeInBits();
+  switch (I->getOpcode()) {
+  // 0-(zext i1 A)  =>  sext i1 A
+  case Instruction::ZExt:
+    if (I->getOperand(0)->getType()->isIntOrIntVectorTy(1))
+      return Builder.CreateSExtOrBitCast(
+          I->getOperand(0), I->getType(), I->getName() + ".neg");
+    return nullptr;
+
+  // 0-(sext i1 A)  =>  zext i1 A
+  case Instruction::SExt:
+    if (I->getOperand(0)->getType()->isIntOrIntVectorTy(1))
+      return Builder.CreateZExtOrBitCast(
+          I->getOperand(0), I->getType(), I->getName() + ".neg");
+    return nullptr;
+
+  // 0-(A lshr (BW-1))  =>  A ashr (BW-1)
+  case Instruction::LShr:
+    if (match(I->getOperand(1), m_SpecificInt(BitWidth - 1)))
+      return Builder.CreateAShr(
+          I->getOperand(0), I->getOperand(1),
+          I->getName() + ".neg", cast<BinaryOperator>(I)->isExact());
+    return nullptr;
+
+  // 0-(A ashr (BW-1))  =>  A lshr (BW-1)
+  case Instruction::AShr:
+    if (match(I->getOperand(1), m_SpecificInt(BitWidth - 1)))
+      return Builder.CreateLShr(
+          I->getOperand(0), I->getOperand(1),
+          I->getName() + ".neg", cast<BinaryOperator>(I)->isExact());
+    return nullptr;
+
+  default:
+    break;
+  }
+
+  // TODO: The "sub" pattern below could also be applied without the one-use
+  // restriction. Not allowing it for now in line with existing behavior.
+  if (!I->hasOneUse())
+    return nullptr;
+
+  switch (I->getOpcode()) {
+  // 0-(A-B)  =>  B-A
+  case Instruction::Sub:
+    return Builder.CreateSub(
+        I->getOperand(1), I->getOperand(0), I->getName() + ".neg");
+
+  // 0-(A sdiv C)  =>  A sdiv (0-C)  provided the negation doesn't overflow.
+  case Instruction::SDiv: {
+    Constant *C = dyn_cast<Constant>(I->getOperand(1));
+    if (C && !C->containsUndefElement() && C->isNotMinSignedValue() &&
+        C->isNotOneValue())
+      return Builder.CreateSDiv(I->getOperand(0), ConstantExpr::getNeg(C),
+          I->getName() + ".neg", cast<BinaryOperator>(I)->isExact());
+    return nullptr;
+  }
+
+  // 0-(A<<B)  =>  (0-A)<<B
+  case Instruction::Shl:
+    if (Value *NegA = freelyNegateValue(I->getOperand(0)))
+      return Builder.CreateShl(NegA, I->getOperand(1), I->getName() + ".neg");
+    return nullptr;
+
+  // 0-(trunc A)  =>  trunc (0-A)
+  case Instruction::Trunc:
+    if (Value *NegA = freelyNegateValue(I->getOperand(0)))
+      return Builder.CreateTrunc(NegA, I->getType(), I->getName() + ".neg");
+    return nullptr;
+
+  default:
+    return nullptr;
+  }
+}
+
 static Value *foldOperationIntoSelectOperand(Instruction &I, Value *SO,
                                              InstCombiner::BuilderTy &Builder) {
   if (auto *Cast = dyn_cast<CastInst>(&I))
@@ -1649,7 +1733,7 @@ Instruction *InstCombiner::narrowMathIfNoOverflow(BinaryOperator &BO) {
   return CastInst::Create(CastOpc, NarrowBO, BO.getType());
 }
 
-bool isMergedGEPInBounds(GEPOperator &GEP1, GEPOperator &GEP2) {
+static bool isMergedGEPInBounds(GEPOperator &GEP1, GEPOperator &GEP2) {
   // At least one GEP must be inbounds.
   if (!GEP1.isInBounds() && !GEP2.isInBounds())
     return false;
@@ -2592,14 +2676,17 @@ Instruction *InstCombiner::visitReturnInst(ReturnInst &RI) {
 
   Value *ResultOp = RI.getOperand(0);
   Type *VTy = ResultOp->getType();
-  if (!VTy->isIntegerTy())
+  if (!VTy->isIntegerTy() || isa<Constant>(ResultOp))
     return nullptr;
 
   // There might be assume intrinsics dominating this return that completely
   // determine the value. If so, constant fold it.
   KnownBits Known = computeKnownBits(ResultOp, 0, &RI);
-  if (Known.isConstant())
+  if (Known.isConstant()) {
+    Worklist.AddValue(ResultOp);
     RI.setOperand(0, Constant::getIntegerValue(VTy, Known.getConstant()));
+    return &RI;
+  }
 
   return nullptr;
 }
@@ -3568,7 +3655,8 @@ static bool combineInstructionsOverFunction(
     ProfileSummaryInfo *PSI, bool ExpensiveCombines, unsigned MaxIterations,
     LoopInfo *LI) {
   auto &DL = F.getParent()->getDataLayout();
-  ExpensiveCombines |= EnableExpensiveCombines;
+  if (EnableExpensiveCombines.getNumOccurrences())
+    ExpensiveCombines = EnableExpensiveCombines;
   MaxIterations = std::min(MaxIterations, LimitMaxIterations.getValue());
 
   /// Builder - This is an IRBuilder that automatically inserts new

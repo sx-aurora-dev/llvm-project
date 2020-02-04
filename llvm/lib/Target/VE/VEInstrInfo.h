@@ -37,8 +37,9 @@ namespace VEII {
 
 class VEInstrInfo : public VEGenInstrInfo {
   const VERegisterInfo RI;
-  const VESubtarget& Subtarget;
+  const VESubtarget &Subtarget;
   virtual void anchor();
+
 public:
   explicit VEInstrInfo(VESubtarget &ST);
 
@@ -64,6 +65,7 @@ public:
   unsigned isStoreToStackSlot(const MachineInstr &MI,
                               int &FrameIndex) const override;
 
+  /// Branch Analysis & Modification {
   bool analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                      MachineBasicBlock *&FBB,
                      SmallVectorImpl<MachineOperand> &Cond,
@@ -79,8 +81,9 @@ public:
 
   bool
   reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
+  /// } Branch Analysis & Modification
 
-  void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
+  void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                    const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg,
                    bool KillSrc) const override;
   void copyPhysSubRegs(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
@@ -110,6 +113,6 @@ public:
   bool expandGetStackTopPseudo(MachineInstr &MI) const;
 };
 
-}
+} // namespace llvm
 
 #endif

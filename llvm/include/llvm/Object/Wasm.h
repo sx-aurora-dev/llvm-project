@@ -168,6 +168,7 @@ public:
   uint64_t getCommonSymbolSizeImpl(DataRefImpl Symb) const override;
   Expected<SymbolRef::Type> getSymbolType(DataRefImpl Symb) const override;
   Expected<section_iterator> getSymbolSection(DataRefImpl Symb) const override;
+  uint32_t getSymbolSectionId(SymbolRef Sym) const;
 
   // Overrides from SectionRef.
   void moveSectionNext(DataRefImpl &Sec) const override;
@@ -229,6 +230,7 @@ private:
 
   const WasmSection &getWasmSection(DataRefImpl Ref) const;
   const wasm::WasmRelocation &getWasmRelocation(DataRefImpl Ref) const;
+  uint32_t getSymbolSectionIdImpl(const WasmSymbol &Symb) const;
 
   Error parseSection(WasmSection &Sec);
   Error parseCustomSection(WasmSection &Sec, ReadContext &Ctx);

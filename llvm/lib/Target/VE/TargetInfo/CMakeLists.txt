@@ -1,3 +1,3 @@
-add_llvm_library(LLVMVEInfo
+add_llvm_component_library(LLVMVEInfo
   VETargetInfo.cpp
   )

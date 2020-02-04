@@ -29,7 +29,7 @@
 
 using namespace llvm;
 
-extern "C" void LLVMInitializeSystemZTarget() {
+extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeSystemZTarget() {
   // Register the target.
   RegisterTargetMachine<SystemZTargetMachine> X(getTheSystemZTarget());
 }
@@ -155,7 +155,7 @@ SystemZTargetMachine::SystemZTargetMachine(const Target &T, const Triple &TT,
           getEffectiveSystemZCodeModel(CM, getEffectiveRelocModel(RM), JIT),
           OL),
       TLOF(std::make_unique<TargetLoweringObjectFileELF>()),
-      Subtarget(TT, CPU, FS, *this) {
+      Subtarget(TT, std::string(CPU), std::string(FS), *this) {
   initAsmInfo();
 }
 

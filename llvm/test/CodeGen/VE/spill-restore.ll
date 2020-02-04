@@ -9,9 +9,9 @@ define void @check_spill_restore() {
 ; CHECK:       .LBB0_2:
 ; CHECK-NEXT:    st %s18, 48(,%s9)               # 8-byte Folded Spill
 ; CHECK-NEXT:    st %s19, 56(,%s9)               # 8-byte Folded Spill
-; CHECK-NEXT:    lea %s34, memset@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, memset@hi(%s34)
+; CHECK-NEXT:    lea %s0, memset@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, memset@hi(%s0)
 ; CHECK-NEXT:    lea %s18,-2048(,%s9)
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    lea %s2, 2048
@@ -20,21 +20,21 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    lea %s19, 256
 ; CHECK-NEXT:    lvl %s19
 ; CHECK-NEXT:    vld %v0,8,%s18
-; CHECK-NEXT:    lea %s35, 256
-; CHECK-NEXT:    lea %s34,-4096(,%s9)
-; CHECK-NEXT:    lvl %s35
-; CHECK-NEXT:    vst %v0,8,%s34                  # 2048-byte Folded Spill
-; CHECK-NEXT:    lea %s34, puts@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, puts@hi(%s34)
-; CHECK-NEXT:    lea %s34, .Lstr@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s0, .Lstr@hi(%s34)
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lea %s0,-4096(,%s9)
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vst %v0,8,%s0                  # 2048-byte Folded Spill
+; CHECK-NEXT:    lea %s0, puts@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, puts@hi(%s0)
+; CHECK-NEXT:    lea %s0, .Lstr@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s0, .Lstr@hi(%s0)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
-; CHECK-NEXT:    lea %s35, 256
-; CHECK-NEXT:    lea %s34,-4096(,%s9)
-; CHECK-NEXT:    lvl %s35
-; CHECK-NEXT:    vld %v0,8,%s34                  # 2048-byte Folded Reload
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lea %s0,-4096(,%s9)
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vld %v0,8,%s0                  # 2048-byte Folded Reload
 ; CHECK-NEXT:    lvl %s19
 ; CHECK-NEXT:    vadds.w.sx %v0,3,%v0
   %1 = alloca [256 x i64], align 8

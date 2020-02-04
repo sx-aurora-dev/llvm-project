@@ -39,8 +39,8 @@ class VESubtarget : public VEGenSubtargetInfo {
   VEFrameLowering FrameLowering;
 
 public:
-  VESubtarget(const Triple &TT, const std::string &CPU,
-              const std::string &FS, const TargetMachine &TM);
+  VESubtarget(const Triple &TT, const std::string &CPU, const std::string &FS,
+              const TargetMachine &TM);
 
   const VEInstrInfo *getInstrInfo() const override { return &InstrInfo; }
   const VEFrameLowering *getFrameLowering() const override {
@@ -49,9 +49,7 @@ public:
   const VERegisterInfo *getRegisterInfo() const override {
     return &InstrInfo.getRegisterInfo();
   }
-  const VETargetLowering *getTargetLowering() const override {
-    return &TLInfo;
-  }
+  const VETargetLowering *getTargetLowering() const override { return &TLInfo; }
   const SelectionDAGTargetInfo *getSelectionDAGInfo() const override {
     return &TSInfo;
   }
@@ -73,6 +71,6 @@ public:
   bool isTargetLinux() const { return TargetTriple.isOSLinux(); }
 };
 
-} // end namespace llvm
+} // namespace llvm
 
 #endif

@@ -138,22 +138,28 @@ foreach I = 0-31 in
 // The register order is defined in terms of the preferred
 // allocation order.
 def I8  : RegisterClass<"VE", [i8], 8,
-                        (add (sequence "SB%u", 34, 63),
-                             (sequence "SB%u", 0, 33))>;
+                        (add (sequence "SB%u", 0, 7),
+                             (sequence "SB%u", 34, 63),
+                             (sequence "SB%u", 8, 33))>;
 def I16 : RegisterClass<"VE", [i16], 16,
-                        (add (sequence "SH%u", 34, 63),
-                             (sequence "SH%u", 0, 33))>;
+                        (add (sequence "SH%u", 0, 7),
+                             (sequence "SH%u", 34, 63),
+                             (sequence "SH%u", 8, 33))>;
 def I32 : RegisterClass<"VE", [i32], 32,
-                        (add (sequence "SW%u", 34, 63),
-                             (sequence "SW%u", 0, 33))>;
+                        (add (sequence "SW%u", 0, 7),
+                             (sequence "SW%u", 34, 63),
+                             (sequence "SW%u", 8, 33))>;
 def I64 : RegisterClass<"VE", [i64, f64], 64,
-                        (add (sequence "SX%u", 34, 63),
-                             (sequence "SX%u", 0, 33))>;
+                        (add (sequence "SX%u", 0, 7),
+                             (sequence "SX%u", 34, 63),
+                             (sequence "SX%u", 8, 33))>;
 def F32 : RegisterClass<"VE", [f32], 32,
-                        (add (sequence "SF%u", 34, 63),
-                             (sequence "SF%u", 0, 33))>;
+                        (add (sequence "SF%u", 0, 7),
+                             (sequence "SF%u", 34, 63),
+                             (sequence "SF%u", 8, 33))>;
 def F128 : RegisterClass<"VE", [f128], 128,
-                        (add (sequence "Q%u", 17, 31),
+                        (add (sequence "Q%u", 0, 3),
+                             (sequence "Q%u", 17, 31),
                              (sequence "Q%u", 0, 16))>;
 
 def Misc : RegisterClass<"VE", [i64], 64,

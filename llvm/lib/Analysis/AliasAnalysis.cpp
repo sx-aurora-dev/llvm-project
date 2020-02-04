@@ -196,8 +196,7 @@ ModRefInfo AAResults::getModRefInfo(const CallBase *Call,
   // Try to refine the mod-ref info further using other API entry points to the
   // aggregate set of AA results.
   auto MRB = getModRefBehavior(Call);
-  if (MRB == FMRB_DoesNotAccessMemory ||
-      MRB == FMRB_OnlyAccessesInaccessibleMem)
+  if (onlyAccessesInaccessibleMem(MRB))
     return ModRefInfo::NoModRef;
 
   if (onlyReadsMemory(MRB))
@@ -846,6 +845,7 @@ void AAResultsWrapperPass::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addUsedIfAvailable<SCEVAAWrapperPass>();
   AU.addUsedIfAvailable<CFLAndersAAWrapperPass>();
   AU.addUsedIfAvailable<CFLSteensAAWrapperPass>();
+  AU.addUsedIfAvailable<ExternalAAWrapperPass>();
 }
 
 AAResults llvm::createLegacyPMAAResults(Pass &P, Function &F,
@@ -871,6 +871,9 @@ AAResults llvm::createLegacyPMAAResults(Pass &P, Function &F,
     AAR.addAAResult(WrapperPass->getResult());
   if (auto *WrapperPass = P.getAnalysisIfAvailable<CFLSteensAAWrapperPass>())
     AAR.addAAResult(WrapperPass->getResult());
+  if (auto *WrapperPass = P.getAnalysisIfAvailable<ExternalAAWrapperPass>())
+    if (WrapperPass->CB)
+      WrapperPass->CB(P, F, AAR);
 
   return AAR;
 }
@@ -914,4 +917,5 @@ void llvm::getAAResultsAnalysisUsage(AnalysisUsage &AU) {
   AU.addUsedIfAvailable<GlobalsAAWrapperPass>();
   AU.addUsedIfAvailable<CFLAndersAAWrapperPass>();
   AU.addUsedIfAvailable<CFLSteensAAWrapperPass>();
+  AU.addUsedIfAvailable<ExternalAAWrapperPass>();
 }

@@ -171,7 +171,7 @@ struct RunPassOption {
     SmallVector<StringRef, 8> PassNames;
     StringRef(Val).split(PassNames, ',', -1, false);
     for (auto PassName : PassNames)
-      RunPassNames->push_back(PassName);
+      RunPassNames->push_back(std::string(PassName));
   }
 };
 }
@@ -196,11 +196,11 @@ static std::unique_ptr<ToolOutputFile> GetOutputStream(const char *TargetName,
       // If InputFilename ends in .bc or .ll, remove it.
       StringRef IFN = InputFilename;
       if (IFN.endswith(".bc") || IFN.endswith(".ll"))
-        OutputFilename = IFN.drop_back(3);
+        OutputFilename = std::string(IFN.drop_back(3));
       else if (IFN.endswith(".mir"))
-        OutputFilename = IFN.drop_back(4);
+        OutputFilename = std::string(IFN.drop_back(4));
       else
-        OutputFilename = IFN;
+        OutputFilename = std::string(IFN);
 
       switch (FileType) {
       case CGFT_AssemblyFile:
@@ -395,6 +395,12 @@ static int compileModule(char **argv, LLVMContext &Context) {
   std::unique_ptr<Module> M;
   std::unique_ptr<MIRParser> MIR;
   Triple TheTriple;
+  std::string CPUStr = getCPUStr(), FeaturesStr = getFeaturesStr();
+
+  // Set attributes on functions as loaded from MIR from command line arguments.
+  auto setMIRFunctionAttributes = [&CPUStr, &FeaturesStr](Function &F) {
+    setFunctionAttributes(CPUStr, FeaturesStr, F);
+  };
 
   bool SkipModule = MCPU == "help" ||
                     (!MAttrs.empty() && MAttrs.front() == "help");
@@ -403,7 +409,8 @@ static int compileModule(char **argv, LLVMContext &Context) {
   if (!SkipModule) {
     if (InputLanguage == "mir" ||
         (InputLanguage == "" && StringRef(InputFilename).endswith(".mir"))) {
-      MIR = createMIRParserFromFile(InputFilename, Err, Context);
+      MIR = createMIRParserFromFile(InputFilename, Err, Context,
+                                    setMIRFunctionAttributes);
       if (MIR)
         M = MIR->parseIRModule();
     } else
@@ -433,8 +440,6 @@ static int compileModule(char **argv, LLVMContext &Context) {
     return 1;
   }
 
-  std::string CPUStr = getCPUStr(), FeaturesStr = getFeaturesStr();
-
   CodeGenOpt::Level OLvl = CodeGenOpt::Default;
   switch (OptLevel) {
   default:
@@ -456,8 +461,17 @@ static int compileModule(char **argv, LLVMContext &Context) {
   Options.MCOptions.IASSearchPaths = IncludeDirs;
   Options.MCOptions.SplitDwarfFile = SplitDwarfFile;
 
+  // On AIX, setting the relocation model to anything other than PIC is considered
+  // a user error.
+  Optional<Reloc::Model> RM = getRelocModel();
+  if (TheTriple.isOSAIX() && RM.hasValue() && *RM != Reloc::PIC_) {
+    WithColor::error(errs(), argv[0])
+        << "invalid relocation model, AIX only supports PIC.\n";
+    return 1;
+  }
+
   std::unique_ptr<TargetMachine> Target(TheTarget->createTargetMachine(
-      TheTriple.getTriple(), CPUStr, FeaturesStr, Options, getRelocModel(),
+      TheTriple.getTriple(), CPUStr, FeaturesStr, Options, RM,
       getCodeModel(), OLvl));
 
   assert(Target && "Could not allocate target machine!");

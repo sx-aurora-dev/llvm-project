@@ -31,9 +31,8 @@ public:
   const MCExpr* getExprForFDESymbol(const MCSymbol *Sym,
                                     unsigned Encoding,
                                     MCStreamer &Streamer) const override;
-
 };
 
-} // end namespace llvm
+} // namespace llvm
 
 #endif // LLVM_LIB_TARGET_VE_MCTARGETDESC_VEMCASMINFO_H

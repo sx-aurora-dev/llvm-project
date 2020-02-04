@@ -40,10 +40,7 @@ VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple) {
   // assembler manual says sinple '.bss' is supported.
   UsesELFSectionDirectiveForBSS = true;
 
-  // ExceptionsType = ExceptionHandling::DwarfCFI;
   SupportsDebugInformation = true;
-  // SunStyleELFSectionSwitchSyntax = true;
-  // UseIntegratedAssembler = true;
 }
 
 const MCExpr*

@@ -7,16 +7,16 @@
 //===----------------------------------------------------------------------===//
 //
 // This file contains a printer that converts from our internal representation
-// of machine-dependent LLVM code to GAS-format SPARC assembly language.
+// of machine-dependent LLVM code to GAS-format VE assembly language.
 //
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/VEInstPrinter.h"
 #include "MCTargetDesc/VEMCExpr.h"
+#include "MCTargetDesc/VETargetStreamer.h"
 #include "VE.h"
 #include "VEInstrInfo.h"
 #include "VETargetMachine.h"
-#include "MCTargetDesc/VETargetStreamer.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineModuleInfoImpls.h"
@@ -33,46 +33,43 @@
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
-#define DEBUG_TYPE "asm-printer"
+#define DEBUG_TYPE "ve-asmprinter"
 
 namespace {
-  class VEAsmPrinter : public AsmPrinter {
-    VETargetStreamer &getTargetStreamer() {
-      return static_cast<VETargetStreamer &>(
-          *OutStreamer->getTargetStreamer());
-    }
-  public:
-    explicit VEAsmPrinter(TargetMachine &TM,
-                             std::unique_ptr<MCStreamer> Streamer)
-        : AsmPrinter(TM, std::move(Streamer)) {}
+class VEAsmPrinter : public AsmPrinter {
+  VETargetStreamer &getTargetStreamer() {
+    return static_cast<VETargetStreamer &>(*OutStreamer->getTargetStreamer());
+  }
 
-    StringRef getPassName() const override { return "VE Assembly Printer"; }
+public:
+  explicit VEAsmPrinter(TargetMachine &TM, std::unique_ptr<MCStreamer> Streamer)
+      : AsmPrinter(TM, std::move(Streamer)) {}
 
-    void printOperand(const MachineInstr *MI, int opNum, raw_ostream &OS);
-    void printMemASXOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
+  StringRef getPassName() const override { return "VE Assembly Printer"; }
+
+  void printOperand(const MachineInstr *MI, int opNum, raw_ostream &OS);
+  void printMemASXOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
+                          const char *Modifier = nullptr);
+  void printMemASOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                          const char *Modifier = nullptr);
-    void printMemASOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
-                           const char *Modifier = nullptr);
 
-    void EmitFunctionBodyStart() override;
-    void EmitInstruction(const MachineInstr *MI) override;
+  void EmitInstruction(const MachineInstr *MI) override;
 
-    static const char *getRegisterName(unsigned RegNo) {
-      return VEInstPrinter::getRegisterName(RegNo);
-    }
+  static const char *getRegisterName(unsigned RegNo) {
+    return VEInstPrinter::getRegisterName(RegNo);
+  }
+  bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
+                       const char *ExtraCode, raw_ostream &O) override;
+  bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
+                             const char *ExtraCode, raw_ostream &O) override;
 
-    bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                         const char *ExtraCode, raw_ostream &O) override;
-    bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
-                               const char *ExtraCode, raw_ostream &O) override;
-
-    void LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
-                                   const MCSubtargetInfo &STI);
-    void LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
-                                      const MCSubtargetInfo &STI);
-    void LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
-                                       const MCSubtargetInfo &STI);
-  };
+  void LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
+                                 const MCSubtargetInfo &STI);
+  void LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
+                                    const MCSubtargetInfo &STI);
+  void LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
+                                     const MCSubtargetInfo &STI);
+};
 } // end of anonymous namespace
 
 static MCOperand createVEMCOperand(VEMCExpr::VariantKind Kind,
@@ -372,11 +369,11 @@ void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   EmitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
-void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
-{
+void VEAsmPrinter::EmitInstruction(const MachineInstr *MI) {
 
   switch (MI->getOpcode()) {
-  default: break;
+  default:
+    break;
   case TargetOpcode::DBG_VALUE:
     // FIXME: Debug Value.
     return;
@@ -401,23 +398,6 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI)
     LowerVEMachineInstrToMCInst(&*I, TmpInst, *this);
     EmitToStreamer(*OutStreamer, TmpInst);
   } while ((++I != E) && I->isInsideBundle()); // Delay slot check.
-}
-
-void VEAsmPrinter::EmitFunctionBodyStart() {
-#if 0
-  const MachineRegisterInfo &MRI = MF->getRegInfo();
-  const unsigned globalRegs[] = { SP::G2, SP::G3, SP::G6, SP::G7, 0 };
-  for (unsigned i = 0; globalRegs[i] != 0; ++i) {
-    unsigned reg = globalRegs[i];
-    if (MRI.use_empty(reg))
-      continue;
-
-    if  (reg == SP::G6 || reg == SP::G7)
-      getTargetStreamer().emitVERegisterIgnore(reg);
-    else
-      getTargetStreamer().emitVERegisterScratch(reg);
-  }
-#endif
 }
 
 void VEAsmPrinter::printOperand(const MachineInstr *MI, int opNum,

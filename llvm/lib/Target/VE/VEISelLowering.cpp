@@ -37,7 +37,7 @@
 #include "llvm/Support/KnownBits.h"
 using namespace llvm;
 
-#define DEBUG_TYPE "ve-lower"
+#define DEBUG_TYPE "ve-isel"
 
 //===----------------------------------------------------------------------===//
 // Calling Convention Implementation
@@ -54,9 +54,9 @@ static bool allocateFloat(unsigned ValNo, MVT ValVT, MVT LocVT,
     //    | empty| float|
     //    +------+------+
     // Use align=8 for dummy area to align the beginning of these 2 area.
-    State.AllocateStack(4, 8);                      // for empty area
+    State.AllocateStack(4, 8); // for empty area
     // Use align=4 for value to place it at just after the dummy area.
-    unsigned Offset = State.AllocateStack(4, 4);    // for float value area
+    unsigned Offset = State.AllocateStack(4, 4); // for float value area
     State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
     return true;
   }
@@ -67,14 +67,12 @@ static bool allocateFloat(unsigned ValNo, MVT ValVT, MVT LocVT,
 
 #include "VEGenCallingConv.inc"
 
-bool
-VETargetLowering::CanLowerReturn(CallingConv::ID CallConv, MachineFunction &MF,
-                                 bool isVarArg,
-                                 const SmallVectorImpl<ISD::OutputArg> &Outs,
-                                 LLVMContext &Context) const {
+bool VETargetLowering::CanLowerReturn(
+    CallingConv::ID CallConv, MachineFunction &MF, bool IsVarArg,
+    const SmallVectorImpl<ISD::OutputArg> &Outs, LLVMContext &Context) const {
   CCAssignFn *RetCC = RetCC_VE;
   SmallVector<CCValAssign, 16> RVLocs;
-  CCState CCInfo(CallConv, isVarArg, MF, RVLocs, Context);
+  CCState CCInfo(CallConv, IsVarArg, MF, RVLocs, Context);
   return CCInfo.CheckReturn(Outs, RetCC);
 }
 
@@ -480,7 +478,8 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
 
     // Integer return values must be sign or zero extended by the callee.
     switch (VA.getLocInfo()) {
-    case CCValAssign::Full: break;
+    case CCValAssign::Full:
+      break;
     case CCValAssign::SExt:
       OutVal = DAG.getNode(ISD::SIGN_EXTEND, DL, VA.getLocVT(), OutVal);
       break;
@@ -494,6 +493,8 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
       llvm_unreachable("Unknown loc info!");
     }
 
+    // FIXME: need to remove following code taken from Sparc, we guess.
+#if 0
     // The custom bit on an i32 return value indicates that it should be passed
     // in the high bits of the register.
     if (VA.getValVT() == MVT::i32 && VA.needsCustom()) {
@@ -509,6 +510,9 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
         ++i;
       }
     }
+#else
+    assert(!VA.needsCustom() && "Unexpected custom lowering");
+#endif
 
     Chain = DAG.getCopyToReg(Chain, DL, VA.getLocReg(), OutVal, Flag);
 
@@ -517,7 +521,7 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     RetOps.push_back(DAG.getRegister(VA.getLocReg(), VA.getLocVT()));
   }
 
-  RetOps[0] = Chain;  // Update chain.
+  RetOps[0] = Chain; // Update chain.
 
   // Add the flag if we have it.
   if (Flag.getNode())
@@ -526,13 +530,10 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   return DAG.getNode(VEISD::RET_FLAG, DL, MVT::Other, RetOps);
 }
 
-SDValue
-VETargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
-                                       bool IsVarArg,
-                                       const SmallVectorImpl<ISD::InputArg>
-                                       &Ins,
-                                       const SDLoc &DL, SelectionDAG &DAG,
-                                       SmallVectorImpl<SDValue> &InVals) const {
+SDValue VETargetLowering::LowerFormalArguments(
+    SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
+    const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &DL,
+    SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const {
   MachineFunction &MF = DAG.getMachineFunction();
 
   // Get the base offset of the incoming arguments stack space.
@@ -595,11 +596,14 @@ VETargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
     // beginning of the arguments area at %fp+176.
     unsigned Offset = VA.getLocMemOffset() + ArgsBaseOffset;
     unsigned ValSize = VA.getValVT().getSizeInBits() / 8;
+    // FIXME: need to remove following code taken from Sparc, we guess.
+#if 0
     // Adjust offset for extended arguments, SPARC is big-endian.
     // The caller will have written the full slot with extended bytes, but we
     // prefer our own extending loads.
     if (VA.isExtInLoc())
       Offset += 8 - ValSize;
+#endif
     int FI = MF.getFrameInfo().CreateFixedObject(ValSize, Offset, true);
     InVals.push_back(
         DAG.getLoad(VA.getValVT(), DL, Chain,
@@ -621,46 +625,25 @@ VETargetLowering::LowerFormalArguments(SDValue Chain, CallingConv::ID CallConv,
   // Skip the 176 bytes of register save area.
   FuncInfo->setVarArgsFrameOffset(ArgOffset + ArgsBaseOffset);
 
-#if 0
-// VE ABI requires to store values in stack by caller side.
-// So no need to store varargs here.
-  // Save the variable arguments that were passed in registers.
-  // The caller is required to reserve stack space for 8 arguments regardless
-  // of how many arguments were actually passed.
-  SmallVector<SDValue, 8> OutChains;
-  for (; ArgOffset < 8*8; ArgOffset += 8) {
-    unsigned VReg = MF.addLiveIn(VE::SX0 + ArgOffset/8, &VE::I64RegClass);
-    SDValue VArg = DAG.getCopyFromReg(Chain, DL, VReg, MVT::i64);
-    int FI = MF.getFrameInfo().CreateFixedObject(8, ArgOffset + ArgsBaseOffset, true);
-    auto PtrVT = getPointerTy(MF.getDataLayout());
-    OutChains.push_back(
-        DAG.getStore(Chain, DL, VArg, DAG.getFrameIndex(FI, PtrVT),
-                     MachinePointerInfo::getFixedStack(MF, FI)));
-  }
-
-  if (!OutChains.empty())
-    Chain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other, OutChains);
-#endif
-
   return Chain;
 }
 
 // FIXME? Maybe this could be a TableGen attribute on some registers and
 // this table could be generated automatically from RegInfo.
-Register VETargetLowering::
-getRegisterByName(const char* RegName, EVT VT, const MachineFunction &MF) const {
-  unsigned Reg = StringSwitch<unsigned>(RegName)
-    .Case("sp", VE::SX11)        // Stack pointer
-    .Case("fp", VE::SX9)         // Frame pointer
-    .Case("sl", VE::SX8)         // Stack limit
-    .Case("lr", VE::SX10)        // Link regsiter
-    .Case("tp", VE::SX14)        // Thread pointer
-    .Case("outer", VE::SX12)     // Outer regiser
-    .Case("info", VE::SX17)      // Info area register
-    .Case("got", VE::SX15)       // Global offset table register
-    .Case("plt", VE::SX16)       // Procedure linkage table register
-    .Case("usrcc", VE::UCC)     // User clock counter
-    .Default(0);
+Register VETargetLowering::getRegisterByName(const char *RegName, LLT VT,
+                                             const MachineFunction &MF) const {
+  Register Reg = StringSwitch<Register>(RegName)
+                     .Case("sp", VE::SX11)    // Stack pointer
+                     .Case("fp", VE::SX9)     // Frame pointer
+                     .Case("sl", VE::SX8)     // Stack limit
+                     .Case("lr", VE::SX10)    // Link regsiter
+                     .Case("tp", VE::SX14)    // Thread pointer
+                     .Case("outer", VE::SX12) // Outer regiser
+                     .Case("info", VE::SX17)  // Info area register
+                     .Case("got", VE::SX15)   // Global offset table register
+                     .Case("plt", VE::SX16) // Procedure linkage table register
+                     .Case("usrcc", VE::UCC)  // User clock counter
+                     .Default(0);
 
   if (Reg)
     return Reg;
@@ -712,9 +695,12 @@ VETargetLowering::getSRetArgSize(SelectionDAG &DAG, SDValue Callee) const
   return DAG.getDataLayout().getTypeAllocSize(ElementTy);
 }
 
-SDValue
-VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
-                            SmallVectorImpl<SDValue> &InVals) const {
+//===----------------------------------------------------------------------===//
+// TargetLowering Implementation
+//===----------------------------------------------------------------------===//
+
+SDValue VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
+                                    SmallVectorImpl<SDValue> &InVals) const {
   SelectionDAG &DAG = CLI.DAG;
   SDLoc DL = CLI.DL;
   SDValue Chain = CLI.Chain;
@@ -726,7 +712,7 @@ VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // Get the base offset of the outgoing arguments stack space.
   unsigned ArgsBaseOffset = 176;
   // Get the size of the preserved arguments area
-  unsigned ArgsPreserved = 8*8u;
+  unsigned ArgsPreserved = 8 * 8u;
 
   // Analyze operands of the call, assigning locations to each operand.
   SmallVector<CCValAssign, 16> ArgLocs;
@@ -839,6 +825,8 @@ VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     }
 
     if (VA.isRegLoc()) {
+      // FIXME: need to remove following code taken from Sparc, we guess.
+#if 0
       // The custom bit on an i32 return value indicates that it should be
       // passed in the high bits of the register.
       if (VA.getValVT() == MVT::i32 && VA.needsCustom()) {
@@ -860,6 +848,9 @@ VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
         }
 #endif
       }
+#else
+      assert(!VA.needsCustom() && "Unexpected custom lowering");
+#endif
       RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
       if (!UseBoth)
         continue;
@@ -872,8 +863,8 @@ VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     SDValue StackPtr = DAG.getRegister(VE::SX11, PtrVT);
     // The argument area starts at %fp+176 in the callee frame,
     // %sp+176 in ours.
-    SDValue PtrOff = DAG.getIntPtrConstant(VA.getLocMemOffset() +
-                                           ArgsBaseOffset, DL);
+    SDValue PtrOff =
+        DAG.getIntPtrConstant(VA.getLocMemOffset() + ArgsBaseOffset, DL);
     PtrOff = DAG.getNode(ISD::ADD, DL, PtrVT, StackPtr, PtrOff);
     MemOpChains.push_back(
         DAG.getStore(Chain, DL, Arg, PtrOff, MachinePointerInfo()));
@@ -889,8 +880,8 @@ VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // to pass the live physical registers.
   SDValue InGlue;
   for (unsigned i = 0, e = RegsToPass.size(); i != e; ++i) {
-    Chain = DAG.getCopyToReg(Chain, DL,
-                             RegsToPass[i].first, RegsToPass[i].second, InGlue);
+    Chain = DAG.getCopyToReg(Chain, DL, RegsToPass[i].first,
+                             RegsToPass[i].second, InGlue);
     InGlue = Chain.getValue(1);
   }
 
@@ -904,7 +895,7 @@ VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   // Add a register mask operand representing the call-preserved registers.
   const VERegisterInfo *TRI = Subtarget->getRegisterInfo();
   const uint32_t *Mask =
-    TRI->getCallPreservedMask(DAG.getMachineFunction(), CLI.CallConv);
+      TRI->getCallPreservedMask(DAG.getMachineFunction(), CLI.CallConv);
   assert(Mask && "Missing call preserved mask for calling convention");
   Ops.push_back(DAG.getRegisterMask(Mask));
 
@@ -988,15 +979,11 @@ VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   return Chain;
 }
 
-//===----------------------------------------------------------------------===//
-// TargetLowering Implementation
-//===----------------------------------------------------------------------===//
-
 /// isFPImmLegal - Returns true if the target can instruction select the
 /// specified FP immediate natively. If false, the legalizer will
 /// materialize the FP immediate as a load from a constant pool.
 bool VETargetLowering::isFPImmLegal(const APFloat &Imm, EVT VT,
-                                     bool ForCodeSize) const {
+                                    bool ForCodeSize) const {
   return VT == MVT::f32 || VT == MVT::f64;
 }
 
@@ -1047,7 +1034,8 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
   return true;
 }
 
-TargetLowering::AtomicExpansionKind VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
+TargetLowering::AtomicExpansionKind
+VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
   if (AI->getOperation() == AtomicRMWInst::Xchg){
     const DataLayout &DL = AI->getModule()->getDataLayout();
     if (DL.getTypeStoreSize(AI->getValOperand()->getType()) == 2)
@@ -1060,8 +1048,6 @@ TargetLowering::AtomicExpansionKind VETargetLowering::shouldExpandAtomicRMWInIR(
 VETargetLowering::VETargetLowering(const TargetMachine &TM,
                                    const VESubtarget &STI)
     : TargetLowering(TM), Subtarget(&STI) {
-  MVT PtrVT = MVT::getIntegerVT(8 * TM.getPointerSize(0));
-
   // Instructions which use registers as conditionals examine all the
   // bits (as does the pseudo SELECT_CC expansion). I don't think it
   // matters much whether it's ZeroOrOneBooleanContent, or
@@ -1153,21 +1139,20 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setTruncStoreAction(MVT::f128, MVT::f32, Expand);
   setTruncStoreAction(MVT::f128, MVT::f64, Expand);
 
-  // Custom legalize GlobalAddress nodes into LO/HI parts.
+  // Custom legalize address nodes into LO/HI parts.
+  MVT PtrVT = MVT::getIntegerVT(TM.getPointerSizeInBits(0));
+  setOperationAction(ISD::BlockAddress, PtrVT, Custom);
   setOperationAction(ISD::GlobalAddress, PtrVT, Custom);
   setOperationAction(ISD::GlobalTLSAddress, PtrVT, Custom);
   setOperationAction(ISD::ConstantPool, PtrVT, Custom);
-  setOperationAction(ISD::BlockAddress, PtrVT, Custom);
 
   // VE has no REM or DIVREM operations.
-  for (MVT VT : MVT::integer_valuetypes()) {
-    setOperationAction(ISD::UREM, VT, Expand);
-    setOperationAction(ISD::SREM, VT, Expand);
-    setOperationAction(ISD::SDIVREM, VT, Expand);
-    setOperationAction(ISD::UDIVREM, VT, Expand);
+  for (MVT IntVT : MVT::integer_valuetypes()) {
+    setOperationAction(ISD::UREM, IntVT, Expand);
+    setOperationAction(ISD::SREM, IntVT, Expand);
+    setOperationAction(ISD::SDIVREM, IntVT, Expand);
+    setOperationAction(ISD::UDIVREM, IntVT, Expand);
   }
-
-  // VE has instructions for fp<->sint, so use them.
 
   // VE doesn't have instructions for fp<->uint, so expand them by llvm
   setOperationAction(ISD::FP_TO_UINT, MVT::i32, Promote); // use i64
@@ -1557,51 +1542,56 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 }
 
 const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
+#define TARGET_NODE_CASE(NAME)                                                 \
+  case VEISD::NAME:                                                            \
+    return "VEISD::" #NAME;
   switch ((VEISD::NodeType)Opcode) {
-  case VEISD::FIRST_NUMBER:    break;
-  case VEISD::CMPICC:          return "VEISD::CMPICC";
-  case VEISD::CMPFCC:          return "VEISD::CMPFCC";
-  case VEISD::BRICC:           return "VEISD::BRICC";
-  case VEISD::BRXCC:           return "VEISD::BRXCC";
-  case VEISD::BRFCC:           return "VEISD::BRFCC";
-  case VEISD::SELECT:          return "VEISD::SELECT";
-  case VEISD::SELECT_ICC:      return "VEISD::SELECT_ICC";
-  case VEISD::SELECT_XCC:      return "VEISD::SELECT_XCC";
-  case VEISD::SELECT_FCC:      return "VEISD::SELECT_FCC";
-  case VEISD::EH_SJLJ_SETJMP:  return "VEISD::EH_SJLJ_SETJMP";
-  case VEISD::EH_SJLJ_LONGJMP: return "VEISD::EH_SJLJ_LONGJMP";
-  case VEISD::EH_SJLJ_SETUP_DISPATCH:   return "VEISD::EH_SJLJ_SETUP_DISPATCH";
-  case VEISD::Hi:              return "VEISD::Hi";
-  case VEISD::Lo:              return "VEISD::Lo";
-  case VEISD::FTOI:            return "VEISD::FTOI";
-  case VEISD::ITOF:            return "VEISD::ITOF";
-  case VEISD::FTOX:            return "VEISD::FTOX";
-  case VEISD::XTOF:            return "VEISD::XTOF";
-  case VEISD::MAX:             return "VEISD::MAX";
-  case VEISD::MIN:             return "VEISD::MIN";
-  case VEISD::FMAX:            return "VEISD::FMAX";
-  case VEISD::FMIN:            return "VEISD::FMIN";
-  case VEISD::GETFUNPLT:       return "VEISD::GETFUNPLT";
-  case VEISD::GETSTACKTOP:     return "VEISD::GETSTACKTOP";
-  case VEISD::GETTLSADDR:      return "VEISD::GETTLSADDR";
-  case VEISD::MEMBARRIER:      return "VEISD::MEMBARRIER";
-  case VEISD::CALL:            return "VEISD::CALL";
-  case VEISD::RET_FLAG:        return "VEISD::RET_FLAG";
-  case VEISD::GLOBAL_BASE_REG: return "VEISD::GLOBAL_BASE_REG";
-  case VEISD::FLUSHW:          return "VEISD::FLUSHW";
-  case VEISD::VEC_BROADCAST:   return "VEISD::VEC_BROADCAST";
-  case VEISD::VEC_LVL:         return "VEISD::VEC_LVL";
-  case VEISD::VEC_SEQ:         return "VEISD::VEC_SEQ";
-  case VEISD::VEC_VMV:         return "VEISD::VEC_VMV";
-  case VEISD::VEC_SCATTER:     return "VEISD::VEC_SCATTER";
-  case VEISD::VEC_GATHER:      return "VEISD::VEC_GATHER";
-  case VEISD::Wrapper:         return "VEISD::Wrapper";
+  case VEISD::FIRST_NUMBER:
+    break;
+    TARGET_NODE_CASE(Lo)
+    TARGET_NODE_CASE(Hi)
+    TARGET_NODE_CASE(CALL)
+    TARGET_NODE_CASE(RET_FLAG)
+    TARGET_NODE_CASE(CMPICC)
+    TARGET_NODE_CASE(CMPFCC)
+    TARGET_NODE_CASE(BRICC)
+    TARGET_NODE_CASE(BRXCC)
+    TARGET_NODE_CASE(BRFCC)
+    TARGET_NODE_CASE(SELECT)
+    TARGET_NODE_CASE(SELECT_ICC)
+    TARGET_NODE_CASE(SELECT_XCC)
+    TARGET_NODE_CASE(SELECT_FCC)
+    TARGET_NODE_CASE(EH_SJLJ_SETJMP)
+    TARGET_NODE_CASE(EH_SJLJ_LONGJMP)
+    TARGET_NODE_CASE(EH_SJLJ_SETUP_DISPATCH)
+    TARGET_NODE_CASE(FTOI)
+    TARGET_NODE_CASE(ITOF)
+    TARGET_NODE_CASE(FTOX)
+    TARGET_NODE_CASE(XTOF)
+    TARGET_NODE_CASE(MAX)
+    TARGET_NODE_CASE(MIN)
+    TARGET_NODE_CASE(FMAX)
+    TARGET_NODE_CASE(FMIN)
+    TARGET_NODE_CASE(GETFUNPLT)
+    TARGET_NODE_CASE(GETSTACKTOP)
+    TARGET_NODE_CASE(GETTLSADDR)
+    TARGET_NODE_CASE(MEMBARRIER)
+    TARGET_NODE_CASE(GLOBAL_BASE_REG)
+    TARGET_NODE_CASE(FLUSHW)
+    TARGET_NODE_CASE(VEC_BROADCAST)
+    TARGET_NODE_CASE(VEC_LVL)
+    TARGET_NODE_CASE(VEC_SEQ)
+    TARGET_NODE_CASE(VEC_VMV)
+    TARGET_NODE_CASE(VEC_SCATTER)
+    TARGET_NODE_CASE(VEC_GATHER)
+    TARGET_NODE_CASE(Wrapper)
   }
+#undef TARGET_NODE_CASE
   return nullptr;
 }
 
 EVT VETargetLowering::getSetCCResultType(const DataLayout &, LLVMContext &,
-                                            EVT VT) const {
+                                         EVT VT) const {
   if (!VT.isVector())
     return MVT::i32;
   return VT.changeVectorElementTypeToInteger();
@@ -1658,37 +1648,28 @@ static void LookThroughSetCC(SDValue &LHS, SDValue &RHS,
 
 // Convert to a target node and set target flags.
 SDValue VETargetLowering::withTargetFlags(SDValue Op, unsigned TF,
-                                             SelectionDAG &DAG) const {
+                                          SelectionDAG &DAG) const {
   if (const GlobalAddressSDNode *GA = dyn_cast<GlobalAddressSDNode>(Op))
-    return DAG.getTargetGlobalAddress(GA->getGlobal(),
-                                      SDLoc(GA),
-                                      GA->getValueType(0),
-                                      GA->getOffset(), TF);
-
-  if (const ConstantPoolSDNode *CP = dyn_cast<ConstantPoolSDNode>(Op))
-    return DAG.getTargetConstantPool(CP->getConstVal(),
-                                     CP->getValueType(0),
-                                     CP->getAlignment(),
-                                     CP->getOffset(), TF);
+    return DAG.getTargetGlobalAddress(GA->getGlobal(), SDLoc(GA),
+                                      GA->getValueType(0), GA->getOffset(), TF);
 
   if (const BlockAddressSDNode *BA = dyn_cast<BlockAddressSDNode>(Op))
-    return DAG.getTargetBlockAddress(BA->getBlockAddress(),
-                                     Op.getValueType(),
-                                     0,
-                                     TF);
-
+    return DAG.getTargetBlockAddress(BA->getBlockAddress(), Op.getValueType(),
+                                     0, TF);
+  if (const ConstantPoolSDNode *CP = dyn_cast<ConstantPoolSDNode>(Op))
+    return DAG.getTargetConstantPool(CP->getConstVal(), CP->getValueType(0),
+                                     CP->getAlignment(), CP->getOffset(), TF);
   if (const ExternalSymbolSDNode *ES = dyn_cast<ExternalSymbolSDNode>(Op))
-    return DAG.getTargetExternalSymbol(ES->getSymbol(),
-                                       ES->getValueType(0), TF);
+    return DAG.getTargetExternalSymbol(ES->getSymbol(), ES->getValueType(0),
+                                       TF);
 
   llvm_unreachable("Unhandled address SDNode");
 }
 
 // Split Op into high and low parts according to HiTF and LoTF.
 // Return an ADD node combining the parts.
-SDValue VETargetLowering::makeHiLoPair(SDValue Op,
-                                          unsigned HiTF, unsigned LoTF,
-                                          SelectionDAG &DAG) const {
+SDValue VETargetLowering::makeHiLoPair(SDValue Op, unsigned HiTF, unsigned LoTF,
+                                       SelectionDAG &DAG) const {
   SDLoc DL(Op);
   EVT VT = Op.getValueType();
   SDValue Hi = DAG.getNode(VEISD::Hi, DL, VT, withTargetFlags(Op, HiTF, DAG));
@@ -1700,10 +1681,10 @@ SDValue VETargetLowering::makeHiLoPair(SDValue Op,
 // or ExternalSymbol SDNode.
 SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
   SDLoc DL(Op);
-  EVT VT = getPointerTy(DAG.getDataLayout());
-
   // Handle PIC mode first. SPARC needs a got load for every variable!
   if (isPositionIndependent()) {
+    EVT VT = getPointerTy(DAG.getDataLayout());
+
     // GLOBAL_BASE_REG codegen'ed with call. Inform MFI that this
     // function has calls.
     MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
@@ -1740,29 +1721,30 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
   }
 
   // This is one of the absolute code models.
-  switch(getTargetMachine().getCodeModel()) {
+  switch (getTargetMachine().getCodeModel()) {
   default:
     llvm_unreachable("Unsupported absolute code model");
   case CodeModel::Small:
   case CodeModel::Medium:
   case CodeModel::Large:
     // abs64.
-    return makeHiLoPair(Op, VEMCExpr::VK_VE_HI32,
-                        VEMCExpr::VK_VE_LO32, DAG);
+    return makeHiLoPair(Op, VEMCExpr::VK_VE_HI32, VEMCExpr::VK_VE_LO32, DAG);
   }
 }
+
+/// Custom Lower {
 
 SDValue VETargetLowering::LowerGlobalAddress(SDValue Op,
                                              SelectionDAG &DAG) const {
   return makeAddress(Op, DAG);
 }
 
-SDValue VETargetLowering::LowerConstantPool(SDValue Op,
+SDValue VETargetLowering::LowerBlockAddress(SDValue Op,
                                             SelectionDAG &DAG) const {
   return makeAddress(Op, DAG);
 }
 
-SDValue VETargetLowering::LowerBlockAddress(SDValue Op,
+SDValue VETargetLowering::LowerConstantPool(SDValue Op,
                                             SelectionDAG &DAG) const {
   return makeAddress(Op, DAG);
 }
@@ -2757,54 +2739,67 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
   return Op;
 }
 
-SDValue VETargetLowering::
-LowerOperation(SDValue Op, SelectionDAG &DAG) const {
-
-#if 0
-  bool hasHardQuad = Subtarget->hasHardQuad();
-  bool isV9        = Subtarget->isV9();
-#endif
-
+SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
-  default: llvm_unreachable("Should not custom lower this!");
-
-  case ISD::RETURNADDR:         return LowerRETURNADDR(Op, DAG, *this,
-                                                       Subtarget);
-  case ISD::FRAMEADDR:          return LowerFRAMEADDR(Op, DAG, *this,
-                                                      Subtarget);
-  case ISD::GlobalTLSAddress:   return LowerGlobalTLSAddress(Op, DAG);
-  case ISD::GlobalAddress:      return LowerGlobalAddress(Op, DAG);
-  case ISD::BlockAddress:       return LowerBlockAddress(Op, DAG);
-  case ISD::ConstantPool:       return LowerConstantPool(Op, DAG);
-  case ISD::EH_SJLJ_SETJMP:     return LowerEH_SJLJ_SETJMP(Op, DAG);
-  case ISD::EH_SJLJ_LONGJMP:    return LowerEH_SJLJ_LONGJMP(Op, DAG);
-  case ISD::EH_SJLJ_SETUP_DISPATCH: return LowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
-  case ISD::VASTART:            return LowerVASTART(Op, DAG, *this);
-  case ISD::VAARG:              return LowerVAARG(Op, DAG);
-  case ISD::DYNAMIC_STACKALLOC: return LowerDYNAMIC_STACKALLOC(Op, DAG);
-
-  case ISD::LOAD:               return LowerLOAD(Op, DAG);
-  case ISD::STORE:              return LowerSTORE(Op, DAG, *this);
+  default:
+    llvm_unreachable("Should not custom lower this!");
+  case ISD::BlockAddress:
+    return LowerBlockAddress(Op, DAG);
+  case ISD::GlobalAddress:
+    return LowerGlobalAddress(Op, DAG);
+  case ISD::RETURNADDR:
+    return LowerRETURNADDR(Op, DAG, *this, Subtarget);
+  case ISD::FRAMEADDR:
+    return LowerFRAMEADDR(Op, DAG, *this, Subtarget);
+  case ISD::GlobalTLSAddress:
+    return LowerGlobalTLSAddress(Op, DAG);
+  case ISD::ConstantPool:
+    return LowerConstantPool(Op, DAG);
+  case ISD::EH_SJLJ_SETJMP:
+    return LowerEH_SJLJ_SETJMP(Op, DAG);
+  case ISD::EH_SJLJ_LONGJMP:
+    return LowerEH_SJLJ_LONGJMP(Op, DAG);
+  case ISD::EH_SJLJ_SETUP_DISPATCH:
+    return LowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
+  case ISD::VASTART:
+    return LowerVASTART(Op, DAG, *this);
+  case ISD::VAARG:
+    return LowerVAARG(Op, DAG);
+  case ISD::DYNAMIC_STACKALLOC:
+    return LowerDYNAMIC_STACKALLOC(Op, DAG);
+  case ISD::LOAD:
+    return LowerLOAD(Op, DAG);
+  case ISD::STORE:
+    return LowerSTORE(Op, DAG, *this);
   case ISD::UMULO:
-  case ISD::SMULO:              return LowerUMULO_SMULO(Op, DAG, *this);
-  case ISD::ATOMIC_FENCE:       return LowerATOMIC_FENCE(Op, DAG);
-  case ISD::INTRINSIC_VOID:     return LowerINTRINSIC_VOID(Op, DAG);
-  case ISD::INTRINSIC_W_CHAIN:  return LowerINTRINSIC_W_CHAIN(Op, DAG);
-  case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
-  case ISD::BUILD_VECTOR:       return LowerBUILD_VECTOR(Op, DAG);
-  case ISD::INSERT_VECTOR_ELT:  return LowerINSERT_VECTOR_ELT(Op, DAG);
-  case ISD::EXTRACT_VECTOR_ELT: return LowerEXTRACT_VECTOR_ELT(Op, DAG);
-
-  case ISD::BITCAST:            return LowerBitcast(Op, DAG);
-
-  case ISD::VECTOR_SHUFFLE:     return LowerVECTOR_SHUFFLE(Op, DAG);
-
+  case ISD::SMULO:
+    return LowerUMULO_SMULO(Op, DAG, *this);
+  case ISD::ATOMIC_FENCE:
+    return LowerATOMIC_FENCE(Op, DAG);
+  case ISD::INTRINSIC_VOID:
+    return LowerINTRINSIC_VOID(Op, DAG);
+  case ISD::INTRINSIC_W_CHAIN:
+    return LowerINTRINSIC_W_CHAIN(Op, DAG);
+  case ISD::INTRINSIC_WO_CHAIN:
+    return LowerINTRINSIC_WO_CHAIN(Op, DAG);
+  case ISD::BUILD_VECTOR:
+    return LowerBUILD_VECTOR(Op, DAG);
+  case ISD::INSERT_VECTOR_ELT:
+    return LowerINSERT_VECTOR_ELT(Op, DAG);
+  case ISD::EXTRACT_VECTOR_ELT:
+    return LowerEXTRACT_VECTOR_ELT(Op, DAG);
+  case ISD::BITCAST:
+    return LowerBitcast(Op, DAG);
+  case ISD::VECTOR_SHUFFLE:
+    return LowerVECTOR_SHUFFLE(Op, DAG);
   case ISD::MSCATTER:
-  case ISD::MGATHER:            return LowerMGATHER_MSCATTER(Op, DAG);
-
-  case ISD::MLOAD:              return LowerMLOAD(Op, DAG);
+  case ISD::MGATHER:
+    return LowerMGATHER_MSCATTER(Op, DAG);
+  case ISD::MLOAD:
+    return LowerMLOAD(Op, DAG);
   }
 }
+/// } Custom Lower
 
 /// Return the entry encoding for a jump table in the
 /// current function.  The returned value is a member of the

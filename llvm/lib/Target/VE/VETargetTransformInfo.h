@@ -17,14 +17,9 @@
 #define LLVM_LIB_TARGET_VE_VETARGETTRANSFORMINFO_H
 
 #include "VE.h"
-//#include "VESubtarget.h"
 #include "VETargetMachine.h"
-//#include "llvm/ADT/ArrayRef.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
-//#include "llvm/IR/Function.h"
-//#include "llvm/IR/Intrinsics.h"
-//#include <cstdint>
 
 namespace llvm {
 
@@ -41,7 +36,7 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
 public:
   explicit VETTIImpl(const VETargetMachine *TM, const Function &F)
       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
-        TLI(ST->getTargetLowering()){}
+        TLI(ST->getTargetLowering()) {}
 
   unsigned getNumberOfRegisters(unsigned ClassID) const {
     bool Vector = (ClassID == 1);
@@ -101,6 +96,6 @@ public:
 
 };
 
-}
+} // namespace llvm
 
 #endif // LLVM_LIB_TARGET_VE_VETARGETTRANSFORMINFO_H

@@ -6,8 +6,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_SPARC_SPARCTARGETSTREAMER_H
-#define LLVM_LIB_TARGET_SPARC_SPARCTARGETSTREAMER_H
+#ifndef LLVM_LIB_TARGET_VE_VETARGETSTREAMER_H
+#define LLVM_LIB_TARGET_VE_VETARGETSTREAMER_H
 
 #include "llvm/MC/MCELFStreamer.h"
 #include "llvm/MC/MCStreamer.h"
@@ -32,7 +32,6 @@ public:
   VETargetAsmStreamer(MCStreamer &S, formatted_raw_ostream &OS);
   void emitVERegisterIgnore(unsigned reg) override;
   void emitVERegisterScratch(unsigned reg) override;
-
 };
 
 // This part is for ELF object output
@@ -43,6 +42,6 @@ public:
   void emitVERegisterIgnore(unsigned reg) override {}
   void emitVERegisterScratch(unsigned reg) override {}
 };
-} // end namespace llvm
+} // namespace llvm
 
 #endif

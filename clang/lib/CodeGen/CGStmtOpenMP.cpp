@@ -18,6 +18,7 @@
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/Attr.h"
 #include "clang/AST/DeclOpenMP.h"
+#include "clang/AST/OpenMPClause.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
 #include "clang/Basic/PrettyStackTrace.h"
@@ -365,26 +366,28 @@ static QualType getCanonicalParamType(ASTContext &C, QualType T) {
 }
 
 namespace {
-  /// Contains required data for proper outlined function codegen.
-  struct FunctionOptions {
-    /// Captured statement for which the function is generated.
-    const CapturedStmt *S = nullptr;
-    /// true if cast to/from  UIntPtr is required for variables captured by
-    /// value.
-    const bool UIntPtrCastRequired = true;
-    /// true if only casted arguments must be registered as local args or VLA
-    /// sizes.
-    const bool RegisterCastedArgsOnly = false;
-    /// Name of the generated function.
-    const StringRef FunctionName;
-    explicit FunctionOptions(const CapturedStmt *S, bool UIntPtrCastRequired,
-                             bool RegisterCastedArgsOnly,
-                             StringRef FunctionName)
-        : S(S), UIntPtrCastRequired(UIntPtrCastRequired),
-          RegisterCastedArgsOnly(UIntPtrCastRequired && RegisterCastedArgsOnly),
-          FunctionName(FunctionName) {}
-  };
-}
+/// Contains required data for proper outlined function codegen.
+struct FunctionOptions {
+  /// Captured statement for which the function is generated.
+  const CapturedStmt *S = nullptr;
+  /// true if cast to/from  UIntPtr is required for variables captured by
+  /// value.
+  const bool UIntPtrCastRequired = true;
+  /// true if only casted arguments must be registered as local args or VLA
+  /// sizes.
+  const bool RegisterCastedArgsOnly = false;
+  /// Name of the generated function.
+  const StringRef FunctionName;
+  /// Location of the non-debug version of the outlined function.
+  SourceLocation Loc;
+  explicit FunctionOptions(const CapturedStmt *S, bool UIntPtrCastRequired,
+                           bool RegisterCastedArgsOnly, StringRef FunctionName,
+                           SourceLocation Loc)
+      : S(S), UIntPtrCastRequired(UIntPtrCastRequired),
+        RegisterCastedArgsOnly(UIntPtrCastRequired && RegisterCastedArgsOnly),
+        FunctionName(FunctionName), Loc(Loc) {}
+};
+} // namespace
 
 static llvm::Function *emitOutlinedFunctionPrologue(
     CodeGenFunction &CGF, FunctionArgList &Args,
@@ -485,7 +488,9 @@ static llvm::Function *emitOutlinedFunctionPrologue(
 
   // Generate the function.
   CGF.StartFunction(CD, Ctx.VoidTy, F, FuncInfo, TargetArgs,
-                    FO.S->getBeginLoc(), CD->getBody()->getBeginLoc());
+                    FO.UIntPtrCastRequired ? FO.Loc : FO.S->getBeginLoc(),
+                    FO.UIntPtrCastRequired ? FO.Loc
+                                           : CD->getBody()->getBeginLoc());
   unsigned Cnt = CD->getContextParamPosition();
   I = FO.S->captures().begin();
   for (const FieldDecl *FD : RD->fields()) {
@@ -560,15 +565,15 @@ static llvm::Function *emitOutlinedFunctionPrologue(
 }
 
 llvm::Function *
-CodeGenFunction::GenerateOpenMPCapturedStmtFunction(const CapturedStmt &S) {
+CodeGenFunction::GenerateOpenMPCapturedStmtFunction(const CapturedStmt &S,
+                                                    SourceLocation Loc) {
   assert(
       CapturedStmtInfo &&
       "CapturedStmtInfo should be set when generating the captured function");
   const CapturedDecl *CD = S.getCapturedDecl();
   // Build the argument list.
   bool NeedWrapperFunction =
-      getDebugInfo() &&
-      CGM.getCodeGenOpts().getDebugInfo() >= codegenoptions::LimitedDebugInfo;
+      getDebugInfo() && CGM.getCodeGenOpts().hasReducedDebugInfo();
   FunctionArgList Args;
   llvm::MapVector<const Decl *, std::pair<const VarDecl *, Address>> LocalAddrs;
   llvm::DenseMap<const Decl *, std::pair<const Expr *, llvm::Value *>> VLASizes;
@@ -578,7 +583,7 @@ CodeGenFunction::GenerateOpenMPCapturedStmtFunction(const CapturedStmt &S) {
   if (NeedWrapperFunction)
     Out << "_debug__";
   FunctionOptions FO(&S, !NeedWrapperFunction, /*RegisterCastedArgsOnly=*/false,
-                     Out.str());
+                     Out.str(), Loc);
   llvm::Function *F = emitOutlinedFunctionPrologue(*this, Args, LocalAddrs,
                                                    VLASizes, CXXThisValue, FO);
   CodeGenFunction::OMPPrivateScope LocalScope(*this);
@@ -601,7 +606,7 @@ CodeGenFunction::GenerateOpenMPCapturedStmtFunction(const CapturedStmt &S) {
 
   FunctionOptions WrapperFO(&S, /*UIntPtrCastRequired=*/true,
                             /*RegisterCastedArgsOnly=*/true,
-                            CapturedStmtInfo->getHelperName());
+                            CapturedStmtInfo->getHelperName(), Loc);
   CodeGenFunction WrapperCGF(CGM, /*suppressNewContext=*/true);
   WrapperCGF.CapturedStmtInfo = CapturedStmtInfo;
   Args.clear();
@@ -633,8 +638,7 @@ CodeGenFunction::GenerateOpenMPCapturedStmtFunction(const CapturedStmt &S) {
     }
     CallArgs.emplace_back(WrapperCGF.EmitFromMemory(CallArg, Arg->getType()));
   }
-  CGM.getOpenMPRuntime().emitOutlinedFunctionCall(WrapperCGF, S.getBeginLoc(),
-                                                  F, CallArgs);
+  CGM.getOpenMPRuntime().emitOutlinedFunctionCall(WrapperCGF, Loc, F, CallArgs);
   WrapperCGF.FinishFunction();
   return WrapperF;
 }
@@ -1329,6 +1333,19 @@ static void emitCommonOMPParallelDirective(
   CGF.GenerateOpenMPCapturedVars(*CS, CapturedVars);
   CGF.CGM.getOpenMPRuntime().emitParallelCall(CGF, S.getBeginLoc(), OutlinedFn,
                                               CapturedVars, IfCond);
+  // Check for outer lastprivate conditional update.
+  for (const auto *C : S.getClausesOfKind<OMPReductionClause>()) {
+    for (const Expr *Ref : C->varlists())
+      CGF.CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(CGF, Ref);
+  }
+  for (const auto *C : S.getClausesOfKind<OMPLastprivateClause>()) {
+    for (const Expr *Ref : C->varlists())
+      CGF.CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(CGF, Ref);
+  }
+  for (const auto *C : S.getClausesOfKind<OMPLinearClause>()) {
+    for (const Expr *Ref : C->varlists())
+      CGF.CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(CGF, Ref);
+  }
 }
 
 static void emitEmptyBoundParameters(CodeGenFunction &,
@@ -3785,7 +3802,7 @@ void CodeGenFunction::EmitOMPDistributeLoop(const OMPLoopDirective &S,
             });
         EmitBlock(LoopExit.getBlock());
         // Tell the runtime we are done.
-        RT.emitForStaticFinish(*this, S.getBeginLoc(), S.getDirectiveKind());
+        RT.emitForStaticFinish(*this, S.getEndLoc(), S.getDirectiveKind());
       } else {
         // Emit the outer loop, which requests its work chunk [LB..UB] from
         // runtime and runs the inner loop to process it.
@@ -3838,11 +3855,12 @@ void CodeGenFunction::EmitOMPDistributeDirective(
 }
 
 static llvm::Function *emitOutlinedOrderedFunction(CodeGenModule &CGM,
-                                                   const CapturedStmt *S) {
+                                                   const CapturedStmt *S,
+                                                   SourceLocation Loc) {
   CodeGenFunction CGF(CGM, /*suppressNewContext=*/true);
   CodeGenFunction::CGCapturedStmtInfo CapStmtInfo;
   CGF.CapturedStmtInfo = &CapStmtInfo;
-  llvm::Function *Fn = CGF.GenerateOpenMPCapturedStmtFunction(*S);
+  llvm::Function *Fn = CGF.GenerateOpenMPCapturedStmtFunction(*S, Loc);
   Fn->setDoesNotRecurse();
   return Fn;
 }
@@ -3862,7 +3880,8 @@ void CodeGenFunction::EmitOMPOrderedDirective(const OMPOrderedDirective &S) {
     if (C) {
       llvm::SmallVector<llvm::Value *, 16> CapturedVars;
       CGF.GenerateOpenMPCapturedVars(*CS, CapturedVars);
-      llvm::Function *OutlinedFn = emitOutlinedOrderedFunction(CGM, CS);
+      llvm::Function *OutlinedFn =
+          emitOutlinedOrderedFunction(CGM, CS, S.getBeginLoc());
       CGM.getOpenMPRuntime().emitOutlinedFunctionCall(CGF, S.getBeginLoc(),
                                                       OutlinedFn, CapturedVars);
     } else {
@@ -3965,6 +3984,7 @@ static void emitOMPAtomicReadExpr(CodeGenFunction &CGF, bool IsSeqCst,
   if (IsSeqCst)
     CGF.CGM.getOpenMPRuntime().emitFlush(CGF, llvm::None, Loc);
   CGF.emitOMPSimpleStore(VLValue, Res, X->getType().getNonReferenceType(), Loc);
+  CGF.CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(CGF, V);
 }
 
 static void emitOMPAtomicWriteExpr(CodeGenFunction &CGF, bool IsSeqCst,
@@ -3973,6 +3993,7 @@ static void emitOMPAtomicWriteExpr(CodeGenFunction &CGF, bool IsSeqCst,
   // x = expr;
   assert(X->isLValue() && "X of 'omp atomic write' is not lvalue");
   emitSimpleAtomicStore(CGF, IsSeqCst, CGF.EmitLValue(X), CGF.EmitAnyExpr(E));
+  CGF.CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(CGF, X);
   // OpenMP, 2.12.6, atomic Construct
   // Any atomic construct with a seq_cst clause forces the atomically
   // performed operation to include an implicit flush operation without a
@@ -4129,6 +4150,7 @@ static void emitOMPAtomicUpdateExpr(CodeGenFunction &CGF, bool IsSeqCst,
   };
   (void)CGF.EmitOMPAtomicSimpleUpdateExpr(
       XLValue, ExprRValue, BOUE->getOpcode(), IsXLHSInRHSPart, AO, Loc, Gen);
+  CGF.CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(CGF, X);
   // OpenMP, 2.12.6, atomic Construct
   // Any atomic construct with a seq_cst clause forces the atomically
   // performed operation to include an implicit flush operation without a
@@ -4195,6 +4217,7 @@ static void emitOMPAtomicCaptureExpr(CodeGenFunction &CGF, bool IsSeqCst,
     };
     auto Res = CGF.EmitOMPAtomicSimpleUpdateExpr(
         XLValue, ExprRValue, BOUE->getOpcode(), IsXLHSInRHSPart, AO, Loc, Gen);
+    CGF.CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(CGF, X);
     if (Res.first) {
       // 'atomicrmw' instruction was generated.
       if (IsPostfixUpdate) {
@@ -4221,6 +4244,7 @@ static void emitOMPAtomicCaptureExpr(CodeGenFunction &CGF, bool IsSeqCst,
     auto Res = CGF.EmitOMPAtomicSimpleUpdateExpr(
         XLValue, ExprRValue, /*BO=*/BO_Assign, /*IsXLHSInRHSPart=*/false, AO,
         Loc, Gen);
+    CGF.CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(CGF, X);
     if (Res.first) {
       // 'atomicrmw' instruction was generated.
       NewVVal = IsPostfixUpdate ? Res.second : ExprRValue;
@@ -4228,6 +4252,7 @@ static void emitOMPAtomicCaptureExpr(CodeGenFunction &CGF, bool IsSeqCst,
   }
   // Emit post-update store to 'v' of old/new 'x' value.
   CGF.emitOMPSimpleStore(VLValue, NewVVal, NewVValType, Loc);
+  CGF.CGM.getOpenMPRuntime().checkAndEmitLastprivateConditional(CGF, V);
   // OpenMP, 2.12.6, atomic Construct
   // Any atomic construct with a seq_cst clause forces the atomically
   // performed operation to include an implicit flush operation without a
@@ -5465,7 +5490,7 @@ void CodeGenFunction::EmitSimpleOMPExecutableDirective(
       OMPPrivateScope LoopGlobals(CGF);
       if (const auto *LD = dyn_cast<OMPLoopDirective>(&D)) {
         for (const Expr *E : LD->counters()) {
-          const auto *VD = dyn_cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
+          const auto *VD = cast<VarDecl>(cast<DeclRefExpr>(E)->getDecl());
           if (!VD->hasLocalStorage() && !CGF.LocalDeclMap.count(VD)) {
             LValue GlobLVal = CGF.EmitLValue(E);
             LoopGlobals.addPrivate(

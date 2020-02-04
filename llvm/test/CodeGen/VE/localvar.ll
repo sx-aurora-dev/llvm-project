@@ -6,28 +6,28 @@
 define void @test(i32) {
 ; CHECK-LABEL: test:
 ; CHECK:       .LBB0_2:
-; CHECK-NEXT:    or %s34, 0, %s0
-; CHECK-NEXT:    adds.w.zx %s35, %s0, (0)1
-; CHECK-NEXT:    sll %s35, %s35, 3
-; CHECK-NEXT:    lea %s35, 15(%s35)
-; CHECK-NEXT:    lea %s36, -16
-; CHECK-NEXT:    and %s36, %s36, (32)0
-; CHECK-NEXT:    lea.sl %s36, 15(%s36)
-; CHECK-NEXT:    and %s0, %s35, %s36
-; CHECK-NEXT:    lea %s35, __llvm_grow_stack@lo
-; CHECK-NEXT:    and %s35, %s35, (32)0
-; CHECK-NEXT:    lea.sl %s12, __llvm_grow_stack@hi(%s35)
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    sll %s0, %s0, 3
+; CHECK-NEXT:    lea %s0, 15(%s0)
+; CHECK-NEXT:    lea %s1, -16
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s1, 15(%s1)
+; CHECK-NEXT:    and %s0, %s0, %s1
+; CHECK-NEXT:    lea %s1, __llvm_grow_stack@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s12, __llvm_grow_stack@hi(%s1)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    lea %s1, 240(%s11)
-; CHECK-NEXT:    lea %s35, p@lo
-; CHECK-NEXT:    and %s35, %s35, (32)0
-; CHECK-NEXT:    lea.sl %s35, p@hi(%s35)
-; CHECK-NEXT:    ld %s0, (,%s35)
-; CHECK-NEXT:    adds.w.sx %s34, %s34, (0)1
-; CHECK-NEXT:    sll %s2, %s34, 3
-; CHECK-NEXT:    lea %s34, memcpy@lo
-; CHECK-NEXT:    and %s34, %s34, (32)0
-; CHECK-NEXT:    lea.sl %s12, memcpy@hi(%s34)
+; CHECK-NEXT:    lea %s0, p@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s0, p@hi(%s0)
+; CHECK-NEXT:    ld %s0, (,%s0)
+; CHECK-NEXT:    adds.w.sx %s2, %s2, (0)1
+; CHECK-NEXT:    sll %s2, %s2, 3
+; CHECK-NEXT:    lea %s3, memcpy@lo
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    lea.sl %s12, memcpy@hi(%s3)
 ; CHECK-NEXT:    bsic %lr, (,%s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = zext i32 %0 to i64

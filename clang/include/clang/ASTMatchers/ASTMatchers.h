@@ -52,9 +52,11 @@
 #include "clang/AST/DeclFriend.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/DeclTemplate.h"
+#include "clang/AST/ParentMapContext.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
+#include "clang/AST/LambdaCapture.h"
 #include "clang/AST/NestedNameSpecifier.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/OperationKinds.h"
@@ -1193,6 +1195,20 @@ extern const internal::VariadicDynCastAllOfMatcher<Decl, EnumDecl> enumDecl;
 extern const internal::VariadicDynCastAllOfMatcher<Decl, EnumConstantDecl>
     enumConstantDecl;
 
+/// Matches tag declarations.
+///
+/// Example matches X, Z, U, S, E
+/// \code
+///   class X;
+///   template<class T> class Z {};
+///   struct S {};
+///   union U {};
+///   enum E {
+///     A, B, C
+///   };
+/// \endcode
+extern const internal::VariadicDynCastAllOfMatcher<Decl, TagDecl> tagDecl;
+
 /// Matches method declarations.
 ///
 /// Example matches y
@@ -1821,6 +1837,22 @@ extern const internal::VariadicDynCastAllOfMatcher<Stmt, CXXNewExpr> cxxNewExpr;
 ///   matches 'delete X'.
 extern const internal::VariadicDynCastAllOfMatcher<Stmt, CXXDeleteExpr>
     cxxDeleteExpr;
+
+/// Matches noexcept expressions.
+///
+/// Given
+/// \code
+///   bool a() noexcept;
+///   bool b() noexcept(true);
+///   bool c() noexcept(false);
+///   bool d() noexcept(noexcept(a()));
+///   bool e = noexcept(b()) || noexcept(c());
+/// \endcode
+/// cxxNoexceptExpr()
+///   matches `noexcept(a())`, `noexcept(b())` and `noexcept(c())`.
+///   doesn't match the noexcept specifier in the declarations a, b, c or d.
+extern const internal::VariadicDynCastAllOfMatcher<Stmt, CXXNoexceptExpr>
+    cxxNoexceptExpr;
 
 /// Matches array subscript expressions.
 ///
@@ -2540,6 +2572,36 @@ extern const internal::VariadicOperatorMatcherFunc<
     2, std::numeric_limits<unsigned>::max()>
     allOf;
 
+/// Matches any node regardless of the submatchers.
+///
+/// However, \c optionally will generate a result binding for each matching
+/// submatcher.
+///
+/// Useful when additional information which may or may not present about a
+/// main matching node is desired.
+///
+/// For example, in:
+/// \code
+///   class Foo {
+///     int bar;
+///   }
+/// \endcode
+/// The matcher:
+/// \code
+///   cxxRecordDecl(
+///     optionally(has(
+///       fieldDecl(hasName("bar")).bind("var")
+///   ))).bind("record")
+/// \endcode
+/// will produce a result binding for both "record" and "var".
+/// The matcher will produce a "record" binding for even if there is no data
+/// member named "bar" in that class.
+///
+/// Usable as: Any Matcher
+extern const internal::VariadicOperatorMatcherFunc<
+    1, std::numeric_limits<unsigned>::max()>
+    optionally;
+
 /// Matches sizeof (C99), alignof (C++11) and vec_step (OpenCL)
 ///
 /// Given
@@ -2615,8 +2677,9 @@ inline internal::Matcher<Stmt> sizeOfExpr(
 /// \code
 ///   namespace a { namespace b { class X; } }
 /// \endcode
-inline internal::Matcher<NamedDecl> hasName(const std::string &Name) {
-  return internal::Matcher<NamedDecl>(new internal::HasNameMatcher({Name}));
+inline internal::Matcher<NamedDecl> hasName(StringRef Name) {
+  return internal::Matcher<NamedDecl>(
+      new internal::HasNameMatcher({std::string(Name)}));
 }
 
 /// Matches NamedDecl nodes that have any of the specified names.
@@ -4014,6 +4077,50 @@ AST_POLYMORPHIC_MATCHER_P(hasAnyArgument,
   return false;
 }
 
+/// Matches any capture of a lambda expression.
+///
+/// Given
+/// \code
+///   void foo() {
+///     int x;
+///     auto f = [x](){};
+///   }
+/// \endcode
+/// lambdaExpr(hasAnyCapture(anything()))
+///   matches [x](){};
+AST_MATCHER_P_OVERLOAD(LambdaExpr, hasAnyCapture, internal::Matcher<VarDecl>,
+                       InnerMatcher, 0) {
+  for (const LambdaCapture &Capture : Node.captures()) {
+    if (Capture.capturesVariable()) {
+      BoundNodesTreeBuilder Result(*Builder);
+      if (InnerMatcher.matches(*Capture.getCapturedVar(), Finder, &Result)) {
+        *Builder = std::move(Result);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/// Matches any capture of 'this' in a lambda expression.
+///
+/// Given
+/// \code
+///   struct foo {
+///     void bar() {
+///       auto f = [this](){};
+///     }
+///   }
+/// \endcode
+/// lambdaExpr(hasAnyCapture(cxxThisExpr()))
+///   matches [this](){};
+AST_MATCHER_P_OVERLOAD(LambdaExpr, hasAnyCapture,
+                       internal::Matcher<CXXThisExpr>, InnerMatcher, 1) {
+  return llvm::any_of(Node.captures(), [](const LambdaCapture &LC) {
+    return LC.capturesThis();
+  });
+}
+
 /// Matches a constructor call expression which uses list initialization.
 AST_MATCHER(CXXConstructExpr, isListInitialization) {
   return Node.isListInitialization();
@@ -4770,40 +4877,56 @@ AST_MATCHER_P(ImplicitCastExpr, hasImplicitDestinationType,
   return InnerMatcher.matches(Node.getType(), Finder, Builder);
 }
 
-/// Matches RecordDecl object that are spelled with "struct."
+/// Matches TagDecl object that are spelled with "struct."
 ///
-/// Example matches S, but not C or U.
+/// Example matches S, but not C, U or E.
 /// \code
 ///   struct S {};
 ///   class C {};
 ///   union U {};
+///   enum E {};
 /// \endcode
-AST_MATCHER(RecordDecl, isStruct) {
+AST_MATCHER(TagDecl, isStruct) {
   return Node.isStruct();
 }
 
-/// Matches RecordDecl object that are spelled with "union."
+/// Matches TagDecl object that are spelled with "union."
 ///
-/// Example matches U, but not C or S.
+/// Example matches U, but not C, S or E.
 /// \code
 ///   struct S {};
 ///   class C {};
 ///   union U {};
+///   enum E {};
 /// \endcode
-AST_MATCHER(RecordDecl, isUnion) {
+AST_MATCHER(TagDecl, isUnion) {
   return Node.isUnion();
 }
 
-/// Matches RecordDecl object that are spelled with "class."
+/// Matches TagDecl object that are spelled with "class."
 ///
-/// Example matches C, but not S or U.
+/// Example matches C, but not S, U or E.
 /// \code
 ///   struct S {};
 ///   class C {};
 ///   union U {};
+///   enum E {};
 /// \endcode
-AST_MATCHER(RecordDecl, isClass) {
+AST_MATCHER(TagDecl, isClass) {
   return Node.isClass();
+}
+
+/// Matches TagDecl object that are spelled with "enum."
+///
+/// Example matches E, but not C, S or U.
+/// \code
+///   struct S {};
+///   class C {};
+///   union U {};
+///   enum E {};
+/// \endcode
+AST_MATCHER(TagDecl, isEnum) {
+  return Node.isEnum();
 }
 
 /// Matches the true branch expression of a conditional operator.

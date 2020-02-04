@@ -433,8 +433,6 @@ enum NodeType : unsigned {
   MUL_LOHI_U24,
   PERM,
   TEXTURE_FETCH,
-  EXPORT, // exp on SI+
-  EXPORT_DONE, // exp on SI+ with done bit set
   R600_EXPORT,
   CONST_ADDRESS,
   REGISTER_LOAD,
@@ -476,9 +474,6 @@ enum NodeType : unsigned {
   BUILD_VERTICAL_VECTOR,
   /// Pointer to the start of the shader's constant data.
   CONST_DATA_PTR,
-  INTERP_P1LL_F16,
-  INTERP_P1LV_F16,
-  INTERP_P2_F16,
   PC_ADD_REL_OFFSET,
   LDS,
   KILL,

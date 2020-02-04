@@ -19,15 +19,18 @@ add_clang_library(clangStaticAnalyzerCheckers
   CastValueChecker.cpp
   CheckObjCDealloc.cpp
   CheckObjCInstMethSignature.cpp
+  CheckPlacementNew.cpp
   CheckSecuritySyntaxOnly.cpp
   CheckSizeofPointer.cpp
   CheckerDocumentation.cpp
   ChrootChecker.cpp
   CloneChecker.cpp
+  ContainerModeling.cpp
   ConversionChecker.cpp
   CXXSelfAssignmentChecker.cpp
   DeadStoresChecker.cpp
   DebugCheckers.cpp
+  DebugContainerModeling.cpp
   DebugIteratorModeling.cpp
   DeleteWithNonVirtualDtorChecker.cpp
   DereferenceChecker.cpp

@@ -195,8 +195,8 @@ define zeroext i64 @p128zi64() {
 define i64 @p2264924160i64() {
 ; CHECK-LABEL: p2264924160i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, -2030043136
-; CHECK-NEXT:  and %s0, %s34, (32)0
+; CHECK-NEXT:  lea %s0, -2030043136
+; CHECK-NEXT:  and %s0, %s0, (32)0
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret i64 2264924160
 }
@@ -204,8 +204,8 @@ define i64 @p2264924160i64() {
 define signext i64 @p2264924160si64() {
 ; CHECK-LABEL: p2264924160si64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, -2030043136
-; CHECK-NEXT:  and %s0, %s34, (32)0
+; CHECK-NEXT:  lea %s0, -2030043136
+; CHECK-NEXT:  and %s0, %s0, (32)0
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret i64 2264924160
 }
@@ -213,8 +213,8 @@ define signext i64 @p2264924160si64() {
 define zeroext i64 @p2264924160zi64() {
 ; CHECK-LABEL: p2264924160zi64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, -2030043136
-; CHECK-NEXT:  and %s0, %s34, (32)0
+; CHECK-NEXT:  lea %s0, -2030043136
+; CHECK-NEXT:  and %s0, %s0, (32)0
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret i64 2264924160
 }
@@ -246,8 +246,8 @@ define zeroext i64 @p2147483647zi64() {
 define i64 @p15032385535i64() {
 ; CHECK-LABEL: p15032385535i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 2147483647
-; CHECK-NEXT:  lea.sl %s0, 3(%s34)
+; CHECK-NEXT:  lea %s0, 2147483647
+; CHECK-NEXT:  lea.sl %s0, 3(%s0)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret i64 15032385535
 }
@@ -255,8 +255,8 @@ define i64 @p15032385535i64() {
 define signext i64 @p15032385535si64() {
 ; CHECK-LABEL: p15032385535si64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 2147483647
-; CHECK-NEXT:  lea.sl %s0, 3(%s34)
+; CHECK-NEXT:  lea %s0, 2147483647
+; CHECK-NEXT:  lea.sl %s0, 3(%s0)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret i64 15032385535
 }
@@ -264,8 +264,8 @@ define signext i64 @p15032385535si64() {
 define zeroext i64 @p15032385535zi64() {
 ; CHECK-LABEL: p15032385535zi64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 2147483647
-; CHECK-NEXT:  lea.sl %s0, 3(%s34)
+; CHECK-NEXT:  lea %s0, 2147483647
+; CHECK-NEXT:  lea.sl %s0, 3(%s0)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret i64 15032385535
 }
@@ -273,9 +273,9 @@ define zeroext i64 @p15032385535zi64() {
 define i64 @p15032385536i64() {
 ; CHECK-LABEL: p15032385536i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, -2147483648
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, 3(%s34)
+; CHECK-NEXT:  lea %s0, -2147483648
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s0, 3(%s0)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret i64 15032385536
 }
@@ -283,9 +283,9 @@ define i64 @p15032385536i64() {
 define signext i64 @p15032385536si64() {
 ; CHECK-LABEL: p15032385536si64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, -2147483648
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, 3(%s34)
+; CHECK-NEXT:  lea %s0, -2147483648
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s0, 3(%s0)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret i64 15032385536
 }
@@ -293,9 +293,9 @@ define signext i64 @p15032385536si64() {
 define zeroext i64 @p15032385536zi64() {
 ; CHECK-LABEL: p15032385536zi64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, -2147483648
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, 3(%s34)
+; CHECK-NEXT:  lea %s0, -2147483648
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s0, 3(%s0)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret i64 15032385536
 }
@@ -303,8 +303,8 @@ define zeroext i64 @p15032385536zi64() {
 define float @m5f32() {
 ; CHECK-LABEL: m5f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, -1063256064
-; CHECK-NEXT:  or %s0, 0, %s34
+; CHECK-NEXT:  lea.sl %s0, -1063256064
+; CHECK-NEXT:  or %s0, 0, %s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret float -5.000000e+00
 }
@@ -323,11 +323,11 @@ define fp128 @m5f128() {
 ; CHECK-NEXT:  .8byte	-4611334174706499584
 ; CHECK-LABEL: m5f128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:  ld %s0, 8(,%s34)
-; CHECK-NEXT:  ld %s1, (,%s34)
+; CHECK-NEXT:  lea %s0, .LCPI{{[0-9]+}}_0@lo
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(%s0)
+; CHECK-NEXT:  ld %s0, 8(,%s2)
+; CHECK-NEXT:  ld %s1, (,%s2)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret fp128 0xL0000000000000000C001400000000000  ; -5.0
 }
@@ -335,8 +335,8 @@ define fp128 @m5f128() {
 define float @p2p3f32() {
 ; CHECK-LABEL: p2p3f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, 1075000115
-; CHECK-NEXT:  or %s0, 0, %s34
+; CHECK-NEXT:  lea.sl %s0, 1075000115
+; CHECK-NEXT:  or %s0, 0, %s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret float 0x4002666660000000 ; 2.3
 }
@@ -344,8 +344,8 @@ define float @p2p3f32() {
 define double @p2p3f64() {
 ; CHECK-LABEL: p2p3f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, 1717986918
-; CHECK-NEXT:  lea.sl %s0, 1073899110(%s34)
+; CHECK-NEXT:  lea %s0, 1717986918
+; CHECK-NEXT:  lea.sl %s0, 1073899110(%s0)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret double 2.3
 }
@@ -356,11 +356,11 @@ define fp128 @p2p3f128() {
 ; CHECK-NEXT:  .8byte	4611728239673894502
 ; CHECK-LABEL: p2p3f128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:  ld %s0, 8(,%s34)
-; CHECK-NEXT:  ld %s1, (,%s34)
+; CHECK-NEXT:  lea %s0, .LCPI{{[0-9]+}}_0@lo
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(%s0)
+; CHECK-NEXT:  ld %s0, 8(,%s2)
+; CHECK-NEXT:  ld %s1, (,%s2)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret fp128 0xL60000000000000004000266666666666 ; 2.3
 }
@@ -368,8 +368,8 @@ define fp128 @p2p3f128() {
 define float @p128p3f32() {
 ; CHECK-LABEL: p128p3f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s34, 1124093133
-; CHECK-NEXT:  or %s0, 0, %s34
+; CHECK-NEXT:  lea.sl %s0, 1124093133
+; CHECK-NEXT:  or %s0, 0, %s0
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret float 0x40600999A0000000 ; 128.3
 }
@@ -377,9 +377,9 @@ define float @p128p3f32() {
 define double @p128p3f64() {
 ; CHECK-LABEL: p128p3f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, -1717986918
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s0, 1080035737(%s34)
+; CHECK-NEXT:  lea %s0, -1717986918
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s0, 1080035737(%s0)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret double 128.3
 }
@@ -390,11 +390,11 @@ define fp128 @p128p3f128() {
 ; CHECK-NEXT:  .8byte  4613375527994628505
 ; CHECK-LABEL: p128p3f128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s34, .LCPI{{[0-9]+}}_0@lo
-; CHECK-NEXT:  and %s34, %s34, (32)0
-; CHECK-NEXT:  lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(%s34)
-; CHECK-NEXT:  ld %s0, 8(,%s34)
-; CHECK-NEXT:  ld %s1, (,%s34)
+; CHECK-NEXT:  lea %s0, .LCPI{{[0-9]+}}_0@lo
+; CHECK-NEXT:  and %s0, %s0, (32)0
+; CHECK-NEXT:  lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(%s0)
+; CHECK-NEXT:  ld %s0, 8(,%s2)
+; CHECK-NEXT:  ld %s1, (,%s2)
 ; CHECK-NEXT:  or %s11, 0, %s9
   ret fp128 0xLA0000000000000004006009999999999 ; 128.3
 }

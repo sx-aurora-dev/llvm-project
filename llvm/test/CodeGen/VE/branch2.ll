@@ -69,8 +69,8 @@ define i32 @func4(i32, i32) {
 define i32 @func5(i32, i32) {
 ; CHECK-LABEL: func5:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    cmpu.w %s34, %s1, %s0
-; CHECK-NEXT:    brle.w 0, %s34, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
+; CHECK-NEXT:    brle.w 0, %s0, .LBB{{[0-9]+}}_1
   %3 = icmp ugt i32 %0, %1
   br i1 %3, label %4, label %6
 
@@ -86,8 +86,8 @@ define i32 @func5(i32, i32) {
 define i32 @func6(i32, i32) {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    cmpu.w %s34, %s1, %s0
-; CHECK-NEXT:    brlt.w 0, %s34, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
+; CHECK-NEXT:    brlt.w 0, %s0, .LBB{{[0-9]+}}_1
   %3 = icmp uge i32 %0, %1
   br i1 %3, label %4, label %6
 
@@ -103,8 +103,8 @@ define i32 @func6(i32, i32) {
 define i32 @func7(i32, i32) {
 ; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    cmpu.w %s34, %s1, %s0
-; CHECK-NEXT:    brge.w 0, %s34, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
+; CHECK-NEXT:    brge.w 0, %s0, .LBB{{[0-9]+}}_1
   %3 = icmp ult i32 %0, %1
   br i1 %3, label %4, label %6
 
@@ -120,8 +120,8 @@ define i32 @func7(i32, i32) {
 define i32 @func8(i32, i32) {
 ; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    cmpu.w %s34, %s1, %s0
-; CHECK-NEXT:    brgt.w 0, %s34, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
+; CHECK-NEXT:    brgt.w 0, %s0, .LBB{{[0-9]+}}_1
   %3 = icmp ule i32 %0, %1
   br i1 %3, label %4, label %6
 
@@ -394,8 +394,8 @@ define i32 @func25(float, float) {
 ; CHECK-LABEL: func25:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    or %s34, 1, (0)1
-; CHECK-NEXT:    brne.w %s34, %s0, .LBB{{[0-9]+}}_2
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    brne.w %s1, %s0, .LBB{{[0-9]+}}_2
   %3 = fcmp false float %0, %1
   br i1 %3, label %4, label %6
 

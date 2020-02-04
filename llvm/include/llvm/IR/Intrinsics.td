@@ -512,6 +512,20 @@ def int_memcpy  : Intrinsic<[],
                               llvm_i1_ty],
                             [IntrArgMemOnly, IntrWillReturn, NoCapture<0>, NoCapture<1>,
                              NoAlias<0>, NoAlias<1>, WriteOnly<0>, ReadOnly<1>, ImmArg<3>]>;
+
+// Memcpy semantic that is guaranteed to be inlined.
+// In particular this means that the generated code is not allowed to call any
+// external function.
+// The third argument (specifying the size) must be a constant.
+def int_memcpy_inline
+    : Intrinsic<[],
+      [ llvm_anyptr_ty, llvm_anyptr_ty, llvm_anyint_ty, llvm_i1_ty ],
+      [ IntrArgMemOnly, IntrWillReturn,
+      NoCapture<0>, NoCapture<1>,
+      NoAlias<0>, NoAlias<1>,
+      WriteOnly<0>, ReadOnly<1>,
+      ImmArg<2>, ImmArg<3> ]>;
+
 def int_memmove : Intrinsic<[],
                             [llvm_anyptr_ty, llvm_anyptr_ty, llvm_anyint_ty,
                              llvm_i1_ty],
@@ -520,8 +534,8 @@ def int_memmove : Intrinsic<[],
 def int_memset  : Intrinsic<[],
                             [llvm_anyptr_ty, llvm_i8_ty, llvm_anyint_ty,
                              llvm_i1_ty],
-                            [IntrArgMemOnly, IntrWillReturn, NoCapture<0>, WriteOnly<0>,
-                            ImmArg<3>]>;
+                            [IntrWriteMem, IntrArgMemOnly, IntrWillReturn, NoCapture<0>,
+                             WriteOnly<0>, ImmArg<3>]>;
 
 // FIXME: Add version of these floating point intrinsics which allow non-default
 // rounding modes and FP exception handling.
@@ -626,6 +640,13 @@ let IntrProperties = [IntrInaccessibleMemOnly, IntrWillReturn] in {
                                                       LLVMMatchType<0>,
                                                       llvm_metadata_ty,
                                                       llvm_metadata_ty ]>;
+
+  def int_experimental_constrained_fmuladd : Intrinsic<[ llvm_anyfloat_ty ],
+                                                       [ LLVMMatchType<0>,
+                                                         LLVMMatchType<0>,
+                                                         LLVMMatchType<0>,
+                                                         llvm_metadata_ty,
+                                                         llvm_metadata_ty ]>;
 
   def int_experimental_constrained_fptosi : Intrinsic<[ llvm_anyint_ty ],
                                                     [ llvm_anyfloat_ty,
@@ -931,6 +952,14 @@ def int_umul_fix : Intrinsic<[llvm_anyint_ty],
                              [LLVMMatchType<0>, LLVMMatchType<0>, llvm_i32_ty],
                              [IntrNoMem, IntrSpeculatable, IntrWillReturn, Commutative, ImmArg<2>]>;
 
+def int_sdiv_fix : Intrinsic<[llvm_anyint_ty],
+                             [LLVMMatchType<0>, LLVMMatchType<0>, llvm_i32_ty],
+                             [IntrNoMem, ImmArg<2>]>;
+
+def int_udiv_fix : Intrinsic<[llvm_anyint_ty],
+                             [LLVMMatchType<0>, LLVMMatchType<0>, llvm_i32_ty],
+                             [IntrNoMem, ImmArg<2>]>;
+
 //===------------------- Fixed Point Saturation Arithmetic Intrinsics ----------------===//
 //
 def int_smul_fix_sat : Intrinsic<[llvm_anyint_ty],
@@ -1214,7 +1243,8 @@ def int_memmove_element_unordered_atomic
 // @llvm.memset.element.unordered.atomic.*(dest, value, length, elementsize)
 def int_memset_element_unordered_atomic
     : Intrinsic<[], [ llvm_anyptr_ty, llvm_i8_ty, llvm_anyint_ty, llvm_i32_ty ],
-                [ IntrArgMemOnly, IntrWillReturn, NoCapture<0>, WriteOnly<0>, ImmArg<3> ]>;
+                [ IntrWriteMem, IntrArgMemOnly, IntrWillReturn, NoCapture<0>, WriteOnly<0>,
+                  ImmArg<3> ]>;
 
 //===------------------------ Reduction Intrinsics ------------------------===//
 //
@@ -1307,7 +1337,9 @@ def int_loop_decrement :
 // maximum number of elements processed in an iteration). Return the remaining
 // number of iterations still to be executed. This is effectively a sub which
 // can be used with a phi, icmp and br to control the number of iterations
-// executed, as usual.
+// executed, as usual. Any optimisations are allowed to treat it is a sub, and
+// it's scevable, so it's the backends responsibility to handle cases where it
+// may be optimised.
 def int_loop_decrement_reg :
   Intrinsic<[llvm_anyint_ty],
             [llvm_anyint_ty, llvm_anyint_ty], [IntrNoDuplicate]>;
@@ -1331,6 +1363,11 @@ def int_preserve_struct_access_index : Intrinsic<[llvm_anyptr_ty],
                                                   llvm_i32_ty],
                                                  [IntrNoMem, ImmArg<1>,
                                                   ImmArg<2>]>;
+
+//===---------- Intrinsics to query properties of scalable vectors --------===//
+def int_vscale : Intrinsic<[llvm_anyint_ty], [], [IntrNoMem]>;
+
+//===----------------------------------------------------------------------===//
 
 //===----------------------------------------------------------------------===//
 // Target-specific intrinsics

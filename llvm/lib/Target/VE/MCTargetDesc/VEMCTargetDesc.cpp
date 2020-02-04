@@ -31,8 +31,7 @@ using namespace llvm;
 #define GET_REGINFO_MC_DESC
 #include "VEGenRegisterInfo.inc"
 
-static MCAsmInfo *createVEMCAsmInfo(const MCRegisterInfo &MRI,
-                                    const Triple &TT,
+static MCAsmInfo *createVEMCAsmInfo(const MCRegisterInfo &MRI, const Triple &TT,
                                     const MCTargetOptions &Options) {
   MCAsmInfo *MAI = new VEELFMCAsmInfo(TT);
   unsigned Reg = MRI.getDwarfRegNum(VE::SX11, true);
@@ -53,8 +52,8 @@ static MCRegisterInfo *createVEMCRegisterInfo(const Triple &TT) {
   return X;
 }
 
-static MCSubtargetInfo *
-createVEMCSubtargetInfo(const Triple &TT, StringRef CPU, StringRef FS) {
+static MCSubtargetInfo *createVEMCSubtargetInfo(const Triple &TT, StringRef CPU,
+                                                StringRef FS) {
   if (CPU.empty())
     CPU = "ve";
   return createVEMCSubtargetInfoImpl(TT, CPU, FS);
@@ -73,10 +72,10 @@ static MCTargetStreamer *createTargetAsmStreamer(MCStreamer &S,
 }
 
 static MCInstPrinter *createVEMCInstPrinter(const Triple &T,
-                                               unsigned SyntaxVariant,
-                                               const MCAsmInfo &MAI,
-                                               const MCInstrInfo &MII,
-                                               const MCRegisterInfo &MRI) {
+                                            unsigned SyntaxVariant,
+                                            const MCAsmInfo &MAI,
+                                            const MCInstrInfo &MII,
+                                            const MCRegisterInfo &MRI) {
   return new VEInstPrinter(MAI, MII, MRI);
 }
 

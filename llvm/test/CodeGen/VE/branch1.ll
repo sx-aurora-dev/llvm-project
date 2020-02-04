@@ -1,177 +1,299 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define signext i8 @func1(i8 signext, i8 signext) {
+define signext i8 @func1(i8 signext %a, i8 signext %b) {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brle.w %s0, %s1, .LBB{{[0-9]+}}_1
-  %3 = icmp sgt i8 %0, %1
-  br i1 %3, label %4, label %7
+; CHECK-NEXT:    brle.w %s0, %s1, .LBB0_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB0_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = icmp sgt i8 %a, %b
+  br i1 %cmp, label %on.true, label %join
 
-; <label>:4:                                      ; preds = %2
-  %5 = tail call i32 @ret(i32 2)
-  %6 = trunc i32 %5 to i8
-  br label %7
+on.true:
+  %ret.val = tail call i32 @ret(i32 2)
+  %r8 = trunc i32 %ret.val to i8
+  br label %join
 
-; <label>:7:                                      ; preds = %2, %4
-  %8 = phi i8 [ %6, %4 ], [ 0, %2 ]
-  ret i8 %8
+join:
+  %r = phi i8 [ %r8, %on.true ], [ 0, %entry ]
+  ret i8 %r
 }
 
 declare i32 @ret(i32)
 
-define i32 @func2(i16 signext, i16 signext) {
+define i32 @func2(i16 signext %a, i16 signext %b) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brle.w %s0, %s1, .LBB{{[0-9]+}}_1
-  %3 = icmp sgt i16 %0, %1
-  br i1 %3, label %4, label %6
+; CHECK-NEXT:    brle.w %s0, %s1, .LBB1_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB1_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = icmp sgt i16 %a, %b
+  br i1 %cmp, label %on.true, label %join
 
-; <label>:4:                                      ; preds = %2
-  %5 = tail call i32 @ret(i32 2)
-  br label %6
+on.true:
+  %ret.val = tail call i32 @ret(i32 2)
+  br label %join
 
-; <label>:6:                                      ; preds = %2, %4
-  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
-  ret i32 %7
+join:
+  %r = phi i32 [ %ret.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
 }
 
-define i32 @func3(i32, i32) {
+define i32 @func3(i32 %a, i32 %b) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brle.w %s0, %s1, .LBB{{[0-9]+}}_1
-  %3 = icmp sgt i32 %0, %1
-  br i1 %3, label %4, label %6
+; CHECK-NEXT:    brle.w %s0, %s1, .LBB2_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB2_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = icmp sgt i32 %a, %b
+  br i1 %cmp, label %on.true, label %join
 
-; <label>:4:                                      ; preds = %2
-  %5 = tail call i32 @ret(i32 2)
-  br label %6
+on.true:
+  %ret.val = tail call i32 @ret(i32 2)
+  br label %join
 
-; <label>:6:                                      ; preds = %2, %4
-  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
-  ret i32 %7
+join:
+  %r = phi i32 [ %ret.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
 }
 
-define i32 @func4(i64, i64) {
+define i32 @func4(i64 %a, i64 %b) {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brle.l %s0, %s1, .LBB{{[0-9]+}}_1
-  %3 = icmp sgt i64 %0, %1
-  br i1 %3, label %4, label %6
+; CHECK-NEXT:    brle.l %s0, %s1, .LBB3_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB3_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = icmp sgt i64 %a, %b
+  br i1 %cmp, label %on.true, label %join
 
-; <label>:4:                                      ; preds = %2
-  %5 = tail call i32 @ret(i32 2)
-  br label %6
+on.true:
+  %ret.val = tail call i32 @ret(i32 2)
+  br label %join
 
-; <label>:6:                                      ; preds = %2, %4
-  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
-  ret i32 %7
+join:
+  %r = phi i32 [ %ret.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
 }
 
-define i32 @func5(i8 zeroext, i8 zeroext) {
+define i32 @func5(i8 zeroext %a, i8 zeroext %b) {
 ; CHECK-LABEL: func5:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    cmpu.w %s34, %s1, %s0
-; CHECK-NEXT:    brle.w 0, %s34, .LBB{{[0-9]+}}_1
-  %3 = icmp ugt i8 %0, %1
-  br i1 %3, label %4, label %6
+; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
+; CHECK-NEXT:    brle.w 0, %s0, .LBB4_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB4_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = icmp ugt i8 %a, %b
+  br i1 %cmp, label %on.true, label %join
 
-; <label>:4:                                      ; preds = %2
-  %5 = tail call i32 @ret(i32 2)
-  br label %6
+on.true:
+  %ret.val = tail call i32 @ret(i32 2)
+  br label %join
 
-; <label>:6:                                      ; preds = %2, %4
-  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
-  ret i32 %7
+join:
+  %r = phi i32 [ %ret.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
 }
 
-define i32 @func6(i16 zeroext, i16 zeroext) {
+define i32 @func6(i16 zeroext %a, i16 zeroext %b) {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    cmpu.w %s34, %s1, %s0
-; CHECK-NEXT:    brle.w 0, %s34, .LBB{{[0-9]+}}_1
-  %3 = icmp ugt i16 %0, %1
-  br i1 %3, label %4, label %6
+; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
+; CHECK-NEXT:    brle.w 0, %s0, .LBB5_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB5_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = icmp ugt i16 %a, %b
+  br i1 %cmp, label %on.true, label %join
 
-; <label>:4:                                      ; preds = %2
-  %5 = tail call i32 @ret(i32 2)
-  br label %6
+on.true:
+  %ret.val = tail call i32 @ret(i32 2)
+  br label %join
 
-; <label>:6:                                      ; preds = %2, %4
-  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
-  ret i32 %7
+join:
+  %r = phi i32 [ %ret.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
 }
 
-define i32 @func7(i32, i32) {
+define i32 @func7(i32 %a, i32 %b) {
 ; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    cmpu.w %s34, %s1, %s0
-; CHECK-NEXT:    brle.w 0, %s34, .LBB{{[0-9]+}}_1
-  %3 = icmp ugt i32 %0, %1
-  br i1 %3, label %4, label %6
+; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
+; CHECK-NEXT:    brle.w 0, %s0, .LBB6_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB6_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = icmp ugt i32 %a, %b
+  br i1 %cmp, label %on.true, label %join
 
-; <label>:4:                                      ; preds = %2
-  %5 = tail call i32 @ret(i32 2)
-  br label %6
+on.true:
+  %ret.val = tail call i32 @ret(i32 2)
+  br label %join
 
-; <label>:6:                                      ; preds = %2, %4
-  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
-  ret i32 %7
+join:
+  %r = phi i32 [ %ret.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
 }
 
-define i32 @func8(float, float) {
+define i32 @func8(float %a, float %b) {
 ; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brlenan.s %s0, %s1, .LBB{{[0-9]+}}_1
-  %3 = fcmp ogt float %0, %1
-  br i1 %3, label %4, label %6
+; CHECK-NEXT:    brlenan.s %s0, %s1, .LBB7_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB7_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = fcmp ogt float %a, %b
+  br i1 %cmp, label %on.true, label %join
 
-; <label>:4:                                      ; preds = %2
-  %5 = tail call i32 @ret(i32 2)
-  br label %6
+on.true:
+  %ret.val = tail call i32 @ret(i32 2)
+  br label %join
 
-; <label>:6:                                      ; preds = %2, %4
-  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
-  ret i32 %7
+join:
+  %r = phi i32 [ %ret.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
 }
 
-define i32 @func9(double, double) {
+define i32 @func9(double %a, double %b) {
 ; CHECK-LABEL: func9:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brlenan.d %s0, %s1, .LBB{{[0-9]+}}_1
-  %3 = fcmp ogt double %0, %1
-  br i1 %3, label %4, label %6
+; CHECK-NEXT:    brlenan.d %s0, %s1, .LBB8_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB8_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = fcmp ogt double %a, %b
+  br i1 %cmp, label %on.true, label %join
 
-; <label>:4:                                      ; preds = %2
-  %5 = tail call i32 @ret(i32 2)
-  br label %6
+on.true:
+  %ret.val = tail call i32 @ret(i32 2)
+  br label %join
 
-; <label>:6:                                      ; preds = %2, %4
-  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
-  ret i32 %7
+join:
+  %r = phi i32 [ %ret.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
 }
 
-define i32 @func10(double, double) {
+define i32 @func10(double %a, double %b) {
 ; CHECK-LABEL: func10:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    lea.sl %s34, 1075052544
-; CHECK-NEXT:    brlenan.d %s0, %s34, .LBB{{[0-9]+}}_1
-  %3 = fcmp ogt double %0, 5.000000e+00
-  br i1 %3, label %4, label %6
+; CHECK-NEXT:    lea.sl %s1, 1075052544
+; CHECK-NEXT:    brlenan.d %s0, %s1, .LBB9_1
+; CHECK-NEXT:  # %bb.2:
+; CHECK-NEXT:    lea %s0, ret@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    br.l .LBB9_3
+; CHECK:       .LBB{{[0-9]+}}_1:
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK:       .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
+  %cmp = fcmp ogt double %a, 5.000000e+00
+  br i1 %cmp, label %on.true, label %join
 
-; <label>:4:                                      ; preds = %2
-  %5 = tail call i32 @ret(i32 2)
-  br label %6
+on.true:
+  %ret.val = tail call i32 @ret(i32 2)
+  br label %join
 
-; <label>:6:                                      ; preds = %2, %4
-  %7 = phi i32 [ %5, %4 ], [ 0, %2 ]
-  ret i32 %7
+join:
+  %r = phi i32 [ %ret.val, %on.true ], [ 0, %entry ]
+  ret i32 %r
 }
 
 define i32 @func11(fp128, fp128) {
 ; CHECK-LABEL:  func11:
 ; CHECK:        .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:   fcmp.q %s34, %s2, %s0
-; CHECK-NEXT:   brlenan.d 0, %s34, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:   fcmp.q %s0, %s2, %s0
+; CHECK-NEXT:   brlenan.d 0, %s0, .LBB{{[0-9]+}}_1
   %3 = fcmp ogt fp128 %0, %1
   br i1 %3, label %4, label %6
 
@@ -184,20 +306,19 @@ define i32 @func11(fp128, fp128) {
   ret i32 %7
 }
 
-
 ; Function Attrs: nounwind
 define i32 @func12(i128, i128) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_4:
-; CHECK-NEXT:    or %s34, 0, (0)1
-; CHECK-NEXT:    cmps.l %s35, %s1, %s3
-; CHECK-NEXT:    or %s36, 0, %s34
-; CHECK-NEXT:    cmov.l.le %s36, (63)0, %s35
-; CHECK-NEXT:    cmpu.l %s37, %s0, %s2
-; CHECK-NEXT:    cmov.l.le %s34, (63)0, %s37
-; CHECK-NEXT:    cmov.l.eq %s36, %s34, %s35
+; CHECK-NEXT:    or %s4, 0, (0)1
+; CHECK-NEXT:    cmps.l %s1, %s1, %s3
+; CHECK-NEXT:    or %s3, 0, %s4
+; CHECK-NEXT:    cmov.l.le %s3, (63)0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s2
+; CHECK-NEXT:    cmov.l.le %s4, (63)0, %s0
+; CHECK-NEXT:    cmov.l.eq %s3, %s4, %s1
 ; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    brne.w %s36, %s0, .LBB{{[0-9]+}}_2
+; CHECK-NEXT:    brne.w %s3, %s0, .LBB{{[0-9]+}}_2
   %3 = icmp sgt i128 %0, %1
   br i1 %3, label %4, label %6
 
@@ -214,16 +335,16 @@ define i32 @func12(i128, i128) {
 define i32 @func13(i128, i128) {
 ; CHECK-LABEL: func13:
 ; CHECK:       .LBB{{[0-9]+}}_4:
-; CHECK-NEXT:    cmps.l %s34, %s1, %s3
-; CHECK-NEXT:    or %s35, 0, (0)1
-; CHECK-NEXT:    cmpu.l %s36, %s1, %s3
-; CHECK-NEXT:    or %s37, 0, %s35
-; CHECK-NEXT:    cmov.l.le %s37, (63)0, %s36
-; CHECK-NEXT:    cmpu.l %s36, %s0, %s2
-; CHECK-NEXT:    cmov.l.le %s35, (63)0, %s36
-; CHECK-NEXT:    cmov.l.eq %s37, %s35, %s34
+; CHECK-NEXT:    cmps.l %s4, %s1, %s3
+; CHECK-NEXT:    or %s5, 0, (0)1
+; CHECK-NEXT:    cmpu.l %s1, %s1, %s3
+; CHECK-NEXT:    or %s3, 0, %s5
+; CHECK-NEXT:    cmov.l.le %s3, (63)0, %s1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s2
+; CHECK-NEXT:    cmov.l.le %s5, (63)0, %s0
+; CHECK-NEXT:    cmov.l.eq %s3, %s5, %s4
 ; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    brne.w %s37, %s0, .LBB{{[0-9]+}}_2
+; CHECK-NEXT:    brne.w %s3, %s0, .LBB{{[0-9]+}}_2
   %3 = icmp ugt i128 %0, %1
   br i1 %3, label %4, label %6
 

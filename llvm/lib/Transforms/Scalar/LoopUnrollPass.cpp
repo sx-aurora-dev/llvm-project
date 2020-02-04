@@ -167,6 +167,16 @@ static cl::opt<bool> UnrollRevisitChildLoops(
              "This shouldn't typically be needed as child loops (or their "
              "clones) were already visited."));
 
+static cl::opt<unsigned> UnrollThresholdAggressive(
+    "unroll-threshold-aggressive", cl::init(300), cl::Hidden,
+    cl::desc("Threshold (max size of unrolled loop) to use in aggressive (O3) "
+             "optimizations"));
+static cl::opt<unsigned>
+    UnrollThresholdDefault("unroll-threshold-default", cl::init(150),
+                           cl::Hidden,
+                           cl::desc("Default threshold (max size of unrolled "
+                                    "loop), used in all but O3 optimizations"));
+
 /// A magic value for use with the Threshold parameter to indicate
 /// that the loop unroll should be performed regardless of how much
 /// code expansion would result.
@@ -185,7 +195,8 @@ TargetTransformInfo::UnrollingPreferences llvm::gatherUnrollingPreferences(
   TargetTransformInfo::UnrollingPreferences UP;
 
   // Set up the defaults
-  UP.Threshold = OptLevel > 2 ? 300 : 150;
+  UP.Threshold =
+      OptLevel > 2 ? UnrollThresholdAggressive : UnrollThresholdDefault;
   UP.MaxPercentThresholdBoost = 400;
   UP.OptSizeThreshold = 0;
   UP.PartialThreshold = 150;
@@ -1316,7 +1327,7 @@ PreservedAnalyses LoopFullUnrollPass::run(Loop &L, LoopAnalysisManager &AM,
   else
     OldLoops.insert(AR.LI.begin(), AR.LI.end());
 
-  std::string LoopName = L.getName();
+  std::string LoopName = std::string(L.getName());
 
   bool Changed = tryToUnrollLoop(&L, AR.DT, &AR.LI, AR.SE, AR.TTI, AR.AC, *ORE,
                                  /*BFI*/ nullptr, /*PSI*/ nullptr,
@@ -1459,7 +1470,7 @@ PreservedAnalyses LoopUnrollPass::run(Function &F,
     Optional<bool> LocalAllowPeeling = UnrollOpts.AllowPeeling;
     if (PSI && PSI->hasHugeWorkingSetSize())
       LocalAllowPeeling = false;
-    std::string LoopName = L.getName();
+    std::string LoopName = std::string(L.getName());
     // The API here is quite complex to call and we allow to select some
     // flavors of unrolling during construction time (by setting UnrollOpts).
     LoopUnrollResult Result = tryToUnrollLoop(

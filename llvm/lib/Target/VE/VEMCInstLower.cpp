@@ -25,28 +25,21 @@
 
 using namespace llvm;
 
-
 static MCOperand LowerSymbolOperand(const MachineInstr *MI,
                                     const MachineOperand &MO,
-                                    const MCSymbol *Symbol,
-                                    AsmPrinter &AP) {
+                                    const MCSymbol *Symbol, AsmPrinter &AP) {
+  VEMCExpr::VariantKind Kind = (VEMCExpr::VariantKind)MO.getTargetFlags();
 
-  VEMCExpr::VariantKind Kind =
-    (VEMCExpr::VariantKind)MO.getTargetFlags();
-
-  const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::create(Symbol,
-                                                         AP.OutContext);
-  const VEMCExpr *expr = VEMCExpr::create(Kind, MCSym,
-                                                AP.OutContext);
+  const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::create(Symbol, AP.OutContext);
+  const VEMCExpr *expr = VEMCExpr::create(Kind, MCSym, AP.OutContext);
   return MCOperand::createExpr(expr);
 }
 
-static MCOperand LowerOperand(const MachineInstr *MI,
-                              const MachineOperand &MO,
+static MCOperand LowerOperand(const MachineInstr *MI, const MachineOperand &MO,
                               AsmPrinter &AP) {
-  switch(MO.getType()) {
+  switch (MO.getType()) {
   default:
-    report_fatal_error("unknown operand type");
+    report_fatal_error("unsupported operand type");
     break;
   case MachineOperand::MO_CImmediate:
     report_fatal_error("unsupported MO_CImmediate operand type");
@@ -86,13 +79,13 @@ static MCOperand LowerOperand(const MachineInstr *MI,
       break;
     return MCOperand::createReg(MO.getReg());
 
+  case MachineOperand::MO_GlobalAddress:
+    return LowerSymbolOperand(MI, MO, AP.getSymbol(MO.getGlobal()), AP);
   case MachineOperand::MO_Immediate:
     return MCOperand::createImm(MO.getImm());
 
   case MachineOperand::MO_MachineBasicBlock:
     return LowerSymbolOperand(MI, MO, MO.getMBB()->getSymbol(), AP);
-  case MachineOperand::MO_GlobalAddress:
-    return LowerSymbolOperand(MI, MO, AP.getSymbol(MO.getGlobal()), AP);
   case MachineOperand::MO_BlockAddress:
     return LowerSymbolOperand(
       MI, MO, AP.GetBlockAddressSymbol(MO.getBlockAddress()), AP);
@@ -102,16 +95,14 @@ static MCOperand LowerOperand(const MachineInstr *MI,
   case MachineOperand::MO_ConstantPoolIndex:
     return LowerSymbolOperand(MI, MO, AP.GetCPISymbol(MO.getIndex()), AP);
 
-  case MachineOperand::MO_RegisterMask:   break;
-
+  case MachineOperand::MO_RegisterMask:
+    break;
   }
   return MCOperand();
 }
 
-void llvm::LowerVEMachineInstrToMCInst(const MachineInstr *MI,
-                                          MCInst &OutMI,
-                                          AsmPrinter &AP)
-{
+void llvm::LowerVEMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
+                                       AsmPrinter &AP) {
   OutMI.setOpcode(MI->getOpcode());
 
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {

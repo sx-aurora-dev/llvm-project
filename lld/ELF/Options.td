@@ -176,10 +176,6 @@ def fix_cortex_a53_843419: F<"fix-cortex-a53-843419">,
 def fix_cortex_a8: F<"fix-cortex-a8">,
   HelpText<"Apply fixes for ARM Cortex-A8 erratum 657417">;
 
-// This option is intentionally hidden from the user as the implementation
-// is not complete.
-def require_cet: F<"require-cet">;
-
 defm format: Eq<"format", "Change the input format of the inputs following this option">,
   MetaVarName<"[default,elf,binary]">;
 
@@ -483,6 +479,8 @@ def lto_cs_profile_file: J<"lto-cs-profile-file=">,
 def lto_obj_path_eq: J<"lto-obj-path=">;
 def lto_sample_profile: J<"lto-sample-profile=">,
   HelpText<"Sample profile file path">;
+def lto_whole_program_visibility: F<"lto-whole-program-visibility">,
+  HelpText<"Asserts that the LTO link has whole program visibility">;
 def disable_verify: F<"disable-verify">;
 defm mllvm: Eq<"mllvm", "Additional arguments to forward to LLVM's option processing">;
 def opt_remarks_filename: Separate<["--"], "opt-remarks-filename">,

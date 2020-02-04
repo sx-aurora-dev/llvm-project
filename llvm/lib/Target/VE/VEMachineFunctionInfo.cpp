@@ -10,4 +10,4 @@
 
 using namespace llvm;
 
-void VEMachineFunctionInfo::anchor() { }
+void VEMachineFunctionInfo::anchor() {}

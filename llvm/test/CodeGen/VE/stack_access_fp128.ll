@@ -15,14 +15,14 @@ define void @test(fp128) {
 ; CHECK-NEXT:  st %s0, -24(,%s9)
 ; CHECK:       st %s1, -48(,%s9)
 ; CHECK-NEXT:  st %s0, -40(,%s9)               # 16-byte Folded Spill
-; CHECK-NEXT:  or %s0, 0, %s34
+; CHECK-NEXT:  or %s0, 0, %s2
 ; CHECK-NEXT:  ld %s3, -48(,%s9)
 ; CHECK-NEXT:  ld %s2, -40(,%s9)               # 16-byte Folded Reload
 ; CHECK-NEXT:  bsic %lr, (,%s12)
-; CHECK-NEXT:  ld %s37, -16(,%s9)
-; CHECK-NEXT:  ld %s36, -8(,%s9)
-; CHECK:       or %s0, 0, %s36
-; CHECK-NEXT:  or %s1, 0, %s37
+; CHECK-NEXT:  ld %s3, -16(,%s9)
+; CHECK-NEXT:  ld %s2, -8(,%s9)
+; CHECK:       or %s0, 0, %s2
+; CHECK-NEXT:  or %s1, 0, %s3
 ; CHECK-NEXT:  bsic %lr, (,%s12)
 ; CHECK-NEXT:  ld %s3, -32(,%s9)
 ; CHECK-NEXT:  ld %s2, -24(,%s9)

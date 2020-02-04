@@ -467,7 +467,7 @@ BitcodeModule &InputFile::getSingleBitcodeModule() {
 }
 
 LTO::RegularLTOState::RegularLTOState(unsigned ParallelCodeGenParallelismLevel,
-                                      Config &Conf)
+                                      const Config &Conf)
     : ParallelCodeGenParallelismLevel(ParallelCodeGenParallelismLevel),
       Ctx(Conf), CombinedModule(std::make_unique<Module>("ld-temp.o", Ctx)),
       Mover(std::make_unique<IRMover>(*CombinedModule)) {}
@@ -513,7 +513,7 @@ void LTO::addModuleToGlobalRes(ArrayRef<InputFile::Symbol> Syms,
       assert(!GlobalRes.Prevailing &&
              "Multiple prevailing defs are not allowed");
       GlobalRes.Prevailing = true;
-      GlobalRes.IRName = Sym.getIRName();
+      GlobalRes.IRName = std::string(Sym.getIRName());
     } else if (!GlobalRes.Prevailing && GlobalRes.IRName.empty()) {
       // Sometimes it can be two copies of symbol in a module and prevailing
       // symbol can have no IR name. That might happen if symbol is defined in
@@ -521,7 +521,7 @@ void LTO::addModuleToGlobalRes(ArrayRef<InputFile::Symbol> Syms,
       // the same symbol we want to use IR name of the prevailing symbol.
       // Otherwise, if we haven't seen a prevailing symbol, set the name so that
       // we can later use it to check if there is any prevailing copy in IR.
-      GlobalRes.IRName = Sym.getIRName();
+      GlobalRes.IRName = std::string(Sym.getIRName());
     }
 
     // Set the partition to external if we know it is re-defined by the linker
@@ -762,7 +762,7 @@ LTO::addRegularLTO(BitcodeModule BM, ArrayRef<InputFile::Symbol> Syms,
     if (Sym.isCommon()) {
       // FIXME: We should figure out what to do about commons defined by asm.
       // For now they aren't reported correctly by ModuleSymbolTable.
-      auto &CommonRes = RegularLTO.Commons[Sym.getIRName()];
+      auto &CommonRes = RegularLTO.Commons[std::string(Sym.getIRName())];
       CommonRes.Size = std::max(CommonRes.Size, Sym.getCommonSize());
       CommonRes.Align =
           std::max(CommonRes.Align, MaybeAlign(Sym.getCommonAlignment()));
@@ -982,6 +982,11 @@ Error LTO::runRegularLTO(AddStreamFn AddStream) {
     }
   }
 
+  // If allowed, upgrade public vcall visibility metadata to linkage unit
+  // visibility before whole program devirtualization in the optimizer.
+  updateVCallVisibilityInModule(*RegularLTO.CombinedModule,
+                                Conf.HasWholeProgramVisibility);
+
   if (Conf.PreOptModuleHook &&
       !Conf.PreOptModuleHook(0, *RegularLTO.CombinedModule))
     return Error::success();
@@ -1029,12 +1034,12 @@ ArrayRef<const char*> LTO::getRuntimeLibcallSymbols() {
 /// This class defines the interface to the ThinLTO backend.
 class lto::ThinBackendProc {
 protected:
-  Config &Conf;
+  const Config &Conf;
   ModuleSummaryIndex &CombinedIndex;
   const StringMap<GVSummaryMapTy> &ModuleToDefinedGVSummaries;
 
 public:
-  ThinBackendProc(Config &Conf, ModuleSummaryIndex &CombinedIndex,
+  ThinBackendProc(const Config &Conf, ModuleSummaryIndex &CombinedIndex,
                   const StringMap<GVSummaryMapTy> &ModuleToDefinedGVSummaries)
       : Conf(Conf), CombinedIndex(CombinedIndex),
         ModuleToDefinedGVSummaries(ModuleToDefinedGVSummaries) {}
@@ -1062,7 +1067,7 @@ class InProcessThinBackend : public ThinBackendProc {
 
 public:
   InProcessThinBackend(
-      Config &Conf, ModuleSummaryIndex &CombinedIndex,
+      const Config &Conf, ModuleSummaryIndex &CombinedIndex,
       unsigned ThinLTOParallelismLevel,
       const StringMap<GVSummaryMapTy> &ModuleToDefinedGVSummaries,
       AddStreamFn AddStream, NativeObjectCache Cache)
@@ -1160,7 +1165,7 @@ public:
 } // end anonymous namespace
 
 ThinBackend lto::createInProcessThinBackend(unsigned ParallelismLevel) {
-  return [=](Config &Conf, ModuleSummaryIndex &CombinedIndex,
+  return [=](const Config &Conf, ModuleSummaryIndex &CombinedIndex,
              const StringMap<GVSummaryMapTy> &ModuleToDefinedGVSummaries,
              AddStreamFn AddStream, NativeObjectCache Cache) {
     return std::make_unique<InProcessThinBackend>(
@@ -1186,7 +1191,7 @@ std::string lto::getThinLTOOutputFile(const std::string &Path,
       llvm::errs() << "warning: could not create directory '" << ParentPath
                    << "': " << EC.message() << '\n';
   }
-  return NewPath.str();
+  return std::string(NewPath.str());
 }
 
 namespace {
@@ -1198,7 +1203,7 @@ class WriteIndexesThinBackend : public ThinBackendProc {
 
 public:
   WriteIndexesThinBackend(
-      Config &Conf, ModuleSummaryIndex &CombinedIndex,
+      const Config &Conf, ModuleSummaryIndex &CombinedIndex,
       const StringMap<GVSummaryMapTy> &ModuleToDefinedGVSummaries,
       std::string OldPrefix, std::string NewPrefix, bool ShouldEmitImportsFiles,
       raw_fd_ostream *LinkedObjectsFile, lto::IndexWriteCallback OnWrite)
@@ -1215,7 +1220,7 @@ public:
       MapVector<StringRef, BitcodeModule> &ModuleMap) override {
     StringRef ModulePath = BM.getModuleIdentifier();
     std::string NewModulePath =
-        getThinLTOOutputFile(ModulePath, OldPrefix, NewPrefix);
+        getThinLTOOutputFile(std::string(ModulePath), OldPrefix, NewPrefix);
 
     if (LinkedObjectsFile)
       *LinkedObjectsFile << NewModulePath << '\n';
@@ -1239,7 +1244,7 @@ public:
     }
 
     if (OnWrite)
-      OnWrite(ModulePath);
+      OnWrite(std::string(ModulePath));
     return Error::success();
   }
 
@@ -1250,7 +1255,7 @@ public:
 ThinBackend lto::createWriteIndexesThinBackend(
     std::string OldPrefix, std::string NewPrefix, bool ShouldEmitImportsFiles,
     raw_fd_ostream *LinkedObjectsFile, IndexWriteCallback OnWrite) {
-  return [=](Config &Conf, ModuleSummaryIndex &CombinedIndex,
+  return [=](const Config &Conf, ModuleSummaryIndex &CombinedIndex,
              const StringMap<GVSummaryMapTy> &ModuleToDefinedGVSummaries,
              AddStreamFn AddStream, NativeObjectCache Cache) {
     return std::make_unique<WriteIndexesThinBackend>(
@@ -1298,6 +1303,11 @@ Error LTO::runThinLTO(AddStreamFn AddStream, NativeObjectCache Cache,
     ThinLTO.CombinedIndex.dumpSCCs(outs());
 
   std::set<GlobalValue::GUID> ExportedGUIDs;
+
+  // If allowed, upgrade public vcall visibility to linkage unit visibility in
+  // the summaries before whole program devirtualization below.
+  updateVCallVisibilityInIndex(ThinLTO.CombinedIndex,
+                               Conf.HasWholeProgramVisibility);
 
   // Perform index-based WPD. This will return immediately if there are
   // no index entries in the typeIdMetadata map (e.g. if we are instead
@@ -1381,7 +1391,7 @@ Expected<std::unique_ptr<ToolOutputFile>>
 lto::setupOptimizationRemarks(LLVMContext &Context, StringRef RemarksFilename,
                               StringRef RemarksPasses, StringRef RemarksFormat,
                               bool RemarksWithHotness, int Count) {
-  std::string Filename = RemarksFilename;
+  std::string Filename = std::string(RemarksFilename);
   // For ThinLTO, file.opt.<format> becomes
   // file.opt.<format>.thin.<num>.<format>.
   if (!Filename.empty() && Count != -1)

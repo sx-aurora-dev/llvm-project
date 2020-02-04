@@ -1,6 +1,6 @@
 //===- LoopAnalysis.cpp - Misc loop analysis routines //-------------------===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -166,7 +166,7 @@ uint64_t mlir::getLargestDivisorOfTripCount(AffineForOp forOp) {
 /// conservative.
 static bool isAccessIndexInvariant(Value iv, Value index) {
   assert(isForInductionVar(iv) && "iv must be a AffineForOp");
-  assert(index->getType().isa<IndexType>() && "index must be of IndexType");
+  assert(index.getType().isa<IndexType>() && "index must be of IndexType");
   SmallVector<Operation *, 4> affineApplyOps;
   getReachableAffineApplyOps({index}, affineApplyOps);
 
@@ -373,7 +373,7 @@ bool mlir::isInstwiseShiftValid(AffineForOp forOp, ArrayRef<uint64_t> shifts) {
     // Validate the results of this operation if it were to be shifted.
     for (unsigned i = 0, e = op.getNumResults(); i < e; ++i) {
       Value result = op.getResult(i);
-      for (auto *user : result->getUsers()) {
+      for (auto *user : result.getUsers()) {
         // If an ancestor operation doesn't lie in the block of forOp,
         // there is no shift to check.
         if (auto *ancOp = forBody->findAncestorOpInBlock(*user)) {
