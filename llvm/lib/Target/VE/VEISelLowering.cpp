@@ -475,10 +475,8 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
 SDValue VETargetLowering::CreateBroadcast(SDLoc dl, MVT ResTy, SDValue S,
                                           SelectionDAG &DAG) const {
 
-  auto bcConst = dyn_cast<ConstantSDNode>(S);
-
-  // custom path for non-constant mask splat
-  if (bcConst || (ResTy != MVT::v256i1 && ResTy != MVT::v512i1))
+  // custom path for mask splat
+  if (ResTy != MVT::v256i1 && ResTy != MVT::v512i1)
     return DAG.getNode(VEISD::VEC_BROADCAST, dl, ResTy, S);
 
 #if 0
@@ -496,7 +494,15 @@ SDValue VETargetLowering::CreateBroadcast(SDLoc dl, MVT ResTy, SDValue S,
   }
 #endif
 
-  // Generic code path
+  auto BcConst = dyn_cast<ConstantSDNode>(S);
+
+  // expand to `i32` constant
+  if (BcConst) {
+    auto RecastConst = DAG.getConstant(BcConst->getSExtValue(), dl, MVT::i32);
+    return DAG.getNode(VEISD::VEC_BROADCAST, dl, ResTy, RecastConst);
+  }
+
+  // Generic mask code path
   auto BoolTy = S.getSimpleValueType();
   assert(BoolTy == MVT::i32);
 
