@@ -245,14 +245,35 @@ SDValue VETargetLowering::LowerVectorArithmetic(SDValue Op,
                      FixedOperandList);
 }
 
+
+// VVP property queries
+static Optional<unsigned> GetVVPOpcode(unsigned OpCode) {
+  switch (OpCode) {
+  default:
+    return None;
+#define REGISTER_VVP_OP(VVP_NAME,NATIVE_ISD)                                    \
+  case ISD:: NATIVE_ISD: return VEISD::VVP_NAME;
+#include "VVPNodes.inc"
+  }
+}
+
 static EVT GetIdiomaticType(SDValue Op) {
   switch (Op.getOpcode()) {
-    default: llvm_unreachable("Don't know any idiomatic vector type for this Opcode");
-    case ISD::LOAD:
-    case ISD::FADD:
-      return Op->getValueType(0);
-    case ISD::STORE:
-      return Op.getNode()->getOperand(1)->getValueType(0);
+  default:
+    llvm_unreachable("Don't know any idiomatic vector type for this Opcode");
+
+  case ISD::LOAD:
+    return Op->getValueType(0);
+
+    // all standard un/bin/tern-ary operators
+#define REGISTER_VVP_UNNARY_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD:
+#define REGISTER_VVP_BINARY_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD:
+#define REGISTER_VVP_TERNARY_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD:
+#include "VVPNodes.inc"
+    return Op->getValueType(0);
+
+  case ISD::STORE:
+    return Op.getNode()->getOperand(1)->getValueType(0);
   }
 }
 
@@ -301,7 +322,9 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
   SDValue LenVal = DAG.getConstant(OpVectorLength, dl, MVT::i32);
 
   if (isBinaryOp) {
-    return DAG.getNode(VEISD::VVP_FADD, dl, NativeVecTy,
+    Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
+    assert(VVPOC.hasValue());
+    return DAG.getNode(VVPOC.getValue(), dl, NativeVecTy,
                        {Op->getOperand(0), Op->getOperand(1), MaskVal, LenVal});
   }
 
@@ -1885,14 +1908,11 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(VEC_MSTORE)
     TARGET_NODE_CASE(VEC_REDUCE_ANY)
     TARGET_NODE_CASE(VEC_POPCOUNT)
-    TARGET_NODE_CASE(VVP_FADD)
-    TARGET_NODE_CASE(VVP_FSUB)
-    TARGET_NODE_CASE(VVP_FMUL)
-    TARGET_NODE_CASE(VVP_FDIV)
-    TARGET_NODE_CASE(VVP_FFMA)
-    TARGET_NODE_CASE(VVP_LOAD)
-    TARGET_NODE_CASE(VVP_STORE)
     TARGET_NODE_CASE(Wrapper)
+
+#define REGISTER_VVP_OP(VVP_NAME,...) TARGET_NODE_CASE(VVP_NAME)
+#include "VVPNodes.inc"
+
   }
   return nullptr;
 }

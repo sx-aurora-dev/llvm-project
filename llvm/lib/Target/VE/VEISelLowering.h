@@ -79,16 +79,9 @@ enum NodeType : unsigned {
 
   VEC_LVL,
 
-
   // Internal VVP nodes
-  VVP_LOAD,
-  VVP_STORE,
-
-  VVP_FADD,
-  VVP_FSUB,
-  VVP_FMUL,
-  VVP_FDIV,
-  VVP_FFMA,
+#define REGISTER_VVP_OP(VVP_NAME,ISD_NAME) VVP_NAME ,
+ #include "VVPNodes.inc"
 
   /// A wrapper node for TargetConstantPool, TargetJumpTable,
   /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
