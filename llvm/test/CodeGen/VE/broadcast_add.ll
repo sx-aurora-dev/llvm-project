@@ -4948,7 +4948,7 @@ define x86_regcallcc <256 x double> @addbrdv256f64(<256 x double>, double) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v1,%s0
-; CHECK-NEXT:    vfadd.d %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    vfadd.d %v0,%v1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <256 x double> undef, double %1, i32 0
   %vec = shufflevector <256 x double> %vec0, <256 x double> undef, <256 x i32> zeroinitializer
@@ -4963,7 +4963,7 @@ define x86_regcallcc <256 x float> @addbrdv256f32(<256 x float>, float) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrdu %v1,%s0
-; CHECK-NEXT:    vfadd.s %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    vfadd.s %v0,%v1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <256 x float> undef, float %1, i32 0
   %vec = shufflevector <256 x float> %vec0, <256 x float> undef, <256 x i32> zeroinitializer
@@ -5076,7 +5076,7 @@ define x86_regcallcc <128 x double> @addbrdv128f64(<128 x double>, double) {
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v1,%s0
-; CHECK-NEXT:    vfadd.d %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    vfadd.d %v0,%v1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <128 x double> undef, double %1, i32 0
   %vec = shufflevector <128 x double> %vec0, <128 x double> undef, <128 x i32> zeroinitializer
@@ -5091,7 +5091,7 @@ define x86_regcallcc <64 x double> @addbrdv64f64(<64 x double>, double) {
 ; CHECK-NEXT:    lea %s1, 64
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v1,%s0
-; CHECK-NEXT:    vfadd.d %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    vfadd.d %v0,%v1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <64 x double> undef, double %1, i32 0
   %vec = shufflevector <64 x double> %vec0, <64 x double> undef, <64 x i32> zeroinitializer
@@ -5108,7 +5108,7 @@ define x86_regcallcc <32 x double> @addbrdv32f64(<32 x double>, double) {
 ; CHECK-NEXT:    vbrd %v1,%s0
 ; CHECK-NEXT:    or %s0, 32, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfadd.d %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    vfadd.d %v0,%v1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <32 x double> undef, double %1, i32 0
   %vec = shufflevector <32 x double> %vec0, <32 x double> undef, <32 x i32> zeroinitializer
@@ -5125,7 +5125,7 @@ define x86_regcallcc <16 x double> @addbrdv16f64(<16 x double>, double) {
 ; CHECK-NEXT:    vbrd %v1,%s0
 ; CHECK-NEXT:    or %s0, 16, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfadd.d %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    vfadd.d %v0,%v1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <16 x double> undef, double %1, i32 0
   %vec = shufflevector <16 x double> %vec0, <16 x double> undef, <16 x i32> zeroinitializer
@@ -5142,7 +5142,7 @@ define x86_regcallcc <8 x double> @addbrdv8f64(<8 x double>, double) {
 ; CHECK-NEXT:    vbrd %v1,%s0
 ; CHECK-NEXT:    or %s0, 8, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfadd.d %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    vfadd.d %v0,%v1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <8 x double> undef, double %1, i32 0
   %vec = shufflevector <8 x double> %vec0, <8 x double> undef, <8 x i32> zeroinitializer
@@ -5159,7 +5159,7 @@ define x86_regcallcc <4 x double> @addbrdv4f64(<4 x double>, double) {
 ; CHECK-NEXT:    vbrd %v1,%s0
 ; CHECK-NEXT:    or %s0, 4, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfadd.d %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    vfadd.d %v0,%v1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <4 x double> undef, double %1, i32 0
   %vec = shufflevector <4 x double> %vec0, <4 x double> undef, <4 x i32> zeroinitializer
@@ -5176,7 +5176,7 @@ define x86_regcallcc <2 x double> @addbrdv2f64(<2 x double>, double) {
 ; CHECK-NEXT:    vbrd %v1,%s0
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfadd.d %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    vfadd.d %v0,%v1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <2 x double> undef, double %1, i32 0
   %vec = shufflevector <2 x double> %vec0, <2 x double> undef, <2 x i32> zeroinitializer
