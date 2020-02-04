@@ -2424,8 +2424,8 @@ SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   StoreSDNode *St = cast<StoreSDNode>(Op.getNode());
 
   EVT MemVT = St->getMemoryVT();
-  if (MemVT == MVT::v256i1 || MemVT == MVT::v512i1) {
-   return LowerI1Store(SDValue Op, SelectionDAG &DAG);
+  if (MemVT == MVT::v256i1 || MemVT == MVT::v512i1)
+   return LowerI1Store(Op, DAG);
   if (MemVT == MVT::f128)
     return LowerF128Store(Op, DAG);
 
@@ -2436,8 +2436,7 @@ SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
 
 // Custom lower UMULO/SMULO for VE. This code is similar to ExpandNode()
 // in LegalizeDAG.cpp except the order of arguments to the library function.
-static SDValue LowerUMULO_SMULO(SDValue Op, SelectionDAG &DAG,
-                                const VETargetLowering &TLI) {
+static SDValue LowerUMULO_SMULO(SDValue Op, SelectionDAG &DAG, const VETargetLowering &TLI) {
   unsigned opcode = Op.getOpcode();
   assert((opcode == ISD::UMULO || opcode == ISD::SMULO) && "Invalid Opcode.");
 
