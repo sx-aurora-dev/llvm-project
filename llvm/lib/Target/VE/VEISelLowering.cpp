@@ -1319,6 +1319,63 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f32, &VE::F32RegClass);
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
+  addRegisterClass(MVT::v512i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v512f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v256i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v256i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v256f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v256f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v128i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v128i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v128f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v128f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v64i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v64i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v64f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v64f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v32i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v32i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v32f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v32f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v16i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v16i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v16f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v16f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v8i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v8i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v8f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v8f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v4i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v4i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v4f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v4f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v2i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v2i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v2f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v2f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+  addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+
+  if (Subtarget->vectorize()) {
+    // We want to use any of vectorization oppotunities in llvm.
+    // So, try to use llvm's SIMD style vectorizations here.
+    //
+    // However, this requires intrinsics with vector mask to use
+    // following bitcast in order to convert between v4i64/v8i64 and
+    // v256i1/v512i1 respectively since C doesn't have 1 bit data types.
+    //
+    //   e.g. (i256i1 (bitcast (v4i64 (llvm.ve.vfmkw.mcv ...))))
+    //                ^^^^^^^^^^^^^^^ this bitcast is needed
+    //
+    addRegisterClass(MVT::v4i64, &VE::V64RegClass);
+    addRegisterClass(MVT::v8i64, &VE::V64RegClass);
+  } else {
+    // FIXME:
+    // llvm-ve uses v4i64/v8i64 for a mask temporally until llvm supports
+    // v256i1/v512i1.
+    addRegisterClass(MVT::v4i64, &VE::VMRegClass);
+    addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
+  }
 
   /// Load & Store {
   for (MVT FPVT : MVT::fp_valuetypes()) {
