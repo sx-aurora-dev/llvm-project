@@ -212,6 +212,3 @@ def : Pat<(i64 (vp_reduce_xor v256i64:$val, v256i1:$mask, i32:$avl)), (lvsl_svs 
 def : Pat<(f64 (vp_reduce_fadd f64:$start, v256f64:$val, v256i1:$mask, i32:$avl)), (FADrr $start, (lvsl_svs (vfsumd_vvml $val, $mask, $avl), 0))>; // TODO only acceptable if may reassociate
 // def : Pat<(f64 (vp_reduce_fmin v256f64:$val, v256i1:$mask, i32:$avl)), (lvsl_svs (vfsumd_vvml $val, $mask, $avl), 0)>; // TODO masked vfrmax instruction missing
 // def : Pat<(f64 (vp_reduce_fmax v256f64:$val, v256i1:$mask, i32:$avl)), (lvsl_svs (vfmaxd_vvml $val, $mask, $avl), 0)>; // TODO masked vfrmin instruction missing
-
-// VVP lowering
-include "VVPInstPatterns.td"

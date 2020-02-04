@@ -35,10 +35,7 @@ def vec_popcount    : SDNode<"VEISD::VEC_POPCOUNT",  SDTypeProfile<1, 2,  [SDTCi
 def register        : SDNode<"ISD::Register",        SDTypeProfile<1, 0,  []>, [], "RegisterSDNode">;
 
 // whether the avl is ineffective
-def no_avl_256    : PatLeaf<(imm), [{ return (N->getSExtValue() < 0) || (N->getSExtValue() >= 256); }]>;
-
-// whether the mask is all true
-def true_mask     : PatLeaf<(register), [{ return (N->getReg() == VE::VM0) || (N->getReg() == VE::VMP0); }]>;
+def no_avl_256      : PatLeaf<(imm), [{ return (N->getSExtValue() < 0) || (N->getSExtValue() >= 256); }]>;
 
 def simm7       : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
@@ -55,6 +52,9 @@ def fplomsbzero : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
                                       .getZExtValue() & 0x80000000) == 0; }]>;
 def fplozero    : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
                                       .getZExtValue() & 0xffffffff) == 0; }]>;
+
+// whether the mask is all true
+def true_mask   : PatLeaf<(vec_broadcast (i32 true))>;
 
 def CCSIOp : PatLeaf<(cond), [{
   switch (N->get()) {
@@ -2118,6 +2118,8 @@ def vfmkw_mvIl : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-
 // VP intrinsics (llvm.vp.*)
 include "VEVPIntrinsic.td"
+
+// VVP lowering
+include "VVPInstPatterns.td"

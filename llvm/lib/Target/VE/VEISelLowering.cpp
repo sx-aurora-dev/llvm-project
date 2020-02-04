@@ -475,13 +475,13 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
 SDValue VETargetLowering::CreateBroadcast(SDLoc dl, MVT ResTy, SDValue S,
                                           SelectionDAG &DAG) const {
 
-  // only use custom lowering for masks
-  if (ResTy != MVT::v256i1 && ResTy != MVT::v512i1)
-    return DAG.getNode(VEISD::VEC_BROADCAST, dl, ResTy, S);
-
-  // generate VM from VRegs if the mask bit is non-constant
   auto bcConst = dyn_cast<ConstantSDNode>(S);
 
+  // custom path for non-constant mask splat
+  if (bcConst || (ResTy != MVT::v256i1 && ResTy != MVT::v512i1))
+    return DAG.getNode(VEISD::VEC_BROADCAST, dl, ResTy, S);
+
+#if 0
   // Use the hard-wired vm0/vmp0 registers
   if (bcConst) {
     unsigned TrueRegClass = (ResTy == MVT::v256i1) ? VE::VM0 : VE::VMP0;
@@ -494,22 +494,28 @@ SDValue VETargetLowering::CreateBroadcast(SDLoc dl, MVT ResTy, SDValue S,
       return TrueMaskReg;
     return DAG.getNOT(dl, {TrueMaskReg}, ResTy);
   }
+#endif
 
   // Generic code path
-  auto boolTy = S.getSimpleValueType();
-  assert(boolTy == MVT::i32);
+  auto BoolTy = S.getSimpleValueType();
+  assert(BoolTy == MVT::i32);
 
-  // cast to i64
-  SDValue asDoubleElem = DAG.getSExtOrTrunc(S, dl, MVT::i64);
+  // cast to i32 ty
+  SDValue CmpElem = DAG.getSExtOrTrunc(S, dl, MVT::i32);
+
+  unsigned ElemCount = ResTy.getVectorNumElements();
+  MVT CmpVecTy = MVT::getVectorVT(BoolTy, ElemCount);
 
   // broadcast to vector
-  SDValue dataVec =
-      DAG.getNode(VEISD::VEC_BROADCAST, dl, MVT::v256i64, {asDoubleElem});
-  SDValue zeroVec = CreateBroadcast(dl, MVT::v256i64,
-                                    {DAG.getConstant(0, dl, MVT::i64)}, DAG);
+  SDValue BCVec =
+      DAG.getNode(VEISD::VEC_BROADCAST, dl, CmpVecTy, {CmpElem});
+  SDValue ZeroVec = CreateBroadcast(dl, CmpVecTy,
+                                    {DAG.getConstant(0, dl, BoolTy)}, DAG);
+
+  MVT BoolVecTy = MVT::getVectorVT(MVT::i1, ElemCount);
 
   // broadcast(Data) != broadcast(0)
-  return DAG.getSetCC(dl, MVT::v256i1, dataVec, zeroVec, ISD::CondCode::SETNE);
+  return DAG.getSetCC(dl, BoolVecTy, BCVec, ZeroVec, ISD::CondCode::SETNE);
 }
 
 SDValue VETargetLowering::LowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const {
