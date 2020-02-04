@@ -412,9 +412,9 @@ TEST_F(FormatTestCSharp, CSharpSpaceAfterCStyleCast) {
 TEST_F(FormatTestCSharp, CSharpEscapedQuotesInVerbatimStrings) {
   FormatStyle Style = getGoogleStyle(FormatStyle::LK_CSharp);
 
-  verifyFormat(R"(string str = @"""")", Style);
-  verifyFormat(R"(string str = @"""Hello world""")", Style);
-  verifyFormat(R"(string str = $@"""Hello {friend}""")", Style);
+  verifyFormat(R"(string str = @"""";)", Style);
+  verifyFormat(R"(string str = @"""Hello world""";)", Style);
+  verifyFormat(R"(string str = $@"""Hello {friend}""";)", Style);
 }
 
 TEST_F(FormatTestCSharp, CSharpQuotesInInterpolatedStrings) {
@@ -423,6 +423,67 @@ TEST_F(FormatTestCSharp, CSharpQuotesInInterpolatedStrings) {
   verifyFormat(R"(string str1 = $"{null ?? "null"}";)", Style);
   verifyFormat(R"(string str2 = $"{{{braceCount} braces";)", Style);
   verifyFormat(R"(string str3 = $"{braceCount}}} braces";)", Style);
+}
+
+TEST_F(FormatTestCSharp, CSharpNewlinesInVerbatimStrings) {
+  // Use MS style as Google Style inserts a line break before multiline strings.
+
+  // verifyFormat does not understand multiline C# string-literals
+  // so check the format explicitly.
+
+  FormatStyle Style = getMicrosoftStyle(FormatStyle::LK_CSharp);
+
+  std::string Code = R"(string s1 = $@"some code:
+  class {className} {{
+    {className}() {{}}
+  }}";)";
+
+  EXPECT_EQ(Code, format(Code, Style));
+
+  // Multiline string in the middle of a function call.
+  Code = R"(
+var x = foo(className, $@"some code:
+  class {className} {{
+    {className}() {{}}
+  }}",
+            y);)"; // y aligned with `className` arg.
+
+  EXPECT_EQ(Code, format(Code, Style));
+
+  // Interpolated string with embedded multiline string.
+  Code = R"(Console.WriteLine($"{string.Join(@",
+		", values)}");)";
+
+  EXPECT_EQ(Code, format(Code, Style));
+}
+
+TEST_F(FormatTestCSharp, CSharpObjectInitializers) {
+  FormatStyle Style = getGoogleStyle(FormatStyle::LK_CSharp);
+
+  // Start code fragemnts with a comment line so that C++ raw string literals
+  // as seen are identical to expected formatted code.
+
+  verifyFormat(R"(//
+Shape[] shapes = new[] {
+    new Circle {
+        Radius = 2.7281,
+        Colour = Colours.Red,
+    },
+    new Square {
+        Side = 101.1,
+        Colour = Colours.Yellow,
+    },
+};)",
+               Style);
+
+  // Omitted final `,`s will change the formatting.
+  verifyFormat(R"(//
+Shape[] shapes = new[] {new Circle {Radius = 2.7281, Colour = Colours.Red},
+                        new Square {
+                            Side = 101.1,
+                            Colour = Colours.Yellow,
+                        }};)",
+               Style);
 }
 
 } // namespace format

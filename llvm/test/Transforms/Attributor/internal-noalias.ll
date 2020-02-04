@@ -1,4 +1,4 @@
-; RUN: opt -S -passes=attributor -aa-pipeline='basic-aa' -attributor-disable=false -attributor-max-iterations-verify -attributor-annotate-decl-cs -attributor-max-iterations=5 < %s | FileCheck %s
+; RUN: opt -S -passes=attributor -aa-pipeline='basic-aa' -attributor-disable=false -attributor-max-iterations-verify -attributor-annotate-decl-cs -attributor-max-iterations=6 < %s | FileCheck %s
 
 define dso_local i32 @visible(i32* noalias %A, i32* noalias %B) #0 {
 entry:
@@ -40,7 +40,7 @@ entry:
   ret i32 %add
 }
 
-; CHECK: define internal i32 @noalias_args_argmem_ro(i32* noalias nocapture nofree nonnull readonly align 4 dereferenceable(4) %A, i32* noalias nocapture nofree nonnull readonly align 4 dereferenceable(4) %B)
+; CHECK: define internal i32 @noalias_args_argmem_ro(i32 %0, i32 %1)
 define internal i32 @noalias_args_argmem_ro(i32* %A, i32* %B) #1 {
   %t0 = load i32, i32* %A, align 4
   %t1 = load i32, i32* %B, align 4

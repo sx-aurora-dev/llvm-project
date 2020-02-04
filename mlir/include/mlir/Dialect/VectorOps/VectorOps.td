@@ -203,6 +203,7 @@ def Vector_BroadcastOp :
       return vector().getType().cast<VectorType>();
     }
   }];
+  let assemblyFormat = "$source attr-dict `:` type($source) `to` type($vector)";
 }
 
 def Vector_ShuffleOp :
@@ -364,6 +365,10 @@ def Vector_ExtractSlicesOp :
     static StringRef getSizesAttrName() { return "sizes"; }
     static StringRef getStridesAttrName() { return "strides"; }
   }];
+  let assemblyFormat = [{
+    $vector `,` $sizes `,` $strides attr-dict `:` type($vector) `into`
+    type(results)
+  }];
 }
 
 def Vector_InsertElementOp :
@@ -402,10 +407,9 @@ def Vector_InsertOp :
   Vector_Op<"insert", [NoSideEffect,
      PredOpTrait<"source operand and result have same element type",
                  TCresVTEtIsSameAsOpBase<0, 0>>,
-     PredOpTrait<"dest operand and result have same type",
-                 TCresIsSameAsOpBase<0, 1>>]>,
+     AllTypesMatch<["dest", "res"]>]>,
      Arguments<(ins AnyType:$source, AnyVector:$dest, I64ArrayAttr:$position)>,
-     Results<(outs AnyVector)> {
+     Results<(outs AnyVector:$res)> {
   let summary = "insert operation";
   let description = [{
     Takes an n-D source vector, an (n+k)-D destination vector and a k-D position
@@ -420,6 +424,10 @@ def Vector_InsertOp :
         f32 into vector<4x8x16xf32>
     ```
   }];
+  let assemblyFormat = [{
+    $source `,` $dest $position attr-dict `:` type($source) `into` type($dest)
+  }];
+
   let builders = [OpBuilder<
     "Builder *builder, OperationState &result, Value source, " #
     "Value dest, ArrayRef<int64_t>">];
@@ -482,17 +490,20 @@ def Vector_InsertSlicesOp :
     static StringRef getSizesAttrName() { return "sizes"; }
     static StringRef getStridesAttrName() { return "strides"; }
   }];
+  let assemblyFormat = [{
+    $vectors `,` $sizes `,` $strides attr-dict `:` type($vectors) `into`
+    type(results)
+  }];
 }
 
 def Vector_InsertStridedSliceOp :
   Vector_Op<"insert_strided_slice", [NoSideEffect,
     PredOpTrait<"operand #0 and result have same element type",
                  TCresVTEtIsSameAsOpBase<0, 0>>,
-    PredOpTrait<"dest operand and result have same type",
-                 TCresIsSameAsOpBase<0, 1>>]>,
+    AllTypesMatch<["dest", "res"]>]>,
     Arguments<(ins AnyVector:$source, AnyVector:$dest, I64ArrayAttr:$offsets,
                I64ArrayAttr:$strides)>,
-    Results<(outs AnyVector)> {
+    Results<(outs AnyVector:$res)> {
   let summary = "strided_slice operation";
   let description = [{
     Takes a k-D source vector, an n-D destination vector (n >= k), n-sized
@@ -513,6 +524,11 @@ def Vector_InsertStridedSliceOp :
         vector<2x4xf32> into vector<16x4x8xf32>
     ```
   }];
+
+  let assemblyFormat = [{
+    $source `,` $dest attr-dict `:` type($source) `into` type($dest)
+  }];
+
   let builders = [OpBuilder<
     "Builder *builder, OperationState &result, Value source, Value dest, " #
     "ArrayRef<int64_t> offsets, ArrayRef<int64_t> strides">];
@@ -727,6 +743,7 @@ def Vector_StridedSliceOp :
     void getOffsets(SmallVectorImpl<int64_t> &results);
   }];
   let hasCanonicalizer = 1;
+  let assemblyFormat = "$vector attr-dict `:` type($vector) `to` type(results)";
 }
 
 def Vector_TransferReadOp :
@@ -939,6 +956,10 @@ def Vector_TransferWriteOp :
       return memref().getType().cast<MemRefType>();
     }
   }];
+  let assemblyFormat = [{
+    $vector `,` $memref `[` $indices `]` attr-dict `:` type($vector) `,`
+    type($memref)
+  }];
 }
 
 def Vector_TypeCastOp :
@@ -1017,6 +1038,7 @@ def Vector_ConstantMaskOp :
   let extraClassDeclaration = [{
     static StringRef getMaskDimSizesAttrName() { return "mask_dim_sizes"; }
   }];
+  let assemblyFormat = "$mask_dim_sizes attr-dict `:` type(results)";
 }
 
 def Vector_CreateMaskOp :
@@ -1048,6 +1070,7 @@ def Vector_CreateMaskOp :
   }];
 
   let hasCanonicalizer = 1;
+  let assemblyFormat = "$operands attr-dict `:` type(results)";
 }
 
 def Vector_TupleOp :
@@ -1148,6 +1171,7 @@ def Vector_PrintOp :
       return source().getType();
     }
   }];
+  let assemblyFormat = "$source attr-dict `:` type($source)";
 }
 
 #endif // VECTOR_OPS
