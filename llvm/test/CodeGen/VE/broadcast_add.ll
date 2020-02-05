@@ -4,13 +4,12 @@
 define x86_regcallcc <512 x i32> @addbrdv512i32(<512 x i32>, i32) {
 ; CHECK-LABEL: addbrdv512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    sll %s0, %s0, 32
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    srl %s1, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvadds %v0,%s0,%v0
+; CHECK-NEXT:    pvaddu %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
@@ -22,7 +21,11 @@ define x86_regcallcc <512 x i32> @addbrdv512i32(<512 x i32>, i32) {
 define x86_regcallcc <512 x float> @addbrdv512f32(<512 x float>, float) {
 ; CHECK-LABEL: addbrdv512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:         lea %s1, 256
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    and %s1, %s0, (32)0
+; CHECK-NEXT:    sll %s0, %s0, 32
+; CHECK-NEXT:    or %s0, %s0, %s1
+; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pvfadd %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -134,7 +137,7 @@ define x86_regcallcc <64 x i64> @addbrdv64i64(<64 x i64>, i64) {
 define x86_regcallcc <32 x i64> @addbrdv32i64(<32 x i64>, i64) {
 ; CHECK-LABEL: addbrdv32i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 32
+; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vadds.l %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -148,7 +151,7 @@ define x86_regcallcc <32 x i64> @addbrdv32i64(<32 x i64>, i64) {
 define x86_regcallcc <16 x i64> @addbrdv16i64(<16 x i64>, i64) {
 ; CHECK-LABEL: addbrdv16i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 16
+; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vadds.l %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -162,7 +165,7 @@ define x86_regcallcc <16 x i64> @addbrdv16i64(<16 x i64>, i64) {
 define x86_regcallcc <8 x i64> @addbrdv8i64(<8 x i64>, i64) {
 ; CHECK-LABEL: addbrdv8i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 8
+; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vadds.l %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -176,7 +179,7 @@ define x86_regcallcc <8 x i64> @addbrdv8i64(<8 x i64>, i64) {
 define x86_regcallcc <4 x i64> @addbrdv4i64(<4 x i64>, i64) {
 ; CHECK-LABEL: addbrdv4i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 4
+; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vadds.l %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -190,7 +193,7 @@ define x86_regcallcc <4 x i64> @addbrdv4i64(<4 x i64>, i64) {
 define x86_regcallcc <2 x i64> @addbrdv2i64(<2 x i64>, i64) {
 ; CHECK-LABEL: addbrdv2i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 2
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vadds.l %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
