@@ -874,7 +874,7 @@ class InstTable(object):
     def Inst3u(self, opc, name, instName, expr, hasPacked = True):
         O_u64 = [Args_vvv(T_u64), Args_vsv(T_u64), Args_vIv(T_u64)]
         O_u32 = [Args_vvv(T_u32), Args_vsv(T_u32), Args_vIv(T_u32)]
-        O_pu32 = [Args_vvv(T_u32), Args_vsv(T_u32)] #, Args_vIv(T_u32)] ???
+        O_pu32 = [Args_vvv(T_u32), [VX(T_u32), SY(T_u64), VZ(T_u32)]]
 
         O_u64 = self.addMask(O_u64)
         O_u32 = self.addMask(O_u32)
