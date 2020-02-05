@@ -194,10 +194,15 @@ SDValue VETargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
   return DAG.getSelect(dl, VecTy, VecCmp, X, Y);
 }
 
-SDValue VETargetLowering::LowerVectorArithmetic(SDValue Op,
+static bool IsMaskType(MVT Ty) {
+  if (!Ty.isVector()) return false;
+  return Ty.getVectorElementType() == MVT::i1;
+}
+
+SDValue VETargetLowering::LowerSETCCInVectorArithmetic(SDValue Op,
                                                 SelectionDAG &DAG) const {
   SDLoc dl(Op);
-  LLVM_DEBUG(dbgs() << "Lowering Vector Arithmetic\n");
+  LLVM_DEBUG(dbgs() << "Lowering SETCC Operands in Vector Arithmetic\n");
 
   // this only applies to vector yielding operations that are not v256i1
   MVT Ty = Op.getSimpleValueType();
@@ -214,7 +219,7 @@ SDValue VETargetLowering::LowerVectorArithmetic(SDValue Op,
     // check whether this is an v256i1 SETCC
     auto Operand = Op->getOperand(i);
     if ((Operand->getOpcode() != ISD::SETCC) ||
-        (Operand.getSimpleValueType() != MVT::v256i1)) {
+        !IsMaskType(Operand.getSimpleValueType())) {
       FixedOperandList.push_back(Operand);
       continue;
     }
@@ -1733,21 +1738,21 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       // currently unsupported math functions
       setOperationAction(ISD::FABS, VT, Expand);
 
-      // Experimental VVP lowering
-      setOperationAction(ISD::FADD, VT, Custom); // Lower TO VVP_FADD
-      setOperationAction(ISD::LOAD, VT, Custom); // Lower TO VVP_LOAD
-      setOperationAction(ISD::STORE, VT, Custom); // Lower TO VVP_LOAD
+      // Ops with VVP lowering
+#define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME) setOperationAction(ISD:: ISD_NAME, VT, Custom);
+#define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) setOperationAction(ISD:: ISD_NAME, VT, Custom);
+#include "VVPNodes.inc"
 
       // supported calculations
       setOperationAction(ISD::FNEG, VT, Legal);
-      setOperationAction(ISD::FSUB, VT, Legal);
-      setOperationAction(ISD::FMUL, VT, Legal);
-      setOperationAction(ISD::FDIV, VT, Legal);
-      setOperationAction(ISD::ADD, VT, Legal);
-      setOperationAction(ISD::SUB, VT, Legal);
-      setOperationAction(ISD::MUL, VT, Legal);
-      setOperationAction(ISD::SDIV, VT, Legal);
-      setOperationAction(ISD::UDIV, VT, Legal);
+      // setOperationAction(ISD::FSUB, VT, Legal);
+      // setOperationAction(ISD::FMUL, VT, Legal);
+      // setOperationAction(ISD::FDIV, VT, Legal);
+      // setOperationAction(ISD::ADD, VT, Legal);
+      // setOperationAction(ISD::SUB, VT, Legal);
+      // setOperationAction(ISD::MUL, VT, Legal);
+      // setOperationAction(ISD::SDIV, VT, Legal);
+      // setOperationAction(ISD::UDIV, VT, Legal);
 
       setOperationAction(ISD::MULHS, VT, Expand);
       setOperationAction(ISD::MULHU, VT, Expand);
@@ -3077,14 +3082,11 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   // if a SETCC result is used by vector arithmetic, convert it back into
   // v256i64 (from the v256i1 created in the SETCC lowering)
   // TODO extend this list as necessary (possibly shifts)
-  case ISD::MUL:
-  case ISD::ADD:
-  case ISD::SUB:
-    return LowerVectorArithmetic(Op, DAG);
-
   // Lower this operation to an internal VVP_* node
-  case ISD::FADD:
-    return LowerToVVP(Op, DAG);
+#define REGISTER_BINARY_VVP_OP(VP_NAME, ISD_NAME) case ISD:: ISD_NAME:
+#define REGISTER_TERNARY_VVP_OP(VP_NAME, ISD_NAME) case ISD:: ISD_NAME:
+#include "VVPNodes.inc"
+     return LowerToVVP(LowerSETCCInVectorArithmetic(Op, DAG), DAG);
 
   // modify the return type of SETCC on vectors to v256i1
   case ISD::SETCC:

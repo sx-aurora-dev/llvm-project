@@ -209,8 +209,10 @@ public:
   SDValue LowerVSELECT(llvm::SDValue, llvm::SelectionDAG &) const;
   SDValue LowerTRUNCATE(llvm::SDValue, llvm::SelectionDAG &) const;
 
+  // translate this operation to a VVP_* node
   SDValue LowerToVVP(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
+  // expand SETCC opernads directly used in vector arithmeticops
+  SDValue LowerSETCCInVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
   // Should we expand the build vector with shuffles?
   bool
   shouldExpandBuildVectorWithShuffles(EVT VT,

@@ -101,6 +101,14 @@ multiclass VectorTernaryArith_ShortLong<SDPatternOperator OpNode, ValueType Long
   defm : VectorTernaryArith<OpNode, ShortDataVT, ShortScalarVT, v256i1, ShortOpBaseName>;
 }
 
+
+// Integer arithmetic (256 elements)
+defm : VectorBinaryArith_ShortLong<vvp_add, v256i64, i64, "vaddsl", v256i32, i32, "vaddswsx">;
+defm : VectorBinaryArith_ShortLong<vvp_sub, v256i64, i64, "vsubsl", v256i32, i32, "vsubswsx">;
+defm : VectorBinaryArith_ShortLong<vvp_mul, v256i64, i64, "vmulsl", v256i32, i32, "vmulswsx">;
+defm : VectorBinaryArith_ShortLong<vvp_sdiv, v256i64, i64, "vdivsl", v256i32, i32, "vdivswsx">;
+defm : VectorBinaryArith_ShortLong<vvp_udiv, v256i64, i64, "vdivul", v256i32, i32, "vdivuw">;
+
 // Floating-point arithmetic (256 elements)
 defm : VectorBinaryArith_ShortLong<vvp_fadd, v256f64, f64, "vfaddd", v256f32, f32, "vfadds">;
 defm : VectorBinaryArith_ShortLong<vvp_fsub, v256f64, f64, "vfsubd", v256f32, f32, "vfsubs">;
@@ -109,6 +117,17 @@ defm : VectorBinaryArith_ShortLong<vvp_fdiv, v256f64, f64, "vfdivd", v256f32, f3
 
 defm : VectorTernaryArith_ShortLong<vvp_ffma, v256f64, f64, "vfmadd", v256f32, f32, "vfmads">;
 
+// Integer arithmetic (512 elements)
+defm : VectorBinaryArith<vvp_add, v512i32, i32, v512i1, "pvaddu", "M">;
+defm : VectorBinaryArith<vvp_sub, v512i32, i32, v512i1, "pvsubu", "M">;
+// defm : VectorBinaryArith<vvp_mul, v512i32, i32, "vmulsl", "M">; // no packed mul
+// defm : VectorBinaryArith<vvp_sdiv, v512i32, i32, "vdivsl", "M">; // no packed sdiv
+// defm : VectorBinaryArith<vvp_udiv, v512i32, i32, "vdivul", "M">; // no packed udiv
 
-// Floating-point arithmetic (512 elements) // TODO
+// Floating-point arithmetic (512 elements)
 defm : VectorBinaryArith<vvp_fadd, v512f32, f32, v512i1, "pvfadd", "M">;
+defm : VectorBinaryArith<vvp_fmul, v512f32, f32, v512i1, "pvfmul", "M">;
+defm : VectorBinaryArith<vvp_fsub, v512f32, f32, v512i1, "pvfsub", "M">;
+
+defm : VectorTernaryArith<vvp_ffma, v512f32, f32, v512i1, "pvfmad", "M">;
+
