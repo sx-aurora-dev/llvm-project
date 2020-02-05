@@ -42,19 +42,27 @@ def vvp_sra    : SDNode<"VEISD::VVP_SRA",  SDTIntShiftOpVVP>;
 def vvp_shl    : SDNode<"VEISD::VVP_SHL",  SDTIntShiftOpVVP>;
 
 // fp
-def vvp_fadd    : SDNode<"VEISD::VVP_FADD",  SDTFPBinOpVVP>;
-def vvp_fsub    : SDNode<"VEISD::VVP_FSUB",  SDTFPBinOpVVP>;
-def vvp_fmul    : SDNode<"VEISD::VVP_FMUL",  SDTFPBinOpVVP>;
-def vvp_fdiv    : SDNode<"VEISD::VVP_FDIV",  SDTFPBinOpVVP>;
-def vvp_ffma    : SDNode<"VEISD::VVP_FFMA",  SDTFPTernaryOpVVP>;
+def vvp_fadd    : SDNode<"VEISD::VVP_FADD",  SDTFPBinOpVVP>;     // x + y
+def vvp_fsub    : SDNode<"VEISD::VVP_FSUB",  SDTFPBinOpVVP>;     // x - y
+def vvp_fmul    : SDNode<"VEISD::VVP_FMUL",  SDTFPBinOpVVP>;     // x * y
+def vvp_fdiv    : SDNode<"VEISD::VVP_FDIV",  SDTFPBinOpVVP>;     // x / y
+def vvp_ffma    : SDNode<"VEISD::VVP_FFMA",  SDTFPTernaryOpVVP>; // x + (y*z)
 
 class vvp_commutative<SDNode RootOp> :
   PatFrags<(ops node:$lhs, node:$rhs, node:$mask, node:$vlen),
                        [(RootOp node:$lhs, node:$rhs, node:$mask, node:$vlen),
                         (RootOp node:$rhs, node:$lhs, node:$mask, node:$vlen)]>;
 
+class vvp_fma_commutative<SDNode RootOp> :
+  PatFrags<(ops node:$X, node:$Y, node:$Z, node:$mask, node:$vlen),
+                       [(RootOp node:$X, node:$Y, node:$Z, node:$mask, node:$vlen),
+                        (RootOp node:$X, node:$Z, node:$Y, node:$mask, node:$vlen)]>;
+
+
 // commutative match
 def c_vv_fadd     : vvp_commutative<vvp_fadd>;
 def c_vv_fmul     : vvp_commutative<vvp_fmul>;
 def c_vv_add     : vvp_commutative<vvp_add>;
 def c_vv_mul     : vvp_commutative<vvp_mul>;
+
+def c_vv_ffma     : vvp_fma_commutative<vvp_ffma>;

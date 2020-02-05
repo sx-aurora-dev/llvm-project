@@ -135,7 +135,7 @@ defm : VectorBinaryArith_ShortLong<vvp_fsub, v256f64, f64, "vfsubd", v256f32, f3
 defm : VectorBinaryArith_ShortLong<c_vv_fmul, v256f64, f64, "vfmuld", v256f32, f32, "vfmuls">;
 defm : VectorBinaryArith_ShortLong<vvp_fdiv, v256f64, f64, "vfdivd", v256f32, f32, "vfdivs">;
 
-defm : VectorTernaryArith_ShortLong<vvp_ffma, v256f64, f64, "vfmadd", v256f32, f32, "vfmads">;
+defm : VectorTernaryArith_ShortLong<c_vv_ffma, v256f64, f64, "vfmadd", v256f32, f32, "vfmads">;
 
 // Integer arithmetic (512 elements)
 defm : VectorBinaryArith<c_vv_add, v512i32, i64, v512i1, "pvaddu", "M">; 
