@@ -282,6 +282,45 @@ static EVT GetIdiomaticType(SDValue Op) {
   }
 }
 
+// legalize packed-mode broadcasts into lane replication + broadcast
+static SDValue
+LegalizeBroadcast(SDValue Op, SelectionDAG & DAG) {
+  if (Op.getOpcode() != VEISD::VEC_BROADCAST) return Op;
+
+  auto Ty = Op.getValueType();
+  if (!Ty.isVector() || Ty.getVectorNumElements() != 512) {
+    return Op;
+  }
+
+  SDLoc DL(Op);
+
+  auto ScaOp = Op.getOperand(0);
+  auto ScaTy = ScaOp->getValueType(0);
+  unsigned ReplOC; 
+  if (ScaTy == MVT::f32) {
+    ReplOC = VEISD::REPL_F32;
+  } else if (ScaTy == MVT::i32) {
+    ReplOC = VEISD::REPL_I32;
+  } else {
+    assert(ScaTy == MVT::i64);
+    return Op;
+  }
+  LLVM_DEBUG(dbgs() << "Broadcast legalization\n");
+
+
+  auto ReplOp = DAG.getNode(ReplOC, DL, MVT::i64, ScaOp);
+  // auto LegalVecTy = MVT::getVectorVT(MVT::i64, Ty.getVectorNumElements());
+  return DAG.getNode(VEISD::VEC_BROADCAST, DL, Ty, ReplOp);
+}
+
+static SDValue
+LegalizeVecOperand(SDValue Op, SelectionDAG & DAG) {
+  if (!Op.getValueType().isVector()) return Op;
+
+  // TODO add operand legalization
+  return LegalizeBroadcast(Op, DAG);
+}
+
 SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering to VVP node\n");
 
@@ -350,14 +389,20 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
     Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
     assert(VVPOC.hasValue());
     return DAG.getNode(VVPOC.getValue(), dl, NativeVecTy,
-                       {Op->getOperand(0), Op->getOperand(1), MaskVal, LenVal});
+                       {LegalizeVecOperand(Op->getOperand(0), DAG),
+                        LegalizeVecOperand(Op->getOperand(1), DAG), MaskVal,
+                        LenVal});
   }
 
   if (isTernaryOp) {
     Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
     assert(VVPOC.hasValue());
     return DAG.getNode(VVPOC.getValue(), dl, NativeVecTy,
-                       {Op->getOperand(0), Op->getOperand(1), Op->getOperand(2), MaskVal, LenVal});
+                       {LegalizeVecOperand(Op->getOperand(0), DAG),
+                        LegalizeVecOperand(Op->getOperand(1), DAG),
+                        LegalizeVecOperand(Op->getOperand(2), DAG),
+                        MaskVal,
+                        LenVal});
   }
 
   if (isLoadOp) {
@@ -375,8 +420,9 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
     SDValue DataVal = Op->getOperand(2);
     MVT ChainTy = MVT::Other;
 
-    return DAG.getNode(VEISD::VVP_STORE, dl, ChainTy,
-                      {ChainVal, PtrVal, DataVal, MaskVal, LenVal});
+    return DAG.getNode(
+        VEISD::VVP_STORE, dl, ChainTy,
+        {ChainVal, PtrVal, LegalizeVecOperand(DataVal, DAG), MaskVal, LenVal});
   }
 
   llvm_unreachable("Cannot lower this op to VVP");
@@ -532,7 +578,7 @@ SDValue VETargetLowering::CreateBroadcast(SDLoc dl, MVT ResTy, SDValue S,
 
   // custom path for mask splat
   if (ResTy != MVT::v256i1 && ResTy != MVT::v512i1)
-    return DAG.getNode(VEISD::VEC_BROADCAST, dl, ResTy, S);
+    return LegalizeBroadcast(DAG.getNode(VEISD::VEC_BROADCAST, dl, ResTy, S), DAG);
 
 #if 0
   // Use the hard-wired vm0/vmp0 registers
@@ -1940,6 +1986,8 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(VEC_MSTORE)
     TARGET_NODE_CASE(VEC_REDUCE_ANY)
     TARGET_NODE_CASE(VEC_POPCOUNT)
+    TARGET_NODE_CASE(REPL_F32)
+    TARGET_NODE_CASE(REPL_I32)
     TARGET_NODE_CASE(Wrapper)
 
 #define REGISTER_VVP_OP(VVP_NAME,...) TARGET_NODE_CASE(VVP_NAME)

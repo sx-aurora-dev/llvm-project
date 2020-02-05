@@ -118,16 +118,15 @@ defm : VectorBinaryArith_ShortLong<vvp_fdiv, v256f64, f64, "vfdivd", v256f32, f3
 defm : VectorTernaryArith_ShortLong<vvp_ffma, v256f64, f64, "vfmadd", v256f32, f32, "vfmads">;
 
 // Integer arithmetic (512 elements)
-// TODO Cannot subsume broadcast of i32 (since it needs to be replicated to both sides)
-// defm : VectorBinaryArith<vvp_add, v512i32, i32, v512i1, "pvaddu", "M">; 
-// defm : VectorBinaryArith<vvp_sub, v512i32, i32, v512i1, "pvsubu", "M">;
-// defm : VectorBinaryArith<vvp_mul, v512i32, i32, "vmulsl", "M">; // no packed mul
-// defm : VectorBinaryArith<vvp_sdiv, v512i32, i32, "vdivsl", "M">; // no packed sdiv
-// defm : VectorBinaryArith<vvp_udiv, v512i32, i32, "vdivul", "M">; // no packed udiv
+defm : VectorBinaryArith<vvp_add, v512i32, i64, v512i1, "pvaddu", "M">; 
+defm : VectorBinaryArith<vvp_sub, v512i32, i64, v512i1, "pvsubu", "M">;
+// defm : VectorBinaryArith<vvp_mul, v512i32, i64, "vmulsl", "M">; // no packed mul
+// defm : VectorBinaryArith<vvp_sdiv, v512i32, i64, "vdivsl", "M">; // no packed sdiv
+// defm : VectorBinaryArith<vvp_udiv, v512i32, i64, "vdivul", "M">; // no packed udiv
 
 // Floating-point arithmetic (512 elements)
-// defm : VectorBinaryArith<vvp_fadd, v512f32, f32, v512i1, "pvfadd", "M">;
-// defm : VectorBinaryArith<vvp_fmul, v512f32, f32, v512i1, "pvfmul", "M">;
-// defm : VectorBinaryArith<vvp_fsub, v512f32, f32, v512i1, "pvfsub", "M">;
+defm : VectorBinaryArith<vvp_fadd, v512f32, i64, v512i1, "pvfadd", "M">;
+defm : VectorBinaryArith<vvp_fmul, v512f32, i64, v512i1, "pvfmul", "M">;
+defm : VectorBinaryArith<vvp_fsub, v512f32, i64, v512i1, "pvfsub", "M">;
 
-// defm : VectorTernaryArith<vvp_ffma, v512f32, f32, v512i1, "pvfmad", "M">;
+defm : VectorTernaryArith<vvp_ffma, v512f32, i64, v512i1, "pvfmad", "M">;

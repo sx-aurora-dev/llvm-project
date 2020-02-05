@@ -79,6 +79,10 @@ enum NodeType : unsigned {
 
   VEC_LVL,
 
+  // Replication on lower/upper32 bit to other half -> I64
+  REPL_F32,
+  REPL_I32,
+
   // Internal VVP nodes
 #define REGISTER_VVP_OP(VVP_NAME,ISD_NAME) VVP_NAME ,
  #include "VVPNodes.inc"

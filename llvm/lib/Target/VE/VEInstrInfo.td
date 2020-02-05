@@ -34,6 +34,11 @@ def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 1, [SDTCis
 def vec_popcount    : SDNode<"VEISD::VEC_POPCOUNT",  SDTypeProfile<1, 2,  [SDTCisInt<0>, SDTCisVec<1>, SDTCisInt<2>]>>;
 def register        : SDNode<"ISD::Register",        SDTypeProfile<1, 0,  []>, [], "RegisterSDNode">;
 
+// replicate lower 32bit to upper 32bit (f32 scalar replication)
+def repl_f32        : SDNode<"VEISD::REPL_F32",  SDTypeProfile<1, 1,  [SDTCisInt<0>, SDTCisFP<1>]>>;
+// replicate upper 32bit to lower 32 bit (i32 scalar replication)
+def repl_i32        : SDNode<"VEISD::REPL_I32",  SDTypeProfile<1, 1,  [SDTCisInt<0>, SDTCisInt<1>]>>;
+
 // whether the avl is ineffective
 def no_avl_256      : PatLeaf<(imm), [{ return (N->getSExtValue() < 0) || (N->getSExtValue() >= 256); }]>;
 
@@ -2076,6 +2081,17 @@ def : Pat<(i32 (and i32:$lhs, 0xffffffff)),
 // vector instructions
 include "VEInstrVec.td"
 include "VEInstrVecVL.td"
+
+// sub-word replication
+def: Pat<(i64 (repl_f32 f32:$val)),
+            (ORrr
+              (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
+              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32))>;
+def: Pat<(i64 (repl_i32 i32:$val)),
+            (ORrr
+              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32))>;
+
 
 // generic vector instruction patterns
 include "VEInstrPatternsVec.td"
