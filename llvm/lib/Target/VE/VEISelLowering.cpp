@@ -411,10 +411,11 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
   if (isTernaryOp) {
     Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
     assert(VVPOC.hasValue());
+    assert((VVPOC.getValue() == VEISD::VVP_FFMA) && "operand swizzle for target!");
     return DAG.getNode(VVPOC.getValue(), dl, NativeVecTy,
-                       {LegalizeVecOperand(Op->getOperand(0), DAG),
-                        LegalizeVecOperand(Op->getOperand(1), DAG),
+                       {LegalizeVecOperand(Op->getOperand(1), DAG),
                         LegalizeVecOperand(Op->getOperand(2), DAG),
+                        LegalizeVecOperand(Op->getOperand(0), DAG),
                         MaskVal,
                         LenVal});
   }
