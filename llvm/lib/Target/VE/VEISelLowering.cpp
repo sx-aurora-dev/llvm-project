@@ -266,9 +266,9 @@ static EVT GetIdiomaticType(SDValue Op) {
     return Op->getValueType(0);
 
     // all standard un/bin/tern-ary operators
-#define REGISTER_VVP_UNNARY_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD:
-#define REGISTER_VVP_BINARY_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD:
-#define REGISTER_VVP_TERNARY_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD:
+#define REGISTER_UNNARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD:
+#define REGISTER_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD:
+#define REGISTER_TERNARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD:
 #include "VVPNodes.inc"
     return Op->getValueType(0);
 
@@ -281,6 +281,7 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering to VVP node\n");
 
   bool isBinaryOp = false;
+  bool isTernaryOp = false;
   bool isLoadOp = false;
   bool isStoreOp = false;
 
@@ -290,7 +291,10 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
 
   case ISD::LOAD:  isLoadOp = true; break;
   case ISD::STORE: isStoreOp = true; break;
-  case ISD::FADD:  isBinaryOp = true; break;
+
+#define REGISTER_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isBinaryOp=true; break;
+#define REGISTER_TERNARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isTernaryOp=true; break;
+#include "VVPNodes.inc"
   }
 
   EVT OpVecTy = GetIdiomaticType(Op);
@@ -326,6 +330,13 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
     assert(VVPOC.hasValue());
     return DAG.getNode(VVPOC.getValue(), dl, NativeVecTy,
                        {Op->getOperand(0), Op->getOperand(1), MaskVal, LenVal});
+  }
+
+  if (isTernaryOp) {
+    Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
+    assert(VVPOC.hasValue());
+    return DAG.getNode(VVPOC.getValue(), dl, NativeVecTy,
+                       {Op->getOperand(0), Op->getOperand(1), Op->getOperand(2), MaskVal, LenVal});
   }
 
   if (isLoadOp) {
