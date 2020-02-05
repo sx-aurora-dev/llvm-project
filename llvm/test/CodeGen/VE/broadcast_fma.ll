@@ -4,8 +4,9 @@
 define x86_regcallcc <512 x float> @fmadrvv512f32(<512 x float>, float) {
 ; CHECK-LABEL: fmadrvv512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
-; CHECK-NEXT:    srl %s1, %s0, 32
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    and %s1, %s0, (32)0
+; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
@@ -22,12 +23,13 @@ define x86_regcallcc <512 x float> @fmadrvv512f32(<512 x float>, float) {
 define x86_regcallcc <512 x float> @fmadrvv512f32s(<512 x float>, float) {
 ; CHECK-LABEL: fmadrvv512f32s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
-; CHECK-NEXT:    srl %s1, %s0, 32
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    and %s1, %s0, (32)0
+; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvfmad %v0,%v0,%s0,%v0
+; CHECK-NEXT:    pvfmad %v0,%s0,%v0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <512 x float> undef, float %1, i32 0
   %vec = shufflevector <512 x float> %vec0, <512 x float> undef, <512 x i32> zeroinitializer
@@ -40,12 +42,13 @@ define x86_regcallcc <512 x float> @fmadrvv512f32s(<512 x float>, float) {
 define x86_regcallcc <512 x float> @fmadrvv512f32s2(<512 x float>, float) {
 ; CHECK-LABEL: fmadrvv512f32s2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
-; CHECK-NEXT:    srl %s1, %s0, 32
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    and %s1, %s0, (32)0
+; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvfmad %v0,%s0,%v0,%v0
+; CHECK-NEXT:    pvfmad %v0,%v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <512 x float> undef, float %1, i32 0
   %vec = shufflevector <512 x float> %vec0, <512 x float> undef, <512 x i32> zeroinitializer
@@ -75,7 +78,7 @@ define x86_regcallcc <256 x double> @fmadrvv256f64s(<256 x double>, double) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmad.d %v0,%v0,%s0,%v0
+; CHECK-NEXT:    vfmad.d %v0,%s0,%v0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <256 x double> undef, double %1, i32 0
   %vec = shufflevector <256 x double> %vec0, <256 x double> undef, <256 x i32> zeroinitializer
@@ -90,7 +93,7 @@ define x86_regcallcc <256 x double> @fmadrvv256f64s2(<256 x double>, double) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmad.d %v0,%s0,%v0,%v0
+; CHECK-NEXT:    vfmad.d %v0,%v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <256 x double> undef, double %1, i32 0
   %vec = shufflevector <256 x double> %vec0, <256 x double> undef, <256 x i32> zeroinitializer
@@ -120,7 +123,7 @@ define x86_regcallcc <256 x float> @fmadrvv256f32s(<256 x float>, float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmad.s %v0,%v0,%s0,%v0
+; CHECK-NEXT:    vfmad.s %v0,%s0,%v0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <256 x float> undef, float %1, i32 0
   %vec = shufflevector <256 x float> %vec0, <256 x float> undef, <256 x i32> zeroinitializer
@@ -135,7 +138,7 @@ define x86_regcallcc <256 x float> @fmadrvv256f32s2(<256 x float>, float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmad.s %v0,%s0,%v0,%v0
+; CHECK-NEXT:    vfmad.s %v0,%v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <256 x float> undef, float %1, i32 0
   %vec = shufflevector <256 x float> %vec0, <256 x float> undef, <256 x i32> zeroinitializer
@@ -178,7 +181,7 @@ define x86_regcallcc <64 x double> @fmadrvv64f64(<64 x double>, double) {
 define x86_regcallcc <32 x double> @fmadrvv32f64(<32 x double>, double) {
 ; CHECK-LABEL: fmadrvv32f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 32
+; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmad.d %v0,%v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -193,7 +196,7 @@ define x86_regcallcc <32 x double> @fmadrvv32f64(<32 x double>, double) {
 define x86_regcallcc <16 x double> @fmadrvv16f64(<16 x double>, double) {
 ; CHECK-LABEL: fmadrvv16f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 16
+; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmad.d %v0,%v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -208,7 +211,7 @@ define x86_regcallcc <16 x double> @fmadrvv16f64(<16 x double>, double) {
 define x86_regcallcc <8 x double> @fmadrvv8f64(<8 x double>, double) {
 ; CHECK-LABEL: fmadrvv8f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 8
+; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmad.d %v0,%v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -223,7 +226,7 @@ define x86_regcallcc <8 x double> @fmadrvv8f64(<8 x double>, double) {
 define x86_regcallcc <4 x double> @fmadrvv4f64(<4 x double>, double) {
 ; CHECK-LABEL: fmadrvv4f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 4
+; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmad.d %v0,%v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -238,7 +241,7 @@ define x86_regcallcc <4 x double> @fmadrvv4f64(<4 x double>, double) {
 define x86_regcallcc <2 x double> @fmadrvv2f64(<2 x double>, double) {
 ; CHECK-LABEL: fmadrvv2f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 2
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmad.d %v0,%v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
