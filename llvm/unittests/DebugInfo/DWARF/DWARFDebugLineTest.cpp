@@ -235,6 +235,29 @@ TEST_F(DebugLineBasicFixture, GetOrParseLineTableAtInvalidOffsetAfterData) {
       "offset 0x00000001 is not a valid debug line section offset", 1);
 }
 
+TEST_P(DebugLineParameterisedFixture, PrologueGetLength) {
+  if (!setupGenerator(Version))
+    return;
+  LineTable &LT = Gen->addLineTable(Format);
+  DWARFDebugLine::Prologue Prologue = LT.createBasicPrologue();
+  LT.setPrologue(Prologue);
+  generate();
+
+  // + 10 for sizes of DWARF-32 unit length, version, prologue length.
+  uint64_t ExpectedLength = Prologue.PrologueLength + 10;
+  if (Version == 5)
+    // Add address and segment selector size fields.
+    ExpectedLength += 2;
+  if (Format == DWARF64)
+    // Unit length grows by 8, prologue length by 4.
+    ExpectedLength += 12;
+
+  auto ExpectedLineTable = Line.getOrParseLineTable(LineData, 0, *Context,
+                                                    nullptr, RecordRecoverable);
+  ASSERT_THAT_EXPECTED(ExpectedLineTable, Succeeded());
+  EXPECT_EQ((*ExpectedLineTable)->Prologue.getLength(), ExpectedLength);
+}
+
 TEST_P(DebugLineParameterisedFixture, GetOrParseLineTableValidTable) {
   if (!setupGenerator(Version))
     return;
@@ -526,9 +549,8 @@ TEST_F(DebugLineBasicFixture, ErrorForUnitLengthTooLarge) {
   LT.addStandardOpcode(DW_LNS_const_add_pc, {});
   LT.addExtendedOpcode(1, DW_LNE_end_sequence, {});
   DWARFDebugLine::Prologue Prologue = LT.createBasicPrologue();
-  // Set the total length to 1 higher than the actual length. The program body
-  // has size 5.
-  Prologue.TotalLength += 6;
+  // Set the total length to 1 higher than the actual length.
+  ++Prologue.TotalLength;
   LT.setPrologue(Prologue);
 
   generate();

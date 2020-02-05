@@ -104,6 +104,7 @@
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/Analysis/MustExecute.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/IR/CallSite.h"
 #include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/PassManager.h"
@@ -330,6 +331,15 @@ struct IRPosition {
       return *AnchorVal;
     assert(isa<CallBase>(AnchorVal) && "Expected a call base!");
     return *cast<CallBase>(AnchorVal)->getArgOperand(getArgNo());
+  }
+
+  /// Return the type this abstract attribute is associated with.
+  Type *getAssociatedType() const {
+    assert(KindOrArgNo != IRP_INVALID &&
+           "Invalid position does not have an associated type!");
+    if (getPositionKind() == IRPosition::IRP_RETURNED)
+      return getAssociatedFunction()->getReturnType();
+    return getAssociatedValue().getType();
   }
 
   /// Return the argument number of the associated value if it is an argument or
@@ -942,6 +952,16 @@ struct Attributor {
     friend struct Attributor;
   };
 
+  /// Check if we can rewrite a function signature.
+  ///
+  /// The argument \p Arg is replaced with new ones defined by the number,
+  /// order, and types in \p ReplacementTypes.
+  ///
+  /// \returns True, if the replacement can be registered, via
+  /// registerFunctionSignatureRewrite, false otherwise.
+  bool isValidFunctionSignatureRewrite(Argument &Arg,
+                                       ArrayRef<Type *> ReplacementTypes);
+
   /// Register a rewrite for a function signature.
   ///
   /// The argument \p Arg is replaced with new ones defined by the number,
@@ -960,9 +980,11 @@ struct Attributor {
   /// This method will evaluate \p Pred on call sites and return
   /// true if \p Pred holds in every call sites. However, this is only possible
   /// all call sites are known, hence the function has internal linkage.
+  /// If true is returned, \p AllCallSitesKnown is set if all possible call
+  /// sites of the function have been visited.
   bool checkForAllCallSites(const function_ref<bool(AbstractCallSite)> &Pred,
                             const AbstractAttribute &QueryingAA,
-                            bool RequireAllCallSites);
+                            bool RequireAllCallSites, bool &AllCallSitesKnown);
 
   /// Check \p Pred on all values potentially returned by \p F.
   ///
@@ -1020,9 +1042,12 @@ private:
   /// This method will evaluate \p Pred on call sites and return
   /// true if \p Pred holds in every call sites. However, this is only possible
   /// all call sites are known, hence the function has internal linkage.
+  /// If true is returned, \p AllCallSitesKnown is set if all possible call
+  /// sites of the function have been visited.
   bool checkForAllCallSites(const function_ref<bool(AbstractCallSite)> &Pred,
                             const Function &Fn, bool RequireAllCallSites,
-                            const AbstractAttribute *QueryingAA);
+                            const AbstractAttribute *QueryingAA,
+                            bool &AllCallSitesKnown);
 
   /// The private version of getAAFor that allows to omit a querying abstract
   /// attribute. See also the public getAAFor method.
@@ -2074,6 +2099,9 @@ struct AAIsDead : public StateWrapper<BooleanState, AbstractAttribute>,
   /// Returns true if the underlying value is assumed dead.
   virtual bool isAssumedDead() const = 0;
 
+  /// Returns true if the underlying value is known dead.
+  virtual bool isKnownDead() const = 0;
+
   /// Returns true if \p BB is assumed dead.
   virtual bool isAssumedDead(const BasicBlock *BB) const = 0;
 
@@ -2393,6 +2421,45 @@ struct AAHeapToStack : public StateWrapper<BooleanState, AbstractAttribute>,
   static const char ID;
 };
 
+/// An abstract interface for privatizability.
+///
+/// A pointer is privatizable if it can be replaced by a new, private one.
+/// Privatizing pointer reduces the use count, interaction between unrelated
+/// code parts.
+///
+/// In order for a pointer to be privatizable its value cannot be observed
+/// (=nocapture), it is (for now) not written (=readonly & noalias), we know
+/// what values are necessary to make the private copy look like the original
+/// one, and the values we need can be loaded (=dereferenceable).
+struct AAPrivatizablePtr : public StateWrapper<BooleanState, AbstractAttribute>,
+                           public IRPosition {
+  AAPrivatizablePtr(const IRPosition &IRP) : IRPosition(IRP) {}
+
+  /// Returns true if pointer privatization is assumed to be possible.
+  bool isAssumedPrivatizablePtr() const { return getAssumed(); }
+
+  /// Returns true if pointer privatization is known to be possible.
+  bool isKnownPrivatizablePtr() const { return getKnown(); }
+
+  /// Return the type we can choose for a private copy of the underlying
+  /// value. None means it is not clear yet, nullptr means there is none.
+  virtual Optional<Type *> getPrivatizableType() const = 0;
+
+  /// Return an IR position, see struct IRPosition.
+  ///
+  ///{
+  IRPosition &getIRPosition() { return *this; }
+  const IRPosition &getIRPosition() const { return *this; }
+  ///}
+
+  /// Create an abstract attribute view for the position \p IRP.
+  static AAPrivatizablePtr &createForPosition(const IRPosition &IRP,
+                                              Attributor &A);
+
+  /// Unique ID (due to the unique address)
+  static const char ID;
+};
+
 /// An abstract interface for all memory related attributes.
 struct AAMemoryBehavior
     : public IRAttribute<
@@ -2447,8 +2514,7 @@ struct AAValueConstantRange : public IntegerRangeState,
                               public AbstractAttribute,
                               public IRPosition {
   AAValueConstantRange(const IRPosition &IRP)
-      : IntegerRangeState(
-            IRP.getAssociatedValue().getType()->getIntegerBitWidth()),
+      : IntegerRangeState(IRP.getAssociatedType()->getIntegerBitWidth()),
         IRPosition(IRP) {}
 
   /// Return an IR position, see struct IRPosition.

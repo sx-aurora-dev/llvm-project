@@ -1120,6 +1120,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
   }
 
+  /// Load & Store {
   // Turn FP extload into load/fpextend
   for (MVT VT : MVT::fp_valuetypes()) {
     setLoadExtAction(ISD::EXTLOAD, VT, MVT::f32, Expand);
@@ -1130,7 +1131,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   for (MVT VT : MVT::integer_valuetypes()) {
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
     setLoadExtAction(ISD::ZEXTLOAD, VT, MVT::i1, Promote);
-    setLoadExtAction(ISD::EXTLOAD,  VT, MVT::i1, Promote);
+    setLoadExtAction(ISD::EXTLOAD, VT, MVT::i1, Promote);
     setTruncStoreAction(VT, MVT::i1, Expand);
   }
 
@@ -1138,6 +1139,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setTruncStoreAction(MVT::f64, MVT::f32, Expand);
   setTruncStoreAction(MVT::f128, MVT::f32, Expand);
   setTruncStoreAction(MVT::f128, MVT::f64, Expand);
+  /// } Load & Store
 
   // Custom legalize address nodes into LO/HI parts.
   MVT PtrVT = MVT::getIntegerVT(TM.getPointerSizeInBits(0));
@@ -1145,6 +1147,15 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::GlobalAddress, PtrVT, Custom);
   setOperationAction(ISD::GlobalTLSAddress, PtrVT, Custom);
   setOperationAction(ISD::ConstantPool, PtrVT, Custom);
+
+  /// VAARG handling {
+  setOperationAction(ISD::VASTART, MVT::Other, Custom);
+  // VAARG needs to be lowered to access with 8 bytes alignment.
+  setOperationAction(ISD::VAARG, MVT::Other, Custom);
+  // Use the default implementation.
+  setOperationAction(ISD::VACOPY, MVT::Other, Expand);
+  setOperationAction(ISD::VAEND, MVT::Other, Expand);
+  /// } VAARG handling
 
   // VE has no REM or DIVREM operations.
   for (MVT IntVT : MVT::integer_valuetypes()) {
@@ -1853,11 +1864,10 @@ SDValue VETargetLowering::LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op,
                      Op.getOperand(0));
 }
 
-static SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG,
-                            const VETargetLowering &TLI) {
+SDValue VETargetLowering::LowerVASTART(SDValue Op, SelectionDAG &DAG) const {
   MachineFunction &MF = DAG.getMachineFunction();
   VEMachineFunctionInfo *FuncInfo = MF.getInfo<VEMachineFunctionInfo>();
-  auto PtrVT = TLI.getPointerTy(DAG.getDataLayout());
+  auto PtrVT = getPointerTy(DAG.getDataLayout());
 
   // Need frame address to find the address of VarArgsFrameIndex.
   MF.getFrameInfo().setFrameAddressIsTaken(true);
@@ -1873,7 +1883,7 @@ static SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG,
                       MachinePointerInfo(SV));
 }
 
-static SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) {
+SDValue VETargetLowering::LowerVAARG(SDValue Op, SelectionDAG &DAG) const {
   SDNode *Node = Op.getNode();
   EVT VT = Node->getValueType(0);
   SDValue InChain = Node->getOperand(0);
@@ -1903,21 +1913,20 @@ static SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) {
     //    | empty| float|
     //    +------+------+
     // Increment the pointer, VAList, by 8 to the next vaarg.
-    NextPtr = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
-                          DAG.getIntPtrConstant(8, DL));
+    NextPtr =
+        DAG.getNode(ISD::ADD, DL, PtrVT, VAList, DAG.getIntPtrConstant(8, DL));
     // Then, adjust VAList.
     unsigned InternalOffset = 4;
     VAList = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
                          DAG.getConstant(InternalOffset, DL, PtrVT));
   } else {
     // Increment the pointer, VAList, by 8 to the next vaarg.
-    NextPtr = DAG.getNode(ISD::ADD, DL, PtrVT, VAList,
-                          DAG.getIntPtrConstant(8, DL));
+    NextPtr =
+        DAG.getNode(ISD::ADD, DL, PtrVT, VAList, DAG.getIntPtrConstant(8, DL));
   }
 
   // Store the incremented VAList to the legalized pointer.
-  InChain = DAG.getStore(Chain, DL, NextPtr, VAListPtr,
-                         MachinePointerInfo(SV));
+  InChain = DAG.getStore(Chain, DL, NextPtr, VAListPtr, MachinePointerInfo(SV));
 
   // Load the actual argument out of the pointer VAList.
   // We can't count on greater alignment than the word size.
@@ -2762,7 +2771,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::EH_SJLJ_SETUP_DISPATCH:
     return LowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
   case ISD::VASTART:
-    return LowerVASTART(Op, DAG, *this);
+    return LowerVASTART(Op, DAG);
   case ISD::VAARG:
     return LowerVAARG(Op, DAG);
   case ISD::DYNAMIC_STACKALLOC:

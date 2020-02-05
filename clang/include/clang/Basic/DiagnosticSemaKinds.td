@@ -2383,18 +2383,18 @@ def note_for_range_begin_end : Note<
 def warn_for_range_const_reference_copy : Warning<
   "loop variable %0 "
   "%diff{has type $ but is initialized with type $"
-  "| is initialized with a value of a different type}1,2 resulting in a copy">,
-  InGroup<RangeLoopAnalysis>, DefaultIgnore;
+  "|is initialized with a value of a different type}1,2 resulting in a copy">,
+  InGroup<RangeLoopConstruct>, DefaultIgnore;
 def note_use_type_or_non_reference : Note<
   "use non-reference type %0 to keep the copy or type %1 to prevent copying">;
 def warn_for_range_variable_always_copy : Warning<
   "loop variable %0 is always a copy because the range of type %1 does not "
   "return a reference">,
-  InGroup<RangeLoopAnalysis>, DefaultIgnore;
+  InGroup<RangeLoopBindReference>, DefaultIgnore;
 def note_use_non_reference_type : Note<"use non-reference type %0">;
 def warn_for_range_copy : Warning<
   "loop variable %0 of type %1 creates a copy from type %2">,
-  InGroup<RangeLoopAnalysis>, DefaultIgnore;
+  InGroup<RangeLoopConstruct>, DefaultIgnore;
 def note_use_reference_type : Note<"use reference type %0 to prevent copying">;
 def err_objc_for_range_init_stmt : Error<
   "initialization statement is not supported when iterating over Objective-C "
@@ -8397,6 +8397,12 @@ def note_defaulted_comparison_cannot_deduce : Note<
   "return type of defaulted 'operator<=>' cannot be deduced because "
   "return type %2 of three-way comparison for %select{|member|base class}0 %1 "
   "is not a standard comparison category type">;
+def err_defaulted_comparison_cannot_deduce_undeduced_auto : Error<
+  "return type of defaulted 'operator<=>' cannot be deduced because "
+  "three-way comparison for %select{|member|base class}0 %1 "
+  "has a deduced return type and is not yet defined">;
+def note_defaulted_comparison_cannot_deduce_undeduced_auto : Note<
+  "%select{|member|base class}0 %1 declared here">;
 def note_defaulted_comparison_cannot_deduce_callee : Note<
   "selected 'operator<=>' for %select{|member|base class}0 %1 declared here">;
 def err_incorrect_defaulted_comparison_constexpr : Error<
@@ -9708,7 +9714,7 @@ def err_omp_ordered_directive_with_param : Error<
 def err_omp_ordered_directive_without_param : Error<
   "'ordered' directive with 'depend' clause cannot be closely nested inside ordered region without specified parameter">;
 def note_omp_ordered_param : Note<
-  "'ordered' clause with specified parameter">;
+  "'ordered' clause%select{| with specified parameter}0">;
 def err_omp_expected_base_var_name : Error<
   "expected variable name as a base of the array %select{subscript|section}0">;
 def err_omp_map_shared_storage : Error<
@@ -9753,8 +9759,8 @@ def err_omp_unexpected_schedule_modifier : Error<
   "modifier '%0' cannot be used along with modifier '%1'">;
 def err_omp_schedule_nonmonotonic_static : Error<
   "'nonmonotonic' modifier can only be specified with 'dynamic' or 'guided' schedule kind">;
-def err_omp_schedule_nonmonotonic_ordered : Error<
-  "'schedule' clause with 'nonmonotonic' modifier cannot be specified if an 'ordered' clause is specified">;
+def err_omp_simple_clause_incompatible_with_ordered : Error<
+  "'%0' clause with '%1' modifier cannot be specified if an 'ordered' clause is specified">;
 def err_omp_ordered_simd : Error<
   "'ordered' clause with a parameter can not be specified in '#pragma omp %0' directive">;
 def err_omp_variable_in_given_clause_and_dsa : Error<

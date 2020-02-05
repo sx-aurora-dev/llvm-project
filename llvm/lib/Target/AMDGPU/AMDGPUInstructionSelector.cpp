@@ -2107,15 +2107,14 @@ AMDGPUInstructionSelector::selectSmrdImm(MachineOperand &Root) const {
     return None;
 
   const GEPInfo &GEPInfo = AddrInfo[0];
-
-  if (!AMDGPU::isLegalSMRDImmOffset(STI, GEPInfo.Imm))
+  Optional<int64_t> EncodedImm = AMDGPU::getSMRDEncodedOffset(STI, GEPInfo.Imm);
+  if (!EncodedImm)
     return None;
 
   unsigned PtrReg = GEPInfo.SgprParts[0];
-  int64_t EncodedImm = AMDGPU::getSMRDEncodedOffset(STI, GEPInfo.Imm);
   return {{
     [=](MachineInstrBuilder &MIB) { MIB.addReg(PtrReg); },
-    [=](MachineInstrBuilder &MIB) { MIB.addImm(EncodedImm); }
+    [=](MachineInstrBuilder &MIB) { MIB.addImm(*EncodedImm); }
   }};
 }
 
@@ -2129,13 +2128,14 @@ AMDGPUInstructionSelector::selectSmrdImm32(MachineOperand &Root) const {
 
   const GEPInfo &GEPInfo = AddrInfo[0];
   unsigned PtrReg = GEPInfo.SgprParts[0];
-  int64_t EncodedImm = AMDGPU::getSMRDEncodedOffset(STI, GEPInfo.Imm);
-  if (!isUInt<32>(EncodedImm))
+  Optional<int64_t> EncodedImm =
+      AMDGPU::getSMRDEncodedLiteralOffset32(STI, GEPInfo.Imm);
+  if (!EncodedImm)
     return None;
 
   return {{
     [=](MachineInstrBuilder &MIB) { MIB.addReg(PtrReg); },
-    [=](MachineInstrBuilder &MIB) { MIB.addImm(EncodedImm); }
+    [=](MachineInstrBuilder &MIB) { MIB.addImm(*EncodedImm); }
   }};
 }
 
@@ -2722,14 +2722,68 @@ AMDGPUInstructionSelector::selectMUBUFOffset(MachineOperand &Root) const {
     }};
 }
 
+InstructionSelector::ComplexRendererFns
+AMDGPUInstructionSelector::selectMUBUFAddr64Atomic(MachineOperand &Root) const {
+  Register VAddr;
+  Register RSrcReg;
+  Register SOffset;
+  int64_t Offset = 0;
+
+  if (!selectMUBUFAddr64Impl(Root, VAddr, RSrcReg, SOffset, Offset))
+    return {};
+
+  // FIXME: Use defaulted operands for trailing 0s and remove from the complex
+  // pattern.
+  return {{
+      [=](MachineInstrBuilder &MIB) {  // rsrc
+        MIB.addReg(RSrcReg);
+      },
+      [=](MachineInstrBuilder &MIB) { // vaddr
+        MIB.addReg(VAddr);
+      },
+      [=](MachineInstrBuilder &MIB) { // soffset
+        if (SOffset)
+          MIB.addReg(SOffset);
+        else
+          MIB.addImm(0);
+      },
+      [=](MachineInstrBuilder &MIB) { // offset
+        MIB.addImm(Offset);
+      },
+      addZeroImm //  slc
+    }};
+}
+
+InstructionSelector::ComplexRendererFns
+AMDGPUInstructionSelector::selectMUBUFOffsetAtomic(MachineOperand &Root) const {
+  Register RSrcReg;
+  Register SOffset;
+  int64_t Offset = 0;
+
+  if (!selectMUBUFOffsetImpl(Root, RSrcReg, SOffset, Offset))
+    return {};
+
+  return {{
+      [=](MachineInstrBuilder &MIB) {  // rsrc
+        MIB.addReg(RSrcReg);
+      },
+      [=](MachineInstrBuilder &MIB) { // soffset
+        if (SOffset)
+          MIB.addReg(SOffset);
+        else
+          MIB.addImm(0);
+      },
+      [=](MachineInstrBuilder &MIB) { MIB.addImm(Offset); }, // offset
+      addZeroImm //  slc
+    }};
+}
+
 void AMDGPUInstructionSelector::renderTruncImm32(MachineInstrBuilder &MIB,
                                                  const MachineInstr &MI,
                                                  int OpIdx) const {
   assert(MI.getOpcode() == TargetOpcode::G_CONSTANT && OpIdx == -1 &&
          "Expected G_CONSTANT");
-  Optional<int64_t> CstVal = getConstantVRegVal(MI.getOperand(0).getReg(), *MRI);
-  assert(CstVal && "Expected constant value");
-  MIB.addImm(CstVal.getValue());
+  MIB.addImm(MI.getOperand(1).getCImm()->getSExtValue());
 }
 
 void AMDGPUInstructionSelector::renderNegateImm(MachineInstrBuilder &MIB,

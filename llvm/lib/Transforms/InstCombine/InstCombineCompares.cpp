@@ -1575,11 +1575,8 @@ Instruction *InstCombiner::foldICmpXorConstant(ICmpInst &Cmp,
 
     // If the sign bit of the XorCst is not set, there is no change to
     // the operation, just stop using the Xor.
-    if (!XorC->isNegative()) {
-      Cmp.setOperand(0, X);
-      Worklist.Add(Xor);
-      return &Cmp;
-    }
+    if (!XorC->isNegative())
+      return replaceOperand(Cmp, 0, X);
 
     // Emit the opposite comparison.
     if (TrueIfSigned)
@@ -1687,7 +1684,7 @@ Instruction *InstCombiner::foldICmpAndShift(ICmpInst &Cmp, BinaryOperator *And,
         APInt NewAndCst = IsShl ? C2.lshr(*C3) : C2.shl(*C3);
         And->setOperand(1, ConstantInt::get(And->getType(), NewAndCst));
         And->setOperand(0, Shift->getOperand(0));
-        Worklist.Add(Shift); // Shift is dead.
+        Worklist.push(Shift); // Shift is dead.
         return &Cmp;
       }
     }
@@ -1705,8 +1702,7 @@ Instruction *InstCombiner::foldICmpAndShift(ICmpInst &Cmp, BinaryOperator *And,
 
     // Compute X & (C2 << Y).
     Value *NewAnd = Builder.CreateAnd(Shift->getOperand(0), NewShift);
-    Cmp.setOperand(0, NewAnd);
-    return &Cmp;
+    return replaceOperand(Cmp, 0, NewAnd);
   }
 
   return nullptr;
@@ -1812,8 +1808,7 @@ Instruction *InstCombiner::foldICmpAndConstConst(ICmpInst &Cmp,
       }
       if (NewOr) {
         Value *NewAnd = Builder.CreateAnd(A, NewOr, And->getName());
-        Cmp.setOperand(0, NewAnd);
-        return &Cmp;
+        return replaceOperand(Cmp, 0, NewAnd);
       }
     }
   }
@@ -3025,20 +3020,16 @@ Instruction *InstCombiner::foldICmpEqIntrinsicWithConstant(ICmpInst &Cmp,
   unsigned BitWidth = C.getBitWidth();
   switch (II->getIntrinsicID()) {
   case Intrinsic::bswap:
-    Worklist.Add(II);
-    Cmp.setOperand(0, II->getArgOperand(0));
-    Cmp.setOperand(1, ConstantInt::get(Ty, C.byteSwap()));
-    return &Cmp;
+    // bswap(A) == C  ->  A == bswap(C)
+    return new ICmpInst(Cmp.getPredicate(), II->getArgOperand(0),
+                        ConstantInt::get(Ty, C.byteSwap()));
 
   case Intrinsic::ctlz:
   case Intrinsic::cttz: {
     // ctz(A) == bitwidth(A)  ->  A == 0 and likewise for !=
-    if (C == BitWidth) {
-      Worklist.Add(II);
-      Cmp.setOperand(0, II->getArgOperand(0));
-      Cmp.setOperand(1, ConstantInt::getNullValue(Ty));
-      return &Cmp;
-    }
+    if (C == BitWidth)
+      return new ICmpInst(Cmp.getPredicate(), II->getArgOperand(0),
+                          ConstantInt::getNullValue(Ty));
 
     // ctz(A) == C -> A & Mask1 == Mask2, where Mask2 only has bit C set
     // and Mask1 has bits 0..C+1 set. Similar for ctl, but for high bits.
@@ -3051,10 +3042,9 @@ Instruction *InstCombiner::foldICmpEqIntrinsicWithConstant(ICmpInst &Cmp,
       APInt Mask2 = IsTrailing
         ? APInt::getOneBitSet(BitWidth, Num)
         : APInt::getOneBitSet(BitWidth, BitWidth - Num - 1);
-      Cmp.setOperand(0, Builder.CreateAnd(II->getArgOperand(0), Mask1));
-      Cmp.setOperand(1, ConstantInt::get(Ty, Mask2));
-      Worklist.Add(II);
-      return &Cmp;
+      return new ICmpInst(Cmp.getPredicate(),
+          Builder.CreateAnd(II->getArgOperand(0), Mask1),
+          ConstantInt::get(Ty, Mask2));
     }
     break;
   }
@@ -3063,14 +3053,10 @@ Instruction *InstCombiner::foldICmpEqIntrinsicWithConstant(ICmpInst &Cmp,
     // popcount(A) == 0  ->  A == 0 and likewise for !=
     // popcount(A) == bitwidth(A)  ->  A == -1 and likewise for !=
     bool IsZero = C.isNullValue();
-    if (IsZero || C == BitWidth) {
-      Worklist.Add(II);
-      Cmp.setOperand(0, II->getArgOperand(0));
-      auto *NewOp =
-          IsZero ? Constant::getNullValue(Ty) : Constant::getAllOnesValue(Ty);
-      Cmp.setOperand(1, NewOp);
-      return &Cmp;
-    }
+    if (IsZero || C == BitWidth)
+      return new ICmpInst(Cmp.getPredicate(), II->getArgOperand(0),
+          IsZero ? Constant::getNullValue(Ty) : Constant::getAllOnesValue(Ty));
+
     break;
   }
 
@@ -3078,9 +3064,7 @@ Instruction *InstCombiner::foldICmpEqIntrinsicWithConstant(ICmpInst &Cmp,
     // uadd.sat(a, b) == 0  ->  (a | b) == 0
     if (C.isNullValue()) {
       Value *Or = Builder.CreateOr(II->getArgOperand(0), II->getArgOperand(1));
-      return replaceInstUsesWith(Cmp, Builder.CreateICmp(
-          Cmp.getPredicate(), Or, Constant::getNullValue(Ty)));
-
+      return new ICmpInst(Cmp.getPredicate(), Or, Constant::getNullValue(Ty));
     }
     break;
   }
@@ -3090,8 +3074,7 @@ Instruction *InstCombiner::foldICmpEqIntrinsicWithConstant(ICmpInst &Cmp,
     if (C.isNullValue()) {
       ICmpInst::Predicate NewPred = Cmp.getPredicate() == ICmpInst::ICMP_EQ
           ? ICmpInst::ICMP_ULE : ICmpInst::ICMP_UGT;
-      return ICmpInst::Create(Instruction::ICmp, NewPred,
-                              II->getArgOperand(0), II->getArgOperand(1));
+      return new ICmpInst(NewPred, II->getArgOperand(0), II->getArgOperand(1));
     }
     break;
   }
@@ -4670,7 +4653,7 @@ static Instruction *processUMulZExtIdiom(ICmpInst &I, Value *MulVal,
   Function *F = Intrinsic::getDeclaration(
       I.getModule(), Intrinsic::umul_with_overflow, MulType);
   CallInst *Call = Builder.CreateCall(F, {MulA, MulB}, "umul");
-  IC.Worklist.Add(MulInstr);
+  IC.Worklist.push(MulInstr);
 
   // If there are uses of mul result other than the comparison, we know that
   // they are truncation or binary AND. Change them to use result of
@@ -4692,18 +4675,16 @@ static Instruction *processUMulZExtIdiom(ICmpInst &I, Value *MulVal,
         ConstantInt *CI = cast<ConstantInt>(BO->getOperand(1));
         APInt ShortMask = CI->getValue().trunc(MulWidth);
         Value *ShortAnd = Builder.CreateAnd(Mul, ShortMask);
-        Instruction *Zext =
-            cast<Instruction>(Builder.CreateZExt(ShortAnd, BO->getType()));
-        IC.Worklist.Add(Zext);
+        Value *Zext = Builder.CreateZExt(ShortAnd, BO->getType());
         IC.replaceInstUsesWith(*BO, Zext);
       } else {
         llvm_unreachable("Unexpected Binary operation");
       }
-      IC.Worklist.Add(cast<Instruction>(U));
+      IC.Worklist.push(cast<Instruction>(U));
     }
   }
   if (isa<Instruction>(OtherVal))
-    IC.Worklist.Add(cast<Instruction>(OtherVal));
+    IC.Worklist.push(cast<Instruction>(OtherVal));
 
   // The original icmp gets replaced with the overflow value, maybe inverted
   // depending on predicate.

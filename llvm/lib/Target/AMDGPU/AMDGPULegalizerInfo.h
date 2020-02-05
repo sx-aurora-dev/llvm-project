@@ -50,6 +50,8 @@ public:
                               MachineIRBuilder &B) const;
   bool legalizeITOFP(MachineInstr &MI, MachineRegisterInfo &MRI,
                      MachineIRBuilder &B, bool Signed) const;
+  bool legalizeFPTOI(MachineInstr &MI, MachineRegisterInfo &MRI,
+                     MachineIRBuilder &B, bool Signed) const;
   bool legalizeMinNumMaxNum(MachineInstr &MI, MachineRegisterInfo &MRI,
                             MachineIRBuilder &B) const;
   bool legalizeExtractVectorElt(MachineInstr &MI, MachineRegisterInfo &MRI,
@@ -77,7 +79,8 @@ public:
 
   bool legalizeAtomicCmpXChg(MachineInstr &MI, MachineRegisterInfo &MRI,
                              MachineIRBuilder &B) const;
-
+  bool legalizeFlog(MachineInstr &MI, MachineIRBuilder &B,
+                    double Log2BaseInverted) const;
   Register getLiveInRegister(MachineRegisterInfo &MRI,
                              Register Reg, LLT Ty) const;
 
@@ -125,6 +128,11 @@ public:
                           bool IsFormat) const;
   bool legalizeBufferAtomic(MachineInstr &MI, MachineIRBuilder &B,
                             Intrinsic::ID IID) const;
+
+  bool legalizeImageIntrinsic(
+      MachineInstr &MI, MachineIRBuilder &B,
+      GISelChangeObserver &Observer,
+      const AMDGPU::ImageDimIntrinsicInfo *ImageDimIntr) const;
 
   bool legalizeAtomicIncDec(MachineInstr &MI,  MachineIRBuilder &B,
                             bool IsInc) const;

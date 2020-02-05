@@ -3142,10 +3142,10 @@ SDValue PPCTargetLowering::LowerVACOPY(SDValue Op, SelectionDAG &DAG) const {
 
   // We have to copy the entire va_list struct:
   // 2*sizeof(char) + 2 Byte alignment + 2*sizeof(char*) = 12 Byte
-  return DAG.getMemcpy(Op.getOperand(0), Op,
-                       Op.getOperand(1), Op.getOperand(2),
-                       DAG.getConstant(12, SDLoc(Op), MVT::i32), 8, false, true,
-                       false, MachinePointerInfo(), MachinePointerInfo());
+  return DAG.getMemcpy(Op.getOperand(0), Op, Op.getOperand(1), Op.getOperand(2),
+                       DAG.getConstant(12, SDLoc(Op), MVT::i32), Align(8),
+                       false, true, false, MachinePointerInfo(),
+                       MachinePointerInfo());
 }
 
 SDValue PPCTargetLowering::LowerADJUST_TRAMPOLINE(SDValue Op,
@@ -3308,31 +3308,31 @@ static unsigned CalculateStackSlotSize(EVT ArgVT, ISD::ArgFlagsTy Flags,
 
 /// CalculateStackSlotAlignment - Calculates the alignment of this argument
 /// on the stack.
-static unsigned CalculateStackSlotAlignment(EVT ArgVT, EVT OrigVT,
-                                            ISD::ArgFlagsTy Flags,
-                                            unsigned PtrByteSize) {
-  unsigned Align = PtrByteSize;
+static Align CalculateStackSlotAlignment(EVT ArgVT, EVT OrigVT,
+                                         ISD::ArgFlagsTy Flags,
+                                         unsigned PtrByteSize) {
+  Align Alignment(PtrByteSize);
 
   // Altivec parameters are padded to a 16 byte boundary.
   if (ArgVT == MVT::v4f32 || ArgVT == MVT::v4i32 ||
       ArgVT == MVT::v8i16 || ArgVT == MVT::v16i8 ||
       ArgVT == MVT::v2f64 || ArgVT == MVT::v2i64 ||
       ArgVT == MVT::v1i128 || ArgVT == MVT::f128)
-    Align = 16;
+    Alignment = Align(16);
   // QPX vector types stored in double-precision are padded to a 32 byte
   // boundary.
   else if (ArgVT == MVT::v4f64 || ArgVT == MVT::v4i1)
-    Align = 32;
+    Alignment = Align(32);
 
   // ByVal parameters are aligned as requested.
   if (Flags.isByVal()) {
-    unsigned BVAlign = Flags.getByValAlign();
+    auto BVAlign = Flags.getNonZeroByValAlign();
     if (BVAlign > PtrByteSize) {
-      if (BVAlign % PtrByteSize != 0)
-          llvm_unreachable(
+      if (BVAlign.value() % PtrByteSize != 0)
+        llvm_unreachable(
             "ByVal alignment is not a multiple of the pointer size");
 
-      Align = BVAlign;
+      Alignment = BVAlign;
     }
   }
 
@@ -3342,12 +3342,12 @@ static unsigned CalculateStackSlotAlignment(EVT ArgVT, EVT OrigVT,
     // needs to be aligned to the size of the full type.  (Except for
     // ppcf128, which is only aligned as its f64 components.)
     if (Flags.isSplit() && OrigVT != MVT::ppcf128)
-      Align = OrigVT.getStoreSize();
+      Alignment = Align(OrigVT.getStoreSize());
     else
-      Align = ArgVT.getStoreSize();
+      Alignment = Align(ArgVT.getStoreSize());
   }
 
-  return Align;
+  return Alignment;
 }
 
 /// CalculateStackSlotUsed - Return whether this argument will use its
@@ -3365,9 +3365,9 @@ static bool CalculateStackSlotUsed(EVT ArgVT, EVT OrigVT,
   bool UseMemory = false;
 
   // Respect alignment of argument on the stack.
-  unsigned Align =
-    CalculateStackSlotAlignment(ArgVT, OrigVT, Flags, PtrByteSize);
-  ArgOffset = ((ArgOffset + Align - 1) / Align) * Align;
+  Align Alignment =
+      CalculateStackSlotAlignment(ArgVT, OrigVT, Flags, PtrByteSize);
+  ArgOffset = alignTo(ArgOffset, Alignment);
   // If there's no space left in the argument save area, we must
   // use memory (this check also catches zero-sized arguments).
   if (ArgOffset >= LinkageSize + ParamAreaSize)
@@ -3789,11 +3789,13 @@ SDValue PPCTargetLowering::LowerFormalArguments_64SVR4(
     // We re-align the argument offset for each argument, except when using the
     // fast calling convention, when we need to make sure we do that only when
     // we'll actually use a stack slot.
-    unsigned CurArgOffset, Align;
+    unsigned CurArgOffset;
+    Align Alignment;
     auto ComputeArgOffset = [&]() {
       /* Respect alignment of argument on the stack.  */
-      Align = CalculateStackSlotAlignment(ObjectVT, OrigVT, Flags, PtrByteSize);
-      ArgOffset = ((ArgOffset + Align - 1) / Align) * Align;
+      Alignment =
+          CalculateStackSlotAlignment(ObjectVT, OrigVT, Flags, PtrByteSize);
+      ArgOffset = alignTo(ArgOffset, Alignment);
       CurArgOffset = ArgOffset;
     };
 
@@ -3841,7 +3843,7 @@ SDValue PPCTargetLowering::LowerFormalArguments_64SVR4(
           ArgSize + ArgOffset > LinkageSize + Num_GPR_Regs * PtrByteSize)
         FI = MFI.CreateFixedObject(ArgSize, ArgOffset, false, true);
       else
-        FI = MFI.CreateStackObject(ArgSize, Align, false);
+        FI = MFI.CreateStackObject(ArgSize, Alignment, false);
       SDValue FIN = DAG.getFrameIndex(FI, PtrVT);
 
       // Handle aggregates smaller than 8 bytes.
@@ -4874,9 +4876,9 @@ static SDValue CreateCopyOfByValArgument(SDValue Src, SDValue Dst,
                                          SDValue Chain, ISD::ArgFlagsTy Flags,
                                          SelectionDAG &DAG, const SDLoc &dl) {
   SDValue SizeNode = DAG.getConstant(Flags.getByValSize(), dl, MVT::i32);
-  return DAG.getMemcpy(Chain, dl, Dst, Src, SizeNode, Flags.getByValAlign(),
-                       false, false, false, MachinePointerInfo(),
-                       MachinePointerInfo());
+  return DAG.getMemcpy(Chain, dl, Dst, Src, SizeNode,
+                       Flags.getNonZeroByValAlign(), false, false, false,
+                       MachinePointerInfo(), MachinePointerInfo());
 }
 
 /// LowerMemOpCallTo - Store the argument to the stack or remember it in case of
@@ -5907,9 +5909,9 @@ SDValue PPCTargetLowering::LowerCall_64SVR4(
     }
 
     /* Respect alignment of argument on the stack.  */
-    unsigned Align =
-      CalculateStackSlotAlignment(ArgVT, OrigVT, Flags, PtrByteSize);
-    NumBytes = ((NumBytes + Align - 1) / Align) * Align;
+    auto Alignement =
+        CalculateStackSlotAlignment(ArgVT, OrigVT, Flags, PtrByteSize);
+    NumBytes = alignTo(NumBytes, Alignement);
 
     NumBytes += CalculateStackSlotSize(ArgVT, Flags, PtrByteSize);
     if (Flags.isInConsecutiveRegsLast())
@@ -5988,9 +5990,9 @@ SDValue PPCTargetLowering::LowerCall_64SVR4(
     // we'll actually use a stack slot.
     auto ComputePtrOff = [&]() {
       /* Respect alignment of argument on the stack.  */
-      unsigned Align =
-        CalculateStackSlotAlignment(ArgVT, OrigVT, Flags, PtrByteSize);
-      ArgOffset = ((ArgOffset + Align - 1) / Align) * Align;
+      auto Alignment =
+          CalculateStackSlotAlignment(ArgVT, OrigVT, Flags, PtrByteSize);
+      ArgOffset = alignTo(ArgOffset, Alignment);
 
       PtrOff = DAG.getConstant(ArgOffset, dl, StackPtr.getValueType());
 
@@ -15069,35 +15071,27 @@ bool PPCTargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
   return false;
 }
 
-/// getOptimalMemOpType - Returns the target specific optimal type for load
-/// and store operations as a result of memset, memcpy, and memmove
-/// lowering. If DstAlign is zero that means it's safe to destination
-/// alignment can satisfy any constraint. Similarly if SrcAlign is zero it
-/// means there isn't a need to check it against alignment requirement,
-/// probably because the source does not need to be loaded. If 'IsMemset' is
-/// true, that means it's expanding a memset. If 'ZeroMemset' is true, that
-/// means it's a memset of zero. 'MemcpyStrSrc' indicates whether the memcpy
-/// source is constant so it does not need to be loaded.
 /// It returns EVT::Other if the type should be determined using generic
 /// target-independent logic.
 EVT PPCTargetLowering::getOptimalMemOpType(
-    uint64_t Size, unsigned DstAlign, unsigned SrcAlign, bool IsMemset,
-    bool ZeroMemset, bool MemcpyStrSrc,
-    const AttributeList &FuncAttributes) const {
+    const MemOp &Op, const AttributeList &FuncAttributes) const {
   if (getTargetMachine().getOptLevel() != CodeGenOpt::None) {
     // When expanding a memset, require at least two QPX instructions to cover
     // the cost of loading the value to be stored from the constant pool.
-    if (Subtarget.hasQPX() && Size >= 32 && (!IsMemset || Size >= 64) &&
-       (!SrcAlign || SrcAlign >= 32) && (!DstAlign || DstAlign >= 32) &&
+    if (Subtarget.hasQPX() && Op.Size >= 32 &&
+        (!Op.IsMemset || Op.Size >= 64) &&
+        (!Op.SrcAlign || Op.SrcAlign >= 32) &&
+        (!Op.DstAlign || Op.DstAlign >= 32) &&
         !FuncAttributes.hasFnAttribute(Attribute::NoImplicitFloat)) {
       return MVT::v4f64;
     }
 
     // We should use Altivec/VSX loads and stores when available. For unaligned
     // addresses, unaligned VSX loads are only fast starting with the P8.
-    if (Subtarget.hasAltivec() && Size >= 16 &&
-        (((!SrcAlign || SrcAlign >= 16) && (!DstAlign || DstAlign >= 16)) ||
-         ((IsMemset && Subtarget.hasVSX()) || Subtarget.hasP8Vector())))
+    if (Subtarget.hasAltivec() && Op.Size >= 16 &&
+        (((!Op.SrcAlign || Op.SrcAlign >= 16) &&
+          (!Op.DstAlign || Op.DstAlign >= 16)) ||
+         ((Op.IsMemset && Subtarget.hasVSX()) || Subtarget.hasP8Vector())))
       return MVT::v4i32;
   }
 

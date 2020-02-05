@@ -896,11 +896,6 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
       Opts.setFramePointer(FP);
   }
 
-  // -pg may override -mframe-pointer
-  // TODO: This should be merged into getFramePointerKind in Clang.cpp.
-  if (Args.hasArg(OPT_pg))
-    Opts.setFramePointer(CodeGenOptions::FramePointerKind::All);
-
   Opts.DisableFree = Args.hasArg(OPT_disable_free);
   Opts.DiscardValueNames = Args.hasArg(OPT_discard_value_names);
   Opts.DisableTailCalls = Args.hasArg(OPT_mdisable_tail_calls);
@@ -3035,6 +3030,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
     else
       Opts.setDefaultCallingConv(DefaultCC);
   }
+
+  Opts.SemanticInterposition = Args.hasArg(OPT_fsemantic_interposition);
 
   // -mrtd option
   if (Arg *A = Args.getLastArg(OPT_mrtd)) {

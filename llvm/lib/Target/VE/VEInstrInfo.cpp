@@ -45,54 +45,6 @@ VEInstrInfo::VEInstrInfo(VESubtarget &ST)
     : VEGenInstrInfo(VE::ADJCALLSTACKDOWN, VE::ADJCALLSTACKUP), RI(),
       Subtarget(ST) {}
 
-/// isLoadFromStackSlot - If the specified machine instruction is a direct
-/// load from a stack slot, return the virtual or physical register number of
-/// the destination along with the FrameIndex of the loaded stack slot.  If
-/// not, return 0.  This predicate must return 0 if the instruction has
-/// any side effects other than loading from the stack slot.
-unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
-                                             int &FrameIndex) const {
-  if (MI.getOpcode() == VE::LDSri ||            // I64
-      MI.getOpcode() == VE::LDLri ||            // I32
-      MI.getOpcode() == VE::LDUri ||            // F32
-      MI.getOpcode() == VE::LDQri ||            // F128 (pseudo)
-      MI.getOpcode() == VE::LDVRri ||           // V64 (pseudo)
-      MI.getOpcode() == VE::LDVMri ||           // VM (pseudo)
-      MI.getOpcode() == VE::LDVM512ri           // VM512 (pseudo)
-      ) {
-    if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
-        MI.getOperand(2).getImm() == 0) {
-      FrameIndex = MI.getOperand(1).getIndex();
-      return MI.getOperand(0).getReg();
-    }
-  }
-  return 0;
-}
-
-/// isStoreToStackSlot - If the specified machine instruction is a direct
-/// store to a stack slot, return the virtual or physical register number of
-/// the source reg along with the FrameIndex of the loaded stack slot.  If
-/// not, return 0.  This predicate must return 0 if the instruction has
-/// any side effects other than storing to the stack slot.
-unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
-                                         int &FrameIndex) const {
-  if (MI.getOpcode() == VE::STSri ||            // I64
-      MI.getOpcode() == VE::STLri ||            // I32
-      MI.getOpcode() == VE::STUri ||            // F32
-      MI.getOpcode() == VE::STQri ||            // F128 (pseudo)
-      MI.getOpcode() == VE::STVRri ||           // V64 (pseudo)
-      MI.getOpcode() == VE::STVMri ||           // VM (pseudo)
-      MI.getOpcode() == VE::STVM512ri           // VM512 (pseudo)
-      ) {
-    if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
-        MI.getOperand(1).getImm() == 0) {
-      FrameIndex = MI.getOperand(0).getIndex();
-      return MI.getOperand(2).getReg();
-    }
-  }
-  return 0;
-}
-
 static bool IsIntegerCC(unsigned CC) { return (CC < VECC::CC_AF); }
 
 static VECC::CondCodes GetOppositeBranchCondition(VECC::CondCodes CC) {
@@ -156,11 +108,10 @@ static void parseCondBranch(MachineInstr *LastInst, MachineBasicBlock *&Target,
   Target = LastInst->getOperand(3).getMBB();
 }
 
-bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
-                                   MachineBasicBlock *&TBB,
-                                   MachineBasicBlock *&FBB,
-                                   SmallVectorImpl<MachineOperand> &Cond,
-                                   bool AllowModify) const {
+bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
+                                MachineBasicBlock *&FBB,
+                                SmallVectorImpl<MachineOperand> &Cond,
+                                bool AllowModify) const {
   MachineBasicBlock::iterator I = MBB.getLastNonDebugInstr();
   if (I == MBB.end())
     return false;
@@ -239,11 +190,10 @@ bool VEInstrInfo::analyzeBranch(MachineBasicBlock &MBB,
 }
 
 unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
-                                      MachineBasicBlock *TBB,
-                                      MachineBasicBlock *FBB,
-                                      ArrayRef<MachineOperand> Cond,
-                                      const DebugLoc &DL,
-                                      int *BytesAdded) const {
+                                   MachineBasicBlock *TBB,
+                                   MachineBasicBlock *FBB,
+                                   ArrayRef<MachineOperand> Cond,
+                                   const DebugLoc &DL, int *BytesAdded) const {
   assert(TBB && "insertBranch must not be told to insert a fallthrough");
   assert((Cond.size() == 3 || Cond.size() == 0) &&
          "VE branch conditions should have three component!");
@@ -419,13 +369,62 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   }
 }
 
-void VEInstrInfo::
-storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
-                    unsigned SrcReg, bool isKill, int FI,
-                    const TargetRegisterClass *RC,
-                    const TargetRegisterInfo *TRI) const {
+/// isLoadFromStackSlot - If the specified machine instruction is a direct
+/// load from a stack slot, return the virtual or physical register number of
+/// the destination along with the FrameIndex of the loaded stack slot.  If
+/// not, return 0.  This predicate must return 0 if the instruction has
+/// any side effects other than loading from the stack slot.
+unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
+                                          int &FrameIndex) const {
+  if (MI.getOpcode() == VE::LDSri ||            // I64
+      MI.getOpcode() == VE::LDLri ||            // I32
+      MI.getOpcode() == VE::LDUri ||            // F32
+      MI.getOpcode() == VE::LDQri ||            // F128 (pseudo)
+      MI.getOpcode() == VE::LDVRri ||           // V64 (pseudo)
+      MI.getOpcode() == VE::LDVMri ||           // VM (pseudo)
+      MI.getOpcode() == VE::LDVM512ri           // VM512 (pseudo)
+      ) {
+    if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
+        MI.getOperand(2).getImm() == 0) {
+      FrameIndex = MI.getOperand(1).getIndex();
+      return MI.getOperand(0).getReg();
+    }
+  }
+  return 0;
+}
+
+/// isStoreToStackSlot - If the specified machine instruction is a direct
+/// store to a stack slot, return the virtual or physical register number of
+/// the source reg along with the FrameIndex of the loaded stack slot.  If
+/// not, return 0.  This predicate must return 0 if the instruction has
+/// any side effects other than storing to the stack slot.
+unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
+                                         int &FrameIndex) const {
+  if (MI.getOpcode() == VE::STSri ||            // I64
+      MI.getOpcode() == VE::STLri ||            // I32
+      MI.getOpcode() == VE::STUri ||            // F32
+      MI.getOpcode() == VE::STQri ||            // F128 (pseudo)
+      MI.getOpcode() == VE::STVRri ||           // V64 (pseudo)
+      MI.getOpcode() == VE::STVMri ||           // VM (pseudo)
+      MI.getOpcode() == VE::STVM512ri           // VM512 (pseudo)
+      ) {
+    if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
+        MI.getOperand(1).getImm() == 0) {
+      FrameIndex = MI.getOperand(0).getIndex();
+      return MI.getOperand(2).getReg();
+    }
+  }
+  return 0;
+}
+
+void VEInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
+                                      MachineBasicBlock::iterator I,
+                                      Register SrcReg, bool isKill, int FI,
+                                      const TargetRegisterClass *RC,
+                                      const TargetRegisterInfo *TRI) const {
   DebugLoc DL;
-  if (I != MBB.end()) DL = I->getDebugLoc();
+  if (I != MBB.end())
+    DL = I->getDebugLoc();
 
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
@@ -444,38 +443,61 @@ storeRegToStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
 
   // On the order of operands here: think "[FrameIdx + 0] = SrcReg".
-  if (RC == &VE::I64RegClass)
-    BuildMI(MBB, I, DL, get(VE::STSri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (RC == &VE::I32RegClass)
-    BuildMI(MBB, I, DL, get(VE::STLri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (RC == &VE::F32RegClass)
-    BuildMI(MBB, I, DL, get(VE::STUri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (VE::F128RegClass.hasSubClassEq(RC))
-    BuildMI(MBB, I, DL, get(VE::STQri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (RC == &VE::V64RegClass)
-    BuildMI(MBB, I, DL, get(VE::STVRri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addImm(256).addMemOperand(MMO);
-  else if (RC == &VE::VMRegClass)
-    BuildMI(MBB, I, DL, get(VE::STVMri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else if (VE::VM512RegClass.hasSubClassEq(RC))
-    BuildMI(MBB, I, DL, get(VE::STVM512ri)).addFrameIndex(FI).addImm(0)
-      .addReg(SrcReg, getKillRegState(isKill)).addMemOperand(MMO);
-  else
+  if (RC == &VE::I64RegClass) {
+    BuildMI(MBB, I, DL, get(VE::STSri))
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(isKill))
+        .addMemOperand(MMO);
+  } else if (RC == &VE::I32RegClass) {
+    BuildMI(MBB, I, DL, get(VE::STLri))
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(isKill))
+        .addMemOperand(MMO);
+  } else if (RC == &VE::F32RegClass) {
+    BuildMI(MBB, I, DL, get(VE::STUri))
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(isKill))
+        .addMemOperand(MMO);
+  } else if (VE::F128RegClass.hasSubClassEq(RC)) {
+    BuildMI(MBB, I, DL, get(VE::STQri))
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(isKill))
+        .addMemOperand(MMO);
+  } else if (RC == &VE::V64RegClass) {
+    BuildMI(MBB, I, DL, get(VE::STVRri))
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(isKill))
+        .addImm(256)
+        .addMemOperand(MMO);
+  } else if (RC == &VE::VMRegClass) {
+    BuildMI(MBB, I, DL, get(VE::STVMri))
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(isKill))
+        .addMemOperand(MMO);
+  } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
+    BuildMI(MBB, I, DL, get(VE::STVM512ri))
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(isKill))
+        .addMemOperand(MMO);
+  } else
     report_fatal_error("Can't store this register to stack slot");
 }
 
-void VEInstrInfo::
-loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
-                     unsigned DestReg, int FI,
-                     const TargetRegisterClass *RC,
-                     const TargetRegisterInfo *TRI) const {
+void VEInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
+                                       MachineBasicBlock::iterator I,
+                                       Register DestReg, int FI,
+                                       const TargetRegisterClass *RC,
+                                       const TargetRegisterInfo *TRI) const {
   DebugLoc DL;
-  if (I != MBB.end()) DL = I->getDebugLoc();
+  if (I != MBB.end())
+    DL = I->getDebugLoc();
 
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
@@ -493,28 +515,43 @@ loadRegFromStackSlot(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
       MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
       MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
 
-  if (RC == &VE::I64RegClass)
-    BuildMI(MBB, I, DL, get(VE::LDSri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else if (RC == &VE::I32RegClass)
-    BuildMI(MBB, I, DL, get(VE::LDLri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else if (RC == &VE::F32RegClass)
-    BuildMI(MBB, I, DL, get(VE::LDUri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else if (VE::F128RegClass.hasSubClassEq(RC))
-    BuildMI(MBB, I, DL, get(VE::LDQri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else if (RC == &VE::V64RegClass)
-    BuildMI(MBB, I, DL, get(VE::LDVRri), DestReg).addFrameIndex(FI).addImm(0)
-      .addImm(256).addMemOperand(MMO);
-  else if (RC == &VE::VMRegClass)
-    BuildMI(MBB, I, DL, get(VE::LDVMri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else if (VE::VM512RegClass.hasSubClassEq(RC))
-    BuildMI(MBB, I, DL, get(VE::LDVM512ri), DestReg).addFrameIndex(FI).addImm(0)
-      .addMemOperand(MMO);
-  else
+  if (RC == &VE::I64RegClass) {
+    BuildMI(MBB, I, DL, get(VE::LDSri), DestReg)
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addMemOperand(MMO);
+  } else if (RC == &VE::I32RegClass) {
+    BuildMI(MBB, I, DL, get(VE::LDLri), DestReg)
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addMemOperand(MMO);
+  } else if (RC == &VE::F32RegClass) {
+    BuildMI(MBB, I, DL, get(VE::LDUri), DestReg)
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addMemOperand(MMO);
+  } else if (VE::F128RegClass.hasSubClassEq(RC)) {
+    BuildMI(MBB, I, DL, get(VE::LDQri), DestReg)
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addMemOperand(MMO);
+  } else if (RC == &VE::V64RegClass) {
+    BuildMI(MBB, I, DL, get(VE::LDVRri), DestReg)
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addImm(256)
+        .addMemOperand(MMO);
+  } else if (RC == &VE::VMRegClass) {
+    BuildMI(MBB, I, DL, get(VE::LDVMri), DestReg)
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addMemOperand(MMO);
+  } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
+    BuildMI(MBB, I, DL, get(VE::LDVM512ri), DestReg)
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addMemOperand(MMO);
+  } else
     report_fatal_error("Can't load this register from stack slot");
 }
 
