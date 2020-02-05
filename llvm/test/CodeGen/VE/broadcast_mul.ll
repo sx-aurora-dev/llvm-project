@@ -3874,8 +3874,9 @@ define x86_regcallcc <512 x i32> @mulbrdv512i32(<512 x i32>, i32) {
 define x86_regcallcc <512 x float> @mulbrdv512f32(<512 x float>, float) {
 ; CHECK-LABEL: mulbrdv512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
-; CHECK-NEXT:    srl %s1, %s0, 32
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    and %s1, %s0, (32)0
+; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
@@ -3975,7 +3976,7 @@ define x86_regcallcc <64 x i64> @mulbrdv64i64(<64 x i64>, i64) {
 define x86_regcallcc <32 x i64> @mulbrdv32i64(<32 x i64>, i64) {
 ; CHECK-LABEL: mulbrdv32i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 32
+; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.l %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -3989,7 +3990,7 @@ define x86_regcallcc <32 x i64> @mulbrdv32i64(<32 x i64>, i64) {
 define x86_regcallcc <16 x i64> @mulbrdv16i64(<16 x i64>, i64) {
 ; CHECK-LABEL: mulbrdv16i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 16
+; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.l %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -4003,7 +4004,7 @@ define x86_regcallcc <16 x i64> @mulbrdv16i64(<16 x i64>, i64) {
 define x86_regcallcc <8 x i64> @mulbrdv8i64(<8 x i64>, i64) {
 ; CHECK-LABEL: mulbrdv8i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 8
+; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.l %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -4017,7 +4018,7 @@ define x86_regcallcc <8 x i64> @mulbrdv8i64(<8 x i64>, i64) {
 define x86_regcallcc <4 x i64> @mulbrdv4i64(<4 x i64>, i64) {
 ; CHECK-LABEL: mulbrdv4i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 4
+; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.l %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -4031,7 +4032,7 @@ define x86_regcallcc <4 x i64> @mulbrdv4i64(<4 x i64>, i64) {
 define x86_regcallcc <2 x i64> @mulbrdv2i64(<2 x i64>, i64) {
 ; CHECK-LABEL: mulbrdv2i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 2
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.l %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -4073,7 +4074,7 @@ define x86_regcallcc <64 x double> @mulbrdv64f64(<64 x double>, double) {
 define x86_regcallcc <32 x double> @mulbrdv32f64(<32 x double>, double) {
 ; CHECK-LABEL: mulbrdv32f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 32
+; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmul.d %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -4087,7 +4088,7 @@ define x86_regcallcc <32 x double> @mulbrdv32f64(<32 x double>, double) {
 define x86_regcallcc <16 x double> @mulbrdv16f64(<16 x double>, double) {
 ; CHECK-LABEL: mulbrdv16f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 16
+; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmul.d %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -4101,7 +4102,7 @@ define x86_regcallcc <16 x double> @mulbrdv16f64(<16 x double>, double) {
 define x86_regcallcc <8 x double> @mulbrdv8f64(<8 x double>, double) {
 ; CHECK-LABEL: mulbrdv8f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 8
+; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmul.d %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -4115,7 +4116,7 @@ define x86_regcallcc <8 x double> @mulbrdv8f64(<8 x double>, double) {
 define x86_regcallcc <4 x double> @mulbrdv4f64(<4 x double>, double) {
 ; CHECK-LABEL: mulbrdv4f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 4
+; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmul.d %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -4129,7 +4130,7 @@ define x86_regcallcc <4 x double> @mulbrdv4f64(<4 x double>, double) {
 define x86_regcallcc <2 x double> @mulbrdv2f64(<2 x double>, double) {
 ; CHECK-LABEL: mulbrdv2f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 2
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmul.d %v0,%s0,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
