@@ -859,7 +859,7 @@ class InstTable(object):
     def Inst3f(self, opc, name, instName, subop, expr, hasPacked = True):
         O_f64 = [Args_vvv(T_f64), Args_vsv(T_f64)]
         O_f32 = [Args_vvv(T_f32), Args_vsv(T_f32)]
-        O_pf32 = [Args_vvv(T_f32), Args_vsv(T_f32)]
+        O_pf32 = [Args_vvv(T_f32), [VX(T_f32), SY(T_u64), VZ(T_f32)]]
 
         O_f64 = self.addMask(O_f64)
         O_f32 = self.addMask(O_f32)
@@ -955,8 +955,8 @@ class InstTable(object):
         O_f32_vsvv = [VX(T_f32), SY(T_f32), VZ(T_f32), VW(T_f32)]
         O_f32_vvsv = [VX(T_f32), VY(T_f32), SY(T_f32), VW(T_f32)]
 
-        O_pf32_vsvv = [VX(T_f32), SY(T_f32), VZ(T_f32), VW(T_f32)]
-        O_pf32_vvsv = [VX(T_f32), VY(T_f32), SY(T_f32), VW(T_f32)]
+        O_pf32_vsvv = [VX(T_f32), SY(T_u64), VZ(T_f32), VW(T_f32)]
+        O_pf32_vvsv = [VX(T_f32), VY(T_f32), SY(T_u64), VW(T_f32)]
 
         O_f64 = [O_f64_vvvv, O_f64_vsvv, O_f64_vvsv]
         O_f32 = [O_f32_vvvv, O_f32_vsvv, O_f32_vvsv]
