@@ -39,3 +39,14 @@ def vvp_fsub    : SDNode<"VEISD::VVP_FSUB",  SDTFPBinOpVVP>;
 def vvp_fmul    : SDNode<"VEISD::VVP_FMUL",  SDTFPBinOpVVP>;
 def vvp_fdiv    : SDNode<"VEISD::VVP_FDIV",  SDTFPBinOpVVP>;
 def vvp_ffma    : SDNode<"VEISD::VVP_FFMA",  SDTFPTernaryOpVVP>;
+
+class vvp_commutative<SDNode RootOp> :
+  PatFrags<(ops node:$lhs, node:$rhs, node:$mask, node:$vlen),
+                       [(RootOp node:$lhs, node:$rhs, node:$mask, node:$vlen),
+                        (RootOp node:$rhs, node:$lhs, node:$mask, node:$vlen)]>;
+
+// commutative match
+def c_vv_fadd     : vvp_commutative<vvp_fadd>;
+def c_vv_fmul     : vvp_commutative<vvp_fmul>;
+def c_vv_add     : vvp_commutative<vvp_add>;
+def c_vv_mul     : vvp_commutative<vvp_mul>;
