@@ -1193,8 +1193,8 @@ def createInstructionTable():
 
     T.Def(0xB5, "VFMS", "", "pvfmk.w.lo.", [[VMX, VZ(T_i32), ImmN(T_u64)]]).noTest().noPat()
     T.Def(0xB5, "VFMS", "", "pvfmk.w.up.", [[VMX, VZ(T_i32), ImmN(T_u64)]]).noTest().noPat()
-    T.Def(0xB5, "VFMS", "", "pvfmk.w.lo.", [[VMX, VZ(T_i32), ImmN(T_u64), VM]]).noTest()
-    T.Def(0xB5, "VFMS", "", "pvfmk.w.up.", [[VMX, VZ(T_i32), ImmN(T_u64), VM]]).noTest()
+    T.Def(0xB5, "VFMS", "", "pvfmk.w.lo.", [[VMX, VZ(T_i32), ImmN(T_u64), VM]]).noTest().noPat()
+    T.Def(0xB5, "VFMS", "", "pvfmk.w.up.", [[VMX, VZ(T_i32), ImmN(T_u64), VM]]).noTest().noPat()
     for cc in tmp:
       T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32)]]).noTest()
       T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32)]]).noTest()
