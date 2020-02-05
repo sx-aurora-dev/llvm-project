@@ -13,6 +13,10 @@ def SDTIntBinOpVVP : SDTypeProfile<1, 4, [     // vp_add, vp_and, etc.
   SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisInt<4>, SDTCisSameNumEltsAs<0, 3>
 ]>;
 
+def SDTIntShiftOpVVP : SDTypeProfile<1, 4, [   // shl, sra, srl
+  SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisInt<2>, SDTCisInt<4>, SDTCisSameNumEltsAs<0, 3>
+]>;
+
 // load store
 def SDTLoadVVP : SDTypeProfile<1, 3, [       // vvp load
   SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisSameNumEltsAs<0, 2>, SDTCisInt<3> 
@@ -30,8 +34,12 @@ def vvp_store   : SDNode<"VEISD::VVP_STORE", SDTStoreVVP, [SDNPHasChain, SDNPMay
 def vvp_add    : SDNode<"VEISD::VVP_ADD",  SDTIntBinOpVVP>;
 def vvp_sub    : SDNode<"VEISD::VVP_SUB",  SDTIntBinOpVVP>;
 def vvp_mul    : SDNode<"VEISD::VVP_MUL",  SDTIntBinOpVVP>;
-def vvp_sdiv    : SDNode<"VEISD::VVP_SDIV",  SDTIntBinOpVVP>;
-def vvp_udiv    : SDNode<"VEISD::VVP_UDIV",  SDTIntBinOpVVP>;
+def vvp_sdiv   : SDNode<"VEISD::VVP_SDIV",  SDTIntBinOpVVP>;
+def vvp_udiv   : SDNode<"VEISD::VVP_UDIV",  SDTIntBinOpVVP>;
+
+def vvp_srl    : SDNode<"VEISD::VVP_SRL",  SDTIntShiftOpVVP>;
+def vvp_sra    : SDNode<"VEISD::VVP_SRA",  SDTIntShiftOpVVP>;
+def vvp_shl    : SDNode<"VEISD::VVP_SHL",  SDTIntShiftOpVVP>;
 
 // fp
 def vvp_fadd    : SDNode<"VEISD::VVP_FADD",  SDTFPBinOpVVP>;

@@ -59,7 +59,7 @@ def fplozero    : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
                                       .getZExtValue() & 0xffffffff) == 0; }]>;
 
 // whether the mask is all true
-def true_mask   : PatLeaf<(vec_broadcast (i32 true))>;
+def true_mask    : PatLeaf<(vec_broadcast (i32 true))>;
 
 def CCSIOp : PatLeaf<(cond), [{
   switch (N->get()) {

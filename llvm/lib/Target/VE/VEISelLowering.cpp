@@ -321,6 +321,20 @@ LegalizeVecOperand(SDValue Op, SelectionDAG & DAG) {
   return LegalizeBroadcast(Op, DAG);
 }
 
+// whether this VVP operation ignores its mask argument
+static bool
+HasDeadMask(unsigned VVPOC) {
+  switch (VVPOC) {
+    default:
+      return false;
+
+    case VEISD::VVP_SRL:
+    case VEISD::VVP_SRA:
+    case VEISD::VVP_SHL:
+      return true;
+  }
+}
+
 SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering to VVP node\n");
 

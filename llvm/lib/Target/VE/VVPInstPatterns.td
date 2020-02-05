@@ -71,6 +71,22 @@ multiclass VectorBinaryArith_ShortLong<SDPatternOperator OpNode, ValueType LongD
   defm : VectorBinaryArith<OpNode, ShortDataVT, ShortScalarVT, v256i1, ShortOpBaseName>;
 }
 
+multiclass VectorShiftArith<SDPatternOperator OpNode, ValueType DataVT, ValueType ScalarVT, ValueType MaskVT, string OpBaseName> {
+  // w/o mask, broadcast
+  def : Pat<(DataVT (OpNode DataVT:$vx, (DataVT (vec_broadcast ScalarVT:$sy)), (MaskVT true_mask), i32:$avl)),
+            (!cast<Instruction>(OpBaseName#"_vvsl") $vx, $sy, $avl)>;
+  // w/o mask
+  def : Pat<(DataVT (OpNode DataVT:$vx, DataVT:$vy, (MaskVT true_mask), i32:$avl)),
+            (!cast<Instruction>(OpBaseName#"_vvvl") $vx, $vy, $avl)>;
+  // TODO fold select into op
+}
+
+// Expand both 64bit and 32 bit variant (256 elements)
+multiclass VectorShiftArith_ShortLong<SDPatternOperator OpNode, ValueType LongDataVT, ValueType LongScalarVT, string LongOpBaseName, ValueType ShortDataVT, ValueType ShortScalarVT, string ShortOpBaseName> {
+  defm : VectorShiftArith<OpNode, LongDataVT, LongScalarVT, v256i1, LongOpBaseName>;
+  defm : VectorShiftArith<OpNode, ShortDataVT, ShortScalarVT, v256i1, ShortOpBaseName>;
+}
+
 multiclass VectorTernaryArith<SDPatternOperator OpNode, ValueType DataVT, ValueType ScalarVT, ValueType MaskVT, string OpBaseName, string MaskToken="m"> {
   // w/o mask, broadcast first
   def : Pat<(OpNode (DataVT (vec_broadcast ScalarVT:$sx)), DataVT:$vy, DataVT:$vz, (MaskVT true_mask), i32:$avl),
@@ -108,6 +124,10 @@ defm : VectorBinaryArith_ShortLong<vvp_sub, v256i64, i64, "vsubsl", v256i32, i32
 defm : VectorBinaryArith_ShortLong<c_vv_mul, v256i64, i64, "vmulsl", v256i32, i32, "vmulswsx">;
 defm : VectorBinaryArith_ShortLong<vvp_sdiv, v256i64, i64, "vdivsl", v256i32, i32, "vdivswsx">;
 defm : VectorBinaryArith_ShortLong<vvp_udiv, v256i64, i64, "vdivul", v256i32, i32, "vdivuw">;
+
+defm : VectorShiftArith_ShortLong<vvp_srl, v256i64, i64, "vsrl", v256i32, i64, "pvsrllo">;
+defm : VectorShiftArith_ShortLong<vvp_sra, v256i64, i64, "vsral", v256i32, i64, "pvsralo">;
+defm : VectorShiftArith_ShortLong<vvp_shl, v256i64, i64, "vslal", v256i32, i64, "pvslalo">;
 
 // Floating-point arithmetic (256 elements)
 defm : VectorBinaryArith_ShortLong<c_vv_fadd, v256f64, f64, "vfaddd", v256f32, f32, "vfadds">;
