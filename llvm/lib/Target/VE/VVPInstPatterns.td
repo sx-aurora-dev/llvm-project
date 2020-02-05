@@ -149,4 +149,4 @@ defm : VectorBinaryArith<c_vv_fadd, v512f32, i64, v512i1, "pvfadd", "M">;
 defm : VectorBinaryArith<c_vv_fmul, v512f32, i64, v512i1, "pvfmul", "M">;
 defm : VectorBinaryArith<vvp_fsub, v512f32, i64, v512i1, "pvfsub", "M">;
 
-defm : VectorTernaryArith<vvp_ffma, v512f32, i64, v512i1, "pvfmad", "M">;
+defm : VectorTernaryArith<c_vv_ffma, v512f32, i64, v512i1, "pvfmad", "M">;
