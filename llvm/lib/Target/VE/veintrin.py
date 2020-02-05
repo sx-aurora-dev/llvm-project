@@ -277,12 +277,12 @@ class Inst(object):
 
         if self.opc:
             s = "def {} : RV<0x{:x}, (outs {}), (ins {}),\n".format(instName, self.opc, outs, ins)
-            s += '       "{} {}",'.format(self.asm(), asmArgs) # asmstr
-            s += " [], NoItinerary>\n" # pattern
+            s += '       "{} {}"'.format(self.asm(), asmArgs) # asmstr
+            s += ">\n" # pattern
         else:
             s = "def {} : Pseudo<(outs {}), (ins {}),\n".format(instName, outs, ins)
-            s += '       "# {} {}",'.format(self.asm(), asmArgs) # asmstr
-            s += " []>\n" # pattern
+            s += '       "# {} {}"'.format(self.asm(), asmArgs) # asmstr
+            s += ">\n" # pattern
         s += "{\n"
 #        if self.opc:
 #            if len(self.ins) > 2 and self.ins[1].kind == "s":
