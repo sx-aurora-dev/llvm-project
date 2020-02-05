@@ -111,4 +111,4 @@ defm : VectorTernaryArith_ShortLong<vvp_ffma, v256f64, f64, "vfmadd", v256f32, f
 
 
 // Floating-point arithmetic (512 elements) // TODO
-// defm : VectorBinaryArith<vvp_fadd, v512f32, f32, v512i1, "pvfadd", "M">;
+defm : VectorBinaryArith<vvp_fadd, v512f32, f32, v512i1, "pvfadd", "M">;

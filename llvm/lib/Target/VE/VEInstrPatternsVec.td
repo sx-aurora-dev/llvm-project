@@ -358,24 +358,24 @@ defm : vseq_for_vector_length<2, v2i32, v2i64>;
 //
 // fadd, fsub, fmul, and fdiv for all floating point vector types.
 
-def : Pat<(fadd (vec_broadcast f32:$val), v512f32:$vz),
-          (pvfadd_vsvl
-            (ORrr
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
-              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
-            v512f32:$vz, (LEA32zzi 256))>;
-def : Pat<(fsub (vec_broadcast f32:$val), v512f32:$vz),
-          (pvfsub_vsvl
-            (ORrr
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
-              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
-            v512f32:$vz, (LEA32zzi 256))>;
-def : Pat<(fmul (vec_broadcast f32:$val), v512f32:$vz),
-          (pvfmul_vsvl
-            (ORrr
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
-              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
-            v512f32:$vz, (LEA32zzi 256))>;
+// def : Pat<(fadd (vec_broadcast f32:$val), v512f32:$vz),
+//           (pvfadd_vsvl
+//             (ORrr
+//               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+//               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
+//             v512f32:$vz, (LEA32zzi 256))>;
+// def : Pat<(fsub (vec_broadcast f32:$val), v512f32:$vz),
+//           (pvfsub_vsvl
+//             (ORrr
+//               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+//               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
+//             v512f32:$vz, (LEA32zzi 256))>;
+// def : Pat<(fmul (vec_broadcast f32:$val), v512f32:$vz),
+//           (pvfmul_vsvl
+//             (ORrr
+//               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+//               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32)),
+//             v512f32:$vz, (LEA32zzi 256))>;
 
 multiclass farith_for_vector_length<int length, ValueType vf32,
                                     ValueType vf64> {
@@ -427,26 +427,26 @@ defm : farith_for_vector_length<2, v2f32, v2f64>;
 
 // fma for all floating point vector types.
 
-def : Pat<(fma (v512f32 (vec_broadcast f32:$sy)), v512f32:$vw, v512f32:$vy),
-          (pvfmad_vvsvl v512f32:$vy,
-                    (ORrr
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
-              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32), 32)),
-                    v512f32:$vw,
-                    (LEA32zzi 256))>;
-def : Pat<(fma v512f32:$vw, (v512f32 (vec_broadcast f32:$sy)), v512f32:$vy),
-          (pvfmad_vvsvl v512f32:$vy,
-                    (ORrr
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
-              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32), 32)),
-                    v512f32:$vw,
-                    (LEA32zzi 256))>;
-def : Pat<(fma v512f32:$vz, v512f32:$vw, (v512f32 (vec_broadcast f32:$sy))),
-          (pvfmad_vsvvl (ORrr
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
-              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32), 32)),
-                   v512f32:$vz, v512f32:$vw,
-                   (LEA32zzi 256))>;
+// def : Pat<(fma (v512f32 (vec_broadcast f32:$sy)), v512f32:$vw, v512f32:$vy),
+//           (pvfmad_vvsvl v512f32:$vy,
+//                     (ORrr
+//               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
+//               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32), 32)),
+//                     v512f32:$vw,
+//                     (LEA32zzi 256))>;
+// def : Pat<(fma v512f32:$vw, (v512f32 (vec_broadcast f32:$sy)), v512f32:$vy),
+//           (pvfmad_vvsvl v512f32:$vy,
+//                     (ORrr
+//               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
+//               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32), 32)),
+//                     v512f32:$vw,
+//                     (LEA32zzi 256))>;
+// def : Pat<(fma v512f32:$vz, v512f32:$vw, (v512f32 (vec_broadcast f32:$sy))),
+//           (pvfmad_vsvvl (ORrr
+//               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
+//               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32), 32)),
+//                    v512f32:$vz, v512f32:$vw,
+//                    (LEA32zzi 256))>;
 
 multiclass fma_for_vector_length<int length, ValueType vf32, ValueType vf64> {
   def : Pat<(fma (vf64 (vec_broadcast f64:$sy)), vf64:$vw, vf64:$vy),

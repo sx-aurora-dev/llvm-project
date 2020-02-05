@@ -306,24 +306,40 @@ SDValue VETargetLowering::LowerToVVP(SDValue Op, SelectionDAG &DAG) const {
   }
 
   unsigned OpVectorLength = OpVecTy.getVectorNumElements();
-  const unsigned NativeVectorWidth = 256;
 
-  // break-up oversized vector opers
-  if (OpVecTy.getVectorNumElements() > NativeVectorWidth) {
+  // TODO improve packed macthing logic
+  const unsigned StandardVectorWidth = 256;
+  const unsigned PackedWidth = 512;
+
+  // Switch to packed mode (TODO where appropriate)
+  unsigned VectorWidth = StandardVectorWidth;
+  bool NeedsPackedMasking = false;
+  bool PackedMode = false;
+
+  if (OpVectorLength > StandardVectorWidth) {
+    NeedsPackedMasking = (OpVectorLength % 2 != 0);
+    VectorWidth= PackedWidth;
+    PackedMode = true;
+  }
+
+  // bail out on excess
+  if (OpVectorLength > VectorWidth) {
     LLVM_DEBUG(dbgs() << "LowerToVVP: Over-sized vector operation\n");
     return SDValue();
   }
 
   // Decide on a new result type
   MVT NativeVecTy =
-      MVT::getVectorVT(OpVecTy.getVectorElementType().getSimpleVT(), NativeVectorWidth);
+      MVT::getVectorVT(OpVecTy.getVectorElementType().getSimpleVT(), VectorWidth);
 
   SDLoc dl(Op);
 
-  MVT NativeMaskTy = MVT::getVectorVT(MVT::i1, NativeVectorWidth);
-  SDValue MaskVal = CreateBroadcast(
-      dl, NativeMaskTy, DAG.getConstant(-1, dl, MVT::i1, MVT::i32), DAG); // cannonical type for i1
-  SDValue LenVal = DAG.getConstant(OpVectorLength, dl, MVT::i32);
+  MVT NativeMaskTy = MVT::getVectorVT(MVT::i1, VectorWidth);
+  SDValue MaskVal = CreateBroadcast(dl, NativeMaskTy, DAG.getConstant(-1, dl, MVT::i1, MVT::i32), DAG); // cannonical type for i1
+  assert(!NeedsPackedMasking && "TODO implement packed mask generation");
+
+  unsigned AdjustedLen = PackedMode ? (OpVectorLength + 1) / 2 : OpVectorLength;
+  SDValue LenVal = DAG.getConstant(AdjustedLen, dl, MVT::i32);
 
   if (isBinaryOp) {
     Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
