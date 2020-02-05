@@ -2083,41 +2083,6 @@ include "VEInstrPatternsVec.td"
 // vevlintrin
 include "VEInstrIntrinsicVL.td"
 
-// TODO multiclass
-// with mask
-def vfmkl_mvIml : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
-       "vfmk.l.${cf} $vmx,$vz,$vm">
-{
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-def vfmkw_mvIml : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
-       "vfmk.w.${cf} $vmx,$vz,$vm">
-{
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// w/o m
-def vfmkl_mvIl : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
-       "vfmk.l.${cf} $vmx,$vz">
-{
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-def vfmkw_mvIl : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
-       "vfmk.w.${cf} $vmx,$vz">
-{
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
 // VP intrinsics (llvm.vp.*)
 include "VEVPIntrinsic.td"
 
