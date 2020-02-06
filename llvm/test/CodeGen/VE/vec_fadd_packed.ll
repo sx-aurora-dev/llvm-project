@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+packed | FileCheck %s
 
 ; Function Attrs: nounwind
 define <1 x double> @vec_add_v1f64(<1 x double> %a, <1 x double> %b) {
