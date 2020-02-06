@@ -2904,18 +2904,13 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
   unsigned BufReg = MI.getOperand(1).getReg();
 
   unsigned DstReg;
-  unsigned MemOpndSlot = 0;
 
-  unsigned CurOp = 0;
-
-  DstReg = MI.getOperand(CurOp++).getReg();
+  DstReg = MI.getOperand(0).getReg();
   const TargetRegisterClass *RC = MRI.getRegClass(DstReg);
   assert(TRI->isTypeLegalForClass(*RC, MVT::i32) && "Invalid destination!");
   (void)TRI;
   Register mainDstReg = MRI.createVirtualRegister(RC);
   Register restoreDstReg = MRI.createVirtualRegister(RC);
-
-  MemOpndSlot = CurOp;
 
   // For v = setjmp(buf), we generate
   //
@@ -3084,7 +3079,9 @@ VETargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
   MIB.setMemRefs(MMOs);
 
   // Jump
-  BuildMI(*thisMBB, MI, DL, TII->get(VE::BAri)).addReg(Tmp).addImm(0);
+  BuildMI(*thisMBB, MI, DL, TII->get(VE::BAri))
+      .addReg(Tmp)
+      .addImm(0);
 
   MI.eraseFromParent();
   return thisMBB;
