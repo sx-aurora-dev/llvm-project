@@ -182,7 +182,12 @@ public:
   }
 
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
+  void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
+                          SelectionDAG &DAG) const override;
+  void LowerOperationWrapper(SDNode *N, SmallVectorImpl<SDValue> &Results,
+                             SelectionDAG &DAG) const override;
 
+  SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
@@ -198,7 +203,7 @@ public:
   SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
 
   // Custom Operations
-  SDValue CreateBroadcast(SDLoc dl, MVT ResTy, SDValue S, SelectionDAG &DAG) const;
+  SDValue CreateBroadcast(SDLoc dl, EVT ResTy, SDValue S, SelectionDAG &DAG) const;
 
   // Vector Operations
   SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
@@ -217,8 +222,24 @@ public:
   SDValue LowerVSELECT(llvm::SDValue, llvm::SelectionDAG &) const;
   SDValue LowerTRUNCATE(llvm::SDValue, llvm::SelectionDAG &) const;
 
-  // translate this operation to a VVP_* node
-  SDValue LowerToVVP(SDValue Op, SelectionDAG &DAG) const;
+  enum class VVPExpansionMode : int8_t {
+    ToNextWidth = 0,
+    // for use in result type legalization - expand to the next expected result size
+
+    ToNativeWidth = 1
+    // for use in LowerOperation -> directly expand to the expanded width
+  };
+
+  SDValue ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
+  // Called in TL::ReplaceNodeResults
+  // This replaces the standard ISD node with a VVP VEISD node with a widened
+  // result type.
+
+  SDValue LowerToNativeWidthVVP(SDValue Op, SelectionDAG &DAG) const;
+  // Called during TL::LowerOperation
+  // This replaces this standard ISD node (or VVP VEISD node) with
+  // a VVP VEISD node with a native-width type.
+
   // expand SETCC opernads directly used in vector arithmeticops
   SDValue LowerSETCCInVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
   // Should we expand the build vector with shuffles?
@@ -276,9 +297,6 @@ public:
 
   AtomicExpansionKind
   shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
-
-  void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
-                          SelectionDAG &DAG) const override;
 
   MachineBasicBlock *expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB,
                                     unsigned BROpcode) const;
