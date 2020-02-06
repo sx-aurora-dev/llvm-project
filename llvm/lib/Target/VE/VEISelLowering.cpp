@@ -1818,11 +1818,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::MULHS, VT, Expand);
       setOperationAction(ISD::MULHU, VT, Expand);
 
-      setOperationAction(ISD::SHL, VT, Legal);
+      // setOperationAction(ISD::SHL, VT, Legal);
       setOperationAction(ISD::VP_SHL, VT, Legal);
-      setOperationAction(ISD::SRL, VT, Legal);
+      // setOperationAction(ISD::SRL, VT, Legal);
       setOperationAction(ISD::VP_SRL, VT, Legal);
-      setOperationAction(ISD::SRA, VT, Legal);
+      // setOperationAction(ISD::SRA, VT, Legal);
       setOperationAction(ISD::VP_SRA, VT, Legal);
 
       setOperationAction(ISD::MSCATTER, VT, Custom);
