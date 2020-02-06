@@ -616,15 +616,15 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
     Mask = N->getMask();
     Chain = N->getChain();
     Scale = N->getScale();
-    // } else if (Op.getOpcode() == ISD::VP_GATHER || Op.getOpcode() ==
-    // ISD::VP_SCATTER) {
-    //   VPGatherScatterSDNode *N = cast<VPGatherScatterSDNode>(Op.getNode());
+  } else if (Op.getOpcode() == ISD::VP_GATHER || Op.getOpcode() == ISD::VP_SCATTER) {
+    VPGatherScatterSDNode *N = cast<VPGatherScatterSDNode>(Op.getNode());
 
-    //   Index = N->getIndex();
-    //   BasePtr = N->getBasePtr();
-    //   Mask = N->getMask();
-    //   Chain = N->getChain();
-    //   Scale = N->getScale();
+    OpVectorLength = N->getVectorLength(); // TODO packed mode legalization!!!!
+    Index = N->getIndex();
+    BasePtr = N->getBasePtr();
+    Mask = N->getMask();
+    Chain = N->getChain();
+    Scale = N->getScale();
   } else {
     llvm_unreachable("Unexpected SDNode in lowering function");
   }
@@ -705,10 +705,60 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) 
   return SrcVec;
 }
 
+static Optional<unsigned>
+GetVVPForVP(unsigned VPOC) {
+  switch (VPOC) {
+#define HANDLE_VP_TO_VVP(VP_ISD, VVP_VEISD) \
+    case ISD:: VP_ISD: return VEISD:: VVP_VEISD;
+#include "VVPNodes.inc"
+
+    default:
+      return None;
+  }
+}
+
 SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
-  abort(); // TODO implement
-  // case ISD::VP_VSHIFT: // FIXME shift amount inversion
-  //   return LowerVP_VSHIFT(Op, DAG);
+  auto OCOpt = GetVVPForVP(Op.getOpcode());
+  assert(OCOpt.hasValue());
+
+  switch (Op.getOpcode()) {
+    case ISD::VP_VSHIFT:
+      // Lowered to VEC_VMV (inverted shift amount)
+      return LowerVP_VSHIFT(Op, DAG); 
+
+    case ISD::VP_LOAD:
+      return LowerMLOAD(Op, DAG);
+    case ISD::VP_STORE:
+      return LowerMSTORE(Op, DAG);
+
+    case ISD::VP_GATHER:
+    case ISD::VP_SCATTER:
+      return LowerMGATHER_MSCATTER(Op, DAG);
+
+    default:
+      break;
+  }
+
+  SDLoc dl(Op);
+  unsigned VVPOC = OCOpt.getValue();
+  std::vector<SDValue> OpVec;
+
+  if (VVPOC == VEISD::VVP_FFMA) {
+    OpVec.push_back(LegalizeVecOperand(Op->getOperand(2), DAG));
+    OpVec.push_back(LegalizeVecOperand(Op->getOperand(0), DAG));
+    OpVec.push_back(LegalizeVecOperand(Op->getOperand(1), DAG));
+
+  } else {
+    unsigned NumOps = Op.getNumOperands();
+    for (unsigned i = 0; i < NumOps; ++i) {
+      OpVec.push_back(LegalizeVecOperand(Op.getOperand(i), DAG));
+    }
+  }
+  
+  // Create a matching CP_* node
+  auto NewN = DAG.getNode(VVPOC, dl, Op.getValueType(), OpVec);
+  NewN->setFlags(Op->getFlags());
+  return NewN;
 }
 
 SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
@@ -716,27 +766,79 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(Op.dumpr(&DAG));
   SDLoc dl(Op);
 
-  MaskedLoadSDNode *N = cast<MaskedLoadSDNode>(Op.getNode());
+  SDValue BasePtr;
+  SDValue Mask;
+  SDValue Chain;
+  SDValue PassThru;
+  SDValue OpVectorLength;
 
-  SDValue BasePtr = N->getBasePtr();
-  SDValue Mask = N->getMask();
-  SDValue Chain = N->getChain();
-  SDValue PassThru = N->getPassThru();
+  MaskedLoadSDNode *MaskedN = dyn_cast<MaskedLoadSDNode>(Op.getNode());
+  VPLoadSDNode *VPLoadN = dyn_cast<VPLoadSDNode>(Op.getNode());
+  
+  if (MaskedN) {
+    BasePtr = MaskedN->getBasePtr();
+    Mask = MaskedN->getMask();
+    Chain = MaskedN->getChain();
+    PassThru = MaskedN->getPassThru();
 
-  // Infer the AVL
-  // TODO set to the highest set bit in the mask operand
-  EVT OpVecTy = GetIdiomaticType(Op);
-  SDValue OpVectorLength = DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);
+    // Infer the AVL
+    // TODO set to the highest set bit in the mask operand
+    EVT OpVecTy = GetIdiomaticType(Op);
+    OpVectorLength = DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);
+
+  } else if (VPLoadN) {
+    BasePtr = VPLoadN->getBasePtr();
+    Mask = VPLoadN->getMask();
+    Chain = VPLoadN->getChain();
+    OpVectorLength = VPLoadN->getVectorLength();
+  }
   
   auto load = DAG.getNode(VEISD::VVP_LOAD, dl, Op.getNode()->getVTList(),
                           {Chain, BasePtr, Mask, OpVectorLength});
 
-  if (PassThru.isUndef()) {
+  if (!PassThru || PassThru.isUndef()) {
     return load;
   } else {
     // re-introduce passthru as a select
     return DAG.getSelect(dl, Op.getSimpleValueType(), Mask, load, PassThru);
   }
+}
+
+SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering MSTORE\n");
+  LLVM_DEBUG(Op.dumpr(&DAG));
+  SDLoc dl(Op);
+
+  SDValue BasePtr;
+  SDValue Mask;
+  SDValue Chain;
+  SDValue Data;
+  SDValue OpVectorLength;
+
+  MaskedStoreSDNode *MaskedN = dyn_cast<MaskedStoreSDNode>(Op.getNode());
+  VPStoreSDNode *VPStoreN = dyn_cast<VPStoreSDNode>(Op.getNode());
+  
+  if (MaskedN) {
+    BasePtr = MaskedN->getBasePtr();
+    Mask = MaskedN->getMask();
+    Chain = MaskedN->getChain();
+    Data = MaskedN->getValue();
+
+    // Infer the AVL
+    // TODO set to the highest set bit in the mask operand
+    EVT OpVecTy = GetIdiomaticType(Op);
+    OpVectorLength = DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);
+
+  } else if (VPStoreN) {
+    BasePtr = VPStoreN->getBasePtr();
+    Mask = VPStoreN->getMask();
+    Chain = VPStoreN->getChain();
+    OpVectorLength = VPStoreN->getVectorLength();
+    Data = VPStoreN->getValue();
+  }
+
+  return DAG.getNode(VEISD::VVP_STORE, dl, Op.getNode()->getVTList(),
+                     {Chain, Data, BasePtr, Mask, OpVectorLength});
 }
 
 SDValue VETargetLowering::CreateBroadcast(SDLoc dl, EVT ResTy, SDValue S,

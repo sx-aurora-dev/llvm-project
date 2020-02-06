@@ -213,6 +213,7 @@ public:
   SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerMLOAD(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerMSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
 
