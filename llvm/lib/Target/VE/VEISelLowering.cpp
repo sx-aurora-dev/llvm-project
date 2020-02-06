@@ -49,6 +49,17 @@ static Optional<unsigned> GetVVPOpcode(unsigned OpCode) {
   }
 }
 
+static bool SupportsPackedMode(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    return false;
+
+  case VEISD::VVP_FADD:
+  case VEISD::VVP_FMUL:
+    return true;
+  }
+}
+
 static bool IsVVP(unsigned Opcode) {
   switch (Opcode) {
   default:
@@ -57,7 +68,6 @@ static bool IsVVP(unsigned Opcode) {
 #include "VVPNodes.inc"
   }
 }
-
 static EVT GetIdiomaticType(SDValue Op) {
   auto MemN = dyn_cast<MemSDNode>(Op);
   if (MemN) {
@@ -434,15 +444,26 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
     PackedMode = true;
   }
 
-  // bail out on excess
+  // Is packed mode an option for this OC?
+  if (PackedMode && !SupportsPackedMode(Op.getOpcode())) {
+    LLVM_DEBUG( dbgs() << "\tThe operation does not support packed mode!\n"; );
+    return SDValue();
+  }
+
+  // Over-sized even for packed
   if (OpVectorLength > VectorWidth) {
     LLVM_DEBUG(dbgs() << "LowerToVVP: Over-sized vector operation\n");
     return SDValue();
   }
 
+  // Select CCP Op
+  Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
+  assert(VVPOC.hasValue());
+
   /// Use the eventual native vector width for all newly generated operands
   // we do not want to go through ::ReplaceNodeResults again only to have them widened
   unsigned NativeVectorWidth = (OpVectorLength > StandardVectorWidth) ? PackedWidth : StandardVectorWidth;
+
 
   ///// Generate the VVP operation /////
   MVT ResVecTy =
@@ -458,7 +479,6 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   SDValue LenVal = DAG.getConstant(AdjustedLen, dl, MVT::i32);
 
   if (isBinaryOp) {
-    Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
     assert(VVPOC.hasValue());
     return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
                        {LegalizeVecOperand(Op->getOperand(0), DAG),
@@ -467,7 +487,6 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   }
 
   if (isTernaryOp) {
-    Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
     assert(VVPOC.hasValue());
     assert((VVPOC.getValue() == VEISD::VVP_FFMA) && "operand swizzle for target!");
     return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
@@ -1901,6 +1920,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
       // Custom LOAD/STORE lowering
       setOperationAction(ISD::STORE, VT, Custom);
+
       setOperationAction(ISD::LOAD, VT, Custom);
 
       // currently unsupported math functions
