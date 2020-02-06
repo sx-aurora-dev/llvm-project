@@ -445,7 +445,8 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   }
 
   // Is packed mode an option for this OC?
-  if (PackedMode && !SupportsPackedMode(Op.getOpcode())) {
+  if (PackedMode &&
+      (!Subtarget->hasPackedMode() || !SupportsPackedMode(Op.getOpcode()))) {
     LLVM_DEBUG( dbgs() << "\tThe operation does not support packed mode!\n"; );
     return SDValue();
   }
@@ -1569,8 +1570,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f32, &VE::F32RegClass);
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
-  addRegisterClass(MVT::v512i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v512f32, &VE::V64RegClass);
+  if (Subtarget->hasPackedMode()) {
+    addRegisterClass(MVT::v512i32, &VE::V64RegClass);
+    addRegisterClass(MVT::v512f32, &VE::V64RegClass);
+  }
   addRegisterClass(MVT::v256i32, &VE::V64RegClass);
   addRegisterClass(MVT::v256i64, &VE::V64RegClass);
   addRegisterClass(MVT::v256f32, &VE::V64RegClass);

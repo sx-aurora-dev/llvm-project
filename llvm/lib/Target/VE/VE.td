@@ -23,6 +23,10 @@ def FeatureVectorize
   : SubtargetFeature<"vec", "Vectorize", "true",
                      "Try to vectorize (experimental)">;
 
+def FeaturePackedMode
+  : SubtargetFeature<"packed", "PackedMode", "true",
+                     "Enable v512 packed mode (experimental)">;
+
 
 //===----------------------------------------------------------------------===//
 // Register File, Calling Conv, Instruction Descriptions
