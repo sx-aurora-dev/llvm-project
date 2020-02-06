@@ -84,7 +84,7 @@ enum NodeType : unsigned {
   REPL_I32,
 
   // Internal VVP nodes
-#define REGISTER_VVP_OP(VVP_NAME,ISD_NAME) VVP_NAME ,
+#define ADD_VVP_OP(VVP_NAME) VVP_NAME ,
  #include "VVPNodes.inc"
 
   /// A wrapper node for TargetConstantPool, TargetJumpTable,
@@ -186,6 +186,8 @@ public:
                           SelectionDAG &DAG) const override;
   void LowerOperationWrapper(SDNode *N, SmallVectorImpl<SDValue> &Results,
                              SelectionDAG &DAG) const override;
+
+  SDValue LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;

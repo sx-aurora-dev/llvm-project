@@ -64,7 +64,7 @@ static bool IsVVP(unsigned Opcode) {
   switch (Opcode) {
   default:
     return false;
-#define REGISTER_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME: return true;
+#define ADD_VVP_OP(VVP_NAME) case VEISD::VVP_NAME: return true;
 #include "VVPNodes.inc"
   }
 }
@@ -84,6 +84,11 @@ static EVT GetIdiomaticType(SDValue Op) {
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD:
 #include "VVPNodes.inc"
     return Op->getValueType(0);
+
+  case VEISD::VVP_GATHER:
+      return Op->getValueType(0);
+    case VEISD::VVP_SCATTER:
+      return Op->getOperand(0)->getValueType(0); // FIXME use memory VT instead
   }
 }
 
@@ -373,10 +378,22 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   bool isTernaryOp = false;
   bool isLoadOp = false;
   bool isStoreOp = false;
+  bool isGatherOp = false;
+  bool isScatterOp = false;
 
   switch (Op->getOpcode()) {
   default:
     return SDValue(); // default on this node
+
+  case ISD::MGATHER:
+  case ISD::VP_GATHER:
+    isGatherOp = true;
+    break;
+
+  case ISD::MSCATTER:
+  case ISD::VP_SCATTER:
+    isScatterOp = true;
+    break;
 
   case ISD::LOAD:  isLoadOp = true; break;
   case ISD::STORE: isStoreOp = true; break;
@@ -465,8 +482,11 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   // we do not want to go through ::ReplaceNodeResults again only to have them widened
   unsigned NativeVectorWidth = (OpVectorLength > StandardVectorWidth) ? PackedWidth : StandardVectorWidth;
 
-
   ///// Generate the VVP operation /////
+  if (isGatherOp || isScatterOp) {
+    return LowerMGATHER_MSCATTER(Op, DAG);
+  }
+
   MVT ResVecTy =
       MVT::getVectorVT(OpVecTy.getVectorElementType().getSimpleVT(), VectorWidth);
 
@@ -570,7 +590,7 @@ SDValue VETargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
 
 SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
                                                 SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "Lowering gather or scatter\n");
+  LLVM_DEBUG(dbgs() << "Lowering MGATHER or MSCATTER\n");
   SDLoc dl(Op);
   // dbgs() << "\nNext Instr:\n";
   // Op.dumpr(&DAG);
@@ -583,10 +603,14 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
   SDValue PassThru;
   SDValue Source;
 
+  EVT OpVecTy = GetIdiomaticType(Op);
+  SDValue OpVectorLength;
+
   if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::MSCATTER) {
     MaskedGatherScatterSDNode *N =
         cast<MaskedGatherScatterSDNode>(Op.getNode());
 
+    OpVectorLength = DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);;
     Index = N->getIndex();
     BasePtr = N->getBasePtr();
     Mask = N->getMask();
@@ -640,10 +664,11 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
         DAG.getNode(ISD::ADD, dl, IndexVT, {BaseBroadcast, ScaledIndex});
   }
 
+
   if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::VP_GATHER) {
     // vt = vgt (vindex, vmx, cs=0, sx=0, sy=0, sw=0);
-    SDValue load = DAG.getNode(VEISD::VEC_GATHER, dl, Op.getNode()->getVTList(),
-                               {Chain, addresses, Mask});
+    SDValue load = DAG.getNode(VEISD::VVP_GATHER, dl, Op.getNode()->getVTList(),
+                               {Chain, addresses, Mask, OpVectorLength});
     // load.dumpr(&DAG);
 
     if (PassThru.isUndef()) {
@@ -655,8 +680,8 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
 
   } else {
     SDValue store =
-        DAG.getNode(VEISD::VEC_SCATTER, dl, Op.getNode()->getVTList(),
-                    {Chain, Source, addresses, Mask});
+        DAG.getNode(VEISD::VVP_SCATTER, dl, Op.getNode()->getVTList(),
+                    {Chain, Source, addresses, Mask, OpVectorLength});
     // store.dumpr(&DAG);
     return store;
   }
@@ -680,13 +705,16 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) 
   return SrcVec;
 }
 
+SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
+  abort(); // TODO implement
+  // case ISD::VP_VSHIFT: // FIXME shift amount inversion
+  //   return LowerVP_VSHIFT(Op, DAG);
+}
+
 SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering MLOAD\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
   SDLoc dl(Op);
-
-  // abort(); // TODO implement properly!
-  errs() << "VE WARNING! Using gather for masked load!\n";
 
   MaskedLoadSDNode *N = cast<MaskedLoadSDNode>(Op.getNode());
 
@@ -695,13 +723,13 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
   SDValue Chain = N->getChain();
   SDValue PassThru = N->getPassThru();
 
-  auto CastPtr = CreateBroadcast(dl, MVT::v256i64, BasePtr, DAG);
-  auto ConstStride = DAG.getConstant(8, dl, MVT::i64);
-  auto Offsets = DAG.getNode(VEISD::VEC_SEQ, dl, MVT::v256i64, ConstStride);
-  auto PtrVec = DAG.getNode(ISD::ADD, dl, MVT::v256i64, {CastPtr, Offsets});
-
-  auto load = DAG.getNode(VEISD::VEC_GATHER, dl, Op.getNode()->getVTList(),
-                          {Chain, PtrVec, Mask});
+  // Infer the AVL
+  // TODO set to the highest set bit in the mask operand
+  EVT OpVecTy = GetIdiomaticType(Op);
+  SDValue OpVectorLength = DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);
+  
+  auto load = DAG.getNode(VEISD::VVP_LOAD, dl, Op.getNode()->getVTList(),
+                          {Chain, BasePtr, Mask, OpVectorLength});
 
   if (PassThru.isUndef()) {
     return load;
@@ -1830,8 +1858,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   for (MVT VT : MVT::vector_valuetypes()) {
     setOperationAction(ISD::SELECT_CC, VT, Custom);
-    setOperationAction(ISD::VP_VSHIFT, VT,
-                       Custom); // -> VP_VMV with inverse shift amount
+    // setOperationAction(ISD::VP_VSHIFT, VT,
+    //                    Custom); // -> VP_VMV with inverse shift amount
 
     if (VT.getVectorElementType() == MVT::i8 ||
         VT.getVectorElementType() == MVT::i16) {
@@ -1934,33 +1962,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) setOperationAction(ISD:: ISD_NAME, VT, Custom);
 #include "VVPNodes.inc"
 
-      // supported calculations
+      // supported calculations (FIXME not yet lowered to VVP_* nodes)
       setOperationAction(ISD::FNEG, VT, Legal);
-      // setOperationAction(ISD::FSUB, VT, Legal);
-      // setOperationAction(ISD::FMUL, VT, Legal);
-      // setOperationAction(ISD::FDIV, VT, Legal);
-      // setOperationAction(ISD::ADD, VT, Legal);
-      // setOperationAction(ISD::SUB, VT, Legal);
-      // setOperationAction(ISD::MUL, VT, Legal);
-      // setOperationAction(ISD::SDIV, VT, Legal);
-      // setOperationAction(ISD::UDIV, VT, Legal);
-
       setOperationAction(ISD::MULHS, VT, Expand);
       setOperationAction(ISD::MULHU, VT, Expand);
 
-      // setOperationAction(ISD::SHL, VT, Legal);
-      setOperationAction(ISD::VP_SHL, VT, Legal);
-      // setOperationAction(ISD::SRL, VT, Legal);
-      setOperationAction(ISD::VP_SRL, VT, Legal);
-      // setOperationAction(ISD::SRA, VT, Legal);
-      setOperationAction(ISD::VP_SRA, VT, Legal);
-
       setOperationAction(ISD::MSCATTER, VT, Custom);
       setOperationAction(ISD::MGATHER, VT, Custom);
-      setOperationAction(ISD::VP_SCATTER, VT,
-                         Legal); // FIXME Expand for illegal types!
-      setOperationAction(ISD::VP_GATHER, VT,
-                         Legal); // FIXME Expand for illegal types!
       setOperationAction(ISD::MLOAD, VT, Custom);
 
       // VE vector unit supports only setcc and vselect
@@ -1977,20 +1985,20 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     }
   }
 
-  // VP legalization
+  // VP -> VVP lowering
   for (MVT VT : MVT::vector_valuetypes()) {
     LegalizeAction Action;
     if ((VT.getVectorNumElements() == 256) ||
         (VT.getVectorNumElements() == 512)) {
-      Action = Legal;
+      Action = Custom;
     } else {
-      Action = Custom; // custom expansion to native-width operation
+      Action = Expand; // custom expansion to native-width operation
     }
 
   // Legalize VVP ops for all sizes, except the native ones
-// #define REGISTER_VVP_OP(VVP_NAME, ISD_NAME) \
-//   setOperationAction(VEISD:: VVP_NAME, VT, Action);
-// #include "VVPNodes.inc"
+#define REGISTER_VP_SDNODE(VP_NAME, VP_TEXT, MASK_POS, LEN_POS) \
+      setOperationAction(ISD:: VP_NAME, VT, Action);
+#include "llvm/IR/VPIntrinsics.def"
  }
   
   // CUSTOM HANDLERS FOR VECTOR INSTRUCTIONS
@@ -2151,7 +2159,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(REPL_I32)
     TARGET_NODE_CASE(Wrapper)
 
-#define REGISTER_VVP_OP(VVP_NAME,...) TARGET_NODE_CASE(VVP_NAME)
+#define ADD_VVP_OP(VVP_NAME) TARGET_NODE_CASE(VVP_NAME)
 #include "VVPNodes.inc"
 
   }
@@ -3227,6 +3235,11 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     Op.dump();
     llvm_unreachable("Should not custom lower this!");
 
+#define REGISTER_VP_SDNODE(VP_NAME, VP_TEXT, MASK_POS, LEN_POS) \
+  case ISD:: VP_NAME:
+#include "llvm/IR/VPIntrinsics.def"
+    return LowerVPToVVP(Op, DAG);
+
   case ISD::RETURNADDR:
     return LowerRETURNADDR(Op, DAG, *this, Subtarget);
   case ISD::FRAMEADDR:
@@ -3266,8 +3279,8 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerINTRINSIC_W_CHAIN(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN:
     return LowerINTRINSIC_WO_CHAIN(Op, DAG);
-  case ISD::VP_VSHIFT:
-    return LowerVP_VSHIFT(Op, DAG);
+  // case ISD::VP_VSHIFT:
+  //   return LowerVP_VSHIFT(Op, DAG);
   case ISD::BUILD_VECTOR:
     return LowerBUILD_VECTOR(Op, DAG);
   case ISD::INSERT_VECTOR_ELT:
