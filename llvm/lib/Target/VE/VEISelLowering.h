@@ -177,6 +177,10 @@ public:
   SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
 
   /// Custom Lower {
+  LegalizeAction getActionForExtendedType(unsigned Op, EVT VT) const override {
+    return VT.isVector() ? Custom : Expand;
+  }
+
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
