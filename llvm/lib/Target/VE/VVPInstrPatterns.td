@@ -8,8 +8,35 @@ include "VVPInstrInfo.td"
 // TODO
 // ====
 // * fold select/vp.select into patterns to match passthru
-// * fold broadcast into op
 
+// Vector Gather and scatter
+multiclass VectorGather<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, string GTPrefix> {
+  // w/o mask
+  def : Pat<(DataVT (vvp_gather PtrVt:$addr, (MaskVT true_mask), i32:$avl)),
+                    (!cast<Instruction>(GTPrefix#"_vvssl") $addr, 0, 0, $avl)>;
+  // with mask
+  def : Pat<(DataVT (vvp_gather PtrVt:$addr, MaskVT:$mask, i32:$avl)),
+            (!cast<Instruction>(GTPrefix#"_vvssml") $addr, 0, 0, $mask, $avl)>;
+}
+
+defm : VectorGather<v256f64, v256i64, v256i1, "vgt">;
+defm : VectorGather<v256i64, v256i64, v256i1, "vgt">;
+defm : VectorGather<v256f32, v256i64, v256i1, "vgtu">;
+defm : VectorGather<v256i32, v256i64, v256i1, "vgtlzx">;
+
+multiclass VectorScatter<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, string SCPrefix> {
+  // w/o mask
+  def : Pat<(vvp_scatter DataVT:$data, PtrVt:$addr, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(SCPrefix#"_vvssl") $data, $addr, 0, 0, $avl)>;
+  // with mask
+  def : Pat<(vvp_scatter DataVT:$data, PtrVt:$addr, MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(SCPrefix#"_vvssml") $data, $addr, 0, 0, $mask, $avl)>;
+}
+
+defm : VectorScatter<v256f64, v256i64, v256i1, "vsc">;
+defm : VectorScatter<v256i64, v256i64, v256i1, "vsc">;
+defm : VectorScatter<v256f32, v256i64, v256i1, "vscu">;
+defm : VectorScatter<v256i32, v256i64, v256i1, "vscl">;
 
 // Vector Load and Store
 multiclass VectorLoad<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, int immStride, SDNode GTWithMask, SDNode LDNoMask> {

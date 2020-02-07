@@ -762,7 +762,7 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
 }
 
 SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "Lowering MLOAD\n");
+  LLVM_DEBUG(dbgs() << "Lowering VP/MLOAD\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
   SDLoc dl(Op);
 
@@ -805,7 +805,7 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
 }
 
 SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "Lowering MSTORE\n");
+  LLVM_DEBUG(dbgs() << "Lowering VP/MSTORE\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
   SDLoc dl(Op);
 
@@ -1695,15 +1695,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setBooleanVectorContents(ZeroOrOneBooleanContent);
 
   // Set up the register classes.
+  // SPU registers
   addRegisterClass(MVT::i32, &VE::I32RegClass);
   addRegisterClass(MVT::i64, &VE::I64RegClass);
   addRegisterClass(MVT::f32, &VE::F32RegClass);
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
-  if (Subtarget->hasPackedMode()) {
-    addRegisterClass(MVT::v512i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v512f32, &VE::V64RegClass);
-  }
+  // VPU registers
   addRegisterClass(MVT::v256i32, &VE::V64RegClass);
   addRegisterClass(MVT::v256i64, &VE::V64RegClass);
   addRegisterClass(MVT::v256f32, &VE::V64RegClass);
@@ -1737,7 +1735,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v2f32, &VE::V64RegClass);
   addRegisterClass(MVT::v2f64, &VE::V64RegClass);
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
-  addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+
+  if (Subtarget->hasPackedMode()) {
+    addRegisterClass(MVT::v512i32, &VE::V64RegClass);
+    addRegisterClass(MVT::v512f32, &VE::V64RegClass);
+    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+  }
 
   if (Subtarget->vectorize()) {
     // We want to use any of vectorization oppotunities in llvm.
@@ -1759,6 +1762,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::v4i64, &VE::VMRegClass);
     addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
   }
+
+  /// Scalar Lowering {
 
   /// Load & Store {
   for (MVT FPVT : MVT::fp_valuetypes()) {
@@ -1958,6 +1963,68 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::LOAD, MVT::f128, Custom);
   setOperationAction(ISD::STORE, MVT::f128, Custom);
 
+  // VE has FAQ, FSQ, FMQ, and FCQ
+  setOperationAction(ISD::FADD, MVT::f128, Legal);
+  setOperationAction(ISD::FSUB, MVT::f128, Legal);
+  setOperationAction(ISD::FMUL, MVT::f128, Legal);
+  setOperationAction(ISD::FDIV, MVT::f128, Expand);
+  setOperationAction(ISD::FSQRT, MVT::f128, Expand);
+  setOperationAction(ISD::FP_EXTEND, MVT::f128, Legal);
+  setOperationAction(ISD::FP_ROUND, MVT::f128, Legal);
+
+  // Other configurations related to f128.
+  setOperationAction(ISD::SELECT, MVT::f128, Legal);
+  setOperationAction(ISD::SELECT_CC, MVT::f128, Legal);
+  setOperationAction(ISD::SETCC, MVT::f128, Legal);
+  setOperationAction(ISD::BR_CC, MVT::f128, Legal);
+
+  setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
+  setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::Other, Custom);
+  setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
+
+  // TRAP to expand (which turns it into abort).
+  setOperationAction(ISD::TRAP, MVT::Other, Expand);
+
+  // On most systems, DEBUGTRAP and TRAP have no difference. The "Expand"
+  // here is to inform DAG Legalizer to replace DEBUGTRAP with TRAP.
+  setOperationAction(ISD::DEBUGTRAP, MVT::Other, Expand);
+
+  /// VAARG handling {
+  setOperationAction(ISD::VASTART, MVT::Other, Custom);
+  // VAARG needs to be lowered to access with 8 bytes alignment.
+  setOperationAction(ISD::VAARG, MVT::Other, Custom);
+  // Use the default implementation.
+  setOperationAction(ISD::VACOPY, MVT::Other, Expand);
+  setOperationAction(ISD::VAEND, MVT::Other, Expand);
+  /// } VAARG handling
+
+  // VE has no REM or DIVREM operations.
+  for (MVT IntVT : MVT::integer_valuetypes()) {
+    setOperationAction(ISD::UREM, IntVT, Expand);
+    setOperationAction(ISD::SREM, IntVT, Expand);
+    setOperationAction(ISD::SDIVREM, IntVT, Expand);
+    setOperationAction(ISD::UDIVREM, IntVT, Expand);
+  }
+
+  /// Conversion {
+  // VE doesn't have instructions for fp<->uint, so expand them by llvm
+  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Promote); // use i64
+  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Promote); // use i64
+  setOperationAction(ISD::FP_TO_UINT, MVT::i64, Expand);
+  setOperationAction(ISD::UINT_TO_FP, MVT::i64, Expand);
+
+  // fp16 not supported
+  for (MVT FPVT : MVT::fp_valuetypes()) {
+    setOperationAction(ISD::FP16_TO_FP, FPVT, Expand);
+    setOperationAction(ISD::FP_TO_FP16, FPVT, Expand);
+  }
+  /// } Conversion
+
+  /// } Scalar Lowering
+
+
+  /// Vector Lowering {
+
   for (MVT VT : MVT::vector_valuetypes()) {
     setOperationAction(ISD::SELECT_CC, VT, Custom);
     // setOperationAction(ISD::VP_VSHIFT, VT,
@@ -2069,10 +2136,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::MULHS, VT, Expand);
       setOperationAction(ISD::MULHU, VT, Expand);
 
-      setOperationAction(ISD::MSCATTER, VT, Custom);
-      setOperationAction(ISD::MGATHER, VT, Custom);
-      setOperationAction(ISD::MLOAD, VT, Custom);
-
       // VE vector unit supports only setcc and vselect
       setOperationAction(ISD::SELECT_CC, VT, Expand);
 
@@ -2087,7 +2150,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     }
   }
 
-  // VP -> VVP lowering
+  // X -> vp_* funnel
   for (MVT VT : MVT::vector_valuetypes()) {
     LegalizeAction Action;
     if ((VT.getVectorNumElements() == 256) ||
@@ -2097,7 +2160,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       Action = Expand; // custom expansion to native-width operation
     }
 
-  // Legalize VVP ops for all sizes, except the native ones
+    // llvm.masked.* -> vvp lowering
+    setOperationAction(ISD::MSCATTER, VT, Custom);
+    setOperationAction(ISD::MGATHER, VT, Custom);
+    setOperationAction(ISD::MLOAD, VT, Custom);
+    setOperationAction(ISD::MSTORE, VT, Custom);
+
+     // VP -> VVP lowering
 #define REGISTER_VP_SDNODE(VP_NAME, VP_TEXT, MASK_POS, LEN_POS) \
       setOperationAction(ISD:: VP_NAME, VT, Action);
 #include "llvm/IR/VPIntrinsics.def"
@@ -2119,15 +2188,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::TRUNCATE, MVT::v256i32, Custom);
   setOperationAction(ISD::VSELECT, MVT::v256i1, Custom);
 
-  // repair the setcc as operand of arithmetic pattern
-  // TODO extend this list as necessary (possibly shifts)
-  setOperationAction(ISD::ADD, MVT::v256i64, Custom);
-  setOperationAction(ISD::MUL, MVT::v256i64, Custom);
-  setOperationAction(ISD::SUB, MVT::v256i64, Custom);
-  setOperationAction(ISD::ADD, MVT::v256i32, Custom);
-  setOperationAction(ISD::MUL, MVT::v256i32, Custom);
-  setOperationAction(ISD::SUB, MVT::v256i32, Custom);
-
   // VE has no packed MUL, SDIV, or UDIV operations.
   for (MVT VT : {MVT::v512i32, MVT::v512f32}) {
     setOperationAction(ISD::MUL, VT, Expand);
@@ -2143,62 +2203,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::UDIVREM, VT, Expand);
   }
 
-  // VE has FAQ, FSQ, FMQ, and FCQ
-  setOperationAction(ISD::FADD, MVT::f128, Legal);
-  setOperationAction(ISD::FSUB, MVT::f128, Legal);
-  setOperationAction(ISD::FMUL, MVT::f128, Legal);
-  setOperationAction(ISD::FDIV, MVT::f128, Expand);
-  setOperationAction(ISD::FSQRT, MVT::f128, Expand);
-  setOperationAction(ISD::FP_EXTEND, MVT::f128, Legal);
-  setOperationAction(ISD::FP_ROUND, MVT::f128, Legal);
+  /// } Vector Lowering
 
-  // Other configurations related to f128.
-  setOperationAction(ISD::SELECT, MVT::f128, Legal);
-  setOperationAction(ISD::SELECT_CC, MVT::f128, Legal);
-  setOperationAction(ISD::SETCC, MVT::f128, Legal);
-  setOperationAction(ISD::BR_CC, MVT::f128, Legal);
-
-  setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
-  setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::Other, Custom);
-  setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
-
-  // TRAP to expand (which turns it into abort).
-  setOperationAction(ISD::TRAP, MVT::Other, Expand);
-
-  // On most systems, DEBUGTRAP and TRAP have no difference. The "Expand"
-  // here is to inform DAG Legalizer to replace DEBUGTRAP with TRAP.
-  setOperationAction(ISD::DEBUGTRAP, MVT::Other, Expand);
-
-  /// VAARG handling {
-  setOperationAction(ISD::VASTART, MVT::Other, Custom);
-  // VAARG needs to be lowered to access with 8 bytes alignment.
-  setOperationAction(ISD::VAARG, MVT::Other, Custom);
-  // Use the default implementation.
-  setOperationAction(ISD::VACOPY, MVT::Other, Expand);
-  setOperationAction(ISD::VAEND, MVT::Other, Expand);
-  /// } VAARG handling
-
-  // VE has no REM or DIVREM operations.
-  for (MVT IntVT : MVT::integer_valuetypes()) {
-    setOperationAction(ISD::UREM, IntVT, Expand);
-    setOperationAction(ISD::SREM, IntVT, Expand);
-    setOperationAction(ISD::SDIVREM, IntVT, Expand);
-    setOperationAction(ISD::UDIVREM, IntVT, Expand);
-  }
-
-  /// Conversion {
-  // VE doesn't have instructions for fp<->uint, so expand them by llvm
-  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Promote); // use i64
-  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Promote); // use i64
-  setOperationAction(ISD::FP_TO_UINT, MVT::i64, Expand);
-  setOperationAction(ISD::UINT_TO_FP, MVT::i64, Expand);
-
-  // fp16 not supported
-  for (MVT FPVT : MVT::fp_valuetypes()) {
-    setOperationAction(ISD::FP16_TO_FP, FPVT, Expand);
-    setOperationAction(ISD::FP_TO_FP16, FPVT, Expand);
-  }
-  /// } Conversion
 
   setStackPointerRegisterToSaveRestore(VE::SX11);
 
@@ -3337,100 +3343,68 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     Op.dump();
     llvm_unreachable("Should not custom lower this!");
 
+  // LLVM-VP --> vvp_*
 #define REGISTER_VP_SDNODE(VP_NAME, VP_TEXT, MASK_POS, LEN_POS) \
   case ISD:: VP_NAME:
 #include "llvm/IR/VPIntrinsics.def"
     return LowerVPToVVP(Op, DAG);
 
-  case ISD::RETURNADDR:
-    return LowerRETURNADDR(Op, DAG, *this, Subtarget);
-  case ISD::FRAMEADDR:
-    return LowerFRAMEADDR(Op, DAG, *this, Subtarget);
-  case ISD::BlockAddress:
-    return LowerBlockAddress(Op, DAG);
-  case ISD::GlobalAddress:
-    return LowerGlobalAddress(Op, DAG);
-  case ISD::GlobalTLSAddress:
-    return LowerGlobalTLSAddress(Op, DAG);
-  case ISD::ConstantPool:
-    return LowerConstantPool(Op, DAG);
-  case ISD::EH_SJLJ_SETJMP:
-    return LowerEH_SJLJ_SETJMP(Op, DAG);
-  case ISD::EH_SJLJ_LONGJMP:
-    return LowerEH_SJLJ_LONGJMP(Op, DAG);
-  case ISD::EH_SJLJ_SETUP_DISPATCH:
-    return LowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
-  case ISD::VASTART:
-    return LowerVASTART(Op, DAG);
-  case ISD::VAARG:
-    return LowerVAARG(Op, DAG);
-  case ISD::DYNAMIC_STACKALLOC:
-    return LowerDYNAMIC_STACKALLOC(Op, DAG);
-  case ISD::LOAD:
-    return LowerLOAD(Op, DAG);
-  case ISD::STORE:
-    return LowerSTORE(Op, DAG);
+  case ISD::RETURNADDR: return LowerRETURNADDR(Op, DAG, *this, Subtarget);
+  case ISD::FRAMEADDR: return LowerFRAMEADDR(Op, DAG, *this, Subtarget);
+  case ISD::BlockAddress: return LowerBlockAddress(Op, DAG);
+  case ISD::GlobalAddress: return LowerGlobalAddress(Op, DAG);
+  case ISD::GlobalTLSAddress: return LowerGlobalTLSAddress(Op, DAG);
+  case ISD::ConstantPool: return LowerConstantPool(Op, DAG);
+  case ISD::EH_SJLJ_SETJMP: return LowerEH_SJLJ_SETJMP(Op, DAG);
+  case ISD::EH_SJLJ_LONGJMP: return LowerEH_SJLJ_LONGJMP(Op, DAG);
+  case ISD::EH_SJLJ_SETUP_DISPATCH: return LowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
+  case ISD::VASTART: return LowerVASTART(Op, DAG);
+  case ISD::VAARG: return LowerVAARG(Op, DAG);
+  case ISD::DYNAMIC_STACKALLOC: return LowerDYNAMIC_STACKALLOC(Op, DAG);
   case ISD::UMULO:
   case ISD::SMULO:
     return LowerUMULO_SMULO(Op, DAG, *this);
-  case ISD::ATOMIC_FENCE:
-    return LowerATOMIC_FENCE(Op, DAG);
-  case ISD::INTRINSIC_VOID:
-    return LowerINTRINSIC_VOID(Op, DAG);
-  case ISD::INTRINSIC_W_CHAIN:
-    return LowerINTRINSIC_W_CHAIN(Op, DAG);
-  case ISD::INTRINSIC_WO_CHAIN:
-    return LowerINTRINSIC_WO_CHAIN(Op, DAG);
-  // case ISD::VP_VSHIFT:
-  //   return LowerVP_VSHIFT(Op, DAG);
-  case ISD::BUILD_VECTOR:
-    return LowerBUILD_VECTOR(Op, DAG);
-  case ISD::INSERT_VECTOR_ELT:
-    return LowerINSERT_VECTOR_ELT(Op, DAG);
-  case ISD::EXTRACT_VECTOR_ELT:
-    return LowerEXTRACT_VECTOR_ELT(Op, DAG);
+  case ISD::ATOMIC_FENCE: return LowerATOMIC_FENCE(Op, DAG);
+  case ISD::INTRINSIC_VOID: return LowerINTRINSIC_VOID(Op, DAG);
+  case ISD::INTRINSIC_W_CHAIN: return LowerINTRINSIC_W_CHAIN(Op, DAG);
+  case ISD::INTRINSIC_WO_CHAIN: return LowerINTRINSIC_WO_CHAIN(Op, DAG);
+  case ISD::BITCAST: return LowerBitcast(Op, DAG);
 
-  case ISD::BITCAST:
-    return LowerBitcast(Op, DAG);
-
-  case ISD::VECTOR_SHUFFLE:
-    return LowerVECTOR_SHUFFLE(Op, DAG);
+  case ISD::BUILD_VECTOR: return LowerBUILD_VECTOR(Op, DAG);
+  case ISD::INSERT_VECTOR_ELT: return LowerINSERT_VECTOR_ELT(Op, DAG);
+  case ISD::EXTRACT_VECTOR_ELT: return LowerEXTRACT_VECTOR_ELT(Op, DAG);
+  case ISD::VECTOR_SHUFFLE: return LowerVECTOR_SHUFFLE(Op, DAG);
+  case ISD::EXTRACT_SUBVECTOR: return LowerEXTRACT_SUBVECTOR(Op, DAG);
 
   case ISD::VECREDUCE_OR:
   case ISD::VECREDUCE_AND:
   case ISD::VECREDUCE_XOR:
     return LowerVECREDUCE(Op, DAG);
 
+  case ISD::LOAD: return LowerLOAD(Op, DAG);
+  case ISD::MLOAD: return LowerMLOAD(Op, DAG);
+  case ISD::STORE: return LowerSTORE(Op, DAG);
+  case ISD::MSTORE: return LowerMSTORE(Op, DAG);
   case ISD::MSCATTER:
   case ISD::MGATHER:
     return LowerMGATHER_MSCATTER(Op, DAG);
 
+  // vvp_* --> vvp_* with native types
   // if a SETCC result is used by vector arithmetic, convert it back into
   // v256i64 (from the v256i1 created in the SETCC lowering)
   // TODO extend this list as necessary (possibly shifts)
   
   // Lower this operation to an internal VVP_* node
-#define REGISTER_BINARY_VVP_OP(VP_NAME, ISD_NAME) case ISD:: ISD_NAME:
-#define REGISTER_TERNARY_VVP_OP(VP_NAME, ISD_NAME) case ISD:: ISD_NAME:
+#define ADD_VVP_OP(VVP_NAME) case VEISD:: VVP_NAME:
 #include "VVPNodes.inc"
      return LowerToNativeWidthVVP(LowerSETCCInVectorArithmetic(Op, DAG), DAG);
 
   // modify the return type of SETCC on vectors to v256i1
-  case ISD::SETCC:
-    return LowerSETCC(Op, DAG);
-  case ISD::SELECT_CC:
-    return LowerSELECT_CC(Op, DAG);
-  case ISD::VSELECT:
-    return LowerVSELECT(Op, DAG);
+  case ISD::SETCC: return LowerSETCC(Op, DAG);
+  case ISD::SELECT_CC: return LowerSELECT_CC(Op, DAG);
+  case ISD::VSELECT: return LowerVSELECT(Op, DAG);
 
-  case ISD::TRUNCATE:
-    return LowerTRUNCATE(Op, DAG);
-  case ISD::MLOAD:
-    return LowerMLOAD(Op, DAG);
-
-
-  case ISD::EXTRACT_SUBVECTOR:
-    return LowerEXTRACT_SUBVECTOR(Op, DAG);
+  case ISD::TRUNCATE: return LowerTRUNCATE(Op, DAG);
   }
 }
 

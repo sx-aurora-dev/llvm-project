@@ -2103,4 +2103,4 @@ include "VEInstrIntrinsicVL.td"
 include "VEVPIntrinsic.td"
 
 // VVP lowering
-include "VVPInstPatterns.td"
+include "VVPInstrPatterns.td"
