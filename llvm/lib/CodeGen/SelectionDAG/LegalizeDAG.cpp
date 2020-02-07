@@ -1137,9 +1137,17 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
                                               Node->getValueType(0), Scale);
     break;
   }
+  case ISD::VP_SCATTER:
+    Action = TLI.getOperationAction(Node->getOpcode(),
+                    cast<VPScatterSDNode>(Node)->getValue().getValueType());
+    break;
   case ISD::MSCATTER:
     Action = TLI.getOperationAction(Node->getOpcode(),
                     cast<MaskedScatterSDNode>(Node)->getValue().getValueType());
+    break;
+  case ISD::VP_STORE:
+    Action = TLI.getOperationAction(Node->getOpcode(),
+                    cast<VPStoreSDNode>(Node)->getValue().getValueType());
     break;
   case ISD::MSTORE:
     Action = TLI.getOperationAction(Node->getOpcode(),
