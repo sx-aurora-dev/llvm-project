@@ -171,7 +171,6 @@ defm : VectorBinaryArith<vvp_sub, v512i32, i64, v512i1, "pvsubu", "M">;
 // defm : VectorBinaryArith<vvp_mul, v512i32, i64, "vmulsl", "M">; // no packed mul
 // defm : VectorBinaryArith<vvp_sdiv, v512i32, i64, "vdivsl", "M">; // no packed sdiv
 // defm : VectorBinaryArith<vvp_udiv, v512i32, i64, "vdivul", "M">; // no packed udiv
-
 defm : VectorShiftArith<vvp_srl, v512i32, i64, v512i1, "pvsrl">;
 defm : VectorShiftArith<vvp_sra, v512i32, i64, v512i1, "pvsra">;
 defm : VectorShiftArith<vvp_shl, v512i32, i64, v512i1, "pvsll">;

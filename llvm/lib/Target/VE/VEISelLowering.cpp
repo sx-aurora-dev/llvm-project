@@ -54,9 +54,8 @@ static bool SupportsPackedMode(unsigned Opcode) {
   default:
     return false;
 
-  case VEISD::VVP_FADD:
-  case VEISD::VVP_FMUL:
-    return true;
+#define REGISTER_PACKED(VVP_NAME) case VEISD:: VVP_NAME: return true;
+#include "VVPNodes.inc"
   }
 }
 
@@ -928,20 +927,27 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
   bool S2V;
   unsigned FirstDef;
   if (isBroadCastOrS2V(BVN, AllUndef, S2V, FirstDef)) {
+
+    // TODO infer a proper vector width
+    EVT ResTy = Op.getSimpleValueType();
+    assert(ResTy.isVector());
+    unsigned TargetWidth = ResTy.getVectorNumElements() > StandardVectorWidth ? PackedWidth : StandardVectorWidth;
+    EVT NativeResTy = EVT::getVectorVT(*DAG.getContext(), ResTy.getVectorElementType(), TargetWidth);
+
     if (AllUndef) {
       LLVM_DEBUG(dbgs() << "AllUndef: VEC_BROADCAST ");
       LLVM_DEBUG(BVN->getOperand(0)->dump());
-      return CreateBroadcast(DL, Op.getSimpleValueType(), BVN->getOperand(0),
+      return CreateBroadcast(DL, NativeResTy, BVN->getOperand(0),
                              DAG);
     } else if (S2V) {
       LLVM_DEBUG(dbgs() << "isS2V: scalar_to_vector ");
       LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
-      return DAG.getNode(ISD::SCALAR_TO_VECTOR, DL, Op.getSimpleValueType(),
+      return DAG.getNode(ISD::SCALAR_TO_VECTOR, DL, NativeResTy,
                          BVN->getOperand(FirstDef));
     } else {
       LLVM_DEBUG(dbgs() << "isBroadCast: VEC_BROADCAST ");
       LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
-      return CreateBroadcast(DL, Op.getSimpleValueType(),
+      return CreateBroadcast(DL, NativeResTy,
                              BVN->getOperand(FirstDef), DAG);
     }
   }
@@ -3407,7 +3413,6 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 #include "VVPNodes.inc"
 
      return LowerToNativeWidthVVP(LowerSETCCInVectorArithmetic(Op, DAG), DAG);
-
   }
 }
 
