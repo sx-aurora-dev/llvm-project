@@ -37,6 +37,11 @@ using namespace llvm;
 
 #define DEBUG_TYPE "ve-lower"
 
+/// Target Constants {
+const unsigned StandardVectorWidth = 256;
+const unsigned PackedWidth = 512;
+/// } Target Constants
+
 //// VVP Machinery {
 // VVP property queries
 static Optional<unsigned> GetVVPOpcode(unsigned OpCode) {
@@ -67,6 +72,7 @@ static bool IsVVP(unsigned Opcode) {
 #include "VVPNodes.inc"
   }
 }
+
 static EVT GetIdiomaticType(SDValue Op) {
   auto MemN = dyn_cast<MemSDNode>(Op);
   if (MemN) {
@@ -145,8 +151,15 @@ HasDeadMask(unsigned VVPOC) {
 }
 //// } VVP Machinery
 
-
-
+static EVT LegalizeVectorType(EVT ResTy, SelectionDAG &DAG) {
+  // TODO infer a proper vector width
+  assert(ResTy.isVector());
+  unsigned TargetWidth = ResTy.getVectorNumElements() > StandardVectorWidth
+                             ? PackedWidth
+                             : StandardVectorWidth;
+  return EVT::getVectorVT(*DAG.getContext(), ResTy.getVectorElementType(),
+                          TargetWidth);
+}
 
 //===----------------------------------------------------------------------===//
 // Calling Convention Implementation
@@ -362,10 +375,6 @@ SDValue VETargetLowering::LowerSETCCInVectorArithmetic(SDValue Op,
   return DAG.getNode(Op.getOpcode(), dl, Op.getSimpleValueType(),
                      FixedOperandList);
 }
-
-// Target constants
-const unsigned StandardVectorWidth = 256;
-const unsigned PackedWidth = 512;
 
 
 SDValue 
@@ -922,18 +931,13 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
   SDLoc DL(Op);
 
+  auto NativeResTy = LegalizeVectorType(Op.getSimpleValueType(), DAG);
+
   // match VEC_BROADCAST
   bool AllUndef;
   bool S2V;
   unsigned FirstDef;
   if (isBroadCastOrS2V(BVN, AllUndef, S2V, FirstDef)) {
-
-    // TODO infer a proper vector width
-    EVT ResTy = Op.getSimpleValueType();
-    assert(ResTy.isVector());
-    unsigned TargetWidth = ResTy.getVectorNumElements() > StandardVectorWidth ? PackedWidth : StandardVectorWidth;
-    EVT NativeResTy = EVT::getVectorVT(*DAG.getContext(), ResTy.getVectorElementType(), TargetWidth);
-
     if (AllUndef) {
       LLVM_DEBUG(dbgs() << "AllUndef: VEC_BROADCAST ");
       LLVM_DEBUG(BVN->getOperand(0)->dump());
@@ -1063,9 +1067,9 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
     }
 
     SDValue const_stride = CreateBroadcast(
-        DL, Op.getSimpleValueType(), DAG.getConstant(stride, DL, elemTy), DAG);
+        DL, NativeResTy, DAG.getConstant(stride, DL, elemTy), DAG);
     SDValue ret =
-        DAG.getNode(ISD::MUL, DL, Op.getSimpleValueType(), {seq, const_stride});
+        DAG.getNode(ISD::MUL, DL, NativeResTy, {seq, const_stride});
     LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST\n");
     LLVM_DEBUG(const_stride.dump());
     LLVM_DEBUG(ret.dump());
@@ -1079,13 +1083,13 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence =
-          DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
+          DAG.getNode(VEISD::VEC_SEQ, DL, NativeResTy,
                       DAG.getConstant(1, DL, elemTy));
       SDValue shiftbroadcast =
-          CreateBroadcast(DL, Op.getSimpleValueType(),
+          CreateBroadcast(DL, NativeResTy,
                           DAG.getConstant(blockLengthLog, DL, elemTy), DAG);
 
-      SDValue shift = DAG.getNode(ISD::SRL, DL, Op.getSimpleValueType(),
+      SDValue shift = DAG.getNode(ISD::SRL, DL, NativeResTy,
                                   {sequence, shiftbroadcast});
       LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST\n");
       LLVM_DEBUG(sequence.dump());
@@ -1102,13 +1106,13 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence =
-          DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
+          DAG.getNode(VEISD::VEC_SEQ, DL, NativeResTy,
                       DAG.getConstant(1, DL, elemTy));
       SDValue modulobroadcast =
-          CreateBroadcast(DL, Op.getSimpleValueType(),
+          CreateBroadcast(DL, NativeResTy,
                           DAG.getConstant(blockLength - 1, DL, elemTy), DAG);
 
-      SDValue modulo = DAG.getNode(ISD::AND, DL, Op.getSimpleValueType(),
+      SDValue modulo = DAG.getNode(ISD::AND, DL, NativeResTy,
                                    {sequence, modulobroadcast});
 
       LLVM_DEBUG(dbgs() << "BlockStride2: VEC_SEQ & VEC_BROADCAST\n");
@@ -1126,7 +1130,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
   for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
     newVector = DAG.getNode(
-        ISD::INSERT_VECTOR_ELT, DL, Op.getSimpleValueType(), newVector,
+        ISD::INSERT_VECTOR_ELT, DL, NativeResTy, newVector,
         BVN->getOperand(i),
         DAG.getConstant(i, DL, EVT::getIntegerVT(*DAG.getContext(), 64)));
   }
