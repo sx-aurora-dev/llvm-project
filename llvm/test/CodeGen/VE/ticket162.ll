@@ -6,8 +6,8 @@ define i64 @test(float* readonly %pValue, i64 %distance) {
 ; CHECK: .LBB0_2:
 ; CHECK-NEXT: sll %s1, %s1, 2
 ; CHECK-NEXT: adds.l %s1, %s0, %s1
-; CHECK-NEXT: ldu %s0, (,%s0)
-; CHECK-NEXT: ldl.zx %s1, (,%s1)
+; CHECK-NEXT: ldu %s0, (, %s0)
+; CHECK-NEXT: ldl.zx %s1, (, %s1)
 ; CHECK-NEXT: or %s0, %s0, %s1
 ; CHECK-NEXT: or %s11, 0, %s9
 

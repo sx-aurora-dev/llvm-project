@@ -25,8 +25,8 @@ define i128 @divi128(i128, i128) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s4, __divti3@lo
 ; CHECK-NEXT:    and %s4, %s4, (32)0
-; CHECK-NEXT:    lea.sl %s12, __divti3@hi(%s4)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __divti3@hi(, %s4)
+; CHECK-NEXT:    bsic %lr, (, %s12)
   %3 = sdiv i128 %0, %1
   ret i128 %3
 }
@@ -56,8 +56,8 @@ define i128 @divu128(i128, i128) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s4, __udivti3@lo
 ; CHECK-NEXT:    and %s4, %s4, (32)0
-; CHECK-NEXT:    lea.sl %s12, __udivti3@hi(%s4)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __udivti3@hi(, %s4)
+; CHECK-NEXT:    bsic %lr, (, %s12)
   %3 = udiv i128 %0, %1
   ret i128 %3
 }
@@ -139,7 +139,7 @@ define double @divf64ri(double, double) {
 ; CHECK-LABEL: divf64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, 858993459
-; CHECK-NEXT:    lea.sl %s1, 1072902963(%s1)
+; CHECK-NEXT:    lea.sl %s1, 1072902963(, %s1)
 ; CHECK-NEXT:    fdiv.d %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv double %0, 1.200000e+00
@@ -163,10 +163,10 @@ define i128 @divi128ri(i128) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, __divti3@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __divti3@hi(%s2)
+; CHECK-NEXT:    lea.sl %s12, __divti3@hi(, %s2)
 ; CHECK-NEXT:    or %s2, 3, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
   %2 = sdiv i128 %0, 3
   ret i128 %2
 }
@@ -204,10 +204,10 @@ define i128 @divu128ri(i128) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, __udivti3@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __udivti3@hi(%s2)
+; CHECK-NEXT:    lea.sl %s12, __udivti3@hi(, %s2)
 ; CHECK-NEXT:    or %s2, 3, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
   %2 = udiv i128 %0, 3
   ret i128 %2
 }
@@ -243,7 +243,7 @@ define double @divf64li(double, double) {
 ; CHECK-LABEL: divf64li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 858993459
-; CHECK-NEXT:    lea.sl %s0, 1072902963(%s0)
+; CHECK-NEXT:    lea.sl %s0, 1072902963(, %s0)
 ; CHECK-NEXT:    fdiv.d %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv double 1.200000e+00, %1
@@ -269,10 +269,10 @@ define i128 @divi128li(i128) {
 ; CHECK-NEXT:    or %s2, 0, %s0
 ; CHECK-NEXT:    lea %s0, __divti3@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, __divti3@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, __divti3@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    or %s1, 0, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
   %2 = sdiv i128 3, %0
   ret i128 %2
 }
@@ -304,10 +304,10 @@ define i128 @divu128li(i128) {
 ; CHECK-NEXT:    or %s2, 0, %s0
 ; CHECK-NEXT:    lea %s0, __udivti3@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, __udivti3@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, __udivti3@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    or %s1, 0, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
   %2 = udiv i128 3, %0
   ret i128 %2
 }

@@ -53,9 +53,9 @@ define fp128 @func6(fp128 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(%s2)
-; CHECK-NEXT:    ld %s4, 8(,%s2)
-; CHECK-NEXT:    ld %s5, (,%s2)
+; CHECK-NEXT:    lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(, %s2)
+; CHECK-NEXT:    ld %s4, 8(, %s2)
+; CHECK-NEXT:    ld %s5, (, %s2)
 ; CHECK-NEXT:    fadd.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = fadd fp128 %a, 0xL00000000000000004001400000000000
@@ -78,7 +78,7 @@ define double @func8(double %a) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, -1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s1, 2146435071(%s1)
+; CHECK-NEXT:    lea.sl %s1, 2146435071(, %s1)
 ; CHECK-NEXT:    fadd.d %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = fadd double %a, 0x7FEFFFFFFFFFFFFF
@@ -90,9 +90,9 @@ define fp128 @func9(fp128 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(%s2)
-; CHECK-NEXT:    ld %s4, 8(,%s2)
-; CHECK-NEXT:    ld %s5, (,%s2)
+; CHECK-NEXT:    lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(, %s2)
+; CHECK-NEXT:    ld %s4, 8(, %s2)
+; CHECK-NEXT:    ld %s5, (, %s2)
 ; CHECK-NEXT:    fadd.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = fadd fp128 %a, 0xLFFFFFFFFFFFFFFFF7FFEFFFFFFFFFFFF

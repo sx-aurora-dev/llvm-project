@@ -125,7 +125,7 @@ define double @func12(double %0, double %1) {
 define signext i8 @func13(i8 signext %0, i8 signext %1) {
 ; CHECK-LABEL: func13:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, -5(%s0)
+; CHECK-NEXT:    lea %s0, -5(, %s0)
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -136,7 +136,7 @@ define signext i8 @func13(i8 signext %0, i8 signext %1) {
 define signext i16 @func14(i16 signext %0, i16 signext %1) {
 ; CHECK-LABEL: func14:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, -5(%s0)
+; CHECK-NEXT:    lea %s0, -5(, %s0)
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -147,7 +147,7 @@ define signext i16 @func14(i16 signext %0, i16 signext %1) {
 define i32 @func15(i32 %0, i32 %1) {
 ; CHECK-LABEL: func15:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, -5(%s0)
+; CHECK-NEXT:    lea %s0, -5(, %s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add nsw i32 %0, -5
   ret i32 %3
@@ -156,7 +156,7 @@ define i32 @func15(i32 %0, i32 %1) {
 define i64 @func16(i64 %0, i64 %1) {
 ; CHECK-LABEL: func16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, -5(%s0)
+; CHECK-NEXT:    lea %s0, -5(, %s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add nsw i64 %0, -5
   ret i64 %3
@@ -165,7 +165,7 @@ define i64 @func16(i64 %0, i64 %1) {
 define i128 @func17(i128 %0) {
 ; CHECK-LABEL: func17:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s2, -5(%s0)
+; CHECK-NEXT:    lea %s2, -5(, %s0)
 ; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
 ; CHECK-NEXT:    or %s3, 0, (0)1
 ; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s0
@@ -179,7 +179,7 @@ define i128 @func17(i128 %0) {
 define zeroext i8 @func18(i8 zeroext %0, i8 zeroext %1) {
 ; CHECK-LABEL: func18:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, -5(%s0)
+; CHECK-NEXT:    lea %s0, -5(, %s0)
 ; CHECK-NEXT:    and %s0, %s0, (56)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add i8 %0, -5
@@ -189,7 +189,7 @@ define zeroext i8 @func18(i8 zeroext %0, i8 zeroext %1) {
 define zeroext i16 @func19(i16 zeroext %0, i16 zeroext %1) {
 ; CHECK-LABEL: func19:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, -5(%s0)
+; CHECK-NEXT:    lea %s0, -5(, %s0)
 ; CHECK-NEXT:    and %s0, %s0, (48)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add i16 %0, -5
@@ -199,7 +199,7 @@ define zeroext i16 @func19(i16 zeroext %0, i16 zeroext %1) {
 define i32 @func20(i32 %0, i32 %1) {
 ; CHECK-LABEL: func20:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, -5(%s0)
+; CHECK-NEXT:    lea %s0, -5(, %s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add i32 %0, -5
   ret i32 %3
@@ -208,7 +208,7 @@ define i32 @func20(i32 %0, i32 %1) {
 define i64 @func21(i64 %0, i64 %1) {
 ; CHECK-LABEL: func21:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, -5(%s0)
+; CHECK-NEXT:    lea %s0, -5(, %s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add i64 %0, -5
   ret i64 %3
@@ -217,7 +217,7 @@ define i64 @func21(i64 %0, i64 %1) {
 define i128 @func22(i128 %0) {
 ; CHECK-LABEL: func22:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s2, -5(%s0)
+; CHECK-NEXT:    lea %s2, -5(, %s0)
 ; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
 ; CHECK-NEXT:    or %s3, 0, (0)1
 ; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s0
@@ -260,7 +260,7 @@ define i32 @func25(i32 %0, i32 %1) {
 define i64 @func26(i64 %0, i64 %1) {
 ; CHECK-LABEL: func26:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, -2147483648(%s0)
+; CHECK-NEXT:    lea %s0, -2147483648(, %s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add nsw i64 %0, -2147483648
   ret i64 %3
@@ -269,7 +269,7 @@ define i64 @func26(i64 %0, i64 %1) {
 define i128 @func27(i128 %0) {
 ; CHECK-LABEL: func27:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s2, -2147483648(%s0)
+; CHECK-NEXT:    lea %s2, -2147483648(, %s0)
 ; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
 ; CHECK-NEXT:    or %s3, 0, (0)1
 ; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s0

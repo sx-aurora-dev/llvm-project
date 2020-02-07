@@ -215,9 +215,9 @@ define i64 @q2ull(fp128) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, .LCPI22_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s2, .LCPI22_0@hi(%s2)
-; CHECK-NEXT:    ld %s4, 8(,%s2)
-; CHECK-NEXT:    ld %s5, (,%s2)
+; CHECK-NEXT:    lea.sl %s2, .LCPI22_0@hi(, %s2)
+; CHECK-NEXT:    ld %s4, 8(, %s2)
+; CHECK-NEXT:    ld %s5, (, %s2)
 ; CHECK-NEXT:    fcmp.q %s3, %s0, %s4
 ; CHECK-NEXT:    fsub.q %s4, %s0, %s4
 ; CHECK-NEXT:    cvt.d.q %s2, %s4
@@ -571,7 +571,7 @@ define double @ull2d(i64 %x) {
 ; CHECK-NEXT:    lea.sl %s2, 1160773632
 ; CHECK-NEXT:    or %s1, %s1, %s2
 ; CHECK-NEXT:    lea %s2, 1048576
-; CHECK-NEXT:    lea.sl %s2, -986710016(%s2)
+; CHECK-NEXT:    lea.sl %s2, -986710016(, %s2)
 ; CHECK-NEXT:    fadd.d %s1, %s1, %s2
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s2, 1127219200
@@ -589,9 +589,9 @@ define fp128 @ull2q(i64) {
 ; CHECK-NEXT:    and %s1, 4, %s1
 ; CHECK-NEXT:    lea %s2, .LCPI58_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s2, .LCPI58_0@hi(%s2)
+; CHECK-NEXT:    lea.sl %s2, .LCPI58_0@hi(, %s2)
 ; CHECK-NEXT:    adds.l %s1, %s2, %s1
-; CHECK-NEXT:    ldu %s1, (,%s1)
+; CHECK-NEXT:    ldu %s1, (, %s1)
 ; CHECK-NEXT:    cvt.q.s %s2, %s1
 ; CHECK-NEXT:    cvt.d.l %s0, %s0
 ; CHECK-NEXT:    cvt.q.d %s0, %s0
@@ -1389,8 +1389,8 @@ define float @i1282f(i128) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, __floattisf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __floattisf@hi(%s2)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __floattisf@hi(, %s2)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = sitofp i128 %0 to float
   ret float %2
@@ -1402,8 +1402,8 @@ define float @ui1282f(i128) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, __floatuntisf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __floatuntisf@hi(%s2)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __floatuntisf@hi(, %s2)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i128 %0 to float
   ret float %2
@@ -1415,8 +1415,8 @@ define double @i1282d(i128) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, __floattidf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __floattidf@hi(%s2)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __floattidf@hi(, %s2)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = sitofp i128 %0 to double
   ret double %2
@@ -1428,8 +1428,8 @@ define double @ui1282d(i128) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, __floatuntidf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __floatuntidf@hi(%s2)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __floatuntidf@hi(, %s2)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i128 %0 to double
   ret double %2
@@ -1441,8 +1441,8 @@ define i128 @d2i128(double) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, __fixdfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, __fixdfti@hi(%s1)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __fixdfti@hi(, %s1)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptosi double %0 to i128
   ret i128 %2
@@ -1454,8 +1454,8 @@ define i128 @d2ui128(double) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, __fixunsdfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, __fixunsdfti@hi(%s1)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __fixunsdfti@hi(, %s1)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptoui double %0 to i128
   ret i128 %2
@@ -1467,8 +1467,8 @@ define i128 @f2i128(float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, __fixsfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, __fixsfti@hi(%s1)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __fixsfti@hi(, %s1)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptosi float %0 to i128
   ret i128 %2
@@ -1480,8 +1480,8 @@ define i128 @f2ui128(float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, __fixunssfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, __fixunssfti@hi(%s1)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __fixunssfti@hi(, %s1)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptoui float %0 to i128
   ret i128 %2

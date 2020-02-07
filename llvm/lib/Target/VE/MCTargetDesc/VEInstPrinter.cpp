@@ -85,7 +85,7 @@ void VEInstPrinter::printMemASXOperand(const MCInst *MI, int opNum,
   if (!MO.isImm() || MO.getImm() != 0) {
     printOperand(MI, opNum + 1, STI, O);
   }
-  O << "(,";
+  O << "(, ";
   printOperand(MI, opNum, STI, O);
   O << ")";
 }

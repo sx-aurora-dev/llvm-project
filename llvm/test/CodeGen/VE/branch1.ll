@@ -7,9 +7,9 @@ define signext i8 @func1(i8 signext %a, i8 signext %b) {
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    br.l .LBB0_3
 ; CHECK:       .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -40,9 +40,9 @@ define i32 @func2(i16 signext %a, i16 signext %b) {
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    br.l .LBB1_3
 ; CHECK:       .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -68,9 +68,9 @@ define i32 @func3(i32 %a, i32 %b) {
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    br.l .LBB2_3
 ; CHECK:       .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -96,9 +96,9 @@ define i32 @func4(i64 %a, i64 %b) {
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    br.l .LBB3_3
 ; CHECK:       .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -125,9 +125,9 @@ define i32 @func5(i8 zeroext %a, i8 zeroext %b) {
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    br.l .LBB4_3
 ; CHECK:       .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -154,9 +154,9 @@ define i32 @func6(i16 zeroext %a, i16 zeroext %b) {
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    br.l .LBB5_3
 ; CHECK:       .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -183,9 +183,9 @@ define i32 @func7(i32 %a, i32 %b) {
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    br.l .LBB6_3
 ; CHECK:       .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -211,9 +211,9 @@ define i32 @func8(float %a, float %b) {
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    br.l .LBB7_3
 ; CHECK:       .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -239,9 +239,9 @@ define i32 @func9(double %a, double %b) {
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    br.l .LBB8_3
 ; CHECK:       .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -268,9 +268,9 @@ define i32 @func10(double %a, double %b) {
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, ret@hi(%s0)
+; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    br.l .LBB9_3
 ; CHECK:       .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1

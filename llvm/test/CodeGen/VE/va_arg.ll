@@ -16,20 +16,20 @@
 define i32 @func(i32, ...) {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:       ldl.sx %s1, 184(,%s9)
-; CHECK:       ld2b.sx %s20, 192(,%s9)
-; CHECK:       ld1b.sx %s21, 200(,%s9)
-; CHECK:       ldl.sx %s22, 208(,%s9)
-; CHECK:       ld2b.zx %s23, 216(,%s9)
-; CHECK:       ld1b.zx %s24, 224(,%s9)
-; CHECK:       ldu %s18, 236(,%s9)
-; CHECK:       ld %s26, 240(,%s9)
-; CHECK:       ld %s27, 248(,%s9)
-; CHECK:       ld %s28, 256(,%s9)
-; CHECK:       ld %s29, 264(,%s9)
-; CHECK:       ld %s32, 272(,%s9)
-; CHECK:       ld %s30, 280(,%s9)
-; CHECK:       ld %s31, 288(,%s9)
+; CHECK:       ldl.sx %s1, 184(, %s9)
+; CHECK:       ld2b.sx %s20, 192(, %s9)
+; CHECK:       ld1b.sx %s21, 200(, %s9)
+; CHECK:       ldl.sx %s22, 208(, %s9)
+; CHECK:       ld2b.zx %s23, 216(, %s9)
+; CHECK:       ld1b.zx %s24, 224(, %s9)
+; CHECK:       ldu %s18, 236(, %s9)
+; CHECK:       ld %s26, 240(, %s9)
+; CHECK:       ld %s27, 248(, %s9)
+; CHECK:       ld %s28, 256(, %s9)
+; CHECK:       ld %s29, 264(, %s9)
+; CHECK:       ld %s32, 272(, %s9)
+; CHECK:       ld %s30, 280(, %s9)
+; CHECK:       ld %s31, 288(, %s9)
 
   %2 = alloca i8*, align 8
   %3 = alloca i8*, align 8
@@ -107,42 +107,42 @@ define i32 @func(i32, ...) {
 define i32 @caller() {
 ; CHECK-LABEL: caller:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  st %s18, 48(,%s9)               # 8-byte Folded Spill
+; CHECK-NEXT:  st %s18, 48(, %s9)               # 8-byte Folded Spill
 ; CHECK-NEXT:  or %s7, 0, (0)1
-; CHECK-NEXT:  st %s7, 280(,%s11)
+; CHECK-NEXT:  st %s7, 280(, %s11)
 ; CHECK-NEXT:  or %s0, 11, (0)1
-; CHECK-NEXT:  st %s0, 272(,%s11)
-; CHECK-NEXT:  st %s7, 264(,%s11)
+; CHECK-NEXT:  st %s0, 272(, %s11)
+; CHECK-NEXT:  st %s7, 264(, %s11)
 ; CHECK-NEXT:  or %s0, 10, (0)1
-; CHECK-NEXT:  st %s0, 256(,%s11)
+; CHECK-NEXT:  st %s0, 256(, %s11)
 ; CHECK-NEXT:  lea.sl %s0, 1075970048
-; CHECK-NEXT:  st %s0, 248(,%s11)
+; CHECK-NEXT:  st %s0, 248(, %s11)
 ; CHECK-NEXT:  or %s0, 8, (0)1
-; CHECK-NEXT:  st %s0, 240(,%s11)
-; CHECK-NEXT:  st %s7, 232(,%s11)
+; CHECK-NEXT:  st %s0, 240(, %s11)
+; CHECK-NEXT:  st %s7, 232(, %s11)
 ; CHECK-NEXT:  lea %s0, 1086324736
-; CHECK-NEXT:  stl %s0, 228(,%s11)
+; CHECK-NEXT:  stl %s0, 228(, %s11)
 ; CHECK-NEXT:  or %s5, 5, (0)1
-; CHECK-NEXT:  stl %s5, 216(,%s11)
+; CHECK-NEXT:  stl %s5, 216(, %s11)
 ; CHECK-NEXT:  or %s4, 4, (0)1
-; CHECK-NEXT:  stl %s4, 208(,%s11)
+; CHECK-NEXT:  stl %s4, 208(, %s11)
 ; CHECK-NEXT:  or %s3, 3, (0)1
-; CHECK-NEXT:  stl %s3, 200(,%s11)
+; CHECK-NEXT:  stl %s3, 200(, %s11)
 ; CHECK-NEXT:  or %s2, 2, (0)1
-; CHECK-NEXT:  stl %s2, 192(,%s11)
+; CHECK-NEXT:  stl %s2, 192(, %s11)
 ; CHECK-NEXT:  or %s1, 1, (0)1
-; CHECK-NEXT:  stl %s1, 184(,%s11)
+; CHECK-NEXT:  stl %s1, 184(, %s11)
 ; CHECK-NEXT:  or %s18, 0, (0)1
 ; CHECK-NEXT:  lea %s0, func@lo
 ; CHECK-NEXT:  and %s0, %s0, (32)0
-; CHECK-NEXT:  lea.sl %s12, func@hi(%s0)
+; CHECK-NEXT:  lea.sl %s12, func@hi(, %s0)
 ; CHECK-NEXT:  lea.sl %s0, 1086324736
-; CHECK-NEXT:  stl %s18, 176(,%s11)
+; CHECK-NEXT:  stl %s18, 176(, %s11)
 ; CHECK-NEXT:  or %s6, 0, %s0
 ; CHECK-NEXT:  or %s0, 0, %s18
-; CHECK-NEXT:  bsic %lr, (,%s12)
+; CHECK-NEXT:  bsic %lr, (, %s12)
 ; CHECK-NEXT:  or %s0, 0, %s18
-; CHECK-NEXT:  ld %s18, 48(,%s9)               # 8-byte Folded Reload
+; CHECK-NEXT:  ld %s18, 48(, %s9)               # 8-byte Folded Reload
 ; CHECK-NEXT:  or %s11, 0, %s9
   call i32 (i32, ...) @func(i32 0, i16 1, i8 2, i32 3, i16 4, i8 5, float 6.0, i8* null, i64 8, double 9.0, i128 10, i128 11)
   ret i32 0
@@ -150,16 +150,16 @@ define i32 @caller() {
 
 define i32 @func_vainout(i32, ...) {
 ; CHECK-LABEL: func_vainout:
-; CHECK:         ldl.sx %s1, 184(,%s9)
-; CHECK:         ld2b.sx %s18, 192(,%s9)
-; CHECK:         ld1b.sx %s19, 200(,%s9)
-; CHECK:         ldl.sx %s20, 208(,%s9)
-; CHECK:         ld2b.zx %s21, 216(,%s9)
-; CHECK:         ld1b.zx %s22, 224(,%s9)
-; CHECK:         ldu %s23, 236(,%s9)
-; CHECK:         ld %s24, 240(,%s9)
-; CHECK:         ld %s25, 248(,%s9)
-; CHECK:         ld %s26, 256(,%s9)
+; CHECK:         ldl.sx %s1, 184(, %s9)
+; CHECK:         ld2b.sx %s18, 192(, %s9)
+; CHECK:         ld1b.sx %s19, 200(, %s9)
+; CHECK:         ldl.sx %s20, 208(, %s9)
+; CHECK:         ld2b.zx %s21, 216(, %s9)
+; CHECK:         ld1b.zx %s22, 224(, %s9)
+; CHECK:         ldu %s23, 236(, %s9)
+; CHECK:         ld %s24, 240(, %s9)
+; CHECK:         ld %s25, 248(, %s9)
+; CHECK:         ld %s26, 256(, %s9)
 
   %a = alloca i8*, align 8
   %a8 = bitcast i8** %a to i8*

@@ -9,16 +9,16 @@ define i32 @t_setjmp(i64 %n, %Foo* byval nocapture readnone align 8 %f) {
 ; CHECK-LABEL: t_setjmp:
 ; CHECK:       lea %s0, .LBB{{[0-9]+}}_3@lo
 ; CHECK-NEXT:  and %s0, %s0, (32)0
-; CHECK-NEXT:  lea.sl %s0, .LBB{{[0-9]+}}_3@hi(%s0)
-; CHECK-NEXT:  st %s17, 24(,%s1)
-; CHECK-NEXT:  st %s1, 296(,%s17)
-; CHECK-NEXT:  st %s0, 8(,%s1)
+; CHECK-NEXT:  lea.sl %s0, .LBB{{[0-9]+}}_3@hi(, %s0)
+; CHECK-NEXT:  st %s17, 24(, %s1)
+; CHECK-NEXT:  st %s1, 296(, %s17)
+; CHECK-NEXT:  st %s0, 8(, %s1)
 ; CHECK-NEXT:  # EH_SJlJ_SETUP .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:  lea %s5, 0
 ; CHECK-NEXT:  br.l .LBB{{[0-9]+}}_2
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3:
-; CHECK-NEXT:  ld %s17, 24(,%s10)
+; CHECK-NEXT:  ld %s17, 24(, %s10)
 ; CHECK-NEXT:  lea %s5, 1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea %s0, whatever@lo

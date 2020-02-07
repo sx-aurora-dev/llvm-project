@@ -4,8 +4,8 @@
 define fp128 @loadq(fp128* nocapture readonly) {
 ; CHECK-LABEL: loadq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s2, 8(,%s0)
-; CHECK-NEXT:    ld %s3, (,%s0)
+; CHECK-NEXT:    ld %s2, 8(, %s0)
+; CHECK-NEXT:    ld %s3, (, %s0)
 ; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    or %s1, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -17,8 +17,8 @@ define fp128 @loadq(fp128* nocapture readonly) {
 define void @storeq(fp128* nocapture, fp128) {
 ; CHECK-LABEL: storeq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    st %s2, 8(,%s0)
-; CHECK-NEXT:    st %s3, (,%s0)
+; CHECK-NEXT:    st %s2, 8(, %s0)
+; CHECK-NEXT:    st %s3, (, %s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   store fp128 %1, fp128* %0, align 16, !tbaa !2
   ret void
@@ -28,23 +28,23 @@ define void @storeq(fp128* nocapture, fp128) {
 define void @ld_l_arg(i8*, fp128, i64, i64, i64, fp128, i64, fp128, i64) {
 ; CHECK-LABEL: ld_l_arg:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s1, 464(,%s11)
-; CHECK-NEXT:    ld %s35, 448(,%s11)
-; CHECK-NEXT:    ld %s34, 456(,%s11)
-; CHECK-NEXT:    ld %s7, 432(,%s11)
-; CHECK-NEXT:    ld %s37, 416(,%s11)
-; CHECK-NEXT:    ld %s36, 424(,%s11)
-; CHECK-NEXT:    st %s2, 8(,%s0)
-; CHECK-NEXT:    st %s3, (,%s0)
-; CHECK-NEXT:    st %s4, (,%s0)
-; CHECK-NEXT:    st %s5, (,%s0)
-; CHECK-NEXT:    st %s6, (,%s0)
-; CHECK-NEXT:    st %s36, 8(,%s0)
-; CHECK-NEXT:    st %s37, (,%s0)
-; CHECK-NEXT:    st %s7, (,%s0)
-; CHECK-NEXT:    st %s34, 8(,%s0)
-; CHECK-NEXT:    st %s35, (,%s0)
-; CHECK-NEXT:    st %s1, (,%s0)
+; CHECK-NEXT:    ld %s1, 464(, %s11)
+; CHECK-NEXT:    ld %s35, 448(, %s11)
+; CHECK-NEXT:    ld %s34, 456(, %s11)
+; CHECK-NEXT:    ld %s7, 432(, %s11)
+; CHECK-NEXT:    ld %s37, 416(, %s11)
+; CHECK-NEXT:    ld %s36, 424(, %s11)
+; CHECK-NEXT:    st %s2, 8(, %s0)
+; CHECK-NEXT:    st %s3, (, %s0)
+; CHECK-NEXT:    st %s4, (, %s0)
+; CHECK-NEXT:    st %s5, (, %s0)
+; CHECK-NEXT:    st %s6, (, %s0)
+; CHECK-NEXT:    st %s36, 8(, %s0)
+; CHECK-NEXT:    st %s37, (, %s0)
+; CHECK-NEXT:    st %s7, (, %s0)
+; CHECK-NEXT:    st %s34, 8(, %s0)
+; CHECK-NEXT:    st %s35, (, %s0)
+; CHECK-NEXT:    st %s1, (, %s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %10 = bitcast i8* %0 to fp128*
   store volatile fp128 %1, fp128* %10, align 16, !tbaa !2

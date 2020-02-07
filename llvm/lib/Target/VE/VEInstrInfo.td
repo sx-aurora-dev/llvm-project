@@ -367,7 +367,7 @@ multiclass RMm<string opcStr, bits<8>opc,
   }
   def rzi : RM<
     opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32),
-    !strconcat(opcStr, " $sx, ${imm32}(${sz})"),
+    !strconcat(opcStr, " $sx, ${imm32}(, ${sz})"),
     [(set Ty:$sx, (OpNode Ty:$sz, (Ty simm32:$imm32)))]> {
     let cy = 0;
     let sy = 0;
@@ -860,7 +860,7 @@ def : Pat<(add (add I64:$base, simm32:$disp), I64:$idx),
 let cx = 0, cy = 1, cz = 0, sz = 0, hasSideEffects = 0 in {
   def LEAasx : RM<
       0x06, (outs I64:$sx), (ins MEMri:$addr),
-      "lea $sx,$addr", [(set iPTR:$sx, ADDRri:$addr)]>;
+      "lea $sx, $addr", [(set iPTR:$sx, ADDRri:$addr)]>;
 }
 
 // 5.3.2.2. Fixed-Point Arithmetic Operation Instructions
@@ -1296,7 +1296,7 @@ let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
     isCodeGenOnly = 1, hasSideEffects = 0 in
 def RET : CF<
     0x19, (outs), (ins),
-    "b.l (,%lr)",
+    "b.l (, %lr)",
     [(retflag)]>;
 
 // Branch and Save IC
@@ -1490,7 +1490,7 @@ def CALL : RM<
 let cx = 0, sx = 10, cy = 0, sy = 0, cz = 1, imm32 = 0 in
 def CALLr : RM<
     0x08, (outs), (ins I64:$sz, variable_ops),
-    "bsic %lr, (,$sz)">;
+    "bsic %lr, (, $sz)">;
 }
 
 }

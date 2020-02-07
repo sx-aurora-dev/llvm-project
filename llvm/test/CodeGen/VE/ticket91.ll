@@ -4,8 +4,8 @@
 define void @func(i32* nocapture) {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
-; CHECK-NEXT:  lea %s1,176(,%s11)
-; CHECK-NEXT:  lea %s1, 16(%s1)
+; CHECK-NEXT:  lea %s1, 176(, %s11)
+; CHECK-NEXT:  lea %s1, 16(, %s1)
 ; CHECK-NEXT:  or %s2, 0, (0)1
   %2 = alloca [256 x i32], align 16
   %3 = bitcast [256 x i32]* %2 to i8*

@@ -192,12 +192,6 @@ define fp128 @minfp128(fp128, fp128) {
 ; CHECK-NEXT:  cmov.d.lt %s3, %s1, %s4
 ; CHECK-NEXT:  or %s0, 0, %s2
 ; CHECK-NEXT:  or %s1, 0, %s3
-; CHECK-NEXT:  or %s11, 0, %s9
-; CHECK-NEXT:  ld %s16, 32(,%s11)
-; CHECK-NEXT:  ld %s15, 24(,%s11)
-; CHECK-NEXT:  ld %s10, 8(,%s11)
-; CHECK-NEXT:  ld %s9, (,%s11)
-; CHECK-NEXT:  b.l (,%lr)
   %3 = fcmp olt fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4
@@ -211,12 +205,6 @@ define fp128 @min2fp128(fp128, fp128) {
 ; CHECK-NEXT:  cmov.d.le %s3, %s1, %s4
 ; CHECK-NEXT:  or %s0, 0, %s2
 ; CHECK-NEXT:  or %s1, 0, %s3
-; CHECK-NEXT:  or %s11, 0, %s9
-; CHECK-NEXT:  ld %s16, 32(,%s11)
-; CHECK-NEXT:  ld %s15, 24(,%s11)
-; CHECK-NEXT:  ld %s10, 8(,%s11)
-; CHECK-NEXT:  ld %s9, (,%s11)
-; CHECK-NEXT:  b.l (,%lr)
   %3 = fcmp ole fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4
@@ -230,12 +218,6 @@ define fp128 @minufp128(fp128, fp128) {
 ; CHECK-NEXT:  cmov.d.ltnan %s3, %s1, %s4
 ; CHECK-NEXT:  or %s0, 0, %s2
 ; CHECK-NEXT:  or %s1, 0, %s3
-; CHECK-NEXT:  or %s11, 0, %s9
-; CHECK-NEXT:  ld %s16, 32(,%s11)
-; CHECK-NEXT:  ld %s15, 24(,%s11)
-; CHECK-NEXT:  ld %s10, 8(,%s11)
-; CHECK-NEXT:  ld %s9, (,%s11)
-; CHECK-NEXT:  b.l (,%lr)
   %3 = fcmp ult fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4
@@ -249,12 +231,6 @@ define fp128 @min2ufp128(fp128, fp128) {
 ; CHECK-NEXT:  cmov.d.lenan %s3, %s1, %s4
 ; CHECK-NEXT:  or %s0, 0, %s2
 ; CHECK-NEXT:  or %s1, 0, %s3
-; CHECK-NEXT:  or %s11, 0, %s9
-; CHECK-NEXT:  ld %s16, 32(,%s11)
-; CHECK-NEXT:  ld %s15, 24(,%s11)
-; CHECK-NEXT:  ld %s10, 8(,%s11)
-; CHECK-NEXT:  ld %s9, (,%s11)
-; CHECK-NEXT:  b.l (,%lr)
   %3 = fcmp ule fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4

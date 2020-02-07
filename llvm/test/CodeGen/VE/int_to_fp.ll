@@ -51,8 +51,8 @@ define float @i1282f(i128 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:    lea %s2, __floattisf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __floattisf@hi(%s2)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __floattisf@hi(, %s2)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = sitofp i128 %a to float
   ret float %conv
@@ -121,8 +121,8 @@ define float @ui1282f(i128 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:    lea %s2, __floatuntisf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __floatuntisf@hi(%s2)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __floatuntisf@hi(, %s2)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = uitofp i128 %a to float
   ret float %conv
@@ -178,8 +178,8 @@ define double @i1282d(i128 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:    lea %s2, __floattidf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __floattidf@hi(%s2)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __floattidf@hi(, %s2)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = sitofp i128 %a to double
   ret double %conv
@@ -227,7 +227,7 @@ define double @ul2d(i64 %a) {
 ; CHECK-NEXT:    lea.sl %s2, 1160773632
 ; CHECK-NEXT:    or %s1, %s1, %s2
 ; CHECK-NEXT:    lea %s2, 1048576
-; CHECK-NEXT:    lea.sl %s2, -986710016(%s2)
+; CHECK-NEXT:    lea.sl %s2, -986710016(, %s2)
 ; CHECK-NEXT:    fadd.d %s1, %s1, %s2
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s2, 1127219200
@@ -245,8 +245,8 @@ define double @ui1282d(i128) {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:    lea %s2, __floatuntidf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __floatuntidf@hi(%s2)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __floatuntidf@hi(, %s2)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i128 %0 to double
   ret double %2
@@ -306,8 +306,8 @@ define fp128 @i1282q(i128 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:    lea %s2, __floattitf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __floattitf@hi(%s2)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __floattitf@hi(, %s2)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = sitofp i128 %a to fp128
   ret fp128 %conv
@@ -358,9 +358,9 @@ define fp128 @ul2q(i64 %a) {
 ; CHECK-NEXT:  and %s1, 4, %s1
 ; CHECK-NEXT:  lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:  and %s2, %s2, (32)0
-; CHECK-NEXT:  lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(%s2)
+; CHECK-NEXT:  lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(, %s2)
 ; CHECK-NEXT:  adds.l %s1, %s2, %s1
-; CHECK-NEXT:  ldu %s1, (,%s1)
+; CHECK-NEXT:  ldu %s1, (, %s1)
 ; CHECK-NEXT:  cvt.q.s %s2, %s1
 ; CHECK-NEXT:  cvt.d.l %s0, %s0
 ; CHECK-NEXT:  cvt.q.d %s0, %s0
@@ -377,8 +377,8 @@ define fp128 @ui1282q(i128 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_{{[0-9]}}:
 ; CHECK-NEXT:    lea %s2, __floatuntitf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, __floatuntitf@hi(%s2)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, __floatuntitf@hi(, %s2)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = uitofp i128 %a to fp128
   ret fp128 %conv
