@@ -4,12 +4,10 @@
 define x86_regcallcc <512 x i32> @addbrdv512i32(<512 x i32>, i32) {
 ; CHECK-LABEL: addbrdv512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    srl %s1, %s0, 32
-; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvaddu %v0,%s0,%v0
+; CHECK-NEXT:    vadds.w.sx %v0,%s0,%v0
+; CHECK-NEXT:    vadds.w.sx %v1,%s0,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
@@ -21,13 +19,10 @@ define x86_regcallcc <512 x i32> @addbrdv512i32(<512 x i32>, i32) {
 define x86_regcallcc <512 x float> @addbrdv512f32(<512 x float>, float) {
 ; CHECK-LABEL: addbrdv512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    sll %s0, %s0, 32
-; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvfadd %v0,%s0,%v0
+; CHECK-NEXT:    vfadd.s %v0,%s0,%v0
+; CHECK-NEXT:    vfadd.s %v1,%s0,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <512 x float> undef, float %1, i32 0
   %vec = shufflevector <512 x float> %vec0, <512 x float> undef, <512 x i32> zeroinitializer
