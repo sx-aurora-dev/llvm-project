@@ -4,6 +4,16 @@
 define x86_regcallcc <1024 x i32> @brdv512i32x2(i32) {
 ; CHECK-LABEL: brdv512i32x2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    srl %s1, %s0, 32
+; CHECK-NEXT:    or %s0, %s0, %s1
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    pvbrd %v0,%s0
+; CHECK-NEXT:    lea %s12, 256
+; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    vor %v1,(0)1,%v0
+; CHECK-NEXT:    or %s11, 0, %s9
   %val = insertelement <1024 x i32> undef, i32 %0, i32 0
   %r0 = insertelement <1024 x i32> %val, i32 %0, i32 1
   %r1 = insertelement <1024 x i32> %r0, i32 %0, i32 257
