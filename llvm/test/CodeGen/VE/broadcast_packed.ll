@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+packed | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <1024 x i32> @brdv512i32x2(i32) {
