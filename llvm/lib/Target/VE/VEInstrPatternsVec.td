@@ -329,6 +329,8 @@ def: Pat<(v512i32 (vec_seq i32:$vl)),
          (pvseq_vl $vl)>;
 def: Pat<(v256i64 (vec_seq i32:$vl)),
          (vseq_vl $vl)>;
+def: Pat<(v256i32 (vec_seq i32:$vl)),
+         (pvseqlo_vl $vl)>;
 
 
 
