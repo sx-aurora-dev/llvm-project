@@ -3343,12 +3343,6 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     Op.dump();
     llvm_unreachable("Should not custom lower this!");
 
-  // LLVM-VP --> vvp_*
-#define REGISTER_VP_SDNODE(VP_NAME, VP_TEXT, MASK_POS, LEN_POS) \
-  case ISD:: VP_NAME:
-#include "llvm/IR/VPIntrinsics.def"
-    return LowerVPToVVP(Op, DAG);
-
   case ISD::RETURNADDR: return LowerRETURNADDR(Op, DAG, *this, Subtarget);
   case ISD::FRAMEADDR: return LowerFRAMEADDR(Op, DAG, *this, Subtarget);
   case ISD::BlockAddress: return LowerBlockAddress(Op, DAG);
@@ -3389,22 +3383,31 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::MGATHER:
     return LowerMGATHER_MSCATTER(Op, DAG);
 
-  // vvp_* --> vvp_* with native types
-  // if a SETCC result is used by vector arithmetic, convert it back into
-  // v256i64 (from the v256i1 created in the SETCC lowering)
-  // TODO extend this list as necessary (possibly shifts)
-  
-  // Lower this operation to an internal VVP_* node
-#define ADD_VVP_OP(VVP_NAME) case VEISD:: VVP_NAME:
-#include "VVPNodes.inc"
-     return LowerToNativeWidthVVP(LowerSETCCInVectorArithmetic(Op, DAG), DAG);
-
   // modify the return type of SETCC on vectors to v256i1
   case ISD::SETCC: return LowerSETCC(Op, DAG);
   case ISD::SELECT_CC: return LowerSELECT_CC(Op, DAG);
   case ISD::VSELECT: return LowerVSELECT(Op, DAG);
 
   case ISD::TRUNCATE: return LowerTRUNCATE(Op, DAG);
+
+  ///// LLVM-VP --> vvp_* /////
+#define REGISTER_VP_SDNODE(VP_NAME, VP_TEXT, MASK_POS, LEN_POS) \
+  case ISD:: VP_NAME:
+#include "llvm/IR/VPIntrinsics.def"
+    return LowerVPToVVP(Op, DAG);
+
+  ///// non-VP --> vvp_* with native type /////
+  // Use a native vector type for this VVP_* operation
+#define ADD_VVP_OP(VVP_NAME) case VEISD:: VVP_NAME:
+
+  // Convert this standard vector op to VVP
+#define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD:: ISD_NAME:
+#define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD:: ISD_NAME:
+
+#include "VVPNodes.inc"
+
+     return LowerToNativeWidthVVP(LowerSETCCInVectorArithmetic(Op, DAG), DAG);
+
   }
 }
 
