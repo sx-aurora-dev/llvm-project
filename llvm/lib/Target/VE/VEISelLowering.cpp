@@ -467,11 +467,18 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
     NeedsPackedMasking = (OpVectorLength % 2 != 0);
     VectorWidth = PackedWidth;
     PackedMode = true;
+    if (!Subtarget->hasPackedMode()) {
+      LLVM_DEBUG( dbgs() << "\tPacked operations not enabled (set -mattr=+packed to enable)!\n"; );
+      return SDValue();
+    }
   }
 
+  // Select CCP Op
+  Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
+  assert(VVPOC.hasValue() && "TODO implement this operation in the VVP isel layer");
+
   // Is packed mode an option for this OC?
-  if (PackedMode &&
-      (!Subtarget->hasPackedMode() || !SupportsPackedMode(Op.getOpcode()))) {
+  if (PackedMode && !SupportsPackedMode(VVPOC.getValue())) {
     LLVM_DEBUG( dbgs() << "\tThe operation does not support packed mode!\n"; );
     return SDValue();
   }
@@ -481,10 +488,6 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
     LLVM_DEBUG(dbgs() << "LowerToVVP: Over-sized vector operation\n");
     return SDValue();
   }
-
-  // Select CCP Op
-  Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
-  assert(VVPOC.hasValue());
 
   /// Use the eventual native vector width for all newly generated operands
   // we do not want to go through ::ReplaceNodeResults again only to have them widened
