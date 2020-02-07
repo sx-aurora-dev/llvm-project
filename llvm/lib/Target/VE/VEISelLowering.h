@@ -63,7 +63,7 @@ enum NodeType : unsigned {
   FLUSHW,          // FLUSH register windows to stack.
 
   VEC_BROADCAST, // 0: the value, 1: the vector length (no mask)
-  VEC_SEQ,       // 0: the constrant stride, 1: the vector length (no mask)
+  VEC_SEQ,       // 1: the vector length (no mask)
 
   VEC_VMV,       // custom lowering for vp_vshift
 
@@ -205,7 +205,7 @@ public:
 
   // Custom Operations
   SDValue CreateBroadcast(SDLoc dl, EVT ResTy, SDValue ScaValue, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
-  SDValue CreateSeq(SDLoc dl, EVT ResTy, SDValue Stride, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
+  SDValue CreateSeq(SDLoc dl, EVT ResTy, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
 
   // Vector Operations
   SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;

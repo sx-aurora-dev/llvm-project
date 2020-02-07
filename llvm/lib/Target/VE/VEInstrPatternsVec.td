@@ -325,9 +325,9 @@ defm : vbrd_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
 
 
 // Sequence
-def: Pat<(v512i32 (vec_seq (i32 one), i32:$vl)),
+def: Pat<(v512i32 (vec_seq i32:$vl)),
          (pvseq_vl $vl)>;
-def: Pat<(v256i64 (vec_seq (i64 one), i32:$vl)),
+def: Pat<(v256i64 (vec_seq i32:$vl)),
          (vseq_vl $vl)>;
 
 

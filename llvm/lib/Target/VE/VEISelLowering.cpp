@@ -863,7 +863,7 @@ SelectBoundedVectorLength(unsigned StaticNumElems) {
 }
 
 SDValue
-VETargetLowering::CreateSeq(SDLoc DL, EVT ResTy, SDValue Stride, SelectionDAG &DAG, Optional<SDValue> OpVectorLength) const {
+VETargetLowering::CreateSeq(SDLoc DL, EVT ResTy, SelectionDAG &DAG, Optional<SDValue> OpVectorLength) const {
   // Pick VL
   SDValue VectorLen;
   if (OpVectorLength.hasValue()) {
@@ -873,7 +873,7 @@ VETargetLowering::CreateSeq(SDLoc DL, EVT ResTy, SDValue Stride, SelectionDAG &D
         SelectBoundedVectorLength(ResTy.getVectorNumElements()), DL, MVT::i32);
   }
 
-  return DAG.getNode(VEISD::VEC_SEQ, DL, ResTy, {Stride, VectorLen});
+  return DAG.getNode(VEISD::VEC_SEQ, DL, ResTy, VectorLen);
 }
 
 SDValue
@@ -1090,7 +1090,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
   // detected a proper stride pattern
   if (hasConstantStride) {
-    SDValue seq = CreateSeq(DL, NativeResTy, DAG.getConstant(1, DL, elemTy),
+    SDValue seq = CreateSeq(DL, NativeResTy,
                             DAG, OpVectorLength);
     if (stride == 1) {
       LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
@@ -1115,7 +1115,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence =
-          CreateSeq(DL, NativeResTy, DAG.getConstant(1, DL, elemTy), DAG, OpVectorLength);
+          CreateSeq(DL, NativeResTy, DAG, OpVectorLength);
       SDValue shiftbroadcast =
           CreateBroadcast(DL, NativeResTy,
                           DAG.getConstant(blockLengthLog, DL, elemTy), DAG);
@@ -1137,7 +1137,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence =
-          CreateSeq(DL, NativeResTy, DAG.getConstant(1, DL, elemTy), DAG, OpVectorLength);
+          CreateSeq(DL, NativeResTy, DAG, OpVectorLength);
       SDValue modulobroadcast =
           CreateBroadcast(DL, NativeResTy,
                           DAG.getConstant(blockLength - 1, DL, elemTy), DAG);
