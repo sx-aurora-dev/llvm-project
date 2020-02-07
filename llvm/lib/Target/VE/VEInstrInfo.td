@@ -48,6 +48,7 @@ def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def uimm6       : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
 def uimm7       : PatLeaf<(imm), [{ return isUInt<7>(N->getZExtValue()); }]>;
 def true        : PatLeaf<(imm), [{ return N->getSExtValue() !=0 ; }]>;
+def one         : PatLeaf<(imm), [{ return N->getSExtValue() == 1 ; }]>;
 def zero        : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
                                       == 0; }]>;
