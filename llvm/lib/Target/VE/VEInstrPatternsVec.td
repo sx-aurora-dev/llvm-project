@@ -124,57 +124,57 @@ def : Pat<(v512i32 (load I64:$addr)),
 def : Pat<(v512f32 (load I64:$addr)),
           (v512f32 (vld_vIsl 8, $addr, (LEA32zzi 256)))>;
 
-multiclass load_for_vector_length<int length> {
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i32")
-              (load I64:$addr)),
-            (vldlsx_vIsl 4, $addr, (LEA32zzi length))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f32")
-              (load I64:$addr)),
-            (vldu_vIsl 4, $addr, (LEA32zzi length))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f64")
-              (load I64:$addr)),
-            (vld_vIsl 8, $addr, (LEA32zzi length))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (load I64:$addr)),
-            (vld_vIsl 8, $addr, (LEA32zzi length))>;
-}
+// multiclass load_for_vector_length<int length> {
+//   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i32")
+//               (load I64:$addr)),
+//             (vldlsx_vIsl 4, $addr, (LEA32zzi length))>;
+//   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f32")
+//               (load I64:$addr)),
+//             (vldu_vIsl 4, $addr, (LEA32zzi length))>;
+//   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f64")
+//               (load I64:$addr)),
+//             (vld_vIsl 8, $addr, (LEA32zzi length))>;
+//   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
+//               (load I64:$addr)),
+//             (vld_vIsl 8, $addr, (LEA32zzi length))>;
+// }
 
-defm : load_for_vector_length<256>;
-defm : load_for_vector_length<128>;
-defm : load_for_vector_length<64>;
-defm : load_for_vector_length<32>;
-defm : load_for_vector_length<16>;
-defm : load_for_vector_length<8>;
-defm : load_for_vector_length<4>;
-defm : load_for_vector_length<2>;
+// defm : load_for_vector_length<256>;
+// defm : load_for_vector_length<128>;
+// defm : load_for_vector_length<64>;
+// defm : load_for_vector_length<32>;
+// defm : load_for_vector_length<16>;
+// defm : load_for_vector_length<8>;
+// defm : load_for_vector_length<4>;
+// defm : load_for_vector_length<2>;
 
-multiclass store_for_vector_length<int length> {
-  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
-                   I64:$addr),
-	      (vstl_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
-                    4, $addr, (LEA32zzi length))>;
-  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
-                   I64:$addr),
-	      (vstu_vIsl !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
-                    4, $addr, (LEA32zzi length))>;
-  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-                   I64:$addr),
-            (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-                    8, $addr, (LEA32zzi length))>;
-  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-                   I64:$addr),
-            (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-                    8, $addr, (LEA32zzi length))>;
-}
+// multiclass store_for_vector_length<int length> {
+//   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
+//                    I64:$addr),
+// 	      (vstl_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
+//                     4, $addr, (LEA32zzi length))>;
+//   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
+//                    I64:$addr),
+// 	      (vstu_vIsl !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
+//                     4, $addr, (LEA32zzi length))>;
+//   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
+//                    I64:$addr),
+//             (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
+//                     8, $addr, (LEA32zzi length))>;
+//   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
+//                    I64:$addr),
+//             (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
+//                     8, $addr, (LEA32zzi length))>;
+// }
 
-defm : store_for_vector_length<256>;
-defm : store_for_vector_length<128>;
-defm : store_for_vector_length<64>;
-defm : store_for_vector_length<32>;
-defm : store_for_vector_length<16>;
-defm : store_for_vector_length<8>;
-defm : store_for_vector_length<4>;
-defm : store_for_vector_length<2>;
+// defm : store_for_vector_length<256>;
+// defm : store_for_vector_length<128>;
+// defm : store_for_vector_length<64>;
+// defm : store_for_vector_length<32>;
+// defm : store_for_vector_length<16>;
+// defm : store_for_vector_length<8>;
+// defm : store_for_vector_length<4>;
+// defm : store_for_vector_length<2>;
 
 // Load for
 // v256i1, v512i1
@@ -303,31 +303,31 @@ defm : eve_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Broadcast
 
-def: Pat<(v512i32 (vec_broadcast i64:$val)),
-         (pvbrd_vsl $val, (LEA32zzi 256))>;
-def: Pat<(v512f32 (vec_broadcast i64:$val)),
-         (pvbrd_vsl $val, (LEA32zzi 256))>;
+def: Pat<(v512i32 (vec_broadcast i64:$val, i32:$vl)),
+         (pvbrd_vsl $val, $vl)>;
+def: Pat<(v512f32 (vec_broadcast i64:$val, i32:$vl)),
+         (pvbrd_vsl $val, $vl)>;
 
 multiclass vbrd_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                   ValueType vf32, ValueType vf64> {
-  def : Pat<(vi32 (vec_broadcast i32:$sy)),
-            (vbrdl_vsl i32:$sy, (LEA32zzi length))>;
-  def : Pat<(vf32 (vec_broadcast f32:$sy)),
-            (vbrdu_vsl f32:$sy, (LEA32zzi length))>;
-  def : Pat<(vi64 (vec_broadcast i64:$sy)),
-            (vbrd_vsl i64:$sy, (LEA32zzi length))>;
-  def : Pat<(vf64 (vec_broadcast f64:$sy)),
-            (vbrd_vsl f64:$sy, (LEA32zzi length))>;
+  def : Pat<(vi32 (vec_broadcast i32:$sy, i32:$vl)),
+            (vbrdl_vsl i32:$sy, i32:$vl)>;
+  def : Pat<(vf32 (vec_broadcast f32:$sy, i32:$vl)),
+            (vbrdu_vsl f32:$sy, i32:$vl)>;
+  def : Pat<(vi64 (vec_broadcast i64:$sy, i32:$vl)),
+            (vbrd_vsl i64:$sy, i32:$vl)>;
+  def : Pat<(vf64 (vec_broadcast f64:$sy, i32:$vl)),
+            (vbrd_vsl f64:$sy, i32:$vl)>;
 }
 
 defm : vbrd_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
-defm : vbrd_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
-defm : vbrd_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
-defm : vbrd_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
-defm : vbrd_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
-defm : vbrd_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
-defm : vbrd_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
-defm : vbrd_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
+// defm : vbrd_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
+// defm : vbrd_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
+// defm : vbrd_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
+// defm : vbrd_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
+// defm : vbrd_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+// defm : vbrd_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+// defm : vbrd_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // element extraction and insertion
 def : Pat<(extractelt v256f64:$vx, i64:$sy),

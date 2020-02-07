@@ -62,9 +62,8 @@ enum NodeType : unsigned {
   GLOBAL_BASE_REG, // Global base reg for PIC.
   FLUSHW,          // FLUSH register windows to stack.
 
-  VEC_BROADCAST, // a scalar value is broadcast across all vector lanes (Operand
-                 // 0: the broadcast register)
-  VEC_SEQ,       // sequence vector match (Operand 0: the constant stride)
+  VEC_BROADCAST, // 0: the value, 1: the vector length (no mask)
+  VEC_SEQ,       // 0: the constrant stride, 1: the vector length (no mask)
 
   VEC_VMV,       // custom lowering for vp_vshift
 
@@ -205,7 +204,8 @@ public:
   SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
 
   // Custom Operations
-  SDValue CreateBroadcast(SDLoc dl, EVT ResTy, SDValue S, SelectionDAG &DAG) const;
+  SDValue CreateBroadcast(SDLoc dl, EVT ResTy, SDValue ScaValue, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
+  SDValue CreateSeq(SDLoc dl, EVT ResTy, SDValue Stride, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
 
   // Vector Operations
   SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;

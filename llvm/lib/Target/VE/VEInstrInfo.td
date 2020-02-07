@@ -28,9 +28,9 @@ include "VEInstrFormats.td"
 // VEISD::VEC_SEQ - represents a vector sequence where the operand is the stride
 // VEISD::VEC_BROADCAST - represents a vector splat of a scalar value into all vector lanes.
 
-def vec_vmv         : SDNode<"VEISD::VEC_VMV",       SDTypeProfile<1, 4, [SDTCisSameAs<0, 1>, SDTCisVec<0>, SDTCisVec<3>, SDTCisSameNumEltsAs<3,1>, SDTCisInt<4>]>>;
-def vec_seq         : SDNode<"VEISD::VEC_SEQ",       SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
-def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 1, [SDTCisVec<0>]>>;
+def vec_vmv         : SDNode<"VEISD::VEC_VMV",       SDTypeProfile<1, 4,  [SDTCisSameAs<0, 1>, SDTCisVec<0>, SDTCisVec<3>, SDTCisSameNumEltsAs<3,1>, SDTCisInt<4>]>>;
+def vec_seq         : SDNode<"VEISD::VEC_SEQ",       SDTypeProfile<1, 2,  [SDTCisVec<0>, SDTCisInt<1>, SDTCisInt<2>]>>;
+def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 2,  [SDTCisVec<0>, SDTCisInt<2>]>>;
 def vec_popcount    : SDNode<"VEISD::VEC_POPCOUNT",  SDTypeProfile<1, 2,  [SDTCisInt<0>, SDTCisVec<1>, SDTCisInt<2>]>>;
 def register        : SDNode<"ISD::Register",        SDTypeProfile<1, 0,  []>, [], "RegisterSDNode">;
 
@@ -59,7 +59,10 @@ def fplozero    : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
                                       .getZExtValue() & 0xffffffff) == 0; }]>;
 
 // whether the mask is all true
-def true_mask    : PatLeaf<(vec_broadcast (i32 true))>;
+let PredicateCodeUsesOperands = 1 in {
+def true_mask                            : PatLeaf<(vec_broadcast (i32 true), I32)>;
+def any_broadcast                        : PatFrag<(ops node:$sx), (vec_broadcast node:$sx, I32)>;
+}
 
 def CCSIOp : PatLeaf<(cond), [{
   switch (N->get()) {

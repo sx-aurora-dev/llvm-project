@@ -125,7 +125,7 @@ LegalizeBroadcast(SDValue Op, SelectionDAG & DAG) {
 
   auto ReplOp = DAG.getNode(ReplOC, DL, MVT::i64, ScaOp);
   // auto LegalVecTy = MVT::getVectorVT(MVT::i64, Ty.getVectorNumElements());
-  return DAG.getNode(VEISD::VEC_BROADCAST, DL, Ty, ReplOp);
+  return DAG.getNode(VEISD::VEC_BROADCAST, DL, Ty, {ReplOp, Op.getOperand(1)});
 }
 
 static SDValue
@@ -660,7 +660,7 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
   if (isOneConstant(Scale)) {
     ScaledIndex = Index;
   } else {
-    SDValue ScaleBroadcast = CreateBroadcast(dl, IndexVT, Scale, DAG);
+    SDValue ScaleBroadcast = CreateBroadcast(dl, IndexVT, Scale, DAG, OpVectorLength);
     ScaledIndex = DAG.getNode(ISD::MUL, dl, IndexVT, {Index, ScaleBroadcast});
   }
 
@@ -670,7 +670,7 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
     addresses = ScaledIndex;
   } else {
     // re-constitute pointer vector (basePtr + index * scale)
-    SDValue BaseBroadcast = CreateBroadcast(dl, IndexVT, BasePtr, DAG);
+    SDValue BaseBroadcast = CreateBroadcast(dl, IndexVT, BasePtr, DAG, OpVectorLength);
     addresses =
         DAG.getNode(ISD::ADD, dl, IndexVT, {BaseBroadcast, ScaledIndex});
   }
@@ -852,35 +852,62 @@ SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
                      {Chain, Data, BasePtr, Mask, OpVectorLength});
 }
 
-SDValue VETargetLowering::CreateBroadcast(SDLoc dl, EVT ResTy, SDValue S,
-                                          SelectionDAG &DAG) const {
+// select an appropriate %evl argument for this element count.
+// This will return the correct result for packed mode oeprations (half).
+static unsigned
+SelectBoundedVectorLength(unsigned StaticNumElems) {
+    if (StaticNumElems > StandardVectorWidth) {
+      return (StaticNumElems + 1) / 2;
+    }
+    return StaticNumElems;
+}
 
-  // custom path for mask splat
-  if (ResTy != MVT::v256i1 && ResTy != MVT::v512i1)
-    return LegalizeBroadcast(DAG.getNode(VEISD::VEC_BROADCAST, dl, ResTy, S), DAG);
-
-#if 0
-  // Use the hard-wired vm0/vmp0 registers
-  if (bcConst) {
-    unsigned TrueRegClass = (ResTy == MVT::v256i1) ? VE::VM0 : VE::VMP0;
-    SDValue TrueMaskReg =
-        DAG.getCopyFromReg(DAG.getEntryNode(), dl, TrueRegClass, ResTy);
-
-    bool genTrueMask = (bool)bcConst->getSExtValue();
-
-    if (genTrueMask)
-      return TrueMaskReg;
-    return DAG.getNOT(dl, {TrueMaskReg}, ResTy);
+SDValue
+VETargetLowering::CreateSeq(SDLoc DL, EVT ResTy, SDValue Stride, SelectionDAG &DAG, Optional<SDValue> OpVectorLength) const {
+  // Pick VL
+  SDValue VectorLen;
+  if (OpVectorLength.hasValue()) {
+    VectorLen = OpVectorLength.getValue();
+  } else {
+    VectorLen = DAG.getConstant(
+        SelectBoundedVectorLength(ResTy.getVectorNumElements()), DL, MVT::i32);
   }
-#endif
 
+  return DAG.getNode(VEISD::VEC_SEQ, DL, ResTy, {Stride, VectorLen});
+}
+
+SDValue
+VETargetLowering::CreateBroadcast(SDLoc dl, EVT ResTy, SDValue S,
+                                  SelectionDAG &DAG,
+                                  Optional<SDValue> OpVectorLength) const {
+
+  // Pick VL
+  SDValue VectorLen;
+  if (OpVectorLength.hasValue()) {
+    VectorLen = OpVectorLength.getValue();
+  } else {
+    VectorLen = DAG.getConstant(
+        SelectBoundedVectorLength(ResTy.getVectorNumElements()), dl, MVT::i32);
+  }
+
+  // FIXME legalize vlen for packed mode!
+
+  // Non-mask case
+  if (ResTy.getVectorElementType() != MVT::i1) {
+    return LegalizeBroadcast(DAG.getNode(VEISD::VEC_BROADCAST, dl, ResTy, {S, VectorLen}), DAG);
+  }
+
+  // Mask bit broadcast
   auto BcConst = dyn_cast<ConstantSDNode>(S);
 
-  // expand to `i32` constant
+  // Constant splace -> expand to `i32` constant
   if (BcConst) {
     auto RecastConst = DAG.getConstant(BcConst->getSExtValue(), dl, MVT::i32);
-    return DAG.getNode(VEISD::VEC_BROADCAST, dl, ResTy, RecastConst);
+    return DAG.getNode(VEISD::VEC_BROADCAST, dl, ResTy, {RecastConst, VectorLen});
   }
+
+  // Expanding a non-constant value into a mask -> general case uses comparison with '0' to produce a vector mask
+  abort(); // TODO expand into vvp_* nodes (old code below)
 
   // Generic mask code path
   auto BoolTy = S.getSimpleValueType();
@@ -894,9 +921,9 @@ SDValue VETargetLowering::CreateBroadcast(SDLoc dl, EVT ResTy, SDValue S,
 
   // broadcast to vector
   SDValue BCVec =
-      DAG.getNode(VEISD::VEC_BROADCAST, dl, CmpVecTy, {CmpElem});
+      DAG.getNode(VEISD::VEC_BROADCAST, dl, CmpVecTy, {CmpElem, VectorLen});
   SDValue ZeroVec = CreateBroadcast(dl, CmpVecTy,
-                                    {DAG.getConstant(0, dl, BoolTy)}, DAG);
+                                    {DAG.getConstant(0, dl, BoolTy)}, DAG, VectorLen);
 
   MVT BoolVecTy = MVT::getVectorVT(MVT::i1, ElemCount);
 
@@ -934,6 +961,9 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
   SDLoc DL(Op);
 
+  unsigned NumElems = Op.getSimpleValueType().getVectorNumElements();
+  SDValue OpVectorLength =
+      DAG.getConstant(SelectBoundedVectorLength(NumElems), DL, MVT::i32);
   auto NativeResTy = LegalizeVectorType(Op.getSimpleValueType(), DAG);
 
   // match VEC_BROADCAST
@@ -944,8 +974,8 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
     if (AllUndef) {
       LLVM_DEBUG(dbgs() << "AllUndef: VEC_BROADCAST ");
       LLVM_DEBUG(BVN->getOperand(0)->dump());
-      return CreateBroadcast(DL, NativeResTy, BVN->getOperand(0),
-                             DAG);
+      return CreateBroadcast(DL, NativeResTy, BVN->getOperand(0), DAG,
+                             OpVectorLength);
     } else if (S2V) {
       LLVM_DEBUG(dbgs() << "isS2V: scalar_to_vector ");
       LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
@@ -954,8 +984,8 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
     } else {
       LLVM_DEBUG(dbgs() << "isBroadCast: VEC_BROADCAST ");
       LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
-      return CreateBroadcast(DL, NativeResTy,
-                             BVN->getOperand(FirstDef), DAG);
+      return CreateBroadcast(DL, NativeResTy, BVN->getOperand(FirstDef), DAG,
+                             OpVectorLength);
     }
   }
 
@@ -965,7 +995,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
   }
 #endif
 
-  // match VEC_SEQ(stride) patterns
+  // match veC_SEQ(stride) patterns
   // identify a constant stride vector
   bool hasConstantStride = true;
 
@@ -1060,9 +1090,8 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
   // detected a proper stride pattern
   if (hasConstantStride) {
-    SDValue seq = DAG.getNode(
-        VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
-        DAG.getConstant(1, DL, elemTy)); // TODO draw strideTy from elements
+    SDValue seq = CreateSeq(DL, NativeResTy, DAG.getConstant(1, DL, elemTy),
+                            DAG, OpVectorLength);
     if (stride == 1) {
       LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
       LLVM_DEBUG(seq.dump());
@@ -1086,8 +1115,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence =
-          DAG.getNode(VEISD::VEC_SEQ, DL, NativeResTy,
-                      DAG.getConstant(1, DL, elemTy));
+          CreateSeq(DL, NativeResTy, DAG.getConstant(1, DL, elemTy), DAG, OpVectorLength);
       SDValue shiftbroadcast =
           CreateBroadcast(DL, NativeResTy,
                           DAG.getConstant(blockLengthLog, DL, elemTy), DAG);
@@ -1109,8 +1137,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
 
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence =
-          DAG.getNode(VEISD::VEC_SEQ, DL, NativeResTy,
-                      DAG.getConstant(1, DL, elemTy));
+          CreateSeq(DL, NativeResTy, DAG.getConstant(1, DL, elemTy), DAG, OpVectorLength);
       SDValue modulobroadcast =
           CreateBroadcast(DL, NativeResTy,
                           DAG.getConstant(blockLength - 1, DL, elemTy), DAG);
