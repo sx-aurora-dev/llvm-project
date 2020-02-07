@@ -133,7 +133,7 @@ define x86_regcallcc <64 x i64> @brdv64i64(i64) {
 define x86_regcallcc <32 x i64> @brdv32i64(i64) {
 ; CHECK-LABEL: brdv32i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 32
+; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -146,7 +146,7 @@ define x86_regcallcc <32 x i64> @brdv32i64(i64) {
 define x86_regcallcc <16 x i64> @brdv16i64(i64) {
 ; CHECK-LABEL: brdv16i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 16
+; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -159,7 +159,7 @@ define x86_regcallcc <16 x i64> @brdv16i64(i64) {
 define x86_regcallcc <8 x i64> @brdv8i64(i64) {
 ; CHECK-LABEL: brdv8i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 8
+; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -172,7 +172,7 @@ define x86_regcallcc <8 x i64> @brdv8i64(i64) {
 define x86_regcallcc <4 x i64> @brdv4i64(i64) {
 ; CHECK-LABEL: brdv4i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 4
+; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -185,7 +185,7 @@ define x86_regcallcc <4 x i64> @brdv4i64(i64) {
 define x86_regcallcc <2 x i64> @brdv2i64(i64) {
 ; CHECK-LABEL: brdv2i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 2
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
