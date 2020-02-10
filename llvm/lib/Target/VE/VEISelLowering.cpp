@@ -1747,7 +1747,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v256i64, &VE::V64RegClass);
   addRegisterClass(MVT::v256f32, &VE::V64RegClass);
   addRegisterClass(MVT::v256f64, &VE::V64RegClass);
-
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
 
   if (Subtarget->hasPackedMode()) {
@@ -1755,6 +1754,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::v512f32, &VE::V64RegClass);
     addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
   }
+
+  // Support mask DT for target intrinsics
+  addRegisterClass(MVT::v4i64, &VE::VMRegClass);
+  addRegisterClass(MVT::v8i64, &VE::VMRegClass);
 
   // if (Subtarget->vectorize()) {
   //   // We want to use any of vectorization oppotunities in llvm.
