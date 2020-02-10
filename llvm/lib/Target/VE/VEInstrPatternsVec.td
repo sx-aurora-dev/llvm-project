@@ -4,113 +4,6 @@
 
 // Pattern Matchings for Generic Vector Instructions
 
-// Pattern Fragments for sextload/zextload/truncstore of vector types
-
-def extloadv256i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v256i32;
-}]>;
-def sextloadv256i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v256i32;
-}]>;
-def zextloadv256i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v256i32;
-}]>;
-def extloadv128i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v128i32;
-}]>;
-def sextloadv128i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v128i32;
-}]>;
-def zextloadv128i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v128i32;
-}]>;
-def extloadv64i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v64i32;
-}]>;
-def sextloadv64i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v64i32;
-}]>;
-def zextloadv64i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v64i32;
-}]>;
-def extloadv32i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v32i32;
-}]>;
-def sextloadv32i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v32i32;
-}]>;
-def zextloadv32i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v32i32;
-}]>;
-def extloadv16i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v16i32;
-}]>;
-def sextloadv16i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v16i32;
-}]>;
-def zextloadv16i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v16i32;
-}]>;
-def extloadv8i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v8i32;
-}]>;
-def sextloadv8i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v8i32;
-}]>;
-def zextloadv8i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v8i32;
-}]>;
-def extloadv4i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v4i32;
-}]>;
-def sextloadv4i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v4i32;
-}]>;
-def zextloadv4i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v4i32;
-}]>;
-def extloadv2i32 : PatFrag<(ops node:$ptr), (extload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v2i32;
-}]>;
-def sextloadv2i32 : PatFrag<(ops node:$ptr), (sextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v2i32;
-}]>;
-def zextloadv2i32 : PatFrag<(ops node:$ptr), (zextload node:$ptr), [{
-  return cast<LoadSDNode>(N)->getMemoryVT() == MVT::v2i32;
-}]>;
-def truncstorev256i32 : PatFrag<(ops node:$val, node:$ptr),
-                                (truncstore node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v256i32;
-}]>;
-def truncstorev128i32 : PatFrag<(ops node:$val, node:$ptr),
-                              (truncstore node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v128i32;
-}]>;
-def truncstorev64i32 : PatFrag<(ops node:$val, node:$ptr),
-                              (truncstore node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v64i32;
-}]>;
-def truncstorev32i32 : PatFrag<(ops node:$val, node:$ptr),
-                              (truncstore node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v32i32;
-}]>;
-def truncstorev16i32 : PatFrag<(ops node:$val, node:$ptr),
-                              (truncstore node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v16i32;
-}]>;
-def truncstorev8i32 : PatFrag<(ops node:$val, node:$ptr),
-                              (truncstore node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v8i32;
-}]>;
-def truncstorev4i32 : PatFrag<(ops node:$val, node:$ptr),
-                              (truncstore node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v4i32;
-}]>;
-def truncstorev2i32 : PatFrag<(ops node:$val, node:$ptr),
-                              (truncstore node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getMemoryVT() == MVT::v2i32;
-}]>;
-
 // Load and store for all vector types
 // v2i32, v2i64, v2f32, v2f64, v4i32, v4i64, v4f32, v4f64,
 // v8i32, v8i64, v8f32, v8f64, v16i32, v16i64, v16f32, v16f64,
@@ -123,58 +16,6 @@ def : Pat<(v512i32 (load I64:$addr)),
 
 def : Pat<(v512f32 (load I64:$addr)),
           (v512f32 (vld_vIsl 8, $addr, (LEA32zzi 256)))>;
-
-// multiclass load_for_vector_length<int length> {
-//   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i32")
-//               (load I64:$addr)),
-//             (vldlsx_vIsl 4, $addr, (LEA32zzi length))>;
-//   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f32")
-//               (load I64:$addr)),
-//             (vldu_vIsl 4, $addr, (LEA32zzi length))>;
-//   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f64")
-//               (load I64:$addr)),
-//             (vld_vIsl 8, $addr, (LEA32zzi length))>;
-//   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
-//               (load I64:$addr)),
-//             (vld_vIsl 8, $addr, (LEA32zzi length))>;
-// }
-
-// defm : load_for_vector_length<256>;
-// defm : load_for_vector_length<128>;
-// defm : load_for_vector_length<64>;
-// defm : load_for_vector_length<32>;
-// defm : load_for_vector_length<16>;
-// defm : load_for_vector_length<8>;
-// defm : load_for_vector_length<4>;
-// defm : load_for_vector_length<2>;
-
-// multiclass store_for_vector_length<int length> {
-//   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
-//                    I64:$addr),
-// 	      (vstl_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
-//                     4, $addr, (LEA32zzi length))>;
-//   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
-//                    I64:$addr),
-// 	      (vstu_vIsl !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
-//                     4, $addr, (LEA32zzi length))>;
-//   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-//                    I64:$addr),
-//             (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-//                     8, $addr, (LEA32zzi length))>;
-//   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-//                    I64:$addr),
-//             (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-//                     8, $addr, (LEA32zzi length))>;
-// }
-
-// defm : store_for_vector_length<256>;
-// defm : store_for_vector_length<128>;
-// defm : store_for_vector_length<64>;
-// defm : store_for_vector_length<32>;
-// defm : store_for_vector_length<16>;
-// defm : store_for_vector_length<8>;
-// defm : store_for_vector_length<4>;
-// defm : store_for_vector_length<2>;
 
 // Load for
 // v256i1, v512i1
@@ -217,13 +58,6 @@ multiclass ext_for_vector_length<int length, ValueType vi32, ValueType vi64,
 }
 
 defm : ext_for_vector_length<256, v256i32, v256i64, v256i1>;
-// defm : ext_for_vector_length<128, v128i32, v128i64, v128i1>;
-// defm : ext_for_vector_length<64, v64i32, v64i64, v64i1>;
-// defm : ext_for_vector_length<32, v32i32, v32i64, v32i1>;
-// defm : ext_for_vector_length<16, v16i32, v16i64, v16i1>;
-// defm : ext_for_vector_length<8, v8i32, v8i64, v8i1>;
-// defm : ext_for_vector_length<4, v4i32, v4i64, v4i1>;
-// defm : ext_for_vector_length<2, v2i32, v2i64, v2i1>;
 
 // Bitconvert for vector registers
 
@@ -252,13 +86,6 @@ multiclass s2v_for_vector_length<int length, ValueType vi32, ValueType vi64,
 }
 
 defm : s2v_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
-// defm : s2v_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
-// defm : s2v_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
-// defm : s2v_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
-// defm : s2v_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
-// defm : s2v_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
-// defm : s2v_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
-// defm : s2v_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Series of INSERT_VECTOR_ELT for all VE vector types,
 // v512i32 and v512f32 is expanded by LowerINSERT_VECTOR_ELT().
@@ -275,13 +102,6 @@ multiclass ive_for_vector_length<int length, ValueType vi32, ValueType vi64,
 }
 
 defm : ive_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
-// defm : ive_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
-// defm : ive_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
-// defm : ive_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
-// defm : ive_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
-// defm : ive_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
-// defm : ive_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
-// defm : ive_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Series of EXTRACT_VECOR_ELT for all VE vector types,
 // v512i32 and v512f32 is expanded by LowerEXTRACT_VECTOR_ELT().
@@ -293,14 +113,6 @@ multiclass eve_for_vector_length<int length, ValueType vi32, ValueType vi64,
 }
 
 defm : eve_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
-// defm : eve_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
-// defm : eve_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
-// defm : eve_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
-// defm : eve_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
-// defm : eve_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
-// defm : eve_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
-// defm : eve_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
-
 
 // Broadcast
 
