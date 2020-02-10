@@ -495,7 +495,7 @@ multiclass RRNDmrm<string opcStr, bits<8>opc,
                !strconcat(opcStr, " $sx, $sy, (${sz})0")> {
               let cy = 1;
               let cz = 0;
-              let sz{6} = 1;
+              let mz = 1;
               // (guess) tblgen conservatively assumes hasSideEffects when
               // it fails to infer from a pattern.
               let hasSideEffects = 0;
@@ -504,6 +504,7 @@ multiclass RRNDmrm<string opcStr, bits<8>opc,
                !strconcat(opcStr, " $sx, $sy, (${sz})1")> {
               let cy = 1;
               let cz = 0;
+              let mz = 0;
               let hasSideEffects = 0;
             }
 }
@@ -516,7 +517,7 @@ multiclass RRNDmim<string opcStr, bits<8>opc,
                !strconcat(opcStr, " $sx, $sy, (${sz})0")> {
               let cy = 0;
               let cz = 0;
-              let sz{6} = 1;
+              let mz = 1;
               // (guess) tblgen conservatively assumes hasSideEffects when
               // it fails to infer from a pattern.
               let hasSideEffects = 0;
@@ -525,6 +526,7 @@ multiclass RRNDmim<string opcStr, bits<8>opc,
                !strconcat(opcStr, " $sx, $sy, (${sz})1")> {
               let cy = 0;
               let cz = 0;
+              let mz = 0;
               let hasSideEffects = 0;
             }
 }
@@ -607,7 +609,7 @@ multiclass RRIm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})0, $sy")> {
     let cy = 1;
     let cz = 0;
-    let sz{6} = 1;
+    let mz = 1;
     let hasSideEffects = 0;
   }
   def rm1 : RR<
@@ -615,6 +617,7 @@ multiclass RRIm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})1, $sy")> {
     let cy = 1;
     let cz = 0;
+    let mz = 0;
     let hasSideEffects = 0;
   }
   def im0 : RR<
@@ -622,7 +625,7 @@ multiclass RRIm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})0, $sy")> {
     let cy = 0;
     let cz = 0;
-    let sz{6} = 1;
+    let mz = 1;
     let hasSideEffects = 0;
   }
   def im1 : RR<
@@ -630,6 +633,7 @@ multiclass RRIm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})1, $sy")> {
     let cy = 0;
     let cz = 0;
+    let mz = 0;
     let hasSideEffects = 0;
   }
   def zi : RR<
@@ -668,7 +672,7 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})0, $sy")> {
     let cy = 1;
     let cz = 0;
-    let sz{6} = 1;
+    let mz = 1;
     let hasSideEffects = 0;
   }
   def rm1 : RR<
@@ -676,6 +680,7 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})1, $sy")> {
     let cy = 1;
     let cz = 0;
+    let mz = 0;
     let hasSideEffects = 0;
   }
   def im0 : RR<
@@ -683,7 +688,7 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})0, $sy")> {
     let cy = 0;
     let cz = 0;
-    let sz{6} = 1;
+    let mz = 1;
     let hasSideEffects = 0;
   }
   def im1 : RR<
@@ -691,6 +696,7 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})1, $sy")> {
     let cy = 0;
     let cz = 0;
+    let mz = 0;
     let hasSideEffects = 0;
   }
 }
@@ -722,7 +728,7 @@ multiclass RRI2m<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})0")> {
     let cy = 1;
     let cz = 0;
-    let sz{6} = 1;
+    let mz = 1;
     let hasSideEffects = 0;
   }
   def m1 : RR<
@@ -730,6 +736,7 @@ multiclass RRI2m<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})1")> {
     let cy = 1;
     let cz = 0;
+    let mz = 0;
     let hasSideEffects = 0;
   }
 }
@@ -835,7 +842,7 @@ let cx = 0, cw = 1, cw2 = 1 in
 defm CMOVS : RRCMOVm<"cmov.s.${cf}", 0x3B, F32, f32, simm7Op64, uimm6Op32>;
 
 // NOP instruction
-let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0, hasSideEffects = 0 in
+let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
 def NOP : RR<0x79, (outs), (ins), "nop">;
 
 // LEA and LEASL instruction (load 32 bit imm to low or high part)
