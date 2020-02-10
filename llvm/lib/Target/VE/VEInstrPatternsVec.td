@@ -217,13 +217,13 @@ multiclass ext_for_vector_length<int length, ValueType vi32, ValueType vi64,
 }
 
 defm : ext_for_vector_length<256, v256i32, v256i64, v256i1>;
-defm : ext_for_vector_length<128, v128i32, v128i64, v128i1>;
-defm : ext_for_vector_length<64, v64i32, v64i64, v64i1>;
-defm : ext_for_vector_length<32, v32i32, v32i64, v32i1>;
-defm : ext_for_vector_length<16, v16i32, v16i64, v16i1>;
-defm : ext_for_vector_length<8, v8i32, v8i64, v8i1>;
-defm : ext_for_vector_length<4, v4i32, v4i64, v4i1>;
-defm : ext_for_vector_length<2, v2i32, v2i64, v2i1>;
+// defm : ext_for_vector_length<128, v128i32, v128i64, v128i1>;
+// defm : ext_for_vector_length<64, v64i32, v64i64, v64i1>;
+// defm : ext_for_vector_length<32, v32i32, v32i64, v32i1>;
+// defm : ext_for_vector_length<16, v16i32, v16i64, v16i1>;
+// defm : ext_for_vector_length<8, v8i32, v8i64, v8i1>;
+// defm : ext_for_vector_length<4, v4i32, v4i64, v4i1>;
+// defm : ext_for_vector_length<2, v2i32, v2i64, v2i1>;
 
 // Bitconvert for vector registers
 
@@ -252,15 +252,15 @@ multiclass s2v_for_vector_length<int length, ValueType vi32, ValueType vi64,
 }
 
 defm : s2v_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
-defm : s2v_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
-defm : s2v_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
-defm : s2v_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
-defm : s2v_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
-defm : s2v_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
-defm : s2v_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
-defm : s2v_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
+// defm : s2v_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
+// defm : s2v_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
+// defm : s2v_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
+// defm : s2v_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
+// defm : s2v_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+// defm : s2v_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+// defm : s2v_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
-// Series of INSERT_VECOR_ELT for all VE vector types,
+// Series of INSERT_VECTOR_ELT for all VE vector types,
 // v512i32 and v512f32 is expanded by LowerINSERT_VECTOR_ELT().
 
 multiclass ive_for_vector_length<int length, ValueType vi32, ValueType vi64,
@@ -275,13 +275,13 @@ multiclass ive_for_vector_length<int length, ValueType vi32, ValueType vi64,
 }
 
 defm : ive_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
-defm : ive_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
-defm : ive_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
-defm : ive_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
-defm : ive_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
-defm : ive_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
-defm : ive_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
-defm : ive_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
+// defm : ive_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
+// defm : ive_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
+// defm : ive_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
+// defm : ive_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
+// defm : ive_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+// defm : ive_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+// defm : ive_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 // Series of EXTRACT_VECOR_ELT for all VE vector types,
 // v512i32 and v512f32 is expanded by LowerEXTRACT_VECTOR_ELT().
@@ -293,13 +293,13 @@ multiclass eve_for_vector_length<int length, ValueType vi32, ValueType vi64,
 }
 
 defm : eve_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
-defm : eve_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
-defm : eve_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
-defm : eve_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
-defm : eve_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
-defm : eve_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
-defm : eve_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
-defm : eve_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
+// defm : eve_for_vector_length<128, v128i32, v128i64, v128f32, v128f64>;
+// defm : eve_for_vector_length<64, v64i32, v64i64, v64f32, v64f64>;
+// defm : eve_for_vector_length<32, v32i32, v32i64, v32f32, v32f64>;
+// defm : eve_for_vector_length<16, v16i32, v16i64, v16f32, v16f64>;
+// defm : eve_for_vector_length<8, v8i32, v8i64, v8f32, v8f64>;
+// defm : eve_for_vector_length<4, v4i32, v4i64, v4f32, v4f64>;
+// defm : eve_for_vector_length<2, v2i32, v2i64, v2f32, v2f64>;
 
 
 // Broadcast
