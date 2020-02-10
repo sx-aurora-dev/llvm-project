@@ -99,15 +99,8 @@ public:
       T.push_back(Entry);
     }
 
-    // we need to have at least one additional element in the vector because
-    // we want to return __tgt_target_table, which contains a pointer to the
-    // the element after the last entry in the table.
-    // If we didnt own the memory then we would have undefined behaviour
-    __tgt_offload_entry DummyEntry = {NULL, NULL, 0, 0, 0};
-    T.push_back(DummyEntry);
-
     FuncOrGblEntry[device_id].back().Table.EntriesBegin = &T.front();
-    FuncOrGblEntry[device_id].back().Table.EntriesEnd = &T.back();
+    FuncOrGblEntry[device_id].back().Table.EntriesEnd = &T.back() + 1;
   }
 
   __tgt_target_table *getOffloadTable(int32_t device_id) {
