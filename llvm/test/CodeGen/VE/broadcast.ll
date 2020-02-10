@@ -4,18 +4,18 @@
 define x86_regcallcc <1024 x i32> @brdv512i32x2(i32) {
 ; CHECK-LABEL: brdv512i32x2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrdl %v0,%s0
+; CHECK-NEXT:    or %s1, 3, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrdl %v2,%s0
+; CHECK-NEXT:    or %s1, 4, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrdl %v3,%s0
 ; CHECK-NEXT:    lea %s12, 256
 ; CHECK-NEXT:    lvl %s12
 ; CHECK-NEXT:    vor %v1,(0)1,%v0
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
-; CHECK-NEXT:    vor %v2,(0)1,%v0
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
-; CHECK-NEXT:    vor %v3,(0)1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %val = insertelement <1024 x i32> undef, i32 %0, i32 0
   %r0 = insertelement <1024 x i32> %val, i32 %0, i32 1
@@ -29,9 +29,12 @@ define x86_regcallcc <1024 x i32> @brdv512i32x2(i32) {
 define x86_regcallcc <512 x i32> @brdv512i32(i32) {
 ; CHECK-LABEL: brdv512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrdl %v0,%s0
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrdl %v1,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %val = insertelement <512 x i32> undef, i32 %0, i32 0
   %ret = insertelement <512 x i32> %val, i32 %0, i32 511
@@ -42,9 +45,12 @@ define x86_regcallcc <512 x i32> @brdv512i32(i32) {
 define x86_regcallcc <512 x float> @brdv512f32(float) {
 ; CHECK-LABEL: brdv512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrdu %v0,%s0
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrdu %v1,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %val = insertelement <512 x float> undef, float %0, i32 0
   %ret = insertelement <512 x float> %val, float %0, i32 511
