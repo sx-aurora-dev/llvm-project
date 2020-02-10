@@ -160,7 +160,7 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
   if (RequestHandle == VEO_REQUEST_ID_INVALID) {
     DP("Execution of entry point %p failed\n",
        reinterpret_cast<void *>(FuncAddr));
-    return -1;
+    return OFFLOAD_FAIL;
   } else {
     DP("Function at address %p called (VEO request ID: %" PRIu64 ")\n",
        reinterpret_cast<void *>(FuncAddr), RequestHandle);
@@ -171,9 +171,9 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
   if (ret != 0) {
     DP("Waiting for entry point %p failed (Error code %d)\n",
        reinterpret_cast<void *>(FuncAddr), ret);
-    return -1;
+    return OFFLOAD_FAIL;
   }
-  return 0;
+  return OFFLOAD_SUCCESS;
 }
 
 #ifdef __cplusplus
@@ -206,12 +206,12 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
     DP("veo_get_version() reported version %i. Minimum supported veo api "
        "version is %i\n",
        veo_version, VEO_MIN_VERSION);
-    return -1;
+    return OFFLOAD_FAIL;
   } else if (veo_version > VEO_MAX_VERSION) {
     DP("veo_get_version() reported version %i, Maximum supported veo api "
        "version is %i\n",
        veo_version, VEO_MAX_VERSION);
-    return -2;
+    return OFFLOAD_FAIL;
   }
   DP("Available VEO version: %i (supported)\n", veo_version);
 
@@ -222,7 +222,7 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
   // can load a dynamically linked binary later, after we create the process).
   // At this stage, we cannot check if we have a dynamically or statically
   // linked binary so we defer process creation until we know.
-  return 0;
+  return OFFLOAD_SUCCESS;
 }
 
 // Pass an executable image section described by image to the specified
@@ -390,8 +390,9 @@ int32_t __tgt_rtl_data_submit(int32_t ID, void *TargetPtr, void *HostPtr,
                           HostPtr, (size_t)Size);
   if (ret != 0) {
     DP("veo_write_mem() failed with error code %d\n", ret);
+    return OFFLOAD_FAIL;
   }
-  return ret;
+  return OFFLOAD_SUCCESS;
 }
 
 // Retrieve the data content from the target device using its address.
@@ -402,14 +403,21 @@ int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
                          (uint64_t)TargetPtr, Size);
   if (ret != 0) {
     DP("veo_read_mem() failed with error code %d\n", ret);
+    return OFFLOAD_FAIL;
   }
-  return ret;
+  return OFFLOAD_SUCCESS;
 }
 
 // De-allocate the data referenced by target ptr on the device. In case of
 // success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr) {
-  return veo_free_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr);
+  int ret =  veo_free_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr);
+
+  if (ret != 0) {
+    DP("veo_free_mem() failed with error code %d\n", ret);
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
 }
 
 // Similar to __tgt_rtl_run_target_region, but additionally specify the
@@ -436,7 +444,7 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
 
   uint64_t RetVal;
   if (target_run_function_wait(ID, reinterpret_cast<uint64_t>(Entry),
-                               TargetArgs, &RetVal) != 0) {
+                               TargetArgs, &RetVal) != OFFLOAD_SUCCESS) {
     veo_args_free(TargetArgs);
     return OFFLOAD_FAIL;
   }
