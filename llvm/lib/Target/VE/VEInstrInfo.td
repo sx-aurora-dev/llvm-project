@@ -1334,16 +1334,16 @@ defm BCRS : BCRm<"br${cf}.s", "br.s", 0x18, F32, f32, simm7Op32>;
 
 // Load and Store host memory instructions
 let cx = 0, cz = 1, hasSideEffects = 0 in {
-let ry = 3 in
+let ry = 3, DecoderMethod = "DecodeLoadASI64" in
 def LHMri : RRMHM<0x21, (outs I64:$dest), (ins MEMriHM:$addr),
                   "lhm.l $dest, $addr">;
-let ry = 2 in
+let ry = 2, DecoderMethod = "DecodeLoadASI32" in
 def LHMLri : RRMHM<0x21, (outs I32:$dest), (ins MEMriHM:$addr),
                    "lhm.w $dest, $addr">;
-let ry = 1 in
+let ry = 1, DecoderMethod = "DecodeLoadASI16" in
 def LHM2Bri : RRMHM<0x21, (outs I16:$dest), (ins MEMriHM:$addr),
                     "lhm.h $dest, $addr">;
-let ry = 0 in
+let ry = 0, DecoderMethod = "DecodeLoadASI8" in
 def LHM1Bri : RRMHM<0x21, (outs I8:$dest), (ins MEMriHM:$addr),
                     "lhm.b $dest, $addr">;
 }
