@@ -99,6 +99,9 @@ class VETargetLowering : public TargetLowering {
 public:
   VETargetLowering(const TargetMachine &TM, const VESubtarget &STI);
 
+  TargetLoweringBase::LegalizeAction
+  getCustomOperationAction(SDNode &) const override;
+
   /// computeKnownBitsForTargetNode - Determine which of the bits specified
   /// in Mask are known to be either zero or one and return them in the
   /// KnownZero/KnownOne bitsets.

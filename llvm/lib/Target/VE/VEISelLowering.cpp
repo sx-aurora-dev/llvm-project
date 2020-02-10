@@ -556,6 +556,15 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   abort(); // TODO implement
 }
 
+/// Whether this VVP node needs widening
+static bool VVPNeedsWidening(SDNode Op) {
+  // Otw, widen this VVP operation to the native vector width
+  EVT OpVecTy = GetIdiomaticType(SDValue(&Op, 0));
+  unsigned OpVectorLength = OpVecTy.getVectorNumElements();
+  assert((OpVectorLength <= PackedWidth) && "Operation should have been split during legalization");
+  return (OpVectorLength != StandardVectorWidth) && (OpVectorLength != PackedWidth);
+}
+
 SDValue VETargetLowering::LowerToNativeWidthVVP(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering to VVP node\n");
 
@@ -2243,6 +2252,15 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setMinStackArgumentAlignment(Align(8));
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
+}
+
+TargetLowering::LegalizeAction
+VETargetLowering::getCustomOperationAction(SDNode& Op) const {
+  if (VVPNeedsWidening(GetIdiomaticType(SDValue(&Op, 0)))) {
+    return Custom;
+  }
+
+  return Legal;
 }
 
 const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
