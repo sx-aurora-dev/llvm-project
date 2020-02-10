@@ -3380,7 +3380,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
   switch (Op.getOpcode()) {
   default:
-    Op.dump();
+    LLVM_DEBUG( Op.dump(); );
     llvm_unreachable("Should not custom lower this!");
 
   case ISD::RETURNADDR: return LowerRETURNADDR(Op, DAG, *this, Subtarget);
