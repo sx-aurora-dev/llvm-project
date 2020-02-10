@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/VEMCTargetDesc.h"
+#include "VE.h"
 #include "TargetInfo/VETargetInfo.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
@@ -259,6 +260,11 @@ static DecodeStatus DecodeUIMM6(MCInst &Inst, uint64_t insn,
                                 uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeSIMM7(MCInst &Inst, uint64_t insn,
                                 uint64_t Address, const void *Decoder);
+static DecodeStatus DecodeCCOperand(MCInst &Inst, uint64_t insn,
+                                    uint64_t Address, const void *Decoder);
+static DecodeStatus DecodeBranchCondition(MCInst &Inst, uint64_t insn,
+                                          uint64_t Address,
+                                          const void *Decoder);
 
 #include "VEGenDisassemblerTables.inc"
 
@@ -515,3 +521,74 @@ static DecodeStatus DecodeSIMM7(MCInst &MI, uint64_t insn,
   MI.addOperand(MCOperand::createImm(tgt));
   return MCDisassembler::Success;
 }
+
+static bool isIntegerBCKind(MCInst &MI) {
+
+#define BCm_kind(NAME) \
+  case NAME ## r: \
+  case NAME ## i:
+
+#define BCRm_kind(NAME) \
+  case NAME ## rr: \
+  case NAME ## ir:
+
+
+  {
+    using namespace llvm::VE;
+    switch (MI.getOpcode()) {
+    BCm_kind(BC)
+    BCRm_kind(BCRL)
+    BCRm_kind(BCRW)
+      return true;
+    }
+  }
+#undef BCm_kind
+
+  return false;
+}
+
+// Decode CCOperand field.
+static DecodeStatus DecodeCCOperand(MCInst &MI, uint64_t cf,
+                                    uint64_t Address, const void *Decoder) {
+  MI.addOperand(MCOperand::createImm(VEValToCondCode(cf, isIntegerBCKind(MI))));
+  return MCDisassembler::Success;
+}
+
+// Decode branch condition instruction and CCOperand field in it.
+static DecodeStatus DecodeBranchCondition(MCInst &MI, uint64_t insn,
+                                          uint64_t Address,
+                                          const void *Decoder) {
+  unsigned cf = fieldFromInstruction(insn, 48, 4);
+  bool cy = fieldFromInstruction(insn, 47, 1);
+  unsigned sy = fieldFromInstruction(insn, 40, 7);
+  bool cz = fieldFromInstruction(insn, 39, 1);
+  unsigned sz = fieldFromInstruction(insn, 32, 7);
+  uint64_t simm32 = SignExtend64<32>(fieldFromInstruction(insn, 0, 32));
+
+  // Decode cf.
+  MI.addOperand(MCOperand::createImm(VEValToCondCode(cf, isIntegerBCKind(MI))));
+
+  // Decode sy.
+  DecodeStatus status;
+  if (cy) {
+    status = DecodeI64RegisterClass(MI, sy, Address, Decoder);
+    if (status != MCDisassembler::Success)
+      return status;
+  } else {
+    MI.addOperand(MCOperand::createImm(SignExtend32<7>(sy)));
+  }
+
+  // Decode sz.
+  if (cz) {
+    status = DecodeI64RegisterClass(MI, sz, Address, Decoder);
+    if (status != MCDisassembler::Success)
+      return status;
+  } else {
+    MI.addOperand(MCOperand::createImm(0));
+  }
+
+  // Decode simm32.
+  MI.addOperand(MCOperand::createImm(simm32));
+  return MCDisassembler::Success;
+}
+

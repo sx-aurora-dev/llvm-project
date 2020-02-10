@@ -310,8 +310,11 @@ def uimm6Op128 : Operand<i128> {
 }
 
 // Operand for printing out a condition code.
-let PrintMethod = "printCCOperand" in
-  def CCOp : Operand<i32>;
+def CCOp : Operand<i32> {
+  let PrintMethod = "printCCOperand";
+  let DecoderMethod = "DecodeCCOperand";
+  let EncoderMethod = "getCCOpValue";
+}
 
 def VEhi    : SDNode<"VEISD::Hi", SDTIntUnaryOp>;
 def VElo    : SDNode<"VEISD::Lo", SDTIntUnaryOp>;
@@ -783,26 +786,22 @@ multiclass BCm<string opcStr, string opcStrAt, bits<8> opc,
                RegisterClass RC, ValueType Ty, Operand immOp> {
   def r : CF<
     opc, (outs),
-    (ins CCOp:$cf, RC:$sy, RC:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, ${imm32}(, ${sz})"), []> {
-    let cy = 1;
-    let cz = 1;
+    (ins CCOp:$cond, RC:$comp, MEMriASX:$addr),
+    !strconcat(opcStr, " $comp, $addr"), []> {
     let hasSideEffects = 0;
   }
   def i : CF<
     opc, (outs),
-    (ins CCOp:$cf, immOp:$sy, RC:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, ${imm32}(, ${sz})"), []> {
+    (ins CCOp:$cond, immOp:$comp, MEMriASX:$addr),
+    !strconcat(opcStr, " $comp, $addr"), []> {
     let cy = 0;
-    let cz = 1;
     let hasSideEffects = 0;
   }
   def a : CF<
-    opc, (outs), (ins RC:$sz, brtarget32:$imm32),
-    !strconcat(opcStrAt, " ${imm32}(, ${sz})"), []> {
+    opc, (outs), (ins MEMriASX:$addr),
+    !strconcat(opcStrAt, " $addr"), []> {
     let cy = 0;
     let sy = 0;
-    let cz = 1;
     let cf = 15;  /* AT */
     let isBarrier = 1;
     let hasSideEffects = 0;
@@ -1286,8 +1285,9 @@ def : Pat<(unaligned8truncstorei32 i64:$src, ADDRrii:$addr),
 
 // Jump instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */,
-    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0 in
-defm BC : BCm<"b${cf}.l", "b.l", 0x19, I64, i64, simm7Op64>;
+    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0,
+    DecoderMethod = "DecodeBranchCondition" in
+defm BC : BCm<"b${cond}.l", "b.l", 0x19, I64, i64, simm7Op64>;
 
 // Jump always instruction is treated as a special case of jump in order
 // to make finding unconditional jump easy.
