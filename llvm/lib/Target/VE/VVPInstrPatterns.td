@@ -98,15 +98,14 @@ multiclass VectorBinaryArith_ShortLong<SDPatternOperator OpNode, ValueType LongD
   defm : VectorBinaryArith<OpNode, ShortDataVT, ShortScalarVT, v256i1, ShortOpBaseName>;
 }
 
-multiclass VectorShiftArith<SDPatternOperator OpNode, ValueType DataVT, ValueType ScalarVT, ValueType MaskVT, string OpBaseName> {
+multiclass VectorShiftArith<SDPatternOperator OpNode, ValueType DataVT, ValueType ScalarVT, ValueType MaskVT, string OpBaseName, string MaskToken="m"> {
   // w/o mask, broadcast
   def : Pat<(DataVT (OpNode DataVT:$vx, (DataVT (any_broadcast ScalarVT:$sy)), (MaskVT true_mask), i32:$avl)),
             (!cast<Instruction>(OpBaseName#"_vvsl") $vx, $sy, $avl)>;
   // w/o mask
-  def : Pat<(DataVT (OpNode DataVT:$vx, DataVT:$vy, (MaskVT true_mask), i32:$avl)),
-            (!cast<Instruction>(OpBaseName#"_vvvl") $vx, $vy, $avl)>;
+  def : Pat<(DataVT (OpNode DataVT:$vx, DataVT:$vy, MaskVT:$vm, i32:$avl)),
+            (!cast<Instruction>(OpBaseName#"_vvv"#MaskToken#"vl") $vx, $vy, $vm, (DataVT (IMPLICIT_DEF)), $avl)>;
   // TODO fold select into op
-  // TODO implement masked shift operations
 }
 
 // Expand both 64bit and 32 bit variant (256 elements)
@@ -171,9 +170,9 @@ defm : VectorBinaryArith<vvp_sub, v512i32, i64, v512i1, "pvsubu", "M">;
 // defm : VectorBinaryArith<vvp_mul, v512i32, i64, "vmulsl", "M">; // no packed mul
 // defm : VectorBinaryArith<vvp_sdiv, v512i32, i64, "vdivsl", "M">; // no packed sdiv
 // defm : VectorBinaryArith<vvp_udiv, v512i32, i64, "vdivul", "M">; // no packed udiv
-defm : VectorShiftArith<vvp_srl, v512i32, i64, v512i1, "pvsrl">;
-defm : VectorShiftArith<vvp_sra, v512i32, i64, v512i1, "pvsra">;
-defm : VectorShiftArith<vvp_shl, v512i32, i64, v512i1, "pvsll">;
+defm : VectorShiftArith<vvp_srl, v512i32, i64, v512i1, "pvsrl", "M">;
+defm : VectorShiftArith<vvp_sra, v512i32, i64, v512i1, "pvsra", "M">;
+defm : VectorShiftArith<vvp_shl, v512i32, i64, v512i1, "pvsll", "M">;
 
 
 // Floating-point arithmetic (512 elements)

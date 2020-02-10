@@ -938,13 +938,16 @@ class InstTable(object):
     def ShiftPacked(self, opc, name, instName, ty, expr):
         O_vvv = [VX(ty), VZ(ty), VY(T_u32)]
         O_vvs = [VX(ty), VZ(ty), SY(T_u64)]
-
         OL = [O_vvv, O_vvs]
-        OL = self.addMask(OL, VM512)
 
-        self.Def(opc, instName, "p", "p"+name+".lo", OL, expr)
-        self.Def(opc, instName, "p", "p"+name+".up", OL, expr)
-        self.Def(opc, instName, "p", "p"+name, OL, expr)
+        OL_lohi = self.addMask(OL)
+
+        self.Def(opc, instName, "p", "p"+name+".lo", OL_lohi, expr)
+        self.Def(opc, instName, "p", "p"+name+".up", OL_lohi, expr)
+
+        OL_packed = self.addMask(OL, VM512)
+
+        self.Def(opc, instName, "p", "p"+name, OL_packed, expr)
 
     def Inst4f(self, opc, name, instName, expr):
         O_f64_vvvv = [VX(T_f64), VY(T_f64), VZ(T_f64), VW(T_f64)]

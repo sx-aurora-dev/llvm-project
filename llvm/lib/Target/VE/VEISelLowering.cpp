@@ -136,16 +136,14 @@ LegalizeVecOperand(SDValue Op, SelectionDAG & DAG) {
   return LegalizeBroadcast(Op, DAG);
 }
 
-// whether this VVP operation ignores its mask argument
+// whether this VVP operation has no mask argument
 static bool
 HasDeadMask(unsigned VVPOC) {
   switch (VVPOC) {
     default:
       return false;
 
-    case VEISD::VVP_SRL:
-    case VEISD::VVP_SRA:
-    case VEISD::VVP_SHL:
+    case VEISD::VVP_LOAD:
       return true;
   }
 }
@@ -209,7 +207,7 @@ SDValue VETargetLowering::LowerBitcast(SDValue Op, SelectionDAG &DAG) const {
 }
 
 static bool isBroadCastOrS2V(BuildVectorSDNode *BVN, bool &AllUndef, bool &S2V,
-                             unsigned &FirstDef) {
+                             unsigned &FirstDef, unsigned &LastDef) {
   // Check UNDEF or FirstDef
   AllUndef = true;
   S2V = false;
@@ -218,11 +216,12 @@ static bool isBroadCastOrS2V(BuildVectorSDNode *BVN, bool &AllUndef, bool &S2V,
     if (!BVN->getOperand(i).isUndef()) {
       AllUndef = false;
       FirstDef = i;
-      break;
+      LastDef = i;
     }
   }
   if (AllUndef)
     return true;
+
   // Check scalar_to_vector (single def at first, and the rests are undef)
   if (FirstDef == 0) {
     S2V = true;
@@ -237,9 +236,12 @@ static bool isBroadCastOrS2V(BuildVectorSDNode *BVN, bool &AllUndef, bool &S2V,
   }
   // Check broadcast
   for (unsigned i = FirstDef + 1; i < BVN->getNumOperands(); ++i) {
-    if (BVN->getOperand(FirstDef) != BVN->getOperand(i) &&
-        !BVN->getOperand(i).isUndef()) {
+    bool SameAsFirst = BVN->getOperand(FirstDef) == BVN->getOperand(i);
+    if (!SameAsFirst && !BVN->getOperand(i).isUndef()) {
       return false;
+    }
+    if (SameAsFirst) {
+      LastDef = i;
     }
   }
   return true;
@@ -962,33 +964,42 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op,
   SDLoc DL(Op);
 
   unsigned NumElems = Op.getSimpleValueType().getVectorNumElements();
-  SDValue OpVectorLength =
-      DAG.getConstant(SelectBoundedVectorLength(NumElems), DL, MVT::i32);
   auto NativeResTy = LegalizeVectorType(Op.getSimpleValueType(), DAG);
 
   // match VEC_BROADCAST
   bool AllUndef;
   bool S2V;
-  unsigned FirstDef;
-  if (isBroadCastOrS2V(BVN, AllUndef, S2V, FirstDef)) {
-    if (AllUndef) {
-      LLVM_DEBUG(dbgs() << "AllUndef: VEC_BROADCAST ");
-      LLVM_DEBUG(BVN->getOperand(0)->dump());
-      return CreateBroadcast(DL, NativeResTy, BVN->getOperand(0), DAG,
-                             OpVectorLength);
-    } else if (S2V) {
+  unsigned FirstDef, LastDef;
+  if (isBroadCastOrS2V(BVN, AllUndef, S2V, FirstDef, LastDef)) {
+#if 0
+    // Do not use LSV to allow coalescing with other broadcasts
+    if (S2V) {
       LLVM_DEBUG(dbgs() << "isS2V: scalar_to_vector ");
       LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
       return DAG.getNode(ISD::SCALAR_TO_VECTOR, DL, NativeResTy,
                          BVN->getOperand(FirstDef));
+    }
+#endif
+
+    // Reduce VL to include the last defined result element
+    unsigned MinVectorLength = LastDef + 1;
+    SDValue OpVectorLength =
+      DAG.getConstant(SelectBoundedVectorLength(MinVectorLength), DL, MVT::i32);
+
+    if (AllUndef) {
+      LLVM_DEBUG(dbgs() << "AllUndef: VEC_BROADCAST ");
     } else {
       LLVM_DEBUG(dbgs() << "isBroadCast: VEC_BROADCAST ");
-      LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
-      return CreateBroadcast(DL, NativeResTy, BVN->getOperand(FirstDef), DAG,
-                             OpVectorLength);
     }
+
+    SDValue ScaVal = AllUndef ? BVN->getOperand(0) : BVN->getOperand(FirstDef);
+
+    LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
+    return CreateBroadcast(DL, NativeResTy, ScaVal, DAG, OpVectorLength);
   }
 
+  SDValue OpVectorLength =
+      DAG.getConstant(SelectBoundedVectorLength(NumElems), DL, MVT::i32);
 #if 0
   if (BVN->isConstant()) {
     // All values are either a constant value or undef, so optimize it...
@@ -4043,11 +4054,7 @@ VETargetLowering::getPreferredVectorAction(MVT VT) const {
     return TypePromoteInteger;
 
   // The default action for an odd-width vector is to widen.
-  if (!VT.isPow2VectorType())
-    return TypeWidenVector;
-
-  // The default action for other vectors is to split
-  return TypeSplitVector;
+  return TypeWidenVector;
 }
 
 // Override to enable LOAD_STACK_GUARD lowering on Linux.
