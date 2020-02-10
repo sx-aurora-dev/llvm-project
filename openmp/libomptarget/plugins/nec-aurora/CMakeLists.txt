@@ -6,15 +6,15 @@
 
 
 if(${LIBOMPTARGET_DEP_VEO_FOUND})
-  libomptarget_say("Building NEC Aurora offloading plugin.")
+  libomptarget_say("Building SX-Aurora VE offloading plugin.")
   set(additonal_libs "")
   set(additional_libs ${LIBOMPTARGET_DEP_VEO_LIBRARIES}
                       ${LIBOMPTARGET_DEP_VEOSINFO_LIBRARIES}
                       ${additional_libs})
 
-  set(tmachine_name "necaurora")
-  set(tmachine_libname "necaurora")
-  set(tmachine_triple "aurora-nec-veort-unknown")
+  set(tmachine_name "sx-aurora")
+  set(tmachine_libname "sx-aurora")
+  set(tmachine_triple "ve-nec-linux-unknown")
   set(elf_machine_id 251)
 
   include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
