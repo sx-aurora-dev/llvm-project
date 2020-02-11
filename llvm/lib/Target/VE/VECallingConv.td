@@ -31,7 +31,7 @@ def CC_VE_C_Stack: CallingConv<[
 def CC_VE_RegCall : CallingConv<[
   // vector --> generic vector registers
   CCIfType<[v256i32, v256f32, v256i64, v256f64,
-            v512i32, v512f32],
+            v4i64, v8i64, v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
 
   // vector mask --> generic vector mask registers

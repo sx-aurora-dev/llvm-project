@@ -108,11 +108,30 @@ defm : ive_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
 
 multiclass eve_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                  ValueType vf32, ValueType vf64> {
+  def: Pat<(i64 (extractelt vi64:$vx, uimm7:$idx)),
+            (lvsl_svs vi64:$vx, $idx)>;
+  def: Pat<(f64 (extractelt vf64:$vx, uimm7:$idx)),
+            (lvsl_svs vf64:$vx, $idx)>;
   def: Pat<(i32 (extractelt vi32:$vec, uimm7:$idx)),
            (EXTRACT_SUBREG (lvsl_svs vi32:$vec, imm:$idx), sub_i32)>;
+  def: Pat<(f32 (extractelt vf32:$vec, uimm7:$idx)),
+           (EXTRACT_SUBREG (lvsl_svs vf32:$vec, imm:$idx), sub_f32)>;
 }
 
 defm : eve_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
+
+// Narrow
+
+multiclass narrow_dce<ValueType DataVT> {
+  def: Pat<(DataVT (vec_narrow DataVT:$vx, (i32 uimm32))),
+           (COPY_TO_REGCLASS $vx, V64)>;
+}
+defm : narrow_dce<v256f64>;
+defm : narrow_dce<v256i64>;
+defm : narrow_dce<v256f32>;
+defm : narrow_dce<v256i32>;
+defm : narrow_dce<v512f32>;
+defm : narrow_dce<v512i32>;
 
 // Broadcast
 
@@ -143,11 +162,3 @@ def: Pat<(v256i64 (vec_seq i32:$vl)),
          (vseq_vl $vl)>;
 def: Pat<(v256i32 (vec_seq i32:$vl)),
          (pvseqlo_vl $vl)>;
-
-
-
-// element extraction and insertion
-def : Pat<(extractelt v256f64:$vx, i64:$sy),
-          (lvsl_svs v256f64:$vx, (EXTRACT_SUBREG i64:$sy, sub_i32))>;
-// def : Pat<(insertelt v256f64:$vx, i32:$sy, f64:$sz), // FIXME does not build
-//           (lsv_vvss v256f64:$vx, i32:$sy, f64:$sz)>;

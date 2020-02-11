@@ -71,12 +71,10 @@ enum NodeType : unsigned {
   VEC_REDUCE_ANY,
   VEC_POPCOUNT,
 
-  /// Scatter and gather instructions.
-  VEC_MSTORE,  // (value, ptr, mask)
-  VEC_GATHER,  // (ptrVec, mask),
-  VEC_SCATTER, // (value, ptrVec, mask)
-
   VEC_LVL,
+
+  // narrowing marker
+  VEC_NARROW, // (Op, vector length)
 
   // Replication on lower/upper32 bit to other half -> I64
   REPL_F32,
@@ -236,7 +234,9 @@ public:
     // for use in LowerOperation -> directly expand to the expanded width
   };
 
-  SDValue ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
+  SDValue TryNarrowExtractVectorLoad(SDNode *ExtractN, SelectionDAG &DAG) const;
+
+  SDValue ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, Optional<unsigned> VecLenHint=None) const;
   // Called in TL::ReplaceNodeResults
   // This replaces the standard ISD node with a VVP VEISD node with a widened
   // result type.
