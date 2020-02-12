@@ -91,6 +91,16 @@ enum NodeType : unsigned {
 };
 }
 
+using VecLenOpt = Optional<unsigned>;
+
+enum class VVPExpansionMode : int8_t {
+  ToNextWidth = 0,
+  // for use in result type legalization - expand to the next expected result size
+
+  ToNativeWidth = 1
+  // for use in LowerOperation -> directly expand to the expanded width
+};
+
 class VETargetLowering : public TargetLowering {
   const VESubtarget *Subtarget;
 
@@ -208,12 +218,16 @@ public:
   SDValue CreateBroadcast(SDLoc dl, EVT ResTy, SDValue ScaValue, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
   SDValue CreateSeq(SDLoc dl, EVT ResTy, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
 
+
   // Vector Operations
   SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBitcast(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerMLOAD(SDValue Op, SelectionDAG &DAG) const;
+
+  SDValue LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint) const;
+  SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint) const;
+
+  SDValue LowerMLOAD(SDValue Op, SelectionDAG &DAG, VecLenOpt VecLenHint=None) const;
   SDValue LowerMSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
@@ -225,14 +239,6 @@ public:
   SDValue LowerSELECT_CC(llvm::SDValue, llvm::SelectionDAG &) const;
   SDValue LowerVSELECT(llvm::SDValue, llvm::SelectionDAG &) const;
   SDValue LowerTRUNCATE(llvm::SDValue, llvm::SelectionDAG &) const;
-
-  enum class VVPExpansionMode : int8_t {
-    ToNextWidth = 0,
-    // for use in result type legalization - expand to the next expected result size
-
-    ToNativeWidth = 1
-    // for use in LowerOperation -> directly expand to the expanded width
-  };
 
   SDValue TryNarrowExtractVectorLoad(SDNode *ExtractN, SelectionDAG &DAG) const;
 

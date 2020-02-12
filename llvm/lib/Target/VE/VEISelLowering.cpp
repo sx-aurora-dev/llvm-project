@@ -46,6 +46,8 @@ const unsigned PackedWidth = 512;
 // VVP property queries
 static Optional<unsigned> GetVVPOpcode(unsigned OpCode) {
   switch (OpCode) {
+  case ISD:: SCALAR_TO_VECTOR: return VEISD::VEC_BROADCAST;
+
   default:
     return None;
 #define REGISTER_VVP_OP(VVP_NAME,NATIVE_ISD)                                    \
@@ -83,6 +85,10 @@ static Optional<EVT> GetIdiomaticType(SDValue Op) {
   default:
     return None;
 
+  case ISD::SCALAR_TO_VECTOR:
+    return Op->getValueType(0);
+
+  // Known VP ops
     // all standard un/bin/tern-ary operators
 #define REGISTER_UNNARY_VVP_OP(VVP_NAME, NATIVE_ISD)  case VEISD::VVP_NAME: case ISD::NATIVE_ISD:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD)  case VEISD::VVP_NAME: case ISD::NATIVE_ISD:
@@ -90,14 +96,22 @@ static Optional<EVT> GetIdiomaticType(SDValue Op) {
 #include "VVPNodes.inc"
     return Op->getValueType(0);
 
-    case VEISD::VEC_SEQ:
-    case VEISD::VEC_BROADCAST:
-      return Op->getValueType(0);
-    case VEISD::VVP_GATHER:
-      return Op->getValueType(0);
-    case VEISD::VVP_SCATTER:
-      return Op->getOperand(0)->getValueType(0); // FIXME use memory VT instead
+  case VEISD::VEC_SEQ:
+  case VEISD::VEC_BROADCAST:
+    return Op->getValueType(0);
+  case VEISD::VVP_GATHER:
+    return Op->getValueType(0);
+  case VEISD::VVP_SCATTER:
+    return Op->getOperand(0)->getValueType(0); // FIXME use memory VT instead
   }
+}
+
+static
+VecLenOpt
+MinVectorLength(VecLenOpt A, VecLenOpt B) {
+  if (!A) return B;
+  if (!B) return A;
+  return std::min<unsigned>(A.getValue(), B.getValue());
 }
 
 // legalize packed-mode broadcasts into lane replication + broadcast
@@ -150,6 +164,31 @@ HasDeadMask(unsigned VVPOC) {
       return true;
   }
 }
+
+SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
+                           SelectionDAG &DAG) {
+  // TODO analyze Mask
+  auto ActualConstVL = dyn_cast<ConstantSDNode>(DynamicVL);
+  if (!ActualConstVL)
+    return DynamicVL;
+
+  int64_t EVLVal = ActualConstVL->getSExtValue();
+  SDLoc DL(DynamicVL);
+
+  // no hint available -> dynamic VL
+  if (!VLHint)
+    return DynamicVL;
+
+  // in-effective DynamicVL -> return the hint
+  if (EVLVal < 0) {
+    return DAG.getConstant(VLHint.getValue(), DL, MVT::i32);
+  }
+
+  // the minimum of dynamicVL and the VLHint
+  return DAG.getConstant(std::min<unsigned>(EVLVal, VLHint.getValue()), DL,
+                         MVT::i32);
+}
+
 //// } VVP Machinery
 
 static EVT LegalizeVectorType(EVT ResTy, SelectionDAG &DAG) {
@@ -217,9 +256,12 @@ static bool isBroadCastOrS2V(BuildVectorSDNode *BVN, bool &AllUndef, bool &S2V,
   FirstDef = 0;
   for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
     if (!BVN->getOperand(i).isUndef()) {
-      AllUndef = false;
-      FirstDef = i;
-      LastDef = i;
+      // mark first non-undef position
+      if (AllUndef) {
+        FirstDef = i;
+        LastDef = i;
+        AllUndef = false;
+      }
     }
   }
   if (AllUndef)
@@ -391,6 +433,26 @@ static Optional<unsigned> PeekForNarrow(SDValue Op) {
   return cast<ConstantSDNode>(OnlyN->getOperand(1))->getZExtValue();
 }
 
+static Optional<SDValue>
+EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG& DAG) {
+  if (!Opt) return None;
+  return DAG.getConstant(Opt.getValue(), DL, MVT::i32);
+}
+
+SDValue VETargetLowering::LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
+                                                VVPExpansionMode Mode,
+                                                VecLenOpt VecLenHint) const {
+  SDLoc DL(Op);
+
+  EVT ResTy = Op.getValueType();
+  EVT NativeResTy = LegalizeVectorType(ResTy, DAG);
+
+  // FIXME
+  Optional<SDValue> OptVL = EVLToVal(
+      MinVectorLength(ResTy.getVectorNumElements(), VecLenHint), DL, DAG);
+
+  return CreateBroadcast(DL, NativeResTy, Op.getOperand(0), DAG, OptVL);
+}
 
 SDValue 
 VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, Optional<unsigned> VecLenHint) const {
@@ -401,22 +463,19 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   bool isTernaryOp = false;
   bool isLoadOp = false;
   bool isStoreOp = false;
-  bool isGatherOp = false;
-  bool isScatterOp = false;
 
   switch (Op->getOpcode()) {
   default:
     return SDValue(); // default on this node
 
+  case ISD::SCALAR_TO_VECTOR:
+    return LowerSCALAR_TO_VECTOR(Op, DAG, Mode, VecLenHint);
+
   case ISD::MGATHER:
   case ISD::VP_GATHER:
-    isGatherOp = true;
-    break;
-
   case ISD::MSCATTER:
   case ISD::VP_SCATTER:
-    isScatterOp = true;
-    break;
+    return LowerMGATHER_MSCATTER(Op, DAG, Mode, VecLenHint);
 
   case ISD::LOAD:  isLoadOp = true; break;
   case ISD::STORE: isStoreOp = true; break;
@@ -444,10 +503,9 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   Optional<unsigned> NarrowLen = PeekForNarrow(Op);
   unsigned OpVectorLength =
       NarrowLen ? NarrowLen.getValue() : OpVecTy.getVectorNumElements();
+  OpVectorLength = MinVectorLength(VecLenHint, OpVectorLength).getValue();
 
-  OpVectorLength = VecLenHint.hasValue()
-                       ? std::min(VecLenHint.getValue(), OpVectorLength)
-                       : OpVectorLength;
+  LLVM_DEBUG(dbgs() << "\t detected AVL:" << OpVectorLength << "\n"; );
 
   ///// Decide for a vector width /////
   // TODO improve packed matching logic
@@ -457,6 +515,7 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   bool PackedMode = false;
 
   if (Mode == VVPExpansionMode::ToNativeWidth) {
+    LLVM_DEBUG(dbgs() << "\t expanding to native width\n"; );
 
     if (OpVectorLength > StandardVectorWidth) {
       // packed mode only available for 32bit elements up to 512 elements
@@ -476,7 +535,12 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
     }
 
   } else if (Mode == VVPExpansionMode::ToNextWidth) {
+    LLVM_DEBUG(dbgs() << "\t expanding to next width\n"; );
+
     EVT NextDestVecTy = getTypeToTransformTo(*DAG.getContext(), OpVecTy);
+    LLVM_DEBUG(dbgs() << "\t OpVecTy: " << OpVecTy.getEVTString() << "\n"; );
+    LLVM_DEBUG(dbgs() << "\t NextTy: " << NextDestVecTy.getEVTString() << "\n"; );
+
     VectorWidth = NextDestVecTy.getVectorNumElements();
     assert((NextDestVecTy.getVectorElementType() ==
             OpVecTy.getVectorElementType()) &&
@@ -490,6 +554,8 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
     }
   }
 
+  LLVM_DEBUG( dbgs() << "\tSelected target width: " << VectorWidth << "\n"; );
+
   // Does this expansion imply packed mode?
   if (VectorWidth > StandardVectorWidth) {
     NeedsPackedMasking = (OpVectorLength % 2 != 0);
@@ -501,7 +567,7 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
     }
   }
 
-  // Select CCP Op
+  // Select VVP Op
   Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
   assert(VVPOC.hasValue() && "TODO implement this operation in the VVP isel layer");
 
@@ -520,11 +586,6 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   /// Use the eventual native vector width for all newly generated operands
   // we do not want to go through ::ReplaceNodeResults again only to have them widened
   unsigned NativeVectorWidth = (OpVectorLength > StandardVectorWidth) ? PackedWidth : StandardVectorWidth;
-
-  ///// Generate the VVP operation /////
-  if (isGatherOp || isScatterOp) {
-    return LowerMGATHER_MSCATTER(Op, DAG);
-  }
 
   MVT ResVecTy =
       MVT::getVectorVT(OpVecTy.getVectorElementType().getSimpleVT(), VectorWidth);
@@ -664,7 +725,9 @@ SDValue VETargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
 }
 
 SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
-                                                SelectionDAG &DAG) const {
+                                                SelectionDAG &DAG,
+                                                VVPExpansionMode Mode,
+                                                VecLenOpt VecLenHint) const {
   LLVM_DEBUG(dbgs() << "Lowering MGATHER or MSCATTER\n");
   SDLoc dl(Op);
   // dbgs() << "\nNext Instr:\n";
@@ -740,6 +803,9 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
         DAG.getNode(ISD::ADD, dl, IndexVT, {BaseBroadcast, ScaledIndex});
   }
 
+  // try to shrink the VL
+  OpVectorLength = ReduceVectorLength(Mask, OpVectorLength,
+                                      IndexVT.getVectorNumElements(), DAG);
 
   if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::VP_GATHER) {
     // vt = vgt (vindex, vmx, cs=0, sx=0, sy=0, sw=0);
@@ -821,7 +887,7 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
 
     case ISD::VP_GATHER:
     case ISD::VP_SCATTER:
-      return LowerMGATHER_MSCATTER(Op, DAG);
+      return LowerMGATHER_MSCATTER(Op, DAG, VVPExpansionMode::ToNativeWidth, None);
 
     default:
       break;
@@ -851,7 +917,7 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
   return NewN;
 }
 
-SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
+SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG, VecLenOpt VecLenHint) const {
   LLVM_DEBUG(dbgs() << "Lowering VP/MLOAD\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
   SDLoc dl(Op);
@@ -883,7 +949,10 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
     Chain = VPLoadN->getChain();
     OpVectorLength = VPLoadN->getVectorLength();
   }
-  
+
+  // minimize vector length
+  OpVectorLength = ReduceVectorLength(Mask, OpVectorLength, VecLenHint, DAG);
+
   auto load = DAG.getNode(VEISD::VVP_LOAD, dl, Op.getNode()->getVTList(),
                           {Chain, BasePtr, Mask, OpVectorLength});
 
@@ -2214,7 +2283,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
     } else {
       /// fp/int vector operations
-      setOperationAction(ISD::SCALAR_TO_VECTOR, VT, Legal);
+      setOperationAction(ISD::SCALAR_TO_VECTOR, VT, Custom);
       setOperationAction(ISD::INSERT_VECTOR_ELT, VT, Custom);
       setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
       setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
@@ -3507,7 +3576,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::MSTORE: return LowerMSTORE(Op, DAG);
   case ISD::MSCATTER:
   case ISD::MGATHER:
-    return LowerMGATHER_MSCATTER(Op, DAG);
+    return LowerMGATHER_MSCATTER(Op, DAG, VVPExpansionMode::ToNativeWidth, None);
 
   // modify the return type of SETCC on vectors to v256i1
   case ISD::SETCC: return LowerSETCC(Op, DAG);
@@ -4152,36 +4221,37 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
   LLVM_DEBUG(dbgs() << "ReplaceNodeResult: "; N->dump(&DAG); );
 
   unsigned NumResults = N->getNumValues();
-  if (NumResults != 1) {
-    LLVM_DEBUG(dbgs() << "\t more than one result. Skpping!\n"; );
-    return; // Spooky.. do not custom lower
-  }
+  assert(NumResults > 0);
 
   switch (N->getOpcode()) {
     default:
       break;
-
-#if 0
-    case ISD::EXTRACT_SUBVECTOR:
-      SDValue Res = TryNarrowExtractVectorLoad(N, DAG);
-      if (Res) {
-        Results.push_back(Res);
-        return;
-      }
-      // subvector optimization pattern for VLD
-#endif
   }
 
+  // if the SDNode has a chain operator on the value output instead
+  assert(NumResults <= 2);
+  int ValIdx = NumResults - 1;
+
+  // VVP ops already have a legal result type
   SDValue Result;
   if (IsVVP(N->getOpcode())) {
-    Result = LowerToNativeWidthVVP(SDValue(N, 0), DAG);
-  } else {
-    Result = ExpandToVVP(SDValue(N, 0), DAG, VVPExpansionMode::ToNextWidth);
-  }
-  if (Result) {
-    Results.push_back(Result);
     return;
   }
+  
+  // Legalize this to a VVP op with the next expected result type
+  Result = ExpandToVVP(SDValue(N, ValIdx), DAG, VVPExpansionMode::ToNextWidth);
+
+  // Resort to standard expansion
+  if (!Result) return;
+
+  // Otw, fiffle the chain result back in
+  auto ResN = Result.getNode();
+  if (NumResults == 2) {
+    Results.push_back(SDValue(ResN, 0));
+  }
+
+  // attach the value output
+  Results.push_back(SDValue(ResN, ValIdx));
 }
 
 VETargetLowering::LegalizeTypeAction
