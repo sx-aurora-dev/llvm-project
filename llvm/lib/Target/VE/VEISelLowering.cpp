@@ -835,6 +835,8 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
     OpVec.push_back(LegalizeVecOperand(Op->getOperand(2), DAG));
     OpVec.push_back(LegalizeVecOperand(Op->getOperand(0), DAG));
     OpVec.push_back(LegalizeVecOperand(Op->getOperand(1), DAG));
+    OpVec.push_back(LegalizeVecOperand(Op->getOperand(3), DAG));
+    OpVec.push_back(LegalizeVecOperand(Op->getOperand(4), DAG));
 
   } else {
     unsigned NumOps = Op.getNumOperands();
