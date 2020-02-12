@@ -62,6 +62,8 @@ def vvp_fadd    : SDNode<"VEISD::VVP_FADD",  SDTFPBinOpVVP>;     // x + y
 def vvp_fsub    : SDNode<"VEISD::VVP_FSUB",  SDTFPBinOpVVP>;     // x - y
 def vvp_fmul    : SDNode<"VEISD::VVP_FMUL",  SDTFPBinOpVVP>;     // x * y
 def vvp_fdiv    : SDNode<"VEISD::VVP_FDIV",  SDTFPBinOpVVP>;     // x / y
+def vvp_fminnum    : SDNode<"VEISD::VVP_FMINNUM",  SDTFPBinOpVVP>;     // min(x, y)
+def vvp_fmaxnum    : SDNode<"VEISD::VVP_FMAXNUM",  SDTFPBinOpVVP>;     // max(x, y)
 def vvp_ffma    : SDNode<"VEISD::VVP_FFMA",  SDTFPTernaryOpVVP>; // x + (y*z)
 
 class vvp_commutative<SDNode RootOp> :
@@ -76,9 +78,11 @@ class vvp_fma_commutative<SDNode RootOp> :
 
 
 // commutative match
-def c_vv_fadd     : vvp_commutative<vvp_fadd>;
-def c_vv_fmul     : vvp_commutative<vvp_fmul>;
-def c_vv_add     : vvp_commutative<vvp_add>;
-def c_vv_mul     : vvp_commutative<vvp_mul>;
+def c_vv_fadd        : vvp_commutative<vvp_fadd>;
+def c_vv_fmul        : vvp_commutative<vvp_fmul>;
+def c_vv_add         : vvp_commutative<vvp_add>;
+def c_vv_mul         : vvp_commutative<vvp_mul>;
+def c_vv_fminnum     : vvp_commutative<vvp_fminnum>;
+def c_vv_fmaxnum     : vvp_commutative<vvp_fmaxnum>;
 
 def c_vv_ffma     : vvp_fma_commutative<vvp_ffma>;

@@ -162,6 +162,9 @@ defm : VectorBinaryArith_ShortLong<vvp_fsub, v256f64, f64, "vfsubd", v256f32, f3
 defm : VectorBinaryArith_ShortLong<c_vv_fmul, v256f64, f64, "vfmuld", v256f32, f32, "vfmuls">;
 defm : VectorBinaryArith_ShortLong<vvp_fdiv, v256f64, f64, "vfdivd", v256f32, f32, "vfdivs">;
 
+defm : VectorBinaryArith_ShortLong<c_vv_fminnum, v256f64, f64, "vfmind", v256f32, f32, "vfmins">;
+defm : VectorBinaryArith_ShortLong<c_vv_fmaxnum, v256f64, f64, "vfmaxd", v256f32, f32, "vfmaxs">;
+
 defm : VectorTernaryArith_ShortLong<c_vv_ffma, v256f64, f64, "vfmadd", v256f32, f32, "vfmads">;
 
 // Integer arithmetic (512 elements)
@@ -179,5 +182,7 @@ defm : VectorShiftArith<vvp_shl, v512i32, i64, v512i1, "pvsll", "M">;
 defm : VectorBinaryArith<c_vv_fadd, v512f32, i64, v512i1, "pvfadd", "M">;
 defm : VectorBinaryArith<c_vv_fmul, v512f32, i64, v512i1, "pvfmul", "M">;
 defm : VectorBinaryArith<vvp_fsub, v512f32, i64, v512i1, "pvfsub", "M">;
+defm : VectorBinaryArith<c_vv_fminnum, v512f32, i64, v512i1, "pvfmin", "M">;
+defm : VectorBinaryArith<c_vv_fmaxnum, v512f32, i64, v512i1, "pvfmax", "M">;
 
 defm : VectorTernaryArith<c_vv_ffma, v512f32, i64, v512i1, "pvfmad", "M">;
