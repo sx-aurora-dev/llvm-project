@@ -583,15 +583,22 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
 }
 
 /// Whether this VVP node needs widening
-static bool OpNeedsWidening(SDNode Op) {
+static bool OpNeedsWidening(SDNode& Op) {
+  // Do not widen operations that do not yield a vector value
+  if (!Op.getValueType(0).isVector())
+    return false;
+
   // Otw, widen this VVP operation to the native vector width
   Optional<EVT> OpVecTyOpt = GetIdiomaticType(SDValue(&Op, 0));
-  if (!OpVecTyOpt.hasValue()) return false;
+  if (!OpVecTyOpt.hasValue())
+    return false;
   EVT OpVecTy = OpVecTyOpt.getValue();
 
   unsigned OpVectorLength = OpVecTy.getVectorNumElements();
-  assert((OpVectorLength <= PackedWidth) && "Operation should have been split during legalization");
-  return (OpVectorLength != StandardVectorWidth) && (OpVectorLength != PackedWidth);
+  assert((OpVectorLength <= PackedWidth) &&
+         "Operation should have been split during legalization");
+  return (OpVectorLength != StandardVectorWidth) &&
+         (OpVectorLength != PackedWidth);
 }
 
 SDValue VETargetLowering::LowerToNativeWidthVVP(SDValue Op, SelectionDAG &DAG) const {
@@ -2328,6 +2335,7 @@ VETargetLowering::getCustomOperationAction(SDNode& Op) const {
     case VEISD::VEC_NARROW:
       return Legal;
 
+    case VEISD::VEC_SEQ:
     case VEISD::VEC_BROADCAST:
       return OpNeedsWidening(Op) ? Custom : Legal;
   }
