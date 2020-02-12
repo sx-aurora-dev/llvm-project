@@ -4063,7 +4063,7 @@ bool VETargetLowering::isOffsetFoldingLegal(
 void VETargetLowering::LowerOperationWrapper(SDNode *N,
                                              SmallVectorImpl<SDValue> &Results,
                                              SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "LowerOperationWrapper: "; N->dump(); );
+  LLVM_DEBUG(dbgs() << "LowerOperationWrapper: "; N->dump(&DAG); );
 
   // TODO generalize to all void-typed sinks (check whetehr this is a VVP-able operation..)
   if (N->getOpcode() == ISD::STORE) {
@@ -4139,7 +4139,7 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
                                           SmallVectorImpl<SDValue> &Results,
                                           SelectionDAG &DAG) const {
 
-  LLVM_DEBUG(dbgs() << "ReplaceNodeResult: "; N->dump(); );
+  LLVM_DEBUG(dbgs() << "ReplaceNodeResult: "; N->dump(&DAG); );
 
   unsigned NumResults = N->getNumValues();
   if (NumResults != 1) {
