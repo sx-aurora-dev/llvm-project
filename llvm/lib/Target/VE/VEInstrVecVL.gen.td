@@ -5410,8 +5410,8 @@ def pvandlo_vsvvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
-// inst=VAND asm=pvand.lo intrisic=pvandlo_vvvMvl
-def pvandlo_vvvMvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VAND asm=pvand.lo intrisic=pvandlo_vvvmvl
+def pvandlo_vvvmvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvand.lo $vx,$vy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5420,8 +5420,8 @@ def pvandlo_vvvMvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, 
   let DisableEncoding = "$vl";
 }
 
-// inst=VAND asm=pvand.lo intrisic=pvandlo_vsvMvl
-def pvandlo_vsvMvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VAND asm=pvand.lo intrisic=pvandlo_vsvmvl
+def pvandlo_vsvmvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvand.lo $vx,$sy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5468,8 +5468,8 @@ def pvandup_vsvvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
-// inst=VAND asm=pvand.up intrisic=pvandup_vvvMvl
-def pvandup_vvvMvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VAND asm=pvand.up intrisic=pvandup_vvvmvl
+def pvandup_vvvmvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvand.up $vx,$vy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5478,8 +5478,8 @@ def pvandup_vvvMvl : RV<0xc4, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, 
   let DisableEncoding = "$vl";
 }
 
-// inst=VAND asm=pvand.up intrisic=pvandup_vsvMvl
-def pvandup_vsvMvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VAND asm=pvand.up intrisic=pvandup_vsvmvl
+def pvandup_vsvmvl : RV<0xc4, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvand.up $vx,$sy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5642,8 +5642,8 @@ def pvorlo_vsvvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
   let DisableEncoding = "$vl";
 }
 
-// inst=VOR asm=pvor.lo intrisic=pvorlo_vvvMvl
-def pvorlo_vvvMvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VOR asm=pvor.lo intrisic=pvorlo_vvvmvl
+def pvorlo_vvvmvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvor.lo $vx,$vy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5652,8 +5652,8 @@ def pvorlo_vvvMvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V
   let DisableEncoding = "$vl";
 }
 
-// inst=VOR asm=pvor.lo intrisic=pvorlo_vsvMvl
-def pvorlo_vsvMvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VOR asm=pvor.lo intrisic=pvorlo_vsvmvl
+def pvorlo_vsvmvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvor.lo $vx,$sy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5700,8 +5700,8 @@ def pvorup_vsvvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
   let DisableEncoding = "$vl";
 }
 
-// inst=VOR asm=pvor.up intrisic=pvorup_vvvMvl
-def pvorup_vvvMvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VOR asm=pvor.up intrisic=pvorup_vvvmvl
+def pvorup_vvvmvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvor.up $vx,$vy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5710,8 +5710,8 @@ def pvorup_vvvMvl : RV<0xc5, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V
   let DisableEncoding = "$vl";
 }
 
-// inst=VOR asm=pvor.up intrisic=pvorup_vsvMvl
-def pvorup_vsvMvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VOR asm=pvor.up intrisic=pvorup_vsvmvl
+def pvorup_vsvmvl : RV<0xc5, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvor.up $vx,$sy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5874,8 +5874,8 @@ def pvxorlo_vsvvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
-// inst=VXOR asm=pvxor.lo intrisic=pvxorlo_vvvMvl
-def pvxorlo_vvvMvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VXOR asm=pvxor.lo intrisic=pvxorlo_vvvmvl
+def pvxorlo_vvvmvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvxor.lo $vx,$vy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5884,8 +5884,8 @@ def pvxorlo_vvvMvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, 
   let DisableEncoding = "$vl";
 }
 
-// inst=VXOR asm=pvxor.lo intrisic=pvxorlo_vsvMvl
-def pvxorlo_vsvMvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VXOR asm=pvxor.lo intrisic=pvxorlo_vsvmvl
+def pvxorlo_vsvmvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvxor.lo $vx,$sy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5932,8 +5932,8 @@ def pvxorup_vsvvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
-// inst=VXOR asm=pvxor.up intrisic=pvxorup_vvvMvl
-def pvxorup_vvvMvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VXOR asm=pvxor.up intrisic=pvxorup_vvvmvl
+def pvxorup_vvvmvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvxor.up $vx,$vy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5942,8 +5942,8 @@ def pvxorup_vvvMvl : RV<0xc6, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, 
   let DisableEncoding = "$vl";
 }
 
-// inst=VXOR asm=pvxor.up intrisic=pvxorup_vsvMvl
-def pvxorup_vsvMvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VXOR asm=pvxor.up intrisic=pvxorup_vsvmvl
+def pvxorup_vsvmvl : RV<0xc6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pvxor.up $vx,$sy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -6106,8 +6106,8 @@ def pveqvlo_vsvvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
-// inst=VEQV asm=pveqv.lo intrisic=pveqvlo_vvvMvl
-def pveqvlo_vvvMvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VEQV asm=pveqv.lo intrisic=pveqvlo_vvvmvl
+def pveqvlo_vvvmvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pveqv.lo $vx,$vy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -6116,8 +6116,8 @@ def pveqvlo_vvvMvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, 
   let DisableEncoding = "$vl";
 }
 
-// inst=VEQV asm=pveqv.lo intrisic=pveqvlo_vsvMvl
-def pveqvlo_vsvMvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VEQV asm=pveqv.lo intrisic=pveqvlo_vsvmvl
+def pveqvlo_vsvmvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pveqv.lo $vx,$sy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -6164,8 +6164,8 @@ def pveqvup_vsvvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32
   let DisableEncoding = "$vl";
 }
 
-// inst=VEQV asm=pveqv.up intrisic=pveqvup_vvvMvl
-def pveqvup_vvvMvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VEQV asm=pveqv.up intrisic=pveqvup_vvvmvl
+def pveqvup_vvvmvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pveqv.up $vx,$vy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -6174,8 +6174,8 @@ def pveqvup_vvvMvl : RV<0xc7, (outs V64:$vx), (ins V64:$vy, V64:$vz, VM512:$vm, 
   let DisableEncoding = "$vl";
 }
 
-// inst=VEQV asm=pveqv.up intrisic=pveqvup_vsvMvl
-def pveqvup_vsvMvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM512:$vm, V64:$vd, I32:$vl),
+// inst=VEQV asm=pveqv.up intrisic=pveqvup_vsvmvl
+def pveqvup_vsvmvl : RV<0xc7, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "pveqv.up $vx,$sy,$vz,$vm">
 {
   let Constraints = "$vx = $vd";

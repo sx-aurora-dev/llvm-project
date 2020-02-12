@@ -916,13 +916,15 @@ class InstTable(object):
 
         Args = [Args_vvv(T_u64), Args_vsv(T_u64)]
         Args = self.addMask(Args)
+        self.Def(opc, instName, "", name, Args, expr)
 
         ArgsP = [Args_vvv(T_u32), O_u32_vsv]
-        ArgsP = self.addMask(ArgsP, VM512)
 
-        self.Def(opc, instName, "", name, Args, expr)
-        self.Def(opc, instName, "p", "p"+name+".lo", ArgsP, expr)
-        self.Def(opc, instName, "p", "p"+name+".up", ArgsP, expr)
+        ArgsP_lohi = self.addMask(ArgsP)
+        self.Def(opc, instName, "p", "p"+name+".lo", ArgsP_lohi, expr)
+        self.Def(opc, instName, "p", "p"+name+".up", ArgsP_lohi, expr)
+
+        ArgsP = self.addMask(ArgsP, VM512)
         self.Def(opc, instName, "p", "p"+name, ArgsP, expr)
 
     def Shift(self, opc, name, instName, ty, expr):

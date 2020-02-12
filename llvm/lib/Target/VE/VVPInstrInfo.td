@@ -47,6 +47,10 @@ def vvp_load    : SDNode<"VEISD::VVP_LOAD",  SDTLoadVVP, [SDNPHasChain, SDNPMayL
 def vvp_store   : SDNode<"VEISD::VVP_STORE", SDTStoreVVP, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 
 // int
+def vvp_and    : SDNode<"VEISD::VVP_AND",  SDTIntBinOpVVP>;
+def vvp_or     : SDNode<"VEISD::VVP_OR",  SDTIntBinOpVVP>;
+def vvp_xor    : SDNode<"VEISD::VVP_XOR",  SDTIntBinOpVVP>;
+
 def vvp_add    : SDNode<"VEISD::VVP_ADD",  SDTIntBinOpVVP>;
 def vvp_sub    : SDNode<"VEISD::VVP_SUB",  SDTIntBinOpVVP>;
 def vvp_mul    : SDNode<"VEISD::VVP_MUL",  SDTIntBinOpVVP>;
@@ -82,6 +86,10 @@ def c_vv_fadd        : vvp_commutative<vvp_fadd>;
 def c_vv_fmul        : vvp_commutative<vvp_fmul>;
 def c_vv_add         : vvp_commutative<vvp_add>;
 def c_vv_mul         : vvp_commutative<vvp_mul>;
+def c_vv_and         : vvp_commutative<vvp_and>;
+def c_vv_or          : vvp_commutative<vvp_xor>;
+def c_vv_xor         : vvp_commutative<vvp_or>;
+
 def c_vv_fminnum     : vvp_commutative<vvp_fminnum>;
 def c_vv_fmaxnum     : vvp_commutative<vvp_fmaxnum>;
 
