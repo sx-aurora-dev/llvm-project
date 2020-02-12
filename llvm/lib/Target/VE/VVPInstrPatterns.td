@@ -154,7 +154,7 @@ defm : VectorBinaryArith_ShortLong<vvp_udiv, v256i64, i64, "vdivul", v256i32, i3
 
 defm : VectorShiftArith_ShortLong<vvp_srl, v256i64, i64, "vsrl", v256i32, i64, "pvsrllo">;
 defm : VectorShiftArith_ShortLong<vvp_sra, v256i64, i64, "vsral", v256i32, i64, "pvsralo">;
-defm : VectorShiftArith_ShortLong<vvp_shl, v256i64, i64, "vslal", v256i32, i64, "pvslalo">;
+defm : VectorShiftArith_ShortLong<vvp_shl, v256i64, i64, "vsll", v256i32, i64, "pvslllo">;
 
 defm : VectorBinaryArith_ShortLong<vvp_and, v256i64, i64, "vand", v256i32, i64, "pvandlo">;
 defm : VectorBinaryArith_ShortLong<vvp_xor, v256i64, i64, "vxor", v256i32, i64, "pvxorlo">;
