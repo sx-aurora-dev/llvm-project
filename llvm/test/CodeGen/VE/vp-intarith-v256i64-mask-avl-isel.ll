@@ -11,9 +11,9 @@ define void @test_vp_add_sub_mul(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64>
   %r1 = call <256 x i64> @llvm.vp.sub.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   %r2 = call <256 x i64> @llvm.vp.mul.v256i64(<256 x i64> %r0, <256 x i64> %r1, <256 x i1> %m, i32 %n)
 ; CHECK: test_vp_add_sub_mul:
-; CHECK: vaddu.l
-; CHECK: vsubu.l
-; CHECK: vmulu.l
+; CHECK: vadd{{.}}.l
+; CHECK: vsub{{.}}.l
+; CHECK: vmul{{.}}.l
 ; CHECK: vst
   store <256 x i64> %r2, <256 x i64>* %Out
   ret void
