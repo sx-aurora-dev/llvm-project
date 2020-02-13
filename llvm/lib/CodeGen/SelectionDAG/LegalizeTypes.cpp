@@ -906,7 +906,8 @@ bool DAGTypeLegalizer::CustomLowerNode(SDNode *N, EVT VT, bool LegalizeResult) {
   if (LegalizeResult)
     TLI.ReplaceNodeResults(N, Results, DAG);
   else
-    TLI.LowerOperationWrapper(N, Results, DAG);
+    TLI.LowerOperationWrapper(N, Results, DAG,
+                              [&](SDValue V) { return GetWidenedVector(V); });
 
   if (Results.empty())
     // The target didn't want to custom lower it after all.
