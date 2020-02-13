@@ -3908,6 +3908,12 @@ public:
                                      SmallVectorImpl<SDValue> &Results,
                                      SelectionDAG &DAG) const;
 
+  virtual void LowerOperationWrapper(
+      SDNode *N, SmallVectorImpl<SDValue> &Results, SelectionDAG &DAG,
+      std::function<SDValue(SDValue)> GetWidenedOperandCB) const {
+    LowerOperationWrapper(N, Results, DAG);
+  }
+
   /// This callback is invoked for operations that are unsupported by the
   /// target, which are registered to use 'custom' lowering, and whose defined
   /// values are all legal.  If the target has no operations that require custom
