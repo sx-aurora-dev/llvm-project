@@ -88,6 +88,37 @@ class CF<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern=[]>
   let sx{3-0} = cf;
 }
 
+class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern=[]>
+    : InstVE<outs, ins, asmstr, pattern> {
+    bits<1> cx = 0;
+    bits<1> cx2 = 0;
+    bits<1> cs = 0;   // y operand is scalar(1) or vector(0)
+    bits<1> cs2 = 0;
+    bits<1> cy = 0;   // y operand is register(1) or immediate(0)
+    bits<7> sy = 0;
+    bits<1> cz = 0;   // y operand is register(1) or immediate(0)
+    bits<7> sz = 0;
+    bits<8> vx = 0;
+    bits<8> vy = 0;
+    bits<8> vz = 0;
+    bits<8> vw = 0;
+    bits<4> m = 0;
+    let op = opVal;
+    let Inst{8} = cx;
+    let Inst{9} = cx2;
+    let Inst{10} = cs;
+    let Inst{11} = cs2;
+    let Inst{15-12} = m;
+    let Inst{16} = cy;
+    let Inst{23-17} = sy;
+    let Inst{24} = cz;
+    let Inst{25-31} = sz;
+    let Inst{39-32} = vx;
+    let Inst{47-40} = vy;
+    let Inst{55-48} = vz;
+    let Inst{63-56} = vw;
+}
+
 // Pseudo instructions.
 class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern=[]>
    : InstVE<outs, ins, asmstr, pattern> {

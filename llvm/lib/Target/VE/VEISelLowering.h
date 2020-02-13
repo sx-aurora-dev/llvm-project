@@ -187,6 +187,8 @@ public:
   SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
 
   /// Custom Lower {
+  EVT LegalizeVectorType(EVT ResTy, SelectionDAG &DAG, VVPExpansionMode) const;
+
   LegalizeAction getActionForExtendedType(unsigned Op, EVT VT) const override {
     return VT.isVector() ? Custom : Expand;
   }
@@ -194,12 +196,14 @@ public:
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
   void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
                           SelectionDAG &DAG) const override;
-  void LowerOperationWrapper(SDNode *N, SmallVectorImpl<SDValue> &Results,
-                             SelectionDAG &DAG) const override;
+  void LowerOperationWrapper(SDNode *N,
+                             SmallVectorImpl<SDValue> &Results,
+                             SelectionDAG &DAG,
+                             std::function<SDValue(SDValue)> WidenedOpCB) const override;
 
   SDValue LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const;
 
-  SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
@@ -221,7 +225,7 @@ public:
 
 
   // Vector Operations
-  SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
   SDValue LowerBitcast(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
 
@@ -248,7 +252,7 @@ public:
   // This replaces the standard ISD node with a VVP VEISD node with a widened
   // result type.
 
-  SDValue LowerToNativeWidthVVP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue WidenVVPOperation(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
   // Called during TL::LowerOperation
   // This replaces this standard ISD node (or VVP VEISD node) with
   // a VVP VEISD node with a native-width type.
