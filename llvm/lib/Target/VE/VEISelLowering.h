@@ -215,6 +215,7 @@ public:
   SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
 
   // Custom Operations
+  SDValue CreateConstMask(SDLoc DL, unsigned NumElements, SelectionDAG &DAG, bool IsTrue=true) const;
   SDValue CreateBroadcast(SDLoc dl, EVT ResTy, SDValue ScaValue, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
   SDValue CreateSeq(SDLoc dl, EVT ResTy, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
 
