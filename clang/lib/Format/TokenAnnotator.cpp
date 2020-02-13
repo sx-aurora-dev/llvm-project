@@ -392,8 +392,8 @@ private:
 
     // Limit this to being an access modifier that follows.
     if (AttrTok->isOneOf(tok::kw_public, tok::kw_private, tok::kw_protected,
-                         tok::kw_class, tok::kw_static, tok::l_square,
-                         Keywords.kw_internal)) {
+                         tok::comment, tok::kw_class, tok::kw_static,
+                         tok::l_square, Keywords.kw_internal)) {
       return true;
     }
 
@@ -3279,13 +3279,6 @@ bool TokenAnnotator::mustBreakBefore(const AnnotatedLine &Line,
          Style.AllowShortLambdasOnASingleLine == FormatStyle::SLS_Empty))
       return true;
   }
-
-  // Put multiple C# attributes on a new line.
-  if (Style.isCSharp() &&
-      ((Left.is(TT_AttributeSquare) && Left.is(tok::r_square)) ||
-       (Left.is(tok::r_square) && Right.is(TT_AttributeSquare) &&
-        Right.is(tok::l_square))))
-    return true;
 
   // Put multiple Java annotation on a new line.
   if ((Style.Language == FormatStyle::LK_Java ||

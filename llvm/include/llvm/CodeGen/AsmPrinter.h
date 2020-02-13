@@ -71,10 +71,13 @@ class MDNode;
 class Module;
 class ProfileSummaryInfo;
 class raw_ostream;
-class RemarkStreamer;
 class StackMaps;
 class TargetLoweringObjectFile;
 class TargetMachine;
+
+namespace remarks {
+class RemarkStreamer;
+}
 
 /// This class is intended to be used as a driving class for all asm writers.
 class AsmPrinter : public MachineFunctionPass {
@@ -100,7 +103,7 @@ public:
   /// This is a pointer to the current MachineModuleInfo.
   MachineModuleInfo *MMI = nullptr;
 
-  /// This is a pointer to the current MachineLoopInfo.
+  /// This is a pointer to the current MachineDominatorTree.
   MachineDominatorTree *MDT = nullptr;
 
   /// This is a pointer to the current MachineLoopInfo.
@@ -337,7 +340,7 @@ public:
 
   void emitStackSizeSection(const MachineFunction &MF);
 
-  void emitRemarksSection(RemarkStreamer &RS);
+  void emitRemarksSection(remarks::RemarkStreamer &RS);
 
   enum CFIMoveType { CFI_M_None, CFI_M_EH, CFI_M_Debug };
   CFIMoveType needsCFIMoves() const;

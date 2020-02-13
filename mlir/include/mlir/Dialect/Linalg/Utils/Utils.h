@@ -71,6 +71,12 @@ Optional<FusionInfo> fuseProducerOf(OpBuilder &b, LinalgOp consumer,
                                     const LinalgDependenceGraph &graph,
                                     OperationFolder *folder = nullptr);
 
+/// Fuse linalg operation on tensors, where the result of the producer is used
+/// as the operand of the consumer at position `consumerIdx`.
+Optional<LinalgOp> fuseTensorOps(OpBuilder &b, LinalgOp producer,
+                                 LinalgOp consumer, unsigned consumerIdx,
+                                 OperationFolder *folder = nullptr);
+
 /// Returns the linearized list of all view dimensions in a linalgOp. Applying
 /// the inverse, concatenated loopToOperandRangeMaps to this list allows the
 /// derivation of loop ranges for any linalgOp.
@@ -118,6 +124,9 @@ Optional<TiledLinalgOp> tileLinalgOp(OpBuilder &b, LinalgOp op,
                                      ArrayRef<Value> tileSizes,
                                      ArrayRef<unsigned> permutation = {},
                                      OperationFolder *folder = nullptr);
+Optional<TiledLinalgOp> tileLinalgOpToParallelLoops(
+    OpBuilder &b, LinalgOp op, ArrayRef<Value> tileSizes,
+    ArrayRef<unsigned> permutation = {}, OperationFolder *folder = nullptr);
 
 /// Performs standalone tiling of a single LinalgOp by constant `tileSizes`.
 /// and permute the loop nest according to `permutation`
@@ -138,6 +147,9 @@ Optional<TiledLinalgOp> tileLinalgOp(OpBuilder &b, LinalgOp op,
                                      ArrayRef<int64_t> tileSizes,
                                      ArrayRef<unsigned> permutation = {},
                                      OperationFolder *folder = nullptr);
+Optional<TiledLinalgOp> tileLinalgOpToParallelLoops(
+    OpBuilder &b, LinalgOp op, ArrayRef<int64_t> tileSizes,
+    ArrayRef<unsigned> permutation = {}, OperationFolder *folder = nullptr);
 
 template <typename... Args>
 Optional<TiledLinalgOp> tileLinalgOperation(OpBuilder &b, Operation *op,

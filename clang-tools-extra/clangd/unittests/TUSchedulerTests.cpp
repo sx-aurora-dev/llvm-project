@@ -23,6 +23,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <algorithm>
+#include <chrono>
 #include <utility>
 
 namespace clang {
@@ -208,7 +209,7 @@ TEST_F(TUSchedulerTests, Debounce) {
   std::atomic<int> CallbackCount(0);
   {
     auto Opts = optsForTest();
-    Opts.UpdateDebounce = std::chrono::seconds(1);
+    Opts.UpdateDebounce = DebouncePolicy::fixed(std::chrono::seconds(1));
     TUScheduler S(CDB, Opts, captureDiags());
     // FIXME: we could probably use timeouts lower than 1 second here.
     auto Path = testPath("foo.cpp");
@@ -361,7 +362,7 @@ TEST_F(TUSchedulerTests, ManyUpdates) {
   // Run TUScheduler and collect some stats.
   {
     auto Opts = optsForTest();
-    Opts.UpdateDebounce = std::chrono::milliseconds(50);
+    Opts.UpdateDebounce = DebouncePolicy::fixed(std::chrono::milliseconds(50));
     TUScheduler S(CDB, Opts, captureDiags());
 
     std::vector<std::string> Files;
@@ -615,6 +616,53 @@ TEST_F(TUSchedulerTests, NoopOnEmptyChanges) {
   ASSERT_FALSE(DoUpdate(OtherSourceContents));
 }
 
+TEST_F(TUSchedulerTests, ForceRebuild) {
+  TUScheduler S(CDB, optsForTest(), captureDiags());
+
+  auto Source = testPath("foo.cpp");
+  auto Header = testPath("foo.h");
+
+  auto SourceContents = R"cpp(
+      #include "foo.h"
+      int b = a;
+    )cpp";
+
+  ParseInputs Inputs = getInputs(Source, SourceContents);
+
+  // Update the source contents, which should trigger an initial build with
+  // the header file missing.
+  updateWithDiags(S, Source, Inputs, WantDiagnostics::Yes,
+                  [](std::vector<Diag> Diags) {
+    EXPECT_THAT(
+        Diags,
+        ElementsAre(
+            Field(&Diag::Message, "'foo.h' file not found"),
+            Field(&Diag::Message, "use of undeclared identifier 'a'")));
+  });
+
+  // Add the header file. We need to recreate the inputs since we changed a
+  // file from underneath the test FS.
+  Files[Header] = "int a;";
+  Timestamps[Header] = time_t(1);
+  Inputs = getInputs(Source, SourceContents);
+
+  // The addition of the missing header file shouldn't trigger a rebuild since
+  // we don't track missing files.
+  updateWithDiags(S, Source, Inputs, WantDiagnostics::Yes,
+                  [](std::vector<Diag> Diags) {
+    ADD_FAILURE() << "Did not expect diagnostics for missing header update";
+  });
+
+  // Forcing the reload should should cause a rebuild which no longer has any
+  // errors.
+  Inputs.ForceRebuild = true;
+  updateWithDiags(S, Source, Inputs, WantDiagnostics::Yes,
+                  [](std::vector<Diag> Diags) {
+    EXPECT_THAT(Diags, IsEmpty());
+  });
+
+  ASSERT_TRUE(S.blockUntilIdle(timeoutSeconds(10)));
+}
 TEST_F(TUSchedulerTests, NoChangeDiags) {
   TUScheduler S(CDB, optsForTest(), captureDiags());
 
@@ -721,7 +769,8 @@ TEST_F(TUSchedulerTests, CommandLineErrors) {
   TUScheduler S(CDB, optsForTest(), captureDiags());
   std::vector<Diag> Diagnostics;
   updateWithDiags(S, testPath("foo.cpp"), "void test() {}",
-                  WantDiagnostics::Yes, [&](std::vector<Diag> D) {
+                  WantDiagnostics::Yes,
+                  [&](std::vector<Diag> D) {
                     Diagnostics = std::move(D);
                     Ready.notify();
                   });
@@ -745,13 +794,40 @@ TEST_F(TUSchedulerTests, CommandLineWarnings) {
   TUScheduler S(CDB, optsForTest(), captureDiags());
   std::vector<Diag> Diagnostics;
   updateWithDiags(S, testPath("foo.cpp"), "void test() {}",
-                  WantDiagnostics::Yes, [&](std::vector<Diag> D) {
+                  WantDiagnostics::Yes,
+                  [&](std::vector<Diag> D) {
                     Diagnostics = std::move(D);
                     Ready.notify();
                   });
   Ready.wait();
 
   EXPECT_THAT(Diagnostics, IsEmpty());
+}
+
+TEST(DebouncePolicy, Compute) {
+  namespace c = std::chrono;
+  std::vector<DebouncePolicy::clock::duration> History = {
+      c::seconds(0),
+      c::seconds(5),
+      c::seconds(10),
+      c::seconds(20),
+  };
+  DebouncePolicy Policy;
+  Policy.Min = c::seconds(3);
+  Policy.Max = c::seconds(25);
+  // Call Policy.compute(History) and return seconds as a float.
+  auto Compute = [&](llvm::ArrayRef<DebouncePolicy::clock::duration> History) {
+    using FloatingSeconds = c::duration<float, c::seconds::period>;
+    return static_cast<float>(Policy.compute(History) / FloatingSeconds(1));
+  };
+  EXPECT_NEAR(10, Compute(History), 0.01) << "(upper) median = 10";
+  Policy.RebuildRatio = 1.5;
+  EXPECT_NEAR(15, Compute(History), 0.01) << "median = 10, ratio = 1.5";
+  Policy.RebuildRatio = 3;
+  EXPECT_NEAR(25, Compute(History), 0.01) << "constrained by max";
+  Policy.RebuildRatio = 0;
+  EXPECT_NEAR(3, Compute(History), 0.01) << "constrained by min";
+  EXPECT_NEAR(25, Compute({}), 0.01) << "no history -> max";
 }
 
 } // namespace

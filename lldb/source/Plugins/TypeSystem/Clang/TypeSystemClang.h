@@ -41,6 +41,8 @@ class PDBASTParser;
 
 namespace lldb_private {
 
+class ClangASTMetadata;
+class ClangASTSource;
 class Declaration;
 
 class TypeSystemClang : public TypeSystem {
@@ -583,6 +585,10 @@ public:
   // Accessors
 
   ConstString GetTypeName(lldb::opaque_compiler_type_t type) override;
+
+  ConstString GetDisplayTypeName(lldb::opaque_compiler_type_t type) override {
+    return GetTypeName(type);
+  }
 
   uint32_t GetTypeInfo(lldb::opaque_compiler_type_t type,
                        CompilerType *pointee_or_element_compiler_type) override;

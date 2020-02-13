@@ -709,17 +709,15 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
 
 // Multiclass for RR type instructions with only 2 operands
 //   Used by pcnt, brv
-
-multiclass RRI2m<string opcStr, bits<8>opc,
-                 RegisterClass RC, ValueType Ty, Operand immOp2,
-                 SDPatternOperator OpNode = null_frag> {
+let hasSideEffects = 0 in
+multiclass RRI2m<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
+                 Operand immOp2, SDPatternOperator OpNode = null_frag> {
   def r : RR<
     opc, (outs RC:$sx), (ins RC:$sz),
     !strconcat(opcStr, " $sx, $sz"),
     [(set Ty:$sx, (OpNode Ty:$sz))]> {
     let cy = 1;
     let cz = 1;
-    let hasSideEffects = 0;
   }
   def i : RR<
     opc, (outs RC:$sx), (ins RC:$sz),
@@ -727,7 +725,6 @@ multiclass RRI2m<string opcStr, bits<8>opc,
     [(set Ty:$sx, (OpNode Ty:$sz))]> {
     let cy = 0;
     let cz = 1;
-    let hasSideEffects = 0;
   }
   def m0 : RR<
     opc, (outs RC:$sx), (ins immOp2:$sz),
@@ -735,7 +732,6 @@ multiclass RRI2m<string opcStr, bits<8>opc,
     let cy = 1;
     let cz = 0;
     let mz = 1;
-    let hasSideEffects = 0;
   }
   def m1 : RR<
     opc, (outs RC:$sx), (ins immOp2:$sz),
@@ -743,7 +739,6 @@ multiclass RRI2m<string opcStr, bits<8>opc,
     let cy = 1;
     let cz = 0;
     let mz = 0;
-    let hasSideEffects = 0;
   }
 }
 
@@ -1000,11 +995,12 @@ let cx = 0 in {
 // Bits operations
 
 let cx = 0 in {
-defm PCNT : RRI2m<"pcnt", 0x38, I64, i64, uimm6Op64, ctpop>;
-defm BRV : RRI2m<"brv", 0x39, I64, i64, uimm6Op64, bitreverse>;
-defm LDZ : RRI2m<"ldz", 0x67, I64, i64, uimm6Op64, ctlz>;
-defm BSWP : RRIm<"bswp", 0x2B, I64, i64, simm7Op64, uimm6Op64>;
+  defm PCNT : RRI2m<"pcnt", 0x38, I64, i64, uimm6Op64, ctpop>;
+  defm BRV : RRI2m<"brv", 0x39, I64, i64, uimm6Op64, bitreverse>;
+  defm LDZ : RRI2m<"ldz", 0x67, I64, i64, uimm6Op64, ctlz>;
+  defm BSWP : RRIm<"bswp", 0x2B, I64, i64, simm7Op64, uimm6Op64>;
 }
+
 
 
 // 5.3.2.4 Shift Instructions
@@ -1692,6 +1688,8 @@ def : Pat<(i64 mcsym:$src),
           (LEASLrii (ANDrm0 (LEAzii 0, 0, (LO32 mcsym:$src)), 32), 0,
                     (HI32 mcsym:$src))>;
 
+// Address calculation and its optimization
+
 // Calls
 def : Pat<(call tglobaladdr:$dst),
           (CALL tglobaladdr:$dst)>;
@@ -2124,9 +2122,6 @@ def : Pat<(f32 (bitconvert i32:$op)),
 def : Pat<(i32 (ctpop i32:$src)),
           (EXTRACT_SUBREG (PCNTr (ANDrm0 (INSERT_SUBREG
             (i64 (IMPLICIT_DEF)), $src, sub_i32), 32)), sub_i32)>;
-def : Pat<(i32 (bitreverse i32:$src)),
-          (EXTRACT_SUBREG (SRLri (BRVr (INSERT_SUBREG
-            (i64 (IMPLICIT_DEF)), $src, sub_i32)), 32), sub_i32)>;
 def : Pat<(i32 (ctlz i32:$src)),
           (EXTRACT_SUBREG (LDZr (SLLri (INSERT_SUBREG
             (i64 (IMPLICIT_DEF)), $src, sub_i32), 32)), sub_i32)>;

@@ -347,6 +347,7 @@ void DWARFUnit::AddUnitDIE(const DWARFDebugInfoEntry &cu_die) {
   DWARFUnit *dwo_cu = dwo_symbol_file->GetCompileUnit();
   if (!dwo_cu)
     return; // Can't fetch the compile unit from the dwo file.
+  dwo_cu->SetUserData(this);
 
   DWARFBaseDIE dwo_cu_die = dwo_cu->GetUnitDIEOnly();
   if (!dwo_cu_die.IsValid())
@@ -467,8 +468,8 @@ void DWARFUnit::SetLoclistsBase(dw_addr_t loclists_base) {
 std::unique_ptr<llvm::DWARFLocationTable>
 DWARFUnit::GetLocationTable(const DataExtractor &data) const {
   llvm::DWARFDataExtractor llvm_data(
-      toStringRef(data.GetData()),
-      data.GetByteOrder() == lldb::eByteOrderLittle, data.GetAddressByteSize());
+      data.GetData(), data.GetByteOrder() == lldb::eByteOrderLittle,
+      data.GetAddressByteSize());
 
   if (m_is_dwo || GetVersion() >= 5)
     return std::make_unique<llvm::DWARFDebugLoclists>(llvm_data, GetVersion());
@@ -563,11 +564,7 @@ uint8_t DWARFUnit::GetDefaultAddressSize() { return 4; }
 
 void *DWARFUnit::GetUserData() const { return m_user_data; }
 
-void DWARFUnit::SetUserData(void *d) {
-  m_user_data = d;
-  if (m_dwo_symbol_file)
-    m_dwo_symbol_file->GetCompileUnit()->SetUserData(d);
-}
+void DWARFUnit::SetUserData(void *d) { m_user_data = d; }
 
 bool DWARFUnit::Supports_DW_AT_APPLE_objc_complete_type() {
   return GetProducer() != eProducerLLVMGCC;

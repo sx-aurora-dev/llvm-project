@@ -2134,6 +2134,7 @@ TEST(GuessCompletionPrefix, Filters) {
            "some text [[scope::more::]][[identif]]^ier",
            "some text [[scope::]][[mor]]^e::identifier",
            "weird case foo::[[::bar::]][[baz]]^",
+           "/* [[]][[]]^ */",
        }) {
     Annotations F(Case);
     auto Offset = cantFail(positionToOffset(F.code(), F.point()));
@@ -2662,6 +2663,39 @@ TEST(CompletionTest, DerivedMethodsAreAlwaysVisible) {
                          .Completions;
   EXPECT_THAT(Completions,
               ElementsAre(AllOf(ReturnType("int"), Named("size"))));
+}
+
+TEST(CompletionTest, NoCrashWithIncompleteLambda) {
+  auto Completions = completions("auto&& x = []{^").Completions;
+  // The completion of x itself can cause a problem: in the code completion
+  // callback, its type is not known, which affects the linkage calculation.
+  // A bad linkage value gets cached, and subsequently updated.
+  EXPECT_THAT(Completions, Contains(Named("x")));
+
+  auto Signatures = signatures("auto x() { x(^").signatures;
+  EXPECT_THAT(Signatures, Contains(Sig("x() -> auto")));
+}
+
+TEST(CompletionTest, CompletionRange) {
+  const char *WithRange = "auto x = [[abc]]^";
+  auto Completions = completions(WithRange);
+  EXPECT_EQ(Completions.CompletionRange, Annotations(WithRange).range());
+  Completions = completionsNoCompile(WithRange);
+  EXPECT_EQ(Completions.CompletionRange, Annotations(WithRange).range());
+
+  const char *EmptyRange = "auto x = [[]]^";
+  Completions = completions(EmptyRange);
+  EXPECT_EQ(Completions.CompletionRange, Annotations(EmptyRange).range());
+  Completions = completionsNoCompile(EmptyRange);
+  EXPECT_EQ(Completions.CompletionRange, Annotations(EmptyRange).range());
+
+  // Sema doesn't trigger at all here, while the no-sema completion runs
+  // heuristics as normal and reports a range. It'd be nice to be consistent.
+  const char *NoCompletion = "/* [[]]^ */";
+  Completions = completions(NoCompletion);
+  EXPECT_EQ(Completions.CompletionRange, llvm::None);
+  Completions = completionsNoCompile(NoCompletion);
+  EXPECT_EQ(Completions.CompletionRange, Annotations(NoCompletion).range());
 }
 
 TEST(NoCompileCompletionTest, Basic) {

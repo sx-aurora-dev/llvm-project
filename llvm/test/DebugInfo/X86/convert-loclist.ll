@@ -1,8 +1,9 @@
-; RUN: llc -dwarf-version=5 -filetype=obj -O0 < %s \
+; RUN: %llc_dwarf -filetype=obj < %s \
 ; RUN:   | llvm-dwarfdump -debug-info -debug-loclists - | FileCheck %s
-; RUN: llc -dwarf-version=5 -split-dwarf-file=foo.dwo -filetype=obj -O0 < %s \
-; RUN:   | llvm-dwarfdump -debug-info -debug-loclists - | FileCheck --check-prefix=CHECK --check-prefix=SPLIT %s
-; RUN: llc -dwarf-version=5 -split-dwarf-file=foo.dwo -filetype=asm -O0 < %s | FileCheck --check-prefix=ASM %s
+; RUN: llc -mtriple x86_64-pc-linux -split-dwarf-file=foo.dwo -filetype=obj < %s \
+; RUN:   | llvm-dwarfdump -debug-info -debug-loclists - | FileCheck --check-prefix=SPLIT --check-prefix=CHECK %s
+; RUN: llc -mtriple x86_64-pc-linux -split-dwarf-file=foo.dwo -filetype=asm < %s \
+; RUN:   | FileCheck --check-prefix=ASM %s
 
 ; A bit of a brittle test - this is testing the specific DWO_id. The
 ; alternative would be to test two files with different DW_OP_convert values &
@@ -23,7 +24,6 @@
 ; CHECK-NEXT:                   DW_AT_name ("DW_ATE_unsigned_32")
 
 ; CHECK: DW_LLE_offset_pair ({{.*}}): DW_OP_consts +7, DW_OP_convert 0x[[TYPE]], DW_OP_stack_value
-
 
 ; Function Attrs: uwtable
 define dso_local void @_Z2f2v() local_unnamed_addr #0 !dbg !11 {
