@@ -398,7 +398,7 @@ const char *MipsAsmPrinter::getCurrentABIString() const {
   }
 }
 
-void MipsAsmPrinter::EmitFunctionEntryLabel() {
+void MipsAsmPrinter::emitFunctionEntryLabel() {
   MipsTargetStreamer &TS = getTargetStreamer();
 
   // NaCl sandboxing requires that indirect call instructions are masked.
@@ -424,7 +424,7 @@ void MipsAsmPrinter::EmitFunctionEntryLabel() {
 
 /// EmitFunctionBodyStart - Targets can override this to emit stuff before
 /// the first basic block in the function.
-void MipsAsmPrinter::EmitFunctionBodyStart() {
+void MipsAsmPrinter::emitFunctionBodyStart() {
   MipsTargetStreamer &TS = getTargetStreamer();
 
   MCInstLowering.Initialize(&MF->getContext());
@@ -445,7 +445,7 @@ void MipsAsmPrinter::EmitFunctionBodyStart() {
 
 /// EmitFunctionBodyEnd - Targets can override this to emit stuff after
 /// the last basic block in the function.
-void MipsAsmPrinter::EmitFunctionBodyEnd() {
+void MipsAsmPrinter::emitFunctionBodyEnd() {
   MipsTargetStreamer &TS = getTargetStreamer();
 
   // There are instruction for this macros, but they must
@@ -465,8 +465,8 @@ void MipsAsmPrinter::EmitFunctionBodyEnd() {
   OutStreamer->EmitDataRegion(MCDR_DataRegionEnd);
 }
 
-void MipsAsmPrinter::EmitBasicBlockEnd(const MachineBasicBlock &MBB) {
-  AsmPrinter::EmitBasicBlockEnd(MBB);
+void MipsAsmPrinter::emitBasicBlockEnd(const MachineBasicBlock &MBB) {
+  AsmPrinter::emitBasicBlockEnd(MBB);
   MipsTargetStreamer &TS = getTargetStreamer();
   if (MBB.empty())
     TS.emitDirectiveInsn();
@@ -770,7 +770,7 @@ printRegisterList(const MachineInstr *MI, int opNum, raw_ostream &O) {
   }
 }
 
-void MipsAsmPrinter::EmitStartOfAsmFile(Module &M) {
+void MipsAsmPrinter::emitStartOfAsmFile(Module &M) {
   MipsTargetStreamer &TS = getTargetStreamer();
 
   // MipsTargetStreamer has an initialization order problem when emitting an
@@ -1122,7 +1122,7 @@ void MipsAsmPrinter::EmitFPCallStub(
   OutStreamer->PopSection();
 }
 
-void MipsAsmPrinter::EmitEndOfAsmFile(Module &M) {
+void MipsAsmPrinter::emitEndOfAsmFile(Module &M) {
   // Emit needed stubs
   //
   for (std::map<
@@ -1255,7 +1255,7 @@ void MipsAsmPrinter::PrintDebugValueComment(const MachineInstr *MI,
 
 // Emit .dtprelword or .dtpreldword directive
 // and value for debug thread local expression.
-void MipsAsmPrinter::EmitDebugValue(const MCExpr *Value, unsigned Size) const {
+void MipsAsmPrinter::emitDebugValue(const MCExpr *Value, unsigned Size) const {
   if (auto *MipsExpr = dyn_cast<MipsMCExpr>(Value)) {
     if (MipsExpr && MipsExpr->getKind() == MipsMCExpr::MEK_DTPREL) {
       switch (Size) {
@@ -1271,7 +1271,7 @@ void MipsAsmPrinter::EmitDebugValue(const MCExpr *Value, unsigned Size) const {
       return;
     }
   }
-  AsmPrinter::EmitDebugValue(Value, Size);
+  AsmPrinter::emitDebugValue(Value, Size);
 }
 
 // Align all targets of indirect branches on bundle size.  Used only if target
