@@ -54,7 +54,7 @@ public:
   void printMemASOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                          const char *Modifier = nullptr);
 
-  void EmitInstruction(const MachineInstr *MI) override;
+  void emitInstruction(const MachineInstr *MI) override;
 
   static const char *getRegisterName(unsigned RegNo) {
     return VEInstPrinter::getRegisterName(RegNo);
@@ -96,7 +96,7 @@ static void EmitSIC(MCStreamer &OutStreamer,
   MCInst SICInst;
   SICInst.setOpcode(VE::SIC);
   SICInst.addOperand(RD);
-  OutStreamer.EmitInstruction(SICInst, STI);
+  OutStreamer.emitInstruction(SICInst, STI);
 }
 
 static void EmitBSIC(MCStreamer &OutStreamer,
@@ -105,7 +105,7 @@ static void EmitBSIC(MCStreamer &OutStreamer,
   BSICInst.setOpcode(VE::BSIC);
   BSICInst.addOperand(R1);
   BSICInst.addOperand(R2);
-  OutStreamer.EmitInstruction(BSICInst, STI);
+  OutStreamer.emitInstruction(BSICInst, STI);
 }
 
 static void EmitLEAzzi(MCStreamer &OutStreamer,
@@ -119,7 +119,7 @@ static void EmitLEAzzi(MCStreamer &OutStreamer,
   LEAInst.addOperand(czero);
   LEAInst.addOperand(czero);
   LEAInst.addOperand(Imm);
-  OutStreamer.EmitInstruction(LEAInst, STI);
+  OutStreamer.emitInstruction(LEAInst, STI);
 }
 
 static void EmitLEASLzzi(MCStreamer &OutStreamer,
@@ -133,7 +133,7 @@ static void EmitLEASLzzi(MCStreamer &OutStreamer,
   LEASLInst.addOperand(czero);
   LEASLInst.addOperand(czero);
   LEASLInst.addOperand(Imm);
-  OutStreamer.EmitInstruction(LEASLInst, STI);
+  OutStreamer.emitInstruction(LEASLInst, STI);
 }
 
 static void EmitLEAzii(MCStreamer &OutStreamer,
@@ -147,7 +147,7 @@ static void EmitLEAzii(MCStreamer &OutStreamer,
   LEAInst.addOperand(czero);
   LEAInst.addOperand(RS1);
   LEAInst.addOperand(Imm);
-  OutStreamer.EmitInstruction(LEAInst, STI);
+  OutStreamer.emitInstruction(LEAInst, STI);
 }
 
 static void EmitLEASLrri(MCStreamer &OutStreamer,
@@ -161,7 +161,7 @@ static void EmitLEASLrri(MCStreamer &OutStreamer,
   LEASLInst.addOperand(Base);
   LEASLInst.addOperand(Index);
   LEASLInst.addOperand(Imm);
-  OutStreamer.EmitInstruction(LEASLInst, STI);
+  OutStreamer.emitInstruction(LEASLInst, STI);
 }
 
 static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode,
@@ -173,7 +173,7 @@ static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode,
   Inst.addOperand(RD);
   Inst.addOperand(RS1);
   Inst.addOperand(Src2);
-  OutStreamer.EmitInstruction(Inst, STI);
+  OutStreamer.emitInstruction(Inst, STI);
 }
 
 static void EmitANDrm0(MCStreamer &OutStreamer,
@@ -378,7 +378,7 @@ void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   EmitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
-void VEAsmPrinter::EmitInstruction(const MachineInstr *MI) {
+void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
 
   switch (MI->getOpcode()) {
   default:
