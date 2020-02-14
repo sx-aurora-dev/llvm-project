@@ -4,11 +4,11 @@
 define x86_regcallcc <512 x i32> @brd_shl_v512i32(<512 x i32>, i32) {
 ; CHECK-LABEL: brd_shl_v512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdl %v2,%s0
-; CHECK-NEXT:    pvsll.lo %v0,%v0,%v2,%vm0
-; CHECK-NEXT:    pvsll.lo %v1,%v1,%v2,%vm0
+; CHECK-NEXT:    pvsll.lo %v0,%v0,%s0
+; CHECK-NEXT:    pvsll.lo %v1,%v1,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
@@ -20,11 +20,11 @@ define x86_regcallcc <512 x i32> @brd_shl_v512i32(<512 x i32>, i32) {
 define x86_regcallcc <512 x i32> @brd_lshr_v512i32(<512 x i32>, i32) {
 ; CHECK-LABEL: brd_lshr_v512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdl %v2,%s0
-; CHECK-NEXT:    pvsrl.lo %v0,%v0,%v2,%vm0
-; CHECK-NEXT:    pvsrl.lo %v1,%v1,%v2,%vm0
+; CHECK-NEXT:    pvsrl.lo %v0,%v0,%s0
+; CHECK-NEXT:    pvsrl.lo %v1,%v1,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
@@ -36,11 +36,11 @@ define x86_regcallcc <512 x i32> @brd_lshr_v512i32(<512 x i32>, i32) {
 define x86_regcallcc <512 x i32> @brd_ashr_v512i32(<512 x i32>, i32) {
 ; CHECK-LABEL: brd_ashr_v512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdl %v2,%s0
-; CHECK-NEXT:    pvsra.lo %v0,%v0,%v2,%vm0
-; CHECK-NEXT:    pvsra.lo %v1,%v1,%v2,%vm0
+; CHECK-NEXT:    pvsra.lo %v0,%v0,%s0
+; CHECK-NEXT:    pvsra.lo %v1,%v1,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
@@ -94,10 +94,10 @@ define x86_regcallcc <256 x i64> @brd_ashr_v256i64(<256 x i64>, i64) {
 define x86_regcallcc <256 x i32> @brd_shl_v256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: brd_shl_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdl %v1,%s0
-; CHECK-NEXT:    pvsll.lo %v0,%v0,%v1,%vm0
+; CHECK-NEXT:    pvsll.lo %v0,%v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <256 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <256 x i32> %vec0, <256 x i32> undef, <256 x i32> zeroinitializer
@@ -109,10 +109,10 @@ define x86_regcallcc <256 x i32> @brd_shl_v256i32(<256 x i32>, i32) {
 define x86_regcallcc <256 x i32> @brd_lshr_v256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: brd_lshr_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdl %v1,%s0
-; CHECK-NEXT:    pvsrl.lo %v0,%v0,%v1,%vm0
+; CHECK-NEXT:    pvsrl.lo %v0,%v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <256 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <256 x i32> %vec0, <256 x i32> undef, <256 x i32> zeroinitializer
@@ -124,10 +124,10 @@ define x86_regcallcc <256 x i32> @brd_lshr_v256i32(<256 x i32>, i32) {
 define x86_regcallcc <256 x i32> @brd_ashr_v256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: brd_ashr_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdl %v1,%s0
-; CHECK-NEXT:    pvsra.lo %v0,%v0,%v1,%vm0
+; CHECK-NEXT:    pvsra.lo %v0,%v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <256 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <256 x i32> %vec0, <256 x i32> undef, <256 x i32> zeroinitializer
