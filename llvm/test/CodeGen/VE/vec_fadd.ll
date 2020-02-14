@@ -274,10 +274,21 @@ define <2 x float> @vec_add_v2f32(<2 x float> %a, <2 x float> %b) {
 define <3 x float> @vec_add_v3f32(<3 x float> %a, <3 x float> %b) {
 ; CHECK-LABEL: vec_add_v3f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    stu %s5, 1208(,%s11)
+; CHECK-NEXT:    stu %s4, 1204(,%s11)
+; CHECK-NEXT:    stu %s3, 1200(,%s11)
+; CHECK-NEXT:    stu %s2, 184(,%s11)
+; CHECK-NEXT:    stu %s1, 180(,%s11)
+; CHECK-NEXT:    stu %s0, 176(,%s11)
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s1,1200(,%s11)
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vldu %v0,4,%s1
+; CHECK-NEXT:    lea %s1,176(,%s11)
+; CHECK-NEXT:    vldu %v1,4,%s1
 ; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrdu %v0,%s5
-; CHECK-NEXT:    vfadd.s %v0,%s2,%v0
+; CHECK-NEXT:    vfadd.s %v0,%v1,%v0
 ; CHECK-NEXT:    lvs %s0,%v0(0)
 ; CHECK-NEXT:    lvs %s1,%v0(1)
 ; CHECK-NEXT:    lvs %s2,%v0(2)
