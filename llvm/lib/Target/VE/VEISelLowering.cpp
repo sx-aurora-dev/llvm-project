@@ -2352,8 +2352,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::INSERT_SUBVECTOR, VT, Custom);
       setOperationAction(ISD::VECTOR_SHUFFLE, VT, Custom);
 
-      // Preserve extract subvector to narrow operations during legalization
-      setOperationAction(ISD::EXTRACT_SUBVECTOR, VT, Legal); 
+      // VL narrowing opportunities
+      setOperationAction(ISD::EXTRACT_SUBVECTOR, VT,
+                         Custom); // -> VEC_NARROW(Op, OldVlen)
 
       setOperationAction(ISD::FP_EXTEND, VT, Legal);
       setOperationAction(ISD::FP_ROUND, VT, Legal);
