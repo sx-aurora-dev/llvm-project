@@ -75,13 +75,13 @@ static bool IsVVP(unsigned Opcode) {
   }
 }
 
-static Optional<EVT> GetIdiomaticType(SDValue Op) {
+static Optional<EVT> GetIdiomaticType(SDNode* Op) {
   auto MemN = dyn_cast<MemSDNode>(Op);
   if (MemN) {
     return MemN->getMemoryVT();
   }
 
-  switch (Op.getOpcode()) {
+  switch (Op->getOpcode()) {
   default:
     return None;
 
@@ -556,11 +556,16 @@ SDValue VETargetLowering::LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
   return CreateBroadcast(DL, NativeResTy, Op.getOperand(0), DAG, OptVL);
 }
 
+static bool
+ShouldExpandToVVP(SDNode& N) {
+  return GetIdiomaticType(&N).hasValue();
+}
+
 SDValue 
 VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, Optional<unsigned> VecLenHint) const {
   LLVM_DEBUG(dbgs() << "Expand to VVP node\n");
 
-  Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op);
+  Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
   EVT OpVecTy = OpVecTyOpt.getValue();
 
   if (!OpVecTyOpt.hasValue()) {
@@ -759,7 +764,7 @@ static bool OpNeedsWidening(SDNode& Op) {
     return false;
 
   // Otw, widen this VVP operation to the native vector width
-  Optional<EVT> OpVecTyOpt = GetIdiomaticType(SDValue(&Op, 0));
+  Optional<EVT> OpVecTyOpt = GetIdiomaticType(&Op);
   if (!OpVecTyOpt.hasValue())
     return false;
   EVT OpVecTy = OpVecTyOpt.getValue();
@@ -783,7 +788,7 @@ SDValue VETargetLowering::WidenVVPOperation(SDValue Op, SelectionDAG &DAG, VVPEx
   }
 
   // Otw, widen this VVP operation to the next OR native vector width
-  Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op);
+  Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
   assert(OpVecTyOpt.hasValue());
   EVT OpVecTy = OpVecTyOpt.getValue();
 
@@ -860,7 +865,7 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
   SDValue PassThru;
   SDValue Source;
 
-  Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op);
+  Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
   EVT OpVecTy = OpVecTyOpt.getValue();
   SDValue OpVectorLength;
 
@@ -1059,7 +1064,7 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG, VecLenOpt Ve
 
     // Infer the AVL
     // TODO set to the highest set bit in the mask operand
-    Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op);
+    Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
     EVT OpVecTy = OpVecTyOpt.getValue();
     OpVectorLength = DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);
 
@@ -1106,7 +1111,7 @@ SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
 
     // Infer the AVL
     // TODO set to the highest set bit in the mask operand
-    Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op);
+    Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
     assert(OpVecTyOpt.hasValue());
     EVT OpVecTy = OpVecTyOpt.getValue();
     OpVectorLength = DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);
@@ -4303,15 +4308,19 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
 
   SDNode* ResN = nullptr;
   if (IsVVP(N->getOpcode())) {
+    // FIXME abort() here!!! must not create VVP ops with illegal result type!
     // VVP ops already have a legal result type
     ResN = WidenVVPOperation(SDValue(N, 0), DAG, VVPExpansionMode::ToNextWidth).getNode();
 
-  } else {
-    // Legalize this to a VVP (or VEC_) op with the next expected result type
+  } else if (ShouldExpandToVVP(*N)) {
+    // Lower this to a VVP (or VEC_) op with the next expected result type
     ResN = ExpandToVVP(SDValue(N, ValIdx), DAG, VVPExpansionMode::ToNextWidth).getNode();
+  } else {
+    // Otw, let LLVM do its expansion
+    ResN = nullptr;
   }
 
-  // Resort to standard expansion
+  // Expansion defer to LLVM for lowering
   if (!ResN) {
     LLVM_DEBUG(dbgs() << "\t Default to standard expansion\n"; );
     return;
