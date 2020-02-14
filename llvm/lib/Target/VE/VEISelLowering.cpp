@@ -775,7 +775,7 @@ SDValue VETargetLowering::WidenVVPOperation(SDValue Op, SelectionDAG &DAG, VVPEx
   LLVM_DEBUG(dbgs() << "Widen this VVP operation\n");
 
   // Expand this directly to the right VVP node
-  assert (IsVVP(Op.getOpcode()));
+  // assert (IsVVP(Op.getOpcode()));
 
   if (!Op.getValueType().isVector()) {
     LLVM_DEBUG(dbgs() << "\tdoes not produce a vector result (FIXME)\n");
@@ -3667,6 +3667,9 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME)  case VEISD:: VVP_NAME:
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD:: VVP_NAME:
 #include "VVPNodes.inc"
+
+  case VEISD::VEC_BROADCAST:
+  case VEISD::VEC_SEQ:
      return WidenVVPOperation(LowerSETCCInVectorArithmetic(Op, DAG), DAG, VVPExpansionMode::ToNativeWidth);
 
     // "forget" about the narrowing
