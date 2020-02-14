@@ -11,9 +11,9 @@ define void @test_vp_add_sub_mul(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32>
   %r1 = call <256 x i32> @llvm.vp.sub.v256i32(<256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n)
   %r2 = call <256 x i32> @llvm.vp.mul.v256i32(<256 x i32> %r0, <256 x i32> %r1, <256 x i1> %m, i32 %n)
 ; CHECK: test_vp_add_sub_mul:
-; CHECK: vaddu.w
-; CHECK: vsubu.w
-; CHECK: vmulu.w
+; CHECK: vadd
+; CHECK: vsub
+; CHECK: vmul
 ; CHECK: vst
   store <256 x i32> %r2, <256 x i32>* %Out
   ret void
@@ -23,7 +23,7 @@ define void @test_vp_su_div(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i1,
   %r0 = call <256 x i32> @llvm.vp.sdiv.v256i32(<256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i32> @llvm.vp.udiv.v256i32(<256 x i32> %r0, <256 x i32> %i1, <256 x i1> %m, i32 %n)
 ; CHECK: test_vp_su_div
-; CHECK: vdivs.w.sx
+; CHECK: vdivs
 ; CHECK: vdivu
 ; CHECK: vst
   store <256 x i32> %r1, <256 x i32>* %Out
@@ -42,9 +42,9 @@ define void @test_vp_bitarith(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i
 ; CHECK: vand
 ; CHECK: vor
 ; CHECK: vxor
-; CHECK: vsra.l
-; CHECK: vsrl
-; CHECK: vsla.w
+; CHECK: pvsra
+; CHECK: pvsrl
+; CHECK: pvsl
 ; CHECK: vst
   store <256 x i32> %r5, <256 x i32>* %Out
   ret void
