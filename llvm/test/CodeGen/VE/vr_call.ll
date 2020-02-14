@@ -17,10 +17,10 @@ define <256 x i32> @calc2(<256 x i32>, <256 x i32>) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lea %s2,416(,%s11)
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vldl.sx %v0,4,%s2
+; CHECK-NEXT:    vldl{{.*}} %v0,4,%s2
 ; CHECK-NEXT:    lea %s2,1440(,%s11)
-; CHECK-NEXT:    vldl.sx %v1,4,%s2
-; CHECK-NEXT:    vadds.w.sx %v0,%v1,%v0
+; CHECK-NEXT:    vldl{{.*}} %v1,4,%s2
+; CHECK-NEXT:    vadd{{.*}} %v0,%v1,%v0
 ; CHECK-NEXT:    vstl %v0,4,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add <256 x i32> %1, %0
@@ -33,15 +33,15 @@ define x86_regcallcc <256 x i32> @__regcall3__calc3(<256 x i32>, <256 x i32>, <2
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lea %s1,416(,%s11)
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vldl.sx %v8,4,%s1
-; CHECK-NEXT:    vadds.w.sx %v0,%v1,%v0
-; CHECK-NEXT:    vadds.w.sx %v1,%v3,%v2
-; CHECK-NEXT:    vadds.w.sx %v2,%v5,%v4
-; CHECK-NEXT:    vadds.w.sx %v3,%v7,%v6
-; CHECK-NEXT:    vadds.w.sx %v0,%v0,%v8
-; CHECK-NEXT:    vadds.w.sx %v1,%v2,%v1
-; CHECK-NEXT:    vadds.w.sx %v0,%v0,%v3
-; CHECK-NEXT:    vadds.w.sx %v0,%v0,%v1
+; CHECK-NEXT:    vldl{{.*}} %v8,4,%s1
+; CHECK-NEXT:    vadd{{.*}} %v0,%v1,%v0
+; CHECK-NEXT:    vadd{{.*}} %v1,%v3,%v2
+; CHECK-NEXT:    vadd{{.*}} %v2,%v5,%v4
+; CHECK-NEXT:    vadd{{.*}} %v3,%v7,%v6
+; CHECK-NEXT:    vadd{{.*}} %v0,%v0,%v8
+; CHECK-NEXT:    vadd{{.*}} %v1,%v2,%v1
+; CHECK-NEXT:    vadd{{.*}} %v0,%v0,%v3
+; CHECK-NEXT:    vadd{{.*}} %v0,%v0,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %10 = add <256 x i32> %1, %0
   %11 = add <256 x i32> %3, %2
