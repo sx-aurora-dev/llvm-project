@@ -1000,8 +1000,11 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
                                       IndexVT.getVectorNumElements(), DAG);
 
   if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::VP_GATHER) {
+    EVT LegalResVT = LegalizeVectorType(Op.getNode()->getValueType(0), DAG, Mode);
+    EVT ChainVT = Op.getNode()->getValueType(1);
+
     // vt = vgt (vindex, vmx, cs=0, sx=0, sy=0, sw=0);
-    SDValue load = DAG.getNode(VEISD::VVP_GATHER, dl, Op.getNode()->getVTList(),
+    SDValue load = DAG.getNode(VEISD::VVP_GATHER, dl, {LegalResVT, ChainVT},
                                {Chain, addresses, Mask, OpVectorLength});
     // load.dumpr(&DAG);
 
@@ -3224,7 +3227,8 @@ SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   if (MemVT == MVT::f128)
     return LowerF128Store(Op, DAG);
 
-  if (MemVT.isVector()) return ExpandToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
+  if (MemVT.isVector())
+    return ExpandToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
   // Otherwise, ask llvm to expand it.
   return SDValue();
 }
@@ -4304,19 +4308,17 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
                                              std::function<SDValue(SDValue)> WidenedOpCB) const {
   LLVM_DEBUG(dbgs() << "LowerOperationWrapper: "; N->dump(&DAG); );
 
-  // TODO generalize to all void-typed sinks (check whetehr this is a VVP-able operation..)
-  if (N->getOpcode() == ISD::STORE) {
-    SDValue FixedN = ExpandToVVP(SDValue(N, 0), DAG, VVPExpansionMode::ToNativeWidth);
-    if (FixedN)
-      Results.push_back(FixedN);
-    return; 
-  }
+  // if the SDNode has a chain operator on the value output instead
+  unsigned NumResults = N->getNumValues();
+  assert(NumResults > 0);
+  assert(NumResults <= 2);
+  int ValIdx = NumResults - 1;
 
   // Defer to LLVM for standard op widening
   if (!IsVVP(N->getOpcode())) {
     return;
   }
-  
+
   // Legalize the operands of this VVP op
   unsigned NumOp = N->getNumOperands();
   std::vector<SDValue> FixedOperands;
@@ -4337,10 +4339,19 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
 
   // Otw, clone the operation in every regard
   SDLoc DL(N);
-  SDValue NewN = DAG.getNode(N->getOpcode(), DL, N->getValueType(0), FixedOperands);
+  SDNode *NewN =
+      DAG.getNode(N->getOpcode(), DL, N->getVTList(), FixedOperands)
+          .getNode();
   // assert((NewN->getNode() != N) && "node was not changed!");
   NewN->setFlags(N->getFlags());
-  Results.push_back(NewN);
+
+  // Otw, fiddle the chain result back in
+  if (NumResults == 2) {
+    Results.push_back(SDValue(NewN, 0));
+  }
+
+  // attach the value output
+  Results.push_back(SDValue(NewN, ValIdx));
 }
 
 // Illegal result type
@@ -4377,7 +4388,7 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
     return;
   }
 
-  // Otw, fiffle the chain result back in
+  // Otw, fiddle the chain result back in
   if (NumResults == 2) {
     Results.push_back(SDValue(ResN, 0));
   }
