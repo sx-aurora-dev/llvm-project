@@ -42,6 +42,184 @@ const unsigned StandardVectorWidth = 256;
 const unsigned PackedWidth = 512;
 /// } Target Constants
 
+
+enum class BVMaskKind : int8_t {
+  Unknown,  // could not infer mask pattern
+  Interval, //  interval of all-ones
+};
+
+static BVMaskKind AnalyzeBuildVectorMask(BuildVectorSDNode *BVN,
+                                         unsigned &FirstOne, unsigned &FirstZero,
+                                         unsigned &NumElements) {
+  bool HasFirstOne = false, HasFirstZero = false;
+  FirstOne = 0;
+  FirstZero = 0;
+  NumElements = 0;
+
+  // this matches a 0*1*0* pattern (BVMaskKind::Interval)
+  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
+    auto Elem = BVN->getOperand(i);
+    if (Elem->isUndef()) continue;
+    ++NumElements;
+    auto CE = dyn_cast<ConstantSDNode>(Elem);
+    if (!CE) return BVMaskKind::Unknown;
+    bool TrueBit = CE->getZExtValue() != 0;
+
+    if (TrueBit && !HasFirstOne) {
+      FirstOne = i;
+      HasFirstOne = true;
+    } else if (!TrueBit && !HasFirstZero) {
+      FirstZero = i;
+      HasFirstZero = true;
+    } else if (TrueBit) {
+      // flipping bits on again ->abort
+      return BVMaskKind::Unknown;
+    }
+  }
+
+  return BVMaskKind::Interval;
+}
+
+/// Broadcast, Shuffle, Mask Analysis {
+enum class BVKind : int8_t {
+  Unknown, // could not infer pattern
+  AllUndef, // all lanes undef
+  Broadcast, // broadcast 
+  Seq,        // (0, .., 255) Sequence 
+  SeqBlock,  // (0, .., 15) ^ 16
+  BlockSeq,  // 0^16, 1^16, 2^16
+};
+
+static BVKind AnalyzeBuildVector(BuildVectorSDNode *BVN, unsigned &FirstDef,
+                                 unsigned &LastDef, int64_t &Stride,
+                                 unsigned &BlockLength, unsigned &NumElements) {
+  // Check UNDEF or FirstDef
+  NumElements = 0;
+  bool AllUndef = true;
+  FirstDef = 0;
+  LastDef = 0;
+  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
+    if (BVN->getOperand(i).isUndef()) continue;
+    ++NumElements;
+
+    // mark first non-undef position
+    if (AllUndef) {
+      FirstDef = i;
+      AllUndef = false;
+    }
+    LastDef = i;
+  }
+  if (AllUndef) {
+    return BVKind::Unknown;
+  }
+
+  // Check broadcast
+  bool IsBroadcast = true;
+  for (unsigned i = FirstDef + 1; i < BVN->getNumOperands(); ++i) {
+    bool SameAsFirst = BVN->getOperand(FirstDef) == BVN->getOperand(i);
+    if (!SameAsFirst && !BVN->getOperand(i).isUndef()) {
+      IsBroadcast = false;
+    }
+  }
+  if (IsBroadcast) return BVKind::Broadcast;
+
+
+  ///// Stride pattern detection /////
+  // FIXME clean up
+
+  bool hasConstantStride = true;
+  bool hasBlockStride = false;
+  bool hasBlockStride2 = false;
+  bool firstStride = true;
+  int64_t lastElemValue;
+  BlockLength = 16;
+
+  // Optional<int64_t> InnerStrideOpt;
+  // Optional<int64_t> OuterStrideOpt
+  // Optional<unsigned> BlockSizeOpt;
+
+  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
+    if (hasBlockStride) {
+      if (i % BlockLength == 0)
+        Stride = 1;
+      else
+        Stride = 0;
+    }
+
+    if (BVN->getOperand(i).isUndef()) {
+      if (hasBlockStride2 && i % BlockLength == 0)
+        lastElemValue = 0;
+      else
+        lastElemValue += Stride;
+      continue;
+    }
+
+    // is this an immediate constant value?
+    auto *constNumElem = dyn_cast<ConstantSDNode>(BVN->getOperand(i));
+    if (!constNumElem) {
+      hasConstantStride = false;
+      hasBlockStride = false;
+      hasBlockStride2 = false;
+      break;
+    }
+
+    // read value
+    int64_t elemValue = constNumElem->getSExtValue();
+
+    if (i == FirstDef) {
+      // FIXME: Currently, this code requies that first value of vseq
+      // is zero.  This is possible to enhance like thses instructions:
+      //        VSEQ $v0
+      //        VBRD $v1, 2
+      //        VADD $v0, $v0, $v1
+      if (elemValue != 0) {
+        hasConstantStride = false;
+        hasBlockStride = false;
+        hasBlockStride2 = false;
+        break;
+      }
+    } else if (i > FirstDef && firstStride) {
+      // first stride
+      Stride = (elemValue - lastElemValue) / (i - FirstDef);
+      firstStride = false;
+    } else if (i > FirstDef) {
+      // later stride
+      if (hasBlockStride2 && elemValue == 0 && i % BlockLength == 0) {
+        lastElemValue = 0;
+        continue;
+      }
+      int64_t thisStride = elemValue - lastElemValue;
+      if (thisStride != Stride) {
+        hasConstantStride = false;
+        if (!hasBlockStride && thisStride == 1 && Stride == 0 &&
+            lastElemValue == 0) {
+          hasBlockStride = true;
+          BlockLength = i;
+        } else if (!hasBlockStride2 && elemValue == 0 &&
+                   lastElemValue + 1 == i) {
+          hasBlockStride2 = true;
+          BlockLength = i;
+        } else {
+          // not blockStride anymore.  e.g. { 0, 1, 2, 3, 0, 0, 0, 0 }
+          hasBlockStride = false;
+          hasBlockStride2 = false;
+          break;
+        }
+      }
+    }
+
+    // track last elem value
+    lastElemValue = elemValue;
+  }
+
+  if (hasConstantStride) return BVKind::Seq;
+  if (hasBlockStride) return BVKind::BlockSeq;
+  if (hasBlockStride2) return BVKind::SeqBlock;
+  return BVKind::Unknown;
+}
+
+/// } Broadcast, Shuffle, Mask Analysis
+
 //// VVP Machinery {
 // VVP property queries
 static Optional<unsigned> GetVVPOpcode(unsigned OpCode) {
@@ -169,8 +347,26 @@ HasDeadMask(unsigned VVPOC) {
   }
 }
 
+VecLenOpt
+InferLengthFromMask(SDValue MaskV) {
+  auto BVN = dyn_cast<BuildVectorSDNode>(MaskV.getNode());
+  if (BVN) {
+    unsigned FirstDef, LastDef, NumElems;
+
+    BVMaskKind BVK = AnalyzeBuildVectorMask(BVN, FirstDef, LastDef, NumElems);
+    if (BVK == BVMaskKind::Interval) {
+      // FIXME \p FirstDef must be == 0
+      return LastDef + 1;
+    }
+  }
+
+  return None;
+}
+
 SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
                            SelectionDAG &DAG) {
+  VecLenOpt MaskVL = InferLengthFromMask(Mask);
+
   // TODO analyze Mask
   auto ActualConstVL = dyn_cast<ConstantSDNode>(DynamicVL);
   if (!ActualConstVL)
@@ -189,8 +385,9 @@ SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
   }
 
   // the minimum of dynamicVL and the VLHint
-  return DAG.getConstant(std::min<unsigned>(EVLVal, VLHint.getValue()), DL,
-                         MVT::i32);
+  VecLenOpt MinOfAllHints =
+      MinVectorLength(MinVectorLength(MaskVL, VLHint), EVLVal);
+  return DAG.getConstant(MinOfAllHints.getValue(), DL, MVT::i32);
 }
 
 //// } VVP Machinery
@@ -259,140 +456,6 @@ SDValue VETargetLowering::LowerBitcast(SDValue Op, SelectionDAG &DAG) const {
   }
 }
 
-enum class BVKind : int8_t {
-  Unknown, // could not infer pattern
-  AllUndef, // all lanes undef
-  Broadcast, // broadcast 
-  Seq,        // (0, .., 255) Sequence 
-  SeqBlock,  // (0, .., 15) ^ 16
-  BlockSeq,  // 0^16, 1^16, 2^16
-};
-
-static BVKind AnalyzeBuildVector(BuildVectorSDNode *BVN, unsigned &FirstDef,
-                                 unsigned &LastDef, int64_t &Stride,
-                                 unsigned &BlockLength) {
-  // Check UNDEF or FirstDef
-  bool AllUndef = true;
-  FirstDef = 0;
-  LastDef = 0;
-  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
-    if (BVN->getOperand(i).isUndef()) continue;
-
-    // mark first non-undef position
-    if (AllUndef) {
-      FirstDef = i;
-      AllUndef = false;
-    }
-    LastDef = i;
-  }
-  if (AllUndef) {
-    return BVKind::Unknown;
-  }
-
-  // Check broadcast
-  bool IsBroadcast = true;
-  for (unsigned i = FirstDef + 1; i < BVN->getNumOperands(); ++i) {
-    bool SameAsFirst = BVN->getOperand(FirstDef) == BVN->getOperand(i);
-    if (!SameAsFirst && !BVN->getOperand(i).isUndef()) {
-      IsBroadcast = false;
-    }
-  }
-  if (IsBroadcast) return BVKind::Broadcast;
-
-
-  ///// Stride pattern detection /////
-  // FIXME clean up
-
-  bool hasConstantStride = true;
-  bool hasBlockStride = false;
-  bool hasBlockStride2 = false;
-  bool firstStride = true;
-  int64_t lastElemValue;
-  BlockLength = 16;
-
-  // Optional<int64_t> InnerStrideOpt;
-  // Optional<int64_t> OuterStrideOpt
-  // Optional<unsigned> BlockSizeOpt;
-
-  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
-    if (hasBlockStride) {
-      if (i % BlockLength == 0)
-        Stride = 1;
-      else
-        Stride = 0;
-    }
-
-    if (BVN->getOperand(i).isUndef()) {
-      if (hasBlockStride2 && i % BlockLength == 0)
-        lastElemValue = 0;
-      else
-        lastElemValue += Stride;
-      continue;
-    }
-
-    // is this an immediate constant value?
-    auto *constNumElem = dyn_cast<ConstantSDNode>(BVN->getOperand(i));
-    if (!constNumElem) {
-      hasConstantStride = false;
-      hasBlockStride = false;
-      hasBlockStride2 = false;
-      break;
-    }
-
-    // read value
-    int64_t elemValue = constNumElem->getSExtValue();
-
-    if (i == FirstDef) {
-      // FIXME: Currently, this code requies that first value of vseq
-      // is zero.  This is possible to enhance like thses instructions:
-      //        VSEQ $v0
-      //        VBRD $v1, 2
-      //        VADD $v0, $v0, $v1
-      if (elemValue != 0) {
-        hasConstantStride = false;
-        hasBlockStride = false;
-        hasBlockStride2 = false;
-        break;
-      }
-    } else if (i > FirstDef && firstStride) {
-      // first stride
-      Stride = (elemValue - lastElemValue) / (i - FirstDef);
-      firstStride = false;
-    } else if (i > FirstDef) {
-      // later stride
-      if (hasBlockStride2 && elemValue == 0 && i % BlockLength == 0) {
-        lastElemValue = 0;
-        continue;
-      }
-      int64_t thisStride = elemValue - lastElemValue;
-      if (thisStride != Stride) {
-        hasConstantStride = false;
-        if (!hasBlockStride && thisStride == 1 && Stride == 0 &&
-            lastElemValue == 0) {
-          hasBlockStride = true;
-          BlockLength = i;
-        } else if (!hasBlockStride2 && elemValue == 0 &&
-                   lastElemValue + 1 == i) {
-          hasBlockStride2 = true;
-          BlockLength = i;
-        } else {
-          // not blockStride anymore.  e.g. { 0, 1, 2, 3, 0, 0, 0, 0 }
-          hasBlockStride = false;
-          hasBlockStride2 = false;
-          break;
-        }
-      }
-    }
-
-    // track last elem value
-    lastElemValue = elemValue;
-  }
-
-  if (hasConstantStride) return BVKind::Seq;
-  if (hasBlockStride) return BVKind::BlockSeq;
-  if (hasBlockStride2) return BVKind::SeqBlock;
-  return BVKind::Unknown;
-}
 
 SDValue VETargetLowering::LowerTRUNCATE(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Simpliying vector TRUNCATE\n");
@@ -562,7 +625,7 @@ ShouldExpandToVVP(SDNode& N) {
 }
 
 SDValue 
-VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, Optional<unsigned> VecLenHint) const {
+VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "Expand to VVP node\n");
 
   Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
@@ -583,7 +646,6 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   Optional<unsigned> NarrowLen = PeekForNarrow(Op);
   unsigned OpVectorLength =
       NarrowLen ? NarrowLen.getValue() : OpVecTy.getVectorNumElements();
-  OpVectorLength = MinVectorLength(VecLenHint, OpVectorLength).getValue();
 
   LLVM_DEBUG(dbgs() << "\t detected AVL:" << OpVectorLength << "\n"; );
 
@@ -665,13 +727,19 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   case ISD::BUILD_VECTOR:
     return LowerBUILD_VECTOR(Op, DAG, Mode); // TODO account for AVL, Expansion mode
   case ISD::SCALAR_TO_VECTOR:
-    return LowerSCALAR_TO_VECTOR(Op, DAG, Mode, VecLenHint); // TODO account for AVL, Expansion mode
+    return LowerSCALAR_TO_VECTOR(Op, DAG, Mode); // TODO account for AVL, Expansion mode
+
+  case ISD::MLOAD:
+    return LowerMLOAD(Op, DAG, Mode);
+
+  case ISD::MSTORE:
+    return LowerMSTORE(Op, DAG);
 
   case ISD::MGATHER:
   case ISD::VP_GATHER:
   case ISD::MSCATTER:
   case ISD::VP_SCATTER:
-    return LowerMGATHER_MSCATTER(Op, DAG, Mode, VecLenHint);
+    return LowerMGATHER_MSCATTER(Op, DAG, Mode);
 
   case ISD::LOAD:  isLoadOp = true; break;
   case ISD::STORE: isStoreOp = true; break;
@@ -1006,7 +1074,7 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
       return LowerVP_VSHIFT(Op, DAG); 
 
     case ISD::VP_LOAD:
-      return LowerMLOAD(Op, DAG);
+      return LowerMLOAD(Op, DAG, VVPExpansionMode::ToNativeWidth);
     case ISD::VP_STORE:
       return LowerMSTORE(Op, DAG);
 
@@ -1042,7 +1110,7 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
   return NewN;
 }
 
-SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG, VecLenOpt VecLenHint) const {
+SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint) const {
   LLVM_DEBUG(dbgs() << "Lowering VP/MLOAD\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
   SDLoc dl(Op);
@@ -1078,8 +1146,14 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG, VecLenOpt Ve
   // minimize vector length
   OpVectorLength = ReduceVectorLength(Mask, OpVectorLength, VecLenHint, DAG);
 
-  auto load = DAG.getNode(VEISD::VVP_LOAD, dl, Op.getNode()->getVTList(),
-                          {Chain, BasePtr, Mask, OpVectorLength});
+  EVT DataVT = LegalizeVectorType(Op.getNode()->getValueType(0), DAG, Mode);
+  MVT ChainVT = Op.getNode()->getSimpleValueType(1);
+
+  // FIXME VLD does not support masking
+  SDValue TrueMask = CreateConstMask(dl, DataVT.getVectorNumElements(), DAG, true);
+
+  auto load = DAG.getNode(VEISD::VVP_LOAD, dl, {DataVT, ChainVT},
+                          {Chain, BasePtr, TrueMask, OpVectorLength});
 
   if (!PassThru || PassThru.isUndef()) {
     return load;
@@ -1255,10 +1329,12 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
   // stride pattern detection (BVKind::Strided)
   int64_t Stride = 0;
   unsigned BlockLength = 0;
+  unsigned NumElems = 0;
 
   EVT ElemTy = BVN->getValueType(0).getVectorElementType();
 
-  BVKind BVK = AnalyzeBuildVector(BVN, FirstDef, LastDef, Stride, BlockLength);
+  BVKind BVK =
+      AnalyzeBuildVector(BVN, FirstDef, LastDef, Stride, BlockLength, NumElems);
 
   unsigned MinVectorLength = LastDef + 1;
   SDValue OpVectorLength =
@@ -1266,101 +1342,108 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
 
   SDValue TrueMask = CreateConstMask(DL, NativeNumElems, DAG, true);
 
-  switch (BVK) {
-
-  // Could not detect pattern
-  case BVKind::Unknown: break;
-
-  // Fold undef
-  case BVKind::AllUndef: {
-      LLVM_DEBUG(dbgs() << "::AllUndef\n");
-    return SDValue(DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL,
-                                      Op.getSimpleValueType()),
-                   0);
-  }
-
-  case BVKind::Broadcast: {
-      LLVM_DEBUG(dbgs() << "::Broadcast\n");
-    SDValue ScaVal = BVN->getOperand(FirstDef);
-    LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
-    return CreateBroadcast(DL, ResTy, ScaVal, DAG, OpVectorLength);
-  }
-
-  case BVKind::Seq: {
-      LLVM_DEBUG(dbgs() << "::Seq\n");
-  // detected a proper stride pattern
-    SDValue SeqV = CreateSeq(DL, ResTy,
-                            DAG, OpVectorLength);
-    if (Stride == 1) {
-      LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
-      LLVM_DEBUG(SeqV.dump(&DAG););
-      return SeqV;
-    }
-
-    SDValue StrideV = CreateBroadcast(
-        DL, ResTy, DAG.getConstant(Stride, DL, ElemTy), DAG, OpVectorLength);
-    SDValue ret =
-        DAG.getNode(VEISD::VVP_MUL, DL, ResTy, {SeqV, StrideV, TrueMask, OpVectorLength});
-    LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST\n");
-    LLVM_DEBUG(StrideV.dump(&DAG));
-    LLVM_DEBUG(ret.dump(&DAG));
-    return ret;
-  }
-
-  case BVKind::SeqBlock: {
-      LLVM_DEBUG(dbgs() << "::SeqBlock\n");
-  // codegen for <0, 1, .., 15, 0, 1, .., ..... > constant patterns
-  // constant == VSEQ % blockLength
-    int64_t blockLengthLog = log2(BlockLength);
-
-    if (pow(2, blockLengthLog) != BlockLength) break;
-
-    SDValue sequence = CreateSeq(DL, ResTy, DAG, OpVectorLength);
-    SDValue modulobroadcast = CreateBroadcast(
-        DL, ResTy, DAG.getConstant(BlockLength - 1, DL, ElemTy), DAG,
-        OpVectorLength);
-
-    SDValue modulo =
-        DAG.getNode(VEISD::VVP_AND, DL, ResTy,
-                    {sequence, modulobroadcast, TrueMask, OpVectorLength});
-
-    LLVM_DEBUG(dbgs() << "BlockStride2: VEC_SEQ & VEC_BROADCAST\n");
-    LLVM_DEBUG(sequence.dump());
-    LLVM_DEBUG(modulobroadcast.dump());
-    LLVM_DEBUG(modulo.dump());
-    return modulo;
-  }
-
-  case BVKind::BlockSeq: {
-      LLVM_DEBUG(dbgs() << "::BlockSeq\n");
-  // codegen for <0, 0, .., 0, 0, 1, 1, .., 1, 1, .....> constant patterns
-  // constant == VSEQ >> log2(blockLength)
-    int64_t blockLengthLog = log2(BlockLength);
-
-    if (pow(2, blockLengthLog) != BlockLength) break;
-
-    SDValue sequence = CreateSeq(DL, ResTy, DAG, OpVectorLength);
-    SDValue shiftbroadcast = CreateBroadcast(
-        DL, ResTy, DAG.getConstant(blockLengthLog, DL, ElemTy), DAG,
-        OpVectorLength);
-
-    SDValue shift = DAG.getNode(VEISD::VVP_SRL, DL, ResTy,
-                                {sequence, shiftbroadcast, TrueMask, OpVectorLength});
-    LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST\n");
-    LLVM_DEBUG(sequence.dump());
-    LLVM_DEBUG(shiftbroadcast.dump());
-    LLVM_DEBUG(shift.dump());
-    return shift;
-  }
-
-  }
-
-  ///// Fallback /////
-
   // This is the number of LSV that may be used to represent a BUILD_VECTOR
   // Otw, this defaults to VLD of a constant
   // FIXME move this to TTI
   const unsigned InsertThreshold = 2;
+
+  if (NumElems >= InsertThreshold) {
+    switch (BVK) {
+
+    // Could not detect pattern
+    case BVKind::Unknown: break;
+
+    // Fold undef
+    case BVKind::AllUndef: {
+        LLVM_DEBUG(dbgs() << "::AllUndef\n");
+      return SDValue(DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL,
+                                        Op.getSimpleValueType()),
+                     0);
+    }
+
+    case BVKind::Broadcast: {
+        LLVM_DEBUG(dbgs() << "::Broadcast\n");
+      SDValue ScaVal = BVN->getOperand(FirstDef);
+      LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
+      return CreateBroadcast(DL, ResTy, ScaVal, DAG, OpVectorLength);
+    }
+
+    case BVKind::Seq: {
+        LLVM_DEBUG(dbgs() << "::Seq\n");
+    // detected a proper stride pattern
+      SDValue SeqV = CreateSeq(DL, ResTy,
+                              DAG, OpVectorLength);
+      if (Stride == 1) {
+        LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
+        LLVM_DEBUG(SeqV.dump(&DAG););
+        return SeqV;
+      }
+
+      SDValue StrideV = CreateBroadcast(
+          DL, ResTy, DAG.getConstant(Stride, DL, ElemTy), DAG, OpVectorLength);
+      SDValue ret =
+          DAG.getNode(VEISD::VVP_MUL, DL, ResTy, {SeqV, StrideV, TrueMask, OpVectorLength});
+      LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST\n");
+      LLVM_DEBUG(StrideV.dump(&DAG));
+      LLVM_DEBUG(ret.dump(&DAG));
+      return ret;
+    }
+
+    case BVKind::SeqBlock: {
+        LLVM_DEBUG(dbgs() << "::SeqBlock\n");
+    // codegen for <0, 1, .., 15, 0, 1, .., ..... > constant patterns
+    // constant == VSEQ % blockLength
+      int64_t blockLengthLog = log2(BlockLength);
+
+      if (pow(2, blockLengthLog) != BlockLength) break;
+
+      SDValue sequence = CreateSeq(DL, ResTy, DAG, OpVectorLength);
+      SDValue modulobroadcast = CreateBroadcast(
+          DL, ResTy, DAG.getConstant(BlockLength - 1, DL, ElemTy), DAG,
+          OpVectorLength);
+
+      SDValue modulo =
+          DAG.getNode(VEISD::VVP_AND, DL, ResTy,
+                      {sequence, modulobroadcast, TrueMask, OpVectorLength});
+
+      LLVM_DEBUG(dbgs() << "BlockStride2: VEC_SEQ & VEC_BROADCAST\n");
+      LLVM_DEBUG(sequence.dump());
+      LLVM_DEBUG(modulobroadcast.dump());
+      LLVM_DEBUG(modulo.dump());
+      return modulo;
+    }
+
+    case BVKind::BlockSeq: {
+        LLVM_DEBUG(dbgs() << "::BlockSeq\n");
+    // codegen for <0, 0, .., 0, 0, 1, 1, .., 1, 1, .....> constant patterns
+    // constant == VSEQ >> log2(blockLength)
+      int64_t blockLengthLog = log2(BlockLength);
+
+      if (pow(2, blockLengthLog) != BlockLength) break;
+
+      SDValue sequence = CreateSeq(DL, ResTy, DAG, OpVectorLength);
+      SDValue shiftbroadcast = CreateBroadcast(
+          DL, ResTy, DAG.getConstant(blockLengthLog, DL, ElemTy), DAG,
+          OpVectorLength);
+
+      SDValue shift = DAG.getNode(VEISD::VVP_SRL, DL, ResTy,
+                                  {sequence, shiftbroadcast, TrueMask, OpVectorLength});
+      LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST\n");
+      LLVM_DEBUG(sequence.dump());
+      LLVM_DEBUG(shiftbroadcast.dump());
+      LLVM_DEBUG(shift.dump());
+      return shift;
+    }
+
+    }
+  }
+
+  ///// Fallback /////
+
+  // # mask elements from which on a vector load is preferred
+  // over a sequence of LVS instructions
+  // TODO move this to TLI
+  const unsigned VLDThreshold = 2;
 
   // Count non-undef elements
   unsigned NumInserts = 0;
@@ -1371,7 +1454,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
   }
 
   // LLVM extends this to VLD of a constant shuffle mask
-  if (NumInserts > InsertThreshold) {
+  if (NumInserts > VLDThreshold) {
     return SDValue();
   }
 
@@ -3638,7 +3721,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerVECREDUCE(Op, DAG);
 
   case ISD::LOAD: return LowerLOAD(Op, DAG);
-  case ISD::MLOAD: return LowerMLOAD(Op, DAG);
+  case ISD::MLOAD: return LowerMLOAD(Op, DAG, VVPExpansionMode::ToNativeWidth);
   case ISD::STORE: return LowerSTORE(Op, DAG);
   case ISD::MSTORE: return LowerMSTORE(Op, DAG);
   case ISD::MSCATTER:
@@ -4258,38 +4341,6 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
   // assert((NewN->getNode() != N) && "node was not changed!");
   NewN->setFlags(N->getFlags());
   Results.push_back(NewN);
-}
-
-
-SDValue
-VETargetLowering::TryNarrowExtractVectorLoad(SDNode * ExtractN, SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "TryNarrowExtractVectorLoad: "; ExtractN->dump(); );
-
-  assert(ExtractN->getOpcode() == ISD::EXTRACT_SUBVECTOR);
-  auto IdxArg = ExtractN->getOperand(1); // the idx
-
-  // not a zero extract
-  auto IdxConst = dyn_cast<ConstantSDNode>(IdxArg);
-  if (!IdxConst || IdxConst->getZExtValue() != 0)  {
-    LLVM_DEBUG(dbgs() << "\tIdx wasn't 0.\n"; );
-    return SDValue();
-  }
-
-  // not a load
-  auto VecArg = ExtractN->getOperand(0); // the load
-  auto LoadN = dyn_cast<LoadSDNode>(VecArg);
-  if (!LoadN) return SDValue();
-
-  // not the only user...
-  if (LoadN->use_size() != 1) {
-    LLVM_DEBUG(dbgs() << "\tmore than 1 user.\n"; );
-    return SDValue();
-  }
-
-  // perform narrowing
-  EVT NarrowVT = ExtractN->getValueType(0);
-  assert(NarrowVT.isVector());
-  return ExpandToVVP(SDValue(LoadN, 0), DAG, VVPExpansionMode::ToNativeWidth, NarrowVT.getVectorNumElements());
 }
 
 // Illegal result type

@@ -54,15 +54,15 @@ public:
 
   unsigned getMinVectorRegisterBitWidth() const { return 256 * 64; }
 
-  bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) { return false; }
+  bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) { return true; }
   bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment) {
-    return false;
+    return true;
   }
   bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment) {
-    return false;
+    return true;
   };
   bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
-    return false;
+    return true;
   }
 
   /// LLVM-VP Support

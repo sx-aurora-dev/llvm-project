@@ -229,10 +229,11 @@ public:
   SDValue LowerBitcast(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
 
-  SDValue LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint) const;
-  SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint) const;
+  SDValue LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint=None) const;
+  SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint=None) const;
 
-  SDValue LowerMLOAD(SDValue Op, SelectionDAG &DAG, VecLenOpt VecLenHint=None) const;
+  SDValue LowerMLOAD(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode,
+                     VecLenOpt VecLenHint = None) const;
   SDValue LowerMSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
@@ -247,7 +248,7 @@ public:
 
   SDValue TryNarrowExtractVectorLoad(SDNode *ExtractN, SelectionDAG &DAG) const;
 
-  SDValue ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, Optional<unsigned> VecLenHint=None) const;
+  SDValue ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
   // Called in TL::ReplaceNodeResults
   // This replaces the standard ISD node with a VVP VEISD node with a widened
   // result type.
