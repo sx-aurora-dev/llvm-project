@@ -76,8 +76,6 @@ public:
                        const MCInstrDesc &MCID, unsigned int numSubRegs,
                        const unsigned* subRegIdx) const;
 
-  unsigned getGlobalBaseReg(MachineFunction *MF) const;
-
   /// Stack Spill & Reload {
   unsigned isLoadFromStackSlot(const MachineInstr &MI,
                                int &FrameIndex) const override;
@@ -94,6 +92,8 @@ public:
                             int FrameIndex, const TargetRegisterClass *RC,
                             const TargetRegisterInfo *TRI) const override;
   /// } Stack Spill & Reload
+
+  Register getGlobalBaseReg(MachineFunction *MF) const;
 
   // Lower pseudo instructions after register allocation.
   bool expandPostRAPseudo(MachineInstr &MI) const override;

@@ -21,7 +21,7 @@ class VEMachineFunctionInfo : public MachineFunctionInfo {
 
 private:
   // GlobalBaseReg - Holds the physical reigster for the base register.
-  unsigned GlobalBaseReg;
+  Register GlobalBaseReg;
 
   /// VectorLengthReg - Holds the virtual register for VL register.
   unsigned VectorLengthReg;
@@ -38,14 +38,14 @@ private:
 
 public:
   VEMachineFunctionInfo()
-      : GlobalBaseReg(0), VectorLengthReg(0), VarArgsFrameOffset(0),
+      : GlobalBaseReg(), VectorLengthReg(0), VarArgsFrameOffset(0),
         SRetReturnReg(0), IsLeafProc(false) {}
   explicit VEMachineFunctionInfo(MachineFunction &MF)
-      : GlobalBaseReg(0), VectorLengthReg(0), VarArgsFrameOffset(0),
+      : GlobalBaseReg(), VectorLengthReg(0), VarArgsFrameOffset(0),
         SRetReturnReg(0), IsLeafProc(false) {}
 
-  unsigned getGlobalBaseReg() const { return GlobalBaseReg; }
-  void setGlobalBaseReg(unsigned Reg) { GlobalBaseReg = Reg; }
+  Register getGlobalBaseReg() const { return GlobalBaseReg; }
+  void setGlobalBaseReg(Register Reg) { GlobalBaseReg = Reg; }
 
   unsigned getVectorLengthReg() const { return VectorLengthReg; }
   void setVectorLengthReg(unsigned Reg) { VectorLengthReg = Reg; }

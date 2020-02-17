@@ -166,7 +166,7 @@ public:
 #include "VEGenDAGISel.inc"
 
 private:
-  SDNode* getGlobalBaseReg();
+  SDNode *getGlobalBaseReg();
   bool tryInlineAsm(SDNode *N);
 
 #if 0
@@ -185,13 +185,6 @@ private:
 #endif
 };
 } // end anonymous namespace
-
-SDNode* VEDAGToDAGISel::getGlobalBaseReg() {
-  unsigned GlobalBaseReg = Subtarget->getInstrInfo()->getGlobalBaseReg(MF);
-  return CurDAG->getRegister(GlobalBaseReg,
-                             TLI->getPointerTy(CurDAG->getDataLayout()))
-      .getNode();
-}
 
 // Re-assemble i64 arguments split up in SelectionDAGBuilder's
 // visitInlineAsm / GetRegistersForValue functions.
@@ -533,16 +526,16 @@ void VEDAGToDAGISel::Select(SDNode *N) {
   }
 
   switch (N->getOpcode()) {
-  default: break;
+  default:
+    break;
+  case VEISD::GLOBAL_BASE_REG:
+    ReplaceNode(N, getGlobalBaseReg());
+    return;
   case ISD::INLINEASM: {
     if (tryInlineAsm(N))
       return;
     break;
   }
-  case VEISD::GLOBAL_BASE_REG:
-    ReplaceNode(N, getGlobalBaseReg());
-    return;
-
 #if 0
   case ISD::SDIV:
   case ISD::UDIV: {
@@ -609,6 +602,13 @@ VEDAGToDAGISel::SelectInlineAsmMemoryOperand(const SDValue &Op,
   OutOps.push_back(Op1);
   OutOps.push_back(Op2);
   return false;
+}
+
+SDNode *VEDAGToDAGISel::getGlobalBaseReg() {
+  Register GlobalBaseReg = Subtarget->getInstrInfo()->getGlobalBaseReg(MF);
+  return CurDAG
+      ->getRegister(GlobalBaseReg, TLI->getPointerTy(CurDAG->getDataLayout()))
+      .getNode();
 }
 
 /// createVEISelDag - This pass converts a legalized DAG into a

@@ -338,9 +338,7 @@ def call          : SDNode<"VEISD::CALL", SDT_SPCall,
 def retflag       : SDNode<"VEISD::RET_FLAG", SDTNone,
                            [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 
-def getGOT        : Operand<iPTR> {
-  let PrintMethod = "printGetGOT";
-}
+def getGOT        : Operand<iPTR>;
 def getFunPLT     : Operand<iPTR> {
   let PrintMethod = "printGetFunPLT";
 }

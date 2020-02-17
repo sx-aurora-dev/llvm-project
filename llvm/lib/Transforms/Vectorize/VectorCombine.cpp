@@ -58,8 +58,9 @@ static bool foldExtractCmp(Instruction &I, const TargetTransformInfo &TTI) {
   // ((2 * extract) + scalar cmp) < (vector cmp + extract) ?
   int ExtractCost = TTI.getVectorInstrCost(Instruction::ExtractElement,
                                            VecTy, C->getZExtValue());
-  int ScalarCmpCost = TTI.getOperationCost(CmpOpcode, ScalarTy);
-  int VecCmpCost = TTI.getOperationCost(CmpOpcode, VecTy);
+  int ScalarCmpCost = TTI.getCmpSelInstrCost(CmpOpcode, ScalarTy, I.getType());
+  int VecCmpCost = TTI.getCmpSelInstrCost(CmpOpcode, VecTy,
+                                          CmpInst::makeCmpResultType(VecTy));
 
   int ScalarCost = 2 * ExtractCost + ScalarCmpCost;
   int VecCost = VecCmpCost + ExtractCost +
@@ -107,8 +108,6 @@ static bool foldExtractBinop(Instruction &I, const TargetTransformInfo &TTI) {
   int VecBOCost = TTI.getArithmeticInstrCost(BOpcode, VecTy);
   int Extract0Cost = TTI.getVectorInstrCost(Instruction::ExtractElement,
                                             VecTy, C0);
-  int Extract1Cost = TTI.getVectorInstrCost(Instruction::ExtractElement,
-                                            VecTy, C1);
 
   // Handle a special case - if the extract indexes are the same, the
   // replacement sequence does not require a shuffle. Unless the vector binop is
@@ -116,7 +115,9 @@ static bool foldExtractBinop(Instruction &I, const TargetTransformInfo &TTI) {
   // Extra uses of the extracts mean that we include those costs in the
   // vector total because those instructions will not be eliminated.
   if (C0 == C1) {
-    assert(Extract0Cost == Extract1Cost && "Different costs for same extract?");
+    assert(Extract0Cost ==
+               TTI.getVectorInstrCost(Instruction::ExtractElement, VecTy, C1) &&
+           "Different costs for same extract?");
     int ExtractCost = Extract0Cost;
     if (X != Y) {
       int ScalarCost = ExtractCost + ExtractCost + ScalarBOCost;

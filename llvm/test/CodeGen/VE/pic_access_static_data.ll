@@ -6,44 +6,28 @@
 
 define void @func() {
 ; CHECK-LABEL: func:
-; CHECK:       .LBB0_2:
-; CHECK-NEXT:  lea %s15, _GLOBAL_OFFSET_TABLE_@pc_lo(-24)
-; CHECK-NEXT:  and %s15, %s15, (32)0
-; CHECK-NEXT:  sic %s16
-; CHECK-NEXT:  lea.sl %s15, _GLOBAL_OFFSET_TABLE_@pc_hi(%s16, %s15)
-; CHECK-NEXT:  lea %s0, src@gotoff_lo
-; CHECK-NEXT:  and %s0, %s0, (32)0
-; CHECK-NEXT:  lea.sl %s0, src@gotoff_hi(, %s0)
-; CHECK-NEXT:  adds.l %s0, %s15, %s0
-; CHECK-NEXT:  ld1b.zx %s0, (, %s0)
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  lea %s2, 100
-; CHECK-NEXT:  cmov.w.ne %s1, %s2, %s0
-; CHECK-NEXT:  lea %s0, dst@gotoff_lo
-; CHECK-NEXT:  and %s0, %s0, (32)0
-; CHECK-NEXT:  lea.sl %s0, dst@gotoff_hi(, %s0)
-; CHECK-NEXT:  adds.l %s0, %s15, %s0
-; CHECK-NEXT:  stl %s1, (, %s0)
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s15, _GLOBAL_OFFSET_TABLE_@pc_lo(-24)
+; CHECK-NEXT:    and %s15, %s15, (32)0
+; CHECK-NEXT:    sic %s16
+; CHECK-NEXT:    lea.sl %s15, _GLOBAL_OFFSET_TABLE_@pc_hi(%s16, %s15)
+; CHECK-NEXT:    lea %s0, src@gotoff_lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s0, src@gotoff_hi(, %s0)
+; CHECK-NEXT:    adds.l %s0, %s15, %s0
+; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    lea %s2, 100
+; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
+; CHECK-NEXT:    lea %s0, dst@gotoff_lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s0, dst@gotoff_hi(, %s0)
+; CHECK-NEXT:    adds.l %s0, %s15, %s0
+; CHECK-NEXT:    stl %s1, (, %s0)
+; CHECK-NEXT:    or %s11, 0, %s9
 
   %1 = load i1, i1* @src, align 4
   %2 = select i1 %1, i32 100, i32 0
-  store i32 %2, i32* @dst, align 4, !tbaa !3
+  store i32 %2, i32* @dst, align 4
   ret void
 }
-
-; Function Attrs: nounwind
-define i32 @main() {
-  store i1 true, i1* @src, align 4
-  tail call void @func()
-  %1 = load i32, i32* @dst, align 4, !tbaa !3
-  %2 = tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([3 x i8], [3 x i8]* @.str, i64 0, i64 0), i32 %1)
-  ret i32 0
-}
-
-declare i32 @printf(i8* nocapture readonly, ...)
-
-!2 = !{!"clang version 8.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git 3b98372866ea8dd6c83dd461fdd1bff7ac3658ba) (llvm/llvm.git 6fe73ad9979f8f32a171413308a96c1d7c3b6a18)"}
-!3 = !{!4, !4, i64 0}
-!4 = !{!"int", !5, i64 0}
-!5 = !{!"omnipotent char", !6, i64 0}
-!6 = !{!"Simple C/C++ TBAA"}

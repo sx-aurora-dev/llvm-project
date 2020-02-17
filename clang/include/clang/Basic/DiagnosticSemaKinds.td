@@ -3658,6 +3658,15 @@ def warn_int_to_pointer_cast : Warning<
 def warn_int_to_void_pointer_cast : Warning<
   "cast to %1 from smaller integer type %0">,
   InGroup<IntToVoidPointerCast>;
+def warn_pointer_to_int_cast : Warning<
+  "cast to smaller integer type %1 from %0">,
+  InGroup<PointerToIntCast>;
+def warn_void_pointer_to_int_cast : Warning<
+  "cast to smaller integer type %1 from %0">,
+  InGroup<VoidPointerToIntCast>;
+def ext_ms_pointer_to_int_cast : ExtWarn<
+  "cast to smaller integer type %1 from %0 is a Microsoft extension">,
+InGroup<MicrosoftCast>;
 
 def warn_attribute_ignored_for_field_of_type : Warning<
   "%0 attribute ignored for field of type %1">,
@@ -9910,6 +9919,13 @@ def warn_omp_declare_target_after_first_use : Warning<
   InGroup<OpenMPTarget>;
 def err_omp_declare_variant_incompat_attributes : Error<
   "'#pragma omp declare variant' is not compatible with any target-specific attributes">;
+def warn_omp_declare_variant_score_not_constant
+    : Warning<"score expressions in the OpenMP context selector need to be "
+              "constant; %0 is not and will be ignored">,
+      InGroup<SourceUsesOpenMP>;
+def err_omp_declare_variant_user_condition_not_constant
+    : Error<"the user condition in the OpenMP context selector needs to be "
+            "constant; %0 is not">;
 def warn_omp_declare_variant_after_used : Warning<
   "'#pragma omp declare variant' cannot be applied for function after first "
   "usage; the original function might be used">, InGroup<SourceUsesOpenMP>;

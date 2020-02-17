@@ -53,6 +53,12 @@ public:
                           const char *Modifier = nullptr);
   void printMemASOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                          const char *Modifier = nullptr);
+  void lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
+                                 const MCSubtargetInfo &STI);
+  void lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
+                                    const MCSubtargetInfo &STI);
+  void lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
+                                     const MCSubtargetInfo &STI);
 
   void emitInstruction(const MachineInstr *MI) override;
 
@@ -63,44 +69,33 @@ public:
                        const char *ExtraCode, raw_ostream &O) override;
   bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
                              const char *ExtraCode, raw_ostream &O) override;
-
-  void LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
-                                 const MCSubtargetInfo &STI);
-  void LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
-                                    const MCSubtargetInfo &STI);
-  void LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
-                                     const MCSubtargetInfo &STI);
 };
 } // end of anonymous namespace
 
-static MCOperand createVEMCOperand(VEMCExpr::VariantKind Kind,
-                                      MCSymbol *Sym, MCContext &OutContext) {
-  const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::create(Sym,
-                                                         OutContext);
+static MCOperand createVEMCOperand(VEMCExpr::VariantKind Kind, MCSymbol *Sym,
+                                   MCContext &OutContext) {
+  const MCSymbolRefExpr *MCSym = MCSymbolRefExpr::create(Sym, OutContext);
   const VEMCExpr *expr = VEMCExpr::create(Kind, MCSym, OutContext);
   return MCOperand::createExpr(expr);
-
 }
 
 static MCOperand createGOTRelExprOp(VEMCExpr::VariantKind Kind,
-                                    MCSymbol *GOTLabel,
-                                    MCContext &OutContext)
-{
+                                    MCSymbol *GOTLabel, MCContext &OutContext) {
   const MCSymbolRefExpr *GOT = MCSymbolRefExpr::create(GOTLabel, OutContext);
   const VEMCExpr *expr = VEMCExpr::create(Kind, GOT, OutContext);
   return MCOperand::createExpr(expr);
 }
 
-static void EmitSIC(MCStreamer &OutStreamer,
-                    MCOperand &RD, const MCSubtargetInfo &STI) {
+static void emitSIC(MCStreamer &OutStreamer, MCOperand &RD,
+                    const MCSubtargetInfo &STI) {
   MCInst SICInst;
   SICInst.setOpcode(VE::SIC);
   SICInst.addOperand(RD);
   OutStreamer.emitInstruction(SICInst, STI);
 }
 
-static void EmitBSIC(MCStreamer &OutStreamer,
-                    MCOperand &R1, MCOperand &R2, const MCSubtargetInfo &STI) {
+static void emitBSIC(MCStreamer &OutStreamer, MCOperand &R1, MCOperand &R2,
+                     const MCSubtargetInfo &STI) {
   MCInst BSICInst;
   BSICInst.setOpcode(VE::BSIC);
   BSICInst.addOperand(R1);
@@ -108,10 +103,8 @@ static void EmitBSIC(MCStreamer &OutStreamer,
   OutStreamer.emitInstruction(BSICInst, STI);
 }
 
-static void EmitLEAzzi(MCStreamer &OutStreamer,
-                    MCOperand &Imm, MCOperand &RD,
-                    const MCSubtargetInfo &STI)
-{
+static void emitLEAzzi(MCStreamer &OutStreamer, MCOperand &Imm, MCOperand &RD,
+                       const MCSubtargetInfo &STI) {
   MCInst LEAInst;
   LEAInst.setOpcode(VE::LEAzii);
   LEAInst.addOperand(RD);
@@ -122,10 +115,8 @@ static void EmitLEAzzi(MCStreamer &OutStreamer,
   OutStreamer.emitInstruction(LEAInst, STI);
 }
 
-static void EmitLEASLzzi(MCStreamer &OutStreamer,
-                      MCOperand &Imm, MCOperand &RD,
-                      const MCSubtargetInfo &STI)
-{
+static void emitLEASLzzi(MCStreamer &OutStreamer, MCOperand &Imm, MCOperand &RD,
+                         const MCSubtargetInfo &STI) {
   MCInst LEASLInst;
   LEASLInst.setOpcode(VE::LEASLzii);
   LEASLInst.addOperand(RD);
@@ -136,10 +127,8 @@ static void EmitLEASLzzi(MCStreamer &OutStreamer,
   OutStreamer.emitInstruction(LEASLInst, STI);
 }
 
-static void EmitLEAzii(MCStreamer &OutStreamer,
-                       MCOperand &RS1, MCOperand &Imm, MCOperand &RD,
-                       const MCSubtargetInfo &STI)
-{
+static void emitLEAzii(MCStreamer &OutStreamer, MCOperand &RS1, MCOperand &Imm,
+                       MCOperand &RD, const MCSubtargetInfo &STI) {
   MCInst LEAInst;
   LEAInst.setOpcode(VE::LEAzii);
   LEAInst.addOperand(RD);
@@ -150,24 +139,21 @@ static void EmitLEAzii(MCStreamer &OutStreamer,
   OutStreamer.emitInstruction(LEAInst, STI);
 }
 
-static void EmitLEASLrri(MCStreamer &OutStreamer,
-                         MCOperand &Dest, MCOperand &Base,
-                         MCOperand &Index, MCOperand &Imm,
-                         const MCSubtargetInfo &STI)
-{
+static void emitLEASLrri(MCStreamer &OutStreamer, MCOperand &RS1,
+                         MCOperand &RS2, MCOperand &Imm, MCOperand &RD,
+                         const MCSubtargetInfo &STI) {
   MCInst LEASLInst;
   LEASLInst.setOpcode(VE::LEASLrri);
-  LEASLInst.addOperand(Dest);
-  LEASLInst.addOperand(Base);
-  LEASLInst.addOperand(Index);
+  LEASLInst.addOperand(RD);
+  LEASLInst.addOperand(RS1);
+  LEASLInst.addOperand(RS2);
   LEASLInst.addOperand(Imm);
   OutStreamer.emitInstruction(LEASLInst, STI);
 }
 
-static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode,
-                       MCOperand &RS1, MCOperand &Src2, MCOperand &RD,
-                       const MCSubtargetInfo &STI)
-{
+static void emitBinary(MCStreamer &OutStreamer, unsigned Opcode, MCOperand &RS1,
+                       MCOperand &Src2, MCOperand &RD,
+                       const MCSubtargetInfo &STI) {
   MCInst Inst;
   Inst.setOpcode(Opcode);
   Inst.addOperand(RD);
@@ -176,111 +162,82 @@ static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode,
   OutStreamer.emitInstruction(Inst, STI);
 }
 
-static void EmitANDrm0(MCStreamer &OutStreamer,
-                       MCOperand &RS1, MCOperand &Imm, MCOperand &RD,
-                       const MCSubtargetInfo &STI) {
-  EmitBinary(OutStreamer, VE::ANDrm0, RS1, Imm, RD, STI);
+static void emitANDrm0(MCStreamer &OutStreamer, MCOperand &RS1, MCOperand &Imm,
+                       MCOperand &RD, const MCSubtargetInfo &STI) {
+  emitBinary(OutStreamer, VE::ANDrm0, RS1, Imm, RD, STI);
 }
 
-#if 0
-static void EmitOR(MCStreamer &OutStreamer,
-                   MCOperand &RS1, MCOperand &Imm, MCOperand &RD,
-                   const MCSubtargetInfo &STI) {
-  EmitBinary(OutStreamer, VE::ORri, RS1, Imm, RD, STI);
-}
-
-static void EmitADD(MCStreamer &OutStreamer,
-                    MCOperand &RS1, MCOperand &RS2, MCOperand &RD,
-                    const MCSubtargetInfo &STI) {
-  EmitBinary(OutStreamer, VE::ADDrr, RS1, RS2, RD, STI);
-}
-
-static void EmitSHL(MCStreamer &OutStreamer,
-                    MCOperand &RS1, MCOperand &Imm, MCOperand &RD,
-                    const MCSubtargetInfo &STI) {
-  EmitBinary(OutStreamer, VE::SLLri, RS1, Imm, RD, STI);
-}
-#endif
-
-static void EmitHiLo(MCStreamer &OutStreamer,  MCSymbol *GOTSym,
-                     VEMCExpr::VariantKind HiKind,
-                     VEMCExpr::VariantKind LoKind,
-                     MCOperand &RD,
-                     MCContext &OutContext,
+static void emitHiLo(MCStreamer &OutStreamer, MCSymbol *GOTSym,
+                     VEMCExpr::VariantKind HiKind, VEMCExpr::VariantKind LoKind,
+                     MCOperand &RD, MCContext &OutContext,
                      const MCSubtargetInfo &STI) {
 
   MCOperand hi = createVEMCOperand(HiKind, GOTSym, OutContext);
   MCOperand lo = createVEMCOperand(LoKind, GOTSym, OutContext);
   MCOperand ci32 = MCOperand::createImm(32);
-  EmitLEAzzi(OutStreamer, lo, RD, STI);
-  EmitANDrm0(OutStreamer, RD, ci32, RD, STI);
-  EmitLEASLzzi(OutStreamer, hi, RD, STI);
+  emitLEAzzi(OutStreamer, lo, RD, STI);
+  emitANDrm0(OutStreamer, RD, ci32, RD, STI);
+  emitLEASLzzi(OutStreamer, hi, RD, STI);
 }
 
-void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
-                                             const MCSubtargetInfo &STI)
-{
+void VEAsmPrinter::lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
+                                             const MCSubtargetInfo &STI) {
   MCSymbol *GOTLabel   =
-    OutContext.getOrCreateSymbol(Twine("_GLOBAL_OFFSET_TABLE_"));
+      OutContext.getOrCreateSymbol(Twine("_GLOBAL_OFFSET_TABLE_"));
 
   const MachineOperand &MO = MI->getOperand(0);
   MCOperand MCRegOP = MCOperand::createReg(MO.getReg());
 
-
   if (!isPositionIndependent()) {
     // Just load the address of GOT to MCRegOP.
-    switch(TM.getCodeModel()) {
+    switch (TM.getCodeModel()) {
     default:
       llvm_unreachable("Unsupported absolute code model");
     case CodeModel::Small:
     case CodeModel::Medium:
     case CodeModel::Large:
-      EmitHiLo(*OutStreamer, GOTLabel,
-               VEMCExpr::VK_VE_HI32, VEMCExpr::VK_VE_LO32,
-               MCRegOP, OutContext, STI);
+      emitHiLo(*OutStreamer, GOTLabel, VEMCExpr::VK_VE_HI32,
+               VEMCExpr::VK_VE_LO32, MCRegOP, OutContext, STI);
       break;
     }
     return;
   }
 
-  MCOperand RegGOT   = MCOperand::createReg(VE::SX15);  // GOT
-  MCOperand RegPLT   = MCOperand::createReg(VE::SX16);  // PLT
+  MCOperand RegGOT = MCOperand::createReg(VE::SX15); // GOT
+  MCOperand RegPLT = MCOperand::createReg(VE::SX16); // PLT
 
   // lea %got, _GLOBAL_OFFSET_TABLE_@PC_LO(-24)
   // and %got, %got, (32)0
   // sic %plt
   // lea.sl %got, _GLOBAL_OFFSET_TABLE_@PC_HI(%plt, %got)
   MCOperand cim24 = MCOperand::createImm(-24);
-  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PC_LO32,
-                                       GOTLabel,
-                                       OutContext);
-  EmitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
+  MCOperand loImm =
+      createGOTRelExprOp(VEMCExpr::VK_VE_PC_LO32, GOTLabel, OutContext);
+  emitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
   MCOperand ci32 = MCOperand::createImm(32);
-  EmitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
-  EmitSIC(*OutStreamer, RegPLT, STI);
-  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PC_HI32,
-                                       GOTLabel,
-                                       OutContext);
-  EmitLEASLrri(*OutStreamer, RegGOT, MCRegOP, RegPLT, hiImm, STI);
+  emitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
+  emitSIC(*OutStreamer, RegPLT, STI);
+  MCOperand hiImm =
+      createGOTRelExprOp(VEMCExpr::VK_VE_PC_HI32, GOTLabel, OutContext);
+  emitLEASLrri(*OutStreamer, RegGOT, RegPLT, hiImm, MCRegOP, STI);
 }
 
-void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
-                                                const MCSubtargetInfo &STI)
-{
+void VEAsmPrinter::lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
+                                                const MCSubtargetInfo &STI) {
   const MachineOperand &MO = MI->getOperand(0);
   MCOperand MCRegOP = MCOperand::createReg(MO.getReg());
   const MachineOperand &Addr = MI->getOperand(1);
-  MCSymbol* AddrSym = nullptr;
+  MCSymbol *AddrSym = nullptr;
 
   switch (Addr.getType()) {
   default:
-    llvm_unreachable ("<unknown operand type>");
+    llvm_unreachable("<unknown operand type>");
     return;
   case MachineOperand::MO_MachineBasicBlock:
-    report_fatal_error("MBB is not supporeted yet");
+    report_fatal_error("MBB is not supported yet");
     return;
   case MachineOperand::MO_ConstantPoolIndex:
-    report_fatal_error("ConstantPool is not supporeted yet");
+    report_fatal_error("ConstantPool is not supported yet");
     return;
   case MachineOperand::MO_ExternalSymbol:
     AddrSym = GetExternalSymbolSymbol(Addr.getSymbolName());
@@ -295,27 +252,25 @@ void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
     return;
   }
 
-  MCOperand RegPLT   = MCOperand::createReg(VE::SX16);  // PLT
+  MCOperand RegPLT = MCOperand::createReg(VE::SX16); // PLT
 
   // lea %dst, %plt_lo(func)(-24)
   // and %dst, %dst, (32)0
   // sic %plt                            ; FIXME: is it safe to use %plt here?
   // lea.sl %dst, %plt_hi(func)(%plt, %dst)
   MCOperand cim24 = MCOperand::createImm(-24);
-  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32,
-                                       AddrSym,
-                                       OutContext);
-  EmitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
+  MCOperand loImm =
+      createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32, AddrSym, OutContext);
+  emitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
   MCOperand ci32 = MCOperand::createImm(32);
-  EmitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
-  EmitSIC(*OutStreamer, RegPLT, STI);
-  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32,
-                                       AddrSym,
-                                       OutContext);
-  EmitLEASLrri(*OutStreamer, MCRegOP, MCRegOP, RegPLT, hiImm, STI);
+  emitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
+  emitSIC(*OutStreamer, RegPLT, STI);
+  MCOperand hiImm =
+      createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32, AddrSym, OutContext);
+  emitLEASLrri(*OutStreamer, MCRegOP, RegPLT, hiImm, MCRegOP, STI);
 }
 
-void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
+void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
                                                  const MCSubtargetInfo &STI)
 {
   const MachineOperand &Addr = MI->getOperand(0);
@@ -357,25 +312,25 @@ void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_LO32,
                                        AddrSym,
                                        OutContext);
-  EmitLEAzii(*OutStreamer, cim24, loImm, RegS0, STI);
+  emitLEAzii(*OutStreamer, cim24, loImm, RegS0, STI);
   MCOperand ci32 = MCOperand::createImm(32);
-  EmitANDrm0(*OutStreamer, RegS0, ci32, RegS0, STI);
-  EmitSIC(*OutStreamer, RegLR, STI);
+  emitANDrm0(*OutStreamer, RegS0, ci32, RegS0, STI);
+  emitSIC(*OutStreamer, RegLR, STI);
   MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_HI32,
                                        AddrSym,
                                        OutContext);
-  EmitLEASLrri(*OutStreamer, RegS0, RegS0, RegLR, hiImm, STI);
+  emitLEASLrri(*OutStreamer, RegS0, RegLR, hiImm, RegS0, STI);
   MCOperand ci8 = MCOperand::createImm(8);
   MCOperand loImm2 = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32,
                                         GetTLSLabel,
                                         OutContext);
-  EmitLEAzii(*OutStreamer, ci8, loImm2, RegS12, STI);
-  EmitANDrm0(*OutStreamer, RegS12, ci32, RegS12, STI);
+  emitLEAzii(*OutStreamer, ci8, loImm2, RegS12, STI);
+  emitANDrm0(*OutStreamer, RegS12, ci32, RegS12, STI);
   MCOperand hiImm2 = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32,
                                         GetTLSLabel,
                                         OutContext);
-  EmitLEASLrri(*OutStreamer, RegS12, RegS12, RegLR, hiImm2, STI);
-  EmitBSIC(*OutStreamer, RegLR, RegS12, STI);
+  emitLEASLrri(*OutStreamer, RegS12, RegLR, hiImm2, RegS12, STI);
+  emitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
 void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
@@ -387,19 +342,20 @@ void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
     // FIXME: Debug Value.
     return;
   case VE::GETGOT:
-    LowerGETGOTAndEmitMCInsts(MI, getSubtargetInfo());
+    lowerGETGOTAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   case VE::GETFUNPLT:
-    LowerGETFunPLTAndEmitMCInsts(MI, getSubtargetInfo());
+    lowerGETFunPLTAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   case VE::GETTLSADDR:
-    LowerGETTLSAddrAndEmitMCInsts(MI, getSubtargetInfo());
+    lowerGETTLSAddrAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   // Emit nothing here but a comment if we can.
   case VE::MEMBARRIER:
     OutStreamer->emitRawComment("MEMBARRIER");
     return;
   }
+
   MachineBasicBlock::const_instr_iterator I = MI->getIterator();
   MachineBasicBlock::const_instr_iterator E = MI->getParent()->instr_end();
   do {

@@ -564,9 +564,9 @@ void VEInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
     report_fatal_error("Can't load this register from stack slot");
 }
 
-unsigned VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const {
+Register VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const {
   VEMachineFunctionInfo *VEFI = MF->getInfo<VEMachineFunctionInfo>();
-  unsigned GlobalBaseReg = VEFI->getGlobalBaseReg();
+  Register GlobalBaseReg = VEFI->getGlobalBaseReg();
   if (GlobalBaseReg != 0)
     return GlobalBaseReg;
 

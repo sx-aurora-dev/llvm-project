@@ -1548,9 +1548,10 @@ void DWARFLinker::patchLineTableForUnit(CompileUnit &Unit,
   if (needToTranslateStrings())
     return TheDwarfEmitter->translateLineTable(LineExtractor, StmtOffset);
 
-  Error Err = LineTable.parse(LineExtractor, &StmtOffset, OrigDwarf,
-                              &Unit.getOrigUnit(), DWARFContext::dumpWarning);
-  DWARFContext::dumpWarning(std::move(Err));
+  if (Error Err =
+          LineTable.parse(LineExtractor, &StmtOffset, OrigDwarf,
+                          &Unit.getOrigUnit(), OrigDwarf.getWarningHandler()))
+    OrigDwarf.getWarningHandler()(std::move(Err));
 
   // This vector is the output line table.
   std::vector<DWARFDebugLine::Row> NewRows;
@@ -2446,7 +2447,7 @@ bool DWARFLinker::link() {
     }
     EmitLambda();
   } else {
-    ThreadPool Pool(2);
+    ThreadPool Pool(hardware_concurrency(2));
     Pool.async(AnalyzeAll);
     Pool.async(CloneAll);
     Pool.wait();

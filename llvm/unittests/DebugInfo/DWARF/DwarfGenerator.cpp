@@ -27,6 +27,7 @@
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCTargetOptionsCommandFlags.inc"
 #include "llvm/PassAnalysisSupport.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetLoweringObjectFile.h"
@@ -175,7 +176,7 @@ DWARFDebugLine::Prologue dwarfgen::LineTable::createBasicPrologue() const {
     P.TotalLength += 4;
     P.FormParams.Format = DWARF64;
   }
-  P.TotalLength += Contents.size();
+  P.TotalLength += getContentsSize();
   P.FormParams.Version = Version;
   P.MinInstLength = 1;
   P.MaxOpsPerInst = 1;
@@ -235,7 +236,7 @@ void dwarfgen::LineTable::generate(MCContext &MC, AsmPrinter &Asm) const {
 
   writeData(Contents, Asm);
   if (EndSymbol != nullptr)
-    Asm.OutStreamer->EmitLabel(EndSymbol);
+    Asm.OutStreamer->emitLabel(EndSymbol);
 }
 
 void dwarfgen::LineTable::writeData(ArrayRef<ValueAndLength> Data,
@@ -246,7 +247,7 @@ void dwarfgen::LineTable::writeData(ArrayRef<ValueAndLength> Data,
     case Half:
     case Long:
     case Quad:
-      Asm.OutStreamer->EmitIntValue(Entry.Value, Entry.Length);
+      Asm.OutStreamer->emitIntValue(Entry.Value, Entry.Length);
       continue;
     case ULEB:
       Asm.emitULEB128(Entry.Value);
@@ -259,6 +260,24 @@ void dwarfgen::LineTable::writeData(ArrayRef<ValueAndLength> Data,
   }
 }
 
+size_t dwarfgen::LineTable::getContentsSize() const {
+  size_t Size = 0;
+  for (auto Entry : Contents) {
+    switch (Entry.Length) {
+    case ULEB:
+      Size += getULEB128Size(Entry.Value);
+      break;
+    case SLEB:
+      Size += getSLEB128Size(Entry.Value);
+      break;
+    default:
+      Size += Entry.Length;
+      break;
+    }
+  }
+  return Size;
+}
+
 MCSymbol *dwarfgen::LineTable::writeDefaultPrologue(AsmPrinter &Asm) const {
   MCSymbol *UnitStart = Asm.createTempSymbol("line_unit_start");
   MCSymbol *UnitEnd = Asm.createTempSymbol("line_unit_end");
@@ -268,7 +287,7 @@ MCSymbol *dwarfgen::LineTable::writeDefaultPrologue(AsmPrinter &Asm) const {
   } else {
     Asm.emitLabelDifference(UnitEnd, UnitStart, 4);
   }
-  Asm.OutStreamer->EmitLabel(UnitStart);
+  Asm.OutStreamer->emitLabel(UnitStart);
   Asm.emitInt16(Version);
   if (Version == 5) {
     Asm.emitInt8(AddrSize);
@@ -279,11 +298,11 @@ MCSymbol *dwarfgen::LineTable::writeDefaultPrologue(AsmPrinter &Asm) const {
   MCSymbol *PrologueEnd = Asm.createTempSymbol("line_prologue_end");
   Asm.emitLabelDifference(PrologueEnd, PrologueStart,
                           Format == DwarfFormat::DWARF64 ? 8 : 4);
-  Asm.OutStreamer->EmitLabel(PrologueStart);
+  Asm.OutStreamer->emitLabel(PrologueStart);
 
   DWARFDebugLine::Prologue DefaultPrologue = createBasicPrologue();
   writeProloguePayload(DefaultPrologue, Asm);
-  Asm.OutStreamer->EmitLabel(PrologueEnd);
+  Asm.OutStreamer->emitLabel(PrologueEnd);
   return UnitEnd;
 }
 
@@ -308,7 +327,7 @@ void dwarfgen::LineTable::writePrologue(AsmPrinter &Asm) const {
 }
 
 static void writeCString(StringRef Str, AsmPrinter &Asm) {
-  Asm.OutStreamer->EmitBytes(Str);
+  Asm.OutStreamer->emitBytes(Str);
   Asm.emitInt8(0);
 }
 
