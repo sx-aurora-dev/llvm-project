@@ -1150,10 +1150,10 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG, VVPExpansion
   MVT ChainVT = Op.getNode()->getSimpleValueType(1);
 
   // FIXME VLD does not support masking
-  SDValue TrueMask = CreateConstMask(dl, DataVT.getVectorNumElements(), DAG, true);
+  // SDValue TrueMask = CreateConstMask(dl, DataVT.getVectorNumElements(), DAG, true);
 
   auto load = DAG.getNode(VEISD::VVP_LOAD, dl, {DataVT, ChainVT},
-                          {Chain, BasePtr, TrueMask, OpVectorLength});
+                          {Chain, BasePtr, Mask, OpVectorLength});
 
   if (!PassThru || PassThru.isUndef()) {
     return load;
