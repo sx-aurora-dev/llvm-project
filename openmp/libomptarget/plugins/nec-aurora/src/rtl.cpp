@@ -438,7 +438,6 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
   }
 
   for (int32_t i = 0; i < NumArgs; ++i) {
-    // TargetArgs.arguments[i] = ((intptr_t)(Args[i]));
     veo_args_set_u64(TargetArgs, i, (intptr_t)Args[i]);
   }
 
