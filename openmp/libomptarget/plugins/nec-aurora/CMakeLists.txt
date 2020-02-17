@@ -12,9 +12,9 @@ if(${LIBOMPTARGET_DEP_VEO_FOUND})
                       ${LIBOMPTARGET_DEP_VEOSINFO_LIBRARIES}
                       ${additional_libs})
 
-  set(tmachine_name "sx-aurora")
-  set(tmachine_libname "sx-aurora")
-  set(tmachine_triple "ve-nec-linux-unknown")
+  set(tmachine_name "ve")
+  set(tmachine_libname "ve")
+  set(tmachine_triple "ve-unknown-linux-unknown")
   set(elf_machine_id 251)
 
   include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
