@@ -1,4 +1,5 @@
-; RUN: llc < %s --exception-model=sjlj -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s --exception-model=sjlj -mtriple=x86_64-unknown-unknown --print-after=sjljehprepare |& FileCheck --check-prefix=CHECK-X86 %s
+; RUN: llc < %s --exception-model=sjlj -mtriple=ve-unknown-unknown  --print-after=sjljehprepare |& FileCheck --check-prefix=CHECK-VE %s
 
 $_ZTS10SomeExcept = comdat any
 
@@ -10,6 +11,18 @@ $_ZTI10SomeExcept = comdat any
 @_ZTI10SomeExcept = linkonce_odr dso_local constant { i8*, i8*, i8* } { i8* bitcast (i8** getelementptr inbounds (i8*, i8** @_ZTVN10__cxxabiv120__si_class_type_infoE, i64 2) to i8*), i8* getelementptr inbounds ([13 x i8], [13 x i8]* @_ZTS10SomeExcept, i32 0, i32 0), i8* bitcast (i8** @_ZTISt9exception to i8*) }, comdat, align 8
 
 define dso_local i32 @foo(i32 %arg) local_unnamed_addr personality i8* bitcast (i32 (...)* @__gxx_personality_sj0 to i8*) {
+; CHECK-VE: *** IR Dump After SJLJ Exception Handling preparation ***
+; CHECK-VE-NEXT: define dso_local i32 @foo(i32 %arg) local_unnamed_addr personality i8* bitcast (i32 (...)* @__gxx_personality_sj0 to i8*) {
+; CHECK-VE-NEXT: entry:
+; CHECK-VE-NEXT:   %fn_context = alloca { i8*, i64, [4 x i64], i8*, i8*, [5 x i8*] }, align 8
+; CHECK-VE-NEXT:   %arg.tmp = select i1 true, i32 %arg, i32 undef
+; CHECK-VE-NEXT:   %pers_fn_gep = getelementptr { i8*, i64, [4 x i64], i8*, i8*, [5 x i8*] }, { i8*, i64, [4 x i64], i8*, i8*, [5 x i8*] }* %fn_context, i32 0, i32 3
+; CHECK-X86: *** IR Dump After SJLJ Exception Handling preparation ***
+; CHECK-X86-NEXT: define dso_local i32 @foo(i32 %arg) local_unnamed_addr personality i8* bitcast (i32 (...)* @__gxx_personality_sj0 to i8*) {
+; CHECK-X86-NEXT: entry:
+; CHECK-X86-NEXT:   %fn_context = alloca { i8*, i32, [4 x i32], i8*, i8*, [5 x i8*] }, align 8
+; CHECK-X86-NEXT:   %arg.tmp = select i1 true, i32 %arg, i32 undef
+; CHECK-X86-NEXT:   %pers_fn_gep = getelementptr { i8*, i32, [4 x i32], i8*, i8*, [5 x i8*] }, { i8*, i32, [4 x i32], i8*, i8*, [5 x i8*] }* %fn_context, i32 0, i32 3
 entry:
   invoke void @errorbar()
           to label %join unwind label %handle
