@@ -35,6 +35,16 @@ def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 2,  [SDTCi
 def vec_popcount    : SDNode<"VEISD::VEC_POPCOUNT",  SDTypeProfile<1, 2,  [SDTCisInt<0>, SDTCisVec<1>, SDTCisInt<2>]>>;
 def register        : SDNode<"ISD::Register",        SDTypeProfile<1, 0,  []>, [], "RegisterSDNode">;
 
+///// packed mode support /////
+// unpack the v256i32 part of this vector
+def vec_unpack_lo   : SDNode<"VEISD::VEC_UNPACK_LO", SDTypeProfile<1, 1,  [SDTCisVec<0>, SDTCisVec<1>]>>;
+// unpack the v256f32 part of this vector
+def vec_unpack_hi   : SDNode<"VEISD::VEC_UNPACK_LO", SDTypeProfile<1, 1,  [SDTCisVec<0>, SDTCisVec<1>]>>;
+// re-pack v256i32, v256f32 back into tone v512.32
+def vec_pack        : SDNode<"VEISD::VEC_PACK", SDTypeProfile<1, 2,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<1,2>]>>;
+// exchange the odd-even pairs in a v512.32
+def vec_swap        : SDNode<"VEISD::VEC_SWAP", SDTypeProfile<1, 1,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0,1>]>>;
+
 // replicate lower 32bit to upper 32bit (f32 scalar replication)
 def repl_f32        : SDNode<"VEISD::REPL_F32",  SDTypeProfile<1, 1,  [SDTCisInt<0>, SDTCisFP<1>]>>;
 // replicate upper 32bit to lower 32 bit (i32 scalar replication)

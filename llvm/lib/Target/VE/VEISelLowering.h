@@ -62,10 +62,17 @@ enum NodeType : unsigned {
   GLOBAL_BASE_REG, // Global base reg for PIC.
   FLUSHW,          // FLUSH register windows to stack.
 
+  // Packed mode support
+  VEC_UNPACK_LO, // upnack the lo (v256i32) slice of a packed v512.32
+  VEC_UNPACK_HI, // upnack the hi (v256f32) slice of a packed v512.32
+  VEC_PACK,      // pack a lo and a hi vector backinto one v512.32 vector
+  VEC_SWAP, // exchange the odd-even positions (v256i32 <> v256f32) or (v512.32
+            // <> v521.32)
+
   VEC_BROADCAST, // 0: the value, 1: the vector length (no mask)
   VEC_SEQ,       // 1: the vector length (no mask)
 
-  VEC_VMV,       // custom lowering for vp_vshift
+  VEC_VMV, // custom lowering for vp_vshift
 
   //// Horizontal operations
   VEC_REDUCE_ANY,
@@ -80,7 +87,7 @@ enum NodeType : unsigned {
   REPL_F32,
   REPL_I32,
 
-  // Internal VVP nodes
+// Internal VVP nodes
 #define ADD_VVP_OP(VVP_NAME) VVP_NAME ,
  #include "VVPNodes.inc"
 
@@ -219,9 +226,9 @@ public:
   SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
 
   // Custom Operations
-  SDValue CreateConstMask(SDLoc DL, unsigned NumElements, SelectionDAG &DAG, bool IsTrue=true) const;
-  SDValue CreateBroadcast(SDLoc dl, EVT ResTy, SDValue ScaValue, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
-  SDValue CreateSeq(SDLoc dl, EVT ResTy, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
+  // SDValue CreateConstMask(SDLoc DL, unsigned NumElements, SelectionDAG &DAG, bool IsTrue=true) const;
+  // SDValue CreateBroadcast(SDLoc dl, EVT ResTy, SDValue ScaValue, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
+  // SDValue CreateSeq(SDLoc dl, EVT ResTy, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
 
 
   // Vector Operations
