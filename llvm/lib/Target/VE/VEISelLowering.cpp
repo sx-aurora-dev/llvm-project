@@ -365,8 +365,8 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
 
 
   ///// Translate to a VVP layer operation (VVP_* or VEC_*) /////
-  bool isBinaryOp = false;
   bool isTernaryOp = false;
+  bool isBinaryOp = false;
   bool isLoadOp = false;
   bool isStoreOp = false;
 
@@ -436,23 +436,43 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   unsigned AdjustedLen = PackedMode ? (OpVectorLength + 1) / 2 : OpVectorLength;
   SDValue LenVal = DAG.getConstant(AdjustedLen, dl, MVT::i32);
 
+  // legalize all operands
+  SmallVector<SDValue, 4> LegalOperands;
+  for (unsigned i = 0 ; i < Op->getNumOperands(); ++i) {
+    LegalOperands.push_back(LegalizeVecOperand(Op->getOperand(i), DAG));
+  }
+
   if (isBinaryOp) {
     assert(VVPOC.hasValue());
     return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
-                       {LegalizeVecOperand(Op->getOperand(0), DAG),
-                        LegalizeVecOperand(Op->getOperand(1), DAG), MaskVal,
-                        LenVal});
+                       {LegalOperands[0], LegalOperands[1], MaskVal, LenVal});
   }
 
   if (isTernaryOp) {
     assert(VVPOC.hasValue());
-    assert((VVPOC.getValue() == VEISD::VVP_FFMA) && "operand swizzle for target!");
-    return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
-                       {LegalizeVecOperand(Op->getOperand(2), DAG),
-                        LegalizeVecOperand(Op->getOperand(0), DAG),
-                        LegalizeVecOperand(Op->getOperand(1), DAG),
-                        MaskVal,
-                        LenVal});
+    switch (VVPOC.getValue()) {
+      case VEISD::VVP_FFMA: {
+        // VE has a swizzled operand order in FMA (compared to LLVM IR and
+        // SDNodes).
+        return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
+                           {LegalOperands[2], LegalOperands[0],
+                            LegalOperands[1], MaskVal, LenVal});
+      }
+      case VEISD::VVP_SETCC: {
+        return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
+                           {LegalOperands[0], LegalOperands[1],
+                            LegalOperands[2], MaskVal, LenVal});
+      }
+      case VEISD::VVP_SELECT: {
+        if (IsMaskType(Op.getValueType()))
+          return LowerVSELECT(Op, DAG);
+        return DAG.getNode(
+            VVPOC.getValue(), dl, ResVecTy,
+            {LegalOperands[0], LegalOperands[1], LegalOperands[2], LenVal});
+      }
+      default:
+        llvm_unreachable("Unexpected ternary operator!");
+    }
   }
 
   if (isLoadOp) {
@@ -508,9 +528,15 @@ SDValue VETargetLowering::WidenVVPOperation(SDValue Op, SelectionDAG &DAG, VVPEx
 
     unsigned VectorWidth = (OpVectorLength > StandardVectorWidth) ? PackedWidth : StandardVectorWidth;
 
-    // Decide on a new result type
-    NewResultType =
-        MVT::getVectorVT(OpVecTy.getVectorElementType().getSimpleVT(), VectorWidth);
+    // result type fixup for SETCC
+    if (Op.getOpcode() == VEISD::VVP_SETCC) {
+      // VVP_SETCC has to return vXi1 
+      NewResultType = MVT::getVectorVT(MVT::i1, VectorWidth);
+    } else {
+      // Otw, simply widen the result vector
+      NewResultType =
+          MVT::getVectorVT(OpVecTy.getVectorElementType().getSimpleVT(), VectorWidth);
+    }
   } else {
     // Simply go for the next requested type
     NewResultType = getTypeToTransformTo(*DAG.getContext(), Op.getValueType());
@@ -532,6 +558,8 @@ SDValue VETargetLowering::WidenVVPOperation(SDValue Op, SelectionDAG &DAG, VVPEx
   return NewN;
 }
 
+#if 0
+// TODO DCE
 SDValue VETargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
 
@@ -551,6 +579,7 @@ SDValue VETargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
   return DAG.getNode(ISD::SETCC, dl, MVT::v256i1, Op.getOperand(0),
                      Op.getOperand(1), Op.getOperand(2));
 }
+#endif
 
 SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
                                                 SelectionDAG &DAG,
@@ -3287,9 +3316,8 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerMGATHER_MSCATTER(Op, DAG, VVPExpansionMode::ToNativeWidth, None);
 
   // modify the return type of SETCC on vectors to v256i1
-  case ISD::SETCC: return LowerSETCC(Op, DAG);
+  // case ISD::SETCC: return LowerSETCC(Op, DAG);
   case ISD::SELECT_CC: return LowerSELECT_CC(Op, DAG);
-  case ISD::VSELECT: return LowerVSELECT(Op, DAG);
 
   case ISD::TRUNCATE: return LowerTRUNCATE(Op, DAG);
 

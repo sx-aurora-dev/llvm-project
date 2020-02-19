@@ -10694,18 +10694,18 @@ def pvfmkaf_Ml : Pseudo<(outs VM512:$vmx), (ins I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMK asm=vfmk.l. intrisic=vfmkl_mvsl
-def vfmkl_mvIl : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
-       "vfmk.l. $vmx,$vz,$N">
+// inst=VFMK asm=vfmk.l.${cf} intrisic=vfmk_mvCl
+def vfmk_mvCl : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "vfmk.l.${cf} $vmx,$vz">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMK asm=vfmk.l. intrisic=vfmkl_mvsml
-def vfmkl_mvIml : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, VM:$vm, I32:$vl),
-       "vfmk.l. $vmx,$vz,$N,$vm">
+// inst=VFMK asm=vfmk.l.${cf} intrisic=vfmk_mvCml
+def vfmk_mvCml : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
+       "vfmk.l.${cf} $vmx,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -10964,18 +10964,18 @@ def vfmkllenan_mvml : RV<0xb4, (outs VM:$vmx), (ins V64:$vz, VM:$vm, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMS asm=vfmk.w. intrisic=vfmkw_mvsl
-def vfmkw_mvIl : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
-       "vfmk.w. $vmx,$vz,$N">
+// inst=VFMS asm=vfmk.w.${cf} intrisic=vfmk_mvCl
+def vfmk_mvCl : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "vfmk.w.${cf} $vmx,$vz">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMS asm=vfmk.w. intrisic=vfmkw_mvsml
-def vfmkw_mvIml : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, VM:$vm, I32:$vl),
-       "vfmk.w. $vmx,$vz,$N,$vm">
+// inst=VFMS asm=vfmk.w.${cf} intrisic=vfmk_mvCml
+def vfmk_mvCml : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
+       "vfmk.w.${cf} $vmx,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -11234,36 +11234,36 @@ def vfmkwlenan_mvml : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, VM:$vm, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMS asm=pvfmk.w.lo. intrisic=pvfmkwlo_mvsl
-def pvfmkwlo_mvIl : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
-       "pvfmk.w.lo. $vmx,$vz,$N">
+// inst=VFMS asm=pvfmk.w.lo.${cf} intrisic=pvfmkwl_mvCl
+def pvfmkwl_mvCl : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "pvfmk.w.lo.${cf} $vmx,$vz">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMS asm=pvfmk.w.up. intrisic=pvfmkwup_mvsl
-def pvfmkwup_mvIl : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
-       "pvfmk.w.up. $vmx,$vz,$N">
+// inst=VFMS asm=pvfmk.w.up.${cf} intrisic=pvfmkwu_mvCl
+def pvfmkwu_mvCl : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "pvfmk.w.up.${cf} $vmx,$vz">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMS asm=pvfmk.w.lo. intrisic=pvfmkwlo_mvsml
-def pvfmkwlo_mvIml : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, VM:$vm, I32:$vl),
-       "pvfmk.w.lo. $vmx,$vz,$N,$vm">
+// inst=VFMS asm=pvfmk.w.lo.${cf} intrisic=pvfmkwl_mvCml
+def pvfmkwl_mvCml : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
+       "pvfmk.w.lo.${cf} $vmx,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMS asm=pvfmk.w.up. intrisic=pvfmkwup_mvsml
-def pvfmkwup_mvIml : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, VM:$vm, I32:$vl),
-       "pvfmk.w.up. $vmx,$vz,$N,$vm">
+// inst=VFMS asm=pvfmk.w.up.${cf} intrisic=pvfmkwu_mvCml
+def pvfmkwu_mvCml : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
+       "pvfmk.w.up.${cf} $vmx,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -11774,18 +11774,18 @@ def pvfmkwuplenan_mvml : RV<0xb5, (outs VM:$vmx), (ins V64:$vz, VM:$vm, I32:$vl)
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMS asm=pvfmk.w. intrisic=pvfmkw_Mvsl
-def pvfmkw_MvIl : Pseudo<(outs VM512:$vmx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
-       "# pvfmk.w. $vmx,$vz,$N">
+// inst=VFMS asm=pvfmk.w.${cf} intrisic=pvfmk_MvCl
+def pvfmk_MvCl : Pseudo<(outs VM512:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "# pvfmk.w.${cf} $vmx,$vz">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMS asm=pvfmk.w. intrisic=pvfmkw_MvsMl
-def pvfmkw_MvIMl : Pseudo<(outs VM512:$vmx), (ins V64:$vz, simm7Op64:$N, VM512:$vm, I32:$vl),
-       "# pvfmk.w. $vmx,$vz,$N,$vm">
+// inst=VFMS asm=pvfmk.w.${cf} intrisic=pvfmk_MvCMl
+def pvfmk_MvCMl : Pseudo<(outs VM512:$vmx), (ins V64:$vz, CCOp:$cf, VM512:$vm, I32:$vl),
+       "# pvfmk.w.${cf} $vmx,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -12044,18 +12044,18 @@ def pvfmkwlenan_MvMl : Pseudo<(outs VM512:$vmx), (ins V64:$vz, VM512:$vm, I32:$v
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMF asm=vfmk.d. intrisic=vfmkd_mvsl
-def vfmkd_mvIl : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
-       "vfmk.d. $vmx,$vz,$N">
+// inst=VFMF asm=vfmk.d.${cf} intrisic=vfmk_mvCl
+def vfmk_mvCl : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "vfmk.d.${cf} $vmx,$vz">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMF asm=vfmk.d. intrisic=vfmkd_mvsml
-def vfmkd_mvIml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, VM:$vm, I32:$vl),
-       "vfmk.d. $vmx,$vz,$N,$vm">
+// inst=VFMF asm=vfmk.d.${cf} intrisic=vfmk_mvCml
+def vfmk_mvCml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
+       "vfmk.d.${cf} $vmx,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -12314,18 +12314,18 @@ def vfmkdlenan_mvml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, VM:$vm, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMF asm=vfmk.s. intrisic=vfmks_mvsl
-def vfmks_mvIl : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
-       "vfmk.s. $vmx,$vz,$N">
+// inst=VFMF asm=vfmk.s.${cf} intrisic=vfmk_mvCl
+def vfmk_mvCl : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "vfmk.s.${cf} $vmx,$vz">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMF asm=vfmk.s. intrisic=vfmks_mvsml
-def vfmks_mvIml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, VM:$vm, I32:$vl),
-       "vfmk.s. $vmx,$vz,$N,$vm">
+// inst=VFMF asm=vfmk.s.${cf} intrisic=vfmk_mvCml
+def vfmk_mvCml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
+       "vfmk.s.${cf} $vmx,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -12584,36 +12584,36 @@ def vfmkslenan_mvml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, VM:$vm, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMF asm=pvfmk.s.lo. intrisic=pvfmkslo_mvsl
-def pvfmkslo_mvIl : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
-       "pvfmk.s.lo. $vmx,$vz,$N">
+// inst=VFMF asm=pvfmk.s.lo.${cf} intrisic=pvfmksl_mvCl
+def pvfmksl_mvCl : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "pvfmk.s.lo.${cf} $vmx,$vz">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMF asm=pvfmk.s.up. intrisic=pvfmksup_mvsl
-def pvfmksup_mvIl : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
-       "pvfmk.s.up. $vmx,$vz,$N">
+// inst=VFMF asm=pvfmk.s.up.${cf} intrisic=pvfmksu_mvCl
+def pvfmksu_mvCl : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "pvfmk.s.up.${cf} $vmx,$vz">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMF asm=pvfmk.s.lo. intrisic=pvfmkslo_mvsml
-def pvfmkslo_mvIml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, VM:$vm, I32:$vl),
-       "pvfmk.s.lo. $vmx,$vz,$N,$vm">
+// inst=VFMF asm=pvfmk.s.lo.${cf} intrisic=pvfmksl_mvCml
+def pvfmksl_mvCml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
+       "pvfmk.s.lo.${cf} $vmx,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMF asm=pvfmk.s.up. intrisic=pvfmksup_mvsml
-def pvfmksup_mvIml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, simm7Op64:$N, VM:$vm, I32:$vl),
-       "pvfmk.s.up. $vmx,$vz,$N,$vm">
+// inst=VFMF asm=pvfmk.s.up.${cf} intrisic=pvfmksu_mvCml
+def pvfmksu_mvCml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, CCOp:$cf, VM:$vm, I32:$vl),
+       "pvfmk.s.up.${cf} $vmx,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -13124,18 +13124,18 @@ def pvfmksuplenan_mvml : RV<0xb6, (outs VM:$vmx), (ins V64:$vz, VM:$vm, I32:$vl)
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMF asm=pvfmk.s. intrisic=pvfmks_Mvsl
-def pvfmks_MvIl : Pseudo<(outs VM512:$vmx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
-       "# pvfmk.s. $vmx,$vz,$N">
+// inst=VFMF asm=pvfmk.s.${cf} intrisic=pvfmk_MvCl
+def pvfmk_MvCl : Pseudo<(outs VM512:$vmx), (ins V64:$vz, CCOp:$cf, I32:$vl),
+       "# pvfmk.s.${cf} $vmx,$vz">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
   let DisableEncoding = "$vl";
 }
 
-// inst=VFMF asm=pvfmk.s. intrisic=pvfmks_MvsMl
-def pvfmks_MvIMl : Pseudo<(outs VM512:$vmx), (ins V64:$vz, simm7Op64:$N, VM512:$vm, I32:$vl),
-       "# pvfmk.s. $vmx,$vz,$N,$vm">
+// inst=VFMF asm=pvfmk.s.${cf} intrisic=pvfmk_MvCMl
+def pvfmk_MvCMl : Pseudo<(outs VM512:$vmx), (ins V64:$vz, CCOp:$cf, VM512:$vm, I32:$vl),
+       "# pvfmk.s.${cf} $vmx,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;

@@ -1,39 +1,51 @@
 ///// V(E) - VP internal nodes
 // fp node types
+class IsVLVT<int OpIdx> : SDTCisVT<OpIdx,i32>;
+
 def SDTFPBinOpVVP : SDTypeProfile<1, 4, [   // vvp_fadd, etc.
-  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisFP<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 3>, SDTCisInt<4>
+  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisFP<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
 ]>;
 
 def SDTFPTernaryOpVVP : SDTypeProfile<1, 5, [  // vvp_ffma
-  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>, SDTCisFP<0>, SDTCisInt<4>, SDTCisSameNumEltsAs<0, 4>, SDTCisInt<5>
+  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisSameAs<0, 3>, SDTCisFP<0>, SDTCisInt<4>, SDTCisSameNumEltsAs<0, 4>, IsVLVT<5>
 ]>;
 
 // int node types
 def SDTIntBinOpVVP : SDTypeProfile<1, 4, [     // vp_add, vp_and, etc.
-  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisInt<4>, SDTCisSameNumEltsAs<0, 3>
+  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
 ]>;
 
 def SDTIntShiftOpVVP : SDTypeProfile<1, 4, [   // shl, sra, srl
-  SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisInt<2>, SDTCisInt<4>, SDTCisSameNumEltsAs<0, 3>
+  SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisInt<2>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
 ]>;
 
 // load store
 def SDTLoadVVP : SDTypeProfile<1, 3, [       // vvp load
-  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisSameNumEltsAs<0, 2>, SDTCisInt<3> 
+  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
 ]>;
 
 def SDTStoreVVP: SDTypeProfile<0, 4, [       // vvp store
-  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<0, 2>, SDTCisInt<3>
+  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
 ]>;
 
 // scatter (Value, PtrVec, Mask, Vlen)
 def SDTScatterVVP: SDTypeProfile<0, 4, [     // vvp scatter
-  SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<0, 2>, SDTCisInt<3>
+  SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
 ]>;
 
 // gather (PtrVec, Mask, Vlen)
 def SDTGatherVVP: SDTypeProfile<1, 3, [     // vvp gather
-  SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0, 2>, SDTCisInt<3> 
+  SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3> 
+]>;
+
+// select (SelMask, OnTrue, OnFalse, OpMask, VL)
+def SDTSelectVVP : SDTypeProfile<1, 4, [       // vp_select
+  SDTCisVec<0>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisSameAs<2, 3>, IsVLVT<4>
+]>;
+
+// setcc (lhs, rhs, cc, mask, vl)
+def SDTSetCCVVP : SDTypeProfile<1, 5, [        // vp_setcc
+  SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameAs<1, 2>, SDTCisVT<3, OtherVT>, SDTCisInt<4>, SDTCisSameNumEltsAs<0, 4>, IsVLVT<5>
 ]>;
 
 // gather scatter
@@ -69,6 +81,12 @@ def vvp_fdiv    : SDNode<"VEISD::VVP_FDIV",  SDTFPBinOpVVP>;     // x / y
 def vvp_fminnum    : SDNode<"VEISD::VVP_FMINNUM",  SDTFPBinOpVVP>;     // min(x, y)
 def vvp_fmaxnum    : SDNode<"VEISD::VVP_FMAXNUM",  SDTFPBinOpVVP>;     // max(x, y)
 def vvp_ffma    : SDNode<"VEISD::VVP_FFMA",  SDTFPTernaryOpVVP>; // x + (y*z)
+
+// select // select(SelM,OnT,OnF,VL) = SelM[lane] ? OnT[lane] : OnF[lane] // (if lane < VL the out lane is preserved...)
+def vvp_select : SDNode<"VEISD::VVP_SELECT", SDTSelectVVP>;      
+
+// setcc (lhs, rhs, cc, mask, vl)
+def vvp_setcc  : SDNode<"VEISD::VVP_SETCC", SDTSetCCVVP>;      
 
 class vvp_commutative<SDNode RootOp> :
   PatFrags<(ops node:$lhs, node:$rhs, node:$mask, node:$vlen),
