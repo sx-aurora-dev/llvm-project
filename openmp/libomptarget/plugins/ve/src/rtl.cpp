@@ -310,7 +310,6 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
     struct veo_thr_ctxt *ctx = veo_context_open(DeviceInfo.ProcHandles[ID]);
 
     if (!ctx) {
-      // TODO: errno does not seem to be set by VEO
       DP("veo_context_open() failed: %s\n", std::strerror(errno));
       return NULL;
     }
