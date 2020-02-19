@@ -159,3 +159,14 @@ def: Pat<(v256i64 (vec_seq i32:$vl)),
          (vseq_vl $vl)>;
 def: Pat<(v256i32 (vec_seq i32:$vl)),
          (pvseqlo_vl $vl)>;
+
+
+// Casts
+def : Pat<(v256i32 (trunc v256i64:$src)),
+          (COPY_TO_REGCLASS $src, V64)>;
+def : Pat<(v256i64 (sext_inreg V64:$src, v256i32)),
+          (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (i32 256)), V64)>;
+def : Pat<(v256i64 (sext v256i32:$src)),
+          (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (i32 256)), V64)>;
+def : Pat<(v256i64 (zext v256i32:$src)),
+          (COPY_TO_REGCLASS (vaddswzx_vsvl (i32 0), $src, (i32 256)), V64)>;
