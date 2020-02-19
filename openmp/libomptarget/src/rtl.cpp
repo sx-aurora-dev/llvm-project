@@ -23,7 +23,7 @@
 
 // List of all plugins that can support offloading.
 static const char *RTLNames[] = {
-    /* Aurora target  */ "libomptarget.rtl.necaurora.so",
+    /* SX-Aurora VE target  */ "libomptarget.rtl.ve.so",
     /* PowerPC target */ "libomptarget.rtl.ppc64.so",
     /* x86_64 target  */ "libomptarget.rtl.x86_64.so",
     /* CUDA target    */ "libomptarget.rtl.cuda.so",
