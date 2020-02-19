@@ -192,11 +192,11 @@ defm : VectorSelect<v256i32, i32>;
 // Comparison (VVP_SETCC)
 // TODO use a multiclass here! multiclass select_cc<ValueType DataVT, SDPatternOperatorI//...
 def : Pat<(v256i1 (vvp_setcc v256i64:$LHS, v256i64:$RHS, CCSIOp:$cond, v256i1:$vm, i32:$vl)),
-                  (vfmkl_mvIml (vcmpul_vvvl $LHS, $RHS, $vl), (icond2cc $cond), $vm, $vl)>;
+                  (vfmkl_mvCml (vcmpul_vvvl $LHS, $RHS, $vl), (icond2cc $cond), $vm, $vl)>;
 def : Pat<(v256i1 (vvp_setcc v256i64:$LHS, v256i64:$RHS, CCUIOp:$cond, v256i1:$vm, i32:$vl)),
-                  (vfmkl_mvIml (vcmpsl_vvvl $LHS, $RHS, $vl), (icond2cc $cond), $vm, $vl)>;
+                  (vfmkl_mvCml (vcmpsl_vvvl $LHS, $RHS, $vl), (icond2cc $cond), $vm, $vl)>;
 def : Pat<(v256i1 (vvp_setcc v256f64:$LHS, v256f64:$RHS, cond:$cond, v256i1:$vm, i32:$vl)),
-                  (vfmkl_mvIml (vfcmpd_vvvl $LHS, $RHS, $vl), (fcond2cc $cond), $vm, $vl)>;
+                  (vfmkl_mvCml (vfcmpd_vvvl $LHS, $RHS, $vl), (fcond2cc $cond), $vm, $vl)>;
 
 // Integer arithmetic (512 elements)
 defm : VectorBinaryArith<c_vv_add, v512i32, i64, v512i1, "pvaddu", "M">; 
