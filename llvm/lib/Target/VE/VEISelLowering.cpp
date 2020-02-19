@@ -2012,7 +2012,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 #include "VVPNodes.inc"
 
       // supported calculations (FIXME not yet lowered to VVP_* nodes)
-      setOperationAction(ISD::FNEG, VT, Legal);
+      setOperationAction(ISD::FNEG, VT, Expand);
       setOperationAction(ISD::MULHS, VT, Expand);
       setOperationAction(ISD::MULHU, VT, Expand);
 
