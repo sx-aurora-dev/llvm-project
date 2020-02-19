@@ -10,7 +10,7 @@ def stripCF(text):
     StartPos = text.find("$")
     EndPos = text.find("}")
     if StartPos >= 0:
-        return text[0:StartPos-1] + text[EndPos+1:]
+        return text[0:StartPos] + text[EndPos+1:]
     return text
 
 class Type:
