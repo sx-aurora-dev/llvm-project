@@ -35,6 +35,11 @@ def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 2,  [SDTCi
 def vec_popcount    : SDNode<"VEISD::VEC_POPCOUNT",  SDTypeProfile<1, 2,  [SDTCisInt<0>, SDTCisVec<1>, SDTCisInt<2>]>>;
 def register        : SDNode<"ISD::Register",        SDTypeProfile<1, 0,  []>, [], "RegisterSDNode">;
 
+///// mask support /////
+def vm_extract     : SDNode<"VEISD::VM_EXTRACT",  SDTypeProfile<1, 2,    [SDTCisVT<0,i64>, SDTCisVec<1>, SDTCisVT<2,i64>]>>;
+def vm_insert      : SDNode<"VEISD::VM_INSERT",   SDTypeProfile<1, 3,    [SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0,1>, SDTCisVT<2,i64>, SDTCisVT<3,i64>]>>;
+
+
 ///// packed mode support /////
 // unpack the v256i32 part of this vector
 def vec_unpack_lo   : SDNode<"VEISD::VEC_UNPACK_LO", SDTypeProfile<1, 1,  [SDTCisVec<0>, SDTCisVec<1>]>>;

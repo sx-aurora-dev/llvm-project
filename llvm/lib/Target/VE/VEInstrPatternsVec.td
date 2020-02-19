@@ -17,6 +17,26 @@ def : Pat<(v512i32 (load I64:$addr)),
 def : Pat<(v512f32 (load I64:$addr)),
           (v512f32 (vld_vIsl 8, $addr, (LEA32zzi 256)))>;
 
+// Mask Insert & Extract
+multiclass insert_extract_mask<ValueType MaskVT, string MaskToken> {
+  // extract at imm
+  def : Pat<(i64 (vm_extract MaskVT:$vm, uimm7:$idx)),
+                 (!cast<Instruction>("svm_s"#MaskToken#"I") MaskVT:$vm, uimm7:$idx)>;
+  // extract at sx
+  def : Pat<(i64 (vm_extract MaskVT:$vm, i64:$idx)),
+                 (!cast<Instruction>("svm_s"#MaskToken#"s") MaskVT:$vm, i64:$idx)>;
+ 
+  // insert at imm
+  def : Pat<(MaskVT (vm_insert MaskVT:$vm, uimm7:$idx, i64:$sy)),
+                    (!cast<Instruction>("lvm_"#MaskToken#MaskToken#"Is") MaskVT:$vm, uimm7:$idx, i64:$sy)>;
+  // insert at sx
+  def : Pat<(MaskVT (vm_insert MaskVT:$vm, i64:$idx, i64:$sy)),
+                    (!cast<Instruction>("lvm_"#MaskToken#MaskToken#"ss") MaskVT:$vm, i64:$idx, i64:$sy)>;
+}
+
+defm: insert_extract_mask<v256i1, "m">;
+defm: insert_extract_mask<v512i1, "M">;
+
 // Mask Load & Store
 
 def : Pat<(v256i1 (load I64:$addr)),

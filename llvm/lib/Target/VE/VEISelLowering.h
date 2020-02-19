@@ -62,6 +62,10 @@ enum NodeType : unsigned {
   GLOBAL_BASE_REG, // Global base reg for PIC.
   FLUSHW,          // FLUSH register windows to stack.
 
+  // Mask support
+  VM_EXTRACT, // VM_EXTRACT(v256i1:mask, i32:i) Extract a SX register from a mask register
+  VM_INSERT,  // VM_INSERT(v256i1:mask, i32:i, i64:val) Insert a SX register into a mask register
+
   // Packed mode support
   VEC_UNPACK_LO, // upnack the lo (v256i32) slice of a packed v512.32
   VEC_UNPACK_HI, // upnack the hi (v256f32) slice of a packed v512.32
@@ -96,9 +100,7 @@ enum NodeType : unsigned {
   /// MCSymbol and TargetBlockAddress.
   Wrapper,
 };
-}
-
-using VecLenOpt = Optional<unsigned>;
+} // namespace VEISD
 
 enum class VVPExpansionMode : int8_t {
   ToNextWidth = 0,
@@ -107,6 +109,9 @@ enum class VVPExpansionMode : int8_t {
   ToNativeWidth = 1
   // for use in LowerOperation -> directly expand to the expanded width
 };
+
+
+using VecLenOpt = Optional<unsigned>;
 
 class VETargetLowering : public TargetLowering {
   const VESubtarget *Subtarget;

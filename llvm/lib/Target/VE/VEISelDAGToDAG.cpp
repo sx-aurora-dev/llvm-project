@@ -17,6 +17,10 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+
+#define DEBUG_TYPE "ve-dagtodag"
+#include "CustomDAG.h"
+
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -145,6 +149,8 @@ void VEDAGToDAGISel::Select(SDNode *N) {
     if (!BConst)
       break;
     bool BCTrueMask = (BConst->getSExtValue() != 0);
+    if (!BCTrueMask)
+      break;
 
     // Decode the register
     SDValue New;
@@ -157,10 +163,7 @@ void VEDAGToDAGISel::Select(SDNode *N) {
     } else
       break;
 
-    // do we need to negate the node?
-    if (!BCTrueMask)
-      New = CurDAG->getNOT(SDLoc(N), New, New->getSimpleValueType(0));
-
+    // ok replace
     ReplaceNode(N, New.getNode());
     return;
   }
