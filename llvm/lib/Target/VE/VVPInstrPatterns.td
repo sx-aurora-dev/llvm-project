@@ -188,16 +188,37 @@ multiclass VectorSelect<ValueType DataVT, ValueType ScalarVT> {
 defm : VectorSelect<v256f64, f64>;
 defm : VectorSelect<v256i64, i64>;
 defm : VectorSelect<v256i32, i32>;
+defm : VectorSelect<v256f32, f32>;
 
-// Comparison (VVP_SETCC)
-// TODO use a multiclass here! multiclass select_cc<ValueType DataVT, SDPatternOperatorI//...
-def : Pat<(v256i1 (vvp_setcc v256i64:$LHS, v256i64:$RHS, CCSIOp:$cond, v256i1:$vm, i32:$vl)),
-                  (vfmkl_mvCml (vcmpul_vvvl $LHS, $RHS, $vl), (icond2cc $cond), $vm, $vl)>;
-def : Pat<(v256i1 (vvp_setcc v256i64:$LHS, v256i64:$RHS, CCUIOp:$cond, v256i1:$vm, i32:$vl)),
-                  (vfmkl_mvCml (vcmpsl_vvvl $LHS, $RHS, $vl), (icond2cc $cond), $vm, $vl)>;
-def : Pat<(v256i1 (vvp_setcc v256f64:$LHS, v256f64:$RHS, cond:$cond, v256i1:$vm, i32:$vl)),
-                  (vfmkl_mvCml (vfcmpd_vvvl $LHS, $RHS, $vl), (fcond2cc $cond), $vm, $vl)>;
+///// Comparison (VVP_SETCC) /////
 
+multiclass Set_CC<ValueType MaskVT, ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv, string MaskTag="m"> {
+  def : Pat<(MaskVT (vvp_setcc DataVT:$LHS, DataVT:$RHS, CCMatcher:$cond, MaskVT:$vm, i32:$vl)),
+                    (!cast<Instruction>(FmkBaseName#"_"#MaskTag#"vC"#MaskTag#"l") (!cast<Instruction>(CmpBaseName#"_vvvl") $LHS, $RHS, $vl), (CCConv $cond), $vm, $vl)>;
+}
+
+multiclass Set_CC_256<ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv>
+  : Set_CC<v256i1, DataVT, FmkBaseName, CmpBaseName, CCMatcher, CCConv, "m">;
+
+multiclass Set_CC_512<ValueType DataVT, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv>
+  : Set_CC<v512i1, DataVT, "pvfmkw", CmpBaseName, CCMatcher, CCConv, "M">;
+
+// SETCC (256)
+defm : Set_CC_256<v256i64,"vfmkl","vcmpul",CCUIOp,icond2cc>;
+defm : Set_CC_256<v256i64,"vfmkl","vcmpsl",CCSIOp,icond2cc>;
+defm : Set_CC_256<v256f64,"vfmkl","vfcmpd",cond,fcond2cc>;
+
+defm : Set_CC_256<v256i32,"vfmkw","vcmpuw",CCUIOp,icond2cc>;
+defm : Set_CC_256<v256i32,"vfmkw","vcmpswzx",CCSIOp,icond2cc>;
+defm : Set_CC_256<v256f32,"vfmks","vfcmps",cond,fcond2cc>;
+
+// SETCC (packed)
+defm : Set_CC_512<v512i32,"pvcmpu",CCUIOp,icond2cc>;
+defm : Set_CC_512<v512i32,"pvcmps",CCSIOp,icond2cc>;
+defm : Set_CC_512<v512f32,"pvfcmp",cond,fcond2cc>;
+
+
+///// ARITHMETIC /////
 // Integer arithmetic (512 elements)
 defm : VectorBinaryArith<c_vv_add, v512i32, i64, v512i1, "pvaddu", "M">; 
 defm : VectorBinaryArith<vvp_sub, v512i32, i64, v512i1, "pvsubu", "M">;
