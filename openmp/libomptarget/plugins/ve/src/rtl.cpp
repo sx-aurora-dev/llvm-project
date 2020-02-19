@@ -92,8 +92,12 @@ public:
         Entry = {NULL, NULL, 0, 0, 0};
       } else {
         DP("Found symbol %s successfully in target image (addr: %p)\n",
-           SymbolName, (void *)SymbolTargetAddr);
-        Entry = {(void *)SymbolTargetAddr, i->name, i->size, i->flags, 0};
+           SymbolName, reinterpret_cast<void *>(SymbolTargetAddr));
+        Entry = { reinterpret_cast<void *>(SymbolTargetAddr),
+                  i->name,
+                  i->size,
+                  i->flags,
+                  0 };
       }
 
       T.push_back(Entry);
@@ -372,14 +376,15 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
 
   ret = veo_alloc_mem(DeviceInfo.ProcHandles[ID], &addr, Size);
   DP("Allocate target memory: device=%d, target addr=%p, size=%" PRIu64 "\n",
-     ID, (void *)addr, Size);
+     ID, reinterpret_cast<void *>(addr), Size);
   if (ret != 0) {
     DP("veo_alloc_mem(%d, %p, %" PRIu64 ") failed with error code %" PRIu64
        "\n",
-       ID, (void *)addr, Size, ret);
+       ID, reinterpret_cast<void *>(addr), Size, ret);
     return NULL;
   }
-  return (void *)addr;
+
+  return reinterpret_cast<void *>(addr);
 }
 
 // Pass the data content to the target device using the target address.
