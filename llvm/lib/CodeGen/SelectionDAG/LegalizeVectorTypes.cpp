@@ -828,6 +828,7 @@ void DAGTypeLegalizer::SplitVectorResult(SDNode *N, unsigned ResNo) {
   case ISD::UNDEF:        SplitRes_UNDEF(N, Lo, Hi); break;
   case ISD::BITCAST:           SplitVecRes_BITCAST(N, Lo, Hi); break;
   case ISD::BUILD_VECTOR:      SplitVecRes_BUILD_VECTOR(N, Lo, Hi); break;
+  case ISD::SPLAT_VECTOR:      SplitVecRes_SPLAT_VECTOR(N, Lo, Hi); break;
   case ISD::CONCAT_VECTORS:    SplitVecRes_CONCAT_VECTORS(N, Lo, Hi); break;
   case ISD::EXTRACT_SUBVECTOR: SplitVecRes_EXTRACT_SUBVECTOR(N, Lo, Hi); break;
   case ISD::INSERT_SUBVECTOR:  SplitVecRes_INSERT_SUBVECTOR(N, Lo, Hi); break;
@@ -1085,6 +1086,19 @@ void DAGTypeLegalizer::SplitVecRes_BUILD_VECTOR(SDNode *N, SDValue &Lo,
 
   SmallVector<SDValue, 8> HiOps(N->op_begin()+LoNumElts, N->op_end());
   Hi = DAG.getBuildVector(HiVT, dl, HiOps);
+}
+
+void DAGTypeLegalizer::SplitVecRes_SPLAT_VECTOR(SDNode *N, SDValue &Lo,
+                                                SDValue &Hi) {
+  EVT LoVT, HiVT;
+  SDLoc dl(N);
+  std::tie(LoVT, HiVT) = DAG.GetSplitDestVTs(N->getValueType(0));
+  Lo = DAG.getSplatVector(LoVT, dl, N->getOperand(0));
+  if (LoVT == HiVT) {
+    Hi = Lo;
+    return;
+  }
+  Hi = DAG.getSplatVector(HiVT, dl, N->getOperand(0));
 }
 
 void DAGTypeLegalizer::SplitVecRes_CONCAT_VECTORS(SDNode *N, SDValue &Lo,
