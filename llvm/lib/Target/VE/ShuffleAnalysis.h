@@ -124,6 +124,7 @@ static MaskView *requestMaskView(SDNode *N) {
   return nullptr;
 }
 
+
 // matches mask elements
 struct MaskShuffleAnalysis {
   // extract bits form the source register part \p SrcPart of \p SrcMask, select

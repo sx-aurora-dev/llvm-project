@@ -3014,11 +3014,86 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
   return Op;
 }
 
-#if 0
+SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
+                                                  SelectionDAG &DAG) const {
+  assert(Op.getOpcode() == ISD::EXTRACT_VECTOR_ELT && "Unknown opcode!");
+  EVT VT = Op.getOperand(0).getValueType();
+
+  // Special treatements for packed V64 types.
+  if (VT == MVT::v512i32 || VT == MVT::v512f32) {
+    // Example of codes:
+    //   %packed_v = extractelt %vr, %idx / 2
+    //   %v = %packed_v >> (%idx % 2 * 32)
+    //   %res = %v & 0xffffffff
+
+    SDValue Vec = Op.getOperand(0);
+    SDValue Idx = Op.getOperand(1);
+    EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
+    EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
+    EVT f32 = EVT::getFloatingPointVT(32);
+    SDLoc dl(Op);
+    SDValue Result = Op;
+    if (0 /* Idx->isConstant() */) {
+      // FIXME: optimized implementation using constant values
+    } else {
+      SDValue SetEq = DAG.getCondCode(ISD::SETEQ);
+      SDValue ZeroConst = DAG.getConstant(0, dl, i64);
+      SDValue OneConst = DAG.getConstant(1, dl, i64);
+      SDValue ThirtyTwoConst = DAG.getConstant(32, dl, i64);
+      SDValue LowBits = DAG.getConstant(0xFFFFFFFF, dl, i64);
+      SDValue HalfIdx = DAG.getNode(ISD::SRL, dl, i64, {Idx, OneConst});
+      SDValue PackedVal =
+          SDValue(DAG.getMachineNode(VE::lvsl_svI, dl, i64, {Vec, HalfIdx}), 0);
+      SDValue IdxLSB = DAG.getNode(ISD::AND, dl, i64, {Idx, OneConst});
+      SDValue ShiftIdx =
+          DAG.getNode(ISD::SELECT_CC, dl, i64,
+                      {IdxLSB, ZeroConst, ZeroConst, ThirtyTwoConst, SetEq});
+      SDValue ShiftedVal =
+          DAG.getNode(ISD::SRL, dl, i64, {PackedVal, ShiftIdx});
+      SDValue MaskedVal = DAG.getNode(ISD::AND, dl, i64, {ShiftedVal, LowBits});
+      // In v512i32 and v512f32, Both i32 and f32 values are placed from Low32.
+      SDValue SubLow32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
+      Result = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, dl, i32,
+                                          MaskedVal, SubLow32),
+                       0);
+      if (VT == MVT::v512f32) {
+        Result = DAG.getBitcast(f32, Result);
+      }
+    }
+    return Result;
+  }
+
+  // Extraction is legal for other V64 types.
+  return Op;
+}
+
 SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
                                               SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Lowering Shuffle\n");
   SDLoc DL(Op);
+  std::unique_ptr<MaskView> MView(requestMaskView(Op.getNode()));
+
+  const unsigned NumResElems = Op.getValueType().getVectorNumElements();
+
+  // mask to shift + OR expansion
+  if (Op.getValueType() == MVT::v256i1) {
+    // TODO IsMaskType(Op.getValueType())) {
+    MaskShuffleAnalysis MSA(MView.get(), NumResElems);
+    CustomDAG CDAG(DAG, Op);
+    return MSA.synthesize(CDAG);
+  }
+
+#if 0
+  // TODO implement
+  // freeform shuffle expansion
+  VectorShuffleAnalysis VSA(Mask.get(), NumResElems);
+#endif
+
+#if 1
+  // FIXME legacy code path
+// SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
+//                                               SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Lowering Shuffle (legacy code path)\n");
   ShuffleVectorSDNode *ShuffleInstr = cast<ShuffleVectorSDNode>(Op.getNode());
 
   SDValue firstVec = ShuffleInstr->getOperand(0);
@@ -3184,70 +3259,9 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
                                  {firstrotated, secondrotated, Mask, VL}),
               0);
   return returnValue;
-}
+/// }
 #endif
 
-SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
-                                                  SelectionDAG &DAG) const {
-  assert(Op.getOpcode() == ISD::EXTRACT_VECTOR_ELT && "Unknown opcode!");
-  EVT VT = Op.getOperand(0).getValueType();
-
-  // Special treatements for packed V64 types.
-  if (VT == MVT::v512i32 || VT == MVT::v512f32) {
-    // Example of codes:
-    //   %packed_v = extractelt %vr, %idx / 2
-    //   %v = %packed_v >> (%idx % 2 * 32)
-    //   %res = %v & 0xffffffff
-
-    SDValue Vec = Op.getOperand(0);
-    SDValue Idx = Op.getOperand(1);
-    EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
-    EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
-    EVT f32 = EVT::getFloatingPointVT(32);
-    SDLoc dl(Op);
-    SDValue Result = Op;
-    if (0 /* Idx->isConstant() */) {
-      // FIXME: optimized implementation using constant values
-    } else {
-      SDValue SetEq = DAG.getCondCode(ISD::SETEQ);
-      SDValue ZeroConst = DAG.getConstant(0, dl, i64);
-      SDValue OneConst = DAG.getConstant(1, dl, i64);
-      SDValue ThirtyTwoConst = DAG.getConstant(32, dl, i64);
-      SDValue LowBits = DAG.getConstant(0xFFFFFFFF, dl, i64);
-      SDValue HalfIdx = DAG.getNode(ISD::SRL, dl, i64, {Idx, OneConst});
-      SDValue PackedVal =
-          SDValue(DAG.getMachineNode(VE::lvsl_svI, dl, i64, {Vec, HalfIdx}), 0);
-      SDValue IdxLSB = DAG.getNode(ISD::AND, dl, i64, {Idx, OneConst});
-      SDValue ShiftIdx =
-          DAG.getNode(ISD::SELECT_CC, dl, i64,
-                      {IdxLSB, ZeroConst, ZeroConst, ThirtyTwoConst, SetEq});
-      SDValue ShiftedVal =
-          DAG.getNode(ISD::SRL, dl, i64, {PackedVal, ShiftIdx});
-      SDValue MaskedVal = DAG.getNode(ISD::AND, dl, i64, {ShiftedVal, LowBits});
-      // In v512i32 and v512f32, Both i32 and f32 values are placed from Low32.
-      SDValue SubLow32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
-      Result = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, dl, i32,
-                                          MaskedVal, SubLow32),
-                       0);
-      if (VT == MVT::v512f32) {
-        Result = DAG.getBitcast(f32, Result);
-      }
-    }
-    return Result;
-  }
-
-  // Extraction is legal for other V64 types.
-  return Op;
-}
-
-SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
-                                              SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "Lowering Shuffle\n");
-  SDLoc DL(Op);
-  std::unique_ptr<MaskView> Mask(requestMaskView(Op.getNode()));
-  MaskShuffleAnalysis MSA(Mask.get(), Op.getValueType().getVectorNumElements());
-  CustomDAG CDAG(DAG, Op);
-  return MSA.synthesize(CDAG);
 }
 
 SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {

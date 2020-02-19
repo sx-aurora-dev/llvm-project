@@ -404,7 +404,7 @@ EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG& DAG) {
   return DAG.getConstant(Opt.getValue(), DL, MVT::i32);
 }
 
-static bool IsMaskType(MVT Ty) {
+static bool IsMaskType(EVT Ty) {
   if (!Ty.isVector()) return false;
   return Ty.getVectorElementType() == MVT::i1;
 }
