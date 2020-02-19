@@ -65,6 +65,8 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   if (FloatABI == ve::FloatABI::Soft)
     Features.push_back("+soft-float");
 
+#if 0
+  // FIXME re-introduce this flag at some point
   // -mno-vevec is default, unless -mvevec is specified.
   bool VEVec = false;
   if (auto *A = Args.getLastArg(options::OPT_mvevec, options::OPT_mno_vevec)) {
@@ -77,4 +79,5 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   if (!VEVec) {
     Features.push_back("-vec");
   }
+#endif
 }

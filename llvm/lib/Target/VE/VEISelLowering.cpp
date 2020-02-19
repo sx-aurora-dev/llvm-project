@@ -1610,27 +1610,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v4i64, &VE::VMRegClass);
   addRegisterClass(MVT::v8i64, &VE::VMRegClass);
 
-  // if (Subtarget->vectorize()) {
-  //   // We want to use any of vectorization oppotunities in llvm.
-  //   // So, try to use llvm's SIMD style vectorizations here.
-  //   //
-  //   // However, this requires intrinsics with vector mask to use
-  //   // following bitcast in order to convert between v4i64/v8i64 and
-  //   // v256i1/v512i1 respectively since C doesn't have 1 bit data types.
-  //   //
-  //   //   e.g. (i256i1 (bitcast (v4i64 (llvm.ve.vfmkw.mcv ...))))
-  //   //                ^^^^^^^^^^^^^^^ this bitcast is needed
-  //   //
-  //   addRegisterClass(MVT::v4i64, &VE::V64RegClass);
-  //   addRegisterClass(MVT::v8i64, &VE::V64RegClass);
-  // } else {
-  //   // FIXME:
-  //   // llvm-ve uses v4i64/v8i64 for a mask temporally until llvm supports
-  //   // v256i1/v512i1.
-  //   addRegisterClass(MVT::v4i64, &VE::VMRegClass);
-  //   addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
-  // }
-
   /// Scalar Lowering {
 
   /// Load & Store {

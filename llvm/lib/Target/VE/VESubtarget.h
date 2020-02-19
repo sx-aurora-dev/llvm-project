@@ -31,7 +31,6 @@ class StringRef;
 class VESubtarget : public VEGenSubtargetInfo {
   Triple TargetTriple;
   virtual void anchor();
-  bool Vectorize;
   bool PackedMode;
 
   VEInstrInfo InstrInfo;
@@ -57,7 +56,6 @@ public:
 
   bool enableMachineScheduler() const override;
 
-  bool vectorize() const { return Vectorize; }
   bool hasPackedMode() const { return PackedMode; }
 
   /// ParseSubtargetFeatures - Parses features string setting specified

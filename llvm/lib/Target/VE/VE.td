@@ -19,10 +19,6 @@ include "llvm/Target/Target.td"
 // VE Subtarget features.
 //
 
-def FeatureVectorize
-  : SubtargetFeature<"vec", "Vectorize", "true",
-                     "Try to vectorize (experimental)">;
-
 def FeaturePackedMode
   : SubtargetFeature<"packed", "PackedMode", "true",
                      "Enable v512 packed mode (experimental)">;
