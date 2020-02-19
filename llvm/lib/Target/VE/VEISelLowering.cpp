@@ -914,10 +914,8 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
 
     // Fold undef
     case BVKind::AllUndef: {
-        LLVM_DEBUG(dbgs() << "::AllUndef\n");
-      return SDValue(DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL,
-                                        Op.getSimpleValueType()),
-                     0);
+      LLVM_DEBUG(dbgs() << "::AllUndef\n");
+      return DAG.getUNDEF(ResTy);
     }
 
     case BVKind::Broadcast: {
@@ -1007,9 +1005,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
   }
 
   // Expand to LSV //
-  SDValue newVector = SDValue(DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL,
-                                                 Op.getSimpleValueType()),
-                              0);
+  SDValue newVector = DAG.getUNDEF(ResTy);
 
   for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
     auto ElemN = BVN->getOperand(i);

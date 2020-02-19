@@ -50,7 +50,7 @@ public:
     return 64;
   }
 
-  bool enableLoopVectorizer() const { return false; }
+  bool enableLoopVectorizer() const { return true; }
 
   unsigned getMinVectorRegisterBitWidth() const { return 256 * 64; }
 
