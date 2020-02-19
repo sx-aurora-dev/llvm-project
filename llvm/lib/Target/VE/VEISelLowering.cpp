@@ -695,8 +695,13 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
                                                  VVPExpansionMode Mode) const {
   auto SrcVec = Op.getOperand(0);
   auto BaseIdxN = Op.getOperand(1);
+  
+  assert(isa<ConstantSDNode>(BaseIdxN) && "TODO dynamic extract");
 
-  assert((cast<ConstantSDNode>(BaseIdxN)->getSExtValue() == 0) && "TODO: use a shift operation here!");
+  int64_t ShiftVal = cast<ConstantSDNode>(BaseIdxN)->getSExtValue();
+  if (ShiftVal != 0) {
+    abort(); // TODO use shuffle analysis here (still emit NARROW on result)
+  }
 
   // TODO fold the extract_subv + load pattern
   // TODO move this to a separate narrowing pass
@@ -2000,6 +2005,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
       // Custom LOAD/STORE lowering
       setOperationAction(ISD::STORE, VT, Custom);
+      for (MVT OtherVecVT : MVT::vector_valuetypes()) {
+        // Turn FP extload into load/fpextend
+        setLoadExtAction(ISD::EXTLOAD, VT, OtherVecVT, Expand);
+
+        // Turn FP truncstore into trunc + store.
+        setTruncStoreAction(VT, OtherVecVT, Expand);
+      }
 
       setOperationAction(ISD::LOAD, VT, Custom);
 
