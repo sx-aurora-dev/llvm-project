@@ -50,15 +50,15 @@ def : Pat<(v256i64 (vp_select v256i1:$mask, v256i64:$ontrue, v256i64:$onfalse, i
           (vmrg_vvvml $onfalse, $ontrue, $mask, $avl)>;
 
 // TODO auto-generate
-def : Pat<(v256i1 (setcc v256i32:$A, v256i32:$B, cond:$cond)),
-          (vfmkw_mvIl (vcmpuw_vvvvl $A, $B, (v256i32 (IMPLICIT_DEF)), (lea_imm32 256)), (icond2cc $cond), (lea_imm32 256))>;
-def : Pat<(v256i1 (setcc v256i64:$A, v256i64:$B, cond:$cond)),
-          (vfmkl_mvIl (vcmpul_vvvvl $A, $B, (v256i64 (IMPLICIT_DEF)), (lea_imm32 256)), (icond2cc $cond), (lea_imm32 256))>;
+// def : Pat<(v256i1 (setcc v256i32:$A, v256i32:$B, cond:$cond)),
+//           (vfmkw_mvIl (vcmpuw_vvvvl $A, $B, (v256i32 (IMPLICIT_DEF)), (lea_imm32 256)), (icond2cc $cond), (lea_imm32 256))>;
+// def : Pat<(v256i1 (setcc v256i64:$A, v256i64:$B, cond:$cond)),
+//           (vfmkl_mvIl (vcmpul_vvvvl $A, $B, (v256i64 (IMPLICIT_DEF)), (lea_imm32 256)), (icond2cc $cond), (lea_imm32 256))>;
 
-def : Pat<(v256i1 (vp_setcc v256i32:$A, v256i32:$B, cond:$cond, v256i1:$mask, i32:$avl)),
-          (vfmkw_mvIml (vcmpuw_vvvmvl $A, $B, $mask, (v256i32 (IMPLICIT_DEF)), $avl), (icond2cc $cond), $mask, $avl)>;
-def : Pat<(v256i1 (vp_setcc v256i64:$A, v256i64:$B, cond:$cond, v256i1:$mask, i32:$avl)),
-          (vfmkl_mvIml (vcmpul_vvvmvl $A, $B, $mask, (v256i64 (IMPLICIT_DEF)), $avl), (icond2cc $cond), $mask, $avl)>;
+// def : Pat<(v256i1 (vp_setcc v256i32:$A, v256i32:$B, cond:$cond, v256i1:$mask, i32:$avl)),
+//           (vfmkw_mvIml (vcmpuw_vvvmvl $A, $B, $mask, (v256i32 (IMPLICIT_DEF)), $avl), (icond2cc $cond), $mask, $avl)>;
+// def : Pat<(v256i1 (vp_setcc v256i64:$A, v256i64:$B, cond:$cond, v256i1:$mask, i32:$avl)),
+//           (vfmkl_mvIml (vcmpul_vvvmvl $A, $B, $mask, (v256i64 (IMPLICIT_DEF)), $avl), (icond2cc $cond), $mask, $avl)>;
 
 
 // Reductions
