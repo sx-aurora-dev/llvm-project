@@ -218,6 +218,9 @@ defm : Set_CC_512<v512i32,"pvcmps",CCSIOp,icond2cc>;
 defm : Set_CC_512<v512f32,"pvfcmp",cond,fcond2cc>;
 
 ///// Conversion /////
+def vcvtsl_vvmvl
+  : OutPatFrag<(outs node:$vx, node:$vm, node:$vpass, node:$vl),
+               (vcvtsd_vvmvl (vcvtdl_vvmvl $vx, $vm, $vpass, $vl), $vm, $vpass, $vl)>;
 
 // x_to_y
 multiclass conv_x_to_y<SDPatternOperator MatchOp, ValueType MaskVT, ValueType DestVT, ValueType SrcVT, string ConvBaseName, string MaskToken> {
@@ -236,9 +239,9 @@ defm: both_x_to_y<v256i1, v256f32, "s", v256i32, "w", "zx">;
 defm: both_x_to_y<v256i1, v256f64, "d", v256i64, "l">;
 defm: both_x_to_y<v512i1, v512f32, "s", v512i32, "w", "", "pvcvt", "M">;
 
-// TODO...
-// i64 <> f32
-// f32 <> i64
+// t32 <> t64
+defm: both_x_to_y<v256i1, v256f32, "s", v256i64, "l">;
+defm: both_x_to_y<v256i1, v256f64, "d", v256i32, "w", "zx">;
 
 // fpext, fpround (256 only)
 defm : conv_x_to_y<vvp_fpround, v256i1, v256f32, v256f64, "vcvtsd", "m">;
