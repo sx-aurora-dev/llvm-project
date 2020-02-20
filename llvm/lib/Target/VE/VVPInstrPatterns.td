@@ -218,38 +218,24 @@ defm : Set_CC_512<v512i32,"pvcmps",CCSIOp,icond2cc>;
 defm : Set_CC_512<v512f32,"pvfcmp",cond,fcond2cc>;
 
 ///// Conversion /////
+// Pseudo instructions for i64 <> fp32 conversion
 def vcvtls_vvmvl : Instruction,
 PseudoInstExpansion<(vcvtldrz_vvmvl (vcvtds_vvmvl v256f32:$vy, v256i1:$vm, (v256i64 (IMPLICIT_DEF)), i32:$vl), $vm, $vpt, $vl)> {
-  let DecoderNamespace="VE";
+  let Namespace="VE";
   let isPseudo = 1;
-  // let isCodeGenOnly = 1;
-  // let hasSideEffects = 0;
   dag OutOperandList = (outs V64:$vx);
   dag InOperandList = (ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl);
-  // let DisableEncoding = "$vx,$vy,$vm,$vpt,$vl";
   let AsmString   = ";";
 }
 
 def vcvtsl_vvmvl : Instruction,
 PseudoInstExpansion<(vcvtsd_vvmvl (vcvtdl_vvmvl v256i64:$vy, v256i1:$vm, (v256i64 (IMPLICIT_DEF)), i32:$vl), $vm, $vpt, $vl)> {
-  let DecoderNamespace="VE";
+  let Namespace="VE";
   let isPseudo = 1;
-  // let isCodeGenOnly = 1;
-  // let hasSideEffects = 0;
   dag OutOperandList = (outs V64:$vx);
   dag InOperandList = (ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl);
-  // let DisableEncoding = "$vx,$vy,$vm,$vpt,$vl";
   let AsmString   = ";";
 }
-
-// multiclass apply<string Name> {
-//   if !isa<Instruction>(Name) then {
-//     def !cast<Instruction>(Name);
-//   }
-//   if !isa<SDPatternOperator>(Name) then {
-//     def !cast<SDPatternOperator>(Name);
-//   }
-// }
 
 // x_to_y
 multiclass conv_x_to_y<SDPatternOperator MatchOp, ValueType MaskVT, ValueType DestVT, ValueType SrcVT, string ConvBaseName, string MaskToken> {
