@@ -10374,6 +10374,16 @@ def vcvtdw_vvvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VFLT asm=vcvt.d.w intrisic=vcvtdw_vvmvl
+def vcvtdw_vvmvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+       "vcvt.d.w $vx,$vy,$vm">
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VFLT asm=vcvt.s.w intrisic=vcvtsw_vvl
 def vcvtsw_vvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
        "vcvt.s.w $vx,$vy">
@@ -10386,6 +10396,16 @@ def vcvtsw_vvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
 // inst=VFLT asm=vcvt.s.w intrisic=vcvtsw_vvvl
 def vcvtsw_vvvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vcvt.s.w $vx,$vy">
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VFLT asm=vcvt.s.w intrisic=vcvtsw_vvmvl
+def vcvtsw_vvmvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+       "vcvt.s.w $vx,$vy,$vm">
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
@@ -10412,6 +10432,16 @@ def pvcvtsw_vvvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VFLT asm=pvcvt.s.w intrisic=pvcvtsw_vvMvl
+def pvcvtsw_vvMvl : RV<0xf8, (outs V64:$vx), (ins V64:$vy, VM512:$vm, V64:$vd, I32:$vl),
+       "pvcvt.s.w $vx,$vy,$vm">
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VFLTX asm=vcvt.d.l intrisic=vcvtdl_vvl
 def vcvtdl_vvl : RV<0xb8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
        "vcvt.d.l $vx,$vy">
@@ -10424,6 +10454,16 @@ def vcvtdl_vvl : RV<0xb8, (outs V64:$vx), (ins V64:$vy, I32:$vl),
 // inst=VFLTX asm=vcvt.d.l intrisic=vcvtdl_vvvl
 def vcvtdl_vvvl : RV<0xb8, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vcvt.d.l $vx,$vy">
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VFLTX asm=vcvt.d.l intrisic=vcvtdl_vvmvl
+def vcvtdl_vvmvl : RV<0xb8, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+       "vcvt.d.l $vx,$vy,$vm">
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";

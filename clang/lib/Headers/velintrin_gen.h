@@ -862,12 +862,16 @@
 #define _vel_vcvtldrz_vvmvl __builtin_ve_vl_vcvtldrz_vvmvl
 #define _vel_vcvtdw_vvl __builtin_ve_vl_vcvtdw_vvl
 #define _vel_vcvtdw_vvvl __builtin_ve_vl_vcvtdw_vvvl
+#define _vel_vcvtdw_vvmvl __builtin_ve_vl_vcvtdw_vvmvl
 #define _vel_vcvtsw_vvl __builtin_ve_vl_vcvtsw_vvl
 #define _vel_vcvtsw_vvvl __builtin_ve_vl_vcvtsw_vvvl
+#define _vel_vcvtsw_vvmvl __builtin_ve_vl_vcvtsw_vvmvl
 #define _vel_pvcvtsw_vvl __builtin_ve_vl_pvcvtsw_vvl
 #define _vel_pvcvtsw_vvvl __builtin_ve_vl_pvcvtsw_vvvl
+#define _vel_pvcvtsw_vvMvl __builtin_ve_vl_pvcvtsw_vvMvl
 #define _vel_vcvtdl_vvl __builtin_ve_vl_vcvtdl_vvl
 #define _vel_vcvtdl_vvvl __builtin_ve_vl_vcvtdl_vvvl
+#define _vel_vcvtdl_vvmvl __builtin_ve_vl_vcvtdl_vvmvl
 #define _vel_vcvtds_vvl __builtin_ve_vl_vcvtds_vvl
 #define _vel_vcvtds_vvvl __builtin_ve_vl_vcvtds_vvvl
 #define _vel_vcvtsd_vvl __builtin_ve_vl_vcvtsd_vvl
