@@ -236,7 +236,14 @@ static bool IsVVP(unsigned Opcode) {
   }
 }
 
-static Optional<EVT> GetIdiomaticType(SDNode* Op) {
+// Choses the widest element type
+static EVT getFPConvType(SDNode *Op) {
+  EVT ResVT = Op->getValueType(0);
+  EVT OpVT = Op->getOperand(0).getValueType();
+  return ResVT.getStoreSizeInBits() > OpVT.getStoreSizeInBits() ? ResVT : OpVT;
+}
+
+static Optional<EVT> getIdiomaticType(SDNode* Op) {
   auto MemN = dyn_cast<MemSDNode>(Op);
   if (MemN) {
     return MemN->getMemoryVT();
@@ -260,6 +267,10 @@ static Optional<EVT> GetIdiomaticType(SDNode* Op) {
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, NATIVE_ISD) case VEISD::VVP_NAME: case ISD::NATIVE_ISD:
 #include "VVPNodes.inc"
     return Op->getValueType(0);
+
+#define REGISTER_FPCONV_VVP_OP(VVP_NAME, NATIVE_ISD) case VEISD::VVP_NAME: case ISD::NATIVE_ISD:
+#include "VVPNodes.inc"
+    return getFPConvType(Op);
 
   case VEISD::VEC_SEQ:
   case VEISD::VEC_BROADCAST:

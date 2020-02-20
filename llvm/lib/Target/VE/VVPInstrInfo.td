@@ -48,6 +48,22 @@ def SDTSetCCVVP : SDTypeProfile<1, 5, [        // vp_setcc
   SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameAs<1, 2>, SDTCisVT<3, OtherVT>, SDTCisInt<4>, SDTCisSameNumEltsAs<0, 4>, IsVLVT<5>
 ]>;
 
+// s/uint_to_fp
+def SDTIntToFPOpVVP : SDTypeProfile<1, 3, [    // [su]int_to_fp
+  SDTCisFP<0>, SDTCisInt<1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+]>;
+def SDTFPToIntOpVVP : SDTypeProfile<1, 3, [    // fp_to_[su]int
+  SDTCisInt<0>, SDTCisFP<1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+]>;
+
+// fpext, fpround
+def SDTFPRoundOpVVP  : SDTypeProfile<1, 3, [   // fround
+  SDTCisFP<0>, SDTCisFP<1>, SDTCisOpSmallerThanOp<0, 1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+]>;
+def SDTFPExtOpVVP  : SDTypeProfile<1, 3, [  // fextend
+  SDTCisFP<0>, SDTCisFP<1>, SDTCisOpSmallerThanOp<1, 0>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+]>;
+
 // gather scatter
 def vvp_scatter : SDNode<"VEISD::VVP_SCATTER",  SDTScatterVVP,
                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
@@ -82,11 +98,23 @@ def vvp_fminnum    : SDNode<"VEISD::VVP_FMINNUM",  SDTFPBinOpVVP>;     // min(x,
 def vvp_fmaxnum    : SDNode<"VEISD::VVP_FMAXNUM",  SDTFPBinOpVVP>;     // max(x, y)
 def vvp_ffma    : SDNode<"VEISD::VVP_FFMA",  SDTFPTernaryOpVVP>; // x + (y*z)
 
-// select // select(SelM,OnT,OnF,VL) = SelM[lane] ? OnT[lane] : OnF[lane] // (if lane < VL the out lane is preserved...)
+// select // select(SelM,OnT,OnF,VL) = SelM[lane] ? OnT[lane] : OnF[lane] 
 def vvp_select : SDNode<"VEISD::VVP_SELECT", SDTSelectVVP>;      
 
 // setcc (lhs, rhs, cc, mask, vl)
 def vvp_setcc  : SDNode<"VEISD::VVP_SETCC", SDTSetCCVVP>;      
+
+
+// x_to_y
+def vvp_uint_to_fp    : SDNode<"VEISD::VVP_UINT_TO_FP", SDTIntToFPOpVVP>;
+def vvp_sint_to_fp    : SDNode<"VEISD::VVP_SINT_TO_FP", SDTIntToFPOpVVP>;
+def vvp_fp_to_sint    : SDNode<"VEISD::VVP_FP_TO_SINT", SDTFPToIntOpVVP>;
+def vvp_fp_to_uint    : SDNode<"VEISD::VVP_FP_TO_UINT", SDTFPToIntOpVVP>;
+
+// fpext, fpround
+def vvp_fpround      : SDNode<"VEISD::VVP_FPROUND", SDTFPRoundOpVVP>;
+def vvp_fpext        : SDNode<"VEISD::VVP_FPEXT", SDTFPExtOpVVP>;
+
 
 class vvp_commutative<SDNode RootOp> :
   PatFrags<(ops node:$lhs, node:$rhs, node:$mask, node:$vlen),

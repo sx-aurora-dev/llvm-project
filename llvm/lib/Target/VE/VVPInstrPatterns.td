@@ -217,6 +217,33 @@ defm : Set_CC_512<v512i32,"pvcmpu",CCUIOp,icond2cc>;
 defm : Set_CC_512<v512i32,"pvcmps",CCSIOp,icond2cc>;
 defm : Set_CC_512<v512f32,"pvfcmp",cond,fcond2cc>;
 
+///// Conversion /////
+
+// x_to_y
+multiclass conv_x_to_y<SDPatternOperator MatchOp, ValueType MaskVT, ValueType DestVT, ValueType SrcVT, string ConvBaseName, string MaskToken> {
+  def : Pat<(DestVT (MatchOp SrcVT:$vx, MaskVT:$vm, i32:$vl)),
+                    (!cast<Instruction>(ConvBaseName#"_vv"#MaskToken#"vl") $vx,$vm,(DestVT IMPLICIT_DEF),$vl)>;
+  // TODO unmasked, add implicit fold with select
+}
+
+multiclass both_x_to_y<ValueType MaskVT, ValueType FPVT, string FPTag, string IVT, string ITag, string IExtTag="", string ConvBaseName="vcvt", string MaskToken="m"> {
+ defm : conv_x_to_y<vvp_sint_to_fp, MaskVT, FPVT, IVT, ConvBaseName#FPTag#ITag, MaskToken>;
+ defm : conv_x_to_y<vvp_fp_to_sint, MaskVT, IVT, FPVT, ConvBaseName#ITag#FPTag#IExtTag, MaskToken>;
+}
+
+// iN <> fpN
+defm: both_x_to_y<v256i1, v256f32, "s", v256i32, "w", "zx">;
+defm: both_x_to_y<v256i1, v256f64, "d", v256i64, "l">;
+defm: both_x_to_y<v512i1, v512f32, "s", v512i32, "w", "", "pvcvt", "M">;
+
+// TODO...
+// i64 <> f32
+// f32 <> i64
+
+// fpext, fpround (256 only)
+defm : conv_x_to_y<vvp_fpround, v256i1, v256f32, v256f64, "vcvtsd", "m">;
+defm : conv_x_to_y<vvp_fpext, v256i1, v256f64, f256f32, "vcvtds", "m">;
+
 
 ///// ARITHMETIC /////
 // Integer arithmetic (512 elements)

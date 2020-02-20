@@ -42,8 +42,8 @@
 using namespace llvm;
 
 static bool
-ShouldExpandToVVP(SDNode& N) {
-  return GetIdiomaticType(&N).hasValue();
+shouldExpandToVVP(SDNode& N) {
+  return getIdiomaticType(&N).hasValue();
 }
 
 /// Whether this VVP node needs widening
@@ -53,7 +53,7 @@ static bool OpNeedsWidening(SDNode& Op) {
     return false;
 
   // Otw, widen this VVP operation to the native vector width
-  Optional<EVT> OpVecTyOpt = GetIdiomaticType(&Op);
+  Optional<EVT> OpVecTyOpt = getIdiomaticType(&Op);
   if (!OpVecTyOpt.hasValue())
     return false;
   EVT OpVecTy = OpVecTyOpt.getValue();
@@ -280,7 +280,7 @@ SDValue
 VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "Expand to VVP node\n");
 
-  Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
+  Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
   EVT OpVecTy = OpVecTyOpt.getValue();
 
   if (!OpVecTyOpt.hasValue()) {
@@ -369,6 +369,7 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   bool isBinaryOp = false;
   bool isLoadOp = false;
   bool isStoreOp = false;
+  bool isConvOp = false;
 
   switch (Op->getOpcode()) {
   default:
@@ -398,6 +399,9 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
 
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isBinaryOp=true; break;
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isTernaryOp=true; break;
+#include "VVPNodes.inc"
+
+#define REGISTER_FPCONV_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isConvOp=true; break;
 #include "VVPNodes.inc"
   }
 
@@ -495,6 +499,10 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
         {ChainVal, PtrVal, LegalizeVecOperand(DataVal, DAG), MaskVal, LenVal});
   }
 
+  if (isConvOp) {
+    return DAG.getNode(VVPOC.getValue(), dl, ResVecTy, LegalOperands[0]);
+  }
+
   llvm_unreachable("Cannot lower this op to VVP");
   
   abort(); // TODO implement
@@ -512,7 +520,7 @@ SDValue VETargetLowering::WidenVVPOperation(SDValue Op, SelectionDAG &DAG, VVPEx
   }
 
   // Otw, widen this VVP operation to the next OR native vector width
-  Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
+  Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
   assert(OpVecTyOpt.hasValue());
   EVT OpVecTy = OpVecTyOpt.getValue();
 
@@ -598,7 +606,7 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
   SDValue PassThru;
   SDValue Source;
 
-  Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
+  Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
   EVT OpVecTy = OpVecTyOpt.getValue();
   SDValue OpVectorLength;
 
@@ -807,7 +815,7 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG, VVPExpansion
 
     // Infer the AVL
     // TODO set to the highest set bit in the mask operand
-    Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
+    Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
     EVT OpVecTy = OpVecTyOpt.getValue();
     OpVectorLength = DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);
 
@@ -860,7 +868,7 @@ SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
 
     // Infer the AVL
     // TODO set to the highest set bit in the mask operand
-    Optional<EVT> OpVecTyOpt = GetIdiomaticType(Op.getNode());
+    Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
     assert(OpVecTyOpt.hasValue());
     EVT OpVecTy = OpVecTyOpt.getValue();
     OpVectorLength = DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);
@@ -1683,12 +1691,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   // VE has instructions for fp<->sint, so use them.
 
-  // VE doesn't have instructions for fp<->uint, so expand them by llvm
-  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Promote); // use i64
-  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Promote); // use i64
-  setOperationAction(ISD::FP_TO_UINT, MVT::i64, Expand);
-  setOperationAction(ISD::UINT_TO_FP, MVT::i64, Expand);
-
   // VE doesn't have BRCOND
   setOperationAction(ISD::BRCOND, MVT::Other, Expand);
 
@@ -2038,6 +2040,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       } else {
         setOperationAction(ISD::FP_TO_UINT, VT, Expand);
         setOperationAction(ISD::UINT_TO_FP, VT, Expand);
+        setOperationAction(ISD::FP_TO_SINT, VT, Custom);
+        setOperationAction(ISD::SINT_TO_FP, VT, Custom);
       }
     }
   }
@@ -3968,7 +3972,7 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
     // VVP ops already have a legal result type
     ResN = WidenVVPOperation(SDValue(N, 0), DAG, VVPExpansionMode::ToNextWidth).getNode();
 
-  } else if (ShouldExpandToVVP(*N)) {
+  } else if (shouldExpandToVVP(*N)) {
     // Lower this to a VVP (or VEC_) op with the next expected result type
     ResN = ExpandToVVP(SDValue(N, ValIdx), DAG, VVPExpansionMode::ToNextWidth).getNode();
   } else {
