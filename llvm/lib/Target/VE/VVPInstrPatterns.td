@@ -222,7 +222,7 @@ defm : Set_CC_512<v512f32,"pvfcmp",cond,fcond2cc>;
 // x_to_y
 multiclass conv_x_to_y<SDPatternOperator MatchOp, ValueType MaskVT, ValueType DestVT, ValueType SrcVT, string ConvBaseName, string MaskToken> {
   def : Pat<(DestVT (MatchOp SrcVT:$vx, MaskVT:$vm, i32:$vl)),
-                    (!cast<Instruction>(ConvBaseName#"_vv"#MaskToken#"vl") $vx,$vm,(DestVT IMPLICIT_DEF),$vl)>;
+                    (!cast<Instruction>(ConvBaseName#"_vv"#MaskToken#"vl") $vx, $vm, (DestVT (IMPLICIT_DEF)), $vl)>;
   // TODO unmasked, add implicit fold with select
 }
 
@@ -242,7 +242,7 @@ defm: both_x_to_y<v512i1, v512f32, "s", v512i32, "w", "", "pvcvt", "M">;
 
 // fpext, fpround (256 only)
 defm : conv_x_to_y<vvp_fpround, v256i1, v256f32, v256f64, "vcvtsd", "m">;
-defm : conv_x_to_y<vvp_fpext, v256i1, v256f64, f256f32, "vcvtds", "m">;
+defm : conv_x_to_y<vvp_fpext, v256i1, v256f64, v256f32, "vcvtds", "m">;
 
 
 ///// ARITHMETIC /////
