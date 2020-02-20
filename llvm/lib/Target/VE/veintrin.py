@@ -1193,6 +1193,7 @@ def createInstructionTable():
     T.VFIX(0xE8, "VFIX", "dzx", "vcvt.w.d.zx", [[VX(T_i32), VY(T_f64)]], "unsigned int")
     T.VFIX(0xE8, "VFIX", "ssx", "vcvt.w.s.sx", [[VX(T_i32), VY(T_f32)]], "int")
     T.VFIX(0xE8, "VFIX", "szx", "vcvt.w.s.zx", [[VX(T_i32), VY(T_f32)]], "unsigned int")
+    # T.VFIX(0xE8, "VFIXX", "", "vcvt.l.s", [[VX(T_i64), VY(T_f32)]], "long long") # expand to vcvt.l.d(vcvt.d.s ..)
     T.VFIX(0xE8, "VFIX", "p", "pvcvt.w.s", [[VX(T_i32), VY(T_f32)]], "int")
     T.VFIX(0xA8, "VFIXX", "", "vcvt.l.d", [[VX(T_i64), VY(T_f64)]], "long long")
     T.DefM(0xF8, "VFLT", "d", "vcvt.d.w", [[VX(T_f64), VY(T_i32)]], "{0} = (double){1}")
