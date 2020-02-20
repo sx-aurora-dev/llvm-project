@@ -346,6 +346,24 @@ public:
     return VT.isVector();
   }
 
+#if 0
+  // TODO map *ALL* vector types, including EVTs to vregs
+  /// Certain combinations of ABIs, Targets and features require that types
+  /// are legal for some operations and not for other operations.
+  /// For MIPS all vector types must be passed through the integer register set.
+  MVT getRegisterTypeForCallingConv(LLVMContext &Context,
+                                            CallingConv::ID CC, EVT VT) const override {
+  }
+
+  /// Certain targets require unusual breakdowns of certain types. For MIPS,
+  /// this occurs when a vector type is used, as vector are passed through the
+  /// integer register set.
+  unsigned getNumRegistersForCallingConv(LLVMContext &Context,
+                                                 CallingConv::ID CC,
+                                                 EVT VT) const override {
+  }
+#endif
+
   /// Return the preferred vector type legalization action.
   LegalizeTypeAction getPreferredVectorAction(MVT VT) const override;
 };

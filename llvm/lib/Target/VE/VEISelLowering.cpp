@@ -68,6 +68,8 @@ static bool OpNeedsWidening(SDNode& Op) {
 EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SelectionDAG &DAG,
                                          VVPExpansionMode Mode) const {
 
+  if (!ResTy.isVector()) return ResTy;
+
   if (Mode == VVPExpansionMode::ToNextWidth) {
     return getTypeToTransformTo(*DAG.getContext(), ResTy);
   }
@@ -350,7 +352,6 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
     }
   }
 
-
   //// Does this expansion imply packed mode? /////
   LLVM_DEBUG( dbgs() << "\tSelected target width: " << VectorWidth << "\n"; );
   if (VectorWidth > StandardVectorWidth) {
@@ -362,6 +363,7 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
       return SDValue(); // possibly redundant
     }
   }
+
 
 
   ///// Translate to a VVP layer operation (VVP_* or VEC_*) /////
@@ -423,17 +425,19 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
     return SDValue();
   }
 
-  /// Use the eventual native vector width for all newly generated operands
-  // we do not want to go through ::ReplaceNodeResults again only to have them widened
-  unsigned NativeVectorWidth = (OpVectorLength > StandardVectorWidth) ? PackedWidth : StandardVectorWidth;
-
-  MVT ResVecTy =
-      MVT::getVectorVT(OpVecTy.getVectorElementType().getSimpleVT(), VectorWidth);
+  ///// Widen the actual result type /////
+  // FIXME We cannot use the idiomatic type here since that type reflects the
+  // operatino vector width (and the element type does not matter as much).
+  EVT ResVecTy = LegalizeVectorType(Op.getValueType(), DAG, Mode);
 
   SDLoc dl(Op);
   CustomDAG CDAG(DAG, dl);
 
+  /// Use the eventual native vector width for all newly generated operands
+  // we do not want to go through ::ReplaceNodeResults again only to have them widened
+  unsigned NativeVectorWidth = (OpVectorLength > StandardVectorWidth) ? PackedWidth : StandardVectorWidth;
   MVT NativeMaskTy = MVT::getVectorVT(MVT::i1, NativeVectorWidth);
+
   SDValue MaskVal = CDAG.CreateBroadcast(NativeMaskTy, DAG.getConstant(-1, dl, MVT::i1, MVT::i32)); // cannonical type for i1
   assert(!NeedsPackedMasking && "TODO implement packed mask generation");
 
@@ -500,7 +504,8 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   }
 
   if (isConvOp) {
-    return DAG.getNode(VVPOC.getValue(), dl, ResVecTy, LegalOperands[0]);
+    return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
+                       {LegalOperands[0], MaskVal, LenVal});
   }
 
   llvm_unreachable("Cannot lower this op to VVP");
@@ -2002,11 +2007,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::EXTRACT_SUBVECTOR, VT,
                          Custom); // -> VEC_NARROW(Op, OldVlen)
 
-      setOperationAction(ISD::FP_EXTEND, VT, Legal);
-      setOperationAction(ISD::FP_ROUND, VT, Legal);
-
       // Custom LOAD/STORE lowering
       setOperationAction(ISD::STORE, VT, Custom);
+      setOperationAction(ISD::LOAD, VT, Custom);
       for (MVT OtherVecVT : MVT::vector_valuetypes()) {
         // Turn FP extload into load/fpextend
         setLoadExtAction(ISD::EXTLOAD, VT, OtherVecVT, Expand);
@@ -2015,15 +2018,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         setTruncStoreAction(VT, OtherVecVT, Expand);
       }
 
-      setOperationAction(ISD::LOAD, VT, Custom);
-
       // currently unsupported math functions
       setOperationAction(ISD::FABS, VT, Expand);
-
-      // Ops with VVP lowering
-#define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME) setOperationAction(ISD:: ISD_NAME, VT, Custom);
-#define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) setOperationAction(ISD:: ISD_NAME, VT, Custom);
-#include "VVPNodes.inc"
 
       // supported calculations (FIXME not yet lowered to VVP_* nodes)
       setOperationAction(ISD::FNEG, VT, Expand);
@@ -2040,9 +2036,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       } else {
         setOperationAction(ISD::FP_TO_UINT, VT, Expand);
         setOperationAction(ISD::UINT_TO_FP, VT, Expand);
-        setOperationAction(ISD::FP_TO_SINT, VT, Custom);
-        setOperationAction(ISD::SINT_TO_FP, VT, Custom);
       }
+
+      // Ops with VVP lowering
+#define REGISTER_VVP_OP(VVP_NAME, ISD_NAME) setOperationAction(ISD:: ISD_NAME, VT, Custom);
+#include "VVPNodes.inc"
     }
   }
 
@@ -3346,6 +3344,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   ///// non-VP --> vvp_* with native type /////
   // Convert this standard vector op to VVP
   // FIXME List all operation that correspond to a VVP operation here
+#define REGISTER_FPCONV_VVP_OP(VVP_NAME, ISD_NAME)  case ISD:: ISD_NAME:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME)  case ISD:: ISD_NAME:
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD:: ISD_NAME:
 #include "VVPNodes.inc"
@@ -3354,6 +3353,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   ///// Widen this VVP operation to the vector type /////
   // Use a native vector type for this VVP_* operation
   // FIXME List all VVP ops with vector results here
+#define REGISTER_FPCONV_VVP_OP(VVP_NAME, ISD_NAME)  case VEISD:: VVP_NAME:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME)  case VEISD:: VVP_NAME:
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD:: VVP_NAME:
 #include "VVPNodes.inc"

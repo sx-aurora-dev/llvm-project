@@ -106,10 +106,10 @@ def vvp_setcc  : SDNode<"VEISD::VVP_SETCC", SDTSetCCVVP>;
 
 
 // x_to_y
-def vvp_uint_to_fp    : SDNode<"VEISD::VVP_UINT_TO_FP", SDTIntToFPOpVVP>;
+// def vvp_uint_to_fp    : SDNode<"VEISD::VVP_UINT_TO_FP", SDTIntToFPOpVVP>; // not supported on VE
+// def vvp_fp_to_uint    : SDNode<"VEISD::VVP_FP_TO_UINT", SDTFPToIntOpVVP>; // not supported on VE
 def vvp_sint_to_fp    : SDNode<"VEISD::VVP_SINT_TO_FP", SDTIntToFPOpVVP>;
 def vvp_fp_to_sint    : SDNode<"VEISD::VVP_FP_TO_SINT", SDTFPToIntOpVVP>;
-def vvp_fp_to_uint    : SDNode<"VEISD::VVP_FP_TO_UINT", SDTFPToIntOpVVP>;
 
 // fpext, fpround
 def vvp_fpround      : SDNode<"VEISD::VVP_FPROUND", SDTFPRoundOpVVP>;
