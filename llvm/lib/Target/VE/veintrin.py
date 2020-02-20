@@ -827,14 +827,6 @@ class InstTable(object):
         return self.Def(opc, inst, subop, asm+".${cf}", ary, expr, **kwargs).noTest().noBuiltin().noPat().noIntrinsicDef()
         # 0xB5, "VFMS", "", "pvfmk.w.lo.${cf}", [[VMX, VZ(T_i32), CC]]).noTest().noPat().noBuiltin()
 
-    def VFLT(self, opc, baseInstName, subop, asm, OL, expr = None, **kwargs):
-        vm = VM512 if 'p' in subop else VM
-        MOL = self.addMask(OL, vm)
-
-        # define with and without mask
-        self.Def(opc, baseInstName, subop, asm, MOL, expr, **kwargs)
-        # return self.Def(opc, baseInstName, subop, asm, OL, expr, **kwargs)
-
     def DefM(self, opc, baseInstName, subop, asm, OL, expr = None, **kwargs):
         vm = VM512 if 'p' in subop else VM
         OL = self.addMask(OL, vm)
@@ -1203,12 +1195,12 @@ def createInstructionTable():
     T.VFIX(0xE8, "VFIX", "szx", "vcvt.w.s.zx", [[VX(T_i32), VY(T_f32)]], "unsigned int")
     T.VFIX(0xE8, "VFIX", "p", "pvcvt.w.s", [[VX(T_i32), VY(T_f32)]], "int")
     T.VFIX(0xA8, "VFIXX", "", "vcvt.l.d", [[VX(T_i64), VY(T_f64)]], "long long")
-    T.VFLT(0xF8, "VFLT", "d", "vcvt.d.w", [[VX(T_f64), VY(T_i32)]], "{0} = (double){1}")
-    T.VFLT(0xF8, "VFLT", "s", "vcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
-    T.VFLT(0xF8, "VFLT", "p", "pvcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
-    T.VFLT(0xB8, "VFLTX", "", "vcvt.d.l", [[VX(T_f64), VY(T_i64)]], "{0} = (double){1}")
-    T.Def(0x8F, "VCVD", "", "vcvt.d.s", [[VX(T_f64), VY(T_f32)]], "{0} = (double){1}")
-    T.Def(0x9F, "VCVS", "", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
+    T.DefM(0xF8, "VFLT", "d", "vcvt.d.w", [[VX(T_f64), VY(T_i32)]], "{0} = (double){1}")
+    T.DefM(0xF8, "VFLT", "s", "vcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
+    T.DefM(0xF8, "VFLT", "p", "pvcvt.s.w", [[VX(T_f32), VY(T_i32)]], "{0} = (float){1}")
+    T.DefM(0xB8, "VFLTX", "", "vcvt.d.l", [[VX(T_f64), VY(T_i64)]], "{0} = (double){1}")
+    T.DefM(0x8F, "VCVD", "", "vcvt.d.s", [[VX(T_f64), VY(T_f32)]], "{0} = (double){1}")
+    T.DefM(0x9F, "VCVS", "", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
     
     T.Section("Table 3-20 Vector Mask Arithmetic Instructions", 32)
     T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), VY(T_u64), VZ(T_u64), VM]]).noTest()

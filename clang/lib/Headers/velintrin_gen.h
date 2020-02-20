@@ -874,8 +874,10 @@
 #define _vel_vcvtdl_vvmvl __builtin_ve_vl_vcvtdl_vvmvl
 #define _vel_vcvtds_vvl __builtin_ve_vl_vcvtds_vvl
 #define _vel_vcvtds_vvvl __builtin_ve_vl_vcvtds_vvvl
+#define _vel_vcvtds_vvmvl __builtin_ve_vl_vcvtds_vvmvl
 #define _vel_vcvtsd_vvl __builtin_ve_vl_vcvtsd_vvl
 #define _vel_vcvtsd_vvvl __builtin_ve_vl_vcvtsd_vvvl
+#define _vel_vcvtsd_vvmvl __builtin_ve_vl_vcvtsd_vvmvl
 #define _vel_vmrg_vvvml __builtin_ve_vl_vmrg_vvvml
 #define _vel_vmrg_vvvmvl __builtin_ve_vl_vmrg_vvvmvl
 #define _vel_vmrg_vsvml __builtin_ve_vl_vmrg_vsvml
