@@ -199,7 +199,8 @@ public:
   SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
 
   /// Custom Lower {
-  EVT LegalizeVectorType(EVT ResTy, SelectionDAG &DAG, VVPExpansionMode) const;
+  // legalize the result vector type for operation \p Op
+  EVT LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG, VVPExpansionMode) const;
 
   LegalizeAction getActionForExtendedType(unsigned Op, EVT VT) const override {
     return VT.isVector() ? Custom : Expand;

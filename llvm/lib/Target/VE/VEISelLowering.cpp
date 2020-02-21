@@ -65,7 +65,18 @@ static bool OpNeedsWidening(SDNode& Op) {
          (OpVectorLength != PackedWidth);
 }
 
-EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SelectionDAG &DAG,
+static bool isSETCC(unsigned OC) {
+  switch (OC) {
+    default:
+      return false;
+    case ISD::SETCC:
+    case ISD::VP_SETCC:
+    case VEISD::VVP_SETCC:
+      return true;
+  }
+}
+
+EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG,
                                          VVPExpansionMode Mode) const {
 
   if (!ResTy.isVector()) return ResTy;
@@ -80,7 +91,12 @@ EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SelectionDAG &DAG,
                           ResTy.getVectorNumElements() > StandardVectorWidth)
                              ? PackedWidth
                              : StandardVectorWidth;
-  return EVT::getVectorVT(*DAG.getContext(), ResTy.getVectorElementType(),
+
+  // Use vXi1 as result type in native widening mode
+  bool UseBitElem = isSETCC(Op.getOpcode());
+  EVT ElemVT = UseBitElem ? MVT::i1 : ResTy.getVectorElementType();
+
+  return EVT::getVectorVT(*DAG.getContext(), ElemVT,
                           TargetWidth);
 }
 
@@ -133,18 +149,20 @@ SDValue VETargetLowering::LowerBitcast(SDValue Op, SelectionDAG &DAG) const {
 
 
 SDValue VETargetLowering::LowerTRUNCATE(SDValue Op, SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "Simpliying vector TRUNCATE\n");
+  LLVM_DEBUG(dbgs() << "Simplifying vector TRUNCATE\n");
 
   // eliminate redundant truncates of "i1"
   MVT Ty = Op.getSimpleValueType();
   if (!Ty.isVector())
     return Op;
 
-  // truncate $vr to i1  ---> $vr
+  // not truncation bool
   MVT OpTy = Op.getOperand(0).getSimpleValueType();
   if (OpTy.getVectorElementType() != MVT::i1)
     return Op;
-  return Op;
+
+  // truncate $x to i1  ---> $x
+  return Op.getOperand(0);
 }
 
 SDValue VETargetLowering::LowerVSELECT(SDValue Op, SelectionDAG &DAG) const {
@@ -268,7 +286,7 @@ SDValue VETargetLowering::LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
   SDLoc DL(Op);
 
   EVT ResTy = Op.getValueType();
-  EVT NativeResTy = LegalizeVectorType(ResTy, DAG, Mode);
+  EVT NativeResTy = LegalizeVectorType(ResTy, Op, DAG, Mode);
 
   // FIXME
   Optional<SDValue> OptVL = EVLToVal(
@@ -428,7 +446,7 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   ///// Widen the actual result type /////
   // FIXME We cannot use the idiomatic type here since that type reflects the
   // operatino vector width (and the element type does not matter as much).
-  EVT ResVecTy = LegalizeVectorType(Op.getValueType(), DAG, Mode);
+  EVT ResVecTy = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
 
   SDLoc dl(Op);
   CustomDAG CDAG(DAG, dl);
@@ -680,7 +698,7 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
                                       IndexVT.getVectorNumElements(), DAG);
 
   if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::VP_GATHER) {
-    EVT LegalResVT = LegalizeVectorType(Op.getNode()->getValueType(0), DAG, Mode);
+    EVT LegalResVT = LegalizeVectorType(Op.getNode()->getValueType(0), Op, DAG, Mode);
     EVT ChainVT = Op.getNode()->getValueType(1);
 
     // vt = vgt (vindex, vmx, cs=0, sx=0, sy=0, sw=0);
@@ -731,7 +749,7 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
   if (EmitNarrow) {
     SDLoc DL(Op);
     unsigned NarrowLen = Op.getValueType().getVectorNumElements();
-    EVT LegalVecTy = LegalizeVectorType(Op.getValueType(), DAG, Mode);
+    EVT LegalVecTy = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
     return DAG.getNode(VEISD::VEC_NARROW, DL, LegalVecTy,
                        {SrcVec, DAG.getConstant(NarrowLen, DL, MVT::i32)});
   }
@@ -834,7 +852,7 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG, VVPExpansion
   // minimize vector length
   OpVectorLength = ReduceVectorLength(Mask, OpVectorLength, VecLenHint, DAG);
 
-  EVT DataVT = LegalizeVectorType(Op.getNode()->getValueType(0), DAG, Mode);
+  EVT DataVT = LegalizeVectorType(Op.getNode()->getValueType(0), Op, DAG, Mode);
   MVT ChainVT = Op.getNode()->getSimpleValueType(1);
 
   // FIXME VLD does not support masking
@@ -923,7 +941,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
 
   SDLoc DL(Op);
 
-  EVT ResTy = LegalizeVectorType(Op.getValueType(), DAG, Mode);
+  EVT ResTy = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
   bool Packed = IsPackedType(Op.getValueType());
   unsigned NativeNumElems = ResTy.getVectorNumElements();
 
@@ -1896,7 +1914,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   /// Conversion {
   // VE doesn't have instructions for fp<->uint, so expand them by llvm
-  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Expand); // "Promote" actually breaks due to the v4i32 type and resulting type mismatches
+  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Expand);
   setOperationAction(ISD::UINT_TO_FP, MVT::i32, Expand);
   setOperationAction(ISD::FP_TO_UINT, MVT::i64, Expand);
   setOperationAction(ISD::UINT_TO_FP, MVT::i64, Expand);
@@ -2030,13 +2048,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::SELECT_CC, VT, Expand);
 
       // VE doesn't have instructions for fp<->uint, so expand them by llvm
-      if (VT.getVectorElementType() == MVT::i32) {
-        setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
-        setOperationAction(ISD::UINT_TO_FP, VT, Promote); // use i64
-      } else {
-        setOperationAction(ISD::FP_TO_UINT, VT, Expand);
-        setOperationAction(ISD::UINT_TO_FP, VT, Expand);
-      }
+      setOperationAction(ISD::FP_TO_UINT, VT, Expand);
+      setOperationAction(ISD::UINT_TO_FP, VT, Expand);
 
       // Ops with VVP lowering
 #define REGISTER_VVP_OP(VVP_NAME, ISD_NAME) setOperationAction(ISD:: ISD_NAME, VT, Custom);
@@ -2079,11 +2092,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SETCC, MVT::v256i32, Custom);
 
   // truncate of X to i1 -> X
-  setOperationAction(ISD::TRUNCATE, MVT::v256i32, Custom);
+  // setOperationAction(ISD::TRUNCATE, MVT::v256i32, Custom); // should not generate invalid valid SETCC in the first place
   setOperationAction(ISD::VSELECT, MVT::v256i1, Custom);
 
   // VE has no packed MUL, SDIV, or UDIV operations.
   for (MVT VT : {MVT::v512i32, MVT::v512f32}) {
+    // TODO use VVPNodes.inc here
     setOperationAction(ISD::MUL, VT, Expand);
     setOperationAction(ISD::SDIV, VT, Expand);
     setOperationAction(ISD::UDIV, VT, Expand);
@@ -2190,11 +2204,11 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   return nullptr;
 }
 
-EVT VETargetLowering::getSetCCResultType(const DataLayout &, LLVMContext &,
+EVT VETargetLowering::getSetCCResultType(const DataLayout &, LLVMContext & Context,
                                          EVT VT) const {
   if (!VT.isVector())
     return MVT::i32;
-  return VT.changeVectorElementTypeToInteger();
+  return EVT::getVectorVT(Context, MVT::i1, VT.getVectorElementCount());
 }
 
 /// isMaskedValueZeroForTargetNode - Return true if 'Op & Mask' is known to
@@ -3333,7 +3347,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   // case ISD::SETCC: return LowerSETCC(Op, DAG);
   case ISD::SELECT_CC: return LowerSELECT_CC(Op, DAG);
 
-  case ISD::TRUNCATE: return LowerTRUNCATE(Op, DAG);
+  // case ISD::TRUNCATE: return LowerTRUNCATE(Op, DAG);
 
   ///// LLVM-VP --> vvp_* /////
 #define REGISTER_VP_SDNODE(VP_NAME, VP_TEXT, MASK_POS, LEN_POS) \

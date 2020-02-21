@@ -123,6 +123,7 @@ multiclass narrow_dce<ValueType DataVT> {
   def: Pat<(DataVT (vec_narrow DataVT:$vx, (i32 uimm32))),
            (COPY_TO_REGCLASS $vx, V64)>;
 }
+
 defm : narrow_dce<v256f64>;
 defm : narrow_dce<v256i64>;
 defm : narrow_dce<v256f32>;
@@ -170,3 +171,20 @@ def : Pat<(v256i64 (sext v256i32:$src)),
           (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (i32 256)), V64)>;
 def : Pat<(v256i64 (zext v256i32:$src)),
           (COPY_TO_REGCLASS (vaddswzx_vsvl (i32 0), $src, (i32 256)), V64)>;
+
+// bitconvert
+multiclass NoopConv<ValueType AVT, ValueType BVT, RegisterClass RT=V64> {
+  def : Pat<(AVT (bitconvert BVT:$src)), (COPY_TO_REGCLASS $src, RT)>;
+  def : Pat<(BVT (bitconvert AVT:$src)), (COPY_TO_REGCLASS $src, RT)>;
+}
+
+defm : NoopConv<v512i32,v512f32>;
+defm : NoopConv<v256i64,v256f64>;
+defm : NoopConv<v4i1,v256i1,VM>;
+defm : NoopConv<v8i1,v512i1,VM512>;
+
+// actual conversions
+def : Pat<(v256i32 (bitconvert v256f32:$src)),
+          (vsral_vvIl (COPY_TO_REGCLASS $src, V64), 32, (i32 256))>;
+def : Pat<(v256f32 (bitconvert v256i32:$src)),
+          (vslal_vvIl (COPY_TO_REGCLASS $src, V64), 32, (i32 256))>;
