@@ -114,6 +114,25 @@ struct BuildVectorView : public MaskView {
   }
 };
 
+// SDNode abstractions
+struct ExtractSubvectorView : public MaskView {
+  SDValue EVN;
+  unsigned Offset;
+
+  ExtractSubvectorView(SDValue EVN)
+  : EVN(EVN),
+  Offset(cast<const ConstantSDNode>(EVN.getOperand(1))->getZExtValue())
+  {}
+
+  SDValue getSrc() const {
+    return EVN.getOperand(0);
+  }
+
+  ElemSelect getSourceElem(unsigned DestIdx) override {
+    return ElemSelect(getSrc(), DestIdx + Offset);
+  }
+};
+
 static MaskView *requestMaskView(SDNode *N) {
   auto BVN = dyn_cast<BuildVectorSDNode>(N);
   if (BVN)
@@ -121,6 +140,8 @@ static MaskView *requestMaskView(SDNode *N) {
   auto SN = dyn_cast<ShuffleVectorSDNode>(N);
   if (SN)
     return new ShuffleVectorView(SN);
+  if (N->getOpcode() == ISD::EXTRACT_SUBVECTOR)
+    return new ExtractSubvectorView(SDValue(N, 0));
   return nullptr;
 }
 
@@ -235,15 +256,35 @@ struct MaskShuffleAnalysis {
     }
   }
 
-  SDValue synthesize(SDValue Passthru, BitSelect &BSel, SDValue SXV, CustomDAG &CDAG) {
-    const uint64_t AllSetMask = (uint64_t) -1;
+  SDValue synthesize(SDValue Passthru, BitSelect &BSel, SDValue SXV,
+                     CustomDAG &CDAG) const {
+    const uint64_t AllSetMask = (uint64_t)-1;
 
     // match full register copies
     if ((BSel.SrcSelMask == AllSetMask) && (BSel.ShiftAmount == 0)) {
       return SXV;
     }
-    
-    abort(); // TODO implement shifting and stuff
+
+    // AND active lanes
+    SDValue MaskedV = SXV;
+    if (BSel.SrcSelMask != AllSetMask) {
+      MaskedV = CDAG.DAG.getNode(
+          ISD::AND, CDAG.DL, SXV.getValueType(),
+          {MaskedV, CDAG.getConstant(BSel.SrcSelMask, MVT::i64)});
+    }
+
+    // shift (trivial 0 case handled internally)
+    SDValue ShiftV =
+        CDAG.createElementShift(MaskedV, BSel.ShiftAmount, SDValue());
+
+    // OR-in passthru
+    SDValue ResV = ShiftV;
+    if (Passthru) {
+      ResV = CDAG.DAG.getNode(ISD::OR, CDAG.DL, SXV.getValueType(),
+                              {ShiftV, Passthru});
+    }
+
+    return ResV;
   }
 
   // materialize the code to synthesize this operation

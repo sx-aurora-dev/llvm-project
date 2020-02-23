@@ -468,6 +468,30 @@ struct CustomDAG {
     return DAG.getNode(VEISD::VEC_SEQ, DL, ResTy, VectorLen);
   }
 
+  // create a vector element or scalar bitshift depending on the element type
+  // dst[i] = src[i + Offset]
+  SDValue
+  createElementShift(SDValue Src, unsigned Offset, SDValue AVL) {
+    if (Offset == 0)
+      return Src;
+
+    if (Src.getValueType().isVector()) {
+      unsigned OC = Offset > 0 ? ISD::SHL : ISD::SRL; //VE::SLLri : VE::SRLri;
+      return DAG.getNode(OC, DL, Src.getValueType(), Src);
+    }
+    
+    EVT VecVT = Src.getValueType();
+    assert(!IsMaskType(VecVT));
+    return createVMV(Src.getValueType(), Src, getConstant(Offset, MVT::i32),
+                     CreateConstMask(VecVT.getVectorNumElements(), true), AVL);
+  }
+
+  SDValue
+  createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV, SDValue Mask, SDValue Avl) const {
+    return DAG.getNode(VEISD::VEC_VMV, DL, ResVT,
+                       {SrcV, OffsetV, Mask, Avl});
+  }
+
   SDValue
   CreateUnpack(EVT DestVT, SDValue Vec, SubElem E) {
     abort(); // TODO implement
