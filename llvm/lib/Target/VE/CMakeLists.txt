@@ -14,6 +14,7 @@ add_public_tablegen_target(VECommonTableGen)
 add_llvm_target(VECodeGen
   CustomDAG.cpp
   LVLGen.cpp
+  MaskView.cpp
   VEAsmPrinter.cpp
   VEFrameLowering.cpp
   VEISelDAGToDAG.cpp

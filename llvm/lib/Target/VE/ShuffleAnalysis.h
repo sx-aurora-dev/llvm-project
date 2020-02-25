@@ -1,4 +1,4 @@
-//===-- VEISelLowering.h - VE DAG Lowering Interface ------------*- C++ -*-===//
+//===---- ShuffleAnalysis.h - Analysis & Codegen for shuffles ----*- C++-*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -6,8 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// This file defines the interfaces that VE uses to lower LLVM code into a
-// selection DAG.
+// Analysis and code generation for shuffles masks in the VE target
 //
 //===----------------------------------------------------------------------===//
 
@@ -21,130 +20,13 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Format.h"
 #include "CustomDAG.h"
+#include "MaskView.h"
 
 #ifndef DEBUG_TYPE
 #define DEBUG_TYPE "shuffleanalysis"
 #endif
 
 namespace llvm {
-
-struct ElemSelect {
-  SDValue V;          // the value that is chosen
-  int64_t ExtractIdx; // whether (>=0) this indicates element extraction
-
-  // insertion from scalar
-  ElemSelect(SDValue V) : V(V), ExtractIdx(-1) {}
-
-  // elem transfer of V
-  ElemSelect(SDValue V, int64_t ExtractIdx) : V(V), ExtractIdx(ExtractIdx) {}
-
-  // element of V transfered from dest
-  bool isElemTransfer() const { return ExtractIdx >= 0; }
-  // V as a whole inserted into dest
-  bool isElemInsert() const { return ExtractIdx < 0; }
-};
-
-struct MaskView {
-  virtual ~MaskView() {}
-
-  // get the element selection at i
-  virtual ElemSelect getSourceElem(unsigned DestIdx) = 0;
-};
-
-// SDNode abstractions
-struct ShuffleVectorView : public MaskView {
-  ShuffleVectorSDNode *SN;
-
-  ShuffleVectorView(ShuffleVectorSDNode *SN) : SN(SN) {}
-
-  ElemSelect getSourceElem(unsigned DestIdx) override {
-    unsigned SrcPos = SN->getMaskElt(DestIdx);
-    unsigned NumOps = SN->getNumOperands();
-    unsigned CurrentBase = 0;
-    for (unsigned i = 0; i < NumOps; ++i) {
-      SDValue Op = SN->getOperand(i);
-      bool SrcIsVector = Op->getValueType(0).isVector();
-      unsigned OpWidth =
-          SrcIsVector ? Op->getValueType(0).getVectorNumElements() : 1;
-
-      if (SrcPos >= CurrentBase && SrcPos < CurrentBase + OpWidth) {
-        // selecting from Op at SrcPos - CurrentBase
-        if (SrcIsVector) {
-          return ElemSelect(Op, SrcPos - CurrentBase);
-        }
-
-        return ElemSelect(Op);
-      }
-
-      CurrentBase += OpWidth;
-    }
-
-    abort(); // invalid SN
-  }
-};
-
-// SDNode abstractions
-struct BuildVectorView : public MaskView {
-  BuildVectorSDNode *BVN;
-
-  BuildVectorView(BuildVectorSDNode *BVN) : BVN(BVN) {}
-
-  ElemSelect getSourceElem(unsigned DestIdx) override {
-    unsigned NumOps = BVN->getNumOperands();
-    unsigned CurrentBase = 0;
-    for (unsigned i = 0; i < NumOps; ++i) {
-      SDValue Op = BVN->getOperand(i);
-      bool SrcIsVector = Op->getValueType(0).isVector();
-      unsigned OpWidth =
-          SrcIsVector ? Op->getValueType(0).getVectorNumElements() : 1;
-
-      if (DestIdx >= CurrentBase && DestIdx < CurrentBase + OpWidth) {
-        // selecting from Op at SrcPos - CurrentBase
-        if (SrcIsVector) {
-          return ElemSelect(Op, DestIdx - CurrentBase);
-        }
-
-        return ElemSelect(Op);
-      }
-
-      CurrentBase += OpWidth;
-    }
-
-    abort(); // invalid BVN
-  }
-};
-
-// SDNode abstractions
-struct ExtractSubvectorView : public MaskView {
-  SDValue EVN;
-  unsigned Offset;
-
-  ExtractSubvectorView(SDValue EVN)
-  : EVN(EVN),
-  Offset(cast<const ConstantSDNode>(EVN.getOperand(1))->getZExtValue())
-  {}
-
-  SDValue getSrc() const {
-    return EVN.getOperand(0);
-  }
-
-  ElemSelect getSourceElem(unsigned DestIdx) override {
-    return ElemSelect(getSrc(), DestIdx + Offset);
-  }
-};
-
-static MaskView *requestMaskView(SDNode *N) {
-  auto BVN = dyn_cast<BuildVectorSDNode>(N);
-  if (BVN)
-    return new BuildVectorView(BVN);
-  auto SN = dyn_cast<ShuffleVectorSDNode>(N);
-  if (SN)
-    return new ShuffleVectorView(SN);
-  if (N->getOpcode() == ISD::EXTRACT_SUBVECTOR)
-    return new ExtractSubvectorView(SDValue(N, 0));
-  return nullptr;
-}
-
 
 // matches mask elements
 struct MaskShuffleAnalysis {
