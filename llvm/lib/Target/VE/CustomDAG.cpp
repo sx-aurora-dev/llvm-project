@@ -11,9 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef LLVM_LIB_TARGET_VE_CUSTOMDAG_H
-#define LLVM_LIB_TARGET_VE_CUSTOMDAG_H
-
 #include "CustomDAG.h"
 #include "VE.h"
 #include "VEISelLowering.h"
@@ -480,7 +477,7 @@ SDValue CustomDAG::CreateSwap(EVT DestVT, SDValue V) {
 
 SDValue
 CustomDAG::CreateBroadcast(EVT ResTy, SDValue S,
-                           Optional<SDValue> OpVectorLength = None) const {
+                           Optional<SDValue> OpVectorLength) const {
 
   // Pick VL
   SDValue VectorLen;
@@ -557,8 +554,8 @@ SDValue CustomDAG::CreateConstMask(unsigned NumElements, bool IsTrue) const {
   return DAG.getNOT(DL, Res, Res.getValueType());
 }
 
-SDValue CustomDAG::getConstant(uint64_t Val, EVT VT, bool IsTarget = false,
-                               bool IsOpaque = false) const {
+SDValue CustomDAG::getConstant(uint64_t Val, EVT VT, bool IsTarget,
+                               bool IsOpaque) const {
   return DAG.getConstant(Val, DL, VT, IsTarget, IsOpaque);
 }
 
