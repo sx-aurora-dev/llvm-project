@@ -1153,6 +1153,15 @@ public:
   /// to a stack reload.
   unsigned getGISelRematGlobalCost() const;
 
+  /// \name Vector Predication Information
+  /// @{
+  /// Whether the target supports the %evl parameter of VP intrinsic efficiently in hardware.
+  /// (see LLVM Language Reference - "Vector Predication Intrinsics")
+  /// Use of %evl is discouraged when that is not the case.
+  bool hasActiveVectorLength() const;
+
+  /// @}
+
   /// @}
 
 private:
@@ -1400,6 +1409,7 @@ public:
                                      ReductionFlags) const = 0;
   virtual bool shouldExpandReduction(const IntrinsicInst *II) const = 0;
   virtual unsigned getGISelRematGlobalCost() const = 0;
+  virtual bool hasActiveVectorLength() const = 0;
   virtual int getInstructionLatency(const Instruction *I) = 0;
 };
 
@@ -1882,6 +1892,10 @@ public:
 
   unsigned getGISelRematGlobalCost() const override {
     return Impl.getGISelRematGlobalCost();
+  }
+
+  bool hasActiveVectorLength() const override {
+    return Impl.hasActiveVectorLength();
   }
 
   int getInstructionLatency(const Instruction *I) override {
