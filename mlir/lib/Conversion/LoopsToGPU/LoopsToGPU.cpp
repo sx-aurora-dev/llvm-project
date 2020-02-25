@@ -18,7 +18,7 @@
 #include "mlir/Dialect/AffineOps/AffineOps.h"
 #include "mlir/Dialect/GPU/GPUDialect.h"
 #include "mlir/Dialect/LoopOps/LoopOps.h"
-#include "mlir/Dialect/StandardOps/Ops.h"
+#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/Builders.h"
@@ -294,8 +294,8 @@ static void packIdAndNumId(gpu::KernelDim3 kernelIds,
                            SmallVectorImpl<Value> &ids,
                            SmallVectorImpl<Value> &nids) {
   assert(nDims <= 3 && "invalid number of launch dimensions");
-  SmallVector<Value, 3> allIds = {kernelIds.z, kernelIds.y, kernelIds.x};
-  SmallVector<Value, 3> allNids = {kernelNids.z, kernelNids.y, kernelNids.x};
+  std::array<Value, 3> allIds = {kernelIds.z, kernelIds.y, kernelIds.x};
+  std::array<Value, 3> allNids = {kernelNids.z, kernelNids.y, kernelNids.x};
   ids.clear();
   ids.append(std::next(allIds.begin(), allIds.size() - nDims), allIds.end());
   nids.clear();

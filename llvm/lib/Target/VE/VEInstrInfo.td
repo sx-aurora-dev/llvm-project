@@ -375,6 +375,7 @@ def GetStackTop : SDNode<"VEISD::GETSTACKTOP", SDTNone,
 def MemBarrier : SDNode<"VEISD::MEMBARRIER", SDTNone,
                         [SDNPHasChain, SDNPSideEffect]>;
 
+
 //===----------------------------------------------------------------------===//
 // VE Flag Conditions
 //===----------------------------------------------------------------------===//

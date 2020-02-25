@@ -245,7 +245,8 @@ enum IIT_Info {
   IIT_SCALABLE_VEC = 44,
   IIT_SUBDIVIDE2_ARG = 45,
   IIT_SUBDIVIDE4_ARG = 46,
-  IIT_VEC_OF_BITCASTS_TO_INT = 47
+  IIT_VEC_OF_BITCASTS_TO_INT = 47,
+  IIT_V128  = 47
 };
 
 static void EncodeFixedValueType(MVT::SimpleValueType VT,
@@ -381,6 +382,7 @@ static void EncodeFixedType(Record *R, std::vector<unsigned char> &ArgCodes,
     case 16: Sig.push_back(IIT_V16); break;
     case 32: Sig.push_back(IIT_V32); break;
     case 64: Sig.push_back(IIT_V64); break;
+    case 128: Sig.push_back(IIT_V128); break;
     case 256: Sig.push_back(IIT_V256); break;
     case 512: Sig.push_back(IIT_V512); break;
     case 1024: Sig.push_back(IIT_V1024); break;

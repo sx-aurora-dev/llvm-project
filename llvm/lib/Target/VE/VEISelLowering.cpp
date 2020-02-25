@@ -1760,17 +1760,18 @@ SDValue VETargetLowering::LowerConstantPool(SDValue Op,
   return makeAddress(Op, DAG);
 }
 
-SDValue VETargetLowering::LowerToTLSGeneralDynamicModel(
-  SDValue Op, SelectionDAG &DAG) const {
+SDValue
+VETargetLowering::LowerToTLSGeneralDynamicModel(SDValue Op,
+                                                SelectionDAG &DAG) const {
   SDLoc dl(Op);
 
-  // Generate following code:
+  // Generate the following code:
   //   t1: ch,glue = callseq_start t0, 0, 0
   //   t2: i64,ch,glue = VEISD::GETTLSADDR t1, label, t1:1
   //   t3: ch,glue = callseq_end t2, 0, 0, t2:2
   //   t4: i64,ch,glue = CopyFromReg t3, Register:i64 $sx0, t3:1
   SDValue Label = withTargetFlags(Op, 0, DAG);
-  EVT PtrVT = getPointerTy(DAG.getDataLayout());
+  EVT PtrVT = Op.getValueType();
 
   // Lowering the machine isd will make sure everything is in the right
   // location.
@@ -1779,7 +1780,7 @@ SDValue VETargetLowering::LowerToTLSGeneralDynamicModel(
   const uint32_t *Mask = Subtarget->getRegisterInfo()->getCallPreservedMask(
       DAG.getMachineFunction(), CallingConv::C);
   Chain = DAG.getCALLSEQ_START(Chain, 64, 0, dl);
-  SDValue Args[] = { Chain, Label, DAG.getRegisterMask(Mask), Chain.getValue(1) };
+  SDValue Args[] = {Chain, Label, DAG.getRegisterMask(Mask), Chain.getValue(1)};
   Chain = DAG.getNode(VEISD::GETTLSADDR, dl, NodeTys, Args);
   Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(64, dl, true),
                              DAG.getIntPtrConstant(0, dl, true),
@@ -1819,10 +1820,9 @@ SDValue VETargetLowering::LowerToTLSLocalExecModel(SDValue Op,
 SDValue VETargetLowering::LowerGlobalTLSAddress(SDValue Op,
                                                 SelectionDAG &DAG) const {
 #if 1
-  // Current implementation of nld doesn't allow local exec model code
-  // described in VE-tls_v1.1.pdf (*1) as its input.  The nld accept
-  // only general dynamic model and optimize it whenever.  So, here
-  // we need to generate only general dynamic model code sequence.
+  // The current implementation of nld (2.26) doesn't allow local exec model
+  // code described in VE-tls_v1.1.pdf (*1) as its input. Instead, we always
+  // generate the general dynamic model code sequence.
   //
   // *1: https://www.nec.com/en/global/prod/hpc/aurora/document/VE-tls_v1.1.pdf
   return LowerToTLSGeneralDynamicModel(Op, DAG);

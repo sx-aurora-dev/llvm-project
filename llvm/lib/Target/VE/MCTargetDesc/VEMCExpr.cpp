@@ -16,7 +16,7 @@
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCObjectStreamer.h"
 #include "llvm/MC/MCSymbolELF.h"
-#include "llvm/Object/ELF.h"
+#include "llvm/BinaryFormat/ELF.h"
 
 using namespace llvm;
 
@@ -173,10 +173,6 @@ bool VEMCExpr::evaluateAsRelocatableImpl(MCValue &Res,
   return getSubExpr()->evaluateAsRelocatable(Res, Layout, Fixup);
 }
 
-void VEMCExpr::visitUsedExpr(MCStreamer &Streamer) const {
-  Streamer.visitUsedExpr(*getSubExpr());
-}
-
 static void fixELFSymbolsInTLSFixupsImpl(const MCExpr *Expr, MCAssembler &Asm) {
   switch (Expr->getKind()) {
   case MCExpr::Target:
@@ -203,7 +199,10 @@ static void fixELFSymbolsInTLSFixupsImpl(const MCExpr *Expr, MCAssembler &Asm) {
     fixELFSymbolsInTLSFixupsImpl(cast<MCUnaryExpr>(Expr)->getSubExpr(), Asm);
     break;
   }
+}
 
+void VEMCExpr::visitUsedExpr(MCStreamer &Streamer) const {
+  Streamer.visitUsedExpr(*getSubExpr());
 }
 
 void VEMCExpr::fixELFSymbolsInTLSFixups(MCAssembler &Asm) const {

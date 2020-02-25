@@ -124,6 +124,9 @@ public:
   SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
 
   SDValue withTargetFlags(SDValue Op, unsigned TF, SelectionDAG &DAG) const;
@@ -186,9 +189,6 @@ public:
   bool useLoadStackGuardNode() const override;
   void insertSSPDeclarations(Module &M) const override;
 
-  SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
 

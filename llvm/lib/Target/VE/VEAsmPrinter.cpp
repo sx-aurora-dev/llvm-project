@@ -271,20 +271,19 @@ void VEAsmPrinter::lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
 }
 
 void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
-                                                 const MCSubtargetInfo &STI)
-{
+                                                 const MCSubtargetInfo &STI) {
   const MachineOperand &Addr = MI->getOperand(0);
-  MCSymbol* AddrSym = nullptr;
+  MCSymbol *AddrSym = nullptr;
 
   switch (Addr.getType()) {
   default:
-    llvm_unreachable ("<unknown operand type>");
+    llvm_unreachable("<unknown operand type>");
     return;
   case MachineOperand::MO_MachineBasicBlock:
-    report_fatal_error("MBB is not supporeted yet");
+    report_fatal_error("MBB is not supported yet");
     return;
   case MachineOperand::MO_ConstantPoolIndex:
-    report_fatal_error("ConstantPool is not supporeted yet");
+    report_fatal_error("ConstantPool is not supported yet");
     return;
   case MachineOperand::MO_ExternalSymbol:
     AddrSym = GetExternalSymbolSymbol(Addr.getSymbolName());
@@ -294,11 +293,10 @@ void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
     break;
   }
 
-  MCOperand RegLR   = MCOperand::createReg(VE::SX10);   // LR
-  MCOperand RegS0   = MCOperand::createReg(VE::SX0);    // S0
-  MCOperand RegS12  = MCOperand::createReg(VE::SX12);   // S12
-  MCSymbol *GetTLSLabel   =
-    OutContext.getOrCreateSymbol(Twine("__tls_get_addr"));
+  MCOperand RegLR = MCOperand::createReg(VE::SX10);  // LR
+  MCOperand RegS0 = MCOperand::createReg(VE::SX0);   // S0
+  MCOperand RegS12 = MCOperand::createReg(VE::SX12); // S12
+  MCSymbol *GetTLSLabel = OutContext.getOrCreateSymbol(Twine("__tls_get_addr"));
 
   // lea %s0, sym@tls_gd_lo(-24)
   // and %s0, %s0, (32)0
@@ -306,29 +304,25 @@ void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   // lea.sl %s0, sym@tls_gd_hi(%lr, %s0)
   // lea %s12, __tls_get_addr@plt_lo(8)
   // and %s12, %s12, (32)0
-  // lea.sl %s12, __tls_get_addr@plt_hi(%lr, %s12)
+  // lea.sl %s12, __tls_get_addr@plt_hi(%s12, %lr)
   // bsic %lr, (, %s12)
   MCOperand cim24 = MCOperand::createImm(-24);
-  MCOperand loImm = createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_LO32,
-                                       AddrSym,
-                                       OutContext);
+  MCOperand loImm =
+      createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_LO32, AddrSym, OutContext);
   emitLEAzii(*OutStreamer, cim24, loImm, RegS0, STI);
   MCOperand ci32 = MCOperand::createImm(32);
   emitANDrm0(*OutStreamer, RegS0, ci32, RegS0, STI);
   emitSIC(*OutStreamer, RegLR, STI);
-  MCOperand hiImm = createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_HI32,
-                                       AddrSym,
-                                       OutContext);
+  MCOperand hiImm =
+      createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_HI32, AddrSym, OutContext);
   emitLEASLrri(*OutStreamer, RegS0, RegLR, hiImm, RegS0, STI);
   MCOperand ci8 = MCOperand::createImm(8);
-  MCOperand loImm2 = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32,
-                                        GetTLSLabel,
-                                        OutContext);
+  MCOperand loImm2 =
+      createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32, GetTLSLabel, OutContext);
   emitLEAzii(*OutStreamer, ci8, loImm2, RegS12, STI);
   emitANDrm0(*OutStreamer, RegS12, ci32, RegS12, STI);
-  MCOperand hiImm2 = createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32,
-                                        GetTLSLabel,
-                                        OutContext);
+  MCOperand hiImm2 =
+      createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32, GetTLSLabel, OutContext);
   emitLEASLrri(*OutStreamer, RegS12, RegLR, hiImm2, RegS12, STI);
   emitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
