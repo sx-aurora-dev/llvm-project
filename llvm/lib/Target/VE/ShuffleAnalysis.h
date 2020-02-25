@@ -325,29 +325,6 @@ struct MaskShuffleAnalysis {
   }
 };
 
-// decompose shuffle masks into digestible chunks
-// template<typename SegmentMatcher>
-// class ShuffleAnalysis {
-//   SegmentMatcher &SegM;
-//
-// public:
-//   ShuffleAnalysis(SegmentMatcher & SegM) {}
-//
-//   void analyze(ShuffleVectorSDNode* ShufN) {
-//     unsigned NumElems = ShufN->getValueType(0).getVectorNumElements();
-//
-//     std::vector<bool> MatchedBits(NumElems, false);
-//
-//     ArrayRef<int> Mask = ShufN->getMask();
-//     unsigned FirstIdx = 0;
-//     while (FirstIdx < NumElems) {
-//       bool OK = SegM.matchSegment(Mask, FirstIdx, MatchedBits);
-//     }
-//
-//     abort();
-//   }
-// };
-
 } // namespace llvm
 
 #endif // LLVM_LIB_TARGET_VE_SHUFFLEANALYSIS_H

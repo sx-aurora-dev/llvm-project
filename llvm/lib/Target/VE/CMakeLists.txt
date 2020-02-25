@@ -12,6 +12,7 @@ tablegen(LLVM VEGenSubtargetInfo.inc -gen-subtarget)
 add_public_tablegen_target(VECommonTableGen)
 
 add_llvm_target(VECodeGen
+  CustomDAG.cpp
   LVLGen.cpp
   VEAsmPrinter.cpp
   VEFrameLowering.cpp
