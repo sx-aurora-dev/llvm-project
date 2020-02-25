@@ -592,14 +592,11 @@ void Verifier::visitGlobalValue(const GlobalValue &GV) {
            "Global is marked as dllimport, but not external", &GV);
   }
 
-  if (GV.hasLocalLinkage())
+  if (GV.isImplicitDSOLocal())
     Assert(GV.isDSOLocal(),
-           "GlobalValue with private or internal linkage must be dso_local!",
+           "GlobalValue with local linkage or non-default "
+           "visibility must be dso_local!",
            &GV);
-
-  if (!GV.hasDefaultVisibility() && !GV.hasExternalWeakLinkage())
-    Assert(GV.isDSOLocal(),
-           "GlobalValue with non default visibility must be dso_local!", &GV);
 
   forEachUser(&GV, GlobalValueVisited, [&](const Value *V) -> bool {
     if (const Instruction *I = dyn_cast<Instruction>(V)) {
@@ -2561,8 +2558,6 @@ void Verifier::visitIndirectBrInst(IndirectBrInst &BI) {
 
 void Verifier::visitCallBrInst(CallBrInst &CBI) {
   Assert(CBI.isInlineAsm(), "Callbr is currently only used for asm-goto!",
-         &CBI);
-  Assert(CBI.getType()->isVoidTy(), "Callbr return value is not supported!",
          &CBI);
   for (unsigned i = 0, e = CBI.getNumSuccessors(); i != e; ++i)
     Assert(CBI.getSuccessor(i)->getType()->isLabelTy(),
@@ -4763,7 +4758,9 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
   case Intrinsic::umul_fix:
   case Intrinsic::umul_fix_sat:
   case Intrinsic::sdiv_fix:
-  case Intrinsic::udiv_fix: {
+  case Intrinsic::sdiv_fix_sat:
+  case Intrinsic::udiv_fix:
+  case Intrinsic::udiv_fix_sat: {
     Value *Op1 = Call.getArgOperand(0);
     Value *Op2 = Call.getArgOperand(1);
     Assert(Op1->getType()->isIntOrIntVectorTy(),
@@ -4778,7 +4775,7 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
            "third argument of [us][mul|div]_fix[_sat] must fit within 32 bits");
 
     if (ID == Intrinsic::smul_fix || ID == Intrinsic::smul_fix_sat ||
-        ID == Intrinsic::sdiv_fix) {
+        ID == Intrinsic::sdiv_fix || ID == Intrinsic::sdiv_fix_sat) {
       Assert(
           Op3->getZExtValue() < Op1->getType()->getScalarSizeInBits(),
           "the scale of s[mul|div]_fix[_sat] must be less than the width of "
@@ -4861,7 +4858,7 @@ void Verifier::visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI) {
     Type *ResultTy = FPI.getType();
     Assert(!ValTy->isVectorTy() && !ResultTy->isVectorTy(),
            "Intrinsic does not support vectors", &FPI);
-  } 
+  }
     break;
 
   case Intrinsic::experimental_constrained_lround:
@@ -4871,7 +4868,7 @@ void Verifier::visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI) {
     Assert(!ValTy->isVectorTy() && !ResultTy->isVectorTy(),
            "Intrinsic does not support vectors", &FPI);
     break;
-  } 
+  }
 
   case Intrinsic::experimental_constrained_fcmp:
   case Intrinsic::experimental_constrained_fcmps: {
@@ -4882,7 +4879,7 @@ void Verifier::visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI) {
   }
 
   case Intrinsic::experimental_constrained_fptosi:
-  case Intrinsic::experimental_constrained_fptoui: { 
+  case Intrinsic::experimental_constrained_fptoui: {
     Value *Operand = FPI.getArgOperand(0);
     uint64_t NumSrcElem = 0;
     Assert(Operand->getType()->isFPOrFPVectorTy(),
@@ -4954,7 +4951,7 @@ void Verifier::visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI) {
              "Intrinsic first argument's type must be smaller than result type",
              &FPI);
     }
-  } 
+  }
     break;
 
   default:

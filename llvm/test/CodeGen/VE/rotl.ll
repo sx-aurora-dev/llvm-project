@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define i64 @func1(i64, i32) {
+define i64 @func1(i64 %a, i32 %b) {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sll %s2, %s0, %s1
@@ -9,16 +9,16 @@ define i64 @func1(i64, i32) {
 ; CHECK-NEXT:    srl %s0, %s0, %s1
 ; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = zext i32 %1 to i64
-  %4 = shl i64 %0, %3
-  %5 = sub nsw i32 64, %1
-  %6 = zext i32 %5 to i64
-  %7 = lshr i64 %0, %6
-  %8 = or i64 %7, %4
-  ret i64 %8
+  %b64 = zext i32 %b to i64
+  %a.sl = shl i64 %a, %b64
+  %b.inv = sub nsw i32 64, %b
+  %b.inv64 = zext i32 %b.inv to i64
+  %a.sr = lshr i64 %a, %b.inv64
+  %r = or i64 %a.sr, %a.sl
+  ret i64 %r
 }
 
-define i32 @func2(i32, i32) {
+define i32 @func2(i32 %a, i32 %b) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
@@ -28,10 +28,10 @@ define i32 @func2(i32, i32) {
 ; CHECK-NEXT:    srl %s0, %s0, %s1
 ; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = shl i32 %0, %1
-  %4 = sub nsw i32 32, %1
-  %5 = lshr i32 %0, %4
-  %6 = or i32 %5, %3
-  ret i32 %6
+  %a.sl = shl i32 %a, %b
+  %b.inv = sub nsw i32 32, %b
+  %a.sr = lshr i32 %a, %b.inv
+  %r = or i32 %a.sr, %a.sl
+  ret i32 %r
 }
 

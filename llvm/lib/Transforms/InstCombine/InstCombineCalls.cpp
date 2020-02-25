@@ -45,6 +45,7 @@
 #include "llvm/IR/IntrinsicsX86.h"
 #include "llvm/IR/IntrinsicsARM.h"
 #include "llvm/IR/IntrinsicsAArch64.h"
+#include "llvm/IR/IntrinsicsHexagon.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
 #include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsPowerPC.h"
@@ -1964,10 +1965,9 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
       // Canonicalize a shift amount constant operand to modulo the bit-width.
       Constant *WidthC = ConstantInt::get(Ty, BitWidth);
       Constant *ModuloC = ConstantExpr::getURem(ShAmtC, WidthC);
-      if (ModuloC != ShAmtC) {
-        II->setArgOperand(2, ModuloC);
-        return II;
-      }
+      if (ModuloC != ShAmtC)
+        return replaceOperand(*II, 2, ModuloC);
+
       assert(ConstantExpr::getICmp(ICmpInst::ICMP_UGT, WidthC, ShAmtC) ==
                  ConstantInt::getTrue(CmpInst::makeCmpResultType(Ty)) &&
              "Shift amount expected to be modulo bitwidth");
@@ -2195,7 +2195,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
         llvm_unreachable("unexpected intrinsic ID");
       }
       Value *NewCall = Builder.CreateBinaryIntrinsic(NewIID, X, Y, II);
-      Instruction *FNeg = BinaryOperator::CreateFNeg(NewCall);
+      Instruction *FNeg = UnaryOperator::CreateFNeg(NewCall);
       FNeg->copyIRFlags(II);
       return FNeg;
     }
@@ -2266,16 +2266,16 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     Value *Src1 = II->getArgOperand(1);
     Value *X, *Y;
     if (match(Src0, m_FNeg(m_Value(X))) && match(Src1, m_FNeg(m_Value(Y)))) {
-      II->setArgOperand(0, X);
-      II->setArgOperand(1, Y);
+      replaceOperand(*II, 0, X);
+      replaceOperand(*II, 1, Y);
       return II;
     }
 
     // fma fabs(x), fabs(x), z -> fma x, x, z
     if (match(Src0, m_FAbs(m_Value(X))) &&
         match(Src1, m_FAbs(m_Specific(X)))) {
-      II->setArgOperand(0, X);
-      II->setArgOperand(1, X);
+      replaceOperand(*II, 0, X);
+      replaceOperand(*II, 1, X);
       return II;
     }
 
@@ -2313,10 +2313,8 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     // copysign X, (copysign ?, SignArg) --> copysign X, SignArg
     Value *SignArg;
     if (match(II->getArgOperand(1),
-              m_Intrinsic<Intrinsic::copysign>(m_Value(), m_Value(SignArg)))) {
-      II->setArgOperand(1, SignArg);
-      return II;
-    }
+              m_Intrinsic<Intrinsic::copysign>(m_Value(), m_Value(SignArg))))
+      return replaceOperand(*II, 1, SignArg);
 
     break;
   }
@@ -2353,8 +2351,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     if (match(Src, m_FNeg(m_Value(X))) || match(Src, m_FAbs(m_Value(X)))) {
       // cos(-x) -> cos(x)
       // cos(fabs(x)) -> cos(x)
-      II->setArgOperand(0, X);
-      return II;
+      return replaceOperand(*II, 0, X);
     }
     break;
   }
@@ -2363,7 +2360,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     if (match(II->getArgOperand(0), m_OneUse(m_FNeg(m_Value(X))))) {
       // sin(-x) --> -sin(x)
       Value *NewSin = Builder.CreateUnaryIntrinsic(Intrinsic::sin, X, II);
-      Instruction *FNeg = BinaryOperator::CreateFNeg(NewSin);
+      Instruction *FNeg = UnaryOperator::CreateFNeg(NewSin);
       FNeg->copyFastMathFlags(II);
       return FNeg;
     }
@@ -2713,8 +2710,8 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
          cast<Instruction>(Arg0)->getFastMathFlags().noInfs())) {
       if (Arg0IsZero)
         std::swap(A, B);
-      II->setArgOperand(0, A);
-      II->setArgOperand(1, B);
+      replaceOperand(*II, 0, A);
+      replaceOperand(*II, 1, B);
       return II;
     }
     break;
@@ -3337,12 +3334,10 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
         getKnownAlignment(II->getArgOperand(0), DL, II, &AC, &DT);
     unsigned AlignArg = II->getNumArgOperands() - 1;
     ConstantInt *IntrAlign = dyn_cast<ConstantInt>(II->getArgOperand(AlignArg));
-    if (IntrAlign && IntrAlign->getZExtValue() < MemAlign) {
-      II->setArgOperand(AlignArg,
-                        ConstantInt::get(Type::getInt32Ty(II->getContext()),
-                                         MemAlign, false));
-      return II;
-    }
+    if (IntrAlign && IntrAlign->getZExtValue() < MemAlign)
+      return replaceOperand(*II, AlignArg,
+                            ConstantInt::get(Type::getInt32Ty(II->getContext()),
+                                             MemAlign, false));
     break;
   }
 
@@ -3401,8 +3396,8 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     Value *Data, *Key;
     if (match(KeyArg, m_ZeroInt()) &&
         match(DataArg, m_Xor(m_Value(Data), m_Value(Key)))) {
-      II->setArgOperand(0, Data);
-      II->setArgOperand(1, Key);
+      replaceOperand(*II, 0, Data);
+      replaceOperand(*II, 1, Key);
       return II;
     }
     break;
@@ -3569,11 +3564,9 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     }
 
     // fp_class (nnan x), qnan|snan|other -> fp_class (nnan x), other
-    if (((Mask & S_NAN) || (Mask & Q_NAN)) && isKnownNeverNaN(Src0, &TLI)) {
-      II->setArgOperand(1, ConstantInt::get(Src1->getType(),
-                                            Mask & ~(S_NAN | Q_NAN)));
-      return II;
-    }
+    if (((Mask & S_NAN) || (Mask & Q_NAN)) && isKnownNeverNaN(Src0, &TLI))
+      return replaceOperand(*II, 1, ConstantInt::get(Src1->getType(),
+                                                     Mask & ~(S_NAN | Q_NAN)));
 
     const ConstantFP *CVal = dyn_cast<ConstantFP>(Src0);
     if (!CVal) {
@@ -3663,23 +3656,19 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
       if ((Width & (IntSize - 1)) == 0)
         return replaceInstUsesWith(*II, ConstantInt::getNullValue(Ty));
 
-      if (Width >= IntSize) {
-        // Hardware ignores high bits, so remove those.
-        II->setArgOperand(2, ConstantInt::get(CWidth->getType(),
-                                              Width & (IntSize - 1)));
-        return II;
-      }
+      // Hardware ignores high bits, so remove those.
+      if (Width >= IntSize)
+        return replaceOperand(*II, 2, ConstantInt::get(CWidth->getType(),
+                                                       Width & (IntSize - 1)));
     }
 
     unsigned Offset;
     ConstantInt *COffset = dyn_cast<ConstantInt>(II->getArgOperand(1));
     if (COffset) {
       Offset = COffset->getZExtValue();
-      if (Offset >= IntSize) {
-        II->setArgOperand(1, ConstantInt::get(COffset->getType(),
-                                              Offset & (IntSize - 1)));
-        return II;
-      }
+      if (Offset >= IntSize)
+        return replaceOperand(*II, 1, ConstantInt::get(COffset->getType(),
+                                                       Offset & (IntSize - 1)));
     }
 
     bool Signed = IID == Intrinsic::amdgcn_sbfe;
@@ -3722,7 +3711,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
           (IsCompr && ((EnBits & (0x3 << (2 * I))) == 0))) {
         Value *Src = II->getArgOperand(I + 2);
         if (!isa<UndefValue>(Src)) {
-          II->setArgOperand(I + 2, UndefValue::get(Src->getType()));
+          replaceOperand(*II, I + 2, UndefValue::get(Src->getType()));
           Changed = true;
         }
       }
@@ -3861,8 +3850,8 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
         ((match(Src1, m_One()) && match(Src0, m_ZExt(m_Value(ExtSrc)))) ||
          (match(Src1, m_AllOnes()) && match(Src0, m_SExt(m_Value(ExtSrc))))) &&
         ExtSrc->getType()->isIntegerTy(1)) {
-      II->setArgOperand(1, ConstantInt::getNullValue(Src1->getType()));
-      II->setArgOperand(2, ConstantInt::get(CC->getType(), CmpInst::ICMP_NE));
+      replaceOperand(*II, 1, ConstantInt::getNullValue(Src1->getType()));
+      replaceOperand(*II, 2, ConstantInt::get(CC->getType(), CmpInst::ICMP_NE));
       return II;
     }
 
@@ -4007,6 +3996,24 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
         return replaceInstUsesWith(*II, Src);
     }
 
+    break;
+  }
+  case Intrinsic::hexagon_V6_vandvrt:
+  case Intrinsic::hexagon_V6_vandvrt_128B: {
+    // Simplify Q -> V -> Q conversion.
+    if (auto Op0 = dyn_cast<IntrinsicInst>(II->getArgOperand(0))) {
+      Intrinsic::ID ID0 = Op0->getIntrinsicID();
+      if (ID0 != Intrinsic::hexagon_V6_vandqrt &&
+          ID0 != Intrinsic::hexagon_V6_vandqrt_128B)
+        break;
+      Value *Bytes = Op0->getArgOperand(1), *Mask = II->getArgOperand(1);
+      uint64_t Bytes1 = computeKnownBits(Bytes, 0, Op0).One.getZExtValue();
+      uint64_t Mask1 = computeKnownBits(Mask, 0, II).One.getZExtValue();
+      // Check if every byte has common bits in Bytes and Mask.
+      uint64_t C = Bytes1 & Mask1;
+      if ((C & 0xFF) && (C & 0xFF00) && (C & 0xFF0000) && (C & 0xFF000000))
+        return replaceInstUsesWith(*II, Op0->getArgOperand(0));
+    }
     break;
   }
   case Intrinsic::stackrestore: {
@@ -4206,7 +4213,7 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
           MoveI = MoveI->getNextNonDebugInstruction();
           Temp->moveBefore(II);
         }
-        II->setArgOperand(0, Builder.CreateAnd(CurrCond, NextCond));
+        replaceOperand(*II, 0, Builder.CreateAnd(CurrCond, NextCond));
       }
       eraseInstFromFunction(*NextInst);
       return II;
@@ -4283,7 +4290,7 @@ Instruction *InstCombiner::tryOptimizeCall(CallInst *CI) {
   };
   LibCallSimplifier Simplifier(DL, &TLI, ORE, BFI, PSI, InstCombineRAUW,
                                InstCombineErase);
-  if (Value *With = Simplifier.optimizeCall(CI)) {
+  if (Value *With = Simplifier.optimizeCall(CI, Builder)) {
     ++NumSimplified;
     return CI->use_empty() ? CI : replaceInstUsesWith(*CI, With);
   }

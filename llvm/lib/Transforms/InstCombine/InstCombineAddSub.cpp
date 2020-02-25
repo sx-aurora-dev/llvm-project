@@ -1383,8 +1383,9 @@ Instruction *InstCombiner::visitAdd(BinaryOperator &I) {
   // (add (and A, B) (or A, B)) --> (add A, B)
   if (match(&I, m_c_BinOp(m_Or(m_Value(A), m_Value(B)),
                           m_c_And(m_Deferred(A), m_Deferred(B))))) {
-    I.setOperand(0, A);
-    I.setOperand(1, B);
+    // Replacing operands in-place to preserve nuw/nsw flags.
+    replaceOperand(I, 0, A);
+    replaceOperand(I, 1, B);
     return &I;
   }
 
@@ -2196,7 +2197,7 @@ Instruction *InstCombiner::visitFSubGeneric(BinaryOpTy &I) {
   // (-X) - Op1 --> -(X + Op1)
   if (I.hasNoSignedZeros() && !isa<ConstantExpr>(Op0) &&
       MC.try_match(Op0, m_OneUse(m_FNeg(m_Value(X))))) {
-    Value *FAdd = MCBuilder.CreateFAddFMF(X, Op1, &I);
+    Value *FAdd = MCBuilder.CreateFAddFMF(Builder, X, Op1, &I);
     return MCBuilder.CreateFNegFMF(FAdd, &I);
   }
 

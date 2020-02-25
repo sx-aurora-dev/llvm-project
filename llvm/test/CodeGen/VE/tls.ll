@@ -278,7 +278,7 @@ define void @set_global(i32 %v) {
 ; LOCAL-NEXT:  stl %s0, (,%s34)
 ; LOCAL-NEXT:  or %s11, 0, %s9
 entry:
-  store i32 %v, i32* @x, align 4, !tbaa !3
+  store i32 %v, i32* @x, align 4
   ret void
 }
 
@@ -376,12 +376,6 @@ define void @set_local(i32 %v) {
 ; LOCAL-NEXT:  stl %s0, (,%s34)
 ; LOCAL-NEXT:  or %s11, 0, %s9
 entry:
-  store i32 %v, i32* @y, align 4, !tbaa !3
+  store i32 %v, i32* @y, align 4
   ret void
 }
-
-!2 = !{!"clang version 8.0.0 (https://github.com/llvm-mirror/clang.git 3b98372866ea8dd6c83dd461fdd1bff7ac3658ba) (https://github.com/llvm-mirror/llvm.git 404e99265b881e4259763b7780aaf824581ff160)"}
-!3 = !{!4, !4, i64 0}
-!4 = !{!"int", !5, i64 0}
-!5 = !{!"omnipotent char", !6, i64 0}
-!6 = !{!"Simple C/C++ TBAA"}

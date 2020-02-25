@@ -835,6 +835,9 @@ bool LLParser::ParseSummaryEntry() {
   case lltok::kw_typeidCompatibleVTable:
     result = ParseTypeIdCompatibleVtableEntry(SummaryID);
     break;
+  case lltok::kw_flags:
+    result = ParseSummaryIndexFlags();
+    break;
   default:
     result = Error(Lex.getLoc(), "unexpected summary kind");
     break;
@@ -6429,9 +6432,6 @@ bool LLParser::ParseCallBr(Instruction *&Inst, PerFunctionState &PFS) {
                           /*IsCall=*/true))
     return true;
 
-  if (isa<InlineAsm>(Callee) && !Ty->getReturnType()->isVoidTy())
-    return Error(RetTypeLoc, "asm-goto outputs not supported");
-
   // Set up the Attribute for the function.
   SmallVector<Value *, 8> Args;
   SmallVector<AttributeSet, 8> ArgAttrs;
@@ -7669,6 +7669,9 @@ bool LLParser::ParseTypeTestResolution(TypeTestResolution &TTRes) {
     return true;
 
   switch (Lex.getKind()) {
+  case lltok::kw_unknown:
+    TTRes.TheKind = TypeTestResolution::Unknown;
+    break;
   case lltok::kw_unsat:
     TTRes.TheKind = TypeTestResolution::Unsat;
     break;
@@ -7999,6 +8002,21 @@ void LLParser::AddGlobalValueToIndex(
       NumberedValueInfos.resize(ID + 1);
     NumberedValueInfos[ID] = VI;
   }
+}
+
+/// ParseSummaryIndexFlags
+///   ::= 'flags' ':' UInt64
+bool LLParser::ParseSummaryIndexFlags() {
+  assert(Lex.getKind() == lltok::kw_flags);
+  Lex.Lex();
+
+  if (ParseToken(lltok::colon, "expected ':' here"))
+    return true;
+  uint64_t Flags;
+  if (ParseUInt64(Flags))
+    return true;
+  Index->setFlags(Flags);
+  return false;
 }
 
 /// ParseGVEntry

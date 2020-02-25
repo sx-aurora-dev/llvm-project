@@ -255,7 +255,7 @@ def llvm_v8i1_ty       : LLVMType<v8i1>;     //   8 x i1
 def llvm_v16i1_ty      : LLVMType<v16i1>;    //  16 x i1
 def llvm_v32i1_ty      : LLVMType<v32i1>;    //  32 x i1
 def llvm_v64i1_ty      : LLVMType<v64i1>;    //  64 x i1
-def llvm_v256i1_ty     : LLVMType<v256i1>;   // 256 x i1
+def llvm_v128i1_ty     : LLVMType<v128i1>;   // 128 x i1
 def llvm_v512i1_ty     : LLVMType<v512i1>;   // 512 x i1
 def llvm_v1024i1_ty    : LLVMType<v1024i1>;  //1024 x i1
 
@@ -991,6 +991,14 @@ def int_smul_fix_sat : Intrinsic<[llvm_anyint_ty],
 def int_umul_fix_sat : Intrinsic<[llvm_anyint_ty],
                                  [LLVMMatchType<0>, LLVMMatchType<0>, llvm_i32_ty],
                                  [IntrNoMem, IntrSpeculatable, IntrWillReturn, Commutative, ImmArg<2>]>;
+
+def int_sdiv_fix_sat : Intrinsic<[llvm_anyint_ty],
+                                 [LLVMMatchType<0>, LLVMMatchType<0>, llvm_i32_ty],
+                                 [IntrNoMem, ImmArg<2>]>;
+
+def int_udiv_fix_sat : Intrinsic<[llvm_anyint_ty],
+                                 [LLVMMatchType<0>, LLVMMatchType<0>, llvm_i32_ty],
+                                 [IntrNoMem, ImmArg<2>]>;
 
 //===------------------------- Memory Use Markers -------------------------===//
 //
@@ -1875,4 +1883,3 @@ include "llvm/IR/IntrinsicsBPF.td"
 include "llvm/IR/IntrinsicsSystemZ.td"
 include "llvm/IR/IntrinsicsWebAssembly.td"
 include "llvm/IR/IntrinsicsRISCV.td"
-include "llvm/IR/IntrinsicsVE.td"

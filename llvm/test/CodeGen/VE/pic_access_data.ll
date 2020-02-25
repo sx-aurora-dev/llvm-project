@@ -32,16 +32,8 @@ define i32 @func() {
 ; CHECK-NEXT:    stl %s2, (,%s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
 
-  store i32* @dst, i32** @ptr, align 8, !tbaa !3
-  %1 = load i32, i32* @src, align 4, !tbaa !7
-  store i32 %1, i32* @dst, align 4, !tbaa !7
+  store i32* @dst, i32** @ptr, align 8
+  %1 = load i32, i32* @src, align 4
+  store i32 %1, i32* @dst, align 4
   ret i32 1
 }
-
-!2 = !{!"clang version 8.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git 3b98372866ea8dd6c83dd461fdd1bff7ac3658ba) (llvm/llvm.git 6fe73ad9979f8f32a171413308a96c1d7c3b6a18)"}
-!3 = !{!4, !4, i64 0}
-!4 = !{!"any pointer", !5, i64 0}
-!5 = !{!"omnipotent char", !6, i64 0}
-!6 = !{!"Simple C/C++ TBAA"}
-!7 = !{!8, !8, i64 0}
-!8 = !{!"int", !5, i64 0}

@@ -141,7 +141,11 @@ def Vector_ContractionOp :
   }];
   let builders = [OpBuilder<
     "Builder *builder, OperationState &result, Value lhs, Value rhs, "
-    "Value acc, ArrayAttr indexingMaps, ArrayAttr iteratorTypes">];
+    "Value acc, ArrayAttr indexingMaps, ArrayAttr iteratorTypes">,
+    OpBuilder<
+      "Builder *builder, OperationState &result, Value lhs, Value rhs, "
+      "Value acc, ArrayRef<ArrayRef<AffineExpr>> indexingExprs, "
+      "ArrayRef<StringRef> iteratorTypes">];
   let extraClassDeclaration = [{
     VectorType getLhsType() {
       return lhs().getType().cast<VectorType>();
@@ -176,6 +180,62 @@ def Vector_ContractionOp :
 
     std::vector<std::pair<int64_t, int64_t>> getContractingDimMap();
     std::vector<std::pair<int64_t, int64_t>> getBatchDimMap();
+  }];
+}
+
+def Vector_ReductionOp :
+  Vector_Op<"reduction", [NoSideEffect,
+     PredOpTrait<"source operand and result have same element type",
+                 TCresVTEtIsSameAsOpBase<0, 0>>]>,
+    Arguments<(ins StrAttr:$kind, AnyVector:$vector)>,
+    Results<(outs AnyType:$dest)> {
+  let summary = "reduction operation";
+  let description = [{
+    Reduces an 1-D vector "horizontally" into a scalar using the given
+    operation (add/mul/min/max for int/fp and and/or/xor for int only).
+    Note that these operations are restricted to 1-D vectors to remain
+    close to the corresponding LLVM intrinsics:
+
+    http://llvm.org/docs/LangRef.html#experimental-vector-reduction-intrinsics
+
+    Examples:
+    ```
+      %1 = vector.reduction "add", %0 : vector<16xf32> into f32
+
+      %3 = vector.reduction "xor", %2 : vector<4xi32> into i32
+    ```
+  }];
+  let verifier = [{ return ::verify(*this); }];
+  let assemblyFormat = [{
+    $kind `,` $vector attr-dict `:` type($vector) `into` type($dest)
+  }];
+  let extraClassDeclaration = [{
+    VectorType getVectorType() {
+      return vector().getType().cast<VectorType>();
+    }
+  }];
+}
+
+// TODO(ajcbik): quick version with "fused" accumulator; next step
+//               will merge Reduction/ReductionV2 into one with
+//               an optional accumulator instead
+def Vector_ReductionV2Op :
+  Vector_Op<"reductionv2", [NoSideEffect]>,
+    Arguments<(ins StrAttr:$kind, VectorOf<[F32, F64]>:$vector, AnyType:$acc)>,
+    Results<(outs AnyType:$dest)> {
+  let summary = "reduction operation";
+  let description = [{
+     As vector.reduction, but with a fused accumulator (add/mul for fp only).
+  }];
+  let verifier = ?;
+  let assemblyFormat = [{
+    $kind `,` $vector `,` $acc attr-dict `:`
+      type($vector) `,` type($acc) `into` type($dest)
+  }];
+  let extraClassDeclaration = [{
+    VectorType getVectorType() {
+      return vector().getType().cast<VectorType>();
+    }
   }];
 }
 
@@ -279,10 +339,11 @@ def Vector_ShuffleOp :
 
 def Vector_ExtractElementOp :
   Vector_Op<"extractelement", [NoSideEffect,
-     PredOpTrait<"operand and result have same element type",
-                 TCresVTEtIsSameAsOpBase<0, 0>>]>,
-    Arguments<(ins AnyVector:$vector, AnyInteger:$position)>,
-    Results<(outs AnyType)> {
+     TypesMatchWith<"result type matches element type of vector operand",
+                    "vector", "result",
+                    "$_self.cast<ShapedType>().getElementType()">]>,
+    Arguments<(ins AnyVector:$vector, AnySignlessInteger:$position)>,
+    Results<(outs AnyType:$result)> {
   let summary = "extractelement operation";
   let description = [{
     Takes an 1-D vector and a dynamic index position and extracts the
@@ -301,6 +362,10 @@ def Vector_ExtractElementOp :
     VectorType getVectorType() {
       return vector().getType().cast<VectorType>();
     }
+  }];
+
+  let assemblyFormat = [{
+    $vector `[` $position `:` type($position) `]` attr-dict `:` type($vector)
   }];
 }
 
@@ -422,12 +487,13 @@ def Vector_FMAOp :
 
 def Vector_InsertElementOp :
   Vector_Op<"insertelement", [NoSideEffect,
-     PredOpTrait<"source operand and result have same element type",
-                 TCresVTEtIsSameAsOpBase<0, 0>>,
-     PredOpTrait<"dest operand and result have same type",
-                 TCresIsSameAsOpBase<0, 1>>]>,
-     Arguments<(ins AnyType:$source, AnyVector:$dest, AnyInteger:$position)>,
-     Results<(outs AnyVector)> {
+     TypesMatchWith<"source operand type matches element type of result",
+                    "result", "source",
+                    "$_self.cast<ShapedType>().getElementType()">,
+     AllTypesMatch<["dest", "result"]>]>,
+     Arguments<(ins AnyType:$source, AnyVector:$dest,
+                    AnySignlessInteger:$position)>,
+     Results<(outs AnyVector:$result)> {
   let summary = "insertelement operation";
   let description = [{
     Takes a scalar source, an 1-D destination vector and a dynamic index
@@ -449,6 +515,11 @@ def Vector_InsertElementOp :
     VectorType getDestVectorType() {
       return dest().getType().cast<VectorType>();
     }
+  }];
+
+  let assemblyFormat = [{
+    $source `,` $dest `[` $position `:` type($position) `]` attr-dict `:`
+    type($result)
   }];
 }
 

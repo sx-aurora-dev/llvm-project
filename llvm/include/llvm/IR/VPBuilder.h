@@ -84,62 +84,35 @@ public:
       return BinaryOperator::Create(Instruction::OPC, V1, V2, Name);\
     } \
     template<typename IRBuilderType> \
-    Value *Create##OPC(IRBuilderType & Builder, Value *V1, Value *V2, \
+    Instruction *Create##OPC(IRBuilderType & Builder, Value *V1, Value *V2, \
                                        const Twine &Name = "") const { \
       auto * Inst = BinaryOperator::Create(Instruction::OPC, V1, V2, Name); \
       Builder.Insert(Inst); return Inst; \
-    }
-  #include "llvm/IR/Instruction.def"
-  #define HANDLE_BINARY_INST(N, OPC, CLASS) \
-    Value *Create##OPC(Value *V1, Value *V2, \
+    } \
+    Instruction *Create##OPC(Value *V1, Value *V2, \
                                        const Twine &Name, BasicBlock *BB) const {\
       return BinaryOperator::Create(Instruction::OPC, V1, V2, Name, BB);\
-    }
- #include "llvm/IR/Instruction.def"
-  #define HANDLE_BINARY_INST(N, OPC, CLASS) \
-    Value *Create##OPC(Value *V1, Value *V2, \
+    } \
+    Instruction *Create##OPC(Value *V1, Value *V2, \
                                        const Twine &Name, Instruction *I) const {\
       return BinaryOperator::Create(Instruction::OPC, V1, V2, Name, I);\
+    } \
+    Instruction *Create##OPC##FMF(Value *V1, Value *V2, Instruction *FMFSource, \
+                                       const Twine &Name = "") const {\
+      return BinaryOperator::CreateWithCopiedFlags(Instruction::OPC, V1, V2, FMFSource, Name);\
+    } \
+    template<typename IRBuilderType> \
+    Instruction *Create##OPC##FMF(IRBuilderType& Builder, Value *V1, Value *V2, Instruction *FMFSource, \
+                                       const Twine &Name = "") const {\
+      auto * Inst = BinaryOperator::CreateWithCopiedFlags(Instruction::OPC, V1, V2, FMFSource, Name);\
+      Builder.Insert(Inst); return Inst; \
     }
   #include "llvm/IR/Instruction.def"
   #undef HANDLE_BINARY_INST
 
-  BinaryOperator *CreateFAddFMF(Value *V1, Value *V2,
-                                       Instruction *FMFSource,
+  UnaryOperator *CreateFNegFMF(Value *Op, Instruction *FMFSource,
                                        const Twine &Name = "") {
-    return BinaryOperator::CreateWithCopiedFlags(Instruction::FAdd, V1, V2, FMFSource, Name);
-  }
-  BinaryOperator *CreateFSubFMF(Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    return BinaryOperator::CreateWithCopiedFlags(Instruction::FSub, V1, V2, FMFSource, Name);
-  }
-  template<typename IRBuilderType>
-  BinaryOperator *CreateFSubFMF(IRBuilderType & Builder, Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    auto * Inst = CreateFSubFMF(V1, V2, FMFSource, Name);
-    Builder.Insert(Inst); return Inst;
-  }
-  BinaryOperator *CreateFMulFMF(Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    return BinaryOperator::CreateWithCopiedFlags(Instruction::FMul, V1, V2, FMFSource, Name);
-  }
-  BinaryOperator *CreateFDivFMF(Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    return BinaryOperator::CreateWithCopiedFlags(Instruction::FDiv, V1, V2, FMFSource, Name);
-  }
-  BinaryOperator *CreateFRemFMF(Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    return BinaryOperator::CreateWithCopiedFlags(Instruction::FRem, V1, V2, FMFSource, Name);
-  }
-  BinaryOperator *CreateFNegFMF(Value *Op, Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    Value *Zero = ConstantFP::getNegativeZero(Op->getType());
-    return BinaryOperator::CreateWithCopiedFlags(Instruction::FSub, Zero, Op, FMFSource);
+    return UnaryOperator::CreateFNegFMF(Op, FMFSource, Name);
   }
 
   template<typename IRBuilderType>
@@ -165,59 +138,36 @@ public:
     template<typename IRBuilderType> \
     Instruction *Create##OPC(IRBuilderType & Builder, Value *V1, Value *V2, \
                                        const Twine &Name = "") const {\
-      auto * PredInst = Create##OPC(V1, V2, Name); Builder.Insert(PredInst); return PredInst; \
-    }
-  #include "llvm/IR/Instruction.def"
-  #define HANDLE_BINARY_INST(N, OPC, CLASS) \
+      auto * PredInst = Create##OPC(V1, V2, Name); \
+      Builder.Insert(PredInst); \
+      return PredInst; \
+    } \
     Instruction *Create##OPC(Value *V1, Value *V2, \
                                        const Twine &Name, BasicBlock *BB) const {\
       return PredicatedBinaryOperator::Create(PC.Mod, PC.Mask, PC.VectorLength, Instruction::OPC, V1, V2, Name, BB);\
-    }
-  #include "llvm/IR/Instruction.def"
-  #define HANDLE_BINARY_INST(N, OPC, CLASS) \
+    } \
     Instruction *Create##OPC(Value *V1, Value *V2, \
                                        const Twine &Name, Instruction *I) const {\
       return PredicatedBinaryOperator::Create(PC.Mod, PC.Mask, PC.VectorLength, Instruction::OPC, V1, V2, Name, I);\
+    } \
+    Instruction *Create##OPC##FMF(Value *V1, Value *V2, Instruction *FMFSource, \
+                                       const Twine &Name = "") const {\
+      return PredicatedBinaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::OPC, V1, V2, FMFSource, Name);\
+    } \
+    template<typename IRBuilderType> \
+    Instruction *Create##OPC##FMF(IRBuilderType& Builder, Value *V1, Value *V2, Instruction *FMFSource, \
+                                       const Twine &Name = "") const {\
+      auto * Inst = PredicatedBinaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::OPC, V1, V2, FMFSource, Name);\
+      Builder.Insert(Inst); return Inst; \
     }
   #include "llvm/IR/Instruction.def"
   #undef HANDLE_BINARY_INST
 
-  Instruction *CreateFAddFMF(Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    return PredicatedBinaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::FAdd, V1, V2, FMFSource, Name);
-  }
-  Instruction *CreateFSubFMF(Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    return PredicatedBinaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::FSub, V1, V2, FMFSource, Name);
-  }
-  template<typename IRBuilderType>
-  Instruction *CreateFSubFMF(IRBuilderType & Builder, Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    auto * Inst = CreateFSubFMF(V1, V2, FMFSource, Name);
-    Builder.Insert(Inst); return Inst;
-  }
-  Instruction *CreateFMulFMF(Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    return PredicatedBinaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::FMul, V1, V2, FMFSource, Name);
-  }
-  Instruction *CreateFDivFMF(Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    return PredicatedBinaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::FDiv, V1, V2, FMFSource, Name);
-  }
-  Instruction *CreateFRemFMF(Value *V1, Value *V2,
-                                       Instruction *FMFSource,
-                                       const Twine &Name = "") {
-    return PredicatedBinaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::FRem, V1, V2, FMFSource, Name);
-  }
   Instruction *CreateFNegFMF(Value *Op, Instruction *FMFSource,
                                        const Twine &Name = "") {
+    // FIXME use llvm.vp.fneg
     Value *Zero = ConstantFP::getNegativeZero(Op->getType());
-    return PredicatedBinaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::FSub, Zero, Op, FMFSource);
+    return PredicatedBinaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::FSub, Zero, Op, FMFSource, Name);
   }
 
   // TODO predicated casts

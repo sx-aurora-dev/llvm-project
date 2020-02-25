@@ -1290,14 +1290,24 @@ struct CmpClass_match {
   template <typename OpTy> bool match(OpTy *V) { EmptyContext EContext; return match_context(V, EContext); }
   template <typename OpTy, typename MatchContext> bool match_context(OpTy *V, MatchContext & MContext) {
     if (auto *I = match_dyn_cast<MatchContext, Class>(V)) {
-      if (!MContext.acceptInnerNode(I)) return false;
+      if (!MContext.acceptInnerNode(I))
+        return false;
+
       MatchContext LRContext(MContext);
-      if ((L.match_context(I->getOperand(0), LRContext) && R.match_context(I->getOperand(1), LRContext) && MContext.mergeContext(LRContext)) ||
-          (Commutable && (L.match_context(I->getOperand(1), MContext) && R.match_context(I->getOperand(0), MContext)))) {
+      if (L.match_context(I->getOperand(0), LRContext) &&
+          R.match_context(I->getOperand(1), LRContext) &&
+          MContext.mergeContext(LRContext)) {
         Predicate = I->getPredicate();
         return true;
-      } else if (Commutable && L.match(I->getOperand(1)) &&
-           R.match(I->getOperand(0))) {
+      }
+
+      if (!Commutable)
+        return false;
+
+      MatchContext RLContext(MContext);
+      if (L.match_context(I->getOperand(1), RLContext) &&
+          R.match_context(I->getOperand(0), RLContext) &&
+          MContext.mergeContext(RLContext)) {
         Predicate = I->getSwappedPredicate();
         return true;
       }
@@ -1789,7 +1799,8 @@ m_UnordFMin(const LHS &L, const RHS &R) {
 }
 
 //===----------------------------------------------------------------------===//
-// Matchers for overflow check patterns: e.g. (a + b) u< a
+// Matchers for overflow check patterns: e.g. (a + b) u< a, (a ^ -1) <u b
+// Note that S might be matched to other instructions than AddInst.
 //
 
 template <typename LHS_t, typename RHS_t, typename Sum_t>
@@ -1820,6 +1831,19 @@ struct UAddWithOverflow_match {
     if (Pred == ICmpInst::ICMP_UGT)
       if (AddExpr.match(ICmpRHS) && (ICmpLHS == AddLHS || ICmpLHS == AddRHS))
         return L.match(AddLHS) && R.match(AddRHS) && S.match(ICmpRHS);
+
+    Value *Op1;
+    auto XorExpr = m_OneUse(m_Xor(m_Value(Op1), m_AllOnes()));
+    // (a ^ -1) <u b
+    if (Pred == ICmpInst::ICMP_ULT) {
+      if (XorExpr.match(ICmpLHS))
+        return L.match(Op1) && R.match(ICmpRHS) && S.match(ICmpLHS);
+    }
+    //  b > u (a ^ -1)
+    if (Pred == ICmpInst::ICMP_UGT) {
+      if (XorExpr.match(ICmpRHS))
+        return L.match(Op1) && R.match(ICmpLHS) && S.match(ICmpRHS);
+    }
 
     // Match special-case for increment-by-1.
     if (Pred == ICmpInst::ICMP_EQ) {

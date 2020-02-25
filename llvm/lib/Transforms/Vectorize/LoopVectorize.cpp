@@ -295,15 +295,6 @@ cl::opt<bool> llvm::EnableLoopVectorization(
     "vectorize-loops", cl::init(true), cl::Hidden,
     cl::desc("Run the Loop vectorization passes"));
 
-/// A helper function for converting Scalar types to vector types.
-/// If the incoming type is void, we return void. If the VF is 1, we return
-/// the scalar type.
-static Type *ToVectorTy(Type *Scalar, unsigned VF) {
-  if (Scalar->isVoidTy() || VF == 1)
-    return Scalar;
-  return VectorType::get(Scalar, VF);
-}
-
 /// A helper function that returns the type of loaded or stored value.
 static Type *getMemInstValueType(Value *I) {
   assert((isa<LoadInst>(I) || isa<StoreInst>(I)) &&
@@ -1609,14 +1600,9 @@ struct LoopVectorize : public FunctionPass {
     if (skipFunction(F))
       return false;
 
-    auto *TTI = &getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F);
-    if (!TTI->enableLoopVectorizer()) {
-      // bail for targets that do not support LV
-      return false;
-    }
-
     auto *SE = &getAnalysis<ScalarEvolutionWrapperPass>().getSE();
     auto *LI = &getAnalysis<LoopInfoWrapperPass>().getLoopInfo();
+    auto *TTI = &getAnalysis<TargetTransformInfoWrapperPass>().getTTI(F);
     auto *DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
     auto *BFI = &getAnalysis<BlockFrequencyInfoWrapperPass>().getBFI();
     auto *TLIP = getAnalysisIfAvailable<TargetLibraryInfoWrapperPass>();
@@ -5038,11 +5024,8 @@ LoopVectorizationCostModel::computeFeasibleMaxVF(unsigned ConstTripCount) {
   LLVM_DEBUG(dbgs() << "LV: The Widest register safe to use is: "
                     << WidestRegister << " bits.\n");
 
-#if 0
   assert(MaxVectorSize <= 256 && "Did not expect to pack so many elements"
                                  " into one vector!");
-#endif
-
   if (MaxVectorSize == 0) {
     LLVM_DEBUG(dbgs() << "LV: The target has no vector registers.\n");
     MaxVectorSize = 1;
@@ -7986,14 +7969,9 @@ bool LoopVectorizePass::runImpl(
 
 PreservedAnalyses LoopVectorizePass::run(Function &F,
                                          FunctionAnalysisManager &AM) {
-    auto &TTI = AM.getResult<TargetIRAnalysis>(F);
-    if (!TTI.enableLoopVectorizer()) {
-      // bail for targets that do not support LV
-      return PreservedAnalyses::all();
-    }
-
     auto &SE = AM.getResult<ScalarEvolutionAnalysis>(F);
     auto &LI = AM.getResult<LoopAnalysis>(F);
+    auto &TTI = AM.getResult<TargetIRAnalysis>(F);
     auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
     auto &BFI = AM.getResult<BlockFrequencyAnalysis>(F);
     auto &TLI = AM.getResult<TargetLibraryAnalysis>(F);

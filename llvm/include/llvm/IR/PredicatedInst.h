@@ -373,7 +373,7 @@ struct PredicatedContext {
   }
 
   PredicatedContext(const PredicatedContext &PC)
-      : Mask(PC.Mask), VectorLength(PC.VectorLength), Mod(PC.Mod) {}
+  : Mask(PC.Mask), VectorLength(PC.VectorLength), Mod(PC.Mod) {}
 
   /// accept a match where \p Val is in a non-leaf position in a match pattern
   bool acceptInnerNode(const Value *Val) const {

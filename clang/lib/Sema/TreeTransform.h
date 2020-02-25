@@ -1602,8 +1602,7 @@ public:
   ///
   /// By default, performs semantic analysis to build the new OpenMP clause.
   /// Subclasses may override this routine to provide different behavior.
-  OMPClause *RebuildOMPDefaultClause(OpenMPDefaultClauseKind Kind,
-                                     SourceLocation KindKwLoc,
+  OMPClause *RebuildOMPDefaultClause(DefaultKind Kind, SourceLocation KindKwLoc,
                                      SourceLocation StartLoc,
                                      SourceLocation LParenLoc,
                                      SourceLocation EndLoc) {
@@ -8807,6 +8806,27 @@ TreeTransform<Derived>::TransformOMPSeqCstClause(OMPSeqCstClause *C) {
 template <typename Derived>
 OMPClause *
 TreeTransform<Derived>::TransformOMPAcqRelClause(OMPAcqRelClause *C) {
+  // No need to rebuild this clause, no template-dependent parameters.
+  return C;
+}
+
+template <typename Derived>
+OMPClause *
+TreeTransform<Derived>::TransformOMPAcquireClause(OMPAcquireClause *C) {
+  // No need to rebuild this clause, no template-dependent parameters.
+  return C;
+}
+
+template <typename Derived>
+OMPClause *
+TreeTransform<Derived>::TransformOMPReleaseClause(OMPReleaseClause *C) {
+  // No need to rebuild this clause, no template-dependent parameters.
+  return C;
+}
+
+template <typename Derived>
+OMPClause *
+TreeTransform<Derived>::TransformOMPRelaxedClause(OMPRelaxedClause *C) {
   // No need to rebuild this clause, no template-dependent parameters.
   return C;
 }

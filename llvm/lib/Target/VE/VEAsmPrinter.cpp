@@ -47,34 +47,33 @@ public:
 
   StringRef getPassName() const override { return "VE Assembly Printer"; }
 
+  bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
+                       const char *ExtraCode, raw_ostream &O) override;
+  bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
+                             const char *ExtraCode, raw_ostream &O) override;
   void printOperand(const MachineInstr *MI, int opNum, raw_ostream &OS);
   void printMemASXOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                           const char *Modifier = nullptr);
   void printMemASOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                          const char *Modifier = nullptr);
 
-  void EmitFunctionBodyStart() override;
-  void EmitInstruction(const MachineInstr *MI) override;
+  void lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
+                                 const MCSubtargetInfo &STI);
+  void lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
+                                    const MCSubtargetInfo &STI);
+  void lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
+                                     const MCSubtargetInfo &STI);
+  void lowerEH_SJLJ_SETJMPAndEmitMCInsts(const MachineInstr *MI,
+                                         const MCSubtargetInfo &STI);
+  void lowerEH_SJLJ_LONGJMPAndEmitMCInsts(const MachineInstr *MI,
+                                          const MCSubtargetInfo &STI);
+
+  void emitInstruction(const MachineInstr *MI) override;
 
   static const char *getRegisterName(unsigned RegNo) {
     return VEInstPrinter::getRegisterName(RegNo);
   }
 
-  bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                       const char *ExtraCode, raw_ostream &O) override;
-  bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
-                             const char *ExtraCode, raw_ostream &O) override;
-
-  void LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
-                                 const MCSubtargetInfo &STI);
-  void LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
-                                    const MCSubtargetInfo &STI);
-  void LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
-                                     const MCSubtargetInfo &STI);
-  void LowerEH_SJLJ_SETJMPAndEmitMCInsts(const MachineInstr *MI,
-                                         const MCSubtargetInfo &STI);
-  void LowerEH_SJLJ_LONGJMPAndEmitMCInsts(const MachineInstr *MI,
-                                          const MCSubtargetInfo &STI);
 };
 } // end of anonymous namespace
 
@@ -92,52 +91,52 @@ static MCOperand createGOTRelExprOp(VEMCExpr::VariantKind Kind,
   return MCOperand::createExpr(expr);
 }
 
-static void EmitSIC(MCStreamer &OutStreamer, MCOperand &RD,
+static void emitSIC(MCStreamer &OutStreamer, MCOperand &RD,
                     const MCSubtargetInfo &STI) {
   MCInst SICInst;
   SICInst.setOpcode(VE::SIC);
   SICInst.addOperand(RD);
-  OutStreamer.EmitInstruction(SICInst, STI);
+  OutStreamer.emitInstruction(SICInst, STI);
 }
 
-static void EmitBSIC(MCStreamer &OutStreamer, MCOperand &R1, MCOperand &R2,
+static void emitBSIC(MCStreamer &OutStreamer, MCOperand &R1, MCOperand &R2,
                      const MCSubtargetInfo &STI) {
   MCInst BSICInst;
   BSICInst.setOpcode(VE::BSIC);
   BSICInst.addOperand(R1);
   BSICInst.addOperand(R2);
-  OutStreamer.EmitInstruction(BSICInst, STI);
+  OutStreamer.emitInstruction(BSICInst, STI);
 }
 
-static void EmitLEAzzi(MCStreamer &OutStreamer, MCOperand &Imm, MCOperand &RD,
+static void emitLEAzzi(MCStreamer &OutStreamer, MCOperand &Imm, MCOperand &RD,
                        const MCSubtargetInfo &STI) {
   MCInst LEAInst;
   LEAInst.setOpcode(VE::LEAzzi);
   LEAInst.addOperand(RD);
   LEAInst.addOperand(Imm);
-  OutStreamer.EmitInstruction(LEAInst, STI);
+  OutStreamer.emitInstruction(LEAInst, STI);
 }
 
-static void EmitLEASLzzi(MCStreamer &OutStreamer, MCOperand &Imm, MCOperand &RD,
+static void emitLEASLzzi(MCStreamer &OutStreamer, MCOperand &Imm, MCOperand &RD,
                          const MCSubtargetInfo &STI) {
   MCInst LEASLInst;
   LEASLInst.setOpcode(VE::LEASLzzi);
   LEASLInst.addOperand(RD);
   LEASLInst.addOperand(Imm);
-  OutStreamer.EmitInstruction(LEASLInst, STI);
+  OutStreamer.emitInstruction(LEASLInst, STI);
 }
 
-static void EmitLEAzii(MCStreamer &OutStreamer, MCOperand &RS1, MCOperand &Imm,
+static void emitLEAzii(MCStreamer &OutStreamer, MCOperand &RS1, MCOperand &Imm,
                        MCOperand &RD, const MCSubtargetInfo &STI) {
   MCInst LEAInst;
   LEAInst.setOpcode(VE::LEAzii);
   LEAInst.addOperand(RD);
   LEAInst.addOperand(RS1);
   LEAInst.addOperand(Imm);
-  OutStreamer.EmitInstruction(LEAInst, STI);
+  OutStreamer.emitInstruction(LEAInst, STI);
 }
 
-static void EmitLEASLrri(MCStreamer &OutStreamer, MCOperand &RS1,
+static void emitLEASLrri(MCStreamer &OutStreamer, MCOperand &RS1,
                          MCOperand &RS2, MCOperand &Imm, MCOperand &RD,
                          const MCSubtargetInfo &STI) {
   MCInst LEASLInst;
@@ -146,10 +145,10 @@ static void EmitLEASLrri(MCStreamer &OutStreamer, MCOperand &RS1,
   LEASLInst.addOperand(RS2);
   LEASLInst.addOperand(RD);
   LEASLInst.addOperand(Imm);
-  OutStreamer.EmitInstruction(LEASLInst, STI);
+  OutStreamer.emitInstruction(LEASLInst, STI);
 }
 
-static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode, MCOperand &RS1,
+static void emitBinary(MCStreamer &OutStreamer, unsigned Opcode, MCOperand &RS1,
                        MCOperand &Src2, MCOperand &RD,
                        const MCSubtargetInfo &STI) {
   MCInst Inst;
@@ -157,15 +156,20 @@ static void EmitBinary(MCStreamer &OutStreamer, unsigned Opcode, MCOperand &RS1,
   Inst.addOperand(RD);
   Inst.addOperand(RS1);
   Inst.addOperand(Src2);
-  OutStreamer.EmitInstruction(Inst, STI);
+  OutStreamer.emitInstruction(Inst, STI);
 }
 
 static void EmitANDrm0(MCStreamer &OutStreamer, MCOperand &RS1, MCOperand &Imm,
                        MCOperand &RD, const MCSubtargetInfo &STI) {
-  EmitBinary(OutStreamer, VE::ANDrm0, RS1, Imm, RD, STI);
+  emitBinary(OutStreamer, VE::ANDrm0, RS1, Imm, RD, STI);
 }
 
-static void EmitHiLo(MCStreamer &OutStreamer, MCSymbol *GOTSym,
+static void emitANDrm0(MCStreamer &OutStreamer, MCOperand &RS1, MCOperand &Imm,
+                       MCOperand &RD, const MCSubtargetInfo &STI) {
+  emitBinary(OutStreamer, VE::ANDrm0, RS1, Imm, RD, STI);
+}
+
+static void emitHiLo(MCStreamer &OutStreamer, MCSymbol *GOTSym,
                      VEMCExpr::VariantKind HiKind, VEMCExpr::VariantKind LoKind,
                      MCOperand &RD, MCContext &OutContext,
                      const MCSubtargetInfo &STI) {
@@ -173,12 +177,18 @@ static void EmitHiLo(MCStreamer &OutStreamer, MCSymbol *GOTSym,
   MCOperand hi = createVEMCOperand(HiKind, GOTSym, OutContext);
   MCOperand lo = createVEMCOperand(LoKind, GOTSym, OutContext);
   MCOperand ci32 = MCOperand::createImm(32);
-  EmitLEAzzi(OutStreamer, lo, RD, STI);
-  EmitANDrm0(OutStreamer, RD, ci32, RD, STI);
-  EmitLEASLzzi(OutStreamer, hi, RD, STI);
+  emitLEAzzi(OutStreamer, lo, RD, STI);
+  emitANDrm0(OutStreamer, RD, ci32, RD, STI);
+  emitLEASLzzi(OutStreamer, hi, RD, STI);
 }
 
-void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
+void VEAsmPrinter::lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
+  emitLEAzzi(OutStreamer, lo, RD, STI);
+  emitANDrm0(OutStreamer, RD, ci32, RD, STI);
+  emitLEASLzzi(OutStreamer, hi, RD, STI);
+}
+
+void VEAsmPrinter::lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
                                              const MCSubtargetInfo &STI) {
   MCSymbol *GOTLabel =
       OutContext.getOrCreateSymbol(Twine("_GLOBAL_OFFSET_TABLE_"));
@@ -194,7 +204,7 @@ void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
     case CodeModel::Small:
     case CodeModel::Medium:
     case CodeModel::Large:
-      EmitHiLo(*OutStreamer, GOTLabel, VEMCExpr::VK_VE_HI32,
+      emitHiLo(*OutStreamer, GOTLabel, VEMCExpr::VK_VE_HI32,
                VEMCExpr::VK_VE_LO32, MCRegOP, OutContext, STI);
       break;
     }
@@ -211,16 +221,17 @@ void VEAsmPrinter::LowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
   MCOperand cim24 = MCOperand::createImm(-24);
   MCOperand loImm =
       createGOTRelExprOp(VEMCExpr::VK_VE_PC_LO32, GOTLabel, OutContext);
-  EmitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
+
+  emitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
   MCOperand ci32 = MCOperand::createImm(32);
-  EmitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
-  EmitSIC(*OutStreamer, RegPLT, STI);
+  emitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
+  emitSIC(*OutStreamer, RegPLT, STI);
   MCOperand hiImm =
       createGOTRelExprOp(VEMCExpr::VK_VE_PC_HI32, GOTLabel, OutContext);
-  EmitLEASLrri(*OutStreamer, RegGOT, RegPLT, hiImm, MCRegOP, STI);
+  emitLEASLrri(*OutStreamer, RegGOT, RegPLT, hiImm, MCRegOP, STI);
 }
 
-void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
+void VEAsmPrinter::lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
                                                 const MCSubtargetInfo &STI) {
   const MachineOperand &MO = MI->getOperand(0);
   MCOperand MCRegOP = MCOperand::createReg(MO.getReg());
@@ -232,10 +243,10 @@ void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
     llvm_unreachable("<unknown operand type>");
     return;
   case MachineOperand::MO_MachineBasicBlock:
-    report_fatal_error("MBB is not supporeted yet");
+    report_fatal_error("MBB is not supported yet");
     return;
   case MachineOperand::MO_ConstantPoolIndex:
-    report_fatal_error("ConstantPool is not supporeted yet");
+    report_fatal_error("ConstantPool is not supported yet");
     return;
   case MachineOperand::MO_ExternalSymbol:
     AddrSym = GetExternalSymbolSymbol(Addr.getSymbolName());
@@ -259,16 +270,16 @@ void VEAsmPrinter::LowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
   MCOperand cim24 = MCOperand::createImm(-24);
   MCOperand loImm =
       createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32, AddrSym, OutContext);
-  EmitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
+  emitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
   MCOperand ci32 = MCOperand::createImm(32);
-  EmitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
-  EmitSIC(*OutStreamer, RegPLT, STI);
+  emitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
+  emitSIC(*OutStreamer, RegPLT, STI);
   MCOperand hiImm =
       createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32, AddrSym, OutContext);
-  EmitLEASLrri(*OutStreamer, MCRegOP, RegPLT, hiImm, MCRegOP, STI);
+  emitLEASLrri(*OutStreamer, MCRegOP, RegPLT, hiImm, MCRegOP, STI);
 }
 
-void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
+void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
                                                  const MCSubtargetInfo &STI) {
   const MachineOperand &Addr = MI->getOperand(0);
   MCSymbol *AddrSym = nullptr;
@@ -278,10 +289,10 @@ void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
     llvm_unreachable("<unknown operand type>");
     return;
   case MachineOperand::MO_MachineBasicBlock:
-    report_fatal_error("MBB is not supporeted yet");
+    report_fatal_error("MBB is not supported yet");
     return;
   case MachineOperand::MO_ConstantPoolIndex:
-    report_fatal_error("ConstantPool is not supporeted yet");
+    report_fatal_error("ConstantPool is not supported yet");
     return;
   case MachineOperand::MO_ExternalSymbol:
     AddrSym = GetExternalSymbolSymbol(Addr.getSymbolName());
@@ -307,25 +318,25 @@ void VEAsmPrinter::LowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   MCOperand cim24 = MCOperand::createImm(-24);
   MCOperand loImm =
       createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_LO32, AddrSym, OutContext);
-  EmitLEAzii(*OutStreamer, cim24, loImm, RegS0, STI);
+  emitLEAzii(*OutStreamer, cim24, loImm, RegS0, STI);
   MCOperand ci32 = MCOperand::createImm(32);
-  EmitANDrm0(*OutStreamer, RegS0, ci32, RegS0, STI);
-  EmitSIC(*OutStreamer, RegLR, STI);
+  emitANDrm0(*OutStreamer, RegS0, ci32, RegS0, STI);
+  emitSIC(*OutStreamer, RegLR, STI);
   MCOperand hiImm =
       createGOTRelExprOp(VEMCExpr::VK_VE_TLS_GD_HI32, AddrSym, OutContext);
-  EmitLEASLrri(*OutStreamer, RegS0, RegLR, hiImm, RegS0, STI);
+  emitLEASLrri(*OutStreamer, RegS0, RegLR, hiImm, RegS0, STI);
   MCOperand ci8 = MCOperand::createImm(8);
   MCOperand loImm2 =
       createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32, GetTLSLabel, OutContext);
-  EmitLEAzii(*OutStreamer, ci8, loImm2, RegS12, STI);
-  EmitANDrm0(*OutStreamer, RegS12, ci32, RegS12, STI);
+  emitLEAzii(*OutStreamer, ci8, loImm2, RegS12, STI);
+  emitANDrm0(*OutStreamer, RegS12, ci32, RegS12, STI);
   MCOperand hiImm2 =
       createGOTRelExprOp(VEMCExpr::VK_VE_PLT_HI32, GetTLSLabel, OutContext);
-  EmitLEASLrri(*OutStreamer, RegS12, RegLR, hiImm2, RegS12, STI);
-  EmitBSIC(*OutStreamer, RegLR, RegS12, STI);
+  emitLEASLrri(*OutStreamer, RegS12, RegLR, hiImm2, RegS12, STI);
+  emitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
-void VEAsmPrinter::LowerEH_SJLJ_SETJMPAndEmitMCInsts(
+void VEAsmPrinter::lowerEH_SJLJ_SETJMPAndEmitMCInsts(
     const MachineInstr *MI, const MCSubtargetInfo &STI) {
   //   sic $dest
   //   lea $dest, 32($dest)     // $dest points 0f
@@ -358,7 +369,7 @@ void VEAsmPrinter::LowerEH_SJLJ_SETJMPAndEmitMCInsts(
                  MCInstBuilder(VE::LEAzzi).addReg(DestReg).addImm(1));
 }
 
-void VEAsmPrinter::LowerEH_SJLJ_LONGJMPAndEmitMCInsts(
+void VEAsmPrinter::lowerEH_SJLJ_LONGJMPAndEmitMCInsts(
     const MachineInstr *MI, const MCSubtargetInfo &STI) {
   // ld %s9, (, $src)           // s9  = fp
   // ld %s10, 8(, $src)         // s10 = lr
@@ -384,7 +395,7 @@ void VEAsmPrinter::LowerEH_SJLJ_LONGJMPAndEmitMCInsts(
   return;
 }
 
-void VEAsmPrinter::EmitInstruction(const MachineInstr *MI) {
+void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
 
   switch (MI->getOpcode()) {
   default:
@@ -393,25 +404,26 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI) {
     // FIXME: Debug Value.
     return;
   case VE::GETGOT:
-    LowerGETGOTAndEmitMCInsts(MI, getSubtargetInfo());
+    lowerGETGOTAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   case VE::GETFUNPLT:
-    LowerGETFunPLTAndEmitMCInsts(MI, getSubtargetInfo());
+    lowerGETFunPLTAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   case VE::GETTLSADDR:
-    LowerGETTLSAddrAndEmitMCInsts(MI, getSubtargetInfo());
+    lowerGETTLSAddrAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   // Emit nothing here but a comment if we can.
   case VE::MEMBARRIER:
     OutStreamer->emitRawComment("MEMBARRIER");
     return;
   case VE::EH_SjLj_SetJmp:
-    LowerEH_SJLJ_SETJMPAndEmitMCInsts(MI, getSubtargetInfo());
+    lowerEH_SJLJ_SETJMPAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   case VE::EH_SjLj_LongJmp:
-    LowerEH_SJLJ_LONGJMPAndEmitMCInsts(MI, getSubtargetInfo());
+    lowerEH_SJLJ_LONGJMPAndEmitMCInsts(MI, getSubtargetInfo());
     return;
   }
+
   MachineBasicBlock::const_instr_iterator I = MI->getIterator();
   MachineBasicBlock::const_instr_iterator E = MI->getParent()->instr_end();
   do {
@@ -420,8 +432,6 @@ void VEAsmPrinter::EmitInstruction(const MachineInstr *MI) {
     EmitToStreamer(*OutStreamer, TmpInst);
   } while ((++I != E) && I->isInsideBundle()); // Delay slot check.
 }
-
-void VEAsmPrinter::EmitFunctionBodyStart() {}
 
 void VEAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
                                 raw_ostream &O) {

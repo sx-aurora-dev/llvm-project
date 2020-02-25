@@ -28,7 +28,7 @@ define void @func() {
 
   %1 = load i1, i1* @src, align 4
   %2 = select i1 %1, i32 100, i32 0
-  store i32 %2, i32* @dst, align 4, !tbaa !3
+  store i32 %2, i32* @dst, align 4
   ret void
 }
 
@@ -71,15 +71,9 @@ define i32 @main() {
 ; CHECK-NEXT:    or %s11, 0, %s9
   store i1 true, i1* @src, align 4
   tail call void @func()
-  %1 = load i32, i32* @dst, align 4, !tbaa !3
+  %1 = load i32, i32* @dst, align 4
   %2 = tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([3 x i8], [3 x i8]* @.str, i64 0, i64 0), i32 %1)
   ret i32 0
 }
 
 declare i32 @printf(i8* nocapture readonly, ...)
-
-!2 = !{!"clang version 8.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git 3b98372866ea8dd6c83dd461fdd1bff7ac3658ba) (llvm/llvm.git 6fe73ad9979f8f32a171413308a96c1d7c3b6a18)"}
-!3 = !{!4, !4, i64 0}
-!4 = !{!"int", !5, i64 0}
-!5 = !{!"omnipotent char", !6, i64 0}
-!6 = !{!"Simple C/C++ TBAA"}

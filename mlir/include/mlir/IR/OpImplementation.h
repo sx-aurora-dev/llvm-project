@@ -105,7 +105,8 @@ public:
     if (types.begin() != types.end())
       printArrowTypeList(types);
   }
-  template <typename TypeRange> void printArrowTypeList(TypeRange &&types) {
+  template <typename TypeRange>
+  void printArrowTypeList(TypeRange &&types) {
     auto &os = getStream() << " -> ";
 
     bool wrapped = !has_single_element(types) ||
@@ -187,10 +188,9 @@ inline OpAsmPrinter &operator<<(OpAsmPrinter &p, bool value) {
   return p << (value ? StringRef("true") : "false");
 }
 
-template <typename IteratorT>
-inline OpAsmPrinter &
-operator<<(OpAsmPrinter &p,
-           const iterator_range<ValueTypeIterator<IteratorT>> &types) {
+template <typename ValueRangeT>
+inline OpAsmPrinter &operator<<(OpAsmPrinter &p,
+                                const ValueTypeRange<ValueRangeT> &types) {
   interleaveComma(types, p);
   return p;
 }
@@ -496,6 +496,12 @@ public:
         return failure();
     return success();
   }
+  template <typename Operands>
+  ParseResult resolveOperands(Operands &&operands, Type type, llvm::SMLoc loc,
+                              SmallVectorImpl<Value> &result) {
+    return resolveOperands(std::forward<Operands>(operands),
+                           ArrayRef<Type>(type), loc, result);
+  }
   template <typename Operands, typename Types>
   ParseResult resolveOperands(Operands &&operands, Types &&types,
                               llvm::SMLoc loc, SmallVectorImpl<Value> &result) {
@@ -517,7 +523,8 @@ public:
   virtual ParseResult
   parseAffineMapOfSSAIds(SmallVectorImpl<OperandType> &operands, Attribute &map,
                          StringRef attrName,
-                         SmallVectorImpl<NamedAttribute> &attrs) = 0;
+                         SmallVectorImpl<NamedAttribute> &attrs,
+                         Delimiter delimiter = Delimiter::Square) = 0;
 
   //===--------------------------------------------------------------------===//
   // Region Parsing
@@ -571,6 +578,11 @@ public:
   virtual ParseResult
   parseSuccessorAndUseList(Block *&dest, SmallVectorImpl<Value> &operands) = 0;
 
+  /// Parse an optional operation successor and its operand list.
+  virtual OptionalParseResult
+  parseOptionalSuccessorAndUseList(Block *&dest,
+                                   SmallVectorImpl<Value> &operands) = 0;
+
   //===--------------------------------------------------------------------===//
   // Type Parsing
   //===--------------------------------------------------------------------===//
@@ -579,7 +591,8 @@ public:
   virtual ParseResult parseType(Type &result) = 0;
 
   /// Parse a type of a specific type.
-  template <typename TypeT> ParseResult parseType(TypeT &result) {
+  template <typename TypeT>
+  ParseResult parseType(TypeT &result) {
     llvm::SMLoc loc = getCurrentLocation();
 
     // Parse any kind of type.
@@ -606,6 +619,9 @@ public:
     return success();
   }
 
+  /// Parse an arrow followed by a type list.
+  virtual ParseResult parseArrowTypeList(SmallVectorImpl<Type> &result) = 0;
+
   /// Parse an optional arrow followed by a type list.
   virtual ParseResult
   parseOptionalArrowTypeList(SmallVectorImpl<Type> &result) = 0;
@@ -614,7 +630,8 @@ public:
   virtual ParseResult parseColonType(Type &result) = 0;
 
   /// Parse a colon followed by a type of a specific kind, e.g. a FunctionType.
-  template <typename TypeType> ParseResult parseColonType(TypeType &result) {
+  template <typename TypeType>
+  ParseResult parseColonType(TypeType &result) {
     llvm::SMLoc loc = getCurrentLocation();
 
     // Parse any kind of type.
@@ -637,6 +654,13 @@ public:
   /// have at least one type.
   virtual ParseResult
   parseOptionalColonTypeList(SmallVectorImpl<Type> &result) = 0;
+
+  /// Parse a list of assignments of the form
+  /// (%x1 = %y1 : type1, %x2 = %y2 : type2, ...).
+  /// The list must contain at least one entry
+  virtual ParseResult
+  parseAssignmentList(SmallVectorImpl<OperandType> &lhs,
+                      SmallVectorImpl<OperandType> &rhs) = 0;
 
   /// Parse a keyword followed by a type.
   ParseResult parseKeywordType(const char *keyword, Type &result) {

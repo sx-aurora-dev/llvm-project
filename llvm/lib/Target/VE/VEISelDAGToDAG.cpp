@@ -134,9 +134,6 @@ void VEDAGToDAGISel::Select(SDNode *N) {
   switch (N->getOpcode()) {
   default:
     break;
-  case VEISD::GLOBAL_BASE_REG:
-    ReplaceNode(N, getGlobalBaseReg());
-    return;
 
   // Custom lowering code for constant-zero regs
   case VEISD::VEC_BROADCAST:
@@ -172,7 +169,7 @@ void VEDAGToDAGISel::Select(SDNode *N) {
 }
 
 SDNode *VEDAGToDAGISel::getGlobalBaseReg() {
-  unsigned GlobalBaseReg = Subtarget->getInstrInfo()->getGlobalBaseReg(MF);
+  Register GlobalBaseReg = Subtarget->getInstrInfo()->getGlobalBaseReg(MF);
   return CurDAG
       ->getRegister(GlobalBaseReg, TLI->getPointerTy(CurDAG->getDataLayout()))
       .getNode();

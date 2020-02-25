@@ -111,6 +111,44 @@ AffineMap AffineMap::getPermutationMap(ArrayRef<unsigned> permutation,
   return permutationMap;
 }
 
+template <typename AffineExprContainer>
+static void getMaxDimAndSymbol(ArrayRef<AffineExprContainer> exprsList,
+                               int64_t &maxDim, int64_t &maxSym) {
+  for (const auto &exprs : exprsList) {
+    for (auto expr : exprs) {
+      expr.walk([&maxDim, &maxSym](AffineExpr e) {
+        if (auto d = e.dyn_cast<AffineDimExpr>())
+          maxDim = std::max(maxDim, static_cast<int64_t>(d.getPosition()));
+        if (auto s = e.dyn_cast<AffineSymbolExpr>())
+          maxSym = std::max(maxSym, static_cast<int64_t>(s.getPosition()));
+      });
+    }
+  }
+}
+
+template <typename AffineExprContainer>
+static SmallVector<AffineMap, 4>
+inferFromExprList(ArrayRef<AffineExprContainer> exprsList) {
+  int64_t maxDim = -1, maxSym = -1;
+  getMaxDimAndSymbol(exprsList, maxDim, maxSym);
+  SmallVector<AffineMap, 4> maps;
+  maps.reserve(exprsList.size());
+  for (const auto &exprs : exprsList)
+    maps.push_back(AffineMap::get(/*dimCount=*/maxDim + 1,
+                                  /*symbolCount=*/maxSym + 1, exprs));
+  return maps;
+}
+
+SmallVector<AffineMap, 4>
+AffineMap::inferFromExprList(ArrayRef<ArrayRef<AffineExpr>> exprsList) {
+  return ::inferFromExprList(exprsList);
+}
+
+SmallVector<AffineMap, 4>
+AffineMap::inferFromExprList(ArrayRef<SmallVector<AffineExpr, 4>> exprsList) {
+  return ::inferFromExprList(exprsList);
+}
+
 AffineMap AffineMap::getMultiDimIdentityMap(unsigned numDims,
                                             MLIRContext *context) {
   SmallVector<AffineExpr, 4> dimExprs;
@@ -313,12 +351,12 @@ AffineMap mlir::inversePermutation(AffineMap map) {
 AffineMap mlir::concatAffineMaps(ArrayRef<AffineMap> maps) {
   unsigned numResults = 0;
   for (auto m : maps)
-    numResults += m ? m.getNumResults() : 0;
+    numResults += (m && !m.isSingleConstant()) ? m.getNumResults() : 0;
   unsigned numDims = 0;
   SmallVector<AffineExpr, 8> results;
   results.reserve(numResults);
   for (auto m : maps) {
-    if (!m)
+    if (!m || m.isSingleConstant())
       continue;
     assert(m.getNumSymbols() == 0 && "expected map without symbols");
     results.append(m.getResults().begin(), m.getResults().end());

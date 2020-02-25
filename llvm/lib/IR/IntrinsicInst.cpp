@@ -316,7 +316,7 @@ bool VPIntrinsic::canIgnoreVectorLengthParam() const {
 
   // Can ignore if MSB of vlen is set.
   auto VLConst = dyn_cast<ConstantInt>(VLParam);
-  if (VLConst && VLConst->getSExtValue() < 0)
+  if (VLConst && VLConst->getSExtValue() == -1)
     return true;
 
   // Vlen param greater-equal type vlen - no lanes masked-off.

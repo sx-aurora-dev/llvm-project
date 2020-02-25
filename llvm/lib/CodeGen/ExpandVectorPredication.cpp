@@ -357,7 +357,6 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
   bool IsUnmasked = IsAllTrueMask(MaskParam);
 
   IRBuilder<> Builder(&I);
-  auto &DL = Builder.GetInsertBlock()->getModule()->getDataLayout();
   MaybeAlign AlignOpt = VPI->getPointerAlignment();
 
   Value *NewMemoryInst = nullptr;
@@ -373,7 +372,7 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
       NewMemoryInst = NewStore;
     } else {
       NewMemoryInst = Builder.CreateMaskedStore(
-          DataParam, PtrParam, AlignOpt.valueOrOne().value(), MaskParam);
+          DataParam, PtrParam, AlignOpt.valueOrOne(), MaskParam);
     }
   } break;
 
@@ -384,9 +383,8 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
         NewLoad->setAlignment(AlignOpt.getValue());
       NewMemoryInst = NewLoad;
     } else {
-      Align MayAlign = PtrParam->getPointerAlignment(DL).valueOrOne();
       NewMemoryInst =
-          Builder.CreateMaskedLoad(PtrParam, MayAlign.value(), MaskParam);
+          Builder.CreateMaskedLoad(PtrParam, AlignOpt.valueOrOne(), MaskParam);
     }
   } break;
 
@@ -398,7 +396,7 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
     // } else {
     Align MayAlign; // FIXME = PtrParam->getPointerAlignment(DL).valueOrOne();
     NewMemoryInst = Builder.CreateMaskedScatter(DataParam, PtrParam,
-                                                MayAlign.value(), MaskParam);
+                                                MayAlign, MaskParam);
     // }
   } break;
 
@@ -409,7 +407,7 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
     //   NewMemoryInst = NewLoad;
     // } else {
     Align MayAlign; // FIXME = PtrParam->getPointerAlignment(DL).valueOrOne();
-    NewMemoryInst = Builder.CreateMaskedGather(PtrParam, MayAlign.value(),
+    NewMemoryInst = Builder.CreateMaskedGather(PtrParam, MayAlign,
                                                MaskParam, nullptr, I.getName());
     // }
   } break;
