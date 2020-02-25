@@ -21,8 +21,8 @@
 #include <string>
 #include <sys/stat.h>
 #include <ve_offload.h>
-#include <veosinfo/veosinfo.h>
 #include <vector>
+#include <veosinfo/veosinfo.h>
 
 #ifndef TARGET_ELF_ID
 #define TARGET_ELF_ID 0
@@ -74,7 +74,8 @@ public:
                                  __tgt_offload_entry *HostBegin,
                                  __tgt_offload_entry *HostEnd) {
     FuncOrGblEntry[device_id].emplace_back();
-    std::vector<__tgt_offload_entry> &T = FuncOrGblEntry[device_id].back().Entries;
+    std::vector<__tgt_offload_entry> &T =
+        FuncOrGblEntry[device_id].back().Entries;
     T.clear();
     for (__tgt_offload_entry *i = HostBegin; i != HostEnd; ++i) {
       char *SymbolName = i->name;
@@ -91,22 +92,19 @@ public:
         Entry = {NULL, NULL, 0, 0, 0};
       } else {
         DP("Found symbol %s successfully in target image (addr: %p)\n",
-           SymbolName, (void *)SymbolTargetAddr);
-        Entry = {(void *)SymbolTargetAddr, i->name, i->size, i->flags, 0};
+           SymbolName, reinterpret_cast<void *>(SymbolTargetAddr));
+        Entry = { reinterpret_cast<void *>(SymbolTargetAddr),
+                  i->name,
+                  i->size,
+                  i->flags,
+                  0 };
       }
 
       T.push_back(Entry);
     }
 
-    // we need to have at least one additional element in the vector because
-    // we want to return __tgt_target_table, which contains a pointer to the
-    // the element after the last entry in the table.
-    // If we didnt own the memory then we would have undefined behaviour
-    __tgt_offload_entry DummyEntry = {NULL, NULL, 0, 0, 0};
-    T.push_back(DummyEntry);
-
     FuncOrGblEntry[device_id].back().Table.EntriesBegin = &T.front();
-    FuncOrGblEntry[device_id].back().Table.EntriesEnd = &T.back();
+    FuncOrGblEntry[device_id].back().Table.EntriesEnd = &T.back() + 1;
   }
 
   __tgt_target_table *getOffloadTable(int32_t device_id) {
@@ -114,7 +112,6 @@ public:
   }
 
   RTLDeviceInfoTy() {
-    // TODO: some debug code here
 #ifdef OMPTARGET_DEBUG
     if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
       DebugLevel = std::stoi(envStr);
@@ -142,11 +139,11 @@ public:
       }
     }
 
-    /*for (auto &hdl : ProcHandles) {
+    for (auto &hdl : ProcHandles) {
       if (hdl != NULL) {
         veo_proc_destroy(hdl);
       }
-    }*/
+    }
 
     for (auto &lib : DynLibs) {
       if (lib.FileName) {
@@ -167,7 +164,7 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
   if (RequestHandle == VEO_REQUEST_ID_INVALID) {
     DP("Execution of entry point %p failed\n",
        reinterpret_cast<void *>(FuncAddr));
-    return -1;
+    return OFFLOAD_FAIL;
   } else {
     DP("Function at address %p called (VEO request ID: %" PRIu64 ")\n",
        reinterpret_cast<void *>(FuncAddr), RequestHandle);
@@ -178,10 +175,9 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
   if (ret != 0) {
     DP("Waiting for entry point %p failed (Error code %d)\n",
        reinterpret_cast<void *>(FuncAddr), ret);
-    // TODO: Do something with return value?
-    return -1;
+    return OFFLOAD_FAIL;
   }
-  return 0;
+  return OFFLOAD_SUCCESS;
 }
 
 #ifdef __cplusplus
@@ -190,9 +186,7 @@ extern "C" {
 
 // Return the number of available devices of the type supported by the
 // target RTL.
-int32_t __tgt_rtl_number_of_devices(void) {
-  return DeviceInfo.NumDevices;
-}
+int32_t __tgt_rtl_number_of_devices(void) { return DeviceInfo.NumDevices; }
 
 // Return an integer different from zero if the provided device image can be
 // supported by the runtime. The functionality is similar to comparing the
@@ -213,22 +207,26 @@ int32_t __tgt_rtl_init_device(int32_t ID) {
   // First of all: check the veo API version
   int veo_version = veo_api_version();
   if (veo_version < VEO_MIN_VERSION) {
-    DP("veo_get_version() reported version %i. Minimum supported veo api version is %i\n", veo_version, VEO_MIN_VERSION);
-    return -1;
+    DP("veo_get_version() reported version %i. Minimum supported veo api "
+       "version is %i\n",
+       veo_version, VEO_MIN_VERSION);
+    return OFFLOAD_FAIL;
   } else if (veo_version > VEO_MAX_VERSION) {
-    DP("veo_get_version() reported version %i, Maximum supported veo api version is %i\n", veo_version, VEO_MAX_VERSION);
-    return -2;
+    DP("veo_get_version() reported version %i, Maximum supported veo api "
+       "version is %i\n",
+       veo_version, VEO_MAX_VERSION);
+    return OFFLOAD_FAIL;
   }
   DP("Available VEO version: %i (supported)\n", veo_version);
 
-// TODO: At the moment we do not initilize the device here, but in
-// "__tgt_rtl_load_binary". The reason is that we need to set an the
-// ENV VEORUN_BIN to the static bin. As long as we dont have any possibilty
-// to to pass the location of the binary to veo_proc_create it is much more
-// convinient to set the ENV here (sentenv()). However, we do not know where
-// the tgt_binary (ELF) for that which we dont have at this point. :-(.
-// Thus, we do nothing here for now.
-  return 0;
+  // At the moment we do not really initialize (i.e. creaete a process or
+  // context on) the device here, but in "__tgt_rtl_load_binary".
+  // The reason for this is, that, when we create a process for a statically
+  // linked binary, the VEO api needs us to already supply the binary (but we
+  // can load a dynamically linked binary later, after we create the process).
+  // At this stage, we cannot check if we have a dynamically or statically
+  // linked binary so we defer process creation until we know.
+  return OFFLOAD_SUCCESS;
 }
 
 // Pass an executable image section described by image to the specified
@@ -259,7 +257,6 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   //
   // 1) Create tmp file with the library contents.
   // 2) Use dlopen to load the file and dlsym to retrieve the symbols.
-  // TODO: Remove hard-coded "/tmp"
   char tmp_name[] = "/tmp/tmpfile_XXXXXX";
   int tmp_fd = mkstemp(tmp_name);
 
@@ -285,13 +282,13 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 
   // See comment in "__tgt_rtl_init_device"
   bool is_dyn = true;
-  if (DeviceInfo.ProcHandles[ID] == NULL){
+  if (DeviceInfo.ProcHandles[ID] == NULL) {
     struct veo_proc_handle *proc_handle;
     is_dyn = elf_is_dynamic(Image);
     // If we have a dynamically linked image, we create the process handle, then
     // the thread, and then load the image.
-    // If we have a statically linked image, we need to create the process handle
-    // and load the image at the same time with veo_proc_create_static().
+    // If we have a statically linked image, we need to create the process
+    // handle and load the image at the same time with veo_proc_create_static().
     if (is_dyn) {
       proc_handle = veo_proc_create(ID);
       if (!proc_handle) {
@@ -301,7 +298,8 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
     } else {
       proc_handle = veo_proc_create_static(ID, tmp_name);
       if (!proc_handle) {
-        DP("veo_proc_create_static() failed for device %d, image=%s\n", ID, tmp_name);
+        DP("veo_proc_create_static() failed for device %d, image=%s\n", ID,
+           tmp_name);
         return NULL;
       }
     }
@@ -312,7 +310,6 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
     struct veo_thr_ctxt *ctx = veo_context_open(DeviceInfo.ProcHandles[ID]);
 
     if (!ctx) {
-      // TODO: errno does not seem to be set by VEO
       DP("veo_context_open() failed: %s\n", std::strerror(errno));
       return NULL;
     }
@@ -320,8 +317,9 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
     DeviceInfo.Contexts[ID] = ctx;
   }
 
-  DP("Aurora device successfully initialized with loaded binary: proc_handle=%p, ctx=%p\n",
-     DeviceInfo.ProcHandles[ID] , DeviceInfo.Contexts[ID]);
+  DP("Aurora device successfully initialized with loaded binary: "
+     "proc_handle=%p, ctx=%p\n",
+     DeviceInfo.ProcHandles[ID], DeviceInfo.Contexts[ID]);
 
   uint64_t LibHandle = 0UL;
   if (is_dyn) {
@@ -336,7 +334,8 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 
     DP("Successfully loaded library dynamically\n");
   } else {
-    DP("Symbol table is expected to have been created by veo_create_proc_static()\n");
+    DP("Symbol table is expected to have been created by "
+       "veo_create_proc_static()\n");
   }
 
   DynLibTy Lib = {tmp_name, LibHandle};
@@ -372,19 +371,19 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
     }
     DeviceInfo.ProcHandles[ID] = proc_handle;
     DP("Aurora device successfully initialized: proc_handle=%p", proc_handle);
- }
+  }
 
-  DP("Store dev addr to: target addr=%p \n", &addr);
   ret = veo_alloc_mem(DeviceInfo.ProcHandles[ID], &addr, Size);
   DP("Allocate target memory: device=%d, target addr=%p, size=%" PRIu64 "\n",
-     ID, (void *)addr, Size);
+     ID, reinterpret_cast<void *>(addr), Size);
   if (ret != 0) {
     DP("veo_alloc_mem(%d, %p, %" PRIu64 ") failed with error code %" PRIu64
        "\n",
-       ID, (void *)addr, Size, ret);
+       ID, reinterpret_cast<void *>(addr), Size, ret);
     return NULL;
   }
-  return (void *)addr;
+
+  return reinterpret_cast<void *>(addr);
 }
 
 // Pass the data content to the target device using the target address.
@@ -395,8 +394,9 @@ int32_t __tgt_rtl_data_submit(int32_t ID, void *TargetPtr, void *HostPtr,
                           HostPtr, (size_t)Size);
   if (ret != 0) {
     DP("veo_write_mem() failed with error code %d\n", ret);
+    return OFFLOAD_FAIL;
   }
-  return ret;
+  return OFFLOAD_SUCCESS;
 }
 
 // Retrieve the data content from the target device using its address.
@@ -407,16 +407,21 @@ int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
                          (uint64_t)TargetPtr, Size);
   if (ret != 0) {
     DP("veo_read_mem() failed with error code %d\n", ret);
+    return OFFLOAD_FAIL;
   }
-  return ret;
+  return OFFLOAD_SUCCESS;
 }
 
 // De-allocate the data referenced by target ptr on the device. In case of
 // success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr) {
-  uint64_t ret;
+  int ret =  veo_free_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr);
 
-  return veo_free_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr);
+  if (ret != 0) {
+    DP("veo_free_mem() failed with error code %d\n", ret);
+    return OFFLOAD_FAIL;
+  }
+  return OFFLOAD_SUCCESS;
 }
 
 // Similar to __tgt_rtl_run_target_region, but additionally specify the
@@ -437,13 +442,12 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
   }
 
   for (int32_t i = 0; i < NumArgs; ++i) {
-    // TargetArgs.arguments[i] = ((intptr_t)(Args[i]));
     veo_args_set_u64(TargetArgs, i, (intptr_t)Args[i]);
   }
 
   uint64_t RetVal;
   if (target_run_function_wait(ID, reinterpret_cast<uint64_t>(Entry),
-                               TargetArgs, &RetVal) != 0) {
+                               TargetArgs, &RetVal) != OFFLOAD_SUCCESS) {
     veo_args_free(TargetArgs);
     return OFFLOAD_FAIL;
   }
