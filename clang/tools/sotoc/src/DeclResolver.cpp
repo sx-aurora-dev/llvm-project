@@ -22,7 +22,7 @@
 #include "TargetCodeFragment.h"
 #include "Visitors.h"
 
-static bool isHeaderOpenMPHeader(std::string header_path) {
+static bool isHeaderOpenMPHeader(llvm::StringRef header_path) {
   if (header_path.substr(header_path.find_last_of("/\\") + 1) == "omp.h") {
     return true;
   }

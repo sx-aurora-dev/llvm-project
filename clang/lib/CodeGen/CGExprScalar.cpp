@@ -297,7 +297,7 @@ public:
 
     Value *AlignmentValue = CGF.EmitScalarExpr(AVAttr->getAlignment());
     llvm::ConstantInt *AlignmentCI = cast<llvm::ConstantInt>(AlignmentValue);
-    CGF.EmitAlignmentAssumption(V, E, AVAttr->getLocation(), AlignmentCI);
+    CGF.emitAlignmentAssumption(V, E, AVAttr->getLocation(), AlignmentCI);
   }
 
   /// EmitLoadOfLValue - Given an expression with complex type that represents a
@@ -677,6 +677,10 @@ public:
   }
 
   Value *VisitConceptSpecializationExpr(const ConceptSpecializationExpr *E) {
+    return Builder.getInt1(E->isSatisfied());
+  }
+
+  Value *VisitRequiresExpr(const RequiresExpr *E) {
     return Builder.getInt1(E->isSatisfied());
   }
 
@@ -3361,7 +3365,7 @@ static Value *emitPointerArithmetic(CodeGenFunction &CGF,
 // the add operand respectively. This allows fmuladd to represent a*b-c, or
 // c-a*b. Patterns in LLVM should catch the negated forms and translate them to
 // efficient operations.
-static Value* buildFMulAdd(llvm::BinaryOperator *MulOp, Value *Addend,
+static Value* buildFMulAdd(llvm::Instruction *MulOp, Value *Addend,
                            const CodeGenFunction &CGF, CGBuilderTy &Builder,
                            bool negMul, bool negAdd) {
   assert(!(negMul && negAdd) && "Only one of negMul and negAdd should be set.");
@@ -3373,12 +3377,23 @@ static Value* buildFMulAdd(llvm::BinaryOperator *MulOp, Value *Addend,
   if (negAdd)
     Addend = Builder.CreateFNeg(Addend, "neg");
 
-  Value *FMulAdd = Builder.CreateCall(
-      CGF.CGM.getIntrinsic(llvm::Intrinsic::fmuladd, Addend->getType()),
-      {MulOp0, MulOp1, Addend});
-   MulOp->eraseFromParent();
+  Value *FMulAdd = nullptr;
+  if (Builder.getIsFPConstrained()) {
+    assert(isa<llvm::ConstrainedFPIntrinsic>(MulOp) &&
+           "Only constrained operation should be created when Builder is in FP "
+           "constrained mode");
+    FMulAdd = Builder.CreateConstrainedFPCall(
+        CGF.CGM.getIntrinsic(llvm::Intrinsic::experimental_constrained_fmuladd,
+                             Addend->getType()),
+        {MulOp0, MulOp1, Addend});
+  } else {
+    FMulAdd = Builder.CreateCall(
+        CGF.CGM.getIntrinsic(llvm::Intrinsic::fmuladd, Addend->getType()),
+        {MulOp0, MulOp1, Addend});
+  }
+  MulOp->eraseFromParent();
 
-   return FMulAdd;
+  return FMulAdd;
 }
 
 // Check whether it would be legal to emit an fmuladd intrinsic call to
@@ -3409,6 +3424,19 @@ static Value* tryEmitFMulAdd(const BinOpInfo &op,
   }
   if (auto *RHSBinOp = dyn_cast<llvm::BinaryOperator>(op.RHS)) {
     if (RHSBinOp->getOpcode() == llvm::Instruction::FMul &&
+        RHSBinOp->use_empty())
+      return buildFMulAdd(RHSBinOp, op.LHS, CGF, Builder, isSub, false);
+  }
+
+  if (auto *LHSBinOp = dyn_cast<llvm::CallBase>(op.LHS)) {
+    if (LHSBinOp->getIntrinsicID() ==
+            llvm::Intrinsic::experimental_constrained_fmul &&
+        LHSBinOp->use_empty())
+      return buildFMulAdd(LHSBinOp, op.RHS, CGF, Builder, false, isSub);
+  }
+  if (auto *RHSBinOp = dyn_cast<llvm::CallBase>(op.RHS)) {
+    if (RHSBinOp->getIntrinsicID() ==
+            llvm::Intrinsic::experimental_constrained_fmul &&
         RHSBinOp->use_empty())
       return buildFMulAdd(RHSBinOp, op.LHS, CGF, Builder, isSub, false);
   }
@@ -3835,8 +3863,7 @@ Value *ScalarExprEmitter::EmitCompare(const BinaryOperator *E,
             *SecondVecArg = RHS;
 
       QualType ElTy = LHSTy->castAs<VectorType>()->getElementType();
-      const BuiltinType *BTy = ElTy->getAs<BuiltinType>();
-      BuiltinType::Kind ElementKind = BTy->getKind();
+      BuiltinType::Kind ElementKind = ElTy->castAs<BuiltinType>()->getKind();
 
       switch(E->getOpcode()) {
       default: llvm_unreachable("is not a comparison operation");
@@ -4312,6 +4339,21 @@ VisitAbstractConditionalOperator(const AbstractConditionalOperator *E) {
     return tmp5;
   }
 
+  if (condExpr->getType()->isVectorType()) {
+    CGF.incrementProfileCounter(E);
+
+    llvm::Value *CondV = CGF.EmitScalarExpr(condExpr);
+    llvm::Value *LHS = Visit(lhsExpr);
+    llvm::Value *RHS = Visit(rhsExpr);
+
+    llvm::Type *CondType = ConvertType(condExpr->getType());
+    auto *VecTy = cast<llvm::VectorType>(CondType);
+    llvm::Value *ZeroVec = llvm::Constant::getNullValue(VecTy);
+
+    CondV = Builder.CreateICmpNE(CondV, ZeroVec, "vector_cond");
+    return Builder.CreateSelect(CondV, LHS, RHS, "vector_select");
+  }
+
   // If this is a really simple expression (like x ? 4 : 5), emit this as a
   // select instead of as control flow.  We can only do this if it is cheap and
   // safe to evaluate the LHS and RHS unconditionally.
@@ -4641,7 +4683,7 @@ struct GEPOffsetAndOverflow {
 static GEPOffsetAndOverflow EmitGEPOffsetInBytes(Value *BasePtr, Value *GEPVal,
                                                  llvm::LLVMContext &VMContext,
                                                  CodeGenModule &CGM,
-                                                 CGBuilderTy Builder) {
+                                                 CGBuilderTy &Builder) {
   const auto &DL = CGM.getDataLayout();
 
   // The total (signed) byte offset for the GEP.

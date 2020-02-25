@@ -116,6 +116,14 @@ def create_parser():
         type=int,
         help='Override the DWARF version.')
     group.add_argument(
+        '--setting',
+        metavar='SETTING=VALUE',
+        dest='settings',
+        type=str,
+        nargs=1,
+        action='append',
+        help='Run "setting set SETTING VALUE" before executing any test.')
+    group.add_argument(
         '-s',
         metavar='name',
         help='Specify the name of the dir created to store the session files of tests with errored or failed status. If not specified, the test driver uses the timestamp as the session dir name')
@@ -164,6 +172,11 @@ def create_parser():
         dest='clang_module_cache_dir',
         metavar='The clang module cache directory used by Clang',
         help='The clang module cache directory used in the Make files by Clang while building tests. Defaults to <test build directory>/module-cache-clang.')
+    group.add_argument(
+        '--lldb-libs-dir',
+        dest='lldb_libs_dir',
+        metavar='path',
+        help='The path to LLDB library directory (containing liblldb)')
 
     # Configuration options
     group = parser.add_argument_group('Remote platform options')
