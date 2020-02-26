@@ -212,6 +212,10 @@ bool TargetTransformInfo::hasBranchDivergence() const {
   return TTIImpl->hasBranchDivergence();
 }
 
+bool TargetTransformInfo::useGPUDivergenceAnalysis() const {
+  return TTIImpl->useGPUDivergenceAnalysis();
+}
+
 bool TargetTransformInfo::isSourceOfDivergence(const Value *V) const {
   return TTIImpl->isSourceOfDivergence(V);
 }
@@ -344,6 +348,10 @@ bool TargetTransformInfo::hasVolatileVariant(Instruction *I,
 
 bool TargetTransformInfo::prefersVectorizedAddressing() const {
   return TTIImpl->prefersVectorizedAddressing();
+}
+
+bool TargetTransformInfo::enableLoopVectorizer() const {
+  return TTIImpl->enableLoopVectorizer();
 }
 
 int TargetTransformInfo::getScalingFactorCost(Type *Ty, GlobalValue *BaseGV,
@@ -837,6 +845,16 @@ unsigned TargetTransformInfo::getStoreVectorFactor(unsigned VF,
                                                    unsigned ChainSizeInBytes,
                                                    VectorType *VecTy) const {
   return TTIImpl->getStoreVectorFactor(VF, StoreSize, ChainSizeInBytes, VecTy);
+}
+
+bool TargetTransformInfo::shouldFoldVectorLengthIntoMask(
+    const PredicatedInstruction &PI) const {
+  return TTIImpl->shouldFoldVectorLengthIntoMask(PI);
+}
+
+bool TargetTransformInfo::supportsVPOperation(
+    const PredicatedInstruction &PI) const {
+  return TTIImpl->supportsVPOperation(PI);
 }
 
 bool TargetTransformInfo::useReductionIntrinsic(unsigned Opcode,

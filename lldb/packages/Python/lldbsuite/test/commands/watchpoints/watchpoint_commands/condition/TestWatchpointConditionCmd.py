@@ -13,6 +13,7 @@ from lldbsuite.test import lldbutil
 class WatchpointConditionCmdTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
+    NO_DEBUG_INFO_TESTCASE = True
 
     def setUp(self):
         # Call super's setUp().
@@ -69,7 +70,7 @@ class WatchpointConditionCmdTestCase(TestBase):
         # Use the '-v' option to do verbose listing of the watchpoint.
         # The hit count should be 0 initially.
         self.expect("watchpoint list -v",
-                    substrs=['hit_count = 0', 'global==5'])
+                    substrs=['global==5', 'hit_count = 0'])
 
         self.runCmd("process continue")
 

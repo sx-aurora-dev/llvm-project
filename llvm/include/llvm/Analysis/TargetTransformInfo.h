@@ -45,6 +45,7 @@ class BranchInst;
 class Function;
 class GlobalValue;
 class IntrinsicInst;
+class PredicatedInstruction;
 class LoadInst;
 class LoopAccessInfo;
 class Loop;
@@ -342,6 +343,10 @@ public:
   /// branches.
   bool hasBranchDivergence() const;
 
+  /// Return true if the target prefers to use GPU divergence analysis to
+  /// replace the legacy version.
+  bool useGPUDivergenceAnalysis() const;
+
   /// Returns whether V is a source of divergence.
   ///
   /// This function provides the target-dependent information for
@@ -622,6 +627,9 @@ public:
 
   /// Return true if target doesn't mind addresses in vectors.
   bool prefersVectorizedAddressing() const;
+
+  /// Whether LLVMs builtin LV does the right thing for this target.
+  bool enableLoopVectorizer() const;
 
   /// Return the cost of the scaling factor used in the addressing
   /// mode represented by AM for this target, for a load/store
@@ -1141,6 +1149,15 @@ public:
   bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
                              ReductionFlags Flags) const;
 
+  /// \returns True if the vector length parameter should be folded into the
+  /// vector mask.
+  bool
+  shouldFoldVectorLengthIntoMask(const PredicatedInstruction &PredInst) const;
+
+  /// \returns False if this VP op should be replaced by a non-VP op or an
+  /// unpredicated op plus a select.
+  bool supportsVPOperation(const PredicatedInstruction &PredInst) const;
+
   /// \returns True if the target wants to expand the given reduction intrinsic
   /// into a shuffle sequence.
   bool shouldExpandReduction(const IntrinsicInst *II) const;
@@ -1198,6 +1215,7 @@ public:
   virtual int
   getUserCost(const User *U, ArrayRef<const Value *> Operands) = 0;
   virtual bool hasBranchDivergence() = 0;
+  virtual bool useGPUDivergenceAnalysis() = 0;
   virtual bool isSourceOfDivergence(const Value *V) = 0;
   virtual bool isAlwaysUniform(const Value *V) = 0;
   virtual unsigned getFlatAddressSpace() = 0;
@@ -1244,6 +1262,7 @@ public:
   virtual bool hasDivRemOp(Type *DataType, bool IsSigned) = 0;
   virtual bool hasVolatileVariant(Instruction *I, unsigned AddrSpace) = 0;
   virtual bool prefersVectorizedAddressing() = 0;
+  virtual bool enableLoopVectorizer() const = 0;
   virtual int getScalingFactorCost(Type *Ty, GlobalValue *BaseGV,
                                    int64_t BaseOffset, bool HasBaseReg,
                                    int64_t Scale, unsigned AddrSpace) = 0;
@@ -1391,6 +1410,10 @@ public:
   virtual unsigned getStoreVectorFactor(unsigned VF, unsigned StoreSize,
                                         unsigned ChainSizeInBytes,
                                         VectorType *VecTy) const = 0;
+  virtual bool shouldFoldVectorLengthIntoMask(
+      const PredicatedInstruction &PredInst) const = 0;
+  virtual bool
+  supportsVPOperation(const PredicatedInstruction &PredInst) const = 0;
   virtual bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
                                      ReductionFlags) const = 0;
   virtual bool shouldExpandReduction(const IntrinsicInst *II) const = 0;
@@ -1452,6 +1475,7 @@ public:
     return Impl.getUserCost(U, Operands);
   }
   bool hasBranchDivergence() override { return Impl.hasBranchDivergence(); }
+  bool useGPUDivergenceAnalysis() override { return Impl.useGPUDivergenceAnalysis(); }
   bool isSourceOfDivergence(const Value *V) override {
     return Impl.isSourceOfDivergence(V);
   }
@@ -1557,6 +1581,9 @@ public:
   }
   bool prefersVectorizedAddressing() override {
     return Impl.prefersVectorizedAddressing();
+  }
+  bool enableLoopVectorizer() const override {
+    return Impl.enableLoopVectorizer();
   }
   int getScalingFactorCost(Type *Ty, GlobalValue *BaseGV, int64_t BaseOffset,
                            bool HasBaseReg, int64_t Scale,
@@ -1865,6 +1892,14 @@ public:
                                 unsigned ChainSizeInBytes,
                                 VectorType *VecTy) const override {
     return Impl.getStoreVectorFactor(VF, StoreSize, ChainSizeInBytes, VecTy);
+  }
+  bool shouldFoldVectorLengthIntoMask(
+      const PredicatedInstruction &PredInst) const override {
+    return Impl.shouldFoldVectorLengthIntoMask(PredInst);
+  }
+  bool
+  supportsVPOperation(const PredicatedInstruction &PredInst) const override {
+    return Impl.supportsVPOperation(PredInst);
   }
   bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
                              ReductionFlags Flags) const override {

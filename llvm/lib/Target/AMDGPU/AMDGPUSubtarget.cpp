@@ -241,6 +241,7 @@ GCNSubtarget::GCNSubtarget(const Triple &TT, StringRef GPU, StringRef FS,
     HasDPP(false),
     HasDPP8(false),
     HasR128A16(false),
+    HasGFX10A16(false),
     HasNSAEncoding(false),
     HasDLInsts(false),
     HasDot1Insts(false),
@@ -497,7 +498,7 @@ uint64_t AMDGPUSubtarget::getExplicitKernArgSize(const Function &F,
 
   const DataLayout &DL = F.getParent()->getDataLayout();
   uint64_t ExplicitArgBytes = 0;
-  MaxAlign = Align::None();
+  MaxAlign = Align(1);
 
   for (const Argument &Arg : F.args()) {
     Type *ArgTy = Arg.getType();
@@ -716,93 +717,44 @@ unsigned GCNSubtarget::getMaxNumVGPRs(const MachineFunction &MF) const {
   return MaxNumVGPRs;
 }
 
-namespace {
-struct MemOpClusterMutation : ScheduleDAGMutation {
-  const SIInstrInfo *TII;
+void GCNSubtarget::adjustSchedDependency(SUnit *Src, SUnit *Dst,
+                                         SDep &Dep) const {
+  if (Dep.getKind() != SDep::Kind::Data || !Dep.getReg() ||
+      !Src->isInstr() || !Dst->isInstr())
+    return;
 
-  MemOpClusterMutation(const SIInstrInfo *tii) : TII(tii) {}
+  MachineInstr *SrcI = Src->getInstr();
+  MachineInstr *DstI = Dst->getInstr();
 
-  void apply(ScheduleDAGInstrs *DAG) override {
-    SUnit *SUa = nullptr;
-    // Search for two consequent memory operations and link them
-    // to prevent scheduler from moving them apart.
-    // In DAG pre-process SUnits are in the original order of
-    // the instructions before scheduling.
-    for (SUnit &SU : DAG->SUnits) {
-      MachineInstr &MI2 = *SU.getInstr();
-      if (!MI2.mayLoad() && !MI2.mayStore()) {
-        SUa = nullptr;
-        continue;
-      }
-      if (!SUa) {
-        SUa = &SU;
-        continue;
-      }
-
-      MachineInstr &MI1 = *SUa->getInstr();
-      if ((TII->isVMEM(MI1) && TII->isVMEM(MI2)) ||
-          (TII->isFLAT(MI1) && TII->isFLAT(MI2)) ||
-          (TII->isSMRD(MI1) && TII->isSMRD(MI2)) ||
-          (TII->isDS(MI1)   && TII->isDS(MI2))) {
-        SU.addPredBarrier(SUa);
-
-        for (const SDep &SI : SU.Preds) {
-          if (SI.getSUnit() != SUa)
-            SUa->addPred(SDep(SI.getSUnit(), SDep::Artificial));
-        }
-
-        if (&SU != &DAG->ExitSU) {
-          for (const SDep &SI : SUa->Succs) {
-            if (SI.getSUnit() != &SU)
-              SI.getSUnit()->addPred(SDep(&SU, SDep::Artificial));
-          }
-        }
-      }
-
-      SUa = &SU;
-    }
-  }
-};
-
-struct FixBundleLatencyMutation : ScheduleDAGMutation {
-  const SIInstrInfo *TII;
-
-  const TargetSchedModel *TSchedModel;
-
-  FixBundleLatencyMutation(const SIInstrInfo *tii) : TII(tii) {}
-
-  unsigned computeLatency(const MachineInstr &MI, unsigned Reg) const {
-    const SIRegisterInfo &TRI = TII->getRegisterInfo();
-    MachineBasicBlock::const_instr_iterator I(MI.getIterator());
-    MachineBasicBlock::const_instr_iterator E(MI.getParent()->instr_end());
+  if (SrcI->isBundle()) {
+    const SIRegisterInfo *TRI = getRegisterInfo();
+    auto Reg = Dep.getReg();
+    MachineBasicBlock::const_instr_iterator I(SrcI->getIterator());
+    MachineBasicBlock::const_instr_iterator E(SrcI->getParent()->instr_end());
     unsigned Lat = 0;
     for (++I; I != E && I->isBundledWithPred(); ++I) {
-      if (!I->modifiesRegister(Reg, &TRI))
-        continue;
-      Lat = TSchedModel->computeInstrLatency(&*I);
-      break;
+      if (I->modifiesRegister(Reg, TRI))
+        Lat = InstrInfo.getInstrLatency(getInstrItineraryData(), *I);
+      else if (Lat)
+        --Lat;
     }
-    return Lat;
-  }
-
-  void apply(ScheduleDAGInstrs *DAGInstrs) override {
-    ScheduleDAGMI *DAG = static_cast<ScheduleDAGMI*>(DAGInstrs);
-    TSchedModel = DAGInstrs->getSchedModel();
-    if (!TSchedModel || DAG->SUnits.empty())
-      return;
-
-    for (SUnit &SU : DAG->SUnits) {
-      if (!SU.isInstr() || !SU.getInstr()->isBundle())
-        continue;
-      for (SDep &Dep : SU.Succs) {
-        if (Dep.getKind() == SDep::Kind::Data && Dep.getReg())
-          if (unsigned Lat = computeLatency(*SU.getInstr(), Dep.getReg()))
-            Dep.setLatency(Lat);
-      }
+    Dep.setLatency(Lat);
+  } else if (DstI->isBundle()) {
+    const SIRegisterInfo *TRI = getRegisterInfo();
+    auto Reg = Dep.getReg();
+    MachineBasicBlock::const_instr_iterator I(DstI->getIterator());
+    MachineBasicBlock::const_instr_iterator E(DstI->getParent()->instr_end());
+    unsigned Lat = InstrInfo.getInstrLatency(getInstrItineraryData(), *SrcI);
+    for (++I; I != E && I->isBundledWithPred() && Lat; ++I) {
+      if (I->readsRegister(Reg, TRI))
+        break;
+      --Lat;
     }
+    Dep.setLatency(Lat);
   }
-};
+}
 
+namespace {
 struct FillMFMAShadowMutation : ScheduleDAGMutation {
   const SIInstrInfo *TII;
 
@@ -929,8 +881,6 @@ struct FillMFMAShadowMutation : ScheduleDAGMutation {
 
 void GCNSubtarget::getPostRAMutations(
     std::vector<std::unique_ptr<ScheduleDAGMutation>> &Mutations) const {
-  Mutations.push_back(std::make_unique<FixBundleLatencyMutation>(&InstrInfo));
-  Mutations.push_back(std::make_unique<MemOpClusterMutation>(&InstrInfo));
   Mutations.push_back(std::make_unique<FillMFMAShadowMutation>(&InstrInfo));
 }
 

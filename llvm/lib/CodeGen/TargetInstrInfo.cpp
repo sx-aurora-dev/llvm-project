@@ -15,6 +15,7 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
+#include "llvm/CodeGen/MachineScheduler.h"
 #include "llvm/CodeGen/PseudoSourceValue.h"
 #include "llvm/CodeGen/ScoreboardHazardRecognizer.h"
 #include "llvm/CodeGen/StackMaps.h"
@@ -142,7 +143,7 @@ TargetInstrInfo::ReplaceTailWithBranchTo(MachineBasicBlock::iterator Tail,
   // from the end of MBB.
   while (Tail != MBB->end()) {
     auto MI = Tail++;
-    if (MI->isCall())
+    if (MI->isCandidateForCallSiteEntry())
       MBB->getParent()->eraseCallSiteInfo(&*MI);
     MBB->erase(MI);
   }
@@ -1015,19 +1016,28 @@ CreateTargetHazardRecognizer(const TargetSubtargetInfo *STI,
 }
 
 // Default implementation of CreateTargetMIHazardRecognizer.
-ScheduleHazardRecognizer *TargetInstrInfo::
-CreateTargetMIHazardRecognizer(const InstrItineraryData *II,
-                               const ScheduleDAG *DAG) const {
-  return (ScheduleHazardRecognizer *)
-    new ScoreboardHazardRecognizer(II, DAG, "machine-scheduler");
+ScheduleHazardRecognizer *TargetInstrInfo::CreateTargetMIHazardRecognizer(
+    const InstrItineraryData *II, const ScheduleDAGMI *DAG) const {
+  return new ScoreboardHazardRecognizer(II, DAG, "machine-scheduler");
 }
 
 // Default implementation of CreateTargetPostRAHazardRecognizer.
 ScheduleHazardRecognizer *TargetInstrInfo::
 CreateTargetPostRAHazardRecognizer(const InstrItineraryData *II,
                                    const ScheduleDAG *DAG) const {
-  return (ScheduleHazardRecognizer *)
-    new ScoreboardHazardRecognizer(II, DAG, "post-RA-sched");
+  return new ScoreboardHazardRecognizer(II, DAG, "post-RA-sched");
+}
+
+// Default implementation of getMemOperandWithOffset.
+bool TargetInstrInfo::getMemOperandWithOffset(
+    const MachineInstr &MI, const MachineOperand *&BaseOp, int64_t &Offset,
+    const TargetRegisterInfo *TRI) const {
+  SmallVector<const MachineOperand *, 4> BaseOps;
+  if (!getMemOperandsWithOffset(MI, BaseOps, Offset, TRI) ||
+      BaseOps.size() != 1)
+    return false;
+  BaseOp = BaseOps.front();
+  return true;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1168,8 +1178,14 @@ TargetInstrInfo::describeLoadedValue(const MachineInstr &MI,
     if (!TII->getMemOperandWithOffset(MI, BaseOp, Offset, TRI))
       return None;
 
-    assert(MI.getNumExplicitDefs() == 1 &&
-           "Can currently only handle mem instructions with a single define");
+    // TODO: Can currently only handle mem instructions with a single define.
+    // An example from the x86 target:
+    //    ...
+    //    DIV64m $rsp, 1, $noreg, 24, $noreg, implicit-def dead $rax, implicit-def $rdx
+    //    ...
+    //
+    if (MI.getNumExplicitDefs() != 1)
+      return None;
 
     // TODO: In what way do we need to take Reg into consideration here?
 

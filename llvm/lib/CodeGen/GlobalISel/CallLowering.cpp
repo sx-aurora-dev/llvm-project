@@ -52,8 +52,19 @@ bool CallLowering::lowerCall(MachineIRBuilder &MIRBuilder, ImmutableCallSite CS,
 
   if (const Function *F = CS.getCalledFunction())
     Info.Callee = MachineOperand::CreateGA(F, 0);
-  else
-    Info.Callee = MachineOperand::CreateReg(GetCalleeReg(), false);
+  else {
+    // Try looking through a bitcast from one function type to another.
+    // Commonly happens with calls to objc_msgSend().
+    const Value *CalleeV = CS.getCalledValue();
+    auto *BC = dyn_cast<ConstantExpr>(CalleeV);
+    if (BC && BC->getOpcode() == Instruction::BitCast) {
+      if (const auto *F = dyn_cast<Function>(BC->getOperand(0))) {
+        Info.Callee = MachineOperand::CreateGA(F, 0);
+      }
+    } else {
+      Info.Callee = MachineOperand::CreateReg(GetCalleeReg(), false);
+    }
+  }
 
   Info.OrigRet = ArgInfo{ResRegs, CS.getType(), ISD::ArgFlagsTy{}};
   if (!Info.OrigRet.Ty->isVoidTy())
@@ -239,7 +250,7 @@ bool CallLowering::handleAssignments(CCState &CCInfo,
             if (Part == 0) {
               Flags.setSplit();
             } else {
-              Flags.setOrigAlign(Align::None());
+              Flags.setOrigAlign(Align(1));
               if (Part == NumParts - 1)
                 Flags.setSplitEnd();
             }
@@ -272,7 +283,7 @@ bool CallLowering::handleAssignments(CCState &CCInfo,
           if (PartIdx == 0) {
             Flags.setSplit();
           } else {
-            Flags.setOrigAlign(Align::None());
+            Flags.setOrigAlign(Align(1));
             if (PartIdx == NumParts - 1)
               Flags.setSplitEnd();
           }
@@ -469,7 +480,7 @@ Register CallLowering::ValueHandler::extendRegister(Register ValReg,
     return ValReg;
   case CCValAssign::AExt: {
     auto MIB = MIRBuilder.buildAnyExt(LocTy, ValReg);
-    return MIB->getOperand(0).getReg();
+    return MIB.getReg(0);
   }
   case CCValAssign::SExt: {
     Register NewReg = MRI.createGenericVirtualRegister(LocTy);

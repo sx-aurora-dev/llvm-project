@@ -16,10 +16,8 @@
 // Register live intervals: Registers must be defined only once, and must be
 // defined before use.
 //
-// The machine code verifier is enabled from LLVMTargetMachine.cpp with the
-// command-line option -verify-machineinstrs, or by defining the environment
-// variable LLVM_VERIFY_MACHINEINSTRS to the name of a file that will receive
-// the verifier errors.
+// The machine code verifier is enabled with the command-line option
+// -verify-machineinstrs.
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/BitVector.h"
@@ -376,13 +374,11 @@ unsigned MachineVerifier::verify(MachineFunction &MF) {
   if (isFunctionFailedISel)
     return foundErrors;
 
-  isFunctionRegBankSelected =
-      !isFunctionFailedISel &&
-      MF.getProperties().hasProperty(
-          MachineFunctionProperties::Property::RegBankSelected);
-  isFunctionSelected = !isFunctionFailedISel &&
-                       MF.getProperties().hasProperty(
-                           MachineFunctionProperties::Property::Selected);
+  isFunctionRegBankSelected = MF.getProperties().hasProperty(
+      MachineFunctionProperties::Property::RegBankSelected);
+  isFunctionSelected = MF.getProperties().hasProperty(
+      MachineFunctionProperties::Property::Selected);
+
   LiveVars = nullptr;
   LiveInts = nullptr;
   LiveStks = nullptr;
@@ -669,12 +665,12 @@ MachineVerifier::visitMachineBasicBlockBefore(const MachineBasicBlock *MBB) {
       !isScopedEHPersonality(classifyEHPersonality(F.getPersonalityFn())))
     report("MBB has more than one landing pad successor", MBB);
 
-  // Call AnalyzeBranch. If it succeeds, there several more conditions to check.
+  // Call analyzeBranch. If it succeeds, there several more conditions to check.
   MachineBasicBlock *TBB = nullptr, *FBB = nullptr;
   SmallVector<MachineOperand, 4> Cond;
   if (!TII->analyzeBranch(*const_cast<MachineBasicBlock *>(MBB), TBB, FBB,
                           Cond)) {
-    // Ok, AnalyzeBranch thinks it knows what's going on with this block. Let's
+    // Ok, analyzeBranch thinks it knows what's going on with this block. Let's
     // check whether its answers match up with reality.
     if (!TBB && !FBB) {
       // Block falls through to its successor.
@@ -791,7 +787,7 @@ MachineVerifier::visitMachineBasicBlockBefore(const MachineBasicBlock *MBB) {
                "condition!", MBB);
       }
     } else {
-      report("AnalyzeBranch returned invalid data!", MBB);
+      report("analyzeBranch returned invalid data!", MBB);
     }
   }
 
@@ -1407,18 +1403,6 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
       break;
     }
 
-    const Constant *Mask = MaskOp.getShuffleMask();
-    auto *MaskVT = dyn_cast<VectorType>(Mask->getType());
-    if (!MaskVT || !MaskVT->getElementType()->isIntegerTy(32)) {
-      report("Invalid shufflemask constant type", MI);
-      break;
-    }
-
-    if (!Mask->getAggregateElement(0u)) {
-      report("Invalid shufflemask constant type", MI);
-      break;
-    }
-
     LLT DstTy = MRI->getType(MI->getOperand(0).getReg());
     LLT Src0Ty = MRI->getType(MI->getOperand(1).getReg());
     LLT Src1Ty = MRI->getType(MI->getOperand(2).getReg());
@@ -1434,8 +1418,7 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
     int SrcNumElts = Src0Ty.isVector() ? Src0Ty.getNumElements() : 1;
     int DstNumElts = DstTy.isVector() ? DstTy.getNumElements() : 1;
 
-    SmallVector<int, 32> MaskIdxes;
-    ShuffleVectorInst::getShuffleMask(Mask, MaskIdxes);
+    ArrayRef<int> MaskIdxes = MaskOp.getShuffleMask();
 
     if (static_cast<int>(MaskIdxes.size()) != DstNumElts)
       report("Wrong result type for shufflemask", MI);

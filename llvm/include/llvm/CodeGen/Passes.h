@@ -342,7 +342,7 @@ namespace llvm {
   /// createSjLjEHPreparePass - This pass adapts exception handling code to use
   /// the GCC-style builtin setjmp/longjmp (sjlj) to handling EH control flow.
   ///
-  FunctionPass *createSjLjEHPreparePass();
+  FunctionPass *createSjLjEHPreparePass(const TargetMachine *TM);
 
   /// createWasmEHPass - This pass adapts exception handling code to use
   /// WebAssembly's exception handling scheme.
@@ -443,6 +443,11 @@ namespace llvm {
   /// This pass expands the experimental reduction intrinsics into sequences of
   /// shuffles.
   FunctionPass *createExpandReductionsPass();
+
+  /// This pass expands the vector predication intrinsics into unpredicated
+  /// instructions with selects or just the explicit vector length into the
+  /// predicate mask.
+  FunctionPass *createExpandVectorPredicationPass();
 
   // This pass expands memcmp() to load/stores.
   FunctionPass *createExpandMemCmpPass();

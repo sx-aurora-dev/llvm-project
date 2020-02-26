@@ -187,8 +187,8 @@ static void moveOperands(MachineOperand *Dst, MachineOperand *Src,
                          unsigned NumOps, MachineRegisterInfo *MRI) {
   if (MRI)
     return MRI->moveOperands(Dst, Src, NumOps);
-
   // MachineOperand is a trivially copyable type so we can just use memmove.
+  assert(Dst && Src && "Unknown operands");
   std::memmove(Dst, Src, NumOps * sizeof(MachineOperand));
 }
 
@@ -694,6 +694,20 @@ void MachineInstr::eraseFromParentAndMarkDBGValuesForRemoval() {
 void MachineInstr::eraseFromBundle() {
   assert(getParent() && "Not embedded in a basic block!");
   getParent()->erase_instr(this);
+}
+
+bool MachineInstr::isCandidateForCallSiteEntry() const {
+  if (!isCall(MachineInstr::IgnoreBundle))
+    return false;
+  switch (getOpcode()) {
+  case TargetOpcode::PATCHABLE_EVENT_CALL:
+  case TargetOpcode::PATCHABLE_TYPED_EVENT_CALL:
+  case TargetOpcode::PATCHPOINT:
+  case TargetOpcode::STACKMAP:
+  case TargetOpcode::STATEPOINT:
+    return false;
+  }
+  return true;
 }
 
 unsigned MachineInstr::getNumExplicitOperands() const {

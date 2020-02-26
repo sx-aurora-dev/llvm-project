@@ -93,6 +93,22 @@ void f() {
 }
 } // namespace testPtrToArrayWithOffsetAsPlace
 
+namespace testZeroSize {
+void f() {
+  int buf[3];                      // expected-note {{'buf' initialized here}}
+  long *lp = ::new (buf + 3) long; // expected-warning{{Storage provided to placement new is only 0 bytes, whereas the allocated type requires 8 bytes}} expected-note 1 {{}}
+  (void)lp;
+}
+} // namespace testZeroSize
+
+namespace testNegativeSize {
+void f() {
+  int buf[3];                      // expected-note {{'buf' initialized here}}
+  long *lp = ::new (buf + 4) long; // expected-warning{{Storage provided to placement new is only -4 bytes, whereas the allocated type requires 8 bytes}} expected-note 1 {{}}
+  (void)lp;
+}
+} // namespace testNegativeSize
+
 namespace testHeapAllocatedBuffer {
 void g2() {
   char *buf = new char[2];     // expected-note {{'buf' initialized here}}

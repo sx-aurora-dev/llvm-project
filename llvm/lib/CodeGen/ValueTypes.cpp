@@ -92,6 +92,18 @@ bool EVT::isExtended2048BitVector() const {
   return isExtendedVector() && getExtendedSizeInBits() == 2048;
 }
 
+bool EVT::isExtended4096BitVector() const {
+  return isExtendedVector() && getExtendedSizeInBits() == 4096;
+}
+
+bool EVT::isExtended8192BitVector() const {
+  return isExtendedVector() && getExtendedSizeInBits() == 8192;
+}
+
+bool EVT::isExtended16384BitVector() const {
+  return isExtendedVector() && getExtendedSizeInBits() == 16384;
+}
+
 EVT EVT::getExtendedVectorElementType() const {
   assert(isExtended() && "Type is not extended!");
   return EVT::getEVT(cast<VectorType>(LLVMTy)->getElementType());
@@ -205,6 +217,9 @@ Type *EVT::getTypeForEVT(LLVMContext &Context) const {
   case MVT::v8i64:   return VectorType::get(Type::getInt64Ty(Context), 8);
   case MVT::v16i64:  return VectorType::get(Type::getInt64Ty(Context), 16);
   case MVT::v32i64:  return VectorType::get(Type::getInt64Ty(Context), 32);
+  case MVT::v64i64:  return VectorType::get(Type::getInt64Ty(Context), 64);
+  case MVT::v128i64: return VectorType::get(Type::getInt64Ty(Context), 128);
+  case MVT::v256i64: return VectorType::get(Type::getInt64Ty(Context), 256);
   case MVT::v1i128:  return VectorType::get(Type::getInt128Ty(Context), 1);
   case MVT::v2f16:   return VectorType::get(Type::getHalfTy(Context), 2);
   case MVT::v3f16:   return VectorType::get(Type::getHalfTy(Context), 3);
@@ -230,6 +245,11 @@ Type *EVT::getTypeForEVT(LLVMContext &Context) const {
   case MVT::v2f64:   return VectorType::get(Type::getDoubleTy(Context), 2);
   case MVT::v4f64:   return VectorType::get(Type::getDoubleTy(Context), 4);
   case MVT::v8f64:   return VectorType::get(Type::getDoubleTy(Context), 8);
+  case MVT::v16f64:  return VectorType::get(Type::getDoubleTy(Context), 16);
+  case MVT::v32f64:  return VectorType::get(Type::getDoubleTy(Context), 32);
+  case MVT::v64f64:  return VectorType::get(Type::getDoubleTy(Context), 64);
+  case MVT::v128f64: return VectorType::get(Type::getDoubleTy(Context), 128);
+  case MVT::v256f64: return VectorType::get(Type::getDoubleTy(Context), 256);
   case MVT::nxv1i1:  
     return VectorType::get(Type::getInt1Ty(Context), 1, /*Scalable=*/ true);
   case MVT::nxv2i1:  

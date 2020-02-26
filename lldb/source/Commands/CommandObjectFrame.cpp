@@ -1,4 +1,4 @@
-//===-- CommandObjectFrame.cpp ----------------------------------*- C++ -*-===//
+//===-- CommandObjectFrame.cpp --------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -172,8 +172,7 @@ protected:
                      Stream &stream) -> bool {
       const ValueObject::GetExpressionPathFormat format = ValueObject::
           GetExpressionPathFormat::eGetExpressionPathFormatHonorPointers;
-      const bool qualify_cxx_base_classes = false;
-      valobj_sp->GetExpressionPath(stream, qualify_cxx_base_classes, format);
+      valobj_sp->GetExpressionPath(stream, format);
       stream.PutCString(" =");
       return true;
     };
@@ -882,7 +881,7 @@ bool CommandObjectFrameRecognizerAdd::DoExecute(Args &command,
   } else {
     auto module = ConstString(m_options.m_module);
     auto func = ConstString(m_options.m_function);
-    StackFrameRecognizerManager::AddRecognizer(recognizer_sp, module, func);
+    StackFrameRecognizerManager::AddRecognizer(recognizer_sp, module, func, {});
   }
 #endif
 
@@ -961,12 +960,13 @@ protected:
     StackFrameRecognizerManager::ForEach(
         [&result, &any_printed](uint32_t recognizer_id, std::string name,
                                 std::string function, std::string symbol,
-                                bool regexp) {
+                                std::string alternate_symbol, bool regexp) {
           if (name == "")
             name = "(internal)";
           result.GetOutputStream().Printf(
-              "%d: %s, module %s, function %s%s\n", recognizer_id, name.c_str(),
-              function.c_str(), symbol.c_str(), regexp ? " (regexp)" : "");
+              "%d: %s, module %s, function %s{%s}%s\n", recognizer_id,
+              name.c_str(), function.c_str(), symbol.c_str(),
+              alternate_symbol.c_str(), regexp ? " (regexp)" : "");
           any_printed = true;
         });
 

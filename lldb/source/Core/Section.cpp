@@ -1,4 +1,4 @@
-//===-- Section.cpp ---------------------------------------------*- C++ -*-===//
+//===-- Section.cpp -------------------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -80,8 +80,12 @@ const char *Section::GetTypeAsCString() const {
     return "dwarf-line-str";
   case eSectionTypeDWARFDebugLoc:
     return "dwarf-loc";
+  case eSectionTypeDWARFDebugLocDwo:
+    return "dwarf-loc-dwo";
   case eSectionTypeDWARFDebugLocLists:
     return "dwarf-loclists";
+  case eSectionTypeDWARFDebugLocListsDwo:
+    return "dwarf-loclists-dwo";
   case eSectionTypeDWARFDebugMacInfo:
     return "dwarf-macinfo";
   case eSectionTypeDWARFDebugMacro:

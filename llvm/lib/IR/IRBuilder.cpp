@@ -49,7 +49,7 @@ GlobalVariable *IRBuilderBase::CreateGlobalString(StringRef Str,
                                 nullptr, GlobalVariable::NotThreadLocal,
                                 AddressSpace);
   GV->setUnnamedAddr(GlobalValue::UnnamedAddr::Global);
-  GV->setAlignment(Align::None());
+  GV->setAlignment(Align(1));
   return GV;
 }
 
@@ -200,8 +200,32 @@ CallInst *IRBuilderBase::CreateMemCpy(Value *Dst, MaybeAlign DstAlign,
   return CI;
 }
 
+CallInst *IRBuilderBase::CreateMemCpyInline(Value *Dst, MaybeAlign DstAlign,
+                                            Value *Src, MaybeAlign SrcAlign,
+                                            Value *Size) {
+  Dst = getCastedInt8PtrValue(Dst);
+  Src = getCastedInt8PtrValue(Src);
+  Value *IsVolatile = getInt1(false);
+
+  Value *Ops[] = {Dst, Src, Size, IsVolatile};
+  Type *Tys[] = {Dst->getType(), Src->getType(), Size->getType()};
+  Function *F = BB->getParent();
+  Module *M = F->getParent();
+  Function *TheFn = Intrinsic::getDeclaration(M, Intrinsic::memcpy_inline, Tys);
+
+  CallInst *CI = createCallHelper(TheFn, Ops, this);
+
+  auto *MCI = cast<MemCpyInlineInst>(CI);
+  if (DstAlign)
+    MCI->setDestAlignment(*DstAlign);
+  if (SrcAlign)
+    MCI->setSourceAlignment(*SrcAlign);
+
+  return CI;
+}
+
 CallInst *IRBuilderBase::CreateElementUnorderedAtomicMemCpy(
-    Value *Dst, unsigned DstAlign, Value *Src, unsigned SrcAlign, Value *Size,
+    Value *Dst, Align DstAlign, Value *Src, Align SrcAlign, Value *Size,
     uint32_t ElementSize, MDNode *TBAATag, MDNode *TBAAStructTag,
     MDNode *ScopeTag, MDNode *NoAliasTag) {
   assert(DstAlign >= ElementSize &&
@@ -276,7 +300,7 @@ CallInst *IRBuilderBase::CreateMemMove(Value *Dst, MaybeAlign DstAlign,
 }
 
 CallInst *IRBuilderBase::CreateElementUnorderedAtomicMemMove(
-    Value *Dst, unsigned DstAlign, Value *Src, unsigned SrcAlign, Value *Size,
+    Value *Dst, Align DstAlign, Value *Src, Align SrcAlign, Value *Size,
     uint32_t ElementSize, MDNode *TBAATag, MDNode *TBAAStructTag,
     MDNode *ScopeTag, MDNode *NoAliasTag) {
   assert(DstAlign >= ElementSize &&
@@ -295,10 +319,8 @@ CallInst *IRBuilderBase::CreateElementUnorderedAtomicMemMove(
   CallInst *CI = createCallHelper(TheFn, Ops, this);
 
   // Set the alignment of the pointer args.
-  CI->addParamAttr(
-      0, Attribute::getWithAlignment(CI->getContext(), Align(DstAlign)));
-  CI->addParamAttr(
-      1, Attribute::getWithAlignment(CI->getContext(), Align(SrcAlign)));
+  CI->addParamAttr(0, Attribute::getWithAlignment(CI->getContext(), DstAlign));
+  CI->addParamAttr(1, Attribute::getWithAlignment(CI->getContext(), SrcAlign));
 
   // Set the TBAA info if present.
   if (TBAATag)
@@ -466,14 +488,14 @@ CallInst *IRBuilderBase::CreateAssumption(Value *Cond) {
 }
 
 /// Create a call to a Masked Load intrinsic.
-/// \p Ptr      - base pointer for the load
-/// \p Align    - alignment of the source location
-/// \p Mask     - vector of booleans which indicates what vector lanes should
-///               be accessed in memory
-/// \p PassThru - pass-through value that is used to fill the masked-off lanes
-///               of the result
-/// \p Name     - name of the result variable
-CallInst *IRBuilderBase::CreateMaskedLoad(Value *Ptr, unsigned Align,
+/// \p Ptr       - base pointer for the load
+/// \p Alignment - alignment of the source location
+/// \p Mask      - vector of booleans which indicates what vector lanes should
+///                be accessed in memory
+/// \p PassThru  - pass-through value that is used to fill the masked-off lanes
+///                of the result
+/// \p Name      - name of the result variable
+CallInst *IRBuilderBase::CreateMaskedLoad(Value *Ptr, Align Alignment,
                                           Value *Mask, Value *PassThru,
                                           const Twine &Name) {
   auto *PtrTy = cast<PointerType>(Ptr->getType());
@@ -483,25 +505,25 @@ CallInst *IRBuilderBase::CreateMaskedLoad(Value *Ptr, unsigned Align,
   if (!PassThru)
     PassThru = UndefValue::get(DataTy);
   Type *OverloadedTypes[] = { DataTy, PtrTy };
-  Value *Ops[] = { Ptr, getInt32(Align), Mask,  PassThru};
+  Value *Ops[] = {Ptr, getInt32(Alignment.value()), Mask, PassThru};
   return CreateMaskedIntrinsic(Intrinsic::masked_load, Ops,
                                OverloadedTypes, Name);
 }
 
 /// Create a call to a Masked Store intrinsic.
-/// \p Val   - data to be stored,
-/// \p Ptr   - base pointer for the store
-/// \p Align - alignment of the destination location
-/// \p Mask  - vector of booleans which indicates what vector lanes should
-///            be accessed in memory
+/// \p Val       - data to be stored,
+/// \p Ptr       - base pointer for the store
+/// \p Alignment - alignment of the destination location
+/// \p Mask      - vector of booleans which indicates what vector lanes should
+///                be accessed in memory
 CallInst *IRBuilderBase::CreateMaskedStore(Value *Val, Value *Ptr,
-                                           unsigned Align, Value *Mask) {
+                                           Align Alignment, Value *Mask) {
   auto *PtrTy = cast<PointerType>(Ptr->getType());
   Type *DataTy = PtrTy->getElementType();
   assert(DataTy->isVectorTy() && "Ptr should point to a vector");
   assert(Mask && "Mask should not be all-ones (null)");
   Type *OverloadedTypes[] = { DataTy, PtrTy };
-  Value *Ops[] = { Val, Ptr, getInt32(Align), Mask };
+  Value *Ops[] = {Val, Ptr, getInt32(Alignment.value()), Mask};
   return CreateMaskedIntrinsic(Intrinsic::masked_store, Ops, OverloadedTypes);
 }
 
@@ -517,6 +539,60 @@ CallInst *IRBuilderBase::CreateMaskedIntrinsic(Intrinsic::ID Id,
   return createCallHelper(TheFn, Ops, this, Name);
 }
 
+/// Create a call to a vector-predicated intrinsic (VP).
+/// \p OC            - The LLVM IR Opcode of the operation
+/// \p VecOpArray    - Intrinsic operand list
+/// \p FMFSource     - Copy source for Fast Math Flags
+/// \p Name          - name of the result variable
+Instruction *IRBuilderBase::CreateVectorPredicatedInst(unsigned OC,
+                                                       ArrayRef<Value *> Params,
+                                                       Instruction *FMFSource,
+                                                       const Twine &Name) {
+
+  Module *M = BB->getParent()->getParent();
+
+  Intrinsic::ID VPID = VPIntrinsic::GetForOpcode(OC);
+  auto VPFunc = VPIntrinsic::GetDeclarationForParams(M, VPID, Params);
+  auto *VPCall = createCallHelper(VPFunc, Params, this, Name);
+
+  // transfer fast math flags
+  if (FMFSource && isa<FPMathOperator>(FMFSource)) {
+    VPCall->copyFastMathFlags(FMFSource);
+  }
+
+  return VPCall;
+}
+
+/// Create a call to a vector-predicated comparison intrinsic (VP).
+/// \p Pred          - comparison predicate
+/// \p FirstOp       - First vector operand
+/// \p SndOp         - Second vector operand
+/// \p Mask          - Mask operand
+/// \p VectorLength  - Vector length operand
+/// \p Name          - name of the result variable
+Instruction *IRBuilderBase::CreateVectorPredicatedCmp(
+    CmpInst::Predicate Pred, Value *FirstParam, Value *SndParam,
+    Value *MaskParam, Value *VectorLengthParam, const Twine &Name) {
+
+  Module *M = BB->getParent()->getParent();
+
+  // encode comparison predicate as MD
+  uint8_t RawPred = static_cast<uint8_t>(Pred);
+  auto Int8Ty = Type::getInt8Ty(getContext());
+  auto PredParam = ConstantInt::get(Int8Ty, RawPred, false);
+
+  Intrinsic::ID VPID = FirstParam->getType()->isIntOrIntVectorTy()
+                           ? Intrinsic::vp_icmp
+                           : Intrinsic::vp_fcmp;
+
+  auto VPFunc = VPIntrinsic::GetDeclarationForParams(
+      M, VPID, {FirstParam, SndParam, PredParam, MaskParam, VectorLengthParam});
+
+  return createCallHelper(
+      VPFunc, {FirstParam, SndParam, PredParam, MaskParam, VectorLengthParam},
+      this, Name);
+}
+
 /// Create a call to a Masked Gather intrinsic.
 /// \p Ptrs     - vector of pointers for loading
 /// \p Align    - alignment for one element
@@ -525,9 +601,9 @@ CallInst *IRBuilderBase::CreateMaskedIntrinsic(Intrinsic::ID Id,
 /// \p PassThru - pass-through value that is used to fill the masked-off lanes
 ///               of the result
 /// \p Name     - name of the result variable
-CallInst *IRBuilderBase::CreateMaskedGather(Value *Ptrs, unsigned Align,
-                                            Value *Mask,  Value *PassThru,
-                                            const Twine& Name) {
+CallInst *IRBuilderBase::CreateMaskedGather(Value *Ptrs, Align Alignment,
+                                            Value *Mask, Value *PassThru,
+                                            const Twine &Name) {
   auto PtrsTy = cast<VectorType>(Ptrs->getType());
   auto PtrTy = cast<PointerType>(PtrsTy->getElementType());
   unsigned NumElts = PtrsTy->getVectorNumElements();
@@ -541,7 +617,7 @@ CallInst *IRBuilderBase::CreateMaskedGather(Value *Ptrs, unsigned Align,
     PassThru = UndefValue::get(DataTy);
 
   Type *OverloadedTypes[] = {DataTy, PtrsTy};
-  Value * Ops[] = {Ptrs, getInt32(Align), Mask, PassThru};
+  Value *Ops[] = {Ptrs, getInt32(Alignment.value()), Mask, PassThru};
 
   // We specify only one type when we create this intrinsic. Types of other
   // arguments are derived from this type.
@@ -557,7 +633,7 @@ CallInst *IRBuilderBase::CreateMaskedGather(Value *Ptrs, unsigned Align,
 /// \p Mask  - vector of booleans which indicates what vector lanes should
 ///            be accessed in memory
 CallInst *IRBuilderBase::CreateMaskedScatter(Value *Data, Value *Ptrs,
-                                             unsigned Align, Value *Mask) {
+                                             Align Alignment, Value *Mask) {
   auto PtrsTy = cast<VectorType>(Ptrs->getType());
   auto DataTy = cast<VectorType>(Data->getType());
   unsigned NumElts = PtrsTy->getVectorNumElements();
@@ -574,7 +650,7 @@ CallInst *IRBuilderBase::CreateMaskedScatter(Value *Data, Value *Ptrs,
                                      NumElts));
 
   Type *OverloadedTypes[] = {DataTy, PtrsTy};
-  Value * Ops[] = {Data, Ptrs, getInt32(Align), Mask};
+  Value *Ops[] = {Data, Ptrs, getInt32(Alignment.value()), Mask};
 
   // We specify only one type when we create this intrinsic. Types of other
   // arguments are derived from this type.

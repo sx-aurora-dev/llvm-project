@@ -206,9 +206,175 @@ namespace llvm {
     /// @}
   };
 
+  /// This is the common base class for vector predication intrinsics.
+  class VPIntrinsic : public IntrinsicInst {
+  public:
+    enum class VPTypeToken : int8_t {
+      Returned = 0,  // vectorized return type.
+      Vector = 1,    // vector operand type
+      Pointer = 2,   // vector pointer-operand type (memory op)
+      Mask = 3       // vector mask type
+    };
+
+    using TypeTokenVec = SmallVector<VPTypeToken, 4>;
+    using ShortTypeVec = SmallVector<Type *, 4>;
+
+    /// \brief Declares a llvm.vp.* intrinsic in \p M that matches the parameters \p Params.
+    static Function* GetDeclarationForParams(Module *M, Intrinsic::ID, ArrayRef<Value *> Params, Type* VecRetTy = nullptr);
+
+    // Type tokens required to instantiate this intrinsic.
+    static TypeTokenVec GetTypeTokens(Intrinsic::ID);
+
+    // whether the intrinsic has a rounding mode parameter (regardless of
+    // setting).
+    static bool HasRoundingModeParam(Intrinsic::ID VPID) { return GetRoundingModeParamPos(VPID) != None; }
+    // whether the intrinsic has a exception behavior parameter (regardless of
+    // setting).
+    static bool HasExceptionBehaviorParam(Intrinsic::ID VPID) { return GetExceptionBehaviorParamPos(VPID) != None; }
+    static Optional<int> GetMaskParamPos(Intrinsic::ID IntrinsicID);
+    static Optional<int> GetVectorLengthParamPos(Intrinsic::ID IntrinsicID);
+    static Optional<int>
+    GetExceptionBehaviorParamPos(Intrinsic::ID IntrinsicID);
+    static Optional<int> GetRoundingModeParamPos(Intrinsic::ID IntrinsicID);
+    // the llvm.vp.* intrinsic for this other kind of intrinsic.
+    static Intrinsic::ID GetForIntrinsic(Intrinsic::ID IntrinsicID);
+    static Intrinsic::ID GetForOpcode(unsigned OC);
+
+    // Whether \p ID is a VP intrinsic ID.
+    static bool IsVPIntrinsic(Intrinsic::ID);
+
+    /// TODO make this private!
+    /// \brief Generate the disambiguating type vec for this VP Intrinsic.
+    /// \returns A disamguating type vector to instantiate this intrinsic.
+    /// \p TTVec
+    ///     Vector of disambiguating tokens.
+    /// \p VecRetTy
+    ///     The return type of the intrinsic (optional)
+    /// \p VecPtrTy
+    ///     The pointer operand type (optional)
+    /// \p VectorTy
+    ///     The vector data type of the operation.
+    static VPIntrinsic::ShortTypeVec
+    EncodeTypeTokens(VPIntrinsic::TypeTokenVec TTVec, Type *VecRetTy,
+                     Type *VecPtrTy, Type &VectorTy);
+
+    /// set the mask parameter.
+    /// this asserts if the underlying intrinsic has no mask parameter.
+    void setMaskParam(Value *);
+
+    /// set the vector length parameter.
+    /// this asserts if the underlying intrinsic has no vector length
+    /// parameter.
+    void setVectorLengthParam(Value *);
+
+    /// \return the mask parameter or nullptr.
+    Value *getMaskParam() const;
+
+    /// \return the vector length parameter or nullptr.
+    Value *getVectorLengthParam() const;
+
+    /// \return whether the vector length param can be ignored.
+    bool canIgnoreVectorLengthParam() const;
+
+    /// \return the alignment of the pointer used by this load/store/gather or scatter.
+    MaybeAlign getPointerAlignment() const;
+    // MaybeAlign setPointerAlignment(Align NewAlign); // TODO
+
+    /// \return The pointer operand of this load,store, gather or scatter.
+    Value *getMemoryPointerParam() const;
+    static Optional<int> GetMemoryPointerParamPos(Intrinsic::ID);
+
+    /// \return The data (payload) operand of this store or scatter.
+    Value *getMemoryDataParam() const;
+    static Optional<int> GetMemoryDataParamPos(Intrinsic::ID);
+
+    /// \return The vector to reduce if this is a reduction operation.
+    Value *getReductionVectorParam() const;
+    static Optional<int> GetReductionVectorParamPos(Intrinsic::ID VPID);
+
+    /// \return The initial value of this is a reduction operation.
+    Value *getReductionAccuParam() const;
+    static Optional<int> GetReductionAccuParamPos(Intrinsic::ID VPID);
+
+    /// \return the static element count (vector number of elements) the vector
+    /// length parameter applies to.
+    ElementCount getVectorLength() const;
+
+    bool isUnaryOp() const;
+    static bool IsUnaryVPOp(Intrinsic::ID);
+    bool isBinaryOp() const;
+    static bool IsBinaryVPOp(Intrinsic::ID);
+    bool isTernaryOp() const;
+    static bool IsTernaryVPOp(Intrinsic::ID);
+
+    /// \returns Whether this is a comparison operation.
+    bool isCompareOp() const;
+    static bool IsCompareVPOp(Intrinsic::ID);
+
+    /// \returns The comparison predicate.
+    CmpInst::Predicate getCmpPredicate() const;
+
+    // Contrained fp-math
+    // whether this is an fp op with non-standard rounding or exception
+    // behavior.
+    bool isConstrainedOp() const;
+
+    // the specified rounding mode.
+    Optional<fp::RoundingMode> getRoundingMode() const;
+    // the specified exception behavior.
+    Optional<fp::ExceptionBehavior> getExceptionBehavior() const;
+
+    // llvm.vp.reduction.*
+    bool isReductionOp() const;
+    static bool IsVPReduction(Intrinsic::ID VPIntrin);
+
+    // Methods for support type inquiry through isa, cast, and dyn_cast:
+    static bool classof(const IntrinsicInst *I) {
+      return IsVPIntrinsic(I->getIntrinsicID());
+    }
+    static bool classof(const Value *V) {
+      return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
+    }
+
+    /// \return The non-VP intrinsic that is functionally equivalent to this VP
+    /// intrinsic.
+    Intrinsic::ID getFunctionalIntrinsicID() const {
+      Intrinsic::ID IID = Intrinsic::not_intrinsic;
+      // Return a constrained intrinsic if this intrinsic does not operate in
+      // the standard fp environment.
+      if (isConstrainedOp()) {
+        IID = GetConstrainedIntrinsicForVP(getIntrinsicID());
+      }
+      if (IID == Intrinsic::not_intrinsic) {
+        IID = GetFunctionalIntrinsicForVP(getIntrinsicID());
+      }
+      return IID;
+    }
+
+    /// \return The llvm.experimental.constrained.* intrinsic that is
+    /// functionally equivalent to this llvm.vp.* intrinsic.
+    static Intrinsic::ID GetConstrainedIntrinsicForVP(Intrinsic::ID VPID);
+
+    /// \return The intrinsic that is
+    /// functionally equivalent to this llvm.vp.* intrinsic.
+    static Intrinsic::ID GetFunctionalIntrinsicForVP(Intrinsic::ID VPID);
+
+    // Equivalent non-predicated opcode
+    unsigned getFunctionalOpcode() const {
+      if (isConstrainedOp()) {
+        return Instruction::Call;
+      }
+      return GetFunctionalOpcodeForVP(getIntrinsicID());
+    }
+
+    // Equivalent non-predicated opcode
+    static unsigned GetFunctionalOpcodeForVP(Intrinsic::ID ID);
+  };
+
   /// This is the common base class for constrained floating point intrinsics.
   class ConstrainedFPIntrinsic : public IntrinsicInst {
   public:
+
     bool isUnaryOp() const;
     bool isTernaryOp() const;
     Optional<fp::RoundingMode> getRoundingMode() const;
@@ -582,6 +748,7 @@ namespace llvm {
       case Intrinsic::memcpy:
       case Intrinsic::memmove:
       case Intrinsic::memset:
+      case Intrinsic::memcpy_inline:
         return true;
       default: return false;
       }
@@ -608,8 +775,14 @@ namespace llvm {
   public:
     // Methods for support type inquiry through isa, cast, and dyn_cast:
     static bool classof(const IntrinsicInst *I) {
-      return I->getIntrinsicID() == Intrinsic::memcpy ||
-             I->getIntrinsicID() == Intrinsic::memmove;
+      switch (I->getIntrinsicID()) {
+      case Intrinsic::memcpy:
+      case Intrinsic::memmove:
+      case Intrinsic::memcpy_inline:
+        return true;
+      default:
+        return false;
+      }
     }
     static bool classof(const Value *V) {
       return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
@@ -640,6 +813,21 @@ namespace llvm {
     }
   };
 
+  /// This class wraps the llvm.memcpy.inline intrinsic.
+  class MemCpyInlineInst : public MemTransferInst {
+  public:
+    ConstantInt *getLength() const {
+      return cast<ConstantInt>(MemTransferInst::getLength());
+    }
+    // Methods for support type inquiry through isa, cast, and dyn_cast:
+    static bool classof(const IntrinsicInst *I) {
+      return I->getIntrinsicID() == Intrinsic::memcpy_inline;
+    }
+    static bool classof(const Value *V) {
+      return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
+    }
+  };
+
   // The common base class for any memset/memmove/memcpy intrinsics;
   // whether they be atomic or non-atomic.
   // i.e. llvm.element.unordered.atomic.memset/memcpy/memmove
@@ -656,6 +844,7 @@ namespace llvm {
     static bool classof(const IntrinsicInst *I) {
       switch (I->getIntrinsicID()) {
       case Intrinsic::memcpy:
+      case Intrinsic::memcpy_inline:
       case Intrinsic::memmove:
       case Intrinsic::memset:
       case Intrinsic::memcpy_element_unordered_atomic:
@@ -698,6 +887,7 @@ namespace llvm {
     static bool classof(const IntrinsicInst *I) {
       switch (I->getIntrinsicID()) {
       case Intrinsic::memcpy:
+      case Intrinsic::memcpy_inline:
       case Intrinsic::memmove:
       case Intrinsic::memcpy_element_unordered_atomic:
       case Intrinsic::memmove_element_unordered_atomic:
@@ -719,6 +909,7 @@ namespace llvm {
     static bool classof(const IntrinsicInst *I) {
       switch (I->getIntrinsicID()) {
       case Intrinsic::memcpy:
+      case Intrinsic::memcpy_inline:
       case Intrinsic::memcpy_element_unordered_atomic:
         return true;
       default:

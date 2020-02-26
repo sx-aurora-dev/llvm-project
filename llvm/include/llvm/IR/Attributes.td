@@ -139,6 +139,15 @@ def Returned : EnumAttr<"returned">;
 /// Parameter is required to be a trivial constant.
 def ImmArg : EnumAttr<"immarg">;
 
+/// Return value that is equal to this argument on enabled lanes (mask).
+def Passthru : EnumAttr<"passthru">;
+
+/// Mask argument that applies to this function.
+def Mask : EnumAttr<"mask">;
+
+/// Dynamic Vector Length argument of this function.
+def VectorLength : EnumAttr<"vlen">;
+
 /// Function can return twice.
 def ReturnsTwice : EnumAttr<"returns_twice">;
 

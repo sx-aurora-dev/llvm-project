@@ -343,6 +343,14 @@ def parseOptionsAndInitTestdirs():
         # that explicitly require no debug info.
         os.environ['CFLAGS'] = '-gdwarf-{}'.format(configuration.dwarf_version)
 
+    if args.settings:
+        for setting in args.settings:
+            if not len(setting) == 1 or not setting[0].count('='):
+                logging.error('"%s" is not a setting in the form "key=value"',
+                              setting[0])
+                sys.exit(-1)
+            configuration.settings.append(setting[0].split('=', 1))
+
     if args.d:
         sys.stdout.write(
             "Suspending the process %d to wait for debugger to attach...\n" %
@@ -444,6 +452,9 @@ def parseOptionsAndInitTestdirs():
 
     os.environ['CLANG_MODULE_CACHE_DIR'] = configuration.clang_module_cache_dir
 
+    if args.lldb_libs_dir:
+        configuration.lldb_libs_dir = args.lldb_libs_dir
+
     # Gather all the dirs passed on the command line.
     if len(args.args) > 0:
         configuration.testdirs = [os.path.realpath(os.path.abspath(x)) for x in args.args]
@@ -493,6 +504,7 @@ def setupSysPath():
         sys.exit(-1)
 
     os.environ["LLDB_TEST"] = scriptPath
+    os.environ["LLDB_TEST_SRC"] = lldbsuite.lldb_test_root
 
     # Set up the root build directory.
     builddir = configuration.test_build_dir
@@ -551,10 +563,7 @@ def setupSysPath():
     # confusingly, this is the "bin" directory
     lldbLibDir = os.path.dirname(lldbtest_config.lldbExec)
     os.environ["LLDB_LIB_DIR"] = lldbLibDir
-    lldbImpLibDir = os.path.join(
-        lldbLibDir,
-        '..',
-        'lib') if sys.platform.startswith('win32') else lldbLibDir
+    lldbImpLibDir = configuration.lldb_libs_dir
     os.environ["LLDB_IMPLIB_DIR"] = lldbImpLibDir
     print("LLDB library dir:", os.environ["LLDB_LIB_DIR"])
     print("LLDB import library dir:", os.environ["LLDB_IMPLIB_DIR"])
@@ -765,17 +774,15 @@ def visit(prefix, dir, names):
             raise
 
 
-def disabledynamics():
+def setSetting(setting, value):
     import lldb
     ci = lldb.DBG.GetCommandInterpreter()
     res = lldb.SBCommandReturnObject()
-    ci.HandleCommand(
-        "setting set target.prefer-dynamic-value no-dynamic-values",
-        res,
-        False)
+    cmd = 'setting set %s %s'%(setting, value)
+    print(cmd)
+    ci.HandleCommand(cmd, res, False)
     if not res.Succeeded():
-        raise Exception('disabling dynamic type support failed')
-
+        raise Exception('failed to run "%s"'%cmd)
 
 # ======================================== #
 #                                          #
@@ -1060,8 +1067,9 @@ def run_suite():
     # Now that we have loaded all the test cases, run the whole test suite.
     #
 
-    # Disable default dynamic types for testing purposes
-    disabledynamics()
+    # Set any user-overridden settings.
+    for key, value in configuration.settings:
+        setSetting(key, value)
 
     # Install the control-c handler.
     unittest2.signals.installHandler()

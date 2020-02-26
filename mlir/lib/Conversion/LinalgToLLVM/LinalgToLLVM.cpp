@@ -1,6 +1,6 @@
 //===- LinalgToLLVM.cpp - conversion from Linalg to LLVM dialect ----------===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -16,7 +16,6 @@
 #include "mlir/Dialect/Linalg/IR/LinalgOps.h"
 #include "mlir/Dialect/Linalg/IR/LinalgTypes.h"
 #include "mlir/Dialect/Linalg/Passes.h"
-#include "mlir/Dialect/Linalg/Utils/Intrinsics.h"
 #include "mlir/EDSC/Builders.h"
 #include "mlir/EDSC/Intrinsics.h"
 #include "mlir/IR/AffineExpr.h"
@@ -47,7 +46,6 @@ using namespace mlir::edsc;
 using namespace mlir::edsc::intrinsics;
 using namespace mlir::LLVM;
 using namespace mlir::linalg;
-using namespace mlir::linalg::intrinsics;
 
 using add = ValueBuilder<mlir::LLVM::AddOp>;
 using addi = ValueBuilder<mlir::AddIOp>;
@@ -139,7 +137,6 @@ private:
 
   MemRefDescriptor d;
 };
-} // namespace
 
 // RangeOp creates a new range descriptor.
 class RangeOpConversion : public LLVMOpLowering {
@@ -152,7 +149,7 @@ public:
                   ConversionPatternRewriter &rewriter) const override {
     auto rangeOp = cast<RangeOp>(op);
     auto rangeDescriptorTy =
-        convertLinalgType(rangeOp.getResult()->getType(), lowering);
+        convertLinalgType(rangeOp.getResult().getType(), lowering);
 
     edsc::ScopedContext context(rewriter, op->getLoc());
 
@@ -251,7 +248,7 @@ public:
     for (int i = 0, e = memRefType.getRank(); i < e; ++i) {
       Value indexing = adaptor.indexings()[i];
       Value min = indexing;
-      if (sliceOp.indexing(i)->getType().isa<RangeType>())
+      if (sliceOp.indexing(i).getType().isa<RangeType>())
         min = extractvalue(int64Ty, indexing, pos(0));
       baseOffset = add(baseOffset, mul(min, strides[i]));
     }
@@ -274,7 +271,7 @@ public:
     int numNewDims = 0;
     for (auto en : llvm::enumerate(sliceOp.indexings())) {
       Value indexing = en.value();
-      if (indexing->getType().isa<RangeType>()) {
+      if (indexing.getType().isa<RangeType>()) {
         int rank = en.index();
         Value rangeDescriptor = adaptor.indexings()[rank];
         Value min = extractvalue(int64Ty, rangeDescriptor, pos(0));
@@ -364,6 +361,7 @@ public:
     return matchSuccess();
   }
 };
+} // namespace
 
 template <typename LinalgOp>
 static SmallVector<Type, 4> ExtractOperandTypes(Operation *op) {
@@ -427,6 +425,8 @@ Type LinalgTypeConverter::convertType(Type t) {
   return convertLinalgType(t, *this);
 }
 
+namespace {
+
 // LinalgOpConversion<LinalgOp> creates a new call to the
 // `LinalgOp::getLibraryCallName()` function.
 // The implementation of the function can be either in the same module or in an
@@ -450,7 +450,8 @@ public:
 
 /// Conversion pattern specialization for CopyOp. This kicks in when both input
 /// and output permutations are left unspecified or are the identity.
-template <> class LinalgOpConversion<CopyOp> : public OpRewritePattern<CopyOp> {
+template <>
+class LinalgOpConversion<CopyOp> : public OpRewritePattern<CopyOp> {
 public:
   using OpRewritePattern<CopyOp>::OpRewritePattern;
 
@@ -552,6 +553,8 @@ populateLinalgToStandardConversionPatterns(OwningRewritePatternList &patterns,
       ctx);
 }
 
+} // namespace
+
 /// Populate the given list with patterns that convert from Linalg to LLVM.
 void mlir::populateLinalgToLLVMConversionPatterns(
     LinalgTypeConverter &converter, OwningRewritePatternList &patterns,
@@ -588,8 +591,7 @@ void ConvertLinalgToLLVMPass::runOnModule() {
     signalPassFailure();
 }
 
-std::unique_ptr<OpPassBase<ModuleOp>>
-mlir::linalg::createConvertLinalgToLLVMPass() {
+std::unique_ptr<OpPassBase<ModuleOp>> mlir::createConvertLinalgToLLVMPass() {
   return std::make_unique<ConvertLinalgToLLVMPass>();
 }
 

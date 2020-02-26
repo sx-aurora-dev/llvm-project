@@ -123,6 +123,9 @@ struct CodeGenIntrinsic {
   /// True if the intrinsic is no-return.
   bool isNoReturn;
 
+  /// True if the intrinsic is no-sync.
+  bool isNoSync;
+
   /// True if the intrinsic is will-return.
   bool isWillReturn;
 
@@ -146,7 +149,10 @@ struct CodeGenIntrinsic {
     ReadOnly,
     WriteOnly,
     ReadNone,
-    ImmArg
+    ImmArg,
+    Mask,
+    VectorLength,
+    Passthru
   };
 
   std::vector<std::pair<unsigned, ArgAttribute>> ArgumentAttributes;

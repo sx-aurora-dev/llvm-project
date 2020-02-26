@@ -338,7 +338,7 @@ static cl::extrahelp
     HelpResponse("\nPass @FILE as argument to read options from FILE.\n");
 
 static StringSet<> DisasmFuncsSet;
-static StringSet<> FoundSectionSet;
+StringSet<> FoundSectionSet;
 static StringRef ToolName;
 
 typedef std::vector<std::tuple<uint64_t, StringRef, uint8_t>> SectionSymbolsTy;
@@ -397,7 +397,7 @@ std::string getFileNameForError(const object::Archive::Child &C,
                                 unsigned Index) {
   Expected<StringRef> NameOrErr = C.getName();
   if (NameOrErr)
-    return NameOrErr.get();
+    return std::string(NameOrErr.get());
   // If we have an error getting the name then we print the index of the archive
   // member. Since we are already in an error state, we just ignore this error.
   consumeError(NameOrErr.takeError());
@@ -562,7 +562,7 @@ public:
     symbolize::LLVMSymbolizer::Options SymbolizerOpts;
     SymbolizerOpts.PrintFunctions = DILineInfoSpecifier::FunctionNameKind::None;
     SymbolizerOpts.Demangle = false;
-    SymbolizerOpts.DefaultArch = DefaultArch;
+    SymbolizerOpts.DefaultArch = std::string(DefaultArch);
     Symbolizer.reset(new symbolize::LLVMSymbolizer(SymbolizerOpts));
   }
   virtual ~SourcePrinter() = default;
@@ -1353,16 +1353,10 @@ static void disassembleObject(const Target *TheTarget, const ObjectFile *Obj,
         continue;
       }
 
-#ifndef NDEBUG
-      raw_ostream &DebugOut = DebugFlag ? dbgs() : nulls();
-#else
-      raw_ostream &DebugOut = nulls();
-#endif
-
       // Some targets (like WebAssembly) have a special prelude at the start
       // of each symbol.
       DisAsm->onSymbolStart(SymbolName, Size, Bytes.slice(Start, End - Start),
-                            SectionAddr + Start, DebugOut, CommentStream);
+                            SectionAddr + Start, CommentStream);
       Start += Size;
 
       Index = Start;
@@ -1426,8 +1420,7 @@ static void disassembleObject(const Target *TheTarget, const ObjectFile *Obj,
         // provided
         MCInst Inst;
         bool Disassembled = DisAsm->getInstruction(
-            Inst, Size, Bytes.slice(Index), SectionAddr + Index, DebugOut,
-            CommentStream);
+            Inst, Size, Bytes.slice(Index), SectionAddr + Index, CommentStream);
         if (Size == 0)
           Size = 1;
 
@@ -1437,6 +1430,14 @@ static void disassembleObject(const Target *TheTarget, const ObjectFile *Obj,
                       outs(), "", *STI, &SP, Obj->getFileName(), &Rels);
         outs() << CommentStream.str();
         Comments.clear();
+
+        // If disassembly has failed, continue with the next instruction, to
+        // avoid analysing invalid/incomplete instruction information.
+        if (!Disassembled) {
+          outs() << "\n";
+          Index += Size;
+          continue;
+        }
 
         // Try to resolve the target of a call, tail call, etc. to a specific
         // symbol.
@@ -1934,7 +1935,7 @@ void printSymbolTable(const ObjectFile *O, StringRef ArchiveName,
     }
 
     if (Demangle)
-      outs() << ' ' << demangle(Name) << '\n';
+      outs() << ' ' << demangle(std::string(Name)) << '\n';
     else
       outs() << ' ' << Name << '\n';
   }

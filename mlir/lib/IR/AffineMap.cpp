@@ -1,6 +1,6 @@
 //===- AffineMap.cpp - MLIR Affine Map Classes ----------------------------===//
 //
-// Part of the MLIR Project, under the Apache License v2.0 with LLVM Exceptions.
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
@@ -325,4 +325,49 @@ AffineMap mlir::concatAffineMaps(ArrayRef<AffineMap> maps) {
     numDims = std::max(m.getNumDims(), numDims);
   }
   return numDims == 0 ? AffineMap() : AffineMap::get(numDims, 0, results);
+}
+
+//===----------------------------------------------------------------------===//
+// MutableAffineMap.
+//===----------------------------------------------------------------------===//
+
+MutableAffineMap::MutableAffineMap(AffineMap map)
+    : numDims(map.getNumDims()), numSymbols(map.getNumSymbols()),
+      // A map always has at least 1 result by construction
+      context(map.getResult(0).getContext()) {
+  for (auto result : map.getResults())
+    results.push_back(result);
+}
+
+void MutableAffineMap::reset(AffineMap map) {
+  results.clear();
+  numDims = map.getNumDims();
+  numSymbols = map.getNumSymbols();
+  // A map always has at least 1 result by construction
+  context = map.getResult(0).getContext();
+  for (auto result : map.getResults())
+    results.push_back(result);
+}
+
+bool MutableAffineMap::isMultipleOf(unsigned idx, int64_t factor) const {
+  if (results[idx].isMultipleOf(factor))
+    return true;
+
+  // TODO(bondhugula): use simplifyAffineExpr and FlatAffineConstraints to
+  // complete this (for a more powerful analysis).
+  return false;
+}
+
+// Simplifies the result affine expressions of this map. The expressions have to
+// be pure for the simplification implemented.
+void MutableAffineMap::simplify() {
+  // Simplify each of the results if possible.
+  // TODO(ntv): functional-style map
+  for (unsigned i = 0, e = getNumResults(); i < e; i++) {
+    results[i] = simplifyAffineExpr(getResult(i), numDims, numSymbols);
+  }
+}
+
+AffineMap MutableAffineMap::getAffineMap() const {
+  return AffineMap::get(numDims, numSymbols, results);
 }

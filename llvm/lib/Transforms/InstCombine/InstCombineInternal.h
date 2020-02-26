@@ -30,6 +30,7 @@
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/PredicatedInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/Use.h"
@@ -369,8 +370,11 @@ public:
   Instruction *visitFNeg(UnaryOperator &I);
   Instruction *visitAdd(BinaryOperator &I);
   Instruction *visitFAdd(BinaryOperator &I);
-  Value *OptimizePointerDifference(Value *LHS, Value *RHS, Type *Ty);
+  Value *OptimizePointerDifference(
+      Value *LHS, Value *RHS, Type *Ty, bool isNUW);
   Instruction *visitSub(BinaryOperator &I);
+  template<typename BinaryOpTy, typename MatcherType> Instruction *visitFSubGeneric(BinaryOpTy &I);
+  Instruction *visitPredicatedFSub(PredicatedBinaryOperator &I);
   Instruction *visitFSub(BinaryOperator &I);
   Instruction *visitMul(BinaryOperator &I);
   Instruction *visitFMul(BinaryOperator &I);
@@ -448,6 +452,16 @@ public:
   Instruction *visitVACopyInst(VACopyInst &I);
   Instruction *visitFreeze(FreezeInst &I);
 
+  // Entry point to VPIntrinsic
+  Instruction *visitPredicatedInstruction(PredicatedInstruction * PI) {
+    switch (PI->getOpcode()) {
+      default:
+        return nullptr;
+      case Instruction::FSub:
+        return visitPredicatedFSub(cast<PredicatedBinaryOperator>(*PI));
+    }
+  }
+
   /// Specify what to return for unhandled instructions.
   Instruction *visitInstruction(Instruction &I) { return nullptr; }
 
@@ -466,10 +480,14 @@ public:
   /// \return true if successful.
   bool replacePointer(Instruction &I, Value *V);
 
+  LoadInst *combineLoadToNewType(LoadInst &LI, Type *NewTy,
+                                 const Twine &Suffix = "");
+
 private:
   bool shouldChangeType(unsigned FromBitWidth, unsigned ToBitWidth) const;
   bool shouldChangeType(Type *From, Type *To) const;
   Value *dyn_castNegVal(Value *V) const;
+  Value *freelyNegateValue(Value *V);
   Type *FindElementAtOffset(PointerType *PtrTy, int64_t Offset,
                             SmallVectorImpl<Value *> &NewIndices);
 
@@ -643,7 +661,7 @@ public:
            "New instruction already inserted into a basic block!");
     BasicBlock *BB = Old.getParent();
     BB->getInstList().insert(Old.getIterator(), New); // Insert inst
-    Worklist.Add(New);
+    Worklist.push(New);
     return New;
   }
 
@@ -664,7 +682,7 @@ public:
     // no changes were made to the program.
     if (I.use_empty()) return nullptr;
 
-    Worklist.AddUsersToWorkList(I); // Add all modified instrs to worklist.
+    Worklist.pushUsersToWorkList(I); // Add all modified instrs to worklist.
 
     // If we are replacing the instruction with itself, this must be in a
     // segment of unreachable code, so just clobber the instruction.
@@ -675,6 +693,13 @@ public:
                       << "    with " << *V << '\n');
 
     I.replaceAllUsesWith(V);
+    return &I;
+  }
+
+  /// Replace operand of instruction and add old operand to the worklist.
+  Instruction *replaceOperand(Instruction &I, unsigned OpNum, Value *V) {
+    Worklist.addValue(I.getOperand(OpNum));
+    I.setOperand(OpNum, V);
     return &I;
   }
 
@@ -713,9 +738,9 @@ public:
     if (I.getNumOperands() < 8) {
       for (Use &Operand : I.operands())
         if (auto *Inst = dyn_cast<Instruction>(Operand))
-          Worklist.Add(Inst);
+          Worklist.push(Inst);
     }
-    Worklist.Remove(&I);
+    Worklist.remove(&I);
     I.eraseFromParent();
     MadeIRChange = true;
     return nullptr; // Don't do anything with FI

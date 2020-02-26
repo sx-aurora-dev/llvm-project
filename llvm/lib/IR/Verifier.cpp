@@ -93,6 +93,7 @@
 #include "llvm/IR/ModuleSlotTracker.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Statepoint.h"
+#include "llvm/IR/FPEnv.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
 #include "llvm/IR/User.h"
@@ -477,6 +478,7 @@ private:
   void visitUserOp2(Instruction &I) { visitUserOp1(I); }
   void visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call);
   void visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI);
+  void visitVPIntrinsic(VPIntrinsic &FPI);
   void visitDbgIntrinsic(StringRef Kind, DbgVariableIntrinsic &DII);
   void visitDbgLabelIntrinsic(StringRef Kind, DbgLabelInst &DLI);
   void visitAtomicCmpXchgInst(AtomicCmpXchgInst &CXI);
@@ -1476,6 +1478,13 @@ Verifier::visitModuleFlag(const MDNode *Op,
            "'Linker Options' named metadata no longer supported");
   }
 
+  if (ID->getString() == "SemanticInterposition") {
+    ConstantInt *Value =
+        mdconst::dyn_extract_or_null<ConstantInt>(Op->getOperand(2));
+    Assert(Value,
+           "SemanticInterposition metadata requires constant integer argument");
+  }
+
   if (ID->getString() == "CG Profile") {
     for (const MDOperand &MDO : cast<MDNode>(Op->getOperand(2))->operands())
       visitModuleFlagCGProfileEntry(MDO);
@@ -1564,6 +1573,13 @@ void Verifier::verifyAttributeTypes(AttributeSet Attrs, bool IsFunction,
   for (Attribute A : Attrs) {
     if (A.isStringAttribute())
       continue;
+
+    if (A.isIntAttribute() !=
+        Attribute::doesAttrKindHaveArgument(A.getKindAsEnum())) {
+      CheckFailed("Attribute '" + A.getAsString() + "' should have an Argument",
+                  V);
+      return;
+    }
 
     if (isFuncOnlyAttr(A.getKindAsEnum())) {
       if (!IsFunction) {
@@ -1691,11 +1707,14 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
   if (Attrs.isEmpty())
     return;
 
+  bool SawMask = false;
   bool SawNest = false;
+  bool SawPassthru = false;
   bool SawReturned = false;
   bool SawSRet = false;
   bool SawSwiftSelf = false;
   bool SawSwiftError = false;
+  bool SawVectorLength = false;
 
   // Verify return value attributes.
   AttributeSet RetAttrs = Attrs.getRetAttributes();
@@ -1764,11 +1783,32 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
       SawSwiftError = true;
     }
 
+    if (ArgAttrs.hasAttribute(Attribute::VectorLength)) {
+      Assert(!SawVectorLength, "Cannot have multiple 'vlen' parameters!",
+             V);
+      SawVectorLength = true;
+    }
+
+    if (ArgAttrs.hasAttribute(Attribute::Passthru)) {
+      Assert(!SawPassthru, "Cannot have multiple 'passthru' parameters!",
+             V);
+      SawPassthru = true;
+    }
+
+    if (ArgAttrs.hasAttribute(Attribute::Mask)) {
+      Assert(!SawMask, "Cannot have multiple 'mask' parameters!",
+             V);
+      SawMask = true;
+    }
+
     if (ArgAttrs.hasAttribute(Attribute::InAlloca)) {
       Assert(i == FT->getNumParams() - 1,
              "inalloca isn't on the last parameter!", V);
     }
   }
+
+  Assert(!SawPassthru || SawMask,
+      "Cannot have 'passthru' parameter without 'mask' parameter!", V);
 
   if (!Attrs.hasAttributes(AttributeList::FunctionIndex))
     return;
@@ -1850,6 +1890,27 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
                                       "frame-pointer").getValueAsString();
     if (FP != "all" && FP != "non-leaf" && FP != "none")
       CheckFailed("invalid value for 'frame-pointer' attribute: " + FP, V);
+  }
+
+  if (Attrs.hasFnAttribute("patchable-function-prefix")) {
+    StringRef S = Attrs
+                      .getAttribute(AttributeList::FunctionIndex,
+                                    "patchable-function-prefix")
+                      .getValueAsString();
+    unsigned N;
+    if (S.getAsInteger(10, N))
+      CheckFailed(
+          "\"patchable-function-prefix\" takes an unsigned integer: " + S, V);
+  }
+  if (Attrs.hasFnAttribute("patchable-function-entry")) {
+    StringRef S = Attrs
+                      .getAttribute(AttributeList::FunctionIndex,
+                                    "patchable-function-entry")
+                      .getValueAsString();
+    unsigned N;
+    if (S.getAsInteger(10, N))
+      CheckFailed(
+          "\"patchable-function-entry\" takes an unsigned integer: " + S, V);
   }
 }
 
@@ -3142,7 +3203,7 @@ void Verifier::visitInvokeInst(InvokeInst &II) {
 /// visitUnaryOperator - Check the argument to the unary operator.
 ///
 void Verifier::visitUnaryOperator(UnaryOperator &U) {
-  Assert(U.getType() == U.getOperand(0)->getType(), 
+  Assert(U.getType() == U.getOperand(0)->getType(),
          "Unary operators must have same type for"
          "operands and result!",
          &U);
@@ -4306,11 +4367,18 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
       "an array");
     break;
   }
-#define INSTRUCTION(NAME, NARGS, ROUND_MODE, INTRINSIC, DAGN)                  \
+#define INSTRUCTION(NAME, NARGS, ROUND_MODE, INTRINSIC)                        \
   case Intrinsic::INTRINSIC:
 #include "llvm/IR/ConstrainedOps.def"
     visitConstrainedFPIntrinsic(cast<ConstrainedFPIntrinsic>(Call));
     break;
+
+#define REGISTER_VP_INTRINSIC(VPID,MASKPOS,VLENPOS) \
+  case Intrinsic::VPID:
+#include "llvm/IR/VPIntrinsics.def"
+    visitVPIntrinsic(cast<VPIntrinsic>(Call));
+    break;
+
   case Intrinsic::dbg_declare: // llvm.dbg.declare
     Assert(isa<MetadataAsValue>(Call.getArgOperand(0)),
            "invalid llvm.dbg.declare intrinsic call 1", Call);
@@ -4326,6 +4394,7 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     visitDbgLabelIntrinsic("label", cast<DbgLabelInst>(Call));
     break;
   case Intrinsic::memcpy:
+  case Intrinsic::memcpy_inline:
   case Intrinsic::memmove:
   case Intrinsic::memset: {
     const auto *MI = cast<MemIntrinsic>(&Call);
@@ -4630,6 +4699,21 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     break;
   }
 
+  case Intrinsic::masked_gather: {
+    const APInt &Alignment =
+        cast<ConstantInt>(Call.getArgOperand(1))->getValue();
+    Assert(Alignment.isNullValue() || Alignment.isPowerOf2(),
+           "masked_gather: alignment must be 0 or a power of 2", Call);
+    break;
+  }
+  case Intrinsic::masked_scatter: {
+    const APInt &Alignment =
+        cast<ConstantInt>(Call.getArgOperand(2))->getValue();
+    Assert(Alignment.isNullValue() || Alignment.isPowerOf2(),
+           "masked_scatter: alignment must be 0 or a power of 2", Call);
+    break;
+  }
+
   case Intrinsic::experimental_guard: {
     Assert(isa<CallInst>(Call), "experimental_guard cannot be invoked", Call);
     Assert(Call.countOperandBundlesOfType(LLVMContext::OB_deopt) == 1,
@@ -4738,11 +4822,23 @@ static DISubprogram *getSubprogram(Metadata *LocalScope) {
   return nullptr;
 }
 
+void Verifier::visitVPIntrinsic(VPIntrinsic &VPI) {
+  Assert(!VPI.isConstrainedOp(),
+         "VP intrinsics only support the default fp environment for now "
+         "(round.tonearest; fpexcept.ignore).");
+  if (VPI.isConstrainedOp()) {
+    Assert(VPI.getExceptionBehavior() != None,
+           "invalid exception behavior argument", &VPI);
+    Assert(VPI.getRoundingMode() != None, "invalid rounding mode argument",
+           &VPI);
+  }
+}
+
 void Verifier::visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI) {
   unsigned NumOperands;
   bool HasRoundingMD;
   switch (FPI.getIntrinsicID()) {
-#define INSTRUCTION(NAME, NARG, ROUND_MODE, INTRINSIC, DAGN)                   \
+#define INSTRUCTION(NAME, NARG, ROUND_MODE, INTRINSIC)                         \
   case Intrinsic::INTRINSIC:                                                   \
     NumOperands = NARG;                                                        \
     HasRoundingMD = ROUND_MODE;                                                \
@@ -5124,7 +5220,7 @@ struct VerifierLegacyPass : public FunctionPass {
 
   bool runOnFunction(Function &F) override {
     if (!V->verify(F) && FatalErrors) {
-      errs() << "in function " << F.getName() << '\n'; 
+      errs() << "in function " << F.getName() << '\n';
       report_fatal_error("Broken function found, compilation aborted!");
     }
     return false;

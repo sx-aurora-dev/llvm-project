@@ -305,11 +305,6 @@ bool SIRegisterInfo::requiresVirtualBaseRegisters(
   return true;
 }
 
-bool SIRegisterInfo::trackLivenessAfterRegAlloc(const MachineFunction &MF) const {
-  // This helps catch bugs as verifier errors.
-  return true;
-}
-
 int64_t SIRegisterInfo::getMUBUFInstrOffset(const MachineInstr *MI) const {
   assert(SIInstrInfo::isMUBUF(*MI));
 
@@ -1396,7 +1391,7 @@ const TargetRegisterClass *SIRegisterInfo::getSubRegClass(
     return RC;
 
   // We can assume that each lane corresponds to one 32-bit register.
-  unsigned Count = getSubRegIndexLaneMask(SubIdx).getNumLanes();
+  unsigned Count = getNumChannelsFromSubReg(SubIdx);
   if (isSGPRClass(RC)) {
     switch (Count) {
     case 1:
@@ -1784,7 +1779,7 @@ SIRegisterInfo::getRegClassForSizeOnBank(unsigned Size,
                                                  &AMDGPU::SReg_32RegClass;
   case 64:
     return RB.getID() == AMDGPU::VGPRRegBankID ? &AMDGPU::VReg_64RegClass :
-                                                 &AMDGPU::SReg_64_XEXECRegClass;
+                                                 &AMDGPU::SReg_64RegClass;
   case 96:
     return RB.getID() == AMDGPU::VGPRRegBankID ? &AMDGPU::VReg_96RegClass :
                                                  &AMDGPU::SReg_96RegClass;

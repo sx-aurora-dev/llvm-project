@@ -314,13 +314,14 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
   // to the link paths.
   path_list &Paths = getFilePaths();
 
-  const std::string OSLibDir = getOSLibDir(Triple, Args);
+  const std::string OSLibDir = std::string(getOSLibDir(Triple, Args));
   const std::string MultiarchTriple = getMultiarchTriple(D, Triple, SysRoot);
 
   // Add the multilib suffixed paths where they are available.
   if (GCCInstallation.isValid()) {
     const llvm::Triple &GCCTriple = GCCInstallation.getTriple();
-    const std::string &LibPath = GCCInstallation.getParentLibPath();
+    const std::string &LibPath =
+        std::string(GCCInstallation.getParentLibPath());
 
     // Add toolchain / multilib specific file paths.
     addMultilibsFilePaths(D, Multilibs, SelectedMultilib,
@@ -429,7 +430,8 @@ Linux::Linux(const Driver &D, const llvm::Triple &Triple, const ArgList &Args)
 
     // See comments above on the multilib variant for details of why this is
     // included even from outside the sysroot.
-    const std::string &LibPath = GCCInstallation.getParentLibPath();
+    const std::string &LibPath =
+        std::string(GCCInstallation.getParentLibPath());
     const llvm::Triple &GCCTriple = GCCInstallation.getTriple();
     const Multilib &Multilib = GCCInstallation.getMultilib();
     addPathIfExists(D, LibPath + "/../" + GCCTriple.str() + "/lib" +
@@ -518,6 +520,7 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
 
   if (Triple.isMusl()) {
     std::string ArchName;
+    std::string Path = "/lib/";
     bool IsArm = false;
 
     switch (Arch) {
@@ -531,6 +534,10 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
       ArchName = "armeb";
       IsArm = true;
       break;
+    case llvm::Triple::ve:
+      Path = "/opt/nec/ve/musl/lib/";
+      ArchName = "ve";
+      break;
     default:
       ArchName = Triple.getArchName().str();
     }
@@ -539,7 +546,7 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
          tools::arm::getARMFloatABI(*this, Args) == tools::arm::FloatABI::Hard))
       ArchName += "hf";
 
-    return "/lib/ld-musl-" + ArchName + ".so.1";
+    return Path + "ld-musl-" + ArchName + ".so.1";
   }
 
   std::string LibDir;
@@ -638,6 +645,9 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
     Loader = X32 ? "ld-linux-x32.so.2" : "ld-linux-x86-64.so.2";
     break;
   }
+  case llvm::Triple::ve:
+    return "/opt/nec/ve/lib/ld-linux-ve.so.1";
+    break;
   }
 
   if (Distro == Distro::Exherbo &&

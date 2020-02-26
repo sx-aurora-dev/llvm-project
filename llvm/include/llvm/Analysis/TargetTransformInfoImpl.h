@@ -152,6 +152,8 @@ public:
 
   bool hasBranchDivergence() { return false; }
 
+  bool useGPUDivergenceAnalysis() { return false; }
+
   bool isSourceOfDivergence(const Value *V) { return false; }
 
   bool isAlwaysUniform(const Value *V) { return false; }
@@ -289,6 +291,8 @@ public:
   bool hasVolatileVariant(Instruction *I, unsigned AddrSpace) { return false; }
 
   bool prefersVectorizedAddressing() { return true; }
+
+  bool enableLoopVectorizer() const { return true; }
 
   int getScalingFactorCost(Type *Ty, GlobalValue *BaseGV, int64_t BaseOffset,
                            bool HasBaseReg, int64_t Scale, unsigned AddrSpace) {
@@ -603,6 +607,15 @@ public:
     return VF;
   }
 
+  bool
+  shouldFoldVectorLengthIntoMask(const PredicatedInstruction &PredInst) const {
+    return true;
+  }
+
+  bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
+    return false;
+  }
+
   bool useReductionIntrinsic(unsigned Opcode, Type *Ty,
                              TTI::ReductionFlags Flags) const {
     return false;
@@ -864,6 +877,9 @@ public:
 
     if (isa<ExtractValueInst>(U))
       return TTI::TCC_Free; // Model all ExtractValue nodes as free.
+
+    if (isa<FreezeInst>(U))
+      return TTI::TCC_Free; // Model all Freeze nodes as free.
 
     // Static alloca doesn't generate target instructions.
     if (auto *A = dyn_cast<AllocaInst>(U))

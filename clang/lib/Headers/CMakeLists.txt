@@ -121,6 +121,9 @@ set(files
   xsaveoptintrin.h
   xsavesintrin.h
   xtestintrin.h
+  velintrin.h
+  velintrin_gen.h
+  velintrin_approx.h
   )
 
 set(cuda_wrapper_files
@@ -144,6 +147,7 @@ set(openmp_wrapper_files
   openmp_wrappers/cmath
   openmp_wrappers/__clang_openmp_math.h
   openmp_wrappers/__clang_openmp_math_declares.h
+  openmp_wrappers/new
 )
 
 set(output_dir ${LLVM_LIBRARY_OUTPUT_INTDIR}/clang/${CLANG_VERSION}/include)

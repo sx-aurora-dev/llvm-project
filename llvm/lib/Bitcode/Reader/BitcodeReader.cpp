@@ -859,7 +859,7 @@ BitcodeReader::BitcodeReader(BitstreamCursor Stream, StringRef Strtab,
                              LLVMContext &Context)
     : BitcodeReaderBase(std::move(Stream), Strtab), Context(Context),
       ValueList(Context, Stream.SizeInBytes()) {
-  this->ProducerIdentification = ProducerIdentification;
+  this->ProducerIdentification = std::string(ProducerIdentification);
 }
 
 Error BitcodeReader::materializeForwardReferencedFunctions() {
@@ -985,8 +985,10 @@ static GlobalValueSummary::GVFlags getDecodedGVSummaryFlags(uint64_t RawFlags,
 
 // Decode the flags for GlobalVariable in the summary
 static GlobalVarSummary::GVarFlags getDecodedGVarFlags(uint64_t RawFlags) {
-  return GlobalVarSummary::GVarFlags((RawFlags & 0x1) ? true : false,
-                                     (RawFlags & 0x2) ? true : false);
+  return GlobalVarSummary::GVarFlags(
+      (RawFlags & 0x1) ? true : false, (RawFlags & 0x2) ? true : false,
+      (RawFlags & 0x4) ? true : false,
+      (GlobalObject::VCallVisibility)(RawFlags >> 3));
 }
 
 static GlobalValue::VisibilityTypes getDecodedVisibility(unsigned Val) {
@@ -1300,6 +1302,15 @@ static uint64_t getRawAttributeMask(Attribute::AttrKind Val) {
   case Attribute::SanitizeMemTag:
     llvm_unreachable("sanitize_memtag attribute not supported in raw format");
     break;
+  case Attribute::Mask:
+    llvm_unreachable("mask attribute not supported in raw format");
+    break;
+  case Attribute::VectorLength:
+    llvm_unreachable("vlen attribute not supported in raw format");
+    break;
+  case Attribute::Passthru:
+    llvm_unreachable("passthru attribute not supported in raw format");
+    break;
   }
   llvm_unreachable("Unsupported attribute type");
 }
@@ -1314,6 +1325,9 @@ static void addRawAttributeValue(AttrBuilder &B, uint64_t Val) {
         I == Attribute::DereferenceableOrNull ||
         I == Attribute::ArgMemOnly ||
         I == Attribute::AllocSize ||
+        I == Attribute::Mask ||
+        I == Attribute::VectorLength ||
+        I == Attribute::Passthru ||
         I == Attribute::NoSync)
       continue;
     if (uint64_t A = (Val & getRawAttributeMask(I))) {
@@ -1439,6 +1453,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::InReg;
   case bitc::ATTR_KIND_JUMP_TABLE:
     return Attribute::JumpTable;
+  case bitc::ATTR_KIND_MASK:
+    return Attribute::Mask;
   case bitc::ATTR_KIND_MIN_SIZE:
     return Attribute::MinSize;
   case bitc::ATTR_KIND_NAKED:
@@ -1487,6 +1503,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::OptimizeForSize;
   case bitc::ATTR_KIND_OPTIMIZE_NONE:
     return Attribute::OptimizeNone;
+  case bitc::ATTR_KIND_PASSTHRU:
+    return Attribute::Passthru;
   case bitc::ATTR_KIND_READ_NONE:
     return Attribute::ReadNone;
   case bitc::ATTR_KIND_READ_ONLY:
@@ -1533,6 +1551,8 @@ static Attribute::AttrKind getAttrFromCode(uint64_t Code) {
     return Attribute::UWTable;
   case bitc::ATTR_KIND_WILLRETURN:
     return Attribute::WillReturn;
+  case bitc::ATTR_KIND_VECTORLENGTH:
+    return Attribute::VectorLength;
   case bitc::ATTR_KIND_WRITEONLY:
     return Attribute::WriteOnly;
   case bitc::ATTR_KIND_Z_EXT:
@@ -2629,12 +2649,13 @@ Error BitcodeReader::parseConstants() {
 
       Type *SelectorTy = Type::getInt1Ty(Context);
 
-      // The selector might be an i1 or an <n x i1>
+      // The selector might be an i1, an <n x i1>, or a <vscale x n x i1>
       // Get the type from the ValueList before getting a forward ref.
       if (VectorType *VTy = dyn_cast<VectorType>(CurTy))
         if (Value *V = ValueList[Record[0]])
           if (SelectorTy != V->getType())
-            SelectorTy = VectorType::get(SelectorTy, VTy->getNumElements());
+            SelectorTy = VectorType::get(SelectorTy,
+                                         VTy->getElementCount());
 
       V = ConstantExpr::getSelect(ValueList.getConstantFwdRef(Record[0],
                                                               SelectorTy),
@@ -2692,7 +2713,7 @@ Error BitcodeReader::parseConstants() {
       Constant *Op0 = ValueList.getConstantFwdRef(Record[0], OpTy);
       Constant *Op1 = ValueList.getConstantFwdRef(Record[1], OpTy);
       Type *ShufTy = VectorType::get(Type::getInt32Ty(Context),
-                                                 OpTy->getNumElements());
+                                     OpTy->getElementCount());
       Constant *Op2 = ValueList.getConstantFwdRef(Record[2], ShufTy);
       V = ConstantExpr::getShuffleVector(Op0, Op1, Op2);
       break;
@@ -2706,7 +2727,7 @@ Error BitcodeReader::parseConstants() {
       Constant *Op0 = ValueList.getConstantFwdRef(Record[1], OpTy);
       Constant *Op1 = ValueList.getConstantFwdRef(Record[2], OpTy);
       Type *ShufTy = VectorType::get(Type::getInt32Ty(Context),
-                                                 RTy->getNumElements());
+                                     RTy->getElementCount());
       Constant *Op2 = ValueList.getConstantFwdRef(Record[3], ShufTy);
       V = ConstantExpr::getShuffleVector(Op0, Op1, Op2);
       break;
@@ -4167,9 +4188,10 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
         return error("Invalid record");
       if (!Vec1->getType()->isVectorTy() || !Vec2->getType()->isVectorTy())
         return error("Invalid type for value");
+
       I = new ShuffleVectorInst(Vec1, Vec2, Mask);
       FullTy = VectorType::get(FullTy->getVectorElementType(),
-                               Mask->getType()->getVectorNumElements());
+                               Mask->getType()->getVectorElementCount());
       InstructionList.push_back(I);
       break;
     }
@@ -5965,7 +5987,9 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       uint64_t RawFlags = Record[1];
       unsigned RefArrayStart = 2;
       GlobalVarSummary::GVarFlags GVF(/* ReadOnly */ false,
-                                      /* WriteOnly */ false);
+                                      /* WriteOnly */ false,
+                                      /* Constant */ false,
+                                      GlobalObject::VCallVisibilityPublic);
       auto Flags = getDecodedGVSummaryFlags(RawFlags, Version);
       if (Version >= 5) {
         GVF = getDecodedGVarFlags(Record[2]);
@@ -6101,7 +6125,9 @@ Error ModuleSummaryIndexBitcodeReader::parseEntireSummary(unsigned ID) {
       uint64_t RawFlags = Record[2];
       unsigned RefArrayStart = 3;
       GlobalVarSummary::GVarFlags GVF(/* ReadOnly */ false,
-                                      /* WriteOnly */ false);
+                                      /* WriteOnly */ false,
+                                      /* Constant */ false,
+                                      GlobalObject::VCallVisibilityPublic);
       auto Flags = getDecodedGVSummaryFlags(RawFlags, Version);
       if (Version >= 5) {
         GVF = getDecodedGVarFlags(Record[3]);

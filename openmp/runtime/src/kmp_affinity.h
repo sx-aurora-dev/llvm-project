@@ -233,6 +233,18 @@ public:
 #elif __NR_sched_getaffinity != 5196
 #error Wrong code for getaffinity system call.
 #endif /* __NR_sched_getaffinity */
+#elif KMP_ARCH_VE
+#ifndef __NR_sched_setaffinity
+#define __NR_sched_setaffinity 203
+#elif __NR_sched_setaffinity != 203
+#error Wrong code for setaffinity system call.
+#endif /* __NR_sched_setaffinity */
+#ifndef __NR_sched_getaffinity
+#define __NR_sched_getaffinity 204
+#elif __NR_sched_getaffinity != 204
+#error Wrong code for getaffinity system call.
+#endif /* __NR_sched_getaffinity */
+#else
 #error Unknown or unsupported architecture
 #endif /* KMP_ARCH_* */
 #elif KMP_OS_FREEBSD
@@ -303,8 +315,9 @@ class KMPNativeAffinity : public KMPAffinity {
       int retval =
           syscall(__NR_sched_getaffinity, 0, __kmp_affin_mask_size, mask);
 #elif KMP_OS_FREEBSD
-      int retval =
+      int r =
           pthread_getaffinity_np(pthread_self(), __kmp_affin_mask_size, reinterpret_cast<cpuset_t *>(mask));
+      int retval = (r == 0 ? 0 : -1);
 #endif
       if (retval >= 0) {
         return 0;
@@ -322,8 +335,9 @@ class KMPNativeAffinity : public KMPAffinity {
       int retval =
           syscall(__NR_sched_setaffinity, 0, __kmp_affin_mask_size, mask);
 #elif KMP_OS_FREEBSD
-      int retval =
+      int r =
           pthread_setaffinity_np(pthread_self(), __kmp_affin_mask_size, reinterpret_cast<cpuset_t *>(mask));
+      int retval = (r == 0 ? 0 : -1);
 #endif
       if (retval >= 0) {
         return 0;

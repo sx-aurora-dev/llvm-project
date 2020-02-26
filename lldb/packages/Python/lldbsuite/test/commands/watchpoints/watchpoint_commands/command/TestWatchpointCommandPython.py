@@ -14,6 +14,7 @@ from lldbsuite.test import lldbutil
 class WatchpointPythonCommandTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
+    NO_DEBUG_INFO_TESTCASE = True
 
     def setUp(self):
         # Call super's setUp().
@@ -86,8 +87,8 @@ class WatchpointPythonCommandTestCase(TestBase):
 
         # Check that the watchpoint snapshoting mechanism is working.
         self.expect("watchpoint list -v",
-                    substrs=['old value:', ' = 0',
-                             'new value:', ' = 1'])
+                    substrs=['old value: 0',
+                             'new value: 1'])
 
         # The watchpoint command "forced" our global variable 'cookie' to
         # become 777.

@@ -937,6 +937,9 @@ public:
   LazyCallGraph(LazyCallGraph &&G);
   LazyCallGraph &operator=(LazyCallGraph &&RHS);
 
+  bool invalidate(Module &, const PreservedAnalyses &PA,
+                  ModuleAnalysisManager::Invalidator &);
+
   EdgeSequence::iterator begin() { return EntryEdges.begin(); }
   EdgeSequence::iterator end() { return EntryEdges.end(); }
 
@@ -1054,6 +1057,9 @@ public:
   /// DFS in order to call this safely. Typically, the function will have been
   /// fully visited by the DFS prior to calling this routine.
   void removeDeadFunction(Function &F);
+
+  /// Introduce a node for the function \p NewF in the SCC \p C.
+  void addNewFunctionIntoSCC(Function &NewF, SCC &C);
 
   ///@}
 

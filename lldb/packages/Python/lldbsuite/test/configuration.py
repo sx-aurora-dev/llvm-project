@@ -48,6 +48,10 @@ compiler = None    # Must be initialized after option parsing
 # The overriden dwarf verison.
 dwarf_version = 0
 
+# Any overridden settings.
+# Always disable default dynamic types for testing purposes.
+settings = [('target.prefer-dynamic-value', 'no-dynamic-values')]
+
 # Path to the FileCheck testing tool. Not optional.
 filecheck = None
 
@@ -131,6 +135,10 @@ rerun_all_issues = False
 # The names of all tests. Used to assert we don't have two tests with the
 # same base name.
 all_tests = set()
+
+# LLDB library directory.
+lldb_libs_dir = None
+
 
 def shouldSkipBecauseOfCategories(test_categories):
     if use_categories:

@@ -17,6 +17,7 @@
 #include "AMDGPUTargetMachine.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Analysis/AssumptionCache.h"
+#include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/LegacyDivergenceAnalysis.h"
 #include "llvm/Analysis/Loads.h"
 #include "llvm/Analysis/ValueTracking.h"
@@ -151,6 +152,10 @@ class AMDGPUCodeGenPrepare : public FunctionPass,
   /// Replace mul instructions with llvm.amdgcn.mul.u24 or llvm.amdgcn.mul.s24.
   /// SelectionDAG has an issue where an and asserting the bits are known
   bool replaceMulWithMul24(BinaryOperator &I) const;
+
+  /// Perform same function as equivalently named function in DAGCombiner. Since
+  /// we expand some divisions here, we need to perform this before obscuring.
+  bool foldBinOpIntoSelect(BinaryOperator &I) const;
 
   /// Expands 24 bit div or rem.
   Value* expandDivRem24(IRBuilder<> &Builder, BinaryOperator &I,
@@ -525,58 +530,210 @@ bool AMDGPUCodeGenPrepare::replaceMulWithMul24(BinaryOperator &I) const {
   return true;
 }
 
-static bool shouldKeepFDivF32(Value *Num, bool UnsafeDiv, bool HasDenormals) {
-  const ConstantFP *CNum = dyn_cast<ConstantFP>(Num);
-  if (!CNum)
-    return HasDenormals;
+// Find a select instruction, which may have been casted. This is mostly to deal
+// with cases where i16 selects were promoted here to i32.
+static SelectInst *findSelectThroughCast(Value *V, CastInst *&Cast) {
+  Cast = nullptr;
+  if (SelectInst *Sel = dyn_cast<SelectInst>(V))
+    return Sel;
 
-  if (UnsafeDiv)
-    return true;
+  if ((Cast = dyn_cast<CastInst>(V))) {
+    if (SelectInst *Sel = dyn_cast<SelectInst>(Cast->getOperand(0)))
+      return Sel;
+  }
 
-  bool IsOne = CNum->isExactlyValue(+1.0) || CNum->isExactlyValue(-1.0);
-
-  // Reciprocal f32 is handled separately without denormals.
-  return HasDenormals ^ IsOne;
+  return nullptr;
 }
 
-// Insert an intrinsic for fast fdiv for safe math situations where we can
-// reduce precision. Leave fdiv for situations where the generic node is
-// expected to be optimized.
-bool AMDGPUCodeGenPrepare::visitFDiv(BinaryOperator &FDiv) {
-  Type *Ty = FDiv.getType();
+bool AMDGPUCodeGenPrepare::foldBinOpIntoSelect(BinaryOperator &BO) const {
+  // Don't do this unless the old select is going away. We want to eliminate the
+  // binary operator, not replace a binop with a select.
+  int SelOpNo = 0;
 
-  if (!Ty->getScalarType()->isFloatTy())
+  CastInst *CastOp;
+
+  // TODO: Should probably try to handle some cases with multiple
+  // users. Duplicating the select may be profitable for division.
+  SelectInst *Sel = findSelectThroughCast(BO.getOperand(0), CastOp);
+  if (!Sel || !Sel->hasOneUse()) {
+    SelOpNo = 1;
+    Sel = findSelectThroughCast(BO.getOperand(1), CastOp);
+  }
+
+  if (!Sel || !Sel->hasOneUse())
     return false;
 
-  MDNode *FPMath = FDiv.getMetadata(LLVMContext::MD_fpmath);
-  if (!FPMath)
+  Constant *CT = dyn_cast<Constant>(Sel->getTrueValue());
+  Constant *CF = dyn_cast<Constant>(Sel->getFalseValue());
+  Constant *CBO = dyn_cast<Constant>(BO.getOperand(SelOpNo ^ 1));
+  if (!CBO || !CT || !CF)
+    return false;
+
+  if (CastOp) {
+    if (!CastOp->hasOneUse())
+      return false;
+    CT = ConstantFoldCastOperand(CastOp->getOpcode(), CT, BO.getType(), *DL);
+    CF = ConstantFoldCastOperand(CastOp->getOpcode(), CF, BO.getType(), *DL);
+  }
+
+  // TODO: Handle special 0/-1 cases DAG combine does, although we only really
+  // need to handle divisions here.
+  Constant *FoldedT = SelOpNo ?
+    ConstantFoldBinaryOpOperands(BO.getOpcode(), CBO, CT, *DL) :
+    ConstantFoldBinaryOpOperands(BO.getOpcode(), CT, CBO, *DL);
+  if (isa<ConstantExpr>(FoldedT))
+    return false;
+
+  Constant *FoldedF = SelOpNo ?
+    ConstantFoldBinaryOpOperands(BO.getOpcode(), CBO, CF, *DL) :
+    ConstantFoldBinaryOpOperands(BO.getOpcode(), CF, CBO, *DL);
+  if (isa<ConstantExpr>(FoldedF))
+    return false;
+
+  IRBuilder<> Builder(&BO);
+  Builder.SetCurrentDebugLocation(BO.getDebugLoc());
+  if (const FPMathOperator *FPOp = dyn_cast<const FPMathOperator>(&BO))
+    Builder.setFastMathFlags(FPOp->getFastMathFlags());
+
+  Value *NewSelect = Builder.CreateSelect(Sel->getCondition(),
+                                          FoldedT, FoldedF);
+  NewSelect->takeName(&BO);
+  BO.replaceAllUsesWith(NewSelect);
+  BO.eraseFromParent();
+  if (CastOp)
+    CastOp->eraseFromParent();
+  Sel->eraseFromParent();
+  return true;
+}
+
+// Optimize fdiv with rcp:
+//
+// 1/x -> rcp(x) when rcp is sufficiently accurate or inaccurate rcp is
+//               allowed with unsafe-fp-math or afn.
+//
+// a/b -> a*rcp(b) when inaccurate rcp is allowed with unsafe-fp-math or afn.
+static Value *optimizeWithRcp(Value *Num, Value *Den, bool AllowInaccurateRcp,
+                              bool RcpIsAccurate, IRBuilder<> Builder,
+                              Module *Mod) {
+
+  if (!AllowInaccurateRcp && !RcpIsAccurate)
+    return nullptr;
+
+  Type *Ty = Den->getType();
+  Function *Decl = Intrinsic::getDeclaration(Mod, Intrinsic::amdgcn_rcp, Ty);
+  if (const ConstantFP *CLHS = dyn_cast<ConstantFP>(Num)) {
+    if (AllowInaccurateRcp || RcpIsAccurate) {
+      if (CLHS->isExactlyValue(1.0)) {
+        // v_rcp_f32 and v_rsq_f32 do not support denormals, and according to
+        // the CI documentation has a worst case error of 1 ulp.
+        // OpenCL requires <= 2.5 ulp for 1.0 / x, so it should always be OK to
+        // use it as long as we aren't trying to use denormals.
+        //
+        // v_rcp_f16 and v_rsq_f16 DO support denormals.
+
+        // NOTE: v_sqrt and v_rcp will be combined to v_rsq later. So we don't
+        //       insert rsq intrinsic here.
+
+        // 1.0 / x -> rcp(x)
+        return Builder.CreateCall(Decl, { Den });
+       }
+
+       // Same as for 1.0, but expand the sign out of the constant.
+       if (CLHS->isExactlyValue(-1.0)) {
+         // -1.0 / x -> rcp (fneg x)
+         Value *FNeg = Builder.CreateFNeg(Den);
+         return Builder.CreateCall(Decl, { FNeg });
+       }
+    }
+  }
+
+  if (AllowInaccurateRcp) {
+    // Turn into multiply by the reciprocal.
+    // x / y -> x * (1.0 / y)
+    Value *Recip = Builder.CreateCall(Decl, { Den });
+    return Builder.CreateFMul(Num, Recip);
+  }
+  return nullptr;
+}
+
+// optimize with fdiv.fast:
+//
+// a/b -> fdiv.fast(a, b) when !fpmath >= 2.5ulp with denormals flushed.
+//
+// 1/x -> fdiv.fast(1,x)  when !fpmath >= 2.5ulp.
+//
+// NOTE: optimizeWithRcp should be tried first because rcp is the preference.
+static Value *optimizeWithFDivFast(Value *Num, Value *Den, float ReqdAccuracy,
+                                   bool HasDenormals, IRBuilder<> Builder,
+                                   Module *Mod) {
+  // fdiv.fast can achieve 2.5 ULP accuracy.
+  if (ReqdAccuracy < 2.5f)
+    return nullptr;
+
+  // Only have fdiv.fast for f32.
+  Type *Ty = Den->getType();
+  if (!Ty->isFloatTy())
+    return nullptr;
+
+  bool NumIsOne = false;
+  if (const ConstantFP *CNum = dyn_cast<ConstantFP>(Num)) {
+    if (CNum->isExactlyValue(+1.0) || CNum->isExactlyValue(-1.0))
+      NumIsOne = true;
+  }
+
+  // fdiv does not support denormals. But 1.0/x is always fine to use it.
+  if (HasDenormals && !NumIsOne)
+    return nullptr;
+
+  Function *Decl = Intrinsic::getDeclaration(Mod, Intrinsic::amdgcn_fdiv_fast);
+  return Builder.CreateCall(Decl, { Num, Den });
+}
+
+// Optimizations is performed based on fpmath, fast math flags as well as
+// denormals to optimize fdiv with either rcp or fdiv.fast.
+//
+// With rcp:
+//   1/x -> rcp(x) when rcp is sufficiently accurate or inaccurate rcp is
+//                 allowed with unsafe-fp-math or afn.
+//
+//   a/b -> a*rcp(b) when inaccurate rcp is allowed with unsafe-fp-math or afn.
+//
+// With fdiv.fast:
+//   a/b -> fdiv.fast(a, b) when !fpmath >= 2.5ulp with denormals flushed.
+//
+//   1/x -> fdiv.fast(1,x)  when !fpmath >= 2.5ulp.
+//
+// NOTE: rcp is the preference in cases that both are legal.
+bool AMDGPUCodeGenPrepare::visitFDiv(BinaryOperator &FDiv) {
+
+  Type *Ty = FDiv.getType()->getScalarType();
+
+  // No intrinsic for fdiv16 if target does not support f16.
+  if (Ty->isHalfTy() && !ST->has16BitInsts())
     return false;
 
   const FPMathOperator *FPOp = cast<const FPMathOperator>(&FDiv);
-  float ULP = FPOp->getFPAccuracy();
-  if (ULP < 2.5f)
-    return false;
+  const float ReqdAccuracy =  FPOp->getFPAccuracy();
 
+  // Inaccurate rcp is allowed with unsafe-fp-math or afn.
   FastMathFlags FMF = FPOp->getFastMathFlags();
-  bool UnsafeDiv = HasUnsafeFPMath || FMF.isFast() ||
-                                      FMF.allowReciprocal();
+  const bool AllowInaccurateRcp = HasUnsafeFPMath || FMF.approxFunc();
 
-  // With UnsafeDiv node will be optimized to just rcp and mul.
-  if (UnsafeDiv)
-    return false;
+  // rcp_f16 is accurate for !fpmath >= 1.0ulp.
+  // rcp_f32 is accurate for !fpmath >= 1.0ulp and denormals are flushed.
+  // rcp_f64 is never accurate.
+  const bool RcpIsAccurate = (Ty->isHalfTy() && ReqdAccuracy >= 1.0f) ||
+            (Ty->isFloatTy() && !HasFP32Denormals && ReqdAccuracy >= 1.0f);
 
-  IRBuilder<> Builder(FDiv.getParent(), std::next(FDiv.getIterator()), FPMath);
+  IRBuilder<> Builder(FDiv.getParent(), std::next(FDiv.getIterator()));
   Builder.setFastMathFlags(FMF);
   Builder.SetCurrentDebugLocation(FDiv.getDebugLoc());
-
-  Function *Decl = Intrinsic::getDeclaration(Mod, Intrinsic::amdgcn_fdiv_fast);
 
   Value *Num = FDiv.getOperand(0);
   Value *Den = FDiv.getOperand(1);
 
   Value *NewFDiv = nullptr;
-
-  if (VectorType *VT = dyn_cast<VectorType>(Ty)) {
+  if (VectorType *VT = dyn_cast<VectorType>(FDiv.getType())) {
     NewFDiv = UndefValue::get(VT);
 
     // FIXME: Doesn't do the right thing for cases where the vector is partially
@@ -584,19 +741,25 @@ bool AMDGPUCodeGenPrepare::visitFDiv(BinaryOperator &FDiv) {
     for (unsigned I = 0, E = VT->getNumElements(); I != E; ++I) {
       Value *NumEltI = Builder.CreateExtractElement(Num, I);
       Value *DenEltI = Builder.CreateExtractElement(Den, I);
-      Value *NewElt;
-
-      if (shouldKeepFDivF32(NumEltI, UnsafeDiv, HasFP32Denormals)) {
+      // Try rcp first.
+      Value *NewElt = optimizeWithRcp(NumEltI, DenEltI, AllowInaccurateRcp,
+                                      RcpIsAccurate, Builder, Mod);
+      if (!NewElt) // Try fdiv.fast.
+        NewElt = optimizeWithFDivFast(NumEltI, DenEltI, ReqdAccuracy,
+                                      HasFP32Denormals, Builder, Mod);
+      if (!NewElt) // Keep the original.
         NewElt = Builder.CreateFDiv(NumEltI, DenEltI);
-      } else {
-        NewElt = Builder.CreateCall(Decl, { NumEltI, DenEltI });
-      }
 
       NewFDiv = Builder.CreateInsertElement(NewFDiv, NewElt, I);
     }
-  } else {
-    if (!shouldKeepFDivF32(Num, UnsafeDiv, HasFP32Denormals))
-      NewFDiv = Builder.CreateCall(Decl, { Num, Den });
+  } else { // Scalar FDiv.
+    // Try rcp first.
+    NewFDiv = optimizeWithRcp(Num, Den, AllowInaccurateRcp, RcpIsAccurate,
+                              Builder, Mod);
+    if (!NewFDiv) { // Try fdiv.fast.
+      NewFDiv = optimizeWithFDivFast(Num, Den, ReqdAccuracy, HasFP32Denormals,
+                                     Builder, Mod);
+    }
   }
 
   if (NewFDiv) {
@@ -654,7 +817,6 @@ Value* AMDGPUCodeGenPrepare::expandDivRem24(IRBuilder<> &Builder,
   if (IsSigned)
     ++DivBits;
 
-  Type *Ty = Num->getType();
   Type *I32Ty = Builder.getInt32Ty();
   Type *F32Ty = Builder.getFloatTy();
   ConstantInt *One = Builder.getInt32(1);
@@ -725,10 +887,10 @@ Value* AMDGPUCodeGenPrepare::expandDivRem24(IRBuilder<> &Builder,
     Res = Builder.CreateSub(Num, Rem);
   }
 
-  // Truncate to number of bits this divide really is.
+  // Extend in register from the number of bits this divide really is.
   if (IsSigned) {
-    Res = Builder.CreateTrunc(Res, Builder.getIntNTy(DivBits));
-    Res = Builder.CreateSExt(Res, Ty);
+    Res = Builder.CreateShl(Res, 32 - DivBits);
+    Res = Builder.CreateAShr(Res, 32 - DivBits);
   } else {
     ConstantInt *TruncMask = Builder.getInt32((UINT64_C(1) << DivBits) - 1);
     Res = Builder.CreateAnd(Res, TruncMask);
@@ -884,6 +1046,9 @@ Value* AMDGPUCodeGenPrepare::expandDivRem32(IRBuilder<> &Builder,
 }
 
 bool AMDGPUCodeGenPrepare::visitBinaryOperator(BinaryOperator &I) {
+  if (foldBinOpIntoSelect(I))
+    return true;
+
   if (ST->has16BitInsts() && needsPromotionToI32(I.getType()) &&
       DA->isUniform(&I) && promoteUniformOpToI32(I))
     return true;

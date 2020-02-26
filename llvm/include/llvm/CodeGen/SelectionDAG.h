@@ -600,6 +600,8 @@ public:
                             bool isTarget = false);
   SDValue getShiftAmountConstant(uint64_t Val, EVT VT, const SDLoc &DL,
                                  bool LegalTypes = true);
+  SDValue getVectorIdxConstant(uint64_t Val, const SDLoc &DL,
+                               bool isTarget = false);
 
   SDValue getTargetConstant(uint64_t Val, const SDLoc &DL, EVT VT,
                             bool isOpaque = false) {
@@ -912,6 +914,13 @@ public:
     return getNode(ISD::UNDEF, SDLoc(), VT);
   }
 
+  /// Return a node that represents the runtime scaling 'MulImm * RuntimeVL'.
+  SDValue getVScale(const SDLoc &DL, EVT VT, APInt MulImm) {
+    assert(MulImm.getMinSignedBits() <= VT.getSizeInBits() &&
+           "Immediate does not fit VT");
+    return getNode(ISD::VSCALE, DL, VT, getConstant(MulImm, DL, VT));
+  }
+
   /// Return a GLOBAL_OFFSET_TABLE node. This does not have a useful SDLoc.
   SDValue getGLOBAL_OFFSET_TABLE(EVT VT) {
     return getNode(ISD::GLOBAL_OFFSET_TABLE, SDLoc(), VT);
@@ -960,18 +969,50 @@ public:
   /// stack arguments from being clobbered.
   SDValue getStackArgumentTokenFactor(SDValue Chain);
 
+  LLVM_ATTRIBUTE_DEPRECATED(SDValue getMemcpy(SDValue Chain, const SDLoc &dl,
+                                              SDValue Dst, SDValue Src,
+                                              SDValue Size, unsigned Align,
+                                              bool isVol, bool AlwaysInline,
+                                              bool isTailCall,
+                                              MachinePointerInfo DstPtrInfo,
+                                              MachinePointerInfo SrcPtrInfo),
+                            "Use the version that takes Align instead") {
+    return getMemcpy(Chain, dl, Dst, Src, Size, llvm::Align(Align), isVol,
+                     AlwaysInline, isTailCall, DstPtrInfo, SrcPtrInfo);
+  }
+
   SDValue getMemcpy(SDValue Chain, const SDLoc &dl, SDValue Dst, SDValue Src,
-                    SDValue Size, unsigned Align, bool isVol, bool AlwaysInline,
-                    bool isTailCall, MachinePointerInfo DstPtrInfo,
+                    SDValue Size, Align Alignment, bool isVol,
+                    bool AlwaysInline, bool isTailCall,
+                    MachinePointerInfo DstPtrInfo,
                     MachinePointerInfo SrcPtrInfo);
 
+  LLVM_ATTRIBUTE_DEPRECATED(SDValue getMemmove(SDValue Chain, const SDLoc &dl,
+                                               SDValue Dst, SDValue Src,
+                                               SDValue Size, unsigned Align,
+                                               bool isVol, bool isTailCall,
+                                               MachinePointerInfo DstPtrInfo,
+                                               MachinePointerInfo SrcPtrInfo),
+                            "Use the version that takes Align instead") {
+    return getMemmove(Chain, dl, Dst, Src, Size, llvm::Align(Align), isVol,
+                      isTailCall, DstPtrInfo, SrcPtrInfo);
+  }
   SDValue getMemmove(SDValue Chain, const SDLoc &dl, SDValue Dst, SDValue Src,
-                     SDValue Size, unsigned Align, bool isVol, bool isTailCall,
+                     SDValue Size, Align Alignment, bool isVol, bool isTailCall,
                      MachinePointerInfo DstPtrInfo,
                      MachinePointerInfo SrcPtrInfo);
 
+  LLVM_ATTRIBUTE_DEPRECATED(SDValue getMemset(SDValue Chain, const SDLoc &dl,
+                                              SDValue Dst, SDValue Src,
+                                              SDValue Size, unsigned Align,
+                                              bool isVol, bool isTailCall,
+                                              MachinePointerInfo DstPtrInfo),
+                            "Use the version that takes Align instead") {
+    return getMemset(Chain, dl, Dst, Src, Size, llvm::Align(Align), isVol,
+                     isTailCall, DstPtrInfo);
+  }
   SDValue getMemset(SDValue Chain, const SDLoc &dl, SDValue Dst, SDValue Src,
-                    SDValue Size, unsigned Align, bool isVol, bool isTailCall,
+                    SDValue Size, Align Alignment, bool isVol, bool isTailCall,
                     MachinePointerInfo DstPtrInfo);
 
   SDValue getAtomicMemcpy(SDValue Chain, const SDLoc &dl, SDValue Dst,
@@ -1006,6 +1047,20 @@ public:
       return getNode(IsSignaling ? ISD::STRICT_FSETCCS : ISD::STRICT_FSETCC, DL,
                      {VT, MVT::Other}, {Chain, LHS, RHS, getCondCode(Cond)});
     return getNode(ISD::SETCC, DL, VT, LHS, RHS, getCondCode(Cond));
+  }
+
+  /// Helper function to make it easier to build VP_SetCC's if you just have an
+  /// ISD::CondCode instead of an SDValue.
+  SDValue getVPSetCC(const SDLoc &DL, EVT VT, SDValue LHS, SDValue RHS,
+                     ISD::CondCode Cond, SDValue Mask, SDValue EVL) {
+    assert(LHS.getValueType().isVector() == RHS.getValueType().isVector() &&
+           "Cannot compare scalars to vectors");
+    assert(LHS.getValueType().isVector() == VT.isVector() &&
+           "Cannot compare scalars to vectors");
+    assert(Cond != ISD::SETCC_INVALID &&
+           "Cannot create a setCC of an invalid node.");
+    return getNode(ISD::VP_SETCC, DL, VT, LHS, RHS, getCondCode(Cond), Mask,
+                   EVL);
   }
 
   /// Helper function to make it easier to build Select's if you just have
@@ -1147,6 +1202,20 @@ public:
                         SDValue Ptr, EVT SVT, MachineMemOperand *MMO);
   SDValue getIndexedStore(SDValue OrigStore, const SDLoc &dl, SDValue Base,
                           SDValue Offset, ISD::MemIndexedMode AM);
+
+  /// Returns sum of the base pointer and offset.
+  SDValue getLoadVP(EVT VT, const SDLoc &dl, SDValue Chain, SDValue Ptr, 
+                        SDValue Mask, SDValue VLen, EVT MemVT,
+                        MachineMemOperand *MMO, ISD::LoadExtType);
+  SDValue getStoreVP(SDValue Chain, const SDLoc &dl, SDValue Val,
+                         SDValue Ptr, SDValue Mask, SDValue VLen, EVT MemVT,
+                         MachineMemOperand *MMO, bool IsTruncating = false);
+  SDValue getGatherVP(SDVTList VTs, EVT VT, const SDLoc &dl,
+                          ArrayRef<SDValue> Ops, MachineMemOperand *MMO,
+                          ISD::MemIndexType IndexType);
+  SDValue getScatterVP(SDVTList VTs, EVT VT, const SDLoc &dl,
+                           ArrayRef<SDValue> Ops, MachineMemOperand *MMO,
+                           ISD::MemIndexType IndexType);
 
   SDValue getMaskedLoad(EVT VT, const SDLoc &dl, SDValue Chain, SDValue Base,
                         SDValue Offset, SDValue Mask, SDValue Src0, EVT MemVT,
@@ -1467,7 +1536,7 @@ public:
                            const SDNode *N2);
 
   SDValue FoldConstantArithmetic(unsigned Opcode, const SDLoc &DL, EVT VT,
-                                 SDNode *N1, SDNode *N2);
+                                 ArrayRef<SDValue> Ops);
 
   SDValue FoldConstantArithmetic(unsigned Opcode, const SDLoc &DL, EVT VT,
                                  const ConstantSDNode *C1,

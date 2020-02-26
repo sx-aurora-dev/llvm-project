@@ -154,7 +154,6 @@ struct Configuration {
   bool fixCortexA8;
   bool forceBTI;
   bool formatBinary = false;
-  bool requireCET;
   bool gcSections;
   bool gdbIndex;
   bool gnuHash = false;
@@ -166,10 +165,12 @@ struct Configuration {
   bool ltoCSProfileGenerate;
   bool ltoDebugPassManager;
   bool ltoNewPassManager;
+  bool ltoWholeProgramVisibility;
   bool mergeArmExidx;
   bool mipsN32Abi = false;
   bool mmapOutputFile;
   bool nmagic;
+  bool noDynamicLinker = false;
   bool noinhibitExec;
   bool nostdlib;
   bool oFormatBinary;
@@ -191,6 +192,7 @@ struct Configuration {
   bool trace;
   bool thinLTOEmitImportsFiles;
   bool thinLTOIndexOnly;
+  bool timeTraceEnabled;
   bool tocOptimize;
   bool undefinedVersion;
   bool useAndroidRelrTags = false;
@@ -202,6 +204,7 @@ struct Configuration {
   bool writeAddends;
   bool zCombreloc;
   bool zCopyreloc;
+  bool zForceIbt;
   bool zGlobal;
   bool zHazardplt;
   bool zIfuncNoplt;
@@ -215,6 +218,7 @@ struct Configuration {
   bool zOrigin;
   bool zRelro;
   bool zRodynamic;
+  bool zShstk;
   bool zText;
   bool zRetpolineplt;
   bool zWxneeded;
@@ -240,6 +244,7 @@ struct Configuration {
   unsigned ltoo;
   unsigned optimize;
   unsigned thinLTOJobs;
+  unsigned timeTraceGranularity;
   int32_t splitStackAdjustSize;
 
   // The following config options do not directly correspond to any

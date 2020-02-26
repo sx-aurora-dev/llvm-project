@@ -923,7 +923,7 @@ void request_completions(const llvm::json::Object &request) {
   FillResponse(request, response);
   llvm::json::Object body;
   auto arguments = request.getObject("arguments");
-  std::string text = GetString(arguments, "text");
+  std::string text = std::string(GetString(arguments, "text"));
   auto original_column = GetSigned(arguments, "column", text.size());
   auto actual_column = original_column - 1;
   llvm::json::Array targets;
@@ -951,9 +951,17 @@ void request_completions(const llvm::json::Object &request) {
   for (size_t i = 0; i < count; i++) {
     std::string match = matches.GetStringAtIndex(i);
     std::string description = descriptions.GetStringAtIndex(i);
-
+    
     llvm::json::Object item;
-    EmplaceSafeString(item, "text", match);
+
+    llvm::StringRef match_ref = match;
+    for(llvm::StringRef commit_point: {".", "->"}) {
+      if (match_ref.contains(commit_point)){
+        match_ref = match_ref.rsplit(commit_point).second;
+      }
+    }
+    EmplaceSafeString(item, "text", match_ref);
+
     if (description.empty())
       EmplaceSafeString(item, "label", match);
     else
@@ -1077,8 +1085,8 @@ void request_evaluate(const llvm::json::Object &request) {
   const auto expression = GetString(arguments, "expression");
 
   if (!expression.empty() && expression[0] == '`') {
-    auto result = RunLLDBCommands(llvm::StringRef(),
-                                     {expression.substr(1)});
+    auto result =
+        RunLLDBCommands(llvm::StringRef(), {std::string(expression.substr(1))});
     EmplaceSafeString(body, "result", result);
     body.try_emplace("variablesReference", (int64_t)0);
   } else {
@@ -1252,8 +1260,22 @@ void request_initialize(const llvm::json::Object &request) {
   body.try_emplace("supportsGotoTargetsRequest", false);
   // The debug adapter supports the stepInTargetsRequest.
   body.try_emplace("supportsStepInTargetsRequest", false);
-  // The debug adapter supports the completionsRequest.
-  body.try_emplace("supportsCompletionsRequest", true);
+  // We need to improve the current implementation of completions in order to
+  // enable it again. For some context, this is how VSCode works: 
+  // - VSCode sends a completion request whenever chars are added, the user
+  //   triggers completion manually via CTRL-space or similar mechanisms, but
+  //   not when there's a deletion. Besides, VSCode doesn't let us know which
+  //   of these events we are handling. What is more, the use can paste or cut
+  //   sections of the text arbitrarily.
+  //   https://github.com/microsoft/vscode/issues/89531 tracks part of the
+  //   issue just mentioned.
+  // This behavior causes many problems with the current way completion is
+  // implemented in lldb-vscode, as these requests could be really expensive,
+  // blocking the debugger, and there could be many concurrent requests unless
+  // the user types very slowly... We need to address this specific issue, or
+  // at least trigger completion only when the user explicitly wants it, which
+  // is the behavior of LLDB CLI, that expects a TAB.
+  body.try_emplace("supportsCompletionsRequest", false);
   // The debug adapter supports the modules request.
   body.try_emplace("supportsModulesRequest", false);
   // The set of additional module information exposed by the debug adapter.
@@ -1853,10 +1875,10 @@ void request_setExceptionBreakpoints(const llvm::json::Object &request) {
 
   for (const auto &value : *filters) {
     const auto filter = GetAsString(value);
-    auto exc_bp = g_vsc.GetExceptionBreakpoint(filter);
+    auto exc_bp = g_vsc.GetExceptionBreakpoint(std::string(filter));
     if (exc_bp) {
       exc_bp->SetBreakpoint();
-      unset_filters.erase(filter);
+      unset_filters.erase(std::string(filter));
     }
   }
   for (const auto &filter : unset_filters) {
@@ -2798,7 +2820,7 @@ int main(int argc, char *argv[]) {
     const auto packet_type = GetString(object, "type");
     if (packet_type == "request") {
       const auto command = GetString(object, "command");
-      auto handler_pos = request_handlers.find(command);
+      auto handler_pos = request_handlers.find(std::string(command));
       if (handler_pos != request_handlers.end()) {
         handler_pos->second(*object);
       } else {
