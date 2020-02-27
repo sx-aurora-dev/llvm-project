@@ -213,7 +213,7 @@ find_library(
 
 set(LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS ${LIBOMPTARGET_DEP_VEO_INCLUDE_DIR})
 find_package_handle_standard_args(
-  LIBOMPTARGET_DEP_VEO 
+  LIBOMPTARGET_DEP_VEO
   DEFAULT_MSG
   LIBOMPTARGET_DEP_VEO_LIBRARIES
   LIBOMPTARGET_DEP_VEOSINFO_LIBRARIES
@@ -221,8 +221,8 @@ find_package_handle_standard_args(
 
 mark_as_advanced(
   LIBOMPTARGET_DEP_VEO_FOUND
-  LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS) 
- 
+  LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS)
+
 # Looking for CUDA libdevice subdirectory
 #
 # Special case for Debian/Ubuntu to have nvidia-cuda-toolkit work
