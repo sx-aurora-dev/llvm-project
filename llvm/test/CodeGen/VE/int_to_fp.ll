@@ -359,8 +359,7 @@ define fp128 @ul2q(i64 %a) {
 ; CHECK-NEXT:  lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(, %s2)
-; CHECK-NEXT:  adds.l %s1, %s2, %s1
-; CHECK-NEXT:  ldu %s1, (, %s1)
+; CHECK-NEXT:  ldu %s1, (%s1, %s2)
 ; CHECK-NEXT:  cvt.q.s %s2, %s1
 ; CHECK-NEXT:  cvt.d.l %s0, %s0
 ; CHECK-NEXT:  cvt.q.d %s0, %s0

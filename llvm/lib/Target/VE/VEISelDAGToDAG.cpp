@@ -20,107 +20,6 @@
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
-//                      Pattern Matcher Implementation
-//===----------------------------------------------------------------------===//
-
-namespace {
-  /// This corresponds to X86AddressMode, but uses SDValue's instead of register
-  /// numbers for the leaves of the matched tree.
-  struct VEISelAddressMode {
-    enum {
-      RegBase,
-      FrameIndexBase
-    } BaseType;
-
-    // This is really a union, discriminated by BaseType!
-    SDValue Base_Reg;
-    int Base_FrameIndex;
-
-    enum {
-      RegIndex,
-      ImmIndex
-    } IndexType;
-
-    SDValue IndexReg;
-    int32_t IndexImm;
-
-    int32_t Disp;
-    const GlobalValue *GV;
-    const Constant *CP;
-    const BlockAddress *BlockAddr;
-    const char *ES;
-    MCSymbol *MCSym;
-    int JT;
-    unsigned Align;    // CP alignment.
-    unsigned SymbolFlags;  // VEMCExpr::VK_*
-
-    VEISelAddressMode()
-        : BaseType(RegBase), Base_Reg(), Base_FrameIndex(0),
-          IndexType(RegIndex), IndexReg(), IndexImm(0),
-          Disp(0), GV(nullptr), CP(nullptr), BlockAddr(nullptr), ES(nullptr),
-          MCSym(nullptr), JT(-1), Align(0), SymbolFlags(0) {}
-
-    bool hasSymbolicDisplacement() const {
-      return GV != nullptr || CP != nullptr || ES != nullptr ||
-             MCSym != nullptr || JT != -1 || BlockAddr != nullptr;
-    }
-
-    bool hasBaseOrIndexReg() const {
-      return BaseType == FrameIndexBase ||
-             IndexReg.getNode() != nullptr || Base_Reg.getNode() != nullptr;
-    }
-
-    void setBaseReg(SDValue Reg) {
-      BaseType = RegBase;
-      Base_Reg = Reg;
-    }
-
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-    void dump(SelectionDAG *DAG = nullptr) {
-      dbgs() << "VEISelAddressMode " << this << '\n';
-      dbgs() << "Base_Reg ";
-      if (Base_Reg.getNode())
-        Base_Reg.getNode()->dump(DAG);
-      else
-        dbgs() << "nul\n";
-      if (BaseType == FrameIndexBase)
-        dbgs() << " Base_FrameIndex " << Base_FrameIndex << '\n';
-      dbgs() << "IndexReg ";
-      if (IndexReg.getNode())
-        IndexReg.getNode()->dump(DAG);
-      else
-        dbgs() << "nul\n";
-      if (IndexType == ImmIndex)
-        dbgs() << " ImmIndex " << IndexImm << '\n';
-      dbgs() << " Disp " << Disp << '\n'
-             << "GV ";
-      if (GV)
-        GV->dump();
-      else
-        dbgs() << "nul";
-      dbgs() << " CP ";
-      if (CP)
-        CP->dump();
-      else
-        dbgs() << "nul";
-      dbgs() << '\n'
-             << "ES ";
-      if (ES)
-        dbgs() << ES;
-      else
-        dbgs() << "nul";
-      dbgs() << " MCSym ";
-      if (MCSym)
-        dbgs() << MCSym;
-      else
-        dbgs() << "nul";
-      dbgs() << " JT" << JT << " Align" << Align << '\n';
-    }
-#endif
-  };
-}
-
-//===----------------------------------------------------------------------===//
 // Instruction Selector Implementation
 //===----------------------------------------------------------------------===//
 
@@ -146,9 +45,9 @@ public:
   void Select(SDNode *N) override;
 
   // Complex Pattern Selectors.
-  bool SelectADDRrri(SDValue N, SDValue &Base, SDValue &Idx, SDValue &Offset);
-  bool SelectADDRrii(SDValue N, SDValue &Base, SDValue &Idx, SDValue &Offset);
-  bool SelectADDRzii(SDValue N, SDValue &Base, SDValue &Idx, SDValue &Offset);
+  bool SelectADDRrri(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
+  bool SelectADDRrii(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
+  bool SelectADDRzii(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
   bool SelectADDRri(SDValue N, SDValue &Base, SDValue &Offset);
   bool SelectADDRzi(SDValue N, SDValue &Base, SDValue &Offset);
 
@@ -169,20 +68,8 @@ private:
   SDNode *getGlobalBaseReg();
   bool tryInlineAsm(SDNode *N);
 
-#if 0
-  private:
-    void Select(SDNode *N) override;
-
-    bool foldOffsetIntoAddress(uint64_t Offset, X86ISelAddressMode &AM);
-    bool matchLoadInAddress(LoadSDNode *N, X86ISelAddressMode &AM);
-    bool matchWrapper(SDValue N, X86ISelAddressMode &AM);
-    bool matchAddress(SDValue N, X86ISelAddressMode &AM);
-    bool matchVectorAddress(SDValue N, X86ISelAddressMode &AM);
-    bool matchAdd(SDValue &N, X86ISelAddressMode &AM, unsigned Depth);
-    bool matchAddressRecursively(SDValue N, X86ISelAddressMode &AM,
-                                 unsigned Depth);
-    bool matchAddressBase(SDValue N, X86ISelAddressMode &AM);
-#endif
+  bool matchADDRrr(SDValue N, SDValue &Base, SDValue &Index);
+  bool matchADDRri(SDValue N, SDValue &Base, SDValue &Offset);
 };
 } // end anonymous namespace
 
@@ -365,7 +252,7 @@ bool VEDAGToDAGISel::tryInlineAsm(SDNode *N){
   return true;
 }
 
-bool VEDAGToDAGISel::SelectADDRrri(SDValue Addr, SDValue &Base, SDValue &Idx,
+bool VEDAGToDAGISel::SelectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
                                    SDValue &Offset) {
   if (Addr.getOpcode() == ISD::FrameIndex)
     return false;
@@ -374,67 +261,37 @@ bool VEDAGToDAGISel::SelectADDRrri(SDValue Addr, SDValue &Base, SDValue &Idx,
       Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
     return false; // direct calls.
 
-  if (Addr.getOpcode() == ISD::ADD) {
-    if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1)))
-      if (isInt<32>(CN->getSExtValue()))
-        return false; // Let the reg+imm pattern catch this!
-    if (Addr.getOperand(0).getOpcode() == VEISD::Lo ||
-        Addr.getOperand(1).getOpcode() == VEISD::Lo)
-      return false; // Let the reg+imm(=0) pattern catch this!
-    Base = Addr.getOperand(0);
-    Idx = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
-    Offset = Addr.getOperand(1);
-    return true;
-#if 0
-  } else if (Addr.getOpcode() == ISD::OR) {
-    // We want to look through a transform in InstCombine and DAGCombiner that
-    // turns 'add' into 'or', so we can treat this 'or' exactly like an 'add'.
-    if (CurDAG->haveNoCommonBitsSet(Addr.getOperand(0), Addr.getOperand(1))) {
-      if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1)))
-        if (isInt<32>(CN->getSExtValue()))
-          return false;  // Let the reg+imm pattern catch this!
-      Base = Addr.getOperand(0);
-      Idx = Addr.getOperand(1);
-      Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+  SDValue LHS, RHS;
+  if (matchADDRri(Addr, LHS, RHS)) {
+    if (matchADDRrr(LHS, Base, Index)) {
+      Offset = RHS;
       return true;
     }
-#endif
+    return false;
+  } else if (matchADDRrr(Addr, LHS, RHS)) {
+    if (matchADDRri(RHS, Index, Offset)) {
+      Base = LHS;
+      return true;
+    } else if (matchADDRri(LHS, Base, Offset)) {
+      Index = RHS;
+      return true;
+    }
+    Base = LHS;
+    Index = RHS;
+    Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+    return true;
   }
-
   return false; // Let the reg+imm(=0) pattern catch this!
 }
 
 bool VEDAGToDAGISel::SelectADDRrii(SDValue Addr,
                                    SDValue &Base, SDValue &Index,
                                    SDValue &Offset) {
-  auto AddrTy = Addr->getValueType(0);
-  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
-    Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), AddrTy);
+  if (matchADDRri(Addr, Base, Offset)) {
     Index = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
-    Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
     return true;
   }
-  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
-      Addr.getOpcode() == ISD::TargetGlobalAddress ||
-      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
-    return false;  // direct calls.
 
-  if (CurDAG->isBaseWithConstantOffset(Addr)) {
-    ConstantSDNode *CN = cast<ConstantSDNode>(Addr.getOperand(1));
-    if (isInt<32>(CN->getSExtValue())) {
-      if (FrameIndexSDNode *FIN =
-              dyn_cast<FrameIndexSDNode>(Addr.getOperand(0))) {
-        // Constant offset from frame ref.
-        Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), AddrTy);
-      } else {
-        Base = Addr.getOperand(0);
-      }
-      Index = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
-      Offset =
-          CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr), MVT::i32);
-      return true;
-    }
-  }
   Base = Addr;
   Index = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
   Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
@@ -466,6 +323,66 @@ bool VEDAGToDAGISel::SelectADDRzii(SDValue Addr,
 
 bool VEDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
                                   SDValue &Offset) {
+  if (matchADDRri(Addr, Base, Offset))
+    return true;
+
+  Base = Addr;
+  Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+  return true;
+}
+
+bool VEDAGToDAGISel::SelectADDRzi(SDValue Addr, SDValue &Base,
+                                  SDValue &Offset) {
+  if (dyn_cast<FrameIndexSDNode>(Addr)) {
+    return false;
+  }
+  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
+      Addr.getOpcode() == ISD::TargetGlobalAddress ||
+      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
+    return false;  // direct calls.
+
+  if (ConstantSDNode *CN = cast<ConstantSDNode>(Addr)) {
+    if (isInt<32>(CN->getSExtValue())) {
+      Base = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+      Offset =
+          CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr), MVT::i32);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool VEDAGToDAGISel::matchADDRrr(SDValue Addr, SDValue &Base, SDValue &Index) {
+  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr))
+    return false;
+  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
+      Addr.getOpcode() == ISD::TargetGlobalAddress ||
+      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
+    return false; // direct calls.
+
+  if (Addr.getOpcode() == ISD::ADD) {
+    if (Addr.getOperand(0).getOpcode() == VEISD::Lo ||
+        Addr.getOperand(1).getOpcode() == VEISD::Lo)
+      return false; // Let use LEASL
+    Base = Addr.getOperand(0);
+    Index = Addr.getOperand(1);
+    return true;
+  } else if (Addr.getOpcode() == ISD::OR) {
+    if (Addr.getOperand(0).getOpcode() == VEISD::Lo ||
+        Addr.getOperand(1).getOpcode() == VEISD::Lo)
+      return false; // Let use LEASL
+    // We want to look through a transform in InstCombine and DAGCombiner that
+    // turns 'add' into 'or', so we can treat this 'or' exactly like an 'add'.
+    if (CurDAG->haveNoCommonBitsSet(Addr.getOperand(0), Addr.getOperand(1))) {
+      Base = Addr.getOperand(0);
+      Index = Addr.getOperand(1);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool VEDAGToDAGISel::matchADDRri(SDValue Addr, SDValue &Base, SDValue &Offset) {
   auto AddrTy = Addr->getValueType(0);
   if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
     Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), AddrTy);
@@ -487,29 +404,6 @@ bool VEDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
       } else {
         Base = Addr.getOperand(0);
       }
-      Offset =
-          CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr), MVT::i32);
-      return true;
-    }
-  }
-  Base = Addr;
-  Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
-  return true;
-}
-
-bool VEDAGToDAGISel::SelectADDRzi(SDValue Addr, SDValue &Base,
-                                  SDValue &Offset) {
-  if (dyn_cast<FrameIndexSDNode>(Addr)) {
-    return false;
-  }
-  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
-      Addr.getOpcode() == ISD::TargetGlobalAddress ||
-      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
-    return false;  // direct calls.
-
-  if (ConstantSDNode *CN = cast<ConstantSDNode>(Addr)) {
-    if (isInt<32>(CN->getSExtValue())) {
-      Base = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
       Offset =
           CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr), MVT::i32);
       return true;

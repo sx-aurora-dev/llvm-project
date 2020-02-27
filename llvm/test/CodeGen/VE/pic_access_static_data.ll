@@ -14,16 +14,14 @@ define void @func() {
 ; CHECK-NEXT:    lea %s0, src@gotoff_lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, src@gotoff_hi(, %s0)
-; CHECK-NEXT:    adds.l %s0, %s15, %s0
-; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
+; CHECK-NEXT:    ld1b.zx %s0, (%s0, %s15)
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    lea %s2, 100
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    lea %s0, dst@gotoff_lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, dst@gotoff_hi(, %s0)
-; CHECK-NEXT:    adds.l %s0, %s15, %s0
-; CHECK-NEXT:    stl %s1, (, %s0)
+; CHECK-NEXT:    stl %s1, (%s0, %s15)
 ; CHECK-NEXT:    or %s11, 0, %s9
 
   %1 = load i1, i1* @src, align 4
