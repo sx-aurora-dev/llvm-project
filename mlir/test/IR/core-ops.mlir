@@ -506,6 +506,12 @@ func @standard_instrs(tensor<4x4x?xf32>, f32, i32, index, i64, f16) {
   // CHECK: %{{[0-9]+}} = sqrt %arg0 : tensor<4x4x?xf32>
   %142 = sqrt %t : tensor<4x4x?xf32>
 
+  // CHECK: = fpext {{.*}} : vector<4xf32> to vector<4xf64>
+  %143 = fpext %vcf32 : vector<4xf32> to vector<4xf64>
+
+  // CHECK: = fptrunc {{.*}} : vector<4xf32> to vector<4xf16>
+  %144 = fptrunc %vcf32 : vector<4xf32> to vector<4xf16>
+
   return
 }
 
@@ -738,6 +744,13 @@ func @tensor_load_store(%0 : memref<4x4xi32>) {
   %1 = tensor_load %0 : memref<4x4xi32>
   // CHECK: tensor_store %[[TENSOR]], %[[MEMREF]] : memref<4x4xi32>
   tensor_store %1, %0 : memref<4x4xi32>
+  return
+}
+
+// CHECK-LABEL: func @atomic_rmw
+func @atomic_rmw(%I: memref<10xf32>, %val: f32, %i : index) {
+  // CHECK: %{{.*}} = atomic_rmw "addf" %{{.*}}, %{{.*}}[%{{.*}}]
+  %x = atomic_rmw "addf" %val, %I[%i] : (f32, memref<10xf32>) -> f32
   return
 }
 
