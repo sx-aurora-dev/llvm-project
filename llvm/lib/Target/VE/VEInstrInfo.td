@@ -1192,90 +1192,6 @@ def STQrii : Pseudo<
 def : Pat<(f64 (load ADDRrii:$addr)), (LDrii ADDRrii:$addr)>;
 def : Pat<(store f64:$src, ADDRrii:$addr), (STrii ADDRrii:$addr, $src)>;
 
-// Patterns for unaligned load
-
-def unaligned4load : PatFrag<(ops node:$ptr), (load node:$ptr), [{
-  return cast<LoadSDNode>(N)->getAlignment() < 4;
-}]>;
-def unaligned8load : PatFrag<(ops node:$ptr), (load node:$ptr), [{
-  return cast<LoadSDNode>(N)->getAlignment() < 8;
-}]>;
-def : Pat<(i32 (unaligned4load ADDRrii:$addr)),
-          (LDLSXrii MEMrii:$addr)>;
-def : Pat<(f32 (unaligned4load ADDRrii:$addr)),
-          (LDUrii MEMrii:$addr)>;
-def : Pat<(i64 (unaligned8load ADDRrii:$addr)),
-          (LDrii ADDRrii:$addr)>;
-def : Pat<(f64 (unaligned8load ADDRrii:$addr)),
-          (LDrii ADDRrii:$addr)>;
-
-// Patterns for unaligned store
-
-def unaligned4store : PatFrag<(ops node:$val, node:$ptr),
-                              (store node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getAlignment() < 4;
-}]>;
-def unaligned8store : PatFrag<(ops node:$val, node:$ptr),
-                              (store node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getAlignment() < 8;
-}]>;
-def : Pat<(unaligned4store i32:$src, ADDRrii:$addr),
-          (STLrii ADDRrii:$addr, $src)>;
-def : Pat<(unaligned4store f32:$src, ADDRrii:$addr),
-          (STUrii ADDRrii:$addr, $src)>;
-def : Pat<(unaligned8store i64:$src, ADDRrii:$addr),
-          (STrii ADDRrii:$addr, $src)>;
-def : Pat<(unaligned8store f64:$src, ADDRrii:$addr),
-          (STrii ADDRrii:$addr, $src)>;
-
-// Patterns for unaligned sextload/zextload/extload
-
-def unaligned2extloadi16 : PatFrag<(ops node:$ptr), (extloadi16 node:$ptr), [{
-  return cast<LoadSDNode>(N)->getAlignment() < 2;
-}]>;
-def unaligned2sextloadi16 : PatFrag<(ops node:$ptr), (sextloadi16 node:$ptr), [{
-  return cast<LoadSDNode>(N)->getAlignment() < 2;
-}]>;
-def unaligned2zextloadi16 : PatFrag<(ops node:$ptr), (zextloadi16 node:$ptr), [{
-  return cast<LoadSDNode>(N)->getAlignment() < 2;
-}]>;
-def unaligned4extloadi32 : PatFrag<(ops node:$ptr), (extloadi32 node:$ptr), [{
-  return cast<LoadSDNode>(N)->getAlignment() < 4;
-}]>;
-def unaligned4sextloadi32 : PatFrag<(ops node:$ptr), (sextloadi32 node:$ptr), [{
-  return cast<LoadSDNode>(N)->getAlignment() < 4;
-}]>;
-def unaligned4zextloadi32 : PatFrag<(ops node:$ptr), (zextloadi32 node:$ptr), [{
-  return cast<LoadSDNode>(N)->getAlignment() < 4;
-}]>;
-def : Pat<(i64 (unaligned2sextloadi16 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BSXrii MEMrii:$addr), sub_i32)>;
-def : Pat<(i64 (unaligned2zextloadi16 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr), sub_i32)>;
-def : Pat<(i64 (unaligned2extloadi16 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr), sub_i32)>;
-def : Pat<(i64 (unaligned4sextloadi32 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr), sub_i32)>;
-def : Pat<(i64 (unaligned4zextloadi32 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLZXrii MEMrii:$addr), sub_i32)>;
-def : Pat<(i64 (unaligned4extloadi32 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr), sub_i32)>;
-
-// Patterns for unaligned truncstore
-
-def unaligned4truncstorei16 : PatFrag<(ops node:$val, node:$ptr),
-                                   (truncstorei16 node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getAlignment() < 4;
-}]>;
-def unaligned8truncstorei32 : PatFrag<(ops node:$val, node:$ptr),
-                                   (truncstorei32 node:$val, node:$ptr), [{
-  return cast<StoreSDNode>(N)->getAlignment() < 8;
-}]>;
-def : Pat<(unaligned4truncstorei16 i64:$src, ADDRrii:$addr),
-          (ST2Brii ADDRrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
-def : Pat<(unaligned8truncstorei32 i64:$src, ADDRrii:$addr),
-          (STLrii ADDRrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
-
 // Control-flow
 
 // Jump instruction
@@ -1590,23 +1506,32 @@ def : Pat<(i64 (anyext i32:$sy)),
 
 // extload, sextload and zextload stuff
 def : Pat<(i64 (sextloadi8 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BSXrii MEMrii:$addr), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BSXrii MEMrii:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (zextloadi8 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrii MEMrii:$addr), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrii MEMrii:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (sextloadi16 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BSXrii MEMrii:$addr), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BSXrii MEMrii:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (zextloadi16 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (sextloadi32 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (zextloadi32 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLZXrii MEMrii:$addr), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLZXrii MEMrii:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (extloadi8 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrii MEMrii:$addr), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrii MEMrii:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (extloadi16 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (extloadi32 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr),
+                         sub_i32)>;
 
 // anyextload
 def : Pat<(extloadi8  ADDRrii:$addr), (LD1BZXrii MEMrii:$addr)>;
