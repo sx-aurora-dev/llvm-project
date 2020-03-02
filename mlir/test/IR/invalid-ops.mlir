@@ -563,6 +563,46 @@ func @fpext_f32_to_i32(%arg0 : f32) {
 
 // -----
 
+func @fpext_vec(%arg0 : vector<2xf16>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = fpext %arg0 : vector<2xf16> to vector<3xf32>
+  return
+}
+
+// -----
+
+func @fpext_vec_f32_to_f16(%arg0 : vector<2xf32>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = fpext %arg0 : vector<2xf32> to vector<2xf16>
+  return
+}
+
+// -----
+
+func @fpext_vec_f16_to_f16(%arg0 : vector<2xf16>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = fpext %arg0 : vector<2xf16> to vector<2xf16>
+  return
+}
+
+// -----
+
+func @fpext_vec_i32_to_f32(%arg0 : vector<2xi32>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = fpext %arg0 : vector<2xi32> to vector<2xf32>
+  return
+}
+
+// -----
+
+func @fpext_vec_f32_to_i32(%arg0 : vector<2xf32>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = fpext %arg0 : vector<2xf32> to vector<2xi32>
+  return
+}
+
+// -----
+
 func @fptrunc_f16_to_f32(%arg0 : f16) {
   // expected-error@+1 {{are cast incompatible}}
   %0 = fptrunc %arg0 : f16 to f32
@@ -590,6 +630,46 @@ func @fptrunc_i32_to_f32(%arg0 : i32) {
 func @fptrunc_f32_to_i32(%arg0 : f32) {
   // expected-error@+1 {{are cast incompatible}}
   %0 = fptrunc %arg0 : f32 to i32
+  return
+}
+
+// -----
+
+func @fptrunc_vec(%arg0 : vector<2xf16>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = fptrunc %arg0 : vector<2xf16> to vector<3xf32>
+  return
+}
+
+// -----
+
+func @fptrunc_vec_f16_to_f32(%arg0 : vector<2xf16>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = fptrunc %arg0 : vector<2xf16> to vector<2xf32>
+  return
+}
+
+// -----
+
+func @fptrunc_vec_f32_to_f32(%arg0 : vector<2xf32>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = fptrunc %arg0 : vector<2xf32> to vector<2xf32>
+  return
+}
+
+// -----
+
+func @fptrunc_vec_i32_to_f32(%arg0 : vector<2xi32>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = fptrunc %arg0 : vector<2xi32> to vector<2xf32>
+  return
+}
+
+// -----
+
+func @fptrunc_vec_f32_to_i32(%arg0 : vector<2xf32>) {
+  // expected-error@+1 {{are cast incompatible}}
+  %0 = fptrunc %arg0 : vector<2xf32> to vector<2xi32>
   return
 }
 
@@ -1034,6 +1114,30 @@ func @invalid_memref_cast() {
   %1 = memref_cast %0 : memref<2x5xf32, 0> to memref<*xf32, 0>
   // expected-error@+1 {{operand type 'memref<*xf32>' and result type 'memref<*xf32>' are cast incompatible}}
   %2 = memref_cast %1 : memref<*xf32, 0> to memref<*xf32, 0>
+  return
+}
+
+// -----
+
+func @atomic_rmw_idxs_rank_mismatch(%I: memref<16x10xf32>, %i : index, %val : f32) {
+  // expected-error@+1 {{expects the number of subscripts to be equal to memref rank}}
+  %x = atomic_rmw "addf" %val, %I[%i] : (f32, memref<16x10xf32>) -> f32
+  return
+}
+
+// -----
+
+func @atomic_rmw_expects_float(%I: memref<16x10xi32>, %i : index, %val : i32) {
+  // expected-error@+1 {{expects a floating-point type}}
+  %x = atomic_rmw "addf" %val, %I[%i, %i] : (i32, memref<16x10xi32>) -> i32
+  return
+}
+
+// -----
+
+func @atomic_rmw_expects_int(%I: memref<16x10xf32>, %i : index, %val : f32) {
+  // expected-error@+1 {{expects an integer type}}
+  %x = atomic_rmw "addi" %val, %I[%i, %i] : (f32, memref<16x10xf32>) -> f32
   return
 }
 

@@ -607,7 +607,7 @@ function(llvm_add_library name)
   endif()
 
   if(ARG_STATIC)
-    set(libtype INTERFACE)
+    set(libtype PUBLIC)
   else()
     # We can use PRIVATE since SO knows its dependent libs.
     set(libtype PRIVATE)
@@ -1032,6 +1032,7 @@ endfunction()
 if(NOT LLVM_TOOLCHAIN_TOOLS)
   set (LLVM_TOOLCHAIN_TOOLS
     llvm-ar
+    llvm-cov
     llvm-cxxfilt
     llvm-ranlib
     llvm-lib

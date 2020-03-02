@@ -2398,6 +2398,7 @@ void Verifier::visitFunction(const Function &F) {
     AssertDI(SP->describes(&F),
              "!dbg attachment points at wrong subprogram for function", N, &F,
              &I, DL, Scope, SP);
+    visitMDNode(*SP);
   };
   for (auto &BB : F)
     for (auto &I : BB) {
@@ -2532,8 +2533,6 @@ void Verifier::visitIndirectBrInst(IndirectBrInst &BI) {
 
 void Verifier::visitCallBrInst(CallBrInst &CBI) {
   Assert(CBI.isInlineAsm(), "Callbr is currently only used for asm-goto!",
-         &CBI);
-  Assert(CBI.getType()->isVoidTy(), "Callbr return value is not supported!",
          &CBI);
   for (unsigned i = 0, e = CBI.getNumSuccessors(); i != e; ++i)
     Assert(CBI.getSuccessor(i)->getType()->isLabelTy(),

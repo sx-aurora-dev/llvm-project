@@ -221,9 +221,9 @@ namespace {
     bool selectAddr(SDNode *Parent, SDValue N, SDValue &Base,
                     SDValue &Scale, SDValue &Index, SDValue &Disp,
                     SDValue &Segment);
-    bool selectVectorAddr(SDNode *Parent, SDValue N, SDValue &Base,
-                          SDValue &Scale, SDValue &Index, SDValue &Disp,
-                          SDValue &Segment);
+    bool selectVectorAddr(MemSDNode *Parent, SDValue BasePtr, SDValue IndexOp,
+                          SDValue ScaleOp, SDValue &Base, SDValue &Scale,
+                          SDValue &Index, SDValue &Disp, SDValue &Segment);
     bool selectMOV64Imm32(SDValue N, SDValue &Imm);
     bool selectLEAAddr(SDValue N, SDValue &Base,
                        SDValue &Scale, SDValue &Index, SDValue &Disp,
@@ -1100,14 +1100,17 @@ void X86DAGToDAGISel::PreprocessISelDAG() {
       // operations.  Based on this, decide what we want to do.
       MVT MemVT = (N->getOpcode() == ISD::FP_ROUND) ? DstVT : SrcVT;
       SDValue MemTmp = CurDAG->CreateStackTemporary(MemVT);
+      int SPFI = cast<FrameIndexSDNode>(MemTmp)->getIndex();
+      MachinePointerInfo MPI =
+          MachinePointerInfo::getFixedStack(CurDAG->getMachineFunction(), SPFI);
       SDLoc dl(N);
 
       // FIXME: optimize the case where the src/dest is a load or store?
 
-      SDValue Store = CurDAG->getTruncStore(CurDAG->getEntryNode(), dl, N->getOperand(0),
-                                          MemTmp, MachinePointerInfo(), MemVT);
-      SDValue Result = CurDAG->getExtLoad(ISD::EXTLOAD, dl, DstVT, Store, MemTmp,
-                                          MachinePointerInfo(), MemVT);
+      SDValue Store = CurDAG->getTruncStore(
+          CurDAG->getEntryNode(), dl, N->getOperand(0), MemTmp, MPI, MemVT);
+      SDValue Result = CurDAG->getExtLoad(ISD::EXTLOAD, dl, DstVT, Store,
+                                          MemTmp, MPI, MemVT);
 
       // We're about to replace all uses of the FP_ROUND/FP_EXTEND with the
       // extload we created.  This will cause general havok on the dag because
@@ -1153,6 +1156,9 @@ void X86DAGToDAGISel::PreprocessISelDAG() {
       // operations.  Based on this, decide what we want to do.
       MVT MemVT = (N->getOpcode() == ISD::STRICT_FP_ROUND) ? DstVT : SrcVT;
       SDValue MemTmp = CurDAG->CreateStackTemporary(MemVT);
+      int SPFI = cast<FrameIndexSDNode>(MemTmp)->getIndex();
+      MachinePointerInfo MPI =
+          MachinePointerInfo::getFixedStack(CurDAG->getMachineFunction(), SPFI);
       SDLoc dl(N);
 
       // FIXME: optimize the case where the src/dest is a load or store?
@@ -1163,7 +1169,7 @@ void X86DAGToDAGISel::PreprocessISelDAG() {
         SDVTList VTs = CurDAG->getVTList(MVT::Other);
         SDValue Ops[] = {N->getOperand(0), N->getOperand(1), MemTmp};
         Store = CurDAG->getMemIntrinsicNode(X86ISD::FST, dl, VTs, Ops, MemVT,
-                                            MachinePointerInfo(), 0,
+                                            MPI, /*Align*/ 0,
                                             MachineMemOperand::MOStore);
         if (N->getFlags().hasNoFPExcept()) {
           SDNodeFlags Flags = Store->getFlags();
@@ -1173,15 +1179,15 @@ void X86DAGToDAGISel::PreprocessISelDAG() {
       } else {
         assert(SrcVT == MemVT && "Unexpected VT!");
         Store = CurDAG->getStore(N->getOperand(0), dl, N->getOperand(1), MemTmp,
-                                 MachinePointerInfo());
+                                 MPI);
       }
 
       if (!DstIsSSE) {
         SDVTList VTs = CurDAG->getVTList(DstVT, MVT::Other);
         SDValue Ops[] = {Store, MemTmp};
-        Result = CurDAG->getMemIntrinsicNode(X86ISD::FLD, dl, VTs, Ops, MemVT,
-                                             MachinePointerInfo(), 0,
-                                             MachineMemOperand::MOLoad);
+        Result =
+            CurDAG->getMemIntrinsicNode(X86ISD::FLD, dl, VTs, Ops, MemVT, MPI,
+                                        /*Align*/ 0, MachineMemOperand::MOLoad);
         if (N->getFlags().hasNoFPExcept()) {
           SDNodeFlags Flags = Result->getFlags();
           Flags.setNoFPExcept(true);
@@ -1189,8 +1195,7 @@ void X86DAGToDAGISel::PreprocessISelDAG() {
         }
       } else {
         assert(DstVT == MemVT && "Unexpected VT!");
-        Result =
-            CurDAG->getLoad(DstVT, dl, Store, MemTmp, MachinePointerInfo());
+        Result = CurDAG->getLoad(DstVT, dl, Store, MemTmp, MPI);
       }
 
       // We're about to replace all uses of the FP_ROUND/FP_EXTEND with the
@@ -2319,15 +2324,16 @@ bool X86DAGToDAGISel::matchVectorAddress(SDValue N, X86ISelAddressMode &AM) {
   return matchAddressBase(N, AM);
 }
 
-bool X86DAGToDAGISel::selectVectorAddr(SDNode *Parent, SDValue N, SDValue &Base,
-                                       SDValue &Scale, SDValue &Index,
-                                       SDValue &Disp, SDValue &Segment) {
+bool X86DAGToDAGISel::selectVectorAddr(MemSDNode *Parent, SDValue BasePtr,
+                                       SDValue IndexOp, SDValue ScaleOp,
+                                       SDValue &Base, SDValue &Scale,
+                                       SDValue &Index, SDValue &Disp,
+                                       SDValue &Segment) {
   X86ISelAddressMode AM;
-  auto *Mgs = cast<X86MaskedGatherScatterSDNode>(Parent);
-  AM.IndexReg = Mgs->getIndex();
-  AM.Scale = cast<ConstantSDNode>(Mgs->getScale())->getZExtValue();
+  AM.IndexReg = IndexOp;
+  AM.Scale = cast<ConstantSDNode>(ScaleOp)->getZExtValue();
 
-  unsigned AddrSpace = cast<MemSDNode>(Parent)->getPointerInfo().getAddrSpace();
+  unsigned AddrSpace = Parent->getPointerInfo().getAddrSpace();
   if (AddrSpace == X86AS::GS)
     AM.Segment = CurDAG->getRegister(X86::GS, MVT::i16);
   if (AddrSpace == X86AS::FS)
@@ -2335,11 +2341,11 @@ bool X86DAGToDAGISel::selectVectorAddr(SDNode *Parent, SDValue N, SDValue &Base,
   if (AddrSpace == X86AS::SS)
     AM.Segment = CurDAG->getRegister(X86::SS, MVT::i16);
 
-  SDLoc DL(N);
-  MVT VT = N.getSimpleValueType();
+  SDLoc DL(BasePtr);
+  MVT VT = BasePtr.getSimpleValueType();
 
   // Try to match into the base and displacement fields.
-  if (matchVectorAddress(N, AM))
+  if (matchVectorAddress(BasePtr, AM))
     return false;
 
   getAddressOperands(AM, DL, VT, Base, Scale, Index, Disp, Segment);
@@ -5467,14 +5473,15 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
     if (!Opc)
       break;
 
-    SDValue BasePtr = Mgt->getBasePtr();
     SDValue Base, Scale, Index, Disp, Segment;
-    if (!selectVectorAddr(Node, BasePtr, Base, Scale, Index, Disp, Segment))
+    if (!selectVectorAddr(Mgt, Mgt->getBasePtr(), IndexOp, Mgt->getScale(),
+                          Base, Scale, Index, Disp, Segment))
       break;
 
     SDValue PassThru = Mgt->getPassThru();
     SDValue Chain = Mgt->getChain();
-    SDVTList VTs = Mgt->getVTList();
+    // Gather instructions have a mask output not in the ISD node.
+    SDVTList VTs = CurDAG->getVTList(ValueVT, MaskVT, MVT::Other);
 
     MachineSDNode *NewNode;
     if (AVX512Gather) {
@@ -5487,7 +5494,9 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
       NewNode = CurDAG->getMachineNode(Opc, SDLoc(dl), VTs, Ops);
     }
     CurDAG->setNodeMemRefs(NewNode, {Mgt->getMemOperand()});
-    ReplaceNode(Node, NewNode);
+    ReplaceUses(SDValue(Node, 0), SDValue(NewNode, 0));
+    ReplaceUses(SDValue(Node, 1), SDValue(NewNode, 2));
+    CurDAG->RemoveDeadNode(Node);
     return;
   }
   case X86ISD::MSCATTER: {
@@ -5537,19 +5546,21 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
     else
       break;
 
-    SDValue BasePtr = Sc->getBasePtr();
     SDValue Base, Scale, Index, Disp, Segment;
-    if (!selectVectorAddr(Node, BasePtr, Base, Scale, Index, Disp, Segment))
+    if (!selectVectorAddr(Sc, Sc->getBasePtr(), IndexOp, Sc->getScale(),
+                          Base, Scale, Index, Disp, Segment))
       break;
 
     SDValue Mask = Sc->getMask();
     SDValue Chain = Sc->getChain();
-    SDVTList VTs = Sc->getVTList();
+    // Scatter instructions have a mask output not in the ISD node.
+    SDVTList VTs = CurDAG->getVTList(Mask.getValueType(), MVT::Other);
     SDValue Ops[] = {Base, Scale, Index, Disp, Segment, Mask, Value, Chain};
 
     MachineSDNode *NewNode = CurDAG->getMachineNode(Opc, SDLoc(dl), VTs, Ops);
     CurDAG->setNodeMemRefs(NewNode, {Sc->getMemOperand()});
-    ReplaceNode(Node, NewNode);
+    ReplaceUses(SDValue(Node, 0), SDValue(NewNode, 1));
+    CurDAG->RemoveDeadNode(Node);
     return;
   }
   }
