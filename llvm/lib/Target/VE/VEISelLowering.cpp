@@ -583,6 +583,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::VAEND, MVT::Other, Expand);
   /// } VAARG handling
 
+  // Expand DYNAMIC_STACKALLOC
+  setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32, Custom);
+  setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Custom);
+
   /// Int Ops {
   for (MVT IntVT : {MVT::i32, MVT::i64}) {
     // VE has no REM or DIVREM operations.
@@ -642,6 +646,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(Hi)
     TARGET_NODE_CASE(GETFUNPLT)
     TARGET_NODE_CASE(GETTLSADDR)
+    TARGET_NODE_CASE(GETSTACKTOP)
     TARGET_NODE_CASE(CALL)
     TARGET_NODE_CASE(RET_FLAG)
     TARGET_NODE_CASE(GLOBAL_BASE_REG)
@@ -860,12 +865,82 @@ SDValue VETargetLowering::LowerVAARG(SDValue Op, SelectionDAG &DAG) const {
                      std::min(PtrVT.getSizeInBits(), VT.getSizeInBits()) / 8);
 }
 
+SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(
+    SDValue Op, SelectionDAG &DAG) const {
+  // Generate following code.
+  //   (void)__llvm_grow_stack(size);
+  //   ret = GETSTACKTOP;        // pseudo instruction
+  SDLoc dl(Op);
+
+  // Get the inputs.
+  SDNode *Node = Op.getNode();
+  SDValue Chain = Op.getOperand(0);
+  SDValue Size  = Op.getOperand(1);
+  MaybeAlign Alignment(Op.getConstantOperandVal(2));
+  EVT VT = Node->getValueType(0);
+
+  // Chain the dynamic stack allocation so that it doesn't modify the stack
+  // pointer when other instructions are using the stack.
+  Chain = DAG.getCALLSEQ_START(Chain, 0, 0, dl);
+
+  const TargetFrameLowering &TFI = *Subtarget->getFrameLowering();
+  const Align StackAlign(TFI.getStackAlignment());
+  bool NeedsAlign = Alignment && Alignment > StackAlign;
+
+  // Prepare arguments
+  TargetLowering::ArgListTy Args;
+  TargetLowering::ArgListEntry Entry;
+  Entry.Node = Size;
+  Entry.Ty = Entry.Node.getValueType().getTypeForEVT(*DAG.getContext());
+  Args.push_back(Entry);
+  if (NeedsAlign) {
+    Entry.Node = DAG.getConstant(~(Alignment->value() - 1ULL), dl, VT);
+    Entry.Ty = Entry.Node.getValueType().getTypeForEVT(*DAG.getContext());
+    Args.push_back(Entry);
+  }
+  Type* RetTy = Type::getVoidTy(*DAG.getContext());
+
+  EVT PtrVT = getPointerTy(DAG.getDataLayout());
+  SDValue Callee;
+  if (NeedsAlign) {
+    Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack_align", PtrVT, 0);
+  } else {
+    Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack", PtrVT, 0);
+  }
+
+  SDValue Result;
+  TargetLowering::CallLoweringInfo CLI(DAG);
+  CLI.setDebugLoc(dl)
+      .setChain(Chain)
+      .setCallee(CallingConv::VE_LLVM_GROW_STACK, RetTy,
+                 Callee, std::move(Args))
+      .setDiscardResult(true);
+  std::pair<SDValue, SDValue> pair = LowerCallTo(CLI);
+  Chain = pair.second;
+  Result =  DAG.getNode(VEISD::GETSTACKTOP, dl, VT, Chain);
+  if (NeedsAlign) {
+    Result = DAG.getNode(ISD::ADD, dl, VT, Result,
+                         DAG.getConstant((Alignment->value() - 1ULL), dl, VT));
+    Result = DAG.getNode(ISD::AND, dl, VT, Result,
+                         DAG.getConstant(~(Alignment->value() - 1ULL), dl, VT));
+  }
+//  Chain = Result.getValue(1);
+  Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(0, dl, true),
+                             DAG.getIntPtrConstant(0, dl, true), SDValue(), dl);
+
+  SDValue Ops[2] = {Result, Chain};
+  return DAG.getMergeValues(Ops, dl);
+  return DAG.getMergeValues(Ops, dl);
+}
+
 SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default:
     llvm_unreachable("Should not custom lower this!");
   case ISD::BlockAddress:
     return LowerBlockAddress(Op, DAG);
+  case ISD::DYNAMIC_STACKALLOC:
+    return LowerDYNAMIC_STACKALLOC(Op, DAG);
   case ISD::GlobalAddress:
     return LowerGlobalAddress(Op, DAG);
   case ISD::GlobalTLSAddress:

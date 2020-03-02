@@ -221,6 +221,9 @@ def GetTLSAddr : SDNode<"VEISD::GETTLSADDR", SDT_SPCall,
                         [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                          SDNPVariadic]>;
 
+// GETSTACKTOP
+def GetStackTop : SDNode<"VEISD::GETSTACKTOP", SDTNone,
+                        [SDNPHasChain, SDNPSideEffect]>;
 
 
 //===----------------------------------------------------------------------===//
@@ -1291,6 +1294,15 @@ let  hasSideEffects = 0 in
 def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
                                 "# EXTEND STACK GUARD",
                                 []>;
+
+// Dynamic stack allocation yields a __llvm_grow_stack for VE targets.
+// These calls are needed to probe the stack when allocating more over
+// %s8 (%sl - stack limit).
+
+let Uses = [SX11], hasSideEffects = 1 in
+def GETSTACKTOP : Pseudo<(outs I64:$dst), (ins),
+                         "# GET STACK TOP",
+                         [(set iPTR:$dst, (GetStackTop))]>;
 
 // SETCC pattern matches
 //

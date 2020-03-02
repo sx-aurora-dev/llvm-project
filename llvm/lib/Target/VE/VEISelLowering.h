@@ -27,7 +27,9 @@ enum NodeType : unsigned {
   Hi,
   Lo, // Hi/Lo operations, typically on a global address.
 
-  GETFUNPLT,       // load function address through %plt insturction
+  GETFUNPLT,   // load function address through %plt insturction
+  GETSTACKTOP, // retrieve address of stack top (first address of
+               // locals and temporaries)
   GETTLSADDR,  // load address for TLS access
 
   CALL,            // A call instruction.
@@ -75,6 +77,7 @@ public:
   /// Custom Lower {
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
+  SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
