@@ -183,12 +183,6 @@ static void emitHiLo(MCStreamer &OutStreamer, MCSymbol *GOTSym,
 }
 
 void VEAsmPrinter::lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
-  emitLEAzzi(OutStreamer, lo, RD, STI);
-  emitANDrm0(OutStreamer, RD, ci32, RD, STI);
-  emitLEASLzzi(OutStreamer, hi, RD, STI);
-}
-
-void VEAsmPrinter::lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
                                              const MCSubtargetInfo &STI) {
   MCSymbol *GOTLabel =
       OutContext.getOrCreateSymbol(Twine("_GLOBAL_OFFSET_TABLE_"));
