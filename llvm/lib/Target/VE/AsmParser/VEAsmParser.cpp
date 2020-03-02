@@ -66,7 +66,11 @@ class VEAsmParser : public MCTargetAsmParser {
                                OperandVector &Operands, MCStreamer &Out,
                                uint64_t &ErrorInfo,
                                bool MatchingInlineAsm) override;
+  OperandMatchResultTy parseRegister(unsigned &RegNo, SMLoc &StartLoc,
+                                     SMLoc &EndLoc, bool RestoreOnFailure);
   bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc) override;
+  OperandMatchResultTy tryParseRegister(unsigned &RegNo, SMLoc &StartLoc,
+                                        SMLoc &EndLoc) override;
   bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
                         SMLoc NameLoc, OperandVector &Operands) override;
   bool ParseDirective(AsmToken DirectiveID) override;
@@ -361,7 +365,7 @@ bool VEAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   switch (MatchResult) {
   case Match_Success: {
     for (const MCInst &I : Instructions) {
-      Out.EmitInstruction(I, getSTI());
+      Out.emitInstruction(I, getSTI());
     }
     return false;
   }
@@ -389,22 +393,43 @@ bool VEAsmParser::MatchAndEmitInstruction(SMLoc IDLoc, unsigned &Opcode,
   llvm_unreachable("Implement any new match types added!");
 }
 
-bool VEAsmParser::ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
-                                SMLoc &EndLoc) {
-  const AsmToken &Tok = Parser.getTok();
-  StartLoc = Tok.getLoc();
-  EndLoc = Tok.getEndLoc();
+OperandMatchResultTy VEAsmParser::parseRegister(unsigned &RegNo,
+                                                SMLoc &StartLoc, SMLoc &EndLoc,
+                                                bool RestoreOnFailure) {
+  const AsmToken &PercenTok = Parser.getTok();
+  StartLoc = PercenTok.getLoc();
+  EndLoc = PercenTok.getEndLoc();
   RegNo = 0;
   if (getLexer().getKind() != AsmToken::Percent)
-    return false;
+    return OperandMatchResultTy::MatchOperand_NoMatch; // not a valid register
+                                                       // prefix
   Parser.Lex();
   unsigned regKind = VEOperand::rk_None;
-  if (matchRegisterName(Tok, RegNo, regKind)) {
+  if (matchRegisterName(PercenTok, RegNo, regKind)) {
     Parser.Lex();
-    return false;
+    return OperandMatchResultTy::MatchOperand_Success;
   }
+  if (RestoreOnFailure)
+    getLexer().UnLex(PercenTok);
 
-  return Error(StartLoc, "invalid register name");
+  return OperandMatchResultTy::MatchOperand_ParseFail;
+}
+
+bool VEAsmParser::ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
+                                SMLoc &EndLoc) {
+  auto MatchRes = parseRegister(RegNo, StartLoc, EndLoc, false);
+  if (MatchRes == OperandMatchResultTy::MatchOperand_ParseFail)
+    return Error(StartLoc, "invalid register name");
+  return false;
+}
+
+OperandMatchResultTy VEAsmParser::tryParseRegister(unsigned &RegNo,
+                                                   SMLoc &StartLoc,
+                                                   SMLoc &EndLoc) {
+  if (parseRegister(RegNo, StartLoc, EndLoc, true)) {
+    return OperandMatchResultTy::MatchOperand_ParseFail;
+  }
+  return OperandMatchResultTy::MatchOperand_Success;
 }
 
 bool VEAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
@@ -490,7 +515,7 @@ bool VEAsmParser::parseDirectiveWord(unsigned Size, SMLoc L) {
       if (getParser().parseExpression(Value))
         return true;
 
-      getParser().getStreamer().EmitValue(Value, Size);
+      getParser().getStreamer().emitValue(Value, Size);
 
       if (getLexer().is(AsmToken::EndOfStatement))
         break;
