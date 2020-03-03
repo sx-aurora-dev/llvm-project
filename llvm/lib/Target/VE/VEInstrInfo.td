@@ -853,6 +853,7 @@ let cx = 0, DecoderMethod = "DecodeLoadI32" in
 defm LEA32 : RMm<"lea", 0x06, I32>;
 }
 
+def : Pat<(iPTR ADDRrri:$addr), (LEArri MEMrri:$addr)>;
 def : Pat<(iPTR ADDRrii:$addr), (LEArii MEMrii:$addr)>;
 def : Pat<(add I64:$base, simm32:$disp), (LEArii $base, 0, (LO32 $disp))>;
 def : Pat<(add (add I64:$base, simm7:$idx), simm32:$disp),
@@ -1507,59 +1508,106 @@ def : Pat<(i64 (anyext i32:$sy)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32)>;
 
 // extload, sextload and zextload stuff
+def : Pat<(i64 (sextloadi8 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BSXrri MEMrri:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (sextloadi8 ADDRrii:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BSXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (zextloadi8 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrri MEMrri:$addr),
                          sub_i32)>;
 def : Pat<(i64 (zextloadi8 ADDRrii:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrii MEMrii:$addr),
                          sub_i32)>;
+def : Pat<(i64 (sextloadi16 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BSXrri MEMrri:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (sextloadi16 ADDRrii:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BSXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (zextloadi16 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrri MEMrri:$addr),
                          sub_i32)>;
 def : Pat<(i64 (zextloadi16 ADDRrii:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr),
                          sub_i32)>;
+def : Pat<(i64 (sextloadi32 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrri MEMrri:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (sextloadi32 ADDRrii:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (zextloadi32 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLZXrri MEMrri:$addr),
                          sub_i32)>;
 def : Pat<(i64 (zextloadi32 ADDRrii:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLZXrii MEMrii:$addr),
                          sub_i32)>;
+def : Pat<(i64 (extloadi8 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrri MEMrri:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (extloadi8 ADDRrii:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrii MEMrii:$addr),
                          sub_i32)>;
+def : Pat<(i64 (extloadi16 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrri MEMrri:$addr),
+                         sub_i32)>;
 def : Pat<(i64 (extloadi16 ADDRrii:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (extloadi32 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrri MEMrri:$addr),
                          sub_i32)>;
 def : Pat<(i64 (extloadi32 ADDRrii:$addr)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr),
                          sub_i32)>;
 
 // anyextload
+def : Pat<(extloadi8  ADDRrri:$addr), (LD1BZXrri MEMrri:$addr)>;
 def : Pat<(extloadi8  ADDRrii:$addr), (LD1BZXrii MEMrii:$addr)>;
+def : Pat<(extloadi16 ADDRrri:$addr), (LD2BZXrri MEMrri:$addr)>;
 def : Pat<(extloadi16 ADDRrii:$addr), (LD2BZXrii MEMrii:$addr)>;
 
 // truncstore
+def : Pat<(truncstorei8 i64:$src, ADDRrri:$addr),
+          (ST1Brri MEMrri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
 def : Pat<(truncstorei8 i64:$src, ADDRrii:$addr),
           (ST1Brii MEMrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+def : Pat<(truncstorei16 i64:$src, ADDRrri:$addr),
+          (ST2Brri MEMrri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
 def : Pat<(truncstorei16 i64:$src, ADDRrii:$addr),
           (ST2Brii MEMrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+def : Pat<(truncstorei32 i64:$src, ADDRrri:$addr),
+          (STLrri MEMrri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
 def : Pat<(truncstorei32 i64:$src, ADDRrii:$addr),
           (STLrii MEMrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
 
 // Atomic loads
+def : Pat<(atomic_load_8  ADDRrri:$src), (LD1BZXrri MEMrri:$src)>;
 def : Pat<(atomic_load_8  ADDRrii:$src), (LD1BZXrii MEMrii:$src)>;
+def : Pat<(atomic_load_16 ADDRrri:$src), (LD2BZXrri MEMrri:$src)>;
 def : Pat<(atomic_load_16 ADDRrii:$src), (LD2BZXrii MEMrii:$src)>;
+def : Pat<(atomic_load_32 ADDRrri:$src), (LDLZXrri  MEMrri:$src)>;
 def : Pat<(atomic_load_32 ADDRrii:$src), (LDLZXrii  MEMrii:$src)>;
+def : Pat<(atomic_load_64 ADDRrri:$src), (LDrri     MEMrri:$src)>;
 def : Pat<(atomic_load_64 ADDRrii:$src), (LDrii     MEMrii:$src)>;
 
 // Atomic stores
+def : Pat<(atomic_store_8  ADDRrri:$ptr, i32:$val),
+          (ST1Brri MEMrri:$ptr, $val)>;
 def : Pat<(atomic_store_8  ADDRrii:$ptr, i32:$val),
           (ST1Brii MEMrii:$ptr, $val)>;
+def : Pat<(atomic_store_16 ADDRrri:$ptr, i32:$val),
+          (ST2Brri MEMrri:$ptr, $val)>;
 def : Pat<(atomic_store_16 ADDRrii:$ptr, i32:$val),
           (ST2Brii MEMrii:$ptr, $val)>;
+def : Pat<(atomic_store_32 ADDRrri:$ptr, i32:$val),
+          (STLrri  MEMrri:$ptr, $val)>;
 def : Pat<(atomic_store_32 ADDRrii:$ptr, i32:$val),
           (STLrii  MEMrii:$ptr, $val)>;
+def : Pat<(atomic_store_64 ADDRrri:$ptr, i64:$val),
+          (STrri  MEMrri:$ptr, $val)>;
 def : Pat<(atomic_store_64 ADDRrii:$ptr, i64:$val),
           (STrii  MEMrii:$ptr, $val)>;
 
