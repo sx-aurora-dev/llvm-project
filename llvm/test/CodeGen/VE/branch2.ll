@@ -392,10 +392,9 @@ define i32 @func24(float, float) {
 
 define i32 @func25(float, float) {
 ; CHECK-LABEL: func25:
-; CHECK:       .LBB{{[0-9]+}}_4:
-; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    or %s1, 1, (0)1
-; CHECK-NEXT:    brne.w %s1, %s0, .LBB{{[0-9]+}}_2
+; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK-NEXT:    or %s0, 1, (0)1
+; CHECK-NEXT:    brne.w 0, %s0, .LBB{{[0-9]+}}_1
   %3 = fcmp false float %0, %1
   br i1 %3, label %4, label %6
 
@@ -412,7 +411,7 @@ define i32 @func26(float, float) {
 ; CHECK-LABEL: func26:
 ; CHECK:       .LBB{{[0-9]+}}_4:
 ; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    brne.w %s0, %s0, .LBB{{[0-9]+}}_2
+; CHECK-NEXT:    brne.w 0, %s0, .LBB{{[0-9]+}}_2
   %3 = fcmp true float %0, %1
   br i1 %3, label %4, label %6
 
