@@ -527,7 +527,7 @@ multiclass RRmir<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
                  RegisterClass RCi, ValueType Tyi, Operand immOp,
                  SDPatternOperator OpNode = null_frag> {
-  def ri : RR<opc, (outs RCo:$sx), (ins immOp:$sy, RCi:$sz),
+  def ir : RR<opc, (outs RCo:$sx), (ins immOp:$sy, RCi:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"),
               [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), Tyi:$sz))]>
            { let cy = 0; let cz = 1; let hasSideEffects = 0; }
@@ -1358,7 +1358,7 @@ defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, i32, simm7Op32>;
 //   SLA $new, $new, $tmp       ; shift $new for 1byte ts1am
 //   TS1AM $new, 0($newsrc), $flag ; 1byte ts1am
 def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
-          (SRArr
+          (SRAri
             (SLArr
               (TS1AMWrir
                 (ANDri $src, -4),
@@ -1367,7 +1367,7 @@ def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
                        (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3)),
                 (SLArr $new,
                        (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
-              (SBSri 24,
+              (SBSir 24,
                      (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
             24
           )>;
@@ -1741,8 +1741,8 @@ multiclass BRCCIm<ValueType ty, SDPatternOperator BrOpNode1,
   def : Pat<(brcc CCUIOp:$cond, ty:$l, ty:$r, bb:$addr),
             (BrOpNode2 (icond2cc $cond), 0, (CmpOpNode1 $r, $l), bb:$addr)>;
 }
-defm : BRCCIm<i32, BCRWrr, BCRWir, CMPUWrr, CMPUWri>;
-defm : BRCCIm<i64, BCRLrr, BCRLir, CMPrr, CMPri>;
+defm : BRCCIm<i32, BCRWrr, BCRWir, CMPUWrr, CMPUWir>;
+defm : BRCCIm<i64, BCRLrr, BCRLir, CMPrr, CMPir>;
 
 // floating point brcc
 multiclass BRCCFm<ValueType ty, SDPatternOperator BrOpNode1,
@@ -1757,7 +1757,7 @@ defm : BRCCFm<f64, BCRDrr, BCRDir>;
 // FIXME: fpzero doesn't work with f128 since f128 is separated
 //        to INSERT_SUBREG stuff before performing ISEL.
 def : Pat<(brcc cond:$cond, f128:$l, fpzero:$r, bb:$addr),
-          (BCRDrr (fcond2cc $cond), 0, (FCQri (LOFP32 $r), $l), bb:$addr)>;
+          (BCRDrr (fcond2cc $cond), 0, (FCQir (LOFP32 $r), $l), bb:$addr)>;
 def : Pat<(brcc cond:$cond, f128:$l, f128:$r, bb:$addr),
           (BCRDrr (fcond2cc $cond), 0, (FCQrr $r, $l), bb:$addr)>;
 
