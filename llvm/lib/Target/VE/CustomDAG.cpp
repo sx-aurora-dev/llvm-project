@@ -447,12 +447,14 @@ SDValue CustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
   if (Offset == 0)
     return Src;
 
-  if (Src.getValueType().isVector()) {
-    unsigned OC = Offset > 0 ? ISD::SHL : ISD::SRL; // VE::SLLri : VE::SRLri;
-    SDValue ShiftV = CreateBroadcast(ResVT, getConstant(Offset, MVT::i64));
+  // scalar bit shift
+  if (!Src.getValueType().isVector()) {
+    unsigned OC = Offset > 0 ? VE::SLLri : VE::SRLri; // ISD::SHL : ISD::SRL;
+    SDValue ShiftV = getConstant(Offset, ResVT);
     return DAG.getNode(OC, DL, ResVT, {Src, ShiftV});
   }
 
+  // vector shift
   EVT VecVT = Src.getValueType();
   assert(!IsMaskType(VecVT));
   return createVMV(ResVT, Src, getConstant(Offset, MVT::i32),
