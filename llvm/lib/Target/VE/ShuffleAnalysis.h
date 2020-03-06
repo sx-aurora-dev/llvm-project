@@ -157,7 +157,7 @@ struct MaskShuffleAnalysis {
 
     // shift (trivial 0 case handled internally)
     SDValue ShiftV =
-        CDAG.createElementShift(MaskedV, BSel.ShiftAmount, SDValue());
+        CDAG.createElementShift(MaskedV.getValueType(), MaskedV, BSel.ShiftAmount, SDValue());
 
     // OR-in passthru
     SDValue ResV = ShiftV;

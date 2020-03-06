@@ -442,19 +442,19 @@ SDValue CustomDAG::CreateSeq(EVT ResTy,
 
 // create a vector element or scalar bitshift depending on the element type
 // dst[i] = src[i + Offset]
-SDValue CustomDAG::createElementShift(SDValue Src, unsigned Offset,
+SDValue CustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
                                       SDValue AVL) {
   if (Offset == 0)
     return Src;
 
   if (Src.getValueType().isVector()) {
     unsigned OC = Offset > 0 ? ISD::SHL : ISD::SRL; // VE::SLLri : VE::SRLri;
-    return DAG.getNode(OC, DL, Src.getValueType(), Src);
+    return DAG.getNode(OC, DL, ResVT, Src);
   }
 
   EVT VecVT = Src.getValueType();
   assert(!IsMaskType(VecVT));
-  return createVMV(Src.getValueType(), Src, getConstant(Offset, MVT::i32),
+  return createVMV(ResVT, Src, getConstant(Offset, MVT::i32),
                    CreateConstMask(VecVT.getVectorNumElements(), true), AVL);
 }
 

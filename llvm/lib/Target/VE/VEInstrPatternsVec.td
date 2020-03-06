@@ -161,6 +161,18 @@ def: Pat<(v256i64 (vec_seq i32:$vl)),
 def: Pat<(v256i32 (vec_seq i32:$vl)),
          (pvseqlo_vl $vl)>;
 
+// Element shift (VMV)
+def : Pat<(v256f64 (vec_vmv v256f64:$v, i32:$amount, v256i1:$mask, i32:$avl)),
+          (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
+def : Pat<(v256f32 (vec_vmv v256f32:$v, i32:$amount, v256i1:$mask, i32:$avl)),
+          (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
+def : Pat<(v256i32 (vec_vmv v256i32:$v, i32:$amount, v256i1:$mask, i32:$avl)),
+          (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
+
+// Vector mask popcnt
+def : Pat<(i64 (vec_popcount v256i1:$mask, i32:$avl)),
+          (pcvm_sml $mask, $avl)>;
+
 
 // Casts
 def : Pat<(v256i32 (trunc v256i64:$src)),

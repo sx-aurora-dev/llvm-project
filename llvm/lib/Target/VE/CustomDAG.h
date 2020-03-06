@@ -119,8 +119,9 @@ struct CustomDAG {
   SDValue CreateSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const;
 
   // create a vector element or scalar bitshift depending on the element type
+  // \p ResVT will only be used in case any new node is created
   // dst[i] = src[i + Offset]
-  SDValue createElementShift(SDValue Src, unsigned Offset, SDValue AVL);
+  SDValue createElementShift(EVT ResVT, SDValue Src, int Offset, SDValue AVL);
 
   SDValue createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV, SDValue Mask,
                     SDValue Avl) const;
@@ -141,6 +142,13 @@ struct CustomDAG {
   SDValue createMaskInsert(SDValue MaskV, SDValue Idx, SDValue ElemV);
 
   SDValue CreateConstMask(unsigned NumElements, bool IsTrue) const;
+
+  SDValue createNarrow(EVT ResTy, SDValue SrcV, uint64_t NarrowLen) {
+    return DAG.getNode(VEISD::VEC_NARROW, DL, ResTy,
+                       {SrcV, getConstant(NarrowLen, MVT::i32)});
+  }
+
+  inline SDValue getConstEVL(uint32_t EVL) const { return getConstant(EVL, MVT::i32); }
 
   SDValue getConstant(uint64_t Val, EVT VT, bool IsTarget = false,
                       bool IsOpaque = false) const;

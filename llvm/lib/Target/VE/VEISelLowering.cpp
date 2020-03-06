@@ -728,14 +728,20 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
   auto BaseIdxN = Op.getOperand(1);
   
   assert(isa<ConstantSDNode>(BaseIdxN) && "TODO dynamic extract");
+  CustomDAG CDAG(DAG, Op);
+  EVT LegalVecTy = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
 
   int64_t ShiftVal = cast<ConstantSDNode>(BaseIdxN)->getSExtValue();
+  // Shift by a constant amount
   if (ShiftVal != 0) {
-    abort(); // TODO use shuffle analysis here (still emit NARROW on result)
+    unsigned DestNumElems = Op.getValueType().getVectorNumElements();
+    unsigned PackedVL =
+        IsPackedType(Op.getValueType()) ? (DestNumElems + 1) / 2 : DestNumElems;
+    return CDAG.createElementShift(LegalVecTy, SrcVec, ShiftVal,
+                                   CDAG.getConstEVL(PackedVL));
   }
 
-  // TODO fold the extract_subv + load pattern
-  // TODO move this to a separate narrowing pass
+  // See if it is worthwhile to emit a narrowing node
   bool EmitNarrow = false;
   auto SrcN = SrcVec.getNode();
   if (SrcN->getOpcode() == ISD::LOAD) {
@@ -749,9 +755,7 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
   if (EmitNarrow) {
     SDLoc DL(Op);
     unsigned NarrowLen = Op.getValueType().getVectorNumElements();
-    EVT LegalVecTy = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
-    return DAG.getNode(VEISD::VEC_NARROW, DL, LegalVecTy,
-                       {SrcVec, DAG.getConstant(NarrowLen, DL, MVT::i32)});
+    return CDAG.createNarrow(LegalVecTy, SrcVec, NarrowLen);
   }
 
   // simply drop this narrowing node

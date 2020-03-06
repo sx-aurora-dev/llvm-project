@@ -61,17 +61,6 @@ def : Pat<(v256i64 (vp_select v256i1:$mask, v256i64:$ontrue, v256i64:$onfalse, i
 //           (vfmkl_mvIml (vcmpul_vvvmvl $A, $B, $mask, (v256i64 (IMPLICIT_DEF)), $avl), (icond2cc $cond), $mask, $avl)>;
 
 
-// Reductions
-
-def : Pat<(v256f64 (vec_vmv v256f64:$v, i32:$amount, v256i1:$mask, i32:$avl)),
-          (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
-def : Pat<(v256f32 (vec_vmv v256f32:$v, i32:$amount, v256i1:$mask, i32:$avl)),
-          (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
-def : Pat<(v256i32 (vec_vmv v256i32:$v, i32:$amount, v256i1:$mask, i32:$avl)),
-          (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
-
-def : Pat<(i64 (vec_popcount v256i1:$mask, i32:$avl)),
-          (pcvm_sml $mask, $avl)>;
 
 // v256 x i64
 def : Pat<(i64 (vp_reduce_add v256i64:$val, v256i1:$mask, i32:$avl)), (lvsl_svs (vsuml_vvml $val, $mask, $avl), 0)>;
