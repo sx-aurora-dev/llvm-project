@@ -135,8 +135,8 @@ void VEDAGToDAGISel::Select(SDNode *N) {
   default:
     break;
 
-  // Custom lowering code for constant-zero regs
-  case VEISD::VEC_BROADCAST:
+  // Lower (broadcast 1) and (broadcast 0) to VM[P]0
+  case VEISD::VEC_BROADCAST: {
     MVT SplatResTy = N->getSimpleValueType(0);
     if (SplatResTy.getVectorElementType() != MVT::i1)
       break;
@@ -164,6 +164,13 @@ void VEDAGToDAGISel::Select(SDNode *N) {
     ReplaceNode(N, New.getNode());
     return;
   }
+
+  // Lower to actual base register
+  case VEISD::GLOBAL_BASE_REG:
+    ReplaceNode(N, getGlobalBaseReg());
+    return;
+  }
+
 
   SelectCode(N);
 }
