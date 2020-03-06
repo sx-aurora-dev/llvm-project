@@ -3483,9 +3483,10 @@ void InnerLoopVectorizer::fixVectorizedLoop() {
   // profile is not inherently precise anyway. Note also possible bypass of
   // vector code caused by legality checks is ignored, assigning all the weight
   // to the vector loop, optimistically.
-  setProfileInfoAfterUnrolling(LI->getLoopFor(LoopScalarBody),
-                               LI->getLoopFor(LoopVectorBody),
-                               LI->getLoopFor(LoopScalarBody), VF * UF);
+  if (UF > 0)
+    setProfileInfoAfterUnrolling(LI->getLoopFor(LoopScalarBody),
+                                 LI->getLoopFor(LoopVectorBody),
+                                 LI->getLoopFor(LoopScalarBody), VF * UF);
 }
 
 void InnerLoopVectorizer::fixCrossIterationPHIs() {
