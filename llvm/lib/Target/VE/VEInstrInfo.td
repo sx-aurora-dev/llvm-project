@@ -231,7 +231,7 @@ def fcond2ccSwap : SDNodeXForm<cond, [{
 // We defined them below.
 //
 // ASX format:
-//    MEMrri, MEMrii, MEMzii
+//    MEMrri, MEMrii, MEMzri, MEMzii
 // AS format:
 //    MEMriASX, MEMziASX    : simple AS format
 //    MEMriRRM, MEMziRRM    : AS format in RRM format
@@ -239,6 +239,7 @@ def fcond2ccSwap : SDNodeXForm<cond, [{
 
 def ADDRrri : ComplexPattern<iPTR, 3, "SelectADDRrri", [frameindex], []>;
 def ADDRrii : ComplexPattern<iPTR, 3, "SelectADDRrii", [frameindex], []>;
+def ADDRzri : ComplexPattern<iPTR, 3, "SelectADDRzri", [], []>;
 def ADDRzii : ComplexPattern<iPTR, 3, "SelectADDRzii", [], []>;
 // AS format:
 def ADDRri : ComplexPattern<iPTR, 2, "SelectADDRri", [frameindex], []>;
@@ -251,6 +252,10 @@ def VEMEMrriAsmOperand : AsmOperandClass {
 }
 def VEMEMriiAsmOperand : AsmOperandClass {
   let Name = "MEMrii";
+  let ParserMethod = "parseMEMOperand";
+}
+def VEMEMzriAsmOperand : AsmOperandClass {
+  let Name = "MEMzri";
   let ParserMethod = "parseMEMOperand";
 }
 def VEMEMziiAsmOperand : AsmOperandClass {
@@ -266,6 +271,11 @@ def MEMrii : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
   let MIOperandInfo = (ops ptr_rc, i32imm, i32imm);
   let ParserMatchClass = VEMEMriiAsmOperand;
+}
+def MEMzri : Operand<iPTR> {
+  let PrintMethod = "printMemASXOperand";
+  let MIOperandInfo = (ops i32imm /* = 0 */, ptr_rc, i32imm);
+  let ParserMatchClass = VEMEMzriAsmOperand;
 }
 def MEMzii : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
@@ -461,27 +471,17 @@ def CC_AT    : CC_VAL<21>;  // Always true
 //===----------------------------------------------------------------------===//
 
 multiclass RMm<string opcStr, bits<8>opc, RegisterClass RC> {
-  def rri : RM<
-    opc, (outs RC:$dest), (ins MEMrri:$addr),
-    !strconcat(opcStr, " $dest, $addr"), []> {
-    let cy = 1;
-    let cz = 1;
-    let hasSideEffects = 0;
-  }
-  def rii : RM<
-    opc, (outs RC:$dest), (ins MEMrii:$addr),
-    !strconcat(opcStr, " $dest, $addr"), []> {
-    let cy = 0;
-    let cz = 1;
-    let hasSideEffects = 0;
-  }
-  def zii : RM<
-    opc, (outs RC:$dest), (ins MEMzii:$addr),
-    !strconcat(opcStr, " $dest, $addr"), []> {
-    let cy = 0;
-    let cz = 0;
-    let hasSideEffects = 0;
-  }
+  def rri : RM<opc, (outs RC:$dest), (ins MEMrri:$addr),
+               !strconcat(opcStr, " $dest, $addr"), []>;
+  let cy = 0 in
+  def rii : RM<opc, (outs RC:$dest), (ins MEMrii:$addr),
+               !strconcat(opcStr, " $dest, $addr"), []>;
+  let cz = 0 in
+  def zri : RM<opc, (outs RC:$dest), (ins MEMzri:$addr),
+               !strconcat(opcStr, " $dest, $addr"), []>;
+  let cy = 0, cz = 0 in
+  def zii : RM<opc, (outs RC:$dest), (ins MEMzii:$addr),
+               !strconcat(opcStr, " $dest, $addr"), []>;
 }
 
 let Constraints = "$dest = $sd", DisableEncoding = "$sd", mayStore=1 in

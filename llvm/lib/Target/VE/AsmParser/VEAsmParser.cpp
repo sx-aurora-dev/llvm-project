@@ -215,6 +215,7 @@ private:
                         // SX-Aurora ASX form is disp(index, base).
     k_MemoryRegRegImm,  // base=reg, index=reg, disp=imm
     k_MemoryRegImmImm,  // base=reg, index=imm, disp=imm
+    k_MemoryZeroRegImm, // base=0, index=reg, disp=imm
     k_MemoryZeroImmImm, // base=0, index=imm, disp=imm
                         // SX-Aurora AS form is disp(base).
     k_MemoryRegImm,     // base=reg, disp=imm
@@ -258,9 +259,11 @@ public:
   bool isReg() const override { return Kind == k_Register; }
   bool isImm() const override { return Kind == k_Immediate; }
   bool isMem() const override
-  { return isMEMrri() || isMEMrii() || isMEMzii() || isMEMri() || isMEMzi(); }
+  { return isMEMrri() || isMEMrii() || isMEMzri() || isMEMzii() ||
+           isMEMri() || isMEMzi(); }
   bool isMEMrri() const { return Kind == k_MemoryRegRegImm; }
   bool isMEMrii() const { return Kind == k_MemoryRegImmImm; }
+  bool isMEMzri() const { return Kind == k_MemoryZeroRegImm; }
   bool isMEMzii() const { return Kind == k_MemoryZeroImmImm; }
   bool isMEMri() const { return Kind == k_MemoryRegImm; }
   bool isMEMzi() const { return Kind == k_MemoryZeroImm; }
@@ -304,7 +307,8 @@ public:
   }
 
   unsigned getMemIndexReg() const {
-    assert((Kind == k_MemoryRegRegImm) && "Invalid access!");
+    assert((Kind == k_MemoryRegRegImm || Kind == k_MemoryZeroRegImm)
+           && "Invalid access!");
     return Mem.IndexReg;
   }
 
@@ -316,8 +320,9 @@ public:
 
   const MCExpr *getMemOffset() const {
     assert((Kind == k_MemoryRegRegImm || Kind == k_MemoryRegImmImm ||
-            Kind == k_MemoryZeroImmImm || Kind == k_MemoryRegImm ||
-            Kind == k_MemoryZeroImm) && "Invalid access!");
+            Kind == k_MemoryZeroImmImm || Kind == k_MemoryZeroRegImm ||
+            Kind == k_MemoryRegImm || Kind == k_MemoryZeroImm) &&
+           "Invalid access!");
     return Mem.Offset;
   }
 
@@ -350,6 +355,10 @@ public:
       assert(getMemIndex() != nullptr && getMemOffset() != nullptr);
       OS << "Mem: #" << getMemBase() << "+" << *getMemIndex() << "+"
          << *getMemOffset() << "\n";
+      break;
+    case k_MemoryZeroRegImm:
+      assert(getMemOffset() != nullptr);
+      OS << "Mem: 0+#" << getMemIndexReg() << "+" << *getMemOffset() << "\n";
       break;
     case k_MemoryZeroImmImm:
       assert(getMemIndex() != nullptr && getMemOffset() != nullptr);
@@ -400,6 +409,14 @@ public:
 
     Inst.addOperand(MCOperand::createReg(getMemBase()));
     addExpr(Inst, getMemIndex());
+    addExpr(Inst, getMemOffset());
+  }
+
+  void addMEMzriOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 3 && "Invalid number of operands!");
+
+    Inst.addOperand(MCOperand::createImm(0));
+    Inst.addOperand(MCOperand::createReg(getMemIndexReg()));
     addExpr(Inst, getMemOffset());
   }
 
@@ -574,6 +591,17 @@ public:
     Op->Mem.Base = Base;
     Op->Mem.IndexReg = 0;
     Op->Mem.Index = Index;
+    Op->Mem.Offset = Imm;
+    return Op;
+  }
+
+  static std::unique_ptr<VEOperand>
+  MorphToMEMzri(unsigned Index, std::unique_ptr<VEOperand> Op) {
+    const MCExpr *Imm  = Op->getImm();
+    Op->Kind = k_MemoryZeroRegImm;
+    Op->Mem.Base = 0;
+    Op->Mem.IndexReg = Index;
+    Op->Mem.Index = nullptr;
     Op->Mem.Offset = Imm;
     return Op;
   }
@@ -837,9 +865,7 @@ VEAsmParser::parseMEMOperand(OperandVector &Operands) {
     Parser.Lex(); // Eat the )
     Operands.push_back(
         IndexValue ? VEOperand::MorphToMEMzii(IndexValue, std::move(Offset))
-                   : VEOperand::MorphToMEMrii(
-                         IndexReg, MCConstantExpr::create(0, getContext()),
-                         std::move(Offset)));
+                   : VEOperand::MorphToMEMzri(IndexReg, std::move(Offset)));
     return MatchOperand_Success;
 
   case AsmToken::Comma:

@@ -47,6 +47,7 @@ public:
   // Complex Pattern Selectors.
   bool SelectADDRrri(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
   bool SelectADDRrii(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
+  bool SelectADDRzri(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
   bool SelectADDRzii(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
   bool SelectADDRri(SDValue N, SDValue &Base, SDValue &Offset);
   bool SelectADDRzi(SDValue N, SDValue &Base, SDValue &Offset);
@@ -296,6 +297,13 @@ bool VEDAGToDAGISel::SelectADDRrii(SDValue Addr,
   Index = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
   Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
   return true;
+}
+
+bool VEDAGToDAGISel::SelectADDRzri(SDValue Addr,
+                                   SDValue &Base, SDValue &Index,
+                                   SDValue &Offset) {
+  // Prefer ADDRrii
+  return false;
 }
 
 bool VEDAGToDAGISel::SelectADDRzii(SDValue Addr,
