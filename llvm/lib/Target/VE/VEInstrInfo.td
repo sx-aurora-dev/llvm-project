@@ -1580,108 +1580,99 @@ def : Pat<(i64 (anyext i32:$sy)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32)>;
 
 // extload, sextload and zextload stuff
-def : Pat<(i64 (sextloadi8 ADDRrri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BSXrri MEMrri:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (sextloadi8 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BSXrii MEMrii:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (zextloadi8 ADDRrri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrri MEMrri:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (zextloadi8 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrii MEMrii:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (sextloadi16 ADDRrri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BSXrri MEMrri:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (sextloadi16 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BSXrii MEMrii:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (zextloadi16 ADDRrri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrri MEMrri:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (zextloadi16 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (sextloadi32 ADDRrri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrri MEMrri:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (sextloadi32 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (zextloadi32 ADDRrri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLZXrri MEMrri:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (zextloadi32 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLZXrii MEMrii:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (extloadi8 ADDRrri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrri MEMrri:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (extloadi8 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrii MEMrii:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (extloadi16 ADDRrri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrri MEMrri:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (extloadi16 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (extloadi32 ADDRrri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrri MEMrri:$addr),
-                         sub_i32)>;
-def : Pat<(i64 (extloadi32 ADDRrii:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr),
-                         sub_i32)>;
+multiclass EXT64m<SDPatternOperator from,
+                  SDPatternOperator torri,
+                  SDPatternOperator torii,
+                  SDPatternOperator tozri,
+                  SDPatternOperator tozii> {
+  def : Pat<(i64 (from ADDRrri:$addr)),
+            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (torri MEMrri:$addr),
+                           sub_i32)>;
+  def : Pat<(i64 (from ADDRrii:$addr)),
+            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (torii MEMrii:$addr),
+                           sub_i32)>;
+  def : Pat<(i64 (from ADDRzri:$addr)),
+            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (tozri MEMzri:$addr),
+                           sub_i32)>;
+  def : Pat<(i64 (from ADDRzii:$addr)),
+            (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (tozii MEMzii:$addr),
+                           sub_i32)>;
+}
+defm : EXT64m<sextloadi8, LD1BSXrri, LD1BSXrii, LD1BSXzri, LD1BSXzii>;
+defm : EXT64m<zextloadi8, LD1BZXrri, LD1BZXrii, LD1BZXzri, LD1BZXzii>;
+defm : EXT64m<extloadi8, LD1BZXrri, LD1BZXrii, LD1BZXzri, LD1BZXzii>;
+defm : EXT64m<sextloadi16, LD2BSXrri, LD2BSXrii, LD2BSXzri, LD2BSXzii>;
+defm : EXT64m<zextloadi16, LD2BZXrri, LD2BZXrii, LD2BZXzri, LD2BZXzii>;
+defm : EXT64m<extloadi16, LD2BZXrri, LD2BZXrii, LD2BZXzri, LD2BZXzii>;
+defm : EXT64m<sextloadi32, LDLSXrri, LDLSXrii, LDLSXzri, LDLSXzii>;
+defm : EXT64m<zextloadi32, LDLZXrri, LDLZXrii, LDLZXzri, LDLZXzii>;
+defm : EXT64m<extloadi32, LDLSXrri, LDLSXrii, LDLSXzri, LDLSXzii>;
 
 // anyextload
-def : Pat<(extloadi8  ADDRrri:$addr), (LD1BZXrri MEMrri:$addr)>;
-def : Pat<(extloadi8  ADDRrii:$addr), (LD1BZXrii MEMrii:$addr)>;
-def : Pat<(extloadi16 ADDRrri:$addr), (LD2BZXrri MEMrri:$addr)>;
-def : Pat<(extloadi16 ADDRrii:$addr), (LD2BZXrii MEMrii:$addr)>;
+multiclass EXT32m<SDPatternOperator from,
+                  SDPatternOperator torri,
+                  SDPatternOperator torii,
+                  SDPatternOperator tozri,
+                  SDPatternOperator tozii> {
+  def : Pat<(from ADDRrri:$addr), (torri MEMrri:$addr)>;
+  def : Pat<(from ADDRrii:$addr), (torii MEMrii:$addr)>;
+  def : Pat<(from ADDRzri:$addr), (tozri MEMzri:$addr)>;
+  def : Pat<(from ADDRzii:$addr), (tozii MEMzii:$addr)>;
+}
+defm : EXT32m<extloadi8, LD1BZXrri, LD1BZXrii, LD1BZXzri, LD1BZXzii>;
+defm : EXT32m<extloadi16, LD2BZXrri, LD2BZXrii, LD2BZXzri, LD2BZXzii>;
 
 // truncstore
-def : Pat<(truncstorei8 i64:$src, ADDRrri:$addr),
-          (ST1Brri MEMrri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
-def : Pat<(truncstorei8 i64:$src, ADDRrii:$addr),
-          (ST1Brii MEMrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
-def : Pat<(truncstorei16 i64:$src, ADDRrri:$addr),
-          (ST2Brri MEMrri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
-def : Pat<(truncstorei16 i64:$src, ADDRrii:$addr),
-          (ST2Brii MEMrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
-def : Pat<(truncstorei32 i64:$src, ADDRrri:$addr),
-          (STLrri MEMrri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
-def : Pat<(truncstorei32 i64:$src, ADDRrii:$addr),
-          (STLrii MEMrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+multiclass TRUNC64m<SDPatternOperator from,
+                    SDPatternOperator torri,
+                    SDPatternOperator torii,
+                    SDPatternOperator tozri,
+                    SDPatternOperator tozii> {
+  def : Pat<(from i64:$src, ADDRrri:$addr),
+            (torri MEMrri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+  def : Pat<(from i64:$src, ADDRrii:$addr),
+            (torii MEMrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+  def : Pat<(from i64:$src, ADDRzri:$addr),
+            (tozri MEMzri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+  def : Pat<(from i64:$src, ADDRzii:$addr),
+            (tozii MEMzii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+}
+defm : TRUNC64m<truncstorei8, ST1Brri, ST1Brii, ST1Bzri, ST1Bzii>;
+defm : TRUNC64m<truncstorei16, ST2Brri, ST2Brii, ST2Bzri, ST2Bzii>;
+defm : TRUNC64m<truncstorei32, STLrri, STLrii, STLzri, ST1Bzii>;
 
 // Atomic loads
-def : Pat<(atomic_load_8  ADDRrri:$src), (LD1BZXrri MEMrri:$src)>;
-def : Pat<(atomic_load_8  ADDRrii:$src), (LD1BZXrii MEMrii:$src)>;
-def : Pat<(atomic_load_16 ADDRrri:$src), (LD2BZXrri MEMrri:$src)>;
-def : Pat<(atomic_load_16 ADDRrii:$src), (LD2BZXrii MEMrii:$src)>;
-def : Pat<(atomic_load_32 ADDRrri:$src), (LDLZXrri  MEMrri:$src)>;
-def : Pat<(atomic_load_32 ADDRrii:$src), (LDLZXrii  MEMrii:$src)>;
-def : Pat<(atomic_load_64 ADDRrri:$src), (LDrri     MEMrri:$src)>;
-def : Pat<(atomic_load_64 ADDRrii:$src), (LDrii     MEMrii:$src)>;
+multiclass ATMLDm<SDPatternOperator from,
+                  SDPatternOperator torri,
+                  SDPatternOperator torii,
+                  SDPatternOperator tozri,
+                  SDPatternOperator tozii> {
+  def : Pat<(from ADDRrri:$addr), (torri MEMrri:$addr)>;
+  def : Pat<(from ADDRrii:$addr), (torii MEMrii:$addr)>;
+  def : Pat<(from ADDRzri:$addr), (tozri MEMzri:$addr)>;
+  def : Pat<(from ADDRzii:$addr), (tozii MEMzii:$addr)>;
+}
+defm : ATMLDm<atomic_load_8, LD1BZXrri, LD1BZXrii, LD1BZXzri, LD1BZXzii>;
+defm : ATMLDm<atomic_load_16, LD2BZXrri, LD2BZXrii, LD2BZXzri, LD2BZXzii>;
+defm : ATMLDm<atomic_load_32, LDLZXrri, LDLZXrii, LDLZXzri, LDLZXzii>;
+defm : ATMLDm<atomic_load_64, LDrri, LDrii, LDzri, LDzii>;
 
 // Atomic stores
-def : Pat<(atomic_store_8  ADDRrri:$ptr, i32:$val),
-          (ST1Brri MEMrri:$ptr, $val)>;
-def : Pat<(atomic_store_8  ADDRrii:$ptr, i32:$val),
-          (ST1Brii MEMrii:$ptr, $val)>;
-def : Pat<(atomic_store_16 ADDRrri:$ptr, i32:$val),
-          (ST2Brri MEMrri:$ptr, $val)>;
-def : Pat<(atomic_store_16 ADDRrii:$ptr, i32:$val),
-          (ST2Brii MEMrii:$ptr, $val)>;
-def : Pat<(atomic_store_32 ADDRrri:$ptr, i32:$val),
-          (STLrri  MEMrri:$ptr, $val)>;
-def : Pat<(atomic_store_32 ADDRrii:$ptr, i32:$val),
-          (STLrii  MEMrii:$ptr, $val)>;
-def : Pat<(atomic_store_64 ADDRrri:$ptr, i64:$val),
-          (STrri  MEMrri:$ptr, $val)>;
-def : Pat<(atomic_store_64 ADDRrii:$ptr, i64:$val),
-          (STrii  MEMrii:$ptr, $val)>;
+multiclass ATMSTm<SDPatternOperator from,
+                  ValueType ty,
+                  SDPatternOperator torri,
+                  SDPatternOperator torii,
+                  SDPatternOperator tozri,
+                  SDPatternOperator tozii> {
+  def : Pat<(from ADDRrri:$addr, ty:$src), (torri MEMrri:$addr, $src)>;
+  def : Pat<(from ADDRrii:$addr, ty:$src), (torii MEMrii:$addr, $src)>;
+  def : Pat<(from ADDRzri:$addr, ty:$src), (tozri MEMzri:$addr, $src)>;
+  def : Pat<(from ADDRzii:$addr, ty:$src), (tozii MEMzii:$addr, $src)>;
+}
+defm : ATMSTm<atomic_store_8, i32, ST1Brri, ST1Brii, ST1Bzri, ST1Bzii>;
+defm : ATMSTm<atomic_store_16, i32, ST2Brri, ST2Brii, ST2Bzri, ST2Bzii>;
+defm : ATMSTm<atomic_store_32, i32, STLrri, STLrii, STLzri, STLzii>;
+defm : ATMSTm<atomic_store_64, i64, STrri, STrii, STzri, STzii>;
 
 // Address calculation and its optimization
 def : Pat<(VEhi tglobaladdr:$in), (LEASLzii 0, 0, tglobaladdr:$in)>;
