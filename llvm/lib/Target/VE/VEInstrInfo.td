@@ -1158,21 +1158,24 @@ let cz = 0, sz = 0 in {
 // Load and Store instructions
 
 // Multiclass for load instructions.
+let mayLoad = 1, hasSideEffects = 0 in
 multiclass LOADm<string opcStr, bits<8> opc, RegisterClass RC, ValueType Ty,
                  SDPatternOperator OpNode = null_frag> {
   def rri : RM<opc, (outs RC:$dest), (ins MEMrri:$addr),
                !strconcat(opcStr, " $dest, $addr"),
-               [(set Ty:$dest, (OpNode ADDRrri:$addr))]> {
-    let mayLoad = 1;
-    let hasSideEffects = 0;
-  }
+               [(set Ty:$dest, (OpNode ADDRrri:$addr))]>;
+  let cy = 0 in
   def rii : RM<opc, (outs RC:$dest), (ins MEMrii:$addr),
                !strconcat(opcStr, " $dest, $addr"),
-               [(set Ty:$dest, (OpNode ADDRrii:$addr))]> {
-    let mayLoad = 1;
-    let hasSideEffects = 0;
-    let cy = 0;
-  }
+               [(set Ty:$dest, (OpNode ADDRrii:$addr))]>;
+  let cz = 0 in
+  def zri : RM<opc, (outs RC:$dest), (ins MEMzri:$addr),
+               !strconcat(opcStr, " $dest, $addr"),
+               [(set Ty:$dest, (OpNode ADDRzri:$addr))]>;
+  let cy = 0, cz = 0 in
+  def zii : RM<opc, (outs RC:$dest), (ins MEMzii:$addr),
+               !strconcat(opcStr, " $dest, $addr"),
+               [(set Ty:$dest, (OpNode ADDRzii:$addr))]>;
 }
 
 let DecoderMethod = "DecodeLoadI64" in
@@ -1192,8 +1195,10 @@ defm LD1BSX : LOADm<"ld1b.sx", 0x05, I32, i32, sextloadi8>;
 let cx = 1, DecoderMethod = "DecodeLoadI8" in
 defm LD1BZX : LOADm<"ld1b.zx", 0x05, I32, i32, zextloadi8>;
 
-def : Pat<(f64 (load ADDRrri:$addr)), (LDrri ADDRrri:$addr)>;
-def : Pat<(f64 (load ADDRrii:$addr)), (LDrii ADDRrii:$addr)>;
+def : Pat<(f64 (load ADDRrri:$addr)), (LDrri MEMrri:$addr)>;
+def : Pat<(f64 (load ADDRrii:$addr)), (LDrii MEMrii:$addr)>;
+def : Pat<(f64 (load ADDRzri:$addr)), (LDzri MEMzri:$addr)>;
+def : Pat<(f64 (load ADDRzii:$addr)), (LDzii MEMzii:$addr)>;
 
 let mayLoad = 1, hasSideEffects = 0 in {
 def LDQrri : Pseudo<(outs F128:$dest), (ins MEMrri:$addr),
@@ -1202,24 +1207,33 @@ def LDQrri : Pseudo<(outs F128:$dest), (ins MEMrri:$addr),
 def LDQrii : Pseudo<(outs F128:$dest), (ins MEMrii:$addr),
                     "# pseudo ldq $dest, $addr",
                     [(set f128:$dest, (load ADDRrii:$addr))]>;
+def LDQzri : Pseudo<(outs F128:$dest), (ins MEMzri:$addr),
+                    "# pseudo ldq $dest, $addr",
+                    [(set f128:$dest, (load ADDRzri:$addr))]>;
+def LDQzii : Pseudo<(outs F128:$dest), (ins MEMzii:$addr),
+                    "# pseudo ldq $dest, $addr",
+                    [(set f128:$dest, (load ADDRzii:$addr))]>;
 }
 
 // Multiclass for store instructions.
+let mayStore = 1 in
 multiclass STOREm<string opcStr, bits<8> opc, RegisterClass RC, ValueType Ty,
                   SDPatternOperator OpNode = null_frag> {
   def rri : RM<opc, (outs), (ins MEMrri:$addr, RC:$sx),
                !strconcat(opcStr, " $sx, $addr"),
-               [(OpNode Ty:$sx, ADDRrri:$addr)]> {
-    let mayStore = 1;
-    let hasSideEffects = 0;
-  }
+               [(OpNode Ty:$sx, ADDRrri:$addr)]>;
+  let cy = 0 in
   def rii : RM<opc, (outs), (ins MEMrii:$addr, RC:$sx),
                !strconcat(opcStr, " $sx, $addr"),
-               [(OpNode Ty:$sx, ADDRrii:$addr)]> {
-    let mayStore = 1;
-    let hasSideEffects = 0;
-    let cy = 0;
-  }
+               [(OpNode Ty:$sx, ADDRrii:$addr)]>;
+  let cz = 0 in
+  def zri : RM<opc, (outs), (ins MEMzri:$addr, RC:$sx),
+               !strconcat(opcStr, " $sx, $addr"),
+               [(OpNode Ty:$sx, ADDRzri:$addr)]>;
+  let cy = 0, cz = 0 in
+  def zii : RM<opc, (outs), (ins MEMzii:$addr, RC:$sx),
+               !strconcat(opcStr, " $sx, $addr"),
+               [(OpNode Ty:$sx, ADDRzii:$addr)]>;
 }
 
 let DecoderMethod = "DecodeStoreI64" in
@@ -1233,8 +1247,10 @@ defm ST2B : STOREm<"st2b", 0x14, I32, i32, truncstorei16>;
 let DecoderMethod = "DecodeStoreI8" in
 defm ST1B : STOREm<"st1b", 0x15, I32, i32, truncstorei8>;
 
-def : Pat<(store f64:$src, ADDRrri:$addr), (STrri ADDRrri:$addr, $src)>;
-def : Pat<(store f64:$src, ADDRrii:$addr), (STrii ADDRrii:$addr, $src)>;
+def : Pat<(store f64:$src, ADDRrri:$addr), (STrri MEMrri:$addr, $src)>;
+def : Pat<(store f64:$src, ADDRrii:$addr), (STrii MEMrii:$addr, $src)>;
+def : Pat<(store f64:$src, ADDRzri:$addr), (STzri MEMzri:$addr, $src)>;
+def : Pat<(store f64:$src, ADDRzii:$addr), (STzii MEMzii:$addr, $src)>;
 
 let mayStore = 1, hasSideEffects = 0 in {
 def STQrri : Pseudo<(outs), (ins MEMrri:$addr, F128:$sx),
@@ -1243,6 +1259,12 @@ def STQrri : Pseudo<(outs), (ins MEMrri:$addr, F128:$sx),
 def STQrii : Pseudo<(outs), (ins MEMrii:$addr, F128:$sx),
                     "# pseudo stq $sx, $addr",
                     [(store f128:$sx, ADDRrii:$addr)]>;
+def STQzri : Pseudo<(outs), (ins MEMzri:$addr, F128:$sx),
+                    "# pseudo stq $sx, $addr",
+                    [(store f128:$sx, ADDRzri:$addr)]>;
+def STQzii : Pseudo<(outs), (ins MEMzii:$addr, F128:$sx),
+                    "# pseudo stq $sx, $addr",
+                    [(store f128:$sx, ADDRzii:$addr)]>;
 }
 
 // Control-flow
