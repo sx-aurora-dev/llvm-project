@@ -38,7 +38,10 @@ include "VEInstrInfo.td"
 def VEInstrInfo : InstrInfo;
 
 def VEAsmParser : AsmParser {
-  bit ShouldEmitMatchRegisterName = 0;
+  // Use both VE register name matcher to accept "S0~S63" register names
+  // and default register matcher to accept other registeres.
+  let AllowDuplicateRegisterNames = 1;
+  let ShouldEmitMatchRegisterAltName = 1;
 }
 
 //===----------------------------------------------------------------------===//

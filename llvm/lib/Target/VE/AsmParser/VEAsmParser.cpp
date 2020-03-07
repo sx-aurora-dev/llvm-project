@@ -68,6 +68,7 @@ class VEAsmParser : public MCTargetAsmParser {
                                uint64_t &ErrorInfo,
                                bool MatchingInlineAsm) override;
   bool ParseRegister(unsigned &RegNo, SMLoc &StartLoc, SMLoc &EndLoc) override;
+  int parseRegisterName(unsigned (*matchFn)(StringRef));
   OperandMatchResultTy tryParseRegister(unsigned &RegNo, SMLoc &StartLoc,
                                         SMLoc &EndLoc) override;
   bool ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
@@ -88,10 +89,6 @@ class VEAsmParser : public MCTargetAsmParser {
   const VEMCExpr *adjustPICRelocation(VEMCExpr::VariantKind VK,
                                          const MCExpr *subExpr);
 
-  // returns true if Tok is matched to a register and returns register in RegNo.
-  bool matchRegisterName(const AsmToken &Tok, unsigned &RegNo,
-                         unsigned &RegKind);
-
   bool matchVEAsmModifiers(const MCExpr *&EVal, SMLoc &EndLoc);
   bool parseDirectiveWord(unsigned Size, SMLoc L);
 
@@ -111,7 +108,7 @@ public:
 
 } // end anonymous namespace
 
-  static const MCPhysReg IntRegs[64] = {
+  static const MCPhysReg I64Regs[64] = {
     VE::SX0,  VE::SX1,  VE::SX2,  VE::SX3,
     VE::SX4,  VE::SX5,  VE::SX6,  VE::SX7,
     VE::SX8,  VE::SX9,  VE::SX10, VE::SX11,
@@ -129,84 +126,57 @@ public:
     VE::SX56, VE::SX57, VE::SX58, VE::SX59,
     VE::SX60, VE::SX61, VE::SX62, VE::SX63 };
 
-#if 0
-  static const MCPhysReg FloatRegs[32] = {
-    Sparc::F0,  Sparc::F1,  Sparc::F2,  Sparc::F3,
-    Sparc::F4,  Sparc::F5,  Sparc::F6,  Sparc::F7,
-    Sparc::F8,  Sparc::F9,  Sparc::F10, Sparc::F11,
-    Sparc::F12, Sparc::F13, Sparc::F14, Sparc::F15,
-    Sparc::F16, Sparc::F17, Sparc::F18, Sparc::F19,
-    Sparc::F20, Sparc::F21, Sparc::F22, Sparc::F23,
-    Sparc::F24, Sparc::F25, Sparc::F26, Sparc::F27,
-    Sparc::F28, Sparc::F29, Sparc::F30, Sparc::F31 };
+  static const MCPhysReg I32Regs[64] = {
+    VE::SW0,  VE::SW1,  VE::SW2,  VE::SW3,
+    VE::SW4,  VE::SW5,  VE::SW6,  VE::SW7,
+    VE::SW8,  VE::SW9,  VE::SW10, VE::SW11,
+    VE::SW12, VE::SW13, VE::SW14, VE::SW15,
+    VE::SW16, VE::SW17, VE::SW18, VE::SW19,
+    VE::SW20, VE::SW21, VE::SW22, VE::SW23,
+    VE::SW24, VE::SW25, VE::SW26, VE::SW27,
+    VE::SW28, VE::SW29, VE::SW30, VE::SW31,
+    VE::SW32, VE::SW33, VE::SW34, VE::SW35,
+    VE::SW36, VE::SW37, VE::SW38, VE::SW39,
+    VE::SW40, VE::SW41, VE::SW42, VE::SW43,
+    VE::SW44, VE::SW45, VE::SW46, VE::SW47,
+    VE::SW48, VE::SW49, VE::SW50, VE::SW51,
+    VE::SW52, VE::SW53, VE::SW54, VE::SW55,
+    VE::SW56, VE::SW57, VE::SW58, VE::SW59,
+    VE::SW60, VE::SW61, VE::SW62, VE::SW63 };
 
-  static const MCPhysReg DoubleRegs[32] = {
-    Sparc::D0,  Sparc::D1,  Sparc::D2,  Sparc::D3,
-    Sparc::D4,  Sparc::D5,  Sparc::D6,  Sparc::D7,
-    Sparc::D8,  Sparc::D9,  Sparc::D10, Sparc::D11,
-    Sparc::D12, Sparc::D13, Sparc::D14, Sparc::D15,
-    Sparc::D16, Sparc::D17, Sparc::D18, Sparc::D19,
-    Sparc::D20, Sparc::D21, Sparc::D22, Sparc::D23,
-    Sparc::D24, Sparc::D25, Sparc::D26, Sparc::D27,
-    Sparc::D28, Sparc::D29, Sparc::D30, Sparc::D31 };
+  static const MCPhysReg F32Regs[64] = {
+    VE::SF0,  VE::SF1,  VE::SF2,  VE::SF3,
+    VE::SF4,  VE::SF5,  VE::SF6,  VE::SF7,
+    VE::SF8,  VE::SF9,  VE::SF10, VE::SF11,
+    VE::SF12, VE::SF13, VE::SF14, VE::SF15,
+    VE::SF16, VE::SF17, VE::SF18, VE::SF19,
+    VE::SF20, VE::SF21, VE::SF22, VE::SF23,
+    VE::SF24, VE::SF25, VE::SF26, VE::SF27,
+    VE::SF28, VE::SF29, VE::SF30, VE::SF31,
+    VE::SF32, VE::SF33, VE::SF34, VE::SF35,
+    VE::SF36, VE::SF37, VE::SF38, VE::SF39,
+    VE::SF40, VE::SF41, VE::SF42, VE::SF43,
+    VE::SF44, VE::SF45, VE::SF46, VE::SF47,
+    VE::SF48, VE::SF49, VE::SF50, VE::SF51,
+    VE::SF52, VE::SF53, VE::SF54, VE::SF55,
+    VE::SF56, VE::SF57, VE::SF58, VE::SF59,
+    VE::SF60, VE::SF61, VE::SF62, VE::SF63 };
 
-  static const MCPhysReg QuadFPRegs[32] = {
-    Sparc::Q0,  Sparc::Q1,  Sparc::Q2,  Sparc::Q3,
-    Sparc::Q4,  Sparc::Q5,  Sparc::Q6,  Sparc::Q7,
-    Sparc::Q8,  Sparc::Q9,  Sparc::Q10, Sparc::Q11,
-    Sparc::Q12, Sparc::Q13, Sparc::Q14, Sparc::Q15 };
+  static const MCPhysReg F128Regs[32] = {
+    VE::Q0,  VE::Q1,  VE::Q2,  VE::Q3,
+    VE::Q4,  VE::Q5,  VE::Q6,  VE::Q7,
+    VE::Q8,  VE::Q9,  VE::Q10, VE::Q11,
+    VE::Q12, VE::Q13, VE::Q14, VE::Q15,
+    VE::Q16, VE::Q17, VE::Q18, VE::Q19,
+    VE::Q20, VE::Q21, VE::Q22, VE::Q23,
+    VE::Q24, VE::Q25, VE::Q26, VE::Q27,
+    VE::Q28, VE::Q29, VE::Q30, VE::Q31 };
 
-  static const MCPhysReg ASRRegs[32] = {
-    SP::Y,     SP::ASR1,  SP::ASR2,  SP::ASR3,
-    SP::ASR4,  SP::ASR5,  SP::ASR6, SP::ASR7,
-    SP::ASR8,  SP::ASR9,  SP::ASR10, SP::ASR11,
-    SP::ASR12, SP::ASR13, SP::ASR14, SP::ASR15,
-    SP::ASR16, SP::ASR17, SP::ASR18, SP::ASR19,
-    SP::ASR20, SP::ASR21, SP::ASR22, SP::ASR23,
-    SP::ASR24, SP::ASR25, SP::ASR26, SP::ASR27,
-    SP::ASR28, SP::ASR29, SP::ASR30, SP::ASR31};
-
-  static const MCPhysReg IntPairRegs[] = {
-    Sparc::G0_G1, Sparc::G2_G3, Sparc::G4_G5, Sparc::G6_G7,
-    Sparc::O0_O1, Sparc::O2_O3, Sparc::O4_O5, Sparc::O6_O7,
-    Sparc::L0_L1, Sparc::L2_L3, Sparc::L4_L5, Sparc::L6_L7,
-    Sparc::I0_I1, Sparc::I2_I3, Sparc::I4_I5, Sparc::I6_I7};
-
-  static const MCPhysReg CoprocRegs[32] = {
-    Sparc::C0,  Sparc::C1,  Sparc::C2,  Sparc::C3,
-    Sparc::C4,  Sparc::C5,  Sparc::C6,  Sparc::C7,
-    Sparc::C8,  Sparc::C9,  Sparc::C10, Sparc::C11,
-    Sparc::C12, Sparc::C13, Sparc::C14, Sparc::C15,
-    Sparc::C16, Sparc::C17, Sparc::C18, Sparc::C19,
-    Sparc::C20, Sparc::C21, Sparc::C22, Sparc::C23,
-    Sparc::C24, Sparc::C25, Sparc::C26, Sparc::C27,
-    Sparc::C28, Sparc::C29, Sparc::C30, Sparc::C31 };
-
-  static const MCPhysReg CoprocPairRegs[] = {
-    Sparc::C0_C1,   Sparc::C2_C3,   Sparc::C4_C5,   Sparc::C6_C7,
-    Sparc::C8_C9,   Sparc::C10_C11, Sparc::C12_C13, Sparc::C14_C15,
-    Sparc::C16_C17, Sparc::C18_C19, Sparc::C20_C21, Sparc::C22_C23,
-    Sparc::C24_C25, Sparc::C26_C27, Sparc::C28_C29, Sparc::C30_C31};
-#endif
-  
 namespace {
 
 /// VEOperand - Instances of this class represent a parsed VE machine
 /// instruction.
 class VEOperand : public MCParsedAsmOperand {
-public:
-  enum RegisterKind {
-    rk_None,
-    rk_IntReg,
-    rk_IntPairReg,
-    rk_FloatReg,
-    rk_DoubleReg,
-    rk_QuadReg,
-    rk_CoprocReg,
-    rk_CoprocPairReg,
-    rk_Special,
-  };
-
 private:
   enum KindTy {
     k_Token,
@@ -231,7 +201,6 @@ private:
 
   struct RegOp {
     unsigned RegNum;
-    RegisterKind Kind;
   };
 
   struct ImmOp {
@@ -267,23 +236,6 @@ public:
   bool isMEMzii() const { return Kind == k_MemoryZeroImmImm; }
   bool isMEMri() const { return Kind == k_MemoryRegImm; }
   bool isMEMzi() const { return Kind == k_MemoryZeroImm; }
-
-  bool isIntReg() const {
-    return (Kind == k_Register && Reg.Kind == rk_IntReg);
-  }
-
-  bool isFloatReg() const {
-    return (Kind == k_Register && Reg.Kind == rk_FloatReg);
-  }
-
-  bool isFloatOrDoubleReg() const {
-    return (Kind == k_Register && (Reg.Kind == rk_FloatReg
-                                   || Reg.Kind == rk_DoubleReg));
-  }
-
-  bool isCoprocReg() const {
-    return (Kind == k_Register && Reg.Kind == rk_CoprocReg);
-  }
 
   StringRef getToken() const {
     assert(Kind == k_Token && "Invalid access!");
@@ -451,18 +403,17 @@ public:
     return Op;
   }
 
-  static std::unique_ptr<VEOperand> CreateReg(unsigned RegNum, unsigned Kind,
-                                                 SMLoc S, SMLoc E) {
+  static std::unique_ptr<VEOperand> CreateReg(unsigned RegNum, SMLoc S,
+                                              SMLoc E) {
     auto Op = std::make_unique<VEOperand>(k_Register);
     Op->Reg.RegNum = RegNum;
-    Op->Reg.Kind   = (VEOperand::RegisterKind)Kind;
     Op->StartLoc = S;
     Op->EndLoc = E;
     return Op;
   }
 
   static std::unique_ptr<VEOperand> CreateImm(const MCExpr *Val, SMLoc S,
-                                                 SMLoc E) {
+                                              SMLoc E) {
     auto Op = std::make_unique<VEOperand>(k_Immediate);
     Op->Imm.Val = Val;
     Op->StartLoc = S;
@@ -470,86 +421,29 @@ public:
     return Op;
   }
 
-#if 0
-  static bool MorphToIntPairReg(VEOperand &Op) {
+  static bool MorphToI32Reg(VEOperand &Op) {
     unsigned Reg = Op.getReg();
-    assert(Op.Reg.Kind == rk_IntReg);
-    unsigned regIdx = 32;
-    if (Reg >= Sparc::G0 && Reg <= Sparc::G7)
-      regIdx = Reg - Sparc::G0;
-    else if (Reg >= Sparc::O0 && Reg <= Sparc::O7)
-      regIdx = Reg - Sparc::O0 + 8;
-    else if (Reg >= Sparc::L0 && Reg <= Sparc::L7)
-      regIdx = Reg - Sparc::L0 + 16;
-    else if (Reg >= Sparc::I0 && Reg <= Sparc::I7)
-      regIdx = Reg - Sparc::I0 + 24;
-    if (regIdx % 2 || regIdx > 31)
-      return false;
-    Op.Reg.RegNum = IntPairRegs[regIdx / 2];
-    Op.Reg.Kind = rk_IntPairReg;
+    unsigned regIdx = Reg - VE::SX0;
+    Op.Reg.RegNum = I32Regs[regIdx];
     return true;
   }
 
-  static bool MorphToDoubleReg(VEOperand &Op) {
+  static bool MorphToF32Reg(VEOperand &Op) {
     unsigned Reg = Op.getReg();
-    assert(Op.Reg.Kind == rk_FloatReg);
-    unsigned regIdx = Reg - Sparc::F0;
-    if (regIdx % 2 || regIdx > 31)
-      return false;
-    Op.Reg.RegNum = DoubleRegs[regIdx / 2];
-    Op.Reg.Kind = rk_DoubleReg;
+    unsigned regIdx = Reg - VE::SX0;
+    Op.Reg.RegNum = F32Regs[regIdx];
     return true;
   }
 
-  static bool MorphToQuadReg(VEOperand &Op) {
+  static bool MorphToF128Reg(VEOperand &Op) {
     unsigned Reg = Op.getReg();
-    unsigned regIdx = 0;
-    switch (Op.Reg.Kind) {
-    default: llvm_unreachable("Unexpected register kind!");
-    case rk_FloatReg:
-      regIdx = Reg - Sparc::F0;
-      if (regIdx % 4 || regIdx > 31)
-        return false;
-      Reg = QuadFPRegs[regIdx / 4];
-      break;
-    case rk_DoubleReg:
-      regIdx =  Reg - Sparc::D0;
-      if (regIdx % 2 || regIdx > 31)
-        return false;
-      Reg = QuadFPRegs[regIdx / 2];
-      break;
-    }
-    Op.Reg.RegNum = Reg;
-    Op.Reg.Kind = rk_QuadReg;
+    unsigned regIdx = Reg - VE::SX0;
+    if (regIdx % 2 || regIdx > 31)
+      return false;
+    Op.Reg.RegNum = F128Regs[regIdx / 2];
     return true;
   }
 
-  static bool MorphToCoprocPairReg(VEOperand &Op) {
-    unsigned Reg = Op.getReg();
-    assert(Op.Reg.Kind == rk_CoprocReg);
-    unsigned regIdx = 32;
-    if (Reg >= Sparc::C0 && Reg <= Sparc::C31)
-      regIdx = Reg - Sparc::C0;
-    if (regIdx % 2 || regIdx > 31)
-      return false;
-    Op.Reg.RegNum = CoprocPairRegs[regIdx / 2];
-    Op.Reg.Kind = rk_CoprocPairReg;
-    return true;
-  }
-#endif
-  
-#if 0
-  static std::unique_ptr<VEOperand>
-  CreateMEMr(unsigned Base, SMLoc S, SMLoc E) {
-    auto Op = std::make_unique<VEOperand>(k_MemoryReg);
-    Op->Mem.Base = Base;
-    Op->Mem.OffsetReg = 0;  // always 0
-    Op->Mem.Offset = nullptr;
-    Op->StartLoc = S;
-    Op->EndLoc = E;
-    return Op;
-  }
-#endif
   static std::unique_ptr<VEOperand>
   MorphToMEMri(unsigned Base, std::unique_ptr<VEOperand> Op) {
     const MCExpr *Imm  = Op->getImm();
@@ -664,6 +558,35 @@ bool VEAsmParser::ParseRegister(unsigned &RegNo, SMLoc &StartLoc,
   return false;
 }
 
+/// Parses a register name using a given matching function.
+/// Checks for lowercase or uppercase if necessary.
+int VEAsmParser::parseRegisterName(unsigned (*matchFn)(StringRef)) {
+  StringRef Name = Parser.getTok().getString();
+
+  int RegNum = matchFn(Name);
+
+  // GCC supports case insensitive register names. Some of the AVR registers
+  // are all lower case, some are all upper case but non are mixed. We prefer
+  // to use the original names in the register definitions. That is why we
+  // have to test both upper and lower case here.
+  if (RegNum == VE::NoRegister) {
+    RegNum = matchFn(Name.lower());
+  }
+  if (RegNum == VE::NoRegister) {
+    RegNum = matchFn(Name.upper());
+  }
+
+  return RegNum;
+}
+
+/// Maps from the set of all register names to a register number.
+/// \note Generated by TableGen.
+static unsigned MatchRegisterName(StringRef Name);
+
+/// Maps from the set of all alternative registernames to a register number.
+/// \note Generated by TableGen.
+static unsigned MatchRegisterAltName(StringRef Name);
+
 OperandMatchResultTy VEAsmParser::tryParseRegister(unsigned &RegNo,
                                                    SMLoc &StartLoc,
                                                    SMLoc &EndLoc) {
@@ -674,8 +597,12 @@ OperandMatchResultTy VEAsmParser::tryParseRegister(unsigned &RegNo,
   if (getLexer().getKind() != AsmToken::Percent)
     return MatchOperand_Success;
   Parser.Lex();
-  unsigned regKind = VEOperand::rk_None;
-  if (matchRegisterName(Tok, RegNo, regKind)) {
+
+  RegNo = parseRegisterName(&MatchRegisterName);
+  if (RegNo == VE::NoRegister)
+      RegNo = parseRegisterName(&MatchRegisterAltName);
+
+  if (RegNo != VE::NoRegister) {
     Parser.Lex();
     return MatchOperand_Success;
   }
@@ -930,54 +857,13 @@ VEAsmParser::parseVEAsmOperand(std::unique_ptr<VEOperand> &Op) {
   default:
     break;
 
-  case AsmToken::LCurly:
-    break;
   case AsmToken::Percent:
-    Parser.Lex(); // Eat the '%'.
     unsigned RegNo;
-    unsigned RegKind;
-    if (matchRegisterName(Parser.getTok(), RegNo, RegKind)) {
-#if 0
-      StringRef name = Parser.getTok().getString();
-#endif
-      Parser.Lex(); // Eat the identifier token.
-      E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
-      switch (RegNo) {
-      default:
-        Op = VEOperand::CreateReg(RegNo, RegKind, S, E);
-        break;
-#if 0
-      case Sparc::PSR:
-        Op = VEOperand::CreateToken("%psr", S);
-        break;
-      case Sparc::FSR:
-        Op = VEOperand::CreateToken("%fsr", S);
-        break;
-      case Sparc::FQ:
-        Op = VEOperand::CreateToken("%fq", S);
-        break;
-      case Sparc::CPSR:
-        Op = VEOperand::CreateToken("%csr", S);
-        break;
-      case Sparc::CPQ:
-        Op = VEOperand::CreateToken("%cq", S);
-        break;
-      case Sparc::WIM:
-        Op = VEOperand::CreateToken("%wim", S);
-        break;
-      case Sparc::TBR:
-        Op = VEOperand::CreateToken("%tbr", S);
-        break;
-      case Sparc::ICC:
-        if (name == "xcc")
-          Op = VEOperand::CreateToken("%xcc", S);
-        else
-          Op = VEOperand::CreateToken("%icc", S);
-        break;
-#endif
-      }
-      break;
-    }
+    if (tryParseRegister(RegNo, S, E) == MatchOperand_Success)
+      Op = VEOperand::CreateReg(RegNo, S, E);
+    break;
+
+  case AsmToken::At:
     if (matchVEAsmModifiers(EVal, E)) {
       E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
       Op = VEOperand::CreateImm(EVal, S, E);
@@ -1005,63 +891,6 @@ VEAsmParser::parseVEAsmOperand(std::unique_ptr<VEOperand> &Op) {
   }
   }
   return (Op) ? MatchOperand_Success : MatchOperand_ParseFail;
-}
-
-bool VEAsmParser::matchRegisterName(const AsmToken &Tok, unsigned &RegNo,
-                                       unsigned &RegKind) {
-  int64_t intVal = 0;
-  RegNo = 0;
-  RegKind = VEOperand::rk_None;
-  if (Tok.is(AsmToken::Identifier)) {
-    StringRef name = Tok.getString();
-
-    // %fp
-    if (name.equals("fp")) {
-      RegNo = VE::SX9;
-      RegKind = VEOperand::rk_IntReg;
-      return true;
-    }
-    // %sp
-    if (name.equals("sp")) {
-      RegNo = VE::SX11;
-      RegKind = VEOperand::rk_IntReg;
-      return true;
-    }
-
-#if 0
-    // %f0 - %f31
-    if (name.substr(0, 1).equals_lower("f")
-        && !name.substr(1, 2).getAsInteger(10, intVal) && intVal < 32) {
-      RegNo = FloatRegs[intVal];
-      RegKind = VEOperand::rk_FloatReg;
-      return true;
-    }
-    // %f32 - %f62
-    if (name.substr(0, 1).equals_lower("f")
-        && !name.substr(1, 2).getAsInteger(10, intVal)
-        && intVal >= 32 && intVal <= 62 && (intVal % 2 == 0)) {
-      // FIXME: Check V9
-      RegNo = DoubleRegs[intVal/2];
-      RegKind = VEOperand::rk_DoubleReg;
-      return true;
-    }
-#endif
-
-    // %s0 - %s63
-    if (name.substr(0, 1).equals_lower("s")
-        && !name.substr(1).getAsInteger(10, intVal) && intVal < 64) {
-      RegNo = IntRegs[intVal];
-      RegKind = VEOperand::rk_IntReg;
-      return true;
-    }
-
-    if (name.equals("usrcc")) {
-      RegNo = VE::UCC;
-      RegKind = VEOperand::rk_Special;
-      return true;
-    }
-  }
-  return false;
 }
 
 // Determine if an expression contains a reference to the symbol
@@ -1153,32 +982,27 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeVEAsmParser() {
 #include "VEGenAsmMatcher.inc"
 
 unsigned VEAsmParser::validateTargetOperandClass(MCParsedAsmOperand &GOp,
-                                                    unsigned Kind) {
+                                                 unsigned Kind) {
   VEOperand &Op = (VEOperand &)GOp;
-  if (Op.isFloatOrDoubleReg()) {
-    switch (Kind) {
-    default: break;
-#if 0
-    case MCK_DFPRegs:
-      if (!Op.isFloatReg() || VEOperand::MorphToDoubleReg(Op))
-        return MCTargetAsmParser::Match_Success;
-      break;
-    case MCK_QFPRegs:
-      if (VEOperand::MorphToQuadReg(Op))
-        return MCTargetAsmParser::Match_Success;
-      break;
-#endif
-    }
-  }
-#if 0
-  if (Op.isIntReg() && Kind == MCK_IntPair) {
-    if (VEOperand::MorphToIntPairReg(Op))
+
+  // VE uses identical register name for all registers like both
+  // F32 and I32 uses "%s23".  Need to convert the name of them
+  // for validation.
+  switch (Kind) {
+  default:
+    break;
+  case MCK_F128:
+    if (VEOperand::MorphToF128Reg(Op))
       return MCTargetAsmParser::Match_Success;
+    break;
+  case MCK_F32:
+    if (VEOperand::MorphToF32Reg(Op))
+      return MCTargetAsmParser::Match_Success;
+    break;
+  case MCK_I32:
+    if (VEOperand::MorphToI32Reg(Op))
+      return MCTargetAsmParser::Match_Success;
+    break;
   }
-  if (Op.isCoprocReg() && Kind == MCK_CoprocPair) {
-     if (VEOperand::MorphToCoprocPairReg(Op))
-       return MCTargetAsmParser::Match_Success;
-   }
-#endif
   return Match_InvalidOperand;
 }
