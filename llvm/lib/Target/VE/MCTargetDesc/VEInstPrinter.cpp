@@ -36,7 +36,7 @@ using namespace VE;
 #include "VEGenAsmWriter.inc"
 
 void VEInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
-  OS << '%' << StringRef(getRegisterName(RegNo)).lower();
+  OS << '%' << StringRef(getRegisterName(RegNo, VE::AsmName)).lower();
 }
 
 void VEInstPrinter::printInst(const MCInst *MI, uint64_t Address,
