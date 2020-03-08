@@ -220,6 +220,10 @@ static DecodeStatus DecodeF128RegisterClass(MCInst &Inst,
   return MCDisassembler::Success;
 }
 
+static DecodeStatus DecodeASX(MCInst &Inst, uint64_t insn, uint64_t Address,
+                              const void *Decoder);
+static DecodeStatus DecodeAS(MCInst &Inst, uint64_t insn, uint64_t Address,
+                             const void *Decoder);
 static DecodeStatus DecodeLoadI8(MCInst &Inst, uint64_t insn, uint64_t Address,
                                  const void *Decoder);
 static DecodeStatus DecodeStoreI8(MCInst &Inst, uint64_t insn,

@@ -1022,6 +1022,23 @@ defm DLDLSX : LOADm<"dldl.sx", 0x0b, I32, i32, load>;
 let cx = 1, DecoderMethod = "DecodeLoadI32" in
 defm DLDLZX : LOADm<"dldl.zx", 0x0b, I32, i32, load>;
 
+// Section 8.2.15 - PFCH
+let sx = 0 in
+multiclass PFCHm<string opcStr, bits<8>opc> {
+  def rri : RM<opc, (outs), (ins MEMrri:$addr), !strconcat(opcStr, " $addr"),
+               [(prefetch ADDRrri:$addr, imm, imm, (i32 1))]>;
+  let cy = 0 in
+  def rii : RM<opc, (outs), (ins MEMrii:$addr), !strconcat(opcStr, " $addr"),
+               [(prefetch ADDRrii:$addr, imm, imm, (i32 1))]>;
+  let cz = 0 in
+  def zri : RM<opc, (outs), (ins MEMzri:$addr), !strconcat(opcStr, " $addr"),
+               [(prefetch ADDRzri:$addr, imm, imm, (i32 1))]>;
+  let cy = 0, cz = 0 in
+  def zii : RM<opc, (outs), (ins MEMzii:$addr), !strconcat(opcStr, " $addr"),
+               [(prefetch ADDRzii:$addr, imm, imm, (i32 1))]>;
+}
+let DecoderMethod = "DecodeASX" in defm PFCH : PFCHm<"pfch", 0x0c>;
+
 // 5.3.2.2. Fixed-Point Arithmetic Operation Instructions
 
 // ADD instruction
