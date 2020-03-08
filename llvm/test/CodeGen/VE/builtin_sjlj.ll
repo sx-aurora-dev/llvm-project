@@ -19,7 +19,7 @@ define i32 @t_setjmp() {
 ; CHECK-NEXT:  # EH_SJlJ_SETUP .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:  lea %s0, 0
-; CHECK-NEXT:  br.l .LBB{{[0-9]+}}_2
+; CHECK-NEXT:  br.l.t .LBB{{[0-9]+}}_2
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3:
 ; CHECK-NEXT:  lea %s0, 1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_2:
@@ -51,7 +51,7 @@ define void @t_longjmp() {
 ; CHECK-NEXT:  ld %s1, 8(, %s0)
 ; CHECK-NEXT:  or %s10, 0, %s0
 ; CHECK-NEXT:  ld %s11, 16(, %s0)
-; CHECK-NEXT:  b.l (, %s1)
+; CHECK-NEXT:  b.l.t (, %s1)
   call void @llvm.eh.sjlj.longjmp(i8* bitcast ([1 x %struct.__jmp_buf_tag]* @buf to i8*))
   unreachable
                                                   ; No predecessors!
