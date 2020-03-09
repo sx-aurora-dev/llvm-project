@@ -1919,8 +1919,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   /// Conversion {
   // VE doesn't have instructions for fp<->uint, so expand them by llvm
-  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Expand);
-  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Expand);
+  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Promote);
+  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Promote);
   setOperationAction(ISD::FP_TO_UINT, MVT::i64, Expand);
   setOperationAction(ISD::UINT_TO_FP, MVT::i64, Expand);
 
