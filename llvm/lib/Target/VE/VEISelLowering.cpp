@@ -446,7 +446,8 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   ///// Widen the actual result type /////
   // FIXME We cannot use the idiomatic type here since that type reflects the
   // operatino vector width (and the element type does not matter as much).
-  EVT ResVecTy = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
+  EVT OldResVT = Op.getValue(0)->getValueType(0);
+  EVT ResVecTy = LegalizeVectorType(OldResVT, Op, DAG, Mode);
 
   SDLoc dl(Op);
   CustomDAG CDAG(DAG, dl);
