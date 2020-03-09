@@ -308,28 +308,9 @@ SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   auto ScaTy = ScaOp->getValueType(0);
   auto VLOp = Op.getOperand(1);
 
-  // v256x broadcast -> insert operand into a full I64 register
+  // v256x broadcast 
   if (!IsPackedType(VT)) {
-    if ((ScaTy == MVT::i64) ||
-        (ScaTy == MVT::f64)) {
-      return Op;
-    }
-
-    LLVM_DEBUG(dbgs() << "Legalize regular broadcast\n");
-    int SubRegIdx;
-    if (ScaTy == MVT::i32) {
-      SubRegIdx = VE::sub_i32;
-    } else if (ScaTy == MVT::f32) {
-      SubRegIdx = VE::sub_f32;
-    } else {
-      abort(); // unexpected operand type for broadcast
-    }
-
-    SDValue ImplicitReg = DAG.getUNDEF(MVT::i64);
-    SDValue CastOp =
-        DAG.getTargetInsertSubreg(SubRegIdx, DL, MVT::i64, ImplicitReg, ScaOp);
-    return DAG.getNode(VEISD::VEC_BROADCAST, DL, VT,
-                       {CastOp, VLOp});
+    return Op;
   }
 
   LLVM_DEBUG(dbgs() << "Legalize packed broadcast\n");

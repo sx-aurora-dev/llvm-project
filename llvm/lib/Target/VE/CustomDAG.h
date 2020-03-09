@@ -126,11 +126,13 @@ struct CustomDAG {
   SDValue createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV, SDValue Mask,
                     SDValue Avl) const;
 
+  /// Packed Mode Support {
   SDValue CreateUnpack(EVT DestVT, SDValue Vec, SubElem E);
 
   SDValue CreatePack(EVT DestVT, SDValue LowV, SDValue HighV);
 
   SDValue CreateSwap(EVT DestVT, SDValue V);
+  /// } Packed Mode Support
 
   SDValue CreateBroadcast(EVT ResTy, SDValue S,
                           Optional<SDValue> OpVectorLength = None) const;
