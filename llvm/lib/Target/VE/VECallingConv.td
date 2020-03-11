@@ -75,10 +75,8 @@ def CC_VE : CallingConv<[
            CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
                                    [SX0, SX1, SX3, SX5]>>,
 
-  CCIfCC<"CallingConv::X86_RegCall", CCDelegateTo<CC_VE_RegCall>>,
-
-  // Alternatively, they are assigned to the stack in 8-byte aligned units.
-  CCDelegateTo<CC_VE_C_Stack>
+  // Unconditionally use the reg-call convention
+  CCDelegateTo<CC_VE_RegCall>
 ]>;
 
 // All arguments get passed in stack for varargs function or non-prototyped
@@ -143,7 +141,8 @@ def RetCC_VE : CallingConv<[
            CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
                                    [SX0, SX1, SX3, SX5]>>,
 
-  CCIfCC<"CallingConv::X86_RegCall", CCDelegateTo<RetCC_VE_RegCall>>
+  // Always use regcall
+  CCDelegateTo<RetCC_VE_RegCall>
 ]>;
 
 // Callee-saved registers
