@@ -3977,6 +3977,7 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
   if (!N->getValueType(0).isVector() && shouldExpandToVVP(*N)) {
     SDValue FixedOp = ExpandToVVP(SDValue(N, 0), DAG, VVPExpansionMode::ToNativeWidth);
     N = FixedOp.getNode();
+    assert(N && "VVP expansion did not create a new node!");
   }
 
   // Legalize the operands of this VVP op
@@ -3992,6 +3993,10 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
     if (OpDestVecTy != Op.getValueType()) {
       FixedOp = WidenedOpCB(Op);
     }
+
+    // keep this operation (this may occur when ExpansionToVVP has happened
+    // before)
+    if (!FixedOp) FixedOp = Op;
 
     assert(FixedOp && "illegal operand");
     FixedOperands.push_back(FixedOp);
