@@ -2143,16 +2143,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // setOperationAction(ISD::TRUNCATE, MVT::v256i32, Custom); // should not generate invalid valid SETCC in the first place
   setOperationAction(ISD::VSELECT, MVT::v256i1, Custom);
 
-  // VE has no packed MUL, SDIV, or UDIV operations.
-#if 0
-  for (MVT VT : {MVT::v512i32, MVT::v512f32}) {
-    // TODO use VVPNodes.inc here
-    setOperationAction(ISD::MUL, VT, Expand);
-    setOperationAction(ISD::SDIV, VT, Expand);
-    setOperationAction(ISD::UDIV, VT, Expand);
-  }
-#endif
-
   // VE has no REM or DIVREM operations.
   for (MVT VT : MVT::vector_valuetypes()) {
     setOperationAction(ISD::UREM, VT, Expand);
@@ -3964,6 +3954,7 @@ bool VETargetLowering::isOffsetFoldingLegal(
 }
 
 // Legal result type - but illegal operand type
+// FIXME Use this to ExpandTOVVP vector operation that do not yield a vector result
 void VETargetLowering::LowerOperationWrapper(SDNode *N,
                                              SmallVectorImpl<SDValue> &Results,
                                              SelectionDAG &DAG,
@@ -3976,9 +3967,16 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
   assert(NumResults <= 2);
   int ValIdx = NumResults - 1;
 
-  // Defer to LLVM for standard op widening
-  if (!IsVVP(N->getOpcode())) {
+  // Vector-typed non-VVP op -> expand using LLVM (fallback)
+  if (N->getValueType(0).isVector()
+      && !IsVVP(N->getOpcode())) {
     return;
+  }
+
+  // void/non-vector that needs lowering? -> expand to VVP
+  if (!N->getValueType(0).isVector() && shouldExpandToVVP(*N)) {
+    SDValue FixedOp = ExpandToVVP(SDValue(N, 0), DAG, VVPExpansionMode::ToNativeWidth);
+    N = FixedOp.getNode();
   }
 
   // Legalize the operands of this VVP op

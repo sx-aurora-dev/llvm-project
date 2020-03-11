@@ -57,10 +57,13 @@ multiclass VectorLoad<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, int i
               $avl)>;
 }
 
-multiclass VectorLoad_Packed<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, int immStride, SDNode LDNoMask> {
+multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, int immStride, SDNode LDNoMask, SDNode STNoMask> {
   // w/o mask
   def : Pat<(DataVT (vvp_load PtrVt:$addr, (MaskVT true_mask), i32:$avl)),
                     (LDNoMask immStride, $addr, $avl)>;
+  // FIXME
+  // def : Pat<(vvp_store PtrVt:$addr, DataVT:$vx, (MaskVT true_mask), i32:$avl),
+  //           (STNoMask $vx, immStride, $addr, $avl)>;
 }
 
 
@@ -70,8 +73,8 @@ defm : VectorLoad<v256i64, i64, v256i1, 8, vgt_vvssml, vld_vIsl>;
 defm : VectorLoad<v256f32, i64, v256i1, 4, vgtu_vvssml, vldu_vIsl>;
 defm : VectorLoad<v256i32, i64, v256i1, 4, vgtlzx_vvssml, vldlzx_vIsl>;
 // packed load patterns
-defm : VectorLoad_Packed<v512i32, i64, v512i1, 8, vld_vIsl>;
-defm : VectorLoad_Packed<v512f32, i64, v512i1, 8, vld_vIsl>;
+defm : VectorLoadStore_Packed<v512i32, i64, v512i1, 8, vld_vIsl, vst_vIsl>;
+defm : VectorLoadStore_Packed<v512f32, i64, v512i1, 8, vld_vIsl, vst_vIsl>;
 
 multiclass VectorStore<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, int immStride, SDNode STWithMask, SDNode STNoMask> {
   // w/o mask

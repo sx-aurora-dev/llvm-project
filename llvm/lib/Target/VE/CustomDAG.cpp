@@ -238,7 +238,19 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
     return MemN->getMemoryVT();
   }
 
-  switch (Op->getOpcode()) {
+  unsigned OC = Op->getOpcode();
+  // Translate VP to VVP IDs on the fly
+  switch (OC) {
+    default: break;
+#define HANDLE_VP_TO_VVP(VP_ID, VVP_ID)                                        \
+  case ISD::VP_ID:                                                             \
+    OC = VEISD::VVP_ID;                                                        \
+    break;
+#include "VVPNodes.inc"
+  }
+
+  // Expect VEISD:: VVP or ISD::non-VP Opcodes here
+  switch (OC) {
   default:
     return None;
 
