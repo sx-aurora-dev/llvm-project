@@ -101,8 +101,8 @@ SelectBoundedVectorLength(unsigned StaticNumElems);
 
 // Packed interpretation sub element
 enum class SubElem : int8_t {
-  Lo = 0,
-  Hi = 1
+  Lo = 0, // integer (63, 32]
+  Hi = 1  // float   (32,  0]
 };
 
 /// Helper class for short hand custom node creation ///
