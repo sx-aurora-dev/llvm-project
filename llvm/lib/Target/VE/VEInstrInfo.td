@@ -28,6 +28,9 @@ include "VEInstrFormats.td"
 // VEISD::VEC_SEQ - represents a vector sequence where the operand is the stride
 // VEISD::VEC_BROADCAST - represents a vector splat of a scalar value into all vector lanes.
 
+// AVL operand type constraint for SDNodes
+class IsVLVT<int OpIdx> : SDTCisVT<OpIdx,i32>;
+
 def vec_vmv         : SDNode<"VEISD::VEC_VMV",       SDTypeProfile<1, 4,  [SDTCisSameAs<0, 1>, SDTCisVec<0>, SDTCisVec<3>, SDTCisSameNumEltsAs<3,1>, SDTCisInt<4>]>>;
 def vec_seq         : SDNode<"VEISD::VEC_SEQ",       SDTypeProfile<1, 1,  [SDTCisVec<0>, SDTCisInt<1>]>>;
 def vec_narrow      : SDNode<"VEISD::VEC_NARROW",    SDTypeProfile<1, 2,  [SDTCisVec<0>, SDTCisVec<1>, SDTCisInt<2>]>>;
@@ -42,13 +45,13 @@ def vm_insert      : SDNode<"VEISD::VM_INSERT",   SDTypeProfile<1, 3,    [SDTCis
 
 ///// packed mode support /////
 // unpack the v256i32 part of this vector
-def vec_unpack_lo   : SDNode<"VEISD::VEC_UNPACK_LO", SDTypeProfile<1, 1,  [SDTCisVec<0>, SDTCisVec<1>]>>;
+def vec_unpack_lo   : SDNode<"VEISD::VEC_UNPACK_LO", SDTypeProfile<1, 2,  [SDTCisVec<0>, SDTCisVec<1>, IsVLVT<2>]>>;
 // unpack the v256f32 part of this vector
-def vec_unpack_hi   : SDNode<"VEISD::VEC_UNPACK_LO", SDTypeProfile<1, 1,  [SDTCisVec<0>, SDTCisVec<1>]>>;
+def vec_unpack_hi   : SDNode<"VEISD::VEC_UNPACK_HI", SDTypeProfile<1, 2,  [SDTCisVec<0>, SDTCisVec<1>, IsVLVT<2>]>>;
 // re-pack v256i32, v256f32 back into tone v512.32
-def vec_pack        : SDNode<"VEISD::VEC_PACK", SDTypeProfile<1, 2,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<1,2>]>>;
+def vec_pack        : SDNode<"VEISD::VEC_PACK", SDTypeProfile<1, 3,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<1,2>, IsVLVT<3>]>>;
 // exchange the odd-even pairs in a v512.32
-def vec_swap        : SDNode<"VEISD::VEC_SWAP", SDTypeProfile<1, 1,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0,1>]>>;
+def vec_swap        : SDNode<"VEISD::VEC_SWAP", SDTypeProfile<1, 2,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0,1>, IsVLVT<2>]>>;
 
 // replicate lower 32bit to upper 32bit (f32 scalar replication)
 def repl_f32        : SDNode<"VEISD::REPL_F32",  SDTypeProfile<1, 1,  [SDTCisInt<0>, SDTCisFP<1>]>>;
@@ -77,8 +80,8 @@ def fplozero    : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
 
 // whether the mask is all true
 let PredicateCodeUsesOperands = 1 in {
-def true_mask                            : PatLeaf<(vec_broadcast (i32 true), I32)>;
-def any_broadcast                        : PatFrag<(ops node:$sx), (vec_broadcast node:$sx, I32)>;
+def true_mask                            : PatLeaf<(vec_broadcast (i32 true), (i32 srcvalue))>;
+def any_broadcast                        : PatFrag<(ops node:$sx), (vec_broadcast node:$sx, (i32 srcvalue))>;
 }
 
 def CCSIOp : PatLeaf<(cond), [{
@@ -2104,6 +2107,10 @@ def: Pat<(i64 (repl_i32 i32:$val)),
             (ORrr
               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32))>;
+
+
+// load an immediate into a register
+def lea_i32         : OutPatFrag<(ins node:$imm), (LEAzzi node:$imm)>;
 
 
 // generic vector instruction patterns

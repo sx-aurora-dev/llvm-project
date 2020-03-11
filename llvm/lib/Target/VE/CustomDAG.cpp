@@ -470,18 +470,20 @@ SDValue CustomDAG::createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV,
   return DAG.getNode(VEISD::VEC_VMV, DL, ResVT, {SrcV, OffsetV, Mask, Avl});
 }
 
-SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, SubElem E) {
+SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, SubElem E,
+                                SDValue AVL) {
   unsigned OC =
       (E == SubElem::Lo) ? VEISD::VEC_UNPACK_LO : VEISD::VEC_UNPACK_HI;
-  return DAG.getNode(OC, DL, DestVT, Vec);
+  return DAG.getNode(OC, DL, DestVT, Vec, AVL);
 }
 
-SDValue CustomDAG::CreatePack(EVT DestVT, SDValue LowV, SDValue HighV) {
-  return DAG.getNode(VEISD::VEC_PACK, DL, DestVT, LowV, HighV);
+SDValue CustomDAG::CreatePack(EVT DestVT, SDValue LowV, SDValue HighV,
+                              SDValue AVL) {
+  return DAG.getNode(VEISD::VEC_PACK, DL, DestVT, LowV, HighV, AVL);
 }
 
-SDValue CustomDAG::CreateSwap(EVT DestVT, SDValue V) {
-  return DAG.getNode(VEISD::VEC_SWAP, DL, DestVT, V);
+SDValue CustomDAG::CreateSwap(EVT DestVT, SDValue V, SDValue AVL) {
+  return DAG.getNode(VEISD::VEC_SWAP, DL, DestVT, V, AVL);
 }
 
 SDValue

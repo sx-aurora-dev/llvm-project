@@ -173,6 +173,33 @@ def : Pat<(v256i32 (vec_vmv v256i32:$v, i32:$amount, v256i1:$mask, i32:$avl)),
 def : Pat<(i64 (vec_popcount v256i1:$mask, i32:$avl)),
           (pcvm_sml $mask, $avl)>;
 
+// Packing (type based)
+def : Pat<(v512i32 (vec_pack v256i32:$vlo, v256i32:$vhi, i32:$avl)),
+          (vshf_vvvsl $vlo, $vhi, (lea_i32 3), $avl)>;
+def : Pat<(v512f32 (vec_pack v256f32:$vlo, v256f32:$vhi, i32:$avl)),
+          (vshf_vvvsl $vlo, $vhi, (lea_i32 2), $avl)>;
+
+// Swapping
+multiclass Unpack_Swap<ValueType PackVT> {
+  def : Pat<(PackVT (vec_swap PackVT:$vp, i32:$avl)),
+            (vshf_vvvsl $vp, $vp, (lea_i32 8), $avl)>; // exchange hi and lo
+
+  // no-op unpacks
+  def : Pat<(v256i32 (vec_unpack_lo PackVT:$vp, (i32 srcvalue))),
+            (COPY_TO_REGCLASS $vp, V64)>;
+  def : Pat<(v256f32 (vec_unpack_hi PackVT:$vp, (i32 srcvalue))),
+            (COPY_TO_REGCLASS $vp, V64)>;
+
+  // shuffle unpacks
+  def : Pat<(v256f32 (vec_unpack_lo PackVT:$vp, i32:$avl)),
+            (vshf_vvvsl $vp, $vp, (lea_i32 15), $avl)>; // always pick lo
+  def : Pat<(v256i32 (vec_unpack_hi PackVT:$vp, i32:$avl)),
+            (vshf_vvvsl $vp, $vp, (lea_i32 0), $avl)>; // always pick hi
+}
+
+defm: Unpack_Swap<v512i32>;
+defm: Unpack_Swap<v512f32>;
+
 
 // Casts
 def : Pat<(v256i32 (trunc v256i64:$src)),

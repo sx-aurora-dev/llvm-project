@@ -1,6 +1,5 @@
 ///// V(E) - VP internal nodes
 // fp node types
-class IsVLVT<int OpIdx> : SDTCisVT<OpIdx,i32>;
 
 def SDTFPBinOpVVP : SDTypeProfile<1, 4, [   // vvp_fadd, etc.
   SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisFP<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>

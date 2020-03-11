@@ -127,11 +127,11 @@ struct CustomDAG {
                     SDValue Avl) const;
 
   /// Packed Mode Support {
-  SDValue CreateUnpack(EVT DestVT, SDValue Vec, SubElem E);
+  SDValue CreateUnpack(EVT DestVT, SDValue Vec, SubElem E, SDValue AVL);
 
-  SDValue CreatePack(EVT DestVT, SDValue LowV, SDValue HighV);
+  SDValue CreatePack(EVT DestVT, SDValue LowV, SDValue HighV, SDValue AVL);
 
-  SDValue CreateSwap(EVT DestVT, SDValue V);
+  SDValue CreateSwap(EVT DestVT, SDValue V, SDValue AVL);
   /// } Packed Mode Support
 
   SDValue CreateBroadcast(EVT ResTy, SDValue S,
@@ -145,11 +145,22 @@ struct CustomDAG {
 
   SDValue CreateConstMask(unsigned NumElements, bool IsTrue) const;
 
+  SDValue getNode(unsigned OC, SDVTList VTL, ArrayRef<SDValue> OpV) const {
+    return DAG.getNode(OC, DL, VTL, OpV);
+  }
+
+  SDValue getNode(unsigned OC, EVT ResVT, ArrayRef<SDValue> OpV) const {
+    return DAG.getNode(OC, DL, ResVT, OpV);
+  }
+
   SDValue createNarrow(EVT ResTy, SDValue SrcV, uint64_t NarrowLen) {
     return DAG.getNode(VEISD::VEC_NARROW, DL, ResTy,
                        {SrcV, getConstant(NarrowLen, MVT::i32)});
   }
 
+  EVT getVectorVT(EVT ElemVT, unsigned NumElems) const {
+    return EVT::getVectorVT(*DAG.getContext(), ElemVT, NumElems);
+  }
   inline SDValue getConstEVL(uint32_t EVL) const { return getConstant(EVL, MVT::i32); }
 
   SDValue getConstant(uint64_t Val, EVT VT, bool IsTarget = false,

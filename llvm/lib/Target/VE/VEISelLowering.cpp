@@ -296,6 +296,52 @@ SDValue VETargetLowering::LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
   return CDAG.CreateBroadcast(NativeResTy, Op.getOperand(0), OptVL);
 }
 
+static EVT getSplitVT(EVT OldValVT, CustomDAG &CDAG) {
+  return CDAG.getVectorVT(OldValVT.getVectorElementType(), StandardVectorWidth);
+}
+
+static SDValue
+extractSubElem(SDValue Op, CustomDAG& CDAG, SubElem Part, SDValue AVL) {
+  EVT OldValVT = Op.getValue(0).getValueType();
+  if (!OldValVT.isVector()) return Op;
+
+  // TODO peek through pack operations
+  return CDAG.CreateUnpack(getSplitVT(OldValVT, CDAG), Op, Part, AVL);
+}
+
+SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
+                                           VVPExpansionMode Mode,
+                                           SDValue AVL) const {
+  auto OcOpt = GetVVPOpcode(Op.getOpcode());
+  assert(OcOpt.hasValue());
+  unsigned VVPOC = OcOpt.getValue();
+
+  CustomDAG CDAG(DAG, Op);
+
+  EVT ResVT = getSplitVT(Op.getValue(0).getValueType(), CDAG);
+
+  // request the parts
+  SDValue PartOps[2];
+  for (SubElem Part : {SubElem::Lo, SubElem::Hi}) {
+    SmallVector<SDValue, 4> OpVec;
+    for (unsigned i = 0; i < Op.getNumOperands(); ++i) {
+      SDValue PartV = extractSubElem(Op.getOperand(i), CDAG, Part, AVL);
+      OpVec.push_back(PartV);
+    }
+    // attach Mask
+    SDValue TrueMask = CDAG.CreateConstMask(256, true);
+    OpVec.push_back(TrueMask);
+    // attach AVL
+    OpVec.push_back(AVL);
+    PartOps[(int)Part] = CDAG.getNode(VVPOC, ResVT, OpVec);
+  }
+
+  // re-package into a proper packed operation
+  EVT PackedVT =
+      LegalizeVectorType(Op.getValue(0).getValueType(), Op, CDAG.DAG, Mode);
+  return CDAG.CreatePack(PackedVT, PartOps[(int) SubElem::Lo], PartOps[(int) SubElem::Hi], AVL);
+}
+
 SDValue 
 VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "Expand to VVP node\n");
@@ -306,6 +352,7 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   if (!OpVecTyOpt.hasValue()) {
     LLVM_DEBUG(dbgs() << "LowerToVVP: cannot infer idiomatic vector type\n");
     return SDValue();
+  
   }
 
   // not a vector operation // TODO adjust for reductions
@@ -429,12 +476,14 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
   assert(VVPOC.hasValue() && "TODO implement this operation in the VVP isel layer");
 
+  // Select the AVL
+  CustomDAG CDAG(DAG, Op);
+  unsigned AdjustedLen = PackedMode ? (OpVectorLength + 1) / 2 : OpVectorLength;
+  SDValue LenVal = CDAG.getConstant(AdjustedLen, MVT::i32);
+
   // Is packed mode an option for this OC?
   if (PackedMode && !SupportsPackedMode(VVPOC.getValue())) {
-    // FIXME split this into two ops
-    // vec_unpack_lo/hi (depending on type)
-    LLVM_DEBUG( dbgs() << "\tThe operation does not support packed mode!\n"; );
-    return SDValue();
+    return ExpandToSplitVVP(Op, DAG, Mode, LenVal);
   }
 
   // Over-sized even for packed
@@ -449,19 +498,13 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   EVT OldResVT = Op.getValue(0)->getValueType(0);
   EVT ResVecTy = LegalizeVectorType(OldResVT, Op, DAG, Mode);
 
-  SDLoc dl(Op);
-  CustomDAG CDAG(DAG, dl);
-
   /// Use the eventual native vector width for all newly generated operands
   // we do not want to go through ::ReplaceNodeResults again only to have them widened
   unsigned NativeVectorWidth = (OpVectorLength > StandardVectorWidth) ? PackedWidth : StandardVectorWidth;
   MVT NativeMaskTy = MVT::getVectorVT(MVT::i1, NativeVectorWidth);
 
-  SDValue MaskVal = CDAG.CreateBroadcast(NativeMaskTy, DAG.getConstant(-1, dl, MVT::i1, MVT::i32)); // cannonical type for i1
+  SDValue MaskVal = CDAG.CreateBroadcast(NativeMaskTy, CDAG.getConstant(-1, MVT::i1, MVT::i32)); // cannonical type for i1
   assert(!NeedsPackedMasking && "TODO implement packed mask generation");
-
-  unsigned AdjustedLen = PackedMode ? (OpVectorLength + 1) / 2 : OpVectorLength;
-  SDValue LenVal = DAG.getConstant(AdjustedLen, dl, MVT::i32);
 
   // legalize all operands
   SmallVector<SDValue, 4> LegalOperands;
@@ -471,8 +514,8 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
 
   if (isBinaryOp) {
     assert(VVPOC.hasValue());
-    return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
-                       {LegalOperands[0], LegalOperands[1], MaskVal, LenVal});
+    return CDAG.getNode(VVPOC.getValue(), ResVecTy,
+                        {LegalOperands[0], LegalOperands[1], MaskVal, LenVal});
   }
 
   if (isTernaryOp) {
@@ -481,20 +524,20 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
       case VEISD::VVP_FFMA: {
         // VE has a swizzled operand order in FMA (compared to LLVM IR and
         // SDNodes).
-        return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
-                           {LegalOperands[2], LegalOperands[0],
-                            LegalOperands[1], MaskVal, LenVal});
+        return CDAG.getNode(VVPOC.getValue(), ResVecTy,
+                            {LegalOperands[2], LegalOperands[0],
+                             LegalOperands[1], MaskVal, LenVal});
       }
       case VEISD::VVP_SETCC: {
-        return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
-                           {LegalOperands[0], LegalOperands[1],
-                            LegalOperands[2], MaskVal, LenVal});
+        return CDAG.getNode(VVPOC.getValue(), ResVecTy,
+                            {LegalOperands[0], LegalOperands[1],
+                             LegalOperands[2], MaskVal, LenVal});
       }
       case VEISD::VVP_SELECT: {
         if (IsMaskType(Op.getValueType()))
           return LowerVSELECT(Op, DAG);
-        return DAG.getNode(
-            VVPOC.getValue(), dl, ResVecTy,
+        return CDAG.getNode(
+            VVPOC.getValue(), ResVecTy,
             {LegalOperands[0], LegalOperands[1], LegalOperands[2], LenVal});
       }
       default:
@@ -507,7 +550,7 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
     SDValue PtrVal = Op->getOperand(1);
     SDVTList ResWithChainTy = DAG.getVTList(ResVecTy, MVT::Other);
 
-    return DAG.getNode(VEISD::VVP_LOAD, dl, ResWithChainTy,
+    return CDAG.getNode(VEISD::VVP_LOAD, ResWithChainTy,
                       {ChainVal, PtrVal, MaskVal, LenVal});
   }
 
@@ -517,13 +560,13 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
     SDValue DataVal = Op->getOperand(2);
     MVT ChainTy = MVT::Other;
 
-    return DAG.getNode(
-        VEISD::VVP_STORE, dl, ChainTy,
+    return CDAG.getNode(
+        VEISD::VVP_STORE, ChainTy,
         {ChainVal, PtrVal, LegalizeVecOperand(DataVal, DAG), MaskVal, LenVal});
   }
 
   if (isConvOp) {
-    return DAG.getNode(VVPOC.getValue(), dl, ResVecTy,
+    return CDAG.getNode(VVPOC.getValue(), ResVecTy,
                        {LegalOperands[0], MaskVal, LenVal});
   }
 
@@ -2101,12 +2144,14 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::VSELECT, MVT::v256i1, Custom);
 
   // VE has no packed MUL, SDIV, or UDIV operations.
+#if 0
   for (MVT VT : {MVT::v512i32, MVT::v512f32}) {
     // TODO use VVPNodes.inc here
     setOperationAction(ISD::MUL, VT, Expand);
     setOperationAction(ISD::SDIV, VT, Expand);
     setOperationAction(ISD::UDIV, VT, Expand);
   }
+#endif
 
   // VE has no REM or DIVREM operations.
   for (MVT VT : MVT::vector_valuetypes()) {

@@ -262,9 +262,15 @@ public:
   SDValue TryNarrowExtractVectorLoad(SDNode *ExtractN, SelectionDAG &DAG) const;
 
   SDValue ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
+  // main entry point for regular OC to VVP_* ISD expansion
   // Called in TL::ReplaceNodeResults
-  // This replaces the standard ISD node with a VVP VEISD node with a widened
+  // This replaces the standard ISD node with VVP VEISD node(s) with a widened
   // result type.
+
+  SDValue ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode,
+                           SDValue AVL) const;
+  // Split \p Op into two VVP_ ops with the native vector width by splitting
+  // the i32 and f32 sub elements of the vector operation.
 
   SDValue WidenVVPOperation(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
   // Called during TL::LowerOperation
