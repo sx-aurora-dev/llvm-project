@@ -1023,7 +1023,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
   // This is the number of LSV that may be used to represent a BUILD_VECTOR
   // Otw, this defaults to VLD of a constant
   // FIXME move this to TTI
-  const unsigned InsertThreshold = 2;
+  const unsigned InsertThreshold = 6;
 
   if (NumElems >= InsertThreshold) {
     switch (BVK) {
@@ -1118,8 +1118,14 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
   // # mask elements from which on a vector load is preferred
   // over a sequence of LVS instructions
   // TODO move this to TLI
-  const unsigned FallbackThreshold = 2;
+  const unsigned FallbackThreshold = 8;
   if (NumElems > FallbackThreshold) {
+    // TODO low FallbackThreshold values lead to divergence in the backend as
+    // 1. scalar stores are fused into vector stores,
+    // 2. the value to store becomes a BUILD_VECTOR and
+    // 3. LowerBUILD_VECTOR gives up and convertes the
+    // BUILD_VECTOR into scalar stores again..
+    // ..and so on
     return SDValue();
   }
 
@@ -1868,26 +1874,21 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SHL_PARTS, MVT::i32, Expand);
   setOperationAction(ISD::SRA_PARTS, MVT::i32, Expand);
   setOperationAction(ISD::SRL_PARTS, MVT::i32, Expand);
-  if (1) {
-    setOperationAction(ISD::SHL_PARTS, MVT::i64, Expand);
-    setOperationAction(ISD::SRA_PARTS, MVT::i64, Expand);
-    setOperationAction(ISD::SRL_PARTS, MVT::i64, Expand);
-  }
+  setOperationAction(ISD::SHL_PARTS, MVT::i64, Expand);
+  setOperationAction(ISD::SRA_PARTS, MVT::i64, Expand);
+  setOperationAction(ISD::SRL_PARTS, MVT::i64, Expand);
 
   // Expands to [SU]MUL_LOHI.
   setOperationAction(ISD::MULHU, MVT::i32, Expand);
   setOperationAction(ISD::MULHS, MVT::i32, Expand);
-  // setOperationAction(ISD::MUL,       MVT::i32, Expand);
 
-  if (1) {
-    setOperationAction(ISD::UMUL_LOHI, MVT::i64, Expand);
-    setOperationAction(ISD::SMUL_LOHI, MVT::i64, Expand);
-    setOperationAction(ISD::MULHU, MVT::i64, Expand);
-    setOperationAction(ISD::MULHS, MVT::i64, Expand);
+  setOperationAction(ISD::UMUL_LOHI, MVT::i64, Expand);
+  setOperationAction(ISD::SMUL_LOHI, MVT::i64, Expand);
+  setOperationAction(ISD::MULHU, MVT::i64, Expand);
+  setOperationAction(ISD::MULHS, MVT::i64, Expand);
 
-    setOperationAction(ISD::UMULO, MVT::i64, Custom);
-    setOperationAction(ISD::SMULO, MVT::i64, Custom);
-  }
+  setOperationAction(ISD::UMULO, MVT::i64, Custom);
+  setOperationAction(ISD::SMULO, MVT::i64, Custom);
 
   setOperationAction(ISD::BITREVERSE, MVT::i32, Legal);
   setOperationAction(ISD::BITREVERSE, MVT::i64, Legal);
@@ -2055,16 +2056,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::VECTOR_SHUFFLE, VT, Custom);
       setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
 
-#if 0
-	// i1 <> anything is legal
-        for (MVT OuterVT : MVT::vector_valuetypes()) {
-          setTruncStoreAction(OuterVT, VT, Legal);
-          setLoadExtAction(ISD::SEXTLOAD, OuterVT, VT, Legal);
-          setLoadExtAction(ISD::ZEXTLOAD, OuterVT, VT, Legal);
-          setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Legal);
-         }
-#endif
-
     } else {
       /// fp/int vector operations
       setOperationAction(ISD::SCALAR_TO_VECTOR, VT, Custom);
@@ -2097,6 +2088,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::FNEG, VT, Expand);
       setOperationAction(ISD::MULHS, VT, Expand);
       setOperationAction(ISD::MULHU, VT, Expand);
+      setOperationAction(ISD::SMUL_LOHI, VT, Expand);
+      setOperationAction(ISD::UMUL_LOHI, VT, Expand);
 
       // VE vector unit supports only setcc and vselect
       setOperationAction(ISD::SELECT_CC, VT, Expand);
@@ -3972,9 +3965,8 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
   assert(NumResults <= 2);
   int ValIdx = NumResults - 1;
 
-  // Vector-typed non-VVP op -> expand using LLVM (fallback)
-  if (N->getValueType(0).isVector()
-      && !IsVVPOrVEC(N->getOpcode())) {
+  // Non-VVP op -> expand using LLVM (fallback)
+  if (!IsVVPOrVEC(N->getOpcode())) {
     LLVM_DEBUG(
         dbgs() << "\t Not a VP/VEC Op ->defaulting to standard expansion\n";);
     return;
