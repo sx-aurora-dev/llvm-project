@@ -786,7 +786,9 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
   }
 
   // See if it is worthwhile to emit a narrowing node
-  bool EmitNarrow = false;
+#if 0
+  bool EmitNarrow =
+      true; // Passing-through \p May result in an invalid result type
   auto SrcN = SrcVec.getNode();
   if (SrcN->getOpcode() == ISD::LOAD) {
     if (SrcN->use_size() == 1) {
@@ -795,15 +797,11 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
     }
     // use this opportunity to implement a narrowed load
   }
+#endif
 
-  if (EmitNarrow) {
-    SDLoc DL(Op);
-    unsigned NarrowLen = Op.getValueType().getVectorNumElements();
-    return CDAG.createNarrow(LegalVecTy, SrcVec, NarrowLen);
-  }
-
-  // simply drop this narrowing node
-  return SrcVec;
+  SDLoc DL(Op);
+  unsigned NarrowLen = Op.getValueType().getVectorNumElements();
+  return CDAG.createNarrow(LegalVecTy, SrcVec, NarrowLen);
 }
 
 static Optional<unsigned>
@@ -3977,7 +3975,12 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
   if (!N->getValueType(0).isVector() && shouldExpandToVVP(*N)) {
     SDValue FixedOp = ExpandToVVP(SDValue(N, 0), DAG, VVPExpansionMode::ToNativeWidth);
     N = FixedOp.getNode();
-    assert(N && "VVP expansion did not create a new node!");
+  }
+
+  // Expansion defer to LLVM for lowering
+  if (!N) {
+    LLVM_DEBUG(dbgs() << "\t Default to standard expansion\n"; );
+    return;
   }
 
   // Legalize the operands of this VVP op
@@ -3989,16 +3992,13 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
     SDValue FixedOp = Op;
 
     // Re-use widened nodes from ReplaceNodeResult
-    EVT OpDestVecTy = getTypeToTransformTo(*DAG.getContext(), Op.getValueType());
+    EVT OpDestVecTy =
+        getTypeToTransformTo(*DAG.getContext(), Op.getValueType());
     if (OpDestVecTy != Op.getValueType()) {
       FixedOp = WidenedOpCB(Op);
+      assert(FixedOp && "No legal operand available!");
     }
 
-    // keep this operation (this may occur when ExpansionToVVP has happened
-    // before)
-    if (!FixedOp) FixedOp = Op;
-
-    assert(FixedOp && "illegal operand");
     FixedOperands.push_back(FixedOp);
   }
 
