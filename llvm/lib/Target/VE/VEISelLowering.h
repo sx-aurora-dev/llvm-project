@@ -82,10 +82,12 @@ enum NodeType : unsigned {
   VEC_REDUCE_ANY,
   VEC_POPCOUNT,
 
-  VEC_LVL,
-
   // narrowing marker
   VEC_NARROW, // (Op, vector length)
+
+  // VEC_* operator range
+  VEC_FIRST = VEC_UNPACK_LO,
+  VEC_LAST = VEC_NARROW,
 
   // Replication on lower/upper32 bit to other half -> I64
   REPL_F32,

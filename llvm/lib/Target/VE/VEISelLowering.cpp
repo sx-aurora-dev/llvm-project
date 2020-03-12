@@ -661,10 +661,17 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
                                                 VVPExpansionMode Mode,
                                                 VecLenOpt VecLenHint) const {
   LLVM_DEBUG(dbgs() << "Lowering MGATHER or MSCATTER\n");
-  SDLoc dl(Op);
   // dbgs() << "\nNext Instr:\n";
   // Op.dumpr(&DAG);
+  
+  Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
+  EVT OpVecTy = OpVecTyOpt.getValue();
+  
+  EVT LegalResVT = LegalizeVectorType(OpVecTy, Op, DAG, Mode); // vector result type
+  CustomDAG CDAG(DAG, Op);
 
+
+  SDValue OpVectorLength;
   SDValue Index;
   SDValue BasePtr;
   SDValue Mask;
@@ -673,15 +680,12 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
   SDValue PassThru;
   SDValue Source;
 
-  Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
-  EVT OpVecTy = OpVecTyOpt.getValue();
-  SDValue OpVectorLength;
 
   if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::MSCATTER) {
     MaskedGatherScatterSDNode *N =
         cast<MaskedGatherScatterSDNode>(Op.getNode());
 
-    OpVectorLength = DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);;
+    OpVectorLength = CDAG.getConstant(OpVecTy.getVectorNumElements(), MVT::i32);;
     Index = N->getIndex();
     BasePtr = N->getBasePtr();
     Mask = N->getMask();
@@ -707,15 +711,18 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
     MaskedScatterSDNode *N = cast<MaskedScatterSDNode>(Op.getNode());
     Source = N->getValue();
   } else if (Op.getOpcode() == ISD::VP_GATHER) {
-    PassThru = DAG.getUNDEF(Op.getValueType());
+    PassThru = CDAG.DAG.getUNDEF(Op.getValueType());
   } else if (Op.getOpcode() == ISD::VP_SCATTER) {
     VPScatterSDNode *N = cast<VPScatterSDNode>(Op.getNode());
     Source = N->getValue();
   }
 
-  MVT IndexVT = Index.getSimpleValueType();
+  // Legalize the index type
+  EVT IndexVT = CDAG.getVectorVT(Index.getValueType().getVectorElementType(),
+                                 LegalResVT.getVectorNumElements());
 
-  CustomDAG CDAG(DAG, dl);
+  // Widen the index
+  Index = CDAG.widenOrNarrow(IndexVT, Index);
 
   // apply scale
   SDValue ScaledIndex;
@@ -723,7 +730,8 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
     ScaledIndex = Index;
   } else {
     SDValue ScaleBroadcast = CDAG.CreateBroadcast(IndexVT, Scale, OpVectorLength);
-    ScaledIndex = DAG.getNode(ISD::MUL, dl, IndexVT, {Index, ScaleBroadcast});
+    ScaledIndex = CDAG.getNode(VEISD::VVP_MUL, IndexVT,
+                               {Index, ScaleBroadcast, Mask, OpVectorLength});
   }
 
   // add basePtr
@@ -734,7 +742,8 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
     // re-constitute pointer vector (basePtr + index * scale)
     SDValue BaseBroadcast = CDAG.CreateBroadcast(IndexVT, BasePtr, OpVectorLength);
     addresses =
-        DAG.getNode(ISD::ADD, dl, IndexVT, {BaseBroadcast, ScaledIndex});
+        CDAG.getNode(VEISD::VVP_ADD, IndexVT,
+                     {BaseBroadcast, ScaledIndex, Mask, OpVectorLength});
   }
 
   // try to shrink the VL
@@ -742,11 +751,10 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
                                       IndexVT.getVectorNumElements(), DAG);
 
   if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::VP_GATHER) {
-    EVT LegalResVT = LegalizeVectorType(Op.getNode()->getValueType(0), Op, DAG, Mode);
     EVT ChainVT = Op.getNode()->getValueType(1);
 
     // vt = vgt (vindex, vmx, cs=0, sx=0, sy=0, sw=0);
-    SDValue load = DAG.getNode(VEISD::VVP_GATHER, dl, {LegalResVT, ChainVT},
+    SDValue load = CDAG.getNode(VEISD::VVP_GATHER, {LegalResVT, ChainVT},
                                {Chain, addresses, Mask, OpVectorLength});
     // load.dumpr(&DAG);
 
@@ -754,12 +762,12 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op,
       return load;
     }
 
-    // re-introduce passthru as a select
-    return DAG.getSelect(dl, Op.getSimpleValueType(), Mask, load, PassThru);
+    // re-introduce passthru as a select // TODO CDAG.getSelect
+    return CDAG.DAG.getSelect(CDAG.DL, LegalResVT, Mask, load, PassThru);
 
   } else {
     SDValue store =
-        DAG.getNode(VEISD::VVP_SCATTER, dl, Op.getNode()->getVTList(),
+        CDAG.getNode(VEISD::VVP_SCATTER, Op.getNode()->getVTList(),
                     {Chain, Source, addresses, Mask, OpVectorLength});
     // store.dumpr(&DAG);
     return store;
@@ -2171,7 +2179,7 @@ VETargetLowering::getCustomOperationAction(SDNode& Op) const {
       return Legal;
 
     case VEISD::VEC_NARROW:
-      return Legal;
+      return Custom;
 
     case VEISD::VEC_SEQ:
     case VEISD::VEC_BROADCAST:
@@ -2219,7 +2227,6 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(GLOBAL_BASE_REG)
     TARGET_NODE_CASE(FLUSHW)
     TARGET_NODE_CASE(VEC_BROADCAST)
-    TARGET_NODE_CASE(VEC_LVL)
     TARGET_NODE_CASE(VEC_NARROW)
     TARGET_NODE_CASE(VEC_SEQ)
     TARGET_NODE_CASE(VEC_VMV)
@@ -3967,7 +3974,9 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
 
   // Vector-typed non-VVP op -> expand using LLVM (fallback)
   if (N->getValueType(0).isVector()
-      && !IsVVP(N->getOpcode())) {
+      && !IsVVPOrVEC(N->getOpcode())) {
+    LLVM_DEBUG(
+        dbgs() << "\t Not a VP/VEC Op ->defaulting to standard expansion\n";);
     return;
   }
 
@@ -4034,7 +4043,7 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
   int ValIdx = NumResults - 1;
 
   SDNode* ResN = nullptr;
-  if (IsVVP(N->getOpcode())) {
+  if (IsVVPOrVEC(N->getOpcode())) {
     // FIXME abort() here!!! must not create VVP ops with illegal result type!
     // VVP ops already have a legal result type
     ResN = WidenVVPOperation(SDValue(N, 0), DAG, VVPExpansionMode::ToNextWidth).getNode();

@@ -214,6 +214,12 @@ bool SupportsPackedMode(unsigned Opcode) {
   }
 }
 
+bool IsVVPOrVEC(unsigned OC) {
+  if ((VEISD::VEC_FIRST <= OC) && (OC <= VEISD::VEC_LAST))
+    return true;
+  return IsVVP(OC);
+}
+
 bool IsVVP(unsigned Opcode) {
   switch (Opcode) {
   default:

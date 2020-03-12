@@ -54,6 +54,7 @@ Optional<unsigned> GetVVPOpcode(unsigned OpCode);
 
 bool SupportsPackedMode(unsigned Opcode);
 
+bool IsVVPOrVEC(unsigned Opcode);
 bool IsVVP(unsigned Opcode);
 
 // Choses the widest element type
@@ -145,12 +146,30 @@ struct CustomDAG {
 
   SDValue CreateConstMask(unsigned NumElements, bool IsTrue) const;
 
+  /// getNode {
   SDValue getNode(unsigned OC, SDVTList VTL, ArrayRef<SDValue> OpV) const {
     return DAG.getNode(OC, DL, VTL, OpV);
   }
 
+  SDValue getNode(unsigned OC, ArrayRef<EVT> ResVT,
+                  ArrayRef<SDValue> OpV) const {
+    return DAG.getNode(OC, DL, ResVT, OpV);
+  }
+
   SDValue getNode(unsigned OC, EVT ResVT, ArrayRef<SDValue> OpV) const {
     return DAG.getNode(OC, DL, ResVT, OpV);
+  }
+  /// } getNode
+
+  SDValue widenOrNarrow(EVT DestVT, SDValue Op) {
+    EVT OpVT = Op.getValueType();
+    if (OpVT == DestVT)
+      return Op;
+
+    if (!OpVT.isVector())
+      return Op;
+
+    return createNarrow(DestVT, Op, OpVT.getVectorNumElements());
   }
 
   SDValue createNarrow(EVT ResTy, SDValue SrcV, uint64_t NarrowLen) {
