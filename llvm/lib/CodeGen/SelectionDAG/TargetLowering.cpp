@@ -6064,6 +6064,42 @@ bool TargetLowering::expandMUL(SDNode *N, SDValue &Lo, SDValue &Hi, EVT HiLoVT,
   return Ok;
 }
 
+SDValue TargetLowering::expandSUREM(SDNode *Node, SelectionDAG &DAG) const {
+  SDLoc dl(SDValue(Node, 0));
+  EVT VT = Node->getValueType(0);
+  bool isSigned = Node->getOpcode() == ISD::SREM;
+  unsigned DivOpc = isSigned ? ISD::SDIV : ISD::UDIV;
+  unsigned DivRemOpc = isSigned ? ISD::SDIVREM : ISD::UDIVREM;
+  SDValue Tmp2 = Node->getOperand(0);
+  SDValue Tmp3 = Node->getOperand(1);
+
+  if (isOperationLegalOrCustom(DivRemOpc, VT)) {
+    SDVTList VTs = DAG.getVTList(VT, VT);
+    return DAG.getNode(DivRemOpc, dl, VTs, Tmp2, Tmp3).getValue(1);
+  }
+
+  if (isOperationLegalOrCustom(DivOpc, VT)) {
+    // X % Y -> X-X/Y*Y
+    SDValue Tmp1 = DAG.getNode(DivOpc, dl, VT, Tmp2, Tmp3);
+    Tmp1 = DAG.getNode(ISD::MUL, dl, VT, Tmp1, Tmp3);
+    return DAG.getNode(ISD::SUB, dl, VT, Tmp2, Tmp1);
+  }
+  return SDValue();
+}
+
+SDValue TargetLowering::expandSUDIV(SDNode *Node, SelectionDAG &DAG) const {
+  SDLoc dl(SDValue(Node, 0));
+  bool isSigned = Node->getOpcode() == ISD::SDIV;
+  unsigned DivRemOpc = isSigned ? ISD::SDIVREM : ISD::UDIVREM;
+  EVT VT = Node->getValueType(0);
+  if (isOperationLegalOrCustom(DivRemOpc, VT)) {
+    SDVTList VTs = DAG.getVTList(VT, VT);
+    return DAG.getNode(DivRemOpc, dl, VTs, Node->getOperand(0),
+                       Node->getOperand(1));
+  }
+  return SDValue();
+}
+
 bool TargetLowering::expandFunnelShift(SDNode *Node, SDValue &Result,
                                        SelectionDAG &DAG) const {
   EVT VT = Node->getValueType(0);
