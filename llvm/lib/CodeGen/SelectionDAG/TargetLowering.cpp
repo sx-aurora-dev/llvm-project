@@ -5814,6 +5814,52 @@ SDValue TargetLowering::getNegatedExpression(SDValue Op, SelectionDAG &DAG,
 // Legalization Utilities
 //===----------------------------------------------------------------------===//
 
+SDValue TargetLowering::expandMULHU_MULHS(SDNode *Node,
+                                          SelectionDAG &DAG) const {
+  SDLoc dl(SDValue(Node, 0));
+  unsigned ExpandOpcode =
+      Node->getOpcode() == ISD::MULHU ? ISD::UMUL_LOHI : ISD::SMUL_LOHI;
+  EVT VT = Node->getValueType(0);
+  SDVTList VTs = DAG.getVTList(VT, VT);
+
+  return DAG.getNode(ExpandOpcode, dl, VTs, Node->getOperand(0),
+                     Node->getOperand(1));
+}
+
+void TargetLowering::expandSMUL_UMUL_LOHI(SmallVectorImpl<SDValue> &Results,
+                                          SDNode *Node,
+                                          SelectionDAG &DAG) const {
+  SDLoc dl(SDValue(Node, 0));
+
+  SDValue LHS = Node->getOperand(0);
+  SDValue RHS = Node->getOperand(1);
+  MVT VT = LHS.getSimpleValueType();
+  unsigned MULHOpcode =
+      Node->getOpcode() == ISD::UMUL_LOHI ? ISD::MULHU : ISD::MULHS;
+
+  if (isOperationLegalOrCustom(MULHOpcode, VT)) {
+    Results.push_back(DAG.getNode(ISD::MUL, dl, VT, LHS, RHS));
+    Results.push_back(DAG.getNode(MULHOpcode, dl, VT, LHS, RHS));
+    return;
+  }
+
+  SmallVector<SDValue, 4> Halves;
+  EVT HalfType = EVT(VT).getHalfSizedIntegerVT(*DAG.getContext());
+  assert(isTypeLegal(HalfType));
+  if (expandMUL_LOHI(Node->getOpcode(), VT, Node, LHS, RHS, Halves, HalfType,
+                     DAG, TargetLowering::MulExpansionKind::Always)) {
+    for (unsigned i = 0; i < 2; ++i) {
+      SDValue Lo = DAG.getNode(ISD::ZERO_EXTEND, dl, VT, Halves[2 * i]);
+      SDValue Hi = DAG.getNode(ISD::ANY_EXTEND, dl, VT, Halves[2 * i + 1]);
+      SDValue Shift =
+          DAG.getConstant(HalfType.getScalarSizeInBits(), dl,
+                          getShiftAmountTy(HalfType, DAG.getDataLayout()));
+      Hi = DAG.getNode(ISD::SHL, dl, VT, Hi, Shift);
+      Results.push_back(DAG.getNode(ISD::OR, dl, VT, Lo, Hi));
+    }
+  }
+}
+
 bool TargetLowering::expandMUL_LOHI(unsigned Opcode, EVT VT, SDLoc dl,
                                     SDValue LHS, SDValue RHS,
                                     SmallVectorImpl<SDValue> &Result,
