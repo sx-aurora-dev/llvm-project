@@ -4177,6 +4177,15 @@ public:
                       SDValue LL = SDValue(), SDValue LH = SDValue(),
                       SDValue RL = SDValue(), SDValue RH = SDValue()) const;
 
+  // convenience wrapper
+  void expandSMUL_UMUL_LOHI(SmallVectorImpl<SDValue> &Results, SDNode *Node,
+                            SelectionDAG &DAG) const;
+
+  /// Expand a MULHU_MULHS into MUL_LOHI
+  /// \param Node the MULHU or MULHS node to expand
+  /// \returns the expanded MUL_LOHI
+  SDValue expandMULHU_MULHS(SDNode *Node, SelectionDAG &DAG) const;
+
   /// Expand a MUL into two nodes.  One that computes the high bits of
   /// the result and one that computes the low bits.
   /// \param HiLoVT The value type to use for the Lo and Hi nodes.

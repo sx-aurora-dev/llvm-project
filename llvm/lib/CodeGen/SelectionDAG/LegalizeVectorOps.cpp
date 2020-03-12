@@ -937,6 +937,21 @@ void VectorLegalizer::Expand(SDNode *Node, SmallVectorImpl<SDValue> &Results) {
   case ISD::SSUBO:
     ExpandSADDSUBO(Node, Results);
     return;
+
+  case ISD::UMUL_LOHI:
+  case ISD::SMUL_LOHI:
+    TLI.expandSMUL_UMUL_LOHI(Results, Node, DAG);
+    if (!Results.empty()) return;
+    break;
+
+  case ISD::MULHS:
+  case ISD::MULHU:
+    if (SDValue Res = TLI.expandMULHU_MULHS(Node, DAG))  {
+      Results.push_back(Res);
+      return;
+    }
+    break;
+
   case ISD::UMULO:
   case ISD::SMULO:
     ExpandMULO(Node, Results);
