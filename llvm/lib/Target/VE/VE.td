@@ -23,6 +23,10 @@ def FeaturePackedMode
   : SubtargetFeature<"packed", "PackedMode", "true",
                      "Enable v512 packed mode (experimental)">;
 
+def VELIntrinsicMode
+  : SubtargetFeature<"velintrin", "VELIntrinsicMode", "true",
+                     "Enable llvm.vel.* intrinsics">;
+
 
 //===----------------------------------------------------------------------===//
 // Register File, Calling Conv, Instruction Descriptions

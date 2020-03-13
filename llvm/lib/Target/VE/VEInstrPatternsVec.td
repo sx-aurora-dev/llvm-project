@@ -162,8 +162,14 @@ def: Pat<(v256i32 (vec_seq i32:$vl)),
          (pvseqlo_vl $vl)>;
 
 // Element shift (VMV)
-def : Pat<(v256f64 (vec_vmv v256f64:$v, i32:$amount, v256i1:$mask, i32:$avl)),
-          (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
+multiclass VMV_Patterns<ValueType VecVT> {
+  def : Pat<(VecVT (vec_vmv VecVT:$v, i32:$amount, v256i1:$mask, i32:$avl)),
+            (vmv_vsvmvl $amount, $v, $mask, (VecVT (IMPLICIT_DEF)), $avl)>;
+}
+defm: VMV_Patterns<v256i32>;
+defm: VMV_Patterns<v256f32>;
+defm: VMV_Patterns<v256i64>;
+
 def : Pat<(v256f32 (vec_vmv v256f32:$v, i32:$amount, v256i1:$mask, i32:$avl)),
           (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
 def : Pat<(v256i32 (vec_vmv v256i32:$v, i32:$amount, v256i1:$mask, i32:$avl)),

@@ -43,7 +43,13 @@ using namespace llvm;
 
 static bool
 shouldExpandToVVP(SDNode& N) {
-  return getIdiomaticType(&N).hasValue();
+  Optional<EVT> IdiomVT = getIdiomaticType(&N);
+  if (!IdiomVT.hasValue())
+    return false;
+  // Only expand to VP if the element type is legal. Otw, defer to LLVM for legalization.
+  auto ElemVT = IdiomVT->getVectorElementType();
+  return (ElemVT == MVT::i1 || ElemVT == MVT::i32 || ElemVT == MVT::f32 ||
+          ElemVT == MVT::i64 || ElemVT == MVT::f64);
 }
 
 /// Whether this VVP node needs widening
@@ -778,7 +784,8 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
                                                  VVPExpansionMode Mode) const {
   auto SrcVec = Op.getOperand(0);
   auto BaseIdxN = Op.getOperand(1);
-  
+
+
   assert(isa<ConstantSDNode>(BaseIdxN) && "TODO dynamic extract");
   CustomDAG CDAG(DAG, Op);
   EVT LegalVecTy = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
@@ -1732,8 +1739,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
 
   // Support mask DT for target intrinsics
-  addRegisterClass(MVT::v4i64, &VE::VMRegClass);
-  addRegisterClass(MVT::v8i64, &VE::VMRegClass);
+  if (Subtarget->hasVELIntrinsicMode()) {
+    // FIXME intrinsics disabled for now
+    addRegisterClass(MVT::v4i64, &VE::VMRegClass);
+    addRegisterClass(MVT::v8i64, &VE::VMRegClass);
+  }
 
   /// Scalar Lowering {
 
@@ -3965,18 +3975,16 @@ void VETargetLowering::LowerOperationWrapper(SDNode *N,
   assert(NumResults <= 2);
   int ValIdx = NumResults - 1;
 
-  // Non-VVP op -> expand using LLVM (fallback)
-  if (!IsVVPOrVEC(N->getOpcode())) {
+  // void/non-vector that needs lowering? -> expand to VVP
+  if (!N->getValueType(0).isVector() && shouldExpandToVVP(*N)) {
+    SDValue FixedOp = ExpandToVVP(SDValue(N, 0), DAG, VVPExpansionMode::ToNativeWidth);
+    N = FixedOp.getNode();
+  } else if (!IsVVPOrVEC(N->getOpcode())) {
     LLVM_DEBUG(
         dbgs() << "\t Not a VP/VEC Op ->defaulting to standard expansion\n";);
     return;
   }
 
-  // void/non-vector that needs lowering? -> expand to VVP
-  if (!N->getValueType(0).isVector() && shouldExpandToVVP(*N)) {
-    SDValue FixedOp = ExpandToVVP(SDValue(N, 0), DAG, VVPExpansionMode::ToNativeWidth);
-    N = FixedOp.getNode();
-  }
 
   // Expansion defer to LLVM for lowering
   if (!N) {
@@ -4030,6 +4038,17 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
   unsigned NumResults = N->getNumValues();
   assert(NumResults > 0);
 
+  // recognized reductions
+  if (N->getOpcode() == ISD::EXTRACT_VECTOR_ELT) {
+    const ISD::NodeType RecognizedOCList[] = { ISD::ADD, ISD::MUL, ISD::OR, ISD::XOR, ISD::AND };
+    
+    ISD::NodeType RedOC;
+    SDValue RedRootV = DAG.matchBinOpReduction(N, RedOC, RecognizedOCList);
+    if (RedRootV) {
+      LLVM_DEBUG( dbgs() << "Matched a shuffle reduction pattern!\n"; );
+    }
+  }
+  
   // if the SDNode has a chain operator on the value output instead
   assert(NumResults <= 2);
   int ValIdx = NumResults - 1;
