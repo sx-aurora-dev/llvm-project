@@ -1030,7 +1030,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
   // This is the number of LSV that may be used to represent a BUILD_VECTOR
   // Otw, this defaults to VLD of a constant
   // FIXME move this to TTI
-  const unsigned InsertThreshold = 6;
+  const unsigned InsertThreshold = 4;
 
   if (NumElems >= InsertThreshold) {
     switch (BVK) {
