@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=velintrin | FileCheck %s
 ; ModuleID = 'gen/tests/pvfnmad_vvvvl.c'
 source_filename = "gen/tests/pvfnmad_vvvvl.c"
 target datalayout = "e-m:e-i64:64-n32:64-S64-v64:64:64-v128:64:64-v256:64:64-v512:64:64-v1024:64:64-v2048:64:64-v4096:64:64-v8192:64:64-v16384:64:64"

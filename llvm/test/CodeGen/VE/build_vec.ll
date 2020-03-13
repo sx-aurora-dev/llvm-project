@@ -4,12 +4,17 @@
 define i32 @brd_v4i32() {
 ; CHECK-LABEL: brd_v4i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    st %s18, 48(,%s9) # 8-byte Folded Spill
-; CHECK-NEXT:    st %s19, 56(,%s9) # 8-byte Folded Spill
-; CHECK-NEXT:    or %s19, 4, (0)1
-; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    lvl %s19
-; CHECK-NEXT:    vbrdl %v0,%s0
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    or %s1, 2, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrdl %v0,%s1
+; CHECK-NEXT:    lea %s0, calc_v4i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 2, i32 2, i32 2, i32 2>)
   %elems.sroa.0.8.vec.extract = extractelement <4 x i32> %call, i32 2
@@ -22,12 +27,17 @@ declare <4 x i32> @calc_v4i32(<4 x i32>)
 define i32 @brd_v256i32() {
 ; CHECK-LABEL: brd_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    st %s18, 48(,%s9) # 8-byte Folded Spill
-; CHECK-NEXT:    st %s19, 56(,%s9) # 8-byte Folded Spill
-; CHECK-NEXT:    lea %s19, 256
-; CHECK-NEXT:    or %s0, 2, (0)1
-; CHECK-NEXT:    lvl %s19
-; CHECK-NEXT:    vbrdl %v0,%s0
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    or %s1, 2, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrdl %v0,%s1
+; CHECK-NEXT:    lea %s0, calc_v256i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2,
@@ -72,11 +82,16 @@ declare <256 x i32> @calc_v256i32(<256 x i32>)
 define i32 @vseq_v4i32() {
 ; CHECK-LABEL: vseq_v4i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    st %s18, 48(,%s9) # 8-byte Folded Spill
-; CHECK-NEXT:    st %s19, 56(,%s9) # 8-byte Folded Spill
-; CHECK-NEXT:    or %s19, 4, (0)1
-; CHECK-NEXT:    lvl %s19
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    lea %s0, calc_v4i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 1, i32 2, i32 3>)
   %elems.sroa.0.8.vec.extract = extractelement <4 x i32> %call, i32 2
@@ -87,11 +102,16 @@ entry:
 define i32 @vseq_v256i32() {
 ; CHECK-LABEL: vseq_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    st %s18, 48(,%s9) # 8-byte Folded Spill
-; CHECK-NEXT:    st %s19, 56(,%s9) # 8-byte Folded Spill
-; CHECK-NEXT:    lea %s19, 256
-; CHECK-NEXT:    lvl %s19
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    lea %s0, calc_v256i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,
@@ -134,7 +154,19 @@ entry:
 define i32 @vseq_bad_v4i32() {
 ; CHECK-LABEL: vseq_bad_v4i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NOT:     pvseq.lo
+; CHECK-NEXT:    lea %s0, .LCPI4_0@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s0, .LCPI4_0@hi(%s0)
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vldl.zx %v0,4,%s0
+; CHECK-NEXT:    lea %s0, calc_v4i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 2, i32 3, i32 4, i32 5>)
   %elems.sroa.0.8.vec.extract = extractelement <4 x i32> %call, i32 2
@@ -145,7 +177,19 @@ entry:
 define i32 @vseq_bad_v256i32() {
 ; CHECK-LABEL: vseq_bad_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NOT:     pvseq.lo
+; CHECK-NEXT:    lea %s0, .LCPI5_0@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s0, .LCPI5_0@hi(%s0)
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vldl.zx %v0,4,%s0
+; CHECK-NEXT:    lea %s0, calc_v256i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15,
@@ -188,11 +232,18 @@ entry:
 define i32 @vseqmul_v4i32() {
 ; CHECK-LABEL: vseqmul_v4i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:         or %s19, 4, (0)1
-; CHECK-NEXT:    lvl %s19
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
-; CHECK-NEXT:    or %s0, 3, (0)1
-; CHECK-NEXT:    vmuls.w.sx %v0,%s0,%v0
+; CHECK-NEXT:    or %s1, 3, (0)1
+; CHECK-NEXT:    vmuls.w.sx %v0,%s1,%v0
+; CHECK-NEXT:    lea %s0, calc_v4i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 3, i32 6, i32 9>)
@@ -204,9 +255,18 @@ entry:
 define i32 @vseqmul_v256i32() {
 ; CHECK-LABEL: vseqmul_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:         lea %s19, 256
-; CHECK-NEXT:    lvl %s19
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    or %s1, 2, (0)1
+; CHECK-NEXT:    vmuls.w.sx %v0,%s1,%v0
+; CHECK-NEXT:    lea %s0, calc_v256i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 0, i32 2, i32 4, i32 6, i32 8, i32 10, i32 12, i32 14,
@@ -249,11 +309,19 @@ entry:
 define i32 @vseqsrl_v4i32() {
 ; CHECK-LABEL: vseqsrl_v4i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:         or %s0, 1, (0)1
-; CHECK-NEXT:    or %s19, 4, (0)1
-; CHECK-NEXT:    lvl %s19
-; CHECK-NEXT:    pvseq.lo %v0
-; CHECK-NEXT:    pvsrl.lo %v0,%v0,%s0
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrdl %v0,%s1
+; CHECK-NEXT:    pvseq.lo %v1
+; CHECK-NEXT:    pvsrl.lo %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    lea %s0, calc_v4i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 0, i32 1, i32 1>)
   %elems.sroa.0.8.vec.extract = extractelement <4 x i32> %call, i32 2
@@ -264,11 +332,19 @@ entry:
 define i32 @vseqsrl_v8i32() {
 ; CHECK-LABEL: vseqsrl_v8i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:         or %s0, 1, (0)1
-; CHECK-NEXT:    or %s19, 8, (0)1
-; CHECK-NEXT:    lvl %s19
-; CHECK-NEXT:    pvseq.lo %v0
-; CHECK-NEXT:    pvsrl.lo %v0,%v0,%s0
+; CHECK-NEXT:    or %s0, 8, (0)1
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrdl %v0,%s1
+; CHECK-NEXT:    pvseq.lo %v1
+; CHECK-NEXT:    pvsrl.lo %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    lea %s0, calc_v8i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v8i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <8 x i32> @calc_v8i32(<8 x i32> <i32 0, i32 0, i32 1, i32 1, i32 2, i32 2, i32 3, i32 3>)
   %elems.sroa.0.8.vec.extract = extractelement <8 x i32> %call, i32 2
@@ -281,11 +357,19 @@ declare <8 x i32> @calc_v8i32(<8 x i32>)
 define i32 @vseqsrl_v256i32() {
 ; CHECK-LABEL: vseqsrl_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:         or %s0, 1, (0)1
-; CHECK-NEXT:    lea %s19, 256
-; CHECK-NEXT:    lvl %s19
-; CHECK-NEXT:    pvseq.lo %v0
-; CHECK-NEXT:    pvsrl.lo %v0,%v0,%s0
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrdl %v0,%s1
+; CHECK-NEXT:    pvseq.lo %v1
+; CHECK-NEXT:    pvsrl.lo %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    lea %s0, calc_v256i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 0, i32 0, i32 1, i32 1, i32 2, i32 2, i32 3, i32 3,
@@ -328,12 +412,19 @@ entry:
 define i32 @vseqand_v4i32() {
 ; CHECK-LABEL: vseqand_v4i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:         or %s19, 4, (0)1
-; CHECK-NEXT:    or %s0, 1, (0)1
-; CHECK-NEXT:    lvl %s19
-; CHECK-NEXT:    vbrdl %v0,%s0
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrdl %v0,%s1
 ; CHECK-NEXT:    pvseq.lo %v1
 ; CHECK-NEXT:    pvand.lo %v0,%v1,%v0
+; CHECK-NEXT:    lea %s0, calc_v4i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 1, i32 0, i32 1>)
   %elems.sroa.0.8.vec.extract = extractelement <4 x i32> %call, i32 2
@@ -344,12 +435,19 @@ entry:
 define i32 @vseqand_v256i32() {
 ; CHECK-LABEL: vseqand_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:         lea %s19, 256
-; CHECK-NEXT:    or %s0, 1, (0)1
-; CHECK-NEXT:    lvl %s19
-; CHECK-NEXT:    vbrdl %v0,%s0
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrdl %v0,%s1
 ; CHECK-NEXT:    pvseq.lo %v1
 ; CHECK-NEXT:    pvand.lo %v0,%v1,%v0
+; CHECK-NEXT:    lea %s0, calc_v256i32@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
+; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 0, i32 1, i32 0, i32 1, i32 0, i32 1, i32 0, i32 1,
