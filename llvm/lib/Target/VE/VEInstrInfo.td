@@ -1083,6 +1083,10 @@ let hasSideEffects = 1 in {
   }
 }
 
+// Section 8.3.2 - SVOB (Set Vector Out-of-order memory access Boundary)
+let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 1 in
+def SVOB : RR<0x30, (outs), (ins), "svob">;
+
 // 5.3.2.2. Fixed-Point Arithmetic Operation Instructions
 
 // ADD instruction
@@ -1492,11 +1496,6 @@ def : Pat<(i64 (atomic_cmp_swap_64 ADDRri:$src, i64:$cmp, i64:$new)),
 def : Pat<(int_ve_fencem1), (FENCEM 1)>;
 def : Pat<(int_ve_fencem2), (FENCEM 2)>;
 def : Pat<(int_ve_fencem3), (FENCEM 3)>;
-
-// Set Vector Out-of-order memory access Boundary
-
-let sx = 0, sy = 0, sz = 0, hasSideEffects = 1 in
-def SVOB : RR<0x30, (outs), (ins), "svob">;
 
 // MEMBARRIER
 let hasSideEffects = 1 in
