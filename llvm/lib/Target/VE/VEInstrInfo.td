@@ -1063,6 +1063,26 @@ let cx = 0 in defm ATMAM : RRCASm<"atmam", 0x53, I64, uimm7>;
 let cx = 0 in defm CASL : RRCASm<"cas.l", 0x62, I64, simm7>;
 let cx = 1 in defm CASW : RRCASm<"cas.w", 0x62, I32, simm7>;
 
+//-----------------------------------------------------------------------------
+// Section 8.3 - Transfer Control Instructions
+//-----------------------------------------------------------------------------
+
+// Section 8.3.1 - FENCE (Fence)
+let hasSideEffects = 1 in {
+  let avo = 1 in def FENCEI : RRFENCE<0x20, (outs), (ins), "fencei">;
+  def FENCEM : RRFENCE<0x20, (outs), (ins uimm7:$kind), "fencem $kind"> {
+    bits<2> kind;
+    let lf = kind{1};
+    let sf = kind{0};
+  }
+  def FENCEC : RRFENCE<0x20, (outs), (ins uimm7:$kind), "fencec $kind"> {
+    bits<3> kind;
+    let c2 = kind{2};
+    let c1 = kind{1};
+    let c0 = kind{0};
+  }
+}
+
 // 5.3.2.2. Fixed-Point Arithmetic Operation Instructions
 
 // ADD instruction
@@ -1467,20 +1487,11 @@ def : Pat<(i32 (atomic_cmp_swap_32 ADDRri:$src, i32:$cmp, i32:$new)),
 def : Pat<(i64 (atomic_cmp_swap_64 ADDRri:$src, i64:$cmp, i64:$new)),
           (CASLrir MEMriRRM:$src, $cmp, $new)>;
 
-// Transfer Control Instruction
+// Fence
 
-let avo = 0, c2 = 0, c1 = 0, c0 = 0, hasSideEffects = 1 in {
-  let lf = 0, sf = 1 in
-  def FENCEstore : RRFENCE<0x20, (outs), (ins), "fencem 1">;
-  let lf = 1, sf = 0 in
-  def FENCEload : RRFENCE<0x20, (outs), (ins), "fencem 2">;
-  let lf = 1, sf = 1 in
-  def FENCEloadstore : RRFENCE<0x20, (outs), (ins), "fencem 3">;
-}
-
-def : Pat<(int_ve_fencem1), (FENCEstore)>;
-def : Pat<(int_ve_fencem2), (FENCEload)>;
-def : Pat<(int_ve_fencem3), (FENCEloadstore)>;
+def : Pat<(int_ve_fencem1), (FENCEM 1)>;
+def : Pat<(int_ve_fencem2), (FENCEM 2)>;
+def : Pat<(int_ve_fencem3), (FENCEM 3)>;
 
 // Set Vector Out-of-order memory access Boundary
 
