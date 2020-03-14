@@ -39,9 +39,13 @@ def uimm6 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<6>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm6AsmOperand;
 }
+def LO7 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
+                                   SDLoc(N), MVT::i32);
+}]>;
 def SImm7AsmOperand : AsmOperandClass { let Name = "SImm7"; }
 def simm7 : Operand<i32>, PatLeaf<(imm), [{
-    return isInt<7>(N->getSExtValue()); }]> {
+    return isInt<7>(N->getSExtValue()); }], LO7> {
   let ParserMatchClass = SImm7AsmOperand;
   let DecoderMethod = "DecodeSIMM7";
 }
@@ -104,11 +108,6 @@ def HIFP32 : SDNodeXForm<fpimm, [{
   const APInt& imm = N->getValueAPF().bitcastToAPInt();
   return CurDAG->getTargetConstant(Hi_32(imm.getZExtValue()),
                                    SDLoc(N), MVT::i64);
-}]>;
-
-def LO7 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
-                                   SDLoc(N), MVT::i32);
 }]>;
 
 def LO32 : SDNodeXForm<imm, [{
@@ -1085,20 +1084,20 @@ def SVOB : RR<0x30, (outs), (ins), "svob">;
 // Section 8.4 - Fixed-point Operation Instructions
 //-----------------------------------------------------------------------------
 
-// ADD instruction
-defm ADD : RRm<"addu.l", 0x48, I64, i64, simm7Op64, uimm6Op64>;
+// Section 8.4.1 - ADD (Add)
+defm ADDUL : RRm<"addu.l", 0x48, I64, i64, simm7, uimm6>;
 let cx = 1 in
-defm ADDUW : RRm<"addu.w", 0x48, I32, i32, simm7Op32, uimm6Op32>;
+defm ADDUW : RRm<"addu.w", 0x48, I32, i32, simm7, uimm6>;
 
-// ADS instruction
+// Section 8.4.2 - ADS (Add Single)
 let cx = 0 in
-defm ADS : RRm<"adds.w.sx", 0x4A, I32, i32, simm7Op32, uimm6Op32, add>;
+defm ADDSWSX : RRm<"adds.w.sx", 0x4A, I32, i32, simm7, uimm6, add>;
 let cx = 1 in
-defm ADSU : RRm<"adds.w.zx", 0x4A, I32, i32, simm7Op32, uimm6Op32>;
+defm ADDSWZX : RRm<"adds.w.zx", 0x4A, I32, i32, simm7, uimm6>;
 
-// ADX instruction
+// Section 8.4.3 - ADX (Add)
 let cx = 0 in
-defm ADX : RRm<"adds.l", 0x59, I64, i64, simm7Op64, uimm6Op64, add>;
+defm ADDSL : RRm<"adds.l", 0x59, I64, i64, simm7, uimm6, add>;
 
 // SUB instruction
 let cx = 0 in
@@ -1614,17 +1613,17 @@ def : Pat<(and (trunc i64:$src), 0xffff),
 
 // Cast to i32
 def : Pat<(i32 (trunc i64:$src)),
-          (ADSrm1 (EXTRACT_SUBREG $src, sub_i32), 0)>;
+          (ADDSWSXrm1 (EXTRACT_SUBREG $src, sub_i32), 0)>;
 def : Pat<(i32 (fp_to_sint f128:$sy)), (FIXr (CVDQr $sy))>;
 
 // Cast to i64
 def : Pat<(sext_inreg I64:$src, i32),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
-            (ADSrm1 (EXTRACT_SUBREG $src, sub_i32), 0), sub_i32)>;
+            (ADDSWSXrm1 (EXTRACT_SUBREG $src, sub_i32), 0), sub_i32)>;
 def : Pat<(i64 (sext i32:$sy)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADSrm1 $sy, 0), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADDSWSXrm1 $sy, 0), sub_i32)>;
 def : Pat<(i64 (zext i32:$sy)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADSUrm1 $sy, 0), sub_i32)>;
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADDSWZXrm1 $sy, 0), sub_i32)>;
 def : Pat<(i64 (fp_to_sint f32:$sy)), (FIXXr (CVDr $sy))>;
 def : Pat<(i64 (fp_to_sint f128:$sy)), (FIXXr (CVDQr $sy))>;
 

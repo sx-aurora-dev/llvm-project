@@ -38,6 +38,8 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "ve-asmparser"
+
 // The generated AsmMatcher VEGenAsmMatcher uses "VE" as the target
 // namespace. But SPARC backend uses "SP" as its namespace.
 namespace llvm {
@@ -903,6 +905,7 @@ bool VEAsmParser:: parseDirectiveWord(unsigned Size, SMLoc L) {
 
 OperandMatchResultTy
 VEAsmParser::parseMEMOperand(OperandVector &Operands) {
+  LLVM_DEBUG(dbgs() << "parseMEMOpeand\n");
   const AsmToken &Tok = Parser.getTok();
   SMLoc S = Tok.getLoc();
   SMLoc E = Tok.getEndLoc();
@@ -1015,6 +1018,7 @@ VEAsmParser::parseMEMOperand(OperandVector &Operands) {
 
 OperandMatchResultTy
 VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
+  LLVM_DEBUG(dbgs() << "parseMEMAsOpeand\n");
   const AsmToken &Tok = Parser.getTok();
   SMLoc S = Tok.getLoc();
   SMLoc E = Tok.getEndLoc();
@@ -1106,7 +1110,7 @@ VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
 
 OperandMatchResultTy
 VEAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
-
+  LLVM_DEBUG(dbgs() << "parseOpeand\n");
   OperandMatchResultTy ResTy = MatchOperandParserImpl(Operands, Mnemonic);
 
   // If there wasn't a custom match, try the generic matcher below. Otherwise,
@@ -1115,19 +1119,69 @@ VEAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
   if (ResTy == MatchOperand_Success || ResTy == MatchOperand_ParseFail)
     return ResTy;
 
-  std::unique_ptr<VEOperand> Op;
-  ResTy = parseVEAsmOperand(Op);
-  if (ResTy != MatchOperand_Success || !Op)
-    return MatchOperand_ParseFail;
+  switch (getLexer().getKind()) {
+  case AsmToken::LParen: {
+    // Parsing "(" + number + ")0/1"
+    const AsmToken &Tok1 = Parser.getTok();
+    std::unique_ptr<VEOperand> Op1 = VEOperand::CreateToken(
+        Tok1.getString(), Tok1.getLoc());
+    Parser.Lex(); // Eat the '('.
 
-  // Push the parsed operand into the list of operands
-  Operands.push_back(std::move(Op));
+    const AsmToken &Tok2 = Parser.getTok();
+    std::unique_ptr<VEOperand> Op2;
+    SMLoc E;
+    const MCExpr *EVal;
+    if (Tok2.is(AsmToken::Integer) &&
+        !getParser().parseExpression(EVal, E)) {
+      Op2 = VEOperand::CreateImm(EVal, Tok2.getLoc(), E);
+    } else {
+      getLexer().UnLex(Tok1);
+      return MatchOperand_ParseFail;
+    }
+
+    const AsmToken &Tok3 = Parser.getTok();
+    if (!Tok3.is(AsmToken::RParen)) {
+      getLexer().UnLex(Tok2);
+      getLexer().UnLex(Tok1);
+      return MatchOperand_ParseFail;
+    }
+    Parser.Lex(); // Eat the ')'.
+
+    const AsmToken &Tok4 = Parser.getTok();
+    StringRef Suffix = Tok4.getString();
+    if (Suffix != "1" && Suffix != "0") {
+      getLexer().UnLex(Tok3);
+      getLexer().UnLex(Tok2);
+      getLexer().UnLex(Tok1);
+      return MatchOperand_ParseFail;
+    }
+    Parser.Lex(); // Eat the value.
+    Operands.push_back(std::move(Op1));
+    Operands.push_back(std::move(Op2));
+    // Need to concatanate ')' and '0'/'1'.
+    if (Suffix == "1") {
+      Operands.push_back(VEOperand::CreateToken(")1", Tok3.getLoc()));
+    } else {
+      Operands.push_back(VEOperand::CreateToken(")0", Tok3.getLoc()));
+    }
+    return MatchOperand_Success;
+  }
+  default:
+    std::unique_ptr<VEOperand> Op;
+    ResTy = parseVEAsmOperand(Op);
+    if (ResTy != MatchOperand_Success || !Op)
+      return MatchOperand_ParseFail;
+
+    // Push the parsed operand into the list of operands
+    Operands.push_back(std::move(Op));
+  }
 
   return MatchOperand_Success;
 }
 
 OperandMatchResultTy
 VEAsmParser::parseVEAsmOperand(std::unique_ptr<VEOperand> &Op) {
+  LLVM_DEBUG(dbgs() << "parseVEAsmOpeand\n");
   SMLoc S = Parser.getTok().getLoc();
   SMLoc E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
   const MCExpr *EVal;

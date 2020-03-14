@@ -2874,7 +2874,7 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
         .addReg(Tmp1).addImm(32);
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), Tmp3)
         .addReg(Tmp2).addImm(0).addMBB(DispatchBB, VEMCExpr::VK_VE_GOTOFF_HI32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ADXrr), VR)
+    BuildMI(*MBB, MI, DL, TII->get(VE::ADDSLrr), VR)
         .addReg(VE::SX15).addReg(Tmp3);
   } else {
     // lea     %Tmp1, DispatchBB@lo
@@ -2969,7 +2969,7 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
         .addReg(Tmp1).addImm(32);
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), Tmp3)
         .addReg(Tmp2).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_HI32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ADXrr), LabelReg)
+    BuildMI(*MBB, MI, DL, TII->get(VE::ADDSLrr), LabelReg)
         .addReg(VE::SX15).addReg(Tmp3);
   } else {
     // lea     %Tmp1, restoreMBB@lo
@@ -3230,7 +3230,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), Tmp3)
         .addReg(Tmp2).addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_HI32);
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), BReg)
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), BReg)
         .addReg(VE::SX15).addReg(Tmp3);
   } else {
     // lea     %Tmp1, .LJTI0_0@lo
@@ -3259,7 +3259,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(3);
     // FIXME: combine these add and lds into "lds     TReg, *(BReg, Tmp1)"
     // adds.l  Tmp2, BReg, Tmp1
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
     // lds     TReg, *(Tmp2)
@@ -3292,7 +3292,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(2);
     // FIXME: combine these add and ldl into "ldl     OReg, *(BReg, Tmp1)"
     // add     Tmp2, BReg, Tmp1
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
     // ldl.sx  OReg, *(Tmp2)
@@ -3300,7 +3300,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addReg(Tmp2)
         .addImm(0);
     // adds.l  TReg, BReg, OReg
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), TReg)
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), TReg)
         .addReg(OReg)
         .addReg(BReg);
     // jmpq *(TReg)
@@ -3326,7 +3326,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(2);
     // FIXME: combine these add and ldl into "ldl.zx   OReg, *(BReg, Tmp1)"
     // add     Tmp2, BReg, Tmp1
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
     // ldl.zx  OReg, *(Tmp2)
@@ -3354,11 +3354,11 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), Tmp5)
         .addReg(Tmp4).addImm(0)
         .addExternalSymbol(FunName, VEMCExpr::VK_VE_GOTOFF_HI32);
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), BReg2)
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), BReg2)
         .addReg(VE::SX15).addReg(Tmp5);
 
     // adds.l  TReg, BReg2, OReg
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), TReg)
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), TReg)
         .addReg(OReg)
         .addReg(BReg2);
     // jmpq *(TReg)

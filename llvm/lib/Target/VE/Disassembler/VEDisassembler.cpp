@@ -22,7 +22,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "sparc-disassembler"
+#define DEBUG_TYPE "ve-disassembler"
 
 typedef MCDisassembler::DecodeStatus DecodeStatus;
 
