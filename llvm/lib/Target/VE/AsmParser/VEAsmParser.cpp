@@ -258,6 +258,39 @@ public:
     }
     return false;
   }
+  bool isUImm2() {
+    if (!isImm())
+      return false;
+
+    // Constant case
+    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+      int64_t Value = ConstExpr->getValue();
+      return isUInt<2>(Value);
+    }
+    return false;
+  }
+  bool isUImm3() {
+    if (!isImm())
+      return false;
+
+    // Constant case
+    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+      int64_t Value = ConstExpr->getValue();
+      return isUInt<3>(Value);
+    }
+    return false;
+  }
+  bool isUImm6() {
+    if (!isImm())
+      return false;
+
+    // Constant case
+    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+      int64_t Value = ConstExpr->getValue();
+      return isUInt<6>(Value);
+    }
+    return false;
+  }
   bool isUImm7() {
     if (!isImm())
       return false;
@@ -388,6 +421,18 @@ public:
   }
 
   void addSImm7Operands(MCInst &Inst, unsigned N) const {
+    addImmOperands(Inst, N);
+  }
+
+  void addUImm2Operands(MCInst &Inst, unsigned N) const {
+    addImmOperands(Inst, N);
+  }
+
+  void addUImm3Operands(MCInst &Inst, unsigned N) const {
+    addImmOperands(Inst, N);
+  }
+
+  void addUImm6Operands(MCInst &Inst, unsigned N) const {
     addImmOperands(Inst, N);
   }
 

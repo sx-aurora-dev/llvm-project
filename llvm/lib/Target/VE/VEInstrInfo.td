@@ -24,6 +24,21 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
+def UImm2AsmOperand : AsmOperandClass { let Name = "UImm2"; }
+def uimm2 : Operand<i32>, PatLeaf<(imm), [{
+    return isUInt<2>(N->getZExtValue()); }]> {
+  let ParserMatchClass = UImm2AsmOperand;
+}
+def UImm3AsmOperand : AsmOperandClass { let Name = "UImm3"; }
+def uimm3 : Operand<i32>, PatLeaf<(imm), [{
+    return isUInt<3>(N->getZExtValue()); }]> {
+  let ParserMatchClass = UImm3AsmOperand;
+}
+def UImm6AsmOperand : AsmOperandClass { let Name = "UImm6"; }
+def uimm6 : Operand<i32>, PatLeaf<(imm), [{
+    return isUInt<6>(N->getZExtValue()); }]> {
+  let ParserMatchClass = UImm6AsmOperand;
+}
 def SImm7AsmOperand : AsmOperandClass { let Name = "SImm7"; }
 def simm7 : Operand<i32>, PatLeaf<(imm), [{
     return isInt<7>(N->getSExtValue()); }]> {
@@ -37,7 +52,6 @@ def uimm7 : Operand<i32>, PatLeaf<(imm), [{
 }
 
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
-def uimm6       : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def zero        : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
@@ -503,10 +517,10 @@ multiclass RRmrr<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
                  RegisterClass RCi, ValueType Tyi,
                  SDPatternOperator OpNode = null_frag> {
+  let hasSideEffects = 0 in
   def rr : RR<opc, (outs RCo:$sx), (ins RCi:$sy, RCi:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"),
-              [(set Tyo:$sx, (OpNode Tyi:$sy, Tyi:$sz))]>
-           { let cy = 1; let cz = 1; let hasSideEffects = 0; }
+              [(set Tyo:$sx, (OpNode Tyi:$sy, Tyi:$sz))]>;
 }
 
 multiclass RRmri<string opcStr, bits<8>opc,
@@ -515,73 +529,53 @@ multiclass RRmri<string opcStr, bits<8>opc,
                  SDPatternOperator OpNode = null_frag> {
   // VE calculates (OpNode $sy, $sz), but llvm requires to have immediate
   // in RHS, so we use following definition.
+  let cy = 0, hasSideEffects = 0 in
   def ri : RR<opc, (outs RCo:$sx), (ins RCi:$sz, immOp:$sy),
               !strconcat(opcStr, " $sx, $sy, $sz"),
-              [(set Tyo:$sx, (OpNode Tyi:$sz, (Tyi simm7:$sy)))]>
-           { let cy = 0; let cz = 1; let hasSideEffects = 0; }
+              [(set Tyo:$sx, (OpNode Tyi:$sz, (Tyi simm7:$sy)))]>;
 }
 
 multiclass RRmir<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
                  RegisterClass RCi, ValueType Tyi, Operand immOp,
                  SDPatternOperator OpNode = null_frag> {
+  let cy = 0, hasSideEffects = 0 in
   def ir : RR<opc, (outs RCo:$sx), (ins immOp:$sy, RCi:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"),
-              [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), Tyi:$sz))]>
-           { let cy = 0; let cz = 1; let hasSideEffects = 0; }
+              [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), Tyi:$sz))]>;
 }
 
 multiclass RRmiz<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
                  RegisterClass RCi, ValueType Tyi, Operand immOp,
                  SDPatternOperator OpNode = null_frag> {
+  let cy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
   def zi : RR<opc, (outs RCo:$sx), (ins immOp:$sy),
               !strconcat(opcStr, " $sx, $sy"),
-              [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), 0))]>
-           { let cy = 0; let cz = 0; let sz = 0; let hasSideEffects = 0; }
+              [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), 0))]>;
 }
 
 multiclass RRNDmrm<string opcStr, bits<8>opc,
                    RegisterClass RCo, ValueType Tyo,
                    RegisterClass RCi, ValueType Tyi, Operand immOp2> {
+  let cz = 0, mz = 1, hasSideEffects = 0 in
   def rm0 : RR<opc, (outs RCo:$sx), (ins RCi:$sy, immOp2:$sz),
-               !strconcat(opcStr, " $sx, $sy, (${sz})0")> {
-              let cy = 1;
-              let cz = 0;
-              let mz = 1;
-              // (guess) tblgen conservatively assumes hasSideEffects when
-              // it fails to infer from a pattern.
-              let hasSideEffects = 0;
-            }
+               !strconcat(opcStr, " $sx, $sy, (${sz})0")>;
+  let cz = 0, mz = 0, hasSideEffects = 0 in
   def rm1 : RR<opc, (outs RCo:$sx), (ins RCi:$sy, immOp2:$sz),
-               !strconcat(opcStr, " $sx, $sy, (${sz})1")> {
-              let cy = 1;
-              let cz = 0;
-              let mz = 0;
-              let hasSideEffects = 0;
-            }
+               !strconcat(opcStr, " $sx, $sy, (${sz})1")>;
 }
 
 multiclass RRNDmim<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
                  RegisterClass RCi, ValueType Tyi,
                  Operand immOp, Operand immOp2> {
+  let cy = 0, cz = 0, mz = 1, hasSideEffects = 0 in
   def im0 : RR<opc, (outs RCo:$sx), (ins immOp:$sy, immOp2:$sz),
-               !strconcat(opcStr, " $sx, $sy, (${sz})0")> {
-              let cy = 0;
-              let cz = 0;
-              let mz = 1;
-              // (guess) tblgen conservatively assumes hasSideEffects when
-              // it fails to infer from a pattern.
-              let hasSideEffects = 0;
-            }
+               !strconcat(opcStr, " $sx, $sy, (${sz})0")>;
+  let cy = 0, cz = 0, mz = 0, hasSideEffects = 0 in
   def im1 : RR<opc, (outs RCo:$sx), (ins immOp:$sy, immOp2:$sz),
-               !strconcat(opcStr, " $sx, $sy, (${sz})1")> {
-              let cy = 0;
-              let cz = 0;
-              let mz = 0;
-              let hasSideEffects = 0;
-            }
+               !strconcat(opcStr, " $sx, $sy, (${sz})1")>;
 }
 
 // Used by add, mul, and similar commutative instructions
@@ -1070,12 +1064,12 @@ let cx = 1 in defm CASW : RRCASm<"cas.w", 0x62, I32, simm7>;
 // Section 8.3.1 - FENCE (Fence)
 let hasSideEffects = 1 in {
   let avo = 1 in def FENCEI : RRFENCE<0x20, (outs), (ins), "fencei">;
-  def FENCEM : RRFENCE<0x20, (outs), (ins uimm7:$kind), "fencem $kind"> {
+  def FENCEM : RRFENCE<0x20, (outs), (ins uimm2:$kind), "fencem $kind"> {
     bits<2> kind;
     let lf = kind{1};
     let sf = kind{0};
   }
-  def FENCEC : RRFENCE<0x20, (outs), (ins uimm7:$kind), "fencec $kind"> {
+  def FENCEC : RRFENCE<0x20, (outs), (ins uimm3:$kind), "fencec $kind"> {
     bits<3> kind;
     let c2 = kind{2};
     let c1 = kind{1};
@@ -1087,10 +1081,11 @@ let hasSideEffects = 1 in {
 let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 1 in
 def SVOB : RR<0x30, (outs), (ins), "svob">;
 
-// 5.3.2.2. Fixed-Point Arithmetic Operation Instructions
+//-----------------------------------------------------------------------------
+// Section 8.4 - Fixed-point Operation Instructions
+//-----------------------------------------------------------------------------
 
 // ADD instruction
-let cx = 0 in
 defm ADD : RRm<"addu.l", 0x48, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1 in
 defm ADDUW : RRm<"addu.w", 0x48, I32, i32, simm7Op32, uimm6Op32>;
