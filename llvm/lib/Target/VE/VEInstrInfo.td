@@ -27,7 +27,13 @@ include "VEInstrFormats.td"
 def simm7       : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm6       : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
-def uimm7       : PatLeaf<(imm), [{ return isUInt<7>(N->getZExtValue()); }]>;
+
+def UImm7AsmOperand : AsmOperandClass { let Name = "UImm7"; }
+def uimm7 : Operand<i32>, PatLeaf<(imm), [{
+    return isUInt<7>(N->getZExtValue()); }]> {
+  let ParserMatchClass = UImm7AsmOperand;
+}
+
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def zero        : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
@@ -358,14 +364,9 @@ def simm32Op64 : Operand<i64> {
   let DecoderMethod = "DecodeSIMM32";
 }
 
-def uimm6Op32 : Operand<i32> {
-}
-
-def uimm6Op64 : Operand<i64> {
-}
-
-def uimm6Op128 : Operand<i128> {
-}
+def uimm6Op32 : Operand<i32>;
+def uimm6Op64 : Operand<i64>;
+def uimm6Op128 : Operand<i128>;
 
 // Operand for printing out a condition code.
 def CCOpAsmOperand : AsmOperandClass {
@@ -491,22 +492,6 @@ multiclass RMm<string opcStr, bits<8>opc, RegisterClass RC> {
   let cy = 0, cz = 0 in
   def zii : RM<opc, (outs RC:$dest), (ins MEMzii:$addr),
                !strconcat(opcStr, " $dest, $addr"), []>;
-}
-
-let Constraints = "$dest = $sd", DisableEncoding = "$sd", mayStore=1 in
-multiclass RRCASm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
-                  Operand immOp> {
-  def rir : RRM<
-    opc, (outs RC:$dest), (ins MEMriRRM:$addr, RC:$sy, RC:$sd),
-    !strconcat(opcStr, " $dest, $addr, $sy")> {
-    let hasSideEffects = 0;
-  }
-  def rii : RRM<
-    opc, (outs RC:$dest), (ins MEMriRRM:$addr, immOp:$sy, RC:$sd),
-    !strconcat(opcStr, " $dest, $addr, $sy")> {
-    let cy = 0;
-    let hasSideEffects = 0;
-  }
 }
 
 // Multiclass for RR type instructions
@@ -1039,6 +1024,41 @@ multiclass PFCHm<string opcStr, bits<8>opc> {
 }
 let DecoderMethod = "DecodeASX" in defm PFCH : PFCHm<"pfch", 0x0c>;
 
+// Section 8.2.16 - TS1AM (Test and Set 1 AM)
+
+let Constraints = "$dest = $sd", DisableEncoding = "$sd",
+    mayStore=1, mayLoad = 1, hasSideEffects = 0 in
+multiclass RRCAStgm<string opcStr, bits<8>opc, RegisterClass RC, Operand immOp,
+                    Operand ADDR> {
+  def r : RRM<opc, (outs RC:$dest), (ins ADDR:$addr, RC:$sy, RC:$sd),
+                !strconcat(opcStr, " $dest, $addr, $sy")>;
+  let cy = 0 in
+  def i : RRM<opc, (outs RC:$dest), (ins ADDR:$addr, immOp:$sy, RC:$sd),
+                  !strconcat(opcStr, " $dest, $addr, $sy")>;
+}
+multiclass RRCASm<string opcStr, bits<8>opc, RegisterClass RC, Operand immOp> {
+  defm ri : RRCAStgm<opcStr, opc, RC, immOp, MEMriRRM>;
+  let cz = 0 in defm zi : RRCAStgm<opcStr, opc, RC, immOp, MEMziRRM>;
+}
+
+let cx = 0 in
+defm TS1AML : RRCASm<"ts1am.l", 0x42, I64, uimm7>;
+let cx = 1 in
+defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, uimm7>;
+
+// Section 8.2.17 - TS2AM (Test and Set 2 AM)
+let cx = 0 in defm TS2AM : RRCASm<"ts2am", 0x43, I64, uimm7>;
+
+// Section 8.2.18 - TS3AM (Test and Set 3 AM)
+let cx = 0 in defm TS3AM : RRCASm<"ts3am", 0x52, I64, uimm7>;
+
+// Section 8.2.19 - ATMAM (Atomic AM)
+let cx = 0 in defm ATMAM : RRCASm<"atmam", 0x53, I64, uimm7>;
+
+// Section 8.2.20 - CAS (Compare and Swap)
+let cx = 0 in defm CASL : RRCASm<"cas.l", 0x62, I64, simm7Op32>;
+let cx = 1 in defm CASW : RRCASm<"cas.w", 0x62, I32, simm7Op32>;
+
 // 5.3.2.2. Fixed-Point Arithmetic Operation Instructions
 
 // ADD instruction
@@ -1408,13 +1428,6 @@ def MONCT : RR<
 let cx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 /* , Uses = [IC] */ in
 def SIC : RR<0x28, (outs I32:$sx), (ins), "sic $sx">;
 
-// Test and Set 1 AM (multiple length swap)
-
-let cx = 0 in
-defm TS1AML : RRCASm<"ts1am.l", 0x42, I64, i64, simm7Op64>;
-let cx = 1 in
-defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, i32, simm7Op32>;
-
 // Atomic swap
 //   AND $newsrc, $src, -4      ; 4 byte align address
 //   AND $frac, $src, 3         ; $src position in $newsrc
@@ -1443,13 +1456,6 @@ def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
           (TS1AMWrir MEMriRRM:$src, 15, $new)>;
 def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
           (TS1AMLrir MEMriRRM:$src, 127, $new)>;
-
-// Compare and Swap
-
-let cx = 0 in
-defm CASL : RRCASm<"cas.l", 0x62, I64, i64, simm7Op64>;
-let cx = 1 in
-defm CASW : RRCASm<"cas.w", 0x62, I32, i32, simm7Op32>;
 
 // Atomic cmp and swap
 def : Pat<(i32 (atomic_cmp_swap_32 ADDRri:$src, i32:$cmp, i32:$new)),
