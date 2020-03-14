@@ -24,16 +24,20 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
-def simm7       : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
-def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
-def uimm6       : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
-
+def SImm7AsmOperand : AsmOperandClass { let Name = "SImm7"; }
+def simm7 : Operand<i32>, PatLeaf<(imm), [{
+    return isInt<7>(N->getSExtValue()); }]> {
+  let ParserMatchClass = SImm7AsmOperand;
+  let DecoderMethod = "DecodeSIMM7";
+}
 def UImm7AsmOperand : AsmOperandClass { let Name = "UImm7"; }
 def uimm7 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<7>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm7AsmOperand;
 }
 
+def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
+def uimm6       : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def zero        : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
@@ -1056,8 +1060,8 @@ let cx = 0 in defm TS3AM : RRCASm<"ts3am", 0x52, I64, uimm7>;
 let cx = 0 in defm ATMAM : RRCASm<"atmam", 0x53, I64, uimm7>;
 
 // Section 8.2.20 - CAS (Compare and Swap)
-let cx = 0 in defm CASL : RRCASm<"cas.l", 0x62, I64, simm7Op32>;
-let cx = 1 in defm CASW : RRCASm<"cas.w", 0x62, I32, simm7Op32>;
+let cx = 0 in defm CASL : RRCASm<"cas.l", 0x62, I64, simm7>;
+let cx = 1 in defm CASW : RRCASm<"cas.w", 0x62, I32, simm7>;
 
 // 5.3.2.2. Fixed-Point Arithmetic Operation Instructions
 
@@ -1347,7 +1351,7 @@ multiclass BCRm<string opcStr, string opcStrAt, string opcStrAf, bits<8> opc,
 }
 
 // Section 8.8.1 - BC (Branch on Codition)
-defm BCFL : BCm<"b${cond}.l", "b.l", "baf.l", 0x19, I64, simm7Op32>;
+defm BCFL : BCm<"b${cond}.l", "b.l", "baf.l", 0x19, I64, simm7>;
 
 // Indirect branch aliases
 def : Pat<(brind I64:$reg), (BCFLari_t $reg, 0)>;
@@ -1360,22 +1364,22 @@ let Uses = [SX10], bpf = 3 /* TAKEN */, cf = 15 /* AT */, cy = 0, sy = 0,
 def RET : CF<0x19, (outs), (ins), "b.l.t (, %lr)", [(retflag)]>;
 
 // Section 8.8.2 - BCS (Branch on Condition Single)
-defm BCFW : BCm<"b${cond}.w", "b.w", "baf.w", 0x1B, I32, simm7Op32>;
+defm BCFW : BCm<"b${cond}.w", "b.w", "baf.w", 0x1B, I32, simm7>;
 
 // Section 8.8.3 - BCF (Branch on Condition Floating Point)
-defm BCFD : BCm<"b${cond}.d", "b.d", "baf.d", 0x1C, I64, simm7Op32>;
+defm BCFD : BCm<"b${cond}.d", "b.d", "baf.d", 0x1C, I64, simm7>;
 let cx = 1 in
-defm BCFS : BCm<"b${cond}.s", "b.s", "baf.s", 0x1C, F32, simm7Op32>;
+defm BCFS : BCm<"b${cond}.s", "b.s", "baf.s", 0x1C, F32, simm7>;
 
 // Section 8.8.4 - BCR (Branch on Condition Relative)
 let cx = 0, cx2 = 0 in
-defm BRCFL : BCRm<"br${cf}.l", "br.l", "braf.l", 0x18, I64, simm7Op32>;
+defm BRCFL : BCRm<"br${cf}.l", "br.l", "braf.l", 0x18, I64, simm7>;
 let cx = 1, cx2 = 0 in
-defm BRCFW : BCRm<"br${cf}.w", "br.w", "braf.w", 0x18, I32, simm7Op32>;
+defm BRCFW : BCRm<"br${cf}.w", "br.w", "braf.w", 0x18, I32, simm7>;
 let cx = 0, cx2 = 1 in
-defm BRCFD : BCRm<"br${cf}.d", "br.d", "braf.d", 0x18, I64, simm7Op32>;
+defm BRCFD : BCRm<"br${cf}.d", "br.d", "braf.d", 0x18, I64, simm7>;
 let cx = 1, cx2 = 1 in
-defm BRCFS : BCRm<"br${cf}.s", "br.s", "braf.s", 0x18, F32, simm7Op32>;
+defm BRCFS : BCRm<"br${cf}.s", "br.s", "braf.s", 0x18, F32, simm7>;
 
 // Branch and Save IC
 
