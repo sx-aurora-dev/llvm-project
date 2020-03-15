@@ -1389,7 +1389,7 @@ def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
               (TS1AMWrir
                 (ANDri $src, -4),
                 0,
-                (SLAWSXrr (OR32im1 1, 0),
+                (SLAWSXm0r 63,
                           (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3)),
                 (SLAWSXrr $new,
                           (SLAWSXri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
