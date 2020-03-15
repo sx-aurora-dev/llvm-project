@@ -451,7 +451,7 @@ void VEDAGToDAGISel::Select(SDNode *N) {
     // Set the Y register to the high-part.
     SDValue TopPart;
     if (N->getOpcode() == ISD::SDIV) {
-      TopPart = SDValue(CurDAG->getMachineNode(SP::SRAri, dl, MVT::i32, DivLHS,
+      TopPart = SDValue(CurDAG->getMachineNode(SP::SRAWSXri, dl, MVT::i32, DivLHS,
                                    CurDAG->getTargetConstant(31, dl, MVT::i32)),
                         0);
     } else {

@@ -1120,24 +1120,35 @@ let cw = 1, cw2 = 0 in defm CMOVW : RRCMOVm<"cmov.w${cfw}", 0x3B, I32, i32>;
 let cw = 0, cw2 = 1 in defm CMOVD : RRCMOVm<"cmov.d${cfw}", 0x3B, I64, f64>;
 let cw = 1, cw2 = 1 in defm CMOVS : RRCMOVm<"cmov.s${cfw}", 0x3B, F32, f32>;
 
-// 5.3.2.4 Shift Instructions
+//-----------------------------------------------------------------------------
+// Section 8.6 - Shift Operation Instructions
+//-----------------------------------------------------------------------------
 
-let cx = 0 in
-defm SRAX : RRIm<"sra.l", 0x77, I64, i64, sra>;
-let cx = 0 in
-defm SRA : RRIm<"sra.w.sx", 0x76, I32, i32, sra>;
-let cx = 1 in
-defm SRAU : RRIm<"sra.w.zx", 0x76, I32, i32>;
-
-let cx = 0 in
+// Section 8.6.1 - SLL (Shift Left Logical)
 defm SLL : RRIm<"sll", 0x65, I64, i64, shl>;
-let cx = 0 in
-defm SLA : RRIm<"sla.w.sx", 0x66, I32, i32, shl>;
-let cx = 1 in
-defm SLAU : RRIm<"sla.w.zx", 0x66, I32, i32>;
 
-let cx = 0 in
+// Section 8.6.2 - SLD (Shift Left Double)
+defm SLD : RRIm<"sld", 0x64, I64, i64>;
+
+// Section 8.6.3 - SRL (Shift Right Logical)
 defm SRL : RRIm<"srl", 0x75, I64, i64, srl>;
+
+// Section 8.6.4 - SRD (Shift Right Double)
+defm SRD : RRIm<"srd", 0x74, I64, i64>;
+
+// Section 8.6.5 - SLA (Shift Left Arithmetic)
+defm SLAWSX : RRIm<"sla.w.sx", 0x66, I32, i32, shl>;
+let cx = 1 in defm SLAWZX : RRIm<"sla.w.zx", 0x66, I32, i32>;
+
+// Section 8.6.6 - SLAX (Shift Left Arithmetic)
+defm SLAL : RRIm<"sla.l", 0x57, I64, i64>;
+
+// Section 8.6.7 - SRA (Shift Right Arithmetic)
+defm SRAWSX : RRIm<"sra.w.sx", 0x76, I32, i32, sra>;
+let cx = 1 in defm SRAWZX : RRIm<"sra.w.zx", 0x76, I32, i32>;
+
+// Section 8.6.8 - SRAX (Shift Right Arithmetic)
+defm SRAL : RRIm<"sra.l", 0x77, I64, i64, sra>;
 
 def : Pat<(i32 (srl i32:$src, (i32 simm7:$val))),
           (EXTRACT_SUBREG (SRLri (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
@@ -1373,17 +1384,17 @@ def SIC : RR<0x28, (outs I32:$sx), (ins), "sic $sx">;
 //   SLA $new, $new, $tmp       ; shift $new for 1byte ts1am
 //   TS1AM $new, 0($newsrc), $flag ; 1byte ts1am
 def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
-          (SRAri
-            (SLArr
+          (SRAWSXri
+            (SLAWSXrr
               (TS1AMWrir
                 (ANDri $src, -4),
                 0,
-                (SLArr (OR32im1 1, 0),
-                       (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3)),
-                (SLArr $new,
-                       (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
+                (SLAWSXrr (OR32im1 1, 0),
+                          (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3)),
+                (SLAWSXrr $new,
+                          (SLAWSXri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
               (SUBSWSXir 24,
-                (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
+                (SLAWSXri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
             24
           )>;
 // def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
@@ -1501,27 +1512,27 @@ def : Pat<(f64 fpimm:$val),
 
 // Cast to i1
 def : Pat<(sext_inreg I32:$src, i1),
-          (SRAri (SLAri $src, 31), 31)>;
+          (SRAWSXri (SLAWSXri $src, 31), 31)>;
 def : Pat<(sext_inreg I64:$src, i1),
-          (SRAXri (SLLri $src, 63), 63)>;
+          (SRALri (SLLri $src, 63), 63)>;
 
 // Cast to i8
 def : Pat<(sext_inreg I32:$src, i8),
-          (SRAri (SLAri $src, 24), 24)>;
+          (SRAWSXri (SLAWSXri $src, 24), 24)>;
 def : Pat<(sext_inreg I64:$src, i8),
-          (SRAXri (SLLri $src, 56), 56)>;
+          (SRALri (SLLri $src, 56), 56)>;
 def : Pat<(sext_inreg (i32 (trunc i64:$src)), i8),
-          (EXTRACT_SUBREG (SRAXri (SLLri $src, 56), 56), sub_i32)>;
+          (EXTRACT_SUBREG (SRALri (SLLri $src, 56), 56), sub_i32)>;
 def : Pat<(and (trunc i64:$src), 0xff),
           (AND32rm0 (EXTRACT_SUBREG $src, sub_i32), 56)>;
 
 // Cast to i16
 def : Pat<(sext_inreg I32:$src, i16),
-          (SRAri (SLAri $src, 16), 16)>;
+          (SRAWSXri (SLAWSXri $src, 16), 16)>;
 def : Pat<(sext_inreg I64:$src, i16),
-          (SRAXri (SLLri $src, 48), 48)>;
+          (SRALri (SLLri $src, 48), 48)>;
 def : Pat<(sext_inreg (i32 (trunc i64:$src)), i16),
-          (EXTRACT_SUBREG (SRAXri (SLLri $src, 48), 48), sub_i32)>;
+          (EXTRACT_SUBREG (SRALri (SLLri $src, 48), 48), sub_i32)>;
 def : Pat<(and (trunc i64:$src), 0xffff),
           (AND32rm0 (EXTRACT_SUBREG $src, sub_i32), 48)>;
 
@@ -2141,7 +2152,7 @@ def : Pat<(f64 (bitconvert i64:$src)), (COPY_TO_REGCLASS $src, I64)>;
 def : Pat<(i64 (bitconvert f64:$src)), (COPY_TO_REGCLASS $src, I64)>;
 
 def : Pat<(i32 (bitconvert f32:$op)),
-          (EXTRACT_SUBREG (SRAXri (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
+          (EXTRACT_SUBREG (SRALri (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
             $op, sub_f32), 32), sub_i32)>;
 def : Pat<(f32 (bitconvert i32:$op)),
           (EXTRACT_SUBREG (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
