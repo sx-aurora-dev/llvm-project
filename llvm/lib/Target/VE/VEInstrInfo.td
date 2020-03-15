@@ -590,6 +590,19 @@ multiclass RRm<string opcStr, bits<8>opc,
   RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, immOp2>,
   RRNDmim<opcStr, opc, RC, Ty, RC, Ty, immOp, immOp2>;
 
+// Used by mpd (int x int = long) and similar instructions.
+
+multiclass RRTYm<string opcStr, bits<8>opc,
+               RegisterClass RCo, ValueType Tyo,
+               RegisterClass RCi, ValueType Tyi,
+               Operand immOp, Operand immOp2,
+               SDPatternOperator OpNode = null_frag> :
+  RRmrr<opcStr, opc, RCo, Tyo, RCi, Tyi, OpNode>,
+  RRmri<opcStr, opc, RCo, Tyo, RCi, Tyi, immOp, OpNode>,
+  RRmiz<opcStr, opc, RCo, Tyo, RCi, Tyi, immOp, OpNode>,
+  RRNDmrm<opcStr, opc, RCo, Tyo, RCi, Tyi, immOp2>,
+  RRNDmim<opcStr, opc, RCo, Tyo, RCi, Tyi, immOp, immOp2>;
+
 // Used by sub, div, and similar not commutative instructions
 //   The order of operands are "$sx, $sy, $sz"
 
@@ -1086,50 +1099,39 @@ def SVOB : RR<0x30, (outs), (ins), "svob">;
 
 // Section 8.4.1 - ADD (Add)
 defm ADDUL : RRm<"addu.l", 0x48, I64, i64, simm7, uimm6>;
-let cx = 1 in
-defm ADDUW : RRm<"addu.w", 0x48, I32, i32, simm7, uimm6>;
+let cx = 1 in defm ADDUW : RRm<"addu.w", 0x48, I32, i32, simm7, uimm6>;
 
 // Section 8.4.2 - ADS (Add Single)
-let cx = 0 in
 defm ADDSWSX : RRm<"adds.w.sx", 0x4A, I32, i32, simm7, uimm6, add>;
-let cx = 1 in
-defm ADDSWZX : RRm<"adds.w.zx", 0x4A, I32, i32, simm7, uimm6>;
+let cx = 1 in defm ADDSWZX : RRm<"adds.w.zx", 0x4A, I32, i32, simm7, uimm6>;
 
 // Section 8.4.3 - ADX (Add)
-let cx = 0 in
 defm ADDSL : RRm<"adds.l", 0x59, I64, i64, simm7, uimm6, add>;
 
-// SUB instruction
-let cx = 0 in
-defm SUB : RRNCm<"subu.l", 0x58, I64, i64, simm7Op64, uimm6Op64>;
-let cx = 1 in
-defm SUBUW : RRNCm<"subu.w", 0x58, I32, i32, simm7Op32, uimm6Op32>;
+// Section 8.4.4 - SUB (Subtract)
+defm SUBUL : RRNCm<"subu.l", 0x58, I64, i64, simm7, uimm6>;
+let cx = 1 in defm SUBUW : RRNCm<"subu.w", 0x58, I32, i32, simm7, uimm6>;
 
-// SBS instruction
-let cx = 0 in
-defm SBS : RRNCm<"subs.w.sx", 0x5A, I32, i32, simm7Op32, uimm6Op32, sub>;
-let cx = 1 in
-defm SBSU : RRNCm<"subs.w.zx", 0x5A, I32, i32, simm7Op32, uimm6Op32>;
+// Section 8.4.5 - SBS (Subtract Single)
+defm SUBSWSX : RRNCm<"subs.w.sx", 0x5A, I32, i32, simm7, uimm6, sub>;
+let cx = 1 in defm SUBSWZX : RRNCm<"subs.w.zx", 0x5A, I32, i32, simm7, uimm6>;
 
-// SBX instruction
-let cx = 0 in
-defm SBX : RRNCm<"subs.l", 0x5B, I64, i64, simm7Op64, uimm6Op64, sub>;
+// Section 8.4.6 - SBX (Subtract)
+defm SUBSL : RRNCm<"subs.l", 0x5B, I64, i64, simm7, uimm6, sub>;
 
-// MPY instruction
-let cx = 0 in
-defm MPY : RRm<"mulu.l", 0x49, I64, i64, simm7Op64, uimm6Op64>;
-let cx = 1 in
-defm MPYUW : RRm<"mulu.w", 0x49, I32, i32, simm7Op32, uimm6Op32>;
+// Section 8.4.7 - MPY (Multiply)
+defm MULUL : RRm<"mulu.l", 0x49, I64, i64, simm7, uimm6>;
+let cx = 1 in defm MULUW : RRm<"mulu.w", 0x49, I32, i32, simm7, uimm6>;
 
-// MPS instruction
-let cx = 0 in
-defm MPS : RRm<"muls.w.sx", 0x4B, I32, i32, simm7Op32, uimm6Op32, mul>;
-let cx = 1 in
-defm MPSU : RRm<"muls.w.zx", 0x4B, I32, i32, simm7Op32, uimm6Op32>;
+// Section 8.4.8 - MPS (Multiply Single)
+defm MULSWSX : RRm<"muls.w.sx", 0x4B, I32, i32, simm7, uimm6, mul>;
+let cx = 1 in defm MULSWZX : RRm<"muls.w.zx", 0x4B, I32, i32, simm7, uimm6>;
 
-// MPX instruction
-let cx = 0 in
-defm MPX : RRm<"muls.l", 0x6E, I64, i64, simm7Op64, uimm6Op64, mul>;
+// Section 8.4.9 - MPX (Multiply)
+defm MULSL : RRm<"muls.l", 0x6E, I64, i64, simm7, uimm6, mul>;
+
+// Section 8.4.10 - MPD (Multiply)
+defm MULSLW : RRTYm<"muls.l.w", 0x6B, I64, i64, I32, i32, simm7, uimm6>;
 
 // DIV instruction
 let cx = 0 in
@@ -1468,8 +1470,8 @@ def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
                        (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3)),
                 (SLArr $new,
                        (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
-              (SBSir 24,
-                     (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
+              (SUBSWSXir 24,
+                (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
             24
           )>;
 // def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
