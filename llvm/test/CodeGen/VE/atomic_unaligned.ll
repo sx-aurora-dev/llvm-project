@@ -2066,7 +2066,7 @@ define i32 @test_atomic_fetch_max_4() {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:  or %s3, 0, %s0
-; CHECK-NEXT:  maxs.w.zx %s0, %s0, %s2
+; CHECK-NEXT:  maxs.w.sx %s0, %s0, %s2
 ; CHECK-NEXT:  cas.w %s0, (%s1), %s3
 ; CHECK-NEXT:  brne.w %s0, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
