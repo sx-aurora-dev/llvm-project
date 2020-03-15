@@ -249,6 +249,7 @@ public:
   bool isMEMri() const { return Kind == k_MemoryRegImm; }
   bool isMEMzi() const { return Kind == k_MemoryZeroImm; }
   bool isCCOp() const { return Kind == k_CCOp; }
+  bool isCCOpDot() const { return Kind == k_CCOp; }
   bool isSImm7() {
     if (!isImm())
       return false;
@@ -499,6 +500,12 @@ public:
   }
 
   void addCCOpOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1 && "Invalid number of operands!");
+
+    Inst.addOperand(MCOperand::createImm(getCCVal()));
+  }
+
+  void addCCOpDotOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
 
     Inst.addOperand(MCOperand::createImm(getCCVal()));
@@ -773,25 +780,30 @@ StringRef VEAsmParser::splitMnemonic(StringRef Name, SMLoc NameLoc,
     }
   } else if (Mnemonic.startswith("cmov.") &&
              (Name[5] == 'l' || Name[5] == 'w' || Name[5] == 'd' ||
-              Name[5] == 's') &&
-             Name[6] == '.') {
+              Name[5] == 's')) {
     bool ICC = true;      // Integer CondCode by default
     if (Name[5] == 'd' || Name[5] == 's')
       ICC = false;
-
     // Parse instructions with a conditional code. For example, 'bne' is
     // converted into two operands 'b' and 'ne'.
-    StringRef Cond = Mnemonic.substr(7);
+    StringRef Cond;
+    if (Name.size() == 6) {
+        Cond = Mnemonic.substr(6);
+    } else if (Name[6] == '.') {
+        Cond = Mnemonic.substr(7);
+    } else {
+        Cond = Mnemonic;
+    }
     VECC::CondCode CondCode = ICC ? stringToVEICondCode(Cond)
                                   : stringToVEFCondCode(Cond);
 
     if (CondCode != VECC::UNKNOWN) {
-      Mnemonic = Mnemonic.slice(0, 7);
-      // push "cmov.l/w/d/s."
+      Mnemonic = Mnemonic.slice(0, 6);
+      // push "cmov.l/w/d/s"
       Operands->push_back(VEOperand::CreateToken(Mnemonic, NameLoc));
       SMLoc SuffixLoc = SMLoc::getFromPointer(NameLoc.getPointer() +
                                               (Cond.data() - Name.data()) + 1);
-      // push $cond
+      // push $cond if it has condition
       Operands->push_back(VEOperand::CreateCCOp(CondCode, SuffixLoc, SuffixLoc));
     } else {
       Operands->push_back(VEOperand::CreateToken(Mnemonic, NameLoc));

@@ -212,6 +212,12 @@ void VEInstPrinter::printCCOperand(const MCInst *MI, int opNum,
   O << VECondCodeToString((VECC::CondCode)CC);
 }
 
+void VEInstPrinter::printCCOperandDot(const MCInst *MI, int opNum,
+                                   const MCSubtargetInfo &STI, raw_ostream &O) {
+  int CC = (int)MI->getOperand(opNum).getImm();
+  O << "." << VECondCodeToString((VECC::CondCode)CC);
+}
+
 void VEInstPrinter::printBPOperand(const MCInst *MI, int opNum,
                                    const MCSubtargetInfo &STI,
                                    raw_ostream &O) {

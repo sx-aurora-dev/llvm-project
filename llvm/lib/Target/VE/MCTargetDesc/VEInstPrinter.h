@@ -56,6 +56,8 @@ public:
                            const char *Modifier = nullptr);
   void printCCOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                       raw_ostream &OS);
+  void printCCOperandDot(const MCInst *MI, int opNum,
+                         const MCSubtargetInfo &STI, raw_ostream &OS);
   void printBPOperand(const MCInst *MI, int opNum, const MCSubtargetInfo &STI,
                       raw_ostream &OS);
   bool printGetGOT(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
