@@ -1133,51 +1133,39 @@ defm MULSL : RRm<"muls.l", 0x6E, I64, i64, simm7, uimm6, mul>;
 // Section 8.4.10 - MPD (Multiply)
 defm MULSLW : RRTYm<"muls.l.w", 0x6B, I64, i64, I32, i32, simm7, uimm6>;
 
-// DIV instruction
-let cx = 0 in
-defm DIV : RRNCm<"divu.l", 0x6F, I64, i64, simm7Op64, uimm6Op64, udiv>;
-let cx = 1 in
-defm DIVUW : RRNCm<"divu.w", 0x6F, I32, i32, simm7Op32, uimm6Op32, udiv>;
+// Section 8.4.11 - DIV (Divide)
+defm DIVUL : RRNCm<"divu.l", 0x6F, I64, i64, simm7, uimm6, udiv>;
+let cx = 1 in defm DIVUW : RRNCm<"divu.w", 0x6F, I32, i32, simm7, uimm6, udiv>;
 
-// DVS instruction
-let cx = 0 in
-defm DVS : RRNCm<"divs.w.sx", 0x7B, I32, i32, simm7Op32, uimm6Op32, sdiv>;
-let cx = 1 in
-defm DVSU : RRNCm<"divs.w.zx", 0x7B, I32, i32, simm7Op32, uimm6Op32>;
+// Section 8.4.12 - DVS (Divide Single)
+defm DIVSWSX : RRNCm<"divs.w.sx", 0x7B, I32, i32, simm7, uimm6, sdiv>;
+let cx = 1 in defm DIVSWZX : RRNCm<"divs.w.zx", 0x7B, I32, i32, simm7, uimm6>;
 
-// DVX instruction
-let cx = 0 in
-defm DVX : RRNCm<"divs.l", 0x7F, I64, i64, simm7Op64, uimm6Op64, sdiv>;
+// Section 8.4.13 - DVX (Divide)
+defm DIVSL : RRNCm<"divs.l", 0x7F, I64, i64, simm7, uimm6, sdiv>;
 
-// CMP instruction
-let cx = 0 in
-defm CMP : RRNCm<"cmpu.l", 0x55, I64, i64, simm7Op64, uimm6Op64>;
-let cx = 1 in
-defm CMPUW : RRNCm<"cmpu.w", 0x55, I32, i32, simm7Op32, uimm6Op32>;
+// Section 8.4.14 - CMP (Compare)
+defm CMPUL : RRNCm<"cmpu.l", 0x55, I64, i64, simm7, uimm6>;
+let cx = 1 in defm CMPUW : RRNCm<"cmpu.w", 0x55, I32, i32, simm7, uimm6>;
 
-// CPS instruction
-let cx = 0 in
-defm CPS : RRNCm<"cmps.w.sx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
-let cx = 1 in
-defm CPSU : RRNCm<"cmps.w.zx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
+// Section 8.4.15 - CPS (Compare Single)
+defm CMPSWSX : RRNCm<"cmps.w.sx", 0x7A, I32, i32, simm7, uimm6>;
+let cx = 1 in defm CMPSWZX : RRNCm<"cmps.w.zx", 0x7A, I32, i32, simm7, uimm6>;
 
-// CPX instruction
-let cx = 0 in
-defm CPX : RRNCm<"cmps.l", 0x6A, I64, i64, simm7Op64, uimm6Op64>;
+// Section 8.4.16 - CPX (Compare)
+defm CMPSL : RRNCm<"cmps.l", 0x6A, I64, i64, simm7, uimm6>;
 
+// Section 8.4.17 - CMS (Compare and Select Maximum/Minimum Single)
 // cx: sx/zx, cw: max/min
+defm MAXSWSX : RRm<"maxs.w.sx", 0x78, I32, i32, simm7, uimm6>;
+let cx = 1 in defm MAXSWZX : RRm<"maxs.w.zx", 0x78, I32, i32, simm7, uimm6>;
+let cw = 1 in defm MINSWSX : RRm<"mins.w.sx", 0x78, I32, i32, simm7, uimm6>;
+let cx = 1, cw = 1 in
+defm MINSWZX : RRm<"mins.w.zx", 0x78, I32, i32, simm7, uimm6>;
 
-let cw = 0 in defm CMXa :
-  RRm<"maxs.l", 0x68, I64, i64, simm7Op64, uimm6Op64>;
-
-let cx = 0, cw = 0 in defm CMSa :
-  RRm<"maxs.w.zx", 0x78, I32, i32, simm7Op32, uimm6Op32>;
-
-let cw = 1 in defm CMXi :
-  RRm<"mins.l", 0x68, I64, i64, simm7Op64, uimm6Op64>;
-
-let cx = 1, cw = 0 in defm CMSi :
-  RRm<"mins.w.zx", 0x78, I32, i32, simm7Op32, uimm6Op32>;
+// Section 8.4.18 - CMX (Compare and Select Maximum/Minimum)
+defm MAXSL : RRm<"maxs.l", 0x68, I64, i64, simm7, uimm6>;
+let cw = 1 in defm MINSL : RRm<"mins.l", 0x68, I64, i64, simm7, uimm6>;
 
 // 5.3.2.3. Logical Arithmetic Operation Instructions
 
@@ -1815,7 +1803,7 @@ multiclass BRCCIm<ValueType ty, SDPatternOperator BrOpNode1,
             (BrOpNode2 (icond2cc $cond), 0, (CmpOpNode1 $r, $l), bb:$addr)>;
 }
 defm : BRCCIm<i32, BRCFWrr, BRCFWir, CMPUWrr, CMPUWir>;
-defm : BRCCIm<i64, BRCFLrr, BRCFLir, CMPrr, CMPir>;
+defm : BRCCIm<i64, BRCFLrr, BRCFLir, CMPULrr, CMPULir>;
 
 // floating point brcc
 multiclass BRCCFm<ValueType ty, SDPatternOperator BrOpNode1,
@@ -1899,21 +1887,21 @@ def GETSTACKTOP : Pseudo<(outs I64:$dst), (ins),
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCSIOp:$cond)),
           (EXTRACT_SUBREG
               (CMOVLrm0 (icond2cc $cond),
-                        (CPXrr i64:$LHS, i64:$RHS),
+                        (CMPSLrr i64:$LHS, i64:$RHS),
                         63,
                         (ORim1 0, 0)), sub_i32)>;
 
 def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCUIOp:$cond)),
           (EXTRACT_SUBREG
               (CMOVLrm0 (icond2cc $cond),
-                        (CMPrr i64:$LHS, i64:$RHS),
+                        (CMPULrr i64:$LHS, i64:$RHS),
                         63,
                         (ORim1 0, 0)), sub_i32)>;
 
 def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCSIOp:$cond)),
           (EXTRACT_SUBREG
               (CMOVWrm0 (icond2cc $cond),
-                        (CPSrr i32:$LHS, i32:$RHS),
+                        (CMPSWSXrr i32:$LHS, i32:$RHS),
                         63,
                         (ORim1 0, 0)), sub_i32)>;
 
@@ -1955,34 +1943,34 @@ def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOGT)),
 def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOGT)),
           (FCMASrr $LHS, $RHS)>;
 def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$LHS, i64:$RHS, SETGT)),
-          (CMXarr $LHS, $RHS)>;
+          (MAXSLrr $LHS, $RHS)>;
 def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$LHS, i32:$RHS, SETGT)),
-          (CMSarr $LHS, $RHS)>;
+          (MAXSWSXrr $LHS, $RHS)>;
 def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOGE)),
           (FCMArr $LHS, $RHS)>;
 def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOGE)),
           (FCMASrr $LHS, $RHS)>;
 def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$LHS, i64:$RHS, SETGE)),
-          (CMXarr $LHS, $RHS)>;
+          (MAXSLrr $LHS, $RHS)>;
 def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$LHS, i32:$RHS, SETGE)),
-          (CMSarr $LHS, $RHS)>;
+          (MAXSWSXrr $LHS, $RHS)>;
 
 def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOLT)),
           (FCMIrr $LHS, $RHS)>;
 def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOLT)),
           (FCMISrr $LHS, $RHS)>;
 def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$LHS, i64:$RHS, SETLT)),
-          (CMXirr $LHS, $RHS)>;
+          (MINSLrr $LHS, $RHS)>;
 def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$LHS, i32:$RHS, SETLT)),
-          (CMSirr $LHS, $RHS)>;
+          (MINSWSXrr $LHS, $RHS)>;
 def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOLE)),
           (FCMIrr $LHS, $RHS)>;
 def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOLE)),
           (FCMISrr $LHS, $RHS)>;
 def : Pat<(i64 (selectcc i64:$LHS, i64:$RHS, i64:$LHS, i64:$RHS, SETLE)),
-          (CMXirr $LHS, $RHS)>;
+          (MINSLrr $LHS, $RHS)>;
 def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$LHS, i32:$RHS, SETLE)),
-          (CMSirr $LHS, $RHS)>;
+          (MINSWSXrr $LHS, $RHS)>;
 
 // Generic SELECTCC pattern matches
 //
@@ -1992,13 +1980,13 @@ def : Pat<(i32 (selectcc i32:$LHS, i32:$RHS, i32:$LHS, i32:$RHS, SETLE)),
 
 // selectcc for i64 result
 def : Pat<(i64 (selectcc i32:$l, i32:$r, i64:$t, i64:$f, CCSIOp:$cond)),
-          (CMOVWrr (icond2cc $cond), (CPSrr $l, $r), $t, $f)>;
+          (CMOVWrr (icond2cc $cond), (CMPSWSXrr $l, $r), $t, $f)>;
 def : Pat<(i64 (selectcc i32:$l, i32:$r, i64:$t, i64:$f, CCUIOp:$cond)),
           (CMOVWrr (icond2cc $cond), (CMPUWrr $l, $r), $t, $f)>;
 def : Pat<(i64 (selectcc i64:$l, i64:$r, i64:$t, i64:$f, CCSIOp:$cond)),
-          (CMOVLrr (icond2cc $cond), (CPXrr $l, $r), $t, $f)>;
+          (CMOVLrr (icond2cc $cond), (CMPSLrr $l, $r), $t, $f)>;
 def : Pat<(i64 (selectcc i64:$l, i64:$r, i64:$t, i64:$f, CCUIOp:$cond)),
-          (CMOVLrr (icond2cc $cond), (CMPrr $l, $r), $t, $f)>;
+          (CMOVLrr (icond2cc $cond), (CMPULrr $l, $r), $t, $f)>;
 def : Pat<(i64 (selectcc f32:$l, f32:$r, i64:$t, i64:$f, cond:$cond)),
           (CMOVSrr (fcond2cc $cond), (FCPSrr $l, $r), $t, $f)>;
 def : Pat<(i64 (selectcc f64:$l, f64:$r, i64:$t, i64:$f, cond:$cond)),
@@ -2010,7 +1998,7 @@ def : Pat<(i64 (selectcc f128:$l, f128:$r, i64:$t, i64:$f, cond:$cond)),
 def : Pat<(i32 (selectcc i32:$l, i32:$r, i32:$t, i32:$f, CCSIOp:$cond)),
           (EXTRACT_SUBREG
               (CMOVWrr (icond2cc $cond),
-                       (CPSrr $l, $r),
+                       (CMPSWSXrr $l, $r),
                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_i32),
                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_i32)),
               sub_i32)>;
@@ -2024,14 +2012,14 @@ def : Pat<(i32 (selectcc i32:$l, i32:$r, i32:$t, i32:$f, CCUIOp:$cond)),
 def : Pat<(i32 (selectcc i64:$l, i64:$r, i32:$t, i32:$f, CCSIOp:$cond)),
           (EXTRACT_SUBREG
               (CMOVLrr (icond2cc $cond),
-                       (CPXrr $l, $r),
+                       (CMPSLrr $l, $r),
                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_i32),
                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_i32)),
               sub_i32)>;
 def : Pat<(i32 (selectcc i64:$l, i64:$r, i32:$t, i32:$f, CCUIOp:$cond)),
           (EXTRACT_SUBREG
               (CMOVLrr (icond2cc $cond),
-                       (CMPrr $l, $r),
+                       (CMPULrr $l, $r),
                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_i32),
                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_i32)),
               sub_i32)>;
@@ -2061,10 +2049,10 @@ def : Pat<(i32 (selectcc f128:$l, f128:$r, i32:$t, i32:$f, cond:$cond)),
 def : Pat<(f128 (selectcc i32:$l, i32:$r, f128:$t, f128:$f, CCSIOp:$cond)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
-              (CMOVWrr (icond2cc $cond), (CPSrr $l, $r),
+              (CMOVWrr (icond2cc $cond), (CMPSWSXrr $l, $r),
                 (EXTRACT_SUBREG $t, sub_odd),
                 (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
-            (CMOVWrr (icond2cc $cond), (CPSrr $l, $r),
+            (CMOVWrr (icond2cc $cond), (CMPSWSXrr $l, $r),
               (EXTRACT_SUBREG $t, sub_even),
               (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 def : Pat<(f128 (selectcc i32:$l, i32:$r, f128:$t, f128:$f, CCUIOp:$cond)),
@@ -2079,19 +2067,19 @@ def : Pat<(f128 (selectcc i32:$l, i32:$r, f128:$t, f128:$f, CCUIOp:$cond)),
 def : Pat<(f128 (selectcc i64:$l, i64:$r, f128:$t, f128:$f, CCSIOp:$cond)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
-              (CMOVLrr (icond2cc $cond), (CPXrr $l, $r),
+              (CMOVLrr (icond2cc $cond), (CMPSLrr $l, $r),
                 (EXTRACT_SUBREG $t, sub_odd),
                 (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
-            (CMOVLrr (icond2cc $cond), (CPXrr $l, $r),
+            (CMOVLrr (icond2cc $cond), (CMPSLrr $l, $r),
               (EXTRACT_SUBREG $t, sub_even),
               (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 def : Pat<(f128 (selectcc i64:$l, i64:$r, f128:$t, f128:$f, CCUIOp:$cond)),
           (INSERT_SUBREG
             (INSERT_SUBREG (f128 (IMPLICIT_DEF)),
-              (CMOVLrr (icond2cc $cond), (CMPrr $l, $r),
+              (CMOVLrr (icond2cc $cond), (CMPULrr $l, $r),
                 (EXTRACT_SUBREG $t, sub_odd),
                 (EXTRACT_SUBREG $f, sub_odd)), sub_odd),
-            (CMOVLrr (icond2cc $cond), (CMPrr $l, $r),
+            (CMOVLrr (icond2cc $cond), (CMPULrr $l, $r),
               (EXTRACT_SUBREG $t, sub_even),
               (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 def : Pat<(f128 (selectcc f32:$l, f32:$r, f128:$t, f128:$f, cond:$cond)),
@@ -2124,13 +2112,13 @@ def : Pat<(f128 (selectcc f128:$l, f128:$r, f128:$t, f128:$f, cond:$cond)),
 
 // selectcc for f64 result
 def : Pat<(f64 (selectcc i32:$l, i32:$r, f64:$t, f64:$f, CCSIOp:$cond)),
-          (CMOVWrr (icond2cc $cond), (CPSrr $l, $r), $t, $f)>;
+          (CMOVWrr (icond2cc $cond), (CMPSWSXrr $l, $r), $t, $f)>;
 def : Pat<(f64 (selectcc i32:$l, i32:$r, f64:$t, f64:$f, CCUIOp:$cond)),
           (CMOVWrr (icond2cc $cond), (CMPUWrr $l, $r), $t, $f)>;
 def : Pat<(f64 (selectcc i64:$l, i64:$r, f64:$t, f64:$f, CCSIOp:$cond)),
-          (CMOVLrr (icond2cc $cond), (CPXrr $l, $r), $t, $f)>;
+          (CMOVLrr (icond2cc $cond), (CMPSLrr $l, $r), $t, $f)>;
 def : Pat<(f64 (selectcc i64:$l, i64:$r, f64:$t, f64:$f, CCUIOp:$cond)),
-          (CMOVLrr (icond2cc $cond), (CMPrr $l, $r), $t, $f)>;
+          (CMOVLrr (icond2cc $cond), (CMPULrr $l, $r), $t, $f)>;
 def : Pat<(f64 (selectcc f32:$l, f32:$r, f64:$t, f64:$f, cond:$cond)),
           (CMOVSrr (fcond2cc $cond), (FCPSrr $l, $r), $t, $f)>;
 def : Pat<(f64 (selectcc f64:$l, f64:$r, f64:$t, f64:$f, cond:$cond)),
@@ -2142,7 +2130,7 @@ def : Pat<(f64 (selectcc f128:$l, f128:$r, f64:$t, f64:$f, cond:$cond)),
 def : Pat<(f32 (selectcc i32:$l, i32:$r, f32:$t, f32:$f, CCSIOp:$cond)),
           (EXTRACT_SUBREG
               (CMOVWrr (icond2cc $cond),
-                       (CPSrr $l, $r),
+                       (CMPSWSXrr $l, $r),
                        (INSERT_SUBREG (f64 (IMPLICIT_DEF)), $t, sub_f32),
                        (INSERT_SUBREG (f64 (IMPLICIT_DEF)), $f, sub_f32)),
               sub_f32)>;
@@ -2156,14 +2144,14 @@ def : Pat<(f32 (selectcc i32:$l, i32:$r, f32:$t, f32:$f, CCUIOp:$cond)),
 def : Pat<(f32 (selectcc i64:$l, i64:$r, f32:$t, f32:$f, CCSIOp:$cond)),
           (EXTRACT_SUBREG
               (CMOVLrr (icond2cc $cond),
-                       (CPXrr $l, $r),
+                       (CMPSLrr $l, $r),
                        (INSERT_SUBREG (f64 (IMPLICIT_DEF)), $t, sub_f32),
                        (INSERT_SUBREG (f64 (IMPLICIT_DEF)), $f, sub_f32)),
               sub_f32)>;
 def : Pat<(f32 (selectcc i64:$l, i64:$r, f32:$t, f32:$f, CCUIOp:$cond)),
           (EXTRACT_SUBREG
               (CMOVLrr (icond2cc $cond),
-                       (CMPrr $l, $r),
+                       (CMPULrr $l, $r),
                        (INSERT_SUBREG (f64 (IMPLICIT_DEF)), $t, sub_f32),
                        (INSERT_SUBREG (f64 (IMPLICIT_DEF)), $f, sub_f32)),
               sub_f32)>;
