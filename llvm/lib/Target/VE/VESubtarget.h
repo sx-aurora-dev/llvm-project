@@ -32,9 +32,18 @@ class VESubtarget : public VEGenSubtargetInfo {
   Triple TargetTriple;
   virtual void anchor();
 
-  // Features
+  /// Features {
+
+  // Enable Packed-Mode VPU instructions
   bool PackedMode;
+
+  // Enable llvm.vel.* intrinsics (disabled regular vectorization)
   bool VELIntrinsicMode;
+
+  // Emit VPU instructions
+  bool EnableVPU;
+
+  /// } Features
 
   VEInstrInfo InstrInfo;
   VETargetLowering TLInfo;
@@ -59,6 +68,7 @@ public:
 
   bool enableMachineScheduler() const override;
 
+  bool enableVPU() const { return EnableVPU; }
   bool hasPackedMode() const { return PackedMode; }
   bool hasVELIntrinsicMode() const { return VELIntrinsicMode; }
 

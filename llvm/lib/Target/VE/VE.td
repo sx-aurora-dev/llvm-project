@@ -23,6 +23,10 @@ def FeaturePackedMode
   : SubtargetFeature<"packed", "PackedMode", "true",
                      "Enable v512 packed mode (experimental)">;
 
+def FeatureVPU
+  : SubtargetFeature<"vpu", "EnableVPU", "true",
+                     "Use the VPU">;
+
 def VELIntrinsicMode
   : SubtargetFeature<"velintrin", "VELIntrinsicMode", "true",
                      "Enable llvm.vel.* intrinsics">;

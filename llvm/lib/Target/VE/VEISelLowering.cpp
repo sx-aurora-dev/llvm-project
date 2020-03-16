@@ -1726,23 +1726,25 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
   // VPU registers
-  addRegisterClass(MVT::v256i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v256i64, &VE::V64RegClass);
-  addRegisterClass(MVT::v256f32, &VE::V64RegClass);
-  addRegisterClass(MVT::v256f64, &VE::V64RegClass);
-  addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+  if (Subtarget->enableVPU()) {
+    addRegisterClass(MVT::v256i32, &VE::V64RegClass);
+    addRegisterClass(MVT::v256i64, &VE::V64RegClass);
+    addRegisterClass(MVT::v256f32, &VE::V64RegClass);
+    addRegisterClass(MVT::v256f64, &VE::V64RegClass);
+    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
 
-  if (Subtarget->hasPackedMode()) {
-    addRegisterClass(MVT::v512i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v512f32, &VE::V64RegClass);
-    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-  }
+    if (Subtarget->hasPackedMode()) {
+      addRegisterClass(MVT::v512i32, &VE::V64RegClass);
+      addRegisterClass(MVT::v512f32, &VE::V64RegClass);
+      addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+    }
 
-  // Support mask DT for target intrinsics
-  if (Subtarget->hasVELIntrinsicMode()) {
-    // FIXME intrinsics disabled for now
-    addRegisterClass(MVT::v4i64, &VE::VMRegClass);
-    addRegisterClass(MVT::v8i64, &VE::VMRegClass);
+    // Support mask DT for target intrinsics
+    if (Subtarget->hasVELIntrinsicMode()) {
+      // FIXME intrinsics disabled for now
+      addRegisterClass(MVT::v4i64, &VE::VMRegClass);
+      addRegisterClass(MVT::v8i64, &VE::VMRegClass);
+    }
   }
 
   /// Scalar Lowering {
