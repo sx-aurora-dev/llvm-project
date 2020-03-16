@@ -1438,6 +1438,11 @@ const char *AArch64TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case AArch64ISD::GLDFF1S_UXTW_SCALED:
     return "AArch64ISD::GLDFF1S_UXTW_SCALED";
   case AArch64ISD::GLDFF1S_IMM:       return "AArch64ISD::GLDFF1S_IMM";
+
+  case AArch64ISD::GLDNT1:            return "AArch64ISD::GLDNT1";
+  case AArch64ISD::GLDNT1_INDEX:      return "AArch64ISD::GLDNT1_INDEX";
+  case AArch64ISD::GLDNT1S:           return "AArch64ISD::GLDNT1S";
+
   case AArch64ISD::SST1:              return "AArch64ISD::SST1";
   case AArch64ISD::SST1_SCALED:       return "AArch64ISD::SST1_SCALED";
   case AArch64ISD::SST1_SXTW:         return "AArch64ISD::SST1_SXTW";
@@ -1445,6 +1450,10 @@ const char *AArch64TargetLowering::getTargetNodeName(unsigned Opcode) const {
   case AArch64ISD::SST1_SXTW_SCALED:  return "AArch64ISD::SST1_SXTW_SCALED";
   case AArch64ISD::SST1_UXTW_SCALED:  return "AArch64ISD::SST1_UXTW_SCALED";
   case AArch64ISD::SST1_IMM:          return "AArch64ISD::SST1_IMM";
+
+  case AArch64ISD::SSTNT1:            return "AArch64ISD::SSTNT1";
+  case AArch64ISD::SSTNT1_INDEX:      return "AArch64ISD::SSTNT1_INDEX";
+
   case AArch64ISD::LDP:               return "AArch64ISD::LDP";
   case AArch64ISD::STP:               return "AArch64ISD::STP";
   case AArch64ISD::STNP:              return "AArch64ISD::STNP";
@@ -4257,7 +4266,7 @@ AArch64TargetLowering::LowerCall(CallLoweringInfo &CLI,
         RegsToPass.emplace_back(VA.getLocReg(), Arg);
         RegsUsed.insert(VA.getLocReg());
         const TargetOptions &Options = DAG.getTarget().Options;
-        if (Options.EnableDebugEntryValues)
+        if (Options.EmitCallSiteInfo)
           CSInfo.emplace_back(VA.getLocReg(), i);
       }
     } else {
@@ -10457,6 +10466,7 @@ static SDValue performSVEAndCombine(SDNode *N,
   case AArch64ISD::GLDFF1_UXTW:
   case AArch64ISD::GLDFF1_UXTW_SCALED:
   case AArch64ISD::GLDFF1_IMM:
+  case AArch64ISD::GLDNT1:
     MemVT = cast<VTSDNode>(Src->getOperand(4))->getVT();
     break;
   default:
@@ -11286,8 +11296,14 @@ static SDValue performIntrinsicCombine(SDNode *N,
     return LowerSVEIntrinsicIndex(N, DAG);
   case Intrinsic::aarch64_sve_dup:
     return LowerSVEIntrinsicDUP(N, DAG);
+  case Intrinsic::aarch64_sve_dup_x:
+    return DAG.getNode(ISD::SPLAT_VECTOR, SDLoc(N), N->getValueType(0),
+                       N->getOperand(1));
   case Intrinsic::aarch64_sve_ext:
     return LowerSVEIntrinsicEXT(N, DAG);
+  case Intrinsic::aarch64_sve_sel:
+    return DAG.getNode(ISD::VSELECT, SDLoc(N), N->getValueType(0),
+                       N->getOperand(1), N->getOperand(2), N->getOperand(3));
   case Intrinsic::aarch64_sve_cmpeq_wide:
     return tryConvertSVEWideCompare(N, Intrinsic::aarch64_sve_cmpeq,
                                     false, DCI, DAG);
@@ -12617,6 +12633,19 @@ static SDValue performGlobalAddressCombine(SDNode *N, SelectionDAG &DAG,
                      DAG.getConstant(MinOffset, DL, MVT::i64));
 }
 
+// Turns the vector of indices into a vector of byte offstes by scaling Offset
+// by (BitWidth / 8).
+static SDValue getScaledOffsetForBitWidth(SelectionDAG &DAG, SDValue Offset,
+                                          SDLoc DL, unsigned BitWidth) {
+  assert(Offset.getValueType().isScalableVector() &&
+         "This method is only for scalable vectors of offsets");
+
+  SDValue Shift = DAG.getConstant(Log2_32(BitWidth / 8), DL, MVT::i64);
+  SDValue SplatShift = DAG.getNode(ISD::SPLAT_VECTOR, DL, MVT::nxv2i64, Shift);
+
+  return DAG.getNode(ISD::SHL, DL, MVT::nxv2i64, Offset, SplatShift);
+}
+
 static SDValue performScatterStoreCombine(SDNode *N, SelectionDAG &DAG,
                                           unsigned Opcode,
                                           bool OnlyPackedOffsets = true) {
@@ -12643,6 +12672,23 @@ static SDValue performScatterStoreCombine(SDNode *N, SelectionDAG &DAG,
   // Depending on the addressing mode, this is either a single offset or a
   // vector of offsets  (that fits into one register)
   SDValue Offset = N->getOperand(5);
+
+  // For "scalar + vector of indices", just scale the indices. This only
+  // applies to non-temporal scatters because there's no instruction that takes
+  // indicies.
+  if (Opcode == AArch64ISD::SSTNT1_INDEX) {
+    Offset =
+        getScaledOffsetForBitWidth(DAG, Offset, DL, SrcElVT.getSizeInBits());
+    Opcode = AArch64ISD::SSTNT1;
+  }
+
+  // In the case of non-temporal gather loads there's only one SVE instruction
+  // per data-size: "scalar + vector", i.e.
+  //    * stnt1{b|h|w|d} { z0.s }, p0/z, [z0.s, x0]
+  // Since we do have intrinsics that allow the arguments to be in a different
+  // order, we may need to swap them to match the spec.
+  if (Opcode == AArch64ISD::SSTNT1 && Offset.getValueType().isVector())
+      std::swap(Base, Offset);
 
   // SST1_IMM requires that the offset is an immediate that is:
   //    * a multiple of #SizeInBytes,
@@ -12729,6 +12775,23 @@ static SDValue performGatherLoadCombine(SDNode *N, SelectionDAG &DAG,
   // Depending on the addressing mode, this is either a single offset or a
   // vector of offsets  (that fits into one register)
   SDValue Offset = N->getOperand(4);
+
+  // For "scalar + vector of indices", just scale the indices. This only
+  // applies to non-temporal gathers because there's no instruction that takes
+  // indicies.
+  if (Opcode == AArch64ISD::GLDNT1_INDEX) {
+    Offset =
+        getScaledOffsetForBitWidth(DAG, Offset, DL, RetElVT.getSizeInBits());
+    Opcode = AArch64ISD::GLDNT1;
+  }
+
+  // In the case of non-temporal gather loads there's only one SVE instruction
+  // per data-size: "scalar + vector", i.e.
+  //    * ldnt1{b|h|w|d} { z0.s }, p0/z, [z0.s, x0]
+  // Since we do have intrinsics that allow the arguments to be in a different
+  // order, we may need to swap them to match the spec.
+  if (Opcode == AArch64ISD::GLDNT1 && Offset.getValueType().isVector())
+      std::swap(Base, Offset);
 
   // GLD{FF}1_IMM requires that the offset is an immediate that is:
   //    * a multiple of #SizeInBytes,
@@ -12859,6 +12922,9 @@ performSignExtendInRegCombine(SDNode *N, TargetLowering::DAGCombinerInfo &DCI,
   case AArch64ISD::GLDFF1_IMM:
     NewOpc = AArch64ISD::GLDFF1S_IMM;
     break;
+  case AArch64ISD::GLDNT1:
+    NewOpc = AArch64ISD::GLDNT1S;
+    break;
   default:
     return SDValue();
   }
@@ -12972,12 +13038,28 @@ SDValue AArch64TargetLowering::PerformDAGCombine(SDNode *N,
       return performNEONPostLDSTCombine(N, DCI, DAG);
     case Intrinsic::aarch64_sve_ldnt1:
       return performLDNT1Combine(N, DAG);
+    case Intrinsic::aarch64_sve_ldnt1_gather_scalar_offset:
+      return performGatherLoadCombine(N, DAG, AArch64ISD::GLDNT1);
+    case Intrinsic::aarch64_sve_ldnt1_gather:
+      return performGatherLoadCombine(N, DAG, AArch64ISD::GLDNT1);
+    case Intrinsic::aarch64_sve_ldnt1_gather_index:
+      return performGatherLoadCombine(N, DAG, AArch64ISD::GLDNT1_INDEX);
+    case Intrinsic::aarch64_sve_ldnt1_gather_uxtw:
+      return performGatherLoadCombine(N, DAG, AArch64ISD::GLDNT1);
     case Intrinsic::aarch64_sve_ldnf1:
       return performLDNF1Combine(N, DAG, AArch64ISD::LDNF1);
     case Intrinsic::aarch64_sve_ldff1:
       return performLDNF1Combine(N, DAG, AArch64ISD::LDFF1);
     case Intrinsic::aarch64_sve_stnt1:
       return performSTNT1Combine(N, DAG);
+    case Intrinsic::aarch64_sve_stnt1_scatter_scalar_offset:
+      return performScatterStoreCombine(N, DAG, AArch64ISD::SSTNT1);
+    case Intrinsic::aarch64_sve_stnt1_scatter_uxtw:
+      return performScatterStoreCombine(N, DAG, AArch64ISD::SSTNT1);
+    case Intrinsic::aarch64_sve_stnt1_scatter:
+      return performScatterStoreCombine(N, DAG, AArch64ISD::SSTNT1);
+    case Intrinsic::aarch64_sve_stnt1_scatter_index:
+      return performScatterStoreCombine(N, DAG, AArch64ISD::SSTNT1_INDEX);
     case Intrinsic::aarch64_sve_ld1_gather:
       return performGatherLoadCombine(N, DAG, AArch64ISD::GLD1);
     case Intrinsic::aarch64_sve_ld1_gather_index:
