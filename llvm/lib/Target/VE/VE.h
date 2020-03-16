@@ -77,6 +77,19 @@ enum Prediction {
   BP_TAKEN = 3,
 };
 }
+// Enums corresponding to VE Rounding Mode.  These values must be kept in
+// sync with the ones in the .td file.
+namespace VERD {
+enum RoundingMode {
+  RD_NONE =  0, // According to PSW
+  RD_RZ = 8,    // Round toward Zero
+  RD_RP = 9,    // Round toward Plus infinity
+  RD_RM = 10,   // Round toward Minus infinity
+  RD_RN = 11,   // Round to Nearest (ties to Even)
+  RD_RA = 12,   // Round to Nearest (ties to Away)
+  UNKNOWN
+};
+}
 
 inline static const char *VECondCodeToString(VECC::CondCode CC) {
   switch (CC) {
@@ -236,6 +249,60 @@ inline static VEBP::Prediction VEValToBP(unsigned Val) {
   }
   llvm_unreachable("Invalid branch predicates");
   return VEBP::BP_NONE;
+}
+
+inline static const char *VERDToString(VERD::RoundingMode R) {
+  switch (R) {
+  case VERD::RD_NONE: return "";
+  case VERD::RD_RZ: return ".rz";
+  case VERD::RD_RP: return ".rp";
+  case VERD::RD_RM: return ".rm";
+  case VERD::RD_RN: return ".rn";
+  case VERD::RD_RA: return ".ra";
+  default:
+    llvm_unreachable("Invalid branch predicate");
+  }
+}
+
+inline static VERD::RoundingMode stringToVEIRD(StringRef S) {
+  return StringSwitch<VERD::RoundingMode>(S)
+      .Case("", VERD::RD_NONE)
+      .Case(".rz", VERD::RD_RZ)
+      .Case(".rp", VERD::RD_RP)
+      .Case(".rm", VERD::RD_RM)
+      .Case(".rn", VERD::RD_RN)
+      .Case(".ra", VERD::RD_RA)
+      .Default(VERD::UNKNOWN);
+}
+
+inline static unsigned VERDToVal(VERD::RoundingMode R) {
+  switch (R) {
+  case VERD::RD_NONE:
+  case VERD::RD_RZ:
+  case VERD::RD_RP:
+  case VERD::RD_RM:
+  case VERD::RD_RN:
+  case VERD::RD_RA:
+    return static_cast<unsigned>(R);
+  default:
+    break;
+  }
+  llvm_unreachable("Invalid branch predicates");
+  return VERD::UNKNOWN;
+}
+
+inline static VERD::RoundingMode VEValToRD(unsigned Val) {
+  switch (Val) {
+  case static_cast<unsigned>(VERD::RD_NONE): return VERD::RD_NONE;
+  case static_cast<unsigned>(VERD::RD_RZ): return VERD::RD_RZ;
+  case static_cast<unsigned>(VERD::RD_RP): return VERD::RD_RP;
+  case static_cast<unsigned>(VERD::RD_RM): return VERD::RD_RM;
+  case static_cast<unsigned>(VERD::RD_RN): return VERD::RD_RN;
+  case static_cast<unsigned>(VERD::RD_RA): return VERD::RD_RA;
+  default: break;
+  }
+  llvm_unreachable("Invalid branch predicates");
+  return VERD::UNKNOWN;
 }
 
 } // namespace llvm

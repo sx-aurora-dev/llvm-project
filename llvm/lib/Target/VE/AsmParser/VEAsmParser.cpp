@@ -85,6 +85,7 @@ class VEAsmParser : public MCTargetAsmParser {
   OperandMatchResultTy parseMEMOperand(OperandVector &Operands);
   OperandMatchResultTy parseMEMAsOperand(OperandVector &Operands);
   OperandMatchResultTy parseCCOpOperand(OperandVector &Operands);
+  OperandMatchResultTy parseRDOpOperand(OperandVector &Operands);
   OperandMatchResultTy parseOperand(OperandVector &Operands, StringRef Name);
   OperandMatchResultTy parseVEAsmOperand(std::unique_ptr<VEOperand> &Operand);
   // Split the mnemonic stripping conditional code and quantifiers
@@ -197,6 +198,7 @@ private:
     k_MemoryRegImm,     // base=reg, disp=imm
     k_MemoryZeroImm,    // base=0, disp=imm
     k_CCOp,             // condition code
+    k_RDOp,             // rounding mode
   } Kind;
 
   SMLoc StartLoc, EndLoc;
@@ -225,12 +227,17 @@ private:
     unsigned CCVal;
   };
 
+  struct RDOp {
+    unsigned RDVal;
+  };
+
   union {
     struct Token Tok;
     struct RegOp Reg;
     struct ImmOp Imm;
     struct MemOp Mem;
     struct CCOp CC;
+    struct RDOp RD;
   };
 
 public:
@@ -250,6 +257,7 @@ public:
   bool isMEMzi() const { return Kind == k_MemoryZeroImm; }
   bool isCCOp() const { return Kind == k_CCOp; }
   bool isCCOpDot() const { return Kind == k_CCOp; }
+  bool isRDOp() const { return Kind == k_RDOp; }
   bool isSImm7() {
     if (!isImm())
       return false;
@@ -360,6 +368,11 @@ public:
     return CC.CCVal;
   }
 
+  unsigned getRDVal() const {
+    assert((Kind == k_RDOp) && "Invalid access!");
+    return RD.RDVal;
+  }
+
   /// getStartLoc - Get the location of the first token of this operand.
   SMLoc getStartLoc() const override {
     return StartLoc;
@@ -408,6 +421,9 @@ public:
       break;
     case k_CCOp:
       OS << "CCOp: " << getCCVal() << "\n";
+      break;
+    case k_RDOp:
+      OS << "RDOp: " << getRDVal() << "\n";
       break;
     }
   }
@@ -511,6 +527,12 @@ public:
     Inst.addOperand(MCOperand::createImm(getCCVal()));
   }
 
+  void addRDOpOperands(MCInst &Inst, unsigned N) const {
+    assert(N == 1 && "Invalid number of operands!");
+
+    Inst.addOperand(MCOperand::createImm(getRDVal()));
+  }
+
   static std::unique_ptr<VEOperand> CreateToken(StringRef Str, SMLoc S) {
     auto Op = std::make_unique<VEOperand>(k_Token);
     Op->Tok.Data = Str.data();
@@ -542,6 +564,15 @@ public:
                                                SMLoc E) {
     auto Op = std::make_unique<VEOperand>(k_CCOp);
     Op->CC.CCVal = CCVal;
+    Op->StartLoc = S;
+    Op->EndLoc = E;
+    return Op;
+  }
+
+  static std::unique_ptr<VEOperand> CreateRDOp(unsigned RDVal, SMLoc S,
+                                               SMLoc E) {
+    auto Op = std::make_unique<VEOperand>(k_RDOp);
+    Op->RD.RDVal = RDVal;
     Op->StartLoc = S;
     Op->EndLoc = E;
     return Op;
@@ -741,29 +772,29 @@ OperandMatchResultTy VEAsmParser::tryParseRegister(unsigned &RegNo,
 // qualifier (half-word, byte).
 StringRef VEAsmParser::splitMnemonic(StringRef Name, SMLoc NameLoc,
                                      OperandVector *Operands) {
-  // Create the leading tokens for the mnemonic, split by '.' characters.
+  // Create the leading tokens for the mnemonic
   StringRef Mnemonic = Name;
 
-  // Match b??, br??, and cmov.df.??
+  // Match b??, br??, cmov.df.??, cvt.w.d/s.sx/zx.??, and cvt.l.d.??
   if (Name[0] == 'b') {
     size_t Start = 1;
-    if (Name[1] == 'r')
+    if (Name.size() > 1 && Name[1] == 'r')
       Start = 2;
     size_t Next = Name.find('.');
     bool ICC = true;      // Integer CondCode by default
-    if (Next != StringRef::npos &&
-        (Name[Next+1] == 'd' || Name[Next+1] == 's'))
+    if (Next + 1 < Name.size() &&
+        (Name[Next + 1] == 'd' || Name[Next + 1] == 's'))
       ICC = false;
 
     // Parse instructions with a conditional code. For example, 'bne' is
     // converted into two operands 'b' and 'ne'.
-    StringRef Cond = Mnemonic.slice(Start, Next);
+    StringRef Cond = Name.slice(Start, Next);
     VECC::CondCode CondCode = ICC ? stringToVEICondCode(Cond)
                                   : stringToVEFCondCode(Cond);
 
     if (CondCode != VECC::UNKNOWN && CondCode != VECC::CC_AT &&
         CondCode != VECC::CC_AF) {
-      Mnemonic = Mnemonic.slice(0, Start);
+      Mnemonic = Name.slice(0, Start);
       // push "b" or "br"
       Operands->push_back(VEOperand::CreateToken(Mnemonic, NameLoc));
       SMLoc CondLoc = SMLoc::getFromPointer(NameLoc.getPointer() +
@@ -778,7 +809,7 @@ StringRef VEAsmParser::splitMnemonic(StringRef Name, SMLoc NameLoc,
     } else {
       Operands->push_back(VEOperand::CreateToken(Mnemonic, NameLoc));
     }
-  } else if (Mnemonic.startswith("cmov.") &&
+  } else if (Name.startswith("cmov.") && 5 < Name.size() &&
              (Name[5] == 'l' || Name[5] == 'w' || Name[5] == 'd' ||
               Name[5] == 's')) {
     bool ICC = true;      // Integer CondCode by default
@@ -788,23 +819,51 @@ StringRef VEAsmParser::splitMnemonic(StringRef Name, SMLoc NameLoc,
     // converted into two operands 'b' and 'ne'.
     StringRef Cond;
     if (Name.size() == 6) {
-        Cond = Mnemonic.substr(6);
+        Cond = Name.substr(6);
     } else if (Name[6] == '.') {
-        Cond = Mnemonic.substr(7);
+        Cond = Name.substr(7);
     } else {
-        Cond = Mnemonic;
+        Cond = Name;
     }
     VECC::CondCode CondCode = ICC ? stringToVEICondCode(Cond)
                                   : stringToVEFCondCode(Cond);
 
     if (CondCode != VECC::UNKNOWN) {
-      Mnemonic = Mnemonic.slice(0, 6);
+      Mnemonic = Name.slice(0, 6);
       // push "cmov.l/w/d/s"
       Operands->push_back(VEOperand::CreateToken(Mnemonic, NameLoc));
       SMLoc SuffixLoc = SMLoc::getFromPointer(NameLoc.getPointer() +
                                               (Cond.data() - Name.data()) + 1);
       // push $cond if it has condition
       Operands->push_back(VEOperand::CreateCCOp(CondCode, SuffixLoc, SuffixLoc));
+    } else {
+      Operands->push_back(VEOperand::CreateToken(Mnemonic, NameLoc));
+    }
+  } else if (Name.startswith("cvt.") && 6 < Name.size() &&
+             (Name[4] == 'w' || Name[4] == 'l') && Name[5] == '.' &&
+             (Name[6] == 'd' || Name[6] == 's')) {
+    // Parse instructions with a conditional code. For example, 'cvt.w.d.sx.rz'
+    // is converted into two operands 'cvt.w.d.sx' and '.rz'.
+    StringRef RD = Name;
+    if (Name[4] == 'w' && 9 < Name.size() && Name[7] == '.' &&
+        (Name[8] == 's' || Name[8] == 'z') && Name[9] == 'x') {
+      RD = Name.substr(10);
+    } else if (Name[4] == 'l' && Name[6] == 'd') {
+      RD = Name.substr(7);
+    }
+    VERD::RoundingMode RoundingMode = stringToVEIRD(RD);
+
+    if (RoundingMode != VERD::UNKNOWN) {
+      if (Name[4] == 'w')
+        Mnemonic = Name.slice(0, 10);
+      else
+        Mnemonic = Name.slice(0, 7);
+      // push 1st like `cvt.w.d.sx`
+      Operands->push_back(VEOperand::CreateToken(Mnemonic, NameLoc));
+      SMLoc SuffixLoc = SMLoc::getFromPointer(NameLoc.getPointer() +
+                                              (RD.data() - Name.data()) + 1);
+      // push $round if it has rounding mode
+      Operands->push_back(VEOperand::CreateRDOp(RoundingMode, SuffixLoc, SuffixLoc));
     } else {
       Operands->push_back(VEOperand::CreateToken(Mnemonic, NameLoc));
     }

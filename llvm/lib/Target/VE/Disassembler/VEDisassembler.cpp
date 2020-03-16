@@ -268,6 +268,8 @@ static DecodeStatus DecodeCCOperand(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeBPOperand(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder);
+static DecodeStatus DecodeRDOperand(MCInst &Inst, uint64_t insn,
+                                    uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeBranchCondition(MCInst &Inst, uint64_t insn,
                                           uint64_t Address,
                                           const void *Decoder);
@@ -604,6 +606,13 @@ static DecodeStatus DecodeCCOperand(MCInst &MI, uint64_t cf,
 static DecodeStatus DecodeBPOperand(MCInst &MI, uint64_t bpf,
                                     uint64_t Address, const void *Decoder) {
   MI.addOperand(MCOperand::createImm(VEValToBP(bpf)));
+  return MCDisassembler::Success;
+}
+
+// Decode RD Operand field.
+static DecodeStatus DecodeRDOperand(MCInst &MI, uint64_t cf,
+                                    uint64_t Address, const void *Decoder) {
+  MI.addOperand(MCOperand::createImm(VEValToRD(cf)));
   return MCDisassembler::Success;
 }
 
