@@ -1798,6 +1798,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::SREM, VT, Expand);
     setOperationAction(ISD::SDIVREM, VT, Expand);
     setOperationAction(ISD::UDIVREM, VT, Expand);
+    setOperationAction(ISD::BUILD_PAIR, VT, Expand);
   }
 
   // VE has instructions for fp<->sint, so use them.
