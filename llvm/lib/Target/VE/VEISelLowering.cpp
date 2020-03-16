@@ -33,6 +33,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
+#include "llvm/ADT/iterator_range.h"
 
 #define DEBUG_TYPE "ve-lower"
 
@@ -1729,6 +1730,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
+  const MVT FakeLegalVTs[] = {MVT::v2i32,  MVT::v4i32,  MVT::v8i32,
+                              MVT::v16i32, MVT::v32i32, MVT::v64i32,
+                              MVT::v128i32};
+  
   // VPU registers
   if (Subtarget->enableVPU()) {
     addRegisterClass(MVT::v256i32, &VE::V64RegClass);
@@ -1736,6 +1741,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::v256f32, &VE::V64RegClass);
     addRegisterClass(MVT::v256f64, &VE::V64RegClass);
     addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+
+    // add a couple of fake-legal register classes to
+    // trick LLVM into dowing the lowering right (first promote, then widen -
+    // NEVER split unless told to)
+    for (MVT FakeVT : FakeLegalVTs) {
+      addRegisterClass(FakeVT, &VE::V64RegClass);
+    }
 
     if (Subtarget->hasPackedMode()) {
       addRegisterClass(MVT::v512i32, &VE::V64RegClass);
@@ -2011,6 +2023,20 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     }
   };
 
+  // all builtin opcodes
+  auto AllOCs = llvm::make_range<unsigned>(1, ISD::BUILTIN_OP_END); // TODO use this
+
+  // Promote all builtin ops on vXiT types with size(T) < 32 bit to vXi32
+  // By default use expansion from there on (hoping for widening through
+  // TLI::getPreferredAction)
+#if 0
+  for (MVT FakeVT : FakeLegalVTs) {
+    for (unsigned OC = 1; OC < ISD::BUILTIN_OP_END; ++OC) {
+      setOperationAction(OC, FakeVT, Promote);
+    }
+  }
+#endif
+
   // (Otw legal) Operations to promote to a larger vector element type (i8 and i16 elems)
   const ISD::NodeType SmallElemPromoteOC[] = {
       ISD::ADD,
@@ -2045,6 +2071,27 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     ISD::FP_ROUND,
   };
 
+  // promote arithmetic on i8/i16 element vector types to i32
+  for (MVT VT : MVT::vector_valuetypes()) {
+    MVT ElemVT = VT.getVectorElementType();
+    unsigned W = VT.getVectorNumElements();
+
+    // Promotion rule, accept native element bit sizes
+    if (ElemVT.getScalarSizeInBits() >= 32)
+      continue;
+
+    // Use default splitting for vlens > 512
+    if (W > PackedWidth)
+      continue;
+
+    // Pick packed/standard width
+    MVT PromoteToVT = MVT::getVectorVT(MVT::i32, LegalizeVectorLength(W));
+
+    for (auto OC : SmallElemPromoteOC) {
+      setOperationPromotedToType(OC, VT, PromoteToVT); // TESTING
+    }
+  }
+
   for (MVT VT : MVT::vector_valuetypes()) {
     setOperationAction(ISD::SELECT_CC, VT, Custom);
     // setOperationAction(ISD::VP_VSHIFT, VT,
@@ -2055,15 +2102,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       // VE uses vXi1 types but has no generic operations.
       // VE doesn't support vXi8 and vXi16 value types.
       // So, we mark them all as expanded.
-
-      MVT PromoteToVT =
-          MVT::getVectorVT(MVT::i32,
-                           LegalizeVectorLength(VT.getVectorNumElements()));
-
-      // promote arithmetic on i8/i16 element vector types to i32
-      for (auto OC : SmallElemPromoteOC) {
-        setOperationPromotedToType(OC, VT, PromoteToVT); // TESTING
-      }
 
       // Expand all vector-i8/i16-vector truncstore and extload
       for (MVT OuterVT : MVT::vector_valuetypes()) {
@@ -4119,17 +4157,17 @@ VETargetLowering::getPreferredVectorAction(MVT VT) const {
   if (VT.getVectorNumElements() == 1)
     return TypeScalarizeVector;
 
-  // Promote short element vectors to i32
-  if (VT.isInteger() &&
-      (VT.getVectorElementType().getSizeInBits() < 32) &&
-      (VT.getVectorNumElements() <= 512))
-    return TypePromoteInteger;
-
   // Split oversized vectors
   if (VT.getVectorNumElements() > 512)
     return TypeSplitVector;
 
+  // Promote short element vectors to i32
+  if ((VT.getVectorElementType() != MVT::i1) && VT.isInteger() &&
+      (VT.getVectorElementType().getSizeInBits() < 32))
+    return TypePromoteInteger;
+
   // The default action for an odd-width vector is to widen.
+  // This should also widen vNi1 vectors to v256i1/v512i1
   return TypeWidenVector;
 }
 
