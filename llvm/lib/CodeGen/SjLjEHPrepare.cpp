@@ -27,6 +27,7 @@
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/Utils/Local.h"
 using namespace llvm;
 
@@ -37,6 +38,7 @@ STATISTIC(NumSpilled, "Number of registers live across unwind edges");
 
 namespace {
 class SjLjEHPrepare : public FunctionPass {
+  IntegerType *DataTy;
   Type *doubleUnderDataTy;
   Type *doubleUnderJBufTy;
   Type *FunctionContextTy;
@@ -50,12 +52,12 @@ class SjLjEHPrepare : public FunctionPass {
   Function *CallSiteFn;
   Function *FuncCtxFn;
   AllocaInst *FuncCtx;
-  bool Use64BitsData;
+  const TargetMachine *TM;
 
 public:
   static char ID; // Pass identification, replacement for typeid
-  explicit SjLjEHPrepare(bool use64 = false)
-      : FunctionPass(ID), Use64BitsData(use64) {}
+  explicit SjLjEHPrepare(const TargetMachine *TM = nullptr)
+      : FunctionPass(ID), TM(TM) {}
   bool doInitialization(Module &M) override;
   bool runOnFunction(Function &F) override;
 
@@ -79,8 +81,8 @@ INITIALIZE_PASS(SjLjEHPrepare, DEBUG_TYPE, "Prepare SjLj exceptions",
                 false, false)
 
 // Public Interface To the SjLjEHPrepare pass.
-FunctionPass *llvm::createSjLjEHPreparePass(bool Use64BitsData) {
-  return new SjLjEHPrepare(Use64BitsData);
+FunctionPass *llvm::createSjLjEHPreparePass(const TargetMachine *TM) {
+  return new SjLjEHPrepare(TM);
 }
 
 // doInitialization - Set up decalarations and types needed to process
@@ -89,8 +91,9 @@ bool SjLjEHPrepare::doInitialization(Module &M) {
   // Build the function context structure.
   // builtin_setjmp uses a five word jbuf
   Type *VoidPtrTy = Type::getInt8PtrTy(M.getContext());
-  Type *DataTy = Use64BitsData ?
-    Type::getInt64Ty(M.getContext()) : Type::getInt32Ty(M.getContext());
+  unsigned DataBits =
+      TM ? TM->getSjLjDataSize() : TargetMachine::DefaultSjLjDataSize;
+  DataTy = Type::getIntNTy(M.getContext(), DataBits);
   doubleUnderDataTy = ArrayType::get(DataTy, 4);
   doubleUnderJBufTy = ArrayType::get(VoidPtrTy, 5);
   FunctionContextTy = StructType::get(VoidPtrTy,         // __prev
@@ -99,7 +102,7 @@ bool SjLjEHPrepare::doInitialization(Module &M) {
                                       VoidPtrTy,         // __personality
                                       VoidPtrTy,         // __lsda
                                       doubleUnderJBufTy  // __jbuf
-                                      );
+  );
 
   return true;
 }
@@ -118,10 +121,7 @@ void SjLjEHPrepare::insertCallSiteStore(Instruction *I, int Number) {
       Builder.CreateGEP(FunctionContextTy, FuncCtx, Idxs, "call_site");
 
   // Insert a store of the call-site number
-  IntegerType *DataTy = Use64BitsData ?
-      Type::getInt64Ty(I->getContext()) : Type::getInt32Ty(I->getContext());
-  ConstantInt *CallSiteNoC =
-      ConstantInt::get(DataTy, Number);
+  ConstantInt *CallSiteNoC = ConstantInt::get(DataTy, Number);
   Builder.CreateStore(CallSiteNoC, CallSite, true /*volatile*/);
 }
 
@@ -136,7 +136,6 @@ static void MarkBlocksLiveIn(BasicBlock *BB,
 
   for (BasicBlock *B : inverse_depth_first_ext(BB, Visited))
     LiveBBs.insert(B);
-
 }
 
 /// substituteLPadValues - Substitute the values returned by the landingpad
@@ -198,8 +197,6 @@ Value *SjLjEHPrepare::setupFunctionContext(Function &F,
         Builder.CreateConstGEP2_32(FunctionContextTy, FuncCtx, 0, 2, "__data");
 
     // The exception values come back in context->__data[0].
-    IntegerType *DataTy = Use64BitsData ?
-        Type::getInt64Ty(F.getContext()) : Type::getInt32Ty(F.getContext());
     Value *ExceptionAddr = Builder.CreateConstGEP2_32(doubleUnderDataTy, FCData,
                                                       0, 0, "exception_gep");
     Value *ExnVal = Builder.CreateLoad(DataTy, ExceptionAddr, true, "exn_val");
@@ -211,8 +208,7 @@ Value *SjLjEHPrepare::setupFunctionContext(Function &F,
         Builder.CreateLoad(DataTy, SelectorAddr, true, "exn_selector_val");
 
     // SelVal must be Int32Ty, so trunc it
-    if (Use64BitsData)
-      SelVal = Builder.CreateTrunc(SelVal, Type::getInt32Ty(F.getContext()));
+    SelVal = Builder.CreateTrunc(SelVal, Type::getInt32Ty(F.getContext()));
 
     substituteLPadValues(LPI, ExnVal, SelVal);
   }
