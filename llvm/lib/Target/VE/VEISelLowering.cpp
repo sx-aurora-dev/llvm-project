@@ -2042,6 +2042,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   const ISD::NodeType SmallElemPromoteOC[] = {
       ISD::ADD,
       ISD::AND,
+      ISD::BITCAST,
       ISD::OR,
       ISD::XOR,
       ISD::BUILD_VECTOR,
@@ -2089,7 +2090,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     MVT PromoteToVT = MVT::getVectorVT(MVT::i32, LegalizeVectorLength(W));
 
     for (auto OC : SmallElemPromoteOC) {
-      setOperationPromotedToType(OC, VT, PromoteToVT); // TESTING
+      setOperationPromotedToType(OC, VT, PromoteToVT);
     }
   }
 
