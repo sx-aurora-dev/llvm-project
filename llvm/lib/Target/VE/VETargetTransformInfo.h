@@ -52,16 +52,37 @@ public:
 
   unsigned getMinVectorRegisterBitWidth() const { return 256 * 64; }
 
-  bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) { return true; }
+  static bool
+  isLegalMemDataType(Type& DT) {
+    if (DT.isIntegerTy()) {
+      unsigned ScaBits = DT.getScalarSizeInBits();
+      return ScaBits == 32 || ScaBits == 64;
+    }
+    if (DT.isPointerTy()) {
+      return true;
+    } 
+    if (DT.isFloatTy() || DT.isDoubleTy()) {
+      return true;
+    }
+    return false;
+  }
+
+  // Load & Store {
+  bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) {
+    return DataType->getPrimitiveSizeInBits() == 1 ||
+           isLegalMemDataType(*DataType);
+  }
   bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment) {
-    return true;
+    return DataType->getPrimitiveSizeInBits() == 1 ||
+           isLegalMemDataType(*DataType);
   }
-  bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment) {
-    return true;
+  bool isLegalMaskedGather(Type *ScaDataType, MaybeAlign Alignment) {
+    return isLegalMemDataType(*ScaDataType);
   };
-  bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
-    return true;
+  bool isLegalMaskedScatter(Type *ScaDataType, MaybeAlign Alignment) {
+    return isLegalMemDataType(*ScaDataType);
   }
+  // } Load & Store
 
   /// LLVM-VP Support
   /// {
