@@ -2028,6 +2028,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       ISD::SCALAR_TO_VECTOR,
       ISD::SDIV,
       ISD::SHL,
+      ISD::SRA,
+      ISD::SRL,
       ISD::SUB,
       ISD::UDIV,
       ISD::VECTOR_SHUFFLE,
@@ -2102,7 +2104,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
       setOperationAction(ISD::CONCAT_VECTORS, VT, Expand);
       setOperationAction(ISD::INSERT_SUBVECTOR, VT, Custom);
-      setOperationAction(ISD::VECTOR_SHUFFLE, VT, Custom);
+      // TODO implement a robust shuffle lowering
+      setOperationAction(ISD::VECTOR_SHUFFLE, VT, Promote);
 
       // VL narrowing opportunities
       setOperationAction(ISD::EXTRACT_SUBVECTOR, VT,
