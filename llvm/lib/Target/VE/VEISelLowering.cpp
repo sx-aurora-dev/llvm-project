@@ -1998,6 +1998,47 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   /// Vector Lowering {
 
+  // Vector length legalization
+  auto LegalizeVectorLength = [&](unsigned VL) -> unsigned {
+    if (this->Subtarget->hasPackedMode()) {
+      return VL > StandardVectorWidth ? PackedWidth : StandardVectorWidth;
+    } else {
+      return StandardVectorWidth;
+    }
+  };
+
+  // (Otw legal) Operations to promote to a larger vector element type (i8 and i16 elems)
+  const ISD::NodeType SmallElemPromoteOC[] = {
+      ISD::ADD,
+      ISD::AND,
+      ISD::OR,
+      ISD::XOR,
+      ISD::BUILD_VECTOR,
+      ISD::CONCAT_VECTORS,
+      ISD::EXTRACT_SUBVECTOR,
+      ISD::INSERT_SUBVECTOR,
+      ISD::MGATHER,
+      ISD::MLOAD,
+      ISD::MSCATTER,
+      ISD::MUL,
+      ISD::SCALAR_TO_VECTOR,
+      ISD::SDIV,
+      ISD::SHL,
+      ISD::SUB,
+      ISD::UDIV,
+      ISD::VECTOR_SHUFFLE,
+  };
+
+  const ISD::NodeType FPOCs[] = {
+    ISD::FABS,
+    ISD::FSUB,
+    ISD::FDIV,
+    ISD::FMUL,
+    ISD::FNEG,
+    ISD::FP_EXTEND,
+    ISD::FP_ROUND,
+  };
+
   for (MVT VT : MVT::vector_valuetypes()) {
     setOperationAction(ISD::SELECT_CC, VT, Custom);
     // setOperationAction(ISD::VP_VSHIFT, VT,
@@ -2009,6 +2050,15 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       // VE doesn't support vXi8 and vXi16 value types.
       // So, we mark them all as expanded.
 
+      MVT PromoteToVT =
+          MVT::getVectorVT(MVT::i32,
+                           LegalizeVectorLength(VT.getVectorNumElements()));
+
+      // promote arithmetic on i8/i16 element vector types to i32
+      for (auto OC : SmallElemPromoteOC) {
+        setOperationPromotedToType(OC, VT, PromoteToVT); // TESTING
+      }
+
       // Expand all vector-i8/i16-vector truncstore and extload
       for (MVT OuterVT : MVT::vector_valuetypes()) {
         setTruncStoreAction(OuterVT, VT, Expand);
@@ -2016,34 +2066,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
         setLoadExtAction(ISD::ZEXTLOAD, OuterVT, VT, Expand);
         setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Expand);
       }
-
-      setOperationAction(ISD::SCALAR_TO_VECTOR, VT, Expand);
-      setOperationAction(ISD::BUILD_VECTOR, VT, Expand);
-      setOperationAction(ISD::CONCAT_VECTORS, VT, Expand);
-      setOperationAction(ISD::INSERT_SUBVECTOR, VT, Expand);
-      setOperationAction(ISD::EXTRACT_SUBVECTOR, VT, Expand);
-      setOperationAction(ISD::VECTOR_SHUFFLE, VT, Expand);
-
-      setOperationAction(ISD::FP_EXTEND, VT, Expand);
-      setOperationAction(ISD::FP_ROUND, VT, Expand);
-
-      setOperationAction(ISD::FABS, VT, Expand);
-      setOperationAction(ISD::FNEG, VT, Expand);
-      // setOperationAction(ISD::FADD, VT, Expand);
-      setOperationAction(ISD::FSUB, VT, Expand);
-      setOperationAction(ISD::FMUL, VT, Expand);
-      setOperationAction(ISD::FDIV, VT, Expand);
-      setOperationAction(ISD::ADD, VT, Expand);
-      setOperationAction(ISD::SUB, VT, Expand);
-      setOperationAction(ISD::MUL, VT, Expand);
-      setOperationAction(ISD::SDIV, VT, Expand);
-      setOperationAction(ISD::UDIV, VT, Expand);
-
-      setOperationAction(ISD::SHL, VT, Expand);
-
-      setOperationAction(ISD::MSCATTER, VT, Expand);
-      setOperationAction(ISD::MGATHER, VT, Expand);
-      setOperationAction(ISD::MLOAD, VT, Expand);
 
       // VE vector unit supports only setcc and vselect
       setOperationAction(ISD::SELECT_CC, VT, Expand);
@@ -4090,10 +4112,15 @@ VETargetLowering::getPreferredVectorAction(MVT VT) const {
   if (VT.getVectorNumElements() == 1)
     return TypeScalarizeVector;
 
-  // The default action for mask vectors is to promote
-  if ((VT.getVectorElementType() == MVT::i1) &&
+  // Promote short element vectors to i32
+  if (VT.isInteger() &&
+      (VT.getVectorElementType().getSizeInBits() < 32) &&
       (VT.getVectorNumElements() <= 512))
     return TypePromoteInteger;
+
+  // Split oversized vectors
+  if (VT.getVectorNumElements() > 512)
+    return TypeSplitVector;
 
   // The default action for an odd-width vector is to widen.
   return TypeWidenVector;
