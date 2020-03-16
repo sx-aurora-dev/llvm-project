@@ -2105,7 +2105,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::CONCAT_VECTORS, VT, Expand);
       setOperationAction(ISD::INSERT_SUBVECTOR, VT, Custom);
       // TODO implement a robust shuffle lowering
-      setOperationAction(ISD::VECTOR_SHUFFLE, VT, Promote);
+      setOperationAction(ISD::VECTOR_SHUFFLE, VT, Expand);
 
       // VL narrowing opportunities
       setOperationAction(ISD::EXTRACT_SUBVECTOR, VT,
