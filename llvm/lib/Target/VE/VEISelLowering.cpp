@@ -43,6 +43,10 @@ using namespace llvm;
 
 static bool
 shouldExpandToVVP(SDNode& N) {
+  // Already a target node
+  if (IsVVPOrVEC(N.getOpcode()))
+    return false;
+
   Optional<EVT> IdiomVT = getIdiomaticType(&N);
   if (!IdiomVT.hasValue())
     return false;
