@@ -472,18 +472,31 @@ SDValue CustomDAG::CreateSeq(EVT ResTy,
   return DAG.getNode(VEISD::VEC_SEQ, DL, ResTy, VectorLen);
 }
 
+SDValue
+CustomDAG::getTargetExtractSubreg(MVT SubRegVT, int SubRegIdx, SDValue RegV) const {
+  return DAG.getTargetExtractSubreg(SubRegIdx, DL, SubRegVT, RegV);
+}
+
+// create a vector element or scalar bitshift depending on the element type
+// dst[i] = src[i + Offset]
+SDValue CustomDAG::createScalarShift(EVT ResVT, SDValue Src, int Offset) const {
+  if (Offset == 0)
+    return Src;
+  unsigned OC = Offset > 0 ? VE::SLLri : VE::SRLri; // ISD::SHL : ISD::SRL;
+  SDValue ShiftV = getConstant(std::abs(Offset), ResVT);
+  return DAG.getNode(OC, DL, ResVT, Src, ShiftV);
+}
+
 // create a vector element or scalar bitshift depending on the element type
 // dst[i] = src[i + Offset]
 SDValue CustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
-                                      SDValue AVL) {
+                                      SDValue AVL) const {
   if (Offset == 0)
     return Src;
 
   // scalar bit shift
   if (!Src.getValueType().isVector()) {
-    unsigned OC = Offset > 0 ? VE::SLLri : VE::SRLri; // ISD::SHL : ISD::SRL;
-    SDValue ShiftV = getConstant(Offset, ResVT);
-    return DAG.getNode(OC, DL, ResVT, {Src, ShiftV});
+    return createScalarShift(ResVT, Src, Offset);
   }
 
   // vector shift

@@ -3240,10 +3240,32 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
 
   // Lowering to VM_EXTRACT
   if (SDValue ActualMaskV = PeekForMask(SrcV)) {
-    assert((Op.getValueType() == MVT::i64) && "not a proper mask extraction");
+    auto IndexC = dyn_cast<ConstantSDNode>(IndexV);
+    assert(IndexC);
+    assert(Op.getValueType().isScalarInteger());
+    unsigned PartSize = Op.getValueType().getSizeInBits();
+
+    const unsigned SXRegSize = 64;
 
     CustomDAG CDAG(DAG, Op);
-    return CDAG.CreateExtractMask(ActualMaskV, IndexV);
+
+    // determine the adjusted extraction index
+    SDValue AdjIndexV = IndexV;
+    unsigned ShiftAmount = 0;
+    if (PartSize != 64) {
+      unsigned PartIdx = IndexC->getZExtValue();
+      unsigned AbsOffset = PartSize * PartIdx;
+      unsigned ActualPart = AbsOffset / SXRegSize;
+      AdjIndexV = CDAG.getConstant(ActualPart, MVT::i32);
+
+      ShiftAmount = AbsOffset - (ActualPart * SXRegSize);
+    }
+
+    auto ResV = CDAG.CreateExtractMask(ActualMaskV, AdjIndexV);
+    ResV = CDAG.createScalarShift(MVT::i64, ResV, ShiftAmount);
+
+    // Convert back to actual result type
+    return CDAG.DAG.getAnyExtOrTrunc(ResV, CDAG.DL, Op.getValueType());
   }
 
   // Extraction is legal for other V64 types.

@@ -122,10 +122,15 @@ struct CustomDAG {
   // create a vector element or scalar bitshift depending on the element type
   // \p ResVT will only be used in case any new node is created
   // dst[i] = src[i + Offset]
-  SDValue createElementShift(EVT ResVT, SDValue Src, int Offset, SDValue AVL);
+  SDValue createElementShift(EVT ResVT, SDValue Src, int Offset,
+                             SDValue AVL) const;
+  SDValue createScalarShift(EVT ResVT, SDValue Src, int Offset) const;
 
   SDValue createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV, SDValue Mask,
                     SDValue Avl) const;
+
+  SDValue getTargetExtractSubreg(MVT SubRegVT, int SubRegIdx,
+                                 SDValue RegV) const;
 
   /// Packed Mode Support {
   SDValue CreateUnpack(EVT DestVT, SDValue Vec, SubElem E, SDValue AVL);
