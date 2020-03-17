@@ -58,16 +58,45 @@ public:
     return enableVPU() ? 256 * 64 : 0;
   }
 
-  static bool
-  isLegalMemDataType(Type& DT) {
-    if (DT.isIntegerTy()) {
-      unsigned ScaBits = DT.getScalarSizeInBits();
+  static bool isBoolTy(Type *Ty) { return Ty->getPrimitiveSizeInBits() == 1; }
+
+  unsigned getVRegCapacity(Type &ElemTy) const {
+    unsigned PackLimit = getST()->hasPackedMode() ? 512 : 256;
+    if (ElemTy.isIntegerTy() && ElemTy.getPrimitiveSizeInBits() <= 32)
+      return PackLimit;
+    if (ElemTy.isFloatTy())
+      return PackLimit;
+    return 256;
+  }
+
+  bool isBitVectorType(Type &DT) {
+    auto VTy = dyn_cast<VectorType>(&DT);
+    if (!VTy)
+      return false;
+    return isBoolTy(VTy->getVectorElementType()) &&
+           VTy->getVectorNumElements() <=
+               getVRegCapacity(*VTy->getVectorElementType());
+  }
+
+  bool isVectorRegisterType(Type &DT) {
+    auto VTy = dyn_cast<VectorType>(&DT);
+    if (!VTy)
+      return false;
+    auto &ElemTy = *VTy->getVectorElementType();
+
+    // oversized vector
+    if (getVRegCapacity(ElemTy) < VTy->getVectorNumElements())
+      return false;
+
+    // check element sizes for vregs
+    if (ElemTy.isIntegerTy()) {
+      unsigned ScaBits = ElemTy.getScalarSizeInBits();
       return ScaBits == 32 || ScaBits == 64;
     }
-    if (DT.isPointerTy()) {
+    if (ElemTy.isPointerTy()) {
       return true;
-    } 
-    if (DT.isFloatTy() || DT.isDoubleTy()) {
+    }
+    if (ElemTy.isFloatTy() || ElemTy.isDoubleTy()) {
       return true;
     }
     return false;
@@ -75,22 +104,24 @@ public:
 
   // Load & Store {
   bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) {
-    if (!enableVPU()) return false;
-    return DataType->getPrimitiveSizeInBits() == 1 ||
-           isLegalMemDataType(*DataType);
+    if (!enableVPU())
+      return false;
+    return isVectorRegisterType(*DataType);
   }
   bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment) {
-    if (!enableVPU()) return false;
-    return DataType->getPrimitiveSizeInBits() == 1 ||
-           isLegalMemDataType(*DataType);
+    if (!enableVPU())
+      return false;
+    return isVectorRegisterType(*DataType);
   }
   bool isLegalMaskedGather(Type *ScaDataType, MaybeAlign Alignment) {
-    if (!enableVPU()) return false;
-    return isLegalMemDataType(*ScaDataType);
+    if (!enableVPU())
+      return false;
+    return isVectorRegisterType(*ScaDataType);
   };
   bool isLegalMaskedScatter(Type *ScaDataType, MaybeAlign Alignment) {
-    if (!enableVPU()) return false;
-    return isLegalMemDataType(*ScaDataType);
+    if (!enableVPU())
+      return false;
+    return isVectorRegisterType(*ScaDataType);
   }
   // } Load & Store
 
