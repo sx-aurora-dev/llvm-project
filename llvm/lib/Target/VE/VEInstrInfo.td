@@ -34,9 +34,32 @@ def uimm3 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<3>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm3AsmOperand;
 }
+def M0 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(
+      countLeadingZeros((uint64_t)N->getZExtValue()), SDLoc(N), MVT::i32);
+}]>;
+def M1 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(
+      countLeadingOnes((uint64_t)N->getZExtValue()), SDLoc(N), MVT::i32);
+}]>;
 def UImm6AsmOperand : AsmOperandClass { let Name = "UImm6"; }
 def uimm6 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<6>(N->getZExtValue()); }]> {
+  let ParserMatchClass = UImm6AsmOperand;
+}
+def m0imm : Operand<i32>, PatLeaf<(imm), [{
+    // m0imm is leading 0 and trailing 1 values like `0b000...000111...111`.
+    // Assembler format is `(num)0`, where num is equal to the number of
+    // leading 0.
+    return isMask_64(N->getZExtValue()); }], M0> {
+  let ParserMatchClass = UImm6AsmOperand;
+}
+def m1imm : Operand<i32>, PatLeaf<(imm), [{
+    // m1imm is leading 1 and trailing 0 values like `0b111...111000...000`.
+    // Assembler format is `(num)1`, where num is equal to the number of
+    // leading 1.
+    return (N->getZExtValue() & (1UL << 63)) &&
+           isShiftedMask_64(N->getZExtValue()); }], M1> {
   let ParserMatchClass = UImm6AsmOperand;
 }
 def LO7 : SDNodeXForm<imm, [{
@@ -601,25 +624,31 @@ multiclass RRmiz<string opcStr, bits<8>opc,
 
 multiclass RRNDmrm<string opcStr, bits<8>opc,
                    RegisterClass RCo, ValueType Tyo,
-                   RegisterClass RCi, ValueType Tyi, Operand immOp2> {
+                   RegisterClass RCi, ValueType Tyi, Operand immOp2,
+                   SDPatternOperator OpNode = null_frag> {
   let cz = 0, mz = 1, hasSideEffects = 0 in
-  def rm0 : RR<opc, (outs RCo:$sx), (ins RCi:$sy, immOp2:$sz),
-               !strconcat(opcStr, " $sx, $sy, (${sz})0")>;
+  def rm0 : RR<opc, (outs RCo:$sx), (ins RCi:$sy, m0imm:$sz),
+               !strconcat(opcStr, " $sx, $sy, (${sz})0"),
+               [(set Tyo:$sx, (OpNode Tyi:$sy, (Tyi m0imm:$sz)))]>;
   let cz = 0, mz = 0, hasSideEffects = 0 in
-  def rm1 : RR<opc, (outs RCo:$sx), (ins RCi:$sy, immOp2:$sz),
-               !strconcat(opcStr, " $sx, $sy, (${sz})1")>;
+  def rm1 : RR<opc, (outs RCo:$sx), (ins RCi:$sy, m1imm:$sz),
+               !strconcat(opcStr, " $sx, $sy, (${sz})1"),
+               [(set Tyo:$sx, (OpNode Tyi:$sy, (Tyi m1imm:$sz)))]>;
 }
 
 multiclass RRNDmim<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
                  RegisterClass RCi, ValueType Tyi,
-                 Operand immOp, Operand immOp2> {
+                 Operand immOp, Operand immOp2,
+                 SDPatternOperator OpNode = null_frag> {
   let cy = 0, cz = 0, mz = 1, hasSideEffects = 0 in
-  def im0 : RR<opc, (outs RCo:$sx), (ins immOp:$sy, immOp2:$sz),
-               !strconcat(opcStr, " $sx, $sy, (${sz})0")>;
+  def im0 : RR<opc, (outs RCo:$sx), (ins immOp:$sy, m0imm:$sz),
+               !strconcat(opcStr, " $sx, $sy, (${sz})0"),
+               [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), (Tyi m0imm:$sz)))]>;
   let cy = 0, cz = 0, mz = 0, hasSideEffects = 0 in
-  def im1 : RR<opc, (outs RCo:$sx), (ins immOp:$sy, immOp2:$sz),
-               !strconcat(opcStr, " $sx, $sy, (${sz})1")>;
+  def im1 : RR<opc, (outs RCo:$sx), (ins immOp:$sy, m1imm:$sz),
+               !strconcat(opcStr, " $sx, $sy, (${sz})1"),
+               [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), (Tyi m1imm:$sz)))]>;
 }
 
 // Used by add, mul, and similar commutative instructions
@@ -632,8 +661,8 @@ multiclass RRm<string opcStr, bits<8>opc,
   RRmrr<opcStr, opc, RC, Ty, RC, Ty, OpNode>,
   RRmri<opcStr, opc, RC, Ty, RC, Ty, immOp, OpNode>,
   RRmiz<opcStr, opc, RC, Ty, RC, Ty, immOp, OpNode>,
-  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, immOp2>,
-  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, immOp, immOp2>;
+  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, immOp2, OpNode>,
+  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, immOp, immOp2, OpNode>;
 
 // Used by mpd (int x int = long) and similar instructions.
 
@@ -645,8 +674,8 @@ multiclass RRTYm<string opcStr, bits<8>opc,
   RRmrr<opcStr, opc, RCo, Tyo, RCi, Tyi, OpNode>,
   RRmri<opcStr, opc, RCo, Tyo, RCi, Tyi, immOp, OpNode>,
   RRmiz<opcStr, opc, RCo, Tyo, RCi, Tyi, immOp, OpNode>,
-  RRNDmrm<opcStr, opc, RCo, Tyo, RCi, Tyi, immOp2>,
-  RRNDmim<opcStr, opc, RCo, Tyo, RCi, Tyi, immOp, immOp2>;
+  RRNDmrm<opcStr, opc, RCo, Tyo, RCi, Tyi, immOp2, OpNode>,
+  RRNDmim<opcStr, opc, RCo, Tyo, RCi, Tyi, immOp, immOp2, OpNode>;
 
 // Used by sub, div, and similar not commutative instructions
 //   The order of operands are "$sx, $sy, $sz"
@@ -657,8 +686,8 @@ multiclass RRNCm<string opcStr, bits<8>opc,
   RRmrr<opcStr, opc, RC, Ty, RC, Ty, OpNode>,
   RRmir<opcStr, opc, RC, Ty, RC, Ty, immOp, OpNode>,
   RRmiz<opcStr, opc, RC, Ty, RC, Ty, immOp, OpNode>,
-  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, immOp2>,
-  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, immOp, immOp2>;
+  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, immOp2, OpNode>,
+  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, immOp, immOp2, OpNode>;
 
 // Used by fadd, fsub, and similar floating point instructions
 //   The order of operands are "$sx, $sy, $sz"
@@ -669,8 +698,8 @@ multiclass RRFm<string opcStr, bits<8>opc,
   RRmrr<opcStr, opc, RC, Ty, RC, Ty, OpNode>,
   RRmir<opcStr, opc, RC, Ty, RC, Ty, immOp, null_frag>,
   RRmiz<opcStr, opc, RC, Ty, RC, Ty, immOp, null_frag>,
-  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, immOp2>,
-  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, immOp, immOp2>;
+  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, immOp2, null_frag>,
+  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, immOp, immOp2, null_frag>;
 
 // Used by fcq instruction like "F64 <- cmp F128, F128"
 //   The order of operands are "$sx, $sy, $sz"
@@ -681,8 +710,8 @@ multiclass RRFCQm<string opcStr, bits<8>opc,
   RRmrr<opcStr, opc, I64, f64, RC, Ty, null_frag>,
   RRmir<opcStr, opc, I64, f64, RC, Ty, immOp, null_frag>,
   RRmiz<opcStr, opc, I64, f64, RC, Ty, immOp, null_frag>,
-  RRNDmrm<opcStr, opc, I64, f64, RC, Ty, immOp2>,
-  RRNDmim<opcStr, opc, I64, f64, RC, Ty, immOp, immOp2>;
+  RRNDmrm<opcStr, opc, I64, f64, RC, Ty, immOp2, null_frag>,
+  RRNDmim<opcStr, opc, I64, f64, RC, Ty, immOp, immOp2, null_frag>;
 
 
 //===----------------------------------------------------------------------===//
