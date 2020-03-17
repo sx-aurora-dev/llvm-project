@@ -36,6 +36,10 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
   const VESubtarget *getST() const { return ST; }
   const VETargetLowering *getTLI() const { return TLI; }
 
+  bool enableVPU() const {
+    return getST()->enableVPU();
+  }
+
 public:
   explicit VETTIImpl(const VETargetMachine *TM, const Function &F)
       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
@@ -44,13 +48,15 @@ public:
   unsigned getNumberOfRegisters(unsigned ClassID) const { return 64; }
 
   unsigned getRegisterBitWidth(bool Vector) const {
-    if (Vector) {
+    if (Vector && enableVPU()) {
       return 256 * 64;
     }
     return 64;
   }
 
-  unsigned getMinVectorRegisterBitWidth() const { return 256 * 64; }
+  unsigned getMinVectorRegisterBitWidth() const {
+    return enableVPU() ? 256 * 64 : 0;
+  }
 
   static bool
   isLegalMemDataType(Type& DT) {
@@ -69,17 +75,21 @@ public:
 
   // Load & Store {
   bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) {
+    if (!enableVPU()) return false;
     return DataType->getPrimitiveSizeInBits() == 1 ||
            isLegalMemDataType(*DataType);
   }
   bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment) {
+    if (!enableVPU()) return false;
     return DataType->getPrimitiveSizeInBits() == 1 ||
            isLegalMemDataType(*DataType);
   }
   bool isLegalMaskedGather(Type *ScaDataType, MaybeAlign Alignment) {
+    if (!enableVPU()) return false;
     return isLegalMemDataType(*ScaDataType);
   };
   bool isLegalMaskedScatter(Type *ScaDataType, MaybeAlign Alignment) {
+    if (!enableVPU()) return false;
     return isLegalMemDataType(*ScaDataType);
   }
   // } Load & Store
