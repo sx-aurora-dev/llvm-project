@@ -30,7 +30,7 @@ struct ShuffleVectorView : public MaskView {
       CurrentBase += OpWidth;
     }
 
-    abort(); // invalid SN
+    return ElemSelect();
   }
 };
 
@@ -61,7 +61,7 @@ struct BuildVectorView : public MaskView {
       CurrentBase += OpWidth;
     }
 
-    abort(); // invalid BVN
+    return ElemSelect();
   }
 };
 

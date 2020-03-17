@@ -95,20 +95,20 @@ struct MaskShuffleAnalysis {
           if (DefinedBits[i])
             continue;
           ElemSelect ES = Mask->getSourceElem(i + DestPartBase);
-          assert(ES.isElemTransfer() && "TODO implement shuffle-in of scalars");
-
-          // skip undef
-          if (ES.V.isUndef()) {
+          // skip both kinds of undef (no value transfered or source is undef)
+          if (!ES.isDefined()) {
             DefinedBits[i] = true;
             NumMissingBits--;
+            continue;
           }
+
+          assert(ES.isElemTransfer() && "TODO implement shuffle-in of scalars");
 
           // map a new source (and a shift amount)
           unsigned SrcPartIdx =
               (ES.ExtractIdx / SXRegSize); // sx sub-register to chose from
-          int64_t ShiftAmount =
-              (ES.ExtractIdx % SXRegSize) -
-              i; // required shift amount of the elements of the sub register
+          // required shift amount of the elements of the sub register
+          int64_t ShiftAmount = (ES.ExtractIdx % SXRegSize) - i;
           if (!Sel.SrcVal) {
             Sel.SrcVal = ES.V;
             Sel.SrcValPart = SrcPartIdx;
@@ -130,7 +130,9 @@ struct MaskShuffleAnalysis {
 
           // misaligned bit // TODO start from here next round
         }
-        Part.Selects.push_back(Sel);
+        if (Sel.SrcVal) {
+          Part.Selects.push_back(Sel);
+        }
       }
 
       LLVM_DEBUG( Part.print(dbgs()); );
