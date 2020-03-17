@@ -1730,7 +1730,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
-  const MVT FakeLegalVTs[] = {MVT::v2i32,  MVT::v4i32,  MVT::v8i32,
+  const MVT FakeLegalVTs[] = {MVT::v4i32,  MVT::v8i32,
                               MVT::v16i32, MVT::v32i32, MVT::v64i32,
                               MVT::v128i32};
   
@@ -2076,7 +2076,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     unsigned W = VT.getVectorNumElements();
 
     // Promotion rule, accept native element bit sizes
-    if (ElemVT.getScalarSizeInBits() >= 32)
+    unsigned ElemBits = ElemVT.getScalarSizeInBits();
+    if (ElemBits == 1 || (ElemBits >= 32))
       continue;
 
     // Use default splitting for vlens > 512
