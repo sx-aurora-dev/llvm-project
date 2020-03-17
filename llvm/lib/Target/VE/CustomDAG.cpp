@@ -482,8 +482,8 @@ CustomDAG::getTargetExtractSubreg(MVT SubRegVT, int SubRegIdx, SDValue RegV) con
 SDValue CustomDAG::createScalarShift(EVT ResVT, SDValue Src, int Offset) const {
   if (Offset == 0)
     return Src;
-  unsigned OC = Offset > 0 ? VE::SLLri : VE::SRLri; // ISD::SHL : ISD::SRL;
-  SDValue ShiftV = getConstant(std::abs(Offset), ResVT);
+  unsigned OC = Offset > 0 ? ISD::SHL : ISD::SRL; // VE::SLLri : VE::SRLri; 
+  SDValue ShiftV = getConstant(std::abs(Offset), MVT::i32); // This is the ShiftAmount constant
   return DAG.getNode(OC, DL, ResVT, Src, ShiftV);
 }
 
