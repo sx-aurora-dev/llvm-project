@@ -1743,7 +1743,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::v256i1, &VE::VMRegClass);
 
     // add a couple of fake-legal register classes to
-    // trick LLVM into dowing the lowering right (first promote, then widen -
+    // trick LLVM into doing the lowering right (first promote, then widen -
     // NEVER split unless told to)
     for (MVT FakeVT : FakeLegalVTs) {
       addRegisterClass(FakeVT, &VE::V64RegClass);
@@ -1756,11 +1756,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     }
 
     // Support mask DT for target intrinsics
-    if (Subtarget->hasVELIntrinsicMode()) {
-      // FIXME intrinsics disabled for now
-      addRegisterClass(MVT::v4i64, &VE::VMRegClass);
-      addRegisterClass(MVT::v8i64, &VE::VMRegClass);
-    }
+    addRegisterClass(MVT::v4i64, &VE::VMRegClass);
+    addRegisterClass(MVT::v8i64, &VE::VMRegClass);
   }
 
   /// Scalar Lowering {
@@ -2137,10 +2134,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
 
     } else {
-      /// fp/int vector operations
-      setOperationAction(ISD::SCALAR_TO_VECTOR, VT, Custom);
       setOperationAction(ISD::INSERT_VECTOR_ELT, VT, Custom);
       setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+
+      /// fp/int vector operations
+      setOperationAction(ISD::SCALAR_TO_VECTOR, VT, Custom);
       setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
       setOperationAction(ISD::CONCAT_VECTORS, VT, Expand);
       setOperationAction(ISD::INSERT_SUBVECTOR, VT, Custom);
@@ -3098,6 +3096,17 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
 #endif
 }
 
+static SDValue PeekForMask(SDValue Op) {
+  while (Op.getOpcode() == ISD::BITCAST) {
+    Op = Op.getOperand(0);
+  }
+
+  if (IsMaskType(Op.getValueType()))
+    return Op;
+  return SDValue();
+}
+
+
 SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
                                                  SelectionDAG &DAG) const {
   assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");
@@ -3161,6 +3170,17 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
     return Result;
   }
 
+  // Lowering to VM_EXTRACT
+  SDValue SrcV = Op.getOperand(0);
+  SDValue ElemV = Op.getOperand(1);
+  SDValue IndexV = Op.getOperand(2);
+  if (SDValue ActualMaskV = PeekForMask(SrcV)) {
+    assert((Op.getValueType() == MVT::i64) && "not a proper mask extraction");
+
+    CustomDAG CDAG(DAG, Op);
+    return CDAG.CreateInsertMask(ActualMaskV, ElemV, IndexV);
+  }
+
   // Insertion is legal for other V64 types.
   return Op;
 }
@@ -3169,6 +3189,9 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
                                                   SelectionDAG &DAG) const {
   assert(Op.getOpcode() == ISD::EXTRACT_VECTOR_ELT && "Unknown opcode!");
   EVT VT = Op.getOperand(0).getValueType();
+
+  SDValue SrcV = Op.getOperand(0);
+  SDValue IndexV = Op.getOperand(1);
 
   // Special treatements for packed V64 types.
   if (VT == MVT::v512i32 || VT == MVT::v512f32) {
@@ -3212,6 +3235,14 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
       }
     }
     return Result;
+  }
+
+  // Lowering to VM_EXTRACT
+  if (SDValue ActualMaskV = PeekForMask(SrcV)) {
+    assert((Op.getValueType() == MVT::i64) && "not a proper mask extraction");
+
+    CustomDAG CDAG(DAG, Op);
+    return CDAG.CreateExtractMask(ActualMaskV, IndexV);
   }
 
   // Extraction is legal for other V64 types.

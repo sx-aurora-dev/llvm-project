@@ -134,6 +134,11 @@ struct CustomDAG {
 
   SDValue CreateSwap(EVT DestVT, SDValue V, SDValue AVL);
   /// } Packed Mode Support
+  
+  /// Mask Insert/Extract {
+  SDValue CreateExtractMask(SDValue MaskV, SDValue IndexV) const;
+  SDValue CreateInsertMask(SDValue MaskV, SDValue ElemV, SDValue IndexV) const;
+  /// } Mask Insert/Extract
 
   SDValue CreateBroadcast(EVT ResTy, SDValue S,
                           Optional<SDValue> OpVectorLength = None) const;

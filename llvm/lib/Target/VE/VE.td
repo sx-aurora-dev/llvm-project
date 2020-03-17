@@ -27,11 +27,6 @@ def FeatureVPU
   : SubtargetFeature<"vpu", "EnableVPU", "true",
                      "Use the VPU">;
 
-def VELIntrinsicMode
-  : SubtargetFeature<"velintrin", "VELIntrinsicMode", "true",
-                     "Enable llvm.vel.* intrinsics">;
-
-
 //===----------------------------------------------------------------------===//
 // Register File, Calling Conv, Instruction Descriptions
 //===----------------------------------------------------------------------===//

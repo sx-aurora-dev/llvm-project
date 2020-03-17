@@ -430,10 +430,20 @@ Optional<SDValue> EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG &DAG) {
   return DAG.getConstant(Opt.getValue(), DL, MVT::i32);
 }
 
-bool IsMaskType(EVT Ty) {
-  if (!Ty.isVector())
+bool IsMaskType(EVT VT) {
+  if (!VT.isVector())
     return false;
-  return Ty.getVectorElementType() == MVT::i1;
+
+  // an actual bit mask type
+  if (VT.getVectorElementType() == MVT::i1)
+    return true;
+
+  // allow aliased mask types
+  if (VT == MVT::v8i64 || VT == MVT::v4i64)
+    return true;
+
+  // not a mask
+  return false;
 }
 
 // select an appropriate %evl argument for this element count.
@@ -486,6 +496,16 @@ SDValue CustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
 SDValue CustomDAG::createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV,
                              SDValue Mask, SDValue Avl) const {
   return DAG.getNode(VEISD::VEC_VMV, DL, ResVT, {SrcV, OffsetV, Mask, Avl});
+}
+
+SDValue
+CustomDAG::CreateExtractMask(SDValue MaskV, SDValue IndexV) const {
+  return DAG.getNode(VEISD::VM_EXTRACT, DL, MVT::i64, MaskV, IndexV);
+}
+
+SDValue
+CustomDAG::CreateInsertMask(SDValue MaskV, SDValue ElemV, SDValue IndexV) const {
+  return DAG.getNode(VEISD::VM_INSERT, DL, MaskV.getValueType(), MaskV, ElemV, IndexV);
 }
 
 SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, SubElem E,
