@@ -3227,11 +3227,11 @@ def mno_retpoline_external_thunk : Flag<["-"], "mno-retpoline-external-thunk">, 
 def mvzeroupper : Flag<["-"], "mvzeroupper">, Group<m_x86_Features_Group>;
 def mno_vzeroupper : Flag<["-"], "mno-vzeroupper">, Group<m_x86_Features_Group>;
 
-def mvevec : Flag<["-"], "mvevec">, Group<m_ve_Features_Group>,
-  HelpText<"Enable vectorization for VE">,
+def mvevpu : Flag<["-"], "mvevpu">, Group<m_ve_Features_Group>,
+  HelpText<"Emit VPU instructions for VE">,
   Flags<[CC1Option]>;
-def mno_vevec : Flag<["-"], "mno-vevec">, Group<m_ve_Features_Group>,
-  HelpText<"Disable vectorization for VE">,
+def mno_vevpu : Flag<["-"], "mno-vevpu">, Group<m_ve_Features_Group>,
+  HelpText<"Do not emit VPU instructions for VE">,
   Flags<[CC1Option]>;
 
 // These are legacy user-facing driver-level option spellings. They are always

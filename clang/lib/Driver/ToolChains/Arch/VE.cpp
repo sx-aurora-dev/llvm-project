@@ -65,19 +65,16 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   if (FloatABI == ve::FloatABI::Soft)
     Features.push_back("+soft-float");
 
-#if 0
-  // FIXME re-introduce this flag at some point
-  // -mno-vevec is default, unless -mvevec is specified.
-  bool VEVec = false;
-  if (auto *A = Args.getLastArg(options::OPT_mvevec, options::OPT_mno_vevec)) {
-    if (A->getOption().matches(options::OPT_mvevec)) {
-      VEVec = true;
-      Features.push_back("+vec");
+  // Whether to generate VPU instructions (on by default)
+  bool VEVPUFlag = false;
+  if (auto *A = Args.getLastArg(options::OPT_mvevpu, options::OPT_mno_vevpu)) {
+    if (A->getOption().matches(options::OPT_mvevpu)) {
+      VEVPUFlag = true;
+      Features.push_back("+vpu");
     }
   }
 
-  if (!VEVec) {
-    Features.push_back("-vec");
+  if (!VEVPUFlag) {
+    Features.push_back("-vpu");
   }
-#endif
 }
