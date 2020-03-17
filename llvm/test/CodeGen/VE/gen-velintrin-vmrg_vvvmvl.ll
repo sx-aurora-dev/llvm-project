@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=velintrin | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
 ; Function Attrs: nounwind
 define void @vmrg_vvvmvl(i64*, i64*, i64*, i32*, i64*, i32) {
