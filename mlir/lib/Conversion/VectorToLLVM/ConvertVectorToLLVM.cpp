@@ -12,7 +12,7 @@
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/Dialect/VectorOps/VectorOps.h"
+#include "mlir/Dialect/Vector/VectorOps.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/MLIRContext.h"
@@ -805,7 +805,7 @@ public:
         // multiple times.
         auto success = matchAndRewrite(insertStridedSliceOp, rewriter);
         (void)success;
-        assert(success && "Unexpected failure");
+        assert(succeeded(success) && "Unexpected failure");
         extractedSource = insertStridedSliceOp;
       }
       // 4. Insert the extractedSource into the res vector.
@@ -1083,7 +1083,7 @@ public:
         // multiple times.
         auto success = matchAndRewrite(stridedSliceOp, rewriter);
         (void)success;
-        assert(success && "Unexpected failure");
+        assert(succeeded(success) && "Unexpected failure");
         extracted = stridedSliceOp;
       }
       res = insertOne(rewriter, loc, extracted, res, idx);

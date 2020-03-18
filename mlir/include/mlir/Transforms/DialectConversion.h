@@ -238,7 +238,7 @@ public:
   virtual PatternMatchResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const {
-    if (!match(op))
+    if (failed(match(op)))
       return matchFailure();
     rewrite(op, operands, rewriter);
     return matchSuccess();
@@ -285,7 +285,7 @@ struct OpConversionPattern : public ConversionPattern {
   virtual PatternMatchResult
   matchAndRewrite(SourceOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const {
-    if (!match(op))
+    if (failed(match(op)))
       return matchFailure();
     rewrite(op, operands, rewriter);
     return matchSuccess();
@@ -378,6 +378,12 @@ public:
 
   /// PatternRewriter hook for updating the root operation in-place.
   void cancelRootUpdate(Operation *op) override;
+
+  /// PatternRewriter hook for notifying match failure reasons.
+  LogicalResult
+  notifyMatchFailure(Operation *op,
+                     function_ref<void(Diagnostic &)> reasonCallback) override;
+  using PatternRewriter::notifyMatchFailure;
 
   /// Return a reference to the internal implementation.
   detail::ConversionPatternRewriterImpl &getImpl();
