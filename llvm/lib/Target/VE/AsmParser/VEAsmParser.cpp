@@ -313,6 +313,17 @@ public:
     }
     return false;
   }
+  bool isZero() {
+    if (!isImm())
+      return false;
+
+    // Constant case
+    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+      int64_t Value = ConstExpr->getValue();
+      return Value == 0;
+    }
+    return false;
+  }
 
   StringRef getToken() const {
     assert(Kind == k_Token && "Invalid access!");
@@ -456,6 +467,10 @@ public:
   }
 
   void addUImm7Operands(MCInst &Inst, unsigned N) const {
+    addImmOperands(Inst, N);
+  }
+
+  void addZeroOperands(MCInst &Inst, unsigned N) const {
     addImmOperands(Inst, N);
   }
 

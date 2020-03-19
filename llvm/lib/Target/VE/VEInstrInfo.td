@@ -54,10 +54,13 @@ def uimm7 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<7>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm7AsmOperand;
 }
-
+def ZeroAsmOperand : AsmOperandClass { let Name = "Zero"; }
+def zero : Operand<i32>, PatLeaf<(imm), [{
+    return N->getSExtValue() == 0; }]> {
+  let ParserMatchClass = ZeroAsmOperand;
+}
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
-def zero        : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
                                       == 0; }]>;
 def lozero      : PatLeaf<(imm), [{ return (N->getZExtValue() & 0xffffffff)
@@ -1444,12 +1447,56 @@ let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in {
 }
 
 // Section 8.19.9 - LCR (Load Communication Register)
+multiclass LOADCRm<string opcStr, bits<8>opc, RegisterClass RC> {
+  def rr : RR<opc, (outs RC:$sx), (ins RC:$sz, RC:$sy),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0 in def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, simm7:$sy),
+                            !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cz = 0 in def zr : RR<opc, (outs RC:$sx), (ins zero:$sz, RC:$sy),
+                            !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0, cz = 0 in
+  def zi : RR<opc, (outs RC:$sx), (ins zero:$sz, simm7:$sy),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+}
+let mayLoad = 1 in defm LCR : LOADCRm<"lcr", 0x40, I64>;
 
 // Section 8.19.10 - SCR (Save Communication Register)
+multiclass STORECRm<string opcStr, bits<8>opc, RegisterClass RC> {
+  def rr : RR<opc, (outs), (ins RC:$sz, RC:$sy, RC:$sx),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0 in def ri : RR<opc, (outs), (ins RC:$sz, simm7:$sy, RC:$sx),
+                            !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cz = 0 in def zr : RR<opc, (outs), (ins zero:$sz, RC:$sy, RC:$sx),
+                            !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0, cz = 0 in
+  def zi : RR<opc, (outs), (ins zero:$sz, simm7:$sy, RC:$sx),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+}
+let mayStore = 1 in defm SCR : STORECRm<"scr", 0x50, I64>;
 
 // Section 8.19.11 - TSCR (Test & Set Communication Register)
+let mayLoad = 1, mayStore = 1 in
+defm TSCR : LOADCRm<"tscr", 0x41, I64>;
 
 // Section 8.19.12 - FIDCR (Fetch & Increment/Decrement CR)
+let cz = 0 in
+multiclass FIDCRm<string opcStr, bits<8>opc, RegisterClass RC> {
+  def ri : RR<opc, (outs RC:$dest), (ins RC:$src, uimm3:$rz),
+              !strconcat(opcStr, " $dest, $src, $rz")> {
+    bits<3> rz;
+    let sz{5-3} = 0;
+    let sz{2-0} = rz;
+  }
+  let cy = 0 in def ii : RR<opc, (outs RC:$dest), (ins simm7:$src, uimm3:$rz),
+                            !strconcat(opcStr, " $dest, $src, $rz")> {
+    bits<3> rz;
+    let sz{5-3} = 0;
+    let sz{2-0} = rz;
+  }
+}
+
+let mayLoad = 1, mayStore = 1, hasSideEffects = 0 in
+defm FIDCR : FIDCRm<"fidcr", 0x51, I64>;
 
 //-----------------------------------------------------------------------------
 // Section 8.20 - Host Memory Access Instructions
