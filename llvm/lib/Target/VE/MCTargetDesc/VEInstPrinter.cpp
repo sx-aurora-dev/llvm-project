@@ -191,10 +191,6 @@ void VEInstPrinter::printMemASOperandHM(const MCInst *MI, int opNum,
     return;
   }
 
-  assert(!(MI->getOperand(opNum).isImm() &&
-           MI->getOperand(opNum).getImm() == 0) &&
-         "AS format for host memory requires base register");
-
   if (MI->getOperand(opNum+1).isImm() &&
       MI->getOperand(opNum+1).getImm() == 0) {
     // don't print "+0"
@@ -202,7 +198,8 @@ void VEInstPrinter::printMemASOperandHM(const MCInst *MI, int opNum,
     printOperand(MI, opNum+1, STI, O);
   }
   O << "(";
-  printOperand(MI, opNum, STI, O);
+  if (MI->getOperand(opNum).isReg())
+    printOperand(MI, opNum, STI, O);
   O << ")";
 }
 

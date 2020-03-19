@@ -1381,36 +1381,117 @@ let Defs = [SX10], sx = 10 /* SX10 */, cy = 0, sy = 0, imm32 = 0,
 def CALLr : RM<0x08, (outs), (ins I64:$sz, variable_ops),
                "bsic %s10, (, $sz)", [(call i64:$sz)]>;
 
-// Load and Store host memory instructions
-let cx = 0, cz = 1, hasSideEffects = 0 in {
-let ry = 3, DecoderMethod = "DecodeLoadASI64" in
-def LHMri : RRMHM<0x21, (outs I64:$dest), (ins MEMriHM:$addr),
-                  "lhm.l $dest, $addr">;
-let ry = 2, DecoderMethod = "DecodeLoadASI32" in
-def LHMLri : RRMHM<0x21, (outs I32:$dest), (ins MEMriHM:$addr),
-                   "lhm.w $dest, $addr">;
-let ry = 1, DecoderMethod = "DecodeLoadASI16" in
-def LHM2Bri : RRMHM<0x21, (outs I16:$dest), (ins MEMriHM:$addr),
-                    "lhm.h $dest, $addr">;
-let ry = 0, DecoderMethod = "DecodeLoadASI8" in
-def LHM1Bri : RRMHM<0x21, (outs I8:$dest), (ins MEMriHM:$addr),
-                    "lhm.b $dest, $addr">;
+//-----------------------------------------------------------------------------
+// Section 8.9 - Vector Load/Store and Move Instructions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Section 8.10 - Vector Fixed-Point Arithmetic Instructions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Section 8.11 - Vector Logical Operation Instructions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Section 8.12 - Vector Shift Operation Instructions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Section 8.13 - Vector Floating-Point Arithmetic Instructions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Section 8.14 - Vector Reduction Instructions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Section 8.15 - Vector Iterative Operation Instructions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Section 8.16 - Vector Merger Operation Instructions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Section 8.17 - Vector Mask Operation Instructions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Section 8.18 - Vector Control Instructions
+//-----------------------------------------------------------------------------
+
+//-----------------------------------------------------------------------------
+// Section 8.19 - Control Instructions
+//-----------------------------------------------------------------------------
+
+// Section 8.19.1 - SIC (Save Instruction Counter)
+
+// Section 8.19.2 - LPM (Load Program Mode Flags)
+
+// Section 8.19.3 - SPM (Save Program Mode Flags)
+
+// Section 8.19.4 - LFR (Load Flag Register)
+
+// Section 8.19.5 - SFR (Save Flag Register)
+
+// Section 8.19.6 - SMIR (Save Miscellaneous Register)
+
+// Section 8.19.7 - NOP (No Operation)
+
+// Section 8.19.8 - MONC (Monitor Call)
+
+// Section 8.19.9 - LCR (Load Communication Register)
+
+// Section 8.19.10 - SCR (Save Communication Register)
+
+// Section 8.19.11 - TSCR (Test & Set Communication Register)
+
+// Section 8.19.12 - FIDCR (Fetch & Increment/Decrement CR)
+
+//-----------------------------------------------------------------------------
+// Section 8.20 - Host Memory Access Instructions
+//-----------------------------------------------------------------------------
+
+// Multiclass for LHM instruction.
+let mayLoad = 1, hasSideEffects = 0 in
+multiclass LHMm<string opcStr, bits<8> opc, RegisterClass RC> {
+  def ri : RRMHM<opc, (outs RC:$dest), (ins MEMriHM:$addr),
+                 !strconcat(opcStr, " $dest, $addr")>;
+  let cz = 0 in
+  def zi : RRMHM<opc, (outs RC:$dest), (ins MEMziHM:$addr),
+                 !strconcat(opcStr, " $dest, $addr")>;
 }
 
-let cx = 0, cz = 1, hasSideEffects = 0 in {
-let ry = 3, DecoderMethod = "DecodeStoreASI64" in
-def SHMri : RRMHM<0x31, (outs), (ins MEMriHM:$addr, I64:$sx),
-                  "shm.l $sx, $addr">;
-let ry = 2, DecoderMethod = "DecodeStoreASI32" in
-def SHMLri : RRMHM<0x31, (outs), (ins MEMriHM:$addr, I32:$sx),
-                   "shm.w $sx, $addr">;
-let ry = 1, DecoderMethod = "DecodeStoreASI16" in
-def SHM2Bri : RRMHM<0x31, (outs), (ins MEMriHM:$addr, I16:$sx),
-                    "shm.h $sx, $addr">;
-let ry = 0, DecoderMethod = "DecodeStoreASI8" in
-def SHM1Bri : RRMHM<0x31, (outs), (ins MEMriHM:$addr, I8:$sx),
-                    "shm.b $sx, $addr">;
+// Section 8.20.1 - LHM (Load Host Memory)
+let ry = 3, DecoderMethod = "DecodeLoadASI64" in
+defm LHML : LHMm<"lhm.l", 0x21, I64>;
+let ry = 2, DecoderMethod = "DecodeLoadASI64" in
+defm LHMW : LHMm<"lhm.w", 0x21, I64>;
+let ry = 1, DecoderMethod = "DecodeLoadASI64" in
+defm LHMH : LHMm<"lhm.h", 0x21, I64>;
+let ry = 0, DecoderMethod = "DecodeLoadASI64" in
+defm LHMB : LHMm<"lhm.b", 0x21, I64>;
+
+// Multiclass for SHM instruction.
+let mayStore = 1, hasSideEffects = 0 in
+multiclass SHMm<string opcStr, bits<8> opc, RegisterClass RC> {
+  def ri : RRMHM<opc, (outs), (ins MEMriHM:$addr, RC:$sx),
+                 !strconcat(opcStr, " $sx, $addr")>;
+  let cz = 0 in
+  def zi : RRMHM<opc, (outs), (ins MEMziHM:$addr, RC:$sx),
+                 !strconcat(opcStr, " $sx, $addr")>;
 }
+
+// Section 8.20.2 - SHM (Store Host Memory)
+let ry = 3, DecoderMethod = "DecodeStoreASI64" in
+defm SHML : SHMm<"shm.l", 0x31, I64>;
+let ry = 2, DecoderMethod = "DecodeStoreASI64" in
+defm SHMW : SHMm<"shm.w", 0x31, I64>;
+let ry = 1, DecoderMethod = "DecodeStoreASI64" in
+defm SHMH : SHMm<"shm.h", 0x31, I64>;
+let ry = 0, DecoderMethod = "DecodeStoreASI64" in
+defm SHMB : SHMm<"shm.b", 0x31, I64>;
 
 let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
 def MONC : RR<
