@@ -172,6 +172,18 @@ struct CustomDAG {
   }
   /// } getNode
 
+  SDValue getVectorExtract(SDValue VecV, SDValue IdxV) const {
+    assert(VecV.getValueType().isVector());
+    auto ElemVT = VecV.getValueType().getVectorElementType();
+    return getNode(ISD::EXTRACT_VECTOR_ELT, ElemVT, {VecV, IdxV});
+  }
+
+  SDValue getVectorInsert(SDValue DestVecV, SDValue ElemV, SDValue IdxV) const {
+    assert(DestVecV.getValueType().isVector());
+    return getNode(ISD::INSERT_VECTOR_ELT, DestVecV.getValueType(),
+                   {DestVecV, ElemV, IdxV});
+  }
+
   SDValue widenOrNarrow(EVT DestVT, SDValue Op) {
     EVT OpVT = Op.getValueType();
     if (OpVT == DestVT)

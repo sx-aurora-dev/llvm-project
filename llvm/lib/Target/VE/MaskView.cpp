@@ -32,6 +32,10 @@ struct ShuffleVectorView : public MaskView {
 
     return ElemSelect();
   }
+
+  virtual EVT getValueType() const override {
+    return SN->getValueType(0);
+  }
 };
 
 // SDNode abstractions
@@ -63,6 +67,10 @@ struct BuildVectorView : public MaskView {
 
     return ElemSelect();
   }
+
+  virtual EVT getValueType() const override {
+    return BVN->getValueType(0);
+  }
 };
 
 // SDNode abstractions
@@ -78,6 +86,10 @@ struct ExtractSubvectorView : public MaskView {
 
   ElemSelect getSourceElem(unsigned DestIdx) override {
     return ElemSelect(getSrc(), DestIdx + Offset);
+  }
+
+  virtual EVT getValueType() const override {
+    return EVN->getValueType(0);
   }
 };
 

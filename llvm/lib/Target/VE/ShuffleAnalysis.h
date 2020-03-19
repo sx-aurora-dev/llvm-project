@@ -209,6 +209,146 @@ struct MaskShuffleAnalysis {
   }
 };
 
+using LaneBits = std::bitset<256>;
+
+enum IterControl {
+  IterContinue = 0,
+  IterBreak = 1,
+};
+
+void where_true(const LaneBits Bits, std::function<IterControl(unsigned Idx)> LoopBody) {
+  auto Len = Bits.size();
+  for (size_t i = 0; i < Len; ++i) {
+    if (!Bits[i])
+      continue;
+    if (LoopBody(i) == IterBreak)
+      break;
+  }
+}
+
+// lower a shuffle mask to actual operations
+struct ShuffleAnalysis {
+
+  // represents a partially shuffled up state
+  struct PartialShuffleState {
+    LaneBits MissingLanes;
+    
+    PartialShuffleState() {
+      MissingLanes.reset();
+    }
+    
+    void setMissing(unsigned i) {
+      MissingLanes[i] = true;
+    }
+
+    static PartialShuffleState fromInitialMask(MaskView &MV) {
+      PartialShuffleState PSS;
+
+      for (unsigned i = 0; i < MV.getNumElements(); ++i) {
+        auto ES = MV.getSourceElem(i);
+        if (ES.isDefined())
+          PSS.setMissing(i);
+      }
+
+      return PSS;
+    }
+
+    bool isComplete() const {
+      return !MissingLanes.any();
+    }
+
+    void for_missing(std::function<IterControl(unsigned Idx)> LoopBody) {
+      where_true(MissingLanes, LoopBody);
+    }
+  };
+
+  // an abstract shuffle operation produced bu a shuffle strategy
+  struct AbstractShuffleOp {
+    virtual SDValue synthesize(MaskView &MV, CustomDAG &CDAG,
+                               SDValue PartialV) = 0;
+    virtual void print(raw_ostream &out) const = 0;
+  };
+
+  // An shuffle heuristics that reports back partial progress through a callback
+  using PartialShuffleCB = std::function<void(AbstractShuffleOp *, PartialShuffleState)>;
+  struct ShuffleStrategy {
+    // apply the shuffle strategy, reporting all partial shuffles that were
+    // found
+    virtual void planPartialShuffle(MaskView& MV, PartialShuffleState FromState, PartialShuffleCB CB) = 0;
+  };
+
+  // Scalar transfer strategy
+  // extract all vector elements and insert them back at the right positions
+  struct ScalarTransferOp final : public AbstractShuffleOp {
+    LaneBits InsertPositions;
+
+    ScalarTransferOp(LaneBits DefinedLanes) : InsertPositions(DefinedLanes) {}
+    virtual ~ScalarTransferOp() {}
+
+    // transfer all insert positions to their destination
+    virtual SDValue synthesize(MaskView &MV, CustomDAG &CDAG,
+                               SDValue PartialV) {
+      SDValue AccuV = PartialV;
+
+      // TODO caching of extracted element..
+      where_true(InsertPositions, [&](unsigned Idx) {
+          auto ES = MV.getSourceElem(Idx);
+          if (!ES.isDefined())
+            return IterContinue;
+
+          // isolate the scalar element
+          SDValue SrcElemV;
+          if (ES.isElemTransfer()) {
+            SrcElemV = CDAG.getVectorExtract(ES.V, CDAG.getConstant(ES.getElemIdx(), MVT::i64));
+          } else {
+            assert(ES.isElemInsert());
+            SrcElemV = ES.V;
+          }
+
+          // insert it
+          AccuV = CDAG.getVectorInsert(AccuV, SrcElemV, CDAG.getConstant(Idx, MVT::i64));
+          
+          return IterContinue;
+      });
+      return AccuV;
+    }
+
+    virtual void print(raw_ostream &out) const { out << "Scalar Transfer"; }
+  };
+
+  struct ScalarTransferStrategy final : public ShuffleStrategy {
+    void planPartialShuffle(MaskView &MV, PartialShuffleState FromState, PartialShuffleCB CB) override {
+      PartialShuffleState FinalState;
+      FinalState.MissingLanes.reset();
+      CB(new ScalarTransferOp(FromState.MissingLanes), FinalState);
+    }
+  };
+
+  // TODO VMV chaining...
+  // TODO Expand,Compress
+
+  // Analysis result -> the final shuffle sequence
+  std::vector<AbstractShuffleOp*> ShuffleSeq;
+
+  SDValue FinalV;
+
+  // match a 64 bit segment, mapping out all source bits
+  // FIXME this implies knowledge about the underlying object structure
+  ShuffleAnalysis(MaskView *Mask, CustomDAG& CDAG) {
+    PartialShuffleState InitialPSS =
+        PartialShuffleState::fromInitialMask(*Mask);
+
+    ScalarTransferStrategy STS;
+    STS.planPartialShuffle(*Mask, InitialPSS, [&](AbstractShuffleOp * PartialOp, PartialShuffleState NextPSS){
+        assert(NextPSS.isComplete() && "scalar transfer is always complete..");
+        FinalV = PartialOp->synthesize(*Mask, CDAG, CDAG.DAG.getUNDEF(Mask->getValueType()));
+    });
+  }
+
+  SDValue getResultValue() { return FinalV; }
+};
+
+
 } // namespace llvm
 
 #endif // LLVM_LIB_TARGET_VE_SHUFFLEANALYSIS_H

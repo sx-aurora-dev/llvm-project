@@ -20,6 +20,11 @@ struct ElemSelect {
 
   bool isDefined() const { return ((bool)V) && !V.isUndef(); }
 
+  unsigned getElemIdx() const {
+    assert(isElemTransfer());
+    return ExtractIdx;
+  }
+
   // element of V transfered from dest
   bool isElemTransfer() const { return ExtractIdx >= 0; }
   // V as a whole inserted into dest
@@ -32,6 +37,13 @@ struct MaskView {
 
   // get the element selection at i
   virtual ElemSelect getSourceElem(unsigned DestIdx) = 0;
+
+  // the abstracr type of this mask
+  virtual EVT getValueType() const = 0;
+
+  virtual unsigned getNumElements() const {
+    return getValueType().getVectorNumElements();
+  }
 };
 
 MaskView *requestMaskView(SDNode *N);
