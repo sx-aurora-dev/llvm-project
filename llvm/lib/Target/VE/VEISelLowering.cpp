@@ -2273,6 +2273,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     ForAll_setOperationAction(VectorTransformOCs, VT, Custom);
   }
 
+  // Special rules for aliased mask types
+  for (MVT MaskVT : {MVT::v4i64, MVT::v8i64}) {
+    // Mask producing operations
+    setOperationAction(ISD::INSERT_VECTOR_ELT, MaskVT, Expand);
+    setOperationAction(ISD::EXTRACT_VECTOR_ELT, MaskVT, Custom);
+  }
+
   // vNi8, vNi16 ops
   for (MVT VT : MVT::vector_valuetypes()) {
     if ((VT.getVectorElementType() != MVT::i8) &&

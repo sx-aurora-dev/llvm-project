@@ -154,12 +154,14 @@ entry:
 define i32 @vseq_bad_v4i32() {
 ; CHECK-LABEL: vseq_bad_v4i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, .LCPI4_0@lo
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s0, .LCPI4_0@hi(%s0)
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vldl.zx %v0,4,%s0
+; CHECK-NEXT:    or %s0, 3, (0)1
+; CHECK-NEXT:    or %s1, 2, (0)1
+; CHECK-NEXT:    lsv %v0(0),%s1
+; CHECK-NEXT:    lsv %v0(1),%s0
+; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK-NEXT:    lsv %v0(2),%s0
+; CHECK-NEXT:    or %s0, 5, (0)1
+; CHECK-NEXT:    lsv %v0(3),%s0
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
