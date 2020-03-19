@@ -161,7 +161,7 @@ define void @test_atomic_store_16() {
 ; CHECK-NEXT:  or %s1, 12, (0)1
 ; CHECK-NEXT:  or %s2, 0, (0)1
 ; CHECK-NEXT:  or %s3, 3, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   store atomic i128 12, i128* @it release, align 32
@@ -181,7 +181,7 @@ define void @test_atomic_store_16cst() {
 ; CHECK-NEXT:  or %s1, 12, (0)1
 ; CHECK-NEXT:  or %s2, 0, (0)1
 ; CHECK-NEXT:  or %s3, 5, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   store atomic i128 12, i128* @it seq_cst, align 32
@@ -327,7 +327,7 @@ define i128 @test_atomic_load_16() {
 ; CHECK-NEXT:  and %s0, %s0, (32)0
 ; CHECK-NEXT:  lea.sl %s0, it@hi(, %s0)
 ; CHECK-NEXT:  or %s1, 2, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = load atomic i128, i128* @it acquire, align 32
@@ -345,7 +345,7 @@ define i128 @test_atomic_load_16cst() {
 ; CHECK-NEXT:  and %s0, %s0, (32)0
 ; CHECK-NEXT:  lea.sl %s0, it@hi(, %s0)
 ; CHECK-NEXT:  or %s1, 5, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = load atomic i128, i128* @it seq_cst, align 32
@@ -629,7 +629,7 @@ define i128 @test_atomic_exchange_16() {
 ; CHECK-NEXT:  lea.sl %s1, 1886417008(, %s1)
 ; CHECK-NEXT:  or %s2, 0, (0)1
 ; CHECK-NEXT:  or %s3, 2, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i128* @it, i128 8102099357864587376 acquire
@@ -865,7 +865,7 @@ define i128 @test_atomic_compare_exchange_16(i128, i128) {
 ; CHECK-NEXT:  lea %s1, -16(, %s9)
 ; CHECK-NEXT:  or %s4, 5, (0)1
 ; CHECK-NEXT:  or %s5, 0, %s4
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s1, 0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
@@ -1315,7 +1315,7 @@ define i128 @test_atomic_fetch_add_16() {
 ; CHECK-NEXT:  or %s1, 1, (0)1
 ; CHECK-NEXT:  or %s2, 0, (0)1
 ; CHECK-NEXT:  or %s3, 5, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = atomicrmw add i128* @it, i128 1 seq_cst
@@ -1465,7 +1465,7 @@ define i128 @test_atomic_fetch_sub_16() {
 ; CHECK-NEXT:  or %s1, 1, (0)1
 ; CHECK-NEXT:  or %s2, 0, (0)1
 ; CHECK-NEXT:  or %s3, 5, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = atomicrmw sub i128* @it, i128 1 seq_cst
@@ -1611,7 +1611,7 @@ define i128 @test_atomic_fetch_and_16() {
 ; CHECK-NEXT:  or %s1, 1, (0)1
 ; CHECK-NEXT:  or %s2, 0, (0)1
 ; CHECK-NEXT:  or %s3, 5, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = atomicrmw and i128* @it, i128 1 seq_cst
@@ -1749,7 +1749,7 @@ define i128 @test_atomic_fetch_or_16() {
 ; CHECK-NEXT:  or %s1, 1, (0)1
 ; CHECK-NEXT:  or %s2, 0, (0)1
 ; CHECK-NEXT:  or %s3, 5, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = atomicrmw or i128* @it, i128 1 seq_cst
@@ -1887,7 +1887,7 @@ define i128 @test_atomic_fetch_xor_16() {
 ; CHECK-NEXT:  or %s1, 1, (0)1
 ; CHECK-NEXT:  or %s2, 0, (0)1
 ; CHECK-NEXT:  or %s3, 5, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = atomicrmw xor i128* @it, i128 1 seq_cst
@@ -2041,7 +2041,7 @@ define i128 @test_atomic_fetch_nand_16() {
 ; CHECK-NEXT:  or %s1, 1, (0)1
 ; CHECK-NEXT:  or %s2, 0, (0)1
 ; CHECK-NEXT:  or %s3, 5, (0)1
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %0 = atomicrmw nand i128* @it, i128 1 seq_cst

@@ -73,7 +73,7 @@ define x86_regcallcc <256 x i32> @__regcall3__calc4(<256 x i32>, <256 x i32>, <2
 ; CHECK-NEXT:  lea %s12, 256
 ; CHECK-NEXT:  lvl %s12
 ; CHECK-NEXT:  vor %v1,(0)1,%v2
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  lea %s0, 256
 ; CHECK-NEXT:  lvl %s0
 ; CHECK-NEXT:  vadds.w.sx %v0,%v0,%v18

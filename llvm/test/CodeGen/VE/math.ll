@@ -22,7 +22,7 @@ define double @sin_test(double) {
 ; CHECK-NEXT:  lea %s1, sin@lo
 ; CHECK-NEXT:  and %s1, %s1, (32)0
 ; CHECK-NEXT:  lea.sl %s12, sin@hi(, %s1)
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
   %2 = tail call double @llvm.sin.f64(double %0)
   ret double %2
 }

@@ -18,12 +18,12 @@ define void @test(fp128) {
 ; CHECK-NEXT:  or %s0, 0, %s2
 ; CHECK-NEXT:  ld %s3, -48(, %s9)
 ; CHECK-NEXT:  ld %s2, -40(, %s9)               # 16-byte Folded Reload
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  ld %s3, -16(, %s9)
 ; CHECK-NEXT:  ld %s2, -8(, %s9)
 ; CHECK:       or %s0, 0, %s2
 ; CHECK-NEXT:  or %s1, 0, %s3
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  ld %s3, -32(, %s9)
 ; CHECK-NEXT:  ld %s2, -24(, %s9)
 

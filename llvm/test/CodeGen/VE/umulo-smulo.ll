@@ -11,7 +11,7 @@ define i64 @smulo(i64, i64) {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __multi3@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 0, %s4
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    sra.l %s2, %s0, 63
 ; CHECK-NEXT:    cmps.l %s1, %s1, %s2
 ; CHECK-NEXT:    or %s2, -1, (0)1
@@ -34,7 +34,7 @@ define i64 @umulo(i64, i64) {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __multi3@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 0, %s4
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s2, 0, (0)1
 ; CHECK-NEXT:    cmps.l %s1, %s1, %s2
 ; CHECK-NEXT:    or %s2, -1, (0)1

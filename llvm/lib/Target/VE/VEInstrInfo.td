@@ -1371,10 +1371,15 @@ defm BRCFD : BCRm<"br${cf}.d", "br.d", "braf.d", 0x18, I64, simm7>;
 let cx = 1, cx2 = 1 in
 defm BRCFS : BCRm<"br${cf}.s", "br.s", "braf.s", 0x18, F32, simm7>;
 
-// Branch and Save IC
+// Section 8.8.5 - BSIC (Branch and Save IC)
+let isCall = 1, hasSideEffects = 0 /* , Uses = [IC] */ in
+defm BSIC : RMm<"bsic", 0x08, I64>;
 
-let cx = 0, cy = 0, cy = 0, cz = 1, hasSideEffects = 0 /* , Uses = [IC] */ in
-def BSIC : RM<0x08, (outs), (ins I64:$sx, I64:$sz), "bsic $sx, (, ${sz})">;
+// Call instruction is a special case of BSIC.
+let Defs = [SX10], sx = 10 /* SX10 */, cy = 0, sy = 0, imm32 = 0,
+    isCall = 1, isCodeGenOnly = 1, hasSideEffects = 0 in
+def CALLr : RM<0x08, (outs), (ins I64:$sz, variable_ops),
+               "bsic %s10, (, $sz)", [(call i64:$sz)]>;
 
 // Load and Store host memory instructions
 let cx = 0, cz = 1, hasSideEffects = 0 in {
@@ -1498,27 +1503,6 @@ let isBranch = 1, isTerminator = 1, isCodeGenOnly = 1 in
 
 let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
   def TRAP    : Pseudo<(outs), (ins), "# TRAP", [(trap)]>;
-}
-
-//===----------------------------------------------------------------------===//
-// Instructions for CodeGenOnly
-//===----------------------------------------------------------------------===//
-
-let isCodeGenOnly = 1 in {
-
-// Call instruction
-let Defs = [SX10], Uses = [SX11], hasDelaySlot = 1, isCall = 1, hasSideEffects = 0 in {
-let cx = 0, sx = 10, cy = 0, sy = 0, cz = 0, sz = 0 in
-def CALL : RM<
-    0x08, (outs), (ins calltarget:$imm32, variable_ops),
-    "bsic %lr, $imm32">;
-// use sz to represent a register
-let cx = 0, sx = 10, cy = 0, sy = 0, cz = 1, imm32 = 0 in
-def CALLr : RM<
-    0x08, (outs), (ins I64:$sz, variable_ops),
-    "bsic %lr, (, $sz)">;
-}
-
 }
 
 //===----------------------------------------------------------------------===//
@@ -1756,14 +1740,6 @@ def : Pat<(i64 mcsym:$src),
                     (HI32 mcsym:$src))>;
 
 // Address calculation and its optimization
-
-// Calls
-def : Pat<(call tglobaladdr:$dst),
-          (CALL tglobaladdr:$dst)>;
-def : Pat<(call texternalsym:$dst),
-          (CALL texternalsym:$dst)>;
-def : Pat<(call i64:$dst),
-          (CALLr i64:$dst)>;
 
 // Branches
 def : Pat<(br bb:$addr), (BRCFLa bb:$addr)>;

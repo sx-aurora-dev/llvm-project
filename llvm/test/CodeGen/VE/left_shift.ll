@@ -55,7 +55,7 @@ define i128 @func5(i128 %0, i128 %1) {
 ; CHECK-NEXT:    lea %s3, __ashlti3@lo
 ; CHECK-NEXT:    and %s3, %s3, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __ashlti3@hi(, %s3)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
   %3 = shl i128 %0, %1
   ret i128 %3
 }
@@ -113,7 +113,7 @@ define i128 @func10(i128 %0, i128 %1) {
 ; CHECK-NEXT:    lea %s3, __ashlti3@lo
 ; CHECK-NEXT:    and %s3, %s3, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __ashlti3@hi(, %s3)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
   %3 = shl i128 %0, %1
   ret i128 %3
 }

@@ -52,7 +52,7 @@ define i128 @f2i128(float %a) {
 ; CHECK-NEXT:    lea %s1, __fixsfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixsfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptosi float %a to i128
   ret i128 %conv
@@ -122,7 +122,7 @@ define i128 @f2ui128(float %a) {
 ; CHECK-NEXT:    lea %s1, __fixunssfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixunssfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptoui float %a to i128
   ret i128 %conv
@@ -179,7 +179,7 @@ define i128 @d2i128(double %a) {
 ; CHECK-NEXT:    lea %s1, __fixdfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixdfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptosi double %a to i128
   ret i128 %conv
@@ -245,7 +245,7 @@ define i128 @d2ui128(double %a) {
 ; CHECK-NEXT:    lea %s1, __fixunsdfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixunsdfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptoui double %a to i128
   ret i128 %conv
@@ -306,7 +306,7 @@ define i128 @q2i128(fp128 %a) {
 ; CHECK-NEXT:    lea %s2, __fixtfti@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixtfti@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptosi fp128 %a to i128
   ret i128 %conv
@@ -381,7 +381,7 @@ define i128 @q2ui128(fp128 %a) {
 ; CHECK-NEXT:    lea %s2, __fixunstfti@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixunstfti@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptoui fp128 %a to i128
   ret i128 %conv
