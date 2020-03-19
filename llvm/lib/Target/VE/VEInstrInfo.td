@@ -1440,6 +1440,10 @@ def CALLr : RM<0x08, (outs), (ins I64:$sz, variable_ops),
 // Section 8.19.7 - NOP (No Operation)
 
 // Section 8.19.8 - MONC (Monitor Call)
+let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in {
+  def MONC : RR<0x3F, (outs), (ins), "monc">;
+  let cx = 1, isTrap = 1 in def MONCHDB : RR<0x3F, (outs), (ins), "monc.hdb">;
+}
 
 // Section 8.19.9 - LCR (Load Communication Register)
 
@@ -1492,16 +1496,6 @@ let ry = 1, DecoderMethod = "DecodeStoreASI64" in
 defm SHMH : SHMm<"shm.h", 0x31, I64>;
 let ry = 0, DecoderMethod = "DecodeStoreASI64" in
 defm SHMB : SHMm<"shm.b", 0x31, I64>;
-
-let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
-def MONC : RR<
-    0x3F, (outs), (ins),
-    "monc">;
-
-let cx = 1, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
-def MONCT : RR<
-    0x3F, (outs), (ins),
-    "monc.hdb">;
 
 // Save Instruction Counter
 
