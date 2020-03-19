@@ -1730,9 +1730,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
+#if 0
   const MVT FakeLegalVTs[] = {MVT::v4i32,  MVT::v8i32,
                               MVT::v16i32, MVT::v32i32, MVT::v64i32,
                               MVT::v128i32};
+#endif
   
   // VPU registers
   if (Subtarget->enableVPU()) {
@@ -1742,12 +1744,14 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::v256f64, &VE::V64RegClass);
     addRegisterClass(MVT::v256i1, &VE::VMRegClass);
 
+#if 0
     // add a couple of fake-legal register classes to
     // trick LLVM into doing the lowering right (first promote, then widen -
     // NEVER split unless told to)
     for (MVT FakeVT : FakeLegalVTs) {
       addRegisterClass(FakeVT, &VE::V64RegClass);
     }
+#endif
 
     if (Subtarget->hasPackedMode()) {
       addRegisterClass(MVT::v512i32, &VE::V64RegClass);
@@ -2022,7 +2026,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   };
 
   // all builtin opcodes
-  auto AllOCs = llvm::make_range<unsigned>(1, ISD::BUILTIN_OP_END); // TODO use this
+  // auto AllOCs = llvm::make_range<unsigned>(1, ISD::BUILTIN_OP_END); // TODO use this
 
   // Promote all builtin ops on vXiT types with size(T) < 32 bit to vXi32
   // By default use expansion from there on (hoping for widening through
@@ -2035,32 +2039,93 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
 #endif
 
-  // (Otw legal) Operations to promote to a larger vector element type (i8 and i16 elems)
-  const ISD::NodeType SmallElemPromoteOC[] = {
-      ISD::ADD,
-      ISD::AND,
-      ISD::BITCAST,
-      ISD::OR,
-      ISD::XOR,
-      ISD::BUILD_VECTOR,
+  const ISD::NodeType END_OF_OCLIST = ISD::DELETED_NODE;
+
+  // Unsupported vector ops (expand for all vector types)
+  // This is most
+  const ISD::NodeType AllExpandOCs[] = {
+      // won't implement
       ISD::CONCAT_VECTORS,
-      ISD::EXTRACT_SUBVECTOR,
-      ISD::INSERT_SUBVECTOR,
-      ISD::MGATHER,
-      ISD::MLOAD,
-      ISD::MSCATTER,
-      ISD::MUL,
-      ISD::SCALAR_TO_VECTOR,
-      ISD::SDIV,
-      ISD::SHL,
-      ISD::SRA,
-      ISD::SRL,
-      ISD::SUB,
-      ISD::UDIV,
-      ISD::VECTOR_SHUFFLE,
+      ISD::MERGE_VALUES,
+
+      // TODO
+      ISD::CTLZ,
+      ISD::CTLZ_ZERO_UNDEF,
+      ISD::CTTZ,
+      ISD::CTTZ_ZERO_UNDEF,
+      ISD::ADDC,
+      ISD::ADDCARRY,
+      ISD::FABS,
+      ISD::FNEG,
+      ISD::MULHS,
+      ISD::MULHU,
+      ISD::SMUL_LOHI,
+      ISD::UMUL_LOHI,
+
+      // genuinely  unsupported
+      ISD::UREM,
+      ISD::SREM,
+      ISD::SDIVREM,
+      ISD::UDIVREM,
+      ISD::FP16_TO_FP,
+      ISD::FP_TO_FP16,
+      END_OF_OCLIST
   };
 
-  const ISD::NodeType FPOCs[] = {
+  // FIXME should differentiate this..
+  const ISD::NodeType AllLegalOCs[] = {
+    ISD::BITCAST,
+    END_OF_OCLIST
+  };
+
+  const ISD::NodeType AllCustomOCs[] = {
+    END_OF_OCLIST
+  };
+
+  // Memory vector ops
+  const ISD::NodeType MemoryOCs[] = {
+    // memory
+    ISD::LOAD,
+    ISD::STORE,
+    ISD::MGATHER,
+    ISD::MSCATTER,
+    ISD::MLOAD,
+    ISD::MSTORE,
+    END_OF_OCLIST
+  };
+
+  // vector construction operations
+  const ISD::NodeType VectorTransformOCs[] {
+    ISD::BUILD_VECTOR,
+    // ISD::CONCAT_VECTORS, // always expanded
+    ISD::EXTRACT_SUBVECTOR,
+    ISD::INSERT_SUBVECTOR,
+    ISD::SCALAR_TO_VECTOR,
+    ISD::VECTOR_SHUFFLE,
+    END_OF_OCLIST
+  };
+
+  // (Otw legal) Operations to promote to a larger vector element type (i8 and i16 elems)
+  const ISD::NodeType IntArithOCs[] = {
+    // arithmetic
+    ISD::ADD,
+    ISD::SUB,
+    ISD::MUL,
+    ISD::SDIV,
+    ISD::UDIV,
+    ISD::SREM,
+    ISD::UREM,
+    ISD::AND,
+    ISD::OR,
+    ISD::XOR,
+    ISD::SDIV,
+    ISD::SHL,
+    ISD::SRA,
+    ISD::SRL,
+    END_OF_OCLIST
+  };
+
+  const ISD::NodeType FPArithOCs[] = {
     ISD::FABS,
     ISD::FSUB,
     ISD::FDIV,
@@ -2068,9 +2133,103 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     ISD::FNEG,
     ISD::FP_EXTEND,
     ISD::FP_ROUND,
+    END_OF_OCLIST
   };
 
-  // promote arithmetic on i8/i16 element vector types to i32
+  const ISD::NodeType ToIntCastOCs[] = {
+    // casts
+    ISD::TRUNCATE,
+    ISD::SIGN_EXTEND_VECTOR_INREG,
+    ISD::ZERO_EXTEND_VECTOR_INREG,
+    ISD::FP_TO_SINT,
+    ISD::FP_TO_UINT,
+    END_OF_OCLIST
+  };
+
+  const ISD::NodeType ToFPCastOCs[] = {
+    // casts
+    ISD::FP_EXTEND,
+    ISD::SINT_TO_FP,
+    ISD::UINT_TO_FP,
+    END_OF_OCLIST
+  };
+
+  //
+  // reductions
+  const ISD::NodeType IntReductionOCs[] = {
+    ISD::VECREDUCE_ADD,
+    ISD::VECREDUCE_MUL,
+    ISD::VECREDUCE_AND,
+    ISD::VECREDUCE_OR,
+    ISD::VECREDUCE_XOR,
+    ISD::VECREDUCE_SMIN,
+    ISD::VECREDUCE_SMAX,
+    ISD::VECREDUCE_UMIN,
+    ISD::VECREDUCE_UMAX,
+    END_OF_OCLIST
+  };
+
+  // reductions
+  const ISD::NodeType FPReductionOCs[] = {
+    ISD::VECREDUCE_FADD,
+    ISD::VECREDUCE_FMUL,
+    ISD::VECREDUCE_FMIN,
+    ISD::VECREDUCE_FMAX,
+    END_OF_OCLIST
+  };
+
+
+  // Convenience Opcode loops
+  auto ForAll_Opcodes = [](const ISD::NodeType* OCs, std::function<void(unsigned)> Functor) {
+    while (*OCs != END_OF_OCLIST) {
+      Functor(*OCs);
+      ++OCs;
+    }
+  };
+
+  auto ForAll_setOperationAction = [&](const ISD::NodeType *OCs, MVT VT,
+                                       LegalizeAction Act) {
+    ForAll_Opcodes(OCs, [this, VT, Act](unsigned OC) {
+      this->setOperationAction(OC, VT, Act);
+    });
+  };
+
+  
+  // Helpers for specifying trunc+store & load+ext legalization
+  // expand all trunc/extend memory ops with this VALUE type
+  auto ExpandMemory_TruncExtend_ToValue = [&](MVT ValVT) {
+    for (MVT MemVT : MVT::vector_valuetypes()) {
+      setTruncStoreAction(ValVT, MemVT, Expand);
+      setLoadExtAction(ISD::SEXTLOAD, ValVT, MemVT, Expand);
+      setLoadExtAction(ISD::ZEXTLOAD, ValVT, MemVT, Expand);
+      setLoadExtAction(ISD::EXTLOAD, ValVT, MemVT, Expand);
+    }
+  };
+
+  // expand all trunc/extend memory ops with this MEMORY type
+  auto ExpandMemory_TruncExtend_ToMemory = [&](MVT MemVT) {
+    for (MVT ValVT : MVT::vector_valuetypes()) {
+      setTruncStoreAction(ValVT, MemVT, Expand);
+      setLoadExtAction(ISD::SEXTLOAD, ValVT, MemVT, Expand);
+      setLoadExtAction(ISD::ZEXTLOAD, ValVT, MemVT, Expand);
+      setLoadExtAction(ISD::EXTLOAD, ValVT, MemVT, Expand);
+    }
+  };
+
+
+  // The simple cases (always expand, custom or legal)
+  for (MVT VT : MVT::vector_valuetypes()) {
+    // expand all trunc+store, load+ext nodes
+    ExpandMemory_TruncExtend_ToValue(VT);
+    ExpandMemory_TruncExtend_ToMemory(VT);
+
+    // Expand all operation on vector types on the list
+    ForAll_setOperationAction(AllLegalOCs, VT, Legal);
+    ForAll_setOperationAction(AllExpandOCs, VT, Expand);
+    ForAll_setOperationAction(AllCustomOCs, VT, Custom);
+  }
+
+  // Short vector elements (EXCLUDING masks)
   for (MVT VT : MVT::vector_valuetypes()) {
     MVT ElemVT = VT.getVectorElementType();
     unsigned W = VT.getVectorNumElements();
@@ -2084,104 +2243,71 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     if (W > PackedWidth)
       continue;
 
-    // Pick packed/standard width
-    MVT PromoteToVT = MVT::getVectorVT(MVT::i32, LegalizeVectorLength(W));
-
-    for (auto OC : SmallElemPromoteOC) {
+    // Directly select the legal promotion target
+    MVT PromotedElemVT = ElemVT.isInteger() ? MVT::i32 : MVT::f32;
+    MVT PromoteToVT = MVT::getVectorVT(PromotedElemVT, LegalizeVectorLength(W));
+    auto PromotionAction = [&](unsigned OC) {
       setOperationPromotedToType(OC, VT, PromoteToVT);
-    }
+    };
+
+    // fp16
+    ForAll_Opcodes(FPArithOCs, PromotionAction);
+    ForAll_Opcodes(FPReductionOCs, PromotionAction);
+    // i8, i16
+    ForAll_Opcodes(IntArithOCs, PromotionAction);
+    ForAll_Opcodes(IntReductionOCs, PromotionAction);
+    ForAll_Opcodes(MemoryOCs, PromotionAction);
+    ForAll_Opcodes(ToIntCastOCs, PromotionAction);
+    ForAll_Opcodes(ToFPCastOCs, PromotionAction);
   }
 
+  // All mask ops
   for (MVT VT : MVT::vector_valuetypes()) {
-    setOperationAction(ISD::SELECT_CC, VT, Custom);
-    // setOperationAction(ISD::VP_VSHIFT, VT,
-    //                    Custom); // -> VP_VMV with inverse shift amount
+    if (VT.getVectorElementType() != MVT::i1) continue;
 
-    if (VT.getVectorElementType() == MVT::i8 ||
-        VT.getVectorElementType() == MVT::i16) {
-      // VE uses vXi1 types but has no generic operations.
-      // VE doesn't support vXi8 and vXi16 value types.
-      // So, we mark them all as expanded.
+    // Mask producing operations
+    setOperationAction(ISD::INSERT_VECTOR_ELT, VT, Expand);
+    setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
 
-      // Expand all vector-i8/i16-vector truncstore and extload
-      for (MVT OuterVT : MVT::vector_valuetypes()) {
-        setTruncStoreAction(OuterVT, VT, Expand);
-        setLoadExtAction(ISD::SEXTLOAD, OuterVT, VT, Expand);
-        setLoadExtAction(ISD::ZEXTLOAD, OuterVT, VT, Expand);
-        setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Expand);
-      }
+    ForAll_setOperationAction(IntReductionOCs, VT, Custom);
+    ForAll_setOperationAction(VectorTransformOCs, VT, Custom);
+  }
 
-      // VE vector unit supports only setcc and vselect
-      setOperationAction(ISD::SELECT_CC, VT, Expand);
+  // vNi8, vNi16 ops
+  for (MVT VT : MVT::vector_valuetypes()) {
+    if ((VT.getVectorElementType() != MVT::i8) &&
+        (VT.getVectorElementType() != MVT::i16))
+      continue;
 
-      // VE doesn't have instructions for fp<->uint, so expand them by llvm
-      setOperationAction(ISD::FP_TO_UINT, VT, Promote); // use i64
-      setOperationAction(ISD::UINT_TO_FP, VT, Promote); // use i64
+  }
 
-    } else if (VT.getVectorElementType() == MVT::i1) {
-      // Mask producing operations
-      // SExt i1 and ZExt i1 are legal.
-      setOperationAction(ISD::VECREDUCE_OR, VT, Custom);
-      setOperationAction(ISD::VECREDUCE_AND, VT, Custom);
-      setOperationAction(ISD::VECREDUCE_XOR, VT, Custom);
+  // vNt32, vNt64 ops (legal element types)
+  for (MVT VT : MVT::vector_valuetypes()) {
+    MVT ElemVT = VT.getVectorElementType();
+    unsigned ElemBits = ElemVT.getScalarSizeInBits();
+    if (ElemBits != 32 && ElemBits != 64)
+      continue;
 
-      setOperationAction(ISD::SIGN_EXTEND, VT, Legal);
-      setOperationAction(ISD::ZERO_EXTEND, VT, Legal);
-      setOperationAction(ISD::INSERT_VECTOR_ELT, VT, Expand);
-      setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
-      setOperationAction(ISD::STORE, VT, Custom);
+    ForAll_setOperationAction(VectorTransformOCs, VT, Custom);
 
-      setOperationAction(ISD::VECTOR_SHUFFLE, VT, Custom);
-      setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
+    // TODO implement a robust shuffle lowering
+    setOperationAction(ISD::VECTOR_SHUFFLE, VT, Expand);
 
-    } else {
-      setOperationAction(ISD::INSERT_VECTOR_ELT, VT, Custom);
-      setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+    ForAll_setOperationAction(MemoryOCs, VT, Custom);
 
-      /// fp/int vector operations
-      setOperationAction(ISD::SCALAR_TO_VECTOR, VT, Custom);
-      setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
-      setOperationAction(ISD::CONCAT_VECTORS, VT, Expand);
-      setOperationAction(ISD::INSERT_SUBVECTOR, VT, Custom);
-      // TODO implement a robust shuffle lowering
-      setOperationAction(ISD::VECTOR_SHUFFLE, VT, Expand);
-
-      // VL narrowing opportunities
-      setOperationAction(ISD::EXTRACT_SUBVECTOR, VT,
-                         Custom); // -> VEC_NARROW(Op, OldVlen)
-
-      // Custom LOAD/STORE lowering
-      setOperationAction(ISD::STORE, VT, Custom);
-      setOperationAction(ISD::LOAD, VT, Custom);
-      for (MVT OtherVecVT : MVT::vector_valuetypes()) {
-        // Turn FP extload into load/fpextend
-        setLoadExtAction(ISD::EXTLOAD, VT, OtherVecVT, Expand);
-
-        // Turn FP truncstore into trunc + store.
-        setTruncStoreAction(VT, OtherVecVT, Expand);
-      }
-
-      // currently unsupported math functions
-      setOperationAction(ISD::FABS, VT, Expand);
-
-      // supported calculations (FIXME not yet lowered to VVP_* nodes)
-      setOperationAction(ISD::FNEG, VT, Expand);
-      setOperationAction(ISD::MULHS, VT, Expand);
-      setOperationAction(ISD::MULHU, VT, Expand);
-      setOperationAction(ISD::SMUL_LOHI, VT, Expand);
-      setOperationAction(ISD::UMUL_LOHI, VT, Expand);
-
-      // VE vector unit supports only setcc and vselect
-      setOperationAction(ISD::SELECT_CC, VT, Expand);
-
-      // VE doesn't have instructions for fp<->uint, so expand them by llvm
+    // VE doesn't have instructions for fp<->uint, so expand them by llvm
+    if (ElemBits == 32) {
+      setOperationAction(ISD::FP_TO_UINT, VT, Promote);
+      setOperationAction(ISD::UINT_TO_FP, VT, Promote);
+    } 
+    if (ElemBits == 64) {
       setOperationAction(ISD::FP_TO_UINT, VT, Expand);
       setOperationAction(ISD::UINT_TO_FP, VT, Expand);
+    }
 
-      // Ops with VVP lowering
+    // Translate all ops with legal element types to VVP_* nodes
 #define REGISTER_VVP_OP(VVP_NAME, ISD_NAME) setOperationAction(ISD:: ISD_NAME, VT, Custom);
 #include "VVPNodes.inc"
-    }
   }
 
   // X -> vp_* funnel
@@ -2221,14 +2347,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // truncate of X to i1 -> X
   // setOperationAction(ISD::TRUNCATE, MVT::v256i32, Custom); // should not generate invalid valid SETCC in the first place
   setOperationAction(ISD::VSELECT, MVT::v256i1, Custom);
-
-  // VE has no REM or DIVREM operations.
-  for (MVT VT : MVT::vector_valuetypes()) {
-    setOperationAction(ISD::UREM, VT, Expand);
-    setOperationAction(ISD::SREM, VT, Expand);
-    setOperationAction(ISD::SDIVREM, VT, Expand);
-    setOperationAction(ISD::UDIVREM, VT, Expand);
-  }
 
   /// } Vector Lowering
 
@@ -2806,7 +2924,7 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG) {
 SDValue VETargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   LoadSDNode *LdNode = cast<LoadSDNode>(Op.getNode());
 
-  if (Op->getValueType(0).isVector())
+  if (LdNode->getMemoryVT().isVector())
     return ExpandToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   EVT MemVT = LdNode->getMemoryVT();
@@ -2859,6 +2977,7 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
 }
 
+#if 0
 // Lower a vXi1 store into following instructions
 //   SVMi  %1, %vm, 0
 //   STSri %1, (,%addr)
@@ -2917,21 +3036,25 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
     return SDValue();
   }
 }
+#endif
 
 SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
   StoreSDNode *St = cast<StoreSDNode>(Op.getNode());
 
   EVT MemVT = St->getMemoryVT();
+#if 0
   if (MemVT == MVT::v256i1 || MemVT == MVT::v512i1)
    return LowerI1Store(Op, DAG);
+#endif
   if (MemVT == MVT::f128)
     return LowerF128Store(Op, DAG);
 
   if (MemVT.isVector())
     return ExpandToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
-  // Otherwise, ask llvm to expand it.
-  return SDValue();
+
+  // Otherwise, this store is legal
+  return Op;
 }
 
 // Custom lower UMULO/SMULO for VE. This code is similar to ExpandNode()
