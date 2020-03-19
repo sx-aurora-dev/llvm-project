@@ -678,10 +678,6 @@ multiclass RRFCQm<string opcStr, bits<8>opc,
 // Instructions
 //===----------------------------------------------------------------------===//
 
-// NOP instruction
-let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
-def NOP : RR<0x79, (outs), (ins), "nop">;
-
 //-----------------------------------------------------------------------------
 // Section 8.2 - Load/Store instructions
 //-----------------------------------------------------------------------------
@@ -1438,6 +1434,8 @@ def CALLr : RM<0x08, (outs), (ins I64:$sz, variable_ops),
 // Section 8.19.6 - SMIR (Save Miscellaneous Register)
 
 // Section 8.19.7 - NOP (No Operation)
+let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
+def NOP : RR<0x79, (outs), (ins), "nop">;
 
 // Section 8.19.8 - MONC (Monitor Call)
 let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in {
