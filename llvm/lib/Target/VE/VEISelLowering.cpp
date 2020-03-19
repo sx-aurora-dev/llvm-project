@@ -3373,7 +3373,9 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
     auto IndexC = dyn_cast<ConstantSDNode>(IndexV);
     assert(IndexC);
     assert(Op.getValueType().isScalarInteger());
-    unsigned PartSize = Op.getValueType().getSizeInBits();
+    // unsigned ResSize = Op.getValueType().getSizeInBits(); // Implicit
+    EVT MaskVT = Op.getOperand(0).getValueType();
+    unsigned PartSize = MaskVT.getVectorElementType().getSizeInBits();
 
     const unsigned SXRegSize = 64;
 
@@ -3384,10 +3386,12 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
     unsigned ShiftAmount = 0;
     if (PartSize != 64) {
       unsigned PartIdx = IndexC->getZExtValue();
-      unsigned AbsOffset = PartSize * PartIdx;
-      unsigned ActualPart = AbsOffset / SXRegSize;
+      unsigned AbsOffset = PartSize * PartIdx; // bit offset
+      unsigned ActualPart = AbsOffset / SXRegSize; // actual part when chunked into 64bit elements
+      assert(ActualPart < GetMaskBits(MaskVT) / SXRegSize && "Mask bits out of range!");
       AdjIndexV = CDAG.getConstant(ActualPart, MVT::i32);
 
+      // Missing shift amount to isolate the wanted bit
       ShiftAmount = AbsOffset - (ActualPart * SXRegSize);
     }
 

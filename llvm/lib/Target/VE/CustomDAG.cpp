@@ -446,6 +446,17 @@ bool IsMaskType(EVT VT) {
   return false;
 }
 
+unsigned GetMaskBits(EVT VT) {
+  if (!VT.isVector())
+    return 0;
+
+  EVT ElemVT = VT.getVectorElementType();
+  if (!ElemVT.isInteger())
+    return 0;
+
+  return ElemVT.getScalarSizeInBits() * VT.getVectorNumElements();
+}
+
 // select an appropriate %evl argument for this element count.
 // This will return the correct result for packed mode oeprations (half).
 unsigned SelectBoundedVectorLength(unsigned StaticNumElems) {

@@ -94,6 +94,7 @@ Optional<SDValue>
 EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG& DAG);
 
 bool IsMaskType(EVT Ty);
+unsigned GetMaskBits(EVT Ty);
 
 // select an appropriate %evl argument for this element count.
 // This will return the correct result for packed mode oeprations (half).
