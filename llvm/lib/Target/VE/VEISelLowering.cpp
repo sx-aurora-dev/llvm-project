@@ -1138,7 +1138,13 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
     // 3. LowerBUILD_VECTOR gives up and convertes the
     // BUILD_VECTOR into scalar stores again..
     // ..and so on
-    return SDValue();
+
+    std::unique_ptr<MaskView> VecView(requestMaskView(Op.getNode()));
+    assert(VecView && "Cannot lower this shufffle..");
+
+    ShuffleAnalysis VSA(VecView.get(), CDAG);
+    assert(VSA.getResultValue());
+    return VSA.getResultValue();
   }
 
   // Expand to LSV //
@@ -3414,27 +3420,27 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
 
   const unsigned NumResElems = Op.getValueType().getVectorNumElements();
 
+  CustomDAG CDAG(DAG, Op);
+
   // mask to shift + OR expansion
   if (Op.getValueType() == MVT::v256i1) {
     // TODO IsMaskType(Op.getValueType())) {
     MaskShuffleAnalysis MSA(MView.get(), NumResElems);
-    CustomDAG CDAG(DAG, Op);
     return MSA.synthesize(CDAG);
   }
 
+  LLVM_DEBUG(dbgs() << "Lowering Shuffle (non-vmask path)\n");
+  // ShuffleVectorSDNode *ShuffleInstr = cast<ShuffleVectorSDNode>(Op.getNode());
+
+  std::unique_ptr<MaskView> VecView(requestMaskView(Op.getNode()));
+  assert(VecView && "Cannot lower this shufffle..");
+
+  ShuffleAnalysis VSA(VecView.get(), CDAG);
+  assert(VSA.getResultValue());
+  return VSA.getResultValue();
+
 #if 0
-  // TODO implement
-  // freeform shuffle expansion
-  VectorShuffleAnalysis VSA(Mask.get(), NumResElems);
-#endif
-
-#if 1
-  // FIXME legacy code path
-// SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
-//                                               SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "Lowering Shuffle (legacy code path)\n");
-  ShuffleVectorSDNode *ShuffleInstr = cast<ShuffleVectorSDNode>(Op.getNode());
-
+  // BROKEN LEGACY CODE
   SDValue firstVec = ShuffleInstr->getOperand(0);
   int firstVecLength = firstVec.getSimpleValueType().getVectorNumElements();
   SDValue secondVec = ShuffleInstr->getOperand(1);
@@ -3600,7 +3606,6 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
   return returnValue;
 /// }
 #endif
-
 }
 
 SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
