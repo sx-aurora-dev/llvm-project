@@ -448,6 +448,7 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   bool isLoadOp = false;
   bool isStoreOp = false;
   bool isConvOp = false;
+  bool isReduceOp = false;
 
   switch (Op->getOpcode()) {
   default:
@@ -477,10 +478,11 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
 
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isBinaryOp=true; break;
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isTernaryOp=true; break;
-#include "VVPNodes.inc"
 
 #define REGISTER_ICONV_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isConvOp=true; break;
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isConvOp=true; break;
+
+#define REGISTER_REDUCE_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isReduceOp=true; break;
 #include "VVPNodes.inc"
   }
 
@@ -580,6 +582,10 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   if (isConvOp) {
     return CDAG.getNode(VVPOC.getValue(), ResVecTy,
                        {LegalOperands[0], MaskVal, LenVal});
+  }
+
+  if (isReduceOp) {
+    abort(); // TODO implement reduction lowering
   }
 
   llvm_unreachable("Cannot lower this op to VVP");

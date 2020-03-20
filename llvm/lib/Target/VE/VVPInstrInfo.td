@@ -69,9 +69,20 @@ def vvp_scatter : SDNode<"VEISD::VVP_SCATTER",  SDTScatterVVP,
 def vvp_gather  : SDNode<"VEISD::VVP_GATHER",  SDTGatherVVP,
                         [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
 
+// sext, zext
 def SDTIntExtendOpVVP : SDTypeProfile<1, 3, [  // sext, zext, anyext
   SDTCisInt<0>, SDTCisInt<1>, SDTCisOpSmallerThanOp<1, 0>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0,2>, IsVLVT<3>
 ]>;
+
+// reductions
+def SDTReduceStartVVP : SDTypeProfile<1, 4, [    // vvp_reduce (with start arg)
+  SDTCisVec<2>, SDTCisInt<3>, SDTCisVec<3>, SDTCisSameNumEltsAs<2,3>, IsVLVT<4>
+]>;
+def SDTReduceVVP : SDTypeProfile<1, 3, [    // vp_reduce (w/o start arg)
+  SDTCisVec<1>, SDTCisInt<2>, SDTCisVec<2>, SDTCisSameNumEltsAs<1,2>, IsVLVT<3>
+]>;
+
+
 
 // load store
 def vvp_load    : SDNode<"VEISD::VVP_LOAD",  SDTLoadVVP, [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
@@ -118,8 +129,14 @@ def vvp_fp_to_sint    : SDNode<"VEISD::VVP_FP_TO_SINT", SDTFPToIntOpVVP>;
 def vvp_fpround      : SDNode<"VEISD::VVP_FPROUND", SDTFPRoundOpVVP>;
 def vvp_fpext        : SDNode<"VEISD::VVP_FPEXT", SDTFPExtOpVVP>;
 
+// zext, sext
 def vvp_sext       : SDNode<"VEISD::VVP_SEXT", SDTIntExtendOpVVP>;
 def vvp_zext       : SDNode<"VEISD::VVP_ZEXT", SDTIntExtendOpVVP>;
+
+// reductions
+def vvp_reduce_fadd          : SDNode<"VEISD::VVP_REDUCE_FADD", SDTReduceStartVVP>;
+def vvp_reduce_strict_fadd   : SDNode<"VEISD::VVP_REDUCE_STRICT_FADD", SDTReduceVVP>;
+
 
 class vvp_commutative<SDNode RootOp> :
   PatFrags<(ops node:$lhs, node:$rhs, node:$mask, node:$vlen),
