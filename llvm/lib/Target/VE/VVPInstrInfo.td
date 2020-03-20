@@ -118,8 +118,8 @@ def vvp_fp_to_sint    : SDNode<"VEISD::VVP_FP_TO_SINT", SDTFPToIntOpVVP>;
 def vvp_fpround      : SDNode<"VEISD::VVP_FPROUND", SDTFPRoundOpVVP>;
 def vvp_fpext        : SDNode<"VEISD::VVP_FPEXT", SDTFPExtOpVVP>;
 
-def vvp_sext       : SDNode<"VEISD::SEXT", SDTIntExtendOpVVP>;
-def vvp_zext       : SDNode<"VEISD::ZEXT", SDTIntExtendOpVVP>;
+def vvp_sext       : SDNode<"VEISD::VVP_SEXT", SDTIntExtendOpVVP>;
+def vvp_zext       : SDNode<"VEISD::VVP_ZEXT", SDTIntExtendOpVVP>;
 
 class vvp_commutative<SDNode RootOp> :
   PatFrags<(ops node:$lhs, node:$rhs, node:$mask, node:$vlen),

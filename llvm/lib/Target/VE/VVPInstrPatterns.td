@@ -297,3 +297,27 @@ defm : VectorBinaryArith_Base<c_vv_fminnum, i64, v512f32, v512i1, "pvfmin", "M">
 defm : VectorBinaryArith_Base<c_vv_fmaxnum, i64, v512f32, v512i1, "pvfmax", "M">;
 
 defm : VectorTernaryArith_Base<c_vv_ffma, i64, v512f32, v512i1, "pvfmad", "M">;
+
+// Integer extension (256 elements) //
+// vNi32 to vNi64
+multiclass IExtend32<string ExtToken> {
+  def : Pat<(v256i64 (!cast<SDPatternOperator>("vvp_"#ExtToken#"ext") v256i32:$vx, v256i1:$vm, i32:$vl)),
+            (!cast<Instruction>("vaddsw"#ExtToken#"x_vIvmvl") 0, $vx, $vm, (v256i32 (IMPLICIT_DEF)), $vl)>;
+}
+defm : IExtend32<"z">;
+defm : IExtend32<"s">;
+
+// vNi1 to vNiT
+multiclass IExtend_Mask<ValueType ResVT, string ExtToken, int TrueVal> {
+def : Pat<(ResVT (!cast<SDPatternOperator>("vvp_"#ExtToken#"ext") v256i1:$vm, (v256i1 srcvalue), i32:$vl)),
+          (vmrg_vIvml TrueVal, (vbrd_vIl 0, $vl), $vm, $vl)>;
+}
+multiclass IExtend_Mask_ForRes<ValueType ResVT> {
+  defm: IExtend_Mask<ResVT, "z", 1>;
+  defm: IExtend_Mask<ResVT, "s", -1>;
+}
+defm: IExtend_Mask_ForRes<v256i32>;
+defm: IExtend_Mask_ForRes<v256i64>;
+
+// Integer extension (512 elements) //
+// TODO
