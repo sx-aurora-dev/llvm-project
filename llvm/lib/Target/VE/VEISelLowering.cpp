@@ -1007,9 +1007,9 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
 
   SDLoc DL(Op);
 
-  EVT ResTy = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
+  EVT LegalResVT = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
   bool Packed = IsPackedType(Op.getValueType());
-  unsigned NativeNumElems = ResTy.getVectorNumElements();
+  unsigned NativeNumElems = LegalResVT.getVectorNumElements();
 
   // Defined range
   // TODO use LSV below a threshold
@@ -1046,20 +1046,20 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
     // Fold undef
     case BVKind::AllUndef: {
       LLVM_DEBUG(dbgs() << "::AllUndef\n");
-      return DAG.getUNDEF(ResTy);
+      return DAG.getUNDEF(LegalResVT);
     }
 
     case BVKind::Broadcast: {
         LLVM_DEBUG(dbgs() << "::Broadcast\n");
       SDValue ScaVal = BVN->getOperand(FirstDef);
       LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
-      return CDAG.CreateBroadcast(ResTy, ScaVal, OpVectorLength);
+      return CDAG.CreateBroadcast(LegalResVT, ScaVal, OpVectorLength);
     }
 
     case BVKind::Seq: {
         LLVM_DEBUG(dbgs() << "::Seq\n");
     // detected a proper stride pattern
-      SDValue SeqV = CDAG.CreateSeq(ResTy, OpVectorLength);
+      SDValue SeqV = CDAG.CreateSeq(LegalResVT, OpVectorLength);
       if (Stride == 1) {
         LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
         LLVM_DEBUG(SeqV.dump(&DAG););
@@ -1067,9 +1067,9 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
       }
 
       SDValue StrideV = CDAG.CreateBroadcast(
-          ResTy, DAG.getConstant(Stride, DL, ElemTy), OpVectorLength);
+          LegalResVT, DAG.getConstant(Stride, DL, ElemTy), OpVectorLength);
       SDValue ret =
-          DAG.getNode(VEISD::VVP_MUL, DL, ResTy, {SeqV, StrideV, TrueMask, OpVectorLength});
+          DAG.getNode(VEISD::VVP_MUL, DL, LegalResVT, {SeqV, StrideV, TrueMask, OpVectorLength});
       LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST\n");
       LLVM_DEBUG(StrideV.dump(&DAG));
       LLVM_DEBUG(ret.dump(&DAG));
@@ -1084,12 +1084,12 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
 
       if (pow(2, blockLengthLog) != BlockLength) break;
 
-      SDValue sequence = CDAG.CreateSeq(ResTy, OpVectorLength);
+      SDValue sequence = CDAG.CreateSeq(LegalResVT, OpVectorLength);
       SDValue modulobroadcast = CDAG.CreateBroadcast(
-          ResTy, DAG.getConstant(BlockLength - 1, DL, ElemTy), OpVectorLength);
+          LegalResVT, DAG.getConstant(BlockLength - 1, DL, ElemTy), OpVectorLength);
 
       SDValue modulo =
-          DAG.getNode(VEISD::VVP_AND, DL, ResTy,
+          DAG.getNode(VEISD::VVP_AND, DL, LegalResVT,
                       {sequence, modulobroadcast, TrueMask, OpVectorLength});
 
       LLVM_DEBUG(dbgs() << "BlockStride2: VEC_SEQ & VEC_BROADCAST\n");
@@ -1107,11 +1107,11 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
 
       if (pow(2, blockLengthLog) != BlockLength) break;
 
-      SDValue sequence = CDAG.CreateSeq(ResTy, OpVectorLength);
+      SDValue sequence = CDAG.CreateSeq(LegalResVT, OpVectorLength);
       SDValue shiftbroadcast = CDAG.CreateBroadcast(
-          ResTy, DAG.getConstant(blockLengthLog, DL, ElemTy), OpVectorLength);
+          LegalResVT, DAG.getConstant(blockLengthLog, DL, ElemTy), OpVectorLength);
 
-      SDValue shift = DAG.getNode(VEISD::VVP_SRL, DL, ResTy,
+      SDValue shift = DAG.getNode(VEISD::VVP_SRL, DL, LegalResVT,
                                   {sequence, shiftbroadcast, TrueMask, OpVectorLength});
       LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST\n");
       LLVM_DEBUG(sequence.dump());
@@ -1123,42 +1123,12 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
     }
   }
 
+  // new shuffle implementatino
+  std::unique_ptr<MaskView> VecView(requestMaskView(Op.getNode()));
+  assert(VecView && "Cannot lower this shufffle..");
 
-  ///// Fallback for BVKind::Unknown or too few defined elements /////
-  
-  // LLVM extends this to VLD of a constant shuffle mask
-  // # mask elements from which on a vector load is preferred
-  // over a sequence of LVS instructions
-  // TODO move this to TLI
-  const unsigned FallbackThreshold = 8;
-  if (NumElems > FallbackThreshold) {
-    // TODO low FallbackThreshold values lead to divergence in the backend as
-    // 1. scalar stores are fused into vector stores,
-    // 2. the value to store becomes a BUILD_VECTOR and
-    // 3. LowerBUILD_VECTOR gives up and convertes the
-    // BUILD_VECTOR into scalar stores again..
-    // ..and so on
-
-    std::unique_ptr<MaskView> VecView(requestMaskView(Op.getNode()));
-    assert(VecView && "Cannot lower this shufffle..");
-
-    ShuffleAnalysis VSA(VecView.get(), CDAG);
-    assert(VSA.getResultValue());
-    return VSA.getResultValue();
-  }
-
-  // Expand to LSV //
-  SDValue newVector = DAG.getUNDEF(ResTy);
-
-  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
-    auto ElemN = BVN->getOperand(i);
-    if (ElemN.isUndef()) continue;
-
-    newVector = DAG.getNode(
-        ISD::INSERT_VECTOR_ELT, DL, ResTy, newVector, BVN->getOperand(i),
-        DAG.getConstant(i, DL, EVT::getIntegerVT(*DAG.getContext(), 64)));
-  }
-  return newVector;
+  ShuffleAnalysis VSA(ref_to(VecView));
+  return VSA.synthesize(ref_to(VecView), CDAG, LegalResVT);
 }
 
 static SDValue PeekThroughCasts(SDValue Op) {
@@ -3413,10 +3383,13 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
 }
 
 SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
-                                              SelectionDAG &DAG) const {
+                                              SelectionDAG &DAG,
+                                              VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "Lowering Shuffle\n");
   SDLoc DL(Op);
   std::unique_ptr<MaskView> MView(requestMaskView(Op.getNode()));
+
+  EVT LegalResVT = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
 
   const unsigned NumResElems = Op.getValueType().getVectorNumElements();
 
@@ -3435,9 +3408,8 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op,
   std::unique_ptr<MaskView> VecView(requestMaskView(Op.getNode()));
   assert(VecView && "Cannot lower this shufffle..");
 
-  ShuffleAnalysis VSA(VecView.get(), CDAG);
-  assert(VSA.getResultValue());
-  return VSA.getResultValue();
+  ShuffleAnalysis VSA(*VecView);
+  return VSA.synthesize(ref_to(VecView), CDAG, LegalResVT);
 
 #if 0
   // BROKEN LEGACY CODE
@@ -3639,7 +3611,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::BUILD_VECTOR: return LowerBUILD_VECTOR(Op, DAG, VVPExpansionMode::ToNativeWidth);
   case ISD::INSERT_VECTOR_ELT: return LowerINSERT_VECTOR_ELT(Op, DAG);
   case ISD::EXTRACT_VECTOR_ELT: return LowerEXTRACT_VECTOR_ELT(Op, DAG);
-  case ISD::VECTOR_SHUFFLE: return LowerVECTOR_SHUFFLE(Op, DAG);
+  case ISD::VECTOR_SHUFFLE: return LowerVECTOR_SHUFFLE(Op, DAG, VVPExpansionMode::ToNativeWidth);
   case ISD::EXTRACT_SUBVECTOR: return LowerEXTRACT_SUBVECTOR(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   case ISD::VECREDUCE_OR:

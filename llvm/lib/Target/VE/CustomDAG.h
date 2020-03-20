@@ -19,6 +19,14 @@
 #include "VEISelLowering.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 
+/// Helpers {
+template<typename ElemT>
+ElemT&
+ref_to(std::unique_ptr<ElemT>& UP) {
+  return *(UP.get());
+}
+/// } Helpers
+
 namespace llvm {
 class VESubtarget;
 
@@ -207,6 +215,8 @@ struct CustomDAG {
 
   SDValue getConstant(uint64_t Val, EVT VT, bool IsTarget = false,
                       bool IsOpaque = false) const;
+
+  SDValue getUndef(EVT VT) const { return DAG.getUNDEF(VT); }
 };
 
 }  // namespace llvm

@@ -242,7 +242,7 @@ public:
   // Vector Operations
   SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
   SDValue LowerBitcast(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
 
   SDValue LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint=None) const;
   SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint=None) const;

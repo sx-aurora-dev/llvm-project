@@ -328,24 +328,29 @@ struct ShuffleAnalysis {
   // TODO Expand,Compress
 
   // Analysis result -> the final shuffle sequence
-  std::vector<AbstractShuffleOp*> ShuffleSeq;
-
-  SDValue FinalV;
+  std::vector<std::unique_ptr<AbstractShuffleOp>> ShuffleSeq;
 
   // match a 64 bit segment, mapping out all source bits
   // FIXME this implies knowledge about the underlying object structure
-  ShuffleAnalysis(MaskView *Mask, CustomDAG& CDAG) {
+  ShuffleAnalysis(MaskView &Mask) {
     PartialShuffleState InitialPSS =
-        PartialShuffleState::fromInitialMask(*Mask);
+        PartialShuffleState::fromInitialMask(Mask);
 
+    // FIXME generalize this
     ScalarTransferStrategy STS;
-    STS.planPartialShuffle(*Mask, InitialPSS, [&](AbstractShuffleOp * PartialOp, PartialShuffleState NextPSS){
+    STS.planPartialShuffle(Mask, InitialPSS, [&](AbstractShuffleOp * PartialOp, PartialShuffleState NextPSS){
         assert(NextPSS.isComplete() && "scalar transfer is always complete..");
-        FinalV = PartialOp->synthesize(*Mask, CDAG, CDAG.DAG.getUNDEF(Mask->getValueType()));
+        ShuffleSeq.push_back(std::unique_ptr<AbstractShuffleOp>(PartialOp));
+        return IterBreak;
     });
   }
 
-  SDValue getResultValue() { return FinalV; }
+  SDValue synthesize(MaskView &Mask, CustomDAG &CDAG, EVT LegalResultVT) {
+    assert(ShuffleSeq.size() == 1);
+    AbstractShuffleOp &SO = ref_to(*ShuffleSeq.begin());
+    SDValue StartV = CDAG.getUndef(LegalResultVT);
+    return SO.synthesize(Mask, CDAG, StartV);
+  }
 };
 
 
