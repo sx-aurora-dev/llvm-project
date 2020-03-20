@@ -59,6 +59,14 @@ def zero : Operand<i32>, PatLeaf<(imm), [{
     return N->getSExtValue() == 0; }]> {
   let ParserMatchClass = ZeroAsmOperand;
 }
+// Immediates to represent MISC registers
+def MiscImmAsmOperand : AsmOperandClass { let Name = "MiscImm"; }
+def misc : Operand<i32>, PatLeaf<(imm), [{
+    int64_t Val = N->getSExtValue();
+    return Val == 0 || Val == 1 || Val == 2 || (Val >= 7 && Val <= 11) ||
+           (Val >= 16 && Val <= 30); }]> {
+  let ParserMatchClass = MiscImmAsmOperand;
+}
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
@@ -1434,13 +1442,24 @@ def LPM : RR<0x3a, (outs), (ins I64:$sy), "lpm $sy">;
 
 // Section 8.19.3 - SPM (Save Program Mode Flags)
 let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0, Uses = [PSW] in
-def SPM : RR<0x2a, (outs I64:$sx), (ins I64:$sy), "spm $sx">;
+def SPM : RR<0x2a, (outs I64:$sx), (ins), "spm $sx">;
 
 // Section 8.19.4 - LFR (Load Flag Register)
+let sx = 0, cz = 0, sz = 0, hasSideEffects = 0, Defs = [PSW] in {
+  def LFRr : RR<0x69, (outs), (ins I64:$sy), "lfr $sy">;
+  let cy = 0 in def LFRi : RR<0x69, (outs), (ins uimm6:$sy), "lfr $sy">;
+}
 
 // Section 8.19.5 - SFR (Save Flag Register)
+let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0, Uses = [PSW] in
+def SFR : RR<0x29, (outs I64:$sx), (ins), "sfr $sx">;
 
 // Section 8.19.6 - SMIR (Save Miscellaneous Register)
+let cy = 0, cz = 0, sz = 0, hasSideEffects = 0, Uses = [PSW] in {
+  def SMIR : RR<0x22, (outs I64:$sx), (ins MISC:$sy), "smir $sx, $sy">;
+  let isAsmParserOnly = 1 in
+  def SMIRi : RR<0x22, (outs I64:$sx), (ins misc:$sy), "smir $sx, $sy">;
+}
 
 // Section 8.19.7 - NOP (No Operation)
 let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in

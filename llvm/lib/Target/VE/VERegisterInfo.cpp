@@ -104,7 +104,7 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   // Reserved.set(VE::VL);
 
   // Other Misc registers are reserved
-  Reserved.set(VE::UCC);
+  Reserved.set(VE::USRCC);
   Reserved.set(VE::PSW);
   Reserved.set(VE::SAR);
   Reserved.set(VE::PMMR);

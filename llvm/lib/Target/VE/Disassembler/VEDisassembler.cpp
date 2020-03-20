@@ -154,6 +154,16 @@ static const unsigned F128RegDecoderTable[] = {
   VE::Q24, VE::Q25, VE::Q26, VE::Q27,
   VE::Q28, VE::Q29, VE::Q30, VE::Q31 };
 
+static const unsigned MiscRegDecoderTable[] = {
+  VE::USRCC, VE::PSW,   VE::SAR,   0,
+  0,         0,         0,         VE::PMMR,
+  VE::PMCR0, VE::PMCR1, VE::PMCR2, VE::PMCR3,
+  0,         0,         0,         0,
+  VE::PMC0,  VE::PMC1,  VE::PMC2,  VE::PMC3,
+  VE::PMC4,  VE::PMC5,  VE::PMC6,  VE::PMC7,
+  VE::PMC8,  VE::PMC9,  VE::PMC10, VE::PMC11,
+  VE::PMC12, VE::PMC13, VE::PMC14 };
+
 static DecodeStatus DecodeI8RegisterClass(MCInst &Inst,
                                           unsigned RegNo,
                                           uint64_t Address,
@@ -216,6 +226,17 @@ static DecodeStatus DecodeF128RegisterClass(MCInst &Inst,
   if (RegNo > 31)
     return MCDisassembler::Fail;
   unsigned Reg = F128RegDecoderTable[RegNo];
+  Inst.addOperand(MCOperand::createReg(Reg));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeMISCRegisterClass(MCInst &Inst,
+                                            unsigned RegNo,
+                                            uint64_t Address,
+                                            const void *Decoder) {
+  if (!isMiscReg(RegNo))
+    return MCDisassembler::Fail;
+  unsigned Reg = MiscRegDecoderTable[RegNo];
   Inst.addOperand(MCOperand::createReg(Reg));
   return MCDisassembler::Success;
 }

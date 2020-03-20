@@ -324,6 +324,18 @@ public:
     }
     return false;
   }
+  bool isMiscImm() {
+    if (!isImm())
+      return false;
+
+    // Constant case
+    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+      int64_t Value = ConstExpr->getValue();
+      return Value == 0 || Value == 1 || Value == 2 ||
+             (Value >= 7 && Value <= 11) || (Value >= 16 && Value <= 30);
+    }
+    return false;
+  }
 
   StringRef getToken() const {
     assert(Kind == k_Token && "Invalid access!");
@@ -471,6 +483,10 @@ public:
   }
 
   void addZeroOperands(MCInst &Inst, unsigned N) const {
+    addImmOperands(Inst, N);
+  }
+
+  void addMiscImmOperands(MCInst &Inst, unsigned N) const {
     addImmOperands(Inst, N);
   }
 

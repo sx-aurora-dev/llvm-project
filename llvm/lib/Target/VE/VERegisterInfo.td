@@ -38,11 +38,14 @@ let Namespace = "VE" in {
   def AsmName : RegAltNameIndex;
 }
 
+//-----------------------------------------------------------------------------
 // Miscellaneous Registers
-def UCC : VEMiscReg<0, "UCC">;       // User clock counter
-def PSW : VEMiscReg<1, "PSW">;       // Program status word
-def SAR : VEMiscReg<2, "SAR">;       // Store address register
-def PMMR : VEMiscReg<7, "PMMR">;     // Performance monitor mode register
+//-----------------------------------------------------------------------------
+
+def USRCC : VEMiscReg<0, "USRCC">;      // User clock counter
+def PSW : VEMiscReg<1, "PSW">;          // Program status word
+def SAR : VEMiscReg<2, "SAR">;          // Store address register
+def PMMR : VEMiscReg<7, "PMMR">;        // Performance monitor mode register
 
 // Performance monitor configuration registers
 foreach I = 0-3 in
@@ -51,6 +54,16 @@ foreach I = 0-3 in
 // Performance monitor counter
 foreach I = 0-14 in
   def PMC#I : VEMiscReg<!add(16,I), "PMC"#I>;
+
+// Register classes.
+def MISC : RegisterClass<"VE", [i64], 64,
+                         (add USRCC, PSW, SAR, PMMR,
+                              (sequence "PMCR%u", 0, 3),
+                              (sequence "PMC%u", 0, 14))>;
+
+//-----------------------------------------------------------------------------
+// Gneric Registers
+//-----------------------------------------------------------------------------
 
 // Generic integer registers - 8 bits wide
 let RegAltNameIndices = [AsmName] in
@@ -144,11 +157,6 @@ def F128 : RegisterClass<"VE", [f128], 128,
                         (add (sequence "Q%u", 0, 3),
                              (sequence "Q%u", 17, 31),
                              (sequence "Q%u", 0, 16))>;
-
-def Misc : RegisterClass<"VE", [i64], 64,
-                         (add UCC, PSW, SAR, PMMR,
-                              (sequence "PMCR%u", 0, 3),
-                              (sequence "PMC%u", 0, 14))>;
 
 def V64 : RegisterClass<"VE",
                         [v512i32, v512f32,

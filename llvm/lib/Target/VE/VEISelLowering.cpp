@@ -642,7 +642,7 @@ Register VETargetLowering::getRegisterByName(const char *RegName, LLT VT,
                      .Case("info", VE::SX17)  // Info area register
                      .Case("got", VE::SX15)   // Global offset table register
                      .Case("plt", VE::SX16) // Procedure linkage table register
-                     .Case("usrcc", VE::UCC)  // User clock counter
+                     .Case("usrcc", VE::USRCC)  // User clock counter
                      .Default(0);
 
   if (Reg)

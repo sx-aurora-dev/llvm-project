@@ -305,5 +305,11 @@ inline static VERD::RoundingMode VEValToRD(unsigned Val) {
   return VERD::UNKNOWN;
 }
 
+inline static bool isMiscReg(unsigned RegNo) {
+  return RegNo == 0 || RegNo == 1 || RegNo == 2 ||
+         (RegNo >= 7 && RegNo <= 11) ||
+         (RegNo >= 16 && RegNo <= 30);
+}
+
 } // namespace llvm
 #endif
