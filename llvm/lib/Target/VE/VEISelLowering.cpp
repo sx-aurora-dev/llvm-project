@@ -2210,31 +2210,48 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     MVT ElemVT = VT.getVectorElementType();
     unsigned W = VT.getVectorNumElements();
 
-    // Promotion rule, accept native element bit sizes
-    unsigned ElemBits = ElemVT.getScalarSizeInBits();
-    if (ElemBits == 1 || (ElemBits >= 32))
-      continue;
-
     // Use default splitting for vlens > 512
     if (W > PackedWidth)
       continue;
 
-    // Directly select the legal promotion target
-    MVT PromotedElemVT = ElemVT.isInteger() ? MVT::i32 : MVT::f32;
-    MVT PromoteToVT = MVT::getVectorVT(PromotedElemVT, LegalizeVectorLength(W));
-    auto PromotionAction = [&](unsigned OC) {
-      setOperationPromotedToType(OC, VT, PromoteToVT);
-    };
+    // Promotion rule, accept native element bit sizes
+    unsigned ElemBits = ElemVT.getScalarSizeInBits();
 
-    // fp16
-    ForAll_Opcodes(FPArithOCs, PromotionAction);
-    ForAll_Opcodes(FPReductionOCs, PromotionAction);
-    // i8, i16
-    ForAll_Opcodes(IntArithOCs, PromotionAction);
-    ForAll_Opcodes(IntReductionOCs, PromotionAction);
-    ForAll_Opcodes(MemoryOCs, PromotionAction);
-    ForAll_Opcodes(ToIntCastOCs, PromotionAction);
-    ForAll_Opcodes(ToFPCastOCs, PromotionAction);
+    if ((ElemBits == 1) || (ElemBits >= 64))
+      continue;
+
+    ///// [32, 64) lane bits /////
+    if (ElemBits >= 32) {
+      // Directly select the legal promotion target
+      MVT PromotedElemVT = ElemVT.isInteger() ? MVT::i64 : MVT::f64;
+      MVT PromoteToVT = MVT::getVectorVT(PromotedElemVT, LegalizeVectorLength(W));
+
+      setOperationPromotedToType(ISD::FP_TO_UINT, VT, PromoteToVT);
+      setOperationPromotedToType(ISD::UINT_TO_FP, VT, PromoteToVT);
+    }
+
+    ///// (1 - 32) lane bits /////
+    if (ElemBits >= 32)
+      continue;
+
+    {
+      // Directly select the legal promotion target
+      MVT PromotedElemVT = ElemVT.isInteger() ? MVT::i32 : MVT::f32;
+      MVT PromoteToVT = MVT::getVectorVT(PromotedElemVT, LegalizeVectorLength(W));
+      auto PromotionAction = [&](unsigned OC) {
+        setOperationPromotedToType(OC, VT, PromoteToVT);
+      };
+
+      // fp16
+      ForAll_Opcodes(FPArithOCs, PromotionAction);
+      ForAll_Opcodes(FPReductionOCs, PromotionAction);
+      // i8, i16
+      ForAll_Opcodes(IntArithOCs, PromotionAction);
+      ForAll_Opcodes(IntReductionOCs, PromotionAction);
+      ForAll_Opcodes(MemoryOCs, PromotionAction);
+      ForAll_Opcodes(ToIntCastOCs, PromotionAction);
+      ForAll_Opcodes(ToFPCastOCs, PromotionAction);
+    }
   }
 
   // All mask ops
@@ -2279,10 +2296,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     ForAll_setOperationAction(MemoryOCs, VT, Custom);
 
     // VE doesn't have instructions for fp<->uint, so expand them by llvm
-    if (ElemBits == 32) {
-      setOperationAction(ISD::FP_TO_UINT, VT, Promote);
-      setOperationAction(ISD::UINT_TO_FP, VT, Promote);
-    } 
     if (ElemBits == 64) {
       setOperationAction(ISD::FP_TO_UINT, VT, Expand);
       setOperationAction(ISD::UINT_TO_FP, VT, Expand);
