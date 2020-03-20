@@ -479,6 +479,7 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isTernaryOp=true; break;
 #include "VVPNodes.inc"
 
+#define REGISTER_ICONV_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isConvOp=true; break;
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME, NATIVE_ISD) case ISD::NATIVE_ISD: isConvOp=true; break;
 #include "VVPNodes.inc"
   }
@@ -3655,6 +3656,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   ///// non-VP --> vvp_* with native type /////
   // Convert this standard vector op to VVP
   // FIXME List all operation that correspond to a VVP operation here
+#define REGISTER_ICONV_VVP_OP(VVP_NAME, ISD_NAME)  case ISD:: ISD_NAME:
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME, ISD_NAME)  case ISD:: ISD_NAME:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME)  case ISD:: ISD_NAME:
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD:: ISD_NAME:
@@ -3664,6 +3666,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   ///// Widen this VVP operation to the vector type /////
   // Use a native vector type for this VVP_* operation
   // FIXME List all VVP ops with vector results here
+#define REGISTER_ICONV_VVP_OP(VVP_NAME, ISD_NAME)  case VEISD:: VVP_NAME:
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME, ISD_NAME)  case VEISD:: VVP_NAME:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME)  case VEISD:: VVP_NAME:
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD:: VVP_NAME:

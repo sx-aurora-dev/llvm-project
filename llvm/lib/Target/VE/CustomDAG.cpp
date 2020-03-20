@@ -232,7 +232,7 @@ bool IsVVP(unsigned Opcode) {
 }
 
 // Choses the widest element type
-EVT getFPConvType(SDNode *Op) {
+EVT getLargestConvType(SDNode *Op) {
   EVT ResVT = Op->getValueType(0);
   EVT OpVT = Op->getOperand(0).getValueType();
   return ResVT.getStoreSizeInBits() > OpVT.getStoreSizeInBits() ? ResVT : OpVT;
@@ -284,8 +284,11 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
   case VEISD::VVP_NAME:                                                        \
   case ISD::NATIVE_ISD:
+#define REGISTER_ICONV_VVP_OP(VVP_NAME, NATIVE_ISD)                            \
+  case VEISD::VVP_NAME:                                                        \
+  case ISD::NATIVE_ISD:
 #include "VVPNodes.inc"
-    return getFPConvType(Op);
+    return getLargestConvType(Op);
 
   case VEISD::VEC_SEQ:
   case VEISD::VEC_BROADCAST:
