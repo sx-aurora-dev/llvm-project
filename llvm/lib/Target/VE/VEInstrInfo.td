@@ -1425,6 +1425,8 @@ def CALLr : RM<0x08, (outs), (ins I64:$sz, variable_ops),
 //-----------------------------------------------------------------------------
 
 // Section 8.19.1 - SIC (Save Instruction Counter)
+let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 /* , Uses = [IC] */ in
+def SIC : RR<0x28, (outs I32:$sx), (ins), "sic $sx">;
 
 // Section 8.19.2 - LPM (Load Program Mode Flags)
 
@@ -1541,11 +1543,6 @@ let ry = 1, DecoderMethod = "DecodeStoreASI64" in
 defm SHMH : SHMm<"shm.h", 0x31, I64>;
 let ry = 0, DecoderMethod = "DecodeStoreASI64" in
 defm SHMB : SHMm<"shm.b", 0x31, I64>;
-
-// Save Instruction Counter
-
-let cx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 /* , Uses = [IC] */ in
-def SIC : RR<0x28, (outs I32:$sx), (ins), "sic $sx">;
 
 // Atomic swap
 //   AND $newsrc, $src, -4      ; 4 byte align address
