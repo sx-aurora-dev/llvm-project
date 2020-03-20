@@ -2274,14 +2274,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::EXTRACT_VECTOR_ELT, MaskVT, Custom);
   }
 
-  // vNi8, vNi16 ops
-  for (MVT VT : MVT::vector_valuetypes()) {
-    if ((VT.getVectorElementType() != MVT::i8) &&
-        (VT.getVectorElementType() != MVT::i16))
-      continue;
-
-  }
-
   // vNt32, vNt64 ops (legal element types)
   for (MVT VT : MVT::vector_valuetypes()) {
     MVT ElemVT = VT.getVectorElementType();
