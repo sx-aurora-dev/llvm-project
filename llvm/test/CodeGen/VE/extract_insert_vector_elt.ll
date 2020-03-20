@@ -29,8 +29,7 @@ define x86_regcallcc <512 x i32> @__regcall3__insert_v512i32(<512 x i32>) {
 ; CHECK-NEXT:  or %s0, 2, (0)1
 ; CHECK-NEXT:  or %s1, 0, (0)1
 ; CHECK-NEXT:  lvs %s2,%v0(%s1)
-; CHECK-NEXT:  lea.sl %s3, -1
-; CHECK-NEXT:  and %s2, %s2, %s3
+; CHECK-NEXT:  and %s2, %s2, (32)1
 ; CHECK-NEXT:  or %s0, %s0, %s2
 ; CHECK-NEXT:  lsv %v0(%s1),%s0
 ; CHECK-NEXT:  or %s11, 0, %s9
@@ -59,8 +58,7 @@ define x86_regcallcc <512 x float> @__regcall3__insert_v512f32(<512 x float>) {
 ; CHECK-NEXT:  lea %s0, 1065353216
 ; CHECK-NEXT:  or %s1, 1, (0)1
 ; CHECK-NEXT:  lvs %s2,%v0(%s1)
-; CHECK-NEXT:  lea.sl %s3, -1
-; CHECK-NEXT:  and %s2, %s2, %s3
+; CHECK-NEXT:  and %s2, %s2, (32)1
 ; CHECK-NEXT:  or %s0, %s0, %s2
 ; CHECK-NEXT:  lsv %v0(%s1),%s0
 ; CHECK-NEXT:  or %s11, 0, %s9

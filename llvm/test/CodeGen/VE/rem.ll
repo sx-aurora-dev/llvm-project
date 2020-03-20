@@ -148,8 +148,7 @@ define i128 @remi128ri(i128 %a) {
 define i64 @remi64ri(i64 %a) {
 ; CHECK-LABEL: remi64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 3, (0)1
-; CHECK-NEXT:    divs.l %s1, %s0, %s1
+; CHECK-NEXT:    divs.l %s1, %s0, (62)0
 ; CHECK-NEXT:    muls.l %s1, 3, %s1
 ; CHECK-NEXT:    subs.l %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -194,8 +193,7 @@ define i128 @remu128ri(i128 %a) {
 define i64 @remu64ri(i64 %a) {
 ; CHECK-LABEL: remu64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 3, (0)1
-; CHECK-NEXT:    divu.l %s1, %s0, %s1
+; CHECK-NEXT:    divu.l %s1, %s0, (62)0
 ; CHECK-NEXT:    muls.l %s1, 3, %s1
 ; CHECK-NEXT:    subs.l %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9

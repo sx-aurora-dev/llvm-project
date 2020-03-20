@@ -175,8 +175,7 @@ define i128 @divi128ri(i128) {
 define i64 @divi64ri(i64 %a, i64 %b) {
 ; CHECK-LABEL: divi64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 3, (0)1
-; CHECK-NEXT:    divs.l %s0, %s0, %s1
+; CHECK-NEXT:    divs.l %s0, %s0, (62)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = sdiv i64 %a, 3
   ret i64 %r
@@ -216,8 +215,7 @@ define i128 @divu128ri(i128) {
 define i64 @divu64ri(i64 %a, i64 %b) {
 ; CHECK-LABEL: divu64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 3, (0)1
-; CHECK-NEXT:    divu.l %s0, %s0, %s1
+; CHECK-NEXT:    divu.l %s0, %s0, (62)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = udiv i64 %a, 3
   ret i64 %r
