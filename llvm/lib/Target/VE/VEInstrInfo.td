@@ -1429,8 +1429,12 @@ let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 /* , Uses = [IC] */ in
 def SIC : RR<0x28, (outs I32:$sx), (ins), "sic $sx">;
 
 // Section 8.19.2 - LPM (Load Program Mode Flags)
+let sx = 0, cz = 0, sz = 0, hasSideEffects = 0, Defs = [PSW] in
+def LPM : RR<0x3a, (outs), (ins I64:$sy), "lpm $sy">;
 
 // Section 8.19.3 - SPM (Save Program Mode Flags)
+let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0, Uses = [PSW] in
+def SPM : RR<0x2a, (outs I64:$sx), (ins I64:$sy), "spm $sx">;
 
 // Section 8.19.4 - LFR (Load Flag Register)
 
