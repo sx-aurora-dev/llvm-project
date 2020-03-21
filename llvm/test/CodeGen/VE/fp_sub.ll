@@ -98,3 +98,21 @@ define fp128 @func9(fp128 %a) {
   %r = fadd fp128 %a, 0xLFFFFFFFFFFFFFFFFFFFEFFFFFFFFFFFF
   ret fp128 %r
 }
+
+define float @fsubs_ir(float %a) {
+; CHECK-LABEL: fsubs_ir:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    fsub.s %s0, 0, %s0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fsub float 0.e+00, %a
+  ret float %r
+}
+
+define float @fsubs_ri(float %a) {
+; CHECK-LABEL: fsubs_ri:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    fadd.s %s0, %s0, (2)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fsub float %a, 2.0e+00
+  ret float %r
+}

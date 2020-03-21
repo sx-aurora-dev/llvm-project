@@ -101,6 +101,59 @@ def misc : Operand<i32>, PatLeaf<(imm), [{
   let ParserMatchClass = MiscImmAsmOperand;
 }
 
+// simm7fp
+def LO7FP : SDNodeXForm<fpimm, [{
+  // Get a integer immediate from fpimm
+  const APInt& imm = N->getValueAPF().bitcastToAPInt();
+  uint64_t val = imm.getSExtValue();
+  if (imm.getBitWidth() == 32)
+    val <<= 32; // Immediate value of float place at higher bits on VE.
+  return CurDAG->getTargetConstant(SignExtend32(val, 7), SDLoc(N), MVT::i32);
+}]>;
+def simm7fp : Operand<i32>, PatLeaf<(fpimm), [{
+    const APInt& imm = N->getValueAPF().bitcastToAPInt();
+    uint64_t val = imm.getSExtValue();
+    if (imm.getBitWidth() == 32)
+      val <<= 32; // Immediate value of float place at higher bits on VE.
+    return isInt<7>(val);
+  }], LO7FP> {
+  let ParserMatchClass = SImm7AsmOperand;
+  let DecoderMethod = "DecodeSIMM7";
+}
+
+// m0immfp, m1immfp
+def M0FP : SDNodeXForm<fpimm, [{
+  const APInt& imm = N->getValueAPF().bitcastToAPInt();
+  uint64_t val = imm.getSExtValue();
+  if (imm.getBitWidth() == 32)
+    val <<= 32; // Immediate value of float place at higher bits on VE.
+  return CurDAG->getTargetConstant(countLeadingZeros(val), SDLoc(N), MVT::i32);
+}]>;
+def M1FP : SDNodeXForm<fpimm, [{
+  const APInt& imm = N->getValueAPF().bitcastToAPInt();
+  uint64_t val = imm.getSExtValue();
+  if (imm.getBitWidth() == 32)
+    val <<= 32; // Immediate value of float place at higher bits on VE.
+  return CurDAG->getTargetConstant(countLeadingOnes(val), SDLoc(N), MVT::i32);
+}]>;
+def m0immfp : Operand<i32>, PatLeaf<(fpimm), [{
+    // m0imm is leading 0 and trailing 1 values like `0b000...000111...111`.
+    // Assembler format is `(num)0`, where num is equal to the number of
+    // leading 0.
+    const APInt& imm = N->getValueAPF().bitcastToAPInt();
+    return isMask_64(imm.getSExtValue()); }], M0FP> {
+  let ParserMatchClass = UImm6AsmOperand;
+}
+def m1immfp : Operand<i32>, PatLeaf<(fpimm), [{
+    // m1imm is leading 1 and trailing 0 values like `0b111...111000...000`.
+    // Assembler format is `(num)1`, where num is equal to the number of
+    // leading 1.
+    const APInt& imm = N->getValueAPF().bitcastToAPInt();
+    return (imm.getSExtValue() & (1UL << 63)) &&
+           isShiftedMask_64(imm.getSExtValue()); }], M1FP> {
+  let ParserMatchClass = UImm6AsmOperand;
+}
+
 // other generic patterns to use in pattern matchings
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
@@ -618,7 +671,7 @@ multiclass RRmiz<string opcStr, bits<8>opc,
   let cy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
   def zi : RR<opc, (outs RCo:$sx), (ins immOp:$sy),
               !strconcat(opcStr, " $sx, $sy"),
-              [(set Tyo:$sx, (OpNode (Tyi immOp:$sy), 0))]>;
+              [(set Tyo:$sx, (OpNode (Tyi immOp:$sy), (Tyi 0)))]>;
 }
 
 multiclass RRNDmrm<string opcStr, bits<8>opc,
@@ -694,10 +747,10 @@ multiclass RRFm<string opcStr, bits<8>opc,
                 RegisterClass RC, ValueType Ty,
                 SDPatternOperator OpNode = null_frag> :
   RRmrr<opcStr, opc, RC, Ty, RC, Ty, OpNode>,
-  RRmir<opcStr, opc, RC, Ty, RC, Ty, simm7, null_frag>,
-  RRmiz<opcStr, opc, RC, Ty, RC, Ty, simm7, null_frag>,
-  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, m0imm, m1imm, null_frag>,
-  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, simm7, m0imm, m1imm, null_frag>;
+  RRmir<opcStr, opc, RC, Ty, RC, Ty, simm7fp, OpNode>,
+  RRmiz<opcStr, opc, RC, Ty, RC, Ty, simm7fp, null_frag>,
+  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, m0immfp, m1immfp, OpNode>,
+  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, simm7fp, m0immfp, m1immfp, OpNode>;
 
 // Used by fcq instruction like "F64 <- cmp F128, F128"
 //   The order of operands are "$sx, $sy, $sz"
@@ -705,11 +758,11 @@ multiclass RRFm<string opcStr, bits<8>opc,
 multiclass RRFCQm<string opcStr, bits<8>opc,
                   RegisterClass RC, ValueType Ty,
                   SDPatternOperator OpNode = null_frag> :
-  RRmrr<opcStr, opc, I64, f64, RC, Ty, null_frag>,
-  RRmir<opcStr, opc, I64, f64, RC, Ty, simm7, null_frag>,
-  RRmiz<opcStr, opc, I64, f64, RC, Ty, simm7, null_frag>,
-  RRNDmrm<opcStr, opc, I64, f64, RC, Ty, m0imm, m1imm, null_frag>,
-  RRNDmim<opcStr, opc, I64, f64, RC, Ty, simm7, m0imm, m1imm, null_frag>;
+  RRmrr<opcStr, opc, I64, f64, RC, Ty, OpNode>,
+  RRmir<opcStr, opc, I64, f64, RC, Ty, simm7fp, OpNode>,
+  RRmiz<opcStr, opc, I64, f64, RC, Ty, simm7fp, null_frag>,
+  RRNDmrm<opcStr, opc, I64, f64, RC, Ty, m0immfp, m1immfp, OpNode>,
+  RRNDmim<opcStr, opc, I64, f64, RC, Ty, simm7fp, m0immfp, m1immfp, OpNode>;
 
 
 //===----------------------------------------------------------------------===//
