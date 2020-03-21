@@ -1084,11 +1084,13 @@ multiclass RRI2m<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
   def r : RR<opc, (outs RC:$sx), (ins RC:$sz), !strconcat(opcStr, " $sx, $sz"),
              [(set Ty:$sx, (OpNode Ty:$sz))]>;
   let cz = 0, mz = 1 in
-  def m0 : RR<opc, (outs RC:$sx), (ins uimm6:$sz),
-              !strconcat(opcStr, " $sx, (${sz})0")>;
+  def m0 : RR<opc, (outs RC:$sx), (ins m0imm:$sz),
+              !strconcat(opcStr, " $sx, (${sz})0"),
+              [(set Ty:$sx, (OpNode (Ty m0imm:$sz)))]>;
   let cz = 0 in
-  def m1 : RR<opc, (outs RC:$sx), (ins uimm6:$sz),
-              !strconcat(opcStr, " $sx, (${sz})1")>;
+  def m1 : RR<opc, (outs RC:$sx), (ins m1imm:$sz),
+              !strconcat(opcStr, " $sx, (${sz})1"),
+              [(set Ty:$sx, (OpNode (Ty m1imm:$sz)))]>;
 }
 defm LDZ : RRI2m<"ldz", 0x67, I64, i64, ctlz>;
 
@@ -1109,22 +1111,26 @@ multiclass RRIm<string opcStr, bits<8>opc,
   def rr : RR<opc, (outs RC:$sx), (ins RC:$sz, I32:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy"),
               [(set Ty:$sx, (OpNode Ty:$sz, i32:$sy))]>;
+  let cz = 0, mz = 1 in
+  def m0r : RR<opc, (outs RC:$sx), (ins m0imm:$sz, I32:$sy),
+               !strconcat(opcStr, " $sx, (${sz})0, $sy"),
+               [(set Ty:$sx, (OpNode (Ty m0imm:$sz), i32:$sy))]>;
+  let cz = 0 in
+  def m1r : RR<opc, (outs RC:$sx), (ins m1imm:$sz, I32:$sy),
+               !strconcat(opcStr, " $sx, (${sz})1, $sy"),
+               [(set Ty:$sx, (OpNode (Ty m1imm:$sz), i32:$sy))]>;
   let cy = 0 in
   def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, simm7:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy"),
               [(set Ty:$sx, (OpNode Ty:$sz, (i32 simm7:$sy)))]>;
-  let cz = 0, mz = 1 in
-  def m0r : RR<opc, (outs RC:$sx), (ins uimm6:$sz, I32:$sy),
-               !strconcat(opcStr, " $sx, (${sz})0, $sy")>;
-  let cz = 0 in
-  def m1r : RR<opc, (outs RC:$sx), (ins uimm6:$sz, I32:$sy),
-               !strconcat(opcStr, " $sx, (${sz})1, $sy")>;
   let cy = 0, cz = 0, mz = 1 in
-  def m0i : RR<opc, (outs RC:$sx), (ins uimm6:$sz, simm7:$sy),
-               !strconcat(opcStr, " $sx, (${sz})0, $sy")>;
+  def m0i : RR<opc, (outs RC:$sx), (ins m0imm:$sz, simm7:$sy),
+               !strconcat(opcStr, " $sx, (${sz})0, $sy"),
+               [(set Ty:$sx, (OpNode (Ty m0imm:$sz), (i32 simm7:$sy)))]>;
   let cy = 0, cz = 0 in
-  def m1i : RR<opc, (outs RC:$sx), (ins uimm6:$sz, simm7:$sy),
-               !strconcat(opcStr, " $sx, (${sz})1, $sy")>;
+  def m1i : RR<opc, (outs RC:$sx), (ins m1imm:$sz, simm7:$sy),
+               !strconcat(opcStr, " $sx, (${sz})1, $sy"),
+               [(set Ty:$sx, (OpNode (Ty m1imm:$sz), (i32 simm7:$sy)))]>;
 }
 
 defm BSWP : RRIm<"bswp", 0x2B, I64, i64>;
@@ -1141,19 +1147,19 @@ multiclass RRCMOVm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty> {
               !strconcat(opcStr, " $sx, $sz, $sy")>;
   let cz = 0, mz = 1 in
   def rm0 : RR<opc, (outs I64:$sx),
-               (ins CCOpDot:$cfw, RC:$sy, uimm6:$sz, I64:$sd),
+               (ins CCOpDot:$cfw, RC:$sy, m0imm:$sz, I64:$sd),
                !strconcat(opcStr, " $sx, (${sz})0, $sy")>;
   let cz = 0 in
   def rm1 : RR<opc, (outs I64:$sx),
-               (ins CCOpDot:$cfw, RC:$sy, uimm6:$sz, I64:$sd),
+               (ins CCOpDot:$cfw, RC:$sy, m1imm:$sz, I64:$sd),
                !strconcat(opcStr, " $sx, (${sz})1, $sy")>;
   let cy = 0, cz = 0, mz = 1 in
   def im0 : RR<opc, (outs I64:$sx),
-               (ins CCOpDot:$cfw, simm7:$sy, uimm6:$sz, I64:$sd),
+               (ins CCOpDot:$cfw, simm7:$sy, m0imm:$sz, I64:$sd),
                !strconcat(opcStr, " $sx, (${sz})0, $sy")>;
   let cy = 0, cz = 0 in
   def im1 : RR<opc, (outs I64:$sx),
-               (ins CCOpDot:$cfw, simm7:$sy, uimm6:$sz, I64:$sd),
+               (ins CCOpDot:$cfw, simm7:$sy, m1imm:$sz, I64:$sd),
                !strconcat(opcStr, " $sx, (${sz})1, $sy")>;
 }
 
