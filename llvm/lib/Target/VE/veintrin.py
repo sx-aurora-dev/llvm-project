@@ -1046,6 +1046,12 @@ class InstTable(object):
             OL.append(op + [VM])
         self.Def(opc, inst, subop, asm, OL, noPassThrough=True)
 
+    def VITER(self, opc, inst, subop, asm, ElemVT):
+        RegStartOL = [[VX(ElemVT), VY(ElemVT), SY(ElemVT)]]
+        self.Def(opc, inst, subop, asm, RegStartOL, noPassThrough=True)
+        # ImmStartOL = [[VX(ElemVT), VY(ElemVT), ImmI(T_i32)]]
+        # self.Def(opc, inst, subop, asm, ImmStartOL, noPassThrough=True)
+
     def VFIX(self, opc, inst, subop, asm, OL, ty):
         expr = "{0} = (" + ty + ")({1}+0.5)"
         self.DefM(opc, inst, subop, asm, OL, expr)
@@ -1298,13 +1304,16 @@ def createInstructionTable():
     T.VSUM(0x88, "VRAND", "", "vrand", [[VX(T_u64), VY(T_u64)]])
     T.VSUM(0x98, "VROR",  "", "vror",  [[VX(T_u64), VY(T_u64)]])
     T.VSUM(0x89, "VRXOR", "", "vrxor", [[VX(T_u64), VY(T_u64)]])
-    T.NoImpl("VFIA")
-    T.NoImpl("VFIS")
-    T.NoImpl("VFIM")
-    T.NoImpl("VFIAM")
-    T.NoImpl("VFISM")
-    T.NoImpl("VFIMA")
-    T.NoImpl("VFIMS")
+    for TySuffix, ElemVT in zip("ds", [T_f64, T_f32]):
+      for OC, Name in [
+          (0xCE, "VFIA"), 
+          (0xDE, "VFIS"),
+          (0xCF, "VFIM"),
+          (0xEE, "VFIAM"),
+          (0xFE, "VFISM"),
+          (0xEF, "VFIMA"),
+          (0xFF, "VFIMS")]:
+        T.VITER(OC, Name, TySuffix, "{}.{}".format(Name.lower(), TySuffix), ElemVT)
     
     T.Section("Table 3-22 Vector Gathering/Scattering Instructions", 34)
     T.VGTm(0xA1, "VGT", "", "vgt")
