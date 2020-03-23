@@ -330,17 +330,27 @@ defm: IExtend_Mask_ForRes<v256i64>;
 // case VE::vfsums_vvl: return 2;
 // case VE::vfsums_vvml: return 3;
 
-def : Pat <(f64 (vvp_reduce_fadd v256f64:$vx, v256i1:$vm, i32:$vl)),
-           (lvsl_svI (vfsumd_vvml $vx, $vm, $vl), 0)>;
-def : Pat <(f32 (vvp_reduce_fadd v256f32:$vx, v256i1:$vm, i32:$vl)),
-           (lvss_svI (vfsums_vvml $vx, $vm ,$vl), 0)>;
+multiclass Reduce_FAdd<ValueType VectorVT, ValueType ResVT, string LVSToken, string FPToken, SDPatternOperator neutral_elem> {
+// unordered
+def : Pat <(ResVT (vvp_reduce_fadd VectorVT:$vx, v256i1:$vm, i32:$vl)),
+           (!cast<Instruction>("lvs"#LVSToken#"_svI") (!cast<Instruction>("vfsum"#FPToken#"_vvml") $vx, $vm, $vl), 0)>;
 
-def : Pat <(f64 (vvp_reduce_strict_fadd (f64 fpzero), v256f64:$vx, (v256i1 true_mask), i32:$vl)),
-           (lvsl_svI (vfiad_vvIl $vx, 0, $vl), 0)>;
-def : Pat <(f64 (vvp_reduce_strict_fadd f64:$sy, v256f64:$vx, (v256i1 true_mask), i32:$vl)),
-           (lvsl_svI (vfiad_vvsl $vx, $sy, $vl), 0)>;
-def : Pat <(f32 (vvp_reduce_strict_fadd f32:$sy, v256f32:$vx, (v256i1 true_mask), i32:$vl)),
-           (lvss_svI (vfias_vvsl $vx, $sy, $vl), 0)>;
+// ordered
+def : Pat <(ResVT (vvp_reduce_strict_fadd (ResVT neutral_elem), VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
+           (!cast<Instruction>("lvs"#LVSToken#"_svI") (!cast<Instruction>("vfia"#FPToken#"_vvIl") $vx, 0, $vl), 0)>;
+def : Pat <(ResVT (vvp_reduce_strict_fadd ResVT:$sy, VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
+           (!cast<Instruction>("lvs"#LVSToken#"_svI") (!cast<Instruction>("vfia"#FPToken#"_vvsl") $vx, $sy, $vl), 0)>;
+}
+
+defm: Reduce_FAdd<v256f64,f64,"l","d",fpzero>;
+defm: Reduce_FAdd<v256f32,f32,"s","s",fpzero>;
+
+// def : Pat <(f32 (vvp_reduce_fadd v256f32:$vx, v256i1:$vm, i32:$vl)),
+//            (lvss_svI (vfsums_vvml $vx, $vm ,$vl), 0)>;
+// def : Pat <(f32 (vvp_reduce_strict_fadd (f32 fpzero), v256f32:$vx, (v256i1 true_mask), i32:$vl)),
+//            (lvss_svI (vfias_vvIl $vx, 0, $vl), 0)>;
+// def : Pat <(f32 (vvp_reduce_strict_fadd f32:$sy, v256f32:$vx, (v256i1 true_mask), i32:$vl)),
+//            (lvss_svI (vfias_vvsl $vx, $sy, $vl), 0)>;
 
 
 // case VE::vfiad_vsl: return 2;
