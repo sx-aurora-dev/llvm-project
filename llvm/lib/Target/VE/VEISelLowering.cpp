@@ -2169,6 +2169,13 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     END_OF_OCLIST
   };
 
+  // reductions
+  const ISD::NodeType FPOrderedReductionOCs[] = {
+    ISD::VECREDUCE_STRICT_FADD,
+    ISD::VECREDUCE_STRICT_FMUL,
+    END_OF_OCLIST
+  };
+
 
   // Convenience Opcode loops
   auto ForAll_Opcodes = [](const ISD::NodeType* OCs, std::function<void(unsigned)> Functor) {
@@ -2260,6 +2267,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       // fp16
       ForAll_Opcodes(FPArithOCs, PromotionAction);
       ForAll_Opcodes(FPReductionOCs, PromotionAction);
+      ForAll_Opcodes(FPOrderedReductionOCs, PromotionAction);
       // i8, i16
       ForAll_Opcodes(IntArithOCs, PromotionAction);
       ForAll_Opcodes(IntReductionOCs, PromotionAction);
@@ -2334,6 +2342,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       setOperationAction(ISD:: VP_NAME, VT, Action);
 #include "llvm/IR/VPIntrinsics.def"
  }
+
+  // Reduction ops are mapped with their result type
+  for (MVT ResVT : {MVT::f64, MVT::f32, MVT::i64, MVT::i32}) {
+#define REGISTER_REDUCE_VVP_OP(VVP_NAME, ISD_NAME) setOperationAction(ISD:: ISD_NAME, ResVT, Custom);
+#include "VVPNodes.inc"
+  }
   
   // CUSTOM HANDLERS FOR VECTOR INSTRUCTIONS
   // horizontal reductions
