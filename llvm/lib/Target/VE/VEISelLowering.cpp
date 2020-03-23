@@ -585,7 +585,15 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   }
 
   if (isReduceOp) {
-    abort(); // TODO implement reduction lowering
+    auto PosOpt = getReductionStartParamPos(VVPOC.getValue());
+    if (PosOpt) {
+      return CDAG.getNode(
+          VVPOC.getValue(), ResVecTy,
+          {LegalOperands[0], LegalOperands[1], MaskVal, LenVal});
+    }
+
+    return CDAG.getNode(VVPOC.getValue(), ResVecTy,
+                        {LegalOperands[0], MaskVal, LenVal});
   }
 
   llvm_unreachable("Cannot lower this op to VVP");
@@ -3654,10 +3662,11 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   ///// non-VP --> vvp_* with native type /////
   // Convert this standard vector op to VVP
   // FIXME List all operation that correspond to a VVP operation here
-#define REGISTER_ICONV_VVP_OP(VVP_NAME, ISD_NAME)  case ISD:: ISD_NAME:
+#define REGISTER_ICONV_VVP_OP(VVP_NAME, ISD_NAME)   case ISD:: ISD_NAME:
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME, ISD_NAME)  case ISD:: ISD_NAME:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME)  case ISD:: ISD_NAME:
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD:: ISD_NAME:
+#define REGISTER_REDUCE_VVP_OP(VVP_NAME, ISD_NAME)  case ISD:: ISD_NAME:
 #include "VVPNodes.inc"
     return ExpandToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 

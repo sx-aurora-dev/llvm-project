@@ -96,6 +96,10 @@ SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
                            SelectionDAG &DAG);
 //// } VVP Machinery
 
+Optional<unsigned> getReductionStartParamPos(unsigned ISD);
+
+Optional<unsigned> getReductionVectorParamPos(unsigned ISD);
+
 Optional<unsigned> PeekForNarrow(SDValue Op);
 
 Optional<SDValue>

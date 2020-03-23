@@ -321,3 +321,17 @@ defm: IExtend_Mask_ForRes<v256i64>;
 
 // Integer extension (512 elements) //
 // TODO
+
+
+///// Reductions (256 elements) /////
+// case VE::vfsumd_vvl: return 2;
+// case VE::vfsumd_vvml: return 3;
+// case VE::vfsums_vvl: return 2;
+// case VE::vfsums_vvml: return 3;
+
+def : Pat <(f64 (vvp_reduce_fadd v256f64:$vx, v256i1:$vm, i32:$vl)),
+           (lvsl_svI (vfsumd_vvml $vx, $vm, $vl), 0)>;
+def : Pat <(f32 (vvp_reduce_fadd v256f32:$vx, v256i1:$vm, i32:$vl)),
+           (lvss_svI (vfsums_vvml $vx, $vm ,$vl), 0)>;
+
+// TODO

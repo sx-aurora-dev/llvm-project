@@ -238,6 +238,33 @@ EVT getLargestConvType(SDNode *Op) {
   return ResVT.getStoreSizeInBits() > OpVT.getStoreSizeInBits() ? ResVT : OpVT;
 }
 
+Optional<unsigned>
+getReductionStartParamPos(unsigned ISD) {
+  switch (ISD) {
+  case VEISD::VVP_REDUCE_STRICT_FADD:
+  case ISD::VECREDUCE_STRICT_FADD:
+  case ISD::VECREDUCE_STRICT_FMUL:
+    return 0;
+  default:
+    return None;
+  }
+}
+
+Optional<unsigned>
+getReductionVectorParamPos(unsigned ISD) {
+  switch (ISD) {
+    case VEISD::VVP_REDUCE_FADD: return 0;
+    case ISD::VECREDUCE_FADD: return 0;
+    // case VEISD::VVP_REDUCE_FMUL: return 0;
+    // case ISD::VECREDUCE_FMUL: return 0;
+      return 0;
+
+    case ISD::VECREDUCE_STRICT_FADD: return 1;
+    case ISD::VECREDUCE_STRICT_FMUL: return 1;
+  default: return None;
+  }
+}
+
 Optional<EVT> getIdiomaticType(SDNode *Op) {
   auto MemN = dyn_cast<MemSDNode>(Op);
   if (MemN) {
@@ -289,6 +316,16 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   case ISD::NATIVE_ISD:
 #include "VVPNodes.inc"
     return getLargestConvType(Op);
+
+#define REGISTER_REDUCE_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
+  case VEISD::VVP_NAME:                                                        \
+  case ISD::NATIVE_ISD:
+#include "VVPNodes.inc"
+  {
+    Optional<unsigned> VecParamPos = getReductionVectorParamPos(OC);
+    assert(VecParamPos.hasValue());
+    return Op->getOperand(VecParamPos.getValue()).getValueType();
+  }
 
   case VEISD::VEC_SEQ:
   case VEISD::VEC_BROADCAST:
