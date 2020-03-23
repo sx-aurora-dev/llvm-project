@@ -335,10 +335,13 @@ def : Pat <(f64 (vvp_reduce_fadd v256f64:$vx, v256i1:$vm, i32:$vl)),
 def : Pat <(f32 (vvp_reduce_fadd v256f32:$vx, v256i1:$vm, i32:$vl)),
            (lvss_svI (vfsums_vvml $vx, $vm ,$vl), 0)>;
 
+def : Pat <(f64 (vvp_reduce_strict_fadd (f64 fpzero), v256f64:$vx, (v256i1 true_mask), i32:$vl)),
+           (lvsl_svI (vfiad_vvIl $vx, 0, $vl), 0)>;
 def : Pat <(f64 (vvp_reduce_strict_fadd f64:$sy, v256f64:$vx, (v256i1 true_mask), i32:$vl)),
            (lvsl_svI (vfiad_vvsl $vx, $sy, $vl), 0)>;
 def : Pat <(f32 (vvp_reduce_strict_fadd f32:$sy, v256f32:$vx, (v256i1 true_mask), i32:$vl)),
            (lvss_svI (vfias_vvsl $vx, $sy, $vl), 0)>;
+
 
 // case VE::vfiad_vsl: return 2;
 // case VE::vfiad_vIl: return 2;

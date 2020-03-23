@@ -1049,8 +1049,8 @@ class InstTable(object):
     def VITER(self, opc, inst, subop, asm, ElemVT):
         RegStartOL = [[VX(ElemVT), VY(ElemVT), SY(ElemVT)]]
         self.Def(opc, inst, subop, asm, RegStartOL, noPassThrough=True)
-        # ImmStartOL = [[VX(ElemVT), VY(ElemVT), ImmI(T_i32)]]
-        # self.Def(opc, inst, subop, asm, ImmStartOL, noPassThrough=True)
+        ImmStartOL = [[VX(ElemVT), VY(ElemVT), ImmI(T_i32)]]
+        self.Def(opc, inst, subop, asm, ImmStartOL, noPassThrough=True).noTest().noPat()
 
     def VFIX(self, opc, inst, subop, asm, OL, ty):
         expr = "{0} = (" + ty + ")({1}+0.5)"

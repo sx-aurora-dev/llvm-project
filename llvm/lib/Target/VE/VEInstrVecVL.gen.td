@@ -13987,9 +13987,27 @@ def vfiad_vvsl : RV<0xce, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VFIA asm=vfia.d intrisic=vfiad_vvsl
+def vfiad_vvIl : RV<0xce, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfia.d $vx,$vy,$I">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VFIS asm=vfis.d intrisic=vfisd_vvsl
 def vfisd_vvsl : RV<0xde, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
        "vfis.d $vx,$vy,$sy">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VFIS asm=vfis.d intrisic=vfisd_vvsl
+def vfisd_vvIl : RV<0xde, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfis.d $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -14005,9 +14023,27 @@ def vfimd_vvsl : RV<0xcf, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VFIM asm=vfim.d intrisic=vfimd_vvsl
+def vfimd_vvIl : RV<0xcf, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfim.d $vx,$vy,$I">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VFIAM asm=vfiam.d intrisic=vfiamd_vvsl
 def vfiamd_vvsl : RV<0xee, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
        "vfiam.d $vx,$vy,$sy">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VFIAM asm=vfiam.d intrisic=vfiamd_vvsl
+def vfiamd_vvIl : RV<0xee, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfiam.d $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -14023,9 +14059,27 @@ def vfismd_vvsl : RV<0xfe, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VFISM asm=vfism.d intrisic=vfismd_vvsl
+def vfismd_vvIl : RV<0xfe, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfism.d $vx,$vy,$I">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VFIMA asm=vfima.d intrisic=vfimad_vvsl
 def vfimad_vvsl : RV<0xef, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
        "vfima.d $vx,$vy,$sy">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VFIMA asm=vfima.d intrisic=vfimad_vvsl
+def vfimad_vvIl : RV<0xef, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfima.d $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -14041,9 +14095,27 @@ def vfimsd_vvsl : RV<0xff, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VFIMS asm=vfims.d intrisic=vfimsd_vvsl
+def vfimsd_vvIl : RV<0xff, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfims.d $vx,$vy,$I">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VFIA asm=vfia.s intrisic=vfias_vvsl
 def vfias_vvsl : RV<0xce, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
        "vfia.s $vx,$vy,$sy">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VFIA asm=vfia.s intrisic=vfias_vvsl
+def vfias_vvIl : RV<0xce, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfia.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -14059,9 +14131,27 @@ def vfiss_vvsl : RV<0xde, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VFIS asm=vfis.s intrisic=vfiss_vvsl
+def vfiss_vvIl : RV<0xde, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfis.s $vx,$vy,$I">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VFIM asm=vfim.s intrisic=vfims_vvsl
 def vfims_vvsl : RV<0xcf, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
        "vfim.s $vx,$vy,$sy">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VFIM asm=vfim.s intrisic=vfims_vvsl
+def vfims_vvIl : RV<0xcf, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfim.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -14077,9 +14167,27 @@ def vfiams_vvsl : RV<0xee, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VFIAM asm=vfiam.s intrisic=vfiams_vvsl
+def vfiams_vvIl : RV<0xee, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfiam.s $vx,$vy,$I">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VFISM asm=vfism.s intrisic=vfisms_vvsl
 def vfisms_vvsl : RV<0xfe, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
        "vfism.s $vx,$vy,$sy">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VFISM asm=vfism.s intrisic=vfisms_vvsl
+def vfisms_vvIl : RV<0xfe, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfism.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
@@ -14095,9 +14203,27 @@ def vfimas_vvsl : RV<0xef, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VFIMA asm=vfima.s intrisic=vfimas_vvsl
+def vfimas_vvIl : RV<0xef, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfima.s $vx,$vy,$I">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VFIMS asm=vfims.s intrisic=vfimss_vvsl
 def vfimss_vvsl : RV<0xff, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
        "vfims.s $vx,$vy,$sy">
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VFIMS asm=vfims.s intrisic=vfimss_vvsl
+def vfimss_vvIl : RV<0xff, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+       "vfims.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;

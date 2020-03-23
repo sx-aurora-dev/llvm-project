@@ -77,6 +77,7 @@ def fplomsbzero : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
                                       .getZExtValue() & 0x80000000) == 0; }]>;
 def fplozero    : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
                                       .getZExtValue() & 0xffffffff) == 0; }]>;
+def fpzero      : PatLeaf<(fpimm), [{ return N->isZero(); }]>;
 
 // whether the mask is all true
 let PredicateCodeUsesOperands = 1 in {
