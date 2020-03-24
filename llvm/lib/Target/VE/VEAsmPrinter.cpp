@@ -48,11 +48,7 @@ public:
 
   StringRef getPassName() const override { return "VE Assembly Printer"; }
 
-  void printOperand(const MachineInstr *MI, int opNum, raw_ostream &OS);
-  void printMemASXOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
-                          const char *Modifier = nullptr);
-  void printMemASOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
-                         const char *Modifier = nullptr);
+  void printOperand(const MachineInstr *MI, int OpNum, raw_ostream &OS);
   void lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
                                  const MCSubtargetInfo &STI);
   void lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
@@ -362,10 +358,10 @@ void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
   } while ((++I != E) && I->isInsideBundle()); // Delay slot check.
 }
 
-void VEAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
+void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
                                    raw_ostream &O) {
   const DataLayout &DL = getDataLayout();
-  const MachineOperand &MO = MI->getOperand (opNum);
+  const MachineOperand &MO = MI->getOperand (OpNum);
   VEMCExpr::VariantKind TF = (VEMCExpr::VariantKind) MO.getTargetFlags();
 
 #ifndef NDEBUG
@@ -456,85 +452,6 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
   VEMCExpr::printVariantKindSuffix(O, TF);
 }
 
-void VEAsmPrinter::printMemASXOperand(const MachineInstr *MI, int opNum,
-                                      raw_ostream &O, const char *Modifier) {
-  // If this is an ADD operand, emit it like normal operands.
-  if (Modifier && !strcmp(Modifier, "arith")) {
-    printOperand(MI, opNum, O);
-    O << ", ";
-    printOperand(MI, opNum+1, O);
-    return;
-  }
-
-  if (MI->getOperand(opNum+2).isImm() &&
-      MI->getOperand(opNum+2).getImm() == 0) {
-    // don't print "+0"
-  } else {
-    printOperand(MI, opNum+2, O);
-  }
-  if (MI->getOperand(opNum+1).isImm() &&
-      MI->getOperand(opNum+1).getImm() == 0 &&
-      MI->getOperand(opNum).isImm() &&
-      MI->getOperand(opNum).getImm() == 0) {
-    if (MI->getOperand(opNum+2).isImm() &&
-        MI->getOperand(opNum+2).getImm() == 0) {
-      O << "0";
-    } else {
-      // don't print "(0)"
-    }
-  } else {
-    O << "(";
-    if (MI->getOperand(opNum+1).isImm() &&
-        MI->getOperand(opNum+1).getImm() == 0) {
-      // don't print "+0"
-    } else {
-      printOperand(MI, opNum+1, O);
-    }
-    if (MI->getOperand(opNum).isImm() &&
-        MI->getOperand(opNum).getImm() == 0) {
-      // don't print "+0"
-    } else {
-      O << ", ";
-      printOperand(MI, opNum, O);
-    }
-    O << ")";
-  }
-}
-
-void VEAsmPrinter::printMemASOperand(const MachineInstr *MI, int opNum,
-                                      raw_ostream &O, const char *Modifier) {
-  // If this is an ADD operand, emit it like normal operands.
-  if (Modifier && !strcmp(Modifier, "arith")) {
-    printOperand(MI, opNum, O);
-    O << ", ";
-    printOperand(MI, opNum+2, O);
-    return;
-  }
-
-  if (MI->getOperand(opNum+2).isImm() &&
-      MI->getOperand(opNum+2).getImm() == 0) {
-    // don't print "+0"
-  } else {
-    printOperand(MI, opNum+2, O);
-  }
-  assert(MI->getOperand(opNum+1).isImm() &&
-         MI->getOperand(opNum+1).getImm() == 0 &&
-         "AS format must have 0 index");
-  if (MI->getOperand(opNum).isImm() &&
-      MI->getOperand(opNum).getImm() == 0) {
-    if (MI->getOperand(opNum+2).isImm() &&
-        MI->getOperand(opNum+2).getImm() == 0) {
-      O << "0";
-    } else {
-      // don't print "(0)"
-    }
-  } else {
-    O << "(";
-    printOperand(MI, opNum, O);
-    O << ")";
-  }
-}
-
 /// PrintAsmOperand - Print out an operand for an inline asm expression.
 ///
 bool VEAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
@@ -564,10 +481,25 @@ bool VEAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
   if (ExtraCode && ExtraCode[0])
     return true;  // Unknown modifier
 
-  O << '[';
-  printMemASXOperand(MI, OpNo, O);
-  O << ']';
-
+  if (MI->getOperand(OpNo+1).isImm() &&
+      MI->getOperand(OpNo+1).getImm() == 0) {
+    // don't print "+0"
+  } else {
+    printOperand(MI, OpNo+1, O);
+  }
+  if (MI->getOperand(OpNo).isImm() &&
+      MI->getOperand(OpNo).getImm() == 0) {
+    if (MI->getOperand(OpNo+1).isImm() &&
+        MI->getOperand(OpNo+1).getImm() == 0) {
+      O << "0";
+    } else {
+      // don't print "(0)"
+    }
+  } else {
+    O << "(";
+    printOperand(MI, OpNo, O);
+    O << ")";
+  }
   return false;
 }
 
