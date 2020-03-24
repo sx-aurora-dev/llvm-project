@@ -79,6 +79,11 @@ def fplozero    : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
                                       .getZExtValue() & 0xffffffff) == 0; }]>;
 def fpzero      : PatLeaf<(fpimm), [{ return N->isZero(); }]>;
 
+def ones_l      : PatLeaf<(imm), [{ return N->getZExtValue() == 0xffffffffffffffff; }]>;
+def ones_w      : PatLeaf<(imm), [{ return N->N->getZExtValue() & 0xffffffff == 0xffffffff; }]>;
+def zero_l      : PatLeaf<(imm), [{ return N->getZExtValue() == 0; }]>;
+def zero_w      : PatLeaf<(imm), [{ return N->N->getZExtValue() & 0xffffffff == 0; }]>;
+
 // whether the mask is all true
 let PredicateCodeUsesOperands = 1 in {
 def true_mask                            : PatLeaf<(vec_broadcast (i32 true), (i32 srcvalue))>;

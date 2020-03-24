@@ -84,6 +84,7 @@
 #define _vel_lvsl_svs __builtin_ve_vl_lvsl_svs
 #define _vel_lvsd_svs __builtin_ve_vl_lvsd_svs
 #define _vel_lvss_svs __builtin_ve_vl_lvss_svs
+#define _vel_lvsw_svs __builtin_ve_vl_lvsw_svs
 #define _vel_lvm_mmss __builtin_ve_vl_lvm_mmss
 #define _vel_lvm_MMss __builtin_ve_vl_lvm_MMss
 #define _vel_svm_sms __builtin_ve_vl_svm_sms

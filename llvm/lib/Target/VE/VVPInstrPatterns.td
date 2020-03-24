@@ -330,6 +330,21 @@ defm: IExtend_Mask_ForRes<v256i64>;
 // case VE::vfsums_vvl: return 2;
 // case VE::vfsums_vvml: return 3;
 
+multiclass IntReduce<ValueType VectorVT, ValueType ResVT, string OpTag, string DataTag, SDPatternOperator neutral_elem> {
+def : Pat <(ResVT (!cast<SDNode>("vvp_reduce_"#OpTag) VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
+           (!cast<Instruction>("lvs"#DataTag#"_svI") (!cast<Instruction>("vr"#OpTag#"_vvl") $vx, $vl), 0)>;
+
+def : Pat <(ResVT (!cast<SDNode>("vvp_reduce_"#OpTag) VectorVT:$vx, v256i1:$vm, i32:$vl)),
+           (!cast<Instruction>("lvs"#DataTag#"_svI") (!cast<Instruction>("vr"#OpTag#"_vvml") $vx, $vm, $vl), 0)>;
+}
+multiclass IntReduce_ShortLong<ValueType VectorVT, ValueType ResVT, string DataTag> {
+  defm: IntReduce<VectorVT, ResVT, "or", DataTag, !cast<SDPatternOperator>("zeros_"#DataTag)>;
+  defm: IntReduce<VectorVT, ResVT, "and", DataTag, !cast<SDPatternOperator>("ones_"#DataTag)>;
+  defm: IntReduce<VectorVT, ResVT, "xor", DataTag, !cast<SDPatternOperator>("zeros_"#DataTag)>;
+}
+defm: IntReduce_ShortLong<v256i64, i64, "l">;
+defm: IntReduce_ShortLong<v256i32, i32, "w">;
+
 multiclass Reduce_FAdd<ValueType VectorVT, ValueType ResVT, string LVSToken, string FPToken, SDPatternOperator neutral_elem> {
 // unordered
 def : Pat <(ResVT (vvp_reduce_fadd VectorVT:$vx, v256i1:$vm, i32:$vl)),
@@ -344,14 +359,6 @@ def : Pat <(ResVT (vvp_reduce_strict_fadd ResVT:$sy, VectorVT:$vx, (v256i1 true_
 
 defm: Reduce_FAdd<v256f64,f64,"l","d",fpzero>;
 defm: Reduce_FAdd<v256f32,f32,"s","s",fpzero>;
-
-// def : Pat <(f32 (vvp_reduce_fadd v256f32:$vx, v256i1:$vm, i32:$vl)),
-//            (lvss_svI (vfsums_vvml $vx, $vm ,$vl), 0)>;
-// def : Pat <(f32 (vvp_reduce_strict_fadd (f32 fpzero), v256f32:$vx, (v256i1 true_mask), i32:$vl)),
-//            (lvss_svI (vfias_vvIl $vx, 0, $vl), 0)>;
-// def : Pat <(f32 (vvp_reduce_strict_fadd f32:$sy, v256f32:$vx, (v256i1 true_mask), i32:$vl)),
-//            (lvss_svI (vfias_vvsl $vx, $sy, $vl), 0)>;
-
 
 // case VE::vfiad_vsl: return 2;
 // case VE::vfiad_vIl: return 2;

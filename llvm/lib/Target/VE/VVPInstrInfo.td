@@ -134,8 +134,14 @@ def vvp_sext       : SDNode<"VEISD::VVP_SEXT", SDTIntExtendOpVVP>;
 def vvp_zext       : SDNode<"VEISD::VVP_ZEXT", SDTIntExtendOpVVP>;
 
 // reductions
-def vvp_reduce_fadd          : SDNode<"VEISD::VVP_REDUCE_FADD", SDTReduceVVP>;
-def vvp_reduce_strict_fadd   : SDNode<"VEISD::VVP_REDUCE_STRICT_FADD", SDTReduceStartVVP>;
+def vvp_reduce_fadd         : SDNode<"VEISD::VVP_REDUCE_FADD", SDTReduceVVP>;
+def vvp_reduce_strict_fadd  : SDNode<"VEISD::VVP_REDUCE_STRICT_FADD", SDTReduceStartVVP>;
+
+// int reductions
+def vvp_reduce_add          : SDNode<"VEISD::VVP_REDUCE_ADD", SDTReduceVVP>;
+def vvp_reduce_and          : SDNode<"VEISD::VVP_REDUCE_AND", SDTReduceVVP>;
+def vvp_reduce_or           : SDNode<"VEISD::VVP_REDUCE_OR",  SDTReduceVVP>;
+def vvp_reduce_xor          : SDNode<"VEISD::VVP_REDUCE_XOR", SDTReduceVVP>;
 
 
 class vvp_commutative<SDNode RootOp> :

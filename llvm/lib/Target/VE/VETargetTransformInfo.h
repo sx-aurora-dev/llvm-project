@@ -23,6 +23,7 @@
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/PredicatedInst.h"
 #include "llvm/IR/Type.h"
+#include "llvm/IR/Intrinsics.h"
 
 namespace llvm {
 
@@ -168,7 +169,27 @@ public:
   /// }
 
   bool shouldExpandReduction(const IntrinsicInst *II) const {
-    return false; // never expand reductions
+    bool Unordered = II->getFastMathFlags().allowReassoc();
+    switch (II->getIntrinsicID()) {
+      // Supported in all variations
+      case Intrinsic::experimental_vector_reduce_v2_fadd:
+      case Intrinsic::experimental_vector_reduce_fmin:
+      case Intrinsic::experimental_vector_reduce_fmax:
+      case Intrinsic::experimental_vector_reduce_add:
+      case Intrinsic::experimental_vector_reduce_mul:
+      case Intrinsic::experimental_vector_reduce_or:
+      case Intrinsic::experimental_vector_reduce_and:
+      case Intrinsic::experimental_vector_reduce_xor:
+        return false;
+
+      // Natively supported vector-iterative variant
+      case Intrinsic::experimental_vector_reduce_v2_fmul:
+        return Unordered;
+
+      // Otw, run full expansion
+      default:
+        return true;
+    }
   }
 };
 

@@ -16,6 +16,7 @@ multiclass DefLVS<ValueType OutVT> {
 
 defm lvsl : DefLVS<I64>;
 defm lvss : DefLVS<F32>;
+defm lvsw : DefLVS<I32>;
 
 multiclass DefLSV<ValueType ElemVT> {
 // inst=LVS asm=lvv intrisic=lsv_vvss
@@ -39,6 +40,7 @@ def _vvIs : RV<0x8e, (outs V64:$vx), (ins V64:$vd, simm7Op32:$sy, ElemVT:$sz),
 
 defm lsv : DefLSV<I64>;
 defm lsvs : DefLSV<F32>;
+defm lsvw : DefLSV<I32>;
 
 
 // temporary (used in reg-to-reg copy)

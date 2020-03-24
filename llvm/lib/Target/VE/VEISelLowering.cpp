@@ -585,6 +585,11 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
   }
 
   if (isReduceOp) {
+    // FIXME
+    SDValue Attempt = LowerVECREDUCE(Op, DAG);
+    if (Attempt)
+      return Attempt;
+
     auto PosOpt = getReductionStartParamPos(VVPOC.getValue());
     if (PosOpt) {
       return CDAG.getNode(
@@ -1168,8 +1173,12 @@ SDValue VETargetLowering::LowerVECREDUCE(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
 
   auto V = Op->getOperand(0);
-  auto VTy = V.getSimpleValueType();
+  EVT VTy = V.getValueType();
+  if (VTy != MVT::v256i1)
+    return SDValue();
+
   auto AVL = DAG.getConstant(VTy.getVectorNumElements(), dl, MVT::i32);
+
 
   SDValue Result;
   switch (Op->getOpcode()) {
@@ -3648,10 +3657,9 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::VECTOR_SHUFFLE: return LowerVECTOR_SHUFFLE(Op, DAG, VVPExpansionMode::ToNativeWidth);
   case ISD::EXTRACT_SUBVECTOR: return LowerEXTRACT_SUBVECTOR(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
-  case ISD::VECREDUCE_OR:
-  case ISD::VECREDUCE_AND:
-  case ISD::VECREDUCE_XOR:
-    return LowerVECREDUCE(Op, DAG);
+  // case ISD::VECREDUCE_OR:
+  // case ISD::VECREDUCE_AND:
+  // case ISD::VECREDUCE_XOR:
 
   case ISD::LOAD: return LowerLOAD(Op, DAG);
   case ISD::MLOAD: return LowerMLOAD(Op, DAG, VVPExpansionMode::ToNativeWidth);

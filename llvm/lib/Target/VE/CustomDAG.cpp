@@ -188,7 +188,9 @@ BVKind AnalyzeBuildVector(BuildVectorSDNode *BVN, unsigned &FirstDef,
   return BVKind::Unknown;
 }
 
-Optional<unsigned> GetVVPOpcode(unsigned OpCode) {
+PosOpt GetVVPOpcode(unsigned OpCode) {
+  if (IsVVP(OpCode)) return OpCode;
+
   switch (OpCode) {
   case ISD::SCALAR_TO_VECTOR:
     return VEISD::VEC_BROADCAST;
@@ -238,31 +240,28 @@ EVT getLargestConvType(SDNode *Op) {
   return ResVT.getStoreSizeInBits() > OpVT.getStoreSizeInBits() ? ResVT : OpVT;
 }
 
-Optional<unsigned>
+PosOpt
 getReductionStartParamPos(unsigned ISD) {
-  switch (ISD) {
+  PosOpt VVPOC = GetVVPOpcode(ISD);
+  if (!VVPOC) return None;
+
+  switch (VVPOC.getValue()) {
   case VEISD::VVP_REDUCE_STRICT_FADD:
-  case ISD::VECREDUCE_STRICT_FADD:
-  case ISD::VECREDUCE_STRICT_FMUL:
+  case VEISD::VVP_REDUCE_STRICT_FMUL:
     return 0;
   default:
     return None;
   }
 }
 
-Optional<unsigned>
+PosOpt
 getReductionVectorParamPos(unsigned ISD) {
-  switch (ISD) {
-    case VEISD::VVP_REDUCE_FADD: return 0;
-    case ISD::VECREDUCE_FADD: return 0;
-    // case VEISD::VVP_REDUCE_FMUL: return 0;
-    // case ISD::VECREDUCE_FMUL: return 0;
-      return 0;
+  PosOpt VVPOC = GetVVPOpcode(ISD);
+  if (!VVPOC) return None;
 
-    case ISD::VECREDUCE_STRICT_FADD: return 1;
-    case ISD::VECREDUCE_STRICT_FMUL: return 1;
-  default: return None;
-  }
+  unsigned OC = VVPOC.getValue();
+  if (getReductionStartParamPos(OC)) return 1;
+  return 0;
 }
 
 Optional<EVT> getIdiomaticType(SDNode *Op) {

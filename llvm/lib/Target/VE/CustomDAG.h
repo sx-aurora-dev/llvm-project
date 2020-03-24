@@ -54,11 +54,13 @@ BVKind AnalyzeBuildVector(BuildVectorSDNode *BVN, unsigned &FirstDef,
                                  unsigned &LastDef, int64_t &Stride,
                                  unsigned &BlockLength, unsigned &NumElements);
 
+using PosOpt = Optional<unsigned>;
+
 /// } Broadcast, Shuffle, Mask Analysis
 
 //// VVP Machinery {
 // VVP property queries
-Optional<unsigned> GetVVPOpcode(unsigned OpCode);
+PosOpt GetVVPOpcode(unsigned OpCode);
 
 bool SupportsPackedMode(unsigned Opcode);
 
