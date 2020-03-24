@@ -265,18 +265,6 @@ static DecodeStatus DecodeLoadF32(MCInst &Inst, uint64_t insn, uint64_t Address,
                                   const void *Decoder);
 static DecodeStatus DecodeStoreF32(MCInst &Inst, uint64_t insn,
                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeLoadASI8(MCInst &Inst, uint64_t insn,
-                                   uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeStoreASI8(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeLoadASI16(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeStoreASI16(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeLoadASI32(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeStoreASI32(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeLoadASI64(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeStoreASI64(MCInst &Inst, uint64_t insn,
@@ -286,8 +274,6 @@ static DecodeStatus DecodeSIMM7(MCInst &Inst, uint64_t insn,
 static DecodeStatus DecodeSIMM32(MCInst &Inst, uint64_t insn,
                                  uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeCCOperand(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeBPOperand(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeRDOperand(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder);
@@ -514,42 +500,6 @@ static DecodeStatus DecodeStoreF32(MCInst &Inst, uint64_t insn,
                    DecodeF32RegisterClass);
 }
 
-static DecodeStatus DecodeLoadASI8(MCInst &Inst, uint64_t insn,
-                                   uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, true,
-                     DecodeI8RegisterClass);
-}
-
-static DecodeStatus DecodeStoreASI8(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, false,
-                     DecodeI8RegisterClass);
-}
-
-static DecodeStatus DecodeLoadASI16(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, true,
-                     DecodeI16RegisterClass);
-}
-
-static DecodeStatus DecodeStoreASI16(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, false,
-                     DecodeI16RegisterClass);
-}
-
-static DecodeStatus DecodeLoadASI32(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, true,
-                     DecodeI32RegisterClass);
-}
-
-static DecodeStatus DecodeStoreASI32(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, false,
-                     DecodeI32RegisterClass);
-}
-
 static DecodeStatus DecodeLoadASI64(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder) {
   return DecodeMemAS(Inst, insn, Address, Decoder, true,
@@ -620,13 +570,6 @@ static bool isIntegerBCKind(MCInst &MI) {
 static DecodeStatus DecodeCCOperand(MCInst &MI, uint64_t cf,
                                     uint64_t Address, const void *Decoder) {
   MI.addOperand(MCOperand::createImm(VEValToCondCode(cf, isIntegerBCKind(MI))));
-  return MCDisassembler::Success;
-}
-
-// Decode BP Operand field.
-static DecodeStatus DecodeBPOperand(MCInst &MI, uint64_t bpf,
-                                    uint64_t Address, const void *Decoder) {
-  MI.addOperand(MCOperand::createImm(VEValToBP(bpf)));
   return MCDisassembler::Success;
 }
 
