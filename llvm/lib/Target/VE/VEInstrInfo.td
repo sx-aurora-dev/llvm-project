@@ -491,13 +491,6 @@ def CCOpDot : Operand<i32> {
   let ParserMatchClass = CCOpDotAsmOperand;
 }
 
-// Operand for printing out a branch prediction code.
-def BPOp : Operand<i32> {
-  let PrintMethod = "printBPOperand";
-  let DecoderMethod = "DecodeBPOperand";
-  let EncoderMethod = "getBPOpValue";
-}
-
 // Operand for printing out a rounding mode code.
 def RDOpAsmOperand : AsmOperandClass {
   let Name = "RDOp";
