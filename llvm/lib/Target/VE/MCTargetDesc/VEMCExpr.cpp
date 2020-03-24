@@ -206,5 +206,14 @@ void VEMCExpr::visitUsedExpr(MCStreamer &Streamer) const {
 }
 
 void VEMCExpr::fixELFSymbolsInTLSFixups(MCAssembler &Asm) const {
+  switch(getKind()) {
+  default:
+    return;
+  case VK_VE_TLS_GD_HI32:
+  case VK_VE_TLS_GD_LO32:
+  case VK_VE_TPOFF_HI32:
+  case VK_VE_TPOFF_LO32:
+    break;
+  }
   fixELFSymbolsInTLSFixupsImpl(getSubExpr(), Asm);
 }
