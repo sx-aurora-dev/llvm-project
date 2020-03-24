@@ -265,18 +265,6 @@ static DecodeStatus DecodeLoadF32(MCInst &Inst, uint64_t insn, uint64_t Address,
                                   const void *Decoder);
 static DecodeStatus DecodeStoreF32(MCInst &Inst, uint64_t insn,
                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeLoadASI8(MCInst &Inst, uint64_t insn,
-                                   uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeStoreASI8(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeLoadASI16(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeStoreASI16(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeLoadASI32(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeStoreASI32(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeLoadASI64(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeStoreASI64(MCInst &Inst, uint64_t insn,
@@ -512,42 +500,6 @@ static DecodeStatus DecodeStoreF32(MCInst &Inst, uint64_t insn,
                                    uint64_t Address, const void *Decoder) {
   return DecodeMem(Inst, insn, Address, Decoder, false,
                    DecodeF32RegisterClass);
-}
-
-static DecodeStatus DecodeLoadASI8(MCInst &Inst, uint64_t insn,
-                                   uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, true,
-                     DecodeI8RegisterClass);
-}
-
-static DecodeStatus DecodeStoreASI8(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, false,
-                     DecodeI8RegisterClass);
-}
-
-static DecodeStatus DecodeLoadASI16(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, true,
-                     DecodeI16RegisterClass);
-}
-
-static DecodeStatus DecodeStoreASI16(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, false,
-                     DecodeI16RegisterClass);
-}
-
-static DecodeStatus DecodeLoadASI32(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, true,
-                     DecodeI32RegisterClass);
-}
-
-static DecodeStatus DecodeStoreASI32(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, false,
-                     DecodeI32RegisterClass);
 }
 
 static DecodeStatus DecodeLoadASI64(MCInst &Inst, uint64_t insn,
