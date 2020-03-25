@@ -3028,67 +3028,6 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
 }
 
-#if 0
-// Lower a vXi1 store into following instructions
-//   SVMi  %1, %vm, 0
-//   STSri %1, (,%addr)
-//   SVMi  %2, %vm, 1
-//   STSri %2, 8(,%addr)
-//   ...
-static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
-  SDLoc dl(Op);
-  StoreSDNode *StNode = dyn_cast<StoreSDNode>(Op.getNode());
-  assert(StNode && StNode->getOffset().isUndef() && "Unexpected node type");
-
-  SDValue BasePtr = StNode->getBasePtr();
-  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
-    // For the case of frame index, expanding it here cause dependency
-    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
-    return Op;
-  }
-
-  unsigned alignment = StNode->getAlignment();
-  if (alignment > 8)
-    alignment = 8;
-  EVT addrVT = BasePtr.getValueType();
-  EVT MemVT = StNode->getMemoryVT();
-  if (MemVT == MVT::v256i1) {
-    SDValue OutChains[4];
-    for (int i = 0; i < 4; ++i) {
-      SDNode *V =
-          DAG.getMachineNode(VE::svm_smI, dl, MVT::i64, StNode->getValue(),
-                             DAG.getTargetConstant(i, dl, MVT::i64));
-      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
-                                 DAG.getConstant(8 * i, dl, addrVT));
-      OutChains[i] =
-          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
-                       MachinePointerInfo(), alignment,
-                       StNode->isVolatile() ? MachineMemOperand::MOVolatile
-                                            : MachineMemOperand::MONone);
-    }
-    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
-  } else if (MemVT == MVT::v512i1) {
-    SDValue OutChains[8];
-    for (int i = 0; i < 8; ++i) {
-      SDNode *V =
-          DAG.getMachineNode(VE::svm_sMI, dl, MVT::i64, StNode->getValue(),
-                             DAG.getTargetConstant(i, dl, MVT::i64));
-      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
-                                 DAG.getConstant(8 * i, dl, addrVT));
-      OutChains[i] =
-          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
-                       MachinePointerInfo(), alignment,
-                       StNode->isVolatile() ? MachineMemOperand::MOVolatile
-                                            : MachineMemOperand::MONone);
-    }
-    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
-  } else {
-    // Otherwise, ask llvm to expand it.
-    return SDValue();
-  }
-}
-#endif
-
 SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
   StoreSDNode *St = cast<StoreSDNode>(Op.getNode());
@@ -3779,7 +3718,7 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
   Register Tmp1 = MRI->createVirtualRegister(TRC);
   Register Tmp2 = MRI->createVirtualRegister(TRC);
   Register VR = MRI->createVirtualRegister(TRC);
-  unsigned Op = VE::STSri;
+  unsigned Op = VE::STrii;
 
   if (isPositionIndependent()) {
     // Create following instructions for local linkage PIC code.
@@ -3793,7 +3732,9 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
         .addImm(0)
         .addImm(0)
         .addMBB(DispatchBB, VEMCExpr::VK_VE_GOTOFF_LO32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2).addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
+        .addReg(Tmp1)
+        .addImm(32);
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), Tmp3)
         .addReg(Tmp2)
         .addImm(0)
@@ -3809,7 +3750,9 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
         .addImm(0)
         .addImm(0)
         .addMBB(DispatchBB, VEMCExpr::VK_VE_LO32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2).addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
+        .addReg(Tmp1)
+        .addImm(32);
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), VR)
         .addReg(Tmp2)
         .addImm(0)
@@ -4262,7 +4205,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addReg(Tmp1)
         .addReg(BReg);
     // ldl.zx  OReg, *(Tmp2)
-    BuildMI(DispContBB, DL, TII->get(VE::LDZXrii), OReg)
+    BuildMI(DispContBB, DL, TII->get(VE::LDLZXrii), OReg)
         .addReg(Tmp2)
         .addImm(0)
         .addImm(0);
