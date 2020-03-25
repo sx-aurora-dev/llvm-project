@@ -1,4 +1,4 @@
-; RUN: opt --verify %s 
+; RUN: opt --verify %s
 
 define void @test_vp_int(<8 x i32> %i0, <8 x i32> %i1, <8 x i1> %m, i32 %n) {
   %r0 = call <8 x i32> @llvm.vp.add.v8i32(<8 x i32> %i0, <8 x i32> %i1, <8 x i1> %m, i32 %n)

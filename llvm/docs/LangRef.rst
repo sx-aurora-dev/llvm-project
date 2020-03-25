@@ -1692,7 +1692,7 @@ example:
     functions.
 ``safestack``
     This attribute indicates that
-    `SafeStack <http://clang.llvm.org/docs/SafeStack.html>`_
+    `SafeStack <https://clang.llvm.org/docs/SafeStack.html>`_
     protection is enabled for this function.
 
     If a function that has a ``safestack`` attribute is inlined into a
@@ -2119,8 +2119,9 @@ An assume operand bundle has the form:
 
       "<tag>"([ <holds for value> [, <attribute argument>] ])
 
-* The tag of the operand bundle is the name of attribute that can be assumed
-  to hold.
+* The tag of the operand bundle is usually the name of attribute that can be
+  assumed to hold. It can also be `ignore`, this tag doesn't contain any
+  information and should be ignored.
 * The first argument if present is the value for which the attribute hold.
 * The second argument if present is an argument of the attribute.
 
@@ -2456,10 +2457,11 @@ The compiler may assume execution will continue after a volatile operation,
 so operations which modify memory or may have undefined behavior can be
 hoisted past a volatile operation.
 
-IR-level volatile loads and stores cannot safely be optimized into
-llvm.memcpy or llvm.memmove intrinsics even when those intrinsics are
-flagged volatile. Likewise, the backend should never split or merge
-target-legal volatile load/store instructions.
+IR-level volatile loads and stores cannot safely be optimized into llvm.memcpy
+or llvm.memmove intrinsics even when those intrinsics are flagged volatile.
+Likewise, the backend should never split or merge target-legal volatile
+load/store instructions. Similarly, IR-level volatile loads and stores cannot
+change from integer to floating-point or vice versa.
 
 .. admonition:: Rationale
 
@@ -3476,9 +3478,12 @@ the ``nsw`` flag.
 
 Poison value behavior is defined in terms of value *dependence*:
 
--  Values other than :ref:`phi <i_phi>` nodes depend on their operands.
+-  Values other than :ref:`phi <i_phi>` nodes and :ref:`select <i_select>`
+   instructions depend on their operands.
 -  :ref:`Phi <i_phi>` nodes depend on the operand corresponding to
    their dynamic predecessor basic block.
+-  Select instructions depend on their condition operand and their
+   selected operand.
 -  Function arguments depend on the corresponding actual argument values
    in the dynamic callers of their functions.
 -  :ref:`Call <i_call>` instructions depend on the :ref:`ret <i_ret>`
@@ -4566,7 +4571,7 @@ DIFile
 
 Files are sometimes used in ``scope:`` fields, and are the only valid target
 for ``file:`` fields.
-Valid values for ``checksumkind:`` field are: {CSK_None, CSK_MD5, CSK_SHA1}
+Valid values for ``checksumkind:`` field are: {CSK_None, CSK_MD5, CSK_SHA1, CSK_SHA256}
 
 .. _DIBasicType:
 
@@ -6685,7 +6690,7 @@ TypeIdInfo
 ^^^^^^^^^^
 
 The optional ``TypeIdInfo`` field, used for
-`Control Flow Integrity <http://clang.llvm.org/docs/ControlFlowIntegrity.html>`_,
+`Control Flow Integrity <https://clang.llvm.org/docs/ControlFlowIntegrity.html>`_,
 looks like:
 
 .. code-block:: text
@@ -6762,7 +6767,7 @@ Type ID Summary Entry
 
 Each type id summary entry corresponds to a type identifier resolution
 which is generated during the LTO link portion of the compile when building
-with `Control Flow Integrity <http://clang.llvm.org/docs/ControlFlowIntegrity.html>`_,
+with `Control Flow Integrity <https://clang.llvm.org/docs/ControlFlowIntegrity.html>`_,
 so these are only present in a combined summary index.
 
 Example:
@@ -15293,8 +15298,8 @@ operation takes a vector mask and an explicit vector length parameter as in:
 
 The vector mask parameter (%mask) always has a vector of `i1` type, for example
 `<32 x i1>`.  The explicit vector length parameter always has the type `i32` and
-is an unsigned integer value.  The explicit vector length parameter (%evl) is either
-the IR constant ``i32 -1`` or %evl is in the range
+is an unsigned integer value.  The explicit vector length parameter (%evl) is in
+the range:
 
 ::
 
@@ -15303,15 +15308,10 @@ the IR constant ``i32 -1`` or %evl is in the range
 Note that for :ref:`scalable vector types <t_vector>` ``W`` is the runtime
 length of the vector.
 
-Note that for :ref:`scalable vector types <t_vector>` ``W`` is the runtime
-length of the vector.
-
-The VP intrinsic has undefined behavior for any other setting of %evl, for
-example if ``%evl > W``.  The explicit vector length (%evl) is only effective
-when it is not the IR constant ``i32 -1``, and, when that is the case, it
-creates a mask, %EVLmask, with all elements ``0 <= i <= %evl`` set to True, and
-all other lanes ``%evl < i <= W`` to False.  A new mask %M is calculated with an
-element-wise AND from %mask and %EVLmask:
+The VP intrinsic has undefined behavior if ``%evl > W``.  The explicit vector
+length (%evl) creates a mask, %EVLmask, with all elements ``0 <= i < %evl`` set
+to True, and all other lanes ``%evl <= i < W`` to False.  A new mask %M is
+calculated with an element-wise AND from %mask and %EVLmask:
 
 ::
 

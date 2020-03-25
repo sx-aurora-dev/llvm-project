@@ -105,7 +105,7 @@ protected:
 };
 
 /// Check that VPIntrinsic:canIgnoreVectorLengthParam() returns true
-/// if the vector length parameter does not mask-off any lanes.
+/// if the vector length parameter does not mask off any lanes.
 TEST_F(VPIntrinsicTest, CanIgnoreVectorLength) {
   LLVMContext C;
   SMDiagnostic Err;
@@ -114,6 +114,7 @@ TEST_F(VPIntrinsicTest, CanIgnoreVectorLength) {
       parseAssemblyString(
 "declare <256 x i64> @llvm.vp.mul.v256i64(<256 x i64>, <256 x i64>, <256 x i1>, i32)"
 "declare <vscale x 2 x i64> @llvm.vp.mul.nxv2i64(<vscale x 2 x i64>, <vscale x 2 x i64>, <vscale x 2 x i1>, i32)"
+"declare i32 @llvm.vscale.i32()"
 "define void @test_static_vlen( "
 "      <256 x i64> %i0, <vscale x 2 x i64> %si0,"
 "      <256 x i64> %i1, <vscale x 2 x i64> %si1,"
@@ -121,9 +122,11 @@ TEST_F(VPIntrinsicTest, CanIgnoreVectorLength) {
 "  %r0 = call <256 x i64> @llvm.vp.mul.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %vl)"
 "  %r1 = call <256 x i64> @llvm.vp.mul.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 256)"
 "  %r2 = call <256 x i64> @llvm.vp.mul.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 0)"
-"  %r3 = call <256 x i64> @llvm.vp.mul.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 -1)"
+"  %r3 = call <256 x i64> @llvm.vp.mul.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 7)"
 "  %r4 = call <256 x i64> @llvm.vp.mul.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 123)"
-"  %r5 = call <vscale x 2 x i64> @llvm.vp.mul.nxv2i64(<vscale x 2 x i64> %si0, <vscale x 2 x i64> %si1, <vscale x 2 x i1> %sm, i32 -1)"
+"  %vs = call i32 @llvm.vscale.i32()"
+"  %vs.i64 = mul i32 %vs, 2"
+"  %r5 = call <vscale x 2 x i64> @llvm.vp.mul.nxv2i64(<vscale x 2 x i64> %si0, <vscale x 2 x i64> %si1, <vscale x 2 x i1> %sm, i32 %vs.i64)"
 "  %r6 = call <vscale x 2 x i64> @llvm.vp.mul.nxv2i64(<vscale x 2 x i64> %si0, <vscale x 2 x i64> %si1, <vscale x 2 x i1> %sm, i32 99999)"
 "  ret void "
 "}",
@@ -133,14 +136,12 @@ TEST_F(VPIntrinsicTest, CanIgnoreVectorLength) {
   assert(F);
 
   const int NumExpected = 7;
-  const bool Expected[] = {false, true, false, true, false, true, false};
+  const bool Expected[] = {false, true, false, false, false, true, false};
   int i = 0;
   for (auto &I : F->getEntryBlock()) {
     VPIntrinsic *VPI = dyn_cast<VPIntrinsic>(&I);
-    if (!VPI) {
-      ASSERT_TRUE(I.isTerminator());
+    if (!VPI)
       continue;
-    }
 
     ASSERT_LT(i, NumExpected);
     ASSERT_EQ(Expected[i], VPI->canIgnoreVectorLengthParam());

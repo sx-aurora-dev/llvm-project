@@ -116,11 +116,13 @@ class ObjCPropertyDecl;
 class ObjCPropertyImplDecl;
 class ObjCProtocolDecl;
 class ObjCTypeParamDecl;
+class OMPTraitInfo;
 struct ParsedTargetAttr;
 class Preprocessor;
 class Stmt;
 class StoredDeclsMap;
 class TargetAttr;
+class TargetInfo;
 class TemplateDecl;
 class TemplateParameterList;
 class TemplateTemplateParmDecl;
@@ -881,7 +883,7 @@ public:
   void addedLocalImportDecl(ImportDecl *Import);
 
   static ImportDecl *getNextLocalImport(ImportDecl *Import) {
-    return Import->NextLocalImport;
+    return Import->getNextLocalImport();
   }
 
   using import_range = llvm::iterator_range<import_iterator>;
@@ -909,13 +911,7 @@ public:
 
   /// Get the additional modules in which the definition \p Def has
   /// been merged.
-  ArrayRef<Module*> getModulesWithMergedDefinition(const NamedDecl *Def) {
-    auto MergedIt =
-        MergedDefModules.find(cast<NamedDecl>(Def->getCanonicalDecl()));
-    if (MergedIt == MergedDefModules.end())
-      return None;
-    return MergedIt->second;
-  }
+  ArrayRef<Module*> getModulesWithMergedDefinition(const NamedDecl *Def);
 
   /// Add a declaration to the list of declarations that are initialized
   /// for a module. This will typically be a global variable (with internal
@@ -1279,6 +1275,12 @@ public:
 
   /// Returns a vla type where known sizes are replaced with [*].
   QualType getVariableArrayDecayedType(QualType Ty) const;
+
+  /// Return the unique reference to a scalable vector type of the specified
+  /// element type and scalable number of elements.
+  ///
+  /// \pre \p EltTy must be a built-in type.
+  QualType getScalableVectorType(QualType EltTy, unsigned NumElts) const;
 
   /// Return the unique reference to a vector type of the specified
   /// element type and size.
@@ -2961,6 +2963,14 @@ public:
   };
 
   llvm::StringMap<SectionInfo> SectionInfos;
+
+  /// Return a new OMPTraitInfo object owned by this context.
+  OMPTraitInfo &getNewOMPTraitInfo();
+
+private:
+  /// All OMPTraitInfo objects live in this collection, one per
+  /// `pragma omp [begin] declare variant` directive.
+  SmallVector<OMPTraitInfo *, 4> OMPTraitInfoVector;
 };
 
 /// Utility function for constructing a nullary selector.

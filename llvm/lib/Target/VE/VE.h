@@ -45,7 +45,7 @@ const unsigned PackedWidth = 512;
 // Enums corresponding to VE condition codes, both icc's and fcc's.  These
 // values must be kept in sync with the ones in the .td file.
 namespace VECC {
-enum CondCodes {
+enum CondCode {
   // Integer comparison
   CC_IG = 0,  // Greater
   CC_IL = 1,  // Less
@@ -74,7 +74,7 @@ enum CondCodes {
 };
 }
 
-inline static const char *VECondCodeToString(VECC::CondCodes CC) {
+inline static const char *VECondCodeToString(VECC::CondCode CC) {
   switch (CC) {
   case VECC::CC_IG:    return "gt";
   case VECC::CC_IL:    return "lt";

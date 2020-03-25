@@ -10,7 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "mlir/Analysis/Passes.h"
 #include "mlir/InitAllDialects.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/IR/Dialect.h"
@@ -35,12 +34,14 @@ void registerMemRefBoundCheck();
 void registerPassManagerTestPass();
 void registerPatternsTestPass();
 void registerPrintOpAvailabilityPass();
+void registerSideEffectTestPasses();
 void registerSimpleParametricTilingPass();
 void registerSymbolTestPasses();
 void registerTestAffineDataCopyPass();
 void registerTestAllReduceLoweringPass();
 void registerTestCallGraphPass();
 void registerTestConstantFold();
+void registerTestConvertGPUKernelToCubinPass();
 void registerTestFunc();
 void registerTestGpuMemoryPromotionPass();
 void registerTestLinalgTransforms();
@@ -89,12 +90,16 @@ void registerTestPasses() {
   registerPassManagerTestPass();
   registerPatternsTestPass();
   registerPrintOpAvailabilityPass();
+  registerSideEffectTestPasses();
   registerSimpleParametricTilingPass();
   registerSymbolTestPasses();
   registerTestAffineDataCopyPass();
   registerTestAllReduceLoweringPass();
   registerTestCallGraphPass();
   registerTestConstantFold();
+#if MLIR_CUDA_CONVERSIONS_ENABLED
+  registerTestConvertGPUKernelToCubinPass();
+#endif
   registerTestFunc();
   registerTestGpuMemoryPromotionPass();
   registerTestLinalgTransforms();
@@ -110,14 +115,6 @@ void registerTestPasses() {
   registerTestVectorConversions();
   registerTestVectorToLoopsPass();
   registerVectorizerTestPass();
-
-  // The following passes are using global initializers, just link them in.
-  if (std::getenv("bar") != (char *)-1)
-    return;
-
-  // TODO: move these to the test folder.
-  createTestMemRefBoundCheckPass();
-  createTestMemRefDependenceCheckPass();
 }
 
 static cl::opt<bool>

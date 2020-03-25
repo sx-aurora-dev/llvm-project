@@ -150,7 +150,7 @@ Constant *GetSafeDivisor(Type *DivTy) {
   }
   if (DivTy->isFPOrFPVectorTy()) {
     return ConstantVector::getSplat(
-        DivTy->getVectorNumElements(),
+        DivTy->getVectorElementCount(),
         ConstantFP::get(DivTy->getVectorElementType(), 1.0));
   }
   llvm_unreachable("Not a valid type for division");
@@ -245,7 +245,7 @@ void LowerVPCastOperator(VPIntrinsic *VPI) {
 /// \brief Lower llvm.vp.compose.* into a select instruction
 void LowerVPCompose(VPIntrinsic *VPI) {
   auto ElemBits = GetFunctionalVectorElementSize();
-  ElementCount ElemCount = VPI->getVectorLength();
+  ElementCount ElemCount = VPI->getStaticVectorLength();
   assert(!ElemCount.Scalable && "TODO scalable type support");
 
   IRBuilder<> Builder(cast<Instruction>(VPI));
@@ -394,9 +394,8 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
     //   if (AlignOpt.hasValue()) NewStore->setAlignment(AlignOpt.getValue());
     //   NewMemoryInst = NewStore;
     // } else {
-    Align MayAlign; // FIXME = PtrParam->getPointerAlignment(DL).valueOrOne();
     NewMemoryInst = Builder.CreateMaskedScatter(DataParam, PtrParam,
-                                                MayAlign, MaskParam);
+                                                AlignOpt.valueOrOne(), MaskParam);
     // }
   } break;
 
@@ -406,8 +405,7 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
     //   if (AlignOpt.hasValue()) NewLoad->setAlignment(AlignOpt.getValue());
     //   NewMemoryInst = NewLoad;
     // } else {
-    Align MayAlign; // FIXME = PtrParam->getPointerAlignment(DL).valueOrOne();
-    NewMemoryInst = Builder.CreateMaskedGather(PtrParam, MayAlign,
+    NewMemoryInst = Builder.CreateMaskedGather(PtrParam, AlignOpt.valueOrOne(),
                                                MaskParam, nullptr, I.getName());
     // }
   } break;
@@ -564,7 +562,7 @@ bool expandVectorPredication(Function &F, const TargetTransformInfo *TTI) {
 
     // Determine the lane bit size that should be used to lower this op
     auto ElemBits = GetFunctionalVectorElementSize();
-    ElementCount ElemCount = VPI->getVectorLength();
+    ElementCount ElemCount = VPI->getStaticVectorLength();
     assert(!ElemCount.Scalable && "TODO scalable vector support");
 
     // Lower VL to M

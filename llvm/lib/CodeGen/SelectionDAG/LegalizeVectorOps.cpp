@@ -182,9 +182,7 @@ bool VectorLegalizer::Run() {
        E = std::prev(DAG.allnodes_end()); I != std::next(E); ++I) {
     // Check if the values of the nodes contain vectors. We don't need to check
     // the operands because we are going to check their values at some point.
-    for (SDNode::value_iterator J = I->value_begin(), E = I->value_end();
-         J != E; ++J)
-      HasVectors |= J->isVector();
+    HasVectors = llvm::any_of(I->values(), [](EVT T) { return T.isVector(); });
 
     // If we found a vector node we can start the legalization.
     if (HasVectors)
@@ -318,12 +316,10 @@ SDValue VectorLegalizer::LegalizeOp(SDValue Op) {
     }
   }
 
-  bool HasVectorValueOrOp = false;
-  for (auto J = Node->value_begin(), E = Node->value_end(); J != E; ++J)
-    HasVectorValueOrOp |= J->isVector();
-  for (const SDValue &Oper : Node->op_values())
-    HasVectorValueOrOp |= Oper.getValueType().isVector();
-
+  bool HasVectorValueOrOp =
+      llvm::any_of(Node->values(), [](EVT T) { return T.isVector(); }) ||
+      llvm::any_of(Node->op_values(),
+                   [](SDValue O) { return O.getValueType().isVector(); });
   if (!HasVectorValueOrOp)
     return TranslateLegalizeResults(Op, Node);
 
@@ -941,39 +937,10 @@ void VectorLegalizer::Expand(SDNode *Node, SmallVectorImpl<SDValue> &Results) {
   case ISD::SSUBO:
     ExpandSADDSUBO(Node, Results);
     return;
-
-  case ISD::UMUL_LOHI:
-  case ISD::SMUL_LOHI:
-    TLI.expandSMUL_UMUL_LOHI(Results, Node, DAG);
-    if (!Results.empty()) return;
-    break;
-
-  case ISD::MULHS:
-  case ISD::MULHU:
-    if (SDValue Res = TLI.expandMULHU_MULHS(Node, DAG))  {
-      Results.push_back(Res);
-      return;
-    }
-    break;
-
   case ISD::UMULO:
   case ISD::SMULO:
     ExpandMULO(Node, Results);
     return;
-  case ISD::SREM:
-  case ISD::UREM:
-    if (SDValue Res = TLI.expandSUREM(Node, DAG))  {
-      Results.push_back(Res);
-      return;
-    }
-    break;
-  case ISD::SDIV:
-  case ISD::UDIV:
-    if (SDValue Res = TLI.expandSUDIV(Node, DAG))  {
-      Results.push_back(Res);
-      return;
-    }
-    break;
   case ISD::USUBSAT:
   case ISD::SSUBSAT:
   case ISD::UADDSAT:

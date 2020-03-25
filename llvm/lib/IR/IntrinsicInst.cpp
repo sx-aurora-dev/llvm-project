@@ -27,7 +27,9 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/PatternMatch.h"
 #include "llvm/IR/Operator.h"
+
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
@@ -179,7 +181,7 @@ bool ConstrainedFPIntrinsic::classof(const IntrinsicInst *I) {
   }
 }
 
-ElementCount VPIntrinsic::getVectorLength() const {
+ElementCount VPIntrinsic::getStaticVectorLength() const {
   auto GetVectorLengthOfType = [](const Type *T) -> ElementCount {
     auto VT = cast<VectorType>(T);
     auto ElemCount = VT->getElementCount();
@@ -309,28 +311,49 @@ Intrinsic::ID VPIntrinsic::GetForOpcode(unsigned OC) {
 }
 
 bool VPIntrinsic::canIgnoreVectorLengthParam() const {
+  using namespace PatternMatch;
+
+  ElementCount EC = getStaticVectorLength();
+
   // No vlen param - no lanes masked-off by it.
   auto *VLParam = getVectorLengthParam();
   if (!VLParam)
     return true;
 
-  // Can ignore if MSB of vlen is set.
-  auto VLConst = dyn_cast<ConstantInt>(VLParam);
-  if (VLConst && VLConst->getSExtValue() == -1)
-    return true;
+  // Note that the VP intrinsic causes undefined behavior if the Explicit Vector
+  // Length parameter is strictly greater-than the number of vector elements of
+  // the operation. This function returns true when this is detected statically
+  // in the IR.
 
-  // Vlen param greater-equal type vlen - no lanes masked-off.
-  if (VLConst) {
-    auto ElemCount = getVectorLength();
-    if (ElemCount.Scalable)
+  // Check whether "W == vscale * EC.Min"
+  if (EC.Scalable) {
+    // Undig the DL
+    auto ParMod = this->getModule();
+    if (!ParMod)
       return false;
+    const auto &DL = ParMod->getDataLayout();
 
-    uint64_t VLNum = VLConst->getZExtValue();
-    if (VLNum >= ElemCount.Min)
-      return true;
+    // Compare vscale patterns
+    uint64_t ParamFactor;
+    if (EC.Min > 1 &&
+        match(VLParam, m_c_BinOp(m_ConstantInt(ParamFactor), m_VScale(DL)))) {
+      return ParamFactor >= EC.Min;
+    }
+    if (match(VLParam, m_VScale(DL))) {
+      return ParamFactor;
+    }
+    return false;
   }
 
-  // Cannot ignore vlen param by default.
+  // standard SIMD operation
+  auto VLConst = dyn_cast<ConstantInt>(VLParam);
+  if (!VLConst)
+    return false;
+
+  uint64_t VLNum = VLConst->getZExtValue();
+  if (VLNum >= EC.Min)
+    return true;
+
   return false;
 }
 

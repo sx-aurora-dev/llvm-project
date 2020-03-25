@@ -666,8 +666,7 @@ Value *FAddCombine::createFSub(Value *Opnd0, Value *Opnd1) {
 }
 
 Value *FAddCombine::createFNeg(Value *V) {
-  Value *Zero = cast<Value>(ConstantFP::getZeroValueForNegation(V->getType()));
-  Value *NewV = createFSub(Zero, V);
+  Value *NewV = Builder.CreateFNeg(V);
   if (Instruction *I = dyn_cast<Instruction>(NewV))
     createInstPostProc(I, true); // fneg's don't receive instruction numbers.
   return NewV;
@@ -727,8 +726,6 @@ unsigned FAddCombine::calcInstrNumber(const AddendVect &Opnds) {
     if (!CE.isMinusOne() && !CE.isOne())
       InstrNeeded++;
   }
-  if (NegOpndNum == OpndNum)
-    InstrNeeded++;
   return InstrNeeded;
 }
 
@@ -1047,8 +1044,7 @@ Value *InstCombiner::SimplifyAddWithRemainder(BinaryOperator &I) {
       // Match RemOpV = X / C0
       if (MatchDiv(RemOpV, DivOpV, DivOpC, IsSigned) && X == DivOpV &&
           C0 == DivOpC && !MulWillOverflow(C0, C1, IsSigned)) {
-        Value *NewDivisor =
-            ConstantInt::get(X->getType()->getContext(), C0 * C1);
+        Value *NewDivisor = ConstantInt::get(X->getType(), C0 * C1);
         return IsSigned ? Builder.CreateSRem(X, NewDivisor, "srem")
                         : Builder.CreateURem(X, NewDivisor, "urem");
       }
@@ -1920,6 +1916,12 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
       return NewSel;
   }
 
+  // (X - (X & Y))   -->   (X & ~Y)
+  if (match(Op1, m_c_And(m_Specific(Op0), m_Value(Y))) &&
+      (Op1->hasOneUse() || isa<Constant>(Y)))
+    return BinaryOperator::CreateAnd(
+        Op0, Builder.CreateNot(Y, Y->getName() + ".not"));
+
   if (Op1->hasOneUse()) {
     Value *Y = nullptr, *Z = nullptr;
     Constant *C = nullptr;
@@ -1928,11 +1930,6 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
     if (match(Op1, m_Sub(m_Value(Y), m_Value(Z))))
       return BinaryOperator::CreateAdd(Op0,
                                       Builder.CreateSub(Z, Y, Op1->getName()));
-
-    // (X - (X & Y))   -->   (X & ~Y)
-    if (match(Op1, m_c_And(m_Value(Y), m_Specific(Op0))))
-      return BinaryOperator::CreateAnd(Op0,
-                                  Builder.CreateNot(Y, Y->getName() + ".not"));
 
     // Subtracting -1/0 is the same as adding 1/0:
     // sub [nsw] Op0, sext(bool Y) -> add [nsw] Op0, zext(bool Y)
@@ -2060,29 +2057,33 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
 
 /// This eliminates floating-point negation in either 'fneg(X)' or
 /// 'fsub(-0.0, X)' form by combining into a constant operand.
+template<typename MatchContextType>
 static Instruction *foldFNegIntoConstant(Instruction &I) {
   Value *X;
   Constant *C;
 
+  MatchContextType MC(cast<Value>(&I));
+  MatchContextBuilder<MatchContextType> MCBuilder(MC);
+
   // Fold negation into constant operand. This is limited with one-use because
   // fneg is assumed better for analysis and cheaper in codegen than fmul/fdiv.
-  // -(X * C) --> X * (-C)
   // FIXME: It's arguable whether these should be m_OneUse or not. The current
   // belief is that the FNeg allows for better reassociation opportunities.
-  if (match(&I, m_FNeg(m_OneUse(m_FMul(m_Value(X), m_Constant(C))))))
-    return BinaryOperator::CreateFMulFMF(X, ConstantExpr::getFNeg(C), &I);
+  // -(X * C) --> X * (-C)
+  if (MC.try_match(&I, m_FNeg(m_OneUse(m_FMul(m_Value(X), m_Constant(C))))))
+    return MCBuilder.CreateFMulFMF(X, ConstantExpr::getFNeg(C), &I);
   // -(X / C) --> X / (-C)
-  if (match(&I, m_FNeg(m_OneUse(m_FDiv(m_Value(X), m_Constant(C))))))
-    return BinaryOperator::CreateFDivFMF(X, ConstantExpr::getFNeg(C), &I);
+  if (MC.try_match(&I, m_FNeg(m_OneUse(m_FDiv(m_Value(X), m_Constant(C))))))
+    return MCBuilder.CreateFDivFMF(X, ConstantExpr::getFNeg(C), &I);
   // -(C / X) --> (-C) / X
-  if (match(&I, m_FNeg(m_OneUse(m_FDiv(m_Constant(C), m_Value(X))))))
-    return BinaryOperator::CreateFDivFMF(ConstantExpr::getFNeg(C), X, &I);
+  if (MC.try_match(&I, m_FNeg(m_OneUse(m_FDiv(m_Constant(C), m_Value(X))))))
+    return MCBuilder.CreateFDivFMF(ConstantExpr::getFNeg(C), X, &I);
 
   // With NSZ [ counter-example with -0.0: -(-0.0 + 0.0) != 0.0 + -0.0 ]:
   // -(X + C) --> -X + -C --> -C - X
   if (I.hasNoSignedZeros() &&
-      match(&I, m_FNeg(m_OneUse(m_FAdd(m_Value(X), m_Constant(C))))))
-    return BinaryOperator::CreateFSubFMF(ConstantExpr::getFNeg(C), X, &I);
+      MC.try_match(&I, m_FNeg(m_OneUse(m_FAdd(m_Value(X), m_Constant(C))))))
+    return MCBuilder.CreateFSubFMF(ConstantExpr::getFNeg(C), X, &I);
 
   return nullptr;
 }
@@ -2110,7 +2111,7 @@ Instruction *InstCombiner::visitFNeg(UnaryOperator &I) {
                                   SQ.getWithInstruction(&I)))
     return replaceInstUsesWith(I, V);
 
-  if (Instruction *X = foldFNegIntoConstant(I))
+  if (Instruction *X = foldFNegIntoConstant<EmptyContext>(I))
     return X;
 
   Value *X, *Y;
@@ -2155,12 +2156,17 @@ Instruction *InstCombiner::visitFSubGeneric(BinaryOpTy &I) {
   MatchContextBuilder<MatchContextType> MCBuilder(MC);
 
   // Subtraction from -0.0 is the canonical form of fneg.
-  // fsub nsz 0, X ==> fsub nsz -0.0, X
-  Value *Op0 = I.getOperand(0), *Op1 = I.getOperand(1);
-  if (I.hasNoSignedZeros() && MC.try_match(Op0, m_PosZeroFP()))
-    return MCBuilder.CreateFNegFMF(Op1, &I);
+  // fsub -0.0, X ==> fneg X
+  // fsub nsz 0.0, X ==> fneg nsz X
+  //
+  // FIXME This matcher does not respect FTZ or DAZ yet:
+  // fsub -0.0, Denorm ==> +-0
+  // fneg Denorm ==> -Denorm
+  Value *Op;
+  if (MC.try_match(&I, m_FNeg(m_Value(Op))))
+    return MCBuilder.CreateFNegFMF(Op, &I);
 
-  if (Instruction *X = foldFNegIntoConstant(I))
+  if (Instruction *X = foldFNegIntoConstant<MatchContextType>(I))
     return X;
 
   if (Instruction *R = hoistFNegAboveFMulFDiv(I, Builder))
@@ -2169,18 +2175,7 @@ Instruction *InstCombiner::visitFSubGeneric(BinaryOpTy &I) {
   Value *X, *Y;
   Constant *C;
 
-  // Fold negation into constant operand. This is limited with one-use because
-  // fneg is assumed better for analysis and cheaper in codegen than fmul/fdiv.
-  // -(X * C) --> X * (-C)
-  if (MC.try_match(&I, m_FNeg(m_OneUse(m_FMul(m_Value(X), m_Constant(C))))))
-    return MCBuilder.CreateFMulFMF(X, ConstantExpr::getFNeg(C), &I);
-  // -(X / C) --> X / (-C)
-  if (MC.try_match(&I, m_FNeg(m_OneUse(m_FDiv(m_Value(X), m_Constant(C))))))
-    return MCBuilder.CreateFDivFMF(X, ConstantExpr::getFNeg(C), &I);
-  // -(C / X) --> (-C) / X
-  if (MC.try_match(&I, m_FNeg(m_OneUse(m_FDiv(m_Constant(C), m_Value(X))))))
-    return MCBuilder.CreateFDivFMF(ConstantExpr::getFNeg(C), X, &I);
-
+  Value *Op0 = I.getOperand(0), *Op1 = I.getOperand(1);
   // If Op0 is not -0.0 or we can ignore -0.0: Z - (X - Y) --> Z + (Y - X)
   // Canonicalize to fadd to make analysis easier.
   // This can also help codegen because fadd is commutative.

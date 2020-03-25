@@ -298,7 +298,7 @@ namespace llvm {
 
     /// \return the static element count (vector number of elements) the vector
     /// length parameter applies to.
-    ElementCount getVectorLength() const;
+    ElementCount getStaticVectorLength() const;
 
     bool isUnaryOp() const;
     static bool IsUnaryVPOp(Intrinsic::ID);

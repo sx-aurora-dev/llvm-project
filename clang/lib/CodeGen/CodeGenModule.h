@@ -1037,7 +1037,7 @@ public:
   void MaybeHandleStaticInExternC(const SomeDecl *D, llvm::GlobalValue *GV);
 
   /// Add a global to a list to be added to the llvm.used metadata.
-  void addUsedGlobal(llvm::GlobalValue *GV);
+  void addUsedGlobal(llvm::GlobalValue *GV, bool SkipCheck = false);
 
   /// Add a global to a list to be added to the llvm.compiler.used metadata.
   void addCompilerUsedGlobal(llvm::GlobalValue *GV);
@@ -1511,6 +1511,10 @@ private:
 
   /// Emits target specific Metadata for global declarations.
   void EmitTargetMetadata();
+
+  /// Emit the module flag metadata used to pass options controlling the
+  /// the backend to LLVM.
+  void EmitBackendOptionsMetadata(const CodeGenOptions CodeGenOpts);
 
   /// Emits OpenCL specific Metadata e.g. OpenCL version.
   void EmitOpenCLMetadata();
