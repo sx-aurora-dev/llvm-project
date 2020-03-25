@@ -1418,33 +1418,6 @@ static bool isFP128ABICall(const char *CalleeName)
   return false;
 }
 
-unsigned
-VETargetLowering::getSRetArgSize(SelectionDAG &DAG, SDValue Callee) const
-{
-  const Function *CalleeFn = nullptr;
-  if (GlobalAddressSDNode *G = dyn_cast<GlobalAddressSDNode>(Callee)) {
-    CalleeFn = dyn_cast<Function>(G->getGlobal());
-  } else if (ExternalSymbolSDNode *E =
-             dyn_cast<ExternalSymbolSDNode>(Callee)) {
-    const Function &F = DAG.getMachineFunction().getFunction();
-    const Module *M = F.getParent();
-    const char *CalleeName = E->getSymbol();
-    CalleeFn = M->getFunction(CalleeName);
-    if (!CalleeFn && isFP128ABICall(CalleeName))
-      return 16; // Return sizeof(fp128)
-  }
-
-  if (!CalleeFn)
-    return 0;
-
-  // It would be nice to check for the sret attribute on CalleeFn here,
-  // but since it is not part of the function type, any check will misfire.
-
-  PointerType *Ty = cast<PointerType>(CalleeFn->arg_begin()->getType());
-  Type *ElementTy = Ty->getElementType();
-  return DAG.getDataLayout().getTypeAllocSize(ElementTy);
-}
-
 //===----------------------------------------------------------------------===//
 // TargetLowering Implementation
 //===----------------------------------------------------------------------===//
@@ -3859,18 +3832,6 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
         .addReg(Tmp2)
         .addImm(0)
         .addMBB(restoreMBB, VEMCExpr::VK_VE_HI32);
-  }
-
-  // Store BP
-  const VEFrameLowering *TFI = Subtarget->getFrameLowering();
-  if (TFI->hasBP(*MF)) {
-    // store BP in buf[3]
-    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, TII->get(VE::STrii));
-    MIB.addReg(BufReg);
-    MIB.addImm(0);
-    MIB.addImm(24);
-    MIB.addReg(VE::SX17);
-    MIB.setMemRefs(MMOs);
   }
 
   // Store BP
