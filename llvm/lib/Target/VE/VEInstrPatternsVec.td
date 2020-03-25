@@ -62,11 +62,11 @@ def : Pat<(v512i1 (load I64:$addr)),
 // pseudo instruction is used for frameindex related load/store instructions.
 // Custom Lowering is used for other load/store instructions.
 
-def : Pat<(store v256i1:$vx, ADDRri:$addr),
-          (STVMri ADDRri:$addr, $vx)>;
+def : Pat<(store v256i1:$vx, ADDRrii:$addr),
+          (STVMrii ADDRrii:$addr, $vx)>;
 
-def : Pat<(store v512i1:$vx, ADDRri:$addr),
-          (STVM512ri ADDRri:$addr, $vx)>;
+def : Pat<(store v512i1:$vx, ADDRrii:$addr),
+          (STVM512rii ADDRrii:$addr, $vx)>;
 
 // Insert & Extract Vector Element
 
