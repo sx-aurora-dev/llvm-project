@@ -35,6 +35,12 @@ void LowerVEMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
 } // namespace llvm
 
 namespace llvm {
+
+/// Target Constants {
+const unsigned StandardVectorWidth = 256;
+const unsigned PackedWidth = 512;
+/// } Target Constants
+
 // Enums corresponding to VE condition codes, both icc's and fcc's.  These
 // values must be kept in sync with the ones in the .td file.
 namespace VECC {
