@@ -1145,18 +1145,18 @@ class StridedSliceConstantMaskFolder final
 public:
   using OpRewritePattern<StridedSliceOp>::OpRewritePattern;
 
-  PatternMatchResult matchAndRewrite(StridedSliceOp stridedSliceOp,
-                                     PatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(StridedSliceOp stridedSliceOp,
+                                PatternRewriter &rewriter) const override {
     // Return if 'stridedSliceOp' operand is not defined by a ConstantMaskOp.
     auto defOp = stridedSliceOp.vector().getDefiningOp();
     auto constantMaskOp = dyn_cast_or_null<ConstantMaskOp>(defOp);
     if (!constantMaskOp)
-      return matchFailure();
+      return failure();
     // Return if 'stridedSliceOp' has non-unit strides.
     if (llvm::any_of(stridedSliceOp.strides(), [](Attribute attr) {
           return attr.cast<IntegerAttr>().getInt() != 1;
         }))
-      return matchFailure();
+      return failure();
     // Gather constant mask dimension sizes.
     SmallVector<int64_t, 4> maskDimSizes;
     populateFromInt64AttrArray(constantMaskOp.mask_dim_sizes(), maskDimSizes);
@@ -1187,7 +1187,7 @@ public:
     rewriter.replaceOpWithNewOp<ConstantMaskOp>(
         stridedSliceOp, stridedSliceOp.getResult().getType(),
         vector::getVectorSubscriptAttr(rewriter, sliceMaskDimSizes));
-    return matchSuccess();
+    return success();
   }
 };
 
@@ -1483,6 +1483,10 @@ static void print(OpAsmPrinter &p, TypeCastOp op) {
 }
 
 static LogicalResult verify(TypeCastOp op) {
+  MemRefType canonicalType = canonicalizeStridedLayout(op.getMemRefType());
+  if (!canonicalType.getAffineMaps().empty())
+    return op.emitOpError("expects operand to be a memref with no layout");
+
   auto resultType = inferVectorTypeCastResultType(op.getMemRefType());
   if (op.getResultMemRefType() != resultType)
     return op.emitOpError("expects result type to be: ") << resultType;
@@ -1515,6 +1519,35 @@ static void print(OpAsmPrinter &p, TupleOp op) {
 }
 
 static LogicalResult verify(TupleOp op) { return success(); }
+
+//===----------------------------------------------------------------------===//
+// TransposeOp
+//===----------------------------------------------------------------------===//
+
+static LogicalResult verify(TransposeOp op) {
+  VectorType vectorType = op.getVectorType();
+  VectorType resultType = op.getResultType();
+  int64_t rank = resultType.getRank();
+  if (vectorType.getRank() != rank)
+    return op.emitOpError("vector result rank mismatch: ") << rank;
+  // Verify transposition array.
+  auto transpAttr = op.transp().getValue();
+  int64_t size = transpAttr.size();
+  if (rank != size)
+    return op.emitOpError("transposition length mismatch: ") << size;
+  SmallVector<bool, 8> seen(rank, false);
+  for (auto ta : llvm::enumerate(transpAttr)) {
+    int64_t i = ta.value().cast<IntegerAttr>().getInt();
+    if (i < 0 || i >= rank)
+      return op.emitOpError("transposition index out of range: ") << i;
+    if (seen[i])
+      return op.emitOpError("duplicate position index: ") << i;
+    seen[i] = true;
+    if (resultType.getDimSize(ta.index()) != vectorType.getDimSize(i))
+      return op.emitOpError("dimension size mismatch at: ") << i;
+  }
+  return success();
+}
 
 //===----------------------------------------------------------------------===//
 // TupleGetOp
@@ -1619,14 +1652,14 @@ class CreateMaskFolder final : public OpRewritePattern<CreateMaskOp> {
 public:
   using OpRewritePattern<CreateMaskOp>::OpRewritePattern;
 
-  PatternMatchResult matchAndRewrite(CreateMaskOp createMaskOp,
-                                     PatternRewriter &rewriter) const override {
+  LogicalResult matchAndRewrite(CreateMaskOp createMaskOp,
+                                PatternRewriter &rewriter) const override {
     // Return if any of 'createMaskOp' operands are not defined by a constant.
     auto is_not_def_by_constant = [](Value operand) {
       return !isa_and_nonnull<ConstantIndexOp>(operand.getDefiningOp());
     };
     if (llvm::any_of(createMaskOp.operands(), is_not_def_by_constant))
-      return matchFailure();
+      return failure();
     // Gather constant mask dimension sizes.
     SmallVector<int64_t, 4> maskDimSizes;
     for (auto operand : createMaskOp.operands()) {
@@ -1637,7 +1670,7 @@ public:
     rewriter.replaceOpWithNewOp<ConstantMaskOp>(
         createMaskOp, createMaskOp.getResult().getType(),
         vector::getVectorSubscriptAttr(rewriter, maskDimSizes));
-    return matchSuccess();
+    return success();
   }
 };
 
