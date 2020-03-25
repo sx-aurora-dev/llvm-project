@@ -37,6 +37,7 @@ namespace VEII {
 
 class VEInstrInfo : public VEGenInstrInfo {
   const VERegisterInfo RI;
+  const VESubtarget &Subtarget;
   virtual void anchor();
 
 public:
@@ -75,12 +76,6 @@ public:
                        MCRegister SrcReg, bool KillSrc,
                        const MCInstrDesc &MCID, unsigned int numSubRegs,
                        const unsigned* subRegIdx) const;
-
-  void copyPhysSubRegs(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
-                       const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,
-                       bool KillSrc, const MCInstrDesc &MCID,
-                       unsigned int numSubRegs,
-                       const unsigned *subRegIdx) const;
   /// } Register Copy
 
   /// Stack Spill & Reload {

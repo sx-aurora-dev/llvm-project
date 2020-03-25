@@ -42,7 +42,8 @@ static cl::opt<bool> ShowSpillMessageVec(
 void VEInstrInfo::anchor() {}
 
 VEInstrInfo::VEInstrInfo(VESubtarget &ST)
-    : VEGenInstrInfo(VE::ADJCALLSTACKDOWN, VE::ADJCALLSTACKUP), RI() {}
+    : VEGenInstrInfo(VE::ADJCALLSTACKDOWN, VE::ADJCALLSTACKUP), RI(),
+      Subtarget(ST) {}
 
 static bool IsIntegerCC(unsigned CC) { return (CC < VECC::CC_AF); }
 
