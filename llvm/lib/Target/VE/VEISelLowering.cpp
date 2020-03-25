@@ -4182,7 +4182,9 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     //     adds.l %BReg, %s15, %Tmp3                  ; %s15 is GOT
     // FIXME: use lea.sl %BReg, .LJTI0_0@gotoff_hi(%Tmp2, %s15)
     Register Tmp3 = MRI->createVirtualRegister(&VE::I64RegClass);
-    BuildMI(DispContBB, DL, TII->get(VE::LEAzzi), Tmp1)
+    BuildMI(DispContBB, DL, TII->get(VE::LEAzii), Tmp1)
+        .addImm(0)
+        .addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_LO32);
     BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2)
         .addReg(Tmp1)
