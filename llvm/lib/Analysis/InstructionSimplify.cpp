@@ -5421,18 +5421,6 @@ Value *llvm::SimplifyVPIntrinsic(VPIntrinsic & VPInst, const SimplifyQuery &Q) {
   }
 }
 
-Value *llvm::SimplifyVPIntrinsic(VPIntrinsic & VPInst, const SimplifyQuery &Q) {
-  PredicatedContext PC(&VPInst);
-
-  auto & PI = cast<PredicatedInstruction>(VPInst);
-  switch (PI.getOpcode()) {
-    default:
-      return nullptr;
-
-    case Instruction::FSub: return SimplifyPredicatedFSubInst(VPInst.getOperand(0), VPInst.getOperand(1), VPInst.getFastMathFlags(), Q, PC);
-  }
-}
-
 /// See if we can compute a simplified version of this instruction.
 /// If not, this returns null.
 Value *llvm::SimplifyInstruction(Instruction *I, const SimplifyQuery &SQ,
