@@ -193,7 +193,7 @@ uint64_t VEMCCodeEmitter::getCCOpValue(const MCInst &MI, unsigned OpNo,
                                        const MCSubtargetInfo &STI) const {
   const MCOperand &MO = MI.getOperand(OpNo);
   if (MO.isImm())
-    return VECondCodeToVal(static_cast<VECC::CondCodes>(
+    return VECondCodeToVal(static_cast<VECC::CondCode>(
         getMachineOpValue(MI, MO, Fixups, STI)));
   return 0;
 }

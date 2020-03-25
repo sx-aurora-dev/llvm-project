@@ -209,7 +209,7 @@ void VEInstPrinter::printMemASOperandHM(const MCInst *MI, int opNum,
 void VEInstPrinter::printCCOperand(const MCInst *MI, int opNum,
                                    const MCSubtargetInfo &STI, raw_ostream &O) {
   int CC = (int)MI->getOperand(opNum).getImm();
-  O << VECondCodeToString((VECC::CondCodes)CC);
+  O << VECondCodeToString((VECC::CondCode)CC);
 }
 
 bool VEInstPrinter::printGetGOT(const MCInst *MI, unsigned opNum,

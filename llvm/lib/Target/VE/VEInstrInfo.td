@@ -168,7 +168,7 @@ def zext_imm : SDNodeXForm<imm, [{
 }]>;
 
 def icond2cc : SDNodeXForm<cond, [{
-  VECC::CondCodes cc;
+  VECC::CondCode cc;
   switch (N->get()) {
   default:          llvm_unreachable("Unknown integer condition code!");
   case ISD::SETEQ:  cc = VECC::CC_IEQ; break;
@@ -186,7 +186,7 @@ def icond2cc : SDNodeXForm<cond, [{
 }]>;
 
 def icond2ccSwap : SDNodeXForm<cond, [{
-  VECC::CondCodes cc;
+  VECC::CondCode cc;
   switch (N->get()) {
   default:          llvm_unreachable("Unknown integer condition code!");
   case ISD::SETEQ:  cc = VECC::CC_IEQ; break;
@@ -204,7 +204,7 @@ def icond2ccSwap : SDNodeXForm<cond, [{
 }]>;
 
 def fcond2cc : SDNodeXForm<cond, [{
-  VECC::CondCodes cc;
+  VECC::CondCode cc;
   switch (N->get()) {
   default:          llvm_unreachable("Unknown float condition code!");
   case ISD::SETFALSE: cc = VECC::CC_AF;    break;
@@ -234,7 +234,7 @@ def fcond2cc : SDNodeXForm<cond, [{
 }]>;
 
 def fcond2ccSwap : SDNodeXForm<cond, [{
-  VECC::CondCodes cc;
+  VECC::CondCode cc;
   switch (N->get()) {
   default:          llvm_unreachable("Unknown float condition code!");
   case ISD::SETFALSE: cc = VECC::CC_AF;    break;
