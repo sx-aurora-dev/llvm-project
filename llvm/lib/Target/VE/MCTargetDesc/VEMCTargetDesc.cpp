@@ -11,9 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "VEMCTargetDesc.h"
-#include "InstPrinter/VEInstPrinter.h"
+#include "VEInstPrinter.h"
 #include "VEMCAsmInfo.h"
 #include "VETargetStreamer.h"
+#include "TargetInfo/VETargetInfo.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
@@ -92,6 +93,12 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeVETargetMC() {
 
     // Register the MC subtarget info.
     TargetRegistry::RegisterMCSubtargetInfo(*T, createVEMCSubtargetInfo);
+
+    // Register the MC Code Emitter.
+    TargetRegistry::RegisterMCCodeEmitter(*T, createVEMCCodeEmitter);
+
+    // Register the asm backend.
+    TargetRegistry::RegisterMCAsmBackend(*T, createVEAsmBackend);
 
     // Register the object target streamer.
     TargetRegistry::RegisterObjectTargetStreamer(*T,

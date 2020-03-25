@@ -13,6 +13,7 @@
 #include "VE.h"
 // #include "VETargetObjectFile.h"
 #include "VETargetTransformInfo.h"
+#include "TargetInfo/VETargetInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetPassConfig.h"
@@ -21,9 +22,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "ve"
-
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeVETarget() {
+extern "C" void LLVMInitializeVETarget() {
   // Register the target.
   RegisterTargetMachine<VETargetMachine> X(getTheVETarget());
 }
@@ -41,13 +40,13 @@ static std::string computeDataLayout(const Triple &T) {
   // VE supports 32 bit and 64 bits integer on registers
   Ret += "-n32:64";
 
-  // Stack alignment is 64 bits
-  Ret += "-S64";
+  // Stack alignment is 128 bits
+  Ret += "-S128";
 
   // Vector alignments are 64 bits
   // Need to define all of them.  Otherwise, each alignment becomes
   // the size of each data by default.
-  Ret += "-v64:64:64"; // for v2f32
+  Ret += "-v64:64:64";          // for v2f32
   Ret += "-v128:64:64";
   Ret += "-v256:64:64";
   Ret += "-v512:64:64";
@@ -55,7 +54,7 @@ static std::string computeDataLayout(const Triple &T) {
   Ret += "-v2048:64:64";
   Ret += "-v4096:64:64";
   Ret += "-v8192:64:64";
-  Ret += "-v16384:64:64"; // for v256f64
+  Ret += "-v16384:64:64";       // for v256f64
 
   return Ret;
 }
@@ -129,7 +128,10 @@ bool VEPassConfig::addInstSelector() {
   return false;
 }
 
-void VEPassConfig::addPreEmitPass() {
+void VEPassConfig::addPreEmitPass(){
   // LVLGen should be called after scheduling and register allocation
   addPass(createLVLGenPass());
+#if 0
+  addPass(createVEDelaySlotFillerPass());
+#endif
 }

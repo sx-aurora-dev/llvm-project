@@ -9845,10 +9845,13 @@ private:
 };
 } // end anonymous namespace
 
-ABIArgInfo VEABIInfo::classifyReturnType(QualType Ty) const {
+
+ABIArgInfo
+VEABIInfo::classifyReturnType(QualType Ty) const {
   if (Ty->isAnyComplexType()) {
     return ABIArgInfo::getDirect();
-  } else {
+  }
+  else {
     return DefaultABIInfo::classifyReturnType(Ty);
   }
 }
@@ -9864,7 +9867,7 @@ namespace {
 class VETargetCodeGenInfo : public TargetCodeGenInfo {
 public:
   VETargetCodeGenInfo(CodeGenTypes &CGT)
-      : TargetCodeGenInfo(new VEABIInfo(CGT)) {}
+    : TargetCodeGenInfo(new VEABIInfo(CGT)) {}
 };
 } // end anonymous namespace
 

@@ -8,8 +8,8 @@
 
 #include "VE.h"
 #include "CommonArgs.h"
-#include "clang/Driver/Compilation.h"
 #include "clang/Driver/Driver.h"
+#include "clang/Driver/Compilation.h"
 #include "clang/Driver/Options.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Support/FileSystem.h"
@@ -65,7 +65,7 @@ bool VEToolChain::SupportsProfiling() const { return false; }
 bool VEToolChain::hasBlocksRuntime() const { return false; }
 
 void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
-                                            ArgStringList &CC1Args) const {
+                                               ArgStringList &CC1Args) const {
   if (DriverArgs.hasArg(clang::driver::options::OPT_nostdinc))
     return;
 
@@ -98,17 +98,17 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
 }
 
 void VEToolChain::addClangTargetOptions(const ArgList &DriverArgs,
-                                        ArgStringList &CC1Args,
-                                        Action::OffloadKind) const {
+                                           ArgStringList &CC1Args,
+                                           Action::OffloadKind) const {
   CC1Args.push_back("-nostdsysteminc");
   bool UseInitArrayDefault = true;
   if (!DriverArgs.hasFlag(options::OPT_fuse_init_array,
-                         options::OPT_fno_use_init_array, UseInitArrayDefault))
+                          options::OPT_fno_use_init_array, UseInitArrayDefault))
     CC1Args.push_back("-fno-use-init-array");
 }
 
-void VEToolChain::AddClangCXXStdlibIncludeArgs(const ArgList &DriverArgs,
-                                               ArgStringList &CC1Args) const {
+void VEToolChain::AddClangCXXStdlibIncludeArgs(
+    const ArgList &DriverArgs, ArgStringList &CC1Args) const {
   if (DriverArgs.hasArg(clang::driver::options::OPT_nostdinc) ||
       DriverArgs.hasArg(options::OPT_nostdlibinc) ||
       DriverArgs.hasArg(options::OPT_nostdincxx))
@@ -144,8 +144,9 @@ void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
   }
 }
 
-llvm::ExceptionHandling
-VEToolChain::GetExceptionModel(const ArgList &Args) const {
+llvm::ExceptionHandling VEToolChain::GetExceptionModel(
+        const ArgList &Args) const {
   // VE uses SjLj exceptions.
   return llvm::ExceptionHandling::SjLj;
 }
+

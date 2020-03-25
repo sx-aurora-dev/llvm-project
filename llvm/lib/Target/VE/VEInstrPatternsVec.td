@@ -12,10 +12,10 @@
 // v512i32, v512f32.
 
 def : Pat<(v512i32 (load I64:$addr)),
-          (v512i32 (vld_vIsl 8, $addr, (LEA32zzi 256)))>;
+          (v512i32 (vld_vIsl 8, $addr, (LEA32zii 0, 0, 256)))>;
 
 def : Pat<(v512f32 (load I64:$addr)),
-          (v512f32 (vld_vIsl 8, $addr, (LEA32zzi 256)))>;
+          (v512f32 (vld_vIsl 8, $addr, (LEA32zii 0, 0, 256)))>;
 
 // Mask Insert & Extract
 multiclass insert_extract_mask<ValueType MaskVT, string MaskToken> {
@@ -41,22 +41,22 @@ defm: insert_extract_mask<v512i1, "M">;
 
 def : Pat<(v256i1 (load I64:$addr)),
           (v256i1 (lvm_mmIs (lvm_mmIs (lvm_mmIs (lvm_mmIs (v256i1 (IMPLICIT_DEF)), 
-                      0, (LDSri $addr, 0)),
-                      1, (LDSri $addr, 8)),
-                      2, (LDSri $addr, 16)),
-                      3, (LDSri $addr, 24)))>;
+                      0, (LDrii $addr, 0, 0)),
+                      1, (LDrii $addr, 0, 8)),
+                      2, (LDrii $addr, 0, 16)),
+                      3, (LDrii $addr, 0, 24)))>;
 
 def : Pat<(v512i1 (load I64:$addr)),
           (v512i1 (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs
                   (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs (v512i1 (IMPLICIT_DEF)), 
-                      0, (LDSri $addr, 0)),
-                      1, (LDSri $addr, 8)),
-                      2, (LDSri $addr, 16)),
-                      3, (LDSri $addr, 24)),
-                      4, (LDSri $addr, 32)),
-                      5, (LDSri $addr, 40)),
-                      6, (LDSri $addr, 48)),
-                      7, (LDSri $addr, 56)))>;
+                      0, (LDrii $addr, 0, 0)),
+                      1, (LDrii $addr, 0, 8)),
+                      2, (LDrii $addr, 0, 16)),
+                      3, (LDrii $addr, 0, 24)),
+                      4, (LDrii $addr, 0, 32)),
+                      5, (LDrii $addr, 0, 40)),
+                      6, (LDrii $addr, 0, 48)),
+                      7, (LDrii $addr, 0, 56)))>;
 
 // Store for v256i1, v512i1 are implemented in 2 ways.  These STVM/STVM512
 // pseudo instruction is used for frameindex related load/store instructions.
@@ -67,17 +67,6 @@ def : Pat<(store v256i1:$vx, ADDRri:$addr),
 
 def : Pat<(store v512i1:$vx, ADDRri:$addr),
           (STVM512ri ADDRri:$addr, $vx)>;
-
-multiclass ext_for_vector_length<int length, ValueType vi32, ValueType vi64,
-                                 ValueType vi1> {
-  def : Pat<(vi64 (sext vi32:$vx)),
-            (vaddswsx_vIvl 0, $vx, (LEA32zzi length))>;
-  def : Pat<(vi64 (zext vi32:$vx)),
-            (vaddswzx_vIvl 0, $vx, (LEA32zzi length))>;
-}
-
-defm : ext_for_vector_length<256, v256i32, v256i64, v256i1>;
-
 
 // Insert & Extract Vector Element
 

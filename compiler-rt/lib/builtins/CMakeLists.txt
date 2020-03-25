@@ -574,6 +574,7 @@ set(wasm64_SOURCES
 
 set(ve_SOURCES 
   ve/llvm_grow_stack.S
+  ve/llvm_grow_stack_align.S
   ${GENERIC_TF_SOURCES}
   ${GENERIC_SOURCES})
 

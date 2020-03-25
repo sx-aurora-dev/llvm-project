@@ -61,7 +61,6 @@ _LIBUNWIND_HIDDEN int __unw_init_local(unw_cursor_t *cursor,
 #elif defined(__riscv) && __riscv_xlen == 64
 # define REGISTER_KIND Registers_riscv
 #elif defined(__ve__)
-# warning The VE architecture is not supported with this ABI and environment!
 # define REGISTER_KIND Registers_ve
 #else
 # error Architecture not supported

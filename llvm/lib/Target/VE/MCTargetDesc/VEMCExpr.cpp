@@ -62,7 +62,8 @@ bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind) {
   case VK_VE_TLS_GD_LO32:
   case VK_VE_TPOFF_HI32:
   case VK_VE_TPOFF_LO32:
-    return false; // OS << "@<text>(";  break;
+    // Use suffix for these variant kinds
+    return false;
   }
   return true;
 }

@@ -22,7 +22,6 @@ include "llvm/Target/Target.td"
 def FeaturePackedMode
   : SubtargetFeature<"packed", "PackedMode", "true",
                      "Enable v512 packed mode (experimental)">;
-
 def FeatureVPU
   : SubtargetFeature<"vpu", "EnableVPU", "true",
                      "Use the VPU">;
@@ -50,6 +49,8 @@ class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
 def : Proc<"ve",             []>;
+// def : Processor<"ve", VEItinerary, []>;
+// def : ProcessorModel<"ve", VESchedModel, []>;
 
 //===----------------------------------------------------------------------===//
 // Declare the target which we are implementing
@@ -64,7 +65,7 @@ def VEAsmWriter : AsmWriter {
 def VE : Target {
   // Pull in Instruction Info:
   let InstructionSet = VEInstrInfo;
-  let AssemblyParsers  = [VEAsmParser];
+  let AssemblyParsers = [VEAsmParser];
   let AssemblyWriters = [VEAsmWriter];
   let AllowRegisterRenaming = 1;
 }

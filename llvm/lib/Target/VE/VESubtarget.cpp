@@ -41,10 +41,10 @@ VESubtarget &VESubtarget::initializeSubtargetDependencies(StringRef CPU,
 VESubtarget::VESubtarget(const Triple &TT, const std::string &CPU,
                          const std::string &FS, const TargetMachine &TM)
     : VEGenSubtargetInfo(TT, CPU, FS), TargetTriple(TT), PackedMode(false),
-      EnableVPU(true), InstrInfo(initializeSubtargetDependencies(CPU, FS)),
+      EnableVPU(true) InstrInfo(initializeSubtargetDependencies(CPU, FS)),
       TLInfo(TM, *this), FrameLowering(*this) {}
 
-int VESubtarget::getAdjustedFrameSize(int frameSize) const {
+uint64_t VESubtarget::getAdjustedFrameSize(uint64_t frameSize) const {
 
   // VE stack frame:
   //
@@ -90,8 +90,7 @@ int VESubtarget::getAdjustedFrameSize(int frameSize) const {
   //  16(fp) | Thread pointer register (%tp=%s14)           |
   //         +----------------------------------------------+
 
-  frameSize += 176;                   // for RSA, RA, and FP
-  frameSize = alignTo(frameSize, 16); // requires 16 bytes alignment
+  frameSize += 176;                     // for RSA, RA, and FP
 
   return frameSize;
 }

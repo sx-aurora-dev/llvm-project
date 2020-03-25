@@ -11,12 +11,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "InstPrinter/VEInstPrinter.h"
+#include "MCTargetDesc/VEInstPrinter.h"
 #include "MCTargetDesc/VEMCExpr.h"
 #include "MCTargetDesc/VETargetStreamer.h"
 #include "VE.h"
 #include "VEInstrInfo.h"
 #include "VETargetMachine.h"
+#include "TargetInfo/VETargetInfo.h"
 #include "llvm/CodeGen/AsmPrinter.h"
 #include "llvm/CodeGen/MachineInstr.h"
 #include "llvm/CodeGen/MachineModuleInfoImpls.h"
@@ -47,33 +48,27 @@ public:
 
   StringRef getPassName() const override { return "VE Assembly Printer"; }
 
-  bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                       const char *ExtraCode, raw_ostream &O) override;
-  bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
-                             const char *ExtraCode, raw_ostream &O) override;
   void printOperand(const MachineInstr *MI, int opNum, raw_ostream &OS);
   void printMemASXOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                           const char *Modifier = nullptr);
   void printMemASOperand(const MachineInstr *MI, int opNum, raw_ostream &OS,
                          const char *Modifier = nullptr);
-
   void lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
                                  const MCSubtargetInfo &STI);
   void lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
                                     const MCSubtargetInfo &STI);
   void lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
                                      const MCSubtargetInfo &STI);
-  void lowerEH_SJLJ_SETJMPAndEmitMCInsts(const MachineInstr *MI,
-                                         const MCSubtargetInfo &STI);
-  void lowerEH_SJLJ_LONGJMPAndEmitMCInsts(const MachineInstr *MI,
-                                          const MCSubtargetInfo &STI);
 
   void emitInstruction(const MachineInstr *MI) override;
 
   static const char *getRegisterName(unsigned RegNo) {
     return VEInstPrinter::getRegisterName(RegNo);
   }
-
+  bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
+                       const char *ExtraCode, raw_ostream &O) override;
+  bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
+                             const char *ExtraCode, raw_ostream &O) override;
 };
 } // end of anonymous namespace
 
@@ -111,8 +106,11 @@ static void emitBSIC(MCStreamer &OutStreamer, MCOperand &R1, MCOperand &R2,
 static void emitLEAzzi(MCStreamer &OutStreamer, MCOperand &Imm, MCOperand &RD,
                        const MCSubtargetInfo &STI) {
   MCInst LEAInst;
-  LEAInst.setOpcode(VE::LEAzzi);
+  LEAInst.setOpcode(VE::LEAzii);
   LEAInst.addOperand(RD);
+  MCOperand czero = MCOperand::createImm(0);
+  LEAInst.addOperand(czero);
+  LEAInst.addOperand(czero);
   LEAInst.addOperand(Imm);
   OutStreamer.emitInstruction(LEAInst, STI);
 }
@@ -120,8 +118,11 @@ static void emitLEAzzi(MCStreamer &OutStreamer, MCOperand &Imm, MCOperand &RD,
 static void emitLEASLzzi(MCStreamer &OutStreamer, MCOperand &Imm, MCOperand &RD,
                          const MCSubtargetInfo &STI) {
   MCInst LEASLInst;
-  LEASLInst.setOpcode(VE::LEASLzzi);
+  LEASLInst.setOpcode(VE::LEASLzii);
   LEASLInst.addOperand(RD);
+  MCOperand czero = MCOperand::createImm(0);
+  LEASLInst.addOperand(czero);
+  LEASLInst.addOperand(czero);
   LEASLInst.addOperand(Imm);
   OutStreamer.emitInstruction(LEASLInst, STI);
 }
@@ -131,6 +132,8 @@ static void emitLEAzii(MCStreamer &OutStreamer, MCOperand &RS1, MCOperand &Imm,
   MCInst LEAInst;
   LEAInst.setOpcode(VE::LEAzii);
   LEAInst.addOperand(RD);
+  MCOperand czero = MCOperand::createImm(0);
+  LEAInst.addOperand(czero);
   LEAInst.addOperand(RS1);
   LEAInst.addOperand(Imm);
   OutStreamer.emitInstruction(LEAInst, STI);
@@ -141,9 +144,9 @@ static void emitLEASLrri(MCStreamer &OutStreamer, MCOperand &RS1,
                          const MCSubtargetInfo &STI) {
   MCInst LEASLInst;
   LEASLInst.setOpcode(VE::LEASLrri);
+  LEASLInst.addOperand(RD);
   LEASLInst.addOperand(RS1);
   LEASLInst.addOperand(RS2);
-  LEASLInst.addOperand(RD);
   LEASLInst.addOperand(Imm);
   OutStreamer.emitInstruction(LEASLInst, STI);
 }
@@ -157,11 +160,6 @@ static void emitBinary(MCStreamer &OutStreamer, unsigned Opcode, MCOperand &RS1,
   Inst.addOperand(RS1);
   Inst.addOperand(Src2);
   OutStreamer.emitInstruction(Inst, STI);
-}
-
-static void EmitANDrm0(MCStreamer &OutStreamer, MCOperand &RS1, MCOperand &Imm,
-                       MCOperand &RD, const MCSubtargetInfo &STI) {
-  emitBinary(OutStreamer, VE::ANDrm0, RS1, Imm, RD, STI);
 }
 
 static void emitANDrm0(MCStreamer &OutStreamer, MCOperand &RS1, MCOperand &Imm,
@@ -184,7 +182,7 @@ static void emitHiLo(MCStreamer &OutStreamer, MCSymbol *GOTSym,
 
 void VEAsmPrinter::lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
                                              const MCSubtargetInfo &STI) {
-  MCSymbol *GOTLabel =
+  MCSymbol *GOTLabel   =
       OutContext.getOrCreateSymbol(Twine("_GLOBAL_OFFSET_TABLE_"));
 
   const MachineOperand &MO = MI->getOperand(0);
@@ -211,11 +209,10 @@ void VEAsmPrinter::lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
   // lea %got, _GLOBAL_OFFSET_TABLE_@PC_LO(-24)
   // and %got, %got, (32)0
   // sic %plt
-  // lea.sl %got, _GLOBAL_OFFSET_TABLE_@PC_HI(%got, %plt)
+  // lea.sl %got, _GLOBAL_OFFSET_TABLE_@PC_HI(%plt, %got)
   MCOperand cim24 = MCOperand::createImm(-24);
   MCOperand loImm =
       createGOTRelExprOp(VEMCExpr::VK_VE_PC_LO32, GOTLabel, OutContext);
-
   emitLEAzii(*OutStreamer, cim24, loImm, MCRegOP, STI);
   MCOperand ci32 = MCOperand::createImm(32);
   emitANDrm0(*OutStreamer, MCRegOP, ci32, MCRegOP, STI);
@@ -260,7 +257,7 @@ void VEAsmPrinter::lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
   // lea %dst, %plt_lo(func)(-24)
   // and %dst, %dst, (32)0
   // sic %plt                            ; FIXME: is it safe to use %plt here?
-  // lea.sl %dst, %plt_hi(func)(%dst, %plt)
+  // lea.sl %dst, %plt_hi(func)(%plt, %dst)
   MCOperand cim24 = MCOperand::createImm(-24);
   MCOperand loImm =
       createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32, AddrSym, OutContext);
@@ -304,7 +301,7 @@ void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   // lea %s0, sym@tls_gd_lo(-24)
   // and %s0, %s0, (32)0
   // sic %lr
-  // lea.sl %s0, sym@tls_gd_hi(%s0, %lr)
+  // lea.sl %s0, sym@tls_gd_hi(%lr, %s0)
   // lea %s12, __tls_get_addr@plt_lo(8)
   // and %s12, %s12, (32)0
   // lea.sl %s12, __tls_get_addr@plt_hi(%s12, %lr)
@@ -330,65 +327,6 @@ void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   emitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
-void VEAsmPrinter::lowerEH_SJLJ_SETJMPAndEmitMCInsts(
-    const MachineInstr *MI, const MCSubtargetInfo &STI) {
-  //   sic $dest
-  //   lea $dest, 32($dest)     // $dest points 0f
-  //   st $dest, 8(,$src)
-  //   lea $dest, 0
-  //   br.l 16                  // br 1f
-  // 0:
-  //   lea $dest, 1
-  // 1:
-
-  unsigned DestReg = MI->getOperand(0).getReg();
-  unsigned SrcReg = MI->getOperand(1).getReg();
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::SIC).addReg(DestReg));
-
-  EmitToStreamer(
-      *OutStreamer,
-      MCInstBuilder(VE::LEArzi).addReg(DestReg).addReg(DestReg).addImm(32));
-
-  EmitToStreamer(
-      *OutStreamer,
-      MCInstBuilder(VE::STSri).addReg(SrcReg).addImm(8).addReg(DestReg));
-
-  EmitToStreamer(*OutStreamer,
-                 MCInstBuilder(VE::LEAzzi).addReg(DestReg).addImm(0));
-
-  EmitToStreamer(*OutStreamer, MCInstBuilder(VE::BCRLa).addImm(16));
-
-  EmitToStreamer(*OutStreamer,
-                 MCInstBuilder(VE::LEAzzi).addReg(DestReg).addImm(1));
-}
-
-void VEAsmPrinter::lowerEH_SJLJ_LONGJMPAndEmitMCInsts(
-    const MachineInstr *MI, const MCSubtargetInfo &STI) {
-  // ld %s9, (, $src)           // s9  = fp
-  // ld %s10, 8(, $src)         // s10 = lr
-  // ld %s11, 16(, $src)        // s11 = sp
-  // b.l (%s10)
-
-  unsigned SrcReg = MI->getOperand(0).getReg();
-
-  EmitToStreamer(
-      *OutStreamer,
-      MCInstBuilder(VE::LDSri).addReg(VE::SX9).addReg(SrcReg).addImm(0));
-
-  EmitToStreamer(
-      *OutStreamer,
-      MCInstBuilder(VE::LDSri).addReg(VE::SX10).addReg(SrcReg).addImm(8));
-
-  EmitToStreamer(
-      *OutStreamer,
-      MCInstBuilder(VE::LDSri).addReg(VE::SX11).addReg(SrcReg).addImm(16));
-
-  EmitToStreamer(*OutStreamer,
-                 MCInstBuilder(VE::BAri).addReg(VE::SX10).addImm(0));
-  return;
-}
-
 void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
 
   switch (MI->getOpcode()) {
@@ -410,12 +348,6 @@ void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
   case VE::MEMBARRIER:
     OutStreamer->emitRawComment("MEMBARRIER");
     return;
-  case VE::EH_SjLj_SetJmp:
-    lowerEH_SJLJ_SETJMPAndEmitMCInsts(MI, getSubtargetInfo());
-    return;
-  case VE::EH_SjLj_LongJmp:
-    lowerEH_SJLJ_LONGJMPAndEmitMCInsts(MI, getSubtargetInfo());
-    return;
   }
 
   MachineBasicBlock::const_instr_iterator I = MI->getIterator();
@@ -428,10 +360,62 @@ void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
 }
 
 void VEAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
-                                raw_ostream &O) {
+                                   raw_ostream &O) {
   const DataLayout &DL = getDataLayout();
-  const MachineOperand &MO = MI->getOperand(opNum);
-  VEMCExpr::VariantKind TF = (VEMCExpr::VariantKind)MO.getTargetFlags();
+  const MachineOperand &MO = MI->getOperand (opNum);
+  VEMCExpr::VariantKind TF = (VEMCExpr::VariantKind) MO.getTargetFlags();
+
+#ifndef NDEBUG
+  // Verify the target flags.
+  if (MO.isGlobal() || MO.isSymbol() || MO.isCPI()) {
+#if 0
+    if (MI->getOpcode() == SP::CALL)
+      assert(TF == VEMCExpr::VK_VE_None &&
+             "Cannot handle target flags on call address");
+    else if (MI->getOpcode() == VE::LEASL)
+      assert((TF == VEMCExpr::VK_VE_HI
+              || TF == VEMCExpr::VK_VE_H44
+              || TF == VEMCExpr::VK_VE_HH
+              || TF == VEMCExpr::VK_VE_TLS_GD_HI22
+              || TF == VEMCExpr::VK_VE_TLS_LDM_HI22
+              || TF == VEMCExpr::VK_VE_TLS_LDO_HIX22
+              || TF == VEMCExpr::VK_VE_TLS_IE_HI22
+              || TF == VEMCExpr::VK_VE_TLS_LE_HIX22) &&
+             "Invalid target flags for address operand on sethi");
+    else if (MI->getOpcode() == SP::TLS_CALL)
+      assert((TF == VEMCExpr::VK_VE_None
+              || TF == VEMCExpr::VK_VE_TLS_GD_CALL
+              || TF == VEMCExpr::VK_VE_TLS_LDM_CALL) &&
+             "Cannot handle target flags on tls call address");
+    else if (MI->getOpcode() == SP::TLS_ADDrr)
+      assert((TF == VEMCExpr::VK_VE_TLS_GD_ADD
+              || TF == VEMCExpr::VK_VE_TLS_LDM_ADD
+              || TF == VEMCExpr::VK_VE_TLS_LDO_ADD
+              || TF == VEMCExpr::VK_VE_TLS_IE_ADD) &&
+             "Cannot handle target flags on add for TLS");
+    else if (MI->getOpcode() == SP::TLS_LDrr)
+      assert(TF == VEMCExpr::VK_VE_TLS_IE_LD &&
+             "Cannot handle target flags on ld for TLS");
+    else if (MI->getOpcode() == SP::TLS_LDXrr)
+      assert(TF == VEMCExpr::VK_VE_TLS_IE_LDX &&
+             "Cannot handle target flags on ldx for TLS");
+    else if (MI->getOpcode() == SP::XORri || MI->getOpcode() == SP::XORXri)
+      assert((TF == VEMCExpr::VK_VE_TLS_LDO_LOX10
+              || TF == VEMCExpr::VK_VE_TLS_LE_LOX10) &&
+             "Cannot handle target flags on xor for TLS");
+    else
+      assert((TF == VEMCExpr::VK_VE_LO
+              || TF == VEMCExpr::VK_VE_M44
+              || TF == VEMCExpr::VK_VE_L44
+              || TF == VEMCExpr::VK_VE_HM
+              || TF == VEMCExpr::VK_VE_TLS_GD_LO10
+              || TF == VEMCExpr::VK_VE_TLS_LDM_LO10
+              || TF == VEMCExpr::VK_VE_TLS_IE_LO10 ) &&
+             "Invalid target flags for small address operand");
+#endif
+  }
+#endif
+
 
   bool CloseParen = VEMCExpr::printVariantKind(O, TF);
 
@@ -450,7 +434,7 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
     getSymbol(MO.getGlobal())->print(O, MAI);
     break;
   case MachineOperand::MO_BlockAddress:
-    O << GetBlockAddressSymbol(MO.getBlockAddress())->getName();
+    O <<  GetBlockAddressSymbol(MO.getBlockAddress())->getName();
     break;
   case MachineOperand::MO_ExternalSymbol:
     O << MO.getSymbolName();
@@ -465,8 +449,7 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int opNum,
   default:
     llvm_unreachable("<unknown operand type>");
   }
-  if (CloseParen)
-    O << ")";
+  if (CloseParen) O << ")";
   VEMCExpr::printVariantKindSuffix(O, TF);
 }
 
@@ -476,49 +459,86 @@ void VEAsmPrinter::printMemASXOperand(const MachineInstr *MI, int opNum,
   if (Modifier && !strcmp(Modifier, "arith")) {
     printOperand(MI, opNum, O);
     O << ", ";
-    printOperand(MI, opNum + 1, O);
+    printOperand(MI, opNum+1, O);
     return;
   }
 
-  if (MI->getOperand(opNum + 1).isImm() &&
-      MI->getOperand(opNum + 1).getImm() == 0) {
+  if (MI->getOperand(opNum+2).isImm() &&
+      MI->getOperand(opNum+2).getImm() == 0) {
     // don't print "+0"
   } else {
-    printOperand(MI, opNum + 1, O);
+    printOperand(MI, opNum+2, O);
   }
-  O << "(,";
-  printOperand(MI, opNum, O);
-  O << ")";
+  if (MI->getOperand(opNum+1).isImm() &&
+      MI->getOperand(opNum+1).getImm() == 0 &&
+      MI->getOperand(opNum).isImm() &&
+      MI->getOperand(opNum).getImm() == 0) {
+    if (MI->getOperand(opNum+2).isImm() &&
+        MI->getOperand(opNum+2).getImm() == 0) {
+      O << "0";
+    } else {
+      // don't print "(0)"
+    }
+  } else {
+    O << "(";
+    if (MI->getOperand(opNum+1).isImm() &&
+        MI->getOperand(opNum+1).getImm() == 0) {
+      // don't print "+0"
+    } else {
+      printOperand(MI, opNum+1, O);
+    }
+    if (MI->getOperand(opNum).isImm() &&
+        MI->getOperand(opNum).getImm() == 0) {
+      // don't print "+0"
+    } else {
+      O << ", ";
+      printOperand(MI, opNum, O);
+    }
+    O << ")";
+  }
 }
 
 void VEAsmPrinter::printMemASOperand(const MachineInstr *MI, int opNum,
-                                     raw_ostream &O, const char *Modifier) {
+                                      raw_ostream &O, const char *Modifier) {
   // If this is an ADD operand, emit it like normal operands.
   if (Modifier && !strcmp(Modifier, "arith")) {
     printOperand(MI, opNum, O);
     O << ", ";
-    printOperand(MI, opNum + 1, O);
+    printOperand(MI, opNum+2, O);
     return;
   }
 
-  if (MI->getOperand(opNum + 1).isImm() &&
-      MI->getOperand(opNum + 1).getImm() == 0) {
+  if (MI->getOperand(opNum+2).isImm() &&
+      MI->getOperand(opNum+2).getImm() == 0) {
     // don't print "+0"
   } else {
-    printOperand(MI, opNum + 1, O);
+    printOperand(MI, opNum+2, O);
   }
-  O << "(";
-  printOperand(MI, opNum, O);
-  O << ")";
+  assert(MI->getOperand(opNum+1).isImm() &&
+         MI->getOperand(opNum+1).getImm() == 0 &&
+         "AS format must have 0 index");
+  if (MI->getOperand(opNum).isImm() &&
+      MI->getOperand(opNum).getImm() == 0) {
+    if (MI->getOperand(opNum+2).isImm() &&
+        MI->getOperand(opNum+2).getImm() == 0) {
+      O << "0";
+    } else {
+      // don't print "(0)"
+    }
+  } else {
+    O << "(";
+    printOperand(MI, opNum, O);
+    O << ")";
+  }
 }
 
 /// PrintAsmOperand - Print out an operand for an inline asm expression.
 ///
 bool VEAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                                   const char *ExtraCode, raw_ostream &O) {
+                                   const char *ExtraCode,
+                                   raw_ostream &O) {
   if (ExtraCode && ExtraCode[0]) {
-    if (ExtraCode[1] != 0)
-      return true; // Unknown modifier.
+    if (ExtraCode[1] != 0) return true; // Unknown modifier.
 
     switch (ExtraCode[0]) {
     default:
@@ -526,7 +546,7 @@ bool VEAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
       return AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, O);
     case 'f':
     case 'r':
-      break;
+     break;
     }
   }
 
@@ -539,7 +559,7 @@ bool VEAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
                                          const char *ExtraCode,
                                          raw_ostream &O) {
   if (ExtraCode && ExtraCode[0])
-    return true; // Unknown modifier
+    return true;  // Unknown modifier
 
   O << '[';
   printMemASXOperand(MI, OpNo, O);
@@ -549,6 +569,6 @@ bool VEAsmPrinter::PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
 }
 
 // Force static initialization.
-extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeVEAsmPrinter() {
+extern "C" void LLVMInitializeVEAsmPrinter() {
   RegisterAsmPrinter<VEAsmPrinter> X(getTheVETarget());
 }

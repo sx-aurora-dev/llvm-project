@@ -23,6 +23,18 @@ namespace llvm {
 
 class VESubtarget;
 
+/// VEII - This namespace holds all of the target specific flags that
+/// instruction info tracks.
+///
+namespace VEII {
+  enum {
+    Pseudo = (1<<0),
+    Load = (1<<1),
+    Store = (1<<2),
+    DelaySlot = (1<<3)
+  };
+}
+
 class VEInstrInfo : public VEGenInstrInfo {
   const VERegisterInfo RI;
   const VESubtarget &Subtarget;
@@ -59,6 +71,11 @@ public:
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                    const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg,
                    bool KillSrc) const override;
+  void copyPhysSubRegs(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                       const DebugLoc &DL, MCRegister DestReg,
+                       MCRegister SrcReg, bool KillSrc,
+                       const MCInstrDesc &MCID, unsigned int numSubRegs,
+                       const unsigned* subRegIdx) const;
 
   void copyPhysSubRegs(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                        const DebugLoc &DL, unsigned DestReg, unsigned SrcReg,

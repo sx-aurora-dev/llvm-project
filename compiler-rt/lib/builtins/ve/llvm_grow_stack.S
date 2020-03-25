@@ -15,9 +15,8 @@
 .text
 .p2align        4
 DEFINE_COMPILERRT_FUNCTION(__llvm_grow_stack)
-        lea             %s62, 15(%s0)           # (s0 + 15) / 16 * 16
-        and             %s62, -16, %s62
-        subu.l          %sp, %sp, %s62          # sp -= alloca size
+        subu.l          %sp, %sp, %s0           # sp -= alloca size
+        and             %sp, -16, %sp           # align sp
         brge.l.t        %sp, %sl, 1f
         ld              %s63, 0x18(,%tp)        # load param area
         lea             %s62, 0x13b             # syscall # of grow

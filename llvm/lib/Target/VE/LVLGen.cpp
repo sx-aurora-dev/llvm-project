@@ -32,7 +32,6 @@ namespace {
     LVLGen() : MachineFunctionPass(ID) {}
     bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
     bool runOnMachineFunction(MachineFunction &F) override;
-    StringRef getPassName() const override { return "LVL Inference"; }
   };
   char LVLGen::ID = 0;
 

@@ -13,6 +13,7 @@
 #include "Arch/PPC.h"
 #include "Arch/SystemZ.h"
 #include "Arch/X86.h"
+#include "Arch/VE.h"
 #include "HIP.h"
 #include "Hexagon.h"
 #include "InputInfo.h"

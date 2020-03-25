@@ -45,6 +45,9 @@ public:
   Register getFrameRegister(const MachineFunction &MF) const override;
 
   bool canRealignStack(const MachineFunction &MF) const override;
+
+  unsigned getRegPressureSetLimit(const MachineFunction &MF,
+                                  unsigned Idx) const override;
 };
 
 } // namespace llvm

@@ -24,6 +24,7 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
+ 
 // Custom ISDs
 // VEISD::VEC_SEQ - represents a vector sequence where the operand is the stride
 // VEISD::VEC_BROADCAST - represents a vector splat of a scalar value into all vector lanes.
@@ -61,23 +62,23 @@ def repl_i32        : SDNode<"VEISD::REPL_I32",  SDTypeProfile<1, 1,  [SDTCisInt
 // whether the avl is ineffective
 def no_avl_256      : PatLeaf<(imm), [{ return (N->getSExtValue() < 0) || (N->getSExtValue() >= 256); }]>;
 
+///// Immediates /////
 def simm7       : PatLeaf<(imm), [{ return isInt<7>(N->getSExtValue()); }]>;
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
-def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def uimm6       : PatLeaf<(imm), [{ return isUInt<6>(N->getZExtValue()); }]>;
 def uimm7       : PatLeaf<(imm), [{ return isUInt<7>(N->getZExtValue()); }]>;
-def true        : PatLeaf<(imm), [{ return N->getSExtValue() !=0 ; }]>;
-def one         : PatLeaf<(imm), [{ return N->getSExtValue() == 1 ; }]>;
+def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 def zero        : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
                                       == 0; }]>;
 def lozero      : PatLeaf<(imm), [{ return (N->getZExtValue() & 0xffffffff)
                                       == 0; }]>;
+
+def fpzero      : PatLeaf<(fpimm), [{ return N->isZero(); }]>;
 def fplomsbzero : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
                                       .getZExtValue() & 0x80000000) == 0; }]>;
 def fplozero    : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
                                       .getZExtValue() & 0xffffffff) == 0; }]>;
-def fpzero      : PatLeaf<(fpimm), [{ return N->isZero(); }]>;
 
 def ones_l      : PatLeaf<(imm), [{ return N->getZExtValue() == 0xffffffffffffffff; }]>;
 def ones_w      : PatLeaf<(imm), [{ return N->N->getZExtValue() & 0xffffffff == 0xffffffff; }]>;
@@ -89,6 +90,7 @@ let PredicateCodeUsesOperands = 1 in {
 def true_mask                            : PatLeaf<(vec_broadcast (i32 true), (i32 srcvalue))>;
 def any_broadcast                        : PatFrag<(ops node:$sx), (vec_broadcast node:$sx, (i32 srcvalue))>;
 }
+
 
 def CCSIOp : PatLeaf<(cond), [{
   switch (N->get()) {
@@ -110,6 +112,13 @@ def CCUIOp : PatLeaf<(cond), [{
   }
 }]>;
 
+def GetVL : SDNodeXForm<imm, [{
+  // Get a virtual register for VL and return it.
+  MachineFunction& MF = CurDAG->getMachineFunction();
+  unsigned VLReg = MF.getSubtarget<VESubtarget>().getInstrInfo()->getVectorLengthReg(&MF);
+  return CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VLReg, MVT::i32);
+}]>;
+
 def LOFP32 : SDNodeXForm<fpimm, [{
   // Get a integer immediate from fpimm
   const APInt& imm = N->getValueAPF().bitcastToAPInt();
@@ -124,9 +133,14 @@ def HIFP32 : SDNodeXForm<fpimm, [{
                                    SDLoc(N), MVT::i64);
 }]>;
 
+def LO7 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
+                                   SDLoc(N), MVT::i32);
+}]>;
+
 def LO32 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(Lo_32(N->getZExtValue()),
-                                   SDLoc(N), MVT::i64);
+                                   SDLoc(N), MVT::i32);
 }]>;
 
 def HI32 : SDNodeXForm<imm, [{
@@ -169,6 +183,24 @@ def icond2cc : SDNodeXForm<cond, [{
   return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
 }]>;
 
+def icond2ccSwap : SDNodeXForm<cond, [{
+  VECC::CondCodes cc;
+  switch (N->get()) {
+  default:          llvm_unreachable("Unknown integer condition code!");
+  case ISD::SETEQ:  cc = VECC::CC_IEQ; break;
+  case ISD::SETNE:  cc = VECC::CC_INE; break;
+  case ISD::SETLT:  cc = VECC::CC_IG;  break;
+  case ISD::SETGT:  cc = VECC::CC_IL;  break;
+  case ISD::SETLE:  cc = VECC::CC_IGE; break;
+  case ISD::SETGE:  cc = VECC::CC_ILE; break;
+  case ISD::SETULT: cc = VECC::CC_IG;  break;
+  case ISD::SETULE: cc = VECC::CC_IGE; break;
+  case ISD::SETUGT: cc = VECC::CC_IL;  break;
+  case ISD::SETUGE: cc = VECC::CC_ILE; break;
+  }
+  return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
+}]>;
+
 def fcond2cc : SDNodeXForm<cond, [{
   VECC::CondCodes cc;
   switch (N->get()) {
@@ -199,51 +231,147 @@ def fcond2cc : SDNodeXForm<cond, [{
   return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
 }]>;
 
-// Addressing modes.
-def ADDRrr : ComplexPattern<iPTR, 2, "SelectADDRrr", [], []>;
-def ADDRri : ComplexPattern<iPTR, 2, "SelectADDRri", [frameindex], []>;
+def fcond2ccSwap : SDNodeXForm<cond, [{
+  VECC::CondCodes cc;
+  switch (N->get()) {
+  default:          llvm_unreachable("Unknown float condition code!");
+  case ISD::SETFALSE: cc = VECC::CC_AF;    break;
+  case ISD::SETEQ:
+  case ISD::SETOEQ:   cc = VECC::CC_EQ;    break;
+  case ISD::SETNE:
+  case ISD::SETONE:   cc = VECC::CC_NE;    break;
+  case ISD::SETLT:
+  case ISD::SETOLT:   cc = VECC::CC_G;     break;
+  case ISD::SETGT:
+  case ISD::SETOGT:   cc = VECC::CC_L;     break;
+  case ISD::SETLE:
+  case ISD::SETOLE:   cc = VECC::CC_GE;    break;
+  case ISD::SETGE:
+  case ISD::SETOGE:   cc = VECC::CC_LE;    break;
+  case ISD::SETO:     cc = VECC::CC_NUM;   break;
+  case ISD::SETUO:    cc = VECC::CC_NAN;   break;
+  case ISD::SETUEQ:   cc = VECC::CC_EQNAN; break;
+  case ISD::SETUNE:   cc = VECC::CC_NENAN; break;
+  case ISD::SETULT:   cc = VECC::CC_GNAN;  break;
+  case ISD::SETUGT:   cc = VECC::CC_LNAN;  break;
+  case ISD::SETULE:   cc = VECC::CC_GENAN; break;
+  case ISD::SETUGE:   cc = VECC::CC_LENAN; break;
+  case ISD::SETTRUE:  cc = VECC::CC_AT;    break;
+  }
+  return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
+}]>;
 
-// Address operands
-def VEMEMrrAsmOperand : AsmOperandClass {
-  let Name = "MEMrr";
+// Addressing modes.
+// SX-Aurora has following fields.
+//    sz: register or 0
+//    sy: register or immediate (-64 to 63)
+//    disp: immediate (-2147483648 to 2147483647)
+//
+// There are two kinds of instruction.
+//    ASX format uses sz + sy + disp.
+//    AS format uses sz + disp.
+//
+// Moreover, there are four kinds of assembly instruction format.
+//    ASX format uses "disp", "disp(, sz)", "disp(sy)", "disp(sy, sz)",
+//    "(, sz)", "(sy)", or "(sy, sz)".
+//    AS format uses "disp", "disp(, sz)", or "(, sz)" in general.
+//    AS format in RRM format uses "disp", "disp(sz)", or "(sz)".
+//    AS format in RRM format for host memory access uses "sz", "(sz)",
+//    or "disp(sz)".
+//
+// We defined them below.
+//
+// ASX format:
+//    MEMrri, MEMrii, MEMzii
+// AS format:
+//    MEMriASX, MEMziASX    : simple AS format
+//    MEMriRRM, MEMziRRM    : AS format in RRM format
+//    MEMriHM, MEMziHM      : AS format in RRM format for host memory access
+
+def ADDRrri : ComplexPattern<iPTR, 3, "SelectADDRrri", [frameindex], []>;
+def ADDRrii : ComplexPattern<iPTR, 3, "SelectADDRrii", [frameindex], []>;
+def ADDRzii : ComplexPattern<iPTR, 3, "SelectADDRzii", [], []>;
+// AS format:
+def ADDRri : ComplexPattern<iPTR, 2, "SelectADDRri", [frameindex], []>;
+def ADDRzi : ComplexPattern<iPTR, 2, "SelectADDRzi", [], []>;
+//
+// ASX assembly instrcution format:
+def VEMEMrriAsmOperand : AsmOperandClass {
+  let Name = "MEMrri";
   let ParserMethod = "parseMEMOperand";
 }
-
+def VEMEMriiAsmOperand : AsmOperandClass {
+  let Name = "MEMrii";
+  let ParserMethod = "parseMEMOperand";
+}
+def VEMEMziiAsmOperand : AsmOperandClass {
+  let Name = "MEMzii";
+  let ParserMethod = "parseMEMOperand";
+}
+def MEMrri : Operand<iPTR> {
+  let PrintMethod = "printMemASXOperand";
+  let MIOperandInfo = (ops ptr_rc, ptr_rc, i32imm);
+  let ParserMatchClass = VEMEMrriAsmOperand;
+}
+def MEMrii : Operand<iPTR> {
+  let PrintMethod = "printMemASXOperand";
+  let MIOperandInfo = (ops ptr_rc, i32imm, i32imm);
+  let ParserMatchClass = VEMEMriiAsmOperand;
+}
+def MEMzii : Operand<iPTR> {
+  let PrintMethod = "printMemASXOperand";
+  let MIOperandInfo = (ops i32imm /* = 0 */, i32imm, i32imm);
+  let ParserMatchClass = VEMEMziiAsmOperand;
+}
+// AS assembly instrcution format:
 def VEMEMriAsmOperand : AsmOperandClass {
   let Name = "MEMri";
   let ParserMethod = "parseMEMOperand";
 }
-
-// ASX format of memory address
-def MEMrr : Operand<iPTR> {
-  let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops ptr_rc, ptr_rc);
+def VEMEMziAsmOperand : AsmOperandClass {
+  let Name = "MEMzi";
+  let ParserMethod = "parseMEMOperand";
 }
-
-def MEMri : Operand<iPTR> {
-  let PrintMethod = "printMemASXOperand";
-  let MIOperandInfo = (ops ptr_rc, i64imm);
+// AS generic assembly instruction format:
+def MEMriASX : Operand<iPTR> {
+  let PrintMethod = "printMemASOperandASX";
+  let MIOperandInfo = (ops ptr_rc, i32imm);
   let ParserMatchClass = VEMEMriAsmOperand;
 }
-
-// AS format of memory address
-def MEMASri : Operand<iPTR> {
-  let PrintMethod = "printMemASOperand";
-  let MIOperandInfo = (ops ptr_rc, i64imm);
+def MEMziASX : Operand<iPTR> {
+  let PrintMethod = "printMemASOperandASX";
+  let MIOperandInfo = (ops i32imm /* = 0 */, i32imm);
+  let ParserMatchClass = VEMEMziAsmOperand;
+}
+// AS RRM style assembly instruction format:
+def MEMriRRM : Operand<iPTR> {
+  let PrintMethod = "printMemASOperandRRM";
+  let MIOperandInfo = (ops ptr_rc, i32imm);
   let ParserMatchClass = VEMEMriAsmOperand;
+}
+def MEMziRRM : Operand<iPTR> {
+  let PrintMethod = "printMemASOperandRRM";
+  let MIOperandInfo = (ops i32imm /* = 0 */, i32imm);
+  let ParserMatchClass = VEMEMziAsmOperand;
+}
+// AS HM style assembly instruction format:
+def MEMriHM : Operand<iPTR> {
+  let PrintMethod = "printMemASOperandHM";
+  let MIOperandInfo = (ops ptr_rc, i32imm);
+  let ParserMatchClass = VEMEMriAsmOperand;
+}
+def MEMziHM : Operand<iPTR> {
+  let PrintMethod = "printMemASOperandHM";
+  let MIOperandInfo = (ops i32imm /* = 0 */, i32imm);
+  let ParserMatchClass = VEMEMziAsmOperand;
 }
 
 // Branch targets have OtherVT type.
 def brtarget32 : Operand<OtherVT> {
-  let EncoderMethod = "getBranchTarget32OpValue";
+  let EncoderMethod = "getBranchTargetOpValue";
 }
 
 def TLSSym : Operand<iPTR>;
-
-// Branch targets have OtherVT type.
-def brtarget : Operand<OtherVT> {
-  let EncoderMethod = "getBranchTargetOpValue";
-}
 
 def calltarget : Operand<i64> {
   let EncoderMethod = "getCallTargetOpValue";
@@ -270,10 +398,6 @@ def simm32Op64 : Operand<i64> {
   let DecoderMethod = "DecodeSIMM32";
 }
 
-def uimm7Op32 : Operand<i32> {
-  let DecoderMethod = "DecodeUIMM6";
-}
-
 def uimm6Op32 : Operand<i32> {
   let DecoderMethod = "DecodeUIMM6";
 }
@@ -287,8 +411,11 @@ def uimm6Op128 : Operand<i128> {
 }
 
 // Operand for printing out a condition code.
-let PrintMethod = "printCCOperand" in
-  def CCOp : Operand<i32>;
+def CCOp : Operand<i32> {
+  let PrintMethod = "printCCOperand";
+  let DecoderMethod = "DecodeCCOperand";
+  let EncoderMethod = "getCCOpValue";
+}
 
 def VEhi    : SDNode<"VEISD::Hi", SDTIntUnaryOp>;
 def VElo    : SDNode<"VEISD::Lo", SDTIntUnaryOp>;
@@ -312,9 +439,7 @@ def call          : SDNode<"VEISD::CALL", SDT_SPCall,
 def retflag       : SDNode<"VEISD::RET_FLAG", SDTNone,
                            [SDNPHasChain, SDNPOptInGlue, SDNPVariadic]>;
 
-def getGOT        : Operand<iPTR> {
-  let PrintMethod = "printGetGOT";
-}
+def getGOT        : Operand<iPTR>;
 def getFunPLT     : Operand<iPTR> {
   let PrintMethod = "printGetFunPLT";
 }
@@ -351,6 +476,7 @@ def GetStackTop : SDNode<"VEISD::GETSTACKTOP", SDTNone,
 def MemBarrier : SDNode<"VEISD::MEMBARRIER", SDTNone,
                         [SDNPHasChain, SDNPSideEffect]>;
 
+
 //===----------------------------------------------------------------------===//
 // VE Flag Conditions
 //===----------------------------------------------------------------------===//
@@ -385,109 +511,51 @@ def CC_AT    : CC_VAL<21>;  // Always true
 // VE Multiclasses for common instruction formats
 //===----------------------------------------------------------------------===//
 
-multiclass RMm<string opcStr, bits<8>opc,
-               RegisterClass RC, ValueType Ty,
-               Operand immOp, Operand immOp2,
-               SDPatternOperator OpNode=null_frag> {
+multiclass RMm<string opcStr, bits<8>opc, RegisterClass RC> {
   def rri : RM<
-    opc, (outs RC:$sx), (ins RC:$sy, RC:$sz, immOp2:$imm32),
-    !strconcat(opcStr, " $sx, ${imm32}($sy, ${sz})"),
-    [(set Ty:$sx, (OpNode (OpNode Ty:$sy, Ty:$sz), (Ty simm32:$imm32)))]> {
+    opc, (outs RC:$dest), (ins MEMrri:$addr),
+    !strconcat(opcStr, " $dest, $addr"), []> {
     let cy = 1;
     let cz = 1;
     let hasSideEffects = 0;
   }
   def rii : RM<
-    opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy, immOp2:$imm32),
-    !strconcat(opcStr, " $sx, ${imm32}($sy, ${sz})"),
-    [/* Not define DAG pattern here to avoid llvm uses LEArii for add
-        instructions.
-        (set Ty:$sx, (OpNode (OpNode Ty:$sz, (Ty simm7:$sy)), (Ty simm32:$imm32)))*/]> {
+    opc, (outs RC:$dest), (ins MEMrii:$addr),
+    !strconcat(opcStr, " $dest, $addr"), []> {
     let cy = 0;
-    let cz = 1;
-    let hasSideEffects = 0;
-  }
-  def rzi : RM<
-    opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32),
-    !strconcat(opcStr, " $sx, ${imm32}(${sz})"),
-    [(set Ty:$sx, (OpNode Ty:$sz, (Ty simm32:$imm32)))]> {
-    let cy = 0;
-    let sy = 0;
     let cz = 1;
     let hasSideEffects = 0;
   }
   def zii : RM<
-    opc, (outs RC:$sx), (ins immOp:$sy, immOp2:$imm32),
-    !strconcat(opcStr, " $sx, ${imm32}(${sy})"),
-    [/* Not define DAG pattern here to avoid llvm uses LEAzii for all add
-        instructions.
-        (set Ty:$sx, (OpNode (Ty simm7:$sy), (Ty simm32:$imm32))) */]> {
+    opc, (outs RC:$dest), (ins MEMzii:$addr),
+    !strconcat(opcStr, " $dest, $addr"), []> {
     let cy = 0;
     let cz = 0;
-    let sz = 0;
-    let hasSideEffects = 0;
-  }
-  def zzi : RM<
-    opc, (outs RC:$sx), (ins immOp2:$imm32),
-    !strconcat(opcStr, " $sx, $imm32"),
-    [/* Not define DAG pattern here to avoid llvm uses LEAzzi for all set
-        instructions.
-        (set Ty:$sx, (Ty simm32:$imm32)) */]> {
-    let cy = 0;
-    let sy = 0;
-    let cz = 0;
-    let sz = 0;
     let hasSideEffects = 0;
   }
 }
 
-let Constraints = "$sx = $sd", DisableEncoding = "$sd" in
-multiclass RRCASm<string opcStr, bits<8>opc,
-               RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
-  def asr : RM<
-    opc, (outs RC:$sx), (ins MEMASri:$addr, RC:$sy, RC:$sd),
-    !strconcat(opcStr, " $sx, $addr, $sy")> {
-    let cy = 1;
-    let cz = 1;
+let Constraints = "$dest = $sd", DisableEncoding = "$sd", mayStore=1 in
+multiclass RRCASm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
+                  Operand immOp> {
+  def rir : RRM<
+    opc, (outs RC:$dest), (ins MEMriRRM:$addr, RC:$sy, RC:$sd),
+    !strconcat(opcStr, " $dest, $addr, $sy")> {
     let hasSideEffects = 0;
   }
-  def asi : RM<
-    opc, (outs RC:$sx), (ins MEMASri:$addr, immOp:$sy, RC:$sd),
-    !strconcat(opcStr, " $sx, $addr, $sy")> {
+  def rii : RRM<
+    opc, (outs RC:$dest), (ins MEMriRRM:$addr, immOp:$sy, RC:$sd),
+    !strconcat(opcStr, " $dest, $addr, $sy")> {
     let cy = 0;
-    let cz = 1;
-    let hasSideEffects = 0;
-  }
-  def rir : RM<
-    opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32, RC:$sy, RC:$sd),
-    !strconcat(opcStr, " $sx, ${imm32}(${sz}), $sy")> {
-    let cy = 1;
-    let cz = 1;
-    let isCodeGenOnly = 1;
-    let hasSideEffects = 0;
-  }
-  def rii : RM<
-    opc, (outs RC:$sx), (ins RC:$sz, immOp2:$imm32, immOp:$sy, RC:$sd),
-    !strconcat(opcStr, " $sx, ${imm32}(${sz}), $sy")> {
-    let cy = 0;
-    let cz = 1;
-    let isCodeGenOnly = 1;
-    let hasSideEffects = 0;
-  }
-  def zii : RM<
-    opc, (outs RC:$sx), (ins immOp2:$imm32, immOp:$sy, RC:$sd),
-    !strconcat(opcStr, " $sx, $imm32, $sy")> {
-    let cy = 0;
-    let cz = 0;
-    let sz = 0;
     let hasSideEffects = 0;
   }
 }
 
+// Multiclass for RR type instructions
 multiclass RRmrr<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
                  RegisterClass RCi, ValueType Tyi,
-                 SDPatternOperator OpNode=null_frag> {
+                 SDPatternOperator OpNode = null_frag> {
   def rr : RR<opc, (outs RCo:$sx), (ins RCi:$sy, RCi:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"),
               [(set Tyo:$sx, (OpNode Tyi:$sy, Tyi:$sz))]>
@@ -497,7 +565,7 @@ multiclass RRmrr<string opcStr, bits<8>opc,
 multiclass RRmri<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
                  RegisterClass RCi, ValueType Tyi, Operand immOp,
-                 SDPatternOperator OpNode=null_frag> {
+                 SDPatternOperator OpNode = null_frag> {
   // VE calculates (OpNode $sy, $sz), but llvm requires to have immediate
   // in RHS, so we use following definition.
   def ri : RR<opc, (outs RCo:$sx), (ins RCi:$sz, immOp:$sy),
@@ -509,8 +577,8 @@ multiclass RRmri<string opcStr, bits<8>opc,
 multiclass RRmir<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
                  RegisterClass RCi, ValueType Tyi, Operand immOp,
-                 SDPatternOperator OpNode=null_frag> {
-  def ri : RR<opc, (outs RCo:$sx), (ins immOp:$sy, RCi:$sz),
+                 SDPatternOperator OpNode = null_frag> {
+  def ir : RR<opc, (outs RCo:$sx), (ins immOp:$sy, RCi:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"),
               [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), Tyi:$sz))]>
            { let cy = 0; let cz = 1; let hasSideEffects = 0; }
@@ -519,7 +587,7 @@ multiclass RRmir<string opcStr, bits<8>opc,
 multiclass RRmiz<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
                  RegisterClass RCi, ValueType Tyi, Operand immOp,
-                 SDPatternOperator OpNode=null_frag> {
+                 SDPatternOperator OpNode = null_frag> {
   def zi : RR<opc, (outs RCo:$sx), (ins immOp:$sy),
               !strconcat(opcStr, " $sx, $sy"),
               [(set Tyo:$sx, (OpNode (Tyi simm7:$sy), 0))]>
@@ -533,7 +601,7 @@ multiclass RRNDmrm<string opcStr, bits<8>opc,
                !strconcat(opcStr, " $sx, $sy, (${sz})0")> {
               let cy = 1;
               let cz = 0;
-              let sz{6} = 1;
+              let mz = 1;
               // (guess) tblgen conservatively assumes hasSideEffects when
               // it fails to infer from a pattern.
               let hasSideEffects = 0;
@@ -542,6 +610,7 @@ multiclass RRNDmrm<string opcStr, bits<8>opc,
                !strconcat(opcStr, " $sx, $sy, (${sz})1")> {
               let cy = 1;
               let cz = 0;
+              let mz = 0;
               let hasSideEffects = 0;
             }
 }
@@ -554,7 +623,7 @@ multiclass RRNDmim<string opcStr, bits<8>opc,
                !strconcat(opcStr, " $sx, $sy, (${sz})0")> {
               let cy = 0;
               let cz = 0;
-              let sz{6} = 1;
+              let mz = 1;
               // (guess) tblgen conservatively assumes hasSideEffects when
               // it fails to infer from a pattern.
               let hasSideEffects = 0;
@@ -563,29 +632,30 @@ multiclass RRNDmim<string opcStr, bits<8>opc,
                !strconcat(opcStr, " $sx, $sy, (${sz})1")> {
               let cy = 0;
               let cz = 0;
+              let mz = 0;
               let hasSideEffects = 0;
             }
 }
 
-// Used by add, mul, div, and similar commutative instructions
+// Used by add, mul, and similar commutative instructions
 //   The order of operands are "$sx, $sy, $sz"
 
 multiclass RRm<string opcStr, bits<8>opc,
                RegisterClass RC, ValueType Ty,
                Operand immOp, Operand immOp2,
-               SDPatternOperator OpNode=null_frag> :
+               SDPatternOperator OpNode = null_frag> :
   RRmrr<opcStr, opc, RC, Ty, RC, Ty, OpNode>,
   RRmri<opcStr, opc, RC, Ty, RC, Ty, immOp, OpNode>,
   RRmiz<opcStr, opc, RC, Ty, RC, Ty, immOp, OpNode>,
   RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, immOp2>,
   RRNDmim<opcStr, opc, RC, Ty, RC, Ty, immOp, immOp2>;
 
-// Used by sub, and similar not commutative instructions
+// Used by sub, div, and similar not commutative instructions
 //   The order of operands are "$sx, $sy, $sz"
 
 multiclass RRNCm<string opcStr, bits<8>opc,
                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2,
-               SDPatternOperator OpNode=null_frag> :
+               SDPatternOperator OpNode = null_frag> :
   RRmrr<opcStr, opc, RC, Ty, RC, Ty, OpNode>,
   RRmir<opcStr, opc, RC, Ty, RC, Ty, immOp, OpNode>,
   RRmiz<opcStr, opc, RC, Ty, RC, Ty, immOp, OpNode>,
@@ -597,7 +667,7 @@ multiclass RRNCm<string opcStr, bits<8>opc,
 
 multiclass RRFm<string opcStr, bits<8>opc,
                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2,
-               SDPatternOperator OpNode=null_frag> :
+               SDPatternOperator OpNode = null_frag> :
   RRmrr<opcStr, opc, RC, Ty, RC, Ty, OpNode>,
   RRmir<opcStr, opc, RC, Ty, RC, Ty, immOp, null_frag>,
   RRmiz<opcStr, opc, RC, Ty, RC, Ty, immOp, null_frag>,
@@ -608,11 +678,11 @@ multiclass RRFm<string opcStr, bits<8>opc,
 //   The order of operands are "$sx, $sy, $sz"
 
 multiclass RRFCQm<string opcStr, bits<8>opc,
-                 RegisterClass RC, ValueType Ty,
-                 Operand immOp, Operand immOp2> :
-  RRmrr<opcStr, opc, I64, f64, RC, Ty>,
-  RRmir<opcStr, opc, I64, f64, RC, Ty, immOp>,
-  RRmiz<opcStr, opc, I64, f64, RC, Ty, immOp>,
+                  RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2,
+                  SDPatternOperator OpNode = null_frag> :
+  RRmrr<opcStr, opc, I64, f64, RC, Ty, null_frag>,
+  RRmir<opcStr, opc, I64, f64, RC, Ty, immOp, null_frag>,
+  RRmiz<opcStr, opc, I64, f64, RC, Ty, immOp, null_frag>,
   RRNDmrm<opcStr, opc, I64, f64, RC, Ty, immOp2>,
   RRNDmim<opcStr, opc, I64, f64, RC, Ty, immOp, immOp2>;
 
@@ -623,7 +693,7 @@ multiclass RRFCQm<string opcStr, bits<8>opc,
 multiclass RRIm<string opcStr, bits<8>opc,
                 RegisterClass RC, ValueType Ty,
                 Operand immOp, Operand immOp2,
-                SDPatternOperator OpNode=null_frag> {
+                SDPatternOperator OpNode = null_frag> {
   def rr : RR<
     opc, (outs RC:$sx), (ins RC:$sz, I32:$sy),
     !strconcat(opcStr, " $sx, $sz, $sy"),
@@ -645,7 +715,7 @@ multiclass RRIm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})0, $sy")> {
     let cy = 1;
     let cz = 0;
-    let sz{6} = 1;
+    let mz = 1;
     let hasSideEffects = 0;
   }
   def rm1 : RR<
@@ -653,6 +723,7 @@ multiclass RRIm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})1, $sy")> {
     let cy = 1;
     let cz = 0;
+    let mz = 0;
     let hasSideEffects = 0;
   }
   def im0 : RR<
@@ -660,7 +731,7 @@ multiclass RRIm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})0, $sy")> {
     let cy = 0;
     let cz = 0;
-    let sz{6} = 1;
+    let mz = 1;
     let hasSideEffects = 0;
   }
   def im1 : RR<
@@ -668,71 +739,13 @@ multiclass RRIm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})1, $sy")> {
     let cy = 0;
     let cz = 0;
+    let mz = 0;
     let hasSideEffects = 0;
   }
   def zi : RR<
     opc, (outs RC:$sx), (ins immOp:$sy),
     !strconcat(opcStr, " $sx, $sy"),
     [(set Ty:$sx, (OpNode 0, (i32 simm7:$sy)))]> {
-    let cy = 0;
-    let cz = 0;
-    let sz = 0;
-    let hasSideEffects = 0;
-  }
-}
-
-// Multiclass for RR type instructions without dag pattern
-//   Used by sra.w.zx, sla.w.zx, and others
-
-multiclass RRINDm<string opcStr, bits<8>opc,
-               RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
-  def rr : RR<
-    opc, (outs RC:$sx), (ins RC:$sz, I32:$sy),
-    !strconcat(opcStr, " $sx, $sz, $sy")> {
-    let cy = 1;
-    let cz = 1;
-    let hasSideEffects = 0;
-  }
-  def ri : RR<
-    opc, (outs RC:$sx), (ins RC:$sz, immOp:$sy),
-    !strconcat(opcStr, " $sx, $sz, $sy")> {
-    let cy = 0;
-    let cz = 1;
-    let hasSideEffects = 0;
-  }
-  def rm0 : RR<
-    opc, (outs RC:$sx), (ins immOp2:$sz, I32:$sy),
-    !strconcat(opcStr, " $sx, (${sz})0, $sy")> {
-    let cy = 1;
-    let cz = 0;
-    let sz{6} = 1;
-    let hasSideEffects = 0;
-  }
-  def rm1 : RR<
-    opc, (outs RC:$sx), (ins immOp2:$sz, I32:$sy),
-    !strconcat(opcStr, " $sx, (${sz})1, $sy")> {
-    let cy = 1;
-    let cz = 0;
-    let hasSideEffects = 0;
-  }
-  def im0 : RR<
-    opc, (outs RC:$sx), (ins immOp2:$sz, immOp:$sy),
-    !strconcat(opcStr, " $sx, (${sz})0, $sy")> {
-    let cy = 0;
-    let cz = 0;
-    let sz{6} = 1;
-    let hasSideEffects = 0;
-  }
-  def im1 : RR<
-    opc, (outs RC:$sx), (ins immOp2:$sz, immOp:$sy),
-    !strconcat(opcStr, " $sx, (${sz})1, $sy")> {
-    let cy = 0;
-    let cz = 0;
-    let hasSideEffects = 0;
-  }
-  def zi : RR<
-    opc, (outs RC:$sx), (ins immOp:$sy),
-    !strconcat(opcStr, " $sx, $sy")> {
     let cy = 0;
     let cz = 0;
     let sz = 0;
@@ -765,7 +778,7 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})0, $sy")> {
     let cy = 1;
     let cz = 0;
-    let sz{6} = 1;
+    let mz = 1;
     let hasSideEffects = 0;
   }
   def rm1 : RR<
@@ -773,6 +786,7 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})1, $sy")> {
     let cy = 1;
     let cz = 0;
+    let mz = 0;
     let hasSideEffects = 0;
   }
   def im0 : RR<
@@ -780,7 +794,7 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})0, $sy")> {
     let cy = 0;
     let cz = 0;
-    let sz{6} = 1;
+    let mz = 1;
     let hasSideEffects = 0;
   }
   def im1 : RR<
@@ -788,22 +802,22 @@ multiclass RRCMOVm<string opcStr, bits<8>opc,
     !strconcat(opcStr, " $sx, (${sz})1, $sy")> {
     let cy = 0;
     let cz = 0;
+    let mz = 0;
     let hasSideEffects = 0;
   }
 }
 
 // Multiclass for RR type instructions with only 2 operands
 //   Used by pcnt, brv
-
-multiclass RRI2m<string opcStr, bits<8>opc, SDNode OpNode,
-                 RegisterClass RC, ValueType Ty, Operand immOp2> {
+let hasSideEffects = 0 in
+multiclass RRI2m<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
+                 Operand immOp2, SDPatternOperator OpNode = null_frag> {
   def r : RR<
     opc, (outs RC:$sx), (ins RC:$sz),
     !strconcat(opcStr, " $sx, $sz"),
     [(set Ty:$sx, (OpNode Ty:$sz))]> {
     let cy = 1;
     let cz = 1;
-    let hasSideEffects = 0;
   }
   def i : RR<
     opc, (outs RC:$sx), (ins RC:$sz),
@@ -811,30 +825,27 @@ multiclass RRI2m<string opcStr, bits<8>opc, SDNode OpNode,
     [(set Ty:$sx, (OpNode Ty:$sz))]> {
     let cy = 0;
     let cz = 1;
-    let hasSideEffects = 0;
   }
   def m0 : RR<
     opc, (outs RC:$sx), (ins immOp2:$sz),
     !strconcat(opcStr, " $sx, (${sz})0")> {
     let cy = 1;
     let cz = 0;
-    let sz{6} = 1;
-    // (guess) tblgen conservatively assumes hasSideEffects when it fails to infer from a pattern.
-    let hasSideEffects = 0;
+    let mz = 1;
   }
   def m1 : RR<
     opc, (outs RC:$sx), (ins immOp2:$sz),
     !strconcat(opcStr, " $sx, (${sz})1")> {
     let cy = 1;
     let cz = 0;
-    let hasSideEffects = 0;
+    let mz = 0;
   }
 }
 
-// Branch multiclass
+// Branch relative multiclass
 let isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
 multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
-                RegisterClass RC, ValueType Ty, Operand immOp, Operand immOp2> {
+                RegisterClass RC, ValueType Ty, Operand immOp> {
   def rr : CF<
     opc, (outs),
     (ins CCOp:$cf, RC:$sy, RC:$sz, brtarget32:$imm32),
@@ -851,36 +862,6 @@ multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
     let cz = 1;
     let hasSideEffects = 0;
   }
-  def rm0 : CF<
-    opc, (outs), (ins CCOp:$cf, RC:$sy, immOp2:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, (${sz})0, $imm32")> {
-    let cy = 1;
-    let cz = 0;
-    let sz{6} = 1;
-    let hasSideEffects = 0;
-  }
-  def rm1 : CF<
-    opc, (outs), (ins CCOp:$cf, RC:$sy, immOp2:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, (${sz})1, $imm32")> {
-    let cy = 1;
-    let cz = 0;
-    let hasSideEffects = 0;
-  }
-  def im0 : CF<
-    opc, (outs), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, (${sz})0, $imm32")> {
-    let cy = 0;
-    let cz = 0;
-    let sz{6} = 1;
-    let hasSideEffects = 0;
-  }
-  def im1 : CF<
-    opc, (outs), (ins CCOp:$cf, immOp:$sy, immOp2:$sz, brtarget32:$imm32),
-    !strconcat(opcStr, " $sy, (${sz})1, $imm32")> {
-    let cy = 0;
-    let cz = 0;
-    let hasSideEffects = 0;
-  }
   def a : CF<
     opc, (outs), (ins brtarget32:$imm32),
     !strconcat(opcStrAt, " $imm32")> {
@@ -894,12 +875,40 @@ multiclass BCRm<string opcStr, string opcStrAt, bits<8> opc,
   }
 }
 
+// Branch multiclass
+let isBranch = 1, isTerminator = 1, hasDelaySlot = 1 in
+multiclass BCm<string opcStr, string opcStrAt, bits<8> opc,
+               RegisterClass RC, ValueType Ty, Operand immOp> {
+  def r : CF<
+    opc, (outs),
+    (ins CCOp:$cond, RC:$comp, MEMriASX:$addr),
+    !strconcat(opcStr, " $comp, $addr"), []> {
+    let hasSideEffects = 0;
+  }
+  def i : CF<
+    opc, (outs),
+    (ins CCOp:$cond, immOp:$comp, MEMriASX:$addr),
+    !strconcat(opcStr, " $comp, $addr"), []> {
+    let cy = 0;
+    let hasSideEffects = 0;
+  }
+  def a : CF<
+    opc, (outs), (ins MEMriASX:$addr),
+    !strconcat(opcStrAt, " $addr"), []> {
+    let cy = 0;
+    let sy = 0;
+    let cf = 15;  /* AT */
+    let isBarrier = 1;
+    let hasSideEffects = 0;
+  }
+}
+
 // Multiclass for floating point conversion instructions.
 //   Used by CVS/CVD/FLT and others
 multiclass CVTm<string opcStr, bits<8> opc,
                 RegisterClass RCo, ValueType Tyo,
                 RegisterClass RCi, ValueType Tyi, Operand immOp,
-                SDPatternOperator OpNode=null_frag> {
+                SDPatternOperator OpNode = null_frag> {
   def r : RR<opc, (outs RCo:$sx), (ins RCi:$sy),
     !strconcat(opcStr, " $sx, $sy"),
     [(set Tyo:$sx, (OpNode Tyi:$sy))]> {
@@ -907,12 +916,12 @@ multiclass CVTm<string opcStr, bits<8> opc,
       let hasSideEffects = 0;
     }
   def i : RR<opc, (outs RCo:$sx), (ins immOp:$sy),
-    !strconcat(opcStr, " $sx, $sy"),
-    [/* (set Tyo:$sx, (OpNode (Tyi simm7:$sy))) */]> {
+    !strconcat(opcStr, " $sx, $sy")> {
       let cy = 0;
       let hasSideEffects = 0;
     }
 }
+
 
 //===----------------------------------------------------------------------===//
 // Instructions
@@ -932,26 +941,43 @@ let cx = 0, cw = 1, cw2 = 1 in
 defm CMOVS : RRCMOVm<"cmov.s.${cf}", 0x3B, F32, f32, simm7Op64, uimm6Op32>;
 
 // NOP instruction
-let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, imm32 = 0, hasSideEffects = 0 in
+let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
 def NOP : RR<0x79, (outs), (ins), "nop">;
 
 // LEA and LEASL instruction (load 32 bit imm to low or high part)
-let cx = 0 in
-defm LEA : RMm<"lea", 0x06, I64, i64, simm7Op64, simm32Op64, add>;
-let cx = 1 in
-defm LEASL : RMm<"lea.sl", 0x06, I64, i64, simm7Op64, simm32Op64>;
+let cx = 0, DecoderMethod = "DecodeLoadI64" in
+defm LEA : RMm<"lea", 0x06, I64>;
+let cx = 1, DecoderMethod = "DecodeLoadI64" in
+defm LEASL : RMm<"lea.sl", 0x06, I64>;
 let isCodeGenOnly = 1 in {
-let cx = 0 in
-defm LEA32 : RMm<"lea", 0x06, I32, i32, simm7Op32, simm32Op32, add>;
-let cx = 1 in
-defm LEASL32 : RMm<"lea.sl", 0x06, I32, i32, simm7Op32, simm32Op32>;
+let cx = 0, DecoderMethod = "DecodeLoadI32" in
+defm LEA32 : RMm<"lea", 0x06, I32>;
 }
 
-let cx = 0, cy = 1, cz = 0, sz = 0, hasSideEffects = 0 in {
-  def LEAasx : RM<
-      0x06, (outs I64:$sx), (ins MEMri:$addr),
-      "lea $sx,$addr", [(set iPTR:$sx, ADDRri:$addr)]>;
-}
+def : Pat<(iPTR ADDRrri:$addr), (LEArri MEMrri:$addr)>;
+def : Pat<(iPTR ADDRrii:$addr), (LEArii MEMrii:$addr)>;
+def : Pat<(add I64:$base, simm32:$disp), (LEArii $base, 0, (LO32 $disp))>;
+def : Pat<(add (add I64:$base, simm7:$idx), simm32:$disp),
+          (LEArii $base, (LO7 $idx), (LO32 $disp))>;
+def : Pat<(add (add I64:$base, simm32:$disp), simm7:$idx),
+          (LEArii $base, (LO7 $idx), (LO32 $disp))>;
+def : Pat<(add (add I64:$base, I64:$idx), simm32:$disp),
+          (LEArri $base, $idx, (LO32 $disp))>;
+def : Pat<(add (add I64:$base, simm32:$disp), I64:$idx),
+          (LEArri $base, $idx, (LO32 $disp))>;
+def : Pat<(add I64:$base, lozero:$disp), (LEASLrii $base, 0, (HI32 $disp))>;
+def : Pat<(add (add I64:$base, simm7:$idx), lozero:$disp),
+          (LEASLrii $base, (LO7 $idx), (HI32 $disp))>;
+def : Pat<(add (add I64:$base, lozero:$disp), simm7:$idx),
+          (LEASLrii $base, (LO7 $idx), (HI32 $disp))>;
+def : Pat<(add (add I64:$base, I64:$idx), lozero:$disp),
+          (LEASLrri $base, $idx, (HI32 $disp))>;
+def : Pat<(add (add I64:$base, lozero:$disp), I64:$idx),
+          (LEASLrri $base, $idx, (HI32 $disp))>;
+
+def : Pat<(add I32:$base, simm32:$disp),
+          (LEA32rii (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $base, sub_i32), 0,
+                    (LO32 $disp))>;
 
 // 5.3.2.2. Fixed-Point Arithmetic Operation Instructions
 
@@ -973,15 +999,15 @@ defm ADX : RRm<"adds.l", 0x59, I64, i64, simm7Op64, uimm6Op64, add>;
 
 // SUB instruction
 let cx = 0 in
-defm SUB : RRm<"subu.l", 0x58, I64, i64, simm7Op64, uimm6Op64>;
+defm SUB : RRNCm<"subu.l", 0x58, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm SUBUW : RRm<"subu.w", 0x58, I32, i32, simm7Op32, uimm6Op32>;
+defm SUBUW : RRNCm<"subu.w", 0x58, I32, i32, simm7Op32, uimm6Op32>;
 
 // SBS instruction
 let cx = 0 in
 defm SBS : RRNCm<"subs.w.sx", 0x5A, I32, i32, simm7Op32, uimm6Op32, sub>;
 let cx = 1 in
-defm SBSU : RRm<"subs.w.zx", 0x5A, I32, i32, simm7Op32, uimm6Op32>;
+defm SBSU : RRNCm<"subs.w.zx", 0x5A, I32, i32, simm7Op32, uimm6Op32>;
 
 // SBX instruction
 let cx = 0 in
@@ -1013,7 +1039,7 @@ defm DIVUW : RRNCm<"divu.w", 0x6F, I32, i32, simm7Op32, uimm6Op32, udiv>;
 let cx = 0 in
 defm DVS : RRNCm<"divs.w.sx", 0x7B, I32, i32, simm7Op32, uimm6Op32, sdiv>;
 let cx = 1 in
-defm DVSU : RRm<"divs.w.zx", 0x7B, I32, i32, simm7Op32, uimm6Op32>;
+defm DVSU : RRNCm<"divs.w.zx", 0x7B, I32, i32, simm7Op32, uimm6Op32>;
 
 // DVX instruction
 let cx = 0 in
@@ -1021,19 +1047,19 @@ defm DVX : RRNCm<"divs.l", 0x7F, I64, i64, simm7Op64, uimm6Op64, sdiv>;
 
 // CMP instruction
 let cx = 0 in
-defm CMP : RRm<"cmpu.l", 0x55, I64, i64, simm7Op64, uimm6Op64>;
+defm CMP : RRNCm<"cmpu.l", 0x55, I64, i64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm CMPUW : RRm<"cmpu.w", 0x55, I32, i32, simm7Op32, uimm6Op32>;
+defm CMPUW : RRNCm<"cmpu.w", 0x55, I32, i32, simm7Op32, uimm6Op32>;
 
 // CPS instruction
 let cx = 0 in
-defm CPS : RRm<"cmps.w.sx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
+defm CPS : RRNCm<"cmps.w.sx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
 let cx = 1 in
-defm CPSU : RRm<"cmps.w.zx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
+defm CPSU : RRNCm<"cmps.w.zx", 0x7A, I32, i32, simm7Op32, uimm6Op32>;
 
 // CPX instruction
 let cx = 0 in
-defm CPX : RRm<"cmps.l", 0x6A, I64, i64, simm7Op64, uimm6Op64>;
+defm CPX : RRNCm<"cmps.l", 0x6A, I64, i64, simm7Op64, uimm6Op64>;
 
 // cx: sx/zx, cw: max/min
 
@@ -1051,7 +1077,6 @@ let cx = 1, cw = 0 in defm CMSi :
 
 // 5.3.2.3. Logical Arithmetic Operation Instructions
 
-// AND, OR, XOR, EQV, NND, and MRG instruction
 let cx = 0 in {
   defm AND : RRm<"and", 0x44, I64, i64, simm7Op64, uimm6Op64, and>;
   defm OR : RRm<"or", 0x45, I64, i64, simm7Op64, uimm6Op64, or>;
@@ -1061,16 +1086,22 @@ let cx = 0 in {
     defm OR32 : RRm<"or", 0x45, I32, i32, simm7Op32, uimm6Op32, or>;
     defm XOR32 : RRm<"xor", 0x46, I32, i32, simm7Op32, uimm6Op32, xor>;
   }
+  /*
+     defm EQV : RRm<"eqv", 0x47, eqv, I64, i64, simm7Op64, uimm6Op64>;
+     defm NND : RRm<"nnd", 0x54, nnd, I64, i64, simm7Op64, uimm6Op64>;
+     defm MRG : RRm<"mrg", 0x56, mrg, I64, i64, simm7Op64, uimm6Op64>;
+   */
 }
 
 // Bits operations
 
 let cx = 0 in {
-defm PCNT : RRI2m<"pcnt", 0x38, ctpop, I64, i64, uimm6Op64>;
-defm BRV : RRI2m<"brv", 0x39, bitreverse, I64, i64, uimm6Op64>;
-defm LDZ : RRI2m<"ldz", 0x67, ctlz, I64, i64, uimm6Op64>;
-defm BSWP : RRINDm<"bswp", 0x2B, I64, i64, simm7Op64, uimm6Op64>;
+  defm PCNT : RRI2m<"pcnt", 0x38, I64, i64, uimm6Op64, ctpop>;
+  defm BRV : RRI2m<"brv", 0x39, I64, i64, uimm6Op64, bitreverse>;
+  defm LDZ : RRI2m<"ldz", 0x67, I64, i64, uimm6Op64, ctlz>;
+  defm BSWP : RRIm<"bswp", 0x2B, I64, i64, simm7Op64, uimm6Op64>;
 }
+
 
 
 // 5.3.2.4 Shift Instructions
@@ -1080,14 +1111,14 @@ defm SRAX : RRIm<"sra.l", 0x77, I64, i64, simm7Op32, uimm6Op64, sra>;
 let cx = 0 in
 defm SRA : RRIm<"sra.w.sx", 0x76, I32, i32, simm7Op32, uimm6Op32, sra>;
 let cx = 1 in
-defm SRAU : RRINDm<"sra.w.zx", 0x76, I32, i32, simm7Op32, uimm6Op32>;
+defm SRAU : RRIm<"sra.w.zx", 0x76, I32, i32, simm7Op32, uimm6Op32>;
 
 let cx = 0 in
 defm SLL : RRIm<"sll", 0x65, I64, i64, simm7Op32, uimm6Op64, shl>;
 let cx = 0 in
 defm SLA : RRIm<"sla.w.sx", 0x66, I32, i32, simm7Op32, uimm6Op32, shl>;
 let cx = 1 in
-defm SLAU : RRINDm<"sla.w.zx", 0x66, I32, i32, simm7Op32, uimm6Op32>;
+defm SLAU : RRIm<"sla.w.zx", 0x66, I32, i32, simm7Op32, uimm6Op32>;
 
 let cx = 0 in
 defm SRL : RRIm<"srl", 0x75, I64, i64, simm7Op32, uimm6Op64, srl>;
@@ -1128,24 +1159,24 @@ defm FDVS : RRFm<"fdiv.s", 0x5D, F32, f32, simm7Op32, uimm6Op32, fdiv>;
 
 // FCP instruction
 let cx = 0 in
-defm FCP : RRm<"fcmp.d", 0x7E, I64, f64, simm7Op64, uimm6Op64>;
+defm FCP : RRFm<"fcmp.d", 0x7E, I64, f64, simm7Op64, uimm6Op64>;
 let cx = 1 in
-defm FCPS : RRm<"fcmp.s", 0x7E, F32, f32, simm7Op32, uimm6Op32>;
+defm FCPS : RRFm<"fcmp.s", 0x7E, F32, f32, simm7Op32, uimm6Op32>;
 let cx = 0 in
 defm FCQ : RRFCQm<"fcmp.q", 0x7D, F128, f128, simm7Op128, uimm6Op128>;
 
 // FCM
 let cw = 0 in {
   let cx = 0 in
-  defm FCMA : RRm<"fmax.d", 0x3E, I64, f64, simm7Op64, uimm6Op64>;
+  defm FCMA : RRFm<"fmax.d", 0x3E, I64, f64, simm7Op64, uimm6Op64>;
   let cx = 1 in
-  defm FCMAS : RRm<"fmax.s", 0x3E, F32, f32, simm7Op32, uimm6Op32>;
+  defm FCMAS : RRFm<"fmax.s", 0x3E, F32, f32, simm7Op32, uimm6Op32>;
 }
 let cw = 1 in {
   let cx = 0 in
-  defm FCMI : RRm<"fmin.d", 0x3E, I64, f64, simm7Op64, uimm6Op64>;
+  defm FCMI : RRFm<"fmin.d", 0x3E, I64, f64, simm7Op64, uimm6Op64>;
   let cx = 1 in
-  defm FCMIS : RRm<"fmin.s", 0x3E, F32, f32, simm7Op32, uimm6Op32>;
+  defm FCMIS : RRFm<"fmin.s", 0x3E, F32, f32, simm7Op32, uimm6Op32>;
 }
 
 let cx = 0, cw = 0 /* sign extend */, cz = 1, sz = 0 /* round toward zero */ in
@@ -1176,96 +1207,102 @@ let cz = 0, sz = 0 in {
 }
 
 // Load and Store instructions
-// As 1st step, only uses sz and imm32 to represent $addr
+
+// Multiclass for load instructions.
+multiclass LOADm<string opcStr, bits<8> opc, RegisterClass RC, ValueType Ty,
+                 SDPatternOperator OpNode = null_frag> {
+  def rri : RM<opc, (outs RC:$dest), (ins MEMrri:$addr),
+               !strconcat(opcStr, " $dest, $addr"),
+               [(set Ty:$dest, (OpNode ADDRrri:$addr))]> {
+    let mayLoad = 1;
+    let hasSideEffects = 0;
+  }
+  def rii : RM<opc, (outs RC:$dest), (ins MEMrii:$addr),
+               !strconcat(opcStr, " $dest, $addr"),
+               [(set Ty:$dest, (OpNode ADDRrii:$addr))]> {
+    let mayLoad = 1;
+    let hasSideEffects = 0;
+    let cy = 0;
+  }
+}
+
+let DecoderMethod = "DecodeLoadI64" in
+defm LD : LOADm<"ld", 0x01, I64, i64, load>;
+let DecoderMethod = "DecodeLoadF32" in
+defm LDU : LOADm<"ldu", 0x02, F32, f32, load>;
+let DecoderMethod = "DecodeLoadI32" in
+defm LDLSX : LOADm<"ldl.sx", 0x03, I32, i32, load>;
+let cx = 1, DecoderMethod = "DecodeLoadI32" in
+defm LDLZX : LOADm<"ldl.zx", 0x03, I32, i32, load>;
+let DecoderMethod = "DecodeLoadI16" in
+defm LD2BSX : LOADm<"ld2b.sx", 0x04, I32, i32, sextloadi16>;
+let cx = 1, DecoderMethod = "DecodeLoadI16" in
+defm LD2BZX : LOADm<"ld2b.zx", 0x04, I32, i32, zextloadi16>;
+let DecoderMethod = "DecodeLoadI8" in
+defm LD1BSX : LOADm<"ld1b.sx", 0x05, I32, i32, sextloadi8>;
+let cx = 1, DecoderMethod = "DecodeLoadI8" in
+defm LD1BZX : LOADm<"ld1b.zx", 0x05, I32, i32, zextloadi8>;
+
+def : Pat<(f64 (load ADDRrri:$addr)), (LDrri ADDRrri:$addr)>;
+def : Pat<(f64 (load ADDRrii:$addr)), (LDrii ADDRrii:$addr)>;
+
 let mayLoad = 1, hasSideEffects = 0 in {
-let cy = 0, sy = 0, cz = 1 in {
-let cx = 0 in
-def LDSri : RM<
-    0x01, (outs I64:$sx), (ins MEMri:$addr),
-    "ld $sx, $addr",
-    [(set i64:$sx, (load ADDRri:$addr))]>;
-let cx = 0 in
-def LDUri : RM<
-    0x02, (outs F32:$sx), (ins MEMri:$addr),
-    "ldu $sx, $addr",
-    [(set f32:$sx, (load ADDRri:$addr))]>;
-let cx = 0 in
-def LDLri : RM<
-    0x03, (outs I32:$sx), (ins MEMri:$addr),
-    "ldl.sx $sx, $addr",
-    [(set i32:$sx, (load ADDRri:$addr))]>;
-let cx = 1 in
-def LDLUri : RM<
-    0x03, (outs I32:$sx), (ins MEMri:$addr),
-    "ldl.zx $sx, $addr",
-    [(set i32:$sx, (load ADDRri:$addr))]>;
-let cx = 0 in
-def LD2Bri : RM<
-    0x04, (outs I32:$sx), (ins MEMri:$addr),
-    "ld2b.sx $sx, $addr",
-    [(set i32:$sx, (sextloadi16 ADDRri:$addr))]>;
-let cx = 1 in
-def LD2BUri : RM<
-    0x04, (outs I32:$sx), (ins MEMri:$addr),
-    "ld2b.zx $sx, $addr",
-    [(set i32:$sx, (zextloadi16 ADDRri:$addr))]>;
-let cx = 0 in
-def LD1Bri : RM<
-    0x05, (outs I32:$sx), (ins MEMri:$addr),
-    "ld1b.sx $sx, $addr",
-    [(set i32:$sx, (sextloadi8 ADDRri:$addr))]>;
-let cx = 1 in
-def LD1BUri : RM<
-    0x05, (outs I32:$sx), (ins MEMri:$addr),
-    "ld1b.zx $sx, $addr",
-    [(set i32:$sx, (zextloadi8 ADDRri:$addr))]>;
+def LDQrri : Pseudo<(outs F128:$dest), (ins MEMrri:$addr),
+                    "# pseudo ldq $dest, $addr",
+                    [(set f128:$dest, (load ADDRrri:$addr))]>;
+def LDQrii : Pseudo<(outs F128:$dest), (ins MEMrii:$addr),
+                    "# pseudo ldq $dest, $addr",
+                    [(set f128:$dest, (load ADDRrii:$addr))]>;
 }
-def LDQri : Pseudo<
-    (outs F128:$sx), (ins MEMri:$addr),
-    "# pseudo ldq $sx, $addr",
-    [(set f128:$sx, (load ADDRri:$addr))]>;
+
+// Multiclass for store instructions.
+multiclass STOREm<string opcStr, bits<8> opc, RegisterClass RC, ValueType Ty,
+                  SDPatternOperator OpNode = null_frag> {
+  def rri : RM<opc, (outs), (ins MEMrri:$addr, RC:$sx),
+               !strconcat(opcStr, " $sx, $addr"),
+               [(OpNode Ty:$sx, ADDRrri:$addr)]> {
+    let mayStore = 1;
+    let hasSideEffects = 0;
+  }
+  def rii : RM<opc, (outs), (ins MEMrii:$addr, RC:$sx),
+               !strconcat(opcStr, " $sx, $addr"),
+               [(OpNode Ty:$sx, ADDRrii:$addr)]> {
+    let mayStore = 1;
+    let hasSideEffects = 0;
+    let cy = 0;
+  }
 }
+
+let DecoderMethod = "DecodeStoreI64" in
+defm ST : STOREm<"st", 0x11, I64, i64, store>;
+let DecoderMethod = "DecodeStoreF32" in
+defm STU : STOREm<"stu", 0x12, F32, f32, store>;
+let DecoderMethod = "DecodeStoreI32" in
+defm STL : STOREm<"stl", 0x13, I32, i32, store>;
+let DecoderMethod = "DecodeStoreI16" in
+defm ST2B : STOREm<"st2b", 0x14, I32, i32, truncstorei16>;
+let DecoderMethod = "DecodeStoreI8" in
+defm ST1B : STOREm<"st1b", 0x15, I32, i32, truncstorei8>;
+
+def : Pat<(store f64:$src, ADDRrri:$addr), (STrri ADDRrri:$addr, $src)>;
+def : Pat<(store f64:$src, ADDRrii:$addr), (STrii ADDRrii:$addr, $src)>;
 
 let mayStore = 1, hasSideEffects = 0 in {
-let cx = 0, cy = 0, sy = 0, cz = 1 in {
-def STSri : RM<
-    0x11, (outs), (ins MEMri:$addr, I64:$sx),
-    "st $sx, $addr",
-    [(store i64:$sx, ADDRri:$addr)]>;
-def STUri : RM<
-    0x12, (outs), (ins MEMri:$addr, F32:$sx),
-    "stu $sx, $addr",
-    [(store f32:$sx, ADDRri:$addr)]>;
-def STLri : RM<
-    0x13, (outs), (ins MEMri:$addr, I32:$sx),
-    "stl $sx, $addr",
-    [(store i32:$sx, ADDRri:$addr)]>;
-def ST2Bri : RM<
-    0x14, (outs), (ins MEMri:$addr, I32:$sx),
-    "st2b $sx, $addr",
-    [(truncstorei16 i32:$sx, ADDRri:$addr)]>;
-def ST1Bri : RM<
-    0x15, (outs), (ins MEMri:$addr, I32:$sx),
-    "st1b $sx, $addr",
-    [(truncstorei8 i32:$sx, ADDRri:$addr)]>;
+def STQrri : Pseudo<(outs), (ins MEMrri:$addr, F128:$sx),
+                    "# pseudo stq $sx, $addr",
+                    [(store f128:$sx, ADDRrri:$addr)]>;
+def STQrii : Pseudo<(outs), (ins MEMrii:$addr, F128:$sx),
+                    "# pseudo stq $sx, $addr",
+                    [(store f128:$sx, ADDRrii:$addr)]>;
 }
-def STQri : Pseudo<
-    (outs), (ins MEMri:$addr, F128:$sx),
-    "# pseudo stq $sx, $addr",
-    [(store f128:$sx, ADDRri:$addr)]>;
-}
-
-def : Pat<(f64 (load ADDRri:$addr)), (LDSri ADDRri:$addr)>;
-def : Pat<(store f64:$sx, ADDRri:$addr), (STSri ADDRri:$addr, $sx)>;
 
 // Control-flow
 
 // Jump instruction
-let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cy = 1, cz = 1,
-    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0 in
-def BC : CF<
-    0x19, (outs), (ins CCOp:$cf, I64:$sy, brtarget32:$imm32),
-    "b.${cf}.l $sy, $imm32">;
+let cx = 0, cx2 = 0, bpf = 0 /* NONE */,
+    isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0,
+    DecoderMethod = "DecodeBranchCondition" in
+defm BC : BCm<"b${cond}.l", "b.l", 0x19, I64, i64, simm7Op64>;
 
 // Jump always instruction is treated as a special case of jump in order
 // to make finding unconditional jump easy.
@@ -1273,12 +1310,8 @@ let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
     cz = 1,
     isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1,
     hasDelaySlot = 1, isCodeGenOnly = 1, hasSideEffects = 0 in {
-def BArr : CF<
-    0x19, (outs), (ins MEMrr:$addr),
-    "b.l $addr",
-    [(brind ADDRrr:$addr)]>;
 def BAri : CF<
-    0x19, (outs), (ins MEMri:$addr),
+    0x19, (outs), (ins MEMriASX:$addr),
     "b.l $addr",
     [(brind ADDRri:$addr)]>;
 }
@@ -1287,18 +1320,16 @@ def BAri : CF<
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 0 /* AF */, cy = 1, sy = 0,
     cz = 1,
     isBranch = 1, isTerminator = 1, hasDelaySlot = 1, hasSideEffects = 0 in
-def BN : CF<
-    0x19, (outs), (ins brtarget32:$imm32),
-    "b.af.l $imm32">;
+def BN : CF<0x19, (outs), (ins brtarget32:$imm32), "baf.l $imm32">;
 
 // Return instruction is also a special case of jump.
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */, cf = 15 /* AT */, cy = 0, sy = 0,
-    cz = 1, sz = 0x10 /* SX10 */, imm32 = 0, Uses = [SX10],
+    cz = 1, sz = 10 /* SX10 */, imm32 = 0, Uses = [SX10],
     isReturn = 1, isTerminator = 1, hasDelaySlot = 1, isBarrier = 1,
     isCodeGenOnly = 1, hasSideEffects = 0 in
 def RET : CF<
     0x19, (outs), (ins),
-    "b.l (,%lr)",
+    "b.l (, %lr)",
     [(retflag)]>;
 
 // Branch and Save IC
@@ -1308,51 +1339,43 @@ def BSIC : RM<0x08, (outs), (ins I64:$sx, I64:$sz), "bsic $sx, (, ${sz})">;
 
 // Branch instruction
 let cx = 0, cx2 = 0, bpf = 0 /* NONE */ in
-defm BCRL : BCRm<"br${cf}.l", "br.l", 0x18, I64, i64, simm7Op64, uimm6Op64>;
+defm BCRL : BCRm<"br${cf}.l", "br.l", 0x18, I64, i64, simm7Op64>;
 let cx = 1, cx2 = 0, bpf = 0 /* NONE */ in
-defm BCRW : BCRm<"br${cf}.w", "br.w", 0x18, I32, i32, simm7Op32, uimm6Op32>;
+defm BCRW : BCRm<"br${cf}.w", "br.w", 0x18, I32, i32, simm7Op32>;
 let cx = 0, cx2 = 1, bpf = 0 /* NONE */ in
-defm BCRD : BCRm<"br${cf}.d", "br.d", 0x18, I64, f64, simm7Op64, uimm6Op64>;
+defm BCRD : BCRm<"br${cf}.d", "br.d", 0x18, I64, f64, simm7Op64>;
 let cx = 1, cx2 = 1, bpf = 0 /* NONE */ in
-defm BCRS : BCRm<"br${cf}.s", "br.s", 0x18, F32, f32, simm7Op32, uimm6Op32>;
+defm BCRS : BCRm<"br${cf}.s", "br.s", 0x18, F32, f32, simm7Op32>;
 
 // Load and Store host memory instructions
-let cx = 0, cy = 0, cz = 1, hasSideEffects = 0 in {
-let sy = 3 in
-def LHMri : RM<
-    0x21, (outs I64:$sx), (ins MEMASri:$addr),
-    "lhm.l $sx, $addr">;
-let sy = 2 in
-def LHMLri : RM<
-    0x21, (outs I32:$sx), (ins MEMASri:$addr),
-    "lhm.w $sx, $addr">;
-let sy = 1 in
-def LHM2Bri : RM<
-    0x21, (outs I16:$sx), (ins MEMASri:$addr),
-    "lhm.h $sx, $addr">;
-let sy = 0 in
-def LHM1Bri : RM<
-    0x21, (outs I8:$sx), (ins MEMASri:$addr),
-    "lhm.b $sx, $addr">;
+let cx = 0, cz = 1, hasSideEffects = 0 in {
+let ry = 3, DecoderMethod = "DecodeLoadASI64" in
+def LHMri : RRMHM<0x21, (outs I64:$dest), (ins MEMriHM:$addr),
+                  "lhm.l $dest, $addr">;
+let ry = 2, DecoderMethod = "DecodeLoadASI32" in
+def LHMLri : RRMHM<0x21, (outs I32:$dest), (ins MEMriHM:$addr),
+                   "lhm.w $dest, $addr">;
+let ry = 1, DecoderMethod = "DecodeLoadASI16" in
+def LHM2Bri : RRMHM<0x21, (outs I16:$dest), (ins MEMriHM:$addr),
+                    "lhm.h $dest, $addr">;
+let ry = 0, DecoderMethod = "DecodeLoadASI8" in
+def LHM1Bri : RRMHM<0x21, (outs I8:$dest), (ins MEMriHM:$addr),
+                    "lhm.b $dest, $addr">;
 }
 
-let cx = 0, cy = 0, cz = 1, hasSideEffects = 0 in {
-let sy = 3 in
-def SHMri : RM<
-    0x31, (outs), (ins MEMASri:$addr, I64:$sx),
-    "shm.l $sx, $addr">;
-let sy = 2 in
-def SHMLri : RM<
-    0x31, (outs), (ins MEMASri:$addr, I32:$sx),
-    "shm.l $sx, $addr">;
-let sy = 1 in
-def SHM2Bri : RM<
-    0x31, (outs), (ins MEMASri:$addr, I16:$sx),
-    "shm.l $sx, $addr">;
-let sy = 0 in
-def SHM1Bri : RM<
-    0x31, (outs), (ins MEMASri:$addr, I8:$sx),
-    "shm.l $sx, $addr">;
+let cx = 0, cz = 1, hasSideEffects = 0 in {
+let ry = 3, DecoderMethod = "DecodeStoreASI64" in
+def SHMri : RRMHM<0x31, (outs), (ins MEMriHM:$addr, I64:$sx),
+                  "shm.l $sx, $addr">;
+let ry = 2, DecoderMethod = "DecodeStoreASI32" in
+def SHMLri : RRMHM<0x31, (outs), (ins MEMriHM:$addr, I32:$sx),
+                   "shm.w $sx, $addr">;
+let ry = 1, DecoderMethod = "DecodeStoreASI16" in
+def SHM2Bri : RRMHM<0x31, (outs), (ins MEMriHM:$addr, I16:$sx),
+                    "shm.h $sx, $addr">;
+let ry = 0, DecoderMethod = "DecodeStoreASI8" in
+def SHM1Bri : RRMHM<0x31, (outs), (ins MEMriHM:$addr, I8:$sx),
+                    "shm.b $sx, $addr">;
 }
 
 let cx = 0, sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
@@ -1373,33 +1396,51 @@ def SIC : RR<0x28, (outs I32:$sx), (ins), "sic $sx">;
 // Test and Set 1 AM (multiple length swap)
 
 let cx = 0 in
-defm TS1AML : RRCASm<"ts1am.l", 0x42, I64, i64, simm7Op64, uimm6Op64>;
+defm TS1AML : RRCASm<"ts1am.l", 0x42, I64, i64, simm7Op64>;
 let cx = 1 in
-defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, i32, simm7Op32, uimm6Op32>;
+defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, i32, simm7Op32>;
 
 // Atomic swap
-// FIXME: Assign 4 byte align address to $src
-// def : Pat<(i32 (atomic_swap_8  ADDRri:$src, i32:$new)),
-//           (TS1AMWasi MEMASri:$src, 1, $new)>;
+//   AND $newsrc, $src, -4      ; 4 byte align address
+//   AND $frac, $src, 3         ; $src position in $newsrc
+//   ADD $flag, 0, 1            ; set 1
+//   SLA $flag, $flag, $frac    ; shift 1 for 1byte ts1am
+//   SLA $tmp, $flac, 3         ; calc shift bits for next SLA
+//   SLA $new, $new, $tmp       ; shift $new for 1byte ts1am
+//   TS1AM $new, 0($newsrc), $flag ; 1byte ts1am
+def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
+          (SRAri
+            (SLArr
+              (TS1AMWrir
+                (ANDri $src, -4),
+                0,
+                (SLArr (OR32im1 1, 0),
+                       (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3)),
+                (SLArr $new,
+                       (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
+              (SBSir 24,
+                     (SLAri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
+            24
+          )>;
 // def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
-//           (TS1AMWasi MEMASri:$src, 3, $new)>;
+//           (TS1AMWrir MEMriRRM:$src, 3, $new)>;
 def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
-          (TS1AMWasi MEMASri:$src, 15, $new)>;
+          (TS1AMWrir MEMriRRM:$src, 15, $new)>;
 def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
-          (TS1AMLasi MEMASri:$src, 127, $new)>;
+          (TS1AMLrir MEMriRRM:$src, 127, $new)>;
 
 // Compare and Swap
 
 let cx = 0 in
-defm CASL : RRCASm<"cas.l", 0x62, I64, i64, simm7Op64, uimm6Op64>;
+defm CASL : RRCASm<"cas.l", 0x62, I64, i64, simm7Op64>;
 let cx = 1 in
-defm CASW : RRCASm<"cas.w", 0x62, I32, i32, simm7Op32, uimm6Op32>;
+defm CASW : RRCASm<"cas.w", 0x62, I32, i32, simm7Op32>;
 
 // Atomic cmp and swap
 def : Pat<(i32 (atomic_cmp_swap_32 ADDRri:$src, i32:$cmp, i32:$new)),
-          (CASWasr MEMASri:$src, $cmp, $new)>;
+          (CASWrir MEMriRRM:$src, $cmp, $new)>;
 def : Pat<(i64 (atomic_cmp_swap_64 ADDRri:$src, i64:$cmp, i64:$new)),
-          (CASLasr MEMASri:$src, $cmp, $new)>;
+          (CASLrir MEMriRRM:$src, $cmp, $new)>;
 
 // Transfer Control Instruction
 
@@ -1430,7 +1471,8 @@ def MEMBARRIER : Pseudo<(outs), (ins), "# MEMBARRIER",
 // SJLJ Exception handling intrinsics
 //===----------------------------------------------------------------------===//
 
-let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1 in {
+let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1,
+    usesCustomInserter = 1 in {
   def EH_SjLj_SetJmp  : Pseudo<(outs I32:$dst), (ins I64:$buf),
                                "# EH_SJLJ_SETJMP",
                                [(set I32:$dst, (VEeh_sjlj_setjmp I64:$buf))]>;
@@ -1444,6 +1486,10 @@ let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1 in {
 let isBarrier = 1, hasSideEffects = 1, usesCustomInserter = 1 in
   def EH_SjLj_Setup_Dispatch : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
                                       [(VEeh_sjlj_setup_dispatch)]>;
+
+let isBranch = 1, isTerminator = 1, isCodeGenOnly = 1 in
+  def EH_SjLj_Setup : Pseudo<(outs), (ins brtarget32:$dst),
+                             "# EH_SJlJ_SETUP $dst">;
 
 //===----------------------------------------------------------------------===//
 // Dummy instruction for CPU flow control
@@ -1469,7 +1515,7 @@ def CALL : RM<
 let cx = 0, sx = 10, cy = 0, sy = 0, cz = 1, imm32 = 0 in
 def CALLr : RM<
     0x08, (outs), (ins I64:$sz, variable_ops),
-    "bsic %lr, (,$sz)">;
+    "bsic %lr, (, $sz)">;
 }
 
 }
@@ -1482,36 +1528,31 @@ def CALLr : RM<
 def : Pat<(i32 simm7:$val), (OR32im1 imm:$val, 0)>;
 def : Pat<(i64 simm7:$val), (ORim1 imm:$val, 0)>;
 // Medium immediates.
-def : Pat<(i32 simm32:$val), (LEA32zzi imm:$val)>;
-def : Pat<(i64 simm32:$val), (LEAzzi imm:$val)>;
-def : Pat<(i64 uimm32:$val), (ANDrm0 (LEAzzi imm:$val), 32)>;
-
-// reg-ify immediates
-def lea_imm32 : OutPatFrag<(ops node:$val), (LEA32zzi $val)>;
-
-
+def : Pat<(i32 simm32:$val), (LEA32zii 0, 0, (LO32 $val))>;
+def : Pat<(i64 simm32:$val), (LEAzii 0, 0, (LO32 $val))>;
+def : Pat<(i64 uimm32:$val), (ANDrm0 (LEAzii 0, 0, (LO32 $val)), 32)>;
 // Arbitrary immediates.
 def : Pat<(i64 lozero:$val),
-          (LEASLzzi (HI32 imm:$val))>;
+          (LEASLzii 0, 0, (HI32 imm:$val))>;
 def : Pat<(i64 lomsbzero:$val),
-          (LEASLrzi (LEAzzi (LO32 imm:$val)), (HI32 imm:$val))>;
+          (LEASLrii (LEAzii 0, 0, (LO32 imm:$val)), 0, (HI32 imm:$val))>;
 def : Pat<(i64 imm:$val),
-          (LEASLrzi (ANDrm0 (LEAzzi (LO32 imm:$val)), 32),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, (LO32 imm:$val)), 32), 0,
                     (HI32 imm:$val))>;
 
 // floating point
 def : Pat<(f32 fpimm:$val),
-          (COPY_TO_REGCLASS (LEASLzzi (LOFP32 $val)), F32)>;
+          (COPY_TO_REGCLASS (LEASLzii 0, 0, (LOFP32 $val)), F32)>;
 def : Pat<(f64 fplozero:$val),
-          (LEASLzzi (HIFP32 $val))>;
+          (LEASLzii 0, 0, (HIFP32 $val))>;
 def : Pat<(f64 fplomsbzero:$val),
-          (LEASLrzi (LEAzzi (LOFP32 $val)), (HIFP32 $val))>;
+          (LEASLrii (LEAzii 0, 0, (LOFP32 $val)), 0, (HIFP32 $val))>;
 def : Pat<(f64 fpimm:$val),
-          (LEASLrzi (ANDrm0 (LEAzzi (LOFP32 $val)), 32),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, (LOFP32 $val)), 32), 0,
                     (HIFP32 $val))>;
 
 // The same integer registers are used for i32 and i64 values.
-// When registers hold i32 values, the high bits are don't care.
+// When registers hold i32 values, the high bits are unused.
 
 // TODO Use standard expansion for shift-based lowering of sext_inreg
 
@@ -1568,85 +1609,161 @@ def : Pat<(i64 (anyext i32:$sy)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32)>;
 
 // extload, sextload and zextload stuff
-def : Pat<(i64 (sextloadi8 ADDRri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1Bri MEMri:$addr), sub_i32)>;
-def : Pat<(i64 (zextloadi8 ADDRri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BUri MEMri:$addr), sub_i32)>;
-def : Pat<(i64 (sextloadi16 ADDRri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2Bri MEMri:$addr), sub_i32)>;
-def : Pat<(i64 (zextloadi16 ADDRri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BUri MEMri:$addr), sub_i32)>;
-def : Pat<(i64 (sextloadi32 ADDRri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
-def : Pat<(i64 (zextloadi32 ADDRri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLUri MEMri:$addr), sub_i32)>;
-def : Pat<(i64 (extloadi8 ADDRri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BUri MEMri:$addr), sub_i32)>;
-def : Pat<(i64 (extloadi16 ADDRri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BUri MEMri:$addr), sub_i32)>;
-def : Pat<(i64 (extloadi32 ADDRri:$addr)),
-          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLri MEMri:$addr), sub_i32)>;
+def : Pat<(i64 (sextloadi8 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BSXrri MEMrri:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (sextloadi8 ADDRrii:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BSXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (zextloadi8 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrri MEMrri:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (zextloadi8 ADDRrii:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (sextloadi16 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BSXrri MEMrri:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (sextloadi16 ADDRrii:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BSXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (zextloadi16 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrri MEMrri:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (zextloadi16 ADDRrii:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (sextloadi32 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrri MEMrri:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (sextloadi32 ADDRrii:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (zextloadi32 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLZXrri MEMrri:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (zextloadi32 ADDRrii:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLZXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (extloadi8 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrri MEMrri:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (extloadi8 ADDRrii:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD1BZXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (extloadi16 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrri MEMrri:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (extloadi16 ADDRrii:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LD2BZXrii MEMrii:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (extloadi32 ADDRrri:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrri MEMrri:$addr),
+                         sub_i32)>;
+def : Pat<(i64 (extloadi32 ADDRrii:$addr)),
+          (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (LDLSXrii MEMrii:$addr),
+                         sub_i32)>;
 
 // anyextload
-def : Pat<(extloadi8  ADDRri:$addr), (LD1BUri MEMri:$addr)>;
-def : Pat<(extloadi16 ADDRri:$addr), (LD2BUri MEMri:$addr)>;
+def : Pat<(extloadi8  ADDRrri:$addr), (LD1BZXrri MEMrri:$addr)>;
+def : Pat<(extloadi8  ADDRrii:$addr), (LD1BZXrii MEMrii:$addr)>;
+def : Pat<(extloadi16 ADDRrri:$addr), (LD2BZXrri MEMrri:$addr)>;
+def : Pat<(extloadi16 ADDRrii:$addr), (LD2BZXrii MEMrii:$addr)>;
 
 // truncstore
-def : Pat<(truncstorei8 i64:$src, ADDRri:$addr),
-          (ST1Bri MEMri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
-def : Pat<(truncstorei16 i64:$src, ADDRri:$addr),
-          (ST2Bri MEMri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
-def : Pat<(truncstorei32 i64:$src, ADDRri:$addr),
-          (STLri MEMri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+def : Pat<(truncstorei8 i64:$src, ADDRrri:$addr),
+          (ST1Brri MEMrri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+def : Pat<(truncstorei8 i64:$src, ADDRrii:$addr),
+          (ST1Brii MEMrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+def : Pat<(truncstorei16 i64:$src, ADDRrri:$addr),
+          (ST2Brri MEMrri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+def : Pat<(truncstorei16 i64:$src, ADDRrii:$addr),
+          (ST2Brii MEMrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+def : Pat<(truncstorei32 i64:$src, ADDRrri:$addr),
+          (STLrri MEMrri:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
+def : Pat<(truncstorei32 i64:$src, ADDRrii:$addr),
+          (STLrii MEMrii:$addr, (EXTRACT_SUBREG $src, sub_i32))>;
 
 // Atomic loads
-def : Pat<(atomic_load_8  ADDRri:$src), (LD1BUri MEMri:$src)>;
-def : Pat<(atomic_load_16 ADDRri:$src), (LD2BUri MEMri:$src)>;
-def : Pat<(atomic_load_32 ADDRri:$src), (LDLUri  MEMri:$src)>;
-def : Pat<(atomic_load_64 ADDRri:$src), (LDSri   MEMri:$src)>;
+def : Pat<(atomic_load_8  ADDRrri:$src), (LD1BZXrri MEMrri:$src)>;
+def : Pat<(atomic_load_8  ADDRrii:$src), (LD1BZXrii MEMrii:$src)>;
+def : Pat<(atomic_load_16 ADDRrri:$src), (LD2BZXrri MEMrri:$src)>;
+def : Pat<(atomic_load_16 ADDRrii:$src), (LD2BZXrii MEMrii:$src)>;
+def : Pat<(atomic_load_32 ADDRrri:$src), (LDLZXrri  MEMrri:$src)>;
+def : Pat<(atomic_load_32 ADDRrii:$src), (LDLZXrii  MEMrii:$src)>;
+def : Pat<(atomic_load_64 ADDRrri:$src), (LDrri     MEMrri:$src)>;
+def : Pat<(atomic_load_64 ADDRrii:$src), (LDrii     MEMrii:$src)>;
 
 // Atomic stores
-def : Pat<(atomic_store_8  ADDRri:$ptr, i32:$val),
-          (ST1Bri MEMri:$ptr, $val)>;
-def : Pat<(atomic_store_16 ADDRri:$ptr, i32:$val),
-          (ST2Bri MEMri:$ptr, $val)>;
-def : Pat<(atomic_store_32 ADDRri:$ptr, i32:$val),
-          (STLri  MEMri:$ptr, $val)>;
-def : Pat<(atomic_store_64 ADDRri:$ptr, i64:$val),
-          (STSri  MEMri:$ptr, $val)>;
+def : Pat<(atomic_store_8  ADDRrri:$ptr, i32:$val),
+          (ST1Brri MEMrri:$ptr, $val)>;
+def : Pat<(atomic_store_8  ADDRrii:$ptr, i32:$val),
+          (ST1Brii MEMrii:$ptr, $val)>;
+def : Pat<(atomic_store_16 ADDRrri:$ptr, i32:$val),
+          (ST2Brri MEMrri:$ptr, $val)>;
+def : Pat<(atomic_store_16 ADDRrii:$ptr, i32:$val),
+          (ST2Brii MEMrii:$ptr, $val)>;
+def : Pat<(atomic_store_32 ADDRrri:$ptr, i32:$val),
+          (STLrri  MEMrri:$ptr, $val)>;
+def : Pat<(atomic_store_32 ADDRrii:$ptr, i32:$val),
+          (STLrii  MEMrii:$ptr, $val)>;
+def : Pat<(atomic_store_64 ADDRrri:$ptr, i64:$val),
+          (STrri  MEMrri:$ptr, $val)>;
+def : Pat<(atomic_store_64 ADDRrii:$ptr, i64:$val),
+          (STrii  MEMrii:$ptr, $val)>;
 
 // Address calculation and its optimization
-def : Pat<(VEhi tglobaladdr:$in), (LEASLzzi tglobaladdr:$in)>;
-def : Pat<(VElo tglobaladdr:$in), (ANDrm0 (LEAzzi tglobaladdr:$in), 32)>;
+def : Pat<(VEhi tglobaladdr:$in), (LEASLzii 0, 0, tglobaladdr:$in)>;
+def : Pat<(VElo tglobaladdr:$in), (ANDrm0 (LEAzii 0, 0, tglobaladdr:$in), 32)>;
 def : Pat<(add (VEhi tglobaladdr:$in1), (VElo tglobaladdr:$in2)),
-          (LEASLrzi (ANDrm0 (LEAzzi tglobaladdr:$in2), 32),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, tglobaladdr:$in2), 32), 0,
                     (tglobaladdr:$in1))>;
+def : Pat<(add (add (VEhi tglobaladdr:$in1), (VElo tglobaladdr:$in2)),
+               simm7:$val),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, tglobaladdr:$in2), 32),
+                    (LO7 $val), (tglobaladdr:$in1))>;
 
 // GlobalTLS address calculation and its optimization
-def : Pat<(VEhi tglobaltlsaddr:$in), (LEASLzzi tglobaltlsaddr:$in)>;
-def : Pat<(VElo tglobaltlsaddr:$in), (ANDrm0 (LEAzzi tglobaltlsaddr:$in), 32)>;
+def : Pat<(VEhi tglobaltlsaddr:$in), (LEASLzii 0, 0, tglobaltlsaddr:$in)>;
+def : Pat<(VElo tglobaltlsaddr:$in),
+          (ANDrm0 (LEAzii 0, 0, tglobaltlsaddr:$in), 32)>;
 def : Pat<(add (VEhi tglobaltlsaddr:$in1), (VElo tglobaltlsaddr:$in2)),
-          (LEASLrzi (ANDrm0 (LEAzzi tglobaltlsaddr:$in2), 32),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, tglobaltlsaddr:$in2), 32), 0,
                     (tglobaltlsaddr:$in1))>;
+def : Pat<(add (add (VEhi tglobaltlsaddr:$in1), (VElo tglobaltlsaddr:$in2)),
+               simm7:$val),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, tglobaltlsaddr:$in2), 32),
+                    (LO7 $val), (tglobaltlsaddr:$in1))>;
 
 // Address calculation and its optimization
-def : Pat<(VEhi tconstpool:$in), (LEASLzzi tconstpool:$in)>;
-def : Pat<(VElo tconstpool:$in), (ANDrm0 (LEAzzi tconstpool:$in), 32)>;
+def : Pat<(VEhi tconstpool:$in), (LEASLzii 0, 0, tconstpool:$in)>;
+def : Pat<(VElo tconstpool:$in), (ANDrm0 (LEAzii 0, 0, tconstpool:$in), 32)>;
 def : Pat<(add (VEhi tconstpool:$in1), (VElo tconstpool:$in2)),
-          (LEASLrzi (ANDrm0 (LEAzzi tconstpool:$in2), 32),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, tconstpool:$in2), 32), 0,
                     (tconstpool:$in1))>;
+def : Pat<(add (add (VEhi tconstpool:$in1), (VElo tconstpool:$in2)),
+               simm7:$val),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, tconstpool:$in2), 32),
+                    (LO7 $val), (tconstpool:$in1))>;
 
 // Address calculation and its optimization
-def : Pat<(VEhi texternalsym:$in), (LEASLzzi texternalsym:$in)>;
-def : Pat<(VElo texternalsym:$in), (ANDrm0 (LEAzzi texternalsym:$in), 32)>;
+def : Pat<(VEhi texternalsym:$in), (LEASLzii 0, 0, texternalsym:$in)>;
+def : Pat<(VElo texternalsym:$in),
+          (ANDrm0 (LEAzii 0, 0, texternalsym:$in), 32)>;
 def : Pat<(add (VEhi texternalsym:$in1), (VElo texternalsym:$in2)),
-          (LEASLrzi (ANDrm0 (LEAzzi texternalsym:$in2), 32),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, texternalsym:$in2), 32), 0,
                     (texternalsym:$in1))>;
+def : Pat<(add (add (VEhi texternalsym:$in1), (VElo texternalsym:$in2)),
+               simm7:$val),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, texternalsym:$in2), 32),
+                    (LO7 $val), (texternalsym:$in1))>;
 
-// Address store of mcsym
-def : Pat<(store (i64 mcsym:$src), ADDRri:$dst),
-          (STSri ADDRri:$dst, (LEASLrzi (ANDrm0 (LEAzzi mcsym:$src), 32),
-                                        (mcsym:$src)))>;
+// Address calculation of mcsym
+def : Pat<(i64 mcsym:$src),
+          (LEASLrii (ANDrm0 (LEAzii 0, 0, (LO32 mcsym:$src)), 32), 0,
+                    (HI32 mcsym:$src))>;
+
+// Address calculation and its optimization
 
 // Calls
 def : Pat<(call tglobaladdr:$dst),
@@ -1660,19 +1777,38 @@ def : Pat<(call i64:$dst),
 def : Pat<(br bb:$addr), (BCRLa bb:$addr)>;
 
 // brcc
-def : Pat<(brcc CCSIOp:$cond, i32:$l, i32:$r, bb:$addr),
-          (BCRWrr (icond2cc $cond), $l, $r, bb:$addr)>;
-def : Pat<(brcc CCUIOp:$cond, i32:$l, i32:$r, bb:$addr),
-          (BCRWir (icond2cc $cond), 0, (CMPUWrr $r, $l), bb:$addr)>;
-def : Pat<(brcc CCSIOp:$cond, i64:$l, i64:$r, bb:$addr),
-          (BCRLrr (icond2cc $cond), $l, $r, bb:$addr)>;
-def : Pat<(brcc CCUIOp:$cond, i64:$l, i64:$r, bb:$addr),
-          (BCRLir (icond2cc $cond), 0, (CMPrr $r, $l), bb:$addr)>;
-def : Pat<(brcc cond:$cond, f32:$l, f32:$r, bb:$addr),
-          (BCRSrr (fcond2cc $cond), $l, $r, bb:$addr)>;
-def : Pat<(brcc cond:$cond, f64:$l, f64:$r, bb:$addr),
-          (BCRDrr (fcond2cc $cond), $l, $r, bb:$addr)>;
+// integer brcc
+multiclass BRCCIm<ValueType ty, SDPatternOperator BrOpNode1,
+                 SDPatternOperator BrOpNode2,
+                 SDPatternOperator CmpOpNode1,
+                 SDPatternOperator CmpOpNode2> {
+  def : Pat<(brcc CCSIOp:$cond, ty:$l, simm7:$r, bb:$addr),
+            (BrOpNode2 (icond2ccSwap $cond), (LO7 $r), $l, bb:$addr)>;
+  def : Pat<(brcc CCSIOp:$cond, ty:$l, ty:$r, bb:$addr),
+            (BrOpNode1 (icond2cc $cond), $l, $r, bb:$addr)>;
+  def : Pat<(brcc CCUIOp:$cond, ty:$l, simm7:$r, bb:$addr),
+            (BrOpNode2 (icond2cc $cond), 0, (CmpOpNode2 (LO7 $r), $l),
+                       bb:$addr)>;
+  def : Pat<(brcc CCUIOp:$cond, ty:$l, ty:$r, bb:$addr),
+            (BrOpNode2 (icond2cc $cond), 0, (CmpOpNode1 $r, $l), bb:$addr)>;
+}
+defm : BRCCIm<i32, BCRWrr, BCRWir, CMPUWrr, CMPUWir>;
+defm : BRCCIm<i64, BCRLrr, BCRLir, CMPrr, CMPir>;
 
+// floating point brcc
+multiclass BRCCFm<ValueType ty, SDPatternOperator BrOpNode1,
+                 SDPatternOperator BrOpNode2> {
+  def : Pat<(brcc cond:$cond, ty:$l, fpzero:$r, bb:$addr),
+            (BrOpNode2 (fcond2ccSwap $cond), (LOFP32 $r), $l, bb:$addr)>;
+  def : Pat<(brcc cond:$cond, ty:$l, ty:$r, bb:$addr),
+            (BrOpNode1 (fcond2cc $cond), $l, $r, bb:$addr)>;
+}
+defm : BRCCFm<f32, BCRSrr, BCRSir>;
+defm : BRCCFm<f64, BCRDrr, BCRDir>;
+// FIXME: fpzero doesn't work with f128 since f128 is separated
+//        to INSERT_SUBREG stuff before performing ISEL.
+def : Pat<(brcc cond:$cond, f128:$l, fpzero:$r, bb:$addr),
+          (BCRDrr (fcond2cc $cond), 0, (FCQir (LOFP32 $r), $l), bb:$addr)>;
 def : Pat<(brcc cond:$cond, f128:$l, f128:$r, bb:$addr),
           (BCRDrr (fcond2cc $cond), 0, (FCQrr $r, $l), bb:$addr)>;
 
@@ -1716,10 +1852,12 @@ def ADJCALLSTACKUP : Pseudo<(outs), (ins i64imm:$amt1, i64imm:$amt2),
 
 let Defs = [SX8], Uses = [SX8, SX11], hasSideEffects = 0 in
 def EXTEND_STACK : Pseudo<(outs), (ins),
-                          "# EXTEND STACK">;
+                          "# EXTEND STACK",
+                          []>;
 let  hasSideEffects = 0 in
 def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
-                                "# EXTEND STACK GUARD">;
+                                "# EXTEND STACK GUARD",
+                                []>;
 
 // Dynamic stack allocation yields a __llvm_grow_stack for VE targets.
 // These calls are needed to probe the stack when allocating more over
@@ -2079,9 +2217,6 @@ def : Pat<(f32 (bitconvert i32:$op)),
 def : Pat<(i32 (ctpop i32:$src)),
           (EXTRACT_SUBREG (PCNTr (ANDrm0 (INSERT_SUBREG
             (i64 (IMPLICIT_DEF)), $src, sub_i32), 32)), sub_i32)>;
-def : Pat<(i32 (bitreverse i32:$src)),
-          (EXTRACT_SUBREG (SRLri (BRVr (INSERT_SUBREG
-            (i64 (IMPLICIT_DEF)), $src, sub_i32)), 32), sub_i32)>;
 def : Pat<(i32 (ctlz i32:$src)),
           (EXTRACT_SUBREG (LDZr (SLLri (INSERT_SUBREG
             (i64 (IMPLICIT_DEF)), $src, sub_i32), 32)), sub_i32)>;
@@ -2093,12 +2228,9 @@ def : Pat<(i32 (bswap i32:$src)),
 
 // Several special pattern matches to optimize code
 
-def : Pat<(i32 (and i32:$lhs, 0xff)),
-          (AND32rm0 $lhs, 56)>;
-def : Pat<(i32 (and i32:$lhs, 0xffff)),
-          (AND32rm0 $lhs, 48)>;
-def : Pat<(i32 (and i32:$lhs, 0xffffffff)),
-          (AND32rm0 $lhs, 32)>;
+def : Pat<(i32 (and i32:$val, 0xff)), (AND32rm0 $val, 56)>;
+def : Pat<(i32 (and i32:$val, 0xffff)), (AND32rm0 $val, 48)>;
+def : Pat<(i64 (and i64:$val, 0xffffffff)), (ANDrm0 $val, 32)>;
 
 // vector instructions
 include "VEInstrVec.td"
@@ -2113,7 +2245,6 @@ def: Pat<(i64 (repl_i32 i32:$val)),
             (ORrr
               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32))>;
-
 
 // load an immediate into a register
 def lea_i32         : OutPatFrag<(ins node:$imm), (LEAzzi node:$imm)>;

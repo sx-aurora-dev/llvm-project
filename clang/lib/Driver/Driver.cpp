@@ -4830,19 +4830,19 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
     case llvm::Triple::Linux:
     case llvm::Triple::ELFIAMCU:
       if (Target.getArch() == llvm::Triple::hexagon)
-        TC =
-            std::make_unique<toolchains::HexagonToolChain>(*this, Target, Args);
+        TC = std::make_unique<toolchains::HexagonToolChain>(*this, Target,
+                                                             Args);
       else if (Target.getArch() == llvm::Triple::ve)
         TC = std::make_unique<toolchains::VEToolChain>(*this, Target, Args);
       else if ((Target.getVendor() == llvm::Triple::MipsTechnologies) &&
                !Target.hasEnvironment())
         TC = std::make_unique<toolchains::MipsLLVMToolChain>(*this, Target,
-                                                             Args);
+                                                              Args);
       else if (Target.getArch() == llvm::Triple::ppc ||
                Target.getArch() == llvm::Triple::ppc64 ||
                Target.getArch() == llvm::Triple::ppc64le)
         TC = std::make_unique<toolchains::PPCLinuxToolChain>(*this, Target,
-                                                             Args);
+                                                              Args);
       else
         TC = std::make_unique<toolchains::Linux>(*this, Target, Args);
       break;

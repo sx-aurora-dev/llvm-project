@@ -20,10 +20,6 @@
 #include "VETargetMachine.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/CodeGen/BasicTTIImpl.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/PredicatedInst.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/Intrinsics.h"
 
 namespace llvm {
 
@@ -37,160 +33,67 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
   const VESubtarget *getST() const { return ST; }
   const VETargetLowering *getTLI() const { return TLI; }
 
-  bool enableVPU() const {
-    return getST()->enableVPU();
-  }
-
 public:
   explicit VETTIImpl(const VETargetMachine *TM, const Function &F)
       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
         TLI(ST->getTargetLowering()) {}
 
-  unsigned getNumberOfRegisters(unsigned ClassID) const { return 64; }
-
-  unsigned getRegisterBitWidth(bool Vector) const {
-    if (Vector && enableVPU()) {
-      return 256 * 64;
+  unsigned getNumberOfRegisters(unsigned ClassID) const {
+    bool Vector = (ClassID == 1);
+    if (Vector) {
+      return 64;
     }
     return 64;
   }
 
-  unsigned getMinVectorRegisterBitWidth() const {
-    return enableVPU() ? 256 * 64 : 0;
+  unsigned getRegisterBitWidth(bool Vector) const {
+      if (Vector) {
+          return 256*64;
+      }
+      return 64;
   }
 
-  static bool isBoolTy(Type *Ty) { return Ty->getPrimitiveSizeInBits() == 1; }
+  unsigned getMinVectorRegisterBitWidth() const { return 256*64; }
 
-  unsigned getVRegCapacity(Type &ElemTy) const {
-    unsigned PackLimit = getST()->hasPackedMode() ? 512 : 256;
-    if (ElemTy.isIntegerTy() && ElemTy.getPrimitiveSizeInBits() <= 32)
-      return PackLimit;
-    if (ElemTy.isFloatTy())
-      return PackLimit;
-    return 256;
-  }
-
-  bool isBitVectorType(Type &DT) {
-    auto VTy = dyn_cast<VectorType>(&DT);
-    if (!VTy)
-      return false;
-    return isBoolTy(VTy->getVectorElementType()) &&
-           VTy->getVectorNumElements() <=
-               getVRegCapacity(*VTy->getVectorElementType());
-  }
-
-  bool isVectorRegisterType(Type &DT) {
-    auto VTy = dyn_cast<VectorType>(&DT);
-    if (!VTy)
-      return false;
-    auto &ElemTy = *VTy->getVectorElementType();
-
-    // oversized vector
-    if (getVRegCapacity(ElemTy) < VTy->getVectorNumElements())
-      return false;
-
-    // check element sizes for vregs
-    if (ElemTy.isIntegerTy()) {
-      unsigned ScaBits = ElemTy.getScalarSizeInBits();
-      return ScaBits == 32 || ScaBits == 64;
-    }
-    if (ElemTy.isPointerTy()) {
-      return true;
-    }
-    if (ElemTy.isFloatTy() || ElemTy.isDoubleTy()) {
-      return true;
-    }
-    return false;
-  }
-
-  // Load & Store {
   bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) {
-    if (!enableVPU())
-      return false;
-    return isVectorRegisterType(*DataType);
-  }
-  bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment) {
-    if (!enableVPU())
-      return false;
-    return isVectorRegisterType(*DataType);
-  }
-  bool isLegalMaskedGather(Type *ScaDataType, MaybeAlign Alignment) {
-    if (!enableVPU())
-      return false;
-    return isVectorRegisterType(*ScaDataType);
-  };
-  bool isLegalMaskedScatter(Type *ScaDataType, MaybeAlign Alignment) {
-    if (!enableVPU())
-      return false;
-    return isVectorRegisterType(*ScaDataType);
-  }
-  // } Load & Store
-
-  /// LLVM-VP Support
-  /// {
-
-  /// \returns True if the vector length parameter should be folded into the
-  /// vector mask.
-  bool
-  shouldFoldVectorLengthIntoMask(const PredicatedInstruction &PredInst) const {
-    return false; // FIXME (return true for masking operations)
-  }
-
-  /// \returns False if this VP op should be replaced by a non-VP op or an
-  /// unpredicated op plus a select.
-  bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
-    switch (PredInst.getOpcode()) {
-    default:
-      break;
-
-    // Non-opcode VP ops
-    case Instruction::Call:
-      // vp mask operations unsupported
-      if (PredInst.isVectorReduction())
-        return !PredInst.getType()->isIntOrIntVectorTy(1);
-      break;
-
-    // vp mask operations unsupported
-    case Instruction::And:
-    case Instruction::Or:
-    case Instruction::Xor:
-      auto ITy = PredInst.getType();
-      if (!ITy->isVectorTy())
-        break;
-      if (!ITy->isIntOrIntVectorTy(1))
-        break;
-      return false;
-    }
-
-    // be optimistic by default
+#if 1
+    // Enabling masked load causes "Cannot select ...masked_load..."
+    // error in test-suite/SingleSource/Benchmarks/BenchmarkGame/fannkuch.c.
+    // So, disable this temporary.
+    return false;
+#else
     return true;
+#endif
   }
 
-  /// }
+  bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment) {
+      //if (DataType->getVectorNumElements() != 256) {
+      //  return false;
+      //}
+#if 1
+      // Enabling masked gather causes "Cannot select ...masked_gather..."
+      // error in test-suite/SingleSource/Benchmarks/Misc/ReedSolomon.c.  So,
+      // disable this temporary.
+      return false;
+#else
+      return true;
+#endif
+  };
 
-  bool shouldExpandReduction(const IntrinsicInst *II) const {
-    bool Unordered = II->getFastMathFlags().allowReassoc();
-    switch (II->getIntrinsicID()) {
-      // Supported in all variations
-      case Intrinsic::experimental_vector_reduce_v2_fadd:
-      case Intrinsic::experimental_vector_reduce_fmin:
-      case Intrinsic::experimental_vector_reduce_fmax:
-      case Intrinsic::experimental_vector_reduce_add:
-      case Intrinsic::experimental_vector_reduce_mul:
-      case Intrinsic::experimental_vector_reduce_or:
-      case Intrinsic::experimental_vector_reduce_and:
-      case Intrinsic::experimental_vector_reduce_xor:
-        return false;
+  bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
+      //if (DataType->getVectorNumElements() != 256) {
+      //  return false;
+      //}
+#if 1
+      // Enabling masked scatter causes "Cannot select ...masked_scatter..."
+      // error in test-suite/SingleSource/Regression/C/bigstack.c.  So,
+      // disable this temporary.
+      return false;
+#else
+      return true;
+#endif
+  };
 
-      // Natively supported vector-iterative variant
-      case Intrinsic::experimental_vector_reduce_v2_fmul:
-        return Unordered;
-
-      // Otw, run full expansion
-      default:
-        return true;
-    }
-  }
 };
 
 } // namespace llvm

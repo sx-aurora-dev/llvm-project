@@ -17,10 +17,6 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
-
-#define DEBUG_TYPE "ve-dagtodag"
-#include "CustomDAG.h"
-
 using namespace llvm;
 
 //===----------------------------------------------------------------------===//
@@ -41,6 +37,7 @@ public:
   explicit VEDAGToDAGISel(VETargetMachine &tm) : SelectionDAGISel(tm) {}
 
   bool runOnMachineFunction(MachineFunction &MF) override {
+    // Reset the subtarget each time through.
     Subtarget = &MF.getSubtarget<VESubtarget>();
     return SelectionDAGISel::runOnMachineFunction(MF);
   }
@@ -48,12 +45,16 @@ public:
   void Select(SDNode *N) override;
 
   // Complex Pattern Selectors.
-  bool SelectADDRrr(SDValue N, SDValue &R1, SDValue &R2);
+  bool SelectADDRrri(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
+  bool SelectADDRrii(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
+  bool SelectADDRzii(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
   bool SelectADDRri(SDValue N, SDValue &Base, SDValue &Offset);
+  bool SelectADDRzi(SDValue N, SDValue &Base, SDValue &Offset);
 
   /// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
   /// inline asm expressions.
-  bool SelectInlineAsmMemoryOperand(const SDValue &Op, unsigned ConstraintID,
+  bool SelectInlineAsmMemoryOperand(const SDValue &Op,
+                                    unsigned ConstraintID,
                                     std::vector<SDValue> &OutOps) override;
 
   StringRef getPassName() const override {
@@ -65,10 +66,194 @@ public:
 
 private:
   SDNode *getGlobalBaseReg();
+  bool tryInlineAsm(SDNode *N);
+
+  bool matchADDRrr(SDValue N, SDValue &Base, SDValue &Index);
+  bool matchADDRri(SDValue N, SDValue &Base, SDValue &Offset);
 };
 } // end anonymous namespace
 
-bool VEDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
+// Re-assemble i64 arguments split up in SelectionDAGBuilder's
+// visitInlineAsm / GetRegistersForValue functions.
+//
+// Note: This function was copied from, and is essentially identical
+// to ARMISelDAGToDAG::SelectInlineAsm. It is very unfortunate that
+// such hacking-up is necessary; a rethink of how inline asm operands
+// are handled may be in order to make doing this more sane.
+//
+// TODO: fix inline asm support so I can simply tell it that 'i64'
+// inputs to asm need to be allocated to the IntPair register type,
+// and have that work. Then, delete this function.
+bool VEDAGToDAGISel::tryInlineAsm(SDNode *N){
+  std::vector<SDValue> AsmNodeOperands;
+  unsigned Flag, Kind;
+  bool Changed = false;
+  unsigned NumOps = N->getNumOperands();
+
+  // Normally, i64 data is bounded to two arbitrary GPRs for "%r"
+  // constraint.  However, some instructions (e.g. ldd/std) require
+  // (even/even+1) GPRs.
+
+  // So, here, we check for this case, and mutate the inlineasm to use
+  // a single IntPair register instead, which guarantees such even/odd
+  // placement.
+
+  SDLoc dl(N);
+  SDValue Glue = N->getGluedNode() ? N->getOperand(NumOps-1)
+                                   : SDValue(nullptr,0);
+
+  SmallVector<bool, 8> OpChanged;
+  // Glue node will be appended late.
+  for(unsigned i = 0, e = N->getGluedNode() ? NumOps - 1 : NumOps; i < e; ++i) {
+    SDValue op = N->getOperand(i);
+    AsmNodeOperands.push_back(op);
+
+    if (i < InlineAsm::Op_FirstOperand)
+      continue;
+
+    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(N->getOperand(i))) {
+      Flag = C->getZExtValue();
+      Kind = InlineAsm::getKind(Flag);
+    }
+    else
+      continue;
+
+    // Immediate operands to inline asm in the SelectionDAG are modeled with
+    // two operands. The first is a constant of value InlineAsm::Kind_Imm, and
+    // the second is a constant with the value of the immediate. If we get here
+    // and we have a Kind_Imm, skip the next operand, and continue.
+    if (Kind == InlineAsm::Kind_Imm) {
+      SDValue op = N->getOperand(++i);
+      AsmNodeOperands.push_back(op);
+      continue;
+    }
+
+    unsigned NumRegs = InlineAsm::getNumOperandRegisters(Flag);
+    if (NumRegs)
+      OpChanged.push_back(false);
+
+    unsigned DefIdx = 0;
+    bool IsTiedToChangedOp = false;
+    // If it's a use that is tied with a previous def, it has no
+    // reg class constraint.
+    if (Changed && InlineAsm::isUseOperandTiedToDef(Flag, DefIdx))
+      IsTiedToChangedOp = OpChanged[DefIdx];
+
+    if (Kind != InlineAsm::Kind_RegUse && Kind != InlineAsm::Kind_RegDef
+        && Kind != InlineAsm::Kind_RegDefEarlyClobber)
+      continue;
+
+    unsigned RC;
+    bool HasRC = InlineAsm::hasRegClassConstraint(Flag, RC);
+    if ((!IsTiedToChangedOp && (!HasRC || RC != VE::I64RegClassID))
+        || NumRegs != 2)
+      continue;
+
+    // No IntPairRegister on VE
+    continue;
+#if 0
+    assert((i+2 < NumOps) && "Invalid number of operands in inline asm");
+    SDValue V0 = N->getOperand(i+1);
+    SDValue V1 = N->getOperand(i+2);
+    unsigned Reg0 = cast<RegisterSDNode>(V0)->getReg();
+    unsigned Reg1 = cast<RegisterSDNode>(V1)->getReg();
+    SDValue PairedReg;
+    MachineRegisterInfo &MRI = MF->getRegInfo();
+
+    if (Kind == InlineAsm::Kind_RegDef ||
+        Kind == InlineAsm::Kind_RegDefEarlyClobber) {
+      // Replace the two GPRs with 1 GPRPair and copy values from GPRPair to
+      // the original GPRs.
+
+      unsigned GPVR = MRI.createVirtualRegister(&SP::IntPairRegClass);
+      PairedReg = CurDAG->getRegister(GPVR, MVT::v2i32);
+      SDValue Chain = SDValue(N,0);
+
+      SDNode *GU = N->getGluedUser();
+      SDValue RegCopy = CurDAG->getCopyFromReg(Chain, dl, GPVR, MVT::v2i32,
+                                               Chain.getValue(1));
+
+      // Extract values from a GPRPair reg and copy to the original GPR reg.
+      SDValue Sub0 = CurDAG->getTargetExtractSubreg(SP::sub_even, dl, MVT::i32,
+                                                    RegCopy);
+      SDValue Sub1 = CurDAG->getTargetExtractSubreg(SP::sub_odd, dl, MVT::i32,
+                                                    RegCopy);
+      SDValue T0 = CurDAG->getCopyToReg(Sub0, dl, Reg0, Sub0,
+                                        RegCopy.getValue(1));
+      SDValue T1 = CurDAG->getCopyToReg(Sub1, dl, Reg1, Sub1, T0.getValue(1));
+
+      // Update the original glue user.
+      std::vector<SDValue> Ops(GU->op_begin(), GU->op_end()-1);
+      Ops.push_back(T1.getValue(1));
+      CurDAG->UpdateNodeOperands(GU, Ops);
+    }
+    else {
+      // For Kind  == InlineAsm::Kind_RegUse, we first copy two GPRs into a
+      // GPRPair and then pass the GPRPair to the inline asm.
+      SDValue Chain = AsmNodeOperands[InlineAsm::Op_InputChain];
+
+      // As REG_SEQ doesn't take RegisterSDNode, we copy them first.
+      SDValue T0 = CurDAG->getCopyFromReg(Chain, dl, Reg0, MVT::i32,
+                                          Chain.getValue(1));
+      SDValue T1 = CurDAG->getCopyFromReg(Chain, dl, Reg1, MVT::i32,
+                                          T0.getValue(1));
+      SDValue Pair = SDValue(
+          CurDAG->getMachineNode(
+              TargetOpcode::REG_SEQUENCE, dl, MVT::v2i32,
+              {
+                  CurDAG->getTargetConstant(SP::IntPairRegClassID, dl,
+                                            MVT::i32),
+                  T0,
+                  CurDAG->getTargetConstant(SP::sub_even, dl, MVT::i32),
+                  T1,
+                  CurDAG->getTargetConstant(SP::sub_odd, dl, MVT::i32),
+              }),
+          0);
+
+      // Copy REG_SEQ into a GPRPair-typed VR and replace the original two
+      // i32 VRs of inline asm with it.
+      unsigned GPVR = MRI.createVirtualRegister(&SP::IntPairRegClass);
+      PairedReg = CurDAG->getRegister(GPVR, MVT::v2i32);
+      Chain = CurDAG->getCopyToReg(T1, dl, GPVR, Pair, T1.getValue(1));
+
+      AsmNodeOperands[InlineAsm::Op_InputChain] = Chain;
+      Glue = Chain.getValue(1);
+    }
+
+    Changed = true;
+
+    if(PairedReg.getNode()) {
+      OpChanged[OpChanged.size() -1 ] = true;
+      Flag = InlineAsm::getFlagWord(Kind, 1 /* RegNum*/);
+      if (IsTiedToChangedOp)
+        Flag = InlineAsm::getFlagWordForMatchingOp(Flag, DefIdx);
+      else
+        Flag = InlineAsm::getFlagWordForRegClass(Flag, SP::IntPairRegClassID);
+      // Replace the current flag.
+      AsmNodeOperands[AsmNodeOperands.size() -1] = CurDAG->getTargetConstant(
+          Flag, dl, MVT::i32);
+      // Add the new register node and skip the original two GPRs.
+      AsmNodeOperands.push_back(PairedReg);
+      // Skip the next two GPRs.
+      i += 2;
+    }
+#endif
+  }
+
+  if (Glue.getNode())
+    AsmNodeOperands.push_back(Glue);
+  if (!Changed)
+    return false;
+
+  SDValue New = CurDAG->getNode(ISD::INLINEASM, SDLoc(N),
+      CurDAG->getVTList(MVT::Other, MVT::Glue), AsmNodeOperands);
+  New->setNodeId(-1);
+  ReplaceNode(N, New.getNode());
+  return true;
+}
+
+bool VEDAGToDAGISel::SelectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
+                                   SDValue &Offset) {
   if (Addr.getOpcode() == ISD::FrameIndex)
     return false;
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
@@ -76,23 +261,128 @@ bool VEDAGToDAGISel::SelectADDRrr(SDValue Addr, SDValue &R1, SDValue &R2) {
       Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
     return false; // direct calls.
 
-  if (Addr.getOpcode() == ISD::ADD) {
-    if (ConstantSDNode *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1)))
-      if (isInt<13>(CN->getSExtValue()))
-        return false; // Let the reg+imm pattern catch this!
-    if (Addr.getOperand(0).getOpcode() == VEISD::Lo ||
-        Addr.getOperand(1).getOpcode() == VEISD::Lo)
-      return false; // Let the reg+imm pattern catch this!
-    R1 = Addr.getOperand(0);
-    R2 = Addr.getOperand(1);
+  SDValue LHS, RHS;
+  if (matchADDRri(Addr, LHS, RHS)) {
+    if (matchADDRrr(LHS, Base, Index)) {
+      Offset = RHS;
+      return true;
+    }
+    return false;
+  } else if (matchADDRrr(Addr, LHS, RHS)) {
+    if (matchADDRri(RHS, Index, Offset)) {
+      Base = LHS;
+      return true;
+    } else if (matchADDRri(LHS, Base, Offset)) {
+      Index = RHS;
+      return true;
+    }
+    Base = LHS;
+    Index = RHS;
+    Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+    return true;
+  }
+  return false; // Let the reg+imm(=0) pattern catch this!
+}
+
+bool VEDAGToDAGISel::SelectADDRrii(SDValue Addr,
+                                   SDValue &Base, SDValue &Index,
+                                   SDValue &Offset) {
+  if (matchADDRri(Addr, Base, Offset)) {
+    Index = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
     return true;
   }
 
-  return false; // Let the reg+imm pattern catch this!
+  Base = Addr;
+  Index = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+  Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+  return true;
+}
+
+bool VEDAGToDAGISel::SelectADDRzii(SDValue Addr,
+                                   SDValue &Base, SDValue &Index,
+                                   SDValue &Offset) {
+  if (dyn_cast<FrameIndexSDNode>(Addr)) {
+    return false;
+  }
+  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
+      Addr.getOpcode() == ISD::TargetGlobalAddress ||
+      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
+    return false;  // direct calls.
+
+  if (ConstantSDNode *CN = cast<ConstantSDNode>(Addr)) {
+    if (isInt<32>(CN->getSExtValue())) {
+      Base = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+      Index = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+      Offset =
+          CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr), MVT::i32);
+      return true;
+    }
+  }
+  return false;
 }
 
 bool VEDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
                                   SDValue &Offset) {
+  if (matchADDRri(Addr, Base, Offset))
+    return true;
+
+  Base = Addr;
+  Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+  return true;
+}
+
+bool VEDAGToDAGISel::SelectADDRzi(SDValue Addr, SDValue &Base,
+                                  SDValue &Offset) {
+  if (dyn_cast<FrameIndexSDNode>(Addr)) {
+    return false;
+  }
+  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
+      Addr.getOpcode() == ISD::TargetGlobalAddress ||
+      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
+    return false;  // direct calls.
+
+  if (ConstantSDNode *CN = cast<ConstantSDNode>(Addr)) {
+    if (isInt<32>(CN->getSExtValue())) {
+      Base = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
+      Offset =
+          CurDAG->getTargetConstant(CN->getZExtValue(), SDLoc(Addr), MVT::i32);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool VEDAGToDAGISel::matchADDRrr(SDValue Addr, SDValue &Base, SDValue &Index) {
+  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr))
+    return false;
+  if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
+      Addr.getOpcode() == ISD::TargetGlobalAddress ||
+      Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
+    return false; // direct calls.
+
+  if (Addr.getOpcode() == ISD::ADD) {
+    if (Addr.getOperand(0).getOpcode() == VEISD::Lo ||
+        Addr.getOperand(1).getOpcode() == VEISD::Lo)
+      return false; // Let use LEASL
+    Base = Addr.getOperand(0);
+    Index = Addr.getOperand(1);
+    return true;
+  } else if (Addr.getOpcode() == ISD::OR) {
+    if (Addr.getOperand(0).getOpcode() == VEISD::Lo ||
+        Addr.getOperand(1).getOpcode() == VEISD::Lo)
+      return false; // Let use LEASL
+    // We want to look through a transform in InstCombine and DAGCombiner that
+    // turns 'add' into 'or', so we can treat this 'or' exactly like an 'add'.
+    if (CurDAG->haveNoCommonBitsSet(Addr.getOperand(0), Addr.getOperand(1))) {
+      Base = Addr.getOperand(0);
+      Index = Addr.getOperand(1);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool VEDAGToDAGISel::matchADDRri(SDValue Addr, SDValue &Base, SDValue &Offset) {
   auto AddrTy = Addr->getValueType(0);
   if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr)) {
     Base = CurDAG->getTargetFrameIndex(FIN->getIndex(), AddrTy);
@@ -106,7 +396,7 @@ bool VEDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
 
   if (CurDAG->isBaseWithConstantOffset(Addr)) {
     ConstantSDNode *CN = cast<ConstantSDNode>(Addr.getOperand(1));
-    if (isInt<13>(CN->getSExtValue())) {
+    if (isInt<32>(CN->getSExtValue())) {
       if (FrameIndexSDNode *FIN =
               dyn_cast<FrameIndexSDNode>(Addr.getOperand(0))) {
         // Constant offset from frame ref.
@@ -119,9 +409,7 @@ bool VEDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
       return true;
     }
   }
-  Base = Addr;
-  Offset = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
-  return true;
+  return false;
 }
 
 void VEDAGToDAGISel::Select(SDNode *N) {
@@ -162,17 +450,49 @@ void VEDAGToDAGISel::Select(SDNode *N) {
 
     // ok replace
     ReplaceNode(N, New.getNode());
-    return;
-  }
+     return;
+   }
 
-  // Lower to actual base register
+
   case VEISD::GLOBAL_BASE_REG:
     ReplaceNode(N, getGlobalBaseReg());
     return;
+  case ISD::INLINEASM: {
+    if (tryInlineAsm(N))
+      return;
+    break;
+  }
   }
 
-
   SelectCode(N);
+}
+
+/// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
+/// inline asm expressions.
+bool
+VEDAGToDAGISel::SelectInlineAsmMemoryOperand(const SDValue &Op,
+                                                unsigned ConstraintID,
+                                                std::vector<SDValue> &OutOps) {
+  SDValue Op0, Op1, Op2;
+  switch (ConstraintID) {
+  default: return true;
+  case InlineAsm::Constraint_i:
+  case InlineAsm::Constraint_o:
+  case InlineAsm::Constraint_m: // memory
+    if (!SelectADDRrri(Op, Op0, Op1, Op2))
+      if (!SelectADDRrii(Op, Op0, Op1, Op2))
+        if (SelectADDRri(Op, Op0, Op1)) {
+          OutOps.push_back(Op0);
+          OutOps.push_back(Op1);
+          return false;
+        }
+    break;
+  }
+
+  OutOps.push_back(Op0);
+  OutOps.push_back(Op1);
+  OutOps.push_back(Op2);
+  return false;
 }
 
 SDNode *VEDAGToDAGISel::getGlobalBaseReg() {
@@ -180,27 +500,6 @@ SDNode *VEDAGToDAGISel::getGlobalBaseReg() {
   return CurDAG
       ->getRegister(GlobalBaseReg, TLI->getPointerTy(CurDAG->getDataLayout()))
       .getNode();
-}
-
-/// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
-/// inline asm expressions.
-bool VEDAGToDAGISel::SelectInlineAsmMemoryOperand(
-    const SDValue &Op, unsigned ConstraintID, std::vector<SDValue> &OutOps) {
-  SDValue Op0, Op1;
-  switch (ConstraintID) {
-  default:
-    return true;
-  case InlineAsm::Constraint_i:
-  case InlineAsm::Constraint_o:
-  case InlineAsm::Constraint_m: // memory
-    if (!SelectADDRrr(Op, Op0, Op1))
-      SelectADDRri(Op, Op0, Op1);
-    break;
-  }
-
-  OutOps.push_back(Op0);
-  OutOps.push_back(Op1);
-  return false;
 }
 
 /// createVEISelDag - This pass converts a legalized DAG into a
