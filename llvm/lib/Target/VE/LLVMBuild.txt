@@ -30,6 +30,6 @@ has_jit = 1
 type = Library
 name = VECodeGen
 parent = VE
-required_libraries = Analysis AsmPrinter CodeGen Core MC SelectionDAG
+required_libraries = AsmPrinter CodeGen Core MC SelectionDAG
                      VEDesc VEInfo Support Target
 add_to_library_groups = VE

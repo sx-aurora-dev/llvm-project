@@ -47,8 +47,7 @@ static MCDisassembler *createVEDisassembler(const Target &T,
   return new VEDisassembler(STI, Ctx);
 }
 
-
-extern "C" void LLVMInitializeVEDisassembler() {
+extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeVEDisassembler() {
   // Register the disassembler.
   TargetRegistry::RegisterMCDisassembler(getTheVETarget(),
                                          createVEDisassembler);
@@ -591,4 +590,3 @@ static DecodeStatus DecodeBranchCondition(MCInst &MI, uint64_t insn,
   MI.addOperand(MCOperand::createImm(simm32));
   return MCDisassembler::Success;
 }
-
