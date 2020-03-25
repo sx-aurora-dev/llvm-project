@@ -350,10 +350,6 @@ bool TargetTransformInfo::prefersVectorizedAddressing() const {
   return TTIImpl->prefersVectorizedAddressing();
 }
 
-bool TargetTransformInfo::enableLoopVectorizer() const {
-  return TTIImpl->enableLoopVectorizer();
-}
-
 int TargetTransformInfo::getScalingFactorCost(Type *Ty, GlobalValue *BaseGV,
                                               int64_t BaseOffset,
                                               bool HasBaseReg,
