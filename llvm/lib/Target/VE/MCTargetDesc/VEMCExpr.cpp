@@ -44,10 +44,6 @@ bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind) {
   case VK_VE_None:
     return false;
 
-  case VK_VE_R_DISP32:
-    OS << "%r_disp32(";
-    return true;
-
   case VK_VE_HI32:
   case VK_VE_LO32:
   case VK_VE_PC_HI32:
@@ -71,8 +67,6 @@ bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind) {
 void VEMCExpr::printVariantKindSuffix(raw_ostream &OS, VariantKind Kind) {
   switch (Kind) {
   case VK_VE_None:
-    break;
-  case VK_VE_R_DISP32:
     break;
   case VK_VE_HI32:
     OS << "@hi";
@@ -121,7 +115,6 @@ void VEMCExpr::printVariantKindSuffix(raw_ostream &OS, VariantKind Kind) {
 
 VEMCExpr::VariantKind VEMCExpr::parseVariantKind(StringRef name) {
   return StringSwitch<VEMCExpr::VariantKind>(name)
-      .Case("r_disp32", VK_VE_R_DISP32)
       .Case("hi", VK_VE_HI32)
       .Case("lo", VK_VE_LO32)
       .Case("pc_hi", VK_VE_PC_HI32)

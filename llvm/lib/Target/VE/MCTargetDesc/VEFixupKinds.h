@@ -14,23 +14,8 @@
 namespace llvm {
 namespace VE {
 enum Fixups {
-  // fixup_ve_call30 - 30-bit PC relative relocation for call
-  fixup_ve_call30 = FirstTargetFixupKind,
-
-  /// fixup_ve_br22 - 22-bit PC relative relocation for
-  /// branches
-  fixup_ve_br22,
-
-  /// fixup_ve_br19 - 19-bit PC relative relocation for
-  /// branches on icc/xcc
-  fixup_ve_br19,
-
-  /// fixup_ve_bpr  - 16-bit fixup for bpr
-  fixup_ve_br16_2,
-  fixup_ve_br16_14,
-
   /// fixup_ve_hi32 - 32-bit fixup corresponding to foo@hi
-  fixup_ve_hi32,
+  fixup_ve_hi32 = FirstTargetFixupKind,
 
   /// fixup_ve_lo32 - 32-bit fixup corresponding to foo@lo
   fixup_ve_lo32,

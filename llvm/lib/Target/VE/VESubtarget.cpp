@@ -41,7 +41,7 @@ VESubtarget &VESubtarget::initializeSubtargetDependencies(StringRef CPU,
 VESubtarget::VESubtarget(const Triple &TT, const std::string &CPU,
                          const std::string &FS, const TargetMachine &TM)
     : VEGenSubtargetInfo(TT, CPU, FS), TargetTriple(TT), PackedMode(false),
-      EnableVPU(true) InstrInfo(initializeSubtargetDependencies(CPU, FS)),
+      EnableVPU(true), InstrInfo(initializeSubtargetDependencies(CPU, FS)),
       TLInfo(TM, *this), FrameLowering(*this) {}
 
 uint64_t VESubtarget::getAdjustedFrameSize(uint64_t frameSize) const {
