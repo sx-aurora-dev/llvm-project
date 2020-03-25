@@ -2249,7 +2249,7 @@ def: Pat<(i64 (repl_i32 i32:$val)),
               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32))>;
 
 // load an immediate into a register
-def lea_i32         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 $val))>;
+def lea_i32         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 $imm))>;
 
 
 // generic vector instruction patterns
