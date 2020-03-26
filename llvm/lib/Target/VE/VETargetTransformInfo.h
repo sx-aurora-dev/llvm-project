@@ -57,7 +57,6 @@ public:
   unsigned getRegisterBitWidth(bool Vector) const {
     if (Vector) {
       return enableVPU() ? 256 * 64 : 0;
-      return 256 * 64;
     }
     return 64;
   }

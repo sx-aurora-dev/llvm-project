@@ -48,7 +48,7 @@ def VEAsmParser : AsmParser {
 class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
-def : Proc<"ve",             []>;
+def : Proc<"ve",             [FeatureVPU, FeaturePackedMode]>;
 // def : Processor<"ve", VEItinerary, []>;
 // def : ProcessorModel<"ve", VESchedModel, []>;
 
