@@ -455,11 +455,6 @@ def brtarget32 : Operand<OtherVT> {
 
 def TLSSym : Operand<iPTR>;
 
-def calltarget : Operand<i64> {
-  let EncoderMethod = "getCallTargetOpValue";
-  let DecoderMethod = "DecodeCallTarget";
-}
-
 def simm7Op32 : Operand<i32> {
   let DecoderMethod = "DecodeSIMM7";
 }
@@ -1453,7 +1448,7 @@ let cx = 1, cx2 = 1 in
 defm BRCFS : BCRm<"br${cf}.s", "br.s", "braf.s", 0x18, F32, simm7>;
 
 // Section 8.8.5 - BSIC (Branch and Save IC)
-let isCall = 1, hasSideEffects = 0 /* , Uses = [IC] */ in
+let isCall = 1, hasSideEffects = 0, DecoderMethod = "DecodeCall" in
 defm BSIC : RMm<"bsic", 0x08, I64>;
 
 // Call instruction is a special case of BSIC.

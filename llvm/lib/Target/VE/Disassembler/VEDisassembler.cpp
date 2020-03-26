@@ -269,6 +269,8 @@ static DecodeStatus DecodeLoadASI64(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeStoreASI64(MCInst &Inst, uint64_t insn,
                                      uint64_t Address, const void *Decoder);
+static DecodeStatus DecodeCall(MCInst &Inst, uint64_t insn, uint64_t Address,
+                               const void *Decoder);
 static DecodeStatus DecodeSIMM7(MCInst &Inst, uint64_t insn,
                                 uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeSIMM32(MCInst &Inst, uint64_t insn,
@@ -510,6 +512,12 @@ static DecodeStatus DecodeStoreASI64(MCInst &Inst, uint64_t insn,
                                      uint64_t Address, const void *Decoder) {
   return DecodeMemAS(Inst, insn, Address, Decoder, false,
                      DecodeI64RegisterClass);
+}
+
+static DecodeStatus DecodeCall(MCInst &Inst, uint64_t insn, uint64_t Address,
+                               const void *Decoder) {
+  return DecodeMem(Inst, insn, Address, Decoder, true,
+                   DecodeI64RegisterClass);
 }
 
 static DecodeStatus DecodeSIMM7(MCInst &MI, uint64_t insn,
