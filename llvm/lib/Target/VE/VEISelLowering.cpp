@@ -2288,15 +2288,21 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
 
   // All mask ops
-  for (MVT VT : MVT::vector_valuetypes()) {
-    if (VT.getVectorElementType() != MVT::i1) continue;
+  for (MVT MaskVT : MVT::vector_valuetypes()) {
+    if (MaskVT.getVectorElementType() != MVT::i1)
+      continue;
 
     // Mask producing operations
-    setOperationAction(ISD::INSERT_VECTOR_ELT, VT, Expand);
-    setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
+    setOperationAction(ISD::INSERT_VECTOR_ELT, MaskVT, Expand);
+    setOperationAction(ISD::EXTRACT_VECTOR_ELT, MaskVT, Custom);
 
-    ForAll_setOperationAction(IntReductionOCs, VT, Custom);
-    ForAll_setOperationAction(VectorTransformOCs, VT, Custom);
+    // Custom lower mask ops
+    setOperationAction(ISD::STORE, MaskVT, Custom);
+    // setOperationAction(ISD::LOAD, MaskVT, Custom);
+    // FIXME vm loads,stores should be symmetric?
+
+    ForAll_setOperationAction(IntReductionOCs, MaskVT, Custom);
+    ForAll_setOperationAction(VectorTransformOCs, MaskVT, Custom);
   }
 
   // Special rules for aliased mask types
