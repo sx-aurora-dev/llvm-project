@@ -256,7 +256,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   emitPrologueInsns(MF, MBB, MBBI, NumBytes, true);
 
   // Emit stack adjust instructions
-  int RuntimeAlign = NeedsStackRealignment ? MFI.getMaxAlignment() : 0;
+  int RuntimeAlign = NeedsStackRealignment ? MFI.getMaxAlign().value() : 0;
   emitSPAdjustment(MF, MBB, MBBI, -NumBytes, RuntimeAlign);
 
   if (hasBP(MF)) {
