@@ -55,7 +55,12 @@ const uint32_t *VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
     return CSR_vec_expf_RegMask;
   case CallingConv::VE_LLVM_GROW_STACK:
     return CSR_llvm_grow_stack_RegMask;
+  case CallingConv::Fast:
+    // Some vregs, vmask regs saved
+    return CSR_RegCall_RegMask;
   default:
+    // NCC default CC does not explictly mention vector (mask) regs - assume
+    // that they are clobbered
     return CSR_RegMask;
   }
 }
