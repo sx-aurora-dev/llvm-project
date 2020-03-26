@@ -1144,10 +1144,19 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
     Action = TLI.getOperationAction(Node->getOpcode(),
                     cast<MaskedScatterSDNode>(Node)->getValue().getValueType());
     break;
+  case ISD::VP_SCATTER:
+    Action = TLI.getOperationAction(Node->getOpcode(),
+                    cast<VPScatterSDNode>(Node)->getValue().getValueType());
+    break;
   case ISD::MSTORE:
     Action = TLI.getOperationAction(Node->getOpcode(),
                     cast<MaskedStoreSDNode>(Node)->getValue().getValueType());
     break;
+  case ISD::VP_STORE:
+    Action = TLI.getOperationAction(Node->getOpcode(),
+                    cast<VPStoreSDNode>(Node)->getValue().getValueType());
+    break;
+  // FIXME add VP reductions
   case ISD::VECREDUCE_FADD:
   case ISD::VECREDUCE_FMUL:
   case ISD::VECREDUCE_ADD:
