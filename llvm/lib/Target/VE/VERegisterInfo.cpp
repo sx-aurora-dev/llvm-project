@@ -162,9 +162,7 @@ static unsigned offset_to_disp(MachineInstr &MI) {
 static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
                       MachineInstr &MI, const DebugLoc &dl,
                       unsigned FIOperandNum, int Offset, unsigned FramePtr) {
-  if (1) {
-      LLVM_DEBUG(dbgs() << "replaceFI: "; MI.dump());
-  }
+  LLVM_DEBUG(dbgs() << "replaceFI: "; MI.dump());
 
   // Replace frame index with a temporal register if the instruction is
   // vector load/store.
