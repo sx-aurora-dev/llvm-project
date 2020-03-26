@@ -326,6 +326,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
     return Op->getOperand(VecParamPos.getValue()).getValueType();
   }
 
+  case VEISD::VEC_NARROW:
   case VEISD::VEC_SEQ:
   case VEISD::VEC_BROADCAST:
     return Op->getValueType(0);

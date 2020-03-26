@@ -2397,6 +2397,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
 TargetLowering::LegalizeAction
 VETargetLowering::getCustomOperationAction(SDNode& Op) const {
+  // Always custom-lower VEC_NARROW to eliminate it
+  if (Op.getOpcode() == VEISD::VEC_NARROW)
+    return Custom;
+  // Otw, only custom lower to perform due widening
   if (IsVVPOrVEC(Op.getOpcode()) && OpNeedsWidening(Op))
     return Custom;
   return Legal;
