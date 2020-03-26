@@ -27,6 +27,10 @@ void VESubtarget::anchor() {}
 
 VESubtarget &VESubtarget::initializeSubtargetDependencies(StringRef CPU,
                                                           StringRef FS) {
+  // Default feature settings
+  EnableVPU = true;
+  PackedMode = false;
+
   // Determine default and user specified characteristics
   std::string CPUName = std::string(CPU);
   if (CPUName.empty())
@@ -40,9 +44,9 @@ VESubtarget &VESubtarget::initializeSubtargetDependencies(StringRef CPU,
 
 VESubtarget::VESubtarget(const Triple &TT, const std::string &CPU,
                          const std::string &FS, const TargetMachine &TM)
-    : VEGenSubtargetInfo(TT, CPU, FS), TargetTriple(TT), PackedMode(false),
-      EnableVPU(true), InstrInfo(initializeSubtargetDependencies(CPU, FS)),
-      TLInfo(TM, *this), FrameLowering(*this) {}
+    : VEGenSubtargetInfo(TT, CPU, FS), TargetTriple(TT),
+      InstrInfo(initializeSubtargetDependencies(CPU, FS)), TLInfo(TM, *this),
+      FrameLowering(*this) {}
 
 uint64_t VESubtarget::getAdjustedFrameSize(uint64_t frameSize) const {
 
