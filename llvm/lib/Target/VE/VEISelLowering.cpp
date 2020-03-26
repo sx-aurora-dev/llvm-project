@@ -2527,7 +2527,7 @@ SDValue VETargetLowering::makeHiLoPair(SDValue Op, unsigned HiTF, unsigned LoTF,
 // or ExternalSymbol SDNode.
 SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
   SDLoc DL(Op);
-  EVT VT = getPointerTy(DAG.getDataLayout());
+  EVT PtrVT = Op.getValueType();
 
   // Handle PIC mode first. VE needs a got load for every variable!
   if (isPositionIndependent()) {
@@ -2547,8 +2547,8 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
       // FIXME: use lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35, %s15)
       SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOTOFF_HI32,
                                   VEMCExpr::VK_VE_GOTOFF_LO32, DAG);
-      SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, VT);
-      return DAG.getNode(ISD::ADD, DL, VT, GlobalBase, HiLo);
+      SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, PtrVT);
+      return DAG.getNode(ISD::ADD, DL, PtrVT, GlobalBase, HiLo);
     }
     // Create following instructions for not local linkage PIC code.
     //     lea %s35, %got_lo(.LCPI0_0)
@@ -2559,9 +2559,9 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
     // FIXME: use lea.sl %s35, %gotoff_hi(.LCPI0_0)(%s35, %s15)
     SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOT_HI32,
                                 VEMCExpr::VK_VE_GOT_LO32, DAG);
-    SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, VT);
-    SDValue AbsAddr = DAG.getNode(ISD::ADD, DL, VT, GlobalBase, HiLo);
-    return DAG.getLoad(VT, DL, DAG.getEntryNode(), AbsAddr,
+    SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, PtrVT);
+    SDValue AbsAddr = DAG.getNode(ISD::ADD, DL, PtrVT, GlobalBase, HiLo);
+    return DAG.getLoad(PtrVT, DL, DAG.getEntryNode(), AbsAddr,
                          MachinePointerInfo::getGOT(DAG.getMachineFunction()));
   }
 
@@ -2652,7 +2652,7 @@ VETargetLowering::LowerToTLSGeneralDynamicModel(SDValue Op,
   //   t3: ch,glue = callseq_end t2, 0, 0, t2:2
   //   t4: i64,ch,glue = CopyFromReg t3, Register:i64 $sx0, t3:1
   SDValue Label = withTargetFlags(Op, 0, DAG);
-  EVT PtrVT = getPointerTy(DAG.getDataLayout());
+  EVT PtrVT = Op.getValueType();
 
   // Lowering the machine isd will make sure everything is in the right
   // location.
@@ -2808,8 +2808,20 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
   //   ret = GETSTACKTOP;        // pseudo instruction
   SDLoc dl(Op);
 
-  SDValue Size = Op.getOperand(1); // Legalize the size.
-  EVT VT = Size->getValueType(0);
+  // Get the inputs.
+  SDNode *Node = Op.getNode();
+  SDValue Chain = Op.getOperand(0);
+  SDValue Size = Op.getOperand(1);
+  MaybeAlign Alignment(Op.getConstantOperandVal(2));
+  EVT VT = Node->getValueType(0);
+
+  // Chain the dynamic stack allocation so that it doesn't modify the stack
+  // pointer when other instructions are using the stack.
+  Chain = DAG.getCALLSEQ_START(Chain, 0, 0, dl);
+
+  const TargetFrameLowering &TFI = *Subtarget->getFrameLowering();
+  const Align StackAlign(TFI.getStackAlignment());
+  bool NeedsAlign = Alignment && Alignment > StackAlign;
 
   // Prepare arguments
   TargetLowering::ArgListTy Args;
@@ -2819,8 +2831,13 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
   Args.push_back(Entry);
   Type *RetTy = Type::getVoidTy(*DAG.getContext());
 
-  EVT PtrVT = getPointerTy(DAG.getDataLayout());
-  SDValue Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack", PtrVT, 0);
+  EVT PtrVT = Op.getValueType();
+  SDValue Callee;
+  if (NeedsAlign) {
+    Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack_align", PtrVT, 0);
+  } else {
+    Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack", PtrVT, 0);
+  }
 
   TargetLowering::CallLoweringInfo CLI(DAG);
   CLI.setDebugLoc(dl)
@@ -2829,9 +2846,19 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
                  std::move(Args))
       .setDiscardResult(true);
   std::pair<SDValue, SDValue> pair = LowerCallTo(CLI);
-  SDValue Chain = pair.second;
-  SDValue Value = DAG.getNode(VEISD::GETSTACKTOP, dl, VT, Chain);
-  SDValue Ops[2] = {Value, Chain};
+  Chain = pair.second;
+  SDValue Result = DAG.getNode(VEISD::GETSTACKTOP, dl, VT, Chain);
+  if (NeedsAlign) {
+    Result = DAG.getNode(ISD::ADD, dl, VT, Result,
+                         DAG.getConstant((Alignment->value() - 1ULL), dl, VT));
+    Result = DAG.getNode(ISD::AND, dl, VT, Result,
+                         DAG.getConstant(~(Alignment->value() - 1ULL), dl, VT));
+  }
+  //  Chain = Result.getValue(1);
+  Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(0, dl, true),
+                             DAG.getIntPtrConstant(0, dl, true), SDValue(), dl);
+
+  SDValue Ops[2] = {Result, Chain};
   return DAG.getMergeValues(Ops, dl);
 }
 
@@ -2950,6 +2977,61 @@ SDValue VETargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   return Op;
 }
 
+static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
+  SDLoc dl(Op);
+  StoreSDNode *StNode = dyn_cast<StoreSDNode>(Op.getNode());
+  assert(StNode && StNode->getOffset().isUndef() && "Unexpected node type");
+
+  SDValue BasePtr = StNode->getBasePtr();
+  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
+    // For the case of frame index, expanding it here cause dependency
+    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
+    return Op;
+  }
+
+  unsigned alignment = StNode->getAlignment();
+  if (alignment > 8)
+    alignment = 8;
+  EVT addrVT = BasePtr.getValueType();
+  EVT MemVT = StNode->getMemoryVT();
+  if (MemVT == MVT::v256i1 || MemVT == MVT::v4i64) {
+    SDValue OutChains[4];
+    for (int i = 0; i < 4; ++i) {
+      SDNode *V =
+          DAG.getMachineNode(VE::svm_smI, dl, MVT::i64, StNode->getValue(),
+                             DAG.getTargetConstant(i, dl, MVT::i64));
+      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, dl, addrVT));
+      OutChains[i] =
+          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
+                       MachinePointerInfo(), alignment,
+                       StNode->isVolatile() ? MachineMemOperand::MOVolatile
+                                            : MachineMemOperand::MONone);
+    }
+    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
+  }
+
+  if (MemVT == MVT::v512i1 || MemVT == MVT::v8i64) {
+    SDValue OutChains[8];
+    for (int i = 0; i < 8; ++i) {
+      SDNode *V =
+          DAG.getMachineNode(VE::svm_sMI, dl, MVT::i64, StNode->getValue(),
+                             DAG.getTargetConstant(i, dl, MVT::i64));
+      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, dl, addrVT));
+      OutChains[i] =
+          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
+                       MachinePointerInfo(), alignment,
+                       StNode->isVolatile() ? MachineMemOperand::MOVolatile
+                                            : MachineMemOperand::MONone);
+    }
+    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
+  }
+
+  // Otherwise, ask llvm to expand it.
+  return SDValue();
+}
+
 // Lower a f128 store into two f64 stores.
 static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   SDLoc dl(Op);
@@ -2998,10 +3080,10 @@ SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   StoreSDNode *St = cast<StoreSDNode>(Op.getNode());
 
   EVT MemVT = St->getMemoryVT();
-#if 0
+
   if (MemVT == MVT::v256i1 || MemVT == MVT::v512i1)
    return LowerI1Store(Op, DAG);
-#endif
+
   if (MemVT == MVT::f128)
     return LowerF128Store(Op, DAG);
 
@@ -3090,7 +3172,7 @@ SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
     case AtomicOrdering::AcquireRelease:
     case AtomicOrdering::SequentiallyConsistent:
       // Generate "fencem 3" as acq_rel and seq_cst fence.
-      // FIXME: "fencem 3" doesn't wait for for PCIe deveices accesses,
+      // FIXME: "fencem 3" doesn't wait for for PCIe device accesses,
       //        so  seq_cst may require more instruction for them.
       return SDValue(DAG.getMachineNode(VE::FENCEloadstore, DL, MVT::Other,
                                         Op.getOperand(0)),
