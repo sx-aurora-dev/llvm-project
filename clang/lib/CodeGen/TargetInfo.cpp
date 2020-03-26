@@ -9845,6 +9845,7 @@ public:
 
 private:
   ABIArgInfo classifyReturnType(QualType RetTy) const;
+  ABIArgInfo classifyArgumentType(QualType RetTy) const;
   void computeInfo(CGFunctionInfo &FI) const override;
 };
 } // end anonymous namespace
@@ -9857,6 +9858,16 @@ VEABIInfo::classifyReturnType(QualType Ty) const {
   }
   else {
     return DefaultABIInfo::classifyReturnType(Ty);
+  }
+}
+
+ABIArgInfo
+VEABIInfo::classifyArgumentType(QualType Ty) const {
+  if (Ty->isAnyComplexType()) {
+    return ABIArgInfo::getDirect();
+  }
+  else {
+    return DefaultABIInfo::classifyArgumentType(Ty);
   }
 }
 
