@@ -20,7 +20,7 @@ include "llvm/Target/Target.td"
 //
 
 def FeaturePackedMode
-  : SubtargetFeature<"packed", "PackedMode", "true",
+  : SubtargetFeature<"packed", "PackedMode", "false",
                      "Enable v512 packed mode (experimental)">;
 def FeatureVPU
   : SubtargetFeature<"vpu", "EnableVPU", "true",
