@@ -1812,6 +1812,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::GlobalTLSAddress, PtrVT, Custom);
   setOperationAction(ISD::ConstantPool, PtrVT, Custom);
 
+  // VE doesn't have BRCOND
+  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
+
   // BRIND/BR_JT are not implemented yet.
   //   FIXME: BRIND instruction is implemented, but JumpTable is not yet.
   setOperationAction(ISD::BRIND, MVT::Other, Expand);
