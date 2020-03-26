@@ -610,20 +610,6 @@ def RD_RA    : RD_VAL<12>;  // Round to Nearest (ties to Away)
 // VE Multiclasses for common instruction formats
 //===----------------------------------------------------------------------===//
 
-multiclass RMm<string opcStr, bits<8>opc, RegisterClass RC> {
-  def rri : RM<opc, (outs RC:$dest), (ins MEMrri:$addr),
-               !strconcat(opcStr, " $dest, $addr"), []>;
-  let cy = 0 in
-  def rii : RM<opc, (outs RC:$dest), (ins MEMrii:$addr),
-               !strconcat(opcStr, " $dest, $addr"), []>;
-  let cz = 0 in
-  def zri : RM<opc, (outs RC:$dest), (ins MEMzri:$addr),
-               !strconcat(opcStr, " $dest, $addr"), []>;
-  let cy = 0, cz = 0 in
-  def zii : RM<opc, (outs RC:$dest), (ins MEMzii:$addr),
-               !strconcat(opcStr, " $dest, $addr"), []>;
-}
-
 // Multiclass for RR type instructions
 multiclass RRmrr<string opcStr, bits<8>opc,
                  RegisterClass RCo, ValueType Tyo,
@@ -766,15 +752,28 @@ multiclass RRFCQm<string opcStr, bits<8>opc,
 // Section 8.2 - Load/Store instructions
 //-----------------------------------------------------------------------------
 
+// Multiclass for generic RM instructions
+multiclass RMm<string opcStr, bits<8>opc, RegisterClass RC> {
+  def rri : RM<opc, (outs RC:$dest), (ins MEMrri:$addr),
+               !strconcat(opcStr, " $dest, $addr"), []>;
+  let cy = 0 in
+  def rii : RM<opc, (outs RC:$dest), (ins MEMrii:$addr),
+               !strconcat(opcStr, " $dest, $addr"), []>;
+  let cz = 0 in
+  def zri : RM<opc, (outs RC:$dest), (ins MEMzri:$addr),
+               !strconcat(opcStr, " $dest, $addr"), []>;
+  let cy = 0, cz = 0 in
+  def zii : RM<opc, (outs RC:$dest), (ins MEMzii:$addr),
+               !strconcat(opcStr, " $dest, $addr"), []>;
+}
+
 // Section 8.2.1 - LEA
 let cx = 0, DecoderMethod = "DecodeLoadI64" in
 defm LEA : RMm<"lea", 0x06, I64>;
 let cx = 1, DecoderMethod = "DecodeLoadI64" in
 defm LEASL : RMm<"lea.sl", 0x06, I64>;
-let isCodeGenOnly = 1 in {
-let cx = 0, DecoderMethod = "DecodeLoadI32" in
+let cx = 0, DecoderMethod = "DecodeLoadI32", isCodeGenOnly = 1 in
 defm LEA32 : RMm<"lea", 0x06, I32>;
-}
 
 def : Pat<(iPTR ADDRrri:$addr), (LEArri MEMrri:$addr)>;
 def : Pat<(iPTR ADDRrii:$addr), (LEArii MEMrii:$addr)>;
@@ -854,18 +853,18 @@ defm LD1BZX : LOADm<"ld1b.zx", 0x05, I32, i32, zextloadi8>;
 
 // LDQ pseudo instructions
 let mayLoad = 1, hasSideEffects = 0 in {
-def LDQrri : Pseudo<(outs F128:$dest), (ins MEMrri:$addr),
-                    "# pseudo ldq $dest, $addr",
-                    [(set f128:$dest, (load ADDRrri:$addr))]>;
-def LDQrii : Pseudo<(outs F128:$dest), (ins MEMrii:$addr),
-                    "# pseudo ldq $dest, $addr",
-                    [(set f128:$dest, (load ADDRrii:$addr))]>;
-def LDQzri : Pseudo<(outs F128:$dest), (ins MEMzri:$addr),
-                    "# pseudo ldq $dest, $addr",
-                    [(set f128:$dest, (load ADDRzri:$addr))]>;
-def LDQzii : Pseudo<(outs F128:$dest), (ins MEMzii:$addr),
-                    "# pseudo ldq $dest, $addr",
-                    [(set f128:$dest, (load ADDRzii:$addr))]>;
+  def LDQrri : Pseudo<(outs F128:$dest), (ins MEMrri:$addr),
+                      "# pseudo ldq $dest, $addr",
+                      [(set f128:$dest, (load ADDRrri:$addr))]>;
+  def LDQrii : Pseudo<(outs F128:$dest), (ins MEMrii:$addr),
+                      "# pseudo ldq $dest, $addr",
+                      [(set f128:$dest, (load ADDRrii:$addr))]>;
+  def LDQzri : Pseudo<(outs F128:$dest), (ins MEMzri:$addr),
+                      "# pseudo ldq $dest, $addr",
+                      [(set f128:$dest, (load ADDRzri:$addr))]>;
+  def LDQzii : Pseudo<(outs F128:$dest), (ins MEMzii:$addr),
+                      "# pseudo ldq $dest, $addr",
+                      [(set f128:$dest, (load ADDRzii:$addr))]>;
 }
 
 // Multiclass for store instructions.
@@ -915,18 +914,18 @@ defm ST1B : STOREm<"st1b", 0x15, I32, i32, truncstorei8>;
 
 // STQ pseudo instructions
 let mayStore = 1, hasSideEffects = 0 in {
-def STQrri : Pseudo<(outs), (ins MEMrri:$addr, F128:$sx),
-                    "# pseudo stq $sx, $addr",
-                    [(store f128:$sx, ADDRrri:$addr)]>;
-def STQrii : Pseudo<(outs), (ins MEMrii:$addr, F128:$sx),
-                    "# pseudo stq $sx, $addr",
-                    [(store f128:$sx, ADDRrii:$addr)]>;
-def STQzri : Pseudo<(outs), (ins MEMzri:$addr, F128:$sx),
-                    "# pseudo stq $sx, $addr",
-                    [(store f128:$sx, ADDRzri:$addr)]>;
-def STQzii : Pseudo<(outs), (ins MEMzii:$addr, F128:$sx),
-                    "# pseudo stq $sx, $addr",
-                    [(store f128:$sx, ADDRzii:$addr)]>;
+  def STQrri : Pseudo<(outs), (ins MEMrri:$addr, F128:$sx),
+                      "# pseudo stq $sx, $addr",
+                      [(store f128:$sx, ADDRrri:$addr)]>;
+  def STQrii : Pseudo<(outs), (ins MEMrii:$addr, F128:$sx),
+                      "# pseudo stq $sx, $addr",
+                      [(store f128:$sx, ADDRrii:$addr)]>;
+  def STQzri : Pseudo<(outs), (ins MEMzri:$addr, F128:$sx),
+                      "# pseudo stq $sx, $addr",
+                      [(store f128:$sx, ADDRzri:$addr)]>;
+  def STQzii : Pseudo<(outs), (ins MEMzii:$addr, F128:$sx),
+                      "# pseudo stq $sx, $addr",
+                      [(store f128:$sx, ADDRzii:$addr)]>;
 }
 
 // Section 8.2.12 - DLDS
