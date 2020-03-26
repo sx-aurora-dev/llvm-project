@@ -55,7 +55,8 @@ public:
   }
 
   unsigned getRegisterBitWidth(bool Vector) const {
-    if (Vector && enableVPU()) {
+    if (Vector) {
+      return enableVPU() ? 256 * 64 : 0;
       return 256 * 64;
     }
     return 64;
@@ -145,6 +146,9 @@ public:
   /// \returns False if this VP op should be replaced by a non-VP op or an
   /// unpredicated op plus a select.
   bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
+    if (!enableVPU())
+      return false;
+
     switch (PredInst.getOpcode()) {
     default:
       break;
@@ -175,6 +179,9 @@ public:
   /// }
 
   bool shouldExpandReduction(const IntrinsicInst *II) const {
+    if (!enableVPU())
+      return true;
+
     bool Unordered = II->getFastMathFlags().allowReassoc();
     switch (II->getIntrinsicID()) {
       // Supported in all variations

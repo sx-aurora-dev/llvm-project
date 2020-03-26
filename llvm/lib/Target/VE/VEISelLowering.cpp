@@ -2391,19 +2391,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
 TargetLowering::LegalizeAction
 VETargetLowering::getCustomOperationAction(SDNode& Op) const {
-  switch (Op.getOpcode()) {
-    default:
-      if (IsVVP(Op.getOpcode()) && OpNeedsWidening(Op)) return Custom;
-      return Legal;
-
-    case VEISD::VEC_NARROW:
-      return Custom;
-
-    case VEISD::VEC_SEQ:
-    case VEISD::VEC_BROADCAST:
-      return OpNeedsWidening(Op) ? Custom : Legal;
-  }
-
+  if (IsVVPOrVEC(Op.getOpcode()) && OpNeedsWidening(Op))
+    return Custom;
   return Legal;
 }
 
