@@ -134,7 +134,7 @@ void VEFrameLowering::emitEpilogueInsns(MachineFunction &MF,
 void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
                                        MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator MBBI,
-                                       int64_t NumBytes, int Align) const {
+                                       int64_t NumBytes, MaybeAlign MaybeAlign) const {
   DebugLoc dl;
   const VEInstrInfo &TII =
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
@@ -163,11 +163,11 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
       .addReg(VE::SX13)
       .addImm(Hi_32(NumBytes));
 
-  if (Align != 0) {
+  if (MaybeAlign) {
     // and %sp, %sp, Align-1
     BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm1), VE::SX11)
         .addReg(VE::SX11)
-        .addImm(64 - Log2_64(Align));
+        .addImm(64 - Log2_64(MaybeAlign->value()));
   }
 }
 
@@ -245,7 +245,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 
   // Finally, ensure that the size is sufficiently aligned for the
   // data on the stack.
-  NumBytes = alignTo(NumBytes, MFI.getMaxAlign().value());
+  NumBytes = alignTo(NumBytes, MFI.getMaxAlign());
 
   // Update stack size with corrected value.
   MFI.setStackSize(NumBytes);
@@ -254,7 +254,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   emitPrologueInsns(MF, MBB, MBBI, NumBytes, true);
 
   // Emit stack adjust instructions
-  int RuntimeAlign = NeedsStackRealignment ? MFI.getMaxAlignment() : 0;
+  MaybeAlign RuntimeAlign = NeedsStackRealignment ? MaybeAlign(MFI.getMaxAlign()) : None;
   emitSPAdjustment(MF, MBB, MBBI, -NumBytes, RuntimeAlign);
 
   if (hasBP(MF)) {
