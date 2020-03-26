@@ -85,29 +85,29 @@ void VEInstPrinter::printMemASXOperand(const MCInst *MI, int opNum,
     return;
   }
 
-  if (MI->getOperand(opNum+2).isImm() &&
-      MI->getOperand(opNum+2).getImm() == 0) {
+  if (MI->getOperand(opNum + 2).isImm() &&
+      MI->getOperand(opNum + 2).getImm() == 0) {
     // don't print "+0"
   } else {
-    printOperand(MI, opNum+2, STI, O);
+    printOperand(MI, opNum + 2, STI, O);
   }
-  if (MI->getOperand(opNum+1).isImm() &&
-      MI->getOperand(opNum+1).getImm() == 0 &&
+  if (MI->getOperand(opNum + 1).isImm() &&
+      MI->getOperand(opNum + 1).getImm() == 0 &&
       MI->getOperand(opNum).isImm() &&
       MI->getOperand(opNum).getImm() == 0) {
-    if (MI->getOperand(opNum+2).isImm() &&
-        MI->getOperand(opNum+2).getImm() == 0) {
+    if (MI->getOperand(opNum + 2).isImm() &&
+        MI->getOperand(opNum + 2).getImm() == 0) {
       O << "0";
     } else {
       // don't print "+0,+0"
     }
   } else {
     O << "(";
-    if (MI->getOperand(opNum+1).isImm() &&
-        MI->getOperand(opNum+1).getImm() == 0) {
+    if (MI->getOperand(opNum + 1).isImm() &&
+        MI->getOperand(opNum + 1).getImm() == 0) {
       // don't print "+0"
     } else {
-      printOperand(MI, opNum+1, STI, O);
+      printOperand(MI, opNum + 1, STI, O);
     }
     if (MI->getOperand(opNum).isImm() &&
         MI->getOperand(opNum).getImm() == 0) {
@@ -127,20 +127,20 @@ void VEInstPrinter::printMemASOperandASX(const MCInst *MI, int opNum,
   if (Modifier && !strcmp(Modifier, "arith")) {
     printOperand(MI, opNum, STI, O);
     O << ", ";
-    printOperand(MI, opNum+1, STI, O);
+    printOperand(MI, opNum + 1, STI, O);
     return;
   }
 
-  if (MI->getOperand(opNum+1).isImm() &&
-      MI->getOperand(opNum+1).getImm() == 0) {
+  if (MI->getOperand(opNum + 1).isImm() &&
+      MI->getOperand(opNum + 1).getImm() == 0) {
     // don't print "+0"
   } else {
-    printOperand(MI, opNum+1, STI, O);
+    printOperand(MI, opNum + 1, STI, O);
   }
   if (MI->getOperand(opNum).isImm() &&
       MI->getOperand(opNum).getImm() == 0) {
-    if (MI->getOperand(opNum+1).isImm() &&
-        MI->getOperand(opNum+1).getImm() == 0) {
+    if (MI->getOperand(opNum + 1).isImm() &&
+        MI->getOperand(opNum + 1).getImm() == 0) {
       O << "0";
     } else {
       // don't print "(0)"
@@ -159,20 +159,20 @@ void VEInstPrinter::printMemASOperandRRM(const MCInst *MI, int opNum,
   if (Modifier && !strcmp(Modifier, "arith")) {
     printOperand(MI, opNum, STI, O);
     O << ", ";
-    printOperand(MI, opNum+1, STI, O);
+    printOperand(MI, opNum + 1, STI, O);
     return;
   }
 
-  if (MI->getOperand(opNum+1).isImm() &&
-      MI->getOperand(opNum+1).getImm() == 0) {
+  if (MI->getOperand(opNum + 1).isImm() &&
+      MI->getOperand(opNum + 1).getImm() == 0) {
     // don't print "+0"
   } else {
-    printOperand(MI, opNum+1, STI, O);
+    printOperand(MI, opNum + 1, STI, O);
   }
   if (MI->getOperand(opNum).isImm() &&
       MI->getOperand(opNum).getImm() == 0) {
-    if (MI->getOperand(opNum+1).isImm() &&
-        MI->getOperand(opNum+1).getImm() == 0) {
+    if (MI->getOperand(opNum + 1).isImm() &&
+        MI->getOperand(opNum + 1).getImm() == 0) {
       O << "0";
     } else {
       // don't print "(0)"
@@ -191,15 +191,15 @@ void VEInstPrinter::printMemASOperandHM(const MCInst *MI, int opNum,
   if (Modifier && !strcmp(Modifier, "arith")) {
     printOperand(MI, opNum, STI, O);
     O << ", ";
-    printOperand(MI, opNum+1, STI, O);
+    printOperand(MI, opNum + 1, STI, O);
     return;
   }
 
-  if (MI->getOperand(opNum+1).isImm() &&
-      MI->getOperand(opNum+1).getImm() == 0) {
+  if (MI->getOperand(opNum + 1).isImm() &&
+      MI->getOperand(opNum + 1).getImm() == 0) {
     // don't print "+0"
   } else {
-    printOperand(MI, opNum+1, STI, O);
+    printOperand(MI, opNum + 1, STI, O);
   }
   O << "(";
   if (MI->getOperand(opNum).isReg())
