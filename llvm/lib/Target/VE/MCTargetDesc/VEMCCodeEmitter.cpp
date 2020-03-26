@@ -70,9 +70,6 @@ public:
                              SmallVectorImpl<MCFixup> &Fixups,
                              const MCSubtargetInfo &STI) const;
 
-  unsigned getCallTargetOpValue(const MCInst &MI, unsigned OpNo,
-                                SmallVectorImpl<MCFixup> &Fixups,
-                                const MCSubtargetInfo &STI) const;
   uint64_t getBranchTargetOpValue(const MCInst &MI, unsigned OpNo,
                                   SmallVectorImpl<MCFixup> &Fixups,
                                   const MCSubtargetInfo &STI) const;
@@ -144,37 +141,6 @@ getMachineOpValue(const MCInst &MI, const MCOperand &MO,
     return Res;
 
   llvm_unreachable("Unhandled expression!");
-  return 0;
-}
-
-unsigned VEMCCodeEmitter::
-getCallTargetOpValue(const MCInst &MI, unsigned OpNo,
-                     SmallVectorImpl<MCFixup> &Fixups,
-                     const MCSubtargetInfo &STI) const {
-  const MCOperand &MO = MI.getOperand(OpNo);
-  if (MO.isReg() || MO.isImm())
-    return getMachineOpValue(MI, MO, Fixups, STI);
-
-#if 0
-  if (MI.getOpcode() == VE::TLS_CALL) {
-    // No fixups for __tls_get_addr. Will emit for fixups for tls_symbol in
-    // encodeInstruction.
-#ifndef NDEBUG
-    // Verify that the callee is actually __tls_get_addr.
-    const VEMCExpr *SExpr = dyn_cast<VEMCExpr>(MO.getExpr());
-    assert(SExpr && SExpr->getSubExpr()->getKind() == MCExpr::SymbolRef &&
-           "Unexpected expression in TLS_CALL");
-    const MCSymbolRefExpr *SymExpr = cast<MCSymbolRefExpr>(SExpr->getSubExpr());
-    assert(SymExpr->getSymbol().getName() == "__tls_get_addr" &&
-           "Unexpected function for TLS_CALL");
-#endif
-    return 0;
-  }
-#endif
-
-  Fixups.push_back(MCFixup::create(0, MO.getExpr(),
-                                   (MCFixupKind)VE::fixup_ve_pc_lo32));
-
   return 0;
 }
 
