@@ -1,3 +1,3 @@
-add_llvm_library(LLVMVEDisassembler
+add_llvm_component_library(LLVMVEDisassembler
   VEDisassembler.cpp
   )
