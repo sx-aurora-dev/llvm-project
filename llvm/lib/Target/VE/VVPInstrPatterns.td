@@ -196,7 +196,7 @@ defm : VectorTernaryArith_ShortLong<c_vv_ffma, f64, v256f64, "vfmadd", f32, v256
 // Element-wise select (256 elements)
 multiclass VectorSelect<ValueType DataVT> {
     def :Pat<(DataVT (vvp_select v256i1:$vm, DataVT:$vtrue, DataVT:$vfalse, i32:$vl)),
-                     (vmrg_vvvml $vtrue, $vfalse, $vm, $vl)>;
+                     (vmrg_vvvml $vfalse, $vtrue, $vm, $vl)>;
 }
 
 defm : VectorSelect<v256f64>;
@@ -300,7 +300,7 @@ defm : IExtend32<"s">;
 // vNi1 to vNiT
 multiclass IExtend_Mask<ValueType ResVT, string ExtToken, int TrueVal> {
 def : Pat<(ResVT (!cast<SDPatternOperator>("vvp_"#ExtToken#"ext") v256i1:$vm, (v256i1 srcvalue), i32:$vl)),
-          (vmrg_vIvml TrueVal, (vbrd_vIl 0, $vl), $vm, $vl)>;
+          (vmrg_vIvml 0, (vbrd_vIl TrueVal, $vl), $vm, $vl)>;
 }
 multiclass IExtend_Mask_ForRes<ValueType ResVT> {
   defm: IExtend_Mask<ResVT, "z", 1>;
