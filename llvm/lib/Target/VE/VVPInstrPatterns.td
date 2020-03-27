@@ -233,7 +233,7 @@ defm : Set_CC_512<v512f32,"pvfcmp",cond,fcond2cc>;
 
 ///// Conversion /////
 // Pseudo instructions for i64 <> fp32 conversion
-def vcvtls_vvmvl
+def vcvtlsrz_vvmvl
   : Pseudo<(outs V64:$vx),(ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl),"# pseudo vcvtls_vvmvl">;
     // PseudoInstExpansion<(vcvtldrz_vvmvl V64:$vx, (vcvtds_vvmvl V64:$vy, VM:$vm, (V64 (IMPLICIT_DEF)), I32:$vl), $vm, $vpt, $vl)>;
 
@@ -254,13 +254,13 @@ multiclass both_x_to_y<ValueType MaskVT, ValueType FPVT, string FPTag, string IV
 }
 
 // iN <> fpN
-defm: both_x_to_y<v256i1, v256f32, "s", v256i32, "w", "zx">;
-defm: both_x_to_y<v256i1, v256f64, "d", v256i64, "l">;
+defm: both_x_to_y<v256i1, v256f32, "s", v256i32, "w", "sxrz">;
+defm: both_x_to_y<v256i1, v256f64, "d", v256i64, "l", "rz">;
 defm: both_x_to_y<v512i1, v512f32, "s", v512i32, "w", "", "pvcvt", "M">;
 
 // t32 <> t64
-defm: both_x_to_y<v256i1, v256f32, "s", v256i64, "l">;
-defm: both_x_to_y<v256i1, v256f64, "d", v256i32, "w", "zx">;
+defm: both_x_to_y<v256i1, v256f32, "s", v256i64, "l", "rz">;
+defm: both_x_to_y<v256i1, v256f64, "d", v256i32, "w", "sxrz">;
 
 // fpext, fpround (256 only)
 defm : conv_x_to_y<vvp_fpround, v256i1, v256f32, v256f64, "vcvtsd", "m">;

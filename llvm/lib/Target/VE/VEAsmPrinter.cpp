@@ -362,9 +362,9 @@ void VEAsmPrinter::lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
   auto VL = getRegOperand(MI->getOperand(4));
 
   switch (MI->getOpcode()) {
-    case VE::vcvtls_vvmvl: {
-      /// def vcvtls_vvmvl
-      ///   : Pseudo<(outs V64:$vx),(ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl),"# pseudo vcvtls_vvmvl">,;
+    case VE::vcvtlsrz_vvmvl: {
+      /// def vcvtlsrz_vvmvl
+      ///   : Pseudo<(outs V64:$vx),(ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl),"# pseudo vcvtlsrz_vvmvl">,;
       ///     PseudoInstExpansion<(vcvtldrz_vvmvl V64:$vx, (vcvtds_vvmvl V64:$vy, VM:$vm, (V64 (IMPLICIT_DEF)), I32:$vl), $vm, $vpt, $vl)>;
       /// 
       emit_vvmvl(*OutStreamer, VE::vcvtds_vvmvl, ResV, SrcV, Mask, PassthruV, VL, STI);
@@ -388,7 +388,7 @@ void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
   case TargetOpcode::DBG_VALUE:
     // FIXME: Debug Value.
     return;
-  case VE::vcvtls_vvmvl:
+  case VE::vcvtlsrz_vvmvl:
   case VE::vcvtsl_vvmvl:
     lowerFPConversionAndEmitMCInsts(MI, getSubtargetInfo());
     return;
