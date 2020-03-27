@@ -16,6 +16,7 @@ add_llvm_target(VECodeGen
   CustomDAG.cpp
   LVLGen.cpp
   MaskView.cpp
+  ShuffleSynthesis.cpp
   VEAsmPrinter.cpp
   VEFrameLowering.cpp
   VEISelDAGToDAG.cpp

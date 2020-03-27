@@ -38,7 +38,7 @@
 #define DEBUG_TYPE "ve-lower"
 
 #include "CustomDAG.h"
-#include "ShuffleAnalysis.h"
+#include "ShuffleSynthesis.h"
 
 using namespace llvm;
 
