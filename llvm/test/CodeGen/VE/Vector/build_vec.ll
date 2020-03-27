@@ -10,8 +10,8 @@ define i32 @brd_v4i32() {
 ; CHECK-NEXT:    vbrdl %v0,%s1
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -33,8 +33,8 @@ define i32 @brd_v256i32() {
 ; CHECK-NEXT:    vbrdl %v0,%s1
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -87,8 +87,8 @@ define i32 @vseq_v4i32() {
 ; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -107,8 +107,8 @@ define i32 @vseq_v256i32() {
 ; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -164,8 +164,8 @@ define i32 @vseq_bad_v4i32() {
 ; CHECK-NEXT:    lsv %v0(3),%s0
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -179,16 +179,650 @@ entry:
 define i32 @vseq_bad_v256i32() {
 ; CHECK-LABEL: vseq_bad_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, .LCPI5_0@lo
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s0, .LCPI5_0@hi(%s0)
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vldl.zx %v0,4,%s0
+; CHECK-NEXT:    or %s0, 9, (0)1
+; CHECK-NEXT:    or %s1, 8, (0)1
+; CHECK-NEXT:    lsv %v0(0),%s1
+; CHECK-NEXT:    lsv %v0(1),%s0
+; CHECK-NEXT:    or %s0, 10, (0)1
+; CHECK-NEXT:    lsv %v0(2),%s0
+; CHECK-NEXT:    or %s0, 11, (0)1
+; CHECK-NEXT:    lsv %v0(3),%s0
+; CHECK-NEXT:    or %s0, 12, (0)1
+; CHECK-NEXT:    lsv %v0(4),%s0
+; CHECK-NEXT:    or %s0, 13, (0)1
+; CHECK-NEXT:    lsv %v0(5),%s0
+; CHECK-NEXT:    or %s0, 14, (0)1
+; CHECK-NEXT:    lsv %v0(6),%s0
+; CHECK-NEXT:    or %s0, 15, (0)1
+; CHECK-NEXT:    lsv %v0(7),%s0
+; CHECK-NEXT:    or %s0, 16, (0)1
+; CHECK-NEXT:    lsv %v0(8),%s0
+; CHECK-NEXT:    or %s0, 17, (0)1
+; CHECK-NEXT:    lsv %v0(9),%s0
+; CHECK-NEXT:    or %s0, 18, (0)1
+; CHECK-NEXT:    lsv %v0(10),%s0
+; CHECK-NEXT:    or %s0, 19, (0)1
+; CHECK-NEXT:    lsv %v0(11),%s0
+; CHECK-NEXT:    or %s0, 20, (0)1
+; CHECK-NEXT:    lsv %v0(12),%s0
+; CHECK-NEXT:    or %s0, 21, (0)1
+; CHECK-NEXT:    lsv %v0(13),%s0
+; CHECK-NEXT:    or %s0, 22, (0)1
+; CHECK-NEXT:    lsv %v0(14),%s0
+; CHECK-NEXT:    or %s0, 23, (0)1
+; CHECK-NEXT:    lsv %v0(15),%s0
+; CHECK-NEXT:    or %s0, 24, (0)1
+; CHECK-NEXT:    lsv %v0(16),%s0
+; CHECK-NEXT:    or %s0, 25, (0)1
+; CHECK-NEXT:    lsv %v0(17),%s0
+; CHECK-NEXT:    or %s0, 26, (0)1
+; CHECK-NEXT:    lsv %v0(18),%s0
+; CHECK-NEXT:    or %s0, 27, (0)1
+; CHECK-NEXT:    lsv %v0(19),%s0
+; CHECK-NEXT:    or %s0, 28, (0)1
+; CHECK-NEXT:    lsv %v0(20),%s0
+; CHECK-NEXT:    or %s0, 29, (0)1
+; CHECK-NEXT:    lsv %v0(21),%s0
+; CHECK-NEXT:    or %s0, 30, (0)1
+; CHECK-NEXT:    lsv %v0(22),%s0
+; CHECK-NEXT:    or %s0, 31, (0)1
+; CHECK-NEXT:    lsv %v0(23),%s0
+; CHECK-NEXT:    or %s0, 32, (0)1
+; CHECK-NEXT:    lsv %v0(24),%s0
+; CHECK-NEXT:    or %s0, 33, (0)1
+; CHECK-NEXT:    lsv %v0(25),%s0
+; CHECK-NEXT:    or %s0, 34, (0)1
+; CHECK-NEXT:    lsv %v0(26),%s0
+; CHECK-NEXT:    or %s0, 35, (0)1
+; CHECK-NEXT:    lsv %v0(27),%s0
+; CHECK-NEXT:    or %s0, 36, (0)1
+; CHECK-NEXT:    lsv %v0(28),%s0
+; CHECK-NEXT:    or %s0, 37, (0)1
+; CHECK-NEXT:    lsv %v0(29),%s0
+; CHECK-NEXT:    or %s0, 38, (0)1
+; CHECK-NEXT:    lsv %v0(30),%s0
+; CHECK-NEXT:    or %s0, 39, (0)1
+; CHECK-NEXT:    lsv %v0(31),%s0
+; CHECK-NEXT:    or %s0, 40, (0)1
+; CHECK-NEXT:    lsv %v0(32),%s0
+; CHECK-NEXT:    or %s0, 41, (0)1
+; CHECK-NEXT:    lsv %v0(33),%s0
+; CHECK-NEXT:    or %s0, 42, (0)1
+; CHECK-NEXT:    lsv %v0(34),%s0
+; CHECK-NEXT:    or %s0, 43, (0)1
+; CHECK-NEXT:    lsv %v0(35),%s0
+; CHECK-NEXT:    or %s0, 44, (0)1
+; CHECK-NEXT:    lsv %v0(36),%s0
+; CHECK-NEXT:    or %s0, 45, (0)1
+; CHECK-NEXT:    lsv %v0(37),%s0
+; CHECK-NEXT:    or %s0, 46, (0)1
+; CHECK-NEXT:    lsv %v0(38),%s0
+; CHECK-NEXT:    or %s0, 47, (0)1
+; CHECK-NEXT:    lsv %v0(39),%s0
+; CHECK-NEXT:    or %s0, 48, (0)1
+; CHECK-NEXT:    lsv %v0(40),%s0
+; CHECK-NEXT:    or %s0, 49, (0)1
+; CHECK-NEXT:    lsv %v0(41),%s0
+; CHECK-NEXT:    or %s0, 50, (0)1
+; CHECK-NEXT:    lsv %v0(42),%s0
+; CHECK-NEXT:    or %s0, 51, (0)1
+; CHECK-NEXT:    lsv %v0(43),%s0
+; CHECK-NEXT:    or %s0, 52, (0)1
+; CHECK-NEXT:    lsv %v0(44),%s0
+; CHECK-NEXT:    or %s0, 53, (0)1
+; CHECK-NEXT:    lsv %v0(45),%s0
+; CHECK-NEXT:    or %s0, 54, (0)1
+; CHECK-NEXT:    lsv %v0(46),%s0
+; CHECK-NEXT:    or %s0, 55, (0)1
+; CHECK-NEXT:    lsv %v0(47),%s0
+; CHECK-NEXT:    or %s0, 56, (0)1
+; CHECK-NEXT:    lsv %v0(48),%s0
+; CHECK-NEXT:    or %s0, 57, (0)1
+; CHECK-NEXT:    lsv %v0(49),%s0
+; CHECK-NEXT:    or %s0, 58, (0)1
+; CHECK-NEXT:    lsv %v0(50),%s0
+; CHECK-NEXT:    or %s0, 59, (0)1
+; CHECK-NEXT:    lsv %v0(51),%s0
+; CHECK-NEXT:    or %s0, 60, (0)1
+; CHECK-NEXT:    lsv %v0(52),%s0
+; CHECK-NEXT:    or %s0, 61, (0)1
+; CHECK-NEXT:    lsv %v0(53),%s0
+; CHECK-NEXT:    or %s0, 62, (0)1
+; CHECK-NEXT:    lsv %v0(54),%s0
+; CHECK-NEXT:    or %s0, 63, (0)1
+; CHECK-NEXT:    lsv %v0(55),%s0
+; CHECK-NEXT:    lea %s0, 64
+; CHECK-NEXT:    lsv %v0(56),%s0
+; CHECK-NEXT:    lea %s0, 65
+; CHECK-NEXT:    lsv %v0(57),%s0
+; CHECK-NEXT:    lea %s0, 66
+; CHECK-NEXT:    lsv %v0(58),%s0
+; CHECK-NEXT:    lea %s0, 67
+; CHECK-NEXT:    lsv %v0(59),%s0
+; CHECK-NEXT:    lea %s0, 68
+; CHECK-NEXT:    lsv %v0(60),%s0
+; CHECK-NEXT:    lea %s0, 69
+; CHECK-NEXT:    lsv %v0(61),%s0
+; CHECK-NEXT:    lea %s0, 70
+; CHECK-NEXT:    lsv %v0(62),%s0
+; CHECK-NEXT:    lea %s0, 71
+; CHECK-NEXT:    lsv %v0(63),%s0
+; CHECK-NEXT:    lea %s0, 72
+; CHECK-NEXT:    lsv %v0(64),%s0
+; CHECK-NEXT:    lea %s0, 73
+; CHECK-NEXT:    lsv %v0(65),%s0
+; CHECK-NEXT:    lea %s0, 74
+; CHECK-NEXT:    lsv %v0(66),%s0
+; CHECK-NEXT:    lea %s0, 75
+; CHECK-NEXT:    lsv %v0(67),%s0
+; CHECK-NEXT:    lea %s0, 76
+; CHECK-NEXT:    lsv %v0(68),%s0
+; CHECK-NEXT:    lea %s0, 77
+; CHECK-NEXT:    lsv %v0(69),%s0
+; CHECK-NEXT:    lea %s0, 78
+; CHECK-NEXT:    lsv %v0(70),%s0
+; CHECK-NEXT:    lea %s0, 79
+; CHECK-NEXT:    lsv %v0(71),%s0
+; CHECK-NEXT:    lea %s0, 80
+; CHECK-NEXT:    lsv %v0(72),%s0
+; CHECK-NEXT:    lea %s0, 81
+; CHECK-NEXT:    lsv %v0(73),%s0
+; CHECK-NEXT:    lea %s0, 82
+; CHECK-NEXT:    lsv %v0(74),%s0
+; CHECK-NEXT:    lea %s0, 83
+; CHECK-NEXT:    lsv %v0(75),%s0
+; CHECK-NEXT:    lea %s0, 84
+; CHECK-NEXT:    lsv %v0(76),%s0
+; CHECK-NEXT:    lea %s0, 85
+; CHECK-NEXT:    lsv %v0(77),%s0
+; CHECK-NEXT:    lea %s0, 86
+; CHECK-NEXT:    lsv %v0(78),%s0
+; CHECK-NEXT:    lea %s0, 87
+; CHECK-NEXT:    lsv %v0(79),%s0
+; CHECK-NEXT:    lea %s0, 88
+; CHECK-NEXT:    lsv %v0(80),%s0
+; CHECK-NEXT:    lea %s0, 89
+; CHECK-NEXT:    lsv %v0(81),%s0
+; CHECK-NEXT:    lea %s0, 90
+; CHECK-NEXT:    lsv %v0(82),%s0
+; CHECK-NEXT:    lea %s0, 91
+; CHECK-NEXT:    lsv %v0(83),%s0
+; CHECK-NEXT:    lea %s0, 92
+; CHECK-NEXT:    lsv %v0(84),%s0
+; CHECK-NEXT:    lea %s0, 93
+; CHECK-NEXT:    lsv %v0(85),%s0
+; CHECK-NEXT:    lea %s0, 94
+; CHECK-NEXT:    lsv %v0(86),%s0
+; CHECK-NEXT:    lea %s0, 95
+; CHECK-NEXT:    lsv %v0(87),%s0
+; CHECK-NEXT:    lea %s0, 96
+; CHECK-NEXT:    lsv %v0(88),%s0
+; CHECK-NEXT:    lea %s0, 97
+; CHECK-NEXT:    lsv %v0(89),%s0
+; CHECK-NEXT:    lea %s0, 98
+; CHECK-NEXT:    lsv %v0(90),%s0
+; CHECK-NEXT:    lea %s0, 99
+; CHECK-NEXT:    lsv %v0(91),%s0
+; CHECK-NEXT:    lea %s0, 100
+; CHECK-NEXT:    lsv %v0(92),%s0
+; CHECK-NEXT:    lea %s0, 101
+; CHECK-NEXT:    lsv %v0(93),%s0
+; CHECK-NEXT:    lea %s0, 102
+; CHECK-NEXT:    lsv %v0(94),%s0
+; CHECK-NEXT:    lea %s0, 103
+; CHECK-NEXT:    lsv %v0(95),%s0
+; CHECK-NEXT:    lea %s0, 104
+; CHECK-NEXT:    lsv %v0(96),%s0
+; CHECK-NEXT:    lea %s0, 105
+; CHECK-NEXT:    lsv %v0(97),%s0
+; CHECK-NEXT:    lea %s0, 106
+; CHECK-NEXT:    lsv %v0(98),%s0
+; CHECK-NEXT:    lea %s0, 107
+; CHECK-NEXT:    lsv %v0(99),%s0
+; CHECK-NEXT:    lea %s0, 108
+; CHECK-NEXT:    lsv %v0(100),%s0
+; CHECK-NEXT:    lea %s0, 109
+; CHECK-NEXT:    lsv %v0(101),%s0
+; CHECK-NEXT:    lea %s0, 110
+; CHECK-NEXT:    lsv %v0(102),%s0
+; CHECK-NEXT:    lea %s0, 111
+; CHECK-NEXT:    lsv %v0(103),%s0
+; CHECK-NEXT:    lea %s0, 112
+; CHECK-NEXT:    lsv %v0(104),%s0
+; CHECK-NEXT:    lea %s0, 113
+; CHECK-NEXT:    lsv %v0(105),%s0
+; CHECK-NEXT:    lea %s0, 114
+; CHECK-NEXT:    lsv %v0(106),%s0
+; CHECK-NEXT:    lea %s0, 115
+; CHECK-NEXT:    lsv %v0(107),%s0
+; CHECK-NEXT:    lea %s0, 116
+; CHECK-NEXT:    lsv %v0(108),%s0
+; CHECK-NEXT:    lea %s0, 117
+; CHECK-NEXT:    lsv %v0(109),%s0
+; CHECK-NEXT:    lea %s0, 118
+; CHECK-NEXT:    lsv %v0(110),%s0
+; CHECK-NEXT:    lea %s0, 119
+; CHECK-NEXT:    lsv %v0(111),%s0
+; CHECK-NEXT:    lea %s0, 120
+; CHECK-NEXT:    lsv %v0(112),%s0
+; CHECK-NEXT:    lea %s0, 121
+; CHECK-NEXT:    lsv %v0(113),%s0
+; CHECK-NEXT:    lea %s0, 122
+; CHECK-NEXT:    lsv %v0(114),%s0
+; CHECK-NEXT:    lea %s0, 123
+; CHECK-NEXT:    lsv %v0(115),%s0
+; CHECK-NEXT:    lea %s0, 124
+; CHECK-NEXT:    lsv %v0(116),%s0
+; CHECK-NEXT:    lea %s0, 125
+; CHECK-NEXT:    lsv %v0(117),%s0
+; CHECK-NEXT:    lea %s0, 126
+; CHECK-NEXT:    lsv %v0(118),%s0
+; CHECK-NEXT:    lea %s0, 127
+; CHECK-NEXT:    lsv %v0(119),%s0
+; CHECK-NEXT:    lea %s0, 128
+; CHECK-NEXT:    lsv %v0(120),%s0
+; CHECK-NEXT:    lea %s0, 129
+; CHECK-NEXT:    lsv %v0(121),%s0
+; CHECK-NEXT:    lea %s0, 130
+; CHECK-NEXT:    lsv %v0(122),%s0
+; CHECK-NEXT:    lea %s0, 131
+; CHECK-NEXT:    lsv %v0(123),%s0
+; CHECK-NEXT:    lea %s0, 132
+; CHECK-NEXT:    lsv %v0(124),%s0
+; CHECK-NEXT:    lea %s0, 133
+; CHECK-NEXT:    lsv %v0(125),%s0
+; CHECK-NEXT:    lea %s0, 134
+; CHECK-NEXT:    lsv %v0(126),%s0
+; CHECK-NEXT:    lea %s0, 135
+; CHECK-NEXT:    lsv %v0(127),%s0
+; CHECK-NEXT:    lea %s0, 136
+; CHECK-NEXT:    lea %s1, 128
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 137
+; CHECK-NEXT:    lea %s1, 129
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 138
+; CHECK-NEXT:    lea %s1, 130
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 139
+; CHECK-NEXT:    lea %s1, 131
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 140
+; CHECK-NEXT:    lea %s1, 132
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 141
+; CHECK-NEXT:    lea %s1, 133
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 142
+; CHECK-NEXT:    lea %s1, 134
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 143
+; CHECK-NEXT:    lea %s1, 135
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 144
+; CHECK-NEXT:    lea %s1, 136
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 145
+; CHECK-NEXT:    lea %s1, 137
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 146
+; CHECK-NEXT:    lea %s1, 138
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 147
+; CHECK-NEXT:    lea %s1, 139
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 148
+; CHECK-NEXT:    lea %s1, 140
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 149
+; CHECK-NEXT:    lea %s1, 141
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 150
+; CHECK-NEXT:    lea %s1, 142
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 151
+; CHECK-NEXT:    lea %s1, 143
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 152
+; CHECK-NEXT:    lea %s1, 144
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 153
+; CHECK-NEXT:    lea %s1, 145
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 154
+; CHECK-NEXT:    lea %s1, 146
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 155
+; CHECK-NEXT:    lea %s1, 147
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 156
+; CHECK-NEXT:    lea %s1, 148
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 157
+; CHECK-NEXT:    lea %s1, 149
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 158
+; CHECK-NEXT:    lea %s1, 150
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 159
+; CHECK-NEXT:    lea %s1, 151
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 160
+; CHECK-NEXT:    lea %s1, 152
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 161
+; CHECK-NEXT:    lea %s1, 153
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 162
+; CHECK-NEXT:    lea %s1, 154
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 163
+; CHECK-NEXT:    lea %s1, 155
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 164
+; CHECK-NEXT:    lea %s1, 156
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 165
+; CHECK-NEXT:    lea %s1, 157
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 166
+; CHECK-NEXT:    lea %s1, 158
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 167
+; CHECK-NEXT:    lea %s1, 159
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 168
+; CHECK-NEXT:    lea %s1, 160
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 169
+; CHECK-NEXT:    lea %s1, 161
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 170
+; CHECK-NEXT:    lea %s1, 162
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 171
+; CHECK-NEXT:    lea %s1, 163
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 172
+; CHECK-NEXT:    lea %s1, 164
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 173
+; CHECK-NEXT:    lea %s1, 165
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 174
+; CHECK-NEXT:    lea %s1, 166
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 175
+; CHECK-NEXT:    lea %s1, 167
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 176
+; CHECK-NEXT:    lea %s1, 168
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 177
+; CHECK-NEXT:    lea %s1, 169
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 178
+; CHECK-NEXT:    lea %s1, 170
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 179
+; CHECK-NEXT:    lea %s1, 171
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 180
+; CHECK-NEXT:    lea %s1, 172
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 181
+; CHECK-NEXT:    lea %s1, 173
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 182
+; CHECK-NEXT:    lea %s1, 174
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 183
+; CHECK-NEXT:    lea %s1, 175
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 184
+; CHECK-NEXT:    lea %s1, 176
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 185
+; CHECK-NEXT:    lea %s1, 177
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 186
+; CHECK-NEXT:    lea %s1, 178
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 187
+; CHECK-NEXT:    lea %s1, 179
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 188
+; CHECK-NEXT:    lea %s1, 180
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 189
+; CHECK-NEXT:    lea %s1, 181
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 190
+; CHECK-NEXT:    lea %s1, 182
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 191
+; CHECK-NEXT:    lea %s1, 183
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 192
+; CHECK-NEXT:    lea %s1, 184
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 193
+; CHECK-NEXT:    lea %s1, 185
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 194
+; CHECK-NEXT:    lea %s1, 186
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 195
+; CHECK-NEXT:    lea %s1, 187
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 196
+; CHECK-NEXT:    lea %s1, 188
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 197
+; CHECK-NEXT:    lea %s1, 189
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 198
+; CHECK-NEXT:    lea %s1, 190
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 199
+; CHECK-NEXT:    lea %s1, 191
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 200
+; CHECK-NEXT:    lea %s1, 192
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 201
+; CHECK-NEXT:    lea %s1, 193
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 202
+; CHECK-NEXT:    lea %s1, 194
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 203
+; CHECK-NEXT:    lea %s1, 195
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 204
+; CHECK-NEXT:    lea %s1, 196
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 205
+; CHECK-NEXT:    lea %s1, 197
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 206
+; CHECK-NEXT:    lea %s1, 198
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 207
+; CHECK-NEXT:    lea %s1, 199
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 208
+; CHECK-NEXT:    lea %s1, 200
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 209
+; CHECK-NEXT:    lea %s1, 201
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 210
+; CHECK-NEXT:    lea %s1, 202
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 211
+; CHECK-NEXT:    lea %s1, 203
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 212
+; CHECK-NEXT:    lea %s1, 204
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 213
+; CHECK-NEXT:    lea %s1, 205
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 214
+; CHECK-NEXT:    lea %s1, 206
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 215
+; CHECK-NEXT:    lea %s1, 207
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 216
+; CHECK-NEXT:    lea %s1, 208
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 217
+; CHECK-NEXT:    lea %s1, 209
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 218
+; CHECK-NEXT:    lea %s1, 210
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 219
+; CHECK-NEXT:    lea %s1, 211
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 220
+; CHECK-NEXT:    lea %s1, 212
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 221
+; CHECK-NEXT:    lea %s1, 213
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 222
+; CHECK-NEXT:    lea %s1, 214
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 223
+; CHECK-NEXT:    lea %s1, 215
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 224
+; CHECK-NEXT:    lea %s1, 216
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 225
+; CHECK-NEXT:    lea %s1, 217
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 226
+; CHECK-NEXT:    lea %s1, 218
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 227
+; CHECK-NEXT:    lea %s1, 219
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 228
+; CHECK-NEXT:    lea %s1, 220
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 229
+; CHECK-NEXT:    lea %s1, 221
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 230
+; CHECK-NEXT:    lea %s1, 222
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 231
+; CHECK-NEXT:    lea %s1, 223
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 232
+; CHECK-NEXT:    lea %s1, 224
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 233
+; CHECK-NEXT:    lea %s1, 225
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 234
+; CHECK-NEXT:    lea %s1, 226
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 235
+; CHECK-NEXT:    lea %s1, 227
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 236
+; CHECK-NEXT:    lea %s1, 228
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 237
+; CHECK-NEXT:    lea %s1, 229
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 238
+; CHECK-NEXT:    lea %s1, 230
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 239
+; CHECK-NEXT:    lea %s1, 231
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 240
+; CHECK-NEXT:    lea %s1, 232
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 241
+; CHECK-NEXT:    lea %s1, 233
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 242
+; CHECK-NEXT:    lea %s1, 234
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 243
+; CHECK-NEXT:    lea %s1, 235
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 244
+; CHECK-NEXT:    lea %s1, 236
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 245
+; CHECK-NEXT:    lea %s1, 237
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 246
+; CHECK-NEXT:    lea %s1, 238
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 247
+; CHECK-NEXT:    lea %s1, 239
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 248
+; CHECK-NEXT:    lea %s1, 240
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 249
+; CHECK-NEXT:    lea %s1, 241
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 250
+; CHECK-NEXT:    lea %s1, 242
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 251
+; CHECK-NEXT:    lea %s1, 243
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 252
+; CHECK-NEXT:    lea %s1, 244
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 253
+; CHECK-NEXT:    lea %s1, 245
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 254
+; CHECK-NEXT:    lea %s1, 246
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 255
+; CHECK-NEXT:    lea %s1, 247
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s1, 248
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 257
+; CHECK-NEXT:    lea %s1, 249
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 258
+; CHECK-NEXT:    lea %s1, 250
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 259
+; CHECK-NEXT:    lea %s1, 251
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 260
+; CHECK-NEXT:    lea %s1, 252
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 261
+; CHECK-NEXT:    lea %s1, 253
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 262
+; CHECK-NEXT:    lea %s1, 254
+; CHECK-NEXT:    lsv %v0(%s1),%s0
+; CHECK-NEXT:    lea %s0, 263
+; CHECK-NEXT:    lea %s1, 255
+; CHECK-NEXT:    lsv %v0(%s1),%s0
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -241,8 +875,8 @@ define i32 @vseqmul_v4i32() {
 ; CHECK-NEXT:    vmuls.w.sx %v0,%s1,%v0
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -264,8 +898,8 @@ define i32 @vseqmul_v256i32() {
 ; CHECK-NEXT:    vmuls.w.sx %v0,%s1,%v0
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -312,15 +946,14 @@ define i32 @vseqsrl_v4i32() {
 ; CHECK-LABEL: vseqsrl_v4i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 4, (0)1
-; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrdl %v0,%s1
-; CHECK-NEXT:    pvseq.lo %v1
-; CHECK-NEXT:    pvsrl.lo %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    pvsrl.lo %v0,%v0,%s1
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -335,15 +968,14 @@ define i32 @vseqsrl_v8i32() {
 ; CHECK-LABEL: vseqsrl_v8i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 8, (0)1
-; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrdl %v0,%s1
-; CHECK-NEXT:    pvseq.lo %v1
-; CHECK-NEXT:    pvsrl.lo %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    pvsrl.lo %v0,%v0,%s1
 ; CHECK-NEXT:    lea %s0, calc_v8i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v8i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v8i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -360,15 +992,14 @@ define i32 @vseqsrl_v256i32() {
 ; CHECK-LABEL: vseqsrl_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrdl %v0,%s1
-; CHECK-NEXT:    pvseq.lo %v1
-; CHECK-NEXT:    pvsrl.lo %v0,%v1,%v0,%vm0
+; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    pvsrl.lo %v0,%v0,%s1
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -422,8 +1053,8 @@ define i32 @vseqand_v4i32() {
 ; CHECK-NEXT:    pvand.lo %v0,%v1,%v0
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -445,8 +1076,8 @@ define i32 @vseqand_v256i32() {
 ; CHECK-NEXT:    pvand.lo %v0,%v1,%v0
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(%s0)
-; CHECK-NEXT:    bsic %lr, (,%s12)
+; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
+; CHECK-NEXT:    bsic %lr, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
