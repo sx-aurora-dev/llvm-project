@@ -1930,7 +1930,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::CTPOP, MVT::i64, Legal);
   setOperationAction(ISD::CTLZ, MVT::i32, Legal);
   setOperationAction(ISD::CTLZ, MVT::i64, Legal);
-  setOperationAction(ISD::CTTZ, MVT::i32, Legal);
+  setOperationAction(ISD::CTTZ, MVT::i32, Promote);
   setOperationAction(ISD::CTTZ, MVT::i64, Expand);
   setOperationAction(ISD::ROTL, MVT::i32, Expand);
   setOperationAction(ISD::ROTL, MVT::i64, Expand);
