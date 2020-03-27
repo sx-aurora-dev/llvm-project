@@ -1059,6 +1059,8 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
 
   // Always use broadcast if you can -> this enables implicit broadcast matching
   // during isel (eg vfadd_vsvl) if one operand is a VEC_BROADCAST node
+  // TODO preserve the bitmask in VEC_BROADCAST to expand VEC_BROADCAST late
+  // into LVS when its not folded
   if ((BVK == BVKind::Broadcast) || (NumElems >= InsertThreshold)) {
     switch (BVK) {
 
