@@ -2296,6 +2296,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::INSERT_VECTOR_ELT, MaskVT, Expand);
     setOperationAction(ISD::EXTRACT_VECTOR_ELT, MaskVT, Custom);
 
+    // Lower to vvp_trunc
+    setOperationAction(ISD::TRUNCATE, MaskVT, Custom);
+
     // Custom lower mask ops
     setOperationAction(ISD::STORE, MaskVT, Custom);
     // setOperationAction(ISD::LOAD, MaskVT, Custom);

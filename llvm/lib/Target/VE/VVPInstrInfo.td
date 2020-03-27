@@ -74,6 +74,11 @@ def SDTIntExtendOpVVP : SDTypeProfile<1, 3, [  // sext, zext, anyext
   SDTCisInt<0>, SDTCisInt<1>, SDTCisOpSmallerThanOp<1, 0>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0,2>, IsVLVT<3>
 ]>;
 
+// trunc
+def SDTIntTruncOpVVP  : SDTypeProfile<1, 3, [  // trunc
+  SDTCisInt<0>, SDTCisInt<1>, SDTCisOpSmallerThanOp<0, 1>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0,2>, IsVLVT<3>
+]>;
+
 // reductions
 def SDTReduceStartVVP : SDTypeProfile<1, 4, [    // vvp_reduce (with start arg)
   SDTCisVec<2>, SDTCisInt<3>, SDTCisVec<3>, SDTCisSameNumEltsAs<2,3>, IsVLVT<4>
@@ -132,6 +137,7 @@ def vvp_fpext        : SDNode<"VEISD::VVP_FPEXT", SDTFPExtOpVVP>;
 // zext, sext
 def vvp_sext       : SDNode<"VEISD::VVP_SEXT", SDTIntExtendOpVVP>;
 def vvp_zext       : SDNode<"VEISD::VVP_ZEXT", SDTIntExtendOpVVP>;
+def vvp_trunc      : SDNode<"VEISD::VVP_TRUNC", SDTIntTruncOpVVP>;
 
 // reductions
 def vvp_reduce_fadd         : SDNode<"VEISD::VVP_REDUCE_FADD", SDTReduceVVP>;

@@ -197,8 +197,6 @@ defm: Unpack_Swap<v512f32>;
 
 
 // Casts
-def : Pat<(v256i32 (trunc v256i64:$src)),
-          (COPY_TO_REGCLASS $src, V64)>;
 def : Pat<(v256i64 (sext_inreg V64:$src, v256i32)),
           (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (i32 256)), V64)>;
 def : Pat<(v256i64 (sext v256i32:$src)),
