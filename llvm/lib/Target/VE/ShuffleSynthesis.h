@@ -85,15 +85,13 @@ struct MaskShuffleAnalysis {
   SDValue synthesize(CustomDAG &CDAG);
 };
 
-using LaneBits = std::bitset<256>;
-
 enum IterControl {
   IterContinue = 0,
   IterBreak = 1,
 };
 
 inline void where_true(const LaneBits Bits,
-                std::function<IterControl(unsigned Idx)> LoopBody) {
+                       std::function<IterControl(unsigned Idx)> LoopBody) {
   auto Len = Bits.size();
   for (size_t i = 0; i < Len; ++i) {
     if (!Bits[i])
@@ -134,6 +132,8 @@ struct PartialShuffleState {
 
 // an abstract shuffle operation produced bu a shuffle strategy
 struct AbstractShuffleOp {
+  virtual ~AbstractShuffleOp() {}
+
   virtual SDValue synthesize(MaskView &MV, CustomDAG &CDAG,
                              SDValue PartialV) = 0;
   virtual void print(raw_ostream &out) const = 0;
@@ -142,7 +142,10 @@ struct AbstractShuffleOp {
 // An shuffle heuristics that reports back partial progress through a callback
 using PartialShuffleCB =
     std::function<void(AbstractShuffleOp *, PartialShuffleState)>;
+
 struct ShuffleStrategy {
+  virtual ~ShuffleStrategy() {}
+
   // apply the shuffle strategy, reporting all partial shuffles that were
   // found
   virtual void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,

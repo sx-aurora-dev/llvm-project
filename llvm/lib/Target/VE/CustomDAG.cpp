@@ -557,6 +557,11 @@ SDValue CustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
                    CreateConstMask(VecVT.getVectorNumElements(), true), AVL);
 }
 
+SDValue CustomDAG::createPassthruVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV,
+                            SDValue Mask, SDValue PassthruV, SDValue Avl) const {
+  abort(); // TODO return DAG.getNode(VEISD::VEC_VMV, DL, ResVT, {SrcV, OffsetV, Mask, Avl});
+}
+
 SDValue CustomDAG::createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV,
                              SDValue Mask, SDValue Avl) const {
   return DAG.getNode(VEISD::VEC_VMV, DL, ResVT, {SrcV, OffsetV, Mask, Avl});
@@ -649,6 +654,10 @@ SDValue CustomDAG::createMaskExtract(SDValue MaskV, SDValue Idx) {
 SDValue CustomDAG::createMaskInsert(SDValue MaskV, SDValue Idx, SDValue ElemV) {
   return DAG.getNode(VEISD::VM_INSERT, DL, MaskV.getValueType(),
                      {MaskV, Idx, ElemV});
+}
+
+SDValue CustomDAG::createConstMask(unsigned NumElems, const LaneBits &TrueBits) const {
+  abort(); // TODO implement
 }
 
 SDValue CustomDAG::CreateConstMask(unsigned NumElements, bool IsTrue) const {

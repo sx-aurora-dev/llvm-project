@@ -145,7 +145,9 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG) {
 /// ShuffleAnalysis {
 
 /// Scalar Shuffle Strategy {
-// Scalar transfer strategy
+// This shuffle strategy extracts all source lanes and inserts them into the
+// result vector
+
 // extract all vector elements and insert them back at the right positions
 struct ScalarTransferOp final : public AbstractShuffleOp {
   LaneBits InsertPositions;
@@ -189,12 +191,77 @@ struct ScalarTransferStrategy final : public ShuffleStrategy {
   void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
                           PartialShuffleCB CB) override {
     PartialShuffleState FinalState;
+
+    // provides all missing lanes
     FinalState.MissingLanes.reset();
     CB(new ScalarTransferOp(FromState.MissingLanes), FinalState);
   }
 };
 
 /// } Scalar Shuffle Strategy
+
+/// VMV Shuffle Strategy {
+// This strategy emits one VMV Op that transfers an entire subvector
+// either of the accumulator or the incoming vector.
+
+struct VMVShuffleOp final : public AbstractShuffleOp {
+  unsigned DestStartPos;
+  unsigned SubVectorLength;
+  int32_t ShiftAmount;
+  SDValue SrcVector;
+
+  VMVShuffleOp(unsigned DestStartPos, unsigned SubVectorLength, int32_t ShiftAmount, SDValue SrcVector)
+  : DestStartPos(DestStartPos)
+  , SubVectorLength(SubVectorLength)
+  , ShiftAmount(ShiftAmount)
+  , SrcVector(SrcVector)
+  {}
+
+  ~VMVShuffleOp() override {
+  }
+
+  void print(raw_ostream &out) const override {
+    out << "VMV { SubVL: " << SubVectorLength
+        << ", DestStartPos: " << DestStartPos
+        << ", ShuftAmount: " << ShiftAmount << ", Src: ";
+    SrcVector->print(out);
+    out << " }\n";
+  }
+
+  unsigned getAVL() const {
+    return DestStartPos + SubVectorLength;
+  }
+
+  // transfer all insert positions to their destination
+  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
+    LaneBits VMVMask;
+    // Synthesize the mask
+    VMVMask.reset();
+    for (size_t i = 0; i < getAVL(); ++i) {
+      VMVMask[i] = (i >= (size_t) DestStartPos) && ((i - DestStartPos) < SubVectorLength);
+    }
+    SDValue MaskV = CDAG.createConstMask(getAVL(), VMVMask);
+    SDValue VL = CDAG.getConstEVL(getAVL());
+    SDValue ShiftV = CDAG.getConstant(ShiftAmount, MVT::i32);
+
+    return CDAG.createPassthruVMV(PartialV.getValueType(), SrcVector, ShiftV,
+                                  MaskV, PartialV, VL);
+  }
+};
+
+struct VMVShuffleStrategy final : public ShuffleStrategy {
+  void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
+                          PartialShuffleCB CB) override {
+    // Seek the largest, lowest shift amount subvector
+    abort(); // TODO warping path...
+
+    // TODO Generate partially planned state
+    // CB(new VMVShuffleOp(FromState.MissingLanes), FinalState);
+  }
+};
+
+/// } VMV Shuffle Strategy
+
 
 ShuffleAnalysis::ShuffleAnalysis(MaskView &Mask) {
   PartialShuffleState InitialPSS = PartialShuffleState::fromInitialMask(Mask);

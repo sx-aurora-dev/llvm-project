@@ -18,6 +18,11 @@
 #include "llvm/CodeGen/TargetLowering.h"
 #include "VEISelLowering.h"
 #include "llvm/CodeGen/SelectionDAG.h"
+#include <bitset>
+
+namespace llvm {
+
+using LaneBits = std::bitset<256>;
 
 /// Helpers {
 template<typename ElemT>
@@ -27,7 +32,6 @@ ref_to(std::unique_ptr<ElemT>& UP) {
 }
 /// } Helpers
 
-namespace llvm {
 class VESubtarget;
 
 /// Broadcast, Shuffle, Mask Analysis {
@@ -143,6 +147,8 @@ struct CustomDAG {
 
   SDValue createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV, SDValue Mask,
                     SDValue Avl) const;
+  SDValue createPassthruVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV,
+                            SDValue Mask, SDValue PassthruV, SDValue Avl) const;
 
   SDValue getTargetExtractSubreg(MVT SubRegVT, int SubRegIdx,
                                  SDValue RegV) const;
@@ -169,7 +175,10 @@ struct CustomDAG {
   // Extract an SX register from a mask
   SDValue createMaskInsert(SDValue MaskV, SDValue Idx, SDValue ElemV);
 
+  // all-true/false mask
   SDValue CreateConstMask(unsigned NumElements, bool IsTrue) const;
+  // materialize a constant mask vector given by \p TrueBits
+  SDValue createConstMask(unsigned NumElems, const LaneBits &TrueBits) const;
 
   /// getNode {
   SDValue getNode(unsigned OC, SDVTList VTL, ArrayRef<SDValue> OpV) const {
