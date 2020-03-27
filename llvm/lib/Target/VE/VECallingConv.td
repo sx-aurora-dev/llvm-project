@@ -22,6 +22,12 @@ class CCIfNotSubtarget<string F, CCAction A>
                        "(State.getMachineFunction().getSubtarget()).", F),
            A>;
 
+class CCIfPackedMode<CCAction A> : CCIfSubtarget<"hasPackedMode()",A>;
+class CCIfNotPackedMode<CCAction A> : CCIfNotSubtarget<"hasPackedMode()",A>;
+class CCIfVPU<CCAction A> : CCIfSubtarget<"enableVPU()",A>;
+class CCIfNotVPU<CCAction A> : CCIfNotSubtarget<"enableVPU()",A>;
+class CCIfVELIntrinsicMode<CCAction A> : CCIfSubtarget<"isVELIntrinsicMode()",A>;
+class CCIfNotVELIntrinsicMode<CCAction A> : CCIfNotSubtarget<"isVELIntrinsicMode()",A>;
 
 //===----------------------------------------------------------------------===//
 // Aurora VE
@@ -43,21 +49,27 @@ def CC_VE_C_Stack: CallingConv<[
 
 def CC_VE_VRegCall : CallingConv<[
   // vector --> generic vector registers
-  CCIfType<[v256i32, v256f32, v256i64, v256f64,
-            v4i64, v8i64],
+  CCIfType<[v256i32, v256f32, v256i64, v256f64],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
 
-  CCIfSubtarget<"hasPackedMode()",
+  CCIfPackedMode<
     CCIfType<[v512i32, v512f32],
              CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
 
   // vector mask --> generic vector mask registers
   CCIfType<[v256i1],
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>,
+  CCIfVELIntrinsicMode<
+      CCIfType<[v4i64],
+               CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
 
   // pair of vector mask --> generic vector mask registers
-  CCIfSubtarget<"hasPackedMode()",
+  CCIfPackedMode<
     CCIfType<[v512i1],
+             CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
+                                     [VM1, VM1, VM3]>>>,
+  CCIfVELIntrinsicMode<
+      CCIfType<[v8i64],
              CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
                                      [VM1, VM1, VM3]>>>,
 
@@ -93,11 +105,9 @@ def CC_VE : CallingConv<[
            CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
                                    [SX0, SX1, SX3, SX5]>>,
 
-  CCIfSubtarget<"enableVPU()",
-    // Unconditionally use the reg-call convention
-    CCDelegateTo<CC_VE_VRegCall>>,
-  CCIfNotSubtarget<"enableVPU()",
-    CCDelegateTo<CC_VE_C_Stack>>
+  // Unconditionally use the reg-call convention
+  CCIfVPU<  CCDelegateTo<CC_VE_VRegCall>>,
+  CCIfNotVPU<CCDelegateTo<CC_VE_C_Stack>>
 ]>;
 
 // All arguments get passed in stack for varargs function or non-prototyped
@@ -118,16 +128,9 @@ def CC_VE2 : CallingConv<[
 
 def RetCC_VE_VRegCall : CallingConv<[
   // vector --> generic vector registers
-  CCIfType<[v2i32,   v2i64,   v2f32,   v2f64,
-            v4i32,   v4i64,   v4f32,   v4f64,
-            v8i32,   v8i64,   v8f32,   v8f64,
-            v16i32,  v16i64,  v16f32,  v16f64,
-            v32i32,  v32i64,  v32f32,  v32f64,
-            v64i32,  v64i64,  v64f32,  v64f64,
-            v128i32, v128i64, v128f32, v128f64,
-            v256i32, v256f32, v256i64, v256f64],
+  CCIfType<[v256i32, v256f32, v256i64, v256f64],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
-  CCIfSubtarget<"hasPackedMode()",
+  CCIfPackedMode<
     CCIfType<[v512i32, v512f32],
              CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
 
@@ -136,7 +139,7 @@ def RetCC_VE_VRegCall : CallingConv<[
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>,
 
   // pair of vector mask --> generic vector mask registers
-  CCIfSubtarget<"hasPackedMode()",
+  CCIfPackedMode<
     CCIfType<[v512i1],
              CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
                                      [VM1, VM1, VM3]>>>
@@ -165,12 +168,9 @@ def RetCC_VE : CallingConv<[
            CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
                                    [SX0, SX1, SX3, SX5]>>,
 
-  // Always use regcall
-  CCIfSubtarget<"enableVPU()",
-    // Unconditionally use the reg-call convention
-    CCDelegateTo<RetCC_VE_VRegCall>>,
-  CCIfNotSubtarget<"enableVPU()",
-    CCDelegateTo<CC_VE_C_Stack>>
+  // Unconditionally use the reg-call convention
+  CCIfVPU<    CCDelegateTo<RetCC_VE_VRegCall>>,
+  CCIfNotVPU< CCDelegateTo<CC_VE_C_Stack>>
 ]>;
 
 // Callee-saved registers

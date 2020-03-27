@@ -30,6 +30,7 @@ VESubtarget &VESubtarget::initializeSubtargetDependencies(StringRef CPU,
   // Default feature settings
   EnableVPU = true;
   PackedMode = false;
+  VELIntrinsicMode = false;
 
   // Determine default and user specified characteristics
   std::string CPUName = std::string(CPU);

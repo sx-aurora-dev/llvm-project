@@ -40,6 +40,9 @@ class VESubtarget : public VEGenSubtargetInfo {
   // Emit VPU instructions
   bool EnableVPU;
 
+  // Enable VEL intrinsics
+  bool VELIntrinsicMode;
+
   /// } Features
 
   VEInstrInfo InstrInfo;
@@ -65,6 +68,7 @@ public:
 
   bool enableMachineScheduler() const override;
 
+  bool isVELIntrinsicMode() const { return VELIntrinsicMode; }
   bool enableVPU() const { return EnableVPU; }
   bool hasPackedMode() const { return enableVPU() && PackedMode; }
 

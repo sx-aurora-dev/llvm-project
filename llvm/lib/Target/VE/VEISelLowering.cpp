@@ -1057,7 +1057,9 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
   // FIXME move this to TTI
   const unsigned InsertThreshold = 4;
 
-  if (NumElems >= InsertThreshold) {
+  // Always use broadcast if you can -> this enables implicit broadcast matching
+  // during isel (eg vfadd_vsvl) if one operand is a VEC_BROADCAST node
+  if ((BVK == BVKind::Broadcast) || (NumElems >= InsertThreshold)) {
     switch (BVK) {
 
     // Could not detect pattern
@@ -1139,7 +1141,6 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
       LLVM_DEBUG(shift.dump());
       return shift;
     }
-
     }
   }
 
@@ -1763,15 +1764,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     addRegisterClass(MVT::v256f64, &VE::V64RegClass);
     addRegisterClass(MVT::v256i1, &VE::VMRegClass);
 
-#if 0
-    // add a couple of fake-legal register classes to
-    // trick LLVM into doing the lowering right (first promote, then widen -
-    // NEVER split unless told to)
-    for (MVT FakeVT : FakeLegalVTs) {
-      addRegisterClass(FakeVT, &VE::V64RegClass);
-    }
-#endif
-
     if (Subtarget->hasPackedMode()) {
       addRegisterClass(MVT::v512i32, &VE::V64RegClass);
       addRegisterClass(MVT::v512f32, &VE::V64RegClass);
@@ -1779,8 +1771,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     }
 
     // Support mask DT for target intrinsics
-    addRegisterClass(MVT::v4i64, &VE::VMRegClass);
-    addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
+    if (Subtarget->isVELIntrinsicMode()) {
+      addRegisterClass(MVT::v4i64, &VE::VMRegClass);
+      addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
+    }
   }
 
   /// Scalar Lowering {
@@ -2028,17 +2022,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   // all builtin opcodes
   // auto AllOCs = llvm::make_range<unsigned>(1, ISD::BUILTIN_OP_END); // TODO use this
-
-  // Promote all builtin ops on vXiT types with size(T) < 32 bit to vXi32
-  // By default use expansion from there on (hoping for widening through
-  // TLI::getPreferredAction)
-#if 0
-  for (MVT FakeVT : FakeLegalVTs) {
-    for (unsigned OC = 1; OC < ISD::BUILTIN_OP_END; ++OC) {
-      setOperationAction(OC, FakeVT, Promote);
-    }
-  }
-#endif
 
   const ISD::NodeType END_OF_OCLIST = ISD::DELETED_NODE;
 
@@ -2309,10 +2292,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
 
   // Special rules for aliased mask types
-  for (MVT MaskVT : {MVT::v4i64, MVT::v8i64}) {
-    // Mask producing operations
-    setOperationAction(ISD::INSERT_VECTOR_ELT, MaskVT, Expand);
-    setOperationAction(ISD::EXTRACT_VECTOR_ELT, MaskVT, Custom);
+  if (Subtarget->isVELIntrinsicMode()) {
+    for (MVT MaskVT : {MVT::v4i64, MVT::v8i64}) {
+      // Mask producing operations
+      setOperationAction(ISD::INSERT_VECTOR_ELT, MaskVT, Expand);
+      setOperationAction(ISD::EXTRACT_VECTOR_ELT, MaskVT, Custom);
+    }
   }
 
   // vNt32, vNt64 ops (legal element types)

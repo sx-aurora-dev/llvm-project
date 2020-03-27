@@ -26,6 +26,10 @@ def FeatureVPU
   : SubtargetFeature<"vpu", "EnableVPU", "true",
                      "Use the VPU">;
 
+def FeatureVELIntrin
+  : SubtargetFeature<"velintrin", "VELIntrinsicMode", "false",
+                     "Enable use of VEL intrinsics">;
+
 //===----------------------------------------------------------------------===//
 // Register File, Calling Conv, Instruction Descriptions
 //===----------------------------------------------------------------------===//
@@ -48,7 +52,7 @@ def VEAsmParser : AsmParser {
 class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
-def : Proc<"ve",             [FeatureVPU, FeaturePackedMode]>;
+def : Proc<"ve",             [FeatureVPU, FeaturePackedMode, FeatureVELIntrin]>;
 // def : Processor<"ve", VEItinerary, []>;
 // def : ProcessorModel<"ve", VESchedModel, []>;
 
