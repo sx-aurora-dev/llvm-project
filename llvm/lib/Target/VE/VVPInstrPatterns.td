@@ -234,12 +234,12 @@ defm : Set_CC_512<v512f32,"pvfcmp",cond,fcond2cc>;
 ///// Conversion /////
 // Pseudo instructions for i64 <> fp32 conversion
 def vcvtls_vvmvl
-  : Pseudo<(outs V64:$vx),(ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl),"# pseudo vcvtls_vvmvl">,
-    PseudoInstExpansion<(vcvtldrz_vvmvl (vcvtds_vvmvl v256f32:$vy, v256i1:$vm, (v256i64 (IMPLICIT_DEF)), i32:$vl), $vm, $vpt, $vl)>;
+  : Pseudo<(outs V64:$vx),(ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl),"# pseudo vcvtls_vvmvl">;
+    // PseudoInstExpansion<(vcvtldrz_vvmvl V64:$vx, (vcvtds_vvmvl V64:$vy, VM:$vm, (V64 (IMPLICIT_DEF)), I32:$vl), $vm, $vpt, $vl)>;
 
 def vcvtsl_vvmvl
-  : Pseudo<(outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl), "# pseudo vcvtsl_vvmvl">,
-    PseudoInstExpansion<(vcvtsd_vvmvl (vcvtdl_vvmvl v256i64:$vy, v256i1:$vm, (v256i64 (IMPLICIT_DEF)), i32:$vl), $vm, $vpt, $vl)>;
+  : Pseudo<(outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl), "# pseudo vcvtsl_vvmvl">;
+    // PseudoInstExpansion<(vcvtsd_vvmvl V64:$vx, (vcvtdl_vvmvl V64:$vy, VM:$vm, (V64 (IMPLICIT_DEF)), I32:$vl), $vm, $vpt, $vl)>;
 
 // x_to_y
 multiclass conv_x_to_y<SDPatternOperator MatchOp, ValueType MaskVT, ValueType DestVT, ValueType SrcVT, string ConvBaseName, string MaskToken> {

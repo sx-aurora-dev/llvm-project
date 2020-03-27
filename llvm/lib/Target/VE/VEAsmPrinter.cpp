@@ -60,6 +60,10 @@ public:
   void lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
                                      const MCSubtargetInfo &STI);
 
+  // Expand non-native fp conversions
+  void lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
+                                       const MCSubtargetInfo &STI);
+
   void emitInstruction(const MachineInstr *MI) override;
 
   static const char *getRegisterName(unsigned RegNo) {
@@ -327,14 +331,68 @@ void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   emitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
-void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
+static void emit_vvmvl(MCStreamer &OutStreamer, unsigned OC,
+                       MCOperand &InV,
+                       MCOperand &Mask, MCOperand &PassthruV, MCOperand &VL,
+                       MCOperand &ResV,
+                       const MCSubtargetInfo &STI) {
+  MCInst Inst;
+  Inst.setOpcode(OC);
+  // ins
+  Inst.addOperand(InV);
+  Inst.addOperand(Mask);
+  Inst.addOperand(PassthruV);
+  Inst.addOperand(VL);
+  // outs
+  Inst.addOperand(ResV);
+  OutStreamer.emitInstruction(Inst, STI);
+}
 
+static MCOperand getRegOperand(const MachineOperand& MO) {
+  // const MachineOperand &MO = MI->getOperand(0);
+  return MCOperand::createReg(MO.getReg());
+}
+
+void VEAsmPrinter::lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
+                                                 const MCSubtargetInfo &STI) {
+  auto ResV = getRegOperand(MI->getOperand(0));
+  auto SrcV = getRegOperand(MI->getOperand(1));
+  auto Mask = getRegOperand(MI->getOperand(2));
+  auto PassthruV = getRegOperand(MI->getOperand(3));
+  auto VL = getRegOperand(MI->getOperand(4));
+
+  switch (MI->getOpcode()) {
+    case VE::vcvtls_vvmvl: {
+      /// def vcvtls_vvmvl
+      ///   : Pseudo<(outs V64:$vx),(ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl),"# pseudo vcvtls_vvmvl">,;
+      ///     PseudoInstExpansion<(vcvtldrz_vvmvl V64:$vx, (vcvtds_vvmvl V64:$vy, VM:$vm, (V64 (IMPLICIT_DEF)), I32:$vl), $vm, $vpt, $vl)>;
+      /// 
+      emit_vvmvl(*OutStreamer, VE::vcvtds_vvmvl, ResV, SrcV, Mask, PassthruV, VL, STI);
+      emit_vvmvl(*OutStreamer, VE::vcvtldrz_vvmvl, ResV, SrcV, Mask, PassthruV, VL, STI);
+    } break;
+    case VE::vcvtsl_vvmvl: {
+      /// def vcvtsl_vvmvl
+      ///   : Pseudo<(outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vpt, I32:$vl), "# pseudo vcvtsl_vvmvl">,
+      ///     PseudoInstExpansion<(vcvtsd_vvmvl V64:$vx, (vcvtdl_vvmvl V64:$vy, VM:$vm, (V64 (IMPLICIT_DEF)), I32:$vl), $vm, $vpt, $vl)>;
+      emit_vvmvl(*OutStreamer, VE::vcvtdl_vvmvl, ResV, SrcV, Mask, PassthruV, VL, STI);
+      emit_vvmvl(*OutStreamer, VE::vcvtsd_vvmvl, ResV, SrcV, Mask, PassthruV, VL, STI);
+    } break;
+  }
+}
+
+
+void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default:
     break;
   case TargetOpcode::DBG_VALUE:
     // FIXME: Debug Value.
     return;
+  case VE::vcvtls_vvmvl:
+  case VE::vcvtsl_vvmvl:
+    lowerFPConversionAndEmitMCInsts(MI, getSubtargetInfo());
+    return;
+
   case VE::GETGOT:
     lowerGETGOTAndEmitMCInsts(MI, getSubtargetInfo());
     return;
