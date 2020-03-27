@@ -951,19 +951,25 @@ class InstTable(object):
         self.Def(opc, instName, subop, name, O, "{0} = {1} / {2}")
 
     def Logical(self, opc, name, instName, expr):
-        O_u32_vsv = [VX(T_u32), SY(T_u64), VZ(T_u32)]
-
+        # v256i64 
         Args = [Args_vvv(T_u64), Args_vsv(T_u64)]
         Args = self.addMask(Args)
         self.Def(opc, instName, "", name, Args, expr)
 
-        ArgsP = [Args_vvv(T_u32), O_u32_vsv]
+        O_vsv_lo =   [VX(T_u32), SY(T_u32), VZ(T_u32)]
+        O_vsv_hi =   [VX(T_f32), SY(T_f32), VZ(T_f32)]
 
-        ArgsP_lohi = self.addMask(ArgsP)
-        self.Def(opc, instName, "p", "p"+name+".lo", ArgsP_lohi, expr)
-        self.Def(opc, instName, "p", "p"+name+".up", ArgsP_lohi, expr)
+        # v256i32 (lower half alias)
+        ArgsP_lo = self.addMask([Args_vvv(T_u32), O_vsv_lo])
+        self.Def(opc, instName, "p", "p"+name+".lo", ArgsP_lo, expr)
 
-        ArgsP = self.addMask(ArgsP, VM512)
+        # v256f32 (upper half alias)
+        ArgsP_hi = self.addMask([Args_vvv(T_f32), O_vsv_hi])
+        self.Def(opc, instName, "p", "p"+name+".up", ArgsP_hi, expr)
+
+        # v512i32 (packed)
+        O_u64_vsv =   [VX(T_u32), SY(T_u64), VZ(T_u32)]
+        ArgsP    = self.addMask([Args_vvv(T_u32), O_u64_vsv], VM512)
         self.Def(opc, instName, "p", "p"+name, ArgsP, expr)
 
     def Shift(self, opc, name, instName, ty, expr):
@@ -978,16 +984,21 @@ class InstTable(object):
 
     def ShiftPacked(self, opc, name, instName, ty, expr):
         O_vvv = [VX(ty), VZ(ty), VY(T_u32)]
-        O_vvs = [VX(ty), VZ(ty), SY(T_u64)]
-        OL = [O_vvv, O_vvs]
 
-        OL_lohi = self.addMask(OL)
+        # v256i32 (lower half)
+        O_vvs_lo = [VX(ty), VZ(ty), SY(T_u32)]
+        OL_lo = self.addMask([O_vvv, O_vvs_lo])
+        self.Def(opc, instName, "p", "p"+name+".lo", OL_lo, expr)
 
-        self.Def(opc, instName, "p", "p"+name+".lo", OL_lohi, expr)
-        self.Def(opc, instName, "p", "p"+name+".up", OL_lohi, expr)
+        # v256f32 (upper half)
+        O_vvs_hi = [VX(ty), VZ(ty), SY(T_f32)]
+        OL_hi = self.addMask([O_vvv, O_vvs_hi])
+        self.Def(opc, instName, "p", "p"+name+".up", OL_hi, expr)
 
-        OL_packed = self.addMask(OL, VM512)
-
+        # v256i32 (packed)
+        O_vvs_64 = [VX(ty), VZ(ty), SY(T_u64)]
+        OL_dense = [O_vvv, O_vvs_64]
+        OL_packed = self.addMask(OL_dense, VM512)
         self.Def(opc, instName, "p", "p"+name, OL_packed, expr)
 
     def Inst4f(self, opc, name, instName, expr):

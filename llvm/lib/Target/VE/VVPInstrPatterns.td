@@ -174,13 +174,13 @@ defm : VectorBinaryArith_ShortLong<c_vv_mul, i64, v256i64, "vmulsl", i32, v256i3
 defm : VectorBinaryArith_ShortLong<vvp_sdiv, i64, v256i64, "vdivsl", i32, v256i32, "vdivswsx">;
 defm : VectorBinaryArith_ShortLong<vvp_udiv, i64, v256i64, "vdivul", i32, v256i32, "vdivuw">;
 
-defm : VectorShiftArith_ShortLong<vvp_srl, i64, v256i64, "vsrl",  i64, v256i32, "pvsrllo">;
-defm : VectorShiftArith_ShortLong<vvp_sra, i64, v256i64, "vsral", i64, v256i32, "pvsralo">;
-defm : VectorShiftArith_ShortLong<vvp_shl, i64, v256i64, "vsll",  i64, v256i32, "pvslllo">;
+defm : VectorShiftArith_ShortLong<vvp_srl, i64, v256i64, "vsrl",  i32, v256i32, "pvsrllo">;
+defm : VectorShiftArith_ShortLong<vvp_sra, i64, v256i64, "vsral", i32, v256i32, "pvsralo">;
+defm : VectorShiftArith_ShortLong<vvp_shl, i64, v256i64, "vsll",  i32, v256i32, "pvslllo">;
 
-defm : VectorBinaryArith_ShortLong<vvp_and, i64, v256i64, "vand", i64, v256i32, "pvandlo">;
-defm : VectorBinaryArith_ShortLong<vvp_xor, i64, v256i64, "vxor", i64, v256i32, "pvxorlo">;
-defm : VectorBinaryArith_ShortLong<vvp_or,  i64, v256i64, "vor",  i64, v256i32, "pvorlo">;
+defm : VectorBinaryArith_ShortLong<vvp_and, i64, v256i64, "vand", i32, v256i32, "pvandlo">;
+defm : VectorBinaryArith_ShortLong<vvp_xor, i64, v256i64, "vxor", i32, v256i32, "pvxorlo">;
+defm : VectorBinaryArith_ShortLong<vvp_or,  i64, v256i64, "vor",  i32, v256i32, "pvorlo">;
 
 // Floating-point arithmetic (256 elements)
 defm : VectorBinaryArith_ShortLong<c_vv_fadd, f64, v256f64, "vfaddd", f32, v256f32, "vfadds">;
@@ -268,7 +268,7 @@ defm : conv_x_to_y<vvp_fpext,   v256i1, v256f64, v256f32, "vcvtds", "m">;
 
 // trunc (256 elements)
 def : Pat<(v256i1 (vvp_trunc v256i32:$src, (v256i1 srcvalue), i32:$vl)),
-          (pvfmkwlo_mvCl (v256i32 (pvandlo_vsvl (lea_i64 (i32 1)), v256i32:$src, i32:$vl)), (i32 2), i32:$vl)>; // 0xB true when Sy != 0
+          (pvfmkwlo_mvCl (v256i32 (pvandlo_vsvl (lea_i32 (i32 1)), v256i32:$src, i32:$vl)), (i32 2), i32:$vl)>; // 0xB true when Sy != 0
 def : Pat<(v256i1 (vvp_trunc v256i64:$src, (v256i1 srcvalue), i32:$vl)),
           (vfmkl_mvCl (v256i64 (vand_vsvl (i64 (lea_u32 (i32 1))), v256i64:$src, i32:$vl)), (i32 2), i32:$vl)>; // 0xB true when Sy != 0
 def : Pat<(v256i32 (vvp_trunc v256i64:$src, (v256i1 srcvalue), (i32 srcvalue))),
