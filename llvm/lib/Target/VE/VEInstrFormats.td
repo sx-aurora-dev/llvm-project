@@ -111,8 +111,7 @@ class RR<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern = [],
   bits<1>  cy = 1;
   bits<7>  sy;
   bits<1>  cz = 1;
-  bits<1>  mz = 0;
-  bits<6>  sz;
+  bits<7>  sz;          // m field places at the top sz field
   bits<8>  vx = 0;
   bits<8>  vz = 0;
   bits<1> cw = 0;
@@ -124,8 +123,7 @@ class RR<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern = [],
   let Inst{47} = cy;
   let Inst{46-40} = sy;
   let Inst{39} = cz;
-  let Inst{38} = mz;
-  let Inst{37-32} = sz;
+  let Inst{38-32} = sz;
   let Inst{31-24} = vx;
   let Inst{23-16} = 0;
   let Inst{15-8} = vz;

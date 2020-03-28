@@ -311,5 +311,12 @@ inline static bool isMiscReg(unsigned RegNo) {
          (RegNo >= 16 && RegNo <= 30);
 }
 
+inline unsigned M0(unsigned Val) {
+  return Val + 64;
+}
+inline unsigned M1(unsigned Val) {
+  return Val;
+}
+
 } // namespace llvm
 #endif
