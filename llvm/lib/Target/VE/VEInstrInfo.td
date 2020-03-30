@@ -24,7 +24,12 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
-// uimm2, uimm3, uimm6, uimm7
+// uimm1, uimm2, uimm3, uimm6, uimm7, uimm0to2
+def UImm1AsmOperand : AsmOperandClass { let Name = "UImm1"; }
+def uimm1 : Operand<i32>, PatLeaf<(imm), [{
+    return isUInt<1>(N->getZExtValue()); }]> {
+  let ParserMatchClass = UImm1AsmOperand;
+}
 def UImm2AsmOperand : AsmOperandClass { let Name = "UImm2"; }
 def uimm2 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<2>(N->getZExtValue()); }]> {
@@ -49,6 +54,11 @@ def UImm7AsmOperand : AsmOperandClass { let Name = "UImm7"; }
 def uimm7 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<7>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm7AsmOperand;
+}
+def UImm0to2AsmOperand : AsmOperandClass { let Name = "UImm0to2"; }
+def uimm0to2 : Operand<i32>, PatLeaf<(imm), [{
+    return N->getZExtValue() >= 0 && N->getZExtValue() < 3; }]> {
+  let ParserMatchClass = UImm0to2AsmOperand;
 }
 
 // simm7
@@ -959,10 +969,10 @@ defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, uimm7>;
 let cx = 0 in defm TS2AM : RRCASm<"ts2am", 0x43, I64, uimm7>;
 
 // Section 8.2.18 - TS3AM (Test and Set 3 AM)
-let cx = 0 in defm TS3AM : RRCASm<"ts3am", 0x52, I64, uimm7>;
+let cx = 0 in defm TS3AM : RRCASm<"ts3am", 0x52, I64, uimm1>;
 
 // Section 8.2.19 - ATMAM (Atomic AM)
-let cx = 0 in defm ATMAM : RRCASm<"atmam", 0x53, I64, uimm7>;
+let cx = 0 in defm ATMAM : RRCASm<"atmam", 0x53, I64, uimm0to2>;
 
 // Section 8.2.20 - CAS (Compare and Swap)
 let cx = 0 in defm CASL : RRCASm<"cas.l", 0x62, I64, simm7>;
@@ -1112,29 +1122,22 @@ defm BRV : RRI2m<"brv", 0x39, I64, i64, bitreverse>;
 // Section 8.5.10 - BSWP (Byte Swap)
 
 // Multiclass for RR type instructions
-//   Used by sra, sla, sll, and similar instructions
+//   Used by BSWP
 let hasSideEffects = 0 in
-multiclass RRIm<string opcStr, bits<8>opc,
-                RegisterClass RC, ValueType Ty,
-                SDPatternOperator OpNode = null_frag> {
-  def rr : RR<opc, (outs RC:$sx), (ins RC:$sz, I32:$sy),
-              !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set Ty:$sx, (OpNode Ty:$sz, i32:$sy))]>;
-  let cz = 0 in
-  def mr : RR<opc, (outs RC:$sx), (ins mimm:$sz, I32:$sy),
-              !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set Ty:$sx, (OpNode (Ty mimm:$sz), i32:$sy))]>;
+multiclass RRSWPm<string opcStr, bits<8>opc,
+                  RegisterClass RC, ValueType Ty,
+                  SDPatternOperator OpNode = null_frag> {
   let cy = 0 in
-  def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, simm7:$sy),
+  def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, uimm1:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set Ty:$sx, (OpNode Ty:$sz, (i32 simm7:$sy)))]>;
+              [(set Ty:$sx, (OpNode Ty:$sz, (i32 uimm1:$sy)))]>;
   let cy = 0, cz = 0 in
-  def mi : RR<opc, (outs RC:$sx), (ins mimm:$sz, simm7:$sy),
+  def mi : RR<opc, (outs RC:$sx), (ins mimm:$sz, uimm1:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set Ty:$sx, (OpNode (Ty mimm:$sz), (i32 simm7:$sy)))]>;
+              [(set Ty:$sx, (OpNode (Ty mimm:$sz), (i32 uimm1:$sy)))]>;
 }
 
-defm BSWP : RRIm<"bswp", 0x2B, I64, i64>;
+defm BSWP : RRSWPm<"bswp", 0x2B, I64, i64>;
 
 // Section 8.5.11 - CMOV (Conditional Move)
 let Constraints = "$sx = $sd", DisableEncoding = "$sd", hasSideEffects = 0,
@@ -1168,6 +1171,29 @@ def : MnemonicAlias<"cmov.s", "cmov.s.at">;
 //-----------------------------------------------------------------------------
 // Section 8.6 - Shift Operation Instructions
 //-----------------------------------------------------------------------------
+
+// Multiclass for RR type instructions
+//   Used by sra, sla, sll, and similar instructions
+let hasSideEffects = 0 in
+multiclass RRIm<string opcStr, bits<8>opc,
+                RegisterClass RC, ValueType Ty,
+                SDPatternOperator OpNode = null_frag> {
+  def rr : RR<opc, (outs RC:$sx), (ins RC:$sz, I32:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set Ty:$sx, (OpNode Ty:$sz, i32:$sy))]>;
+  let cz = 0 in
+  def mr : RR<opc, (outs RC:$sx), (ins mimm:$sz, I32:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set Ty:$sx, (OpNode (Ty mimm:$sz), i32:$sy))]>;
+  let cy = 0 in
+  def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, uimm7:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set Ty:$sx, (OpNode Ty:$sz, (i32 uimm7:$sy)))]>;
+  let cy = 0, cz = 0 in
+  def mi : RR<opc, (outs RC:$sx), (ins mimm:$sz, uimm7:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set Ty:$sx, (OpNode (Ty mimm:$sz), (i32 uimm7:$sy)))]>;
+}
 
 // Section 8.6.1 - SLL (Shift Left Logical)
 defm SLL : RRIm<"sll", 0x65, I64, i64, shl>;
