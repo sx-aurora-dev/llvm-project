@@ -286,6 +286,9 @@ struct VMVShuffleStrategy final : public ShuffleStrategy {
          DestStartIdx + LongestSubvector < MV.getNumElements();
          ++DestStartIdx) {
 
+      if (!FromState.isMissing(DestStartIdx))
+        continue;
+
       auto ES = MV.getSourceElem(DestStartIdx);
       if (!ES.isDefined())
         continue;
@@ -299,7 +302,8 @@ struct VMVShuffleStrategy final : public ShuffleStrategy {
       // TODO allow wrapping
       unsigned SrcLastMatchIdx =
           matchSubvectorMove(MV, SrcVectorV, DestStartIdx, SrcStartIdx);
-      unsigned MatchedSVLen = SrcLastMatchIdx - SrcStartIdx;
+      unsigned LastMatchedSVPos = SrcLastMatchIdx - SrcStartIdx;
+      unsigned MatchedSVLen = LastMatchedSVPos + 1;
 
       // new contender
       int32_t BestShiftAmount = LongestSVDestStart - (int32_t)LongestSVSrcStart;
@@ -387,10 +391,11 @@ raw_ostream &ShuffleAnalysis::print(raw_ostream &out) const {
 
 SDValue ShuffleAnalysis::synthesize(MaskView &Mask, CustomDAG &CDAG,
                                     EVT LegalResultVT) {
-  assert(ShuffleSeq.size() == 1);
-  AbstractShuffleOp &SO = ref_to(*ShuffleSeq.begin());
-  SDValue StartV = CDAG.getUndef(LegalResultVT);
-  return SO.synthesize(Mask, CDAG, StartV);
+  SDValue AccuV = CDAG.getUndef(LegalResultVT);
+  for (auto& ShuffOp : ShuffleSeq) {
+    AccuV = ShuffOp->synthesize(Mask, CDAG, AccuV);
+  }
+  return AccuV;
 }
 
 /// } ShuffleAnalysis

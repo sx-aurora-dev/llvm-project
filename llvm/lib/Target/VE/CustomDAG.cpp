@@ -21,6 +21,8 @@
 #define DEBUG_TYPE "customdag"
 #endif
 
+const unsigned SXRegSize = 64;
+
 namespace llvm {
 
 BVMaskKind AnalyzeBuildVectorMask(BuildVectorSDNode *BVN, unsigned &FirstOne,
@@ -646,18 +648,35 @@ CustomDAG::CreateBroadcast(EVT ResTy, SDValue S,
 }
 
 // Extract an SX register from a mask
-SDValue CustomDAG::createMaskExtract(SDValue MaskV, SDValue Idx) {
+SDValue CustomDAG::createMaskExtract(SDValue MaskV, SDValue Idx) const {
   return DAG.getNode(VEISD::VM_EXTRACT, DL, MVT::i64, {MaskV, Idx});
 }
 
 // Extract an SX register from a mask
-SDValue CustomDAG::createMaskInsert(SDValue MaskV, SDValue Idx, SDValue ElemV) {
+SDValue CustomDAG::createMaskInsert(SDValue MaskV, SDValue Idx, SDValue ElemV) const {
   return DAG.getNode(VEISD::VM_INSERT, DL, MaskV.getValueType(),
                      {MaskV, Idx, ElemV});
 }
 
-SDValue CustomDAG::createConstMask(unsigned NumElems, const LaneBits &TrueBits) const {
-  abort(); // TODO implement
+SDValue CustomDAG::createConstMask(unsigned NumElems,
+                                   const LaneBits &TrueBits) const {
+  SDValue MaskV = CreateConstMask(NumElems, false);
+
+  unsigned RegPartIdx = 0;
+  for (unsigned StartIdx = 0; StartIdx < NumElems + 63;
+       ++StartIdx, ++RegPartIdx) {
+    uint64_t ConstReg = 0;
+    for (uint i = 0; i < SXRegSize; ++i) {
+      ConstReg |= TrueBits[StartIdx + i] ? (1 << i) : 0;
+    }
+    // initial mask is all-zero already
+    if (!ConstReg)
+      continue;
+
+    MaskV = createMaskInsert(MaskV, getConstant(RegPartIdx, MVT::i32),
+                             getConstant(ConstReg, MVT::i64));
+  }
+  return MaskV;
 }
 
 SDValue CustomDAG::CreateConstMask(unsigned NumElements, bool IsTrue) const {

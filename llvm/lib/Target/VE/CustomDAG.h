@@ -170,10 +170,10 @@ struct CustomDAG {
                           Optional<SDValue> OpVectorLength = None) const;
 
   // Extract an SX register from a mask
-  SDValue createMaskExtract(SDValue MaskV, SDValue Idx);
+  SDValue createMaskExtract(SDValue MaskV, SDValue Idx) const;
 
   // Extract an SX register from a mask
-  SDValue createMaskInsert(SDValue MaskV, SDValue Idx, SDValue ElemV);
+  SDValue createMaskInsert(SDValue MaskV, SDValue Idx, SDValue ElemV) const;
 
   // all-true/false mask
   SDValue CreateConstMask(unsigned NumElements, bool IsTrue) const;

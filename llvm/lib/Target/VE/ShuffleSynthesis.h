@@ -113,6 +113,7 @@ struct PartialShuffleState {
 
   void setMissing(unsigned i) { MissingLanes[i] = true; }
   void unsetMissing(unsigned i) { MissingLanes[i] = false; }
+  bool isMissing(unsigned i) const { return MissingLanes[i]; }
 
   static PartialShuffleState fromInitialMask(MaskView &MV) {
     PartialShuffleState PSS;

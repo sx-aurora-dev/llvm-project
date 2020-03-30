@@ -2310,10 +2310,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       continue;
 
     ForAll_setOperationAction(VectorTransformOCs, VT, Custom);
-
-    // TODO implement a robust shuffle lowering
-    setOperationAction(ISD::VECTOR_SHUFFLE, VT, Expand);
-
     ForAll_setOperationAction(MemoryOCs, VT, Custom);
 
     // VE doesn't have instructions for fp<->uint, so expand them by llvm
