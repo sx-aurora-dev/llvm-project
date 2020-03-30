@@ -35,6 +35,11 @@ def uimm3 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<3>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm3AsmOperand;
 }
+def UImm4AsmOperand : AsmOperandClass { let Name = "UImm4"; }
+def uimm4 : Operand<i32>, PatLeaf<(imm), [{
+    return isUInt<4>(N->getZExtValue()); }]> {
+  let ParserMatchClass = UImm4AsmOperand;
+}
 def UImm6AsmOperand : AsmOperandClass { let Name = "UImm6"; }
 def uimm6 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<6>(N->getZExtValue()); }]> {
@@ -466,15 +471,6 @@ def CCOp : Operand<i32> {
   let DecoderMethod = "DecodeCCOperand";
   let EncoderMethod = "getCCOpValue";
   let ParserMatchClass = CCOpAsmOperand;
-}
-def CCOpDotAsmOperand : AsmOperandClass {
-  let Name = "CCOpDot";
-}
-def CCOpDot : Operand<i32> {
-  let PrintMethod = "printCCOperandDot";
-  let DecoderMethod = "DecodeCCOperand";
-  let EncoderMethod = "getCCOpValue";
-  let ParserMatchClass = CCOpDotAsmOperand;
 }
 
 // Operand for printing out a rounding mode code.
@@ -1144,26 +1140,30 @@ defm BSWP : RRIm<"bswp", 0x2B, I64, i64>;
 let Constraints = "$sx = $sd", DisableEncoding = "$sd", hasSideEffects = 0,
     cfw = ? in
 multiclass RRCMOVm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty> {
-  def rr : RR<opc, (outs I64:$sx), (ins CCOpDot:$cfw, RC:$sy, I64:$sz, I64:$sd),
+  def rr : RR<opc, (outs I64:$sx), (ins CCOp:$cfw, RC:$sy, I64:$sz, I64:$sd),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
   let cy = 0 in
   def ir : RR<opc, (outs I64:$sx),
-              (ins CCOpDot:$cfw, simm7:$sy, I64:$sz, I64:$sd),
+              (ins CCOp:$cfw, simm7:$sy, I64:$sz, I64:$sd),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
   let cz = 0 in
   def rm : RR<opc, (outs I64:$sx),
-              (ins CCOpDot:$cfw, RC:$sy, mimm:$sz, I64:$sd),
+              (ins CCOp:$cfw, RC:$sy, mimm:$sz, I64:$sd),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
   let cy = 0, cz = 0 in
   def im : RR<opc, (outs I64:$sx),
-              (ins CCOpDot:$cfw, simm7:$sy, mimm:$sz, I64:$sd),
+              (ins CCOp:$cfw, simm7:$sy, mimm:$sz, I64:$sd),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
 }
 
-let cw = 0, cw2 = 0 in defm CMOVL : RRCMOVm<"cmov.l${cfw}", 0x3B, I64, i64>;
-let cw = 1, cw2 = 0 in defm CMOVW : RRCMOVm<"cmov.w${cfw}", 0x3B, I32, i32>;
-let cw = 0, cw2 = 1 in defm CMOVD : RRCMOVm<"cmov.d${cfw}", 0x3B, I64, f64>;
-let cw = 1, cw2 = 1 in defm CMOVS : RRCMOVm<"cmov.s${cfw}", 0x3B, F32, f32>;
+let cw = 0, cw2 = 0 in defm CMOVL : RRCMOVm<"cmov.l.${cfw}", 0x3B, I64, i64>;
+let cw = 1, cw2 = 0 in defm CMOVW : RRCMOVm<"cmov.w.${cfw}", 0x3B, I32, i32>;
+let cw = 0, cw2 = 1 in defm CMOVD : RRCMOVm<"cmov.d.${cfw}", 0x3B, I64, f64>;
+let cw = 1, cw2 = 1 in defm CMOVS : RRCMOVm<"cmov.s.${cfw}", 0x3B, F32, f32>;
+def : MnemonicAlias<"cmov.l", "cmov.l.at">;
+def : MnemonicAlias<"cmov.w", "cmov.w.at">;
+def : MnemonicAlias<"cmov.d", "cmov.d.at">;
+def : MnemonicAlias<"cmov.s", "cmov.s.at">;
 
 //-----------------------------------------------------------------------------
 // Section 8.6 - Shift Operation Instructions
@@ -1465,7 +1465,7 @@ def CALLr : RM<0x08, (outs), (ins I64:$sz, variable_ops),
 //-----------------------------------------------------------------------------
 
 // Section 8.19.1 - SIC (Save Instruction Counter)
-let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 /* , Uses = [IC] */ in
+let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0, Uses = [IC] in
 def SIC : RR<0x28, (outs I32:$sx), (ins), "sic $sx">;
 
 // Section 8.19.2 - LPM (Load Program Mode Flags)
