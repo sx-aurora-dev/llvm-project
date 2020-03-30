@@ -2870,8 +2870,8 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
     unsigned Tmp3 = MRI->createVirtualRegister(&VE::I64RegClass);
     BuildMI(*MBB, MI, DL, TII->get(VE::LEAzii), Tmp1)
         .addImm(0).addImm(0).addMBB(DispatchBB, VEMCExpr::VK_VE_GOTOFF_LO32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
-        .addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1).addImm(M0(32));
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), Tmp3)
         .addReg(Tmp2).addImm(0).addMBB(DispatchBB, VEMCExpr::VK_VE_GOTOFF_HI32);
     BuildMI(*MBB, MI, DL, TII->get(VE::ADDSLrr), VR)
@@ -2882,8 +2882,8 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
     // lea.sl  %VR, DispatchBB@hi(%Tmp2)
     BuildMI(*MBB, MI, DL, TII->get(VE::LEAzii), Tmp1)
         .addImm(0).addImm(0).addMBB(DispatchBB, VEMCExpr::VK_VE_LO32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
-        .addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1).addImm(M0(32));
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), VR)
         .addReg(Tmp2).addImm(0).addMBB(DispatchBB, VEMCExpr::VK_VE_HI32);
   }
@@ -2965,8 +2965,8 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
     unsigned Tmp3 = MRI.createVirtualRegister(&VE::I64RegClass);
     BuildMI(*MBB, MI, DL, TII->get(VE::LEAzii), Tmp1)
         .addImm(0).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_LO32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
-        .addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1).addImm(M0(32));
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), Tmp3)
         .addReg(Tmp2).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_HI32);
     BuildMI(*MBB, MI, DL, TII->get(VE::ADDSLrr), LabelReg)
@@ -2977,8 +2977,8 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
     // lea.sl  %LabelReg, restoreMBB@hi(%Tmp2)
     BuildMI(*MBB, MI, DL, TII->get(VE::LEAzii), Tmp1)
         .addImm(0).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_LO32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2)
-        .addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1).addImm(M0(32));
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), LabelReg)
         .addReg(Tmp2).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_HI32);
   }
@@ -3225,8 +3225,8 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::LEAzii), Tmp1)
         .addImm(0).addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_LO32);
-    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2)
-        .addReg(Tmp1).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1).addImm(M0(32));
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), Tmp3)
         .addReg(Tmp2).addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_HI32);
@@ -3239,8 +3239,8 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::LEAzii), Tmp1)
         .addImm(0).addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_LO32);
-    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2)
-        .addReg(Tmp1).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1).addImm(M0(32));
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), BReg)
         .addReg(Tmp2).addImm(0).addJumpTableIndex(MJTI, VEMCExpr::VK_VE_HI32);
   }
@@ -3349,8 +3349,8 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::LEAzii), Tmp3)
         .addImm(0).addImm(0)
         .addExternalSymbol(FunName, VEMCExpr::VK_VE_GOTOFF_LO32);
-    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp4)
-        .addReg(Tmp3).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm), Tmp4)
+        .addReg(Tmp3).addImm(M0(32));
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), Tmp5)
         .addReg(Tmp4).addImm(0)
         .addExternalSymbol(FunName, VEMCExpr::VK_VE_GOTOFF_HI32);

@@ -343,7 +343,8 @@ def: Pat<(v512i32 (vec_broadcast i32:$val)),
          (pvbrd_vsl
             (ORrr
               (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
-              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32)),
+              (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
+                     !add(32, 64))),
             (LEA32zii 0, 0, 256))>;
 def: Pat<(v512f32 (vec_broadcast f32:$val)),
          (pvbrd_vsl
@@ -559,13 +560,15 @@ def : Pat<(add (vec_broadcast i32:$val), v512i32:$vz),
           (pvadds_vsvl
             (ORrr
               (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
-              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32)),
+              (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
+                     !add(32, 64))),
             v512i32:$vz, (LEA32zii 0, 0, 256))>;
 def : Pat<(sub (vec_broadcast i32:$val), v512i32:$vz),
           (pvsubs_vsvl
             (ORrr
               (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
-              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32)),
+              (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
+                     !add(32, 64))),
             v512i32:$vz, (LEA32zii 0, 0, 256))>;
 
 multiclass arith_for_vector_length<int length, ValueType vi32, ValueType vi64> {
@@ -645,19 +648,22 @@ def : Pat<(shl v512i32:$vx, (v512i32 (vec_broadcast i32:$sy))),
           (pvsll_vvsl v512i32:$vx,
                    (ORrr
               (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32),
-              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32)),
+              (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
+                     !add(32, 64))),
                    (LEA32zii 0, 0, 256))>;
 def : Pat<(srl v512i32:$vx, (v512i32 (vec_broadcast i32:$sy))),
           (pvsrl_vvsl v512i32:$vx,
                    (ORrr
               (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32),
-              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32)),
+              (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
+                     !add(32, 64))),
                    (LEA32zii 0, 0, 256))>;
 def : Pat<(sra v512i32:$vx, (v512i32 (vec_broadcast i32:$sy))),
           (pvsra_vvsl v512i32:$vx,
                    (ORrr
               (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32),
-              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32)),
+              (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
+                     !add(32, 64))),
                    (LEA32zii 0, 0, 256))>;
 
 multiclass shift_for_vector_length<int length, ValueType vi32, ValueType vi64> {
