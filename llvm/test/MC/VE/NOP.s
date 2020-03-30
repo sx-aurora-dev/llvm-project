@@ -1,5 +1,5 @@
-// RUN: llvm-mc -triple ve-unknown-unknown --show-encoding %s | FileCheck %s
+# RUN: llvm-mc -triple ve-unknown-unknown --show-encoding %s | FileCheck %s
 
-// CHECK: nop
-// CHECK: encoding: [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x79]
+# CHECK: nop
+# CHECK: encoding: [0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x79]
 nop
