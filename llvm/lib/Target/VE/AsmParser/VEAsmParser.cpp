@@ -281,6 +281,17 @@ public:
     }
     return false;
   }
+  bool isUImm1() {
+    if (!isImm())
+      return false;
+
+    // Constant case
+    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+      int64_t Value = ConstExpr->getValue();
+      return isUInt<1>(Value);
+    }
+    return false;
+  }
   bool isUImm2() {
     if (!isImm())
       return false;
@@ -333,6 +344,17 @@ public:
     if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<7>(Value);
+    }
+    return false;
+  }
+  bool isUImm0to2() {
+    if (!isImm())
+      return false;
+
+    // Constant case
+    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+      int64_t Value = ConstExpr->getValue();
+      return Value >= 0 && Value < 3;
     }
     return false;
   }
@@ -512,6 +534,10 @@ public:
     addImmOperands(Inst, N);
   }
 
+  void addUImm1Operands(MCInst &Inst, unsigned N) const {
+    addImmOperands(Inst, N);
+  }
+
   void addUImm2Operands(MCInst &Inst, unsigned N) const {
     addImmOperands(Inst, N);
   }
@@ -529,6 +555,10 @@ public:
   }
 
   void addUImm7Operands(MCInst &Inst, unsigned N) const {
+    addImmOperands(Inst, N);
+  }
+
+  void addUImm0to2Operands(MCInst &Inst, unsigned N) const {
     addImmOperands(Inst, N);
   }
 
