@@ -210,15 +210,12 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
   int32_t ShiftAmount;
   SDValue SrcVector;
 
-  VMVShuffleOp(unsigned DestStartPos, unsigned SubVectorLength, int32_t ShiftAmount, SDValue SrcVector)
-  : DestStartPos(DestStartPos)
-  , SubVectorLength(SubVectorLength)
-  , ShiftAmount(ShiftAmount)
-  , SrcVector(SrcVector)
-  {}
+  VMVShuffleOp(unsigned DestStartPos, unsigned SubVectorLength,
+               int32_t ShiftAmount, SDValue SrcVector)
+      : DestStartPos(DestStartPos), SubVectorLength(SubVectorLength),
+        ShiftAmount(ShiftAmount), SrcVector(SrcVector) {}
 
-  ~VMVShuffleOp() override {
-  }
+  ~VMVShuffleOp() override {}
 
   void print(raw_ostream &out) const override {
     out << "VMV { SubVL: " << SubVectorLength
@@ -228,9 +225,7 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
     out << " }\n";
   }
 
-  unsigned getAVL() const {
-    return DestStartPos + SubVectorLength;
-  }
+  unsigned getAVL() const { return DestStartPos + SubVectorLength; }
 
   // transfer all insert positions to their destination
   SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
@@ -238,7 +233,8 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
     // Synthesize the mask
     VMVMask.reset();
     for (size_t i = 0; i < getAVL(); ++i) {
-      VMVMask[i] = (i >= (size_t) DestStartPos) && ((i - DestStartPos) < SubVectorLength);
+      VMVMask[i] =
+          (i >= (size_t)DestStartPos) && ((i - DestStartPos) < SubVectorLength);
     }
     SDValue MaskV = CDAG.createConstMask(getAVL(), VMVMask);
     SDValue VL = CDAG.getConstEVL(getAVL());
@@ -250,31 +246,143 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
 };
 
 struct VMVShuffleStrategy final : public ShuffleStrategy {
+  // greedily match the longest subvector move from \p MV starting at \p
+  // SrcStartPos and reading from the source vector \p SrcValue.
+  // \returns  the last matching position
+  unsigned matchSubvectorMove(MaskView &MV, SDValue SrcValue,
+                              unsigned DestStartPos, unsigned SrcStartPos) {
+    unsigned LastProperMatch = SrcStartPos;
+    for (unsigned i = 1; DestStartPos + i < MV.getNumElements(); ++i) {
+      auto ES = MV.getSourceElem(DestStartPos + i);
+      // skip over undefined elements
+      if (!ES.isDefined())
+        continue;
+      if (!ES.isElemTransfer())
+        continue;
+
+      // check for a contiguous element transfer from the same source vector
+      if (ES.V != SrcValue)
+        return LastProperMatch;
+      unsigned SrcOffset = SrcStartPos + i;
+      if (SrcOffset != ES.getElemIdx())
+        return LastProperMatch;
+
+      LastProperMatch = SrcOffset;
+    }
+
+    return LastProperMatch;
+  }
+
   void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
                           PartialShuffleCB CB) override {
     // Seek the largest, lowest shift amount subvector
-    abort(); // TODO warping path...
+    SDValue BestSourceV;
+    unsigned LongestSVSrcStart = 0;
+    unsigned LongestSVDestStart = 0;
+    unsigned LongestSubvector = 0;
 
-    // TODO Generate partially planned state
-    // CB(new VMVShuffleOp(FromState.MissingLanes), FinalState);
+    // Scan for the largest subvector match
+    for (unsigned DestStartIdx = 0;
+         DestStartIdx + LongestSubvector < MV.getNumElements();
+         ++DestStartIdx) {
+
+      auto ES = MV.getSourceElem(DestStartIdx);
+      if (!ES.isDefined())
+        continue;
+      if (ES.isElemInsert())
+        continue;
+
+      SDValue SrcVectorV = ES.V;
+      unsigned SrcStartIdx = ES.getElemIdx();
+      int32_t ShiftAmount = DestStartIdx - (int32_t)SrcStartIdx;
+
+      // TODO allow wrapping
+      unsigned SrcLastMatchIdx =
+          matchSubvectorMove(MV, SrcVectorV, DestStartIdx, SrcStartIdx);
+      unsigned MatchedSVLen = SrcLastMatchIdx - SrcStartIdx;
+
+      // new contender
+      int32_t BestShiftAmount = LongestSVDestStart - (int32_t)LongestSVSrcStart;
+      if ((MatchedSVLen > LongestSubvector) ||
+          ((MatchedSVLen == LongestSubvector) &&
+           (ShiftAmount < BestShiftAmount))) {
+        LongestSVSrcStart = SrcStartIdx;
+        LongestSVDestStart = DestStartIdx;
+        LongestSubvector = MatchedSVLen;
+        BestSourceV = SrcVectorV;
+      }
+    }
+
+    LLVM_DEBUG(
+        dbgs() << "Best Source: "; if (BestSourceV) BestSourceV->print(dbgs());
+        dbgs() << ", BestSV: " << LongestSubvector
+               << ", LongestSVDestStart: " << LongestSVDestStart << "\n";);
+
+    // TODO cost considerations
+    const unsigned MinSubvectorLen = 2;
+    if (LongestSubvector < MinSubvectorLen) {
+      return;
+    }
+
+    // Construct VMV and feed it to the callback
+    PartialShuffleState Res = FromState;
+    for (unsigned DestIdx = LongestSVDestStart;
+         DestIdx < LongestSVDestStart + LongestSubvector; ++DestIdx) {
+      Res.unsetMissing(DestIdx);
+    }
+
+    int32_t ShiftAmount = LongestSVDestStart - (int32_t)LongestSVSrcStart;
+    auto *VMVOp = new VMVShuffleOp(LongestSVDestStart, LongestSubvector,
+                                   ShiftAmount, BestSourceV);
+    CB(VMVOp, Res);
   }
 };
 
 /// } VMV Shuffle Strategy
 
-
 ShuffleAnalysis::ShuffleAnalysis(MaskView &Mask) {
-  PartialShuffleState InitialPSS = PartialShuffleState::fromInitialMask(Mask);
+  PartialShuffleState PSS = PartialShuffleState::fromInitialMask(Mask);
 
-  // FIXME generalize this
+  // Try transfering entire subvectors
+  const unsigned NumVMVRounds = 5;
+  VMVShuffleStrategy VMVStrat;
+
+  for (unsigned i = 0; i < NumVMVRounds; ++i) {
+
+    bool Progress = false;
+    VMVStrat.planPartialShuffle(
+        Mask, PSS,
+        [&](AbstractShuffleOp *PartialOp, PartialShuffleState NextPSS) {
+          Progress = true;
+          PSS = NextPSS,
+          ShuffleSeq.push_back(std::unique_ptr<AbstractShuffleOp>(PartialOp));
+          return IterBreak;
+        });
+    if (!Progress)
+      break;
+  }
+  if (PSS.isComplete())
+    return;
+
+  // Fallback
   ScalarTransferStrategy STS;
   STS.planPartialShuffle(
-      Mask, InitialPSS,
+      Mask, PSS,
       [&](AbstractShuffleOp *PartialOp, PartialShuffleState NextPSS) {
         assert(NextPSS.isComplete() && "scalar transfer is always complete..");
         ShuffleSeq.push_back(std::unique_ptr<AbstractShuffleOp>(PartialOp));
         return IterBreak;
       });
+}
+
+raw_ostream &ShuffleAnalysis::print(raw_ostream &out) const {
+  out << "ShuffleAnalysis. Sequence {\n";
+  for (const auto &ShuffleOp : ShuffleSeq) {
+    out << "- ";
+    ShuffleOp->print(out);
+  }
+  out << "}\n";
+  return out;
 }
 
 SDValue ShuffleAnalysis::synthesize(MaskView &Mask, CustomDAG &CDAG,
@@ -284,6 +392,7 @@ SDValue ShuffleAnalysis::synthesize(MaskView &Mask, CustomDAG &CDAG,
   SDValue StartV = CDAG.getUndef(LegalResultVT);
   return SO.synthesize(Mask, CDAG, StartV);
 }
+
 /// } ShuffleAnalysis
 
 } // namespace llvm

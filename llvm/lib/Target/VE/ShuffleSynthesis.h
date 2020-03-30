@@ -108,8 +108,11 @@ struct PartialShuffleState {
   LaneBits MissingLanes;
 
   PartialShuffleState() { MissingLanes.reset(); }
+  PartialShuffleState(const PartialShuffleState &O)
+      : MissingLanes(O.MissingLanes) {}
 
   void setMissing(unsigned i) { MissingLanes[i] = true; }
+  void unsetMissing(unsigned i) { MissingLanes[i] = false; }
 
   static PartialShuffleState fromInitialMask(MaskView &MV) {
     PartialShuffleState PSS;
@@ -163,6 +166,8 @@ struct ShuffleAnalysis {
   // match a 64 bit segment, mapping out all source bits
   // FIXME this implies knowledge about the underlying object structure
   ShuffleAnalysis(MaskView &Mask);
+
+  raw_ostream &print(raw_ostream &out) const;
 
   SDValue synthesize(MaskView &Mask, CustomDAG &CDAG, EVT LegalResultVT);
 };
