@@ -9883,6 +9883,12 @@ class VETargetCodeGenInfo : public TargetCodeGenInfo {
 public:
   VETargetCodeGenInfo(CodeGenTypes &CGT)
     : TargetCodeGenInfo(new VEABIInfo(CGT)) {}
+  // VE ABI requires the arguments of variadic and prototype-less functions 
+  // are passed in both registers and memory.
+  bool isNoProtoCallVariadic(const CallArgList &args,
+                             const FunctionNoProtoType *fnType) const override {
+    return true;
+  }
 };
 } // end anonymous namespace
 
