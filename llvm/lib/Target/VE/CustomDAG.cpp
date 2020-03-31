@@ -21,174 +21,8 @@
 #define DEBUG_TYPE "customdag"
 #endif
 
-const unsigned SXRegSize = 64;
-
 namespace llvm {
 
-BVMaskKind AnalyzeBuildVectorMask(BuildVectorSDNode *BVN, unsigned &FirstOne,
-                                  unsigned &FirstZero, unsigned &NumElements) {
-  bool HasFirstOne = false, HasFirstZero = false;
-  FirstOne = 0;
-  FirstZero = 0;
-  NumElements = 0;
-
-  // this matches a 0*1*0* pattern (BVMaskKind::Interval)
-  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
-    auto Elem = BVN->getOperand(i);
-    if (Elem->isUndef())
-      continue;
-    ++NumElements;
-    auto CE = dyn_cast<ConstantSDNode>(Elem);
-    if (!CE)
-      return BVMaskKind::Unknown;
-    bool TrueBit = CE->getZExtValue() != 0;
-
-    if (TrueBit && !HasFirstOne) {
-      FirstOne = i;
-      HasFirstOne = true;
-    } else if (!TrueBit && !HasFirstZero) {
-      FirstZero = i;
-      HasFirstZero = true;
-    } else if (TrueBit) {
-      // flipping bits on again ->abort
-      return BVMaskKind::Unknown;
-    }
-  }
-
-  return BVMaskKind::Interval;
-}
-
-BVKind AnalyzeBuildVector(BuildVectorSDNode *BVN, unsigned &FirstDef,
-                          unsigned &LastDef, int64_t &Stride,
-                          unsigned &BlockLength, unsigned &NumElements) {
-  // Check UNDEF or FirstDef
-  NumElements = 0;
-  bool AllUndef = true;
-  FirstDef = 0;
-  LastDef = 0;
-  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
-    if (BVN->getOperand(i).isUndef())
-      continue;
-    ++NumElements;
-
-    // mark first non-undef position
-    if (AllUndef) {
-      FirstDef = i;
-      AllUndef = false;
-    }
-    LastDef = i;
-  }
-  if (AllUndef) {
-    return BVKind::Unknown;
-  }
-
-  // Check broadcast
-  bool IsBroadcast = true;
-  for (unsigned i = FirstDef + 1; i < BVN->getNumOperands(); ++i) {
-    bool SameAsFirst = BVN->getOperand(FirstDef) == BVN->getOperand(i);
-    if (!SameAsFirst && !BVN->getOperand(i).isUndef()) {
-      IsBroadcast = false;
-    }
-  }
-  if (IsBroadcast)
-    return BVKind::Broadcast;
-
-  ///// Stride pattern detection /////
-  // FIXME clean up
-
-  bool hasConstantStride = true;
-  bool hasBlockStride = false;
-  bool hasBlockStride2 = false;
-  bool firstStride = true;
-  int64_t lastElemValue;
-  BlockLength = 16;
-
-  // Optional<int64_t> InnerStrideOpt;
-  // Optional<int64_t> OuterStrideOpt
-  // Optional<unsigned> BlockSizeOpt;
-
-  for (unsigned i = 0; i < BVN->getNumOperands(); ++i) {
-    if (hasBlockStride) {
-      if (i % BlockLength == 0)
-        Stride = 1;
-      else
-        Stride = 0;
-    }
-
-    if (BVN->getOperand(i).isUndef()) {
-      if (hasBlockStride2 && i % BlockLength == 0)
-        lastElemValue = 0;
-      else
-        lastElemValue += Stride;
-      continue;
-    }
-
-    // is this an immediate constant value?
-    auto *constNumElem = dyn_cast<ConstantSDNode>(BVN->getOperand(i));
-    if (!constNumElem) {
-      hasConstantStride = false;
-      hasBlockStride = false;
-      hasBlockStride2 = false;
-      break;
-    }
-
-    // read value
-    int64_t elemValue = constNumElem->getSExtValue();
-
-    if (i == FirstDef) {
-      // FIXME: Currently, this code requies that first value of vseq
-      // is zero.  This is possible to enhance like thses instructions:
-      //        VSEQ $v0
-      //        VBRD $v1, 2
-      //        VADD $v0, $v0, $v1
-      if (elemValue != 0) {
-        hasConstantStride = false;
-        hasBlockStride = false;
-        hasBlockStride2 = false;
-        break;
-      }
-    } else if (i > FirstDef && firstStride) {
-      // first stride
-      Stride = (elemValue - lastElemValue) / (i - FirstDef);
-      firstStride = false;
-    } else if (i > FirstDef) {
-      // later stride
-      if (hasBlockStride2 && elemValue == 0 && i % BlockLength == 0) {
-        lastElemValue = 0;
-        continue;
-      }
-      int64_t thisStride = elemValue - lastElemValue;
-      if (thisStride != Stride) {
-        hasConstantStride = false;
-        if (!hasBlockStride && thisStride == 1 && Stride == 0 &&
-            lastElemValue == 0) {
-          hasBlockStride = true;
-          BlockLength = i;
-        } else if (!hasBlockStride2 && elemValue == 0 &&
-                   lastElemValue + 1 == i) {
-          hasBlockStride2 = true;
-          BlockLength = i;
-        } else {
-          // not blockStride anymore.  e.g. { 0, 1, 2, 3, 0, 0, 0, 0 }
-          hasBlockStride = false;
-          hasBlockStride2 = false;
-          break;
-        }
-      }
-    }
-
-    // track last elem value
-    lastElemValue = elemValue;
-  }
-
-  if (hasConstantStride)
-    return BVKind::Seq;
-  if (hasBlockStride)
-    return BVKind::BlockSeq;
-  if (hasBlockStride2)
-    return BVKind::SeqBlock;
-  return BVKind::Unknown;
-}
 
 PosOpt GetVVPOpcode(unsigned OpCode) {
   if (IsVVP(OpCode))
@@ -416,47 +250,8 @@ bool HasDeadMask(unsigned VVPOC) {
   }
 }
 
-VecLenOpt InferLengthFromMask(SDValue MaskV) {
-  auto BVN = dyn_cast<BuildVectorSDNode>(MaskV.getNode());
-  if (BVN) {
-    unsigned FirstDef, LastDef, NumElems;
-
-    BVMaskKind BVK = AnalyzeBuildVectorMask(BVN, FirstDef, LastDef, NumElems);
-    if (BVK == BVMaskKind::Interval) {
-      // FIXME \p FirstDef must be == 0
-      return LastDef + 1;
-    }
-  }
-
-  return None;
-}
-
-SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
-                           SelectionDAG &DAG) {
-  VecLenOpt MaskVL = InferLengthFromMask(Mask);
-
-  // TODO analyze Mask
-  auto ActualConstVL = dyn_cast<ConstantSDNode>(DynamicVL);
-  if (!ActualConstVL)
-    return DynamicVL;
-
-  int64_t EVLVal = ActualConstVL->getSExtValue();
-  SDLoc DL(DynamicVL);
-
-  // no hint available -> dynamic VL
-  if (!VLHint)
-    return DynamicVL;
-
-  // in-effective DynamicVL -> return the hint
-  if (EVLVal < 0) {
-    return DAG.getConstant(VLHint.getValue(), DL, MVT::i32);
-  }
-
-  // the minimum of dynamicVL and the VLHint
-  VecLenOpt MinOfAllHints =
-      MinVectorLength(MinVectorLength(MaskVL, VLHint), EVLVal);
-  return DAG.getConstant(MinOfAllHints.getValue(), DL, MVT::i32);
-}
+#if 0
+#endif
 
 Optional<unsigned> PeekForNarrow(SDValue Op) {
   if (!Op.getValueType().isVector())
@@ -710,6 +505,10 @@ SDValue CustomDAG::CreateConstMask(unsigned NumElements, bool IsTrue) const {
 SDValue CustomDAG::getConstant(uint64_t Val, EVT VT, bool IsTarget,
                                bool IsOpaque) const {
   return DAG.getConstant(Val, DL, VT, IsTarget, IsOpaque);
+}
+
+void CustomDAG::dumpValue(SDValue V) const {
+  V->dump(&DAG);
 }
 
 /// } class CustomDAG

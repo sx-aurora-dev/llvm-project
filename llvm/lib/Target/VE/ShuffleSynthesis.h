@@ -29,6 +29,21 @@
 
 namespace llvm {
 
+/// Broadcast, Shuffle, Mask Analysis {
+
+VecLenOpt InferLengthFromMask(SDValue MaskV);
+
+SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
+                           SelectionDAG &DAG);
+
+enum class BVMaskKind : int8_t {
+  Unknown,  // could not infer mask pattern
+  Interval, //  interval of all-ones
+};
+
+BVMaskKind AnalyzeBitMaskView(MaskView &MV, unsigned &FirstOne,
+                              unsigned &FirstZero, unsigned &NumElements);
+
 // matches mask elements
 struct MaskShuffleAnalysis {
   // extract bits form the source register part \p SrcPart of \p SrcMask, select
@@ -70,12 +85,16 @@ struct MaskShuffleAnalysis {
     }
   };
 
+  // Constant inserts
+  LaneBits IsConstantOne;
+  LaneBits UndefBits;
+
   // Analysis result
   std::vector<ResPart> Segments;
 
   // match a 64 bit segment, mapping out all source bits
   // FIXME this implies knowledge about the underlying object structure
-  MaskShuffleAnalysis(MaskView *Mask, unsigned NumEls);
+  MaskShuffleAnalysis(MaskView &MV, unsigned NumEls);
 
   // Synthesize \p BitSelect, merging the result into \p Passthru
   SDValue synthesize(SDValue Passthru, BitSelect &BSel, SDValue SXV,
@@ -158,7 +177,6 @@ struct ShuffleStrategy {
 
 // lower a shuffle mask to actual operations
 struct ShuffleAnalysis {
-  // TODO VMV chaining...
   // TODO Expand,Compress
 
   // Analysis result -> the final shuffle sequence

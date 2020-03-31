@@ -22,6 +22,8 @@
 
 namespace llvm {
 
+const unsigned SXRegSize = 64;
+
 using LaneBits = std::bitset<256>;
 
 /// Helpers {
@@ -33,30 +35,6 @@ ref_to(std::unique_ptr<ElemT>& UP) {
 /// } Helpers
 
 class VESubtarget;
-
-/// Broadcast, Shuffle, Mask Analysis {
-//
-enum class BVMaskKind : int8_t {
-  Unknown,  // could not infer mask pattern
-  Interval, //  interval of all-ones
-};
-
-BVMaskKind AnalyzeBuildVectorMask(BuildVectorSDNode *BVN,
-                                         unsigned &FirstOne, unsigned &FirstZero,
-                                         unsigned &NumElements);
-
-enum class BVKind : int8_t {
-  Unknown, // could not infer pattern
-  AllUndef, // all lanes undef
-  Broadcast, // broadcast 
-  Seq,        // (0, .., 255) Sequence 
-  SeqBlock,  // (0, .., 15) ^ 16
-  BlockSeq,  // 0^16, 1^16, 2^16
-};
-
-BVKind AnalyzeBuildVector(BuildVectorSDNode *BVN, unsigned &FirstDef,
-                                 unsigned &LastDef, int64_t &Stride,
-                                 unsigned &BlockLength, unsigned &NumElements);
 
 using PosOpt = Optional<unsigned>;
 
@@ -95,11 +73,6 @@ LegalizeVecOperand(SDValue Op, SelectionDAG & DAG);
 bool
 HasDeadMask(unsigned VVPOC);
 
-VecLenOpt
-InferLengthFromMask(SDValue MaskV);
-
-SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
-                           SelectionDAG &DAG);
 //// } VVP Machinery
 
 Optional<unsigned> getReductionStartParamPos(unsigned ISD);
@@ -236,6 +209,8 @@ struct CustomDAG {
                       bool IsOpaque = false) const;
 
   SDValue getUndef(EVT VT) const { return DAG.getUNDEF(VT); }
+
+  void dumpValue(SDValue V) const;
 };
 
 }  // namespace llvm

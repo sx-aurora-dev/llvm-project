@@ -2,13 +2,254 @@
 
 namespace llvm {
 
+VecLenOpt InferLengthFromMask(SDValue MaskV) {
+  std::unique_ptr<MaskView> MV(requestMaskView(MaskV.getNode()));
+  if (!MV)
+    return None;
+
+  unsigned FirstDef, LastDef, NumElems;
+  BVMaskKind BVK = AnalyzeBitMaskView(*MV.get(), FirstDef, LastDef, NumElems);
+  if (BVK == BVMaskKind::Interval) {
+    // FIXME \p FirstDef must be == 0
+    return LastDef + 1;
+  }
+
+  return None;
+}
+
+SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
+                           SelectionDAG &DAG) {
+  VecLenOpt MaskVL = InferLengthFromMask(Mask);
+
+  // TODO analyze Mask
+  auto ActualConstVL = dyn_cast<ConstantSDNode>(DynamicVL);
+  if (!ActualConstVL)
+    return DynamicVL;
+
+  int64_t EVLVal = ActualConstVL->getSExtValue();
+  SDLoc DL(DynamicVL);
+
+  // no hint available -> dynamic VL
+  if (!VLHint)
+    return DynamicVL;
+
+  // in-effective DynamicVL -> return the hint
+  if (EVLVal < 0) {
+    return DAG.getConstant(VLHint.getValue(), DL, MVT::i32);
+  }
+
+  // the minimum of dynamicVL and the VLHint
+  VecLenOpt MinOfAllHints =
+      MinVectorLength(MinVectorLength(MaskVL, VLHint), EVLVal);
+  return DAG.getConstant(MinOfAllHints.getValue(), DL, MVT::i32);
+}
+
+BVMaskKind AnalyzeBitMaskView(MaskView &MV, unsigned &FirstOne,
+                              unsigned &FirstZero, unsigned &NumElements) {
+  bool HasFirstOne = false, HasFirstZero = false;
+  FirstOne = 0;
+  FirstZero = 0;
+  NumElements = 0;
+
+  // this matches a 0*1*0* pattern (BVMaskKind::Interval)
+  for (unsigned i = 0; i < MV.getNumElements(); ++i) {
+    auto ES = MV.getSourceElem(i);
+    if (!ES.isDefined())
+      continue;
+    ++NumElements;
+    if (!ES.isElemInsert())
+      return BVMaskKind::Unknown;
+
+    auto CE = dyn_cast<ConstantSDNode>(ES.V);
+    if (!CE)
+      return BVMaskKind::Unknown;
+    bool TrueBit = CE->getZExtValue() != 0;
+
+    if (TrueBit && !HasFirstOne) {
+      FirstOne = i;
+      HasFirstOne = true;
+    } else if (!TrueBit && !HasFirstZero) {
+      FirstZero = i;
+      HasFirstZero = true;
+    } else if (TrueBit) {
+      // flipping bits on again ->abort
+      return BVMaskKind::Unknown;
+    }
+  }
+
+  return BVMaskKind::Interval;
+}
+
+enum class BVKind : int8_t {
+  Unknown,   // could not infer pattern
+  AllUndef,  // all lanes undef
+  Broadcast, // broadcast
+  Seq,       // (0, .., 255) Sequence
+  SeqBlock,  // (0, .., 15) ^ 16
+  BlockSeq,  // 0^16, 1^16, 2^16
+};
+
+BVKind AnalyzeMaskView(MaskView &MV, unsigned &FirstDef, unsigned &LastDef,
+                       int64_t &Stride, unsigned &BlockLength,
+                       unsigned &NumElements) {
+  // Check UNDEF or FirstDef
+  NumElements = 0;
+  bool AllUndef = true;
+  FirstDef = 0;
+  LastDef = 0;
+  SDValue FirstInsertedV;
+  for (unsigned i = 0; i < MV.getNumElements(); ++i) {
+    auto ES = MV.getSourceElem(i);
+    if (!ES.isDefined())
+      continue;
+    if (!ES.isElemInsert())
+      return BVKind::Unknown;
+    ++NumElements;
+
+    // mark first non-undef position
+    if (AllUndef) {
+      FirstInsertedV = ES.V;
+      FirstDef = i;
+      AllUndef = false;
+    }
+    LastDef = i;
+  }
+  if (AllUndef) {
+    return BVKind::Unknown;
+  }
+
+  // We know at this point that all source elements are scalar insertions or
+  // undef
+
+  // Check broadcast
+  bool IsBroadcast = true;
+  for (unsigned i = FirstDef + 1; i < MV.getNumElements(); ++i) {
+    auto ES = MV.getSourceElem(i);
+    assert((!ES.isDefined() || ES.isElemInsert()) &&
+           "should have quit during first pass");
+
+    bool SameAsFirst = FirstInsertedV == ES.V;
+    if (!SameAsFirst && ES.isDefined()) {
+      IsBroadcast = false;
+    }
+  }
+  if (IsBroadcast)
+    return BVKind::Broadcast;
+
+  ///// Stride pattern detection /////
+  // FIXME clean up
+
+  bool hasConstantStride = true;
+  bool hasBlockStride = false;
+  bool hasBlockStride2 = false;
+  bool firstStride = true;
+  int64_t lastElemValue;
+  BlockLength = 16;
+
+  // Optional<int64_t> InnerStrideOpt;
+  // Optional<int64_t> OuterStrideOpt
+  // Optional<unsigned> BlockSizeOpt;
+
+  for (unsigned i = 0; i < MV.getNumElements(); ++i) {
+    auto ES = MV.getSourceElem(i);
+    if (hasBlockStride) {
+      if (i % BlockLength == 0)
+        Stride = 1;
+      else
+        Stride = 0;
+    }
+
+    if (!ES.isDefined()) {
+      if (hasBlockStride2 && i % BlockLength == 0)
+        lastElemValue = 0;
+      else
+        lastElemValue += Stride;
+      continue;
+    }
+
+    // is this an immediate constant value?
+    auto *constNumElem = dyn_cast<ConstantSDNode>(ES.V);
+    if (!constNumElem) {
+      hasConstantStride = false;
+      hasBlockStride = false;
+      hasBlockStride2 = false;
+      break;
+    }
+
+    // read value
+    int64_t elemValue = constNumElem->getSExtValue();
+
+    if (i == FirstDef) {
+      // FIXME: Currently, this code requies that first value of vseq
+      // is zero.  This is possible to enhance like thses instructions:
+      //        VSEQ $v0
+      //        VBRD $v1, 2
+      //        VADD $v0, $v0, $v1
+      if (elemValue != 0) {
+        hasConstantStride = false;
+        hasBlockStride = false;
+        hasBlockStride2 = false;
+        break;
+      }
+    } else if (i > FirstDef && firstStride) {
+      // first stride
+      Stride = (elemValue - lastElemValue) / (i - FirstDef);
+      firstStride = false;
+    } else if (i > FirstDef) {
+      // later stride
+      if (hasBlockStride2 && elemValue == 0 && i % BlockLength == 0) {
+        lastElemValue = 0;
+        continue;
+      }
+      int64_t thisStride = elemValue - lastElemValue;
+      if (thisStride != Stride) {
+        hasConstantStride = false;
+        if (!hasBlockStride && thisStride == 1 && Stride == 0 &&
+            lastElemValue == 0) {
+          hasBlockStride = true;
+          BlockLength = i;
+        } else if (!hasBlockStride2 && elemValue == 0 &&
+                   lastElemValue + 1 == i) {
+          hasBlockStride2 = true;
+          BlockLength = i;
+        } else {
+          // not blockStride anymore.  e.g. { 0, 1, 2, 3, 0, 0, 0, 0 }
+          hasBlockStride = false;
+          hasBlockStride2 = false;
+          break;
+        }
+      }
+    }
+
+    // track last elem value
+    lastElemValue = elemValue;
+  }
+
+  if (hasConstantStride)
+    return BVKind::Seq;
+  if (hasBlockStride)
+    return BVKind::BlockSeq;
+  if (hasBlockStride2)
+    return BVKind::SeqBlock;
+  return BVKind::Unknown;
+}
+
 /// MaskShuffleAnalysis {
 
 // match a 64 bit segment, mapping out all source bits
 // FIXME this implies knowledge about the underlying object structure
-MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView *Mask, unsigned NumEls) {
-  const unsigned SXRegSize = 64;
+MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, unsigned NumEls) {
 
+  unsigned FirstZero = 0, FirstOne = 0, NumElements = 0;
+
+  BVMaskKind MaskPattern =
+      AnalyzeBitMaskView(MV, FirstOne, FirstZero, NumElements);
+
+  // match a broadcast
+  if (MaskPattern == BVMaskKind::Interval) {
+  }
+
+  const unsigned SXRegSize = 64;
   // loop over all sub-registers (sx parts of v256)
   for (unsigned PartIdx = 0; PartIdx * SXRegSize < NumEls; ++PartIdx) {
     const unsigned DestPartBase = PartIdx * SXRegSize;
@@ -25,15 +266,25 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView *Mask, unsigned NumEls) {
       for (unsigned i = 0; i < NumPartBits; ++i) {
         if (DefinedBits[i])
           continue;
-        ElemSelect ES = Mask->getSourceElem(i + DestPartBase);
+        ElemSelect ES = MV.getSourceElem(i + DestPartBase);
         // skip both kinds of undef (no value transfered or source is undef)
         if (!ES.isDefined()) {
           DefinedBits[i] = true;
+          UndefBits[DestPartBase + i] = true;
           NumMissingBits--;
           continue;
         }
 
-        assert(ES.isElemTransfer() && "TODO implement shuffle-in of scalars");
+        // inserted bit constants
+        if (!ES.isElemTransfer()) {
+          DefinedBits[i] = true;
+          NumMissingBits--;
+          // TODO implement SX bit insertions
+          auto ConstBit = cast<ConstantSDNode>(ES.V);
+          bool IsTrueBit = 0 != ConstBit->getZExtValue();
+          IsConstantOne[i] = IsTrueBit;
+          continue;
+        }
 
         // map a new source (and a shift amount)
         unsigned SrcPartIdx =
@@ -104,6 +355,17 @@ SDValue MaskShuffleAnalysis::synthesize(SDValue Passthru, BitSelect &BSel,
 
 // materialize the code to synthesize this operation
 SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG) {
+  // Check for a constant splat
+  bool IsTrueSplat = true;
+  for (unsigned i = 0; i < IsConstantOne.size(); ++i) {
+    if (!UndefBits[i] && !IsConstantOne[i])
+      IsTrueSplat = false;
+  }
+  if (IsTrueSplat) {
+    return CDAG.createConstMask(256, true);
+  }
+
+  // Actual mask synthesis code path
   std::map<std::pair<SDValue, unsigned>, SDValue> SourceParts;
 
   // Extract all source parts
@@ -123,7 +385,16 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG) {
   SDValue VMAccu = CDAG.DAG.getUNDEF(MVT::v256i1);
 
   for (auto &ResPart : Segments) {
-    SDValue SXAccu = CDAG.DAG.getUNDEF(MVT::i64);
+
+    // Synthesize the constant background
+    unsigned BaseConstant = 0;
+    for (unsigned i = 0; i < SXRegSize; ++i) {
+      unsigned BitPos = i + ResPart.ResPartIdx * SXRegSize;
+      if (IsConstantOne[BitPos])
+        BaseConstant |= (1 << i);
+    }
+    SDValue SXAccu = CDAG.getConstant(BaseConstant, MVT::i64);
+
     // synthesize all operations that feed into this destionation sx part
     for (auto &BitSel : ResPart.Selects) {
       auto ItExtractedSrc = SourceParts.find(
@@ -348,6 +619,179 @@ struct VMVShuffleStrategy final : public ShuffleStrategy {
 };
 
 /// } VMV Shuffle Strategy
+
+/// Legacy Pattern Strategy {
+
+struct PatternShuffleOp final : public AbstractShuffleOp {
+  BVKind PatternKind;
+  unsigned FirstDef;
+  unsigned LastDef;
+  int64_t Stride;
+  unsigned BlockLength;
+  unsigned NumElems;
+
+  PatternShuffleOp(BVKind PatternKind, unsigned FirstDef, unsigned LastDef,
+                   int64_t Stride, unsigned BlockLength, unsigned NumElems)
+      : FirstDef(FirstDef), LastDef(LastDef), Stride(Stride),
+        BlockLength(BlockLength), NumElems(NumElems) {}
+
+  ~PatternShuffleOp() override {}
+
+  void print(raw_ostream &out) const override {
+    out << "PatternShuffle { FirstDef: " << FirstDef << ", LastDef: " << LastDef
+        << " }\n";
+  }
+
+  // transfer all insert positions to their destination
+  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
+    EVT LegalResVT =
+        PartialV.getValueType(); // LegalizeVectorType(Op.getValueType(),
+                                 // Op, DAG, Mode);
+    bool Packed = IsPackedType(LegalResVT);
+    unsigned NativeNumElems = LegalResVT.getVectorNumElements();
+
+    EVT ElemTy = PartialV.getValueType().getVectorElementType();
+
+    // Include the last defined element in the broadcast
+    SDValue OpVectorLength =
+        CDAG.getConstant(Packed ? (LastDef + 1) / 2 : LastDef + 1, MVT::i32);
+
+    SDValue TrueMask = CDAG.CreateConstMask(NativeNumElems, true);
+
+    switch (PatternKind) {
+
+    // Could not detect pattern
+    case BVKind::Unknown:
+      llvm_unreachable("Cannot synthesize the 'Unknown' pattern!");
+
+    // Fold undef
+    case BVKind::AllUndef: {
+      LLVM_DEBUG(dbgs() << "::AllUndef\n");
+      return CDAG.getUndef(LegalResVT);
+    }
+
+    case BVKind::Broadcast: {
+      LLVM_DEBUG(dbgs() << "::Broadcast\n");
+      SDValue ScaVal = MV.getSourceElem(FirstDef).V;
+      LLVM_DEBUG(ScaVal->dump());
+      return CDAG.CreateBroadcast(LegalResVT, ScaVal, OpVectorLength);
+    }
+
+    case BVKind::Seq: {
+      LLVM_DEBUG(dbgs() << "::Seq\n");
+      // detected a proper stride pattern
+      SDValue SeqV = CDAG.CreateSeq(LegalResVT, OpVectorLength);
+      if (Stride == 1) {
+        LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
+        LLVM_DEBUG(CDAG.dumpValue(SeqV));
+        return SeqV;
+      }
+
+      SDValue StrideV = CDAG.CreateBroadcast(
+          LegalResVT, CDAG.getConstant(Stride, ElemTy), OpVectorLength);
+      SDValue ret = CDAG.getNode(VEISD::VVP_MUL, LegalResVT,
+                                 {SeqV, StrideV, TrueMask, OpVectorLength});
+      LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST\n");
+      LLVM_DEBUG(CDAG.dumpValue(StrideV));
+      LLVM_DEBUG(CDAG.dumpValue(ret));
+      return ret;
+    }
+
+    case BVKind::SeqBlock: {
+      LLVM_DEBUG(dbgs() << "::SeqBlock\n");
+      // codegen for <0, 1, .., 15, 0, 1, .., ..... > constant patterns
+      // constant == VSEQ % blockLength
+      int64_t blockLengthLog = log2(BlockLength);
+
+      if (pow(2, blockLengthLog) != BlockLength)
+        break;
+
+      SDValue sequence = CDAG.CreateSeq(LegalResVT, OpVectorLength);
+      SDValue modulobroadcast = CDAG.CreateBroadcast(
+          LegalResVT, CDAG.getConstant(BlockLength - 1, ElemTy),
+          OpVectorLength);
+
+      SDValue modulo =
+          CDAG.getNode(VEISD::VVP_AND, LegalResVT,
+                       {sequence, modulobroadcast, TrueMask, OpVectorLength});
+
+      LLVM_DEBUG(dbgs() << "BlockStride2: VEC_SEQ & VEC_BROADCAST\n");
+      LLVM_DEBUG(CDAG.dumpValue(sequence));
+      LLVM_DEBUG(CDAG.dumpValue(modulobroadcast));
+      LLVM_DEBUG(CDAG.dumpValue(modulo));
+      return modulo;
+    }
+
+    case BVKind::BlockSeq: {
+      LLVM_DEBUG(dbgs() << "::BlockSeq\n");
+      // codegen for <0, 0, .., 0, 0, 1, 1, .., 1, 1, .....> constant patterns
+      // constant == VSEQ >> log2(blockLength)
+      int64_t blockLengthLog = log2(BlockLength);
+
+      if (pow(2, blockLengthLog) != BlockLength)
+        break;
+
+      SDValue sequence = CDAG.CreateSeq(LegalResVT, OpVectorLength);
+      SDValue shiftbroadcast = CDAG.CreateBroadcast(
+          LegalResVT, CDAG.getConstant(blockLengthLog, ElemTy), OpVectorLength);
+
+      SDValue shift =
+          CDAG.getNode(VEISD::VVP_SRL, LegalResVT,
+                       {sequence, shiftbroadcast, TrueMask, OpVectorLength});
+      LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST\n");
+      LLVM_DEBUG(sequence.dump());
+      LLVM_DEBUG(shiftbroadcast.dump());
+      LLVM_DEBUG(shift.dump());
+      return shift;
+    }
+    }
+    llvm_unreachable("");
+  }
+};
+
+class LegacyPatternStrategy final : ShuffleStrategy {
+public:
+  void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
+                          PartialShuffleCB CB) override {
+    // Seek the largest, lowest shift amount subvector
+    // TODO move this to the planning stage
+    unsigned FirstDef = 0;
+    unsigned LastDef = 0;
+    int64_t Stride = 0;
+    unsigned BlockLength = 0;
+    unsigned NumElems = 0;
+
+    BVKind PatternKind =
+        AnalyzeMaskView(MV, FirstDef, LastDef, Stride, BlockLength, NumElems);
+
+    if (PatternKind == BVKind::Unknown)
+      return;
+
+    // This is the number of LSV that may be used to represent a BUILD_VECTOR
+    // Otw, this defaults to VLD of a constant
+    // FIXME move this to TTI
+    const unsigned InsertThreshold = 4;
+
+    // Always use broadcast if you can -> this enables implicit broadcast
+    // matching during isel (eg vfadd_vsvl) if one operand is a VEC_BROADCAST
+    // node
+    // TODO preserve the bitmask in VEC_BROADCAST to expand VEC_BROADCAST late
+    // into LVS when its not folded
+    if ((PatternKind != BVKind::Broadcast) && (NumElems < InsertThreshold)) {
+      return;
+    }
+
+    // all missing bits provided
+    PartialShuffleState FinalState;
+    FinalState.MissingLanes.reset();
+
+    CB(new PatternShuffleOp(PatternKind, FirstDef, LastDef, Stride, BlockLength,
+                            NumElems),
+       FinalState);
+  }
+};
+
+/// } Legacy Pattern Strategy
 
 ShuffleAnalysis::ShuffleAnalysis(MaskView &Mask) {
   PartialShuffleState PSS = PartialShuffleState::fromInitialMask(Mask);
