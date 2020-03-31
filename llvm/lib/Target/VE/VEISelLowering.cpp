@@ -552,7 +552,7 @@ VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mo
           return LowerVSELECT(Op, DAG);
         return CDAG.getNode(
             VVPOC.getValue(), ResVecTy,
-            {LegalOperands[0], LegalOperands[1], LegalOperands[2], LenVal});
+            {LegalOperands[1], LegalOperands[2], LegalOperands[0], LenVal});
       }
       default:
         llvm_unreachable("Unexpected ternary operator!");
