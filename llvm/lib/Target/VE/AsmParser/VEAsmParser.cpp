@@ -885,12 +885,12 @@ static unsigned MatchRegisterAltName(StringRef Name);
 OperandMatchResultTy VEAsmParser::tryParseRegister(unsigned &RegNo,
                                                    SMLoc &StartLoc,
                                                    SMLoc &EndLoc) {
-  const AsmToken &Tok = Parser.getTok();
+  const AsmToken Tok = Parser.getTok();
   StartLoc = Tok.getLoc();
   EndLoc = Tok.getEndLoc();
   RegNo = 0;
   if (getLexer().getKind() != AsmToken::Percent)
-    return MatchOperand_Success;
+    return MatchOperand_NoMatch;
   Parser.Lex();
 
   RegNo = parseRegisterName(&MatchRegisterName);
@@ -1149,7 +1149,7 @@ VEAsmParser::parseMEMOperand(OperandVector &Operands) {
 
   switch (getLexer().getKind()) {
   default:
-    return MatchOperand_NoMatch;
+    return MatchOperand_ParseFail;
 
   case AsmToken::EndOfStatement:
     Operands.push_back(
@@ -1168,14 +1168,14 @@ VEAsmParser::parseMEMOperand(OperandVector &Operands) {
   switch (getLexer().getKind()) {
   default:
     if (ParseRegister(IndexReg, S, E))
-      return MatchOperand_NoMatch;
+      return MatchOperand_ParseFail;
     break;
 
   case AsmToken::Minus:
   case AsmToken::Integer:
   case AsmToken::Dot:
     if (getParser().parseExpression(IndexValue, E))
-      return MatchOperand_NoMatch;
+      return MatchOperand_ParseFail;
     break;
 
   case AsmToken::Comma:
@@ -1186,7 +1186,7 @@ VEAsmParser::parseMEMOperand(OperandVector &Operands) {
 
   switch (getLexer().getKind()) {
   default:
-    return MatchOperand_NoMatch;
+    return MatchOperand_ParseFail;
 
   case AsmToken::RParen:
     Parser.Lex(); // Eat the )
@@ -1201,19 +1201,13 @@ VEAsmParser::parseMEMOperand(OperandVector &Operands) {
   }
 
   unsigned BaseReg = 0;
-  if (ParseRegister(BaseReg, S, E)) {
-    return MatchOperand_NoMatch;
-  }
+  if (ParseRegister(BaseReg, S, E))
+    return MatchOperand_ParseFail;
 
-  switch (getLexer().getKind()) {
-  default:
-    return MatchOperand_NoMatch;
+  if (!Parser.getTok().is(AsmToken::RParen))
+    return MatchOperand_ParseFail;
 
-  case AsmToken::RParen:
-    Parser.Lex(); // Eat the )
-    break;
-  }
-
+  Parser.Lex(); // Eat the )
   Operands.push_back(
       IndexValue ? VEOperand::MorphToMEMrii(BaseReg, IndexValue,
                                             std::move(Offset))
@@ -1233,6 +1227,7 @@ VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
   //   disp
   //   disp(, base)
   //   disp(base)
+  //   disp()
   //   (, base)
   //   (base)
   //   base
@@ -1269,7 +1264,7 @@ VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
 
   switch (getLexer().getKind()) {
   default:
-    return MatchOperand_NoMatch;
+    return MatchOperand_ParseFail;
 
   case AsmToken::EndOfStatement:
   case AsmToken::Comma:
@@ -1281,7 +1276,7 @@ VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
 
   case AsmToken::LParen:
     if (BaseReg != VE::NoRegister)
-      return MatchOperand_NoMatch;
+      return MatchOperand_ParseFail;
     Parser.Lex(); // Eat the (
     break;
   }
@@ -1289,24 +1284,23 @@ VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
   switch (getLexer().getKind()) {
   default:
     if (ParseRegister(BaseReg, S, E))
-      return MatchOperand_NoMatch;
+      return MatchOperand_ParseFail;
     break;
 
   case AsmToken::Comma:
     Parser.Lex(); // Eat the ,
     if (ParseRegister(BaseReg, S, E))
-      return MatchOperand_NoMatch;
+      return MatchOperand_ParseFail;
     break;
-  }
-
-  switch (getLexer().getKind()) {
-  default:
-    return MatchOperand_NoMatch;
 
   case AsmToken::RParen:
-    Parser.Lex(); // Eat the )
     break;
   }
+
+  if (!Parser.getTok().is(AsmToken::RParen))
+    return MatchOperand_ParseFail;
+
+  Parser.Lex(); // Eat the )
   Operands.push_back(
       BaseReg != VE::NoRegister ?
           VEOperand::MorphToMEMri(BaseReg, std::move(Offset))
@@ -1319,13 +1313,13 @@ OperandMatchResultTy VEAsmParser::parseMImmOperand(OperandVector &Operands) {
   LLVM_DEBUG(dbgs() << "parseMImmOpeand\n");
 
   // Parsing "(" + number + ")0/1"
-  const AsmToken &Tok1 = Parser.getTok();
+  const AsmToken Tok1 = Parser.getTok();
   if (!Tok1.is(AsmToken::LParen))
     return MatchOperand_NoMatch;
 
   Parser.Lex(); // Eat the '('.
 
-  const AsmToken &Tok2 = Parser.getTok();
+  const AsmToken Tok2 = Parser.getTok();
   SMLoc E;
   const MCExpr *EVal;
   if (!Tok2.is(AsmToken::Integer) ||
@@ -1334,7 +1328,7 @@ OperandMatchResultTy VEAsmParser::parseMImmOperand(OperandVector &Operands) {
     return MatchOperand_NoMatch;
   }
 
-  const AsmToken &Tok3 = Parser.getTok();
+  const AsmToken Tok3 = Parser.getTok();
   if (!Tok3.is(AsmToken::RParen)) {
     getLexer().UnLex(Tok2);
     getLexer().UnLex(Tok1);
@@ -1370,49 +1364,35 @@ VEAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
 
   switch (getLexer().getKind()) {
   case AsmToken::LParen: {
-    // Parsing "(" + number + ")0/1"
-    const AsmToken &Tok1 = Parser.getTok();
-    std::unique_ptr<VEOperand> Op1 = VEOperand::CreateToken(
-        Tok1.getString(), Tok1.getLoc());
+    // Parsing "(" + %vreg + ", " + %vreg + ")"
+    const AsmToken Tok1 = Parser.getTok();
     Parser.Lex(); // Eat the '('.
 
-    const AsmToken &Tok2 = Parser.getTok();
-    std::unique_ptr<VEOperand> Op2;
-    SMLoc E;
-    const MCExpr *EVal;
-    if (Tok2.is(AsmToken::Integer) &&
-        !getParser().parseExpression(EVal, E)) {
-      Op2 = VEOperand::CreateImm(EVal, Tok2.getLoc(), E);
-    } else {
+    unsigned RegNo1;
+    SMLoc S1, E1;
+    if (tryParseRegister(RegNo1, S1, E1) != MatchOperand_Success) {
       getLexer().UnLex(Tok1);
-      return MatchOperand_ParseFail;
+      return MatchOperand_NoMatch;
     }
 
-    const AsmToken &Tok3 = Parser.getTok();
-    if (!Tok3.is(AsmToken::RParen)) {
-      getLexer().UnLex(Tok2);
-      getLexer().UnLex(Tok1);
+    if (!Parser.getTok().is(AsmToken::Comma))
       return MatchOperand_ParseFail;
-    }
+    Parser.Lex(); // Eat the ','.
+
+    unsigned RegNo2;
+    SMLoc S2, E2;
+    if (tryParseRegister(RegNo2, S2, E2) != MatchOperand_Success)
+      return MatchOperand_ParseFail;
+
+    if (!Parser.getTok().is(AsmToken::RParen))
+      return MatchOperand_ParseFail;
+
+    Operands.push_back(VEOperand::CreateToken(Tok1.getString(), Tok1.getLoc()));
+    Operands.push_back(VEOperand::CreateReg(RegNo1, S1, E1));
+    Operands.push_back(VEOperand::CreateReg(RegNo2, S2, E2));
+    Operands.push_back(VEOperand::CreateToken(
+        Parser.getTok().getString(), Parser.getTok().getLoc()));
     Parser.Lex(); // Eat the ')'.
-
-    const AsmToken &Tok4 = Parser.getTok();
-    StringRef Suffix = Tok4.getString();
-    if (Suffix != "1" && Suffix != "0") {
-      getLexer().UnLex(Tok3);
-      getLexer().UnLex(Tok2);
-      getLexer().UnLex(Tok1);
-      return MatchOperand_ParseFail;
-    }
-    Parser.Lex(); // Eat the value.
-    Operands.push_back(std::move(Op1));
-    Operands.push_back(std::move(Op2));
-    // Need to concatanate ')' and '0'/'1'.
-    if (Suffix == "1") {
-      Operands.push_back(VEOperand::CreateToken(")1", Tok3.getLoc()));
-    } else {
-      Operands.push_back(VEOperand::CreateToken(")0", Tok3.getLoc()));
-    }
     break;
   }
   default: {
@@ -1424,33 +1404,27 @@ VEAsmParser::parseOperand(OperandVector &Operands, StringRef Mnemonic) {
     // Push the parsed operand into the list of operands
     Operands.push_back(std::move(Op));
 
-    const AsmToken &Tok1 = Parser.getTok();
-    if (Tok1.is(AsmToken::LParen)) {
-      // Parsing %vec-reg + "(" + %sclar-reg/number + ")"
-      std::unique_ptr<VEOperand> Op1 = VEOperand::CreateToken(
-          Tok1.getString(), Tok1.getLoc());
-      Parser.Lex(); // Eat the '('.
+    if (!Parser.getTok().is(AsmToken::LParen))
+      break;
 
-      const AsmToken &Tok2 = Parser.getTok();
-      std::unique_ptr<VEOperand> Op2;
-      ResTy = parseVEAsmOperand(Op2);
-      if (ResTy != MatchOperand_Success || !Op2) {
-        getLexer().UnLex(Tok1);
-        return MatchOperand_ParseFail;
-      }
+    // Parsing %vec-reg + "(" + %sclar-reg/number + ")"
+    std::unique_ptr<VEOperand> Op1 = VEOperand::CreateToken(
+        Parser.getTok().getString(), Parser.getTok().getLoc());
+    Parser.Lex(); // Eat the '('.
 
-      const AsmToken &Tok3 = Parser.getTok();
-      if (!Tok3.is(AsmToken::RParen)) {
-        getLexer().UnLex(Tok2);
-        getLexer().UnLex(Tok1);
-        return MatchOperand_ParseFail;
-      }
-      Operands.push_back(std::move(Op1));
-      Operands.push_back(std::move(Op2));
-      Operands.push_back(VEOperand::CreateToken(
-          Tok3.getString(), Tok3.getLoc()));
-      Parser.Lex(); // Eat the ')'.
-    }
+    std::unique_ptr<VEOperand> Op2;
+    ResTy = parseVEAsmOperand(Op2);
+    if (ResTy != MatchOperand_Success || !Op2)
+      return MatchOperand_ParseFail;
+
+    if (!Parser.getTok().is(AsmToken::RParen))
+      return MatchOperand_ParseFail;
+
+    Operands.push_back(std::move(Op1));
+    Operands.push_back(std::move(Op2));
+    Operands.push_back(VEOperand::CreateToken(
+        Parser.getTok().getString(), Parser.getTok().getLoc()));
+    Parser.Lex(); // Eat the ')'.
     break;
   }
   }
