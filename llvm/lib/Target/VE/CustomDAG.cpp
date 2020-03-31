@@ -191,7 +191,8 @@ BVKind AnalyzeBuildVector(BuildVectorSDNode *BVN, unsigned &FirstDef,
 }
 
 PosOpt GetVVPOpcode(unsigned OpCode) {
-  if (IsVVP(OpCode)) return OpCode;
+  if (IsVVP(OpCode))
+    return OpCode;
 
   switch (OpCode) {
   case ISD::SCALAR_TO_VECTOR:
@@ -242,10 +243,10 @@ EVT getLargestConvType(SDNode *Op) {
   return ResVT.getStoreSizeInBits() > OpVT.getStoreSizeInBits() ? ResVT : OpVT;
 }
 
-PosOpt
-getReductionStartParamPos(unsigned ISD) {
+PosOpt getReductionStartParamPos(unsigned ISD) {
   PosOpt VVPOC = GetVVPOpcode(ISD);
-  if (!VVPOC) return None;
+  if (!VVPOC)
+    return None;
 
   switch (VVPOC.getValue()) {
   case VEISD::VVP_REDUCE_STRICT_FADD:
@@ -256,13 +257,14 @@ getReductionStartParamPos(unsigned ISD) {
   }
 }
 
-PosOpt
-getReductionVectorParamPos(unsigned ISD) {
+PosOpt getReductionVectorParamPos(unsigned ISD) {
   PosOpt VVPOC = GetVVPOpcode(ISD);
-  if (!VVPOC) return None;
+  if (!VVPOC)
+    return None;
 
   unsigned OC = VVPOC.getValue();
-  if (getReductionStartParamPos(OC)) return 1;
+  if (getReductionStartParamPos(OC))
+    return 1;
   return 0;
 }
 
@@ -275,7 +277,8 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   unsigned OC = Op->getOpcode();
   // Translate VP to VVP IDs on the fly
   switch (OC) {
-    default: break;
+  default:
+    break;
 #define HANDLE_VP_TO_VVP(VP_ID, VVP_ID)                                        \
   case ISD::VP_ID:                                                             \
     OC = VEISD::VVP_ID;                                                        \
@@ -322,11 +325,11 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   case VEISD::VVP_NAME:                                                        \
   case ISD::NATIVE_ISD:
 #include "VVPNodes.inc"
-  {
-    Optional<unsigned> VecParamPos = getReductionVectorParamPos(OC);
-    assert(VecParamPos.hasValue());
-    return Op->getOperand(VecParamPos.getValue()).getValueType();
-  }
+    {
+      Optional<unsigned> VecParamPos = getReductionVectorParamPos(OC);
+      assert(VecParamPos.hasValue());
+      return Op->getOperand(VecParamPos.getValue()).getValueType();
+    }
 
   case VEISD::VEC_NARROW:
   case VEISD::VEC_SEQ:
@@ -368,7 +371,7 @@ SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   auto ScaTy = ScaOp->getValueType(0);
   auto VLOp = Op.getOperand(1);
 
-  // v256x broadcast 
+  // v256x broadcast
   if (!IsPackedType(VT)) {
     return Op;
   }
@@ -525,8 +528,8 @@ SDValue CustomDAG::CreateSeq(EVT ResTy,
   return DAG.getNode(VEISD::VEC_SEQ, DL, ResTy, VectorLen);
 }
 
-SDValue
-CustomDAG::getTargetExtractSubreg(MVT SubRegVT, int SubRegIdx, SDValue RegV) const {
+SDValue CustomDAG::getTargetExtractSubreg(MVT SubRegVT, int SubRegIdx,
+                                          SDValue RegV) const {
   return DAG.getTargetExtractSubreg(SubRegIdx, DL, SubRegVT, RegV);
 }
 
@@ -535,8 +538,9 @@ CustomDAG::getTargetExtractSubreg(MVT SubRegVT, int SubRegIdx, SDValue RegV) con
 SDValue CustomDAG::createScalarShift(EVT ResVT, SDValue Src, int Offset) const {
   if (Offset == 0)
     return Src;
-  unsigned OC = Offset > 0 ? ISD::SHL : ISD::SRL; // VE::SLLri : VE::SRLri; 
-  SDValue ShiftV = getConstant(std::abs(Offset), MVT::i32); // This is the ShiftAmount constant
+  unsigned OC = Offset > 0 ? ISD::SHL : ISD::SRL; // VE::SLLri : VE::SRLri;
+  SDValue ShiftV = getConstant(std::abs(Offset),
+                               MVT::i32); // This is the ShiftAmount constant
   return DAG.getNode(OC, DL, ResVT, Src, ShiftV);
 }
 
@@ -560,8 +564,10 @@ SDValue CustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
 }
 
 SDValue CustomDAG::createPassthruVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV,
-                            SDValue Mask, SDValue PassthruV, SDValue Avl) const {
-  abort(); // TODO return DAG.getNode(VEISD::VEC_VMV, DL, ResVT, {SrcV, OffsetV, Mask, Avl});
+                                     SDValue Mask, SDValue PassthruV,
+                                     SDValue Avl) const {
+  abort(); // TODO return DAG.getNode(VEISD::VEC_VMV, DL, ResVT, {SrcV, OffsetV,
+           // Mask, Avl});
 }
 
 SDValue CustomDAG::createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV,
@@ -569,14 +575,14 @@ SDValue CustomDAG::createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV,
   return DAG.getNode(VEISD::VEC_VMV, DL, ResVT, {SrcV, OffsetV, Mask, Avl});
 }
 
-SDValue
-CustomDAG::CreateExtractMask(SDValue MaskV, SDValue IndexV) const {
+SDValue CustomDAG::CreateExtractMask(SDValue MaskV, SDValue IndexV) const {
   return DAG.getNode(VEISD::VM_EXTRACT, DL, MVT::i64, MaskV, IndexV);
 }
 
-SDValue
-CustomDAG::CreateInsertMask(SDValue MaskV, SDValue ElemV, SDValue IndexV) const {
-  return DAG.getNode(VEISD::VM_INSERT, DL, MaskV.getValueType(), MaskV, ElemV, IndexV);
+SDValue CustomDAG::CreateInsertMask(SDValue MaskV, SDValue ElemV,
+                                    SDValue IndexV) const {
+  return DAG.getNode(VEISD::VM_INSERT, DL, MaskV.getValueType(), MaskV, ElemV,
+                     IndexV);
 }
 
 SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, SubElem E,
@@ -595,9 +601,8 @@ SDValue CustomDAG::CreateSwap(EVT DestVT, SDValue V, SDValue AVL) {
   return DAG.getNode(VEISD::VEC_SWAP, DL, DestVT, V, AVL);
 }
 
-SDValue
-CustomDAG::CreateBroadcast(EVT ResTy, SDValue S,
-                           Optional<SDValue> OpVectorLength) const {
+SDValue CustomDAG::CreateBroadcast(EVT ResTy, SDValue S,
+                                   Optional<SDValue> OpVectorLength) const {
 
   // Pick VL
   SDValue VectorLen;
@@ -653,18 +658,19 @@ SDValue CustomDAG::createMaskExtract(SDValue MaskV, SDValue Idx) const {
 }
 
 // Extract an SX register from a mask
-SDValue CustomDAG::createMaskInsert(SDValue MaskV, SDValue Idx, SDValue ElemV) const {
+SDValue CustomDAG::createMaskInsert(SDValue MaskV, SDValue Idx,
+                                    SDValue ElemV) const {
   return DAG.getNode(VEISD::VM_INSERT, DL, MaskV.getValueType(),
                      {MaskV, Idx, ElemV});
 }
 
 SDValue CustomDAG::createConstMask(unsigned NumElems,
                                    const LaneBits &TrueBits) const {
-  SDValue MaskV = CreateConstMask(NumElems, false);
+  SDValue MaskV = CreateConstMask(TrueBits.size(), false);
 
   unsigned RegPartIdx = 0;
-  for (unsigned StartIdx = 0; StartIdx < NumElems + 63;
-       ++StartIdx, ++RegPartIdx) {
+  for (unsigned StartIdx = 0; StartIdx < NumElems;
+       StartIdx += SXRegSize, ++RegPartIdx) {
     uint64_t ConstReg = 0;
     for (uint i = 0; i < SXRegSize; ++i) {
       ConstReg |= TrueBits[StartIdx + i] ? (1 << i) : 0;
@@ -677,6 +683,12 @@ SDValue CustomDAG::createConstMask(unsigned NumElems,
                              getConstant(ConstReg, MVT::i64));
   }
   return MaskV;
+}
+
+SDValue CustomDAG::createSelect(SDValue OnTrueV, SDValue OnFalseV,
+                                SDValue MaskV, SDValue PivotV) const {
+  return DAG.getNode(VEISD::VVP_SELECT, DL, OnTrueV.getValueType(),
+                     {OnTrueV, OnFalseV, MaskV, PivotV});
 }
 
 SDValue CustomDAG::CreateConstMask(unsigned NumElements, bool IsTrue) const {

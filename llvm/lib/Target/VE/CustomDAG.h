@@ -180,6 +180,10 @@ struct CustomDAG {
   // materialize a constant mask vector given by \p TrueBits
   SDValue createConstMask(unsigned NumElems, const LaneBits &TrueBits) const;
 
+  // OnTrueV[l] if l < PivotV && Mask[l] else OnFalseV[l]
+  SDValue createSelect(SDValue OnTrueV, SDValue OnFalseV, SDValue MaskV,
+                       SDValue PivotV) const;
+
   /// getNode {
   SDValue getNode(unsigned OC, SDVTList VTL, ArrayRef<SDValue> OpV) const {
     return DAG.getNode(OC, DL, VTL, OpV);

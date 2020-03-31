@@ -229,6 +229,10 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
 
   // transfer all insert positions to their destination
   SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
+    // noop VMV
+    if (ShiftAmount == 0 && PartialV->isUndef())
+      return SrcVector;
+
     LaneBits VMVMask;
     // Synthesize the mask
     VMVMask.reset();
@@ -240,8 +244,9 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
     SDValue VL = CDAG.getConstEVL(getAVL());
     SDValue ShiftV = CDAG.getConstant(ShiftAmount, MVT::i32);
 
-    return CDAG.createPassthruVMV(PartialV.getValueType(), SrcVector, ShiftV,
-                                  MaskV, PartialV, VL);
+    SDValue ResV =
+        CDAG.createVMV(PartialV.getValueType(), SrcVector, ShiftV, MaskV, VL);
+    return CDAG.createSelect(ResV, PartialV, MaskV, VL);
   }
 };
 
@@ -392,7 +397,7 @@ raw_ostream &ShuffleAnalysis::print(raw_ostream &out) const {
 SDValue ShuffleAnalysis::synthesize(MaskView &Mask, CustomDAG &CDAG,
                                     EVT LegalResultVT) {
   SDValue AccuV = CDAG.getUndef(LegalResultVT);
-  for (auto& ShuffOp : ShuffleSeq) {
+  for (auto &ShuffOp : ShuffleSeq) {
     AccuV = ShuffOp->synthesize(Mask, CDAG, AccuV);
   }
   return AccuV;
