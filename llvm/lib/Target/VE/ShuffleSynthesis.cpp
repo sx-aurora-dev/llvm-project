@@ -796,7 +796,19 @@ public:
 ShuffleAnalysis::ShuffleAnalysis(MaskView &Mask) {
   PartialShuffleState PSS = PartialShuffleState::fromInitialMask(Mask);
 
-  // Try transfering entire subvectors
+  // Use the legacy strategy where applicable
+  LegacyPatternStrategy LegacyStrategy;
+  LegacyStrategy.planPartialShuffle(
+      Mask, PSS,
+      [&](AbstractShuffleOp *PartialOp, PartialShuffleState NextPSS) {
+        PSS = NextPSS,
+        ShuffleSeq.push_back(std::unique_ptr<AbstractShuffleOp>(PartialOp));
+        return IterBreak;
+      });
+  if (!ShuffleSeq.empty())
+    return;
+
+  // Try lowering to VMV transfers
   const unsigned NumVMVRounds = 5;
   VMVShuffleStrategy VMVStrat;
 
