@@ -39,7 +39,7 @@ def SDTGatherVVP: SDTypeProfile<1, 3, [     // vvp gather
 
 // select (OnTrue, OnFalse, SelMask, OpThreshold)
 def SDTSelectVVP : SDTypeProfile<1, 4, [       // vp_select
-  SDTCisVec<0>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisSameAs<2, 3>, IsVLVT<4>
+  SDTCisVec<0>, SDTCisSameNumEltsAs<0, 3>, SDTCisSameAs<0, 1>, SDTCisSameAs<1, 2>, IsVLVT<4>
 ]>;
 
 // setcc (lhs, rhs, cc, mask, vl)

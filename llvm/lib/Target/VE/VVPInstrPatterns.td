@@ -195,8 +195,8 @@ defm : VectorTernaryArith_ShortLong<c_vv_ffma, f64, v256f64, "vfmadd", f32, v256
 
 // Element-wise select (256 elements)
 multiclass VectorSelect<ValueType DataVT> {
-    def :Pat<(DataVT (vvp_select v256i1:$vm, DataVT:$vtrue, DataVT:$vfalse, i32:$vl)),
-                     (vmrg_vvvml $vfalse, $vtrue, $vm, $vl)>;
+    def :Pat<(DataVT (vvp_select DataVT:$vtrue, DataVT:$vfalse, v256i1:$vm, i32:$pivot)),
+                     (vmrg_vvvmvl $vfalse, $vtrue, $vm, $vfalse, $pivot)>;
 }
 
 defm : VectorSelect<v256f64>;
