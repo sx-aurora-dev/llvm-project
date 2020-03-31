@@ -152,6 +152,13 @@ def: Pat<(v256i32 (vec_seq i32:$vl)),
 
 // Element shift (VMV)
 multiclass VMV_Patterns<ValueType VecVT> {
+  // folded select
+  def : Pat<(VecVT (vvp_select (vec_vmv VecVT:$v, i32:$amount, (v256i1 srcvalue), (i32 srcvalue)),
+                               VecVT:$vpt,
+                               v256i1:$mask,
+                               i32:$pivot)),
+            (vmv_vsvmvl $amount, $v, $mask, $vpt, $pivot)>;
+  // standard VMV
   def : Pat<(VecVT (vec_vmv VecVT:$v, i32:$amount, v256i1:$mask, i32:$avl)),
             (vmv_vsvmvl $amount, $v, $mask, (VecVT (IMPLICIT_DEF)), $avl)>;
 }

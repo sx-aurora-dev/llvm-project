@@ -1,9 +1,3 @@
-// The backend translates VP and regular vector operations into vvp_* nodes
-// This file defines the isel patterns
-// The vvp_nodes are defined in..
-
-include "VVPInstrInfo.td"
-
 // Conversion operators
 // def f32_to_i64 : OutPatFrag<(ops node:$val), (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)>;
 // def i32_to_i64 : OutPatFrag<(ops node:$val), (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32)>;

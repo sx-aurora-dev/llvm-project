@@ -2254,6 +2254,11 @@ def lea_i64         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 (i32 $imm)
 def lea_u32         : OutPatFrag<(ins node:$imm), (ANDrm0 (LEAzii 0, 0, (LO32 (i32 $imm))), 32)>;
 
 
+// The backend translates VP and regular vector operations into vvp_* nodes
+// This file defines the isel patterns
+// The vvp_nodes are defined in..
+include "VVPInstrInfo.td"
+
 // generic vector instruction patterns
 include "VEInstrPatternsVec.td"
 
