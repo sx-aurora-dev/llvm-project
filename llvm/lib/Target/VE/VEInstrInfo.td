@@ -737,6 +737,7 @@ multiclass RRFCQm<string opcStr, bits<8>opc,
 //-----------------------------------------------------------------------------
 
 // Multiclass for generic RM instructions
+let hasSideEffects = 0 in
 multiclass RMm<string opcStr, bits<8>opc, RegisterClass RC> {
   def rri : RM<opc, (outs RC:$dest), (ins MEMrri:$addr),
                !strconcat(opcStr, " $dest, $addr"), []>;
@@ -852,7 +853,7 @@ let mayLoad = 1, hasSideEffects = 0 in {
 }
 
 // Multiclass for store instructions.
-let mayStore = 1 in
+let mayStore = 1, hasSideEffects = 0 in
 multiclass STOREm<string opcStr, bits<8> opc, RegisterClass RC, ValueType Ty,
                   SDPatternOperator OpNode = null_frag> {
   def rri : RM<opc, (outs), (ins MEMrri:$addr, RC:$sx),
@@ -927,7 +928,7 @@ let cx = 1, DecoderMethod = "DecodeLoadI32" in
 defm DLDLZX : LOADm<"dldl.zx", 0x0b, I32, i32, load>;
 
 // Section 8.2.15 - PFCH
-let sx = 0 in
+let sx = 0, hasSideEffects = 0 in
 multiclass PFCHm<string opcStr, bits<8>opc> {
   def rri : RM<opc, (outs), (ins MEMrri:$addr), !strconcat(opcStr, " $addr"),
                [(prefetch ADDRrri:$addr, imm, imm, (i32 1))]>;
@@ -1350,7 +1351,7 @@ defm CVTQS : CVTm<"cvt.q.s", 0x2D, F128, f128, F32, f32, fpextend>;
 //-----------------------------------------------------------------------------
 
 // Branch multiclass
-let isBranch = 1, isTerminator = 1, isIndirectBranch = 1 in
+let isBranch = 1, isTerminator = 1, isIndirectBranch = 1, hasSideEffects = 0 in
 multiclass BCbpfm<string opcStr, string cmpStr, bits<8> opc, dag cond,
                   Operand ADDR> {
   let bpf = 0 /* NONE */ in
@@ -1382,7 +1383,7 @@ multiclass BCm<string opcStr, string opcStrAt, string opcStrAf, bits<8> opc,
 }
 
 // Branch relative multiclass
-let isBranch = 1, isTerminator = 1 in
+let isBranch = 1, isTerminator = 1, hasSideEffects = 0 in
 multiclass BCRbpfm<string opcStr, string cmpStr, bits<8> opc, dag cond> {
   let bpf = 0 /* NONE */ in
   def "" : CF<opc, (outs), !con(cond, (ins brtarget32:$imm32)),
@@ -1415,7 +1416,7 @@ def : Pat<(brind tblockaddress:$imm), (BCFLazi_t 0, $imm)>;
 // Return instruction is a special case of jump.
 let Uses = [SX10], bpf = 3 /* TAKEN */, cf = 15 /* AT */, cy = 0, sy = 0,
     sz = 10 /* SX10 */, imm32 = 0, isReturn = 1, isTerminator = 1,
-    isBarrier = 1, isCodeGenOnly = 1 in
+    isBarrier = 1, isCodeGenOnly = 1, hasSideEffects = 0 in
 def RET : CF<0x19, (outs), (ins), "b.l.t (, %lr)", [(retflag)]>;
 
 // Section 8.8.2 - BCS (Branch on Condition Single)
@@ -1491,29 +1492,29 @@ def CALLr : RM<0x08, (outs), (ins I64:$sz, variable_ops),
 //-----------------------------------------------------------------------------
 
 // Section 8.19.1 - SIC (Save Instruction Counter)
-let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0, Uses = [IC] in
+let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 1, Uses = [IC] in
 def SIC : RR<0x28, (outs I32:$sx), (ins), "sic $sx">;
 
 // Section 8.19.2 - LPM (Load Program Mode Flags)
-let sx = 0, cz = 0, sz = 0, hasSideEffects = 0, Defs = [PSW] in
+let sx = 0, cz = 0, sz = 0, hasSideEffects = 1, Defs = [PSW] in
 def LPM : RR<0x3a, (outs), (ins I64:$sy), "lpm $sy">;
 
 // Section 8.19.3 - SPM (Save Program Mode Flags)
-let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0, Uses = [PSW] in
+let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 1, Uses = [PSW] in
 def SPM : RR<0x2a, (outs I64:$sx), (ins), "spm $sx">;
 
 // Section 8.19.4 - LFR (Load Flag Register)
-let sx = 0, cz = 0, sz = 0, hasSideEffects = 0, Defs = [PSW] in {
+let sx = 0, cz = 0, sz = 0, hasSideEffects = 1, Defs = [PSW] in {
   def LFRr : RR<0x69, (outs), (ins I64:$sy), "lfr $sy">;
   let cy = 0 in def LFRi : RR<0x69, (outs), (ins uimm6:$sy), "lfr $sy">;
 }
 
 // Section 8.19.5 - SFR (Save Flag Register)
-let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0, Uses = [PSW] in
+let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 1, Uses = [PSW] in
 def SFR : RR<0x29, (outs I64:$sx), (ins), "sfr $sx">;
 
 // Section 8.19.6 - SMIR (Save Miscellaneous Register)
-let cy = 0, cz = 0, sz = 0, hasSideEffects = 0, Uses = [PSW] in {
+let cy = 0, cz = 0, sz = 0, hasSideEffects = 1 in {
   def SMIR : RR<0x22, (outs I64:$sx), (ins MISC:$sy), "smir $sx, $sy">;
   let isAsmParserOnly = 1 in
   def SMIRi : RR<0x22, (outs I64:$sx), (ins misc:$sy), "smir $sx, $sy">;
@@ -1524,12 +1525,13 @@ let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
 def NOP : RR<0x79, (outs), (ins), "nop">;
 
 // Section 8.19.8 - MONC (Monitor Call)
-let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in {
+let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 1 in {
   def MONC : RR<0x3F, (outs), (ins), "monc">;
   let cx = 1, isTrap = 1 in def MONCHDB : RR<0x3F, (outs), (ins), "monc.hdb">;
 }
 
 // Section 8.19.9 - LCR (Load Communication Register)
+let hasSideEffects = 1 in
 multiclass LOADCRm<string opcStr, bits<8>opc, RegisterClass RC> {
   def rr : RR<opc, (outs RC:$sx), (ins RC:$sz, RC:$sy),
               !strconcat(opcStr, " $sx, $sy, $sz")>;
@@ -1541,9 +1543,10 @@ multiclass LOADCRm<string opcStr, bits<8>opc, RegisterClass RC> {
   def zi : RR<opc, (outs RC:$sx), (ins zero:$sz, simm7:$sy),
               !strconcat(opcStr, " $sx, $sy, $sz")>;
 }
-let mayLoad = 1 in defm LCR : LOADCRm<"lcr", 0x40, I64>;
+defm LCR : LOADCRm<"lcr", 0x40, I64>;
 
 // Section 8.19.10 - SCR (Save Communication Register)
+let hasSideEffects = 1 in
 multiclass STORECRm<string opcStr, bits<8>opc, RegisterClass RC> {
   def rr : RR<opc, (outs), (ins RC:$sz, RC:$sy, RC:$sx),
               !strconcat(opcStr, " $sx, $sy, $sz")>;
@@ -1555,14 +1558,13 @@ multiclass STORECRm<string opcStr, bits<8>opc, RegisterClass RC> {
   def zi : RR<opc, (outs), (ins zero:$sz, simm7:$sy, RC:$sx),
               !strconcat(opcStr, " $sx, $sy, $sz")>;
 }
-let mayStore = 1 in defm SCR : STORECRm<"scr", 0x50, I64>;
+defm SCR : STORECRm<"scr", 0x50, I64>;
 
 // Section 8.19.11 - TSCR (Test & Set Communication Register)
-let mayLoad = 1, mayStore = 1 in
 defm TSCR : LOADCRm<"tscr", 0x41, I64>;
 
 // Section 8.19.12 - FIDCR (Fetch & Increment/Decrement CR)
-let cz = 0 in
+let cz = 0, hasSideEffects = 1 in
 multiclass FIDCRm<string opcStr, bits<8>opc, RegisterClass RC> {
   def ri : RR<opc, (outs RC:$dest), (ins RC:$src, uimm3:$rz),
               !strconcat(opcStr, " $dest, $src, $rz")> {
@@ -1578,7 +1580,6 @@ multiclass FIDCRm<string opcStr, bits<8>opc, RegisterClass RC> {
   }
 }
 
-let mayLoad = 1, mayStore = 1, hasSideEffects = 0 in
 defm FIDCR : FIDCRm<"fidcr", 0x51, I64>;
 
 //-----------------------------------------------------------------------------
@@ -2020,11 +2021,11 @@ def ADJCALLSTACKUP : Pseudo<(outs), (ins i64imm:$amt1, i64imm:$amt2),
                             [(callseq_end timm:$amt1, timm:$amt2)]>;
 }
 
-let Defs = [SX8], Uses = [SX8, SX11], hasSideEffects = 0 in
+let Defs = [SX8], Uses = [SX8, SX11], hasSideEffects = 1 in
 def EXTEND_STACK : Pseudo<(outs), (ins),
                           "# EXTEND STACK",
                           []>;
-let  hasSideEffects = 0 in
+let  hasSideEffects = 1 in
 def EXTEND_STACK_GUARD : Pseudo<(outs), (ins),
                                 "# EXTEND STACK GUARD",
                                 []>;
