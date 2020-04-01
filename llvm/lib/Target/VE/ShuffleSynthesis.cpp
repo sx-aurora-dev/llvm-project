@@ -639,8 +639,8 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
 
   PatternShuffleOp(BVKind PatternKind, unsigned FirstDef, unsigned LastDef,
                    int64_t Stride, unsigned BlockLength, unsigned NumElems)
-      : FirstDef(FirstDef), LastDef(LastDef), Stride(Stride),
-        BlockLength(BlockLength), NumElems(NumElems) {}
+      : PatternKind(PatternKind), FirstDef(FirstDef), LastDef(LastDef),
+        Stride(Stride), BlockLength(BlockLength), NumElems(NumElems) {}
 
   ~PatternShuffleOp() override {}
 
