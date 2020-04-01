@@ -21,6 +21,8 @@
 #include "TargetCode.h"
 #include "TargetCodeFragment.h"
 #include "Visitors.h"
+#include "clang/Basic/SourceManager.h"
+#include "clang/Basic/FileManager.h"
 
 static bool isHeaderOpenMPHeader(llvm::StringRef header_path) {
   if (header_path.substr(header_path.find_last_of("/\\") + 1) == "omp.h") {

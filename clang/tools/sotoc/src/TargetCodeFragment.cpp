@@ -19,6 +19,7 @@
 #include "clang/AST/PrettyPrinter.h"
 #include "clang/AST/Stmt.h"
 #include "clang/AST/StmtOpenMP.h"
+#include "clang/Basic/SourceManager.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/TokenKinds.h"
