@@ -1656,47 +1656,8 @@ VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
   return AtomicExpansionKind::CmpXChg;
 }
 
-VETargetLowering::VETargetLowering(const TargetMachine &TM,
-                                   const VESubtarget &STI)
-    : TargetLowering(TM), Subtarget(&STI) {
-  // Instructions which use registers as conditionals examine all the
-  // bits (as does the pseudo SELECT_CC expansion). I don't think it
-  // matters much whether it's ZeroOrOneBooleanContent, or
-  // ZeroOrNegativeOneBooleanContent, so, arbitrarily choose the
-  // former.
-  setBooleanContents(ZeroOrOneBooleanContent);
-  setBooleanVectorContents(ZeroOrOneBooleanContent);
-
-  // Set up the register classes.
-  // SPU registers
-  addRegisterClass(MVT::i32, &VE::I32RegClass);
-  addRegisterClass(MVT::i64, &VE::I64RegClass);
-  addRegisterClass(MVT::f32, &VE::F32RegClass);
-  addRegisterClass(MVT::f64, &VE::I64RegClass);
-  addRegisterClass(MVT::f128, &VE::F128RegClass);
-
-  // VPU registers
-  if (Subtarget->enableVPU()) {
-    addRegisterClass(MVT::v256i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v256i64, &VE::V64RegClass);
-    addRegisterClass(MVT::v256f32, &VE::V64RegClass);
-    addRegisterClass(MVT::v256f64, &VE::V64RegClass);
-    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
-
-    if (Subtarget->hasPackedMode()) {
-      addRegisterClass(MVT::v512i32, &VE::V64RegClass);
-      addRegisterClass(MVT::v512f32, &VE::V64RegClass);
-      addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-    }
-
-    // Support mask DT for target intrinsics
-    if (Subtarget->isVELIntrinsicMode()) {
-      addRegisterClass(MVT::v4i64, &VE::VMRegClass);
-      addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
-    }
-  }
-
-  /// Scalar Lowering {
+void VETargetLowering::initSPUActions() {
+  const auto &TM = getTargetMachine();
 
   /// Load & Store {
   for (MVT FPVT : MVT::fp_valuetypes()) {
@@ -1924,10 +1885,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::FP_TO_FP16, FPVT, Expand);
   }
   /// } Conversion
+}
 
-  /// } Scalar Lowering
-
-  /// Vector Lowering {
+void VETargetLowering::initVPUActions() {
+  if (!Subtarget->enableVPU())
+    return;
 
   // Vector length legalization
   auto LegalizeVectorLength = [&](unsigned VL) -> unsigned {
@@ -2216,8 +2178,57 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // setOperationAction(ISD::TRUNCATE, MVT::v256i32, Custom); // should not
   // generate invalid valid SETCC in the first place
   setOperationAction(ISD::VSELECT, MVT::v256i1, Custom);
-
   /// } Vector Lowering
+}
+
+void VETargetLowering::initRegisterClasses() {
+  // Set up the register classes.
+  // SPU registers
+  addRegisterClass(MVT::i32, &VE::I32RegClass);
+  addRegisterClass(MVT::i64, &VE::I64RegClass);
+  addRegisterClass(MVT::f32, &VE::F32RegClass);
+  addRegisterClass(MVT::f64, &VE::I64RegClass);
+  addRegisterClass(MVT::f128, &VE::F128RegClass);
+
+  // VPU registers
+  if (Subtarget->enableVPU()) {
+    addRegisterClass(MVT::v256i32, &VE::V64RegClass);
+    addRegisterClass(MVT::v256i64, &VE::V64RegClass);
+    addRegisterClass(MVT::v256f32, &VE::V64RegClass);
+    addRegisterClass(MVT::v256f64, &VE::V64RegClass);
+    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+
+    if (Subtarget->hasPackedMode()) {
+      addRegisterClass(MVT::v512i32, &VE::V64RegClass);
+      addRegisterClass(MVT::v512f32, &VE::V64RegClass);
+      addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+    }
+
+    // Support mask DT for target intrinsics
+    if (Subtarget->isVELIntrinsicMode()) {
+      addRegisterClass(MVT::v4i64, &VE::VMRegClass);
+      addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
+    }
+  }
+}
+
+VETargetLowering::VETargetLowering(const TargetMachine &TM,
+                                   const VESubtarget &STI)
+    : TargetLowering(TM), Subtarget(&STI) {
+  // Instructions which use registers as conditionals examine all the
+  // bits (as does the pseudo SELECT_CC expansion). I don't think it
+  // matters much whether it's ZeroOrOneBooleanContent, or
+  // ZeroOrNegativeOneBooleanContent, so, arbitrarily choose the
+  // former.
+  setBooleanContents(ZeroOrOneBooleanContent);
+  setBooleanVectorContents(ZeroOrOneBooleanContent);
+
+  ///// Registers //////
+  initRegisterClasses();
+
+  /////// set operation actions /////
+  initSPUActions();
+  initVPUActions();
 
   setStackPointerRegisterToSaveRestore(VE::SX11);
 
@@ -4367,6 +4378,10 @@ void VETargetLowering::LowerOperationWrapper(
     std::function<SDValue(SDValue)> WidenedOpCB) const {
   LLVM_DEBUG(dbgs() << "LowerOperationWrapper: "; N->dump(&DAG););
 
+  // custom lowering only desired for VPU mode
+  if (!Subtarget->enableVPU())
+    return;
+
   // if the SDNode has a chain operator on the value output instead
   unsigned NumResults = N->getNumValues();
   assert(NumResults > 0);
@@ -4432,6 +4447,10 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
 
   LLVM_DEBUG(dbgs() << "ReplaceNodeResult: "; N->dump(&DAG););
 
+  // custom lowering only desired for VPU mode
+  if (!Subtarget->enableVPU())
+    return;
+
   unsigned NumResults = N->getNumValues();
   assert(NumResults > 0);
 
@@ -4484,6 +4503,9 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
 
 VETargetLowering::LegalizeTypeAction
 VETargetLowering::getPreferredVectorAction(MVT VT) const {
+  if (!Subtarget->enableVPU())
+    return TypeScalarizeVector;
+
   // The default action for one element vectors is to scalarize
   if (VT.getVectorNumElements() == 1)
     return TypeScalarizeVector;

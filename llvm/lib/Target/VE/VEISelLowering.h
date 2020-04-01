@@ -118,6 +118,13 @@ using VecLenOpt = Optional<unsigned>;
 class VETargetLowering : public TargetLowering {
   const VESubtarget *Subtarget;
 
+  void initRegisterClasses();
+
+  // setOperationAction for all scalar ops
+  void initSPUActions();
+  // setOperationAction for all vector ops
+  void initVPUActions();
+
 public:
   VETargetLowering(const TargetMachine &TM, const VESubtarget &STI);
 

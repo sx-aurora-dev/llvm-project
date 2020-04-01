@@ -353,7 +353,7 @@ bool VEDAGToDAGISel::SelectADDRzi(SDValue Addr, SDValue &Base,
 }
 
 bool VEDAGToDAGISel::matchADDRrr(SDValue Addr, SDValue &Base, SDValue &Index) {
-  if (FrameIndexSDNode *FIN = dyn_cast<FrameIndexSDNode>(Addr))
+  if (isa<FrameIndexSDNode>(Addr))
     return false;
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
       Addr.getOpcode() == ISD::TargetGlobalAddress ||
