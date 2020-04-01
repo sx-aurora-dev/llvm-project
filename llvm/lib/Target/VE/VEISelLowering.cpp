@@ -1675,12 +1675,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
-#if 0
-  const MVT FakeLegalVTs[] = {MVT::v4i32,  MVT::v8i32,
-                              MVT::v16i32, MVT::v32i32, MVT::v64i32,
-                              MVT::v128i32};
-#endif
-
   // VPU registers
   if (Subtarget->enableVPU()) {
     addRegisterClass(MVT::v256i32, &VE::V64RegClass);
@@ -2678,6 +2672,11 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
   Entry.Node = Size;
   Entry.Ty = Entry.Node.getValueType().getTypeForEVT(*DAG.getContext());
   Args.push_back(Entry);
+  if (NeedsAlign) {
+    Entry.Node = DAG.getConstant(~(Alignment->value() - 1ULL), dl, VT);
+    Entry.Ty = Entry.Node.getValueType().getTypeForEVT(*DAG.getContext());
+    Args.push_back(Entry);
+  }
   Type *RetTy = Type::getVoidTy(*DAG.getContext());
 
   EVT PtrVT = Op.getValueType();
@@ -2690,7 +2689,7 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
 
   TargetLowering::CallLoweringInfo CLI(DAG);
   CLI.setDebugLoc(dl)
-      .setChain(DAG.getEntryNode())
+      .setChain(Chain)
       .setCallee(CallingConv::VE_LLVM_GROW_STACK, RetTy, Callee,
                  std::move(Args))
       .setDiscardResult(true);
