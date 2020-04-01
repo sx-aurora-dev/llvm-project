@@ -227,10 +227,17 @@ BVKind AnalyzeMaskView(MaskView &MV, unsigned &FirstDef, unsigned &LastDef,
 
   if (hasConstantStride)
     return BVKind::Seq;
-  if (hasBlockStride)
-    return BVKind::BlockSeq;
-  if (hasBlockStride2)
-    return BVKind::SeqBlock;
+  if (hasBlockStride) {
+    int64_t blockLengthLog = log2(BlockLength);
+    if (pow(2, blockLengthLog) == BlockLength)
+      return BVKind::BlockSeq;
+    return BVKind::Unknown;
+  }
+  if (hasBlockStride2) {
+    int64_t blockLengthLog = log2(BlockLength);
+    if (pow(2, blockLengthLog) == BlockLength)
+      return BVKind::SeqBlock;
+  }
   return BVKind::Unknown;
 }
 
@@ -701,11 +708,6 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
       LLVM_DEBUG(dbgs() << "::SeqBlock\n");
       // codegen for <0, 1, .., 15, 0, 1, .., ..... > constant patterns
       // constant == VSEQ % blockLength
-      int64_t blockLengthLog = log2(BlockLength);
-
-      if (pow(2, blockLengthLog) != BlockLength)
-        break;
-
       SDValue sequence = CDAG.CreateSeq(LegalResVT, OpVectorLength);
       SDValue modulobroadcast = CDAG.CreateBroadcast(
           LegalResVT, CDAG.getConstant(BlockLength - 1, ElemTy),
@@ -727,10 +729,6 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
       // codegen for <0, 0, .., 0, 0, 1, 1, .., 1, 1, .....> constant patterns
       // constant == VSEQ >> log2(blockLength)
       int64_t blockLengthLog = log2(BlockLength);
-
-      if (pow(2, blockLengthLog) != BlockLength)
-        break;
-
       SDValue sequence = CDAG.CreateSeq(LegalResVT, OpVectorLength);
       SDValue shiftbroadcast = CDAG.CreateBroadcast(
           LegalResVT, CDAG.getConstant(blockLengthLog, ElemTy), OpVectorLength);
@@ -745,7 +743,7 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
       return shift;
     }
     }
-    llvm_unreachable("");
+    llvm_unreachable("UNREACHABLE!");
   }
 };
 
