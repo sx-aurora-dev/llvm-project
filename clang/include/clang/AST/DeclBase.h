@@ -60,6 +60,7 @@ class ObjCImplementationDecl;
 class ObjCInterfaceDecl;
 class ObjCMethodDecl;
 class ObjCProtocolDecl;
+class PrinterHelper;
 struct PrintingPolicy;
 class RecordDecl;
 class SourceManager;
@@ -1140,7 +1141,8 @@ public:
   void print(raw_ostream &Out, unsigned Indentation = 0,
              bool PrintInstantiation = false) const;
   void print(raw_ostream &Out, const PrintingPolicy &Policy,
-             unsigned Indentation = 0, bool PrintInstantiation = false) const;
+             unsigned Indentation = 0, bool PrintInstantiation = false,
+             PrinterHelper *StmtHelper=nullptr) const;
   static void printGroup(Decl** Begin, unsigned NumDecls,
                          raw_ostream &Out, const PrintingPolicy &Policy,
                          unsigned Indentation = 0);
