@@ -17,3 +17,10 @@ long double __complex__
 s (long double __complex__ a, long double __complex__ b)
 {
 }
+
+void
+func() 
+{
+// CHECK-LABEL: %call = call i32 (i32, i32, i32, i32, i32, i32, i32, ...) bitcast (i32 (...)* @hoge to i32 (i32, i32, i32, i32, i32, i32, i32, ...)*)(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7)
+  hoge(1,2,3,4,5,6,7);
+}
