@@ -500,7 +500,7 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
   void print(raw_ostream &out) const override {
     out << "VMV { SubVL: " << SubVectorLength
         << ", DestStartPos: " << DestStartPos
-        << ", ShuftAmount: " << ShiftAmount << ", Src: ";
+        << ", ShiftAmount: " << ShiftAmount << ", Src: ";
     SrcVector->print(out);
     out << " }\n";
   }
@@ -558,6 +558,14 @@ struct VMVShuffleStrategy final : public ShuffleStrategy {
     return LastProperMatch;
   }
 
+  static int32_t WrapShiftAmount(int32_t ShiftAmount) {
+    if (std::abs(ShiftAmount) <= 127)
+      return ShiftAmount;
+    if (ShiftAmount > 0)
+      return -(256 - ShiftAmount);
+    return 256 + ShiftAmount;
+  }
+
   void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
                           PartialShuffleCB CB) override {
     // Seek the largest, lowest shift amount subvector
@@ -582,7 +590,7 @@ struct VMVShuffleStrategy final : public ShuffleStrategy {
 
       SDValue SrcVectorV = ES.V;
       unsigned SrcStartIdx = ES.getElemIdx();
-      int32_t ShiftAmount = DestStartIdx - (int32_t)SrcStartIdx;
+      int32_t ShiftAmount = SrcStartIdx - (int32_t)DestStartIdx;
 
       // TODO allow wrapping
       unsigned SrcLastMatchIdx =
@@ -591,7 +599,7 @@ struct VMVShuffleStrategy final : public ShuffleStrategy {
       unsigned MatchedSVLen = LastMatchedSVPos + 1;
 
       // new contender
-      int32_t BestShiftAmount = LongestSVDestStart - (int32_t)LongestSVSrcStart;
+      int32_t BestShiftAmount = LongestSVSrcStart - (int32_t)LongestSVDestStart;
       if ((MatchedSVLen > LongestSubvector) ||
           ((MatchedSVLen == LongestSubvector) &&
            (ShiftAmount < BestShiftAmount))) {
@@ -602,13 +610,8 @@ struct VMVShuffleStrategy final : public ShuffleStrategy {
       }
     }
 
-    LLVM_DEBUG(
-        dbgs() << "Best Source: "; if (BestSourceV) BestSourceV->print(dbgs());
-        dbgs() << ", BestSV: " << LongestSubvector
-               << ", LongestSVDestStart: " << LongestSVDestStart << "\n";);
-
     // TODO cost considerations
-    const unsigned MinSubvectorLen = 2;
+    const unsigned MinSubvectorLen = 3;
     if (LongestSubvector < MinSubvectorLen) {
       return;
     }
@@ -620,7 +623,8 @@ struct VMVShuffleStrategy final : public ShuffleStrategy {
       Res.unsetMissing(DestIdx);
     }
 
-    int32_t ShiftAmount = LongestSVDestStart - (int32_t)LongestSVSrcStart;
+    int32_t ShiftAmount =
+        WrapShiftAmount(LongestSVSrcStart - (int32_t)LongestSVDestStart);
     auto *VMVOp = new VMVShuffleOp(LongestSVDestStart, LongestSubvector,
                                    ShiftAmount, BestSourceV);
     CB(VMVOp, Res);
@@ -825,7 +829,10 @@ struct BroadcastOp final : public AbstractShuffleOp {
     return CDAG.createSelect(BroadcastV, PartialV, BlendMaskV, PivotV);
   }
 
-  void print(raw_ostream &out) const { out << "Broadcast\n"; }
+  void print(raw_ostream &out) const {
+    out << "Broadcast (AVL: " << MaxAVL << ", Elem: ";
+    SourceElem.print(out) << "\n";
+  }
 };
 
 class BroadcastStrategy final : public ShuffleStrategy {
@@ -872,7 +879,10 @@ public:
     LaneBits BroadcastMask;
     BroadcastMask.reset();
     for (unsigned i = 0; i < MV.getNumElements(); ++i) {
-      if (BestES != MV.getSourceElem(i))
+      auto ES = MV.getSourceElem(i);
+      if (!ES.isDefined())
+        continue;
+      if (BestES != ES)
         continue;
       FromState.unsetMissing(i);
       BroadcastMask[i] = true;
@@ -936,6 +946,8 @@ raw_ostream &ShuffleAnalysis::print(raw_ostream &out) const {
 
 SDValue ShuffleAnalysis::synthesize(MaskView &Mask, CustomDAG &CDAG,
                                     EVT LegalResultVT) {
+  LLVM_DEBUG(dbgs() << "Synthesized shuffle sequence:\n"; print(dbgs()));
+
   SDValue AccuV = CDAG.getUndef(LegalResultVT);
   for (auto &ShuffOp : ShuffleSeq) {
     AccuV = ShuffOp->synthesize(Mask, CDAG, AccuV);

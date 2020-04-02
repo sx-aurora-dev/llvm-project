@@ -35,6 +35,17 @@ struct ElemSelect {
     return (ES.V == V) && (ExtractIdx == ES.ExtractIdx);
   }
   bool operator!=(const ElemSelect &ES) const { return !(*this == ES); }
+
+  raw_ostream &print(raw_ostream &out) const {
+    if (isElemTransfer()) {
+      out << "Trans Idx: " << ExtractIdx << ", From: ";
+      V->print(dbgs());
+    } else {
+      out << "Insert: ";
+      V->print(dbgs());
+    }
+    return out;
+  }
 };
 
 struct MaskView {

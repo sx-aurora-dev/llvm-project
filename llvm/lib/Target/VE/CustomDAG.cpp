@@ -471,7 +471,7 @@ SDValue CustomDAG::createConstMask(unsigned NumElems,
     }
   }
   if (TrivialMask)
-    return CreateConstMask(NumElems, TrueBits[0]);
+    return CreateConstMask(TrueBits.size(), TrueBits[0]);
 
   unsigned RegPartIdx = 0;
   for (unsigned StartIdx = 0; StartIdx < NumElems;
@@ -492,6 +492,11 @@ SDValue CustomDAG::createConstMask(unsigned NumElems,
 
 SDValue CustomDAG::createSelect(SDValue OnTrueV, SDValue OnFalseV,
                                 SDValue MaskV, SDValue PivotV) const {
+  if (OnTrueV.isUndef())
+    return OnFalseV;
+  if (OnFalseV.isUndef())
+    return OnTrueV;
+
   return DAG.getNode(VEISD::VVP_SELECT, DL, OnTrueV.getValueType(),
                      {OnTrueV, OnFalseV, MaskV, PivotV});
 }
@@ -508,7 +513,7 @@ SDValue CustomDAG::CreateConstMask(unsigned NumElements, bool IsTrue) const {
   if (IsTrue)
     return Res;
 
-  // negate
+  // negate // FIXME
   return DAG.getNOT(DL, Res, Res.getValueType());
 }
 
