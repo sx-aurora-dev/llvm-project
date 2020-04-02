@@ -184,8 +184,12 @@ public:
     switch (II->getIntrinsicID()) {
     // Supported in all variations
     case Intrinsic::experimental_vector_reduce_v2_fadd:
-    case Intrinsic::experimental_vector_reduce_fmin:
-    case Intrinsic::experimental_vector_reduce_fmax:
+    // case Intrinsic::experimental_vector_reduce_fmin: // TODO
+    // case Intrinsic::experimental_vector_reduce_fmax: // TODO
+    // case Intrinsic::experimental_vector_reduce_smin: // TODO
+    // case Intrinsic::experimental_vector_reduce_smax: // TODO
+    // case Intrinsic::experimental_vector_reduce_umin: // TODO
+    // case Intrinsic::experimental_vector_reduce_umax: // TODO
     case Intrinsic::experimental_vector_reduce_add:
     case Intrinsic::experimental_vector_reduce_mul:
     case Intrinsic::experimental_vector_reduce_or:

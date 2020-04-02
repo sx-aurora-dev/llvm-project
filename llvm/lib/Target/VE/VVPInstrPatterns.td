@@ -383,15 +383,40 @@ multiclass Reduce_FAdd<ValueType VectorVT, ValueType ResVT, string LVSToken, str
 def : Pat <(ResVT (vvp_reduce_fadd VectorVT:$vx, v256i1:$vm, i32:$vl)),
            (!cast<Instruction>("lvs"#LVSToken#"_svI") (!cast<Instruction>("vfsum"#FPToken#"_vvml") $vx, $vm, $vl), 0)>;
 
-// ordered
+// ordered & unmasked
 def : Pat <(ResVT (vvp_reduce_strict_fadd (ResVT neutral_elem), VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
            (!cast<Instruction>("lvs"#LVSToken#"_svI") (!cast<Instruction>("vfia"#FPToken#"_vvIl") $vx, 0, $vl), 0)>;
 def : Pat <(ResVT (vvp_reduce_strict_fadd ResVT:$sy, VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
            (!cast<Instruction>("lvs"#LVSToken#"_svI") (!cast<Instruction>("vfia"#FPToken#"_vvsl") $vx, $sy, $vl), 0)>;
+
+// ordered & masked
+def : Pat <(ResVT (vvp_reduce_strict_fadd ResVT:$sy, VectorVT:$vx, v256i1:$vm, i32:$vl)),
+           (!cast<Instruction>("lvs"#LVSToken#"_svI")
+               (!cast<Instruction>("vfia"#FPToken#"_vvsl")
+                   (vmrg_vIvml 0, $vx, $vm, $vl),
+                   $sy,
+                   $vl
+               ),
+               0
+           )>;
 }
 
 defm: Reduce_FAdd<v256f64,f64,"l","d",fpzero>;
 defm: Reduce_FAdd<v256f32,f32,"s","s",fpzero>;
 
-// case VE::vfiad_vsl: return 2;
-// case VE::vfiad_vIl: return 2;
+multiclass Reduce_GenericInt<ValueType VectorVT, ValueType ResVT, string VVPRedOp, string LVSToken, string RedInstName> {
+  def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_"#VVPRedOp) VectorVT:$vx, v256i1:$vm, i32:$vl)),
+             (!cast<Instruction>("lvs"#LVSToken#"_svI") (!cast<Instruction>(RedInstName#"_vvml") $vx, $vm, $vl), 0)>;
+}
+
+defm: Reduce_GenericInt<v256i64, i64, "add", "l", "vsuml">;
+defm: Reduce_GenericInt<v256i32, i32, "add", "w", "vsumwsx">;
+
+multiclass Reduce_BitArith<ValueType VectorVT, ValueType ResVT, string LVSToken> {
+  defm: Reduce_GenericInt<VectorVT, ResVT, "or",  LVSToken, "vror">;
+  defm: Reduce_GenericInt<VectorVT, ResVT, "and", LVSToken, "vrand">;
+  defm: Reduce_GenericInt<VectorVT, ResVT, "xor", LVSToken, "vrand">;
+}
+
+defm: Reduce_BitArith<v256i32, i32, "w">;
+defm: Reduce_BitArith<v256i64, i64, "l">;
