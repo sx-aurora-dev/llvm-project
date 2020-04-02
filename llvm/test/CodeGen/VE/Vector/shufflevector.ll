@@ -4,13 +4,12 @@
 define <8 x i32> @__regcall3__svv512i32(<4 x i32>) {
 ; CHECK-LABEL: __regcall3__svv512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lvs %s0,%v0(1)
-; CHECK-NEXT:    lsv %v0(2),%s0
-; CHECK-NEXT:    lsv %v0(3),%s0
-; CHECK-NEXT:    lsv %v0(4),%s0
-; CHECK-NEXT:    lsv %v0(5),%s0
-; CHECK-NEXT:    lsv %v0(6),%s0
-; CHECK-NEXT:    lsv %v0(7),%s0
+; CHECK-NEXT:    lvs %s0,%v0(0)
+; CHECK-NEXT:    lvs %s1,%v0(1)
+; CHECK-NEXT:    or %s2, 8, (0)1
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vbrdl %v0,%s1
+; CHECK-NEXT:    lsv %v0(0),%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = shufflevector <4 x i32> %0, <4 x i32> zeroinitializer, <8 x i32> <i32 0, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
   ret <8 x i32> %2
@@ -21,14 +20,9 @@ define <8 x i32> @__regcall3__svv512i32_brd2(<4 x i32>) {
 ; CHECK-LABEL: __regcall3__svv512i32_brd2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    lsv %v0(0),%s0
-; CHECK-NEXT:    lsv %v0(1),%s0
-; CHECK-NEXT:    lsv %v0(2),%s0
-; CHECK-NEXT:    lsv %v0(3),%s0
-; CHECK-NEXT:    lsv %v0(4),%s0
-; CHECK-NEXT:    lsv %v0(5),%s0
-; CHECK-NEXT:    lsv %v0(6),%s0
-; CHECK-NEXT:    lsv %v0(7),%s0
+; CHECK-NEXT:    or %s1, 8, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrdl %v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = shufflevector <4 x i32> %0, <4 x i32> zeroinitializer, <8 x i32> <i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2>
   ret <8 x i32> %2
@@ -39,14 +33,9 @@ define <8 x i32> @__regcall3__svv512i32_brd7(<4 x i32>, <4 x i32>) {
 ; CHECK-LABEL: __regcall3__svv512i32_brd7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lvs %s0,%v1(3)
-; CHECK-NEXT:    lsv %v0(0),%s0
-; CHECK-NEXT:    lsv %v0(1),%s0
-; CHECK-NEXT:    lsv %v0(2),%s0
-; CHECK-NEXT:    lsv %v0(3),%s0
-; CHECK-NEXT:    lsv %v0(4),%s0
-; CHECK-NEXT:    lsv %v0(5),%s0
-; CHECK-NEXT:    lsv %v0(6),%s0
-; CHECK-NEXT:    lsv %v0(7),%s0
+; CHECK-NEXT:    or %s1, 8, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrdl %v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = shufflevector <4 x i32> %0, <4 x i32> %1, <8 x i32> <i32 7, i32 7, i32 7, i32 7, i32 7, i32 7, i32 7, i32 7>
   ret <8 x i32> %3
@@ -108,7 +97,7 @@ define <256 x i32> @__regcall3__svv512i32_vmrg1(<256 x i32>, <256 x i32>) {
 ; CHECK-NEXT:    lea %s0, -16777216
 ; CHECK-NEXT:    lvm %vm1,3,%s0
 ; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lea %s1, 240
+; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmv %v0,%s1,%v1,%vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -152,6 +141,10 @@ define <256 x i32> @__regcall3__svv512i32_vmrg1(<256 x i32>, <256 x i32>) {
 define <256 x i32> @__regcall3__svv512i32_vmrg2(<256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: __regcall3__svv512i32_vmrg2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, 248
+; CHECK-NEXT:    or %s1, 8, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmv %v0,%s1,%v0,%vm0
 ; CHECK-NEXT:    lea %s0, -1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lvm %vm1,0,%s0
@@ -160,20 +153,10 @@ define <256 x i32> @__regcall3__svv512i32_vmrg2(<256 x i32>, <256 x i32>) {
 ; CHECK-NEXT:    lvm %vm1,2,%s0
 ; CHECK-NEXT:    lvm %vm1,3,%s0
 ; CHECK-NEXT:    xorm %vm1,%vm0,%vm1
-; CHECK-NEXT:    or %s0, -1, (0)1
-; CHECK-NEXT:    andm %vm2,%vm0,%vm1
-; CHECK-NEXT:    lvm %vm2,0,%s0
-; CHECK-NEXT:    lvm %vm2,1,%s0
-; CHECK-NEXT:    lvm %vm2,2,%s0
-; CHECK-NEXT:    lvm %vm2,3,%s0
-; CHECK-NEXT:    lea %s0, 248
-; CHECK-NEXT:    or %s1, -8, (0)1
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmv %v0,%s1,%v0,%vm2
 ; CHECK-NEXT:    lea %s0, -16777216
 ; CHECK-NEXT:    lvm %vm1,3,%s0
 ; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lea %s1, 240
+; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmv %v0,%s1,%v1,%vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -254,23 +237,24 @@ define <256 x i32> @shuffle_4x64(<256 x i32> %src) {
 ; CHECK-NEXT:    xorm %vm1,%vm0,%vm1
 ; CHECK-NEXT:    or %s0, -1, (0)1
 ; CHECK-NEXT:    andm %vm2,%vm0,%vm1
-; CHECK-NEXT:    lvm %vm2,1,%s0
-; CHECK-NEXT:    lea %s1, 128
-; CHECK-NEXT:    lea %s2, 64
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
-; CHECK-NEXT:    vor %v1,(0)1,%v0
+; CHECK-NEXT:    lvm %vm2,2,%s0
+; CHECK-NEXT:    lea %s1, 192
+; CHECK-NEXT:    lea %s2, 128
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmv %v1,%s2,%v0,%vm2
 ; CHECK-NEXT:    andm %vm2,%vm0,%vm1
-; CHECK-NEXT:    lvm %vm2,2,%s0
-; CHECK-NEXT:    lea %s2, 192
+; CHECK-NEXT:    lvm %vm2,1,%s0
+; CHECK-NEXT:    or %s1, -64, (0)1
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm2
+; CHECK-NEXT:    lea %s1, 64
+; CHECK-NEXT:    or %s2, 0, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vmv %v1,%s2,%v0,%vm0
 ; CHECK-NEXT:    lvm %vm1,3,%s0
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmv %v1,%s2,%v0,%vm1
+; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm1
 ; CHECK-NEXT:    lea %s12, 256
 ; CHECK-NEXT:    lvl %s12
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
@@ -285,6 +269,10 @@ define <256 x i32> @shuffle_4x64(<256 x i32> %src) {
 define <256 x i32> @shuffle_vshift17(<256 x i32> %src) {
 ; CHECK-LABEL: shuffle_vshift17:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, 239
+; CHECK-NEXT:    or %s1, 17, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm0
 ; CHECK-NEXT:    lea %s0, -1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lvm %vm1,0,%s0
@@ -293,21 +281,11 @@ define <256 x i32> @shuffle_vshift17(<256 x i32> %src) {
 ; CHECK-NEXT:    lvm %vm1,2,%s0
 ; CHECK-NEXT:    lvm %vm1,3,%s0
 ; CHECK-NEXT:    xorm %vm1,%vm0,%vm1
-; CHECK-NEXT:    or %s0, -1, (0)1
-; CHECK-NEXT:    andm %vm2,%vm0,%vm1
-; CHECK-NEXT:    lvm %vm2,0,%s0
-; CHECK-NEXT:    lvm %vm2,1,%s0
-; CHECK-NEXT:    lvm %vm2,2,%s0
-; CHECK-NEXT:    lvm %vm2,3,%s0
-; CHECK-NEXT:    lea %s0, 239
-; CHECK-NEXT:    or %s1, -17, (0)1
+; CHECK-NEXT:    lea %s0, -32768
+; CHECK-NEXT:    lvm %vm1,3,%s0
+; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm2
-; CHECK-NEXT:    lea %s1, -32768
-; CHECK-NEXT:    lvm %vm1,3,%s1
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vmv %v1,%s0,%v0,%vm1
+; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm1
 ; CHECK-NEXT:    lea %s12, 256
 ; CHECK-NEXT:    lvl %s12
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
@@ -329,30 +307,30 @@ define <32 x i32> @shuffle_v32_repl1to8and0(<32 x i32> %src) {
 ; CHECK-NEXT:    lvm %vm1,2,%s0
 ; CHECK-NEXT:    lvm %vm1,3,%s0
 ; CHECK-NEXT:    xorm %vm1,%vm0,%vm1
+; CHECK-NEXT:    lea %s0, 66977792
+; CHECK-NEXT:    andm %vm2,%vm0,%vm1
+; CHECK-NEXT:    lvm %vm2,0,%s0
+; CHECK-NEXT:    or %s0, 26, (0)1
+; CHECK-NEXT:    or %s1, -17, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm2
 ; CHECK-NEXT:    lea %s0, 130816
 ; CHECK-NEXT:    andm %vm2,%vm0,%vm1
 ; CHECK-NEXT:    lvm %vm2,0,%s0
 ; CHECK-NEXT:    or %s0, 17, (0)1
-; CHECK-NEXT:    or %s1, 8, (0)1
+; CHECK-NEXT:    or %s1, -8, (0)1
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm2
-; CHECK-NEXT:    lea %s2, 66977792
-; CHECK-NEXT:    andm %vm2,%vm0,%vm1
-; CHECK-NEXT:    lvm %vm2,0,%s2
-; CHECK-NEXT:    or %s2, 26, (0)1
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1,%s0,%v0,%vm2
-; CHECK-NEXT:    lea %s0, 255
-; CHECK-NEXT:    andm %vm2,%vm0,%vm1
-; CHECK-NEXT:    lvm %vm2,0,%s0
-; CHECK-NEXT:    or %s0, -1, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vmv %v1,%s0,%v0,%vm2
+; CHECK-NEXT:    or %s0, 8, (0)1
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm0
 ; CHECK-NEXT:    lea %s0, -67108864
 ; CHECK-NEXT:    lvm %vm1,0,%s0
 ; CHECK-NEXT:    or %s0, 32, (0)1
+; CHECK-NEXT:    or %s1, -26, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmv %v1,%s2,%v0,%vm1
+; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm1
 ; CHECK-NEXT:    lea %s12, 256
 ; CHECK-NEXT:    lvl %s12
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
