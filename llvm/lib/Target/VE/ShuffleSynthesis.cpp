@@ -1,5 +1,7 @@
 #include "ShuffleSynthesis.h"
 
+#include <unordered_map>
+
 namespace llvm {
 
 VecLenOpt InferLengthFromMask(SDValue MaskV) {
@@ -747,7 +749,7 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
   }
 };
 
-class LegacyPatternStrategy final : ShuffleStrategy {
+class LegacyPatternStrategy final : public ShuffleStrategy {
 public:
   void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
                           PartialShuffleCB CB) override {
@@ -791,30 +793,104 @@ public:
 
 /// } Legacy Pattern Strategy
 
-ShuffleAnalysis::ShuffleAnalysis(MaskView &Mask) {
-  PartialShuffleState PSS = PartialShuffleState::fromInitialMask(Mask);
+/// Broadcast Strategy {
 
-  // Use the legacy strategy where applicable
-  LegacyPatternStrategy LegacyStrategy;
-  LegacyStrategy.planPartialShuffle(
-      Mask, PSS,
-      [&](AbstractShuffleOp *PartialOp, PartialShuffleState NextPSS) {
-        PSS = NextPSS,
-        ShuffleSeq.push_back(std::unique_ptr<AbstractShuffleOp>(PartialOp));
-        return IterBreak;
-      });
-  if (!ShuffleSeq.empty())
-    return;
+// This strategy tries to identify the most-frequent element to
+// broadcast-and-merge
 
-  // Try lowering to VMV transfers
-  const unsigned NumVMVRounds = 5;
-  VMVShuffleStrategy VMVStrat;
+struct BroadcastOp final : public AbstractShuffleOp {
+  ElemSelect SourceElem;
+  LaneBits TargetLanes;
+  unsigned MaxAVL;
 
-  for (unsigned i = 0; i < NumVMVRounds; ++i) {
+  BroadcastOp(ElemSelect SourceElem, LaneBits TargetLanes, unsigned MaxAVL)
+      : SourceElem(SourceElem), TargetLanes(TargetLanes), MaxAVL(MaxAVL) {}
 
+  ~BroadcastOp() {}
+
+  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) {
+    SDValue ScalarSrcV;
+    if (SourceElem.isElemInsert()) {
+      ScalarSrcV = SourceElem.V;
+    } else {
+      ScalarSrcV = CDAG.getVectorExtract(SourceElem.V, SourceElem.ExtractIdx);
+    }
+
+    EVT VecTy = PartialV.getValueType();
+    const unsigned NumElems = VecTy.getVectorNumElements();
+
+    const SDValue PivotV = CDAG.getConstEVL(MaxAVL);
+    SDValue BlendMaskV = CDAG.createConstMask(NumElems, TargetLanes);
+    SDValue BroadcastV = CDAG.CreateBroadcast(VecTy, ScalarSrcV, PivotV);
+    return CDAG.createSelect(BroadcastV, PartialV, BlendMaskV, PivotV);
+  }
+
+  void print(raw_ostream &out) const { out << "Broadcast\n"; }
+};
+
+class BroadcastStrategy final : public ShuffleStrategy {
+public:
+  void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
+                          PartialShuffleCB CB) override {
+
+    std::unordered_map<ElemSelect, unsigned> ESMap;
+
+    unsigned MaxVL = 0;
+
+    // Create a histogram of all selected values
+    FromState.for_missing([&](unsigned Idx) {
+      if (!MV.getSourceElem(Idx).isDefined())
+        return IterContinue;
+      MaxVL = Idx + 1;
+
+      ElemSelect ES = MV.getSourceElem(Idx);
+      auto ItES = ESMap.find(ES);
+      unsigned Count = 0;
+      if (ItES != ESMap.end()) {
+        Count = ItES->second + 1;
+      }
+      ESMap[ES] = Count;
+      return IterContinue;
+    });
+
+    // find the most frequent (and cheapest) element to broadcast and blend
+    unsigned BestCount = 0;
+    ElemSelect BestES;
+    for (const auto ItElemCount : ESMap) {
+      if (ItElemCount.second > BestCount) {
+        BestES = ItElemCount.first;
+        BestCount = ItElemCount.second;
+      }
+    }
+
+    // FIXME cost considerations
+    const unsigned BroadcastThreshold = 4;
+    if (BestCount < BroadcastThreshold)
+      return;
+
+    // tick off all merged positions
+    LaneBits BroadcastMask;
+    BroadcastMask.reset();
+    for (unsigned i = 0; i < MV.getNumElements(); ++i) {
+      if (BestES != MV.getSourceElem(i))
+        continue;
+      FromState.unsetMissing(i);
+      BroadcastMask[i] = true;
+    }
+
+    CB(new BroadcastOp(BestES, BroadcastMask, MaxVL), FromState);
+  }
+};
+
+/// } Broadcast Strategy
+
+IterControl ShuffleAnalysis::runStrategy(ShuffleStrategy &Strat,
+                                         unsigned NumRounds, MaskView &MV,
+                                         PartialShuffleState &PSS) {
+  for (unsigned i = 0; i < NumRounds; ++i) {
     bool Progress = false;
-    VMVStrat.planPartialShuffle(
-        Mask, PSS,
+    Strat.planPartialShuffle(
+        MV, PSS,
         [&](AbstractShuffleOp *PartialOp, PartialShuffleState NextPSS) {
           Progress = true;
           PSS = NextPSS,
@@ -824,7 +900,17 @@ ShuffleAnalysis::ShuffleAnalysis(MaskView &Mask) {
     if (!Progress)
       break;
   }
-  if (PSS.isComplete())
+  return PSS.isComplete() ? IterBreak : IterContinue;
+}
+
+ShuffleAnalysis::ShuffleAnalysis(MaskView &Mask) {
+  PartialShuffleState PSS = PartialShuffleState::fromInitialMask(Mask);
+
+  if (IterBreak == run<LegacyPatternStrategy>(1, Mask, PSS))
+    return;
+  if (IterBreak == run<BroadcastStrategy>(3, Mask, PSS))
+    return;
+  if (IterBreak == run<VMVShuffleStrategy>(5, Mask, PSS))
     return;
 
   // Fallback

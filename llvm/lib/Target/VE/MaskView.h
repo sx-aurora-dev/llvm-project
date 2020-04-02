@@ -2,6 +2,7 @@
 #define TARGET_VE_MASKVIEW_H
 
 #include "llvm/CodeGen/SelectionDAG.h"
+#include <functional>
 
 namespace llvm {
 
@@ -29,6 +30,11 @@ struct ElemSelect {
   bool isElemTransfer() const { return ExtractIdx >= 0; }
   // V as a whole inserted into dest
   bool isElemInsert() const { return ExtractIdx < 0; }
+
+  bool operator==(const ElemSelect &ES) const {
+    return (ES.V == V) && (ExtractIdx == ES.ExtractIdx);
+  }
+  bool operator!=(const ElemSelect &ES) const { return !(*this == ES); }
 };
 
 struct MaskView {
@@ -49,5 +55,14 @@ struct MaskView {
 MaskView *requestMaskView(SDNode *N);
 
 } // namespace llvm
+
+// custom specialization of std::hash can be injected in namespace std
+namespace std {
+template <> struct hash<llvm::ElemSelect> {
+  std::size_t operator()(llvm::ElemSelect const &ES) const noexcept {
+    return ((std::size_t)ES.V.getNode()) ^ ES.ExtractIdx;
+  }
+};
+} // namespace std
 
 #endif // TARGET_VE_MASKVIEW_H

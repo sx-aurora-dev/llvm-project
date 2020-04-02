@@ -176,12 +176,23 @@ struct ShuffleStrategy {
 };
 
 // lower a shuffle mask to actual operations
-struct ShuffleAnalysis {
+class ShuffleAnalysis {
   // TODO Expand,Compress
 
   // Analysis result -> the final shuffle sequence
   std::vector<std::unique_ptr<AbstractShuffleOp>> ShuffleSeq;
 
+  // apply a fixed strategy for a given number of rounds
+  IterControl runStrategy(ShuffleStrategy &Strat, unsigned NumRounds,
+                          MaskView &MV, PartialShuffleState &PSS);
+
+  template<typename Strategy>
+  IterControl run(unsigned NumRounds, MaskView & MV, PartialShuffleState &PSS) {
+    Strategy Strat;
+    return runStrategy(Strat, NumRounds, MV, PSS);
+  }
+
+public:
   // match a 64 bit segment, mapping out all source bits
   // FIXME this implies knowledge about the underlying object structure
   ShuffleAnalysis(MaskView &Mask);

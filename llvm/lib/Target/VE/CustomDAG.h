@@ -15,9 +15,9 @@
 #define LLVM_LIB_TARGET_VE_CUSTOMDAG_H
 
 #include "VE.h"
-#include "llvm/CodeGen/TargetLowering.h"
 #include "VEISelLowering.h"
 #include "llvm/CodeGen/SelectionDAG.h"
+#include "llvm/CodeGen/TargetLowering.h"
 #include <bitset>
 
 namespace llvm {
@@ -27,9 +27,7 @@ const unsigned SXRegSize = 64;
 using LaneBits = std::bitset<256>;
 
 /// Helpers {
-template<typename ElemT>
-ElemT&
-ref_to(std::unique_ptr<ElemT>& UP) {
+template <typename ElemT> ElemT &ref_to(std::unique_ptr<ElemT> &UP) {
   return *(UP.get());
 }
 /// } Helpers
@@ -52,26 +50,21 @@ bool IsVVP(unsigned Opcode);
 // Choses the widest element type
 EVT getFPConvType(SDNode *Op);
 
-Optional<EVT> getIdiomaticType(SDNode* Op);
+Optional<EVT> getIdiomaticType(SDNode *Op);
 
-VecLenOpt
-MinVectorLength(VecLenOpt A, VecLenOpt B);
+VecLenOpt MinVectorLength(VecLenOpt A, VecLenOpt B);
 
 // Whether direct codegen for this type will result in a packed operation
 // (requiring a packed VL param..)
-bool
-IsPackedType(EVT SomeVT);
+bool IsPackedType(EVT SomeVT);
 
 // legalize packed-mode broadcasts into lane replication + broadcast
-SDValue
-LegalizeBroadcast(SDValue Op, SelectionDAG & DAG);
+SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG);
 
-SDValue
-LegalizeVecOperand(SDValue Op, SelectionDAG & DAG);
+SDValue LegalizeVecOperand(SDValue Op, SelectionDAG &DAG);
 
 // whether this VVP operation has no mask argument
-bool
-HasDeadMask(unsigned VVPOC);
+bool HasDeadMask(unsigned VVPOC);
 
 //// } VVP Machinery
 
@@ -81,16 +74,14 @@ Optional<unsigned> getReductionVectorParamPos(unsigned ISD);
 
 Optional<unsigned> PeekForNarrow(SDValue Op);
 
-Optional<SDValue>
-EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG& DAG);
+Optional<SDValue> EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG &DAG);
 
 bool IsMaskType(EVT Ty);
 unsigned GetMaskBits(EVT Ty);
 
 // select an appropriate %evl argument for this element count.
 // This will return the correct result for packed mode oeprations (half).
-unsigned
-SelectBoundedVectorLength(unsigned StaticNumElems);
+unsigned SelectBoundedVectorLength(unsigned StaticNumElems);
 
 // Packed interpretation sub element
 enum class SubElem : int8_t {
@@ -133,7 +124,7 @@ struct CustomDAG {
 
   SDValue CreateSwap(EVT DestVT, SDValue V, SDValue AVL);
   /// } Packed Mode Support
-  
+
   /// Mask Insert/Extract {
   SDValue CreateExtractMask(SDValue MaskV, SDValue IndexV) const;
   SDValue CreateInsertMask(SDValue MaskV, SDValue ElemV, SDValue IndexV) const;
@@ -172,17 +163,14 @@ struct CustomDAG {
   }
   /// } getNode
 
-  SDValue getVectorExtract(SDValue VecV, SDValue IdxV) const {
-    assert(VecV.getValueType().isVector());
-    auto ElemVT = VecV.getValueType().getVectorElementType();
-    return getNode(ISD::EXTRACT_VECTOR_ELT, ElemVT, {VecV, IdxV});
+  SDValue getVectorExtract(SDValue VecV, unsigned Idx) const {
+    return getVectorExtract(VecV, getConstant(Idx, MVT::i32));
   }
-
-  SDValue getVectorInsert(SDValue DestVecV, SDValue ElemV, SDValue IdxV) const {
-    assert(DestVecV.getValueType().isVector());
-    return getNode(ISD::INSERT_VECTOR_ELT, DestVecV.getValueType(),
-                   {DestVecV, ElemV, IdxV});
+  SDValue getVectorExtract(SDValue VecV, SDValue IdxV) const;
+  SDValue getVectorInsert(SDValue DestVecV, SDValue ElemV, unsigned Idx) const {
+    return getVectorInsert(DestVecV, ElemV, getConstant(Idx, MVT::i32));
   }
+  SDValue getVectorInsert(SDValue DestVecV, SDValue ElemV, SDValue IdxV) const;
 
   SDValue widenOrNarrow(EVT DestVT, SDValue Op) {
     EVT OpVT = Op.getValueType();
@@ -203,7 +191,9 @@ struct CustomDAG {
   EVT getVectorVT(EVT ElemVT, unsigned NumElems) const {
     return EVT::getVectorVT(*DAG.getContext(), ElemVT, NumElems);
   }
-  inline SDValue getConstEVL(uint32_t EVL) const { return getConstant(EVL, MVT::i32); }
+  inline SDValue getConstEVL(uint32_t EVL) const {
+    return getConstant(EVL, MVT::i32);
+  }
 
   SDValue getConstant(uint64_t Val, EVT VT, bool IsTarget = false,
                       bool IsOpaque = false) const;
@@ -213,6 +203,6 @@ struct CustomDAG {
   void dumpValue(SDValue V) const;
 };
 
-}  // namespace llvm
+} // namespace llvm
 
 #endif // LLVM_LIB_TARGET_VE_CUSTOMDAG_H

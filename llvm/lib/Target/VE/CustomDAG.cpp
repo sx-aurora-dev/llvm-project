@@ -23,7 +23,6 @@
 
 namespace llvm {
 
-
 PosOpt GetVVPOpcode(unsigned OpCode) {
   if (IsVVP(OpCode))
     return OpCode;
@@ -463,6 +462,17 @@ SDValue CustomDAG::createConstMask(unsigned NumElems,
                                    const LaneBits &TrueBits) const {
   SDValue MaskV = CreateConstMask(TrueBits.size(), false);
 
+  // Scan for trivial cases
+  bool TrivialMask = true;
+  for (unsigned i = 1; i < NumElems; ++i) {
+    if (TrueBits[i] != TrueBits[0]) {
+      TrivialMask = false;
+      break;
+    }
+  }
+  if (TrivialMask)
+    return CreateConstMask(NumElems, TrueBits[0]);
+
   unsigned RegPartIdx = 0;
   for (unsigned StartIdx = 0; StartIdx < NumElems;
        StartIdx += SXRegSize, ++RegPartIdx) {
@@ -507,8 +517,19 @@ SDValue CustomDAG::getConstant(uint64_t Val, EVT VT, bool IsTarget,
   return DAG.getConstant(Val, DL, VT, IsTarget, IsOpaque);
 }
 
-void CustomDAG::dumpValue(SDValue V) const {
-  V->dump(&DAG);
+void CustomDAG::dumpValue(SDValue V) const { V->dump(&DAG); }
+
+SDValue CustomDAG::getVectorExtract(SDValue VecV, SDValue IdxV) const {
+  assert(VecV.getValueType().isVector());
+  auto ElemVT = VecV.getValueType().getVectorElementType();
+  return getNode(ISD::EXTRACT_VECTOR_ELT, ElemVT, {VecV, IdxV});
+}
+
+SDValue CustomDAG::getVectorInsert(SDValue DestVecV, SDValue ElemV,
+                                   SDValue IdxV) const {
+  assert(DestVecV.getValueType().isVector());
+  return getNode(ISD::INSERT_VECTOR_ELT, DestVecV.getValueType(),
+                 {DestVecV, ElemV, IdxV});
 }
 
 /// } class CustomDAG
