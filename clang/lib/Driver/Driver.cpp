@@ -36,6 +36,7 @@
 #include "ToolChains/MipsLinux.h"
 #include "ToolChains/Myriad.h"
 #include "ToolChains/NaCl.h"
+#include "ToolChains/NECAuroraOffload.h"
 #include "ToolChains/NetBSD.h"
 #include "ToolChains/OpenBSD.h"
 #include "ToolChains/PPCLinux.h"
@@ -702,9 +703,21 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
             Diag(clang::diag::err_drv_invalid_omp_target) << Val;
           else {
             const ToolChain *TC;
+            //MR_MARKER: TODO: use Arch + OS (not Environment)
+            if (TT.getArch() == llvm::Triple::aurora) {
+              const ToolChain *HostTC =
+                C.getSingleOffloadToolChain<Action::OFK_Host>();
+              assert(HostTC && "Host toolchain should be always defined.");
+              auto &AuroraTC =
+                ToolChains[TT.str() + "/" + HostTC->getTriple().normalize()];
+              if (!AuroraTC)
+                AuroraTC = std::make_unique<toolchains::NECAuroraOffloadToolChain>(
+                  *this, TT, *HostTC, C.getInputArgs());
+              TC = AuroraTC.get();
+            }
             // CUDA toolchains have to be selected differently. They pair host
             // and device in their implementation.
-            if (TT.isNVPTX()) {
+            else if (TT.isNVPTX()) {
               const ToolChain *HostTC =
                   C.getSingleOffloadToolChain<Action::OFK_Host>();
               assert(HostTC && "Host toolchain should be always defined.");

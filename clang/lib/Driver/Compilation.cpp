@@ -69,7 +69,7 @@ Compilation::getArgsForToolChain(const ToolChain *TC, StringRef BoundArch,
     SmallVector<Arg *, 4> AllocatedArgs;
     DerivedArgList *OpenMPArgs = nullptr;
     // Translate OpenMP toolchain arguments provided via the -Xopenmp-target flags.
-    if (DeviceOffloadKind == Action::OFK_OpenMP) {
+    if (DeviceOffloadKind == Action::OFK_OpenMP && TC->getArch() != llvm::Triple::aurora) {
       const ToolChain *HostTC = getSingleOffloadToolChain<Action::OFK_Host>();
       bool SameTripleAsHost = (TC->getTriple() == HostTC->getTriple());
       OpenMPArgs = TC->TranslateOpenMPTargetArgs(
