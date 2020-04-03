@@ -144,7 +144,7 @@ public:
   /// unpredicated op plus a select.
   bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
     // FIXME code generation issues with VP intrinsics atm
-    return true;
+    return false;
 #if 0
     if (!enableVPU())
       return false;
