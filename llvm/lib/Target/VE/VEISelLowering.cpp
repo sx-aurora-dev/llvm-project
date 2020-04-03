@@ -1948,7 +1948,7 @@ void VETargetLowering::initVPUActions() {
       ISD::SDIV, ISD::SHL,  ISD::SRA, ISD::SRL,  END_OF_OCLIST};
 
   const ISD::NodeType FPArithOCs[] = {
-      ISD::FABS, ISD::FSUB,      ISD::FDIV,     ISD::FMUL,
+      ISD::FMA,  ISD::FABS,      ISD::FSUB,     ISD::FDIV,    ISD::FMUL,
       ISD::FNEG, ISD::FP_EXTEND, ISD::FP_ROUND, END_OF_OCLIST};
 
   const ISD::NodeType ToIntCastOCs[] = {// casts
