@@ -165,6 +165,7 @@ multiclass VMV_Patterns<ValueType VecVT> {
 defm: VMV_Patterns<v256i32>;
 defm: VMV_Patterns<v256f32>;
 defm: VMV_Patterns<v256i64>;
+defm: VMV_Patterns<v256f64>;
 
 def : Pat<(v256f32 (vec_vmv v256f32:$v, i32:$amount, v256i1:$mask, i32:$avl)),
           (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
