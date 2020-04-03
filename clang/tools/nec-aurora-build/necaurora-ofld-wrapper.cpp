@@ -31,7 +31,6 @@ bool Verbose = false;
 const char *KeepTransformedFilesDir;
 bool SaveTemps = false;
 
-
 enum class ToolMode {
   Unknown,
   Compiler,
@@ -63,6 +62,14 @@ int parseCmdline(int argc, char **argv, ToolMode &Mode, std::string &SotocPath,
   }
 
   for (int i = 2; i < argc; ++i) {
+    if (strcmp(argv[i], "--nec-target-compiler") == 0) {
+      ++i;
+      if (i == argc)
+        return EXIT_FAILURE;
+      int ret = configureTargetCompiler(std::string(argv[i]));
+      if (ret) return EXIT_FAILURE; // invalid compiler flag!
+      continue;
+    }
     if (strcmp(argv[i], "-c") == 0) {
       if (Mode != ToolMode::Unknown) {
         std::cerr << "necaurora-ofld-cc1-wrapper: WARNING: more than one "

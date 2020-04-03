@@ -8,6 +8,19 @@
 
 #include "necaurora-ofld-wrapper.h"
 
+const std::string ClangCompilerCmd = "clang --target=ve-linux";
+const std::string RVClangCompilerCmd = "rvclang --target=ve-linux";
+const std::string NCCCompilerCmd = "/opt/nec/ve/bin/ncc";
+
+std::string CompilerCmd;
+
+int configureTargetCompiler(const std::string& CompilerName) {
+  if (CompilerName == "clang")   { CompilerCmd = ClangCompilerCmd; return 0; }
+  if (CompilerName == "rvclang") { CompilerCmd = RVClangCompilerCmd; return 0; }
+  if (CompilerName == "ncc")     { CompilerCmd = NCCCompilerCmd; return 0; }
+  return 1;
+}
+
 const char *getTmpDir() {
   const char *TmpDir = std::getenv("TMPDIR");
 
@@ -27,12 +40,15 @@ const char *getTmpDir() {
 }
 
 const char *getTargetCompiler() {
-  const char *TargetCompiler = std::getenv("NECAURORA_OFLD_TARGET_COMPILER");
-  if (!TargetCompiler) {
-    TargetCompiler = DEFAULT_TARGET_COMPILER;
+  if (CompilerCmd.empty()) {
+    const char *TargetCompiler = std::getenv("NECAURORA_OFLD_TARGET_COMPILER");
+    if (!TargetCompiler) {
+      TargetCompiler = DEFAULT_TARGET_COMPILER;
+    }
+    return TargetCompiler;
   }
 
-  return TargetCompiler;
+  return CompilerCmd.c_str();
 }
 
 std::string writeTmpFile(const std::string &Content, const std::string &Prefix,

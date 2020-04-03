@@ -25,6 +25,7 @@ int runPassthrough(const std::string &Args);
 
 const char *getTmpDir();
 
+int configureTargetCompiler(const std::string&);
 const char *getTargetCompiler();
 
 std::string writeTmpFile(const std::string &Content, const std::string &Prefix,

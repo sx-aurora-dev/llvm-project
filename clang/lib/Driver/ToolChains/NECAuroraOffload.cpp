@@ -12,6 +12,8 @@ using namespace clang::driver;
 using namespace clang::driver::tools;
 using namespace llvm::opt;
 
+const char* DefaultOffloadCompiler = "clang";
+
 void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
                                           const InputInfo &Output,
                                           const InputInfoList &Inputs,
@@ -46,6 +48,8 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
+  const char* compilerName = DefaultOffloadCompiler;
+
   for (const auto &A : Args) {
     if (A->getOption().getKind() != Option::InputClass &&
         !A->getOption().hasFlag(options::DriverOption) &&
@@ -64,6 +68,14 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
       // Handle Preprocessor Args seperatly
       if (A->getOption().matches(options::OPT_Preprocessor_Group)) {
         PPargs.push_back(A);
+        continue;
+      }
+      
+      if (A->getOption().matches(options::OPT_fopenmp_nec_compiler_EQ)) {
+        const char *RawTxt = A->getNumValues() != 1 ? nullptr : A->getValue(0);
+        if (RawTxt) {
+          compilerName = RawTxt;
+        }
         continue;
       }
 
@@ -104,6 +116,10 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
 
 
   RenderExtraToolArgs(JA, CmdArgs);
+
+  // Keep this in sync with the compiler option in necaurora-ofld-wrapper.cpp (FIXME)
+  CmdArgs.push_back("--nec-target-compiler"); 
+  CmdArgs.push_back(compilerName);
 
   if (Output.isFilename()) {
     CmdArgs.push_back("-o");
