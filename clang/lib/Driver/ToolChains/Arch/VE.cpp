@@ -66,15 +66,16 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
     Features.push_back("+soft-float");
 
   // Whether to generate VPU instructions (on by default)
-  bool VEVPUFlag = false;
   if (auto *A = Args.getLastArg(options::OPT_mvevpu, options::OPT_mno_vevpu)) {
-    if (A->getOption().matches(options::OPT_mvevpu)) {
-      VEVPUFlag = true;
-      Features.push_back("+vpu");
+    if (A->getOption().matches(options::OPT_mno_vevpu)) {
+      Features.push_back("-vpu");
     }
   }
 
-  if (!VEVPUFlag) {
-    Features.push_back("-vpu");
+  // Whether to generate VPU instructions (on by default)
+  if (auto *A = Args.getLastArg(options::OPT_mvelintrin, options::OPT_mno_velintrin)) {
+    if (A->getOption().matches(options::OPT_mvelintrin)) {
+      Features.push_back("+velintrin");
+    }
   }
 }

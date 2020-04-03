@@ -3246,6 +3246,13 @@ def mno_vevpu : Flag<["-"], "mno-vevpu">, Group<m_ve_Features_Group>,
   HelpText<"Do not emit VPU instructions for VE">,
   Flags<[CC1Option]>;
 
+def mvelintrin : Flag<["-"], "mvelintrin">, Group<m_ve_Features_Group>,
+  HelpText<"Enable VEL intrinsinsics for VE">,
+  Flags<[CC1Option]>;
+def mno_velintrin : Flag<["-"], "mno-velintrin">, Group<m_ve_Features_Group>,
+  HelpText<"Disable VEL intrinsics for VE">,
+  Flags<[CC1Option]>;
+
 // These are legacy user-facing driver-level option spellings. They are always
 // aliases for options that are spelled using the more common Unix / GNU flag
 // style of double-dash and equals-joined flags.

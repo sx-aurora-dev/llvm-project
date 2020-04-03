@@ -28,7 +28,7 @@ void VESubtarget::anchor() {}
 VESubtarget &VESubtarget::initializeSubtargetDependencies(StringRef CPU,
                                                           StringRef FS) {
   // Default feature settings
-  EnableVPU = true;
+  EnableVPU = false;
   PackedMode = false;
   VELIntrinsicMode = false;
 

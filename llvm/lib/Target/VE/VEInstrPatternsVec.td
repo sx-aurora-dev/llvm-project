@@ -211,6 +211,8 @@ def : Pat<(v256i64 (sext v256i32:$src)),
           (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (i32 256)), V64)>;
 def : Pat<(v256i64 (zext v256i32:$src)),
           (COPY_TO_REGCLASS (vaddswzx_vsvl (i32 0), $src, (i32 256)), V64)>;
+def : Pat<(v256i64 (anyext v256i32:$src)),
+          (COPY_TO_REGCLASS $src, V64)>;
 
 // bitconvert
 multiclass NoopConv<ValueType AVT, ValueType BVT, RegisterClass RT=V64> {

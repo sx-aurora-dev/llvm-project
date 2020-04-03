@@ -20,15 +20,16 @@ include "llvm/Target/Target.td"
 //
 
 def FeaturePackedMode
-  : SubtargetFeature<"packed", "PackedMode", "false",
+  : SubtargetFeature<"packed", "PackedMode", "true",
                      "Enable v512 packed mode (experimental)">;
-def FeatureVPU
+
+def FeatureEnableVPU
   : SubtargetFeature<"vpu", "EnableVPU", "true",
-                     "Use the VPU">;
+                     "Disable the VPU">;
 
 def FeatureVELIntrin
-  : SubtargetFeature<"velintrin", "VELIntrinsicMode", "false",
-                     "Enable use of VEL intrinsics">;
+  : SubtargetFeature<"velintrin", "VELIntrinsicMode", "true",
+                     "Enable VEL intrinsics">;
 
 //===----------------------------------------------------------------------===//
 // Register File, Calling Conv, Instruction Descriptions
@@ -52,7 +53,7 @@ def VEAsmParser : AsmParser {
 class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
-def : Proc<"ve",             [FeatureVPU, FeaturePackedMode, FeatureVELIntrin]>;
+def : Proc<"ve",             [FeatureEnableVPU]>;
 // def : Processor<"ve", VEItinerary, []>;
 // def : ProcessorModel<"ve", VESchedModel, []>;
 
