@@ -522,7 +522,7 @@ SDValue CustomDAG::getConstant(uint64_t Val, EVT VT, bool IsTarget,
   return DAG.getConstant(Val, DL, VT, IsTarget, IsOpaque);
 }
 
-void CustomDAG::dumpValue(SDValue V) const { V->dump(&DAG); }
+void CustomDAG::dumpValue(SDValue V) const { V->print(dbgs(), &DAG); }
 
 SDValue CustomDAG::getVectorExtract(SDValue VecV, SDValue IdxV) const {
   assert(VecV.getValueType().isVector());
