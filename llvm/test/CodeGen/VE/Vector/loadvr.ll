@@ -45,7 +45,7 @@ define x86_regcallcc <256 x i64> @loadv256i32sext(<256 x i32>* nocapture readonl
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vldl.zx %v0,4,%s0
-; CHECK-NEXT:    vadds.w.sx %v0,0,%v0
+; CHECK-NEXT:    vadds.w.sx %v0,0,%v0,%vm0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = load <256 x i32>, <256 x i32>* %0, align 16
   %3 = sext <256 x i32> %2 to <256 x i64>
@@ -59,7 +59,7 @@ define x86_regcallcc <256 x i64> @loadv256i32zext(<256 x i32>* nocapture readonl
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vldl.zx %v0,4,%s0
-; CHECK-NEXT:    vadds.w.zx %v0,0,%v0
+; CHECK-NEXT:    vadds.w.zx %v0,0,%v0,%vm0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = load <256 x i32>, <256 x i32>* %0, align 16
   %3 = zext <256 x i32> %2 to <256 x i64>
@@ -83,7 +83,7 @@ define x86_regcallcc <256 x i64> @loadv256i64stk() {
 ; CHECK-LABEL: loadv256i64stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lea %s1,176(,%s11)
+; CHECK-NEXT:    lea %s1, 176(, %s11)
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vld %v0,8,%s1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -98,7 +98,7 @@ define x86_regcallcc <256 x i64> @loadv256i64com() {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, v256i64@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s0, v256i64@hi(%s0)
+; CHECK-NEXT:    lea.sl %s0, v256i64@hi(, %s0)
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0,8,%s0
