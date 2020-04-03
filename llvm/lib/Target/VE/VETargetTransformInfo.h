@@ -143,6 +143,9 @@ public:
   /// \returns False if this VP op should be replaced by a non-VP op or an
   /// unpredicated op plus a select.
   bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
+    // FIXME code generation issues with VP intrinsics atm
+    return true;
+#if 0
     if (!enableVPU())
       return false;
 
@@ -171,6 +174,7 @@ public:
 
     // be optimistic by default
     return true;
+#endif
   }
 
   /// }
