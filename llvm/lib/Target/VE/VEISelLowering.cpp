@@ -1913,9 +1913,9 @@ void VETargetLowering::initVPUActions() {
       ISD::CONCAT_VECTORS, ISD::MERGE_VALUES,
 
       // TODO
-      ISD::CTLZ, ISD::CTLZ_ZERO_UNDEF, ISD::CTTZ, ISD::CTTZ_ZERO_UNDEF,
-      ISD::ADDC, ISD::ADDCARRY, ISD::FABS, ISD::FNEG, ISD::MULHS, ISD::MULHU,
-      ISD::SMUL_LOHI, ISD::UMUL_LOHI,
+      ISD::BSWAP, ISD::BITREVERSE, ISD::CTLZ, ISD::CTLZ_ZERO_UNDEF, ISD::CTTZ,
+      ISD::CTTZ_ZERO_UNDEF, ISD::ADDC, ISD::ADDCARRY, ISD::FABS, ISD::FNEG,
+      ISD::MULHS, ISD::MULHU, ISD::SMUL_LOHI, ISD::UMUL_LOHI,
 
       // genuinely  unsupported
       ISD::UREM, ISD::SREM, ISD::SDIVREM, ISD::UDIVREM, ISD::FP16_TO_FP,
@@ -2222,6 +2222,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // former.
   setBooleanContents(ZeroOrOneBooleanContent);
   setBooleanVectorContents(ZeroOrOneBooleanContent);
+
+  LLVM_DEBUG(dbgs() << "VPU MODE:       " << Subtarget->enableVPU() << "\n";
+             dbgs() << "PACKED MODE:    " << Subtarget->hasPackedMode() << "\n";
+             dbgs() << "VELINTRIN MODE: " << Subtarget->isVELIntrinsicMode()
+                    << "\n";);
 
   ///// Registers //////
   initRegisterClasses();
