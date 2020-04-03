@@ -90,7 +90,14 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
   auto VPDecl =
       VPIntrinsic::GetDeclarationForParams(&M, VPID, VecParams, VecRetTy);
 
-  return Builder.CreateCall(VPDecl, VecParams, Inst.getName() + ".vp");
+  // Transfer FMF flags
+  auto VPCall = Builder.CreateCall(VPDecl, VecParams, Inst.getName() + ".vp");
+  auto FPOp = dyn_cast<FPMathOperator>(&Inst);
+  if (FPOp) {
+    VPCall->setFastMathFlags(FPOp->getFastMathFlags());
+  }
+
+  return VPCall;
 }
 
 VectorType &VPBuilder::getVectorType(Type &ElementTy) {
