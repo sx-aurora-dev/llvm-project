@@ -1,138 +1,56 @@
 # LLVM for NEC SX-Aurora VE
 
-This repository is a clone of public LLVM repository
-(https://github.com/llvm/llvm-project), plus experimental modifications
-which provide support for the NEC SX-Aurora TSUBASA Vector Engine (VE).
-See [README_MORE.rst](llvm/docs/VE/README_MORE.rst).
+This is a fork of the LLVM repositoy with experimental support for the NEC
+SX-Aurora TSUBASA Vector Engine (VE).
 
-You can start with the PRM package.
+### Features
 
-```
-% yum install \
-  https://sx-aurora.com/repos/veos/ef_extra/x86_64/llvm-ve-1.5.0-1.5.0-1.x86_64.rpm \
-  https://sx-aurora.com/repos/veos/ef_extra/x86_64/llvm-ve-link-1.5.0-1.x86_64.rpm
-```
+- C, C++ support.
+- Automatic vectorization through LLVM's loop and SLP vectorizers.
+- Preview release of OpenMP target offloading in C code from the VH to VE. This
+  prototype has been developed by RWTH Aachen.
+- VEL intrinsics for low-level vector programming.
+- This release is bundled with the Region Vectorizer for outer-loop
+  vectorization with arbitrary nested control flow.
 
-Then use clang like below.  Clang++ is also available.
+### Build instructions
+
+To build llvm-ve from source refer to 
+[llvm-dev](https://github.com/sx-aurora-dev/llvm-dev) and
+[Compile.rst](llvm/docs/VE/Compile.rst).
+
+### General Usage
+
+To compile for the VE run Clang/Clang++ with the following command line:
 
     $ /opt/nec/nosupport/llvm-ve/clang -target ve-linux -O3 ...
 
-- If you are interested in intrinsic functions for vector instructions, see
-  [the manual](https://sx-aurora-dev.github.io/velintrin.html).
-- If you are interested in the guided vectorization, or region vectorizer, see
-  [RV](https://github.com/cdl-saarland/rv).
-- If you want to build the llvm-ve, see
-  [llvm-dev](https://github.com/sx-aurora-dev/llvm-dev) and
-  [Compile.rst](llvm/docs/VE/Compile.rst).
-- Automatic vectorization is not supported.
+### Outer-loop vectorization (Region Vectorizer)
 
-# The LLVM Compiler Infrastructure
+The Region Vectorizer ([RV](https://github.com/cdl-saarland/rv)) provides
+advanced vectorization for outer-loop and whole-functions in LLVM through user
+annotations.  RV is activated by running 'rvclang(++)' instead of 'clang(++)'.
+To trigger RV on a loop use a vectorization pragma (eg annotate the loop with
+`#pragma omp simd` and pass the compiler option `-fopenmp-simd`).  RV is
+available on both the VE and the VH.
 
-This directory and its sub-directories contain source code for LLVM,
-a toolkit for the construction of highly optimized compilers,
-optimizers, and run-time environments.
+### OpenMP target offloading (preview feature)
 
-The README briefly describes how to get started with building LLVM.
-For more information on how to contribute to the LLVM project, please
-take a look at the
-[Contributing to LLVM](https://llvm.org/docs/Contributing.html) guide.
+The OpenMP target offloading feature requires that 'clang' is in your PATH. 
+To enable the OpenMP target offloading feature for C programs use:
 
-## Getting Started with the LLVM System
+    $ /opt/nec/nosupport/llvm-ve/clang \
+      -fopenmp -fopenmp-targets=aurora-nec-veort -O3 ...
 
-Taken from https://llvm.org/docs/GettingStarted.html.
+The implementation invokes another compiler instance to compile the offloaded
+code for the VE.  By default, this is 'clang' as found in your PATH. To choose a
+different target compiler, pass the option '-fopenmp-nec-compiler=COMPILER'
+where 'COMPILER' may be either of 'clang', to use llvm-ve, 'rvclang' to use
+llvm-ve with the region vectorizer or 'ncc', to use the NEC C Compiler at
+'/opt/nec/ve/bin/ncc'.
 
-### Overview
+### VEL Intrinsics for direct vector programming
 
-Welcome to the LLVM project!
-
-The LLVM project has multiple components. The core of the project is
-itself called "LLVM". This contains all of the tools, libraries, and header
-files needed to process intermediate representations and converts it into
-object files.  Tools include an assembler, disassembler, bitcode analyzer, and
-bitcode optimizer.  It also contains basic regression tests.
-
-C-like languages use the [Clang](http://clang.llvm.org/) front end.  This
-component compiles C, C++, Objective C, and Objective C++ code into LLVM bitcode
--- and from there into object files, using LLVM.
-
-Other components include:
-the [libc++ C++ standard library](https://libcxx.llvm.org),
-the [LLD linker](https://lld.llvm.org), and more.
-
-### Getting the Source Code and Building LLVM
-
-The LLVM Getting Started documentation may be out of date.  The [Clang
-Getting Started](http://clang.llvm.org/get_started.html) page might have more
-accurate information.
-
-This is an example work-flow and configuration to get and build the LLVM source:
-
-1. Checkout LLVM (including related sub-projects like Clang):
-
-     * ``git clone https://github.com/llvm/llvm-project.git``
-
-     * Or, on windows, ``git clone --config core.autocrlf=false
-    https://github.com/llvm/llvm-project.git``
-
-2. Configure and build LLVM and Clang:
-
-     * ``cd llvm-project``
-
-     * ``mkdir build``
-
-     * ``cd build``
-
-     * ``cmake -G <generator> [options] ../llvm``
-
-        Some common build system generators are:
-
-        * ``Ninja`` --- for generating [Ninja](https://ninja-build.org)
-          build files. Most llvm developers use Ninja.
-        * ``Unix Makefiles`` --- for generating make-compatible parallel makefiles.
-        * ``Visual Studio`` --- for generating Visual Studio projects and
-          solutions.
-        * ``Xcode`` --- for generating Xcode projects.
-
-        Some Common options:
-
-        * ``-DLLVM_ENABLE_PROJECTS='...'`` --- semicolon-separated list of the LLVM
-          sub-projects you'd like to additionally build. Can include any of: clang,
-          clang-tools-extra, libcxx, libcxxabi, libunwind, lldb, compiler-rt, lld,
-          polly, or debuginfo-tests.
-
-          For example, to build LLVM, Clang, libcxx, and libcxxabi, use
-          ``-DLLVM_ENABLE_PROJECTS="clang;libcxx;libcxxabi"``.
-
-        * ``-DCMAKE_INSTALL_PREFIX=directory`` --- Specify for *directory* the full
-          path name of where you want the LLVM tools and libraries to be installed
-          (default ``/usr/local``).
-
-        * ``-DCMAKE_BUILD_TYPE=type`` --- Valid options for *type* are Debug,
-          Release, RelWithDebInfo, and MinSizeRel. Default is Debug.
-
-        * ``-DLLVM_ENABLE_ASSERTIONS=On`` --- Compile with assertion checks enabled
-          (default is Yes for Debug builds, No for all other build types).
-
-      * ``cmake --build . [-- [options] <target>]`` or your build system specified above
-        directly.
-
-        * The default target (i.e. ``ninja`` or ``make``) will build all of LLVM.
-
-        * The ``check-all`` target (i.e. ``ninja check-all``) will run the
-          regression tests to ensure everything is in working order.
-
-        * CMake will generate targets for each tool and library, and most
-          LLVM sub-projects generate their own ``check-<project>`` target.
-
-        * Running a serial build will be **slow**.  To improve speed, try running a
-          parallel build.  That's done by default in Ninja; for ``make``, use the option
-          ``-j NNN``, where ``NNN`` is the number of parallel jobs, e.g. the number of
-          CPUs you have.
-
-      * For more information see [CMake](https://llvm.org/docs/CMake.html)
-
-Consult the
-[Getting Started with LLVM](https://llvm.org/docs/GettingStarted.html#getting-started-with-llvm)
-page for detailed information on configuring and compiling LLVM. You can visit
-[Directory Layout](https://llvm.org/docs/GettingStarted.html#directory-layout)
-to learn about the layout of the source code tree.
+See [the manual](https://sx-aurora-dev.github.io/velintrin.html).  To use VEL
+intrinsics, pass the compiler option `-mattr=+velintrin`.  The resulting LLVM
+bitcode and objects are compatible with those compiler without this option.
