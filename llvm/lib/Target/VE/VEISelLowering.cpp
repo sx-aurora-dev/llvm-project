@@ -3329,14 +3329,12 @@ VETargetLowering::LowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG, VVPExpansi
 
   EVT LegalResVT = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
 
-  const unsigned NumResElems = Op.getValueType().getVectorNumElements();
-
   CustomDAG CDAG(DAG, Op);
 
   // mask to shift + OR expansion
   if (Op.getValueType() == MVT::v256i1) {
     // TODO IsMaskType(Op.getValueType())) {
-    MaskShuffleAnalysis MSA(*MView.get(), NumResElems);
+    MaskShuffleAnalysis MSA(*MView.get());
     return MSA.synthesize(CDAG);
   }
 

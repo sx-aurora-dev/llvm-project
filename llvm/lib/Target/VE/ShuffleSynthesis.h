@@ -92,9 +92,11 @@ struct MaskShuffleAnalysis {
   // Analysis result
   std::vector<ResPart> Segments;
 
+  MaskView &MV;
+
   // match a 64 bit segment, mapping out all source bits
   // FIXME this implies knowledge about the underlying object structure
-  MaskShuffleAnalysis(MaskView &MV, unsigned NumEls);
+  MaskShuffleAnalysis(MaskView& MV);
 
   // Synthesize \p BitSelect, merging the result into \p Passthru
   SDValue synthesize(SDValue Passthru, BitSelect &BSel, SDValue SXV,

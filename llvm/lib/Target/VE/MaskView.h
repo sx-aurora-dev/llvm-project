@@ -10,7 +10,10 @@ struct ElemSelect {
   SDValue V;          // the value that is chosen
   int64_t ExtractIdx; // whether (>=0) this indicates element extraction
 
-  // Undef ctor
+  // (explicit) undef construction
+  static ElemSelect Undef() { return ElemSelect(); }
+
+  // (implicit) Undef ctor
   ElemSelect() : V(), ExtractIdx(0) {}
 
   // insertion from scalar
@@ -32,6 +35,10 @@ struct ElemSelect {
   bool isElemInsert() const { return ExtractIdx < 0; }
 
   bool operator==(const ElemSelect &ES) const {
+    if (!isDefined() && !ES.isDefined())
+      return true;
+    if (isDefined() != ES.isDefined())
+      return false;
     return (ES.V == V) && (ExtractIdx == ES.ExtractIdx);
   }
   bool operator!=(const ElemSelect &ES) const { return !(*this == ES); }
