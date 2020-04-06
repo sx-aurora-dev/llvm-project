@@ -914,25 +914,26 @@ IterControl ShuffleAnalysis::runStrategy(ShuffleStrategy &Strat,
   return PSS.isComplete() ? IterBreak : IterContinue;
 }
 
-ShuffleAnalysis::ShuffleAnalysis(MaskView &Mask) {
-  PartialShuffleState PSS = PartialShuffleState::fromInitialMask(Mask);
+ShuffleAnalysis::AnalyzeResult ShuffleAnalysis::analyze() {
+  PartialShuffleState PSS = PartialShuffleState::fromInitialMask(MV);
 
-  if (IterBreak == run<LegacyPatternStrategy>(1, Mask, PSS))
-    return;
-  if (IterBreak == run<BroadcastStrategy>(3, Mask, PSS))
-    return;
-  if (IterBreak == run<VMVShuffleStrategy>(5, Mask, PSS))
-    return;
+  if (IterBreak == run<LegacyPatternStrategy>(1, MV, PSS))
+    return CanSynthesize;
+  if (IterBreak == run<BroadcastStrategy>(3, MV, PSS))
+    return CanSynthesize;
+  if (IterBreak == run<VMVShuffleStrategy>(5, MV, PSS))
+    return CanSynthesize;
 
   // Fallback
   ScalarTransferStrategy STS;
   STS.planPartialShuffle(
-      Mask, PSS,
-      [&](AbstractShuffleOp *PartialOp, PartialShuffleState NextPSS) {
+      MV, PSS, [&](AbstractShuffleOp *PartialOp, PartialShuffleState NextPSS) {
         assert(NextPSS.isComplete() && "scalar transfer is always complete..");
         ShuffleSeq.push_back(std::unique_ptr<AbstractShuffleOp>(PartialOp));
         return IterBreak;
       });
+
+  return CanSynthesize;
 }
 
 raw_ostream &ShuffleAnalysis::print(raw_ostream &out) const {
@@ -945,13 +946,12 @@ raw_ostream &ShuffleAnalysis::print(raw_ostream &out) const {
   return out;
 }
 
-SDValue ShuffleAnalysis::synthesize(MaskView &Mask, CustomDAG &CDAG,
-                                    EVT LegalResultVT) {
+SDValue ShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalResultVT) {
   LLVM_DEBUG(dbgs() << "Synthesized shuffle sequence:\n"; print(dbgs()));
 
   SDValue AccuV = CDAG.getUndef(LegalResultVT);
   for (auto &ShuffOp : ShuffleSeq) {
-    AccuV = ShuffOp->synthesize(Mask, CDAG, AccuV);
+    AccuV = ShuffOp->synthesize(MV, CDAG, AccuV);
   }
   return AccuV;
 }

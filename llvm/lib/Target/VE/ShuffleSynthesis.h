@@ -192,14 +192,24 @@ class ShuffleAnalysis {
     return runStrategy(Strat, NumRounds, MV, PSS);
   }
 
-public:
-  // match a 64 bit segment, mapping out all source bits
-  // FIXME this implies knowledge about the underlying object structure
-  ShuffleAnalysis(MaskView &Mask);
+  MaskView &MV;
 
+public:
+  // Construct this in
+  ShuffleAnalysis(MaskView &MV) : MV(MV) {}
+
+  /// Tries to plan a code sequence that synthesizes the mask view passed into this instance
+  enum AnalyzeResult {
+    Failure = 0,
+    CanSynthesize = 1,
+  };
+  AnalyzeResult analyze();
+
+  // print the sketched synthesisi stages requires to build this mask view
   raw_ostream &print(raw_ostream &out) const;
 
-  SDValue synthesize(MaskView &Mask, CustomDAG &CDAG, EVT LegalResultVT);
+  /// Synthesize the code planned in the analyze stage
+  SDValue synthesize(CustomDAG &CDAG, EVT LegalResultVT);
 };
 
 } // namespace llvm

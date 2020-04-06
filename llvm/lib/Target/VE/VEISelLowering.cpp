@@ -456,14 +456,14 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   default:
     return SDValue(); // default on this node
 
+  case ISD::BUILD_VECTOR:
+  case ISD::VECTOR_SHUFFLE:
+    return LowerVectorShuffleOp(Op, DAG, Mode);
+
   case ISD::EXTRACT_SUBVECTOR:
     return LowerEXTRACT_SUBVECTOR(Op, DAG, Mode);
-  case ISD::BUILD_VECTOR:
-    return LowerBUILD_VECTOR(Op, DAG,
-                             Mode); // TODO account for AVL, Expansion mode
   case ISD::SCALAR_TO_VECTOR:
-    return LowerSCALAR_TO_VECTOR(Op, DAG,
-                                 Mode); // TODO account for AVL, Expansion mode
+    return LowerSCALAR_TO_VECTOR(Op, DAG, Mode);
 
   case ISD::LOAD:
   case ISD::MLOAD:
@@ -858,20 +858,6 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
                                    CDAG.getConstEVL(PackedVL));
   }
 
-  // See if it is worthwhile to emit a narrowing node
-#if 0
-  bool EmitNarrow =
-      true; // Passing-through \p May result in an invalid result type
-  auto SrcN = SrcVec.getNode();
-  if (SrcN->getOpcode() == ISD::LOAD) {
-    if (SrcN->use_size() == 1) {
-      LLVM_DEBUG(dbgs() << "EXT_SUBV + LOAD -> folding opportunity -> emitting VEC_NARROW\n");
-      EmitNarrow = true;
-    }
-    // use this opportunity to implement a narrowed load
-  }
-#endif
-
   SDLoc DL(Op);
   unsigned NarrowLen = Op.getValueType().getVectorNumElements();
   return CDAG.createNarrow(LegalVecTy, SrcVec, NarrowLen);
@@ -1067,6 +1053,7 @@ SDValue VETargetLowering::LowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const {
                      {V, InverseA, Mask, Avl});
 }
 
+#if 0
 SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
                                             VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "Lowering BUILD_VECTOR\n");
@@ -1078,6 +1065,7 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
 
   // mask reconstruction
   if (Op.getValueType() == MVT::v256i1) {
+    // FIXME merge into general ShuffleAnalysis
     const unsigned NumResElems = Op.getValueType().getVectorNumElements();
     MaskShuffleAnalysis MSA(*MView.get(), NumResElems);
     return MSA.synthesize(CDAG);
@@ -1088,14 +1076,22 @@ SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
   assert(VecView && "Cannot lower this shufffle..");
 
   ShuffleAnalysis VSA(ref_to(VecView));
-  return VSA.synthesize(ref_to(VecView), CDAG, LegalResVT);
+  auto Result = VSA.analyze();
+  if (Result == ShuffleAnalysis::CanSynthesize) {
+    return VSA.synthesize(CDAG, LegalResVT);
+  }
+
+  // FIXME fallback to LLVM and hope for the best
+  return SDValue();
 }
+#endif
 
 static SDValue PeekThroughCasts(SDValue Op) {
   switch (Op.getOpcode()) {
   default:
     return Op;
 
+  case ISD::ANY_EXTEND:
   case ISD::ZERO_EXTEND:
   case ISD::SIGN_EXTEND:
   case ISD::TRUNCATE:
@@ -3326,9 +3322,8 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
   return Op;
 }
 
-SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG,
-                                              VVPExpansionMode Mode) const {
-  LLVM_DEBUG(dbgs() << "Lowering Shuffle\n");
+SDValue
+VETargetLowering::LowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const {
   SDLoc DL(Op);
   std::unique_ptr<MaskView> MView(requestMaskView(Op.getNode()));
 
@@ -3353,8 +3348,19 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG,
   assert(VecView && "Cannot lower this shufffle..");
 
   ShuffleAnalysis VSA(*VecView);
-  return VSA.synthesize(ref_to(VecView), CDAG, LegalResVT);
+  if (VSA.analyze() == ShuffleAnalysis::CanSynthesize)
+    return VSA.synthesize(CDAG, LegalResVT);
 
+  // fallback to LLVM and hope for the best
+  return SDValue();
+}
+
+#if 0
+SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG,
+                                              VVPExpansionMode Mode) const {
+  LLVM_DEBUG(dbgs() << "Lowering Shuffle\n");
+
+  return LowerVectorShuffle(Op, DAG, Mode);
 #if 0
   // BROKEN LEGACY CODE
   SDValue firstVec = ShuffleInstr->getOperand(0);
@@ -3523,6 +3529,7 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG,
 /// }
 #endif
 }
+#endif
 
 SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "LowerOp: "; Op.dump(&DAG); dbgs() << "\n";);
@@ -3570,15 +3577,18 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerBitcast(Op, DAG);
 
   case ISD::BUILD_VECTOR:
-    return LowerBUILD_VECTOR(Op, DAG, VVPExpansionMode::ToNativeWidth);
+  case ISD::VECTOR_SHUFFLE:
+    return LowerVectorShuffleOp(Op, DAG, VVPExpansionMode::ToNativeWidth);
+
+  case ISD::EXTRACT_SUBVECTOR:
+    return LowerEXTRACT_SUBVECTOR(Op, DAG, VVPExpansionMode::ToNativeWidth);
+  case ISD::SCALAR_TO_VECTOR:
+    return LowerSCALAR_TO_VECTOR(Op, DAG, VVPExpansionMode::ToNativeWidth);
+
   case ISD::INSERT_VECTOR_ELT:
     return LowerINSERT_VECTOR_ELT(Op, DAG);
   case ISD::EXTRACT_VECTOR_ELT:
     return LowerEXTRACT_VECTOR_ELT(Op, DAG);
-  case ISD::VECTOR_SHUFFLE:
-    return LowerVECTOR_SHUFFLE(Op, DAG, VVPExpansionMode::ToNativeWidth);
-  case ISD::EXTRACT_SUBVECTOR:
-    return LowerEXTRACT_SUBVECTOR(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
     // case ISD::VECREDUCE_OR:
     // case ISD::VECREDUCE_AND:
