@@ -602,131 +602,369 @@ def RD_RA    : RD_VAL<12>;  // Round to Nearest (ties to Away)
 // VE Multiclasses for common instruction formats
 //===----------------------------------------------------------------------===//
 
-// Multiclass for RR type instructions
-multiclass RRmrr<string opcStr, bits<8>opc,
-                 RegisterClass RCo, ValueType Tyo,
-                 RegisterClass RCi, ValueType Tyi,
-                 SDPatternOperator OpNode = null_frag> {
-  let hasSideEffects = 0 in
+// Multiclass for generic RR type instructions
+let hasSideEffects = 0 in
+multiclass RRbm<string opcStr, bits<8>opc,
+                RegisterClass RCo, ValueType Tyo,
+                RegisterClass RCi, ValueType Tyi,
+                SDPatternOperator OpNode = null_frag,
+                Operand immOp = simm7, Operand mOp = mimm> {
   def rr : RR<opc, (outs RCo:$sx), (ins RCi:$sy, RCi:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"),
               [(set Tyo:$sx, (OpNode Tyi:$sy, Tyi:$sz))]>;
-}
-
-multiclass RRmri<string opcStr, bits<8>opc,
-                 RegisterClass RCo, ValueType Tyo,
-                 RegisterClass RCi, ValueType Tyi, Operand immOp,
-                 SDPatternOperator OpNode = null_frag> {
   // VE calculates (OpNode $sy, $sz), but llvm requires to have immediate
   // in RHS, so we use following definition.
-  let cy = 0, hasSideEffects = 0 in
+  let cy = 0 in
   def ri : RR<opc, (outs RCo:$sx), (ins RCi:$sz, immOp:$sy),
               !strconcat(opcStr, " $sx, $sy, $sz"),
               [(set Tyo:$sx, (OpNode Tyi:$sz, (Tyi immOp:$sy)))]>;
-}
-
-multiclass RRmir<string opcStr, bits<8>opc,
-                 RegisterClass RCo, ValueType Tyo,
-                 RegisterClass RCi, ValueType Tyi, Operand immOp,
-                 SDPatternOperator OpNode = null_frag> {
-  let cy = 0, hasSideEffects = 0 in
-  def ir : RR<opc, (outs RCo:$sx), (ins immOp:$sy, RCi:$sz),
-              !strconcat(opcStr, " $sx, $sy, $sz"),
-              [(set Tyo:$sx, (OpNode (Tyi immOp:$sy), Tyi:$sz))]>;
-}
-
-multiclass RRmiz<string opcStr, bits<8>opc,
-                 RegisterClass RCo, ValueType Tyo,
-                 RegisterClass RCi, ValueType Tyi, Operand immOp,
-                 SDPatternOperator OpNode = null_frag> {
-  let cy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
-  def zi : RR<opc, (outs RCo:$sx), (ins immOp:$sy),
-              !strconcat(opcStr, " $sx, $sy"),
-              [(set Tyo:$sx, (OpNode (Tyi immOp:$sy), (Tyi 0)))]>;
-}
-
-multiclass RRNDmrm<string opcStr, bits<8>opc,
-                   RegisterClass RCo, ValueType Tyo,
-                   RegisterClass RCi, ValueType Tyi,
-                   Operand mOp,
-                   SDPatternOperator OpNode = null_frag> {
-  let cz = 0, hasSideEffects = 0 in
+  let cz = 0 in
   def rm : RR<opc, (outs RCo:$sx), (ins RCi:$sy, mOp:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"),
               [(set Tyo:$sx, (OpNode Tyi:$sy, (Tyi mOp:$sz)))]>;
-}
-
-multiclass RRNDmim<string opcStr, bits<8>opc,
-                 RegisterClass RCo, ValueType Tyo,
-                 RegisterClass RCi, ValueType Tyi,
-                 Operand immOp, Operand mOp,
-                 SDPatternOperator OpNode = null_frag> {
-  let cy = 0, cz = 0, hasSideEffects = 0 in
+  let cy = 0, cz = 0 in
   def im : RR<opc, (outs RCo:$sx), (ins immOp:$sy, mOp:$sz),
               !strconcat(opcStr, " $sx, $sy, $sz"),
               [(set Tyo:$sx, (OpNode (Tyi immOp:$sy), (Tyi mOp:$sz)))]>;
 }
 
-// Used by add, mul, and similar commutative instructions
-//   The order of operands are "$sx, $sy, $sz"
+// Multiclass for non-commutative RR type instructions
+let hasSideEffects = 0 in
+multiclass RRNCbm<string opcStr, bits<8>opc,
+                RegisterClass RCo, ValueType Tyo,
+                RegisterClass RCi, ValueType Tyi,
+                SDPatternOperator OpNode = null_frag,
+                Operand immOp = simm7, Operand mOp = mimm> {
+  def rr : RR<opc, (outs RCo:$sx), (ins RCi:$sy, RCi:$sz),
+              !strconcat(opcStr, " $sx, $sy, $sz"),
+              [(set Tyo:$sx, (OpNode Tyi:$sy, Tyi:$sz))]>;
+  let cy = 0 in
+  def ir : RR<opc, (outs RCo:$sx), (ins immOp:$sy, RCi:$sz),
+              !strconcat(opcStr, " $sx, $sy, $sz"),
+              [(set Tyo:$sx, (OpNode (Tyi immOp:$sy), Tyi:$sz))]>;
+  let cz = 0 in
+  def rm : RR<opc, (outs RCo:$sx), (ins RCi:$sy, mOp:$sz),
+              !strconcat(opcStr, " $sx, $sy, $sz"),
+              [(set Tyo:$sx, (OpNode Tyi:$sy, (Tyi mOp:$sz)))]>;
+  let cy = 0, cz = 0 in
+  def im : RR<opc, (outs RCo:$sx), (ins immOp:$sy, mOp:$sz),
+              !strconcat(opcStr, " $sx, $sy, $sz"),
+              [(set Tyo:$sx, (OpNode (Tyi immOp:$sy), (Tyi mOp:$sz)))]>;
+}
 
+// Generic RR multiclass with 2 arguments.
+//   e.g. ADDUL, ADDSWSX, ADDSWZX, and etc.
 multiclass RRm<string opcStr, bits<8>opc,
                RegisterClass RC, ValueType Ty,
-               SDPatternOperator OpNode = null_frag> :
-  RRmrr<opcStr, opc, RC, Ty, RC, Ty, OpNode>,
-  RRmri<opcStr, opc, RC, Ty, RC, Ty, simm7, OpNode>,
-  RRmiz<opcStr, opc, RC, Ty, RC, Ty, simm7, OpNode>,
-  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, mimm, OpNode>,
-  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, simm7, mimm, OpNode>;
+               SDPatternOperator OpNode = null_frag,
+               Operand immOp = simm7, Operand mOp = mimm> {
+  defm "" : RRbm<opcStr, opc, RC, Ty, RC, Ty, OpNode, immOp, mOp>;
+}
 
-// Used by mpd (int x int = long) and similar instructions.
-
-multiclass RRTYm<string opcStr, bits<8>opc,
-                 RegisterClass RCo, ValueType Tyo,
-                 RegisterClass RCi, ValueType Tyi,
-                 SDPatternOperator OpNode = null_frag> :
-  RRmrr<opcStr, opc, RCo, Tyo, RCi, Tyi, OpNode>,
-  RRmri<opcStr, opc, RCo, Tyo, RCi, Tyi, simm7, OpNode>,
-  RRmiz<opcStr, opc, RCo, Tyo, RCi, Tyi, simm7, OpNode>,
-  RRNDmrm<opcStr, opc, RCo, Tyo, RCi, Tyi, mimm, OpNode>,
-  RRNDmim<opcStr, opc, RCo, Tyo, RCi, Tyi, simm7, mimm, OpNode>;
-
-// Used by sub, div, and similar not commutative instructions
-//   The order of operands are "$sx, $sy, $sz"
-
+// Generic RR multiclass for non-commutative instructions with 2 arguments.
+//   e.g. SUBUL, SUBUW, SUBSWSX, and etc.
 multiclass RRNCm<string opcStr, bits<8>opc,
                  RegisterClass RC, ValueType Ty,
-                 SDPatternOperator OpNode = null_frag> :
-  RRmrr<opcStr, opc, RC, Ty, RC, Ty, OpNode>,
-  RRmir<opcStr, opc, RC, Ty, RC, Ty, simm7, OpNode>,
-  RRmiz<opcStr, opc, RC, Ty, RC, Ty, simm7, OpNode>,
-  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, mimm, OpNode>,
-  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, simm7, mimm, OpNode>;
+                 SDPatternOperator OpNode = null_frag,
+                 Operand immOp = simm7, Operand mOp = mimm> {
+  defm "" : RRNCbm<opcStr, opc, RC, Ty, RC, Ty, OpNode, immOp, mOp>;
+}
 
-// Used by fadd, fsub, and similar floating point instructions
-//   The order of operands are "$sx, $sy, $sz"
-
+// Generic RR multiclass for floating point instructions with 2 arguments.
+//   e.g. FADDD, FADDS, FSUBD, and etc.
 multiclass RRFm<string opcStr, bits<8>opc,
                 RegisterClass RC, ValueType Ty,
-                SDPatternOperator OpNode = null_frag> :
-  RRmrr<opcStr, opc, RC, Ty, RC, Ty, OpNode>,
-  RRmir<opcStr, opc, RC, Ty, RC, Ty, simm7fp, OpNode>,
-  RRmiz<opcStr, opc, RC, Ty, RC, Ty, simm7fp, null_frag>,
-  RRNDmrm<opcStr, opc, RC, Ty, RC, Ty, mimmfp, OpNode>,
-  RRNDmim<opcStr, opc, RC, Ty, RC, Ty, simm7fp, mimmfp, OpNode>;
+                SDPatternOperator OpNode = null_frag,
+                Operand immOp = simm7fp, Operand mOp = mimmfp> {
+  defm "" : RRNCbm<opcStr, opc, RC, Ty, RC, Ty, OpNode, immOp, mOp>;
+}
 
-// Used by fcq instruction like "F64 <- cmp F128, F128"
-//   The order of operands are "$sx, $sy, $sz"
+// Generic RR multiclass for shift instructions with 2 arguments.
+//   e.g. SLL, SRL, SLAWSX, and etc.
+let hasSideEffects = 0 in
+multiclass RRIm<string opcStr, bits<8>opc,
+                RegisterClass RC, ValueType Ty,
+                SDPatternOperator OpNode = null_frag> {
+  def rr : RR<opc, (outs RC:$sx), (ins RC:$sz, I32:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set Ty:$sx, (OpNode Ty:$sz, i32:$sy))]>;
+  let cz = 0 in
+  def mr : RR<opc, (outs RC:$sx), (ins mimm:$sz, I32:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set Ty:$sx, (OpNode (Ty mimm:$sz), i32:$sy))]>;
+  let cy = 0 in
+  def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, uimm7:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set Ty:$sx, (OpNode Ty:$sz, (i32 uimm7:$sy)))]>;
+  let cy = 0, cz = 0 in
+  def mi : RR<opc, (outs RC:$sx), (ins mimm:$sz, uimm7:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set Ty:$sx, (OpNode (Ty mimm:$sz), (i32 uimm7:$sy)))]>;
+}
 
-multiclass RRFCQm<string opcStr, bits<8>opc,
+// Special RR multiclass for double-shift instructions.
+//   e.g. SLD and SRD
+let Constraints = "$hi = $sx", DisableEncoding = "$hi", hasSideEffects = 0 in
+multiclass RRIDm<string opcStr, bits<8>opc,
+                 RegisterClass RC, ValueType Ty,
+                 SDPatternOperator OpNode = null_frag> {
+  def rr : RR<opc, (outs RC:$sx), (ins RC:$hi, RC:$sz, I32:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cz = 0 in
+  def mr : RR<opc, (outs RC:$sx), (ins RC:$hi, mimm:$sz, I32:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cy = 0 in
+  def ri : RR<opc, (outs RC:$sx), (ins RC:$hi, RC:$sz, uimm7:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cy = 0, cz = 0 in
+  def mi : RR<opc, (outs RC:$sx), (ins RC:$hi, mimm:$sz, uimm7:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+}
+
+// Generic RR multiclass with an arguments.
+//   e.g. LDZ, PCNT, and  BRV
+let cy = 0, sy = 0, hasSideEffects = 0 in
+multiclass RRI1m<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
+                 SDPatternOperator OpNode = null_frag> {
+  def r : RR<opc, (outs RC:$sx), (ins RC:$sz), !strconcat(opcStr, " $sx, $sz"),
+             [(set Ty:$sx, (OpNode Ty:$sz))]>;
+  let cz = 0 in
+  def m : RR<opc, (outs RC:$sx), (ins mimm:$sz),
+             !strconcat(opcStr, " $sx, $sz"),
+             [(set Ty:$sx, (OpNode (Ty mimm:$sz)))]>;
+}
+
+// Special RR multiclass for BSWP instruction.
+//   e.g. BSWP
+let hasSideEffects = 0 in
+multiclass RRSWPm<string opcStr, bits<8>opc,
                   RegisterClass RC, ValueType Ty,
-                  SDPatternOperator OpNode = null_frag> :
-  RRmrr<opcStr, opc, I64, f64, RC, Ty, OpNode>,
-  RRmir<opcStr, opc, I64, f64, RC, Ty, simm7fp, OpNode>,
-  RRmiz<opcStr, opc, I64, f64, RC, Ty, simm7fp, null_frag>,
-  RRNDmrm<opcStr, opc, I64, f64, RC, Ty, mimmfp, OpNode>,
-  RRNDmim<opcStr, opc, I64, f64, RC, Ty, simm7fp, mimmfp, OpNode>;
+                  SDPatternOperator OpNode = null_frag> {
+  let cy = 0 in
+  def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, uimm1:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set Ty:$sx, (OpNode Ty:$sz, (i32 uimm1:$sy)))]>;
+  let cy = 0, cz = 0 in
+  def mi : RR<opc, (outs RC:$sx), (ins mimm:$sz, uimm1:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set Ty:$sx, (OpNode (Ty mimm:$sz), (i32 uimm1:$sy)))]>;
+}
 
+// Multiclass for CMOV instructions.
+//   e.g. CMOVL, CMOVW, CMOVD, and etc.
+let Constraints = "$sx = $sd", DisableEncoding = "$sd", hasSideEffects = 0,
+    cfw = ? in
+multiclass RRCMOVm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty> {
+  def rr : RR<opc, (outs I64:$sx), (ins CCOp:$cfw, RC:$sy, I64:$sz, I64:$sd),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cy = 0 in
+  def ir : RR<opc, (outs I64:$sx),
+              (ins CCOp:$cfw, simm7:$sy, I64:$sz, I64:$sd),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cz = 0 in
+  def rm : RR<opc, (outs I64:$sx),
+              (ins CCOp:$cfw, RC:$sy, mimm:$sz, I64:$sd),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cy = 0, cz = 0 in
+  def im : RR<opc, (outs I64:$sx),
+              (ins CCOp:$cfw, simm7:$sy, mimm:$sz, I64:$sd),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+}
+
+// Multiclass for floating point conversion instructions.
+//   e.g. CVTWDSX, CVTWDZX, CVTWSSX, and etc.
+// sz{3-0} = rounding mode
+let cz = 0, hasSideEffects = 0 in
+multiclass CVTRDm<string opcStr, bits<8> opc, RegisterClass RCo, ValueType Tyo,
+                  RegisterClass RCi, ValueType Tyi> {
+  def r : RR<opc, (outs RCo:$sx), (ins RDOp:$rd, RCi:$sy),
+             !strconcat(opcStr, "${rd} $sx, $sy")> {
+    bits<4> rd;
+    let sz{5-4} = 0;
+    let sz{3-0} = rd;
+  }
+  let cy = 0 in
+  def i : RR<opc, (outs RCo:$sx), (ins RDOp:$rd, simm7:$sy),
+             !strconcat(opcStr, "${rd} $sx, $sy")> {
+    bits<4> rd;
+    let sz{5-4} = 0;
+    let sz{3-0} = rd;
+  }
+}
+
+// Multiclass for floating point conversion instructions.
+//   e.g. CVTDW, CVTSW, CVTDL, and etc.
+let cz = 0, sz = 0, hasSideEffects = 0 in
+multiclass CVTm<string opcStr, bits<8> opc, RegisterClass RCo, ValueType Tyo,
+                RegisterClass RCi, ValueType Tyi,
+                SDPatternOperator OpNode = null_frag> {
+  def r : RR<opc, (outs RCo:$sx), (ins RCi:$sy),
+             !strconcat(opcStr, " $sx, $sy"),
+             [(set Tyo:$sx, (OpNode Tyi:$sy))]>;
+  let cy = 0 in
+  def i : RR<opc, (outs RCo:$sx), (ins simm7:$sy),
+             !strconcat(opcStr, " $sx, $sy")>;
+}
+
+// Multiclass for PFCH instructions.
+//   e.g. PFCH
+let sx = 0, hasSideEffects = 0 in
+multiclass PFCHm<string opcStr, bits<8>opc> {
+  def rri : RM<opc, (outs), (ins MEMrri:$addr), !strconcat(opcStr, " $addr"),
+               [(prefetch ADDRrri:$addr, imm, imm, (i32 1))]>;
+  let cy = 0 in
+  def rii : RM<opc, (outs), (ins MEMrii:$addr), !strconcat(opcStr, " $addr"),
+               [(prefetch ADDRrii:$addr, imm, imm, (i32 1))]>;
+  let cz = 0 in
+  def zri : RM<opc, (outs), (ins MEMzri:$addr), !strconcat(opcStr, " $addr"),
+               [(prefetch ADDRzri:$addr, imm, imm, (i32 1))]>;
+  let cy = 0, cz = 0 in
+  def zii : RM<opc, (outs), (ins MEMzii:$addr), !strconcat(opcStr, " $addr"),
+               [(prefetch ADDRzii:$addr, imm, imm, (i32 1))]>;
+}
+
+// Multiclass for CAS instructions.
+//   e.g. TS1AML, TS1AMW, TS2AM, and etc.
+let Constraints = "$dest = $sd", DisableEncoding = "$sd",
+    mayStore=1, mayLoad = 1, hasSideEffects = 0 in
+multiclass RRCAStgm<string opcStr, bits<8>opc, RegisterClass RC, Operand immOp,
+                    Operand ADDR> {
+  def r : RRM<opc, (outs RC:$dest), (ins ADDR:$addr, RC:$sy, RC:$sd),
+                !strconcat(opcStr, " $dest, $addr, $sy")>;
+  let cy = 0 in
+  def i : RRM<opc, (outs RC:$dest), (ins ADDR:$addr, immOp:$sy, RC:$sd),
+                  !strconcat(opcStr, " $dest, $addr, $sy")>;
+}
+multiclass RRCASm<string opcStr, bits<8>opc, RegisterClass RC, Operand immOp> {
+  defm ri : RRCAStgm<opcStr, opc, RC, immOp, MEMriRRM>;
+  let cz = 0 in defm zi : RRCAStgm<opcStr, opc, RC, immOp, MEMziRRM>;
+}
+
+// Multiclass for branch instructions
+//   e.g. BCFL, BCFW, BCFD, and etc.
+let isBranch = 1, isTerminator = 1, isIndirectBranch = 1, hasSideEffects = 0 in
+multiclass BCbpfm<string opcStr, string cmpStr, bits<8> opc, dag cond,
+                  Operand ADDR> {
+  let bpf = 0 /* NONE */ in
+  def "" : CF<opc, (outs), !con(cond, (ins ADDR:$addr)),
+              !strconcat(opcStr, " ", cmpStr, "$addr")>;
+  let bpf = 2 /* NOT TaKEN */ in
+  def _nt : CF<opc, (outs), !con(cond, (ins ADDR:$addr)),
+               !strconcat(opcStr, ".nt ", cmpStr, "$addr")>;
+  let bpf = 3 /* TaKEN */ in
+  def _t : CF<opc, (outs), !con(cond, (ins ADDR:$addr)),
+              !strconcat(opcStr, ".t ", cmpStr, "$addr")>;
+}
+multiclass BCtgm<string opcStr, string cmpStr, bits<8> opc, dag cond> {
+  defm ri : BCbpfm<opcStr, cmpStr, opc, cond, MEMriASX>;
+  let cz = 0 in defm zi : BCbpfm<opcStr, cmpStr, opc, cond, MEMziASX>;
+}
+multiclass BCm<string opcStr, string opcStrAt, string opcStrAf, bits<8> opc,
+               RegisterClass RC, Operand immOp> {
+  let DecoderMethod = "DecodeBranchCondition" in
+  defm r : BCtgm<opcStr, "$comp, ", opc, (ins CCOp:$cond, RC:$comp)>;
+  let DecoderMethod = "DecodeBranchCondition", cy = 0 in
+  defm i : BCtgm<opcStr, "$comp, ", opc, (ins CCOp:$cond, immOp:$comp)>;
+  let DecoderMethod = "DecodeBranchConditionAlways", cy = 0, sy = 0,
+      cf = 15 /* AT */, isBarrier = 1 in
+  defm a : BCtgm<opcStrAt, "", opc, (ins)>;
+  let DecoderMethod = "DecodeBranchConditionAlways", cy = 0, sy = 0,
+      cf = 0 /* AF */ in
+  defm na : BCtgm<opcStrAf, "", opc, (ins)>;
+}
+
+// Multiclass for relative branch instructions
+//   e.g. BRCFL, BRCFW, BRCFD, and etc.
+let isBranch = 1, isTerminator = 1, hasSideEffects = 0 in
+multiclass BCRbpfm<string opcStr, string cmpStr, bits<8> opc, dag cond> {
+  let bpf = 0 /* NONE */ in
+  def "" : CF<opc, (outs), !con(cond, (ins brtarget32:$imm32)),
+              !strconcat(opcStr, " ", cmpStr, "$imm32")>;
+  let bpf = 2 /* NOT TaKEN */ in
+  def _nt : CF<opc, (outs), !con(cond, (ins brtarget32:$imm32)),
+               !strconcat(opcStr, ".nt ", cmpStr, "$imm32")>;
+  let bpf = 3 /* TaKEN */ in
+  def _t : CF<opc, (outs), !con(cond, (ins brtarget32:$imm32)),
+              !strconcat(opcStr, ".t ", cmpStr, "$imm32")>;
+}
+multiclass BCRm<string opcStr, string opcStrAt, string opcStrAf, bits<8> opc,
+               RegisterClass RC, Operand immOp> {
+  defm rr : BCRbpfm<opcStr, "$sy, $sz, ", opc, (ins CCOp:$cf, RC:$sy, RC:$sz)>;
+  let cy = 0 in
+  defm ir : BCRbpfm<opcStr, "$sy, $sz, ", opc, (ins CCOp:$cf, immOp:$sy, RC:$sz)>;
+  let cy = 0, sy = 0, cz = 0, sz = 0, cf = 15 /* AT */, isBarrier = 1 in
+  defm a : BCRbpfm<opcStrAt, "", opc, (ins)>;
+  let cy = 0, sy = 0, cz = 0, sz = 0, cf = 0 /* AF */ in
+  defm na : BCRbpfm<opcStrAf, "", opc, (ins)>;
+}
+
+// Multiclass for communication register instructions.
+//   e.g. LCR
+let hasSideEffects = 1 in
+multiclass LOADCRm<string opcStr, bits<8>opc, RegisterClass RC> {
+  def rr : RR<opc, (outs RC:$sx), (ins RC:$sz, RC:$sy),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0 in def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, simm7:$sy),
+                            !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cz = 0 in def zr : RR<opc, (outs RC:$sx), (ins zero:$sz, RC:$sy),
+                            !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0, cz = 0 in
+  def zi : RR<opc, (outs RC:$sx), (ins zero:$sz, simm7:$sy),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+}
+
+// Multiclass for communication register instructions.
+//   e.g. SCR
+let hasSideEffects = 1 in
+multiclass STORECRm<string opcStr, bits<8>opc, RegisterClass RC> {
+  def rr : RR<opc, (outs), (ins RC:$sz, RC:$sy, RC:$sx),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0 in def ri : RR<opc, (outs), (ins RC:$sz, simm7:$sy, RC:$sx),
+                            !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cz = 0 in def zr : RR<opc, (outs), (ins zero:$sz, RC:$sy, RC:$sx),
+                            !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0, cz = 0 in
+  def zi : RR<opc, (outs), (ins zero:$sz, simm7:$sy, RC:$sx),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+}
+
+// Multiclass for communication register instructions.
+//   e.g. FIDCR
+let cz = 0, hasSideEffects = 1 in
+multiclass FIDCRm<string opcStr, bits<8>opc, RegisterClass RC> {
+  def ri : RR<opc, (outs RC:$dest), (ins RC:$src, uimm3:$rz),
+              !strconcat(opcStr, " $dest, $src, $rz")> {
+    bits<3> rz;
+    let sz{5-3} = 0;
+    let sz{2-0} = rz;
+  }
+  let cy = 0 in def ii : RR<opc, (outs RC:$dest), (ins simm7:$src, uimm3:$rz),
+                            !strconcat(opcStr, " $dest, $src, $rz")> {
+    bits<3> rz;
+    let sz{5-3} = 0;
+    let sz{2-0} = rz;
+  }
+}
+
+// Multiclass for LHM instruction.
+let mayLoad = 1, hasSideEffects = 0 in
+multiclass LHMm<string opcStr, bits<8> opc, RegisterClass RC> {
+  def ri : RRMHM<opc, (outs RC:$dest), (ins MEMriHM:$addr),
+                 !strconcat(opcStr, " $dest, $addr")>;
+  let cz = 0 in
+  def zi : RRMHM<opc, (outs RC:$dest), (ins MEMziHM:$addr),
+                 !strconcat(opcStr, " $dest, $addr")>;
+}
+
+// Multiclass for SHM instruction.
+let mayStore = 1, hasSideEffects = 0 in
+multiclass SHMm<string opcStr, bits<8> opc, RegisterClass RC> {
+  def ri : RRMHM<opc, (outs), (ins MEMriHM:$addr, RC:$sx),
+                 !strconcat(opcStr, " $sx, $addr")>;
+  let cz = 0 in
+  def zi : RRMHM<opc, (outs), (ins MEMziHM:$addr, RC:$sx),
+                 !strconcat(opcStr, " $sx, $addr")>;
+}
 
 //===----------------------------------------------------------------------===//
 // Instructions
@@ -927,39 +1165,9 @@ let cx = 1, DecoderMethod = "DecodeLoadI32" in
 defm DLDLZX : LOADm<"dldl.zx", 0x0b, I32, i32, load>;
 
 // Section 8.2.15 - PFCH
-let sx = 0, hasSideEffects = 0 in
-multiclass PFCHm<string opcStr, bits<8>opc> {
-  def rri : RM<opc, (outs), (ins MEMrri:$addr), !strconcat(opcStr, " $addr"),
-               [(prefetch ADDRrri:$addr, imm, imm, (i32 1))]>;
-  let cy = 0 in
-  def rii : RM<opc, (outs), (ins MEMrii:$addr), !strconcat(opcStr, " $addr"),
-               [(prefetch ADDRrii:$addr, imm, imm, (i32 1))]>;
-  let cz = 0 in
-  def zri : RM<opc, (outs), (ins MEMzri:$addr), !strconcat(opcStr, " $addr"),
-               [(prefetch ADDRzri:$addr, imm, imm, (i32 1))]>;
-  let cy = 0, cz = 0 in
-  def zii : RM<opc, (outs), (ins MEMzii:$addr), !strconcat(opcStr, " $addr"),
-               [(prefetch ADDRzii:$addr, imm, imm, (i32 1))]>;
-}
 let DecoderMethod = "DecodeASX" in defm PFCH : PFCHm<"pfch", 0x0c>;
 
 // Section 8.2.16 - TS1AM (Test and Set 1 AM)
-
-let Constraints = "$dest = $sd", DisableEncoding = "$sd",
-    mayStore=1, mayLoad = 1, hasSideEffects = 0 in
-multiclass RRCAStgm<string opcStr, bits<8>opc, RegisterClass RC, Operand immOp,
-                    Operand ADDR> {
-  def r : RRM<opc, (outs RC:$dest), (ins ADDR:$addr, RC:$sy, RC:$sd),
-                !strconcat(opcStr, " $dest, $addr, $sy")>;
-  let cy = 0 in
-  def i : RRM<opc, (outs RC:$dest), (ins ADDR:$addr, immOp:$sy, RC:$sd),
-                  !strconcat(opcStr, " $dest, $addr, $sy")>;
-}
-multiclass RRCASm<string opcStr, bits<8>opc, RegisterClass RC, Operand immOp> {
-  defm ri : RRCAStgm<opcStr, opc, RC, immOp, MEMriRRM>;
-  let cz = 0 in defm zi : RRCAStgm<opcStr, opc, RC, immOp, MEMziRRM>;
-}
-
 let cx = 0 in
 defm TS1AML : RRCASm<"ts1am.l", 0x42, I64, uimm7>;
 let cx = 1 in
@@ -1040,7 +1248,7 @@ let cx = 1 in defm MULSWZX : RRm<"muls.w.zx", 0x4B, I32, i32>;
 defm MULSL : RRm<"muls.l", 0x6E, I64, i64, mul>;
 
 // Section 8.4.10 - MPD (Multiply)
-defm MULSLW : RRTYm<"muls.l.w", 0x6B, I64, i64, I32, i32>;
+defm MULSLW : RRbm<"muls.l.w", 0x6B, I64, i64, I32, i32>;
 
 // Section 8.4.11 - DIV (Divide)
 defm DIVUL : RRNCm<"divu.l", 0x6F, I64, i64, udiv>;
@@ -1101,64 +1309,18 @@ defm NND : RRm<"nnd", 0x54, I64, i64>;
 defm MRG : RRm<"mrg", 0x56, I64, i64>;
 
 // Section 8.5.7 - LDZ (Leading Zero Count)
-let cy = 0, sy = 0, hasSideEffects = 0 in
-multiclass RRI2m<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
-                 SDPatternOperator OpNode = null_frag> {
-  def r : RR<opc, (outs RC:$sx), (ins RC:$sz), !strconcat(opcStr, " $sx, $sz"),
-             [(set Ty:$sx, (OpNode Ty:$sz))]>;
-  let cz = 0 in
-  def m : RR<opc, (outs RC:$sx), (ins mimm:$sz),
-             !strconcat(opcStr, " $sx, $sz"),
-             [(set Ty:$sx, (OpNode (Ty mimm:$sz)))]>;
-}
-defm LDZ : RRI2m<"ldz", 0x67, I64, i64, ctlz>;
+defm LDZ : RRI1m<"ldz", 0x67, I64, i64, ctlz>;
 
 // Section 8.5.8 - PCNT (Population Count)
-defm PCNT : RRI2m<"pcnt", 0x38, I64, i64, ctpop>;
+defm PCNT : RRI1m<"pcnt", 0x38, I64, i64, ctpop>;
 
 // Section 8.5.9 - BRV (Bit Reverse)
-defm BRV : RRI2m<"brv", 0x39, I64, i64, bitreverse>;
+defm BRV : RRI1m<"brv", 0x39, I64, i64, bitreverse>;
 
 // Section 8.5.10 - BSWP (Byte Swap)
-
-// Multiclass for RR type instructions
-//   Used by BSWP
-let hasSideEffects = 0 in
-multiclass RRSWPm<string opcStr, bits<8>opc,
-                  RegisterClass RC, ValueType Ty,
-                  SDPatternOperator OpNode = null_frag> {
-  let cy = 0 in
-  def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, uimm1:$sy),
-              !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set Ty:$sx, (OpNode Ty:$sz, (i32 uimm1:$sy)))]>;
-  let cy = 0, cz = 0 in
-  def mi : RR<opc, (outs RC:$sx), (ins mimm:$sz, uimm1:$sy),
-              !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set Ty:$sx, (OpNode (Ty mimm:$sz), (i32 uimm1:$sy)))]>;
-}
-
 defm BSWP : RRSWPm<"bswp", 0x2B, I64, i64>;
 
 // Section 8.5.11 - CMOV (Conditional Move)
-let Constraints = "$sx = $sd", DisableEncoding = "$sd", hasSideEffects = 0,
-    cfw = ? in
-multiclass RRCMOVm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty> {
-  def rr : RR<opc, (outs I64:$sx), (ins CCOp:$cfw, RC:$sy, I64:$sz, I64:$sd),
-              !strconcat(opcStr, " $sx, $sz, $sy")>;
-  let cy = 0 in
-  def ir : RR<opc, (outs I64:$sx),
-              (ins CCOp:$cfw, simm7:$sy, I64:$sz, I64:$sd),
-              !strconcat(opcStr, " $sx, $sz, $sy")>;
-  let cz = 0 in
-  def rm : RR<opc, (outs I64:$sx),
-              (ins CCOp:$cfw, RC:$sy, mimm:$sz, I64:$sd),
-              !strconcat(opcStr, " $sx, $sz, $sy")>;
-  let cy = 0, cz = 0 in
-  def im : RR<opc, (outs I64:$sx),
-              (ins CCOp:$cfw, simm7:$sy, mimm:$sz, I64:$sd),
-              !strconcat(opcStr, " $sx, $sz, $sy")>;
-}
-
 let cw = 0, cw2 = 0 in defm CMOVL : RRCMOVm<"cmov.l.${cfw}", 0x3B, I64, i64>;
 let cw = 1, cw2 = 0 in defm CMOVW : RRCMOVm<"cmov.w.${cfw}", 0x3B, I32, i32>;
 let cw = 0, cw2 = 1 in defm CMOVD : RRCMOVm<"cmov.d.${cfw}", 0x3B, I64, f64>;
@@ -1172,40 +1334,17 @@ def : MnemonicAlias<"cmov.s", "cmov.s.at">;
 // Section 8.6 - Shift Operation Instructions
 //-----------------------------------------------------------------------------
 
-// Multiclass for RR type instructions
-//   Used by sra, sla, sll, and similar instructions
-let hasSideEffects = 0 in
-multiclass RRIm<string opcStr, bits<8>opc,
-                RegisterClass RC, ValueType Ty,
-                SDPatternOperator OpNode = null_frag> {
-  def rr : RR<opc, (outs RC:$sx), (ins RC:$sz, I32:$sy),
-              !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set Ty:$sx, (OpNode Ty:$sz, i32:$sy))]>;
-  let cz = 0 in
-  def mr : RR<opc, (outs RC:$sx), (ins mimm:$sz, I32:$sy),
-              !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set Ty:$sx, (OpNode (Ty mimm:$sz), i32:$sy))]>;
-  let cy = 0 in
-  def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, uimm7:$sy),
-              !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set Ty:$sx, (OpNode Ty:$sz, (i32 uimm7:$sy)))]>;
-  let cy = 0, cz = 0 in
-  def mi : RR<opc, (outs RC:$sx), (ins mimm:$sz, uimm7:$sy),
-              !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set Ty:$sx, (OpNode (Ty mimm:$sz), (i32 uimm7:$sy)))]>;
-}
-
 // Section 8.6.1 - SLL (Shift Left Logical)
 defm SLL : RRIm<"sll", 0x65, I64, i64, shl>;
 
 // Section 8.6.2 - SLD (Shift Left Double)
-defm SLD : RRIm<"sld", 0x64, I64, i64>;
+defm SLD : RRIDm<"sld", 0x64, I64, i64>;
 
 // Section 8.6.3 - SRL (Shift Right Logical)
 defm SRL : RRIm<"srl", 0x75, I64, i64, srl>;
 
 // Section 8.6.4 - SRD (Shift Right Double)
-defm SRD : RRIm<"srd", 0x74, I64, i64>;
+defm SRD : RRIDm<"srd", 0x74, I64, i64>;
 
 // Section 8.6.5 - SLA (Shift Left Arithmetic)
 defm SLAWSX : RRIm<"sla.w.sx", 0x66, I32, i32, shl>;
@@ -1269,28 +1408,8 @@ defm FSUBQ : RRFm<"fsub.q", 0x7C, F128, f128, fsub>;
 defm FMULQ : RRFm<"fmul.q", 0x6D, F128, f128, fmul>;
 
 // Section 8.7.10 - FCQ (Floating Compare Quadruple)
-defm FCMPQ : RRFCQm<"fcmp.q", 0x7D, F128, f128>;
-
-// Multiclass for floating point conversion instructions.
-//   Used by CVS/CVD/FLT and others
-// sz{3-0} = rounding mode
-let cz = 0, hasSideEffects = 0 in
-multiclass CVTRDm<string opcStr, bits<8> opc, RegisterClass RCo, ValueType Tyo,
-                  RegisterClass RCi, ValueType Tyi> {
-  def r : RR<opc, (outs RCo:$sx), (ins RDOp:$rd, RCi:$sy),
-             !strconcat(opcStr, "${rd} $sx, $sy")> {
-    bits<4> rd;
-    let sz{5-4} = 0;
-    let sz{3-0} = rd;
-  }
-  let cy = 0 in
-  def i : RR<opc, (outs RCo:$sx), (ins RDOp:$rd, simm7:$sy),
-             !strconcat(opcStr, "${rd} $sx, $sy")> {
-    bits<4> rd;
-    let sz{5-4} = 0;
-    let sz{3-0} = rd;
-  }
-}
+defm FCMPQ : RRNCbm<"fcmp.q", 0x7D, I64, f64, F128, f128, null_frag, simm7fp,
+                    mimmfp>;
 
 // Section 8.7.11 - FIX (Convert to Fixed Point)
 // cx: double/float, cw: sx/zx, sz{0-3} = round
@@ -1308,18 +1427,6 @@ def : Pat<(i32 (fp_to_sint F32:$reg)), (CVTWSSXr RD_RZ, $reg)>;
 // Section 8.7.12 - FIXX (Convert to Fixed Point)
 defm CVTLD : CVTRDm<"cvt.l.d", 0x4F, I64, i64, I64, f64>;
 def : Pat<(i64 (fp_to_sint I64:$reg)), (CVTLDr RD_RZ, $reg)>;
-
-let cz = 0, sz = 0, hasSideEffects = 0 in
-multiclass CVTm<string opcStr, bits<8> opc, RegisterClass RCo, ValueType Tyo,
-                RegisterClass RCi, ValueType Tyi,
-                SDPatternOperator OpNode = null_frag> {
-  def r : RR<opc, (outs RCo:$sx), (ins RCi:$sy),
-             !strconcat(opcStr, " $sx, $sy"),
-             [(set Tyo:$sx, (OpNode Tyi:$sy))]>;
-  let cy = 0 in
-  def i : RR<opc, (outs RCo:$sx), (ins simm7:$sy),
-             !strconcat(opcStr, " $sx, $sy")>;
-}
 
 // Section 8.7.13 - FLT (Convert to Floating Point)
 defm CVTDW : CVTm<"cvt.d.w", 0x5E, I64, f64, I32, i32, sint_to_fp>;
@@ -1348,62 +1455,6 @@ defm CVTQS : CVTm<"cvt.q.s", 0x2D, F128, f128, F32, f32, fpextend>;
 //-----------------------------------------------------------------------------
 // Section 8.8 - Branch instructions
 //-----------------------------------------------------------------------------
-
-// Branch multiclass
-let isBranch = 1, isTerminator = 1, isIndirectBranch = 1, hasSideEffects = 0 in
-multiclass BCbpfm<string opcStr, string cmpStr, bits<8> opc, dag cond,
-                  Operand ADDR> {
-  let bpf = 0 /* NONE */ in
-  def "" : CF<opc, (outs), !con(cond, (ins ADDR:$addr)),
-              !strconcat(opcStr, " ", cmpStr, "$addr")>;
-  let bpf = 2 /* NOT TaKEN */ in
-  def _nt : CF<opc, (outs), !con(cond, (ins ADDR:$addr)),
-               !strconcat(opcStr, ".nt ", cmpStr, "$addr")>;
-  let bpf = 3 /* TaKEN */ in
-  def _t : CF<opc, (outs), !con(cond, (ins ADDR:$addr)),
-              !strconcat(opcStr, ".t ", cmpStr, "$addr")>;
-}
-multiclass BCtgm<string opcStr, string cmpStr, bits<8> opc, dag cond> {
-  defm ri : BCbpfm<opcStr, cmpStr, opc, cond, MEMriASX>;
-  let cz = 0 in defm zi : BCbpfm<opcStr, cmpStr, opc, cond, MEMziASX>;
-}
-multiclass BCm<string opcStr, string opcStrAt, string opcStrAf, bits<8> opc,
-               RegisterClass RC, Operand immOp> {
-  let DecoderMethod = "DecodeBranchCondition" in
-  defm r : BCtgm<opcStr, "$comp, ", opc, (ins CCOp:$cond, RC:$comp)>;
-  let DecoderMethod = "DecodeBranchCondition", cy = 0 in
-  defm i : BCtgm<opcStr, "$comp, ", opc, (ins CCOp:$cond, immOp:$comp)>;
-  let DecoderMethod = "DecodeBranchConditionAlways", cy = 0, sy = 0,
-      cf = 15 /* AT */, isBarrier = 1 in
-  defm a : BCtgm<opcStrAt, "", opc, (ins)>;
-  let DecoderMethod = "DecodeBranchConditionAlways", cy = 0, sy = 0,
-      cf = 0 /* AF */ in
-  defm na : BCtgm<opcStrAf, "", opc, (ins)>;
-}
-
-// Branch relative multiclass
-let isBranch = 1, isTerminator = 1, hasSideEffects = 0 in
-multiclass BCRbpfm<string opcStr, string cmpStr, bits<8> opc, dag cond> {
-  let bpf = 0 /* NONE */ in
-  def "" : CF<opc, (outs), !con(cond, (ins brtarget32:$imm32)),
-              !strconcat(opcStr, " ", cmpStr, "$imm32")>;
-  let bpf = 2 /* NOT TaKEN */ in
-  def _nt : CF<opc, (outs), !con(cond, (ins brtarget32:$imm32)),
-               !strconcat(opcStr, ".nt ", cmpStr, "$imm32")>;
-  let bpf = 3 /* TaKEN */ in
-  def _t : CF<opc, (outs), !con(cond, (ins brtarget32:$imm32)),
-              !strconcat(opcStr, ".t ", cmpStr, "$imm32")>;
-}
-multiclass BCRm<string opcStr, string opcStrAt, string opcStrAf, bits<8> opc,
-               RegisterClass RC, Operand immOp> {
-  defm rr : BCRbpfm<opcStr, "$sy, $sz, ", opc, (ins CCOp:$cf, RC:$sy, RC:$sz)>;
-  let cy = 0 in
-  defm ir : BCRbpfm<opcStr, "$sy, $sz, ", opc, (ins CCOp:$cf, immOp:$sy, RC:$sz)>;
-  let cy = 0, sy = 0, cz = 0, sz = 0, cf = 15 /* AT */, isBarrier = 1 in
-  defm a : BCRbpfm<opcStrAt, "", opc, (ins)>;
-  let cy = 0, sy = 0, cz = 0, sz = 0, cf = 0 /* AF */ in
-  defm na : BCRbpfm<opcStrAf, "", opc, (ins)>;
-}
 
 // Section 8.8.1 - BC (Branch on Codition)
 defm BCFL : BCm<"b${cond}.l", "b.l", "baf.l", 0x19, I64, simm7>;
@@ -1495,70 +1546,20 @@ let sx = 0, cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 1 in {
 }
 
 // Section 8.19.9 - LCR (Load Communication Register)
-let hasSideEffects = 1 in
-multiclass LOADCRm<string opcStr, bits<8>opc, RegisterClass RC> {
-  def rr : RR<opc, (outs RC:$sx), (ins RC:$sz, RC:$sy),
-              !strconcat(opcStr, " $sx, $sy, $sz")>;
-  let cy = 0 in def ri : RR<opc, (outs RC:$sx), (ins RC:$sz, simm7:$sy),
-                            !strconcat(opcStr, " $sx, $sy, $sz")>;
-  let cz = 0 in def zr : RR<opc, (outs RC:$sx), (ins zero:$sz, RC:$sy),
-                            !strconcat(opcStr, " $sx, $sy, $sz")>;
-  let cy = 0, cz = 0 in
-  def zi : RR<opc, (outs RC:$sx), (ins zero:$sz, simm7:$sy),
-              !strconcat(opcStr, " $sx, $sy, $sz")>;
-}
 defm LCR : LOADCRm<"lcr", 0x40, I64>;
 
 // Section 8.19.10 - SCR (Save Communication Register)
-let hasSideEffects = 1 in
-multiclass STORECRm<string opcStr, bits<8>opc, RegisterClass RC> {
-  def rr : RR<opc, (outs), (ins RC:$sz, RC:$sy, RC:$sx),
-              !strconcat(opcStr, " $sx, $sy, $sz")>;
-  let cy = 0 in def ri : RR<opc, (outs), (ins RC:$sz, simm7:$sy, RC:$sx),
-                            !strconcat(opcStr, " $sx, $sy, $sz")>;
-  let cz = 0 in def zr : RR<opc, (outs), (ins zero:$sz, RC:$sy, RC:$sx),
-                            !strconcat(opcStr, " $sx, $sy, $sz")>;
-  let cy = 0, cz = 0 in
-  def zi : RR<opc, (outs), (ins zero:$sz, simm7:$sy, RC:$sx),
-              !strconcat(opcStr, " $sx, $sy, $sz")>;
-}
 defm SCR : STORECRm<"scr", 0x50, I64>;
 
 // Section 8.19.11 - TSCR (Test & Set Communication Register)
 defm TSCR : LOADCRm<"tscr", 0x41, I64>;
 
 // Section 8.19.12 - FIDCR (Fetch & Increment/Decrement CR)
-let cz = 0, hasSideEffects = 1 in
-multiclass FIDCRm<string opcStr, bits<8>opc, RegisterClass RC> {
-  def ri : RR<opc, (outs RC:$dest), (ins RC:$src, uimm3:$rz),
-              !strconcat(opcStr, " $dest, $src, $rz")> {
-    bits<3> rz;
-    let sz{5-3} = 0;
-    let sz{2-0} = rz;
-  }
-  let cy = 0 in def ii : RR<opc, (outs RC:$dest), (ins simm7:$src, uimm3:$rz),
-                            !strconcat(opcStr, " $dest, $src, $rz")> {
-    bits<3> rz;
-    let sz{5-3} = 0;
-    let sz{2-0} = rz;
-  }
-}
-
 defm FIDCR : FIDCRm<"fidcr", 0x51, I64>;
 
 //-----------------------------------------------------------------------------
 // Section 8.20 - Host Memory Access Instructions
 //-----------------------------------------------------------------------------
-
-// Multiclass for LHM instruction.
-let mayLoad = 1, hasSideEffects = 0 in
-multiclass LHMm<string opcStr, bits<8> opc, RegisterClass RC> {
-  def ri : RRMHM<opc, (outs RC:$dest), (ins MEMriHM:$addr),
-                 !strconcat(opcStr, " $dest, $addr")>;
-  let cz = 0 in
-  def zi : RRMHM<opc, (outs RC:$dest), (ins MEMziHM:$addr),
-                 !strconcat(opcStr, " $dest, $addr")>;
-}
 
 // Section 8.20.1 - LHM (Load Host Memory)
 let ry = 3, DecoderMethod = "DecodeLoadASI64" in
@@ -1569,16 +1570,6 @@ let ry = 1, DecoderMethod = "DecodeLoadASI64" in
 defm LHMH : LHMm<"lhm.h", 0x21, I64>;
 let ry = 0, DecoderMethod = "DecodeLoadASI64" in
 defm LHMB : LHMm<"lhm.b", 0x21, I64>;
-
-// Multiclass for SHM instruction.
-let mayStore = 1, hasSideEffects = 0 in
-multiclass SHMm<string opcStr, bits<8> opc, RegisterClass RC> {
-  def ri : RRMHM<opc, (outs), (ins MEMriHM:$addr, RC:$sx),
-                 !strconcat(opcStr, " $sx, $addr")>;
-  let cz = 0 in
-  def zi : RRMHM<opc, (outs), (ins MEMziHM:$addr, RC:$sx),
-                 !strconcat(opcStr, " $sx, $addr")>;
-}
 
 // Section 8.20.2 - SHM (Store Host Memory)
 let ry = 3, DecoderMethod = "DecodeStoreASI64" in
