@@ -265,6 +265,24 @@ Right now, the following primitive constraints are supported:
 
 TODO: Design and implement more primitive constraints
 
+### Operation regions
+
+The regions of an operation are specified inside of the `dag`-typed `regions`,
+led by `region`:
+
+```tablegen
+let regions = (region
+  <region-constraint>:$<region-name>,
+  ...
+);
+```
+
+#### Variadic regions
+
+Similar to the `Variadic` class used for variadic operands and results,
+`VariadicRegion<...>` can be used for regions. Variadic regions can currently
+only be specified as the last region in the regions list.
+
 ### Operation results
 
 Similar to operands, results are specified inside the `dag`-typed `results`, led
@@ -710,7 +728,7 @@ to:
    -  Note that `attr-dict` does not overlap with individual attributes. These
       attributes will simply be elided when printing the attribute dictionary.
 
-##### Type Inferrence
+##### Type Inference
 
 One requirement of the format is that the types of operands and results must
 always be present. In certain instances, the type of a variable may be deduced

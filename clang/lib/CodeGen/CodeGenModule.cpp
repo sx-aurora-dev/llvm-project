@@ -713,6 +713,19 @@ llvm::MDNode *CodeGenModule::getTBAATypeInfo(QualType QTy) {
 TBAAAccessInfo CodeGenModule::getTBAAAccessInfo(QualType AccessType) {
   if (!TBAA)
     return TBAAAccessInfo();
+  if (getLangOpts().CUDAIsDevice) {
+    // As CUDA builtin surface/texture types are replaced, skip generating TBAA
+    // access info.
+    if (AccessType->isCUDADeviceBuiltinSurfaceType()) {
+      if (getTargetCodeGenInfo().getCUDADeviceBuiltinSurfaceDeviceType() !=
+          nullptr)
+        return TBAAAccessInfo();
+    } else if (AccessType->isCUDADeviceBuiltinTextureType()) {
+      if (getTargetCodeGenInfo().getCUDADeviceBuiltinTextureDeviceType() !=
+          nullptr)
+        return TBAAAccessInfo();
+    }
+  }
   return TBAA->getAccessInfo(AccessType);
 }
 
@@ -2507,7 +2520,9 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
           !Global->hasAttr<CUDAGlobalAttr>() &&
           !Global->hasAttr<CUDAConstantAttr>() &&
           !Global->hasAttr<CUDASharedAttr>() &&
-          !(LangOpts.HIP && Global->hasAttr<HIPPinnedShadowAttr>()))
+          !(LangOpts.HIP && Global->hasAttr<HIPPinnedShadowAttr>()) &&
+          !Global->getType()->isCUDADeviceBuiltinSurfaceType() &&
+          !Global->getType()->isCUDADeviceBuiltinTextureType())
         return;
     } else {
       // We need to emit host-side 'shadows' for all global
@@ -2599,11 +2614,6 @@ void CodeGenModule::EmitGlobal(GlobalDecl GD) {
     EmitGlobalDefinition(GD);
     return;
   }
-
-    // Check if this must be emitted as declare variant.
-  if (LangOpts.OpenMP && isa<FunctionDecl>(Global) && OpenMPRuntime &&
-      OpenMPRuntime->emitDeclareVariant(GD, /*IsForDefinition=*/false))
-    return;
 
   // If we're deferring emission of a C++ variable with an
   // initializer, remember the order in which it appeared in the file.
@@ -2808,50 +2818,6 @@ void CodeGenModule::EmitMultiVersionFunctionDefinition(GlobalDecl GD,
     // Requires multiple emits.
   } else
     EmitGlobalFunctionDefinition(GD, GV);
-}
-
-void CodeGenModule::emitOpenMPDeviceFunctionRedefinition(
-    GlobalDecl OldGD, GlobalDecl NewGD, llvm::GlobalValue *GV) {
-  assert(getLangOpts().OpenMP && getLangOpts().OpenMPIsDevice &&
-         OpenMPRuntime && "Expected OpenMP device mode.");
-  const auto *D = cast<FunctionDecl>(OldGD.getDecl());
-
-  // Compute the function info and LLVM type.
-  const CGFunctionInfo &FI = getTypes().arrangeGlobalDeclaration(OldGD);
-  llvm::FunctionType *Ty = getTypes().GetFunctionType(FI);
-
-  // Get or create the prototype for the function.
-  if (!GV || (GV->getType()->getElementType() != Ty)) {
-    GV = cast<llvm::GlobalValue>(GetOrCreateLLVMFunction(
-        getMangledName(OldGD), Ty, GlobalDecl(), /*ForVTable=*/false,
-        /*DontDefer=*/true, /*IsThunk=*/false, llvm::AttributeList(),
-        ForDefinition));
-    SetFunctionAttributes(OldGD, cast<llvm::Function>(GV),
-                          /*IsIncompleteFunction=*/false,
-                          /*IsThunk=*/false);
-  }
-  // We need to set linkage and visibility on the function before
-  // generating code for it because various parts of IR generation
-  // want to propagate this information down (e.g. to local static
-  // declarations).
-  auto *Fn = cast<llvm::Function>(GV);
-  setFunctionLinkage(OldGD, Fn);
-
-  // FIXME: this is redundant with part of
-  // setFunctionDefinitionAttributes
-  setGVProperties(Fn, OldGD);
-
-  MaybeHandleStaticInExternC(D, Fn);
-
-  maybeSetTrivialComdat(*D, *Fn);
-
-  CodeGenFunction(*this).GenerateCode(NewGD, Fn, FI);
-
-  setNonAliasAttributes(OldGD, Fn);
-  SetLLVMFunctionAttributesForDefinition(D, Fn);
-
-  if (D->hasAttr<AnnotateAttr>())
-    AddGlobalAnnotations(D, Fn);
 }
 
 void CodeGenModule::EmitGlobalDefinition(GlobalDecl GD, llvm::GlobalValue *GV) {
@@ -3168,10 +3134,6 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
         EmitGlobal(GDDef);
       }
     }
-    // Check if this must be emitted as declare variant and emit reference to
-    // the the declare variant function.
-    if (LangOpts.OpenMP && OpenMPRuntime)
-      (void)OpenMPRuntime->emitDeclareVariant(GD, /*IsForDefinition=*/true);
 
     if (FD->isMultiVersion()) {
       if (FD->hasAttr<TargetAttr>())
@@ -3214,7 +3176,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
     }
 
     if ((isa<llvm::Function>(Entry) || isa<llvm::GlobalAlias>(Entry)) &&
-        (Entry->getType()->getElementType() == Ty)) {
+        (Entry->getValueType() == Ty)) {
       return Entry;
     }
 
@@ -3263,7 +3225,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
     }
 
     llvm::Constant *BC = llvm::ConstantExpr::getBitCast(
-        F, Entry->getType()->getElementType()->getPointerTo());
+        F, Entry->getValueType()->getPointerTo());
     addGlobalValReplacement(Entry, BC);
   }
 
@@ -3322,7 +3284,7 @@ llvm::Constant *CodeGenModule::GetOrCreateLLVMFunction(
 
   // Make sure the result is of the requested type.
   if (!IsIncompleteFunction) {
-    assert(F->getType()->getElementType() == Ty);
+    assert(F->getFunctionType() == Ty);
     return F;
   }
 
@@ -3613,7 +3575,7 @@ CodeGenModule::GetOrCreateLLVMGlobal(StringRef MangledName,
           llvm::Constant *Init = emitter.tryEmitForInitializer(*InitDecl);
           if (Init) {
             auto *InitType = Init->getType();
-            if (GV->getType()->getElementType() != InitType) {
+            if (GV->getValueType() != InitType) {
               // The type of the initializer does not match the definition.
               // This happens when an initializer has a different type from
               // the type of the global (because of padding at the end of a
@@ -3686,7 +3648,7 @@ llvm::GlobalVariable *CodeGenModule::CreateOrReplaceCXXRuntimeVariable(
 
   if (GV) {
     // Check if the variable has the right type.
-    if (GV->getType()->getElementType() == Ty)
+    if (GV->getValueType() == Ty)
       return GV;
 
     // Because C++ name mangling, the only way we can end up with an already
@@ -3960,12 +3922,16 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
       !getLangOpts().CUDAIsDevice &&
       (D->hasAttr<CUDAConstantAttr>() || D->hasAttr<CUDADeviceAttr>() ||
        D->hasAttr<CUDASharedAttr>());
+  bool IsCUDADeviceShadowVar =
+      getLangOpts().CUDAIsDevice &&
+      (D->getType()->isCUDADeviceBuiltinSurfaceType() ||
+       D->getType()->isCUDADeviceBuiltinTextureType());
   // HIP pinned shadow of initialized host-side global variables are also
   // left undefined.
   bool IsHIPPinnedShadowVar =
       getLangOpts().CUDAIsDevice && D->hasAttr<HIPPinnedShadowAttr>();
-  if (getLangOpts().CUDA &&
-      (IsCUDASharedVar || IsCUDAShadowVar || IsHIPPinnedShadowVar))
+  if (getLangOpts().CUDA && (IsCUDASharedVar || IsCUDAShadowVar ||
+                             IsCUDADeviceShadowVar || IsHIPPinnedShadowVar))
     Init = llvm::UndefValue::get(getTypes().ConvertType(ASTTy));
   else if (D->hasAttr<LoaderUninitializedAttr>())
     Init = llvm::UndefValue::get(getTypes().ConvertType(ASTTy));
@@ -4026,7 +3992,7 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
   // "extern int x[];") and then a definition of a different type (e.g.
   // "int x[10];"). This also happens when an initializer has a different type
   // from the type of the global (this happens with unions).
-  if (!GV || GV->getType()->getElementType() != InitType ||
+  if (!GV || GV->getValueType() != InitType ||
       GV->getType()->getAddressSpace() !=
           getContext().getTargetAddressSpace(GetGlobalVarAddressSpace(D))) {
 
@@ -4076,25 +4042,48 @@ void CodeGenModule::EmitGlobalVarDefinition(const VarDecl *D,
       if (D->hasAttr<CUDADeviceAttr>() || D->hasAttr<CUDAConstantAttr>() ||
           D->hasAttr<HIPPinnedShadowAttr>()) {
         Linkage = llvm::GlobalValue::InternalLinkage;
-
-        // Shadow variables and their properties must be registered
-        // with CUDA runtime.
-        unsigned Flags = 0;
-        if (!D->hasDefinition())
-          Flags |= CGCUDARuntime::ExternDeviceVar;
-        if (D->hasAttr<CUDAConstantAttr>())
-          Flags |= CGCUDARuntime::ConstantDeviceVar;
-        // Extern global variables will be registered in the TU where they are
-        // defined.
+        // Shadow variables and their properties must be registered with CUDA
+        // runtime. Skip Extern global variables, which will be registered in
+        // the TU where they are defined.
         if (!D->hasExternalStorage())
-          getCUDARuntime().registerDeviceVar(D, *GV, Flags);
-      } else if (D->hasAttr<CUDASharedAttr>())
+          getCUDARuntime().registerDeviceVar(D, *GV, !D->hasDefinition(),
+                                             D->hasAttr<CUDAConstantAttr>());
+      } else if (D->hasAttr<CUDASharedAttr>()) {
         // __shared__ variables are odd. Shadows do get created, but
         // they are not registered with the CUDA runtime, so they
         // can't really be used to access their device-side
         // counterparts. It's not clear yet whether it's nvcc's bug or
         // a feature, but we've got to do the same for compatibility.
         Linkage = llvm::GlobalValue::InternalLinkage;
+      } else if (D->getType()->isCUDADeviceBuiltinSurfaceType() ||
+                 D->getType()->isCUDADeviceBuiltinTextureType()) {
+        // Builtin surfaces and textures and their template arguments are
+        // also registered with CUDA runtime.
+        Linkage = llvm::GlobalValue::InternalLinkage;
+        const ClassTemplateSpecializationDecl *TD =
+            cast<ClassTemplateSpecializationDecl>(
+                D->getType()->getAs<RecordType>()->getDecl());
+        const TemplateArgumentList &Args = TD->getTemplateArgs();
+        if (TD->hasAttr<CUDADeviceBuiltinSurfaceTypeAttr>()) {
+          assert(Args.size() == 2 &&
+                 "Unexpected number of template arguments of CUDA device "
+                 "builtin surface type.");
+          auto SurfType = Args[1].getAsIntegral();
+          if (!D->hasExternalStorage())
+            getCUDARuntime().registerDeviceSurf(D, *GV, !D->hasDefinition(),
+                                                SurfType.getSExtValue());
+        } else {
+          assert(Args.size() == 3 &&
+                 "Unexpected number of template arguments of CUDA device "
+                 "builtin texture type.");
+          auto TexType = Args[1].getAsIntegral();
+          auto Normalized = Args[2].getAsIntegral();
+          if (!D->hasExternalStorage())
+            getCUDARuntime().registerDeviceTex(D, *GV, !D->hasDefinition(),
+                                               TexType.getSExtValue(),
+                                               Normalized.getZExtValue());
+        }
+      }
     }
   }
 
@@ -4476,11 +4465,6 @@ void CodeGenModule::HandleCXXStaticMemberVarInstantiation(VarDecl *VD) {
 
 void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
                                                  llvm::GlobalValue *GV) {
-  // Check if this must be emitted as declare variant.
-  if (LangOpts.OpenMP && OpenMPRuntime &&
-      OpenMPRuntime->emitDeclareVariant(GD, /*IsForDefinition=*/true))
-    return;
-
   const auto *D = cast<FunctionDecl>(GD.getDecl());
 
   // Compute the function info and LLVM type.
@@ -4488,7 +4472,7 @@ void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
   llvm::FunctionType *Ty = getTypes().GetFunctionType(FI);
 
   // Get or create the prototype for the function.
-  if (!GV || (GV->getType()->getElementType() != Ty))
+  if (!GV || (GV->getValueType() != Ty))
     GV = cast<llvm::GlobalValue>(GetAddrOfFunction(GD, Ty, /*ForVTable=*/false,
                                                    /*DontDefer=*/true,
                                                    ForDefinition));

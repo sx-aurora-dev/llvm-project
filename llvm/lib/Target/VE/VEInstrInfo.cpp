@@ -395,10 +395,10 @@ unsigned VEInstrInfo::isLoadFromStackSlot(const MachineInstr &MI,
       MI.getOpcode() == VE::LDVRrii ||          // V64 (pseudo)
       MI.getOpcode() == VE::LDVMrii ||          // VM (pseudo)
       MI.getOpcode() == VE::LDVM512rii          // VM512 (pseudo)
-      ) {
-    if (MI.getOperand(1).isFI() &&
-        MI.getOperand(2).isImm() && MI.getOperand(2).getImm() == 0 &&
-        MI.getOperand(3).isImm() && MI.getOperand(3).getImm() == 0) {
+  ) {
+    if (MI.getOperand(1).isFI() && MI.getOperand(2).isImm() &&
+        MI.getOperand(2).getImm() == 0 && MI.getOperand(3).isImm() &&
+        MI.getOperand(3).getImm() == 0) {
       FrameIndex = MI.getOperand(1).getIndex();
       return MI.getOperand(0).getReg();
     }
@@ -420,10 +420,10 @@ unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
       MI.getOpcode() == VE::STVRrii ||          // V64 (pseudo)
       MI.getOpcode() == VE::STVMrii ||          // VM (pseudo)
       MI.getOpcode() == VE::STVM512rii          // VM512 (pseudo)
-      ) {
-    if (MI.getOperand(0).isFI() &&
-        MI.getOperand(1).isImm() && MI.getOperand(1).getImm() == 0 &&
-        MI.getOperand(2).isImm() && MI.getOperand(2).getImm() == 0) {
+  ) {
+    if (MI.getOperand(0).isFI() && MI.getOperand(1).isImm() &&
+        MI.getOperand(1).getImm() == 0 && MI.getOperand(2).isImm() &&
+        MI.getOperand(2).getImm() == 0) {
       FrameIndex = MI.getOperand(0).getIndex();
       return MI.getOperand(3).getReg();
     }

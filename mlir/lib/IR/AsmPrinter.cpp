@@ -898,7 +898,7 @@ public:
     mlir::interleaveComma(c, os, each_fn);
   }
 
-  /// This enum descripes the different kinds of elision for the type of an
+  /// This enum describes the different kinds of elision for the type of an
   /// attribute when printing it.
   enum class AttrTypeElision {
     /// The type must not be elided,
@@ -1490,6 +1490,11 @@ void ModulePrinter::printDenseElementsAttr(DenseElementsAttr attr,
 }
 
 void ModulePrinter::printType(Type type) {
+  if (!type) {
+    os << "<<NULL TYPE>>";
+    return;
+  }
+
   // Check for an alias for this type.
   if (state) {
     StringRef alias = state->getAliasState().getTypeAlias(type);
@@ -2025,7 +2030,7 @@ public:
     state->getSSANameState().shadowRegionArgs(region, namesToUse);
   }
 
-  /// Print the given affine map with the smybol and dimension operands printed
+  /// Print the given affine map with the symbol and dimension operands printed
   /// inline with the map.
   void printAffineMapOfSSAIds(AffineMapAttr mapAttr,
                               ValueRange operands) override;
@@ -2284,8 +2289,8 @@ void IntegerSet::dump() const {
 }
 
 void AffineExpr::print(raw_ostream &os) const {
-  if (expr == nullptr) {
-    os << "null affine expr";
+  if (!expr) {
+    os << "<<NULL AFFINE EXPR>>";
     return;
   }
   ModulePrinter(os).printAffineExpr(*this);
@@ -2297,8 +2302,8 @@ void AffineExpr::dump() const {
 }
 
 void AffineMap::print(raw_ostream &os) const {
-  if (map == nullptr) {
-    os << "null affine map";
+  if (!map) {
+    os << "<<NULL AFFINE MAP>>";
     return;
   }
   ModulePrinter(os).printAffineMap(*this);
@@ -2339,23 +2344,23 @@ void Value::printAsOperand(raw_ostream &os, AsmState &state) {
 }
 
 void Operation::print(raw_ostream &os, OpPrintingFlags flags) {
-  // Handle top-level operations or local printing.
-  if (!getParent() || flags.shouldUseLocalScope()) {
-    AsmState state(this);
-    OperationPrinter(os, flags, state.getImpl()).print(this);
-    return;
-  }
+  // Find the operation to number from based upon the provided flags.
+  Operation *printedOp = this;
+  bool shouldUseLocalScope = flags.shouldUseLocalScope();
+  do {
+    // If we are printing local scope, stop at the first operation that is
+    // isolated from above.
+    if (shouldUseLocalScope && printedOp->isKnownIsolatedFromAbove())
+      break;
 
-  Operation *parentOp = getParentOp();
-  if (!parentOp) {
-    os << "<<UNLINKED OPERATION>>\n";
-    return;
-  }
-  // Get the top-level op.
-  while (auto *nextOp = parentOp->getParentOp())
-    parentOp = nextOp;
+    // Otherwise, traverse up to the next parent.
+    Operation *parentOp = printedOp->getParentOp();
+    if (!parentOp)
+      break;
+    printedOp = parentOp;
+  } while (true);
 
-  AsmState state(parentOp);
+  AsmState state(printedOp);
   print(os, state, flags);
 }
 void Operation::print(raw_ostream &os, AsmState &state, OpPrintingFlags flags) {
@@ -2393,10 +2398,6 @@ void Block::printAsOperand(raw_ostream &os, bool printType) {
     os << "<<UNLINKED BLOCK>>\n";
     return;
   }
-  // Get the top-level op.
-  while (auto *nextOp = parentOp->getParentOp())
-    parentOp = nextOp;
-
   AsmState state(parentOp);
   printAsOperand(os, state);
 }

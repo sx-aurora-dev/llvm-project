@@ -686,6 +686,12 @@ public:
     return &I;
   }
 
+  /// Replace use and add the previously used value to the worklist.
+  void replaceUse(Use &U, Value *NewValue) {
+    Worklist.addValue(U);
+    U = NewValue;
+  }
+
   /// Creates a result tuple for an overflow intrinsic \p II with a given
   /// \p Result and a constant \p Overflow value.
   Instruction *CreateOverflowTuple(IntrinsicInst *II, Value *Result,
@@ -718,11 +724,10 @@ public:
 
     // Make sure that we reprocess all operands now that we reduced their
     // use counts.
-    if (I.getNumOperands() < 8) {
-      for (Use &Operand : I.operands())
-        if (auto *Inst = dyn_cast<Instruction>(Operand))
-          Worklist.add(Inst);
-    }
+    for (Use &Operand : I.operands())
+      if (auto *Inst = dyn_cast<Instruction>(Operand))
+        Worklist.add(Inst);
+
     Worklist.remove(&I);
     I.eraseFromParent();
     MadeIRChange = true;

@@ -365,13 +365,13 @@ def fcond2ccSwap : SDNodeXForm<cond, [{
 //    MEMriRRM, MEMziRRM    : AS format in RRM format
 //    MEMriHM, MEMziHM      : AS format in RRM format for host memory access
 
-def ADDRrri : ComplexPattern<iPTR, 3, "SelectADDRrri", [frameindex], []>;
-def ADDRrii : ComplexPattern<iPTR, 3, "SelectADDRrii", [frameindex], []>;
-def ADDRzri : ComplexPattern<iPTR, 3, "SelectADDRzri", [], []>;
-def ADDRzii : ComplexPattern<iPTR, 3, "SelectADDRzii", [], []>;
+def ADDRrri : ComplexPattern<iPTR, 3, "selectADDRrri", [frameindex], []>;
+def ADDRrii : ComplexPattern<iPTR, 3, "selectADDRrii", [frameindex], []>;
+def ADDRzri : ComplexPattern<iPTR, 3, "selectADDRzri", [], []>;
+def ADDRzii : ComplexPattern<iPTR, 3, "selectADDRzii", [], []>;
 // AS format:
-def ADDRri : ComplexPattern<iPTR, 2, "SelectADDRri", [frameindex], []>;
-def ADDRzi : ComplexPattern<iPTR, 2, "SelectADDRzi", [], []>;
+def ADDRri : ComplexPattern<iPTR, 2, "selectADDRri", [frameindex], []>;
+def ADDRzi : ComplexPattern<iPTR, 2, "selectADDRzi", [], []>;
 //
 // ASX assembly instrcution format:
 def VEMEMrriAsmOperand : AsmOperandClass {
@@ -767,27 +767,22 @@ defm LEA32 : RMm<"lea", 0x06, I32>;
 def : Pat<(iPTR ADDRrri:$addr), (LEArri MEMrri:$addr)>;
 def : Pat<(iPTR ADDRrii:$addr), (LEArii MEMrii:$addr)>;
 def : Pat<(add I64:$base, simm32:$disp), (LEArii $base, 0, (LO32 $disp))>;
-def : Pat<(add (add I64:$base, simm7:$idx), simm32:$disp),
-          (LEArii $base, (LO7 $idx), (LO32 $disp))>;
-def : Pat<(add (add I64:$base, simm32:$disp), simm7:$idx),
-          (LEArii $base, (LO7 $idx), (LO32 $disp))>;
-def : Pat<(add (add I64:$base, I64:$idx), simm32:$disp),
-          (LEArri $base, $idx, (LO32 $disp))>;
-def : Pat<(add (add I64:$base, simm32:$disp), I64:$idx),
-          (LEArri $base, $idx, (LO32 $disp))>;
 def : Pat<(add I64:$base, lozero:$disp), (LEASLrii $base, 0, (HI32 $disp))>;
-def : Pat<(add (add I64:$base, simm7:$idx), lozero:$disp),
-          (LEASLrii $base, (LO7 $idx), (HI32 $disp))>;
-def : Pat<(add (add I64:$base, lozero:$disp), simm7:$idx),
-          (LEASLrii $base, (LO7 $idx), (HI32 $disp))>;
-def : Pat<(add (add I64:$base, I64:$idx), lozero:$disp),
-          (LEASLrri $base, $idx, (HI32 $disp))>;
-def : Pat<(add (add I64:$base, lozero:$disp), I64:$idx),
-          (LEASLrri $base, $idx, (HI32 $disp))>;
-
 def : Pat<(add I32:$base, simm32:$disp),
           (LEA32rii (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $base, sub_i32), 0,
                     (LO32 $disp))>;
+
+def lea_add : PatFrags<(ops node:$base, node:$idx, node:$disp),
+                       [(add (add node:$base, node:$idx), node:$disp),
+                        (add (add node:$base, node:$disp), node:$idx)]>;
+def : Pat<(lea_add I64:$base, simm7:$idx, simm32:$disp),
+          (LEArii $base, (LO7 $idx), (LO32 $disp))>;
+def : Pat<(lea_add I64:$base, I64:$idx, simm32:$disp),
+          (LEArri $base, $idx, (LO32 $disp))>;
+def : Pat<(lea_add I64:$base, simm7:$idx, lozero:$disp),
+          (LEASLrii $base, (LO7 $idx), (HI32 $disp))>;
+def : Pat<(lea_add I64:$base, I64:$idx, lozero:$disp),
+          (LEASLrri $base, $idx, (HI32 $disp))>;
 
 // Multiclass for load instructions.
 let mayLoad = 1, hasSideEffects = 0 in

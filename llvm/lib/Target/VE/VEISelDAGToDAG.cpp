@@ -45,12 +45,12 @@ public:
   void Select(SDNode *N) override;
 
   // Complex Pattern Selectors.
-  bool SelectADDRrri(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
-  bool SelectADDRrii(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
-  bool SelectADDRzri(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
-  bool SelectADDRzii(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
-  bool SelectADDRri(SDValue N, SDValue &Base, SDValue &Offset);
-  bool SelectADDRzi(SDValue N, SDValue &Base, SDValue &Offset);
+  bool selectADDRrri(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
+  bool selectADDRrii(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
+  bool selectADDRzri(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
+  bool selectADDRzii(SDValue N, SDValue &Base, SDValue &Index, SDValue &Offset);
+  bool selectADDRri(SDValue N, SDValue &Base, SDValue &Offset);
+  bool selectADDRzi(SDValue N, SDValue &Base, SDValue &Offset);
 
   /// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
   /// inline asm expressions.
@@ -253,7 +253,7 @@ bool VEDAGToDAGISel::tryInlineAsm(SDNode *N){
   return true;
 }
 
-bool VEDAGToDAGISel::SelectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
+bool VEDAGToDAGISel::selectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
                                    SDValue &Offset) {
   if (Addr.getOpcode() == ISD::FrameIndex)
     return false;
@@ -268,12 +268,15 @@ bool VEDAGToDAGISel::SelectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
       Offset = RHS;
       return true;
     }
+    // Return false to try selectADDRrii.
     return false;
-  } else if (matchADDRrr(Addr, LHS, RHS)) {
+  }
+  if (matchADDRrr(Addr, LHS, RHS)) {
     if (matchADDRri(RHS, Index, Offset)) {
       Base = LHS;
       return true;
-    } else if (matchADDRri(LHS, Base, Offset)) {
+    }
+    if (matchADDRri(LHS, Base, Offset)) {
       Index = RHS;
       return true;
     }
@@ -285,8 +288,7 @@ bool VEDAGToDAGISel::SelectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
   return false; // Let the reg+imm(=0) pattern catch this!
 }
 
-bool VEDAGToDAGISel::SelectADDRrii(SDValue Addr,
-                                   SDValue &Base, SDValue &Index,
+bool VEDAGToDAGISel::selectADDRrii(SDValue Addr, SDValue &Base, SDValue &Index,
                                    SDValue &Offset) {
   if (matchADDRri(Addr, Base, Offset)) {
     Index = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
@@ -299,15 +301,13 @@ bool VEDAGToDAGISel::SelectADDRrii(SDValue Addr,
   return true;
 }
 
-bool VEDAGToDAGISel::SelectADDRzri(SDValue Addr,
-                                   SDValue &Base, SDValue &Index,
+bool VEDAGToDAGISel::selectADDRzri(SDValue Addr, SDValue &Base, SDValue &Index,
                                    SDValue &Offset) {
-  // Prefer ADDRrii
+  // Prefer ADDRrii.
   return false;
 }
 
-bool VEDAGToDAGISel::SelectADDRzii(SDValue Addr,
-                                   SDValue &Base, SDValue &Index,
+bool VEDAGToDAGISel::selectADDRzii(SDValue Addr, SDValue &Base, SDValue &Index,
                                    SDValue &Offset) {
   if (dyn_cast<FrameIndexSDNode>(Addr)) {
     return false;
@@ -315,7 +315,7 @@ bool VEDAGToDAGISel::SelectADDRzii(SDValue Addr,
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
       Addr.getOpcode() == ISD::TargetGlobalAddress ||
       Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
-    return false;  // direct calls.
+    return false; // direct calls.
 
   if (ConstantSDNode *CN = cast<ConstantSDNode>(Addr)) {
     if (isInt<32>(CN->getSExtValue())) {
@@ -329,7 +329,7 @@ bool VEDAGToDAGISel::SelectADDRzii(SDValue Addr,
   return false;
 }
 
-bool VEDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
+bool VEDAGToDAGISel::selectADDRri(SDValue Addr, SDValue &Base,
                                   SDValue &Offset) {
   if (matchADDRri(Addr, Base, Offset))
     return true;
@@ -339,7 +339,7 @@ bool VEDAGToDAGISel::SelectADDRri(SDValue Addr, SDValue &Base,
   return true;
 }
 
-bool VEDAGToDAGISel::SelectADDRzi(SDValue Addr, SDValue &Base,
+bool VEDAGToDAGISel::selectADDRzi(SDValue Addr, SDValue &Base,
                                   SDValue &Offset) {
   if (dyn_cast<FrameIndexSDNode>(Addr)) {
     return false;
@@ -369,25 +369,23 @@ bool VEDAGToDAGISel::matchADDRrr(SDValue Addr, SDValue &Base, SDValue &Index) {
     return false; // direct calls.
 
   if (Addr.getOpcode() == ISD::ADD) {
-    if (Addr.getOperand(0).getOpcode() == VEISD::Lo ||
-        Addr.getOperand(1).getOpcode() == VEISD::Lo)
-      return false; // Let use LEASL
-    Base = Addr.getOperand(0);
-    Index = Addr.getOperand(1);
-    return true;
+    ; // Nothing to do here.
   } else if (Addr.getOpcode() == ISD::OR) {
-    if (Addr.getOperand(0).getOpcode() == VEISD::Lo ||
-        Addr.getOperand(1).getOpcode() == VEISD::Lo)
-      return false; // Let use LEASL
     // We want to look through a transform in InstCombine and DAGCombiner that
     // turns 'add' into 'or', so we can treat this 'or' exactly like an 'add'.
-    if (CurDAG->haveNoCommonBitsSet(Addr.getOperand(0), Addr.getOperand(1))) {
-      Base = Addr.getOperand(0);
-      Index = Addr.getOperand(1);
-      return true;
-    }
+    if (!CurDAG->haveNoCommonBitsSet(Addr.getOperand(0), Addr.getOperand(1)))
+      return false;
+  } else {
+    return false;
   }
-  return false;
+
+  if (Addr.getOperand(0).getOpcode() == VEISD::Lo ||
+      Addr.getOperand(1).getOpcode() == VEISD::Lo)
+    return false; // Let the LEASL patterns catch this!
+
+  Base = Addr.getOperand(0);
+  Index = Addr.getOperand(1);
+  return true;
 }
 
 bool VEDAGToDAGISel::matchADDRri(SDValue Addr, SDValue &Base, SDValue &Offset) {
@@ -490,9 +488,9 @@ VEDAGToDAGISel::SelectInlineAsmMemoryOperand(const SDValue &Op,
   case InlineAsm::Constraint_i:
   case InlineAsm::Constraint_o:
   case InlineAsm::Constraint_m: // memory
-    if (!SelectADDRrri(Op, Op0, Op1, Op2))
-      if (!SelectADDRrii(Op, Op0, Op1, Op2))
-        if (SelectADDRri(Op, Op0, Op1)) {
+    if (!selectADDRrri(Op, Op0, Op1, Op2))
+      if (!selectADDRrii(Op, Op0, Op1, Op2))
+        if (selectADDRri(Op, Op0, Op1)) {
           OutOps.push_back(Op0);
           OutOps.push_back(Op1);
           return false;
