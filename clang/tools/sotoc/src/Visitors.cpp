@@ -85,11 +85,13 @@ llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
 }
 
 bool FindTargetCodeVisitor::TraverseDecl(clang::Decl *D) {
-  if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
+  bool PushedDecl = false;
+  if (auto *FD = llvm::dyn_cast_or_null<clang::FunctionDecl>(D)) {
     LastVisitedFuncDecl.push(FD);
+    PushedDecl = true;
   }
   bool ret = clang::RecursiveASTVisitor<FindTargetCodeVisitor>::TraverseDecl(D);
-  if (auto *FD = llvm::dyn_cast<clang::FunctionDecl>(D)) {
+  if (PushedDecl) {
     LastVisitedFuncDecl.pop();
   }
   return ret;
@@ -134,9 +136,10 @@ bool FindTargetCodeVisitor::VisitStmt(clang::Stmt *S) {
 class CollectOMPClauseParamsVarsVisitor
     : public clang::RecursiveASTVisitor<CollectOMPClauseParamsVarsVisitor> {
   std::shared_ptr<TargetCodeRegion> TCR;
+
 public:
   CollectOMPClauseParamsVarsVisitor(std::shared_ptr<TargetCodeRegion> &TCR)
-    : TCR(TCR) {};
+      : TCR(TCR){};
 
   bool VisitStmt(clang::Stmt *S) {
     if (auto *DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
@@ -151,15 +154,16 @@ public:
 class CollectOMPClauseParamsVisitor
     : public clang::RecursiveASTVisitor<CollectOMPClauseParamsVisitor> {
 
-      CollectOMPClauseParamsVarsVisitor VarsVisitor;
+  CollectOMPClauseParamsVarsVisitor VarsVisitor;
   bool InExplicitCast;
+
 public:
   CollectOMPClauseParamsVisitor(std::shared_ptr<TargetCodeRegion> &TCR)
-    : VarsVisitor(TCR), InExplicitCast(false) {};
+      : VarsVisitor(TCR), InExplicitCast(false){};
   bool VisitStmt(clang::Stmt *S) {
     // This relies on the captured statement being the last child
     if (llvm::isa<clang::CapturedStmt>(S)) {
-        return false;
+      return false;
     }
 
     if (llvm::isa<clang::ImplicitCastExpr>(S)) {
@@ -197,7 +201,8 @@ bool FindTargetCodeVisitor::processTargetRegion(
       // if the target region cannot be added we dont want to parse its args
       if (TargetCodeInfo.addCodeFragment(TCR)) {
 
-        FindArraySectionVisitor(TCR->CapturedLowerBounds).TraverseStmt(TargetDirective);
+        FindArraySectionVisitor(TCR->CapturedLowerBounds)
+            .TraverseStmt(TargetDirective);
 
         for (auto C : TargetDirective->clauses()) {
           TCR->addOMPClause(C);
@@ -282,7 +287,6 @@ bool FindLoopStmtVisitor::VisitStmt(clang::Stmt *S) {
   }
   return true;
 }
-
 
 bool FindDeclRefExprVisitor::VisitStmt(clang::Stmt *S) {
   if (auto DRE = llvm::dyn_cast<clang::DeclRefExpr>(S)) {
@@ -407,7 +411,8 @@ bool FindPrivateVariablesVisitor::VisitExpr(clang::Expr *E) {
 
       // If the variable is declared outside of the target region it may be a
       // private variable
-      if (SM.isBeforeInTranslationUnit(VD->getLocation(), RegionTopSourceLocation)) {
+      if (SM.isBeforeInTranslationUnit(VD->getLocation(),
+                                       RegionTopSourceLocation)) {
         // Add the Variable to our set
         VarSet.insert(VD);
       }
