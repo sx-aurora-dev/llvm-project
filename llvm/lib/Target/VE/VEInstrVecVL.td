@@ -40,7 +40,7 @@ def lsv_vvIs : RV<0x8e, (outs V64:$vx), (ins V64:$vd, simm7Op32:$sy, I64:$sz),
 }
 
 // tempolary
-def vor_v1vl : RV<0xc5, (outs V64:$vx), (ins uimm6Op64:$sy, V64:$vz, I32:$vl),
+def vor_v1vl : RV<0xc5, (outs V64:$vx), (ins uimm6:$sy, V64:$vz, I32:$vl),
        "vor $vx,($sy)1,$vz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
