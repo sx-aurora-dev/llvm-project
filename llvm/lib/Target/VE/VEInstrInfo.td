@@ -461,14 +461,6 @@ def brtarget32 : Operand<OtherVT> {
 
 def TLSSym : Operand<iPTR>;
 
-def simm7Op32 : Operand<i32> {
-  let DecoderMethod = "DecodeSIMM7";
-}
-
-def simm7Op64 : Operand<i64> {
-  let DecoderMethod = "DecodeSIMM7";
-}
-
 // Operand for printing out a condition code.
 def CCOpAsmOperand : AsmOperandClass {
   let Name = "CCOp";

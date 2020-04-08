@@ -127,16 +127,20 @@ def : Pat<(v512f32 (load I64:$addr)),
 multiclass load_for_vector_length<int length> {
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i32")
               (load I64:$addr)),
-            (vldlsx_vIsl 4, $addr, (LEA32zii 0, 0, length))>;
+            (!cast<ValueType>("v" # !cast<string>(length) # "i32")
+              (vldlsx_vIsl 4, $addr, (LEA32zii 0, 0, length)))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f32")
               (load I64:$addr)),
-            (vldu_vIsl 4, $addr, (LEA32zii 0, 0, length))>;
+            (!cast<ValueType>("v" # !cast<string>(length) # "f32")
+              (vldu_vIsl 4, $addr, (LEA32zii 0, 0, length)))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f64")
               (load I64:$addr)),
-            (vld_vIsl 8, $addr, (LEA32zii 0, 0, length))>;
+            (!cast<ValueType>("v" # !cast<string>(length) # "f64")
+              (vld_vIsl 8, $addr, (LEA32zii 0, 0, length)))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
               (load I64:$addr)),
-            (vld_vIsl 8, $addr, (LEA32zii 0, 0, length))>;
+            (!cast<ValueType>("v" # !cast<string>(length) # "i64")
+              (vld_vIsl 8, $addr, (LEA32zii 0, 0, length)))>;
 }
 
 defm : load_for_vector_length<256>;
