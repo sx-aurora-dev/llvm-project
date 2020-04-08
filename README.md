@@ -52,5 +52,5 @@ llvm-ve with the region vectorizer or 'ncc', to use the NEC C Compiler at
 ### VEL Intrinsics for direct vector programming
 
 See [the manual](https://sx-aurora-dev.github.io/velintrin.html).  To use VEL
-intrinsics, pass the compiler option `-mattr=+velintrin`.  The resulting LLVM
-bitcode and objects are compatible with those compiler without this option.
+intrinsics, pass the clang option `-mvelintrin`.  The resulting LLVM bitcode
+and objects are compatible with those compiled without this option.
