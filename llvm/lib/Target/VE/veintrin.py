@@ -60,9 +60,15 @@ class Op(object):
     def ctype(self): return self.ty_.ctype
     def stride(self): return self.ty_.stride()
 
-    def dagOp(self):
+    def dagOpL(self):
         if self.kind == 'I' or self.kind == 'Z':
-            return "({} {}:${})".format(self.ty_.ValueType, self.immType, self.name_)
+            return "{}:${}".format(self.immType, self.name_)
+        else:
+            return "{}:${}".format(self.ty_.ValueType, self.name_)
+
+    def dagOpR(self):
+        if self.kind == 'I' or self.kind == 'Z':
+            return "(LO7 ${})".format(self.name_)
         else:
             return "{}:${}".format(self.ty_.ValueType, self.name_)
 
@@ -135,8 +141,8 @@ VMD512 = Op("M", T_v8u64, "vmd", "VM512") # pass through
 
 class ImmOp(Op):
     def __init__(self, kind, ty, name, immType):
-        regClass = {T_u32:"simm7Op32", T_i32:"simm7Op32", 
-                    T_u64:"simm7Op64", T_i64:"simm7Op64"}[ty]
+        regClass = {T_u32:"simm7", T_i32:"simm7", 
+                    T_u64:"simm7", T_i64:"simm7"}[ty]
         super(ImmOp, self).__init__(kind, ty, name, regClass)
         self.immType = immType
 
@@ -369,9 +375,10 @@ class InstVEL(Inst):
         self.llvmIntrinsicPrefix_ = "_ve_vl_" # we have to start from "_ve_" in LLVM
 
     def pattern(self):
-        args = ", ".join([op.dagOp() for op in self.ins])
-        l = "({} {})".format(self.llvmIntrinName(), args)
-        r = "({} {})".format(self.llvmInst(), args)
+        argsL = ", ".join([op.dagOpL() for op in self.ins])
+        argsR = ", ".join([op.dagOpR() for op in self.ins])
+        l = "({} {})".format(self.llvmIntrinName(), argsL)
+        r = "({} {})".format(self.llvmInst(), argsR)
         return "def : Pat<{}, {}>;".format(l, r)
 
 
