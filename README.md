@@ -9,8 +9,8 @@ You can start with the PRM package.
 
 ```
 % yum install \
-  https://sx-aurora.com/repos/veos/ef_extra/x86_64/llvm-ve-1.5.0-1.5.0-1.x86_64.rpm \
-  https://sx-aurora.com/repos/veos/ef_extra/x86_64/llvm-ve-link-1.5.0-1.x86_64.rpm
+  https://www.sx-aurora.com/repos/llvm/x86_64/llvm-ve-1.11.0-1.11.0-1.x86_64.rpm \
+  https://www.sx-aurora.com/repos/llvm/x86_64/llvm-ve-link-1.11.0-1.x86_64.rpm
 ```
 
 Then use clang like below.  Clang++ is also available.
