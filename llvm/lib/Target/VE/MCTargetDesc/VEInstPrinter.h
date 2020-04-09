@@ -59,8 +59,6 @@ public:
                         const MCSubtargetInfo &STI, raw_ostream &OS);
   void printCCOperand(const MCInst *MI, int OpNum, const MCSubtargetInfo &STI,
                       raw_ostream &OS);
-  void printCCOperandDot(const MCInst *MI, int OpNum,
-                         const MCSubtargetInfo &STI, raw_ostream &OS);
   void printRDOperand(const MCInst *MI, int OpNum, const MCSubtargetInfo &STI,
                       raw_ostream &OS);
   bool printGetGOT(const MCInst *MI, unsigned OpNo, const MCSubtargetInfo &STI,
