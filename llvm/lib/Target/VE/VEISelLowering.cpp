@@ -1327,8 +1327,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::MULHU,     MVT::i64, Expand);
     setOperationAction(ISD::MULHS,     MVT::i64, Expand);
 
-    setOperationAction(ISD::UMULO,     MVT::i64, Custom);
-    setOperationAction(ISD::SMULO,     MVT::i64, Custom);
+    setOperationAction(ISD::UMULO,     MVT::i64, Expand);
+    setOperationAction(ISD::SMULO,     MVT::i64, Expand);
   }
 
   // FIXME: temporary disabling Custom BITCAST since such BITCAST
@@ -2274,56 +2274,6 @@ static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG,
   return SDValue();
 }
 
-// Custom lower UMULO/SMULO for VE. This code is similar to ExpandNode()
-// in LegalizeDAG.cpp except the order of arguments to the library function.
-static SDValue LowerUMULO_SMULO(SDValue Op, SelectionDAG &DAG,
-                                const VETargetLowering &TLI)
-{
-  unsigned opcode = Op.getOpcode();
-  assert((opcode == ISD::UMULO || opcode == ISD::SMULO) && "Invalid Opcode.");
-
-  bool isSigned = (opcode == ISD::SMULO);
-  EVT VT = MVT::i64;
-  EVT WideVT = MVT::i128;
-  SDLoc dl(Op);
-  SDValue LHS = Op.getOperand(0);
-
-  if (LHS.getValueType() != VT)
-    return Op;
-
-  SDValue ShiftAmt = DAG.getConstant(63, dl, VT);
-
-  SDValue RHS = Op.getOperand(1);
-  SDValue HiLHS = DAG.getNode(ISD::SRA, dl, VT, LHS, ShiftAmt);
-  SDValue HiRHS = DAG.getNode(ISD::SRA, dl, MVT::i64, RHS, ShiftAmt);
-  SDValue Args[] = { LHS, HiLHS, RHS, HiRHS };
-
-  TargetLowering::MakeLibCallOptions CallOptions;
-  CallOptions.setSExt(isSigned);
-  SDValue MulResult = TLI.makeLibCall(DAG,
-                                      RTLIB::MUL_I128, WideVT,
-                                      Args, CallOptions, dl).first;
-  SDValue BottomHalf = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, VT,
-                                   MulResult, DAG.getIntPtrConstant(0, dl));
-  SDValue TopHalf = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, VT,
-                                MulResult, DAG.getIntPtrConstant(1, dl));
-  if (isSigned) {
-    SDValue Tmp1 = DAG.getNode(ISD::SRA, dl, VT, BottomHalf, ShiftAmt);
-    TopHalf = DAG.getSetCC(dl, MVT::i32, TopHalf, Tmp1, ISD::SETNE);
-  } else {
-    TopHalf = DAG.getSetCC(dl, MVT::i32, TopHalf, DAG.getConstant(0, dl, VT),
-                           ISD::SETNE);
-  }
-  // MulResult is a node with an illegal type. Because such things are not
-  // generally permitted during this phase of legalization, ensure that
-  // nothing is left using the node. The above EXTRACT_ELEMENT nodes should have
-  // been folded.
-  assert(MulResult->use_empty() && "Illegally typed node still in use!");
-
-  SDValue Ops[2] = { BottomHalf, TopHalf } ;
-  return DAG.getMergeValues(Ops, dl);
-}
-
 SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
                                             SelectionDAG &DAG) const {
   SDLoc DL(Op);
@@ -2787,9 +2737,6 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerLOAD(Op, DAG);
   case ISD::STORE:
     return LowerSTORE(Op, DAG, *this);
-  case ISD::UMULO:
-  case ISD::SMULO:
-    return LowerUMULO_SMULO(Op, DAG, *this);
   case ISD::ATOMIC_FENCE:
     return LowerATOMIC_FENCE(Op, DAG);
   case ISD::INTRINSIC_VOID:
