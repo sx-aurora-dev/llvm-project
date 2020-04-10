@@ -923,7 +923,7 @@ static bool emitDebugValueComment(const MachineInstr *MI, AsmPrinter &AP) {
     OS << "!target-index(" << Op.getIndex() << "," << Op.getOffset() << ")";
     return true;
   } else {
-    unsigned Reg;
+    Register Reg;
     if (MI->getOperand(0).isReg()) {
       Reg = MI->getOperand(0).getReg();
     } else {
@@ -2473,8 +2473,8 @@ static void emitGlobalConstantDataSequential(const DataLayout &DL,
   }
 
   unsigned Size = DL.getTypeAllocSize(CDS->getType());
-  unsigned EmittedSize = DL.getTypeAllocSize(CDS->getType()->getElementType()) *
-                        CDS->getNumElements();
+  unsigned EmittedSize =
+      DL.getTypeAllocSize(CDS->getElementType()) * CDS->getNumElements();
   assert(EmittedSize <= Size && "Size cannot be less than EmittedSize!");
   if (unsigned Padding = Size - EmittedSize)
     AP.OutStreamer->emitZeros(Padding);

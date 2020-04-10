@@ -24,44 +24,56 @@ include "VEInstrFormats.td"
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
 
-// uimm1, uimm2, uimm3, uimm6, uimm7, uimm0to2
+// uimm1 - Generic immediate value.
 def UImm1AsmOperand : AsmOperandClass { let Name = "UImm1"; }
 def uimm1 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<1>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm1AsmOperand;
 }
+
+// uimm2 - Generic immediate value.
 def UImm2AsmOperand : AsmOperandClass { let Name = "UImm2"; }
 def uimm2 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<2>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm2AsmOperand;
 }
+
+// uimm3 - Generic immediate value.
 def UImm3AsmOperand : AsmOperandClass { let Name = "UImm3"; }
 def uimm3 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<3>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm3AsmOperand;
 }
+
+// uimm4 - Generic immediate value.
 def UImm4AsmOperand : AsmOperandClass { let Name = "UImm4"; }
 def uimm4 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<4>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm4AsmOperand;
 }
+
+// uimm6 - Generic immediate value.
 def UImm6AsmOperand : AsmOperandClass { let Name = "UImm6"; }
 def uimm6 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<6>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm6AsmOperand;
 }
+
+// uimm7 - Generic immediate value.
 def UImm7AsmOperand : AsmOperandClass { let Name = "UImm7"; }
 def uimm7 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<7>(N->getZExtValue()); }]> {
   let ParserMatchClass = UImm7AsmOperand;
 }
+
+// uimm0to2 - Special immediate value represents 0, 1, and 2.
 def UImm0to2AsmOperand : AsmOperandClass { let Name = "UImm0to2"; }
 def uimm0to2 : Operand<i32>, PatLeaf<(imm), [{
     return N->getZExtValue() >= 0 && N->getZExtValue() < 3; }]> {
   let ParserMatchClass = UImm0to2AsmOperand;
 }
 
-// simm7
+// simm7 - Generic immediate value.
 def LO7 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
                                    SDLoc(N), MVT::i32);

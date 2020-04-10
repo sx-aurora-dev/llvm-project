@@ -55,8 +55,8 @@ public:
   void printMemASOperandHM(const MCInst *MI, int OpNum,
                            const MCSubtargetInfo &STI, raw_ostream &OS,
                            const char *Modifier = nullptr);
-  void printMImmOperand(const MCInst *MI, int OpNum,
-                        const MCSubtargetInfo &STI, raw_ostream &OS);
+  void printMImmOperand(const MCInst *MI, int OpNum, const MCSubtargetInfo &STI,
+                        raw_ostream &OS);
   void printCCOperand(const MCInst *MI, int OpNum, const MCSubtargetInfo &STI,
                       raw_ostream &OS);
   void printRDOperand(const MCInst *MI, int OpNum, const MCSubtargetInfo &STI,

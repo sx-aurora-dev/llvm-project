@@ -502,6 +502,20 @@ def StringAttrPrettyNameOp
 }
 
 //===----------------------------------------------------------------------===//
+// Test Locations
+//===----------------------------------------------------------------------===//
+
+def TestLocationSrcOp : TEST_Op<"loc_src"> {
+  let arguments = (ins I32:$input);
+  let results = (outs I32:$output);
+}
+
+def TestLocationDstOp : TEST_Op<"loc_dst", [SameOperandsAndResultType]> {
+  let arguments = (ins I32:$input);
+  let results = (outs I32:$output);
+}
+
+//===----------------------------------------------------------------------===//
 // Test Patterns
 //===----------------------------------------------------------------------===//
 
@@ -996,6 +1010,18 @@ def : Pat<(OneI32ResultOp),
               ConstantAttr<I32Attr, "2">)>;
 
 //===----------------------------------------------------------------------===//
+// Test Patterns (Location)
+
+// Test that we can specify locations for generated ops.
+def : Pat<(TestLocationSrcOp:$res1
+           (TestLocationSrcOp:$res2
+            (TestLocationSrcOp:$res3 $input))),
+          (TestLocationDstOp
+            (TestLocationDstOp
+              (TestLocationDstOp $input, (location $res1))),
+	    (location $res2, $res3))>;
+
+//===----------------------------------------------------------------------===//
 // Test Legalization
 //===----------------------------------------------------------------------===//
 
@@ -1034,6 +1060,12 @@ def : Pat<(ILLegalOpE), (LegalOpA Test_LegalizerEnum_Success)>;
 def TestRewriteOp : TEST_Op<"rewrite">,
   Arguments<(ins AnyType)>, Results<(outs AnyType)>;
 def : Pat<(TestRewriteOp $input), (replaceWithValue $input)>;
+
+// Check that patterns can specify bounded recursion when rewriting.
+def TestRecursiveRewriteOp : TEST_Op<"recursive_rewrite"> {
+  let arguments = (ins I64Attr:$depth);
+  let assemblyFormat = "$depth attr-dict";
+}
 
 //===----------------------------------------------------------------------===//
 // Test Type Legalization

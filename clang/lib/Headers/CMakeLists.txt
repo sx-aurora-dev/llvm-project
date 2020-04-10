@@ -104,6 +104,7 @@ set(files
   tbmintrin.h
   tgmath.h
   tmmintrin.h
+  tsxldtrkintrin.h
   unwind.h
   vadefs.h
   vaesintrin.h
@@ -148,8 +149,7 @@ set(ppc_wrapper_files
 set(openmp_wrapper_files
   openmp_wrappers/math.h
   openmp_wrappers/cmath
-  openmp_wrappers/__clang_openmp_math.h
-  openmp_wrappers/__clang_openmp_math_declares.h
+  openmp_wrappers/__clang_openmp_device_functions.h
   openmp_wrappers/new
 )
 

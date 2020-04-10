@@ -454,7 +454,7 @@ void VEInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   const MachineFrameInfo &MFI = MF->getFrameInfo();
   MachineMemOperand *MMO = MF->getMachineMemOperand(
       MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOStore,
-      MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
+      MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
 
   // On the order of operands here: think "[FrameIdx + 0] = SrcReg".
   if (RC == &VE::I64RegClass) {
@@ -534,7 +534,7 @@ void VEInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   const MachineFrameInfo &MFI = MF->getFrameInfo();
   MachineMemOperand *MMO = MF->getMachineMemOperand(
       MachinePointerInfo::getFixedStack(*MF, FI), MachineMemOperand::MOLoad,
-      MFI.getObjectSize(FI), MFI.getObjectAlignment(FI));
+      MFI.getObjectSize(FI), MFI.getObjectAlign(FI));
 
   if (RC == &VE::I64RegClass) {
     BuildMI(MBB, I, DL, get(VE::LDrii), DestReg)

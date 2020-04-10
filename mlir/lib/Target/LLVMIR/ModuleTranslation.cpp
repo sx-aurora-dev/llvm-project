@@ -51,12 +51,16 @@ buildSequentialConstant(ArrayRef<llvm::Constant *> &constants,
     return result;
   }
 
-  if (!isa<llvm::SequentialType>(type)) {
+  llvm::Type *elementType;
+  if (auto *arrayTy = dyn_cast<llvm::ArrayType>(type)) {
+    elementType = arrayTy->getElementType();
+  } else if (auto *vectorTy = dyn_cast<llvm::VectorType>(type)) {
+    elementType = vectorTy->getElementType();
+  } else {
     emitError(loc) << "expected sequential LLVM types wrapping a scalar";
     return nullptr;
   }
 
-  llvm::Type *elementType = type->getSequentialElementType();
   SmallVector<llvm::Constant *, 8> nested;
   nested.reserve(shape.front());
   for (int64_t i = 0; i < shape.front(); ++i) {
@@ -74,9 +78,15 @@ buildSequentialConstant(ArrayRef<llvm::Constant *> &constants,
 
 /// Returns the first non-sequential type nested in sequential types.
 static llvm::Type *getInnermostElementType(llvm::Type *type) {
-  while (isa<llvm::SequentialType>(type))
-    type = type->getSequentialElementType();
-  return type;
+  do {
+    if (auto *arrayTy = dyn_cast<llvm::ArrayType>(type)) {
+      type = arrayTy->getElementType();
+    } else if (auto *vectorTy = dyn_cast<llvm::VectorType>(type)) {
+      type = vectorTy->getElementType();
+    } else {
+      return type;
+    }
+  } while (1);
 }
 
 /// Create an LLVM IR constant of `llvmType` from the MLIR attribute `attr`.
@@ -106,17 +116,24 @@ llvm::Constant *ModuleTranslation::getLLVMConstant(llvm::Type *llvmType,
     return llvm::ConstantExpr::getBitCast(
         functionMapping.lookup(funcAttr.getValue()), llvmType);
   if (auto splatAttr = attr.dyn_cast<SplatElementsAttr>()) {
-    auto *sequentialType = cast<llvm::SequentialType>(llvmType);
-    auto *elementType = sequentialType->getElementType();
-    uint64_t numElements = sequentialType->getNumElements();
+    llvm::Type *elementType;
+    uint64_t numElements;
+    if (auto *arrayTy = dyn_cast<llvm::ArrayType>(llvmType)) {
+      elementType = arrayTy->getElementType();
+      numElements = arrayTy->getNumElements();
+    } else {
+      auto *vectorTy = cast<llvm::VectorType>(llvmType);
+      elementType = vectorTy->getElementType();
+      numElements = vectorTy->getNumElements();
+    }
     // Splat value is a scalar. Extract it only if the element type is not
     // another sequence type. The recursion terminates because each step removes
     // one outer sequential type.
+    bool elementTypeSequential =
+        isa<llvm::ArrayType>(elementType) || isa<llvm::VectorType>(elementType);
     llvm::Constant *child = getLLVMConstant(
         elementType,
-        isa<llvm::SequentialType>(elementType) ? splatAttr
-                                               : splatAttr.getSplatValue(),
-        loc);
+        elementTypeSequential ? splatAttr : splatAttr.getSplatValue(), loc);
     if (!child)
       return nullptr;
     if (llvmType->isVectorTy())
@@ -317,7 +334,12 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
       return builder.CreateCall(functionMapping.lookup(attr.getValue()),
                                 operandsRef);
     } else {
-      return builder.CreateCall(operandsRef.front(), operandsRef.drop_front());
+      auto *calleePtrType =
+          cast<llvm::PointerType>(operandsRef.front()->getType());
+      auto *calleeType =
+          cast<llvm::FunctionType>(calleePtrType->getElementType());
+      return builder.CreateCall(calleeType, operandsRef.front(),
+                                operandsRef.drop_front());
     }
   };
 
@@ -336,14 +358,19 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
   if (auto invOp = dyn_cast<LLVM::InvokeOp>(opInst)) {
     auto operands = lookupValues(opInst.getOperands());
     ArrayRef<llvm::Value *> operandsRef(operands);
-    if (auto attr = opInst.getAttrOfType<FlatSymbolRefAttr>("callee"))
+    if (auto attr = opInst.getAttrOfType<FlatSymbolRefAttr>("callee")) {
       builder.CreateInvoke(functionMapping.lookup(attr.getValue()),
                            blockMapping[invOp.getSuccessor(0)],
                            blockMapping[invOp.getSuccessor(1)], operandsRef);
-    else
+    } else {
+      auto *calleePtrType =
+          cast<llvm::PointerType>(operandsRef.front()->getType());
+      auto *calleeType =
+          cast<llvm::FunctionType>(calleePtrType->getElementType());
       builder.CreateInvoke(
-          operandsRef.front(), blockMapping[invOp.getSuccessor(0)],
+          calleeType, operandsRef.front(), blockMapping[invOp.getSuccessor(0)],
           blockMapping[invOp.getSuccessor(1)], operandsRef.drop_front());
+    }
     return success();
   }
 

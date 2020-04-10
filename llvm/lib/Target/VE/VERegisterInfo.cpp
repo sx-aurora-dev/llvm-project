@@ -135,7 +135,7 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
-bool VERegisterInfo::isConstantPhysReg(unsigned PhysReg) const {
+bool VERegisterInfo::isConstantPhysReg(MCRegister PhysReg) const {
   switch (PhysReg) {
   case VE::VM0:
   case VE::VMP0:
@@ -177,7 +177,7 @@ static unsigned offset_to_disp(MachineInstr &MI) {
 
 static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
                       MachineInstr &MI, const DebugLoc &dl,
-                      unsigned FIOperandNum, int Offset, unsigned FramePtr) {
+                      unsigned FIOperandNum, int Offset, Register FrameReg) {
   if (1) {
       LLVM_DEBUG(dbgs() << "replaceFI: "; MI.dump());
   }
@@ -215,7 +215,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
 
     unsigned Tmp1 = MF.getRegInfo().createVirtualRegister(&VE::I64RegClass);
     BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEArri), Tmp1)
-      .addReg(FramePtr).addImm(0).addImm(Offset);
+      .addReg(FrameReg).addImm(0).addImm(Offset);
 
     MI.setDesc(TII.get(opc));
     MI.getOperand(0).ChangeToRegister(Reg, isDef, false, isKill);
@@ -230,7 +230,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
 
   // VE has 32 bit offset field, so no need to expand a target instruction.
   // Directly encode it.
-  MI.getOperand(FIOperandNum).ChangeToRegister(FramePtr, false);
+  MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
   MI.getOperand(FIOperandNum + offset_to_disp(MI)).ChangeToImmediate(Offset);
 }
 
@@ -246,7 +246,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   const VESubtarget &Subtarget = MF.getSubtarget<VESubtarget>();
   const VEFrameLowering *TFI = getFrameLowering(MF);
 
-  unsigned FrameReg;
+  Register FrameReg;
   int Offset;
   Offset = TFI->getFrameIndexReference(MF, FrameIndex, FrameReg);
 

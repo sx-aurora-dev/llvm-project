@@ -365,7 +365,7 @@ bool VEFrameLowering::hasBP(const MachineFunction &MF) const {
 }
 
 int VEFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
-                                            unsigned &FrameReg) const {
+                                            Register &FrameReg) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const VERegisterInfo *RegInfo = STI.getRegisterInfo();
   const VEMachineFunctionInfo *FuncInfo = MF.getInfo<VEMachineFunctionInfo>();

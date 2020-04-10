@@ -25589,7 +25589,7 @@ SDValue X86TargetLowering::LowerFRAME_TO_ARGS_OFFSET(SDValue Op,
   return DAG.getIntPtrConstant(2 * RegInfo->getSlotSize(), SDLoc(Op));
 }
 
-unsigned X86TargetLowering::getExceptionPointerRegister(
+Register X86TargetLowering::getExceptionPointerRegister(
     const Constant *PersonalityFn) const {
   if (classifyEHPersonality(PersonalityFn) == EHPersonality::CoreCLR)
     return Subtarget.isTarget64BitLP64() ? X86::RDX : X86::EDX;
@@ -25597,7 +25597,7 @@ unsigned X86TargetLowering::getExceptionPointerRegister(
   return Subtarget.isTarget64BitLP64() ? X86::RAX : X86::EAX;
 }
 
-unsigned X86TargetLowering::getExceptionSelectorRegister(
+Register X86TargetLowering::getExceptionSelectorRegister(
     const Constant *PersonalityFn) const {
   // Funclet personalities don't use selectors (the runtime does the selection).
   assert(!isFuncletEHPersonality(classifyEHPersonality(PersonalityFn)));
@@ -25621,7 +25621,7 @@ SDValue X86TargetLowering::LowerEH_RETURN(SDValue Op, SelectionDAG &DAG) const {
           (FrameReg == X86::EBP && PtrVT == MVT::i32)) &&
          "Invalid Frame Register!");
   SDValue Frame = DAG.getCopyFromReg(DAG.getEntryNode(), dl, FrameReg, PtrVT);
-  unsigned StoreAddrReg = (PtrVT == MVT::i64) ? X86::RCX : X86::ECX;
+  Register StoreAddrReg = (PtrVT == MVT::i64) ? X86::RCX : X86::ECX;
 
   SDValue StoreAddr = DAG.getNode(ISD::ADD, dl, PtrVT, Frame,
                                  DAG.getIntPtrConstant(RegInfo->getSlotSize(),
@@ -33256,10 +33256,7 @@ void X86TargetLowering::computeKnownBitsForTargetNode(const SDValue Op,
     Known = DAG.computeKnownBits(Op.getOperand(1), DemandedElts, Depth + 1);
     Known2 = DAG.computeKnownBits(Op.getOperand(0), DemandedElts, Depth + 1);
 
-    // Output known-0 bits are only known if clear in both the LHS & RHS.
-    Known.Zero &= Known2.Zero;
-    // Output known-1 are known to be set if set in either the LHS | RHS.
-    Known.One |= Known2.One;
+    Known |= Known2;
     break;
   }
   case X86ISD::PSADBW: {
@@ -34749,6 +34746,7 @@ static SDValue combineX86ShufflesConstants(ArrayRef<SDValue> Ops,
     return SDValue();
 
   // Shuffle the constant bits according to the mask.
+  SDLoc DL(Root);
   APInt UndefElts(NumMaskElts, 0);
   APInt ZeroElts(NumMaskElts, 0);
   APInt ConstantElts(NumMaskElts, 0);
@@ -34786,6 +34784,10 @@ static SDValue combineX86ShufflesConstants(ArrayRef<SDValue> Ops,
   }
   assert((UndefElts | ZeroElts | ConstantElts).isAllOnesValue());
 
+  // Attempt to create a zero vector.
+  if ((UndefElts | ZeroElts).isAllOnesValue())
+    return getZeroVector(Root.getSimpleValueType(), Subtarget, DAG, DL);
+
   // Create the constant data.
   MVT MaskSVT;
   if (VT.isFloatingPoint() && (MaskSizeInBits == 32 || MaskSizeInBits == 64))
@@ -34794,8 +34796,9 @@ static SDValue combineX86ShufflesConstants(ArrayRef<SDValue> Ops,
     MaskSVT = MVT::getIntegerVT(MaskSizeInBits);
 
   MVT MaskVT = MVT::getVectorVT(MaskSVT, NumMaskElts);
+  if (!DAG.getTargetLoweringInfo().isTypeLegal(MaskVT))
+    return SDValue();
 
-  SDLoc DL(Root);
   SDValue CstOp = getConstVector(ConstantBitData, UndefElts, MaskVT, DAG, DL);
   return DAG.getBitcast(VT, CstOp);
 }
@@ -39924,6 +39927,25 @@ static SDValue combinePTESTCC(SDValue EFLAGS, X86::CondCode &CC,
                          DAG.getBitcast(OpVT, NotOp1), Op0);
     }
 
+    if (Op0 == Op1) {
+      SDValue BC = peekThroughBitcasts(Op0);
+
+      // TESTZ(AND(X,Y),AND(X,Y)) == TESTZ(X,Y)
+      if (BC.getOpcode() == ISD::AND || BC.getOpcode() == X86ISD::FAND) {
+        return DAG.getNode(EFLAGS.getOpcode(), SDLoc(EFLAGS), VT,
+                           DAG.getBitcast(OpVT, BC.getOperand(0)),
+                           DAG.getBitcast(OpVT, BC.getOperand(1)));
+      }
+
+      // TESTZ(AND(~X,Y),AND(~X,Y)) == TESTC(X,Y)
+      if (BC.getOpcode() == X86ISD::ANDNP || BC.getOpcode() == X86ISD::FANDN) {
+        CC = (CC == X86::COND_E ? X86::COND_B : X86::COND_AE);
+        return DAG.getNode(EFLAGS.getOpcode(), SDLoc(EFLAGS), VT,
+                           DAG.getBitcast(OpVT, BC.getOperand(0)),
+                           DAG.getBitcast(OpVT, BC.getOperand(1)));
+      }
+    }
+
     // TESTZ(-1,X) == TESTZ(X,X)
     if (ISD::isBuildVectorAllOnes(Op0.getNode()))
       return DAG.getNode(EFLAGS.getOpcode(), SDLoc(EFLAGS), VT, Op1, Op1);
@@ -41253,7 +41275,7 @@ static SDValue PromoteMaskArithmetic(SDNode *N, SelectionDAG &DAG,
   case ISD::ANY_EXTEND:
     return Op;
   case ISD::ZERO_EXTEND:
-    return DAG.getZeroExtendInReg(Op, DL, NarrowVT.getScalarType());
+    return DAG.getZeroExtendInReg(Op, DL, NarrowVT);
   case ISD::SIGN_EXTEND:
     return DAG.getNode(ISD::SIGN_EXTEND_INREG, DL, VT,
                        Op, DAG.getValueType(NarrowVT));
@@ -44864,7 +44886,7 @@ static SDValue combineExtSetcc(SDNode *N, SelectionDAG &DAG,
   SDValue Res = DAG.getSetCC(dl, VT, N0.getOperand(0), N0.getOperand(1), CC);
 
   if (N->getOpcode() == ISD::ZERO_EXTEND)
-    Res = DAG.getZeroExtendInReg(Res, dl, N0.getValueType().getScalarType());
+    Res = DAG.getZeroExtendInReg(Res, dl, N0.getValueType());
 
   return Res;
 }

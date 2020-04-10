@@ -146,6 +146,11 @@ bool OpPrintingFlags::shouldElideElementsAttr(ElementsAttr attr) const {
          *elementsAttrElementLimit < int64_t(attr.getNumElements());
 }
 
+/// Return the size limit for printing large ElementsAttr.
+Optional<int64_t> OpPrintingFlags::getLargeElementsAttrLimit() const {
+  return elementsAttrElementLimit;
+}
+
 /// Return if debug information should be printed.
 bool OpPrintingFlags::shouldPrintDebugInfo() const {
   return printDebugInfoFlag;
@@ -1286,11 +1291,12 @@ void ModulePrinter::printAttribute(Attribute attr,
     break;
   case StandardAttributes::Integer: {
     auto intAttr = attr.cast<IntegerAttr>();
-    // Print all signed/signless integer attributes as signed unless i1.
-    bool isSigned =
-        attrType.isIndex() || (!attrType.isUnsignedInteger() &&
-                               attrType.getIntOrFloatBitWidth() != 1);
-    intAttr.getValue().print(os, isSigned);
+    // Only print attributes as unsigned if they are explicitly unsigned or are
+    // signless 1-bit values.  Indexes, signed values, and multi-bit signless
+    // values print as signed.
+    bool isUnsigned =
+        attrType.isUnsignedInteger() || attrType.isSignlessInteger(1);
+    intAttr.getValue().print(os, !isUnsigned);
 
     // IntegerAttr elides the type if I64.
     if (typeElision == AttrTypeElision::May && attrType.isSignlessInteger(64))
