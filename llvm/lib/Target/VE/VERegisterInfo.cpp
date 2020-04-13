@@ -154,7 +154,8 @@ VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
 #define DEBUG_TYPE "ve-register-info"
 
 static unsigned offset_to_disp(MachineInstr &MI) {
-  unsigned OffDisp = 2;         // ASX format instruction's offset
+  // Default offset in instruction's operands (reg+reg+imm).
+  unsigned OffDisp = 2;
 
 #define RRCASm_kind(NAME) \
   case NAME ## rir: \
@@ -163,10 +164,12 @@ static unsigned offset_to_disp(MachineInstr &MI) {
   {
     using namespace llvm::VE;
     switch (MI.getOpcode()) {
+    case INLINEASM:
     RRCASm_kind(TS1AML)
     RRCASm_kind(TS1AMW)
     RRCASm_kind(CASL)
     RRCASm_kind(CASW)
+      // These instructions use AS format (reg+imm).
       OffDisp = 1;
     }
   }
