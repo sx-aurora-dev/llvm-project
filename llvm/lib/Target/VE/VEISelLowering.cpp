@@ -493,26 +493,7 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
       llvm_unreachable("Unknown loc info!");
     }
 
-    // FIXME: need to remove following code taken from Sparc, we guess.
-#if 0
-    // The custom bit on an i32 return value indicates that it should be passed
-    // in the high bits of the register.
-    if (VA.getValVT() == MVT::i32 && VA.needsCustom()) {
-      OutVal = DAG.getNode(ISD::SHL, DL, MVT::i64, OutVal,
-                           DAG.getConstant(32, DL, MVT::i32));
-
-      // The next value may go in the low bits of the same register.
-      // Handle both at once.
-      if (i+1 < RVLocs.size() && RVLocs[i+1].getLocReg() == VA.getLocReg()) {
-        SDValue NV = DAG.getNode(ISD::ZERO_EXTEND, DL, MVT::i64, OutVals[i+1]);
-        OutVal = DAG.getNode(ISD::OR, DL, MVT::i64, OutVal, NV);
-        // Skip the next value, it's already done.
-        ++i;
-      }
-    }
-#else
     assert(!VA.needsCustom() && "Unexpected custom lowering");
-#endif
 
     Chain = DAG.getCopyToReg(Chain, DL, VA.getLocReg(), OutVal, Flag);
 
@@ -562,10 +543,7 @@ SDValue VETargetLowering::LowerFormalArguments(
                                    getRegClassFor(VA.getLocVT()));
       SDValue Arg = DAG.getCopyFromReg(Chain, DL, VReg, VA.getLocVT());
 
-      // Get the high bits for i32 struct elements.
-      if (VA.getValVT() == MVT::i32 && VA.needsCustom())
-        Arg = DAG.getNode(ISD::SRL, DL, VA.getLocVT(), Arg,
-                          DAG.getConstant(32, DL, MVT::i32));
+      assert(!VA.needsCustom() && "Unexpected custom lowering");
 
       // The caller promoted the argument, so insert an Assert?ext SDNode so we
       // won't promote the value again in this function.
@@ -596,14 +574,6 @@ SDValue VETargetLowering::LowerFormalArguments(
     // beginning of the arguments area at %fp+176.
     unsigned Offset = VA.getLocMemOffset() + ArgsBaseOffset;
     unsigned ValSize = VA.getValVT().getSizeInBits() / 8;
-    // FIXME: need to remove following code taken from Sparc, we guess.
-#if 0
-    // Adjust offset for extended arguments, SPARC is big-endian.
-    // The caller will have written the full slot with extended bytes, but we
-    // prefer our own extending loads.
-    if (VA.isExtInLoc())
-      Offset += 8 - ValSize;
-#endif
     int FI = MF.getFrameInfo().CreateFixedObject(ValSize, Offset, true);
     InVals.push_back(
         DAG.getLoad(VA.getValVT(), DL, Chain,
@@ -826,32 +796,7 @@ SDValue VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     }
 
     if (VA.isRegLoc()) {
-      // FIXME: need to remove following code taken from Sparc, we guess.
-#if 0
-      // The custom bit on an i32 return value indicates that it should be
-      // passed in the high bits of the register.
-      if (VA.getValVT() == MVT::i32 && VA.needsCustom()) {
-#if 1 // ishizaka
-      llvm_unreachable("what's this?\n");
-#else
-        Arg = DAG.getNode(ISD::SHL, DL, MVT::i64, Arg,
-                          DAG.getConstant(32, DL, MVT::i32));
-
-        // The next value may go in the low bits of the same register.
-        // Handle both at once.
-        if (i+1 < ArgLocs.size() && ArgLocs[i+1].isRegLoc() &&
-            ArgLocs[i+1].getLocReg() == VA.getLocReg()) {
-          SDValue NV = DAG.getNode(ISD::ZERO_EXTEND, DL, MVT::i64,
-                                   CLI.OutVals[i+1]);
-          Arg = DAG.getNode(ISD::OR, DL, MVT::i64, Arg, NV);
-          // Skip the next value, it's already done.
-          ++i;
-        }
-#endif
-      }
-#else
       assert(!VA.needsCustom() && "Unexpected custom lowering");
-#endif
       RegsToPass.push_back(std::make_pair(VA.getLocReg(), Arg));
       if (!UseBoth)
         continue;
