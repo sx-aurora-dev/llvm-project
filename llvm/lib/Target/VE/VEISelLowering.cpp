@@ -2014,11 +2014,8 @@ static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
 
   EVT PtrVT = TLI.getPointerTy(MF.getDataLayout());
 
-  // Naked functions never have a frame pointer, and so we use r1. For all
-  // other functions, this decision must be delayed until during PEI.
   const VERegisterInfo *RegInfo = Subtarget->getRegisterInfo();
   unsigned FrameReg = RegInfo->getFrameRegister(MF);
-
   SDValue FrameAddr = DAG.getCopyFromReg(DAG.getEntryNode(), dl, FrameReg,
                                          PtrVT);
   while (Depth--)
@@ -2037,28 +2034,6 @@ static SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
   if (TLI.verifyReturnAddressArgumentIsConstant(Op, DAG))
     return SDValue();
 
-#if 0
-  SDValue RetAddr;
-  if (depth == 0) {
-    auto PtrVT = TLI.getPointerTy(DAG.getDataLayout());
-    unsigned RetReg = MF.addLiveIn(VE::SX10, TLI.getRegClassFor(PtrVT));
-    RetAddr = DAG.getCopyFromReg(DAG.getEntryNode(), dl, RetReg, VT);
-    return RetAddr;
-  }
-
-  // Need frame address to find return address of the caller.
-  SDValue FrameAddr = getFRAMEADDR(depth - 1, Op, DAG, Subtarget);
-
-  unsigned Offset = (Subtarget->is64Bit()) ? 120 : 60;
-  SDValue Ptr = DAG.getNode(ISD::ADD,
-                            dl, VT,
-                            FrameAddr,
-                            DAG.getIntPtrConstant(Offset, dl));
-  RetAddr = DAG.getLoad(VT, dl, DAG.getEntryNode(), Ptr, MachinePointerInfo());
-
-  return RetAddr;
-#endif
-
   SDLoc dl(Op);
   unsigned Depth = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
 
@@ -2066,17 +2041,27 @@ static SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
 
   if (Depth > 0) {
     SDValue FrameAddr = LowerFRAMEADDR(Op, DAG, TLI, Subtarget);
-    SDValue Offset =
-        DAG.getConstant(8, dl, MVT::i64);
+    SDValue Offset = DAG.getConstant(8, dl, MVT::i64);
     return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(),
                        DAG.getNode(ISD::ADD, dl, PtrVT, FrameAddr, Offset),
                        MachinePointerInfo());
   }
 
+#if 0
+  // FIXME: This implementation doesn't work on VE since we doesn't pre-allocate
+  //        stack (guess).  Need modifications on stack allocation to follow
+  //        other architectures in future.
   // Just load the return address off the stack.
   SDValue RetAddrFI = DAG.getFrameIndex(1, PtrVT);
   return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(), RetAddrFI,
                      MachinePointerInfo());
+#else
+  SDValue FrameAddr = LowerFRAMEADDR(Op, DAG, TLI, Subtarget);
+  SDValue Offset = DAG.getConstant(8, dl, MVT::i64);
+  return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(),
+                     DAG.getNode(ISD::ADD, dl, PtrVT, FrameAddr, Offset),
+                     MachinePointerInfo());
+#endif
 }
 
 // Lower a f128 load into two f64 loads.
