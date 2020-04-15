@@ -828,17 +828,22 @@ multiclass PFCHm<string opcStr, bits<8>opc> {
 //   e.g. TS1AML, TS1AMW, TS2AM, and etc.
 let Constraints = "$dest = $sd", DisableEncoding = "$sd",
     mayStore=1, mayLoad = 1, hasSideEffects = 0 in
-multiclass RRCAStgm<string opcStr, bits<8>opc, RegisterClass RC, Operand immOp,
-                    Operand ADDR> {
-  def r : RRM<opc, (outs RC:$dest), (ins ADDR:$addr, RC:$sy, RC:$sd),
-                !strconcat(opcStr, " $dest, $addr, $sy")>;
+multiclass RRCAStgm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
+                    Operand immOp, Operand MEM, Operand ADDR,
+                    SDPatternOperator OpNode = null_frag> {
+  def r : RRM<opc, (outs RC:$dest), (ins MEM:$addr, RC:$sy, RC:$sd),
+              !strconcat(opcStr, " $dest, $addr, $sy"),
+              [(set Ty:$dest, (OpNode ADDR:$addr, Ty:$sy, Ty:$sd))]>;
   let cy = 0 in
-  def i : RRM<opc, (outs RC:$dest), (ins ADDR:$addr, immOp:$sy, RC:$sd),
-                  !strconcat(opcStr, " $dest, $addr, $sy")>;
+  def i : RRM<opc, (outs RC:$dest), (ins MEM:$addr, immOp:$sy, RC:$sd),
+              !strconcat(opcStr, " $dest, $addr, $sy"),
+              [(set Ty:$dest, (OpNode ADDR:$addr, (Ty immOp:$sy), Ty:$sd))]>;
 }
-multiclass RRCASm<string opcStr, bits<8>opc, RegisterClass RC, Operand immOp> {
-  defm ri : RRCAStgm<opcStr, opc, RC, immOp, MEMriRRM>;
-  let cz = 0 in defm zi : RRCAStgm<opcStr, opc, RC, immOp, MEMziRRM>;
+multiclass RRCASm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
+                  Operand immOp, SDPatternOperator OpNode = null_frag> {
+  defm ri : RRCAStgm<opcStr, opc, RC, Ty, immOp, MEMriRRM, ADDRri, OpNode>;
+  let cz = 0 in defm zi : RRCAStgm<opcStr, opc, RC, Ty, immOp, MEMziRRM, ADDRzi,
+                                   OpNode>;
 }
 
 // Multiclass for branch instructions
@@ -1169,23 +1174,22 @@ defm DLDLZX : LOADm<"dldl.zx", 0x0b, I32, i32, load>;
 let DecoderMethod = "DecodeASX" in defm PFCH : PFCHm<"pfch", 0x0c>;
 
 // Section 8.2.16 - TS1AM (Test and Set 1 AM)
-let cx = 0 in
-defm TS1AML : RRCASm<"ts1am.l", 0x42, I64, uimm7>;
-let cx = 1 in
-defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, uimm7>;
+defm TS1AML : RRCASm<"ts1am.l", 0x42, I64, i64, uimm7>;
+let cx = 1 in defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, i32, uimm7>;
 
 // Section 8.2.17 - TS2AM (Test and Set 2 AM)
-let cx = 0 in defm TS2AM : RRCASm<"ts2am", 0x43, I64, uimm7>;
+defm TS2AM : RRCASm<"ts2am", 0x43, I64, i64, uimm7>;
 
 // Section 8.2.18 - TS3AM (Test and Set 3 AM)
-let cx = 0 in defm TS3AM : RRCASm<"ts3am", 0x52, I64, uimm1>;
+defm TS3AM : RRCASm<"ts3am", 0x52, I64, i64, uimm1>;
 
 // Section 8.2.19 - ATMAM (Atomic AM)
-let cx = 0 in defm ATMAM : RRCASm<"atmam", 0x53, I64, uimm0to2>;
+defm ATMAM : RRCASm<"atmam", 0x53, I64, i64, uimm0to2>;
 
 // Section 8.2.20 - CAS (Compare and Swap)
-let cx = 0 in defm CASL : RRCASm<"cas.l", 0x62, I64, simm7>;
-let cx = 1 in defm CASW : RRCASm<"cas.w", 0x62, I32, simm7>;
+defm CASL : RRCASm<"cas.l", 0x62, I64, i64, simm7, atomic_cmp_swap_64>;
+let cx = 1 in defm CASW : RRCASm<"cas.w", 0x62, I32, i32, simm7,
+                                 atomic_cmp_swap_32>;
 
 //-----------------------------------------------------------------------------
 // Section 8.3 - Transfer Control Instructions
@@ -1610,12 +1614,6 @@ def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
           (TS1AMWrir MEMriRRM:$src, 15, $new)>;
 def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
           (TS1AMLrir MEMriRRM:$src, 127, $new)>;
-
-// Atomic cmp and swap
-def : Pat<(i32 (atomic_cmp_swap_32 ADDRri:$src, i32:$cmp, i32:$new)),
-          (CASWrir MEMriRRM:$src, $cmp, $new)>;
-def : Pat<(i64 (atomic_cmp_swap_64 ADDRri:$src, i64:$cmp, i64:$new)),
-          (CASLrir MEMriRRM:$src, $cmp, $new)>;
 
 // Fence
 
