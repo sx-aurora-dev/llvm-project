@@ -3590,8 +3590,10 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
   // modify the return type of SETCC on vectors to v256i1
   // case ISD::SETCC: return LowerSETCC(Op, DAG);
+#if 0
   case ISD::SELECT_CC:
     return LowerSELECT_CC(Op, DAG);
+#endif
 
     // case ISD::TRUNCATE: return LowerTRUNCATE(Op, DAG);
 
@@ -3606,6 +3608,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     // FIXME List all operation that correspond to a VVP operation here
 #define REGISTER_ICONV_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
+#define REGISTER_UNARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
 #define REGISTER_REDUCE_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
@@ -3617,6 +3620,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     // FIXME List all VVP ops with vector results here
 #define REGISTER_ICONV_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
+#define REGISTER_UNARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.inc"
