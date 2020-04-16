@@ -447,6 +447,7 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   ///// Translate to a VVP layer operation (VVP_* or VEC_*) /////
   bool isTernaryOp = false;
   bool isBinaryOp = false;
+  bool isUnaryOp = false;
   bool isStoreOp = false;
   bool isConvOp = false;
   bool isReduceOp = false;
@@ -481,6 +482,10 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
     isStoreOp = true;
     break;
 
+#define REGISTER_UNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
+  case ISD::NATIVE_ISD:                                                        \
+    isUnaryOp = true;                                                         \
+    break;
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
   case ISD::NATIVE_ISD:                                                        \
     isBinaryOp = true;                                                         \
@@ -550,6 +555,12 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   SmallVector<SDValue, 4> LegalOperands;
   for (unsigned i = 0; i < Op->getNumOperands(); ++i) {
     LegalOperands.push_back(LegalizeVecOperand(Op->getOperand(i), DAG));
+  }
+
+  if (isUnaryOp) {
+    assert(VVPOC.hasValue());
+    return CDAG.getNode(VVPOC.getValue(), ResVecTy,
+                        {LegalOperands[0],MaskVal, LenVal});
   }
 
   if (isBinaryOp) {

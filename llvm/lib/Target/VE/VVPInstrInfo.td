@@ -63,6 +63,11 @@ def SDTFPExtOpVVP  : SDTypeProfile<1, 3, [  // fextend
   SDTCisFP<0>, SDTCisFP<1>, SDTCisOpSmallerThanOp<1, 0>, SDTCisSameNumEltsAs<0, 1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
 ]>;
 
+// unary FP
+def SDTFPUnaryOpVVP  : SDTypeProfile<1, 3, [   // fneg, fsqrt, etc
+  SDTCisSameAs<0, 1>, SDTCisFP<0>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+]>;
+
 // gather scatter
 def vvp_scatter : SDNode<"VEISD::VVP_SCATTER",  SDTScatterVVP,
                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
@@ -134,6 +139,7 @@ def vvp_fp_to_sint    : SDNode<"VEISD::VVP_FP_TO_SINT", SDTFPToIntOpVVP>;
 def vvp_fpround      : SDNode<"VEISD::VVP_FPROUND", SDTFPRoundOpVVP>;
 def vvp_fpext        : SDNode<"VEISD::VVP_FPEXT", SDTFPExtOpVVP>;
 
+def vvp_ffloor     : SDNode<"VEISD::VVP_FFLOOR", SDTFPUnaryOpVVP>;
 // zext, sext
 def vvp_sext       : SDNode<"VEISD::VVP_SEXT", SDTIntExtendOpVVP>;
 def vvp_zext       : SDNode<"VEISD::VVP_ZEXT", SDTIntExtendOpVVP>;
