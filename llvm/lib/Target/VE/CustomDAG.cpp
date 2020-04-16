@@ -133,7 +133,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
 
     // Known VP ops
     // all standard un/bin/tern-ary operators
-#define REGISTER_UNNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
+#define REGISTER_UNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
   case VEISD::VVP_NAME:                                                        \
   case ISD::NATIVE_ISD:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \

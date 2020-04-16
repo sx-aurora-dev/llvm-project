@@ -1922,6 +1922,15 @@ void VETargetLowering::initVPUActions() {
       // won't implement
       ISD::CONCAT_VECTORS, ISD::MERGE_VALUES,
 
+      // TODO
+      ISD::FSQRT,
+
+      // not directly supported
+      ISD::FNEG, ISD::FABS, ISD::FCBRT, ISD::FSIN, ISD::FCOS, ISD::FPOWI, ISD::FPOW,
+      ISD::FLOG, ISD::FLOG2, ISD::FLOG10, ISD::FEXP, ISD::FEXP2,
+      ISD::FCEIL, ISD::FTRUNC, ISD::FRINT, ISD::FNEARBYINT, ISD::FROUND, ISD::FFLOOR,
+      ISD::LROUND, ISD::LLROUND, ISD::LRINT, ISD::LLRINT,
+
       // break down into SETCC + (V)SELECT
       ISD::SELECT_CC,
       ISD::ANY_EXTEND, // TODO sub-register insertion
@@ -1929,7 +1938,7 @@ void VETargetLowering::initVPUActions() {
 
       // TODO
       ISD::BSWAP, ISD::BITREVERSE, ISD::CTLZ, ISD::CTLZ_ZERO_UNDEF, ISD::CTTZ,
-      ISD::CTTZ_ZERO_UNDEF, ISD::ADDC, ISD::ADDCARRY, ISD::FABS, ISD::FNEG,
+      ISD::CTTZ_ZERO_UNDEF, ISD::ADDC, ISD::ADDCARRY,
       ISD::MULHS, ISD::MULHU, ISD::SMUL_LOHI, ISD::UMUL_LOHI,
 
       // genuinely  unsupported
@@ -3620,7 +3629,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     // FIXME List all VVP ops with vector results here
 #define REGISTER_ICONV_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
-#define REGISTER_UNARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
+#define REGISTER_UNARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.inc"
