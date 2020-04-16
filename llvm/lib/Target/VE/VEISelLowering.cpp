@@ -1922,6 +1922,11 @@ void VETargetLowering::initVPUActions() {
       // won't implement
       ISD::CONCAT_VECTORS, ISD::MERGE_VALUES,
 
+      // break down into SETCC + (V)SELECT
+      ISD::SELECT_CC,
+      ISD::ANY_EXTEND, // TODO sub-register insertion
+      ISD::ANY_EXTEND_VECTOR_INREG,
+
       // TODO
       ISD::BSWAP, ISD::BITREVERSE, ISD::CTLZ, ISD::CTLZ_ZERO_UNDEF, ISD::CTTZ,
       ISD::CTTZ_ZERO_UNDEF, ISD::ADDC, ISD::ADDCARRY, ISD::FABS, ISD::FNEG,
