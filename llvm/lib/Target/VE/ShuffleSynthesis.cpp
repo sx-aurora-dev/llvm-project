@@ -21,9 +21,6 @@ VecLenOpt InferLengthFromMask(SDValue MaskV) {
 
 SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
                            SelectionDAG &DAG) {
-  VecLenOpt MaskVL = InferLengthFromMask(Mask);
-
-  // TODO analyze Mask
   auto ActualConstVL = dyn_cast<ConstantSDNode>(DynamicVL);
   if (!ActualConstVL)
     return DynamicVL;
@@ -40,9 +37,13 @@ SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
     return DAG.getConstant(VLHint.getValue(), DL, MVT::i32);
   }
 
+  if (Mask) {
+    VecLenOpt MaskVL = InferLengthFromMask(Mask);
+    VLHint = MinVectorLength(MaskVL, VLHint);
+  }
+
   // the minimum of dynamicVL and the VLHint
-  VecLenOpt MinOfAllHints =
-      MinVectorLength(MinVectorLength(MaskVL, VLHint), EVLVal);
+  VecLenOpt MinOfAllHints = MinVectorLength(VLHint, EVLVal);
   return DAG.getConstant(MinOfAllHints.getValue(), DL, MVT::i32);
 }
 
@@ -669,7 +670,7 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
     SDValue OpVectorLength =
         CDAG.getConstant(Packed ? (LastDef + 1) / 2 : LastDef + 1, MVT::i32);
 
-    SDValue TrueMask = CDAG.CreateConstMask(NativeNumElems, true);
+    SDValue TrueMask = CDAG.createUniformConstMask(NativeNumElems, true);
 
     switch (PatternKind) {
 

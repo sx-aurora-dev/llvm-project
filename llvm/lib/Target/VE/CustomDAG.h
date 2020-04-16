@@ -140,7 +140,7 @@ struct CustomDAG {
   SDValue createMaskInsert(SDValue MaskV, SDValue Idx, SDValue ElemV) const;
 
   // all-true/false mask
-  SDValue CreateConstMask(unsigned NumElements, bool IsTrue) const;
+  SDValue createUniformConstMask(unsigned NumElements, bool IsTrue) const;
   // materialize a constant mask vector given by \p TrueBits
   SDValue createConstMask(unsigned NumElems, const LaneBits &TrueBits) const;
 
@@ -199,6 +199,10 @@ struct CustomDAG {
                       bool IsOpaque = false) const;
 
   SDValue getUndef(EVT VT) const { return DAG.getUNDEF(VT); }
+
+  SDValue getMergeValues(ArrayRef<SDValue> Values) const {
+    return DAG.getMergeValues(Values, DL);
+  }
 
   void dumpValue(SDValue V) const;
 };

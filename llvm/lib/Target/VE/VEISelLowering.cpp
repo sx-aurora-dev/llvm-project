@@ -342,7 +342,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
       OpVec.push_back(PartV);
     }
     // attach Mask
-    SDValue TrueMask = CDAG.CreateConstMask(256, true);
+    SDValue TrueMask = CDAG.createUniformConstMask(256, true);
     OpVec.push_back(TrueMask);
     // attach AVL
     OpVec.push_back(AVL);
@@ -447,7 +447,6 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   ///// Translate to a VVP layer operation (VVP_* or VEC_*) /////
   bool isTernaryOp = false;
   bool isBinaryOp = false;
-  bool isLoadOp = false;
   bool isStoreOp = false;
   bool isConvOp = false;
   bool isReduceOp = false;
@@ -465,6 +464,7 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
     return LowerSCALAR_TO_VECTOR(Op, DAG,
                                  Mode); // TODO account for AVL, Expansion mode
 
+  case ISD::LOAD:
   case ISD::MLOAD:
     return LowerMLOAD(Op, DAG, Mode);
 
@@ -477,9 +477,6 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   case ISD::VP_SCATTER:
     return LowerMGATHER_MSCATTER(Op, DAG, Mode);
 
-  case ISD::LOAD:
-    isLoadOp = true;
-    break;
   case ISD::STORE:
     isStoreOp = true;
     break;
@@ -586,15 +583,6 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
     default:
       llvm_unreachable("Unexpected ternary operator!");
     }
-  }
-
-  if (isLoadOp) {
-    SDValue ChainVal = Op->getOperand(0);
-    SDValue PtrVal = Op->getOperand(1);
-    SDVTList ResWithChainTy = DAG.getVTList(ResVecTy, MVT::Other);
-
-    return CDAG.getNode(VEISD::VVP_LOAD, ResWithChainTy,
-                        {ChainVal, PtrVal, MaskVal, LenVal});
   }
 
   if (isStoreOp) {
@@ -748,7 +736,6 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
         cast<MaskedGatherScatterSDNode>(Op.getNode());
 
     OpVectorLength = CDAG.getConstant(OpVecTy.getVectorNumElements(), MVT::i32);
-    ;
     Index = N->getIndex();
     BasePtr = N->getBasePtr();
     Mask = N->getMask();
@@ -819,17 +806,18 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
   if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::VP_GATHER) {
     EVT ChainVT = Op.getNode()->getValueType(1);
 
-    // vt = vgt (vindex, vmx, cs=0, sx=0, sy=0, sw=0);
-    SDValue load = CDAG.getNode(VEISD::VVP_GATHER, {LegalResVT, ChainVT},
-                                {Chain, addresses, Mask, OpVectorLength});
-    // load.dumpr(&DAG);
+    SDValue NewLoadV = CDAG.getNode(VEISD::VVP_GATHER, {LegalResVT, ChainVT},
+                                    {Chain, addresses, Mask, OpVectorLength});
 
     if (PassThru.isUndef()) {
-      return load;
+      return NewLoadV;
     }
 
     // re-introduce passthru as a select // TODO CDAG.getSelect
-    return CDAG.DAG.getSelect(CDAG.DL, LegalResVT, Mask, load, PassThru);
+    SDValue DataV =
+        CDAG.DAG.getSelect(CDAG.DL, LegalResVT, Mask, NewLoadV, PassThru);
+    SDValue NewLoadChainV = SDValue(NewLoadV.getNode(), 1);
+    return CDAG.getMergeValues({DataV, NewLoadChainV});
 
   } else {
     SDValue store =
@@ -942,7 +930,7 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
                                      VecLenOpt VecLenHint) const {
   LLVM_DEBUG(dbgs() << "Lowering VP/MLOAD\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
-  SDLoc dl(Op);
+  CustomDAG CDAG(DAG, Op);
 
   SDValue BasePtr;
   SDValue Mask;
@@ -950,26 +938,31 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
   SDValue PassThru;
   SDValue OpVectorLength;
 
+  MemSDNode *MemN = cast<MemSDNode>(Op.getNode());
+  LoadSDNode *LoadN = dyn_cast<LoadSDNode>(Op.getNode());
   MaskedLoadSDNode *MaskedN = dyn_cast<MaskedLoadSDNode>(Op.getNode());
   VPLoadSDNode *VPLoadN = dyn_cast<VPLoadSDNode>(Op.getNode());
 
-  if (MaskedN) {
-    BasePtr = MaskedN->getBasePtr();
-    Mask = MaskedN->getMask();
-    Chain = MaskedN->getChain();
-    PassThru = MaskedN->getPassThru();
+  BasePtr = MemN->getBasePtr();
+  Chain = MemN->getChain();
 
+  // infer Mask & Passthru
+  if (MaskedN) {
+    Mask = MaskedN->getMask();
+    PassThru = MaskedN->getPassThru();
+  } else if (VPLoadN) {
+    Mask = VPLoadN->getMask();
+  }
+
+  // infer AVL
+  if (LoadN || MaskedN) {
     // Infer the AVL
-    // TODO set to the highest set bit in the mask operand
     Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
     EVT OpVecTy = OpVecTyOpt.getValue();
-    OpVectorLength =
-        DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);
+    OpVectorLength = CDAG.getConstEVL(OpVecTy.getVectorNumElements());
 
   } else if (VPLoadN) {
-    BasePtr = VPLoadN->getBasePtr();
     Mask = VPLoadN->getMask();
-    Chain = VPLoadN->getChain();
     OpVectorLength = VPLoadN->getVectorLength();
   }
 
@@ -979,19 +972,25 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
   EVT DataVT = LegalizeVectorType(Op.getNode()->getValueType(0), Op, DAG, Mode);
   MVT ChainVT = Op.getNode()->getSimpleValueType(1);
 
-  // FIXME VLD does not support masking
-  // SDValue TrueMask = CreateConstMask(dl, DataVT.getVectorNumElements(), DAG,
-  // true);
+  // Patch in an all-true mask if required
+  if (!Mask) {
+    Mask = CDAG.createUniformConstMask(DataVT.getVectorNumElements(), true);
+  }
 
-  auto load = DAG.getNode(VEISD::VVP_LOAD, dl, {DataVT, ChainVT},
-                          {Chain, BasePtr, Mask, OpVectorLength});
+  auto NewLoadV = CDAG.getNode(VEISD::VVP_LOAD, {DataVT, ChainVT},
+                               {Chain, BasePtr, Mask, OpVectorLength});
 
   if (!PassThru || PassThru.isUndef()) {
-    return load;
-  } else {
-    // re-introduce passthru as a select
-    return DAG.getSelect(dl, Op.getSimpleValueType(), Mask, load, PassThru);
+    return NewLoadV;
   }
+
+  // re-introduce passthru as a select
+  SDValue DataV = CDAG.DAG.getSelect(CDAG.DL, Op.getSimpleValueType(), Mask,
+                                     NewLoadV, PassThru);
+  SDValue NewLoadChainV = SDValue(NewLoadV.getNode(), 1);
+
+  // merge them back into one node
+  return CDAG.getMergeValues({DataV, NewLoadChainV});
 }
 
 SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {

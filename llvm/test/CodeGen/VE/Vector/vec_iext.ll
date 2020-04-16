@@ -68,9 +68,9 @@ define <512 x i64> @vec_sext_v512_i1_to_i64(<512 x i1> %a) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrd %v1,0
-; CHECK-NEXT:    vmrg %v0,-1,%v1,%vm1
-; CHECK-NEXT:    vmrg %v1,-1,%v1,%vm2
+; CHECK-NEXT:    vbrd %v1,-1
+; CHECK-NEXT:    vmrg %v0,0,%v1,%vm1
+; CHECK-NEXT:    vmrg %v1,0,%v1,%vm2
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = sext <512 x i1> %a to <512 x i64>
   ret <512 x i64> %r
@@ -81,9 +81,9 @@ define <512 x i64> @vec_zext_v512_i1_to_i64(<512 x i1> %a) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrd %v1,0
-; CHECK-NEXT:    vmrg %v0,1,%v1,%vm1
-; CHECK-NEXT:    vmrg %v1,1,%v1,%vm2
+; CHECK-NEXT:    vbrd %v1,1
+; CHECK-NEXT:    vmrg %v0,0,%v1,%vm1
+; CHECK-NEXT:    vmrg %v1,0,%v1,%vm2
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = zext <512 x i1> %a to <512 x i64>
   ret <512 x i64> %r

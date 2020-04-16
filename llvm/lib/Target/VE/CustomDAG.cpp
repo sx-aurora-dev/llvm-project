@@ -354,7 +354,8 @@ SDValue CustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
   EVT VecVT = Src.getValueType();
   assert(!IsMaskType(VecVT));
   return createVMV(ResVT, Src, getConstant(Offset, MVT::i32),
-                   CreateConstMask(VecVT.getVectorNumElements(), true), AVL);
+                   createUniformConstMask(VecVT.getVectorNumElements(), true),
+                   AVL);
 }
 
 SDValue CustomDAG::createPassthruVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV,
@@ -420,8 +421,8 @@ SDValue CustomDAG::CreateBroadcast(EVT ResTy, SDValue S,
 
   // Constant mask splat
   if (BcConst) {
-    return CreateConstMask(ResTy.getVectorNumElements(),
-                           BcConst->getSExtValue() != 0);
+    return createUniformConstMask(ResTy.getVectorNumElements(),
+                                  BcConst->getSExtValue() != 0);
   }
 
   // Generic mask code path
@@ -460,7 +461,7 @@ SDValue CustomDAG::createMaskInsert(SDValue MaskV, SDValue Idx,
 
 SDValue CustomDAG::createConstMask(unsigned NumElems,
                                    const LaneBits &TrueBits) const {
-  SDValue MaskV = CreateConstMask(TrueBits.size(), false);
+  SDValue MaskV = createUniformConstMask(TrueBits.size(), false);
 
   // Scan for trivial cases
   bool TrivialMask = true;
@@ -471,7 +472,7 @@ SDValue CustomDAG::createConstMask(unsigned NumElems,
     }
   }
   if (TrivialMask)
-    return CreateConstMask(TrueBits.size(), TrueBits[0]);
+    return createUniformConstMask(TrueBits.size(), TrueBits[0]);
 
   unsigned RegPartIdx = 0;
   for (unsigned StartIdx = 0; StartIdx < NumElems;
@@ -501,7 +502,8 @@ SDValue CustomDAG::createSelect(SDValue OnTrueV, SDValue OnFalseV,
                      {OnTrueV, OnFalseV, MaskV, PivotV});
 }
 
-SDValue CustomDAG::CreateConstMask(unsigned NumElements, bool IsTrue) const {
+SDValue CustomDAG::createUniformConstMask(unsigned NumElements,
+                                          bool IsTrue) const {
   auto MaskVT = MVT::getVectorVT(MVT::i1, NumElements);
 
   // VEISelDAGtoDAG will replace this with the constant-true VM
