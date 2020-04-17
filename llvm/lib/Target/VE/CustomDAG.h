@@ -219,10 +219,8 @@ struct CustomDAG {
     return getVectorVT(MVT::i1, VectorV.getValueType().getVectorNumElements());
   }
 
-  SDValue createMaskCast(SDValue VectorV, SDValue AVL) const {
-    return DAG.getNode(VEISD::VEC_TOMASK, DL, getMaskVTFor(VectorV),
-                       {VectorV, AVL});
-  }
+  // create a VEC_TOMASk node if VectorV is not a mask already
+  SDValue createMaskCast(SDValue VectorV, SDValue AVL) const;
 
   void dumpValue(SDValue V) const;
 };

@@ -544,5 +544,13 @@ SDValue CustomDAG::getVectorInsert(SDValue DestVecV, SDValue ElemV,
                  {DestVecV, ElemV, IdxV});
 }
 
+SDValue CustomDAG::createMaskCast(SDValue VectorV, SDValue AVL) const {
+  if (IsMaskType(VectorV.getValueType()))
+    return VectorV;
+
+  return DAG.getNode(VEISD::VEC_TOMASK, DL, getMaskVTFor(VectorV),
+                     {VectorV, AVL});
+}
+
 /// } class CustomDAG
 } // namespace llvm
