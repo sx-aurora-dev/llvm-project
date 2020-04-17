@@ -83,6 +83,10 @@ struct MaskShuffleAnalysis {
       Out << "}\n";
       return Out;
     }
+
+    bool empty() const {
+      return Selects.empty();
+    }
   };
 
   // Constant inserts
@@ -101,6 +105,9 @@ struct MaskShuffleAnalysis {
   // Synthesize \p BitSelect, merging the result into \p Passthru
   SDValue synthesize(SDValue Passthru, BitSelect &BSel, SDValue SXV,
                      CustomDAG &CDAG) const;
+
+  // Check whether the constant background of the result consists only of `1` bits (or undef)
+  bool analyzeVectorSources(bool & AllTrue) const;
 
   // materialize the code to synthesize this operation
   SDValue synthesize(CustomDAG &CDAG);

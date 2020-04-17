@@ -203,6 +203,14 @@ multiclass Unpack_Swap<ValueType PackVT> {
 defm: Unpack_Swap<v512i32>;
 defm: Unpack_Swap<v512f32>;
 
+def : Pat<(vec_tomask v256i64:$vx, i32:$avl),
+          (vfmklne_mvl $vx, $avl)>;
+def : Pat<(vec_tomask v256f64:$vx, i32:$avl),
+          (vfmklne_mvl $vx, $avl)>;
+def : Pat<(vec_tomask v256i32:$vx, i32:$avl),
+          (pvfmkwlone_mvl $vx, $avl)>;
+def : Pat<(vec_tomask v256f32:$vx, i32:$avl),
+          (pvfmkwupne_mvl $vx, $avl)>;
 
 // Casts
 def : Pat<(v256i64 (sext_inreg V64:$src, v256i32)),

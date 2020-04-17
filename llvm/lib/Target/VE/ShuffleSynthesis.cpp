@@ -268,6 +268,11 @@ public:
       return ElemSelect::Undef();
 
     // insertion from scalar registers (not a constant)
+    LLVM_DEBUG(dbgs() << "VRegView ES: " << DestIdx << " value: ";
+               ES.V->print(dbgs());
+               dbgs() << " with value type "
+                      << ES.V.getValueType().getEVTString() << "\n";);
+
     if (ES.isElemInsert() && ES.V.getValueType() == MVT::i32) {
       return isa<ConstantSDNode>(ES.V) ? ZeroInsert : ES;
     }
@@ -299,6 +304,12 @@ public:
   // get the element selection at i
   ElemSelect getSourceElem(unsigned DestIdx) override {
     auto ES = BitMV.getSourceElem(DestIdx);
+
+    LLVM_DEBUG(dbgs() << "OriginalMV ES: " << DestIdx << " value: ";
+               ES.V->print(dbgs());
+               dbgs() << " with value type "
+                      << ES.V.getValueType().getEVTString() << "\n";);
+
     if (!ES.isDefined())
       return ES;
 
@@ -337,6 +348,9 @@ static bool hasNonZeroEntry(MaskView &MV) {
 // match a 64 bit segment, mapping out all source bits
 // FIXME this implies knowledge about the underlying object structure
 MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV) : MV(MV) {
+  IsConstantOne.reset();
+  UndefBits.reset();
+
   // First, check for any insertions from scalar registers
 
   // this view only reflects insertions of actual i1 bits (from other mask
@@ -348,7 +362,6 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV) : MV(MV) {
   // loop over all sub-registers (sx parts of v256)
   for (unsigned PartIdx = 0; PartIdx * SXRegSize < NumEls; ++PartIdx) {
     const unsigned DestPartBase = PartIdx * SXRegSize;
-    std::vector<bool> DefinedBits(SXRegSize, false);
     const unsigned NumPartBits = std::min(SXRegSize, NumEls - DestPartBase);
 
     unsigned NumMissingBits = NumPartBits; // keeps track of matcher rouds
@@ -359,12 +372,9 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV) : MV(MV) {
     while (NumMissingBits > 0) {
       BitSelect Sel;
       for (unsigned i = 0; i < NumPartBits; ++i) {
-        if (DefinedBits[i])
-          continue;
         ElemSelect ES = BitMV.getSourceElem(i + DestPartBase);
         // skip both kinds of undef (no value transfered or source is undef)
         if (!ES.isDefined()) {
-          DefinedBits[i] = true;
           UndefBits[DestPartBase + i] = true;
           NumMissingBits--;
           continue;
@@ -372,7 +382,6 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV) : MV(MV) {
 
         // inserted bit constants
         if (!ES.isElemTransfer()) {
-          DefinedBits[i] = true;
           NumMissingBits--;
           // This only works because we know that the BitMaskView will mask-out
           // any non-constant bit insertions
@@ -392,7 +401,6 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV) : MV(MV) {
           Sel.SrcValPart = SrcPartIdx;
           Sel.ShiftAmount = ShiftAmount;
           Sel.SrcSelMask |= 1 << ES.ExtractIdx;
-          DefinedBits[i] = true;
           NumMissingBits--;
           continue;
         }
@@ -401,7 +409,6 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV) : MV(MV) {
         if ((Sel.SrcVal == ES.V && Sel.SrcValPart == SrcPartIdx) &&
             Sel.ShiftAmount == ShiftAmount) {
           Sel.SrcSelMask |= 1 << ES.ExtractIdx;
-          DefinedBits[i] = true;
           NumMissingBits--;
           continue;
         }
@@ -449,82 +456,132 @@ SDValue MaskShuffleAnalysis::synthesize(SDValue Passthru, BitSelect &BSel,
   return ResV;
 }
 
-// materialize the code to synthesize this operation
-SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG) {
-  // Check for a constant splat
-  bool IsTrueSplat = true;
+bool MaskShuffleAnalysis::analyzeVectorSources(bool &AllTrue) const {
+  // Check whether all non-scalar sources are the constant `1` or undef
+  AllTrue = true;
   for (unsigned i = 0; i < IsConstantOne.size(); ++i) {
     if (!UndefBits[i] && !IsConstantOne[i])
-      IsTrueSplat = false;
+      AllTrue = false;
+    break;
   }
-  if (IsTrueSplat) {
-    return CDAG.createConstMask(256, true);
+  // all `1` background
+  if (AllTrue)
+    return true;
+
+  // Check whether all segments are empty (eg all non-scalar sources are `0` or
+  // undef)
+  for (auto &SXPart : Segments) {
+    // bit transfer from vector mask reg
+    if (!SXPart.empty())
+      return false;
+    // Non-0 bits in the cconstant background
+    for (unsigned SXBit = 0; SXBit < SXRegSize; ++SXBit) {
+      if (IsConstantOne[SXPart.ResPartIdx * SXRegSize + SXBit]) {
+        return false;
+      }
+    }
   }
 
+  // all `0` background
+  AllTrue = false;
+  return true;
+}
+
+// materialize the code to synthesize this operation
+SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG) {
   // this view reflects exactly those insertions that are non-constant and have
   // a MVT::i32 type
   VRegView VectorMV(CDAG, MV);
   SDValue BlendV; // VM to be OR-ed into the resulting vector
 
-  if (hasNonZeroEntry(VectorMV)) {
+  bool HasScalarSourceEntries = hasNonZeroEntry(VectorMV);
+
+  if (HasScalarSourceEntries) {
+    LLVM_DEBUG(dbgs() << ":: has non-trivial insertion in VectorMV ::\n";);
     SDValue AVL = CDAG.getConstEVL(256); // FIXME
     // Synthesize the result vector
     ShuffleAnalysis VSA(VectorMV);
     auto Res = VSA.analyze();
     assert(Res == ShuffleAnalysis::CanSynthesize);
     SDValue VecSourceV = VSA.synthesize(CDAG, VectorMV.getValueType());
-    BlendV = CDAG.getNode(VE::vfmkwne_mvl, MVT::v256i1, {VecSourceV, AVL});
+    BlendV = CDAG.createMaskCast(VecSourceV, AVL);
   }
 
-  // Actual mask synthesis code path
-  std::map<std::pair<SDValue, unsigned>, SDValue> SourceParts;
+  // Check for a constant in the bit transfer mask
+  SDValue VMAccu;
+  bool AllTrue;
+  bool HasTrivialBackground = analyzeVectorSources(AllTrue);
+  bool AllTrueBackground = HasTrivialBackground && AllTrue;
+  bool AllFalseBackground = HasTrivialBackground && AllTrue;
 
-  // Extract all source parts
-  for (auto &ResPart : Segments) {
-    for (auto &BitSel : ResPart.Selects) {
-      auto Key = std::pair<SDValue, unsigned>(BitSel.SrcVal, BitSel.SrcValPart);
-      if (SourceParts.find(Key) != SourceParts.end())
-        continue;
+  if (!HasScalarSourceEntries && AllTrueBackground) {
+    // Must not have spurious `1` entries since what is undefined for the
+    // vector/constant sources could be the defined insertion of a bit from a
+    // scalar register. Short cut when the only occuring constant is a '1'
+    VMAccu = CDAG.createUniformConstMask(256, true);
 
-      SDValue PartIdxC = CDAG.getConstant(Key.second, MVT::i64);
-      auto SXPart = CDAG.createMaskExtract(Key.first, PartIdxC);
-      SourceParts[Key] = SXPart;
+  } else if (AllFalseBackground) {
+    // Don't need to check for spurious `1` bits here since
+    // the scalar result and the vector/constant results are OR-ed together in
+    // the end.
+    VMAccu = SDValue();
+
+  } else {
+    VMAccu = CDAG.DAG.getUNDEF(MVT::v256i1);
+
+    // There are non-trivial bit transfers from other vector registers
+    // Actual mask synthesis code path
+    std::map<std::pair<SDValue, unsigned>, SDValue> SourceParts;
+
+    // Extract all source parts
+    for (auto &ResPart : Segments) {
+      for (auto &BitSel : ResPart.Selects) {
+        auto Key =
+            std::pair<SDValue, unsigned>(BitSel.SrcVal, BitSel.SrcValPart);
+        if (SourceParts.find(Key) != SourceParts.end())
+          continue;
+
+        SDValue PartIdxC = CDAG.getConstant(Key.second, MVT::i64);
+        auto SXPart = CDAG.createMaskExtract(Key.first, PartIdxC);
+        SourceParts[Key] = SXPart;
+      }
+    }
+
+    // Work through selects, blending and shifting the parts together
+    for (auto &ResPart : Segments) {
+
+      // Synthesize the constant background
+      unsigned BaseConstant = 0;
+      for (unsigned i = 0; i < SXRegSize; ++i) {
+        unsigned BitPos = i + ResPart.ResPartIdx * SXRegSize;
+        if (IsConstantOne[BitPos])
+          BaseConstant |= (1 << i);
+      }
+      SDValue SXAccu = CDAG.getConstant(BaseConstant, MVT::i64);
+
+      // synthesize all operations that feed into this destionation sx part
+      for (auto &BitSel : ResPart.Selects) {
+        auto ItExtractedSrc = SourceParts.find(
+            std::pair<SDValue, unsigned>(BitSel.SrcVal, BitSel.SrcValPart));
+        assert(ItExtractedSrc != SourceParts.end());
+        SXAccu = synthesize(SXAccu, BitSel, ItExtractedSrc->second, CDAG);
+      }
+
+      // finally, insert the SX part into the the actual VM
+      VMAccu = CDAG.createMaskInsert(
+          VMAccu, CDAG.getConstant(ResPart.ResPartIdx, MVT::i64), SXAccu);
     }
   }
 
-  // Work through selects, blending and shifting the parts together
-  SDValue VMAccu = CDAG.DAG.getUNDEF(MVT::v256i1);
-
-  for (auto &ResPart : Segments) {
-
-    // Synthesize the constant background
-    unsigned BaseConstant = 0;
-    for (unsigned i = 0; i < SXRegSize; ++i) {
-      unsigned BitPos = i + ResPart.ResPartIdx * SXRegSize;
-      if (IsConstantOne[BitPos])
-        BaseConstant |= (1 << i);
-    }
-    SDValue SXAccu = CDAG.getConstant(BaseConstant, MVT::i64);
-
-    // synthesize all operations that feed into this destionation sx part
-    for (auto &BitSel : ResPart.Selects) {
-      auto ItExtractedSrc = SourceParts.find(
-          std::pair<SDValue, unsigned>(BitSel.SrcVal, BitSel.SrcValPart));
-      assert(ItExtractedSrc != SourceParts.end());
-      SXAccu = synthesize(SXAccu, BitSel, ItExtractedSrc->second, CDAG);
-    }
-
-    // finally, insert the SX part into the the actual VM
-    VMAccu = CDAG.createMaskInsert(
-        VMAccu, CDAG.getConstant(ResPart.ResPartIdx, MVT::i64), SXAccu);
+  // OR-in the BlendV (values inserted from scalar regs)
+  if (BlendV && VMAccu) {
+    return CDAG.getNode(ISD::OR, MVT::v256i1, {VMAccu, BlendV});
   }
-
-  if (BlendV) {
-    // Blend in any SX reg sources (if there are any)
-    VMAccu = CDAG.getNode(ISD::OR, MVT::v256i1, {VMAccu, BlendV});
-  }
-
-  return VMAccu;
+  if (BlendV)
+    return BlendV;
+  if (VMAccu)
+    return VMAccu;
+  return CDAG.createUniformConstMask(256, false);
 }
 
 /// } MaskShuffleAnalysis
