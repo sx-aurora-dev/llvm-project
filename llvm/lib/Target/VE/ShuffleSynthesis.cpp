@@ -690,7 +690,7 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
 
     SDValue ResV =
         CDAG.createVMV(PartialV.getValueType(), SrcVector, ShiftV, MaskV, VL);
-    return CDAG.createSelect(ResV, PartialV, MaskV, VL);
+    return CDAG.createSelect(ResV.getValueType(), ResV, PartialV, MaskV, VL);
   }
 };
 
@@ -990,7 +990,7 @@ struct BroadcastOp final : public AbstractShuffleOp {
     const SDValue PivotV = CDAG.getConstEVL(MaxAVL);
     SDValue BlendMaskV = CDAG.createConstMask(NumElems, TargetLanes);
     SDValue BroadcastV = CDAG.CreateBroadcast(VecTy, ScalarSrcV, PivotV);
-    return CDAG.createSelect(BroadcastV, PartialV, BlendMaskV, PivotV);
+    return CDAG.createSelect(VecTy, BroadcastV, PartialV, BlendMaskV, PivotV);
   }
 
   void print(raw_ostream &out) const {

@@ -152,8 +152,8 @@ struct CustomDAG {
   }
 
   // OnTrueV[l] if l < PivotV && Mask[l] else OnFalseV[l]
-  SDValue createSelect(SDValue OnTrueV, SDValue OnFalseV, SDValue MaskV,
-                       SDValue PivotV) const;
+  SDValue createSelect(EVT ResVT, SDValue OnTrueV, SDValue OnFalseV,
+                       SDValue MaskV, SDValue PivotV) const;
 
   /// getNode {
   SDValue getNode(unsigned OC, SDVTList VTL, ArrayRef<SDValue> OpV) const {

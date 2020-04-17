@@ -137,7 +137,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
 
     // Known VP ops
     // all standard un/bin/tern-ary operators
-#define REGISTER_UNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
+#define REGISTER_UNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                            \
   case VEISD::VVP_NAME:                                                        \
   case ISD::NATIVE_ISD:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
@@ -496,14 +496,14 @@ SDValue CustomDAG::createConstMask(unsigned NumElems,
   return MaskV;
 }
 
-SDValue CustomDAG::createSelect(SDValue OnTrueV, SDValue OnFalseV,
+SDValue CustomDAG::createSelect(EVT ResVT, SDValue OnTrueV, SDValue OnFalseV,
                                 SDValue MaskV, SDValue PivotV) const {
   if (OnTrueV.isUndef())
     return OnFalseV;
   if (OnFalseV.isUndef())
     return OnTrueV;
 
-  return DAG.getNode(VEISD::VVP_SELECT, DL, OnTrueV.getValueType(),
+  return DAG.getNode(VEISD::VVP_SELECT, DL, ResVT,
                      {OnTrueV, OnFalseV, MaskV, PivotV});
 }
 

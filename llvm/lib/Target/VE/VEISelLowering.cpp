@@ -209,7 +209,7 @@ SDValue VETargetLowering::ExpandSELECT(SDValue Op,
   }
 
   // Create a plain vector selection
-  return CDAG.createSelect(OnTrueV, OnFalseV, CondVecV, AVL);
+  return CDAG.createSelect(LegalResVT, OnTrueV, OnFalseV, CondVecV, AVL);
 }
 
 #if 0
