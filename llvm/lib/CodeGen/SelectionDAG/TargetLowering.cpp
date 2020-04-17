@@ -4318,10 +4318,10 @@ unsigned TargetLowering::AsmOperandInfo::getMatchedOperand() const {
 TargetLowering::AsmOperandInfoVector
 TargetLowering::ParseConstraints(const DataLayout &DL,
                                  const TargetRegisterInfo *TRI,
-                                 ImmutableCallSite CS) const {
+                                 const CallBase &Call) const {
   /// Information about all of the constraints.
   AsmOperandInfoVector ConstraintOperands;
-  const InlineAsm *IA = cast<InlineAsm>(CS.getCalledValue());
+  const InlineAsm *IA = cast<InlineAsm>(Call.getCalledValue());
   unsigned maCount = 0; // Largest number of multiple alternative constraints.
 
   // Do a prepass over the constraints, canonicalizing them, and building up the
@@ -4344,25 +4344,24 @@ TargetLowering::ParseConstraints(const DataLayout &DL,
     case InlineAsm::isOutput:
       // Indirect outputs just consume an argument.
       if (OpInfo.isIndirect) {
-        OpInfo.CallOperandVal = const_cast<Value *>(CS.getArgument(ArgNo++));
+        OpInfo.CallOperandVal = Call.getArgOperand(ArgNo++);
         break;
       }
 
       // The return value of the call is this value.  As such, there is no
       // corresponding argument.
-      assert(!CS.getType()->isVoidTy() &&
-             "Bad inline asm!");
-      if (StructType *STy = dyn_cast<StructType>(CS.getType())) {
+      assert(!Call.getType()->isVoidTy() && "Bad inline asm!");
+      if (StructType *STy = dyn_cast<StructType>(Call.getType())) {
         OpInfo.ConstraintVT =
             getSimpleValueType(DL, STy->getElementType(ResNo));
       } else {
         assert(ResNo == 0 && "Asm only has one result!");
-        OpInfo.ConstraintVT = getSimpleValueType(DL, CS.getType());
+        OpInfo.ConstraintVT = getSimpleValueType(DL, Call.getType());
       }
       ++ResNo;
       break;
     case InlineAsm::isInput:
-      OpInfo.CallOperandVal = const_cast<Value *>(CS.getArgument(ArgNo++));
+      OpInfo.CallOperandVal = Call.getArgOperand(ArgNo++);
       break;
     case InlineAsm::isClobber:
       // Nothing to do.
@@ -5672,10 +5671,10 @@ TargetLowering::getNegatibleCost(SDValue Op, SelectionDAG &DAG,
                                         ForCodeSize, Depth + 1);
     NegatibleCost V1 = getNegatibleCost(Op.getOperand(1), DAG, LegalOperations,
                                         ForCodeSize, Depth + 1);
-    NegatibleCost V01 = std::max(V0, V1);
+    NegatibleCost V01 = std::min(V0, V1);
     if (V01 == NegatibleCost::Expensive)
       return NegatibleCost::Expensive;
-    return std::max(V01, V2);
+    return std::min(V01, V2);
   }
 
   case ISD::FP_EXTEND:
@@ -5777,7 +5776,7 @@ SDValue TargetLowering::getNegatedExpression(SDValue Op, SelectionDAG &DAG,
     SDValue NegZ = getNegatedExpression(Z, DAG, LegalOps, OptForSize, Depth);
     NegatibleCost CostX = getNegatibleCost(X, DAG, LegalOps, OptForSize, Depth);
     NegatibleCost CostY = getNegatibleCost(Y, DAG, LegalOps, OptForSize, Depth);
-    if (CostX > CostY) {
+    if (CostX <= CostY) {
       // fold (fneg (fma X, Y, Z)) -> (fma (fneg X), Y, (fneg Z))
       SDValue NegX = getNegatedExpression(X, DAG, LegalOps, OptForSize, Depth);
       return DAG.getNode(Opcode, DL, VT, NegX, Y, NegZ, Flags);

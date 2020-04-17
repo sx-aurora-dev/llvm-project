@@ -244,8 +244,7 @@ private:
                     SmallVectorImpl<uint64_t> *Offsets = nullptr);
 
   /// Common code for translating normal calls or invokes.
-  bool translateCallSite(const ImmutableCallSite &CS,
-                         MachineIRBuilder &MIRBuilder);
+  bool translateCallBase(const CallBase &CB, MachineIRBuilder &MIRBuilder);
 
   /// Translate call instruction.
   /// \pre \p U is a call instruction.
@@ -453,6 +452,7 @@ private:
   bool translateAtomicCmpXchg(const User &U, MachineIRBuilder &MIRBuilder);
   bool translateAtomicRMW(const User &U, MachineIRBuilder &MIRBuilder);
   bool translateFence(const User &U, MachineIRBuilder &MIRBuilder);
+  bool translateFreeze(const User &U, MachineIRBuilder &MIRBuilder);
 
   // Stubs to keep the compiler happy while we implement the rest of the
   // translation.
@@ -481,9 +481,6 @@ private:
     return false;
   }
   bool translateUserOp2(const User &U, MachineIRBuilder &MIRBuilder) {
-    return false;
-  }
-  bool translateFreeze(const User &U, MachineIRBuilder &MIRBuilder) {
     return false;
   }
 

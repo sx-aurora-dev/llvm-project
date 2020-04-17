@@ -12,7 +12,7 @@
 
 #include "PassDetail.h"
 #include "mlir/Dialect/Affine/EDSC/Intrinsics.h"
-#include "mlir/Dialect/Linalg/EDSC/Intrinsics.h"
+#include "mlir/Dialect/Linalg/EDSC/FoldedIntrinsics.h"
 #include "mlir/Dialect/Linalg/IR/LinalgTypes.h"
 #include "mlir/Dialect/Linalg/Passes.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
@@ -21,9 +21,7 @@
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineExprVisitor.h"
 #include "mlir/IR/AffineMap.h"
-#include "mlir/Support/Functional.h"
 #include "mlir/Support/LLVM.h"
-#include "mlir/Support/STLExtras.h"
 #include "mlir/Transforms/FoldUtils.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -296,7 +294,8 @@ makeTiledViews(OpBuilder &b, Location loc, LinalgOp linalgOp,
             /*dimCount=*/3, /*symbolCount=*/0,
             {getAffineDimExpr(/*position=*/0, b.getContext()),
              getAffineDimExpr(/*position=*/1, b.getContext()) -
-                 getAffineDimExpr(/*position=*/2, b.getContext())});
+                 getAffineDimExpr(/*position=*/2, b.getContext())},
+            b.getContext());
         auto d = folded_std_dim(folder, view, r);
         size = folded_affine_min(folder, b.getIndexType(), minMap,
                                  ValueRange{size, d, offset});
@@ -350,6 +349,8 @@ Optional<TiledLinalgOp> static tileLinalgOpImpl(OpBuilder &b, LinalgOp op,
   if (!permutation.empty())
     invPermutationMap = inversePermutation(
         AffineMap::getPermutationMap(permutation, ScopedContext::getContext()));
+  if (!invPermutationMap)
+    return llvm::None;
 
   OpBuilder::InsertionGuard g(b);
   b.setInsertionPoint(op);
@@ -359,10 +360,11 @@ Optional<TiledLinalgOp> static tileLinalgOpImpl(OpBuilder &b, LinalgOp op,
   // The flattened loopToOperandRangesMaps is expected to be an invertible
   // permutation map (asserted in the inverse calculation).
   auto mapsRange = op.indexing_maps().getAsRange<AffineMapAttr>();
-  auto maps =
-      functional::map([](AffineMapAttr a) { return a.getValue(); }, mapsRange);
+  auto maps = llvm::to_vector<8>(
+      llvm::map_range(mapsRange, [](AffineMapAttr a) { return a.getValue(); }));
   auto viewSizesToLoopsMap = inversePermutation(concatAffineMaps(maps));
-  assert(viewSizesToLoopsMap && "expected invertible map");
+  if (!viewSizesToLoopsMap)
+    return llvm::None;
 
   SmallVector<SubViewOp::Range, 4> loopRanges;
   LoopIndexToRangeIndexMap loopIndexToRangeIndex;

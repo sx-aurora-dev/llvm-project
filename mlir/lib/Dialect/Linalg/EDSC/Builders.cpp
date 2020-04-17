@@ -8,12 +8,12 @@
 
 #include "mlir/IR/Builders.h"
 #include "mlir/Dialect/Affine/EDSC/Intrinsics.h"
+#include "mlir/Dialect/Linalg/EDSC/Builders.h"
 #include "mlir/Dialect/Linalg/EDSC/Intrinsics.h"
 #include "mlir/Dialect/LoopOps/EDSC/Builders.h"
 #include "mlir/Dialect/StandardOps/EDSC/Intrinsics.h"
 #include "mlir/Dialect/Utils/StructuredOpsUtils.h"
 #include "mlir/IR/AffineExpr.h"
-#include "mlir/Support/Functional.h"
 
 using namespace mlir;
 using namespace mlir::edsc;
@@ -164,7 +164,8 @@ Operation *mlir::edsc::makeGenericLinalgOp(
   std::copy_if(outputs.begin(), outputs.end(), std::back_inserter(types),
                [](StructuredIndexed s) { return !s.hasValue(); });
 
-  auto iteratorStrTypes = functional::map(toString, iteratorTypes);
+  auto iteratorStrTypes =
+      llvm::to_vector<8>(llvm::map_range(iteratorTypes, toString));
   // clang-format off
   auto *op =
       edsc::ScopedContext::getBuilder()
@@ -177,7 +178,6 @@ Operation *mlir::edsc::makeGenericLinalgOp(
               builder.getAffineMapArrayAttr(maps),
               builder.getStrArrayAttr(iteratorStrTypes),
               StringAttr() /*doc*/,
-              FlatSymbolRefAttr() /*fun*/,
               StringAttr() /*library_call*/
               /* TODO: other attributes in op */
               )

@@ -41,6 +41,7 @@ VEELFMCAsmInfo::VEELFMCAsmInfo(const Triple &TheTriple) {
   UsesELFSectionDirectiveForBSS = true;
 
   SupportsDebugInformation = true;
+  UseIntegratedAssembler = false;
 }
 
 const MCExpr*

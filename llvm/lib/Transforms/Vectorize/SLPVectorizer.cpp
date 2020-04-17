@@ -108,9 +108,8 @@ using namespace slpvectorizer;
 
 STATISTIC(NumVectorInstructions, "Number of vector instructions generated");
 
-cl::opt<bool>
-    llvm::RunSLPVectorization("vectorize-slp", cl::init(false), cl::Hidden,
-                              cl::desc("Run the SLP vectorization passes"));
+cl::opt<bool> RunSLPVectorization("vectorize-slp", cl::init(true), cl::Hidden,
+                                  cl::desc("Run the SLP vectorization passes"));
 
 static cl::opt<int>
     SLPCostThreshold("slp-threshold", cl::init(0), cl::Hidden,
@@ -285,7 +284,7 @@ static bool isCommutative(Instruction *I) {
 static Optional<TargetTransformInfo::ShuffleKind>
 isShuffle(ArrayRef<Value *> VL) {
   auto *EI0 = cast<ExtractElementInst>(VL[0]);
-  unsigned Size = EI0->getVectorOperandType()->getVectorNumElements();
+  unsigned Size = EI0->getVectorOperandType()->getNumElements();
   Value *Vec1 = nullptr;
   Value *Vec2 = nullptr;
   enum ShuffleMode { Unknown, Select, Permute };
@@ -294,7 +293,7 @@ isShuffle(ArrayRef<Value *> VL) {
     auto *EI = cast<ExtractElementInst>(VL[I]);
     auto *Vec = EI->getVectorOperand();
     // All vector operands must have the same number of vector elements.
-    if (Vec->getType()->getVectorNumElements() != Size)
+    if (cast<VectorType>(Vec->getType())->getNumElements() != Size)
       return None;
     auto *Idx = dyn_cast<ConstantInt>(EI->getIndexOperand());
     if (!Idx)
@@ -1438,7 +1437,7 @@ private:
       return VL.size() == ReuseShuffleIndices.size() &&
              std::equal(
                  VL.begin(), VL.end(), ReuseShuffleIndices.begin(),
-                 [this](Value *V, unsigned Idx) { return V == Scalars[Idx]; });
+                 [this](Value *V, int Idx) { return V == Scalars[Idx]; });
     }
 
     /// A vector of scalars.
@@ -1452,7 +1451,7 @@ private:
     EntryState State;
 
     /// Does this sequence require some shuffling?
-    SmallVector<unsigned, 4> ReuseShuffleIndices;
+    SmallVector<int, 4> ReuseShuffleIndices;
 
     /// Does this entry require reordering?
     ArrayRef<unsigned> ReorderIndices;
@@ -3182,7 +3181,7 @@ bool BoUpSLP::canReuseExtract(ArrayRef<Value *> VL, Value *OpValue,
     if (!LI || !LI->isSimple() || !LI->hasNUses(VL.size()))
       return false;
   } else {
-    NElts = Vec->getType()->getVectorNumElements();
+    NElts = cast<VectorType>(Vec->getType())->getNumElements();
   }
 
   if (NElts != VL.size())
@@ -4028,9 +4027,9 @@ Value *BoUpSLP::vectorizeTree(ArrayRef<Value *> VL) {
             V = SV->getOperand(0);
           } else {
             // Reshuffle to get only unique values.
-            SmallVector<unsigned, 4> UniqueIdxs;
-            SmallSet<unsigned, 4> UsedIdxs;
-            for(unsigned Idx : E->ReuseShuffleIndices)
+            SmallVector<int, 4> UniqueIdxs;
+            SmallSet<int, 4> UsedIdxs;
+            for (int Idx : E->ReuseShuffleIndices)
               if (UsedIdxs.insert(Idx).second)
                 UniqueIdxs.emplace_back(Idx);
             V = Builder.CreateShuffleVector(V, UndefValue::get(V->getType()),
@@ -4047,7 +4046,7 @@ Value *BoUpSLP::vectorizeTree(ArrayRef<Value *> VL) {
     ScalarTy = SI->getValueOperand()->getType();
 
   // Check that every instruction appears once in this bundle.
-  SmallVector<unsigned, 4> ReuseShuffleIndicies;
+  SmallVector<int, 4> ReuseShuffleIndicies;
   SmallVector<Value *, 4> UniqueValues;
   if (VL.size() > 2) {
     DenseMap<Value *, unsigned> UniquePositions;
@@ -5647,6 +5646,8 @@ bool SLPVectorizerPass::runImpl(Function &F, ScalarEvolution *SE_,
                                 LoopInfo *LI_, DominatorTree *DT_,
                                 AssumptionCache *AC_, DemandedBits *DB_,
                                 OptimizationRemarkEmitter *ORE_) {
+  if (!RunSLPVectorization)
+    return false;
   SE = SE_;
   TTI = TTI_;
   TLI = TLI_;

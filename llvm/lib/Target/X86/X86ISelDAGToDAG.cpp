@@ -862,6 +862,72 @@ void X86DAGToDAGISel::PreprocessISelDAG() {
     }
 
     switch (N->getOpcode()) {
+    case X86ISD::VBROADCAST: {
+      MVT VT = N->getSimpleValueType(0);
+      // Emulate v32i16/v64i8 broadcast without BWI.
+      if (!Subtarget->hasBWI() && (VT == MVT::v32i16 || VT == MVT::v64i8)) {
+        MVT NarrowVT = VT == MVT::v32i16 ? MVT::v16i16 : MVT::v32i8;
+        SDLoc dl(N);
+        SDValue NarrowBCast =
+            CurDAG->getNode(X86ISD::VBROADCAST, dl, NarrowVT, N->getOperand(0));
+        SDValue Res =
+            CurDAG->getNode(ISD::INSERT_SUBVECTOR, dl, VT, CurDAG->getUNDEF(VT),
+                            NarrowBCast, CurDAG->getIntPtrConstant(0, dl));
+        unsigned Index = VT == MVT::v32i16 ? 16 : 32;
+        Res = CurDAG->getNode(ISD::INSERT_SUBVECTOR, dl, VT, Res, NarrowBCast,
+                              CurDAG->getIntPtrConstant(Index, dl));
+
+        --I;
+        CurDAG->ReplaceAllUsesWith(N, Res.getNode());
+        ++I;
+        CurDAG->DeleteNode(N);
+      }
+
+      break;
+    }
+    case X86ISD::VBROADCAST_LOAD: {
+      MVT VT = N->getSimpleValueType(0);
+      // Emulate v32i16/v64i8 broadcast without BWI.
+      if (!Subtarget->hasBWI() && (VT == MVT::v32i16 || VT == MVT::v64i8)) {
+        MVT NarrowVT = VT == MVT::v32i16 ? MVT::v16i16 : MVT::v32i8;
+        auto *MemNode = cast<MemSDNode>(N);
+        SDLoc dl(N);
+        SDVTList VTs = CurDAG->getVTList(NarrowVT, MVT::Other);
+        SDValue Ops[] = {MemNode->getChain(), MemNode->getBasePtr()};
+        SDValue NarrowBCast = CurDAG->getMemIntrinsicNode(
+            X86ISD::VBROADCAST_LOAD, dl, VTs, Ops, MemNode->getMemoryVT(),
+            MemNode->getMemOperand());
+        SDValue Res =
+            CurDAG->getNode(ISD::INSERT_SUBVECTOR, dl, VT, CurDAG->getUNDEF(VT),
+                            NarrowBCast, CurDAG->getIntPtrConstant(0, dl));
+        unsigned Index = VT == MVT::v32i16 ? 16 : 32;
+        Res = CurDAG->getNode(ISD::INSERT_SUBVECTOR, dl, VT, Res, NarrowBCast,
+                              CurDAG->getIntPtrConstant(Index, dl));
+
+        --I;
+        SDValue To[] = {Res, NarrowBCast.getValue(1)};
+        CurDAG->ReplaceAllUsesWith(N, To);
+        ++I;
+        CurDAG->DeleteNode(N);
+      }
+
+      break;
+    }
+    case ISD::VSELECT: {
+      // Replace VSELECT with non-mask conditions with with BLENDV.
+      if (N->getOperand(0).getValueType().getVectorElementType() == MVT::i1)
+        break;
+
+      assert(Subtarget->hasSSE41() && "Expected SSE4.1 support!");
+      SDValue Blendv =
+          CurDAG->getNode(X86ISD::BLENDV, SDLoc(N), N->getValueType(0),
+                          N->getOperand(0), N->getOperand(1), N->getOperand(2));
+      --I;
+      CurDAG->ReplaceAllUsesWith(N, Blendv.getNode());
+      ++I;
+      CurDAG->DeleteNode(N);
+      continue;
+    }
     case ISD::FP_ROUND:
     case ISD::STRICT_FP_ROUND:
     case ISD::FP_TO_SINT:
@@ -4505,9 +4571,9 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
       // Converts a 32-bit register to a 64-bit, zero-extended version of
       // it. This is needed because x86-64 can do many things, but jmp %r32
       // ain't one of them.
-      const SDValue &Target = Node->getOperand(1);
-      assert(Target.getSimpleValueType() == llvm::MVT::i32);
-      SDValue ZextTarget = CurDAG->getZExtOrTrunc(Target, dl, EVT(MVT::i64));
+      SDValue Target = Node->getOperand(1);
+      assert(Target.getValueType() == MVT::i32 && "Unexpected VT!");
+      SDValue ZextTarget = CurDAG->getZExtOrTrunc(Target, dl, MVT::i64);
       SDValue Brind = CurDAG->getNode(ISD::BRIND, dl, MVT::Other,
                                       Node->getOperand(0), ZextTarget);
       ReplaceNode(Node, Brind.getNode());
@@ -4530,21 +4596,6 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
       return;
     }
     break;
-
-  case ISD::VSELECT: {
-    // Replace VSELECT with non-mask conditions with with BLENDV.
-    if (Node->getOperand(0).getValueType().getVectorElementType() == MVT::i1)
-      break;
-
-    assert(Subtarget->hasSSE41() && "Expected SSE4.1 support!");
-    SDValue Blendv = CurDAG->getNode(
-        X86ISD::BLENDV, SDLoc(Node), Node->getValueType(0), Node->getOperand(0),
-        Node->getOperand(1), Node->getOperand(2));
-    ReplaceNode(Node, Blendv.getNode());
-    SelectCode(Blendv.getNode());
-    // We already called ReplaceUses.
-    return;
-  }
 
   case ISD::SRL:
     if (matchBitExtract(Node))

@@ -450,11 +450,20 @@ private:
 /// Note: These methods also perform folding and simple dead-code elimination
 ///       before attempting to match any of the provided patterns.
 ///
-bool applyPatternsGreedily(Operation *op,
-                           const OwningRewritePatternList &patterns);
+bool applyPatternsAndFoldGreedily(Operation *op,
+                                  const OwningRewritePatternList &patterns);
 /// Rewrite the given regions, which must be isolated from above.
-bool applyPatternsGreedily(MutableArrayRef<Region> regions,
-                           const OwningRewritePatternList &patterns);
+bool applyPatternsAndFoldGreedily(MutableArrayRef<Region> regions,
+                                  const OwningRewritePatternList &patterns);
+
+/// Applies the specified patterns on `op` alone while also trying to fold it,
+/// by selecting the highest benefits patterns in a greedy manner. Returns true
+/// if no more patterns can be matched. `erased` is set to true if `op` was
+/// folded away or erased as a result of becoming dead. Note: This does not
+/// apply any patterns recursively to the regions of `op`.
+bool applyOpPatternsAndFold(Operation *op,
+                            const OwningRewritePatternList &patterns,
+                            bool *erased = nullptr);
 } // end namespace mlir
 
 #endif // MLIR_PATTERN_MATCH_H

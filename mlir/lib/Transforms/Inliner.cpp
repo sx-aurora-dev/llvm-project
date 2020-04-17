@@ -455,7 +455,7 @@ inlineCallsInSCC(Inliner &inliner, CGUseList &useList,
   // here as more calls may be added during inlining.
   bool inlinedAnyCalls = false;
   for (unsigned i = 0; i != calls.size(); ++i) {
-    ResolvedCall &it = calls[i];
+    ResolvedCall it = calls[i];
     LLVM_DEBUG({
       llvm::dbgs() << "* Considering inlining call: ";
       it.call.dump();
@@ -518,7 +518,8 @@ static void canonicalizeSCC(CallGraph &cg, CGUseList &useList,
 
     // We also won't apply canonicalizations for nodes that are not
     // isolated. This avoids potentially mutating the regions of nodes defined
-    // above, this is also a stipulation of the 'applyPatternsGreedily' driver.
+    // above, this is also a stipulation of the 'applyPatternsAndFoldGreedily'
+    // driver.
     auto *region = node->getCallableRegion();
     if (!region->getParentOp()->isKnownIsolatedFromAbove())
       continue;
@@ -541,7 +542,7 @@ static void canonicalizeSCC(CallGraph &cg, CGUseList &useList,
 
         // Apply the canonicalization patterns to this region.
         auto *node = nodesToCanonicalize[index];
-        applyPatternsGreedily(*node->getCallableRegion(), canonPatterns);
+        applyPatternsAndFoldGreedily(*node->getCallableRegion(), canonPatterns);
 
         // Make sure to reset the order ID for the diagnostic handler, as this
         // thread may be used in a different context.

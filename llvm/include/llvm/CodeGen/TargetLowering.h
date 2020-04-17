@@ -37,7 +37,6 @@
 #include "llvm/CodeGen/TargetCallingConv.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/Attributes.h"
-#include "llvm/IR/CallSite.h"
 #include "llvm/IR/CallingConv.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -257,9 +256,9 @@ public:
 
   /// Enum that specifies when a float negation is beneficial.
   enum class NegatibleCost {
-    Expensive = 0,  // Negated expression is more expensive.
+    Cheaper = 0,    // Negated expression is cheaper.
     Neutral = 1,    // Negated expression has the same cost.
-    Cheaper = 2     // Negated expression is cheaper.
+    Expensive = 2   // Negated expression is more expensive.
   };
 
   class ArgListEntry {
@@ -287,10 +286,6 @@ public:
           IsSwiftSelf(false), IsSwiftError(false), IsCFGuardTarget(false) {}
 
     void setAttributes(const CallBase *Call, unsigned ArgIdx);
-
-    void setAttributes(ImmutableCallSite *CS, unsigned ArgIdx) {
-      return setAttributes(cast<CallBase>(CS->getInstruction()), ArgIdx);
-    }
   };
   using ArgListTy = std::vector<ArgListEntry>;
 
@@ -2642,11 +2637,13 @@ public:
     return false;
   }
 
-  /// Returns true if the FADD or FSUB node passed could legally be combined with
-  /// an fmul to form an ISD::FMAD.
-  virtual bool isFMADLegalForFAddFSub(const SelectionDAG &DAG,
-                                      const SDNode *N) const {
-    assert(N->getOpcode() == ISD::FADD || N->getOpcode() == ISD::FSUB);
+  /// Returns true if be combined with to form an ISD::FMAD. \p N may be an
+  /// ISD::FADD, ISD::FSUB, or an ISD::FMUL which will be distributed into an
+  /// fadd/fsub.
+  virtual bool isFMADLegal(const SelectionDAG &DAG, const SDNode *N) const {
+    assert((N->getOpcode() == ISD::FADD || N->getOpcode() == ISD::FSUB ||
+            N->getOpcode() == ISD::FMUL) &&
+           "unexpected node in FMAD forming combine");
     return isOperationLegal(ISD::FMAD, N->getValueType(0));
   }
 
@@ -3595,7 +3592,7 @@ public:
     ArgListTy Args;
     SelectionDAG &DAG;
     SDLoc DL;
-    ImmutableCallSite CS;
+    const CallBase *CB = nullptr;
     SmallVector<ISD::OutputArg, 32> Outs;
     SmallVector<SDValue, 32> OutVals;
     SmallVector<ISD::InputArg, 32> Ins;
@@ -3642,16 +3639,15 @@ public:
 
     CallLoweringInfo &setCallee(Type *ResultType, FunctionType *FTy,
                                 SDValue Target, ArgListTy &&ArgsList,
-                                ImmutableCallSite Call) {
+                                const CallBase &Call) {
       RetTy = ResultType;
 
       IsInReg = Call.hasRetAttr(Attribute::InReg);
       DoesNotReturn =
           Call.doesNotReturn() ||
-          (!Call.isInvoke() &&
-           isa<UnreachableInst>(Call.getInstruction()->getNextNode()));
+          (!isa<InvokeInst>(Call) && isa<UnreachableInst>(Call.getNextNode()));
       IsVarArg = FTy->isVarArg();
-      IsReturnValueUsed = !Call.getInstruction()->use_empty();
+      IsReturnValueUsed = !Call.use_empty();
       RetSExt = Call.hasRetAttr(Attribute::SExt);
       RetZExt = Call.hasRetAttr(Attribute::ZExt);
 
@@ -3661,7 +3657,7 @@ public:
       NumFixedArgs = FTy->getNumParams();
       Args = std::move(ArgsList);
 
-      CS = Call;
+      CB = &Call;
 
       return *this;
     }
@@ -4036,7 +4032,7 @@ public:
   /// string itself isn't empty, there was an error parsing.
   virtual AsmOperandInfoVector ParseConstraints(const DataLayout &DL,
                                                 const TargetRegisterInfo *TRI,
-                                                ImmutableCallSite CS) const;
+                                                const CallBase &Call) const;
 
   /// Examine constraint type and operand type and determine a weight value.
   /// The operand object must already have been set up with the operand type.

@@ -15,15 +15,31 @@
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/InitializePasses.h"
+#include "llvm/Support/CommandLine.h"
+#include "llvm/Transforms/Utils/Debugify.h"
 
 #define DEBUG_TYPE "mir-strip-debug"
 
 using namespace llvm;
 
 namespace {
+cl::opt<bool>
+    OnlyDebugifiedDefault("mir-strip-debugify-only",
+                          cl::desc("Should mir-strip-debug only strip debug "
+                                   "info from debugified modules by default"),
+                          cl::init(true));
 
 struct StripDebugMachineModule : public ModulePass {
   bool runOnModule(Module &M) override {
+    if (OnlyDebugified) {
+      NamedMDNode *DebugifyMD = M.getNamedMetadata("llvm.debugify");
+      if (!DebugifyMD) {
+        LLVM_DEBUG(dbgs() << "Not stripping debug info"
+                             " (debugify metadata not found)?\n");
+        return false;
+      }
+    }
+
     MachineModuleInfo &MMI =
         getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
 
@@ -58,45 +74,25 @@ struct StripDebugMachineModule : public ModulePass {
       }
     }
 
-    Changed |= StripDebugInfo(M);
-
-    NamedMDNode *NMD = M.getNamedMetadata("llvm.debugify");
-    if (NMD) {
-      NMD->eraseFromParent();
-      Changed |= true;
-    }
-
-    NMD = M.getModuleFlagsMetadata();
-    if (NMD) {
-      // There must be an easier way to remove an operand from a NamedMDNode.
-      SmallVector<MDNode *, 4> Flags;
-      for (MDNode *Flag : NMD->operands())
-        Flags.push_back(Flag);
-      NMD->clearOperands();
-      for (MDNode *Flag : Flags) {
-        MDString *Key = dyn_cast_or_null<MDString>(Flag->getOperand(1));
-        if (Key->getString() == "Debug Info Version") {
-          Changed |= true;
-          continue;
-        }
-        NMD->addOperand(Flag);
-      }
-      // If we left it empty we might as well remove it.
-      if (NMD->getNumOperands() == 0)
-        NMD->eraseFromParent();
-    }
+    Changed |= stripDebugifyMetadata(M);
 
     return Changed;
   }
 
-  StripDebugMachineModule() : ModulePass(ID) {}
+  StripDebugMachineModule() : StripDebugMachineModule(OnlyDebugifiedDefault) {}
+  StripDebugMachineModule(bool OnlyDebugified)
+      : ModulePass(ID), OnlyDebugified(OnlyDebugified) {}
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.addRequired<MachineModuleInfoWrapperPass>();
     AU.addPreserved<MachineModuleInfoWrapperPass>();
+    AU.setPreservesCFG();
   }
 
   static char ID; // Pass identification.
+
+protected:
+  bool OnlyDebugified;
 };
 char StripDebugMachineModule::ID = 0;
 
@@ -107,6 +103,6 @@ INITIALIZE_PASS_BEGIN(StripDebugMachineModule, DEBUG_TYPE,
 INITIALIZE_PASS_END(StripDebugMachineModule, DEBUG_TYPE,
                     "Machine Strip Debug Module", false, false)
 
-ModulePass *createStripDebugMachineModulePass() {
-  return new StripDebugMachineModule();
+ModulePass *llvm::createStripDebugMachineModulePass(bool OnlyDebugified) {
+  return new StripDebugMachineModule(OnlyDebugified);
 }

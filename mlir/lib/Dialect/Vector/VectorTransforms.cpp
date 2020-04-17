@@ -29,8 +29,6 @@
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Types.h"
-#include "mlir/Support/Functional.h"
-#include "mlir/Support/STLExtras.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -40,7 +38,6 @@
 
 using namespace mlir;
 using llvm::dbgs;
-using mlir::functional::zipMap;
 
 /// Given a shape with sizes greater than 0 along all dimensions,
 /// returns the distance, in number of elements, between a slice in a dimension
@@ -774,19 +771,15 @@ static Value getProducerValue(Value consumerValue) {
       int i = sourceVectorRank - 1;
       int j = resultVectorRank - 1;
 
-      // Check that source/result vector shape prefixes match while
-      // updating 'newOffsets'.
-      bool canShapeCastFold = true;
+      // Check that source/result vector shape prefixes match while updating
+      // 'newOffsets'.
       SmallVector<int64_t, 4> newOffsets(sourceVectorRank, 0);
-
-      auto apply = [&](int64_t sourceSize, int64_t resultSize) {
-        canShapeCastFold = sourceSize == resultSize;
+      for (auto it : llvm::zip(llvm::reverse(sourceVectorShape),
+                               llvm::reverse(resultVectorShape))) {
+        if (std::get<0>(it) != std::get<1>(it))
+          return nullptr;
         newOffsets[i--] = offsets[j--];
-      };
-      functional::zipApply(apply, llvm::reverse(sourceVectorShape),
-                           llvm::reverse(resultVectorShape));
-      if (!canShapeCastFold)
-        return nullptr;
+      }
 
       // Check that remaining prefix of source/result vector shapes are all 1s.
       // Currently we only support producer/consumer tracking through trivial
@@ -1355,9 +1348,7 @@ private:
       auto targetExpr = getAffineDimExpr(idx < index ? idx : idx - 1, ctx);
       results.push_back(targetExpr);
     }
-    // The (...) -> () affine map has its own factory method.
-    return results.empty() ? AffineMap::get(map.getNumDims() - 1, 0, ctx)
-                           : AffineMap::get(map.getNumDims() - 1, 0, results);
+    return AffineMap::get(map.getNumDims() - 1, 0, results, ctx);
   }
 
   // Helper to drop dimension from vector type.

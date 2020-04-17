@@ -138,9 +138,9 @@ struct GPUFuncOpLowering : ConvertToLLVMPattern {
     // not specific to function modeling.
     SmallVector<NamedAttribute, 4> attributes;
     for (const auto &attr : gpuFuncOp.getAttrs()) {
-      if (attr.first.is(SymbolTable::getSymbolAttrName()) ||
-          attr.first.is(impl::getTypeAttrName()) ||
-          attr.first.is(gpu::GPUFuncOp::getNumWorkgroupAttributionsAttrName()))
+      if (attr.first == SymbolTable::getSymbolAttrName() ||
+          attr.first == impl::getTypeAttrName() ||
+          attr.first == gpu::GPUFuncOp::getNumWorkgroupAttributionsAttrName())
         continue;
       attributes.push_back(attr);
     }
@@ -268,7 +268,7 @@ public:
     // which need to be lowered further, which is not supported by a single
     // conversion pass.
     populateGpuRewritePatterns(m.getContext(), patterns);
-    applyPatternsGreedily(m, patterns);
+    applyPatternsAndFoldGreedily(m, patterns);
     patterns.clear();
 
     populateStdToLLVMConversionPatterns(converter, patterns);

@@ -12,7 +12,6 @@
 //===----------------------------------------------------------------------===//
 
 #include "../PassDetail.h"
-#include "mlir/ADT/TypeSwitch.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -23,11 +22,11 @@
 #include "mlir/IR/Module.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
-#include "mlir/Support/Functional.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include "mlir/Transforms/Utils.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Type.h"
@@ -797,9 +796,8 @@ static void filterFuncAttributes(ArrayRef<NamedAttribute> attrs,
                                  bool filterArgAttrs,
                                  SmallVectorImpl<NamedAttribute> &result) {
   for (const auto &attr : attrs) {
-    if (attr.first.is(SymbolTable::getSymbolAttrName()) ||
-        attr.first.is(impl::getTypeAttrName()) ||
-        attr.first.is("std.varargs") ||
+    if (attr.first == SymbolTable::getSymbolAttrName() ||
+        attr.first == impl::getTypeAttrName() || attr.first == "std.varargs" ||
         (filterArgAttrs && impl::isArgAttrName(attr.first.strref())))
       continue;
     result.push_back(attr);
@@ -1805,7 +1803,8 @@ struct RsqrtOpLowering : public ConvertOpToLLVMPattern<RsqrtOp> {
         [&](LLVM::LLVMType llvmVectorTy, ValueRange operands) {
           auto splatAttr = SplatElementsAttr::get(
               mlir::VectorType::get(
-                  {llvmVectorTy.getUnderlyingType()->getVectorNumElements()},
+                  {cast<llvm::VectorType>(llvmVectorTy.getUnderlyingType())
+                       ->getNumElements()},
                   floatType),
               floatOne);
           auto one =

@@ -32,6 +32,7 @@ add_llvm_unittest(SupportTests
   ErrnoTest.cpp
   ErrorOrTest.cpp
   ErrorTest.cpp
+  ExtensibleRTTITest.cpp
   FileCheckTest.cpp
   FileCollectorTest.cpp
   FileOutputBufferTest.cpp
@@ -39,6 +40,7 @@ add_llvm_unittest(SupportTests
   FormatVariadicTest.cpp
   GlobPatternTest.cpp
   Host.cpp
+  IndexedAccessorTest.cpp
   ItaniumManglingCanonicalizerTest.cpp
   JSONTest.cpp
   KnownBitsTest.cpp

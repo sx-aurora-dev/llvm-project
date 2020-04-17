@@ -942,7 +942,8 @@ static Value createPrivateMemRef(AffineForOp forOp, Operation *srcStoreOpInst,
   }
   auto indexRemap = zeroOffsetCount == rank
                         ? AffineMap()
-                        : AffineMap::get(outerIVs.size() + rank, 0, remapExprs);
+                        : AffineMap::get(outerIVs.size() + rank, 0, remapExprs,
+                                         forOp.getContext());
   // Replace all users of 'oldMemRef' with 'newMemRef'.
   LogicalResult res =
       replaceAllMemRefUsesWith(oldMemRef, newMemRef, {}, indexRemap,
@@ -1492,7 +1493,7 @@ public:
                 srcStoreOp = nullptr;
                 break;
               }
-              unsigned loopDepth = getNestingDepth(*storeOp);
+              unsigned loopDepth = getNestingDepth(storeOp);
               if (loopDepth > maxLoopDepth) {
                 maxLoopDepth = loopDepth;
                 srcStoreOp = storeOp;

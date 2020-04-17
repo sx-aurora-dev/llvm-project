@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "llvm-dwarfdump.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/Triple.h"
@@ -32,8 +33,10 @@
 #include <cstdlib>
 
 using namespace llvm;
-using namespace object;
+using namespace llvm::dwarfdump;
+using namespace llvm::object;
 
+namespace {
 /// Parser for options that take an optional offest argument.
 /// @{
 struct OffsetOption {
@@ -41,6 +44,7 @@ struct OffsetOption {
   bool HasValue = false;
   bool IsRequested = false;
 };
+} // namespace
 
 namespace llvm {
 namespace cl {
@@ -82,8 +86,8 @@ public:
   // An out-of-line virtual method to provide a 'home' for this class.
   void anchor() override {};
 };
-} // cl
-} // llvm
+} // namespace cl
+} // namespace llvm
 
 /// @}
 /// Command line options.
@@ -239,7 +243,7 @@ static void error(StringRef Prefix, std::error_code EC) {
   exit(1);
 }
 
-static DIDumpOptions getDumpOpts() {
+static DIDumpOptions getDumpOpts(DWARFContext& C) { 
   DIDumpOptions DumpOpts;
   DumpOpts.DumpType = DumpType;
   DumpOpts.ChildRecurseDepth = ChildRecurseDepth;
@@ -250,6 +254,7 @@ static DIDumpOptions getDumpOpts() {
   DumpOpts.ShowForm = ShowForm;
   DumpOpts.SummarizeTypes = SummarizeTypes;
   DumpOpts.Verbose = Verbose;
+  DumpOpts.RecoverableErrorHandler = C.getRecoverableErrorHandler();
   // In -verify mode, print DIEs without children in error messages.
   if (Verify)
     return DumpOpts.noImplicitRecursion();
@@ -290,6 +295,7 @@ using HandlerFn = std::function<bool(ObjectFile &, DWARFContext &DICtx,
 /// Print only DIEs that have a certain name.
 static bool filterByName(const StringSet<> &Names, DWARFDie Die,
                          StringRef NameRef, raw_ostream &OS) {
+  DIDumpOptions DumpOpts = getDumpOpts(Die.getDwarfUnit()->getContext());
   std::string Name =
       (IgnoreCase && !UseRegex) ? NameRef.lower() : NameRef.str();
   if (UseRegex) {
@@ -302,13 +308,13 @@ static bool filterByName(const StringSet<> &Names, DWARFDie Die,
         exit(1);
       }
       if (RE.match(Name)) {
-        Die.dump(OS, 0, getDumpOpts());
+        Die.dump(OS, 0, DumpOpts);
         return true;
       }
     }
   } else if (Names.count(Name)) {
     // Match full text.
-    Die.dump(OS, 0, getDumpOpts());
+    Die.dump(OS, 0, DumpOpts);
     return true;
   }
   return false;
@@ -381,8 +387,9 @@ static void filterByAccelName(ArrayRef<std::string> Names, DWARFContext &DICtx,
   llvm::sort(Dies);
   Dies.erase(std::unique(Dies.begin(), Dies.end()), Dies.end());
 
+  DIDumpOptions DumpOpts = getDumpOpts(DICtx);
   for (DWARFDie Die : Dies)
-    Die.dump(OS, 0, getDumpOpts());
+    Die.dump(OS, 0, DumpOpts);
 }
 
 /// Handle the --lookup option and dump the DIEs and line info for the given
@@ -398,7 +405,7 @@ static bool lookup(ObjectFile &Obj, DWARFContext &DICtx, uint64_t Address,
   if (!DIEsForAddr)
     return false;
 
-  DIDumpOptions DumpOpts = getDumpOpts();
+  DIDumpOptions DumpOpts = getDumpOpts(DICtx);
   DumpOpts.ChildRecurseDepth = 0;
   DIEsForAddr.CompileUnit->dump(OS, DumpOpts);
   if (DIEsForAddr.FunctionDIE) {
@@ -415,12 +422,6 @@ static bool lookup(ObjectFile &Obj, DWARFContext &DICtx, uint64_t Address,
 
   return true;
 }
-
-bool collectStatsForObjectFile(ObjectFile &Obj, DWARFContext &DICtx,
-                               const Twine &Filename, raw_ostream &OS);
-
-bool collectObjectSectionSizes(ObjectFile &Obj, DWARFContext & /*DICtx*/,
-                               const Twine &Filename, raw_ostream &OS);
 
 static bool dumpObjectFile(ObjectFile &Obj, DWARFContext &DICtx,
                            const Twine &Filename, raw_ostream &OS) {
@@ -452,7 +453,7 @@ static bool dumpObjectFile(ObjectFile &Obj, DWARFContext &DICtx,
   }
 
   // Dump the complete DWARF structure.
-  DICtx.dump(OS, getDumpOpts(), DumpOffsets);
+  DICtx.dump(OS, getDumpOpts(DICtx), DumpOffsets);
   return true;
 }
 
@@ -463,7 +464,7 @@ static bool verifyObjectFile(ObjectFile &Obj, DWARFContext &DICtx,
   raw_ostream &stream = Quiet ? nulls() : OS;
   stream << "Verifying " << Filename.str() << ":\tfile format "
   << Obj.getFileFormatName() << "\n";
-  bool Result = DICtx.verify(stream, getDumpOpts());
+  bool Result = DICtx.verify(stream, getDumpOpts(DICtx));
   if (Result)
     stream << "No errors.\n";
   else
