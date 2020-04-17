@@ -3637,6 +3637,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
     ///// non-VP --> vvp_* with native type /////
     // Convert this standard vector op to VVP
+  case ISD::SELECT:
     // FIXME List all operation that correspond to a VVP operation here
 #define REGISTER_ICONV_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
