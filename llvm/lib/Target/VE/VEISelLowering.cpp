@@ -1955,7 +1955,7 @@ void VETargetLowering::initVPUActions() {
   // FIXME should differentiate this..
   const ISD::NodeType AllLegalOCs[] = {ISD::BITCAST, END_OF_OCLIST};
 
-  const ISD::NodeType AllCustomOCs[] = {END_OF_OCLIST};
+  const ISD::NodeType AllCustomOCs[] = {ISD::SELECT, END_OF_OCLIST};
 
   // Memory vector ops
   const ISD::NodeType MemoryOCs[] = {// memory
@@ -3337,8 +3337,8 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
   return Op;
 }
 
-SDValue
-VETargetLowering::LowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const {
+SDValue VETargetLowering::LowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
+                                               VVPExpansionMode Mode) const {
   SDLoc DL(Op);
   std::unique_ptr<MaskView> MView(requestMaskView(Op.getNode()));
 
