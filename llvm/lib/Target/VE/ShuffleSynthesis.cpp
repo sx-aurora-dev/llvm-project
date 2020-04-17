@@ -489,7 +489,8 @@ bool MaskShuffleAnalysis::analyzeVectorSources(bool &AllTrue) const {
       return false;
     // Non-0 bits in the cconstant background
     for (unsigned SXBit = 0; SXBit < SXRegSize; ++SXBit) {
-      if (IsConstantOne[SXPart.ResPartIdx * SXRegSize + SXBit]) {
+      unsigned BitPos = SXPart.ResPartIdx * SXRegSize + SXBit;
+      if (!UndefBits[BitPos] && IsConstantOne[BitPos]) {
         return false;
       }
     }
