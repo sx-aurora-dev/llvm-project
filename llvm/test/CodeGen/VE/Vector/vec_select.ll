@@ -46,6 +46,24 @@ define <256 x double> @vec_select_svv_v256f64(i1 %SC, <256 x double> %T, <256 x 
   ret <256 x double> %r
 }
 
+define <256 x double> @vec_select_ssv_v256f64(i1 %SC, double %ST, <256 x double> %F) {
+; CHECK-LABEL: vec_select_ssv_v256f64:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, 256
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vbrdl %v1,%s0
+; CHECK-NEXT:    pvfmk.w.lo.ne %vm1,%v1
+; CHECK-NEXT:    vbrd %v1,%s1
+; CHECK-NEXT:    vmrg %v0,%v0,%v1,%vm1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %SC0 = insertelement <256 x i1> undef, i1 %SC, i32 0
+  %C = shufflevector <256 x i1> %SC0, <256 x i1> %SC0, <256 x i32> zeroinitializer
+  %ST0 = insertelement <256 x double> undef, double %ST, i32 0
+  %T = shufflevector <256 x double> %ST0, <256 x double> %ST0, <256 x i32> zeroinitializer
+  %r = select <256 x i1> %C, <256 x double> %T, <256 x double> %F
+  ret <256 x double> %r
+}
+
 define <256 x i1> @vec_select_mmm_v256f64(<256 x i1> %C, <256 x i1> %T, <256 x i1> %F) {
 ; CHECK-LABEL: vec_select_mmm_v256f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
