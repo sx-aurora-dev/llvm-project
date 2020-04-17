@@ -31,6 +31,9 @@ PosOpt GetVVPOpcode(unsigned OpCode) {
   case ISD::SCALAR_TO_VECTOR:
     return VEISD::VEC_BROADCAST;
 
+  case ISD::SELECT: // additional alias next to VSELECT
+    return VEISD::VVP_SELECT;
+
   default:
     return None;
 #define REGISTER_VVP_OP(VVP_NAME, NATIVE_ISD)                                  \
@@ -124,6 +127,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   default:
     return None;
 
+  case ISD::SELECT: // not aliased with VVP_SELECT
   case ISD::CONCAT_VECTORS:
   case ISD::EXTRACT_SUBVECTOR:
   case ISD::VECTOR_SHUFFLE:
@@ -164,6 +168,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
       return Op->getOperand(VecParamPos.getValue()).getValueType();
     }
 
+  case VEISD::VEC_TOMASK:
   case VEISD::VEC_NARROW:
   case VEISD::VEC_SEQ:
   case VEISD::VEC_BROADCAST:

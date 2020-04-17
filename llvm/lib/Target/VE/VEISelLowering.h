@@ -19,6 +19,7 @@
 
 namespace llvm {
 class VESubtarget;
+struct CustomDAG;
 
 namespace VEISD {
 enum NodeType : unsigned {
@@ -66,6 +67,7 @@ enum NodeType : unsigned {
   VM_EXTRACT, // VM_EXTRACT(v256i1:mask, i32:i) Extract a SX register from a mask register
   VM_INSERT,  // VM_INSERT(v256i1:mask, i32:i, i64:val) Insert a SX register into a mask register
 
+  /// VEC_ {
   // Packed mode support
   VEC_UNPACK_LO, // upnack the lo (v256i32) slice of a packed v512.32
   VEC_UNPACK_HI, // upnack the hi (v256f32) slice of a packed v512.32
@@ -73,9 +75,12 @@ enum NodeType : unsigned {
   VEC_SWAP, // exchange the odd-even positions (v256i32 <> v256f32) or (v512.32
             // <> v521.32)
 
+  // Create a mask that is true where the vector lane is != 0
+  VEC_TOMASK,    // 0: Vector value, 1: AVL (no mask)
+  // Broadcast an SX register
   VEC_BROADCAST, // 0: the value, 1: the vector length (no mask)
+  // Create a sequence vector
   VEC_SEQ,       // 1: the vector length (no mask)
-
   VEC_VMV, // custom lowering for vp_vshift
 
   //// Horizontal operations
@@ -88,6 +93,7 @@ enum NodeType : unsigned {
   // VEC_* operator range
   VEC_FIRST = VEC_UNPACK_LO,
   VEC_LAST = VEC_NARROW,
+  /// } VEC_
 
   // Replication on lower/upper32 bit to other half -> I64
   REPL_F32,
@@ -266,8 +272,10 @@ public:
   SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVECREDUCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSETCC(llvm::SDValue, llvm::SelectionDAG &) const;
-  SDValue LowerSELECT_CC(llvm::SDValue, llvm::SelectionDAG &) const;
-  SDValue LowerVSELECT(llvm::SDValue, llvm::SelectionDAG &) const;
+  // SDValue LowerSELECT_CC(llvm::SDValue, llvm::SelectionDAG &) const;// Expanded
+  // SDValue LowerVSELECT(llvm::SDValue, llvm::SelectionDAG &) const;
+                                       
+  SDValue ExpandSELECT(SDValue Op, SmallVectorImpl<SDValue>& LegalOperands, EVT LegalResVT, CustomDAG &DAG, SDValue AVL) const;
   SDValue LowerTRUNCATE(llvm::SDValue, llvm::SelectionDAG &) const;
 
   SDValue TryNarrowExtractVectorLoad(SDNode *ExtractN, SelectionDAG &DAG) const;

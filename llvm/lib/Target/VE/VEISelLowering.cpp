@@ -176,33 +176,43 @@ SDValue VETargetLowering::LowerTRUNCATE(SDValue Op, SelectionDAG &DAG) const {
   return Op.getOperand(0);
 }
 
-SDValue VETargetLowering::LowerVSELECT(SDValue Op, SelectionDAG &DAG) const {
-  SDLoc dl(Op);
-  LLVM_DEBUG(dbgs() << "Lowering VSELECT\n");
+SDValue VETargetLowering::ExpandSELECT(SDValue Op,
+                                       SmallVectorImpl<SDValue> &LegalOperands,
+                                       EVT LegalResVT, CustomDAG &CDAG,
+                                       SDValue AVL) const {
+  SDValue MaskV = LegalOperands[0];
+  SDValue OnTrueV = LegalOperands[1];
+  SDValue OnFalseV = LegalOperands[2];
 
-  // only lower mask blends this way
-  MVT Ty = Op.getSimpleValueType();
-  if (!Ty.isVector())
-    return Op;
-  if (Ty.getVectorElementType() != MVT::i1)
-    return Op;
+  // Expand vNi1 selects into a boolean expression
+  if (Op.getValueType().getVectorElementType() == MVT::i1) {
+    auto NotMaskV = CDAG.createNot(MaskV, LegalResVT);
 
-  SDValue Mask = Op.getOperand(0);
-  SDValue A = Op.getOperand(1);
-  SDValue B = Op.getOperand(2);
+    return CDAG.getNode(
+        ISD::OR, LegalResVT,
+        {CDAG.getNode(ISD::AND, LegalResVT, {NotMaskV, OnFalseV}),
+         CDAG.getNode(ISD::AND, LegalResVT, {MaskV, OnTrueV})});
+  }
 
-  auto MaskTy = Op.getSimpleValueType();
+  // We need a boolean vector for the selection condition
+  // If this is an ISD::SELECT, we need to broadcast the condition first
+  SDValue CondVecV;
 
-  auto NotMask =
-      DAG.getNode(ISD::XOR, dl, MaskTy, {Mask, DAG.getConstant(0, dl, MaskTy)});
+  EVT LegalMaskVT =
+      CDAG.getVectorVT(MVT::i1, LegalResVT.getVectorNumElements());
 
-  auto Result = DAG.getNode(ISD::OR, dl, MaskTy,
-                            {DAG.getNode(ISD::AND, dl, MaskTy, {NotMask, B}),
-                             DAG.getNode(ISD::AND, dl, MaskTy, {Mask, A})});
+  if (!MaskV.getValueType().isVector()) {
+    CondVecV = CDAG.CreateBroadcast(LegalMaskVT, MaskV, AVL);
+    CondVecV = CDAG.createMaskCast(CondVecV, AVL);
+  } else {
+    CondVecV = MaskV;
+  }
 
-  return Result;
+  // Create a plain vector selection
+  return CDAG.createSelect(OnTrueV, OnFalseV, CondVecV, AVL);
 }
 
+#if 0
 SDValue VETargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
   LLVM_DEBUG(dbgs() << "Lowering SELECT_CC\n");
@@ -235,6 +245,7 @@ SDValue VETargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
   auto VecCmp = DAG.getNode(ISD::SETCC, dl, MVT::v256i1, {Abc, Bbc, CC});
   return DAG.getSelect(dl, VecTy, VecCmp, X, Y);
 }
+#endif
 
 SDValue
 VETargetLowering::LowerSETCCInVectorArithmetic(SDValue Op,
@@ -482,9 +493,13 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
     isStoreOp = true;
     break;
 
-#define REGISTER_UNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
+  case ISD::SELECT:
+    isTernaryOp = true;
+    break;
+
+#define REGISTER_UNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                            \
   case ISD::NATIVE_ISD:                                                        \
-    isUnaryOp = true;                                                         \
+    isUnaryOp = true;                                                          \
     break;
 #define REGISTER_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
   case ISD::NATIVE_ISD:                                                        \
@@ -560,7 +575,7 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   if (isUnaryOp) {
     assert(VVPOC.hasValue());
     return CDAG.getNode(VVPOC.getValue(), ResVecTy,
-                        {LegalOperands[0],MaskVal, LenVal});
+                        {LegalOperands[0], MaskVal, LenVal});
   }
 
   if (isBinaryOp) {
@@ -585,11 +600,7 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
                            MaskVal, LenVal});
     }
     case VEISD::VVP_SELECT: {
-      if (IsMaskType(Op.getValueType()))
-        return LowerVSELECT(Op, DAG);
-      return CDAG.getNode(
-          VVPOC.getValue(), ResVecTy,
-          {LegalOperands[1], LegalOperands[2], LegalOperands[0], LenVal});
+      return ExpandSELECT(Op, LegalOperands, ResVecTy, CDAG, LenVal);
     }
     default:
       llvm_unreachable("Unexpected ternary operator!");
@@ -1922,10 +1933,10 @@ void VETargetLowering::initVPUActions() {
       ISD::FSQRT,
 
       // not directly supported
-      ISD::FNEG, ISD::FABS, ISD::FCBRT, ISD::FSIN, ISD::FCOS, ISD::FPOWI, ISD::FPOW,
-      ISD::FLOG, ISD::FLOG2, ISD::FLOG10, ISD::FEXP, ISD::FEXP2,
-      ISD::FCEIL, ISD::FTRUNC, ISD::FRINT, ISD::FNEARBYINT, ISD::FROUND, ISD::FFLOOR,
-      ISD::LROUND, ISD::LLROUND, ISD::LRINT, ISD::LLRINT,
+      ISD::FNEG, ISD::FABS, ISD::FCBRT, ISD::FSIN, ISD::FCOS, ISD::FPOWI,
+      ISD::FPOW, ISD::FLOG, ISD::FLOG2, ISD::FLOG10, ISD::FEXP, ISD::FEXP2,
+      ISD::FCEIL, ISD::FTRUNC, ISD::FRINT, ISD::FNEARBYINT, ISD::FROUND,
+      ISD::FFLOOR, ISD::LROUND, ISD::LLROUND, ISD::LRINT, ISD::LLRINT,
 
       // break down into SETCC + (V)SELECT
       ISD::SELECT_CC,
@@ -1934,8 +1945,8 @@ void VETargetLowering::initVPUActions() {
 
       // TODO
       ISD::BSWAP, ISD::BITREVERSE, ISD::CTLZ, ISD::CTLZ_ZERO_UNDEF, ISD::CTTZ,
-      ISD::CTTZ_ZERO_UNDEF, ISD::ADDC, ISD::ADDCARRY,
-      ISD::MULHS, ISD::MULHU, ISD::SMUL_LOHI, ISD::UMUL_LOHI,
+      ISD::CTTZ_ZERO_UNDEF, ISD::ADDC, ISD::ADDCARRY, ISD::MULHS, ISD::MULHU,
+      ISD::SMUL_LOHI, ISD::UMUL_LOHI,
 
       // genuinely  unsupported
       ISD::UREM, ISD::SREM, ISD::SDIVREM, ISD::UDIVREM, ISD::FP16_TO_FP,
@@ -3605,8 +3616,8 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerMGATHER_MSCATTER(Op, DAG, VVPExpansionMode::ToNativeWidth,
                                  None);
 
-  // modify the return type of SETCC on vectors to v256i1
-  // case ISD::SETCC: return LowerSETCC(Op, DAG);
+    // modify the return type of SETCC on vectors to v256i1
+    // case ISD::SETCC: return LowerSETCC(Op, DAG);
 #if 0
   case ISD::SELECT_CC:
     return LowerSELECT_CC(Op, DAG);

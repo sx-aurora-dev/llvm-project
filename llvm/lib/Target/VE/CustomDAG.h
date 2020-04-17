@@ -141,8 +141,15 @@ struct CustomDAG {
 
   // all-true/false mask
   SDValue createUniformConstMask(unsigned NumElements, bool IsTrue) const;
+  SDValue createUniformConstMask(EVT MaskVT, bool IsTrue) const {
+    return createUniformConstMask(MaskVT.getVectorNumElements(), IsTrue);
+  }
   // materialize a constant mask vector given by \p TrueBits
   SDValue createConstMask(unsigned NumElems, const LaneBits &TrueBits) const;
+
+  SDValue createConstMask(EVT MaskVT, const LaneBits &TrueBits) const {
+    return createConstMask(MaskVT.getVectorNumElements(), TrueBits);
+  }
 
   // OnTrueV[l] if l < PivotV && Mask[l] else OnFalseV[l]
   SDValue createSelect(SDValue OnTrueV, SDValue OnFalseV, SDValue MaskV,
@@ -202,6 +209,19 @@ struct CustomDAG {
 
   SDValue getMergeValues(ArrayRef<SDValue> Values) const {
     return DAG.getMergeValues(Values, DL);
+  }
+
+  SDValue createNot(SDValue Op, EVT ResVT) const {
+    return DAG.getNOT(DL, Op, ResVT);
+  }
+
+  EVT getMaskVTFor(SDValue VectorV) const {
+    return getVectorVT(MVT::i1, VectorV.getValueType().getVectorNumElements());
+  }
+
+  SDValue createMaskCast(SDValue VectorV, SDValue AVL) const {
+    return DAG.getNode(VEISD::VEC_TOMASK, DL, getMaskVTFor(VectorV),
+                       {VectorV, AVL});
   }
 
   void dumpValue(SDValue V) const;
