@@ -222,6 +222,10 @@ struct CustomDAG {
   // create a VEC_TOMASk node if VectorV is not a mask already
   SDValue createMaskCast(SDValue VectorV, SDValue AVL) const;
 
+  SDValue getSetCC(SDValue LHS, EVT VT, SDValue RHS, ISD::CondCode CC) const {
+    return DAG.getSetCC(DL, VT, LHS, RHS, CC);
+  }
+
   void dumpValue(SDValue V) const;
 };
 

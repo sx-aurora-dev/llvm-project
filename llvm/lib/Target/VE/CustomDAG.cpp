@@ -282,10 +282,6 @@ bool IsMaskType(EVT VT) {
   if (VT.getVectorElementType() == MVT::i1)
     return true;
 
-  // allow aliased mask types
-  if (VT == MVT::v8i64 || VT == MVT::v4i64)
-    return true;
-
   // not a mask
   return false;
 }

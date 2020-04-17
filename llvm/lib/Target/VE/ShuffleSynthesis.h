@@ -100,7 +100,7 @@ struct MaskShuffleAnalysis {
 
   // match a 64 bit segment, mapping out all source bits
   // FIXME this implies knowledge about the underlying object structure
-  MaskShuffleAnalysis(MaskView& MV);
+  MaskShuffleAnalysis(MaskView& MV, CustomDAG &CDAG);
 
   // Synthesize \p BitSelect, merging the result into \p Passthru
   SDValue synthesize(SDValue Passthru, BitSelect &BSel, SDValue SXV,
@@ -110,7 +110,7 @@ struct MaskShuffleAnalysis {
   bool analyzeVectorSources(bool & AllTrue) const;
 
   // materialize the code to synthesize this operation
-  SDValue synthesize(CustomDAG &CDAG);
+  SDValue synthesize(CustomDAG &CDAG, EVT LegalMaskVT);
 };
 
 enum IterControl {

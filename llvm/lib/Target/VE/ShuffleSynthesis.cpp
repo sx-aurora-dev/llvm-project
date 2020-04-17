@@ -246,15 +246,24 @@ BVKind AnalyzeMaskView(MaskView &MV, unsigned &FirstDef, unsigned &LastDef,
 
 /// MaskShuffleAnalysis {
 
-// shows only those elements of a vNi1 vector that are sourced from SX-registers
-// or vector registers
-class VRegView final : public MaskView {
-  MaskView &BitMV;
+class ZeroDefaultingView : public MaskView {
+protected:
+  MaskView &BaseMV;
   SDValue ConstZeroV;
+  ElemSelect ZeroInsert;
 
 public:
+  ZeroDefaultingView(MaskView &BaseMV, CustomDAG &CDAG)
+      : BaseMV(BaseMV), ConstZeroV(CDAG.getConstant(0, MVT::i32)),
+        ZeroInsert(ConstZeroV) {}
+};
+
+// shows only those elements of a vNi1 vector that are sourced from SX-registers
+// or vector registers
+class VRegView final : public ZeroDefaultingView {
+public:
   VRegView(CustomDAG &CDAG, MaskView &BitMV)
-      : BitMV(BitMV), ConstZeroV(CDAG.getConstant(0, MVT::i32)) {}
+      : ZeroDefaultingView(BitMV, CDAG) {}
 
   ~VRegView() {}
 
@@ -262,31 +271,32 @@ public:
   ElemSelect getSourceElem(unsigned DestIdx) override {
     auto ZeroInsert = ElemSelect(ConstZeroV);
 
-    auto ES = BitMV.getSourceElem(DestIdx);
+    auto ES = BaseMV.getSourceElem(DestIdx);
     // Default
     if (!ES.isDefined())
       return ElemSelect::Undef();
 
     // insertion from scalar registers (not a constant)
+#if 0
     LLVM_DEBUG(dbgs() << "VRegView ES: " << DestIdx << " value: ";
                ES.V->print(dbgs());
                dbgs() << " with value type "
                       << ES.V.getValueType().getEVTString() << "\n";);
+#endif
 
-    if (ES.isElemInsert() && ES.V.getValueType() == MVT::i32) {
-      return isa<ConstantSDNode>(ES.V) ? ZeroInsert : ES;
+    // Only model element insertions
+    if (ES.isElemInsert() && !isa<ConstantSDNode>(ES.V)) {
+      return ES;
     }
 
-    // FIXME peek through vector truncation (and other reductions) to i1
-
-    // Otw, emit a zero
+    // Otw, produce '0' for safe OR-ing of the two views
     return ZeroInsert;
   }
 
-  // the abstracr type of this mask
+  // the abstract type of this mask
   EVT getValueType() const override {
     return MVT::getVectorVT(MVT::i32,
-                            BitMV.getValueType().getVectorNumElements());
+                            BaseMV.getValueType().getVectorNumElements());
   }
 
   unsigned getNumElements() const override {
@@ -294,28 +304,30 @@ public:
   }
 };
 
-class BitMaskView final : public MaskView {
-  MaskView &BitMV;
-
+class BitMaskView final : public ZeroDefaultingView {
 public:
-  BitMaskView(MaskView &BitMV) : BitMV(BitMV) {}
+  BitMaskView(MaskView &BitMV, CustomDAG &CDAG)
+      : ZeroDefaultingView(BitMV, CDAG) {}
   ~BitMaskView() {}
 
   // get the element selection at i
   ElemSelect getSourceElem(unsigned DestIdx) override {
-    auto ES = BitMV.getSourceElem(DestIdx);
+    auto ES = BaseMV.getSourceElem(DestIdx);
 
+#if 0
     LLVM_DEBUG(dbgs() << "OriginalMV ES: " << DestIdx << " value: ";
                ES.V->print(dbgs());
                dbgs() << " with value type "
                       << ES.V.getValueType().getEVTString() << "\n";);
+#endif
 
     if (!ES.isDefined())
       return ES;
 
     // insertion from scalar registers
-    if (ES.isElemInsert() && ES.V.getValueType() == MVT::i32) {
-      return isa<ConstantSDNode>(ES.V) ? ES : ElemSelect::Undef();
+    if (ES.isElemInsert() && !isa<ConstantSDNode>(ES.V)) {
+      // produce '0' for safe OR-ing of the two views
+      return ZeroInsert;
     }
 
     // Otw, this is a proper bit transfer
@@ -323,7 +335,7 @@ public:
   }
 
   // the abstracr type of this mask
-  EVT getValueType() const override { return BitMV.getValueType(); }
+  EVT getValueType() const override { return BaseMV.getValueType(); }
 
   unsigned getNumElements() const override {
     return getValueType().getVectorNumElements();
@@ -347,7 +359,8 @@ static bool hasNonZeroEntry(MaskView &MV) {
 
 // match a 64 bit segment, mapping out all source bits
 // FIXME this implies knowledge about the underlying object structure
-MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV) : MV(MV) {
+MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, CustomDAG &CDAG)
+    : MV(MV) {
   IsConstantOne.reset();
   UndefBits.reset();
 
@@ -355,7 +368,7 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV) : MV(MV) {
 
   // this view only reflects insertions of actual i1 bits (from other mask
   // registers, or MVT::i32 constants)
-  BitMaskView BitMV(MV);
+  BitMaskView BitMV(MV, CDAG);
 
   const unsigned NumEls = BitMV.getNumElements();
   const unsigned SXRegSize = 64;
@@ -488,22 +501,27 @@ bool MaskShuffleAnalysis::analyzeVectorSources(bool &AllTrue) const {
 }
 
 // materialize the code to synthesize this operation
-SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG) {
+SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
   // this view reflects exactly those insertions that are non-constant and have
   // a MVT::i32 type
   VRegView VectorMV(CDAG, MV);
   SDValue BlendV; // VM to be OR-ed into the resulting vector
 
+  // actual element count
+  const unsigned NumElems = MV.getNumElements();
+  // result type element count
+  const unsigned LegalNumElems = LegalMaskVT.getVectorNumElements();
   bool HasScalarSourceEntries = hasNonZeroEntry(VectorMV);
 
   if (HasScalarSourceEntries) {
     LLVM_DEBUG(dbgs() << ":: has non-trivial insertion in VectorMV ::\n";);
-    SDValue AVL = CDAG.getConstEVL(256); // FIXME
+    SDValue AVL = CDAG.getConstEVL(NumElems); // FIXME
     // Synthesize the result vector
     ShuffleAnalysis VSA(VectorMV);
     auto Res = VSA.analyze();
     assert(Res == ShuffleAnalysis::CanSynthesize);
-    SDValue VecSourceV = VSA.synthesize(CDAG, VectorMV.getValueType());
+    SDValue VecSourceV =
+        VSA.synthesize(CDAG, CDAG.getVectorVT(MVT::i32, LegalNumElems));
     BlendV = CDAG.createMaskCast(VecSourceV, AVL);
   }
 
@@ -518,7 +536,7 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG) {
     // Must not have spurious `1` entries since what is undefined for the
     // vector/constant sources could be the defined insertion of a bit from a
     // scalar register. Short cut when the only occuring constant is a '1'
-    VMAccu = CDAG.createUniformConstMask(256, true);
+    VMAccu = CDAG.createUniformConstMask(LegalNumElems, true);
 
   } else if (AllFalseBackground) {
     // Don't need to check for spurious `1` bits here since
@@ -527,7 +545,7 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG) {
     VMAccu = SDValue();
 
   } else {
-    VMAccu = CDAG.DAG.getUNDEF(MVT::v256i1);
+    VMAccu = CDAG.DAG.getUNDEF(LegalMaskVT);
 
     // There are non-trivial bit transfers from other vector registers
     // Actual mask synthesis code path
@@ -575,13 +593,13 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG) {
 
   // OR-in the BlendV (values inserted from scalar regs)
   if (BlendV && VMAccu) {
-    return CDAG.getNode(ISD::OR, MVT::v256i1, {VMAccu, BlendV});
+    return CDAG.getNode(ISD::OR, LegalMaskVT, {VMAccu, BlendV});
   }
   if (BlendV)
     return BlendV;
   if (VMAccu)
     return VMAccu;
-  return CDAG.createUniformConstMask(256, false);
+  return CDAG.createUniformConstMask(LegalNumElems, false);
 }
 
 /// } MaskShuffleAnalysis

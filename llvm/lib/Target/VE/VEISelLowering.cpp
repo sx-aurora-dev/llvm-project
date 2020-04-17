@@ -860,18 +860,26 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
   EVT LegalVecTy = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
 
   int64_t ShiftVal = cast<ConstantSDNode>(BaseIdxN)->getSExtValue();
-  // Shift by a constant amount
-  if (ShiftVal != 0) {
-    unsigned DestNumElems = Op.getValueType().getVectorNumElements();
-    unsigned PackedVL =
-        IsPackedType(Op.getValueType()) ? (DestNumElems + 1) / 2 : DestNumElems;
-    return CDAG.createElementShift(LegalVecTy, SrcVec, ShiftVal,
-                                   CDAG.getConstEVL(PackedVL));
+
+  // Trivial case
+  if (ShiftVal == 0) {
+    unsigned NarrowLen = Op.getValueType().getVectorNumElements();
+    return CDAG.createNarrow(LegalVecTy, SrcVec, NarrowLen);
   }
 
-  SDLoc DL(Op);
-  unsigned NarrowLen = Op.getValueType().getVectorNumElements();
-  return CDAG.createNarrow(LegalVecTy, SrcVec, NarrowLen);
+  // non-trivial mask shift
+  return LowerVectorShuffleOp(Op, DAG, Mode);
+
+#if 0
+  // Legacy code path
+  // Shift by a constant amount
+  assert (ShiftVal != 0);
+  unsigned DestNumElems = Op.getValueType().getVectorNumElements();
+  unsigned PackedVL =
+      IsPackedType(Op.getValueType()) ? (DestNumElems + 1) / 2 : DestNumElems;
+  return CDAG.createElementShift(LegalVecTy, SrcVec, ShiftVal,
+                                 CDAG.getConstEVL(PackedVL));
+#endif
 }
 
 static Optional<unsigned> GetVVPForVP(unsigned VPOC) {
@@ -1063,39 +1071,6 @@ SDValue VETargetLowering::LowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const {
   return DAG.getNode(VEISD::VEC_VMV, DL, Op.getSimpleValueType(),
                      {V, InverseA, Mask, Avl});
 }
-
-#if 0
-SDValue VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
-                                            VVPExpansionMode Mode) const {
-  LLVM_DEBUG(dbgs() << "Lowering BUILD_VECTOR\n");
-  std::unique_ptr<MaskView> MView(requestMaskView(Op.getNode()));
-
-  EVT LegalResVT = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
-
-  CustomDAG CDAG(DAG, Op);
-
-  // mask reconstruction
-  if (Op.getValueType() == MVT::v256i1) {
-    // FIXME merge into general ShuffleAnalysis
-    const unsigned NumResElems = Op.getValueType().getVectorNumElements();
-    MaskShuffleAnalysis MSA(*MView.get(), NumResElems);
-    return MSA.synthesize(CDAG);
-  }
-
-  // new shuffle implementatino
-  std::unique_ptr<MaskView> VecView(requestMaskView(Op.getNode()));
-  assert(VecView && "Cannot lower this shufffle..");
-
-  ShuffleAnalysis VSA(ref_to(VecView));
-  auto Result = VSA.analyze();
-  if (Result == ShuffleAnalysis::CanSynthesize) {
-    return VSA.synthesize(CDAG, LegalResVT);
-  }
-
-  // FIXME fallback to LLVM and hope for the best
-  return SDValue();
-}
-#endif
 
 static SDValue PeekThroughCasts(SDValue Op) {
   switch (Op.getOpcode()) {
@@ -3347,10 +3322,10 @@ SDValue VETargetLowering::LowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
   CustomDAG CDAG(DAG, Op);
 
   // mask to shift + OR expansion
-  if (Op.getValueType() == MVT::v256i1) {
+  if (IsMaskType(Op.getValueType())) {
     // TODO IsMaskType(Op.getValueType())) {
-    MaskShuffleAnalysis MSA(*MView.get());
-    return MSA.synthesize(CDAG);
+    MaskShuffleAnalysis MSA(*MView.get(), CDAG);
+    return MSA.synthesize(CDAG, LegalResVT);
   }
 
   LLVM_DEBUG(dbgs() << "Lowering Shuffle (non-vmask path)\n");
@@ -4427,6 +4402,21 @@ bool VETargetLowering::isOffsetFoldingLegal(
   return false;
 }
 
+static SDValue fixUpOperation(SDValue Val, EVT LegalVT, SelectionDAG &DAG) {
+  if (Val.getValueType() == LegalVT)
+    return Val;
+
+  // SelectionDAGBuilder does not respect TLI::getCCResultVT (do a fixup here)
+  if (Val.getOpcode() == ISD::SETCC && Val.getValueType() == MVT::i1) {
+    CustomDAG CDAG(DAG, Val);
+    SDNode *N = Val.getNode();
+    return CDAG.getNode(ISD::SETCC, LegalVT,
+                        {N->getOperand(0), N->getOperand(1), N->getOperand(2)});
+  }
+
+  return SDValue();
+}
+
 // Legal result type - but illegal operand type
 // FIXME Use this to ExpandTOVVP vector operation that do not yield a vector
 // result
@@ -4470,11 +4460,18 @@ void VETargetLowering::LowerOperationWrapper(
 
     SDValue FixedOp = Op;
 
+    // SETCC
+
     // Re-use widened nodes from ReplaceNodeResult
     EVT OpDestVecTy =
         getTypeToTransformTo(*DAG.getContext(), Op.getValueType());
+
     if (OpDestVecTy != Op.getValueType()) {
-      FixedOp = WidenedOpCB(Op);
+      // run custom widenings first
+      FixedOp = fixUpOperation(Op, OpDestVecTy, DAG);
+      if (!FixedOp) {
+        FixedOp = WidenedOpCB(Op);
+      }
       assert(FixedOp && "No legal operand available!");
     }
 
