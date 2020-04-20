@@ -1,0 +1,30 @@
+# RUN: not llvm-mc -triple ve-unknown-unknown --show-encoding %s 2> %t
+# RUN: FileCheck --check-prefix=CHECK-ERROR < %t %s
+
+# CHECK-ERROR: error: unexpected token
+# CHECK-ERROR: vfadd.d %v64, %s20, %v22
+vfadd.d %v64, %s20, %v22
+
+# CHECK-ERROR: error: unexpected token
+# CHECK-ERROR: vfadd.s %v63, %s64, %v22
+vfadd.s %v63, %s64, %v22
+
+# CHECK-ERROR: error: unexpected token
+# CHECK-ERROR: pvfadd.lo %vix, %s20, %v64
+pvfadd.lo %vix, %s20, %v64
+
+# CHECK-ERROR: error: invalid operand for instruction
+# CHECK-ERROR: pvfadd.up %vix, 64, %v22
+pvfadd.up %vix, 64, %v22
+
+# CHECK-ERROR: error: invalid operand for instruction
+# CHECK-ERROR: pvfadd %vix, -65, %v22
+pvfadd %vix, -65, %v22
+
+# CHECK-ERROR: error: invalid operand for instruction
+# CHECK-ERROR: pvfadd %vix, -64, %v22, %vm1
+pvfadd %vix, -64, %v22, %vm1
+
+# CHECK-ERROR: error: unexpected token
+# CHECK-ERROR: vfadd.d %v10, %s20, %v22, %vm16
+vfadd.d %v10, %s20, %v22, %vm16

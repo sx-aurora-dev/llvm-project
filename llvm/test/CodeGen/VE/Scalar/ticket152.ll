@@ -62,7 +62,7 @@ define i32 @caller2() {
 ; CHECK-NEXT:  or %s6, 7, (0)1
 ; CHECK-NEXT:  or %s7, 8, (0)1
 ; CHECK-NEXT:  stl %s34, 240(, %s11)
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
   %1 = tail call i32 @callee2(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10)
   ret i32 %1
@@ -98,7 +98,7 @@ define i32 @caller3() {
 ; CHECK-NEXT:  lea.sl %s12, callee3@hi(, %s3)
 ; CHECK-NEXT:  lea.sl %s3, 1074790400
 ; CHECK-NEXT:  stl %s0, 176(, %s11)
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
   %1 = tail call i32 (i32, ...) @callee3(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10)
   ret i32 %1
@@ -125,7 +125,7 @@ define i32 @caller4() {
 ; CHECK-NEXT:  or %s6, 7, (0)1
 ; CHECK-NEXT:  or %s7, 8, (0)1
 ; CHECK-NEXT:  stl %s34, 240(, %s11)
-; CHECK-NEXT:  bsic %lr, (, %s12)
+; CHECK-NEXT:  bsic %s10, (, %s12)
 ; CHECK-NEXT:  or %s11, 0, %s9
   %1 = tail call i32 bitcast (i32 (...)* @callee4 to i32 (i32, i32, i32, double, i32, i32, i32, i32, i32, i32)*)(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10)
   ret i32 %1

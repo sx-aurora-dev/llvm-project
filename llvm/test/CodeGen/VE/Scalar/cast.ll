@@ -104,8 +104,7 @@ define i64 @d2ull(double %x) {
 ; CHECK-NEXT:    fcmp.d %s2, %s0, %s1
 ; CHECK-NEXT:    fsub.d %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.l.d.rz %s1, %s1
-; CHECK-NEXT:    lea.sl %s3, -2147483648
-; CHECK-NEXT:    xor %s1, %s1, %s3
+; CHECK-NEXT:    xor %s1, %s1, (1)1
 ; CHECK-NEXT:    cvt.l.d.rz %s0, %s0
 ; CHECK-NEXT:    cmov.d.lt %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
@@ -222,8 +221,7 @@ define i64 @q2ull(fp128) {
 ; CHECK-NEXT:    fsub.q %s4, %s0, %s4
 ; CHECK-NEXT:    cvt.d.q %s2, %s4
 ; CHECK-NEXT:    cvt.l.d.rz %s2, %s2
-; CHECK-NEXT:    lea.sl %s4, -2147483648
-; CHECK-NEXT:    xor %s2, %s2, %s4
+; CHECK-NEXT:    xor %s2, %s2, (1)1
 ; CHECK-NEXT:    cvt.d.q %s0, %s0
 ; CHECK-NEXT:    cvt.l.d.rz %s0, %s0
 ; CHECK-NEXT:    cmov.d.lt %s2, %s0, %s3
@@ -333,8 +331,7 @@ define i64 @f2ull(float %x) {
 ; CHECK-NEXT:    fsub.s %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.d.s %s1, %s1
 ; CHECK-NEXT:    cvt.l.d.rz %s1, %s1
-; CHECK-NEXT:    lea.sl %s3, -2147483648
-; CHECK-NEXT:    xor %s1, %s1, %s3
+; CHECK-NEXT:    xor %s1, %s1, (1)1
 ; CHECK-NEXT:    cvt.d.s %s0, %s0
 ; CHECK-NEXT:    cvt.l.d.rz %s0, %s0
 ; CHECK-NEXT:    cmov.s.lt %s1, %s0, %s2
@@ -1389,7 +1386,7 @@ define float @i1282f(i128) {
 ; CHECK-NEXT:    lea %s2, __floattisf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __floattisf@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = sitofp i128 %0 to float
   ret float %2
@@ -1402,7 +1399,7 @@ define float @ui1282f(i128) {
 ; CHECK-NEXT:    lea %s2, __floatuntisf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __floatuntisf@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i128 %0 to float
   ret float %2
@@ -1415,7 +1412,7 @@ define double @i1282d(i128) {
 ; CHECK-NEXT:    lea %s2, __floattidf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __floattidf@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = sitofp i128 %0 to double
   ret double %2
@@ -1428,7 +1425,7 @@ define double @ui1282d(i128) {
 ; CHECK-NEXT:    lea %s2, __floatuntidf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __floatuntidf@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i128 %0 to double
   ret double %2
@@ -1441,7 +1438,7 @@ define i128 @d2i128(double) {
 ; CHECK-NEXT:    lea %s1, __fixdfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixdfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptosi double %0 to i128
   ret i128 %2
@@ -1454,7 +1451,7 @@ define i128 @d2ui128(double) {
 ; CHECK-NEXT:    lea %s1, __fixunsdfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixunsdfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptoui double %0 to i128
   ret i128 %2
@@ -1467,7 +1464,7 @@ define i128 @f2i128(float) {
 ; CHECK-NEXT:    lea %s1, __fixsfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixsfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptosi float %0 to i128
   ret i128 %2
@@ -1480,7 +1477,7 @@ define i128 @f2ui128(float) {
 ; CHECK-NEXT:    lea %s1, __fixunssfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixunssfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fptoui float %0 to i128
   ret i128 %2

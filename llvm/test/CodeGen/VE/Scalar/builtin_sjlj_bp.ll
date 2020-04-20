@@ -16,7 +16,7 @@ define i32 @t_setjmp(i64 %n, %Foo* byval nocapture readnone align 8 %f) {
 ; CHECK-NEXT:  # EH_SJlJ_SETUP .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:  lea %s5, 0
-; CHECK-NEXT:  br.l .LBB{{[0-9]+}}_2
+; CHECK-NEXT:  br.l.t .LBB{{[0-9]+}}_2
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3:
 ; CHECK-NEXT:  ld %s17, 24(, %s10)
 ; CHECK-NEXT:  lea %s5, 1

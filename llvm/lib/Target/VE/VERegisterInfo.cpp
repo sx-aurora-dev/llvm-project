@@ -88,23 +88,21 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
       VE::SX17, // Linkage-area register
                 // sx18-sx33 are callee-saved registers
                 // sx34-sx63 are temporary registers
-       VE::UCC,  // User clock counter
-       VE::PSW,  // Program status word
-       VE::SAR,  // Store adress
-       VE::PMMR, // Performance monitor mode
+      VE::UCC,  // User clock counter
+      VE::PSW,  // Program status word
+      VE::SAR,  // Store adress
+      VE::PMMR, // Performance monitor mode
 
-       // Performance monitor configuration
-       VE::PMCR0, VE::PMCR1, VE::PMCR2, VE::PMCR3,
+      // Performance monitor configuration
+      VE::PMCR0, VE::PMCR1, VE::PMCR2, VE::PMCR3,
 
-       // Performance monitor counter
-       VE::PMC0, VE::PMC1, VE::PMC2, VE::PMC3,
-       VE::PMC4, VE::PMC5, VE::PMC6, VE::PMC7,
-       VE::PMC8, VE::PMC9, VE::PMC10, VE::PMC11,
-       VE::PMC12, VE::PMC13, VE::PMC14,
+      // Performance monitor counter
+      VE::PMC0, VE::PMC1, VE::PMC2, VE::PMC3, VE::PMC4, VE::PMC5, VE::PMC6,
+      VE::PMC7, VE::PMC8, VE::PMC9, VE::PMC10, VE::PMC11, VE::PMC12, VE::PMC13,
+      VE::PMC14,
 
-       // Zero-mask registers
-       VE::VM0, VE::VMP0
-  };
+      // Zero-mask registers
+      VE::VM0, VE::VMP0};
 
   for (auto R : ReservedRegs)
     for (MCRegAliasIterator ItAlias(R, this, true); ItAlias.isValid();
@@ -114,7 +112,7 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   return Reserved;
 }
 
-bool VERegisterInfo::isConstantPhysReg(unsigned PhysReg) const {
+bool VERegisterInfo::isConstantPhysReg(MCRegister PhysReg) const {
   switch (PhysReg) {
   case VE::VM0:
   case VE::VMP0:
@@ -133,20 +131,21 @@ VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
 #define DEBUG_TYPE "ve-register-info"
 
 static unsigned offset_to_disp(MachineInstr &MI) {
-  unsigned OffDisp = 2;         // ASX format instruction's offset
+  // Default offset in instruction's operands (reg+reg+imm).
+  unsigned OffDisp = 2;
 
-#define RRCASm_kind(NAME) \
-  case NAME ## rir: \
-  case NAME ## rii:
+#define RRCASm_kind(NAME)                                                      \
+  case NAME##rir:                                                              \
+  case NAME##rii:
 
   {
     using namespace llvm::VE;
     switch (MI.getOpcode()) {
-    RRCASm_kind(TS1AML)
-    RRCASm_kind(TS1AMW)
-    RRCASm_kind(CASL)
-    RRCASm_kind(CASW)
-      OffDisp = 1;
+    case INLINEASM:
+      RRCASm_kind(TS1AML) RRCASm_kind(TS1AMW) RRCASm_kind(CASL)
+          RRCASm_kind(CASW)
+          // These instructions use AS format (reg+imm).
+          OffDisp = 1;
     }
   }
 #undef RRCASm_kind
@@ -194,7 +193,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
 
     unsigned Tmp1 = MF.getRegInfo().createVirtualRegister(&VE::I64RegClass);
     BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEArri), Tmp1)
-        .addReg(FramePtr)
+        .addReg(FrameReg)
         .addImm(0)
         .addImm(Offset);
 
@@ -211,7 +210,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
 
   // VE has 32 bit offset field, so no need to expand a target instruction.
   // Directly encode it.
-  MI.getOperand(FIOperandNum).ChangeToRegister(FramePtr, false);
+  MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
   MI.getOperand(FIOperandNum + offset_to_disp(MI)).ChangeToImmediate(Offset);
 }
 
@@ -227,7 +226,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   const VESubtarget &Subtarget = MF.getSubtarget<VESubtarget>();
   const VEFrameLowering *TFI = getFrameLowering(MF);
 
-  unsigned FrameReg;
+  Register FrameReg;
   int Offset;
   Offset = TFI->getFrameIndexReference(MF, FrameIndex, FrameReg);
 
@@ -235,7 +234,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   if (MI.getOpcode() == VE::STQrii) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
-    Register SrcReg   = MI.getOperand(3).getReg();
+    Register SrcReg = MI.getOperand(3).getReg();
     Register SrcHiReg = getSubReg(SrcReg, VE::sub_even);
     Register SrcLoReg = getSubReg(SrcReg, VE::sub_odd);
     // VE stores HiReg to 8(addr) and LoReg to 0(addr)
@@ -250,7 +249,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     Offset += 8;
   } else if (MI.getOpcode() == VE::LDQrii) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
-    Register DestReg   = MI.getOperand(0).getReg();
+    Register DestReg = MI.getOperand(0).getReg();
     Register DestHiReg = getSubReg(DestReg, VE::sub_even);
     Register DestLoReg = getSubReg(DestReg, VE::sub_odd);
     // VE loads HiReg from 8(addr) and LoReg from 0(addr)
@@ -338,10 +337,12 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     MI.setDesc(TII.get(VE::LDrii));
     MI.getOperand(0).ChangeToRegister(TmpReg, true);
     BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::lvm_mmIs), DestReg)
-      .addReg(DestReg).addImm(3).addReg(TmpReg, getKillRegState(true));
+        .addReg(DestReg)
+        .addImm(3)
+        .addReg(TmpReg, getKillRegState(true));
   } else if (MI.getOpcode() == VE::STVM512rii) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
-    Register SrcReg   = MI.getOperand(3).getReg();
+    Register SrcReg = MI.getOperand(3).getReg();
     Register SrcLoReg = getSubReg(SrcReg, VE::sub_vm_odd);
     Register SrcHiReg = getSubReg(SrcReg, VE::sub_vm_even);
     bool isKill = MI.getOperand(3).isKill();
@@ -377,9 +378,9 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       replaceFI(MF, II, *StMI, dl, 0, Offset, FrameReg);
       Offset += 8;
     }
-    LastMI =
-      BuildMI(*MI.getParent(), II, dl, TII.get(VE::svm_smI), TmpReg)
-        .addReg(SrcHiReg).addImm(3);
+    LastMI = BuildMI(*MI.getParent(), II, dl, TII.get(VE::svm_smI), TmpReg)
+                 .addReg(SrcHiReg)
+                 .addImm(3);
     if (isKill) {
       LastMI->addRegisterKilled(SrcHiReg, this);
       // Add implicit super-register kills to the particular MI.
@@ -389,7 +390,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     MI.getOperand(3).ChangeToRegister(TmpReg, false, false, true);
   } else if (MI.getOpcode() == VE::LDVM512rii) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
-    Register DestReg   = MI.getOperand(0).getReg();
+    Register DestReg = MI.getOperand(0).getReg();
     Register DestLoReg = getSubReg(DestReg, VE::sub_vm_odd);
     Register DestHiReg = getSubReg(DestReg, VE::sub_vm_even);
     // FIXME: it would be better to scavenge a register here instead of

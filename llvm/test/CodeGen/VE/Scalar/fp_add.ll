@@ -98,3 +98,35 @@ define fp128 @func9(fp128 %a) {
   %r = fadd fp128 %a, 0xLFFFFFFFFFFFFFFFF7FFEFFFFFFFFFFFF
   ret fp128 %r
 }
+
+define float @fadds_imm(float %a) {
+; CHECK-LABEL: fadds_imm:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    fadd.s %s0, %s0, (2)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fadd float %a, -2.e+00
+  ret float %r
+}
+
+define double @faddd_imm(double %a) {
+; CHECK-LABEL: faddd_imm:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    fadd.d %s0, %s0, (2)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fadd double %a, -2.e+00
+  ret double %r
+}
+
+define fp128 @faddq_imm(fp128 %a) {
+; CHECK-LABEL: faddq_imm:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(, %s2)
+; CHECK-NEXT:    ld %s4, 8(, %s2)
+; CHECK-NEXT:    ld %s5, (, %s2)
+; CHECK-NEXT:    fadd.q %s0, %s0, %s4
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fadd fp128 %a, 0xLA0000000000000000000000000000000
+  ret fp128 %r
+}

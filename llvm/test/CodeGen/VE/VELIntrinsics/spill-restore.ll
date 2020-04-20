@@ -16,7 +16,7 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    lea %s2, 2048
 ; CHECK-NEXT:    or %s0, 0, %s18
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lea %s19, 256
 ; CHECK-NEXT:    lvl %s19
 ; CHECK-NEXT:    vld %v0,8,%s18
@@ -30,7 +30,7 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    lea %s0, .Lstr@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, .Lstr@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lea %s0, -4096(, %s9)
 ; CHECK-NEXT:    lvl %s1

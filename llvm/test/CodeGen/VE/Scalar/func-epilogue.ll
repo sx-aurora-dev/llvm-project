@@ -9,7 +9,7 @@ define i32 @sample_add(i32, i32) {
 ; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
-; CHECK-NEXT:    b.l (, %lr)
+; CHECK-NEXT:    b.l.t (, %lr)
   %3 = add nsw i32 %1, %0
   ret i32 %3
 }

@@ -1331,7 +1331,7 @@ Register VETargetLowering::getRegisterByName(const char *RegName, LLT VT,
                      .Case("sp", VE::SX11)    // Stack pointer
                      .Case("fp", VE::SX9)     // Frame pointer
                      .Case("sl", VE::SX8)     // Stack limit
-                     .Case("lr", VE::SX10)    // Link regsiter
+                     .Case("lr", VE::SX10)    // Link register
                      .Case("tp", VE::SX14)    // Thread pointer
                      .Case("outer", VE::SX12) // Outer regiser
                      .Case("info", VE::SX17)  // Info area register
@@ -2992,55 +2992,6 @@ SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   return Op;
 }
 
-// Custom lower UMULO/SMULO for VE. This code is similar to ExpandNode()
-// in LegalizeDAG.cpp except the order of arguments to the library function.
-static SDValue LowerUMULO_SMULO(SDValue Op, SelectionDAG &DAG,
-                                const VETargetLowering &TLI) {
-  unsigned opcode = Op.getOpcode();
-  assert((opcode == ISD::UMULO || opcode == ISD::SMULO) && "Invalid Opcode.");
-
-  bool isSigned = (opcode == ISD::SMULO);
-  EVT VT = MVT::i64;
-  EVT WideVT = MVT::i128;
-  SDLoc dl(Op);
-  SDValue LHS = Op.getOperand(0);
-
-  if (LHS.getValueType() != VT)
-    return Op;
-
-  SDValue ShiftAmt = DAG.getConstant(63, dl, VT);
-
-  SDValue RHS = Op.getOperand(1);
-  SDValue HiLHS = DAG.getNode(ISD::SRA, dl, VT, LHS, ShiftAmt);
-  SDValue HiRHS = DAG.getNode(ISD::SRA, dl, MVT::i64, RHS, ShiftAmt);
-  SDValue Args[] = {LHS, HiLHS, RHS, HiRHS};
-
-  TargetLowering::MakeLibCallOptions CallOptions;
-  CallOptions.setSExt(isSigned);
-  SDValue MulResult =
-      TLI.makeLibCall(DAG, RTLIB::MUL_I128, WideVT, Args, CallOptions, dl)
-          .first;
-  SDValue BottomHalf = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, VT, MulResult,
-                                   DAG.getIntPtrConstant(0, dl));
-  SDValue TopHalf = DAG.getNode(ISD::EXTRACT_ELEMENT, dl, VT, MulResult,
-                                DAG.getIntPtrConstant(1, dl));
-  if (isSigned) {
-    SDValue Tmp1 = DAG.getNode(ISD::SRA, dl, VT, BottomHalf, ShiftAmt);
-    TopHalf = DAG.getSetCC(dl, MVT::i32, TopHalf, Tmp1, ISD::SETNE);
-  } else {
-    TopHalf = DAG.getSetCC(dl, MVT::i32, TopHalf, DAG.getConstant(0, dl, VT),
-                           ISD::SETNE);
-  }
-  // MulResult is a node with an illegal type. Because such things are not
-  // generally permitted during this phase of legalization, ensure that
-  // nothing is left using the node. The above EXTRACT_ELEMENT nodes should have
-  // been folded.
-  assert(MulResult->use_empty() && "Illegally typed node still in use!");
-
-  SDValue Ops[2] = {BottomHalf, TopHalf};
-  return DAG.getMergeValues(Ops, dl);
-}
-
 SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
                                             SelectionDAG &DAG) const {
   SDLoc DL(Op);
@@ -3060,22 +3011,22 @@ SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
       break;
     case AtomicOrdering::Acquire:
       // Generate "fencem 2" as acquire fence.
-      return SDValue(
-          DAG.getMachineNode(VE::FENCEload, DL, MVT::Other, Op.getOperand(0)),
-          0);
+      return SDValue(DAG.getMachineNode(VE::FENCEM, DL, MVT::Other,
+                                        DAG.getTargetConstant(2, DL, MVT::i32),
+                                        Op.getOperand(0)), 0);
     case AtomicOrdering::Release:
       // Generate "fencem 1" as release fence.
-      return SDValue(
-          DAG.getMachineNode(VE::FENCEstore, DL, MVT::Other, Op.getOperand(0)),
-          0);
+      return SDValue(DAG.getMachineNode(VE::FENCEM, DL, MVT::Other,
+                                        DAG.getTargetConstant(1, DL, MVT::i32),
+                                        Op.getOperand(0)), 0);
     case AtomicOrdering::AcquireRelease:
     case AtomicOrdering::SequentiallyConsistent:
       // Generate "fencem 3" as acq_rel and seq_cst fence.
       // FIXME: "fencem 3" doesn't wait for for PCIe device accesses,
       //        so  seq_cst may require more instruction for them.
-      return SDValue(DAG.getMachineNode(VE::FENCEloadstore, DL, MVT::Other,
-                                        Op.getOperand(0)),
-                     0);
+      return SDValue(DAG.getMachineNode(VE::FENCEM, DL, MVT::Other,
+                                        DAG.getTargetConstant(3, DL, MVT::i32),
+                                        Op.getOperand(0)), 0);
     }
   }
 
@@ -3574,9 +3525,10 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerVAARG(Op, DAG);
   case ISD::DYNAMIC_STACKALLOC:
     return LowerDYNAMIC_STACKALLOC(Op, DAG);
-  case ISD::UMULO:
-  case ISD::SMULO:
-    return LowerUMULO_SMULO(Op, DAG, *this);
+  case ISD::LOAD:
+    return LowerLOAD(Op, DAG);
+  case ISD::STORE:
+    return LowerSTORE(Op, DAG, *this);
   case ISD::ATOMIC_FENCE:
     return LowerATOMIC_FENCE(Op, DAG);
   case ISD::INTRINSIC_VOID:
@@ -3725,12 +3677,14 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
         .addImm(0)
         .addImm(0)
         .addMBB(DispatchBB, VEMCExpr::VK_VE_GOTOFF_LO32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2).addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1)
+        .addImm(M0(32));
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), Tmp3)
         .addReg(Tmp2)
         .addImm(0)
         .addMBB(DispatchBB, VEMCExpr::VK_VE_GOTOFF_HI32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ADXrr), VR)
+    BuildMI(*MBB, MI, DL, TII->get(VE::ADDSLrr), VR)
         .addReg(VE::SX15)
         .addReg(Tmp3);
   } else {
@@ -3741,7 +3695,9 @@ void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
         .addImm(0)
         .addImm(0)
         .addMBB(DispatchBB, VEMCExpr::VK_VE_LO32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2).addReg(Tmp1).addImm(32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1)
+        .addImm(M0(32));
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), VR)
         .addReg(Tmp2)
         .addImm(0)
@@ -3824,26 +3780,21 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
     // FIXME: use lea.sl %BReg, .LJTI0_0@gotoff_hi(%Tmp2, %s15)
     Register Tmp3 = MRI.createVirtualRegister(&VE::I64RegClass);
     BuildMI(*MBB, MI, DL, TII->get(VE::LEAzii), Tmp1)
-        .addImm(0)
-        .addImm(0)
-        .addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_LO32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2).addReg(Tmp1).addImm(32);
+        .addImm(0).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_LO32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1).addImm(M0(32));
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), Tmp3)
-        .addReg(Tmp2)
-        .addImm(0)
-        .addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_HI32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ADXrr), LabelReg)
-        .addReg(VE::SX15)
-        .addReg(Tmp3);
+        .addReg(Tmp2).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_HI32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ADDSLrr), LabelReg)
+        .addReg(VE::SX15).addReg(Tmp3);
   } else {
     // lea     %Tmp1, restoreMBB@lo
     // and     %Tmp2, %Tmp1, (32)0
     // lea.sl  %LabelReg, restoreMBB@hi(%Tmp2)
     BuildMI(*MBB, MI, DL, TII->get(VE::LEAzii), Tmp1)
-        .addImm(0)
-        .addImm(0)
-        .addMBB(restoreMBB, VEMCExpr::VK_VE_LO32);
-    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm0), Tmp2).addReg(Tmp1).addImm(32);
+        .addImm(0).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_LO32);
+    BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1).addImm(M0(32));
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), LabelReg)
         .addReg(Tmp2)
         .addImm(0)
@@ -3907,10 +3858,8 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
     MIB.setMemRefs(MMOs);
   }
   BuildMI(restoreMBB, DL, TII->get(VE::LEAzii), restoreDstReg)
-      .addImm(0)
-      .addImm(0)
-      .addImm(1);
-  BuildMI(restoreMBB, DL, TII->get(VE::BCRLa)).addMBB(sinkMBB);
+      .addImm(0).addImm(0).addImm(1);
+  BuildMI(restoreMBB, DL, TII->get(VE::BRCFLa_t)).addMBB(sinkMBB);
   restoreMBB->addSuccessor(sinkMBB);
 
   MI.eraseFromParent();
@@ -3967,7 +3916,9 @@ VETargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
   MIB.setMemRefs(MMOs);
 
   // Jump
-  BuildMI(*thisMBB, MI, DL, TII->get(VE::BAri)).addReg(Tmp).addImm(0);
+  BuildMI(*thisMBB, MI, DL, TII->get(VE::BCFLari_t))
+      .addReg(Tmp)
+      .addImm(0);
 
   MI.eraseFromParent();
   return thisMBB;
@@ -4070,23 +4021,15 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   addFrameReference(BuildMI(DispatchBB, DL, TII->get(VE::LDLZXrii), IReg), FI,
                     8);
   if (LPadList.size() < 64) {
-    BuildMI(DispatchBB, DL, TII->get(VE::BCRLir))
-        .addImm(VECC::CC_ILE)
-        .addImm(LPadList.size())
-        .addReg(IReg)
-        .addMBB(TrapBB);
+    BuildMI(DispatchBB, DL, TII->get(VE::BRCFLir)).addImm(VECC::CC_ILE)
+        .addImm(LPadList.size()).addReg(IReg).addMBB(TrapBB);
   } else {
     assert(LPadList.size() <= 0x7FFFFFFF && "Too large Landing Pad!");
     Register TmpReg = MRI->createVirtualRegister(&VE::I64RegClass);
     BuildMI(DispatchBB, DL, TII->get(VE::LEAzii), TmpReg)
-        .addImm(0)
-        .addImm(0)
-        .addImm(LPadList.size());
-    BuildMI(DispatchBB, DL, TII->get(VE::BCRLrr))
-        .addImm(VECC::CC_ILE)
-        .addReg(TmpReg)
-        .addReg(IReg)
-        .addMBB(TrapBB);
+        .addImm(0).addImm(0).addImm(LPadList.size());
+    BuildMI(DispatchBB, DL, TII->get(VE::BRCFLrr)).addImm(VECC::CC_ILE)
+        .addReg(TmpReg).addReg(IReg).addMBB(TrapBB);
   }
 
   Register BReg = MRI->createVirtualRegister(&VE::I64RegClass);
@@ -4106,14 +4049,14 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0)
         .addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_LO32);
-    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2).addReg(Tmp1).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1).addImm(M0(32));
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), Tmp3)
         .addReg(Tmp2)
         .addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_HI32);
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), BReg)
-        .addReg(VE::SX15)
-        .addReg(Tmp3);
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), BReg)
+        .addReg(VE::SX15).addReg(Tmp3);
   } else {
     // lea     %Tmp1, .LJTI0_0@lo
     // and     %Tmp2, %Tmp1, (32)0
@@ -4122,7 +4065,8 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0)
         .addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_LO32);
-    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp2).addReg(Tmp1).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm), Tmp2)
+        .addReg(Tmp1).addImm(M0(32));
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), BReg)
         .addReg(Tmp2)
         .addImm(0)
@@ -4141,7 +4085,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1).addReg(IReg).addImm(3);
     // FIXME: combine these add and lds into "lds     TReg, *(BReg, Tmp1)"
     // adds.l  Tmp2, BReg, Tmp1
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
     // lds     TReg, *(Tmp2)
@@ -4151,9 +4095,47 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0);
 
     // jmpq *(TReg)
-    BuildMI(DispContBB, DL, TII->get(VE::BAri)).addReg(TReg).addImm(0);
+    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t))
+        .addReg(TReg)
+        .addImm(0);
     break;
   }
+#if 0
+  case MachineJumpTableInfo::EK_LabelDifference32: {
+    // This code is what regular architecture does, but nas doesn't generate
+    // LabelDifference32 correctly, so doesn't use this atm.
+
+    // for the case of PIC, generates these codes
+    unsigned OReg = MRI->createVirtualRegister(&VE::I64RegClass);
+    unsigned TReg = MRI->createVirtualRegister(&VE::I64RegClass);
+
+    unsigned Tmp1 = MRI->createVirtualRegister(&VE::I64RegClass);
+    unsigned Tmp2 = MRI->createVirtualRegister(&VE::I64RegClass);
+
+    // sll     Tmp1, IReg, 2
+    BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
+        .addReg(IReg)
+        .addImm(2);
+    // FIXME: combine these add and ldl into "ldl     OReg, *(BReg, Tmp1)"
+    // add     Tmp2, BReg, Tmp1
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), Tmp2)
+        .addReg(Tmp1)
+        .addReg(BReg);
+    // ldl.sx  OReg, *(Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::LDLri), OReg)
+        .addReg(Tmp2)
+        .addImm(0);
+    // adds.l  TReg, BReg, OReg
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), TReg)
+        .addReg(OReg)
+        .addReg(BReg);
+    // jmpq *(TReg)
+    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t))
+        .addReg(TReg)
+        .addImm(0);
+    break;
+  }
+#endif
   case MachineJumpTableInfo::EK_Custom32: {
     // for the case of PIC, generates these codes
 
@@ -4168,7 +4150,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1).addReg(IReg).addImm(2);
     // FIXME: combine these add and ldl into "ldl.zx   OReg, *(BReg, Tmp1)"
     // add     Tmp2, BReg, Tmp1
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), Tmp2)
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), Tmp2)
         .addReg(Tmp1)
         .addReg(BReg);
     // ldl.zx  OReg, *(Tmp2)
@@ -4192,21 +4174,23 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0)
         .addImm(0)
         .addExternalSymbol(FunName, VEMCExpr::VK_VE_GOTOFF_LO32);
-    BuildMI(DispContBB, DL, TII->get(VE::ANDrm0), Tmp4).addReg(Tmp3).addImm(32);
+    BuildMI(DispContBB, DL, TII->get(VE::ANDrm), Tmp4)
+        .addReg(Tmp3).addImm(M0(32));
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), Tmp5)
         .addReg(Tmp4)
         .addImm(0)
         .addExternalSymbol(FunName, VEMCExpr::VK_VE_GOTOFF_HI32);
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), BReg2)
-        .addReg(VE::SX15)
-        .addReg(Tmp5);
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), BReg2)
+        .addReg(VE::SX15).addReg(Tmp5);
 
     // adds.l  TReg, BReg2, OReg
-    BuildMI(DispContBB, DL, TII->get(VE::ADXrr), TReg)
+    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), TReg)
         .addReg(OReg)
         .addReg(BReg2);
     // jmpq *(TReg)
-    BuildMI(DispContBB, DL, TII->get(VE::BAri)).addReg(TReg).addImm(0);
+    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t))
+        .addReg(TReg)
+        .addImm(0);
     break;
   }
   default:

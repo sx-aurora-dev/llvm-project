@@ -52,7 +52,7 @@ define float @i1282f(i128 %a) {
 ; CHECK-NEXT:    lea %s2, __floattisf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __floattisf@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = sitofp i128 %a to float
   ret float %conv
@@ -122,7 +122,7 @@ define float @ui1282f(i128 %a) {
 ; CHECK-NEXT:    lea %s2, __floatuntisf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __floatuntisf@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = uitofp i128 %a to float
   ret float %conv
@@ -179,7 +179,7 @@ define double @i1282d(i128 %a) {
 ; CHECK-NEXT:    lea %s2, __floattidf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __floattidf@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = sitofp i128 %a to double
   ret double %conv
@@ -246,7 +246,7 @@ define double @ui1282d(i128) {
 ; CHECK-NEXT:    lea %s2, __floatuntidf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __floatuntidf@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = uitofp i128 %0 to double
   ret double %2
@@ -307,7 +307,7 @@ define fp128 @i1282q(i128 %a) {
 ; CHECK-NEXT:    lea %s2, __floattitf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __floattitf@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = sitofp i128 %a to fp128
   ret fp128 %conv
@@ -377,7 +377,7 @@ define fp128 @ui1282q(i128 %a) {
 ; CHECK-NEXT:    lea %s2, __floatuntitf@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __floatuntitf@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = uitofp i128 %a to fp128
   ret fp128 %conv

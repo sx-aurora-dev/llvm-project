@@ -22,7 +22,7 @@
 
 using namespace llvm;
 
-#define DEBUG_TYPE "sparc-disassembler"
+#define DEBUG_TYPE "ve-disassembler"
 
 typedef MCDisassembler::DecodeStatus DecodeStatus;
 
@@ -153,6 +153,44 @@ static const unsigned F128RegDecoderTable[] = {
   VE::Q24, VE::Q25, VE::Q26, VE::Q27,
   VE::Q28, VE::Q29, VE::Q30, VE::Q31 };
 
+static const unsigned MiscRegDecoderTable[] = {
+  VE::USRCC, VE::PSW,   VE::SAR,   0,
+  0,         0,         0,         VE::PMMR,
+  VE::PMCR0, VE::PMCR1, VE::PMCR2, VE::PMCR3,
+  0,         0,         0,         0,
+  VE::PMC0,  VE::PMC1,  VE::PMC2,  VE::PMC3,
+  VE::PMC4,  VE::PMC5,  VE::PMC6,  VE::PMC7,
+  VE::PMC8,  VE::PMC9,  VE::PMC10, VE::PMC11,
+  VE::PMC12, VE::PMC13, VE::PMC14 };
+
+static const unsigned V64RegDecoderTable[] = {
+  VE::V0,  VE::V1,  VE::V2,  VE::V3,
+  VE::V4,  VE::V5,  VE::V6,  VE::V7,
+  VE::V8,  VE::V9,  VE::V10, VE::V11,
+  VE::V12, VE::V13, VE::V14, VE::V15,
+  VE::V16, VE::V17, VE::V18, VE::V19,
+  VE::V20, VE::V21, VE::V22, VE::V23,
+  VE::V24, VE::V25, VE::V26, VE::V27,
+  VE::V28, VE::V29, VE::V30, VE::V31,
+  VE::V32, VE::V33, VE::V34, VE::V35,
+  VE::V36, VE::V37, VE::V38, VE::V39,
+  VE::V40, VE::V41, VE::V42, VE::V43,
+  VE::V44, VE::V45, VE::V46, VE::V47,
+  VE::V48, VE::V49, VE::V50, VE::V51,
+  VE::V52, VE::V53, VE::V54, VE::V55,
+  VE::V56, VE::V57, VE::V58, VE::V59,
+  VE::V60, VE::V61, VE::V62, VE::V63 };
+
+static const unsigned VM_RegDecoderTable[] = {
+  VE::VM0,  VE::VM1,  VE::VM2,  VE::VM3,
+  VE::VM4,  VE::VM5,  VE::VM6,  VE::VM7,
+  VE::VM8,  VE::VM9,  VE::VM10, VE::VM11,
+  VE::VM12, VE::VM13, VE::VM14, VE::VM15 };
+
+static const unsigned VM512_RegDecoderTable[] = {
+  VE::VMP0,  VE::VMP1,  VE::VMP2,  VE::VMP3,
+  VE::VMP4,  VE::VMP5,  VE::VMP6,  VE::VMP7 };
+
 static DecodeStatus DecodeI8RegisterClass(MCInst &Inst,
                                           unsigned RegNo,
                                           uint64_t Address,
@@ -212,13 +250,65 @@ static DecodeStatus DecodeF128RegisterClass(MCInst &Inst,
                                             unsigned RegNo,
                                             uint64_t Address,
                                             const void *Decoder) {
-  if (RegNo > 31)
+  if (RegNo % 2 || RegNo > 63)
     return MCDisassembler::Fail;
-  unsigned Reg = F128RegDecoderTable[RegNo];
+  unsigned Reg = F128RegDecoderTable[RegNo / 2];
   Inst.addOperand(MCOperand::createReg(Reg));
   return MCDisassembler::Success;
 }
 
+static DecodeStatus DecodeMISCRegisterClass(MCInst &Inst,
+                                            unsigned RegNo,
+                                            uint64_t Address,
+                                            const void *Decoder) {
+  if (!isMiscReg(RegNo))
+    return MCDisassembler::Fail;
+  unsigned Reg = MiscRegDecoderTable[RegNo];
+  Inst.addOperand(MCOperand::createReg(Reg));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeV64RegisterClass(MCInst &Inst,
+                                           unsigned RegNo,
+                                           uint64_t Address,
+                                           const void *Decoder) {
+  unsigned Reg = VE::NoRegister;
+  if (RegNo == 255)
+    Reg = VE::VIX;
+  else if (RegNo > 63)
+    return MCDisassembler::Fail;
+  else
+    Reg = V64RegDecoderTable[RegNo];
+  Inst.addOperand(MCOperand::createReg(Reg));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeVM_RegisterClass(MCInst &Inst,
+                                           unsigned RegNo,
+                                           uint64_t Address,
+                                           const void *Decoder) {
+  if (RegNo > 15)
+    return MCDisassembler::Fail;
+  unsigned Reg = VM_RegDecoderTable[RegNo];
+  Inst.addOperand(MCOperand::createReg(Reg));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeVM512_RegisterClass(MCInst &Inst,
+                                              unsigned RegNo,
+                                              uint64_t Address,
+                                              const void *Decoder) {
+  if (RegNo % 2 || RegNo > 15)
+    return MCDisassembler::Fail;
+  unsigned Reg = VM512_RegDecoderTable[RegNo / 2];
+  Inst.addOperand(MCOperand::createReg(Reg));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeASX(MCInst &Inst, uint64_t insn, uint64_t Address,
+                              const void *Decoder);
+static DecodeStatus DecodeAS(MCInst &Inst, uint64_t insn, uint64_t Address,
+                             const void *Decoder);
 static DecodeStatus DecodeLoadI8(MCInst &Inst, uint64_t insn, uint64_t Address,
                                  const void *Decoder);
 static DecodeStatus DecodeStoreI8(MCInst &Inst, uint64_t insn,
@@ -239,31 +329,26 @@ static DecodeStatus DecodeLoadF32(MCInst &Inst, uint64_t insn, uint64_t Address,
                                   const void *Decoder);
 static DecodeStatus DecodeStoreF32(MCInst &Inst, uint64_t insn,
                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeLoadASI8(MCInst &Inst, uint64_t insn,
-                                   uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeStoreASI8(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeLoadASI16(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeStoreASI16(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeLoadASI32(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeStoreASI32(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeLoadASI64(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeStoreASI64(MCInst &Inst, uint64_t insn,
                                      uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeUIMM6(MCInst &Inst, uint64_t insn,
-                                uint64_t Address, const void *Decoder);
+static DecodeStatus DecodeCall(MCInst &Inst, uint64_t insn, uint64_t Address,
+                               const void *Decoder);
 static DecodeStatus DecodeSIMM7(MCInst &Inst, uint64_t insn,
                                 uint64_t Address, const void *Decoder);
+static DecodeStatus DecodeSIMM32(MCInst &Inst, uint64_t insn,
+                                 uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeCCOperand(MCInst &Inst, uint64_t insn,
+                                    uint64_t Address, const void *Decoder);
+static DecodeStatus DecodeRDOperand(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeBranchCondition(MCInst &Inst, uint64_t insn,
                                           uint64_t Address,
                                           const void *Decoder);
+static DecodeStatus DecodeBranchConditionAlways(MCInst &Inst, uint64_t insn,
+                                                uint64_t Address,
+                                                const void *Decoder);
 
 #include "VEGenDisassemblerTables.inc"
 
@@ -318,22 +403,14 @@ DecodeStatus VEDisassembler::getInstruction(MCInst &Instr, uint64_t &Size,
 typedef DecodeStatus (*DecodeFunc)(MCInst &MI, unsigned RegNo, uint64_t Address,
                                    const void *Decoder);
 
-static DecodeStatus DecodeMem(MCInst &MI, uint64_t insn, uint64_t Address,
-                              const void *Decoder,
-                              bool isLoad, DecodeFunc DecodeSX) {
-  unsigned sx = fieldFromInstruction(insn, 48, 7);
+static DecodeStatus DecodeASX(MCInst &MI, uint64_t insn, uint64_t Address,
+                              const void *Decoder) {
   unsigned sy = fieldFromInstruction(insn, 40, 7);
   bool cy = fieldFromInstruction(insn, 47, 1);
   unsigned sz = fieldFromInstruction(insn, 32, 7);
   bool cz = fieldFromInstruction(insn, 39, 1);
   uint64_t simm32 = SignExtend64<32>(fieldFromInstruction(insn, 0, 32));
-
   DecodeStatus status;
-  if (isLoad) {
-    status = DecodeSX(MI, sx, Address, Decoder);
-    if (status != MCDisassembler::Success)
-      return status;
-  }
 
   // Decode sz.
   if (cz) {
@@ -356,28 +433,15 @@ static DecodeStatus DecodeMem(MCInst &MI, uint64_t insn, uint64_t Address,
   // Decode simm32.
   MI.addOperand(MCOperand::createImm(simm32));
 
-  if (!isLoad) {
-    status = DecodeSX(MI, sx, Address, Decoder);
-    if (status != MCDisassembler::Success)
-      return status;
-  }
   return MCDisassembler::Success;
 }
 
-static DecodeStatus DecodeMemAS(MCInst &MI, uint64_t insn, uint64_t Address,
-                                const void *Decoder,
-                                bool isLoad, DecodeFunc DecodeSX) {
-  unsigned sx = fieldFromInstruction(insn, 48, 7);
+static DecodeStatus DecodeAS(MCInst &MI, uint64_t insn, uint64_t Address,
+                             const void *Decoder) {
   unsigned sz = fieldFromInstruction(insn, 32, 7);
   bool cz = fieldFromInstruction(insn, 39, 1);
   uint64_t simm32 = SignExtend64<32>(fieldFromInstruction(insn, 0, 32));
-
   DecodeStatus status;
-  if (isLoad) {
-    status = DecodeSX(MI, sx, Address, Decoder);
-    if (status != MCDisassembler::Success)
-      return status;
-  }
 
   // Decode sz.
   if (cz) {
@@ -390,6 +454,49 @@ static DecodeStatus DecodeMemAS(MCInst &MI, uint64_t insn, uint64_t Address,
 
   // Decode simm32.
   MI.addOperand(MCOperand::createImm(simm32));
+
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeMem(MCInst &MI, uint64_t insn, uint64_t Address,
+                              const void *Decoder,
+                              bool isLoad, DecodeFunc DecodeSX) {
+  unsigned sx = fieldFromInstruction(insn, 48, 7);
+
+  DecodeStatus status;
+  if (isLoad) {
+    status = DecodeSX(MI, sx, Address, Decoder);
+    if (status != MCDisassembler::Success)
+      return status;
+  }
+
+  status = DecodeASX(MI, insn, Address, Decoder);
+  if (status != MCDisassembler::Success)
+    return status;
+
+  if (!isLoad) {
+    status = DecodeSX(MI, sx, Address, Decoder);
+    if (status != MCDisassembler::Success)
+      return status;
+  }
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeMemAS(MCInst &MI, uint64_t insn, uint64_t Address,
+                                const void *Decoder,
+                                bool isLoad, DecodeFunc DecodeSX) {
+  unsigned sx = fieldFromInstruction(insn, 48, 7);
+
+  DecodeStatus status;
+  if (isLoad) {
+    status = DecodeSX(MI, sx, Address, Decoder);
+    if (status != MCDisassembler::Success)
+      return status;
+  }
+
+  status = DecodeAS(MI, insn, Address, Decoder);
+  if (status != MCDisassembler::Success)
+    return status;
 
   if (!isLoad) {
     status = DecodeSX(MI, sx, Address, Decoder);
@@ -459,42 +566,6 @@ static DecodeStatus DecodeStoreF32(MCInst &Inst, uint64_t insn,
                    DecodeF32RegisterClass);
 }
 
-static DecodeStatus DecodeLoadASI8(MCInst &Inst, uint64_t insn,
-                                   uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, true,
-                     DecodeI8RegisterClass);
-}
-
-static DecodeStatus DecodeStoreASI8(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, false,
-                     DecodeI8RegisterClass);
-}
-
-static DecodeStatus DecodeLoadASI16(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, true,
-                     DecodeI16RegisterClass);
-}
-
-static DecodeStatus DecodeStoreASI16(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, false,
-                     DecodeI16RegisterClass);
-}
-
-static DecodeStatus DecodeLoadASI32(MCInst &Inst, uint64_t insn,
-                                    uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, true,
-                     DecodeI32RegisterClass);
-}
-
-static DecodeStatus DecodeStoreASI32(MCInst &Inst, uint64_t insn,
-                                     uint64_t Address, const void *Decoder) {
-  return DecodeMemAS(Inst, insn, Address, Decoder, false,
-                     DecodeI32RegisterClass);
-}
-
 static DecodeStatus DecodeLoadASI64(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder) {
   return DecodeMemAS(Inst, insn, Address, Decoder, true,
@@ -507,37 +578,58 @@ static DecodeStatus DecodeStoreASI64(MCInst &Inst, uint64_t insn,
                      DecodeI64RegisterClass);
 }
 
-static DecodeStatus DecodeUIMM6(MCInst &MI, uint64_t insn,
-                                uint64_t Address, const void *Decoder) {
-  uint64_t tgt = fieldFromInstruction(insn, 40, 6);
-  MI.addOperand(MCOperand::createImm(tgt));
-  return MCDisassembler::Success;
+static DecodeStatus DecodeCall(MCInst &Inst, uint64_t insn, uint64_t Address,
+                               const void *Decoder) {
+  return DecodeMem(Inst, insn, Address, Decoder, true,
+                   DecodeI64RegisterClass);
 }
 
 static DecodeStatus DecodeSIMM7(MCInst &MI, uint64_t insn,
                                 uint64_t Address, const void *Decoder) {
-  uint64_t tgt = SignExtend64<7>(fieldFromInstruction(insn, 40, 7));
+  uint64_t tgt = SignExtend64<7>(insn);
+  MI.addOperand(MCOperand::createImm(tgt));
+  return MCDisassembler::Success;
+}
+
+static DecodeStatus DecodeSIMM32(MCInst &MI, uint64_t insn,
+                                 uint64_t Address, const void *Decoder) {
+  uint64_t tgt = SignExtend64<32>(insn);
   MI.addOperand(MCOperand::createImm(tgt));
   return MCDisassembler::Success;
 }
 
 static bool isIntegerBCKind(MCInst &MI) {
 
-#define BCm_kind(NAME) \
-  case NAME ## r: \
-  case NAME ## i:
+#define BCm_kind(NAME)  \
+  case NAME ## rri:     \
+  case NAME ## rzi:     \
+  case NAME ## iri:     \
+  case NAME ## izi:     \
+  case NAME ## rri_nt:  \
+  case NAME ## rzi_nt:  \
+  case NAME ## iri_nt:  \
+  case NAME ## izi_nt:  \
+  case NAME ## rri_t:   \
+  case NAME ## rzi_t:   \
+  case NAME ## iri_t:   \
+  case NAME ## izi_t:
 
 #define BCRm_kind(NAME) \
-  case NAME ## rr: \
-  case NAME ## ir:
+  case NAME ## rr:      \
+  case NAME ## ir:      \
+  case NAME ## rr_nt:   \
+  case NAME ## ir_nt:   \
+  case NAME ## rr_t:    \
+  case NAME ## ir_t:
 
 
   {
     using namespace llvm::VE;
     switch (MI.getOpcode()) {
-    BCm_kind(BC)
-    BCRm_kind(BCRL)
-    BCRm_kind(BCRW)
+    BCm_kind(BCFL)
+    BCm_kind(BCFW)
+    BCRm_kind(BRCFL)
+    BCRm_kind(BRCFW)
       return true;
     }
   }
@@ -546,10 +638,17 @@ static bool isIntegerBCKind(MCInst &MI) {
   return false;
 }
 
-// Decode CCOperand field.
+// Decode CC Operand field.
 static DecodeStatus DecodeCCOperand(MCInst &MI, uint64_t cf,
                                     uint64_t Address, const void *Decoder) {
   MI.addOperand(MCOperand::createImm(VEValToCondCode(cf, isIntegerBCKind(MI))));
+  return MCDisassembler::Success;
+}
+
+// Decode RD Operand field.
+static DecodeStatus DecodeRDOperand(MCInst &MI, uint64_t cf,
+                                    uint64_t Address, const void *Decoder) {
+  MI.addOperand(MCOperand::createImm(VEValToRD(cf)));
   return MCDisassembler::Success;
 }
 
@@ -560,9 +659,6 @@ static DecodeStatus DecodeBranchCondition(MCInst &MI, uint64_t insn,
   unsigned cf = fieldFromInstruction(insn, 48, 4);
   bool cy = fieldFromInstruction(insn, 47, 1);
   unsigned sy = fieldFromInstruction(insn, 40, 7);
-  bool cz = fieldFromInstruction(insn, 39, 1);
-  unsigned sz = fieldFromInstruction(insn, 32, 7);
-  uint64_t simm32 = SignExtend64<32>(fieldFromInstruction(insn, 0, 32));
 
   // Decode cf.
   MI.addOperand(MCOperand::createImm(VEValToCondCode(cf, isIntegerBCKind(MI))));
@@ -577,16 +673,13 @@ static DecodeStatus DecodeBranchCondition(MCInst &MI, uint64_t insn,
     MI.addOperand(MCOperand::createImm(SignExtend32<7>(sy)));
   }
 
-  // Decode sz.
-  if (cz) {
-    status = DecodeI64RegisterClass(MI, sz, Address, Decoder);
-    if (status != MCDisassembler::Success)
-      return status;
-  } else {
-    MI.addOperand(MCOperand::createImm(0));
-  }
+  // Decode MEMri.
+  return DecodeAS(MI, insn, Address, Decoder);
+}
 
-  // Decode simm32.
-  MI.addOperand(MCOperand::createImm(simm32));
-  return MCDisassembler::Success;
+static DecodeStatus DecodeBranchConditionAlways(MCInst &MI, uint64_t insn,
+                                                uint64_t Address,
+                                                const void *Decoder) {
+  // Decode MEMri.
+  return DecodeAS(MI, insn, Address, Decoder);
 }

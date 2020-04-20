@@ -18,7 +18,7 @@ def vld_vssvl : RV<0x81, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$vl
 }
 
 // inst=VLD asm=vld intrisic=vld_vssl
-def vld_vIsl : RV<0x81, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vld_vIsl : RV<0x81, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vld $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -27,7 +27,7 @@ def vld_vIsl : RV<0x81, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
 }
 
 // inst=VLD asm=vld intrisic=vld_vssvl
-def vld_vIsvl : RV<0x81, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vld_vIsvl : RV<0x81, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vld $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -56,7 +56,7 @@ def vldnc_vssvl : RV<0x81, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$
 }
 
 // inst=VLD asm=vld.nc intrisic=vldnc_vssl
-def vldnc_vIsl : RV<0x81, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldnc_vIsl : RV<0x81, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vld.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -65,7 +65,7 @@ def vldnc_vIsl : RV<0x81, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
 }
 
 // inst=VLD asm=vld.nc intrisic=vldnc_vssvl
-def vldnc_vIsvl : RV<0x81, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldnc_vIsvl : RV<0x81, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vld.nc $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -94,7 +94,7 @@ def vldu_vssvl : RV<0x82, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$v
 }
 
 // inst=VLDU asm=vldu intrisic=vldu_vssl
-def vldu_vIsl : RV<0x82, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldu_vIsl : RV<0x82, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldu $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -103,7 +103,7 @@ def vldu_vIsl : RV<0x82, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
 }
 
 // inst=VLDU asm=vldu intrisic=vldu_vssvl
-def vldu_vIsvl : RV<0x82, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldu_vIsvl : RV<0x82, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldu $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -132,7 +132,7 @@ def vldunc_vssvl : RV<0x82, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:
 }
 
 // inst=VLDU asm=vldu.nc intrisic=vldunc_vssl
-def vldunc_vIsl : RV<0x82, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldunc_vIsl : RV<0x82, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldu.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -141,7 +141,7 @@ def vldunc_vIsl : RV<0x82, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
 }
 
 // inst=VLDU asm=vldu.nc intrisic=vldunc_vssvl
-def vldunc_vIsvl : RV<0x82, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldunc_vIsvl : RV<0x82, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldu.nc $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -170,7 +170,7 @@ def vldlsx_vssvl : RV<0x83, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:
 }
 
 // inst=VLDL asm=vldl.sx intrisic=vldlsx_vssl
-def vldlsx_vIsl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldlsx_vIsl : RV<0x83, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldl.sx $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -179,7 +179,7 @@ def vldlsx_vIsl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
 }
 
 // inst=VLDL asm=vldl.sx intrisic=vldlsx_vssvl
-def vldlsx_vIsvl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldlsx_vIsvl : RV<0x83, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldl.sx $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -208,7 +208,7 @@ def vldlsxnc_vssvl : RV<0x83, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I3
 }
 
 // inst=VLDL asm=vldl.sx.nc intrisic=vldlsxnc_vssl
-def vldlsxnc_vIsl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldlsxnc_vIsl : RV<0x83, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldl.sx.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -217,7 +217,7 @@ def vldlsxnc_vIsl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl
 }
 
 // inst=VLDL asm=vldl.sx.nc intrisic=vldlsxnc_vssvl
-def vldlsxnc_vIsvl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldlsxnc_vIsvl : RV<0x83, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldl.sx.nc $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -246,7 +246,7 @@ def vldlzx_vssvl : RV<0x83, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:
 }
 
 // inst=VLDL asm=vldl.zx intrisic=vldlzx_vssl
-def vldlzx_vIsl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldlzx_vIsl : RV<0x83, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldl.zx $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -255,7 +255,7 @@ def vldlzx_vIsl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
 }
 
 // inst=VLDL asm=vldl.zx intrisic=vldlzx_vssvl
-def vldlzx_vIsvl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldlzx_vIsvl : RV<0x83, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldl.zx $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -284,7 +284,7 @@ def vldlzxnc_vssvl : RV<0x83, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I3
 }
 
 // inst=VLDL asm=vldl.zx.nc intrisic=vldlzxnc_vssl
-def vldlzxnc_vIsl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldlzxnc_vIsl : RV<0x83, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldl.zx.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -293,7 +293,7 @@ def vldlzxnc_vIsl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl
 }
 
 // inst=VLDL asm=vldl.zx.nc intrisic=vldlzxnc_vssvl
-def vldlzxnc_vIsvl : RV<0x83, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldlzxnc_vIsvl : RV<0x83, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldl.zx.nc $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -322,7 +322,7 @@ def vld2d_vssvl : RV<0xc1, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:$
 }
 
 // inst=VLD2D asm=vld2d intrisic=vld2d_vssl
-def vld2d_vIsl : RV<0xc1, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vld2d_vIsl : RV<0xc1, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vld2d $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -331,7 +331,7 @@ def vld2d_vIsl : RV<0xc1, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
 }
 
 // inst=VLD2D asm=vld2d intrisic=vld2d_vssvl
-def vld2d_vIsvl : RV<0xc1, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vld2d_vIsvl : RV<0xc1, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vld2d $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -360,7 +360,7 @@ def vld2dnc_vssvl : RV<0xc1, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32
 }
 
 // inst=VLD2D asm=vld2d.nc intrisic=vld2dnc_vssl
-def vld2dnc_vIsl : RV<0xc1, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vld2dnc_vIsl : RV<0xc1, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vld2d.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -369,7 +369,7 @@ def vld2dnc_vIsl : RV<0xc1, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl)
 }
 
 // inst=VLD2D asm=vld2d.nc intrisic=vld2dnc_vssvl
-def vld2dnc_vIsvl : RV<0xc1, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vld2dnc_vIsvl : RV<0xc1, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vld2d.nc $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -398,7 +398,7 @@ def vldu2d_vssvl : RV<0xc2, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I32:
 }
 
 // inst=VLDU2D asm=vldu2d intrisic=vldu2d_vssl
-def vldu2d_vIsl : RV<0xc2, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldu2d_vIsl : RV<0xc2, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldu2d $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -407,7 +407,7 @@ def vldu2d_vIsl : RV<0xc2, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
 }
 
 // inst=VLDU2D asm=vldu2d intrisic=vldu2d_vssvl
-def vldu2d_vIsvl : RV<0xc2, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldu2d_vIsvl : RV<0xc2, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldu2d $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -436,7 +436,7 @@ def vldu2dnc_vssvl : RV<0xc2, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I3
 }
 
 // inst=VLDU2D asm=vldu2d.nc intrisic=vldu2dnc_vssl
-def vldu2dnc_vIsl : RV<0xc2, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldu2dnc_vIsl : RV<0xc2, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldu2d.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -445,7 +445,7 @@ def vldu2dnc_vIsl : RV<0xc2, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl
 }
 
 // inst=VLDU2D asm=vldu2d.nc intrisic=vldu2dnc_vssvl
-def vldu2dnc_vIsvl : RV<0xc2, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldu2dnc_vIsvl : RV<0xc2, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldu2d.nc $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -474,7 +474,7 @@ def vldl2dsx_vssvl : RV<0xc3, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I3
 }
 
 // inst=VLDL2D asm=vldl2d.sx intrisic=vldl2dsx_vssl
-def vldl2dsx_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldl2dsx_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldl2d.sx $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -483,7 +483,7 @@ def vldl2dsx_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl
 }
 
 // inst=VLDL2D asm=vldl2d.sx intrisic=vldl2dsx_vssvl
-def vldl2dsx_vIsvl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldl2dsx_vIsvl : RV<0xc3, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldl2d.sx $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -512,7 +512,7 @@ def vldl2dsxnc_vssvl : RV<0xc3, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, 
 }
 
 // inst=VLDL2D asm=vldl2d.sx.nc intrisic=vldl2dsxnc_vssl
-def vldl2dsxnc_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldl2dsxnc_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldl2d.sx.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -521,7 +521,7 @@ def vldl2dsxnc_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$
 }
 
 // inst=VLDL2D asm=vldl2d.sx.nc intrisic=vldl2dsxnc_vssvl
-def vldl2dsxnc_vIsvl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldl2dsxnc_vIsvl : RV<0xc3, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldl2d.sx.nc $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -550,7 +550,7 @@ def vldl2dzx_vssvl : RV<0xc3, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, I3
 }
 
 // inst=VLDL2D asm=vldl2d.zx intrisic=vldl2dzx_vssl
-def vldl2dzx_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldl2dzx_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldl2d.zx $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -559,7 +559,7 @@ def vldl2dzx_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl
 }
 
 // inst=VLDL2D asm=vldl2d.zx intrisic=vldl2dzx_vssvl
-def vldl2dzx_vIsvl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldl2dzx_vIsvl : RV<0xc3, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldl2d.zx $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -588,7 +588,7 @@ def vldl2dzxnc_vssvl : RV<0xc3, (outs V64:$vx), (ins I64:$sy, I64:$sz, V64:$vd, 
 }
 
 // inst=VLDL2D asm=vldl2d.zx.nc intrisic=vldl2dzxnc_vssl
-def vldl2dzxnc_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def vldl2dzxnc_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7:$I, I64:$sz, I32:$vl),
        "vldl2d.zx.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -597,7 +597,7 @@ def vldl2dzxnc_vIsl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, I32:$
 }
 
 // inst=VLDL2D asm=vldl2d.zx.nc intrisic=vldl2dzxnc_vssvl
-def vldl2dzxnc_vIsvl : RV<0xc3, (outs V64:$vx), (ins simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vldl2dzxnc_vIsvl : RV<0xc3, (outs V64:$vx), (ins simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vldl2d.zx.nc $vx,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -616,7 +616,7 @@ def vst_vssl : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VST asm=vst intrisic=vst_vssl
-def vst_vIsl : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vst_vIsl : RV<0x91, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vst $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -634,7 +634,7 @@ def vst_vssml : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32:$v
 }
 
 // inst=VST asm=vst intrisic=vst_vssml
-def vst_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vst_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vst $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -652,7 +652,7 @@ def vstnc_vssl : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VST asm=vst.nc intrisic=vstnc_vssl
-def vstnc_vIsl : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstnc_vIsl : RV<0x91, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vst.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -670,7 +670,7 @@ def vstnc_vssml : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32:
 }
 
 // inst=VST asm=vst.nc intrisic=vstnc_vssml
-def vstnc_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstnc_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vst.nc $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -688,7 +688,7 @@ def vstot_vssl : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VST asm=vst.ot intrisic=vstot_vssl
-def vstot_vIsl : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstot_vIsl : RV<0x91, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vst.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -706,7 +706,7 @@ def vstot_vssml : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32:
 }
 
 // inst=VST asm=vst.ot intrisic=vstot_vssml
-def vstot_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstot_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vst.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -724,7 +724,7 @@ def vstncot_vssl : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VST asm=vst.nc.ot intrisic=vstncot_vssl
-def vstncot_vIsl : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstncot_vIsl : RV<0x91, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vst.nc.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -742,7 +742,7 @@ def vstncot_vssml : RV<0x91, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I3
 }
 
 // inst=VST asm=vst.nc.ot intrisic=vstncot_vssml
-def vstncot_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstncot_vIsml : RV<0x91, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vst.nc.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -760,7 +760,7 @@ def vstu_vssl : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTU asm=vstu intrisic=vstu_vssl
-def vstu_vIsl : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstu_vIsl : RV<0x92, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstu $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -778,7 +778,7 @@ def vstu_vssml : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32:$
 }
 
 // inst=VSTU asm=vstu intrisic=vstu_vssml
-def vstu_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstu_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstu $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -796,7 +796,7 @@ def vstunc_vssl : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTU asm=vstu.nc intrisic=vstunc_vssl
-def vstunc_vIsl : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstunc_vIsl : RV<0x92, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstu.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -814,7 +814,7 @@ def vstunc_vssml : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32
 }
 
 // inst=VSTU asm=vstu.nc intrisic=vstunc_vssml
-def vstunc_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstunc_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstu.nc $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -832,7 +832,7 @@ def vstuot_vssl : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTU asm=vstu.ot intrisic=vstuot_vssl
-def vstuot_vIsl : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstuot_vIsl : RV<0x92, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstu.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -850,7 +850,7 @@ def vstuot_vssml : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32
 }
 
 // inst=VSTU asm=vstu.ot intrisic=vstuot_vssml
-def vstuot_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstuot_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstu.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -868,7 +868,7 @@ def vstuncot_vssl : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTU asm=vstu.nc.ot intrisic=vstuncot_vssl
-def vstuncot_vIsl : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstuncot_vIsl : RV<0x92, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstu.nc.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -886,7 +886,7 @@ def vstuncot_vssml : RV<0x92, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I
 }
 
 // inst=VSTU asm=vstu.nc.ot intrisic=vstuncot_vssml
-def vstuncot_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstuncot_vIsml : RV<0x92, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstu.nc.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -904,7 +904,7 @@ def vstl_vssl : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTL asm=vstl intrisic=vstl_vssl
-def vstl_vIsl : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstl_vIsl : RV<0x93, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstl $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -922,7 +922,7 @@ def vstl_vssml : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32:$
 }
 
 // inst=VSTL asm=vstl intrisic=vstl_vssml
-def vstl_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstl_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstl $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -940,7 +940,7 @@ def vstlnc_vssl : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTL asm=vstl.nc intrisic=vstlnc_vssl
-def vstlnc_vIsl : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstlnc_vIsl : RV<0x93, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstl.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -958,7 +958,7 @@ def vstlnc_vssml : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32
 }
 
 // inst=VSTL asm=vstl.nc intrisic=vstlnc_vssml
-def vstlnc_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstlnc_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstl.nc $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -976,7 +976,7 @@ def vstlot_vssl : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTL asm=vstl.ot intrisic=vstlot_vssl
-def vstlot_vIsl : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstlot_vIsl : RV<0x93, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstl.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -994,7 +994,7 @@ def vstlot_vssml : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32
 }
 
 // inst=VSTL asm=vstl.ot intrisic=vstlot_vssml
-def vstlot_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstlot_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstl.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1012,7 +1012,7 @@ def vstlncot_vssl : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTL asm=vstl.nc.ot intrisic=vstlncot_vssl
-def vstlncot_vIsl : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstlncot_vIsl : RV<0x93, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstl.nc.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1030,7 +1030,7 @@ def vstlncot_vssml : RV<0x93, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I
 }
 
 // inst=VSTL asm=vstl.nc.ot intrisic=vstlncot_vssml
-def vstlncot_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstlncot_vIsml : RV<0x93, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstl.nc.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1048,7 +1048,7 @@ def vst2d_vssl : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VST2D asm=vst2d intrisic=vst2d_vssl
-def vst2d_vIsl : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vst2d_vIsl : RV<0xd1, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vst2d $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1066,7 +1066,7 @@ def vst2d_vssml : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32:
 }
 
 // inst=VST2D asm=vst2d intrisic=vst2d_vssml
-def vst2d_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vst2d_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vst2d $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1084,7 +1084,7 @@ def vst2dnc_vssl : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VST2D asm=vst2d.nc intrisic=vst2dnc_vssl
-def vst2dnc_vIsl : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vst2dnc_vIsl : RV<0xd1, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vst2d.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1102,7 +1102,7 @@ def vst2dnc_vssml : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I3
 }
 
 // inst=VST2D asm=vst2d.nc intrisic=vst2dnc_vssml
-def vst2dnc_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vst2dnc_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vst2d.nc $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1120,7 +1120,7 @@ def vst2dot_vssl : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VST2D asm=vst2d.ot intrisic=vst2dot_vssl
-def vst2dot_vIsl : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vst2dot_vIsl : RV<0xd1, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vst2d.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1138,7 +1138,7 @@ def vst2dot_vssml : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I3
 }
 
 // inst=VST2D asm=vst2d.ot intrisic=vst2dot_vssml
-def vst2dot_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vst2dot_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vst2d.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1156,7 +1156,7 @@ def vst2dncot_vssl : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VST2D asm=vst2d.nc.ot intrisic=vst2dncot_vssl
-def vst2dncot_vIsl : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vst2dncot_vIsl : RV<0xd1, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vst2d.nc.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1174,7 +1174,7 @@ def vst2dncot_vssml : RV<0xd1, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, 
 }
 
 // inst=VST2D asm=vst2d.nc.ot intrisic=vst2dncot_vssml
-def vst2dncot_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vst2dncot_vIsml : RV<0xd1, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vst2d.nc.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1192,7 +1192,7 @@ def vstu2d_vssl : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTU2D asm=vstu2d intrisic=vstu2d_vssl
-def vstu2d_vIsl : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstu2d_vIsl : RV<0xd2, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstu2d $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1210,7 +1210,7 @@ def vstu2d_vssml : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32
 }
 
 // inst=VSTU2D asm=vstu2d intrisic=vstu2d_vssml
-def vstu2d_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstu2d_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstu2d $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1228,7 +1228,7 @@ def vstu2dnc_vssl : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTU2D asm=vstu2d.nc intrisic=vstu2dnc_vssl
-def vstu2dnc_vIsl : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstu2dnc_vIsl : RV<0xd2, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstu2d.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1246,7 +1246,7 @@ def vstu2dnc_vssml : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I
 }
 
 // inst=VSTU2D asm=vstu2d.nc intrisic=vstu2dnc_vssml
-def vstu2dnc_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstu2dnc_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstu2d.nc $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1264,7 +1264,7 @@ def vstu2dot_vssl : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTU2D asm=vstu2d.ot intrisic=vstu2dot_vssl
-def vstu2dot_vIsl : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstu2dot_vIsl : RV<0xd2, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstu2d.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1282,7 +1282,7 @@ def vstu2dot_vssml : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I
 }
 
 // inst=VSTU2D asm=vstu2d.ot intrisic=vstu2dot_vssml
-def vstu2dot_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstu2dot_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstu2d.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1300,7 +1300,7 @@ def vstu2dncot_vssl : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl)
 }
 
 // inst=VSTU2D asm=vstu2d.nc.ot intrisic=vstu2dncot_vssl
-def vstu2dncot_vIsl : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstu2dncot_vIsl : RV<0xd2, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstu2d.nc.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1318,7 +1318,7 @@ def vstu2dncot_vssml : RV<0xd2, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm,
 }
 
 // inst=VSTU2D asm=vstu2d.nc.ot intrisic=vstu2dncot_vssml
-def vstu2dncot_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstu2dncot_vIsml : RV<0xd2, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstu2d.nc.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1336,7 +1336,7 @@ def vstl2d_vssl : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTL2D asm=vstl2d intrisic=vstl2d_vssl
-def vstl2d_vIsl : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstl2d_vIsl : RV<0xd3, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstl2d $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1354,7 +1354,7 @@ def vstl2d_vssml : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I32
 }
 
 // inst=VSTL2D asm=vstl2d intrisic=vstl2d_vssml
-def vstl2d_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstl2d_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstl2d $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1372,7 +1372,7 @@ def vstl2dnc_vssl : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTL2D asm=vstl2d.nc intrisic=vstl2dnc_vssl
-def vstl2dnc_vIsl : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstl2dnc_vIsl : RV<0xd3, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstl2d.nc $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1390,7 +1390,7 @@ def vstl2dnc_vssml : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I
 }
 
 // inst=VSTL2D asm=vstl2d.nc intrisic=vstl2dnc_vssml
-def vstl2dnc_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstl2dnc_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstl2d.nc $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1408,7 +1408,7 @@ def vstl2dot_vssl : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=VSTL2D asm=vstl2d.ot intrisic=vstl2dot_vssl
-def vstl2dot_vIsl : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstl2dot_vIsl : RV<0xd3, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstl2d.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1426,7 +1426,7 @@ def vstl2dot_vssml : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm, I
 }
 
 // inst=VSTL2D asm=vstl2d.ot intrisic=vstl2dot_vssml
-def vstl2dot_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstl2dot_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstl2d.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1444,7 +1444,7 @@ def vstl2dncot_vssl : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, I32:$vl)
 }
 
 // inst=VSTL2D asm=vstl2d.nc.ot intrisic=vstl2dncot_vssl
-def vstl2dncot_vIsl : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, I32:$vl),
+def vstl2dncot_vIsl : RV<0xd3, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, I32:$vl),
        "vstl2d.nc.ot $vx,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1462,7 +1462,7 @@ def vstl2dncot_vssml : RV<0xd3, (outs ), (ins V64:$vx, I64:$sy, I64:$sz, VM:$vm,
 }
 
 // inst=VSTL2D asm=vstl2d.nc.ot intrisic=vstl2dncot_vssml
-def vstl2dncot_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vstl2dncot_vIsml : RV<0xd3, (outs ), (ins V64:$vx, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vstl2d.nc.ot $vx,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -1480,7 +1480,7 @@ def pfchv_ssl : RV<0x80, (outs ), (ins I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=PFCHV asm=pfchv intrisic=pfchv_ssl
-def pfchv_Isl : RV<0x80, (outs ), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def pfchv_Isl : RV<0x80, (outs ), (ins simm7:$I, I64:$sz, I32:$vl),
        "pfchv $I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1498,7 +1498,7 @@ def pfchvnc_ssl : RV<0x80, (outs ), (ins I64:$sy, I64:$sz, I32:$vl),
 }
 
 // inst=PFCHV asm=pfchv.nc intrisic=pfchvnc_ssl
-def pfchvnc_Isl : RV<0x80, (outs ), (ins simm7Op64:$I, I64:$sz, I32:$vl),
+def pfchvnc_Isl : RV<0x80, (outs ), (ins simm7:$I, I64:$sz, I32:$vl),
        "pfchv.nc $I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -1516,7 +1516,7 @@ def lvm_mmss : RV<0xb7, (outs VM:$vmx), (ins VM:$vmd, I64:$sy, I64:$sz),
 }
 
 // inst=LVM asm=lvm intrisic=lvm_mmss
-def lvm_mmIs : RV<0xb7, (outs VM:$vmx), (ins VM:$vmd, simm7Op64:$N, I64:$sz),
+def lvm_mmIs : RV<0xb7, (outs VM:$vmx), (ins VM:$vmd, simm7:$N, I64:$sz),
        "lvm $vmx,$N,$sz">
 {
   let Constraints = "$vmx = $vmd";
@@ -1534,7 +1534,7 @@ def lvm_MMss : Pseudo<(outs VM512:$vmx), (ins VM512:$vmd, I64:$sy, I64:$sz),
 }
 
 // inst=LVM asm=lvm intrisic=lvm_MMss
-def lvm_MMIs : Pseudo<(outs VM512:$vmx), (ins VM512:$vmd, simm7Op64:$N, I64:$sz),
+def lvm_MMIs : Pseudo<(outs VM512:$vmx), (ins VM512:$vmd, simm7:$N, I64:$sz),
        "# lvm $vmx,$N,$sz">
 {
   let Constraints = "$vmx = $vmd";
@@ -1551,7 +1551,7 @@ def svm_sms : RV<0xa7, (outs I64:$sx), (ins VM:$vmz, I64:$sy),
 }
 
 // inst=SVM asm=svm intrisic=svm_sms
-def svm_smI : RV<0xa7, (outs I64:$sx), (ins VM:$vmz, simm7Op64:$N),
+def svm_smI : RV<0xa7, (outs I64:$sx), (ins VM:$vmz, simm7:$N),
        "svm $sx,$vmz,$N">
 {
   let DecoderNamespace = "VEL";
@@ -1567,7 +1567,7 @@ def svm_sMs : Pseudo<(outs I64:$sx), (ins VM512:$vmz, I64:$sy),
 }
 
 // inst=SVM asm=svm intrisic=svm_sMs
-def svm_sMI : Pseudo<(outs I64:$sx), (ins VM512:$vmz, simm7Op64:$N),
+def svm_sMI : Pseudo<(outs I64:$sx), (ins VM512:$vmz, simm7:$N),
        "# svm $sx,$vmz,$N">
 {
   let DecoderNamespace = "VEL";
@@ -1604,7 +1604,7 @@ def vbrd_vsmvl : RV<0x8c, (outs V64:$vx), (ins I64:$sy, VM:$vm, V64:$vd, I32:$vl
 }
 
 // inst=VBRD asm=vbrd intrisic=vbrdl_vsl
-def vbrd_vIl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, I32:$vl),
+def vbrd_vIl : RV<0x8c, (outs V64:$vx), (ins simm7:$I, I32:$vl),
        "vbrd $vx,$I">
 {
   let DecoderNamespace = "VEL";
@@ -1613,7 +1613,7 @@ def vbrd_vIl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, I32:$vl),
 }
 
 // inst=VBRD asm=vbrd intrisic=vbrdl_vsvl
-def vbrd_vIvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, V64:$vd, I32:$vl),
+def vbrd_vIvl : RV<0x8c, (outs V64:$vx), (ins simm7:$I, V64:$vd, I32:$vl),
        "vbrd $vx,$I">
 {
   let Constraints = "$vx = $vd";
@@ -1623,7 +1623,7 @@ def vbrd_vIvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, V64:$vd, I32:$vl),
 }
 
 // inst=VBRD asm=vbrd intrisic=vbrdl_vsmvl
-def vbrd_vImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op64:$I, VM:$vm, V64:$vd, I32:$vl),
+def vbrd_vImvl : RV<0x8c, (outs V64:$vx), (ins simm7:$I, VM:$vm, V64:$vd, I32:$vl),
        "vbrd $vx,$I,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -1691,7 +1691,7 @@ def vbrdl_vsmvl : RV<0x8c, (outs V64:$vx), (ins I32:$sy, VM:$vm, V64:$vd, I32:$v
 }
 
 // inst=VBRD asm=vbrdl intrisic=vbrdw_vsl
-def vbrdl_vIl : RV<0x8c, (outs V64:$vx), (ins simm7Op32:$I, I32:$vl),
+def vbrdl_vIl : RV<0x8c, (outs V64:$vx), (ins simm7:$I, I32:$vl),
        "vbrdl $vx,$I">
 {
   let DecoderNamespace = "VEL";
@@ -1700,7 +1700,7 @@ def vbrdl_vIl : RV<0x8c, (outs V64:$vx), (ins simm7Op32:$I, I32:$vl),
 }
 
 // inst=VBRD asm=vbrdl intrisic=vbrdw_vsvl
-def vbrdl_vIvl : RV<0x8c, (outs V64:$vx), (ins simm7Op32:$I, V64:$vd, I32:$vl),
+def vbrdl_vIvl : RV<0x8c, (outs V64:$vx), (ins simm7:$I, V64:$vd, I32:$vl),
        "vbrdl $vx,$I">
 {
   let Constraints = "$vx = $vd";
@@ -1710,7 +1710,7 @@ def vbrdl_vIvl : RV<0x8c, (outs V64:$vx), (ins simm7Op32:$I, V64:$vd, I32:$vl),
 }
 
 // inst=VBRD asm=vbrdl intrisic=vbrdw_vsmvl
-def vbrdl_vImvl : RV<0x8c, (outs V64:$vx), (ins simm7Op32:$I, VM:$vm, V64:$vd, I32:$vl),
+def vbrdl_vImvl : RV<0x8c, (outs V64:$vx), (ins simm7:$I, VM:$vm, V64:$vd, I32:$vl),
        "vbrdl $vx,$I,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -1768,7 +1768,7 @@ def vmv_vsvvl : RV<0x9c, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:$vl
 }
 
 // inst=VMV asm=vmv intrisic=vmv_vsvl
-def vmv_vIvl : RV<0x9c, (outs V64:$vx), (ins simm7Op32:$N, V64:$vz, I32:$vl),
+def vmv_vIvl : RV<0x9c, (outs V64:$vx), (ins simm7:$N, V64:$vz, I32:$vl),
        "vmv $vx,$N,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -1777,7 +1777,7 @@ def vmv_vIvl : RV<0x9c, (outs V64:$vx), (ins simm7Op32:$N, V64:$vz, I32:$vl),
 }
 
 // inst=VMV asm=vmv intrisic=vmv_vsvvl
-def vmv_vIvvl : RV<0x9c, (outs V64:$vx), (ins simm7Op32:$N, V64:$vz, V64:$vd, I32:$vl),
+def vmv_vIvvl : RV<0x9c, (outs V64:$vx), (ins simm7:$N, V64:$vz, V64:$vd, I32:$vl),
        "vmv $vx,$N,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -1797,7 +1797,7 @@ def vmv_vsvmvl : RV<0x9c, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:$vd
 }
 
 // inst=VMV asm=vmv intrisic=vmv_vsvmvl
-def vmv_vIvmvl : RV<0x9c, (outs V64:$vx), (ins simm7Op32:$N, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmv_vIvmvl : RV<0x9c, (outs V64:$vx), (ins simm7:$N, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmv $vx,$N,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -1845,7 +1845,7 @@ def vaddul_vsvvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VADD asm=vaddu.l intrisic=vaddul_vsvl
-def vaddul_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vaddul_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vaddu.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -1854,7 +1854,7 @@ def vaddul_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VADD asm=vaddu.l intrisic=vaddul_vsvvl
-def vaddul_vIvvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vaddul_vIvvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vaddu.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -1884,7 +1884,7 @@ def vaddul_vsvmvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VADD asm=vaddu.l intrisic=vaddul_vsvmvl
-def vaddul_vIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddul_vIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vaddu.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -1932,7 +1932,7 @@ def vadduw_vsvvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VADD asm=vaddu.w intrisic=vadduw_vsvl
-def vadduw_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vadduw_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vaddu.w $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -1941,7 +1941,7 @@ def vadduw_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VADD asm=vaddu.w intrisic=vadduw_vsvvl
-def vadduw_vIvvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vadduw_vIvvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vaddu.w $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -1971,7 +1971,7 @@ def vadduw_vsvmvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VADD asm=vaddu.w intrisic=vadduw_vsvmvl
-def vadduw_vIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vadduw_vIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vaddu.w $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -2077,7 +2077,7 @@ def vaddswsx_vsvvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VADS asm=vadds.w.sx intrisic=vaddswsx_vsvl
-def vaddswsx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vaddswsx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vadds.w.sx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -2086,7 +2086,7 @@ def vaddswsx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VADS asm=vadds.w.sx intrisic=vaddswsx_vsvvl
-def vaddswsx_vIvvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vaddswsx_vIvvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vadds.w.sx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -2116,7 +2116,7 @@ def vaddswsx_vsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VADS asm=vadds.w.sx intrisic=vaddswsx_vsvmvl
-def vaddswsx_vIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddswsx_vIvmvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vadds.w.sx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -2164,7 +2164,7 @@ def vaddswzx_vsvvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VADS asm=vadds.w.zx intrisic=vaddswzx_vsvl
-def vaddswzx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vaddswzx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vadds.w.zx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -2173,7 +2173,7 @@ def vaddswzx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VADS asm=vadds.w.zx intrisic=vaddswzx_vsvvl
-def vaddswzx_vIvvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vaddswzx_vIvvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vadds.w.zx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -2203,7 +2203,7 @@ def vaddswzx_vsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VADS asm=vadds.w.zx intrisic=vaddswzx_vsvmvl
-def vaddswzx_vIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddswzx_vIvmvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vadds.w.zx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -2309,7 +2309,7 @@ def vaddsl_vsvvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VADX asm=vadds.l intrisic=vaddsl_vsvl
-def vaddsl_vIvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vaddsl_vIvl : RV<0x8b, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vadds.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -2318,7 +2318,7 @@ def vaddsl_vIvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VADX asm=vadds.l intrisic=vaddsl_vsvvl
-def vaddsl_vIvvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vaddsl_vIvvl : RV<0x8b, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vadds.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -2348,7 +2348,7 @@ def vaddsl_vsvmvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VADX asm=vadds.l intrisic=vaddsl_vsvmvl
-def vaddsl_vIvmvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vaddsl_vIvmvl : RV<0x8b, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vadds.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -2396,7 +2396,7 @@ def vsubul_vsvvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VSUB asm=vsubu.l intrisic=vsubul_vsvl
-def vsubul_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vsubul_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vsubu.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -2405,7 +2405,7 @@ def vsubul_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VSUB asm=vsubu.l intrisic=vsubul_vsvvl
-def vsubul_vIvvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vsubul_vIvvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vsubu.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -2435,7 +2435,7 @@ def vsubul_vsvmvl : RV<0xc8, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VSUB asm=vsubu.l intrisic=vsubul_vsvmvl
-def vsubul_vIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubul_vIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vsubu.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -2483,7 +2483,7 @@ def vsubuw_vsvvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VSUB asm=vsubu.w intrisic=vsubuw_vsvl
-def vsubuw_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vsubuw_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vsubu.w $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -2492,7 +2492,7 @@ def vsubuw_vIvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VSUB asm=vsubu.w intrisic=vsubuw_vsvvl
-def vsubuw_vIvvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vsubuw_vIvvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vsubu.w $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -2522,7 +2522,7 @@ def vsubuw_vsvmvl : RV<0xc8, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VSUB asm=vsubu.w intrisic=vsubuw_vsvmvl
-def vsubuw_vIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubuw_vIvmvl : RV<0xc8, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vsubu.w $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -2628,7 +2628,7 @@ def vsubswsx_vsvvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VSBS asm=vsubs.w.sx intrisic=vsubswsx_vsvl
-def vsubswsx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vsubswsx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vsubs.w.sx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -2637,7 +2637,7 @@ def vsubswsx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VSBS asm=vsubs.w.sx intrisic=vsubswsx_vsvvl
-def vsubswsx_vIvvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vsubswsx_vIvvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vsubs.w.sx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -2667,7 +2667,7 @@ def vsubswsx_vsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VSBS asm=vsubs.w.sx intrisic=vsubswsx_vsvmvl
-def vsubswsx_vIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubswsx_vIvmvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vsubs.w.sx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -2715,7 +2715,7 @@ def vsubswzx_vsvvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VSBS asm=vsubs.w.zx intrisic=vsubswzx_vsvl
-def vsubswzx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vsubswzx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vsubs.w.zx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -2724,7 +2724,7 @@ def vsubswzx_vIvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VSBS asm=vsubs.w.zx intrisic=vsubswzx_vsvvl
-def vsubswzx_vIvvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vsubswzx_vIvvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vsubs.w.zx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -2754,7 +2754,7 @@ def vsubswzx_vsvmvl : RV<0xca, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VSBS asm=vsubs.w.zx intrisic=vsubswzx_vsvmvl
-def vsubswzx_vIvmvl : RV<0xca, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubswzx_vIvmvl : RV<0xca, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vsubs.w.zx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -2860,7 +2860,7 @@ def vsubsl_vsvvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VSBX asm=vsubs.l intrisic=vsubsl_vsvl
-def vsubsl_vIvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vsubsl_vIvl : RV<0x8b, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vsubs.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -2869,7 +2869,7 @@ def vsubsl_vIvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VSBX asm=vsubs.l intrisic=vsubsl_vsvvl
-def vsubsl_vIvvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vsubsl_vIvvl : RV<0x8b, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vsubs.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -2899,7 +2899,7 @@ def vsubsl_vsvmvl : RV<0x8b, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VSBX asm=vsubs.l intrisic=vsubsl_vsvmvl
-def vsubsl_vIvmvl : RV<0x8b, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vsubsl_vIvmvl : RV<0x8b, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vsubs.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -2947,7 +2947,7 @@ def vmulul_vsvvl : RV<0xc9, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VMPY asm=vmulu.l intrisic=vmulul_vsvl
-def vmulul_vIvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vmulul_vIvl : RV<0xc9, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmulu.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -2956,7 +2956,7 @@ def vmulul_vIvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VMPY asm=vmulu.l intrisic=vmulul_vsvvl
-def vmulul_vIvvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vmulul_vIvvl : RV<0xc9, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmulu.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -2986,7 +2986,7 @@ def vmulul_vsvmvl : RV<0xc9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VMPY asm=vmulu.l intrisic=vmulul_vsvmvl
-def vmulul_vIvmvl : RV<0xc9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulul_vIvmvl : RV<0xc9, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmulu.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3034,7 +3034,7 @@ def vmuluw_vsvvl : RV<0xc9, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VMPY asm=vmulu.w intrisic=vmuluw_vsvl
-def vmuluw_vIvl : RV<0xc9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vmuluw_vIvl : RV<0xc9, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmulu.w $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -3043,7 +3043,7 @@ def vmuluw_vIvl : RV<0xc9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VMPY asm=vmulu.w intrisic=vmuluw_vsvvl
-def vmuluw_vIvvl : RV<0xc9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vmuluw_vIvvl : RV<0xc9, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmulu.w $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -3073,7 +3073,7 @@ def vmuluw_vsvmvl : RV<0xc9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VMPY asm=vmulu.w intrisic=vmuluw_vsvmvl
-def vmuluw_vIvmvl : RV<0xc9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmuluw_vIvmvl : RV<0xc9, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmulu.w $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3121,7 +3121,7 @@ def vmulswsx_vsvvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VMPS asm=vmuls.w.sx intrisic=vmulswsx_vsvl
-def vmulswsx_vIvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vmulswsx_vIvl : RV<0xcb, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmuls.w.sx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -3130,7 +3130,7 @@ def vmulswsx_vIvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VMPS asm=vmuls.w.sx intrisic=vmulswsx_vsvvl
-def vmulswsx_vIvvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vmulswsx_vIvvl : RV<0xcb, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.w.sx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -3160,7 +3160,7 @@ def vmulswsx_vsvmvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VMPS asm=vmuls.w.sx intrisic=vmulswsx_vsvmvl
-def vmulswsx_vIvmvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulswsx_vIvmvl : RV<0xcb, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmuls.w.sx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3208,7 +3208,7 @@ def vmulswzx_vsvvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VMPS asm=vmuls.w.zx intrisic=vmulswzx_vsvl
-def vmulswzx_vIvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vmulswzx_vIvl : RV<0xcb, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmuls.w.zx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -3217,7 +3217,7 @@ def vmulswzx_vIvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VMPS asm=vmuls.w.zx intrisic=vmulswzx_vsvvl
-def vmulswzx_vIvvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vmulswzx_vIvvl : RV<0xcb, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.w.zx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -3247,7 +3247,7 @@ def vmulswzx_vsvmvl : RV<0xcb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VMPS asm=vmuls.w.zx intrisic=vmulswzx_vsvmvl
-def vmulswzx_vIvmvl : RV<0xcb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulswzx_vIvmvl : RV<0xcb, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmuls.w.zx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3295,7 +3295,7 @@ def vmulsl_vsvvl : RV<0xdb, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VMPX asm=vmuls.l intrisic=vmulsl_vsvl
-def vmulsl_vIvl : RV<0xdb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vmulsl_vIvl : RV<0xdb, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmuls.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -3304,7 +3304,7 @@ def vmulsl_vIvl : RV<0xdb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VMPX asm=vmuls.l intrisic=vmulsl_vsvvl
-def vmulsl_vIvvl : RV<0xdb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vmulsl_vIvvl : RV<0xdb, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -3334,7 +3334,7 @@ def vmulsl_vsvmvl : RV<0xdb, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VMPX asm=vmuls.l intrisic=vmulsl_vsvmvl
-def vmulsl_vIvmvl : RV<0xdb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmulsl_vIvmvl : RV<0xdb, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmuls.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3382,7 +3382,7 @@ def vmulslw_vsvvl : RV<0xd9, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32
 }
 
 // inst=VMPD asm=vmuls.l.w intrisic=vmulslw_vsvl
-def vmulslw_vIvl : RV<0xd9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vmulslw_vIvl : RV<0xd9, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmuls.l.w $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -3391,7 +3391,7 @@ def vmulslw_vIvl : RV<0xd9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl)
 }
 
 // inst=VMPD asm=vmuls.l.w intrisic=vmulslw_vsvvl
-def vmulslw_vIvvl : RV<0xd9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vmulslw_vIvvl : RV<0xd9, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmuls.l.w $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -3439,7 +3439,7 @@ def vdivul_vsvvl : RV<0xe9, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VDIV asm=vdivu.l intrisic=vdivul_vsvl
-def vdivul_vIvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vdivul_vIvl : RV<0xe9, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vdivu.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -3448,7 +3448,7 @@ def vdivul_vIvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VDIV asm=vdivu.l intrisic=vdivul_vsvvl
-def vdivul_vIvvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vdivul_vIvvl : RV<0xe9, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vdivu.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -3478,7 +3478,7 @@ def vdivul_vsvmvl : RV<0xe9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VDIV asm=vdivu.l intrisic=vdivul_vsvmvl
-def vdivul_vIvmvl : RV<0xe9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivul_vIvmvl : RV<0xe9, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vdivu.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3526,7 +3526,7 @@ def vdivuw_vsvvl : RV<0xe9, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VDIV asm=vdivu.w intrisic=vdivuw_vsvl
-def vdivuw_vIvl : RV<0xe9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vdivuw_vIvl : RV<0xe9, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vdivu.w $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -3535,7 +3535,7 @@ def vdivuw_vIvl : RV<0xe9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VDIV asm=vdivu.w intrisic=vdivuw_vsvvl
-def vdivuw_vIvvl : RV<0xe9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vdivuw_vIvvl : RV<0xe9, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vdivu.w $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -3565,7 +3565,7 @@ def vdivuw_vsvmvl : RV<0xe9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VDIV asm=vdivu.w intrisic=vdivuw_vsvmvl
-def vdivuw_vIvmvl : RV<0xe9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivuw_vIvmvl : RV<0xe9, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vdivu.w $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3594,7 +3594,7 @@ def vdivul_vvsvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vd, I32:
 }
 
 // inst=VDIV asm=vdivu.l intrisic=vdivul_vvsl
-def vdivul_vvIl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I32:$vl),
+def vdivul_vvIl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vdivu.l $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -3603,7 +3603,7 @@ def vdivul_vvIl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I32:$vl),
 }
 
 // inst=VDIV asm=vdivu.l intrisic=vdivul_vvsvl
-def vdivul_vvIvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, V64:$vd, I32:$vl),
+def vdivul_vvIvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7:$I, V64:$vd, I32:$vl),
        "vdivu.l $vx,$vy,$I">
 {
   let Constraints = "$vx = $vd";
@@ -3623,7 +3623,7 @@ def vdivul_vvsmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I64:$sy, VM:$vm, V64:
 }
 
 // inst=VDIV asm=vdivu.l intrisic=vdivul_vvsmvl
-def vdivul_vvImvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM:$vm, V64:$vd, I32:$vl),
+def vdivul_vvImvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7:$I, VM:$vm, V64:$vd, I32:$vl),
        "vdivu.l $vx,$vy,$I,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3652,7 +3652,7 @@ def vdivuw_vvsvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I32:$sy, V64:$vd, I32:
 }
 
 // inst=VDIV asm=vdivu.w intrisic=vdivuw_vvsl
-def vdivuw_vvIl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vdivuw_vvIl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vdivu.w $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -3661,7 +3661,7 @@ def vdivuw_vvIl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
 }
 
 // inst=VDIV asm=vdivu.w intrisic=vdivuw_vvsvl
-def vdivuw_vvIvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, V64:$vd, I32:$vl),
+def vdivuw_vvIvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7:$I, V64:$vd, I32:$vl),
        "vdivu.w $vx,$vy,$I">
 {
   let Constraints = "$vx = $vd";
@@ -3681,7 +3681,7 @@ def vdivuw_vvsmvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM:$vm, V64:
 }
 
 // inst=VDIV asm=vdivu.w intrisic=vdivuw_vvsmvl
-def vdivuw_vvImvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, VM:$vm, V64:$vd, I32:$vl),
+def vdivuw_vvImvl : RV<0xe9, (outs V64:$vx), (ins V64:$vy, simm7:$I, VM:$vm, V64:$vd, I32:$vl),
        "vdivu.w $vx,$vy,$I,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3729,7 +3729,7 @@ def vdivswsx_vsvvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VDVS asm=vdivs.w.sx intrisic=vdivswsx_vsvl
-def vdivswsx_vIvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vdivswsx_vIvl : RV<0xeb, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vdivs.w.sx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -3738,7 +3738,7 @@ def vdivswsx_vIvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VDVS asm=vdivs.w.sx intrisic=vdivswsx_vsvvl
-def vdivswsx_vIvvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vdivswsx_vIvvl : RV<0xeb, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -3768,7 +3768,7 @@ def vdivswsx_vsvmvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VDVS asm=vdivs.w.sx intrisic=vdivswsx_vsvmvl
-def vdivswsx_vIvmvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivswsx_vIvmvl : RV<0xeb, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3816,7 +3816,7 @@ def vdivswzx_vsvvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VDVS asm=vdivs.w.zx intrisic=vdivswzx_vsvl
-def vdivswzx_vIvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vdivswzx_vIvl : RV<0xeb, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vdivs.w.zx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -3825,7 +3825,7 @@ def vdivswzx_vIvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VDVS asm=vdivs.w.zx intrisic=vdivswzx_vsvvl
-def vdivswzx_vIvvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vdivswzx_vIvvl : RV<0xeb, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -3855,7 +3855,7 @@ def vdivswzx_vsvmvl : RV<0xeb, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VDVS asm=vdivs.w.zx intrisic=vdivswzx_vsvmvl
-def vdivswzx_vIvmvl : RV<0xeb, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivswzx_vIvmvl : RV<0xeb, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3884,7 +3884,7 @@ def vdivswsx_vvsvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, V64:$vd, I3
 }
 
 // inst=VDVS asm=vdivs.w.sx intrisic=vdivswsx_vvsl
-def vdivswsx_vvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vdivswsx_vvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vdivs.w.sx $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -3893,7 +3893,7 @@ def vdivswsx_vvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl
 }
 
 // inst=VDVS asm=vdivs.w.sx intrisic=vdivswsx_vvsvl
-def vdivswsx_vvIvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, V64:$vd, I32:$vl),
+def vdivswsx_vvIvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7:$I, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$vy,$I">
 {
   let Constraints = "$vx = $vd";
@@ -3913,7 +3913,7 @@ def vdivswsx_vvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM:$vm, V6
 }
 
 // inst=VDVS asm=vdivs.w.sx intrisic=vdivswsx_vvsmvl
-def vdivswsx_vvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, VM:$vm, V64:$vd, I32:$vl),
+def vdivswsx_vvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7:$I, VM:$vm, V64:$vd, I32:$vl),
        "vdivs.w.sx $vx,$vy,$I,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -3942,7 +3942,7 @@ def vdivswzx_vvsvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, V64:$vd, I3
 }
 
 // inst=VDVS asm=vdivs.w.zx intrisic=vdivswzx_vvsl
-def vdivswzx_vvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vdivswzx_vvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vdivs.w.zx $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -3951,7 +3951,7 @@ def vdivswzx_vvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl
 }
 
 // inst=VDVS asm=vdivs.w.zx intrisic=vdivswzx_vvsvl
-def vdivswzx_vvIvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, V64:$vd, I32:$vl),
+def vdivswzx_vvIvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7:$I, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$vy,$I">
 {
   let Constraints = "$vx = $vd";
@@ -3971,7 +3971,7 @@ def vdivswzx_vvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I32:$sy, VM:$vm, V6
 }
 
 // inst=VDVS asm=vdivs.w.zx intrisic=vdivswzx_vvsmvl
-def vdivswzx_vvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, VM:$vm, V64:$vd, I32:$vl),
+def vdivswzx_vvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7:$I, VM:$vm, V64:$vd, I32:$vl),
        "vdivs.w.zx $vx,$vy,$I,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -4019,7 +4019,7 @@ def vdivsl_vsvvl : RV<0xfb, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VDVX asm=vdivs.l intrisic=vdivsl_vsvl
-def vdivsl_vIvl : RV<0xfb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vdivsl_vIvl : RV<0xfb, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vdivs.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -4028,7 +4028,7 @@ def vdivsl_vIvl : RV<0xfb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VDVX asm=vdivs.l intrisic=vdivsl_vsvvl
-def vdivsl_vIvvl : RV<0xfb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vdivsl_vIvvl : RV<0xfb, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vdivs.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -4058,7 +4058,7 @@ def vdivsl_vsvmvl : RV<0xfb, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VDVX asm=vdivs.l intrisic=vdivsl_vsvmvl
-def vdivsl_vIvmvl : RV<0xfb, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vdivsl_vIvmvl : RV<0xfb, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vdivs.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -4087,7 +4087,7 @@ def vdivsl_vvsvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I64:$sy, V64:$vd, I32:
 }
 
 // inst=VDVX asm=vdivs.l intrisic=vdivsl_vvsl
-def vdivsl_vvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I32:$vl),
+def vdivsl_vvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vdivs.l $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -4096,7 +4096,7 @@ def vdivsl_vvIl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I32:$vl),
 }
 
 // inst=VDVX asm=vdivs.l intrisic=vdivsl_vvsvl
-def vdivsl_vvIvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, V64:$vd, I32:$vl),
+def vdivsl_vvIvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7:$I, V64:$vd, I32:$vl),
        "vdivs.l $vx,$vy,$I">
 {
   let Constraints = "$vx = $vd";
@@ -4116,7 +4116,7 @@ def vdivsl_vvsmvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, I64:$sy, VM:$vm, V64:
 }
 
 // inst=VDVX asm=vdivs.l intrisic=vdivsl_vvsmvl
-def vdivsl_vvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, VM:$vm, V64:$vd, I32:$vl),
+def vdivsl_vvImvl : RV<0xeb, (outs V64:$vx), (ins V64:$vy, simm7:$I, VM:$vm, V64:$vd, I32:$vl),
        "vdivs.l $vx,$vy,$I,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -4164,7 +4164,7 @@ def vcmpul_vsvvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VCMP asm=vcmpu.l intrisic=vcmpul_vsvl
-def vcmpul_vIvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vcmpul_vIvl : RV<0xb9, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vcmpu.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -4173,7 +4173,7 @@ def vcmpul_vIvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VCMP asm=vcmpu.l intrisic=vcmpul_vsvvl
-def vcmpul_vIvvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vcmpul_vIvvl : RV<0xb9, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vcmpu.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -4203,7 +4203,7 @@ def vcmpul_vsvmvl : RV<0xb9, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VCMP asm=vcmpu.l intrisic=vcmpul_vsvmvl
-def vcmpul_vIvmvl : RV<0xb9, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpul_vIvmvl : RV<0xb9, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vcmpu.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -4251,7 +4251,7 @@ def vcmpuw_vsvvl : RV<0xb9, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VCMP asm=vcmpu.w intrisic=vcmpuw_vsvl
-def vcmpuw_vIvl : RV<0xb9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vcmpuw_vIvl : RV<0xb9, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vcmpu.w $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -4260,7 +4260,7 @@ def vcmpuw_vIvl : RV<0xb9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VCMP asm=vcmpu.w intrisic=vcmpuw_vsvvl
-def vcmpuw_vIvvl : RV<0xb9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vcmpuw_vIvvl : RV<0xb9, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vcmpu.w $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -4290,7 +4290,7 @@ def vcmpuw_vsvmvl : RV<0xb9, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VCMP asm=vcmpu.w intrisic=vcmpuw_vsvmvl
-def vcmpuw_vIvmvl : RV<0xb9, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpuw_vIvmvl : RV<0xb9, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vcmpu.w $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -4396,7 +4396,7 @@ def vcmpswsx_vsvvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VCPS asm=vcmps.w.sx intrisic=vcmpswsx_vsvl
-def vcmpswsx_vIvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vcmpswsx_vIvl : RV<0xfa, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vcmps.w.sx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -4405,7 +4405,7 @@ def vcmpswsx_vIvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VCPS asm=vcmps.w.sx intrisic=vcmpswsx_vsvvl
-def vcmpswsx_vIvvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vcmpswsx_vIvvl : RV<0xfa, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vcmps.w.sx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -4435,7 +4435,7 @@ def vcmpswsx_vsvmvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VCPS asm=vcmps.w.sx intrisic=vcmpswsx_vsvmvl
-def vcmpswsx_vIvmvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpswsx_vIvmvl : RV<0xfa, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vcmps.w.sx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -4483,7 +4483,7 @@ def vcmpswzx_vsvvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VCPS asm=vcmps.w.zx intrisic=vcmpswzx_vsvl
-def vcmpswzx_vIvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vcmpswzx_vIvl : RV<0xfa, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vcmps.w.zx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -4492,7 +4492,7 @@ def vcmpswzx_vIvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VCPS asm=vcmps.w.zx intrisic=vcmpswzx_vsvvl
-def vcmpswzx_vIvvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vcmpswzx_vIvvl : RV<0xfa, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vcmps.w.zx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -4522,7 +4522,7 @@ def vcmpswzx_vsvmvl : RV<0xfa, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VCPS asm=vcmps.w.zx intrisic=vcmpswzx_vsvmvl
-def vcmpswzx_vIvmvl : RV<0xfa, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpswzx_vIvmvl : RV<0xfa, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vcmps.w.zx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -4628,7 +4628,7 @@ def vcmpsl_vsvvl : RV<0xba, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VCPX asm=vcmps.l intrisic=vcmpsl_vsvl
-def vcmpsl_vIvl : RV<0xba, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vcmpsl_vIvl : RV<0xba, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vcmps.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -4637,7 +4637,7 @@ def vcmpsl_vIvl : RV<0xba, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VCPX asm=vcmps.l intrisic=vcmpsl_vsvvl
-def vcmpsl_vIvvl : RV<0xba, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vcmpsl_vIvvl : RV<0xba, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vcmps.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -4667,7 +4667,7 @@ def vcmpsl_vsvmvl : RV<0xba, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VCPX asm=vcmps.l intrisic=vcmpsl_vsvmvl
-def vcmpsl_vIvmvl : RV<0xba, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vcmpsl_vIvmvl : RV<0xba, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vcmps.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -4715,7 +4715,7 @@ def vmaxswsx_vsvvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VCMS asm=vmaxs.w.sx intrisic=vmaxswsx_vsvl
-def vmaxswsx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vmaxswsx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmaxs.w.sx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -4724,7 +4724,7 @@ def vmaxswsx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VCMS asm=vmaxs.w.sx intrisic=vmaxswsx_vsvvl
-def vmaxswsx_vIvvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vmaxswsx_vIvvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmaxs.w.sx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -4754,7 +4754,7 @@ def vmaxswsx_vsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VCMS asm=vmaxs.w.sx intrisic=vmaxswsx_vsvmvl
-def vmaxswsx_vIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxswsx_vIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmaxs.w.sx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -4802,7 +4802,7 @@ def vmaxswzx_vsvvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VCMS asm=vmaxs.w.zx intrisic=vmaxswzx_vsvl
-def vmaxswzx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vmaxswzx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmaxs.w.zx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -4811,7 +4811,7 @@ def vmaxswzx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VCMS asm=vmaxs.w.zx intrisic=vmaxswzx_vsvvl
-def vmaxswzx_vIvvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vmaxswzx_vIvvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmaxs.w.zx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -4841,7 +4841,7 @@ def vmaxswzx_vsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VCMS asm=vmaxs.w.zx intrisic=vmaxswzx_vsvmvl
-def vmaxswzx_vIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxswzx_vIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmaxs.w.zx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -4947,7 +4947,7 @@ def vminswsx_vsvvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VCMS asm=vmins.w.sx intrisic=vminswsx_vsvl
-def vminswsx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vminswsx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmins.w.sx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -4956,7 +4956,7 @@ def vminswsx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VCMS asm=vmins.w.sx intrisic=vminswsx_vsvvl
-def vminswsx_vIvvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vminswsx_vIvvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmins.w.sx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -4986,7 +4986,7 @@ def vminswsx_vsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VCMS asm=vmins.w.sx intrisic=vminswsx_vsvmvl
-def vminswsx_vIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminswsx_vIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmins.w.sx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5034,7 +5034,7 @@ def vminswzx_vsvvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, V64:$vd, I3
 }
 
 // inst=VCMS asm=vmins.w.zx intrisic=vminswzx_vsvl
-def vminswzx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl),
+def vminswzx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmins.w.zx $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -5043,7 +5043,7 @@ def vminswzx_vIvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, I32:$vl
 }
 
 // inst=VCMS asm=vmins.w.zx intrisic=vminswzx_vsvvl
-def vminswzx_vIvvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, V64:$vd, I32:$vl),
+def vminswzx_vIvvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmins.w.zx $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -5073,7 +5073,7 @@ def vminswzx_vsvmvl : RV<0x8a, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, V6
 }
 
 // inst=VCMS asm=vmins.w.zx intrisic=vminswzx_vsvmvl
-def vminswzx_vIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7Op32:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminswzx_vIvmvl : RV<0x8a, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmins.w.zx $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5179,7 +5179,7 @@ def vmaxsl_vsvvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VCMX asm=vmaxs.l intrisic=vmaxsl_vsvl
-def vmaxsl_vIvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vmaxsl_vIvl : RV<0x9a, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmaxs.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -5188,7 +5188,7 @@ def vmaxsl_vIvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VCMX asm=vmaxs.l intrisic=vmaxsl_vsvvl
-def vmaxsl_vIvvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vmaxsl_vIvvl : RV<0x9a, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmaxs.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -5218,7 +5218,7 @@ def vmaxsl_vsvmvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VCMX asm=vmaxs.l intrisic=vmaxsl_vsvmvl
-def vmaxsl_vIvmvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmaxsl_vIvmvl : RV<0x9a, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmaxs.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -5266,7 +5266,7 @@ def vminsl_vsvvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, V64:$vd, I32:
 }
 
 // inst=VCMX asm=vmins.l intrisic=vminsl_vsvl
-def vminsl_vIvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
+def vminsl_vIvl : RV<0x9a, (outs V64:$vx), (ins simm7:$I, V64:$vz, I32:$vl),
        "vmins.l $vx,$I,$vz">
 {
   let DecoderNamespace = "VEL";
@@ -5275,7 +5275,7 @@ def vminsl_vIvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, I32:$vl),
 }
 
 // inst=VCMX asm=vmins.l intrisic=vminsl_vsvvl
-def vminsl_vIvvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, V64:$vd, I32:$vl),
+def vminsl_vIvvl : RV<0x9a, (outs V64:$vx), (ins simm7:$I, V64:$vz, V64:$vd, I32:$vl),
        "vmins.l $vx,$I,$vz">
 {
   let Constraints = "$vx = $vd";
@@ -5305,7 +5305,7 @@ def vminsl_vsvmvl : RV<0x9a, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:
 }
 
 // inst=VCMX asm=vmins.l intrisic=vminsl_vsvmvl
-def vminsl_vIvmvl : RV<0x9a, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vminsl_vIvmvl : RV<0x9a, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmins.l $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -6357,7 +6357,7 @@ def vsll_vvsvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$v
 }
 
 // inst=VSLL asm=vsll intrisic=vsll_vvsl
-def vsll_vvIl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+def vsll_vvIl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7:$N, I32:$vl),
        "vsll $vx,$vz,$N">
 {
   let DecoderNamespace = "VEL";
@@ -6366,7 +6366,7 @@ def vsll_vvIl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
 }
 
 // inst=VSLL asm=vsll intrisic=vsll_vvsvl
-def vsll_vvIvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I32:$vl),
+def vsll_vvIvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7:$N, V64:$vd, I32:$vl),
        "vsll $vx,$vz,$N">
 {
   let Constraints = "$vx = $vd";
@@ -6396,7 +6396,7 @@ def vsll_vvsmvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$v
 }
 
 // inst=VSLL asm=vsll intrisic=vsll_vvsmvl
-def vsll_vvImvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vsll_vvImvl : RV<0xe5, (outs V64:$vx), (ins V64:$vz, simm7:$N, VM:$vm, V64:$vd, I32:$vl),
        "vsll $vx,$vz,$N,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -6618,7 +6618,7 @@ def vsrl_vvsvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$v
 }
 
 // inst=VSRL asm=vsrl intrisic=vsrl_vvsl
-def vsrl_vvIl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+def vsrl_vvIl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7:$N, I32:$vl),
        "vsrl $vx,$vz,$N">
 {
   let DecoderNamespace = "VEL";
@@ -6627,7 +6627,7 @@ def vsrl_vvIl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
 }
 
 // inst=VSRL asm=vsrl intrisic=vsrl_vvsvl
-def vsrl_vvIvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I32:$vl),
+def vsrl_vvIvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7:$N, V64:$vd, I32:$vl),
        "vsrl $vx,$vz,$N">
 {
   let Constraints = "$vx = $vd";
@@ -6657,7 +6657,7 @@ def vsrl_vvsmvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$v
 }
 
 // inst=VSRL asm=vsrl intrisic=vsrl_vvsmvl
-def vsrl_vvImvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vsrl_vvImvl : RV<0xf5, (outs V64:$vx), (ins V64:$vz, simm7:$N, VM:$vm, V64:$vd, I32:$vl),
        "vsrl $vx,$vz,$N,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -6879,7 +6879,7 @@ def vslaw_vvsvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$
 }
 
 // inst=VSLA asm=vsla.w intrisic=vslaw_vvsl
-def vslaw_vvIl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+def vslaw_vvIl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7:$N, I32:$vl),
        "vsla.w $vx,$vz,$N">
 {
   let DecoderNamespace = "VEL";
@@ -6888,7 +6888,7 @@ def vslaw_vvIl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
 }
 
 // inst=VSLA asm=vsla.w intrisic=vslaw_vvsvl
-def vslaw_vvIvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I32:$vl),
+def vslaw_vvIvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7:$N, V64:$vd, I32:$vl),
        "vsla.w $vx,$vz,$N">
 {
   let Constraints = "$vx = $vd";
@@ -6918,7 +6918,7 @@ def vslaw_vvsmvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$
 }
 
 // inst=VSLA asm=vsla.w intrisic=vslaw_vvsmvl
-def vslaw_vvImvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vslaw_vvImvl : RV<0xe6, (outs V64:$vx), (ins V64:$vz, simm7:$N, VM:$vm, V64:$vd, I32:$vl),
        "vsla.w $vx,$vz,$N,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -7140,7 +7140,7 @@ def vslal_vvsvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$
 }
 
 // inst=VSLAX asm=vsla.l intrisic=vslal_vvsl
-def vslal_vvIl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+def vslal_vvIl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7:$N, I32:$vl),
        "vsla.l $vx,$vz,$N">
 {
   let DecoderNamespace = "VEL";
@@ -7149,7 +7149,7 @@ def vslal_vvIl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
 }
 
 // inst=VSLAX asm=vsla.l intrisic=vslal_vvsvl
-def vslal_vvIvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I32:$vl),
+def vslal_vvIvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7:$N, V64:$vd, I32:$vl),
        "vsla.l $vx,$vz,$N">
 {
   let Constraints = "$vx = $vd";
@@ -7179,7 +7179,7 @@ def vslal_vvsmvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$
 }
 
 // inst=VSLAX asm=vsla.l intrisic=vslal_vvsmvl
-def vslal_vvImvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vslal_vvImvl : RV<0xd4, (outs V64:$vx), (ins V64:$vz, simm7:$N, VM:$vm, V64:$vd, I32:$vl),
        "vsla.l $vx,$vz,$N,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -7227,7 +7227,7 @@ def vsraw_vvsvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$
 }
 
 // inst=VSRA asm=vsra.w intrisic=vsraw_vvsl
-def vsraw_vvIl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+def vsraw_vvIl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7:$N, I32:$vl),
        "vsra.w $vx,$vz,$N">
 {
   let DecoderNamespace = "VEL";
@@ -7236,7 +7236,7 @@ def vsraw_vvIl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
 }
 
 // inst=VSRA asm=vsra.w intrisic=vsraw_vvsvl
-def vsraw_vvIvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I32:$vl),
+def vsraw_vvIvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7:$N, V64:$vd, I32:$vl),
        "vsra.w $vx,$vz,$N">
 {
   let Constraints = "$vx = $vd";
@@ -7266,7 +7266,7 @@ def vsraw_vvsmvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$
 }
 
 // inst=VSRA asm=vsra.w intrisic=vsraw_vvsmvl
-def vsraw_vvImvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vsraw_vvImvl : RV<0xf6, (outs V64:$vx), (ins V64:$vz, simm7:$N, VM:$vm, V64:$vd, I32:$vl),
        "vsra.w $vx,$vz,$N,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -7488,7 +7488,7 @@ def vsral_vvsvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, I64:$sy, V64:$vd, I32:$
 }
 
 // inst=VSRAX asm=vsra.l intrisic=vsral_vvsl
-def vsral_vvIl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
+def vsral_vvIl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7:$N, I32:$vl),
        "vsra.l $vx,$vz,$N">
 {
   let DecoderNamespace = "VEL";
@@ -7497,7 +7497,7 @@ def vsral_vvIl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, I32:$vl),
 }
 
 // inst=VSRAX asm=vsra.l intrisic=vsral_vvsvl
-def vsral_vvIvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, V64:$vd, I32:$vl),
+def vsral_vvIvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7:$N, V64:$vd, I32:$vl),
        "vsra.l $vx,$vz,$N">
 {
   let Constraints = "$vx = $vd";
@@ -7527,7 +7527,7 @@ def vsral_vvsmvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, I64:$sy, VM:$vm, V64:$
 }
 
 // inst=VSRAX asm=vsra.l intrisic=vsral_vvsmvl
-def vsral_vvImvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7Op64:$N, VM:$vm, V64:$vd, I32:$vl),
+def vsral_vvImvl : RV<0xd5, (outs V64:$vx), (ins V64:$vz, simm7:$N, VM:$vm, V64:$vd, I32:$vl),
        "vsra.l $vx,$vz,$N,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -7556,7 +7556,7 @@ def vsfa_vvssvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, V64:$
 }
 
 // inst=VSFA asm=vsfa intrisic=vsfa_vvssl
-def vsfa_vvIsl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$I, I64:$sz, I32:$vl),
+def vsfa_vvIsl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7:$I, I64:$sz, I32:$vl),
        "vsfa $vx,$vz,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -7565,7 +7565,7 @@ def vsfa_vvIsl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$I, I64:$sz, I
 }
 
 // inst=VSFA asm=vsfa intrisic=vsfa_vvssvl
-def vsfa_vvIsvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vsfa_vvIsvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vsfa $vx,$vz,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -7585,7 +7585,7 @@ def vsfa_vvssmvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, I64:$sy, I64:$sz, VM:$
 }
 
 // inst=VSFA asm=vsfa intrisic=vsfa_vvssmvl
-def vsfa_vvIsmvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7Op64:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vsfa_vvIsmvl : RV<0xd7, (outs V64:$vx), (ins V64:$vz, simm7:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
        "vsfa $vx,$vz,$I,$sz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -10568,7 +10568,7 @@ def vmrg_vsvmvl : RV<0xd6, (outs V64:$vx), (ins I64:$sy, V64:$vz, VM:$vm, V64:$v
 }
 
 // inst=VMRG asm=vmrg intrisic=vmrg_vsvml
-def vmrg_vIvml : RV<0xd6, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, I32:$vl),
+def vmrg_vIvml : RV<0xd6, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, I32:$vl),
        "vmrg $vx,$I,$vz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -10577,7 +10577,7 @@ def vmrg_vIvml : RV<0xd6, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, I3
 }
 
 // inst=VMRG asm=vmrg intrisic=vmrg_vsvmvl
-def vmrg_vIvmvl : RV<0xd6, (outs V64:$vx), (ins simm7Op64:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
+def vmrg_vIvmvl : RV<0xd6, (outs V64:$vx), (ins simm7:$I, V64:$vz, VM:$vm, V64:$vd, I32:$vl),
        "vmrg $vx,$I,$vz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -10644,7 +10644,7 @@ def vshf_vvvsvl : RV<0xbc, (outs V64:$vx), (ins V64:$vy, V64:$vz, I64:$sy, V64:$
 }
 
 // inst=VSHF asm=vshf intrisic=vshf_vvvsl
-def vshf_vvvIl : RV<0xbc, (outs V64:$vx), (ins V64:$vy, V64:$vz, simm7Op64:$N, I32:$vl),
+def vshf_vvvIl : RV<0xbc, (outs V64:$vx), (ins V64:$vy, V64:$vz, simm7:$N, I32:$vl),
        "vshf $vx,$vy,$vz,$N">
 {
   let DecoderNamespace = "VEL";
@@ -10653,7 +10653,7 @@ def vshf_vvvIl : RV<0xbc, (outs V64:$vx), (ins V64:$vy, V64:$vz, simm7Op64:$N, I
 }
 
 // inst=VSHF asm=vshf intrisic=vshf_vvvsvl
-def vshf_vvvIvl : RV<0xbc, (outs V64:$vx), (ins V64:$vy, V64:$vz, simm7Op64:$N, V64:$vd, I32:$vl),
+def vshf_vvvIvl : RV<0xbc, (outs V64:$vx), (ins V64:$vy, V64:$vz, simm7:$N, V64:$vd, I32:$vl),
        "vshf $vx,$vy,$vz,$N">
 {
   let Constraints = "$vx = $vd";
@@ -13988,7 +13988,7 @@ def vfiad_vvsl : RV<0xce, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
 }
 
 // inst=VFIA asm=vfia.d intrisic=vfiad_vvsl
-def vfiad_vvIl : RV<0xce, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfiad_vvIl : RV<0xce, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfia.d $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14006,7 +14006,7 @@ def vfisd_vvsl : RV<0xde, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
 }
 
 // inst=VFIS asm=vfis.d intrisic=vfisd_vvsl
-def vfisd_vvIl : RV<0xde, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfisd_vvIl : RV<0xde, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfis.d $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14024,7 +14024,7 @@ def vfimd_vvsl : RV<0xcf, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
 }
 
 // inst=VFIM asm=vfim.d intrisic=vfimd_vvsl
-def vfimd_vvIl : RV<0xcf, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfimd_vvIl : RV<0xcf, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfim.d $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14042,7 +14042,7 @@ def vfiamd_vvsl : RV<0xee, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
 }
 
 // inst=VFIAM asm=vfiam.d intrisic=vfiamd_vvsl
-def vfiamd_vvIl : RV<0xee, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfiamd_vvIl : RV<0xee, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfiam.d $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14060,7 +14060,7 @@ def vfismd_vvsl : RV<0xfe, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
 }
 
 // inst=VFISM asm=vfism.d intrisic=vfismd_vvsl
-def vfismd_vvIl : RV<0xfe, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfismd_vvIl : RV<0xfe, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfism.d $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14078,7 +14078,7 @@ def vfimad_vvsl : RV<0xef, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
 }
 
 // inst=VFIMA asm=vfima.d intrisic=vfimad_vvsl
-def vfimad_vvIl : RV<0xef, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfimad_vvIl : RV<0xef, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfima.d $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14096,7 +14096,7 @@ def vfimsd_vvsl : RV<0xff, (outs V64:$vx), (ins V64:$vy, I64:$sy, I32:$vl),
 }
 
 // inst=VFIMS asm=vfims.d intrisic=vfimsd_vvsl
-def vfimsd_vvIl : RV<0xff, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfimsd_vvIl : RV<0xff, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfims.d $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14114,7 +14114,7 @@ def vfias_vvsl : RV<0xce, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
 }
 
 // inst=VFIA asm=vfia.s intrisic=vfias_vvsl
-def vfias_vvIl : RV<0xce, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfias_vvIl : RV<0xce, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfia.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14132,7 +14132,7 @@ def vfiss_vvsl : RV<0xde, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
 }
 
 // inst=VFIS asm=vfis.s intrisic=vfiss_vvsl
-def vfiss_vvIl : RV<0xde, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfiss_vvIl : RV<0xde, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfis.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14150,7 +14150,7 @@ def vfims_vvsl : RV<0xcf, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
 }
 
 // inst=VFIM asm=vfim.s intrisic=vfims_vvsl
-def vfims_vvIl : RV<0xcf, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfims_vvIl : RV<0xcf, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfim.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14168,7 +14168,7 @@ def vfiams_vvsl : RV<0xee, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
 }
 
 // inst=VFIAM asm=vfiam.s intrisic=vfiams_vvsl
-def vfiams_vvIl : RV<0xee, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfiams_vvIl : RV<0xee, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfiam.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14186,7 +14186,7 @@ def vfisms_vvsl : RV<0xfe, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
 }
 
 // inst=VFISM asm=vfism.s intrisic=vfisms_vvsl
-def vfisms_vvIl : RV<0xfe, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfisms_vvIl : RV<0xfe, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfism.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14204,7 +14204,7 @@ def vfimas_vvsl : RV<0xef, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
 }
 
 // inst=VFIMA asm=vfima.s intrisic=vfimas_vvsl
-def vfimas_vvIl : RV<0xef, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfimas_vvIl : RV<0xef, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfima.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14222,7 +14222,7 @@ def vfimss_vvsl : RV<0xff, (outs V64:$vx), (ins V64:$vy, F32:$sy, I32:$vl),
 }
 
 // inst=VFIMS asm=vfims.s intrisic=vfimss_vvsl
-def vfimss_vvIl : RV<0xff, (outs V64:$vx), (ins V64:$vy, simm7Op32:$I, I32:$vl),
+def vfimss_vvIl : RV<0xff, (outs V64:$vx), (ins V64:$vy, simm7:$I, I32:$vl),
        "vfims.s $vx,$vy,$I">
 {
   let DecoderNamespace = "VEL";
@@ -14250,7 +14250,7 @@ def vgt_vvssvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V64:$v
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssl
-def vgt_vvsZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vgt_vvsZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vgt $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -14259,7 +14259,7 @@ def vgt_vvsZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I3
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssvl
-def vgt_vvsZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgt_vvsZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, V64:$vd, I32:$vl),
        "vgt $vx,$vy,$sy,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -14269,7 +14269,7 @@ def vgt_vvsZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssl
-def vgt_vvIsl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vgt_vvIsl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vgt $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -14278,7 +14278,7 @@ def vgt_vvIsl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I3
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssvl
-def vgt_vvIsvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vgt_vvIsvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vgt $vx,$vy,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -14288,7 +14288,7 @@ def vgt_vvIsvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssl
-def vgt_vvIZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vgt_vvIZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vgt $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -14297,7 +14297,7 @@ def vgt_vvIZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssvl
-def vgt_vvIZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgt_vvIZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, V64:$vd, I32:$vl),
        "vgt $vx,$vy,$I,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -14326,7 +14326,7 @@ def vgt_vvssmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM:$v
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssml
-def vgt_vvsZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgt_vvsZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vgt $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14335,7 +14335,7 @@ def vgt_vvsZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssmvl
-def vgt_vvsZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgt_vvsZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgt $vx,$vy,$sy,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14345,7 +14345,7 @@ def vgt_vvsZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, 
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssml
-def vgt_vvIsml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vgt_vvIsml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vgt $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14354,7 +14354,7 @@ def vgt_vvIsml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssmvl
-def vgt_vvIsmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vgt_vvIsmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
        "vgt $vx,$vy,$I,$sz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14364,7 +14364,7 @@ def vgt_vvIsmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, 
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssml
-def vgt_vvIZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgt_vvIZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vgt $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14373,7 +14373,7 @@ def vgt_vvIZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:
 }
 
 // inst=VGT asm=vgt intrisic=vgt_vvssmvl
-def vgt_vvIZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgt_vvIZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgt $vx,$vy,$I,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14402,7 +14402,7 @@ def vgtnc_vvssvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V64:
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssl
-def vgtnc_vvsZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vgtnc_vvsZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vgt.nc $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -14411,7 +14411,7 @@ def vgtnc_vvsZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, 
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssvl
-def vgtnc_vvsZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtnc_vvsZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, V64:$vd, I32:$vl),
        "vgt.nc $vx,$vy,$sy,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -14421,7 +14421,7 @@ def vgtnc_vvsZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z,
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssl
-def vgtnc_vvIsl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vgtnc_vvIsl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vgt.nc $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -14430,7 +14430,7 @@ def vgtnc_vvIsl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, 
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssvl
-def vgtnc_vvIsvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vgtnc_vvIsvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vgt.nc $vx,$vy,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -14440,7 +14440,7 @@ def vgtnc_vvIsvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz,
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssl
-def vgtnc_vvIZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vgtnc_vvIZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vgt.nc $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -14449,7 +14449,7 @@ def vgtnc_vvIZl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssvl
-def vgtnc_vvIZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtnc_vvIZvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, V64:$vd, I32:$vl),
        "vgt.nc $vx,$vy,$I,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -14478,7 +14478,7 @@ def vgtnc_vvssmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM:
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssml
-def vgtnc_vvsZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtnc_vvsZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vgt.nc $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14487,7 +14487,7 @@ def vgtnc_vvsZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z,
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssmvl
-def vgtnc_vvsZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtnc_vvsZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgt.nc $vx,$vy,$sy,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14497,7 +14497,7 @@ def vgtnc_vvsZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssml
-def vgtnc_vvIsml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vgtnc_vvIsml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vgt.nc $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14506,7 +14506,7 @@ def vgtnc_vvIsml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz,
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssmvl
-def vgtnc_vvIsmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vgtnc_vvIsmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
        "vgt.nc $vx,$vy,$I,$sz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14516,7 +14516,7 @@ def vgtnc_vvIsmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssml
-def vgtnc_vvIZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtnc_vvIZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vgt.nc $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14525,7 +14525,7 @@ def vgtnc_vvIZml : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op6
 }
 
 // inst=VGT asm=vgt.nc intrisic=vgtnc_vvssmvl
-def vgtnc_vvIZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtnc_vvIZmvl : RV<0xa1, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgt.nc $vx,$vy,$I,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14554,7 +14554,7 @@ def vgtu_vvssvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V64:$
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssl
-def vgtu_vvsZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vgtu_vvsZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vgtu $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -14563,7 +14563,7 @@ def vgtu_vvsZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssvl
-def vgtu_vvsZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtu_vvsZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, V64:$vd, I32:$vl),
        "vgtu $vx,$vy,$sy,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -14573,7 +14573,7 @@ def vgtu_vvsZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, 
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssl
-def vgtu_vvIsl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vgtu_vvIsl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vgtu $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -14582,7 +14582,7 @@ def vgtu_vvIsl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssvl
-def vgtu_vvIsvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vgtu_vvIsvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vgtu $vx,$vy,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -14592,7 +14592,7 @@ def vgtu_vvIsvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, 
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssl
-def vgtu_vvIZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vgtu_vvIZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vgtu $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -14601,7 +14601,7 @@ def vgtu_vvIZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssvl
-def vgtu_vvIZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtu_vvIZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, V64:$vd, I32:$vl),
        "vgtu $vx,$vy,$I,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -14630,7 +14630,7 @@ def vgtu_vvssmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM:$
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssml
-def vgtu_vvsZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtu_vvsZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vgtu $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14639,7 +14639,7 @@ def vgtu_vvsZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, 
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssmvl
-def vgtu_vvsZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtu_vvsZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtu $vx,$vy,$sy,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14649,7 +14649,7 @@ def vgtu_vvsZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z,
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssml
-def vgtu_vvIsml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vgtu_vvIsml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vgtu $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14658,7 +14658,7 @@ def vgtu_vvIsml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, 
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssmvl
-def vgtu_vvIsmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vgtu_vvIsmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
        "vgtu $vx,$vy,$I,$sz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14668,7 +14668,7 @@ def vgtu_vvIsmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz,
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssml
-def vgtu_vvIZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtu_vvIZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vgtu $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14677,7 +14677,7 @@ def vgtu_vvIZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64
 }
 
 // inst=VGTU asm=vgtu intrisic=vgtu_vvssmvl
-def vgtu_vvIZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtu_vvIZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtu $vx,$vy,$I,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14706,7 +14706,7 @@ def vgtunc_vvssvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V64
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssl
-def vgtunc_vvsZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vgtunc_vvsZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vgtu.nc $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -14715,7 +14715,7 @@ def vgtunc_vvsZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z,
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssvl
-def vgtunc_vvsZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtunc_vvsZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, V64:$vd, I32:$vl),
        "vgtu.nc $vx,$vy,$sy,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -14725,7 +14725,7 @@ def vgtunc_vvsZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssl
-def vgtunc_vvIsl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vgtunc_vvIsl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vgtu.nc $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -14734,7 +14734,7 @@ def vgtunc_vvIsl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz,
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssvl
-def vgtunc_vvIsvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vgtunc_vvIsvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vgtu.nc $vx,$vy,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -14744,7 +14744,7 @@ def vgtunc_vvIsvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssl
-def vgtunc_vvIZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vgtunc_vvIZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vgtu.nc $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -14753,7 +14753,7 @@ def vgtunc_vvIZl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op6
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssvl
-def vgtunc_vvIZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtunc_vvIZvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, V64:$vd, I32:$vl),
        "vgtu.nc $vx,$vy,$I,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -14782,7 +14782,7 @@ def vgtunc_vvssmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssml
-def vgtunc_vvsZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtunc_vvsZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vgtu.nc $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14791,7 +14791,7 @@ def vgtunc_vvsZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssmvl
-def vgtunc_vvsZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtunc_vvsZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtu.nc $vx,$vy,$sy,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14801,7 +14801,7 @@ def vgtunc_vvsZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssml
-def vgtunc_vvIsml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vgtunc_vvIsml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vgtu.nc $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14810,7 +14810,7 @@ def vgtunc_vvIsml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssmvl
-def vgtunc_vvIsmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vgtunc_vvIsmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
        "vgtu.nc $vx,$vy,$I,$sz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14820,7 +14820,7 @@ def vgtunc_vvIsmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssml
-def vgtunc_vvIZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtunc_vvIZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vgtu.nc $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14829,7 +14829,7 @@ def vgtunc_vvIZml : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op
 }
 
 // inst=VGTU asm=vgtu.nc intrisic=vgtunc_vvssmvl
-def vgtunc_vvIZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtunc_vvIZmvl : RV<0xa2, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtu.nc $vx,$vy,$I,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14858,7 +14858,7 @@ def vgtlsx_vvssvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V64
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssl
-def vgtlsx_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vgtlsx_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vgtl.sx $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -14867,7 +14867,7 @@ def vgtlsx_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z,
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssvl
-def vgtlsx_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtlsx_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, V64:$vd, I32:$vl),
        "vgtl.sx $vx,$vy,$sy,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -14877,7 +14877,7 @@ def vgtlsx_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssl
-def vgtlsx_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vgtlsx_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vgtl.sx $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -14886,7 +14886,7 @@ def vgtlsx_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz,
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssvl
-def vgtlsx_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vgtlsx_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vgtl.sx $vx,$vy,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -14896,7 +14896,7 @@ def vgtlsx_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssl
-def vgtlsx_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vgtlsx_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vgtl.sx $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -14905,7 +14905,7 @@ def vgtlsx_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op6
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssvl
-def vgtlsx_vvIZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtlsx_vvIZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, V64:$vd, I32:$vl),
        "vgtl.sx $vx,$vy,$I,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -14934,7 +14934,7 @@ def vgtlsx_vvssmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssml
-def vgtlsx_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtlsx_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vgtl.sx $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14943,7 +14943,7 @@ def vgtlsx_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssmvl
-def vgtlsx_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtlsx_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.sx $vx,$vy,$sy,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14953,7 +14953,7 @@ def vgtlsx_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssml
-def vgtlsx_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vgtlsx_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vgtl.sx $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14962,7 +14962,7 @@ def vgtlsx_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssmvl
-def vgtlsx_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vgtlsx_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.sx $vx,$vy,$I,$sz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -14972,7 +14972,7 @@ def vgtlsx_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssml
-def vgtlsx_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtlsx_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vgtl.sx $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -14981,7 +14981,7 @@ def vgtlsx_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op
 }
 
 // inst=VGTL asm=vgtl.sx intrisic=vgtlsx_vvssmvl
-def vgtlsx_vvIZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtlsx_vvIZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.sx $vx,$vy,$I,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -15010,7 +15010,7 @@ def vgtlsxnc_vvssvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssl
-def vgtlsxnc_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vgtlsxnc_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15019,7 +15019,7 @@ def vgtlsxnc_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssvl
-def vgtlsxnc_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtlsxnc_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, V64:$vd, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$sy,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -15029,7 +15029,7 @@ def vgtlsxnc_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssl
-def vgtlsxnc_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vgtlsxnc_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15038,7 +15038,7 @@ def vgtlsxnc_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssvl
-def vgtlsxnc_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vgtlsxnc_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -15048,7 +15048,7 @@ def vgtlsxnc_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssl
-def vgtlsxnc_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vgtlsxnc_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15057,7 +15057,7 @@ def vgtlsxnc_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7O
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssvl
-def vgtlsxnc_vvIZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtlsxnc_vvIZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, V64:$vd, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$I,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -15086,7 +15086,7 @@ def vgtlsxnc_vvssmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, 
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssml
-def vgtlsxnc_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtlsxnc_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15095,7 +15095,7 @@ def vgtlsxnc_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssmvl
-def vgtlsxnc_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtlsxnc_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$sy,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -15105,7 +15105,7 @@ def vgtlsxnc_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssml
-def vgtlsxnc_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vgtlsxnc_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15114,7 +15114,7 @@ def vgtlsxnc_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssmvl
-def vgtlsxnc_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vgtlsxnc_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$I,$sz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -15124,7 +15124,7 @@ def vgtlsxnc_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssml
-def vgtlsxnc_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtlsxnc_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15133,7 +15133,7 @@ def vgtlsxnc_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7
 }
 
 // inst=VGTL asm=vgtl.sx.nc intrisic=vgtlsxnc_vvssmvl
-def vgtlsxnc_vvIZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtlsxnc_vvIZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.sx.nc $vx,$vy,$I,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -15162,7 +15162,7 @@ def vgtlzx_vvssvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V64
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssl
-def vgtlzx_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vgtlzx_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vgtl.zx $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15171,7 +15171,7 @@ def vgtlzx_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z,
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssvl
-def vgtlzx_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtlzx_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, V64:$vd, I32:$vl),
        "vgtl.zx $vx,$vy,$sy,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -15181,7 +15181,7 @@ def vgtlzx_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssl
-def vgtlzx_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vgtlzx_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vgtl.zx $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15190,7 +15190,7 @@ def vgtlzx_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz,
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssvl
-def vgtlzx_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vgtlzx_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vgtl.zx $vx,$vy,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -15200,7 +15200,7 @@ def vgtlzx_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssl
-def vgtlzx_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vgtlzx_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vgtl.zx $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15209,7 +15209,7 @@ def vgtlzx_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op6
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssvl
-def vgtlzx_vvIZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtlzx_vvIZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, V64:$vd, I32:$vl),
        "vgtl.zx $vx,$vy,$I,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -15238,7 +15238,7 @@ def vgtlzx_vvssmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, VM
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssml
-def vgtlzx_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtlzx_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vgtl.zx $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15247,7 +15247,7 @@ def vgtlzx_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssmvl
-def vgtlzx_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtlzx_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.zx $vx,$vy,$sy,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -15257,7 +15257,7 @@ def vgtlzx_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssml
-def vgtlzx_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vgtlzx_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vgtl.zx $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15266,7 +15266,7 @@ def vgtlzx_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssmvl
-def vgtlzx_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vgtlzx_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.zx $vx,$vy,$I,$sz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -15276,7 +15276,7 @@ def vgtlzx_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssml
-def vgtlzx_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtlzx_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vgtl.zx $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15285,7 +15285,7 @@ def vgtlzx_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op
 }
 
 // inst=VGTL asm=vgtl.zx intrisic=vgtlzx_vvssmvl
-def vgtlzx_vvIZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtlzx_vvIZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.zx $vx,$vy,$I,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -15314,7 +15314,7 @@ def vgtlzxnc_vvssvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, V
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssl
-def vgtlzxnc_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vgtlzxnc_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15323,7 +15323,7 @@ def vgtlzxnc_vvsZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssvl
-def vgtlzxnc_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtlzxnc_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, V64:$vd, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$sy,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -15333,7 +15333,7 @@ def vgtlzxnc_vvsZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssl
-def vgtlzxnc_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vgtlzxnc_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15342,7 +15342,7 @@ def vgtlzxnc_vvIsl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssvl
-def vgtlzxnc_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, V64:$vd, I32:$vl),
+def vgtlzxnc_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, V64:$vd, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$I,$sz">
 {
   let Constraints = "$vx = $vd";
@@ -15352,7 +15352,7 @@ def vgtlzxnc_vvIsvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssl
-def vgtlzxnc_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vgtlzxnc_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15361,7 +15361,7 @@ def vgtlzxnc_vvIZl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7O
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssvl
-def vgtlzxnc_vvIZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, V64:$vd, I32:$vl),
+def vgtlzxnc_vvIZvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, V64:$vd, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$I,$Z">
 {
   let Constraints = "$vx = $vd";
@@ -15390,7 +15390,7 @@ def vgtlzxnc_vvssmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, I64:$sz, 
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssml
-def vgtlzxnc_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtlzxnc_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15399,7 +15399,7 @@ def vgtlzxnc_vvsZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssmvl
-def vgtlzxnc_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtlzxnc_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$sy,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -15409,7 +15409,7 @@ def vgtlzxnc_vvsZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, I64:$sy, simm7Op64
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssml
-def vgtlzxnc_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vgtlzxnc_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15418,7 +15418,7 @@ def vgtlzxnc_vvIsml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssmvl
-def vgtlzxnc_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
+def vgtlzxnc_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, I64:$sz, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$I,$sz,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -15428,7 +15428,7 @@ def vgtlzxnc_vvIsmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, I64:
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssml
-def vgtlzxnc_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vgtlzxnc_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15437,7 +15437,7 @@ def vgtlzxnc_vvIZml : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7
 }
 
 // inst=VGTL asm=vgtl.zx.nc intrisic=vgtlzxnc_vvssmvl
-def vgtlzxnc_vvIZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, V64:$vd, I32:$vl),
+def vgtlzxnc_vvIZmvl : RV<0xa3, (outs V64:$vx), (ins V64:$vy, simm7:$I, simm7:$Z, VM:$vm, V64:$vd, I32:$vl),
        "vgtl.zx.nc $vx,$vy,$I,$Z,$vm">
 {
   let Constraints = "$vx = $vd";
@@ -15456,7 +15456,7 @@ def vsc_vvssl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32:$
 }
 
 // inst=VSC asm=vsc intrisic=vsc_vvssl
-def vsc_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vsc_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vsc $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15465,7 +15465,7 @@ def vsc_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, 
 }
 
 // inst=VSC asm=vsc intrisic=vsc_vvssl
-def vsc_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vsc_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vsc $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15474,7 +15474,7 @@ def vsc_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, 
 }
 
 // inst=VSC asm=vsc intrisic=vsc_vvssl
-def vsc_vvIZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vsc_vvIZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vsc $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15492,7 +15492,7 @@ def vsc_vvssml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM:$
 }
 
 // inst=VSC asm=vsc intrisic=vsc_vvssml
-def vsc_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vsc_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vsc $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15501,7 +15501,7 @@ def vsc_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z,
 }
 
 // inst=VSC asm=vsc intrisic=vsc_vvssml
-def vsc_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vsc_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vsc $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15510,7 +15510,7 @@ def vsc_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz,
 }
 
 // inst=VSC asm=vsc intrisic=vsc_vvssml
-def vsc_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vsc_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vsc $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15528,7 +15528,7 @@ def vscnc_vvssl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32
 }
 
 // inst=VSC asm=vsc.nc intrisic=vscnc_vvssl
-def vscnc_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vscnc_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vsc.nc $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15537,7 +15537,7 @@ def vscnc_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VSC asm=vsc.nc intrisic=vscnc_vvssl
-def vscnc_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vscnc_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vsc.nc $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15546,7 +15546,7 @@ def vscnc_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VSC asm=vsc.nc intrisic=vscnc_vvssl
-def vscnc_vvIZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vscnc_vvIZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vsc.nc $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15564,7 +15564,7 @@ def vscnc_vvssml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM
 }
 
 // inst=VSC asm=vsc.nc intrisic=vscnc_vvssml
-def vscnc_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscnc_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vsc.nc $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15573,7 +15573,7 @@ def vscnc_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VSC asm=vsc.nc intrisic=vscnc_vvssml
-def vscnc_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vscnc_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vsc.nc $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15582,7 +15582,7 @@ def vscnc_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VSC asm=vsc.nc intrisic=vscnc_vvssml
-def vscnc_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscnc_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vsc.nc $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15600,7 +15600,7 @@ def vscot_vvssl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32
 }
 
 // inst=VSC asm=vsc.ot intrisic=vscot_vvssl
-def vscot_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vscot_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vsc.ot $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15609,7 +15609,7 @@ def vscot_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VSC asm=vsc.ot intrisic=vscot_vvssl
-def vscot_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vscot_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vsc.ot $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15618,7 +15618,7 @@ def vscot_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VSC asm=vsc.ot intrisic=vscot_vvssl
-def vscot_vvIZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vscot_vvIZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vsc.ot $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15636,7 +15636,7 @@ def vscot_vvssml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM
 }
 
 // inst=VSC asm=vsc.ot intrisic=vscot_vvssml
-def vscot_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscot_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vsc.ot $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15645,7 +15645,7 @@ def vscot_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VSC asm=vsc.ot intrisic=vscot_vvssml
-def vscot_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vscot_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vsc.ot $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15654,7 +15654,7 @@ def vscot_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VSC asm=vsc.ot intrisic=vscot_vvssml
-def vscot_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscot_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vsc.ot $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15672,7 +15672,7 @@ def vscncot_vvssl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I
 }
 
 // inst=VSC asm=vsc.nc.ot intrisic=vscncot_vvssl
-def vscncot_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vscncot_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vsc.nc.ot $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15681,7 +15681,7 @@ def vscncot_vvsZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:
 }
 
 // inst=VSC asm=vsc.nc.ot intrisic=vscncot_vvssl
-def vscncot_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vscncot_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vsc.nc.ot $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15690,7 +15690,7 @@ def vscncot_vvIsl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$
 }
 
 // inst=VSC asm=vsc.nc.ot intrisic=vscncot_vvssl
-def vscncot_vvIZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vscncot_vvIZl : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vsc.nc.ot $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15708,7 +15708,7 @@ def vscncot_vvssml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, 
 }
 
 // inst=VSC asm=vsc.nc.ot intrisic=vscncot_vvssml
-def vscncot_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscncot_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vsc.nc.ot $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15717,7 +15717,7 @@ def vscncot_vvsZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64
 }
 
 // inst=VSC asm=vsc.nc.ot intrisic=vscncot_vvssml
-def vscncot_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vscncot_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vsc.nc.ot $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15726,7 +15726,7 @@ def vscncot_vvIsml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:
 }
 
 // inst=VSC asm=vsc.nc.ot intrisic=vscncot_vvssml
-def vscncot_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscncot_vvIZml : RV<0xb1, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vsc.nc.ot $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15744,7 +15744,7 @@ def vscu_vvssl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32:
 }
 
 // inst=VSCU asm=vscu intrisic=vscu_vvssl
-def vscu_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vscu_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vscu $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15753,7 +15753,7 @@ def vscu_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z,
 }
 
 // inst=VSCU asm=vscu intrisic=vscu_vvssl
-def vscu_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vscu_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vscu $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15762,7 +15762,7 @@ def vscu_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz,
 }
 
 // inst=VSCU asm=vscu intrisic=vscu_vvssl
-def vscu_vvIZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vscu_vvIZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vscu $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15780,7 +15780,7 @@ def vscu_vvssml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM:
 }
 
 // inst=VSCU asm=vscu intrisic=vscu_vvssml
-def vscu_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscu_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vscu $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15789,7 +15789,7 @@ def vscu_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VSCU asm=vscu intrisic=vscu_vvssml
-def vscu_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vscu_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vscu $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15798,7 +15798,7 @@ def vscu_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VSCU asm=vscu intrisic=vscu_vvssml
-def vscu_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscu_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vscu $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15816,7 +15816,7 @@ def vscunc_vvssl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I3
 }
 
 // inst=VSCU asm=vscu.nc intrisic=vscunc_vvssl
-def vscunc_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vscunc_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vscu.nc $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15825,7 +15825,7 @@ def vscunc_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VSCU asm=vscu.nc intrisic=vscunc_vvssl
-def vscunc_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vscunc_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vscu.nc $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15834,7 +15834,7 @@ def vscunc_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VSCU asm=vscu.nc intrisic=vscunc_vvssl
-def vscunc_vvIZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vscunc_vvIZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vscu.nc $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15852,7 +15852,7 @@ def vscunc_vvssml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, V
 }
 
 // inst=VSCU asm=vscu.nc intrisic=vscunc_vvssml
-def vscunc_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscunc_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vscu.nc $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15861,7 +15861,7 @@ def vscunc_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:
 }
 
 // inst=VSCU asm=vscu.nc intrisic=vscunc_vvssml
-def vscunc_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vscunc_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vscu.nc $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15870,7 +15870,7 @@ def vscunc_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$
 }
 
 // inst=VSCU asm=vscu.nc intrisic=vscunc_vvssml
-def vscunc_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscunc_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vscu.nc $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15888,7 +15888,7 @@ def vscuot_vvssl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I3
 }
 
 // inst=VSCU asm=vscu.ot intrisic=vscuot_vvssl
-def vscuot_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vscuot_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vscu.ot $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15897,7 +15897,7 @@ def vscuot_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VSCU asm=vscu.ot intrisic=vscuot_vvssl
-def vscuot_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vscuot_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vscu.ot $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15906,7 +15906,7 @@ def vscuot_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VSCU asm=vscu.ot intrisic=vscuot_vvssl
-def vscuot_vvIZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vscuot_vvIZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vscu.ot $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15924,7 +15924,7 @@ def vscuot_vvssml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, V
 }
 
 // inst=VSCU asm=vscu.ot intrisic=vscuot_vvssml
-def vscuot_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscuot_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vscu.ot $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15933,7 +15933,7 @@ def vscuot_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:
 }
 
 // inst=VSCU asm=vscu.ot intrisic=vscuot_vvssml
-def vscuot_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vscuot_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vscu.ot $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15942,7 +15942,7 @@ def vscuot_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$
 }
 
 // inst=VSCU asm=vscu.ot intrisic=vscuot_vvssml
-def vscuot_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscuot_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vscu.ot $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -15960,7 +15960,7 @@ def vscuncot_vvssl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, 
 }
 
 // inst=VSCU asm=vscu.nc.ot intrisic=vscuncot_vvssl
-def vscuncot_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vscuncot_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vscu.nc.ot $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15969,7 +15969,7 @@ def vscuncot_vvsZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64
 }
 
 // inst=VSCU asm=vscu.nc.ot intrisic=vscuncot_vvssl
-def vscuncot_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vscuncot_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vscu.nc.ot $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -15978,7 +15978,7 @@ def vscuncot_vvIsl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:
 }
 
 // inst=VSCU asm=vscu.nc.ot intrisic=vscuncot_vvssl
-def vscuncot_vvIZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vscuncot_vvIZl : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vscu.nc.ot $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -15996,7 +15996,7 @@ def vscuncot_vvssml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz,
 }
 
 // inst=VSCU asm=vscu.nc.ot intrisic=vscuncot_vvssml
-def vscuncot_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscuncot_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vscu.nc.ot $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16005,7 +16005,7 @@ def vscuncot_vvsZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op6
 }
 
 // inst=VSCU asm=vscu.nc.ot intrisic=vscuncot_vvssml
-def vscuncot_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vscuncot_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vscu.nc.ot $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16014,7 +16014,7 @@ def vscuncot_vvIsml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64
 }
 
 // inst=VSCU asm=vscu.nc.ot intrisic=vscuncot_vvssml
-def vscuncot_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscuncot_vvIZml : RV<0xb2, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vscu.nc.ot $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16032,7 +16032,7 @@ def vscl_vvssl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I32:
 }
 
 // inst=VSCL asm=vscl intrisic=vscl_vvssl
-def vscl_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vscl_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vscl $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -16041,7 +16041,7 @@ def vscl_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z,
 }
 
 // inst=VSCL asm=vscl intrisic=vscl_vvssl
-def vscl_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vscl_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vscl $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -16050,7 +16050,7 @@ def vscl_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz,
 }
 
 // inst=VSCL asm=vscl intrisic=vscl_vvssl
-def vscl_vvIZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vscl_vvIZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vscl $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -16068,7 +16068,7 @@ def vscl_vvssml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, VM:
 }
 
 // inst=VSCL asm=vscl intrisic=vscl_vvssml
-def vscl_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscl_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vscl $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16077,7 +16077,7 @@ def vscl_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z
 }
 
 // inst=VSCL asm=vscl intrisic=vscl_vvssml
-def vscl_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vscl_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vscl $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16086,7 +16086,7 @@ def vscl_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz
 }
 
 // inst=VSCL asm=vscl intrisic=vscl_vvssml
-def vscl_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vscl_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vscl $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16104,7 +16104,7 @@ def vsclnc_vvssl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I3
 }
 
 // inst=VSCL asm=vscl.nc intrisic=vsclnc_vvssl
-def vsclnc_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vsclnc_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vscl.nc $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -16113,7 +16113,7 @@ def vsclnc_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VSCL asm=vscl.nc intrisic=vsclnc_vvssl
-def vsclnc_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vsclnc_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vscl.nc $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -16122,7 +16122,7 @@ def vsclnc_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VSCL asm=vscl.nc intrisic=vsclnc_vvssl
-def vsclnc_vvIZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vsclnc_vvIZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vscl.nc $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -16140,7 +16140,7 @@ def vsclnc_vvssml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, V
 }
 
 // inst=VSCL asm=vscl.nc intrisic=vsclnc_vvssml
-def vsclnc_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vsclnc_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vscl.nc $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16149,7 +16149,7 @@ def vsclnc_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:
 }
 
 // inst=VSCL asm=vscl.nc intrisic=vsclnc_vvssml
-def vsclnc_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vsclnc_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vscl.nc $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16158,7 +16158,7 @@ def vsclnc_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$
 }
 
 // inst=VSCL asm=vscl.nc intrisic=vsclnc_vvssml
-def vsclnc_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vsclnc_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vscl.nc $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16176,7 +16176,7 @@ def vsclot_vvssl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, I3
 }
 
 // inst=VSCL asm=vscl.ot intrisic=vsclot_vvssl
-def vsclot_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vsclot_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vscl.ot $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -16185,7 +16185,7 @@ def vsclot_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$
 }
 
 // inst=VSCL asm=vscl.ot intrisic=vsclot_vvssl
-def vsclot_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vsclot_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vscl.ot $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -16194,7 +16194,7 @@ def vsclot_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$s
 }
 
 // inst=VSCL asm=vscl.ot intrisic=vsclot_vvssl
-def vsclot_vvIZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vsclot_vvIZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vscl.ot $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -16212,7 +16212,7 @@ def vsclot_vvssml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, V
 }
 
 // inst=VSCL asm=vscl.ot intrisic=vsclot_vvssml
-def vsclot_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vsclot_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vscl.ot $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16221,7 +16221,7 @@ def vsclot_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:
 }
 
 // inst=VSCL asm=vscl.ot intrisic=vsclot_vvssml
-def vsclot_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vsclot_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vscl.ot $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16230,7 +16230,7 @@ def vsclot_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$
 }
 
 // inst=VSCL asm=vscl.ot intrisic=vsclot_vvssml
-def vsclot_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vsclot_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vscl.ot $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16248,7 +16248,7 @@ def vsclncot_vvssl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz, 
 }
 
 // inst=VSCL asm=vscl.nc.ot intrisic=vsclncot_vvssl
-def vsclncot_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, I32:$vl),
+def vsclncot_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, I32:$vl),
        "vscl.nc.ot $vx,$vy,$sy,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -16257,7 +16257,7 @@ def vsclncot_vvsZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64
 }
 
 // inst=VSCL asm=vscl.nc.ot intrisic=vsclncot_vvssl
-def vsclncot_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, I32:$vl),
+def vsclncot_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, I32:$vl),
        "vscl.nc.ot $vx,$vy,$I,$sz">
 {
   let DecoderNamespace = "VEL";
@@ -16266,7 +16266,7 @@ def vsclncot_vvIsl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:
 }
 
 // inst=VSCL asm=vscl.nc.ot intrisic=vsclncot_vvssl
-def vsclncot_vvIZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, I32:$vl),
+def vsclncot_vvIZl : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, I32:$vl),
        "vscl.nc.ot $vx,$vy,$I,$Z">
 {
   let DecoderNamespace = "VEL";
@@ -16284,7 +16284,7 @@ def vsclncot_vvssml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, I64:$sz,
 }
 
 // inst=VSCL asm=vscl.nc.ot intrisic=vsclncot_vvssml
-def vsclncot_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vsclncot_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7:$Z, VM:$vm, I32:$vl),
        "vscl.nc.ot $vx,$vy,$sy,$Z,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16293,7 +16293,7 @@ def vsclncot_vvsZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, I64:$sy, simm7Op6
 }
 
 // inst=VSCL asm=vscl.nc.ot intrisic=vsclncot_vvssml
-def vsclncot_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64:$sz, VM:$vm, I32:$vl),
+def vsclncot_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, I64:$sz, VM:$vm, I32:$vl),
        "vscl.nc.ot $vx,$vy,$I,$sz,$vm">
 {
   let DecoderNamespace = "VEL";
@@ -16302,7 +16302,7 @@ def vsclncot_vvIsml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, I64
 }
 
 // inst=VSCL asm=vscl.nc.ot intrisic=vsclncot_vvssml
-def vsclncot_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7Op64:$I, simm7Op64:$Z, VM:$vm, I32:$vl),
+def vsclncot_vvIZml : RV<0xb3, (outs ), (ins V64:$vx, V64:$vy, simm7:$I, simm7:$Z, VM:$vm, I32:$vl),
        "vscl.nc.ot $vx,$vy,$I,$Z,$vm">
 {
   let DecoderNamespace = "VEL";

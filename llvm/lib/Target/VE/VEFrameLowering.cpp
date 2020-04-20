@@ -140,7 +140,7 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
 
   if (NumBytes >= -64 && NumBytes < 63) {
-    BuildMI(MBB, MBBI, dl, TII.get(VE::ADXri), VE::SX11)
+    BuildMI(MBB, MBBI, dl, TII.get(VE::ADDSLri), VE::SX11)
         .addReg(VE::SX11)
         .addImm(NumBytes);
     return;
@@ -155,9 +155,9 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
       .addImm(0)
       .addImm(0)
       .addImm(Lo_32(NumBytes));
-  BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm0), VE::SX13)
+  BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm), VE::SX13)
       .addReg(VE::SX13)
-      .addImm(32);
+      .addImm(M0(32));
   BuildMI(MBB, MBBI, dl, TII.get(VE::LEASLrri), VE::SX11)
       .addReg(VE::SX11)
       .addReg(VE::SX13)
@@ -165,9 +165,9 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
 
   if (MaybeAlign) {
     // and %sp, %sp, Align-1
-    BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm1), VE::SX11)
+    BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm), VE::SX11)
         .addReg(VE::SX11)
-        .addImm(64 - Log2_64(MaybeAlign->value()));
+        .addImm(M1(64 - Log2_64(Align)));
   }
 }
 
@@ -354,7 +354,7 @@ bool VEFrameLowering::hasBP(const MachineFunction &MF) const {
 }
 
 int VEFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
-                                            unsigned &FrameReg) const {
+                                            Register &FrameReg) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   const VERegisterInfo *RegInfo = STI.getRegisterInfo();
   const VEMachineFunctionInfo *FuncInfo = MF.getInfo<VEMachineFunctionInfo>();

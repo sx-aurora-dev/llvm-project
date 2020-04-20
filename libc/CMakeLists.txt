@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.4.3)
+cmake_minimum_required(VERSION 3.13.4)
 
 # Use old version of target_sources command which converts the source
 # file paths to full paths.
@@ -27,6 +27,10 @@ add_subdirectory(src)
 add_subdirectory(config)
 add_subdirectory(include)
 add_subdirectory(utils)
+
+# The loader can potentially depend on the library components so add it
+# after the library implementation directories.
+add_subdirectory(loader)
 
 # The lib and test directories are added at the very end as tests
 # and libraries potentially draw from the components present in all

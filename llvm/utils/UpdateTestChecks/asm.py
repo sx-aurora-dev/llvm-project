@@ -239,7 +239,7 @@ def scrub_asm_powerpc(asm, args):
   # Expand the tabs used for indentation.
   asm = string.expandtabs(asm, 2)
   # Stripe unimportant comments, but leave the token '#' in place.
-  asm = SCRUB_LOOP_COMMENT_RE.sub(r'#', asm)
+  asm = common.SCRUB_LOOP_COMMENT_RE.sub(r'#', asm)
   # Strip trailing whitespace.
   asm = common.SCRUB_TRAILING_WHITESPACE_RE.sub(r'', asm)
   return asm

@@ -24,7 +24,7 @@ define fp128 @func3(fp128 %a, fp128 %b) {
 ; CHECK-NEXT:    lea %s4, __divtf3@lo
 ; CHECK-NEXT:    and %s4, %s4, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(, %s4)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = fdiv fp128 %a, %b
   ret fp128 %r
@@ -62,7 +62,7 @@ define fp128 @func6(fp128 %a) {
 ; CHECK-NEXT:    lea %s4, __divtf3@lo
 ; CHECK-NEXT:    and %s4, %s4, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(, %s4)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = fdiv fp128 %a, 0xL00000000000000004001400000000000
   ret fp128 %r
@@ -103,7 +103,7 @@ define fp128 @func9(fp128 %a) {
 ; CHECK-NEXT:    lea %s4, __divtf3@lo
 ; CHECK-NEXT:    and %s4, %s4, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __divtf3@hi(, %s4)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = fdiv fp128 %a, 0xLFFFFFFFFFFFFFFFF7FFEFFFFFFFFFFFF
   ret fp128 %r

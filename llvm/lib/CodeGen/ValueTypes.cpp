@@ -102,6 +102,18 @@ bool EVT::isExtended2048BitVector() const {
   return isExtendedVector() && getExtendedSizeInBits() == 2048;
 }
 
+bool EVT::isExtended4096BitVector() const {
+  return isExtendedVector() && getExtendedSizeInBits() == 4096;
+}
+
+bool EVT::isExtended8192BitVector() const {
+  return isExtendedVector() && getExtendedSizeInBits() == 8192;
+}
+
+bool EVT::isExtended16384BitVector() const {
+  return isExtendedVector() && getExtendedSizeInBits() == 16384;
+}
+
 bool EVT::isExtendedFixedLengthVector() const {
   return isExtendedVector() && !cast<VectorType>(LLVMTy)->isScalable();
 }
@@ -139,7 +151,8 @@ std::string EVT::getEVTString() const {
   switch (V.SimpleTy) {
   default:
     if (isVector())
-      return (isScalableVector() ? "nxv" : "v") + utostr(getVectorNumElements())
+      return (isScalableVector() ? "nxv" : "v")
+             + utostr(getVectorElementCount().Min)
              + getVectorElementType().getEVTString();
     if (isInteger())
       return "i" + utostr(getSizeInBits());

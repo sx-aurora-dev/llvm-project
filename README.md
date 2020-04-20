@@ -9,8 +9,8 @@ You can start with the PRM package.
 
 ```
 % yum install \
-  https://sx-aurora.com/repos/veos/ef_extra/x86_64/llvm-ve-1.5.0-1.5.0-1.x86_64.rpm \
-  https://sx-aurora.com/repos/veos/ef_extra/x86_64/llvm-ve-link-1.5.0-1.x86_64.rpm
+  https://www.sx-aurora.com/repos/llvm/x86_64/llvm-ve-1.11.0-1.11.0-1.x86_64.rpm \
+  https://www.sx-aurora.com/repos/llvm/x86_64/llvm-ve-link-1.11.0-1.x86_64.rpm
 ```
 
 Then use clang like below.  Clang++ is also available.
@@ -52,7 +52,7 @@ object files.  Tools include an assembler, disassembler, bitcode analyzer, and
 bitcode optimizer.  It also contains basic regression tests.
 
 C-like languages use the [Clang](http://clang.llvm.org/) front end.  This
-component compiles C, C++, Objective C, and Objective C++ code into LLVM bitcode
+component compiles C, C++, Objective-C, and Objective-C++ code into LLVM bitcode
 -- and from there into object files, using LLVM.
 
 Other components include:

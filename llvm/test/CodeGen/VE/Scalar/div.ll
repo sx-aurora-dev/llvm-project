@@ -26,7 +26,7 @@ define i128 @divi128(i128, i128) {
 ; CHECK-NEXT:    lea %s4, __divti3@lo
 ; CHECK-NEXT:    and %s4, %s4, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __divti3@hi(, %s4)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
   %3 = sdiv i128 %0, %1
   ret i128 %3
 }
@@ -57,7 +57,7 @@ define i128 @divu128(i128, i128) {
 ; CHECK-NEXT:    lea %s4, __udivti3@lo
 ; CHECK-NEXT:    and %s4, %s4, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __udivti3@hi(, %s4)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
   %3 = udiv i128 %0, %1
   ret i128 %3
 }
@@ -166,7 +166,7 @@ define i128 @divi128ri(i128) {
 ; CHECK-NEXT:    lea.sl %s12, __divti3@hi(, %s2)
 ; CHECK-NEXT:    or %s2, 3, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
   %2 = sdiv i128 %0, 3
   ret i128 %2
 }
@@ -175,8 +175,7 @@ define i128 @divi128ri(i128) {
 define i64 @divi64ri(i64 %a, i64 %b) {
 ; CHECK-LABEL: divi64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 3, (0)1
-; CHECK-NEXT:    divs.l %s0, %s0, %s1
+; CHECK-NEXT:    divs.l %s0, %s0, (62)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = sdiv i64 %a, 3
   ret i64 %r
@@ -207,7 +206,7 @@ define i128 @divu128ri(i128) {
 ; CHECK-NEXT:    lea.sl %s12, __udivti3@hi(, %s2)
 ; CHECK-NEXT:    or %s2, 3, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
   %2 = udiv i128 %0, 3
   ret i128 %2
 }
@@ -216,8 +215,7 @@ define i128 @divu128ri(i128) {
 define i64 @divu64ri(i64 %a, i64 %b) {
 ; CHECK-LABEL: divu64ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 3, (0)1
-; CHECK-NEXT:    divu.l %s0, %s0, %s1
+; CHECK-NEXT:    divu.l %s0, %s0, (62)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = udiv i64 %a, 3
   ret i64 %r
@@ -272,7 +270,7 @@ define i128 @divi128li(i128) {
 ; CHECK-NEXT:    lea.sl %s12, __divti3@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    or %s1, 0, (0)1
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
   %2 = sdiv i128 3, %0
   ret i128 %2
 }
@@ -307,7 +305,7 @@ define i128 @divu128li(i128) {
 ; CHECK-NEXT:    lea.sl %s12, __udivti3@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    or %s1, 0, (0)1
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
   %2 = udiv i128 3, %0
   ret i128 %2
 }

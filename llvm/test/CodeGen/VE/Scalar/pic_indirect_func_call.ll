@@ -19,7 +19,7 @@ define void @func() {
 ; CHECK-NEXT:    ld %s1, (%s1, %s15)
 ; CHECK-NEXT:    st %s0, (, %s1)
 ; CHECK-NEXT:    or %s12, 0, %s0
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 
   store void (...)* @function, void (...)** @ptr, align 8
   %1 = load void (...)*, void (...)** @ptr, align 8

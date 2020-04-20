@@ -52,7 +52,7 @@ define i128 @f2i128(float %a) {
 ; CHECK-NEXT:    lea %s1, __fixsfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixsfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptosi float %a to i128
   ret i128 %conv
@@ -103,8 +103,7 @@ define i64 @f2ul(float %a) {
 ; CHECK-NEXT:    fsub.s %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.d.s %s1, %s1
 ; CHECK-NEXT:    cvt.l.d.rz %s1, %s1
-; CHECK-NEXT:    lea.sl %s3, -2147483648
-; CHECK-NEXT:    xor %s1, %s1, %s3
+; CHECK-NEXT:    xor %s1, %s1, (1)1
 ; CHECK-NEXT:    cvt.d.s %s0, %s0
 ; CHECK-NEXT:    cvt.l.d.rz %s0, %s0
 ; CHECK-NEXT:    cmov.s.lt %s1, %s0, %s2
@@ -122,7 +121,7 @@ define i128 @f2ui128(float %a) {
 ; CHECK-NEXT:    lea %s1, __fixunssfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixunssfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptoui float %a to i128
   ret i128 %conv
@@ -179,7 +178,7 @@ define i128 @d2i128(double %a) {
 ; CHECK-NEXT:    lea %s1, __fixdfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixdfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptosi double %a to i128
   ret i128 %conv
@@ -227,8 +226,7 @@ define i64 @d2ul(double %a) {
 ; CHECK-NEXT:    fcmp.d %s2, %s0, %s1
 ; CHECK-NEXT:    fsub.d %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.l.d.rz %s1, %s1
-; CHECK-NEXT:    lea.sl %s3, -2147483648
-; CHECK-NEXT:    xor %s1, %s1, %s3
+; CHECK-NEXT:    xor %s1, %s1, (1)1
 ; CHECK-NEXT:    cvt.l.d.rz %s0, %s0
 ; CHECK-NEXT:    cmov.d.lt %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
@@ -245,7 +243,7 @@ define i128 @d2ui128(double %a) {
 ; CHECK-NEXT:    lea %s1, __fixunsdfti@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixunsdfti@hi(, %s1)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptoui double %a to i128
   ret i128 %conv
@@ -306,7 +304,7 @@ define i128 @q2i128(fp128 %a) {
 ; CHECK-NEXT:    lea %s2, __fixtfti@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixtfti@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptosi fp128 %a to i128
   ret i128 %conv
@@ -362,8 +360,7 @@ define i64 @q2ul(fp128 %a) {
 ; CHECK-NEXT:  fsub.q %s4, %s0, %s4
 ; CHECK-NEXT:  cvt.d.q %s2, %s4
 ; CHECK-NEXT:  cvt.l.d.rz %s2, %s2
-; CHECK-NEXT:  lea.sl %s4, -2147483648
-; CHECK-NEXT:  xor %s2, %s2, %s4
+; CHECK-NEXT:  xor %s2, %s2, (1)1
 ; CHECK-NEXT:  cvt.d.q %s0, %s0
 ; CHECK-NEXT:  cvt.l.d.rz %s0, %s0
 ; CHECK-NEXT:  cmov.d.lt %s2, %s0, %s3
@@ -381,7 +378,7 @@ define i128 @q2ui128(fp128 %a) {
 ; CHECK-NEXT:    lea %s2, __fixunstfti@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __fixunstfti@hi(, %s2)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %conv = fptoui fp128 %a to i128
   ret i128 %conv

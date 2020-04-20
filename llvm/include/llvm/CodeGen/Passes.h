@@ -478,6 +478,15 @@ namespace llvm {
   /// Create IR Type Promotion pass. \see TypePromotion.cpp
   FunctionPass *createTypePromotionPass();
 
+  /// Creates MIR Debugify pass. \see MachineDebugify.cpp
+  ModulePass *createDebugifyMachineModulePass();
+
+  /// Creates MIR Strip Debug pass. \see MachineStripDebug.cpp
+  ModulePass *createStripDebugMachineModulePass();
+
+  /// The pass fixups statepoint machine instruction to replace usage of
+  /// caller saved registers with stack slots.
+  extern char &FixupStatepointCallerSavedID;
 } // End llvm namespace
 
 #endif

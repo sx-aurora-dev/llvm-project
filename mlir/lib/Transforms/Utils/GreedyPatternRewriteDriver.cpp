@@ -23,13 +23,10 @@ using namespace mlir;
 
 #define DEBUG_TYPE "pattern-matcher"
 
-static llvm::cl::opt<unsigned> maxPatternMatchIterations(
-    "mlir-max-pattern-match-iterations",
-    llvm::cl::desc("Max number of iterations scanning for pattern match"),
-    llvm::cl::init(10));
+/// The max number of iterations scanning for pattern match.
+static unsigned maxPatternMatchIterations = 10;
 
 namespace {
-
 /// This is a worklist-driven driver for the PatternMatcher, which repeatedly
 /// applies the locally optimal patterns in a roughly "bottom up" way.
 class GreedyPatternRewriteDriver : public PatternRewriter {
@@ -165,6 +162,7 @@ bool GreedyPatternRewriteDriver::simplify(MutableArrayRef<Region> regions,
       if (isOpTriviallyDead(op)) {
         notifyOperationRemoved(op);
         op->erase();
+        changed = true;
         continue;
       }
 
@@ -178,15 +176,15 @@ bool GreedyPatternRewriteDriver::simplify(MutableArrayRef<Region> regions,
         // Add all the users of the result to the worklist so we make sure
         // to revisit them.
         for (auto result : op->getResults())
-          for (auto *operand : result.getUsers())
-            addToWorklist(operand);
+          for (auto *userOp : result.getUsers())
+            addToWorklist(userOp);
 
         notifyOperationRemoved(op);
       };
 
       // Try to fold this op.
       if (succeeded(folder.tryToFold(op, collectOps, preReplaceAction))) {
-        changed |= true;
+        changed = true;
         continue;
       }
 
