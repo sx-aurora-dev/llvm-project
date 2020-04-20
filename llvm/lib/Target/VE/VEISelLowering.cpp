@@ -42,19 +42,43 @@
 
 using namespace llvm;
 
+static bool isLegalVectorVT(EVT VT) {
+  auto ElemVT = VT.getVectorElementType();
+  return (ElemVT == MVT::i1 || ElemVT == MVT::i32 || ElemVT == MVT::f32 ||
+          ElemVT == MVT::i64 || ElemVT == MVT::f64);
+}
+
+static bool isScalarOrWidenableVT(EVT VT) {
+  if (!VT.isVector())
+    return true;
+  return isLegalVectorVT(VT);
+}
+
+/// \p returns Whether all operands are scalar or legaliz-able by widening
+/// alone.
+// Expansion to VVP implictly implement 'Widening' as its only legalization
+// strategy. We fallback to whatever LLVM is doing otherwise.
+static bool hasWidenableSourceVTs(SDNode &N) {
+  for (unsigned i = 0; i < N.getNumOperands(); ++i) {
+    EVT SourceVT = N.getOperand(i).getValueType();
+    if (!isScalarOrWidenableVT(SourceVT))
+      return false;
+  }
+  return true;
+}
+
 static bool shouldExpandToVVP(SDNode &N) {
   // Already a target node
   if (IsVVPOrVEC(N.getOpcode()))
     return false;
 
   Optional<EVT> IdiomVT = getIdiomaticType(&N);
-  if (!IdiomVT.hasValue())
+  if (!IdiomVT.hasValue() || !isLegalVectorVT(*IdiomVT))
     return false;
+
   // Only expand to VP if the element type is legal. Otw, defer to LLVM for
   // legalization.
-  auto ElemVT = IdiomVT->getVectorElementType();
-  return (ElemVT == MVT::i1 || ElemVT == MVT::i32 || ElemVT == MVT::f32 ||
-          ElemVT == MVT::i64 || ElemVT == MVT::f64);
+  return hasWidenableSourceVTs(N);
 }
 
 /// Whether this VVP node needs widening
