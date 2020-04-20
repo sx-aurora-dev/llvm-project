@@ -66,6 +66,8 @@ enum NodeType : unsigned {
   // Mask support
   VM_EXTRACT, // VM_EXTRACT(v256i1:mask, i32:i) Extract a SX register from a mask register
   VM_INSERT,  // VM_INSERT(v256i1:mask, i32:i, i64:val) Insert a SX register into a mask register
+  VM_FIRST = VM_EXTRACT,
+  VM_LAST = VM_INSERT,
 
   /// VEC_ {
   // Packed mode support

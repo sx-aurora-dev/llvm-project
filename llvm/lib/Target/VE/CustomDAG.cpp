@@ -55,11 +55,16 @@ bool SupportsPackedMode(unsigned Opcode) {
   }
 }
 
+#define IF_IN_VEISD_RANGE(STARTOC, ENDOC)                                      \
+  if ((VEISD::STARTOC <= OC) && (OC <= VEISD::ENDOC))
+
 bool IsVVPOrVEC(unsigned OC) {
-  if ((VEISD::VEC_FIRST <= OC) && (OC <= VEISD::VEC_LAST))
-    return true;
+  IF_IN_VEISD_RANGE(VEC_FIRST, VEC_LAST) { return true; }
+  IF_IN_VEISD_RANGE(VM_FIRST, VM_LAST) { return true; }
+
   return IsVVP(OC);
 }
+#undef IF_IN_VEISD_RANGE
 
 bool IsVVP(unsigned Opcode) {
   switch (Opcode) {
