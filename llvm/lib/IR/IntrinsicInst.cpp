@@ -362,7 +362,7 @@ CmpInst::Predicate VPIntrinsic::getCmpPredicate() const {
       cast<ConstantInt>(getArgOperand(2))->getZExtValue());
 }
 
-Optional<fp::RoundingMode> VPIntrinsic::getRoundingMode() const {
+Optional<RoundingMode> VPIntrinsic::getRoundingMode() const {
   auto RmParamPos = GetRoundingModeParamPos(getIntrinsicID());
   if (!RmParamPos)
     return None;
@@ -433,11 +433,7 @@ Optional<int> VPIntrinsic::GetReductionAccuParamPos(Intrinsic::ID VPID) {
 MaybeAlign VPIntrinsic::getPointerAlignment() const {
   Optional<int> PtrParamOpt = GetMemoryPointerParamPos(getIntrinsicID());
   assert(PtrParamOpt.hasValue() && "no pointer argument!");
-  unsigned AlignVal = this->getParamAlignment(PtrParamOpt.getValue());
-  if (AlignVal) {
-    return MaybeAlign(AlignVal);
-  }
-  return None;
+  return this->getParamAlign(PtrParamOpt.getValue());
 }
 
 /// \return The pointer operand of this load,store, gather or scatter.
@@ -653,7 +649,7 @@ bool VPIntrinsic::IsVPReduction(Intrinsic::ID ID) {
 
 bool VPIntrinsic::isConstrainedOp() const {
   return (getRoundingMode() != None &&
-          getRoundingMode() != fp::RoundingMode::rmToNearest) ||
+          getRoundingMode() != RoundingMode::NearestTiesToEven) ||
          (getExceptionBehavior() != None &&
           getExceptionBehavior() != fp::ExceptionBehavior::ebIgnore);
 }

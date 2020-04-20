@@ -138,12 +138,11 @@ foreach I = 0-63 in
 // Vector Index Register
 def VIX : VEVecReg<255, "VIX", [], ["VIX"]>;
 
-// Vector mask registers - 256 bits wide
 foreach I = 0-15 in
   def VM#I : VEMaskReg<I, "VM"#I, [], ["VM"#I]>, DwarfRegNum<[!add(128,I)]>;
 
 // Aliases of VMs to use as a pair of two VM for packed instructions
-def VMP0 : VEReg<0, "VM0">;
+def VMP0 : VEMaskReg<0, "VM0", [], ["VM0"]>;
 
 let SubRegIndices = [sub_vm_even, sub_vm_odd], CoveredBySubRegs = 1 in
 foreach I = 1-7 in

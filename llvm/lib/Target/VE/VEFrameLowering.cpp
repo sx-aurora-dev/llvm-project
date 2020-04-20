@@ -83,8 +83,8 @@ void VEFrameLowering::emitPrologueInsns(MachineFunction &MF,
         .addImm(40)
         .addReg(VE::SX17);
   BuildMI(MBB, MBBI, dl, TII.get(VE::ORri), VE::SX9)
-        .addReg(VE::SX11)
-        .addImm(0);
+      .addReg(VE::SX11)
+      .addImm(0);
 }
 
 void VEFrameLowering::emitEpilogueInsns(MachineFunction &MF,
@@ -106,8 +106,8 @@ void VEFrameLowering::emitEpilogueInsns(MachineFunction &MF,
   //    ld %fp, 0(,%sp)
 
   BuildMI(MBB, MBBI, dl, TII.get(VE::ORri), VE::SX11)
-        .addReg(VE::SX9)
-        .addImm(0);
+      .addReg(VE::SX9)
+      .addImm(0);
   if (hasBP(MF))
     BuildMI(MBB, MBBI, dl, TII.get(VE::LDrii), VE::SX17)
         .addReg(VE::SX11)
@@ -134,7 +134,8 @@ void VEFrameLowering::emitEpilogueInsns(MachineFunction &MF,
 void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
                                        MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator MBBI,
-                                       int64_t NumBytes, MaybeAlign MaybeAlign) const {
+                                       int64_t NumBytes,
+                                       MaybeAlign MaybeAlign) const {
   DebugLoc dl;
   const VEInstrInfo &TII =
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
@@ -167,7 +168,7 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
     // and %sp, %sp, Align-1
     BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm), VE::SX11)
         .addReg(VE::SX11)
-        .addImm(M1(64 - Log2_64(Align)));
+        .addImm(M1(64 - Log2_64(MaybeAlign.valueOrOne().value())));
   }
 }
 
@@ -254,7 +255,8 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   emitPrologueInsns(MF, MBB, MBBI, NumBytes, true);
 
   // Emit stack adjust instructions
-  MaybeAlign RuntimeAlign = NeedsStackRealignment ? MaybeAlign(MFI.getMaxAlign()) : None;
+  MaybeAlign RuntimeAlign =
+      NeedsStackRealignment ? MaybeAlign(MFI.getMaxAlign()) : None;
   emitSPAdjustment(MF, MBB, MBBI, -NumBytes, RuntimeAlign);
 
   if (hasBP(MF)) {

@@ -88,7 +88,7 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
       VE::SX17, // Linkage-area register
                 // sx18-sx33 are callee-saved registers
                 // sx34-sx63 are temporary registers
-      VE::UCC,  // User clock counter
+      VE::USRCC,  // User clock counter
       VE::PSW,  // Program status word
       VE::SAR,  // Store adress
       VE::PMMR, // Performance monitor mode
@@ -155,7 +155,7 @@ static unsigned offset_to_disp(MachineInstr &MI) {
 
 static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
                       MachineInstr &MI, const DebugLoc &dl,
-                      unsigned FIOperandNum, int Offset, unsigned FramePtr) {
+                      unsigned FIOperandNum, int Offset, Register FrameReg) {
   LLVM_DEBUG(dbgs() << "replaceFI: "; MI.dump());
 
   // Replace frame index with a temporal register if the instruction is

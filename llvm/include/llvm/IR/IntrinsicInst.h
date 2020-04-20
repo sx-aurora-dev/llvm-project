@@ -320,7 +320,7 @@ namespace llvm {
     bool isConstrainedOp() const;
 
     // the specified rounding mode.
-    Optional<fp::RoundingMode> getRoundingMode() const;
+    Optional<RoundingMode> getRoundingMode() const;
     // the specified exception behavior.
     Optional<fp::ExceptionBehavior> getExceptionBehavior() const;
 

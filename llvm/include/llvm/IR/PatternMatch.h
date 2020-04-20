@@ -1478,9 +1478,12 @@ template <typename T0, typename T1, typename T2> struct Shuffle_match {
   Shuffle_match(const T0 &Op1, const T1 &Op2, const T2 &Mask)
       : Op1(Op1), Op2(Op2), Mask(Mask) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EC; return match_context<OpTy, EmptyContext>(V, EC); }
+  template <typename OpTy, typename MatchContext>
+  bool match_context(OpTy *V, MatchContext &MC) {
     if (auto *I = dyn_cast<ShuffleVectorInst>(V)) {
-      return Op1.match(I->getOperand(0)) && Op2.match(I->getOperand(1)) &&
+      return Op1.match_context(I->getOperand(0), MC) &&
+             Op2.match_context(I->getOperand(1), MC) &&
              Mask.match(I->getShuffleMask());
     }
     return false;

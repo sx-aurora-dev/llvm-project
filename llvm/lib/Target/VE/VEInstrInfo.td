@@ -218,7 +218,6 @@ def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 
 def true        : PatLeaf<(imm), [{ return N->getSExtValue() !=0 ; }]>;
 def one         : PatLeaf<(imm), [{ return N->getSExtValue() == 1 ; }]>;
-def zero        : PatLeaf<(imm), [{ return N->getSExtValue() == 0; }]>;
 
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
                                       == 0; }]>;
@@ -2426,7 +2425,7 @@ include "VEInstrVecVL.td"
 def: Pat<(i64 (repl_f32 f32:$val)),
             (ORrr
               (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
-              (ANDrm0 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32))>;
+              (ANDrm   (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32))>;
 def: Pat<(i64 (repl_i32 i32:$val)),
             (ORrr
               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
@@ -2435,7 +2434,7 @@ def: Pat<(i64 (repl_i32 i32:$val)),
 // load an immediate into a register
 def lea_i32         : OutPatFrag<(ins node:$imm), (LEA32zii 0, 0, (LO32 (i32 $imm)))>;
 def lea_i64         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 (i32 $imm)))>;
-def lea_u32         : OutPatFrag<(ins node:$imm), (ANDrm0 (LEAzii 0, 0, (LO32 (i32 $imm))), 32)>;
+def lea_u32         : OutPatFrag<(ins node:$imm), (ANDrm (LEAzii 0, 0, (LO32 (i32 $imm))), 32)>;
 
 
 // The backend translates VP and regular vector operations into vvp_* nodes
@@ -2448,9 +2447,6 @@ include "VEInstrPatternsVec.td"
 
 // vevlintrin
 include "VEInstrIntrinsicVL.td"
-
-// VP intrinsics (llvm.vp.*)
-include "VEVPIntrinsic.td"
 
 // VVP lowering
 include "VVPInstrPatterns.td"

@@ -68,7 +68,7 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
     if (FPRoundPosOpt && (i == (size_t)FPRoundPosOpt.getValue())) {
       // TODO decode fp env from constrained intrinsics
       VecParams.push_back(GetConstrainedFPRounding(
-          Builder.getContext(), fp::RoundingMode::rmToNearest));
+          Builder.getContext(), RoundingMode::NearestTiesToEven));
     }
     if (FPExceptPosOpt && (i == (size_t)FPExceptPosOpt.getValue())) {
       // TODO decode fp env from constrained intrinsics

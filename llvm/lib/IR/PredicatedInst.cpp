@@ -89,7 +89,7 @@ Instruction *PredicatedBinaryOperator::Create(
   SmallVector<Value *, 6> BinOpArgs({V1, V2});
   if (VPIntrinsic::HasRoundingModeParam(VPID)) {
     BinOpArgs.push_back(
-        GetConstrainedFPRounding(Ctx, fp::RoundingMode::rmToNearest));
+        GetConstrainedFPRounding(Ctx, RoundingMode::NearestTiesToEven));
   }
   if (VPIntrinsic::HasExceptionBehaviorParam(VPID)) {
     BinOpArgs.push_back(

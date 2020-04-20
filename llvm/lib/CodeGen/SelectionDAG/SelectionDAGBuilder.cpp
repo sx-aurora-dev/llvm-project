@@ -4239,18 +4239,18 @@ void SelectionDAGBuilder::visitStoreVP(const CallInst &I) {
   SDLoc sdl = getCurSDLoc();
 
   auto getVPStoreOps = [&](Value* &Ptr, Value* &Mask, Value* &Src0,
-                            Value * &VLen, unsigned & Alignment) {
+                            Value * &VLen, MaybeAlign & Align) {
     // llvm.masked.store.*(Src0, Ptr, Mask, VLen)
     Src0 = I.getArgOperand(0);
     Ptr = I.getArgOperand(1);
-    Alignment = I.getParamAlignment(1);
+    Align = I.getParamAlign(1);
     Mask = I.getArgOperand(2);
     VLen = I.getArgOperand(3);
   };
 
   Value  *PtrOperand, *MaskOperand, *Src0Operand, *VLenOperand;
-  unsigned Alignment = 0;
-  getVPStoreOps(PtrOperand, MaskOperand, Src0Operand, VLenOperand, Alignment);
+  MaybeAlign Align;
+  getVPStoreOps(PtrOperand, MaskOperand, Src0Operand, VLenOperand, Align);
 
   SDValue Ptr = getValue(PtrOperand);
   SDValue Src0 = getValue(Src0Operand);
@@ -4258,8 +4258,8 @@ void SelectionDAGBuilder::visitStoreVP(const CallInst &I) {
   SDValue VLen = getValue(VLenOperand);
 
   EVT VT = Src0.getValueType();
-  if (!Alignment)
-    Alignment = DAG.getEVTAlignment(VT);
+  if (!Align)
+    Align = DAG.getEVTAlign(VT);
 
   AAMDNodes AAInfo;
   I.getAAMetadata(AAInfo);
@@ -4267,8 +4267,8 @@ void SelectionDAGBuilder::visitStoreVP(const CallInst &I) {
   MachineMemOperand *MMO =
     DAG.getMachineFunction().
     getMachineMemOperand(MachinePointerInfo(PtrOperand),
-                          MachineMemOperand::MOStore,  VT.getStoreSize(),
-                          Alignment, AAInfo);
+                          MachineMemOperand::MOStore,  DAG.getDataLayout().getTypeStoreSize(Src0Operand->getType()).getFixedSize(),
+                          Align.valueOrOne(), AAInfo);
   SDValue StoreNode = DAG.getStoreVP(getRoot(), sdl, Src0, Ptr, Mask, VLen, VT,
                                          MMO, false /* Truncating */);
   DAG.setRoot(StoreNode);
@@ -4447,7 +4447,7 @@ void SelectionDAGBuilder::visitMaskedLoad(const CallInst &I, bool IsExpanding) {
     ML = MemoryLocation(PtrOperand);
   else
     ML = MemoryLocation(PtrOperand, LocationSize::precise(
-                           DAG.getDataLayout().getTypeStoreSize(I.getType())),
+                           VT.getStoreSize()),
                            AAInfo);
   bool AddToChain = !AA || !AA->pointsToConstantMemory(ML);
 
@@ -4522,9 +4522,9 @@ void SelectionDAGBuilder::visitGatherVP(const CallInst &I) {
 
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   EVT VT = TLI.getValueType(DAG.getDataLayout(), I.getType());
-  unsigned Alignment = I.getParamAlignment(0);
-  if (!Alignment)
-    Alignment = DAG.getEVTAlignment(VT);
+  MaybeAlign Align = I.getParamAlign(0);
+  if (!Align)
+    Align = DAG.getEVTAlign(VT);
 
   AAMDNodes AAInfo;
   I.getAAMetadata(AAInfo);
@@ -4542,7 +4542,7 @@ void SelectionDAGBuilder::visitGatherVP(const CallInst &I) {
       AA->pointsToConstantMemory(
           MemoryLocation(BasePtr,
                          LocationSize::precise(
-                             DAG.getDataLayout().getTypeStoreSize(I.getType())),
+                             VT.getStoreSize()),
                          AAInfo))) {
     // Do not serialize (non-volatile) loads of constant memory with anything.
     Root = DAG.getEntryNode();
@@ -4553,7 +4553,7 @@ void SelectionDAGBuilder::visitGatherVP(const CallInst &I) {
     DAG.getMachineFunction().
     getMachineMemOperand(MachinePointerInfo(UniformBase ? BasePtr : nullptr),
                          MachineMemOperand::MOLoad,  VT.getStoreSize(),
-                         Alignment, AAInfo, Ranges);
+                         Align.valueOrOne(), AAInfo, Ranges);
 
   if (!UniformBase) {
     Base = DAG.getConstant(0, sdl, TLI.getPointerTy(DAG.getDataLayout()));
@@ -4579,9 +4579,9 @@ void SelectionDAGBuilder::visitScatterVP(const CallInst &I) {
   SDValue Mask = getValue(I.getArgOperand(2));
   SDValue VLen = getValue(I.getArgOperand(3));
   EVT VT = Src0.getValueType();
-  unsigned Alignment = I.getParamAlignment(1);
-  if (!Alignment)
-    Alignment = DAG.getEVTAlignment(VT);
+  MaybeAlign Align = I.getParamAlign(1);
+  if (!Align)
+    Align = DAG.getEVTAlign(VT);
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
 
   AAMDNodes AAInfo;
@@ -4598,7 +4598,7 @@ void SelectionDAGBuilder::visitScatterVP(const CallInst &I) {
   MachineMemOperand *MMO = DAG.getMachineFunction().
     getMachineMemOperand(MachinePointerInfo(MemOpBasePtr),
                          MachineMemOperand::MOStore,  VT.getStoreSize(),
-                         Alignment, AAInfo);
+                         Align.valueOrOne(), AAInfo);
   if (!UniformBase) {
     Base = DAG.getConstant(0, sdl, TLI.getPointerTy(DAG.getDataLayout()));
     Index = getValue(Ptr);
@@ -4616,17 +4616,17 @@ void SelectionDAGBuilder::visitLoadVP(const CallInst &I) {
   SDLoc sdl = getCurSDLoc();
 
   auto getMaskedLoadOps = [&](Value* &Ptr, Value* &Mask, Value* &VLen,
-                           unsigned& Alignment) {
+                           MaybeAlign& Align) {
     // @llvm.evl.load.*(Ptr, Mask, Vlen)
     Ptr = I.getArgOperand(0);
-    Alignment = I.getParamAlignment(0);
+    Align = I.getParamAlign(0);
     Mask = I.getArgOperand(1);
     VLen = I.getArgOperand(2);
   };
 
   Value  *PtrOperand, *MaskOperand, *VLenOperand;
-  unsigned Alignment;
-  getMaskedLoadOps(PtrOperand, MaskOperand, VLenOperand, Alignment);
+  MaybeAlign Align;
+  getMaskedLoadOps(PtrOperand, MaskOperand, VLenOperand, Align);
 
   SDValue Ptr = getValue(PtrOperand);
   SDValue VLen = getValue(VLenOperand);
@@ -4639,8 +4639,8 @@ void SelectionDAGBuilder::visitLoadVP(const CallInst &I) {
   EVT VT = ValValueVTs[0];
   assert((ValValueVTs.size() == 1) && "splitting not implemented");
 
-  if (!Alignment)
-    Alignment = DAG.getEVTAlignment(VT);
+  if (!Align)
+    Align = DAG.getEVTAlign(VT);
 
   AAMDNodes AAInfo;
   I.getAAMetadata(AAInfo);
@@ -4651,7 +4651,7 @@ void SelectionDAGBuilder::visitLoadVP(const CallInst &I) {
       !AA || !AA->pointsToConstantMemory(MemoryLocation(
                  PtrOperand,
                  LocationSize::precise(
-                     DAG.getDataLayout().getTypeStoreSize(I.getType())),
+                     VT.getStoreSize()),
                  AAInfo));
   SDValue InChain = AddToChain ? DAG.getRoot() : DAG.getEntryNode();
 
@@ -4659,7 +4659,7 @@ void SelectionDAGBuilder::visitLoadVP(const CallInst &I) {
     DAG.getMachineFunction().
     getMachineMemOperand(MachinePointerInfo(PtrOperand),
                           MachineMemOperand::MOLoad,  VT.getStoreSize(),
-                          Alignment, AAInfo, Ranges);
+                          Align.valueOrOne(), AAInfo, Ranges);
 
   SDValue Load = DAG.getLoadVP(VT, sdl, InChain, Ptr, Mask, VLen, VT, MMO,
                                    ISD::NON_EXTLOAD);
@@ -7266,10 +7266,6 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
   auto * FPIntrin = dyn_cast<FPMathOperator>(&VPIntrin);
   if (FPIntrin) NodeFlags.copyFMF(*FPIntrin);
 
-  if (VPIntrin.isReductionOp()) {
-    NodeFlags.setVectorReduction(true);
-  }
-  
   // Attach chain
   SDValue VPResult;
   if (Result.getNode()->getNumValues() == 2) {

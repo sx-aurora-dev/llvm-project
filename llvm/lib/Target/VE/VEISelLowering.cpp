@@ -1336,8 +1336,8 @@ Register VETargetLowering::getRegisterByName(const char *RegName, LLT VT,
                      .Case("outer", VE::SX12) // Outer regiser
                      .Case("info", VE::SX17)  // Info area register
                      .Case("got", VE::SX15)   // Global offset table register
-                     .Case("plt", VE::SX16)  // Procedure linkage table register
-                     .Case("usrcc", VE::UCC) // User clock counter
+                     .Case("plt", VE::SX16) // Procedure linkage table register
+                     .Case("usrcc", VE::USRCC) // User clock counter
                      .Default(0);
 
   if (Reg)
@@ -1346,6 +1346,7 @@ Register VETargetLowering::getRegisterByName(const char *RegName, LLT VT,
   report_fatal_error("Invalid register name global variable");
 }
 
+#if 0
 // This functions returns true if CalleeName is a ABI function that returns
 // a long double (fp128).
 static bool isFP128ABICall(const char *CalleeName) {
@@ -1358,6 +1359,7 @@ static bool isFP128ABICall(const char *CalleeName) {
       return true;
   return false;
 }
+#endif
 
 //===----------------------------------------------------------------------===//
 // TargetLowering Implementation
@@ -1815,8 +1817,8 @@ void VETargetLowering::initSPUActions() {
   setOperationAction(ISD::MULHU, MVT::i64, Expand);
   setOperationAction(ISD::MULHS, MVT::i64, Expand);
 
-  setOperationAction(ISD::UMULO, MVT::i64, Custom);
-  setOperationAction(ISD::SMULO, MVT::i64, Custom);
+  setOperationAction(ISD::UMULO, MVT::i64, Expand);
+  setOperationAction(ISD::SMULO, MVT::i64, Expand);
 
   setOperationAction(ISD::BITREVERSE, MVT::i32, Promote);
   setOperationAction(ISD::BITREVERSE, MVT::i64, Legal);
@@ -3013,12 +3015,14 @@ SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
       // Generate "fencem 2" as acquire fence.
       return SDValue(DAG.getMachineNode(VE::FENCEM, DL, MVT::Other,
                                         DAG.getTargetConstant(2, DL, MVT::i32),
-                                        Op.getOperand(0)), 0);
+                                        Op.getOperand(0)),
+                     0);
     case AtomicOrdering::Release:
       // Generate "fencem 1" as release fence.
       return SDValue(DAG.getMachineNode(VE::FENCEM, DL, MVT::Other,
                                         DAG.getTargetConstant(1, DL, MVT::i32),
-                                        Op.getOperand(0)), 0);
+                                        Op.getOperand(0)),
+                     0);
     case AtomicOrdering::AcquireRelease:
     case AtomicOrdering::SequentiallyConsistent:
       // Generate "fencem 3" as acq_rel and seq_cst fence.
@@ -3026,7 +3030,8 @@ SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
       //        so  seq_cst may require more instruction for them.
       return SDValue(DAG.getMachineNode(VE::FENCEM, DL, MVT::Other,
                                         DAG.getTargetConstant(3, DL, MVT::i32),
-                                        Op.getOperand(0)), 0);
+                                        Op.getOperand(0)),
+                     0);
     }
   }
 
@@ -3525,10 +3530,8 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerVAARG(Op, DAG);
   case ISD::DYNAMIC_STACKALLOC:
     return LowerDYNAMIC_STACKALLOC(Op, DAG);
-  case ISD::LOAD:
-    return LowerLOAD(Op, DAG);
   case ISD::STORE:
-    return LowerSTORE(Op, DAG, *this);
+    return LowerSTORE(Op, DAG);
   case ISD::ATOMIC_FENCE:
     return LowerATOMIC_FENCE(Op, DAG);
   case ISD::INTRINSIC_VOID:
@@ -3559,11 +3562,10 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     // case ISD::VECREDUCE_XOR:
 
   case ISD::LOAD:
+    // custom f128 lowering
     return LowerLOAD(Op, DAG);
   case ISD::MLOAD:
     return LowerMLOAD(Op, DAG, VVPExpansionMode::ToNativeWidth);
-  case ISD::STORE:
-    return LowerSTORE(Op, DAG);
   case ISD::MSTORE:
     return LowerMSTORE(Op, DAG);
   case ISD::MSCATTER:
@@ -3780,21 +3782,30 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
     // FIXME: use lea.sl %BReg, .LJTI0_0@gotoff_hi(%Tmp2, %s15)
     Register Tmp3 = MRI.createVirtualRegister(&VE::I64RegClass);
     BuildMI(*MBB, MI, DL, TII->get(VE::LEAzii), Tmp1)
-        .addImm(0).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_LO32);
+        .addImm(0)
+        .addImm(0)
+        .addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_LO32);
     BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm), Tmp2)
-        .addReg(Tmp1).addImm(M0(32));
+        .addReg(Tmp1)
+        .addImm(M0(32));
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), Tmp3)
-        .addReg(Tmp2).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_HI32);
+        .addReg(Tmp2)
+        .addImm(0)
+        .addMBB(restoreMBB, VEMCExpr::VK_VE_GOTOFF_HI32);
     BuildMI(*MBB, MI, DL, TII->get(VE::ADDSLrr), LabelReg)
-        .addReg(VE::SX15).addReg(Tmp3);
+        .addReg(VE::SX15)
+        .addReg(Tmp3);
   } else {
     // lea     %Tmp1, restoreMBB@lo
     // and     %Tmp2, %Tmp1, (32)0
     // lea.sl  %LabelReg, restoreMBB@hi(%Tmp2)
     BuildMI(*MBB, MI, DL, TII->get(VE::LEAzii), Tmp1)
-        .addImm(0).addImm(0).addMBB(restoreMBB, VEMCExpr::VK_VE_LO32);
+        .addImm(0)
+        .addImm(0)
+        .addMBB(restoreMBB, VEMCExpr::VK_VE_LO32);
     BuildMI(*MBB, MI, DL, TII->get(VE::ANDrm), Tmp2)
-        .addReg(Tmp1).addImm(M0(32));
+        .addReg(Tmp1)
+        .addImm(M0(32));
     BuildMI(*MBB, MI, DL, TII->get(VE::LEASLrii), LabelReg)
         .addReg(Tmp2)
         .addImm(0)
@@ -3858,7 +3869,9 @@ VETargetLowering::emitEHSjLjSetJmp(MachineInstr &MI,
     MIB.setMemRefs(MMOs);
   }
   BuildMI(restoreMBB, DL, TII->get(VE::LEAzii), restoreDstReg)
-      .addImm(0).addImm(0).addImm(1);
+      .addImm(0)
+      .addImm(0)
+      .addImm(1);
   BuildMI(restoreMBB, DL, TII->get(VE::BRCFLa_t)).addMBB(sinkMBB);
   restoreMBB->addSuccessor(sinkMBB);
 
@@ -3916,9 +3929,7 @@ VETargetLowering::emitEHSjLjLongJmp(MachineInstr &MI,
   MIB.setMemRefs(MMOs);
 
   // Jump
-  BuildMI(*thisMBB, MI, DL, TII->get(VE::BCFLari_t))
-      .addReg(Tmp)
-      .addImm(0);
+  BuildMI(*thisMBB, MI, DL, TII->get(VE::BCFLari_t)).addReg(Tmp).addImm(0);
 
   MI.eraseFromParent();
   return thisMBB;
@@ -4021,15 +4032,23 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
   addFrameReference(BuildMI(DispatchBB, DL, TII->get(VE::LDLZXrii), IReg), FI,
                     8);
   if (LPadList.size() < 64) {
-    BuildMI(DispatchBB, DL, TII->get(VE::BRCFLir)).addImm(VECC::CC_ILE)
-        .addImm(LPadList.size()).addReg(IReg).addMBB(TrapBB);
+    BuildMI(DispatchBB, DL, TII->get(VE::BRCFLir))
+        .addImm(VECC::CC_ILE)
+        .addImm(LPadList.size())
+        .addReg(IReg)
+        .addMBB(TrapBB);
   } else {
     assert(LPadList.size() <= 0x7FFFFFFF && "Too large Landing Pad!");
     Register TmpReg = MRI->createVirtualRegister(&VE::I64RegClass);
     BuildMI(DispatchBB, DL, TII->get(VE::LEAzii), TmpReg)
-        .addImm(0).addImm(0).addImm(LPadList.size());
-    BuildMI(DispatchBB, DL, TII->get(VE::BRCFLrr)).addImm(VECC::CC_ILE)
-        .addReg(TmpReg).addReg(IReg).addMBB(TrapBB);
+        .addImm(0)
+        .addImm(0)
+        .addImm(LPadList.size());
+    BuildMI(DispatchBB, DL, TII->get(VE::BRCFLrr))
+        .addImm(VECC::CC_ILE)
+        .addReg(TmpReg)
+        .addReg(IReg)
+        .addMBB(TrapBB);
   }
 
   Register BReg = MRI->createVirtualRegister(&VE::I64RegClass);
@@ -4050,13 +4069,15 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_LO32);
     BuildMI(DispContBB, DL, TII->get(VE::ANDrm), Tmp2)
-        .addReg(Tmp1).addImm(M0(32));
+        .addReg(Tmp1)
+        .addImm(M0(32));
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), Tmp3)
         .addReg(Tmp2)
         .addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_GOTOFF_HI32);
     BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), BReg)
-        .addReg(VE::SX15).addReg(Tmp3);
+        .addReg(VE::SX15)
+        .addReg(Tmp3);
   } else {
     // lea     %Tmp1, .LJTI0_0@lo
     // and     %Tmp2, %Tmp1, (32)0
@@ -4066,7 +4087,8 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0)
         .addJumpTableIndex(MJTI, VEMCExpr::VK_VE_LO32);
     BuildMI(DispContBB, DL, TII->get(VE::ANDrm), Tmp2)
-        .addReg(Tmp1).addImm(M0(32));
+        .addReg(Tmp1)
+        .addImm(M0(32));
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), BReg)
         .addReg(Tmp2)
         .addImm(0)
@@ -4095,9 +4117,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0);
 
     // jmpq *(TReg)
-    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t))
-        .addReg(TReg)
-        .addImm(0);
+    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t)).addReg(TReg).addImm(0);
     break;
   }
 #if 0
@@ -4175,22 +4195,22 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
         .addImm(0)
         .addExternalSymbol(FunName, VEMCExpr::VK_VE_GOTOFF_LO32);
     BuildMI(DispContBB, DL, TII->get(VE::ANDrm), Tmp4)
-        .addReg(Tmp3).addImm(M0(32));
+        .addReg(Tmp3)
+        .addImm(M0(32));
     BuildMI(DispContBB, DL, TII->get(VE::LEASLrii), Tmp5)
         .addReg(Tmp4)
         .addImm(0)
         .addExternalSymbol(FunName, VEMCExpr::VK_VE_GOTOFF_HI32);
     BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), BReg2)
-        .addReg(VE::SX15).addReg(Tmp5);
+        .addReg(VE::SX15)
+        .addReg(Tmp5);
 
     // adds.l  TReg, BReg2, OReg
     BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), TReg)
         .addReg(OReg)
         .addReg(BReg2);
     // jmpq *(TReg)
-    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t))
-        .addReg(TReg)
-        .addImm(0);
+    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t)).addReg(TReg).addImm(0);
     break;
   }
   default:
