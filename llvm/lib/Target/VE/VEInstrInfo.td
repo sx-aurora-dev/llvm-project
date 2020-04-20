@@ -1403,7 +1403,7 @@ let cx = 1 in defm FMAXS : RRFm<"fmax.s", 0x3E, F32, f32>;
 let cw = 1 in defm FMIND : RRFm<"fmin.d", 0x3E, I64, f64>;
 let cw = 1, cx = 1 in defm FMINS : RRFm<"fmin.s", 0x3E, F32, f32>;
 
-// Section 8.7.7 - FAW (Floating Add Quadruple)
+// Section 8.7.7 - FAQ (Floating Add Quadruple)
 defm FADDQ : RRFm<"fadd.q", 0x6C, F128, f128, fadd>;
 
 // Section 8.7.8 - FSQ (Floating Subtract Quadruple)
@@ -1426,12 +1426,9 @@ let cx = 1, cw = 0 /* sign extend */ in
 defm CVTWSSX : CVTRDm<"cvt.w.s.sx", 0x4E, I32, i32, F32, f32>;
 let cx = 1, cw = 1 /* zero extend */ in
 defm CVTWSZX : CVTRDm<"cvt.w.s.zx", 0x4E, I32, i32, F32, f32>;
-def : Pat<(i32 (fp_to_sint I64:$reg)), (CVTWDSXr RD_RZ, $reg)>;
-def : Pat<(i32 (fp_to_sint F32:$reg)), (CVTWSSXr RD_RZ, $reg)>;
 
 // Section 8.7.12 - FIXX (Convert to Fixed Point)
 defm CVTLD : CVTRDm<"cvt.l.d", 0x4F, I64, i64, I64, f64>;
-def : Pat<(i64 (fp_to_sint I64:$reg)), (CVTLDr RD_RZ, $reg)>;
 
 // Section 8.7.13 - FLT (Convert to Floating Point)
 defm CVTDW : CVTm<"cvt.d.w", 0x5E, I64, f64, I32, i32, sint_to_fp>;
@@ -1442,7 +1439,6 @@ defm CVTSW : CVTm<"cvt.s.w", 0x5E, F32, f32, I32, i32, sint_to_fp>;
 defm CVTDL : CVTm<"cvt.d.l", 0x5F, I64, f64, I64, i64, sint_to_fp>;
 
 // Section 8.7.15 - CVS (Convert to Single-format)
-let cx = 0 in
 defm CVTSD : CVTm<"cvt.s.d", 0x1F, F32, f32, I64, f64, fpround>;
 let cx = 1 in
 defm CVTSQ : CVTm<"cvt.s.q", 0x1F, F32, f32, F128, f128, fpround>;
@@ -1719,6 +1715,8 @@ def : Pat<(sext_inreg (i32 (trunc i64:$src)), i16),
 // Cast to i32
 def : Pat<(i32 (trunc i64:$src)),
           (ADDSWSXrm (EXTRACT_SUBREG $src, sub_i32), 0)>;
+def : Pat<(i32 (fp_to_sint I64:$reg)), (CVTWDSXr RD_RZ, $reg)>;
+def : Pat<(i32 (fp_to_sint F32:$reg)), (CVTWSSXr RD_RZ, $reg)>;
 def : Pat<(i32 (fp_to_sint f128:$sy)), (CVTWDSXr RD_RZ, (CVTDQr $sy))>;
 
 // Cast to i64
@@ -1730,6 +1728,7 @@ def : Pat<(i64 (sext i32:$sy)),
 def : Pat<(i64 (zext i32:$sy)),
           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), (ADDSWZXrm $sy, 0), sub_i32)>;
 def : Pat<(i64 (fp_to_sint f32:$sy)), (CVTLDr RD_RZ, (CVTDSr $sy))>;
+def : Pat<(i64 (fp_to_sint I64:$reg)), (CVTLDr RD_RZ, $reg)>;
 def : Pat<(i64 (fp_to_sint f128:$sy)), (CVTLDr RD_RZ, (CVTDQr $sy))>;
 
 // Cast to f32
