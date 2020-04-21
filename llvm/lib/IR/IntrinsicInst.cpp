@@ -187,13 +187,8 @@ ElementCount VPIntrinsic::getStaticVectorLength() const {
   };
 
   auto VPMask = getMaskParam();
-  if (VPMask) {
-    return GetVectorLengthOfType(VPMask->getType());
-  }
-
-  // only compose does not have a mask param
-  assert(getIntrinsicID() == Intrinsic::vp_compose);
-  return GetVectorLengthOfType(getType());
+  assert(VPMask);
+  return GetVectorLengthOfType(VPMask->getType());
 }
 
 void VPIntrinsic::setMaskParam(Value *NewMask) {

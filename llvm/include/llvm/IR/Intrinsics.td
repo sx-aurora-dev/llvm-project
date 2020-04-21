@@ -1387,17 +1387,9 @@ def int_vp_select : Intrinsic<[ llvm_anyvector_ty ],
                               [ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                 LLVMMatchType<0>,
                                 LLVMMatchType<0>,
+                                llvm_i32_ty,
                                 llvm_i32_ty],
-                              [ IntrNoMem, IntrNoSync, IntrWillReturn, Passthru<2>, Mask<0>, VectorLength<3> ]>;
-
-// Compose
-def int_vp_compose : Intrinsic<[ llvm_anyvector_ty ],
-                               [ LLVMMatchType<0>,
-                                 LLVMMatchType<0>,
-                                 llvm_i32_ty,
-                                 llvm_i32_ty],
-                               [ IntrNoMem, IntrNoSync, IntrWillReturn, VectorLength<3> ]>;
-
+                              [ IntrNoMem, IntrNoSync, IntrWillReturn, Passthru<2>, Mask<0>, VectorLength<4> ]>;
 
 
 // VP fp rounding and truncation

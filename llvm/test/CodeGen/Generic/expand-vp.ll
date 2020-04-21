@@ -139,12 +139,10 @@ define void @test_reduce_int(<16 x i32> %v, <16 x i1> %m, i32 %n) {
 
 define void @test_shuffle(<16 x float> %v0, <16 x float> %v1, <16 x i1> %m, i32 %k, i32 %n) {
 ; CHECK-NOT: {{call.* @llvm.vp.select}}
-; CHECK-NOT: {{call.* @llvm.vp.compose}}
 ; no generic lowering available: {{call.* @llvm.vp.compress}}
 ; no generic lowering available: {{call.* @llvm.vp.expand}}
 ; CHECK-NOT: {{call.* @llvm.vp.vshift}}
-  %r0 = call <16 x float> @llvm.vp.select.v16f32(<16 x i1> %m, <16 x float> %v0, <16 x float> %v1, i32 %n)
-  %r1 = call <16 x float> @llvm.vp.compose.v16f32(<16 x float> %v0, <16 x float> %v1, i32 %k, i32 %n)
+  %r0 = call <16 x float> @llvm.vp.select.v16f32(<16 x i1> %m, <16 x float> %v0, <16 x float> %v1, i32 %k, i32 %n)
   %r2 = call <16 x float> @llvm.vp.vshift.v16f32(<16 x float> %v0, i32 7, <16 x i1> %m, i32 %n)
   %r3 = call <16 x float> @llvm.vp.compress.v16f32(<16 x float> %v0, <16 x i1> %m, i32 %n)
   %r4 = call <16 x float> @llvm.vp.expand.v16f32(<16 x float> %v0, <16 x i1> %m, i32 %n)
@@ -234,8 +232,7 @@ declare i32 @llvm.vp.reduce.umax.v16i32(<16 x i32> %v, <16 x i1> %m, i32 %n)
 declare i32 @llvm.vp.reduce.umin.v16i32(<16 x i32> %v, <16 x i1> %m, i32 %n)
 
 ; shuffles
-declare <16 x float> @llvm.vp.select.v16f32(<16 x i1>, <16 x float>, <16 x float>, i32 vlen)
-declare <16 x float> @llvm.vp.compose.v16f32(<16 x float>, <16 x float>, i32, i32 vlen)
+declare <16 x float> @llvm.vp.select.v16f32(<16 x i1>, <16 x float>, <16 x float>, i32, i32 vlen)
 declare <16 x float> @llvm.vp.vshift.v16f32(<16 x float>, i32, <16 x i1>, i32 vlen)
 declare <16 x float> @llvm.vp.compress.v16f32(<16 x float>, <16 x i1>, i32 vlen)
 declare <16 x float> @llvm.vp.expand.v16f32(<16 x float>, <16 x i1> mask, i32 vlen)
