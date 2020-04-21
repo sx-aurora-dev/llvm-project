@@ -227,7 +227,7 @@ Optional<int> VPIntrinsic::GetMaskParamPos(Intrinsic::ID IntrinsicID) {
   default:
     return None;
 
-#define REGISTER_VP_INTRINSIC(VPID, MASKPOS, VLENPOS)                          \
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, MASKPOS, VLENPOS)                    \
   case Intrinsic::VPID:                                                        \
     return MASKPOS;
 #include "llvm/IR/VPIntrinsics.def"
@@ -460,7 +460,7 @@ Optional<int> VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::ID VPID) {
   default:
     return None;
 
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID,...) case Intrinsic::VPID:
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
 #define HANDLE_VP_IS_MEMOP(POINTERPOS, DATAPOS) ParamPos = POINTERPOS;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
@@ -482,7 +482,7 @@ Optional<int> VPIntrinsic::GetMemoryDataParamPos(Intrinsic::ID VPID) {
   switch (VPID) {
   default:
     return None;
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID,...) case Intrinsic::VPID:
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
 #define HANDLE_VP_IS_MEMOP(POINTERPOS, DATAPOS) ParamPos = DATAPOS;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
