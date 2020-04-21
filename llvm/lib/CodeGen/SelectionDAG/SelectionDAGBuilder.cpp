@@ -7206,11 +7206,11 @@ void SelectionDAGBuilder::visitCmpVP(const VPIntrinsic &I) {
 
 void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     const VPIntrinsic &VPIntrin) {
-  SDLoc sdl = getCurSDLoc();
+
   unsigned Opcode;
   switch (VPIntrin.getIntrinsicID()) {
   default:
-    llvm_unreachable("Unforeseen intrinsic"); // Can't reach here.
+    break;
 
   case Intrinsic::vp_load:
     visitLoadVP(VPIntrin);
@@ -7229,12 +7229,9 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
   case Intrinsic::vp_icmp:
     visitCmpVP(VPIntrin);
     return;
-  
-  // Generic mappings
-#define HANDLE_VP_TO_SDNODE(VPID, NODEID) \
-  case Intrinsic::VPID: Opcode = ISD::NODEID; break;
-#include "llvm/IR/VPIntrinsics.def"
   }
+
+  Opcode = VPIntrin.getFunctionalOpcode();
 
   // TODO memory evl: SDValue Chain = getRoot();
 
@@ -7254,6 +7251,8 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     if (RoundingModePosOpt && (i == RoundingModePosOpt.getValue())) continue;
     OpValues.push_back(getValue(VPIntrin.getArgOperand(i)));
   }
+
+  SDLoc sdl = getCurSDLoc();
   SDValue Result = DAG.getNode(Opcode, sdl, VTs, OpValues);
 
 
