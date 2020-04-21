@@ -2182,7 +2182,7 @@ void VETargetLowering::initVPUActions() {
     setOperationAction(ISD::MSTORE, VT, Custom);
 
     // VP -> VVP lowering
-#define REGISTER_VP_SDNODE(VP_NAME, LEGALPOS, VP_TEXT, MASK_POS, LEN_POS)      \
+#define BEGIN_REGISTER_VP_SDNODE(VP_NAME, LEGALPOS, VP_TEXT, MASK_POS, LEN_POS)      \
   setOperationAction(ISD::VP_NAME, VT, Action);
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -3583,7 +3583,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     // case ISD::TRUNCATE: return LowerTRUNCATE(Op, DAG);
 
     ///// LLVM-VP --> vvp_* /////
-#define REGISTER_VP_SDNODE(VP_NAME, LEGALPOS, VP_TEXT, MASK_POS, LEN_POS)      \
+#define BEGIN_REGISTER_VP_SDNODE(VP_NAME, LEGALPOS, VP_TEXT, MASK_POS, LEN_POS)      \
   case ISD::VP_NAME:
 #include "llvm/IR/VPIntrinsics.def"
     return LowerVPToVVP(Op, DAG);
