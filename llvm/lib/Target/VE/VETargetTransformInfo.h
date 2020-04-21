@@ -130,6 +130,16 @@ public:
   }
   // } Load & Store
 
+  /// Heuristics {
+  /// \return The maximum interleave factor that any transform should try to
+  /// perform for this target. This number depends on the level of parallelism
+  /// and the number of execution units in the CPU.
+  unsigned getMaxInterleaveFactor(unsigned VF) const {
+    return 3; // 3 FMA units available
+  }
+  /// } Heuristics
+
+
   /// LLVM-VP Support
   /// {
 
