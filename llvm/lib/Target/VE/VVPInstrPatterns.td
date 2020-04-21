@@ -304,9 +304,9 @@ defm : conv_x_to_y<vvp_fpext,   v256i1, v256f64, v256f32, "vcvtds", "m">;
 
 // trunc (256 elements)
 def : Pat<(v256i1 (vvp_trunc v256i32:$src, (v256i1 srcvalue), i32:$vl)),
-          (pvfmkwlo_mvCl (v256i32 (pvandlo_vsvl (lea_i32 (i32 1)), v256i32:$src, i32:$vl)), (i32 2), i32:$vl)>; // 0xB true when Sy != 0
+          (pvfmkwlone_mvl (v256i32 (pvandlo_vsvl (i32 (OR32im 1, 0)), v256i32:$src, i32:$vl)), i32:$vl)>;
 def : Pat<(v256i1 (vvp_trunc v256i64:$src, (v256i1 srcvalue), i32:$vl)),
-          (vfmkl_mvCl (v256i64 (vand_vsvl (i64 (lea_u32 (i32 1))), v256i64:$src, i32:$vl)), (i32 2), i32:$vl)>; // 0xB true when Sy != 0
+          (vfmklne_mvl (v256i64 (vand_vsvl (i64 (ORim 1, 0)), v256i64:$src, i32:$vl)), i32:$vl)>;
 def : Pat<(v256i32 (vvp_trunc v256i64:$src, (v256i1 srcvalue), (i32 srcvalue))),
           (COPY_TO_REGCLASS $src, V64)>;
 

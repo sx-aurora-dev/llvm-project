@@ -11,7 +11,7 @@ define i32 @brd_v4i32() {
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -34,7 +34,7 @@ define i32 @brd_v256i32() {
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -88,7 +88,7 @@ define i32 @vseq_v4i32() {
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -108,7 +108,7 @@ define i32 @vseq_v256i32() {
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -165,7 +165,7 @@ define i32 @vseq_bad_v4i32() {
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -822,7 +822,7 @@ define i32 @vseq_bad_v256i32() {
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -876,7 +876,7 @@ define i32 @vseqmul_v4i32() {
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -899,7 +899,7 @@ define i32 @vseqmul_v256i32() {
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -953,7 +953,7 @@ define i32 @vseqsrl_v4i32() {
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -975,7 +975,7 @@ define i32 @vseqsrl_v8i32() {
 ; CHECK-NEXT:    lea %s0, calc_v8i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v8i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -999,7 +999,7 @@ define i32 @vseqsrl_v256i32() {
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -1054,7 +1054,7 @@ define i32 @vseqand_v4i32() {
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -1077,7 +1077,7 @@ define i32 @vseqand_v256i32() {
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
-; CHECK-NEXT:    bsic %lr, (, %s12)
+; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9

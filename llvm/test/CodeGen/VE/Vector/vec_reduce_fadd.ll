@@ -35,8 +35,7 @@ define double @vec_unordered_reduce_nostart_fadd_f64(<256 x double> %a) {
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfsum.d %v0,%v0,%vm0
 ; CHECK-NEXT:    lvs %s0,%v0(0)
-; CHECK-NEXT:    lea.sl %s1, 0
-; CHECK-NEXT:    fadd.d %s0, %s0, %s1
+; CHECK-NEXT:    fadd.d %s0, 0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = call reassoc double @llvm.experimental.vector.reduce.v2.fadd.f64.v256f64(double 0.0, <256 x double> %a)
   ret double %r
@@ -88,10 +87,8 @@ define float @vec_unordered_reduce_nostart_fadd_f32(<256 x float> %a) {
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfsum.s %v0,%v0,%vm0
-; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    lvs %s1,%v0(0)
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    fadd.s %s0, %s1, %s0
+; CHECK-NEXT:    lvs %s0,%v0(0)
+; CHECK-NEXT:    fadd.s %s0, 0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = call reassoc float @llvm.experimental.vector.reduce.v2.fadd.f32.v256f32(float 0.0, <256 x float> %a)
   ret float %r
