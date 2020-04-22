@@ -918,6 +918,18 @@ static Optional<unsigned> GetVVPForVP(unsigned VPOC) {
   }
 }
 
+#if 0
+static Optional<unsigned> GetScalarISDForReduction(unsigned VVPOC) {
+  switch (VVPOC) {
+#define HANDLE_VVP_REDUCE_TO_SCALAR(VVP_REDUCE, OP)                            \
+  case VEISD::VVP_REDUCE:                                                      \
+    return OP;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return None;
+}
+#endif
+
 SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
   auto OCOpt = GetVVPForVP(Op.getOpcode());
   assert(OCOpt.hasValue());
@@ -959,10 +971,23 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
     }
   }
 
-  // Create a matching CP_* node
-  auto NewN = DAG.getNode(VVPOC, dl, Op.getValueType(), OpVec);
-  NewN->setFlags(Op->getFlags());
-  return NewN;
+  CustomDAG CDAG(DAG, Op);
+
+#if 0
+  // Reduction expansion code path
+  SDValue NewV;
+  if (Op.getNode()->isVPReduction() && Op->getFlags().hasAllowReassociation()) {
+    unsigned ScalarOC = GetScalarISDForReduction(VVPOC).getValue();
+    EVT ScalarVT = Op.getValueType();
+    SDValue VecReducedV =
+        CDAG.getNode(VVPOC, ScalarVT, {OpVec[1], OpVec[2], OpVec[3]});
+    NewV = CDAG.getNode(ScalarOC, ScalarVT, {OpVec[0], VecReducedV});
+  } else {
+#endif
+  // Create a matching VVP_* node
+  SDValue NewV = DAG.getNode(VVPOC, dl, Op.getValueType(), OpVec);
+  NewV->setFlags(Op->getFlags());
+  return NewV;
 }
 
 SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
@@ -2182,7 +2207,8 @@ void VETargetLowering::initVPUActions() {
     setOperationAction(ISD::MSTORE, VT, Custom);
 
     // VP -> VVP lowering
-#define BEGIN_REGISTER_VP_SDNODE(VP_NAME, LEGALPOS, VP_TEXT, MASK_POS, LEN_POS)      \
+#define BEGIN_REGISTER_VP_SDNODE(VP_NAME, LEGALPOS, VP_TEXT, MASK_POS,         \
+                                 LEN_POS)                                      \
   setOperationAction(ISD::VP_NAME, VT, Action);
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -3583,7 +3609,8 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     // case ISD::TRUNCATE: return LowerTRUNCATE(Op, DAG);
 
     ///// LLVM-VP --> vvp_* /////
-#define BEGIN_REGISTER_VP_SDNODE(VP_NAME, LEGALPOS, VP_TEXT, MASK_POS, LEN_POS)      \
+#define BEGIN_REGISTER_VP_SDNODE(VP_NAME, LEGALPOS, VP_TEXT, MASK_POS,         \
+                                 LEN_POS)                                      \
   case ISD::VP_NAME:
 #include "llvm/IR/VPIntrinsics.def"
     return LowerVPToVVP(Op, DAG);
