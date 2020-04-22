@@ -1,14 +1,32 @@
 ; RUN: llc -O0 --march=ve %s -o=/dev/stdout | FileCheck %s
 
 define void @test_vp_harness(<256 x i64>* %Out, <256 x i64> %i0) {
+; CHECK-LABEL: test_vp_harness:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vst %v0,8,%s0
+; CHECK-NEXT:    or %s11, 0, %s9
   store <256 x i64> %i0, <256 x i64>* %Out
-; CHECK: test_vp_harness:
   ret void
 }
 
 define double @test_reduce_fp(<256 x double> %v, <256 x i1> %m, i32 %n) {
+; CHECK-LABEL: test_reduce_fp:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmrg %v0,0,%v0,%vm1
+; CHECK-NEXT:    lea.sl %s1, 0
+; CHECK-NEXT:    vfia.d %v0,%v0,%s1
+; CHECK-NEXT:    lvs %s1,%v0(0)
+; CHECK-NEXT:    fadd.d %s1, 0, %s1
+; CHECK-NEXT:    fadd.d %s1, 0, %s1
+; CHECK-NEXT:    fadd.d %s0, 0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %r0 = call double @llvm.vp.reduce.fadd.v256f64(double 0.0, <256 x double> %v, <256 x i1> %m, i32 %n)
-  ; %r1 = call double @llvm.vp.reduce.fmul.v256f64(double 42.0, <256 x double> %v, <256 x i1> %m, i32 %n)
+  %r0a = call reassoc double @llvm.vp.reduce.fadd.v256f64(double 0.0, <256 x double> %v, <256 x i1> %m, i32 %n)
+  %r1 = call double @llvm.vp.reduce.fmul.v256f64(double 42.0, <256 x double> %v, <256 x i1> %m, i32 %n)
+  %r1a = call reassoc double @llvm.vp.reduce.fmul.v256f64(double 42.0, <256 x double> %v, <256 x i1> %m, i32 %n)
   ; %r2 = call double @llvm.vp.reduce.fmin.v256f64(<256 x double> %v, <256 x i1> %m, i32 %n)
   ; %r3 = call double @llvm.vp.reduce.fmax.v256f64(<256 x double> %v, <256 x i1> %m, i32 %n)
   %s0 = fadd double %r0, 0.0 ; %r1
@@ -18,6 +36,18 @@ define double @test_reduce_fp(<256 x double> %v, <256 x i1> %m, i32 %n) {
 }
 
 define i64 @test_reduce_int(<256 x i64> %v, <256 x i1> %m, i32 %n) {
+; CHECK-LABEL: test_reduce_int:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vsum.l %v1,%v0,%vm1
+; CHECK-NEXT:    lvs %s1,%v1(0)
+; CHECK-NEXT:    vrand %v1,%v0,%vm1
+; CHECK-NEXT:    lvs %s2,%v1(0)
+; CHECK-NEXT:    vrxor %v0,%v0,%vm1
+; CHECK-NEXT:    lvs %s3,%v0(0)
+; CHECK-NEXT:    adds.l %s2, %s2, %s3
+; CHECK-NEXT:    adds.l %s0, %s1, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %r0 = call i64 @llvm.vp.reduce.add.v256i64(<256 x i64> %v, <256 x i1> %m, i32 %n)
   ; %r1 = call i64 @llvm.vp.reduce.mul.v256i64(<256 x i64> %v, <256 x i1> %m, i32 %n)
   %r2 = call i64 @llvm.vp.reduce.and.v256i64(<256 x i64> %v, <256 x i1> %m, i32 %n)
@@ -38,7 +68,7 @@ define i64 @test_reduce_int(<256 x i64> %v, <256 x i1> %m, i32 %n) {
   ret i64 %s7
 }
 
-declare double @llvm.vp.reduce.fadd.v256f64(double, <256 x double>, <256 x i1> mask, i32 vlen) 
+declare double @llvm.vp.reduce.fadd.v256f64(double, <256 x double>, <256 x i1> mask, i32 vlen)
 declare double @llvm.vp.reduce.fmul.v256f64(double, <256 x double>, <256 x i1> mask, i32 vlen)
 declare double @llvm.vp.reduce.fmin.v256f64(<256 x double>, <256 x i1> mask, i32 vlen)
 declare double @llvm.vp.reduce.fmax.v256f64(<256 x double>, <256 x i1> mask, i32 vlen)
