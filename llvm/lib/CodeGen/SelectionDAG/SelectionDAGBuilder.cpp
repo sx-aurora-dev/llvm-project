@@ -6392,7 +6392,7 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
     visitConstrainedFPIntrinsic(cast<ConstrainedFPIntrinsic>(I));
     return;
 
-#define REGISTER_VP_INTRINSIC(VPID, MASKPOS, VLENPOS) case Intrinsic::VPID:
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
 #include "llvm/IR/VPIntrinsics.def"
     visitVectorPredicationIntrinsic(cast<VPIntrinsic>(I));
     return;
@@ -7302,7 +7302,6 @@ static unsigned getISDForVPIntrinsic(unsigned VPID) {
 void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     const VPIntrinsic &VPIntrin) {
 
-  unsigned Opcode;
   switch (VPIntrin.getIntrinsicID()) {
   default:
     break;
@@ -7325,7 +7324,7 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     visitCmpVP(VPIntrin);
     return;
   }
-  Opcode = getISDForVPIntrinsic(VPIntrin.getIntrinsicID());
+  unsigned Opcode = getISDForVPIntrinsic(VPIntrin.getIntrinsicID());
 
   // TODO memory evl: SDValue Chain = getRoot();
 
