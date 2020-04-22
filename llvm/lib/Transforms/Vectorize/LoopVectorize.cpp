@@ -5292,7 +5292,7 @@ unsigned LoopVectorizationCostModel::selectInterleaveCount(unsigned VF,
   // If trip count is known or estimated compile time constant, limit the
   // interleave count to be less than the trip count divided by VF.
   if (BestKnownTC) {
-    MaxInterleaveCount = std::min(*BestKnownTC / VF, MaxInterleaveCount);
+    MaxInterleaveCount = std::max(1u, std::min(*BestKnownTC / VF, MaxInterleaveCount));
   }
 
   // If we did not calculate the cost for VF (because the user selected the VF)
@@ -5313,6 +5313,7 @@ unsigned LoopVectorizationCostModel::selectInterleaveCount(unsigned VF,
   // benefit from interleaving.
   if (VF > 1 && !Legal->getReductionVars().empty()) {
     LLVM_DEBUG(dbgs() << "LV: Interleaving because of reductions.\n");
+    assert(IC > 0);
     return IC;
   }
 
