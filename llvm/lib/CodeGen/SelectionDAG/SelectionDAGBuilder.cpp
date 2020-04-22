@@ -7314,13 +7314,12 @@ static Optional<unsigned> getISDForVPIntrinsic(const VPIntrinsic &VPIntrin) {
 static Optional<unsigned> getScalarISDForVPReduce(unsigned VPOC) {
   switch (VPOC) {
   default:
+    return None;
 
   // TODO factor into VPIntrinsics.def
   case ISD::VP_REDUCE_FADD: return ISD::FADD;
   case ISD::VP_REDUCE_FMUL: return ISD::FMUL;
   }
-
-  return None;
 }
 
 void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
