@@ -55,25 +55,25 @@ let Namespace = "VE" in {
   def sub_odd     : SubRegIndex<64, 64>;        // Low 64 bit (64..127)
   def sub_vm_even : SubRegIndex<256>;           // High 256 bit (0..255)
   def sub_vm_odd  : SubRegIndex<256, 256>;      // Low 256 bit (256..511)
-  def AsmName : RegAltNameIndex;
+  def AsmName     : RegAltNameIndex;
 }
 
 //-----------------------------------------------------------------------------
 // Miscellaneous Registers
 //-----------------------------------------------------------------------------
 
-def USRCC : VEMiscReg<0, "USRCC">;      // User clock counter
-def PSW : VEMiscReg<1, "PSW">;          // Program status word
-def SAR : VEMiscReg<2, "SAR">;          // Store address register
-def PMMR : VEMiscReg<7, "PMMR">;        // Performance monitor mode register
+def USRCC : VEMiscReg<0, "usrcc">;      // User clock counter
+def PSW : VEMiscReg<1, "psw">;          // Program status word
+def SAR : VEMiscReg<2, "sar">;          // Store address register
+def PMMR : VEMiscReg<7, "pmmr">;        // Performance monitor mode register
 
 // Performance monitor configuration registers
 foreach I = 0-3 in
-  def PMCR#I : VEMiscReg<!add(8,I), "PMCR"#I>;
+  def PMCR#I : VEMiscReg<!add(8,I), "pmcr"#I>;
 
 // Performance monitor counter
 foreach I = 0-14 in
-  def PMC#I : VEMiscReg<!add(16,I), "PMC"#I>;
+  def PMC#I : VEMiscReg<!add(16,I), "pmc"#I>;
 
 // Register classes.
 def MISC : RegisterClass<"VE", [i64], 64,
@@ -85,13 +85,13 @@ def MISC : RegisterClass<"VE", [i64], 64,
 // Instruction Counter Register
 //-----------------------------------------------------------------------------
 
-def IC : VEMiscReg<62, "IC">;
+def IC : VEMiscReg<62, "ic">;
 
 //-----------------------------------------------------------------------------
 // Vector Length Register
 //-----------------------------------------------------------------------------
 
-def VL : VEMiscReg<63, "VL">;
+def VL : VEMiscReg<63, "vl">;
 
 // Register classes.
 def VLS : RegisterClass<"VE", [i32], 64, (add VL)>;
@@ -104,63 +104,63 @@ let RegAltNameIndices = [AsmName] in {
 
 // Generic integer registers - 8 bits wide
 foreach I = 0-63 in
-  def SB#I : VEReg<I, "SB"#I, [], ["S"#I]>, DwarfRegNum<[I]>;
+  def SB#I : VEReg<I, "sb"#I, [], ["s"#I]>, DwarfRegNum<[I]>;
 
 // Generic integer registers - 16 bits wide
 let SubRegIndices = [sub_i8] in
 foreach I = 0-63 in
-  def SH#I : VEReg<I, "SH"#I, [!cast<VEReg>("SB"#I)], ["S"#I]>,
+  def SH#I : VEReg<I, "sh"#I, [!cast<VEReg>("SB"#I)], ["s"#I]>,
                    DwarfRegNum<[I]>;
 
 // Generic integer registers - 32 bits wide
 let SubRegIndices = [sub_i16] in
 foreach I = 0-63 in
-  def SW#I : VEReg<I, "SW"#I, [!cast<VEReg>("SH"#I)], ["S"#I]>,
+  def SW#I : VEReg<I, "sw"#I, [!cast<VEReg>("SH"#I)], ["s"#I]>,
                    DwarfRegNum<[I]>;
 
 // Generic floating point registers - 32 bits wide
 //   NOTE: Mark SF#I as alias of SW#I temporary to avoid register allocation
 //         problem.
 foreach I = 0-63 in
-  def SF#I : VEReg<I, "SF"#I, [], ["S"#I], [!cast<VEReg>("SW"#I)]>,
+  def SF#I : VEReg<I, "sf"#I, [], ["s"#I], [!cast<VEReg>("SW"#I)]>,
                    DwarfRegNum<[I]>;
 
 // Generic integer registers - 64 bits wide
 let SubRegIndices = [sub_i32, sub_f32], CoveredBySubRegs = 1 in
 foreach I = 0-63 in
-  def SX#I : VEReg<I, "S"#I, [!cast<VEReg>("SW"#I), !cast<VEReg>("SF"#I)],
-                   ["S"#I]>, DwarfRegNum<[I]>;
+  def SX#I : VEReg<I, "s"#I, [!cast<VEReg>("SW"#I), !cast<VEReg>("SF"#I)],
+                   ["s"#I]>, DwarfRegNum<[I]>;
 
 // Vector registers - 64 bits wide 256 elements
 foreach I = 0-63 in
-  def V#I : VEVecReg<I, "V"#I, [], ["V"#I]>, DwarfRegNum<[!add(64,I)]>;
+  def V#I : VEVecReg<I, "v"#I, [], ["v"#I]>, DwarfRegNum<[!add(64,I)]>;
 
 // Vector Index Register
-def VIX : VEVecReg<255, "VIX", [], ["VIX"]>;
+def VIX : VEVecReg<255, "vix", [], ["vix"]>;
 
 // Vector mask registers - 256 bits wide
 foreach I = 0-15 in
-  def VM#I : VEMaskReg<I, "VM"#I, [], ["VM"#I]>, DwarfRegNum<[!add(128,I)]>;
+  def VM#I : VEMaskReg<I, "vm"#I, [], ["vm"#I]>, DwarfRegNum<[!add(128,I)]>;
 
 // Aliases of VMs to use as a pair of two VM for packed instructions
 let SubRegIndices = [sub_vm_even, sub_vm_odd], CoveredBySubRegs = 1 in
 foreach I = 0-7 in
-  def VMP#I : VEMaskReg<!shl(I,1), "VMP"#I, 
+  def VMP#I : VEMaskReg<!shl(I,1), "vmp"#I, 
                         [!cast<VEMaskReg>("VM"#!shl(I,1)),
                          !cast<VEMaskReg>("VM"#!add(!shl(I,1),1))],
-                        ["VM"#!shl(I,1)]>;
+                        ["vm"#!shl(I,1)]>;
 
 // Aliases of the S* registers used to hold 128-bit for values (long doubles).
 // Following foreach represents something like:
-//   def Q0 : VEReg<0, "S0", [S0, S1]>;
-//   def Q1 : VEReg<2, "S2", [S2, S3]>;
+//   def Q0 : VEReg<0, "q0", [SX0, SX1], ["s0"]>;
+//   def Q1 : VEReg<2, "q2", [SX2, SX3], ["s2"]>;
 //   ...
 let SubRegIndices = [sub_even, sub_odd], CoveredBySubRegs = 1 in
 foreach I = 0-31 in
-  def Q#I : VEReg<!shl(I,1), "Q"#I,
+  def Q#I : VEReg<!shl(I,1), "q"#I,
                   [!cast<VEReg>("SX"#!shl(I,1)),
                    !cast<VEReg>("SX"#!add(!shl(I,1),1))],
-                  ["S"#!shl(I,1)]>;
+                  ["s"#!shl(I,1)]>;
 
 } // RegAltNameIndices = [AsmName]
 
