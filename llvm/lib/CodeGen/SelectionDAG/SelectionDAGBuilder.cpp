@@ -7285,22 +7285,103 @@ void SelectionDAGBuilder::visitCmpVP(const VPIntrinsic &I) {
                               MaskOp, LenOp));
 }
 
-static unsigned getISDForVPIntrinsic(unsigned VPID) {
-  unsigned ResID = 0;
+static Optional<unsigned> getStrictVPSD(unsigned VPIntrinsicID) {
+  Optional<unsigned> StrictOC;
+  switch (VPIntrinsicID) {
+#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
+#define HANDLE_VP_TO_STRICTSD(STRICTSD) StrictOC = ISD::STRICTSD;
+#define END_REGISTER_VP_INTRINSIC(...) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+  return StrictOC;
+}
 
-  switch (VPID) {
+static Optional<unsigned> getISDForVPIntrinsic(const VPIntrinsic &VPIntrin) {
+  Optional<unsigned> ResID;
+  unsigned IntrinID = VPIntrin.getIntrinsicID();
+
+  // Otw, use the cannonical mapping
+  switch (IntrinID) {
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
 #define HANDLE_VP_TO_SDNODE(VPISD) ResID = ISD::VPISD;
 #define END_REGISTER_VP_INTRINSIC(...) break;
-
 #include "llvm/IR/VPIntrinsics.def"
   }
 
   return ResID;
 }
 
+static Optional<unsigned> getScalarISDForVPReduce(unsigned VPOC) {
+  switch (VPOC) {
+  default:
+
+  // TODO factor into VPIntrinsics.def
+  case ISD::VP_REDUCE_FADD: return ISD::FADD;
+  case ISD::VP_REDUCE_FMUL: return ISD::FMUL;
+  }
+
+  return None;
+}
+
+void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
+  LLVM_DEBUG(dbgs() << "DABBuilder: visitReduceVP\n";);
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  SDLoc dl = getCurSDLoc();
+  EVT ResVT = TLI.getValueType(DAG.getDataLayout(), VPIntrin.getType());
+
+  SDValue MaskV = getValue(VPIntrin.getMaskParam());
+  SDValue EVLV = getValue(VPIntrin.getVectorLengthParam());
+
+  auto FMFSource = dyn_cast<FPMathOperator>(&VPIntrin);
+  SDNodeFlags OpFlags;
+  if (FMFSource)
+    OpFlags.copyFMF(*FMFSource);
+
+  Optional<unsigned> ReduceOCOpt = getISDForVPIntrinsic(VPIntrin);
+  unsigned ReduceOC = ReduceOCOpt.getValue();
+  Optional<unsigned> ScalarOCOpt = getScalarISDForVPReduce(ReduceOC);
+  SDValue ResV;
+  if (ScalarOCOpt && FMFSource->hasAllowReassoc()) {
+    LLVM_DEBUG(dbgs() << "visitReduceVP: reassoc-able FP\n";);
+    // Re-associatable reduction with an explicit start parameter for the strict
+    // case
+    SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
+    SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
+    auto ReducedV = DAG.getNode(ReduceOC, dl, ResVT, {VectorV, MaskV, EVLV});
+    if (OpFlags.isDefined())
+      ReducedV->setFlags(OpFlags);
+    ResV = DAG.getNode(ScalarOCOpt.getValue(), dl, ResVT, ScalarV, ReducedV);
+
+  } else if (ScalarOCOpt) {
+    LLVM_DEBUG(dbgs() << "visitReduceVP: strict FP\n";);
+    // Strict reduction (vp_reduce_strict_fadd/fmul)
+    // Reductions are lowered to either VP_REDUCE_STRICT_<OP> or VP_REDUCE_<OP>
+    // depending on the reassoc flag.
+    ReduceOC = getStrictVPSD(VPIntrin.getIntrinsicID()).getValue();
+
+    SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
+    SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
+    ResV = DAG.getNode(ReduceOC, dl, ResVT, {ScalarV, VectorV, MaskV, EVLV});
+
+  } else {
+    LLVM_DEBUG(dbgs() << "visitReduceVP: non-strict-able\n";);
+
+    // Re-associatable without strict case and no initial arg (eg ADD reduction)
+    SDValue VectorV = getValue(VPIntrin.getArgOperand(0));
+    ResV = DAG.getNode(ReduceOC, dl, ResVT, {VectorV, MaskV, EVLV});
+  }
+
+  if (OpFlags.isDefined())
+    ResV->setFlags(OpFlags);
+  setValue(&VPIntrin, ResV);
+}
+
 void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     const VPIntrinsic &VPIntrin) {
+  if (VPIntrin.isReductionOp()) {
+    visitReduceVP(VPIntrin);
+    return;
+  }
 
   switch (VPIntrin.getIntrinsicID()) {
   default:
@@ -7324,7 +7405,7 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     visitCmpVP(VPIntrin);
     return;
   }
-  unsigned Opcode = getISDForVPIntrinsic(VPIntrin.getIntrinsicID());
+  unsigned Opcode = getISDForVPIntrinsic(VPIntrin).getValue();
 
   // TODO memory evl: SDValue Chain = getRoot();
 

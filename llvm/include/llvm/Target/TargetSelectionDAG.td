@@ -515,8 +515,10 @@ def vp_reduce_and   : SDNode<"ISD::VP_REDUCE_AND", SDTReduceVP>;
 def vp_reduce_or    : SDNode<"ISD::VP_REDUCE_OR", SDTReduceVP>;
 def vp_reduce_xor   : SDNode<"ISD::VP_REDUCE_XOR", SDTReduceVP>;
 
-def vp_reduce_fadd  : SDNode<"ISD::VP_REDUCE_FADD", SDTReduceStartVP>;
-def vp_reduce_fmul  : SDNode<"ISD::VP_REDUCE_FMUL", SDTReduceStartVP>;
+def vp_reduce_strict_fadd  : SDNode<"ISD::VP_REDUCE_STRICT_FADD", SDTReduceStartVP>;
+def vp_reduce_strict_fmul  : SDNode<"ISD::VP_REDUCE_STRICT_FMUL", SDTReduceStartVP>;
+def vp_reduce_fadd  : SDNode<"ISD::VP_REDUCE_FADD", SDTReduceVP>;
+def vp_reduce_fmul  : SDNode<"ISD::VP_REDUCE_FMUL", SDTReduceVP>;
 def vp_reduce_fmin  : SDNode<"ISD::VP_REDUCE_FMIN", SDTReduceVP>;
 def vp_reduce_fmax  : SDNode<"ISD::VP_REDUCE_FMAX", SDTReduceVP>;
 

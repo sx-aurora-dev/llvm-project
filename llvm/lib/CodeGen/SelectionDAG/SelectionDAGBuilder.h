@@ -774,6 +774,7 @@ private:
   void visitStoreVP(const CallInst &I);
   void visitGatherVP(const CallInst &I);
   void visitScatterVP(const CallInst &I);
+  void visitReduceVP(const VPIntrinsic &I);
 
   void visitVAStart(const CallInst &I);
   void visitVAArg(const VAArgInst &I);

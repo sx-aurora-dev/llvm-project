@@ -645,9 +645,6 @@ bool VPIntrinsic::isReductionOp() const {
 bool VPIntrinsic::IsVPReduction(Intrinsic::ID ID) {
   bool IsReduction = false;
   switch (ID) {
-  default:
-    return false;
-
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
 #define HANDLE_VP_REDUCTION(...) IsReduction = true;
 #define END_REGISTER_VP_INTRINSIC(...) break;

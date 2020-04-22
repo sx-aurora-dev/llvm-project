@@ -990,6 +990,7 @@ namespace ISD {
     /// operand is an initial scalar accumulator value, and the second operand
     /// is the vector to reduce.
     VECREDUCE_STRICT_FADD, VECREDUCE_STRICT_FMUL,
+    VP_REDUCE_STRICT_FADD, VP_REDUCE_STRICT_FMUL,
     /// These reductions are non-strict, and have a single vector operand.
     VECREDUCE_FADD, VECREDUCE_FMUL,
     /// FMIN/FMAX nodes can have flags, for NaN/NoNaN variants.

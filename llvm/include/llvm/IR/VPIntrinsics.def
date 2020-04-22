@@ -81,6 +81,11 @@
 #define HANDLE_VP_IS_XCMP
 #endif
 
+// link this VP ID to a strict VP OC
+#ifndef HANDLE_VP_TO_STRICTSD
+#define HANDLE_VP_TO_STRICTSD(STRICTSD)
+#endif
+
 ///// REGISTER macros /////
 // These always have to come first
 // This VP Intrinsic is a memory operation
@@ -593,29 +598,39 @@ HANDLE_VP_TO_INTRIN(experimental_vector_reduce_umax)
 END_REGISTER_CASES(vp_reduce_umax, VP_REDUCE_UMAX)
 
 // llvm.vp.reduce.fadd(accu,x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fadd, 2, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FADD, 1, vp_reduce_fadd, 2, 3)
+BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fadd, 1, 2)
+BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FADD, 0, vp_reduce_fadd, 1, 2)
 HANDLE_VP_REDUCTION(0, 1)
 HANDLE_VP_TO_INTRIN(experimental_vector_reduce_v2_fadd)
+HANDLE_VP_TO_STRICTSD(VP_REDUCE_STRICT_FADD)
 END_REGISTER_CASES(vp_reduce_fadd, VP_REDUCE_FADD)
+
+// vp_strict_reduce_fadd (associated node)
+BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_STRICT_FADD, 1, vp_reduce_strict_fadd, 2, 3)
+END_REGISTER_VP_SDNODE(VP_REDUCE_STRICT_FADD)
 
 // llvm.vp.reduce.fmul(accu,x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fmul, 2, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FMUL, 1, vp_reduce_fmul, 2, 3)
+BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FMUL, 0, vp_reduce_fmul, 1, 2)
 HANDLE_VP_REDUCTION(0, 1)
 HANDLE_VP_TO_INTRIN(experimental_vector_reduce_v2_fmul)
+HANDLE_VP_TO_STRICTSD(VP_REDUCE_STRICT_FMUL)
 END_REGISTER_CASES(vp_reduce_fmul, VP_REDUCE_FMUL)
+
+// vp_strict_reduce_fmul (associated node)
+BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_STRICT_FMUL, 1, vp_reduce_strict_fmul, 2, 3)
+END_REGISTER_VP_SDNODE(VP_REDUCE_STRICT_FMUL)
 
 // llvm.vp.reduce.fmin(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fmin, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FMIN, 1, vp_reduce_fmin, 1, 2)
+BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FMIN, 0, vp_reduce_fmin, 0, 1)
 HANDLE_VP_REDUCTION(None, 0)
 HANDLE_VP_TO_INTRIN(experimental_vector_reduce_fmin)
 END_REGISTER_CASES(vp_reduce_fmin, VP_REDUCE_FMIN)
 
 // llvm.vp.reduce.fmax(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fmax, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FMAX, 1, vp_reduce_fmax, 1, 2)
+BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FMAX, 0, vp_reduce_fmax, 0, 1)
 HANDLE_VP_REDUCTION(None, 0)
 HANDLE_VP_TO_INTRIN(experimental_vector_reduce_fmax)
 END_REGISTER_CASES(vp_reduce_fmax, VP_REDUCE_FMAX)
@@ -636,3 +651,4 @@ END_REGISTER_CASES(vp_reduce_fmax, VP_REDUCE_FMAX)
 #undef HANDLE_VP_FPCONSTRAINT
 #undef HANDLE_VP_REDUCTION
 #undef HANDLE_VP_TO_SDNODE
+#undef HANDLE_VP_TO_STRICTSD
