@@ -243,18 +243,23 @@ void LowerVPCastOperator(VPIntrinsic *VPI) {
 }
 
 /// \brief Lower llvm.vp.compose.* into a select instruction
-void LowerVPCompose(VPIntrinsic *VPI) {
+void LowerVPSelect(VPIntrinsic *VPI) {
   auto ElemBits = GetFunctionalVectorElementSize();
   ElementCount ElemCount = VPI->getStaticVectorLength();
   assert(!ElemCount.Scalable && "TODO scalable type support");
 
   IRBuilder<> Builder(cast<Instruction>(VPI));
-  auto PivotMask =
-      ConvertVLToMask(Builder, VPI->getOperand(2), ElemBits, ElemCount.Min);
-  auto NewCompose = Builder.CreateSelect(PivotMask, VPI->getOperand(0),
-                                         VPI->getOperand(1), VPI->getName());
+  auto BitMask = VPI->getOperand(0);
+  auto PivotVal = VPI->getOperand(3);
+  auto OnTrueVal = VPI->getOperand(1);
+  auto OnFalseVal = VPI->getOperand(2);
 
-  ReplaceOperation(NewCompose, VPI);
+  auto PivotMask = ConvertVLToMask(Builder, PivotVal, ElemBits, ElemCount.Min);
+  auto CompositeMask = Builder.CreateAnd(BitMask, PivotMask);
+  auto NewSelect = Builder.CreateSelect(CompositeMask, OnTrueVal, OnFalseVal,
+                                        VPI->getName());
+
+  ReplaceOperation(NewSelect, VPI);
 }
 
 /// \brief Lower this llvm.vp.fma intrinsic to a llvm.fma intrinsic.
@@ -394,8 +399,8 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
     //   if (AlignOpt.hasValue()) NewStore->setAlignment(AlignOpt.getValue());
     //   NewMemoryInst = NewStore;
     // } else {
-    NewMemoryInst = Builder.CreateMaskedScatter(DataParam, PtrParam,
-                                                AlignOpt.valueOrOne(), MaskParam);
+    NewMemoryInst = Builder.CreateMaskedScatter(
+        DataParam, PtrParam, AlignOpt.valueOrOne(), MaskParam);
     // }
   } break;
 
@@ -413,15 +418,6 @@ void LowerVPMemoryIntrinsic(VPIntrinsic *VPI) {
 
   assert(NewMemoryInst);
   ReplaceOperation(NewMemoryInst, VPI);
-}
-
-/// \brief Lower llvm.vp.select.* to a select instruction.
-void LowerVPSelectInst(VPIntrinsic *VPI) {
-  auto I = cast<Instruction>(VPI);
-
-  auto NewSelect = SelectInst::Create(VPI->getMaskParam(), VPI->getOperand(1),
-                                      VPI->getOperand(2), I->getName(), I, I);
-  ReplaceOperation(NewSelect, VPI);
 }
 
 /// \brief Lower llvm.vp.(icmp|fcmp) to an icmp or fcmp instruction.
@@ -494,8 +490,8 @@ void LowerUnmatchedVPIntrinsic(VPIntrinsic *VPI) {
                       << *VPI << "\n");
     return;
 
-  case Intrinsic::vp_compose:
-    LowerVPCompose(VPI);
+  case Intrinsic::vp_select:
+    LowerVPSelect(VPI);
     break;
 
   case Intrinsic::vp_gather:
@@ -625,10 +621,6 @@ bool expandVectorPredication(Function &F, const TargetTransformInfo *TTI) {
 
     case Instruction::Call:
       LowerUnmatchedVPIntrinsic(VPI);
-      break;
-
-    case Instruction::Select:
-      LowerVPSelectInst(VPI);
       break;
 
     case Instruction::Store:

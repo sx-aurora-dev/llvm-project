@@ -525,7 +525,6 @@ END_REGISTER_CASES(vp_vshift, VP_VSHIFT)
 // llvm.vp.select(mask,on_true,on_false,pivot,avl)
 BEGIN_REGISTER_VP_INTRINSIC(vp_select, 0, 4)
 BEGIN_REGISTER_VP_SDNODE(VP_SELECT, -1, vp_select, 0, 4)
-HANDLE_VP_TO_OC(Select)
 END_REGISTER_CASES(vp_select, VP_SELECT)
 
 ///// Reduction /////

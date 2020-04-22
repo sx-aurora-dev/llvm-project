@@ -456,7 +456,7 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
   case ISD::VECREDUCE_FMIN:             return "vecreduce_fmin";
 
   // Vector Predication
-#define REGISTER_VP_SDNODE(NODEID,LEGALARG,NAME,MASKPOS,VLENPOS) \
+#define BEGIN_REGISTER_VP_SDNODE(NODEID,LEGALARG,NAME,...) \
   case ISD::NODEID: return #NAME;
 #include "llvm/IR/VPIntrinsics.def"
   }

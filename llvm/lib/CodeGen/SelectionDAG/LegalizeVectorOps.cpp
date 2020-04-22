@@ -473,7 +473,7 @@ SDValue VectorLegalizer::LegalizeOp(SDValue Op) {
     break;
   }
 
-#define REGISTER_VP_SDNODE(VPID, LEGALPOS, ...)                                \
+#define BEGIN_REGISTER_VP_SDNODE(VPID, LEGALPOS, ...)                          \
   case ISD::VPID: {                                                            \
     EVT LegalizeVT = LEGALPOS < 0 ? Node->getValueType(-(1 + LEGALPOS))        \
                                   : Node->getOperand(LEGALPOS).getValueType(); \
