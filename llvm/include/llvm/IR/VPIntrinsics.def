@@ -598,7 +598,7 @@ HANDLE_VP_TO_INTRIN(experimental_vector_reduce_umax)
 END_REGISTER_CASES(vp_reduce_umax, VP_REDUCE_UMAX)
 
 // llvm.vp.reduce.fadd(accu,x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fadd, 1, 2)
+BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fadd, 2, 3)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FADD, 0, vp_reduce_fadd, 1, 2)
 HANDLE_VP_REDUCTION(0, 1)
 HANDLE_VP_TO_INTRIN(experimental_vector_reduce_v2_fadd)
