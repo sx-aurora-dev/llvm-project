@@ -83,16 +83,7 @@ public:
                getVRegCapacity(*VTy->getVectorElementType());
   }
 
-  bool isVectorRegisterType(Type &DT) {
-    auto VTy = dyn_cast<VectorType>(&DT);
-    if (!VTy)
-      return false;
-    auto &ElemTy = *VTy->getVectorElementType();
-
-    // oversized vector
-    if (getVRegCapacity(ElemTy) < VTy->getVectorNumElements())
-      return false;
-
+  bool isVectorLaneType(Type &ElemTy) {
     // check element sizes for vregs
     if (ElemTy.isIntegerTy()) {
       unsigned ScaBits = ElemTy.getScalarSizeInBits();
@@ -105,6 +96,19 @@ public:
       return true;
     }
     return false;
+  }
+
+  bool isVectorRegisterType(Type &DT) {
+    auto VTy = dyn_cast<VectorType>(&DT);
+    if (!VTy)
+      return false;
+    auto &ElemTy = *VTy->getVectorElementType();
+
+    // oversized vector
+    if (getVRegCapacity(ElemTy) < VTy->getVectorNumElements())
+      return false;
+
+    return isVectorLaneType(ElemTy);
   }
 
   // Load & Store {
@@ -121,12 +125,12 @@ public:
   bool isLegalMaskedGather(Type *ScaDataType, MaybeAlign Alignment) {
     if (!enableVPU())
       return false;
-    return isVectorRegisterType(*ScaDataType);
+    return isVectorLaneType(*ScaDataType);
   };
   bool isLegalMaskedScatter(Type *ScaDataType, MaybeAlign Alignment) {
     if (!enableVPU())
       return false;
-    return isVectorRegisterType(*ScaDataType);
+    return isVectorLaneType(*ScaDataType);
   }
   // } Load & Store
 
@@ -137,8 +141,24 @@ public:
   unsigned getMaxInterleaveFactor(unsigned VF) const {
     return 3; // 3 FMA units available
   }
-  /// } Heuristics
 
+  bool prefersVectorizedAddressing() { return true; }
+
+  bool supportsEfficientVectorElementLoadStore() { return false; }
+
+  unsigned getScalarizationOverhead(Type *Ty, bool Insert, bool Extract) const {
+    auto VecTy = dyn_cast<VectorType>(Ty);
+    if (!VecTy)
+      return 1;
+    return VecTy->getNumElements();
+  }
+
+  unsigned getOperandsScalarizationOverhead(ArrayRef<const Value *> Args,
+                                            unsigned VF) const {
+    return Args.size() * VF;
+  }
+
+  /// } Heuristics
 
   /// LLVM-VP Support
   /// {
