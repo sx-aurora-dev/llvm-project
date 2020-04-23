@@ -25,6 +25,11 @@
 #include "llvm/IR/PredicatedInst.h"
 #include "llvm/IR/Type.h"
 
+static bool IsMaskType(llvm::Type *Ty) {
+  return Ty->isVectorTy() &&
+         Ty->getVectorElementType()->getPrimitiveSizeInBits() == 1;
+}
+
 namespace llvm {
 
 class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
@@ -158,6 +163,20 @@ public:
     return Args.size() * VF;
   }
 
+  int getMemoryOpCost(unsigned Opcode, Type *Src, MaybeAlign Alignment,
+                      unsigned AddressSpace, const Instruction *I = nullptr) {
+    unsigned AlignBytes = Alignment.valueOrOne().value();
+    return getMaskedMemoryOpCost(Opcode, Src, AlignBytes, AddressSpace);
+  }
+
+  int getMaskedMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
+                            unsigned AddressSpace) {
+    if (isa<VectorType>(*Src) && !isVectorLaneType(*Src)) {
+      return cast<VectorType>(Src)->getVectorNumElements();
+    }
+    return 1;
+  }
+
   /// } Heuristics
 
   /// LLVM-VP Support
@@ -186,6 +205,14 @@ public:
       if (PredInst.isVectorReduction())
         return !PredInst.getType()->isIntOrIntVectorTy(1);
       break;
+
+    // TODO mask scatter&gather
+    // vp mask load/store unsupported (FIXME)
+    case Instruction::Load:
+      return !IsMaskType(PredInst.getType());
+
+    case Instruction::Store:
+      return !IsMaskType(PredInst.getOperand(0)->getType());
 
     // vp mask operations unsupported
     case Instruction::And:
