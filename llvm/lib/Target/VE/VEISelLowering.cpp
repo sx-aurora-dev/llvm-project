@@ -72,6 +72,13 @@ static bool shouldExpandToVVP(SDNode &N) {
   if (IsVVPOrVEC(N.getOpcode()))
     return false;
 
+  // Do not VVP expand mask loads/stores
+  // FIXME this leaves dangling VP mask stores if not properly legalized
+  auto MemN = dyn_cast<MemSDNode>(&N);
+  if (MemN && IsMaskType(MemN->getMemoryVT())) {
+    return false;
+  }
+
   Optional<EVT> IdiomVT = getIdiomaticType(&N);
   if (!IdiomVT.hasValue() || !isLegalVectorVT(*IdiomVT))
     return false;
