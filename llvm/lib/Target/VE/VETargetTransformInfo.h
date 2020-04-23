@@ -30,6 +30,13 @@ static bool IsMaskType(llvm::Type *Ty) {
          Ty->getVectorElementType()->getPrimitiveSizeInBits() == 1;
 }
 
+static llvm::Type *GetLaneType(llvm::Type *Ty) {
+  using namespace llvm;
+  if (!isa<VectorType>(Ty))
+    return Ty;
+  return cast<VectorType>(Ty)->getVectorElementType();
+}
+
 namespace llvm {
 
 class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
@@ -120,22 +127,22 @@ public:
   bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) {
     if (!enableVPU())
       return false;
-    return isVectorRegisterType(*DataType);
+    return isVectorLaneType(*GetLaneType(DataType));
   }
   bool isLegalMaskedStore(Type *DataType, MaybeAlign Alignment) {
     if (!enableVPU())
       return false;
-    return isVectorRegisterType(*DataType);
+    return isVectorLaneType(*GetLaneType(DataType));
   }
-  bool isLegalMaskedGather(Type *ScaDataType, MaybeAlign Alignment) {
+  bool isLegalMaskedGather(Type *DataType, MaybeAlign Alignment) {
     if (!enableVPU())
       return false;
-    return isVectorLaneType(*ScaDataType);
+    return isVectorLaneType(*GetLaneType(DataType));
   };
-  bool isLegalMaskedScatter(Type *ScaDataType, MaybeAlign Alignment) {
+  bool isLegalMaskedScatter(Type *DataType, MaybeAlign Alignment) {
     if (!enableVPU())
       return false;
-    return isVectorLaneType(*ScaDataType);
+    return isVectorLaneType(*GetLaneType(DataType));
   }
   // } Load & Store
 
