@@ -177,6 +177,7 @@ namespace clang {
     unsigned EltTypeShift;
     unsigned MemEltTypeShift;
     unsigned MergeTypeShift;
+    unsigned SplatOperandMaskShift;
 
   public:
 #define LLVM_GET_SVE_TYPEFLAGS
@@ -211,6 +212,7 @@ namespace clang {
       EltTypeShift = llvm::countTrailingZeros(EltTypeMask);
       MemEltTypeShift = llvm::countTrailingZeros(MemEltTypeMask);
       MergeTypeShift = llvm::countTrailingZeros(MergeTypeMask);
+      SplatOperandMaskShift = llvm::countTrailingZeros(SplatOperandMask);
     }
 
     EltType getEltType() const {
@@ -225,6 +227,14 @@ namespace clang {
       return (MergeType)((Flags & MergeTypeMask) >> MergeTypeShift);
     }
 
+    unsigned getSplatOperand() const {
+      return ((Flags & SplatOperandMask) >> SplatOperandMaskShift) - 1;
+    }
+
+    bool hasSplatOperand() const {
+      return Flags & SplatOperandMask;
+    }
+
     bool isLoad() const { return Flags & IsLoad; }
     bool isStore() const { return Flags & IsStore; }
     bool isGatherLoad() const { return Flags & IsGatherLoad; }
@@ -232,6 +242,11 @@ namespace clang {
     bool isStructLoad() const { return Flags & IsStructLoad; }
     bool isStructStore() const { return Flags & IsStructStore; }
     bool isZExtReturn() const { return Flags & IsZExtReturn; }
+    bool isByteIndexed() const { return Flags & IsByteIndexed; }
+    bool isOverloadNone() const { return Flags & IsOverloadNone; }
+    bool isOverloadWhile() const { return Flags & IsOverloadWhile; }
+    bool isOverloadDefault() const { return !(Flags & OverloadKindMask); }
+    bool isOverloadWhileRW() const { return Flags & IsOverloadWhileRW; }
 
     uint64_t getBits() const { return Flags; }
     bool isFlagSet(uint64_t Flag) const { return Flags & Flag; }

@@ -10,10 +10,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "VETargetMachine.h"
+#include "TargetInfo/VETargetInfo.h"
 #include "VE.h"
 // #include "VETargetObjectFile.h"
 #include "VETargetTransformInfo.h"
-#include "TargetInfo/VETargetInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/TargetPassConfig.h"

@@ -11,10 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "VEMCTargetDesc.h"
+#include "TargetInfo/VETargetInfo.h"
 #include "VEInstPrinter.h"
 #include "VEMCAsmInfo.h"
 #include "VETargetStreamer.h"
-#include "TargetInfo/VETargetInfo.h"
 #include "llvm/MC/MCInstrInfo.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
