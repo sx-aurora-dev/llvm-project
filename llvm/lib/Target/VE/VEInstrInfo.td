@@ -1986,54 +1986,57 @@ def GETSTACKTOP : Pseudo<(outs I64:$dst), (ins),
 //   or   %res, 0, (0)1      ; initialize by 0
 //   CMOV %res, (63)0, %tmp  ; set 1 if %tmp is true
 
-def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCSIOp:$cond)),
-          (EXTRACT_SUBREG
-              (CMOVLrm (icond2cc $cond),
-                       (CMPSLrr i64:$LHS, i64:$RHS),
-                       !add(63, 64),
-                       (ORim 0, 0)), sub_i32)>;
+// integer setcc
+multiclass SETCCIm<ValueType ty, SDPatternOperator CMOV,
+                   SDPatternOperator SCMPir, SDPatternOperator SCMPrr,
+                   SDPatternOperator UCMPir, SDPatternOperator UCMPrr> {
+  // avoid CMP instruction iff rhs == 0 and signed comparison
+  def : Pat<(i32 (setcc ty:$LHS, zero, CCSIOp:$cond)),
+            (EXTRACT_SUBREG (CMOV (icond2cc $cond),
+                                  $LHS,
+                                  !add(63, 64),
+                                  (ORim 0, 0)), sub_i32)>;
+  def : Pat<(i32 (setcc ty:$LHS, simm7:$RHS, CCSIOp:$cond)),
+            (EXTRACT_SUBREG (CMOV (icond2ccSwap $cond),
+                                  (SCMPir (LO7 $RHS), $LHS),
+                                  !add(63, 64),
+                                  (ORim 0, 0)), sub_i32)>;
+  def : Pat<(i32 (setcc ty:$LHS, ty:$RHS, CCSIOp:$cond)),
+            (EXTRACT_SUBREG (CMOV (icond2cc $cond),
+                                  (SCMPrr $LHS, $RHS),
+                                  !add(63, 64),
+                                  (ORim 0, 0)), sub_i32)>;
+  def : Pat<(i32 (setcc ty:$LHS, simm7:$RHS, CCUIOp:$cond)),
+            (EXTRACT_SUBREG (CMOV (icond2ccSwap $cond),
+                                  (UCMPir (LO7 $RHS), $LHS),
+                                  !add(63, 64),
+                                  (ORim 0, 0)), sub_i32)>;
+  def : Pat<(i32 (setcc ty:$LHS, ty:$RHS, CCUIOp:$cond)),
+            (EXTRACT_SUBREG (CMOV (icond2cc $cond),
+                                  (UCMPrr $LHS, $RHS),
+                                  !add(63, 64),
+                                  (ORim 0, 0)), sub_i32)>;
+}
 
-def : Pat<(i32 (setcc i64:$LHS, i64:$RHS, CCUIOp:$cond)),
-          (EXTRACT_SUBREG
-              (CMOVLrm (icond2cc $cond),
-                       (CMPULrr i64:$LHS, i64:$RHS),
-                       !add(63, 64),
-                       (ORim 0, 0)), sub_i32)>;
-
-def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCSIOp:$cond)),
-          (EXTRACT_SUBREG
-              (CMOVWrm (icond2cc $cond),
-                       (CMPSWSXrr i32:$LHS, i32:$RHS),
-                       !add(63, 64),
-                       (ORim 0, 0)), sub_i32)>;
-
-def : Pat<(i32 (setcc i32:$LHS, i32:$RHS, CCUIOp:$cond)),
-          (EXTRACT_SUBREG
-              (CMOVWrm (icond2cc $cond),
-                       (CMPUWrr i32:$LHS, i32:$RHS),
-                       !add(63, 64),
-                       (ORim 0, 0)), sub_i32)>;
-
-def : Pat<(i32 (setcc f128:$LHS, f128:$RHS, cond:$cond)),
-          (EXTRACT_SUBREG
-              (CMOVDrm (fcond2cc $cond),
-                       (FCMPQrr f128:$LHS, f128:$RHS),
-                       !add(63, 64),
-                       (ORim 0, 0)), sub_i32)>;
-
-def : Pat<(i32 (setcc f64:$LHS, f64:$RHS, cond:$cond)),
-          (EXTRACT_SUBREG
-              (CMOVDrm (fcond2cc $cond),
-                       (FCMPDrr f64:$LHS, f64:$RHS),
-                       !add(63, 64),
-                       (ORim 0, 0)), sub_i32)>;
-
-def : Pat<(i32 (setcc f32:$LHS, f32:$RHS, cond:$cond)),
-          (EXTRACT_SUBREG
-              (CMOVSrm (fcond2cc $cond),
-                       (FCMPSrr f32:$LHS, f32:$RHS),
-                       !add(63, 64),
-                       (ORim 0, 0)), sub_i32)>;
+// floating point setcc
+multiclass SETCCFm<ValueType ty, SDPatternOperator CMOV,
+                   SDPatternOperator CMPir, SDPatternOperator CMPrr> {
+  def : Pat<(i32 (setcc ty:$LHS, fpzero:$RHS, cond:$cond)),
+            (EXTRACT_SUBREG (CMOV (fcond2ccSwap $cond),
+                                  (CMPir (LOFP32 $RHS), $LHS),
+                                  !add(63, 64),
+                                  (ORim 0, 0)), sub_i32)>;
+  def : Pat<(i32 (setcc ty:$LHS, ty:$RHS, cond:$cond)),
+            (EXTRACT_SUBREG (CMOV (fcond2cc $cond),
+                                  (CMPrr $LHS, $RHS),
+                                  !add(63, 64),
+                                  (ORim 0, 0)), sub_i32)>;
+}
+defm : SETCCIm<i32, CMOVWrm, CMPSWSXir, CMPSWSXrr, CMPUWir, CMPUWrr>;
+defm : SETCCIm<i64, CMOVLrm, CMPSLir, CMPSLrr, CMPULir, CMPULrr>;
+defm : SETCCFm<f32, CMOVSrm, FCMPSir, FCMPSrr>;
+defm : SETCCFm<f64, CMOVDrm, FCMPDir, FCMPDrr>;
+defm : SETCCFm<f128, CMOVDrm, FCMPQir, FCMPQrr>;
 
 // Special SELECTCC patterns.
 //   Use min/max for better performance.
