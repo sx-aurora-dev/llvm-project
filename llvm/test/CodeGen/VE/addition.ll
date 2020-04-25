@@ -232,7 +232,6 @@ define float @func23(float %0) {
 ; CHECK-LABEL: func23:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s1, 1084227584
-; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    fadd.s %s0, %s0, %s1
   %2 = fadd float %0, 5.000000e+00
   ret float %2

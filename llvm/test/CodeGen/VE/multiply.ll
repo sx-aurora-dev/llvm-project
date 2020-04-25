@@ -236,7 +236,6 @@ define float @func23(float %a) {
 ; CHECK-LABEL: func23:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s1, 1084227584
-; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    fmul.s %s0, %s0, %s1
   %r = fmul float %a, 5.000000e+00
   ret float %r

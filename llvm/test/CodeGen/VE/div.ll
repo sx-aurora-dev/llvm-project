@@ -151,7 +151,6 @@ define float @divf32ri(float, float) {
 ; CHECK-LABEL: divf32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s1, 1067030938
-; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    fdiv.s %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv float %0, 0x3FF3333340000000
@@ -253,7 +252,6 @@ define float @divf32li(float, float) {
 ; CHECK-LABEL: divf32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s0, 1067030938
-; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    fdiv.s %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fdiv float 0x3FF3333340000000, %1
