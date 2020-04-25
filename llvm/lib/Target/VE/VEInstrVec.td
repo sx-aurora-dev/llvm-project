@@ -326,32 +326,21 @@ let vc = 0, vx = 0 in defm PFCHVNC : PFCHVm<"pfchv.nc", 0x80>;
 // Section 8.9.20 - LSV (Load S to V)
 let sx = 0, vx = ?, hasSideEffects = 0 in
 multiclass LSVbm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
-                 dag dag_in, string disEnc = ""> {
-  let DisableEncoding = disEnc in
+                 dag dag_in> {
   def "" : RR<opc, (outs RC:$vx), dag_in, !strconcat(opcStr, " ${vx}", argStr)>;
-  let Constraints = "$vx = $base", DisableEncoding = disEnc#"$base",
+  let Constraints = "$vx = $base", DisableEncoding = "$base",
       isCodeGenOnly = 1 in
   def _v : RR<opc, (outs RC:$vx), !con(dag_in, (ins RC:$base)),
                !strconcat(opcStr, " ${vx}", argStr)>;
 }
-multiclass LSVlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
-                 dag dag_in> {
-  defm "" : LSVbm<opcStr, argStr, opc, RC, dag_in>;
-  let isCodeGenOnly = 1 in {
-    defm l : LSVbm<opcStr, argStr, opc, RC, !con(dag_in, (ins I32:$vl)),
-                   "$vl,">;
-    defm L : LSVbm<opcStr, argStr, opc, RC, !con(dag_in, (ins VLS:$vl)),
-                   "$vl,">;
-  }
-}
 multiclass LSVm<string opcStr, bits<8>opc, RegisterClass RC> {
-  defm rr : LSVlm<opcStr, "(${sy}), $sz", opc, RC, (ins I64:$sy, I64:$sz)>;
+  defm rr : LSVbm<opcStr, "(${sy}), $sz", opc, RC, (ins I64:$sy, I64:$sz)>;
   let cy = 0 in
-  defm ir : LSVlm<opcStr, "(${sy}), $sz", opc, RC, (ins uimm7:$sy, I64:$sz)>;
+  defm ir : LSVbm<opcStr, "(${sy}), $sz", opc, RC, (ins uimm7:$sy, I64:$sz)>;
   let cz = 0 in
-  defm rm : LSVlm<opcStr, "(${sy}), $sz", opc, RC, (ins I64:$sy, mimm:$sz)>;
+  defm rm : LSVbm<opcStr, "(${sy}), $sz", opc, RC, (ins I64:$sy, mimm:$sz)>;
   let cy = 0, cz = 0 in
-  defm im : LSVlm<opcStr, "(${sy}), $sz", opc, RC, (ins uimm7:$sy, mimm:$sz)>;
+  defm im : LSVbm<opcStr, "(${sy}), $sz", opc, RC, (ins uimm7:$sy, mimm:$sz)>;
 }
 defm LSV : LSVm<"lsv", 0x8e, V64>;
 
