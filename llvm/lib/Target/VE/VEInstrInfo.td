@@ -1362,10 +1362,10 @@ let cx = 1 in defm FCMPS : RRFm<"fcmp.s", 0x7E, F32, f32>;
 
 // Section 8.7.6 - CMS (Compare and Select Maximum/Minimum Single)
 // cx: double/float, cw: max/min
-defm FMAXD : RRFm<"fmax.d", 0x3E, I64, f64>;
-let cx = 1 in defm FMAXS : RRFm<"fmax.s", 0x3E, F32, f32>;
-let cw = 1 in defm FMIND : RRFm<"fmin.d", 0x3E, I64, f64>;
-let cw = 1, cx = 1 in defm FMINS : RRFm<"fmin.s", 0x3E, F32, f32>;
+defm FMAXD : RRFm<"fmax.d", 0x3E, I64, f64, fmaxnum>;
+let cx = 1 in defm FMAXS : RRFm<"fmax.s", 0x3E, F32, f32, fmaxnum>;
+let cw = 1 in defm FMIND : RRFm<"fmin.d", 0x3E, I64, f64, fminnum>;
+let cw = 1, cx = 1 in defm FMINS : RRFm<"fmin.s", 0x3E, F32, f32, fminnum>;
 
 // Section 8.7.7 - FAQ (Floating Add Quadruple)
 defm FADDQ : RRFm<"fadd.q", 0x6C, F128, f128, fadd>;
@@ -2005,11 +2005,11 @@ def : Pat<(i32 (setcc f32:$LHS, f32:$RHS, cond:$cond)),
                        !add(63, 64),
                        (ORim 0, 0)), sub_i32)>;
 
-// Special SELECTCC pattern matches
-// Use min/max for better performance.
-//
-//   MAX/MIN  %res, %lhs, %rhs
-
+// Special SELECTCC patterns.
+//   Use min/max for better performance.
+//   There is combineMinNumMaxNum() in llvm, but in order to use it we need
+//   -enable-no-nans-fp-math --enable-no-signed-zeros-fp-math flags, so
+//   treating ogt/oge/olt/ole optimization here.
 def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOGT)),
           (FMAXDrr $LHS, $RHS)>;
 def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOGT)),
@@ -2018,7 +2018,6 @@ def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOGE)),
           (FMAXDrr $LHS, $RHS)>;
 def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOGE)),
           (FMAXSrr $LHS, $RHS)>;
-
 def : Pat<(f64 (selectcc f64:$LHS, f64:$RHS, f64:$LHS, f64:$RHS, SETOLT)),
           (FMINDrr $LHS, $RHS)>;
 def : Pat<(f32 (selectcc f32:$LHS, f32:$RHS, f32:$LHS, f32:$RHS, SETOLT)),

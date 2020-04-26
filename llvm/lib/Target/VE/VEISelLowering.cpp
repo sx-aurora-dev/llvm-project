@@ -1245,8 +1245,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::FNEARBYINT, VT, Expand);
     setOperationAction(ISD::FROUND, VT, Expand);
     setOperationAction(ISD::FFLOOR, VT, Expand);
-    setOperationAction(ISD::FMINNUM, VT, Expand);
-    setOperationAction(ISD::FMAXNUM, VT, Expand);
+    setOperationAction(ISD::FMINNUM, VT, Legal);
+    setOperationAction(ISD::FMAXNUM, VT, Legal);
     setOperationAction(ISD::FMINIMUM, VT, Expand);
     setOperationAction(ISD::FMAXIMUM, VT, Expand);
     setOperationAction(ISD::FSINCOS, VT, Expand);
