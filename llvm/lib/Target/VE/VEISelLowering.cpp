@@ -1140,6 +1140,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     // Use isel patterns for i64, Promote i32
     LegalizeAction Act = (IntVT == MVT::i32) ? Promote : Legal;
     setOperationAction(ISD::BITREVERSE, IntVT, Act);
+
+    // Legal smax and smin
+    setOperationAction(ISD::SMAX, IntVT, Legal);
+    setOperationAction(ISD::SMIN, IntVT, Legal);
   }
   /// } Int Ops
 
