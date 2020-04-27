@@ -79,6 +79,7 @@ unsigned VEELFObjectWriter::getRelocType(MCContext &Ctx,
                                                ? ELF::R_VE_UA64
                                                : ELF::R_VE_64);
 #endif
+  case VE::fixup_ve_reflong:            return ELF::R_VE_REFLONG;
   case VE::fixup_ve_hi32:               return ELF::R_VE_HI32;
   case VE::fixup_ve_lo32:               return ELF::R_VE_LO32;
 #if 0
@@ -87,8 +88,8 @@ unsigned VEELFObjectWriter::getRelocType(MCContext &Ctx,
 #endif
   case VE::fixup_ve_got_hi32:           return ELF::R_VE_GOT_HI32;
   case VE::fixup_ve_got_lo32:           return ELF::R_VE_GOT_LO32;
-  case VE::fixup_ve_gotoff_hi32:        return ELF::R_VE_GOT_HI32;
-  case VE::fixup_ve_gotoff_lo32:        return ELF::R_VE_GOT_LO32;
+  case VE::fixup_ve_gotoff_hi32:        return ELF::R_VE_GOTOFF_HI32;
+  case VE::fixup_ve_gotoff_lo32:        return ELF::R_VE_GOTOFF_LO32;
   case VE::fixup_ve_plt_hi32:           return ELF::R_VE_PLT_HI32;
   case VE::fixup_ve_plt_lo32:           return ELF::R_VE_PLT_LO32;
   case VE::fixup_ve_tls_gd_hi32:        return ELF::R_VE_TLS_GD_HI32;
