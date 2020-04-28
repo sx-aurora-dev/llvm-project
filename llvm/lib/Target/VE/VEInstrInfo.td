@@ -60,16 +60,20 @@ def uimm6 : Operand<i32>, PatLeaf<(imm), [{
 }
 
 // uimm7 - Generic immediate value.
+def ULO7 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getZExtValue() & 0x7f,
+                                   SDLoc(N), MVT::i32);
+}]>;
 def UImm7AsmOperand : AsmOperandClass { let Name = "UImm7"; }
 def uimm7 : Operand<i32>, PatLeaf<(imm), [{
-    return isUInt<7>(N->getZExtValue()); }]> {
+    return isUInt<7>(N->getZExtValue()); }], ULO7> {
   let ParserMatchClass = UImm7AsmOperand;
 }
 
 // uimm0to2 - Special immediate value represents 0, 1, and 2.
 def UImm0to2AsmOperand : AsmOperandClass { let Name = "UImm0to2"; }
 def uimm0to2 : Operand<i32>, PatLeaf<(imm), [{
-    return N->getZExtValue() >= 0 && N->getZExtValue() < 3; }]> {
+    return N->getZExtValue() < 3; }]> {
   let ParserMatchClass = UImm0to2AsmOperand;
 }
 
@@ -400,10 +404,9 @@ def brtarget32 : Operand<OtherVT> {
 def TLSSym : Operand<iPTR>;
 
 // Operand for printing out a condition code.
-def CCOpAsmOperand : AsmOperandClass {
-  let Name = "CCOp";
-}
-def CCOp : Operand<i32> {
+def CCOpAsmOperand : AsmOperandClass { let Name = "CCOp"; }
+def CCOp : Operand<i32>, ImmLeaf<i32, [{
+    return Imm >= 0 && Imm < 22; }], LO7> {
   let PrintMethod = "printCCOperand";
   let DecoderMethod = "DecodeCCOperand";
   let EncoderMethod = "getCCOpValue";
@@ -447,6 +450,18 @@ def getGOT        : Operand<iPTR>;
 def getFunPLT     : Operand<iPTR> {
   let PrintMethod = "printGetFunPLT";
 }
+
+// res = cmov cmp, t, f, cond
+def SDTCmovOp : SDTypeProfile<1, 4, [SDTCisSameAs<0, 2>, SDTCisSameAs<2, 3>,
+                                     SDTCisVT<4, i32>]>;
+def CMPI : SDNode<"VEISD::CMPI", SDTIntBinOp>;
+def CMPU : SDNode<"VEISD::CMPU", SDTIntBinOp>;
+def CMPF : SDNode<"VEISD::CMPF", SDTFPBinOp>;
+def SDTFPCmpQOp : SDTypeProfile<1, 2, [
+  SDTCisSameAs<1, 2>, SDTCisFP<0>, SDTCisFP<2>
+]>;
+def CMPQ : SDNode<"VEISD::CMPQ", SDTFPCmpQOp>;
+def CMOV : SDNode<"VEISD::CMOV", SDTCmovOp>;
 
 def VEeh_sjlj_setjmp: SDNode<"VEISD::EH_SJLJ_SETJMP",
                              SDTypeProfile<1, 1, [SDTCisInt<0>,
@@ -714,21 +729,30 @@ multiclass RRSWPm<string opcStr, bits<8>opc,
 //   e.g. CMOVL, CMOVW, CMOVD, and etc.
 let Constraints = "$sx = $sd", DisableEncoding = "$sd", hasSideEffects = 0,
     cfw = ? in
-multiclass RRCMOVm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty> {
+multiclass RRCMOVm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
+                   SDPatternOperator OpNode = null_frag,
+                   Operand immOp = simm7> {
   def rr : RR<opc, (outs I64:$sx), (ins CCOp:$cfw, RC:$sy, I64:$sz, I64:$sd),
-              !strconcat(opcStr, " $sx, $sz, $sy")>;
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set i64:$sx, (OpNode Ty:$sy, i64:$sz, i64:$sd, CCOp:$cfw))]>;
   let cy = 0 in
   def ir : RR<opc, (outs I64:$sx),
-              (ins CCOp:$cfw, simm7:$sy, I64:$sz, I64:$sd),
-              !strconcat(opcStr, " $sx, $sz, $sy")>;
+              (ins CCOp:$cfw, immOp:$sy, I64:$sz, I64:$sd),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set i64:$sx, (OpNode (Ty immOp:$sy), i64:$sz, i64:$sd,
+                                     CCOp:$cfw))]>;
   let cz = 0 in
   def rm : RR<opc, (outs I64:$sx),
               (ins CCOp:$cfw, RC:$sy, mimm:$sz, I64:$sd),
-              !strconcat(opcStr, " $sx, $sz, $sy")>;
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set i64:$sx, (OpNode Ty:$sy, (i64 mimm:$sz), i64:$sd,
+                                     CCOp:$cfw))]>;
   let cy = 0, cz = 0 in
   def im : RR<opc, (outs I64:$sx),
-              (ins CCOp:$cfw, simm7:$sy, mimm:$sz, I64:$sd),
-              !strconcat(opcStr, " $sx, $sz, $sy")>;
+              (ins CCOp:$cfw, immOp:$sy, mimm:$sz, I64:$sd),
+              !strconcat(opcStr, " $sx, $sz, $sy"),
+              [(set i64:$sx, (OpNode (Ty immOp:$sy), (i64 mimm:$sz), i64:$sd,
+                                     CCOp:$cfw))]>;
 }
 
 // Multiclass for floating point conversion instructions.
@@ -1230,15 +1254,15 @@ let cx = 1 in defm DIVSWZX : RRNCm<"divs.w.zx", 0x7B, I32, i32>;
 defm DIVSL : RRNCm<"divs.l", 0x7F, I64, i64, sdiv>;
 
 // Section 8.4.14 - CMP (Compare)
-defm CMPUL : RRNCm<"cmpu.l", 0x55, I64, i64>;
-let cx = 1 in defm CMPUW : RRNCm<"cmpu.w", 0x55, I32, i32>;
+defm CMPUL : RRNCm<"cmpu.l", 0x55, I64, i64, CMPU>;
+let cx = 1 in defm CMPUW : RRNCm<"cmpu.w", 0x55, I32, i32, CMPU>;
 
 // Section 8.4.15 - CPS (Compare Single)
-defm CMPSWSX : RRNCm<"cmps.w.sx", 0x7A, I32, i32>;
+defm CMPSWSX : RRNCm<"cmps.w.sx", 0x7A, I32, i32, CMPI>;
 let cx = 1 in defm CMPSWZX : RRNCm<"cmps.w.zx", 0x7A, I32, i32>;
 
 // Section 8.4.16 - CPX (Compare)
-defm CMPSL : RRNCm<"cmps.l", 0x6A, I64, i64>;
+defm CMPSL : RRNCm<"cmps.l", 0x6A, I64, i64, CMPI>;
 
 // Section 8.4.17 - CMS (Compare and Select Maximum/Minimum Single)
 // cx: sx/zx, cw: max/min
@@ -1289,10 +1313,12 @@ defm BRV : RRI1m<"brv", 0x39, I64, i64, bitreverse>;
 defm BSWP : RRSWPm<"bswp", 0x2B, I64, i64>;
 
 // Section 8.5.11 - CMOV (Conditional Move)
-let cw = 0, cw2 = 0 in defm CMOVL : RRCMOVm<"cmov.l.${cfw}", 0x3B, I64, i64>;
-let cw = 1, cw2 = 0 in defm CMOVW : RRCMOVm<"cmov.w.${cfw}", 0x3B, I32, i32>;
-let cw = 0, cw2 = 1 in defm CMOVD : RRCMOVm<"cmov.d.${cfw}", 0x3B, I64, f64>;
-let cw = 1, cw2 = 1 in defm CMOVS : RRCMOVm<"cmov.s.${cfw}", 0x3B, F32, f32>;
+defm CMOVL : RRCMOVm<"cmov.l.${cfw}", 0x3B, I64, i64, CMOV>;
+let cw = 1 in defm CMOVW : RRCMOVm<"cmov.w.${cfw}", 0x3B, I32, i32, CMOV>;
+let cw2 = 1 in
+defm CMOVD : RRCMOVm<"cmov.d.${cfw}", 0x3B, I64, f64, CMOV, simm7fp>;
+let cw = 1, cw2 = 1 in
+defm CMOVS : RRCMOVm<"cmov.s.${cfw}", 0x3B, F32, f32, CMOV, simm7fp>;
 def : MnemonicAlias<"cmov.l", "cmov.l.at">;
 def : MnemonicAlias<"cmov.w", "cmov.w.at">;
 def : MnemonicAlias<"cmov.d", "cmov.d.at">;
@@ -1356,8 +1382,8 @@ defm FDIVD : RRFm<"fdiv.d", 0x5D, I64, f64, fdiv>;
 let cx = 1 in defm FDIVS : RRFm<"fdiv.s", 0x5D, F32, f32, fdiv>;
 
 // Section 8.7.5 - FCP (Floating Compare)
-defm FCMPD : RRFm<"fcmp.d", 0x7E, I64, f64>;
-let cx = 1 in defm FCMPS : RRFm<"fcmp.s", 0x7E, F32, f32>;
+defm FCMPD : RRFm<"fcmp.d", 0x7E, I64, f64, CMPF>;
+let cx = 1 in defm FCMPS : RRFm<"fcmp.s", 0x7E, F32, f32, CMPF>;
 
 // Section 8.7.6 - CMS (Compare and Select Maximum/Minimum Single)
 // cx: double/float, cw: max/min
@@ -1376,7 +1402,7 @@ defm FSUBQ : RRFm<"fsub.q", 0x7C, F128, f128, fsub>;
 defm FMULQ : RRFm<"fmul.q", 0x6D, F128, f128, fmul>;
 
 // Section 8.7.10 - FCQ (Floating Compare Quadruple)
-defm FCMPQ : RRNCbm<"fcmp.q", 0x7D, I64, f64, F128, f128, null_frag, simm7fp,
+defm FCMPQ : RRNCbm<"fcmp.q", 0x7D, I64, f64, F128, f128, CMPQ, simm7fp,
                     mimmfp>;
 
 // Section 8.7.11 - FIX (Convert to Fixed Point)

@@ -1531,6 +1531,11 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(Hi)
     TARGET_NODE_CASE(CALL)
     TARGET_NODE_CASE(RET_FLAG)
+    TARGET_NODE_CASE(CMPI)
+    TARGET_NODE_CASE(CMPU)
+    TARGET_NODE_CASE(CMPF)
+    TARGET_NODE_CASE(CMPQ)
+    TARGET_NODE_CASE(CMOV)
     TARGET_NODE_CASE(EH_SJLJ_SETJMP)
     TARGET_NODE_CASE(EH_SJLJ_LONGJMP)
     TARGET_NODE_CASE(EH_SJLJ_SETUP_DISPATCH)
@@ -1573,6 +1578,16 @@ void VETargetLowering::computeKnownBitsForTargetNode
 
   switch (Op.getOpcode()) {
   default: break;
+  case VEISD::CMOV:
+    // CMOV is a following instruction, so pick t and f and calculate KnownBits.
+    //   res = CMOV comp, t, f, cond
+    Known = DAG.computeKnownBits(Op.getOperand(2), Depth + 1);
+    Known2 = DAG.computeKnownBits(Op.getOperand(1), Depth + 1);
+
+    // Only known if known in both the LHS and RHS.
+    Known.One &= Known2.One;
+    Known.Zero &= Known2.Zero;
+    break;
   }
 }
 

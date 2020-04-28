@@ -24,6 +24,12 @@ namespace VEISD {
 enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
+  CMPI,        // Compare between two signed integer values.
+  CMPU,        // Compare between two unsigned integer values.
+  CMPF,        // Compare between two floating-point values.
+  CMPQ,        // Compare between two quad floating-point values.
+  CMOV,        // Select between two values using the result of comparison.
+
   EH_SJLJ_SETJMP,           // SjLj exception handling setjmp.
   EH_SJLJ_LONGJMP,          // SjLj exception handling longjmp.
   EH_SJLJ_SETUP_DISPATCH,   // SjLj exception handling setup_dispatch.
