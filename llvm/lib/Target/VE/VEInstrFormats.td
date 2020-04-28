@@ -231,4 +231,5 @@ class Pseudo<dag outs, dag ins, string asmstr, list<dag> pattern = []>
    : InstVE<outs, ins, asmstr, pattern> {
   let isCodeGenOnly = 1;
   let isPseudo = 1;
+  let Size = 0;
 }

@@ -95,6 +95,11 @@ void VEMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   verifyInstructionPredicates(MI,
                               computeAvailableFeatures(STI.getFeatureBits()));
 
+  switch (MI.getOpcode()) {
+  case VE::TRAP:
+    // TRAP is not implemented at the moment.  No actual code.
+    return;
+  }
   uint64_t Bits = getBinaryCodeForInstr(MI, Fixups, STI);
   support::endian::write<uint64_t>(OS, Bits, support::little);
 #if 0

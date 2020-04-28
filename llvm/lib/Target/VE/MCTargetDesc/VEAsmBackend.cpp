@@ -28,9 +28,9 @@ static uint64_t adjustFixupValue(unsigned Kind, uint64_t Value) {
   case FK_Data_1:
   case FK_Data_2:
   case FK_Data_4:
+#endif
   case FK_Data_8:
     return Value;
-#endif
 
   case VE::fixup_ve_hi32:
   case VE::fixup_ve_pc_hi32:
@@ -63,9 +63,26 @@ static unsigned getFixupKindNumBytes(unsigned Kind) {
     return 1;
   case FK_Data_2:
     return 2;
+#endif
   case FK_Data_8:
     return 8;
-#endif
+
+  case VE::fixup_ve_reflong:
+  case VE::fixup_ve_hi32:
+  case VE::fixup_ve_lo32:
+  case VE::fixup_ve_pc_hi32:
+  case VE::fixup_ve_pc_lo32:
+  case VE::fixup_ve_got_hi32:
+  case VE::fixup_ve_got_lo32:
+  case VE::fixup_ve_gotoff_hi32:
+  case VE::fixup_ve_gotoff_lo32:
+  case VE::fixup_ve_plt_hi32:
+  case VE::fixup_ve_plt_lo32:
+  case VE::fixup_ve_tls_gd_hi32:
+  case VE::fixup_ve_tls_gd_lo32:
+  case VE::fixup_ve_tpoff_hi32:
+  case VE::fixup_ve_tpoff_lo32:
+    return 4;
   }
 }
 
