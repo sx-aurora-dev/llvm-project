@@ -52,21 +52,13 @@ unsigned VEELFObjectWriter::getRelocType(MCContext &Ctx,
     switch(Fixup.getTargetKind()) {
     default:
       llvm_unreachable("Unimplemented fixup -> relocation");
-#if 0
-    case FK_Data_1:             return ELF::R_VE_DISP8;
-    case FK_Data_2:             return ELF::R_VE_DISP16;
-    case FK_Data_4:             return ELF::R_VE_DISP32;
-    case FK_Data_8:             return ELF::R_VE_DISP64;
-#endif
-    case FK_Data_1:
+    case FK_PCRel_1:
       llvm_unreachable("Unimplemented fixup fk_data_1 -> relocation");
-    case FK_Data_2:
+    case FK_PCRel_2:
       llvm_unreachable("Unimplemented fixup fk_data_2 -> relocation");
-    case FK_Data_4:
-      llvm_unreachable("Unimplemented fixup fk_data_4 -> relocation");
-    case FK_Data_8:
-      llvm_unreachable("Unimplemented fixup fk_data_8 -> relocation");
-    
+    // FIXME: relative kind?
+    case FK_PCRel_4:            return ELF::R_VE_REFLONG;
+    case FK_PCRel_8:            return ELF::R_VE_REFQUAD;
     case VE::fixup_ve_pc_hi32:  return ELF::R_VE_PC_HI32;
     case VE::fixup_ve_pc_lo32:  return ELF::R_VE_PC_LO32;
     }
@@ -75,24 +67,11 @@ unsigned VEELFObjectWriter::getRelocType(MCContext &Ctx,
   switch(Fixup.getTargetKind()) {
   default:
     llvm_unreachable("Unimplemented fixup -> relocation");
-#if 0
-  case FK_Data_1:                       return ELF::R_VE_8;
-  case FK_Data_2:                       return ((Fixup.getOffset() % 2)
-                                               ? ELF::R_VE_UA16
-                                               : ELF::R_VE_16);
-  case FK_Data_4:                       return ((Fixup.getOffset() % 4)
-                                               ? ELF::R_VE_UA32
-                                               : ELF::R_VE_32);
-  case FK_Data_8:                       return ((Fixup.getOffset() % 8)
-                                               ? ELF::R_VE_UA64
-                                               : ELF::R_VE_64);
-#endif
   case FK_Data_1:
     llvm_unreachable("Unimplemented fixup fk_data_1 -> relocation");
   case FK_Data_2:
     llvm_unreachable("Unimplemented fixup fk_data_2 -> relocation");
-  case FK_Data_4:
-    llvm_unreachable("Unimplemented fixup fk_data_4 -> relocation");
+  case FK_Data_4:                       return ELF::R_VE_REFLONG;
   case FK_Data_8:                       return ELF::R_VE_REFQUAD;
   case VE::fixup_ve_reflong:            return ELF::R_VE_REFLONG;
   case VE::fixup_ve_hi32:               return ELF::R_VE_HI32;

@@ -24,14 +24,15 @@ static uint64_t adjustFixupValue(unsigned Kind, uint64_t Value) {
   switch (Kind) {
   default:
     llvm_unreachable("Unknown fixup kind!");
-#if 0
   case FK_Data_1:
   case FK_Data_2:
   case FK_Data_4:
-#endif
   case FK_Data_8:
+  case FK_PCRel_1:
+  case FK_PCRel_2:
+  case FK_PCRel_4:
+  case FK_PCRel_8:
     return Value;
-
   case VE::fixup_ve_hi32:
   case VE::fixup_ve_pc_hi32:
   case VE::fixup_ve_got_hi32:
@@ -40,7 +41,6 @@ static uint64_t adjustFixupValue(unsigned Kind, uint64_t Value) {
   case VE::fixup_ve_tls_gd_hi32:
   case VE::fixup_ve_tpoff_hi32:
     return (Value >> 32) & 0xffffffff;
-
   case VE::fixup_ve_reflong:
   case VE::fixup_ve_lo32:
   case VE::fixup_ve_pc_lo32:
@@ -57,16 +57,16 @@ static uint64_t adjustFixupValue(unsigned Kind, uint64_t Value) {
 static unsigned getFixupKindNumBytes(unsigned Kind) {
   switch (Kind) {
   default:
-    return 8;
-#if 0
+    llvm_unreachable("Unknown fixup kind!");
   case FK_Data_1:
+  case FK_PCRel_1:
     return 1;
   case FK_Data_2:
+  case FK_PCRel_2:
     return 2;
-#endif
-  case FK_Data_8:
-    return 8;
-
+    return 4;
+  case FK_Data_4:
+  case FK_PCRel_4:
   case VE::fixup_ve_reflong:
   case VE::fixup_ve_hi32:
   case VE::fixup_ve_lo32:
@@ -83,6 +83,9 @@ static unsigned getFixupKindNumBytes(unsigned Kind) {
   case VE::fixup_ve_tpoff_hi32:
   case VE::fixup_ve_tpoff_lo32:
     return 4;
+  case FK_Data_8:
+  case FK_PCRel_8:
+    return 8;
   }
 }
 
