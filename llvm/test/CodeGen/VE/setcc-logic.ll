@@ -6,8 +6,6 @@ define i64 @setcc_logic(i64 %a, i64 %b, i64 %c, i64 %d, i64 %t, i64 %f) {
 ; CHECK-NEXT:    xor %s0, %s0, %s1
 ; CHECK-NEXT:    xor %s1, %s2, %s3
 ; CHECK-NEXT:    or %s0, %s0, %s1
-; CHECK-NEXT:    or %s1, 0, (0)1
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s5, %s4, %s0
 ; CHECK-NEXT:    or %s0, 0, %s5
 ; CHECK-NEXT:    or %s11, 0, %s9

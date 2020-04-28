@@ -2284,15 +2284,14 @@ define i32 @test_atomic_fetch_umax_4() {
 ; CHECK-NEXT:  and %s0, %s0, (32)0
 ; CHECK-NEXT:  lea.sl %s1, ui@hi(, %s0)
 ; CHECK-NEXT:  ldl.sx %s0, (, %s1)
-; CHECK-NEXT:  or %s2, 1, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:  or %s3, 0, %s0
-; CHECK-NEXT:  cmpu.w %s4, %s0, %s2
+; CHECK-NEXT:  or %s2, 0, %s0
+; CHECK-NEXT:  cmpu.w %s3, 1, %s0
 ; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  cmov.w.gt %s0, %s3, %s4
-; CHECK-NEXT:  cas.w %s0, (%s1), %s3
-; CHECK-NEXT:  brne.w %s0, %s3, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:  cmov.w.ge %s0, (63)0, %s3
+; CHECK-NEXT:  cas.w %s0, (%s1), %s2
+; CHECK-NEXT:  brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0
@@ -2311,16 +2310,14 @@ define i32 @test_atomic_fetch_umin_4() {
 ; CHECK-NEXT:  and %s0, %s0, (32)0
 ; CHECK-NEXT:  lea.sl %s1, ui@hi(, %s0)
 ; CHECK-NEXT:  ldl.sx %s0, (, %s1)
-; CHECK-NEXT:  or %s2, 1, (0)1
-; CHECK-NEXT:  or %s3, 2, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:  # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:  or %s4, 0, %s0
-; CHECK-NEXT:  cmpu.w %s5, %s0, %s3
+; CHECK-NEXT:  or %s2, 0, %s0
+; CHECK-NEXT:  cmpu.w %s3, 2, %s0
 ; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  cmov.w.lt %s0, %s4, %s5
-; CHECK-NEXT:  cas.w %s0, (%s1), %s4
-; CHECK-NEXT:  brne.w %s0, %s4, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:  cmov.w.le %s0, (63)0, %s3
+; CHECK-NEXT:  cas.w %s0, (%s1), %s2
+; CHECK-NEXT:  brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %atomicrmw.end
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  # kill: def $sw0 killed $sw0 killed $sx0

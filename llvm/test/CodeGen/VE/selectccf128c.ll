@@ -74,10 +74,8 @@ define fp128 @selectccsgti128(i128, i128, fp128, fp128) {
 ; CHECK-NEXT:    cmpu.l %s0, %s0, %s2
 ; CHECK-NEXT:    cmov.l.gt %s34, (63)0, %s0
 ; CHECK-NEXT:    cmov.l.eq %s3, %s34, %s1
-; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    cmps.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    cmov.w.ne %s6, %s4, %s0
-; CHECK-NEXT:    cmov.w.ne %s7, %s5, %s0
+; CHECK-NEXT:    cmov.w.ne %s6, %s4, %s3
+; CHECK-NEXT:    cmov.w.ne %s7, %s5, %s3
 ; CHECK-NEXT:    or %s0, 0, %s6
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s11, 0, %s9

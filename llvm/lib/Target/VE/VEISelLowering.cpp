@@ -1462,9 +1462,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::FP_ROUND,  MVT::f128, Legal);
 
   // Other configurations related to f128.
-  setOperationAction(ISD::SELECT,    MVT::f128, Legal);
-  setOperationAction(ISD::SELECT_CC, MVT::f128, Legal);
-  setOperationAction(ISD::SETCC,     MVT::f128, Legal);
   setOperationAction(ISD::BR_CC,     MVT::f128, Legal);
 
   setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
@@ -1590,28 +1587,6 @@ void VETargetLowering::computeKnownBitsForTargetNode
     break;
   }
 }
-
-#if 0
-// Look at LHS/RHS/CC and see if they are a lowered setcc instruction.  If so
-// set LHS/RHS and VECC to the LHS/RHS of the setcc and VECC to the condition.
-static void LookThroughSetCC(SDValue &LHS, SDValue &RHS,
-                             ISD::CondCode CC, unsigned &VECC) {
-  if (isNullConstant(RHS) &&
-      CC == ISD::SETNE &&
-      (((LHS.getOpcode() == VEISD::SELECT_ICC ||
-         LHS.getOpcode() == VEISD::SELECT_XCC) &&
-        LHS.getOperand(3).getOpcode() == VEISD::CMPICC) ||
-       (LHS.getOpcode() == VEISD::SELECT_FCC &&
-        LHS.getOperand(3).getOpcode() == VEISD::CMPFCC)) &&
-      isOneConstant(LHS.getOperand(0)) &&
-      isNullConstant(LHS.getOperand(1))) {
-    SDValue CMPCC = LHS.getOperand(3);
-    VECC = cast<ConstantSDNode>(LHS.getOperand(2))->getZExtValue();
-    LHS = CMPCC.getOperand(0);
-    RHS = CMPCC.getOperand(1);
-  }
-}
-#endif
 
 // Convert to a target node and set target flags.
 SDValue VETargetLowering::withTargetFlags(SDValue Op, unsigned TF,
