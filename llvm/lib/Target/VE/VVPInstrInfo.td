@@ -27,12 +27,12 @@ def SDTStoreVVP: SDTypeProfile<0, 4, [       // vvp store
   SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
 ]>;
 
-// scatter (Value, PtrVec, Mask, Vlen)
+// scatter (Chain, Value, PtrVec, Mask, Vlen)
 def SDTScatterVVP: SDTypeProfile<0, 4, [     // vvp scatter
   SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
 ]>;
 
-// gather (PtrVec, Mask, Vlen)
+// gather (Chain, PtrVec, Mask, Vlen)
 def SDTGatherVVP: SDTypeProfile<1, 3, [     // vvp gather
   SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3> 
 ]>;
@@ -95,7 +95,7 @@ def SDTReduceVVP : SDTypeProfile<1, 3, [    // vp_reduce (w/o start arg)
 
 
 // load store
-def vvp_load    : SDNode<"VEISD::VVP_LOAD",  SDTLoadVVP, [SDNPHasChain, SDNPMayLoad, SDNPMemOperand]>;
+def vvp_load    : SDNode<"VEISD::VVP_LOAD",  SDTLoadVVP,  [SDNPHasChain, SDNPMayLoad, SDNPMemOperand ]>;
 def vvp_store   : SDNode<"VEISD::VVP_STORE", SDTStoreVVP, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 
 // int

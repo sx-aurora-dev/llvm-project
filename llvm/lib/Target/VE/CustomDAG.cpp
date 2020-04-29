@@ -553,5 +553,25 @@ SDValue CustomDAG::createMaskCast(SDValue VectorV, SDValue AVL) const {
                      {VectorV, AVL});
 }
 
+EVT CustomDAG::legalizeVectorType(SDValue Op, VVPExpansionMode Mode) const {
+  return VLI.LegalizeVectorType(Op->getValueType(0), Op, DAG, Mode);
+}
+
+SDValue CustomDAG::getTokenFactor(ArrayRef<SDValue> Tokens) const {
+  return DAG.getNode(ISD::TokenFactor, DL, MVT::Other, Tokens);
+}
+
+SDValue CustomDAG::getVVPLoad(EVT LegalResVT, SDValue Chain, SDValue PtrV,
+                              SDValue MaskV, SDValue AVL) const {
+  return DAG.getNode(VEISD::VVP_LOAD, DL, {LegalResVT, MVT::Other},
+                     {Chain, PtrV, MaskV, AVL});
+}
+
+SDValue CustomDAG::getVVPGather(EVT LegalResVT, SDValue ChainV, SDValue PtrV,
+                                SDValue MaskV, SDValue AVL) const {
+  return DAG.getNode(VEISD::VVP_GATHER, DL, {LegalResVT, MVT::Other},
+                     {ChainV, PtrV, MaskV, AVL});
+}
+
 /// } class CustomDAG
 } // namespace llvm

@@ -16,6 +16,7 @@
 
 #include "VE.h"
 #include "llvm/CodeGen/TargetLowering.h"
+#include "VELoweringInfo.h"
 
 namespace llvm {
 class VESubtarget;
@@ -112,18 +113,10 @@ enum NodeType : unsigned {
 };
 } // namespace VEISD
 
-enum class VVPExpansionMode : int8_t {
-  ToNextWidth = 0,
-  // for use in result type legalization - expand to the next expected result size
-
-  ToNativeWidth = 1
-  // for use in LowerOperation -> directly expand to the expanded width
-};
-
 
 using VecLenOpt = Optional<unsigned>;
 
-class VETargetLowering : public TargetLowering {
+class VETargetLowering final : public TargetLowering, public VELoweringInfo {
   const VESubtarget *Subtarget;
 
   void initRegisterClasses();
@@ -215,9 +208,12 @@ public:
                        SelectionDAG &DAG) const;
   SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
 
+  /// VELoweringInfo {
+  EVT LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG, VVPExpansionMode) const override;
+  /// } VELoweringInfo
+
   /// Custom Lower {
   // legalize the result vector type for operation \p Op
-  EVT LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG, VVPExpansionMode) const;
 
   LegalizeAction getActionForExtendedType(unsigned Op, EVT VT) const override {
     return VT.isVector() ? Custom : Expand;

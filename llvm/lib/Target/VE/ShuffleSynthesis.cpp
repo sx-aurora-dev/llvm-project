@@ -276,7 +276,7 @@ public:
     if (!ES.isDefined())
       return ElemSelect::Undef();
 
-    // insertion from scalar registers (not a constant)
+      // insertion from scalar registers (not a constant)
 #if 0
     LLVM_DEBUG(dbgs() << "VRegView ES: " << DestIdx << " value: ";
                ES.V->print(dbgs());
@@ -1077,10 +1077,269 @@ public:
 
 /// } Broadcast Strategy
 
+/// Constant Elements {
+// This strategy emits a constant vector with all the elements and loads it from
+// memory.
+struct ConstantElemOp final : public AbstractShuffleOp {
+  Constant *VecConstant;
+  ConstantElemOp(Constant *VecConstant) : VecConstant(VecConstant) {}
+  ~ConstantElemOp() {}
+
+  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) {
+    EVT LegalResVT = PartialV.getValueType();
+    const EVT PtrVT = MVT::i64;
+    // const unsigned LegalNumElems = LegalResVT.getVectorNumElements();
+    const unsigned VecAlignBytes = 8;
+    SDValue ConstantPtrV =
+        CDAG.DAG.getConstantPool(VecConstant, PtrVT, VecAlignBytes);
+    SDValue ResultV;
+    CDAG.weaveIntoRootChain([&]() {
+      SDValue Chain = CDAG.DAG.getEntryNode();
+#if 1
+      // FIXME only works for 32/64bit elements
+      const unsigned NumBufferElems =
+          VecConstant->getType()->getVectorNumElements();
+      SDValue MaskV =
+          CDAG.createUniformConstMask(LegalResVT.getVectorNumElements(), true);
+      SDValue VLV = CDAG.getConstEVL(NumBufferElems);
+      ResultV = CDAG.getVVPLoad(LegalResVT, Chain, ConstantPtrV, MaskV, VLV);
+#else
+      MachinePointerInfo MPI;
+      ResultV = CDAG.DAG.getLoad(LegalResVT, CDAG.DL, Chain, ConstantPtrV, MPI);
+#endif
+      return SDValue(ResultV.getNode(), 1);
+    });
+    return ResultV;
+  }
+
+  void print(raw_ostream &out) const {
+    out << "ConstantElemShuffle (";
+    VecConstant->print(out);
+    out << ")\n";
+  }
+};
+
+class ConstantElemStrategy final : public ShuffleStrategy {
+public:
+  void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
+                          PartialShuffleCB CB) override {
+
+    Type *ElemTy = nullptr;
+    unsigned NumConstElems = 0;
+    std::vector<Constant *> CVec;
+    unsigned LastConstElemVL = 0;
+    for (unsigned Idx = 0; Idx < MV.getNumElements(); ++Idx) {
+      auto ES = MV.getSourceElem(Idx);
+      Constant *ElemC = nullptr;
+      if (!ES.isDefined()) {
+        ElemC = nullptr;
+      } else if (!ES.isElemInsert()) {
+        ElemC = nullptr;
+      } else if (ConstantSDNode *ElemN = dyn_cast<ConstantSDNode>(ES.V)) {
+        ElemC = const_cast<ConstantInt *>(ElemN->getConstantIntValue());
+      } else if (ConstantFPSDNode *ElemN = dyn_cast<ConstantFPSDNode>(ES.V)) {
+        ElemC = const_cast<ConstantFP *>(ElemN->getConstantFPValue());
+      }
+
+      if (ElemC) {
+        if (!ElemTy)
+          ElemTy = ElemC->getType();
+        LastConstElemVL = Idx + 1;
+        ++NumConstElems;
+      }
+
+      CVec.push_back(ElemC);
+    }
+
+    // FIXME Heuristics
+    const unsigned ConstElemThreshold = 8;
+    if (NumConstElems < ConstElemThreshold)
+      return;
+
+    // Truncate up to the last constant entry
+    CVec.resize(LastConstElemVL);
+
+    auto UDVal = UndefValue::get(ElemTy);
+    for (unsigned Idx = 0; Idx < CVec.size(); ++Idx) {
+      if (!CVec[Idx]) {
+        CVec[Idx] = UDVal;
+      } else {
+        FromState.unsetMissing(Idx);
+      }
+    }
+
+    auto *CV = ConstantVector::get(CVec);
+    CB(new ConstantElemOp(CV), FromState);
+  }
+};
+
+/// } Constant Elements
+
+/// Gather Strategy {
+
+// This strategy provides missing lanes by writing the source register to the
+// stack a stack lot and gathering from it to the right lanes (using passthru)
+
+struct GatherShuffleOp final : public AbstractShuffleOp {
+  SDValue SrcVectorV;
+  std::vector<unsigned> SrcLanes;
+  LaneBits TargetLanes;
+  unsigned MaxVL;
+
+  GatherShuffleOp(SDValue SrcVectorV, LaneBits TargetLanes, unsigned MaxVL)
+      : SrcVectorV(SrcVectorV), TargetLanes(TargetLanes), MaxVL(MaxVL) {}
+
+  ~GatherShuffleOp() {}
+
+  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) {
+    // Spill the requires elements of \p SrcVectorV to the stack
+    EVT LegalizedSrcVT =
+        CDAG.legalizeVectorType(SrcVectorV, VVPExpansionMode::ToNextWidth);
+
+    EVT LegalResVT = PartialV.getValueType();
+    const unsigned LegalNumElems = LegalResVT.getVectorNumElements();
+    const unsigned ElemBytes =
+        LegalResVT.getVectorElementType().getStoreSizeInBits();
+
+    // ptr offset type
+    MVT PtrVT = MVT::i64;
+    EVT PtrVecVT = CDAG.getVectorVT(PtrVT, LegalNumElems);
+
+    const unsigned SpillAlign = 8;
+    //
+    // TODO use the smallest possible spill type
+#if 1
+    auto VecSlotPtr = CDAG.DAG.CreateStackTemporary(LegalizedSrcVT, SpillAlign);
+#else
+    // FIXME use something like the below code:
+    uint64_t TySize = CDAG.getDataLayout().getTypeAllocSize(LegalizeSrcVT);
+    int SSFI = MF.getFrameInfo().CreateStackObject(TySize, Align, false);
+    SDValue StackSlot = DAG.getFrameIndex(SSFI, TLI.getFrameIndexTy(DL));
+    Chain = DAG.getTruncStore(Chain, Location, OpInfo.CallOperand, StackSlot,
+                              MachinePointerInfo::getFixedStack(MF, SSFI),
+                              TLI.getMemValueType(DL, Ty));
+#endif
+
+    // Spill to VecSlot
+    MachinePointerInfo MPI;
+    SDValue Chain = CDAG.DAG.getStore(CDAG.DAG.getEntryNode(), CDAG.DL,
+                                      SrcVectorV, VecSlotPtr, MPI);
+
+    // Compute gahter indices
+    SDValue TrueMaskV = CDAG.createUniformConstMask(LegalNumElems, true);
+    SDValue MaskV = PartialV.isUndef()
+                        ? TrueMaskV
+                        : CDAG.createConstMask(MaxVL, TargetLanes);
+
+    std::vector<SDValue> GatherOffsets;
+    for (unsigned Idx = 0; Idx < MaxVL; ++Idx) {
+      auto ES = MV.getSourceElem(Idx);
+      if (ES.V != SrcVectorV) {
+        // Need to emit an inbounds offset here to do the gather without
+        // masking.
+        GatherOffsets.push_back(CDAG.getConstant(0, PtrVT));
+        continue;
+      }
+
+      assert(ES.isElemTransfer());
+      GatherOffsets.push_back(
+          CDAG.getConstant(ElemBytes * ES.getElemIdx(), PtrVT)); // TODO
+    }
+    for (unsigned Idx = MaxVL; Idx < LegalNumElems; ++Idx) {
+      GatherOffsets.push_back(CDAG.getUndef(PtrVT));
+    }
+
+    SDValue MaxVLV = CDAG.getConstEVL(MaxVL);
+    SDValue BasePtrV = CDAG.CreateBroadcast(PtrVecVT, VecSlotPtr);
+    SDValue OffsetV = CDAG.getNode(
+        ISD::BUILD_VECTOR, PtrVecVT,
+        GatherOffsets); // TODO directly call into constant vector generation
+    SDValue GatherPtrV = CDAG.getNode(ISD::ADD, PtrVecVT, {BasePtrV, OffsetV});
+
+    SDValue ElemV =
+        CDAG.getVVPGather(LegalResVT, Chain, GatherPtrV, TrueMaskV, MaxVLV);
+    Chain = SDValue(ElemV.getNode(), 1);
+
+    // weave in with the root chain
+    CDAG.DAG.setRoot(CDAG.getTokenFactor({CDAG.DAG.getRoot(), Chain}));
+
+    if (PartialV.isUndef()) {
+      return ElemV;
+    }
+    return CDAG.createSelect(LegalResVT, ElemV, PartialV, MaskV, MaxVLV);
+  }
+
+  void print(raw_ostream &out) const {
+    out << "GatherShuffle (VL: " << MaxVL << ", SourceVector: ";
+    SrcVectorV->print(out);
+    out << ")\n";
+  }
+};
+
+class GatherStrategy final : public ShuffleStrategy {
+public:
+  void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
+                          PartialShuffleCB CB) override {
+
+    std::unordered_map<SDNode *, unsigned> VecSourceHisto;
+
+    // most frequent vector source
+    SDValue MaxV;
+    unsigned MaxCount = 0;
+    unsigned MaxVL = 0;
+
+    // Find the most frequent vector source
+    FromState.for_missing([&](unsigned Idx) {
+      ElemSelect ES = MV.getSourceElem(Idx);
+      if (!ES.isDefined())
+        return IterContinue;
+      if (ES.isElemInsert())
+        return IterContinue;
+
+      SDNode *SrcN = ES.V.getNode();
+      auto ItSrc = VecSourceHisto.find(SrcN);
+      unsigned Count = 0;
+      if (ItSrc != VecSourceHisto.end()) {
+        Count = ItSrc->second + 1;
+      }
+      if (Count > MaxCount) {
+        MaxCount = Count;
+        MaxV = ES.V;
+        MaxVL = Idx + 1;
+      }
+      VecSourceHisto[SrcN] = Count;
+      return IterContinue;
+    });
+
+    // Abort if below a certain threshold
+    const unsigned MinGatherElements = 32;
+    if (MaxCount < MinGatherElements)
+      return;
+
+    // Find all lanes with this source
+    LaneBits TargetBits;
+    TargetBits.reset();
+    FromState.for_missing([&](unsigned Idx) {
+      auto ES = MV.getSourceElem(Idx);
+      if (!ES.isDefined())
+        return IterContinue;
+      if (ES.V == MaxV) {
+        TargetBits[Idx] = ES.V == MaxV;
+        FromState.unsetMissing(Idx);
+      }
+      return IterContinue;
+    });
+
+    CB(new GatherShuffleOp(MaxV, TargetBits, MaxVL), FromState);
+  }
+};
+
+/// } Gather Strategy
+
 IterControl ShuffleAnalysis::runStrategy(ShuffleStrategy &Strat,
                                          unsigned NumRounds, MaskView &MV,
                                          PartialShuffleState &PSS) {
-  for (unsigned i = 0; i < NumRounds; ++i) {
+  for (unsigned i = 0; !PSS.isComplete() && i < NumRounds; ++i) {
     bool Progress = false;
     Strat.planPartialShuffle(
         MV, PSS,
@@ -1099,14 +1358,23 @@ IterControl ShuffleAnalysis::runStrategy(ShuffleStrategy &Strat,
 ShuffleAnalysis::AnalyzeResult ShuffleAnalysis::analyze() {
   PartialShuffleState PSS = PartialShuffleState::fromInitialMask(MV);
 
+  // Detect simple broadcast, SEQ patterns (that explains the *entire* pattern)
   if (IterBreak == run<LegacyPatternStrategy>(1, MV, PSS))
     return CanSynthesize;
+  // Load all constant entries from the constant pool.
+  if (IterBreak == run<ConstantElemStrategy>(1, MV, PSS))
+    return CanSynthesize;
+  // Broadcast and blend the most frequent single element.
   if (IterBreak == run<BroadcastStrategy>(3, MV, PSS))
     return CanSynthesize;
+  // Provide elements by VMV.
   if (IterBreak == run<VMVShuffleStrategy>(5, MV, PSS))
     return CanSynthesize;
+  // Finally, store vector sources to memory and gather them
+  if (IterBreak == run<GatherStrategy>(3, MV, PSS))
+    return CanSynthesize;
 
-  // Fallback
+  // Fallback: LVS-LSV the elements into place.
   ScalarTransferStrategy STS;
   STS.planPartialShuffle(
       MV, PSS, [&](AbstractShuffleOp *PartialOp, PartialShuffleState NextPSS) {

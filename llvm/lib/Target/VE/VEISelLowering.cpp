@@ -243,41 +243,6 @@ SDValue VETargetLowering::ExpandSELECT(SDValue Op,
   return CDAG.createSelect(LegalResVT, OnTrueV, OnFalseV, CondVecV, AVL);
 }
 
-#if 0
-SDValue VETargetLowering::LowerSELECT_CC(SDValue Op, SelectionDAG &DAG) const {
-  SDLoc dl(Op);
-  LLVM_DEBUG(dbgs() << "Lowering SELECT_CC\n");
-
-  // only lower mask blends this way
-  MVT Ty = Op.getSimpleValueType();
-  if (!Ty.isVector())
-    return Op;
-  if (Ty.getVectorElementType() != MVT::i1)
-    return Op;
-
-  SDValue A = Op.getOperand(0);
-  SDValue B = Op.getOperand(1);
-  SDValue X = Op.getOperand(2);
-  SDValue Y = Op.getOperand(3);
-  SDValue CC = Op.getOperand(4);
-
-  assert(A.getSimpleValueType() == MVT::i64);
-  assert(X.getSimpleValueType() == MVT::v256i1);
-
-  MVT CastVecTy = MVT::v256i64; // FIXME vectorize scalar type for broadcast
-  MVT VecTy = Op.getSimpleValueType();
-
-  CustomDAG CDAG(DAG, dl);
-
-  // lift to a vector compare
-  SDValue Abc = CDAG.CreateBroadcast(CastVecTy, A);
-  SDValue Bbc = CDAG.CreateBroadcast(CastVecTy, B);
-
-  auto VecCmp = DAG.getNode(ISD::SETCC, dl, MVT::v256i1, {Abc, Bbc, CC});
-  return DAG.getSelect(dl, VecTy, VecCmp, X, Y);
-}
-#endif
-
 SDValue
 VETargetLowering::LowerSETCCInVectorArithmetic(SDValue Op,
                                                SelectionDAG &DAG) const {
@@ -295,7 +260,7 @@ VETargetLowering::LowerSETCCInVectorArithmetic(SDValue Op,
   std::vector<SDValue> FixedOperandList;
   bool NeededExpansion = false;
 
-  CustomDAG CDAG(DAG, dl);
+  CustomDAG CDAG(*this, DAG, dl);
 
   for (size_t i = 0; i < Op->getNumOperands(); ++i) {
     // check whether this is an v256i1 SETCC
@@ -340,13 +305,13 @@ SDValue VETargetLowering::LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
   SDLoc DL(Op);
 
   EVT ResTy = Op.getValueType();
-  EVT NativeResTy = LegalizeVectorType(ResTy, Op, DAG, Mode);
+  CustomDAG CDAG(*this, DAG, Op);
+  EVT NativeResTy = CDAG.legalizeVectorType(Op, Mode);
 
   // FIXME
   Optional<SDValue> OptVL = EVLToVal(
       MinVectorLength(ResTy.getVectorNumElements(), VecLenHint), DL, DAG);
 
-  CustomDAG CDAG(DAG, DL);
   return CDAG.CreateBroadcast(NativeResTy, Op.getOperand(0), OptVL);
 }
 
@@ -371,7 +336,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
   assert(OcOpt.hasValue());
   unsigned VVPOC = OcOpt.getValue();
 
-  CustomDAG CDAG(DAG, Op);
+  CustomDAG CDAG(*this, DAG, Op);
 
   EVT ResVT = getSplitVT(Op.getValue(0).getValueType(), CDAG);
 
@@ -392,8 +357,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   // re-package into a proper packed operation
-  EVT PackedVT =
-      LegalizeVectorType(Op.getValue(0).getValueType(), Op, CDAG.DAG, Mode);
+  EVT PackedVT = CDAG.legalizeVectorType(Op, Mode);
   return CDAG.CreatePack(PackedVT, PartOps[(int)SubElem::Lo],
                          PartOps[(int)SubElem::Hi], AVL);
 }
@@ -563,7 +527,7 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
          "TODO implement this operation in the VVP isel layer");
 
   // Select the AVL
-  CustomDAG CDAG(DAG, Op);
+  CustomDAG CDAG(*this, DAG, Op);
   unsigned AdjustedLen = PackedMode ? (OpVectorLength + 1) / 2 : OpVectorLength;
   SDValue LenVal = CDAG.getConstant(AdjustedLen, MVT::i32);
 
@@ -581,8 +545,7 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   ///// Widen the actual result type /////
   // FIXME We cannot use the idiomatic type here since that type reflects the
   // operatino vector width (and the element type does not matter as much).
-  EVT OldResVT = Op.getValue(0)->getValueType(0);
-  EVT ResVecTy = LegalizeVectorType(OldResVT, Op, DAG, Mode);
+  EVT ResVecTy = CDAG.legalizeVectorType(Op, Mode);
 
   /// Use the eventual native vector width for all newly generated operands
   // we do not want to go through ::ReplaceNodeResults again only to have them
@@ -738,29 +701,6 @@ SDValue VETargetLowering::WidenVVPOperation(SDValue Op, SelectionDAG &DAG,
   return NewN;
 }
 
-#if 0
-// TODO DCE
-SDValue VETargetLowering::LowerSETCC(SDValue Op, SelectionDAG &DAG) const {
-  SDLoc dl(Op);
-
-  // re-adjust vector SETCCs to a v256i1 type
-  MVT Ty = Op.getSimpleValueType();
-  if (!Ty.isVector())
-    return Op;
-
-  if (Ty.getVectorElementType() == MVT::i1)
-    return Op;
-
-  LLVM_DEBUG(dbgs() << "Translating vector SETCC to vector mask register\n");
-
-  // this may cause incosistencies in users that needed SETCC to have a v256i64
-  // type we fix those up again in ::LowerVectorArithmetic by selecting based on
-  // the SETCC result.
-  return DAG.getNode(ISD::SETCC, dl, MVT::v256i1, Op.getOperand(0),
-                     Op.getOperand(1), Op.getOperand(2));
-}
-#endif
-
 SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
                                                 VVPExpansionMode Mode,
                                                 VecLenOpt VecLenHint) const {
@@ -771,9 +711,9 @@ SDValue VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
   Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
   EVT OpVecTy = OpVecTyOpt.getValue();
 
-  EVT LegalResVT =
-      LegalizeVectorType(OpVecTy, Op, DAG, Mode); // vector result type
-  CustomDAG CDAG(DAG, Op);
+  CustomDAG CDAG(*this, DAG, Op);
+  auto MemN = cast<MemSDNode>(Op.getNode());
+  EVT LegalResVT = LegalizeVectorType(MemN->getMemoryVT(), Op, DAG, Mode);
 
   SDValue OpVectorLength;
   SDValue Index;
@@ -887,8 +827,8 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
   auto BaseIdxN = Op.getOperand(1);
 
   assert(isa<ConstantSDNode>(BaseIdxN) && "TODO dynamic extract");
-  CustomDAG CDAG(DAG, Op);
-  EVT LegalVecTy = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
+  CustomDAG CDAG(*this, DAG, Op);
+  EVT LegalVecTy = CDAG.legalizeVectorType(Op, Mode);
 
   int64_t ShiftVal = cast<ConstantSDNode>(BaseIdxN)->getSExtValue();
 
@@ -900,17 +840,6 @@ SDValue VETargetLowering::LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
 
   // non-trivial mask shift
   return LowerVectorShuffleOp(Op, DAG, Mode);
-
-#if 0
-  // Legacy code path
-  // Shift by a constant amount
-  assert (ShiftVal != 0);
-  unsigned DestNumElems = Op.getValueType().getVectorNumElements();
-  unsigned PackedVL =
-      IsPackedType(Op.getValueType()) ? (DestNumElems + 1) / 2 : DestNumElems;
-  return CDAG.createElementShift(LegalVecTy, SrcVec, ShiftVal,
-                                 CDAG.getConstEVL(PackedVL));
-#endif
 }
 
 static Optional<unsigned> GetVVPForVP(unsigned VPOC) {
@@ -924,18 +853,6 @@ static Optional<unsigned> GetVVPForVP(unsigned VPOC) {
     return None;
   }
 }
-
-#if 0
-static Optional<unsigned> GetScalarISDForReduction(unsigned VVPOC) {
-  switch (VVPOC) {
-#define HANDLE_VVP_REDUCE_TO_SCALAR(VVP_REDUCE, OP)                            \
-  case VEISD::VVP_REDUCE:                                                      \
-    return OP;
-#include "llvm/IR/VPIntrinsics.def"
-  }
-  return None;
-}
-#endif
 
 SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
   auto OCOpt = GetVVPForVP(Op.getOpcode());
@@ -978,7 +895,7 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
     }
   }
 
-  CustomDAG CDAG(DAG, Op);
+  CustomDAG CDAG(*this, DAG, Op);
 
 #if 0
   // Reduction expansion code path
@@ -1002,7 +919,7 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
                                      VecLenOpt VecLenHint) const {
   LLVM_DEBUG(dbgs() << "Lowering VP/MLOAD\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
-  CustomDAG CDAG(DAG, Op);
+  CustomDAG CDAG(*this, DAG, Op);
 
   SDValue BasePtr;
   SDValue Mask;
@@ -1041,7 +958,7 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
   // minimize vector length
   OpVectorLength = ReduceVectorLength(Mask, OpVectorLength, VecLenHint, DAG);
 
-  EVT DataVT = LegalizeVectorType(Op.getNode()->getValueType(0), Op, DAG, Mode);
+  EVT DataVT = LegalizeVectorType(MemN->getMemoryVT(), Op, DAG, Mode);
   MVT ChainVT = Op.getNode()->getSimpleValueType(1);
 
   // Patch in an all-true mask if required
@@ -1377,21 +1294,6 @@ Register VETargetLowering::getRegisterByName(const char *RegName, LLT VT,
 
   report_fatal_error("Invalid register name global variable");
 }
-
-#if 0
-// This functions returns true if CalleeName is a ABI function that returns
-// a long double (fp128).
-static bool isFP128ABICall(const char *CalleeName) {
-  static const char *const ABICalls[] = {
-      "_Q_add",   "_Q_sub",    "_Q_mul",  "_Q_div",  "_Q_sqrt",
-      "_Q_neg",   "_Q_itoq",   "_Q_stoq", "_Q_dtoq", "_Q_utoq",
-      "_Q_lltoq", "_Q_ulltoq", nullptr};
-  for (const char *const *I = ABICalls; *I != nullptr; ++I)
-    if (strcmp(CalleeName, *I) == 0)
-      return true;
-  return false;
-}
-#endif
 
 //===----------------------------------------------------------------------===//
 // TargetLowering Implementation
@@ -3225,7 +3127,7 @@ SDValue VETargetLowering::LowerINSERT_VECTOR_ELT(SDValue Op,
   if (SDValue ActualMaskV = PeekForMask(SrcV)) {
     assert((Op.getValueType() == MVT::i64) && "not a proper mask extraction");
 
-    CustomDAG CDAG(DAG, Op);
+    CustomDAG CDAG(*this, DAG, Op);
     return CDAG.CreateInsertMask(ActualMaskV, ElemV, IndexV);
   }
 
@@ -3296,7 +3198,7 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
 
     const unsigned SXRegSize = 64;
 
-    CustomDAG CDAG(DAG, Op);
+    CustomDAG CDAG(*this, DAG, Op);
 
     // determine the adjusted extraction index
     SDValue AdjIndexV = IndexV;
@@ -3330,9 +3232,8 @@ SDValue VETargetLowering::LowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
   SDLoc DL(Op);
   std::unique_ptr<MaskView> MView(requestMaskView(Op.getNode()));
 
-  EVT LegalResVT = LegalizeVectorType(Op.getValueType(), Op, DAG, Mode);
-
-  CustomDAG CDAG(DAG, Op);
+  CustomDAG CDAG(*this, DAG, Op);
+  EVT LegalResVT = CDAG.legalizeVectorType(Op, Mode);
 
   // mask to shift + OR expansion
   if (IsMaskType(Op.getValueType())) {
@@ -3355,182 +3256,6 @@ SDValue VETargetLowering::LowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
   // fallback to LLVM and hope for the best
   return SDValue();
 }
-
-#if 0
-SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG,
-                                              VVPExpansionMode Mode) const {
-  LLVM_DEBUG(dbgs() << "Lowering Shuffle\n");
-
-  return LowerVectorShuffle(Op, DAG, Mode);
-#if 0
-  // BROKEN LEGACY CODE
-  SDValue firstVec = ShuffleInstr->getOperand(0);
-  int firstVecLength = firstVec.getSimpleValueType().getVectorNumElements();
-  SDValue secondVec = ShuffleInstr->getOperand(1);
-  int secondVecLength = secondVec.getSimpleValueType().getVectorNumElements();
-
-  MVT ElementType = Op.getSimpleValueType().getScalarType();
-  int resultSize = Op.getSimpleValueType().getVectorNumElements();
-
-  CustomDAG CDAG(DAG, DL);
-
-  if (ShuffleInstr->isSplat()) {
-    int index = ShuffleInstr->getSplatIndex();
-    if (index >= firstVecLength) {
-      index -= firstVecLength;
-      SDValue elem = DAG.getNode(
-          ISD::EXTRACT_VECTOR_ELT, DL, ElementType,
-          {secondVec,
-           DAG.getConstant(index, DL,
-                           EVT::getIntegerVT(*DAG.getContext(), 64))});
-      return CDAG.CreateBroadcast(Op.getSimpleValueType(), elem);
-    } else {
-      SDValue elem = DAG.getNode(
-          ISD::EXTRACT_VECTOR_ELT, DL, ElementType,
-          {firstVec, DAG.getConstant(
-                         index, DL, EVT::getIntegerVT(*DAG.getContext(), 64))});
-      return CDAG.CreateBroadcast(Op.getSimpleValueType(), elem);
-    }
-  }
-
-  // Supports v256 shuffles only atm.
-  if (firstVecLength != 256 || secondVecLength != 256 || resultSize != 256) {
-    LLVM_DEBUG(dbgs() << "Invalid vector lengths\n");
-    return SDValue();
-  }
-
-  int firstrot = 256;
-  int secondrot = 256;
-  int firstsecond = 256;
-  bool inv_order;
-
-  if (ShuffleInstr->getMaskElt(0) < 256) {
-    inv_order = false;
-  } else {
-    inv_order = true;
-  }
-
-  for (int i = 0; i < 256; i++) {
-    int mask_value = ShuffleInstr->getMaskElt(i);
-
-    if (mask_value < 0) // Undef
-      continue;
-
-    if (mask_value < 256) {
-      if (firstsecond != 256 && !inv_order) {
-        LLVM_DEBUG(dbgs() << "Mixing\n");
-        return SDValue();
-      }
-
-      if (firstsecond == 256 && inv_order)
-        firstsecond = i;
-
-      if (firstrot == 256)
-        firstrot = i - mask_value;
-      else if (firstrot != i - mask_value) {
-        LLVM_DEBUG(dbgs() << "Bad first rot\n");
-        return SDValue();
-      }
-    } else { // mask_value >= 256
-      if (firstsecond != 256 && inv_order) {
-        LLVM_DEBUG(dbgs() << "Mixing\n");
-        return SDValue();
-      }
-
-      if (firstsecond == 256 && !inv_order)
-        firstsecond = i;
-
-      mask_value -= 256;
-
-      if (secondrot == 256)
-        secondrot = i - mask_value;
-      else if (secondrot != i - mask_value) {
-        LLVM_DEBUG(dbgs() << "Bad second rot\n");
-        return SDValue();
-      }
-    }
-  }
-
-  if (firstrot < 0)
-    firstrot *= -1;
-  else
-    firstrot = 256 - firstrot;
-  if (secondrot < 0)
-    secondrot *= -1;
-  else
-    secondrot = 256 - secondrot;
-
-  EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
-  EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
-  EVT v256i1 = EVT::getVectorVT(*DAG.getContext(),
-                                EVT::getIntegerVT(*DAG.getContext(), 1), 256);
-
-  SDValue VL = SDValue(
-      DAG.getMachineNode(VE::LEA32zzi, DL, MVT::i32,
-                         DAG.getTargetConstant(resultSize, DL, MVT::i32)),
-      0);
-  // SDValue VL = DAG.getTargetConstant(resultSize, DL, MVT::i32);
-  SDValue firstrotated =
-      firstrot % 256 != 0
-          ? SDValue(
-                DAG.getMachineNode(
-                    VE::vmv_vIvl, DL, firstVec.getSimpleValueType(),
-                    {DAG.getConstant(firstrot % 256, DL, i32), firstVec, VL}),
-                0)
-          : firstVec;
-  SDValue secondrotated =
-      secondrot % 256 != 0
-          ? SDValue(
-                DAG.getMachineNode(
-                    VE::vmv_vIvl, DL, secondVec.getSimpleValueType(),
-                    {DAG.getConstant(secondrot % 256, DL, i32), secondVec, VL}),
-                0)
-          : secondVec;
-
-  int block = firstsecond / 64;
-  int secondblock = firstsecond % 64;
-
-  SDValue Mask = DAG.getUNDEF(v256i1);
-
-  for (int i = 0; i < block; i++) {
-    // set blocks to all 0s
-    SDValue mask = inv_order ? DAG.getConstant(0xffffffffffffffff, DL, i64)
-                             : DAG.getConstant(0, DL, i64);
-    SDValue index = DAG.getTargetConstant(i, DL, i64);
-    Mask = SDValue(
-        DAG.getMachineNode(VE::lvm_mmIs, DL, v256i1, {Mask, index, mask}), 0);
-  }
-
-  SDValue mask = DAG.getConstant(0xffffffffffffffff, DL, i64);
-  if (!inv_order)
-    mask = DAG.getNode(ISD::SRL, DL, i64,
-                       {mask, DAG.getConstant(secondblock, DL, i64)});
-  else
-    mask = DAG.getNode(ISD::SHL, DL, i64,
-                       {mask, DAG.getConstant(64 - secondblock, DL, i64)});
-  Mask = SDValue(
-      DAG.getMachineNode(VE::lvm_mmIs, DL, v256i1,
-                         {Mask, DAG.getTargetConstant(block, DL, i64), mask}),
-      0);
-
-  for (int i = block + 1; i < 4; i++) {
-    // set blocks to all 1s
-    SDValue mask = inv_order ? DAG.getConstant(0, DL, i64)
-                             : DAG.getConstant(0xffffffffffffffff, DL, i64);
-    SDValue index = DAG.getTargetConstant(i, DL, i64);
-    Mask = SDValue(
-        DAG.getMachineNode(VE::lvm_mmIs, DL, v256i1, {Mask, index, mask}), 0);
-  }
-
-  SDValue returnValue =
-      SDValue(DAG.getMachineNode(VE::vmrg_vvvml, DL, Op.getSimpleValueType(),
-                                 {firstrotated, secondrotated, Mask, VL}),
-              0);
-  return returnValue;
-/// }
-#endif
-}
-#endif
 
 SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "LowerOp: "; Op.dump(&DAG); dbgs() << "\n";);
@@ -3608,10 +3333,6 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
 
     // modify the return type of SETCC on vectors to v256i1
     // case ISD::SETCC: return LowerSETCC(Op, DAG);
-#if 0
-  case ISD::SELECT_CC:
-    return LowerSELECT_CC(Op, DAG);
-#endif
 
     // case ISD::TRUNCATE: return LowerTRUNCATE(Op, DAG);
 
@@ -4154,42 +3875,7 @@ VETargetLowering::EmitSjLjDispatchBlock(MachineInstr &MI,
     BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t)).addReg(TReg).addImm(0);
     break;
   }
-#if 0
-  case MachineJumpTableInfo::EK_LabelDifference32: {
-    // This code is what regular architecture does, but nas doesn't generate
-    // LabelDifference32 correctly, so doesn't use this atm.
 
-    // for the case of PIC, generates these codes
-    unsigned OReg = MRI->createVirtualRegister(&VE::I64RegClass);
-    unsigned TReg = MRI->createVirtualRegister(&VE::I64RegClass);
-
-    unsigned Tmp1 = MRI->createVirtualRegister(&VE::I64RegClass);
-    unsigned Tmp2 = MRI->createVirtualRegister(&VE::I64RegClass);
-
-    // sll     Tmp1, IReg, 2
-    BuildMI(DispContBB, DL, TII->get(VE::SLLri), Tmp1)
-        .addReg(IReg)
-        .addImm(2);
-    // FIXME: combine these add and ldl into "ldl     OReg, *(BReg, Tmp1)"
-    // add     Tmp2, BReg, Tmp1
-    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), Tmp2)
-        .addReg(Tmp1)
-        .addReg(BReg);
-    // ldl.sx  OReg, *(Tmp2)
-    BuildMI(DispContBB, DL, TII->get(VE::LDLri), OReg)
-        .addReg(Tmp2)
-        .addImm(0);
-    // adds.l  TReg, BReg, OReg
-    BuildMI(DispContBB, DL, TII->get(VE::ADDSLrr), TReg)
-        .addReg(OReg)
-        .addReg(BReg);
-    // jmpq *(TReg)
-    BuildMI(DispContBB, DL, TII->get(VE::BCFLari_t))
-        .addReg(TReg)
-        .addImm(0);
-    break;
-  }
-#endif
   case MachineJumpTableInfo::EK_Custom32: {
     // for the case of PIC, generates these codes
 
@@ -4464,13 +4150,12 @@ bool VETargetLowering::isOffsetFoldingLegal(
   return false;
 }
 
-static SDValue fixUpOperation(SDValue Val, EVT LegalVT, SelectionDAG &DAG) {
+static SDValue fixUpOperation(SDValue Val, EVT LegalVT, CustomDAG &CDAG) {
   if (Val.getValueType() == LegalVT)
     return Val;
 
   // SelectionDAGBuilder does not respect TLI::getCCResultVT (do a fixup here)
   if (Val.getOpcode() == ISD::SETCC && Val.getValueType() == MVT::i1) {
-    CustomDAG CDAG(DAG, Val);
     SDNode *N = Val.getNode();
     return CDAG.getNode(ISD::SETCC, LegalVT,
                         {N->getOperand(0), N->getOperand(1), N->getOperand(2)});
@@ -4530,7 +4215,8 @@ void VETargetLowering::LowerOperationWrapper(
 
     if (OpDestVecTy != Op.getValueType()) {
       // run custom widenings first
-      FixedOp = fixUpOperation(Op, OpDestVecTy, DAG);
+      CustomDAG CDAG(*this, DAG, Op);
+      FixedOp = fixUpOperation(Op, OpDestVecTy, CDAG);
       if (!FixedOp) {
         FixedOp = WidenedOpCB(Op);
       }

@@ -24,6 +24,7 @@ namespace llvm {
 
 const unsigned SXRegSize = 64;
 
+// FIXME (packed 512 bit mode!)
 using LaneBits = std::bitset<256>;
 
 /// Helpers {
@@ -91,14 +92,15 @@ enum class SubElem : int8_t {
 
 /// Helper class for short hand custom node creation ///
 struct CustomDAG {
+  const VELoweringInfo &VLI;
   SelectionDAG &DAG;
   SDLoc DL;
 
-  CustomDAG(SelectionDAG &DAG, SDLoc DL) : DAG(DAG), DL(DL) {}
+  CustomDAG(const VELoweringInfo & VLI, SelectionDAG &DAG, SDLoc DL) : VLI(VLI), DAG(DAG), DL(DL) {}
 
-  CustomDAG(SelectionDAG &DAG, SDValue WhereOp) : DAG(DAG), DL(WhereOp) {}
+  CustomDAG(const VELoweringInfo & VLI, SelectionDAG &DAG, SDValue WhereOp) : VLI(VLI), DAG(DAG), DL(WhereOp) {}
 
-  CustomDAG(SelectionDAG &DAG, SDNode *WhereN) : DAG(DAG), DL(WhereN) {}
+  CustomDAG(const VELoweringInfo & VLI, SelectionDAG &DAG, SDNode *WhereN) : VLI(VLI), DAG(DAG), DL(WhereN) {}
 
   SDValue CreateSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const;
 
@@ -227,6 +229,28 @@ struct CustomDAG {
   }
 
   void dumpValue(SDValue V) const;
+
+  // weave in a chain into the current root
+  void weaveIntoRootChain(std::function<SDValue()> Func) const {
+    SDValue OutChain = Func();
+    assert(OutChain.getValueType() == MVT::Other); // not a chain!
+    DAG.setRoot(getTokenFactor({DAG.getRoot(), OutChain}));
+  }
+
+  SDValue getTokenFactor(ArrayRef<SDValue> Tokens) const;
+
+  const DataLayout& getDataLayout() const { return DAG.getDataLayout(); }
+
+  // Return a legal vector type for \p Op
+  EVT legalizeVectorType(SDValue Op, VVPExpansionMode) const;
+
+  /// VVP {
+  SDValue getVVPLoad(EVT LegalResVT, SDValue Chain, SDValue PtrV,
+                       SDValue MaskV, SDValue AVL) const;
+
+  SDValue getVVPGather(EVT LegalResVT, SDValue Chain, SDValue PtrVecV,
+                       SDValue MaskV, SDValue AVL) const;
+  /// } VVP
 };
 
 } // namespace llvm
