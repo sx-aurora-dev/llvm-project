@@ -1261,7 +1261,7 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
     Chain = SDValue(ElemV.getNode(), 1);
 
     // weave in with the root chain
-    CDAG.DAG.setRoot(CDAG.getTokenFactor({CDAG.DAG.getRoot(), Chain}));
+    CDAG.DAG.setRoot(CDAG.getTokenFactor({CDAG.getRootOrEntryChain(), Chain}));
 
     if (PartialV.isUndef()) {
       return ElemV;

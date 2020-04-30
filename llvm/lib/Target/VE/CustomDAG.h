@@ -230,11 +230,17 @@ struct CustomDAG {
 
   void dumpValue(SDValue V) const;
 
+  SDValue getRootOrEntryChain() const {
+    SDValue RootChain = DAG.getRoot();
+    if (!RootChain) return DAG.getEntryNode();
+    return RootChain;
+  }
+
   // weave in a chain into the current root
   void weaveIntoRootChain(std::function<SDValue()> Func) const {
     SDValue OutChain = Func();
     assert(OutChain.getValueType() == MVT::Other); // not a chain!
-    DAG.setRoot(getTokenFactor({DAG.getRoot(), OutChain}));
+    DAG.setRoot(getTokenFactor({getRootOrEntryChain(), OutChain}));
   }
 
   SDValue getTokenFactor(ArrayRef<SDValue> Tokens) const;
