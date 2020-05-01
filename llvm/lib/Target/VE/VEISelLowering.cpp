@@ -980,6 +980,24 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
   return true;
 }
 
+bool VETargetLowering::hasAndNot(SDValue Y) const {
+  EVT VT = Y.getValueType();
+
+  // VE doesn't have vector and not instruction.
+  if (VT.isVector())
+    return false;
+
+  // VE has scalar and not instruction which support simm7 in Y, where ~Y & Z.
+  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Y)) {
+    if (isInt<7>(C->getSExtValue()))
+      return true;
+    return false;
+  }
+
+  // It's ok for generic registers.
+  return true;
+}
+
 TargetLowering::AtomicExpansionKind
 VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
   if (AI->getOperation() == AtomicRMWInst::Xchg){

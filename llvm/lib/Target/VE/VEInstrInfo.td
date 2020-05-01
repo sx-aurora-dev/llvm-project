@@ -735,6 +735,44 @@ multiclass RRI1m<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
              [(set Ty:$sx, (OpNode (Ty mimm:$sz)))]>;
 }
 
+// Special RR multiclass for NND instruction.
+//   e.g. NND
+let hasSideEffects = 0 in
+multiclass RRNNDm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty> {
+  def rr : RR<opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
+              !strconcat(opcStr, " $sx, $sy, $sz"),
+              [(set Ty:$sx, (and (not Ty:$sy), Ty:$sz))]>;
+  let cy = 0 in
+  def ir : RR<opc, (outs RC:$sx), (ins simm7:$sy, RC:$sz),
+              !strconcat(opcStr, " $sx, $sy, $sz"),
+              [(set Ty:$sx, (and (not (Ty simm7:$sy)), Ty:$sz))]>;
+  let cz = 0 in
+  def rm : RR<opc, (outs RC:$sx), (ins RC:$sy, mimm:$sz),
+              !strconcat(opcStr, " $sx, $sy, $sz"),
+              [(set Ty:$sx, (and (not Ty:$sy), (Ty mimm:$sz)))]>;
+  let cy = 0, cz = 0 in
+  def im : RR<opc, (outs RC:$sx), (ins simm7:$sy, mimm:$sz),
+              !strconcat(opcStr, " $sx, $sy, $sz"),
+              [(set Ty:$sx, (and (not (Ty simm7:$sy)), (Ty mimm:$sz)))]>;
+}
+
+// Special RR multiclass for MRG instruction.
+//   e.g. MRG
+let Constraints = "$sx = $sd", DisableEncoding = "$sd", hasSideEffects = 0 in
+multiclass RRMRGm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty> {
+  def rr : RR<opc, (outs RC:$sx), (ins RC:$sy, RC:$sz, RC:$sd),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0 in
+  def ir : RR<opc, (outs RC:$sx), (ins simm7:$sy, RC:$sz, RC:$sd),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cz = 0 in
+  def rm : RR<opc, (outs RC:$sx), (ins RC:$sy, mimm:$sz, RC:$sd),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0, cz = 0 in
+  def im : RR<opc, (outs RC:$sx), (ins simm7:$sy, mimm:$sz, RC:$sd),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+}
+
 // Special RR multiclass for BSWP instruction.
 //   e.g. BSWP
 let hasSideEffects = 0 in
@@ -1308,10 +1346,10 @@ let isCodeGenOnly = 1 in defm XOR32 : RRm<"xor", 0x46, I32, i32, xor>;
 defm EQV : RRm<"eqv", 0x47, I64, i64>;
 
 // Section 8.5.5 - NND (Negate AND)
-defm NND : RRm<"nnd", 0x54, I64, i64>;
+defm NND : RRNNDm<"nnd", 0x54, I64, i64>;
 
 // Section 8.5.6 - MRG (Merge)
-defm MRG : RRm<"mrg", 0x56, I64, i64>;
+defm MRG : RRMRGm<"mrg", 0x56, I64, i64>;
 
 // Section 8.5.7 - LDZ (Leading Zero Count)
 defm LDZ : RRI1m<"ldz", 0x67, I64, i64, ctlz>;
