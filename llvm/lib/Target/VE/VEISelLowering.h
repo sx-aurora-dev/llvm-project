@@ -122,10 +122,6 @@ public:
                                       MachineMemOperand::Flags Flags,
                                       bool *Fast) const override;
 
-  // SX-Aurora VE s/udiv is 5-9 times slower than multiply.
-  bool isIntDivCheap(EVT VT, AttributeList Attr) const override
-  { return false; }
-
   /// computeKnownBitsForTargetNode - Determine which of the bits specified
   /// in Mask are known to be either zero or one and return them in the
   /// KnownZero/KnownOne bitsets.
@@ -251,6 +247,17 @@ public:
   bool isVectorMaskType(EVT VT) const;
 
   /// Target Optimization {
+
+  // SX-Aurora VE s/udiv is 5-9 times slower than multiply.
+  bool isIntDivCheap(EVT, AttributeList) const override { return false; }
+  bool hasStandaloneRem(EVT) const override { return false; }
+
+  bool isCheapToSpeculateCtlz() const override { return true; }
+  bool isCtlzFast() const override { return true; }
+
+  bool convertSetCCLogicToBitwiseLogic(EVT VT) const override {
+    return true;
+  }
 
   bool hasAndNot(SDValue Y) const override;
 
