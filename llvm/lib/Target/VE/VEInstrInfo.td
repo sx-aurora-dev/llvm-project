@@ -255,99 +255,25 @@ def zext_imm : SDNodeXForm<imm, [{
 }]>;
 
 def icond2cc : SDNodeXForm<cond, [{
-  VECC::CondCode cc;
-  switch (N->get()) {
-  default:          llvm_unreachable("Unknown integer condition code!");
-  case ISD::SETEQ:  cc = VECC::CC_IEQ; break;
-  case ISD::SETNE:  cc = VECC::CC_INE; break;
-  case ISD::SETLT:  cc = VECC::CC_IL;  break;
-  case ISD::SETGT:  cc = VECC::CC_IG;  break;
-  case ISD::SETLE:  cc = VECC::CC_ILE; break;
-  case ISD::SETGE:  cc = VECC::CC_IGE; break;
-  case ISD::SETULT: cc = VECC::CC_IL;  break;
-  case ISD::SETULE: cc = VECC::CC_ILE; break;
-  case ISD::SETUGT: cc = VECC::CC_IG;  break;
-  case ISD::SETUGE: cc = VECC::CC_IGE; break;
-  }
-  return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
+  VECC::CondCode VECC = IntCondCode2ICC(N->get());
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 def icond2ccSwap : SDNodeXForm<cond, [{
-  VECC::CondCode cc;
-  switch (N->get()) {
-  default:          llvm_unreachable("Unknown integer condition code!");
-  case ISD::SETEQ:  cc = VECC::CC_IEQ; break;
-  case ISD::SETNE:  cc = VECC::CC_INE; break;
-  case ISD::SETLT:  cc = VECC::CC_IG;  break;
-  case ISD::SETGT:  cc = VECC::CC_IL;  break;
-  case ISD::SETLE:  cc = VECC::CC_IGE; break;
-  case ISD::SETGE:  cc = VECC::CC_ILE; break;
-  case ISD::SETULT: cc = VECC::CC_IG;  break;
-  case ISD::SETULE: cc = VECC::CC_IGE; break;
-  case ISD::SETUGT: cc = VECC::CC_IL;  break;
-  case ISD::SETUGE: cc = VECC::CC_ILE; break;
-  }
-  return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
+  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
+  VECC::CondCode VECC = IntCondCode2ICC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 def fcond2cc : SDNodeXForm<cond, [{
-  VECC::CondCode cc;
-  switch (N->get()) {
-  default:          llvm_unreachable("Unknown float condition code!");
-  case ISD::SETFALSE: cc = VECC::CC_AF;    break;
-  case ISD::SETEQ:
-  case ISD::SETOEQ:   cc = VECC::CC_EQ;    break;
-  case ISD::SETNE:
-  case ISD::SETONE:   cc = VECC::CC_NE;    break;
-  case ISD::SETLT:
-  case ISD::SETOLT:   cc = VECC::CC_L;     break;
-  case ISD::SETGT:
-  case ISD::SETOGT:   cc = VECC::CC_G;     break;
-  case ISD::SETLE:
-  case ISD::SETOLE:   cc = VECC::CC_LE;    break;
-  case ISD::SETGE:
-  case ISD::SETOGE:   cc = VECC::CC_GE;    break;
-  case ISD::SETO:     cc = VECC::CC_NUM;   break;
-  case ISD::SETUO:    cc = VECC::CC_NAN;   break;
-  case ISD::SETUEQ:   cc = VECC::CC_EQNAN; break;
-  case ISD::SETUNE:   cc = VECC::CC_NENAN; break;
-  case ISD::SETULT:   cc = VECC::CC_LNAN;  break;
-  case ISD::SETUGT:   cc = VECC::CC_GNAN;  break;
-  case ISD::SETULE:   cc = VECC::CC_LENAN; break;
-  case ISD::SETUGE:   cc = VECC::CC_GENAN; break;
-  case ISD::SETTRUE:  cc = VECC::CC_AT;    break;
-  }
-  return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
+  VECC::CondCode VECC = FPCondCode2FCC(N->get());
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 def fcond2ccSwap : SDNodeXForm<cond, [{
-  VECC::CondCode cc;
-  switch (N->get()) {
-  default:          llvm_unreachable("Unknown float condition code!");
-  case ISD::SETFALSE: cc = VECC::CC_AF;    break;
-  case ISD::SETEQ:
-  case ISD::SETOEQ:   cc = VECC::CC_EQ;    break;
-  case ISD::SETNE:
-  case ISD::SETONE:   cc = VECC::CC_NE;    break;
-  case ISD::SETLT:
-  case ISD::SETOLT:   cc = VECC::CC_G;     break;
-  case ISD::SETGT:
-  case ISD::SETOGT:   cc = VECC::CC_L;     break;
-  case ISD::SETLE:
-  case ISD::SETOLE:   cc = VECC::CC_GE;    break;
-  case ISD::SETGE:
-  case ISD::SETOGE:   cc = VECC::CC_LE;    break;
-  case ISD::SETO:     cc = VECC::CC_NUM;   break;
-  case ISD::SETUO:    cc = VECC::CC_NAN;   break;
-  case ISD::SETUEQ:   cc = VECC::CC_EQNAN; break;
-  case ISD::SETUNE:   cc = VECC::CC_NENAN; break;
-  case ISD::SETULT:   cc = VECC::CC_GNAN;  break;
-  case ISD::SETUGT:   cc = VECC::CC_LNAN;  break;
-  case ISD::SETULE:   cc = VECC::CC_GENAN; break;
-  case ISD::SETUGE:   cc = VECC::CC_LENAN; break;
-  case ISD::SETTRUE:  cc = VECC::CC_AT;    break;
-  }
-  return CurDAG->getTargetConstant(cc, SDLoc(N), MVT::i32);
+  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
+  VECC::CondCode VECC = FPCondCode2FCC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 // Addressing modes.
