@@ -1522,6 +1522,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // VE stores all argument by 8 bytes alignment
   setMinStackArgumentAlignment(Align(8));
 
+  // VE uses generic registers as conditional registers.
+  setHasMultipleConditionRegisters(true);
+
   computeRegisterProperties(Subtarget->getRegisterInfo());
 }
 

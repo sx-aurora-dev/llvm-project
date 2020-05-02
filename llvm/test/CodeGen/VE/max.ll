@@ -241,8 +241,12 @@ define fp128 @max2uf128(fp128, fp128) {
 define zeroext i1 @maxi1(i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: maxi1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, %s0, %s1
-; CHECK-NEXT:    or %s0, %s1, %s0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:    xor %s2, -1, %s1
+; CHECK-NEXT:    and %s2, %s2, %s0
+; CHECK-NEXT:    cmov.w.ne %s1, %s0, %s2
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = xor i1 %1, true
   %4 = and i1 %3, %0
