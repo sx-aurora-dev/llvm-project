@@ -141,9 +141,16 @@ public:
   EmitInstrWithCustomInserter(MachineInstr &MI,
                               MachineBasicBlock *MBB) const override;
 
-#if 0
   SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
-#endif
+
+  SDValue combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineSelectCC(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineSelect(SDNode *N, DAGCombinerInfo &DCI) const;
+
+  /// This function looks at SETCC that compares integers. It replaces
+  /// SETCC with integer arithmetic operations when there is a legal way
+  /// of doing it.
+  SDValue optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
 
   ConstraintType getConstraintType(StringRef Constraint) const override;
   ConstraintWeight

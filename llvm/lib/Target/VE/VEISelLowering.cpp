@@ -1508,6 +1508,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   setStackPointerRegisterToSaveRestore(VE::SX11);
 
+  // We have target-specific dag combine patterns for the following nodes:
+  setTargetDAGCombine(ISD::SETCC);
+  setTargetDAGCombine(ISD::SELECT);
+  setTargetDAGCombine(ISD::SELECT_CC);
+
   // Set function alignment to 16 bytes
   setMinFunctionAlignment(Align(16));
 
@@ -3304,6 +3309,163 @@ VETargetLowering::EmitInstrWithCustomInserter(MachineInstr &MI,
   case VE::EH_SjLj_SetJmp:
     return emitEHSjLjSetJmp(MI, BB);
   }
+}
+
+SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
+  assert(N->getOpcode() == ISD::SETCC && "ISD::SETCC Expected.");
+
+  SelectionDAG &DAG = DCI.DAG;
+  SDLoc DL(N);
+
+  // Size of integers being compared has a critical role in the following
+  // analysis, so we prefer to do this when all types are legal.
+  if (!DCI.isAfterLegalizeDAG()) {
+    dbgs() << "optimizeSetCC: not after leagalize dag\n";
+    return SDValue();
+  }
+  dbgs() << "optimizeSetCC: after leagalize dag\n";
+
+#if 0
+  // If all users of SETCC extend its value to a legal integer type
+  // then we replace SETCC with a subtraction
+  for (SDNode::use_iterator UI = N->use_begin(),
+       UE = N->use_end(); UI != UE; ++UI) {
+    if (UI->getOpcode() != ISD::ZERO_EXTEND)
+      return SDValue();
+  }
+
+  ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(2))->get();
+  auto OpSize = N->getOperand(0).getValueSizeInBits();
+
+  unsigned Size = DAG.getDataLayout().getLargestLegalIntTypeSizeInBits();
+
+  if (OpSize < Size) {
+    switch (CC) {
+    default: break;
+    case ISD::SETULT:
+      return generateEquivalentSub(N, Size, false, false, DL, DAG);
+    case ISD::SETULE:
+      return generateEquivalentSub(N, Size, true, true, DL, DAG);
+    case ISD::SETUGT:
+      return generateEquivalentSub(N, Size, false, true, DL, DAG);
+    case ISD::SETUGE:
+      return generateEquivalentSub(N, Size, true, false, DL, DAG);
+    }
+  }
+#endif
+  return SDValue();
+}
+
+SDValue VETargetLowering::combineSetCC(SDNode *N,
+                                        DAGCombinerInfo &DCI) const {
+  assert(N->getOpcode() == ISD::SETCC &&
+         "Should be called with a SETCC node");
+
+#if 0
+  ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(2))->get();
+  if (CC == ISD::SETNE || CC == ISD::SETEQ) {
+    SDValue LHS = N->getOperand(0);
+    SDValue RHS = N->getOperand(1);
+
+    // If there is a '0 - y' pattern, canonicalize the pattern to the RHS.
+    if (LHS.getOpcode() == ISD::SUB && isNullConstant(LHS.getOperand(0)) &&
+        LHS.hasOneUse())
+      std::swap(LHS, RHS);
+
+    // x == 0-y --> x+y == 0
+    // x != 0-y --> x+y != 0
+    if (RHS.getOpcode() == ISD::SUB && isNullConstant(RHS.getOperand(0)) &&
+        RHS.hasOneUse()) {
+      SDLoc DL(N);
+      SelectionDAG &DAG = DCI.DAG;
+      EVT VT = N->getValueType(0);
+      EVT OpVT = LHS.getValueType();
+      SDValue Add = DAG.getNode(ISD::ADD, DL, OpVT, LHS, RHS.getOperand(1));
+      return DAG.getSetCC(DL, VT, Add, DAG.getConstant(0, DL, OpVT), CC);
+    }
+  }
+#endif
+
+  return optimizeSetCC(N, DCI);
+}
+
+static bool isMimm(SDValue V)
+{
+  EVT VT = V.getValueType();
+  if (VT.isVector())
+    return false;
+
+  if (VT.isInteger()) {
+    if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(V))
+      return isMask_64(C->getSExtValue()) ||
+             ((C->getSExtValue() & (1UL << 63)) &&
+              isShiftedMask_64(C->getSExtValue()));
+  } else if (VT.isFloatingPoint()) {
+    if (ConstantFPSDNode *C = dyn_cast<ConstantFPSDNode>(V)) {
+      const APInt& Imm = C->getValueAPF().bitcastToAPInt();
+      return isMask_64(Imm.getSExtValue()) ||
+             ((Imm.getSExtValue() & (1UL << 63)) &&
+              isShiftedMask_64(Imm.getSExtValue()));
+    }
+  }
+  return false;
+}
+
+SDValue VETargetLowering::combineSelectCC(SDNode *N,
+                                          DAGCombinerInfo &DCI) const {
+  assert(N->getOpcode() == ISD::SELECT_CC &&
+         "Should be called with a SELECT_CC node");
+  ISD::CondCode CC = cast<CondCodeSDNode>(N->getOperand(4))->get();
+  SDValue LHS = N->getOperand(0);
+  SDValue RHS = N->getOperand(1);
+  SDValue True = N->getOperand(2);
+  SDValue False = N->getOperand(3);
+  bool Modify = false;
+
+  EVT VT = N->getValueType(0);
+  if (VT.isVector())
+    return SDValue();
+
+  if (isMimm(True)) {
+    // Doesn't swap True and False values.
+  } else if (isMimm(False)) {
+    // Swap True and False values.  Inverse CC also.
+    std::swap(True, False);
+    CC = getSetCCInverse(CC, LHS.getValueType());
+    Modify = true;
+  }
+
+  if (Modify) {
+    SDLoc DL(N);
+    SelectionDAG &DAG = DCI.DAG;
+    return DAG.getSelectCC(SDLoc(N), LHS, RHS, True, False, CC);
+  }
+
+  return SDValue();
+}
+
+SDValue VETargetLowering::combineSelect(SDNode *N,
+                                        DAGCombinerInfo &DCI) const {
+  assert(N->getOpcode() == ISD::SELECT &&
+         "Should be called with a SELECT node");
+  return SDValue();
+}
+
+SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
+                                            DAGCombinerInfo &DCI) const {
+  SelectionDAG &DAG = DCI.DAG;
+  SDLoc dl(N);
+  switch (N->getOpcode()) {
+  default: break;
+  case ISD::SETCC:
+    return combineSetCC(N, DCI);
+  case ISD::SELECT_CC:
+    return combineSelectCC(N, DCI);
+  case ISD::SELECT:
+    return combineSelect(N, DCI);
+  }
+
+  return SDValue();
 }
 
 //===----------------------------------------------------------------------===//
