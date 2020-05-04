@@ -1155,11 +1155,10 @@ define i64 @test_atomic_compare_exchange_8(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry: %2 = cmpxchg i64* @l, i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
@@ -1201,10 +1200,9 @@ define i64 @test_atomic_compare_exchange_8_relaxed(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 monotonic monotonic
@@ -1221,11 +1219,10 @@ define i64 @test_atomic_compare_exchange_8_consume(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
 ; CHECK-NEXT:  fencem 2
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 acquire acquire
@@ -1242,11 +1239,10 @@ define i64 @test_atomic_compare_exchange_8_acquire(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
 ; CHECK-NEXT:  fencem 2
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 acquire acquire
@@ -1264,10 +1260,9 @@ define i64 @test_atomic_compare_exchange_8_release(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 release monotonic
@@ -1285,11 +1280,10 @@ define i64 @test_atomic_compare_exchange_8_acq_rel(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
 ; CHECK-NEXT:  fencem 2
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 acq_rel acquire
@@ -1307,11 +1301,10 @@ define i64 @test_atomic_compare_exchange_8_weak(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 seq_cst seq_cst
@@ -1328,10 +1321,9 @@ define i64 @test_atomic_compare_exchange_8_weak_relaxed(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 monotonic monotonic
@@ -1348,11 +1340,10 @@ define i64 @test_atomic_compare_exchange_8_weak_consume(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
 ; CHECK-NEXT:  fencem 2
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acquire acquire
@@ -1369,11 +1360,10 @@ define i64 @test_atomic_compare_exchange_8_weak_acquire(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
 ; CHECK-NEXT:  fencem 2
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acquire acquire
@@ -1391,10 +1381,9 @@ define i64 @test_atomic_compare_exchange_8_weak_release(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 release monotonic
@@ -1412,11 +1401,10 @@ define i64 @test_atomic_compare_exchange_8_weak_acq_rel(i64, i64) {
 ; CHECK-NEXT:  and %s2, %s2, (32)0
 ; CHECK-NEXT:  lea.sl %s2, l@hi(, %s2)
 ; CHECK-NEXT:  cas.l %s1, (%s2), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
 ; CHECK-NEXT:  fencem 2
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acq_rel acquire
@@ -2418,11 +2406,10 @@ define i64 @test_atomic_compare_exchange_8stk(i64, i64) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  fencem 3
 ; CHECK-NEXT:  cas.l %s1, {{[0-9]+}}(%s11), %s0
-; CHECK-NEXT:  cmps.l %s0, %s1, %s0
-; CHECK-NEXT:  or %s1, 0, (0)1
+; CHECK-NEXT:  eqv %s0, %s1, %s0
 ; CHECK-NEXT:  fencem 3
-; CHECK-NEXT:  cmov.l.eq %s1, (63)0, %s0
-; CHECK-NEXT:  adds.w.zx %s0, %s1, (0)1
+; CHECK-NEXT:  cmov.l.ne %s0, (63)0, %s0
+; CHECK-NEXT:  adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:  or %s11, 0, %s9
 entry:
   %2 = alloca i64, align 32

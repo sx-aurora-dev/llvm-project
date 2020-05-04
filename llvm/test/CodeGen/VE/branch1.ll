@@ -310,14 +310,15 @@ define i32 @func11(fp128, fp128) {
 define i32 @func12(i128, i128) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    or %s4, 0, (0)1
-; CHECK-NEXT:    cmps.l %s1, %s1, %s3
-; CHECK-NEXT:    or %s3, 0, %s4
-; CHECK-NEXT:    cmov.l.le %s3, (63)0, %s1
-; CHECK-NEXT:    cmpu.l %s0, %s0, %s2
-; CHECK-NEXT:    cmov.l.le %s4, (63)0, %s0
-; CHECK-NEXT:    cmov.l.eq %s3, %s4, %s1
-; CHECK-NEXT:    brne.w 0, %s3, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    cmps.l %s4, %s1, %s3
+; CHECK-NEXT:    cmps.l %s1, %s3, %s1
+; CHECK-NEXT:    xor %s1, -1, %s1
+; CHECK-NEXT:    srl %s1, %s1, 63
+; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
+; CHECK-NEXT:    xor %s0, -1, %s0
+; CHECK-NEXT:    srl %s0, %s0, 63
+; CHECK-NEXT:    cmov.l.eq %s1, %s0, %s4
+; CHECK-NEXT:    brne.w 0, %s1, .LBB{{[0-9]+}}_1
   %3 = icmp sgt i128 %0, %1
   br i1 %3, label %4, label %6
 
@@ -335,14 +336,14 @@ define i32 @func13(i128, i128) {
 ; CHECK-LABEL: func13:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    cmps.l %s4, %s1, %s3
-; CHECK-NEXT:    or %s5, 0, (0)1
-; CHECK-NEXT:    cmpu.l %s1, %s1, %s3
-; CHECK-NEXT:    or %s3, 0, %s5
-; CHECK-NEXT:    cmov.l.le %s3, (63)0, %s1
-; CHECK-NEXT:    cmpu.l %s0, %s0, %s2
-; CHECK-NEXT:    cmov.l.le %s5, (63)0, %s0
-; CHECK-NEXT:    cmov.l.eq %s3, %s5, %s4
-; CHECK-NEXT:    brne.w 0, %s3, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    cmpu.l %s1, %s3, %s1
+; CHECK-NEXT:    xor %s1, -1, %s1
+; CHECK-NEXT:    srl %s1, %s1, 63
+; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
+; CHECK-NEXT:    xor %s0, -1, %s0
+; CHECK-NEXT:    srl %s0, %s0, 63
+; CHECK-NEXT:    cmov.l.eq %s1, %s0, %s4
+; CHECK-NEXT:    brne.w 0, %s1, .LBB{{[0-9]+}}_1
   %3 = icmp ugt i128 %0, %1
   br i1 %3, label %4, label %6
 

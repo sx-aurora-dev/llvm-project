@@ -112,6 +112,7 @@ def MImmAsmOperand : AsmOperandClass {
 }
 def mimm : Operand<i32>, PatLeaf<(imm), [{
     return isMask_64(N->getZExtValue()) ||
+           N->getZExtValue() == 0 /* (0)1 == 0 */ ||
            ((N->getZExtValue() & (1UL << 63)) &&
             isShiftedMask_64(N->getZExtValue())); }], MIMM> {
   let ParserMatchClass = MImmAsmOperand;
@@ -484,6 +485,8 @@ def getFunPLT     : Operand<iPTR> {
 // res = cmov cmp, t, f, cond
 def SDTCmovOp : SDTypeProfile<1, 4, [SDTCisSameAs<0, 2>, SDTCisSameAs<2, 3>,
                                      SDTCisVT<4, i32>]>;
+def EQV : SDNode<"VEISD::EQV", SDTIntBinOp>;
+def XOR : SDNode<"VEISD::XOR", SDTIntBinOp>;
 def CMPI : SDNode<"VEISD::CMPI", SDTIntBinOp>;
 def CMPU : SDNode<"VEISD::CMPU", SDTIntBinOp>;
 def CMPF : SDNode<"VEISD::CMPF", SDTFPBinOp>;
@@ -1288,8 +1291,8 @@ defm CMPUL : RRNCm<"cmpu.l", 0x55, I64, i64, CMPU>;
 let cx = 1 in defm CMPUW : RRNCm<"cmpu.w", 0x55, I32, i32, CMPU>;
 
 // Section 8.4.15 - CPS (Compare Single)
-defm CMPSWSX : RRNCm<"cmps.w.sx", 0x7A, I32, i32, CMPI>;
-let cx = 1 in defm CMPSWZX : RRNCm<"cmps.w.zx", 0x7A, I32, i32>;
+defm CMPSWSX : RRNCm<"cmps.w.sx", 0x7A, I32, i32>;
+let cx = 1 in defm CMPSWZX : RRNCm<"cmps.w.zx", 0x7A, I32, i32, CMPI>;
 
 // Section 8.4.16 - CPX (Compare)
 defm CMPSL : RRNCm<"cmps.l", 0x6A, I64, i64, CMPI>;
@@ -1318,11 +1321,15 @@ defm OR : RRm<"or", 0x45, I64, i64, or>;
 let isCodeGenOnly = 1 in defm OR32 : RRm<"or", 0x45, I32, i32, or>;
 
 // Section 8.5.3 - XOR (Exclusive OR)
-defm XOR : RRm<"xor", 0x46, I64, i64, xor>;
-let isCodeGenOnly = 1 in defm XOR32 : RRm<"xor", 0x46, I32, i32, xor>;
+def xor_pat : PatFrags<(ops node:$lhs, node:$rhs),
+                       [(xor node:$lhs, node:$rhs),
+                        (XOR node:$lhs, node:$rhs)]>;
+defm XOR : RRm<"xor", 0x46, I64, i64, xor_pat>;
+let isCodeGenOnly = 1 in defm XOR32 : RRm<"xor", 0x46, I32, i32, xor_pat>;
 
 // Section 8.5.4 - EQV (Equivalence)
-defm EQV : RRm<"eqv", 0x47, I64, i64>;
+defm EQV : RRm<"eqv", 0x47, I64, i64, EQV>;
+let isCodeGenOnly = 1 in defm EQV32 : RRm<"eqv", 0x47, I32, i32, EQV>;
 
 // Section 8.5.5 - NND (Negate AND)
 defm NND : RRNNDm<"nnd", 0x54, I64, i64>;
@@ -2012,6 +2019,12 @@ def GETSTACKTOP : Pseudo<(outs I64:$dst), (ins),
 
 // SETCC pattern matches
 //
+// We performs better instruments in optimizeSetCC() in the middle of
+// DAG combining, but it may fails, so we leave concrete instruments
+// here.
+//
+// These patterns generally generates following instructions.
+//
 //   CMP  %tmp, lhs, rhs     ; compare lhs and rhs
 //   or   %res, 0, (0)1      ; initialize by 0
 //   CMOV %res, (63)0, %tmp  ; set 1 if %tmp is true
@@ -2055,7 +2068,7 @@ multiclass SETCCIm<ValueType TY, SDPatternOperator CMOV,
 // Floating point setcc multiclass.
 multiclass SETCCFm<ValueType TY, SDPatternOperator CMOV,
                    SDPatternOperator CMPir, SDPatternOperator CMPrr> :
-  // Avoid CMP instruction iff rhs == 0.
+  // Avoid CMP instruction iff rhs == 0 and no-nans.
   SETCCZEROm<TY, fpzero, cond, CMOV, fcond2cc>,
   // Instrument immediate value in CMP instruction.  VE uses LHS but llvm uses
   // RHS, so we swap them and use calculate condition code with swap

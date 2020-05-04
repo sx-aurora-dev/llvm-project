@@ -26,6 +26,8 @@ def FeatureVectorize
 def IsVectorizeSubTarget : Predicate<"Subtarget->vectorize()">;
 def IsNotVectorizeSubTarget : Predicate<"!Subtarget->vectorize()">;
 
+def IsNoNaNs : Predicate<"TM.Options.NoNaNsFPMath">;
+
 //===----------------------------------------------------------------------===//
 // Register File, Calling Conv, Instruction Descriptions
 //===----------------------------------------------------------------------===//

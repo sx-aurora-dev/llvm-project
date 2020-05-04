@@ -24,6 +24,8 @@ namespace VEISD {
 enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
+  EQV,         // Equivalence between two integer values.
+  XOR,         // Exclusive-or between two integer values.
   CMPI,        // Compare between two signed integer values.
   CMPU,        // Compare between two unsigned integer values.
   CMPF,        // Compare between two floating-point values.
@@ -143,6 +145,7 @@ public:
 
   SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 
+  SDValue combineExtBoolTrunc(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineSelectCC(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineSelect(SDNode *N, DAGCombinerInfo &DCI) const;
@@ -151,6 +154,11 @@ public:
   /// SETCC with integer arithmetic operations when there is a legal way
   /// of doing it.
   SDValue optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
+
+  SDValue generateEquivalentSub(SDNode *N, bool Signed, bool Complement,
+                                bool Swap, SelectionDAG &DAG) const;
+  SDValue generateEquivalentCmp(SDNode *N, bool UseCompAsBase,
+                                SelectionDAG &DAG) const;
 
   ConstraintType getConstraintType(StringRef Constraint) const override;
   ConstraintWeight

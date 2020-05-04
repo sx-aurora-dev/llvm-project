@@ -1,10 +1,15 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -enable-no-nans-fp-math | FileCheck %s -check-prefix=NONANS
 
 define zeroext i1 @setccaf(float, float) {
 ; CHECK-LABEL: setccaf:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
+; NONANS-LABEL: setccaf:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s0, 0, (0)1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp false float %0, 0.0
   ret i1 %3
 }
@@ -14,6 +19,10 @@ define zeroext i1 @setccat(float, float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 1, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
+; NONANS-LABEL: setccat:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s0, 1, (0)1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp true float %0, 0.0
   ret i1 %3
 }
@@ -25,6 +34,12 @@ define zeroext i1 @setccoeq(float, float) {
 ; CHECK-NEXT:    cmov.s.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+; NONANS-LABEL: setccoeq:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.eq %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp oeq float %0, 0.0
   ret i1 %3
 }
@@ -38,6 +53,14 @@ define zeroext i1 @setccone(float, float) {
 ; CHECK-NEXT:    cmov.s.ne %s0, (63)0, %s1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
+; NONNS-LABEL: setccone:
+; NONNS:       .LBB{{[0-9]+}}_2:
+; NONNS-NEXT:    lea.sl %s1, 1084227584
+; NONNS-NEXT:    fcmp.s %s1, %s0, %s1
+; NONNS-NEXT:    or %s0, 0, (0)1
+; NONNS-NEXT:    cmov.s.ne %s0, (63)0, %s1
+; NONNS-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; NONNS-NEXT:    or %s11, 0, %s9
   %3 = fcmp one float %0, 5.0
   ret i1 %3
 }
@@ -49,6 +72,12 @@ define zeroext i1 @setccogt(float, float) {
 ; CHECK-NEXT:    cmov.s.gt %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+; NONANS-LABEL: setccogt:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.gt %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp ogt float %0, 0.0
   ret i1 %3
 }
