@@ -1510,7 +1510,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   // We have target-specific dag combine patterns for the following nodes:
   setTargetDAGCombine(ISD::SETCC);
-  setTargetDAGCombine(ISD::SELECT);
   setTargetDAGCombine(ISD::SELECT_CC);
 
   // Set function alignment to 16 bytes
@@ -3444,13 +3443,6 @@ SDValue VETargetLowering::combineSelectCC(SDNode *N,
   return SDValue();
 }
 
-SDValue VETargetLowering::combineSelect(SDNode *N,
-                                        DAGCombinerInfo &DCI) const {
-  assert(N->getOpcode() == ISD::SELECT &&
-         "Should be called with a SELECT node");
-  return SDValue();
-}
-
 SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
                                             DAGCombinerInfo &DCI) const {
   SelectionDAG &DAG = DCI.DAG;
@@ -3461,8 +3453,6 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
     return combineSetCC(N, DCI);
   case ISD::SELECT_CC:
     return combineSelectCC(N, DCI);
-  case ISD::SELECT:
-    return combineSelect(N, DCI);
   }
 
   return SDValue();
