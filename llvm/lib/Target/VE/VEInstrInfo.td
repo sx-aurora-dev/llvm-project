@@ -2510,22 +2510,30 @@ defm : CMOVF32m<f32, "CMOVS">;
 // Use cmov.w for all cases since %pred holds i32.
 //
 //   CMOV.w.ne %res, %tval, %tmp  ; set tval if %tmp is true
-def : Pat<(i64 (select i32:$pred, (i64 mimm:$t), i64:$f)),
-          (CMOVWrm CC_INE, $pred, (MIMM $t), $f)>;
 def : Pat<(i64 (select i32:$pred, i64:$t, i64:$f)),
           (CMOVWrr CC_INE, $pred, $t, $f)>;
+def : Pat<(i64 (select i32:$pred, (i64 mimm:$t), i64:$f)),
+          (CMOVWrm CC_INE, $pred, (MIMM $t), $f)>;
+def : Pat<(i64 (select i32:$pred, i64:$t, (i64 mimm:$f))),
+          (CMOVWrm CC_IEQ, $pred, (MIMM $f), $t)>;
 
+def : Pat<(i32 (select i32:$pred, i32:$t, i32:$f)),
+          (EXTRACT_SUBREG
+              (CMOVWrr CC_INE, $pred,
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_i32),
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_i32)),
+              sub_i32)>;
 def : Pat<(i32 (select i32:$pred, (i32 mimm:$t), i32:$f)),
           (EXTRACT_SUBREG
               (CMOVWrm CC_INE, $pred,
                        (MIMM $t),
                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_i32)),
               sub_i32)>;
-def : Pat<(i32 (select i32:$pred, i32:$t, i32:$f)),
+def : Pat<(i32 (select i32:$pred, i32:$t, (i32 mimm:$f))),
           (EXTRACT_SUBREG
-              (CMOVWrr CC_INE, $pred,
-                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_i32),
-                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_i32)),
+              (CMOVWrm CC_IEQ, $pred,
+                       (MIMM $f),
+                       (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_i32)),
               sub_i32)>;
 
 def : Pat<(f128 (select i32:$pred, f128:$t, f128:$f)),
@@ -2538,22 +2546,30 @@ def : Pat<(f128 (select i32:$pred, f128:$t, f128:$f)),
               (EXTRACT_SUBREG $t, sub_even),
               (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 
-def : Pat<(f64 (select i32:$pred, (f64 mimmfp:$t), f64:$f)),
-          (CMOVWrm CC_INE, $pred, (MIMMFP $t), $f)>;
 def : Pat<(f64 (select i32:$pred, f64:$t, f64:$f)),
           (CMOVWrr CC_INE, $pred, $t, $f)>;
+def : Pat<(f64 (select i32:$pred, (f64 mimmfp:$t), f64:$f)),
+          (CMOVWrm CC_INE, $pred, (MIMMFP $t), $f)>;
+def : Pat<(f64 (select i32:$pred, f64:$t, (f64 mimmfp:$f))),
+          (CMOVWrm CC_IEQ, $pred, (MIMMFP $f), $t)>;
 
+def : Pat<(f32 (select i32:$pred, f32:$t, f32:$f)),
+          (EXTRACT_SUBREG
+            (CMOVWrr CC_INE, $pred,
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_f32),
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_f32)),
+            sub_f32)>;
 def : Pat<(f32 (select i32:$pred, (f32 mimmfp:$t), f32:$f)),
           (EXTRACT_SUBREG
             (CMOVWrm CC_INE, $pred,
                      (MIMMFP $t),
                      (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_f32)),
             sub_f32)>;
-def : Pat<(f32 (select i32:$pred, f32:$t, f32:$f)),
+def : Pat<(f32 (select i32:$pred, f32:$t, (f32 mimmfp:$f))),
           (EXTRACT_SUBREG
-            (CMOVWrr CC_INE, $pred,
-                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_f32),
-                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $f, sub_f32)),
+            (CMOVWrm CC_IEQ, $pred,
+                     (MIMMFP $f),
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $t, sub_f32)),
             sub_f32)>;
 
 // bitconvert
