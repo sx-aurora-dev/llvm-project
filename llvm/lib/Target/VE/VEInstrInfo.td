@@ -1855,39 +1855,44 @@ def : Pat<(br bb:$addr), (BRCFLa bb:$addr)>;
 
 // brcc
 // integer brcc
-multiclass BRCCIm<ValueType ty, SDPatternOperator BrOpNode1,
-                 SDPatternOperator BrOpNode2,
-                 SDPatternOperator CmpOpNode1,
-                 SDPatternOperator CmpOpNode2> {
-  def : Pat<(brcc CCSIOp:$cond, ty:$l, simm7:$r, bb:$addr),
-            (BrOpNode2 (icond2ccSwap $cond), (LO7 $r), $l, bb:$addr)>;
+multiclass BRCCIm<ValueType ty, SDPatternOperator BRCCrr,
+                  SDPatternOperator BRCCir, SDPatternOperator BRCCrm,
+                  SDPatternOperator CMPrr, SDPatternOperator CMPir> {
+                  SDPatternOperator CMPrm> {
   def : Pat<(brcc CCSIOp:$cond, ty:$l, ty:$r, bb:$addr),
-            (BrOpNode1 (icond2cc $cond), $l, $r, bb:$addr)>;
-  def : Pat<(brcc CCUIOp:$cond, ty:$l, simm7:$r, bb:$addr),
-            (BrOpNode2 (icond2cc $cond), 0, (CmpOpNode2 (LO7 $r), $l),
-                       bb:$addr)>;
+            (BRCCrr (icond2cc $cond), $l, $r, bb:$addr)>;
+  def : Pat<(brcc CCSIOp:$cond, ty:$l, simm7:$r, bb:$addr),
+            (BRCCir (icond2ccSwap $cond), (LO7 $r), $l, bb:$addr)>;
+  def : Pat<(brcc CCSIOp:$cond, ty:$l, mimm:$r, bb:$addr),
+            (BRCCrm (icond2cc $cond), $l, (MIMM $r), bb:$addr)>;
   def : Pat<(brcc CCUIOp:$cond, ty:$l, ty:$r, bb:$addr),
-            (BrOpNode2 (icond2cc $cond), 0, (CmpOpNode1 $r, $l), bb:$addr)>;
+            (BRCCir (icond2cc $cond), 0, (CMPrr $r, $l), bb:$addr)>;
+  def : Pat<(brcc CCUIOp:$cond, ty:$l, simm7:$r, bb:$addr),
+            (BRCCir (icond2cc $cond), 0, (CMPir (LO7 $r), $l), bb:$addr)>;
+  def : Pat<(brcc CCUIOp:$cond, ty:$l, mimm:$r, bb:$addr),
+            (BRCCir (icond2ccSwap $cond), 0, (CMPir $l, (MIMM $r)), bb:$addr)>;
 }
-defm : BRCCIm<i32, BRCFWrr, BRCFWir, CMPUWrr, CMPUWir>;
-defm : BRCCIm<i64, BRCFLrr, BRCFLir, CMPULrr, CMPULir>;
+defm : BRCCIm<i32, BRCFWrr, BRCFWir, BRCFWrm, CMPUWrr, CMPUWir, CMPUWrm>;
+defm : BRCCIm<i64, BRCFLrr, BRCFLir, BRCFLrm, CMPULrr, CMPULir, CMPULrm>;
 
 // floating point brcc
-multiclass BRCCFm<ValueType ty, SDPatternOperator BrOpNode1,
-                 SDPatternOperator BrOpNode2> {
-  def : Pat<(brcc cond:$cond, ty:$l, fpzero:$r, bb:$addr),
-            (BrOpNode2 (fcond2ccSwap $cond), (LOFP32 $r), $l, bb:$addr)>;
+multiclass BRCCFm<ValueType ty, SDPatternOperator BRCCrr,
+                  SDPatternOperator BRCCir, SDPatternOperator BRCCrm> {
   def : Pat<(brcc cond:$cond, ty:$l, ty:$r, bb:$addr),
-            (BrOpNode1 (fcond2cc $cond), $l, $r, bb:$addr)>;
+            (BRCCrr (fcond2cc $cond), $l, $r, bb:$addr)>;
+  def : Pat<(brcc cond:$cond, ty:$l, simm7fp:$r, bb:$addr),
+            (BRCCir (fcond2ccSwap $cond), (LO7FP $r), $l, bb:$addr)>;
+  def : Pat<(brcc cond:$cond, ty:$l, mimmfp:$r, bb:$addr),
+            (BRCCrm (fcond2cc $cond), $l, (MIMMFP $r), bb:$addr)>;
 }
 defm : BRCCFm<f32, BRCFSrr, BRCFSir>;
 defm : BRCCFm<f64, BRCFDrr, BRCFDir>;
-// FIXME: fpzero doesn't work with f128 since f128 is separated
+// FIXME: simm7fp doesn't work with f128 since f128 is separated
 //        to INSERT_SUBREG stuff before performing ISEL.
-def : Pat<(brcc cond:$cond, f128:$l, fpzero:$r, bb:$addr),
-          (BRCFDrr (fcond2cc $cond), 0, (FCMPQir (LOFP32 $r), $l), bb:$addr)>;
 def : Pat<(brcc cond:$cond, f128:$l, f128:$r, bb:$addr),
           (BRCFDrr (fcond2cc $cond), 0, (FCMPQrr $r, $l), bb:$addr)>;
+def : Pat<(brcc cond:$cond, f128:$l, simm7fp:$r, bb:$addr),
+          (BRCFDrr (fcond2cc $cond), 0, (FCMPQir (LO7FP $r), $l), bb:$addr)>;
 
 //===----------------------------------------------------------------------===//
 // Pseudo Instructions
