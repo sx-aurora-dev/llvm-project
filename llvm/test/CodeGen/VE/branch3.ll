@@ -316,8 +316,7 @@ join:
 define i32 @func12(i128 %a) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    cmps.l %s2, %s1, (0)1
-; CHECK-NEXT:    srl %s2, %s2, 63
+; CHECK-NEXT:    srl %s2, %s1, 63
 ; CHECK-NEXT:    or %s3, 23, (0)1
 ; CHECK-NEXT:    cmpu.l %s0, %s0, %s3
 ; CHECK-NEXT:    srl %s0, %s0, 63

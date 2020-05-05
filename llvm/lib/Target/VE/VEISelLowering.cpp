@@ -3376,6 +3376,20 @@ static EVT decideCompType(EVT SrcVT) {
   return SrcVT;
 }
 
+static bool safeWithoutComp(EVT SrcVT, bool Signed) {
+  if (SrcVT.isFloatingPoint()) {
+    // For the case of floating point setcc, only unordered comparison
+    // or general comparison with -enable-no-nans-fp-math option reach
+    // here, so it is safe even if values are NaN.  Only f128 doesn't
+    // safe since VE uses f64 result of f128 comparison.
+    return SrcVT != MVT::f128;
+  }
+  // For the case of integer setcc, only signed 64 bits comparison is safe.
+  // For unsigned, "CMPU 0x80000000, 0" has to be greater than 0, but it becomes
+  // less than 0 witout CMPU.  For 32 bits, other half of 32 bits are
+  // uncoditional, so it is not safe too without CMPI..
+  return (Signed && SrcVT == MVT::i64) ? true : false;
+}
 
 /// This function is called when we have proved that a SETCC node can be
 /// replaced by subtraction (and other supporting instructions).
@@ -3396,9 +3410,16 @@ SDValue VETargetLowering::generateEquivalentSub(SDNode *N, bool Signed,
   if (Swap)
     std::swap(Op0, Op1);
 
-  // Compare values.
+  // Compare values.  If Op1 is 0 and it is safe to calculate without
+  // comparison, we don't generate compare instruction.
   EVT CompVT = decideCompType(SrcVT);
-  auto CompNode = DAG.getNode(decideComp(SrcVT, Signed), DL, CompVT, Op0, Op1);
+  SDValue CompNode;
+  if (CompVT == SrcVT && safeWithoutComp(SrcVT, Signed) &&
+      (isNullConstant(Op1) || isNullFPConstant(Op1))) {
+    CompNode = Op0;
+  } else {
+    CompNode = DAG.getNode(decideComp(SrcVT, Signed), DL, CompVT, Op0, Op1);
+  }
   if (CompVT != MVT::i64) {
     SDValue Undef = SDValue(
         DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
@@ -3561,10 +3582,18 @@ SDValue VETargetLowering::generateEquivalentLdz(SDNode *N, bool Complement,
   // for SETEQ/SETNE.
   if (!isSimm7(Op0) && !isMimm(Op1) && (isSimm7(Op1) || isMimm(Op0)))
     std::swap(Op0, Op1);
+  assert(!(isNullConstant(Op0) || isNullFPConstant(Op0)) && "lhs is 0!");
 
-  // Compare values.
+  // Compare values.  If Op1 is 0 and it is safe to calculate without
+  // comparison, we don't generate compare instruction.
   EVT CompVT = decideCompType(SrcVT);
-  auto CompNode = DAG.getNode(decideComp(SrcVT, true), DL, CompVT, Op0, Op1);
+  SDValue CompNode;
+  if (CompVT == SrcVT && safeWithoutComp(SrcVT, true) &&
+      (isNullConstant(Op1) || isNullFPConstant(Op1))) {
+    CompNode = Op0;
+  } else {
+    CompNode = DAG.getNode(decideComp(SrcVT, true), DL, CompVT, Op0, Op1);
+  }
   if (CompVT != MVT::i64) {
     SDValue Undef = SDValue(
         DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
@@ -3668,6 +3697,11 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
 #endif
     break;
   case ISD::SETNE:
+    // Generate code for "setugt a, 0" instead of "setne a, 0" since it is
+    // faster on VE.
+    if (isNullConstant(N->getOperand(1)))
+      return generateEquivalentSub(N, false, false, true, DAG);
+    LLVM_FALLTHROUGH;
   case ISD::SETUNE:
 #if 1
     // a != b -> (XOR (LDZ (CMP a, b)) >> 6, 1)
