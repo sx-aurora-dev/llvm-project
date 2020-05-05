@@ -64,7 +64,7 @@ join:
 define i32 @func3(i32 %a) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    brgt.w 19, %s0, .LBB2_1
+; CHECK-NEXT:    brlt.w %s0, (57)0, .LBB2_1
 ; CHECK-NEXT:  # %bb.2:
 ; CHECK-NEXT:    lea %s0, ret@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -77,7 +77,7 @@ define i32 @func3(i32 %a) {
 ; CHECK:       .LBB{{[0-9]+}}_3:
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
-  %cmp = icmp sgt i32 %a, 18
+  %cmp = icmp sgt i32 %a, 126
   br i1 %cmp, label %on.true, label %join
 
 on.true:

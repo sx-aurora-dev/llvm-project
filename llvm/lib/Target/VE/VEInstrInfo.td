@@ -853,10 +853,14 @@ multiclass BCRbpfm<string opcStr, string cmpStr, bits<8> opc, dag cond> {
               !strconcat(opcStr, ".t ", cmpStr, "$imm32")>;
 }
 multiclass BCRm<string opcStr, string opcStrAt, string opcStrAf, bits<8> opc,
-               RegisterClass RC, Operand immOp> {
+               RegisterClass RC, Operand immOp, Operand mimmOp> {
   defm rr : BCRbpfm<opcStr, "$sy, $sz, ", opc, (ins CCOp:$cf, RC:$sy, RC:$sz)>;
   let cy = 0 in
-  defm ir : BCRbpfm<opcStr, "$sy, $sz, ", opc, (ins CCOp:$cf, immOp:$sy, RC:$sz)>;
+  defm ir : BCRbpfm<opcStr, "$sy, $sz, ", opc,
+                    (ins CCOp:$cf, immOp:$sy, RC:$sz)>;
+  let cz = 0 in
+  defm rm : BCRbpfm<opcStr, "$sy, $sz, ", opc,
+                    (ins CCOp:$cf, RC:$sy, mimmOp:$sz)>;
   let cy = 0, sy = 0, cz = 0, sz = 0, cf = 15 /* AT */, isBarrier = 1 in
   defm a : BCRbpfm<opcStrAt, "", opc, (ins)>;
   let cy = 0, sy = 0, cz = 0, sz = 0, cf = 0 /* AF */ in
@@ -1433,19 +1437,19 @@ def RET : CF<0x19, (outs), (ins), "b.l.t (, %lr)", [(retflag)]>;
 defm BCFW : BCm<"b${cond}.w", "b.w", "baf.w", 0x1B, I32, simm7>;
 
 // Section 8.8.3 - BCF (Branch on Condition Floating Point)
-defm BCFD : BCm<"b${cond}.d", "b.d", "baf.d", 0x1C, I64, simm7>;
+defm BCFD : BCm<"b${cond}.d", "b.d", "baf.d", 0x1C, I64, simm7fp>;
 let cx = 1 in
-defm BCFS : BCm<"b${cond}.s", "b.s", "baf.s", 0x1C, F32, simm7>;
+defm BCFS : BCm<"b${cond}.s", "b.s", "baf.s", 0x1C, F32, simm7fp>;
 
 // Section 8.8.4 - BCR (Branch on Condition Relative)
 let cx = 0, cx2 = 0 in
-defm BRCFL : BCRm<"br${cf}.l", "br.l", "braf.l", 0x18, I64, simm7>;
+defm BRCFL : BCRm<"br${cf}.l", "br.l", "braf.l", 0x18, I64, simm7, mimm>;
 let cx = 1, cx2 = 0 in
-defm BRCFW : BCRm<"br${cf}.w", "br.w", "braf.w", 0x18, I32, simm7>;
+defm BRCFW : BCRm<"br${cf}.w", "br.w", "braf.w", 0x18, I32, simm7, mimm>;
 let cx = 0, cx2 = 1 in
-defm BRCFD : BCRm<"br${cf}.d", "br.d", "braf.d", 0x18, I64, simm7>;
+defm BRCFD : BCRm<"br${cf}.d", "br.d", "braf.d", 0x18, I64, simm7fp, mimmfp>;
 let cx = 1, cx2 = 1 in
-defm BRCFS : BCRm<"br${cf}.s", "br.s", "braf.s", 0x18, F32, simm7>;
+defm BRCFS : BCRm<"br${cf}.s", "br.s", "braf.s", 0x18, F32, simm7fp, mimmfp>;
 
 // Section 8.8.5 - BSIC (Branch and Save IC)
 let isCall = 1, hasSideEffects = 0, DecoderMethod = "DecodeCall" in
@@ -1857,7 +1861,7 @@ def : Pat<(br bb:$addr), (BRCFLa bb:$addr)>;
 // integer brcc
 multiclass BRCCIm<ValueType ty, SDPatternOperator BRCCrr,
                   SDPatternOperator BRCCir, SDPatternOperator BRCCrm,
-                  SDPatternOperator CMPrr, SDPatternOperator CMPir> {
+                  SDPatternOperator CMPrr, SDPatternOperator CMPir,
                   SDPatternOperator CMPrm> {
   def : Pat<(brcc CCSIOp:$cond, ty:$l, ty:$r, bb:$addr),
             (BRCCrr (icond2cc $cond), $l, $r, bb:$addr)>;
@@ -1870,7 +1874,7 @@ multiclass BRCCIm<ValueType ty, SDPatternOperator BRCCrr,
   def : Pat<(brcc CCUIOp:$cond, ty:$l, simm7:$r, bb:$addr),
             (BRCCir (icond2cc $cond), 0, (CMPir (LO7 $r), $l), bb:$addr)>;
   def : Pat<(brcc CCUIOp:$cond, ty:$l, mimm:$r, bb:$addr),
-            (BRCCir (icond2ccSwap $cond), 0, (CMPir $l, (MIMM $r)), bb:$addr)>;
+            (BRCCir (icond2ccSwap $cond), 0, (CMPrm $l, (MIMM $r)), bb:$addr)>;
 }
 defm : BRCCIm<i32, BRCFWrr, BRCFWir, BRCFWrm, CMPUWrr, CMPUWir, CMPUWrm>;
 defm : BRCCIm<i64, BRCFLrr, BRCFLir, BRCFLrm, CMPULrr, CMPULir, CMPULrm>;
@@ -1885,8 +1889,8 @@ multiclass BRCCFm<ValueType ty, SDPatternOperator BRCCrr,
   def : Pat<(brcc cond:$cond, ty:$l, mimmfp:$r, bb:$addr),
             (BRCCrm (fcond2cc $cond), $l, (MIMMFP $r), bb:$addr)>;
 }
-defm : BRCCFm<f32, BRCFSrr, BRCFSir>;
-defm : BRCCFm<f64, BRCFDrr, BRCFDir>;
+defm : BRCCFm<f32, BRCFSrr, BRCFSir, BRCFSrm>;
+defm : BRCCFm<f64, BRCFDrr, BRCFDir, BRCFDrm>;
 // FIXME: simm7fp doesn't work with f128 since f128 is separated
 //        to INSERT_SUBREG stuff before performing ISEL.
 def : Pat<(brcc cond:$cond, f128:$l, f128:$r, bb:$addr),

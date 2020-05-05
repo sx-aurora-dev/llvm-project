@@ -77,38 +77,38 @@ static VECC::CondCode GetOppositeBranchCondition(VECC::CondCode CC) {
   return VECC::UNKNOWN;
 }
 
-// Treat br.l [BRCF AT] as unconditional branch
+// Treat branch relative always like br.l.t as unconditional branch
+// instructions.
 static bool isUncondBranchOpcode(int Opc) {
-  return Opc == VE::BRCFLa    || Opc == VE::BRCFWa    ||
-         Opc == VE::BRCFLa_nt || Opc == VE::BRCFWa_nt ||
-         Opc == VE::BRCFLa_t  || Opc == VE::BRCFWa_t  ||
-         Opc == VE::BRCFDa    || Opc == VE::BRCFSa    ||
-         Opc == VE::BRCFDa_nt || Opc == VE::BRCFSa_nt ||
-         Opc == VE::BRCFDa_t  || Opc == VE::BRCFSa_t;
+  using namespace llvm::VE;
+
+#define BRKIND(NAME) \
+    (Opc == NAME ## a || Opc == NAME ## a_nt || Opc == NAME ## a_t)
+  return BRKIND(BRCFL) || BRKIND(BRCFW) || BRKIND(BRCFD) || BRKIND(BRCFS);
+#undef BRKIND
 }
 
+// Treat branch relative conditional like brgt.l.t as conditional branch
+// instructions.
 static bool isCondBranchOpcode(int Opc) {
-  return Opc == VE::BRCFLrr    || Opc == VE::BRCFLir    ||
-         Opc == VE::BRCFLrr_nt || Opc == VE::BRCFLir_nt ||
-         Opc == VE::BRCFLrr_t  || Opc == VE::BRCFLir_t  ||
-         Opc == VE::BRCFWrr    || Opc == VE::BRCFWir    ||
-         Opc == VE::BRCFWrr_nt || Opc == VE::BRCFWir_nt ||
-         Opc == VE::BRCFWrr_t  || Opc == VE::BRCFWir_t  ||
-         Opc == VE::BRCFDrr    || Opc == VE::BRCFDir    ||
-         Opc == VE::BRCFDrr_nt || Opc == VE::BRCFDir_nt ||
-         Opc == VE::BRCFDrr_t  || Opc == VE::BRCFDir_t  ||
-         Opc == VE::BRCFSrr    || Opc == VE::BRCFSir    ||
-         Opc == VE::BRCFSrr_nt || Opc == VE::BRCFSir_nt ||
-         Opc == VE::BRCFSrr_t  || Opc == VE::BRCFSir_t;
+  using namespace llvm::VE;
+
+#define BRKIND(NAME) \
+    (Opc == NAME ## rr || Opc == NAME ## rr_nt || Opc == NAME ## rr_t || \
+     Opc == NAME ## ir || Opc == NAME ## ir_nt || Opc == NAME ## ir_t || \
+     Opc == NAME ## rm || Opc == NAME ## rm_nt || Opc == NAME ## rm_t)
+  return BRKIND(BRCFL) || BRKIND(BRCFW) || BRKIND(BRCFD) || BRKIND(BRCFS);
+#undef BRKIND
 }
 
+// Treat branch always like b.l.t as indirect branch instructions.
 static bool isIndirectBranchOpcode(int Opc) {
-  return Opc == VE::BCFLari    || Opc == VE::BCFLari    ||
-         Opc == VE::BCFLari_nt || Opc == VE::BCFLari_nt ||
-         Opc == VE::BCFLari_t  || Opc == VE::BCFLari_t  ||
-         Opc == VE::BCFLari    || Opc == VE::BCFLari    ||
-         Opc == VE::BCFLari_nt || Opc == VE::BCFLari_nt ||
-         Opc == VE::BCFLari_t  || Opc == VE::BCFLari_t;
+  using namespace llvm::VE;
+
+#define BRKIND(NAME) \
+    (Opc == NAME ## ari || Opc == NAME ## ari_nt || Opc == NAME ## ari_t)
+  return BRKIND(BCFL) || BRKIND(BCFW) || BRKIND(BCFD) || BRKIND(BCFS);
+#undef BRKIND
 }
 
 static void parseCondBranch(MachineInstr *LastInst, MachineBasicBlock *&Target,
@@ -218,29 +218,37 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
   }
 
   // Conditional branch
-  //   (BRCFir CC sy sz addr)
-  assert(Cond[0].isImm() && Cond[2].isReg() && "not implemented");
+  //   (BRCFir CC sy sz addr) where sz is register
+  //   (BRCFrm CC sy sz addr) where sy is regiseer
+  assert(Cond[0].isImm() && (Cond[1].isReg() || Cond[2].isReg()) &&
+         "not implemented");
 
-  unsigned opc[2];
   const TargetRegisterInfo *TRI = &getRegisterInfo();
   MachineFunction *MF = MBB.getParent();
   const MachineRegisterInfo &MRI = MF->getRegInfo();
-  unsigned Reg = Cond[2].getReg();
+  unsigned Size =
+      TRI->getRegSizeInBits(Cond[1].isReg() ? Cond[1].getReg() :
+                                              Cond[2].getReg(), MRI);
+  unsigned opc[3];
   if (IsIntegerCC(Cond[0].getImm())) {
-    if (TRI->getRegSizeInBits(Reg, MRI) == 32) {
+    if (Size == 32) {
       opc[0] = VE::BRCFWir;
-      opc[1] = VE::BRCFWrr;
+      opc[1] = VE::BRCFWrm;
+      opc[2] = VE::BRCFWrr;
     } else {
       opc[0] = VE::BRCFLir;
-      opc[1] = VE::BRCFLrr;
+      opc[1] = VE::BRCFLrm;
+      opc[2] = VE::BRCFLrr;
     }
   } else {
-    if (TRI->getRegSizeInBits(Reg, MRI) == 32) {
+    if (Size == 32) {
       opc[0] = VE::BRCFSir;
-      opc[1] = VE::BRCFSrr;
+      opc[1] = VE::BRCFSrm;
+      opc[2] = VE::BRCFSrr;
     } else {
       opc[0] = VE::BRCFDir;
-      opc[1] = VE::BRCFDrr;
+      opc[1] = VE::BRCFDrm;
+      opc[2] = VE::BRCFDrr;
     }
   }
   if (Cond[1].isImm()) {
@@ -249,8 +257,14 @@ unsigned VEInstrInfo::insertBranch(MachineBasicBlock &MBB,
           .add(Cond[1]) // lhs
           .add(Cond[2]) // rhs
           .addMBB(TBB);
-  } else {
+  } else if (Cond[2].isImm()) {
       BuildMI(&MBB, DL, get(opc[1]))
+          .add(Cond[0]) // condition code
+          .add(Cond[1]) // lhs
+          .add(Cond[2]) // rhs
+          .addMBB(TBB);
+  } else {
+      BuildMI(&MBB, DL, get(opc[2]))
           .add(Cond[0])
           .add(Cond[1])
           .add(Cond[2])
