@@ -159,6 +159,8 @@ public:
                                 bool Swap, SelectionDAG &DAG) const;
   SDValue generateEquivalentCmp(SDNode *N, bool UseCompAsBase,
                                 SelectionDAG &DAG) const;
+  SDValue generateEquivalentLdz(SDNode *N, bool Complement,
+                                SelectionDAG &DAG) const;
 
   ConstraintType getConstraintType(StringRef Constraint) const override;
   ConstraintWeight

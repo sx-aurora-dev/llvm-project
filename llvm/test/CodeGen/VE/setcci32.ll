@@ -3,9 +3,9 @@
 define zeroext i1 @setcceq(i32, i32) {
 ; CHECK-LABEL: setcceq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    cmps.w.sx %s1, %s0, %s1
-; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    cmov.w.eq %s0, (63)0, %s1
+; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
+; CHECK-NEXT:    ldz %s0, %s0
+; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp eq i32 %0, %1
@@ -16,7 +16,9 @@ define zeroext i1 @setccne(i32, i32) {
 ; CHECK-LABEL: setccne:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
-; CHECK-NEXT:    cmov.w.ne %s0, (63)0, %s0
+; CHECK-NEXT:    ldz %s0, %s0
+; CHECK-NEXT:    srl %s0, %s0, 6
+; CHECK-NEXT:    xor %s0, 1, %s0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp ne i32 %0, %1

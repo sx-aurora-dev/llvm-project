@@ -3396,7 +3396,7 @@ SDValue VETargetLowering::generateEquivalentSub(SDNode *N, bool Signed,
   if (Swap)
     std::swap(Op0, Op1);
 
-  // Compare integers.
+  // Compare values.
   EVT CompVT = decideCompType(SrcVT);
   auto CompNode = DAG.getNode(decideComp(SrcVT, Signed), DL, CompVT, Op0, Op1);
   if (CompVT != MVT::i64) {
@@ -3543,6 +3543,75 @@ SDValue VETargetLowering::generateEquivalentCmp(SDNode *N, bool UseCompAsBase,
   return Cmoved;
 }
 
+/// This function is called when we have proved that a SETCC node can be
+/// replaced by leading-zero (and other supporting instructions).
+SDValue VETargetLowering::generateEquivalentLdz(SDNode *N, bool Complement,
+                                                SelectionDAG &DAG) const {
+  assert(N->getOpcode() == ISD::SETCC && "ISD::SETCC Expected.");
+
+  SDLoc DL(N);
+  auto Op0 = N->getOperand(0);
+  auto Op1 = N->getOperand(1);
+  EVT SrcVT = Op0.getValueType();
+  EVT VT = N->getValueType(0);
+  assert(VT == MVT::i32 && "i32 is expected as a result of ISD::SETCC.");
+
+  // VE instruction can holds simm7 at lhs and mimm at rhs.  Swap operands
+  // if it improve instructions.  Both CMP operation is safe to sawp
+  // for SETEQ/SETNE.
+  if (!isSimm7(Op0) && !isMimm(Op1) && (isSimm7(Op1) || isMimm(Op0)))
+    std::swap(Op0, Op1);
+
+  // Compare values.
+  EVT CompVT = decideCompType(SrcVT);
+  auto CompNode = DAG.getNode(decideComp(SrcVT, true), DL, CompVT, Op0, Op1);
+  if (CompVT != MVT::i64) {
+    SDValue Undef = SDValue(
+        DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
+    if (SrcVT == MVT::i32) {
+      SDValue Sub_i32 = DAG.getTargetConstant(VE::sub_i32, DL, MVT::i32);
+      CompNode = SDValue(DAG.getMachineNode(
+          TargetOpcode::INSERT_SUBREG, DL, MVT::i64, Undef,
+          CompNode, Sub_i32), 0);
+    } else if (SrcVT == MVT::f32) {
+      SDValue Sub_f32 = DAG.getTargetConstant(VE::sub_f32, DL, MVT::i32);
+      CompNode = SDValue(DAG.getMachineNode(
+          TargetOpcode::INSERT_SUBREG, DL, MVT::i64, Undef,
+          CompNode, Sub_f32), 0);
+    } else if (SrcVT == MVT::f64) {
+      const TargetRegisterClass *RC = getRegClassFor(MVT::i64);
+      CompNode = SDValue(DAG.getMachineNode(TargetOpcode::COPY_TO_REGCLASS, DL,
+                                            MVT::i64, CompNode,
+                                            DAG.getTargetConstant(RC->getID(),
+                                                DL, MVT::i32)), 0);
+    } else
+      llvm_unreachable("Unknown ValueType!");
+  }
+
+  // Count leading 0 in 64 bit register.
+  auto LdzNode = DAG.getNode(ISD::CTLZ, DL, MVT::i64, CompNode);
+
+  // If both are equal, ldz returns 64.  Otherwise, less than 64.
+  // Move the 6th bit to the least significant position and zero out the rest.
+  // Now the least significant bit carries the result of original comparison.
+  unsigned Size = CompNode.getValueSizeInBits();
+  auto Shifted = DAG.getNode(ISD::SRL, DL, MVT::i64, LdzNode,
+                             DAG.getConstant(Log2_32(Size), DL, MVT::i32));
+  auto Final = Shifted;
+
+  // Complement the result if needed. Based on the condition code.
+  if (Complement)
+    Final = DAG.getNode(ISD::XOR, DL, MVT::i64, Shifted,
+                        DAG.getConstant(1, DL, MVT::i64));
+
+  // Final is either 0 or 1, so it is safe for EXTRACT_SUBREG
+  SDValue Sub_i32 = DAG.getTargetConstant(VE::sub_i32, DL, MVT::i32);
+  Final = SDValue(DAG.getMachineNode(
+      TargetOpcode::EXTRACT_SUBREG, DL, VT, Final, Sub_i32), 0);
+
+  return Final;
+}
+
 // Perform optiization on SetCC similar to PowerPC.
 SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
   assert(N->getOpcode() == ISD::SETCC && "ISD::SETCC Expected.");
@@ -3563,17 +3632,18 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
   // CMOV is slower than ALU instructions.  And this combination requires 3
   // instructions.
   //
-  // For SETEQ/SETNE, we re-use %cmp as 0 initialized %res and generates
-  // following instructions.
-  //   SETNE                   SETEQ
-  //   XOR     %res, %a, %b    EQV     %res, %a, %b
-  //   CMOV.ne %res, 1, %res   CMOV.ne %res, 1, %res
+  // For SETEQ/SETNE, we use LDZ to count the number of bits holding 0.
+  //   SETEQ                   SETNE
+  //   CMP %t1, %a, %b         CMP %t1, %a, %b
+  //   LDZ %t2, %t1            LDZ %t2, %t1 ; 64 iff equal
+  //   SRL %res, %t2, 6        SRL %t3, %t2, 6
+  //                           XOR %res, %t3, 1
   //
   // For other comparison, we use sign bit to generate result value.
   //   SETLT                   SETLE
-  //   CMP %tmp, %a, %b        CMP %tmp, %b, %a
-  //   SRL %res, %tmp, 63/31   SRL %tmp, %tmp, 63/31
-  //                           XOR %res, %tmp, 1
+  //   CMP %t1, %a, %b         CMP %t1, %b, %a
+  //   SRL %res, %t1, 63/31    SRL %t2, %t1, 63/31
+  //                           XOR %res, %t2, 1
   //
   // We can use similar instructions for floating point also iff comparison
   // is unordered.  VE's comparison may return qNaN which MSB is on.
@@ -3583,6 +3653,11 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
   switch (CC) {
   default: break;
   case ISD::SETEQ:
+#if 1
+    // a == b -> (LDZ (CMP a, b)) >> 6
+    //   3 insns are equal to CMP+LEA+CMOV but faster.
+    return generateEquivalentLdz(N, false, DAG);
+#else
     // a == b -> cmov (a EQV b), 1, (a EQV b), SETNE iff a/b are i64
     //           cmov (a CMP b), 1, 0, SETEQ otherwise
     //   2 insns which is less than CMP+LEA+CMOV
@@ -3590,42 +3665,49 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
       return generateEquivalentBitOp(N, VEISD::EQV, DAG);
     // FIXME: generate CMP+LEA+CMOV here.
     // return generateEquivalentCmp(N, false, DAG);
+#endif
     break;
   case ISD::SETNE:
   case ISD::SETUNE:
+#if 1
+    // a != b -> (XOR (LDZ (CMP a, b)) >> 6, 1)
+    //   4 insns are more than CMP+LEA+CMOV but faster.
+    return generateEquivalentLdz(N, true, DAG);
+#else
     // a != b -> cmov (a XOR b), 1, (a XOR b), SETNE iff a/b are i64
     //           cmov (a CMP b), 1, (a CMP b), SETNE otherwise
     //   2 insns which is less than CMP+LEA+CMOV
     if (SrcVT == MVT::i64)
       return generateEquivalentBitOp(N, VEISD::XOR, DAG);
     return generateEquivalentCmp(N, true, DAG);
+#endif
   case ISD::SETLT:
-    // a < b -> (a CMP b) >> size(a)-1
-    //   2 insns which is less than CMP+LEA+CMOV
+    // a < b -> (CMP a, b) >> size(a)-1
+    //   2 insns are less than CMP+LEA+CMOV
     return generateEquivalentSub(N, true, false, false, DAG);
   case ISD::SETGT:
-    // a > b -> (b CMP a) >> size(a)-1
-    //   2 insns which is less than CMP+LEA+CMOV
+    // a > b -> (CMP b, a) >> size(a)-1
+    //   2 insns are less than CMP+LEA+CMOV
     return generateEquivalentSub(N, true, false, true, DAG);
   case ISD::SETLE:
-    // a <= b -> (b CMP a) >> size(a)-1 xor 1
-    //   3 insns which is equal to CMP+LEA+CMOV but faster than CMP+LEA+CMOV
+    // a <= b -> (XOR (CMP b, a) >> size(a)-1, 1)
+    //   3 insns are equal to CMP+LEA+CMOV but faster.
     return generateEquivalentSub(N, true, true, true, DAG);
   case ISD::SETGE:
-    // a >= b -> (a CMP b) >> size(a)-1 xor 1
-    //   3 insns which is equal to CMP+LEA+CMOV but faster than CMP+LEA+CMOV
+    // a >= b -> (XOR (CMP a, b) >> size(a)-1, 1)
+    //   3 insns are equal to CMP+LEA+CMOV but faster.
     return generateEquivalentSub(N, true, true, false, DAG);
   case ISD::SETULT:
-    // a < b -> (a CMP b) >> size(a)-1
+    // a < b -> (CMP a, b) >> size(a)-1
     return generateEquivalentSub(N, false, false, false, DAG);
   case ISD::SETULE:
-    // a <= b -> (b CMP a) >> size(a)-1 xor 1
+    // a <= b -> (XOR (CMP b, a) >> size(a)-1, 1)
     return generateEquivalentSub(N, false, true, true, DAG);
   case ISD::SETUGT:
-    // a > b -> (b CMP a) >> size(a)-1
+    // a > b -> (CMP b, a) >> size(a)-1
     return generateEquivalentSub(N, false, false, true, DAG);
   case ISD::SETUGE:
-    // a >= b -> (a CMP b) >> size(a)-1 xor 1
+    // a >= b -> (XOR (CMP a, b) >> size(a)-1, 1)
     return generateEquivalentSub(N, false, true, false, DAG);
   }
   return SDValue();
@@ -3707,6 +3789,19 @@ SDValue VETargetLowering::combineSetCC(SDNode *N,
     } else if (User->getOpcode() == ISD::BR_CC) {
       if (User->getOperand(1).getNode() == N ||
           User->getOperand(2).getNode() == N)
+        return SDValue();
+    } else if (User->getOpcode() == ISD::AND) {
+      // Atomic expansion may construct instructions like below.
+      //   %cond = SETCC
+      //   %and = AND %cond, 1
+      //   BR_CC %and
+      //
+      // This patterns will be combined into a single BR_CC later.
+      // So, we defer optimization on SETCC for a while.
+      // FIXME: create combine for (AND (SETCC ), 1).
+      if (User->getOperand(0).getNode() == N &&
+          User->getOperand(1).getValueType().isScalarInteger() &&
+          isOneConstant(User->getOperand(1)))
         return SDValue();
     }
   }
