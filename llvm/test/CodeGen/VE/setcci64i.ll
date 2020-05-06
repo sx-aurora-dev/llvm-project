@@ -15,9 +15,8 @@ define zeroext i1 @setccne(i64, i64) {
 ; CHECK-LABEL: setccne:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.l %s0, 12, %s0
-; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    srl %s0, %s0, 6
-; CHECK-NEXT:    xor %s0, 1, %s0
+; CHECK-NEXT:    cmpu.l %s0, 0, %s0
+; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp ne i64 %0, 12
