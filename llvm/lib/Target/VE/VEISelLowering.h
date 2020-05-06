@@ -31,11 +31,6 @@ enum NodeType : unsigned {
   Hi,
   Lo, // Hi/Lo operations, typically on a global address.
 
-  FTOI,        // FP to Int within a FP register.
-  ITOF,        // Int to FP within a FP register.
-  FTOX,        // FP to Int64 within a FP register.
-  XTOF,        // Int64 to FP within a FP register.
-
   MAX,
   MIN,
   FMAX,
