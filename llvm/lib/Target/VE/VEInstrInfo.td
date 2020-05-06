@@ -1716,12 +1716,6 @@ def : Pat<(f64 fpimm:$val),
 
 // TODO Use standard expansion for shift-based lowering of sext_inreg
 
-// Cast to i1
-def : Pat<(sext_inreg I32:$src, i1),
-          (SRAWSXri (SLAWSXri $src, 31), 31)>;
-def : Pat<(sext_inreg I64:$src, i1),
-          (SRALri (SLLri $src, 63), 63)>;
-
 // Cast to i8
 def : Pat<(sext_inreg I32:$src, i8),
           (SRAWSXri (SLAWSXri $src, 24), 24)>;

@@ -1012,11 +1012,7 @@ VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
 VETargetLowering::VETargetLowering(const TargetMachine &TM,
                                    const VESubtarget &STI)
     : TargetLowering(TM), Subtarget(&STI) {
-  // Instructions which use registers as conditionals examine all the
-  // bits (as does the pseudo SELECT_CC expansion). I don't think it
-  // matters much whether it's ZeroOrOneBooleanContent, or
-  // ZeroOrNegativeOneBooleanContent, so, arbitrarily choose the
-  // former.
+  // VE does not have i1 type, so use i32 for setcc operations results.
   setBooleanContents(ZeroOrOneBooleanContent);
   setBooleanVectorContents(ZeroOrOneBooleanContent);
 
@@ -1100,7 +1096,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
     setLoadExtAction(ISD::ZEXTLOAD, VT, MVT::i1, Promote);
     setLoadExtAction(ISD::EXTLOAD, VT, MVT::i1, Promote);
-    setTruncStoreAction(VT, MVT::i1, Expand);
   }
   /// } Load & Store
 
@@ -1145,6 +1140,16 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::SMAX, IntVT, Legal);
     setOperationAction(ISD::SMIN, IntVT, Legal);
   }
+
+  // Operations not supported by VE.
+  setOperationAction(ISD::SIGN_EXTEND_INREG, MVT::i1, Expand);
+
+  // Used by legalize types to correctly generate the setcc result.
+  // Without this, every float setcc comes with a AND/OR with the result,
+  // we don't want this, since the fpcmp result goes to a flag register,
+  // which is used implicitly by brcond and select operations.
+  AddPromotedToType(ISD::SETCC, MVT::i1, MVT::i32);
+
   /// } Int Ops
 
   /// Conversion {
