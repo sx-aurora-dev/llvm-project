@@ -31,11 +31,6 @@ enum NodeType : unsigned {
   Hi,
   Lo, // Hi/Lo operations, typically on a global address.
 
-  MAX,
-  MIN,
-  FMAX,
-  FMIN,
-
   GETFUNPLT,   // load function address through %plt insturction
   GETSTACKTOP, // retrieve address of stack top (first address of
                // locals and temporaries)
