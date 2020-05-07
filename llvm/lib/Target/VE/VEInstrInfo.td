@@ -448,11 +448,6 @@ def getFunPLT     : Operand<iPTR> {
   let PrintMethod = "printGetFunPLT";
 }
 
-def VEmax : SDNode<"VEISD::MAX", SDTIntBinOp>;
-def VEmin : SDNode<"VEISD::MIN", SDTIntBinOp>;
-def VEfmax : SDNode<"VEISD::FMAX", SDTFPBinOp>;
-def VEfmin : SDNode<"VEISD::FMIN", SDTFPBinOp>;
-
 def VEeh_sjlj_setjmp: SDNode<"VEISD::EH_SJLJ_SETJMP",
                              SDTypeProfile<1, 1, [SDTCisInt<0>,
                                                   SDTCisPtrTy<1>]>,
