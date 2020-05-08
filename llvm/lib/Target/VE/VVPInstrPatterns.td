@@ -86,6 +86,31 @@ defm : VectorStore<v256i32, i64, v256i1, 4, vstl_vIsml, vstl_vIsl>;
 
 // Floating-point arithmetic
 
+multiclass VectorUnaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName, string MaskToken> {
+  ///// with vvp_select /////
+  // with mask
+  def : Pat<(vvp_select (OpNode DataVT:$vx, (MaskVT srcvalue), (i32 srcvalue)),
+                        DataVT:$vfalse,
+                        MaskVT:$mask,
+                        i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vv"#MaskToken#"vl") $vx, $mask, $vfalse, $avl)>;
+
+  ///// w/o mask /////
+  // w/o mask
+  def : Pat<(OpNode DataVT:$vx, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vvl") $vx, $avl)>;
+
+  ///// with mask, no select /////
+  def : Pat<(OpNode DataVT:$vx, MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(OpBaseName#"_vv"#MaskToken#"vl") $vx, $mask, (DataVT (IMPLICIT_DEF)), $avl)>;
+}
+
+// Expand both 64bit and 32 bit variant (256 elements)
+multiclass VectorUnaryArith_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
+  defm : VectorUnaryArith_Base<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName, "m">;
+  defm : VectorUnaryArith_Base<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName, "m">;
+}
+
 multiclass VectorBinaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName, string MaskToken> {
   ///// with vvp_select /////
   // with mask, broadcast
@@ -212,6 +237,7 @@ defm : VectorBinaryArith_ShortLong<vvp_xor, i64, v256i64, "vxor", i32, v256i32, 
 defm : VectorBinaryArith_ShortLong<vvp_or,  i64, v256i64, "vor",  i32, v256i32, "pvorlo">;
 
 // Floating-point arithmetic (256 elements)
+defm : VectorBinaryArith_ShortLong<vvp_fsqrt, f64, v256f64, "vfsqrtd", f32, v256f32, "vfsqrts">;
 defm : VectorBinaryArith_ShortLong<c_vv_fadd, f64, v256f64, "vfaddd", f32, v256f32, "vfadds">;
 defm : VectorBinaryArith_ShortLong<vvp_fsub,  f64, v256f64, "vfsubd", f32, v256f32, "vfsubs">;
 defm : VectorBinaryArith_ShortLong<c_vv_fmul, f64, v256f64, "vfmuld", f32, v256f32, "vfmuls">;

@@ -8251,6 +8251,16 @@ def vfsqrtd_vvvl : RV<0xed, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VFSQRT asm=vfsqrt.d intrisic=vfsqrtd_vvmvl
+def vfsqrtd_vvmvl : RV<0xed, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+       "vfsqrt.d $vx,$vy,$vm">
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VFSQRT asm=vfsqrt.s intrisic=vfsqrts_vvl
 def vfsqrts_vvl : RV<0xed, (outs V64:$vx), (ins V64:$vy, I32:$vl),
        "vfsqrt.s $vx,$vy">
@@ -8263,6 +8273,16 @@ def vfsqrts_vvl : RV<0xed, (outs V64:$vx), (ins V64:$vy, I32:$vl),
 // inst=VFSQRT asm=vfsqrt.s intrisic=vfsqrts_vvvl
 def vfsqrts_vvvl : RV<0xed, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vfsqrt.s $vx,$vy">
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VFSQRT asm=vfsqrt.s intrisic=vfsqrts_vvmvl
+def vfsqrts_vvmvl : RV<0xed, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+       "vfsqrt.s $vx,$vy,$vm">
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
@@ -9855,6 +9875,16 @@ def vrcpd_vvvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VRCP asm=vrcp.d intrisic=vrcpd_vvmvl
+def vrcpd_vvmvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+       "vrcp.d $vx,$vy,$vm">
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VRCP asm=vrcp.s intrisic=vrcps_vvl
 def vrcps_vvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
        "vrcp.s $vx,$vy">
@@ -9867,6 +9897,16 @@ def vrcps_vvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
 // inst=VRCP asm=vrcp.s intrisic=vrcps_vvvl
 def vrcps_vvvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vrcp.s $vx,$vy">
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VRCP asm=vrcp.s intrisic=vrcps_vvmvl
+def vrcps_vvmvl : RV<0xe1, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+       "vrcp.s $vx,$vy,$vm">
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";
@@ -9912,6 +9952,16 @@ def vrsqrtd_vvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
   let DisableEncoding = "$vl";
 }
 
+// inst=VRSQRT asm=vrsqrt.d intrisic=vrsqrtd_vvmvl
+def vrsqrtd_vvmvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+       "vrsqrt.d $vx,$vy,$vm">
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VRSQRT asm=vrsqrt.s intrisic=vrsqrts_vvl
 def vrsqrts_vvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
        "vrsqrt.s $vx,$vy">
@@ -9924,6 +9974,16 @@ def vrsqrts_vvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, I32:$vl),
 // inst=VRSQRT asm=vrsqrt.s intrisic=vrsqrts_vvvl
 def vrsqrts_vvvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, V64:$vd, I32:$vl),
        "vrsqrt.s $vx,$vy">
+{
+  let Constraints = "$vx = $vd";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VRSQRT asm=vrsqrt.s intrisic=vrsqrts_vvmvl
+def vrsqrts_vvmvl : RV<0xf1, (outs V64:$vx), (ins V64:$vy, VM:$vm, V64:$vd, I32:$vl),
+       "vrsqrt.s $vx,$vy,$vm">
 {
   let Constraints = "$vx = $vd";
   let DecoderNamespace = "VEL";

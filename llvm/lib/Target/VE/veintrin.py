@@ -892,8 +892,8 @@ class InstTable(object):
         self.add(I(opc, "LVS", "lvs", "lvsw_svs", [SX(T_i32)], [VX(T_u64), SY(T_u32)], llvmInst="lvsw_svs", noVL=True).noTest()).noLLVMInstDefine()
 
     def Inst2f(self, opc, name, instName, expr, hasPacked = True, hasNex = False):
-        self.Def(opc, instName, "d", name+".d", [[VX(T_f64), VY(T_f64)]], expr)
-        self.Def(opc, instName, "s", name+".s", [[VX(T_f32), VY(T_f32)]], expr)
+        self.Def(opc, instName, "d", name+".d", self.addMask([[VX(T_f64), VY(T_f64)]]), expr)
+        self.Def(opc, instName, "s", name+".s", self.addMask([[VX(T_f32), VY(T_f32)]]), expr)
         if hasPacked:
             self.Def(opc, instName, "p", "p"+name, [[VX(T_f32), VY(T_f32)]], expr) 
         if hasNex:
