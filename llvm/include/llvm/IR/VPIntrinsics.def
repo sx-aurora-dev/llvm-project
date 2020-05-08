@@ -228,6 +228,7 @@ BEGIN_REGISTER_VP_SDNODE(VP_FMUL, -1, vp_fmul, 4, 5)
 HANDLE_VP_FPCONSTRAINT(2, 3)
 HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fmul)
 HANDLE_VP_TO_OC(FMul)
+HANDLE_VP_IS_BINARY
 END_REGISTER_CASES(vp_fmul, VP_FMUL)
 
 // llvm.vp.fneg(x,except,mask,vlen)

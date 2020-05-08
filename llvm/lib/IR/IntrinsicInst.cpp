@@ -670,7 +670,7 @@ bool VPIntrinsic::IsUnaryVPOp(Intrinsic::ID VPID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_IS_UNARYOP IsUnary = true;
+#define HANDLE_VP_IS_UNARY IsUnary = true;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -687,7 +687,7 @@ bool VPIntrinsic::IsBinaryVPOp(Intrinsic::ID VPID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_IS_BINARYOP IsBinary = true;
+#define HANDLE_VP_IS_BINARY IsBinary = true;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -706,7 +706,7 @@ bool VPIntrinsic::IsTernaryVPOp(Intrinsic::ID VPID) {
     return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_IS_TERNARYOP IsTernary = true;
+#define HANDLE_VP_IS_TERNARY IsTernary = true;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }

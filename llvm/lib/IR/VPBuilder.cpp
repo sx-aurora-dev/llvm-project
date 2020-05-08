@@ -93,7 +93,7 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
   // Transfer FMF flags
   auto VPCall = Builder.CreateCall(VPDecl, VecParams, Inst.getName() + ".vp");
   auto FPOp = dyn_cast<FPMathOperator>(&Inst);
-  if (FPOp) {
+  if (FPOp && isa<FPMathOperator>(VPCall)) {
     VPCall->setFastMathFlags(FPOp->getFastMathFlags());
   }
 
