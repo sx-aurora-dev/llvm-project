@@ -237,7 +237,7 @@ defm : VectorBinaryArith_ShortLong<vvp_xor, i64, v256i64, "vxor", i32, v256i32, 
 defm : VectorBinaryArith_ShortLong<vvp_or,  i64, v256i64, "vor",  i32, v256i32, "pvorlo">;
 
 // Floating-point arithmetic (256 elements)
-defm : VectorBinaryArith_ShortLong<vvp_fsqrt, f64, v256f64, "vfsqrtd", f32, v256f32, "vfsqrts">;
+defm : VectorUnaryArith_ShortLong<vvp_fsqrt, f64, v256f64, "vfsqrtd", f32, v256f32, "vfsqrts">;
 defm : VectorBinaryArith_ShortLong<c_vv_fadd, f64, v256f64, "vfaddd", f32, v256f32, "vfadds">;
 defm : VectorBinaryArith_ShortLong<vvp_fsub,  f64, v256f64, "vfsubd", f32, v256f32, "vfsubs">;
 defm : VectorBinaryArith_ShortLong<c_vv_fmul, f64, v256f64, "vfmuld", f32, v256f32, "vfmuls">;
