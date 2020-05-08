@@ -150,13 +150,13 @@ multiclass VSTmm<string opcStr, bits<8>opc, dag dag_in> {
   defm x : VSTbm<opcStr, " $vx, $sy, $sz, $m", opc, !con(dag_in, (ins VM:$m))>;
 }
 multiclass VSTtgm<string opcStr, bits<8>opc, RegisterClass RC> {
-  defm rr : VSTmm<opcStr, opc, (ins I64:$sy, I64:$sz, RC:$vx)>;
+  defm rrv : VSTmm<opcStr, opc, (ins I64:$sy, I64:$sz, RC:$vx)>;
   let cy = 0 in
-  defm ir : VSTmm<opcStr, opc, (ins simm7:$sy, I64:$sz, RC:$vx)>;
+  defm irv : VSTmm<opcStr, opc, (ins simm7:$sy, I64:$sz, RC:$vx)>;
   let cz = 0 in
-  defm rz : VSTmm<opcStr, opc, (ins I64:$sy, zero:$sz, RC:$vx)>;
+  defm rzv : VSTmm<opcStr, opc, (ins I64:$sy, zero:$sz, RC:$vx)>;
   let cy = 0, cz = 0 in
-  defm iz : VSTmm<opcStr, opc, (ins simm7:$sy, zero:$sz, RC:$vx)>;
+  defm izv : VSTmm<opcStr, opc, (ins simm7:$sy, zero:$sz, RC:$vx)>;
 }
 multiclass VSTm<string opcStr, bits<8>opc, RegisterClass RC> {
   let vc = 1, cx = 0 in defm "" : VSTtgm<opcStr, opc, RC>;
@@ -347,10 +347,10 @@ defm LSV : LSVm<"lsv", 0x8e, V64>;
 // Section 8.9.21 - LVS (Load V to S)
 let cz = 0, sz = 0, vx = ?, hasSideEffects = 0 in
 multiclass LVSm<string opcStr, bits<8>opc, RegisterClass RC> {
-  def r : RR<opc, (outs I64:$sx), (ins RC:$vx, I64:$sy),
+  def vr : RR<opc, (outs I64:$sx), (ins RC:$vx, I64:$sy),
               opcStr#" $sx, ${vx}(${sy})">;
   let cy = 0 in
-  def i : RR<opc, (outs I64:$sx), (ins RC:$vx, uimm7:$sy),
+  def vi : RR<opc, (outs I64:$sx), (ins RC:$vx, uimm7:$sy),
               opcStr#" $sx, ${vx}(${sy})">;
 }
 defm LVS : LVSm<"lvs", 0x9e, V64>;
@@ -479,9 +479,9 @@ multiclass VMVmm<string opcStr, bits<8>opc, RegisterClass RC,
 }
 multiclass VMVm<string opcStr, bits<8>opc, RegisterClass RC,
                 RegisterClass RCM1, RegisterClass RCM2> {
-  defm r : VMVmm<opcStr, opc, RC, RCM1, RCM2, (ins RC:$vz, I64:$sy)>;
+  defm vr : VMVmm<opcStr, opc, RC, RCM1, RCM2, (ins RC:$vz, I64:$sy)>;
   let cy = 0 in
-  defm i : VMVmm<opcStr, opc, RC, RCM1, RCM2, (ins RC:$vz, uimm7:$sy)>;
+  defm vi : VMVmm<opcStr, opc, RC, RCM1, RCM2, (ins RC:$vz, uimm7:$sy)>;
 }
 defm VMV : VMVm<"vmv", 0x9c, V64, VM_, VM>;
 
@@ -1078,8 +1078,18 @@ def : MnemonicAlias<"pvrcp.up", "vrcp.s">;
 defm VRSQRTD : RVF1m<"vrsqrt.d", 0xf1, V64, VM_, VM>;
 let cx2 = 1 in defm PVRSQRTLO : RVF1m<"pvrsqrt.lo", 0xf1, V64, VM_, VM>;
 let cx = 1 in defm VRSQRTS : RVF1m<"vrsqrt.s", 0xf1, V64, VM_, VM>;
-let cx = 1, cx2 = 1 in defm PVRSQRT : RVF1m<"pvrsqrt", 0xf1, V64, VM512_, VM512>;
+let cx = 1, cx2 = 1 in
+defm PVRSQRT : RVF1m<"pvrsqrt", 0xf1, V64, VM512_, VM512>;
+let cs2 = 1 in {
+    defm VRSQRTDNEX : RVF1m<"vrsqrt.d.nex", 0xf1, V64, VM_, VM>;
+    let cx2 = 1 in
+    defm PVRSQRTLONEX : RVF1m<"pvrsqrt.lo.nex", 0xf1, V64, VM_, VM>;
+    let cx = 1 in defm VRSQRTSNEX : RVF1m<"vrsqrt.s.nex", 0xf1, V64, VM_, VM>;
+    let cx = 1, cx2 = 1 in
+    defm PVRSQRTNEX : RVF1m<"pvrsqrt.nex", 0xf1, V64, VM512_, VM512>;
+}
 def : MnemonicAlias<"pvrsqrt.up", "vrsqrt.s">;
+def : MnemonicAlias<"pvrsqrt.up.nex", "vrsqrt.s.nex">;
 
 // Section 8.13.14 - VFIX (Vector Convert to Fixed Pointer)
 defm VCVTWDSX : RVFIXm<"vcvt.w.d.sx", 0xe8, V64, VM_, VM>;
