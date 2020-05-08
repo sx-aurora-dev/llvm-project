@@ -479,9 +479,9 @@ multiclass VMVmm<string opcStr, bits<8>opc, RegisterClass RC,
 }
 multiclass VMVm<string opcStr, bits<8>opc, RegisterClass RC,
                 RegisterClass RCM1, RegisterClass RCM2> {
-  defm vr : VMVmm<opcStr, opc, RC, RCM1, RCM2, (ins RC:$vz, I64:$sy)>;
+  defm rv : VMVmm<opcStr, opc, RC, RCM1, RCM2, (ins I64:$sy, RC:$vz)>;
   let cy = 0 in
-  defm vi : VMVmm<opcStr, opc, RC, RCM1, RCM2, (ins RC:$vz, uimm7:$sy)>;
+  defm iv : VMVmm<opcStr, opc, RC, RCM1, RCM2, (ins uimm7:$sy, RC:$vz)>;
 }
 defm VMV : VMVm<"vmv", 0x9c, V64, VM_, VM>;
 
