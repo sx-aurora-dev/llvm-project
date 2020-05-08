@@ -184,6 +184,11 @@ public:
     return 1;
   }
 
+  bool haveFastSqrt(Type *Ty) {
+    // float, double or a vector thereof
+    return Ty->isFPOrFPVectorTy() &&
+           (isVectorLaneType(*Ty) || isVectorRegisterType(*Ty));
+  }
   /// } Heuristics
 
   /// LLVM-VP Support
