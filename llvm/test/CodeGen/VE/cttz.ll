@@ -39,7 +39,7 @@ define i32 @func2(i32 %p) {
 ; CHECK-NEXT:    adds.w.sx %s1, -1, %s0
 ; CHECK-NEXT:    xor %s0, -1, %s0
 ; CHECK-NEXT:    and %s0, %s0, %s1
-; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    pcnt %s0, %s0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -55,7 +55,7 @@ define i16 @func3(i16 %p) {
 ; CHECK-NEXT:    adds.w.sx %s1, -1, %s0
 ; CHECK-NEXT:    xor %s0, -1, %s0
 ; CHECK-NEXT:    and %s0, %s0, %s1
-; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    pcnt %s0, %s0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -71,7 +71,7 @@ define i8 @func4(i8 %p) {
 ; CHECK-NEXT:    adds.w.sx %s1, -1, %s0
 ; CHECK-NEXT:    xor %s0, -1, %s0
 ; CHECK-NEXT:    and %s0, %s0, %s1
-; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    pcnt %s0, %s0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9

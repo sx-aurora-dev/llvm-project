@@ -1134,12 +1134,15 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
     // Use isel patterns for i32 and i64
     setOperationAction(ISD::BSWAP, IntVT, Legal);
-    setOperationAction(ISD::CTLZ, IntVT, Legal);
-    setOperationAction(ISD::CTPOP, IntVT, Legal);
+
+    // Use isel patterns for i64, Custom i32
+    LegalizeAction CustomAct = (IntVT == MVT::i32) ? Custom : Legal;
+    setOperationAction(ISD::CTLZ, IntVT, CustomAct);
 
     // Use isel patterns for i64, Promote i32
-    LegalizeAction Act = (IntVT == MVT::i32) ? Promote : Legal;
-    setOperationAction(ISD::BITREVERSE, IntVT, Act);
+    LegalizeAction PromoteAct = (IntVT == MVT::i32) ? Promote : Legal;
+    setOperationAction(ISD::BITREVERSE, IntVT, PromoteAct);
+    setOperationAction(ISD::CTPOP, IntVT, PromoteAct);
 
     // Legal smax and smin
     setOperationAction(ISD::SMAX, IntVT, Legal);
@@ -2138,6 +2141,28 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
 }
 
+static SDValue LowerCTLZ(SDValue Op, SelectionDAG &DAG)
+{
+  // Using defult promote doesn't work well for VE, so that creating custom
+  // promote routine here.
+  SDLoc DL(Op);
+  MVT OVT = Op.getSimpleValueType();
+
+  // Handle only ctlz for i32.
+  if (OVT != MVT::i32)
+    return SDValue();
+
+  // Promote ctlz for i32 like below:
+  //   (i32 (trunc (ctlz (shl (anyext $src, i64), 32)))).
+  MVT NVT = MVT::i64;
+  SDValue AnyExt = DAG.getNode(ISD::ANY_EXTEND, DL, NVT, Op.getOperand(0));
+  SDValue Shifted = DAG.getNode(ISD::SHL, DL, NVT, AnyExt,
+      DAG.getConstant(NVT.getSizeInBits() -
+                      OVT.getSizeInBits(), DL, MVT::i32));
+  SDValue Ctlz = DAG.getNode(Op.getOpcode(), DL, NVT, Shifted);
+  return DAG.getNode(ISD::TRUNCATE, DL, OVT, Ctlz);
+}
+
 // Lower a vXi1 store into following instructions
 //   SVMi  %1, %vm, 0
 //   STrii %1, (,%addr)
@@ -2679,6 +2704,8 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerSTORE(Op, DAG, *this);
   case ISD::ATOMIC_FENCE:
     return LowerATOMIC_FENCE(Op, DAG);
+  case ISD::CTLZ:
+    return LowerCTLZ(Op, DAG);
   case ISD::INTRINSIC_VOID:
     return LowerINTRINSIC_VOID(Op, DAG);
   case ISD::INTRINSIC_W_CHAIN:
