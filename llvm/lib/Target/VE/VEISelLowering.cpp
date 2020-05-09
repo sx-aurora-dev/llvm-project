@@ -1138,6 +1138,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     // Use isel patterns for i64, Custom i32
     LegalizeAction CustomAct = (IntVT == MVT::i32) ? Custom : Legal;
     setOperationAction(ISD::CTLZ, IntVT, CustomAct);
+    setOperationAction(ISD::CTLZ_ZERO_UNDEF, IntVT, CustomAct);
 
     // Use isel patterns for i64, Promote i32
     LegalizeAction PromoteAct = (IntVT == MVT::i32) ? Promote : Legal;
@@ -2705,6 +2706,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::ATOMIC_FENCE:
     return LowerATOMIC_FENCE(Op, DAG);
   case ISD::CTLZ:
+  case ISD::CTLZ_ZERO_UNDEF:
     return LowerCTLZ(Op, DAG);
   case ISD::INTRINSIC_VOID:
     return LowerINTRINSIC_VOID(Op, DAG);

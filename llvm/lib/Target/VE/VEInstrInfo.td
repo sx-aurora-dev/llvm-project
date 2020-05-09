@@ -1322,10 +1322,13 @@ defm NND : RRNNDm<"nnd", 0x54, I64, i64>;
 defm MRG : RRMRGm<"mrg", 0x56, I64, i64>;
 
 // Section 8.5.7 - LDZ (Leading Zero Count)
-defm LDZ : RRI1m<"ldz", 0x67, I64, i64, ctlz>;
-def : Pat<(i32 (trunc (i64 (ctlz i64:$src)))),
+def ctlz_pat : PatFrags<(ops node:$src),
+                        [(ctlz node:$src),
+                         (ctlz_zero_undef node:$src)]>;
+defm LDZ : RRI1m<"ldz", 0x67, I64, i64, ctlz_pat>;
+def : Pat<(i32 (trunc (i64 (ctlz_pat i64:$src)))),
           (EXTRACT_SUBREG (LDZr $src), sub_i32)>;
-def : Pat<(i32 (trunc (i64 (ctlz (i64 mimm:$src))))),
+def : Pat<(i32 (trunc (i64 (ctlz_pat (i64 mimm:$src))))),
           (EXTRACT_SUBREG (LDZm (MIMM $src)), sub_i32)>;
 
 // Section 8.5.8 - PCNT (Population Count)
