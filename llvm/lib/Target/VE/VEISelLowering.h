@@ -40,9 +40,9 @@ enum NodeType : unsigned {
   Lo, // Hi/Lo operations, typically on a global address.
 
   GETFUNPLT,   // load function address through %plt insturction
+  GETTLSADDR,  // load address for TLS access
   GETSTACKTOP, // retrieve address of stack top (first address of
                // locals and temporaries)
-  GETTLSADDR,  // load address for TLS access
 
   MEMBARRIER,  // Compiler barrier only; generate a no-op.
 

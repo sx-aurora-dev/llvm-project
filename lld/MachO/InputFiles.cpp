@@ -42,8 +42,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "InputFiles.h"
+#include "ExportTrie.h"
 #include "InputSection.h"
-#include "OutputSegment.h"
+#include "OutputSection.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
 #include "Target.h"
@@ -81,7 +82,31 @@ Optional<MemoryBufferRef> macho::readFile(StringRef path) {
   if (read32be(&hdr->magic) != MachO::FAT_MAGIC)
     return mbref;
 
-  error("TODO: Add support for universal binaries");
+  // Object files and archive files may be fat files, which contains
+  // multiple real files for different CPU ISAs. Here, we search for a
+  // file that matches with the current link target and returns it as
+  // a MemoryBufferRef.
+  auto *arch = reinterpret_cast<const MachO::fat_arch *>(buf + sizeof(*hdr));
+
+  for (uint32_t i = 0, n = read32be(&hdr->nfat_arch); i < n; ++i) {
+    if (reinterpret_cast<const char *>(arch + i + 1) >
+        buf + mbref.getBufferSize()) {
+      error(path + ": fat_arch struct extends beyond end of file");
+      return None;
+    }
+
+    if (read32be(&arch[i].cputype) != target->cpuType ||
+        read32be(&arch[i].cpusubtype) != target->cpuSubtype)
+      continue;
+
+    uint32_t offset = read32be(&arch[i].offset);
+    uint32_t size = read32be(&arch[i].size);
+    if (offset + size > mbref.getBufferSize())
+      error(path + ": slice extends beyond end of file");
+    return MemoryBufferRef(StringRef(buf + offset, size), path.copy(bAlloc));
+  }
+
+  error("unable to find matching architecture in " + path);
   return None;
 }
 
@@ -109,6 +134,7 @@ InputFile::parseSections(ArrayRef<section_64> sections) {
   for (const section_64 &sec : sections) {
     InputSection *isec = make<InputSection>();
     isec->file = this;
+    isec->header = &sec;
     isec->name = StringRef(sec.sectname, strnlen(sec.sectname, 16));
     isec->segname = StringRef(sec.segname, strnlen(sec.segname, 16));
     isec->data = {buf + sec.offset, static_cast<size_t>(sec.size)};
@@ -140,11 +166,14 @@ void InputFile::parseRelocations(const section_64 &sec,
       r.type = rel.r_type;
       r.offset = rel.r_address;
       r.addend = target->getImplicitAddend(buf + sec.offset + r.offset, r.type);
-      if (rel.r_extern)
+      if (rel.r_extern) {
         r.target = symbols[rel.r_symbolnum];
-      else {
-        error("TODO: Non-extern relocations are not supported");
-        continue;
+      } else {
+        if (rel.r_symbolnum == 0 || rel.r_symbolnum > sections.size())
+          fatal("invalid section index in relocation for offset " +
+                std::to_string(r.offset) + " in section " + sec.sectname +
+                " of " + getName());
+        r.target = sections[rel.r_symbolnum - 1];
       }
     }
     relocs.push_back(r);
@@ -221,22 +250,25 @@ DylibFile::DylibFile(MemoryBufferRef mb) : InputFile(DylibKind, mb) {
   }
 
   // Initialize symbols.
-  if (const load_command *cmd = findCommand(hdr, LC_SYMTAB)) {
-    auto *c = reinterpret_cast<const symtab_command *>(cmd);
-    const char *strtab = reinterpret_cast<const char *>(buf + c->stroff);
-    ArrayRef<const nlist_64> nList(
-        reinterpret_cast<const nlist_64 *>(buf + c->symoff), c->nsyms);
-
-    symbols.reserve(c->nsyms);
-
-    for (const nlist_64 &sym : nList) {
-      StringRef name = strtab + sym.n_strx;
-      // TODO: Figure out what to do about undefined symbols: ignore or warn
-      // if unsatisfied? Also make sure we handle re-exported symbols
-      // correctly.
-      symbols.push_back(symtab->addDylib(name, this));
-    }
+  if (const load_command *cmd = findCommand(hdr, LC_DYLD_INFO_ONLY)) {
+    auto *c = reinterpret_cast<const dyld_info_command *>(cmd);
+    parseTrie(buf + c->export_off, c->export_size,
+              [&](const Twine &name, uint64_t flags) {
+                symbols.push_back(symtab->addDylib(saver.save(name), this));
+              });
+  } else {
+    error("LC_DYLD_INFO_ONLY not found in " + getName());
   }
+}
+
+DylibFile::DylibFile() : InputFile(DylibKind, MemoryBufferRef()) {}
+
+DylibFile *DylibFile::createLibSystemMock() {
+  auto *file = make<DylibFile>();
+  file->mb = MemoryBufferRef("", "/usr/lib/libSystem.B.dylib");
+  file->dylibName = "/usr/lib/libSystem.B.dylib";
+  file->symbols.push_back(symtab->addDylib("dyld_stub_binder", file));
+  return file;
 }
 
 // Returns "<internal>" or "baz.o".

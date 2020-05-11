@@ -484,7 +484,7 @@ static LogicalResult verify(AtomicRMWOp op) {
 // GenericAtomicRMWOp
 //===----------------------------------------------------------------------===//
 
-void GenericAtomicRMWOp::build(Builder *builder, OperationState &result,
+void GenericAtomicRMWOp::build(OpBuilder &builder, OperationState &result,
                                Value memref, ValueRange ivs) {
   result.addOperands(memref);
   result.addOperands(ivs);
@@ -566,6 +566,54 @@ static LogicalResult verify(AtomicYieldOp op) {
 // BranchOp
 //===----------------------------------------------------------------------===//
 
+/// Given a successor, try to collapse it to a new destination if it only
+/// contains a passthrough unconditional branch. If the successor is
+/// collapsable, `successor` and `successorOperands` are updated to reference
+/// the new destination and values. `argStorage` is an optional storage to use
+/// if operands to the collapsed successor need to be remapped.
+static LogicalResult collapseBranch(Block *&successor,
+                                    ValueRange &successorOperands,
+                                    SmallVectorImpl<Value> &argStorage) {
+  // Check that the successor only contains a unconditional branch.
+  if (std::next(successor->begin()) != successor->end())
+    return failure();
+  // Check that the terminator is an unconditional branch.
+  BranchOp successorBranch = dyn_cast<BranchOp>(successor->getTerminator());
+  if (!successorBranch)
+    return failure();
+  // Check that the arguments are only used within the terminator.
+  for (BlockArgument arg : successor->getArguments()) {
+    for (Operation *user : arg.getUsers())
+      if (user != successorBranch)
+        return failure();
+  }
+  // Don't try to collapse branches to infinite loops.
+  Block *successorDest = successorBranch.getDest();
+  if (successorDest == successor)
+    return failure();
+
+  // Update the operands to the successor. If the branch parent has no
+  // arguments, we can use the branch operands directly.
+  OperandRange operands = successorBranch.getOperands();
+  if (successor->args_empty()) {
+    successor = successorDest;
+    successorOperands = operands;
+    return success();
+  }
+
+  // Otherwise, we need to remap any argument operands.
+  for (Value operand : operands) {
+    BlockArgument argOperand = operand.dyn_cast<BlockArgument>();
+    if (argOperand && argOperand.getOwner() == successor)
+      argStorage.push_back(successorOperands[argOperand.getArgNumber()]);
+    else
+      argStorage.push_back(operand);
+  }
+  successor = successorDest;
+  successorOperands = argStorage;
+  return success();
+}
+
 namespace {
 /// Simplify a branch to a block that has a single predecessor. This effectively
 /// merges the two blocks.
@@ -586,6 +634,33 @@ struct SimplifyBrToBlockWithSinglePred : public OpRewritePattern<BranchOp> {
     return success();
   }
 };
+
+///   br ^bb1
+/// ^bb1
+///   br ^bbN(...)
+///
+///  -> br ^bbN(...)
+///
+struct SimplifyPassThroughBr : public OpRewritePattern<BranchOp> {
+  using OpRewritePattern<BranchOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(BranchOp op,
+                                PatternRewriter &rewriter) const override {
+    Block *dest = op.getDest();
+    ValueRange destOperands = op.getOperands();
+    SmallVector<Value, 4> destOperandStorage;
+
+    // Try to collapse the successor if it points somewhere other than this
+    // block.
+    if (dest == op.getOperation()->getBlock() ||
+        failed(collapseBranch(dest, destOperands, destOperandStorage)))
+      return failure();
+
+    // Create a new branch with the collapsed successor.
+    rewriter.replaceOpWithNewOp<BranchOp>(op, dest, destOperands);
+    return success();
+  }
+};
 } // end anonymous namespace.
 
 Block *BranchOp::getDest() { return getSuccessor(); }
@@ -598,15 +673,15 @@ void BranchOp::eraseOperand(unsigned index) {
 
 void BranchOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                            MLIRContext *context) {
-  results.insert<SimplifyBrToBlockWithSinglePred>(context);
+  results.insert<SimplifyBrToBlockWithSinglePred, SimplifyPassThroughBr>(
+      context);
 }
 
-Optional<OperandRange> BranchOp::getSuccessorOperands(unsigned index) {
+Optional<MutableOperandRange>
+BranchOp::getMutableSuccessorOperands(unsigned index) {
   assert(index == 0 && "invalid successor index");
-  return getOperands();
+  return destOperandsMutable();
 }
-
-bool BranchOp::canEraseSuccessorOperand() { return true; }
 
 Block *BranchOp::getSuccessorForOperands(ArrayRef<Attribute>) { return dest(); }
 
@@ -684,36 +759,27 @@ void CallIndirectOp::getCanonicalizationPatterns(
 //===----------------------------------------------------------------------===//
 
 // Return the type of the same shape (scalar, vector or tensor) containing i1.
-static Type getCheckedI1SameShape(Type type) {
+static Type getI1SameShape(Type type) {
   auto i1Type = IntegerType::get(1, type.getContext());
-  if (type.isSignlessIntOrIndexOrFloat())
-    return i1Type;
   if (auto tensorType = type.dyn_cast<RankedTensorType>())
     return RankedTensorType::get(tensorType.getShape(), i1Type);
   if (type.isa<UnrankedTensorType>())
     return UnrankedTensorType::get(i1Type);
   if (auto vectorType = type.dyn_cast<VectorType>())
     return VectorType::get(vectorType.getShape(), i1Type);
-  return Type();
-}
-
-static Type getI1SameShape(Type type) {
-  Type res = getCheckedI1SameShape(type);
-  assert(res && "expected type with valid i1 shape");
-  return res;
+  return i1Type;
 }
 
 //===----------------------------------------------------------------------===//
 // CmpIOp
 //===----------------------------------------------------------------------===//
 
-static void buildCmpIOp(Builder *build, OperationState &result,
+static void buildCmpIOp(OpBuilder &build, OperationState &result,
                         CmpIPredicate predicate, Value lhs, Value rhs) {
   result.addOperands({lhs, rhs});
   result.types.push_back(getI1SameShape(lhs.getType()));
-  result.addAttribute(
-      CmpIOp::getPredicateAttrName(),
-      build->getI64IntegerAttr(static_cast<int64_t>(predicate)));
+  result.addAttribute(CmpIOp::getPredicateAttrName(),
+                      build.getI64IntegerAttr(static_cast<int64_t>(predicate)));
 }
 
 // Compute `lhs` `pred` `rhs`, where `pred` is one of the known integer
@@ -762,13 +828,12 @@ OpFoldResult CmpIOp::fold(ArrayRef<Attribute> operands) {
 // CmpFOp
 //===----------------------------------------------------------------------===//
 
-static void buildCmpFOp(Builder *build, OperationState &result,
+static void buildCmpFOp(OpBuilder &build, OperationState &result,
                         CmpFPredicate predicate, Value lhs, Value rhs) {
   result.addOperands({lhs, rhs});
   result.types.push_back(getI1SameShape(lhs.getType()));
-  result.addAttribute(
-      CmpFOp::getPredicateAttrName(),
-      build->getI64IntegerAttr(static_cast<int64_t>(predicate)));
+  result.addAttribute(CmpFOp::getPredicateAttrName(),
+                      build.getI64IntegerAttr(static_cast<int64_t>(predicate)));
 }
 
 /// Compute `lhs` `pred` `rhs`, where `pred` is one of the known floating point
@@ -840,8 +905,10 @@ OpFoldResult CmpFOp::fold(ArrayRef<Attribute> operands) {
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// cond_br true, ^bb1, ^bb2 -> br ^bb1
-/// cond_br false, ^bb1, ^bb2 -> br ^bb2
+/// cond_br true, ^bb1, ^bb2
+///  -> br ^bb1
+/// cond_br false, ^bb1, ^bb2
+///  -> br ^bb2
 ///
 struct SimplifyConstCondBranchPred : public OpRewritePattern<CondBranchOp> {
   using OpRewritePattern<CondBranchOp>::OpRewritePattern;
@@ -862,19 +929,103 @@ struct SimplifyConstCondBranchPred : public OpRewritePattern<CondBranchOp> {
     return failure();
   }
 };
-} // end anonymous namespace.
+
+///   cond_br %cond, ^bb1, ^bb2
+/// ^bb1
+///   br ^bbN(...)
+/// ^bb2
+///   br ^bbK(...)
+///
+///  -> cond_br %cond, ^bbN(...), ^bbK(...)
+///
+struct SimplifyPassThroughCondBranch : public OpRewritePattern<CondBranchOp> {
+  using OpRewritePattern<CondBranchOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(CondBranchOp condbr,
+                                PatternRewriter &rewriter) const override {
+    Block *trueDest = condbr.trueDest(), *falseDest = condbr.falseDest();
+    ValueRange trueDestOperands = condbr.getTrueOperands();
+    ValueRange falseDestOperands = condbr.getFalseOperands();
+    SmallVector<Value, 4> trueDestOperandStorage, falseDestOperandStorage;
+
+    // Try to collapse one of the current successors.
+    LogicalResult collapsedTrue =
+        collapseBranch(trueDest, trueDestOperands, trueDestOperandStorage);
+    LogicalResult collapsedFalse =
+        collapseBranch(falseDest, falseDestOperands, falseDestOperandStorage);
+    if (failed(collapsedTrue) && failed(collapsedFalse))
+      return failure();
+
+    // Create a new branch with the collapsed successors.
+    rewriter.replaceOpWithNewOp<CondBranchOp>(condbr, condbr.getCondition(),
+                                              trueDest, trueDestOperands,
+                                              falseDest, falseDestOperands);
+    return success();
+  }
+};
+
+/// cond_br %cond, ^bb1(A, ..., N), ^bb1(A, ..., N)
+///  -> br ^bb1(A, ..., N)
+///
+/// cond_br %cond, ^bb1(A), ^bb1(B)
+///  -> %select = select %cond, A, B
+///     br ^bb1(%select)
+///
+struct SimplifyCondBranchIdenticalSuccessors
+    : public OpRewritePattern<CondBranchOp> {
+  using OpRewritePattern<CondBranchOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(CondBranchOp condbr,
+                                PatternRewriter &rewriter) const override {
+    // Check that the true and false destinations are the same and have the same
+    // operands.
+    Block *trueDest = condbr.trueDest();
+    if (trueDest != condbr.falseDest())
+      return failure();
+
+    // If all of the operands match, no selects need to be generated.
+    OperandRange trueOperands = condbr.getTrueOperands();
+    OperandRange falseOperands = condbr.getFalseOperands();
+    if (trueOperands == falseOperands) {
+      rewriter.replaceOpWithNewOp<BranchOp>(condbr, trueDest, trueOperands);
+      return success();
+    }
+
+    // Otherwise, if the current block is the only predecessor insert selects
+    // for any mismatched branch operands.
+    if (trueDest->getUniquePredecessor() != condbr.getOperation()->getBlock())
+      return failure();
+
+    // Generate a select for any operands that differ between the two.
+    SmallVector<Value, 8> mergedOperands;
+    mergedOperands.reserve(trueOperands.size());
+    Value condition = condbr.getCondition();
+    for (auto it : llvm::zip(trueOperands, falseOperands)) {
+      if (std::get<0>(it) == std::get<1>(it))
+        mergedOperands.push_back(std::get<0>(it));
+      else
+        mergedOperands.push_back(rewriter.create<SelectOp>(
+            condbr.getLoc(), condition, std::get<0>(it), std::get<1>(it)));
+    }
+
+    rewriter.replaceOpWithNewOp<BranchOp>(condbr, trueDest, mergedOperands);
+    return success();
+  }
+};
+} // end anonymous namespace
 
 void CondBranchOp::getCanonicalizationPatterns(
     OwningRewritePatternList &results, MLIRContext *context) {
-  results.insert<SimplifyConstCondBranchPred>(context);
+  results.insert<SimplifyConstCondBranchPred, SimplifyPassThroughCondBranch,
+                 SimplifyCondBranchIdenticalSuccessors>(context);
 }
 
-Optional<OperandRange> CondBranchOp::getSuccessorOperands(unsigned index) {
+Optional<MutableOperandRange>
+CondBranchOp::getMutableSuccessorOperands(unsigned index) {
   assert(index < getNumSuccessors() && "invalid successor index");
-  return index == trueIndex ? getTrueOperands() : getFalseOperands();
+  return index == trueIndex ? trueDestOperandsMutable()
+                            : falseDestOperandsMutable();
 }
-
-bool CondBranchOp::canEraseSuccessorOperand() { return true; }
 
 Block *CondBranchOp::getSuccessorForOperands(ArrayRef<Attribute> operands) {
   if (BoolAttr condAttr = operands.front().dyn_cast_or_null<BoolAttr>())
@@ -1026,9 +1177,9 @@ bool ConstantOp::isBuildableWith(Attribute value, Type type) {
          value.isa<UnitAttr>();
 }
 
-void ConstantFloatOp::build(Builder *builder, OperationState &result,
+void ConstantFloatOp::build(OpBuilder &builder, OperationState &result,
                             const APFloat &value, FloatType type) {
-  ConstantOp::build(builder, result, type, builder->getFloatAttr(type, value));
+  ConstantOp::build(builder, result, type, builder.getFloatAttr(type, value));
 }
 
 bool ConstantFloatOp::classof(Operation *op) {
@@ -1041,21 +1192,19 @@ bool ConstantIntOp::classof(Operation *op) {
          op->getResult(0).getType().isSignlessInteger();
 }
 
-void ConstantIntOp::build(Builder *builder, OperationState &result,
+void ConstantIntOp::build(OpBuilder &builder, OperationState &result,
                           int64_t value, unsigned width) {
-  Type type = builder->getIntegerType(width);
-  ConstantOp::build(builder, result, type,
-                    builder->getIntegerAttr(type, value));
+  Type type = builder.getIntegerType(width);
+  ConstantOp::build(builder, result, type, builder.getIntegerAttr(type, value));
 }
 
 /// Build a constant int op producing an integer with the specified type,
 /// which must be an integer type.
-void ConstantIntOp::build(Builder *builder, OperationState &result,
+void ConstantIntOp::build(OpBuilder &builder, OperationState &result,
                           int64_t value, Type type) {
   assert(type.isSignlessInteger() &&
          "ConstantIntOp can only have signless integer type");
-  ConstantOp::build(builder, result, type,
-                    builder->getIntegerAttr(type, value));
+  ConstantOp::build(builder, result, type, builder.getIntegerAttr(type, value));
 }
 
 /// ConstantIndexOp only matches values whose result type is Index.
@@ -1063,11 +1212,10 @@ bool ConstantIndexOp::classof(Operation *op) {
   return ConstantOp::classof(op) && op->getResult(0).getType().isIndex();
 }
 
-void ConstantIndexOp::build(Builder *builder, OperationState &result,
+void ConstantIndexOp::build(OpBuilder &builder, OperationState &result,
                             int64_t value) {
-  Type type = builder->getIndexType();
-  ConstantOp::build(builder, result, type,
-                    builder->getIntegerAttr(type, value));
+  Type type = builder.getIndexType();
+  ConstantOp::build(builder, result, type, builder.getIntegerAttr(type, value));
 }
 
 //===----------------------------------------------------------------------===//
@@ -1209,7 +1357,7 @@ OpFoldResult DimOp::fold(ArrayRef<Attribute> operands) {
 // DmaStartOp
 // ---------------------------------------------------------------------------
 
-void DmaStartOp::build(Builder *builder, OperationState &result,
+void DmaStartOp::build(OpBuilder &builder, OperationState &result,
                        Value srcMemRef, ValueRange srcIndices, Value destMemRef,
                        ValueRange destIndices, Value numElements,
                        Value tagMemRef, ValueRange tagIndices, Value stride,
@@ -1296,49 +1444,82 @@ ParseResult DmaStartOp::parse(OpAsmParser &parser, OperationState &result) {
       parser.resolveOperands(tagIndexInfos, indexType, result.operands))
     return failure();
 
-  auto memrefType0 = types[0].dyn_cast<MemRefType>();
-  if (!memrefType0)
-    return parser.emitError(parser.getNameLoc(),
-                            "expected source to be of memref type");
-
-  auto memrefType1 = types[1].dyn_cast<MemRefType>();
-  if (!memrefType1)
-    return parser.emitError(parser.getNameLoc(),
-                            "expected destination to be of memref type");
-
-  auto memrefType2 = types[2].dyn_cast<MemRefType>();
-  if (!memrefType2)
-    return parser.emitError(parser.getNameLoc(),
-                            "expected tag to be of memref type");
-
   if (isStrided) {
     if (parser.resolveOperands(strideInfo, indexType, result.operands))
       return failure();
   }
 
-  // Check that source/destination index list size matches associated rank.
-  if (static_cast<int64_t>(srcIndexInfos.size()) != memrefType0.getRank() ||
-      static_cast<int64_t>(dstIndexInfos.size()) != memrefType1.getRank())
-    return parser.emitError(parser.getNameLoc(),
-                            "memref rank not equal to indices count");
-  if (static_cast<int64_t>(tagIndexInfos.size()) != memrefType2.getRank())
-    return parser.emitError(parser.getNameLoc(),
-                            "tag memref rank not equal to indices count");
 
   return success();
 }
 
 LogicalResult DmaStartOp::verify() {
+  unsigned numOperands = getNumOperands();
+
+  // Mandatory non-variadic operands are: src memref, dst memref, tag memref and
+  // the number of elements.
+  if (numOperands < 4)
+    return emitOpError("expected at least 4 operands");
+
+  // Check types of operands. The order of these calls is important: the later
+  // calls rely on some type properties to compute the operand position.
+  // 1. Source memref.
+  if (!getSrcMemRef().getType().isa<MemRefType>())
+    return emitOpError("expected source to be of memref type");
+  if (numOperands < getSrcMemRefRank() + 4)
+    return emitOpError() << "expected at least " << getSrcMemRefRank() + 4
+                         << " operands";
+  if (!getSrcIndices().empty() &&
+      !llvm::all_of(getSrcIndices().getTypes(),
+                    [](Type t) { return t.isIndex(); }))
+    return emitOpError("expected source indices to be of index type");
+
+  // 2. Destination memref.
+  if (!getDstMemRef().getType().isa<MemRefType>())
+    return emitOpError("expected destination to be of memref type");
+  unsigned numExpectedOperands = getSrcMemRefRank() + getDstMemRefRank() + 4;
+  if (numOperands < numExpectedOperands)
+    return emitOpError() << "expected at least " << numExpectedOperands
+                         << " operands";
+  if (!getDstIndices().empty() &&
+      !llvm::all_of(getDstIndices().getTypes(),
+                    [](Type t) { return t.isIndex(); }))
+    return emitOpError("expected destination indices to be of index type");
+
+  // 3. Number of elements.
+  if (!getNumElements().getType().isIndex())
+    return emitOpError("expected num elements to be of index type");
+
+  // 4. Tag memref.
+  if (!getTagMemRef().getType().isa<MemRefType>())
+    return emitOpError("expected tag to be of memref type");
+  numExpectedOperands += getTagMemRefRank();
+  if (numOperands < numExpectedOperands)
+    return emitOpError() << "expected at least " << numExpectedOperands
+                         << " operands";
+  if (!getTagIndices().empty() &&
+      !llvm::all_of(getTagIndices().getTypes(),
+                    [](Type t) { return t.isIndex(); }))
+    return emitOpError("expected tag indices to be of index type");
+
   // DMAs from different memory spaces supported.
   if (getSrcMemorySpace() == getDstMemorySpace())
     return emitOpError("DMA should be between different memory spaces");
 
-  if (getNumOperands() != getTagMemRefRank() + getSrcMemRefRank() +
-                              getDstMemRefRank() + 3 + 1 &&
-      getNumOperands() != getTagMemRefRank() + getSrcMemRefRank() +
-                              getDstMemRefRank() + 3 + 1 + 2) {
+  // Optional stride-related operands must be either both present or both
+  // absent.
+  if (numOperands != numExpectedOperands &&
+      numOperands != numExpectedOperands + 2)
     return emitOpError("incorrect number of operands");
+
+  // 5. Strides.
+  if (isStrided()) {
+    if (!getStride().getType().isIndex() ||
+        !getNumElementsPerStride().getType().isIndex())
+      return emitOpError(
+          "expected stride and num elements per stride to be of type index");
   }
+
   return success();
 }
 
@@ -1352,8 +1533,9 @@ LogicalResult DmaStartOp::fold(ArrayRef<Attribute> cstOperands,
 // DmaWaitOp
 // ---------------------------------------------------------------------------
 
-void DmaWaitOp::build(Builder *builder, OperationState &result, Value tagMemRef,
-                      ValueRange tagIndices, Value numElements) {
+void DmaWaitOp::build(OpBuilder &builder, OperationState &result,
+                      Value tagMemRef, ValueRange tagIndices,
+                      Value numElements) {
   result.addOperands(tagMemRef);
   result.addOperands(tagIndices);
   result.addOperands(numElements);
@@ -1387,15 +1569,6 @@ ParseResult DmaWaitOp::parse(OpAsmParser &parser, OperationState &result) {
       parser.resolveOperand(numElementsInfo, indexType, result.operands))
     return failure();
 
-  auto memrefType = type.dyn_cast<MemRefType>();
-  if (!memrefType)
-    return parser.emitError(parser.getNameLoc(),
-                            "expected tag to be of memref type");
-
-  if (static_cast<int64_t>(tagIndexInfos.size()) != memrefType.getRank())
-    return parser.emitError(parser.getNameLoc(),
-                            "tag memref rank not equal to indices count");
-
   return success();
 }
 
@@ -1403,6 +1576,32 @@ LogicalResult DmaWaitOp::fold(ArrayRef<Attribute> cstOperands,
                               SmallVectorImpl<OpFoldResult> &results) {
   /// dma_wait(memrefcast) -> dma_wait
   return foldMemRefCast(*this);
+}
+
+LogicalResult DmaWaitOp::verify() {
+  // Mandatory non-variadic operands are tag and the number of elements.
+  if (getNumOperands() < 2)
+    return emitOpError() << "expected at least 2 operands";
+
+  // Check types of operands. The order of these calls is important: the later
+  // calls rely on some type properties to compute the operand position.
+  if (!getTagMemRef().getType().isa<MemRefType>())
+    return emitOpError() << "expected tag to be of memref type";
+
+  if (getNumOperands() != 2 + getTagMemRefRank())
+    return emitOpError() << "expected " << 2 + getTagMemRefRank()
+                         << " operands";
+
+  if (!getTagIndices().empty() &&
+      !llvm::all_of(getTagIndices().getTypes(),
+                    [](Type t) { return t.isIndex(); }))
+    return emitOpError() << "expected tag indices to be of index type";
+
+  if (!getNumElements().getType().isIndex())
+    return emitOpError()
+           << "expected the number of elements to be of index type";
+
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -1762,6 +1961,59 @@ OpFoldResult SelectOp::fold(ArrayRef<Attribute> operands) {
   return nullptr;
 }
 
+static void print(OpAsmPrinter &p, SelectOp op) {
+  p << "select " << op.getOperands();
+  p.printOptionalAttrDict(op.getAttrs());
+  p << " : ";
+  if (ShapedType condType = op.getCondition().getType().dyn_cast<ShapedType>())
+    p << condType << ", ";
+  p << op.getType();
+}
+
+static ParseResult parseSelectOp(OpAsmParser &parser, OperationState &result) {
+  Type conditionType, resultType;
+  SmallVector<OpAsmParser::OperandType, 3> operands;
+  if (parser.parseOperandList(operands, /*requiredOperandCount=*/3) ||
+      parser.parseOptionalAttrDict(result.attributes) ||
+      parser.parseColonType(resultType))
+    return failure();
+
+  // Check for the explicit condition type if this is a masked tensor or vector.
+  if (succeeded(parser.parseOptionalComma())) {
+    conditionType = resultType;
+    if (parser.parseType(resultType))
+      return failure();
+  } else {
+    conditionType = parser.getBuilder().getI1Type();
+  }
+
+  result.addTypes(resultType);
+  return parser.resolveOperands(operands,
+                                {conditionType, resultType, resultType},
+                                parser.getNameLoc(), result.operands);
+}
+
+static LogicalResult verify(SelectOp op) {
+  Type conditionType = op.getCondition().getType();
+  if (conditionType.isSignlessInteger(1))
+    return success();
+
+  // If the result type is a vector or tensor, the type can be a mask with the
+  // same elements.
+  Type resultType = op.getType();
+  if (!resultType.isa<TensorType>() && !resultType.isa<VectorType>())
+    return op.emitOpError()
+           << "expected condition to be a signless i1, but got "
+           << conditionType;
+  Type shapedConditionType = getI1SameShape(resultType);
+  if (conditionType != shapedConditionType)
+    return op.emitOpError()
+           << "expected condition type to have the same shape "
+              "as the result type, expected "
+           << shapedConditionType << ", but got " << conditionType;
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // SignExtendIOp
 //===----------------------------------------------------------------------===//
@@ -1802,6 +2054,16 @@ OpFoldResult SignedDivIOp::fold(ArrayRef<Attribute> operands) {
     }
     return a.sdiv_ov(b, overflowOrDiv0);
   });
+
+  // Fold out division by one. Assumes all tensors of all ones are splats.
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    if (rhs.getValue() == 1)
+      return lhs();
+  } else if (auto rhs = operands[1].dyn_cast_or_null<SplatElementsAttr>()) {
+    if (rhs.getSplatValue<IntegerAttr>().getValue() == 1)
+      return lhs();
+  }
+
   return overflowOrDiv0 ? Attribute() : result;
 }
 
@@ -1940,7 +2202,7 @@ static Type inferSubViewResultType(MemRefType memRefType) {
       .setAffineMaps(stridedLayout);
 }
 
-void mlir::SubViewOp::build(Builder *b, OperationState &result, Value source,
+void mlir::SubViewOp::build(OpBuilder &b, OperationState &result, Value source,
                             ValueRange offsets, ValueRange sizes,
                             ValueRange strides, Type resultType,
                             ArrayRef<NamedAttribute> attrs) {
@@ -1950,8 +2212,8 @@ void mlir::SubViewOp::build(Builder *b, OperationState &result, Value source,
   result.addAttributes(attrs);
 }
 
-void mlir::SubViewOp::build(Builder *b, OperationState &result, Type resultType,
-                            Value source) {
+void mlir::SubViewOp::build(OpBuilder &b, OperationState &result,
+                            Type resultType, Value source) {
   build(b, result, source, /*offsets=*/{}, /*sizes=*/{}, /*strides=*/{},
         resultType);
 }
@@ -2117,6 +2379,8 @@ SubViewOp::getStaticStrides(SmallVectorImpl<int64_t> &staticStrides) {
   return success();
 }
 
+Value SubViewOp::getViewSource() { return source(); }
+
 namespace {
 
 /// Pattern to rewrite a subview op with constant size arguments.
@@ -2255,6 +2519,111 @@ public:
 
 } // end anonymous namespace
 
+/// Determines whether MemRefCastOp casts to a more dynamic version of the
+/// source memref. This is useful to to fold a memref_cast into a consuming op
+/// and implement canonicalization patterns for ops in different dialects that
+/// may consume the results of memref_cast operations. Such foldable memref_cast
+/// operations are typically inserted as `view` and `subview` ops are
+/// canonicalized, to preserve the type compatibility of their uses.
+///
+/// Returns true when all conditions are met:
+/// 1. source and result are ranked memrefs with strided semantics and same
+/// element type and rank.
+/// 2. each of the source's size, offset or stride has more static information
+/// than the corresponding result's size, offset or stride.
+///
+/// Example 1:
+/// ```mlir
+///   %1 = memref_cast %0 : memref<8x16xf32> to memref<?x?xf32>
+///   %2 = consumer %1 ... : memref<?x?xf32> ...
+/// ```
+///
+/// may fold into:
+///
+/// ```mlir
+///   %2 = consumer %0 ... : memref<8x16xf32> ...
+/// ```
+///
+/// Example 2:
+/// ```
+///   %1 = memref_cast %0 : memref<?x16xf32, affine_map<(i, j)->(16 * i + j)>>
+///          to memref<?x?xf32>
+///   consumer %1 : memref<?x?xf32> ...
+/// ```
+///
+/// may fold into:
+///
+/// ```
+///   consumer %0 ... : memref<?x16xf32, affine_map<(i, j)->(16 * i + j)>>
+/// ```
+bool mlir::canFoldIntoConsumerOp(MemRefCastOp castOp) {
+  MemRefType sourceType = castOp.source().getType().dyn_cast<MemRefType>();
+  MemRefType resultType = castOp.getType().dyn_cast<MemRefType>();
+
+  // Requires ranked MemRefType.
+  if (!sourceType || !resultType)
+    return false;
+
+  // Requires same elemental type.
+  if (sourceType.getElementType() != resultType.getElementType())
+    return false;
+
+  // Requires same rank.
+  if (sourceType.getRank() != resultType.getRank())
+    return false;
+
+  // Only fold casts between strided memref forms.
+  int64_t sourceOffset, resultOffset;
+  SmallVector<int64_t, 4> sourceStrides, resultStrides;
+  if (failed(getStridesAndOffset(sourceType, sourceStrides, sourceOffset)) ||
+      failed(getStridesAndOffset(resultType, resultStrides, resultOffset)))
+    return false;
+
+  // If cast is towards more static sizes along any dimension, don't fold.
+  for (auto it : llvm::zip(sourceType.getShape(), resultType.getShape())) {
+    auto ss = std::get<0>(it), st = std::get<1>(it);
+    if (ss != st)
+      if (MemRefType::isDynamic(ss) && !MemRefType::isDynamic(st))
+        return false;
+  }
+
+  // If cast is towards more static offset along any dimension, don't fold.
+  if (sourceOffset != resultOffset)
+    if (MemRefType::isDynamicStrideOrOffset(sourceOffset) &&
+        !MemRefType::isDynamicStrideOrOffset(resultOffset))
+      return false;
+
+  // If cast is towards more static strides along any dimension, don't fold.
+  for (auto it : llvm::zip(sourceStrides, resultStrides)) {
+    auto ss = std::get<0>(it), st = std::get<1>(it);
+    if (ss != st)
+      if (MemRefType::isDynamicStrideOrOffset(ss) &&
+          !MemRefType::isDynamicStrideOrOffset(st))
+        return false;
+  }
+
+  return true;
+}
+
+OpFoldResult SubViewOp::fold(ArrayRef<Attribute>) {
+  auto folds = [](Operation *op) {
+    bool folded = false;
+    for (OpOperand &operand : op->getOpOperands()) {
+      auto castOp =
+          dyn_cast_or_null<MemRefCastOp>(operand.get().getDefiningOp());
+      if (castOp && canFoldIntoConsumerOp(castOp)) {
+        operand.set(castOp.getOperand());
+        folded = true;
+      }
+    }
+    return folded ? success() : failure();
+  };
+
+  if (succeeded(folds(*this)))
+    return getResult();
+  return {};
+}
+
 void SubViewOp::getCanonicalizationPatterns(OwningRewritePatternList &results,
                                             MLIRContext *context) {
   results.insert<SubViewOpShapeFolder, SubViewOpStrideFolder,
@@ -2328,6 +2697,16 @@ OpFoldResult UnsignedDivIOp::fold(ArrayRef<Attribute> operands) {
     }
     return a.udiv(b);
   });
+
+  // Fold out division by one. Assumes all tensors of all ones are splats.
+  if (auto rhs = operands[1].dyn_cast_or_null<IntegerAttr>()) {
+    if (rhs.getValue() == 1)
+      return lhs();
+  } else if (auto rhs = operands[1].dyn_cast_or_null<SplatElementsAttr>()) {
+    if (rhs.getSplatValue<IntegerAttr>().getValue() == 1)
+      return lhs();
+  }
+
   return div0 ? Attribute() : result;
 }
 
@@ -2461,6 +2840,8 @@ static LogicalResult verify(ViewOp op) {
            << viewType;
   return success();
 }
+
+Value ViewOp::getViewSource() { return source(); }
 
 namespace {
 

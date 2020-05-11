@@ -22,6 +22,7 @@
 #include "CursorVisitor.h"
 #include "clang-c/FatalErrorHandler.h"
 #include "clang/AST/Attr.h"
+#include "clang/AST/DeclObjCCommon.h"
 #include "clang/AST/Mangle.h"
 #include "clang/AST/OpenMPClause.h"
 #include "clang/AST/StmtVisitor.h"
@@ -1294,6 +1295,14 @@ bool CursorVisitor::VisitFriendDecl(FriendDecl *D) {
   return false;
 }
 
+bool CursorVisitor::VisitDecompositionDecl(DecompositionDecl *D) {
+  for (auto *B : D->bindings()) {
+    if (Visit(MakeCXCursor(B, TU, RegionOfInterest)))
+      return true;
+  }
+  return VisitVarDecl(D);
+}
+
 bool CursorVisitor::VisitDeclarationNameInfo(DeclarationNameInfo Name) {
   switch (Name.getName().getNameKind()) {
   case clang::DeclarationName::Identifier:
@@ -2489,6 +2498,14 @@ void OMPClauseEnqueue::VisitOMPNontemporalClause(
     Visitor->AddStmt(E);
 }
 void OMPClauseEnqueue::VisitOMPOrderClause(const OMPOrderClause *C) {}
+void OMPClauseEnqueue::VisitOMPUsesAllocatorsClause(
+    const OMPUsesAllocatorsClause *C) {
+  for (unsigned I = 0, E = C->getNumberOfAllocators(); I < E; ++I) {
+    const OMPUsesAllocatorsClause::Data &D = C->getAllocatorData(I);
+    Visitor->AddStmt(D.Allocator);
+    Visitor->AddStmt(D.AllocatorTraits);
+  }
+}
 } // namespace
 
 void EnqueueVisitor::EnqueueChildren(const OMPClause *S) {
@@ -2663,6 +2680,7 @@ void EnqueueVisitor::VisitIfStmt(const IfStmt *If) {
   AddStmt(If->getElse());
   AddStmt(If->getThen());
   AddStmt(If->getCond());
+  AddStmt(If->getInit());
   AddDecl(If->getConditionVariable());
 }
 void EnqueueVisitor::VisitInitListExpr(const InitListExpr *IE) {
@@ -8146,11 +8164,10 @@ unsigned clang_Cursor_getObjCPropertyAttributes(CXCursor C, unsigned reserved) {
 
   unsigned Result = CXObjCPropertyAttr_noattr;
   const ObjCPropertyDecl *PD = dyn_cast<ObjCPropertyDecl>(getCursorDecl(C));
-  ObjCPropertyDecl::PropertyAttributeKind Attr =
-      PD->getPropertyAttributesAsWritten();
+  ObjCPropertyAttribute::Kind Attr = PD->getPropertyAttributesAsWritten();
 
 #define SET_CXOBJCPROP_ATTR(A)                                                 \
-  if (Attr & ObjCPropertyDecl::OBJC_PR_##A)                                    \
+  if (Attr & ObjCPropertyAttribute::kind_##A)                                  \
   Result |= CXObjCPropertyAttr_##A
   SET_CXOBJCPROP_ATTR(readonly);
   SET_CXOBJCPROP_ATTR(getter);

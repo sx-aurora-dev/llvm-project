@@ -360,36 +360,12 @@ public:
     return !!r;
   }
 
-  llvm::Expected<long long> AsLongLong() {
-    if (!m_py_obj)
-      return nullDeref();
-    assert(!PyErr_Occurred());
-    long long r = PyLong_AsLongLong(m_py_obj);
-    if (PyErr_Occurred())
-      return exception();
-    return r;
-  }
+  llvm::Expected<long long> AsLongLong() const;
 
-  llvm::Expected<long long> AsUnsignedLongLong() {
-    if (!m_py_obj)
-      return nullDeref();
-    assert(!PyErr_Occurred());
-    long long r = PyLong_AsUnsignedLongLong(m_py_obj);
-    if (PyErr_Occurred())
-      return exception();
-    return r;
-  }
+  llvm::Expected<long long> AsUnsignedLongLong() const;
 
-  llvm::Expected<unsigned long long> AsModuloUnsignedLongLong() const { 
-    // wraps on overflow, instead of raising an error.
-    if (!m_py_obj)
-      return nullDeref();
-    assert(!PyErr_Occurred());
-    unsigned long long r = PyLong_AsUnsignedLongLongMask(m_py_obj);
-    if (PyErr_Occurred())
-      return exception();
-    return r;
-  }
+  // wraps on overflow, instead of raising an error.
+  llvm::Expected<unsigned long long> AsModuloUnsignedLongLong() const;
 
   llvm::Expected<bool> IsInstance(const PythonObject &cls) {
     if (!m_py_obj || !cls.IsValid())

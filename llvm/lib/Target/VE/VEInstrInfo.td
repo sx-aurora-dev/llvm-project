@@ -135,7 +135,7 @@ def misc : Operand<i32>, PatLeaf<(imm), [{
   let ParserMatchClass = MiscImmAsmOperand;
 }
 
-// simm7fp
+// simm7fp - Generic fp immediate value.
 def LO7FP : SDNodeXForm<fpimm, [{
   // Get a integer immediate from fpimm
   const APInt& imm = N->getValueAPF().bitcastToAPInt();
@@ -155,7 +155,7 @@ def simm7fp : Operand<i32>, PatLeaf<(fpimm), [{
   let DecoderMethod = "DecodeSIMM7";
 }
 
-// mimmfp
+// mimm - Special fp immediate value of sequential bit stream of 0 or 1.
 def MIMMFP : SDNodeXForm<fpimm, [{
   const APInt& Imm = N->getValueAPF().bitcastToAPInt();
   uint64_t Val = Imm.getSExtValue();
@@ -627,27 +627,24 @@ multiclass RRNCbm<string opcStr, bits<8>opc,
 multiclass RRm<string opcStr, bits<8>opc,
                RegisterClass RC, ValueType Ty,
                SDPatternOperator OpNode = null_frag,
-               Operand immOp = simm7, Operand mOp = mimm> {
-  defm "" : RRbm<opcStr, opc, RC, Ty, RC, Ty, OpNode, immOp, mOp>;
-}
+               Operand immOp = simm7, Operand mOp = mimm> :
+  RRbm<opcStr, opc, RC, Ty, RC, Ty, OpNode, immOp, mOp>;
 
 // Generic RR multiclass for non-commutative instructions with 2 arguments.
 //   e.g. SUBUL, SUBUW, SUBSWSX, and etc.
 multiclass RRNCm<string opcStr, bits<8>opc,
                  RegisterClass RC, ValueType Ty,
                  SDPatternOperator OpNode = null_frag,
-                 Operand immOp = simm7, Operand mOp = mimm> {
-  defm "" : RRNCbm<opcStr, opc, RC, Ty, RC, Ty, OpNode, immOp, mOp>;
-}
+                 Operand immOp = simm7, Operand mOp = mimm> :
+  RRNCbm<opcStr, opc, RC, Ty, RC, Ty, OpNode, immOp, mOp>;
 
 // Generic RR multiclass for floating point instructions with 2 arguments.
 //   e.g. FADDD, FADDS, FSUBD, and etc.
 multiclass RRFm<string opcStr, bits<8>opc,
                 RegisterClass RC, ValueType Ty,
                 SDPatternOperator OpNode = null_frag,
-                Operand immOp = simm7fp, Operand mOp = mimmfp> {
-  defm "" : RRNCbm<opcStr, opc, RC, Ty, RC, Ty, OpNode, immOp, mOp>;
-}
+                Operand immOp = simm7fp, Operand mOp = mimmfp> :
+  RRNCbm<opcStr, opc, RC, Ty, RC, Ty, OpNode, immOp, mOp>;
 
 // Generic RR multiclass for shift instructions with 2 arguments.
 //   e.g. SLL, SRL, SLAWSX, and etc.
@@ -1490,7 +1487,7 @@ def : Pat<(brind tblockaddress:$imm), (BCFLazi_t 0, $imm)>;
 let Uses = [SX10], bpf = 3 /* TAKEN */, cf = 15 /* AT */, cy = 0, sy = 0,
     sz = 10 /* SX10 */, imm32 = 0, isReturn = 1, isTerminator = 1,
     isBarrier = 1, isCodeGenOnly = 1, hasSideEffects = 0 in
-def RET : CF<0x19, (outs), (ins), "b.l.t (, %lr)", [(retflag)]>;
+def RET : CF<0x19, (outs), (ins), "b.l.t (, %s10)", [(retflag)]>;
 
 // Section 8.8.2 - BCS (Branch on Condition Single)
 defm BCFW : BCm<"b${cond}.w", "b.w", "baf.w", 0x1B, I32, simm7>;
@@ -1506,9 +1503,9 @@ defm BRCFL : BCRm<"br${cf}.l", "br.l", "braf.l", 0x18, I64, simm7>;
 let cx = 1, cx2 = 0 in
 defm BRCFW : BCRm<"br${cf}.w", "br.w", "braf.w", 0x18, I32, simm7>;
 let cx = 0, cx2 = 1 in
-defm BRCFD : BCRm<"br${cf}.d", "br.d", "braf.d", 0x18, I64, simm7>;
+defm BRCFD : BCRm<"br${cf}.d", "br.d", "braf.d", 0x18, I64, simm7fp>;
 let cx = 1, cx2 = 1 in
-defm BRCFS : BCRm<"br${cf}.s", "br.s", "braf.s", 0x18, F32, simm7>;
+defm BRCFS : BCRm<"br${cf}.s", "br.s", "braf.s", 0x18, F32, simm7fp>;
 
 // Section 8.8.5 - BSIC (Branch and Save IC)
 let isCall = 1, hasSideEffects = 0, DecoderMethod = "DecodeCall" in
@@ -1932,8 +1929,8 @@ defm : BRCCIm<i64, BRCFLrr, BRCFLir, CMPULrr, CMPULir>;
 // floating point brcc
 multiclass BRCCFm<ValueType ty, SDPatternOperator BrOpNode1,
                  SDPatternOperator BrOpNode2> {
-  def : Pat<(brcc cond:$cond, ty:$l, fpzero:$r, bb:$addr),
-            (BrOpNode2 (fcond2ccSwap $cond), (LOFP32 $r), $l, bb:$addr)>;
+  def : Pat<(brcc cond:$cond, ty:$l, simm7fp:$r, bb:$addr),
+            (BrOpNode2 (fcond2ccSwap $cond), (LO7FP $r), $l, bb:$addr)>;
   def : Pat<(brcc cond:$cond, ty:$l, ty:$r, bb:$addr),
             (BrOpNode1 (fcond2cc $cond), $l, $r, bb:$addr)>;
 }

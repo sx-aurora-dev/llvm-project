@@ -81,12 +81,12 @@ enum Prediction {
 // sync with the ones in the .td file.
 namespace VERD {
 enum RoundingMode {
-  RD_NONE =  0, // According to PSW
-  RD_RZ = 8,    // Round toward Zero
-  RD_RP = 9,    // Round toward Plus infinity
-  RD_RM = 10,   // Round toward Minus infinity
-  RD_RN = 11,   // Round to Nearest (ties to Even)
-  RD_RA = 12,   // Round to Nearest (ties to Away)
+  RD_NONE = 0, // According to PSW
+  RD_RZ = 8,   // Round toward Zero
+  RD_RP = 9,   // Round toward Plus infinity
+  RD_RM = 10,  // Round toward Minus infinity
+  RD_RN = 11,  // Round to Nearest (ties to Even)
+  RD_RA = 12,  // Round to Nearest (ties to Away)
   UNKNOWN
 };
 }
@@ -253,12 +253,18 @@ inline static VEBP::Prediction VEValToBP(unsigned Val) {
 
 inline static const char *VERDToString(VERD::RoundingMode R) {
   switch (R) {
-  case VERD::RD_NONE: return "";
-  case VERD::RD_RZ: return ".rz";
-  case VERD::RD_RP: return ".rp";
-  case VERD::RD_RM: return ".rm";
-  case VERD::RD_RN: return ".rn";
-  case VERD::RD_RA: return ".ra";
+  case VERD::RD_NONE:
+    return "";
+  case VERD::RD_RZ:
+    return ".rz";
+  case VERD::RD_RP:
+    return ".rp";
+  case VERD::RD_RM:
+    return ".rm";
+  case VERD::RD_RN:
+    return ".rn";
+  case VERD::RD_RA:
+    return ".ra";
   default:
     llvm_unreachable("Invalid branch predicate");
   }

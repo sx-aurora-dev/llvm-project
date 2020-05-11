@@ -59,12 +59,8 @@ void MCObjectStreamer::addPendingLabel(MCSymbol* S) {
     CurSection->addPendingLabel(S, CurSubsectionIdx);
 
     // Add this Section to the list of PendingLabelSections.
-    auto SecIt = std::find(PendingLabelSections.begin(),
-                           PendingLabelSections.end(), CurSection);
-    if (SecIt == PendingLabelSections.end())
-      PendingLabelSections.push_back(CurSection);
-  }
-  else
+    PendingLabelSections.insert(CurSection);
+  } else
     // There is no Section / Subsection for this label yet.
     PendingLabels.push_back(S);
 }
@@ -191,7 +187,7 @@ MCFragment *MCObjectStreamer::getCurrentFragment() const {
   return nullptr;
 }
 
-static bool CanReuseDataFragment(const MCDataFragment &F,
+static bool canReuseDataFragment(const MCDataFragment &F,
                                  const MCAssembler &Assembler,
                                  const MCSubtargetInfo *STI) {
   if (!F.hasInstructions())
@@ -208,7 +204,7 @@ static bool CanReuseDataFragment(const MCDataFragment &F,
 MCDataFragment *
 MCObjectStreamer::getOrCreateDataFragment(const MCSubtargetInfo *STI) {
   MCDataFragment *F = dyn_cast_or_null<MCDataFragment>(getCurrentFragment());
-  if (!F || !CanReuseDataFragment(*F, *Assembler, STI)) {
+  if (!F || !canReuseDataFragment(*F, *Assembler, STI)) {
     F = new MCDataFragment();
     insert(F);
   }
@@ -407,8 +403,8 @@ void MCObjectStreamer::emitInstructionImpl(const MCInst &Inst,
   if (Assembler.getRelaxAll() ||
       (Assembler.isBundlingEnabled() && Sec->isBundleLocked())) {
     MCInst Relaxed = Inst;
-    while (getAssembler().getBackend().mayNeedRelaxation(Relaxed, STI))
-      getAssembler().getBackend().relaxInstruction(Relaxed, STI);
+    while (Backend.mayNeedRelaxation(Relaxed, STI))
+      Backend.relaxInstruction(Relaxed, STI);
     emitInstToData(Relaxed, STI);
     return;
   }

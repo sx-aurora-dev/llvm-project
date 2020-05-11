@@ -285,7 +285,7 @@ class MVEVectorVTInfo<ValueType vec, ValueType dblvec,
                           !cast<string>(LaneBits));
 
   // The suffix used on an instruction that mentions the whole type.
-  string Suffix = suffixletter ## BitsSuffix;
+  string Suffix = suffixletter # BitsSuffix;
 
   // The letter part of the suffix only.
   string SuffixLetter = suffixletter;
@@ -1690,9 +1690,13 @@ let Predicates = [HasMVEInt] in {
             (MVE_VMOV_from_lane_s8 MQPR:$src, imm:$lane)>;
   def : Pat<(ARMvgetlanes (v8i16 MQPR:$src), imm:$lane),
             (MVE_VMOV_from_lane_s16 MQPR:$src, imm:$lane)>;
+  def : Pat<(ARMvgetlanes (v8f16 MQPR:$src), imm:$lane),
+            (MVE_VMOV_from_lane_s16 MQPR:$src, imm:$lane)>;
   def : Pat<(ARMvgetlaneu (v16i8 MQPR:$src), imm:$lane),
             (MVE_VMOV_from_lane_u8 MQPR:$src, imm:$lane)>;
   def : Pat<(ARMvgetlaneu (v8i16 MQPR:$src), imm:$lane),
+            (MVE_VMOV_from_lane_u16 MQPR:$src, imm:$lane)>;
+  def : Pat<(ARMvgetlaneu (v8f16 MQPR:$src), imm:$lane),
             (MVE_VMOV_from_lane_u16 MQPR:$src, imm:$lane)>;
 
   def : Pat<(v16i8 (scalar_to_vector GPR:$src)),
@@ -2227,24 +2231,10 @@ let Predicates = [HasMVEInt] in {
   def : Pat<(v4i32 (ARMvdup (i32 rGPR:$elem))),
             (MVE_VDUP32 rGPR:$elem)>;
 
-  def : Pat<(v4i32 (ARMvduplane (v4i32 MQPR:$src), imm:$lane)),
-            (MVE_VDUP32 (MVE_VMOV_from_lane_32 MQPR:$src, imm:$lane))>;
-  // For the 16-bit and 8-bit vduplanes we don't care about the signedness
-  // of the lane move operation as we only want the lowest 8/16 bits anyway.
-  def : Pat<(v8i16 (ARMvduplane (v8i16 MQPR:$src), imm:$lane)),
-            (MVE_VDUP16 (MVE_VMOV_from_lane_u16 MQPR:$src, imm:$lane))>;
-  def : Pat<(v16i8 (ARMvduplane (v16i8 MQPR:$src), imm:$lane)),
-            (MVE_VDUP8  (MVE_VMOV_from_lane_u8 MQPR:$src, imm:$lane))>;
-
   def : Pat<(v8f16 (ARMvdup (i32 rGPR:$elem))),
             (MVE_VDUP16 rGPR:$elem)>;
   def : Pat<(v4f32 (ARMvdup (i32 rGPR:$elem))),
             (MVE_VDUP32 rGPR:$elem)>;
-
-  def : Pat<(v4f32 (ARMvduplane (v4f32 MQPR:$src), imm:$lane)),
-            (MVE_VDUP32 (MVE_VMOV_from_lane_32 MQPR:$src, imm:$lane))>;
-  def : Pat<(v8f16 (ARMvduplane (v8f16 MQPR:$src), imm:$lane)),
-            (MVE_VDUP16 (MVE_VMOV_from_lane_u16 MQPR:$src, imm:$lane))>;
 
   // Match a vselect with an ARMvdup as a predicated MVE_VDUP
   def : Pat<(v16i8 (vselect (v16i1 VCCR:$pred),
@@ -4256,7 +4246,7 @@ let Predicates = [HasMVEFloat] in {
 }
 
 
-// Extra "worst case" and/or/xor partterns, going into and out of GRP
+// Extra "worst case" and/or/xor patterns, going into and out of GRP
 multiclass two_predops<SDPatternOperator opnode, Instruction insn> {
   def v16i1 : Pat<(v16i1 (opnode (v16i1 VCCR:$p1), (v16i1 VCCR:$p2))),
                   (v16i1 (COPY_TO_REGCLASS
@@ -4986,7 +4976,7 @@ multiclass MVE_vec_scalar_fp_pat_m<SDNode unpred_op, Intrinsic pred_int,
               (v8f16 (instr_f16 (v8f16 MQPR:$Qm), (i32 rGPR:$val),
                                 ARMVCCThen, (v8i1 VCCR:$mask),
                                 (v8f16 MQPR:$inactive)))>;
-    // Preicated F32
+    // Predicated F32
     def : Pat<(v4f32 (pred_int (v4f32 MQPR:$Qm), (v4f32 (ARMvdup rGPR:$val)),
                                (v4i1 VCCR:$mask), (v4f32 MQPR:$inactive))),
               (v4f32 (instr_f32 (v4f32 MQPR:$Qm), (i32 rGPR:$val),

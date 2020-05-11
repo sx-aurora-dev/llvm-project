@@ -1618,7 +1618,7 @@ SDValue VETargetLowering::withTargetFlags(SDValue Op, unsigned TF,
                                      0, TF);
   if (const ConstantPoolSDNode *CP = dyn_cast<ConstantPoolSDNode>(Op))
     return DAG.getTargetConstantPool(CP->getConstVal(), CP->getValueType(0),
-                                     CP->getAlignment(), CP->getOffset(), TF);
+                                     CP->getAlign(), CP->getOffset(), TF);
   if (const ExternalSymbolSDNode *ES = dyn_cast<ExternalSymbolSDNode>(Op))
     return DAG.getTargetExternalSymbol(ES->getSymbol(), ES->getValueType(0),
                                        TF);
@@ -2027,7 +2027,7 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
     return Op;
   }
 
-  unsigned alignment = LdNode->getAlignment();
+  unsigned alignment = LdNode->getAlign().value();
   if (alignment > 8)
     alignment = 8;
 
@@ -2108,7 +2108,7 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
                                     StNode->getValue(),
                                     SubRegOdd);
 
-  unsigned alignment = StNode->getAlignment();
+  unsigned alignment = StNode->getAlign().value();
   if (alignment > 8)
     alignment = 8;
 
@@ -2150,7 +2150,7 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
     return Op;
   }
 
-  unsigned alignment = StNode->getAlignment();
+  unsigned alignment = StNode->getAlign().value();
   if (alignment > 8)
     alignment = 8;
   EVT addrVT = BasePtr.getValueType();

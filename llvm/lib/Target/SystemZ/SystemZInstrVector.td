@@ -177,9 +177,13 @@ let Predicates = [FeatureVector] in {
 
 let Predicates = [FeatureVectorPackedDecimal] in {
   // Load rightmost with length.  The number of loaded bytes is only known
-  // at run time.
-  def VLRL : BinaryVSI<"vlrl", 0xE635, int_s390_vlrl, 0>;
+  // at run time.  Note that while the instruction will accept immediate
+  // lengths larger that 15 at runtime, those will always result in a trap,
+  // so we never emit them here.
+  def VLRL : BinaryVSI<"vlrl", 0xE635, null_frag, 0>;
   def VLRLR : BinaryVRSd<"vlrlr", 0xE637, int_s390_vlrl, 0>;
+  def : Pat<(int_s390_vlrl imm32zx4:$len, bdaddr12only:$addr),
+            (VLRL bdaddr12only:$addr, imm32zx4:$len)>;
 }
 
 // Use replicating loads if we're inserting a single element into an
@@ -243,9 +247,13 @@ let Predicates = [FeatureVector] in {
 
 let Predicates = [FeatureVectorPackedDecimal] in {
   // Store rightmost with length.  The number of stored bytes is only known
-  // at run time.
-  def VSTRL : StoreLengthVSI<"vstrl", 0xE63D, int_s390_vstrl, 0>;
+  // at run time.  Note that while the instruction will accept immediate
+  // lengths larger that 15 at runtime, those will always result in a trap,
+  // so we never emit them here.
+  def VSTRL : StoreLengthVSI<"vstrl", 0xE63D, null_frag, 0>;
   def VSTRLR : StoreLengthVRSd<"vstrlr", 0xE63F, int_s390_vstrl, 0>;
+  def : Pat<(int_s390_vstrl VR128:$val, imm32zx4:$len, bdaddr12only:$addr),
+            (VSTRL VR128:$val, bdaddr12only:$addr, imm32zx4:$len)>;
 }
 
 //===----------------------------------------------------------------------===//
@@ -1564,7 +1572,7 @@ def : VectorReplicateScalar<v16i8, VREPB, 7>;
 def : VectorReplicateScalar<v8i16, VREPH, 3>;
 def : VectorReplicateScalar<v4i32, VREPF, 1>;
 
-// i64 replications are just a single isntruction.
+// i64 replications are just a single instruction.
 def : Pat<(v2i64 (z_replicate GR64:$scalar)),
           (VLVGP GR64:$scalar, GR64:$scalar)>;
 

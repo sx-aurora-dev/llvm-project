@@ -838,9 +838,16 @@ bool IRTranslator::translateIndirectBr(const User &U,
   MIRBuilder.buildBrIndirect(Tgt);
 
   // Link successors.
+  SmallPtrSet<const BasicBlock *, 32> AddedSuccessors;
   MachineBasicBlock &CurBB = MIRBuilder.getMBB();
-  for (const BasicBlock *Succ : successors(&BrInst))
+  for (const BasicBlock *Succ : successors(&BrInst)) {
+    // It's legal for indirectbr instructions to have duplicate blocks in the
+    // destination list. We don't allow this in MIR. Skip anything that's
+    // already a successor.
+    if (!AddedSuccessors.insert(Succ).second)
+      continue;
     CurBB.addSuccessor(&getMBB(*Succ));
+  }
 
   return true;
 }
@@ -1577,7 +1584,8 @@ bool IRTranslator::translateInlineAsm(const CallBase &CB,
     return false;
   }
 
-  return ALI->lowerInlineAsm(MIRBuilder, CB);
+  return ALI->lowerInlineAsm(
+      MIRBuilder, CB, [&](const Value &Val) { return getOrCreateVRegs(Val); });
 }
 
 bool IRTranslator::translateCallBase(const CallBase &CB,
@@ -1607,7 +1615,7 @@ bool IRTranslator::translateCallBase(const CallBase &CB,
   // scan is done to check if any instructions are calls.
   bool Success =
       CLI->lowerCall(MIRBuilder, CB, Res, Args, SwiftErrorVReg,
-                     [&]() { return getOrCreateVReg(*CB.getCalledValue()); });
+                     [&]() { return getOrCreateVReg(*CB.getCalledOperand()); });
 
   // Check if we just inserted a tail call.
   if (Success) {
@@ -1712,9 +1720,8 @@ bool IRTranslator::translateInvoke(const User &U,
   const BasicBlock *ReturnBB = I.getSuccessor(0);
   const BasicBlock *EHPadBB = I.getSuccessor(1);
 
-  const Value *Callee = I.getCalledValue();
-  const Function *Fn = dyn_cast<Function>(Callee);
-  if (isa<InlineAsm>(Callee))
+  const Function *Fn = I.getCalledFunction();
+  if (I.isInlineAsm())
     return false;
 
   // FIXME: support invoking patchpoint and statepoint intrinsics.

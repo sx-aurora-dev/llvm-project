@@ -27,7 +27,7 @@ define void @func() {
 ; CHECK-NEXT:  ld %s15, 24(, %s11)
 ; CHECK-NEXT:  ld %s10, 8(, %s11)
 ; CHECK-NEXT:  ld %s9, (, %s11)
-; CHECK-NEXT:  b.l.t (, %lr)
+; CHECK-NEXT:  b.l.t (, %s10)
   ret void
 }
 
@@ -58,7 +58,7 @@ define i64 @func1(i64) {
 ; CHECK-NEXT:  ld %s15, 24(, %s11)
 ; CHECK-NEXT:  ld %s10, 8(, %s11)
 ; CHECK-NEXT:  ld %s9, (, %s11)
-; CHECK-NEXT:  b.l.t (, %lr)
+; CHECK-NEXT:  b.l.t (, %s10)
   ret i64 %0
 }
 
@@ -90,6 +90,6 @@ define i64 @func2(i64, i64, i64, i64, i64) {
 ; CHECK-NEXT:  ld %s15, 24(, %s11)
 ; CHECK-NEXT:  ld %s10, 8(, %s11)
 ; CHECK-NEXT:  ld %s9, (, %s11)
-; CHECK-NEXT:  b.l.t (, %lr)
+; CHECK-NEXT:  b.l.t (, %s10)
   ret i64 %4
 }

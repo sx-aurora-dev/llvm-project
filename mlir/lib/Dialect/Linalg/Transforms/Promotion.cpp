@@ -16,6 +16,7 @@
 #include "mlir/Dialect/Linalg/IR/LinalgOps.h"
 #include "mlir/Dialect/Linalg/IR/LinalgTypes.h"
 #include "mlir/Dialect/Linalg/Passes.h"
+#include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/Linalg/Utils/Utils.h"
 #include "mlir/Dialect/LoopOps/LoopOps.h"
 #include "mlir/Dialect/StandardOps/EDSC/Intrinsics.h"
@@ -36,11 +37,11 @@ using namespace mlir::loop;
 
 using llvm::SetVector;
 
-using folded_affine_min = folded::ValueBuilder<AffineMinOp>;
-using folded_linalg_range = folded::ValueBuilder<linalg::RangeOp>;
-using folded_std_dim = folded::ValueBuilder<DimOp>;
-using folded_std_subview = folded::ValueBuilder<SubViewOp>;
-using folded_std_view = folded::ValueBuilder<ViewOp>;
+using folded_affine_min = FoldedValueBuilder<AffineMinOp>;
+using folded_linalg_range = FoldedValueBuilder<linalg::RangeOp>;
+using folded_std_dim = FoldedValueBuilder<DimOp>;
+using folded_std_subview = FoldedValueBuilder<SubViewOp>;
+using folded_std_view = FoldedValueBuilder<ViewOp>;
 
 #define DEBUG_TYPE "linalg-promotion"
 
@@ -74,8 +75,8 @@ static Value allocBuffer(Type elementType, Value size, bool dynamicBuffers,
   if (!dynamicBuffers)
     if (auto cst = dyn_cast_or_null<ConstantIndexOp>(size.getDefiningOp()))
       return std_alloc(
-          MemRefType::get(width * cst.getValue(), IntegerType::get(8, ctx)), {},
-          alignment_attr);
+          MemRefType::get(width * cst.getValue(), IntegerType::get(8, ctx)),
+          ValueRange{}, alignment_attr);
   Value mul =
       folded_std_muli(folder, folded_std_constant_index(folder, width), size);
   return std_alloc(MemRefType::get(-1, IntegerType::get(8, ctx)), mul,
@@ -118,7 +119,7 @@ static PromotionInfo promoteFullTileBuffer(OpBuilder &b, Location loc,
     auto rangeValue = en.value();
     // Try to extract a tight constant
     Value size = extractSmallestConstantBoundingSize(b, loc, rangeValue.size);
-    allocSize = folded_std_muli(folder, allocSize, size).getValue();
+    allocSize = folded_std_muli(folder, allocSize, size);
     fullSizes.push_back(size);
     partialSizes.push_back(folded_std_dim(folder, subView, rank));
   }
@@ -262,6 +263,21 @@ static void promoteSubViews(FuncOp f, bool dynamicBuffers) {
   });
   for (auto op : toErase)
     op.erase();
+}
+
+LogicalResult mlir::linalg::promoteSubviewsLinalgOpPrecondition(
+    Operation *op, llvm::Optional<DenseSet<unsigned>> operandIndicesToPromote) {
+  LinalgOp linOp = dyn_cast<LinalgOp>(op);
+  // Transformation applies to buffers only.
+  if (!linOp || !linOp.hasBufferSemantics())
+    return failure();
+  for (auto en : llvm::enumerate(linOp.getInputsAndOutputBuffers())) {
+    auto sv = isa_and_nonnull<SubViewOp>(en.value().getDefiningOp());
+    if (sv && (!operandIndicesToPromote.hasValue() ||
+               operandIndicesToPromote->count(en.index())))
+      return success();
+  }
+  return failure();
 }
 
 namespace {

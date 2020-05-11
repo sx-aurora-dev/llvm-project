@@ -115,6 +115,44 @@ func @valid_symbols(%arg0: index, %arg1: index, %arg2: index) {
 
 // -----
 
+// Test symbol constraints for ops with AffineScope trait.
+
+// CHECK-LABEL: func @valid_symbol_affine_scope
+func @valid_symbol_affine_scope(%n : index, %A : memref<?xf32>) {
+  test.affine_scope {
+    %c1 = constant 1 : index
+    %l = subi %n, %c1 : index
+    // %l, %n are valid symbols since test.affine_scope defines a new affine
+    // scope.
+    affine.for %i = %l to %n {
+      %m = subi %l, %i : index
+      test.affine_scope {
+        // %m and %n are valid symbols.
+        affine.for %j = %m to %n {
+          %v = affine.load %A[%n - 1] : memref<?xf32>
+          affine.store %v, %A[%n - 1] : memref<?xf32>
+        }
+        "terminate"() : () -> ()
+      }
+    }
+    "terminate"() : () -> ()
+  }
+  return
+}
+
+// -----
+
+// Test the fact that module op always provides an affine scope.
+
+%idx = "test.foo"() : () -> (index)
+"test.func"() ({
+^bb0(%A : memref<?xf32>):
+  affine.load %A[%idx] : memref<?xf32>
+  "terminate"() : () -> ()
+}) : () -> ()
+
+// -----
+
 // CHECK-LABEL: @parallel
 // CHECK-SAME: (%[[N:.*]]: index)
 func @parallel(%N : index) {

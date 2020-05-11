@@ -69,6 +69,55 @@ Expected<std::string> python::As<std::string>(Expected<PythonObject> &&obj) {
   return std::string(utf8.get());
 }
 
+Expected<long long> PythonObject::AsLongLong() const {
+  if (!m_py_obj)
+    return nullDeref();
+#if PY_MAJOR_VERSION < 3
+  if (!PyLong_Check(m_py_obj)) {
+    PythonInteger i(PyRefType::Borrowed, m_py_obj);
+    return i.AsLongLong();
+  }
+#endif
+  assert(!PyErr_Occurred());
+  long long r = PyLong_AsLongLong(m_py_obj);
+  if (PyErr_Occurred())
+    return exception();
+  return r;
+}
+
+Expected<long long> PythonObject::AsUnsignedLongLong() const {
+  if (!m_py_obj)
+    return nullDeref();
+#if PY_MAJOR_VERSION < 3
+  if (!PyLong_Check(m_py_obj)) {
+    PythonInteger i(PyRefType::Borrowed, m_py_obj);
+    return i.AsUnsignedLongLong();
+  }
+#endif
+  assert(!PyErr_Occurred());
+  long long r = PyLong_AsUnsignedLongLong(m_py_obj);
+  if (PyErr_Occurred())
+    return exception();
+  return r;
+}
+
+// wraps on overflow, instead of raising an error.
+Expected<unsigned long long> PythonObject::AsModuloUnsignedLongLong() const {
+  if (!m_py_obj)
+    return nullDeref();
+#if PY_MAJOR_VERSION < 3
+  if (!PyLong_Check(m_py_obj)) {
+    PythonInteger i(PyRefType::Borrowed, m_py_obj);
+    return i.AsModuloUnsignedLongLong();
+  }
+#endif
+  assert(!PyErr_Occurred());
+  unsigned long long r = PyLong_AsUnsignedLongLongMask(m_py_obj);
+  if (PyErr_Occurred())
+    return exception();
+  return r;
+}
+
 void StructuredPythonObject::Serialize(llvm::json::OStream &s) const {
   s.value(llvm::formatv("Python Obj: {0:X}", GetValue()).str());
 }
@@ -484,7 +533,7 @@ StructuredData::IntegerSP PythonInteger::CreateStructuredInteger() const {
   if (!value) {
     llvm::consumeError(value.takeError());
     result->SetValue(0);
-  } else { 
+  } else {
     result->SetValue(value.get());
   }
   return result;

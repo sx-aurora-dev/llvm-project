@@ -222,8 +222,7 @@ void VEInstPrinter::printCCOperand(const MCInst *MI, int OpNum,
 }
 
 void VEInstPrinter::printRDOperand(const MCInst *MI, int OpNum,
-                                   const MCSubtargetInfo &STI,
-                                   raw_ostream &O) {
+                                   const MCSubtargetInfo &STI, raw_ostream &O) {
   int RD = (int)MI->getOperand(OpNum).getImm();
   O << VERDToString((VERD::RoundingMode)RD);
 }
