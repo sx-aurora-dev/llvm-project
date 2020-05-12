@@ -50,6 +50,7 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
   const VETargetLowering *getTLI() const { return TLI; }
 
   bool enableVPU() const { return getST()->enableVPU(); }
+  bool hasPackedMode() const { return getST()->hasPackedMode(); }
 
 public:
   explicit VETTIImpl(const VETargetMachine *TM, const Function &F)
@@ -205,6 +206,17 @@ public:
   /// unpredicated op plus a select.
   bool supportsVPOperation(const PredicatedInstruction &PredInst) const {
     if (!enableVPU())
+      return false;
+
+    // Rely on standard IR expansion for over-sized VP ops
+    auto VPI = dyn_cast<VPIntrinsic>(&PredInst);
+    if (!VPI)
+      return true;
+    auto EC = VPI->getStaticVectorLength();
+    if (EC.Scalable)
+      return false;
+
+    if (EC.Min > (hasPackedMode() ? 512 : 256))
       return false;
 
     switch (PredInst.getOpcode()) {
