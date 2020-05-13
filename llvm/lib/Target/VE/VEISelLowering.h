@@ -131,6 +131,8 @@ public:
 
   TargetLoweringBase::LegalizeAction
   getCustomOperationAction(SDNode &) const override;
+  TargetLowering::LegalizeAction
+  getActionForExtendedType(unsigned Op, EVT VT) const override;
 
   /// computeKnownBitsForTargetNode - Determine which of the bits specified
   /// in Mask are known to be either zero or one and return them in the
@@ -214,10 +216,6 @@ public:
 
   /// Custom Lower {
   // legalize the result vector type for operation \p Op
-
-  LegalizeAction getActionForExtendedType(unsigned Op, EVT VT) const override {
-    return VT.isVector() ? Custom : Expand;
-  }
 
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
   void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,

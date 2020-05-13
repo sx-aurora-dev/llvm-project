@@ -14,40 +14,9 @@ define <1 x double> @vec_load_v1f64(<1 x double>* %P) {
 define x86_regcallcc <17 x double> @vec_load_v17f64(<17 x double>* %P) {
 ; CHECK-LABEL: vec_load_v17f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s1, 128(, %s0)
-; CHECK-NEXT:    ld %s2, 120(, %s0)
-; CHECK-NEXT:    ld %s3, 112(, %s0)
-; CHECK-NEXT:    ld %s4, 104(, %s0)
-; CHECK-NEXT:    ld %s5, 96(, %s0)
-; CHECK-NEXT:    ld %s6, 88(, %s0)
-; CHECK-NEXT:    ld %s7, 80(, %s0)
-; CHECK-NEXT:    ld %s34, 72(, %s0)
-; CHECK-NEXT:    ld %s35, 64(, %s0)
-; CHECK-NEXT:    ld %s36, 56(, %s0)
-; CHECK-NEXT:    ld %s37, 48(, %s0)
-; CHECK-NEXT:    ld %s38, 40(, %s0)
-; CHECK-NEXT:    ld %s39, 32(, %s0)
-; CHECK-NEXT:    ld %s40, (, %s0)
-; CHECK-NEXT:    ld %s41, 8(, %s0)
-; CHECK-NEXT:    ld %s42, 16(, %s0)
-; CHECK-NEXT:    ld %s0, 24(, %s0)
-; CHECK-NEXT:    lsv %v0(0),%s40
-; CHECK-NEXT:    lsv %v0(1),%s41
-; CHECK-NEXT:    lsv %v0(2),%s42
-; CHECK-NEXT:    lsv %v0(3),%s0
-; CHECK-NEXT:    lsv %v0(4),%s39
-; CHECK-NEXT:    lsv %v0(5),%s38
-; CHECK-NEXT:    lsv %v0(6),%s37
-; CHECK-NEXT:    lsv %v0(7),%s36
-; CHECK-NEXT:    lsv %v0(8),%s35
-; CHECK-NEXT:    lsv %v0(9),%s34
-; CHECK-NEXT:    lsv %v0(10),%s7
-; CHECK-NEXT:    lsv %v0(11),%s6
-; CHECK-NEXT:    lsv %v0(12),%s5
-; CHECK-NEXT:    lsv %v0(13),%s4
-; CHECK-NEXT:    lsv %v0(14),%s3
-; CHECK-NEXT:    lsv %v0(15),%s2
-; CHECK-NEXT:    lsv %v0(16),%s1
+; CHECK-NEXT:    or %s1, 17, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vld %v0,8,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = load <17 x double>, <17 x double>* %P, align 8
   ret <17 x double> %r

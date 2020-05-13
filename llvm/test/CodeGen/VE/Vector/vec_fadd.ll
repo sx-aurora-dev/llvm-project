@@ -26,7 +26,7 @@ define <2 x double> @vec_add_v2f64(<2 x double> %a, <2 x double> %b) {
 define <3 x double> @vec_add_v3f64(<3 x double> %a, <3 x double> %b) {
 ; CHECK-LABEL: vec_add_v3f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfadd.d %v0,%v0,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -110,7 +110,7 @@ define <128 x double> @vec_add_v128f64(<128 x double> %a, <128 x double> %b) {
 define <253 x double> @vec_add_v253f64(<253 x double> %a, <253 x double> %b) {
 ; CHECK-LABEL: vec_add_v253f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s0, 253
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfadd.d %v0,%v0,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -287,7 +287,7 @@ define <128 x float> @vec_add_v128f32(<128 x float> %a, <128 x float> %b) {
 define <253 x float> @vec_add_v253f32(<253 x float> %a, <253 x float> %b) {
 ; CHECK-LABEL: vec_add_v253f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s0, 253
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfadd.s %v0,%v0,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9

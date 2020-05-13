@@ -1864,9 +1864,6 @@ void VETargetLowering::initVPUActions() {
       // won't implement
       ISD::CONCAT_VECTORS, ISD::MERGE_VALUES,
 
-      // TODO
-      ISD::FSQRT,
-
       // not directly supported
       ISD::FNEG, ISD::FABS, ISD::FCBRT, ISD::FSIN, ISD::FCOS, ISD::FPOWI,
       ISD::FPOW, ISD::FLOG, ISD::FLOG2, ISD::FLOG10, ISD::FEXP, ISD::FEXP2,
@@ -2211,6 +2208,19 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setMinStackArgumentAlignment(Align(8));
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
+}
+
+TargetLowering::LegalizeAction
+VETargetLowering::getActionForExtendedType(unsigned Op, EVT VT) const {
+  switch (Op) {
+#define REGISTER_VVP_OP(VVP_NAME, ISD_NAME)                                    \
+  case ISD::ISD_NAME:                                                          \
+  case VEISD::VVP_NAME:
+#include "VVPNodes.inc"
+    return Custom;
+  default:
+    return Expand;
+  }
 }
 
 TargetLowering::LegalizeAction
