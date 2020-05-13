@@ -15,8 +15,8 @@
 #define LLVM_LIB_TARGET_VE_VEISELLOWERING_H
 
 #include "VE.h"
-#include "llvm/CodeGen/TargetLowering.h"
 #include "VELoweringInfo.h"
+#include "llvm/CodeGen/TargetLowering.h"
 
 namespace llvm {
 class VESubtarget;
@@ -54,25 +54,27 @@ enum NodeType : unsigned {
   FLUSHW,          // FLUSH register windows to stack.
 
   // Mask support
-  VM_EXTRACT, // VM_EXTRACT(v256i1:mask, i32:i) Extract a SX register from a mask register
-  VM_INSERT,  // VM_INSERT(v256i1:mask, i32:i, i64:val) Insert a SX register into a mask register
+  VM_EXTRACT, // VM_EXTRACT(v256i1:mask, i32:i) Extract a SX register from a
+              // mask register
+  VM_INSERT, // VM_INSERT(v256i1:mask, i32:i, i64:val) Insert a SX register into
+             // a mask register
   VM_FIRST = VM_EXTRACT,
   VM_LAST = VM_INSERT,
 
   /// VEC_ {
   // Packed mode support
-  VEC_UNPACK_LO, // upnack the lo (v256i32) slice of a packed v512.32
-  VEC_UNPACK_HI, // upnack the hi (v256f32) slice of a packed v512.32
+  VEC_UNPACK_LO, // unpack the lo (v256i32) slice of a packed v512.32
+  VEC_UNPACK_HI, // unpack the hi (v256f32) slice of a packed v512.32
   VEC_PACK,      // pack a lo and a hi vector backinto one v512.32 vector
-  VEC_SWAP, // exchange the odd-even positions (v256i32 <> v256f32) or (v512.32
-            // <> v521.32)
+  VEC_SWAP, // exchange the odd-even positions (v256i32 <> v256f32) or (v512x32
+            // <> v512y32) x != y
 
   // Create a mask that is true where the vector lane is != 0
-  VEC_TOMASK,    // 0: Vector value, 1: AVL (no mask)
+  VEC_TOMASK, // 0: Vector value, 1: AVL (no mask)
   // Broadcast an SX register
   VEC_BROADCAST, // 0: the value, 1: the vector length (no mask)
   // Create a sequence vector
-  VEC_SEQ,       // 1: the vector length (no mask)
+  VEC_SEQ, // 1: the vector length (no mask)
   VEC_VMV, // custom lowering for vp_vshift
 
   //// Horizontal operations
@@ -92,8 +94,8 @@ enum NodeType : unsigned {
   REPL_I32,
 
 // Internal VVP nodes
-#define ADD_VVP_OP(VVP_NAME) VVP_NAME ,
- #include "VVPNodes.inc"
+#define ADD_VVP_OP(VVP_NAME) VVP_NAME,
+#include "VVPNodes.inc"
 
   /// A wrapper node for TargetConstantPool, TargetJumpTable,
   /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
@@ -101,7 +103,6 @@ enum NodeType : unsigned {
   Wrapper,
 };
 } // namespace VEISD
-
 
 using VecLenOpt = Optional<unsigned>;
 
@@ -248,7 +249,8 @@ public:
   SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
 
   /// VELoweringInfo {
-  EVT LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG, VVPExpansionMode) const override;
+  EVT LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG,
+                         VVPExpansionMode) const override;
   /// } VELoweringInfo
 
   // Widening configuration & legalizer
@@ -260,14 +262,14 @@ public:
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
   void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
                           SelectionDAG &DAG) const override;
-  void LowerOperationWrapper(SDNode *N,
-                             SmallVectorImpl<SDValue> &Results,
-                             SelectionDAG &DAG,
-                             std::function<SDValue(SDValue)> WidenedOpCB) const override;
+  void LowerOperationWrapper(
+      SDNode *N, SmallVectorImpl<SDValue> &Results, SelectionDAG &DAG,
+      std::function<SDValue(SDValue)> WidenedOpCB) const override;
 
   SDValue LowerVPToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
 
-  SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
+  SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
+                                 VVPExpansionMode Mode) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
@@ -285,20 +287,27 @@ public:
   SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
 
   // Custom Operations
-  // SDValue CreateConstMask(SDLoc DL, unsigned NumElements, SelectionDAG &DAG, bool IsTrue=true) const;
-  // SDValue CreateBroadcast(SDLoc dl, EVT ResTy, SDValue ScaValue, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
-  // SDValue CreateSeq(SDLoc dl, EVT ResTy, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None) const;
-
+  // SDValue CreateConstMask(SDLoc DL, unsigned NumElements, SelectionDAG &DAG,
+  // bool IsTrue=true) const; SDValue CreateBroadcast(SDLoc dl, EVT ResTy,
+  // SDValue ScaValue, SelectionDAG &DAG, Optional<SDValue> OpVectorLength=None)
+  // const; SDValue CreateSeq(SDLoc dl, EVT ResTy, SelectionDAG &DAG,
+  // Optional<SDValue> OpVectorLength=None) const;
 
   // Vector Operations
   // main shuffle handler
-  SDValue LowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
+  SDValue LowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
+                               VVPExpansionMode Mode) const;
   SDValue LowerBitcast(SDValue Op, SelectionDAG &DAG) const;
-  // SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
-  // SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
+  // SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG, VVPExpansionMode
+  // Mode) const; SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG,
+  // VVPExpansionMode Mode) const;
 
-  SDValue LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint=None) const;
-  SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode, VecLenOpt VecLenHint=None) const;
+  SDValue LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
+                                VVPExpansionMode Mode,
+                                VecLenOpt VecLenHint = None) const;
+  SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
+                                VVPExpansionMode Mode,
+                                VecLenOpt VecLenHint = None) const;
 
   SDValue LowerMLOAD(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode,
                      VecLenOpt VecLenHint = None) const;
@@ -310,15 +319,17 @@ public:
   SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVECREDUCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerSETCC(llvm::SDValue, llvm::SelectionDAG &) const;
-  // SDValue LowerSELECT_CC(llvm::SDValue, llvm::SelectionDAG &) const;// Expanded
-  // SDValue LowerVSELECT(llvm::SDValue, llvm::SelectionDAG &) const;
-                                       
-  SDValue ExpandSELECT(SDValue Op, SmallVectorImpl<SDValue>& LegalOperands, EVT LegalResVT, CustomDAG &DAG, SDValue AVL) const;
+  // SDValue LowerSELECT_CC(llvm::SDValue, llvm::SelectionDAG &) const;//
+  // Expanded SDValue LowerVSELECT(llvm::SDValue, llvm::SelectionDAG &) const;
+
+  SDValue ExpandSELECT(SDValue Op, SmallVectorImpl<SDValue> &LegalOperands,
+                       EVT LegalResVT, CustomDAG &DAG, SDValue AVL) const;
   SDValue LowerTRUNCATE(llvm::SDValue, llvm::SelectionDAG &) const;
 
   SDValue TryNarrowExtractVectorLoad(SDNode *ExtractN, SelectionDAG &DAG) const;
 
-  SDValue ExpandToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
+  SDValue ExpandToVVP(SDValue Op, SelectionDAG &DAG,
+                      VVPExpansionMode Mode) const;
   // main entry point for regular OC to VVP_* ISD expansion
   // Called in TL::ReplaceNodeResults
   // This replaces the standard ISD node with VVP VEISD node(s) with a widened
@@ -329,7 +340,8 @@ public:
   // Split \p Op into two VVP_ ops with the native vector width by splitting
   // the i32 and f32 sub elements of the vector operation.
 
-  SDValue WidenVVPOperation(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
+  SDValue WidenVVPOperation(SDValue Op, SelectionDAG &DAG,
+                            VVPExpansionMode Mode) const;
   // Called during TL::LowerOperation
   // This replaces this standard ISD node (or VVP VEISD node) with
   // a VVP VEISD node with a native-width type.

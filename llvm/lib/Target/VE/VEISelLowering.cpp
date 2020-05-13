@@ -304,7 +304,7 @@ static EVT getSplitVT(EVT OldValVT, CustomDAG &CDAG) {
   return CDAG.getVectorVT(OldValVT.getVectorElementType(), StandardVectorWidth);
 }
 
-static SDValue extractSubElem(SDValue Op, CustomDAG &CDAG, SubElem Part,
+static SDValue extractPackElem(SDValue Op, CustomDAG &CDAG, PackElem Part,
                               SDValue AVL) {
   EVT OldValVT = Op.getValue(0).getValueType();
   if (!OldValVT.isVector())
@@ -327,14 +327,14 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
 
   // request the parts
   SDValue PartOps[2];
-  for (SubElem Part : {SubElem::Lo, SubElem::Hi}) {
+  for (PackElem Part : {PackElem::Lo, PackElem::Hi}) {
     SmallVector<SDValue, 4> OpVec;
     for (unsigned i = 0; i < Op.getNumOperands(); ++i) {
-      SDValue PartV = extractSubElem(Op.getOperand(i), CDAG, Part, AVL);
+      SDValue PartV = extractPackElem(Op.getOperand(i), CDAG, Part, AVL);
       OpVec.push_back(PartV);
     }
     // attach Mask
-    SDValue TrueMask = CDAG.createUniformConstMask(256, true);
+    SDValue TrueMask = CDAG.createUniformConstMask(Packing::Normal, 256, true);
     OpVec.push_back(TrueMask);
     // attach AVL
     OpVec.push_back(AVL);
@@ -343,8 +343,8 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
 
   // re-package into a proper packed operation
   EVT PackedVT = CDAG.legalizeVectorType(Op, Mode);
-  return CDAG.CreatePack(PackedVT, PartOps[(int)SubElem::Lo],
-                         PartOps[(int)SubElem::Hi], AVL);
+  return CDAG.CreatePack(PackedVT, PartOps[(int)PackElem::Lo],
+                         PartOps[(int)PackElem::Hi], AVL);
 }
 
 VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
@@ -574,12 +574,22 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
       (WidenInfo.ActiveVectorLength > StandardVectorWidth)
           ? PackedWidth
           : StandardVectorWidth;
-  MVT NativeMaskTy = MVT::getVectorVT(MVT::i1, NativeVectorWidth);
 
-  SDValue MaskVal = CDAG.CreateBroadcast(
-      NativeMaskTy,
-      CDAG.getConstant(-1, MVT::i1, MVT::i32)); // cannonical type for i1
-  assert(!WidenInfo.NeedsPackedMasking && "TODO implement packed mask generation");
+  // Generate a mask for packed operations
+  SDValue MaskVal;
+  if (!WidenInfo.NeedsPackedMasking) {
+    MaskVal = CDAG.createUniformConstMask(Packing::Normal, NativeVectorWidth, true);
+
+  } else {
+    // TODO only really generate a mask if there is a change the operation will
+    // benefit from it (eg, for vfdiv)
+    PackedLaneBits MaskBits;
+    MaskBits.reset();
+    MaskBits.flip();
+    size_t OddRemainderBitPos = WidenInfo.ActiveVectorLength;
+    MaskBits[OddRemainderBitPos] = false;
+    CDAG.createConstMask<>(PackedWidth, MaskBits);
+  }
 
   // legalize all operands
   SmallVector<SDValue, 4> LegalOperands;
@@ -981,11 +991,12 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
   OpVectorLength = ReduceVectorLength(Mask, OpVectorLength, VecLenHint, DAG);
 
   EVT DataVT = LegalizeVectorType(MemN->getMemoryVT(), Op, DAG, Mode);
+  assert(!IsPackedType(DataVT) && "TODO implement packed-mode masked loads");
   MVT ChainVT = Op.getNode()->getSimpleValueType(1);
 
   // Patch in an all-true mask if required
   if (!Mask) {
-    Mask = CDAG.createUniformConstMask(DataVT.getVectorNumElements(), true);
+    Mask = CDAG.createUniformConstMask(Packing::Normal, DataVT.getVectorNumElements(), true);
   }
 
   auto NewLoadV = CDAG.getNode(VEISD::VVP_LOAD, {DataVT, ChainVT},

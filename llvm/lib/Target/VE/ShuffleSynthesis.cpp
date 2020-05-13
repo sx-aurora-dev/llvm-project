@@ -547,7 +547,7 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
     // Must not have spurious `1` entries since what is undefined for the
     // vector/constant sources could be the defined insertion of a bit from a
     // scalar register. Short cut when the only occuring constant is a '1'
-    VMAccu = CDAG.createUniformConstMask(LegalNumElems, true);
+    VMAccu = CDAG.createUniformConstMask(Packing::Normal, LegalNumElems, true);
 
   } else if (AllFalseBackground) {
     // Don't need to check for spurious `1` bits here since
@@ -610,7 +610,7 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
     return BlendV;
   if (VMAccu)
     return VMAccu;
-  return CDAG.createUniformConstMask(LegalNumElems, false);
+  return CDAG.createUniformConstMask(Packing::Normal, LegalNumElems, false);
 }
 
 /// } MaskShuffleAnalysis
@@ -862,7 +862,7 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
     SDValue OpVectorLength =
         CDAG.getConstant(Packed ? (LastDef + 1) / 2 : LastDef + 1, MVT::i32);
 
-    SDValue TrueMask = CDAG.createUniformConstMask(NativeNumElems, true);
+    SDValue TrueMask = CDAG.createUniformConstMask(Packing::Normal, NativeNumElems, true);
 
     switch (PatternKind) {
 
@@ -1109,8 +1109,8 @@ struct ConstantElemOp final : public AbstractShuffleOp {
       // FIXME only works for 32/64bit elements
       const unsigned NumBufferElems =
           GetVectorNumElements(VecConstant->getType());
-      SDValue MaskV =
-          CDAG.createUniformConstMask(LegalResVT.getVectorNumElements(), true);
+      SDValue MaskV = CDAG.createUniformConstMask(
+          Packing::Normal, LegalResVT.getVectorNumElements(), true);
       SDValue VLV = CDAG.getConstEVL(NumBufferElems);
       ResultV = CDAG.getVVPLoad(LegalResVT, Chain, ConstantPtrV, MaskV, VLV);
 #else
@@ -1236,7 +1236,8 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
                                       SrcVectorV, VecSlotPtr, MPI);
 
     // Compute gahter indices
-    SDValue TrueMaskV = CDAG.createUniformConstMask(LegalNumElems, true);
+    SDValue TrueMaskV =
+        CDAG.createUniformConstMask(Packing::Normal, LegalNumElems, true);
     SDValue MaskV = PartialV.isUndef()
                         ? TrueMaskV
                         : CDAG.createConstMask(MaxVL, TargetLanes);

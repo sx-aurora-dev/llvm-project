@@ -24,9 +24,6 @@ namespace llvm {
 
 const unsigned SXRegSize = 64;
 
-// FIXME (packed 512 bit mode!)
-using LaneBits = std::bitset<256>;
-
 /// Helpers {
 template <typename ElemT> ElemT &ref_to(std::unique_ptr<ElemT> &UP) {
   return *(UP.get());
@@ -71,6 +68,62 @@ bool HasDeadMask(unsigned VVPOC);
 
 Optional<unsigned> getVVPReductionStartParamPos(unsigned ISD);
 
+/// Packing {
+using LaneBits = std::bitset<256>;
+
+struct PackedLaneBits {
+  LaneBits Bits[2];
+
+  PackedLaneBits() {}
+
+  PackedLaneBits(LaneBits &Lo, LaneBits &Hi) {
+    Bits[0] = Lo;
+    Bits[1] = Hi;
+  }
+
+  void reset() {
+    Bits[0].reset();
+    Bits[1].reset();
+  }
+
+  void flip() {
+    Bits[0].flip();
+    Bits[1].flip();
+  }
+  LaneBits &low() { return Bits[0]; }
+  LaneBits &high() { return Bits[1]; }
+
+  LaneBits::reference operator[](size_t pos) { return Bits[pos % 2][pos / 2]; }
+  bool operator[](size_t pos) const { return Bits[pos % 2][pos / 2]; }
+  size_t size() const { return 512; }
+};
+
+enum class Packing {
+  Normal = 0, // 32/64bits per 64bit elements
+  Dense = 1,  // packed mode
+};
+
+// Packed interpretation sub element
+enum class PackElem : int8_t {
+  Lo = 0, // integer (63, 32]
+  Hi = 1  // float   (32,  0]
+};
+
+static inline MVT getMaskVT(Packing P) {
+  return P == Packing::Normal ? MVT::v256i1 : MVT::v512i1;
+}
+
+static inline Packing getPackingForVT(EVT VT) {
+  assert(VT.isVector());
+  return IsPackedType(VT) ? Packing::Dense : Packing::Normal;
+}
+
+template <typename MaskBits> Packing getPackingForMaskBits(const MaskBits MB);
+
+/// } Packing
+
+Optional<unsigned> getReductionStartParamPos(unsigned ISD);
+
 Optional<unsigned> getReductionVectorParamPos(unsigned ISD);
 
 Optional<unsigned> PeekForNarrow(SDValue Op);
@@ -84,23 +137,20 @@ unsigned GetMaskBits(EVT Ty);
 // This will return the correct result for packed mode oeprations (half).
 unsigned SelectBoundedVectorLength(unsigned StaticNumElems);
 
-// Packed interpretation sub element
-enum class SubElem : int8_t {
-  Lo = 0, // integer (63, 32]
-  Hi = 1  // float   (32,  0]
-};
-
 /// Helper class for short hand custom node creation ///
 struct CustomDAG {
   const VELoweringInfo &VLI;
   SelectionDAG &DAG;
   SDLoc DL;
 
-  CustomDAG(const VELoweringInfo & VLI, SelectionDAG &DAG, SDLoc DL) : VLI(VLI), DAG(DAG), DL(DL) {}
+  CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDLoc DL)
+      : VLI(VLI), DAG(DAG), DL(DL) {}
 
-  CustomDAG(const VELoweringInfo & VLI, SelectionDAG &DAG, SDValue WhereOp) : VLI(VLI), DAG(DAG), DL(WhereOp) {}
+  CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDValue WhereOp)
+      : VLI(VLI), DAG(DAG), DL(WhereOp) {}
 
-  CustomDAG(const VELoweringInfo & VLI, SelectionDAG &DAG, SDNode *WhereN) : VLI(VLI), DAG(DAG), DL(WhereN) {}
+  CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDNode *WhereN)
+      : VLI(VLI), DAG(DAG), DL(WhereN) {}
 
   SDValue CreateSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const;
 
@@ -120,7 +170,7 @@ struct CustomDAG {
                                  SDValue RegV) const;
 
   /// Packed Mode Support {
-  SDValue CreateUnpack(EVT DestVT, SDValue Vec, SubElem E, SDValue AVL);
+  SDValue CreateUnpack(EVT DestVT, SDValue Vec, PackElem E, SDValue AVL);
 
   SDValue CreatePack(EVT DestVT, SDValue LowV, SDValue HighV, SDValue AVL);
 
@@ -142,14 +192,21 @@ struct CustomDAG {
   SDValue createMaskInsert(SDValue MaskV, SDValue Idx, SDValue ElemV) const;
 
   // all-true/false mask
-  SDValue createUniformConstMask(unsigned NumElements, bool IsTrue) const;
+  SDValue createUniformConstMask(Packing Packing, unsigned NumElements,
+                                 bool IsTrue) const;
   SDValue createUniformConstMask(EVT MaskVT, bool IsTrue) const {
-    return createUniformConstMask(MaskVT.getVectorNumElements(), IsTrue);
+    Packing Packing =
+        MaskVT.getVectorNumElements() < 256 ? Packing::Dense : Packing::Normal;
+    return createUniformConstMask(Packing, MaskVT.getVectorNumElements(),
+                                  IsTrue);
   }
   // materialize a constant mask vector given by \p TrueBits
-  SDValue createConstMask(unsigned NumElems, const LaneBits &TrueBits) const;
+  template <typename MaskBitsType>
+  SDValue createConstMask(unsigned NumElems,
+                          const MaskBitsType &TrueBits) const;
 
-  SDValue createConstMask(EVT MaskVT, const LaneBits &TrueBits) const {
+  template <typename MaskBitsType>
+  SDValue createConstMask(EVT MaskVT, const MaskBitsType &TrueBits) const {
     return createConstMask(MaskVT.getVectorNumElements(), TrueBits);
   }
 
@@ -221,7 +278,7 @@ struct CustomDAG {
     return getVectorVT(MVT::i1, VectorV.getValueType().getVectorNumElements());
   }
 
-  // create a VEC_TOMASk node if VectorV is not a mask already
+  // create a VEC_TOMASK node if VectorV is not a mask already
   SDValue createMaskCast(SDValue VectorV, SDValue AVL) const;
 
   SDValue getSetCC(SDValue LHS, EVT VT, SDValue RHS, ISD::CondCode CC) const {
@@ -232,7 +289,8 @@ struct CustomDAG {
 
   SDValue getRootOrEntryChain() const {
     SDValue RootChain = DAG.getRoot();
-    if (!RootChain) return DAG.getEntryNode();
+    if (!RootChain)
+      return DAG.getEntryNode();
     return RootChain;
   }
 
@@ -245,14 +303,14 @@ struct CustomDAG {
 
   SDValue getTokenFactor(ArrayRef<SDValue> Tokens) const;
 
-  const DataLayout& getDataLayout() const { return DAG.getDataLayout(); }
+  const DataLayout &getDataLayout() const { return DAG.getDataLayout(); }
 
   // Return a legal vector type for \p Op
   EVT legalizeVectorType(SDValue Op, VVPExpansionMode) const;
 
   /// VVP {
-  SDValue getVVPLoad(EVT LegalResVT, SDValue Chain, SDValue PtrV,
-                       SDValue MaskV, SDValue AVL) const;
+  SDValue getVVPLoad(EVT LegalResVT, SDValue Chain, SDValue PtrV, SDValue MaskV,
+                     SDValue AVL) const;
 
   SDValue getVVPGather(EVT LegalResVT, SDValue Chain, SDValue PtrVecV,
                        SDValue MaskV, SDValue AVL) const;
