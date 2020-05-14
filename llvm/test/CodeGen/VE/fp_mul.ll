@@ -100,7 +100,7 @@ define fp128 @func9(fp128 %a) {
 define float @fmuls_ir(float %a) {
 ; CHECK-LABEL: fmuls_ir:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    fmul.s %s0, 0, %s0
+; CHECK-NEXT:    fmul.s %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = fmul float 0.e+00, %a
   ret float %r

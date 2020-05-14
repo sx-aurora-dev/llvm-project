@@ -48,12 +48,8 @@ def ULO7 : SDNodeXForm<imm, [{
                                    SDLoc(N), MVT::i32);
 }]>;
 def MIMM : SDNodeXForm<imm, [{
-  uint64_t Val = N->getZExtValue();
-  if (isMask_64(Val))
-    Val = countLeadingZeros(Val) | 0x40;
-  else
-    Val = countLeadingOnes(Val);
-  return CurDAG->getTargetConstant(Val, SDLoc(N), MVT::i32);
+  return CurDAG->getTargetConstant(convMImmVal(getImmVal(N)),
+                                   SDLoc(N), MVT::i32);
 }]>;
 def LO32 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(Lo_32(N->getZExtValue()),
@@ -66,36 +62,19 @@ def HI32 : SDNodeXForm<imm, [{
 }]>;
 
 def LO7FP : SDNodeXForm<fpimm, [{
-  // Get a integer immediate from fpimm
-  const APInt& imm = N->getValueAPF().bitcastToAPInt();
-  uint64_t val = imm.getSExtValue();
-  if (imm.getBitWidth() == 32)
-    val <<= 32; // Immediate value of float place at higher bits on VE.
-  return CurDAG->getTargetConstant(SignExtend32(val, 7), SDLoc(N), MVT::i32);
+  uint64_t Val = getFpImmVal(N);
+  return CurDAG->getTargetConstant(SignExtend32(Val, 7), SDLoc(N), MVT::i32);
 }]>;
 def MIMMFP : SDNodeXForm<fpimm, [{
-  const APInt& Imm = N->getValueAPF().bitcastToAPInt();
-  uint64_t Val = Imm.getSExtValue();
-  bool M0Flag = isMask_64(Val);
-  if (Imm.getBitWidth() == 32)
-    Val <<= 32; // Immediate value of float place at higher bits on VE.
-  if (M0Flag)
-    Val = countLeadingZeros(Val) | 0x40;
-  else
-    Val = countLeadingOnes(Val);
-  return CurDAG->getTargetConstant(Val, SDLoc(N), MVT::i32);
+  return CurDAG->getTargetConstant(convMImmVal(getFpImmVal(N)),
+                                   SDLoc(N), MVT::i32);
 }]>;
 def LOFP32 : SDNodeXForm<fpimm, [{
-  // Get a integer immediate from fpimm
-  const APInt& imm = N->getValueAPF().bitcastToAPInt();
-  return CurDAG->getTargetConstant(Lo_32(imm.getZExtValue() & 0xffffffff),
-                                   SDLoc(N), MVT::i64);
+  return CurDAG->getTargetConstant(Lo_32(getFpImmVal(N) & 0xffffffff),
+                                   SDLoc(N), MVT::i32);
 }]>;
 def HIFP32 : SDNodeXForm<fpimm, [{
-  // Get a integer immediate from fpimm
-  const APInt& imm = N->getValueAPF().bitcastToAPInt();
-  return CurDAG->getTargetConstant(Hi_32(imm.getZExtValue()),
-                                   SDLoc(N), MVT::i64);
+  return CurDAG->getTargetConstant(Hi_32(getFpImmVal(N)), SDLoc(N), MVT::i32);
 }]>;
 
 /*
@@ -229,10 +208,7 @@ def MImmAsmOperand : AsmOperandClass {
   let ParserMethod = "parseMImmOperand";
 }
 def mimm : Operand<i32>, PatLeaf<(imm), [{
-    return isMask_64(N->getZExtValue()) ||
-           N->getZExtValue() == 0 /* (0)1 == 0 */ ||
-           ((N->getZExtValue() & (1UL << 63)) &&
-            isShiftedMask_64(N->getZExtValue())); }], MIMM> {
+    return isMImmVal(getImmVal(N)); }], MIMM> {
   let ParserMatchClass = MImmAsmOperand;
   let PrintMethod = "printMImmOperand";
 }
@@ -255,22 +231,22 @@ def misc : Operand<i32>, PatLeaf<(imm), [{
 
 // simm7fp - Generic fp immediate value.
 def simm7fp : Operand<i32>, PatLeaf<(fpimm), [{
-    const APInt& imm = N->getValueAPF().bitcastToAPInt();
-    uint64_t val = imm.getSExtValue();
-    if (imm.getBitWidth() == 32)
-      val <<= 32; // Immediate value of float place at higher bits on VE.
-    return isInt<7>(val);
+    return isInt<7>(getFpImmVal(N));
   }], LO7FP> {
   let ParserMatchClass = SImm7AsmOperand;
   let DecoderMethod = "DecodeSIMM7";
 }
 
-// mimm - Special fp immediate value of sequential bit stream of 0 or 1.
+// mimmfp - Special fp immediate value of sequential bit stream of 0 or 1.
 def mimmfp : Operand<i32>, PatLeaf<(fpimm), [{
-    const APInt& Imm = N->getValueAPF().bitcastToAPInt();
-    return isMask_64(Imm.getSExtValue()) ||
-           ((Imm.getSExtValue() & (1UL << 63)) &&
-            isShiftedMask_64(Imm.getSExtValue())); }], MIMMFP> {
+    return isMImmVal(getFpImmVal(N)); }], MIMMFP> {
+  let ParserMatchClass = MImmAsmOperand;
+  let PrintMethod = "printMImmOperand";
+}
+// mimmfp32 - 32 bit width mimmfp
+//   Float value places at higher bits, so ignore lower 32 bits.
+def mimmfp32 : Operand<i32>, PatLeaf<(fpimm), [{
+    return isMImm32Val(getFpImmVal(N) >> 32); }], MIMMFP> {
   let ParserMatchClass = MImmAsmOperand;
   let PrintMethod = "printMImmOperand";
 }
@@ -282,12 +258,11 @@ def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
                                       == 0; }]>;
 def lozero      : PatLeaf<(imm), [{ return (N->getZExtValue() & 0xffffffff)
                                       == 0; }]>;
-def fpzero      : PatLeaf<(fpimm), [{ return N->getValueAPF().bitcastToAPInt()
-                                      .getZExtValue() == 0; }]>;
-def fplomsbzero : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
-                                      .getZExtValue() & 0x80000000) == 0; }]>;
-def fplozero    : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
-                                      .getZExtValue() & 0xffffffff) == 0; }]>;
+def fpzero      : PatLeaf<(fpimm), [{ return getFpImmVal(N) == 0; }]>;
+def fplomsbzero : PatLeaf<(fpimm), [{ return (getFpImmVal(N) & 0x80000000)
+                                        == 0; }]>;
+def fplozero    : PatLeaf<(fpimm), [{ return (getFpImmVal(N) & 0xffffffff)
+                                        == 0; }]>;
 
 def CCSIOp : PatLeaf<(cond), [{
   switch (N->get()) {
@@ -1425,30 +1400,39 @@ def : Pat<(i32 (srl i32:$src, i32:$val)),
 
 // Section 8.7.1 - FAD (Floating Add)
 defm FADDD : RRFm<"fadd.d", 0x4C, I64, f64, fadd>;
-let cx = 1 in defm FADDS : RRFm<"fadd.s", 0x4C, F32, f32, fadd>;
+let cx = 1 in
+defm FADDS : RRFm<"fadd.s", 0x4C, F32, f32, fadd, simm7fp, mimmfp32>;
 
 // Section 8.7.2 - FSB (Floating Subtract)
 defm FSUBD : RRFm<"fsub.d", 0x5C, I64, f64, fsub>;
-let cx = 1 in defm FSUBS : RRFm<"fsub.s", 0x5C, F32, f32, fsub>;
+let cx = 1 in
+defm FSUBS : RRFm<"fsub.s", 0x5C, F32, f32, fsub, simm7fp, mimmfp32>;
 
 // Section 8.7.3 - FMP (Floating Multiply)
 defm FMULD : RRFm<"fmul.d", 0x4D, I64, f64, fmul>;
-let cx = 1 in defm FMULS : RRFm<"fmul.s", 0x4D, F32, f32, fmul>;
+let cx = 1 in
+defm FMULS : RRFm<"fmul.s", 0x4D, F32, f32, fmul, simm7fp, mimmfp32>;
 
 // Section 8.7.4 - FDV (Floating Divide)
 defm FDIVD : RRFm<"fdiv.d", 0x5D, I64, f64, fdiv>;
-let cx = 1 in defm FDIVS : RRFm<"fdiv.s", 0x5D, F32, f32, fdiv>;
+let cx = 1 in
+defm FDIVS : RRFm<"fdiv.s", 0x5D, F32, f32, fdiv, simm7fp, mimmfp32>;
 
 // Section 8.7.5 - FCP (Floating Compare)
 defm FCMPD : RRFm<"fcmp.d", 0x7E, I64, f64, CMPF>;
-let cx = 1 in defm FCMPS : RRFm<"fcmp.s", 0x7E, F32, f32, CMPF>;
+let cx = 1 in
+defm FCMPS : RRFm<"fcmp.s", 0x7E, F32, f32, CMPF, simm7fp, mimmfp32>;
 
 // Section 8.7.6 - CMS (Compare and Select Maximum/Minimum Single)
 // cx: double/float, cw: max/min
+let cw = 0, cx = 0 in
 defm FMAXD : RRFm<"fmax.d", 0x3E, I64, f64, fmaxnum>;
-let cx = 1 in defm FMAXS : RRFm<"fmax.s", 0x3E, F32, f32, fmaxnum>;
-let cw = 1 in defm FMIND : RRFm<"fmin.d", 0x3E, I64, f64, fminnum>;
-let cw = 1, cx = 1 in defm FMINS : RRFm<"fmin.s", 0x3E, F32, f32, fminnum>;
+let cw = 0, cx = 1 in
+defm FMAXS : RRFm<"fmax.s", 0x3E, F32, f32, fmaxnum, simm7fp, mimmfp32>;
+let cw = 1, cx = 0 in
+defm FMIND : RRFm<"fmin.d", 0x3E, I64, f64, fminnum>;
+let cw = 1, cx = 1 in
+defm FMINS : RRFm<"fmin.s", 0x3E, F32, f32, fminnum, simm7fp, mimmfp32>;
 
 // Section 8.7.7 - FAQ (Floating Add Quadruple)
 defm FADDQ : RRFm<"fadd.q", 0x6C, F128, f128, fadd>;
@@ -1733,7 +1717,7 @@ def : Pat<(i64 imm:$val),
 
 // floating point
 def : Pat<(f32 fpimm:$val),
-          (EXTRACT_SUBREG (LEASLzii 0, 0, (LOFP32 $val)), sub_f32)>;
+          (EXTRACT_SUBREG (LEASLzii 0, 0, (HIFP32 $val)), sub_f32)>;
 def : Pat<(f64 fplozero:$val),
           (LEASLzii 0, 0, (HIFP32 $val))>;
 def : Pat<(f64 fplomsbzero:$val),

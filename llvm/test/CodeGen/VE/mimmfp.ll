@@ -5,7 +5,7 @@
 define double @mimm_0000000000000000(double %a) {
 ; CHECK-LABEL: mimm_0000000000000000:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    fadd.d %s0, 0, %s0
+; CHECK-NEXT:    fadd.d %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %res = fadd double %a, 0x0000000000000000
   ret double %res
@@ -134,4 +134,13 @@ define double @mimm_8000000000000000(double %a) {
 ; CHECK-NEXT:    lea.sl %s0, -2147483648
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret double -0.0
+}
+
+define float @mimm_007FFFFFFFFFFFFF_float(float %a) {
+; CHECK-LABEL: mimm_007FFFFFFFFFFFFF_float:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    fmul.s %s0, %s0, (9)0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = fmul float %a, 1.175494210692441075487029444849287348827052428745893333857174530571588870475618904265502351336181163787841796875E-38
+  ret float %r
 }

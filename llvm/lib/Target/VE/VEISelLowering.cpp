@@ -3350,7 +3350,23 @@ static bool isSimm7(SDValue V)
   return false;
 }
 
-static bool isMimm(SDValue V)
+/// getImmVal - get immediate representation of integer value
+inline static uint64_t getImmVal(const ConstantSDNode *N) {
+  return N->getSExtValue();
+}
+
+/// getFpImmVal - get immediate representation of floating point value
+inline static uint64_t getFpImmVal(const ConstantFPSDNode *N) {
+  const APInt& Imm = N->getValueAPF().bitcastToAPInt();
+  uint64_t Val = Imm.getZExtValue();
+  if (Imm.getBitWidth() == 32) {
+    // Immediate value of float place places at higher bits on VE.
+    Val <<= 32;
+  }
+  return Val;
+}
+
+static bool isMImm(SDValue V)
 {
   EVT VT = V.getValueType();
   if (VT.isVector())
@@ -3358,17 +3374,14 @@ static bool isMimm(SDValue V)
 
   if (VT.isInteger()) {
     if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(V))
-      return isMask_64(C->getSExtValue()) ||
-             C->getZExtValue() == 0 /* (0)1 == 0 */ ||
-             ((C->getSExtValue() & (1UL << 63)) &&
-              isShiftedMask_64(C->getSExtValue()));
+      return isMImmVal(getImmVal(C));
   } else if (VT.isFloatingPoint()) {
     if (ConstantFPSDNode *C = dyn_cast<ConstantFPSDNode>(V)) {
-      const APInt& Imm = C->getValueAPF().bitcastToAPInt();
-      return isMask_64(Imm.getSExtValue()) ||
-             Imm.getSExtValue() == 0 /* (0)1 == 0 */ ||
-             ((Imm.getSExtValue() & (1UL << 63)) &&
-              isShiftedMask_64(Imm.getSExtValue()));
+      if (VT == MVT::f32) {
+        // Float value places at higher bits, so ignore lower 32 bits.
+        return isMImm32Val(getFpImmVal(C) >> 32);
+      }
+      return isMImmVal(getFpImmVal(C));
     }
   }
   return false;
@@ -3410,7 +3423,7 @@ static SDValue generateComparison(EVT VT, SDValue LHS, SDValue RHS,
   if (Commutable) {
     // VE comparison can holds simm7 at lhs and mimm at rhs.  Swap operands
     // if it matches.
-    if (!isSimm7(LHS) && !isMimm(RHS) && (isSimm7(RHS) || isMimm(LHS)))
+    if (!isSimm7(LHS) && !isMImm(RHS) && (isSimm7(RHS) || isMImm(LHS)))
       std::swap(LHS, RHS);
     assert(!(isNullConstant(LHS) || isNullFPConstant(LHS)) && "lhs is 0!");
   }
@@ -3545,7 +3558,7 @@ SDValue VETargetLowering::generateEquivalentCmp(SDNode *N, bool UseCompAsBase,
   // VE instruction can holds simm7 at lhs and mimm at rhs.  Swap operands
   // if it improve instructions.  Both CMP operation is safe to sawp
   // for SETEQ/SETNE.
-  if (!isSimm7(Op0) && !isMimm(Op1) && (isSimm7(Op1) || isMimm(Op0)))
+  if (!isSimm7(Op0) && !isMImm(Op1) && (isSimm7(Op1) || isMImm(Op0)))
     std::swap(Op0, Op1);
 
   // Compare or equiv integers.
@@ -3912,9 +3925,9 @@ SDValue VETargetLowering::combineSelectCC(SDNode *N,
   if (VT.isVector())
     return SDValue();
 
-  if (isMimm(True)) {
+  if (isMImm(True)) {
     // Doesn't swap True and False values.
-  } else if (isMimm(False)) {
+  } else if (isMImm(False)) {
     // Swap True and False values.  Inverse CC also.
     std::swap(True, False);
     CC = getSetCCInverse(CC, LHS.getValueType());

@@ -109,6 +109,15 @@ define i64 @mimm_FFFFFFFFFFFFFF80(i64 %a) {
   ret i64 %res
 }
 
+define i32 @mimm_FFFFFFFFFFFFFF00_i32(i32 %a) {
+; CHECK-LABEL: mimm_FFFFFFFFFFFFFF00_i32:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s0, %s0, (56)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %res = and i32 %a, -256
+  ret i32 %res
+}
+
 define i64 @mimm_FFFFFFF000000000(i64 %a) {
 ; CHECK-LABEL: mimm_FFFFFFF000000000:
 ; CHECK:       .LBB{{[0-9]+}}_2:

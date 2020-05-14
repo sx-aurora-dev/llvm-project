@@ -243,8 +243,7 @@ define double @func24(double %0, double %1) {
 define i32 @func25(i32 %0, i32 %1) {
 ; CHECK-LABEL: func25:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, -2147483648
-; CHECK-NEXT:    xor %s0, %s0, %s1
+; CHECK-NEXT:    xor %s0, %s0, (33)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = xor i32 %0, -2147483648
   ret i32 %3
