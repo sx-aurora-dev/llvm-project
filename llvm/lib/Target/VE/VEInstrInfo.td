@@ -17,11 +17,89 @@
 include "VEInstrFormats.td"
 
 //===----------------------------------------------------------------------===//
-// Feature predicates.
+// Helper functions to retrieve target constants.
+//
+// VE instructions have a space to hold following immediates
+//   $sy has 7 bits to represent simm7, uimm7, simm7fp, or uimm7fp.
+//   $sz also has 7 bits to represent mimm or mimmfp.
+//   $disp has 32 bits to represent simm32.
+//
+// The mimm is a special immediate value of sequential bit stream of 0 or 1.
+//     `(m)0`: Represents 0 sequence then 1 sequence like 0b00...0011...11,
+//             where `m` is equal to the number of leading zeros.
+//     `(m)1`: Represents 1 sequence then 0 sequence like 0b11...1100...00,
+//             where `m` is equal to the number of leading ones.
+// Each bit of mimm's 7 bits is used like below:
+//     bit 6  : If `(m)0`, this bit is 1.  Otherwise, this bit is 0.
+//     bit 5-0: Represents the m (0-63).
+// Use `!add(m, 64)` to generates an immediate value in pattern matchings.
+//
+// The floating point immediate value is not something like compacted value.
+// It is simple integer representation, so it works rarely.
+//     e.g. 0.0 (0x00000000) or -2.0 (0xC0000000=(2)1).
 //===----------------------------------------------------------------------===//
 
+def LO7 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
+                                   SDLoc(N), MVT::i32);
+}]>;
+def ULO7 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getZExtValue() & 0x7f,
+                                   SDLoc(N), MVT::i32);
+}]>;
+def MIMM : SDNodeXForm<imm, [{
+  uint64_t Val = N->getZExtValue();
+  if (isMask_64(Val))
+    Val = countLeadingZeros(Val) | 0x40;
+  else
+    Val = countLeadingOnes(Val);
+  return CurDAG->getTargetConstant(Val, SDLoc(N), MVT::i32);
+}]>;
+def LO32 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(Lo_32(N->getZExtValue()),
+                                   SDLoc(N), MVT::i32);
+}]>;
+def HI32 : SDNodeXForm<imm, [{
+  // Transformation function: shift the immediate value down into the low bits.
+  return CurDAG->getTargetConstant(Hi_32(N->getZExtValue()),
+                                   SDLoc(N), MVT::i32);
+}]>;
+
+def LO7FP : SDNodeXForm<fpimm, [{
+  // Get a integer immediate from fpimm
+  const APInt& imm = N->getValueAPF().bitcastToAPInt();
+  uint64_t val = imm.getSExtValue();
+  if (imm.getBitWidth() == 32)
+    val <<= 32; // Immediate value of float place at higher bits on VE.
+  return CurDAG->getTargetConstant(SignExtend32(val, 7), SDLoc(N), MVT::i32);
+}]>;
+def MIMMFP : SDNodeXForm<fpimm, [{
+  const APInt& Imm = N->getValueAPF().bitcastToAPInt();
+  uint64_t Val = Imm.getSExtValue();
+  bool M0Flag = isMask_64(Val);
+  if (Imm.getBitWidth() == 32)
+    Val <<= 32; // Immediate value of float place at higher bits on VE.
+  if (M0Flag)
+    Val = countLeadingZeros(Val) | 0x40;
+  else
+    Val = countLeadingOnes(Val);
+  return CurDAG->getTargetConstant(Val, SDLoc(N), MVT::i32);
+}]>;
+def LOFP32 : SDNodeXForm<fpimm, [{
+  // Get a integer immediate from fpimm
+  const APInt& imm = N->getValueAPF().bitcastToAPInt();
+  return CurDAG->getTargetConstant(Lo_32(imm.getZExtValue() & 0xffffffff),
+                                   SDLoc(N), MVT::i64);
+}]>;
+def HIFP32 : SDNodeXForm<fpimm, [{
+  // Get a integer immediate from fpimm
+  const APInt& imm = N->getValueAPF().bitcastToAPInt();
+  return CurDAG->getTargetConstant(Hi_32(imm.getZExtValue()),
+                                   SDLoc(N), MVT::i64);
+}]>;
+
 //===----------------------------------------------------------------------===//
-// Instruction Pattern Stuff
+// Feature predicates.
 //===----------------------------------------------------------------------===//
 
 // uimm1 - Generic immediate value.
@@ -60,10 +138,6 @@ def uimm6 : Operand<i32>, PatLeaf<(imm), [{
 }
 
 // uimm7 - Generic immediate value.
-def ULO7 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getZExtValue() & 0x7f,
-                                   SDLoc(N), MVT::i32);
-}]>;
 def UImm7AsmOperand : AsmOperandClass { let Name = "UImm7"; }
 def uimm7 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<7>(N->getZExtValue()); }], ULO7> {
@@ -78,10 +152,6 @@ def uimm0to2 : Operand<i32>, PatLeaf<(imm), [{
 }
 
 // simm7 - Generic immediate value.
-def LO7 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
-                                   SDLoc(N), MVT::i32);
-}]>;
 def SImm7AsmOperand : AsmOperandClass { let Name = "SImm7"; }
 def simm7 : Operand<i32>, PatLeaf<(imm), [{
     return isInt<7>(N->getSExtValue()); }], LO7> {
@@ -90,22 +160,6 @@ def simm7 : Operand<i32>, PatLeaf<(imm), [{
 }
 
 // mimm - Special immediate value of sequential bit stream of 0 or 1.
-//   `(m)0`: Represents 0b00...0011...11 pattern where the number of leading
-//           zeros equal to m.
-//   `(m)1`: Represents 0b11...1100...00 pattern where the number of leading
-//           ones equal to m.
-// The immediate value of mimm operands:
-//   bit 6  : If `(m)0`, 1.  Otherwise, 0.
-//   bit 5-0: Represents 0-63.
-// Use `!add(m, 64)` to generates an immediate value in pattern matching.
-def MIMM : SDNodeXForm<imm, [{
-  uint64_t Val = N->getZExtValue();
-  if (isMask_64(Val))
-    Val = countLeadingZeros(Val) | 0x40;
-  else
-    Val = countLeadingOnes(Val);
-  return CurDAG->getTargetConstant(Val, SDLoc(N), MVT::i32);
-}]>;
 def MImmAsmOperand : AsmOperandClass {
   let Name = "MImm";
   let ParserMethod = "parseMImmOperand";
@@ -136,14 +190,6 @@ def misc : Operand<i32>, PatLeaf<(imm), [{
 }
 
 // simm7fp - Generic fp immediate value.
-def LO7FP : SDNodeXForm<fpimm, [{
-  // Get a integer immediate from fpimm
-  const APInt& imm = N->getValueAPF().bitcastToAPInt();
-  uint64_t val = imm.getSExtValue();
-  if (imm.getBitWidth() == 32)
-    val <<= 32; // Immediate value of float place at higher bits on VE.
-  return CurDAG->getTargetConstant(SignExtend32(val, 7), SDLoc(N), MVT::i32);
-}]>;
 def simm7fp : Operand<i32>, PatLeaf<(fpimm), [{
     const APInt& imm = N->getValueAPF().bitcastToAPInt();
     uint64_t val = imm.getSExtValue();
@@ -156,18 +202,6 @@ def simm7fp : Operand<i32>, PatLeaf<(fpimm), [{
 }
 
 // mimm - Special fp immediate value of sequential bit stream of 0 or 1.
-def MIMMFP : SDNodeXForm<fpimm, [{
-  const APInt& Imm = N->getValueAPF().bitcastToAPInt();
-  uint64_t Val = Imm.getSExtValue();
-  bool M0Flag = isMask_64(Val);
-  if (Imm.getBitWidth() == 32)
-    Val <<= 32; // Immediate value of float place at higher bits on VE.
-  if (M0Flag)
-    Val = countLeadingZeros(Val) | 0x40;
-  else
-    Val = countLeadingOnes(Val);
-  return CurDAG->getTargetConstant(Val, SDLoc(N), MVT::i32);
-}]>;
 def mimmfp : Operand<i32>, PatLeaf<(fpimm), [{
     const APInt& Imm = N->getValueAPF().bitcastToAPInt();
     return isMask_64(Imm.getSExtValue()) ||
@@ -216,31 +250,6 @@ def GetVL : SDNodeXForm<imm, [{
   MachineFunction& MF = CurDAG->getMachineFunction();
   unsigned VLReg = MF.getSubtarget<VESubtarget>().getInstrInfo()->getVectorLengthReg(&MF);
   return CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VLReg, MVT::i32);
-}]>;
-
-def LOFP32 : SDNodeXForm<fpimm, [{
-  // Get a integer immediate from fpimm
-  const APInt& imm = N->getValueAPF().bitcastToAPInt();
-  return CurDAG->getTargetConstant(Lo_32(imm.getZExtValue() & 0xffffffff),
-                                   SDLoc(N), MVT::i64);
-}]>;
-
-def HIFP32 : SDNodeXForm<fpimm, [{
-  // Get a integer immediate from fpimm
-  const APInt& imm = N->getValueAPF().bitcastToAPInt();
-  return CurDAG->getTargetConstant(Hi_32(imm.getZExtValue()),
-                                   SDLoc(N), MVT::i64);
-}]>;
-
-def LO32 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(Lo_32(N->getZExtValue()),
-                                   SDLoc(N), MVT::i32);
-}]>;
-
-def HI32 : SDNodeXForm<imm, [{
-  // Transformation function: shift the immediate value down into the low bits.
-  return CurDAG->getTargetConstant(Hi_32(N->getZExtValue()),
-                                   SDLoc(N), MVT::i32);
 }]>;
 
 def LEASLimm : PatLeaf<(imm), [{
