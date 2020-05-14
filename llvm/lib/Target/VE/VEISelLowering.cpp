@@ -43,28 +43,6 @@ using namespace llvm;
 // Calling Convention Implementation
 //===----------------------------------------------------------------------===//
 
-static bool allocateFloat(unsigned ValNo, MVT ValVT, MVT LocVT,
-                          CCValAssign::LocInfo LocInfo,
-                          ISD::ArgFlagsTy ArgFlags, CCState &State) {
-  switch (LocVT.SimpleTy) {
-  case MVT::f32: {
-    // Allocate stack like below
-    //    0      4
-    //    +------+------+
-    //    | empty| float|
-    //    +------+------+
-    // Use align=8 for dummy area to align the beginning of these 2 area.
-    State.AllocateStack(4, Align(8)); // for empty area
-    // Use align=4 for value to place it at just after the dummy area.
-    unsigned Offset = State.AllocateStack(4, Align(4)); // for float value area
-    State.addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
-    return true;
-  }
-  default:
-    return false;
-  }
-}
-
 #include "VEGenCallingConv.inc"
 
 bool VETargetLowering::CanLowerReturn(
@@ -489,6 +467,18 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
     case CCValAssign::AExt:
       OutVal = DAG.getNode(ISD::ANY_EXTEND, DL, VA.getLocVT(), OutVal);
       break;
+    case CCValAssign::BCvt: {
+      // Perform bitconvert from f32 to i64.
+      assert(VA.getLocVT() == MVT::i64);
+      assert(VA.getValVT() == MVT::f32);
+      SDValue Undef = SDValue(
+          DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
+      SDValue Sub_f32 = DAG.getTargetConstant(VE::sub_f32, DL, MVT::i32);
+      OutVal = SDValue(DAG.getMachineNode(
+          TargetOpcode::INSERT_SUBREG, DL, MVT::i64, Undef, OutVal, Sub_f32),
+          0);
+      break;
+    }
     default:
       llvm_unreachable("Unknown loc info!");
     }
@@ -556,6 +546,15 @@ SDValue VETargetLowering::LowerFormalArguments(
         Arg = DAG.getNode(ISD::AssertZext, DL, VA.getLocVT(), Arg,
                           DAG.getValueType(VA.getValVT()));
         break;
+      case CCValAssign::BCvt: {
+        // Perform bitconvert from i64 to f32.
+        assert(VA.getLocVT() == MVT::i64);
+        assert(VA.getValVT() == MVT::f32);
+        SDValue Sub_f32 = DAG.getTargetConstant(VE::sub_f32, DL, MVT::i32);
+        Arg = SDValue(DAG.getMachineNode(
+            TargetOpcode::EXTRACT_SUBREG, DL, MVT::f32, Arg, Sub_f32), 0);
+        break;
+      }
       default:
         break;
       }
@@ -574,6 +573,19 @@ SDValue VETargetLowering::LowerFormalArguments(
     // beginning of the arguments area at %fp+176.
     unsigned Offset = VA.getLocMemOffset() + ArgsBaseOffset;
     unsigned ValSize = VA.getValVT().getSizeInBits() / 8;
+
+    // Adjust float offset by adding 4 since VE allocates 8 bytes data and
+    // store float value like below and llvm try to load only 4 bytes data.
+    // This offset adjustment is required for only LowerFormalArguments.
+    // In LowerCall, float is bit-converted to i64, and stored whole 8 bytes,
+    // so no need any offset adjustment.
+    //    0      4
+    //    +------+------+
+    //    | empty| float|
+    //    +------+------+
+    if (VA.getValVT() == MVT::f32)
+      Offset += 4;
+
     int FI = MF.getFrameInfo().CreateFixedObject(ValSize, Offset, true);
     InVals.push_back(
         DAG.getLoad(VA.getValVT(), DL, Chain,
@@ -793,6 +805,17 @@ SDValue VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
     case CCValAssign::AExt:
       Arg = DAG.getNode(ISD::ANY_EXTEND, DL, VA.getLocVT(), Arg);
       break;
+    case CCValAssign::BCvt: {
+      // Perform bitconvert from f32 to i64.
+      assert(VA.getLocVT() == MVT::i64);
+      assert(VA.getValVT() == MVT::f32);
+      SDValue Undef = SDValue(
+          DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
+      SDValue Sub_f32 = DAG.getTargetConstant(VE::sub_f32, DL, MVT::i32);
+      Arg = SDValue(DAG.getMachineNode(
+          TargetOpcode::INSERT_SUBREG, DL, MVT::i64, Undef, Arg, Sub_f32), 0);
+      break;
+    }
     }
 
     if (VA.isRegLoc()) {
@@ -911,6 +934,15 @@ SDValue VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       RV = DAG.getNode(ISD::AssertZext, DL, VA.getLocVT(), RV,
                        DAG.getValueType(VA.getValVT()));
       break;
+    case CCValAssign::BCvt: {
+      // Perform bitconvert from i64 to f32.
+      assert(VA.getLocVT() == MVT::i64);
+      assert(VA.getValVT() == MVT::f32);
+      SDValue Sub_f32 = DAG.getTargetConstant(VE::sub_f32, DL, MVT::i32);
+      RV = SDValue(DAG.getMachineNode(
+          TargetOpcode::EXTRACT_SUBREG, DL, MVT::f32, RV, Sub_f32), 0);
+      break;
+    }
     default:
       break;
     }
