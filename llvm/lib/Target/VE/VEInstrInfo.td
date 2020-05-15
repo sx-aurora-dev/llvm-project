@@ -671,22 +671,41 @@ multiclass RRIm<string opcStr, bits<8>opc,
               [(set Ty:$sx, (OpNode (Ty mimm:$sz), (i32 uimm7:$sy)))]>;
 }
 
-// Special RR multiclass for double-shift instructions.
-//   e.g. SLD and SRD
+// Special RR multiclass for 128 bits shift left instruction.
+//   e.g. SLD
 let Constraints = "$hi = $sx", DisableEncoding = "$hi", hasSideEffects = 0 in
-multiclass RRIDm<string opcStr, bits<8>opc,
-                 RegisterClass RC, ValueType Ty,
-                 SDPatternOperator OpNode = null_frag> {
-  def rr : RR<opc, (outs RC:$sx), (ins RC:$hi, RC:$sz, I32:$sy),
+multiclass RRILDm<string opcStr, bits<8>opc,
+                  RegisterClass RC, ValueType Ty,
+                  SDPatternOperator OpNode = null_frag> {
+  def rrr : RR<opc, (outs RC:$sx), (ins RC:$hi, RC:$sz, I32:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
   let cz = 0 in
-  def mr : RR<opc, (outs RC:$sx), (ins RC:$hi, mimm:$sz, I32:$sy),
+  def rmr : RR<opc, (outs RC:$sx), (ins RC:$hi, mimm:$sz, I32:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
   let cy = 0 in
-  def ri : RR<opc, (outs RC:$sx), (ins RC:$hi, RC:$sz, uimm7:$sy),
+  def rri : RR<opc, (outs RC:$sx), (ins RC:$hi, RC:$sz, uimm7:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
   let cy = 0, cz = 0 in
-  def mi : RR<opc, (outs RC:$sx), (ins RC:$hi, mimm:$sz, uimm7:$sy),
+  def rmi : RR<opc, (outs RC:$sx), (ins RC:$hi, mimm:$sz, uimm7:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+}
+
+// Special RR multiclass for 128 bits shift right instruction.
+//   e.g. SRD
+let Constraints = "$low = $sx", DisableEncoding = "$low", hasSideEffects = 0 in
+multiclass RRIRDm<string opcStr, bits<8>opc,
+                  RegisterClass RC, ValueType Ty,
+                  SDPatternOperator OpNode = null_frag> {
+  def rrr : RR<opc, (outs RC:$sx), (ins RC:$sz, RC:$low, I32:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cz = 0 in
+  def mrr : RR<opc, (outs RC:$sx), (ins mimm:$sz, RC:$low, I32:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cy = 0 in
+  def rri : RR<opc, (outs RC:$sx), (ins RC:$sz, RC:$low, uimm7:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cy = 0, cz = 0 in
+  def mri : RR<opc, (outs RC:$sx), (ins mimm:$sz, RC:$low, uimm7:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
 }
 
@@ -1371,13 +1390,13 @@ def : MnemonicAlias<"cmov.s", "cmov.s.at">;
 defm SLL : RRIm<"sll", 0x65, I64, i64, shl>;
 
 // Section 8.6.2 - SLD (Shift Left Double)
-defm SLD : RRIDm<"sld", 0x64, I64, i64>;
+defm SLD : RRILDm<"sld", 0x64, I64, i64>;
 
 // Section 8.6.3 - SRL (Shift Right Logical)
 defm SRL : RRIm<"srl", 0x75, I64, i64, srl>;
 
 // Section 8.6.4 - SRD (Shift Right Double)
-defm SRD : RRIDm<"srd", 0x74, I64, i64>;
+defm SRD : RRIRDm<"srd", 0x74, I64, i64>;
 
 // Section 8.6.5 - SLA (Shift Left Arithmetic)
 defm SLAWSX : RRIm<"sla.w.sx", 0x66, I32, i32, shl>;
