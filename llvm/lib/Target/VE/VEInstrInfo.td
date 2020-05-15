@@ -256,18 +256,6 @@ def LEASLimm : PatLeaf<(imm), [{
   return isShiftedUInt<32, 32>(N->getZExtValue());
 }], HI32>;
 
-def trunc_imm : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getZExtValue(), SDLoc(N), MVT::i32);
-}]>;
-
-def sext_imm : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getSExtValue(), SDLoc(N), MVT::i64);
-}]>;
-
-def zext_imm : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getZExtValue(), SDLoc(N), MVT::i64);
-}]>;
-
 def icond2cc : SDNodeXForm<cond, [{
   VECC::CondCode VECC = IntCondCode2ICC(N->get());
   return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
