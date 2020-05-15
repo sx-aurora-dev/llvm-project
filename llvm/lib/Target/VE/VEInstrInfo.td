@@ -1463,9 +1463,19 @@ let cx = 1 in
 defm CVTSQ : CVTm<"cvt.s.q", 0x1F, F32, f32, F128, f128, fpround>;
 
 // Section 8.7.16 - CVD (Convert to Double-format)
-defm CVTDS : CVTm<"cvt.d.s", 0x0F, I64, f64, F32, f32, fpextend>;
+defm CVTDS : CVTm<"cvt.d.s", 0x0F, I64, f64, F32, f32>;
 let cx = 1 in
 defm CVTDQ : CVTm<"cvt.d.q", 0x0F, I64, f64, F128, f128, fpround>;
+
+// CVTDS doesn't work correctly if its input is +NaN.  It returns -NaN.
+// We fix it through DAG lowering.
+//   FIXME: need to add predicate if this HW problem is fixed.
+def : Pat<(f64 (fpextend f32:$src)),
+          (CMOVLrm CC_IG,
+               (CMPSLrr (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $src, sub_f32),
+                        (SRLmi 8, 1)),
+               !add(1, 64) /* = (1)0 */,
+               (COPY_TO_REGCLASS (CVTDSr $src), I64))>;
 
 // Section 8.7.17 - CVQ (Convert to Single-format)
 defm CVTQD : CVTm<"cvt.q.d", 0x2D, F128, f128, I64, f64, fpextend>;
