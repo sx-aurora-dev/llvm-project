@@ -3405,7 +3405,7 @@ static bool safeWithoutComp(EVT SrcVT, bool Signed) {
 }
 
 static SDValue generateComparison(EVT VT, SDValue LHS, SDValue RHS,
-                                  bool Commutable, bool Signed, SDLoc &DL,
+                                  bool Commutable, bool Signed, const SDLoc &DL,
                                   SelectionDAG &DAG) {
   if (Commutable) {
     // VE comparison can holds simm7 at lhs and mimm at rhs.  Swap operands
