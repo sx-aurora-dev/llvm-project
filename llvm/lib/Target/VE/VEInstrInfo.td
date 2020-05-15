@@ -98,6 +98,70 @@ def HIFP32 : SDNodeXForm<fpimm, [{
                                    SDLoc(N), MVT::i64);
 }]>;
 
+/*
+def GetVL : SDNodeXForm<imm, [{
+  // Get a virtual register for VL and return it.
+  MachineFunction& MF = CurDAG->getMachineFunction();
+  unsigned VLReg =
+      MF.getSubtarget<VESubtarget>().getInstrInfo()->getVectorLengthReg(&MF);
+  return CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VLReg,
+                                MVT::i32);
+}]>;
+*/
+
+def icond2cc : SDNodeXForm<cond, [{
+  VECC::CondCode VECC = IntCondCode2ICC(N->get());
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def icond2ccSwap : SDNodeXForm<cond, [{
+  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
+  VECC::CondCode VECC = IntCondCode2ICC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def icond2ccInv : SDNodeXForm<cond, [{
+  ISD::CondCode CC = ISD::GlobalISel::getSetCCInverse(N->get(), true);
+  VECC::CondCode VECC = IntCondCode2ICC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def icond2ccSwapInv : SDNodeXForm<cond, [{
+  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
+  CC = ISD::GlobalISel::getSetCCInverse(CC, true);
+  VECC::CondCode VECC = IntCondCode2ICC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def fcond2cc : SDNodeXForm<cond, [{
+  VECC::CondCode VECC = FPCondCode2FCC(N->get());
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def fcond2ccSwap : SDNodeXForm<cond, [{
+  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
+  VECC::CondCode VECC = FPCondCode2FCC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def fcond2ccInv : SDNodeXForm<cond, [{
+  ISD::CondCode CC = ISD::GlobalISel::getSetCCInverse(N->get(), false);
+  VECC::CondCode VECC = FPCondCode2FCC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def fcond2ccSwapInv : SDNodeXForm<cond, [{
+  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
+  CC = ISD::GlobalISel::getSetCCInverse(CC, false);
+  VECC::CondCode VECC = FPCondCode2FCC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def CCOP : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getZExtValue(),
+                                   SDLoc(N), MVT::i32);
+}]>;
+
 //===----------------------------------------------------------------------===//
 // Feature predicates.
 //===----------------------------------------------------------------------===//
@@ -245,64 +309,9 @@ def CCUIOp : PatLeaf<(cond), [{
   }
 }]>;
 
-def GetVL : SDNodeXForm<imm, [{
-  // Get a virtual register for VL and return it.
-  MachineFunction& MF = CurDAG->getMachineFunction();
-  unsigned VLReg = MF.getSubtarget<VESubtarget>().getInstrInfo()->getVectorLengthReg(&MF);
-  return CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VLReg, MVT::i32);
-}]>;
-
 def LEASLimm : PatLeaf<(imm), [{
   return isShiftedUInt<32, 32>(N->getZExtValue());
 }], HI32>;
-
-def icond2cc : SDNodeXForm<cond, [{
-  VECC::CondCode VECC = IntCondCode2ICC(N->get());
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def icond2ccSwap : SDNodeXForm<cond, [{
-  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
-  VECC::CondCode VECC = IntCondCode2ICC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def icond2ccInv : SDNodeXForm<cond, [{
-  ISD::CondCode CC = ISD::GlobalISel::getSetCCInverse(N->get(), true);
-  VECC::CondCode VECC = IntCondCode2ICC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def icond2ccSwapInv : SDNodeXForm<cond, [{
-  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
-  CC = ISD::GlobalISel::getSetCCInverse(CC, true);
-  VECC::CondCode VECC = IntCondCode2ICC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def fcond2cc : SDNodeXForm<cond, [{
-  VECC::CondCode VECC = FPCondCode2FCC(N->get());
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def fcond2ccSwap : SDNodeXForm<cond, [{
-  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
-  VECC::CondCode VECC = FPCondCode2FCC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def fcond2ccInv : SDNodeXForm<cond, [{
-  ISD::CondCode CC = ISD::GlobalISel::getSetCCInverse(N->get(), false);
-  VECC::CondCode VECC = FPCondCode2FCC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def fcond2ccSwapInv : SDNodeXForm<cond, [{
-  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
-  CC = ISD::GlobalISel::getSetCCInverse(CC, false);
-  VECC::CondCode VECC = FPCondCode2FCC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
 
 // Addressing modes.
 // SX-Aurora has following fields.
@@ -428,10 +437,6 @@ def brtarget32 : Operand<OtherVT> {
 def TLSSym : Operand<iPTR>;
 
 // Operand for printing out a condition code.
-def CCOP : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getZExtValue(),
-                                   SDLoc(N), MVT::i32);
-}]>;
 def CCOpAsmOperand : AsmOperandClass { let Name = "CCOp"; }
 def CCOp : Operand<i32>, ImmLeaf<i32, [{
     return Imm >= 0 && Imm < 22; }], CCOP> {
