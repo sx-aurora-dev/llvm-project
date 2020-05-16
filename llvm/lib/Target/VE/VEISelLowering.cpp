@@ -1176,6 +1176,9 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     LegalizeAction PromoteAct = (IntVT == MVT::i32) ? Promote : Legal;
     setOperationAction(ISD::BITREVERSE, IntVT, PromoteAct);
     setOperationAction(ISD::CTPOP, IntVT, PromoteAct);
+    setOperationAction(ISD::AND, IntVT, PromoteAct);
+    setOperationAction(ISD::OR, IntVT, PromoteAct);
+    setOperationAction(ISD::XOR, IntVT, PromoteAct);
 
     // Legal smax and smin
     setOperationAction(ISD::SMAX, IntVT, Legal);

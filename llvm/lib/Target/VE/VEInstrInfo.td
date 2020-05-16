@@ -1329,22 +1329,18 @@ let cw = 1 in defm MINSL : RRm<"mins.l", 0x68, I64, i64, smin>;
 
 // Section 8.5.1 - AND (AND)
 defm AND : RRm<"and", 0x44, I64, i64, and>;
-let isCodeGenOnly = 1 in defm AND32 : RRm<"and", 0x44, I32, i32, and>;
 
 // Section 8.5.2 - OR (OR)
 defm OR : RRm<"or", 0x45, I64, i64, or>;
-let isCodeGenOnly = 1 in defm OR32 : RRm<"or", 0x45, I32, i32, or>;
 
 // Section 8.5.3 - XOR (Exclusive OR)
 def xor_pat : PatFrags<(ops node:$lhs, node:$rhs),
                        [(xor node:$lhs, node:$rhs),
                         (XOR node:$lhs, node:$rhs)]>;
 defm XOR : RRm<"xor", 0x46, I64, i64, xor_pat>;
-let isCodeGenOnly = 1 in defm XOR32 : RRm<"xor", 0x46, I32, i32, xor_pat>;
 
 // Section 8.5.4 - EQV (Equivalence)
 defm EQV : RRm<"eqv", 0x47, I64, i64, EQV>;
-let isCodeGenOnly = 1 in defm EQV32 : RRm<"eqv", 0x47, I32, i32, EQV>;
 
 // Section 8.5.5 - NND (Negate AND)
 defm NND : RRNNDm<"nnd", 0x54, I64, i64>;
@@ -1678,11 +1674,12 @@ def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
                 (ANDri $src, -4),
                 0,
                 (SLAWSXmr !add(63, 64),
-                          (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3)),
+                          (EXTRACT_SUBREG (ANDri $src, 3), sub_i32)),
                 (SLAWSXrr $new,
-                          (SLAWSXri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
+                          (SLAWSXri (EXTRACT_SUBREG (ANDri $src, 3), sub_i32),
+                                    3))),
               (SUBSWSXir 24,
-                (SLAWSXri (AND32ri (EXTRACT_SUBREG $src, sub_i32), 3), 3))),
+                (SLAWSXri (EXTRACT_SUBREG (ANDri $src, 3), sub_i32), 3))),
             24
           )>;
 // def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
@@ -1740,7 +1737,7 @@ let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
 //===----------------------------------------------------------------------===//
 
 // Small immediates.
-def : Pat<(i32 simm7:$val), (OR32im (LO7 $val), 0)>;
+def : Pat<(i32 simm7:$val), (EXTRACT_SUBREG (ORim (LO7 $val), 0), sub_i32)>;
 def : Pat<(i64 simm7:$val), (ORim (LO7 $val), 0)>;
 // Medium immediates.
 def : Pat<(i32 simm32:$val),
@@ -2640,9 +2637,13 @@ def : Pat<(f32 (bitconvert i32:$op)),
 //    and %s0, %s0, (56)0
 
 def : Pat<(i32 (and i32:$val, 0xff)),
-          (AND32rm $val, !add(56, 64))>;
+          (EXTRACT_SUBREG
+              (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
+                     !add(56, 64)), sub_i32)>;
 def : Pat<(i32 (and i32:$val, 0xffff)),
-          (AND32rm $val, !add(48, 64))>;
+          (EXTRACT_SUBREG
+              (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
+                     !add(48, 64)), sub_i32)>;
 def : Pat<(i64 (and i64:$val, 0xffffffff)),
           (ANDrm $val, !add(32, 64))>;
 
@@ -2651,10 +2652,10 @@ def : Pat<(i64 (and i64:$val, 0xffffffff)),
 //    and %s0, %s0, (56)0
 // B) and %s0, %s0, (56)0
 
-def : Pat<(and (trunc i64:$src), 0xff),
-          (AND32rm (EXTRACT_SUBREG $src, sub_i32), !add(56, 64))>;
-def : Pat<(and (trunc i64:$src), 0xffff),
-          (AND32rm (EXTRACT_SUBREG $src, sub_i32), !add(48, 64))>;
+def : Pat<(i32 (and (trunc i64:$src), 0xff)),
+          (EXTRACT_SUBREG (ANDrm $src, !add(56, 64)), sub_i32)>;
+def : Pat<(i32 (and (trunc i64:$src), 0xffff)),
+          (EXTRACT_SUBREG (ANDrm $src, !add(48, 64)), sub_i32)>;
 
 // vector instructions
 include "VEInstrVec.td"
