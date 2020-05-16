@@ -1021,9 +1021,6 @@ def : Pat<(iPTR ADDRrri:$addr), (LEArri MEMrri:$addr)>;
 def : Pat<(iPTR ADDRrii:$addr), (LEArii MEMrii:$addr)>;
 def : Pat<(add I64:$base, simm32:$disp), (LEArii $base, 0, (LO32 $disp))>;
 def : Pat<(add I64:$base, lozero:$disp), (LEASLrii $base, 0, (HI32 $disp))>;
-def : Pat<(add I32:$base, simm32:$disp),
-          (LEA32rii (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $base, sub_i32), 0,
-                    (LO32 $disp))>;
 
 def lea_add : PatFrags<(ops node:$base, node:$idx, node:$disp),
                        [(add (add node:$base, node:$idx), node:$disp),
@@ -2222,23 +2219,6 @@ class cmov128<Instruction INSN> :
                      (EXTRACT_SUBREG $t, sub_even),
                      (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 
-/*
-def lea_add : PatFrags<(ops node:$base, node:$idx, node:$disp),
-                       [(add (add node:$base, node:$idx), node:$disp),
-                        (add (add node:$base, node:$disp), node:$idx)]>;
-*/
-/*
-multiclass SELCMOVm<ValueType OTY, list<string> SRCT, list<string> SRCOP,
-                    string CMOV,
-                    string COND2CC, Operand COND, Operand COMP,
-                    Operand T, Operand F> {
-  defvar cmovrr = !cast<Instruction>(CMOV#"rr");
-  defvar cmovrm = !cast<Instruction>(CMOV#"rm");
-
-  def : Pat<(OTY !dag(selectcc, SRCT, SRCOP)),
-            (Cmovrr<cmovrr> (!cast<SDNodeXForm>(COND2CC) COND), COMP, T, F)>;
-}
-*/
 multiclass SEL64CMPIm<ValueType oty, ValueType cty, string Insn,
                       SDPatternOperator CMPIir, SDPatternOperator CMPIrr,
                       SDPatternOperator CMPUir, SDPatternOperator CMPUrr,
