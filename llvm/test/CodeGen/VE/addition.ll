@@ -238,17 +238,8 @@ define double @func24(double %0) {
   ret double %2
 }
 
-define i32 @func25(i32 %0) {
+define i64 @func25(i64 %0) {
 ; CHECK-LABEL: func25:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    xor %s0, %s0, (33)1
-; CHECK-NEXT:    or %s11, 0, %s9
-  %2 = xor i32 %0, -2147483648
-  ret i32 %2
-}
-
-define i64 @func26(i64 %0) {
-; CHECK-LABEL: func26:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, -2147483648
 ; CHECK-NEXT:    and %s1, %s1, (32)0
@@ -258,8 +249,8 @@ define i64 @func26(i64 %0) {
   ret i64 %2
 }
 
-define i128 @func27(i128 %0) {
-; CHECK-LABEL: func27:
+define i128 @func26(i128 %0) {
+; CHECK-LABEL: func26:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, -2147483648
 ; CHECK-NEXT:    and %s2, %s2, (32)0

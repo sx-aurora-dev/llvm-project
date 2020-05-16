@@ -91,6 +91,16 @@ define i32 @funci32(i32 %a) {
   ret i32 %res
 }
 
+define i32 @funci32_another(i32 %0) {
+; CHECK-LABEL: funci32_another:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    xor %s0, %s0, (33)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %2 = xor i32 %0, -2147483648
+  ret i32 %2
+}
+
+
 define i64 @func64(i64 %a, i64 %b) {
 ; CHECK-LABEL: func64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
