@@ -95,7 +95,7 @@ define zeroext i1 @setccslt(i64, i64) {
 ; CHECK-LABEL: setccslt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    srl %s0, %s0, 63
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp slt i64 %0, 0
   ret i1 %3

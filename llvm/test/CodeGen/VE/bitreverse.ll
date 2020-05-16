@@ -32,7 +32,7 @@ define i32 @func32(i32 %p) {
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    brv %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 32
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i32 @llvm.bitreverse.i32(i32 %p)
   ret i32 %r
@@ -56,7 +56,7 @@ define zeroext i16 @func16z(i16 zeroext %p) {
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    brv %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 48
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i16 @llvm.bitreverse.i16(i16 %p)
   ret i16 %r
@@ -80,7 +80,7 @@ define zeroext i8 @func8z(i8 zeroext %p) {
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    brv %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 56
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i8 @llvm.bitreverse.i8(i8 %p)
   ret i8 %r

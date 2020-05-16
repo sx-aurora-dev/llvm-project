@@ -279,6 +279,13 @@ def LEASLimm : PatLeaf<(imm), [{
   return isShiftedUInt<32, 32>(N->getZExtValue());
 }], HI32>;
 
+// KnownZExt - i64 known as higher 32 bits are 0.
+def KnownZExt : PatLeaf<(i64 I64:$src), [{
+  SDValue Val(N, 0);
+  KnownBits OpKnown = CurDAG->computeKnownBits(Val);
+  return OpKnown.getMaxValue().getZExtValue() <= 0xFFFFFFFF;
+}]>;
+
 //===----------------------------------------------------------------------===//
 // Addressing modes.
 // SX-Aurora has following fields.
@@ -1755,6 +1762,8 @@ def : Pat<(sext_inreg (i32 (trunc i64:$src)), i16),
           (EXTRACT_SUBREG (SRALri (SLLri $src, 48), 48), sub_i32)>;
 
 // Cast to i32
+def : Pat<(i32 (trunc KnownZExt:$src)),
+          (EXTRACT_SUBREG $src, sub_i32)>;
 def : Pat<(i32 (trunc i64:$src)),
           (ADDSWSXrm (EXTRACT_SUBREG $src, sub_i32), 0)>;
 def : Pat<(i32 (fp_to_sint I64:$reg)), (CVTWDSXr RD_RZ, $reg)>;

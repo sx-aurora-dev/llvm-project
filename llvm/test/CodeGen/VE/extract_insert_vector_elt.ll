@@ -89,7 +89,6 @@ define x86_regcallcc <512 x i32> @__regcall3__insert_v512i32r(<512 x i32>, i32) 
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    sll %s2, %s0, 63
 ; CHECK-NEXT:    srl %s2, %s2, 58
-; CHECK-NEXT:    adds.w.sx %s2, %s2, (0)1
 ; CHECK-NEXT:    sll %s1, %s1, %s2
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    lvs %s3,%v0(%s0)
@@ -111,7 +110,6 @@ define x86_regcallcc i32 @__regcall3__extract_v512i32r(<512 x i32>, i32) {
 ; CHECK-NEXT:    lvs %s1,%v0(%s1)
 ; CHECK-NEXT:    sll %s0, %s0, 63
 ; CHECK-NEXT:    srl %s0, %s0, 58
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    srl %s0, %s1, %s0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
@@ -128,7 +126,6 @@ define x86_regcallcc <512 x float> @__regcall3__insert_v512f32r(<512 x float>, i
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    sll %s2, %s0, 63
 ; CHECK-NEXT:    srl %s2, %s2, 58
-; CHECK-NEXT:    adds.w.sx %s2, %s2, (0)1
 ; CHECK-NEXT:    sll %s1, %s1, %s2
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    lvs %s3,%v0(%s0)
@@ -150,7 +147,6 @@ define x86_regcallcc float @__regcall3__extract_v512f32r(<512 x float>, i32) {
 ; CHECK-NEXT:    lvs %s1,%v0(%s1)
 ; CHECK-NEXT:    sll %s0, %s0, 63
 ; CHECK-NEXT:    srl %s0, %s0, 58
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    srl %s0, %s1, %s0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    sll %s0, %s0, 32

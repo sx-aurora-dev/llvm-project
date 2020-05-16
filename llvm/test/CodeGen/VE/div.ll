@@ -191,9 +191,7 @@ define i32 @divi32ri(i32 %a, i32 %b) {
 ; CHECK-NEXT:    lea %s1, 1431655766
 ; CHECK-NEXT:    muls.l %s0, %s0, %s1
 ; CHECK-NEXT:    srl %s1, %s0, 63
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    srl %s0, %s0, 32
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = sdiv i32 %a, 3
@@ -233,7 +231,7 @@ define i32 @divu32ri(i32 %a, i32 %b) {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    muls.l %s0, %s0, %s1
 ; CHECK-NEXT:    srl %s0, %s0, 33
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = udiv i32 %a, 3
   ret i32 %r
