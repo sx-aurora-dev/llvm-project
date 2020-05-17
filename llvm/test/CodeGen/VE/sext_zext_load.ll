@@ -11,7 +11,7 @@ define signext i16 @func1() {
   ret i16 %a.conv
 }
 
-define i32 @func2() {
+define signext i32 @func2() {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.sx %s0, 191(, %s11)
@@ -57,7 +57,7 @@ define zeroext i16 @func5() {
   ret i16 %a.conv
 }
 
-define i32 @func6() {
+define zeroext i32 @func6() {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.sx %s0, 191(, %s11)
@@ -102,7 +102,7 @@ define signext i16 @func9() {
   ret i16 %a.conv
 }
 
-define i32 @func10() {
+define signext i32 @func10() {
 ; CHECK-LABEL: func10:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.zx %s0, 191(, %s11)
@@ -181,7 +181,7 @@ define i128 @func16() {
   ret i128 %a.conv
 }
 
-define i32 @func17() {
+define signext i32 @func17() {
 ; CHECK-LABEL: func17:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld2b.sx %s0, 190(, %s11)
@@ -248,7 +248,7 @@ define i128 @func22() {
   ret i128 %a.conv
 }
 
-define i32 @func23() {
+define zeroext i32 @func23() {
 ; CHECK-LABEL: func23:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld2b.zx %s0, 190(, %s11)

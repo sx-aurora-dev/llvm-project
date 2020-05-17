@@ -136,7 +136,7 @@ define i64 @min2u64(i64, i64) {
   ret i64 %4
 }
 
-define i32 @mini32(i32, i32) {
+define signext i32 @mini32(i32 signext %0, i32 signext %1) {
 ; CHECK-LABEL: mini32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    mins.w.sx %s0, %s0, %s1
@@ -156,7 +156,7 @@ define i32 @min2i32(i32, i32) {
   ret i32 %4
 }
 
-define i32 @minu32(i32, i32) {
+define zeroext i32 @minu32(i32 zeroext %0, i32 zeroext %1) {
 ; CHECK-LABEL: minu32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1

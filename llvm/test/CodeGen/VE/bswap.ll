@@ -79,8 +79,17 @@ define i64 @func64i() {
   ret i64 %r
 }
 
-define i32 @func32i() {
-; CHECK-LABEL: func32i:
+define signext i32 @func32si() {
+; CHECK-LABEL: func32si:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, -16777216
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = tail call i32 @llvm.bswap.i32(i32 255)
+  ret i32 %r
+}
+
+define zeroext i32 @func32zi() {
+; CHECK-LABEL: func32zi:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, -16777216
 ; CHECK-NEXT:    or %s11, 0, %s9

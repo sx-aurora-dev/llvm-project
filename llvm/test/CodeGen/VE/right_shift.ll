@@ -24,7 +24,7 @@ define signext i16 @func2(i16 signext %0, i16 signext %1) {
   ret i16 %6
 }
 
-define i32 @func3(i32 %0, i32 %1) {
+define signext i32 @func3(i32 signext %0, i32 signext %1) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, %s1
@@ -86,7 +86,7 @@ define zeroext i16 @func8(i16 zeroext %0, i16 zeroext %1) {
   ret i16 %6
 }
 
-define i32 @func9(i32 %0, i32 %1) {
+define zeroext i32 @func9(i32 zeroext %0, i32 zeroext %1) {
 ; CHECK-LABEL: func9:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
@@ -139,7 +139,7 @@ define signext i16 @func13(i16 signext %0) {
   ret i16 %2
 }
 
-define i32 @func14(i32 %0) {
+define signext i32 @func14(i32 signext %0) {
 ; CHECK-LABEL: func14:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 5
@@ -193,7 +193,7 @@ define zeroext i16 @func18(i16 zeroext %0) {
   ret i16 %2
 }
 
-define i32 @func19(i32 %0) {
+define zeroext i32 @func19(i32 zeroext %0) {
 ; CHECK-LABEL: func19:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0

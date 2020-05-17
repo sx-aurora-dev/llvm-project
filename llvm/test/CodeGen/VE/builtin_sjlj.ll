@@ -5,7 +5,7 @@
 @buf = common global [1 x %struct.__jmp_buf_tag] zeroinitializer, align 8
 
 ; Function Attrs: noinline nounwind optnone
-define i32 @t_setjmp() {
+define signext i32 @t_setjmp() {
 ; CHECK-LABEL: t_setjmp:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill

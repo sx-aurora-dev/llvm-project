@@ -43,7 +43,7 @@ define i64 @divi64(i64 %a, i64 %b) {
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @divi32(i32 %a, i32 %b) {
+define signext i32 @divi32(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: divi32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divs.w.sx %s0, %s0, %s1
@@ -76,7 +76,7 @@ define i64 @divu64(i64 %a, i64 %b) {
 
 ; Function Attrs: norecurse nounwind readnone
 ; Function Attrs: norecurse nounwind readnone
-define i32 @divu32(i32 %a, i32 %b) {
+define zeroext i32 @divu32(i32 zeroext %a, i32 zeroext %b) {
 ; CHECK-LABEL: divu32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divu.w %s0, %s0, %s1
@@ -184,7 +184,7 @@ define i64 @divi64ri(i64 %a, i64 %b) {
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @divi32ri(i32 %a, i32 %b) {
+define signext i32 @divi32ri(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: divi32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
@@ -223,7 +223,7 @@ define i64 @divu64ri(i64 %a, i64 %b) {
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @divu32ri(i32 %a, i32 %b) {
+define zeroext i32 @divu32ri(i32 zeroext %a, i32 zeroext %b) {
 ; CHECK-LABEL: divu32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
@@ -287,7 +287,7 @@ define i64 @divi64li(i64 %a, i64 %b) {
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @divi32li(i32 %a, i32 %b) {
+define signext i32 @divi32li(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: divi32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divs.w.sx %s0, 3, %s1
@@ -323,7 +323,7 @@ define i64 @divu64li(i64 %a, i64 %b) {
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @divu32li(i32 %a, i32 %b) {
+define zeroext i32 @divu32li(i32 zeroext %a, i32 zeroext %b) {
 ; CHECK-LABEL: divu32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divu.w %s0, 3, %s1

@@ -28,7 +28,7 @@ define signext i16 @func2(i16 signext %0, i16 signext %1) {
   ret i16 %6
 }
 
-define i32 @func3(i32 %0, i32 %1) {
+define signext i32 @func3(i32 signext %0, i32 signext %1) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, %s1
@@ -87,7 +87,7 @@ define zeroext i16 @func7(i16 zeroext %0, i16 zeroext %1) {
   ret i16 %6
 }
 
-define i32 @func8(i32 %0, i32 %1) {
+define zeroext i32 @func8(i32 zeroext %0, i32 zeroext %1) {
 ; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, %s1
@@ -142,7 +142,7 @@ define signext i16 @func12(i16 signext %0) {
   ret i16 %2
 }
 
-define i32 @func13(i32 %0) {
+define signext i32 @func13(i32 signext %0) {
 ; CHECK-LABEL: func13:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 5
@@ -193,7 +193,7 @@ define zeroext i16 @func17(i16 zeroext %0) {
   ret i16 %2
 }
 
-define i32 @func18(i32 %0) {
+define zeroext i32 @func18(i32 zeroext %0) {
 ; CHECK-LABEL: func18:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 5

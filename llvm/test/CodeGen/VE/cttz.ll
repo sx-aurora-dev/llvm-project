@@ -35,8 +35,22 @@ define i64 @func64(i64 %p) {
   ret i64 %r
 }
 
-define i32 @func32(i32 %p) {
-; CHECK-LABEL: func32:
+define signext i32 @func32s(i32 signext %p) {
+; CHECK-LABEL: func32s:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s1, -1, %s0
+; CHECK-NEXT:    xor %s0, -1, %s0
+; CHECK-NEXT:    and %s0, %s0, %s1
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    pcnt %s0, %s0
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = tail call i32 @llvm.cttz.i32(i32 %p, i1 true)
+  ret i32 %r
+}
+
+define zeroext i32 @func32z(i32 zeroext %p) {
+; CHECK-LABEL: func32z:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.sx %s1, -1, %s0
 ; CHECK-NEXT:    xor %s0, -1, %s0
@@ -124,8 +138,17 @@ define i64 @func64i() {
   ret i64 %r
 }
 
-define i32 @func32i() {
-; CHECK-LABEL: func32i:
+define signext i32 @func32is() {
+; CHECK-LABEL: func32is:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s0, 8, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = tail call i32 @llvm.cttz.i32(i32 65280, i1 true)
+  ret i32 %r
+}
+
+define zeroext i32 @func32iz() {
+; CHECK-LABEL: func32iz:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 8, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9

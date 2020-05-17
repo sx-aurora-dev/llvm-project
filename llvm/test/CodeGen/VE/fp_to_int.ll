@@ -23,7 +23,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @f2i(float %a) {
+define signext i32 @f2i(float %a) {
 ; CHECK-LABEL: f2i:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cvt.w.s.sx.rz %s0, %s0
@@ -81,7 +81,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @f2ui(float %a) {
+define zeroext i32 @f2ui(float %a) {
 ; CHECK-LABEL: f2ui:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cvt.d.s %s0, %s0
@@ -149,7 +149,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @d2i(double %a) {
+define signext i32 @d2i(double %a) {
 ; CHECK-LABEL: d2i:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cvt.w.d.sx.rz %s0, %s0
@@ -206,7 +206,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @d2ui(double %a) {
+define zeroext i32 @d2ui(double %a) {
 ; CHECK-LABEL: d2ui:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cvt.l.d.rz %s0, %s0
@@ -273,7 +273,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @q2i(fp128 %a) {
+define signext i32 @q2i(fp128 %a) {
 ; CHECK-LABEL: q2i:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cvt.d.q %s0, %s0
@@ -334,7 +334,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define i32 @q2ui(fp128 %a) {
+define zeroext i32 @q2ui(fp128 %a) {
 ; CHECK-LABEL: q2ui:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cvt.d.q %s0, %s0
