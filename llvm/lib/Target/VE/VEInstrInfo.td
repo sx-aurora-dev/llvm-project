@@ -1338,17 +1338,9 @@ def ctlz_pat : PatFrags<(ops node:$src),
                         [(ctlz node:$src),
                          (ctlz_zero_undef node:$src)]>;
 defm LDZ : RRI1m<"ldz", 0x67, I64, i64, ctlz_pat>;
-def : Pat<(i32 (trunc (i64 (ctlz_pat i64:$src)))),
-          (EXTRACT_SUBREG (LDZr $src), sub_i32)>;
-def : Pat<(i32 (trunc (i64 (ctlz_pat (i64 mimm:$src))))),
-          (EXTRACT_SUBREG (LDZm (MIMM $src)), sub_i32)>;
 
 // Section 8.5.8 - PCNT (Population Count)
 defm PCNT : RRI1m<"pcnt", 0x38, I64, i64, ctpop>;
-def : Pat<(i32 (trunc (i64 (ctpop i64:$src)))),
-          (EXTRACT_SUBREG (PCNTr $src), sub_i32)>;
-def : Pat<(i32 (trunc (i64 (ctpop (i64 mimm:$src))))),
-          (EXTRACT_SUBREG (PCNTm (MIMM $src)), sub_i32)>;
 
 // Section 8.5.9 - BRV (Bit Reverse)
 defm BRV : RRI1m<"brv", 0x39, I64, i64, bitreverse>;
@@ -1759,22 +1751,18 @@ def : Pat<(sext_inreg I32:$src, i8),
           (SRAWSXri (SLAWSXri $src, 24), 24)>;
 def : Pat<(sext_inreg I64:$src, i8),
           (SRALri (SLLri $src, 56), 56)>;
-def : Pat<(sext_inreg (i32 (trunc i64:$src)), i8),
-          (EXTRACT_SUBREG (SRALri (SLLri $src, 56), 56), sub_i32)>;
 
 // Cast to i16
 def : Pat<(sext_inreg I32:$src, i16),
           (SRAWSXri (SLAWSXri $src, 16), 16)>;
 def : Pat<(sext_inreg I64:$src, i16),
           (SRALri (SLLri $src, 48), 48)>;
-def : Pat<(sext_inreg (i32 (trunc i64:$src)), i16),
-          (EXTRACT_SUBREG (SRALri (SLLri $src, 48), 48), sub_i32)>;
 
 // Cast to i32
 def : Pat<(i32 (trunc KnownZExt:$src)),
           (EXTRACT_SUBREG $src, sub_i32)>;
 def : Pat<(i32 (trunc i64:$src)),
-          (ADDSWSXrm (EXTRACT_SUBREG $src, sub_i32), 0)>;
+          (EXTRACT_SUBREG (ANDrm $src, !add(32, 64)), sub_i32)>;
 def : Pat<(i32 (fp_to_sint I64:$reg)), (CVTWDSXr RD_RZ, $reg)>;
 def : Pat<(i32 (fp_to_sint F32:$reg)), (CVTWSSXr RD_RZ, $reg)>;
 def : Pat<(i32 (fp_to_sint f128:$sy)), (CVTWDSXr RD_RZ, (CVTDQr $sy))>;

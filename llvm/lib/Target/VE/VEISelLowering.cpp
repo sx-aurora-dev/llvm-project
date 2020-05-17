@@ -1576,6 +1576,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setTargetDAGCombine(ISD::SIGN_EXTEND);
   setTargetDAGCombine(ISD::ZERO_EXTEND);
   setTargetDAGCombine(ISD::ANY_EXTEND);
+  setTargetDAGCombine(ISD::TRUNCATE);
 
   setTargetDAGCombine(ISD::SETCC);
   setTargetDAGCombine(ISD::SELECT_CC);
@@ -3986,6 +3987,115 @@ SDValue VETargetLowering::combineExtBoolTrunc(SDNode *N,
   return SDValue();
 }
 
+static bool isI32Insn(const SDNode *User, const SDNode *N) {
+  switch (User->getOpcode()) {
+  default:
+    return false;
+  case ISD::ADD:
+  case ISD::SUB:
+  case ISD::MUL:
+  case ISD::SDIV:
+  case ISD::UDIV:
+  case ISD::SETCC:
+  case ISD::SMIN:
+  case ISD::SMAX:
+  case ISD::SHL:
+  case ISD::SRA:
+  case ISD::BSWAP:
+  case ISD::SINT_TO_FP:
+  case ISD::UINT_TO_FP:
+  case ISD::BR_CC:
+  case ISD::BITCAST:
+  case ISD::ATOMIC_CMP_SWAP:
+  case ISD::ATOMIC_SWAP:
+  case VEISD::CMPU:
+  case VEISD::CMPI:
+  case VEISD::VEC_BROADCAST:
+    return true;
+  case ISD::SRL:
+    if (N->getOperand(0).getOpcode() != ISD::SRL)
+      return true;
+    // (srl (trunc (srl ...))) may be optimized by combining srl, so
+    // doesn't optimize trunc now.
+    return false;
+  case ISD::SELECT_CC:
+    if (User->getOperand(0).getNode() == N ||
+        User->getOperand(1).getNode() == N)
+      return true;
+    LLVM_FALLTHROUGH;
+  case ISD::AND:
+  case ISD::OR:
+  case ISD::XOR:
+  case ISD::SELECT:
+  case ISD::CopyToReg:
+    // Check all use of selections, bit operations, and copies.  If all of them
+    // are safe, optimize truncate to extract_subreg.
+    for (SDNode::use_iterator UI = User->use_begin(), UE = User->use_end();
+         UI != UE; ++UI) {
+      switch ((*UI)->getOpcode()) {
+      case ISD::ANY_EXTEND:
+      case ISD::SIGN_EXTEND:
+      case ISD::ZERO_EXTEND:
+        // (ext ... (select ... (trunc ...))) is not optimized by llvm, so
+        // optimize it at here.  Similar combination through AND/OR/XOR should
+        // be optimized by llvm, so leave it as is.
+        if (User->getOpcode() == ISD::SELECT_CC ||
+            User->getOpcode() == ISD::SELECT)
+          continue;
+        break;
+      default:
+        if (isI32Insn(*UI, N))
+          continue;
+      }
+      return false;
+    }
+    return true;
+  }
+}
+
+// Optimize TRUNCATE in DAG combining.  Optimizing it in CUSTOM lower is
+// sometime too early.  Optimizing it in DAG pattern matching in VEInstrInfo.td
+// is sometime too late.  So, doing it at here.
+SDValue VETargetLowering::combineTRUNCATE(SDNode *N,
+                                          DAGCombinerInfo &DCI) const {
+  assert(N->getOpcode() == ISD::TRUNCATE &&
+         "Should be called with a TRUNCATE node");
+
+  SelectionDAG &DAG = DCI.DAG;
+  SDLoc DL(N);
+  EVT VT = N->getValueType(0);
+
+  // We prefer to do this when all types are legal.
+  if (!DCI.isAfterLegalizeDAG())
+    return SDValue();
+
+  // Skip combine TRUNCATE atm if the operand of TRUNCATE might be a constant.
+  if (N->getOperand(0)->getOpcode() == ISD::SELECT_CC &&
+      isa<ConstantSDNode>(N->getOperand(0)->getOperand(0)) &&
+      isa<ConstantSDNode>(N->getOperand(0)->getOperand(1)))
+    return SDValue();
+
+  // Check all use of this TRUNCATE.
+  for (SDNode::use_iterator UI = N->use_begin(), UE = N->use_end();
+       UI != UE; ++UI) {
+    SDNode *User = *UI;
+
+    // Make sure that we're not going to replace TRUNCATE for non i32 instructions.
+    //
+    // FIXME: Although we could sometimes handle this, and it does occur in
+    // practice that one of the condition inputs to the select is also one of
+    // the outputs, we currently can't deal with this.
+    if (isI32Insn(User, N))
+      continue;
+
+    return SDValue();
+  }
+
+  SDValue Sub_i32 = DAG.getTargetConstant(VE::sub_i32, DL, MVT::i32);
+  return SDValue(DAG.getMachineNode(
+      TargetOpcode::EXTRACT_SUBREG, DL, VT, N->getOperand(0), Sub_i32), 0);
+}
+
 SDValue VETargetLowering::combineSetCC(SDNode *N,
                                         DAGCombinerInfo &DCI) const {
   assert(N->getOpcode() == ISD::SETCC &&
@@ -4099,6 +4209,8 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
   case ISD::ZERO_EXTEND:
   case ISD::ANY_EXTEND:
     return combineExtBoolTrunc(N, DCI);
+  case ISD::TRUNCATE:
+    return combineTRUNCATE(N, DCI);
   case ISD::SETCC:
     return combineSetCC(N, DCI);
   case ISD::SELECT_CC:
