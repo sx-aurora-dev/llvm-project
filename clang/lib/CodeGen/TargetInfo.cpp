@@ -10605,28 +10605,25 @@ private:
 } // end anonymous namespace
 
 
-ABIArgInfo
-VEABIInfo::classifyReturnType(QualType Ty) const {
-  if (Ty->isAnyComplexType()) {
+ABIArgInfo VEABIInfo::classifyReturnType(QualType Ty) const {
+  uint64_t Size = getContext().getTypeSize(Ty);
+  if (Size < 64 && Ty->isIntegerType())
+    return ABIArgInfo::getExtend(Ty);
+  if (Ty->isAnyComplexType())
     return ABIArgInfo::getDirect();
-  }
-  else {
-    return DefaultABIInfo::classifyReturnType(Ty);
-  }
+  return DefaultABIInfo::classifyReturnType(Ty);
 }
 
-ABIArgInfo
-VEABIInfo::classifyArgumentType(QualType Ty) const {
-  if (Ty->isAnyComplexType()) {
+ABIArgInfo VEABIInfo::classifyArgumentType(QualType Ty) const {
+  uint64_t Size = getContext().getTypeSize(Ty);
+  if (Size < 64 && Ty->isIntegerType())
+    return ABIArgInfo::getExtend(Ty);
+  if (Ty->isAnyComplexType())
     return ABIArgInfo::getDirect();
-  }
-  else {
-    return DefaultABIInfo::classifyArgumentType(Ty);
-  }
+  return DefaultABIInfo::classifyArgumentType(Ty);
 }
 
 void VEABIInfo::computeInfo(CGFunctionInfo &FI) const {
-
   FI.getReturnInfo() = classifyReturnType(FI.getReturnType());
   for (auto &Arg : FI.arguments())
     Arg.info = classifyArgumentType(Arg.type);
