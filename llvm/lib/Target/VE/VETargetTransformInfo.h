@@ -223,6 +223,11 @@ public:
     default:
       break;
 
+    // Unsupported ops (TODO native VP legalization)
+    case Instruction::FPToUI:
+    case Instruction::UIToFP:
+      return false;
+
     // Non-opcode VP ops
     case Instruction::Call:
       // vp mask operations unsupported
