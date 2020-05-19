@@ -43,6 +43,8 @@
 using namespace llvm;
 
 static bool isLegalVectorVT(EVT VT) {
+  if (!VT.isVector())
+    return false;
   auto ElemVT = VT.getVectorElementType();
   return (ElemVT == MVT::i1 || ElemVT == MVT::i32 || ElemVT == MVT::f32 ||
           ElemVT == MVT::i64 || ElemVT == MVT::f64);
