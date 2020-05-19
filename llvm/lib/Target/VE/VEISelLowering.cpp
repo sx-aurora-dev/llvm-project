@@ -364,6 +364,92 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
                          PartOps[(int)SubElem::Hi], AVL);
 }
 
+VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
+                                                 VVPExpansionMode Mode) const {
+  Optional<EVT> VecVTOpt = getIdiomaticType(Op.getNode());
+  if (!VecVTOpt.hasValue() || !VecVTOpt.getValue().isVector()) {
+    LLVM_DEBUG(dbgs() << "\tno idiomatic vector VT.\n");
+    return VVPWideningInfo();
+  }
+  EVT OpVecVT = VecVTOpt.getValue();
+
+
+  // try to narrow the vector length
+  Optional<unsigned> NarrowLen = PeekForNarrow(Op);
+  unsigned OpVectorLength =
+      NarrowLen ? NarrowLen.getValue() : OpVecVT.getVectorNumElements();
+
+  LLVM_DEBUG(dbgs() << "\tdetected AVL:" << OpVectorLength << "\n";);
+
+  // Select the target vector width
+  unsigned VectorWidth;
+  if (OpVectorLength > StandardVectorWidth) {
+    // packed mode only available for 32bit elements up to 512 elements
+    EVT RawElemTy = OpVecVT.getVectorElementType();
+    if (!RawElemTy.isSimple()) {
+      LLVM_DEBUG(dbgs() << "\tToNative: Not a simple element type\n";);
+      return VVPWideningInfo();
+    }
+    MVT ElemTy = RawElemTy.getSimpleVT();
+
+    if ((ElemTy != MVT::i32 && ElemTy != MVT::f32) ||
+        (OpVectorLength > PackedWidth)) {
+      LLVM_DEBUG(dbgs() << "\tToNative: Over-sized data type\n";);
+      return VVPWideningInfo();
+    }
+
+    VectorWidth = PackedWidth;
+  } else {
+    VectorWidth = StandardVectorWidth;
+  }
+
+  // Pick a legal vector type
+  EVT ResultVT;
+  if (Mode == VVPExpansionMode::ToNativeWidth) {
+    LLVM_DEBUG(dbgs() << "\texpanding to native width\n";);
+
+    ResultVT = EVT::getVectorVT(CDAG.getContext(),
+                                OpVecVT.getVectorElementType(), VectorWidth);
+
+  } else if (Mode == VVPExpansionMode::ToNextWidth) {
+    LLVM_DEBUG(dbgs() << "\texpanding to next width\n";);
+
+    ResultVT = getTypeToTransformTo(CDAG.getContext(), OpVecVT);
+  }
+
+  LLVM_DEBUG(dbgs() << "\tOpVecTy: " << OpVecVT.getEVTString() << "\n";);
+  LLVM_DEBUG(dbgs() << "\tNextTy: " << ResultVT.getEVTString()
+                    << "\n";);
+
+  VectorWidth = ResultVT.getVectorNumElements();
+  assert((ResultVT.getVectorElementType() ==
+          OpVecVT.getVectorElementType()) &&
+         "unexpected change of element type!");
+
+  // bail if LLVM decides to split
+  if (!ResultVT.isVector() || (ResultVT.getVectorNumElements() <
+                                    OpVecVT.getVectorNumElements())) {
+    LLVM_DEBUG(dbgs() << "\tLLVM decided to split\n";);
+    return VVPWideningInfo();
+  }
+
+  //// Does this expansion imply packed mode? /////
+  LLVM_DEBUG(dbgs() << "\tSelected target width: " << VectorWidth << "\n";);
+  bool PackedMode = false;
+  bool NeedsPackedMasking = false;
+  if (VectorWidth > StandardVectorWidth) {
+    NeedsPackedMasking = (OpVectorLength % 2 != 0);
+    PackedMode = true;
+    if (!Subtarget->hasPackedMode()) {
+      LLVM_DEBUG(dbgs() << "\tPacked operations not enabled (set "
+                           "-mattr=+packed to enable)!\n";);
+      return VVPWideningInfo(); // possibly redundant
+    }
+  }
+
+  return VVPWideningInfo(ResultVT, OpVectorLength, PackedMode, NeedsPackedMasking);
+}
+
 SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
                                       VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "Expand to VVP node\n");
@@ -382,74 +468,22 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
     return SDValue();
   }
 
-  // try to narrow the vector length
-  Optional<unsigned> NarrowLen = PeekForNarrow(Op);
-  unsigned OpVectorLength =
-      NarrowLen ? NarrowLen.getValue() : OpVecTy.getVectorNumElements();
-
-  LLVM_DEBUG(dbgs() << "\t detected AVL:" << OpVectorLength << "\n";);
+  // VP -> VVP expansion
+  if (Op->isVP()) {
+    return LowerVPToVVP(Op, DAG, Mode);
+  }
 
   ///// Decide for a vector width /////
   // This also takes care of splitting
   // TODO improve packed matching logic
   // Switch to packed mode (TODO where appropriate)
-  unsigned VectorWidth = 0;
-  bool NeedsPackedMasking = false;
-  bool PackedMode = false;
+  CustomDAG CDAG(*this, DAG, Op);
+  VVPWideningInfo WidenInfo =
+      pickResultType(CDAG, Op, Mode);
 
-  if (Mode == VVPExpansionMode::ToNativeWidth) {
-    LLVM_DEBUG(dbgs() << "\t expanding to native width\n";);
-
-    if (OpVectorLength > StandardVectorWidth) {
-      // packed mode only available for 32bit elements up to 512 elements
-      EVT RawElemTy = OpVecTy.getVectorElementType();
-      if (!RawElemTy.isSimple())
-        return SDValue();
-      MVT ElemTy = RawElemTy.getSimpleVT();
-
-      if ((ElemTy != MVT::i32 && ElemTy != MVT::f32) ||
-          (OpVectorLength > PackedWidth)) {
-        LLVM_DEBUG(dbgs() << "\tToNative: Over-sized data type\n";);
-        return SDValue();
-      }
-
-      VectorWidth = PackedWidth;
-    } else {
-      VectorWidth = StandardVectorWidth;
-    }
-
-  } else if (Mode == VVPExpansionMode::ToNextWidth) {
-    LLVM_DEBUG(dbgs() << "\t expanding to next width\n";);
-
-    EVT NextDestVecTy = getTypeToTransformTo(*DAG.getContext(), OpVecTy);
-    LLVM_DEBUG(dbgs() << "\t OpVecTy: " << OpVecTy.getEVTString() << "\n";);
-    LLVM_DEBUG(dbgs() << "\t NextTy: " << NextDestVecTy.getEVTString()
-                      << "\n";);
-
-    VectorWidth = NextDestVecTy.getVectorNumElements();
-    assert((NextDestVecTy.getVectorElementType() ==
-            OpVecTy.getVectorElementType()) &&
-           "unexpected change of element type!");
-
-    // bail if LLVM decides to split
-    if (!NextDestVecTy.isVector() || (NextDestVecTy.getVectorNumElements() <
-                                      OpVecTy.getVectorNumElements())) {
-      LLVM_DEBUG(dbgs() << "\tToNext: LLVM decided to split\n";);
-      return SDValue();
-    }
-  }
-
-  //// Does this expansion imply packed mode? /////
-  LLVM_DEBUG(dbgs() << "\tSelected target width: " << VectorWidth << "\n";);
-  if (VectorWidth > StandardVectorWidth) {
-    NeedsPackedMasking = (OpVectorLength % 2 != 0);
-    VectorWidth = PackedWidth;
-    PackedMode = true;
-    if (!Subtarget->hasPackedMode()) {
-      LLVM_DEBUG(dbgs() << "\tPacked operations not enabled (set "
-                           "-mattr=+packed to enable)!\n";);
-      return SDValue(); // possibly redundant
-    }
+  if (!WidenInfo.isValid()) {
+    LLVM_DEBUG(dbgs() << "Cannot derive widening info\n";);
+    return SDValue();
   }
 
   ///// Translate to a VVP layer operation (VVP_* or VEC_*) /////
@@ -481,9 +515,7 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
     return LowerMSTORE(Op, DAG);
 
   case ISD::MGATHER:
-  case ISD::VP_GATHER:
   case ISD::MSCATTER:
-  case ISD::VP_SCATTER:
     return LowerMGATHER_MSCATTER(Op, DAG, Mode);
 
   case ISD::STORE:
@@ -529,20 +561,23 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
          "TODO implement this operation in the VVP isel layer");
 
   // Select the AVL
-  CustomDAG CDAG(*this, DAG, Op);
-  unsigned AdjustedLen = PackedMode ? (OpVectorLength + 1) / 2 : OpVectorLength;
+  unsigned AdjustedLen = WidenInfo.PackedMode
+                             ? (WidenInfo.ActiveVectorLength + 1) / 2
+                             : WidenInfo.ActiveVectorLength;
   SDValue LenVal = CDAG.getConstant(AdjustedLen, MVT::i32);
 
   // Is packed mode an option for this OC?
-  if (PackedMode && !SupportsPackedMode(VVPOC.getValue())) {
+  if (WidenInfo.PackedMode && !SupportsPackedMode(VVPOC.getValue())) {
     return ExpandToSplitVVP(Op, DAG, Mode, LenVal);
   }
 
   // Over-sized even for packed
-  if (OpVectorLength > VectorWidth) {
+#if 0
+  if (WidenInfo.StaticVectorLength OpVectorLength > WidenInfo.StaticVectorLength) {
     LLVM_DEBUG(dbgs() << "LowerToVVP: Over-sized vector operation\n");
     return SDValue();
   }
+#endif
 
   ///// Widen the actual result type /////
   // FIXME We cannot use the idiomatic type here since that type reflects the
@@ -552,15 +587,16 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   /// Use the eventual native vector width for all newly generated operands
   // we do not want to go through ::ReplaceNodeResults again only to have them
   // widened
-  unsigned NativeVectorWidth = (OpVectorLength > StandardVectorWidth)
-                                   ? PackedWidth
-                                   : StandardVectorWidth;
+  unsigned NativeVectorWidth =
+      (WidenInfo.ActiveVectorLength > StandardVectorWidth)
+          ? PackedWidth
+          : StandardVectorWidth;
   MVT NativeMaskTy = MVT::getVectorVT(MVT::i1, NativeVectorWidth);
 
   SDValue MaskVal = CDAG.CreateBroadcast(
       NativeMaskTy,
       CDAG.getConstant(-1, MVT::i1, MVT::i32)); // cannonical type for i1
-  assert(!NeedsPackedMasking && "TODO implement packed mask generation");
+  assert(!WidenInfo.NeedsPackedMasking && "TODO implement packed mask generation");
 
   // legalize all operands
   SmallVector<SDValue, 4> LegalOperands;
@@ -856,10 +892,11 @@ static Optional<unsigned> GetVVPForVP(unsigned VPOC) {
   }
 }
 
-SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
+SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const {
   auto OCOpt = GetVVPForVP(Op.getOpcode());
   assert(OCOpt.hasValue());
 
+  // TODO VP reductions
   switch (Op.getOpcode()) {
   case ISD::VP_VSHIFT:
     // Lowered to VEC_VMV (inverted shift amount)
@@ -898,20 +935,19 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const {
   }
 
   CustomDAG CDAG(*this, DAG, Op);
+  VVPWideningInfo WidenInfo =
+      pickResultType(CDAG, Op, Mode);
 
-#if 0
-  // Reduction expansion code path
-  SDValue NewV;
-  if (Op.getNode()->isVPReduction() && Op->getFlags().hasAllowReassociation()) {
-    unsigned ScalarOC = GetScalarISDForReduction(VVPOC).getValue();
-    EVT ScalarVT = Op.getValueType();
-    SDValue VecReducedV =
-        CDAG.getNode(VVPOC, ScalarVT, {OpVec[1], OpVec[2], OpVec[3]});
-    NewV = CDAG.getNode(ScalarOC, ScalarVT, {OpVec[0], VecReducedV});
-  } else {
-#endif
+  if (!WidenInfo.isValid()) {
+    LLVM_DEBUG(dbgs() << "Cannot Custom-VVP-widen this VP operator.\n");
+    return SDValue();
+  }
+
+  EVT NewResVT = CDAG.legalizeVectorType(Op, Mode);
+
   // Create a matching VVP_* node
-  SDValue NewV = DAG.getNode(VVPOC, dl, Op.getValueType(), OpVec);
+  assert(WidenInfo.isValid() && "Cannot widen this VP op into VVP");
+  SDValue NewV = DAG.getNode(VVPOC, dl, NewResVT, OpVec);
   NewV->setFlags(Op->getFlags());
   return NewV;
 }
@@ -2101,11 +2137,14 @@ void VETargetLowering::initVPUActions() {
   // X -> vp_* funnel
   for (MVT VT : MVT::vector_valuetypes()) {
     LegalizeAction Action;
-    if ((VT.getVectorNumElements() == 256) ||
-        (VT.getVectorNumElements() == 512)) {
+    // FIXME query available vector width for this Op
+    const unsigned WidthLimit = Subtarget->hasPackedMode() ? 512 : 256;
+    if (isLegalVectorVT(VT) && VT.getVectorNumElements() <= WidthLimit) {
+      // We perform custom widening as necessary
       Action = Custom;
     } else {
-      Action = Expand; // custom expansion to native-width operation
+      // Cannot do custom element type legalization at this point
+      Action = Expand;
     }
 
     // llvm.masked.* -> vvp lowering
@@ -3353,7 +3392,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
                                  LEN_POS)                                      \
   case ISD::VP_NAME:
 #include "llvm/IR/VPIntrinsics.def"
-    return LowerVPToVVP(Op, DAG);
+    return LowerVPToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
     ///// non-VP --> vvp_* with native type /////
     // Convert this standard vector op to VVP
@@ -4207,7 +4246,7 @@ void VETargetLowering::LowerOperationWrapper(
 
   // Expansion defer to LLVM for lowering
   if (!N) {
-    LLVM_DEBUG(dbgs() << "\t Default to standard expansion\n";);
+    LLVM_DEBUG(dbgs() << "\tDefault to standard expansion\n";);
     return;
   }
 
@@ -4296,13 +4335,14 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
     ResN = ExpandToVVP(SDValue(N, ValIdx), DAG, VVPExpansionMode::ToNextWidth)
                .getNode();
   } else {
+    LLVM_DEBUG(dbgs() << "\tShould not widen to VVP\n"; );
     // Otw, let LLVM do its expansion
     ResN = nullptr;
   }
 
   // Expansion defer to LLVM for lowering
   if (!ResN) {
-    LLVM_DEBUG(dbgs() << "\t Default to standard expansion\n";);
+    LLVM_DEBUG(dbgs() << "\tDefault to standard expansion\n";);
     return;
   }
 

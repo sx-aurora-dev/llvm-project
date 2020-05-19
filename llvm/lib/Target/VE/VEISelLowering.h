@@ -116,6 +116,26 @@ enum NodeType : unsigned {
 
 using VecLenOpt = Optional<unsigned>;
 
+struct VVPWideningInfo {
+  EVT ResultVT;
+  unsigned ActiveVectorLength;
+  bool PackedMode;
+  bool NeedsPackedMasking;
+
+  bool isValid() const {
+    return ActiveVectorLength != 0;
+  }
+
+  VVPWideningInfo(EVT ResultVT, unsigned StaticVL, bool PackedMode,
+                  bool NeedsPackedMasking)
+      : ResultVT(ResultVT), ActiveVectorLength(StaticVL),
+        PackedMode(PackedMode), NeedsPackedMasking(NeedsPackedMasking) {}
+
+  VVPWideningInfo()
+      : ResultVT(), ActiveVectorLength(0), PackedMode(false),
+        NeedsPackedMasking(false) {}
+};
+
 class VETargetLowering final : public TargetLowering, public VELoweringInfo {
   const VESubtarget *Subtarget;
 
@@ -214,6 +234,9 @@ public:
   EVT LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG, VVPExpansionMode) const override;
   /// } VELoweringInfo
 
+  // Widening configuration & legalizer
+  VVPWideningInfo pickResultType(CustomDAG &CDAG, SDValue Op,
+                                 VVPExpansionMode Mode) const;
   /// Custom Lower {
   // legalize the result vector type for operation \p Op
 
@@ -225,7 +248,7 @@ public:
                              SelectionDAG &DAG,
                              std::function<SDValue(SDValue)> WidenedOpCB) const override;
 
-  SDValue LowerVPToVVP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerVPToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
 
   SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
   SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;

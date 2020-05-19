@@ -257,6 +257,8 @@ struct CustomDAG {
   SDValue getVVPGather(EVT LegalResVT, SDValue Chain, SDValue PtrVecV,
                        SDValue MaskV, SDValue AVL) const;
   /// } VVP
+
+  LLVMContext &getContext() { return *DAG.getContext(); }
 };
 
 } // namespace llvm
