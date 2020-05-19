@@ -350,7 +350,11 @@ define float @f2f(float returned %0) {
 define double @f2d(float %x) {
 ; CHECK-LABEL: f2d:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
+; CHECK-NEXT:    srl %s1, (8)1, 1
+; CHECK-NEXT:    cmps.l %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.d.s %s0, %s0
+; CHECK-NEXT:    cmov.l.gt %s0, (1)0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = fpext float %x to double
   ret double %r

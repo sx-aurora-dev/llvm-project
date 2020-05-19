@@ -9,7 +9,11 @@ define double @func1() {
 ; CHECK-NEXT:    lea %s0, -4(, %s9)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    ldu %s0, -4(, %s9)
+; CHECK-NEXT:    srl %s1, (8)1, 1
+; CHECK-NEXT:    cmps.l %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.d.s %s0, %s0
+; CHECK-NEXT:    cmov.l.gt %s0, (1)0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %1 = alloca float, align 4
   %2 = bitcast float* %1 to i8*
   call void @llvm.lifetime.start.p0i8(i64 4, i8* nonnull %2)
