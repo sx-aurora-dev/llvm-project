@@ -689,7 +689,7 @@ public:
     default:
       return false;
 
-#define REGISTER_VP_SDNODE(VPID, ...) case ISD::VPID:
+#define BEGIN_REGISTER_VP_SDNODE(VPID, ...) case ISD::VPID:
 #include "llvm/IR/VPIntrinsics.def"
       return true;
     }
