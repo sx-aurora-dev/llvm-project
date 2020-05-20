@@ -52,6 +52,41 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
   bool enableVPU() const { return getST()->enableVPU(); }
   bool hasPackedMode() const { return getST()->hasPackedMode(); }
 
+  static bool isSupportedReduction(Intrinsic::ID ReductionID, bool Unordered) {
+    switch (ReductionID) {
+    ///// FP reductions (supported in in ordered and un-ordered mode)
+    case Intrinsic::vp_reduce_fadd:
+    case Intrinsic::experimental_vector_reduce_v2_fadd:
+    // case Intrinsic::experimental_vector_reduce_fmin: // TODO
+    // case Intrinsic::experimental_vector_reduce_fmax: // TODO
+    // case Intrinsic::experimental_vector_reduce_smin: // TODO
+    // case Intrinsic::experimental_vector_reduce_smax: // TODO
+    // case Intrinsic::experimental_vector_reduce_umin: // TODO
+    // case Intrinsic::experimental_vector_reduce_umax: // TODO
+
+    ///// FP reduction (Ordered only)
+    case Intrinsic::experimental_vector_reduce_v2_fmul:
+      return !Unordered;
+
+    ///// int arith
+    case Intrinsic::vp_reduce_add:
+    case Intrinsic::experimental_vector_reduce_add:
+
+    ///// bit arith
+    case Intrinsic::vp_reduce_or:
+    case Intrinsic::vp_reduce_and:
+    case Intrinsic::vp_reduce_xor:
+    case Intrinsic::experimental_vector_reduce_or:
+    case Intrinsic::experimental_vector_reduce_and:
+    case Intrinsic::experimental_vector_reduce_xor:
+      return true;
+
+    // Otw, run standard reduction expansion
+    default:
+      return false;
+    }
+  }
+
 public:
   explicit VETTIImpl(const VETargetMachine *TM, const Function &F)
       : BaseT(TM, F.getParent()->getDataLayout()), ST(TM->getSubtargetImpl(F)),
@@ -208,17 +243,24 @@ public:
     if (!enableVPU())
       return false;
 
-    // Rely on standard IR expansion for over-sized VP ops
     auto VPI = dyn_cast<VPIntrinsic>(&PredInst);
     if (!VPI)
       return true;
 
+    // Cannot be widened into a legal VVP op
     auto EC = VPI->getStaticVectorLength();
     if (EC.Scalable)
       return false;
 
     if (EC.Min > (hasPackedMode() ? 512 : 256))
       return false;
+
+    // Bail on yet-unimplemented reductions
+    if (VPI->isReductionOp()) {
+      auto FPRed = dyn_cast<FPMathOperator>(VPI);
+      bool Unordered = FPRed ? VPI->getFastMathFlags().allowReassoc() : true;
+      return isSupportedReduction(VPI->getIntrinsicID(), Unordered);
+    }
 
     switch (PredInst.getOpcode()) {
     default:
@@ -268,30 +310,7 @@ public:
 
     auto FPRed = dyn_cast<FPMathOperator>(II);
     bool Unordered = FPRed ? II->getFastMathFlags().allowReassoc() : true;
-    switch (II->getIntrinsicID()) {
-    // Supported in all variations
-    case Intrinsic::experimental_vector_reduce_v2_fadd:
-    // case Intrinsic::experimental_vector_reduce_fmin: // TODO
-    // case Intrinsic::experimental_vector_reduce_fmax: // TODO
-    // case Intrinsic::experimental_vector_reduce_smin: // TODO
-    // case Intrinsic::experimental_vector_reduce_smax: // TODO
-    // case Intrinsic::experimental_vector_reduce_umin: // TODO
-    // case Intrinsic::experimental_vector_reduce_umax: // TODO
-    case Intrinsic::experimental_vector_reduce_add:
-    case Intrinsic::experimental_vector_reduce_mul:
-    case Intrinsic::experimental_vector_reduce_or:
-    case Intrinsic::experimental_vector_reduce_and:
-    case Intrinsic::experimental_vector_reduce_xor:
-      return false;
-
-    // Natively supported vector-iterative variant
-    case Intrinsic::experimental_vector_reduce_v2_fmul:
-      return Unordered;
-
-    // Otw, run full expansion
-    default:
-      return true;
-    }
+    return !isSupportedReduction(II->getIntrinsicID(), Unordered);
   }
 };
 

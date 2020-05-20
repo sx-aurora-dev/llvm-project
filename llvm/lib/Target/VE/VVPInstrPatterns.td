@@ -441,7 +441,7 @@ defm: Reduce_GenericInt<v256i32, i32, "add", "w", "vsumwsx">;
 multiclass Reduce_BitArith<ValueType VectorVT, ValueType ResVT, string LVSToken> {
   defm: Reduce_GenericInt<VectorVT, ResVT, "or",  LVSToken, "vror">;
   defm: Reduce_GenericInt<VectorVT, ResVT, "and", LVSToken, "vrand">;
-  defm: Reduce_GenericInt<VectorVT, ResVT, "xor", LVSToken, "vrand">;
+  defm: Reduce_GenericInt<VectorVT, ResVT, "xor", LVSToken, "vrxor">;
 }
 
 defm: Reduce_BitArith<v256i32, i32, "w">;
