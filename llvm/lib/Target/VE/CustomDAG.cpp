@@ -84,6 +84,8 @@ EVT getLargestConvType(SDNode *Op) {
   return ResVT.getStoreSizeInBits() > OpVT.getStoreSizeInBits() ? ResVT : OpVT;
 }
 
+/// Node Properties {
+
 PosOpt getVVPReductionStartParamPos(unsigned VVPOC) {
   switch (VVPOC) {
   case VEISD::VVP_REDUCE_STRICT_FADD:
@@ -94,25 +96,65 @@ PosOpt getVVPReductionStartParamPos(unsigned VVPOC) {
   }
 }
 
-PosOpt getReductionVectorParamPos(unsigned ISD) {
-  // VP reduction param pos
-  switch (ISD) {
+PosOpt getVPReductionVectorParamPos(unsigned VPISD) {
+  PosOpt VecPos;
+  switch (VPISD) {
   default:
     break;
-#define BEGIN_REGISTER_VP_SDNODE(VPISD, VectorPos, IntrinName, MaskPos,        \
-                                 EVLPos)                                       \
-  case ISD::VPISD:                                                             \
-    return VectorPos;
+#define BEGIN_REGISTER_VP_SDNODE(VPISD, ...) case ISD::VPISD:
+#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS) VecPos = VECTORPOS;
+#define END_REGISTER_VP_SDNODE(VPISD) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
-
-  // Otw, we expect this to be a standard reduction intrinsic
-  PosOpt VVPOC = GetVVPOpcode(ISD);
-  if (!VVPOC)
-    return None;
-
-  return getVVPReductionStartParamPos(VVPOC.getValue()) ? 1 : 0;
+  return VecPos;
 }
+
+PosOpt getIntrinReductionVectorParamPos(unsigned ISD) {
+  switch (ISD) {
+    case ISD::VECREDUCE_ADD:
+    case ISD::VECREDUCE_MUL:
+    case ISD::VECREDUCE_AND:
+    case ISD::VECREDUCE_OR:
+    case ISD::VECREDUCE_XOR:
+    case ISD::VECREDUCE_UMIN:
+    case ISD::VECREDUCE_UMAX:
+    case ISD::VECREDUCE_SMIN:
+    case ISD::VECREDUCE_SMAX:
+    case ISD::VECREDUCE_FADD:
+    case ISD::VECREDUCE_FMUL:
+    case ISD::VECREDUCE_FMIN:
+    case ISD::VECREDUCE_FMAX:
+      return 0;
+
+    case ISD::VECREDUCE_STRICT_FADD:
+    case ISD::VECREDUCE_STRICT_FMUL:
+      return 1;
+  }
+  return None;
+}
+
+PosOpt getVVPReductionVectorParamPos(unsigned VPISD) {
+  PosOpt VecPosOpt = getVVPReductionStartParamPos(VPISD);
+  if (!VecPosOpt)
+    return None;
+  return getVVPReductionStartParamPos(VPISD).getValue() == 0 ? 1 : 0;
+}
+
+PosOpt getReductionVectorParamPos(unsigned ISD) {
+  // VP reduction param pos
+  PosOpt VecPos = getVPReductionVectorParamPos(ISD);
+  if (VecPos) return VecPos;
+
+  // VVP reduction
+  VecPos = getVVPReductionVectorParamPos(ISD);
+  if (VecPos) return VecPos;
+
+  // Regular reduction
+  VecPos = getIntrinReductionVectorParamPos(ISD);
+  return VecPos;
+}
+
+/// } Node Properties
 
 Optional<EVT> getIdiomaticType(SDNode *Op) {
   // For memory ops -> the transfered data type
