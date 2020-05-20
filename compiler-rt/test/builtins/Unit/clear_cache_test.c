@@ -55,7 +55,11 @@ realign_f(void *dst, const void *src, size_t n) {
 
 int main()
 {
+#if defined(__ve__)
+    const int kSize = 192;
+#else
     const int kSize = 128;
+#endif
 #if defined(__NetBSD__)
     // we need to create separate RW and RX mappings to satisfy MPROTECT
     uint8_t *write_buffer = mmap(0, kSize,
