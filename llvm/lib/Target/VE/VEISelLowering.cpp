@@ -103,7 +103,7 @@ static bool OpNeedsWidening(SDNode &Op) {
 
   // Otw, widen this VVP operation to the native vector width
   Optional<EVT> OpVecTyOpt = getIdiomaticType(&Op);
-  if (!OpVecTyOpt.hasValue())
+  if (!OpVecTyOpt.hasValue() || !OpVecTyOpt->isVector())
     return false;
   EVT OpVecTy = OpVecTyOpt.getValue();
 
