@@ -84,12 +84,8 @@ EVT getLargestConvType(SDNode *Op) {
   return ResVT.getStoreSizeInBits() > OpVT.getStoreSizeInBits() ? ResVT : OpVT;
 }
 
-PosOpt getReductionStartParamPos(unsigned ISD) {
-  PosOpt VVPOC = GetVVPOpcode(ISD);
-  if (!VVPOC)
-    return None;
-
-  switch (VVPOC.getValue()) {
+PosOpt getVVPReductionStartParamPos(unsigned VVPOC) {
+  switch (VVPOC) {
   case VEISD::VVP_REDUCE_STRICT_FADD:
   case VEISD::VVP_REDUCE_STRICT_FMUL:
     return 0;
@@ -99,24 +95,40 @@ PosOpt getReductionStartParamPos(unsigned ISD) {
 }
 
 PosOpt getReductionVectorParamPos(unsigned ISD) {
+  // VP reduction param pos
+  switch (ISD) {
+  default:
+    break;
+#define BEGIN_REGISTER_VP_SDNODE(VPISD, VectorPos, IntrinName, MaskPos,        \
+                                 EVLPos)                                       \
+  case ISD::VPISD:                                                             \
+    return VectorPos;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+
+  // Otw, we expect this to be a standard reduction intrinsic
   PosOpt VVPOC = GetVVPOpcode(ISD);
   if (!VVPOC)
     return None;
 
-  unsigned OC = VVPOC.getValue();
-  if (getReductionStartParamPos(OC))
-    return 1;
-  return 0;
+  return getVVPReductionStartParamPos(VVPOC.getValue()) ? 1 : 0;
 }
 
 Optional<EVT> getIdiomaticType(SDNode *Op) {
+  // For memory ops -> the transfered data type
   auto MemN = dyn_cast<MemSDNode>(Op);
   if (MemN) {
     return MemN->getMemoryVT();
   }
 
+  // For reductions -> the reduced vector type
+  PosOpt RedVecPos = getReductionVectorParamPos(Op->getOpcode());
+  if (RedVecPos)
+    return Op->getOperand(RedVecPos.getValue())->getValueType(0);
+
+  // Otw, translate everyhing to VVP (expect the VP and non-VP characteristic
+  // parameter to be at the same position)
   unsigned OC = Op->getOpcode();
-  // Translate VP to VVP IDs on the fly
   switch (OC) {
   default:
     break;
@@ -162,16 +174,6 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   case ISD::NATIVE_ISD:
 #include "VVPNodes.inc"
     return getLargestConvType(Op);
-
-#define REGISTER_REDUCE_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
-  case VEISD::VVP_NAME:                                                        \
-  case ISD::NATIVE_ISD:
-#include "VVPNodes.inc"
-    {
-      Optional<unsigned> VecParamPos = getReductionVectorParamPos(OC);
-      assert(VecParamPos.hasValue());
-      return Op->getOperand(VecParamPos.getValue()).getValueType();
-    }
 
   case VEISD::VEC_TOMASK:
   case VEISD::VEC_NARROW:

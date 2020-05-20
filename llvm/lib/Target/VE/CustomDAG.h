@@ -69,7 +69,7 @@ bool HasDeadMask(unsigned VVPOC);
 
 //// } VVP Machinery
 
-Optional<unsigned> getReductionStartParamPos(unsigned ISD);
+Optional<unsigned> getVVPReductionStartParamPos(unsigned ISD);
 
 Optional<unsigned> getReductionVectorParamPos(unsigned ISD);
 

@@ -85,8 +85,13 @@ static bool shouldExpandToVVP(SDNode &N) {
   if (!IdiomVT.hasValue() || !isLegalVectorVT(*IdiomVT))
     return false;
 
-  // Only expand to VP if the element type is legal. Otw, defer to LLVM for
-  // legalization.
+  // Promote if the result type is not a legal vector
+  EVT ResVT = N.getValueType(0);
+  if (ResVT.isVector() && !isLegalVectorVT(ResVT)) {
+    return false;
+  }
+
+  // Also promote if any operand type is illegal.
   return hasWidenableSourceVTs(N);
 }
 
@@ -661,7 +666,7 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
     if (Attempt)
       return Attempt;
 
-    auto PosOpt = getReductionStartParamPos(VVPOC.getValue());
+    auto PosOpt = getVVPReductionStartParamPos(VVPOC.getValue());
     if (PosOpt) {
       return CDAG.getNode(
           VVPOC.getValue(), ResVecTy,
@@ -916,6 +921,16 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansi
     break;
   }
 
+  // Check whether this should be Widened to VVP
+  CustomDAG CDAG(*this, DAG, Op);
+  VVPWideningInfo WidenInfo =
+      pickResultType(CDAG, Op, Mode);
+
+  if (!WidenInfo.isValid()) {
+    LLVM_DEBUG(dbgs() << "Cannot Custom-VVP-widen this VP operator.\n");
+    return SDValue();
+  }
+
   SDLoc dl(Op);
   unsigned VVPOC = OCOpt.getValue();
   std::vector<SDValue> OpVec;
@@ -932,15 +947,6 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansi
     for (unsigned i = 0; i < NumOps; ++i) {
       OpVec.push_back(LegalizeVecOperand(Op.getOperand(i), DAG));
     }
-  }
-
-  CustomDAG CDAG(*this, DAG, Op);
-  VVPWideningInfo WidenInfo =
-      pickResultType(CDAG, Op, Mode);
-
-  if (!WidenInfo.isValid()) {
-    LLVM_DEBUG(dbgs() << "Cannot Custom-VVP-widen this VP operator.\n");
-    return SDValue();
   }
 
   EVT NewResVT = CDAG.legalizeVectorType(Op, Mode);

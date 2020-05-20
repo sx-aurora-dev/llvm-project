@@ -213,11 +213,6 @@ public:
     if (!VPI)
       return true;
 
-    // TODO VP -> VVP reduction lowering
-    if (VPI->isReductionOp()) {
-      return false;
-    }
-
     auto EC = VPI->getStaticVectorLength();
     if (EC.Scalable)
       return false;
