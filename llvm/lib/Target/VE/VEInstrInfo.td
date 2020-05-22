@@ -1634,11 +1634,11 @@ def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
             24
           )>;
 // def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
-//           (TS1AMWrir MEMriRRM:$src, 3, $new)>;
+//           (TS1AMWrii MEMriRRM:$src, 3, $new)>;
 def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
-          (TS1AMWrir MEMriRRM:$src, 15, $new)>;
+          (TS1AMWrii MEMriRRM:$src, 15, $new)>;
 def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
-          (TS1AMLrir MEMriRRM:$src, 127, $new)>;
+          (TS1AMLrii MEMriRRM:$src, 127, $new)>;
 
 // Fence
 
