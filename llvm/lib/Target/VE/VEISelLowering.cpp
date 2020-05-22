@@ -3431,7 +3431,6 @@ static SDValue generateComparison(EVT VT, SDValue LHS, SDValue RHS,
   // Compare values.  If RHS is 0 and it is safe to calculate without
   // comparison, we don't generate an instruction for comparison.
   EVT CompVT = decideCompType(VT);
-  SDValue CompNode;
   if (CompVT == VT && safeWithoutComp(VT, Signed) &&
       (isNullConstant(RHS) || isNullFPConstant(RHS))) {
     return LHS;

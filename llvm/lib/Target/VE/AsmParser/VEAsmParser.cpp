@@ -117,24 +117,6 @@ public:
 
 } // end anonymous namespace
 
-  static const MCPhysReg I64Regs[64] = {
-    VE::SX0,  VE::SX1,  VE::SX2,  VE::SX3,
-    VE::SX4,  VE::SX5,  VE::SX6,  VE::SX7,
-    VE::SX8,  VE::SX9,  VE::SX10, VE::SX11,
-    VE::SX12, VE::SX13, VE::SX14, VE::SX15,
-    VE::SX16, VE::SX17, VE::SX18, VE::SX19,
-    VE::SX20, VE::SX21, VE::SX22, VE::SX23,
-    VE::SX24, VE::SX25, VE::SX26, VE::SX27,
-    VE::SX28, VE::SX29, VE::SX30, VE::SX31,
-    VE::SX32, VE::SX33, VE::SX34, VE::SX35,
-    VE::SX36, VE::SX37, VE::SX38, VE::SX39,
-    VE::SX40, VE::SX41, VE::SX42, VE::SX43,
-    VE::SX44, VE::SX45, VE::SX46, VE::SX47,
-    VE::SX48, VE::SX49, VE::SX50, VE::SX51,
-    VE::SX52, VE::SX53, VE::SX54, VE::SX55,
-    VE::SX56, VE::SX57, VE::SX58, VE::SX59,
-    VE::SX60, VE::SX61, VE::SX62, VE::SX63 };
-
   static const MCPhysReg I32Regs[64] = {
     VE::SW0,  VE::SW1,  VE::SW2,  VE::SW3,
     VE::SW4,  VE::SW5,  VE::SW6,  VE::SW7,

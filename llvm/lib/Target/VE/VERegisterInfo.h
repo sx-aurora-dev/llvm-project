@@ -20,11 +20,6 @@
 
 namespace llvm {
 struct VERegisterInfo : public VEGenRegisterInfo {
-private:
-  // VLS register class's Pressure Set ID.
-  unsigned VLSPSetID;
-
-public:
   VERegisterInfo();
 
   /// Code Generation virtual methods...
