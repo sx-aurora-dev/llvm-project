@@ -1187,20 +1187,27 @@ defm DLDLZX : LOADm<"dldl.zx", 0x0b, I32, i32, load>;
 let DecoderMethod = "DecodeASX" in defm PFCH : PFCHm<"pfch", 0x0c>;
 
 // Section 8.2.16 - TS1AM (Test and Set 1 AM)
+let DecoderMethod = "DecodeTS1AMI64" in
 defm TS1AML : RRCASm<"ts1am.l", 0x42, I64, i64, uimm7>;
+let DecoderMethod = "DecodeTS1AMI32" in
 let cx = 1 in defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, i32, uimm7>;
 
 // Section 8.2.17 - TS2AM (Test and Set 2 AM)
+let DecoderMethod = "DecodeTS2AM" in
 defm TS2AM : RRCASm<"ts2am", 0x43, I64, i64, uimm7>;
 
 // Section 8.2.18 - TS3AM (Test and Set 3 AM)
+let DecoderMethod = "DecodeTS2AM" in
 defm TS3AM : RRCASm<"ts3am", 0x52, I64, i64, uimm1>;
 
 // Section 8.2.19 - ATMAM (Atomic AM)
+let DecoderMethod = "DecodeTS2AM" in
 defm ATMAM : RRCASm<"atmam", 0x53, I64, i64, uimm0to2>;
 
 // Section 8.2.20 - CAS (Compare and Swap)
+let DecoderMethod = "DecodeCASI64" in
 defm CASL : RRCASm<"cas.l", 0x62, I64, i64, simm7, atomic_cmp_swap_64>;
+let DecoderMethod = "DecodeCASI32" in
 let cx = 1 in defm CASW : RRCASm<"cas.w", 0x62, I32, i32, simm7,
                                  atomic_cmp_swap_32>;
 
