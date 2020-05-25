@@ -15,9 +15,22 @@ const std::string NCCCompilerCmd = TARGET_COMPILER_NCC;
 std::string CompilerCmd = ClangCompilerCmd;
 
 int configureTargetCompiler(const std::string& CompilerName) {
+  if (CompilerName.find("path:") == 0) {
+    CompilerCmd = CompilerName.substr(5);
+    //Small sanity check whether there is actually a path
+    if (CompilerCmd.length() > 0) {
+      return 0;
+    }
+    std::cerr << "nec-aurora-build: -fopenmp-nec-compiler=path: empty"
+              << std::endl;
+
+  }
   if (CompilerName == "clang")   { CompilerCmd = ClangCompilerCmd; return 0; }
   if (CompilerName == "rvclang") { CompilerCmd = RVClangCompilerCmd; return 0; }
   if (CompilerName == "ncc")     { CompilerCmd = NCCCompilerCmd; return 0; }
+  std::cerr << "nec-aurora-build: -fopenmp-nec-compiler=" << CompilerCmd
+            << " not recognized"
+            << std::endl;
   return 1;
 }
 
