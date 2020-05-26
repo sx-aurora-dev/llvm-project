@@ -4,7 +4,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 endif()
 
 # Find NEC target compiler.
-find_program(NECAURORA_TARGET_COMPILER
+find_program(NECAURORA_TARGET_COMPILER_NCC
   NAMES
     ncc
     ncc-2.3.1
@@ -13,15 +13,25 @@ find_program(NECAURORA_TARGET_COMPILER
   PATHS
     "/opt/nec/ve/bin/"
     ENV PATH)
-
-# if ncc was not found and gcc is not set stop
-if(NOT NECAURORA_TARGET_COMPILER AND NOT NECAURORA_TARGET_COMPILER_GCC)
-  message(FATAL_ERROR "NEC target compiler not found and GCC not set, exiting.")
-# if ncc was not found vut gcc is set, use gcc
-elseif(NOT NECAURORA_TARGET_COMPILER)
-  message(STATUS "NEC target compiler not found but GCC is set, using GCC.")
-  set(NECAURORA_TARGET_COMPILER "${NECAURORA_TARGET_COMPILER_GCC}")
+# It is okay if we do not find ncc, we can fallback to Clang or RVCLang and
+# will handlle the missing ncc in code.
+if (NECAURORA_TARGET_COMPILER_NCC)
+    set(TARGET_COMPILER_NCC "${NECAURORA_TARGET_COMPILER_NCC}")
+else()
+    message(WARNING "Could not find ncc compiler. ncc will not be avaible as VE target compiler")
 endif()
+
+# Set Clang and RVClang target compiler variables
+set(NECAURORA_TARGET_COMPILER_CLANG
+    "${CMAKE_INSTALL_PREFIX}/bin/clang"
+    CACHE
+    FILEPATH
+    "Path to clang used as VE target compiler")
+set(NECAURORA_TARGET_COMPILER_RVCLANG
+    "${CMAKE_INSTALL_PREFIX}/bin/rvclang"
+    CACHE FILEPATH
+    "Path to rvclang used as VE target compiler")
+
 
 find_library(
    NECAURORA_LIBVEORUN_STATIC
