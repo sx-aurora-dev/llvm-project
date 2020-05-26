@@ -10,6 +10,8 @@ add_clang_subdirectory(clang-import-test)
 add_clang_subdirectory(clang-offload-bundler)
 add_clang_subdirectory(clang-offload-wrapper)
 add_clang_subdirectory(clang-scan-deps)
+add_clang_subdirectory(nec-aurora-build)
+add_clang_subdirectory(sotoc)
 add_clang_subdirectory(driver-rvclang)
 
 add_clang_subdirectory(c-index-test)
