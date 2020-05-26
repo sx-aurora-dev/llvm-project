@@ -14,6 +14,7 @@
 
 #include "llvm/ADT/STLExtras.h"
 
+#include "mlir/Conversion/GPUCommon/GPUCommonPass.h"
 #include "mlir/Conversion/GPUToCUDA/GPUToCUDAPass.h"
 #include "mlir/Conversion/GPUToNVVM/GPUToNVVMPass.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
@@ -22,13 +23,17 @@
 #include "mlir/Dialect/GPU/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
+#include "mlir/ExecutionEngine/JitRunner.h"
+#include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/Function.h"
 #include "mlir/IR/Module.h"
+#include "mlir/InitAllDialects.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
-#include "mlir/Support/JitRunner.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
+#include "llvm/Support/InitLLVM.h"
+#include "llvm/Support/TargetSelect.h"
 
 #include "cuda.h"
 
@@ -111,12 +116,17 @@ static LogicalResult runMLIRPasses(ModuleOp m) {
   kernelPm.addPass(createLowerGpuOpsToNVVMOpsPass());
   kernelPm.addPass(createConvertGPUKernelToCubinPass(&compilePtxToCubin));
   pm.addPass(createLowerToLLVMPass());
-  pm.addPass(createConvertGpuLaunchFuncToCudaCallsPass());
+  pm.addPass(createConvertGpuLaunchFuncToGpuRuntimeCallsPass());
 
   return pm.run(m);
 }
 
 int main(int argc, char **argv) {
   registerPassManagerCLOptions();
+  mlir::registerAllDialects();
+  llvm::InitLLVM y(argc, argv);
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmPrinter();
+  mlir::initializeLLVMPasses();
   return mlir::JitRunnerMain(argc, argv, &runMLIRPasses);
 }

@@ -152,7 +152,7 @@ After the conversion target has been defined, a set of legalization patterns
 must be provided to transform illegal operations into legal ones. The patterns
 supplied here, that do not [require type changes](#conversion-patterns), are the
 same as those described in the
-[quickstart rewrites guide](QuickstartRewrites.md#adding-patterns), but have a
+[quickstart rewrites guide](Tutorials/QuickstartRewrites.md#adding-patterns), but have a
 few additional [restrictions](#restrictions). The patterns provided do not need
 to generate operations that are directly legal on the target. The framework will
 automatically build a graph of conversions to convert non-legal operations into
@@ -247,7 +247,7 @@ struct MyConversionPattern : public ConversionPattern {
   /// The `matchAndRewrite` hooks on ConversionPatterns take an additional
   /// `operands` parameter, containing the remapped operands of the original
   /// operation.
-  virtual PatternMatchResult
+  virtual LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const;
 };

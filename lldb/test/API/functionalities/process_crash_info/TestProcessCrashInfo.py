@@ -25,10 +25,11 @@ class PlatformProcessCrashInfoTestCase(TestBase):
         self.runCmd("settings clear auto-confirm")
         TestBase.tearDown(self)
 
+    @skipIfAsan # The test process intentionally double-frees.
     @skipUnlessDarwin
     def test_cli(self):
         """Test that `process status --verbose` fetches the extended crash
-        information dictionnary from the command-line properly."""
+        information dictionary from the command-line properly."""
         self.build()
         exe = self.getBuildArtifact("a.out")
         self.expect("file " + exe,
@@ -41,10 +42,11 @@ class PlatformProcessCrashInfoTestCase(TestBase):
                     patterns=["\"message\".*pointer being freed was not allocated"])
 
 
+    @skipIfAsan # The test process intentionally hits a memory bug.
     @skipUnlessDarwin
     def test_api(self):
         """Test that lldb can fetch a crashed process' extended crash information
-        dictionnary from the api properly."""
+        dictionary from the api properly."""
         self.build()
         target = self.dbg.CreateTarget(self.getBuildArtifact("a.out"))
         self.assertTrue(target, VALID_TARGET)
@@ -67,9 +69,11 @@ class PlatformProcessCrashInfoTestCase(TestBase):
 
         self.assertIn("pointer being freed was not allocated", stream.GetData())
 
+    # dyld leaves permanent crash_info records when testing on device.
+    @skipIfDarwinEmbedded
     def test_on_sane_process(self):
         """Test that lldb doesn't fetch the extended crash information
-        dictionnary from a 'sane' stopped process."""
+        dictionary from a 'sane' stopped process."""
         self.build()
         target, _, _, _ = lldbutil.run_to_line_breakpoint(self, lldb.SBFileSpec(self.source),
                                         self.line)

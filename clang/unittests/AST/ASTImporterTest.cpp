@@ -12,6 +12,7 @@
 
 #include "clang/ASTMatchers/ASTMatchers.h"
 #include "llvm/ADT/StringMap.h"
+#include "llvm/Support/SmallVectorMemoryBuffer.h"
 
 #include "clang/AST/DeclContextInternals.h"
 #include "gtest/gtest.h"
@@ -255,6 +256,7 @@ static const RecordDecl *getRecordDeclOfFriend(FriendDecl *FD) {
 struct ImportExpr : TestImportBase {};
 struct ImportType : TestImportBase {};
 struct ImportDecl : TestImportBase {};
+struct ImportFixedPointExpr : ImportExpr {};
 
 struct CanonicalRedeclChain : ASTImporterOptionSpecificTestBase {};
 
@@ -527,6 +529,14 @@ TEST_P(ImportExpr, ImportFloatinglLiteralExpr) {
           floatLiteral(equals(1.0e-5f), hasType(asString("float"))))));
 }
 
+TEST_P(ImportFixedPointExpr, ImportFixedPointerLiteralExpr) {
+  MatchVerifier<Decl> Verifier;
+  testImport("void declToImport() { (void)1.0k; }", Lang_C, "", Lang_C,
+             Verifier, functionDecl(hasDescendant(fixedPointLiteral())));
+  testImport("void declToImport() { (void)0.75r; }", Lang_C, "", Lang_C,
+             Verifier, functionDecl(hasDescendant(fixedPointLiteral())));
+}
+
 TEST_P(ImportExpr, ImportImaginaryLiteralExpr) {
   MatchVerifier<Decl> Verifier;
   testImport(
@@ -628,22 +638,16 @@ TEST_P(ImportExpr, ImportSwitch) {
 TEST_P(ImportExpr, ImportStmtExpr) {
   MatchVerifier<Decl> Verifier;
   testImport(
-    "void declToImport() { int b; int a = b ?: 1; int C = ({int X=4; X;}); }",
-    Lang_C, "", Lang_C, Verifier,
-    functionDecl(hasDescendant(
-        varDecl(
-            hasName("C"),
-            hasType(asString("int")),
-            hasInitializer(
-                stmtExpr(
-                    hasAnySubstatement(declStmt(hasSingleDecl(
-                        varDecl(
-                            hasName("X"),
-                            hasType(asString("int")),
-                            hasInitializer(
-                                integerLiteral(equals(4))))))),
-                    hasDescendant(
-                        implicitCastExpr())))))));
+      "void declToImport() { int b; int a = b ?: 1; int C = ({int X=4; X;}); }",
+      Lang_C, "", Lang_C, Verifier,
+      traverse(ast_type_traits::TK_AsIs,
+               functionDecl(hasDescendant(varDecl(
+                   hasName("C"), hasType(asString("int")),
+                   hasInitializer(stmtExpr(
+                       hasAnySubstatement(declStmt(hasSingleDecl(varDecl(
+                           hasName("X"), hasType(asString("int")),
+                           hasInitializer(integerLiteral(equals(4))))))),
+                       hasDescendant(implicitCastExpr()))))))));
 }
 
 TEST_P(ImportExpr, ImportConditionalOperator) {
@@ -663,22 +667,19 @@ TEST_P(ImportExpr, ImportConditionalOperator) {
 TEST_P(ImportExpr, ImportBinaryConditionalOperator) {
   MatchVerifier<Decl> Verifier;
   testImport(
-      "void declToImport() { (void)(1 ?: -5); }",
-      Lang_CXX, "", Lang_CXX, Verifier,
-      functionDecl(hasDescendant(
-          binaryConditionalOperator(
-              hasCondition(
-                  implicitCastExpr(
-                      hasSourceExpression(opaqueValueExpr(
-                          hasSourceExpression(integerLiteral(equals(1))))),
-                      hasType(booleanType()))),
-              hasTrueExpression(
-                  opaqueValueExpr(
-                      hasSourceExpression(integerLiteral(equals(1))))),
-              hasFalseExpression(
-                  unaryOperator(
-                      hasOperatorName("-"),
-                      hasUnaryOperand(integerLiteral(equals(5)))))))));
+      "void declToImport() { (void)(1 ?: -5); }", Lang_CXX, "", Lang_CXX,
+      Verifier,
+      traverse(ast_type_traits::TK_AsIs,
+               functionDecl(hasDescendant(binaryConditionalOperator(
+                   hasCondition(implicitCastExpr(
+                       hasSourceExpression(opaqueValueExpr(
+                           hasSourceExpression(integerLiteral(equals(1))))),
+                       hasType(booleanType()))),
+                   hasTrueExpression(opaqueValueExpr(
+                       hasSourceExpression(integerLiteral(equals(1))))),
+                   hasFalseExpression(unaryOperator(
+                       hasOperatorName("-"),
+                       hasUnaryOperand(integerLiteral(equals(5))))))))));
 }
 
 TEST_P(ImportExpr, ImportDesignatedInitExpr) {
@@ -764,10 +765,10 @@ TEST_P(ImportExpr, CXXTemporaryObjectExpr) {
       "struct C {};"
       "void declToImport() { C c = C(); }",
       Lang_CXX, "", Lang_CXX, Verifier,
-      functionDecl(hasDescendant(
-          exprWithCleanups(has(cxxConstructExpr(
-              has(materializeTemporaryExpr(has(implicitCastExpr(
-                  has(cxxTemporaryObjectExpr())))))))))));
+      traverse(ast_type_traits::TK_AsIs,
+               functionDecl(hasDescendant(exprWithCleanups(has(cxxConstructExpr(
+                   has(materializeTemporaryExpr(has(implicitCastExpr(
+                       has(cxxTemporaryObjectExpr()))))))))))));
 }
 
 TEST_P(ImportType, ImportAtomicType) {
@@ -818,9 +819,10 @@ TEST_P(ImportType, ImportTypeAliasTemplate) {
       "template <int K> using dummy2 = dummy<K>;"
       "int declToImport() { return dummy2<3>::i; }",
       Lang_CXX11, "", Lang_CXX11, Verifier,
-      functionDecl(
-          hasDescendant(implicitCastExpr(has(declRefExpr()))),
-          unless(hasAncestor(translationUnitDecl(has(typeAliasDecl()))))));
+      traverse(ast_type_traits::TK_AsIs,
+               functionDecl(hasDescendant(implicitCastExpr(has(declRefExpr()))),
+                            unless(hasAncestor(
+                                translationUnitDecl(has(typeAliasDecl())))))));
 }
 
 const internal::VariadicDynCastAllOfMatcher<Decl, VarTemplateSpecializationDecl>
@@ -841,16 +843,16 @@ TEST_P(ImportDecl, ImportVarTemplate) {
 
 TEST_P(ImportType, ImportPackExpansion) {
   MatchVerifier<Decl> Verifier;
-  testImport(
-      "template <typename... Args>"
-      "struct dummy {"
-      "  dummy(Args... args) {}"
-      "  static const int i = 4;"
-      "};"
-      "int declToImport() { return dummy<int>::i; }",
-      Lang_CXX11, "", Lang_CXX11, Verifier,
-      functionDecl(hasDescendant(
-          returnStmt(has(implicitCastExpr(has(declRefExpr())))))));
+  testImport("template <typename... Args>"
+             "struct dummy {"
+             "  dummy(Args... args) {}"
+             "  static const int i = 4;"
+             "};"
+             "int declToImport() { return dummy<int>::i; }",
+             Lang_CXX11, "", Lang_CXX11, Verifier,
+             traverse(ast_type_traits::TK_AsIs,
+                      functionDecl(hasDescendant(returnStmt(
+                          has(implicitCastExpr(has(declRefExpr()))))))));
 }
 
 const internal::VariadicDynCastAllOfMatcher<Type,
@@ -927,11 +929,13 @@ TEST_P(ImportExpr, ImportCXXTypeidExpr) {
       "  auto a = typeid(int); auto b = typeid(x);"
       "}",
       Lang_CXX11, "", Lang_CXX11, Verifier,
-      functionDecl(
-          hasDescendant(varDecl(
-              hasName("a"), hasInitializer(hasDescendant(cxxTypeidExpr())))),
-          hasDescendant(varDecl(
-              hasName("b"), hasInitializer(hasDescendant(cxxTypeidExpr()))))));
+      traverse(
+          ast_type_traits::TK_AsIs,
+          functionDecl(
+              hasDescendant(varDecl(hasName("a"), hasInitializer(hasDescendant(
+                                                      cxxTypeidExpr())))),
+              hasDescendant(varDecl(hasName("b"), hasInitializer(hasDescendant(
+                                                      cxxTypeidExpr())))))));
 }
 
 TEST_P(ImportExpr, ImportTypeTraitExprValDep) {
@@ -5887,6 +5891,167 @@ TEST_P(ImportSourceLocations, PreserveFileIDTreeStructure) {
   EXPECT_FALSE(ToSM.isBeforeInTranslationUnit(Location2, Location1));
 }
 
+TEST_P(ImportSourceLocations, NormalFileBuffer) {
+  // Test importing normal file buffers.
+
+  std::string Path = "input0.c";
+  std::string Source = "int X;";
+  TranslationUnitDecl *FromTU = getTuDecl(Source, Lang_C, Path);
+
+  SourceLocation ImportedLoc;
+  {
+    // Import the VarDecl to trigger the importing of the FileID.
+    auto Pattern = varDecl(hasName("X"));
+    VarDecl *FromD = FirstDeclMatcher<VarDecl>().match(FromTU, Pattern);
+    ImportedLoc = Import(FromD, Lang_C)->getLocation();
+  }
+
+  // Make sure the imported buffer has the original contents.
+  SourceManager &ToSM = ToAST->getSourceManager();
+  FileID ImportedID = ToSM.getFileID(ImportedLoc);
+  EXPECT_EQ(Source, ToSM.getBuffer(ImportedID, SourceLocation())->getBuffer());
+}
+
+TEST_P(ImportSourceLocations, OverwrittenFileBuffer) {
+  // Test importing overwritten file buffers.
+
+  std::string Path = "input0.c";
+  TranslationUnitDecl *FromTU = getTuDecl("int X;", Lang_C, Path);
+
+  // Overwrite the file buffer for our input file with new content.
+  const std::string Contents = "overwritten contents";
+  SourceLocation ImportedLoc;
+  {
+    SourceManager &FromSM = FromTU->getASTContext().getSourceManager();
+    clang::FileManager &FM = FromSM.getFileManager();
+    const clang::FileEntry &FE =
+        *FM.getVirtualFile(Path, static_cast<off_t>(Contents.size()), 0);
+
+    llvm::SmallVector<char, 64> Buffer;
+    Buffer.append(Contents.begin(), Contents.end());
+    auto FileContents =
+        std::make_unique<llvm::SmallVectorMemoryBuffer>(std::move(Buffer), Path);
+    FromSM.overrideFileContents(&FE, std::move(FileContents));
+
+    // Import the VarDecl to trigger the importing of the FileID.
+    auto Pattern = varDecl(hasName("X"));
+    VarDecl *FromD = FirstDeclMatcher<VarDecl>().match(FromTU, Pattern);
+    ImportedLoc = Import(FromD, Lang_C)->getLocation();
+  }
+
+  // Make sure the imported buffer has the overwritten contents.
+  SourceManager &ToSM = ToAST->getSourceManager();
+  FileID ImportedID = ToSM.getFileID(ImportedLoc);
+  EXPECT_EQ(Contents,
+            ToSM.getBuffer(ImportedID, SourceLocation())->getBuffer());
+}
+
+TEST_P(ASTImporterOptionSpecificTestBase, ImportExprOfAlignmentAttr) {
+  // Test if import of these packed and aligned attributes does not trigger an
+  // error situation where source location from 'From' context is referenced in
+  // 'To' context through evaluation of the alignof attribute.
+  // This happens if the 'alignof(A)' expression is not imported correctly.
+  Decl *FromTU = getTuDecl(
+      R"(
+      struct __attribute__((packed)) A { int __attribute__((aligned(8))) X; };
+      struct alignas(alignof(A)) S {};
+      )",
+      Lang_CXX11, "input.cc");
+  auto *FromD = FirstDeclMatcher<CXXRecordDecl>().match(
+      FromTU, cxxRecordDecl(hasName("S"), unless(isImplicit())));
+  ASSERT_TRUE(FromD);
+
+  auto *ToD = Import(FromD, Lang_CXX11);
+  ASSERT_TRUE(ToD);
+
+  auto *FromAttr = FromD->getAttr<AlignedAttr>();
+  auto *ToAttr = ToD->getAttr<AlignedAttr>();
+  EXPECT_EQ(FromAttr->isInherited(), ToAttr->isInherited());
+  EXPECT_EQ(FromAttr->isPackExpansion(), ToAttr->isPackExpansion());
+  EXPECT_EQ(FromAttr->isImplicit(), ToAttr->isImplicit());
+  EXPECT_EQ(FromAttr->getSyntax(), ToAttr->getSyntax());
+  EXPECT_EQ(FromAttr->getSemanticSpelling(), ToAttr->getSemanticSpelling());
+  EXPECT_TRUE(ToAttr->getAlignmentExpr());
+
+  auto *ToA = FirstDeclMatcher<CXXRecordDecl>().match(
+      ToD->getTranslationUnitDecl(),
+      cxxRecordDecl(hasName("A"), unless(isImplicit())));
+  // Ensure that 'struct A' was imported (through reference from attribute of
+  // 'S').
+  EXPECT_TRUE(ToA);
+}
+
+template <typename T>
+auto ExtendWithOptions(const T &Values, const ArgVector &Args) {
+  auto Copy = Values;
+  for (ArgVector &ArgV : Copy) {
+    for (const std::string &Arg : Args) {
+      ArgV.push_back(Arg);
+    }
+  }
+  return ::testing::ValuesIn(Copy);
+}
+
+struct ImportWithExternalSource : ASTImporterOptionSpecificTestBase {
+  ImportWithExternalSource() {
+    Creator = [](ASTContext &ToContext, FileManager &ToFileManager,
+                 ASTContext &FromContext, FileManager &FromFileManager,
+                 bool MinimalImport,
+                 const std::shared_ptr<ASTImporterSharedState> &SharedState) {
+      return new ASTImporter(ToContext, ToFileManager, FromContext,
+                             FromFileManager, MinimalImport,
+                             // We use the regular lookup.
+                             /*SharedState=*/nullptr);
+    };
+  }
+};
+
+/// An ExternalASTSource that keeps track of the tags is completed.
+struct SourceWithCompletedTagList : clang::ExternalASTSource {
+  std::vector<clang::TagDecl *> &CompletedTags;
+  SourceWithCompletedTagList(std::vector<clang::TagDecl *> &CompletedTags)
+      : CompletedTags(CompletedTags) {}
+  void CompleteType(TagDecl *Tag) override {
+    auto *Record = cast<CXXRecordDecl>(Tag);
+    Record->startDefinition();
+    Record->completeDefinition();
+    CompletedTags.push_back(Tag);
+  }
+};
+
+TEST_P(ImportWithExternalSource, CompleteRecordBeforeImporting) {
+  // Create an empty TU.
+  TranslationUnitDecl *FromTU = getTuDecl("", Lang_CXX, "input.cpp");
+
+  // Create and add the test ExternalASTSource.
+  std::vector<clang::TagDecl *> CompletedTags;
+  IntrusiveRefCntPtr<ExternalASTSource> source =
+      new SourceWithCompletedTagList(CompletedTags);
+  clang::ASTContext &Context = FromTU->getASTContext();
+  Context.setExternalSource(std::move(source));
+
+  // Create a dummy class by hand with external lexical storage.
+  IdentifierInfo &Ident = Context.Idents.get("test_class");
+  auto *Record = CXXRecordDecl::Create(
+      Context, TTK_Class, FromTU, SourceLocation(), SourceLocation(), &Ident);
+  Record->setHasExternalLexicalStorage();
+  FromTU->addDecl(Record);
+
+  // Do a minimal import of the created class.
+  EXPECT_EQ(0U, CompletedTags.size());
+  Import(Record, Lang_CXX);
+  EXPECT_EQ(0U, CompletedTags.size());
+
+  // Import the definition of the created class.
+  llvm::Error Err = findFromTU(Record)->Importer->ImportDefinition(Record);
+  EXPECT_FALSE((bool)Err);
+  consumeError(std::move(Err));
+
+  // Make sure the class was completed once.
+  EXPECT_EQ(1U, CompletedTags.size());
+  EXPECT_EQ(Record, CompletedTags.front());
+}
+
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ASTImporterLookupTableTest,
                         DefaultTestValuesForRunOptions, );
 
@@ -5895,6 +6060,10 @@ INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportPath,
 
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportExpr,
                         DefaultTestValuesForRunOptions, );
+
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportFixedPointExpr,
+                        ExtendWithOptions(DefaultTestArrayForRunOptions,
+                                          ArgVector{"-ffixed-point"}), );
 
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportType,
                         DefaultTestValuesForRunOptions, );
@@ -5946,6 +6115,9 @@ INSTANTIATE_TEST_CASE_P(ParameterizedTests, LLDBLookupTest,
                         DefaultTestValuesForRunOptions, );
 
 INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportSourceLocations,
+                        DefaultTestValuesForRunOptions, );
+
+INSTANTIATE_TEST_CASE_P(ParameterizedTests, ImportWithExternalSource,
                         DefaultTestValuesForRunOptions, );
 
 } // end namespace ast_matchers

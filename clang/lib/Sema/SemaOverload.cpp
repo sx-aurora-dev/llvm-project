@@ -10,10 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "clang/Sema/Overload.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/CXXInheritance.h"
 #include "clang/AST/DeclObjC.h"
+#include "clang/AST/DependenceFlags.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
@@ -21,9 +21,11 @@
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticOptions.h"
 #include "clang/Basic/PartialDiagnostic.h"
+#include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Sema/Initialization.h"
 #include "clang/Sema/Lookup.h"
+#include "clang/Sema/Overload.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
 #include "clang/Sema/TemplateDeduction.h"
@@ -3001,13 +3003,13 @@ bool Sema::CheckPointerConversion(Expr *From, QualType ToType,
         // We must have a derived-to-base conversion. Check an
         // ambiguous or inaccessible conversion.
         unsigned InaccessibleID = 0;
-        unsigned AmbigiousID = 0;
+        unsigned AmbiguousID = 0;
         if (Diagnose) {
           InaccessibleID = diag::err_upcast_to_inaccessible_base;
-          AmbigiousID = diag::err_ambiguous_derived_to_base_conv;
+          AmbiguousID = diag::err_ambiguous_derived_to_base_conv;
         }
         if (CheckDerivedToBaseConversion(
-                FromPointeeType, ToPointeeType, InaccessibleID, AmbigiousID,
+                FromPointeeType, ToPointeeType, InaccessibleID, AmbiguousID,
                 From->getExprLoc(), From->getSourceRange(), DeclarationName(),
                 &BasePath, IgnoreBaseAccess))
           return true;
@@ -9418,6 +9420,49 @@ static bool isBetterMultiversionCandidate(const OverloadCandidate &Cand1,
   llvm_unreachable("No way to get here unless both had cpu_dispatch");
 }
 
+/// Compute the type of the implicit object parameter for the given function,
+/// if any. Returns None if there is no implicit object parameter, and a null
+/// QualType if there is a 'matches anything' implicit object parameter.
+static Optional<QualType> getImplicitObjectParamType(ASTContext &Context,
+                                                     const FunctionDecl *F) {
+  if (!isa<CXXMethodDecl>(F) || isa<CXXConstructorDecl>(F))
+    return llvm::None;
+
+  auto *M = cast<CXXMethodDecl>(F);
+  // Static member functions' object parameters match all types.
+  if (M->isStatic())
+    return QualType();
+
+  QualType T = M->getThisObjectType();
+  if (M->getRefQualifier() == RQ_RValue)
+    return Context.getRValueReferenceType(T);
+  return Context.getLValueReferenceType(T);
+}
+
+static bool haveSameParameterTypes(ASTContext &Context, const FunctionDecl *F1,
+                                   const FunctionDecl *F2, unsigned NumParams) {
+  if (declaresSameEntity(F1, F2))
+    return true;
+
+  auto NextParam = [&](const FunctionDecl *F, unsigned &I, bool First) {
+    if (First) {
+      if (Optional<QualType> T = getImplicitObjectParamType(Context, F))
+        return *T;
+    }
+    assert(I < F->getNumParams());
+    return F->getParamDecl(I++)->getType();
+  };
+
+  unsigned I1 = 0, I2 = 0;
+  for (unsigned I = 0; I != NumParams; ++I) {
+    QualType T1 = NextParam(F1, I1, I == 0);
+    QualType T2 = NextParam(F2, I2, I == 0);
+    if (!T1.isNull() && !T1.isNull() && !Context.hasSameUnqualifiedType(T1, T2))
+      return false;
+  }
+  return true;
+}
+
 /// isBetterOverloadCandidate - Determines whether the first overload
 /// candidate is a better candidate than the second (C++ 13.3.3p1).
 bool clang::isBetterOverloadCandidate(
@@ -9485,18 +9530,20 @@ bool clang::isBetterOverloadCandidate(
       break;
 
     case ImplicitConversionSequence::Worse:
-      if (Cand1.Function && Cand1.Function == Cand2.Function &&
-          Cand2.isReversed()) {
+      if (Cand1.Function && Cand2.Function &&
+          Cand1.isReversed() != Cand2.isReversed() &&
+          haveSameParameterTypes(S.Context, Cand1.Function, Cand2.Function,
+                                 NumArgs)) {
         // Work around large-scale breakage caused by considering reversed
         // forms of operator== in C++20:
         //
-        // When comparing a function against its reversed form, if we have a
-        // better conversion for one argument and a worse conversion for the
-        // other, we prefer the non-reversed form.
+        // When comparing a function against a reversed function with the same
+        // parameter types, if we have a better conversion for one argument and
+        // a worse conversion for the other, the implicit conversion sequences
+        // are treated as being equally good.
         //
-        // This prevents a conversion function from being considered ambiguous
-        // with its own reversed form in various where it's only incidentally
-        // heterogeneous.
+        // This prevents a comparison function from being considered ambiguous
+        // with a reversed form that is written in the same way.
         //
         // We diagnose this as an extension from CreateOverloadedBinOp.
         HasWorseConversion = true;
@@ -9514,10 +9561,8 @@ bool clang::isBetterOverloadCandidate(
 
   //    -- for some argument j, ICSj(F1) is a better conversion sequence than
   //       ICSj(F2), or, if not that,
-  if (HasBetterConversion)
+  if (HasBetterConversion && !HasWorseConversion)
     return true;
-  if (HasWorseConversion)
-    return false;
 
   //   -- the context is an initialization by user-defined conversion
   //      (see 8.5, 13.3.1.5) and the standard conversion sequence
@@ -12718,9 +12763,7 @@ bool Sema::buildOverloadedCallSet(Scope *S, Expr *Fn,
       // base classes.
       CallExpr *CE = CallExpr::Create(Context, Fn, Args, Context.DependentTy,
                                       VK_RValue, RParenLoc);
-      CE->setTypeDependent(true);
-      CE->setValueDependent(true);
-      CE->setInstantiationDependent(true);
+      CE->markDependentForPostponedNameLookup();
       *Result = CE;
       return true;
     }
@@ -12731,6 +12774,42 @@ bool Sema::buildOverloadedCallSet(Scope *S, Expr *Fn,
 
   UnbridgedCasts.restore();
   return false;
+}
+
+// Guess at what the return type for an unresolvable overload should be.
+static QualType chooseRecoveryType(OverloadCandidateSet &CS,
+                                   OverloadCandidateSet::iterator *Best) {
+  llvm::Optional<QualType> Result;
+  // Adjust Type after seeing a candidate.
+  auto ConsiderCandidate = [&](const OverloadCandidate &Candidate) {
+    if (!Candidate.Function)
+      return;
+    QualType T = Candidate.Function->getCallResultType();
+    if (T.isNull())
+      return;
+    if (!Result)
+      Result = T;
+    else if (Result != T)
+      Result = QualType();
+  };
+
+  // Look for an unambiguous type from a progressively larger subset.
+  // e.g. if types disagree, but all *viable* overloads return int, choose int.
+  //
+  // First, consider only the best candidate.
+  if (Best && *Best != CS.end())
+    ConsiderCandidate(**Best);
+  // Next, consider only viable candidates.
+  if (!Result)
+    for (const auto &C : CS)
+      if (C.Viable)
+        ConsiderCandidate(C);
+  // Finally, consider all candidates.
+  if (!Result)
+    for (const auto &C : CS)
+      ConsiderCandidate(C);
+
+  return Result.getValueOr(QualType());
 }
 
 /// FinishOverloadedCallExpr - given an OverloadCandidateSet, builds and returns
@@ -12822,8 +12901,11 @@ static ExprResult FinishOverloadedCallExpr(Sema &SemaRef, Scope *S, Expr *Fn,
   }
   }
 
-  // Overload resolution failed.
-  return ExprError();
+  // Overload resolution failed, try to recover.
+  SmallVector<Expr *, 8> SubExprs = {Fn};
+  SubExprs.append(Args.begin(), Args.end());
+  return SemaRef.CreateRecoveryExpr(Fn->getBeginLoc(), RParenLoc, SubExprs,
+                                    chooseRecoveryType(*CandidateSet, Best));
 }
 
 static void markUnaddressableCandidatesUnviable(Sema &S,
@@ -12923,8 +13005,9 @@ Sema::CreateOverloadedUnaryOp(SourceLocation OpLoc, UnaryOperatorKind Opc,
 
   if (Input->isTypeDependent()) {
     if (Fns.empty())
-      return new (Context) UnaryOperator(Input, Opc, Context.DependentTy,
-                                         VK_RValue, OK_Ordinary, OpLoc, false);
+      return UnaryOperator::Create(Context, Input, Opc, Context.DependentTy,
+                                   VK_RValue, OK_Ordinary, OpLoc, false,
+                                   CurFPFeatures);
 
     CXXRecordDecl *NamingClass = nullptr; // lookup ignores member operators
     UnresolvedLookupExpr *Fn = UnresolvedLookupExpr::Create(
@@ -12932,7 +13015,7 @@ Sema::CreateOverloadedUnaryOp(SourceLocation OpLoc, UnaryOperatorKind Opc,
         /*ADL*/ true, IsOverloaded(Fns), Fns.begin(), Fns.end());
     return CXXOperatorCallExpr::Create(Context, Op, Fn, ArgsArray,
                                        Context.DependentTy, VK_RValue, OpLoc,
-                                       FPOptions());
+                                       CurFPFeatures);
   }
 
   // Build an empty overload set.
@@ -13006,7 +13089,7 @@ Sema::CreateOverloadedUnaryOp(SourceLocation OpLoc, UnaryOperatorKind Opc,
       Args[0] = Input;
       CallExpr *TheCall = CXXOperatorCallExpr::Create(
           Context, Op, FnExpr.get(), ArgsArray, ResultTy, VK, OpLoc,
-          FPOptions(), Best->IsADLCandidate);
+          CurFPFeatures, Best->IsADLCandidate);
 
       if (CheckCallReturnType(FnDecl->getReturnType(), OpLoc, TheCall, FnDecl))
         return ExprError();
@@ -13163,7 +13246,7 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
   Expr *Args[2] = { LHS, RHS };
   LHS=RHS=nullptr; // Please use only Args instead of LHS/RHS couple
 
-  if (!getLangOpts().CPlusPlus2a)
+  if (!getLangOpts().CPlusPlus20)
     AllowRewrittenCandidates = false;
 
   OverloadedOperatorKind Op = BinaryOperator::getOverloadedOperator(Opc);
@@ -13175,14 +13258,13 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
       // If there are no functions to store, just build a dependent
       // BinaryOperator or CompoundAssignment.
       if (Opc <= BO_Assign || Opc > BO_OrAssign)
-        return new (Context) BinaryOperator(
-            Args[0], Args[1], Opc, Context.DependentTy, VK_RValue, OK_Ordinary,
-            OpLoc, FPFeatures);
-
-      return new (Context) CompoundAssignOperator(
-          Args[0], Args[1], Opc, Context.DependentTy, VK_LValue, OK_Ordinary,
-          Context.DependentTy, Context.DependentTy, OpLoc,
-          FPFeatures);
+        return BinaryOperator::Create(Context, Args[0], Args[1], Opc,
+                                      Context.DependentTy, VK_RValue,
+                                      OK_Ordinary, OpLoc, CurFPFeatures);
+      return CompoundAssignOperator::Create(
+          Context, Args[0], Args[1], Opc, Context.DependentTy, VK_LValue,
+          OK_Ordinary, OpLoc, CurFPFeatures, Context.DependentTy,
+          Context.DependentTy);
     }
 
     // FIXME: save results of ADL from here?
@@ -13195,7 +13277,7 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
         /*ADL*/ PerformADL, IsOverloaded(Fns), Fns.begin(), Fns.end());
     return CXXOperatorCallExpr::Create(Context, Op, Fn, Args,
                                        Context.DependentTy, VK_RValue, OpLoc,
-                                       FPFeatures);
+                                       CurFPFeatures);
   }
 
   // Always do placeholder-like conversions on the RHS.
@@ -13256,36 +13338,56 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
         //   resolution for an operator@, its return type shall be cv bool
         if (Best->RewriteKind && ChosenOp == OO_EqualEqual &&
             !FnDecl->getReturnType()->isBooleanType()) {
-          Diag(OpLoc, diag::err_ovl_rewrite_equalequal_not_bool)
+          bool IsExtension =
+              FnDecl->getReturnType()->isIntegralOrUnscopedEnumerationType();
+          Diag(OpLoc, IsExtension ? diag::ext_ovl_rewrite_equalequal_not_bool
+                                  : diag::err_ovl_rewrite_equalequal_not_bool)
               << FnDecl->getReturnType() << BinaryOperator::getOpcodeStr(Opc)
               << Args[0]->getSourceRange() << Args[1]->getSourceRange();
           Diag(FnDecl->getLocation(), diag::note_declared_at);
-          return ExprError();
+          if (!IsExtension)
+            return ExprError();
         }
 
         if (AllowRewrittenCandidates && !IsReversed &&
-            CandidateSet.getRewriteInfo().shouldAddReversed(ChosenOp)) {
-          // We could have reversed this operator, but didn't. Check if the
+            CandidateSet.getRewriteInfo().isReversible()) {
+          // We could have reversed this operator, but didn't. Check if some
           // reversed form was a viable candidate, and if so, if it had a
           // better conversion for either parameter. If so, this call is
           // formally ambiguous, and allowing it is an extension.
+          llvm::SmallVector<FunctionDecl*, 4> AmbiguousWith;
           for (OverloadCandidate &Cand : CandidateSet) {
-            if (Cand.Viable && Cand.Function == FnDecl &&
-                Cand.isReversed()) {
+            if (Cand.Viable && Cand.Function && Cand.isReversed() &&
+                haveSameParameterTypes(Context, Cand.Function, FnDecl, 2)) {
               for (unsigned ArgIdx = 0; ArgIdx < 2; ++ArgIdx) {
                 if (CompareImplicitConversionSequences(
                         *this, OpLoc, Cand.Conversions[ArgIdx],
                         Best->Conversions[ArgIdx]) ==
                     ImplicitConversionSequence::Better) {
-                  Diag(OpLoc, diag::ext_ovl_ambiguous_oper_binary_reversed)
-                      << BinaryOperator::getOpcodeStr(Opc)
-                      << Args[0]->getType() << Args[1]->getType()
-                      << Args[0]->getSourceRange() << Args[1]->getSourceRange();
-                  Diag(FnDecl->getLocation(),
-                       diag::note_ovl_ambiguous_oper_binary_reversed_candidate);
+                  AmbiguousWith.push_back(Cand.Function);
+                  break;
                 }
               }
-              break;
+            }
+          }
+
+          if (!AmbiguousWith.empty()) {
+            bool AmbiguousWithSelf =
+                AmbiguousWith.size() == 1 &&
+                declaresSameEntity(AmbiguousWith.front(), FnDecl);
+            Diag(OpLoc, diag::ext_ovl_ambiguous_oper_binary_reversed)
+                << BinaryOperator::getOpcodeStr(Opc)
+                << Args[0]->getType() << Args[1]->getType() << AmbiguousWithSelf
+                << Args[0]->getSourceRange() << Args[1]->getSourceRange();
+            if (AmbiguousWithSelf) {
+              Diag(FnDecl->getLocation(),
+                   diag::note_ovl_ambiguous_oper_binary_reversed_self);
+            } else {
+              Diag(FnDecl->getLocation(),
+                   diag::note_ovl_ambiguous_oper_binary_selected_candidate);
+              for (auto *F : AmbiguousWith)
+                Diag(F->getLocation(),
+                     diag::note_ovl_ambiguous_oper_binary_reversed_candidate);
             }
           }
         }
@@ -13344,7 +13446,7 @@ ExprResult Sema::CreateOverloadedBinOp(SourceLocation OpLoc,
 
         CXXOperatorCallExpr *TheCall = CXXOperatorCallExpr::Create(
             Context, ChosenOp, FnExpr.get(), Args, ResultTy, VK, OpLoc,
-            FPFeatures, Best->IsADLCandidate);
+            CurFPFeatures, Best->IsADLCandidate);
 
         if (CheckCallReturnType(FnDecl->getReturnType(), OpLoc, TheCall,
                                 FnDecl))
@@ -13609,10 +13711,10 @@ ExprResult Sema::BuildSynthesizedThreeWayComparison(
 
   // Build a PseudoObjectExpr to model the rewriting of an <=> operator, and to
   // bind the OpaqueValueExprs before they're (repeatedly) used.
-  Expr *SyntacticForm = new (Context)
-      BinaryOperator(OrigLHS, OrigRHS, BO_Cmp, Result.get()->getType(),
-                     Result.get()->getValueKind(),
-                     Result.get()->getObjectKind(), OpLoc, FPFeatures);
+  Expr *SyntacticForm = BinaryOperator::Create(
+      Context, OrigLHS, OrigRHS, BO_Cmp, Result.get()->getType(),
+      Result.get()->getValueKind(), Result.get()->getObjectKind(), OpLoc,
+      CurFPFeatures);
   Expr *SemanticForm[] = {LHS, RHS, Result.get()};
   return PseudoObjectExpr::Create(Context, SyntacticForm, SemanticForm, 2);
 }
@@ -13643,7 +13745,7 @@ Sema::CreateOverloadedArraySubscriptExpr(SourceLocation LLoc,
 
     return CXXOperatorCallExpr::Create(Context, OO_Subscript, Fn, Args,
                                        Context.DependentTy, VK_RValue, RLoc,
-                                       FPOptions());
+                                       CurFPFeatures);
   }
 
   // Handle placeholders on both operands.
@@ -13718,8 +13820,7 @@ Sema::CreateOverloadedArraySubscriptExpr(SourceLocation LLoc,
 
         CXXOperatorCallExpr *TheCall =
             CXXOperatorCallExpr::Create(Context, OO_Subscript, FnExpr.get(),
-                                        Args, ResultTy, VK, RLoc, FPOptions());
-
+                                        Args, ResultTy, VK, RLoc, CurFPFeatures);
         if (CheckCallReturnType(FnDecl->getReturnType(), LLoc, TheCall, FnDecl))
           return ExprError();
 
@@ -14342,7 +14443,7 @@ Sema::BuildCallToObjectOfClassType(Scope *S, Expr *Obj,
 
   CXXOperatorCallExpr *TheCall =
       CXXOperatorCallExpr::Create(Context, OO_Call, NewFn.get(), MethodArgs,
-                                  ResultTy, VK, RParenLoc, FPOptions());
+                                  ResultTy, VK, RParenLoc, CurFPFeatures);
 
   if (CheckCallReturnType(Method->getReturnType(), LParenLoc, TheCall, Method))
     return true;
@@ -14459,7 +14560,7 @@ Sema::BuildOverloadedArrowExpr(Scope *S, Expr *Base, SourceLocation OpLoc,
   ExprValueKind VK = Expr::getValueKindForType(ResultTy);
   ResultTy = ResultTy.getNonLValueExprType(Context);
   CXXOperatorCallExpr *TheCall = CXXOperatorCallExpr::Create(
-      Context, OO_Arrow, FnExpr.get(), Base, ResultTy, VK, OpLoc, FPOptions());
+      Context, OO_Arrow, FnExpr.get(), Base, ResultTy, VK, OpLoc, CurFPFeatures);
 
   if (CheckCallReturnType(Method->getReturnType(), OpLoc, TheCall, Method))
     return ExprError();
@@ -14706,9 +14807,9 @@ Expr *Sema::FixOverloadedFunctionReference(Expr *E, DeclAccessPair Found,
         if (Context.getTargetInfo().getCXXABI().isMicrosoft())
           (void)isCompleteType(UnOp->getOperatorLoc(), MemPtrType);
 
-        return new (Context) UnaryOperator(SubExpr, UO_AddrOf, MemPtrType,
-                                           VK_RValue, OK_Ordinary,
-                                           UnOp->getOperatorLoc(), false);
+        return UnaryOperator::Create(
+            Context, SubExpr, UO_AddrOf, MemPtrType, VK_RValue, OK_Ordinary,
+            UnOp->getOperatorLoc(), false, CurFPFeatures);
       }
     }
     Expr *SubExpr = FixOverloadedFunctionReference(UnOp->getSubExpr(),
@@ -14716,10 +14817,9 @@ Expr *Sema::FixOverloadedFunctionReference(Expr *E, DeclAccessPair Found,
     if (SubExpr == UnOp->getSubExpr())
       return UnOp;
 
-    return new (Context) UnaryOperator(SubExpr, UO_AddrOf,
-                                     Context.getPointerType(SubExpr->getType()),
-                                       VK_RValue, OK_Ordinary,
-                                       UnOp->getOperatorLoc(), false);
+    return UnaryOperator::Create(
+        Context, SubExpr, UO_AddrOf, Context.getPointerType(SubExpr->getType()),
+        VK_RValue, OK_Ordinary, UnOp->getOperatorLoc(), false, CurFPFeatures);
   }
 
   if (UnresolvedLookupExpr *ULE = dyn_cast<UnresolvedLookupExpr>(E)) {

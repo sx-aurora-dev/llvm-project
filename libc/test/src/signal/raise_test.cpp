@@ -1,4 +1,4 @@
-//===----------------------- Unittests for raise --------------------------===//
+//===-- Unittests for raise -----------------------------------------------===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -8,6 +8,7 @@
 
 #include "include/signal.h"
 #include "src/signal/raise.h"
+
 #include "utils/UnitTest/Test.h"
 
 TEST(SignalTest, Raise) {

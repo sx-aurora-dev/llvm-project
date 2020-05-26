@@ -11,9 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/Host.h"
-#include "llvm/Support/TargetParser.h"
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/ADT/Triple.h"
@@ -21,6 +21,7 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/TargetParser.h"
 #include "llvm/Support/raw_ostream.h"
 #include <assert.h>
 #include <string.h>
@@ -28,6 +29,7 @@
 // Include the platform-specific parts of this class.
 #ifdef LLVM_ON_UNIX
 #include "Unix/Host.inc"
+#include <sched.h>
 #endif
 #ifdef _WIN32
 #include "Windows/Host.inc"
@@ -192,6 +194,7 @@ StringRef sys::detail::getHostCPUNameForARM(StringRef ProcCpuinfoContent) {
             .Case("0xc20", "cortex-m0")
             .Case("0xc23", "cortex-m3")
             .Case("0xc24", "cortex-m4")
+            .Case("0xd22", "cortex-m55")
             .Case("0xd02", "cortex-a34")
             .Case("0xd04", "cortex-a35")
             .Case("0xd03", "cortex-a53")
@@ -214,6 +217,26 @@ StringRef sys::detail::getHostCPUNameForARM(StringRef ProcCpuinfoContent) {
           .Case("0xa1", "thunderxt88")
           .Case("0x0a1", "thunderxt88")
           .Default("generic");
+      }
+    }
+  }
+
+  if (Implementer == "0x46") { // Fujitsu Ltd.
+    for (unsigned I = 0, E = Lines.size(); I != E; ++I) {
+      if (Lines[I].startswith("CPU part")) {
+        return StringSwitch<const char *>(Lines[I].substr(8).ltrim("\t :"))
+          .Case("0x001", "a64fx")
+          .Default("generic");
+      }
+    }
+  }
+
+  if (Implementer == "0x4e") { // NVIDIA Corporation
+    for (unsigned I = 0, E = Lines.size(); I != E; ++I) {
+      if (Lines[I].startswith("CPU part")) {
+        return StringSwitch<const char *>(Lines[I].substr(8).ltrim("\t :"))
+            .Case("0x004", "carmel")
+            .Default("generic");
       }
     }
   }
@@ -677,6 +700,8 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
     case 0x5e:              // Skylake desktop
     case 0x8e:              // Kaby Lake mobile
     case 0x9e:              // Kaby Lake desktop
+    case 0xa5:              // Comet Lake-H/S
+    case 0xa6:              // Comet Lake-U
       *Type = X86::INTEL_COREI7; // "skylake"
       *Subtype = X86::INTEL_COREI7_SKYLAKE;
       break;
@@ -751,7 +776,7 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
 
     default: // Unknown family 6 CPU, try to guess.
       // TODO detect tigerlake host
-      if (Features3 & (1 << (X86::FEATURE_AVX512VP2INTERSECT - 64))) {
+      if (Features2 & (1 << (X86::FEATURE_AVX512VP2INTERSECT - 32))) {
         *Type = X86::INTEL_COREI7;
         *Subtype = X86::INTEL_COREI7_TIGERLAKE;
         break;
@@ -1265,11 +1290,18 @@ StringRef sys::getHostCPUName() {
 StringRef sys::getHostCPUName() { return "generic"; }
 #endif
 
-#if defined(__linux__) && defined(__x86_64__)
+#if defined(__linux__) && (defined(__i386__) || defined(__x86_64__))
 // On Linux, the number of physical cores can be computed from /proc/cpuinfo,
 // using the number of unique physical/core id pairs. The following
 // implementation reads the /proc/cpuinfo format on an x86_64 system.
 int computeHostNumPhysicalCores() {
+  // Enabled represents the number of physical id/core id pairs with at least
+  // one processor id enabled by the CPU affinity mask.
+  cpu_set_t Affinity, Enabled;
+  if (sched_getaffinity(0, sizeof(Affinity), &Affinity) != 0)
+    return -1;
+  CPU_ZERO(&Enabled);
+
   // Read /proc/cpuinfo as a stream (until EOF reached). It cannot be
   // mmapped because it appears to have 0 size.
   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> Text =
@@ -1282,33 +1314,29 @@ int computeHostNumPhysicalCores() {
   SmallVector<StringRef, 8> strs;
   (*Text)->getBuffer().split(strs, "\n", /*MaxSplit=*/-1,
                              /*KeepEmpty=*/false);
+  int CurProcessor = -1;
   int CurPhysicalId = -1;
+  int CurSiblings = -1;
   int CurCoreId = -1;
-  SmallSet<std::pair<int, int>, 32> UniqueItems;
-  for (auto &Line : strs) {
-    Line = Line.trim();
-    if (!Line.startswith("physical id") && !Line.startswith("core id"))
-      continue;
+  for (StringRef Line : strs) {
     std::pair<StringRef, StringRef> Data = Line.split(':');
     auto Name = Data.first.trim();
     auto Val = Data.second.trim();
-    if (Name == "physical id") {
-      assert(CurPhysicalId == -1 &&
-             "Expected a core id before seeing another physical id");
+    // These fields are available if the kernel is configured with CONFIG_SMP.
+    if (Name == "processor")
+      Val.getAsInteger(10, CurProcessor);
+    else if (Name == "physical id")
       Val.getAsInteger(10, CurPhysicalId);
-    }
-    if (Name == "core id") {
-      assert(CurCoreId == -1 &&
-             "Expected a physical id before seeing another core id");
+    else if (Name == "siblings")
+      Val.getAsInteger(10, CurSiblings);
+    else if (Name == "core id") {
       Val.getAsInteger(10, CurCoreId);
-    }
-    if (CurPhysicalId != -1 && CurCoreId != -1) {
-      UniqueItems.insert(std::make_pair(CurPhysicalId, CurCoreId));
-      CurPhysicalId = -1;
-      CurCoreId = -1;
+      // The processor id corresponds to an index into cpu_set_t.
+      if (CPU_ISSET(CurProcessor, &Affinity))
+        CPU_SET(CurPhysicalId * CurSiblings + CurCoreId, &Enabled);
     }
   }
-  return UniqueItems.size();
+  return CPU_COUNT(&Enabled);
 }
 #elif defined(__APPLE__) && defined(__x86_64__)
 #include <sys/param.h>
@@ -1465,6 +1493,8 @@ bool sys::getHostCPUFeatures(StringMap<bool> &Features) {
   Features["movdir64b"]       = HasLeaf7 && ((ECX >> 28) & 1);
   Features["enqcmd"]          = HasLeaf7 && ((ECX >> 29) & 1);
 
+  Features["serialize"]       = HasLeaf7 && ((EDX >> 14) & 1);
+  Features["tsxldtrk"]        = HasLeaf7 && ((EDX >> 16) & 1);
   // There are two CPUID leafs which information associated with the pconfig
   // instruction:
   // EAX=0x7, ECX=0x0 indicates the availability of the instruction (via the 18th

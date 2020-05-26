@@ -11,12 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "MILexer.h"
-#include "llvm/ADT/APSInt.h"
 #include "llvm/ADT/None.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSwitch.h"
-#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include <algorithm>
 #include <cassert>
@@ -260,6 +257,7 @@ static MIToken::TokenKind getIdentifierKind(StringRef Identifier) {
       .Case("liveout", MIToken::kw_liveout)
       .Case("address-taken", MIToken::kw_address_taken)
       .Case("landing-pad", MIToken::kw_landing_pad)
+      .Case("ehfunclet-entry", MIToken::kw_ehfunclet_entry)
       .Case("liveins", MIToken::kw_liveins)
       .Case("successors", MIToken::kw_successors)
       .Case("floatpred", MIToken::kw_floatpred)
@@ -268,6 +266,7 @@ static MIToken::TokenKind getIdentifierKind(StringRef Identifier) {
       .Case("pre-instr-symbol", MIToken::kw_pre_instr_symbol)
       .Case("post-instr-symbol", MIToken::kw_post_instr_symbol)
       .Case("heap-alloc-marker", MIToken::kw_heap_alloc_marker)
+      .Case("bbsections", MIToken::kw_bbsections)
       .Case("unknown-size", MIToken::kw_unknown_size)
       .Default(MIToken::Identifier);
 }
@@ -532,7 +531,7 @@ static Cursor maybeLexMCSymbol(Cursor C, MIToken &Token,
 }
 
 static bool isValidHexFloatingPointPrefix(char C) {
-  return C == 'H' || C == 'K' || C == 'L' || C == 'M';
+  return C == 'H' || C == 'K' || C == 'L' || C == 'M' || C == 'R';
 }
 
 static Cursor lexFloatingPointLiteral(Cursor Range, Cursor C, MIToken &Token) {

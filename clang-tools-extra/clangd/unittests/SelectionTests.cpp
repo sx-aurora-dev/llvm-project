@@ -9,6 +9,7 @@
 #include "Selection.h"
 #include "SourceCode.h"
 #include "TestTU.h"
+#include "support/TestTracer.h"
 #include "clang/AST/Decl.h"
 #include "llvm/Support/Casting.h"
 #include "gmock/gmock.h"
@@ -375,8 +376,22 @@ TEST(SelectionTest, CommonAncestor) {
             int test(I *f) { return 42 + [[f.^foo]]; }
           )cpp",
           "ObjCPropertyRefExpr"},
+      {"struct foo { [[int has^h<:32:>]]; };", "FieldDecl"},
+      {"struct foo { [[op^erator int()]]; };", "CXXConversionDecl"},
+      {"struct foo { [[^~foo()]]; };", "CXXDestructorDecl"},
+      // FIXME: The following to should be class itself instead.
+      {"struct foo { [[fo^o(){}]] };", "CXXConstructorDecl"},
+
+      {R"cpp(
+        struct S1 { void f(); };
+        struct S2 { S1 * operator->(); };
+        void test(S2 s2) {
+          s2[[-^>]]f();
+        }
+      )cpp", "DeclRefExpr"} // DeclRefExpr to the "operator->" method.
   };
   for (const Case &C : Cases) {
+    trace::TestTracer Tracer;
     Annotations Test(C.Code);
 
     TestTU TU;
@@ -394,6 +409,7 @@ TEST(SelectionTest, CommonAncestor) {
     if (Test.ranges().empty()) {
       // If no [[range]] is marked in the example, there should be no selection.
       EXPECT_FALSE(T.commonAncestor()) << C.Code << "\n" << T;
+      EXPECT_THAT(Tracer.takeMetric("selection_recovery"), testing::IsEmpty());
     } else {
       // If there is an expected selection, common ancestor should exist
       // with the appropriate node type.
@@ -409,18 +425,34 @@ TEST(SelectionTest, CommonAncestor) {
       // and no nodes outside it are selected.
       EXPECT_TRUE(verifyCommonAncestor(T.root(), T.commonAncestor(), C.Code))
           << C.Code;
+      EXPECT_THAT(Tracer.takeMetric("selection_recovery"),
+                  testing::ElementsAreArray({0}));
     }
   }
 }
 
 // Regression test: this used to match the injected X, not the outer X.
 TEST(SelectionTest, InjectedClassName) {
-  const char* Code = "struct ^X { int x; };";
+  const char *Code = "struct ^X { int x; };";
   auto AST = TestTU::withCode(Annotations(Code).code()).build();
   auto T = makeSelectionTree(Code, AST);
   ASSERT_EQ("CXXRecordDecl", nodeKind(T.commonAncestor())) << T;
   auto *D = dyn_cast<CXXRecordDecl>(T.commonAncestor()->ASTNode.get<Decl>());
   EXPECT_FALSE(D->isInjectedClassName());
+}
+
+TEST(SelectionTree, Metrics) {
+  const char *Code = R"cpp(
+    // error-ok: testing behavior on recovery expression
+    int foo();
+    int foo(int, int);
+    int x = fo^o(42);
+  )cpp";
+  auto AST = TestTU::withCode(Annotations(Code).code()).build();
+  trace::TestTracer Tracer;
+  auto T = makeSelectionTree(Code, AST);
+  EXPECT_THAT(Tracer.takeMetric("selection_recovery"),
+              testing::ElementsAreArray({1}));
 }
 
 // FIXME: Doesn't select the binary operator node in
@@ -508,7 +540,8 @@ TEST(SelectionTest, IncludedFile) {
 }
 
 TEST(SelectionTest, MacroArgExpansion) {
-  // If a macro arg is expanded several times, we consider them all selected.
+  // If a macro arg is expanded several times, we only consider the first one
+  // selected.
   const char *Case = R"cpp(
     int mul(int, int);
     #define SQUARE(X) mul(X, X);
@@ -517,15 +550,8 @@ TEST(SelectionTest, MacroArgExpansion) {
   Annotations Test(Case);
   auto AST = TestTU::withCode(Test.code()).build();
   auto T = makeSelectionTree(Case, AST);
-  // Unfortunately, this makes the common ancestor the CallExpr...
-  // FIXME: hack around this by picking one?
-  EXPECT_EQ("CallExpr", T.commonAncestor()->kind());
-  EXPECT_FALSE(T.commonAncestor()->Selected);
-  EXPECT_EQ(2u, T.commonAncestor()->Children.size());
-  for (const auto* N : T.commonAncestor()->Children) {
-    EXPECT_EQ("IntegerLiteral", N->kind());
-    EXPECT_TRUE(N->Selected);
-  }
+  EXPECT_EQ("IntegerLiteral", T.commonAncestor()->kind());
+  EXPECT_TRUE(T.commonAncestor()->Selected);
 
   // Verify that the common assert() macro doesn't suffer from this.
   // (This is because we don't associate the stringified token with the arg).
@@ -542,7 +568,7 @@ TEST(SelectionTest, MacroArgExpansion) {
 }
 
 TEST(SelectionTest, Implicit) {
-  const char* Test = R"cpp(
+  const char *Test = R"cpp(
     struct S { S(const char*); };
     int f(S);
     int x = f("^");

@@ -57,10 +57,38 @@ public:
   // Returns this op's C++ class name prefixed with namespaces.
   std::string getQualCppClassName() const;
 
+  /// A class used to represent the decorators of an operator variable, i.e.
+  /// argument or result.
+  struct VariableDecorator {
+  public:
+    explicit VariableDecorator(const llvm::Record *def) : def(def) {}
+    const llvm::Record &getDef() const { return *def; }
+
+  protected:
+    // The TableGen definition of this decorator.
+    const llvm::Record *def;
+  };
+
+  // A utility iterator over a list of variable decorators.
+  struct VariableDecoratorIterator
+      : public llvm::mapped_iterator<llvm::Init *const *,
+                                     VariableDecorator (*)(llvm::Init *)> {
+    using reference = VariableDecorator;
+
+    /// Initializes the iterator to the specified iterator.
+    VariableDecoratorIterator(llvm::Init *const *it)
+        : llvm::mapped_iterator<llvm::Init *const *,
+                                VariableDecorator (*)(llvm::Init *)>(it,
+                                                                     &unwrap) {}
+    static VariableDecorator unwrap(llvm::Init *init);
+  };
+  using var_decorator_iterator = VariableDecoratorIterator;
+  using var_decorator_range = llvm::iterator_range<VariableDecoratorIterator>;
+
   using value_iterator = NamedTypeConstraint *;
   using value_range = llvm::iterator_range<value_iterator>;
 
-  // Returns true if this op has variadic operands or results.
+  // Returns true if this op has variable length operands or results.
   bool isVariadic() const;
 
   // Returns true if default builders should not be generated.
@@ -84,9 +112,11 @@ public:
   TypeConstraint getResultTypeConstraint(int index) const;
   // Returns the `index`-th result's name.
   StringRef getResultName(int index) const;
+  // Returns the `index`-th result's decorators.
+  var_decorator_range getResultDecorators(int index) const;
 
-  // Returns the number of variadic results in this operation.
-  unsigned getNumVariadicResults() const;
+  // Returns the number of variable length results in this operation.
+  unsigned getNumVariableLengthResults() const;
 
   // Op attribute iterators.
   using attribute_iterator = const NamedAttribute *;
@@ -112,7 +142,7 @@ public:
   }
 
   // Returns the number of variadic operands in this operation.
-  unsigned getNumVariadicOperands() const;
+  unsigned getNumVariableLengthOperands() const;
 
   // Returns the total number of arguments.
   int getNumArgs() const { return arguments.size(); }
@@ -128,16 +158,26 @@ public:
   // Op argument (attribute or operand) accessors.
   Argument getArg(int index) const;
   StringRef getArgName(int index) const;
+  var_decorator_range getArgDecorators(int index) const;
 
   // Returns the trait wrapper for the given MLIR C++ `trait`.
   // TODO: We should add a C++ wrapper class for TableGen OpTrait instead of
   // requiring the raw MLIR trait here.
   const OpTrait *getTrait(llvm::StringRef trait) const;
 
+  // Regions.
+  using const_region_iterator = const NamedRegion *;
+  const_region_iterator region_begin() const;
+  const_region_iterator region_end() const;
+  llvm::iterator_range<const_region_iterator> getRegions() const;
+
   // Returns the number of regions.
   unsigned getNumRegions() const;
   // Returns the `index`-th region.
   const NamedRegion &getRegion(unsigned index) const;
+
+  // Returns the number of variadic regions in this operation.
+  unsigned getNumVariadicRegions() const;
 
   // Successors.
   using const_successor_iterator = const NamedSuccessor *;
@@ -166,6 +206,10 @@ public:
   StringRef getDescription() const;
   bool hasSummary() const;
   StringRef getSummary() const;
+
+  // Query functions for the assembly format of the operator.
+  bool hasAssemblyFormat() const;
+  StringRef getAssemblyFormat() const;
 
   // Returns this op's extra class declaration code.
   StringRef getExtraClassDeclaration() const;

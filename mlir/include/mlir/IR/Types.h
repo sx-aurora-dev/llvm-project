@@ -12,6 +12,7 @@
 #include "mlir/IR/TypeSupport.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMapInfo.h"
+#include "llvm/Support/PointerLikeTypeTraits.h"
 
 namespace mlir {
 class FloatType;
@@ -167,6 +168,14 @@ public:
   bool isSignlessIntOrIndexOrFloat();
   /// Return true of this is a signless integer or a float type.
   bool isSignlessIntOrFloat();
+
+  /// Return true if this is an integer (of any signedness) or an index type.
+  bool isIntOrIndex();
+  /// Return true if this is an integer (of any signedness) or a float type.
+  bool isIntOrFloat();
+  /// Return true if this is an integer (of any signedness), index, or float
+  /// type.
+  bool isIntOrIndexOrFloat();
 
   /// Print the current type.
   void print(raw_ostream &os);

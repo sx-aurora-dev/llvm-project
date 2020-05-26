@@ -588,6 +588,7 @@ namespace clang {
     ExpectedStmt VisitIntegerLiteral(IntegerLiteral *E);
     ExpectedStmt VisitFloatingLiteral(FloatingLiteral *E);
     ExpectedStmt VisitImaginaryLiteral(ImaginaryLiteral *E);
+    ExpectedStmt VisitFixedPointLiteral(FixedPointLiteral *E);
     ExpectedStmt VisitCharacterLiteral(CharacterLiteral *E);
     ExpectedStmt VisitStringLiteral(StringLiteral *E);
     ExpectedStmt VisitCompoundLiteralExpr(CompoundLiteralExpr *E);
@@ -5489,6 +5490,10 @@ ExpectedDecl ASTNodeImporter::VisitVarTemplateDecl(VarTemplateDecl *D) {
       continue;
 
     if (VarTemplateDecl *FoundTemplate = dyn_cast<VarTemplateDecl>(FoundDecl)) {
+      // Use the templated decl, some linkage flags are set only there.
+      if (!hasSameVisibilityContextAndLinkage(FoundTemplate->getTemplatedDecl(),
+                                              D->getTemplatedDecl()))
+        continue;
       if (IsStructuralMatch(D, FoundTemplate)) {
         // The Decl in the "From" context has a definition, but in the
         // "To" context we already have a definition.
@@ -6336,16 +6341,13 @@ ExpectedStmt ASTNodeImporter::VisitChooseExpr(ChooseExpr *E) {
   ExprValueKind VK = E->getValueKind();
   ExprObjectKind OK = E->getObjectKind();
 
-  bool TypeDependent = ToCond->isTypeDependent();
-  bool ValueDependent = ToCond->isValueDependent();
-
   // The value of CondIsTrue only matters if the value is not
   // condition-dependent.
   bool CondIsTrue = !E->isConditionDependent() && E->isConditionTrue();
 
   return new (Importer.getToContext())
       ChooseExpr(ToBuiltinLoc, ToCond, ToLHS, ToRHS, ToType, VK, OK,
-                 ToRParenLoc, CondIsTrue, TypeDependent, ValueDependent);
+                 ToRParenLoc, CondIsTrue);
 }
 
 ExpectedStmt ASTNodeImporter::VisitGNUNullExpr(GNUNullExpr *E) {
@@ -6502,6 +6504,20 @@ ExpectedStmt ASTNodeImporter::VisitImaginaryLiteral(ImaginaryLiteral *E) {
       *ToSubExprOrErr, *ToTypeOrErr);
 }
 
+ExpectedStmt ASTNodeImporter::VisitFixedPointLiteral(FixedPointLiteral *E) {
+  auto ToTypeOrErr = import(E->getType());
+  if (!ToTypeOrErr)
+    return ToTypeOrErr.takeError();
+
+  ExpectedSLoc ToLocationOrErr = import(E->getLocation());
+  if (!ToLocationOrErr)
+    return ToLocationOrErr.takeError();
+
+  return new (Importer.getToContext()) FixedPointLiteral(
+      Importer.getToContext(), E->getValue(), *ToTypeOrErr, *ToLocationOrErr,
+      Importer.getToContext().getFixedPointScale(*ToTypeOrErr));
+}
+
 ExpectedStmt ASTNodeImporter::VisitCharacterLiteral(CharacterLiteral *E) {
   ExpectedType ToTypeOrErr = import(E->getType());
   if (!ToTypeOrErr)
@@ -6631,8 +6647,9 @@ ExpectedStmt ASTNodeImporter::VisitStmtExpr(StmtExpr *E) {
   if (Err)
     return std::move(Err);
 
-  return new (Importer.getToContext()) StmtExpr(
-      ToSubStmt, ToType, ToLParenLoc, ToRParenLoc);
+  return new (Importer.getToContext())
+      StmtExpr(ToSubStmt, ToType, ToLParenLoc, ToRParenLoc,
+               E->getTemplateDepth());
 }
 
 ExpectedStmt ASTNodeImporter::VisitUnaryOperator(UnaryOperator *E) {
@@ -6643,9 +6660,10 @@ ExpectedStmt ASTNodeImporter::VisitUnaryOperator(UnaryOperator *E) {
   if (Err)
     return std::move(Err);
 
-  return new (Importer.getToContext()) UnaryOperator(
-      ToSubExpr, E->getOpcode(), ToType, E->getValueKind(), E->getObjectKind(),
-      ToOperatorLoc, E->canOverflow());
+  return UnaryOperator::Create(
+      Importer.getToContext(), ToSubExpr, E->getOpcode(), ToType,
+      E->getValueKind(), E->getObjectKind(), ToOperatorLoc, E->canOverflow(),
+      E->getFPFeatures(Importer.getFromContext().getLangOpts()));
 }
 
 ExpectedStmt
@@ -6686,9 +6704,10 @@ ExpectedStmt ASTNodeImporter::VisitBinaryOperator(BinaryOperator *E) {
   if (Err)
     return std::move(Err);
 
-  return new (Importer.getToContext()) BinaryOperator(
-      ToLHS, ToRHS, E->getOpcode(), ToType, E->getValueKind(),
-      E->getObjectKind(), ToOperatorLoc, E->getFPFeatures());
+  return BinaryOperator::Create(
+      Importer.getToContext(), ToLHS, ToRHS, E->getOpcode(), ToType,
+      E->getValueKind(), E->getObjectKind(), ToOperatorLoc,
+      E->getFPFeatures(Importer.getFromContext().getLangOpts()));
 }
 
 ExpectedStmt ASTNodeImporter::VisitConditionalOperator(ConditionalOperator *E) {
@@ -6796,10 +6815,11 @@ ASTNodeImporter::VisitCompoundAssignOperator(CompoundAssignOperator *E) {
   if (Err)
     return std::move(Err);
 
-  return new (Importer.getToContext()) CompoundAssignOperator(
-      ToLHS, ToRHS, E->getOpcode(), ToType, E->getValueKind(),
-      E->getObjectKind(), ToComputationLHSType, ToComputationResultType,
-      ToOperatorLoc, E->getFPFeatures());
+  return CompoundAssignOperator::Create(
+      Importer.getToContext(), ToLHS, ToRHS, E->getOpcode(), ToType,
+      E->getValueKind(), E->getObjectKind(), ToOperatorLoc,
+      E->getFPFeatures(Importer.getFromContext().getLangOpts()),
+      ToComputationLHSType, ToComputationResultType);
 }
 
 Expected<CXXCastPath>
@@ -7906,6 +7926,18 @@ void ASTImporter::RegisterImportedDecl(Decl *FromD, Decl *ToD) {
   MapImported(FromD, ToD);
 }
 
+llvm::Expected<ExprWithCleanups::CleanupObject>
+ASTImporter::Import(ExprWithCleanups::CleanupObject From) {
+  if (auto *CLE = From.dyn_cast<CompoundLiteralExpr *>()) {
+    if (Expected<Expr *> R = Import(CLE))
+      return ExprWithCleanups::CleanupObject(cast<CompoundLiteralExpr>(*R));
+  }
+
+  // FIXME: Handle BlockDecl when we implement importing BlockExpr in
+  //        ASTNodeImporter.
+  return make_error<ImportError>(ImportError::UnsupportedConstruct);
+}
+
 Expected<QualType> ASTImporter::Import(QualType FromT) {
   if (FromT.isNull())
     return QualType{};
@@ -7947,12 +7979,47 @@ Expected<TypeSourceInfo *> ASTImporter::Import(TypeSourceInfo *FromTSI) {
 }
 
 Expected<Attr *> ASTImporter::Import(const Attr *FromAttr) {
-  Attr *ToAttr = FromAttr->clone(ToContext);
-  if (auto ToRangeOrErr = Import(FromAttr->getRange()))
-    ToAttr->setRange(*ToRangeOrErr);
-  else
-    return ToRangeOrErr.takeError();
+  Attr *ToAttr = nullptr;
+  SourceRange ToRange;
+  if (Error Err = importInto(ToRange, FromAttr->getRange()))
+    return std::move(Err);
 
+  // FIXME: Is there some kind of AttrVisitor to use here?
+  switch (FromAttr->getKind()) {
+  case attr::Aligned: {
+    auto *From = cast<AlignedAttr>(FromAttr);
+    AlignedAttr *To;
+    auto CreateAlign = [&](bool IsAlignmentExpr, void *Alignment) {
+      return AlignedAttr::Create(ToContext, IsAlignmentExpr, Alignment, ToRange,
+                                 From->getSyntax(),
+                                 From->getSemanticSpelling());
+    };
+    if (From->isAlignmentExpr()) {
+      if (auto ToEOrErr = Import(From->getAlignmentExpr()))
+        To = CreateAlign(true, *ToEOrErr);
+      else
+        return ToEOrErr.takeError();
+    } else {
+      if (auto ToTOrErr = Import(From->getAlignmentType()))
+        To = CreateAlign(false, *ToTOrErr);
+      else
+        return ToTOrErr.takeError();
+    }
+    To->setInherited(From->isInherited());
+    To->setPackExpansion(From->isPackExpansion());
+    To->setImplicit(From->isImplicit());
+    ToAttr = To;
+    break;
+  }
+  default:
+    // FIXME: 'clone' copies every member but some of them should be imported.
+    // Handle other Attrs that have parameters that should be imported.
+    ToAttr = FromAttr->clone(ToContext);
+    ToAttr->setRange(ToRange);
+    break;
+  }
+  assert(ToAttr && "Attribute should be created.");
+  
   return ToAttr;
 }
 
@@ -8110,15 +8177,22 @@ Expected<DeclContext *> ASTImporter::ImportContext(DeclContext *FromDC) {
   // need it to have a definition.
   if (auto *ToRecord = dyn_cast<RecordDecl>(ToDC)) {
     auto *FromRecord = cast<RecordDecl>(FromDC);
-    if (ToRecord->isCompleteDefinition()) {
-      // Do nothing.
-    } else if (FromRecord->isCompleteDefinition()) {
+    if (ToRecord->isCompleteDefinition())
+      return ToDC;
+
+    // If FromRecord is not defined we need to force it to be.
+    // Simply calling CompleteDecl(...) for a RecordDecl will break some cases
+    // it will start the definition but we never finish it.
+    // If there are base classes they won't be imported and we will
+    // be missing anything that we inherit from those bases.
+    if (FromRecord->getASTContext().getExternalSource() &&
+        !FromRecord->isCompleteDefinition())
+      FromRecord->getASTContext().getExternalSource()->CompleteType(FromRecord);
+
+    if (FromRecord->isCompleteDefinition())
       if (Error Err = ASTNodeImporter(*this).ImportDefinition(
           FromRecord, ToRecord, ASTNodeImporter::IDK_Basic))
         return std::move(Err);
-    } else {
-      CompleteDecl(ToRecord);
-    }
   } else if (auto *ToEnum = dyn_cast<EnumDecl>(ToDC)) {
     auto *FromEnum = cast<EnumDecl>(FromDC);
     if (ToEnum->isCompleteDefinition()) {
@@ -8185,11 +8259,7 @@ Expected<Stmt *> ASTImporter::Import(Stmt *FromS) {
     // constructors.
     ToE->setValueKind(FromE->getValueKind());
     ToE->setObjectKind(FromE->getObjectKind());
-    ToE->setTypeDependent(FromE->isTypeDependent());
-    ToE->setValueDependent(FromE->isValueDependent());
-    ToE->setInstantiationDependent(FromE->isInstantiationDependent());
-    ToE->setContainsUnexpandedParameterPack(
-        FromE->containsUnexpandedParameterPack());
+    ToE->setDependence(FromE->getDependence());
   }
 
   // Record the imported statement object.
@@ -8491,7 +8561,7 @@ Expected<FileID> ASTImporter::Import(FileID FromID, bool IsBuiltin) {
   } else {
     const SrcMgr::ContentCache *Cache = FromSLoc.getFile().getContentCache();
 
-    if (!IsBuiltin) {
+    if (!IsBuiltin && !Cache->BufferOverridden) {
       // Include location of this file.
       ExpectedSLoc ToIncludeLoc = Import(FromSLoc.getFile().getIncludeLoc());
       if (!ToIncludeLoc)

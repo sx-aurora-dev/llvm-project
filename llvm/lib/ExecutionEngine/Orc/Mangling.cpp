@@ -89,15 +89,29 @@ getObjectSymbolInfo(ExecutionSession &ES, MemoryBufferRef ObjBuffer) {
   if (!Obj)
     return Obj.takeError();
 
+  bool IsMachO = isa<object::MachOObjectFile>(Obj->get());
+
   SymbolFlagsMap SymbolFlags;
   for (auto &Sym : (*Obj)->symbols()) {
+    Expected<uint32_t> SymFlagsOrErr = Sym.getFlags();
+    if (!SymFlagsOrErr)
+      // TODO: Test this error.
+      return SymFlagsOrErr.takeError();
+
     // Skip symbols not defined in this object file.
-    if (Sym.getFlags() & object::BasicSymbolRef::SF_Undefined)
+    if (*SymFlagsOrErr & object::BasicSymbolRef::SF_Undefined)
       continue;
 
     // Skip symbols that are not global.
-    if (!(Sym.getFlags() & object::BasicSymbolRef::SF_Global))
+    if (!(*SymFlagsOrErr & object::BasicSymbolRef::SF_Global))
       continue;
+
+    // Skip symbols that have type SF_File.
+    if (auto SymType = Sym.getType()) {
+      if (*SymType == object::SymbolRef::ST_File)
+        continue;
+    } else
+      return SymType.takeError();
 
     auto Name = Sym.getName();
     if (!Name)
@@ -106,19 +120,34 @@ getObjectSymbolInfo(ExecutionSession &ES, MemoryBufferRef ObjBuffer) {
     auto SymFlags = JITSymbolFlags::fromObjectSymbol(Sym);
     if (!SymFlags)
       return SymFlags.takeError();
+
+    // Strip the 'exported' flag from MachO linker-private symbols.
+    if (IsMachO && Name->startswith("l"))
+      *SymFlags &= ~JITSymbolFlags::Exported;
+
     SymbolFlags[InternedName] = std::move(*SymFlags);
   }
 
   SymbolStringPtr InitSymbol;
 
-  if (auto *MachOObj = dyn_cast<object::MachOObjectFile>(Obj->get())) {
-    for (auto &Sec : MachOObj->sections()) {
-      auto SecType = MachOObj->getSectionType(Sec);
+  if (IsMachO) {
+    auto &MachOObj = cast<object::MachOObjectFile>(*Obj->get());
+    for (auto &Sec : MachOObj.sections()) {
+      auto SecType = MachOObj.getSectionType(Sec);
       if ((SecType & MachO::SECTION_TYPE) == MachO::S_MOD_INIT_FUNC_POINTERS) {
-        std::string InitSymString;
-        raw_string_ostream(InitSymString)
-            << "$." << ObjBuffer.getBufferIdentifier() << ".__inits";
-        InitSymbol = ES.intern(InitSymString);
+        size_t Counter = 0;
+        while (true) {
+          std::string InitSymString;
+          raw_string_ostream(InitSymString)
+              << "$." << ObjBuffer.getBufferIdentifier() << ".__inits."
+              << Counter++;
+          InitSymbol = ES.intern(InitSymString);
+          if (SymbolFlags.count(InitSymbol))
+            continue;
+          SymbolFlags[InitSymbol] =
+              JITSymbolFlags::MaterializationSideEffectsOnly;
+          break;
+        }
         break;
       }
     }

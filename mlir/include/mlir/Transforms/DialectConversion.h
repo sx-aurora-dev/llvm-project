@@ -108,7 +108,7 @@ public:
   /// Note: When attempting to convert a type, e.g. via 'convertType', the
   ///       mostly recently added conversions will be invoked first.
   template <typename FnT,
-            typename T = typename FunctionTraits<FnT>::template arg_t<0>>
+            typename T = typename llvm::function_traits<FnT>::template arg_t<0>>
   void addConversion(FnT &&callback) {
     registerConversion(wrapCallback<T>(std::forward<FnT>(callback)));
   }
@@ -172,7 +172,7 @@ private:
   /// different callback forms, that all compose into a single version.
   /// With callback of form: `Optional<Type>(T)`
   template <typename T, typename FnT>
-  std::enable_if_t<is_invocable<FnT, T>::value, ConversionCallbackFn>
+  std::enable_if_t<llvm::is_invocable<FnT, T>::value, ConversionCallbackFn>
   wrapCallback(FnT &&callback) {
     return wrapCallback<T>([callback = std::forward<FnT>(callback)](
                                T type, SmallVectorImpl<Type> &results) {
@@ -187,7 +187,7 @@ private:
   }
   /// With callback of form: `Optional<LogicalResult>(T, SmallVectorImpl<> &)`
   template <typename T, typename FnT>
-  std::enable_if_t<!is_invocable<FnT, T>::value, ConversionCallbackFn>
+  std::enable_if_t<!llvm::is_invocable<FnT, T>::value, ConversionCallbackFn>
   wrapCallback(FnT &&callback) {
     return [callback = std::forward<FnT>(callback)](
                Type type,
@@ -227,57 +227,26 @@ public:
   /// Hook for derived classes to implement rewriting. `op` is the (first)
   /// operation matched by the pattern, `operands` is a list of rewritten values
   /// that are passed to this operation, `rewriter` can be used to emit the new
-  /// operations. This function must be reimplemented if the
-  /// ConversionPattern ever needs to replace an operation that does not
-  /// have successors. This function should not fail. If some specific cases of
+  /// operations. This function should not fail. If some specific cases of
   /// the operation are not supported, these cases should not be matched.
   virtual void rewrite(Operation *op, ArrayRef<Value> operands,
                        ConversionPatternRewriter &rewriter) const {
     llvm_unreachable("unimplemented rewrite");
   }
 
-  /// Hook for derived classes to implement rewriting. `op` is the (first)
-  /// operation matched by the pattern, `properOperands` is a list of rewritten
-  /// values that are passed to the operation itself, `destinations` is a list
-  /// of (potentially rewritten) successor blocks, `operands` is a list of lists
-  /// of rewritten values passed to each of the successors, co-indexed with
-  /// `destinations`, `rewriter` can be used to emit the new operations. It must
-  /// be reimplemented if the ConversionPattern ever needs to replace a
-  /// terminator operation that has successors. This function should not fail
-  /// the pass. If some specific cases of the operation are not supported,
-  /// these cases should not be matched.
-  virtual void rewrite(Operation *op, ArrayRef<Value> properOperands,
-                       ArrayRef<Block *> destinations,
-                       ArrayRef<ArrayRef<Value>> operands,
-                       ConversionPatternRewriter &rewriter) const {
-    llvm_unreachable("unimplemented rewrite for terminators");
-  }
-
   /// Hook for derived classes to implement combined matching and rewriting.
-  virtual PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> properOperands,
-                  ArrayRef<Block *> destinations,
-                  ArrayRef<ArrayRef<Value>> operands,
-                  ConversionPatternRewriter &rewriter) const {
-    if (!match(op))
-      return matchFailure();
-    rewrite(op, properOperands, destinations, operands, rewriter);
-    return matchSuccess();
-  }
-
-  /// Hook for derived classes to implement combined matching and rewriting.
-  virtual PatternMatchResult
+  virtual LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const {
-    if (!match(op))
-      return matchFailure();
+    if (failed(match(op)))
+      return failure();
     rewrite(op, operands, rewriter);
-    return matchSuccess();
+    return success();
   }
 
   /// Attempt to match and rewrite the IR root at the specified operation.
-  PatternMatchResult matchAndRewrite(Operation *op,
-                                     PatternRewriter &rewriter) const final;
+  LogicalResult matchAndRewrite(Operation *op,
+                                PatternRewriter &rewriter) const final;
 
 private:
   using RewritePattern::rewrite;
@@ -297,22 +266,7 @@ struct OpConversionPattern : public ConversionPattern {
                ConversionPatternRewriter &rewriter) const final {
     rewrite(cast<SourceOp>(op), operands, rewriter);
   }
-  void rewrite(Operation *op, ArrayRef<Value> properOperands,
-               ArrayRef<Block *> destinations,
-               ArrayRef<ArrayRef<Value>> operands,
-               ConversionPatternRewriter &rewriter) const final {
-    rewrite(cast<SourceOp>(op), properOperands, destinations, operands,
-            rewriter);
-  }
-  PatternMatchResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> properOperands,
-                  ArrayRef<Block *> destinations,
-                  ArrayRef<ArrayRef<Value>> operands,
-                  ConversionPatternRewriter &rewriter) const final {
-    return matchAndRewrite(cast<SourceOp>(op), properOperands, destinations,
-                           operands, rewriter);
-  }
-  PatternMatchResult
+  LogicalResult
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const final {
     return matchAndRewrite(cast<SourceOp>(op), operands, rewriter);
@@ -328,31 +282,13 @@ struct OpConversionPattern : public ConversionPattern {
     llvm_unreachable("must override matchAndRewrite or a rewrite method");
   }
 
-  virtual void rewrite(SourceOp op, ArrayRef<Value> properOperands,
-                       ArrayRef<Block *> destinations,
-                       ArrayRef<ArrayRef<Value>> operands,
-                       ConversionPatternRewriter &rewriter) const {
-    llvm_unreachable("unimplemented rewrite for terminators");
-  }
-
-  virtual PatternMatchResult
-  matchAndRewrite(SourceOp op, ArrayRef<Value> properOperands,
-                  ArrayRef<Block *> destinations,
-                  ArrayRef<ArrayRef<Value>> operands,
-                  ConversionPatternRewriter &rewriter) const {
-    if (!match(op))
-      return matchFailure();
-    rewrite(op, properOperands, destinations, operands, rewriter);
-    return matchSuccess();
-  }
-
-  virtual PatternMatchResult
+  virtual LogicalResult
   matchAndRewrite(SourceOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const {
-    if (!match(op))
-      return matchFailure();
+    if (failed(match(op)))
+      return failure();
     rewrite(op, operands, rewriter);
-    return matchSuccess();
+    return success();
   }
 
 private:
@@ -408,6 +344,13 @@ public:
   /// otherwise an assert will be issued.
   void eraseOp(Operation *op) override;
 
+  /// PatternRewriter hook for erase all operations in a block. This is not yet
+  /// implemented for dialect conversion.
+  void eraseBlock(Block *block) override;
+
+  /// PatternRewriter hook creating a new block.
+  void notifyBlockCreated(Block *block) override;
+
   /// PatternRewriter hook for splitting a block into two parts.
   Block *splitBlock(Block *block, Block::iterator before) override;
 
@@ -429,7 +372,7 @@ public:
   using PatternRewriter::cloneRegionBefore;
 
   /// PatternRewriter hook for inserting a new operation.
-  Operation *insert(Operation *op) override;
+  void notifyOperationInserted(Operation *op) override;
 
   /// PatternRewriter hook for updating the root operation in-place.
   /// Note: These methods only track updates to the top-level operation itself,
@@ -442,6 +385,12 @@ public:
 
   /// PatternRewriter hook for updating the root operation in-place.
   void cancelRootUpdate(Operation *op) override;
+
+  /// PatternRewriter hook for notifying match failure reasons.
+  LogicalResult
+  notifyMatchFailure(Operation *op,
+                     function_ref<void(Diagnostic &)> reasonCallback) override;
+  using PatternRewriter::notifyMatchFailure;
 
   /// Return a reference to the internal implementation.
   detail::ConversionPatternRewriterImpl &getImpl();
@@ -532,7 +481,8 @@ public:
     addDynamicallyLegalOp<OpT2, OpTs...>(callback);
   }
   template <typename OpT, class Callable>
-  typename std::enable_if<!is_invocable<Callable, Operation *>::value>::type
+  typename std::enable_if<
+      !llvm::is_invocable<Callable, Operation *>::value>::type
   addDynamicallyLegalOp(Callable &&callback) {
     addDynamicallyLegalOp<OpT>(
         [=](Operation *op) { return callback(cast<OpT>(op)); });
@@ -564,7 +514,8 @@ public:
     markOpRecursivelyLegal<OpT2, OpTs...>(callback);
   }
   template <typename OpT, class Callable>
-  typename std::enable_if<!is_invocable<Callable, Operation *>::value>::type
+  typename std::enable_if<
+      !llvm::is_invocable<Callable, Operation *>::value>::type
   markOpRecursivelyLegal(Callable &&callback) {
     markOpRecursivelyLegal<OpT>(
         [=](Operation *op) { return callback(cast<OpT>(op)); });
@@ -708,20 +659,25 @@ private:
 /// ConversionPatternRewriter, to see what additional constraints are imposed on
 /// the use of the PatternRewriter.
 
-/// Apply a partial conversion on the given operations, and all nested
+/// Apply a partial conversion on the given operations and all nested
 /// operations. This method converts as many operations to the target as
 /// possible, ignoring operations that failed to legalize. This method only
-/// returns failure if there are unreachable blocks in any of the regions nested
-/// within 'ops'. If 'converter' is provided, the signatures of blocks and
-/// regions are also converted.
+/// returns failure if there ops explicitly marked as illegal. If `converter` is
+/// provided, the signatures of blocks and regions are also converted.
+/// If an `unconvertedOps` set is provided, all operations that are found not
+/// to be legalizable to the given `target` are placed within that set. (Note
+/// that if there is an op explicitly marked as illegal, the conversion
+/// terminates and the `unconvertedOps` set will not necessarily be complete.)
 LLVM_NODISCARD LogicalResult
 applyPartialConversion(ArrayRef<Operation *> ops, ConversionTarget &target,
                        const OwningRewritePatternList &patterns,
-                       TypeConverter *converter = nullptr);
+                       TypeConverter *converter = nullptr,
+                       DenseSet<Operation *> *unconvertedOps = nullptr);
 LLVM_NODISCARD LogicalResult
 applyPartialConversion(Operation *op, ConversionTarget &target,
                        const OwningRewritePatternList &patterns,
-                       TypeConverter *converter = nullptr);
+                       TypeConverter *converter = nullptr,
+                       DenseSet<Operation *> *unconvertedOps = nullptr);
 
 /// Apply a complete conversion on the given operations, and all nested
 /// operations. This method returns failure if the conversion of any operation

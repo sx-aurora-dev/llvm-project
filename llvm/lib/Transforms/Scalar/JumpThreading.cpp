@@ -298,8 +298,6 @@ bool JumpThreading::runOnFunction(Function &F) {
   if (skipFunction(F))
     return false;
   auto TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
-  // Get DT analysis before LVI. When LVI is initialized it conditionally adds
-  // DT if it's available.
   auto DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
   auto LVI = &getAnalysis<LazyValueInfoWrapperPass>().getLVI();
   auto AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
@@ -316,7 +314,7 @@ bool JumpThreading::runOnFunction(Function &F) {
                               std::move(BFI), std::move(BPI));
   if (PrintLVIAfterJumpThreading) {
     dbgs() << "LVI for function '" << F.getName() << "':\n";
-    LVI->printLVI(F, *DT, dbgs());
+    LVI->printLVI(F, DTU.getDomTree(), dbgs());
   }
   return Changed;
 }
@@ -324,8 +322,6 @@ bool JumpThreading::runOnFunction(Function &F) {
 PreservedAnalyses JumpThreadingPass::run(Function &F,
                                          FunctionAnalysisManager &AM) {
   auto &TLI = AM.getResult<TargetLibraryAnalysis>(F);
-  // Get DT analysis before LVI. When LVI is initialized it conditionally adds
-  // DT if it's available.
   auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
   auto &LVI = AM.getResult<LazyValueAnalysis>(F);
   auto &AA = AM.getResult<AAManager>(F);
@@ -454,9 +450,6 @@ bool JumpThreadingPass::runImpl(Function &F, TargetLibraryInfo *TLI_,
   } while (Changed);
 
   LoopHeaders.clear();
-  // Flush only the Dominator Tree.
-  DTU->getDomTree();
-  LVI->enableDT();
   return EverChanged;
 }
 
@@ -611,14 +604,13 @@ static Constant *getKnownConstant(Value *Val, ConstantPreference Preference) {
 /// This returns true if there were any known values.
 bool JumpThreadingPass::ComputeValueKnownInPredecessorsImpl(
     Value *V, BasicBlock *BB, PredValueInfo &Result,
-    ConstantPreference Preference,
-    DenseSet<std::pair<Value *, BasicBlock *>> &RecursionSet,
+    ConstantPreference Preference, DenseSet<Value *> &RecursionSet,
     Instruction *CxtI) {
   // This method walks up use-def chains recursively.  Because of this, we could
   // get into an infinite loop going around loops in the use-def chain.  To
   // prevent this, keep track of what (value, block) pairs we've already visited
   // and terminate the search if we loop back to them
-  if (!RecursionSet.insert(std::make_pair(V, BB)).second)
+  if (!RecursionSet.insert(V).second)
     return false;
 
   // If V is a constant, then it is known in all predecessors.
@@ -646,11 +638,6 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessorsImpl(
     // able to handle value inequalities better, for example if the compare is
     // "X < 4" and "X < 3" is known true but "X < 4" itself is not available.
     // Perhaps getConstantOnEdge should be smart enough to do this?
-
-    if (DTU->hasPendingDomTreeUpdates())
-      LVI->disableDT();
-    else
-      LVI->enableDT();
     for (BasicBlock *P : predecessors(BB)) {
       // If the value is known by LazyValueInfo to be a constant in a
       // predecessor, use that information to try to thread this block.
@@ -664,10 +651,6 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessorsImpl(
 
   /// If I is a PHI node, then we know the incoming values for any constants.
   if (PHINode *PN = dyn_cast<PHINode>(I)) {
-    if (DTU->hasPendingDomTreeUpdates())
-      LVI->disableDT();
-    else
-      LVI->enableDT();
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
       Value *InVal = PN->getIncomingValue(i);
       if (Constant *KC = getKnownConstant(InVal, Preference)) {
@@ -798,10 +781,6 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessorsImpl(
       const DataLayout &DL = PN->getModule()->getDataLayout();
       // We can do this simplification if any comparisons fold to true or false.
       // See if any do.
-      if (DTU->hasPendingDomTreeUpdates())
-        LVI->disableDT();
-      else
-        LVI->enableDT();
       for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i) {
         BasicBlock *PredBB = PN->getIncomingBlock(i);
         Value *LHS, *RHS;
@@ -845,10 +824,6 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessorsImpl(
 
       if (!isa<Instruction>(CmpLHS) ||
           cast<Instruction>(CmpLHS)->getParent() != BB) {
-        if (DTU->hasPendingDomTreeUpdates())
-          LVI->disableDT();
-        else
-          LVI->enableDT();
         for (BasicBlock *P : predecessors(BB)) {
           // If the value is known by LazyValueInfo to be a constant in a
           // predecessor, use that information to try to thread this block.
@@ -877,10 +852,6 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessorsImpl(
             match(CmpLHS, m_Add(m_Value(AddLHS), m_ConstantInt(AddConst)))) {
           if (!isa<Instruction>(AddLHS) ||
               cast<Instruction>(AddLHS)->getParent() != BB) {
-            if (DTU->hasPendingDomTreeUpdates())
-              LVI->disableDT();
-            else
-              LVI->enableDT();
             for (BasicBlock *P : predecessors(BB)) {
               // If the value is known by LazyValueInfo to be a ConstantRange in
               // a predecessor, use that information to try to thread this
@@ -962,10 +933,6 @@ bool JumpThreadingPass::ComputeValueKnownInPredecessorsImpl(
   }
 
   // If all else fails, see if LVI can figure out a constant value for us.
-  if (DTU->hasPendingDomTreeUpdates())
-    LVI->disableDT();
-  else
-    LVI->enableDT();
   Constant *CI = LVI->getConstant(V, BB, CxtI);
   if (Constant *KC = getKnownConstant(CI, Preference)) {
     for (BasicBlock *Pred : predecessors(BB))
@@ -1125,10 +1092,6 @@ bool JumpThreadingPass::ProcessBlock(BasicBlock *BB) {
       // threading is concerned.
       assert(CondBr->isConditional() && "Threading on unconditional terminator");
 
-      if (DTU->hasPendingDomTreeUpdates())
-        LVI->disableDT();
-      else
-        LVI->enableDT();
       LazyValueInfo::Tristate Ret =
         LVI->getPredicateAt(CondCmp->getPredicate(), CondCmp->getOperand(0),
                             CondConst, CondBr);
@@ -1449,7 +1412,7 @@ bool JumpThreadingPass::SimplifyPartiallyRedundantLoad(LoadInst *LoadI) {
            "Can't handle critical edge here!");
     LoadInst *NewVal = new LoadInst(
         LoadI->getType(), LoadedPtr->DoPHITranslation(LoadBB, UnavailablePred),
-        LoadI->getName() + ".pr", false, MaybeAlign(LoadI->getAlignment()),
+        LoadI->getName() + ".pr", false, LoadI->getAlign(),
         LoadI->getOrdering(), LoadI->getSyncScopeID(),
         UnavailablePred->getTerminator());
     NewVal->setDebugLoc(LoadI->getDebugLoc());
@@ -1582,10 +1545,6 @@ Constant *JumpThreadingPass::EvaluateOnPredecessorEdge(BasicBlock *BB,
   // Consult LVI if V is not an instruction in BB or PredBB.
   Instruction *I = dyn_cast<Instruction>(V);
   if (!I || (I->getParent() != BB && I->getParent() != PredBB)) {
-    if (DTU->hasPendingDomTreeUpdates())
-      LVI->disableDT();
-    else
-      LVI->enableDT();
     return LVI->getConstantOnEdge(V, PredPredBB, PredBB, nullptr);
   }
 
@@ -2125,6 +2084,18 @@ bool JumpThreadingPass::MaybeThreadThroughTwoBasicBlocks(BasicBlock *BB,
   if (PredBB->getSinglePredecessor())
     return false;
 
+  // Don't thread through PredBB if it contains a successor edge to itself, in
+  // which case we would infinite loop.  Suppose we are threading an edge from
+  // PredPredBB through PredBB and BB to SuccBB with PredBB containing a
+  // successor edge to itself.  If we allowed jump threading in this case, we
+  // could duplicate PredBB and BB as, say, PredBB.thread and BB.thread.  Since
+  // PredBB.thread has a successor edge to PredBB, we would immediately come up
+  // with another jump threading opportunity from PredBB.thread through PredBB
+  // and BB to SuccBB.  This jump threading would repeatedly occur.  That is, we
+  // would keep peeling one iteration from PredBB.
+  if (llvm::is_contained(successors(PredBB), PredBB))
+    return false;
+
   // Don't thread across a loop header.
   if (LoopHeaders.count(PredBB))
     return false;
@@ -2334,10 +2305,6 @@ void JumpThreadingPass::ThreadEdge(BasicBlock *BB,
                     << "' to '" << SuccBB->getName()
                     << ", across block:\n    " << *BB << "\n");
 
-  if (DTU->hasPendingDomTreeUpdates())
-    LVI->disableDT();
-  else
-    LVI->enableDT();
   LVI->threadEdge(PredBB, BB, SuccBB);
 
   BasicBlock *NewBB = BasicBlock::Create(BB->getContext(),
@@ -2502,8 +2469,7 @@ void JumpThreadingPass::UpdateBlockFreqAndEdgeWeight(BasicBlock *PredBB,
   }
 
   // Update edge probabilities in BPI.
-  for (int I = 0, E = BBSuccProbs.size(); I < E; I++)
-    BPI->setEdgeProbability(BB, I, BBSuccProbs[I]);
+  BPI->setEdgeProbability(BB, BBSuccProbs);
 
   // Update the profile metadata as well.
   //
@@ -2780,10 +2746,6 @@ bool JumpThreadingPass::TryToUnfoldSelect(CmpInst *CondCmp, BasicBlock *BB) {
     // Now check if one of the select values would allow us to constant fold the
     // terminator in BB. We don't do the transform if both sides fold, those
     // cases will be threaded in any case.
-    if (DTU->hasPendingDomTreeUpdates())
-      LVI->disableDT();
-    else
-      LVI->enableDT();
     LazyValueInfo::Tristate LHSFolds =
         LVI->getPredicateOnEdge(CondCmp->getPredicate(), SI->getOperand(1),
                                 CondRHS, Pred, BB, CondCmp);
@@ -2821,6 +2783,16 @@ bool JumpThreadingPass::TryToUnfoldSelect(CmpInst *CondCmp, BasicBlock *BB) {
 /// select is not jump-threaded, it will be folded again in the later
 /// optimizations.
 bool JumpThreadingPass::TryToUnfoldSelectInCurrBB(BasicBlock *BB) {
+  // This transform can introduce a UB (a conditional branch that depends on a
+  // poison value) that was not present in the original program. See
+  // @TryToUnfoldSelectInCurrBB test in test/Transforms/JumpThreading/select.ll.
+  // Disable this transform under MemorySanitizer.
+  // FIXME: either delete it or replace with a valid transform. This issue is
+  // not limited to MemorySanitizer (but has only been observed as an MSan false
+  // positive in practice so far).
+  if (BB->getParent()->hasFnAttribute(Attribute::SanitizeMemory))
+    return false;
+
   // If threading this would thread across a loop header, don't thread the edge.
   // See the comments above FindLoopHeaders for justifications and caveats.
   if (LoopHeaders.count(BB))

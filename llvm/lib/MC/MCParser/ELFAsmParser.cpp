@@ -637,7 +637,11 @@ EndStmt:
   MCSectionELF *Section = getContext().getELFSection(
       SectionName, Type, Flags, Size, GroupName, UniqueID, LinkedToSym);
   getStreamer().SwitchSection(Section, Subsection);
-  if (Section->getType() != Type)
+  // x86-64 psABI names SHT_X86_64_UNWIND as the canonical type for .eh_frame,
+  // but GNU as emits SHT_PROGBITS .eh_frame for .cfi_* directives. Don't error
+  // for SHT_PROGBITS .eh_frame
+  if (Section->getType() != Type &&
+      !(SectionName == ".eh_frame" && Type == ELF::SHT_PROGBITS))
     Error(loc, "changed section type for " + SectionName + ", expected: 0x" +
                    utohexstr(Section->getType()));
   if (Section->getFlags() != Flags)
@@ -806,12 +810,12 @@ bool ELFAsmParser::ParseDirectiveVersion(StringRef, SMLoc) {
 
   getStreamer().PushSection();
   getStreamer().SwitchSection(Note);
-  getStreamer().emitIntValue(Data.size()+1, 4); // namesz.
-  getStreamer().emitIntValue(0, 4);             // descsz = 0 (no description).
-  getStreamer().emitIntValue(1, 4);             // type = NT_VERSION.
-  getStreamer().emitBytes(Data);                // name.
-  getStreamer().emitIntValue(0, 1);             // terminate the string.
-  getStreamer().emitValueToAlignment(4);        // ensure 4 byte alignment.
+  getStreamer().emitInt32(Data.size() + 1); // namesz
+  getStreamer().emitInt32(0);               // descsz = 0 (no description).
+  getStreamer().emitInt32(1);               // type = NT_VERSION
+  getStreamer().emitBytes(Data);            // name
+  getStreamer().emitInt8(0);                // NUL
+  getStreamer().emitValueToAlignment(4);
   getStreamer().PopSection();
   return false;
 }

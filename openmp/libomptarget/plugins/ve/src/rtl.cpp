@@ -7,12 +7,13 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// RTL for NEC Aurora TSUBASE machines
+// RTL for NEC Aurora TSUBASA machines
 //
 //===----------------------------------------------------------------------===//
 
 #include "omptargetplugin.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cerrno>
 #include <cstring>
@@ -46,9 +47,6 @@ static int DebugLevel = 0;
 
 #include "../../common/elf_common.c"
 
-#define VEO_MIN_VERSION 4
-#define VEO_MAX_VERSION 7
-
 struct DynLibTy {
   char *FileName;
   uint64_t VeoLibHandle;
@@ -68,7 +66,8 @@ public:
   std::vector<struct veo_thr_ctxt *> Contexts;
   std::vector<uint64_t> LibraryHandles;
   std::list<DynLibTy> DynLibs;
-  unsigned int NumDevices;
+  // Maps OpenMP device Ids to Ve nodeids
+  std::vector<int> NodeIds;
 
   void buildOffloadTableFromHost(int32_t device_id, uint64_t VeoLibHandle,
                                  __tgt_offload_entry *HostBegin,
@@ -118,12 +117,25 @@ public:
     }
 #endif // OMPTARGET_DEBUG
 
-    // Dynamically check how many devices we have
-    // For the moment we assume that VEO device IDs are consecutive
     struct ve_nodeinfo node_info;
     ve_node_info(&node_info);
-    DP("Found %i VE devices\n", node_info.total_node_count);
-    NumDevices = node_info.total_node_count;
+
+    // Build a predictable mapping between VE node ids and OpenMP device ids.
+    // This is necessary, because nodes can be missing or offline and (active)
+    // node ids are thus not consecutive. The entries in ve_nodeinfo may also
+    // not be in the order of their node ids.
+    for (int i = 0; i < node_info.total_node_count; ++i) {
+      if (node_info.status[i] == 0) {
+        NodeIds.push_back(node_info.nodeid[i]);
+      }
+    }
+
+    // Because the entries in ve_nodeinfo may not be in the order of their node
+    // ids, we sort NodeIds to get a predictable mapping.
+    std::sort(NodeIds.begin(), NodeIds.end());
+
+    int NumDevices = NodeIds.size();
+    DP("Found %i VE devices\n", NumDevices);
     ProcHandles.resize(NumDevices, NULL);
     Contexts.resize(NumDevices, NULL);
     FuncOrGblEntry.resize(NumDevices);
@@ -165,10 +177,10 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
     DP("Execution of entry point %p failed\n",
        reinterpret_cast<void *>(FuncAddr));
     return OFFLOAD_FAIL;
-  } else {
-    DP("Function at address %p called (VEO request ID: %" PRIu64 ")\n",
-       reinterpret_cast<void *>(FuncAddr), RequestHandle);
   }
+
+  DP("Function at address %p called (VEO request ID: %" PRIu64 ")\n",
+     reinterpret_cast<void *>(FuncAddr), RequestHandle);
 
   int ret = veo_call_wait_result(DeviceInfo.Contexts[DeviceID], RequestHandle,
                                  RetVal);
@@ -180,13 +192,10 @@ static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
   return OFFLOAD_SUCCESS;
 }
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 // Return the number of available devices of the type supported by the
 // target RTL.
-int32_t __tgt_rtl_number_of_devices(void) { return DeviceInfo.NumDevices; }
+int32_t __tgt_rtl_number_of_devices(void) { return DeviceInfo.NodeIds.size(); }
 
 // Return an integer different from zero if the provided device image can be
 // supported by the runtime. The functionality is similar to comparing the
@@ -204,22 +213,9 @@ int32_t __tgt_rtl_is_valid_binary(__tgt_device_image *Image) {
 // Initialize the specified device. In case of success return 0; otherwise
 // return an error code.
 int32_t __tgt_rtl_init_device(int32_t ID) {
-  // First of all: check the veo API version
-  int veo_version = veo_api_version();
-  if (veo_version < VEO_MIN_VERSION) {
-    DP("veo_get_version() reported version %i. Minimum supported veo api "
-       "version is %i\n",
-       veo_version, VEO_MIN_VERSION);
-    return OFFLOAD_FAIL;
-  } else if (veo_version > VEO_MAX_VERSION) {
-    DP("veo_get_version() reported version %i, Maximum supported veo api "
-       "version is %i\n",
-       veo_version, VEO_MAX_VERSION);
-    return OFFLOAD_FAIL;
-  }
-  DP("Available VEO version: %i (supported)\n", veo_version);
+  DP("Available VEO version: %i\n", veo_api_version());
 
-  // At the moment we do not really initialize (i.e. creaete a process or
+  // At the moment we do not really initialize (i.e. create a process or
   // context on) the device here, but in "__tgt_rtl_load_binary".
   // The reason for this is, that, when we create a process for a statically
   // linked binary, the VEO api needs us to already supply the binary (but we
@@ -244,12 +240,6 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
   size_t ImageSize = (size_t)Image->ImageEnd - (size_t)Image->ImageStart;
   size_t NumEntries = (size_t)(Image->EntriesEnd - Image->EntriesBegin);
   DP("Expecting to have %zd entries defined.\n", NumEntries);
-
-  // Is the library version incompatible with the header file?
-  if (elf_version(EV_CURRENT) == EV_NONE) {
-    DP("Incompatible ELF library!\n");
-    return NULL;
-  }
 
   // load dynamic library and get the entry points. We use the dl library
   // to do the loading of the library, but we could do it directly to avoid the
@@ -290,13 +280,13 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
     // If we have a statically linked image, we need to create the process
     // handle and load the image at the same time with veo_proc_create_static().
     if (is_dyn) {
-      proc_handle = veo_proc_create(ID);
+      proc_handle = veo_proc_create(DeviceInfo.NodeIds[ID]);
       if (!proc_handle) {
         DP("veo_proc_create() failed for device %d\n", ID);
         return NULL;
       }
     } else {
-      proc_handle = veo_proc_create_static(ID, tmp_name);
+      proc_handle = veo_proc_create_static(DeviceInfo.NodeIds[ID], tmp_name);
       if (!proc_handle) {
         DP("veo_proc_create_static() failed for device %d, image=%s\n", ID,
            tmp_name);
@@ -359,12 +349,12 @@ __tgt_target_table *__tgt_rtl_load_binary(int32_t ID,
 // __tgt_rtl_run_region(). The __tgt_rtl_data_alloc() returns NULL in
 // case an error occurred on the target device.
 void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
-  uint64_t ret;
+  int ret;
   uint64_t addr;
 
   if (DeviceInfo.ProcHandles[ID] == NULL) {
     struct veo_proc_handle *proc_handle;
-    proc_handle = veo_proc_create(ID);
+    proc_handle = veo_proc_create(DeviceInfo.NodeIds[ID]);
     if (!proc_handle) {
       DP("veo_proc_create() failed for device %d\n", ID);
       return NULL;
@@ -377,8 +367,7 @@ void *__tgt_rtl_data_alloc(int32_t ID, int64_t Size, void *HostPtr) {
   DP("Allocate target memory: device=%d, target addr=%p, size=%" PRIu64 "\n",
      ID, reinterpret_cast<void *>(addr), Size);
   if (ret != 0) {
-    DP("veo_alloc_mem(%d, %p, %" PRIu64 ") failed with error code %" PRIu64
-       "\n",
+    DP("veo_alloc_mem(%d, %p, %" PRIu64 ") failed with error code %d\n",
        ID, reinterpret_cast<void *>(addr), Size, ret);
     return NULL;
   }
@@ -430,6 +419,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
                                          ptrdiff_t *Offsets, int32_t NumArgs,
                                          int32_t NumTeams, int32_t ThreadLimit,
                                          uint64_t loop_tripcount) {
+  int ret;
+
   // ignore team num and thread limit.
   std::vector<void *> ptrs(NumArgs);
 
@@ -441,8 +432,14 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
     return OFFLOAD_FAIL;
   }
 
-  for (int32_t i = 0; i < NumArgs; ++i) {
-    veo_args_set_u64(TargetArgs, i, (intptr_t)Args[i]);
+  for (int i = 0; i < NumArgs; ++i) {
+    ret = veo_args_set_u64(TargetArgs, i, (intptr_t)Args[i]);
+
+    if (ret != 0) {
+      DP("veo_args_set_u64() has returned %d for argnum=%d and value %p\n",
+         ret, i, Args[i]);
+      return OFFLOAD_FAIL;
+    }
   }
 
   uint64_t RetVal;
@@ -465,7 +462,3 @@ int32_t __tgt_rtl_run_target_region(int32_t ID, void *Entry, void **Args,
   return __tgt_rtl_run_target_team_region(ID, Entry, Args, Offsets, NumArgs, 1,
                                           1, 0);
 }
-
-#ifdef __cplusplus
-}
-#endif

@@ -95,15 +95,6 @@ private:
         ", length=" + formatv("{0:d}", RI.r_length));
   }
 
-  MachO::relocation_info
-  getRelocationInfo(const object::relocation_iterator RelItr) {
-    MachO::any_relocation_info ARI =
-        getObject().getRelocation(RelItr->getRawDataRefImpl());
-    MachO::relocation_info RI;
-    memcpy(&RI, &ARI, sizeof(MachO::relocation_info));
-    return RI;
-  }
-
   using PairRelocInfo = std::tuple<MachOX86RelocationKind, Symbol *, uint64_t>;
 
   // Parses paired SUBTRACTOR/UNSIGNED relocations and, on success,
@@ -441,7 +432,7 @@ const uint8_t MachO_x86_64_GOTAndStubsBuilder::StubContent[6] = {
     0xFF, 0x25, 0x00, 0x00, 0x00, 0x00};
 } // namespace
 
-Error optimizeMachO_x86_64_GOTAndStubs(LinkGraph &G) {
+static Error optimizeMachO_x86_64_GOTAndStubs(LinkGraph &G) {
   LLVM_DEBUG(dbgs() << "Optimizing GOT entries and stubs:\n");
 
   for (auto *B : G.blocks())

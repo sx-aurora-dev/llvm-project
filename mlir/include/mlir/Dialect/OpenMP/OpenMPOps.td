@@ -30,8 +30,44 @@ def BarrierOp : OpenMP_Op<"barrier"> {
     the construct appears.
   }];
 
-  let parser = [{ return success(); }];
-  let printer = [{ p << getOperationName(); }];
+  let assemblyFormat = "attr-dict";
+}
+
+//===----------------------------------------------------------------------===//
+// 2.13.7 flush Construct
+//===----------------------------------------------------------------------===//
+def FlushOp : OpenMP_Op<"flush"> {
+  let summary = "flush construct";
+  let description = [{
+    The flush construct executes the OpenMP flush operation. This operation
+    makes a thread’s temporary view of memory consistent with memory and
+    enforces an order on the memory operations of the variables explicitly
+    specified or implied.
+  }];
+
+  let arguments = (ins Variadic<AnyType>:$varList);
+
+  let assemblyFormat = "attr-dict ($varList^ `:` type($varList))?";
+}
+
+def TaskwaitOp : OpenMP_Op<"taskwait"> {
+  let summary = "taskwait construct";
+  let description = [{
+    The taskwait construct specifies a wait on the completion of child tasks
+    of the current task.
+  }];
+
+  let assemblyFormat = "attr-dict";
+}
+
+def TaskyieldOp : OpenMP_Op<"taskyield"> {
+  let summary = "taskyield construct";
+  let description = [{
+    The taskyield construct specifies that the current task can be suspended
+    in favor of execution of a different task.
+  }];
+
+  let assemblyFormat = "attr-dict";
 }
 
 #endif // OPENMP_OPS

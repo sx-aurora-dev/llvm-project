@@ -20,8 +20,10 @@ namespace macho {
 using namespace object;
 using SectionPred = std::function<bool(const std::unique_ptr<Section> &Sec)>;
 
-static void removeSections(const CopyConfig &Config, Object &Obj) {
-  SectionPred RemovePred = [](const std::unique_ptr<Section> &) { return false; };
+static Error removeSections(const CopyConfig &Config, Object &Obj) {
+  SectionPred RemovePred = [](const std::unique_ptr<Section> &) {
+    return false;
+  };
 
   if (!Config.ToRemove.empty()) {
     RemovePred = [&Config, RemovePred](const std::unique_ptr<Section> &Sec) {
@@ -66,7 +68,11 @@ static void updateAndRemoveSymbols(const CopyConfig &Config, Object &Obj) {
   auto RemovePred = [Config](const std::unique_ptr<SymbolEntry> &N) {
     if (N->Referenced)
       return false;
-    return Config.StripAll;
+    if (Config.StripAll)
+      return true;
+    if (Config.DiscardMode == DiscardType::All && !(N->n_type & MachO::N_EXT))
+      return true;
+    return false;
   };
 
   Obj.SymTable.removeSymbols(RemovePred);
@@ -167,17 +173,18 @@ static Error handleArgs(const CopyConfig &Config, Object &Obj) {
       !Config.SectionsToRename.empty() ||
       !Config.UnneededSymbolsToRemove.empty() ||
       !Config.SetSectionAlignment.empty() || !Config.SetSectionFlags.empty() ||
-      Config.ExtractDWO || Config.KeepFileSymbols || Config.LocalizeHidden ||
-      Config.PreserveDates || Config.StripAllGNU || Config.StripDWO ||
-      Config.StripNonAlloc || Config.StripSections || Config.Weaken ||
-      Config.DecompressDebugSections || Config.StripNonAlloc ||
-      Config.StripSections || Config.StripUnneeded ||
-      Config.DiscardMode != DiscardType::None || !Config.SymbolsToAdd.empty() ||
-      Config.EntryExpr) {
+      Config.ExtractDWO || Config.LocalizeHidden || Config.PreserveDates ||
+      Config.StripAllGNU || Config.StripDWO || Config.StripNonAlloc ||
+      Config.StripSections || Config.Weaken || Config.DecompressDebugSections ||
+      Config.StripNonAlloc || Config.StripSections || Config.StripUnneeded ||
+      Config.DiscardMode == DiscardType::Locals ||
+      !Config.SymbolsToAdd.empty() || Config.EntryExpr) {
     return createStringError(llvm::errc::invalid_argument,
                              "option not supported by llvm-objcopy for MachO");
   }
-  removeSections(Config, Obj);
+
+  if (Error E = removeSections(Config, Obj))
+    return E;
 
   // Mark symbols to determine which symbols are still needed.
   if (Config.StripAll)

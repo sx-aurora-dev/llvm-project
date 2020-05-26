@@ -761,7 +761,9 @@ def X86vfproundRnd: SDNode<"X86ISD::VFPROUND_RND",
 
 // cvt fp to bfloat16
 def X86cvtne2ps2bf16 : SDNode<"X86ISD::CVTNE2PS2BF16",
-                       SDTypeProfile<1, 2, [SDTCisVec<0>, SDTCisVec<1>,
+                       SDTypeProfile<1, 2, [SDTCVecEltisVT<0, i16>,
+                                            SDTCVecEltisVT<1, f32>,
+                                            SDTCisSameSizeAs<0,1>,
                                             SDTCisSameAs<1,2>]>>;
 def X86mcvtneps2bf16 : SDNode<"X86ISD::MCVTNEPS2BF16",
                        SDTypeProfile<1, 3, [SDTCVecEltisVT<0, i16>,
@@ -786,23 +788,6 @@ def X86GF2P8mulb        : SDNode<"X86ISD::GF2P8MULB", SDTIntBinOp>;
 def SDTX86MaskedStore: SDTypeProfile<0, 3, [       // masked store
   SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<0, 2>
 ]>;
-
-//===----------------------------------------------------------------------===//
-// SSE Complex Patterns
-//===----------------------------------------------------------------------===//
-
-// These are 'extloads' from a scalar to the low element of a vector, zeroing
-// the top elements.  These are used for the SSE 'ss' and 'sd' instruction
-// forms.
-def sse_load_f32 : ComplexPattern<v4f32, 5, "selectScalarSSELoad", [],
-                                  [SDNPHasChain, SDNPMayLoad, SDNPMemOperand,
-                                   SDNPWantRoot, SDNPWantParent]>;
-def sse_load_f64 : ComplexPattern<v2f64, 5, "selectScalarSSELoad", [],
-                                  [SDNPHasChain, SDNPMayLoad, SDNPMemOperand,
-                                   SDNPWantRoot, SDNPWantParent]>;
-
-def ssmem : X86MemOperand<"printdwordmem", X86Mem32AsmOperand>;
-def sdmem : X86MemOperand<"printqwordmem", X86Mem64AsmOperand>;
 
 //===----------------------------------------------------------------------===//
 // SSE pattern fragments
@@ -973,6 +958,23 @@ def X86VBroadcastld64 : PatFrag<(ops node:$src),
                                 (X86VBroadcastld node:$src), [{
   return cast<MemIntrinsicSDNode>(N)->getMemoryVT().getStoreSize() == 8;
 }]>;
+
+// Scalar SSE intrinsic fragments to match several different types of loads.
+// Used by scalar SSE intrinsic instructions which have 128 bit types, but
+// only load a single element.
+// FIXME: We should add more canolicalizing in DAGCombine. Particulary removing
+// the simple_load case.
+def sse_load_f32 : PatFrags<(ops node:$ptr),
+                            [(v4f32 (simple_load node:$ptr)),
+                             (v4f32 (X86vzload32 node:$ptr)),
+                             (v4f32 (scalar_to_vector (loadf32 node:$ptr)))]>;
+def sse_load_f64 : PatFrags<(ops node:$ptr),
+                            [(v2f64 (simple_load node:$ptr)),
+                             (v2f64 (X86vzload64 node:$ptr)),
+                             (v2f64 (scalar_to_vector (loadf64 node:$ptr)))]>;
+
+def ssmem : X86MemOperand<"printdwordmem", X86Mem32AsmOperand>;
+def sdmem : X86MemOperand<"printqwordmem", X86Mem64AsmOperand>;
 
 
 def fp32imm0 : PatLeaf<(f32 fpimm), [{

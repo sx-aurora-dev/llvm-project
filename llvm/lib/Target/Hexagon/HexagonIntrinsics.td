@@ -205,12 +205,12 @@ def: T_stc_pat<S2_storerf_pci, int_hexagon_circ_sthhi, s4_1ImmPred_timm, I32>;
 
 multiclass MaskedStore <InstHexagon MI, Intrinsic IntID> {
   def : Pat<(IntID HvxQR:$src1, IntRegs:$src2, HvxVR:$src3),
-            (MI HvxQR:$src1, IntRegs:$src2, #0, HvxVR:$src3)>,
+            (MI HvxQR:$src1, IntRegs:$src2, 0, HvxVR:$src3)>,
         Requires<[UseHVX]>;
 
   def : Pat<(!cast<Intrinsic>(IntID#"_128B") HvxQR:$src1, IntRegs:$src2,
                                              HvxVR:$src3),
-            (MI HvxQR:$src1, IntRegs:$src2, #0, HvxVR:$src3)>,
+            (MI HvxQR:$src1, IntRegs:$src2, 0, HvxVR:$src3)>,
         Requires<[UseHVX]>;
 }
 
@@ -235,6 +235,8 @@ def: T_R_pat<Y2_dczeroa,     int_hexagon_Y2_dczeroa>;
 
 def: T_RR_pat<Y4_l2fetch,    int_hexagon_Y4_l2fetch>;
 def: T_RP_pat<Y5_l2fetch,    int_hexagon_Y5_l2fetch>;
+
+def: Pat<(int_hexagon_Y2_dcfetch I32:$Rt), (Y2_dcfetchbo I32:$Rt, 0)>;
 
 //
 // Patterns for optimizing code generations for HVX.

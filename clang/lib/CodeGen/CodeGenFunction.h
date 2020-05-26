@@ -77,6 +77,7 @@ class ObjCAtThrowStmt;
 class ObjCAtSynchronizedStmt;
 class ObjCAutoreleasePoolStmt;
 class ReturnsNonNullAttr;
+class SVETypeFlags;
 
 namespace analyze_os_log {
 class OSLogBufferLayout;
@@ -593,6 +594,9 @@ public:
   /// True if CodeGen currently emits code inside presereved access index
   /// region.
   bool IsInPreservedAIRegion = false;
+
+  /// True if the current statement has nomerge attribute.
+  bool InNoMergeAttributedStmt = false;
 
   const CodeGen::CGBlockInfo *BlockInfo = nullptr;
   llvm::Value *BlockPointer = nullptr;
@@ -2264,13 +2268,6 @@ public:
 
   LValue MakeNaturalAlignPointeeAddrLValue(llvm::Value *V, QualType T);
   LValue MakeNaturalAlignAddrLValue(llvm::Value *V, QualType T);
-  CharUnits getNaturalTypeAlignment(QualType T,
-                                    LValueBaseInfo *BaseInfo = nullptr,
-                                    TBAAAccessInfo *TBAAInfo = nullptr,
-                                    bool forPointeeType = false);
-  CharUnits getNaturalPointeeTypeAlignment(QualType T,
-                                           LValueBaseInfo *BaseInfo = nullptr,
-                                           TBAAAccessInfo *TBAAInfo = nullptr);
 
   Address EmitLoadOfReference(LValue RefLVal,
                               LValueBaseInfo *PointeeBaseInfo = nullptr,
@@ -2704,7 +2701,8 @@ public:
   Address EmitCXXUuidofExpr(const CXXUuidofExpr *E);
 
   /// Situations in which we might emit a check for the suitability of a
-  ///        pointer or glvalue.
+  /// pointer or glvalue. Needs to be kept in sync with ubsan_handlers.cpp in
+  /// compiler-rt.
   enum TypeCheckKind {
     /// Checking the operand of a load. Must be suitably sized and aligned.
     TCK_Load,
@@ -3261,6 +3259,7 @@ public:
   void EmitOMPTaskwaitDirective(const OMPTaskwaitDirective &S);
   void EmitOMPTaskgroupDirective(const OMPTaskgroupDirective &S);
   void EmitOMPFlushDirective(const OMPFlushDirective &S);
+  void EmitOMPDepobjDirective(const OMPDepobjDirective &S);
   void EmitOMPOrderedDirective(const OMPOrderedDirective &S);
   void EmitOMPAtomicDirective(const OMPAtomicDirective &S);
   void EmitOMPTargetDirective(const OMPTargetDirective &S);
@@ -3871,6 +3870,14 @@ public:
   llvm::Value *EmitARMMVEBuiltinExpr(unsigned BuiltinID, const CallExpr *E,
                                      ReturnValueSlot ReturnValue,
                                      llvm::Triple::ArchType Arch);
+  llvm::Value *EmitARMCDEBuiltinExpr(unsigned BuiltinID, const CallExpr *E,
+                                     ReturnValueSlot ReturnValue,
+                                     llvm::Triple::ArchType Arch);
+  llvm::Value *EmitCMSEClearRecord(llvm::Value *V, llvm::IntegerType *ITy,
+                                   QualType RTy);
+  llvm::Value *EmitCMSEClearRecord(llvm::Value *V, llvm::ArrayType *ATy,
+                                   QualType RTy);
+  llvm::Value *EmitCMSEClearFP16(llvm::Value *V);
 
   llvm::Value *EmitCommonNeonBuiltinExpr(unsigned BuiltinID,
                                          unsigned LLVMIntrinsic,
@@ -3889,12 +3896,56 @@ public:
                             SmallVectorImpl<llvm::Value*> &O,
                             const char *name,
                             unsigned shift = 0, bool rightshift = false);
+  llvm::Value *EmitNeonSplat(llvm::Value *V, llvm::Constant *Idx,
+                             const llvm::ElementCount &Count);
   llvm::Value *EmitNeonSplat(llvm::Value *V, llvm::Constant *Idx);
   llvm::Value *EmitNeonShiftVector(llvm::Value *V, llvm::Type *Ty,
                                    bool negateForRightShift);
   llvm::Value *EmitNeonRShiftImm(llvm::Value *Vec, llvm::Value *Amt,
                                  llvm::Type *Ty, bool usgn, const char *name);
   llvm::Value *vectorWrapScalar16(llvm::Value *Op);
+  /// SVEBuiltinMemEltTy - Returns the memory element type for this memory
+  /// access builtin.  Only required if it can't be inferred from the base
+  /// pointer operand.
+  llvm::Type *SVEBuiltinMemEltTy(SVETypeFlags TypeFlags);
+
+  SmallVector<llvm::Type *, 2> getSVEOverloadTypes(SVETypeFlags TypeFlags,
+                                                   ArrayRef<llvm::Value *> Ops);
+  llvm::Type *getEltType(SVETypeFlags TypeFlags);
+  llvm::ScalableVectorType *getSVEType(const SVETypeFlags &TypeFlags);
+  llvm::ScalableVectorType *getSVEPredType(SVETypeFlags TypeFlags);
+  llvm::Value *EmitSVEAllTruePred(SVETypeFlags TypeFlags);
+  llvm::Value *EmitSVEDupX(llvm::Value *Scalar);
+  llvm::Value *EmitSVEDupX(llvm::Value *Scalar, llvm::Type *Ty);
+  llvm::Value *EmitSVEReinterpret(llvm::Value *Val, llvm::Type *Ty);
+  llvm::Value *EmitSVEPMull(SVETypeFlags TypeFlags,
+                            llvm::SmallVectorImpl<llvm::Value *> &Ops,
+                            unsigned BuiltinID);
+  llvm::Value *EmitSVEMovl(SVETypeFlags TypeFlags,
+                           llvm::ArrayRef<llvm::Value *> Ops,
+                           unsigned BuiltinID);
+  llvm::Value *EmitSVEPredicateCast(llvm::Value *Pred,
+                                    llvm::ScalableVectorType *VTy);
+  llvm::Value *EmitSVEGatherLoad(SVETypeFlags TypeFlags,
+                                 llvm::SmallVectorImpl<llvm::Value *> &Ops,
+                                 unsigned IntID);
+  llvm::Value *EmitSVEScatterStore(SVETypeFlags TypeFlags,
+                                   llvm::SmallVectorImpl<llvm::Value *> &Ops,
+                                   unsigned IntID);
+  llvm::Value *EmitSVEMaskedLoad(const CallExpr *, llvm::Type *ReturnTy,
+                                 SmallVectorImpl<llvm::Value *> &Ops,
+                                 unsigned BuiltinID, bool IsZExtReturn);
+  llvm::Value *EmitSVEMaskedStore(const CallExpr *,
+                                  SmallVectorImpl<llvm::Value *> &Ops,
+                                  unsigned BuiltinID);
+  llvm::Value *EmitSVEPrefetchLoad(SVETypeFlags TypeFlags,
+                                   SmallVectorImpl<llvm::Value *> &Ops,
+                                   unsigned BuiltinID);
+  llvm::Value *EmitSVEGatherPrefetch(SVETypeFlags TypeFlags,
+                                     SmallVectorImpl<llvm::Value *> &Ops,
+                                     unsigned IntID);
+  llvm::Value *EmitAArch64SVEBuiltinExpr(unsigned BuiltinID, const CallExpr *E);
+
   llvm::Value *EmitAArch64BuiltinExpr(unsigned BuiltinID, const CallExpr *E,
                                       llvm::Triple::ArchType Arch);
   llvm::Value *EmitBPFBuiltinExpr(unsigned BuiltinID, const CallExpr *E);
@@ -4309,7 +4360,7 @@ private:
   ///
   /// \param AI - The first function argument of the expansion.
   void ExpandTypeFromArgs(QualType Ty, LValue Dst,
-                          SmallVectorImpl<llvm::Value *>::iterator &AI);
+                          llvm::Function::arg_iterator &AI);
 
   /// ExpandTypeToArgs - Expand an CallArg \arg Arg, with the LLVM type for \arg
   /// Ty, into individual arguments on the provided vector \arg IRCallArgs,
@@ -4529,6 +4580,11 @@ inline llvm::Value *DominatingLLVMValue::restore(CodeGenFunction &CGF,
 }
 
 }  // end namespace CodeGen
+
+// Map the LangOption for floating point exception behavior into
+// the corresponding enum in the IR.
+llvm::fp::ExceptionBehavior
+ToConstrainedExceptMD(LangOptions::FPExceptionModeKind Kind);
 }  // end namespace clang
 
 #endif

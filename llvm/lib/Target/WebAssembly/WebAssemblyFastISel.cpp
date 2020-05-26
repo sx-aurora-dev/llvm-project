@@ -640,6 +640,9 @@ bool WebAssemblyFastISel::fastLowerArguments() {
   if (F->isVarArg())
     return false;
 
+  if (FuncInfo.Fn->getCallingConv() == CallingConv::Swift)
+    return false;
+
   unsigned I = 0;
   for (auto const &Arg : F->args()) {
     const AttributeList &Attrs = F->getAttributes();
@@ -754,8 +757,11 @@ bool WebAssemblyFastISel::selectCall(const Instruction *I) {
   if (Func && Func->isIntrinsic())
     return false;
 
+  if (Call->getCallingConv() == CallingConv::Swift)
+    return false;
+
   bool IsDirect = Func != nullptr;
-  if (!IsDirect && isa<ConstantExpr>(Call->getCalledValue()))
+  if (!IsDirect && isa<ConstantExpr>(Call->getCalledOperand()))
     return false;
 
   FunctionType *FuncTy = Call->getFunctionType();
@@ -841,7 +847,7 @@ bool WebAssemblyFastISel::selectCall(const Instruction *I) {
 
   unsigned CalleeReg = 0;
   if (!IsDirect) {
-    CalleeReg = getRegForValue(Call->getCalledValue());
+    CalleeReg = getRegForValue(Call->getCalledOperand());
     if (!CalleeReg)
       return false;
   }

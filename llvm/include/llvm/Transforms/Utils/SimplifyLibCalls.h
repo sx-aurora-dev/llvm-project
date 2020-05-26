@@ -25,7 +25,6 @@ class DataLayout;
 class Instruction;
 class IRBuilderBase;
 class TargetLibraryInfo;
-class BasicBlock;
 class Function;
 class OptimizationRemarkEmitter;
 class BlockFrequencyInfo;
@@ -220,11 +219,7 @@ private:
   Value *optimizeSnPrintF(CallInst *CI, IRBuilderBase &B);
   Value *optimizeFPrintF(CallInst *CI, IRBuilderBase &B);
   Value *optimizeFWrite(CallInst *CI, IRBuilderBase &B);
-  Value *optimizeFRead(CallInst *CI, IRBuilderBase &B);
   Value *optimizeFPuts(CallInst *CI, IRBuilderBase &B);
-  Value *optimizeFGets(CallInst *CI, IRBuilderBase &B);
-  Value *optimizeFPutc(CallInst *CI, IRBuilderBase &B);
-  Value *optimizeFGetc(CallInst *CI, IRBuilderBase &B);
   Value *optimizePuts(CallInst *CI, IRBuilderBase &B);
 
   // Helper methods

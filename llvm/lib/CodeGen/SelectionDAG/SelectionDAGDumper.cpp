@@ -211,6 +211,8 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
   case ISD::STRICT_FNEARBYINT:          return "strict_fnearbyint";
   case ISD::FROUND:                     return "fround";
   case ISD::STRICT_FROUND:              return "strict_fround";
+  case ISD::FROUNDEVEN:                 return "froundeven";
+  case ISD::STRICT_FROUNDEVEN:          return "strict_froundeven";
   case ISD::FEXP:                       return "fexp";
   case ISD::STRICT_FEXP:                return "strict_fexp";
   case ISD::FEXP2:                      return "fexp2";
@@ -392,6 +394,11 @@ std::string SDNode::getOperationName(const SelectionDAG *G) const {
   case ISD::GC_TRANSITION_START:        return "gc_transition.start";
   case ISD::GC_TRANSITION_END:          return "gc_transition.end";
   case ISD::GET_DYNAMIC_AREA_OFFSET:    return "get.dynamic.area.offset";
+  case ISD::FREEZE:                     return "freeze";
+  case ISD::PREALLOCATED_SETUP:
+    return "call_setup";
+  case ISD::PREALLOCATED_ARG:
+    return "call_alloc";
 
   // Bit manipulation
   case ISD::ABS:                        return "abs";
@@ -551,9 +558,6 @@ void SDNode::print_details(raw_ostream &OS, const SelectionDAG *G) const {
 
   if (getFlags().hasAllowReassociation())
     OS << " reassoc";
-
-  if (getFlags().hasVectorReduction())
-    OS << " vector-reduction";
 
   if (getFlags().hasNoFPExcept())
     OS << " nofpexcept";

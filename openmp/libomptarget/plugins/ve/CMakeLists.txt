@@ -7,7 +7,7 @@
 
 if(${LIBOMPTARGET_DEP_VEO_FOUND})
   libomptarget_say("Building SX-Aurora VE offloading plugin.")
-  set(additonal_libs "")
+  set(additional_libs "")
   set(additional_libs ${LIBOMPTARGET_DEP_VEO_LIBRARIES}
                       ${LIBOMPTARGET_DEP_VEOSINFO_LIBRARIES}
                       ${additional_libs})
@@ -39,7 +39,7 @@ if(${LIBOMPTARGET_DEP_VEO_FOUND})
     ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES}
     ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
     ${additional_libs}
-    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/../exports")
+    "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/../exports -Wl,-z,defs")
 
   # Report to the parent scope that we are building a plugin.
   set(LIBOMPTARGET_SYSTEM_TARGETS

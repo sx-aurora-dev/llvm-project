@@ -25,7 +25,7 @@ use of DRR requires that the operations be defined using ODS, as described in
 ## Optimize Transpose using C++ style pattern-match and rewrite
 
 Let's start with a simple pattern and try to eliminate a sequence of two
-transpose that cancel out: `transpose(transpose(X)) -> X`. Here is the
+transposes that cancel out: `transpose(transpose(X)) -> X`. Here is the
 corresponding Toy example:
 
 ```toy
@@ -70,7 +70,7 @@ void double_transpose(int A[N][M]) {
 }
 ```
 
-For a simple C++ approach to rewrite involving matching a tree-like pattern in
+For a simple C++ approach to rewrite, involving matching a tree-like pattern in
 the IR and replacing it with a different set of operations, we can plug into the
 MLIR `Canonicalizer` pass by implementing a `RewritePattern`:
 
@@ -86,20 +86,20 @@ struct SimplifyRedundantTranspose : public mlir::OpRewritePattern<TransposeOp> {
   /// This method is attempting to match a pattern and rewrite it. The rewriter
   /// argument is the orchestrator of the sequence of rewrites. It is expected
   /// to interact with it to perform any changes to the IR from here.
-  mlir::PatternMatchResult
+  mlir::LogicalResult
   matchAndRewrite(TransposeOp op,
                   mlir::PatternRewriter &rewriter) const override {
     // Look through the input of the current transpose.
     mlir::Value transposeInput = op.getOperand();
-    TransposeOp transposeInputOp =
-        llvm::dyn_cast_or_null<TransposeOp>(transposeInput.getDefiningOp());
-    // If the input is defined by another Transpose, bingo!
-    if (!transposeInputOp)
-      return matchFailure();
+    TransposeOp transposeInputOp = transposeInput.getDefiningOp<TransposeOp>();
 
-    // Use the rewriter to perform the replacement
-    rewriter.replaceOp(op, {transposeInputOp.getOperand()}, {transposeInputOp});
-    return matchSuccess();
+    // Input defined by another transpose? If not, no match.
+    if (!transposeInputOp)
+      return failure();
+
+    // Otherwise, we have a redundant transpose. Use the rewriter.
+    rewriter.replaceOp(op, {transposeInputOp.getOperand()});
+    return success();
   }
 };
 ```
@@ -128,8 +128,8 @@ similar way to LLVM:
   pm.addNestedPass<mlir::FuncOp>(mlir::createCanonicalizerPass());
 ```
 
-Finally, we can run `toyc-ch3 test/transpose_transpose.toy -emit=mlir -opt` and
-observe our pattern in action:
+Finally, we can run `toyc-ch3 test/Examples/Toy/Ch3/transpose_transpose.toy 
+-emit=mlir -opt` and observe our pattern in action:
 
 ```mlir
 func @transpose_transpose(%arg0: tensor<*xf64>) -> tensor<*xf64> {
@@ -186,7 +186,7 @@ def ReshapeReshapeOptPattern : Pat<(ReshapeOp(ReshapeOp $arg)),
 ```
 
 The automatically generated C++ code corresponding to each of the DRR patterns
-can be found under path/to/BUILD/projects/mlir/examples/toy/Ch3/ToyCombine.inc.
+can be found under `path/to/BUILD/tools/mlir/examples/toy/Ch3/ToyCombine.inc`.
 
 DRR also provides a method for adding argument constraints when the
 transformation is conditional on some properties of the arguments and results.
@@ -215,7 +215,7 @@ def FoldConstantReshapeOptPattern : Pat<
 ```
 
 We demonstrate these reshape optimizations using the following
-trivialReshape.toy program:
+trivial_reshape.toy program:
 
 ```c++
 def main() {
@@ -239,8 +239,8 @@ module {
 }
 ```
 
-We can try to run `toyc-ch3 test/trivialReshape.toy -emit=mlir -opt` and observe
-our pattern in action:
+We can try to run `toyc-ch3 test/Examples/Toy/Ch3/trivial_reshape.toy -emit=mlir 
+-opt` and observe our pattern in action:
 
 ```mlir
 module {
