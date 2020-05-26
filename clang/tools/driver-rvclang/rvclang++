@@ -2,6 +2,6 @@
 
 SELF_PATH=$(dirname $(readlink -f $0))
 LIB_PATH=${SELF_PATH}/../lib
-FLAGS="-fplugin=${LIB_PATH}/libRV.so -mllvm -rv -Wunused-command-line-argument"
+FLAGS="-mllvm -rv -Wunused-command-line-argument"
 
 ${SELF_PATH}/clang++ ${FLAGS} $@
