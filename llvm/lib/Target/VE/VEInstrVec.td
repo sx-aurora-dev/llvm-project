@@ -268,17 +268,17 @@ multiclass VSCmm<string opcStr, string argStr, bits<8>opc, dag dag_in> {
 }
 multiclass VSClhm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                   dag dag_in> {
-  defm rr : VSCmm<opcStr, " $vx, "#argStr#", $sy, $sz", opc,
-                  !con(dag_in, (ins I64:$sy, I64:$sz, RC:$vx))>;
+  defm rrv : VSCmm<opcStr, " $vx, "#argStr#", $sy, $sz", opc,
+                   !con(dag_in, (ins I64:$sy, I64:$sz, RC:$vx))>;
   let cy = 0 in
-  defm ir : VSCmm<opcStr, " $vx, "#argStr#", $sy, $sz", opc,
-                  !con(dag_in, (ins simm7:$sy, I64:$sz, RC:$vx))>;
+  defm irv : VSCmm<opcStr, " $vx, "#argStr#", $sy, $sz", opc,
+                   !con(dag_in, (ins simm7:$sy, I64:$sz, RC:$vx))>;
   let cz = 0 in
-  defm rz : VSCmm<opcStr, " $vx, "#argStr#", $sy, $sz", opc,
-                  !con(dag_in, (ins I64:$sy, zero:$sz, RC:$vx))>;
+  defm rzv : VSCmm<opcStr, " $vx, "#argStr#", $sy, $sz", opc,
+                   !con(dag_in, (ins I64:$sy, zero:$sz, RC:$vx))>;
   let cy = 0, cz = 0 in
-  defm iz : VSCmm<opcStr, " $vx, "#argStr#", $sy, $sz", opc,
-                  !con(dag_in, (ins simm7:$sy, zero:$sz, RC:$vx))>;
+  defm izv : VSCmm<opcStr, " $vx, "#argStr#", $sy, $sz", opc,
+                   !con(dag_in, (ins simm7:$sy, zero:$sz, RC:$vx))>;
 }
 multiclass VSCtgm<string opcStr, bits<8>opc, RegisterClass RC> {
   let vy = ? in defm v : VSClhm<opcStr, "$vy", opc, RC, (ins V64:$vy)>;
