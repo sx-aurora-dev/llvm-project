@@ -57,7 +57,7 @@ define double @mimm_000000000000FFFF(double %a) {
 }
 
 define double @mimm_000000FFFFFFFFFF(double %a) {
-; CHECK-LABEL: mimm_000000FFFFFFFFFF
+; CHECK-LABEL: mimm_000000FFFFFFFFFF:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fadd.d %s0, %s0, (24)0
 ; CHECK-NEXT:    or %s11, 0, %s9

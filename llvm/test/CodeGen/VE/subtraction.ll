@@ -108,6 +108,7 @@ define float @func11(float %0, float %1) {
 ; CHECK-LABEL: func11:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fsub.s %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fsub float %0, %1
   ret float %3
 }
@@ -116,6 +117,7 @@ define double @func12(double %0, double %1) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fsub.d %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fsub double %0, %1
   ret double %3
 }
@@ -168,6 +170,7 @@ define i128 @func17(i128 %0) {
 ; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    lea %s1, -1(%s0, %s1)
 ; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = add nsw i128 %0, -5
   ret i128 %2
 }
@@ -218,6 +221,7 @@ define i128 @func22(i128 %0) {
 ; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    lea %s1, -1(%s0, %s1)
 ; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = add i128 %0, -5
   ret i128 %2
 }
@@ -225,8 +229,9 @@ define i128 @func22(i128 %0) {
 define float @func23(float %0, float %1) {
 ; CHECK-LABEL: func23:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s1, -1063256064
-; CHECK-NEXT:  fadd.s %s0, %s0, %s1
+; CHECK-NEXT:    lea.sl %s1, -1063256064
+; CHECK-NEXT:    fadd.s %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fadd float %0, -5.000000e+00
   ret float %3
 }
@@ -234,8 +239,9 @@ define float @func23(float %0, float %1) {
 define double @func24(double %0, double %1) {
 ; CHECK-LABEL: func24:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea.sl %s1, -1072431104
-; CHECK-NEXT:  fadd.d %s0, %s0, %s1
+; CHECK-NEXT:    lea.sl %s1, -1072431104
+; CHECK-NEXT:    fadd.d %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fadd double %0, -5.000000e+00
   ret double %3
 }
@@ -257,6 +263,7 @@ define i128 @func26(i128 %0) {
 ; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    lea %s1, -1(%s0, %s1)
 ; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = add nsw i128 %0, -2147483648
   ret i128 %2
 }

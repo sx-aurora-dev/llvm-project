@@ -187,26 +187,28 @@ define i32 @max2u32(i32, i32) {
 }
 
 define fp128 @maxf128(fp128, fp128) {
-; CHECK-LABEL: maxf128:                                # @maxf128
+; CHECK-LABEL: maxf128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:  cmov.d.gt %s2, %s0, %s4
-; CHECK-NEXT:  cmov.d.gt %s3, %s1, %s4
-; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  or %s1, 0, %s3
+; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:    cmov.d.gt %s2, %s0, %s4
+; CHECK-NEXT:    cmov.d.gt %s3, %s1, %s4
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp ogt fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4
 }
 
 define fp128 @max2f128(fp128, fp128) {
-; CHECK-LABEL: max2f128:                               # @max2f128
+; CHECK-LABEL: max2f128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:  cmov.d.ge %s2, %s0, %s4
-; CHECK-NEXT:  cmov.d.ge %s3, %s1, %s4
-; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  or %s1, 0, %s3
+; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:    cmov.d.ge %s2, %s0, %s4
+; CHECK-NEXT:    cmov.d.ge %s3, %s1, %s4
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp oge fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4
@@ -215,11 +217,12 @@ define fp128 @max2f128(fp128, fp128) {
 define fp128 @maxuf128(fp128, fp128) {
 ; CHECK-LABEL: maxuf128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:  cmov.d.gtnan %s2, %s0, %s4
-; CHECK-NEXT:  cmov.d.gtnan %s3, %s1, %s4
-; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  or %s1, 0, %s3
+; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:    cmov.d.gtnan %s2, %s0, %s4
+; CHECK-NEXT:    cmov.d.gtnan %s3, %s1, %s4
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp ugt fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4
@@ -228,11 +231,12 @@ define fp128 @maxuf128(fp128, fp128) {
 define fp128 @max2uf128(fp128, fp128) {
 ; CHECK-LABEL: max2uf128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:  cmov.d.genan %s2, %s0, %s4
-; CHECK-NEXT:  cmov.d.genan %s3, %s1, %s4
-; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  or %s1, 0, %s3
+; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:    cmov.d.genan %s2, %s0, %s4
+; CHECK-NEXT:    cmov.d.genan %s3, %s1, %s4
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp uge fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4

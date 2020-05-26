@@ -9,23 +9,51 @@
 define void @test(fp128) {
 ; CHECK-LABEL: test:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  st %s1, -16(, %s9)
-; CHECK-NEXT:  st %s0, -8(, %s9)
-; CHECK-NEXT:  st %s1, -32(, %s9)
-; CHECK-NEXT:  st %s0, -24(, %s9)
-; CHECK:       st %s1, -48(, %s9)
-; CHECK-NEXT:  st %s0, -40(, %s9)               # 16-byte Folded Spill
-; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  ld %s3, -48(, %s9)
-; CHECK-NEXT:  ld %s2, -40(, %s9)               # 16-byte Folded Reload
-; CHECK-NEXT:  bsic %s10, (, %s12)
-; CHECK-NEXT:  ld %s3, -16(, %s9)
-; CHECK-NEXT:  ld %s2, -8(, %s9)
-; CHECK:       or %s0, 0, %s2
-; CHECK-NEXT:  or %s1, 0, %s3
-; CHECK-NEXT:  bsic %s10, (, %s12)
-; CHECK-NEXT:  ld %s3, -32(, %s9)
-; CHECK-NEXT:  ld %s2, -24(, %s9)
+; CHECK-NEXT:    st %s1, -16(, %s9)
+; CHECK-NEXT:    st %s0, -8(, %s9)
+; CHECK-NEXT:    st %s1, -32(, %s9)
+; CHECK-NEXT:    st %s0, -24(, %s9)
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    st %s2, 200(, %s11)
+; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    st %s2, 192(, %s11)
+; CHECK-NEXT:    lea %s2, .L.str@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s2, .L.str@hi(, %s2)
+; CHECK-NEXT:    st %s2, 176(, %s11)
+; CHECK-NEXT:    lea %s3, printf@lo
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    lea.sl %s3, printf@hi(, %s3)
+; CHECK-NEXT:    or %s12, 0, %s3
+; CHECK-NEXT:    st %s1, -48(, %s9)
+; CHECK-NEXT:    st %s0, -40(, %s9) # 16-byte Folded Spill
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    ld %s3, -48(, %s9)
+; CHECK-NEXT:    ld %s2, -40(, %s9) # 16-byte Folded Reload
+; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    ld %s3, -16(, %s9)
+; CHECK-NEXT:    ld %s2, -8(, %s9)
+; CHECK-NEXT:    lea %s1, test1@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s1, test1@hi(, %s1)
+; CHECK-NEXT:    or %s12, 0, %s1
+; CHECK-NEXT:    stl %s0, -52(, %s9) # 4-byte Folded Spill
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    ld %s3, -32(, %s9)
+; CHECK-NEXT:    ld %s2, -24(, %s9)
+; CHECK-NEXT:    lea %s1, test2@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s1, test2@hi(, %s1)
+; CHECK-NEXT:    lea %s4, .L.str.1@lo
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    lea.sl %s4, .L.str.1@hi(, %s4)
+; CHECK-NEXT:    or %s12, 0, %s1
+; CHECK-NEXT:    stl %s0, -56(, %s9) # 4-byte Folded Spill
+; CHECK-NEXT:    or %s0, 0, %s4
+; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
 
   %2 = alloca fp128, align 16
   %3 = alloca fp128, align 16

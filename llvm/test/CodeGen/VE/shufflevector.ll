@@ -2,54 +2,54 @@
 
 ; Function Attrs: norecurse nounwind readnone
 define x86_regcallcc <8 x i32> @__regcall3__svv512i32(<4 x i32>) {
-; CHECK-LABEL: svv512i32:
+; CHECK-LABEL: __regcall3__svv512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lvs %s0,%v0(1)
-; CHECK-NEXT:  lvs %s1,%v0(0)
-; CHECK-NEXT:  lsv %v0(0),%s1
-; CHECK-NEXT:  lsv %v0(1),%s0
-; CHECK-NEXT:  lsv %v0(2),%s0
-; CHECK-NEXT:  lsv %v0(3),%s0
-; CHECK-NEXT:  lsv %v0(4),%s0
-; CHECK-NEXT:  lsv %v0(5),%s0
-; CHECK-NEXT:  lsv %v0(6),%s0
-; CHECK-NEXT:  lsv %v0(7),%s0
-; CHECK-NEXT:  or %s11, 0, %s9
+; CHECK-NEXT:    lvs %s0,%v0(1)
+; CHECK-NEXT:    lvs %s1,%v0(0)
+; CHECK-NEXT:    lsv %v0(0),%s1
+; CHECK-NEXT:    lsv %v0(1),%s0
+; CHECK-NEXT:    lsv %v0(2),%s0
+; CHECK-NEXT:    lsv %v0(3),%s0
+; CHECK-NEXT:    lsv %v0(4),%s0
+; CHECK-NEXT:    lsv %v0(5),%s0
+; CHECK-NEXT:    lsv %v0(6),%s0
+; CHECK-NEXT:    lsv %v0(7),%s0
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = shufflevector <4 x i32> %0, <4 x i32> zeroinitializer, <8 x i32> <i32 0, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1, i32 1>
   ret <8 x i32> %2
 }
 
 ; Function Attrs: norecurse nounwind readnone
 define x86_regcallcc <8 x i32> @__regcall3__svv512i32_brd2(<4 x i32>) {
-; CHECK-LABEL: svv512i32_brd2:
+; CHECK-LABEL: __regcall3__svv512i32_brd2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lvs %s0,%v0(2)
-; CHECK-NEXT:  lea %s1, 8
-; CHECK-NEXT:  lvl %s1
-; CHECK-NEXT:  vbrdl %v0,%s0
-; CHECK-NEXT:  or %s11, 0, %s9
+; CHECK-NEXT:    lvs %s0,%v0(2)
+; CHECK-NEXT:    lea %s1, 8
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrdl %v0,%s0
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = shufflevector <4 x i32> %0, <4 x i32> zeroinitializer, <8 x i32> <i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2>
   ret <8 x i32> %2
 }
 
 ; Function Attrs: norecurse nounwind readnone
 define x86_regcallcc <8 x i32> @__regcall3__svv512i32_brd7(<4 x i32>, <4 x i32>) {
-; CHECK-LABEL: svv512i32_brd7:
+; CHECK-LABEL: __regcall3__svv512i32_brd7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lvs %s0,%v1(3)
-; CHECK-NEXT:  lea %s1, 8
-; CHECK-NEXT:  lvl %s1
-; CHECK-NEXT:  vbrdl %v0,%s0
-; CHECK-NEXT:  or %s11, 0, %s9
+; CHECK-NEXT:    lvs %s0,%v1(3)
+; CHECK-NEXT:    lea %s1, 8
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrdl %v0,%s0
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = shufflevector <4 x i32> %0, <4 x i32> %1, <8 x i32> <i32 7, i32 7, i32 7, i32 7, i32 7, i32 7, i32 7, i32 7>
   ret <8 x i32> %3
 }
 
 ; Function Attrs: norecurse nounwind readnone
 define x86_regcallcc <256 x i32> @__regcall3__svv512i32_vmrg(<256 x i32>, <256 x i32>) {
-; CHECK-LABEL: svv512i32_vmrg:
+; CHECK-LABEL: __regcall3__svv512i32_vmrg:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  or %s11, 0, %s9
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = shufflevector <256 x i32> %0, <256 x i32> %1, <256 x i32>
     <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,
      i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15,
@@ -88,20 +88,20 @@ define x86_regcallcc <256 x i32> @__regcall3__svv512i32_vmrg(<256 x i32>, <256 x
 
 ; Function Attrs: norecurse nounwind readnone
 define x86_regcallcc <256 x i32> @__regcall3__svv512i32_vmrg1(<256 x i32>, <256 x i32>) {
-; CHECK-LABEL: svv512i32_vmrg1:
+; CHECK-LABEL: __regcall3__svv512i32_vmrg1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s0, 256
-; CHECK-NEXT:  or %s1, 16, (0)1
-; CHECK-NEXT:  lvl %s0
-; CHECK-NEXT:  vmv %v1,%s1,%v1
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  lvm %vm1,0,%s1
-; CHECK-NEXT:  lvm %vm1,1,%s1
-; CHECK-NEXT:  lvm %vm1,2,%s1
-; CHECK-NEXT:  lea %s1, 255
-; CHECK-NEXT:  lvm %vm1,3,%s1
-; CHECK-NEXT:  vmrg %v0,%v0,%v1,%vm1
-; CHECK-NEXT:  or %s11, 0, %s9
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    or %s1, 16, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmv %v1,%s1,%v1
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    lvm %vm1,0,%s1
+; CHECK-NEXT:    lvm %vm1,1,%s1
+; CHECK-NEXT:    lvm %vm1,2,%s1
+; CHECK-NEXT:    lea %s1, 255
+; CHECK-NEXT:    lvm %vm1,3,%s1
+; CHECK-NEXT:    vmrg %v0,%v0,%v1,%vm1
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = shufflevector <256 x i32> %0, <256 x i32> %1, <256 x i32>
     <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,
      i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15,
@@ -140,22 +140,22 @@ define x86_regcallcc <256 x i32> @__regcall3__svv512i32_vmrg1(<256 x i32>, <256 
 
 ; Function Attrs: norecurse nounwind readnone
 define x86_regcallcc <256 x i32> @__regcall3__svv512i32_vmrg2(<256 x i32>, <256 x i32>) {
-; CHECK-LABEL: svv512i32_vmrg2:
+; CHECK-LABEL: __regcall3__svv512i32_vmrg2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  lea %s0, 256
-; CHECK-NEXT:  or %s1, 16, (0)1
-; CHECK-NEXT:  lvl %s0
-; CHECK-NEXT:  vmv %v1,%s1,%v1
-; CHECK-NEXT:  or %s1, 8, (0)1
-; CHECK-NEXT:  vmv %v0,%s1,%v0
-; CHECK-NEXT:  or %s1, 0, (0)1
-; CHECK-NEXT:  lvm %vm1,0,%s1
-; CHECK-NEXT:  lvm %vm1,1,%s1
-; CHECK-NEXT:  lvm %vm1,2,%s1
-; CHECK-NEXT:  lea %s1, 255
-; CHECK-NEXT:  lvm %vm1,3,%s1
-; CHECK-NEXT:  vmrg %v0,%v0,%v1,%vm1
-; CHECK-NEXT:  or %s11, 0, %s9
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    or %s1, 16, (0)1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmv %v1,%s1,%v1
+; CHECK-NEXT:    or %s1, 8, (0)1
+; CHECK-NEXT:    vmv %v0,%s1,%v0
+; CHECK-NEXT:    or %s1, 0, (0)1
+; CHECK-NEXT:    lvm %vm1,0,%s1
+; CHECK-NEXT:    lvm %vm1,1,%s1
+; CHECK-NEXT:    lvm %vm1,2,%s1
+; CHECK-NEXT:    lea %s1, 255
+; CHECK-NEXT:    lvm %vm1,3,%s1
+; CHECK-NEXT:    vmrg %v0,%v0,%v1,%vm1
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = shufflevector <256 x i32> %0, <256 x i32> %1, <256 x i32>
     <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15,
      i32 16, i32 17, i32 18, i32 19, i32 20, i32 21, i32 22, i32 23,

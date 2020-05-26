@@ -3,7 +3,7 @@
 ; Function Attrs: norecurse nounwind readnone
 define i64 @test(i32, i32) {
 ; CHECK-LABEL: test:
-; CHECK:       .LBB0_2:
+; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    adds.w.zx %s1, %s1, (0)1

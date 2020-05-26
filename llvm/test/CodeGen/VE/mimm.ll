@@ -56,7 +56,7 @@ define i64 @mimm_000000000000FFFF(i64 %a) {
 }
 
 define i64 @mimm_000000FFFFFFFFFF(i64 %a) {
-; CHECK-LABEL: mimm_000000FFFFFFFFFF
+; CHECK-LABEL: mimm_000000FFFFFFFFFF:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    and %s0, %s0, (24)0
 ; CHECK-NEXT:    or %s11, 0, %s9

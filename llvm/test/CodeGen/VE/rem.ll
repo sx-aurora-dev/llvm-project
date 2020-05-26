@@ -8,6 +8,7 @@ define i128 @remi128(i128 %a, i128 %b) {
 ; CHECK-NEXT:    and %s4, %s4, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __modti3@hi(, %s4)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = srem i128 %a, %b
   ret i128 %r
 }
@@ -44,6 +45,7 @@ define i128 @remu128(i128 %a, i128 %b) {
 ; CHECK-NEXT:    and %s4, %s4, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __umodti3@hi(, %s4)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = urem i128 %a, %b
   ret i128 %r
 }
@@ -140,6 +142,7 @@ define i128 @remi128ri(i128 %a) {
 ; CHECK-NEXT:    or %s2, 3, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = srem i128 %a, 3
   ret i128 %r
 }
@@ -185,6 +188,7 @@ define i128 @remu128ri(i128 %a) {
 ; CHECK-NEXT:    or %s2, 3, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = urem i128 %a, 3
   ret i128 %r
 }
@@ -230,6 +234,7 @@ define i128 @remi128li(i128 %a) {
 ; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = srem i128 3, %a
   ret i128 %r
 }
@@ -270,6 +275,7 @@ define i128 @remu128li(i128) {
 ; CHECK-NEXT:    or %s0, 3, (0)1
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = urem i128 3, %0
   ret i128 %2
 }

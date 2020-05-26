@@ -5,7 +5,7 @@
 ; Function Attrs: nounwind
 define void @test(i32) {
 ; CHECK-LABEL: test:
-; CHECK:       .LBB0_2:
+; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.sx %s2, %s0, (0)1
 ; CHECK-NEXT:    lea %s0, 15(, %s2)
 ; CHECK-NEXT:    and %s0, -16, %s0

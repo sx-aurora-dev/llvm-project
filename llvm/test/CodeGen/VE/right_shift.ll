@@ -51,6 +51,7 @@ define i128 @func6(i128 %0, i128 %1) {
 ; CHECK-NEXT:    and %s3, %s3, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __ashrti3@hi(, %s3)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = ashr i128 %0, %1
   ret i128 %3
 }
@@ -115,6 +116,7 @@ define i128 @func11(i128 %0, i128 %1) {
 ; CHECK-NEXT:    and %s3, %s3, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __lshrti3@hi(, %s3)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = lshr i128 %0, %1
   ret i128 %3
 }
@@ -162,6 +164,7 @@ define i128 @func16(i128) {
 ; CHECK-NEXT:    srl %s0, %s0, 5
 ; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    sra.l %s1, %s1, 5
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = ashr i128 %0, 5
   ret i128 %2
 }
@@ -218,6 +221,7 @@ define i128 @func21(i128 %0) {
 ; CHECK-NEXT:    srl %s0, %s0, 5
 ; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    sra.l %s1, %s1, 5
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = ashr i128 %0, 5
   ret i128 %2
 }

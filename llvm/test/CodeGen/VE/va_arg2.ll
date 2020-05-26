@@ -12,24 +12,24 @@
 define i32 @func(i32, ...) {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK:       lea %s0, 199(, %s9)
-; CHECK:       and %s0, -16, %s0
-; CHECK:       ld %s2, 8(, %s0)
-; CHECK:       ld %s3, (, %s0)
-; CHECK:       ld %s1, 16(, %s0)
-; CHECK:       ldl.sx %s19, (, %s1)
-; CHECK:       ldl.sx %s21, 4(, %s1)
-; CHECK:       ld %s1, 24(, %s0)
-; CHECK:       ld %s24, 8(, %s1)
-; CHECK:       ld %s25, (, %s1)
-; CHECK:       ld %s22, 24(, %s1)
-; CHECK:       ld %s23, 16(, %s1)
-; CHECK:       ld %s1, 32(, %s0)
-; CHECK:       ld %s26, (, %s1)
-; CHECK:       ld %s27, 8(, %s1)
-; CHECK:       ld %s0, 40(, %s0)
-; CHECK:       ldu %s28, (, %s0)
-; CHECK:       ldu %s29, 4(, %s0)
+; CHECK:         lea %s0, 199(, %s9)
+; CHECK:         and %s0, -16, %s0
+; CHECK:         ld %s2, 8(, %s0)
+; CHECK:         ld %s3, (, %s0)
+; CHECK:         ld %s1, 16(, %s0)
+; CHECK:         ldl.sx %s19, (, %s1)
+; CHECK:         ldl.sx %s21, 4(, %s1)
+; CHECK:         ld %s1, 24(, %s0)
+; CHECK:         ld %s24, 8(, %s1)
+; CHECK:         ld %s25, (, %s1)
+; CHECK:         ld %s22, 24(, %s1)
+; CHECK:         ld %s23, 16(, %s1)
+; CHECK:         ld %s1, 32(, %s0)
+; CHECK:         ld %s26, (, %s1)
+; CHECK:         ld %s27, 8(, %s1)
+; CHECK:         ld %s0, 40(, %s0)
+; CHECK:         ldu %s28, (, %s0)
+; CHECK:         ldu %s29, 4(, %s0)
 
   %2 = alloca i8*, align 8
   %3 = alloca i8*, align 8

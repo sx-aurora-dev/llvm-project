@@ -48,6 +48,7 @@ define i128 @func5(i128 %0, i128 %1) {
 ; CHECK-NEXT:    cmpu.l %s2, %s0, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 63
 ; CHECK-NEXT:    adds.l %s1, %s1, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add nsw i128 %1, %0
   ret i128 %3
 }
@@ -98,6 +99,7 @@ define i128 @func10(i128 %0, i128 %1) {
 ; CHECK-NEXT:    cmpu.l %s2, %s0, %s2
 ; CHECK-NEXT:    srl %s2, %s2, 63
 ; CHECK-NEXT:    adds.l %s1, %s1, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add i128 %1, %0
   ret i128 %3
 }
@@ -106,6 +108,7 @@ define float @func11(float %0, float %1) {
 ; CHECK-LABEL: func11:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fadd.s %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fadd float %0, %1
   ret float %3
 }
@@ -114,6 +117,7 @@ define double @func12(double %0, double %1) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fadd.d %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fadd double %0, %1
   ret double %3
 }
@@ -166,6 +170,7 @@ define i128 @func17(i128 %0) {
 ; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    adds.l %s1, %s1, %s0
 ; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = add nsw i128 %0, 5
   ret i128 %2
 }
@@ -216,6 +221,7 @@ define i128 @func22(i128 %0) {
 ; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    adds.l %s1, %s1, %s0
 ; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = add i128 %0, 5
   ret i128 %2
 }
@@ -225,6 +231,7 @@ define float @func23(float %0) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s1, 1084227584
 ; CHECK-NEXT:    fadd.s %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fadd float %0, 5.000000e+00
   ret float %2
 }
@@ -234,6 +241,7 @@ define double @func24(double %0) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s1, 1075052544
 ; CHECK-NEXT:    fadd.d %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = fadd double %0, 5.000000e+00
   ret double %2
 }
@@ -259,6 +267,7 @@ define i128 @func26(i128 %0) {
 ; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    adds.l %s1, %s1, %s0
 ; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = add nsw i128 %0, 2147483648
   ret i128 %2
 }

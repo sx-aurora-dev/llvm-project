@@ -53,6 +53,7 @@ define i128 @func5(i128 %a, i128 %b) {
 ; CHECK-NEXT:    or %s2, 0, %s5
 ; CHECK-NEXT:    or %s3, 0, %s4
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = mul nsw i128 %b, %a
   ret i128 %r
 }
@@ -108,6 +109,7 @@ define i128 @func10(i128 %a, i128 %b) {
 ; CHECK-NEXT:    or %s2, 0, %s5
 ; CHECK-NEXT:    or %s3, 0, %s4
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = mul i128 %b, %a
   ret i128 %r
 }
@@ -116,6 +118,7 @@ define float @func11(float %a, float %b) {
 ; CHECK-LABEL: func11:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmul.s %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = fmul float %a, %b
   ret float %r
 }
@@ -124,6 +127,7 @@ define double @func12(double %a, double %b) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    fmul.d %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = fmul double %a, %b
   ret double %r
 }
@@ -177,6 +181,7 @@ define i128 @func17(i128 %a) {
 ; CHECK-NEXT:    or %s2, 5, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = mul nsw i128 %a, 5
   ret i128 %r
 }
@@ -228,6 +233,7 @@ define i128 @func22(i128 %a) {
 ; CHECK-NEXT:    or %s2, 5, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = mul i128 %a, 5
   ret i128 %r
 }
@@ -237,6 +243,7 @@ define float @func23(float %a) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s1, 1084227584
 ; CHECK-NEXT:    fmul.s %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = fmul float %a, 5.000000e+00
   ret float %r
 }
@@ -246,6 +253,7 @@ define double @func24(double %a) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s1, 1075052544
 ; CHECK-NEXT:    fmul.d %s0, %s0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = fmul double %a, 5.000000e+00
   ret double %r
 }
@@ -275,6 +283,7 @@ define i128 @func27(i128 %a) {
 ; CHECK-NEXT:    sll %s1, %s1, 31
 ; CHECK-NEXT:    or %s1, %s1, %s2
 ; CHECK-NEXT:    sll %s0, %s0, 31
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = shl nsw i128 %a, 31
   ret i128 %r
 }

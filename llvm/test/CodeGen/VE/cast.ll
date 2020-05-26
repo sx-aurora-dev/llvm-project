@@ -212,9 +212,9 @@ define i64 @q2ll(fp128) {
 define i64 @q2ull(fp128) {
 ; CHECK-LABEL: q2ull:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s2, .LCPI22_0@lo
+; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s2, .LCPI22_0@hi(, %s2)
+; CHECK-NEXT:    lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(, %s2)
 ; CHECK-NEXT:    ld %s4, 8(, %s2)
 ; CHECK-NEXT:    ld %s5, (, %s2)
 ; CHECK-NEXT:    fcmp.q %s3, %s0, %s4
@@ -421,7 +421,7 @@ define i32 @ll2i(i64 %0) {
 define i32 @ll2ui(i64 %0) {
 ; CHECK-LABEL: ll2ui:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT FIXME: need    and %s0, %s0, (32)0
+; FIXME: need    and %s0, %s0, (32)0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = trunc i64 %0 to i32
@@ -523,7 +523,7 @@ define i32 @ull2i(i64 %0) {
 define i32 @ull2ui(i64 %0) {
 ; CHECK-LABEL: ull2ui:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT FIXME: need    and %s0, %s0, (32)0
+; FIXME: need    and %s0, %s0, (32)0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = trunc i64 %0 to i32
@@ -585,9 +585,9 @@ define fp128 @ull2q(i64) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    srl %s1, %s0, 61
 ; CHECK-NEXT:    and %s1, 4, %s1
-; CHECK-NEXT:    lea %s2, .LCPI58_0@lo
+; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s2, .LCPI58_0@hi(, %s2)
+; CHECK-NEXT:    lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(, %s2)
 ; CHECK-NEXT:    ldu %s1, (%s1, %s2)
 ; CHECK-NEXT:    cvt.q.s %s2, %s1
 ; CHECK-NEXT:    cvt.d.l %s0, %s0
@@ -843,7 +843,7 @@ define i32 @s2i(i16 signext %0) {
 define i32 @s2ui(i16 signext %0) {
 ; CHECK-LABEL: s2ui:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT FIXME: need    and %s0, %s0, (32)0
+; FIXME: need    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = sext i16 %0 to i32
   ret i32 %2
