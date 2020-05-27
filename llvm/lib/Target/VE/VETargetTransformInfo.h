@@ -71,6 +71,7 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
     // case Intrinsic::experimental_vector_reduce_smax: // TODO
     // case Intrinsic::experimental_vector_reduce_umin: // TODO
     // case Intrinsic::experimental_vector_reduce_umax: // TODO
+      return true;
 
     ///// FP reduction (Ordered only)
     case Intrinsic::experimental_vector_reduce_v2_fmul:

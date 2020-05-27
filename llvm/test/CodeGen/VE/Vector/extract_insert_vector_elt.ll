@@ -79,7 +79,6 @@ define x86_regcallcc <512 x float> @__regcall3__insert_v512f32(<512 x float>) {
 ; CHECK-LABEL: __regcall3__insert_v512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s0, 1065353216
-; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    lsv %v0(2),%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = insertelement <512 x float> %0, float 1.0, i32 2
