@@ -448,7 +448,7 @@ static SDValue getTargetNode(BlockAddressSDNode *N, SDLoc DL, EVT Ty,
 
 static SDValue getTargetNode(ConstantPoolSDNode *N, SDLoc DL, EVT Ty,
                              SelectionDAG &DAG, unsigned Flags) {
-  return DAG.getTargetConstantPool(N->getConstVal(), Ty, N->getAlignment(),
+  return DAG.getTargetConstantPool(N->getConstVal(), Ty, N->getAlign(),
                                    N->getOffset(), Flags);
 }
 
@@ -2152,7 +2152,7 @@ SDValue RISCVTargetLowering::LowerCall(CallLoweringInfo &CLI,
 
   if (IsTailCall)
     ++NumTailCalls;
-  else if (CLI.CS && CLI.CS.isMustTailCall())
+  else if (CLI.CB && CLI.CB->isMustTailCall())
     report_fatal_error("failed to perform tail call elimination on a call "
                        "site marked musttail");
 

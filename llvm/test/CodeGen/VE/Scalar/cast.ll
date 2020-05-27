@@ -326,7 +326,6 @@ define i64 @f2ull(float %x) {
 ; CHECK-LABEL: f2ull:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s1, 1593835520
-; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    fcmp.s %s2, %s0, %s1
 ; CHECK-NEXT:    fsub.s %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.d.s %s1, %s1
@@ -544,17 +543,15 @@ define i64 @ull2ull(i64 returned %0) {
 define float @ull2f(i64 %x) {
 ; CHECK-LABEL: ull2f:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 0, (0)1
-; CHECK-NEXT:    cmps.l %s2, %s0, %s1
 ; CHECK-NEXT:    cvt.d.l %s1, %s0
 ; CHECK-NEXT:    cvt.s.d %s1, %s1
-; CHECK-NEXT:    srl %s3, %s0, 1
-; CHECK-NEXT:    and %s0, 1, %s0
-; CHECK-NEXT:    or %s0, %s0, %s3
-; CHECK-NEXT:    cvt.d.l %s0, %s0
-; CHECK-NEXT:    cvt.s.d %s0, %s0
-; CHECK-NEXT:    fadd.s %s0, %s0, %s0
-; CHECK-NEXT:    cmov.l.lt %s1, %s0, %s2
+; CHECK-NEXT:    srl %s2, %s0, 1
+; CHECK-NEXT:    and %s3, 1, %s0
+; CHECK-NEXT:    or %s2, %s3, %s2
+; CHECK-NEXT:    cvt.d.l %s2, %s2
+; CHECK-NEXT:    cvt.s.d %s2, %s2
+; CHECK-NEXT:    fadd.s %s2, %s2, %s2
+; CHECK-NEXT:    cmov.l.lt %s1, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = uitofp i64 %x to float

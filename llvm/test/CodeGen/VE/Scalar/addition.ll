@@ -46,9 +46,7 @@ define i128 @func5(i128 %0, i128 %1) {
 ; CHECK-NEXT:    adds.l %s1, %s3, %s1
 ; CHECK-NEXT:    adds.l %s0, %s2, %s0
 ; CHECK-NEXT:    cmpu.l %s2, %s0, %s2
-; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s2
-; CHECK-NEXT:    adds.w.zx %s2, %s3, (0)1
+; CHECK-NEXT:    srl %s2, %s2, 63
 ; CHECK-NEXT:    adds.l %s1, %s1, %s2
   %3 = add nsw i128 %1, %0
   ret i128 %3
@@ -98,9 +96,7 @@ define i128 @func10(i128 %0, i128 %1) {
 ; CHECK-NEXT:    adds.l %s1, %s3, %s1
 ; CHECK-NEXT:    adds.l %s0, %s2, %s0
 ; CHECK-NEXT:    cmpu.l %s2, %s0, %s2
-; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s2
-; CHECK-NEXT:    adds.w.zx %s2, %s3, (0)1
+; CHECK-NEXT:    srl %s2, %s2, 63
 ; CHECK-NEXT:    adds.l %s1, %s1, %s2
   %3 = add i128 %1, %0
   ret i128 %3
@@ -167,9 +163,7 @@ define i128 @func17(i128 %0) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, 5(, %s0)
 ; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
-; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s0
-; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
+; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    adds.l %s1, %s1, %s0
 ; CHECK-NEXT:    or %s0, 0, %s2
   %2 = add nsw i128 %0, 5
@@ -219,9 +213,7 @@ define i128 @func22(i128 %0) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, 5(, %s0)
 ; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
-; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s0
-; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
+; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    adds.l %s1, %s1, %s0
 ; CHECK-NEXT:    or %s0, 0, %s2
   %2 = add i128 %0, 5
@@ -232,7 +224,6 @@ define float @func23(float %0) {
 ; CHECK-LABEL: func23:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea.sl %s1, 1084227584
-; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    fadd.s %s0, %s0, %s1
   %2 = fadd float %0, 5.000000e+00
   ret float %2
@@ -275,9 +266,7 @@ define i128 @func27(i128 %0) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    adds.l %s2, %s0, %s2
 ; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
-; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s0
-; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
+; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    adds.l %s1, %s1, %s0
 ; CHECK-NEXT:    or %s0, 0, %s2
   %2 = add nsw i128 %0, 2147483648

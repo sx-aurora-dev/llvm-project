@@ -374,8 +374,8 @@ private:
         continue;
       Visited.insert(&NextJD);
       DFSLinkOrder.push_back(&NextJD);
-      NextJD.withSearchOrderDo([&](const JITDylibSearchOrder &SearchOrder) {
-        for (auto &KV : SearchOrder)
+      NextJD.withLinkOrderDo([&](const JITDylibSearchOrder &LinkOrder) {
+        for (auto &KV : LinkOrder)
           WorkStack.push_back(KV.first);
       });
     }
@@ -963,12 +963,6 @@ Error LLJITBuilderState::prepareForConstruction() {
 LLJIT::~LLJIT() {
   if (CompileThreads)
     CompileThreads->wait();
-}
-
-Error LLJIT::defineAbsolute(StringRef Name, JITEvaluatedSymbol Sym) {
-  auto InternedName = ES->intern(Name);
-  SymbolMap Symbols({{InternedName, Sym}});
-  return Main->define(absoluteSymbols(std::move(Symbols)));
 }
 
 Error LLJIT::addIRModule(JITDylib &JD, ThreadSafeModule TSM) {

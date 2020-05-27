@@ -25,11 +25,14 @@ Usage
 -----
 
 After building libc++, you can run parts of the libc++ test suite by simply
-running ``llvm-lit`` on a specified test or directory. For example:
+running ``llvm-lit`` on a specified test or directory. If you're unsure
+whether the required libraries have been built, you can use the
+`check-cxx-deps` target. For example:
 
 .. code-block:: bash
 
   $ cd <monorepo-root>
+  $ make -C <build> check-cxx-deps # If you want to make sure the targets get rebuilt
   $ <build>/bin/llvm-lit -sv libcxx/test/std/re # Run all of the std::regex tests
   $ <build>/bin/llvm-lit -sv libcxx/test/std/depr/depr.c.headers/stdlib_h.pass.cpp # Run a single test
   $ <build>/bin/llvm-lit -sv libcxx/test/std/atomics libcxx/test/std/threads # Test std::thread and std::atomic
@@ -99,9 +102,10 @@ LIT Options
 Command Line Options
 --------------------
 
-To use these options you pass them on the LIT command line as --param NAME or
---param NAME=VALUE. Some options have default values specified during CMake's
-configuration. Passing the option on the command line will override the default.
+To use these options you pass them on the LIT command line as ``--param NAME``
+or ``--param NAME=VALUE``. Some options have default values specified during
+CMake's configuration. Passing the option on the command line will override the
+default.
 
 .. program:: lit
 
@@ -184,12 +188,6 @@ configuration. Passing the option on the command line will override the default.
   Run the tests using the given sanitizer. If LLVM_USE_SANITIZER was given when
   building libc++ then that sanitizer will be used by default.
 
-.. option:: color_diagnostics
-
-  Enable the use of colorized compile diagnostics. If the color_diagnostics
-  option is specified or the environment variable LIBCXX_COLOR_DIAGNOSTICS is
-  present then color diagnostics will be enabled.
-
 .. option:: llvm_unwinder
 
   Enable the use of LLVM unwinder instead of libgcc.
@@ -206,12 +204,6 @@ Environment Variables
 
   Specify the site configuration to use when running the tests.
   Also see `libcxx_site_config`.
-
-.. envvar:: LIBCXX_COLOR_DIAGNOSTICS
-
-  If ``LIBCXX_COLOR_DIAGNOSTICS`` is defined then the test suite will attempt
-  to use color diagnostic outputs from the compiler.
-  Also see `color_diagnostics`.
 
 Writing Tests
 -------------

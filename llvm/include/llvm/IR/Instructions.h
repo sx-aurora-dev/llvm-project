@@ -1032,13 +1032,13 @@ public:
     Type *PtrTy = PointerType::get(checkGEPType(getIndexedType(ElTy, IdxList)),
                                    Ptr->getType()->getPointerAddressSpace());
     // Vector GEP
-    if (Ptr->getType()->isVectorTy()) {
-      ElementCount EltCount = Ptr->getType()->getVectorElementCount();
+    if (auto *PtrVTy = dyn_cast<VectorType>(Ptr->getType())) {
+      ElementCount EltCount = PtrVTy->getElementCount();
       return VectorType::get(PtrTy, EltCount);
     }
     for (Value *Index : IdxList)
-      if (Index->getType()->isVectorTy()) {
-        ElementCount EltCount = Index->getType()->getVectorElementCount();
+      if (auto *IndexVTy = dyn_cast<VectorType>(Index->getType())) {
+        ElementCount EltCount = IndexVTy->getElementCount();
         return VectorType::get(PtrTy, EltCount);
       }
     // Scalar GEP
@@ -1991,7 +1991,8 @@ public:
   /// Examples: shufflevector <4 x n> A, <4 x n> B, <1,2,3>
   ///           shufflevector <4 x n> A, <4 x n> B, <1,2,3,4,5>
   bool changesLength() const {
-    unsigned NumSourceElts = Op<0>()->getType()->getVectorNumElements();
+    unsigned NumSourceElts =
+        cast<VectorType>(Op<0>()->getType())->getNumElements();
     unsigned NumMaskElts = ShuffleMask.size();
     return NumSourceElts != NumMaskElts;
   }
@@ -2000,7 +2001,8 @@ public:
   /// elements than its source vectors.
   /// Example: shufflevector <2 x n> A, <2 x n> B, <1,2,3>
   bool increasesLength() const {
-    unsigned NumSourceElts = Op<0>()->getType()->getVectorNumElements();
+    unsigned NumSourceElts =
+        cast<VectorType>(Op<0>()->getType())->getNumElements();
     unsigned NumMaskElts = ShuffleMask.size();
     return NumSourceElts < NumMaskElts;
   }
@@ -2193,7 +2195,7 @@ public:
 
   /// Return true if this shuffle mask is an extract subvector mask.
   bool isExtractSubvectorMask(int &Index) const {
-    int NumSrcElts = Op<0>()->getType()->getVectorNumElements();
+    int NumSrcElts = cast<VectorType>(Op<0>()->getType())->getNumElements();
     return isExtractSubvectorMask(ShuffleMask, NumSrcElts, Index);
   }
 
@@ -2547,15 +2549,11 @@ public:
   using const_block_iterator = BasicBlock * const *;
 
   block_iterator block_begin() {
-    Use::UserRef *ref =
-      reinterpret_cast<Use::UserRef*>(op_begin() + ReservedSpace);
-    return reinterpret_cast<block_iterator>(ref + 1);
+    return reinterpret_cast<block_iterator>(op_begin() + ReservedSpace);
   }
 
   const_block_iterator block_begin() const {
-    const Use::UserRef *ref =
-      reinterpret_cast<const Use::UserRef*>(op_begin() + ReservedSpace);
-    return reinterpret_cast<const_block_iterator>(ref + 1);
+    return reinterpret_cast<const_block_iterator>(op_begin() + ReservedSpace);
   }
 
   block_iterator block_end() {
@@ -3726,15 +3724,6 @@ public:
   /// bundles in \p Bundles.
   static InvokeInst *Create(InvokeInst *II, ArrayRef<OperandBundleDef> Bundles,
                             Instruction *InsertPt = nullptr);
-
-  /// Determine if the call should not perform indirect branch tracking.
-  bool doesNoCfCheck() const { return hasFnAttr(Attribute::NoCfCheck); }
-
-  /// Determine if the call cannot unwind.
-  bool doesNotThrow() const { return hasFnAttr(Attribute::NoUnwind); }
-  void setDoesNotThrow() {
-    addAttribute(AttributeList::FunctionIndex, Attribute::NoUnwind);
-  }
 
   // get*Dest - Return the destination basic blocks...
   BasicBlock *getNormalDest() const {

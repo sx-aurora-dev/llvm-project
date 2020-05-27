@@ -215,6 +215,7 @@ enum Kind {
   kw_optnone,
   kw_optsize,
   kw_passthru,
+  kw_preallocated,
   kw_readnone,
   kw_readonly,
   kw_returned,

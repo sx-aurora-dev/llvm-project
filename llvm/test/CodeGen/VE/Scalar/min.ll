@@ -240,9 +240,11 @@ define zeroext i1 @mini1(i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: mini1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
-; CHECK-NEXT:    and %s2, %s1, %s0
-; CHECK-NEXT:    cmov.w.ne %s2, %s1, %s0
-; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:    xor %s2, -1, %s0
+; CHECK-NEXT:    and %s2, %s2, %s1
+; CHECK-NEXT:    cmov.w.ne %s1, %s0, %s2
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = xor i1 %0, true
   %4 = and i1 %3, %1

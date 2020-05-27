@@ -942,7 +942,8 @@ static Value createPrivateMemRef(AffineForOp forOp, Operation *srcStoreOpInst,
   }
   auto indexRemap = zeroOffsetCount == rank
                         ? AffineMap()
-                        : AffineMap::get(outerIVs.size() + rank, 0, remapExprs);
+                        : AffineMap::get(outerIVs.size() + rank, 0, remapExprs,
+                                         forOp.getContext());
   // Replace all users of 'oldMemRef' with 'newMemRef'.
   LogicalResult res =
       replaceAllMemRefUsesWith(oldMemRef, newMemRef, {}, indexRemap,
@@ -1062,8 +1063,8 @@ static bool isFusionProfitable(Operation *srcOpInst, Operation *srcStoreOpInst,
                                unsigned *dstLoopDepth, bool maximalFusion,
                                double computeToleranceThreshold) {
   LLVM_DEBUG({
-    llvm::dbgs() << "Checking whether fusion is profitable between:\n";
-    llvm::dbgs() << " " << *srcOpInst << " and \n";
+    llvm::dbgs() << "Checking whether fusion is profitable between src op:\n";
+    llvm::dbgs() << ' ' << *srcOpInst << " and destination op(s)\n";
     for (auto dstOpInst : dstLoadOpInsts) {
       llvm::dbgs() << " " << *dstOpInst << "\n";
     };
@@ -1492,7 +1493,7 @@ public:
                 srcStoreOp = nullptr;
                 break;
               }
-              unsigned loopDepth = getNestingDepth(*storeOp);
+              unsigned loopDepth = getNestingDepth(storeOp);
               if (loopDepth > maxLoopDepth) {
                 maxLoopDepth = loopDepth;
                 srcStoreOp = storeOp;
@@ -1624,7 +1625,10 @@ public:
             // continue fusing based on new operands.
             for (auto *loadOpInst : dstLoopCollector.loadOpInsts) {
               auto loadMemRef = cast<AffineLoadOp>(loadOpInst).getMemRef();
-              if (visitedMemrefs.count(loadMemRef) == 0)
+              // NOTE: Change 'loads' to a hash set in case efficiency is an
+              // issue. We still use a vector since it's expected to be small.
+              if (visitedMemrefs.count(loadMemRef) == 0 &&
+                  !llvm::is_contained(loads, loadOpInst))
                 loads.push_back(loadOpInst);
             }
 

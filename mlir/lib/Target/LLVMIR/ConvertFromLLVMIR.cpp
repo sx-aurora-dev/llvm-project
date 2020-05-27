@@ -168,15 +168,16 @@ LLVMType Importer::processType(llvm::Type *type) {
       return nullptr;
     return LLVMType::getArrayTy(elementType, type->getArrayNumElements());
   }
-  case llvm::Type::VectorTyID: {
-    if (type->getVectorIsScalable()) {
-      emitError(unknownLoc) << "scalable vector types not supported";
-      return nullptr;
-    }
-    LLVMType elementType = processType(type->getVectorElementType());
+  case llvm::Type::ScalableVectorTyID: {
+    emitError(unknownLoc) << "scalable vector types not supported";
+    return nullptr;
+  }
+  case llvm::Type::FixedVectorTyID: {
+    auto *typeVTy = llvm::cast<llvm::FixedVectorType>(type);
+    LLVMType elementType = processType(typeVTy->getElementType());
     if (!elementType)
       return nullptr;
-    return LLVMType::getVectorTy(elementType, type->getVectorNumElements());
+    return LLVMType::getVectorTy(elementType, typeVTy->getNumElements());
   }
   case llvm::Type::VoidTyID:
     return LLVMType::getVoidTy(dialect);
@@ -243,7 +244,8 @@ Type Importer::getStdTypeForAttr(LLVMType type) {
 
   // LLVM vectors can only contain scalars.
   if (type.isVectorTy()) {
-    auto numElements = type.getUnderlyingType()->getVectorElementCount();
+    auto numElements = llvm::cast<llvm::VectorType>(type.getUnderlyingType())
+                           ->getElementCount();
     if (numElements.Scalable) {
       emitError(unknownLoc) << "scalable vectors not supported";
       return nullptr;
@@ -269,7 +271,8 @@ Type Importer::getStdTypeForAttr(LLVMType type) {
     if (type.getArrayElementType().isVectorTy()) {
       LLVMType vectorType = type.getArrayElementType();
       auto numElements =
-          vectorType.getUnderlyingType()->getVectorElementCount();
+          llvm::cast<llvm::VectorType>(vectorType.getUnderlyingType())
+              ->getElementCount();
       if (numElements.Scalable) {
         emitError(unknownLoc) << "scalable vectors not supported";
         return nullptr;
@@ -717,7 +720,7 @@ LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
       op = b.create<CallOp>(loc, tys, b.getSymbolRefAttr(callee->getName()),
                             ops);
     } else {
-      Value calledValue = processValue(ci->getCalledValue());
+      Value calledValue = processValue(ci->getCalledOperand());
       if (!calledValue)
         return failure();
       ops.insert(ops.begin(), calledValue);
@@ -763,7 +766,7 @@ LogicalResult Importer::processInstruction(llvm::Instruction *inst) {
                               ops, blocks[ii->getNormalDest()], normalArgs,
                               blocks[ii->getUnwindDest()], unwindArgs);
     } else {
-      ops.insert(ops.begin(), processValue(ii->getCalledValue()));
+      ops.insert(ops.begin(), processValue(ii->getCalledOperand()));
       op = b.create<InvokeOp>(loc, tys, ops, blocks[ii->getNormalDest()],
                               normalArgs, blocks[ii->getUnwindDest()],
                               unwindArgs);

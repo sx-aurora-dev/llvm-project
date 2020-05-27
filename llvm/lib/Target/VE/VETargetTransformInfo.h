@@ -25,16 +25,24 @@
 #include "llvm/IR/PredicatedInst.h"
 #include "llvm/IR/Type.h"
 
+static llvm::Type* GetVectorElementType(llvm::Type *Ty) {
+  return llvm::cast<llvm::FixedVectorType>(Ty)->getElementType();
+}
+
+static unsigned GetVectorNumElements(llvm::Type *Ty) {
+  return llvm::cast<llvm::FixedVectorType>(Ty)->getNumElements();
+}
+
 static bool IsMaskType(llvm::Type *Ty) {
   return Ty->isVectorTy() &&
-         Ty->getVectorElementType()->getPrimitiveSizeInBits() == 1;
+         GetVectorElementType(Ty)->getPrimitiveSizeInBits() == 1;
 }
 
 static llvm::Type *GetLaneType(llvm::Type *Ty) {
   using namespace llvm;
   if (!isa<VectorType>(Ty))
     return Ty;
-  return cast<VectorType>(Ty)->getVectorElementType();
+  return GetVectorElementType(Ty);
 }
 
 namespace llvm {
@@ -126,12 +134,12 @@ public:
     auto VTy = dyn_cast<VectorType>(&DT);
     if (!VTy)
       return false;
-    return isBoolTy(VTy->getVectorElementType()) &&
-           VTy->getVectorNumElements() <=
-               getVRegCapacity(*VTy->getVectorElementType());
+    return isBoolTy(GetVectorElementType(VTy)) &&
+           GetVectorNumElements(VTy) <=
+               getVRegCapacity(*GetVectorElementType(VTy));
   }
 
-  bool isVectorLaneType(Type &ElemTy) {
+  bool isVectorLaneType(Type &ElemTy) const {
     // check element sizes for vregs
     if (ElemTy.isIntegerTy()) {
       unsigned ScaBits = ElemTy.getScalarSizeInBits();
@@ -150,10 +158,10 @@ public:
     auto VTy = dyn_cast<VectorType>(&DT);
     if (!VTy)
       return false;
-    auto &ElemTy = *VTy->getVectorElementType();
+    auto &ElemTy = *GetVectorElementType(VTy);
 
     // oversized vector
-    if (getVRegCapacity(ElemTy) < VTy->getVectorNumElements())
+    if (getVRegCapacity(ElemTy) < GetVectorNumElements(VTy))
       return false;
 
     return isVectorLaneType(ElemTy);
@@ -194,7 +202,8 @@ public:
 
   bool supportsEfficientVectorElementLoadStore() { return false; }
 
-  unsigned getScalarizationOverhead(Type *Ty, bool Insert, bool Extract) const {
+  unsigned getScalarizationOverhead(VectorType *Ty, const APInt &DemandedElts,
+                                    bool Insert, bool Extract) const {
     auto VecTy = dyn_cast<VectorType>(Ty);
     if (!VecTy)
       return 1;
@@ -206,16 +215,19 @@ public:
     return Args.size() * VF;
   }
 
-  int getMemoryOpCost(unsigned Opcode, Type *Src, MaybeAlign Alignment,
-                      unsigned AddressSpace, const Instruction *I = nullptr) {
+  unsigned getMemoryOpCost(unsigned Opcode, Type *Src, MaybeAlign Alignment,
+                           unsigned AddressSpace,
+                           TargetTransformInfo::TargetCostKind CostKind,
+                           const Instruction *I = nullptr) const {
     unsigned AlignBytes = Alignment.valueOrOne().value();
-    return getMaskedMemoryOpCost(Opcode, Src, AlignBytes, AddressSpace);
+    return getMaskedMemoryOpCost(Opcode, Src, AlignBytes, AddressSpace, CostKind);
   }
 
-  int getMaskedMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
-                            unsigned AddressSpace) {
+  unsigned getMaskedMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
+                                 unsigned AddressSpace,
+                                 TargetTransformInfo::TargetCostKind CostKind) const {
     if (isa<VectorType>(*Src) && !isVectorLaneType(*Src)) {
-      return cast<VectorType>(Src)->getVectorNumElements();
+      return GetVectorNumElements(Src);
     }
     return 1;
   }

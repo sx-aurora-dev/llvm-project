@@ -4,6 +4,16 @@
 
 namespace llvm {
 
+unsigned
+GetVectorNumElements(Type *Ty) {
+  return cast<FixedVectorType>(Ty)->getNumElements();
+}
+
+Type*
+GetVectorElementType(Type *Ty) {
+  return cast<FixedVectorType>(Ty)->getElementType();
+}
+
 VecLenOpt InferLengthFromMask(SDValue MaskV) {
   std::unique_ptr<MaskView> MV(requestMaskView(MaskV.getNode()));
   if (!MV)
@@ -1089,7 +1099,7 @@ struct ConstantElemOp final : public AbstractShuffleOp {
     EVT LegalResVT = PartialV.getValueType();
     const EVT PtrVT = MVT::i64;
     // const unsigned LegalNumElems = LegalResVT.getVectorNumElements();
-    const unsigned VecAlignBytes = 8;
+    Align VecAlignBytes(8);
     SDValue ConstantPtrV =
         CDAG.DAG.getConstantPool(VecConstant, PtrVT, VecAlignBytes);
     SDValue ResultV;
@@ -1098,7 +1108,7 @@ struct ConstantElemOp final : public AbstractShuffleOp {
 #if 1
       // FIXME only works for 32/64bit elements
       const unsigned NumBufferElems =
-          VecConstant->getType()->getVectorNumElements();
+          GetVectorNumElements(VecConstant->getType());
       SDValue MaskV =
           CDAG.createUniformConstMask(LegalResVT.getVectorNumElements(), true);
       SDValue VLV = CDAG.getConstEVL(NumBufferElems);

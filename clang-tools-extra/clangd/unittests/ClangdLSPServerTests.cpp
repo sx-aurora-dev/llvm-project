@@ -10,10 +10,13 @@
 #include "ClangdLSPServer.h"
 #include "CodeComplete.h"
 #include "LSPClient.h"
-#include "Logger.h"
 #include "Protocol.h"
 #include "TestFS.h"
 #include "refactor/Rename.h"
+#include "support/Logger.h"
+#include "support/TestTracer.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/JSON.h"
 #include "llvm/Testing/Support/SupportHelpers.h"
 #include "gmock/gmock.h"
@@ -126,6 +129,36 @@ TEST_F(LSPTest, Diagnostics) {
   EXPECT_THAT(Client.diagnostics("foo.cpp"), llvm::ValueIs(testing::IsEmpty()));
 }
 
+TEST_F(LSPTest, DiagnosticsHeaderSaved) {
+  auto &Client = start();
+  FS.Files["foo.h"] = "#define VAR original";
+  Client.didOpen("foo.cpp", R"cpp(
+    #include "foo.h"
+    int x = VAR;
+  )cpp");
+  EXPECT_THAT(Client.diagnostics("foo.cpp"),
+              llvm::ValueIs(testing::ElementsAre(
+                  DiagMessage("Use of undeclared identifier 'original'"))));
+  // Now modify the header from within the "editor".
+  FS.Files["foo.h"] = "#define VAR changed";
+  Client.notify(
+      "textDocument/didSave",
+      llvm::json::Object{{"textDocument", Client.documentID("foo.h")}});
+  // Foo.cpp should be rebuilt with new diagnostics.
+  EXPECT_THAT(Client.diagnostics("foo.cpp"),
+              llvm::ValueIs(testing::ElementsAre(
+                  DiagMessage("Use of undeclared identifier 'changed'"))));
+}
+
+TEST_F(LSPTest, RecordsLatencies) {
+  trace::TestTracer Tracer;
+  auto &Client = start();
+  llvm::StringLiteral MethodName = "method_name";
+  EXPECT_THAT(Tracer.takeMetric("lsp_latency", MethodName), testing::SizeIs(0));
+  llvm::consumeError(Client.call(MethodName, {}).take().takeError());
+  stop();
+  EXPECT_THAT(Tracer.takeMetric("lsp_latency", MethodName), testing::SizeIs(1));
+}
 } // namespace
 } // namespace clangd
 } // namespace clang

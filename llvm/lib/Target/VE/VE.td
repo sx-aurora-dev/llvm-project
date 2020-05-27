@@ -31,6 +31,8 @@ def FeatureVELIntrin
   : SubtargetFeature<"velintrin", "VELIntrinsicMode", "true",
                      "Enable VEL intrinsics">;
 
+def IsNoNaNs : Predicate<"TM.Options.NoNaNsFPMath">;
+
 //===----------------------------------------------------------------------===//
 // Register File, Calling Conv, Instruction Descriptions
 //===----------------------------------------------------------------------===//

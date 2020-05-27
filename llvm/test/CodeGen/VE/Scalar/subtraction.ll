@@ -45,11 +45,10 @@ define i128 @func5(i128 %0, i128 %1) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    subs.l %s1, %s1, %s3
 ; CHECK-NEXT:    cmpu.l %s3, %s0, %s2
-; CHECK-NEXT:    or %s4, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s4, (63)0, %s3
-; CHECK-NEXT:    adds.w.zx %s3, %s4, (0)1
+; CHECK-NEXT:    srl %s3, %s3, 63
 ; CHECK-NEXT:    subs.l %s1, %s1, %s3
 ; CHECK-NEXT:    subs.l %s0, %s0, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = sub nsw i128 %0, %1
   ret i128 %3
 }
@@ -97,11 +96,10 @@ define i128 @func10(i128 %0, i128 %1) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    subs.l %s1, %s1, %s3
 ; CHECK-NEXT:    cmpu.l %s3, %s0, %s2
-; CHECK-NEXT:    or %s4, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s4, (63)0, %s3
-; CHECK-NEXT:    adds.w.zx %s3, %s4, (0)1
+; CHECK-NEXT:    srl %s3, %s3, 63
 ; CHECK-NEXT:    subs.l %s1, %s1, %s3
 ; CHECK-NEXT:    subs.l %s0, %s0, %s2
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = sub i128 %0, %1
   ret i128 %3
 }
@@ -167,9 +165,7 @@ define i128 @func17(i128 %0) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, -5(, %s0)
 ; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
-; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s0
-; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
+; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    lea %s1, -1(%s0, %s1)
 ; CHECK-NEXT:    or %s0, 0, %s2
   %2 = add nsw i128 %0, -5
@@ -219,9 +215,7 @@ define i128 @func22(i128 %0) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, -5(, %s0)
 ; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
-; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s0
-; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
+; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    lea %s1, -1(%s0, %s1)
 ; CHECK-NEXT:    or %s0, 0, %s2
   %2 = add i128 %0, -5
@@ -232,7 +226,6 @@ define float @func23(float %0, float %1) {
 ; CHECK-LABEL: func23:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:  lea.sl %s1, -1063256064
-; CHECK-NEXT:  or %s1, 0, %s1
 ; CHECK-NEXT:  fadd.s %s0, %s0, %s1
   %3 = fadd float %0, -5.000000e+00
   ret float %3
@@ -271,9 +264,7 @@ define i128 @func27(i128 %0) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, -2147483648(, %s0)
 ; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
-; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s0
-; CHECK-NEXT:    adds.w.zx %s0, %s3, (0)1
+; CHECK-NEXT:    srl %s0, %s0, 63
 ; CHECK-NEXT:    lea %s1, -1(%s0, %s1)
 ; CHECK-NEXT:    or %s0, 0, %s2
   %2 = add nsw i128 %0, -2147483648

@@ -63,20 +63,26 @@ namespace llvm {
     }
   };
 
+  /// Check if \p ID corresponds to a debug info intrinsic.
+  static inline bool isDbgInfoIntrinsic(Intrinsic::ID ID) {
+    switch (ID) {
+    case Intrinsic::dbg_declare:
+    case Intrinsic::dbg_value:
+    case Intrinsic::dbg_addr:
+    case Intrinsic::dbg_label:
+      return true;
+    default:
+      return false;
+    }
+  }
+
   /// This is the common base class for debug info intrinsics.
   class DbgInfoIntrinsic : public IntrinsicInst {
   public:
     /// \name Casting methods
     /// @{
     static bool classof(const IntrinsicInst *I) {
-      switch (I->getIntrinsicID()) {
-      case Intrinsic::dbg_declare:
-      case Intrinsic::dbg_value:
-      case Intrinsic::dbg_addr:
-      case Intrinsic::dbg_label:
-        return true;
-      default: return false;
-      }
+      return isDbgInfoIntrinsic(I->getIntrinsicID());
     }
     static bool classof(const Value *V) {
       return isa<IntrinsicInst>(V) && classof(cast<IntrinsicInst>(V));
@@ -256,7 +262,7 @@ namespace llvm {
     ///     The vector data type of the operation.
     static VPIntrinsic::ShortTypeVec
     EncodeTypeTokens(VPIntrinsic::TypeTokenVec TTVec, Type *VecRetTy,
-                     Type *VecPtrTy, Type &VectorTy);
+                     Type *VecPtrTy, VectorType &VectorTy);
 
     /// set the mask parameter.
     /// this asserts if the underlying intrinsic has no mask parameter.
@@ -374,7 +380,6 @@ namespace llvm {
   /// This is the common base class for constrained floating point intrinsics.
   class ConstrainedFPIntrinsic : public IntrinsicInst {
   public:
-
     bool isUnaryOp() const;
     bool isTernaryOp() const;
     Optional<RoundingMode> getRoundingMode() const;

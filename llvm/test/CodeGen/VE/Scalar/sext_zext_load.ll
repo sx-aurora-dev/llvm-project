@@ -387,8 +387,8 @@ define signext i8 @func37() {
 ; CHECK-LABEL: func37:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.zx %s0, 191(, %s11)
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 31
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 31
+; CHECK-NEXT:    and %s0, 1, %s0
+; CHECK-NEXT:    subs.w.sx %s0, 0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a = alloca i1, align 1
   %a.val = load i1, i1* %a, align 1
@@ -400,8 +400,8 @@ define signext i16 @func38() {
 ; CHECK-LABEL: func38:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.zx %s0, 191(, %s11)
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 31
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 31
+; CHECK-NEXT:    and %s0, 1, %s0
+; CHECK-NEXT:    subs.w.sx %s0, 0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a = alloca i1, align 1
   %a.val = load i1, i1* %a, align 1
@@ -413,8 +413,8 @@ define signext i32 @func39() {
 ; CHECK-LABEL: func39:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.zx %s0, 191(, %s11)
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 31
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 31
+; CHECK-NEXT:    and %s0, 1, %s0
+; CHECK-NEXT:    subs.w.sx %s0, 0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a = alloca i1, align 1
   %a.val = load i1, i1* %a, align 1
@@ -426,8 +426,8 @@ define signext i64 @func40() {
 ; CHECK-LABEL: func40:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.zx %s0, 191(, %s11)
-; CHECK-NEXT:    sll %s0, %s0, 63
-; CHECK-NEXT:    sra.l %s0, %s0, 63
+; CHECK-NEXT:    and %s0, 1, %s0
+; CHECK-NEXT:    subs.l %s0, 0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a = alloca i1, align 1
   %a.val = load i1, i1* %a, align 1
@@ -439,8 +439,10 @@ define signext i128 @func41() {
 ; CHECK-LABEL: func41:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.zx %s0, 191(, %s11)
-; CHECK-NEXT:     sll %s0, %s0, 63
-; CHECK-NEXT:     sra.l %s0, %s0, 63
+; CHECK-NEXT:    and %s0, 1, %s0
+; CHECK-NEXT:    subs.l %s0, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    or %s11, 0, %s9
   %a = alloca i1, align 1
   %a.val = load i1, i1* %a, align 1
   %a.conv = sext i1 %a.val to i128

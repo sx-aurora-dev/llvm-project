@@ -95,9 +95,10 @@ class VEAsmParser : public MCTargetAsmParser {
 
   // Helper function for dealing with %lo / %hi in PIC mode.
   const VEMCExpr *adjustPICRelocation(VEMCExpr::VariantKind VK,
-                                         const MCExpr *subExpr);
+                                      const MCExpr *Sym);
 
-  bool matchVEAsmModifiers(const MCExpr *&EVal, SMLoc &EndLoc);
+  bool matchVEAsmModifiers(const MCExpr *&EVal, const MCExpr* Sym,
+                           StringRef Mod, SMLoc &EndLoc);
   bool parseDirectiveWord(unsigned Size, SMLoc L);
 
   bool is64Bit() const {
@@ -1140,6 +1141,38 @@ VEAsmParser::parseMEMOperand(OperandVector &Operands) {
       return MatchOperand_NoMatch;
     break;
   }
+
+  case AsmToken::Identifier: {
+    StringRef Identifier, Modifier;
+    if (!getParser().parseIdentifier(Identifier)) {
+      // Search @modifiers like "symbol@hi".
+      size_t at = Identifier.rfind('@');
+      if (at != 0 || at != StringRef::npos) {
+        std::pair<StringRef, StringRef> Pair = Identifier.rsplit("@");
+        if (!Pair.first.empty() && !Pair.second.empty()) {
+          Identifier = Pair.first;
+          Modifier = Pair.second;
+        }
+      }
+      E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+      MCSymbol *Sym = getContext().getOrCreateSymbol(Identifier);
+
+      const MCExpr *Res = MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None,
+                                                  getContext());
+      const MCExpr *EVal;
+      if (matchVEAsmModifiers(EVal, Res, Modifier, E)) {
+        E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+        Offset = VEOperand::CreateImm(EVal, S, E);
+      } else {
+        E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+        VEMCExpr::VariantKind Kind = VEMCExpr::VK_VE_REFLONG;
+        Res = VEMCExpr::create(Kind, Res, getContext());
+        Offset = VEOperand::CreateImm(Res, S, E);
+      }
+    }
+    break;
+  }
+
   case AsmToken::LParen:
     // empty disp (= 0)
     Offset = VEOperand::CreateImm(MCConstantExpr::create(0, getContext()),
@@ -1248,6 +1281,7 @@ VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
       return MatchOperand_NoMatch;
     break;
   }
+
   case AsmToken::Percent:
     if (ParseRegister(BaseReg, S, E))
       return MatchOperand_NoMatch;
@@ -1450,13 +1484,6 @@ VEAsmParser::parseVEAsmOperand(std::unique_ptr<VEOperand> &Op) {
       Op = VEOperand::CreateReg(RegNo, S, E);
     break;
 
-  case AsmToken::At:
-    if (matchVEAsmModifiers(EVal, E)) {
-      E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
-      Op = VEOperand::CreateImm(EVal, S, E);
-    }
-    break;
-
   case AsmToken::Minus:
   case AsmToken::Integer:
   case AsmToken::Dot:
@@ -1510,7 +1537,7 @@ static bool hasGOTReference(const MCExpr *Expr) {
 
 const VEMCExpr *
 VEAsmParser::adjustPICRelocation(VEMCExpr::VariantKind VK,
-                                    const MCExpr *subExpr) {
+                                    const MCExpr *Sym) {
   // When in PIC mode, "%lo(...)" and "%hi(...)" behave differently.
   // If the expression refers contains _GLOBAL_OFFSETE_TABLE, it is
   // actually a %pc10 or %pc22 relocation. Otherwise, they are interpreted
@@ -1520,42 +1547,27 @@ VEAsmParser::adjustPICRelocation(VEMCExpr::VariantKind VK,
     switch(VK) {
     default: break;
     case VEMCExpr::VK_VE_LO32:
-      VK = (hasGOTReference(subExpr) ? VEMCExpr::VK_VE_PC_LO32
-                                     : VEMCExpr::VK_VE_GOT_LO32);
+      VK = (hasGOTReference(Sym) ? VEMCExpr::VK_VE_PC_LO32
+                                 : VEMCExpr::VK_VE_GOT_LO32);
       break;
     case VEMCExpr::VK_VE_HI32:
-      VK = (hasGOTReference(subExpr) ? VEMCExpr::VK_VE_PC_HI32
-                                     : VEMCExpr::VK_VE_GOT_HI32);
+      VK = (hasGOTReference(Sym) ? VEMCExpr::VK_VE_PC_HI32
+                                 : VEMCExpr::VK_VE_GOT_HI32);
       break;
     }
   }
 
-  return VEMCExpr::create(VK, subExpr, getContext());
+  return VEMCExpr::create(VK, Sym, getContext());
 }
 
-bool VEAsmParser::matchVEAsmModifiers(const MCExpr *&EVal,
-                                            SMLoc &EndLoc) {
-  AsmToken Tok = Parser.getTok();
-  if (!Tok.is(AsmToken::Identifier))
-    return false;
+bool VEAsmParser::matchVEAsmModifiers(const MCExpr *&EVal, const MCExpr* Sym,
+                                      StringRef Mod, SMLoc &EndLoc) {
+  LLVM_DEBUG(dbgs() << "matchVEAsmModifiers\n");
 
-  StringRef name = Tok.getString();
-
-  VEMCExpr::VariantKind VK = VEMCExpr::parseVariantKind(name);
-
+  VEMCExpr::VariantKind VK = VEMCExpr::parseVariantKind(Mod);
   if (VK == VEMCExpr::VK_VE_None)
     return false;
-
-  Parser.Lex(); // Eat the identifier.
-  if (Parser.getTok().getKind() != AsmToken::LParen)
-    return false;
-
-  Parser.Lex(); // Eat the LParen token.
-  const MCExpr *subExpr;
-  if (Parser.parseParenExpression(subExpr, EndLoc))
-    return false;
-
-  EVal = adjustPICRelocation(VK, subExpr);
+  EVal = adjustPICRelocation(VK, Sym);
   return true;
 }
 

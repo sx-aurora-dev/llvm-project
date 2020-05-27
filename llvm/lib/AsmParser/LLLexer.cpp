@@ -669,6 +669,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(optnone);
   KEYWORD(optsize);
   KEYWORD(passthru);
+  KEYWORD(preallocated);
   KEYWORD(readnone);
   KEYWORD(readonly);
   KEYWORD(returned);

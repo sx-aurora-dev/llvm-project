@@ -59,16 +59,13 @@ define i64 @selectccsgti64(i64, i64, i64, i64) {
 define i64 @selectccsgti128(i128, i128, i64, i64) {
 ; CHECK-LABEL: selectccsgti128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s6, 0, (0)1
-; CHECK-NEXT:    cmps.l %s1, %s1, %s3
-; CHECK-NEXT:    or %s3, 0, %s6
-; CHECK-NEXT:    cmov.l.gt %s3, (63)0, %s1
-; CHECK-NEXT:    cmpu.l %s0, %s0, %s2
-; CHECK-NEXT:    cmov.l.gt %s6, (63)0, %s0
-; CHECK-NEXT:    cmov.l.eq %s3, %s6, %s1
-; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    cmps.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    cmov.w.ne %s5, %s4, %s0
+; CHECK-NEXT:    cmps.l %s6, %s1, %s3
+; CHECK-NEXT:    cmps.l %s1, %s3, %s1
+; CHECK-NEXT:    srl %s1, %s1, 63
+; CHECK-NEXT:    cmpu.l %s0, %s2, %s0
+; CHECK-NEXT:    srl %s0, %s0, 63
+; CHECK-NEXT:    cmov.l.eq %s1, %s0, %s6
+; CHECK-NEXT:    cmov.w.ne %s5, %s4, %s1
 ; CHECK-NEXT:    or %s0, 0, %s5
 ; CHECK-NEXT:    or %s11, 0, %s9
   %5 = icmp sgt i128 %0, %1

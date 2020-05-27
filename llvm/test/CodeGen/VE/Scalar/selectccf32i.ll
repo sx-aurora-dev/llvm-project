@@ -23,11 +23,8 @@ define float @selectccat(float, float, float, float) {
 define float @selectccoeq(float, float, float, float) {
 ; CHECK-LABEL: selectccoeq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.eq %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -39,11 +36,8 @@ define float @selectccoeq(float, float, float, float) {
 define float @selectccone(float, float, float, float) {
 ; CHECK-LABEL: selectccone:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.ne %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -55,11 +49,8 @@ define float @selectccone(float, float, float, float) {
 define float @selectccogt(float, float, float, float) {
 ; CHECK-LABEL: selectccogt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.gt %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -71,11 +62,8 @@ define float @selectccogt(float, float, float, float) {
 define float @selectccoge(float, float, float, float) {
 ; CHECK-LABEL: selectccoge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.ge %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -87,11 +75,8 @@ define float @selectccoge(float, float, float, float) {
 define float @selectccolt(float, float, float, float) {
 ; CHECK-LABEL: selectccolt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.lt %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -103,11 +88,8 @@ define float @selectccolt(float, float, float, float) {
 define float @selectccole(float, float, float, float) {
 ; CHECK-LABEL: selectccole:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.le %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -147,11 +129,8 @@ define float @selectccuno(float, float, float, float) {
 define float @selectccueq(float, float, float, float) {
 ; CHECK-LABEL: selectccueq:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.eqnan %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -163,11 +142,8 @@ define float @selectccueq(float, float, float, float) {
 define float @selectccune(float, float, float, float) {
 ; CHECK-LABEL: selectccune:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.nenan %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -179,11 +155,8 @@ define float @selectccune(float, float, float, float) {
 define float @selectccugt(float, float, float, float) {
 ; CHECK-LABEL: selectccugt:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.gtnan %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -195,11 +168,8 @@ define float @selectccugt(float, float, float, float) {
 define float @selectccuge(float, float, float, float) {
 ; CHECK-LABEL: selectccuge:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.genan %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -211,11 +181,8 @@ define float @selectccuge(float, float, float, float) {
 define float @selectccult(float, float, float, float) {
 ; CHECK-LABEL: selectccult:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.ltnan %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -227,11 +194,8 @@ define float @selectccult(float, float, float, float) {
 define float @selectccule(float, float, float, float) {
 ; CHECK-LABEL: selectccule:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
 ; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    fcmp.s %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.s.lenan %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
 ; CHECK-NEXT:    or %s11, 0, %s9

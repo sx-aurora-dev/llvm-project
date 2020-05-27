@@ -50,7 +50,7 @@ public:
                         SmallVectorImpl<Register> &UpdatedDefs) {
     assert(MI.getOpcode() == TargetOpcode::G_ANYEXT);
 
-    Builder.setInstr(MI);
+    Builder.setInstrAndDebugLoc(MI);
     Register DstReg = MI.getOperand(0).getReg();
     Register SrcReg = lookThroughCopyInstrs(MI.getOperand(1).getReg());
 
@@ -100,7 +100,7 @@ public:
                       GISelObserverWrapper &Observer) {
     assert(MI.getOpcode() == TargetOpcode::G_ZEXT);
 
-    Builder.setInstr(MI);
+    Builder.setInstrAndDebugLoc(MI);
     Register DstReg = MI.getOperand(0).getReg();
     Register SrcReg = lookThroughCopyInstrs(MI.getOperand(1).getReg());
 
@@ -364,7 +364,7 @@ public:
       // That is not done yet.
       if (ConvertOp == 0)
         return true;
-      return !DestTy.isVector();
+      return !DestTy.isVector() && OpTy.isVector();
     case TargetOpcode::G_CONCAT_VECTORS: {
       if (ConvertOp == 0)
         return true;
@@ -434,8 +434,42 @@ public:
     }
 
     if (!MergeI || !canFoldMergeOpcode(MergeI->getOpcode(),
-                                       ConvertOp, OpTy, DestTy))
+                                       ConvertOp, OpTy, DestTy)) {
+      if (ConvertOp == TargetOpcode::G_TRUNC && OpTy.isVector() &&
+          OpTy.getScalarType() == DestTy.getScalarType()) {
+        Register TruncSrc = SrcDef->getOperand(1).getReg();
+        LLT TruncSrcTy = MRI.getType(TruncSrc);
+
+        //  %1:_(<4 x s8>) = G_TRUNC %0(<4 x s32>)
+        //  %2:_(s8), %3:_(s8), %4:_(s8), %5:_(s8) = G_UNMERGE_VALUES %1
+        // =>
+        //  %6:_(s32), %7:_(s32), %8:_(s32), %9:_(s32) = G_UNMERGE_VALUES %0
+        //  %2:_(s8) = G_TRUNC %6
+        //  %3:_(s8) = G_TRUNC %7
+        //  %4:_(s8) = G_TRUNC %8
+        //  %5:_(s8) = G_TRUNC %9
+
+        unsigned UnmergeNumElts = DestTy.isVector() ?
+          TruncSrcTy.getNumElements() / NumDefs : 1;
+        LLT UnmergeTy = TruncSrcTy.changeNumElements(UnmergeNumElts);
+
+        if (isInstUnsupported(
+              {TargetOpcode::G_UNMERGE_VALUES, {UnmergeTy, TruncSrcTy}}))
+          return false;
+
+        Builder.setInstr(MI);
+        auto NewUnmerge = Builder.buildUnmerge(UnmergeTy, TruncSrc);
+
+        SmallVector<Register, 8> Regs(NumDefs);
+        for (unsigned I = 0; I != NumDefs; ++I)
+          Builder.buildTrunc(MI.getOperand(I), NewUnmerge.getReg(I));
+
+        markInstAndDefDead(MI, *SrcDef, DeadInsts);
+        return true;
+      }
+
       return false;
+    }
 
     const unsigned NumMergeRegs = MergeI->getNumOperands() - 1;
 
@@ -459,18 +493,35 @@ public:
           DstRegs.push_back(MI.getOperand(DefIdx).getReg());
 
         if (ConvertOp) {
-          SmallVector<Register, 2> TmpRegs;
-          // This is a vector that is being scalarized and casted. Extract to
-          // the element type, and do the conversion on the scalars.
-          LLT MergeEltTy =
-              MRI.getType(MergeI->getOperand(0).getReg()).getElementType();
-          for (unsigned j = 0; j < NumMergeRegs; ++j)
-            TmpRegs.push_back(MRI.createGenericVirtualRegister(MergeEltTy));
+          LLT MergeSrcTy = MRI.getType(MergeI->getOperand(1).getReg());
+
+          // This is a vector that is being split and casted. Extract to the
+          // element type, and do the conversion on the scalars (or smaller
+          // vectors).
+          LLT MergeEltTy = MergeSrcTy.divide(NewNumDefs);
+
+          // Handle split to smaller vectors, with conversions.
+          // %2(<8 x s8>) = G_CONCAT_VECTORS %0(<4 x s8>), %1(<4 x s8>)
+          // %3(<8 x s16>) = G_SEXT %2
+          // %4(<2 x s16>), %5(<2 x s16>), %6(<2 x s16>), %7(<2 x s16>) = G_UNMERGE_VALUES %3
+          //
+          // =>
+          //
+          // %8(<2 x s8>), %9(<2 x s8>) = G_UNMERGE_VALUES %0
+          // %10(<2 x s8>), %11(<2 x s8>) = G_UNMERGE_VALUES %1
+          // %4(<2 x s16>) = G_SEXT %8
+          // %5(<2 x s16>) = G_SEXT %9
+          // %6(<2 x s16>) = G_SEXT %10
+          // %7(<2 x s16>)= G_SEXT %11
+
+          SmallVector<Register, 4> TmpRegs(NewNumDefs);
+          for (unsigned k = 0; k < NewNumDefs; ++k)
+            TmpRegs[k] = MRI.createGenericVirtualRegister(MergeEltTy);
 
           Builder.buildUnmerge(TmpRegs, MergeI->getOperand(Idx + 1).getReg());
 
-          for (unsigned j = 0; j < NumMergeRegs; ++j)
-            Builder.buildInstr(ConvertOp, {DstRegs[j]}, {TmpRegs[j]});
+          for (unsigned k = 0; k < NewNumDefs; ++k)
+            Builder.buildInstr(ConvertOp, {DstRegs[k]}, {TmpRegs[k]});
         } else {
           Builder.buildUnmerge(DstRegs, MergeI->getOperand(Idx + 1).getReg());
         }
@@ -631,6 +682,17 @@ public:
       break;
     case TargetOpcode::G_UNMERGE_VALUES:
       Changed = tryCombineMerges(MI, DeadInsts, UpdatedDefs, WrapperObserver);
+      break;
+    case TargetOpcode::G_MERGE_VALUES:
+      // If any of the users of this merge are an unmerge, then add them to the
+      // artifact worklist in case there's folding that can be done looking up.
+      for (MachineInstr &U : MRI.use_instructions(MI.getOperand(0).getReg())) {
+        if (U.getOpcode() == TargetOpcode::G_UNMERGE_VALUES ||
+            U.getOpcode() == TargetOpcode::G_TRUNC) {
+          UpdatedDefs.push_back(MI.getOperand(0).getReg());
+          break;
+        }
+      }
       break;
     case TargetOpcode::G_EXTRACT:
       Changed = tryCombineExtract(MI, DeadInsts, UpdatedDefs);

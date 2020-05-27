@@ -25,15 +25,14 @@ struct CustomDAG;
 namespace VEISD {
 enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
-  CMPICC, // Compare two GPR operands, set icc+xcc.
-  CMPFCC, // Compare two FP operands, set fcc.
-  BRICC,  // Branch to dest on icc condition
-  BRXCC,  // Branch to dest on xcc condition (64-bit only).
-  BRFCC,  // Branch to dest on fcc condition
-  SELECT,
-  SELECT_ICC, // Select between two values using the current ICC flags.
-  SELECT_XCC, // Select between two values using the current XCC flags.
-  SELECT_FCC, // Select between two values using the current FCC flags.
+
+  EQV,         // Equivalence between two integer values.
+  XOR,         // Exclusive-or between two integer values.
+  CMPI,        // Compare between two signed integer values.
+  CMPU,        // Compare between two unsigned integer values.
+  CMPF,        // Compare between two floating-point values.
+  CMPQ,        // Compare between two quad floating-point values.
+  CMOV,        // Select between two values using the result of comparison.
 
   EH_SJLJ_SETJMP,         // SjLj exception handling setjmp.
   EH_SJLJ_LONGJMP,        // SjLj exception handling longjmp.
@@ -42,20 +41,10 @@ enum NodeType : unsigned {
   Hi,
   Lo, // Hi/Lo operations, typically on a global address.
 
-  FTOI, // FP to Int within a FP register.
-  ITOF, // Int to FP within a FP register.
-  FTOX, // FP to Int64 within a FP register.
-  XTOF, // Int64 to FP within a FP register.
-
-  MAX,
-  MIN,
-  FMAX,
-  FMIN,
-
   GETFUNPLT,   // load function address through %plt insturction
+  GETTLSADDR,  // load address for TLS access
   GETSTACKTOP, // retrieve address of stack top (first address of
                // locals and temporaries)
-  GETTLSADDR,  // load address for TLS access
 
   MEMBARRIER, // Compiler barrier only; generate a no-op.
 
@@ -166,10 +155,30 @@ public:
   EmitInstrWithCustomInserter(MachineInstr &MI,
                               MachineBasicBlock *MBB) const override;
 
+
   const char *getTargetNodeName(unsigned Opcode) const override;
   MVT getScalarShiftAmountTy(const DataLayout &, EVT) const override {
     return MVT::i32;
   }
+
+  SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
+
+  SDValue combineExtBoolTrunc(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineSelectCC(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineSelect(SDNode *N, DAGCombinerInfo &DCI) const;
+
+  /// This function looks at SETCC that compares integers. It replaces
+  /// SETCC with integer arithmetic operations when there is a legal way
+  /// of doing it.
+  SDValue optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
+
+  SDValue generateEquivalentSub(SDNode *N, bool Signed, bool Complement,
+                                bool Swap, SelectionDAG &DAG) const;
+  SDValue generateEquivalentCmp(SDNode *N, bool UseCompAsBase,
+                                SelectionDAG &DAG) const;
+  SDValue generateEquivalentLdz(SDNode *N, bool Complement,
+                                SelectionDAG &DAG) const;
 
   // inline asm
   ConstraintType getConstraintType(StringRef Constraint) const override;
@@ -411,6 +420,24 @@ public:
 
   /// Return the preferred vector type legalization action.
   LegalizeTypeAction getPreferredVectorAction(MVT VT) const override;
+  bool isVectorMaskType(EVT VT) const;
+
+  /// Target Optimization {
+
+  // SX-Aurora VE s/udiv is 5-9 times slower than multiply.
+  bool isIntDivCheap(EVT, AttributeList) const override { return false; }
+  bool hasStandaloneRem(EVT) const override { return false; }
+
+  bool isCheapToSpeculateCtlz() const override { return true; }
+  bool isCtlzFast() const override { return true; }
+
+  bool convertSetCCLogicToBitwiseLogic(EVT VT) const override {
+    return true;
+  }
+
+  bool hasAndNot(SDValue Y) const override;
+
+  /// } Target Optimization
 };
 } // namespace llvm
 

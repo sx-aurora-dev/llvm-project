@@ -211,14 +211,14 @@ template <typename SourceOp> struct OpRewritePattern : public RewritePattern {
 ///     to apply patterns and observe their effects (e.g. to keep worklists or
 ///     other data structures up to date).
 ///
-class PatternRewriter : public OpBuilder {
+class PatternRewriter : public OpBuilder, public OpBuilder::Listener {
 public:
   /// Create operation of specific op type at the current insertion point
   /// without verifying to see if it is valid.
   template <typename OpTy, typename... Args>
   OpTy create(Location location, Args... args) {
     OperationState state(location, OpTy::getOperationName());
-    OpTy::build(this, state, args...);
+    OpTy::build(*this, state, args...);
     auto *op = createOperation(state);
     auto result = dyn_cast<OpTy>(op);
     assert(result && "Builder didn't return the right type");
@@ -231,7 +231,7 @@ public:
   template <typename OpTy, typename... Args>
   OpTy createChecked(Location location, Args... args) {
     OperationState state(location, OpTy::getOperationName());
-    OpTy::build(this, state, args...);
+    OpTy::build(*this, state, args...);
     auto *op = createOperation(state);
 
     // If the Operation we produce is valid, return it.
@@ -246,10 +246,6 @@ public:
     op->erase();
     return OpTy();
   }
-
-  /// This is implemented to insert the specified operation and serves as a
-  /// notification hook for rewriters that want to know about new operations.
-  virtual Operation *insert(Operation *op) = 0;
 
   /// Move the blocks that belong to "region" before the given position in
   /// another region "parent". The two regions must be different. The caller
@@ -349,11 +345,13 @@ public:
   }
 
 protected:
-  explicit PatternRewriter(MLIRContext *ctx) : OpBuilder(ctx) {}
-  virtual ~PatternRewriter();
+  /// Initialize the builder with this rewriter as the listener.
+  explicit PatternRewriter(MLIRContext *ctx)
+      : OpBuilder(ctx, /*listener=*/this) {}
+  ~PatternRewriter() override;
 
-  // These are the callback methods that subclasses can choose to implement if
-  // they would like to be notified about certain types of mutations.
+  /// These are the callback methods that subclasses can choose to implement if
+  /// they would like to be notified about certain types of mutations.
 
   /// Notify the pattern rewriter that the specified operation is about to be
   /// replaced with another set of operations.  This is called before the uses
@@ -450,11 +448,20 @@ private:
 /// Note: These methods also perform folding and simple dead-code elimination
 ///       before attempting to match any of the provided patterns.
 ///
-bool applyPatternsGreedily(Operation *op,
-                           const OwningRewritePatternList &patterns);
+bool applyPatternsAndFoldGreedily(Operation *op,
+                                  const OwningRewritePatternList &patterns);
 /// Rewrite the given regions, which must be isolated from above.
-bool applyPatternsGreedily(MutableArrayRef<Region> regions,
-                           const OwningRewritePatternList &patterns);
+bool applyPatternsAndFoldGreedily(MutableArrayRef<Region> regions,
+                                  const OwningRewritePatternList &patterns);
+
+/// Applies the specified patterns on `op` alone while also trying to fold it,
+/// by selecting the highest benefits patterns in a greedy manner. Returns true
+/// if no more patterns can be matched. `erased` is set to true if `op` was
+/// folded away or erased as a result of becoming dead. Note: This does not
+/// apply any patterns recursively to the regions of `op`.
+bool applyOpPatternsAndFold(Operation *op,
+                            const OwningRewritePatternList &patterns,
+                            bool *erased = nullptr);
 } // end namespace mlir
 
 #endif // MLIR_PATTERN_MATCH_H

@@ -13,7 +13,7 @@
 #ifndef LLVM_LIB_TARGET_VE_INSTPRINTER_VEINSTPRINTER_H
 #define LLVM_LIB_TARGET_VE_INSTPRINTER_VEINSTPRINTER_H
 
-#include "MCTargetDesc/VEMCTargetDesc.h"
+#include "VEMCTargetDesc.h"
 #include "llvm/MC/MCInstPrinter.h"
 
 namespace llvm {
@@ -39,7 +39,6 @@ public:
                         raw_ostream &);
   static const char *getRegisterName(unsigned RegNo,
                                      unsigned AltIdx = VE::NoRegAltName);
-
 
   void printOperand(const MCInst *MI, int OpNum, const MCSubtargetInfo &STI,
                     raw_ostream &OS);

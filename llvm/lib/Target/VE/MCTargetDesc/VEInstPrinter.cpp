@@ -36,11 +36,12 @@ using namespace VE;
 #include "VEGenAsmWriter.inc"
 
 void VEInstPrinter::printRegName(raw_ostream &OS, unsigned RegNo) const {
-  unsigned AltIdx = VE::NoRegAltName;
-  // Generic registers have identical regitster name among register classes.
-  if (!MRI.getRegClass(VE::MISCRegClassID).contains(RegNo))
-    AltIdx = VE::AsmName;
-  OS << '%' << StringRef(getRegisterName(RegNo, AltIdx)).lower();
+  // Generic registers have identical register name among register classes.
+  unsigned AltIdx = VE::AsmName;
+  // Misc registers have each own name, so no use alt-names.
+  if (MRI.getRegClass(VE::MISCRegClassID).contains(RegNo))
+    AltIdx = VE::NoRegAltName;
+  OS << '%' << getRegisterName(RegNo, AltIdx);
 }
 
 void VEInstPrinter::printInst(const MCInst *MI, uint64_t Address,
@@ -221,8 +222,7 @@ void VEInstPrinter::printCCOperand(const MCInst *MI, int OpNum,
 }
 
 void VEInstPrinter::printRDOperand(const MCInst *MI, int OpNum,
-                                   const MCSubtargetInfo &STI,
-                                   raw_ostream &O) {
+                                   const MCSubtargetInfo &STI, raw_ostream &O) {
   int RD = (int)MI->getOperand(OpNum).getImm();
   O << VERDToString((VERD::RoundingMode)RD);
 }

@@ -543,7 +543,7 @@ Function *VPIntrinsic::GetDeclarationForParams(Module *M, Intrinsic::ID VPID,
   auto TypeTokens = VPIntrinsic::GetTypeTokens(VPID);
   auto *VPFunc = Intrinsic::getDeclaration(
       M, VPID,
-      VPIntrinsic::EncodeTypeTokens(TypeTokens, VecRetTy, VecPtrTy, *VecTy));
+      VPIntrinsic::EncodeTypeTokens(TypeTokens, VecRetTy, VecPtrTy, *cast<VectorType>(VecTy)));
   assert(VPFunc && "not a VP intrinsic");
 
   return VPFunc;
@@ -778,7 +778,7 @@ Intrinsic::ID VPIntrinsic::GetForIntrinsic(Intrinsic::ID IntrinsicID) {
 
 VPIntrinsic::ShortTypeVec
 VPIntrinsic::EncodeTypeTokens(VPIntrinsic::TypeTokenVec TTVec, Type *VecRetTy,
-                              Type *VecPtrTy, Type &VectorTy) {
+                              Type *VecPtrTy, VectorType &VectorTy) {
   ShortTypeVec STV;
 
   for (auto Token : TTVec) {
@@ -797,9 +797,9 @@ VPIntrinsic::EncodeTypeTokens(VPIntrinsic::TypeTokenVec TTVec, Type *VecRetTy,
       STV.push_back(VecRetTy);
       break;
     case VPIntrinsic::VPTypeToken::Mask:
-      auto NumElems = VectorTy.getVectorNumElements();
+      auto EC = VectorTy.getElementCount();
       auto MaskTy =
-          VectorType::get(Type::getInt1Ty(VectorTy.getContext()), NumElems);
+          VectorType::get(Type::getInt1Ty(VectorTy.getContext()), EC);
       STV.push_back(MaskTy);
       break;
     }

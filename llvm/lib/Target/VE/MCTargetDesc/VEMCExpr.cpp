@@ -42,6 +42,7 @@ void VEMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
 bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind) {
   switch (Kind) {
   case VK_VE_None:
+  case VK_VE_REFLONG:
     return false;
 
   case VK_VE_HI32:
@@ -67,6 +68,7 @@ bool VEMCExpr::printVariantKind(raw_ostream &OS, VariantKind Kind) {
 void VEMCExpr::printVariantKindSuffix(raw_ostream &OS, VariantKind Kind) {
   switch (Kind) {
   case VK_VE_None:
+  case VK_VE_REFLONG:
     break;
   case VK_VE_HI32:
     OS << "@hi";
@@ -136,6 +138,8 @@ VE::Fixups VEMCExpr::getFixupKind(VEMCExpr::VariantKind Kind) {
   switch (Kind) {
   default:
     llvm_unreachable("Unhandled VEMCExpr::VariantKind");
+  case VK_VE_REFLONG:
+    return VE::fixup_ve_reflong;
   case VK_VE_HI32:
     return VE::fixup_ve_hi32;
   case VK_VE_LO32:

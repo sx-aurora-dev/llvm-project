@@ -272,8 +272,8 @@ linkage:
     visible, meaning that it participates in linkage and can be used to
     resolve external symbol references.
 
-It is illegal for a function *declaration* to have any linkage type
-other than ``external`` or ``extern_weak``.
+It is illegal for a global variable or function *declaration* to have any
+linkage type other than ``external`` or ``extern_weak``.
 
 .. _callingconv:
 
@@ -615,6 +615,8 @@ Global variable definitions must be initialized.
 Global variables in other translation units can also be declared, in which
 case they don't have an initializer.
 
+Global variables can optionally specify a :ref:`linkage type <linkage>`.
+
 Either global variable definitions or declarations may have an explicit section
 to be placed in and may have an optional explicit alignment specified. If there
 is a mismatch between the explicit or inferred section information for the
@@ -685,6 +687,13 @@ case, the extra alignment could be observable: for example, code could
 assume that the globals are densely packed in their section and try to
 iterate over them as an array, alignment padding would break this
 iteration. The maximum alignment is ``1 << 29``.
+
+For global variables declarations, as well as definitions that may be
+replaced at link time (``linkonce``, ``weak``, ``extern_weak`` and ``common``
+linkage types), LLVM makes no assumptions about the allocation size of the
+variables, except that they may not overlap. The alignment of a global variable
+declaration or replaceable definition must not be greater than the alignment of
+the definition it resolves to.
 
 Globals can also have a :ref:`DLL storage class <dllstorageclass>`,
 an optional :ref:`runtime preemption specifier <runtime_preemption_model>`,
@@ -1052,6 +1061,26 @@ Currently, only the following parameter attributes are defined:
     the same as the pointee type of the argument.
 
     The byval attribute also supports specifying an alignment with the
+    align attribute. It indicates the alignment of the stack slot to
+    form and the known alignment of the pointer specified to the call
+    site. If the alignment is not specified, then the code generator
+    makes a target-specific assumption.
+``preallocated(<ty>)``
+    This indicates that the pointer parameter should really be passed by
+    value to the function, and that the pointer parameter's pointee has
+    already been initialized before the call instruction. This attribute
+    is only valid on LLVM pointer arguments. The argument must be the value
+    returned by the appropriate
+    :ref:`llvm.call.preallocated.arg<int_call_preallocated_arg>`, although is
+    ignored during codegen.
+
+    Any function call with a ``preallocated`` attribute in any parameter
+    must have a ``"preallocated"`` operand bundle.
+
+    The preallocated attribute requires a type argument, which must be
+    the same as the pointee type of the argument.
+
+    The preallocated attribute also supports specifying an alignment with the
     align attribute. It indicates the alignment of the stack slot to
     form and the known alignment of the pointer specified to the call
     site. If the alignment is not specified, then the code generator
@@ -1828,7 +1857,7 @@ example:
     ``"preserve-sign"``, or ``"positive-zero"``. The first entry
     indicates the flushing mode for the result of floating point
     operations. The second indicates the handling of denormal inputs
-    to floating point instructions. For compatability with older
+    to floating point instructions. For compatibility with older
     bitcode, if the second value is omitted, both input and output
     modes will assume the same mode.
 
@@ -1879,7 +1908,7 @@ example:
 ``shadowcallstack``
     This attribute indicates that the ShadowCallStack checks are enabled for
     the function. The instrumentation checks that the return address for the
-    function has not changed between the function prolog and eiplog. It is
+    function has not changed between the function prolog and epilog. It is
     currently x86_64-specific.
 
 Call Site Attributes
@@ -1952,6 +1981,12 @@ attributes are supported:
         <scalar_name>:= name of the scalar function
 
         <vector_redirection>:= optional, custom name of the vector function
+
+``preallocated(<ty>)``
+    This attribute is required on calls to ``llvm.call.preallocated.arg``
+    and cannot be used on any other call. See
+    :ref:`llvm.call.preallocated.arg<int_call_preallocated_arg>` for more
+    details.
 
 .. _glattrs:
 
@@ -2164,6 +2199,33 @@ benefits:
   use of the value as a use in an :ref:`llvm.assume <int_assume>`. This then
   simplifies and improves heuristics, e.g., for use "use-sensitive"
   optimizations.
+
+.. _ob_preallocated:
+
+Preallocated Operand Bundles
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Preallocated operand bundles are characterized by the ``"preallocated"``
+operand bundle tag.  These operand bundles allow separation of the allocation
+of the call argument memory from the call site.  This is necessary to pass
+non-trivially copyable objects by value in a way that is compatible with MSVC
+on some targets.  There can be at most one ``"preallocated"`` operand bundle
+attached to a call site and it must have exactly one bundle operand, which is
+a token generated by ``@llvm.call.preallocated.setup``.  A call with this
+operand bundle should not adjust the stack before entering the function, as
+that will have been done by one of the ``@llvm.call.preallocated.*`` intrinsics.
+
+.. code-block:: llvm
+
+      %foo = type { i64, i32 }
+
+      ...
+
+      %t = call token @llvm.call.preallocated.setup(i32 1)
+      %a = call i8* @llvm.call.preallocated.arg(token %t, i32 0) preallocated(%foo)
+      %b = bitcast i8* %a to %foo*
+      ; initialize %b
+      call void @bar(i32 42, %foo* preallocated(%foo) %b) ["preallocated"(token %t)]
 
 .. _moduleasm:
 
@@ -2674,7 +2736,8 @@ floating-point transformations.
 
 ``nsz``
    No Signed Zeros - Allow optimizations to treat the sign of a zero
-   argument or result as insignificant.
+   argument or result as insignificant. This does not imply that -0.0
+   is poison and/or guaranteed to not exist in the operation.
 
 ``arcp``
    Allow Reciprocal - Allow optimizations to use the reciprocal of an
@@ -4050,6 +4113,7 @@ AMDGPU:
 - ``r``: A 32 or 64-bit integer register.
 - ``[0-9]v``: The 32-bit VGPR register, number 0-9.
 - ``[0-9]s``: The 32-bit SGPR register, number 0-9.
+- ``[0-9]a``: The 32-bit AGPR register, number 0-9.
 
 
 All ARM modes:
@@ -7366,9 +7430,8 @@ instruction in most regards. The primary difference is that it
 establishes an association with additional labels to define where control
 flow goes after the call.
 
-Outputs of a '``callbr``' instruction are valid only on the '``fallthrough``'
-path.  Use of outputs on the '``indirect``' path(s) results in :ref:`poison
-values <poisonvalues>`.
+The output values of a '``callbr``' instruction are available only to
+the '``fallthrough``' block, not to any '``indirect``' blocks(s).
 
 The only use of this today is to implement the "goto" feature of gcc inline
 assembly where additional labels can be provided as locations for the inline
@@ -11874,6 +11937,90 @@ in the middle.  Depending on the target, this intrinsic may read a register,
 call a helper function, read from an alternate memory space, or perform
 other operations necessary to locate the TLS area.  Not all targets support
 this intrinsic.
+
+'``llvm.call.preallocated.setup``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      declare token @llvm.call.preallocated.setup(i32 %num_args)
+
+Overview:
+"""""""""
+
+The '``llvm.call.preallocated.setup``' intrinsic returns a token which can
+be used with a call's ``"preallocated"`` operand bundle to indicate that
+certain arguments are allocated and initialized before the call.
+
+Semantics:
+""""""""""
+
+The '``llvm.call.preallocated.setup``' intrinsic returns a token which is
+associated with at most one call. The token can be passed to
+'``@llvm.call.preallocated.arg``' to get a pointer to get that
+corresponding argument. The token must be the parameter to a
+``"preallocated"`` operand bundle for the corresponding call.
+
+Nested calls to '``llvm.call.preallocated.setup``' are allowed, but must
+be properly nested. e.g.
+
+:: code-block:: llvm
+
+      %t1 = call token @llvm.call.preallocated.setup(i32 0)
+      %t2 = call token @llvm.call.preallocated.setup(i32 0)
+      call void foo() ["preallocated"(token %t2)]
+      call void foo() ["preallocated"(token %t1)]
+
+is allowed, but not
+
+:: code-block:: llvm
+
+      %t1 = call token @llvm.call.preallocated.setup(i32 0)
+      %t2 = call token @llvm.call.preallocated.setup(i32 0)
+      call void foo() ["preallocated"(token %t1)]
+      call void foo() ["preallocated"(token %t2)]
+
+.. _int_call_preallocated_arg:
+
+'``llvm.call.preallocated.arg``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      declare i8* @llvm.call.preallocated.arg(token %setup_token, i32 %arg_index)
+
+Overview:
+"""""""""
+
+The '``llvm.call.preallocated.arg``' intrinsic returns a pointer to the
+corresponding preallocated argument for the preallocated call.
+
+Semantics:
+""""""""""
+
+The '``llvm.call.preallocated.arg``' intrinsic returns a pointer to the
+``%arg_index``th argument with the ``preallocated`` attribute for
+the call associated with the ``%setup_token``, which must be from
+'``llvm.call.preallocated.setup``'.
+
+A call to '``llvm.call.preallocated.arg``' must have a call site
+``preallocated`` attribute. The type of the ``preallocated`` attribute must
+match the type used by the ``preallocated`` attribute of the corresponding
+argument at the preallocated call. The type is used in the case that an
+``llvm.call.preallocated.setup`` does not have a corresponding call (e.g. due
+to DCE), where otherwise we cannot know how large the arguments are.
+
+It is undefined behavior if this is called with a token from an
+'``llvm.call.preallocated.setup``' if another
+'``llvm.call.preallocated.setup``' has already been called or if the
+preallocated call corresponding to the '``llvm.call.preallocated.setup``'
+has already been called.
 
 Standard C Library Intrinsics
 -----------------------------
@@ -17286,7 +17433,7 @@ The first three arguments to the '``llvm.experimental.constrained.fmuladd``'
 intrinsic must be floating-point or vector of floating-point values.
 All three arguments must have identical types.
 
-The fourth and fifth arguments specifiy the rounding mode and exception behavior
+The fourth and fifth arguments specify the rounding mode and exception behavior
 as described above.
 
 Semantics:

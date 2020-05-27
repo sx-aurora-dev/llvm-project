@@ -25,7 +25,6 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/Types.h"
-#include "mlir/Support/Functional.h"
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/FoldUtils.h"
 
@@ -525,8 +524,6 @@ using namespace mlir;
 
 #define DEBUG_TYPE "early-vect"
 
-using functional::makePtrDynCaster;
-using functional::map;
 using llvm::dbgs;
 using llvm::SetVector;
 
@@ -812,7 +809,6 @@ static LogicalResult vectorizeRootOrTerminal(Value iv,
 /// operations into the appropriate vector.transfer.
 static LogicalResult vectorizeAffineForOp(AffineForOp loop, int64_t step,
                                           VectorizationState *state) {
-  using namespace functional;
   loop.setStep(step);
 
   FilterFunctionType notVectorizedThisPattern = [state](Operation &op) {
@@ -1059,8 +1055,7 @@ static Operation *vectorizeOneOperation(Operation *opInst,
   OpBuilder b(opInst);
   OperationState newOp(opInst->getLoc(), opInst->getName().getStringRef(),
                        vectorOperands, vectorTypes, opInst->getAttrs(),
-                       /*successors=*/{},
-                       /*regions=*/{}, opInst->hasResizableOperandsList());
+                       /*successors=*/{}, /*regions=*/{});
   return b.createOperation(newOp);
 }
 

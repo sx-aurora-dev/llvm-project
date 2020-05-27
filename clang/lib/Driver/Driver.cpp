@@ -556,6 +556,16 @@ static llvm::Triple computeTargetTriple(const Driver &D,
       Target.setArch(llvm::Triple::riscv64);
   }
 
+  // If target is VE set the default OS and Environment.
+  if (Target.isVE()) {
+    if (Target.getVendor() == llvm::Triple::UnknownVendor)
+      Target.setVendorName("unknown");
+    if (Target.isOSUnknown())
+      Target.setOS(llvm::Triple::Linux);
+    if (Target.getEnvironment() == llvm::Triple::UnknownEnvironment)
+      Target.setEnvironment(llvm::Triple::GNU);
+  }
+
   return Target;
 }
 
@@ -4860,6 +4870,8 @@ const ToolChain &Driver::getToolChain(const ArgList &Args,
       TC = std::make_unique<toolchains::Solaris>(*this, Target, Args);
       break;
     case llvm::Triple::AMDHSA:
+      TC = std::make_unique<toolchains::ROCMToolChain>(*this, Target, Args);
+      break;
     case llvm::Triple::AMDPAL:
     case llvm::Triple::Mesa3D:
       TC = std::make_unique<toolchains::AMDGPUToolChain>(*this, Target, Args);

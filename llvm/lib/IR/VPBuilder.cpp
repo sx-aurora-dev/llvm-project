@@ -162,7 +162,7 @@ Value &VPBuilder::CreateScatter(Value &Val, Value &PointerVec,
 
 Value &VPBuilder::CreateGather(Value &PointerVec, MaybeAlign AlignOpt) {
   auto &PointerVecTy = cast<VectorType>(*PointerVec.getType());
-  auto &ElemTy = *cast<PointerType>(*PointerVecTy.getVectorElementType())
+  auto &ElemTy = *cast<PointerType>(*PointerVecTy.getElementType())
                       .getPointerElementType();
   auto &VecTy = *VectorType::get(&ElemTy, PointerVecTy.getNumElements());
   auto *GatherFunc = Intrinsic::getDeclaration(

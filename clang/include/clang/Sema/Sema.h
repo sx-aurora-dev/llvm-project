@@ -392,7 +392,7 @@ public:
   typedef OpaquePtr<QualType> TypeTy;
 
   OpenCLOptions OpenCLFeatures;
-  FPOptions FPFeatures;
+  FPOptions CurFPFeatures;
 
   const LangOptions &LangOpts;
   Preprocessor &PP;
@@ -554,6 +554,9 @@ public:
   PragmaStack<StringLiteral *> BSSSegStack;
   PragmaStack<StringLiteral *> ConstSegStack;
   PragmaStack<StringLiteral *> CodeSegStack;
+
+  // This stack tracks the current state of Sema.CurFPFeatures.
+  PragmaStack<unsigned> FpPragmaStack;
 
   // RAII object to push / pop sentinel slots for all MS #pragma stacks.
   // Actions should be performed only if we enter / exit a C++ method body.
@@ -1350,12 +1353,12 @@ public:
   /// should not be used elsewhere.
   void EmitCurrentDiagnostic(unsigned DiagID);
 
-  /// Records and restores the FPFeatures state on entry/exit of compound
+  /// Records and restores the CurFPFeatures state on entry/exit of compound
   /// statements.
   class FPFeaturesStateRAII {
   public:
-    FPFeaturesStateRAII(Sema &S) : S(S), OldFPFeaturesState(S.FPFeatures) {}
-    ~FPFeaturesStateRAII() { S.FPFeatures = OldFPFeaturesState; }
+    FPFeaturesStateRAII(Sema &S) : S(S), OldFPFeaturesState(S.CurFPFeatures) {}
+    ~FPFeaturesStateRAII() { S.CurFPFeatures = OldFPFeaturesState; }
 
   private:
     Sema& S;
@@ -1378,7 +1381,7 @@ public:
 
   const LangOptions &getLangOpts() const { return LangOpts; }
   OpenCLOptions &getOpenCLOptions() { return OpenCLFeatures; }
-  FPOptions     &getFPOptions() { return FPFeatures; }
+  FPOptions     &getCurFPFeatures() { return CurFPFeatures; }
 
   DiagnosticsEngine &getDiagnostics() const { return Diags; }
   SourceManager &getSourceManager() const { return SourceMgr; }
@@ -1678,6 +1681,7 @@ public:
                          SourceLocation Loc);
   QualType BuildWritePipeType(QualType T,
                          SourceLocation Loc);
+  QualType BuildExtIntType(bool IsUnsigned, Expr *BitWidth, SourceLocation Loc);
 
   TypeSourceInfo *GetTypeForDeclarator(Declarator &D, Scope *S);
   TypeSourceInfo *GetTypeForDeclaratorCast(Declarator &D, QualType FromTy);
@@ -2961,7 +2965,7 @@ public:
   VisibilityAttr *mergeVisibilityAttr(Decl *D, const AttributeCommonInfo &CI,
                                       VisibilityAttr::VisibilityType Vis);
   UuidAttr *mergeUuidAttr(Decl *D, const AttributeCommonInfo &CI,
-                          StringRef Uuid);
+                          StringRef UuidAsWritten, MSGuidDecl *GuidDecl);
   DLLImportAttr *mergeDLLImportAttr(Decl *D, const AttributeCommonInfo &CI);
   DLLExportAttr *mergeDLLExportAttr(Decl *D, const AttributeCommonInfo &CI);
   MSInheritanceAttr *mergeMSInheritanceAttr(Decl *D,
@@ -6861,7 +6865,7 @@ public:
                                     bool IgnoreAccess = false);
   bool CheckDerivedToBaseConversion(QualType Derived, QualType Base,
                                     unsigned InaccessibleBaseID,
-                                    unsigned AmbigiousBaseConvID,
+                                    unsigned AmbiguousBaseConvID,
                                     SourceLocation Loc, SourceRange Range,
                                     DeclarationName Name,
                                     CXXCastPath *BasePath,
@@ -9454,8 +9458,8 @@ public:
                                          QualType DestType, QualType SrcType,
                                          Expr *&SrcExpr, bool Diagnose = true);
 
-  bool ConversionToObjCStringLiteralCheck(QualType DstType, Expr *&SrcExpr,
-                                          bool Diagnose = true);
+  bool CheckConversionToObjCLiteral(QualType DstType, Expr *&SrcExpr,
+                                    bool Diagnose = true);
 
   bool checkInitMethod(ObjCMethodDecl *method, QualType receiverTypeIfCall);
 
@@ -9565,6 +9569,18 @@ public:
   void ActOnPragmaDetectMismatch(SourceLocation Loc, StringRef Name,
                                  StringRef Value);
 
+  /// Are precise floating point semantics currently enabled?
+  bool isPreciseFPEnabled() {
+    return !CurFPFeatures.allowAssociativeMath() &&
+           !CurFPFeatures.noSignedZeros() &&
+           !CurFPFeatures.allowReciprocalMath() &&
+           !CurFPFeatures.allowApproximateFunctions();
+  }
+
+  /// ActOnPragmaFloatControl - Call on well-formed \#pragma float_control
+  void ActOnPragmaFloatControl(SourceLocation Loc, PragmaMsStackAction Action,
+                               PragmaFloatControlKind Value);
+
   /// ActOnPragmaUnused - Called on well-formed '\#pragma unused'.
   void ActOnPragmaUnused(const Token &Identifier,
                          Scope *curScope,
@@ -9601,11 +9617,15 @@ public:
   /// ActOnPragmaFPContract - Called on well formed
   /// \#pragma {STDC,OPENCL} FP_CONTRACT and
   /// \#pragma clang fp contract
-  void ActOnPragmaFPContract(LangOptions::FPContractModeKind FPC);
+  void ActOnPragmaFPContract(LangOptions::FPModeKind FPC);
+
+  /// Called on well formed
+  /// \#pragma clang fp reassociate
+  void ActOnPragmaFPReassociate(bool IsEnabled);
 
   /// ActOnPragmaFenvAccess - Called on well formed
   /// \#pragma STDC FENV_ACCESS
-  void ActOnPragmaFEnvAccess(LangOptions::FEnvAccessModeKind FPC);
+  void ActOnPragmaFEnvAccess(SourceLocation Loc, bool IsEnabled);
 
   /// Called to set rounding mode for floating point operations.
   void setRoundingMode(llvm::RoundingMode);
@@ -10764,6 +10784,21 @@ public:
                                           SourceLocation StartLoc,
                                           SourceLocation LParenLoc,
                                           SourceLocation EndLoc);
+
+  /// Data for list of allocators.
+  struct UsesAllocatorsData {
+    /// Allocator.
+    Expr *Allocator = nullptr;
+    /// Allocator traits.
+    Expr *AllocatorTraits = nullptr;
+    /// Locations of '(' and ')' symbols.
+    SourceLocation LParenLoc, RParenLoc;
+  };
+  /// Called on well-formed 'uses_allocators' clause.
+  OMPClause *ActOnOpenMPUsesAllocatorClause(SourceLocation StartLoc,
+                                            SourceLocation LParenLoc,
+                                            SourceLocation EndLoc,
+                                            ArrayRef<UsesAllocatorsData> Data);
 
   /// The kind of conversion being performed.
   enum CheckedConversionKind {
@@ -11968,12 +12003,17 @@ private:
 
   ExprResult CheckBuiltinFunctionCall(FunctionDecl *FDecl,
                                       unsigned BuiltinID, CallExpr *TheCall);
+
+  bool CheckTSBuiltinFunctionCall(llvm::Triple::ArchType Arch,
+                                  unsigned BuiltinID, CallExpr *TheCall);
+
   void checkFortifiedBuiltinMemoryFunction(FunctionDecl *FD, CallExpr *TheCall);
 
   bool CheckARMBuiltinExclusiveCall(unsigned BuiltinID, CallExpr *TheCall,
                                     unsigned MaxWidth);
   bool CheckNeonBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckMVEBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
+  bool CheckSVEBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckCDEBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckARMCoprocessorImmediate(const Expr *CoprocArg, bool WantCDE);
   bool CheckARMBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
@@ -11990,6 +12030,7 @@ private:
   bool CheckX86BuiltinGatherScatterScale(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckX86BuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
   bool CheckPPCBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
+  bool CheckAMDGCNBuiltinFunctionCall(unsigned BuiltinID, CallExpr *TheCall);
 
   bool SemaBuiltinVAStart(unsigned BuiltinID, CallExpr *TheCall);
   bool SemaBuiltinVAStartARMMicrosoft(CallExpr *Call);

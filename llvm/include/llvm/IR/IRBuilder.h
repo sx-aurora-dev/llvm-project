@@ -245,6 +245,8 @@ public:
   /// Get the flags to be applied to created floating point ops
   FastMathFlags getFastMathFlags() const { return FMF; }
 
+  FastMathFlags &getFastMathFlags() { return FMF; }
+
   /// Clear the fast-math flags.
   void clearFastMathFlags() { FMF.clear(); }
 
@@ -333,10 +335,16 @@ public:
     IRBuilderBase &Builder;
     FastMathFlags FMF;
     MDNode *FPMathTag;
+    bool IsFPConstrained;
+    fp::ExceptionBehavior DefaultConstrainedExcept;
+    RoundingMode DefaultConstrainedRounding;
 
   public:
     FastMathFlagGuard(IRBuilderBase &B)
-        : Builder(B), FMF(B.FMF), FPMathTag(B.DefaultFPMathTag) {}
+        : Builder(B), FMF(B.FMF), FPMathTag(B.DefaultFPMathTag),
+          IsFPConstrained(B.IsFPConstrained),
+          DefaultConstrainedExcept(B.DefaultConstrainedExcept),
+          DefaultConstrainedRounding(B.DefaultConstrainedRounding) {}
 
     FastMathFlagGuard(const FastMathFlagGuard &) = delete;
     FastMathFlagGuard &operator=(const FastMathFlagGuard &) = delete;
@@ -344,6 +352,9 @@ public:
     ~FastMathFlagGuard() {
       Builder.FMF = FMF;
       Builder.DefaultFPMathTag = FPMathTag;
+      Builder.IsFPConstrained = IsFPConstrained;
+      Builder.DefaultConstrainedExcept = DefaultConstrainedExcept;
+      Builder.DefaultConstrainedRounding = DefaultConstrainedRounding;
     }
   };
 
@@ -1582,28 +1593,32 @@ public:
 
   AllocaInst *CreateAlloca(Type *Ty, unsigned AddrSpace,
                            Value *ArraySize = nullptr, const Twine &Name = "") {
-    return Insert(new AllocaInst(Ty, AddrSpace, ArraySize), Name);
+    const DataLayout &DL = BB->getModule()->getDataLayout();
+    Align AllocaAlign = DL.getPrefTypeAlign(Ty);
+    return Insert(new AllocaInst(Ty, AddrSpace, ArraySize, AllocaAlign), Name);
   }
 
   AllocaInst *CreateAlloca(Type *Ty, Value *ArraySize = nullptr,
                            const Twine &Name = "") {
-    const DataLayout &DL = BB->getParent()->getParent()->getDataLayout();
-    return Insert(new AllocaInst(Ty, DL.getAllocaAddrSpace(), ArraySize), Name);
+    const DataLayout &DL = BB->getModule()->getDataLayout();
+    Align AllocaAlign = DL.getPrefTypeAlign(Ty);
+    unsigned AddrSpace = DL.getAllocaAddrSpace();
+    return Insert(new AllocaInst(Ty, AddrSpace, ArraySize, AllocaAlign), Name);
   }
 
   /// Provided to resolve 'CreateLoad(Ty, Ptr, "...")' correctly, instead of
   /// converting the string to 'bool' for the isVolatile parameter.
   LoadInst *CreateLoad(Type *Ty, Value *Ptr, const char *Name) {
-    return Insert(new LoadInst(Ty, Ptr), Name);
+    return CreateAlignedLoad(Ty, Ptr, MaybeAlign(), Name);
   }
 
   LoadInst *CreateLoad(Type *Ty, Value *Ptr, const Twine &Name = "") {
-    return Insert(new LoadInst(Ty, Ptr), Name);
+    return CreateAlignedLoad(Ty, Ptr, MaybeAlign(), Name);
   }
 
   LoadInst *CreateLoad(Type *Ty, Value *Ptr, bool isVolatile,
                        const Twine &Name = "") {
-    return Insert(new LoadInst(Ty, Ptr, Twine(), isVolatile), Name);
+    return CreateAlignedLoad(Ty, Ptr, MaybeAlign(), isVolatile, Name);
   }
 
   // Deprecated [opaque pointer types]
@@ -1623,7 +1638,7 @@ public:
   }
 
   StoreInst *CreateStore(Value *Val, Value *Ptr, bool isVolatile = false) {
-    return Insert(new StoreInst(Val, Ptr, isVolatile));
+    return CreateAlignedStore(Val, Ptr, MaybeAlign(), isVolatile);
   }
 
   LLVM_ATTRIBUTE_DEPRECATED(LoadInst *CreateAlignedLoad(Type *Ty, Value *Ptr,
@@ -1634,9 +1649,7 @@ public:
   }
   LoadInst *CreateAlignedLoad(Type *Ty, Value *Ptr, MaybeAlign Align,
                               const char *Name) {
-    LoadInst *LI = CreateLoad(Ty, Ptr, Name);
-    LI->setAlignment(Align);
-    return LI;
+    return CreateAlignedLoad(Ty, Ptr, Align, /*isVolatile*/false, Name);
   }
 
   LLVM_ATTRIBUTE_DEPRECATED(LoadInst *CreateAlignedLoad(Type *Ty, Value *Ptr,
@@ -1647,9 +1660,7 @@ public:
   }
   LoadInst *CreateAlignedLoad(Type *Ty, Value *Ptr, MaybeAlign Align,
                               const Twine &Name = "") {
-    LoadInst *LI = CreateLoad(Ty, Ptr, Name);
-    LI->setAlignment(Align);
-    return LI;
+    return CreateAlignedLoad(Ty, Ptr, Align, /*isVolatile*/false, Name);
   }
 
   LLVM_ATTRIBUTE_DEPRECATED(LoadInst *CreateAlignedLoad(Type *Ty, Value *Ptr,
@@ -1661,9 +1672,11 @@ public:
   }
   LoadInst *CreateAlignedLoad(Type *Ty, Value *Ptr, MaybeAlign Align,
                               bool isVolatile, const Twine &Name = "") {
-    LoadInst *LI = CreateLoad(Ty, Ptr, isVolatile, Name);
-    LI->setAlignment(Align);
-    return LI;
+    if (!Align) {
+      const DataLayout &DL = BB->getModule()->getDataLayout();
+      Align = DL.getABITypeAlign(Ty);
+    }
+    return Insert(new LoadInst(Ty, Ptr, Twine(), isVolatile, *Align), Name);
   }
 
   // Deprecated [opaque pointer types]
@@ -1717,9 +1730,11 @@ public:
   }
   StoreInst *CreateAlignedStore(Value *Val, Value *Ptr, MaybeAlign Align,
                                 bool isVolatile = false) {
-    StoreInst *SI = CreateStore(Val, Ptr, isVolatile);
-    SI->setAlignment(Align);
-    return SI;
+    if (!Align) {
+      const DataLayout &DL = BB->getModule()->getDataLayout();
+      Align = DL.getABITypeAlign(Val->getType());
+    }
+    return Insert(new StoreInst(Val, Ptr, isVolatile, *Align));
   }
   FenceInst *CreateFence(AtomicOrdering Ordering,
                          SyncScope::ID SSID = SyncScope::System,
@@ -2387,8 +2402,10 @@ public:
     return CreateShuffleVector(V1, V2, IntMask, Name);
   }
 
-  Value *CreateShuffleVector(Value *V1, Value *V2, ArrayRef<uint32_t> Mask,
-                             const Twine &Name = "") {
+  LLVM_ATTRIBUTE_DEPRECATED(Value *CreateShuffleVector(Value *V1, Value *V2,
+                                                       ArrayRef<uint32_t> Mask,
+                                                       const Twine &Name = ""),
+                            "Pass indices as 'int' instead") {
     SmallVector<int, 16> IntMask;
     IntMask.assign(Mask.begin(), Mask.end());
     return CreateShuffleVector(V1, V2, IntMask, Name);

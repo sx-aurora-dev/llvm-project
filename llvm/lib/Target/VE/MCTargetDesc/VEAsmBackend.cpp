@@ -15,6 +15,7 @@
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCValue.h"
+#include "llvm/Support/EndianStream.h"
 #include "llvm/Support/TargetRegistry.h"
 
 using namespace llvm;
@@ -23,14 +24,15 @@ static uint64_t adjustFixupValue(unsigned Kind, uint64_t Value) {
   switch (Kind) {
   default:
     llvm_unreachable("Unknown fixup kind!");
-#if 0
   case FK_Data_1:
   case FK_Data_2:
   case FK_Data_4:
   case FK_Data_8:
+  case FK_PCRel_1:
+  case FK_PCRel_2:
+  case FK_PCRel_4:
+  case FK_PCRel_8:
     return Value;
-#endif
-
   case VE::fixup_ve_hi32:
   case VE::fixup_ve_pc_hi32:
   case VE::fixup_ve_got_hi32:
@@ -39,7 +41,7 @@ static uint64_t adjustFixupValue(unsigned Kind, uint64_t Value) {
   case VE::fixup_ve_tls_gd_hi32:
   case VE::fixup_ve_tpoff_hi32:
     return (Value >> 32) & 0xffffffff;
-
+  case VE::fixup_ve_reflong:
   case VE::fixup_ve_lo32:
   case VE::fixup_ve_pc_lo32:
   case VE::fixup_ve_got_lo32:
@@ -55,15 +57,35 @@ static uint64_t adjustFixupValue(unsigned Kind, uint64_t Value) {
 static unsigned getFixupKindNumBytes(unsigned Kind) {
   switch (Kind) {
   default:
-    return 8;
-#if 0
+    llvm_unreachable("Unknown fixup kind!");
   case FK_Data_1:
+  case FK_PCRel_1:
     return 1;
   case FK_Data_2:
+  case FK_PCRel_2:
     return 2;
+    return 4;
+  case FK_Data_4:
+  case FK_PCRel_4:
+  case VE::fixup_ve_reflong:
+  case VE::fixup_ve_hi32:
+  case VE::fixup_ve_lo32:
+  case VE::fixup_ve_pc_hi32:
+  case VE::fixup_ve_pc_lo32:
+  case VE::fixup_ve_got_hi32:
+  case VE::fixup_ve_got_lo32:
+  case VE::fixup_ve_gotoff_hi32:
+  case VE::fixup_ve_gotoff_lo32:
+  case VE::fixup_ve_plt_hi32:
+  case VE::fixup_ve_plt_lo32:
+  case VE::fixup_ve_tls_gd_hi32:
+  case VE::fixup_ve_tls_gd_lo32:
+  case VE::fixup_ve_tpoff_hi32:
+  case VE::fixup_ve_tpoff_lo32:
+    return 4;
   case FK_Data_8:
+  case FK_PCRel_8:
     return 8;
-#endif
   }
 }
 
@@ -85,6 +107,7 @@ namespace {
     const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override {
       const static MCFixupKindInfo InfosLE[VE::NumTargetFixupKinds] = {
         // name                     offset bits flags
+        { "fixup_ve_reflong",       0,     32,  0 },
         { "fixup_ve_hi32",          0,     32,  0 },
         { "fixup_ve_lo32",          0,     32,  0 },
         { "fixup_ve_pc_hi32",       0,     32,  MCFixupKindInfo::FKF_IsPCRel },
@@ -138,8 +161,8 @@ namespace {
       llvm_unreachable("fixupNeedsRelaxation() unimplemented");
       return false;
     }
-    void relaxInstruction(const MCInst &Inst, const MCSubtargetInfo &STI,
-                          MCInst &Res) const override {
+    void relaxInstruction(MCInst &Inst,
+                          const MCSubtargetInfo &STI) const override {
       // FIXME.
       llvm_unreachable("relaxInstruction() unimplemented");
     }

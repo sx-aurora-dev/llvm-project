@@ -20,6 +20,7 @@
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Support/LLVM.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 #include "llvm/ADT/SetVector.h"
 #include "llvm/Frontend/OpenMP/OMPIRBuilder.h"
@@ -300,11 +301,40 @@ ModuleTranslation::ModuleTranslation(Operation *module,
       debugTranslation(
           std::make_unique<DebugTranslation>(module, *this->llvmModule)),
       ompDialect(
-          module->getContext()->getRegisteredDialect<omp::OpenMPDialect>()) {
+          module->getContext()->getRegisteredDialect<omp::OpenMPDialect>()),
+      llvmDialect(module->getContext()->getRegisteredDialect<LLVMDialect>()) {
   assert(satisfiesLLVMModule(mlirModule) &&
          "mlirModule should honor LLVM's module semantics.");
 }
 ModuleTranslation::~ModuleTranslation() {}
+
+/// Given an OpenMP MLIR operation, create the corresponding LLVM IR
+/// (including OpenMP runtime calls).
+LogicalResult
+ModuleTranslation::convertOmpOperation(Operation &opInst,
+                                       llvm::IRBuilder<> &builder) {
+  if (!ompBuilder) {
+    ompBuilder = std::make_unique<llvm::OpenMPIRBuilder>(*llvmModule);
+    ompBuilder->initialize();
+  }
+  return llvm::TypeSwitch<Operation *, LogicalResult>(&opInst)
+      .Case([&](omp::BarrierOp) {
+        ompBuilder->CreateBarrier(builder.saveIP(), llvm::omp::OMPD_barrier);
+        return success();
+      })
+      .Case([&](omp::TaskwaitOp) {
+        ompBuilder->CreateTaskwait(builder.saveIP());
+        return success();
+      })
+      .Case([&](omp::TaskyieldOp) {
+        ompBuilder->CreateTaskyield(builder.saveIP());
+        return success();
+      })
+      .Default([&](Operation *inst) {
+        return inst->emitError("unsupported OpenMP operation: ")
+               << inst->getName();
+      });
+}
 
 /// Given a single MLIR operation, create the corresponding LLVM IR operation
 /// using the `builder`.  LLVM IR Builder does not have a generic interface so
@@ -415,17 +445,7 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
   }
 
   if (opInst.getDialect() == ompDialect) {
-    if (!ompBuilder) {
-      ompBuilder = std::make_unique<llvm::OpenMPIRBuilder>(*llvmModule);
-      ompBuilder->initialize();
-    }
-
-    if (isa<omp::BarrierOp>(opInst)) {
-      ompBuilder->CreateBarrier(builder.saveIP(), llvm::omp::OMPD_barrier);
-      return success();
-    }
-    return opInst.emitError("unsupported OpenMP operation: ")
-           << opInst.getName();
+    return convertOmpOperation(opInst, builder);
   }
 
   return opInst.emitError("unsupported or non-LLVM operation: ")
@@ -476,6 +496,9 @@ LogicalResult ModuleTranslation::convertBlock(Block &bb, bool ignoreArguments) {
 /// Create named global variables that correspond to llvm.mlir.global
 /// definitions.
 LogicalResult ModuleTranslation::convertGlobals() {
+  // Lock access to the llvm context.
+  llvm::sys::SmartScopedLock<true> scopedLock(
+      llvmDialect->getLLVMContextMutex());
   for (auto op : getModuleBody(mlirModule).getOps<LLVM::GlobalOp>()) {
     llvm::Type *type = op.getType().getUnderlyingType();
     llvm::Constant *cst = llvm::UndefValue::get(type);
@@ -735,6 +758,9 @@ LogicalResult ModuleTranslation::checkSupportedModuleOps(Operation *m) {
 }
 
 LogicalResult ModuleTranslation::convertFunctions() {
+  // Lock access to the llvm context.
+  llvm::sys::SmartScopedLock<true> scopedLock(
+      llvmDialect->getLLVMContextMutex());
   // Declare all functions first because there may be function calls that form a
   // call graph with cycles.
   for (auto function : getModuleBody(mlirModule).getOps<LLVMFuncOp>()) {
@@ -779,6 +805,8 @@ std::unique_ptr<llvm::Module>
 ModuleTranslation::prepareLLVMModule(Operation *m) {
   auto *dialect = m->getContext()->getRegisteredDialect<LLVM::LLVMDialect>();
   assert(dialect && "LLVM dialect must be registered");
+  // Lock the LLVM context as we might create new types here.
+  llvm::sys::SmartScopedLock<true> scopedLock(dialect->getLLVMContextMutex());
 
   auto llvmModule = llvm::CloneModule(dialect->getLLVMModule());
   if (!llvmModule)

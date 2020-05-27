@@ -136,8 +136,10 @@ struct PartialShuffleState {
   LaneBits MissingLanes;
 
   PartialShuffleState() { MissingLanes.reset(); }
+#if 0
   PartialShuffleState(const PartialShuffleState &O)
       : MissingLanes(O.MissingLanes) {}
+#endif
 
   void setMissing(unsigned i) { MissingLanes[i] = true; }
   void unsetMissing(unsigned i) { MissingLanes[i] = false; }

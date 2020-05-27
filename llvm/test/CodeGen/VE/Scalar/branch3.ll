@@ -316,15 +316,12 @@ join:
 define i32 @func12(i128 %a) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    or %s2, 0, (0)1
-; CHECK-NEXT:    cmps.l %s1, %s1, %s2
-; CHECK-NEXT:    or %s3, 0, %s2
-; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s1
-; CHECK-NEXT:    or %s4, 23, (0)1
-; CHECK-NEXT:    cmpu.l %s0, %s0, %s4
-; CHECK-NEXT:    cmov.l.lt %s2, (63)0, %s0
-; CHECK-NEXT:    cmov.l.eq %s3, %s2, %s1
-; CHECK-NEXT:    brne.w 0, %s3, .LBB11_1
+; CHECK-NEXT:    srl %s2, %s1, 63
+; CHECK-NEXT:    or %s3, 23, (0)1
+; CHECK-NEXT:    cmpu.l %s0, %s0, %s3
+; CHECK-NEXT:    srl %s0, %s0, 63
+; CHECK-NEXT:    cmov.l.eq %s2, %s0, %s1
+; CHECK-NEXT:    brne.w 0, %s2, .LBB11_1
 entry:
   %cmp = icmp sgt i128 %a, 22
   br i1 %cmp, label %on.true, label %join
@@ -341,17 +338,11 @@ join:
 ; Function Attrs: nounwind
 define i32 @func13(i128 %a) {
 ; CHECK-LABEL: func13:
-; CHECK:       .LBB{{[0-9]+}}_4:
-; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    or %s0, 0, (0)1
-; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    cmps.l %s1, %s1, %s3
-; CHECK-NEXT:    or %s4, 63, (0)1
-; CHECK-NEXT:    cmpu.l %s2, %s2, %s4
-; CHECK-NEXT:    cmov.l.lt %s3, (63)0, %s2
-; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    cmov.l.eq %s2, %s3, %s1
-; CHECK-NEXT:    brne.w 0, %s2, .LBB12_2
+; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK-NEXT:    cmpu.l %s0, %s0, (58)0
+; CHECK-NEXT:    srl %s0, %s0, 63
+; CHECK-NEXT:    cmov.l.ne %s0, (0)1, %s1
+; CHECK-NEXT:    brne.w 0, %s0, .LBB12_1
 entry:
   %cmp = icmp ugt i128 %a, 62
   br i1 %cmp, label %on.true, label %join

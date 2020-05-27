@@ -68,139 +68,139 @@ vfmk.d.genan %vm12, %v22
 # CHECK: encoding: [0x00,0xff,0x0e,0x0c,0x00,0x00,0x0f,0xb6]
 vfmk.d.lenan %vm12, %vix, %vm15
 
-# CHECK: vfmk.s.at %vm11
+# CHECK: pvfmk.s.up.at %vm11
 # CHECK: encoding: [0x00,0x00,0x0f,0x0b,0x00,0x00,0x80,0xb6]
 vfmk.s %vm11
 
-# CHECK: vfmk.s.at %vm11
+# CHECK: pvfmk.s.up.at %vm11
 # CHECK: encoding: [0x00,0x00,0x0f,0x0b,0x00,0x00,0x80,0xb6]
 vfmk.s.at %vm11
 
-# CHECK: vfmk.s.af %vm1, %vm15
+# CHECK: pvfmk.s.up.af %vm1, %vm15
 # CHECK: encoding: [0x00,0x00,0x00,0x01,0x00,0x00,0x8f,0xb6]
 vfmk.s.af %vm1, %vm15
 
-# CHECK: vfmk.s.gt %vm12, %v22
+# CHECK: pvfmk.s.up.gt %vm12, %v22
 # CHECK: encoding: [0x00,0x16,0x01,0x0c,0x00,0x00,0x80,0xb6]
 vfmk.s.gt %vm12, %v22
 
-# CHECK: vfmk.s.lt %vm12, %vix, %vm15
+# CHECK: pvfmk.s.up.lt %vm12, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x02,0x0c,0x00,0x00,0x8f,0xb6]
 vfmk.s.lt %vm12, %vix, %vm15
 
-# CHECK: vfmk.s.ne %vm11, %v32
+# CHECK: pvfmk.s.up.ne %vm11, %v32
 # CHECK: encoding: [0x00,0x20,0x03,0x0b,0x00,0x00,0x80,0xb6]
 vfmk.s.ne %vm11, %v32
 
-# CHECK: vfmk.s.eq %vm1, %vix, %vm15
+# CHECK: pvfmk.s.up.eq %vm1, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x04,0x01,0x00,0x00,0x8f,0xb6]
 vfmk.s.eq %vm1, %vix, %vm15
 
-# CHECK: vfmk.s.ge %vm12, %v22
+# CHECK: pvfmk.s.up.ge %vm12, %v22
 # CHECK: encoding: [0x00,0x16,0x05,0x0c,0x00,0x00,0x80,0xb6]
 vfmk.s.ge %vm12, %v22
 
-# CHECK: vfmk.s.le %vm12, %vix, %vm15
+# CHECK: pvfmk.s.up.le %vm12, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x06,0x0c,0x00,0x00,0x8f,0xb6]
 vfmk.s.le %vm12, %vix, %vm15
 
-# CHECK: vfmk.s.num %vm11, %v45
+# CHECK: pvfmk.s.up.num %vm11, %v45
 # CHECK: encoding: [0x00,0x2d,0x07,0x0b,0x00,0x00,0x80,0xb6]
 vfmk.s.num %vm11, %v45
 
-# CHECK: vfmk.s.nan %vm1, %v50, %vm14
+# CHECK: pvfmk.s.up.nan %vm1, %v50, %vm14
 # CHECK: encoding: [0x00,0x32,0x08,0x01,0x00,0x00,0x8e,0xb6]
 vfmk.s.nan %vm1, %v50, %vm14
 
-# CHECK: vfmk.s.gtnan %vm12, %v22
+# CHECK: pvfmk.s.up.gtnan %vm12, %v22
 # CHECK: encoding: [0x00,0x16,0x09,0x0c,0x00,0x00,0x80,0xb6]
 vfmk.s.gtnan %vm12, %v22
 
-# CHECK: vfmk.s.ltnan %vm12, %vix, %vm15
+# CHECK: pvfmk.s.up.ltnan %vm12, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x0a,0x0c,0x00,0x00,0x8f,0xb6]
 vfmk.s.ltnan %vm12, %vix, %vm15
 
-# CHECK: vfmk.s.nenan %vm11, %v32
+# CHECK: pvfmk.s.up.nenan %vm11, %v32
 # CHECK: encoding: [0x00,0x20,0x0b,0x0b,0x00,0x00,0x80,0xb6]
 vfmk.s.nenan %vm11, %v32
 
-# CHECK: vfmk.s.eqnan %vm1, %vix, %vm15
+# CHECK: pvfmk.s.up.eqnan %vm1, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x0c,0x01,0x00,0x00,0x8f,0xb6]
 vfmk.s.eqnan %vm1, %vix, %vm15
 
-# CHECK: vfmk.s.genan %vm12, %v22
+# CHECK: pvfmk.s.up.genan %vm12, %v22
 # CHECK: encoding: [0x00,0x16,0x0d,0x0c,0x00,0x00,0x80,0xb6]
 vfmk.s.genan %vm12, %v22
 
-# CHECK: vfmk.s.lenan %vm12, %vix, %vm15
+# CHECK: pvfmk.s.up.lenan %vm12, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x0e,0x0c,0x00,0x00,0x8f,0xb6]
 vfmk.s.lenan %vm12, %vix, %vm15
 
-# CHECK: vfmk.s.at %vm11
+# CHECK: pvfmk.s.up.at %vm11
 # CHECK: encoding: [0x00,0x00,0x0f,0x0b,0x00,0x00,0x80,0xb6]
 pvfmk.s.up %vm11
 
-# CHECK: vfmk.s.at %vm11
+# CHECK: pvfmk.s.up.at %vm11
 # CHECK: encoding: [0x00,0x00,0x0f,0x0b,0x00,0x00,0x80,0xb6]
 pvfmk.s.up.at %vm11
 
-# CHECK: vfmk.s.af %vm1, %vm15
+# CHECK: pvfmk.s.up.af %vm1, %vm15
 # CHECK: encoding: [0x00,0x00,0x00,0x01,0x00,0x00,0x8f,0xb6]
 pvfmk.s.up.af %vm1, %vm15
 
-# CHECK: vfmk.s.gt %vm12, %v22
+# CHECK: pvfmk.s.up.gt %vm12, %v22
 # CHECK: encoding: [0x00,0x16,0x01,0x0c,0x00,0x00,0x80,0xb6]
 pvfmk.s.up.gt %vm12, %v22
 
-# CHECK: vfmk.s.lt %vm12, %vix, %vm15
+# CHECK: pvfmk.s.up.lt %vm12, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x02,0x0c,0x00,0x00,0x8f,0xb6]
 pvfmk.s.up.lt %vm12, %vix, %vm15
 
-# CHECK: vfmk.s.ne %vm11, %v32
+# CHECK: pvfmk.s.up.ne %vm11, %v32
 # CHECK: encoding: [0x00,0x20,0x03,0x0b,0x00,0x00,0x80,0xb6]
 pvfmk.s.up.ne %vm11, %v32
 
-# CHECK: vfmk.s.eq %vm1, %vix, %vm15
+# CHECK: pvfmk.s.up.eq %vm1, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x04,0x01,0x00,0x00,0x8f,0xb6]
 pvfmk.s.up.eq %vm1, %vix, %vm15
 
-# CHECK: vfmk.s.ge %vm12, %v22
+# CHECK: pvfmk.s.up.ge %vm12, %v22
 # CHECK: encoding: [0x00,0x16,0x05,0x0c,0x00,0x00,0x80,0xb6]
 pvfmk.s.up.ge %vm12, %v22
 
-# CHECK: vfmk.s.le %vm12, %vix, %vm15
+# CHECK: pvfmk.s.up.le %vm12, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x06,0x0c,0x00,0x00,0x8f,0xb6]
 pvfmk.s.up.le %vm12, %vix, %vm15
 
-# CHECK: vfmk.s.num %vm11, %v45
+# CHECK: pvfmk.s.up.num %vm11, %v45
 # CHECK: encoding: [0x00,0x2d,0x07,0x0b,0x00,0x00,0x80,0xb6]
 pvfmk.s.up.num %vm11, %v45
 
-# CHECK: vfmk.s.nan %vm1, %v50, %vm14
+# CHECK: pvfmk.s.up.nan %vm1, %v50, %vm14
 # CHECK: encoding: [0x00,0x32,0x08,0x01,0x00,0x00,0x8e,0xb6]
 pvfmk.s.up.nan %vm1, %v50, %vm14
 
-# CHECK: vfmk.s.gtnan %vm12, %v22
+# CHECK: pvfmk.s.up.gtnan %vm12, %v22
 # CHECK: encoding: [0x00,0x16,0x09,0x0c,0x00,0x00,0x80,0xb6]
 pvfmk.s.up.gtnan %vm12, %v22
 
-# CHECK: vfmk.s.ltnan %vm12, %vix, %vm15
+# CHECK: pvfmk.s.up.ltnan %vm12, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x0a,0x0c,0x00,0x00,0x8f,0xb6]
 pvfmk.s.up.ltnan %vm12, %vix, %vm15
 
-# CHECK: vfmk.s.nenan %vm11, %v32
+# CHECK: pvfmk.s.up.nenan %vm11, %v32
 # CHECK: encoding: [0x00,0x20,0x0b,0x0b,0x00,0x00,0x80,0xb6]
 pvfmk.s.up.nenan %vm11, %v32
 
-# CHECK: vfmk.s.eqnan %vm1, %vix, %vm15
+# CHECK: pvfmk.s.up.eqnan %vm1, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x0c,0x01,0x00,0x00,0x8f,0xb6]
 pvfmk.s.up.eqnan %vm1, %vix, %vm15
 
-# CHECK: vfmk.s.genan %vm12, %v22
+# CHECK: pvfmk.s.up.genan %vm12, %v22
 # CHECK: encoding: [0x00,0x16,0x0d,0x0c,0x00,0x00,0x80,0xb6]
 pvfmk.s.up.genan %vm12, %v22
 
-# CHECK: vfmk.s.lenan %vm12, %vix, %vm15
+# CHECK: pvfmk.s.up.lenan %vm12, %vix, %vm15
 # CHECK: encoding: [0x00,0xff,0x0e,0x0c,0x00,0x00,0x8f,0xb6]
 pvfmk.s.up.lenan %vm12, %vix, %vm15
 

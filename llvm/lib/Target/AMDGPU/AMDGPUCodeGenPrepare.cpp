@@ -28,6 +28,7 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstVisitor.h"
@@ -40,10 +41,10 @@
 #include "llvm/IR/Operator.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
-#include "llvm/Transforms/Utils/IntegerDivision.h"
 #include "llvm/InitializePasses.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Transforms/Utils/IntegerDivision.h"
 #include <cassert>
 #include <iterator>
 
@@ -57,7 +58,7 @@ static cl::opt<bool> WidenLoads(
   "amdgpu-codegenprepare-widen-constant-loads",
   cl::desc("Widen sub-dword constant address space loads in AMDGPUCodeGenPrepare"),
   cl::ReallyHidden,
-  cl::init(true));
+  cl::init(false));
 
 static cl::opt<bool> UseMul24Intrin(
   "amdgpu-codegenprepare-mul24",
@@ -1004,6 +1005,16 @@ bool AMDGPUCodeGenPrepare::divHasSpecialOptimization(
   return false;
 }
 
+static Value *getSign32(Value *V, IRBuilder<> &Builder, const DataLayout *DL) {
+  // Check whether the sign can be determined statically.
+  KnownBits Known = computeKnownBits(V, *DL);
+  if (Known.isNegative())
+    return Constant::getAllOnesValue(V->getType());
+  if (Known.isNonNegative())
+    return Constant::getNullValue(V->getType());
+  return Builder.CreateAShr(V, Builder.getInt32(31));
+}
+
 Value* AMDGPUCodeGenPrepare::expandDivRem32(IRBuilder<> &Builder,
                                             BinaryOperator &I,
                                             Value *Num, Value *Den) const {
@@ -1045,9 +1056,8 @@ Value* AMDGPUCodeGenPrepare::expandDivRem32(IRBuilder<> &Builder,
 
   Value *Sign = nullptr;
   if (IsSigned) {
-    ConstantInt *K31 = Builder.getInt32(31);
-    Value *LHSign = Builder.CreateAShr(Num, K31);
-    Value *RHSign = Builder.CreateAShr(Den, K31);
+    Value *LHSign = getSign32(Num, Builder, DL);
+    Value *RHSign = getSign32(Den, Builder, DL);
     // Remainder sign is the same as LHS
     Sign = IsDiv ? Builder.CreateXor(LHSign, RHSign) : LHSign;
 

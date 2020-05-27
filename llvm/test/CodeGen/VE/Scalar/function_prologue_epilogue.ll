@@ -26,7 +26,7 @@ define i32 @func(i32, i32, i32) {
 ; CHECK-NEXT:  ld %s15, 24(, %s11)
 ; CHECK-NEXT:  ld %s10, 8(, %s11)
 ; CHECK-NEXT:  ld %s9, (, %s11)
-; CHECK-NEXT:  b.l.t (, %lr)
+; CHECK-NEXT:  b.l.t (, %s10)
 
   ret i32 undef
 }

@@ -45,7 +45,7 @@ static bool IsAllTrueMask(Value *MaskVal) {
 
 /// \returns The constant \p ConstVal broadcasted to \p VecTy.
 static Value *BroadcastConstant(Constant *ConstVal, VectorType *VecTy) {
-  return ConstantDataVector::getSplat(VecTy->getVectorNumElements(), ConstVal);
+  return ConstantDataVector::getSplat(cast<FixedVectorType>(VecTy)->getNumElements(), ConstVal);
 }
 
 /// \returns The neutral element of the reduction \p VPRedID.
@@ -149,9 +149,10 @@ Constant *GetSafeDivisor(Type *DivTy) {
     return Constant::getAllOnesValue(DivTy);
   }
   if (DivTy->isFPOrFPVectorTy()) {
+    auto VecDivTy = cast<FixedVectorType>(DivTy);
     return ConstantVector::getSplat(
-        DivTy->getVectorElementCount(),
-        ConstantFP::get(DivTy->getVectorElementType(), 1.0));
+        VecDivTy->getElementCount(),
+        ConstantFP::get(VecDivTy->getElementType(), 1.0));
   }
   llvm_unreachable("Not a valid type for division");
 }
@@ -441,7 +442,7 @@ bool TryLowerVShift(VPIntrinsic *VPI) {
   int64_t Amount = cast<ConstantInt>(AmountVal)->getSExtValue();
 
   // cannot lower scalable vector size
-  auto ElemCount = VPI->getType()->getVectorElementCount();
+  auto ElemCount = cast<VectorType>(VPI->getType())->getElementCount();
   if (ElemCount.Scalable)
     return false;
   int VecWidth = ElemCount.Min;

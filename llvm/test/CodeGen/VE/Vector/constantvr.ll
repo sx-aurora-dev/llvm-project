@@ -3,12 +3,11 @@
 define x86_regcallcc <256 x float> @m5v256f32() {
 ; CHECK-LABEL: m5v256f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s0, -1063256064
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdu %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:  lea %s0, 256
+; CHECK-NEXT:  lea.sl %s1, -1063256064
+; CHECK-NEXT:  lvl %s0
+; CHECK-NEXT:  vbrdu %v0,%s1
+; CHECK-NEXT:  or %s11, 0, %s9
   ret <256 x float> <
     float -5.0, float -5.0, float -5.0, float -5.0,
     float -5.0, float -5.0, float -5.0, float -5.0,
