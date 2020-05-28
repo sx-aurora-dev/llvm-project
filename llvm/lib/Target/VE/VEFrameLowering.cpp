@@ -42,7 +42,7 @@ VEFrameLowering::VEFrameLowering(const VESubtarget &ST)
 void VEFrameLowering::emitPrologueInsns(MachineFunction &MF,
                                         MachineBasicBlock &MBB,
                                         MachineBasicBlock::iterator MBBI,
-                                        int NumBytes,
+                                        uint64_t NumBytes,
                                         bool RequireFPUpdate) const {
 
   DebugLoc dl;
@@ -91,7 +91,7 @@ void VEFrameLowering::emitPrologueInsns(MachineFunction &MF,
 void VEFrameLowering::emitEpilogueInsns(MachineFunction &MF,
                                         MachineBasicBlock &MBB,
                                         MachineBasicBlock::iterator MBBI,
-                                        int NumBytes,
+                                        uint64_t NumBytes,
                                         bool RequireFPUpdate) const {
 
   DebugLoc dl;
@@ -136,7 +136,7 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
                                        MachineBasicBlock &MBB,
                                        MachineBasicBlock::iterator MBBI,
                                        int64_t NumBytes,
-                                       int Align) const {
+                                       MaybeAlign MaybeAlign) const {
   DebugLoc dl;
   const VEInstrInfo &TII =
       *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
@@ -165,11 +165,11 @@ void VEFrameLowering::emitSPAdjustment(MachineFunction &MF,
       .addReg(VE::SX13)
       .addImm(Hi_32(NumBytes));
 
-  if (Align != 0) {
+  if (MaybeAlign) {
     // and %sp, %sp, Align-1
     BuildMI(MBB, MBBI, dl, TII.get(VE::ANDrm), VE::SX11)
         .addReg(VE::SX11)
-        .addImm(M1(64 - Log2_64(Align)));
+        .addImm(M1(64 - Log2_64(MaybeAlign.valueOrOne().value())));
   }
 }
 
@@ -233,7 +233,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
                        "(probably because it has a dynamic alloca).");
 
   // Get the number of bytes to allocate from the FrameInfo
-  int64_t NumBytes = (int64_t) MFI.getStackSize();
+  uint64_t NumBytes = MFI.getStackSize();
 #if 0
   if (FuncInfo->isLeafProc()) {
     if (NumBytes == 0)
@@ -247,7 +247,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 
   // Finally, ensure that the size is sufficiently aligned for the
   // data on the stack.
-  NumBytes = alignTo(NumBytes, MFI.getMaxAlign().value());
+  NumBytes = alignTo(NumBytes, MFI.getMaxAlign());
 
   // Update stack size with corrected value.
   MFI.setStackSize(NumBytes);
@@ -256,23 +256,25 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   emitPrologueInsns(MF, MBB, MBBI, NumBytes, true);
 
   // Emit stack adjust instructions
-  int RuntimeAlign = NeedsStackRealignment ? MFI.getMaxAlign().value() : 0;
-  emitSPAdjustment(MF, MBB, MBBI, -NumBytes, RuntimeAlign);
+  MaybeAlign RuntimeAlign =
+      NeedsStackRealignment ? MaybeAlign(MFI.getMaxAlign()) : None;
+  emitSPAdjustment(MF, MBB, MBBI, -(int64_t)NumBytes, RuntimeAlign);
 
   if (hasBP(MF)) {
     // Copy SP to BP.
     BuildMI(MBB, MBBI, dl, TII.get(VE::ORri), VE::SX17)
-      .addReg(VE::SX11).addImm(0);
+        .addReg(VE::SX11)
+        .addImm(0);
   }
 
   // Emit stack extend instructions
   emitSPExtend(MF, MBB, MBBI);
 
-  unsigned regFP = RegInfo.getDwarfRegNum(VE::SX9, true);
+  Register RegFP = RegInfo.getDwarfRegNum(VE::SX9, true);
 
   // Emit ".cfi_def_cfa_register 30".
   unsigned CFIIndex =
-      MF.addFrameInst(MCCFIInstruction::createDefCfaRegister(nullptr, regFP));
+      MF.addFrameInst(MCCFIInstruction::createDefCfaRegister(nullptr, RegFP));
   BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
       .addCFIIndex(CFIIndex);
 
@@ -327,7 +329,7 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
 #endif
   MachineFrameInfo &MFI = MF.getFrameInfo();
 
-  int64_t NumBytes = (int)MFI.getStackSize();
+  uint64_t NumBytes = MFI.getStackSize();
 
 #if 0
   if (NumBytes == 0)
@@ -378,7 +380,8 @@ int VEFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
     // because we haven't caused %fp to actually point to our frame.
     FrameReg = VE::SX11; // %sp
     return FrameOffset + MF.getFrameInfo().getStackSize();
-  } else if (RegInfo->needsStackRealignment(MF) && !isFixed) {
+  }
+  if (RegInfo->needsStackRealignment(MF) && !isFixed) {
     // If there is dynamic stack realignment, all local object
     // references need to be via %sp or %s17 (bp), to take account
     // of the re-alignment.
@@ -387,27 +390,10 @@ int VEFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
     else
       FrameReg = VE::SX11; // %sp
     return FrameOffset + MF.getFrameInfo().getStackSize();
-  } else {
-    // Finally, default to using %fp.
-    FrameReg = RegInfo->getFrameRegister(MF);
-    return FrameOffset;
   }
-}
-
-static bool LLVM_ATTRIBUTE_UNUSED verifyLeafProcRegUse(MachineRegisterInfo *MRI)
-{
-
-  // If any of parameter registers are used, this is not leaf function.
-  for (unsigned reg = VE::SX0; reg <= VE::SX7; ++reg)
-    if (MRI->isPhysRegUsed(reg))
-      return false;
-
-  // If any of callee-saved registers are used, this is not leaf function.
-  for (unsigned reg = VE::SX18; reg <= VE::SX33; ++reg)
-    if (MRI->isPhysRegUsed(reg))
-      return false;
-
-  return true;
+  // Finally, default to using %fp.
+  FrameReg = RegInfo->getFrameRegister(MF);
+  return FrameOffset;
 }
 
 bool VEFrameLowering::isLeafProc(MachineFunction &MF) const {
@@ -420,7 +406,6 @@ bool VEFrameLowering::isLeafProc(MachineFunction &MF) const {
                                          //   (s18 is first CSR)
          && !MRI.isPhysRegUsed(VE::SX11) // %sp un-used
          && !hasFP(MF);                  // Don't need %fp
-
 }
 
 void VEFrameLowering::determineCalleeSaves(MachineFunction &MF,

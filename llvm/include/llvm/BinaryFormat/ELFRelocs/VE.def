@@ -3,6 +3,13 @@
 #error "ELF_RELOC must be defined"
 #endif
 
+// Relocation types defined in following documents.
+//
+//  - System V Application Binary Interface - VE Architecture
+//    Processor Supplement
+//  - ELF Handling For Thread-Local Storage - VE Architecture
+//    Processor Supplement
+
 ELF_RELOC(R_VE_NONE,         0)
 ELF_RELOC(R_VE_REFLONG,      1)
 ELF_RELOC(R_VE_REFQUAD,      2)

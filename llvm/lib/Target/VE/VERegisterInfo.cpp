@@ -45,28 +45,27 @@ bool VERegisterInfo::requiresFrameIndexScavenging(
 
 const MCPhysReg *
 VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  const Function &F = MF->getFunction();
-  CallingConv::ID CC = F.getCallingConv();
-
-  switch (CC) {
-  case CallingConv::X86_RegCall:
-    return CSR_RegCall_SaveList;
+  switch (MF->getFunction().getCallingConv()) {
   default:
     return CSR_SaveList;
+  case CallingConv::PreserveAll:
+    return CSR_preserve_all_SaveList;
+  case CallingConv::X86_RegCall:
+    return CSR_RegCall_SaveList;
   }
 }
 
 const uint32_t *VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                                      CallingConv::ID CC) const {
   switch (CC) {
-  case CallingConv::X86_RegCall:
-    return CSR_RegCall_RegMask;
-  case CallingConv::VE_VEC_EXPF:
-    return CSR_vec_expf_RegMask;
-  case CallingConv::VE_LLVM_GROW_STACK:
-    return CSR_llvm_grow_stack_RegMask;
   default:
     return CSR_RegMask;
+  case CallingConv::PreserveAll:
+    return CSR_preserve_all_RegMask;
+  case CallingConv::VE_VEC_EXPF:
+    return CSR_vec_expf_RegMask;
+  case CallingConv::X86_RegCall:
+    return CSR_RegCall_RegMask;
   }
 }
 

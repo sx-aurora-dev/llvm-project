@@ -229,11 +229,6 @@ namespace {
     bool selectTLSADDRAddr(SDValue N, SDValue &Base,
                            SDValue &Scale, SDValue &Index, SDValue &Disp,
                            SDValue &Segment);
-    bool selectScalarSSELoad(SDNode *Root, SDNode *Parent, SDValue N,
-                             SDValue &Base, SDValue &Scale,
-                             SDValue &Index, SDValue &Disp,
-                             SDValue &Segment,
-                             SDValue &NodeWithChain);
     bool selectRelocImm(SDValue N, SDValue &Op);
 
     bool tryFoldLoad(SDNode *Root, SDNode *P, SDValue N,
@@ -1393,6 +1388,8 @@ void X86DAGToDAGISel::PostprocessISelDAG() {
                           And.getOperand(6)  /* Chain */ };
         MachineSDNode *Test = CurDAG->getMachineNode(NewOpc, SDLoc(N),
                                                      MVT::i32, MVT::Other, Ops);
+        CurDAG->setNodeMemRefs(
+            Test, cast<MachineSDNode>(And.getNode())->memoperands());
         ReplaceUses(N, Test);
         MadeChange = true;
         continue;
@@ -2472,76 +2469,6 @@ bool X86DAGToDAGISel::selectAddr(SDNode *Parent, SDValue N, SDValue &Base,
   getAddressOperands(AM, DL, VT, Base, Scale, Index, Disp, Segment);
   return true;
 }
-
-// We can only fold a load if all nodes between it and the root node have a
-// single use. If there are additional uses, we could end up duplicating the
-// load.
-static bool hasSingleUsesFromRoot(SDNode *Root, SDNode *User) {
-  while (User != Root) {
-    if (!User->hasOneUse())
-      return false;
-    User = *User->use_begin();
-  }
-
-  return true;
-}
-
-/// Match a scalar SSE load. In particular, we want to match a load whose top
-/// elements are either undef or zeros. The load flavor is derived from the
-/// type of N, which is either v4f32 or v2f64.
-///
-/// We also return:
-///   PatternChainNode: this is the matched node that has a chain input and
-///   output.
-bool X86DAGToDAGISel::selectScalarSSELoad(SDNode *Root, SDNode *Parent,
-                                          SDValue N, SDValue &Base,
-                                          SDValue &Scale, SDValue &Index,
-                                          SDValue &Disp, SDValue &Segment,
-                                          SDValue &PatternNodeWithChain) {
-  if (!hasSingleUsesFromRoot(Root, Parent))
-    return false;
-
-  // We can allow a full vector load here since narrowing a load is ok unless
-  // it's volatile or atomic.
-  if (ISD::isNON_EXTLoad(N.getNode())) {
-    LoadSDNode *LD = cast<LoadSDNode>(N);
-    if (LD->isSimple() &&
-        IsProfitableToFold(N, LD, Root) &&
-        IsLegalToFold(N, Parent, Root, OptLevel)) {
-      PatternNodeWithChain = N;
-      return selectAddr(LD, LD->getBasePtr(), Base, Scale, Index, Disp,
-                        Segment);
-    }
-  }
-
-  // We can also match the special zero extended load opcode.
-  if (N.getOpcode() == X86ISD::VZEXT_LOAD) {
-    PatternNodeWithChain = N;
-    if (IsProfitableToFold(PatternNodeWithChain, N.getNode(), Root) &&
-        IsLegalToFold(PatternNodeWithChain, Parent, Root, OptLevel)) {
-      auto *MI = cast<MemIntrinsicSDNode>(PatternNodeWithChain);
-      return selectAddr(MI, MI->getBasePtr(), Base, Scale, Index, Disp,
-                        Segment);
-    }
-  }
-
-  // Need to make sure that the SCALAR_TO_VECTOR and load are both only used
-  // once. Otherwise the load might get duplicated and the chain output of the
-  // duplicate load will not be observed by all dependencies.
-  if (N.getOpcode() == ISD::SCALAR_TO_VECTOR && N.getNode()->hasOneUse()) {
-    PatternNodeWithChain = N.getOperand(0);
-    if (ISD::isNON_EXTLoad(PatternNodeWithChain.getNode()) &&
-        IsProfitableToFold(PatternNodeWithChain, N.getNode(), Root) &&
-        IsLegalToFold(PatternNodeWithChain, N.getNode(), Root, OptLevel)) {
-      LoadSDNode *LD = cast<LoadSDNode>(PatternNodeWithChain);
-      return selectAddr(LD, LD->getBasePtr(), Base, Scale, Index, Disp,
-                        Segment);
-    }
-  }
-
-  return false;
-}
-
 
 bool X86DAGToDAGISel::selectMOV64Imm32(SDValue N, SDValue &Imm) {
   if (const ConstantSDNode *CN = dyn_cast<ConstantSDNode>(N)) {
@@ -4777,7 +4704,7 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
 
     SDValue Tmp0, Tmp1, Tmp2, Tmp3, Tmp4;
     bool FoldedLoad = tryFoldLoad(Node, N1, Tmp0, Tmp1, Tmp2, Tmp3, Tmp4);
-    // Multiply is commmutative.
+    // Multiply is commutative.
     if (!FoldedLoad) {
       FoldedLoad = tryFoldLoad(Node, N0, Tmp0, Tmp1, Tmp2, Tmp3, Tmp4);
       if (FoldedLoad)
@@ -4831,17 +4758,24 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
     unsigned Opc, MOpc;
     unsigned LoReg, HiReg;
     bool IsSigned = Opcode == ISD::SMUL_LOHI;
+    bool UseMULX = !IsSigned && Subtarget->hasBMI2();
     switch (NVT.SimpleTy) {
     default: llvm_unreachable("Unsupported VT!");
     case MVT::i32:
-      Opc  = IsSigned ? X86::IMUL32r : X86::MUL32r;
-      MOpc = IsSigned ? X86::IMUL32m : X86::MUL32m;
-      LoReg = X86::EAX; HiReg = X86::EDX;
+      Opc  = UseMULX ? X86::MULX32rr :
+             IsSigned ? X86::IMUL32r : X86::MUL32r;
+      MOpc = UseMULX ? X86::MULX32rm :
+             IsSigned ? X86::IMUL32m : X86::MUL32m;
+      LoReg = UseMULX ? X86::EDX : X86::EAX;
+      HiReg = X86::EDX;
       break;
     case MVT::i64:
-      Opc  = IsSigned ? X86::IMUL64r : X86::MUL64r;
-      MOpc = IsSigned ? X86::IMUL64m : X86::MUL64m;
-      LoReg = X86::RAX; HiReg = X86::RDX;
+      Opc  = UseMULX ? X86::MULX64rr :
+             IsSigned ? X86::IMUL64r : X86::MUL64r;
+      MOpc = UseMULX ? X86::MULX64rm :
+             IsSigned ? X86::IMUL64m : X86::MUL64m;
+      LoReg = UseMULX ? X86::RDX : X86::RAX;
+      HiReg = X86::RDX;
       break;
     }
 
@@ -4856,15 +4790,24 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
 
     SDValue InFlag = CurDAG->getCopyToReg(CurDAG->getEntryNode(), dl, LoReg,
                                           N0, SDValue()).getValue(1);
+    SDValue ResHi, ResLo;
     if (foldedLoad) {
       SDValue Chain;
       MachineSDNode *CNode = nullptr;
       SDValue Ops[] = { Tmp0, Tmp1, Tmp2, Tmp3, Tmp4, N1.getOperand(0),
                         InFlag };
-      SDVTList VTs = CurDAG->getVTList(MVT::Other, MVT::Glue);
-      CNode = CurDAG->getMachineNode(MOpc, dl, VTs, Ops);
-      Chain = SDValue(CNode, 0);
-      InFlag = SDValue(CNode, 1);
+      if (UseMULX) {
+        SDVTList VTs = CurDAG->getVTList(NVT, NVT, MVT::Other);
+        CNode = CurDAG->getMachineNode(MOpc, dl, VTs, Ops);
+        ResHi = SDValue(CNode, 0);
+        ResLo = SDValue(CNode, 1);
+        Chain = SDValue(CNode, 2);
+      } else {
+        SDVTList VTs = CurDAG->getVTList(MVT::Other, MVT::Glue);
+        CNode = CurDAG->getMachineNode(MOpc, dl, VTs, Ops);
+        Chain = SDValue(CNode, 0);
+        InFlag = SDValue(CNode, 1);
+      }
 
       // Update the chain.
       ReplaceUses(N1.getValue(1), Chain);
@@ -4872,27 +4815,38 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
       CurDAG->setNodeMemRefs(CNode, {cast<LoadSDNode>(N1)->getMemOperand()});
     } else {
       SDValue Ops[] = { N1, InFlag };
-      SDVTList VTs = CurDAG->getVTList(MVT::Glue);
-      SDNode *CNode = CurDAG->getMachineNode(Opc, dl, VTs, Ops);
-      InFlag = SDValue(CNode, 0);
+      if (UseMULX) {
+        SDVTList VTs = CurDAG->getVTList(NVT, NVT);
+        SDNode *CNode = CurDAG->getMachineNode(Opc, dl, VTs, Ops);
+        ResHi = SDValue(CNode, 0);
+        ResLo = SDValue(CNode, 1);
+      } else {
+        SDVTList VTs = CurDAG->getVTList(MVT::Glue);
+        SDNode *CNode = CurDAG->getMachineNode(Opc, dl, VTs, Ops);
+        InFlag = SDValue(CNode, 0);
+      }
     }
 
     // Copy the low half of the result, if it is needed.
     if (!SDValue(Node, 0).use_empty()) {
-      assert(LoReg && "Register for low half is not defined!");
-      SDValue ResLo = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), dl, LoReg,
-                                             NVT, InFlag);
-      InFlag = ResLo.getValue(2);
+      if (!ResLo) {
+        assert(LoReg && "Register for low half is not defined!");
+        ResLo = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), dl, LoReg,
+                                       NVT, InFlag);
+        InFlag = ResLo.getValue(2);
+      }
       ReplaceUses(SDValue(Node, 0), ResLo);
       LLVM_DEBUG(dbgs() << "=> "; ResLo.getNode()->dump(CurDAG);
                  dbgs() << '\n');
     }
     // Copy the high half of the result, if it is needed.
     if (!SDValue(Node, 1).use_empty()) {
-      assert(HiReg && "Register for high half is not defined!");
-      SDValue ResHi = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), dl, HiReg,
-                                             NVT, InFlag);
-      InFlag = ResHi.getValue(2);
+      if (!ResHi) {
+        assert(HiReg && "Register for high half is not defined!");
+        ResHi = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), dl, HiReg,
+                                       NVT, InFlag);
+        InFlag = ResHi.getValue(2);
+      }
       ReplaceUses(SDValue(Node, 1), ResHi);
       LLVM_DEBUG(dbgs() << "=> "; ResHi.getNode()->dump(CurDAG);
                  dbgs() << '\n');
@@ -5622,6 +5576,39 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
     MachineSDNode *NewNode = CurDAG->getMachineNode(Opc, SDLoc(dl), VTs, Ops);
     CurDAG->setNodeMemRefs(NewNode, {Sc->getMemOperand()});
     ReplaceUses(SDValue(Node, 0), SDValue(NewNode, 1));
+    CurDAG->RemoveDeadNode(Node);
+    return;
+  }
+  case ISD::PREALLOCATED_SETUP: {
+    auto *MFI = CurDAG->getMachineFunction().getInfo<X86MachineFunctionInfo>();
+    auto CallId = MFI->getPreallocatedIdForCallSite(
+        cast<SrcValueSDNode>(Node->getOperand(1))->getValue());
+    SDValue Chain = Node->getOperand(0);
+    SDValue CallIdValue = CurDAG->getTargetConstant(CallId, dl, MVT::i32);
+    MachineSDNode *New = CurDAG->getMachineNode(
+        TargetOpcode::PREALLOCATED_SETUP, dl, MVT::Other, CallIdValue, Chain);
+    ReplaceUses(SDValue(Node, 0), SDValue(New, 0)); // Chain
+    CurDAG->RemoveDeadNode(Node);
+    return;
+  }
+  case ISD::PREALLOCATED_ARG: {
+    auto *MFI = CurDAG->getMachineFunction().getInfo<X86MachineFunctionInfo>();
+    auto CallId = MFI->getPreallocatedIdForCallSite(
+        cast<SrcValueSDNode>(Node->getOperand(1))->getValue());
+    SDValue Chain = Node->getOperand(0);
+    SDValue CallIdValue = CurDAG->getTargetConstant(CallId, dl, MVT::i32);
+    SDValue ArgIndex = Node->getOperand(2);
+    SDValue Ops[3];
+    Ops[0] = CallIdValue;
+    Ops[1] = ArgIndex;
+    Ops[2] = Chain;
+    MachineSDNode *New = CurDAG->getMachineNode(
+        TargetOpcode::PREALLOCATED_ARG, dl,
+        CurDAG->getVTList(TLI->getPointerTy(CurDAG->getDataLayout()),
+                          MVT::Other),
+        Ops);
+    ReplaceUses(SDValue(Node, 0), SDValue(New, 0)); // Arg pointer
+    ReplaceUses(SDValue(Node, 1), SDValue(New, 1)); // Chain
     CurDAG->RemoveDeadNode(Node);
     return;
   }

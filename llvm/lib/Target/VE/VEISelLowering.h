@@ -115,6 +115,7 @@ public:
   SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
 
   SDValue withTargetFlags(SDValue Op, unsigned TF, SelectionDAG &DAG) const;
@@ -208,8 +209,6 @@ public:
   SDValue LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
-
-  SDValue LowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;

@@ -888,8 +888,8 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
   MachineBasicBlock &MBB = *MI.getParent();
   MachineFunction &MF = *MBB.getParent();
-  const VEInstrInfo &TII =
-      *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
+  const VESubtarget &STI = MF.getSubtarget<VESubtarget>();
+  const VEInstrInfo &TII = *STI.getInstrInfo();
   DebugLoc dl = MBB.findDebugLoc(MI);
 
   // Create following instructions and multiple basic blocks.
@@ -970,32 +970,32 @@ bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
 }
 
 bool VEInstrInfo::expandGetStackTopPseudo(MachineInstr &MI) const {
-  MachineBasicBlock* MBB = MI.getParent();
+  MachineBasicBlock *MBB = MI.getParent();
   MachineFunction &MF = *MBB->getParent();
-  const VEInstrInfo &TII =
-      *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
-  DebugLoc dl = MBB->findDebugLoc(MI);
+  const VESubtarget &STI = MF.getSubtarget<VESubtarget>();
+  const VEInstrInfo &TII = *STI.getInstrInfo();
+  DebugLoc DL = MBB->findDebugLoc(MI);
 
   // Create following instruction
   //
   //   dst = %sp + target specific frame + the size of parameter area
 
   const MachineFrameInfo &MFI = MF.getFrameInfo();
-  const TargetFrameLowering* TFL = MF.getSubtarget().getFrameLowering();
+  const VEFrameLowering &TFL = *STI.getFrameLowering();
 
   // The VE ABI requires a reserved 176 bytes area at the top
   // of stack as described in VESubtarget.cpp.  So, we adjust it here.
-  unsigned NumBytes = Subtarget.getAdjustedFrameSize(0);
+  unsigned NumBytes = STI.getAdjustedFrameSize(0);
 
   // Also adds the size of parameter area.
-  if (MFI.adjustsStack() && TFL->hasReservedCallFrame(MF))
+  if (MFI.adjustsStack() && TFL.hasReservedCallFrame(MF))
     NumBytes += MFI.getMaxCallFrameSize();
 
-  BuildMI(*MBB, MI, dl, TII.get(VE::LEArii))
-    .addDef(MI.getOperand(0).getReg())
-    .addReg(VE::SX11)
-    .addImm(0)
-    .addImm(NumBytes);
+  BuildMI(*MBB, MI, DL, TII.get(VE::LEArii))
+      .addDef(MI.getOperand(0).getReg())
+      .addReg(VE::SX11)
+      .addImm(0)
+      .addImm(NumBytes);
 
   MI.eraseFromParent(); // The pseudo instruction is gone now.
   return true;

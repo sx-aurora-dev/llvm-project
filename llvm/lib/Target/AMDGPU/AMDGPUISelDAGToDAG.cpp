@@ -1482,22 +1482,26 @@ bool AMDGPUDAGToDAGISel::SelectMUBUFScratchOffen(SDNode *Parent,
   Rsrc = CurDAG->getRegister(Info->getScratchRSrcReg(), MVT::v4i32);
 
   if (ConstantSDNode *CAddr = dyn_cast<ConstantSDNode>(Addr)) {
-    unsigned Imm = CAddr->getZExtValue();
+    int64_t Imm = CAddr->getSExtValue();
+    const int64_t NullPtr =
+        AMDGPUTargetMachine::getNullPointerValue(AMDGPUAS::PRIVATE_ADDRESS);
+    // Don't fold null pointer.
+    if (Imm != NullPtr) {
+      SDValue HighBits = CurDAG->getTargetConstant(Imm & ~4095, DL, MVT::i32);
+      MachineSDNode *MovHighBits = CurDAG->getMachineNode(
+        AMDGPU::V_MOV_B32_e32, DL, MVT::i32, HighBits);
+      VAddr = SDValue(MovHighBits, 0);
 
-    SDValue HighBits = CurDAG->getTargetConstant(Imm & ~4095, DL, MVT::i32);
-    MachineSDNode *MovHighBits = CurDAG->getMachineNode(AMDGPU::V_MOV_B32_e32,
-                                                        DL, MVT::i32, HighBits);
-    VAddr = SDValue(MovHighBits, 0);
-
-    // In a call sequence, stores to the argument stack area are relative to the
-    // stack pointer.
-    const MachinePointerInfo &PtrInfo = cast<MemSDNode>(Parent)->getPointerInfo();
-
-    SOffset = isStackPtrRelative(PtrInfo)
-                  ? CurDAG->getRegister(Info->getStackPtrOffsetReg(), MVT::i32)
-                  : CurDAG->getTargetConstant(0, DL, MVT::i32);
-    ImmOffset = CurDAG->getTargetConstant(Imm & 4095, DL, MVT::i16);
-    return true;
+      // In a call sequence, stores to the argument stack area are relative to the
+      // stack pointer.
+      const MachinePointerInfo &PtrInfo
+        = cast<MemSDNode>(Parent)->getPointerInfo();
+      SOffset = isStackPtrRelative(PtrInfo)
+        ? CurDAG->getRegister(Info->getStackPtrOffsetReg(), MVT::i32)
+        : CurDAG->getTargetConstant(0, DL, MVT::i32);
+      ImmOffset = CurDAG->getTargetConstant(Imm & 4095, DL, MVT::i16);
+      return true;
+    }
   }
 
   if (CurDAG->isBaseWithConstantOffset(Addr)) {
@@ -1902,7 +1906,9 @@ bool AMDGPUDAGToDAGISel::SelectMOVRELOffset(SDValue Index,
     // (add n0, c0)
     // Don't peel off the offset (c0) if doing so could possibly lead
     // the base (n0) to be negative.
-    if (C1->getSExtValue() <= 0 || CurDAG->SignBitIsZero(N0)) {
+    // (or n0, |c0|) can never change a sign given isBaseWithConstantOffset.
+    if (C1->getSExtValue() <= 0 || CurDAG->SignBitIsZero(N0) ||
+        (Index->getOpcode() == ISD::OR && C1->getSExtValue() >= 0)) {
       Base = N0;
       Offset = CurDAG->getTargetConstant(C1->getZExtValue(), DL, MVT::i32);
       return true;
@@ -2728,7 +2734,7 @@ bool AMDGPUDAGToDAGISel::isUniformLoad(const SDNode * N) const {
           (
             Subtarget->getScalarizeGlobalBehavior() &&
             Ld->getAddressSpace() == AMDGPUAS::GLOBAL_ADDRESS &&
-            !Ld->isVolatile() &&
+            Ld->isSimple() &&
             !N->isDivergent() &&
             static_cast<const SITargetLowering *>(
               getTargetLowering())->isMemOpHasNoClobberedMemOperand(N)
