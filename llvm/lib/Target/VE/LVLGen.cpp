@@ -19,37 +19,47 @@ using namespace llvm;
 #define DEBUG_TYPE "lvl-gen"
 
 namespace {
-  int getVLIndex(unsigned op) {
-    switch (op) {
-#include "vl-index.inc"
-    case VE::vor_v1vl: return 3;
-    }
-  }
-
   struct LVLGen : public MachineFunctionPass {
-    MCInstrDesc LVLInstDesc;
+    const TargetInstrInfo *TII;
+
     static char ID;
     LVLGen() : MachineFunctionPass(ID) {}
     bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
     bool runOnMachineFunction(MachineFunction &F) override;
+
+    unsigned getVL(const MachineInstr &MI);
+    int getVLIndex(unsigned Opcode);
   };
   char LVLGen::ID = 0;
-
-  // returns a register holding a vector length. NoRegister is returned when
-  // this MI does not have a vector length.
-  unsigned getVL(const MachineInstr &MI)
-  {
-    int index = getVLIndex(MI.getOpcode());
-    if (index >= 0)
-      return MI.getOperand(index).getReg();
-
-    return VE::NoRegister;
-  }
 
 } // end of anonymous namespace
 
 FunctionPass *llvm::createLVLGenPass() {
   return new LVLGen;
+}
+
+int LVLGen::getVLIndex(unsigned Opcode) {
+  const MCInstrDesc &MCID = TII->get(Opcode);
+
+  // If an instruction has VLIndex information, return it.
+  if (HAS_VLINDEX(MCID.TSFlags))
+    return GET_VLINDEX(MCID.TSFlags);
+
+  switch (Opcode) {
+#include "vl-index.inc"
+  case VE::vor_v1vl: return 3;
+  }
+}
+
+// returns a register holding a vector length. NoRegister is returned when
+// this MI does not have a vector length.
+unsigned LVLGen::getVL(const MachineInstr &MI)
+{
+  int index = getVLIndex(MI.getOpcode());
+  if (index >= 0)
+    return MI.getOperand(index).getReg();
+
+  return VE::NoRegister;
 }
 
 bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
@@ -75,7 +85,7 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
       if (!hasRegForVL || RegForVL != Reg) {
         LLVM_DEBUG(dbgs() << "Generate a LVL instruction to load "
                 << RegName(Reg) << ".\n");
-        BuildMI(MBB, I, MI->getDebugLoc(), LVLInstDesc).addReg(Reg);
+        BuildMI(MBB, I, MI->getDebugLoc(), TII->get(VE::LVL)).addReg(Reg);
         hasRegForVL = true;
         RegForVL = Reg;
         Changed = true;
@@ -107,8 +117,7 @@ bool LVLGen::runOnMachineFunction(MachineFunction &F)
   bool Changed = false;
 
   const VESubtarget& Subtarget = F.getSubtarget<VESubtarget>();
-  const TargetInstrInfo *TII = Subtarget.getInstrInfo();
-  LVLInstDesc = TII->get(VE::LVL);
+  TII = Subtarget.getInstrInfo();
 
   for (MachineFunction::iterator FI = F.begin(), FE = F.end();
        FI != FE; ++FI)

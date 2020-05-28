@@ -36,6 +36,25 @@ class InstVE<dag outs, dag ins, string asmstr, list<dag> pattern,
   let AsmString   = asmstr;
   let Pattern = pattern;
 
+  bits<1> VE_Vector = 0;
+  bits<1> VE_VLInUse = 0;
+  bits<3> VE_VLIndex = 0;
+  bits<1> VE_VLWithMask = 0;
+
+  /// These fields correspond to the fields in VEInstrInfo.h.  Any changes to
+  /// these must be reflected there!  See comments there for what these are.
+  ///
+  /// VLIndex is the index of VL register in MI's operands.  The HW instruction
+  /// doesn't have that field, but we add is in MI for the ease of optimization.
+  /// For example, the index of VL of (VST $sy, $sz, $sx, $vl) is 3 (beginning
+  /// from 0), and the index of VL of (VST $sy, $sz, $sx, $vm, $vl) is 4.  We
+  /// define vector instructions hierarchically, so use VE_VLIndex which is
+  /// defined by the type of instruction and VE_VLWithMask which is defined
+  /// whether the insturction use mask or not.
+  let TSFlags{0}   = VE_Vector;
+  let TSFlags{1}   = VE_VLInUse;
+  let TSFlags{4-2} = !add(VE_VLIndex, VE_VLWithMask);
+
   let DecoderNamespace = "VE";
   field bits<64> SoftFail = 0;
   
@@ -225,6 +244,8 @@ class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern = []
   let Inst{15-8} = 0;
   let Inst{7} = 0;
   let Inst{6-0} = sw;
+
+  let VE_Vector = 1;
 }
 
 //-----------------------------------------------------------------------------
@@ -263,6 +284,8 @@ class RV<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern = [],
   let Inst{23-16} = vy;
   let Inst{15-8} = vz;
   let Inst{7-0} = vw;
+
+  let VE_Vector = 1;
 }
 
 // Pseudo instructions.

@@ -92,11 +92,12 @@ multiclass VLDbm<string opcStr, bits<8>opc, RegisterClass RC, dag dag_in,
 }
 multiclass VLDlm<string opcStr, bits<8>opc, RegisterClass RC, dag dag_in> {
   defm "" : VLDbm<opcStr, opc, RC, dag_in>;
-  let isCodeGenOnly = 1 in {
+  let isCodeGenOnly = 1, VE_VLInUse = 1 in {
     defm l : VLDbm<opcStr, opc, RC, !con(dag_in, (ins I32:$vl)), "$vl,">;
     defm L : VLDbm<opcStr, opc, RC, !con(dag_in, (ins VLS:$vl)), "$vl,">;
   }
 }
+let VE_VLIndex = 3 in
 multiclass VLDtgm<string opcStr, bits<8>opc, RegisterClass RC> {
   defm rr : VLDlm<opcStr, opc, RC, (ins I64:$sy, I64:$sz)>;
   let cy = 0 in
@@ -135,7 +136,7 @@ let cx = 1 in defm VLDL2DZX : VLDm<"vldl2d.zx", 0xc3, V64>;
 let mayStore = 1, hasSideEffects = 0, Uses = [VL] in
 multiclass VSTbm<string opcStr, string argStr, bits<8>opc, dag dag_in> {
   def "" : RVM<opc, (outs), dag_in, !strconcat(opcStr, argStr)>;
-  let DisableEncoding = "$vl", isCodeGenOnly = 1 in {
+  let DisableEncoding = "$vl", isCodeGenOnly = 1, VE_VLInUse = 1 in {
     def l : RVM<opc, (outs), !con(dag_in, (ins I32:$vl)),
                 !strconcat(opcStr, argStr)>;
     def L : RVM<opc, (outs), !con(dag_in, (ins VLS:$vl)),
@@ -144,11 +145,12 @@ multiclass VSTbm<string opcStr, string argStr, bits<8>opc, dag dag_in> {
 }
 multiclass VSTmm<string opcStr, bits<8>opc, dag dag_in> {
   defm "" : VSTbm<opcStr, " $vx, $sy, $sz", opc, dag_in>;
-  let m = ? in defm m : VSTbm<opcStr, " $vx, $sy, $sz, $m", opc,
-                              !con(dag_in, (ins VM_:$m))>;
-  let m = ?, isCodeGenOnly = 1 in
+  let m = ?, VE_VLWithMask = 1 in
+  defm m : VSTbm<opcStr, " $vx, $sy, $sz, $m", opc, !con(dag_in, (ins VM_:$m))>;
+  let m = ?, isCodeGenOnly = 1, VE_VLWithMask = 1 in
   defm x : VSTbm<opcStr, " $vx, $sy, $sz, $m", opc, !con(dag_in, (ins VM:$m))>;
 }
+let VE_VLIndex = 3 in
 multiclass VSTtgm<string opcStr, bits<8>opc, RegisterClass RC> {
   defm rrv : VSTmm<opcStr, opc, (ins I64:$sy, I64:$sz, RC:$vx)>;
   let cy = 0 in
@@ -198,7 +200,7 @@ multiclass VGTbm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
 multiclass VGTlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                  dag dag_in> {
   defm "" : VGTbm<opcStr, argStr, opc, RC, dag_in>;
-  let isCodeGenOnly = 1 in {
+  let isCodeGenOnly = 1, VE_VLInUse = 1 in {
     defm l : VGTbm<opcStr, argStr, opc, RC, !con(dag_in, (ins I32:$vl)),
                    "$vl,">;
     defm L : VGTbm<opcStr, argStr, opc, RC, !con(dag_in, (ins VLS:$vl)),
@@ -208,11 +210,12 @@ multiclass VGTlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
 multiclass VGTmm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                  dag dag_in> {
   defm "" : VGTlm<opcStr, argStr, opc, RC, dag_in>;
-  let m = ? in defm m : VGTlm<opcStr, argStr#", $m", opc, RC,
-                              !con(dag_in, (ins VM_:$m))>;
-  let m = ?, isCodeGenOnly = 1 in
+  let m = ?, VE_VLWithMask = 1 in
+  defm m : VGTlm<opcStr, argStr#", $m", opc, RC, !con(dag_in, (ins VM_:$m))>;
+  let m = ?, isCodeGenOnly = 1, VE_VLWithMask = 1 in
   defm x : VGTlm<opcStr, argStr#", $m", opc, RC, !con(dag_in, (ins VM:$m))>;
 }
+let VE_VLIndex = 4 in
 multiclass VGTlhm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                   dag dag_in> {
   defm rr : VGTmm<opcStr, argStr#", $sy, $sz", opc, RC,
@@ -252,7 +255,7 @@ def : MnemonicAlias<"vgtl.nc", "vgtl.zx.nc">;
 let mayStore = 1, hasSideEffects = 0, Uses = [VL] in
 multiclass VSCbm<string opcStr, string argStr, bits<8>opc, dag dag_in> {
   def "" : RVM<opc, (outs), dag_in, !strconcat(opcStr, argStr)>;
-  let DisableEncoding = "$vl", isCodeGenOnly = 1 in {
+  let DisableEncoding = "$vl", isCodeGenOnly = 1, VE_VLInUse = 1 in {
     def l : RVM<opc, (outs), !con(dag_in, (ins I32:$vl)),
                 !strconcat(opcStr, argStr)>;
     def L : RVM<opc, (outs), !con(dag_in, (ins VLS:$vl)),
@@ -261,11 +264,12 @@ multiclass VSCbm<string opcStr, string argStr, bits<8>opc, dag dag_in> {
 }
 multiclass VSCmm<string opcStr, string argStr, bits<8>opc, dag dag_in> {
   defm "" : VSCbm<opcStr, argStr, opc, dag_in>;
-  let m = ? in
+  let m = ?, VE_VLWithMask = 1 in
   defm m : VSCbm<opcStr, argStr#", $m", opc, !con(dag_in, (ins VM_:$m))>;
-  let isCodeGenOnly = 1 in
+  let isCodeGenOnly = 1, VE_VLWithMask = 1 in
   defm x : VSCbm<opcStr, argStr#", $m", opc, !con(dag_in, (ins VM:$m))>;
 }
+let VE_VLIndex = 4 in
 multiclass VSClhm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                   dag dag_in> {
   defm rrv : VSCmm<opcStr, " $vx, "#argStr#", $sy, $sz", opc,
@@ -304,13 +308,14 @@ defm VSCL : VSCm<"vscl", 0xb3, V64>;
 let Uses = [VL] in
 multiclass PFCHVbm<string opcStr, string argStr, bits<8>opc, dag dag_in> {
   def "" : RVM<opc, (outs), dag_in, !strconcat(opcStr, argStr)>;
-  let DisableEncoding = "$vl", isCodeGenOnly = 1 in {
+  let DisableEncoding = "$vl", isCodeGenOnly = 1, VE_VLInUse = 1 in {
     def l : RVM<opc, (outs), !con(dag_in, (ins I32:$vl)),
                 !strconcat(opcStr, argStr)>;
     def L : RVM<opc, (outs), !con(dag_in, (ins VLS:$vl)),
                 !strconcat(opcStr, argStr)>;
   }
 }
+let VE_VLIndex = 2 in
 multiclass PFCHVm<string opcStr, bits<8>opc> {
   defm rr : PFCHVbm<opcStr, " $sy, $sz", opc, (ins I64:$sy, I64:$sz)>;
   let cy = 0 in
@@ -419,7 +424,7 @@ multiclass VBRDbm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
 multiclass VBRDlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                   dag dag_in> {
   defm "" : VBRDbm<opcStr, argStr, opc, RC, dag_in>;
-  let isCodeGenOnly = 1 in {
+  let isCodeGenOnly = 1, VE_VLInUse = 1 in {
     defm l : VBRDbm<opcStr, argStr, opc, RC, !con(dag_in, (ins I32:$vl)),
                    "$vl,">;
     defm L : VBRDbm<opcStr, argStr, opc, RC, !con(dag_in, (ins VLS:$vl)),
@@ -429,12 +434,12 @@ multiclass VBRDlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
 multiclass VBRDmm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                   RegisterClass RCM1, RegisterClass RCM2, dag dag_in> {
   defm "" : VBRDlm<opcStr, argStr, opc, RC, dag_in>;
-  let m = ? in defm m : VBRDlm<opcStr, argStr#", $m", opc, RC,
-                               !con(dag_in, (ins RCM1:$m))>;
-  let isCodeGenOnly = 1 in
-  let m = ? in defm x : VBRDlm<opcStr, argStr#", $m", opc, RC,
-                               !con(dag_in, (ins RCM2:$m))>;
+  let m = ?, VE_VLWithMask = 1 in
+  defm m : VBRDlm<opcStr, argStr#", $m", opc, RC, !con(dag_in, (ins RCM1:$m))>;
+  let m = ?, isCodeGenOnly = 1, VE_VLWithMask = 1 in
+  defm x : VBRDlm<opcStr, argStr#", $m", opc, RC, !con(dag_in, (ins RCM2:$m))>;
 }
+let VE_VLIndex = 2 in
 multiclass VBRDm<string opcStr, bits<8>opc, RegisterClass RC,
                  RegisterClass RCM1, RegisterClass RCM2> {
   defm r : VBRDmm<opcStr, "$sy", opc, RC, RCM1, RCM2, (ins I64:$sy)>;
@@ -461,7 +466,7 @@ multiclass VMVbm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
 multiclass VMVlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                  dag dag_in> {
   defm "" : VMVbm<opcStr, argStr, opc, RC, dag_in>;
-  let isCodeGenOnly = 1 in {
+  let isCodeGenOnly = 1, VE_VLInUse = 1 in {
     defm l : VMVbm<opcStr, argStr, opc, RC, !con(dag_in, (ins I32:$vl)),
                    "$vl,">;
     defm L : VMVbm<opcStr, argStr, opc, RC, !con(dag_in, (ins VLS:$vl)),
@@ -471,12 +476,12 @@ multiclass VMVlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
 multiclass VMVmm<string opcStr, bits<8>opc, RegisterClass RC,
                  RegisterClass RCM1, RegisterClass RCM2, dag dag_in> {
   defm "" : VMVlm<opcStr, "$sy, $vz", opc, RC, dag_in>;
-  let m = ? in defm m : VMVlm<opcStr, "$sy, $vz, $m", opc, RC,
-                              !con(dag_in, (ins RCM1:$m))>;
-  let isCodeGenOnly = 1 in
-  let m = ? in defm x : VMVlm<opcStr, "$sy, $vz, $m", opc, RC,
-                              !con(dag_in, (ins RCM2:$m))>;
+  let m = ?, VE_VLWithMask = 1 in
+  defm m : VMVlm<opcStr, "$sy, $vz, $m", opc, RC, !con(dag_in, (ins RCM1:$m))>;
+  let m = ?, isCodeGenOnly = 1, VE_VLWithMask = 1 in
+  defm x : VMVlm<opcStr, "$sy, $vz, $m", opc, RC, !con(dag_in, (ins RCM2:$m))>;
 }
+let VE_VLIndex = 3 in
 multiclass VMVm<string opcStr, bits<8>opc, RegisterClass RC,
                 RegisterClass RCM1, RegisterClass RCM2> {
   defm rv : VMVmm<opcStr, opc, RC, RCM1, RCM2, (ins I64:$sy, RC:$vz)>;
@@ -504,7 +509,7 @@ multiclass RVbm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
 multiclass RVlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                 dag dag_in> {
   defm "" : RVbm<opcStr, argStr, opc, RC, dag_in>;
-  let isCodeGenOnly = 1 in {
+  let isCodeGenOnly = 1, VE_VLInUse = 1 in {
     defm l : RVbm<opcStr, argStr, opc, RC, !con(dag_in, (ins I32:$vl)),
                   "$vl,">;
     defm L : RVbm<opcStr, argStr, opc, RC, !con(dag_in, (ins VLS:$vl)),
@@ -514,14 +519,14 @@ multiclass RVlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
 multiclass RVmm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                 RegisterClass RCM1, RegisterClass RCM2, dag dag_in> {
   defm "" : RVlm<opcStr, argStr, opc, RC, dag_in>;
-  let m = ? in defm m : RVlm<opcStr, argStr#", $m", opc, RC,
-                             !con(dag_in, (ins RCM1:$m))>;
-  let isCodeGenOnly = 1 in
-  let m = ? in defm x : RVlm<opcStr, argStr#", $m", opc, RC,
-                             !con(dag_in, (ins RCM1:$m))>;
+  let m = ?, VE_VLWithMask = 1 in
+  defm m : RVlm<opcStr, argStr#", $m", opc, RC, !con(dag_in, (ins RCM1:$m))>;
+  let m = ?, isCodeGenOnly = 1, VE_VLWithMask = 1 in
+  defm x : RVlm<opcStr, argStr#", $m", opc, RC, !con(dag_in, (ins RCM1:$m))>;
 }
 // Generic RV multiclass with 2 arguments.
 //   e.g. VADD, VSUB, VMPY, and etc.
+let VE_VLIndex = 3 in
 multiclass RVm<string opcStr, bits<8>opc, RegisterClass RC,
                RegisterClass RCM1, RegisterClass RCM2, Operand SIMM = simm7> {
   let cy = 0, sy = 0, vy = ?, vz = ? in
@@ -536,53 +541,71 @@ multiclass RVm<string opcStr, bits<8>opc, RegisterClass RC,
 }
 // Special RV multiclass with 2 arguments using cs2.
 //   e.g. VDIV, VDVS, and VDVX.
+let VE_VLIndex = 3 in
 multiclass RVDIVm<string opcStr, bits<8>opc, RegisterClass RC,
                   RegisterClass RCM1, RegisterClass RCM2,
                   Operand SIMM = simm7> {
   let cy = 0, sy = 0, vy = ?, vz = ? in
-  defm vv : RVmm<opcStr, ", $vy, $vz", opc, RC, RCM1, RCM2, (ins RC:$vy, RC:$vz)>;
+  defm vv : RVmm<opcStr, ", $vy, $vz", opc, RC, RCM1, RCM2,
+                 (ins RC:$vy, RC:$vz)>;
   let cs2 = 1, vy = ? in
-  defm vr : RVmm<opcStr, ", $vy, $sy", opc, RC, RCM1, RCM2, (ins RC:$vy, I64:$sy)>;
+  defm vr : RVmm<opcStr, ", $vy, $sy", opc, RC, RCM1, RCM2,
+                 (ins RC:$vy, I64:$sy)>;
   let cs2 = 1, cy = 0, vy = ? in
-  defm vi : RVmm<opcStr, ", $vy, $sy", opc, RC, RCM1, RCM2, (ins RC:$vy, SIMM:$sy)>;
+  defm vi : RVmm<opcStr, ", $vy, $sy", opc, RC, RCM1, RCM2,
+                 (ins RC:$vy, SIMM:$sy)>;
   let cs = 1, vz = ? in
-  defm rv : RVmm<opcStr, ", $sy, $vz", opc, RC, RCM1, RCM2, (ins I64:$sy, RC:$vz)>;
+  defm rv : RVmm<opcStr, ", $sy, $vz", opc, RC, RCM1, RCM2,
+                 (ins I64:$sy, RC:$vz)>;
   let cs = 1, cy = 0, vz = ? in
-  defm iv : RVmm<opcStr, ", $sy, $vz", opc, RC, RCM1, RCM2, (ins SIMM:$sy, RC:$vz)>;
+  defm iv : RVmm<opcStr, ", $sy, $vz", opc, RC, RCM1, RCM2,
+                 (ins SIMM:$sy, RC:$vz)>;
 }
 // Generic RV multiclass with 2 arguments for logical operations.
 //   e.g. VAND, VOR, VXOR, and etc.
+let VE_VLIndex = 3 in
 multiclass RVLm<string opcStr, bits<8>opc, RegisterClass RC,
                 RegisterClass RCM1, RegisterClass RCM2> {
   let cy = 0, sy = 0, vy = ?, vz = ? in
-  defm vv : RVmm<opcStr, ", $vy, $vz", opc, RC, RCM1, RCM2, (ins RC:$vy, RC:$vz)>;
+  defm vv : RVmm<opcStr, ", $vy, $vz", opc, RC, RCM1, RCM2,
+                 (ins RC:$vy, RC:$vz)>;
   let cs = 1, vz = ? in
-  defm rv : RVmm<opcStr, ", $sy, $vz", opc, RC, RCM1, RCM2, (ins I64:$sy, RC:$vz)>;
+  defm rv : RVmm<opcStr, ", $sy, $vz", opc, RC, RCM1, RCM2,
+                 (ins I64:$sy, RC:$vz)>;
   let cs = 1, cy = 0, vz = ? in
-  defm mv : RVmm<opcStr, ", $sy, $vz", opc, RC, RCM1, RCM2, (ins mimm:$sy, RC:$vz)>;
+  defm mv : RVmm<opcStr, ", $sy, $vz", opc, RC, RCM1, RCM2,
+                 (ins mimm:$sy, RC:$vz)>;
 }
 // Generic RV multiclass with 2 arguments for shift operations.
 //   e.g. VSLL, VSRL, VSLA, and etc.
+let VE_VLIndex = 3 in
 multiclass RVSm<string opcStr, bits<8>opc, RegisterClass RC,
                 RegisterClass RCM1, RegisterClass RCM2> {
   let cy = 0, sy = 0, vy = ?, vz = ? in
-  defm vv : RVmm<opcStr, ", $vz, $vy", opc, RC, RCM1, RCM2, (ins RC:$vz, RC:$vy)>;
+  defm vv : RVmm<opcStr, ", $vz, $vy", opc, RC, RCM1, RCM2,
+                 (ins RC:$vz, RC:$vy)>;
   let cs = 1, vz = ? in
-  defm vr : RVmm<opcStr, ", $vz, $sy", opc, RC, RCM1, RCM2, (ins RC:$vz, I64:$sy)>;
+  defm vr : RVmm<opcStr, ", $vz, $sy", opc, RC, RCM1, RCM2,
+                 (ins RC:$vz, I64:$sy)>;
   let cs = 1, cy = 0, vz = ? in
-  defm vi : RVmm<opcStr, ", $vz, $sy", opc, RC, RCM1, RCM2, (ins RC:$vz, uimm7:$sy)>;
+  defm vi : RVmm<opcStr, ", $vz, $sy", opc, RC, RCM1, RCM2,
+                 (ins RC:$vz, uimm7:$sy)>;
 }
 // Generic RV multiclass with 3 arguments for shift operations.
 //   e.g. VSLD and VSRD.
+let VE_VLIndex = 4 in
 multiclass RVSDm<string opcStr, bits<8>opc, RegisterClass RC,
                  RegisterClass RCM1, RegisterClass RCM2> {
   let vy = ?, vz = ? in
-  defm vvr : RVmm<opcStr, ", ($vy, ${vz}), $sy", opc, RC, RCM1, RCM2, (ins RC:$vy, RC:$vz, I64:$sy)>;
+  defm vvr : RVmm<opcStr, ", ($vy, ${vz}), $sy", opc, RC, RCM1, RCM2,
+                 (ins RC:$vy, RC:$vz, I64:$sy)>;
   let cy = 0, vy = ?, vz = ? in
-  defm vvi : RVmm<opcStr, ", ($vy, ${vz}), $sy", opc, RC, RCM1, RCM2, (ins RC:$vy, RC:$vz, uimm7:$sy)>;
+  defm vvi : RVmm<opcStr, ", ($vy, ${vz}), $sy", opc, RC, RCM1, RCM2,
+                 (ins RC:$vy, RC:$vz, uimm7:$sy)>;
 }
 // Generic RV multiclass with 1 argument.
 //   e.g. VLDZ, VPCNT, and VBRV.
+let VE_VLIndex = 2 in
 multiclass RV1m<string opcStr, bits<8>opc, RegisterClass RC,
                 RegisterClass RCM1, RegisterClass RCM2> {
   let cy = 0, sy = 0, vz = ? in
@@ -590,6 +613,7 @@ multiclass RV1m<string opcStr, bits<8>opc, RegisterClass RC,
 }
 // Generic RV multiclass with 1 argument using vy field.
 //   e.g. VFSQRT, VRCP, and VRSQRT.
+let VE_VLIndex = 2 in
 multiclass RVF1m<string opcStr, bits<8>opc, RegisterClass RC,
                  RegisterClass RCM1, RegisterClass RCM2> {
   let cy = 0, sy = 0, vy = ? in
@@ -597,6 +621,7 @@ multiclass RVF1m<string opcStr, bits<8>opc, RegisterClass RC,
 }
 // Generic RV multiclass with no argument.
 //   e.g. VSEQ.
+let VE_VLIndex = 1 in
 multiclass RV0m<string opcStr, bits<8>opc, RegisterClass RC,
                 RegisterClass RCM1, RegisterClass RCM2> {
   let cy = 0, sy = 0 in
@@ -604,6 +629,7 @@ multiclass RV0m<string opcStr, bits<8>opc, RegisterClass RC,
 }
 // Special RV multiclass with 3 arguments.
 //   e.g. VSFA
+let VE_VLIndex = 4 in
 multiclass RVSAm<string opcStr, bits<8>opc, RegisterClass RC,
                  RegisterClass RCM1, RegisterClass RCM2> {
   let cz = 1, sz = ?, vz = ? in
@@ -621,6 +647,7 @@ multiclass RVSAm<string opcStr, bits<8>opc, RegisterClass RC,
 }
 // Special RV multiclass with 3 arguments using cs2.
 //   e.g. VFMAD, VFMSB, VFNMAD, and etc.
+let VE_VLIndex = 4 in
 multiclass RVMm<string opcStr, bits<8>opc, RegisterClass RC,
                 RegisterClass RCM1, RegisterClass RCM2, Operand SIMM = simm7> {
   let cy = 0, sy = 0, vy = ?, vz = ?, vw = ? in
@@ -641,15 +668,16 @@ multiclass RVMm<string opcStr, bits<8>opc, RegisterClass RC,
 }
 // Special RV multiclass with 2 arguments for floating point conversions.
 //   e.g. VFIX and VFIXX
-let hasSideEffects = 0 in
+let hasSideEffects = 0, VE_VLIndex = 3 in
 multiclass RVFIXm<string opcStr, bits<8> opc, RegisterClass RC,
                   RegisterClass RCM1, RegisterClass RCM2> {
   let cy = 0, sy = 0, vy = ?, vz = ? in
-  defm v : RVmm<opcStr#"$vz", ", $vy", opc, RC, RCM1, RCM2, (ins RDOp:$vz, RC:$vy)>;
+  defm v : RVmm<opcStr#"$vz", ", $vy", opc, RC, RCM1, RCM2,
+                (ins RDOp:$vz, RC:$vy)>;
 }
 // special RV multiclass with 3 arguments for VSHF.
 //   e.g. VSHF
-let vy = ?, vz = ? in
+let vy = ?, vz = ?, VE_VLIndex = 4 in
 multiclass RVSHFm<string opcStr, bits<8>opc, RegisterClass RC,
                   Operand SIMM = uimm4> {
   defm vvr : RVlm<opcStr, ", $vy, $vz, $sy", opc, RC,
@@ -669,7 +697,7 @@ multiclass RVIbm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
 multiclass RVIlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                  dag dag_in> {
   defm "" : RVIbm<opcStr, argStr, opc, RC, dag_in>;
-  let isCodeGenOnly = 1 in {
+  let isCodeGenOnly = 1, VE_VLInUse = 1 in {
     defm l : RVIbm<opcStr, argStr, opc, RC, !con(dag_in, (ins I32:$vl)),
                    "$vl,">;
     defm L : RVIbm<opcStr, argStr, opc, RC, !con(dag_in, (ins VLS:$vl)),
@@ -678,6 +706,7 @@ multiclass RVIlm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
 }
 // Generic RV multiclass for iterative operation with 2 argument.
 //   e.g. VFIA, VFIS, and VFIM
+let VE_VLIndex = 3 in
 multiclass RVI2m<string opcStr, bits<8>opc, RegisterClass RC> {
   let vy = ? in
   defm vr : RVIlm<opcStr, ", $vy, $sy", opc, RC, (ins RC:$vy, I64:$sy)>;
@@ -686,6 +715,7 @@ multiclass RVI2m<string opcStr, bits<8>opc, RegisterClass RC> {
 }
 // Generic RV multiclass for iterative operation with 3 argument.
 //   e.g. VFIAM, VFISM, VFIMA, and etc.
+let VE_VLIndex = 4 in
 multiclass RVI3m<string opcStr, bits<8>opc, RegisterClass RC> {
   let vy = ?, vz = ? in
   defm vvr : RVIlm<opcStr, ", $vy, $vz, $sy", opc, RC,
@@ -700,7 +730,7 @@ let vx = ?, hasSideEffects = 0, Uses = [VL] in
 multiclass RVMKbm<string opcStr, string argStr, bits<8>opc, dag dag_out,
                   dag dag_in> {
   def "" : RV<opc, dag_out, dag_in, !strconcat(opcStr, argStr)>;
-  let DisableEncoding = "$vl", isCodeGenOnly = 1 in {
+  let DisableEncoding = "$vl", isCodeGenOnly = 1, VE_VLInUse = 1 in {
     def l : RV<opc, dag_out, !con(dag_in, (ins I32:$vl)),
                !strconcat(opcStr, argStr)>;
     def L : RV<opc, dag_out, !con(dag_in, (ins VLS:$vl)),
@@ -710,23 +740,23 @@ multiclass RVMKbm<string opcStr, string argStr, bits<8>opc, dag dag_out,
 multiclass RVMKlm<string opcStr, string argStr, bits<8>opc, RegisterClass RCM,
                   dag dag_in> {
   defm "" : RVMKbm<opcStr, " $vx"#argStr, opc, (outs RCM:$vx), dag_in>;
-  let m = ? in defm m : RVMKbm<opcStr, " $vx"#argStr#", $m", opc,
-                               (outs RCM:$vx), !con(dag_in, (ins RCM:$m))>;
-  let isCodeGenOnly = 1 in {
-    let m = ? in defm x : RVMKbm<opcStr, " $vx"#argStr#", $m", opc,
-                                 (outs RCM:$vx), !con(dag_in, (ins RCM:$m))>;
-  }
+  let m = ?, VE_VLWithMask = 1 in
+  defm m : RVMKbm<opcStr, " $vx"#argStr#", $m", opc, (outs RCM:$vx),
+                  !con(dag_in, (ins RCM:$m))>;
+  let m = ?, isCodeGenOnly = 1, VE_VLWithMask = 1 in
+  defm x : RVMKbm<opcStr, " $vx"#argStr#", $m", opc, (outs RCM:$vx),
+                  !con(dag_in, (ins RCM:$m))>;
 }
 // Generic RV multiclass for mask calculation with a condition.
 //   e.g. VFMK, VFMS, and VFMF
 let cy = 0, sy = 0 in
 multiclass RVMKom<string opcStr, bits<8> opc, RegisterClass RC,
                  RegisterClass RCM> {
-  let vy = ?, vz = ? in
+  let vy = ?, vz = ?, VE_VLIndex = 3 in
   defm v : RVMKlm<opcStr#"$vy", ", $vz", opc, RCM, (ins CCOp:$vy, RC:$vz)>;
-  let vy = 15 /* AT */ in
+  let vy = 15 /* AT */, VE_VLIndex = 1 in
   defm a : RVMKlm<opcStr#"at", "", opc, RCM, (ins)>;
-  let vy = 0 /* AF */ in
+  let vy = 0 /* AF */, VE_VLIndex = 1 in
   defm na : RVMKlm<opcStr#"af", "", opc, RCM, (ins)>;
 }
 multiclass RVMKm<string opcStr, bits<8> opc, RegisterClass RC,
