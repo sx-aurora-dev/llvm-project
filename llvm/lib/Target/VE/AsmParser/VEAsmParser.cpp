@@ -167,6 +167,16 @@ public:
     VE::VMP0, VE::VMP1, VE::VMP2, VE::VMP3,
     VE::VMP4, VE::VMP5, VE::VMP6, VE::VMP7 };
 
+  static const MCPhysReg MISCRegs[31] = {
+    VE::USRCC,      VE::PSW,        VE::SAR,        VE::NoRegister,
+    VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::PMMR,
+    VE::PMCR0,      VE::PMCR1,      VE::PMCR2,      VE::PMCR3,
+    VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::NoRegister,
+    VE::PMC0,       VE::PMC1,       VE::PMC2,       VE::PMC3,
+    VE::PMC4,       VE::PMC5,       VE::PMC6,       VE::PMC7,
+    VE::PMC8,       VE::PMC9,       VE::PMC10,      VE::PMC11,
+    VE::PMC12,      VE::PMC13,      VE::PMC14 };
+
 namespace {
 
 /// VEOperand - Instances of this class represent a parsed VE machine
@@ -719,6 +729,18 @@ public:
     if (regIdx % 2 || regIdx > 15)
       return false;
     Op.Reg.RegNum = VM512Regs[regIdx / 2];
+    return true;
+  }
+
+  static bool MorphToMISCReg(VEOperand &Op) {
+    const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Op.getImm());
+    if (!ConstExpr)
+      return false;
+    unsigned regIdx = ConstExpr->getValue();
+    if (regIdx > 31 || MISCRegs[regIdx] == VE::NoRegister)
+      return false;
+    Op.Kind = k_Register;
+    Op.Reg.RegNum = MISCRegs[regIdx];
     return true;
   }
 
@@ -1571,6 +1593,10 @@ unsigned VEAsmParser::validateTargetOperandClass(MCParsedAsmOperand &GOp,
   // for validation.
   switch (Kind) {
   default:
+    break;
+  case MCK_MISC:
+    if (Op.isImm() && VEOperand::MorphToMISCReg(Op))
+      return MCTargetAsmParser::Match_Success;
     break;
   case MCK_F128:
     if (Op.isReg() && VEOperand::MorphToF128Reg(Op))

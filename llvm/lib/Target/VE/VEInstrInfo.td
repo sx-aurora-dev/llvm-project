@@ -220,15 +220,6 @@ def zero : Operand<i32>, PatLeaf<(imm), [{
   let ParserMatchClass = ZeroAsmOperand;
 }
 
-// misc - Immediates to represent MISC registers
-def MiscImmAsmOperand : AsmOperandClass { let Name = "MiscImm"; }
-def misc : Operand<i32>, PatLeaf<(imm), [{
-    int64_t Val = N->getSExtValue();
-    return Val == 0 || Val == 1 || Val == 2 || (Val >= 7 && Val <= 11) ||
-           (Val >= 16 && Val <= 30); }]> {
-  let ParserMatchClass = MiscImmAsmOperand;
-}
-
 // simm7fp - Generic fp immediate value.
 def simm7fp : Operand<i32>, PatLeaf<(fpimm), [{
     return isInt<7>(getFpImmVal(N));
@@ -955,18 +946,10 @@ multiclass STORECRm<string opcStr, bits<8>opc, RegisterClass RC> {
 //   e.g. FIDCR
 let cz = 0, hasSideEffects = 1 in
 multiclass FIDCRm<string opcStr, bits<8>opc, RegisterClass RC> {
-  def ri : RR<opc, (outs RC:$dest), (ins RC:$src, uimm3:$rz),
-              !strconcat(opcStr, " $dest, $src, $rz")> {
-    bits<3> rz;
-    let sz{5-3} = 0;
-    let sz{2-0} = rz;
-  }
-  let cy = 0 in def ii : RR<opc, (outs RC:$dest), (ins simm7:$src, uimm3:$rz),
-                            !strconcat(opcStr, " $dest, $src, $rz")> {
-    bits<3> rz;
-    let sz{5-3} = 0;
-    let sz{2-0} = rz;
-  }
+  def ri : RR<opc, (outs RC:$sx), (ins RC:$sy, uimm3:$sz),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0 in def ii : RR<opc, (outs RC:$sx), (ins simm7:$sy, uimm3:$sz),
+                            !strconcat(opcStr, " $sx, $sy, $sz")>;
 }
 
 // Multiclass for LHM instruction.
@@ -1194,15 +1177,15 @@ let DecoderMethod = "DecodeTS1AMI32" in
 let cx = 1 in defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, i32, uimm7>;
 
 // Section 8.2.17 - TS2AM (Test and Set 2 AM)
-let DecoderMethod = "DecodeTS2AM" in
+let DecoderMethod = "DecodeTS1AMI64" in
 defm TS2AM : RRCASm<"ts2am", 0x43, I64, i64, uimm7>;
 
 // Section 8.2.18 - TS3AM (Test and Set 3 AM)
-let DecoderMethod = "DecodeTS2AM" in
+let DecoderMethod = "DecodeTS1AMI64" in
 defm TS3AM : RRCASm<"ts3am", 0x52, I64, i64, uimm1>;
 
 // Section 8.2.19 - ATMAM (Atomic AM)
-let DecoderMethod = "DecodeTS2AM" in
+let DecoderMethod = "DecodeTS1AMI64" in
 defm ATMAM : RRCASm<"atmam", 0x53, I64, i64, uimm0to2>;
 
 // Section 8.2.20 - CAS (Compare and Swap)
@@ -1578,8 +1561,6 @@ def SFR : RR<0x29, (outs I64:$sx), (ins), "sfr $sx">;
 // Section 8.19.6 - SMIR (Save Miscellaneous Register)
 let cy = 0, cz = 0, sz = 0, hasSideEffects = 1 in {
   def SMIR : RR<0x22, (outs I64:$sx), (ins MISC:$sy), "smir $sx, $sy">;
-  let isAsmParserOnly = 1 in
-  def SMIRi : RR<0x22, (outs I64:$sx), (ins misc:$sy), "smir $sx, $sy">;
 }
 
 // Section 8.19.7 - NOP (No Operation)

@@ -155,14 +155,14 @@ static const unsigned F128RegDecoderTable[] = {
   VE::Q28, VE::Q29, VE::Q30, VE::Q31 };
 
 static const unsigned MiscRegDecoderTable[] = {
-  VE::USRCC, VE::PSW,   VE::SAR,   0,
-  0,         0,         0,         VE::PMMR,
-  VE::PMCR0, VE::PMCR1, VE::PMCR2, VE::PMCR3,
-  0,         0,         0,         0,
-  VE::PMC0,  VE::PMC1,  VE::PMC2,  VE::PMC3,
-  VE::PMC4,  VE::PMC5,  VE::PMC6,  VE::PMC7,
-  VE::PMC8,  VE::PMC9,  VE::PMC10, VE::PMC11,
-  VE::PMC12, VE::PMC13, VE::PMC14 };
+  VE::USRCC,      VE::PSW,        VE::SAR,        VE::NoRegister,
+  VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::PMMR,
+  VE::PMCR0,      VE::PMCR1,      VE::PMCR2,      VE::PMCR3,
+  VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::NoRegister,
+  VE::PMC0,       VE::PMC1,       VE::PMC2,       VE::PMC3,
+  VE::PMC4,       VE::PMC5,       VE::PMC6,       VE::PMC7,
+  VE::PMC8,       VE::PMC9,       VE::PMC10,      VE::PMC11,
+  VE::PMC12,      VE::PMC13,      VE::PMC14 };
 
 static const unsigned V64RegDecoderTable[] = {
   VE::V0,  VE::V1,  VE::V2,  VE::V3,
@@ -262,9 +262,11 @@ static DecodeStatus DecodeMISCRegisterClass(MCInst &Inst,
                                             unsigned RegNo,
                                             uint64_t Address,
                                             const void *Decoder) {
-  if (!isMiscReg(RegNo))
+  if (RegNo > 30)
     return MCDisassembler::Fail;
   unsigned Reg = MiscRegDecoderTable[RegNo];
+  if (Reg == VE::NoRegister)
+    return MCDisassembler::Fail;
   Inst.addOperand(MCOperand::createReg(Reg));
   return MCDisassembler::Success;
 }
@@ -338,8 +340,6 @@ static DecodeStatus DecodeTS1AMI64(MCInst &Inst, uint64_t insn,
                                    uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeTS1AMI32(MCInst &Inst, uint64_t insn,
                                    uint64_t Address, const void *Decoder);
-static DecodeStatus DecodeTS2AM(MCInst &Inst, uint64_t insn, uint64_t Address,
-                                const void *Decoder);
 static DecodeStatus DecodeCASI64(MCInst &Inst, uint64_t insn, uint64_t Address,
                                  const void *Decoder);
 static DecodeStatus DecodeCASI32(MCInst &Inst, uint64_t insn, uint64_t Address,
@@ -637,12 +637,6 @@ static DecodeStatus DecodeTS1AMI32(MCInst &MI, uint64_t insn, uint64_t Address,
                                    const void *Decoder) {
   return DecodeCAS(MI, insn, Address, Decoder, false, true,
                    DecodeI32RegisterClass);
-}
-
-static DecodeStatus DecodeTS2AM(MCInst &MI, uint64_t insn, uint64_t Address,
-                                const void *Decoder) {
-  return DecodeCAS(MI, insn, Address, Decoder, true, true,
-                   DecodeI64RegisterClass);
 }
 
 static DecodeStatus DecodeCASI64(MCInst &MI, uint64_t insn, uint64_t Address,
