@@ -28,9 +28,9 @@ define i32 @t_setjmp(i64 %n, %Foo* byval nocapture readnone align 8 %f) {
 ; CHECK-NEXT:    st %s0, 304(, %s17) # 8-byte Folded Spill
 ; CHECK-NEXT:    lea %s0, 15(, %s0)
 ; CHECK-NEXT:    and %s0, -16, %s0
-; CHECK-NEXT:    lea %s1, __llvm_grow_stack@lo
+; CHECK-NEXT:    lea %s1, __ve_grow_stack@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, __llvm_grow_stack@hi(, %s1)
+; CHECK-NEXT:    lea.sl %s12, __ve_grow_stack@hi(, %s1)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lea %s1, 240(, %s11)
 ; CHECK-NEXT:    st %s1, 328(, %s17)

@@ -30,6 +30,7 @@
 #include "sanitizer_placement_new.h"
 #include "sanitizer_platform_limits_posix.h"
 #include "sanitizer_procmaps.h"
+#include "sanitizer_ptrauth.h"
 
 #if !SANITIZER_IOS
 #include <crt_externs.h>  // for _NSGetEnviron
@@ -628,8 +629,6 @@ MacosVersion GetMacosVersionInternal() {
   if (*p != '.') return MACOS_VERSION_UNKNOWN;
 
   switch (major) {
-    case 9: return MACOS_VERSION_LEOPARD;
-    case 10: return MACOS_VERSION_SNOW_LEOPARD;
     case 11: return MACOS_VERSION_LION;
     case 12: return MACOS_VERSION_MOUNTAIN_LION;
     case 13: return MACOS_VERSION_MAVERICKS;
@@ -659,15 +658,6 @@ MacosVersion GetMacosVersion() {
     atomic_store(cache, result, memory_order_release);
   }
   return result;
-}
-
-bool PlatformHasDifferentMemcpyAndMemmove() {
-  // On OS X 10.7 memcpy() and memmove() are both resolved
-  // into memmove$VARIANT$sse42.
-  // See also https://github.com/google/sanitizers/issues/34.
-  // TODO(glider): need to check dynamically that memcpy() and memmove() are
-  // actually the same function.
-  return GetMacosVersion() == MACOS_VERSION_SNOW_LEOPARD;
 }
 
 uptr GetRSS() {
@@ -764,12 +754,6 @@ bool SignalContext::IsTrueFaultingAddress() const {
   // "Real" SIGSEGV codes (e.g., SEGV_MAPERR, SEGV_MAPERR) are non-zero.
   return si->si_signo == SIGSEGV && si->si_code != 0;
 }
-
-#if __has_feature(ptrauth_calls)
-# include <ptrauth.h>
-#else
-# define ptrauth_strip(value, key) (value)
-#endif
 
 #if defined(__aarch64__) && defined(arm_thread_state64_get_sp)
   #define AARCH64_GET_REG(r) \

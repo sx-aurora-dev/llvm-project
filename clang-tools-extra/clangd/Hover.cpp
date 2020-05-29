@@ -468,6 +468,7 @@ HoverInfo getHoverContents(const NamedDecl *D, const SymbolIndex *Index) {
   HoverInfo HI;
   const ASTContext &Ctx = D->getASTContext();
 
+  HI.AccessSpecifier = getAccessSpelling(D->getAccess()).str();
   HI.NamespaceScope = getNamespaceScope(D);
   if (!HI.NamespaceScope->empty())
     HI.NamespaceScope->append("::");
@@ -662,7 +663,9 @@ void addLayoutInfo(const NamedDecl &ND, HoverInfo &HI) {
   }
 
   if (const auto *FD = llvm::dyn_cast<FieldDecl>(&ND)) {
-    const auto *Record = FD->getParent()->getDefinition();
+    const auto *Record = FD->getParent();
+    if (Record)
+      Record = Record->getDefinition();
     if (Record && !Record->isDependentType()) {
       uint64_t OffsetBits = Ctx.getFieldOffset(FD);
       if (auto Size = Ctx.getTypeSizeInCharsIfKnown(FD->getType())) {
@@ -833,9 +836,12 @@ markup::Document HoverInfo::present() const {
       ScopeComment = "// In namespace " +
                      llvm::StringRef(*NamespaceScope).rtrim(':').str() + '\n';
     }
+    std::string DefinitionWithAccess = !AccessSpecifier.empty()
+                                           ? AccessSpecifier + ": " + Definition
+                                           : Definition;
     // Note that we don't print anything for global namespace, to not annoy
     // non-c++ projects or projects that are not making use of namespaces.
-    Output.addCodeBlock(ScopeComment + Definition);
+    Output.addCodeBlock(ScopeComment + DefinitionWithAccess);
   }
   return Output;
 }

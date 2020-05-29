@@ -97,10 +97,12 @@ bool GCOVFile::readGCDA(GCOVBuffer &buf) {
       return false;
     uint32_t cursor = buf.getCursor();
     if (tag == GCOV_TAG_OBJECT_SUMMARY) {
+      buf.readInt(RunCount);
+      buf.readInt(dummy);
+    } else if (tag == GCOV_TAG_PROGRAM_SUMMARY) {
       buf.readInt(dummy);
       buf.readInt(dummy);
       buf.readInt(RunCount);
-    } else if (tag == GCOV_TAG_PROGRAM_SUMMARY) {
       ++ProgramCount;
     } else if (tag == GCOV_TAG_FUNCTION) {
       if (length == 0) // Placeholder
@@ -650,9 +652,6 @@ std::string FileInfo::getCoveragePath(StringRef Filename,
 
 std::unique_ptr<raw_ostream>
 FileInfo::openCoveragePath(StringRef CoveragePath) {
-  if (Options.NoOutput)
-    return std::make_unique<raw_null_ostream>();
-
   std::error_code EC;
   auto OS =
       std::make_unique<raw_fd_ostream>(CoveragePath, EC, sys::fs::OF_Text);
@@ -676,8 +675,13 @@ void FileInfo::print(raw_ostream &InfoOS, StringRef MainFilename,
     auto AllLines = LineConsumer(Filename);
 
     std::string CoveragePath = getCoveragePath(Filename, MainFilename);
-    std::unique_ptr<raw_ostream> CovStream = openCoveragePath(CoveragePath);
-    raw_ostream &CovOS = *CovStream;
+    std::unique_ptr<raw_ostream> CovStream;
+    if (Options.NoOutput)
+      CovStream = std::make_unique<raw_null_ostream>();
+    else if (!Options.UseStdout)
+      CovStream = openCoveragePath(CoveragePath);
+    raw_ostream &CovOS =
+        !Options.NoOutput && Options.UseStdout ? llvm::outs() : *CovStream;
 
     CovOS << "        -:    0:Source:" << Filename << "\n";
     CovOS << "        -:    0:Graph:" << GCNOFile << "\n";
@@ -774,10 +778,12 @@ void FileInfo::print(raw_ostream &InfoOS, StringRef MainFilename,
     FileCoverages.push_back(std::make_pair(CoveragePath, FileCoverage));
   }
 
-  // FIXME: There is no way to detect calls given current instrumentation.
-  if (Options.FuncCoverage)
-    printFuncCoverage(InfoOS);
-  printFileCoverage(InfoOS);
+  if (!Options.UseStdout) {
+    // FIXME: There is no way to detect calls given current instrumentation.
+    if (Options.FuncCoverage)
+      printFuncCoverage(InfoOS);
+    printFileCoverage(InfoOS);
+  }
 }
 
 /// printFunctionSummary - Print function and block summary.

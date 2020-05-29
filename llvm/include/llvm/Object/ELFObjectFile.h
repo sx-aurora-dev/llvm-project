@@ -1221,7 +1221,6 @@ template <class ELFT> Triple::ArchType ELFObjectFile<ELFT>::getArch() const {
 
   case ELF::EM_VE:
     return Triple::ve;
-
   default:
     return Triple::UnknownArch;
   }

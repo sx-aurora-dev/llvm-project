@@ -41,14 +41,15 @@ class FileInfo;
 
 namespace GCOV {
 
-enum GCOVVersion { V402, V407, V800, V900 };
+enum GCOVVersion { V402, V407, V408, V800, V900 };
 
 /// A struct for passing gcov options between functions.
 struct Options {
-  Options(bool A, bool B, bool C, bool F, bool P, bool U, bool L, bool N, bool X)
+  Options(bool A, bool B, bool C, bool F, bool P, bool U, bool L, bool N,
+          bool T, bool X)
       : AllBlocks(A), BranchInfo(B), BranchCount(C), FuncCoverage(F),
         PreservePaths(P), UncondBranch(U), LongFileNames(L), NoOutput(N),
-        HashFilenames(X) {}
+        UseStdout(T), HashFilenames(X) {}
 
   bool AllBlocks;
   bool BranchInfo;
@@ -58,6 +59,7 @@ struct Options {
   bool UncondBranch;
   bool LongFileNames;
   bool NoOutput;
+  bool UseStdout;
   bool HashFilenames;
 };
 
@@ -106,8 +108,12 @@ public:
       // PR gcov-profile/48463
       Version = GCOV::V800;
       return true;
-    } else if (Major > 4 || (Major == 4 && Minor >= 7)) {
-      // r173147
+    } else if (Major > 4 || (Major == 4 && Minor >= 8)) {
+      // r189778: the exit block moved from the last to the second.
+      Version = GCOV::V408;
+      return true;
+    } else if (Major == 4 && Minor >= 7) {
+      // r173147: split checksum into cfg checksum and line checksum.
       Version = GCOV::V407;
       return true;
     } else {

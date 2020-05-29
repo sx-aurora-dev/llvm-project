@@ -168,14 +168,18 @@ namespace {
 
       // Same for a full set.
       bool addRequired(const RegSet &RS) {
-        return llvm::any_of(
-            RS, [this](unsigned Reg) { return this->addRequired(Reg); });
+        bool Changed = false;
+        for (unsigned Reg : RS)
+          Changed |= addRequired(Reg);
+        return Changed;
       }
 
       // Same for a full map.
       bool addRequired(const RegMap &RM) {
-        return llvm::any_of(
-            RM, [this](const auto &P) { return this->addRequired(P.first); });
+        bool Changed = false;
+        for (const auto &I : RM)
+          Changed |= addRequired(I.first);
+        return Changed;
       }
 
       // Live-out registers are either in regsLiveOut or vregsPassed.
@@ -1096,6 +1100,22 @@ void MachineVerifier::verifyPreISelGenericInstruction(const MachineInstr *MI) {
       report("gep offset operand must not be a pointer", MI);
 
     // TODO: Is the offset allowed to be a scalar with a vector?
+    break;
+  }
+  case TargetOpcode::G_PTRMASK: {
+    LLT DstTy = MRI->getType(MI->getOperand(0).getReg());
+    LLT SrcTy = MRI->getType(MI->getOperand(1).getReg());
+    LLT MaskTy = MRI->getType(MI->getOperand(2).getReg());
+    if (!DstTy.isValid() || !SrcTy.isValid() || !MaskTy.isValid())
+      break;
+
+    if (!DstTy.getScalarType().isPointer())
+      report("ptrmask result type must be a pointer", MI);
+
+    if (!MaskTy.getScalarType().isScalar())
+      report("ptrmask mask type must be an integer", MI);
+
+    verifyVectorElementMatch(DstTy, MaskTy, MI);
     break;
   }
   case TargetOpcode::G_SEXT:

@@ -211,8 +211,8 @@ static bool foldExtractExtract(Instruction &I, const TargetTransformInfo &TTI) {
 
   Value *V0, *V1;
   uint64_t C0, C1;
-  if (!match(Ext0, m_ExtractElement(m_Value(V0), m_ConstantInt(C0))) ||
-      !match(Ext1, m_ExtractElement(m_Value(V1), m_ConstantInt(C1))) ||
+  if (!match(Ext0, m_ExtractElt(m_Value(V0), m_ConstantInt(C0))) ||
+      !match(Ext1, m_ExtractElt(m_Value(V1), m_ConstantInt(C1))) ||
       V0->getType() != V1->getType())
     return false;
 
@@ -223,8 +223,8 @@ static bool foldExtractExtract(Instruction &I, const TargetTransformInfo &TTI) {
   //       probably becomes unnecessary.
   uint64_t InsertIndex = std::numeric_limits<uint64_t>::max();
   if (I.hasOneUse())
-    match(I.user_back(), m_InsertElement(m_Value(), m_Value(),
-                                         m_ConstantInt(InsertIndex)));
+    match(I.user_back(),
+          m_InsertElt(m_Value(), m_Value(), m_ConstantInt(InsertIndex)));
 
   Instruction *ConvertToShuffle;
   if (isExtractExtractCheap(Ext0, Ext1, I.getOpcode(), TTI, ConvertToShuffle,
@@ -266,8 +266,8 @@ static bool foldExtractExtract(Instruction &I, const TargetTransformInfo &TTI) {
 static bool foldBitcastShuf(Instruction &I, const TargetTransformInfo &TTI) {
   Value *V;
   ArrayRef<int> Mask;
-  if (!match(&I, m_BitCast(m_OneUse(m_ShuffleVector(m_Value(V), m_Undef(),
-                                                    m_Mask(Mask))))))
+  if (!match(&I, m_BitCast(
+                     m_OneUse(m_Shuffle(m_Value(V), m_Undef(), m_Mask(Mask))))))
     return false;
 
   // Disallow non-vector casts and length-changing shuffles.
@@ -303,8 +303,8 @@ static bool foldBitcastShuf(Instruction &I, const TargetTransformInfo &TTI) {
   // bitcast (shuf V, MaskC) --> shuf (bitcast V), MaskC'
   IRBuilder<> Builder(&I);
   Value *CastV = Builder.CreateBitCast(V, DestTy);
-  Value *Shuf = Builder.CreateShuffleVector(CastV, UndefValue::get(DestTy),
-                                            NewMask);
+  Value *Shuf =
+      Builder.CreateShuffleVector(CastV, UndefValue::get(DestTy), NewMask);
   I.replaceAllUsesWith(Shuf);
   return true;
 }
@@ -316,15 +316,14 @@ static bool scalarizeBinop(Instruction &I, const TargetTransformInfo &TTI) {
   if (!match(&I, m_BinOp(m_Instruction(Ins0), m_Instruction(Ins1))))
     return false;
 
-  // TODO: Loosen restriction for one-use by adjusting cost equation.
   // TODO: Deal with mismatched index constants and variable indexes?
   Constant *VecC0, *VecC1;
   Value *V0, *V1;
   uint64_t Index;
-  if (!match(Ins0, m_OneUse(m_InsertElement(m_Constant(VecC0), m_Value(V0),
-                                            m_ConstantInt(Index)))) ||
-      !match(Ins1, m_OneUse(m_InsertElement(m_Constant(VecC1), m_Value(V1),
-                                            m_SpecificInt(Index)))))
+  if (!match(Ins0, m_InsertElt(m_Constant(VecC0), m_Value(V0),
+                               m_ConstantInt(Index))) ||
+      !match(Ins1, m_InsertElt(m_Constant(VecC1), m_Value(V1),
+                               m_SpecificInt(Index))))
     return false;
 
   Type *ScalarTy = V0->getType();
@@ -342,7 +341,9 @@ static bool scalarizeBinop(Instruction &I, const TargetTransformInfo &TTI) {
   int InsertCost =
       TTI.getVectorInstrCost(Instruction::InsertElement, VecTy, Index);
   int OldCost = InsertCost + InsertCost + VectorOpCost;
-  int NewCost = ScalarOpCost + InsertCost;
+  int NewCost = ScalarOpCost + InsertCost +
+                !Ins0->hasOneUse() * InsertCost +
+                !Ins1->hasOneUse() * InsertCost;
 
   // We want to scalarize unless the vector variant actually has lower cost.
   if (OldCost < NewCost)
@@ -380,11 +381,10 @@ static bool runImpl(Function &F, const TargetTransformInfo &TTI,
     if (!DT.isReachableFromEntry(&BB))
       continue;
     // Do not delete instructions under here and invalidate the iterator.
-    // Walk the block backwards for efficiency. We're matching a chain of
-    // use->defs, so we're more likely to succeed by starting from the bottom.
+    // Walk the block forwards to enable simple iterative chains of transforms.
     // TODO: It could be more efficient to remove dead instructions
     //       iteratively in this loop rather than waiting until the end.
-    for (Instruction &I : make_range(BB.rbegin(), BB.rend())) {
+    for (Instruction &I : BB) {
       if (isa<DbgInfoIntrinsic>(I))
         continue;
       MadeChange |= foldExtractExtract(I, TTI);
@@ -417,6 +417,8 @@ public:
     AU.setPreservesCFG();
     AU.addPreserved<DominatorTreeWrapperPass>();
     AU.addPreserved<GlobalsAAWrapperPass>();
+    AU.addPreserved<AAResultsWrapperPass>();
+    AU.addPreserved<BasicAAWrapperPass>();
     FunctionPass::getAnalysisUsage(AU);
   }
 
@@ -450,5 +452,7 @@ PreservedAnalyses VectorCombinePass::run(Function &F,
   PreservedAnalyses PA;
   PA.preserveSet<CFGAnalyses>();
   PA.preserve<GlobalsAA>();
+  PA.preserve<AAManager>();
+  PA.preserve<BasicAA>();
   return PA;
 }

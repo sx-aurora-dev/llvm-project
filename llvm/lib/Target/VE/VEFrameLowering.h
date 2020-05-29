@@ -28,10 +28,10 @@ public:
   void emitPrologue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
   void emitEpilogue(MachineFunction &MF, MachineBasicBlock &MBB) const override;
   void emitPrologueInsns(MachineFunction &MF, MachineBasicBlock &MBB,
-                         MachineBasicBlock::iterator MBBI, int NumBytes,
+                         MachineBasicBlock::iterator MBBI, uint64_t NumBytes,
                          bool RequireFPUpdate) const;
   void emitEpilogueInsns(MachineFunction &MF, MachineBasicBlock &MBB,
-                         MachineBasicBlock::iterator MBBI, int NumBytes,
+                         MachineBasicBlock::iterator MBBI, uint64_t NumBytes,
                          bool RequireFPUpdate) const;
 
   MachineBasicBlock::iterator
@@ -73,7 +73,7 @@ private:
   // Emits code for adjusting SP in function prologue/epilogue.
   void emitSPAdjustment(MachineFunction &MF, MachineBasicBlock &MBB,
                         MachineBasicBlock::iterator MBBI, int64_t NumBytes,
-                        int Align = 0) const;
+                        MaybeAlign MayAlign = MaybeAlign()) const;
 
   // Emits code for extending SP in function prologue/epilogue.
   void emitSPExtend(MachineFunction &MF, MachineBasicBlock &MBB,
