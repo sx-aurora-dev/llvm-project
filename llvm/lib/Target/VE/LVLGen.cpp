@@ -85,7 +85,7 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
       if (!hasRegForVL || RegForVL != Reg) {
         LLVM_DEBUG(dbgs() << "Generate a LVL instruction to load "
                 << RegName(Reg) << ".\n");
-        BuildMI(MBB, I, MI->getDebugLoc(), TII->get(VE::LVL)).addReg(Reg);
+        BuildMI(MBB, I, MI->getDebugLoc(), TII->get(VE::LVLr)).addReg(Reg);
         hasRegForVL = true;
         RegForVL = Reg;
         Changed = true;
