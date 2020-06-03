@@ -208,7 +208,9 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     if (MI.getOperand(4).isImm()) {
       int64_t val = MI.getOperand(4).getImm();
       // TODO: if 'val' is already assigned to a register, then use it
-      VLReg = MF.getRegInfo().createVirtualRegister(&VE::I32RegClass);
+      // FIXME: it would be better to scavenge a register here instead of
+      // reserving SX16 all of the time.
+      VLReg = VE::SW16;
       BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEA32zii), VLReg)
           .addImm(0).addImm(0).addImm(val);
     } else {

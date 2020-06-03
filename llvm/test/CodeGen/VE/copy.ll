@@ -78,8 +78,8 @@ define fp128 @copyf128(fp128, fp128 returned) {
 define x86_regcallcc <256 x i32> @__regcall3__copyv256i32(<256 x i32>, <256 x i32> returned) {
 ; CHECK-LABEL: __regcall3__copyv256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret <256 x i32> %1
@@ -89,8 +89,8 @@ define x86_regcallcc <256 x i32> @__regcall3__copyv256i32(<256 x i32>, <256 x i3
 define x86_regcallcc <256 x i64> @__regcall3__copyv256i64(<256 x i64>, <256 x i64> returned) {
 ; CHECK-LABEL: __regcall3__copyv256i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret <256 x i64> %1
@@ -100,8 +100,8 @@ define x86_regcallcc <256 x i64> @__regcall3__copyv256i64(<256 x i64>, <256 x i6
 define x86_regcallcc <256 x float> @__regcall3__copyv256f32(<256 x float>, <256 x float> returned) {
 ; CHECK-LABEL: __regcall3__copyv256f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret <256 x float> %1
@@ -111,8 +111,8 @@ define x86_regcallcc <256 x float> @__regcall3__copyv256f32(<256 x float>, <256 
 define x86_regcallcc <256 x double> @__regcall3__copyv256f64(<256 x double>, <256 x double> returned) {
 ; CHECK-LABEL: __regcall3__copyv256f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret <256 x double> %1
@@ -122,8 +122,8 @@ define x86_regcallcc <256 x double> @__regcall3__copyv256f64(<256 x double>, <25
 define x86_regcallcc <512 x i32> @__regcall3__copyv512i32(<512 x i32>, <512 x i32> returned) {
 ; CHECK-LABEL: __regcall3__copyv512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret <512 x i32> %1
@@ -133,8 +133,8 @@ define x86_regcallcc <512 x i32> @__regcall3__copyv512i32(<512 x i32>, <512 x i3
 define x86_regcallcc <512 x float> @__regcall3__copyv512f32(<512 x float>, <512 x float> returned) {
 ; CHECK-LABEL: __regcall3__copyv512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret <512 x float> %1
