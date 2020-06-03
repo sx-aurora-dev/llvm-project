@@ -372,7 +372,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       Offset += 8;
     }
     if (isKill)
-      LastMI->addRegisterKilled(SrcLoReg, this);
+      LastMI->addRegisterKilled(SrcLoReg, this, true);
     // store high part of VMP
     for (int i = 0; i < 3; ++i) {
       BuildMI(*MI.getParent(), II, dl, TII.get(VE::svm_smI), TmpReg)
@@ -388,9 +388,9 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       BuildMI(*MI.getParent(), II, dl, TII.get(VE::svm_smI), TmpReg)
         .addReg(SrcHiReg).addImm(3);
     if (isKill) {
-      LastMI->addRegisterKilled(SrcHiReg, this);
+      LastMI->addRegisterKilled(SrcHiReg, this, true);
       // Add implicit super-register kills to the particular MI.
-      LastMI->addRegisterKilled(SrcReg, this);
+      LastMI->addRegisterKilled(SrcReg, this, true);
     }
     MI.setDesc(TII.get(VE::STrii));
     MI.getOperand(3).ChangeToRegister(TmpReg, false, false, true);

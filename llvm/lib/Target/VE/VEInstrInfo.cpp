@@ -326,7 +326,7 @@ void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
   // Add implicit super-register defs and kills to the last MovMI.
   MovMI->addRegisterDefined(DestReg, TRI);
   if (KillSrc)
-    MovMI->addRegisterKilled(SrcReg, TRI);
+    MovMI->addRegisterKilled(SrcReg, TRI, true);
 }
 
 static bool IsAliasOfSX(Register Reg) {
