@@ -121,6 +121,7 @@ define signext i32 @func32is() {
 ; CHECK-LABEL: func32is:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, -65536
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i32 @llvm.bitreverse.i32(i32 65535)
   ret i32 %r
@@ -130,6 +131,7 @@ define zeroext i32 @func32iz() {
 ; CHECK-LABEL: func32iz:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, -65536
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i32 @llvm.bitreverse.i32(i32 65535)
   ret i32 %r
@@ -139,6 +141,7 @@ define signext i16 @func16is() {
 ; CHECK-LABEL: func16is:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, -256
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i16 @llvm.bitreverse.i16(i16 255)
   ret i16 %r
@@ -148,6 +151,7 @@ define zeroext i16 @func16iz() {
 ; CHECK-LABEL: func16iz:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 65280
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i16 @llvm.bitreverse.i16(i16 255)
   ret i16 %r

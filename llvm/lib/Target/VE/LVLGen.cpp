@@ -21,6 +21,7 @@ using namespace llvm;
 namespace {
   struct LVLGen : public MachineFunctionPass {
     const TargetInstrInfo *TII;
+    const TargetRegisterInfo *TRI;
 
     static char ID;
     LVLGen() : MachineFunctionPass(ID) {}
@@ -92,14 +93,12 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
       } else {
         LLVM_DEBUG(dbgs() << "Reuse current VL.\n");
       }
-    } else if (hasRegForVL) {
-      for (const MachineOperand &MO : MI->defs()) {
-        if (MO.isReg() && MO.getReg() == RegForVL) {
-          LLVM_DEBUG(dbgs() << RegName(RegForVL) << " is killed: ");
-          LLVM_DEBUG(MI->dump());
-          hasRegForVL = false;
-          break;
-        }
+    }
+    if (hasRegForVL) {
+      if (MI->killsRegister(RegForVL, TRI)) {
+        LLVM_DEBUG(dbgs() << RegName(RegForVL) << " is killed: ");
+        LLVM_DEBUG(MI->dump());
+        hasRegForVL = false;
       }
     }
 
@@ -118,6 +117,7 @@ bool LVLGen::runOnMachineFunction(MachineFunction &F)
 
   const VESubtarget& Subtarget = F.getSubtarget<VESubtarget>();
   TII = Subtarget.getInstrInfo();
+  TRI = Subtarget.getRegisterInfo();
 
   for (MachineFunction::iterator FI = F.begin(), FE = F.end();
        FI != FE; ++FI)

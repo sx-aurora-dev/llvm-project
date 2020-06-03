@@ -4,6 +4,7 @@ define i32 @i() {
 ; CHECK-LABEL: i:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, -2147483648
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret i32 -2147483648
 }
@@ -12,7 +13,6 @@ define i32 @ui() {
 ; CHECK-LABEL: ui:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, -2147483648
-; CHECK-NEXT:    or %s11, 0, %s9
   ret i32 -2147483648
 }
 

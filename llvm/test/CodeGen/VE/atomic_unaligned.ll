@@ -537,6 +537,7 @@ define i32 @test_atomic_exchange_4() {
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
 ; CHECK-NEXT:    fencem 3
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 seq_cst
@@ -555,6 +556,7 @@ define i32 @test_atomic_exchange_4_align1() {
 ; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 ; CHECK-NEXT:    ts1am.w %s0, 1(%s1), 15
 ; CHECK-NEXT:    fencem 3
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 1886417008 seq_cst

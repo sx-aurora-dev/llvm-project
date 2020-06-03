@@ -779,6 +779,7 @@ define i32 @test_atomic_exchange_4() {
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
 ; CHECK-NEXT:    fencem 3
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 seq_cst
@@ -794,6 +795,7 @@ define i32 @test_atomic_exchange_4_relaxed() {
 ; CHECK-NEXT:    lea.sl %s1, i@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 monotonic
@@ -810,6 +812,7 @@ define i32 @test_atomic_exchange_4_acquire() {
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
 ; CHECK-NEXT:    fencem 2
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 acquire
@@ -826,6 +829,7 @@ define i32 @test_atomic_exchange_4_release() {
 ; CHECK-NEXT:    lea.sl %s1, i@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 release
@@ -843,6 +847,7 @@ define i32 @test_atomic_exchange_4_ac1_rel() {
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
 ; CHECK-NEXT:    fencem 2
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 acq_rel

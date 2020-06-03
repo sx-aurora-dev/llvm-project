@@ -1012,8 +1012,6 @@ let cx = 0, DecoderMethod = "DecodeLoadI64" in
 defm LEA : RMm<"lea", 0x06, I64>;
 let cx = 1, DecoderMethod = "DecodeLoadI64" in
 defm LEASL : RMm<"lea.sl", 0x06, I64>;
-let cx = 0, DecoderMethod = "DecodeLoadI32", isCodeGenOnly = 1 in
-defm LEA32 : RMm<"lea", 0x06, I32>;
 
 def : Pat<(iPTR ADDRrri:$addr), (LEArri MEMrri:$addr)>;
 def : Pat<(iPTR ADDRrii:$addr), (LEArii MEMrii:$addr)>;
@@ -1717,7 +1715,8 @@ let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
 def : Pat<(i32 simm7:$val), (OR32im (LO7 $val), 0)>;
 def : Pat<(i64 simm7:$val), (ORim (LO7 $val), 0)>;
 // Medium immediates.
-def : Pat<(i32 simm32:$val), (LEA32zii 0, 0, (LO32 $val))>;
+def : Pat<(i32 simm32:$val),
+          (EXTRACT_SUBREG (LEAzii 0, 0, (LO32 $val)), sub_i32)>;
 def : Pat<(i64 simm32:$val), (LEAzii 0, 0, (LO32 $val))>;
 def : Pat<(i64 uimm32:$val), (ANDrm (LEAzii 0, 0, (LO32 $val)), !add(32, 64))>;
 // Arbitrary immediates.

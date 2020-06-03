@@ -32,12 +32,12 @@ define x86_regcallcc void @storev256i64stk(<256 x i64>) {
 define x86_regcallcc void @storev256i64com(<256 x i64>) {
 ; CHECK-LABEL: storev256i64com:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, v256i64@lo
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s0, v256i64@hi(, %s0)
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0,8,%s0
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s1, v256i64@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s1, v256i64@hi(, %s1)
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vst %v0,8,%s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   store <256 x i64> %0, <256 x i64>* @v256i64, align 16
   ret void

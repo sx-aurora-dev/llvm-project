@@ -2569,10 +2569,14 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
   EVT v256i1 = EVT::getVectorVT(*DAG.getContext(), EVT::getIntegerVT(*DAG.getContext(), 1), 256);
 
   SDValue VL = SDValue(
-    DAG.getMachineNode(VE::LEA32zii, dl, MVT::i32,
+    DAG.getMachineNode(VE::LEAzii, dl, MVT::i64,
                        DAG.getTargetConstant(0, dl, MVT::i32),
                        DAG.getTargetConstant(0, dl, MVT::i32),
                        DAG.getTargetConstant(resultSize, dl, MVT::i32)), 0);
+  SDValue SubLow32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
+  VL = SDValue(DAG.getMachineNode(
+      TargetOpcode::EXTRACT_SUBREG, dl, i32,
+      VL, SubLow32), 0);
   //SDValue VL = DAG.getTargetConstant(resultSize, dl, MVT::i32);
   SDValue firstrotated
 	  = firstrot % 256 != 0

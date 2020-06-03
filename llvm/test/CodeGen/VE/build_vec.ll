@@ -82,12 +82,12 @@ entry:
 define i32 @vseq_v4i32() {
 ; CHECK-LABEL: vseq_v4i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, 4
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
+; CHECK-NEXT:    lea %s0, 4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
@@ -102,12 +102,12 @@ entry:
 define i32 @vseq_v256i32() {
 ; CHECK-LABEL: vseq_v256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0

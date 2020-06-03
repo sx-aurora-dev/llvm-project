@@ -205,13 +205,18 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
 
     // Prepare for VL
     unsigned VLReg;
+    bool isKillSuper = false;
+    unsigned SuperReg;
+    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
     if (MI.getOperand(4).isImm()) {
       int64_t val = MI.getOperand(4).getImm();
       // TODO: if 'val' is already assigned to a register, then use it
       // FIXME: it would be better to scavenge a register here instead of
       // reserving SX16 all of the time.
-      VLReg = VE::SW16;
-      BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEA32zii), VLReg)
+      SuperReg = VE::SX16;
+      isKillSuper = true;
+      VLReg = TRI->getSubReg(SuperReg, VE::sub_i32);
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEAzii), SuperReg)
           .addImm(0).addImm(0).addImm(val);
     } else {
       VLReg = MI.getOperand(4).getReg();
@@ -227,6 +232,8 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     MI.getOperand(2).ChangeToRegister(Tmp1, false, false, true);
     MI.getOperand(3).ChangeToRegister(VLReg, false, false, true);
     MI.RemoveOperand(4);
+    if (isKillSuper)
+      MI.addRegisterKilled(SuperReg, TRI, true);
     return;
   }
 
