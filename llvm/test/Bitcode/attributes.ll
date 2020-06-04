@@ -380,8 +380,8 @@ define void @f64(i32* preallocated(i32) %a)
   ret void
 }
 
-; CHECK: define <8 x double> @f64(<8 x double> passthru %0, <8 x i1> mask %1, i32 vlen %2) {
-define <8 x double> @f64(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
+; CHECK: define <8 x double> @f65(<8 x double> passthru %0, <8 x i1> mask %1, i32 vlen %2) {
+define <8 x double> @f65(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
   ret <8 x double> undef
 }
 
