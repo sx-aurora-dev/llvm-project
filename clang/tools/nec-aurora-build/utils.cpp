@@ -12,7 +12,7 @@ const std::string ClangCompilerCmd = TARGET_COMPILER_CLANG " --target=ve-linux";
 const std::string RVClangCompilerCmd = TARGET_COMPILER_RVCLANG " --target=ve-linux";
 const std::string NCCCompilerCmd = TARGET_COMPILER_NCC;
 
-std::string CompilerCmd = ClangCompilerCmd;
+std::string CompilerCmd;
 
 int configureTargetCompiler(const std::string& CompilerName) {
   if (CompilerName.find("path:") == 0) {
@@ -36,6 +36,13 @@ int configureTargetCompiler(const std::string& CompilerName) {
 
 
 const char *getTargetCompiler() {
+  // If no option was specified on the command line chose the builtin default
+  if (CompilerCmd.empty()) {
+#ifndef DEFAULT_TARGET_COMPILER_OPTION
+#error "DEFAULT_TARGET_COMPILER_OPTION not specified during build!" 
+#endif
+    configureTargetCompiler(DEFAULT_TARGET_COMPILER_OPTION);
+  }
   return CompilerCmd.c_str();
 }
 

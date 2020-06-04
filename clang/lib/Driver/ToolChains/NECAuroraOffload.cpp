@@ -12,8 +12,6 @@ using namespace clang::driver;
 using namespace clang::driver::tools;
 using namespace llvm::opt;
 
-const char* DefaultOffloadCompiler = "clang";
-
 void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
                                           const InputInfo &Output,
                                           const InputInfoList &Inputs,
@@ -48,7 +46,8 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
     }
   }
 
-  const char* compilerName = DefaultOffloadCompiler;
+  // Uses the default specified in the sotoc offload wrapper (tools/)
+  const char* compilerName = NULL;
 
   for (const auto &A : Args) {
     if (A->getOption().getKind() != Option::InputClass &&
@@ -118,8 +117,10 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
   RenderExtraToolArgs(JA, CmdArgs);
 
   // Keep this in sync with the compiler option in necaurora-ofld-wrapper.cpp (FIXME)
-  CmdArgs.push_back("--nec-target-compiler"); 
-  CmdArgs.push_back(compilerName);
+  if (compilerName) {
+    CmdArgs.push_back("--nec-target-compiler"); 
+    CmdArgs.push_back(compilerName);
+  }
 
   if (Output.isFilename()) {
     CmdArgs.push_back("-o");
