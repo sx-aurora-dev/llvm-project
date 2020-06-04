@@ -1070,15 +1070,15 @@ let cx = 1, DecoderMethod = "DecodeLoadI32" in
 defm LDLZX : LOADm<"ldl.zx", 0x03, I32, i32, load>;
 
 // Section 8.2.5 - LD2B
-let DecoderMethod = "DecodeLoadI16" in
+let DecoderMethod = "DecodeLoadI32" in
 defm LD2BSX : LOADm<"ld2b.sx", 0x04, I32, i32, sextloadi16>;
-let cx = 1, DecoderMethod = "DecodeLoadI16" in
+let cx = 1, DecoderMethod = "DecodeLoadI32" in
 defm LD2BZX : LOADm<"ld2b.zx", 0x04, I32, i32, zextloadi16>;
 
 // Section 8.2.6 - LD1B
-let DecoderMethod = "DecodeLoadI8" in
+let DecoderMethod = "DecodeLoadI32" in
 defm LD1BSX : LOADm<"ld1b.sx", 0x05, I32, i32, sextloadi8>;
-let cx = 1, DecoderMethod = "DecodeLoadI8" in
+let cx = 1, DecoderMethod = "DecodeLoadI32" in
 defm LD1BZX : LOADm<"ld1b.zx", 0x05, I32, i32, zextloadi8>;
 
 // LDQ pseudo instructions
@@ -1135,11 +1135,11 @@ let DecoderMethod = "DecodeStoreI32" in
 defm STL : STOREm<"stl", 0x13, I32, i32, store>;
 
 // Section 8.2.10 - ST2B
-let DecoderMethod = "DecodeStoreI16" in
+let DecoderMethod = "DecodeStoreI32" in
 defm ST2B : STOREm<"st2b", 0x14, I32, i32, truncstorei16>;
 
 // Section 8.2.11 - ST1B
-let DecoderMethod = "DecodeStoreI8" in
+let DecoderMethod = "DecodeStoreI32" in
 defm ST1B : STOREm<"st1b", 0x15, I32, i32, truncstorei8>;
 
 // STQ pseudo instructions

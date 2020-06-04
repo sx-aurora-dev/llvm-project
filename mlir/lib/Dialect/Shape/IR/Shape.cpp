@@ -98,15 +98,6 @@ void ShapeDialect::printType(Type type, DialectAsmPrinter &os) const {
 // AnyOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult
-AnyOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
-                        ValueRange operands, DictionaryAttr attributes,
-                        RegionRange regions,
-                        SmallVectorImpl<Type> &inferredReturnTypes) {
-  inferredReturnTypes.push_back(ShapeType::get(context));
-  return success();
-}
-
 //===----------------------------------------------------------------------===//
 // AssumingOp
 //===----------------------------------------------------------------------===//
@@ -155,15 +146,6 @@ static void print(OpAsmPrinter &p, AssumingOp op) {
 // BroadcastOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult
-BroadcastOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
-                              ValueRange operands, DictionaryAttr attributes,
-                              RegionRange regions,
-                              SmallVectorImpl<Type> &inferredReturnTypes) {
-  inferredReturnTypes.push_back(ShapeType::get(context));
-  return success();
-}
-
 OpFoldResult BroadcastOp::fold(ArrayRef<Attribute> operands) {
   if (!operands[0] || !operands[1])
     return nullptr;
@@ -176,6 +158,24 @@ OpFoldResult BroadcastOp::fold(ArrayRef<Attribute> operands) {
   // TODO: Fold to an "error".
   if (!OpTrait::util::getBroadcastedShape(lhsShape, rhsShape, resultShape))
     return nullptr;
+  Builder builder(getContext());
+  return builder.getIndexTensorAttr(resultShape);
+}
+
+//===----------------------------------------------------------------------===//
+// ConcatOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult ConcatOp::fold(ArrayRef<Attribute> operands) {
+  if (!operands[0] || !operands[1])
+    return nullptr;
+  auto lhsShape = llvm::to_vector<6>(
+      operands[0].cast<DenseIntElementsAttr>().getValues<int64_t>());
+  auto rhsShape = llvm::to_vector<6>(
+      operands[1].cast<DenseIntElementsAttr>().getValues<int64_t>());
+  SmallVector<int64_t, 6> resultShape;
+  resultShape.append(lhsShape.begin(), lhsShape.end());
+  resultShape.append(rhsShape.begin(), rhsShape.end());
   Builder builder(getContext());
   return builder.getIndexTensorAttr(resultShape);
 }
@@ -221,34 +221,29 @@ static ParseResult parseConstShapeOp(OpAsmParser &parser,
   return success();
 }
 
-OpFoldResult ConstShapeOp::fold(ArrayRef<Attribute>) { return shape(); }
+OpFoldResult ConstShapeOp::fold(ArrayRef<Attribute>) { return shapeAttr(); }
 
 //===----------------------------------------------------------------------===//
 // ConstSizeOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult
-ConstSizeOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
-                              ValueRange operands, DictionaryAttr attributes,
-                              RegionRange regions,
-                              SmallVectorImpl<Type> &inferredReturnTypes) {
-  inferredReturnTypes.push_back(SizeType::get(context));
-  return success();
-}
-
 OpFoldResult ConstSizeOp::fold(ArrayRef<Attribute>) { return valueAttr(); }
+
+//===----------------------------------------------------------------------===//
+// IndexToSizeOp
+//===----------------------------------------------------------------------===//
+
+OpFoldResult IndexToSizeOp::fold(ArrayRef<Attribute> operands) {
+  // Constant values of both types, `shape.size` and `index`, are represented as
+  // `IntegerAttr`s which makes constant folding simple.
+  if (Attribute arg = operands[0])
+    return arg;
+  return {};
+}
 
 //===----------------------------------------------------------------------===//
 // FromExtentsOp
 //===----------------------------------------------------------------------===//
-
-LogicalResult FromExtentsOp::inferReturnTypes(
-    MLIRContext *context, Optional<Location> location, ValueRange operands,
-    DictionaryAttr attributes, RegionRange regions,
-    SmallVectorImpl<Type> &inferredReturnTypes) {
-  inferredReturnTypes.push_back(ShapeType::get(context));
-  return success();
-}
 
 OpFoldResult FromExtentsOp::fold(ArrayRef<Attribute> operands) {
   if (llvm::any_of(operands, [](Attribute a) { return !a; }))
@@ -264,15 +259,6 @@ OpFoldResult FromExtentsOp::fold(ArrayRef<Attribute> operands) {
 // GetExtentOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult
-GetExtentOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
-                              ValueRange operands, DictionaryAttr attributes,
-                              RegionRange regions,
-                              SmallVectorImpl<Type> &inferredReturnTypes) {
-  inferredReturnTypes.push_back(SizeType::get(context));
-  return success();
-}
-
 OpFoldResult GetExtentOp::fold(ArrayRef<Attribute> operands) {
   auto elements = operands[0].dyn_cast_or_null<DenseIntElementsAttr>();
   if (!elements)
@@ -285,17 +271,26 @@ OpFoldResult GetExtentOp::fold(ArrayRef<Attribute> operands) {
 }
 
 //===----------------------------------------------------------------------===//
-// ShapeOfOp
+// NumElementsOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult
-ShapeOfOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
-                            ValueRange operands, DictionaryAttr attributes,
-                            RegionRange regions,
-                            SmallVectorImpl<Type> &inferredReturnTypes) {
-  inferredReturnTypes.push_back(ShapeType::get(context));
-  return success();
+OpFoldResult NumElementsOp::fold(ArrayRef<Attribute> operands) {
+
+  // Fold only when argument constant.
+  Attribute shape = operands[0];
+  if (!shape)
+    return {};
+
+  APInt product(64, 1);
+  for (auto value : shape.cast<DenseIntElementsAttr>())
+    product *= value;
+  Builder builder(getContext());
+  return builder.getIndexAttr(product.getLimitedValue());
 }
+
+//===----------------------------------------------------------------------===//
+// ShapeOfOp
+//===----------------------------------------------------------------------===//
 
 OpFoldResult ShapeOfOp::fold(ArrayRef<Attribute>) {
   auto type = getOperand().getType().dyn_cast<ShapedType>();
@@ -306,19 +301,20 @@ OpFoldResult ShapeOfOp::fold(ArrayRef<Attribute>) {
 }
 
 //===----------------------------------------------------------------------===//
-// SplitAtOp
+// SizeToIndexOp
 //===----------------------------------------------------------------------===//
 
-LogicalResult
-SplitAtOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
-                            ValueRange operands, DictionaryAttr attributes,
-                            RegionRange regions,
-                            SmallVectorImpl<Type> &inferredReturnTypes) {
-  auto shapeType = ShapeType::get(context);
-  inferredReturnTypes.push_back(shapeType);
-  inferredReturnTypes.push_back(shapeType);
-  return success();
+OpFoldResult SizeToIndexOp::fold(ArrayRef<Attribute> operands) {
+  // Constant values of both types, `shape.size` and `index`, are represented as
+  // `IntegerAttr`s which makes constant folding simple.
+  if (Attribute arg = operands[0])
+    return arg;
+  return {};
 }
+
+//===----------------------------------------------------------------------===//
+// SplitAtOp
+//===----------------------------------------------------------------------===//
 
 LogicalResult SplitAtOp::fold(ArrayRef<Attribute> operands,
                               SmallVectorImpl<OpFoldResult> &results) {
@@ -339,34 +335,6 @@ LogicalResult SplitAtOp::fold(ArrayRef<Attribute> operands,
   results.push_back(builder.getIndexTensorAttr(shape.take_front(splitPoint)));
   results.push_back(builder.getIndexTensorAttr(shape.drop_front(splitPoint)));
   return success();
-}
-
-//===----------------------------------------------------------------------===//
-// ConcatOp
-//===----------------------------------------------------------------------===//
-
-LogicalResult
-ConcatOp::inferReturnTypes(MLIRContext *context, Optional<Location> location,
-                           ValueRange operands, DictionaryAttr attributes,
-                           RegionRange regions,
-                           SmallVectorImpl<Type> &inferredReturnTypes) {
-  auto shapeType = ShapeType::get(context);
-  inferredReturnTypes.push_back(shapeType);
-  return success();
-}
-
-OpFoldResult ConcatOp::fold(ArrayRef<Attribute> operands) {
-  if (!operands[0] || !operands[1])
-    return nullptr;
-  auto lhsShape = llvm::to_vector<6>(
-      operands[0].cast<DenseIntElementsAttr>().getValues<int64_t>());
-  auto rhsShape = llvm::to_vector<6>(
-      operands[1].cast<DenseIntElementsAttr>().getValues<int64_t>());
-  SmallVector<int64_t, 6> resultShape;
-  resultShape.append(lhsShape.begin(), lhsShape.end());
-  resultShape.append(rhsShape.begin(), rhsShape.end());
-  Builder builder(getContext());
-  return builder.getIndexTensorAttr(resultShape);
 }
 
 //===----------------------------------------------------------------------===//

@@ -30,3 +30,7 @@ lea %s11, (,%s12)
 # CHECK-INST: lea.sl %s11, -1(%s13, %s11)
 # CHECK-ENCODING: encoding: [0xff,0xff,0xff,0xff,0x8b,0x8d,0x8b,0x06]
 lea.sl %s11, -1(%s13, %s11)
+
+# CHECK-INST: lea.sl %s11, -1(-64, %s11)
+# CHECK-ENCODING: encoding: [0xff,0xff,0xff,0xff,0x8b,0x40,0x8b,0x06]
+lea.sl %s11, -1(-64, %s11)

@@ -236,6 +236,10 @@ PrintingPolicy CGDebugInfo::getPrintingPolicy() const {
   if (CGM.getCodeGenOpts().EmitCodeView) {
     PP.MSVCFormatting = true;
     PP.SplitTemplateClosers = true;
+  } else {
+    // For DWARF, printing rules are underspecified.
+    // SplitTemplateClosers yields better interop with GCC and GDB (PR46052).
+    PP.SplitTemplateClosers = true;
   }
 
   // Apply -fdebug-prefix-map.
@@ -3896,7 +3900,7 @@ void CGDebugInfo::EmitFunctionDecl(GlobalDecl GD, SourceLocation Loc,
   if (IsDeclForCallSite)
     Fn->setSubprogram(SP);
 
-  DBuilder.retainType(SP);
+  DBuilder.finalizeSubprogram(SP);
 }
 
 void CGDebugInfo::EmitFuncDeclForCallSite(llvm::CallBase *CallOrInvoke,

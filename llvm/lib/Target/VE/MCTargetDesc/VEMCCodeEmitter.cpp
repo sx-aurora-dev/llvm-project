@@ -13,10 +13,8 @@
 #include "MCTargetDesc/VEFixupKinds.h"
 #include "VE.h"
 #include "VEMCExpr.h"
-#include "VEMCTargetDesc.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
-#include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCCodeEmitter.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
@@ -26,9 +24,6 @@
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCSymbol.h"
-#include "llvm/MC/SubtargetFeature.h"
-#include "llvm/Support/Casting.h"
-#include "llvm/Support/Endian.h"
 #include "llvm/Support/EndianStream.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
@@ -120,13 +115,13 @@ void VEMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   }
 #endif
 
-  ++MCNumEmitted;  // Keep track of the # of mi's emitted.
+  ++MCNumEmitted; // Keep track of the # of mi's emitted.
 }
 
-unsigned VEMCCodeEmitter::
-getMachineOpValue(const MCInst &MI, const MCOperand &MO,
-                  SmallVectorImpl<MCFixup> &Fixups,
-                  const MCSubtargetInfo &STI) const {
+unsigned VEMCCodeEmitter::getMachineOpValue(const MCInst &MI,
+                                            const MCOperand &MO,
+                                            SmallVectorImpl<MCFixup> &Fixups,
+                                            const MCSubtargetInfo &STI) const {
   if (MO.isReg())
     return Ctx.getRegisterInfo()->getEncodingValue(MO.getReg());
 

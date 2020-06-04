@@ -295,14 +295,18 @@ std::string tools::getCPUName(const ArgList &Args, const llvm::Triple &T,
     std::string TargetCPUName = ppc::getPPCTargetCPU(Args);
     // LLVM may default to generating code for the native CPU,
     // but, like gcc, we default to a more generic option for
-    // each architecture. (except on Darwin)
-    if (TargetCPUName.empty() && !T.isOSDarwin()) {
-      if (T.getArch() == llvm::Triple::ppc64)
-        TargetCPUName = "ppc64";
-      else if (T.getArch() == llvm::Triple::ppc64le)
-        TargetCPUName = "ppc64le";
-      else
-        TargetCPUName = "ppc";
+    // each architecture. (except on AIX or Darwin)
+    if (TargetCPUName.empty()) {
+      if (T.isOSAIX())
+        TargetCPUName = "pwr4";
+      else if (!T.isOSDarwin()) {
+        if (T.getArch() == llvm::Triple::ppc64)
+          TargetCPUName = "ppc64";
+        else if (T.getArch() == llvm::Triple::ppc64le)
+          TargetCPUName = "ppc64le";
+        else
+          TargetCPUName = "ppc";
+      }
     }
     return TargetCPUName;
   }
@@ -1239,7 +1243,14 @@ static void AddUnwindLibrary(const ToolChain &TC, const Driver &D,
   case ToolChain::UNW_CompilerRT:
     if (LGT == LibGccType::StaticLibGcc)
       CmdArgs.push_back("-l:libunwind.a");
-    else
+    else if (TC.getTriple().isOSCygMing()) {
+      if (LGT == LibGccType::SharedLibGcc)
+        CmdArgs.push_back("-l:libunwind.dll.a");
+      else
+        // Let the linker choose between libunwind.dll.a and libunwind.a
+        // depending on what's available, and depending on the -static flag
+        CmdArgs.push_back("-lunwind");
+    } else
       CmdArgs.push_back("-l:libunwind.so");
     break;
   }
