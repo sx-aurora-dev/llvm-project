@@ -18,7 +18,7 @@ find_program(NECAURORA_TARGET_COMPILER_NCC
 if (NECAURORA_TARGET_COMPILER_NCC)
     set(TARGET_COMPILER_NCC "${NECAURORA_TARGET_COMPILER_NCC}")
 else()
-    message(WARNING "Could not find ncc compiler. ncc will not be avaible as VE target compiler")
+    message(WARNING "Could not find ncc compiler. ncc will not be available as VE target compiler")
 endif()
 
 # Set Clang and RVClang target compiler variables
@@ -32,6 +32,11 @@ set(NECAURORA_TARGET_COMPILER_RVCLANG
     CACHE FILEPATH
     "Path to rvclang used as VE target compiler")
 
+set(NECAURORA_DEFAULT_TARGET_COMPILER
+    "ncc"
+    CACHE STRING
+    "Default target compiler for NEC OpenMP target (-fopenmp-nec-compiler=<this_value>)")
+message("OMPT for SX-Aurora: Using the default target compiler option \"${NECAURORA_DEFAULT_TARGET_COMPILER}\"" )
 
 find_library(
    NECAURORA_LIBVEORUN_STATIC
