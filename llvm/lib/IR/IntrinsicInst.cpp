@@ -486,7 +486,115 @@ Optional<int> VPIntrinsic::GetMemoryDataParamPos(Intrinsic::ID VPID) {
   return ParamPos;
 }
 
-Function *VPIntrinsic::GetDeclarationForParams(Module *M, Intrinsic::ID VPID,
+enum class VPTypeToken : int8_t {
+  Returned = 0,  // vectorized return type.
+  Vector = 1,    // vector operand type
+  Pointer = 2,   // vector pointer-operand type (memory op)
+};
+using VPTypeTokenVec = SmallVector<VPTypeToken, 4>;
+
+/// \brief Generate the disambiguating type vec for this VP Intrinsic.
+/// \returns A disamguating type vector to instantiate this intrinsic.
+/// \p ID
+///     The VPIntrinsic ID
+/// \p VecRetTy
+///     The return type of the intrinsic (optional)
+/// \p VecPtrTy
+///     The pointer operand type (optional)
+/// \p VectorTy
+///     The vector data type of the operation.
+static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
+                                                 Type *VecRetTy, Type *VecPtrTy,
+                                                 Type *VectorTy) {
+  switch (ID) {
+  default:
+    llvm_unreachable("not implemented!");
+
+  case Intrinsic::vp_cos:
+  case Intrinsic::vp_sin:
+  case Intrinsic::vp_exp:
+  case Intrinsic::vp_exp2:
+
+  case Intrinsic::vp_log:
+  case Intrinsic::vp_log2:
+  case Intrinsic::vp_log10:
+  case Intrinsic::vp_sqrt:
+  case Intrinsic::vp_ceil:
+  case Intrinsic::vp_floor:
+  case Intrinsic::vp_round:
+  case Intrinsic::vp_trunc:
+  case Intrinsic::vp_rint:
+  case Intrinsic::vp_nearbyint:
+
+  case Intrinsic::vp_and:
+  case Intrinsic::vp_or:
+  case Intrinsic::vp_xor:
+  case Intrinsic::vp_ashr:
+  case Intrinsic::vp_lshr:
+  case Intrinsic::vp_shl:
+  case Intrinsic::vp_add:
+  case Intrinsic::vp_sub:
+  case Intrinsic::vp_mul:
+  case Intrinsic::vp_sdiv:
+  case Intrinsic::vp_udiv:
+  case Intrinsic::vp_srem:
+  case Intrinsic::vp_urem:
+
+  case Intrinsic::vp_fadd:
+  case Intrinsic::vp_fsub:
+  case Intrinsic::vp_fmul:
+  case Intrinsic::vp_fdiv:
+  case Intrinsic::vp_frem:
+  case Intrinsic::vp_pow:
+  case Intrinsic::vp_powi:
+  case Intrinsic::vp_maxnum:
+  case Intrinsic::vp_minnum:
+  case Intrinsic::vp_vshift:
+    return VPIntrinsic::ShortTypeVec{VectorTy};
+
+  case Intrinsic::vp_select:
+    return VPIntrinsic::ShortTypeVec{VecRetTy};
+
+  case Intrinsic::vp_reduce_and:
+  case Intrinsic::vp_reduce_or:
+  case Intrinsic::vp_reduce_xor:
+
+  case Intrinsic::vp_reduce_add:
+  case Intrinsic::vp_reduce_mul:
+  case Intrinsic::vp_reduce_fadd:
+  case Intrinsic::vp_reduce_fmul:
+
+  case Intrinsic::vp_reduce_fmin:
+  case Intrinsic::vp_reduce_fmax:
+  case Intrinsic::vp_reduce_smin:
+  case Intrinsic::vp_reduce_smax:
+  case Intrinsic::vp_reduce_umin:
+  case Intrinsic::vp_reduce_umax:
+    return VPIntrinsic::ShortTypeVec{VectorTy};
+
+  case Intrinsic::vp_gather:
+  case Intrinsic::vp_load:
+    return VPIntrinsic::ShortTypeVec{VecRetTy, VecPtrTy};
+
+  case Intrinsic::vp_scatter:
+  case Intrinsic::vp_store:
+    return VPIntrinsic::ShortTypeVec{VecPtrTy, VectorTy};
+
+  case Intrinsic::vp_fpext:
+  case Intrinsic::vp_fptrunc:
+  case Intrinsic::vp_fptoui:
+  case Intrinsic::vp_fptosi:
+  case Intrinsic::vp_sitofp:
+  case Intrinsic::vp_uitofp:
+    return VPIntrinsic::ShortTypeVec{VecRetTy, VectorTy};
+
+  case Intrinsic::vp_icmp:
+  case Intrinsic::vp_fcmp:
+    return VPIntrinsic::ShortTypeVec{VectorTy};
+  }
+}
+
+Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
                                                ArrayRef<Value *> Params,
                                                Type *VecRetTy) {
   assert(VPID != Intrinsic::not_intrinsic && "todo dispatch to default insts");
@@ -540,102 +648,11 @@ Function *VPIntrinsic::GetDeclarationForParams(Module *M, Intrinsic::ID VPID,
                                            : Params[0]->getType();
   }
 
-  auto TypeTokens = VPIntrinsic::GetTypeTokens(VPID);
-  auto *VPFunc = Intrinsic::getDeclaration(
-      M, VPID,
-      VPIntrinsic::EncodeTypeTokens(TypeTokens, VecRetTy, VecPtrTy, *cast<VectorType>(VecTy)));
+  auto IntrinTypeVec = getVPIntrinsicTypes(VPID, VecRetTy, VecPtrTy, VecTy);
+  auto *VPFunc = Intrinsic::getDeclaration(M, VPID, IntrinTypeVec);
   assert(VPFunc && "not a VP intrinsic");
 
   return VPFunc;
-}
-
-VPIntrinsic::TypeTokenVec VPIntrinsic::GetTypeTokens(Intrinsic::ID ID) {
-  switch (ID) {
-  default:
-    llvm_unreachable("not implemented!");
-
-  case Intrinsic::vp_cos:
-  case Intrinsic::vp_sin:
-  case Intrinsic::vp_exp:
-  case Intrinsic::vp_exp2:
-
-  case Intrinsic::vp_log:
-  case Intrinsic::vp_log2:
-  case Intrinsic::vp_log10:
-  case Intrinsic::vp_sqrt:
-  case Intrinsic::vp_ceil:
-  case Intrinsic::vp_floor:
-  case Intrinsic::vp_round:
-  case Intrinsic::vp_trunc:
-  case Intrinsic::vp_rint:
-  case Intrinsic::vp_nearbyint:
-
-  case Intrinsic::vp_and:
-  case Intrinsic::vp_or:
-  case Intrinsic::vp_xor:
-  case Intrinsic::vp_ashr:
-  case Intrinsic::vp_lshr:
-  case Intrinsic::vp_shl:
-  case Intrinsic::vp_add:
-  case Intrinsic::vp_sub:
-  case Intrinsic::vp_mul:
-  case Intrinsic::vp_sdiv:
-  case Intrinsic::vp_udiv:
-  case Intrinsic::vp_srem:
-  case Intrinsic::vp_urem:
-
-  case Intrinsic::vp_fadd:
-  case Intrinsic::vp_fsub:
-  case Intrinsic::vp_fmul:
-  case Intrinsic::vp_fdiv:
-  case Intrinsic::vp_frem:
-  case Intrinsic::vp_pow:
-  case Intrinsic::vp_powi:
-  case Intrinsic::vp_maxnum:
-  case Intrinsic::vp_minnum:
-  case Intrinsic::vp_vshift:
-    return TypeTokenVec{VPTypeToken::Vector};
-
-  case Intrinsic::vp_select:
-    return TypeTokenVec{VPTypeToken::Returned};
-
-  case Intrinsic::vp_reduce_and:
-  case Intrinsic::vp_reduce_or:
-  case Intrinsic::vp_reduce_xor:
-
-  case Intrinsic::vp_reduce_add:
-  case Intrinsic::vp_reduce_mul:
-  case Intrinsic::vp_reduce_fadd:
-  case Intrinsic::vp_reduce_fmul:
-
-  case Intrinsic::vp_reduce_fmin:
-  case Intrinsic::vp_reduce_fmax:
-  case Intrinsic::vp_reduce_smin:
-  case Intrinsic::vp_reduce_smax:
-  case Intrinsic::vp_reduce_umin:
-  case Intrinsic::vp_reduce_umax:
-    return TypeTokenVec{VPTypeToken::Vector};
-
-  case Intrinsic::vp_gather:
-  case Intrinsic::vp_load:
-    return TypeTokenVec{VPTypeToken::Returned, VPTypeToken::Pointer};
-
-  case Intrinsic::vp_scatter:
-  case Intrinsic::vp_store:
-    return TypeTokenVec{VPTypeToken::Pointer, VPTypeToken::Vector};
-
-  case Intrinsic::vp_fpext:
-  case Intrinsic::vp_fptrunc:
-  case Intrinsic::vp_fptoui:
-  case Intrinsic::vp_fptosi:
-  case Intrinsic::vp_sitofp:
-  case Intrinsic::vp_uitofp:
-    return TypeTokenVec{VPTypeToken::Returned, VPTypeToken::Vector};
-
-  case Intrinsic::vp_icmp:
-  case Intrinsic::vp_fcmp:
-    return TypeTokenVec{VPTypeToken::Vector};
-  }
 }
 
 bool VPIntrinsic::isReductionOp() const {
@@ -774,38 +791,6 @@ Intrinsic::ID VPIntrinsic::GetForIntrinsic(Intrinsic::ID IntrinsicID) {
 #define END_REGISTER_VP_INTRINSIC(VPID) return Intrinsic::VPID;
 #include "llvm/IR/VPIntrinsics.def"
   }
-}
-
-VPIntrinsic::ShortTypeVec
-VPIntrinsic::EncodeTypeTokens(VPIntrinsic::TypeTokenVec TTVec, Type *VecRetTy,
-                              Type *VecPtrTy, VectorType &VectorTy) {
-  ShortTypeVec STV;
-
-  for (auto Token : TTVec) {
-    switch (Token) {
-    default:
-      llvm_unreachable("unsupported token"); // unsupported VPTypeToken
-
-    case VPIntrinsic::VPTypeToken::Vector:
-      STV.push_back(&VectorTy);
-      break;
-    case VPIntrinsic::VPTypeToken::Pointer:
-      STV.push_back(VecPtrTy);
-      break;
-    case VPIntrinsic::VPTypeToken::Returned:
-      assert(VecRetTy);
-      STV.push_back(VecRetTy);
-      break;
-    case VPIntrinsic::VPTypeToken::Mask:
-      auto EC = VectorTy.getElementCount();
-      auto MaskTy =
-          VectorType::get(Type::getInt1Ty(VectorTy.getContext()), EC);
-      STV.push_back(MaskTy);
-      break;
-    }
-  }
-
-  return STV;
 }
 
 Instruction::BinaryOps BinaryOpIntrinsic::getBinaryOp() const {

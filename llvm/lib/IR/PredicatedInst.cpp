@@ -79,10 +79,8 @@ Instruction *PredicatedBinaryOperator::Create(
 
   // Fetch the VP intrinsic
   auto &VecTy = cast<VectorType>(*V1->getType());
-  auto TypeTokens = VPIntrinsic::GetTypeTokens(VPID);
-  auto *VPFunc = Intrinsic::getDeclaration(
-      Mod, VPID,
-      VPIntrinsic::EncodeTypeTokens(TypeTokens, &VecTy, nullptr, VecTy));
+  auto *VPFunc =
+      VPIntrinsic::getDeclarationForParams(Mod, VPID, {V1, V2}, &VecTy);
 
   // Encode default environment fp behavior
   LLVMContext &Ctx = V1->getContext();

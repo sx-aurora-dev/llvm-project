@@ -215,21 +215,11 @@ namespace llvm {
   /// This is the common base class for vector predication intrinsics.
   class VPIntrinsic : public IntrinsicInst {
   public:
-    enum class VPTypeToken : int8_t {
-      Returned = 0,  // vectorized return type.
-      Vector = 1,    // vector operand type
-      Pointer = 2,   // vector pointer-operand type (memory op)
-      Mask = 3       // vector mask type
-    };
-
-    using TypeTokenVec = SmallVector<VPTypeToken, 4>;
     using ShortTypeVec = SmallVector<Type *, 4>;
 
     /// \brief Declares a llvm.vp.* intrinsic in \p M that matches the parameters \p Params.
-    static Function* GetDeclarationForParams(Module *M, Intrinsic::ID, ArrayRef<Value *> Params, Type* VecRetTy = nullptr);
+    static Function* getDeclarationForParams(Module *M, Intrinsic::ID, ArrayRef<Value *> Params, Type* VecRetTy = nullptr);
 
-    // Type tokens required to instantiate this intrinsic.
-    static TypeTokenVec GetTypeTokens(Intrinsic::ID);
 
     // whether the intrinsic has a rounding mode parameter (regardless of
     // setting).
@@ -249,19 +239,8 @@ namespace llvm {
     // Whether \p ID is a VP intrinsic ID.
     static bool IsVPIntrinsic(Intrinsic::ID);
 
-    /// TODO make this private!
-    /// \brief Generate the disambiguating type vec for this VP Intrinsic.
-    /// \returns A disamguating type vector to instantiate this intrinsic.
-    /// \p TTVec
-    ///     Vector of disambiguating tokens.
-    /// \p VecRetTy
-    ///     The return type of the intrinsic (optional)
-    /// \p VecPtrTy
-    ///     The pointer operand type (optional)
-    /// \p VectorTy
-    ///     The vector data type of the operation.
     static VPIntrinsic::ShortTypeVec
-    EncodeTypeTokens(VPIntrinsic::TypeTokenVec TTVec, Type *VecRetTy,
+    EncodeTypeTokens(unsigned VPID, Type *VecRetTy,
                      Type *VecPtrTy, VectorType &VectorTy);
 
     /// set the mask parameter.

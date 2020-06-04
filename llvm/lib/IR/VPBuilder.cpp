@@ -88,7 +88,7 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
   Type *VecRetTy = ScaRetTy->isVoidTy() ? ScaRetTy : &getVectorType(*ScaRetTy);
   auto &M = *Builder.GetInsertBlock()->getParent()->getParent();
   auto VPDecl =
-      VPIntrinsic::GetDeclarationForParams(&M, VPID, VecParams, VecRetTy);
+      VPIntrinsic::getDeclarationForParams(&M, VPID, VecParams, VecRetTy);
 
   // Transfer FMF flags
   auto VPCall = Builder.CreateCall(VPDecl, VecParams, Inst.getName() + ".vp");
@@ -180,7 +180,7 @@ Value &VPBuilder::CreateGather(Value &PointerVec, MaybeAlign AlignOpt) {
 }
 
 Value *VPBuilder::CreateVectorShift(Value *SrcVal, Value *Amount, Twine Name) {
-  auto D = VPIntrinsic::GetDeclarationForParams(
+  auto D = VPIntrinsic::getDeclarationForParams(
       &getModule(), Intrinsic::vp_vshift, {SrcVal, Amount});
   return Builder.CreateCall(D, {SrcVal, Amount, &RequestPred(), &RequestEVL()},
                             Name);

@@ -524,7 +524,7 @@ Instruction *IRBuilderBase::CreateVectorPredicatedInst(unsigned OC,
   Module *M = BB->getParent()->getParent();
 
   Intrinsic::ID VPID = VPIntrinsic::GetForOpcode(OC);
-  auto VPFunc = VPIntrinsic::GetDeclarationForParams(M, VPID, Params);
+  auto VPFunc = VPIntrinsic::getDeclarationForParams(M, VPID, Params);
   auto *VPCall = createCallHelper(VPFunc, Params, this, Name);
 
   // transfer fast math flags
@@ -557,7 +557,7 @@ Instruction *IRBuilderBase::CreateVectorPredicatedCmp(
                            ? Intrinsic::vp_icmp
                            : Intrinsic::vp_fcmp;
 
-  auto VPFunc = VPIntrinsic::GetDeclarationForParams(
+  auto VPFunc = VPIntrinsic::getDeclarationForParams(
       M, VPID, {FirstParam, SndParam, PredParam, MaskParam, VectorLengthParam});
 
   return createCallHelper(
