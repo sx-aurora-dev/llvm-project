@@ -43,11 +43,20 @@ To enable the OpenMP target offloading feature for C programs use:
       -fopenmp -fopenmp-targets=aurora-nec-veort -O3 ...
 
 The implementation invokes another compiler instance to compile the offloaded
-code for the VE.  By default, this is 'clang' as found in your PATH. To choose a
-different target compiler, pass the option '-fopenmp-nec-compiler=COMPILER'
+code for the VE.  By default, this is 'clang' as found in your PATH. To choose
+a different target compiler, pass the option '-fopenmp-nec-compiler=COMPILER'
 where 'COMPILER' may be either of 'clang', to use llvm-ve, 'rvclang' to use
 llvm-ve with the region vectorizer or 'ncc', to use the NEC C Compiler at
-'/opt/nec/ve/bin/ncc'.
+'/opt/nec/ve/bin/ncc' or an absolute path to a target compiler by using the
+prefix `path:`, ie
+
+    -fopenmp-nec-compiler=path:/opt/nec/ve/bin/ncc-3.0.4
+
+The default target compiler can be configured by changing the value of the
+CMake variable ``NECAURORA_DEFAULT_TARGET_COMPILER``.
+
+To pass additional command line arguments to the target compiler, use the flag
+`-Xopenmp-target <argv_to_pass_on>` repeatedly for each argument.
 
 ### VEL Intrinsics for direct vector programming
 
