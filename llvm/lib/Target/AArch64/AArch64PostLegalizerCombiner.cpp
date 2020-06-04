@@ -28,6 +28,158 @@
 
 using namespace llvm;
 
+/// Represents a pseudo instruction which replaces a G_SHUFFLE_VECTOR.
+///
+/// Used for matching target-supported shuffles before codegen.
+struct ShuffleVectorPseudo {
+  unsigned Opc; ///< Opcode for the instruction. (E.g. G_ZIP1)
+  Register Dst; ///< Destination register.
+  SmallVector<SrcOp, 2> SrcOps; ///< Source registers.
+  ShuffleVectorPseudo(unsigned Opc, Register Dst,
+                      std::initializer_list<SrcOp> SrcOps)
+      : Opc(Opc), Dst(Dst), SrcOps(SrcOps){};
+  ShuffleVectorPseudo() {}
+};
+
+/// Check if a vector shuffle corresponds to a REV instruction with the
+/// specified blocksize.
+static bool isREVMask(ArrayRef<int> M, unsigned EltSize, unsigned NumElts,
+                      unsigned BlockSize) {
+  assert((BlockSize == 16 || BlockSize == 32 || BlockSize == 64) &&
+         "Only possible block sizes for REV are: 16, 32, 64");
+  assert(EltSize != 64 && "EltSize cannot be 64 for REV mask.");
+
+  unsigned BlockElts = M[0] + 1;
+
+  // If the first shuffle index is UNDEF, be optimistic.
+  if (M[0] < 0)
+    BlockElts = BlockSize / EltSize;
+
+  if (BlockSize <= EltSize || BlockSize != BlockElts * EltSize)
+    return false;
+
+  for (unsigned i = 0; i < NumElts; ++i) {
+    // Ignore undef indices.
+    if (M[i] < 0)
+      continue;
+    if (static_cast<unsigned>(M[i]) !=
+        (i - i % BlockElts) + (BlockElts - 1 - i % BlockElts))
+      return false;
+  }
+
+  return true;
+}
+
+/// Determines if \p M is a shuffle vector mask for a UZP of \p NumElts.
+/// Whether or not G_UZP1 or G_UZP2 should be used is stored in \p WhichResult.
+static bool isUZPMask(ArrayRef<int> M, unsigned NumElts,
+                      unsigned &WhichResult) {
+  WhichResult = (M[0] == 0 ? 0 : 1);
+  for (unsigned i = 0; i != NumElts; ++i) {
+    // Skip undef indices.
+    if (M[i] < 0)
+      continue;
+    if (static_cast<unsigned>(M[i]) != 2 * i + WhichResult)
+      return false;
+  }
+  return true;
+}
+
+/// \return true if \p M is a zip mask for a shuffle vector of \p NumElts.
+/// Whether or not G_ZIP1 or G_ZIP2 should be used is stored in \p WhichResult.
+static bool isZipMask(ArrayRef<int> M, unsigned NumElts,
+                      unsigned &WhichResult) {
+  if (NumElts % 2 != 0)
+    return false;
+
+  // 0 means use ZIP1, 1 means use ZIP2.
+  WhichResult = (M[0] == 0 ? 0 : 1);
+  unsigned Idx = WhichResult * NumElts / 2;
+  for (unsigned i = 0; i != NumElts; i += 2) {
+      if ((M[i] >= 0 && static_cast<unsigned>(M[i]) != Idx) ||
+          (M[i + 1] >= 0 && static_cast<unsigned>(M[i + 1]) != Idx + NumElts))
+        return false;
+    Idx += 1;
+  }
+  return true;
+}
+
+/// \return true if a G_SHUFFLE_VECTOR instruction \p MI can be replaced with a
+/// G_REV instruction. Returns the appropriate G_REV opcode in \p Opc.
+static bool matchREV(MachineInstr &MI, MachineRegisterInfo &MRI,
+                     ShuffleVectorPseudo &MatchInfo) {
+  assert(MI.getOpcode() == TargetOpcode::G_SHUFFLE_VECTOR);
+  ArrayRef<int> ShuffleMask = MI.getOperand(3).getShuffleMask();
+  Register Dst = MI.getOperand(0).getReg();
+  Register Src = MI.getOperand(1).getReg();
+  LLT Ty = MRI.getType(Dst);
+  unsigned EltSize = Ty.getScalarSizeInBits();
+
+  // Element size for a rev cannot be 64.
+  if (EltSize == 64)
+    return false;
+
+  unsigned NumElts = Ty.getNumElements();
+
+  // Try to produce G_REV64
+  if (isREVMask(ShuffleMask, EltSize, NumElts, 64)) {
+    MatchInfo = ShuffleVectorPseudo(AArch64::G_REV64, Dst, {Src});
+    return true;
+  }
+
+  // TODO: Produce G_REV32 and G_REV16 once we have proper legalization support.
+  // This should be identical to above, but with a constant 32 and constant
+  // 16.
+  return false;
+}
+
+/// \return true if a G_SHUFFLE_VECTOR instruction \p MI can be replaced with
+/// a G_UZP1 or G_UZP2 instruction.
+///
+/// \param [in] MI - The shuffle vector instruction.
+/// \param [out] Opc - Either G_UZP1 or G_UZP2 on success.
+static bool matchUZP(MachineInstr &MI, MachineRegisterInfo &MRI,
+                     ShuffleVectorPseudo &MatchInfo) {
+  assert(MI.getOpcode() == TargetOpcode::G_SHUFFLE_VECTOR);
+  unsigned WhichResult;
+  ArrayRef<int> ShuffleMask = MI.getOperand(3).getShuffleMask();
+  Register Dst = MI.getOperand(0).getReg();
+  unsigned NumElts = MRI.getType(Dst).getNumElements();
+  if (!isUZPMask(ShuffleMask, NumElts, WhichResult))
+    return false;
+  unsigned Opc = (WhichResult == 0) ? AArch64::G_UZP1 : AArch64::G_UZP2;
+  Register V1 = MI.getOperand(1).getReg();
+  Register V2 = MI.getOperand(2).getReg();
+  MatchInfo = ShuffleVectorPseudo(Opc, Dst, {V1, V2});
+  return true;
+}
+
+static bool matchZip(MachineInstr &MI, MachineRegisterInfo &MRI,
+                     ShuffleVectorPseudo &MatchInfo) {
+  assert(MI.getOpcode() == TargetOpcode::G_SHUFFLE_VECTOR);
+  unsigned WhichResult;
+  ArrayRef<int> ShuffleMask = MI.getOperand(3).getShuffleMask();
+  Register Dst = MI.getOperand(0).getReg();
+  unsigned NumElts = MRI.getType(Dst).getNumElements();
+  if (!isZipMask(ShuffleMask, NumElts, WhichResult))
+    return false;
+  unsigned Opc = (WhichResult == 0) ? AArch64::G_ZIP1 : AArch64::G_ZIP2;
+  Register V1 = MI.getOperand(1).getReg();
+  Register V2 = MI.getOperand(2).getReg();
+  MatchInfo = ShuffleVectorPseudo(Opc, Dst, {V1, V2});
+  return true;
+}
+
+/// Replace a G_SHUFFLE_VECTOR instruction with a pseudo.
+/// \p Opc is the opcode to use. \p MI is the G_SHUFFLE_VECTOR.
+static bool applyShuffleVectorPseudo(MachineInstr &MI,
+                                     ShuffleVectorPseudo &MatchInfo) {
+  MachineIRBuilder MIRBuilder(MI);
+  MIRBuilder.buildInstr(MatchInfo.Opc, {MatchInfo.Dst}, MatchInfo.SrcOps);
+  MI.eraseFromParent();
+  return true;
+}
+
 #define AARCH64POSTLEGALIZERCOMBINERHELPER_GENCOMBINERHELPER_DEPS
 #include "AArch64GenPostLegalizeGICombiner.inc"
 #undef AARCH64POSTLEGALIZERCOMBINERHELPER_GENCOMBINERHELPER_DEPS
@@ -61,7 +213,9 @@ public:
 bool AArch64PostLegalizerCombinerInfo::combine(GISelChangeObserver &Observer,
                                                MachineInstr &MI,
                                                MachineIRBuilder &B) const {
-  CombinerHelper Helper(Observer, B, KB, MDT);
+  const auto *LI =
+      MI.getParent()->getParent()->getSubtarget().getLegalizerInfo();
+  CombinerHelper Helper(Observer, B, KB, MDT, LI);
   return Generated.tryCombineAll(Observer, MI, B, Helper);
 }
 

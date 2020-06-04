@@ -33,13 +33,11 @@ class raw_pwrite_stream;
 class raw_ostream;
 
 MCCodeEmitter *createVEMCCodeEmitter(const MCInstrInfo &MCII,
-                                     const MCRegisterInfo &MRI,
-                                     MCContext &Ctx);
+                                     const MCRegisterInfo &MRI, MCContext &Ctx);
 MCAsmBackend *createVEAsmBackend(const Target &T, const MCSubtargetInfo &STI,
                                  const MCRegisterInfo &MRI,
                                  const MCTargetOptions &Options);
-std::unique_ptr<MCObjectTargetWriter> createVEELFObjectWriter(bool Is64Bit,
-                                                              uint8_t OSABI);
+std::unique_ptr<MCObjectTargetWriter> createVEELFObjectWriter(uint8_t OSABI);
 } // namespace llvm
 
 // Defines symbolic names for VE registers.  This defines a mapping from
