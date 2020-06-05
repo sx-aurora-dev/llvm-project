@@ -440,6 +440,7 @@ enum NodeType {
 
   /// FMA - Perform a * b + c with no intermediate rounding step.
   FMA,
+  VP_FMA,
 
   /// FMAD - Perform a * b + c, while getting the same result as the
   /// separately rounded operations.
@@ -761,6 +762,7 @@ enum NodeType {
 
   /// X = FP_EXTEND(Y) - Extend a smaller FP type into a larger FP type.
   FP_EXTEND,
+  VP_FP_EXTEND,
 
   /// BITCAST - This operator converts between integer, vector and FP
   /// values, as if the value was stored to memory with one type and loaded

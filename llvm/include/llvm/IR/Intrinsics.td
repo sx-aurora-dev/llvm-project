@@ -1249,13 +1249,13 @@ def int_vp_store : Intrinsic<[],
                                LLVMAnyPointerType<LLVMMatchType<0>>,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                llvm_i32_ty],
-                             [ NoCapture<1>, IntrNoSync, IntrArgMemOnly, IntrWillReturn, Mask<2>, VectorLength<3> ]>;
+                             [ NoCapture<ArgIndex<1>>, IntrNoSync, IntrArgMemOnly, IntrWillReturn, Mask<2>, VectorLength<3> ]>;
 
 def int_vp_load  : Intrinsic<[ llvm_anyvector_ty],
                              [ LLVMAnyPointerType<LLVMMatchType<0>>,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                llvm_i32_ty],
-                             [ NoCapture<0>, IntrNoSync, IntrReadMem, IntrWillReturn, IntrArgMemOnly, Mask<1>, VectorLength<2> ]>;
+                             [ NoCapture<ArgIndex<0>>, IntrNoSync, IntrReadMem, IntrWillReturn, IntrArgMemOnly, Mask<1>, VectorLength<2> ]>;
 
 def int_vp_gather: Intrinsic<[ llvm_anyvector_ty],
                              [ LLVMVectorOfAnyPointersToElt<0>,
@@ -1413,7 +1413,7 @@ def int_vp_icmp : Intrinsic<[ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty> ],
                               llvm_i8_ty,
                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                               llvm_i32_ty ],
-                            [ IntrWillReturn, IntrNoSync, IntrNoMem, Mask<3>, VectorLength<4>, ImmArg<2> ]>;
+                            [ IntrWillReturn, IntrNoSync, IntrNoMem, Mask<3>, VectorLength<4>, ImmArg<ArgIndex<2>> ]>;
 
 def int_vp_fcmp : Intrinsic<[ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty> ],
                             [ llvm_anyvector_ty,
@@ -1421,7 +1421,7 @@ def int_vp_fcmp : Intrinsic<[ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty> ],
                               llvm_i8_ty,
                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                               llvm_i32_ty ],
-                            [ IntrWillReturn, IntrNoSync, IntrNoMem, Mask<3>, VectorLength<4>, ImmArg<2> ]>;
+                            [ IntrWillReturn, IntrNoSync, IntrNoMem, Mask<3>, VectorLength<4>, ImmArg<ArgIndex<2>> ]>;
 
 
 
@@ -1447,12 +1447,12 @@ def int_vp_compress: Intrinsic<[ llvm_anyvector_ty ],
 
 // Select
 def int_vp_select : Intrinsic<[ llvm_anyvector_ty ],
-                              [ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                              [ LLVMMatchType<0>,
                                 LLVMMatchType<0>,
-                                LLVMMatchType<0>,
+                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                 llvm_i32_ty,
                                 llvm_i32_ty],
-                              [ IntrNoMem, IntrNoSync, IntrWillReturn, Passthru<2>, Mask<0>, VectorLength<4> ]>;
+                              [ IntrNoMem, IntrNoSync, IntrWillReturn, Passthru<1>, Mask<2>, VectorLength<4> ]>;
 
 
 // VP fp rounding and truncation

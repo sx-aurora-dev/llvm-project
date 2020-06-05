@@ -453,6 +453,9 @@ ISD::GetMaskPosVP(unsigned OpCode) {
   switch (OpCode) {
     default: return -1;
 
+    case ISD::VP_SELECT:
+      return 2;
+
     case ISD::VP_FNEG:
       return 1;
 
@@ -479,7 +482,6 @@ ISD::GetMaskPosVP(unsigned OpCode) {
       return 2;
 
     case ISD::VP_FMA:
-    case ISD::VP_SELECT:
       return 3;
 
     case VP_REDUCE_ADD:
@@ -500,7 +502,6 @@ ISD::GetMaskPosVP(unsigned OpCode) {
       return 2;
 
     /// FMIN/FMAX nodes can have flags, for NaN/NoNaN variants.
-    // (implicit) case ISD::VP_COMPOSE: return -1
   }
 }
 
@@ -510,7 +511,7 @@ ISD::GetVectorLengthPosVP(unsigned OpCode) {
     default: return -1;
 
     case VP_SELECT:
-      return 0;
+      return 3;
 
     case VP_FNEG:
       return 2;
@@ -538,9 +539,6 @@ ISD::GetVectorLengthPosVP(unsigned OpCode) {
 
     case VP_FMA:
       return 4;
-
-    case VP_COMPOSE:
-      return 3;
 
     case VP_REDUCE_ADD:
     case VP_REDUCE_MUL:
