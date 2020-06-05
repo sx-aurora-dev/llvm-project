@@ -2244,8 +2244,11 @@ Instruction *InstCombiner::visitFSubGeneric(BinaryOpTy &I) {
       return MCBuilder.CreateFSubFMF(XZ, YW, &I);
     }
 
-    if (Instruction *F = factorizeFAddFSub(I, Builder))
+    auto *BinOp = dyn_cast<BinaryOperator>(&I);
+    if (BinOp) {
+      auto *F = factorizeFAddFSub(*BinOp, Builder);
       return F;
+    }
 
     // TODO: This performs reassociative folds for FP ops. Some fraction of the
     // functionality has been subsumed by simple pattern matching here and in

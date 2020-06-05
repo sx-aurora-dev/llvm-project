@@ -4,21 +4,6 @@
 
 // Pattern Matchings for Generic Vector Instructions
 
-// Load and store for all vector types
-// v2i32, v2i64, v2f32, v2f64, v4i32, v4i64, v4f32, v4f64,
-// v8i32, v8i64, v8f32, v8f64, v16i32, v16i64, v16f32, v16f64,
-// v32i32, v32i64, v32f32, v32f64, v64i32, v64i64, v64f32, v64f64,
-// v128i32, v128i64, v128f32, v128f64, v256i32, v256i64, v256f32, v256f64,
-// v512i32, v512f32.
-
-def : Pat<(v512i32 (load I64:$addr)),
-          (v512i32 (vld_vIsl 8, $addr,
-                             (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
-
-def : Pat<(v512f32 (load I64:$addr)),
-          (v512f32 (vld_vIsl 8, $addr,
-                             (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
-
 // Mask Insert & Extract
 multiclass insert_extract_mask<ValueType MaskVT, string MaskToken> {
   // extract at imm
@@ -227,14 +212,14 @@ def : Pat<(vec_tomask v256f32:$vx, i32:$avl),
           (pvfmkwupne_mvl $vx, $avl)>;
 
 // Casts
-def : Pat<(v256i64 (sext_inreg V64:$src, v256i32)),
-          (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (LEA32zii 0, 0, 256)), V64)>;
-def : Pat<(v256i64 (sext v256i32:$src)),
-          (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (LEA32zii 0, 0, 256)), V64)>;
-def : Pat<(v256i64 (zext v256i32:$src)),
-          (COPY_TO_REGCLASS (vaddswzx_vsvl (i32 0), $src, (LEA32zii 0, 0, 256)), V64)>;
+// def : Pat<(v256i64 (sext_inreg V64:$src, v256i32)),
+//           (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (lea_i32 256)), V64)>;
+// def : Pat<(v256i64 (sext v256i32:$src)),
+//           (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (lea_i32 256)), V64)>;
+// def : Pat<(v256i64 (zext v256i32:$src)),
+//           (COPY_TO_REGCLASS (vaddswzx_vsvl (i32 0), $src, (lea_i32 256)), V64)>;
 def : Pat<(v256i64 (anyext v256i32:$src)),
-          (COPY_TO_REGCLASS $src, V64)>;
+          (COPY_TO_REGCLASS $src, V64)>; // TODO INSERT_SUBREG
 
 // bitconvert
 multiclass NoopConv<ValueType AVT, ValueType BVT, RegisterClass RT=V64> {
@@ -249,6 +234,6 @@ defm : NoopConv<v8i1,v512i1,VM512>;
 
 // actual conversions
 def : Pat<(v256i32 (bitconvert v256f32:$src)),
-          (vsral_vvIl (COPY_TO_REGCLASS $src, V64), 32, (LEA32zii 0, 0, 256))>;
+          (VSRALvil (COPY_TO_REGCLASS $src, V64), 32, 256)>;
 def : Pat<(v256f32 (bitconvert v256i32:$src)),
-          (vslal_vvIl (COPY_TO_REGCLASS $src, V64), 32, (LEA32zii 0, 0, 256))>;
+          (VSLALvil (COPY_TO_REGCLASS $src, V64), 32, 256)>;

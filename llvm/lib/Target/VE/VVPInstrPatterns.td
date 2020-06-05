@@ -12,16 +12,16 @@
 multiclass VectorGather<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, string GTPrefix> {
   // w/o mask
   def : Pat<(DataVT (vvp_gather PtrVt:$addr, (MaskVT true_mask), i32:$avl)),
-                    (!cast<Instruction>(GTPrefix#"_vvssl") $addr, 0, 0, $avl)>;
+                    (!cast<Instruction>(GTPrefix#"vizl") $addr, 0, 0, $avl)>;
   // with mask
   def : Pat<(DataVT (vvp_gather PtrVt:$addr, MaskVT:$mask, i32:$avl)),
-            (!cast<Instruction>(GTPrefix#"_vvssml") $addr, 0, 0, $mask, $avl)>;
+            (!cast<Instruction>(GTPrefix#"vizml") $addr, 0, 0, $mask, $avl)>;
 }
 
-defm : VectorGather<v256f64, v256i64, v256i1, "vgt">;
-defm : VectorGather<v256i64, v256i64, v256i1, "vgt">;
-defm : VectorGather<v256f32, v256i64, v256i1, "vgtu">;
-defm : VectorGather<v256i32, v256i64, v256i1, "vgtlzx">;
+defm : VectorGather<v256f64, v256i64, v256i1, "VGT">;
+defm : VectorGather<v256i64, v256i64, v256i1, "VGT">;
+defm : VectorGather<v256f32, v256i64, v256i1, "VGTU">;
+defm : VectorGather<v256i32, v256i64, v256i1, "VGTLZX">;
 
 multiclass VectorScatter<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, string SCPrefix> {
   // w/o mask

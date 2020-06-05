@@ -2959,67 +2959,6 @@ SDValue VETargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
 }
 
 
-// Lower a vXi1 store into following instructions
-//   SVMi  %1, %vm, 0
-//   STrii %1, (,%addr)
-//   SVMi  %2, %vm, 1
-//   STrii %2, 8(,%addr)
-//   ...
-static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
-  SDLoc dl(Op);
-  StoreSDNode *StNode = dyn_cast<StoreSDNode>(Op.getNode());
-  assert(StNode && StNode->getOffset().isUndef() && "Unexpected node type");
-
-  SDValue BasePtr = StNode->getBasePtr();
-  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
-    // For the case of frame index, expanding it here cause dependency
-    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
-    return Op;
-  }
-
-  unsigned alignment = StNode->getAlign().value();
-  if (alignment > 8)
-    alignment = 8;
-  EVT addrVT = BasePtr.getValueType();
-  EVT MemVT = StNode->getMemoryVT();
-  if (MemVT == MVT::v256i1 || MemVT == MVT::v4i64) {
-    SDValue OutChains[4];
-    for (int i = 0; i < 4; ++i) {
-      SDNode *V =
-          DAG.getMachineNode(VE::svm_smI, dl, MVT::i64, StNode->getValue(),
-                             DAG.getTargetConstant(i, dl, MVT::i64));
-      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
-                                 DAG.getConstant(8 * i, dl, addrVT));
-      OutChains[i] =
-          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
-                       MachinePointerInfo(), alignment,
-                       StNode->isVolatile() ? MachineMemOperand::MOVolatile
-                                            : MachineMemOperand::MONone);
-    }
-    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
-  }
-
-  if (MemVT == MVT::v512i1 || MemVT == MVT::v8i64) {
-    SDValue OutChains[8];
-    for (int i = 0; i < 8; ++i) {
-      SDNode *V =
-          DAG.getMachineNode(VE::svm_sMI, dl, MVT::i64, StNode->getValue(),
-                             DAG.getTargetConstant(i, dl, MVT::i64));
-      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
-                                 DAG.getConstant(8 * i, dl, addrVT));
-      OutChains[i] =
-          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
-                       MachinePointerInfo(), alignment,
-                       StNode->isVolatile() ? MachineMemOperand::MOVolatile
-                                            : MachineMemOperand::MONone);
-    }
-    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
-  }
-
-  // Otherwise, ask llvm to expand it.
-  return SDValue();
-}
-
 // Lower a f128 store into two f64 stores.
 // Lower a f128 store into two f64 stores.
 static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
@@ -3154,9 +3093,7 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
   }
 }
 
-static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG,
-                          const VETargetLowering &TLI)
-{
+SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
   StoreSDNode *St = cast<StoreSDNode>(Op.getNode());
 
