@@ -1241,6 +1241,36 @@ VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
     break;
   }
 
+  case AsmToken::Identifier: {
+    StringRef Identifier, Modifier;
+    if (!getParser().parseIdentifier(Identifier)) {
+      // Search @modifiers like "symbol@hi".
+      size_t at = Identifier.rfind('@');
+      if (at != 0 || at != StringRef::npos) {
+        std::pair<StringRef, StringRef> Pair = Identifier.rsplit("@");
+        if (!Pair.first.empty() && !Pair.second.empty()) {
+          Identifier = Pair.first;
+          Modifier = Pair.second;
+        }
+      }
+      E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+      MCSymbol *Sym = getContext().getOrCreateSymbol(Identifier);
+
+      const MCExpr *Res = MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None,
+                                                  getContext());
+      const MCExpr *EVal;
+      if (matchVEAsmModifiers(EVal, Res, Modifier, E)) {
+        E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+        Offset = VEOperand::CreateImm(EVal, S, E);
+      } else {
+        E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+        VEMCExpr::VariantKind Kind = VEMCExpr::VK_VE_REFLONG;
+        Res = VEMCExpr::create(Kind, Res, getContext());
+        Offset = VEOperand::CreateImm(Res, S, E);
+      }
+    }
+    break;
+  }
   case AsmToken::Percent:
     if (ParseRegister(BaseReg, S, E))
       return MatchOperand_NoMatch;
