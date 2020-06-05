@@ -151,6 +151,8 @@ public:
     return ST->getMaxInterleaveFactor();
   }
 
+  bool isProfitableLSRChainElement(Instruction *I);
+
   bool isLegalMaskedLoad(Type *DataTy, MaybeAlign Alignment);
 
   bool isLegalMaskedStore(Type *DataTy, MaybeAlign Alignment) {
@@ -247,6 +249,9 @@ public:
                                    const LoopAccessInfo *LAI);
   void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
                                TTI::UnrollingPreferences &UP);
+
+  bool emitGetActiveLaneMask(Loop *L, LoopInfo *LI, ScalarEvolution &SE,
+                             bool TailFolded) const;
 
   bool shouldBuildLookupTablesForConstant(Constant *C) const {
     // In the ROPI and RWPI relocation models we can't have pointers to global

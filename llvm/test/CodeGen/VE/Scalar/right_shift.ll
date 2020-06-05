@@ -24,7 +24,7 @@ define signext i16 @func2(i16 signext %0, i16 signext %1) {
   ret i16 %6
 }
 
-define i32 @func3(i32 %0, i32 %1) {
+define signext i32 @func3(i32 signext %0, i32 signext %1) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, %s1
@@ -51,6 +51,7 @@ define i128 @func6(i128 %0, i128 %1) {
 ; CHECK-NEXT:    and %s3, %s3, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __ashrti3@hi(, %s3)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = ashr i128 %0, %1
   ret i128 %3
 }
@@ -85,7 +86,7 @@ define zeroext i16 @func8(i16 zeroext %0, i16 zeroext %1) {
   ret i16 %6
 }
 
-define i32 @func9(i32 %0, i32 %1) {
+define zeroext i32 @func9(i32 zeroext %0, i32 zeroext %1) {
 ; CHECK-LABEL: func9:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
@@ -115,6 +116,7 @@ define i128 @func11(i128 %0, i128 %1) {
 ; CHECK-NEXT:    and %s3, %s3, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __lshrti3@hi(, %s3)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = lshr i128 %0, %1
   ret i128 %3
 }
@@ -137,7 +139,7 @@ define signext i16 @func13(i16 signext %0) {
   ret i16 %2
 }
 
-define i32 @func14(i32 %0) {
+define signext i32 @func14(i32 signext %0) {
 ; CHECK-LABEL: func14:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 5
@@ -162,6 +164,7 @@ define i128 @func16(i128) {
 ; CHECK-NEXT:    srl %s0, %s0, 5
 ; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    sra.l %s1, %s1, 5
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = ashr i128 %0, 5
   ret i128 %2
 }
@@ -190,7 +193,7 @@ define zeroext i16 @func18(i16 zeroext %0) {
   ret i16 %2
 }
 
-define i32 @func19(i32 %0) {
+define zeroext i32 @func19(i32 zeroext %0) {
 ; CHECK-LABEL: func19:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
@@ -218,6 +221,7 @@ define i128 @func21(i128 %0) {
 ; CHECK-NEXT:    srl %s0, %s0, 5
 ; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    sra.l %s1, %s1, 5
+; CHECK-NEXT:    or %s11, 0, %s9
   %2 = ashr i128 %0, 5
   ret i128 %2
 }

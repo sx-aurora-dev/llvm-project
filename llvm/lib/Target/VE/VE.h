@@ -317,10 +317,32 @@ inline static VERD::RoundingMode VEValToRD(unsigned Val) {
   return VERD::UNKNOWN;
 }
 
-inline static bool isMiscReg(unsigned RegNo) {
-  return RegNo == 0 || RegNo == 1 || RegNo == 2 ||
-         (RegNo >= 7 && RegNo <= 11) ||
-         (RegNo >= 16 && RegNo <= 30);
+// MImm - Special immediate value of sequential bit stream of 0 or 1.
+//   See VEInstrInfo.td for details.
+inline static bool isMImmVal(uint64_t Val) {
+  if (Val == 0) {
+    // (0)1 is 0
+    return true;
+  }
+  if (isMask_64(Val)) {
+    // (m)0 patterns
+    return true;
+  }
+  // (m)1 patterns
+  return (Val & (1UL << 63)) && isShiftedMask_64(Val);
+}
+
+inline static bool isMImm32Val(uint32_t Val) {
+  if (Val == 0) {
+    // (0)1 is 0
+    return true;
+  }
+  if (isMask_32(Val)) {
+    // (m)0 patterns
+    return true;
+  }
+  // (m)1 patterns
+  return (Val & (1 << 31)) && isShiftedMask_32(Val);
 }
 
 inline unsigned M0(unsigned Val) { return Val + 64; }

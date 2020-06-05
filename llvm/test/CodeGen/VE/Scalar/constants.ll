@@ -28,6 +28,7 @@ define i8 @p128i8() {
 ; CHECK-LABEL: p128i8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 128
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret i8 128
 }
@@ -36,6 +37,7 @@ define signext i8 @p128si8() {
 ; CHECK-LABEL: p128si8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, -128
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret i8 128
 }
@@ -44,6 +46,7 @@ define zeroext i8 @p128zi8() {
 ; CHECK-LABEL: p128zi8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 128
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret i8 128
 }
@@ -124,6 +127,7 @@ define i32 @p128i32() {
 ; CHECK-LABEL: p128i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 128
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret i32 128
 }
@@ -132,6 +136,7 @@ define signext i32 @p128si32() {
 ; CHECK-LABEL: p128si32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 128
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret i32 128
 }
@@ -140,6 +145,7 @@ define zeroext i32 @p128zi32() {
 ; CHECK-LABEL: p128zi32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 128
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret i32 128
 }

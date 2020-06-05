@@ -278,6 +278,7 @@ class SelectionDAG {
   struct CallSiteDbgInfo {
     CallSiteInfo CSInfo;
     MDNode *HeapAllocSite = nullptr;
+    bool NoMerge = false;
   };
 
   DenseMap<const SDNode *, CallSiteDbgInfo> SDCallSiteDbgInfo;
@@ -1575,6 +1576,7 @@ public:
     switch (VT.getScalarType().getSimpleVT().SimpleTy) {
     default: llvm_unreachable("Unknown FP format");
     case MVT::f16:     return APFloat::IEEEhalf();
+    case MVT::bf16:    return APFloat::BFloat();
     case MVT::f32:     return APFloat::IEEEsingle();
     case MVT::f64:     return APFloat::IEEEdouble();
     case MVT::f80:     return APFloat::x87DoubleExtended();
@@ -1622,6 +1624,9 @@ public:
   void salvageDebugInfo(SDNode &N);
 
   void dump() const;
+
+  /// Create a stack temporary based on the size in bytes and the alignment
+  SDValue CreateStackTemporary(TypeSize Bytes, Align Alignment);
 
   /// Create a stack temporary, suitable for holding the specified value type.
   /// If minAlign is specified, the slot size will have at least that alignment.
@@ -1938,6 +1943,18 @@ public:
     if (It == SDCallSiteDbgInfo.end())
       return nullptr;
     return It->second.HeapAllocSite;
+  }
+
+  void addNoMergeSiteInfo(const SDNode *Node, bool NoMerge) {
+    if (NoMerge)
+      SDCallSiteDbgInfo[Node].NoMerge = NoMerge;
+  }
+
+  bool getNoMergeSiteInfo(const SDNode *Node) {
+    auto I = SDCallSiteDbgInfo.find(Node);
+    if (I == SDCallSiteDbgInfo.end())
+      return false;
+    return I->second.NoMerge;
   }
 
   /// Return the current function's default denormal handling kind for the given

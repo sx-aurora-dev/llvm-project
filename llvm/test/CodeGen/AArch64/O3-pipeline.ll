@@ -31,10 +31,11 @@
 ; CHECK-NEXT:       Scalar Evolution Analysis
 ; CHECK-NEXT:       Loop Data Prefetch
 ; CHECK-NEXT:       Falkor HW Prefetch Fix
-; CHECK-NEXT:       Basic Alias Analysis (stateless AA impl)
 ; CHECK-NEXT:       Module Verifier
+; CHECK-NEXT:       Basic Alias Analysis (stateless AA impl)
 ; CHECK-NEXT:       Canonicalize natural loops
 ; CHECK-NEXT:       Loop Pass Manager
+; CHECK-NEXT:         Canonicalize Freeze Instructions in Loops
 ; CHECK-NEXT:         Induction Variable Users
 ; CHECK-NEXT:         Loop Strength Reduction
 ; CHECK-NEXT:       Basic Alias Analysis (stateless AA impl)
@@ -59,16 +60,22 @@
 ; CHECK-NEXT:       Expand vector predication intrinsics
 ; CHECK-NEXT:       Scalarize Masked Memory Intrinsics
 ; CHECK-NEXT:       Expand reduction intrinsics
+; CHECK-NEXT:     Stack Safety Analysis
+; CHECK-NEXT:       FunctionPass Manager
+; CHECK-NEXT:         Dominator Tree Construction
+; CHECK-NEXT:         Natural Loop Information
+; CHECK-NEXT:         Scalar Evolution Analysis
+; CHECK-NEXT:         Stack Safety Local Analysis
+; CHECK-NEXT:     FunctionPass Manager
 ; CHECK-NEXT:       Dominator Tree Construction
 ; CHECK-NEXT:       Basic Alias Analysis (stateless AA impl)
+; CHECK-NEXT:       Function Alias Analysis Results
+; CHECK-NEXT:       AArch64 Stack Tagging
 ; CHECK-NEXT:       Function Alias Analysis Results
 ; CHECK-NEXT:       Memory SSA
 ; CHECK-NEXT:       Interleaved Load Combine Pass
 ; CHECK-NEXT:       Dominator Tree Construction
 ; CHECK-NEXT:       Interleaved Access Pass
-; CHECK-NEXT:       Basic Alias Analysis (stateless AA impl)
-; CHECK-NEXT:       Function Alias Analysis Results
-; CHECK-NEXT:       AArch64 Stack Tagging
 ; CHECK-NEXT:       Natural Loop Information
 ; CHECK-NEXT:       CodeGen Prepare
 ; CHECK-NEXT:     Rewrite Symbols
@@ -197,6 +204,17 @@
 ; CHECK-NEXT:       Machine Optimization Remark Emitter
 ; CHECK-NEXT:       AArch64 Assembly Printer
 ; CHECK-NEXT:       Free MachineFunction
+; CHECK-NEXT: Pass Arguments:  -domtree
+; CHECK-NEXT:   FunctionPass Manager
+; CHECK-NEXT:     Dominator Tree Construction
+; CHECK-NEXT: Pass Arguments:  -assumption-cache-tracker -targetlibinfo -domtree -loops -scalar-evolution -stack-safety-local
+; CHECK-NEXT: Assumption Cache Tracker
+; CHECK-NEXT: Target Library Information
+; CHECK-NEXT:   FunctionPass Manager
+; CHECK-NEXT:     Dominator Tree Construction
+; CHECK-NEXT:     Natural Loop Information
+; CHECK-NEXT:     Scalar Evolution Analysis
+; CHECK-NEXT:     Stack Safety Local Analysis
 ; CHECK-NEXT: Pass Arguments:  -domtree
 ; CHECK-NEXT:   FunctionPass Manager
 ; CHECK-NEXT:     Dominator Tree Construction

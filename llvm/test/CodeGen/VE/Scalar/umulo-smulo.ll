@@ -15,6 +15,7 @@ define i64 @smulo(i64, i64) {
 ; CHECK-NEXT:    sra.l %s2, %s0, 63
 ; CHECK-NEXT:    cmps.l %s1, %s1, %s2
 ; CHECK-NEXT:    cmov.l.ne %s0, (0)0, %s1
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call { i64, i1 } @llvm.smul.with.overflow.i64(i64 %1, i64 %0)
   %4 = extractvalue { i64, i1 } %3, 1
   %5 = extractvalue { i64, i1 } %3, 0

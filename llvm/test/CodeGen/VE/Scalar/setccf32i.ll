@@ -6,6 +6,7 @@ define zeroext i1 @setccaf(float, float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
 ; NONANS-LABEL: setccaf:
 ; NONANS:       .LBB{{[0-9]+}}_2:
 ; NONANS-NEXT:    or %s0, 0, (0)1
@@ -19,6 +20,7 @@ define zeroext i1 @setccat(float, float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 1, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
 ; NONANS-LABEL: setccat:
 ; NONANS:       .LBB{{[0-9]+}}_2:
 ; NONANS-NEXT:    or %s0, 1, (0)1
@@ -34,6 +36,7 @@ define zeroext i1 @setccoeq(float, float) {
 ; CHECK-NEXT:    cmov.s.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
 ; NONANS-LABEL: setccoeq:
 ; NONANS:       .LBB{{[0-9]+}}_2:
 ; NONANS-NEXT:    or %s1, 0, (0)1
@@ -53,14 +56,15 @@ define zeroext i1 @setccone(float, float) {
 ; CHECK-NEXT:    cmov.s.ne %s0, (63)0, %s1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
-; NONNS-LABEL: setccone:
-; NONNS:       .LBB{{[0-9]+}}_2:
-; NONNS-NEXT:    lea.sl %s1, 1084227584
-; NONNS-NEXT:    fcmp.s %s1, %s0, %s1
-; NONNS-NEXT:    or %s0, 0, (0)1
-; NONNS-NEXT:    cmov.s.ne %s0, (63)0, %s1
-; NONNS-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
-; NONNS-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccone:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    lea.sl %s1, 1084227584
+; NONANS-NEXT:    fcmp.s %s1, %s0, %s1
+; NONANS-NEXT:    or %s0, 0, (0)1
+; NONANS-NEXT:    cmov.s.ne %s0, (63)0, %s1
+; NONANS-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp one float %0, 5.0
   ret i1 %3
 }
@@ -72,6 +76,7 @@ define zeroext i1 @setccogt(float, float) {
 ; CHECK-NEXT:    cmov.s.gt %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
 ; NONANS-LABEL: setccogt:
 ; NONANS:       .LBB{{[0-9]+}}_2:
 ; NONANS-NEXT:    or %s1, 0, (0)1
@@ -89,6 +94,13 @@ define zeroext i1 @setccoge(float, float) {
 ; CHECK-NEXT:    cmov.s.ge %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccoge:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.ge %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp oge float %0, 0.0
   ret i1 %3
 }
@@ -100,6 +112,13 @@ define zeroext i1 @setccolt(float, float) {
 ; CHECK-NEXT:    cmov.s.lt %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccolt:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.lt %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp olt float %0, 0.0
   ret i1 %3
 }
@@ -111,6 +130,13 @@ define zeroext i1 @setccole(float, float) {
 ; CHECK-NEXT:    cmov.s.le %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccole:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.le %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp ole float %0, 0.0
   ret i1 %3
 }
@@ -123,6 +149,14 @@ define zeroext i1 @setccord(float, float) {
 ; CHECK-NEXT:    cmov.s.num %s0, (63)0, %s1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccord:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    fcmp.s %s1, %s0, %s0
+; NONANS-NEXT:    or %s0, 0, (0)1
+; NONANS-NEXT:    cmov.s.num %s0, (63)0, %s1
+; NONANS-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp ord float %0, 0.0
   ret i1 %3
 }
@@ -135,6 +169,14 @@ define zeroext i1 @setccuno(float, float) {
 ; CHECK-NEXT:    cmov.s.nan %s0, (63)0, %s1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccuno:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    fcmp.s %s1, %s0, %s0
+; NONANS-NEXT:    or %s0, 0, (0)1
+; NONANS-NEXT:    cmov.s.nan %s0, (63)0, %s1
+; NONANS-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp uno float %0, 0.0
   ret i1 %3
 }
@@ -146,6 +188,13 @@ define zeroext i1 @setccueq(float, float) {
 ; CHECK-NEXT:    cmov.s.eqnan %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccueq:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.eq %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp ueq float %0, 0.0
   ret i1 %3
 }
@@ -157,6 +206,13 @@ define zeroext i1 @setccune(float, float) {
 ; CHECK-NEXT:    cmov.s.nenan %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccune:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.ne %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp une float %0, 0.0
   ret i1 %3
 }
@@ -168,6 +224,13 @@ define zeroext i1 @setccugt(float, float) {
 ; CHECK-NEXT:    cmov.s.gtnan %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccugt:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.gt %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp ugt float %0, 0.0
   ret i1 %3
 }
@@ -179,6 +242,13 @@ define zeroext i1 @setccuge(float, float) {
 ; CHECK-NEXT:    cmov.s.genan %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccuge:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.ge %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp uge float %0, 0.0
   ret i1 %3
 }
@@ -190,6 +260,13 @@ define zeroext i1 @setccult(float, float) {
 ; CHECK-NEXT:    cmov.s.ltnan %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccult:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.lt %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp ult float %0, 0.0
   ret i1 %3
 }
@@ -201,6 +278,13 @@ define zeroext i1 @setccule(float, float) {
 ; CHECK-NEXT:    cmov.s.lenan %s1, (63)0, %s0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
+;
+; NONANS-LABEL: setccule:
+; NONANS:       .LBB{{[0-9]+}}_2:
+; NONANS-NEXT:    or %s1, 0, (0)1
+; NONANS-NEXT:    cmov.s.le %s1, (63)0, %s0
+; NONANS-NEXT:    or %s0, 0, %s1
+; NONANS-NEXT:    or %s11, 0, %s9
   %3 = fcmp ule float %0, 0.0
   ret i1 %3
 }

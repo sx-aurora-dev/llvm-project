@@ -45,8 +45,11 @@ if(APPLE)
   set(X86_64 x86_64 x86_64h)
 endif()
 
-set(ALL_BUILTIN_SUPPORTED_ARCH ${X86} ${X86_64} ${ARM32} ${ARM64}
-    ${HEXAGON} ${MIPS32} ${MIPS64} ${PPC64} ${RISCV32} ${RISCV64} ${SPARC} ${SPARCV9} ${WASM32} ${WASM64} ${VE})
+set(ALL_BUILTIN_SUPPORTED_ARCH
+  ${X86} ${X86_64} ${ARM32} ${ARM64}
+  ${HEXAGON} ${MIPS32} ${MIPS64} ${PPC64}
+  ${RISCV32} ${RISCV64} ${SPARC} ${SPARCV9}
+  ${WASM32} ${WASM64} ${VE})
 
 include(CompilerRTUtils)
 include(CompilerRTDarwinUtils)

@@ -51,7 +51,7 @@ define double @func5(double %a) {
 }
 
 define fp128 @func6(fp128 %a) {
-; CHECK-LABEL: func6
+; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -91,7 +91,7 @@ define double @func8(double %a) {
 
 ; Function Attrs: norecurse nounwind readnone
 define fp128 @func9(fp128 %a) {
-; CHECK-LABEL: func9
+; CHECK-LABEL: func9:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0

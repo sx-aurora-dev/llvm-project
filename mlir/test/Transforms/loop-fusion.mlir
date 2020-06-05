@@ -242,7 +242,7 @@ func @should_fuse_first_and_second_loops() {
   }
 
   // Should fuse first loop into the second (last loop should not be fused).
-  // Should create private memref '%2' for fused loop.
+  // Should create private memref '%2' for fused scf.
   // CHECK:      affine.for %{{.*}} = 0 to 10 {
   // CHECK-NEXT:   affine.store %{{.*}}, %{{.*}}[0] : memref<1xf32>
   // CHECK-NEXT:   affine.load %{{.*}}[0] : memref<1xf32>
@@ -2464,3 +2464,32 @@ func @reshape_into_matmul(%lhs : memref<1024x1024xf32>,
 // MAXIMAL-NEXT:     affine.for
 // MAXIMAL-NOT:      affine.for
 // MAXIMAL:      return
+
+// -----
+
+// CHECK-LABEL: func @vector_loop
+func @vector_loop(%a : memref<10x20xf32>, %b : memref<10x20xf32>,
+                  %c : memref<10x20xf32>) {
+  affine.for %j = 0 to 10 {
+    affine.for %i = 0 to 5 {
+      %ld0 = affine.vector_load %a[%j, %i*4] : memref<10x20xf32>, vector<4xf32>
+      affine.vector_store %ld0, %b[%j, %i*4] : memref<10x20xf32>, vector<4xf32>
+    }
+  }
+
+  affine.for %j = 0 to 10 {
+    affine.for %i = 0 to 5 {
+      %ld0 = affine.vector_load %b[%j, %i*4] : memref<10x20xf32>, vector<4xf32>
+      affine.vector_store %ld0, %c[%j, %i*4] : memref<10x20xf32>, vector<4xf32>
+    }
+  }
+
+  return
+}
+// CHECK:      affine.for
+// CHECK-NEXT:   affine.for
+// CHECK-NEXT:     affine.vector_load
+// CHECK-NEXT:     affine.vector_store
+// CHECK-NEXT:     affine.vector_load
+// CHECK-NEXT:     affine.vector_store
+// CHECK-NOT:  affine.for

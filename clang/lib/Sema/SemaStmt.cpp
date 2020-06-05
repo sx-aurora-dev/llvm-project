@@ -370,7 +370,10 @@ void Sema::DiagnoseUnusedExprResult(const Stmt *S) {
     }
   }
 
-  if (E->isGLValue() && E->getType().isVolatileQualified()) {
+  // Tell the user to assign it into a variable to force a volatile load if this
+  // isn't an array.
+  if (E->isGLValue() && E->getType().isVolatileQualified() &&
+      !E->getType()->isArrayType()) {
     Diag(Loc, diag::warn_unused_volatile) << R1 << R2;
     return;
   }
@@ -3306,6 +3309,7 @@ Sema::ActOnCapScopeReturnStmt(SourceLocation ReturnLoc, Expr *RetValExp) {
     assert(AT && "lost auto type from lambda return type");
     if (DeduceFunctionTypeFromReturnExpr(FD, ReturnLoc, RetValExp, AT)) {
       FD->setInvalidDecl();
+      // FIXME: preserve the ill-formed return expression.
       return StmtError();
     }
     CurCap->ReturnType = FnRetType = FD->getReturnType();

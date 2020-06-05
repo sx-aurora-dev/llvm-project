@@ -135,7 +135,7 @@ bool AMDGPULowerKernelArguments::runOnFunction(Function &F) {
         continue;
     }
 
-    VectorType *VT = dyn_cast<VectorType>(ArgTy);
+    auto *VT = dyn_cast<FixedVectorType>(ArgTy);
     bool IsV3 = VT && VT->getNumElements() == 3;
     bool DoShiftOpt = Size < 32 && !ArgTy->isAggregateType();
 
@@ -167,7 +167,7 @@ bool AMDGPULowerKernelArguments::runOnFunction(Function &F) {
     }
 
     if (IsV3 && Size >= 32) {
-      V4Ty = VectorType::get(VT->getElementType(), 4);
+      V4Ty = FixedVectorType::get(VT->getElementType(), 4);
       // Use the hack that clang uses to avoid SelectionDAG ruining v3 loads
       AdjustedArgTy = V4Ty;
     }

@@ -194,6 +194,8 @@ class ASTContext : public RefCountedBase<ASTContext> {
       DependentAddressSpaceTypes;
   mutable llvm::FoldingSet<VectorType> VectorTypes;
   mutable llvm::FoldingSet<DependentVectorType> DependentVectorTypes;
+  mutable llvm::FoldingSet<ConstantMatrixType> MatrixTypes;
+  mutable llvm::FoldingSet<DependentSizedMatrixType> DependentSizedMatrixTypes;
   mutable llvm::FoldingSet<FunctionNoProtoType> FunctionNoProtoTypes;
   mutable llvm::ContextualFoldingSet<FunctionProtoType, ASTContext&>
     FunctionProtoTypes;
@@ -655,7 +657,7 @@ public:
   /// getRealTypeForBitwidth -
   /// sets floating point QualTy according to specified bitwidth.
   /// Returns empty type if there is no appropriate target types.
-  QualType getRealTypeForBitwidth(unsigned DestWidth) const;
+  QualType getRealTypeForBitwidth(unsigned DestWidth, bool ExplicitIEEE) const;
 
   bool AtomicUsesUnsupportedLibcall(const AtomicExpr *E) const;
 
@@ -976,6 +978,7 @@ public:
 #include "clang/Basic/OpenCLImageTypes.def"
   CanQualType OCLSamplerTy, OCLEventTy, OCLClkEventTy;
   CanQualType OCLQueueTy, OCLReserveIDTy;
+  CanQualType IncompleteMatrixIdxTy;
   CanQualType OMPArraySectionTy, OMPArrayShapingTy, OMPIteratorTy;
 #define EXT_OPAQUE_TYPE(ExtType, Id, Ext) \
   CanQualType Id##Ty;
@@ -1325,6 +1328,20 @@ public:
   QualType getDependentSizedExtVectorType(QualType VectorType,
                                           Expr *SizeExpr,
                                           SourceLocation AttrLoc) const;
+
+  /// Return the unique reference to the matrix type of the specified element
+  /// type and size
+  ///
+  /// \pre \p ElementType must be a valid matrix element type (see
+  /// MatrixType::isValidElementType).
+  QualType getConstantMatrixType(QualType ElementType, unsigned NumRows,
+                                 unsigned NumColumns) const;
+
+  /// Return the unique reference to the matrix type of the specified element
+  /// type and size
+  QualType getDependentSizedMatrixType(QualType ElementType, Expr *RowExpr,
+                                       Expr *ColumnExpr,
+                                       SourceLocation AttrLoc) const;
 
   QualType getDependentAddressSpaceType(QualType PointeeType,
                                         Expr *AddrSpaceExpr,

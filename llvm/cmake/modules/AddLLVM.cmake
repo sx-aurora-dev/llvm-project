@@ -483,7 +483,12 @@ function(llvm_add_library name)
         "PUBLIC;PRIVATE"
         ${ARG_LINK_LIBS})
       foreach(link_lib ${LINK_LIBS_ARG_PUBLIC})
-        if(TARGET ${link_lib})
+        if(LLVM_PTHREAD_LIB)
+          # Can't specify a dependence on -lpthread
+          if(NOT ${link_lib} STREQUAL ${LLVM_PTHREAD_LIB})
+            add_dependencies(${obj_name} ${link_lib})
+          endif()
+        else()
           add_dependencies(${obj_name} ${link_lib})
         endif()
       endforeach()
@@ -816,6 +821,10 @@ macro(add_llvm_executable name)
 
   if(NOT ARG_NO_INSTALL_RPATH)
     llvm_setup_rpath(${name})
+  elseif (LLVM_LOCAL_RPATH)
+    set_target_properties(${name} PROPERTIES
+                          BUILD_WITH_INSTALL_RPATH On
+                          INSTALL_RPATH "${LLVM_LOCAL_RPATH}")
   endif()
 
   if(DEFINED windows_resource_file)
@@ -1496,16 +1505,10 @@ endfunction()
 # path. Since this uses __file__, it has to be emitted into python files that
 # use it and can't be in a lit module. Use with make_paths_relative().
 string(CONCAT LLVM_LIT_PATH_FUNCTION
-  # Lit converts config paths to lower case in discovery.py, before
-  # loading the config. This causes __file__ to be all lower-case (including
-  # the drive letter), but several clang tests pass -include %s and a
-  # clang warning checks that passed case matches on-disk cache. So it's
-  # important that this restores the on-disk case of the prefix.
   "# Allow generated file to be relocatable.\n"
   "def path(p):\n"
   "    if not p: return ''\n"
-  "    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), p)\n"
-  "    return p\n"
+  "    return os.path.join(os.path.dirname(os.path.abspath(__file__)), p)\n"
   )
 
 # This function provides an automatic way to 'configure'-like generate a file
@@ -2091,34 +2094,27 @@ function(find_first_existing_vc_file path out_var)
   if(NOT EXISTS "${path}")
     return()
   endif()
-  if(EXISTS "${path}/.svn")
-    set(svn_files
-      "${path}/.svn/wc.db"   # SVN 1.7
-      "${path}/.svn/entries" # SVN 1.6
-    )
-    foreach(file IN LISTS svn_files)
-      if(EXISTS "${file}")
-        set(${out_var} "${file}" PARENT_SCOPE)
-        return()
-      endif()
-    endforeach()
-  else()
-    find_package(Git)
-    if(GIT_FOUND)
-      execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --git-dir
-        WORKING_DIRECTORY ${path}
-        RESULT_VARIABLE git_result
-        OUTPUT_VARIABLE git_output
-        ERROR_QUIET)
-      if(git_result EQUAL 0)
-        string(STRIP "${git_output}" git_output)
-        get_filename_component(git_dir ${git_output} ABSOLUTE BASE_DIR ${path})
-        # Some branchless cases (e.g. 'repo') may not yet have .git/logs/HEAD
-        if (NOT EXISTS "${git_dir}/logs/HEAD")
-          file(WRITE "${git_dir}/logs/HEAD" "")
+  find_package(Git)
+  if(GIT_FOUND)
+    execute_process(COMMAND ${GIT_EXECUTABLE} rev-parse --git-dir
+      WORKING_DIRECTORY ${path}
+      RESULT_VARIABLE git_result
+      OUTPUT_VARIABLE git_output
+      ERROR_QUIET)
+    if(git_result EQUAL 0)
+      string(STRIP "${git_output}" git_output)
+      get_filename_component(git_dir ${git_output} ABSOLUTE BASE_DIR ${path})
+      # Some branchless cases (e.g. 'repo') may not yet have .git/logs/HEAD
+      if (NOT EXISTS "${git_dir}/logs/HEAD")
+        execute_process(COMMAND ${CMAKE_COMMAND} -E touch HEAD
+          WORKING_DIRECTORY "${git_dir}/logs"
+          RESULT_VARIABLE touch_head_result
+          ERROR_QUIET)
+        if (NOT touch_head_result EQUAL 0)
+          return()
         endif()
-        set(${out_var} "${git_dir}/logs/HEAD" PARENT_SCOPE)
       endif()
+      set(${out_var} "${git_dir}/logs/HEAD" PARENT_SCOPE)
     endif()
   endif()
 endfunction()

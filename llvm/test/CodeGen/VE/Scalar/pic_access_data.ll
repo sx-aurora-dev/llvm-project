@@ -4,7 +4,7 @@
 @ptr = external global i32*, align 8
 @src = external global i32, align 4
 
-define i32 @func() {
+define zeroext i32 @func() {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s15, _GLOBAL_OFFSET_TABLE_@pc_lo(-24)

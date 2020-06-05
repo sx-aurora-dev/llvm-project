@@ -30,7 +30,7 @@ define void @func() {
 }
 
 ; Function Attrs: nounwind
-define i32 @main() {
+define signext i32 @main() {
 ; CHECK-LABEL: main:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s15, _GLOBAL_OFFSET_TABLE_@pc_lo(-24)

@@ -35,10 +35,12 @@ public:
     eArchitectureCompletion = (1u << 7),
     eVariablePathCompletion = (1u << 8),
     eRegisterCompletion = (1u << 9),
+    eBreakpointCompletion = (1u << 10),
+    eProcessPluginCompletion = (1u << 11),
     // This item serves two purposes.  It is the last element in the enum, so
     // you can add custom enums starting from here in your Option class. Also
     // if you & in this bit the base code will not process the option.
-    eCustomCompletion = (1u << 10)
+    eCustomCompletion = (1u << 12)
   };
 
   static bool InvokeCommonCompletionCallbacks(
@@ -85,6 +87,13 @@ public:
 
   static void Registers(CommandInterpreter &interpreter,
                         CompletionRequest &request, SearchFilter *searcher);
+
+  static void Breakpoints(CommandInterpreter &interpreter,
+                          CompletionRequest &request, SearchFilter *searcher);
+
+  static void ProcessPluginNames(CommandInterpreter &interpreter,
+                                 CompletionRequest &request,
+                                 SearchFilter *searcher);
 };
 
 } // namespace lldb_private

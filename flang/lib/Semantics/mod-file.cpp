@@ -389,7 +389,7 @@ void ModFileWriter::PutGeneric(const Symbol &symbol) {
 void ModFileWriter::PutUse(const Symbol &symbol) {
   auto &details{symbol.get<UseDetails>()};
   auto &use{details.symbol()};
-  uses_ << "use " << details.module().name();
+  uses_ << "use " << GetUsedModule(details).name();
   PutGenericName(uses_ << ",only:", symbol);
   // Can have intrinsic op with different local-name and use-name
   // (e.g. `operator(<)` and `operator(.lt.)`) but rename is not allowed
@@ -833,7 +833,7 @@ void SubprogramSymbolCollector::Collect() {
   for (const auto &pair : scope_) {
     const Symbol &symbol{*pair.second};
     if (const auto *useDetails{symbol.detailsIf<UseDetails>()}) {
-      if (useSet_.count(useDetails->symbol()) > 0) {
+      if (useSet_.count(useDetails->symbol().GetUltimate()) > 0) {
         need_.push_back(symbol);
       }
     }

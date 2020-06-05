@@ -1,4 +1,5 @@
 add_mlir_dialect_library(MLIRLinalgTransforms
+  DropUnitDims.cpp
   Fusion.cpp
   Interchange.cpp
   Loops.cpp
@@ -23,7 +24,7 @@ add_mlir_dialect_library(MLIRLinalgTransforms
   MLIRLinalgEDSC
   MLIRLinalgOps
   MLIRLinalgUtils
-  MLIRLoopOps
+  MLIRSCF
   MLIRPass
   MLIRStandardOps
   MLIRStandardToLLVM

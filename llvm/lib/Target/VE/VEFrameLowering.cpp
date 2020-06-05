@@ -41,7 +41,7 @@ VEFrameLowering::VEFrameLowering(const VESubtarget &ST)
 void VEFrameLowering::emitPrologueInsns(MachineFunction &MF,
                                         MachineBasicBlock &MBB,
                                         MachineBasicBlock::iterator MBBI,
-                                        int NumBytes,
+                                        uint64_t NumBytes,
                                         bool RequireFPUpdate) const {
 
   DebugLoc dl;
@@ -90,7 +90,7 @@ void VEFrameLowering::emitPrologueInsns(MachineFunction &MF,
 void VEFrameLowering::emitEpilogueInsns(MachineFunction &MF,
                                         MachineBasicBlock &MBB,
                                         MachineBasicBlock::iterator MBBI,
-                                        int NumBytes,
+                                        uint64_t NumBytes,
                                         bool RequireFPUpdate) const {
 
   DebugLoc dl;
@@ -232,7 +232,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
                        "(probably because it has a dynamic alloca).");
 
   // Get the number of bytes to allocate from the FrameInfo
-  int64_t NumBytes = (int64_t)MFI.getStackSize();
+  uint64_t NumBytes = MFI.getStackSize();
 #if 0
   if (FuncInfo->isLeafProc()) {
     if (NumBytes == 0)
@@ -257,7 +257,7 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   // Emit stack adjust instructions
   MaybeAlign RuntimeAlign =
       NeedsStackRealignment ? MaybeAlign(MFI.getMaxAlign()) : None;
-  emitSPAdjustment(MF, MBB, MBBI, -NumBytes, RuntimeAlign);
+  emitSPAdjustment(MF, MBB, MBBI, -(int64_t)NumBytes, RuntimeAlign);
 
   if (hasBP(MF)) {
     // Copy SP to BP.
@@ -269,11 +269,11 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
   // Emit stack extend instructions
   emitSPExtend(MF, MBB, MBBI);
 
-  Register regFP = RegInfo.getDwarfRegNum(VE::SX9, true);
+  Register RegFP = RegInfo.getDwarfRegNum(VE::SX9, true);
 
   // Emit ".cfi_def_cfa_register 30".
   unsigned CFIIndex =
-      MF.addFrameInst(MCCFIInstruction::createDefCfaRegister(nullptr, regFP));
+      MF.addFrameInst(MCCFIInstruction::createDefCfaRegister(nullptr, RegFP));
   BuildMI(MBB, MBBI, dl, TII.get(TargetOpcode::CFI_INSTRUCTION))
       .addCFIIndex(CFIIndex);
 
@@ -318,7 +318,7 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
 #endif
   MachineFrameInfo &MFI = MF.getFrameInfo();
 
-  int64_t NumBytes = (int)MFI.getStackSize();
+  uint64_t NumBytes = MFI.getStackSize();
 
 #if 0
   if (NumBytes == 0)
@@ -369,7 +369,8 @@ int VEFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
     // because we haven't caused %fp to actually point to our frame.
     FrameReg = VE::SX11; // %sp
     return FrameOffset + MF.getFrameInfo().getStackSize();
-  } else if (RegInfo->needsStackRealignment(MF) && !isFixed) {
+  }
+  if (RegInfo->needsStackRealignment(MF) && !isFixed) {
     // If there is dynamic stack realignment, all local object
     // references need to be via %sp or %s17 (bp), to take account
     // of the re-alignment.
@@ -378,27 +379,10 @@ int VEFrameLowering::getFrameIndexReference(const MachineFunction &MF, int FI,
     else
       FrameReg = VE::SX11; // %sp
     return FrameOffset + MF.getFrameInfo().getStackSize();
-  } else {
-    // Finally, default to using %fp.
-    FrameReg = RegInfo->getFrameRegister(MF);
-    return FrameOffset;
   }
-}
-
-static bool LLVM_ATTRIBUTE_UNUSED
-verifyLeafProcRegUse(MachineRegisterInfo *MRI) {
-
-  // If any of parameter registers are used, this is not leaf function.
-  for (unsigned reg = VE::SX0; reg <= VE::SX7; ++reg)
-    if (MRI->isPhysRegUsed(reg))
-      return false;
-
-  // If any of callee-saved registers are used, this is not leaf function.
-  for (unsigned reg = VE::SX18; reg <= VE::SX33; ++reg)
-    if (MRI->isPhysRegUsed(reg))
-      return false;
-
-  return true;
+  // Finally, default to using %fp.
+  FrameReg = RegInfo->getFrameRegister(MF);
+  return FrameOffset;
 }
 
 bool VEFrameLowering::isLeafProc(MachineFunction &MF) const {

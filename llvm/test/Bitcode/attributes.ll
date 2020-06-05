@@ -380,8 +380,14 @@ define void @f64(i32* preallocated(i32) %a)
   ret void
 }
 
-; CHECK: define <8 x double> @f65(<8 x double> passthru %0, <8 x i1> mask %1, i32 vlen %2) {
-define <8 x double> @f65(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
+; CHECK: define void @f65() #40
+define void @f65() null_pointer_is_valid
+{
+  ret void;
+}
+
+; CHECK: define <8 x double> @f66(<8 x double> passthru %0, <8 x i1> mask %1, i32 vlen %2) {
+define <8 x double> @f66(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
   ret <8 x double> undef
 }
 
@@ -425,4 +431,5 @@ define <8 x double> @f65(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
 ; CHECK: attributes #37 = { nofree }
 ; CHECK: attributes #38 = { nosync }
 ; CHECK: attributes #39 = { sanitize_memtag }
+; CHECK: attributes #40 = { null_pointer_is_valid }
 ; CHECK: attributes #[[NOBUILTIN]] = { nobuiltin }

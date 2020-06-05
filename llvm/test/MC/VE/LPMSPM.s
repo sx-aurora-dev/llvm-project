@@ -1,9 +1,12 @@
-# RUN: llvm-mc -triple ve-unknown-unknown --show-encoding %s | FileCheck %s
+# RUN: llvm-mc -triple=ve --show-encoding < %s \
+# RUN:     | FileCheck %s --check-prefixes=CHECK-ENCODING,CHECK-INST
+# RUN: llvm-mc -triple=ve -filetype=obj < %s | llvm-objdump -d - \
+# RUN:     | FileCheck %s --check-prefixes=CHECK-INST
 
-# CHECK: lpm %s11
-# CHECK: encoding: [0x00,0x00,0x00,0x00,0x00,0x8b,0x00,0x3a]
+# CHECK-INST: lpm %s11
+# CHECK-ENCODING: encoding: [0x00,0x00,0x00,0x00,0x00,0x8b,0x00,0x3a]
 lpm %s11
 
-# CHECK: spm %s63
-# CHECK: encoding: [0x00,0x00,0x00,0x00,0x00,0x00,0x3f,0x2a]
+# CHECK-INST: spm %s63
+# CHECK-ENCODING: encoding: [0x00,0x00,0x00,0x00,0x00,0x00,0x3f,0x2a]
 spm %s63

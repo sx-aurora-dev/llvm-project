@@ -17,11 +17,132 @@
 include "VEInstrFormats.td"
 
 //===----------------------------------------------------------------------===//
-// Feature predicates.
+// Helper functions to retrieve target constants.
+//
+// VE instructions have a space to hold following immediates
+//   $sy has 7 bits to represent simm7, uimm7, simm7fp, or uimm7fp.
+//   $sz also has 7 bits to represent mimm or mimmfp.
+//   $disp has 32 bits to represent simm32.
+//
+// The mimm is a special immediate value of sequential bit stream of 0 or 1.
+//     `(m)0`: Represents 0 sequence then 1 sequence like 0b00...0011...11,
+//             where `m` is equal to the number of leading zeros.
+//     `(m)1`: Represents 1 sequence then 0 sequence like 0b11...1100...00,
+//             where `m` is equal to the number of leading ones.
+// Each bit of mimm's 7 bits is used like below:
+//     bit 6  : If `(m)0`, this bit is 1.  Otherwise, this bit is 0.
+//     bit 5-0: Represents the m (0-63).
+// Use `!add(m, 64)` to generates an immediate value in pattern matchings.
+//
+// The floating point immediate value is not something like compacted value.
+// It is simple integer representation, so it works rarely.
+//     e.g. 0.0 (0x00000000) or -2.0 (0xC0000000=(2)1).
 //===----------------------------------------------------------------------===//
 
+def LO7 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
+                                   SDLoc(N), MVT::i32);
+}]>;
+def ULO7 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getZExtValue() & 0x7f,
+                                   SDLoc(N), MVT::i32);
+}]>;
+def MIMM : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(convMImmVal(getImmVal(N)),
+                                   SDLoc(N), MVT::i32);
+}]>;
+def LO32 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(Lo_32(N->getZExtValue()),
+                                   SDLoc(N), MVT::i32);
+}]>;
+def HI32 : SDNodeXForm<imm, [{
+  // Transformation function: shift the immediate value down into the low bits.
+  return CurDAG->getTargetConstant(Hi_32(N->getZExtValue()),
+                                   SDLoc(N), MVT::i32);
+}]>;
+
+def LO7FP : SDNodeXForm<fpimm, [{
+  uint64_t Val = getFpImmVal(N);
+  return CurDAG->getTargetConstant(SignExtend32(Val, 7), SDLoc(N), MVT::i32);
+}]>;
+def MIMMFP : SDNodeXForm<fpimm, [{
+  return CurDAG->getTargetConstant(convMImmVal(getFpImmVal(N)),
+                                   SDLoc(N), MVT::i32);
+}]>;
+def LOFP32 : SDNodeXForm<fpimm, [{
+  return CurDAG->getTargetConstant(Lo_32(getFpImmVal(N) & 0xffffffff),
+                                   SDLoc(N), MVT::i32);
+}]>;
+def HIFP32 : SDNodeXForm<fpimm, [{
+  return CurDAG->getTargetConstant(Hi_32(getFpImmVal(N)), SDLoc(N), MVT::i32);
+}]>;
+
+/*
+def GetVL : SDNodeXForm<imm, [{
+  // Get a virtual register for VL and return it.
+  MachineFunction& MF = CurDAG->getMachineFunction();
+  unsigned VLReg =
+      MF.getSubtarget<VESubtarget>().getInstrInfo()->getVectorLengthReg(&MF);
+  return CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VLReg,
+                                MVT::i32);
+}]>;
+*/
+
+def icond2cc : SDNodeXForm<cond, [{
+  VECC::CondCode VECC = IntCondCode2ICC(N->get());
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def icond2ccSwap : SDNodeXForm<cond, [{
+  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
+  VECC::CondCode VECC = IntCondCode2ICC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def icond2ccInv : SDNodeXForm<cond, [{
+  ISD::CondCode CC = ISD::GlobalISel::getSetCCInverse(N->get(), true);
+  VECC::CondCode VECC = IntCondCode2ICC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def icond2ccSwapInv : SDNodeXForm<cond, [{
+  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
+  CC = ISD::GlobalISel::getSetCCInverse(CC, true);
+  VECC::CondCode VECC = IntCondCode2ICC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def fcond2cc : SDNodeXForm<cond, [{
+  VECC::CondCode VECC = FPCondCode2FCC(N->get());
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def fcond2ccSwap : SDNodeXForm<cond, [{
+  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
+  VECC::CondCode VECC = FPCondCode2FCC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def fcond2ccInv : SDNodeXForm<cond, [{
+  ISD::CondCode CC = ISD::GlobalISel::getSetCCInverse(N->get(), false);
+  VECC::CondCode VECC = FPCondCode2FCC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def fcond2ccSwapInv : SDNodeXForm<cond, [{
+  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
+  CC = ISD::GlobalISel::getSetCCInverse(CC, false);
+  VECC::CondCode VECC = FPCondCode2FCC(CC);
+  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
+}]>;
+
+def CCOP : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(N->getZExtValue(),
+                                   SDLoc(N), MVT::i32);
+}]>;
+
 //===----------------------------------------------------------------------===//
-// Instruction Pattern Stuff
+// Feature predicates.
 //===----------------------------------------------------------------------===//
 
 // Custom ISDs
@@ -99,10 +220,6 @@ def uimm6 : Operand<i32>, PatLeaf<(imm), [{
 }
 
 // uimm7 - Generic immediate value.
-def ULO7 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getZExtValue() & 0x7f,
-                                   SDLoc(N), MVT::i32);
-}]>;
 def UImm7AsmOperand : AsmOperandClass { let Name = "UImm7"; }
 def uimm7 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<7>(N->getZExtValue()); }], ULO7> {
@@ -117,10 +234,6 @@ def uimm0to2 : Operand<i32>, PatLeaf<(imm), [{
 }
 
 // simm7 - Generic immediate value.
-def LO7 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
-                                   SDLoc(N), MVT::i32);
-}]>;
 def SImm7AsmOperand : AsmOperandClass { let Name = "SImm7"; }
 def simm7 : Operand<i32>, PatLeaf<(imm), [{
     return isInt<7>(N->getSExtValue()); }], LO7> {
@@ -129,31 +242,12 @@ def simm7 : Operand<i32>, PatLeaf<(imm), [{
 }
 
 // mimm - Special immediate value of sequential bit stream of 0 or 1.
-//   `(m)0`: Represents 0b00...0011...11 pattern where the number of leading
-//           zeros equal to m.
-//   `(m)1`: Represents 0b11...1100...00 pattern where the number of leading
-//           ones equal to m.
-// The immediate value of mimm operands:
-//   bit 6  : If `(m)0`, 1.  Otherwise, 0.
-//   bit 5-0: Represents 0-63.
-// Use `!add(m, 64)` to generates an immediate value in pattern matching.
-def MIMM : SDNodeXForm<imm, [{
-  uint64_t Val = N->getZExtValue();
-  if (isMask_64(Val))
-    Val = countLeadingZeros(Val) | 0x40;
-  else
-    Val = countLeadingOnes(Val);
-  return CurDAG->getTargetConstant(Val, SDLoc(N), MVT::i32);
-}]>;
 def MImmAsmOperand : AsmOperandClass {
   let Name = "MImm";
   let ParserMethod = "parseMImmOperand";
 }
 def mimm : Operand<i32>, PatLeaf<(imm), [{
-    return isMask_64(N->getZExtValue()) ||
-           N->getZExtValue() == 0 /* (0)1 == 0 */ ||
-           ((N->getZExtValue() & (1UL << 63)) &&
-            isShiftedMask_64(N->getZExtValue())); }], MIMM> {
+    return isMImmVal(getImmVal(N)); }], MIMM> {
   let ParserMatchClass = MImmAsmOperand;
   let PrintMethod = "printMImmOperand";
 }
@@ -165,53 +259,24 @@ def zero : Operand<i32>, PatLeaf<(imm), [{
   let ParserMatchClass = ZeroAsmOperand;
 }
 
-// misc - Immediates to represent MISC registers
-def MiscImmAsmOperand : AsmOperandClass { let Name = "MiscImm"; }
-def misc : Operand<i32>, PatLeaf<(imm), [{
-    int64_t Val = N->getSExtValue();
-    return Val == 0 || Val == 1 || Val == 2 || (Val >= 7 && Val <= 11) ||
-           (Val >= 16 && Val <= 30); }]> {
-  let ParserMatchClass = MiscImmAsmOperand;
-}
-
 // simm7fp - Generic fp immediate value.
-def LO7FP : SDNodeXForm<fpimm, [{
-  // Get a integer immediate from fpimm
-  const APInt& imm = N->getValueAPF().bitcastToAPInt();
-  uint64_t val = imm.getSExtValue();
-  if (imm.getBitWidth() == 32)
-    val <<= 32; // Immediate value of float place at higher bits on VE.
-  return CurDAG->getTargetConstant(SignExtend32(val, 7), SDLoc(N), MVT::i32);
-}]>;
 def simm7fp : Operand<i32>, PatLeaf<(fpimm), [{
-    const APInt& imm = N->getValueAPF().bitcastToAPInt();
-    uint64_t val = imm.getSExtValue();
-    if (imm.getBitWidth() == 32)
-      val <<= 32; // Immediate value of float place at higher bits on VE.
-    return isInt<7>(val);
+    return isInt<7>(getFpImmVal(N));
   }], LO7FP> {
   let ParserMatchClass = SImm7AsmOperand;
   let DecoderMethod = "DecodeSIMM7";
 }
 
-// mimm - Special fp immediate value of sequential bit stream of 0 or 1.
-def MIMMFP : SDNodeXForm<fpimm, [{
-  const APInt& Imm = N->getValueAPF().bitcastToAPInt();
-  uint64_t Val = Imm.getSExtValue();
-  bool M0Flag = isMask_64(Val);
-  if (Imm.getBitWidth() == 32)
-    Val <<= 32; // Immediate value of float place at higher bits on VE.
-  if (M0Flag)
-    Val = countLeadingZeros(Val) | 0x40;
-  else
-    Val = countLeadingOnes(Val);
-  return CurDAG->getTargetConstant(Val, SDLoc(N), MVT::i32);
-}]>;
+// mimmfp - Special fp immediate value of sequential bit stream of 0 or 1.
 def mimmfp : Operand<i32>, PatLeaf<(fpimm), [{
-    const APInt& Imm = N->getValueAPF().bitcastToAPInt();
-    return isMask_64(Imm.getSExtValue()) ||
-           ((Imm.getSExtValue() & (1UL << 63)) &&
-            isShiftedMask_64(Imm.getSExtValue())); }], MIMMFP> {
+    return isMImmVal(getFpImmVal(N)); }], MIMMFP> {
+  let ParserMatchClass = MImmAsmOperand;
+  let PrintMethod = "printMImmOperand";
+}
+// mimmfp32 - 32 bit width mimmfp
+//   Float value places at higher bits, so ignore lower 32 bits.
+def mimmfp32 : Operand<i32>, PatLeaf<(fpimm), [{
+    return isMImm32Val(getFpImmVal(N) >> 32); }], MIMMFP> {
   let ParserMatchClass = MImmAsmOperand;
   let PrintMethod = "printMImmOperand";
 }
@@ -228,13 +293,11 @@ def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
                                       == 0; }]>;
 def lozero      : PatLeaf<(imm), [{ return (N->getZExtValue() & 0xffffffff)
                                       == 0; }]>;
-
-def fpzero      : PatLeaf<(fpimm), [{ return N->isZero(); }]>;
-def fplomsbzero : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
-                                      .getZExtValue() & 0x80000000) == 0; }]>;
-def fplozero    : PatLeaf<(fpimm), [{ return (N->getValueAPF().bitcastToAPInt()
-                                      .getZExtValue() & 0xffffffff) == 0; }]>;
-
+def fpzero      : PatLeaf<(fpimm), [{ return getFpImmVal(N) == 0; }]>;
+def fplomsbzero : PatLeaf<(fpimm), [{ return (getFpImmVal(N) & 0x80000000)
+                                        == 0; }]>;
+def fplozero    : PatLeaf<(fpimm), [{ return (getFpImmVal(N) & 0xffffffff)
+                                        == 0; }]>;
 def ones_l      : PatLeaf<(imm), [{ return N->getZExtValue() == 0xffffffffffffffff; }]>;
 def ones_w      : PatLeaf<(imm), [{ return N->getZExtValue() & 0xffffffff == 0xffffffff; }]>;
 
@@ -269,102 +332,18 @@ def CCUIOp : PatLeaf<(cond), [{
   }
 }]>;
 
-def GetVL : SDNodeXForm<imm, [{
-  // Get a virtual register for VL and return it.
-  MachineFunction& MF = CurDAG->getMachineFunction();
-  unsigned VLReg = MF.getSubtarget<VESubtarget>().getInstrInfo()->getVectorLengthReg(&MF);
-  return CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VLReg, MVT::i32);
-}]>;
-
-def LOFP32 : SDNodeXForm<fpimm, [{
-  // Get a integer immediate from fpimm
-  const APInt& imm = N->getValueAPF().bitcastToAPInt();
-  return CurDAG->getTargetConstant(Lo_32(imm.getZExtValue() & 0xffffffff),
-                                   SDLoc(N), MVT::i64);
-}]>;
-
-def HIFP32 : SDNodeXForm<fpimm, [{
-  // Get a integer immediate from fpimm
-  const APInt& imm = N->getValueAPF().bitcastToAPInt();
-  return CurDAG->getTargetConstant(Hi_32(imm.getZExtValue()),
-                                   SDLoc(N), MVT::i64);
-}]>;
-
-def LO32 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(Lo_32(N->getZExtValue()),
-                                   SDLoc(N), MVT::i32);
-}]>;
-
-def HI32 : SDNodeXForm<imm, [{
-  // Transformation function: shift the immediate value down into the low bits.
-  return CurDAG->getTargetConstant(Hi_32(N->getZExtValue()),
-                                   SDLoc(N), MVT::i32);
-}]>;
-
 def LEASLimm : PatLeaf<(imm), [{
   return isShiftedUInt<32, 32>(N->getZExtValue());
 }], HI32>;
 
-def trunc_imm : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getZExtValue(), SDLoc(N), MVT::i32);
+// KnownZExt - i64 known as higher 32 bits are 0.
+def KnownZExt : PatLeaf<(i64 I64:$src), [{
+  SDValue Val(N, 0);
+  KnownBits OpKnown = CurDAG->computeKnownBits(Val);
+  return OpKnown.getMaxValue().getZExtValue() <= 0xFFFFFFFF;
 }]>;
 
-def sext_imm : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getSExtValue(), SDLoc(N), MVT::i64);
-}]>;
-
-def zext_imm : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getZExtValue(), SDLoc(N), MVT::i64);
-}]>;
-
-def icond2cc : SDNodeXForm<cond, [{
-  VECC::CondCode VECC = IntCondCode2ICC(N->get());
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def icond2ccSwap : SDNodeXForm<cond, [{
-  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
-  VECC::CondCode VECC = IntCondCode2ICC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def icond2ccInv : SDNodeXForm<cond, [{
-  ISD::CondCode CC = ISD::GlobalISel::getSetCCInverse(N->get(), true);
-  VECC::CondCode VECC = IntCondCode2ICC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def icond2ccSwapInv : SDNodeXForm<cond, [{
-  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
-  CC = ISD::GlobalISel::getSetCCInverse(CC, true);
-  VECC::CondCode VECC = IntCondCode2ICC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def fcond2cc : SDNodeXForm<cond, [{
-  VECC::CondCode VECC = FPCondCode2FCC(N->get());
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def fcond2ccSwap : SDNodeXForm<cond, [{
-  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
-  VECC::CondCode VECC = FPCondCode2FCC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def fcond2ccInv : SDNodeXForm<cond, [{
-  ISD::CondCode CC = ISD::GlobalISel::getSetCCInverse(N->get(), false);
-  VECC::CondCode VECC = FPCondCode2FCC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
-def fcond2ccSwapInv : SDNodeXForm<cond, [{
-  ISD::CondCode CC = getSetCCSwappedOperands(N->get());
-  CC = ISD::GlobalISel::getSetCCInverse(CC, false);
-  VECC::CondCode VECC = FPCondCode2FCC(CC);
-  return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
-}]>;
-
+//===----------------------------------------------------------------------===//
 // Addressing modes.
 // SX-Aurora has following fields.
 //    sz: register or 0
@@ -391,16 +370,16 @@ def fcond2ccSwapInv : SDNodeXForm<cond, [{
 //    MEMriASX, MEMziASX    : simple AS format
 //    MEMriRRM, MEMziRRM    : AS format in RRM format
 //    MEMriHM, MEMziHM      : AS format in RRM format for host memory access
+//===----------------------------------------------------------------------===//
 
 def ADDRrri : ComplexPattern<iPTR, 3, "selectADDRrri", [frameindex], []>;
 def ADDRrii : ComplexPattern<iPTR, 3, "selectADDRrii", [frameindex], []>;
 def ADDRzri : ComplexPattern<iPTR, 3, "selectADDRzri", [], []>;
 def ADDRzii : ComplexPattern<iPTR, 3, "selectADDRzii", [], []>;
-// AS format:
 def ADDRri : ComplexPattern<iPTR, 2, "selectADDRri", [frameindex], []>;
 def ADDRzi : ComplexPattern<iPTR, 2, "selectADDRzi", [], []>;
-//
-// ASX assembly instrcution format:
+
+// AsmOperandClasses for addressing mode to parse instructions.
 def VEMEMrriAsmOperand : AsmOperandClass {
   let Name = "MEMrri";
   let ParserMethod = "parseMEMOperand";
@@ -417,6 +396,16 @@ def VEMEMziiAsmOperand : AsmOperandClass {
   let Name = "MEMzii";
   let ParserMethod = "parseMEMOperand";
 }
+def VEMEMriAsmOperand : AsmOperandClass {
+  let Name = "MEMri";
+  let ParserMethod = "parseMEMAsOperand";
+}
+def VEMEMziAsmOperand : AsmOperandClass {
+  let Name = "MEMzi";
+  let ParserMethod = "parseMEMAsOperand";
+}
+
+// Operand definitions for ASX addressing mode.
 def MEMrri : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
   let MIOperandInfo = (ops ptr_rc, ptr_rc, i32imm);
@@ -437,15 +426,10 @@ def MEMzii : Operand<iPTR> {
   let MIOperandInfo = (ops i32imm /* = 0 */, i32imm, i32imm);
   let ParserMatchClass = VEMEMziiAsmOperand;
 }
-// AS assembly instrcution format:
-def VEMEMriAsmOperand : AsmOperandClass {
-  let Name = "MEMri";
-  let ParserMethod = "parseMEMAsOperand";
-}
-def VEMEMziAsmOperand : AsmOperandClass {
-  let Name = "MEMzi";
-  let ParserMethod = "parseMEMAsOperand";
-}
+
+// Operand definitions for AS addressing mode.
+//   AS format has different representations, so defines them.
+
 // AS generic assembly instruction format:
 def MEMriASX : Operand<iPTR> {
   let PrintMethod = "printMemASOperandASX";
@@ -457,6 +441,7 @@ def MEMziASX : Operand<iPTR> {
   let MIOperandInfo = (ops i32imm /* = 0 */, i32imm);
   let ParserMatchClass = VEMEMziAsmOperand;
 }
+
 // AS RRM style assembly instruction format:
 def MEMriRRM : Operand<iPTR> {
   let PrintMethod = "printMemASOperandRRM";
@@ -468,6 +453,7 @@ def MEMziRRM : Operand<iPTR> {
   let MIOperandInfo = (ops i32imm /* = 0 */, i32imm);
   let ParserMatchClass = VEMEMziAsmOperand;
 }
+
 // AS HM style assembly instruction format:
 def MEMriHM : Operand<iPTR> {
   let PrintMethod = "printMemASOperandHM";
@@ -489,10 +475,6 @@ def brtarget32 : Operand<OtherVT> {
 def TLSSym : Operand<iPTR>;
 
 // Operand for printing out a condition code.
-def CCOP : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(N->getZExtValue(),
-                                   SDLoc(N), MVT::i32);
-}]>;
 def CCOpAsmOperand : AsmOperandClass { let Name = "CCOp"; }
 def CCOp : Operand<i32>, ImmLeaf<i32, [{
     return Imm >= 0 && Imm < 22; }], CCOP> {
@@ -727,22 +709,41 @@ multiclass RRIm<string opcStr, bits<8>opc,
               [(set Ty:$sx, (OpNode (Ty mimm:$sz), (i32 uimm7:$sy)))]>;
 }
 
-// Special RR multiclass for double-shift instructions.
-//   e.g. SLD and SRD
+// Special RR multiclass for 128 bits shift left instruction.
+//   e.g. SLD
 let Constraints = "$hi = $sx", DisableEncoding = "$hi", hasSideEffects = 0 in
-multiclass RRIDm<string opcStr, bits<8>opc,
-                 RegisterClass RC, ValueType Ty,
-                 SDPatternOperator OpNode = null_frag> {
-  def rr : RR<opc, (outs RC:$sx), (ins RC:$hi, RC:$sz, I32:$sy),
+multiclass RRILDm<string opcStr, bits<8>opc,
+                  RegisterClass RC, ValueType Ty,
+                  SDPatternOperator OpNode = null_frag> {
+  def rrr : RR<opc, (outs RC:$sx), (ins RC:$hi, RC:$sz, I32:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
   let cz = 0 in
-  def mr : RR<opc, (outs RC:$sx), (ins RC:$hi, mimm:$sz, I32:$sy),
+  def rmr : RR<opc, (outs RC:$sx), (ins RC:$hi, mimm:$sz, I32:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
   let cy = 0 in
-  def ri : RR<opc, (outs RC:$sx), (ins RC:$hi, RC:$sz, uimm7:$sy),
+  def rri : RR<opc, (outs RC:$sx), (ins RC:$hi, RC:$sz, uimm7:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
   let cy = 0, cz = 0 in
-  def mi : RR<opc, (outs RC:$sx), (ins RC:$hi, mimm:$sz, uimm7:$sy),
+  def rmi : RR<opc, (outs RC:$sx), (ins RC:$hi, mimm:$sz, uimm7:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+}
+
+// Special RR multiclass for 128 bits shift right instruction.
+//   e.g. SRD
+let Constraints = "$low = $sx", DisableEncoding = "$low", hasSideEffects = 0 in
+multiclass RRIRDm<string opcStr, bits<8>opc,
+                  RegisterClass RC, ValueType Ty,
+                  SDPatternOperator OpNode = null_frag> {
+  def rrr : RR<opc, (outs RC:$sx), (ins RC:$sz, RC:$low, I32:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cz = 0 in
+  def mrr : RR<opc, (outs RC:$sx), (ins mimm:$sz, RC:$low, I32:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cy = 0 in
+  def rri : RR<opc, (outs RC:$sx), (ins RC:$sz, RC:$low, uimm7:$sy),
+              !strconcat(opcStr, " $sx, $sz, $sy")>;
+  let cy = 0, cz = 0 in
+  def mri : RR<opc, (outs RC:$sx), (ins mimm:$sz, RC:$low, uimm7:$sy),
               !strconcat(opcStr, " $sx, $sz, $sy")>;
 }
 
@@ -1009,18 +1010,10 @@ multiclass STORECRm<string opcStr, bits<8>opc, RegisterClass RC> {
 //   e.g. FIDCR
 let cz = 0, hasSideEffects = 1 in
 multiclass FIDCRm<string opcStr, bits<8>opc, RegisterClass RC> {
-  def ri : RR<opc, (outs RC:$dest), (ins RC:$src, uimm3:$rz),
-              !strconcat(opcStr, " $dest, $src, $rz")> {
-    bits<3> rz;
-    let sz{5-3} = 0;
-    let sz{2-0} = rz;
-  }
-  let cy = 0 in def ii : RR<opc, (outs RC:$dest), (ins simm7:$src, uimm3:$rz),
-                            !strconcat(opcStr, " $dest, $src, $rz")> {
-    bits<3> rz;
-    let sz{5-3} = 0;
-    let sz{2-0} = rz;
-  }
+  def ri : RR<opc, (outs RC:$sx), (ins RC:$sy, uimm3:$sz),
+              !strconcat(opcStr, " $sx, $sy, $sz")>;
+  let cy = 0 in def ii : RR<opc, (outs RC:$sx), (ins simm7:$sy, uimm3:$sz),
+                            !strconcat(opcStr, " $sx, $sy, $sz")>;
 }
 
 // Multiclass for LHM instruction.
@@ -1076,16 +1069,11 @@ let cx = 0, DecoderMethod = "DecodeLoadI64" in
 defm LEA : RMm<"lea", 0x06, I64>;
 let cx = 1, DecoderMethod = "DecodeLoadI64" in
 defm LEASL : RMm<"lea.sl", 0x06, I64>;
-let cx = 0, DecoderMethod = "DecodeLoadI32", isCodeGenOnly = 1 in
-defm LEA32 : RMm<"lea", 0x06, I32>;
 
 def : Pat<(iPTR ADDRrri:$addr), (LEArri MEMrri:$addr)>;
 def : Pat<(iPTR ADDRrii:$addr), (LEArii MEMrii:$addr)>;
 def : Pat<(add I64:$base, simm32:$disp), (LEArii $base, 0, (LO32 $disp))>;
 def : Pat<(add I64:$base, lozero:$disp), (LEASLrii $base, 0, (HI32 $disp))>;
-def : Pat<(add I32:$base, simm32:$disp),
-          (LEA32rii (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $base, sub_i32), 0,
-                    (LO32 $disp))>;
 
 def lea_add : PatFrags<(ops node:$base, node:$idx, node:$disp),
                        [(add (add node:$base, node:$idx), node:$disp),
@@ -1139,15 +1127,15 @@ let cx = 1, DecoderMethod = "DecodeLoadI32" in
 defm LDLZX : LOADm<"ldl.zx", 0x03, I32, i32, load>;
 
 // Section 8.2.5 - LD2B
-let DecoderMethod = "DecodeLoadI16" in
+let DecoderMethod = "DecodeLoadI32" in
 defm LD2BSX : LOADm<"ld2b.sx", 0x04, I32, i32, sextloadi16>;
-let cx = 1, DecoderMethod = "DecodeLoadI16" in
+let cx = 1, DecoderMethod = "DecodeLoadI32" in
 defm LD2BZX : LOADm<"ld2b.zx", 0x04, I32, i32, zextloadi16>;
 
 // Section 8.2.6 - LD1B
-let DecoderMethod = "DecodeLoadI8" in
+let DecoderMethod = "DecodeLoadI32" in
 defm LD1BSX : LOADm<"ld1b.sx", 0x05, I32, i32, sextloadi8>;
-let cx = 1, DecoderMethod = "DecodeLoadI8" in
+let cx = 1, DecoderMethod = "DecodeLoadI32" in
 defm LD1BZX : LOADm<"ld1b.zx", 0x05, I32, i32, zextloadi8>;
 
 // LDQ pseudo instructions
@@ -1204,11 +1192,11 @@ let DecoderMethod = "DecodeStoreI32" in
 defm STL : STOREm<"stl", 0x13, I32, i32, store>;
 
 // Section 8.2.10 - ST2B
-let DecoderMethod = "DecodeStoreI16" in
+let DecoderMethod = "DecodeStoreI32" in
 defm ST2B : STOREm<"st2b", 0x14, I32, i32, truncstorei16>;
 
 // Section 8.2.11 - ST1B
-let DecoderMethod = "DecodeStoreI8" in
+let DecoderMethod = "DecodeStoreI32" in
 defm ST1B : STOREm<"st1b", 0x15, I32, i32, truncstorei8>;
 
 // STQ pseudo instructions
@@ -1245,20 +1233,27 @@ defm DLDLZX : LOADm<"dldl.zx", 0x0b, I32, i32, load>;
 let DecoderMethod = "DecodeASX" in defm PFCH : PFCHm<"pfch", 0x0c>;
 
 // Section 8.2.16 - TS1AM (Test and Set 1 AM)
+let DecoderMethod = "DecodeTS1AMI64" in
 defm TS1AML : RRCASm<"ts1am.l", 0x42, I64, i64, uimm7>;
+let DecoderMethod = "DecodeTS1AMI32" in
 let cx = 1 in defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, i32, uimm7>;
 
 // Section 8.2.17 - TS2AM (Test and Set 2 AM)
+let DecoderMethod = "DecodeTS1AMI64" in
 defm TS2AM : RRCASm<"ts2am", 0x43, I64, i64, uimm7>;
 
 // Section 8.2.18 - TS3AM (Test and Set 3 AM)
+let DecoderMethod = "DecodeTS1AMI64" in
 defm TS3AM : RRCASm<"ts3am", 0x52, I64, i64, uimm1>;
 
 // Section 8.2.19 - ATMAM (Atomic AM)
+let DecoderMethod = "DecodeTS1AMI64" in
 defm ATMAM : RRCASm<"atmam", 0x53, I64, i64, uimm0to2>;
 
 // Section 8.2.20 - CAS (Compare and Swap)
+let DecoderMethod = "DecodeCASI64" in
 defm CASL : RRCASm<"cas.l", 0x62, I64, i64, simm7, atomic_cmp_swap_64>;
+let DecoderMethod = "DecodeCASI32" in
 let cx = 1 in defm CASW : RRCASm<"cas.w", 0x62, I32, i32, simm7,
                                  atomic_cmp_swap_32>;
 
@@ -1389,16 +1384,37 @@ defm NND : RRNNDm<"nnd", 0x54, I64, i64>;
 defm MRG : RRMRGm<"mrg", 0x56, I64, i64>;
 
 // Section 8.5.7 - LDZ (Leading Zero Count)
-defm LDZ : RRI1m<"ldz", 0x67, I64, i64, ctlz>;
+def ctlz_pat : PatFrags<(ops node:$src),
+                        [(ctlz node:$src),
+                         (ctlz_zero_undef node:$src)]>;
+defm LDZ : RRI1m<"ldz", 0x67, I64, i64, ctlz_pat>;
+def : Pat<(i32 (trunc (i64 (ctlz_pat i64:$src)))),
+          (EXTRACT_SUBREG (LDZr $src), sub_i32)>;
+def : Pat<(i32 (trunc (i64 (ctlz_pat (i64 mimm:$src))))),
+          (EXTRACT_SUBREG (LDZm (MIMM $src)), sub_i32)>;
 
 // Section 8.5.8 - PCNT (Population Count)
 defm PCNT : RRI1m<"pcnt", 0x38, I64, i64, ctpop>;
+def : Pat<(i32 (trunc (i64 (ctpop i64:$src)))),
+          (EXTRACT_SUBREG (PCNTr $src), sub_i32)>;
+def : Pat<(i32 (trunc (i64 (ctpop (i64 mimm:$src))))),
+          (EXTRACT_SUBREG (PCNTm (MIMM $src)), sub_i32)>;
 
 // Section 8.5.9 - BRV (Bit Reverse)
 defm BRV : RRI1m<"brv", 0x39, I64, i64, bitreverse>;
 
 // Section 8.5.10 - BSWP (Byte Swap)
 defm BSWP : RRSWPm<"bswp", 0x2B, I64, i64>;
+def : Pat<(i64 (bswap i64:$src)),
+          (BSWPri $src, 0)>;
+def : Pat<(i64 (bswap (i64 mimm:$src))),
+          (BSWPmi (MIMM $src), 0)>;
+def : Pat<(i32 (bswap i32:$src)),
+          (EXTRACT_SUBREG
+              (BSWPri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $src, sub_i32), 1),
+              sub_i32)>;
+def : Pat<(i32 (bswap (i32 mimm:$src))),
+          (EXTRACT_SUBREG (BSWPmi (MIMM $src), 1), sub_i32)>;
 
 // Section 8.5.11 - CMOV (Conditional Move)
 defm CMOVL : RRCMOVm<"cmov.l.${cfw}", 0x3B, I64, i64, CMOV>;
@@ -1420,13 +1436,13 @@ def : MnemonicAlias<"cmov.s", "cmov.s.at">;
 defm SLL : RRIm<"sll", 0x65, I64, i64, shl>;
 
 // Section 8.6.2 - SLD (Shift Left Double)
-defm SLD : RRIDm<"sld", 0x64, I64, i64>;
+defm SLD : RRILDm<"sld", 0x64, I64, i64>;
 
 // Section 8.6.3 - SRL (Shift Right Logical)
 defm SRL : RRIm<"srl", 0x75, I64, i64, srl>;
 
 // Section 8.6.4 - SRD (Shift Right Double)
-defm SRD : RRIDm<"srd", 0x74, I64, i64>;
+defm SRD : RRIRDm<"srd", 0x74, I64, i64>;
 
 // Section 8.6.5 - SLA (Shift Left Arithmetic)
 defm SLAWSX : RRIm<"sla.w.sx", 0x66, I32, i32, shl>;
@@ -1455,30 +1471,39 @@ def : Pat<(i32 (srl i32:$src, i32:$val)),
 
 // Section 8.7.1 - FAD (Floating Add)
 defm FADDD : RRFm<"fadd.d", 0x4C, I64, f64, fadd>;
-let cx = 1 in defm FADDS : RRFm<"fadd.s", 0x4C, F32, f32, fadd>;
+let cx = 1 in
+defm FADDS : RRFm<"fadd.s", 0x4C, F32, f32, fadd, simm7fp, mimmfp32>;
 
 // Section 8.7.2 - FSB (Floating Subtract)
 defm FSUBD : RRFm<"fsub.d", 0x5C, I64, f64, fsub>;
-let cx = 1 in defm FSUBS : RRFm<"fsub.s", 0x5C, F32, f32, fsub>;
+let cx = 1 in
+defm FSUBS : RRFm<"fsub.s", 0x5C, F32, f32, fsub, simm7fp, mimmfp32>;
 
 // Section 8.7.3 - FMP (Floating Multiply)
 defm FMULD : RRFm<"fmul.d", 0x4D, I64, f64, fmul>;
-let cx = 1 in defm FMULS : RRFm<"fmul.s", 0x4D, F32, f32, fmul>;
+let cx = 1 in
+defm FMULS : RRFm<"fmul.s", 0x4D, F32, f32, fmul, simm7fp, mimmfp32>;
 
 // Section 8.7.4 - FDV (Floating Divide)
 defm FDIVD : RRFm<"fdiv.d", 0x5D, I64, f64, fdiv>;
-let cx = 1 in defm FDIVS : RRFm<"fdiv.s", 0x5D, F32, f32, fdiv>;
+let cx = 1 in
+defm FDIVS : RRFm<"fdiv.s", 0x5D, F32, f32, fdiv, simm7fp, mimmfp32>;
 
 // Section 8.7.5 - FCP (Floating Compare)
 defm FCMPD : RRFm<"fcmp.d", 0x7E, I64, f64, CMPF>;
-let cx = 1 in defm FCMPS : RRFm<"fcmp.s", 0x7E, F32, f32, CMPF>;
+let cx = 1 in
+defm FCMPS : RRFm<"fcmp.s", 0x7E, F32, f32, CMPF, simm7fp, mimmfp32>;
 
 // Section 8.7.6 - CMS (Compare and Select Maximum/Minimum Single)
 // cx: double/float, cw: max/min
+let cw = 0, cx = 0 in
 defm FMAXD : RRFm<"fmax.d", 0x3E, I64, f64, fmaxnum>;
-let cx = 1 in defm FMAXS : RRFm<"fmax.s", 0x3E, F32, f32, fmaxnum>;
-let cw = 1 in defm FMIND : RRFm<"fmin.d", 0x3E, I64, f64, fminnum>;
-let cw = 1, cx = 1 in defm FMINS : RRFm<"fmin.s", 0x3E, F32, f32, fminnum>;
+let cw = 0, cx = 1 in
+defm FMAXS : RRFm<"fmax.s", 0x3E, F32, f32, fmaxnum, simm7fp, mimmfp32>;
+let cw = 1, cx = 0 in
+defm FMIND : RRFm<"fmin.d", 0x3E, I64, f64, fminnum>;
+let cw = 1, cx = 1 in
+defm FMINS : RRFm<"fmin.s", 0x3E, F32, f32, fminnum, simm7fp, mimmfp32>;
 
 // Section 8.7.7 - FAQ (Floating Add Quadruple)
 defm FADDQ : RRFm<"fadd.q", 0x6C, F128, f128, fadd>;
@@ -1521,9 +1546,19 @@ let cx = 1 in
 defm CVTSQ : CVTm<"cvt.s.q", 0x1F, F32, f32, F128, f128, fpround>;
 
 // Section 8.7.16 - CVD (Convert to Double-format)
-defm CVTDS : CVTm<"cvt.d.s", 0x0F, I64, f64, F32, f32, fpextend>;
+defm CVTDS : CVTm<"cvt.d.s", 0x0F, I64, f64, F32, f32>;
 let cx = 1 in
 defm CVTDQ : CVTm<"cvt.d.q", 0x0F, I64, f64, F128, f128, fpround>;
+
+// CVTDS doesn't work correctly if its input is +NaN.  It returns -NaN.
+// We fix it through DAG lowering.
+//   FIXME: need to add predicate if this HW problem is fixed.
+def : Pat<(f64 (fpextend f32:$src)),
+          (CMOVLrm CC_IG,
+               (CMPSLrr (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $src, sub_f32),
+                        (SRLmi 8, 1)),
+               !add(1, 64) /* = (1)0 */,
+               (COPY_TO_REGCLASS (CVTDSr $src), I64))>;
 
 // Section 8.7.17 - CVQ (Convert to Single-format)
 defm CVTQD : CVTm<"cvt.q.d", 0x2D, F128, f128, I64, f64, fpextend>;
@@ -1609,8 +1644,6 @@ def SFR : RR<0x29, (outs I64:$sx), (ins), "sfr $sx">;
 // Section 8.19.6 - SMIR (Save Miscellaneous Register)
 let cy = 0, cz = 0, sz = 0, hasSideEffects = 1 in {
   def SMIR : RR<0x22, (outs I64:$sx), (ins MISC:$sy), "smir $sx, $sy">;
-  let isAsmParserOnly = 1 in
-  def SMIRi : RR<0x22, (outs I64:$sx), (ins misc:$sy), "smir $sx, $sy">;
 }
 
 // Section 8.19.7 - NOP (No Operation)
@@ -1682,11 +1715,11 @@ def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
             24
           )>;
 // def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
-//           (TS1AMWrir MEMriRRM:$src, 3, $new)>;
+//           (TS1AMWrii MEMriRRM:$src, 3, $new)>;
 def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
-          (TS1AMWrir MEMriRRM:$src, 15, $new)>;
+          (TS1AMWrii MEMriRRM:$src, 15, $new)>;
 def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
-          (TS1AMLrir MEMriRRM:$src, 127, $new)>;
+          (TS1AMLrii MEMriRRM:$src, 127, $new)>;
 
 // Fence
 
@@ -1739,7 +1772,8 @@ let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
 def : Pat<(i32 simm7:$val), (OR32im (LO7 $val), 0)>;
 def : Pat<(i64 simm7:$val), (ORim (LO7 $val), 0)>;
 // Medium immediates.
-def : Pat<(i32 simm32:$val), (LEA32zii 0, 0, (LO32 $val))>;
+def : Pat<(i32 simm32:$val),
+          (EXTRACT_SUBREG (LEAzii 0, 0, (LO32 $val)), sub_i32)>;
 def : Pat<(i64 simm32:$val), (LEAzii 0, 0, (LO32 $val))>;
 def : Pat<(i64 uimm32:$val), (ANDrm (LEAzii 0, 0, (LO32 $val)), !add(32, 64))>;
 // Arbitrary immediates.
@@ -1753,7 +1787,7 @@ def : Pat<(i64 imm:$val),
 
 // floating point
 def : Pat<(f32 fpimm:$val),
-          (EXTRACT_SUBREG (LEASLzii 0, 0, (LOFP32 $val)), sub_f32)>;
+          (EXTRACT_SUBREG (LEASLzii 0, 0, (HIFP32 $val)), sub_f32)>;
 def : Pat<(f64 fplozero:$val),
           (LEASLzii 0, 0, (HIFP32 $val))>;
 def : Pat<(f64 fplomsbzero:$val),
@@ -1784,6 +1818,8 @@ def : Pat<(sext_inreg (i32 (trunc i64:$src)), i16),
           (EXTRACT_SUBREG (SRALri (SLLri $src, 48), 48), sub_i32)>;
 
 // Cast to i32
+def : Pat<(i32 (trunc KnownZExt:$src)),
+          (EXTRACT_SUBREG $src, sub_i32)>;
 def : Pat<(i32 (trunc i64:$src)),
           (ADDSWSXrm (EXTRACT_SUBREG $src, sub_i32), 0)>;
 def : Pat<(i32 (fp_to_sint I64:$reg)), (CVTWDSXr RD_RZ, $reg)>;
@@ -2258,23 +2294,6 @@ class cmov128<Instruction INSN> :
                      (EXTRACT_SUBREG $t, sub_even),
                      (EXTRACT_SUBREG $f, sub_even)), sub_even)>;
 
-/*
-def lea_add : PatFrags<(ops node:$base, node:$idx, node:$disp),
-                       [(add (add node:$base, node:$idx), node:$disp),
-                        (add (add node:$base, node:$disp), node:$idx)]>;
-*/
-/*
-multiclass SELCMOVm<ValueType OTY, list<string> SRCT, list<string> SRCOP,
-                    string CMOV,
-                    string COND2CC, Operand COND, Operand COMP,
-                    Operand T, Operand F> {
-  defvar cmovrr = !cast<Instruction>(CMOV#"rr");
-  defvar cmovrm = !cast<Instruction>(CMOV#"rm");
-
-  def : Pat<(OTY !dag(selectcc, SRCT, SRCOP)),
-            (Cmovrr<cmovrr> (!cast<SDNodeXForm>(COND2CC) COND), COMP, T, F)>;
-}
-*/
 multiclass SEL64CMPIm<ValueType oty, ValueType cty, string Insn,
                       SDPatternOperator CMPIir, SDPatternOperator CMPIrr,
                       SDPatternOperator CMPUir, SDPatternOperator CMPUrr,
@@ -2285,29 +2304,32 @@ multiclass SEL64CMPIm<ValueType oty, ValueType cty, string Insn,
   def : Pat<(oty (selectcc cty:$l, zero, oty:$t, oty:$f, CCSIOp:$cond)),
             (cmovrr<cmovrr> (icond2cc $cond), $l, $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, zero, (oty mOp:$t), oty:$f, CCSIOp:$cond)),
-            (cmovrm<cmovrm> (icond2cc $cond), $l, $t, $f)>;
+            (cmovrm<cmovrm, MOP> (icond2cc $cond), $l, $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, CCSIOp:$cond)),
             (cmovrr<cmovrr> (icond2cc $cond), (CMPIrr $l, $r), $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, cty:$r, (oty mOp:$t), oty:$f,
                            CCSIOp:$cond)),
-            (cmovrm<cmovrm> (icond2cc $cond), (CMPIrr $l, $r), $t, $f)>;
+            (cmovrm<cmovrm, MOP> (icond2cc $cond), (CMPIrr $l, $r), $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), oty:$t, oty:$f,
                            CCSIOp:$cond)),
-            (cmovirrr<CMPIir, cmovrr> (icond2ccSwap $cond), $r, $l, $t, $f)>;
+            (cmovirrr<CMPIir, cmovrr, LO7> (icond2ccSwap $cond), $r, $l, $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), (oty mOp:$t), oty:$f,
                            CCSIOp:$cond)),
-            (cmovirrm<CMPIir, cmovrm> (icond2ccSwap $cond), $r, $l, $t, $f)>;
+            (cmovirrm<CMPIir, cmovrm, LO7, MOP> (icond2ccSwap $cond), $r, $l,
+                                                $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, CCUIOp:$cond)),
             (cmovrr<cmovrr> (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, cty:$r, (oty mOp:$t), oty:$f,
                            CCUIOp:$cond)),
-            (cmovrm<cmovrm> (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
+            (cmovrm<cmovrm, MOP> (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), oty:$t, oty:$f,
                            CCUIOp:$cond)),
-            (cmovirrr<CMPUir, cmovrr> (icond2ccSwap $cond), $r, $l, $t, $f)>;
+            (cmovirrr<CMPUir, cmovrr, LO7> (icond2ccSwap $cond), $r, $l, $t,
+                                           $f)>;
   def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), (oty mOp:$t), oty:$f,
                            CCUIOp:$cond)),
-            (cmovirrm<CMPUir, cmovrm> (icond2ccSwap $cond), $r, $l, $t, $f)>;
+            (cmovirrm<CMPUir, cmovrm, LO7, MOP> (icond2ccSwap $cond), $r, $l,
+                                                $t, $f)>;
 }
 multiclass SEL64CMPFm<ValueType oty, ValueType cty, SDPatternOperator Insn,
                       SDPatternOperator CMPir, SDPatternOperator CMPrr,
@@ -2323,7 +2345,8 @@ multiclass SEL64CMPFm<ValueType oty, ValueType cty, SDPatternOperator Insn,
             (cmovrr<cmovrr> (fcond2cc $cond), (CMPrr $l, $r), $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, (cty simm7fp:$r), oty:$t, oty:$f,
                            cond:$cond)),
-            (cmovirrr<CMPir, cmovrr, LO7FP> (fcond2ccSwap $cond), $r, $l, $t, $f)>;
+            (cmovirrr<CMPir, cmovrr, LO7FP> (fcond2ccSwap $cond), $r, $l, $t,
+                                            $f)>;
 }
 multiclass SEL64CMPF128m<ValueType oty, ValueType cty, SDPatternOperator Insn,
                          SDPatternOperator CMPir, SDPatternOperator CMPrr,
@@ -2362,36 +2385,36 @@ multiclass SEL32CMPIm<ValueType oty, Operand sub_oty, ValueType cty,
   def : Pat<(oty (selectcc cty:$l, zero, oty:$t, oty:$f, CCSIOp:$cond)),
             (cmov32rr<cmovrr, sub_oty> (icond2cc $cond), $l, $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, zero, (oty mOp:$t), oty:$f, CCSIOp:$cond)),
-            (cmov32rm<cmovrm, sub_oty> (icond2cc $cond), $l, $t, $f)>;
+            (cmov32rm<cmovrm, sub_oty, MOP> (icond2cc $cond), $l, $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, CCSIOp:$cond)),
             (cmov32rr<cmovrr, sub_oty>
                 (icond2cc $cond), (CMPIrr $l, $r), $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, cty:$r, (oty mOp:$t), oty:$f,
                            CCSIOp:$cond)),
-            (cmov32rm<cmovrm, sub_oty>
+            (cmov32rm<cmovrm, sub_oty, MOP>
                 (icond2cc $cond), (CMPIrr $l, $r), $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), oty:$t, oty:$f,
                            CCSIOp:$cond)),
-            (cmov32irrr<CMPIir, cmovrr, sub_oty>
+            (cmov32irrr<CMPIir, cmovrr, sub_oty, LO7>
                 (icond2ccSwap $cond), $r, $l, $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), (oty mOp:$t), oty:$f,
                            CCSIOp:$cond)),
-            (cmov32irrm<CMPIir, cmovrm, sub_oty>
+            (cmov32irrm<CMPIir, cmovrm, sub_oty, LO7, MOP>
                 (icond2ccSwap $cond), $r, $l, $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, cty:$r, oty:$t, oty:$f, CCUIOp:$cond)),
             (cmov32rr<cmovrr, sub_oty>
                 (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, cty:$r, (oty mOp:$t), oty:$f,
                            CCUIOp:$cond)),
-            (cmov32rm<cmovrm, sub_oty>
+            (cmov32rm<cmovrm, sub_oty, MOP>
                 (icond2cc $cond), (CMPUrr $l, $r), $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), oty:$t, oty:$f,
                            CCUIOp:$cond)),
-            (cmov32irrr<CMPUir, cmovrr, sub_oty>
+            (cmov32irrr<CMPUir, cmovrr, sub_oty, LO7>
                 (icond2ccSwap $cond), $r, $l, $t, $f)>;
   def : Pat<(oty (selectcc cty:$l, (cty simm7:$r), (oty mOp:$t), oty:$f,
                            CCUIOp:$cond)),
-            (cmov32irrm<CMPUir, cmovrm, sub_oty>
+            (cmov32irrm<CMPUir, cmovrm, sub_oty, LO7, MOP>
                 (icond2ccSwap $cond), $r, $l, $t, $f)>;
 }
 multiclass SEL32CMPFm<ValueType oty, Operand sub_oty, ValueType cty,
@@ -2636,20 +2659,7 @@ def : Pat<(f32 (bitconvert i32:$op)),
           (EXTRACT_SUBREG (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
             $op, sub_i32), 32), sub_f32)>;
 
-// Bits operations pattern matchings.
-def : Pat<(i32 (ctpop i32:$src)),
-          (EXTRACT_SUBREG (PCNTr (ANDrm (INSERT_SUBREG
-            (i64 (IMPLICIT_DEF)), $src, sub_i32), !add(32, 64))), sub_i32)>;
-def : Pat<(i32 (ctlz i32:$src)),
-          (EXTRACT_SUBREG (LDZr (SLLri (INSERT_SUBREG
-            (i64 (IMPLICIT_DEF)), $src, sub_i32), 32)), sub_i32)>;
-def : Pat<(i64 (bswap i64:$src)),
-          (BSWPri $src, 0)>;
-def : Pat<(i32 (bswap i32:$src)),
-          (EXTRACT_SUBREG (BSWPri (INSERT_SUBREG
-            (i64 (IMPLICIT_DEF)), $src, sub_i32), 1), sub_i32)>;
-
-// Several special patterns to optimize code
+// Several special pattern matches to optimize code
 
 // Optimize code A generated by `(unsigned char)c << 5` to B.
 // A) sla.w.sx %s0, %s0, 5

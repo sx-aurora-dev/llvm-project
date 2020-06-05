@@ -391,6 +391,12 @@ private:
   /// A flag which indicates if the debuginfo should be emitted.
   bool emitDebugInfo = false;
 
+  /// A flag which indicates if the last processed instruction was a merge
+  /// instruction.
+  /// According to SPIR-V spec: "If a branch merge instruction is used, the last
+  /// OpLine in the block must be before its merge instruction".
+  bool lastProcessedWasMergeInst = false;
+
   /// The <id> of the OpString instruction, which specifies a file name, for
   /// use by other debug instructions.
   uint32_t fileID = 0;
@@ -1090,6 +1096,37 @@ Serializer::prepareBasicType(Location loc, Type type, uint32_t resultID,
     return success();
   }
 
+  if (auto cooperativeMatrixType =
+          type.dyn_cast<spirv::CooperativeMatrixNVType>()) {
+    uint32_t elementTypeID = 0;
+    if (failed(processType(loc, cooperativeMatrixType.getElementType(),
+                           elementTypeID))) {
+      return failure();
+    }
+    typeEnum = spirv::Opcode::OpTypeCooperativeMatrixNV;
+    auto getConstantOp = [&](uint32_t id) {
+      auto attr = IntegerAttr::get(IntegerType::get(32, type.getContext()), id);
+      return prepareConstantInt(loc, attr);
+    };
+    operands.push_back(elementTypeID);
+    operands.push_back(
+        getConstantOp(static_cast<uint32_t>(cooperativeMatrixType.getScope())));
+    operands.push_back(getConstantOp(cooperativeMatrixType.getRows()));
+    operands.push_back(getConstantOp(cooperativeMatrixType.getColumns()));
+    return success();
+  }
+
+  if (auto matrixType = type.dyn_cast<spirv::MatrixType>()) {
+    uint32_t elementTypeID = 0;
+    if (failed(processType(loc, matrixType.getElementType(), elementTypeID))) {
+      return failure();
+    }
+    typeEnum = spirv::Opcode::OpTypeMatrix;
+    operands.push_back(elementTypeID);
+    operands.push_back(matrixType.getNumElements());
+    return success();
+  }
+
   // TODO(ravishankarm) : Handle other types.
   return emitError(loc, "unhandled type in serialization: ") << type;
 }
@@ -1518,11 +1555,14 @@ LogicalResult Serializer::processSelectionOp(spirv::SelectionOp selectionOp) {
   auto *headerBlock = selectionOp.getHeaderBlock();
   auto *mergeBlock = selectionOp.getMergeBlock();
   auto mergeID = getBlockID(mergeBlock);
+  auto loc = selectionOp.getLoc();
 
   // Emit the selection header block, which dominates all other blocks, first.
   // We need to emit an OpSelectionMerge instruction before the selection header
   // block's terminator.
   auto emitSelectionMerge = [&]() {
+    emitDebugLine(functionBody, loc);
+    lastProcessedWasMergeInst = true;
     // TODO(antiagainst): properly support selection control here
     encodeInstructionInto(
         functionBody, spirv::Opcode::OpSelectionMerge,
@@ -1567,6 +1607,7 @@ LogicalResult Serializer::processLoopOp(spirv::LoopOp loopOp) {
   auto headerID = getBlockID(headerBlock);
   auto continueID = getBlockID(continueBlock);
   auto mergeID = getBlockID(mergeBlock);
+  auto loc = loopOp.getLoc();
 
   // This LoopOp is in some MLIR block with preceding and following ops. In the
   // binary format, it should reside in separate SPIR-V blocks from its
@@ -1583,6 +1624,8 @@ LogicalResult Serializer::processLoopOp(spirv::LoopOp loopOp) {
   // need to emit an OpLoopMerge instruction before the loop header block's
   // terminator.
   auto emitLoopMerge = [&]() {
+    emitDebugLine(functionBody, loc);
+    lastProcessedWasMergeInst = true;
     // TODO(antiagainst): properly support loop control here
     encodeInstructionInto(
         functionBody, spirv::Opcode::OpLoopMerge,
@@ -1622,11 +1665,13 @@ LogicalResult Serializer::processBranchConditionalOp(
       arguments.push_back(val.cast<IntegerAttr>().getInt());
   }
 
+  emitDebugLine(functionBody, condBranchOp.getLoc());
   return encodeInstructionInto(functionBody, spirv::Opcode::OpBranchConditional,
                                arguments);
 }
 
 LogicalResult Serializer::processBranchOp(spirv::BranchOp branchOp) {
+  emitDebugLine(functionBody, branchOp.getLoc());
   return encodeInstructionInto(functionBody, spirv::Opcode::OpBranch,
                                {getOrCreateBlockID(branchOp.getTarget())});
 }
@@ -1872,6 +1917,11 @@ LogicalResult Serializer::emitDebugLine(SmallVectorImpl<uint32_t> &binary,
                                         Location loc) {
   if (!emitDebugInfo)
     return success();
+
+  if (lastProcessedWasMergeInst) {
+    lastProcessedWasMergeInst = false;
+    return success();
+  }
 
   auto fileLoc = loc.dyn_cast<FileLineColLoc>();
   if (fileLoc)

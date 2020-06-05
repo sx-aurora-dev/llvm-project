@@ -50,9 +50,9 @@ define double @func5(double %a) {
 define fp128 @func6(fp128 %a) {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s2, .LCPI5_0@lo
+; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s2, .LCPI5_0@hi(, %s2)
+; CHECK-NEXT:    lea.sl %s2, .LCPI{{[0-9]+}}_0@hi(, %s2)
 ; CHECK-NEXT:    ld %s4, 8(, %s2)
 ; CHECK-NEXT:    ld %s5, (, %s2)
 ; CHECK-NEXT:    fadd.q %s0, %s0, %s4

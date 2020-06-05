@@ -326,7 +326,7 @@ void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
   // Add implicit super-register defs and kills to the last MovMI.
   MovMI->addRegisterDefined(DestReg, TRI);
   if (KillSrc)
-    MovMI->addRegisterKilled(SrcReg, TRI);
+    MovMI->addRegisterKilled(SrcReg, TRI, true);
 }
 
 static bool IsAliasOfSX(Register Reg) {
@@ -346,16 +346,21 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         .addImm(0);
   } else if (VE::V64RegClass.contains(DestReg, SrcReg)) {
     // Generate following instructions
-    //   LEA32zii %vl, 256
-    //   vor_v1vl %dest, (0)1, %src, %vl
+    //   %sw16 = LEA32zii 256
+    //   vor_v1vl %dest, (0)1, %src, %sw16
     // TODO: reuse a register if vl is already assigned to a register
-    unsigned TmpReg = VE::SX12;
-    BuildMI(MBB, I, DL, get(VE::LEA32zii), TmpReg)
+    // FIXME: it would be better to scavenge a register here instead of
+    // reserving SX16 all of the time.
+    const TargetRegisterInfo *TRI = &getRegisterInfo();
+    unsigned TmpReg = VE::SX16;
+    unsigned SubTmp = TRI->getSubReg(TmpReg, VE::sub_i32);
+    BuildMI(MBB, I, DL, get(VE::LEAzii), TmpReg)
         .addImm(0).addImm(0).addImm(256);
-    BuildMI(MBB, I, DL, get(VE::vor_v1vl), DestReg)
+    MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::vor_v1vl), DestReg)
         .addImm(0)
         .addReg(SrcReg, getKillRegState(KillSrc))
-        .addReg(TmpReg, getKillRegState(true));
+        .addReg(SubTmp, getKillRegState(true));
+    MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
   } else if (VE::VMRegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::andm_mmm), DestReg)
         .addReg(VE::VM0)
@@ -724,18 +729,18 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
     Bu.addReg(GetVM512Upper(MI.getOperand(0).getReg()));
     Bl.addReg(GetVM512Lower(MI.getOperand(0).getReg()));
 
-    if (MI.getNumOperands() == 2) { // _Ml: VM512, VL
+    if (MI.getNumExplicitOperands() == 2) { // _Ml: VM512, VL
       // VL
       Bu.addReg(MI.getOperand(1).getReg());
       Bl.addReg(MI.getOperand(1).getReg());
-    } else if (MI.getNumOperands() == 3) { // _Mvl: VM512, VR, VL
+    } else if (MI.getNumExplicitOperands() == 3) { // _Mvl: VM512, VR, VL
       // VR
       Bu.addReg(MI.getOperand(1).getReg());
       Bl.addReg(MI.getOperand(1).getReg());
       // VL
       Bu.addReg(MI.getOperand(2).getReg());
       Bl.addReg(MI.getOperand(2).getReg());
-    } else if (MI.getNumOperands() == 4) { // _MvMl: VM512, VR, VM512, VL
+    } else if (MI.getNumExplicitOperands() == 4) { // _MvMl: VM512, VR, VM512, VL
       // VR
       Bu.addReg(MI.getOperand(1).getReg());
       Bl.addReg(MI.getOperand(1).getReg());
@@ -888,8 +893,8 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
 bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
   MachineBasicBlock &MBB = *MI.getParent();
   MachineFunction &MF = *MBB.getParent();
-  const VEInstrInfo &TII =
-      *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
+  const VESubtarget &STI = MF.getSubtarget<VESubtarget>();
+  const VEInstrInfo &TII = *STI.getInstrInfo();
   DebugLoc dl = MBB.findDebugLoc(MI);
 
   // Create following instructions and multiple basic blocks.
@@ -970,32 +975,32 @@ bool VEInstrInfo::expandExtendStackPseudo(MachineInstr &MI) const {
 }
 
 bool VEInstrInfo::expandGetStackTopPseudo(MachineInstr &MI) const {
-  MachineBasicBlock* MBB = MI.getParent();
+  MachineBasicBlock *MBB = MI.getParent();
   MachineFunction &MF = *MBB->getParent();
-  const VEInstrInfo &TII =
-      *static_cast<const VEInstrInfo *>(MF.getSubtarget().getInstrInfo());
-  DebugLoc dl = MBB->findDebugLoc(MI);
+  const VESubtarget &STI = MF.getSubtarget<VESubtarget>();
+  const VEInstrInfo &TII = *STI.getInstrInfo();
+  DebugLoc DL = MBB->findDebugLoc(MI);
 
   // Create following instruction
   //
   //   dst = %sp + target specific frame + the size of parameter area
 
   const MachineFrameInfo &MFI = MF.getFrameInfo();
-  const TargetFrameLowering* TFL = MF.getSubtarget().getFrameLowering();
+  const VEFrameLowering &TFL = *STI.getFrameLowering();
 
   // The VE ABI requires a reserved 176 bytes area at the top
   // of stack as described in VESubtarget.cpp.  So, we adjust it here.
-  unsigned NumBytes = Subtarget.getAdjustedFrameSize(0);
+  unsigned NumBytes = STI.getAdjustedFrameSize(0);
 
   // Also adds the size of parameter area.
-  if (MFI.adjustsStack() && TFL->hasReservedCallFrame(MF))
+  if (MFI.adjustsStack() && TFL.hasReservedCallFrame(MF))
     NumBytes += MFI.getMaxCallFrameSize();
 
-  BuildMI(*MBB, MI, dl, TII.get(VE::LEArii))
-    .addDef(MI.getOperand(0).getReg())
-    .addReg(VE::SX11)
-    .addImm(0)
-    .addImm(NumBytes);
+  BuildMI(*MBB, MI, DL, TII.get(VE::LEArii))
+      .addDef(MI.getOperand(0).getReg())
+      .addReg(VE::SX11)
+      .addImm(0)
+      .addImm(NumBytes);
 
   MI.eraseFromParent(); // The pseudo instruction is gone now.
   return true;

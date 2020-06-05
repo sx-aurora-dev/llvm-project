@@ -37,6 +37,8 @@ using namespace mlir::linalg;
 
 using llvm::dbgs;
 
+#define DEBUG_TYPE "linalg-transforms"
+
 //===----------------------------------------------------------------------===//
 // Transformations exposed as rewrite patterns.
 //===----------------------------------------------------------------------===//
@@ -44,14 +46,10 @@ using llvm::dbgs;
 const StringLiteral mlir::linalg::LinalgTransforms::kLinalgTransformMarker =
     "__internal_linalg_transform__";
 
-mlir::linalg::LinalgMarker::LinalgMarker(ArrayRef<StringRef> matchDisjunction,
-                                         llvm::Optional<StringRef> replacement)
+mlir::linalg::LinalgMarker::LinalgMarker(ArrayRef<Identifier> matchDisjunction,
+                                         Optional<Identifier> replacement)
     : matchDisjunction(matchDisjunction.begin(), matchDisjunction.end()),
       replacement(replacement) {}
-
-mlir::linalg::LinalgMarker::LinalgMarker(ArrayRef<StringRef> matchDisjunction,
-                                         StringRef replacement)
-    : LinalgMarker(matchDisjunction, llvm::Optional<StringRef>{replacement}) {}
 
 LogicalResult
 mlir::linalg::LinalgMarker::checkAndNotify(PatternRewriter &rewriter,
@@ -64,15 +62,10 @@ mlir::linalg::LinalgMarker::checkAndNotify(PatternRewriter &rewriter,
     if (matchDisjunction.empty())
       return success();
 
-    // 2. Has no marker and matchDisjuntion matches the no-moarker case.
-    for (auto marker : matchDisjunction)
-      if (marker.empty())
-        return success();
-
-    // 3. Has no marker but was expecting a marker.
+    // 2. Has no marker but was expecting a marker.
     return rewriter.notifyMatchFailure(op, [&](Diagnostic &diag) {
       diag << " does not have any marker from list: ";
-      llvm::interleaveComma(matchDisjunction, diag);
+      interleaveComma(matchDisjunction, diag);
     });
   }
 
@@ -84,7 +77,7 @@ mlir::linalg::LinalgMarker::checkAndNotify(PatternRewriter &rewriter,
   // 5. Fail to match.
   return rewriter.notifyMatchFailure(op, [&](Diagnostic &diag) {
     diag << " does not have any marker from list: ";
-    llvm::interleaveComma(matchDisjunction, diag);
+    interleaveComma(matchDisjunction, diag);
   });
 }
 
@@ -97,6 +90,21 @@ void mlir::linalg::LinalgMarker::replaceLinalgMarker(PatternRewriter &rewriter,
     op->removeAttr(Identifier::get(LinalgTransforms::kLinalgTransformMarker,
                                    rewriter.getContext()));
 }
+
+LinalgTilingOptions &
+mlir::linalg::LinalgTilingOptions::setTileSizes(ArrayRef<int64_t> ts) {
+  SmallVector<int64_t, 4> tileSizes(ts.begin(), ts.end());
+  tileSizeComputationFunction = [tileSizes](OpBuilder &b, Operation *op) {
+    OpBuilder::InsertionGuard guard(b);
+    b.setInsertionPointToStart(
+        &op->getParentOfType<FuncOp>().getBody().front());
+    return llvm::to_vector<4>(map_range(tileSizes, [&](int64_t s) {
+      Value v = b.create<ConstantIndexOp>(op->getLoc(), s);
+      return v;
+    }));
+  };
+  return *this;
+};
 
 /// Linalg base tiling pattern.
 mlir::linalg::LinalgBaseTilingPattern::LinalgBaseTilingPattern(
@@ -112,14 +120,7 @@ LogicalResult mlir::linalg::LinalgBaseTilingPattern::matchAndRewrite(
     return failure();
   if (failed(marker.checkAndNotify(rewriter, linalgOp)))
     return failure();
-  Optional<TiledLinalgOp> res;
-  if (options.loopType == LinalgTilingLoopType::Loops)
-    res = tileLinalgOp(rewriter, linalgOp, options.tileSizes,
-                       options.interchangeVector);
-  else if (options.loopType == LinalgTilingLoopType::ParallelLoops)
-    res = tileLinalgOpToParallelLoops(rewriter, linalgOp, options.tileSizes,
-                                      options.interchangeVector);
-  // TODO: Impl tiling to affine loops when it makes sense.
+  Optional<TiledLinalgOp> res = tileLinalgOp(rewriter, linalgOp, options);
 
   if (!res)
     return failure();
@@ -160,51 +161,30 @@ LogicalResult mlir::linalg::LinalgBaseInterchangePattern::matchAndRewrite(
 }
 
 mlir::linalg::LinalgBasePromotionPattern::LinalgBasePromotionPattern(
-    StringRef opName, MLIRContext *context,
-    ArrayRef<unsigned> operandsToPromote, unsigned alignment,
+    StringRef opName, MLIRContext *context, LinalgPromotionOptions options,
     LinalgMarker marker, PatternBenefit benefit)
     : RewritePattern(opName, {}, benefit, context), marker(marker),
-      operandsToPromote(operandsToPromote.begin(), operandsToPromote.end()),
-      alignment(alignment) {}
+      options(options) {}
 
 LogicalResult mlir::linalg::LinalgBasePromotionPattern::matchAndRewrite(
     Operation *op, PatternRewriter &rewriter) const {
-  LinalgOp linalgOp = dyn_cast<LinalgOp>(op);
-  if (!linalgOp)
+  if (failed(marker.checkAndNotify(rewriter, op)))
     return failure();
-  if (failed(marker.checkAndNotify(rewriter, linalgOp)))
+  if (failed(promoteSubviewsPrecondition(op, options)))
     return failure();
-  if (operandsToPromote.empty()) {
-    if (failed(promoteSubviewsLinalgOpPrecondition(op, llvm::None)))
-      return failure();
-  } else {
-    DenseSet<unsigned> set;
-    set.insert(operandsToPromote.begin(), operandsToPromote.end());
-    if (failed(promoteSubviewsLinalgOpPrecondition(op, set)))
-      return failure();
-  }
 
-  llvm::SetVector<Value> subViews;
-  if (!operandsToPromote.empty()) {
-    for (unsigned idx : operandsToPromote) {
-      auto *op = linalgOp.getBuffer(idx).getDefiningOp();
-      if (auto sv = dyn_cast_or_null<SubViewOp>(op))
-        subViews.insert(sv);
-    }
-  } else {
-    unsigned nBuffers = linalgOp.getNumInputsAndOutputBuffers();
-    for (unsigned idx = 0; idx < nBuffers; ++idx) {
-      auto *op = linalgOp.getBuffer(idx).getDefiningOp();
-      if (auto sv = dyn_cast_or_null<SubViewOp>(op))
-        subViews.insert(sv);
-    }
+  // TODO: We cannot use root update here. This pattern is creating other ops,
+  // so if the promotion fails, those need to be cleaned up, which doesnt seem
+  // to be happening here. So to fail properly, we should be cloning the op and
+  // deleting the previous op. This needs more investigation.
+  rewriter.startRootUpdate(op);
+  Optional<LinalgOp> promotedOp = promoteSubViews(rewriter, op, options);
+  if (!promotedOp) {
+    rewriter.cancelRootUpdate(op);
+    return op->emitError("subview promotion failed");
   }
-
-  auto promotedOp =
-      promoteSubViewOperands(rewriter, op, subViews, /*dynamicBuffers=*/false,
-                             /*alignment=*/alignment);
-  marker.replaceLinalgMarker(rewriter, promotedOp.getOperation());
-  rewriter.eraseOp(op);
+  rewriter.finalizeRootUpdate(op);
+  marker.replaceLinalgMarker(rewriter, op);
   return success();
 }
 
@@ -224,5 +204,40 @@ LogicalResult mlir::linalg::LinalgBaseVectorizationPattern::matchAndRewrite(
     return failure();
   vectorizeLinalgOp(rewriter, op);
   rewriter.eraseOp(op);
+  return success();
+}
+
+LogicalResult mlir::linalg::applyStagedPatterns(
+    Operation *op, ArrayRef<OwningRewritePatternList> stage1Patterns,
+    const OwningRewritePatternList &stage2Patterns,
+    function_ref<LogicalResult(Operation *)> stage3Lambda) {
+  unsigned iteration = 0;
+  (void)iteration;
+  StringRef dbgPref = "\n[" DEBUG_TYPE "]: ";
+  (void)dbgPref;
+  for (const auto &patterns : stage1Patterns) {
+    if (!applyPatternsAndFoldGreedily(op, patterns)) {
+      dbgs() << "Underlying first stage rewrite did not converge";
+      return failure();
+    }
+    LLVM_DEBUG(dbgs()
+               << dbgPref << "After 1st stage, iter: " << ++iteration << "\n"
+               << *op);
+    if (!applyPatternsAndFoldGreedily(op, stage2Patterns)) {
+      LLVM_DEBUG(dbgs()
+                 << dbgPref << "Underlying 2nd stage rewrite did not converge");
+      return failure();
+    }
+    LLVM_DEBUG(dbgs()
+               << dbgPref << "After 2nd stage, iter : " << iteration << "\n"
+               << *op);
+    if (stage3Lambda) {
+      if (failed(stage3Lambda(op)))
+        return failure();
+      LLVM_DEBUG(dbgs()
+                 << dbgPref << "After 3rd stage, iter : " << iteration << "\n"
+                 << *op);
+    }
+  }
   return success();
 }

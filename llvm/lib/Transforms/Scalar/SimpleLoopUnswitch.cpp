@@ -598,6 +598,11 @@ static bool unswitchTrivialSwitch(Loop &L, SwitchInst &SI, DominatorTree &DT,
 
   auto *ParentBB = SI.getParent();
 
+  // The same check must be used both for the default and the exit cases. We
+  // should never leave edges from the switch instruction to a basic block that
+  // we are unswitching, hence the condition used to determine the default case
+  // needs to also be used to populate ExitCaseIndices, which is then used to
+  // remove cases from the switch.
   auto IsTriviallyUnswitchableExitBlock = [&](BasicBlock &BBToCheck) {
     // BBToCheck is not an exit block if it is inside loop L.
     if (L.contains(&BBToCheck))
@@ -616,12 +621,9 @@ static bool unswitchTrivialSwitch(Loop &L, SwitchInst &SI, DominatorTree &DT,
   };
 
   SmallVector<int, 4> ExitCaseIndices;
-  for (auto Case : SI.cases()) {
-    auto *SuccBB = Case.getCaseSuccessor();
-    if (!L.contains(SuccBB) &&
-        areLoopExitPHIsLoopInvariant(L, *ParentBB, *SuccBB))
+  for (auto Case : SI.cases())
+    if (IsTriviallyUnswitchableExitBlock(*Case.getCaseSuccessor()))
       ExitCaseIndices.push_back(Case.getCaseIndex());
-  }
   BasicBlock *DefaultExitBB = nullptr;
   SwitchInstProfUpdateWrapper::CaseWeightOpt DefaultCaseWeight =
       SwitchInstProfUpdateWrapper::getSuccessorWeight(SI, 0);
@@ -1572,6 +1574,11 @@ static void deleteDeadBlocksFromLoop(Loop &L,
     // Check that the dominator tree has already been updated.
     assert(!DT.getNode(BB) && "Should already have cleared domtree!");
     LI.changeLoopFor(BB, nullptr);
+    // Drop all uses of the instructions to make sure we won't have dangling
+    // uses in other blocks.
+    for (auto &I : *BB)
+      if (!I.use_empty())
+        I.replaceAllUsesWith(UndefValue::get(I.getType()));
     BB->dropAllReferences();
   }
 

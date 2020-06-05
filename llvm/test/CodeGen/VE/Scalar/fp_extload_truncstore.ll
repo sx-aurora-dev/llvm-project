@@ -28,7 +28,11 @@ define double @func_i16fp64(i16* %a) {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __gnu_h2f_ieee@hi(, %s1)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
+; CHECK-NEXT:    srl %s1, (8)1, 1
+; CHECK-NEXT:    cmps.l %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.d.s %s0, %s0
+; CHECK-NEXT:    cmov.l.gt %s0, (1)0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a.val = load i16, i16* %a, align 4
   %a.asd = call double @llvm.convert.from.fp16.f64(i16 %a.val)
@@ -57,7 +61,11 @@ define double @func_fp16fp64(half* %a) {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __gnu_h2f_ieee@hi(, %s1)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
+; CHECK-NEXT:    srl %s1, (8)1, 1
+; CHECK-NEXT:    cmps.l %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.d.s %s0, %s0
+; CHECK-NEXT:    cmov.l.gt %s0, (1)0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a.val = load half, half* %a, align 4
   %a.asd = fpext half %a.val to double
@@ -111,8 +119,11 @@ define half @func_fp32fp16(half* %fl.ptr, float %a) {
 define double @func_fp32fp64(float* %a) {
 ; CHECK-LABEL: func_fp32fp64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldu %s0, (,  %s0)
+; CHECK-NEXT:    ldu %s0, (, %s0)
+; CHECK-NEXT:    srl %s1, (8)1, 1
+; CHECK-NEXT:    cmps.l %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.d.s %s0, %s0
+; CHECK-NEXT:    cmov.l.gt %s0, (1)0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a.val = load float, float* %a, align 4
   %a.asd = fpext float %a.val to double
@@ -159,7 +170,7 @@ define void @func_fp64fp32(float* %fl.ptr, double %val) {
 ; CHECK-LABEL: func_fp64fp32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cvt.s.d %s1, %s1
-; CHECK-NEXT:    stu %s1, (,  %s0)
+; CHECK-NEXT:    stu %s1, (, %s0)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %val.asf = fptrunc double %val to float
   store float %val.asf, float* %fl.ptr

@@ -1707,6 +1707,11 @@ void VETargetLowering::initSPUActions() {
   setOperationAction(ISD::VAEND, MVT::Other, Expand);
   /// } VAARG handling
 
+  /// Stack {
+  setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32, Custom);
+  setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Custom);
+  /// } Stack
+
   /// Int Ops {
   for (MVT IntVT : {MVT::i32, MVT::i64}) {
     // VE has no REM or DIVREM operations.
@@ -1721,12 +1726,16 @@ void VETargetLowering::initSPUActions() {
 
     // Use isel patterns for i32 and i64
     setOperationAction(ISD::BSWAP, IntVT, Legal);
-    setOperationAction(ISD::CTLZ, IntVT, Legal);
-    setOperationAction(ISD::CTPOP, IntVT, Legal);
+
+    // Use isel patterns for i64, Custom i32
+    LegalizeAction CustomAct = (IntVT == MVT::i32) ? Custom : Legal;
+    setOperationAction(ISD::CTLZ, IntVT, CustomAct);
+    setOperationAction(ISD::CTLZ_ZERO_UNDEF, IntVT, CustomAct);
 
     // Use isel patterns for i64, Promote i32
-    LegalizeAction Act = (IntVT == MVT::i32) ? Promote : Legal;
-    setOperationAction(ISD::BITREVERSE, IntVT, Act);
+    LegalizeAction PromoteAct = (IntVT == MVT::i32) ? Promote : Legal;
+    setOperationAction(ISD::BITREVERSE, IntVT, PromoteAct);
+    setOperationAction(ISD::CTPOP, IntVT, PromoteAct);
 
     // Legal smax and smin
     setOperationAction(ISD::SMAX, IntVT, Legal);
@@ -2373,6 +2382,9 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     break;
     TARGET_NODE_CASE(Lo)
     TARGET_NODE_CASE(Hi)
+    TARGET_NODE_CASE(GETFUNPLT)
+    TARGET_NODE_CASE(GETSTACKTOP)
+    TARGET_NODE_CASE(GETTLSADDR)
     TARGET_NODE_CASE(CALL)
     TARGET_NODE_CASE(RET_FLAG)
     TARGET_NODE_CASE(EQV)
@@ -2385,9 +2397,6 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(EH_SJLJ_SETJMP)
     TARGET_NODE_CASE(EH_SJLJ_LONGJMP)
     TARGET_NODE_CASE(EH_SJLJ_SETUP_DISPATCH)
-    TARGET_NODE_CASE(GETFUNPLT)
-    TARGET_NODE_CASE(GETSTACKTOP)
-    TARGET_NODE_CASE(GETTLSADDR)
     TARGET_NODE_CASE(MEMBARRIER)
     TARGET_NODE_CASE(GLOBAL_BASE_REG)
     TARGET_NODE_CASE(FLUSHW)
@@ -2760,12 +2769,12 @@ SDValue VETargetLowering::LowerVAARG(SDValue Op, SelectionDAG &DAG) const {
                      std::min(PtrVT.getSizeInBits(), VT.getSizeInBits()) / 8);
 }
 
-SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
+SDValue VETargetLowering::lowerDYNAMIC_STACKALLOC(SDValue Op,
                                                   SelectionDAG &DAG) const {
   // Generate following code.
   //   (void)__llvm_grow_stack(size);
   //   ret = GETSTACKTOP;        // pseudo instruction
-  SDLoc dl(Op);
+  SDLoc DL(Op);
 
   // Get the inputs.
   SDNode *Node = Op.getNode();
@@ -2776,11 +2785,11 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
 
   // Chain the dynamic stack allocation so that it doesn't modify the stack
   // pointer when other instructions are using the stack.
-  Chain = DAG.getCALLSEQ_START(Chain, 0, 0, dl);
+  Chain = DAG.getCALLSEQ_START(Chain, 0, 0, DL);
 
   const TargetFrameLowering &TFI = *Subtarget->getFrameLowering();
-  const Align StackAlign(TFI.getStackAlignment());
-  bool NeedsAlign = Alignment && Alignment > StackAlign;
+  Align StackAlign = TFI.getStackAlign();
+  bool NeedsAlign = Alignment.valueOrOne() > StackAlign;
 
   // Prepare arguments
   TargetLowering::ArgListTy Args;
@@ -2789,7 +2798,7 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
   Entry.Ty = Entry.Node.getValueType().getTypeForEVT(*DAG.getContext());
   Args.push_back(Entry);
   if (NeedsAlign) {
-    Entry.Node = DAG.getConstant(~(Alignment->value() - 1ULL), dl, VT);
+    Entry.Node = DAG.getConstant(~(Alignment->value() - 1ULL), DL, VT);
     Entry.Ty = Entry.Node.getValueType().getTypeForEVT(*DAG.getContext());
     Args.push_back(Entry);
   }
@@ -2798,32 +2807,31 @@ SDValue VETargetLowering::LowerDYNAMIC_STACKALLOC(SDValue Op,
   EVT PtrVT = Op.getValueType();
   SDValue Callee;
   if (NeedsAlign) {
-    Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack_align", PtrVT, 0);
+    Callee = DAG.getTargetExternalSymbol("__ve_grow_stack_align", PtrVT, 0);
   } else {
-    Callee = DAG.getTargetExternalSymbol("__llvm_grow_stack", PtrVT, 0);
+    Callee = DAG.getTargetExternalSymbol("__ve_grow_stack", PtrVT, 0);
   }
 
   TargetLowering::CallLoweringInfo CLI(DAG);
-  CLI.setDebugLoc(dl)
+  CLI.setDebugLoc(DL)
       .setChain(Chain)
-      .setCallee(CallingConv::VE_LLVM_GROW_STACK, RetTy, Callee,
-                 std::move(Args))
+      .setCallee(CallingConv::PreserveAll, RetTy, Callee, std::move(Args))
       .setDiscardResult(true);
   std::pair<SDValue, SDValue> pair = LowerCallTo(CLI);
   Chain = pair.second;
-  SDValue Result = DAG.getNode(VEISD::GETSTACKTOP, dl, VT, Chain);
+  SDValue Result = DAG.getNode(VEISD::GETSTACKTOP, DL, VT, Chain);
   if (NeedsAlign) {
-    Result = DAG.getNode(ISD::ADD, dl, VT, Result,
-                         DAG.getConstant((Alignment->value() - 1ULL), dl, VT));
-    Result = DAG.getNode(ISD::AND, dl, VT, Result,
-                         DAG.getConstant(~(Alignment->value() - 1ULL), dl, VT));
+    Result = DAG.getNode(ISD::ADD, DL, VT, Result,
+                         DAG.getConstant((Alignment->value() - 1ULL), DL, VT));
+    Result = DAG.getNode(ISD::AND, DL, VT, Result,
+                         DAG.getConstant(~(Alignment->value() - 1ULL), DL, VT));
   }
   //  Chain = Result.getValue(1);
-  Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(0, dl, true),
-                             DAG.getIntPtrConstant(0, dl, true), SDValue(), dl);
+  Chain = DAG.getCALLSEQ_END(Chain, DAG.getIntPtrConstant(0, DL, true),
+                             DAG.getIntPtrConstant(0, DL, true), SDValue(), DL);
 
   SDValue Ops[2] = {Result, Chain};
-  return DAG.getMergeValues(Ops, dl);
+  return DAG.getMergeValues(Ops, DL);
 }
 
 static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
@@ -3064,7 +3072,91 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
 }
 
-SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
+static SDValue LowerCTLZ(SDValue Op, SelectionDAG &DAG)
+{
+  // Using defult promote doesn't work well for VE, so that creating custom
+  // promote routine here.
+  SDLoc DL(Op);
+  MVT OVT = Op.getSimpleValueType();
+
+  // Handle only ctlz for i32.
+  if (OVT != MVT::i32)
+    return SDValue();
+
+  // Promote ctlz for i32 like below:
+  //   (i32 (trunc (ctlz (shl (anyext $src, i64), 32)))).
+  MVT NVT = MVT::i64;
+  SDValue AnyExt = DAG.getNode(ISD::ANY_EXTEND, DL, NVT, Op.getOperand(0));
+  SDValue Shifted = DAG.getNode(ISD::SHL, DL, NVT, AnyExt,
+      DAG.getConstant(NVT.getSizeInBits() -
+                      OVT.getSizeInBits(), DL, MVT::i32));
+  SDValue Ctlz = DAG.getNode(Op.getOpcode(), DL, NVT, Shifted);
+  return DAG.getNode(ISD::TRUNCATE, DL, OVT, Ctlz);
+}
+
+// Lower a vXi1 store into following instructions
+//   SVMi  %1, %vm, 0
+//   STrii %1, (,%addr)
+//   SVMi  %2, %vm, 1
+//   STrii %2, 8(,%addr)
+//   ...
+static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
+  SDLoc dl(Op);
+  StoreSDNode *StNode = dyn_cast<StoreSDNode>(Op.getNode());
+  assert(StNode && StNode->getOffset().isUndef()
+         && "Unexpected node type");
+
+  SDValue BasePtr = StNode->getBasePtr();
+  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
+    // For the case of frame index, expanding it here cause dependency
+    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
+    return Op;
+  }
+
+  unsigned alignment = StNode->getAlign().value();
+  if (alignment > 8)
+    alignment = 8;
+  EVT addrVT = BasePtr.getValueType();
+  EVT MemVT = StNode->getMemoryVT();
+  if (MemVT == MVT::v256i1 || MemVT == MVT::v4i64) {
+    SDValue OutChains[4];
+    for (int i = 0; i < 4; ++i) {
+      SDNode *V = DAG.getMachineNode(VE::svm_smI, dl, MVT::i64,
+                                     StNode->getValue(),
+                                     DAG.getTargetConstant(i, dl, MVT::i64));
+      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, dl, addrVT));
+      OutChains[i] =
+          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
+                       MachinePointerInfo(), alignment,
+                       StNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                              MachineMemOperand::MONone);
+    }
+    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
+  } else if (MemVT == MVT::v512i1 || MemVT == MVT::v8i64) {
+    SDValue OutChains[8];
+    for (int i = 0; i < 8; ++i) {
+      SDNode *V = DAG.getMachineNode(VE::svm_sMI, dl, MVT::i64,
+                                     StNode->getValue(),
+                                     DAG.getTargetConstant(i, dl, MVT::i64));
+      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, dl, addrVT));
+      OutChains[i] =
+          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
+                       MachinePointerInfo(), alignment,
+                       StNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                              MachineMemOperand::MONone);
+    }
+    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
+  } else {
+    // Otherwise, ask llvm to expand it.
+    return SDValue();
+  }
+}
+
+static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG,
+                          const VETargetLowering &TLI)
+{
   SDLoc dl(Op);
   StoreSDNode *St = cast<StoreSDNode>(Op.getNode());
 
@@ -3417,15 +3509,16 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default:
     llvm_unreachable("Should not custom lower this!");
-
+  case ISD::BlockAddress:
+    return LowerBlockAddress(Op, DAG);
+  case ISD::DYNAMIC_STACKALLOC:
+    return lowerDYNAMIC_STACKALLOC(Op, DAG);
+  case ISD::GlobalAddress:
+    return LowerGlobalAddress(Op, DAG);
   case ISD::RETURNADDR:
     return LowerRETURNADDR(Op, DAG, *this, Subtarget);
   case ISD::FRAMEADDR:
     return LowerFRAMEADDR(Op, DAG, *this, Subtarget);
-  case ISD::BlockAddress:
-    return LowerBlockAddress(Op, DAG);
-  case ISD::GlobalAddress:
-    return LowerGlobalAddress(Op, DAG);
   case ISD::GlobalTLSAddress:
     return LowerGlobalTLSAddress(Op, DAG);
   case ISD::ConstantPool:
@@ -3440,12 +3533,15 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerVASTART(Op, DAG);
   case ISD::VAARG:
     return LowerVAARG(Op, DAG);
-  case ISD::DYNAMIC_STACKALLOC:
-    return LowerDYNAMIC_STACKALLOC(Op, DAG);
+  case ISD::LOAD:
+    return LowerLOAD(Op, DAG);
   case ISD::STORE:
     return LowerSTORE(Op, DAG);
   case ISD::ATOMIC_FENCE:
     return LowerATOMIC_FENCE(Op, DAG);
+  case ISD::CTLZ:
+  case ISD::CTLZ_ZERO_UNDEF:
+    return LowerCTLZ(Op, DAG);
   case ISD::INTRINSIC_VOID:
     return LowerINTRINSIC_VOID(Op, DAG);
   case ISD::INTRINSIC_W_CHAIN:
@@ -3473,9 +3569,6 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     // case ISD::VECREDUCE_AND:
     // case ISD::VECREDUCE_XOR:
 
-  case ISD::LOAD:
-    // custom f128 lowering
-    return LowerLOAD(Op, DAG);
   case ISD::MLOAD:
     return LowerMLOAD(Op, DAG, VVPExpansionMode::ToNativeWidth);
   case ISD::MSTORE:
@@ -4186,7 +4279,23 @@ static bool isSimm7(SDValue V)
   return false;
 }
 
-static bool isMimm(SDValue V)
+/// getImmVal - get immediate representation of integer value
+inline static uint64_t getImmVal(const ConstantSDNode *N) {
+  return N->getSExtValue();
+}
+
+/// getFpImmVal - get immediate representation of floating point value
+inline static uint64_t getFpImmVal(const ConstantFPSDNode *N) {
+  const APInt& Imm = N->getValueAPF().bitcastToAPInt();
+  uint64_t Val = Imm.getZExtValue();
+  if (Imm.getBitWidth() == 32) {
+    // Immediate value of float place places at higher bits on VE.
+    Val <<= 32;
+  }
+  return Val;
+}
+
+static bool isMImm(SDValue V)
 {
   EVT VT = V.getValueType();
   if (VT.isVector())
@@ -4194,17 +4303,14 @@ static bool isMimm(SDValue V)
 
   if (VT.isInteger()) {
     if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(V))
-      return isMask_64(C->getSExtValue()) ||
-             C->getZExtValue() == 0 /* (0)1 == 0 */ ||
-             ((C->getSExtValue() & (1UL << 63)) &&
-              isShiftedMask_64(C->getSExtValue()));
+      return isMImmVal(getImmVal(C));
   } else if (VT.isFloatingPoint()) {
     if (ConstantFPSDNode *C = dyn_cast<ConstantFPSDNode>(V)) {
-      const APInt& Imm = C->getValueAPF().bitcastToAPInt();
-      return isMask_64(Imm.getSExtValue()) ||
-             Imm.getSExtValue() == 0 /* (0)1 == 0 */ ||
-             ((Imm.getSExtValue() & (1UL << 63)) &&
-              isShiftedMask_64(Imm.getSExtValue()));
+      if (VT == MVT::f32) {
+        // Float value places at higher bits, so ignore lower 32 bits.
+        return isMImm32Val(getFpImmVal(C) >> 32);
+      }
+      return isMImmVal(getFpImmVal(C));
     }
   }
   return false;
@@ -4241,12 +4347,12 @@ static bool safeWithoutComp(EVT SrcVT, bool Signed) {
 }
 
 static SDValue generateComparison(EVT VT, SDValue LHS, SDValue RHS,
-                                  bool Commutable, bool Signed, SDLoc &DL,
+                                  bool Commutable, bool Signed, const SDLoc &DL,
                                   SelectionDAG &DAG) {
   if (Commutable) {
     // VE comparison can holds simm7 at lhs and mimm at rhs.  Swap operands
     // if it matches.
-    if (!isSimm7(LHS) && !isMimm(RHS) && (isSimm7(RHS) || isMimm(LHS)))
+    if (!isSimm7(LHS) && !isMImm(RHS) && (isSimm7(RHS) || isMImm(LHS)))
       std::swap(LHS, RHS);
     assert(!(isNullConstant(LHS) || isNullFPConstant(LHS)) && "lhs is 0!");
   }
@@ -4254,7 +4360,6 @@ static SDValue generateComparison(EVT VT, SDValue LHS, SDValue RHS,
   // Compare values.  If RHS is 0 and it is safe to calculate without
   // comparison, we don't generate an instruction for comparison.
   EVT CompVT = decideCompType(VT);
-  // SDValue CompNode;
   if (CompVT == VT && safeWithoutComp(VT, Signed) &&
       (isNullConstant(RHS) || isNullFPConstant(RHS))) {
     return LHS;
@@ -4381,7 +4486,7 @@ SDValue VETargetLowering::generateEquivalentCmp(SDNode *N, bool UseCompAsBase,
   // VE instruction can holds simm7 at lhs and mimm at rhs.  Swap operands
   // if it improve instructions.  Both CMP operation is safe to sawp
   // for SETEQ/SETNE.
-  if (!isSimm7(Op0) && !isMimm(Op1) && (isSimm7(Op1) || isMimm(Op0)))
+  if (!isSimm7(Op0) && !isMImm(Op1) && (isSimm7(Op1) || isMImm(Op0)))
     std::swap(Op0, Op1);
 
   // Compare or equiv integers.
@@ -4748,9 +4853,9 @@ SDValue VETargetLowering::combineSelectCC(SDNode *N,
   if (VT.isVector())
     return SDValue();
 
-  if (isMimm(True)) {
+  if (isMImm(True)) {
     // Doesn't swap True and False values.
-  } else if (isMimm(False)) {
+  } else if (isMImm(False)) {
     // Swap True and False values.  Inverse CC also.
     std::swap(True, False);
     CC = getSetCCInverse(CC, LHS.getValueType());

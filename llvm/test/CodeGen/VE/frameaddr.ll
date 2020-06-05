@@ -1,20 +1,22 @@
 ; RUN: llc < %s -mtriple=ve-- | FileCheck %s
 
 define i8* @test1() nounwind {
+; CHECK-LABEL: test1:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    or %s0, 0, %s9
+; CHECK-NEXT:    or %s11, 0, %s9
 entry:
-; CHECK-LABEL: test1
-; CHECK:         or %s0, 0, %s9
-; CHECK:         or %s11, 0, %s9
   %ret = tail call i8* @llvm.frameaddress(i32 0)
   ret i8* %ret
 }
 
 define i8* @test2() nounwind {
-entry:
-; CHECK-LABEL: test2
-; CHECK:         ld %s0, (, %s9)
+; CHECK-LABEL: test2:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    ld %s0, (, %s9)
 ; CHECK-NEXT:    ld %s0, (, %s0)
-; CHECK:         or %s11, 0, %s9
+; CHECK-NEXT:    or %s11, 0, %s9
+entry:
   %ret = tail call i8* @llvm.frameaddress(i32 2)
   ret i8* %ret
 }

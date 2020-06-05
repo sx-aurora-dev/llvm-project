@@ -20,7 +20,6 @@
 
 namespace llvm {
 struct VERegisterInfo : public VEGenRegisterInfo {
-public:
   VERegisterInfo();
 
   /// Code Generation virtual methods...

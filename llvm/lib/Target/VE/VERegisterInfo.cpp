@@ -45,23 +45,23 @@ bool VERegisterInfo::requiresFrameIndexScavenging(
 
 const MCPhysReg *
 VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  return CSR_SaveList;
+  switch (MF->getFunction().getCallingConv()) {
+  default:
+    return CSR_SaveList;
+  case CallingConv::PreserveAll:
+    return CSR_preserve_all_SaveList;
+  }
 }
 
 const uint32_t *VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                                      CallingConv::ID CC) const {
   switch (CC) {
-  case CallingConv::VE_VEC_EXPF:
-    return CSR_vec_expf_RegMask;
-  case CallingConv::VE_LLVM_GROW_STACK:
-    return CSR_llvm_grow_stack_RegMask;
-  case CallingConv::Fast:
-    // Some vregs, vmask regs saved
-    return CSR_RegCall_RegMask;
   default:
     // NCC default CC does not explictly mention vector (mask) regs - assume
     // that they are clobbered
     return CSR_RegMask;
+  case CallingConv::PreserveAll:
+    return CSR_preserve_all_RegMask;
   }
 }
 
@@ -179,14 +179,19 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
 
     // Prepare for VL
     unsigned VLReg;
+    bool isKillSuper = false;
+    unsigned SuperReg;
+    const TargetRegisterInfo *TRI = MF.getSubtarget().getRegisterInfo();
     if (MI.getOperand(4).isImm()) {
       int64_t val = MI.getOperand(4).getImm();
       // TODO: if 'val' is already assigned to a register, then use it
-      VLReg = MF.getRegInfo().createVirtualRegister(&VE::I32RegClass);
-      BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEA32zii), VLReg)
-          .addImm(0)
-          .addImm(0)
-          .addImm(val);
+      // FIXME: it would be better to scavenge a register here instead of
+      // reserving SX16 all of the time.
+      SuperReg = VE::SX16;
+      isKillSuper = true;
+      VLReg = TRI->getSubReg(SuperReg, VE::sub_i32);
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::LEAzii), SuperReg)
+          .addImm(0).addImm(0).addImm(val);
     } else {
       VLReg = MI.getOperand(4).getReg();
     }
@@ -203,6 +208,8 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     MI.getOperand(2).ChangeToRegister(Tmp1, false, false, true);
     MI.getOperand(3).ChangeToRegister(VLReg, false, false, true);
     MI.RemoveOperand(4);
+    if (isKillSuper)
+      MI.addRegisterKilled(SuperReg, TRI, true);
     return;
   }
 
@@ -364,7 +371,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       Offset += 8;
     }
     if (isKill)
-      LastMI->addRegisterKilled(SrcLoReg, this);
+      LastMI->addRegisterKilled(SrcLoReg, this, true);
     // store high part of VMP
     for (int i = 0; i < 3; ++i) {
       BuildMI(*MI.getParent(), II, dl, TII.get(VE::svm_smI), TmpReg)
@@ -382,9 +389,9 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
                  .addReg(SrcHiReg)
                  .addImm(3);
     if (isKill) {
-      LastMI->addRegisterKilled(SrcHiReg, this);
+      LastMI->addRegisterKilled(SrcHiReg, this, true);
       // Add implicit super-register kills to the particular MI.
-      LastMI->addRegisterKilled(SrcReg, this);
+      LastMI->addRegisterKilled(SrcReg, this, true);
     }
     MI.setDesc(TII.get(VE::STrii));
     MI.getOperand(3).ChangeToRegister(TmpReg, false, false, true);

@@ -1306,6 +1306,14 @@ Instruction *InstCombiner::visitAdd(BinaryOperator &I) {
       match(&I, m_BinOp(m_c_Add(m_Not(m_Value(B)), m_Value(A)), m_One())))
     return BinaryOperator::CreateSub(A, B);
 
+  // (A + RHS) + RHS --> A + (RHS << 1)
+  if (match(LHS, m_OneUse(m_c_Add(m_Value(A), m_Specific(RHS)))))
+    return BinaryOperator::CreateAdd(A, Builder.CreateShl(RHS, 1, "reass.add"));
+
+  // LHS + (A + LHS) --> A + (LHS << 1)
+  if (match(RHS, m_OneUse(m_c_Add(m_Value(A), m_Specific(LHS)))))
+    return BinaryOperator::CreateAdd(A, Builder.CreateShl(LHS, 1, "reass.add"));
+
   // X % C0 + (( X / C0 ) % C1) * C0 => X % (C0 * C1)
   if (Value *V = SimplifyAddWithRemainder(I)) return replaceInstUsesWith(I, V);
 
@@ -1759,6 +1767,17 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
   // (X + -1) - Y --> ~Y + X
   if (match(Op0, m_OneUse(m_Add(m_Value(X), m_AllOnes()))))
     return BinaryOperator::CreateAdd(Builder.CreateNot(Op1), X);
+
+  // Reassociate sub/add sequences to create more add instructions and
+  // reduce dependency chains:
+  // ((X - Y) + Z) - Op1 --> (X + Z) - (Y + Op1)
+  Value *Z;
+  if (match(Op0, m_OneUse(m_c_Add(m_OneUse(m_Sub(m_Value(X), m_Value(Y))),
+                                  m_Value(Z))))) {
+    Value *XZ = Builder.CreateAdd(X, Z);
+    Value *YW = Builder.CreateAdd(Y, Op1);
+    return BinaryOperator::CreateSub(XZ, YW);
+  }
 
   if (Constant *C = dyn_cast<Constant>(Op0)) {
     Value *X;
@@ -2214,10 +2233,19 @@ Instruction *InstCombiner::visitFSubGeneric(BinaryOpTy &I) {
       return MCBuilder.CreateFMulFMF(Op0, OneSubC, &I);
     }
 
-    if (auto * PlainBinOp = dyn_cast<BinaryOperator>(&I)) {
-      if (Instruction *F = factorizeFAddFSub(*PlainBinOp, Builder))
-        return F;
+    // Reassociate fsub/fadd sequences to create more fadd instructions and
+    // reduce dependency chains:
+    // ((X - Y) + Z) - Op1 --> (X + Z) - (Y + Op1)
+    Value *Z;
+    if (MC.try_match(Op0, m_OneUse(m_c_FAdd(m_OneUse(m_FSub(m_Value(X), m_Value(Y))),
+                                     m_Value(Z))))) {
+      Value *XZ = Builder.CreateFAddFMF(X, Z, &I);
+      Value *YW = Builder.CreateFAddFMF(Y, Op1, &I);
+      return MCBuilder.CreateFSubFMF(XZ, YW, &I);
     }
+
+    if (Instruction *F = factorizeFAddFSub(I, Builder))
+      return F;
 
     // TODO: This performs reassociative folds for FP ops. Some fraction of the
     // functionality has been subsumed by simple pattern matching here and in

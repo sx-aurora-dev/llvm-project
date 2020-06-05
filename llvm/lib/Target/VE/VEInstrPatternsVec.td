@@ -12,10 +12,12 @@
 // v512i32, v512f32.
 
 def : Pat<(v512i32 (load I64:$addr)),
-          (v512i32 (vld_vIsl 8, $addr, (LEA32zii 0, 0, 256)))>;
+          (v512i32 (vld_vIsl 8, $addr,
+                             (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
 
 def : Pat<(v512f32 (load I64:$addr)),
-          (v512f32 (vld_vIsl 8, $addr, (LEA32zii 0, 0, 256)))>;
+          (v512f32 (vld_vIsl 8, $addr,
+                             (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
 
 // Mask Insert & Extract
 multiclass insert_extract_mask<ValueType MaskVT, string MaskToken> {
@@ -153,7 +155,6 @@ multiclass vbrd_for_vector_length<int length, ValueType vi32, ValueType vi64,
 }
 
 defm : vbrd_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
-
 
 // Sequence
 def: Pat<(v512i32 (vec_seq i32:$vl)),

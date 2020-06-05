@@ -88,7 +88,7 @@ define void @func7(i16 signext %p, i128* %a) {
   ret void
 }
 
-define void @func8(i32 %p, i64* %a) {
+define void @func8(i32 signext %p, i64* %a) {
 ; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
@@ -99,7 +99,7 @@ define void @func8(i32 %p, i64* %a) {
   ret void
 }
 
-define void @func9(i32 %p, i128* %a) {
+define void @func9(i32 signext %p, i128* %a) {
 ; CHECK-LABEL: func9:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1

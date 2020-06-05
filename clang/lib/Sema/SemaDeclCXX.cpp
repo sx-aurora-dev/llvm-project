@@ -38,8 +38,9 @@
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/SemaInternal.h"
 #include "clang/Sema/Template.h"
-#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
 #include <map>
 #include <set>
@@ -304,18 +305,22 @@ Sema::ActOnParamDefaultArgument(Decl *param, SourceLocation EqualLoc,
   ParmVarDecl *Param = cast<ParmVarDecl>(param);
   UnparsedDefaultArgLocs.erase(Param);
 
+  auto Fail = [&] {
+    Param->setInvalidDecl();
+    Param->setDefaultArg(new (Context) OpaqueValueExpr(
+        EqualLoc, Param->getType().getNonReferenceType(), VK_RValue));
+  };
+
   // Default arguments are only permitted in C++
   if (!getLangOpts().CPlusPlus) {
     Diag(EqualLoc, diag::err_param_default_argument)
       << DefaultArg->getSourceRange();
-    Param->setInvalidDecl();
-    return;
+    return Fail();
   }
 
   // Check for unexpanded parameter packs.
   if (DiagnoseUnexpandedParameterPack(DefaultArg, UPPC_DefaultArgument)) {
-    Param->setInvalidDecl();
-    return;
+    return Fail();
   }
 
   // C++11 [dcl.fct.default]p3
@@ -324,17 +329,18 @@ Sema::ActOnParamDefaultArgument(Decl *param, SourceLocation EqualLoc,
   if (Param->isParameterPack()) {
     Diag(EqualLoc, diag::err_param_default_argument_on_parameter_pack)
         << DefaultArg->getSourceRange();
+    // Recover by discarding the default argument.
+    Param->setDefaultArg(nullptr);
     return;
   }
 
   // Check that the default argument is well-formed
   CheckDefaultArgumentVisitor DefaultArgChecker(DefaultArg, this);
-  if (DefaultArgChecker.Visit(DefaultArg)) {
-    Param->setInvalidDecl();
-    return;
-  }
+  if (DefaultArgChecker.Visit(DefaultArg))
+    return Fail();
 
-  SetParamDefaultArgument(Param, DefaultArg, EqualLoc);
+  if (SetParamDefaultArgument(Param, DefaultArg, EqualLoc))
+    return Fail();
 }
 
 /// ActOnParamUnparsedDefaultArgument - We've seen a default
@@ -419,14 +425,9 @@ void Sema::CheckExtraCXXDefaultArguments(Declarator &D) {
 }
 
 static bool functionDeclHasDefaultArgument(const FunctionDecl *FD) {
-  for (unsigned NumParams = FD->getNumParams(); NumParams > 0; --NumParams) {
-    const ParmVarDecl *PVD = FD->getParamDecl(NumParams-1);
-    if (!PVD->hasDefaultArg())
-      return false;
-    if (!PVD->hasInheritedDefaultArg())
-      return true;
-  }
-  return false;
+  return std::any_of(FD->param_begin(), FD->param_end(), [](ParmVarDecl *P) {
+    return P->hasDefaultArg() && !P->hasInheritedDefaultArg();
+  });
 }
 
 /// MergeCXXFunctionDecl - Merge two declarations of the same C++
@@ -1528,25 +1529,34 @@ void Sema::MergeVarDeclExceptionSpecs(VarDecl *New, VarDecl *Old) {
 /// [dcl.fct.default].
 void Sema::CheckCXXDefaultArguments(FunctionDecl *FD) {
   unsigned NumParams = FD->getNumParams();
-  unsigned p;
+  unsigned ParamIdx = 0;
+
+  // This checking doesn't make sense for explicit specializations; their
+  // default arguments are determined by the declaration we're specializing,
+  // not by FD.
+  if (FD->getTemplateSpecializationKind() == TSK_ExplicitSpecialization)
+    return;
+  if (auto *FTD = FD->getDescribedFunctionTemplate())
+    if (FTD->isMemberSpecialization())
+      return;
 
   // Find first parameter with a default argument
-  for (p = 0; p < NumParams; ++p) {
-    ParmVarDecl *Param = FD->getParamDecl(p);
+  for (; ParamIdx < NumParams; ++ParamIdx) {
+    ParmVarDecl *Param = FD->getParamDecl(ParamIdx);
     if (Param->hasDefaultArg())
       break;
   }
 
-  // C++11 [dcl.fct.default]p4:
+  // C++20 [dcl.fct.default]p4:
   //   In a given function declaration, each parameter subsequent to a parameter
   //   with a default argument shall have a default argument supplied in this or
-  //   a previous declaration or shall be a function parameter pack. A default
-  //   argument shall not be redefined by a later declaration (not even to the
-  //   same value).
-  unsigned LastMissingDefaultArg = 0;
-  for (; p < NumParams; ++p) {
-    ParmVarDecl *Param = FD->getParamDecl(p);
-    if (!Param->hasDefaultArg() && !Param->isParameterPack()) {
+  //   a previous declaration, unless the parameter was expanded from a
+  //   parameter pack, or shall be a function parameter pack.
+  for (; ParamIdx < NumParams; ++ParamIdx) {
+    ParmVarDecl *Param = FD->getParamDecl(ParamIdx);
+    if (!Param->hasDefaultArg() && !Param->isParameterPack() &&
+        !(CurrentInstantiationScope &&
+          CurrentInstantiationScope->isLocalPackExpansion(Param))) {
       if (Param->isInvalidDecl())
         /* We already complained about this parameter. */;
       else if (Param->getIdentifier())
@@ -1556,21 +1566,6 @@ void Sema::CheckCXXDefaultArguments(FunctionDecl *FD) {
       else
         Diag(Param->getLocation(),
              diag::err_param_default_argument_missing);
-
-      LastMissingDefaultArg = p;
-    }
-  }
-
-  if (LastMissingDefaultArg > 0) {
-    // Some default arguments were missing. Clear out all of the
-    // default arguments up to (and including) the last missing
-    // default argument, so that we leave the function parameters
-    // in a semantically valid state.
-    for (p = 0; p <= LastMissingDefaultArg; ++p) {
-      ParmVarDecl *Param = FD->getParamDecl(p);
-      if (Param->hasDefaultArg()) {
-        Param->setDefaultArg(nullptr);
-      }
     }
   }
 }
@@ -9973,11 +9968,6 @@ void Sema::ActOnDelayedCXXMethodParameter(Scope *S, Decl *ParamD) {
 
   ParmVarDecl *Param = cast<ParmVarDecl>(ParamD);
 
-  // If this parameter has an unparsed default argument, clear it out
-  // to make way for the parsed default argument.
-  if (Param->hasUnparsedDefaultArg())
-    Param->setDefaultArg(nullptr);
-
   S->AddDecl(Param);
   if (Param->getDeclName())
     IdResolver.AddDecl(Param);
@@ -10111,11 +10101,9 @@ void Sema::CheckConstructor(CXXConstructorDecl *Constructor) {
   //   either there are no other parameters or else all other
   //   parameters have default arguments.
   if (!Constructor->isInvalidDecl() &&
-      ((Constructor->getNumParams() == 1) ||
-       (Constructor->getNumParams() > 1 &&
-        Constructor->getParamDecl(1)->hasDefaultArg())) &&
-      Constructor->getTemplateSpecializationKind()
-                                              != TSK_ImplicitInstantiation) {
+      Constructor->hasOneParamOrDefaultArgs() &&
+      Constructor->getTemplateSpecializationKind() !=
+          TSK_ImplicitInstantiation) {
     QualType ParamType = Constructor->getParamDecl(0)->getType();
     QualType ClassTy = Context.getTagDeclType(ClassDecl);
     if (Context.getCanonicalType(ParamType).getUnqualifiedType() == ClassTy) {
@@ -10486,15 +10474,12 @@ Decl *Sema::ActOnConversionDeclarator(CXXConversionDecl *Conversion) {
 
   // Make sure we aren't redeclaring the conversion function.
   QualType ConvType = Context.getCanonicalType(Conversion->getConversionType());
-
   // C++ [class.conv.fct]p1:
   //   [...] A conversion function is never used to convert a
   //   (possibly cv-qualified) object to the (possibly cv-qualified)
   //   same object type (or a reference to it), to a (possibly
   //   cv-qualified) base class of that type (or a reference to it),
   //   or to (possibly cv-qualified) void.
-  // FIXME: Suppress this warning if the conversion function ends up being a
-  // virtual function that overrides a virtual function in a base class.
   QualType ClassType
     = Context.getCanonicalType(Context.getTypeDeclType(ClassDecl));
   if (const ReferenceType *ConvTypeRef = ConvType->getAs<ReferenceType>())
@@ -10502,6 +10487,8 @@ Decl *Sema::ActOnConversionDeclarator(CXXConversionDecl *Conversion) {
   if (Conversion->getTemplateSpecializationKind() != TSK_Undeclared &&
       Conversion->getTemplateSpecializationKind() != TSK_ExplicitSpecialization)
     /* Suppress diagnostics for instantiations. */;
+  else if (Conversion->size_overridden_methods() != 0)
+    /* Suppress diagnostics for overriding virtual function in a base class. */;
   else if (ConvType->isRecordType()) {
     ConvType = Context.getCanonicalType(ConvType).getUnqualifiedType();
     if (ConvType == ClassType)
@@ -11176,8 +11163,7 @@ bool Sema::isInitListConstructor(const FunctionDecl *Ctor) {
   //   is of type std::initializer_list<E> or reference to possibly cv-qualified
   //   std::initializer_list<E> for some type E, and either there are no other
   //   parameters or else all other parameters have default arguments.
-  if (Ctor->getNumParams() < 1 ||
-      (Ctor->getNumParams() > 1 && !Ctor->getParamDecl(1)->hasDefaultArg()))
+  if (!Ctor->hasOneParamOrDefaultArgs())
     return false;
 
   QualType ArgType = Ctor->getParamDecl(0)->getType();
@@ -14915,6 +14901,9 @@ Sema::BuildCXXConstructExpr(SourceLocation ConstructLoc, QualType DeclInitType,
          "given constructor for wrong type");
   MarkFunctionReferenced(ConstructLoc, Constructor);
   if (getLangOpts().CUDA && !CheckCUDACall(ConstructLoc, Constructor))
+    return ExprError();
+  if (getLangOpts().SYCLIsDevice &&
+      !checkSYCLDeviceFunction(ConstructLoc, Constructor))
     return ExprError();
 
   return CheckForImmediateInvocation(

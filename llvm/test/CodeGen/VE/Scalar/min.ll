@@ -136,7 +136,7 @@ define i64 @min2u64(i64, i64) {
   ret i64 %4
 }
 
-define i32 @mini32(i32, i32) {
+define signext i32 @mini32(i32 signext %0, i32 signext %1) {
 ; CHECK-LABEL: mini32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    mins.w.sx %s0, %s0, %s1
@@ -156,7 +156,7 @@ define i32 @min2i32(i32, i32) {
   ret i32 %4
 }
 
-define i32 @minu32(i32, i32) {
+define zeroext i32 @minu32(i32 zeroext %0, i32 zeroext %1) {
 ; CHECK-LABEL: minu32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
@@ -187,11 +187,12 @@ define i32 @min2u32(i32, i32) {
 define fp128 @minfp128(fp128, fp128) {
 ; CHECK-LABEL: minfp128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:  cmov.d.lt %s2, %s0, %s4
-; CHECK-NEXT:  cmov.d.lt %s3, %s1, %s4
-; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  or %s1, 0, %s3
+; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:    cmov.d.lt %s2, %s0, %s4
+; CHECK-NEXT:    cmov.d.lt %s3, %s1, %s4
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp olt fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4
@@ -200,11 +201,12 @@ define fp128 @minfp128(fp128, fp128) {
 define fp128 @min2fp128(fp128, fp128) {
 ; CHECK-LABEL: min2fp128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:  cmov.d.le %s2, %s0, %s4
-; CHECK-NEXT:  cmov.d.le %s3, %s1, %s4
-; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  or %s1, 0, %s3
+; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:    cmov.d.le %s2, %s0, %s4
+; CHECK-NEXT:    cmov.d.le %s3, %s1, %s4
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp ole fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4
@@ -213,11 +215,12 @@ define fp128 @min2fp128(fp128, fp128) {
 define fp128 @minufp128(fp128, fp128) {
 ; CHECK-LABEL: minufp128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:  cmov.d.ltnan %s2, %s0, %s4
-; CHECK-NEXT:  cmov.d.ltnan %s3, %s1, %s4
-; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  or %s1, 0, %s3
+; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:    cmov.d.ltnan %s2, %s0, %s4
+; CHECK-NEXT:    cmov.d.ltnan %s3, %s1, %s4
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp ult fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4
@@ -226,11 +229,12 @@ define fp128 @minufp128(fp128, fp128) {
 define fp128 @min2ufp128(fp128, fp128) {
 ; CHECK-LABEL: min2ufp128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:  fcmp.q %s4, %s0, %s2
-; CHECK-NEXT:  cmov.d.lenan %s2, %s0, %s4
-; CHECK-NEXT:  cmov.d.lenan %s3, %s1, %s4
-; CHECK-NEXT:  or %s0, 0, %s2
-; CHECK-NEXT:  or %s1, 0, %s3
+; CHECK-NEXT:    fcmp.q %s4, %s0, %s2
+; CHECK-NEXT:    cmov.d.lenan %s2, %s0, %s4
+; CHECK-NEXT:    cmov.d.lenan %s3, %s1, %s4
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp ule fp128 %0, %1
   %4 = select i1 %3, fp128 %0, fp128 %1
   ret fp128 %4
