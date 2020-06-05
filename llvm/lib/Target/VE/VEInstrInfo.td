@@ -39,12 +39,12 @@ include "VEInstrFormats.td"
 //     e.g. 0.0 (0x00000000) or -2.0 (0xC0000000=(2)1).
 //===----------------------------------------------------------------------===//
 
-def LO7 : SDNodeXForm<imm, [{
-  return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
-                                   SDLoc(N), MVT::i32);
-}]>;
 def ULO7 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(N->getZExtValue() & 0x7f,
+                                   SDLoc(N), MVT::i32);
+}]>;
+def LO7 : SDNodeXForm<imm, [{
+  return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
                                    SDLoc(N), MVT::i32);
 }]>;
 def MIMM : SDNodeXForm<imm, [{
@@ -89,50 +89,50 @@ def GetVL : SDNodeXForm<imm, [{
 */
 
 def icond2cc : SDNodeXForm<cond, [{
-  VECC::CondCode VECC = IntCondCode2ICC(N->get());
+  VECC::CondCode VECC = intCondCode2Icc(N->get());
   return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 def icond2ccSwap : SDNodeXForm<cond, [{
   ISD::CondCode CC = getSetCCSwappedOperands(N->get());
-  VECC::CondCode VECC = IntCondCode2ICC(CC);
+  VECC::CondCode VECC = intCondCode2Icc(CC);
   return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 def icond2ccInv : SDNodeXForm<cond, [{
   ISD::CondCode CC = ISD::GlobalISel::getSetCCInverse(N->get(), true);
-  VECC::CondCode VECC = IntCondCode2ICC(CC);
+  VECC::CondCode VECC = intCondCode2Icc(CC);
   return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 def icond2ccSwapInv : SDNodeXForm<cond, [{
   ISD::CondCode CC = getSetCCSwappedOperands(N->get());
   CC = ISD::GlobalISel::getSetCCInverse(CC, true);
-  VECC::CondCode VECC = IntCondCode2ICC(CC);
+  VECC::CondCode VECC = intCondCode2Icc(CC);
   return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 def fcond2cc : SDNodeXForm<cond, [{
-  VECC::CondCode VECC = FPCondCode2FCC(N->get());
+  VECC::CondCode VECC = fpCondCode2Fcc(N->get());
   return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 def fcond2ccSwap : SDNodeXForm<cond, [{
   ISD::CondCode CC = getSetCCSwappedOperands(N->get());
-  VECC::CondCode VECC = FPCondCode2FCC(CC);
+  VECC::CondCode VECC = fpCondCode2Fcc(CC);
   return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 def fcond2ccInv : SDNodeXForm<cond, [{
   ISD::CondCode CC = ISD::GlobalISel::getSetCCInverse(N->get(), false);
-  VECC::CondCode VECC = FPCondCode2FCC(CC);
+  VECC::CondCode VECC = fpCondCode2Fcc(CC);
   return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
 def fcond2ccSwapInv : SDNodeXForm<cond, [{
   ISD::CondCode CC = getSetCCSwappedOperands(N->get());
   CC = ISD::GlobalISel::getSetCCInverse(CC, false);
-  VECC::CondCode VECC = FPCondCode2FCC(CC);
+  VECC::CondCode VECC = fpCondCode2Fcc(CC);
   return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
 }]>;
 
@@ -145,57 +145,82 @@ def CCOP : SDNodeXForm<imm, [{
 // Feature predicates.
 //===----------------------------------------------------------------------===//
 
+// zero
+def ZeroAsmOperand : AsmOperandClass {
+  let Name = "Zero";
+}
+def zero : Operand<i32>, PatLeaf<(imm), [{
+    return N->getSExtValue() == 0; }]> {
+  let ParserMatchClass = ZeroAsmOperand;
+}
+
+// uimm0to2 - Special immediate value represents 0, 1, and 2.
+def UImm0to2AsmOperand : AsmOperandClass {
+  let Name = "UImm0to2";
+}
+def uimm0to2 : Operand<i32>, PatLeaf<(imm), [{
+    return N->getZExtValue() < 3; }], ULO7> {
+  let ParserMatchClass = UImm0to2AsmOperand;
+}
+
 // uimm1 - Generic immediate value.
-def UImm1AsmOperand : AsmOperandClass { let Name = "UImm1"; }
+def UImm1AsmOperand : AsmOperandClass {
+  let Name = "UImm1";
+}
 def uimm1 : Operand<i32>, PatLeaf<(imm), [{
-    return isUInt<1>(N->getZExtValue()); }]> {
+    return isUInt<1>(N->getZExtValue()); }], ULO7> {
   let ParserMatchClass = UImm1AsmOperand;
 }
 
 // uimm2 - Generic immediate value.
-def UImm2AsmOperand : AsmOperandClass { let Name = "UImm2"; }
+def UImm2AsmOperand : AsmOperandClass {
+  let Name = "UImm2";
+}
 def uimm2 : Operand<i32>, PatLeaf<(imm), [{
-    return isUInt<2>(N->getZExtValue()); }]> {
+    return isUInt<2>(N->getZExtValue()); }], ULO7> {
   let ParserMatchClass = UImm2AsmOperand;
 }
 
 // uimm3 - Generic immediate value.
-def UImm3AsmOperand : AsmOperandClass { let Name = "UImm3"; }
+def UImm3AsmOperand : AsmOperandClass {
+  let Name = "UImm3";
+}
 def uimm3 : Operand<i32>, PatLeaf<(imm), [{
-    return isUInt<3>(N->getZExtValue()); }]> {
+    return isUInt<3>(N->getZExtValue()); }], ULO7> {
   let ParserMatchClass = UImm3AsmOperand;
 }
 
 // uimm4 - Generic immediate value.
-def UImm4AsmOperand : AsmOperandClass { let Name = "UImm4"; }
+def UImm4AsmOperand : AsmOperandClass {
+  let Name = "UImm4";
+}
 def uimm4 : Operand<i32>, PatLeaf<(imm), [{
-    return isUInt<4>(N->getZExtValue()); }]> {
+    return isUInt<4>(N->getZExtValue()); }], ULO7> {
   let ParserMatchClass = UImm4AsmOperand;
 }
 
 // uimm6 - Generic immediate value.
-def UImm6AsmOperand : AsmOperandClass { let Name = "UImm6"; }
+def UImm6AsmOperand : AsmOperandClass {
+  let Name = "UImm6";
+}
 def uimm6 : Operand<i32>, PatLeaf<(imm), [{
-    return isUInt<6>(N->getZExtValue()); }]> {
+    return isUInt<6>(N->getZExtValue()); }], ULO7> {
   let ParserMatchClass = UImm6AsmOperand;
 }
 
 // uimm7 - Generic immediate value.
-def UImm7AsmOperand : AsmOperandClass { let Name = "UImm7"; }
+def UImm7AsmOperand : AsmOperandClass {
+  let Name = "UImm7";
+}
 def uimm7 : Operand<i32>, PatLeaf<(imm), [{
     return isUInt<7>(N->getZExtValue()); }], ULO7> {
   let ParserMatchClass = UImm7AsmOperand;
 }
 
-// uimm0to2 - Special immediate value represents 0, 1, and 2.
-def UImm0to2AsmOperand : AsmOperandClass { let Name = "UImm0to2"; }
-def uimm0to2 : Operand<i32>, PatLeaf<(imm), [{
-    return N->getZExtValue() < 3; }]> {
-  let ParserMatchClass = UImm0to2AsmOperand;
-}
-
 // simm7 - Generic immediate value.
-def SImm7AsmOperand : AsmOperandClass { let Name = "SImm7"; }
+def SImm7AsmOperand : AsmOperandClass {
+  let Name = "SImm7";
+}
 def simm7 : Operand<i32>, PatLeaf<(imm), [{
     return isInt<7>(N->getSExtValue()); }], LO7> {
   let ParserMatchClass = SImm7AsmOperand;
@@ -211,13 +236,6 @@ def mimm : Operand<i32>, PatLeaf<(imm), [{
     return isMImmVal(getImmVal(N)); }], MIMM> {
   let ParserMatchClass = MImmAsmOperand;
   let PrintMethod = "printMImmOperand";
-}
-
-// zero
-def ZeroAsmOperand : AsmOperandClass { let Name = "Zero"; }
-def zero : Operand<i32>, PatLeaf<(imm), [{
-    return N->getSExtValue() == 0; }]> {
-  let ParserMatchClass = ZeroAsmOperand;
 }
 
 // simm7fp - Generic fp immediate value.
@@ -766,25 +784,26 @@ multiclass RRCMOVm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
                    Operand immOp = simm7> {
   def rr : RR<opc, (outs I64:$sx), (ins CCOp:$cfw, RC:$sy, I64:$sz, I64:$sd),
               !strconcat(opcStr, " $sx, $sz, $sy"),
-              [(set i64:$sx, (OpNode Ty:$sy, i64:$sz, i64:$sd, (i32 CCOp:$cfw)))]>;
+              [(set i64:$sx, (OpNode Ty:$sy, i64:$sz, i64:$sd,
+                                     (i32 CCOp:$cfw)))]>;
   let cy = 0 in
   def ir : RR<opc, (outs I64:$sx),
               (ins CCOp:$cfw, immOp:$sy, I64:$sz, I64:$sd),
               !strconcat(opcStr, " $sx, $sz, $sy"),
               [(set i64:$sx, (OpNode (Ty immOp:$sy), i64:$sz, i64:$sd,
-                                     CCOp:$cfw))]>;
+                                     (i32 CCOp:$cfw)))]>;
   let cz = 0 in
   def rm : RR<opc, (outs I64:$sx),
               (ins CCOp:$cfw, RC:$sy, mimm:$sz, I64:$sd),
               !strconcat(opcStr, " $sx, $sz, $sy"),
               [(set i64:$sx, (OpNode Ty:$sy, (i64 mimm:$sz), i64:$sd,
-                                     CCOp:$cfw))]>;
+                                     (i32 CCOp:$cfw)))]>;
   let cy = 0, cz = 0 in
   def im : RR<opc, (outs I64:$sx),
               (ins CCOp:$cfw, immOp:$sy, mimm:$sz, I64:$sd),
               !strconcat(opcStr, " $sx, $sz, $sy"),
               [(set i64:$sx, (OpNode (Ty immOp:$sy), (i64 mimm:$sz), i64:$sd,
-                                     CCOp:$cfw))]>;
+                                     (i32 CCOp:$cfw)))]>;
 }
 
 // Multiclass for floating point conversion instructions.
@@ -1360,9 +1379,11 @@ def : Pat<(i32 (bswap (i32 mimm:$src))),
           (EXTRACT_SUBREG (BSWPmi (MIMM $src), 1), sub_i32)>;
 
 // Section 8.5.11 - CMOV (Conditional Move)
+let cw = 0, cw2 = 0 in
 defm CMOVL : RRCMOVm<"cmov.l.${cfw}", 0x3B, I64, i64, CMOV>;
-let cw = 1 in defm CMOVW : RRCMOVm<"cmov.w.${cfw}", 0x3B, I32, i32, CMOV>;
-let cw2 = 1 in
+let cw = 1, cw2 = 0 in
+defm CMOVW : RRCMOVm<"cmov.w.${cfw}", 0x3B, I32, i32, CMOV>;
+let cw = 0, cw2 = 1 in
 defm CMOVD : RRCMOVm<"cmov.d.${cfw}", 0x3B, I64, f64, CMOV, simm7fp>;
 let cw = 1, cw2 = 1 in
 defm CMOVS : RRCMOVm<"cmov.s.${cfw}", 0x3B, F32, f32, CMOV, simm7fp>;
@@ -1529,9 +1550,9 @@ def RET : CF<0x19, (outs), (ins), "b.l.t (, %s10)", [(retflag)]>;
 defm BCFW : BCm<"b${cond}.w", "b.w", "baf.w", 0x1B, I32, simm7>;
 
 // Section 8.8.3 - BCF (Branch on Condition Floating Point)
-defm BCFD : BCm<"b${cond}.d", "b.d", "baf.d", 0x1C, I64, simm7>;
+defm BCFD : BCm<"b${cond}.d", "b.d", "baf.d", 0x1C, I64, simm7fp>;
 let cx = 1 in
-defm BCFS : BCm<"b${cond}.s", "b.s", "baf.s", 0x1C, F32, simm7>;
+defm BCFS : BCm<"b${cond}.s", "b.s", "baf.s", 0x1C, F32, simm7fp>;
 
 // Section 8.8.4 - BCR (Branch on Condition Relative)
 let cx = 0, cx2 = 0 in

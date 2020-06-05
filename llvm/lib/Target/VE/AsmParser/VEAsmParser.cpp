@@ -236,14 +236,25 @@ public:
   bool isMEMzi() const { return Kind == k_MemoryZeroImm; }
   bool isCCOp() const { return Kind == k_CCOp; }
   bool isRDOp() const { return Kind == k_RDOp; }
-  bool isSImm7() {
+  bool isZero() {
     if (!isImm())
       return false;
 
     // Constant case
     if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
-      return isInt<7>(Value);
+      return Value == 0;
+    }
+    return false;
+  }
+  bool isUImm0to2() {
+    if (!isImm())
+      return false;
+
+    // Constant case
+    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+      int64_t Value = ConstExpr->getValue();
+      return Value >= 0 && Value < 3;
     }
     return false;
   }
@@ -313,14 +324,14 @@ public:
     }
     return false;
   }
-  bool isUImm0to2() {
+  bool isSImm7() {
     if (!isImm())
       return false;
 
     // Constant case
     if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
-      return Value >= 0 && Value < 3;
+      return isInt<7>(Value);
     }
     return false;
   }
@@ -332,17 +343,6 @@ public:
     if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(MImm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<6>(Value);
-    }
-    return false;
-  }
-  bool isZero() {
-    if (!isImm())
-      return false;
-
-    // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
-      int64_t Value = ConstExpr->getValue();
-      return Value == 0;
     }
     return false;
   }
@@ -492,7 +492,11 @@ public:
     addExpr(Inst, Expr);
   }
 
-  void addSImm7Operands(MCInst &Inst, unsigned N) const {
+  void addZeroOperands(MCInst &Inst, unsigned N) const {
+    addImmOperands(Inst, N);
+  }
+
+  void addUImm0to2Operands(MCInst &Inst, unsigned N) const {
     addImmOperands(Inst, N);
   }
 
@@ -520,11 +524,7 @@ public:
     addImmOperands(Inst, N);
   }
 
-  void addUImm0to2Operands(MCInst &Inst, unsigned N) const {
-    addImmOperands(Inst, N);
-  }
-
-  void addZeroOperands(MCInst &Inst, unsigned N) const {
+  void addSImm7Operands(MCInst &Inst, unsigned N) const {
     addImmOperands(Inst, N);
   }
 
@@ -1209,8 +1209,7 @@ OperandMatchResultTy VEAsmParser::parseMEMOperand(OperandVector &Operands) {
   return MatchOperand_Success;
 }
 
-OperandMatchResultTy
-VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
+OperandMatchResultTy VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
   LLVM_DEBUG(dbgs() << "parseMEMAsOpeand\n");
   const AsmToken &Tok = Parser.getTok();
   SMLoc S = Tok.getLoc();
@@ -1579,10 +1578,6 @@ unsigned VEAsmParser::validateTargetOperandClass(MCParsedAsmOperand &GOp,
   switch (Kind) {
   default:
     break;
-  case MCK_MISC:
-    if (Op.isImm() && VEOperand::MorphToMISCReg(Op))
-      return MCTargetAsmParser::Match_Success;
-    break;
   case MCK_F128:
     if (Op.isReg() && VEOperand::MorphToF128Reg(Op))
       return MCTargetAsmParser::Match_Success;
@@ -1593,6 +1588,10 @@ unsigned VEAsmParser::validateTargetOperandClass(MCParsedAsmOperand &GOp,
     break;
   case MCK_I32:
     if (Op.isReg() && VEOperand::MorphToI32Reg(Op))
+      return MCTargetAsmParser::Match_Success;
+    break;
+  case MCK_MISC:
+    if (Op.isImm() && VEOperand::MorphToMISCReg(Op))
       return MCTargetAsmParser::Match_Success;
     break;
   case MCK_VM512:

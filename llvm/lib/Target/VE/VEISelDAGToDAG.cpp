@@ -23,9 +23,8 @@ using namespace llvm;
 // Instruction Selector Implementation
 //===----------------------------------------------------------------------===//
 
-/// IntCondCCodeToICC - Convert a DAG integer condition code to a SPARC ICC
-/// condition.
-inline static VECC::CondCode IntCondCode2ICC(ISD::CondCode CC) {
+/// Convert a DAG integer condition code to a VE ICC condition.
+inline static VECC::CondCode intCondCode2Icc(ISD::CondCode CC) {
   switch (CC) {
   default: llvm_unreachable("Unknown integer condition code!");
   case ISD::SETEQ:  return VECC::CC_IEQ;
@@ -41,9 +40,8 @@ inline static VECC::CondCode IntCondCode2ICC(ISD::CondCode CC) {
   }
 }
 
-/// FPCondCCodeToFCC - Convert a DAG floatingp oint condition code to a SPARC
-/// FCC condition.
-inline static VECC::CondCode FPCondCode2FCC(ISD::CondCode CC) {
+/// Convert a DAG floatingp oint condition code to a VE FCC condition.
+inline static VECC::CondCode fpCondCode2Fcc(ISD::CondCode CC) {
   switch (CC) {
   default: llvm_unreachable("Unknown fp condition code!");
   case ISD::SETFALSE: return VECC::CC_AF;
