@@ -252,6 +252,7 @@ def mimmfp : Operand<i32>, PatLeaf<(fpimm), [{
   let ParserMatchClass = MImmAsmOperand;
   let PrintMethod = "printMImmOperand";
 }
+
 // mimmfp32 - 32 bit width mimmfp
 //   Float value places at higher bits, so ignore lower 32 bits.
 def mimmfp32 : Operand<i32>, PatLeaf<(fpimm), [{
@@ -357,14 +358,6 @@ def VEMEMziiAsmOperand : AsmOperandClass {
   let Name = "MEMzii";
   let ParserMethod = "parseMEMOperand";
 }
-def VEMEMriAsmOperand : AsmOperandClass {
-  let Name = "MEMri";
-  let ParserMethod = "parseMEMAsOperand";
-}
-def VEMEMziAsmOperand : AsmOperandClass {
-  let Name = "MEMzi";
-  let ParserMethod = "parseMEMAsOperand";
-}
 
 // Operand definitions for ASX addressing mode.
 def MEMrri : Operand<iPTR> {
@@ -390,6 +383,16 @@ def MEMzii : Operand<iPTR> {
 
 // Operand definitions for AS addressing mode.
 //   AS format has different representations, so defines them.
+
+// AS assembly instruction format:
+def VEMEMriAsmOperand : AsmOperandClass {
+  let Name = "MEMri";
+  let ParserMethod = "parseMEMAsOperand";
+}
+def VEMEMziAsmOperand : AsmOperandClass {
+  let Name = "MEMzi";
+  let ParserMethod = "parseMEMAsOperand";
+}
 
 // AS generic assembly instruction format:
 def MEMriASX : Operand<iPTR> {

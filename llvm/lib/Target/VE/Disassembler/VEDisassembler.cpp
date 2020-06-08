@@ -533,8 +533,7 @@ static DecodeStatus DecodeCASI32(MCInst &MI, uint64_t insn, uint64_t Address,
 
 static DecodeStatus DecodeCall(MCInst &Inst, uint64_t insn, uint64_t Address,
                                const void *Decoder) {
-  return DecodeMem(Inst, insn, Address, Decoder, true,
-                   DecodeI64RegisterClass);
+  return DecodeMem(Inst, insn, Address, Decoder, true, DecodeI64RegisterClass);
 }
 
 static DecodeStatus DecodeSIMM7(MCInst &MI, uint64_t insn, uint64_t Address,
@@ -553,37 +552,33 @@ static DecodeStatus DecodeSIMM32(MCInst &MI, uint64_t insn,
 
 static bool isIntegerBCKind(MCInst &MI) {
 
-#define BCm_kind(NAME)  \
-  case NAME ## rri:     \
-  case NAME ## rzi:     \
-  case NAME ## iri:     \
-  case NAME ## izi:     \
-  case NAME ## rri_nt:  \
-  case NAME ## rzi_nt:  \
-  case NAME ## iri_nt:  \
-  case NAME ## izi_nt:  \
-  case NAME ## rri_t:   \
-  case NAME ## rzi_t:   \
-  case NAME ## iri_t:   \
-  case NAME ## izi_t:
+#define BCm_kind(NAME)                                                         \
+  case NAME##rri:                                                              \
+  case NAME##rzi:                                                              \
+  case NAME##iri:                                                              \
+  case NAME##izi:                                                              \
+  case NAME##rri_nt:                                                           \
+  case NAME##rzi_nt:                                                           \
+  case NAME##iri_nt:                                                           \
+  case NAME##izi_nt:                                                           \
+  case NAME##rri_t:                                                            \
+  case NAME##rzi_t:                                                            \
+  case NAME##iri_t:                                                            \
+  case NAME##izi_t:
 
-#define BCRm_kind(NAME) \
-  case NAME ## rr:      \
-  case NAME ## ir:      \
-  case NAME ## rr_nt:   \
-  case NAME ## ir_nt:   \
-  case NAME ## rr_t:    \
-  case NAME ## ir_t:
-
+#define BCRm_kind(NAME)                                                        \
+  case NAME##rr:                                                               \
+  case NAME##ir:                                                               \
+  case NAME##rr_nt:                                                            \
+  case NAME##ir_nt:                                                            \
+  case NAME##rr_t:                                                             \
+  case NAME##ir_t:
 
   {
     using namespace llvm::VE;
     switch (MI.getOpcode()) {
-    BCm_kind(BCFL)
-    BCm_kind(BCFW)
-    BCRm_kind(BRCFL)
-    BCRm_kind(BRCFW)
-      return true;
+      BCm_kind(BCFL) BCm_kind(BCFW) BCRm_kind(BRCFL)
+          BCRm_kind(BRCFW) return true;
     }
   }
 #undef BCm_kind
@@ -592,15 +587,15 @@ static bool isIntegerBCKind(MCInst &MI) {
 }
 
 // Decode CC Operand field.
-static DecodeStatus DecodeCCOperand(MCInst &MI, uint64_t cf,
-                                    uint64_t Address, const void *Decoder) {
+static DecodeStatus DecodeCCOperand(MCInst &MI, uint64_t cf, uint64_t Address,
+                                    const void *Decoder) {
   MI.addOperand(MCOperand::createImm(VEValToCondCode(cf, isIntegerBCKind(MI))));
   return MCDisassembler::Success;
 }
 
 // Decode RD Operand field.
-static DecodeStatus DecodeRDOperand(MCInst &MI, uint64_t cf,
-                                    uint64_t Address, const void *Decoder) {
+static DecodeStatus DecodeRDOperand(MCInst &MI, uint64_t cf, uint64_t Address,
+                                    const void *Decoder) {
   MI.addOperand(MCOperand::createImm(VEValToRD(cf)));
   return MCDisassembler::Success;
 }
