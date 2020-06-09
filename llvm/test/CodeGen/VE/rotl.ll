@@ -46,7 +46,7 @@ define zeroext i32 @func3(i32 zeroext %a, i32 zeroext %b) {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, %s1
 ; CHECK-NEXT:    or %s0, %s0, %s2
-; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a.sl = shl i32 %a, %b
   %b.inv = sub nsw i32 32, %b

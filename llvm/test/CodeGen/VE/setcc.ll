@@ -47,9 +47,7 @@ define zeroext i1 @setcci32(i32, i32) {
 define zeroext i1 @setcci1(i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: setcci1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    xor %s1, -1, %s1
-; CHECK-NEXT:    and %s0, %s1, %s0
-; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    nnd %s0, %s1, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = xor i1 %1, true
   %4 = and i1 %3, %0

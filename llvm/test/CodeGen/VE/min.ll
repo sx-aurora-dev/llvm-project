@@ -241,8 +241,7 @@ define fp128 @min2ufp128(fp128, fp128) {
 define zeroext i1 @mini1(i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: mini1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    xor %s2, -1, %s0
-; CHECK-NEXT:    and %s2, %s2, %s1
+; CHECK-NEXT:    nnd %s2, %s0, %s1
 ; CHECK-NEXT:    cmov.w.ne %s1, %s0, %s2
 ; CHECK-NEXT:    adds.w.zx %s0, %s1, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
