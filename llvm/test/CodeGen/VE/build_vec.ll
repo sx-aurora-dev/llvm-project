@@ -17,7 +17,6 @@ define i32 @brd_v4i32() {
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <4 x i32> @calc_v4i32(<4 x i32> <i32 2, i32 2, i32 2, i32 2>)
@@ -38,7 +37,6 @@ define i32 @brd_v256i32() {
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <256 x i32> @calc_v256i32(<256 x i32>
@@ -90,7 +88,6 @@ define i32 @vseq_v4i32() {
 ; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 1, i32 2, i32 3>)
@@ -110,7 +107,6 @@ define i32 @vseq_v256i32() {
 ; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <256 x i32> @calc_v256i32(<256 x i32>
@@ -218,7 +214,6 @@ define i32 @vseqmul_v4i32() {
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 3, i32 6, i32 9>)
@@ -240,7 +235,6 @@ define i32 @vseqmul_v256i32() {
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <256 x i32> @calc_v256i32(<256 x i32>
@@ -294,7 +288,6 @@ define i32 @vseqsrl_v4i32() {
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 0, i32 1, i32 1>)
@@ -316,7 +309,6 @@ define i32 @vseqsrl_v8i32() {
 ; CHECK-NEXT:    lea.sl %s12, calc_v8i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <8 x i32> @calc_v8i32(<8 x i32> <i32 0, i32 0, i32 1, i32 1, i32 2, i32 2, i32 3, i32 3>)
@@ -338,7 +330,6 @@ define i32 @vseqsrl_v256i32() {
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <256 x i32> @calc_v256i32(<256 x i32>
@@ -393,7 +384,6 @@ define i32 @vseqand_v4i32() {
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 1, i32 0, i32 1>)
@@ -416,7 +406,6 @@ define i32 @vseqand_v256i32() {
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0,%v0(2)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %call = tail call x86_regcallcc <256 x i32> @calc_v256i32(<256 x i32>

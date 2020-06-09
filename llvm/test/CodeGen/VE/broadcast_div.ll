@@ -74,6 +74,7 @@ define x86_regcallcc <256 x i64> @udivbrdv256i64(<256 x i64>, i64) {
 define x86_regcallcc <256 x i32> @sdivbrdv256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: sdivbrdv256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vdivs.w.sx %v0,%s0,%v0
@@ -88,6 +89,7 @@ define x86_regcallcc <256 x i32> @sdivbrdv256i32(<256 x i32>, i32) {
 define x86_regcallcc <256 x i32> @udivbrdv256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: udivbrdv256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vdivu.w %v0,%s0,%v0

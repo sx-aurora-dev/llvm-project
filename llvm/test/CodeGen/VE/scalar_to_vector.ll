@@ -4,7 +4,7 @@
 define x86_regcallcc <512 x i32> @s2vv512i32(i32) {
 ; CHECK-LABEL: s2vv512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    lsv %v0(0),%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -16,7 +16,6 @@ define x86_regcallcc <512 x i32> @s2vv512i32(i32) {
 define x86_regcallcc <512 x float> @s2vv512f32(float) {
 ; CHECK-LABEL: s2vv512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:    lsv %v0(0),%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %ret = insertelement <512 x float> undef, float %0, i32 0
@@ -37,7 +36,7 @@ define x86_regcallcc <256 x i64> @s2vv256i64(i64) {
 define x86_regcallcc <256 x i32> @s2vv256i32(i32) {
 ; CHECK-LABEL: s2vv256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    lsv %v0(0),%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %ret = insertelement <256 x i32> undef, i32 %0, i32 0
@@ -58,7 +57,6 @@ define x86_regcallcc <256 x double> @s2vv256f64(double) {
 define x86_regcallcc <256 x float> @s2vv256f32(float) {
 ; CHECK-LABEL: s2vv256f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:    lsv %v0(0),%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %ret = insertelement <256 x float> undef, float %0, i32 0

@@ -251,7 +251,7 @@ define void @test_atomic_store_16relaxed() {
 ; CHECK-NEXT:    lea.sl %s0, it@hi(, %s0)
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    or %s2, 0, (0)1
-; CHECK-NEXT:    or %s3, 0, (0)1
+; CHECK-NEXT:    or %s3, 0, %s2
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -268,8 +268,8 @@ define signext i8 @test_atomic_load_1() {
 ; CHECK-NEXT:    lea.sl %s0, c@hi(, %s0)
 ; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = load atomic i8, i8* @c acquire, align 32
@@ -285,8 +285,8 @@ define signext i8 @test_atomic_load_1cst() {
 ; CHECK-NEXT:    lea.sl %s0, c@hi(, %s0)
 ; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = load atomic i8, i8* @c seq_cst, align 32
@@ -301,8 +301,8 @@ define signext i8 @test_atomic_load_1relaxed() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, c@hi(, %s0)
 ; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = load atomic i8, i8* @c monotonic, align 32
@@ -318,8 +318,8 @@ define signext i16 @test_atomic_load_2() {
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
 ; CHECK-NEXT:    ld2b.zx %s0, (, %s0)
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = load atomic i16, i16* @s acquire, align 32
@@ -335,8 +335,8 @@ define signext i16 @test_atomic_load_2cst() {
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
 ; CHECK-NEXT:    ld2b.zx %s0, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = load atomic i16, i16* @s seq_cst, align 32
@@ -351,8 +351,8 @@ define signext i16 @test_atomic_load_2relaxed() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
 ; CHECK-NEXT:    ld2b.zx %s0, (, %s0)
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = load atomic i16, i16* @s monotonic, align 32
@@ -520,8 +520,8 @@ define signext i8 @test_atomic_exchange_1() {
 ; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i8* @c, i8 10 seq_cst
@@ -545,8 +545,8 @@ define signext i8 @test_atomic_exchange_1_relaxed() {
 ; CHECK-NEXT:    subs.w.sx %s0, 24, %s2
 ; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i8* @c, i8 10 monotonic
@@ -571,8 +571,8 @@ define signext i8 @test_atomic_exchange_1_acquire() {
 ; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i8* @c, i8 10 acquire
@@ -597,8 +597,8 @@ define signext i8 @test_atomic_exchange_1_release() {
 ; CHECK-NEXT:    subs.w.sx %s0, 24, %s2
 ; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i8* @c, i8 10 release
@@ -624,8 +624,8 @@ define signext i8 @test_atomic_exchange_1_acq_rel () {
 ; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i8* @c, i8 10 acq_rel
@@ -640,20 +640,20 @@ define signext i16 @test_atomic_exchange_2() {
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
-; CHECK-NEXT:    and %s0, -4, %s0
-; CHECK-NEXT:    ldl.sx %s1, (, %s0)
+; CHECK-NEXT:    and %s1, -4, %s0
+; CHECK-NEXT:    ldl.sx %s0, (, %s1)
 ; CHECK-NEXT:    lea %s2, 28672
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    or %s3, 0, %s1
-; CHECK-NEXT:    and %s1, %s1, (48)1
-; CHECK-NEXT:    or %s1, %s1, %s2
-; CHECK-NEXT:    cas.w %s1, (%s0), %s3
-; CHECK-NEXT:    brne.w %s1, %s3, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    or %s3, 0, %s0
+; CHECK-NEXT:    and %s0, %s0, (48)1
+; CHECK-NEXT:    or %s0, %s0, %s2
+; CHECK-NEXT:    cas.w %s0, (%s1), %s3
+; CHECK-NEXT:    brne.w %s0, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s1, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i16* @s, i16 28672 seq_cst
@@ -678,8 +678,8 @@ define signext i16 @test_atomic_exchange_2_relaxed() {
 ; CHECK-NEXT:    cas.w %s1, (%s0), %s3
 ; CHECK-NEXT:    brne.w %s1, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
-; CHECK-NEXT:    sla.w.sx %s0, %s1, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s1, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i16* @s, i16 28672 monotonic
@@ -693,20 +693,20 @@ define signext i16 @test_atomic_exchange_2_acquire() {
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
-; CHECK-NEXT:    and %s0, -4, %s0
-; CHECK-NEXT:    ldl.sx %s1, (, %s0)
+; CHECK-NEXT:    and %s1, -4, %s0
+; CHECK-NEXT:    ldl.sx %s0, (, %s1)
 ; CHECK-NEXT:    lea %s2, 28672
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    or %s3, 0, %s1
-; CHECK-NEXT:    and %s1, %s1, (48)1
-; CHECK-NEXT:    or %s1, %s1, %s2
-; CHECK-NEXT:    cas.w %s1, (%s0), %s3
-; CHECK-NEXT:    brne.w %s1, %s3, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    or %s3, 0, %s0
+; CHECK-NEXT:    and %s0, %s0, (48)1
+; CHECK-NEXT:    or %s0, %s0, %s2
+; CHECK-NEXT:    cas.w %s0, (%s1), %s3
+; CHECK-NEXT:    brne.w %s0, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    sla.w.sx %s0, %s1, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i16* @s, i16 28672 acquire
@@ -732,8 +732,8 @@ define signext i16 @test_atomic_exchange_2_release() {
 ; CHECK-NEXT:    cas.w %s1, (%s0), %s3
 ; CHECK-NEXT:    brne.w %s1, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
-; CHECK-NEXT:    sla.w.sx %s0, %s1, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s1, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i16* @s, i16 28672 release
@@ -748,20 +748,20 @@ define signext i16 @test_atomic_exchange_2_acq_rel() {
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
-; CHECK-NEXT:    and %s0, -4, %s0
-; CHECK-NEXT:    ldl.sx %s1, (, %s0)
+; CHECK-NEXT:    and %s1, -4, %s0
+; CHECK-NEXT:    ldl.sx %s0, (, %s1)
 ; CHECK-NEXT:    lea %s2, 28672
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    or %s3, 0, %s1
-; CHECK-NEXT:    and %s1, %s1, (48)1
-; CHECK-NEXT:    or %s1, %s1, %s2
-; CHECK-NEXT:    cas.w %s1, (%s0), %s3
-; CHECK-NEXT:    brne.w %s1, %s3, .LBB{{[0-9]+}}_1
+; CHECK-NEXT:    or %s3, 0, %s0
+; CHECK-NEXT:    and %s0, %s0, (48)1
+; CHECK-NEXT:    or %s0, %s0, %s2
+; CHECK-NEXT:    cas.w %s0, (%s1), %s3
+; CHECK-NEXT:    brne.w %s0, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    sla.w.sx %s0, %s1, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i16* @s, i16 28672 acq_rel
@@ -779,7 +779,6 @@ define i32 @test_atomic_exchange_4() {
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 seq_cst
@@ -795,7 +794,6 @@ define i32 @test_atomic_exchange_4_relaxed() {
 ; CHECK-NEXT:    lea.sl %s1, i@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 monotonic
@@ -812,7 +810,6 @@ define i32 @test_atomic_exchange_4_acquire() {
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 acquire
@@ -829,7 +826,6 @@ define i32 @test_atomic_exchange_4_release() {
 ; CHECK-NEXT:    lea.sl %s1, i@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 release
@@ -847,7 +843,6 @@ define i32 @test_atomic_exchange_4_ac1_rel() {
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 acq_rel
@@ -974,7 +969,7 @@ define i128 @test_atomic_exchange_16_relaxed() {
 ; CHECK-NEXT:    lea %s1, 1886417008
 ; CHECK-NEXT:    lea.sl %s1, 1886417008(, %s1)
 ; CHECK-NEXT:    or %s2, 0, (0)1
-; CHECK-NEXT:    or %s3, 0, (0)1
+; CHECK-NEXT:    or %s3, 0, %s2
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -1126,16 +1121,18 @@ entry:
 define i32 @test_atomic_compare_exchange_4(i32, i32) {
 ; CHECK-LABEL: test_atomic_compare_exchange_4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s2, i@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, i@hi(, %s2)
 ; CHECK-NEXT:    cas.w %s1, (%s2), %s0
 ; CHECK-NEXT:    cmps.w.zx %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    ldz %s0, %s0
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %2 = cmpxchg i32* @i, i32 %0, i32 %1 seq_cst seq_cst
@@ -1181,7 +1178,6 @@ define i128 @test_atomic_compare_exchange_16(i128, i128) {
 ; CHECK-NEXT:    or %s4, 5, (0)1
 ; CHECK-NEXT:    or %s5, 0, %s4
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -1508,8 +1504,8 @@ define signext i8 @test_atomic_fetch_add_1() {
 ; CHECK-NEXT:    brne.w %s1, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s1, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s1, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw add i8* @c, i8 1 seq_cst
@@ -1537,8 +1533,8 @@ define signext i16 @test_atomic_fetch_add_2() {
 ; CHECK-NEXT:    brne.w %s1, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s1, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s1, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw add i16* @s, i16 1 seq_cst
@@ -1632,8 +1628,8 @@ define signext i8 @test_atomic_fetch_sub_1() {
 ; CHECK-NEXT:    brne.w %s1, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s1, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s1, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw sub i8* @c, i8 1 seq_cst
@@ -1661,8 +1657,8 @@ define signext i16 @test_atomic_fetch_sub_2() {
 ; CHECK-NEXT:    brne.w %s1, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s1, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s1, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw sub i16* @s, i16 1 seq_cst
@@ -1754,8 +1750,8 @@ define signext i8 @test_atomic_fetch_and_1() {
 ; CHECK-NEXT:    brne.w %s0, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw and i8* @c, i8 1 seq_cst
@@ -1781,8 +1777,8 @@ define signext i16 @test_atomic_fetch_and_2() {
 ; CHECK-NEXT:    brne.w %s0, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw and i16* @s, i16 1 seq_cst
@@ -1873,8 +1869,8 @@ define signext i8 @test_atomic_fetch_or_1() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw or i8* @c, i8 1 seq_cst
@@ -1899,8 +1895,8 @@ define signext i16 @test_atomic_fetch_or_2() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw or i16* @s, i16 1 seq_cst
@@ -1991,8 +1987,8 @@ define signext i8 @test_atomic_fetch_xor_1() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xor i8* @c, i8 1 seq_cst
@@ -2017,8 +2013,8 @@ define signext i16 @test_atomic_fetch_xor_2() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw xor i16* @s, i16 1 seq_cst
@@ -2114,8 +2110,8 @@ define signext i8 @test_atomic_fetch_nand_1() {
 ; CHECK-NEXT:    brne.w %s2, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s2, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s2, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw nand i8* @c, i8 1 seq_cst
@@ -2145,8 +2141,8 @@ define signext i16 @test_atomic_fetch_nand_2() {
 ; CHECK-NEXT:    brne.w %s2, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sla.w.sx %s0, %s2, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s2, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw nand i16* @s, i16 1 seq_cst
@@ -2286,7 +2282,6 @@ define i32 @test_atomic_fetch_umax_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw umax i32* @ui, i32 1 seq_cst
@@ -2312,7 +2307,6 @@ define i32 @test_atomic_fetch_umin_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = atomicrmw umin i32* @ui, i32 1 seq_cst

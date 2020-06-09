@@ -3,9 +3,11 @@
 define signext i8 @func8s(i8 signext %0, i8 signext %1) {
 ; CHECK-LABEL: func8s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    adds.w.sx %s0, %s1, %s0
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add i8 %1, %0
   ret i8 %3
@@ -14,9 +16,11 @@ define signext i8 @func8s(i8 signext %0, i8 signext %1) {
 define signext i16 @func16s(i16 signext %0, i16 signext %1) {
 ; CHECK-LABEL: func16s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    adds.w.sx %s0, %s1, %s0
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add i16 %1, %0
   ret i16 %3
@@ -25,7 +29,10 @@ define signext i16 @func16s(i16 signext %0, i16 signext %1) {
 define signext i32 @func32s(i32 signext %0, i32 signext %1) {
 ; CHECK-LABEL: func32s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    adds.w.sx %s0, %s1, %s0
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add nsw i32 %1, %0
   ret i32 %3
@@ -77,6 +84,7 @@ define zeroext i32 @func32z(i32 zeroext %0, i32 zeroext %1) {
 ; CHECK-LABEL: func32z:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.sx %s0, %s1, %s0
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = add i32 %1, %0
   ret i32 %3
@@ -107,9 +115,10 @@ define i128 @func128z(i128 %0, i128 %1) {
 define signext i8 @funci8s(i8 signext %0) {
 ; CHECK-LABEL: funci8s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    adds.w.sx %s0, 5, %s0
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = add i8 %0, 5
   ret i8 %2
@@ -118,9 +127,10 @@ define signext i8 @funci8s(i8 signext %0) {
 define signext i16 @funci16s(i16 signext %0) {
 ; CHECK-LABEL: funci16s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    adds.w.sx %s0, 5, %s0
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = add i16 %0, 5
   ret i16 %2
@@ -129,7 +139,9 @@ define signext i16 @funci16s(i16 signext %0) {
 define signext i32 @funci32s(i32 signext %0) {
 ; CHECK-LABEL: funci32s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    adds.w.sx %s0, 5, %s0
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = add nsw i32 %0, 5
   ret i32 %2
@@ -181,6 +193,7 @@ define zeroext i32 @funci32z(i32 zeroext %0) {
 ; CHECK-LABEL: funci32z:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    adds.w.sx %s0, 5, %s0
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = add i32 %0, 5
   ret i32 %2

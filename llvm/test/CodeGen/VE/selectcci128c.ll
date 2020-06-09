@@ -3,6 +3,8 @@
 define i128 @selectccsgti8(i8 signext, i8 signext, i128, i128) {
 ; CHECK-LABEL: selectccsgti8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.gt %s5, %s3, %s0
@@ -17,6 +19,8 @@ define i128 @selectccsgti8(i8 signext, i8 signext, i128, i128) {
 define i128 @selectccsgti16(i16 signext, i16 signext, i128, i128) {
 ; CHECK-LABEL: selectccsgti16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.gt %s5, %s3, %s0
@@ -31,6 +35,8 @@ define i128 @selectccsgti16(i16 signext, i16 signext, i128, i128) {
 define i128 @selectccsgti32(i32, i32, i128, i128) {
 ; CHECK-LABEL: selectccsgti32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.gt %s5, %s3, %s0

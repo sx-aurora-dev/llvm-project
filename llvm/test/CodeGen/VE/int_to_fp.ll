@@ -4,6 +4,7 @@
 define float @c2f(i8 signext %a) {
 ; CHECK-LABEL: c2f:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.s.w %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -15,6 +16,7 @@ entry:
 define float @s2f(i16 signext %a) {
 ; CHECK-LABEL: s2f:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.s.w %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -26,6 +28,7 @@ entry:
 define float @i2f(i32 signext %a) {
 ; CHECK-LABEL: i2f:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.s.w %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -84,7 +87,6 @@ entry:
 define float @ui2f(i32 zeroext %a) {
 ; CHECK-LABEL: ui2f:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.l %s0, %s0
 ; CHECK-NEXT:    cvt.s.d %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -130,6 +132,7 @@ define float @ui1282f(i128 %a) {
 define double @c2d(i8 signext %a) {
 ; CHECK-LABEL: c2d:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.w %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -141,6 +144,7 @@ entry:
 define double @s2d(i16 signext %a) {
 ; CHECK-LABEL: s2d:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.w %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -152,6 +156,7 @@ entry:
 define double @i2d(i32 signext %a) {
 ; CHECK-LABEL: i2d:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.w %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -209,7 +214,6 @@ entry:
 define double @ui2d(i32 zeroext %a) {
 ; CHECK-LABEL: ui2d:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.l %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -254,6 +258,7 @@ define double @ui1282d(i128) {
 define fp128 @c2q(i8 signext %a) {
 ; CHECK-LABEL: c2q:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.w %s0, %s0
 ; CHECK-NEXT:    cvt.q.d %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -266,6 +271,7 @@ entry:
 define fp128 @s2q(i16 signext %a) {
 ; CHECK-LABEL: s2q:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.w %s0, %s0
 ; CHECK-NEXT:    cvt.q.d %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -278,6 +284,7 @@ entry:
 define fp128 @i2q(i32 signext %a) {
 ; CHECK-LABEL: i2q:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.w %s0, %s0
 ; CHECK-NEXT:    cvt.q.d %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -339,7 +346,6 @@ entry:
 define fp128 @ui2q(i32 zeroext %a) {
 ; CHECK-LABEL: ui2q:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    cvt.d.l %s0, %s0
 ; CHECK-NEXT:    cvt.q.d %s0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9

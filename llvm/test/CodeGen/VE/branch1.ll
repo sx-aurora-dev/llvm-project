@@ -3,6 +3,8 @@
 define signext i8 @func1(i8 signext %a, i8 signext %b) {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    brle.w %s0, %s1, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -10,12 +12,13 @@ define signext i8 @func1(i8 signext %a, i8 signext %b) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = icmp sgt i8 %a, %b
@@ -36,6 +39,8 @@ declare i32 @ret(i32)
 define i32 @func2(i16 signext %a, i16 signext %b) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    brle.w %s0, %s1, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -43,6 +48,7 @@ define i32 @func2(i16 signext %a, i16 signext %b) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -64,6 +70,8 @@ join:
 define i32 @func3(i32 %a, i32 %b) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    brle.w %s0, %s1, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -71,6 +79,7 @@ define i32 @func3(i32 %a, i32 %b) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -99,6 +108,7 @@ define i32 @func4(i64 %a, i64 %b) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -128,6 +138,7 @@ define i32 @func5(i8 zeroext %a, i8 zeroext %b) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -157,6 +168,7 @@ define i32 @func6(i16 zeroext %a, i16 zeroext %b) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -178,6 +190,8 @@ join:
 define i32 @func7(i32 %a, i32 %b) {
 ; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
 ; CHECK-NEXT:    brle.w 0, %s0, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
@@ -186,6 +200,7 @@ define i32 @func7(i32 %a, i32 %b) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -214,6 +229,7 @@ define i32 @func8(float %a, float %b) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -242,6 +258,7 @@ define i32 @func9(double %a, double %b) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -271,6 +288,7 @@ define i32 @func10(double %a, double %b) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -300,6 +318,7 @@ define i32 @func11(fp128, fp128) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -336,6 +355,7 @@ define i32 @func12(i128, i128) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -372,6 +392,7 @@ define i32 @func13(i128, i128) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1

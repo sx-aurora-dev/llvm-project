@@ -7,7 +7,7 @@ define void @test(i32) {
 ; CHECK-LABEL: test:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    sll %s0, %s0, 3
 ; CHECK-NEXT:    lea %s0, 15(, %s0)
 ; CHECK-NEXT:    lea %s1, -16

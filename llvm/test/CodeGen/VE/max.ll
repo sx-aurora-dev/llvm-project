@@ -69,8 +69,6 @@ define float @max2f32(float, float) {
 define float @maxuf32(float, float) {
 ; CHECK-LABEL: maxuf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf1 killed $sf1 def $sx1
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:    fcmp.s %s2, %s0, %s1
 ; CHECK-NEXT:    cmov.s.gtnan %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
@@ -83,8 +81,6 @@ define float @maxuf32(float, float) {
 define float @max2uf32(float, float) {
 ; CHECK-LABEL: max2uf32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf1 killed $sf1 def $sx1
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:    fcmp.s %s2, %s0, %s1
 ; CHECK-NEXT:    cmov.s.genan %s1, %s0, %s2
 ; CHECK-NEXT:    or %s0, 0, %s1
@@ -141,7 +137,10 @@ define i64 @max2u64(i64, i64) {
 define signext i32 @maxi32(i32 signext %0, i32 signext %1) {
 ; CHECK-LABEL: maxi32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    maxs.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp sgt i32 %0, %1
   %4 = select i1 %3, i32 %0, i32 %1
@@ -151,6 +150,8 @@ define signext i32 @maxi32(i32 signext %0, i32 signext %1) {
 define i32 @max2i32(i32, i32) {
 ; CHECK-LABEL: max2i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    maxs.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp sge i32 %0, %1
@@ -161,11 +162,9 @@ define i32 @max2i32(i32, i32) {
 define zeroext i32 @maxu32(i32 zeroext %0, i32 zeroext %1) {
 ; CHECK-LABEL: maxu32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    cmpu.w %s2, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s1, %s0, %s2
-; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    adds.w.zx %s0, %s1, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp ugt i32 %0, %1
   %4 = select i1 %3, i32 %0, i32 %1
@@ -175,11 +174,10 @@ define zeroext i32 @maxu32(i32 zeroext %0, i32 zeroext %1) {
 define i32 @max2u32(i32, i32) {
 ; CHECK-LABEL: max2u32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    cmpu.w %s2, %s0, %s1
-; CHECK-NEXT:    cmov.w.ge %s1, %s0, %s2
-; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    adds.w.sx %s2, %s0, (0)1
+; CHECK-NEXT:    adds.w.sx %s0, %s1, (0)1
+; CHECK-NEXT:    cmpu.w %s1, %s2, %s0
+; CHECK-NEXT:    cmov.w.ge %s0, %s2, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp uge i32 %0, %1
   %4 = select i1 %3, i32 %0, i32 %1
@@ -245,12 +243,10 @@ define fp128 @max2uf128(fp128, fp128) {
 define zeroext i1 @maxi1(i1 zeroext, i1 zeroext) {
 ; CHECK-LABEL: maxi1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 def $sx1
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    xor %s2, -1, %s1
 ; CHECK-NEXT:    and %s2, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s1, %s0, %s2
-; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    adds.w.zx %s0, %s1, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = xor i1 %1, true
   %4 = and i1 %3, %0

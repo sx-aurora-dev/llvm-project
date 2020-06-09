@@ -4,7 +4,6 @@
 define x86_regcallcc <512 x float> @fmadrvv512f32(<512 x float>, float) {
 ; CHECK-LABEL: fmadrvv512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:    srl %s1, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
@@ -22,7 +21,6 @@ define x86_regcallcc <512 x float> @fmadrvv512f32(<512 x float>, float) {
 define x86_regcallcc <512 x float> @fmadrvv512f32s(<512 x float>, float) {
 ; CHECK-LABEL: fmadrvv512f32s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:    srl %s1, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
@@ -40,7 +38,6 @@ define x86_regcallcc <512 x float> @fmadrvv512f32s(<512 x float>, float) {
 define x86_regcallcc <512 x float> @fmadrvv512f32s2(<512 x float>, float) {
 ; CHECK-LABEL: fmadrvv512f32s2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:    srl %s1, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256

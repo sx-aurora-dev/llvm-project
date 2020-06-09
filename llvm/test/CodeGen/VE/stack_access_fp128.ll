@@ -37,7 +37,7 @@ define void @test(fp128) {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s1, test1@hi(, %s1)
 ; CHECK-NEXT:    or %s12, 0, %s1
-; CHECK-NEXT:    stl %s0, -52(, %s9) # 4-byte Folded Spill
+; CHECK-NEXT:    st %s0, -56(, %s9) # 8-byte Folded Spill
 ; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    or %s1, 0, %s3
 ; CHECK-NEXT:    bsic %s10, (, %s12)
@@ -50,7 +50,7 @@ define void @test(fp128) {
 ; CHECK-NEXT:    and %s4, %s4, (32)0
 ; CHECK-NEXT:    lea.sl %s4, .L.str.1@hi(, %s4)
 ; CHECK-NEXT:    or %s12, 0, %s1
-; CHECK-NEXT:    stl %s0, -56(, %s9) # 4-byte Folded Spill
+; CHECK-NEXT:    st %s0, -64(, %s9) # 8-byte Folded Spill
 ; CHECK-NEXT:    or %s0, 0, %s4
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9

@@ -61,6 +61,7 @@ define zeroext i32 @func6() {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.sx %s0, 191(, %s11)
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a = alloca i8, align 1
   %a.val = load i8, i8* %a, align 1
@@ -412,7 +413,7 @@ define signext i8 @func37() {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.zx %s0, 191(, %s11)
 ; CHECK-NEXT:    and %s0, 1, %s0
-; CHECK-NEXT:    subs.w.sx %s0, 0, %s0
+; CHECK-NEXT:    subs.l %s0, 0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a = alloca i1, align 1
   %a.val = load i1, i1* %a, align 1
@@ -425,7 +426,7 @@ define signext i16 @func38() {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.zx %s0, 191(, %s11)
 ; CHECK-NEXT:    and %s0, 1, %s0
-; CHECK-NEXT:    subs.w.sx %s0, 0, %s0
+; CHECK-NEXT:    subs.l %s0, 0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a = alloca i1, align 1
   %a.val = load i1, i1* %a, align 1
@@ -438,7 +439,7 @@ define signext i32 @func39() {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld1b.zx %s0, 191(, %s11)
 ; CHECK-NEXT:    and %s0, 1, %s0
-; CHECK-NEXT:    subs.w.sx %s0, 0, %s0
+; CHECK-NEXT:    subs.l %s0, 0, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a = alloca i1, align 1
   %a.val = load i1, i1* %a, align 1
