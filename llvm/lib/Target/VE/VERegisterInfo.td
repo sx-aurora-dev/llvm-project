@@ -131,6 +131,18 @@ foreach I = 0-63 in
   def SX#I : VEReg<I, "s"#I, [!cast<VEReg>("SW"#I), !cast<VEReg>("SF"#I)],
                    ["s"#I]>, DwarfRegNum<[I]>;
 
+// Aliases of the S* registers used to hold 128-bit for values (long doubles).
+// Following foreach represents something like:
+//   def Q0 : VEReg<0, "q0", [SX0, SX1], ["s0"]>;
+//   def Q1 : VEReg<2, "q2", [SX2, SX3], ["s2"]>;
+//   ...
+let SubRegIndices = [sub_even, sub_odd], CoveredBySubRegs = 1 in
+foreach I = 0-31 in
+  def Q#I : VEReg<!shl(I,1), "q"#I,
+                  [!cast<VEReg>("SX"#!shl(I,1)),
+                   !cast<VEReg>("SX"#!add(!shl(I,1),1))],
+                  ["s"#!shl(I,1)]>;
+
 // Vector registers - 64 bits wide 256 elements
 foreach I = 0-63 in
   def V#I : VEVecReg<I, "v"#I, [], ["v"#I]>, DwarfRegNum<[!add(64,I)]>;
@@ -149,18 +161,6 @@ foreach I = 0-7 in
                         [!cast<VEMaskReg>("VM"#!shl(I,1)),
                          !cast<VEMaskReg>("VM"#!add(!shl(I,1),1))],
                         ["vm"#!shl(I,1)]>;
-
-// Aliases of the S* registers used to hold 128-bit for values (long doubles).
-// Following foreach represents something like:
-//   def Q0 : VEReg<0, "q0", [SX0, SX1], ["s0"]>;
-//   def Q1 : VEReg<2, "q2", [SX2, SX3], ["s2"]>;
-//   ...
-let SubRegIndices = [sub_even, sub_odd], CoveredBySubRegs = 1 in
-foreach I = 0-31 in
-  def Q#I : VEReg<!shl(I,1), "q"#I,
-                  [!cast<VEReg>("SX"#!shl(I,1)),
-                   !cast<VEReg>("SX"#!add(!shl(I,1),1))],
-                  ["s"#!shl(I,1)]>;
 
 } // RegAltNameIndices = [AsmName]
 
@@ -191,7 +191,7 @@ def F32 : RegisterClass<"VE", [f32], 32,
 def F128 : RegisterClass<"VE", [f128], 128,
                         (add (sequence "Q%u", 0, 3),
                              (sequence "Q%u", 17, 31),
-                             (sequence "Q%u", 0, 16))>;
+                             (sequence "Q%u", 4, 16))>;
 
 def V64 : RegisterClass<"VE",
                         [v512i32, v512f32,

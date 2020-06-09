@@ -152,7 +152,8 @@ namespace clang {
       Poly128,
       Float16,
       Float32,
-      Float64
+      Float64,
+      BFloat16
     };
 
     NeonTypeFlags(unsigned F) : Flags(F) {}
@@ -166,7 +167,7 @@ namespace clang {
     EltType getEltType() const { return (EltType)(Flags & EltTypeMask); }
     bool isPoly() const {
       EltType ET = getEltType();
-      return ET == Poly8 || ET == Poly16;
+      return ET == Poly8 || ET == Poly16 || ET == Poly64;
     }
     bool isUnsigned() const { return (Flags & UnsignedFlag) != 0; }
     bool isQuad() const { return (Flags & QuadFlag) != 0; }

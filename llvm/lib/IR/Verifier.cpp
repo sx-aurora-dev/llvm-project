@@ -1278,7 +1278,9 @@ void Verifier::visitDIGlobalVariable(const DIGlobalVariable &N) {
 
   AssertDI(N.getTag() == dwarf::DW_TAG_variable, "invalid tag", &N);
   AssertDI(isType(N.getRawType()), "invalid type ref", &N, N.getRawType());
-  AssertDI(N.getType(), "missing global variable type", &N);
+  // Assert only if the global variable is not an extern
+  if (N.isDefinition())
+    AssertDI(N.getType(), "missing global variable type", &N);
   if (auto *Member = N.getRawStaticDataMemberDeclaration()) {
     AssertDI(isa<DIDerivedType>(Member),
              "invalid static data member declaration", &N, Member);
@@ -2613,8 +2615,7 @@ void Verifier::visitCallBrInst(CallBrInst &CBI) {
       if (auto *BA = dyn_cast<BlockAddress>(V))
         ArgBBs.insert(BA->getBasicBlock());
     for (BasicBlock *BB : CBI.getIndirectDests())
-      Assert(ArgBBs.find(BB) != ArgBBs.end(),
-             "Indirect label missing from arglist.", &CBI);
+      Assert(ArgBBs.count(BB), "Indirect label missing from arglist.", &CBI);
   }
 
   visitTerminator(CBI);
@@ -4173,23 +4174,28 @@ void Verifier::visitProfMetadata(Instruction &I, MDNode *MD) {
 
   // Check consistency of !prof branch_weights metadata.
   if (ProfName.equals("branch_weights")) {
-    unsigned ExpectedNumOperands = 0;
-    if (BranchInst *BI = dyn_cast<BranchInst>(&I))
-      ExpectedNumOperands = BI->getNumSuccessors();
-    else if (SwitchInst *SI = dyn_cast<SwitchInst>(&I))
-      ExpectedNumOperands = SI->getNumSuccessors();
-    else if (isa<CallInst>(&I) || isa<InvokeInst>(&I))
-      ExpectedNumOperands = 1;
-    else if (IndirectBrInst *IBI = dyn_cast<IndirectBrInst>(&I))
-      ExpectedNumOperands = IBI->getNumDestinations();
-    else if (isa<SelectInst>(&I))
-      ExpectedNumOperands = 2;
-    else
-      CheckFailed("!prof branch_weights are not allowed for this instruction",
-                  MD);
+    if (isa<InvokeInst>(&I)) {
+      Assert(MD->getNumOperands() == 2 || MD->getNumOperands() == 3,
+             "Wrong number of InvokeInst branch_weights operands", MD);
+    } else {
+      unsigned ExpectedNumOperands = 0;
+      if (BranchInst *BI = dyn_cast<BranchInst>(&I))
+        ExpectedNumOperands = BI->getNumSuccessors();
+      else if (SwitchInst *SI = dyn_cast<SwitchInst>(&I))
+        ExpectedNumOperands = SI->getNumSuccessors();
+      else if (isa<CallInst>(&I))
+        ExpectedNumOperands = 1;
+      else if (IndirectBrInst *IBI = dyn_cast<IndirectBrInst>(&I))
+        ExpectedNumOperands = IBI->getNumDestinations();
+      else if (isa<SelectInst>(&I))
+        ExpectedNumOperands = 2;
+      else
+        CheckFailed("!prof branch_weights are not allowed for this instruction",
+                    MD);
 
-    Assert(MD->getNumOperands() == 1 + ExpectedNumOperands,
-           "Wrong number of operands", MD);
+      Assert(MD->getNumOperands() == 1 + ExpectedNumOperands,
+             "Wrong number of operands", MD);
+    }
     for (unsigned i = 1; i < MD->getNumOperands(); ++i) {
       auto &MDO = MD->getOperand(i);
       Assert(MDO, "second operand should not be null", MD);
@@ -4851,8 +4857,8 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
            "masked_load: return must match pointer type", Call);
     Assert(PassThru->getType() == DataTy,
            "masked_load: pass through and data type must match", Call);
-    Assert(cast<VectorType>(Mask->getType())->getNumElements() ==
-               cast<VectorType>(DataTy)->getNumElements(),
+    Assert(cast<VectorType>(Mask->getType())->getElementCount() ==
+               cast<VectorType>(DataTy)->getElementCount(),
            "masked_load: vector mask must be same length as data", Call);
     break;
   }
@@ -4870,8 +4876,8 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     Type *DataTy = cast<PointerType>(Ptr->getType())->getElementType();
     Assert(DataTy == Val->getType(),
            "masked_store: storee must match pointer type", Call);
-    Assert(cast<VectorType>(Mask->getType())->getNumElements() ==
-               cast<VectorType>(DataTy)->getNumElements(),
+    Assert(cast<VectorType>(Mask->getType())->getElementCount() ==
+               cast<VectorType>(DataTy)->getElementCount(),
            "masked_store: vector mask must be same length as data", Call);
     break;
   }

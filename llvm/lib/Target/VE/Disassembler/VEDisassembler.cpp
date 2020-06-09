@@ -90,24 +90,10 @@ static const unsigned F32RegDecoderTable[] = {
     VE::SF63};
 
 static const unsigned F128RegDecoderTable[] = {
-  VE::Q0,  VE::Q1,  VE::Q2,  VE::Q3,
-  VE::Q4,  VE::Q5,  VE::Q6,  VE::Q7,
-  VE::Q8,  VE::Q9,  VE::Q10, VE::Q11,
-  VE::Q12, VE::Q13, VE::Q14, VE::Q15,
-  VE::Q16, VE::Q17, VE::Q18, VE::Q19,
-  VE::Q20, VE::Q21, VE::Q22, VE::Q23,
-  VE::Q24, VE::Q25, VE::Q26, VE::Q27,
-  VE::Q28, VE::Q29, VE::Q30, VE::Q31 };
-
-static const unsigned MiscRegDecoderTable[] = {
-  VE::USRCC,      VE::PSW,        VE::SAR,        VE::NoRegister,
-  VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::PMMR,
-  VE::PMCR0,      VE::PMCR1,      VE::PMCR2,      VE::PMCR3,
-  VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::NoRegister,
-  VE::PMC0,       VE::PMC1,       VE::PMC2,       VE::PMC3,
-  VE::PMC4,       VE::PMC5,       VE::PMC6,       VE::PMC7,
-  VE::PMC8,       VE::PMC9,       VE::PMC10,      VE::PMC11,
-  VE::PMC12,      VE::PMC13,      VE::PMC14 };
+    VE::Q0,  VE::Q1,  VE::Q2,  VE::Q3,  VE::Q4,  VE::Q5,  VE::Q6,  VE::Q7,
+    VE::Q8,  VE::Q9,  VE::Q10, VE::Q11, VE::Q12, VE::Q13, VE::Q14, VE::Q15,
+    VE::Q16, VE::Q17, VE::Q18, VE::Q19, VE::Q20, VE::Q21, VE::Q22, VE::Q23,
+    VE::Q24, VE::Q25, VE::Q26, VE::Q27, VE::Q28, VE::Q29, VE::Q30, VE::Q31};
 
 static const unsigned V64RegDecoderTable[] = {
   VE::V0,  VE::V1,  VE::V2,  VE::V3,
@@ -136,6 +122,16 @@ static const unsigned VM_RegDecoderTable[] = {
 static const unsigned VM512_RegDecoderTable[] = {
   VE::VMP0,  VE::VMP1,  VE::VMP2,  VE::VMP3,
   VE::VMP4,  VE::VMP5,  VE::VMP6,  VE::VMP7 };
+
+static const unsigned MiscRegDecoderTable[] = {
+    VE::USRCC,      VE::PSW,        VE::SAR,        VE::NoRegister,
+    VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::PMMR,
+    VE::PMCR0,      VE::PMCR1,      VE::PMCR2,      VE::PMCR3,
+    VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::NoRegister,
+    VE::PMC0,       VE::PMC1,       VE::PMC2,       VE::PMC3,
+    VE::PMC4,       VE::PMC5,       VE::PMC6,       VE::PMC7,
+    VE::PMC8,       VE::PMC9,       VE::PMC10,      VE::PMC11,
+    VE::PMC12,      VE::PMC13,      VE::PMC14};
 
 static DecodeStatus DecodeI32RegisterClass(MCInst &Inst, unsigned RegNo,
                                            uint64_t Address,
@@ -167,26 +163,12 @@ static DecodeStatus DecodeF32RegisterClass(MCInst &Inst, unsigned RegNo,
   return MCDisassembler::Success;
 }
 
-static DecodeStatus DecodeF128RegisterClass(MCInst &Inst,
-                                            unsigned RegNo,
+static DecodeStatus DecodeF128RegisterClass(MCInst &Inst, unsigned RegNo,
                                             uint64_t Address,
                                             const void *Decoder) {
   if (RegNo % 2 || RegNo > 63)
     return MCDisassembler::Fail;
   unsigned Reg = F128RegDecoderTable[RegNo / 2];
-  Inst.addOperand(MCOperand::createReg(Reg));
-  return MCDisassembler::Success;
-}
-
-static DecodeStatus DecodeMISCRegisterClass(MCInst &Inst,
-                                            unsigned RegNo,
-                                            uint64_t Address,
-                                            const void *Decoder) {
-  if (RegNo > 30)
-    return MCDisassembler::Fail;
-  unsigned Reg = MiscRegDecoderTable[RegNo];
-  if (Reg == VE::NoRegister)
-    return MCDisassembler::Fail;
   Inst.addOperand(MCOperand::createReg(Reg));
   return MCDisassembler::Success;
 }
@@ -228,10 +210,20 @@ static DecodeStatus DecodeVM512_RegisterClass(MCInst &Inst,
   return MCDisassembler::Success;
 }
 
+static DecodeStatus DecodeMISCRegisterClass(MCInst &Inst, unsigned RegNo,
+                                            uint64_t Address,
+                                            const void *Decoder) {
+  if (RegNo > 30)
+    return MCDisassembler::Fail;
+  unsigned Reg = MiscRegDecoderTable[RegNo];
+  if (Reg == VE::NoRegister)
+    return MCDisassembler::Fail;
+  Inst.addOperand(MCOperand::createReg(Reg));
+  return MCDisassembler::Success;
+}
+
 static DecodeStatus DecodeASX(MCInst &Inst, uint64_t insn, uint64_t Address,
                               const void *Decoder);
-static DecodeStatus DecodeAS(MCInst &Inst, uint64_t insn, uint64_t Address,
-                             const void *Decoder);
 static DecodeStatus DecodeLoadI32(MCInst &Inst, uint64_t insn, uint64_t Address,
                                   const void *Decoder);
 static DecodeStatus DecodeStoreI32(MCInst &Inst, uint64_t insn,
@@ -533,8 +525,7 @@ static DecodeStatus DecodeCASI32(MCInst &MI, uint64_t insn, uint64_t Address,
 
 static DecodeStatus DecodeCall(MCInst &Inst, uint64_t insn, uint64_t Address,
                                const void *Decoder) {
-  return DecodeMem(Inst, insn, Address, Decoder, true,
-                   DecodeI64RegisterClass);
+  return DecodeMem(Inst, insn, Address, Decoder, true, DecodeI64RegisterClass);
 }
 
 static DecodeStatus DecodeSIMM7(MCInst &MI, uint64_t insn, uint64_t Address,
@@ -553,37 +544,33 @@ static DecodeStatus DecodeSIMM32(MCInst &MI, uint64_t insn,
 
 static bool isIntegerBCKind(MCInst &MI) {
 
-#define BCm_kind(NAME)  \
-  case NAME ## rri:     \
-  case NAME ## rzi:     \
-  case NAME ## iri:     \
-  case NAME ## izi:     \
-  case NAME ## rri_nt:  \
-  case NAME ## rzi_nt:  \
-  case NAME ## iri_nt:  \
-  case NAME ## izi_nt:  \
-  case NAME ## rri_t:   \
-  case NAME ## rzi_t:   \
-  case NAME ## iri_t:   \
-  case NAME ## izi_t:
+#define BCm_kind(NAME)                                                         \
+  case NAME##rri:                                                              \
+  case NAME##rzi:                                                              \
+  case NAME##iri:                                                              \
+  case NAME##izi:                                                              \
+  case NAME##rri_nt:                                                           \
+  case NAME##rzi_nt:                                                           \
+  case NAME##iri_nt:                                                           \
+  case NAME##izi_nt:                                                           \
+  case NAME##rri_t:                                                            \
+  case NAME##rzi_t:                                                            \
+  case NAME##iri_t:                                                            \
+  case NAME##izi_t:
 
-#define BCRm_kind(NAME) \
-  case NAME ## rr:      \
-  case NAME ## ir:      \
-  case NAME ## rr_nt:   \
-  case NAME ## ir_nt:   \
-  case NAME ## rr_t:    \
-  case NAME ## ir_t:
-
+#define BCRm_kind(NAME)                                                        \
+  case NAME##rr:                                                               \
+  case NAME##ir:                                                               \
+  case NAME##rr_nt:                                                            \
+  case NAME##ir_nt:                                                            \
+  case NAME##rr_t:                                                             \
+  case NAME##ir_t:
 
   {
     using namespace llvm::VE;
     switch (MI.getOpcode()) {
-    BCm_kind(BCFL)
-    BCm_kind(BCFW)
-    BCRm_kind(BRCFL)
-    BCRm_kind(BRCFW)
-      return true;
+      BCm_kind(BCFL) BCm_kind(BCFW) BCRm_kind(BRCFL)
+          BCRm_kind(BRCFW) return true;
     }
   }
 #undef BCm_kind
@@ -592,15 +579,15 @@ static bool isIntegerBCKind(MCInst &MI) {
 }
 
 // Decode CC Operand field.
-static DecodeStatus DecodeCCOperand(MCInst &MI, uint64_t cf,
-                                    uint64_t Address, const void *Decoder) {
+static DecodeStatus DecodeCCOperand(MCInst &MI, uint64_t cf, uint64_t Address,
+                                    const void *Decoder) {
   MI.addOperand(MCOperand::createImm(VEValToCondCode(cf, isIntegerBCKind(MI))));
   return MCDisassembler::Success;
 }
 
 // Decode RD Operand field.
-static DecodeStatus DecodeRDOperand(MCInst &MI, uint64_t cf,
-                                    uint64_t Address, const void *Decoder) {
+static DecodeStatus DecodeRDOperand(MCInst &MI, uint64_t cf, uint64_t Address,
+                                    const void *Decoder) {
   MI.addOperand(MCOperand::createImm(VEValToRD(cf)));
   return MCDisassembler::Success;
 }

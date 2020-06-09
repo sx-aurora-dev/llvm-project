@@ -5321,7 +5321,7 @@ bool CodeGenPrepare::optimizeGatherScatterInst(Instruction *MemoryInst,
   // and a vector GEP with all zeroes final index.
   if (!Ops[FinalIndex]->getType()->isVectorTy()) {
     NewAddr = Builder.CreateGEP(Ops[0], makeArrayRef(Ops).drop_front());
-    Type *IndexTy = VectorType::get(ScalarIndexTy, NumElts);
+    auto *IndexTy = FixedVectorType::get(ScalarIndexTy, NumElts);
     NewAddr = Builder.CreateGEP(NewAddr, Constant::getNullValue(IndexTy));
   } else {
     Value *Base = Ops[0];
@@ -6471,7 +6471,8 @@ bool CodeGenPrepare::optimizeShuffleVectorInst(ShuffleVectorInst *SVI) {
   assert(!NewType->isVectorTy() && "Expected a scalar type!");
   assert(NewType->getScalarSizeInBits() == SVIVecType->getScalarSizeInBits() &&
          "Expected a type of the same size!");
-  Type *NewVecType = VectorType::get(NewType, SVIVecType->getNumElements());
+  auto *NewVecType =
+      FixedVectorType::get(NewType, SVIVecType->getNumElements());
 
   // Create a bitcast (shuffle (insert (bitcast(..))))
   IRBuilder<> Builder(SVI->getContext());
@@ -7083,13 +7084,13 @@ static bool splitMergedValStore(StoreInst &SI, const DataLayout &DL,
     Value *Addr = Builder.CreateBitCast(
         SI.getOperand(1),
         SplitStoreType->getPointerTo(SI.getPointerAddressSpace()));
+    Align Alignment = SI.getAlign();
     const bool IsOffsetStore = (IsLE && Upper) || (!IsLE && !Upper);
-    if (IsOffsetStore)
+    if (IsOffsetStore) {
       Addr = Builder.CreateGEP(
           SplitStoreType, Addr,
           ConstantInt::get(Type::getInt32Ty(SI.getContext()), 1));
-    MaybeAlign Alignment = SI.getAlign();
-    if (IsOffsetStore && Alignment) {
+
       // When splitting the store in half, naturally one half will retain the
       // alignment of the original wider store, regardless of whether it was
       // over-aligned or not, while the other will require adjustment.

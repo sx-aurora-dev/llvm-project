@@ -145,6 +145,10 @@ def CCOP : SDNodeXForm<imm, [{
 // Feature predicates.
 //===----------------------------------------------------------------------===//
 
+//===----------------------------------------------------------------------===//
+// Instruction Pattern Stuff
+//===----------------------------------------------------------------------===//
+
 // zero
 def ZeroAsmOperand : AsmOperandClass {
   let Name = "Zero";
@@ -252,6 +256,7 @@ def mimmfp : Operand<i32>, PatLeaf<(fpimm), [{
   let ParserMatchClass = MImmAsmOperand;
   let PrintMethod = "printMImmOperand";
 }
+
 // mimmfp32 - 32 bit width mimmfp
 //   Float value places at higher bits, so ignore lower 32 bits.
 def mimmfp32 : Operand<i32>, PatLeaf<(fpimm), [{
@@ -357,14 +362,6 @@ def VEMEMziiAsmOperand : AsmOperandClass {
   let Name = "MEMzii";
   let ParserMethod = "parseMEMOperand";
 }
-def VEMEMriAsmOperand : AsmOperandClass {
-  let Name = "MEMri";
-  let ParserMethod = "parseMEMAsOperand";
-}
-def VEMEMziAsmOperand : AsmOperandClass {
-  let Name = "MEMzi";
-  let ParserMethod = "parseMEMAsOperand";
-}
 
 // Operand definitions for ASX addressing mode.
 def MEMrri : Operand<iPTR> {
@@ -390,6 +387,16 @@ def MEMzii : Operand<iPTR> {
 
 // Operand definitions for AS addressing mode.
 //   AS format has different representations, so defines them.
+
+// AS assembly instruction format:
+def VEMEMriAsmOperand : AsmOperandClass {
+  let Name = "MEMri";
+  let ParserMethod = "parseMEMAsOperand";
+}
+def VEMEMziAsmOperand : AsmOperandClass {
+  let Name = "MEMzi";
+  let ParserMethod = "parseMEMAsOperand";
+}
 
 // AS generic assembly instruction format:
 def MEMriASX : Operand<iPTR> {
@@ -708,7 +715,7 @@ multiclass RRIRDm<string opcStr, bits<8>opc,
               !strconcat(opcStr, " $sx, $sz, $sy")>;
 }
 
-// Generic RR multiclass with an arguments.
+// Generic RR multiclass with an argument.
 //   e.g. LDZ, PCNT, and  BRV
 let cy = 0, sy = 0, hasSideEffects = 0 in
 multiclass RRI1m<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,

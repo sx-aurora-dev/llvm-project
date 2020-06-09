@@ -15,6 +15,7 @@
 #define LLVM_LIB_TARGET_VE_VE_H
 
 #include "MCTargetDesc/VEMCTargetDesc.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/ADT/StringSwitch.h"
@@ -41,30 +42,30 @@ namespace llvm {
 namespace VECC {
 enum CondCode {
   // Integer comparison
-  CC_IG =  0,  // Greater
-  CC_IL =  1,  // Less
+  CC_IG = 0,  // Greater
+  CC_IL = 1,  // Less
   CC_INE = 2, // Not Equal
   CC_IEQ = 3, // Equal
   CC_IGE = 4, // Greater or Equal
   CC_ILE = 5, // Less or Equal
 
   // Floating point comparison
-  CC_AF =     0 + 6, // Never
-  CC_G =      1 + 6, // Greater
-  CC_L =      2 + 6, // Less
-  CC_NE =     3 + 6, // Not Equal
-  CC_EQ =     4 + 6, // Equal
-  CC_GE =     5 + 6, // Greater or Equal
-  CC_LE =     6 + 6, // Less or Equal
-  CC_NUM =    7 + 6, // Number
-  CC_NAN =    8 + 6, // NaN
-  CC_GNAN =   9 + 6, // Greater or NaN
-  CC_LNAN =  10 + 6, // Less or NaN
+  CC_AF = 0 + 6,     // Never
+  CC_G = 1 + 6,      // Greater
+  CC_L = 2 + 6,      // Less
+  CC_NE = 3 + 6,     // Not Equal
+  CC_EQ = 4 + 6,     // Equal
+  CC_GE = 5 + 6,     // Greater or Equal
+  CC_LE = 6 + 6,     // Less or Equal
+  CC_NUM = 7 + 6,    // Number
+  CC_NAN = 8 + 6,    // NaN
+  CC_GNAN = 9 + 6,   // Greater or NaN
+  CC_LNAN = 10 + 6,  // Less or NaN
   CC_NENAN = 11 + 6, // Not Equal or NaN
   CC_EQNAN = 12 + 6, // Equal or NaN
   CC_GENAN = 13 + 6, // Greater or Equal or NaN
   CC_LENAN = 14 + 6, // Less or Equal or NaN
-  CC_AT =    15 + 6, // Always
+  CC_AT = 15 + 6,    // Always
   UNKNOWN
 };
 }
@@ -158,64 +159,109 @@ inline static VECC::CondCode stringToVEFCondCode(StringRef S) {
 
 inline static unsigned VECondCodeToVal(VECC::CondCode CC) {
   switch (CC) {
-  case VECC::CC_IG:    return 1;
-  case VECC::CC_IL:    return 2;
-  case VECC::CC_INE:   return 3;
-  case VECC::CC_IEQ:   return 4;
-  case VECC::CC_IGE:   return 5;
-  case VECC::CC_ILE:   return 6;
-  case VECC::CC_AF:    return 0;
-  case VECC::CC_G:     return 1;
-  case VECC::CC_L:     return 2;
-  case VECC::CC_NE:    return 3;
-  case VECC::CC_EQ:    return 4;
-  case VECC::CC_GE:    return 5;
-  case VECC::CC_LE:    return 6;
-  case VECC::CC_NUM:   return 7;
-  case VECC::CC_NAN:   return 8;
-  case VECC::CC_GNAN:  return 9;
-  case VECC::CC_LNAN:  return 10;
-  case VECC::CC_NENAN: return 11;
-  case VECC::CC_EQNAN: return 12;
-  case VECC::CC_GENAN: return 13;
-  case VECC::CC_LENAN: return 14;
-  case VECC::CC_AT:    return 15;
+  case VECC::CC_IG:
+    return 1;
+  case VECC::CC_IL:
+    return 2;
+  case VECC::CC_INE:
+    return 3;
+  case VECC::CC_IEQ:
+    return 4;
+  case VECC::CC_IGE:
+    return 5;
+  case VECC::CC_ILE:
+    return 6;
+  case VECC::CC_AF:
+    return 0;
+  case VECC::CC_G:
+    return 1;
+  case VECC::CC_L:
+    return 2;
+  case VECC::CC_NE:
+    return 3;
+  case VECC::CC_EQ:
+    return 4;
+  case VECC::CC_GE:
+    return 5;
+  case VECC::CC_LE:
+    return 6;
+  case VECC::CC_NUM:
+    return 7;
+  case VECC::CC_NAN:
+    return 8;
+  case VECC::CC_GNAN:
+    return 9;
+  case VECC::CC_LNAN:
+    return 10;
+  case VECC::CC_NENAN:
+    return 11;
+  case VECC::CC_EQNAN:
+    return 12;
+  case VECC::CC_GENAN:
+    return 13;
+  case VECC::CC_LENAN:
+    return 14;
+  case VECC::CC_AT:
+    return 15;
   default:
     llvm_unreachable("Invalid cond code");
   }
-  return 0;
 }
 
 inline static VECC::CondCode VEValToCondCode(unsigned Val, bool IsInteger) {
   if (IsInteger) {
     switch (Val) {
-    case 0: return VECC::CC_AF;
-    case 1: return VECC::CC_IG;
-    case 2: return VECC::CC_IL;
-    case 3: return VECC::CC_INE;
-    case 4: return VECC::CC_IEQ;
-    case 5: return VECC::CC_IGE;
-    case 6: return VECC::CC_ILE;
-    case 15: return VECC::CC_AT;
+    case 0:
+      return VECC::CC_AF;
+    case 1:
+      return VECC::CC_IG;
+    case 2:
+      return VECC::CC_IL;
+    case 3:
+      return VECC::CC_INE;
+    case 4:
+      return VECC::CC_IEQ;
+    case 5:
+      return VECC::CC_IGE;
+    case 6:
+      return VECC::CC_ILE;
+    case 15:
+      return VECC::CC_AT;
     }
   } else {
     switch (Val) {
-    case 0: return VECC::CC_AF;
-    case 1: return VECC::CC_G;
-    case 2: return VECC::CC_L;
-    case 3: return VECC::CC_NE;
-    case 4: return VECC::CC_EQ;
-    case 5: return VECC::CC_GE;
-    case 6: return VECC::CC_LE;
-    case 7: return VECC::CC_NUM;
-    case 8: return VECC::CC_NAN;
-    case 9: return VECC::CC_GNAN;
-    case 10: return VECC::CC_LNAN;
-    case 11: return VECC::CC_NENAN;
-    case 12: return VECC::CC_EQNAN;
-    case 13: return VECC::CC_GENAN;
-    case 14: return VECC::CC_LENAN;
-    case 15: return VECC::CC_AT;
+    case 0:
+      return VECC::CC_AF;
+    case 1:
+      return VECC::CC_G;
+    case 2:
+      return VECC::CC_L;
+    case 3:
+      return VECC::CC_NE;
+    case 4:
+      return VECC::CC_EQ;
+    case 5:
+      return VECC::CC_GE;
+    case 6:
+      return VECC::CC_LE;
+    case 7:
+      return VECC::CC_NUM;
+    case 8:
+      return VECC::CC_NAN;
+    case 9:
+      return VECC::CC_GNAN;
+    case 10:
+      return VECC::CC_LNAN;
+    case 11:
+      return VECC::CC_NENAN;
+    case 12:
+      return VECC::CC_EQNAN;
+    case 13:
+      return VECC::CC_GENAN;
+    case 14:
+      return VECC::CC_LENAN;
+    case 15:
+      return VECC::CC_AT;
     }
   }
   llvm_unreachable("Invalid cond code");
