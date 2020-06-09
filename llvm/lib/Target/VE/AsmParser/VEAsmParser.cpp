@@ -122,28 +122,24 @@ static const MCPhysReg F32Regs[64] = {
     VE::SF63};
 
 static const MCPhysReg F128Regs[32] = {
-  VE::Q0,  VE::Q1,  VE::Q2,  VE::Q3,
-  VE::Q4,  VE::Q5,  VE::Q6,  VE::Q7,
-  VE::Q8,  VE::Q9,  VE::Q10, VE::Q11,
-  VE::Q12, VE::Q13, VE::Q14, VE::Q15,
-  VE::Q16, VE::Q17, VE::Q18, VE::Q19,
-  VE::Q20, VE::Q21, VE::Q22, VE::Q23,
-  VE::Q24, VE::Q25, VE::Q26, VE::Q27,
-  VE::Q28, VE::Q29, VE::Q30, VE::Q31 };
+    VE::Q0,  VE::Q1,  VE::Q2,  VE::Q3,  VE::Q4,  VE::Q5,  VE::Q6,  VE::Q7,
+    VE::Q8,  VE::Q9,  VE::Q10, VE::Q11, VE::Q12, VE::Q13, VE::Q14, VE::Q15,
+    VE::Q16, VE::Q17, VE::Q18, VE::Q19, VE::Q20, VE::Q21, VE::Q22, VE::Q23,
+    VE::Q24, VE::Q25, VE::Q26, VE::Q27, VE::Q28, VE::Q29, VE::Q30, VE::Q31};
 
 static const MCPhysReg VM512Regs[8] = {
   VE::VMP0, VE::VMP1, VE::VMP2, VE::VMP3,
   VE::VMP4, VE::VMP5, VE::VMP6, VE::VMP7 };
 
 static const MCPhysReg MISCRegs[31] = {
-  VE::USRCC,      VE::PSW,        VE::SAR,        VE::NoRegister,
-  VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::PMMR,
-  VE::PMCR0,      VE::PMCR1,      VE::PMCR2,      VE::PMCR3,
-  VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::NoRegister,
-  VE::PMC0,       VE::PMC1,       VE::PMC2,       VE::PMC3,
-  VE::PMC4,       VE::PMC5,       VE::PMC6,       VE::PMC7,
-  VE::PMC8,       VE::PMC9,       VE::PMC10,      VE::PMC11,
-  VE::PMC12,      VE::PMC13,      VE::PMC14 };
+    VE::USRCC,      VE::PSW,        VE::SAR,        VE::NoRegister,
+    VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::PMMR,
+    VE::PMCR0,      VE::PMCR1,      VE::PMCR2,      VE::PMCR3,
+    VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::NoRegister,
+    VE::PMC0,       VE::PMC1,       VE::PMC2,       VE::PMC3,
+    VE::PMC4,       VE::PMC5,       VE::PMC6,       VE::PMC7,
+    VE::PMC8,       VE::PMC9,       VE::PMC10,      VE::PMC11,
+    VE::PMC12,      VE::PMC13,      VE::PMC14};
 
 namespace {
 
@@ -237,7 +233,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return Value == 0;
     }
@@ -281,7 +277,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<3>(Value);
     }
@@ -303,7 +299,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<6>(Value);
     }
@@ -314,7 +310,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<7>(Value);
     }
@@ -325,7 +321,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isInt<7>(Value);
     }
@@ -336,7 +332,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(MImm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(MImm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<6>(Value);
     }
@@ -517,7 +513,7 @@ public:
     // Add as immediate when possible.  Null MCExpr = 0.
     if (!Expr)
       Inst.addOperand(MCOperand::createImm(0));
-    else if (const MCConstantExpr *CE = dyn_cast<MCConstantExpr>(Expr))
+    else if (const auto *CE = dyn_cast<MCConstantExpr>(Expr))
       Inst.addOperand(MCOperand::createImm(CE->getValue()));
     else
       Inst.addOperand(MCOperand::createExpr(Expr));
@@ -683,7 +679,7 @@ public:
   }
 
   static bool MorphToMISCReg(VEOperand &Op) {
-    const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Op.getImm());
+    const auto *ConstExpr = dyn_cast<MCConstantExpr>(Op.getImm());
     if (!ConstExpr)
       return false;
     unsigned regIdx = ConstExpr->getValue();
@@ -1558,16 +1554,16 @@ unsigned VEAsmParser::validateTargetOperandClass(MCParsedAsmOperand &GOp,
   switch (Kind) {
   default:
     break;
-  case MCK_F128:
-    if (Op.isReg() && VEOperand::MorphToF128Reg(Op))
-      return MCTargetAsmParser::Match_Success;
-    break;
   case MCK_F32:
     if (Op.isReg() && VEOperand::MorphToF32Reg(Op))
       return MCTargetAsmParser::Match_Success;
     break;
   case MCK_I32:
     if (Op.isReg() && VEOperand::MorphToI32Reg(Op))
+      return MCTargetAsmParser::Match_Success;
+    break;
+  case MCK_F128:
+    if (Op.isReg() && VEOperand::MorphToF128Reg(Op))
       return MCTargetAsmParser::Match_Success;
     break;
   case MCK_MISC:

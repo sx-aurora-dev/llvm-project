@@ -145,6 +145,10 @@ def CCOP : SDNodeXForm<imm, [{
 // Feature predicates.
 //===----------------------------------------------------------------------===//
 
+//===----------------------------------------------------------------------===//
+// Instruction Pattern Stuff
+//===----------------------------------------------------------------------===//
+
 // zero
 def ZeroAsmOperand : AsmOperandClass {
   let Name = "Zero";
@@ -711,7 +715,7 @@ multiclass RRIRDm<string opcStr, bits<8>opc,
               !strconcat(opcStr, " $sx, $sz, $sy")>;
 }
 
-// Generic RR multiclass with an arguments.
+// Generic RR multiclass with an argument.
 //   e.g. LDZ, PCNT, and  BRV
 let cy = 0, sy = 0, hasSideEffects = 0 in
 multiclass RRI1m<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
