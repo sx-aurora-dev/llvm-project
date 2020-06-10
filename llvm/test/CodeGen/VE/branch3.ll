@@ -3,7 +3,6 @@
 define signext i8 @func1(i8 signext %a) {
 ; CHECK-LABEL: func1:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    brgt.w 1, %s0, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -11,7 +10,7 @@ define signext i8 @func1(i8 signext %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
@@ -33,12 +32,11 @@ join:
   ret i8 %r
 }
 
-declare i32 @ret(i32)
+declare signext i32 @ret(i32 signext)
 
-define i32 @func2(i16 signext %a) {
+define signext i32 @func2(i16 signext %a) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    brgt.w 2, %s0, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -46,11 +44,12 @@ define i32 @func2(i16 signext %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = icmp sgt i16 %a, 1
@@ -65,10 +64,9 @@ join:
   ret i32 %r
 }
 
-define i32 @func3(i32 %a) {
+define signext i32 @func3(i32 signext %a) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    brgt.w 19, %s0, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
 ; CHECK-NEXT:    lea %s0, ret@lo
@@ -76,11 +74,12 @@ define i32 @func3(i32 %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = icmp sgt i32 %a, 18
@@ -95,7 +94,7 @@ join:
   ret i32 %r
 }
 
-define i32 @func4(i64 %a) {
+define signext i32 @func4(i64 %a) {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    brgt.l -63, %s0, .LBB{{[0-9]+}}_1
@@ -105,11 +104,12 @@ define i32 @func4(i64 %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = icmp sgt i64 %a, -64
@@ -124,7 +124,7 @@ join:
   ret i32 %r
 }
 
-define i32 @func5(i8 zeroext %a) {
+define signext i32 @func5(i8 zeroext %a) {
 ; CHECK-LABEL: func5:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    cmpu.w %s0, 63, %s0
@@ -135,11 +135,12 @@ define i32 @func5(i8 zeroext %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = icmp ugt i8 %a, 62
@@ -154,7 +155,7 @@ join:
   ret i32 %r
 }
 
-define i32 @func6(i16 zeroext %a) {
+define signext i32 @func6(i16 zeroext %a) {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    cmpu.w %s0, 8, %s0
@@ -165,11 +166,12 @@ define i32 @func6(i16 zeroext %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = icmp ugt i16 %a, 7
@@ -184,10 +186,9 @@ join:
   ret i32 %r
 }
 
-define i32 @func7(i32 %a) {
+define signext i32 @func7(i32 signext %a) {
 ; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_5:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cmpu.w %s0, 13, %s0
 ; CHECK-NEXT:    brlt.w 0, %s0, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %on.true
@@ -196,11 +197,12 @@ define i32 @func7(i32 %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = icmp ugt i32 %a, 12
@@ -215,7 +217,7 @@ join:
   ret i32 %r
 }
 
-define i32 @func8(float %a) {
+define signext i32 @func8(float %a) {
 ; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    brltnan.s 0, %s0, .LBB{{[0-9]+}}_1
@@ -225,11 +227,12 @@ define i32 @func8(float %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = fcmp ole float %a, 0.0
@@ -244,7 +247,7 @@ join:
   ret i32 %r
 }
 
-define i32 @func9(double %a) {
+define signext i32 @func9(double %a) {
 ; CHECK-LABEL: func9:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    brgenan.d 0, %s0, .LBB{{[0-9]+}}_1
@@ -254,11 +257,12 @@ define i32 @func9(double %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = fcmp ogt double %a, 0.0
@@ -273,7 +277,7 @@ join:
   ret i32 %r
 }
 
-define i32 @func10(double %a) {
+define signext i32 @func10(double %a) {
 ; CHECK-LABEL: func10:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    lea.sl %s1, 1075052544
@@ -284,11 +288,12 @@ define i32 @func10(double %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = fcmp ogt double %a, 5.000000e+00
@@ -303,7 +308,7 @@ join:
   ret i32 %r
 }
 
-define i32 @func11(fp128 %a) {
+define signext i32 @func11(fp128 %a) {
 ; CHECK-LABEL: func11:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
@@ -319,11 +324,12 @@ define i32 @func11(fp128 %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = fcmp ogt fp128 %a, 0xL00000000000000000000000000000000
@@ -339,7 +345,7 @@ join:
 }
 
 ; Function Attrs: nounwind
-define i32 @func12(i128 %a) {
+define signext i32 @func12(i128 %a) {
 ; CHECK-LABEL: func12:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    srl %s2, %s1, 63
@@ -354,11 +360,12 @@ define i32 @func12(i128 %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = icmp sgt i128 %a, 22
@@ -374,7 +381,7 @@ join:
 }
 
 ; Function Attrs: nounwind
-define i32 @func13(i128 %a) {
+define signext i32 @func13(i128 %a) {
 ; CHECK-LABEL: func13:
 ; CHECK:       .LBB{{[0-9]+}}_5:
 ; CHECK-NEXT:    cmpu.l %s0, %s0, (58)0
@@ -387,11 +394,12 @@ define i32 @func13(i128 %a) {
 ; CHECK-NEXT:    lea.sl %s12, ret@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 2, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    br.l.t .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1:
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %join
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %cmp = icmp ugt i128 %a, 62

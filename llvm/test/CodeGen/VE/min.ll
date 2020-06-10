@@ -135,8 +135,6 @@ define i64 @min2u64(i64, i64) {
 define signext i32 @mini32(i32 signext %0, i32 signext %1) {
 ; CHECK-LABEL: mini32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    mins.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -148,8 +146,6 @@ define signext i32 @mini32(i32 signext %0, i32 signext %1) {
 define i32 @min2i32(i32, i32) {
 ; CHECK-LABEL: min2i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    mins.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp sle i32 %0, %1
@@ -172,10 +168,9 @@ define zeroext i32 @minu32(i32 zeroext %0, i32 zeroext %1) {
 define i32 @min2u32(i32, i32) {
 ; CHECK-LABEL: min2u32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s2, %s0, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s1, (0)1
-; CHECK-NEXT:    cmpu.w %s1, %s2, %s0
-; CHECK-NEXT:    cmov.w.le %s0, %s2, %s1
+; CHECK-NEXT:    cmpu.w %s2, %s0, %s1
+; CHECK-NEXT:    cmov.w.le %s1, %s0, %s2
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = icmp ule i32 %0, %1
   %4 = select i1 %3, i32 %0, i32 %1

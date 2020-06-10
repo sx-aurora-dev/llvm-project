@@ -38,8 +38,7 @@ define i64 @func64(i64 %p) {
 define signext i32 @func32s(i32 signext %p) {
 ; CHECK-LABEL: func32s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s0, (0)1
-; CHECK-NEXT:    adds.w.sx %s1, -1, %s1
+; CHECK-NEXT:    adds.w.sx %s1, -1, %s0
 ; CHECK-NEXT:    nnd %s0, %s0, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    pcnt %s0, %s0
@@ -63,8 +62,7 @@ define zeroext i32 @func32z(i32 zeroext %p) {
 define i16 @func16s(i16 signext %p) {
 ; CHECK-LABEL: func16s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s0, (0)1
-; CHECK-NEXT:    adds.w.sx %s1, -1, %s1
+; CHECK-NEXT:    adds.w.sx %s1, -1, %s0
 ; CHECK-NEXT:    nnd %s0, %s0, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    pcnt %s0, %s0
@@ -88,8 +86,7 @@ define i16 @func16z(i16 zeroext %p) {
 define i8 @func8s(i8 signext %p) {
 ; CHECK-LABEL: func8s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s0, (0)1
-; CHECK-NEXT:    adds.w.sx %s1, -1, %s1
+; CHECK-NEXT:    adds.w.sx %s1, -1, %s0
 ; CHECK-NEXT:    nnd %s0, %s0, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    pcnt %s0, %s0

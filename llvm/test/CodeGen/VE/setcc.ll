@@ -32,11 +32,9 @@ define zeroext i1 @setcci64(i64, i64) {
   ret i1 %3
 }
 
-define zeroext i1 @setcci32(i32, i32) {
+define zeroext i1 @setcci32(i32 signext, i32 signext) {
 ; CHECK-LABEL: setcci32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    cmps.w.zx %s0, %s1, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 31
 ; CHECK-NEXT:    or %s11, 0, %s9

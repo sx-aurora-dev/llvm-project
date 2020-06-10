@@ -3,8 +3,6 @@
 define signext i8 @func8s(i8 signext %a, i8 signext %b) {
 ; CHECK-LABEL: func8s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    muls.w.sx %s0, %s1, %s0
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
@@ -16,8 +14,6 @@ define signext i8 @func8s(i8 signext %a, i8 signext %b) {
 define signext i16 @func16s(i16 signext %a, i16 signext %b) {
 ; CHECK-LABEL: func16s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    muls.w.sx %s0, %s1, %s0
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
@@ -29,8 +25,6 @@ define signext i16 @func16s(i16 signext %a, i16 signext %b) {
 define signext i32 @func32s(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: func32s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    muls.w.sx %s0, %s1, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -125,7 +119,6 @@ define i128 @func128z(i128 %a, i128 %b) {
 define signext i8 @funci8s(i8 signext %a) {
 ; CHECK-LABEL: funci8s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    muls.w.sx %s0, 5, %s0
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
@@ -137,7 +130,6 @@ define signext i8 @funci8s(i8 signext %a) {
 define signext i16 @funci16s(i16 signext %a) {
 ; CHECK-LABEL: funci16s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    muls.w.sx %s0, 5, %s0
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
@@ -149,7 +141,6 @@ define signext i16 @funci16s(i16 signext %a) {
 define signext i32 @funci32s(i32 signext %a) {
 ; CHECK-LABEL: funci32s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    muls.w.sx %s0, 5, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9

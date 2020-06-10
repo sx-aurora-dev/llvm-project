@@ -6,16 +6,13 @@
 define hidden signext i32 @__paritysi2(i32 signext %0) {
 ; CHECK-LABEL: __paritysi2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s0, (0)1
-; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 16
 ; CHECK-NEXT:    xor %s0, %s1, %s0
-; CHECK-NEXT:    adds.w.sx %s1, %s0, (0)1
-; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 8
 ; CHECK-NEXT:    xor %s0, %s1, %s0
-; CHECK-NEXT:    adds.w.sx %s1, %s0, (0)1
-; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 4
 ; CHECK-NEXT:    xor %s0, %s1, %s0
 ; CHECK-NEXT:    and %s0, 15, %s0

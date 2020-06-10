@@ -4,14 +4,6 @@
 define i32 @callee(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i8 signext, i16 signext, fp128) {
 ; CHECK-LABEL: callee:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s7, %s7, (0)1
-; CHECK-NEXT:    adds.w.sx %s6, %s6, (0)1
-; CHECK-NEXT:    adds.w.sx %s5, %s5, (0)1
-; CHECK-NEXT:    adds.w.sx %s4, %s4, (0)1
-; CHECK-NEXT:    adds.w.sx %s3, %s3, (0)1
-; CHECK-NEXT:    adds.w.sx %s2, %s2, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
 ; CHECK-NEXT:    ld %s35, 448(, %s11)
 ; CHECK-NEXT:    ld %s34, 456(, %s11)
 ; CHECK-NEXT:    ldl.sx %s36, 440(, %s11)

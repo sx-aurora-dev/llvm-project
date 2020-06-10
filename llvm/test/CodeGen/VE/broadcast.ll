@@ -4,7 +4,6 @@
 define x86_regcallcc <512 x i32> @brdv512i32(i32) {
 ; CHECK-LABEL: brdv512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
@@ -49,7 +48,6 @@ define x86_regcallcc <256 x i64> @brdv256i64(i64) {
 define x86_regcallcc <256 x i32> @brdv256i32(i32) {
 ; CHECK-LABEL: brdv256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrdl %v0, %s0

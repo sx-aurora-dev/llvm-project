@@ -46,8 +46,6 @@ define i64 @divi64(i64 %a, i64 %b) {
 define signext i32 @divi32(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: divi32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    divs.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -93,8 +91,6 @@ define zeroext i32 @divu32(i32 zeroext %a, i32 zeroext %b) {
 define signext i16 @divi16(i16 signext %a, i16 signext %b) {
 ; CHECK-LABEL: divi16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    divs.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
@@ -122,8 +118,6 @@ define zeroext i16 @divu16(i16 zeroext %a, i16 zeroext %b) {
 define signext i8 @divi8(i8 signext %a, i8 signext %b) {
 ; CHECK-LABEL: divi8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    divs.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
@@ -298,8 +292,7 @@ define i64 @divi64li(i64 %a, i64 %b) {
 define signext i32 @divi32li(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: divi32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s1, (0)1
-; CHECK-NEXT:    divs.w.sx %s0, 3, %s0
+; CHECK-NEXT:    divs.w.sx %s0, 3, %s1
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = sdiv i32 3, %b

@@ -29,8 +29,6 @@ define i64 @remi64(i64 %a, i64 %b) {
 define signext i32 @remi32(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: remi32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    divs.w.sx %s2, %s0, %s1
 ; CHECK-NEXT:    muls.w.sx %s1, %s2, %s1
 ; CHECK-NEXT:    subs.w.sx %s0, %s0, %s1
@@ -82,8 +80,6 @@ define zeroext i32 @remu32(i32 zeroext %a, i32 zeroext %b) {
 define signext i16 @remi16(i16 signext %a, i16 signext %b) {
 ; CHECK-LABEL: remi16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    divs.w.sx %s2, %s0, %s1
 ; CHECK-NEXT:    muls.w.sx %s1, %s2, %s1
 ; CHECK-NEXT:    subs.w.sx %s0, %s0, %s1
@@ -114,8 +110,6 @@ define zeroext i16 @remu16(i16 zeroext %a, i16 zeroext %b) {
 define signext i8 @remi8(i8 signext %a, i8 signext %b) {
 ; CHECK-LABEL: remi8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    divs.w.sx %s2, %s0, %s1
 ; CHECK-NEXT:    muls.w.sx %s1, %s2, %s1
 ; CHECK-NEXT:    subs.w.sx %s0, %s0, %s1
@@ -173,14 +167,13 @@ define i64 @remi64ri(i64 %a) {
 define signext i32 @remi32ri(i32 signext %a) {
 ; CHECK-LABEL: remi32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s0, (0)1
-; CHECK-NEXT:    lea %s2, 1431655766
-; CHECK-NEXT:    muls.l %s0, %s0, %s2
-; CHECK-NEXT:    srl %s2, %s0, 63
-; CHECK-NEXT:    srl %s0, %s0, 32
-; CHECK-NEXT:    adds.w.sx %s0, %s0, %s2
-; CHECK-NEXT:    muls.w.sx %s0, 3, %s0
-; CHECK-NEXT:    subs.w.sx %s0, %s1, %s0
+; CHECK-NEXT:    lea %s1, 1431655766
+; CHECK-NEXT:    muls.l %s1, %s0, %s1
+; CHECK-NEXT:    srl %s2, %s1, 63
+; CHECK-NEXT:    srl %s1, %s1, 32
+; CHECK-NEXT:    adds.w.sx %s1, %s1, %s2
+; CHECK-NEXT:    muls.w.sx %s1, 3, %s1
+; CHECK-NEXT:    subs.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = srem i32 %a, 3
@@ -263,9 +256,8 @@ define i64 @remi64li(i64 %a, i64 %b) {
 define signext i32 @remi32li(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: remi32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s1, (0)1
-; CHECK-NEXT:    divs.w.sx %s1, 3, %s0
-; CHECK-NEXT:    muls.w.sx %s0, %s1, %s0
+; CHECK-NEXT:    divs.w.sx %s0, 3, %s1
+; CHECK-NEXT:    muls.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    subs.w.sx %s0, 3, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9

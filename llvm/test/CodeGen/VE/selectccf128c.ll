@@ -1,12 +1,8 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define fp128 @selectccsgti8(i8, i8, fp128, fp128) {
+define fp128 @selectccsgti8(i8 signext, i8 signext, fp128, fp128) {
 ; CHECK-LABEL: selectccsgti8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    sll %s1, %s1, 56
-; CHECK-NEXT:    sra.l %s1, %s1, 56
-; CHECK-NEXT:    sll %s0, %s0, 56
-; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.gt %s5, %s3, %s0
@@ -18,13 +14,9 @@ define fp128 @selectccsgti8(i8, i8, fp128, fp128) {
   ret fp128 %6
 }
 
-define fp128 @selectccsgti16(i16, i16, fp128, fp128) {
+define fp128 @selectccsgti16(i16 signext, i16 signext, fp128, fp128) {
 ; CHECK-LABEL: selectccsgti16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    sll %s1, %s1, 48
-; CHECK-NEXT:    sra.l %s1, %s1, 48
-; CHECK-NEXT:    sll %s0, %s0, 48
-; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.gt %s5, %s3, %s0
@@ -36,11 +28,9 @@ define fp128 @selectccsgti16(i16, i16, fp128, fp128) {
   ret fp128 %6
 }
 
-define fp128 @selectccsgti32(i32, i32, fp128, fp128) {
+define fp128 @selectccsgti32(i32 signext, i32 signext, fp128, fp128) {
 ; CHECK-LABEL: selectccsgti32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.w.gt %s5, %s3, %s0

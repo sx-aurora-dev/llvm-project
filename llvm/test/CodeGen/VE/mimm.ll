@@ -13,7 +13,6 @@ define i64 @mimm_0000000000000000(i64 %a) {
 define i32 @mimm_0000000000000001(i32 %a) {
 ; CHECK-LABEL: mimm_0000000000000001:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    adds.w.sx %s0, -1, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %res = sub i32 %a, 1
@@ -23,7 +22,6 @@ define i32 @mimm_0000000000000001(i32 %a) {
 define i32 @mimm_0000000000000003(i32 %a) {
 ; CHECK-LABEL: mimm_0000000000000003:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    adds.w.sx %s0, -3, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %res = sub i32 %a, 3
