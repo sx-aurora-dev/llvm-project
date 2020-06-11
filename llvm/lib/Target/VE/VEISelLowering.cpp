@@ -4030,6 +4030,32 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
   return SDValue();
 }
 
+bool VETargetLowering::isTypeDesirableForOp(unsigned Opc, EVT VT) const {
+  if (!isTypeLegal(VT))
+    return false;
+
+  // There are no i32 bitreverse/ctpop/and/or/xor instructions.
+  if (VT == MVT::i32) {
+    switch (Opc) {
+    default:
+      break;
+    case ISD::BITREVERSE:
+    case ISD::CTPOP:
+    case ISD::AND:
+    case ISD::OR:
+    case ISD::XOR:
+      return false;
+    }
+  }
+
+  // There are no i8/i16 instructions.
+  if (VT == MVT::i8 || VT == MVT::i16)
+    return false;
+
+  // Any legal type not explicitly accounted for above here is desirable.
+  return true;
+}
+
 //===----------------------------------------------------------------------===//
 //                         VE Inline Assembly Support
 //===----------------------------------------------------------------------===//
