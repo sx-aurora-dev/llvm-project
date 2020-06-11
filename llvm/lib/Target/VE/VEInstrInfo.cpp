@@ -352,8 +352,7 @@ void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
 }
 
 static bool IsAliasOfSX(Register Reg) {
-  return VE::I8RegClass.contains(Reg) || VE::I16RegClass.contains(Reg) ||
-         VE::I32RegClass.contains(Reg) || VE::I64RegClass.contains(Reg) ||
+  return VE::I32RegClass.contains(Reg) || VE::I64RegClass.contains(Reg) ||
          VE::F32RegClass.contains(Reg);
 }
 
