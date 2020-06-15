@@ -93,8 +93,16 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
       } else {
         LLVM_DEBUG(dbgs() << "Reuse current VL.\n");
       }
+    } else if (hasRegForVL) {
+      // Old VL is overwritten, so disable hasRegForVL.
+      if (MI->findRegisterDefOperandIdx(RegForVL, false, false, TRI) != -1) {
+        LLVM_DEBUG(dbgs() << RegName(RegForVL) << " is killed: ");
+        LLVM_DEBUG(MI->dump());
+        hasRegForVL = false;
+      }
     }
     if (hasRegForVL) {
+      // The latest VL is killed, so disable hasRegForVL.
       if (MI->killsRegister(RegForVL, TRI)) {
         LLVM_DEBUG(dbgs() << RegName(RegForVL) << " is killed: ");
         LLVM_DEBUG(MI->dump());
