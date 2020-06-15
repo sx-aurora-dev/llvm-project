@@ -780,19 +780,31 @@ multiclass RVM1m<string opcStr, bits<8> opc, RegisterClass RCM1, RegisterClass R
 }
 // Generic RV multiclass for mask calculation with 1 argument.
 //   e.g. PCVM, LZVM, and TOVM
-let cy = 0, sy = 0, vy = ?, hasSideEffects = 0 in
+let cy = 0, sy = 0, vy = ?, hasSideEffects = 0, Uses = [VL] in
+multiclass RVMSbm<string opcStr, string argStr, bits<8>opc, dag dag_in> {
+  def "" : RV<opc, (outs I64:$sx), dag_in,
+              !strconcat(opcStr, " $sx,", argStr)> {
+    bits<7> sx;
+    let Inst{54-48} = sx;
+  }
+  let DisableEncoding = "$vl", isCodeGenOnly = 1, VE_VLInUse = 1 in {
+    def l : RV<opc, (outs I64:$sx), !con(dag_in, (ins I32:$vl)),
+               !strconcat(opcStr, " $sx,", argStr)> {
+      bits<7> sx;
+      let Inst{54-48} = sx;
+    }
+    def L : RV<opc, (outs I64:$sx), !con(dag_in, (ins VLS:$vl)),
+               !strconcat(opcStr, " $sx,", argStr)> {
+      bits<7> sx;
+      let Inst{54-48} = sx;
+    }
+  }
+}
+let VE_VLIndex = 2 in
 multiclass RVMSm<string opcStr, bits<8> opc, RegisterClass RCM1, RegisterClass RCM2> {
-  def m : RV<opc, (outs I64:$sx), (ins RCM1:$vy),
-             !strconcat(opcStr, " $sx, $vy")> {
-    bits<7> sx;
-    let Inst{54-48} = sx;
-  }
+  defm m : RVMSbm<opcStr, " $vy", opc, (ins RCM1:$vy)>;
   let isCodeGenOnly = 1 in
-  def x : RV<opc, (outs I64:$sx), (ins RCM2:$vy),
-             !strconcat(opcStr, " $sx, $vy")> {
-    bits<7> sx;
-    let Inst{54-48} = sx;
-  }
+  defm x : RVMSbm<opcStr, " $vy", opc, (ins RCM2:$vy)>;
 }
 
 // Section 8.10.1 - VADD (Vector Add)
