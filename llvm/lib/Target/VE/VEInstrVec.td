@@ -516,7 +516,7 @@ multiclass RVmm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
   let m = ?, VE_VLWithMask = 1 in
   defm m : RVlm<opcStr, argStr#", $m", opc, RC, !con(dag_in, (ins RCM1:$m))>;
   let m = ?, isCodeGenOnly = 1, VE_VLWithMask = 1 in
-  defm x : RVlm<opcStr, argStr#", $m", opc, RC, !con(dag_in, (ins RCM1:$m))>;
+  defm x : RVlm<opcStr, argStr#", $m", opc, RC, !con(dag_in, (ins RCM2:$m))>;
 }
 // Generic RV multiclass with 2 arguments.
 //   e.g. VADD, VSUB, VMPY, and etc.
@@ -761,7 +761,8 @@ multiclass RVMKm<string opcStr, bits<8> opc, RegisterClass RC,
 // Generic RV multiclass for mask calculation with 2 arguments.
 //   e.g. ANDM, ORM, XORM, and etc.
 let cy = 0, sy = 0, vx = ?, vy = ?, vz = ?, hasSideEffects = 0 in
-multiclass RVM2m<string opcStr, bits<8> opc, RegisterClass RCM1, RegisterClass RCM2> {
+multiclass RVM2m<string opcStr, bits<8> opc, RegisterClass RCM1,
+                 RegisterClass RCM2> {
   def mm : RV<opc, (outs RCM1:$vx), (ins RCM1:$vy, RCM1:$vz),
               !strconcat(opcStr, " $vx, $vy, $vz")>;
   let isCodeGenOnly = 1 in
@@ -771,7 +772,8 @@ multiclass RVM2m<string opcStr, bits<8> opc, RegisterClass RCM1, RegisterClass R
 // Generic RV multiclass for mask calculation with 1 argument.
 //   e.g. NEGM
 let cy = 0, sy = 0, vx = ?, vy = ?, hasSideEffects = 0 in
-multiclass RVM1m<string opcStr, bits<8> opc, RegisterClass RCM1, RegisterClass RCM2> {
+multiclass RVM1m<string opcStr, bits<8> opc, RegisterClass RCM1,
+                 RegisterClass RCM2> {
   def m : RV<opc, (outs RCM1:$vx), (ins RCM1:$vy),
              !strconcat(opcStr, " $vx, $vy")>;
   let isCodeGenOnly = 1 in
@@ -801,7 +803,8 @@ multiclass RVMSbm<string opcStr, string argStr, bits<8>opc, dag dag_in> {
   }
 }
 let VE_VLIndex = 2 in
-multiclass RVMSm<string opcStr, bits<8> opc, RegisterClass RCM1, RegisterClass RCM2> {
+multiclass RVMSm<string opcStr, bits<8> opc, RegisterClass RCM1,
+                 RegisterClass RCM2> {
   defm m : RVMSbm<opcStr, " $vy", opc, (ins RCM1:$vy)>;
   let isCodeGenOnly = 1 in
   defm x : RVMSbm<opcStr, " $vy", opc, (ins RCM2:$vy)>;
