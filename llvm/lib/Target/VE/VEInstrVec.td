@@ -825,7 +825,7 @@ defm VADDSL : RVm<"vadds.l", 0x8b, V64, VM_, VM>;
 let cx = 0, cx2 = 0 in defm VSUBUL : RVm<"vsubu.l", 0xd8, V64, VM_, VM>;
 let cx = 0, cx2 = 1 in {
   defm PVSUBULO : RVm<"pvsubu.lo", 0xd8, V64, VM_, VM>;
-  let isCodeGenOnly = 1 in defm VSUBUS : RVm<"pvsubu.lo", 0xd8, V64, VM_, VM>;
+  let isCodeGenOnly = 1 in defm VSUBUW : RVm<"pvsubu.lo", 0xd8, V64, VM_, VM>;
 }
 let cx = 1, cx2 = 0 in defm PVSUBUUP : RVm<"pvsubu.up", 0xd8, V64, VM_, VM>;
 let cx = 1, cx2 = 1 in defm PVSUBU : RVm<"pvsubu", 0xd8, V64, VM512_, VM512>;
