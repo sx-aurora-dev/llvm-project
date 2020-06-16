@@ -252,8 +252,8 @@ static DecodeStatus DecodeCall(MCInst &Inst, uint64_t insn, uint64_t Address,
                                const void *Decoder);
 static DecodeStatus DecodeSIMM7(MCInst &Inst, uint64_t insn, uint64_t Address,
                                 const void *Decoder);
-static DecodeStatus DecodeSIMM32(MCInst &Inst, uint64_t insn,
-                                 uint64_t Address, const void *Decoder);
+static DecodeStatus DecodeSIMM32(MCInst &Inst, uint64_t insn, uint64_t Address,
+                                 const void *Decoder);
 static DecodeStatus DecodeCCOperand(MCInst &Inst, uint64_t insn,
                                     uint64_t Address, const void *Decoder);
 static DecodeStatus DecodeRDOperand(MCInst &Inst, uint64_t insn,
@@ -396,8 +396,8 @@ static DecodeStatus DecodeMem(MCInst &MI, uint64_t insn, uint64_t Address,
 }
 
 static DecodeStatus DecodeMemAS(MCInst &MI, uint64_t insn, uint64_t Address,
-                                const void *Decoder,
-                                bool isLoad, DecodeFunc DecodeSX) {
+                                const void *Decoder, bool isLoad,
+                                DecodeFunc DecodeSX) {
   unsigned sx = fieldFromInstruction(insn, 48, 7);
 
   DecodeStatus status;
@@ -462,8 +462,8 @@ static DecodeStatus DecodeStoreASI64(MCInst &Inst, uint64_t insn,
 }
 
 static DecodeStatus DecodeCAS(MCInst &MI, uint64_t insn, uint64_t Address,
-                              const void *Decoder, bool isImmOnly,
-                              bool isUImm, DecodeFunc DecodeSX) {
+                              const void *Decoder, bool isImmOnly, bool isUImm,
+                              DecodeFunc DecodeSX) {
   unsigned sx = fieldFromInstruction(insn, 48, 7);
   bool cy = fieldFromInstruction(insn, 47, 1);
   unsigned sy = fieldFromInstruction(insn, 40, 7);
@@ -535,8 +535,8 @@ static DecodeStatus DecodeSIMM7(MCInst &MI, uint64_t insn, uint64_t Address,
   return MCDisassembler::Success;
 }
 
-static DecodeStatus DecodeSIMM32(MCInst &MI, uint64_t insn,
-                                 uint64_t Address, const void *Decoder) {
+static DecodeStatus DecodeSIMM32(MCInst &MI, uint64_t insn, uint64_t Address,
+                                 const void *Decoder) {
   uint64_t tgt = SignExtend64<32>(insn);
   MI.addOperand(MCOperand::createImm(tgt));
   return MCDisassembler::Success;

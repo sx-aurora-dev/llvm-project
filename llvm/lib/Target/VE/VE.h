@@ -316,7 +316,7 @@ inline static const char *VERDToString(VERD::RoundingMode R) {
   }
 }
 
-inline static VERD::RoundingMode stringToVEIRD(StringRef S) {
+inline static VERD::RoundingMode stringToVERD(StringRef S) {
   return StringSwitch<VERD::RoundingMode>(S)
       .Case("", VERD::RD_NONE)
       .Case(".rz", VERD::RD_RZ)
@@ -345,13 +345,20 @@ inline static unsigned VERDToVal(VERD::RoundingMode R) {
 
 inline static VERD::RoundingMode VEValToRD(unsigned Val) {
   switch (Val) {
-  case static_cast<unsigned>(VERD::RD_NONE): return VERD::RD_NONE;
-  case static_cast<unsigned>(VERD::RD_RZ): return VERD::RD_RZ;
-  case static_cast<unsigned>(VERD::RD_RP): return VERD::RD_RP;
-  case static_cast<unsigned>(VERD::RD_RM): return VERD::RD_RM;
-  case static_cast<unsigned>(VERD::RD_RN): return VERD::RD_RN;
-  case static_cast<unsigned>(VERD::RD_RA): return VERD::RD_RA;
-  default: break;
+  case static_cast<unsigned>(VERD::RD_NONE):
+    return VERD::RD_NONE;
+  case static_cast<unsigned>(VERD::RD_RZ):
+    return VERD::RD_RZ;
+  case static_cast<unsigned>(VERD::RD_RP):
+    return VERD::RD_RP;
+  case static_cast<unsigned>(VERD::RD_RM):
+    return VERD::RD_RM;
+  case static_cast<unsigned>(VERD::RD_RN):
+    return VERD::RD_RN;
+  case static_cast<unsigned>(VERD::RD_RA):
+    return VERD::RD_RA;
+  default:
+    break;
   }
   llvm_unreachable("Invalid branch predicates");
   return VERD::UNKNOWN;

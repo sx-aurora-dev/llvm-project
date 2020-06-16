@@ -194,6 +194,8 @@ static void fixELFSymbolsInTLSFixupsImpl(const MCExpr *Expr, MCAssembler &Asm) {
   }
 
   case MCExpr::SymbolRef: {
+    // We're known to be under a TLS fixup, so any symbol should be
+    // modified. There should be only one.
     const MCSymbolRefExpr &SymRef = *cast<MCSymbolRefExpr>(Expr);
     cast<MCSymbolELF>(SymRef.getSymbol()).setType(ELF::STT_TLS);
     break;
@@ -210,7 +212,7 @@ void VEMCExpr::visitUsedExpr(MCStreamer &Streamer) const {
 }
 
 void VEMCExpr::fixELFSymbolsInTLSFixups(MCAssembler &Asm) const {
-  switch(getKind()) {
+  switch (getKind()) {
   default:
     return;
   case VK_VE_TLS_GD_HI32:

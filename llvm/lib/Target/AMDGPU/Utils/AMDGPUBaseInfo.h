@@ -197,6 +197,7 @@ struct MIMGBaseOpcodeInfo {
 
   uint8_t NumExtraArgs;
   bool Gradients;
+  bool G16;
   bool Coordinates;
   bool LodOrClampOrMip;
   bool HasD16;
@@ -233,11 +234,19 @@ struct MIMGMIPMappingInfo {
   MIMGBaseOpcode NONMIP;
 };
 
+struct MIMGG16MappingInfo {
+  MIMGBaseOpcode G;
+  MIMGBaseOpcode G16;
+};
+
 LLVM_READONLY
 const MIMGLZMappingInfo *getMIMGLZMappingInfo(unsigned L);
 
 LLVM_READONLY
-const MIMGMIPMappingInfo *getMIMGMIPMappingInfo(unsigned L);
+const MIMGMIPMappingInfo *getMIMGMIPMappingInfo(unsigned MIP);
+
+LLVM_READONLY
+const MIMGG16MappingInfo *getMIMGG16MappingInfo(unsigned G);
 
 LLVM_READONLY
 int getMIMGOpcode(unsigned BaseOpcode, unsigned MIMGEncoding,
@@ -541,6 +550,7 @@ bool hasXNACK(const MCSubtargetInfo &STI);
 bool hasSRAMECC(const MCSubtargetInfo &STI);
 bool hasMIMG_R128(const MCSubtargetInfo &STI);
 bool hasGFX10A16(const MCSubtargetInfo &STI);
+bool hasG16(const MCSubtargetInfo &STI);
 bool hasPackedD16(const MCSubtargetInfo &STI);
 
 bool isSI(const MCSubtargetInfo &STI);
@@ -548,6 +558,9 @@ bool isCI(const MCSubtargetInfo &STI);
 bool isVI(const MCSubtargetInfo &STI);
 bool isGFX9(const MCSubtargetInfo &STI);
 bool isGFX10(const MCSubtargetInfo &STI);
+bool isGCN3Encoding(const MCSubtargetInfo &STI);
+bool isGFX10_BEncoding(const MCSubtargetInfo &STI);
+bool hasGFX10_3Insts(const MCSubtargetInfo &STI);
 
 /// Is Reg - scalar register
 bool isSGPR(unsigned Reg, const MCRegisterInfo* TRI);

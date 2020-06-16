@@ -453,10 +453,8 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::FLOG10, MVT::f16, Custom);
   }
 
-  // v_mad_f32 does not support denormals. We report it as unconditionally
-  // legal, and the context where it is formed will disallow it when fp32
-  // denormals are enabled.
-  setOperationAction(ISD::FMAD, MVT::f32, Legal);
+  if (Subtarget->hasMadMacF32Insts())
+    setOperationAction(ISD::FMAD, MVT::f32, Legal);
 
   if (!Subtarget->hasBFI()) {
     // fcopysign can be done in a single instruction with BFI.
@@ -766,6 +764,9 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
   for (MVT VT : { MVT::v4i16, MVT::v4f16, MVT::v2i8, MVT::v4i8, MVT::v8i8 }) {
     setOperationAction(ISD::SELECT, VT, Custom);
   }
+
+  setOperationAction(ISD::SMULO, MVT::i64, Custom);
+  setOperationAction(ISD::UMULO, MVT::i64, Custom);
 
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::f32, Custom);
@@ -1125,6 +1126,17 @@ bool SITargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
     if (!Vol->isZero())
       Info.flags |= MachineMemOperand::MOVolatile;
 
+    return true;
+  }
+  case Intrinsic::amdgcn_global_atomic_csub: {
+    Info.opc = ISD::INTRINSIC_W_CHAIN;
+    Info.memVT = MVT::getVT(CI.getType());
+    Info.ptrVal = CI.getOperand(0);
+    Info.align.reset();
+    Info.flags = MachineMemOperand::MOLoad |
+                 MachineMemOperand::MOStore |
+                 MachineMemOperand::MODereferenceable |
+                 MachineMemOperand::MOVolatile;
     return true;
   }
   case Intrinsic::amdgcn_ds_gws_init:
@@ -4280,7 +4292,8 @@ bool SITargetLowering::isFMADLegal(const SelectionDAG &DAG,
   // v_mad_f32/v_mac_f32 do not support denormals.
   EVT VT = N->getValueType(0);
   if (VT == MVT::f32)
-    return !hasFP32Denormals(DAG.getMachineFunction());
+    return Subtarget->hasMadMacF32Insts() &&
+           !hasFP32Denormals(DAG.getMachineFunction());
   if (VT == MVT::f16) {
     return Subtarget->hasMadF16() &&
            !hasFP64FP16Denormals(DAG.getMachineFunction());
@@ -4430,6 +4443,9 @@ SDValue SITargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::FMINNUM_IEEE:
   case ISD::FMAXNUM_IEEE:
     return splitBinaryVectorOp(Op, DAG);
+  case ISD::SMULO:
+  case ISD::UMULO:
+    return lowerXMULO(Op, DAG);
   case ISD::DYNAMIC_STACKALLOC:
     return LowerDYNAMIC_STACKALLOC(Op, DAG);
   }
@@ -4987,6 +5003,42 @@ SDValue SITargetLowering::lowerFMINNUM_FMAXNUM(SDValue Op,
   if (VT == MVT::v4f16)
     return splitBinaryVectorOp(Op, DAG);
   return Op;
+}
+
+SDValue SITargetLowering::lowerXMULO(SDValue Op, SelectionDAG &DAG) const {
+  EVT VT = Op.getValueType();
+  SDLoc SL(Op);
+  SDValue LHS = Op.getOperand(0);
+  SDValue RHS = Op.getOperand(1);
+  bool isSigned = Op.getOpcode() == ISD::SMULO;
+
+  if (ConstantSDNode *RHSC = isConstOrConstSplat(RHS)) {
+    const APInt &C = RHSC->getAPIntValue();
+    // mulo(X, 1 << S) -> { X << S, (X << S) >> S != X }
+    if (C.isPowerOf2()) {
+      // smulo(x, signed_min) is same as umulo(x, signed_min).
+      bool UseArithShift = isSigned && !C.isMinSignedValue();
+      SDValue ShiftAmt = DAG.getConstant(C.logBase2(), SL, MVT::i32);
+      SDValue Result = DAG.getNode(ISD::SHL, SL, VT, LHS, ShiftAmt);
+      SDValue Overflow = DAG.getSetCC(SL, MVT::i1,
+          DAG.getNode(UseArithShift ? ISD::SRA : ISD::SRL,
+                      SL, VT, Result, ShiftAmt),
+          LHS, ISD::SETNE);
+      return DAG.getMergeValues({ Result, Overflow }, SL);
+    }
+  }
+
+  SDValue Result = DAG.getNode(ISD::MUL, SL, VT, LHS, RHS);
+  SDValue Top = DAG.getNode(isSigned ? ISD::MULHS : ISD::MULHU,
+                            SL, VT, LHS, RHS);
+
+  SDValue Sign = isSigned
+    ? DAG.getNode(ISD::SRA, SL, VT, Result,
+                  DAG.getConstant(VT.getScalarSizeInBits() - 1, SL, MVT::i32))
+    : DAG.getConstant(0, SL, VT);
+  SDValue Overflow = DAG.getSetCC(SL, MVT::i1, Top, Sign, ISD::SETNE);
+
+  return DAG.getMergeValues({ Result, Overflow }, SL);
 }
 
 SDValue SITargetLowering::lowerTRAP(SDValue Op, SelectionDAG &DAG) const {
@@ -5702,6 +5754,35 @@ static bool parseTexFail(SDValue TexFailCtrl, SelectionDAG &DAG, SDValue *TFE,
   return Value == 0;
 }
 
+static void packImageA16AddressToDwords(SelectionDAG &DAG, SDValue Op,
+                                        MVT PackVectorVT,
+                                        SmallVectorImpl<SDValue> &PackedAddrs,
+                                        unsigned DimIdx, unsigned EndIdx,
+                                        unsigned NumGradients) {
+  SDLoc DL(Op);
+  for (unsigned I = DimIdx; I < EndIdx; I++) {
+    SDValue Addr = Op.getOperand(I);
+
+    // Gradients are packed with undef for each coordinate.
+    // In <hi 16 bit>,<lo 16 bit> notation, the registers look like this:
+    // 1D: undef,dx/dh; undef,dx/dv
+    // 2D: dy/dh,dx/dh; dy/dv,dx/dv
+    // 3D: dy/dh,dx/dh; undef,dz/dh; dy/dv,dx/dv; undef,dz/dv
+    if (((I + 1) >= EndIdx) ||
+        ((NumGradients / 2) % 2 == 1 && (I == DimIdx + (NumGradients / 2) - 1 ||
+                                         I == DimIdx + NumGradients - 1))) {
+      if (Addr.getValueType() != MVT::i16)
+        Addr = DAG.getBitcast(MVT::i16, Addr);
+      Addr = DAG.getNode(ISD::ANY_EXTEND, DL, MVT::i32, Addr);
+    } else {
+      Addr = DAG.getBuildVector(PackVectorVT, DL, {Addr, Op.getOperand(I + 1)});
+      I++;
+    }
+    Addr = DAG.getBitcast(MVT::f32, Addr);
+    PackedAddrs.push_back(Addr);
+  }
+}
+
 SDValue SITargetLowering::lowerImage(SDValue Op,
                                      const AMDGPU::ImageDimIntrinsicInfo *Intr,
                                      SelectionDAG &DAG) const {
@@ -5721,6 +5802,7 @@ SDValue SITargetLowering::lowerImage(SDValue Op,
   SmallVector<EVT, 3> ResultTypes(Op->value_begin(), Op->value_end());
   SmallVector<EVT, 3> OrigResultTypes(Op->value_begin(), Op->value_end());
   bool IsD16 = false;
+  bool IsG16 = false;
   bool IsA16 = false;
   SDValue VData;
   int NumVDataDwords;
@@ -5827,45 +5909,67 @@ SDValue SITargetLowering::lowerImage(SDValue Op,
     }
   }
 
-  // Check for 16 bit addresses and pack if true.
-  unsigned DimIdx = AddrIdx + BaseOpcode->NumExtraArgs;
-  MVT VAddrVT = Op.getOperand(DimIdx).getSimpleValueType();
-  const MVT VAddrScalarVT = VAddrVT.getScalarType();
-  if (((VAddrScalarVT == MVT::f16) || (VAddrScalarVT == MVT::i16))) {
-    // Illegal to use a16 images
-    if (!ST->hasFeature(AMDGPU::FeatureR128A16) && !ST->hasFeature(AMDGPU::FeatureGFX10A16))
-      return Op;
+  // Push back extra arguments.
+  for (unsigned I = 0; I < BaseOpcode->NumExtraArgs; I++)
+    VAddrs.push_back(Op.getOperand(AddrIdx + I));
 
-    IsA16 = true;
-    const MVT VectorVT = VAddrScalarVT == MVT::f16 ? MVT::v2f16 : MVT::v2i16;
-    for (unsigned i = AddrIdx; i < (AddrIdx + NumMIVAddrs); ++i) {
-      SDValue AddrLo;
-      // Push back extra arguments.
-      if (i < DimIdx) {
-        AddrLo = Op.getOperand(i);
-      } else {
-        // Dz/dh, dz/dv and the last odd coord are packed with undef. Also,
-        // in 1D, derivatives dx/dh and dx/dv are packed with undef.
-        if (((i + 1) >= (AddrIdx + NumMIVAddrs)) ||
-            ((NumGradients / 2) % 2 == 1 &&
-            (i == DimIdx + (NumGradients / 2) - 1 ||
-             i == DimIdx + NumGradients - 1))) {
-          AddrLo = Op.getOperand(i);
-          if (AddrLo.getValueType() != MVT::i16)
-            AddrLo = DAG.getBitcast(MVT::i16, Op.getOperand(i));
-          AddrLo = DAG.getNode(ISD::ANY_EXTEND, DL, MVT::i32, AddrLo);
-        } else {
-          AddrLo = DAG.getBuildVector(VectorVT, DL,
-                                      {Op.getOperand(i), Op.getOperand(i + 1)});
-          i++;
-        }
-        AddrLo = DAG.getBitcast(MVT::f32, AddrLo);
+  // Check for 16 bit addresses or derivatives and pack if true.
+  unsigned DimIdx = AddrIdx + BaseOpcode->NumExtraArgs;
+  unsigned CoordIdx = DimIdx + NumGradients;
+  unsigned CoordsEnd = AddrIdx + NumMIVAddrs;
+
+  MVT VAddrVT = Op.getOperand(DimIdx).getSimpleValueType();
+  MVT VAddrScalarVT = VAddrVT.getScalarType();
+  MVT PackVectorVT = VAddrScalarVT == MVT::f16 ? MVT::v2f16 : MVT::v2i16;
+  IsG16 = VAddrScalarVT == MVT::f16 || VAddrScalarVT == MVT::i16;
+
+  VAddrVT = Op.getOperand(CoordIdx).getSimpleValueType();
+  VAddrScalarVT = VAddrVT.getScalarType();
+  IsA16 = VAddrScalarVT == MVT::f16 || VAddrScalarVT == MVT::i16;
+  if (IsA16 || IsG16) {
+    if (IsA16) {
+      if (!ST->hasA16()) {
+        LLVM_DEBUG(dbgs() << "Failed to lower image intrinsic: Target does not "
+                             "support 16 bit addresses\n");
+        return Op;
       }
-      VAddrs.push_back(AddrLo);
+      if (!IsG16) {
+        LLVM_DEBUG(
+            dbgs() << "Failed to lower image intrinsic: 16 bit addresses "
+                      "need 16 bit derivatives but got 32 bit derivatives\n");
+        return Op;
+      }
+    } else if (!ST->hasG16()) {
+      LLVM_DEBUG(dbgs() << "Failed to lower image intrinsic: Target does not "
+                           "support 16 bit derivatives\n");
+      return Op;
+    }
+
+    if (BaseOpcode->Gradients && !IsA16) {
+      if (!ST->hasG16()) {
+        LLVM_DEBUG(dbgs() << "Failed to lower image intrinsic: Target does not "
+                             "support 16 bit derivatives\n");
+        return Op;
+      }
+      // Activate g16
+      const AMDGPU::MIMGG16MappingInfo *G16MappingInfo =
+          AMDGPU::getMIMGG16MappingInfo(Intr->BaseOpcode);
+      IntrOpcode = G16MappingInfo->G16; // set new opcode to variant with _g16
+    }
+
+    // Don't compress addresses for G16
+    const int PackEndIdx = IsA16 ? CoordsEnd : CoordIdx;
+    packImageA16AddressToDwords(DAG, Op, PackVectorVT, VAddrs, DimIdx,
+                                PackEndIdx, NumGradients);
+
+    if (!IsA16) {
+      // Add uncompressed address
+      for (unsigned I = CoordIdx; I < CoordsEnd; I++)
+        VAddrs.push_back(Op.getOperand(I));
     }
   } else {
-    for (unsigned i = 0; i < NumMIVAddrs; ++i)
-      VAddrs.push_back(Op.getOperand(AddrIdx + i));
+    for (unsigned I = DimIdx; I < CoordsEnd; I++)
+      VAddrs.push_back(Op.getOperand(I));
   }
 
   // If the register allocator cannot place the address registers contiguously
@@ -6765,6 +6869,7 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   case Intrinsic::amdgcn_buffer_atomic_swap:
   case Intrinsic::amdgcn_buffer_atomic_add:
   case Intrinsic::amdgcn_buffer_atomic_sub:
+  case Intrinsic::amdgcn_buffer_atomic_csub:
   case Intrinsic::amdgcn_buffer_atomic_smin:
   case Intrinsic::amdgcn_buffer_atomic_umin:
   case Intrinsic::amdgcn_buffer_atomic_smax:
@@ -6806,6 +6911,9 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
       break;
     case Intrinsic::amdgcn_buffer_atomic_sub:
       Opcode = AMDGPUISD::BUFFER_ATOMIC_SUB;
+      break;
+    case Intrinsic::amdgcn_buffer_atomic_csub:
+      Opcode = AMDGPUISD::BUFFER_ATOMIC_CSUB;
       break;
     case Intrinsic::amdgcn_buffer_atomic_smin:
       Opcode = AMDGPUISD::BUFFER_ATOMIC_SMIN;
@@ -7054,6 +7162,18 @@ SDValue SITargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
 
     return DAG.getMemIntrinsicNode(AMDGPUISD::BUFFER_ATOMIC_CMPSWAP, DL,
                                    Op->getVTList(), Ops, VT, M->getMemOperand());
+  }
+  case Intrinsic::amdgcn_global_atomic_csub: {
+    MemSDNode *M = cast<MemSDNode>(Op);
+    SDValue Ops[] = {
+      M->getOperand(0), // Chain
+      M->getOperand(2), // Ptr
+      M->getOperand(3)  // Value
+    };
+
+    return DAG.getMemIntrinsicNode(AMDGPUISD::ATOMIC_LOAD_CSUB, SDLoc(Op),
+                                   M->getVTList(), Ops, M->getMemoryVT(),
+                                   M->getMemOperand());
   }
 
   default:
@@ -8864,7 +8984,7 @@ SDValue SITargetLowering::performOrCombine(SDNode *N,
     }
   }
 
-  if (VT != MVT::i64)
+  if (VT != MVT::i64 || DCI.isBeforeLegalizeOps())
     return SDValue();
 
   // TODO: This could be a generic combine with a predicate for extracting the

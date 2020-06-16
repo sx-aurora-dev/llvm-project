@@ -56,9 +56,23 @@ def dup: GICombineRule <
   (apply [{ applyShuffleVectorPseudo(*${root}, ${matchinfo}); }])
 >;
 
+def trn : GICombineRule<
+  (defs root:$root, shuffle_matchdata:$matchinfo),
+  (match (wip_match_opcode G_SHUFFLE_VECTOR):$root,
+         [{ return matchTRN(*${root}, MRI, ${matchinfo}); }]),
+  (apply [{ applyShuffleVectorPseudo(*${root}, ${matchinfo}); }])
+>;
+
+def ext: GICombineRule <
+  (defs root:$root, shuffle_matchdata:$matchinfo),
+  (match (wip_match_opcode G_SHUFFLE_VECTOR):$root,
+         [{ return matchEXT(*${root}, MRI, ${matchinfo}); }]),
+  (apply [{ applyEXT(*${root}, ${matchinfo}); }])
+>;
+
 // Combines which replace a G_SHUFFLE_VECTOR with a target-specific pseudo
 // instruction.
-def shuffle_vector_pseudos : GICombineGroup<[dup, rev, zip, uzp]>;
+def shuffle_vector_pseudos : GICombineGroup<[dup, rev, ext, zip, uzp, trn]>;
 
 def AArch64PostLegalizerCombinerHelper
     : GICombinerHelper<"AArch64GenPostLegalizerCombinerHelper",
