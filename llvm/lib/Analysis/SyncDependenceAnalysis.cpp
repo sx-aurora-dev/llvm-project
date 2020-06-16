@@ -1,5 +1,4 @@
-//===- SyncDependenceAnalysis.cpp - Divergent Branch Dependence Calculation
-//--===//
+//===--- SyncDependenceAnalysis.cpp - Compute Control Divergence Effects --===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -99,28 +98,131 @@
 // loop exit and the loop header (_after_ SSA construction).
 //
 //===----------------------------------------------------------------------===//
+#include "llvm/Analysis/SyncDependenceAnalysis.h"
 #include "llvm/ADT/PostOrderIterator.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/PostDominators.h"
-#include "llvm/Analysis/SyncDependenceAnalysis.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
 
+#include <functional>
 #include <stack>
 #include <unordered_set>
 
 #define DEBUG_TYPE "sync-dependence"
 
+// Custom RPO framework
+namespace {
+using namespace llvm;
+
+using RPOCB = std::function<void(const BasicBlock &)>;
+using VisitedSet = std::set<const BasicBlock *>;
+using BlockStack = std::vector<const BasicBlock *>;
+
+// forward
+static void ComputeLoopPO(const LoopInfo &LI, Loop &Loop, RPOCB CallBack,
+                          VisitedSet &Finalized);
+
+// for a nested region (top-level loop or nested loop)
+static void ComputeStackPO(BlockStack &Stack, const LoopInfo &LI,
+                           const BasicBlock *LoopHead, Loop *Loop,
+                           RPOCB CallBack, VisitedSet &Finalized) {
+  while (!Stack.empty()) {
+    const auto *NextBB = Stack.back();
+
+    auto *NestedLoop = LI.getLoopFor(NextBB);
+    bool IsNestedLoop = NestedLoop != Loop;
+
+    // Treat the loop as a node
+    if (IsNestedLoop) {
+      SmallVector<BasicBlock *, 3> NestedExits;
+      NestedLoop->getUniqueExitBlocks(NestedExits);
+      bool PushedNodes = false;
+      for (const auto *NestedExitBB : NestedExits) {
+        if (NestedExitBB == LoopHead)
+          continue;
+        if (Loop && !Loop->contains(NestedExitBB))
+          continue;
+        if (Finalized.count(NestedExitBB))
+          continue;
+        PushedNodes = true;
+        Stack.push_back(NestedExitBB);
+      }
+      if (!PushedNodes) {
+        // All loop exits finalized -> finish this node
+        Stack.pop_back();
+        ComputeLoopPO(LI, *NestedLoop, CallBack, Finalized);
+      }
+      continue;
+    }
+
+    // DAG-style
+    bool PushedNodes = false;
+    for (const auto *SuccBB : successors(NextBB)) {
+      if (SuccBB == LoopHead)
+        continue;
+      if (Loop && !Loop->contains(SuccBB))
+        continue;
+      if (Finalized.count(SuccBB))
+        continue;
+      PushedNodes = true;
+      Stack.push_back(SuccBB);
+    }
+    if (!PushedNodes) {
+      Finalized.insert(NextBB);
+      CallBack(*NextBB);
+      Stack.pop_back();
+    }
+  }
+}
+
+static void ComputeTopLevelPO(Function &F, const LoopInfo &LI, RPOCB CallBack) {
+  VisitedSet Finalized;
+  BlockStack Stack;
+  Stack.push_back(&F.getEntryBlock());
+  ComputeStackPO(Stack, LI, nullptr, nullptr, CallBack, Finalized);
+}
+
+static void ComputeLoopPO(const LoopInfo &LI, Loop &Loop, RPOCB CallBack,
+                          VisitedSet &Finalized) {
+  /// \brief Call CallBack on all loop blocks in the modified CFG
+  std::vector<const BasicBlock *> Stack;
+  const auto *LoopHead = Loop.getHeader();
+
+  // Visit the header last
+  Finalized.insert(LoopHead);
+  CallBack(*LoopHead);
+
+  // Initialize with immediate successors
+  for (const auto *BB : successors(LoopHead)) {
+    if (!Loop.contains(BB))
+      continue;
+    if (BB == LoopHead)
+      continue;
+    Stack.push_back(BB);
+  }
+
+  // Compute PO inside region
+  ComputeStackPO(Stack, LI, LoopHead, &Loop, CallBack, Finalized);
+}
+
+} // namespace
+
 namespace llvm {
 
-ConstBlockSet SyncDependenceAnalysis::EmptyBlockSet;
+ControlDivergenceDesc SyncDependenceAnalysis::EmptyDivergenceDesc;
 
 SyncDependenceAnalysis::SyncDependenceAnalysis(const DominatorTree &DT,
                                                const PostDominatorTree &PDT,
                                                const LoopInfo &LI)
-    : FuncRPOT(DT.getRoot()->getParent()), DT(DT), PDT(PDT), LI(LI) {}
+    : LoopRPO(), DT(DT), PDT(PDT), LI(LI) {
+  ComputeTopLevelPO(*DT.getRoot()->getParent(), LI, [&](const BasicBlock &BB) {
+    // errs() << BB.getName() << "\n";
+    LoopRPO.appendBlock(BB);
+  });
+}
 
 SyncDependenceAnalysis::~SyncDependenceAnalysis() {}
 
@@ -128,13 +230,14 @@ using FunctionRPOT = ReversePostOrderTraversal<const Function *>;
 
 // divergence propagator for reducible CFGs
 struct DivergencePropagator {
-  const FunctionRPOT &FuncRPOT;
+  const ModifiedRPO &LoopRPOT;
   const DominatorTree &DT;
   const PostDominatorTree &PDT;
   const LoopInfo &LI;
+  const BasicBlock &DivTermBlock;
 
-  // identified join points
-  std::unique_ptr<ConstBlockSet> JoinBlocks;
+  // divergent join and loop exit descriptor.
+  std::unique_ptr<ControlDivergenceDesc> DivDesc;
 
   // reached loop exits (by a path disjoint to a path to the loop header)
   SmallPtrSet<const BasicBlock *, 4> ReachedLoopExits;
@@ -149,10 +252,11 @@ struct DivergencePropagator {
   // all blocks with pending visits
   std::unordered_set<const BasicBlock *> PendingUpdates;
 
-  DivergencePropagator(const FunctionRPOT &FuncRPOT, const DominatorTree &DT,
-                       const PostDominatorTree &PDT, const LoopInfo &LI)
-      : FuncRPOT(FuncRPOT), DT(DT), PDT(PDT), LI(LI),
-        JoinBlocks(new ConstBlockSet) {}
+  DivergencePropagator(const ModifiedRPO &LoopRPOT, const DominatorTree &DT,
+                       const PostDominatorTree &PDT, const LoopInfo &LI,
+                       const BasicBlock &DivTermBlock)
+      : LoopRPOT(LoopRPOT), DT(DT), PDT(PDT), LI(LI),
+        DivTermBlock(DivTermBlock), DivDesc(new ControlDivergenceDesc) {}
 
   // set the definition at @block and mark @block as pending for a visit
   void addPending(const BasicBlock &Block, const BasicBlock &DefBlock) {
@@ -163,7 +267,7 @@ struct DivergencePropagator {
 
   void printDefs(raw_ostream &Out) {
     Out << "Propagator::DefMap {\n";
-    for (const auto *Block : FuncRPOT) {
+    for (const auto *Block : LoopRPOT.LoopRPO) {
       auto It = DefMap.find(Block);
       Out << Block->getName() << " : ";
       if (It == DefMap.end()) {
@@ -176,86 +280,88 @@ struct DivergencePropagator {
     Out << "}\n";
   }
 
-  // process @succBlock with reaching definition @defBlock
-  // the original divergent branch was in @parentLoop (if any)
-  void visitSuccessor(const BasicBlock &SuccBlock, const Loop *ParentLoop,
-                      const BasicBlock &DefBlock) {
-
-    // @succBlock is a loop exit
-    if (ParentLoop && !ParentLoop->contains(&SuccBlock)) {
-      DefMap.emplace(&SuccBlock, &DefBlock);
-      ReachedLoopExits.insert(&SuccBlock);
-      return;
-    }
-
+  // Push a definition (\p DefBlock) to \p SuccBlock and return whether this
+  // raises the definition to '\top'
+  bool computeJoin(const BasicBlock &SuccBlock, const BasicBlock &DefBlock) {
     // first reaching def?
     auto ItLastDef = DefMap.find(&SuccBlock);
     if (ItLastDef == DefMap.end()) {
       addPending(SuccBlock, DefBlock);
-      return;
+      return false;
     }
 
     // a join of at least two definitions
-    if (ItLastDef->second != &DefBlock) {
-      // do we know this join already?
-      if (!JoinBlocks->insert(&SuccBlock).second)
-        return;
+    if (ItLastDef->second == &DefBlock)
+      return false; // No definition update
 
-      // update the definition
-      addPending(SuccBlock, SuccBlock);
-    }
+    // Update the definition
+    addPending(SuccBlock, SuccBlock);
+    return true;
   }
 
-  // find all blocks reachable by two disjoint paths from @rootTerm.
-  // This method works for both divergent terminators and loops with
-  // divergent exits.
-  // @rootBlock is either the block containing the branch or the header of the
-  // divergent loop.
-  // @nodeSuccessors is the set of successors of the node (Loop or Terminator)
-  // headed by @rootBlock.
-  // @parentLoop is the parent loop of the Loop or the loop that contains the
-  // Terminator.
-  template <typename SuccessorIterable>
-  std::unique_ptr<ConstBlockSet>
-  computeJoinPoints(const BasicBlock &RootBlock,
-                    SuccessorIterable NodeSuccessors, const Loop *ParentLoop) {
-    assert(JoinBlocks);
+  // visiting a virtual loop exit edge from the loop header --> temporal
+  // divergence on join
+  void visitLoopExitEdge(const BasicBlock &ExitBlock,
+                         const BasicBlock &DefBlock, bool FromParentLoop) {
+    // Pushing from a non-parent loop cannot cause temporal divergence.
+    if (!FromParentLoop)
+      return visitEdge(ExitBlock, DefBlock);
 
-    LLVM_DEBUG(dbgs() << "SDA:computeJoinPoints. Parent loop: " << (ParentLoop ? ParentLoop->getName() : "<null>") << "\n" );
+    if (!computeJoin(ExitBlock, DefBlock))
+      return;
+
+    // Identified a divergent loop exit
+    DivDesc->LoopDivBlocks.insert(&ExitBlock);
+    LLVM_DEBUG(dbgs() << "\tDivergent loop exit: " << ExitBlock.getName());
+  }
+
+  // process \p succBlock with reaching definition @defBlock
+  // the original divergent branch was in @parentLoop (if any)
+  void visitEdge(const BasicBlock &SuccBlock, const BasicBlock &DefBlock) {
+    if (!computeJoin(SuccBlock, DefBlock))
+      return;
+
+    // Divergent, disjoint paths join.
+    DivDesc->JoinDivBlocks.insert(&SuccBlock);
+    LLVM_DEBUG(dbgs() << "\tDivergent join: " << SuccBlock.getName());
+  }
+
+  std::unique_ptr<ControlDivergenceDesc> computeJoinPoints() {
+    assert(DivDesc);
+
+    LLVM_DEBUG(dbgs() << "SDA:computeJoinPoints: " << DivTermBlock.getName()
+                      << "\n");
+
+    const auto *DivBlockLoop = LI.getLoopFor(&DivTermBlock);
 
     // bootstrap with branch targets
-    for (const auto *SuccBlock : NodeSuccessors) {
+    int BlockIdx = 0;
+    for (const auto *SuccBlock : successors(&DivTermBlock)) {
       DefMap.emplace(SuccBlock, SuccBlock);
 
-      if (ParentLoop && !ParentLoop->contains(SuccBlock)) {
-        // immediate loop exit from node.
-        ReachedLoopExits.insert(SuccBlock);
-      } else {
-        // regular successor
-        PendingUpdates.insert(SuccBlock);
-      }
-    }
+      // regular successor
+      PendingUpdates.insert(SuccBlock);
 
-    LLVM_DEBUG(
-      dbgs() << "SDA: rpo order:\n";
-      for (const auto * RpoBlock : FuncRPOT) {
-        dbgs() << "- " << RpoBlock->getName() << "\n";
-      }
-    );
+      // Find the successor with the highest index to start with
+      BlockIdx = std::max<int>(BlockIdx, LoopRPOT.getIndexOf(*SuccBlock));
 
-    auto ItBeginRPO = FuncRPOT.begin();
-    auto ItEndRPO = FuncRPOT.end();
+      // Identify immediate divergent loop exits
+      if (!DivBlockLoop)
+        continue;
 
-    // skip until term (TODO RPOT won't let us start at @term directly)
-    for (; *ItBeginRPO != &RootBlock; ++ItBeginRPO) {
-      assert(ItBeginRPO != ItEndRPO && "Unable to find RootBlock");
+      const auto *BlockLoop = LI.getLoopFor(SuccBlock);
+      if (BlockLoop && DivBlockLoop->contains(BlockLoop))
+        continue;
+      DivDesc->LoopDivBlocks.insert(SuccBlock);
+      LLVM_DEBUG(dbgs() << "\tImmediate divergent loop exit: "
+                        << SuccBlock->getName() << "\n");
     }
 
     // propagate definitions at the immediate successors of the node in RPO
-    auto ItBlockRPO = ItBeginRPO;
-    while ((++ItBlockRPO != ItEndRPO) &&
-           !PendingUpdates.empty()) {
-      const auto *Block = *ItBlockRPO;
+    for (; BlockIdx >= 0 && !PendingUpdates.empty(); --BlockIdx) {
+      LLVM_DEBUG(dbgs() << "Before next visit:\n"; printDefs(dbgs()));
+
+      const auto *Block = LoopRPOT.getBlockAt(BlockIdx);
       LLVM_DEBUG(dbgs() << "SDA::joins. visiting " << Block->getName() << "\n");
 
       // skip Block if not pending update
@@ -270,109 +376,67 @@ struct DivergencePropagator {
       assert(DefBlock);
 
       auto *BlockLoop = LI.getLoopFor(Block);
-      if (ParentLoop &&
-          (ParentLoop != BlockLoop && ParentLoop->contains(BlockLoop))) {
-        // if the successor is the header of a nested loop pretend its a
-        // single node with the loop's exits as successors
+      bool IsLoopHeader = BlockLoop && BlockLoop->getHeader() == Block;
+      if (IsLoopHeader) {
+        // Disconnect from immediate successors and propagate directly to loop
+        // exits.
         SmallVector<BasicBlock *, 4> BlockLoopExits;
         BlockLoop->getExitBlocks(BlockLoopExits);
-        for (const auto *BlockLoopExit : BlockLoopExits) {
-          visitSuccessor(*BlockLoopExit, ParentLoop, *DefBlock);
-        }
 
+        bool IsParentLoop = BlockLoop->contains(&DivTermBlock);
+        for (const auto *BlockLoopExit : BlockLoopExits) {
+          visitLoopExitEdge(*BlockLoopExit, *DefBlock, IsParentLoop);
+        }
       } else {
-        // the successors are either on the same loop level or loop exits
         for (const auto *SuccBlock : successors(Block)) {
-          visitSuccessor(*SuccBlock, ParentLoop, *DefBlock);
+          visitEdge(*SuccBlock, *DefBlock);
         }
       }
     }
 
     LLVM_DEBUG(dbgs() << "SDA::joins. After propagation:\n"; printDefs(dbgs()));
 
-    // We need to know the definition at the parent loop header to decide
-    // whether the definition at the header is different from the definition at
-    // the loop exits, which would indicate a divergent loop exits.
-    //
-    // A // loop header
-    // |
-    // B // nested loop header
-    // |
-    // C -> X (exit from B loop) -..-> (A latch)
-    // |
-    // D -> back to B (B latch)
-    // |
-    // proper exit from both loops
-    //
-    // analyze reached loop exits
-    if (!ReachedLoopExits.empty()) {
-      const BasicBlock *ParentLoopHeader =
-          ParentLoop ? ParentLoop->getHeader() : nullptr;
-
-      assert(ParentLoop);
-      auto ItHeaderDef = DefMap.find(ParentLoopHeader);
-      const auto *HeaderDefBlock = (ItHeaderDef == DefMap.end()) ? nullptr : ItHeaderDef->second;
-
-      LLVM_DEBUG(printDefs(dbgs()));
-      assert(HeaderDefBlock && "no definition at header of carrying loop");
-
-      for (const auto *ExitBlock : ReachedLoopExits) {
-        auto ItExitDef = DefMap.find(ExitBlock);
-        assert((ItExitDef != DefMap.end()) &&
-               "no reaching def at reachable loop exit");
-        if (ItExitDef->second != HeaderDefBlock) {
-          JoinBlocks->insert(ExitBlock);
-        }
-      }
-    }
-
-    return std::move(JoinBlocks);
+    return std::move(DivDesc);
   }
 };
 
-const ConstBlockSet &SyncDependenceAnalysis::join_blocks(const Loop &Loop) {
-  using LoopExitVec = SmallVector<BasicBlock *, 4>;
-  LoopExitVec LoopExits;
-  Loop.getExitBlocks(LoopExits);
-  if (LoopExits.size() < 1) {
-    return EmptyBlockSet;
+static void PrintBlockSet(ConstBlockSet &Blocks, raw_ostream &Out) {
+  Out << "[";
+  bool First = true;
+  for (const auto *BB : Blocks) {
+    if (!First)
+      Out << ", ";
+    First = false;
+    Out << BB->getName();
   }
-
-  // already available in cache?
-  auto ItCached = CachedLoopExitJoins.find(&Loop);
-  if (ItCached != CachedLoopExitJoins.end()) {
-    return *ItCached->second;
-  }
-
-  // compute all join points
-  DivergencePropagator Propagator{FuncRPOT, DT, PDT, LI};
-  auto JoinBlocks = Propagator.computeJoinPoints<const LoopExitVec &>(
-      *Loop.getHeader(), LoopExits, Loop.getParentLoop());
-
-  auto ItInserted = CachedLoopExitJoins.emplace(&Loop, std::move(JoinBlocks));
-  assert(ItInserted.second);
-  return *ItInserted.first->second;
+  Out << "]";
 }
 
-const ConstBlockSet &
+const ControlDivergenceDesc &
 SyncDependenceAnalysis::join_blocks(const Instruction &Term) {
   // trivial case
-  if (Term.getNumSuccessors() < 1) {
-    return EmptyBlockSet;
+  if (Term.getNumSuccessors() <= 1) {
+    return EmptyDivergenceDesc;
   }
 
   // already available in cache?
-  auto ItCached = CachedBranchJoins.find(&Term);
-  if (ItCached != CachedBranchJoins.end())
+  auto ItCached = CachedControlDivDescs.find(&Term);
+  if (ItCached != CachedControlDivDescs.end())
     return *ItCached->second;
 
   // compute all join points
-  DivergencePropagator Propagator{FuncRPOT, DT, PDT, LI};
+  // Special handling of divergent loop exits is not needed for LCSSA
   const auto &TermBlock = *Term.getParent();
-  auto JoinBlocks = Propagator.computeJoinPoints<const_succ_range>(
-      TermBlock, successors(Term.getParent()), LI.getLoopFor(&TermBlock));
+  DivergencePropagator Propagator(LoopRPO, DT, PDT, LI, TermBlock);
+  auto DivDesc = Propagator.computeJoinPoints();
 
-  auto ItInserted = CachedBranchJoins.emplace(&Term, std::move(JoinBlocks));
+  LLVM_DEBUG(dbgs() << "Result (" << Term.getParent()->getName() << "):\n";
+             dbgs() << "JoinDivBlocks: ";
+             PrintBlockSet(DivDesc->JoinDivBlocks, dbgs());
+             dbgs() << "\nLoopDivBlocks: ";
+             PrintBlockSet(DivDesc->LoopDivBlocks, dbgs()); dbgs() << "\n";);
+
+  auto ItInserted = CachedControlDivDescs.emplace(&Term, std::move(DivDesc));
   assert(ItInserted.second);
   return *ItInserted.first->second;
 }
