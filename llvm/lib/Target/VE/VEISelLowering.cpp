@@ -1019,12 +1019,18 @@ bool VETargetLowering::hasAndNot(SDValue Y) const {
   if (VT.isVector())
     return false;
 
-  // VE has scalar and not instruction which support simm7 in Y, where ~Y & Z.
-  if (ConstantSDNode *C = dyn_cast<ConstantSDNode>(Y)) {
-    if (isInt<7>(C->getSExtValue()))
-      return true;
+  // VE allows different immediate values for X and Y where ~X & Y.
+  // Only simm7 works for X, and only mimm works for Y on VE.  However, this
+  // function is used to check whether an immediate value is OK for and-not
+  // instruction as both X and Y.  Generating additional instruction to
+  // retrieve an immediate value is no good since the purpose of this
+  // function is to convert a series of 3 instructions to another series of
+  // 3 instructions with better parallelism.  Therefore, we return false
+  // for all immediate values now.
+  // FIXME: Change hasAndNot function to have two operands to make it work
+  //        correctly with Aurora VE.
+  if (auto *C = dyn_cast<ConstantSDNode>(Y))
     return false;
-  }
 
   // It's ok for generic registers.
   return true;

@@ -37,6 +37,7 @@
 using namespace llvm;
 using namespace llvm::MachO;
 using namespace llvm::sys;
+using namespace llvm::opt;
 using namespace lld;
 using namespace lld::macho;
 
@@ -74,20 +75,27 @@ opt::InputArgList MachOOptTable::parse(ArrayRef<const char *> argv) {
   return args;
 }
 
+void MachOOptTable::printHelp(const char *argv0, bool showHidden) const {
+  PrintHelp(lld::outs(), (std::string(argv0) + " [options] file...").c_str(),
+            "LLVM Linker", showHidden);
+  lld::outs() << "\n";
+}
+
 static Optional<std::string> findLibrary(StringRef name) {
+  std::string stub = (llvm::Twine("lib") + name + ".tbd").str();
   std::string shared = (llvm::Twine("lib") + name + ".dylib").str();
   std::string archive = (llvm::Twine("lib") + name + ".a").str();
   llvm::SmallString<260> location;
 
   for (StringRef dir : config->searchPaths) {
-    for (StringRef library : {shared, archive}) {
+    for (StringRef library : {stub, shared, archive}) {
       location = dir;
       llvm::sys::path::append(location, library);
       if (fs::exists(location))
         return location.str().str();
     }
   }
-  return None;
+  return {};
 }
 
 static TargetInfo *createTargetInfo(opt::InputArgList &args) {
@@ -135,6 +143,16 @@ static void addFile(StringRef path) {
   case file_magic::macho_dynamically_linked_shared_lib:
     inputFiles.push_back(make<DylibFile>(mbref));
     break;
+  case file_magic::tapi_file: {
+    llvm::Expected<std::unique_ptr<llvm::MachO::InterfaceFile>> result =
+        TextAPIReader::get(mbref);
+    if (!result)
+      return;
+
+    std::unique_ptr<llvm::MachO::InterfaceFile> interface{std::move(*result)};
+    inputFiles.push_back(make<DylibFile>(std::move(interface)));
+    break;
+  }
   default:
     error(path + ": unhandled file type");
   }
@@ -248,15 +266,41 @@ static bool markSubLibrary(StringRef searchName) {
   return false;
 }
 
-static void handlePlatformVersion(opt::ArgList::iterator &it,
-                                  const opt::ArgList::iterator &end) {
-  // -platform_version takes 3 args, which LLVM's option library doesn't
-  // support directly.  So this explicitly handles that.
-  // FIXME: stash skipped args for later use.
-  for (int i = 0; i < 3; ++i) {
-    ++it;
-    if (it == end || (*it)->getOption().getID() != OPT_INPUT)
-      fatal("usage: -platform_version platform min_version sdk_version");
+static void handlePlatformVersion(const opt::Arg *arg) {
+  // TODO: implementation coming very soon ...
+}
+
+static void warnIfDeprecatedOption(const opt::Option &opt) {
+  if (!opt.getGroup().isValid())
+    return;
+  if (opt.getGroup().getID() == OPT_grp_deprecated) {
+    warn("Option `" + opt.getPrefixedName() + "' is deprecated in ld64:");
+    warn(opt.getHelpText());
+  }
+}
+
+static void warnIfUnimplementedOption(const opt::Option &opt) {
+  if (!opt.getGroup().isValid())
+    return;
+  switch (opt.getGroup().getID()) {
+  case OPT_grp_deprecated:
+    // warn about deprecated options elsewhere
+    break;
+  case OPT_grp_undocumented:
+    warn("Option `" + opt.getPrefixedName() +
+         "' is undocumented. Should lld implement it?");
+    break;
+  case OPT_grp_obsolete:
+    warn("Option `" + opt.getPrefixedName() +
+         "' is obsolete. Please modernize your usage.");
+    break;
+  case OPT_grp_ignored:
+    warn("Option `" + opt.getPrefixedName() + "' is ignored.");
+    break;
+  default:
+    warn("Option `" + opt.getPrefixedName() +
+         "' is not yet implemented. Stay tuned...");
+    break;
   }
 }
 
@@ -270,6 +314,14 @@ bool macho::link(llvm::ArrayRef<const char *> argsArr, bool canExitEarly,
 
   MachOOptTable parser;
   opt::InputArgList args = parser.parse(argsArr.slice(1));
+
+  if (args.hasArg(OPT_help_hidden)) {
+    parser.printHelp(argsArr[0], /*showHidden=*/true);
+    return true;
+  } else if (args.hasArg(OPT_help)) {
+    parser.printHelp(argsArr[0], /*showHidden=*/false);
+    return true;
+  }
 
   config = make<Configuration>();
   symtab = make<SymbolTable>();
@@ -291,9 +343,9 @@ bool macho::link(llvm::ArrayRef<const char *> argsArr, bool canExitEarly,
     return !errorCount();
   }
 
-  for (opt::ArgList::iterator it = args.begin(), end = args.end(); it != end;
-       ++it) {
-    const opt::Arg *arg = *it;
+  for (const auto &arg : args) {
+    const auto &opt = arg->getOption();
+    warnIfDeprecatedOption(opt);
     switch (arg->getOption().getID()) {
     case OPT_INPUT:
       addFile(arg->getValue());
@@ -307,10 +359,20 @@ bool macho::link(llvm::ArrayRef<const char *> argsArr, bool canExitEarly,
       error("library not found for -l" + name);
       break;
     }
-    case OPT_platform_version: {
-      handlePlatformVersion(it, end); // Can advance "it".
+    case OPT_platform_version:
+      handlePlatformVersion(arg);
       break;
-    }
+    case OPT_o:
+    case OPT_dylib:
+    case OPT_e:
+    case OPT_L:
+    case OPT_Z:
+    case OPT_arch:
+      // handled elsewhere
+      break;
+    default:
+      warnIfUnimplementedOption(opt);
+      break;
     }
   }
 

@@ -338,6 +338,7 @@ def KnownZExt : PatLeaf<(i64 I64:$src), [{
 //    MEMriHM, MEMziHM      : AS format in RRM format for host memory access
 //===----------------------------------------------------------------------===//
 
+// DAG selections for both ASX and AS formats.
 def ADDRrri : ComplexPattern<iPTR, 3, "selectADDRrri", [frameindex], []>;
 def ADDRrii : ComplexPattern<iPTR, 3, "selectADDRrii", [frameindex], []>;
 def ADDRzri : ComplexPattern<iPTR, 3, "selectADDRzri", [], []>;
@@ -345,7 +346,7 @@ def ADDRzii : ComplexPattern<iPTR, 3, "selectADDRzii", [], []>;
 def ADDRri : ComplexPattern<iPTR, 2, "selectADDRri", [frameindex], []>;
 def ADDRzi : ComplexPattern<iPTR, 2, "selectADDRzi", [], []>;
 
-// AsmOperandClasses for addressing mode to parse instructions.
+// ASX format.
 def VEMEMrriAsmOperand : AsmOperandClass {
   let Name = "MEMrri";
   let ParserMethod = "parseMEMOperand";
@@ -363,7 +364,7 @@ def VEMEMziiAsmOperand : AsmOperandClass {
   let ParserMethod = "parseMEMOperand";
 }
 
-// Operand definitions for ASX addressing mode.
+// ASX format uses single assembly instruction format.
 def MEMrri : Operand<iPTR> {
   let PrintMethod = "printMemASXOperand";
   let MIOperandInfo = (ops ptr_rc, ptr_rc, i32imm);
@@ -385,10 +386,7 @@ def MEMzii : Operand<iPTR> {
   let ParserMatchClass = VEMEMziiAsmOperand;
 }
 
-// Operand definitions for AS addressing mode.
-//   AS format has different representations, so defines them.
-
-// AS assembly instruction format:
+// AS format.
 def VEMEMriAsmOperand : AsmOperandClass {
   let Name = "MEMri";
   let ParserMethod = "parseMEMAsOperand";
@@ -398,7 +396,8 @@ def VEMEMziAsmOperand : AsmOperandClass {
   let ParserMethod = "parseMEMAsOperand";
 }
 
-// AS generic assembly instruction format:
+// AS format uses multiple assembly instruction formats
+//   1. AS generic assembly instruction format:
 def MEMriASX : Operand<iPTR> {
   let PrintMethod = "printMemASOperandASX";
   let MIOperandInfo = (ops ptr_rc, i32imm);
@@ -410,7 +409,7 @@ def MEMziASX : Operand<iPTR> {
   let ParserMatchClass = VEMEMziAsmOperand;
 }
 
-// AS RRM style assembly instruction format:
+//   2. AS RRM style assembly instruction format:
 def MEMriRRM : Operand<iPTR> {
   let PrintMethod = "printMemASOperandRRM";
   let MIOperandInfo = (ops ptr_rc, i32imm);
@@ -422,7 +421,7 @@ def MEMziRRM : Operand<iPTR> {
   let ParserMatchClass = VEMEMziAsmOperand;
 }
 
-// AS HM style assembly instruction format:
+//   3. AS HM style assembly instruction format:
 def MEMriHM : Operand<iPTR> {
   let PrintMethod = "printMemASOperandHM";
   let MIOperandInfo = (ops ptr_rc, i32imm);
@@ -433,6 +432,10 @@ def MEMziHM : Operand<iPTR> {
   let MIOperandInfo = (ops i32imm /* = 0 */, i32imm);
   let ParserMatchClass = VEMEMziAsmOperand;
 }
+
+//===----------------------------------------------------------------------===//
+// Other operands.
+//===----------------------------------------------------------------------===//
 
 // Branch targets have OtherVT type.
 def brtarget32 : Operand<OtherVT> {
@@ -452,7 +455,7 @@ def CCOp : Operand<i32>, ImmLeaf<i32, [{
   let ParserMatchClass = CCOpAsmOperand;
 }
 
-// Operand for printing out a rounding mode code.
+// Operand for a rounding mode code.
 def RDOpAsmOperand : AsmOperandClass {
   let Name = "RDOp";
 }
@@ -728,27 +731,6 @@ multiclass RRI1m<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
              [(set Ty:$sx, (OpNode (Ty mimm:$sz)))]>;
 }
 
-// Special RR multiclass for NND instruction.
-//   e.g. NND
-let hasSideEffects = 0 in
-multiclass RRNNDm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty> {
-  def rr : RR<opc, (outs RC:$sx), (ins RC:$sy, RC:$sz),
-              !strconcat(opcStr, " $sx, $sy, $sz"),
-              [(set Ty:$sx, (and (not Ty:$sy), Ty:$sz))]>;
-  let cy = 0 in
-  def ir : RR<opc, (outs RC:$sx), (ins simm7:$sy, RC:$sz),
-              !strconcat(opcStr, " $sx, $sy, $sz"),
-              [(set Ty:$sx, (and (not (Ty simm7:$sy)), Ty:$sz))]>;
-  let cz = 0 in
-  def rm : RR<opc, (outs RC:$sx), (ins RC:$sy, mimm:$sz),
-              !strconcat(opcStr, " $sx, $sy, $sz"),
-              [(set Ty:$sx, (and (not Ty:$sy), (Ty mimm:$sz)))]>;
-  let cy = 0, cz = 0 in
-  def im : RR<opc, (outs RC:$sx), (ins simm7:$sy, mimm:$sz),
-              !strconcat(opcStr, " $sx, $sy, $sz"),
-              [(set Ty:$sx, (and (not (Ty simm7:$sy)), (Ty mimm:$sz)))]>;
-}
-
 // Special RR multiclass for MRG instruction.
 //   e.g. MRG
 let Constraints = "$sx = $sd", DisableEncoding = "$sd", hasSideEffects = 0 in
@@ -883,8 +865,8 @@ multiclass RRCAStgm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
 multiclass RRCASm<string opcStr, bits<8>opc, RegisterClass RC, ValueType Ty,
                   Operand immOp, SDPatternOperator OpNode = null_frag> {
   defm ri : RRCAStgm<opcStr, opc, RC, Ty, immOp, MEMriRRM, ADDRri, OpNode>;
-  let cz = 0 in defm zi : RRCAStgm<opcStr, opc, RC, Ty, immOp, MEMziRRM, ADDRzi,
-                                   OpNode>;
+  let cz = 0 in
+  defm zi : RRCAStgm<opcStr, opc, RC, Ty, immOp, MEMziRRM, ADDRzi, OpNode>;
 }
 
 // Multiclass for branch instructions
@@ -1199,13 +1181,14 @@ let cx = 1, DecoderMethod = "DecodeLoadI32" in
 defm DLDLZX : LOADm<"dldl.zx", 0x0b, I32, i32, load>;
 
 // Section 8.2.15 - PFCH
-let DecoderMethod = "DecodeASX" in defm PFCH : PFCHm<"pfch", 0x0c>;
+let DecoderMethod = "DecodeASX" in
+defm PFCH : PFCHm<"pfch", 0x0c>;
 
 // Section 8.2.16 - TS1AM (Test and Set 1 AM)
 let DecoderMethod = "DecodeTS1AMI64" in
 defm TS1AML : RRCASm<"ts1am.l", 0x42, I64, i64, uimm7>;
-let DecoderMethod = "DecodeTS1AMI32" in
-let cx = 1 in defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, i32, uimm7>;
+let DecoderMethod = "DecodeTS1AMI32", cx = 1 in
+defm TS1AMW : RRCASm<"ts1am.w", 0x42, I32, i32, uimm7>;
 
 // Section 8.2.17 - TS2AM (Test and Set 2 AM)
 let DecoderMethod = "DecodeTS1AMI64" in
@@ -1343,7 +1326,9 @@ defm XOR : RRm<"xor", 0x46, I64, i64, xor_pat>;
 defm EQV : RRm<"eqv", 0x47, I64, i64, EQV>;
 
 // Section 8.5.5 - NND (Negate AND)
-defm NND : RRNNDm<"nnd", 0x54, I64, i64>;
+def and_not : PatFrags<(ops node:$x, node:$y),
+                       [(and (not node:$x), node:$y)]>;
+defm NND : RRNCm<"nnd", 0x54, I64, i64, and_not>;
 
 // Section 8.5.6 - MRG (Merge)
 defm MRG : RRMRGm<"mrg", 0x56, I64, i64>;
