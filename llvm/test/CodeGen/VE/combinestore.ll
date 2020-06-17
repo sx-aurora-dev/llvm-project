@@ -68,7 +68,7 @@ define void @fun2() {
 ; VEC-NEXT:    lea %s1, ldata@lo
 ; VEC-NEXT:    and %s1, %s1, (32)0
 ; VEC-NEXT:    lea.sl %s1, ldata@hi(, %s1)
-; VEC-NEXT:    vst %v0,8,%s1
+; VEC-NEXT:    vst %v0, 8, %s1
 ; VEC-NEXT:    or %s11, 0, %s9
   store i64 0, i64* getelementptr inbounds ([16 x i64], [16 x i64]* @ldata, i64 0, i64 0), align 8
   store i64 0, i64* getelementptr inbounds ([16 x i64], [16 x i64]* @ldata, i64 0, i64 1), align 8

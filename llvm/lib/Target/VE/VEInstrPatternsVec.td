@@ -119,34 +119,34 @@ def truncstorev2i32 : PatFrag<(ops node:$val, node:$ptr),
 // v512i32, v512f32.
 
 def : Pat<(v512i32 (load I64:$addr)),
-          (v512i32 (vld_vIsl 8, $addr,
-                             (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
+          (v512i32 (VLDirl 8, $addr,
+                           (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
 
 def : Pat<(v512f32 (load I64:$addr)),
-          (v512f32 (vld_vIsl 8, $addr,
-                             (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
+          (v512f32 (VLDirl 8, $addr,
+                           (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
 
 multiclass load_for_vector_length<int length> {
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i32")
               (load I64:$addr)),
             (!cast<ValueType>("v" # !cast<string>(length) # "i32")
-              (vldlsx_vIsl 4, $addr,
-                           (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32)))>;
+              (VLDLSXirl 4, $addr,
+                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32)))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f32")
               (load I64:$addr)),
             (!cast<ValueType>("v" # !cast<string>(length) # "f32")
-              (vldu_vIsl 4, $addr,
-                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32)))>;
+              (VLDUirl 4, $addr,
+                       (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32)))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f64")
               (load I64:$addr)),
             (!cast<ValueType>("v" # !cast<string>(length) # "f64")
-              (vld_vIsl 8, $addr,
-                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32)))>;
+              (VLDirl 8, $addr,
+                      (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32)))>;
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
               (load I64:$addr)),
             (!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (vld_vIsl 8, $addr,
-                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32)))>;
+              (VLDirl 8, $addr,
+                      (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32)))>;
 }
 
 defm : load_for_vector_length<256>;
@@ -184,16 +184,24 @@ defm : load_for_vector_length<2>;
 multiclass store_for_vector_length<int length> {
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
                    I64:$addr),
-            (vstl_vIsl !cast<ValueType>("v" # !cast<string>(length) #"i32"):$vx,
-                    4, $addr, (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
+            (VSTLirvl 4, $addr,
+                      !cast<ValueType>("v" # !cast<string>(length) #"i32"):$vx,
+                      (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
+  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
+                   I64:$addr),
+            (VSTUirvl 4, $addr,
+                      !cast<ValueType>("v" # !cast<string>(length) #"f32"):$vx,
+                      (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
                    I64:$addr),
-            (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-                    8, $addr, (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
+            (VSTirvl 8, $addr,
+                     !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
+                     (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
                    I64:$addr),
-            (vst_vIsl !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-                    8, $addr, (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
+            (VSTirvl 8, $addr,
+                     !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
+                     (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
 }
 
 defm : store_for_vector_length<256>;

@@ -192,12 +192,17 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
     // or
     //   LDVRrii reg, frame-index, 0, offset, vl (, memory operand)
     // Convert it to:
-    //   LEA       tmp-reg, frame-reg, 0, offset
-    //   vst_vIsl  reg, 8, tmp-reg, vl (ignored)
+    //   LEA tmp, frame-reg, 0, offset
+    //   VSTirvl 8, tmp-reg, vr, vl
     // or
-    //   vld_vIsl  reg, 8, tmp-reg, vl (ignored)
-    int opc = MI.getOpcode() == VE::LDVRrii ? VE::vld_vIsl : VE::vst_vIsl;
+    //   LEA tmp, frame-reg, 0, offset
+    //   VLDirl vr, 8, tmp-reg, vl
+    int opc = MI.getOpcode() == VE::LDVRrii ? VE::VLDirl : VE::VSTirvl;
     int regi = MI.getOpcode() == VE::LDVRrii ? 0 : 3;
+    int idxo = MI.getOpcode() == VE::LDVRrii ? 1 : 0;
+    int baseo = MI.getOpcode() == VE::LDVRrii ? 2 : 1;
+    int rego = MI.getOpcode() == VE::LDVRrii ? 0 : 2;
+    int vlo = 3;
     const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
     unsigned Reg = MI.getOperand(regi).getReg();
     bool isDef = MI.getOperand(regi).isDef();
@@ -227,10 +232,10 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
       .addReg(FrameReg).addImm(0).addImm(Offset);
 
     MI.setDesc(TII.get(opc));
-    MI.getOperand(0).ChangeToRegister(Reg, isDef, false, isKill);
-    MI.getOperand(1).ChangeToImmediate(8);
-    MI.getOperand(2).ChangeToRegister(Tmp1, false, false, true);
-    MI.getOperand(3).ChangeToRegister(VLReg, false, false, true);
+    MI.getOperand(rego).ChangeToRegister(Reg, isDef, false, isKill);
+    MI.getOperand(idxo).ChangeToImmediate(8);
+    MI.getOperand(baseo).ChangeToRegister(Tmp1, false, false, true);
+    MI.getOperand(vlo).ChangeToRegister(VLReg, false, false, true);
     MI.RemoveOperand(4);
     if (isKillSuper)
       MI.addRegisterKilled(SuperReg, TRI, true);

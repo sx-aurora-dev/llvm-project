@@ -17,7 +17,7 @@ define <256 x double> @test(i8* %p) {
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vld %v2,8,%s1
 ; CHECK-NEXT:    vfadd.d %v2,%v0,%v1
-; CHECK-NEXT:    vst %v2,8,%s0
+; CHECK-NEXT:    vst %v2, 8, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %v1 = tail call <256 x double> @llvm.ve.vl.vld.vssl(i64 8, i8* %p, i32 64)
   %v2 = tail call <256 x double> @llvm.ve.vl.vld.vssl(i64 8, i8* %p, i32 128)
