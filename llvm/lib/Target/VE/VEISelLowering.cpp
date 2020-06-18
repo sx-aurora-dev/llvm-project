@@ -1380,6 +1380,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   if (!Subtarget->vectorize()) {
     setOperationAction(ISD::STORE, MVT::v4i64, Custom);
     setOperationAction(ISD::STORE, MVT::v8i64, Custom);
+    setOperationAction(ISD::LOAD, MVT::v4i64, Custom);
+    setOperationAction(ISD::LOAD, MVT::v8i64, Custom);
   }
 
   for (MVT VT : MVT::vector_valuetypes()) {
@@ -1412,8 +1414,10 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
       // STORE for vXi1 needs to be custom lowered to expand multiple
       // instructions.
-      if (VT.getVectorElementType() == MVT::i1)
+      if (VT.getVectorElementType() == MVT::i1) {
         setOperationAction(ISD::STORE, VT, Custom);
+        setOperationAction(ISD::LOAD, VT, Custom);
+      }
 
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Expand);
       setOperationAction(ISD::BUILD_VECTOR,       VT, Expand);
@@ -2072,13 +2076,6 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
   assert(LdNode && LdNode->getOffset().isUndef()
          && "Unexpected node type");
 
-  SDValue BasePtr = LdNode->getBasePtr();
-  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
-    // For the case of frame index, expanding it here cause dependency
-    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
-    return Op;
-  }
-
   unsigned alignment = LdNode->getAlign().value();
   if (alignment > 8)
     alignment = 8;
@@ -2121,13 +2118,90 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG)
   return DAG.getMergeValues(Ops, dl);
 }
 
-static SDValue LowerLOAD(SDValue Op, SelectionDAG &DAG)
+// Lower a vXi1 load into following instructions
+//   LDrii %1, (,%addr)
+//   LVMxir  %vm, 0, %1
+//   LDrii %2, 8(,%addr)
+//   LVMxir  %vm, 0, %2
+//   ...
+static SDValue LowerI1Load(SDValue Op, SelectionDAG &DAG) {
+  SDLoc DL(Op);
+  LoadSDNode *LdNode = dyn_cast<LoadSDNode>(Op.getNode());
+  assert(LdNode && LdNode->getOffset().isUndef()
+         && "Unexpected node type");
+
+  SDValue BasePtr = LdNode->getBasePtr();
+  unsigned alignment = LdNode->getAlign().value();
+  if (alignment > 8)
+    alignment = 8;
+
+  EVT addrVT = BasePtr.getValueType();
+  EVT MemVT = LdNode->getMemoryVT();
+  if (MemVT == MVT::v256i1 || MemVT == MVT::v4i64) {
+    SDValue OutChains[4];
+    SDNode *VM = DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF,
+                                    DL, MemVT);
+    for (int i = 0; i < 4; ++i) {
+      // Generate load dag and prepare chains.
+      SDValue Addr = DAG.getNode(ISD::ADD, DL, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, DL, addrVT));
+      SDValue Val = DAG.getLoad(MVT::i64, DL, LdNode->getChain(), Addr,
+          LdNode->getPointerInfo(), alignment,
+          LdNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                 MachineMemOperand::MONone);
+      OutChains[i] = SDValue(Val.getNode(), 1);
+
+      VM = DAG.getMachineNode(VE::LVMxir_x, DL, MVT::i64,
+                              DAG.getTargetConstant(i, DL, MVT::i64),
+                              Val, SDValue(VM, 0));
+    }
+    SDValue OutChain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other, OutChains);
+    SDValue Ops[2] = {SDValue(VM,0), OutChain};
+    return DAG.getMergeValues(Ops, DL);
+  } else if (MemVT == MVT::v512i1 || MemVT == MVT::v8i64) {
+    SDValue OutChains[8];
+    SDNode *VM = DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF,
+                                    DL, MemVT);
+    for (int i = 0; i < 8; ++i) {
+      // Generate load dag and prepare chains.
+      SDValue Addr = DAG.getNode(ISD::ADD, DL, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, DL, addrVT));
+      SDValue Val = DAG.getLoad(MVT::i64, DL, LdNode->getChain(), Addr,
+          LdNode->getPointerInfo(), alignment,
+          LdNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                 MachineMemOperand::MONone);
+      OutChains[i] = SDValue(Val.getNode(), 1);
+
+      VM = DAG.getMachineNode(VE::LVMyir_y, DL, MVT::i64,
+                              DAG.getTargetConstant(i, DL, MVT::i64),
+                              Val, SDValue(VM, 0));
+    }
+    SDValue OutChain = DAG.getNode(ISD::TokenFactor, DL, MVT::Other, OutChains);
+    SDValue Ops[2] = {SDValue(VM,0), OutChain};
+    return DAG.getMergeValues(Ops, DL);
+  } else {
+    // Otherwise, ask llvm to expand it.
+    return SDValue();
+  }
+}
+
+static SDValue LowerLOAD(SDValue Op, SelectionDAG &DAG,
+                         const VETargetLowering &TLI)
 {
   LoadSDNode *LdNode = cast<LoadSDNode>(Op.getNode());
+
+  SDValue BasePtr = LdNode->getBasePtr();
+  if (isa<FrameIndexSDNode>(BasePtr.getNode())) {
+    // Do not expand store instruction with frame index here because of
+    // dependency problems.  We expand it later in eliminateFrameIndex().
+    return Op;
+  }
 
   EVT MemVT = LdNode->getMemoryVT();
   if (MemVT == MVT::f128)
     return LowerF128Load(Op, DAG);
+  if (TLI.isVectorMaskType(MemVT))
+    return LowerI1Load(Op, DAG);
 
   return Op;
 }
@@ -2138,13 +2212,6 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   StoreSDNode *StNode = dyn_cast<StoreSDNode>(Op.getNode());
   assert(StNode && StNode->getOffset().isUndef()
          && "Unexpected node type");
-
-  SDValue BasePtr = StNode->getBasePtr();
-  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
-    // For the case of frame index, expanding it here cause dependency
-    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
-    return Op;
-  }
 
   SDValue SubRegEven = DAG.getTargetConstant(VE::sub_even, dl, MVT::i32);
   SDValue SubRegOdd  = DAG.getTargetConstant(VE::sub_odd, dl, MVT::i32);
@@ -2183,6 +2250,84 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
 }
 
+// Lower a vXi1 store into following instructions
+//   SVMi  %1, %vm, 0
+//   STrii %1, (,%addr)
+//   SVMi  %2, %vm, 1
+//   STrii %2, 8(,%addr)
+//   ...
+static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
+  SDLoc DL(Op);
+  StoreSDNode *StNode = dyn_cast<StoreSDNode>(Op.getNode());
+  assert(StNode && StNode->getOffset().isUndef()
+         && "Unexpected node type");
+
+  SDValue BasePtr = StNode->getBasePtr();
+  unsigned alignment = StNode->getAlign().value();
+  if (alignment > 8)
+    alignment = 8;
+  EVT addrVT = BasePtr.getValueType();
+  EVT MemVT = StNode->getMemoryVT();
+  if (MemVT == MVT::v256i1 || MemVT == MVT::v4i64) {
+    SDValue OutChains[4];
+    for (int i = 0; i < 4; ++i) {
+      SDNode *V = DAG.getMachineNode(VE::SVMxi, DL, MVT::i64,
+                                     StNode->getValue(),
+                                     DAG.getTargetConstant(i, DL, MVT::i64));
+      SDValue Addr = DAG.getNode(ISD::ADD, DL, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, DL, addrVT));
+      OutChains[i] =
+          DAG.getStore(StNode->getChain(), DL, SDValue(V, 0), Addr,
+                       MachinePointerInfo(), alignment,
+                       StNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                              MachineMemOperand::MONone);
+    }
+    return DAG.getNode(ISD::TokenFactor, DL, MVT::Other, OutChains);
+  } else if (MemVT == MVT::v512i1 || MemVT == MVT::v8i64) {
+    SDValue OutChains[8];
+    for (int i = 0; i < 8; ++i) {
+      SDNode *V = DAG.getMachineNode(VE::SVMyi, DL, MVT::i64,
+                                     StNode->getValue(),
+                                     DAG.getTargetConstant(i, DL, MVT::i64));
+      SDValue Addr = DAG.getNode(ISD::ADD, DL, addrVT, BasePtr,
+                                 DAG.getConstant(8 * i, DL, addrVT));
+      OutChains[i] =
+          DAG.getStore(StNode->getChain(), DL, SDValue(V, 0), Addr,
+                       MachinePointerInfo(), alignment,
+                       StNode->isVolatile() ? MachineMemOperand::MOVolatile :
+                                              MachineMemOperand::MONone);
+    }
+    return DAG.getNode(ISD::TokenFactor, DL, MVT::Other, OutChains);
+  } else {
+    // Otherwise, ask llvm to expand it.
+    return SDValue();
+  }
+}
+
+static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG,
+                          const VETargetLowering &TLI)
+{
+  SDLoc dl(Op);
+  StoreSDNode *StNode = cast<StoreSDNode>(Op.getNode());
+  assert(StNode && StNode->getOffset().isUndef() && "Unexpected node type");
+
+  SDValue BasePtr = StNode->getBasePtr();
+  if (isa<FrameIndexSDNode>(BasePtr.getNode())) {
+    // Do not expand store instruction with frame index here because of
+    // dependency problems.  We expand it later in eliminateFrameIndex().
+    return Op;
+  }
+
+  EVT MemVT = StNode->getMemoryVT();
+  if (MemVT == MVT::f128)
+    return LowerF128Store(Op, DAG);
+  if (TLI.isVectorMaskType(MemVT))
+    return LowerI1Store(Op, DAG);
+
+  // Otherwise, ask llvm to expand it.
+  return SDValue();
+}
+
 static SDValue LowerCTLZ(SDValue Op, SelectionDAG &DAG)
 {
   // Using defult promote doesn't work well for VE, so that creating custom
@@ -2203,82 +2348,6 @@ static SDValue LowerCTLZ(SDValue Op, SelectionDAG &DAG)
                       OVT.getSizeInBits(), DL, MVT::i32));
   SDValue Ctlz = DAG.getNode(Op.getOpcode(), DL, NVT, Shifted);
   return DAG.getNode(ISD::TRUNCATE, DL, OVT, Ctlz);
-}
-
-// Lower a vXi1 store into following instructions
-//   SVMi  %1, %vm, 0
-//   STrii %1, (,%addr)
-//   SVMi  %2, %vm, 1
-//   STrii %2, 8(,%addr)
-//   ...
-static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
-  SDLoc dl(Op);
-  StoreSDNode *StNode = dyn_cast<StoreSDNode>(Op.getNode());
-  assert(StNode && StNode->getOffset().isUndef()
-         && "Unexpected node type");
-
-  SDValue BasePtr = StNode->getBasePtr();
-  if (dyn_cast<FrameIndexSDNode>(BasePtr.getNode())) {
-    // For the case of frame index, expanding it here cause dependency
-    // problem.  So, treat it as a legal and expand it in eliminateFrameIndex
-    return Op;
-  }
-
-  unsigned alignment = StNode->getAlign().value();
-  if (alignment > 8)
-    alignment = 8;
-  EVT addrVT = BasePtr.getValueType();
-  EVT MemVT = StNode->getMemoryVT();
-  if (MemVT == MVT::v256i1 || MemVT == MVT::v4i64) {
-    SDValue OutChains[4];
-    for (int i = 0; i < 4; ++i) {
-      SDNode *V = DAG.getMachineNode(VE::svm_smI, dl, MVT::i64,
-                                     StNode->getValue(),
-                                     DAG.getTargetConstant(i, dl, MVT::i64));
-      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
-                                 DAG.getConstant(8 * i, dl, addrVT));
-      OutChains[i] =
-          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
-                       MachinePointerInfo(), alignment,
-                       StNode->isVolatile() ? MachineMemOperand::MOVolatile :
-                                              MachineMemOperand::MONone);
-    }
-    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
-  } else if (MemVT == MVT::v512i1 || MemVT == MVT::v8i64) {
-    SDValue OutChains[8];
-    for (int i = 0; i < 8; ++i) {
-      SDNode *V = DAG.getMachineNode(VE::svm_sMI, dl, MVT::i64,
-                                     StNode->getValue(),
-                                     DAG.getTargetConstant(i, dl, MVT::i64));
-      SDValue Addr = DAG.getNode(ISD::ADD, dl, addrVT, BasePtr,
-                                 DAG.getConstant(8 * i, dl, addrVT));
-      OutChains[i] =
-          DAG.getStore(StNode->getChain(), dl, SDValue(V, 0), Addr,
-                       MachinePointerInfo(), alignment,
-                       StNode->isVolatile() ? MachineMemOperand::MOVolatile :
-                                              MachineMemOperand::MONone);
-    }
-    return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
-  } else {
-    // Otherwise, ask llvm to expand it.
-    return SDValue();
-  }
-}
-
-static SDValue LowerSTORE(SDValue Op, SelectionDAG &DAG,
-                          const VETargetLowering &TLI)
-{
-  SDLoc dl(Op);
-  StoreSDNode *St = cast<StoreSDNode>(Op.getNode());
-
-  EVT MemVT = St->getMemoryVT();
-  if (MemVT == MVT::f128)
-    return LowerF128Store(Op, DAG);
-  if (TLI.isVectorMaskType(MemVT))
-    return LowerI1Store(Op, DAG);
-
-  // Otherwise, ask llvm to expand it.
-  return SDValue();
 }
 
 SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
@@ -2639,7 +2708,8 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
     //set blocks to all 0s
     SDValue mask = inv_order ? DAG.getConstant(0xffffffffffffffff, dl, i64) : DAG.getConstant(0, dl, i64);
     SDValue index = DAG.getTargetConstant(i, dl, i64);
-    Mask = SDValue(DAG.getMachineNode(VE::lvm_mmIs, dl, v256i1, {Mask, index, mask}), 0);
+    Mask = SDValue(DAG.getMachineNode(VE::LVMir_m, dl, v256i1,
+                                      {index, mask, Mask}), 0);
   }
 
   SDValue mask = DAG.getConstant(0xffffffffffffffff, dl, i64);
@@ -2647,13 +2717,15 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
     mask = DAG.getNode(ISD::SRL, dl, i64, {mask, DAG.getConstant(secondblock, dl, i64)});
   else
     mask = DAG.getNode(ISD::SHL, dl, i64, {mask, DAG.getConstant(64 - secondblock, dl, i64)});
-  Mask = SDValue(DAG.getMachineNode(VE::lvm_mmIs, dl, v256i1, {Mask, DAG.getTargetConstant(block, dl, i64), mask}), 0);
+  Mask = SDValue(DAG.getMachineNode(VE::LVMir_m, dl, v256i1,
+      {DAG.getTargetConstant(block, dl, i64), mask, Mask}), 0);
 
   for (int i = block + 1; i < 4; i++) {
     //set blocks to all 1s
     SDValue mask = inv_order ? DAG.getConstant(0, dl, i64) : DAG.getConstant(0xffffffffffffffff, dl, i64);
     SDValue index = DAG.getTargetConstant(i, dl, i64);
-    Mask = SDValue(DAG.getMachineNode(VE::lvm_mmIs, dl, v256i1, {Mask, index, mask}), 0);
+    Mask = SDValue(DAG.getMachineNode(VE::LVMir_m, dl, v256i1,
+                                      {index, mask, Mask}), 0);
   }
 
   SDValue returnValue = SDValue(DAG.getMachineNode(VE::vmrg_vvvml, dl, Op.getSimpleValueType(), 
@@ -2745,7 +2817,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::VAARG:
     return LowerVAARG(Op, DAG);
   case ISD::LOAD:
-    return LowerLOAD(Op, DAG);
+    return LowerLOAD(Op, DAG, *this);
   case ISD::STORE:
     return LowerSTORE(Op, DAG, *this);
   case ISD::ATOMIC_FENCE:

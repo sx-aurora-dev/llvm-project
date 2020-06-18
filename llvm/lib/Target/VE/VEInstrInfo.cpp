@@ -832,48 +832,83 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::nndm_MMM: buildVMRInst(MI, get(VE::nndm_mmm)); return true;
   case VE::negm_MM: buildVMRInst(MI, get(VE::negm_mm)); return true;
 
+  case VE::LVMyir:
+  case VE::LVMyir_y: {
+    unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
+    unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
+    int64_t Imm = MI.getOperand(1).getImm();
+    unsigned Src = MI.getOperand(2).getReg();
+    bool KillSrc = MI.getOperand(2).isKill();
+    unsigned VMX = VMXl;
+    if (Imm >= 4) {
+        VMX = VMXu;
+        Imm -= 4;
+    }
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc DL = MI.getDebugLoc();
+    if (MI.getOpcode() == VE::LVMyir) {
+      BuildMI(*MBB, MI, DL, get(VE::LVMxir))
+        .addDef(VMX)
+        .addImm(Imm)
+        .addReg(Src, getKillRegState(KillSrc));
+    } else {
+      assert(MI.getOpcode() == VE::LVMyir_y);
+      BuildMI(*MBB, MI, DL, get(VE::LVMxir_x))
+        .addDef(VMX)
+        .addImm(Imm)
+        .addReg(Src, getKillRegState(KillSrc))
+        .addReg(VMX);
+    }
+    MI.eraseFromParent();
+    return true;
+  }
   case VE::lvm_MMIs: {
     unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
     unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
     unsigned VMDu = GetVM512Upper(MI.getOperand(1).getReg());
     unsigned VMDl = GetVM512Upper(MI.getOperand(1).getReg());
-    int64_t imm = MI.getOperand(2).getImm();
+    int64_t Imm = MI.getOperand(2).getImm();
     unsigned VMX = VMXl;
     unsigned VMD = VMDl;
-    if (imm >= 4) {
+    if (Imm >= 4) {
         VMX = VMXu;
         VMD = VMDu;
-        imm -= 4;
+        Imm -= 4;
     }
     MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::lvm_mmIs))
-      .addDef(VMX)
-      .addReg(VMD)
-      .addImm(imm)
-      .addReg(MI.getOperand(3).getReg());
+    DebugLoc DL = MI.getDebugLoc();
+    BuildMI(*MBB, MI, DL, get(VE::LVMxir_x), VMX)
+      .addImm(Imm)
+      .addReg(MI.getOperand(3).getReg())
+      .addReg(VMD);
     MI.eraseFromParent();
     return true;
   }
-
+  case VE::SVMyi:
   case VE::svm_sMI: {
+    unsigned Dest = MI.getOperand(0).getReg();
     unsigned VMZu = GetVM512Upper(MI.getOperand(1).getReg());
     unsigned VMZl = GetVM512Lower(MI.getOperand(1).getReg());
-    int64_t imm = MI.getOperand(2).getImm();
+    bool KillSrc = MI.getOperand(1).isKill();
+    int64_t Imm = MI.getOperand(2).getImm();
     unsigned VMZ = VMZl;
-    if (imm >= 4) {
+    if (Imm >= 4) {
         VMZ = VMZu;
-        imm -= 4;
+        Imm -= 4;
     }
     MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::svm_smI))
-      .add(MI.getOperand(0))
+    DebugLoc DL = MI.getDebugLoc();
+    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, get(VE::SVMxi), Dest)
       .addReg(VMZ)
-      .addImm(imm);
+      .addImm(Imm);
+    MachineInstr *Inst = MIB.getInstr();
     MI.eraseFromParent();
+    if (KillSrc) {
+      const TargetRegisterInfo *TRI = &getRegisterInfo();
+      Inst->addRegisterKilled(MI.getOperand(1).getReg(), TRI, true);
+    }
     return true;
-                    }
+  }
   case VE::pvfmkat_Ml:
   case VE::pvfmkaf_Ml:
   case VE::pvfmkwgt_Mvl: case VE::pvfmkwgt_MvMl:

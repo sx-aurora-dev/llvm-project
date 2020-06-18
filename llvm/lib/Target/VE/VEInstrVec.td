@@ -33,6 +33,15 @@ def STVM512rii : Pseudo<
     (outs), (ins MEMrii:$addr, VM512:$vmx),
     "# pseudo stvm512 $addr, $vmx", []>;
 }
+let hasSideEffects = 0 in {
+  let Constraints = "$vx = $vd", DisableEncoding = "$vd" in
+  def LVMyir_y : Pseudo<(outs VM512:$vx), (ins uimm3:$sy, I64:$sz, VM512:$vd),
+                        "# pseudo LVM $vx, $sy, $sz, $vd">;
+  def LVMyir : Pseudo<(outs VM512:$vx), (ins uimm3:$sy, I64:$sz),
+                      "# pseudo LVM $vx, $sy, $sz">;
+  def SVMyi : Pseudo<(outs I64:$sx), (ins VM512:$vz, uimm3:$sy),
+                     "# pseudo SVM $sx, $vz, $sy">;
+}
 
 //===----------------------------------------------------------------------===//
 // Instructions

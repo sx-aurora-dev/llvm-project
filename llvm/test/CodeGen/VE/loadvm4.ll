@@ -1,11 +1,11 @@
-; RUN: llc < %s -mtriple=ve -mattr=+vec | FileCheck %s
+; RUN: llc < %s -mtriple=ve | FileCheck %s
 
-@v256i1 = common dso_local local_unnamed_addr global <256 x i1> zeroinitializer, align 4
-@v512i1 = common dso_local local_unnamed_addr global <512 x i1> zeroinitializer, align 4
+@v4i64 = common dso_local local_unnamed_addr global <4 x i64> zeroinitializer, align 4
+@v8i64 = common dso_local local_unnamed_addr global <8 x i64> zeroinitializer, align 4
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <256 x i1> @loadv256i1(<256 x i1>* nocapture readonly) {
-; CHECK-LABEL: loadv256i1:
+define x86_regcallcc <4 x i64> @loadv4i64(<4 x i64>* nocapture readonly) {
+; CHECK-LABEL: loadv4i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld %s1, (, %s0)
 ; CHECK-NEXT:    ld %s2, 8(, %s0)
@@ -16,13 +16,13 @@ define x86_regcallcc <256 x i1> @loadv256i1(<256 x i1>* nocapture readonly) {
 ; CHECK-NEXT:    lvm %vm1, 2, %s3
 ; CHECK-NEXT:    lvm %vm1, 3, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %2 = load <256 x i1>, <256 x i1>* %0, align 16
-  ret <256 x i1> %2
+  %2 = load <4 x i64>, <4 x i64>* %0, align 16
+  ret <4 x i64> %2
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <256 x i1> @loadv256i1stk() {
-; CHECK-LABEL: loadv256i1stk:
+define x86_regcallcc <4 x i64> @loadv4i64stk() {
+; CHECK-LABEL: loadv4i64stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld %s16, 176(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 0, %s16
@@ -33,18 +33,18 @@ define x86_regcallcc <256 x i1> @loadv256i1stk() {
 ; CHECK-NEXT:    ld %s16, 200(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 3, %s16
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %addr = alloca <256 x i1>, align 16
-  %1 = load <256 x i1>, <256 x i1>* %addr, align 16
-  ret <256 x i1> %1
+  %addr = alloca <4 x i64>, align 16
+  %1 = load <4 x i64>, <4 x i64>* %addr, align 16
+  ret <4 x i64> %1
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <256 x i1> @loadv256i1com() {
-; CHECK-LABEL: loadv256i1com:
+define x86_regcallcc <4 x i64> @loadv4i64com() {
+; CHECK-LABEL: loadv4i64com:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, v256i1@lo
+; CHECK-NEXT:    lea %s0, v4i64@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s0, v256i1@hi(, %s0)
+; CHECK-NEXT:    lea.sl %s0, v4i64@hi(, %s0)
 ; CHECK-NEXT:    ld %s1, (, %s0)
 ; CHECK-NEXT:    ld %s2, 8(, %s0)
 ; CHECK-NEXT:    ld %s3, 16(, %s0)
@@ -54,13 +54,13 @@ define x86_regcallcc <256 x i1> @loadv256i1com() {
 ; CHECK-NEXT:    lvm %vm1, 2, %s3
 ; CHECK-NEXT:    lvm %vm1, 3, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %1 = load <256 x i1>, <256 x i1>* @v256i1, align 16
-  ret <256 x i1> %1
+  %1 = load <4 x i64>, <4 x i64>* @v4i64, align 16
+  ret <4 x i64> %1
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <512 x i1> @loadv512i1(<512 x i1>* nocapture readonly) {
-; CHECK-LABEL: loadv512i1:
+define x86_regcallcc <8 x i64> @loadv8i64(<8 x i64>* nocapture readonly) {
+; CHECK-LABEL: loadv8i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    ld %s1, (, %s0)
 ; CHECK-NEXT:    ld %s2, 8(, %s0)
@@ -79,13 +79,13 @@ define x86_regcallcc <512 x i1> @loadv512i1(<512 x i1>* nocapture readonly) {
 ; CHECK-NEXT:    lvm %vm2, 2, %s3
 ; CHECK-NEXT:    lvm %vm2, 3, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %2 = load <512 x i1>, <512 x i1>* %0, align 16
-  ret <512 x i1> %2
+  %2 = load <8 x i64>, <8 x i64>* %0, align 16
+  ret <8 x i64> %2
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <512 x i1> @loadv512i1stk() {
-; CHECK-LABEL: loadv512i1stk:
+define x86_regcallcc <8 x i64> @loadv8i64stk() {
+; CHECK-LABEL: loadv8i64stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # implicit-def: $vmp1
 ; CHECK-NEXT:    ld %s16, 176(, %s11)
@@ -105,18 +105,18 @@ define x86_regcallcc <512 x i1> @loadv512i1stk() {
 ; CHECK-NEXT:    ld %s16, 232(, %s11)
 ; CHECK-NEXT:    lvm %vm2, 3, %s16
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %addr = alloca <512 x i1>, align 16
-  %1 = load <512 x i1>, <512 x i1>* %addr, align 16
-  ret <512 x i1> %1
+  %addr = alloca <8 x i64>, align 16
+  %1 = load <8 x i64>, <8 x i64>* %addr, align 16
+  ret <8 x i64> %1
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <512 x i1> @loadv512i1com() {
-; CHECK-LABEL: loadv512i1com:
+define x86_regcallcc <8 x i64> @loadv8i64com() {
+; CHECK-LABEL: loadv8i64com:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, v512i1@lo
+; CHECK-NEXT:    lea %s0, v8i64@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s0, v512i1@hi(, %s0)
+; CHECK-NEXT:    lea.sl %s0, v8i64@hi(, %s0)
 ; CHECK-NEXT:    ld %s1, (, %s0)
 ; CHECK-NEXT:    ld %s2, 8(, %s0)
 ; CHECK-NEXT:    ld %s3, 16(, %s0)
@@ -134,6 +134,7 @@ define x86_regcallcc <512 x i1> @loadv512i1com() {
 ; CHECK-NEXT:    lvm %vm2, 2, %s3
 ; CHECK-NEXT:    lvm %vm2, 3, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %1 = load <512 x i1>, <512 x i1>* @v512i1, align 16
-  ret <512 x i1> %1
+  %1 = load <8 x i64>, <8 x i64>* @v8i64, align 16
+  ret <8 x i64> %1
 }
+

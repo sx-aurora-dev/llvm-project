@@ -318,7 +318,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     // reserving SX16 all of the time.
     unsigned TmpReg = VE::SX16;
     for (int i = 0; i < 3; ++i) {
-      BuildMI(*MI.getParent(), II, dl, TII.get(VE::svm_smI), TmpReg)
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::SVMxr), TmpReg)
         .addReg(SrcReg).addImm(i);
       MachineInstr *StMI =
         BuildMI(*MI.getParent(), II, dl, TII.get(VE::STrii))
@@ -327,7 +327,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       replaceFI(MF, II, *StMI, dl, 0, Offset, FrameReg);
       Offset += 8;
     }
-    BuildMI(*MI.getParent(), II, dl, TII.get(VE::svm_smI), TmpReg)
+    BuildMI(*MI.getParent(), II, dl, TII.get(VE::SVMxr), TmpReg)
       .addReg(SrcReg, getKillRegState(isKill)).addImm(3);
     MI.setDesc(TII.get(VE::STrii));
     MI.getOperand(3).ChangeToRegister(TmpReg, false, false, true);
@@ -336,33 +336,44 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     //   LDVMri reg, frame-index, 0, offset (, memory operand)
     // Convert it to:
     //   LDrii  tmp-reg, frame-reg, 0, offset
-    //   LVMi   reg, reg, 0, tmp-reg
+    //   LVMxir vm, 0, tmp-reg
     //   LDrii  tmp-reg, frame-reg, 0, offset+8
-    //   LVMi   reg, reg, 1, tmp-reg
+    //   LVMxir_x vm, 1, tmp-reg, vm
     //   LDrii  tmp-reg, frame-reg, 0, offset+16
-    //   LVMi   reg, reg, 2, tmp-reg
+    //   LVMxir_x vm, 2, tmp-reg, vm
     //   LDrii  tmp-reg, frame-reg, 0, offset+24
-    //   LVMi   reg, reg, 3, tmp-reg
+    //   LVMxir_x vm, 3, tmp-reg, vm
 
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
     unsigned DestReg = MI.getOperand(0).getReg();
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
     unsigned TmpReg = VE::SX16;
-    BuildMI(*MI.getParent(), II, dl, TII.get(VE::IMPLICIT_DEF), DestReg);
-    for (int i = 0; i < 3; ++i) {
-      MachineInstr *StMI =
-        BuildMI(*MI.getParent(), II, dl, TII.get(VE::LDrii), TmpReg)
-          .addReg(FrameReg).addImm(0).addImm(0);
-      replaceFI(MF, II, *StMI, dl, 1, Offset, FrameReg);
-      BuildMI(*MI.getParent(), II, dl, TII.get(VE::lvm_mmIs), DestReg)
-        .addReg(DestReg).addImm(i).addReg(TmpReg, getKillRegState(true));
-      Offset += 8;
+    for (int i = 0; i < 4; ++i) {
+      if (i != 3) {
+        MachineInstr *StMI =
+          BuildMI(*MI.getParent(), II, dl, TII.get(VE::LDrii), TmpReg)
+            .addReg(FrameReg).addImm(0).addImm(0);
+        replaceFI(MF, II, *StMI, dl, 1, Offset, FrameReg);
+        Offset += 8;
+      } else {
+        // Last LDrii replace the target instruction.
+        MI.setDesc(TII.get(VE::LDrii));
+        MI.getOperand(0).ChangeToRegister(TmpReg, true);
+      }
+      // First LVM is LVMxir.  Others are LVMxir_x.  Last LVM places at the
+      // next of the target instruction.
+      if (i == 0)
+        BuildMI(*MI.getParent(), II, dl, TII.get(VE::LVMxir), DestReg)
+          .addImm(i).addReg(TmpReg, getKillRegState(true));
+      else if (i != 3)
+        BuildMI(*MI.getParent(), II, dl, TII.get(VE::LVMxir_x), DestReg)
+          .addImm(i).addReg(TmpReg, getKillRegState(true)).addReg(DestReg);
+      else
+        BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVMxir_x),
+                DestReg)
+          .addImm(3).addReg(TmpReg, getKillRegState(true)).addReg(DestReg);
     }
-    MI.setDesc(TII.get(VE::LDrii));
-    MI.getOperand(0).ChangeToRegister(TmpReg, true);
-    BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::lvm_mmIs), DestReg)
-      .addReg(DestReg).addImm(3).addReg(TmpReg, getKillRegState(true));
   } else if (MI.getOpcode() == VE::STVM512rii) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
     unsigned SrcReg   = MI.getOperand(3).getReg();
@@ -376,7 +387,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     MachineInstr *LastMI = nullptr;
     for (int i = 0; i < 4; ++i) {
       LastMI =
-        BuildMI(*MI.getParent(), II, dl, TII.get(VE::svm_smI), TmpReg)
+        BuildMI(*MI.getParent(), II, dl, TII.get(VE::SVMxr), TmpReg)
           .addReg(SrcLoReg).addImm(i);
       MachineInstr *StMI =
         BuildMI(*MI.getParent(), II, dl, TII.get(VE::STrii))
@@ -389,7 +400,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       LastMI->addRegisterKilled(SrcLoReg, this, true);
     // store high part of VMP
     for (int i = 0; i < 3; ++i) {
-      BuildMI(*MI.getParent(), II, dl, TII.get(VE::svm_smI), TmpReg)
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::SVMxr), TmpReg)
         .addReg(SrcHiReg).addImm(i);
       MachineInstr *StMI =
         BuildMI(*MI.getParent(), II, dl, TII.get(VE::STrii))
@@ -399,7 +410,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
       Offset += 8;
     }
     LastMI =
-      BuildMI(*MI.getParent(), II, dl, TII.get(VE::svm_smI), TmpReg)
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::SVMxr), TmpReg)
         .addReg(SrcHiReg).addImm(3);
     if (isKill) {
       LastMI->addRegisterKilled(SrcHiReg, this, true);
@@ -418,27 +429,34 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
     unsigned TmpReg = VE::SX16;
     BuildMI(*MI.getParent(), II, dl, TII.get(VE::IMPLICIT_DEF), DestReg);
     for (int i = 0; i < 4; ++i) {
-      MachineInstr *StMI =
+      MachineInstr *LdMI =
         BuildMI(*MI.getParent(), II, dl, TII.get(VE::LDrii), TmpReg)
           .addReg(FrameReg).addImm(0).addImm(0);
-      replaceFI(MF, II, *StMI, dl, 1, Offset, FrameReg);
-      BuildMI(*MI.getParent(), II, dl, TII.get(VE::lvm_mmIs), DestLoReg)
-        .addReg(DestLoReg).addImm(i).addReg(TmpReg, getKillRegState(true));
+      replaceFI(MF, II, *LdMI, dl, 1, Offset, FrameReg);
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::LVMxir_x), DestLoReg)
+        .addImm(i)
+        .addReg(TmpReg, getKillRegState(true))
+        .addReg(DestLoReg);
       Offset += 8;
     }
     for (int i = 0; i < 3; ++i) {
-      MachineInstr *StMI =
+      MachineInstr *LdMI =
         BuildMI(*MI.getParent(), II, dl, TII.get(VE::LDrii), TmpReg)
           .addReg(FrameReg).addImm(0).addImm(0);
-      replaceFI(MF, II, *StMI, dl, 1, Offset, FrameReg);
-      BuildMI(*MI.getParent(), II, dl, TII.get(VE::lvm_mmIs), DestHiReg)
-        .addReg(DestHiReg).addImm(i).addReg(TmpReg, getKillRegState(true));
+      replaceFI(MF, II, *LdMI, dl, 1, Offset, FrameReg);
+      BuildMI(*MI.getParent(), II, dl, TII.get(VE::LVMxir_x), DestHiReg)
+        .addImm(i)
+        .addReg(TmpReg, getKillRegState(true))
+        .addReg(DestHiReg);
       Offset += 8;
     }
     MI.setDesc(TII.get(VE::LDrii));
     MI.getOperand(0).ChangeToRegister(TmpReg, true);
-    BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::lvm_mmIs), DestHiReg)
-      .addReg(DestHiReg).addImm(3).addReg(TmpReg, getKillRegState(true));
+    BuildMI(*MI.getParent(), std::next(II), dl, TII.get(VE::LVMxir_x),
+            DestHiReg)
+      .addImm(3)
+      .addReg(TmpReg, getKillRegState(true))
+      .addReg(DestHiReg);
   }
 
   replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);
