@@ -25,13 +25,20 @@ int configureTargetCompiler(const std::string& CompilerName) {
               << std::endl;
 
   }
+  // We can assume the first two to exist
   if (CompilerName == "clang")   { CompilerCmd = ClangCompilerCmd; return 0; }
   if (CompilerName == "rvclang") { CompilerCmd = RVClangCompilerCmd; return 0; }
-  if (CompilerName == "ncc")     { CompilerCmd = NCCCompilerCmd; return 0; }
+  if (CompilerName == "ncc")     {
+    CompilerCmd = NCCCompilerCmd;
+    auto ret = std::system((CompilerCmd + " --version").c_str());
+    if (ret == 0) {
+      return 0;
+    }
+  }
   std::cerr << "nec-aurora-build: -fopenmp-nec-compiler=" << CompilerCmd
-            << " not recognized"
+            << " not recognized. Aborting."
             << std::endl;
-  return 1;
+  exit(EXIT_FAILURE); // it does not make any sense to continue here
 }
 
 
@@ -39,7 +46,7 @@ const char *getTargetCompiler() {
   // If no option was specified on the command line chose the builtin default
   if (CompilerCmd.empty()) {
 #ifndef DEFAULT_TARGET_COMPILER_OPTION
-#error "DEFAULT_TARGET_COMPILER_OPTION not specified during build!" 
+#error "DEFAULT_TARGET_COMPILER_OPTION not specified during build!"
 #endif
     configureTargetCompiler(DEFAULT_TARGET_COMPILER_OPTION);
   }

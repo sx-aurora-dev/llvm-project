@@ -3,6 +3,29 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   project("NEC Aurora Offloading Build Wrapper Tools" CXX)
 endif()
 
+# Set Clang and RVClang target compiler variables
+if (CMAKE_BUILD_TYPE MATCHES RELEASE)
+  set(NECAURORA_TARGET_COMPILER_CLANG
+      "${CMAKE_INSTALL_PREFIX}/bin/clang"
+      CACHE
+      FILEPATH
+      "Path to clang used as VE target compiler")
+  set(NECAURORA_TARGET_COMPILER_RVCLANG
+      "${CMAKE_INSTALL_PREFIX}/bin/rvclang"
+      CACHE FILEPATH
+      "Path to rvclang used as VE target compiler")
+else() # most likely there won't be an install step
+  set(NECAURORA_TARGET_COMPILER_CLANG
+      "${CMAKE_BINARY_DIR}/bin/clang"
+      CACHE
+      FILEPATH
+      "Path to clang used as VE target compiler")
+  set(NECAURORA_TARGET_COMPILER_RVCLANG
+      "${CMAKE_BINARY_DIR}/bin/rvclang"
+      CACHE FILEPATH
+      "Path to rvclang used as VE target compiler")
+endif()
+
 # Find NEC target compiler.
 find_program(NECAURORA_TARGET_COMPILER_NCC
   NAMES
@@ -13,29 +36,25 @@ find_program(NECAURORA_TARGET_COMPILER_NCC
   PATHS
     "/opt/nec/ve/bin/"
     ENV PATH)
+
 # It is okay if we do not find ncc, we can fallback to Clang or RVCLang and
 # will handlle the missing ncc in code.
 if (NECAURORA_TARGET_COMPILER_NCC)
-    set(TARGET_COMPILER_NCC "${NECAURORA_TARGET_COMPILER_NCC}")
+  set(TARGET_COMPILER_NCC "${NECAURORA_TARGET_COMPILER_NCC}")
+  set(NECAURORA_DEFAULT_TARGET_COMPILER
+      "ncc"
+      CACHE STRING
+      "Default target compiler for NEC OpenMP target (-fopenmp-nec-compiler=<this_value>)")
 else()
-    message(WARNING "Could not find ncc compiler. ncc will not be available as VE target compiler")
+  set(TARGET_COMPILER_NCC "ncc") # We check whether it exists at runtime
+  set(NECAURORA_DEFAULT_TARGET_COMPILER
+      "${NECAURORA_TARGET_COMPILER_CLANG}"
+      CACHE STRING
+      "Default target compiler for NEC OpenMP target (-fopenmp-nec-compiler=<this_value>)")
+  message(WARNING "Could not find ncc compiler. ncc might not be available as VE target compiler")
 endif()
 
-# Set Clang and RVClang target compiler variables
-set(NECAURORA_TARGET_COMPILER_CLANG
-    "${CMAKE_INSTALL_PREFIX}/bin/clang"
-    CACHE
-    FILEPATH
-    "Path to clang used as VE target compiler")
-set(NECAURORA_TARGET_COMPILER_RVCLANG
-    "${CMAKE_INSTALL_PREFIX}/bin/rvclang"
-    CACHE FILEPATH
-    "Path to rvclang used as VE target compiler")
 
-set(NECAURORA_DEFAULT_TARGET_COMPILER
-    "ncc"
-    CACHE STRING
-    "Default target compiler for NEC OpenMP target (-fopenmp-nec-compiler=<this_value>)")
 message("OMPT for SX-Aurora: Using the default target compiler option \"${NECAURORA_DEFAULT_TARGET_COMPILER}\"" )
 
 find_library(
