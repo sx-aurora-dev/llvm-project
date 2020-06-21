@@ -64,7 +64,7 @@ define void @fun2() {
 ; VEC-NEXT:    lea %s0, 8
 ; VEC-NEXT:    or %s1, 0, (0)1
 ; VEC-NEXT:    lvl %s0
-; VEC-NEXT:    vbrd %v0,%s1
+; VEC-NEXT:    vbrd %v0, %s1
 ; VEC-NEXT:    lea %s1, ldata@lo
 ; VEC-NEXT:    and %s1, %s1, (32)0
 ; VEC-NEXT:    lea.sl %s1, ldata@hi(, %s1)

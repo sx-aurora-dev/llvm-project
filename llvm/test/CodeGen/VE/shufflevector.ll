@@ -26,7 +26,7 @@ define x86_regcallcc <8 x i32> @__regcall3__svv512i32_brd2(<4 x i32>) {
 ; CHECK-NEXT:    lea %s0, 8
 ; CHECK-NEXT:    lvs %s1, %v0(2)
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrdl %v0,%s1
+; CHECK-NEXT:    vbrdl %v0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = shufflevector <4 x i32> %0, <4 x i32> zeroinitializer, <8 x i32> <i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2>
   ret <8 x i32> %2
@@ -39,7 +39,7 @@ define x86_regcallcc <8 x i32> @__regcall3__svv512i32_brd7(<4 x i32>, <4 x i32>)
 ; CHECK-NEXT:    lea %s0, 8
 ; CHECK-NEXT:    lvs %s1, %v1(3)
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrdl %v0,%s1
+; CHECK-NEXT:    vbrdl %v0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = shufflevector <4 x i32> %0, <4 x i32> %1, <8 x i32> <i32 7, i32 7, i32 7, i32 7, i32 7, i32 7, i32 7, i32 7>
   ret <8 x i32> %3
