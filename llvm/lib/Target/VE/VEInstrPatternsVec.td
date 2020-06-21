@@ -279,11 +279,11 @@ let Predicates = [IsVectorizeSubTarget] in {
 multiclass ext_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                  ValueType vi1> {
   def : Pat<(vi64 (sext vi32:$vx)),
-            (vaddswsx_vIvl 0, $vx,
-                           (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
+            (VADDSWSXivl 0, $vx,
+                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(vi64 (zext vi32:$vx)),
-            (vaddswzx_vIvl 0, $vx,
-                           (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
+            (VADDSWZXivl 0, $vx,
+                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
@@ -299,28 +299,24 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // Bitconvert for vector registers
 
+// First data of v512i32/v512f32 places higher bits.
+
 def: Pat<(v512i32 (scalar_to_vector i32:$val)),
-         (v512i32 (lsv_vvss (v512i32 (IMPLICIT_DEF)), 0,
-                        (SLLri
-                           (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
-                           32)))>;
+         (LSVir 0, (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
+                          32))>;
 def: Pat<(v512f32 (scalar_to_vector f32:$val)),
-         (v512f32 (lsv_vvss (v512f32 (IMPLICIT_DEF)), 0,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32)))>;
+         (LSVir 0, (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
 
 multiclass s2v_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                  ValueType vf32, ValueType vf64> {
   def: Pat<(vi32 (scalar_to_vector i32:$val)),
-           (lsv_vvss (vi32 (IMPLICIT_DEF)), 0,
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
+           (LSVir 0, (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
   def: Pat<(vi64 (scalar_to_vector i64:$val)),
-           (lsv_vvss (vi64 (IMPLICIT_DEF)), 0, $val)>;
+           (LSVir 0, $val)>;
   def: Pat<(vf32 (scalar_to_vector f32:$val)),
-           (lsv_vvss (vf32 (IMPLICIT_DEF)), 0,
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
+           (LSVir 0, (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
   def: Pat<(vf64 (scalar_to_vector f64:$val)),
-           (lsv_vvss (vf64 (IMPLICIT_DEF)), 0,
-                 (COPY_TO_REGCLASS $val, I64))>;
+           (LSVir 0, (COPY_TO_REGCLASS $val, I64))>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
@@ -340,12 +336,13 @@ let Predicates = [IsVectorizeSubTarget] in {
 multiclass ive_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                  ValueType vf32, ValueType vf64> {
   def: Pat<(vi32 (insertelt vi32:$vec, i32:$val, uimm7:$idx)),
-           (lsv_vvss vi32:$vec, imm:$idx,
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
+           (LSVir_v (LO7 $idx),
+                    (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
+                    $vec)>;
   def: Pat<(vi32 (insertelt vi32:$vec, i32:$val, i64:$idx)),
-           (lsv_vvss vi32:$vec,
-                 (EXTRACT_SUBREG $idx, sub_i32),
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
+           (LSVrr_v (EXTRACT_SUBREG $idx, sub_i32),
+                    (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
+                    $vec)>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
@@ -365,7 +362,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 multiclass eve_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                  ValueType vf32, ValueType vf64> {
   def: Pat<(i32 (extractelt vi32:$vec, uimm7:$idx)),
-           (EXTRACT_SUBREG (lvsl_svs vi32:$vec, imm:$idx), sub_i32)>;
+           (EXTRACT_SUBREG (LVSvi vi32:$vec, (LO7 $idx)), sub_i32)>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {

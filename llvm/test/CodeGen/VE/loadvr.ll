@@ -45,7 +45,7 @@ define x86_regcallcc <256 x i64> @loadv256i32sext(<256 x i32>* nocapture readonl
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vldl.sx %v0, 4, %s0
-; CHECK-NEXT:    vadds.w.sx %v0,0,%v0
+; CHECK-NEXT:    vadds.w.sx %v0, 0, %v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = load <256 x i32>, <256 x i32>* %0, align 16
   %3 = sext <256 x i32> %2 to <256 x i64>
@@ -59,7 +59,7 @@ define x86_regcallcc <256 x i64> @loadv256i32zext(<256 x i32>* nocapture readonl
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vldl.sx %v0, 4, %s0
-; CHECK-NEXT:    vadds.w.zx %v0,0,%v0
+; CHECK-NEXT:    pvadds.lo %v0, 0, %v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = load <256 x i32>, <256 x i32>* %0, align 16
   %3 = zext <256 x i32> %2 to <256 x i64>
