@@ -425,8 +425,8 @@ let Predicates = [IsVectorizeSubTarget] in {
 // Sequence
 
 multiclass vseq_for_vector_length<int length, ValueType vi32, ValueType vi64> {
-  def : Pat<(vi32 (vec_seq (i32 1))),
-            (PVSEQLOl (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
+    def : Pat<(vi32 (vec_seq (i32 1))),
+                (PVSEQLOl (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {

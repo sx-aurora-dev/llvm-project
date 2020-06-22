@@ -1,12 +1,12 @@
-// LVS lvs lvsl_svs
-def lvsl_svs : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy),
+// LVS lvs veoldLVSLvr
+def veoldLVSLvr : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy),
        "lvs $sx,$vx($sy)", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
 }
 
-def lvsl_svI : RV<0x9e, (outs I64:$sx), (ins V64:$vx, simm7:$sy),
+def veoldLVSLvi : RV<0x9e, (outs I64:$sx), (ins V64:$vx, simm7:$sy),
        "lvs $sx,$vx($sy)", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -14,33 +14,33 @@ def lvsl_svI : RV<0x9e, (outs I64:$sx), (ins V64:$vx, simm7:$sy),
 }
 
 
-// LVS lvs lvss_svs
-def lvss_svs : RV<0x9e, (outs F32:$sx), (ins V64:$vx, I32:$sy),
+// LVS lvs veoldLVSSvr
+def veoldLVSSvr : RV<0x9e, (outs F32:$sx), (ins V64:$vx, I32:$sy),
        "lvs $sx,$vx($sy)", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
 }
 
-// inst=LSV asm=lsv intrisic=lsv_vvss
-def lsv_vvss : RV<0x8e, (outs V64:$vx), (ins V64:$vd, I32:$sy, I64:$sz),
+// inst=LSV asm=lsv intrisic=veoldLSVrr_v
+def veoldLSVrr_v : RV<0x8e, (outs V64:$vx), (ins I32:$sy, I64:$sz, V64:$pt),
        "lsv $vx($sy),$sz", [], NoItinerary>
 {
-  let Constraints = "$vx = $vd";
+  let Constraints = "$vx = $pt";
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
 }
 
-def lsv_vvIs : RV<0x8e, (outs V64:$vx), (ins V64:$vd, simm7:$sy, I64:$sz),
+def veoldLSVir_v : RV<0x8e, (outs V64:$vx), (ins simm7:$sy, I64:$sz, V64:$pt),
        "lsv $vx($sy),$sz", [], NoItinerary>
 {
-  let Constraints = "$vx = $vd";
+  let Constraints = "$vx = $pt";
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
 }
 
 // tempolary
-def vor_v1vl : RV<0xc5, (outs V64:$vx), (ins uimm6:$sy, V64:$vz, I32:$vl),
+def veoldVOR1vl : RV<0xc5, (outs V64:$vx), (ins uimm6:$sy, V64:$vz, I32:$vl),
        "vor $vx,($sy)1,$vz", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";

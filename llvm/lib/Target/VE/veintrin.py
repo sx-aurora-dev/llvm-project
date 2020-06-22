@@ -46,11 +46,12 @@ T_v8u64   = Type("v8i64",   "V8ULi",   "LLVMType<v8i64>", "unsigned int*", T_u64
 #T_v16u32  = Type("v16i32",  "V16ULi",  "unsigned int*",  T_u32)
 
 class Op(object):
-    def __init__(self, kind, ty, name, regClass):
+    def __init__(self, kind, ty, name, regClass, instSuffix = None):
         self.kind = kind
         self.ty_ = ty
         self.name_ = name
         self.regClass_ = regClass
+        self.instSuffix = instSuffix if instSuffix is not None else kind
 
     def regClass(self): return self.regClass_
     def intrinDefType(self): return self.ty_.intrinDefType
@@ -85,6 +86,7 @@ class Op(object):
     def isMask256(self): return self.kind == 'm'
     def isMask512(self): return self.kind == 'M'
     def isVL(self): return self.kind == 'l'
+    def isPassTrough(self): return self.name_ == "pt" or self.name_ == "ptm"
 
     def regName(self):
         return self.name_
@@ -104,21 +106,21 @@ class Op(object):
             return "__vm256"
         raise Exception("not a vector type: {}".format(self.kind))
 
-def VOp(ty, name):
-    if ty == T_f64: return Op("v", T_v256f64, name, "V64")
-    elif ty == T_f32: return Op("v", T_v256f32, name, "V64")
-    elif ty == T_i64: return Op("v", T_v256i64, name, "V64")
-    elif ty == T_i32: return Op("v", T_v256i32, name, "V64")
-    elif ty == T_u64: return Op("v", T_v256u64, name, "V64")
-    elif ty == T_u32: return Op("v", T_v256u32, name, "V64")
+def VOp(ty, name, instSuffix = None):
+    if ty == T_f64: return Op("v", T_v256f64, name, "V64", instSuffix)
+    elif ty == T_f32: return Op("v", T_v256f32, name, "V64", instSuffix)
+    elif ty == T_i64: return Op("v", T_v256i64, name, "V64", instSuffix)
+    elif ty == T_i32: return Op("v", T_v256i32, name, "V64", instSuffix)
+    elif ty == T_u64: return Op("v", T_v256u64, name, "V64", instSuffix)
+    elif ty == T_u32: return Op("v", T_v256u32, name, "V64", instSuffix)
     else: raise Exception("unknown type")
 
 def SOp(ty, name):
     if ty in [T_f64, T_i64, T_u64, T_voidp, T_voidcp]: 
-        return Op("s", ty, name, "I64")
-    elif ty == T_f32: return Op("s", ty, name, "F32")
-    elif ty == T_i32: return Op("s", ty, name, "I32")
-    elif ty == T_u32: return Op("s", ty, name, "I32")
+        return Op("s", ty, name, "I64", "r")
+    elif ty == T_f32: return Op("s", ty, name, "F32", "r")
+    elif ty == T_i32: return Op("s", ty, name, "I32", "r")
+    elif ty == T_u32: return Op("s", ty, name, "I32", "r")
     else: raise Exception("unknown type: {}".format(ty.ValueType))
 
 def SX(ty): return SOp(ty, "sx")
@@ -130,38 +132,55 @@ def VX(ty): return VOp(ty, "vx")
 def VY(ty): return VOp(ty, "vy")
 def VZ(ty): return VOp(ty, "vz")
 def VW(ty): return VOp(ty, "vw")
-def VD(ty): return VOp(ty, "vd") # pass through
+#def VD(ty): return VOp(ty, "vd") # pass through
+def VD(ty): return VOp(ty, "pt", "_v") # pass through
 
 VL = Op("l", T_u32, "vl", "I32")
-VM = Op("m", T_v4u64, "vm", "VM")
-VMX = Op("m", T_v4u64, "vmx", "VM")
-VMY = Op("m", T_v4u64, "vmy", "VM")
-VMZ = Op("m", T_v4u64, "vmz", "VM")
-VMD = Op("m", T_v4u64, "vmd", "VM") # pass through
-VM512 = Op("M", T_v8u64, "vm", "VM512")
-VMX512 = Op("M", T_v8u64, "vmx", "VM512")
-VMY512 = Op("M", T_v8u64, "vmy", "VM512")
-VMZ512 = Op("M", T_v8u64, "vmz", "VM512")
-VMD512 = Op("M", T_v8u64, "vmd", "VM512") # pass through
+VM = Op("m", T_v4u64, "vm", "VM", "x")
+VMX = Op("m", T_v4u64, "vmx", "VM", "x")
+VMY = Op("m", T_v4u64, "vmy", "VM", "x")
+VMZ = Op("m", T_v4u64, "vmz", "VM", "x")
+VMD = Op("m", T_v4u64, "ptm", "VM", "_x") # pass through
+VM512 = Op("M", T_v8u64, "vm", "VM512", "x")
+VMX512 = Op("M", T_v8u64, "vmx", "VM512", "x")
+VMY512 = Op("M", T_v8u64, "vmy", "VM512", "x")
+VMZ512 = Op("M", T_v8u64, "vmz", "VM512", "x")
+VMD512 = Op("M", T_v8u64, "ptm", "VM512", "_x") # pass through
 
 class ImmOp(Op):
-    def __init__(self, kind, ty, name, immType):
+    def __init__(self, kind, ty, name, immType, instSuffix):
         regClass = {T_u32:"simm7", T_i32:"simm7", 
                     T_u64:"simm7", T_i64:"simm7"}[ty]
-        super(ImmOp, self).__init__(kind, ty, name, regClass)
+        super(ImmOp, self).__init__(kind, ty, name, regClass, instSuffix)
         self.immType = immType
 
-def ImmI(ty): return ImmOp("I", ty, "I", "simm7") # kind, type, varname
-def ImmN(ty): return ImmOp("I", ty, "N", "uimm6")
-def UImm7(ty): return ImmOp("I", ty, "N", "uimm7")
-def ImmZ(ty): return ImmOp("Z", ty, "Z", "simm7") # FIXME: simm7?
+def ImmI(ty): return ImmOp("I", ty, "I", "simm7", "i") # kind, type, varname
+def ImmN(ty): return ImmOp("I", ty, "N", "uimm6", "i")
+def UImm7(ty): return ImmOp("I", ty, "N", "uimm7", "i")
+def ImmZ(ty): return ImmOp("Z", ty, "Z", "simm7", "z") # FIXME: simm7?
 
 def Args_vvv(ty): return [VX(ty), VY(ty), VZ(ty)]
 def Args_vsv(tyV, tyS = None): 
-    if tyS == None:
+    if tyS is None:
         tyS = tyV
     return [VX(tyV), SY(tyS), VZ(tyV)]
 def Args_vIv(ty): return [VX(ty), ImmI(ty), VZ(ty)]
+
+def movePassTroughOp(ary):
+    ret = []
+    passTroughOp = None
+    for op in ary:
+        if op.isPassTrough():
+            passTroughOp = op
+        else:
+            ret.append(op)
+    if passTroughOp is not None:
+        ret.append(passTroughOp)
+    return ret
+
+def reorderVSTOps(ary):
+    return [ary[1], ary[2], ary[0]] + ary[3:]
+
 
 # inst: instruction in the manual. VFAD
 # opc: op code (8bit)
@@ -240,8 +259,8 @@ class Inst(object):
         self.hasBuiltin_ = False
         return self
 
-    def hasPassThroughOp(self): return any([op.regName() == "vd" for op in self.ins])
-    def hasPassThroughMaskOp(self): return any([op.regName() == "vmd" for op in self.ins])
+    def hasPassThroughOp(self): return any([op.regName() == "pt" for op in self.ins])
+    def hasPassThroughMaskOp(self): return any([op.regName() == "ptm" for op in self.ins])
     def hasImmOp(self): return any([op.isImm() for op in self.ins])
     def hasVLOp(self): return any([op.isVL() for op in self.ins])
 
@@ -280,8 +299,10 @@ class Inst(object):
             return ", ".join(["{}:${}".format(op.regClass(), op.regName()) for op in ops])
 
         outs = fmtOps(self.outs)
-        ins = fmtOps(self.ins)
-        tmp = [op for op in self.ins if op.regName() not in ["vd", "vl", "vmd"]]
+        tmp = movePassTroughOp(self.ins)
+        ins = fmtOps(tmp)
+        #ins = fmtOps(self.ins)
+        tmp = [op for op in self.ins if op.regName() not in ["pt", "vl", "ptm"]]
         asmArgs = ",".join(["${}".format(op.regName()) for op in self.outs + tmp])
 
         instName = self.llvmInst()
@@ -305,9 +326,9 @@ class Inst(object):
 #                s += '  bits<4> vm;\n'
 #                s += '  let m = vm;\n'
         if self.hasPassThroughOp():
-            s += '  let Constraints = "${} = $vd";\n'.format(self.outs[0].regName())
+            s += '  let Constraints = "${} = $pt";\n'.format(self.outs[0].regName())
         if self.hasPassThroughMaskOp():
-            s += '  let Constraints = "${} = $vmd";\n'.format(self.outs[0].regName())
+            s += '  let Constraints = "${} = $ptm";\n'.format(self.outs[0].regName())
         s += '  let DecoderNamespace = "VEL";\n'
         s += '  let isCodeGenOnly = 1;\n'
         if self.hasVLOp():
@@ -364,15 +385,32 @@ class DummyInst(Inst):
     def isDummy(self): return True
 
 class InstVEL(Inst):
+#    def __init__(self, opc, inst, asm, intrinsicName, outs, ins, **kwargs):
+#        #sys.stderr.write("inst={} subop={} asm={}\n".format(inst, kwargs['subop'], asm))
+#        if 'llvmInst' not in kwargs:
+#            if asm:
+#                suffix = "".join([op.kind for op in outs + ins])
+#                llvmInst = re.sub("\.", "", asm) + "_" + suffix
+#            else:
+#                llvmInst = None
+#            kwargs['llvmInst'] = llvmInst
+#
+#        super(InstVEL, self).__init__(opc, inst, asm, intrinsicName, outs, ins, **kwargs)
+#
+#        self.funcPrefix_ = "_vel_"
+#        self.llvmIntrinsicPrefix_ = "_ve_vl_" # we have to start from "_ve_" in LLVM
+
     def __init__(self, opc, inst, asm, intrinsicName, outs, ins, **kwargs):
         #sys.stderr.write("inst={} subop={} asm={}\n".format(inst, kwargs['subop'], asm))
         if 'llvmInst' not in kwargs:
             if asm:
-                suffix = "".join([op.kind for op in outs + ins])
-                llvmInst = re.sub("\.", "", asm) + "_" + suffix
+                suffix = "".join([op.instSuffix for op in movePassTroughOp(ins)])
+                llvmInst = re.sub("\.", "", asm).upper() + suffix
             else:
                 llvmInst = None
             kwargs['llvmInst'] = llvmInst
+
+        kwargs['llvmInst'] = "veold" + kwargs['llvmInst']
 
         super(InstVEL, self).__init__(opc, inst, asm, intrinsicName, outs, ins, **kwargs)
 
@@ -381,7 +419,7 @@ class InstVEL(Inst):
 
     def pattern(self):
         argsL = ", ".join([op.dagOpL() for op in self.ins])
-        argsR = ", ".join([op.dagOpR() for op in self.ins])
+        argsR = ", ".join([op.dagOpR() for op in movePassTroughOp(self.ins)])
         l = "({} {})".format(self.llvmIntrinName(), argsL)
         r = "({} {})".format(self.llvmInst(), argsR)
         return "def : Pat<{}, {}>;".format(l, r)
@@ -853,9 +891,9 @@ class InstTable(object):
     def LVSm(self, opc):
         I = self.InstClass
         # Manual LLVMInstDefine
-        self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="lvsl_svs", noVL=True).noTest()).noLLVMInstDefine()
-        self.add(I(opc, "LVS", "lvs", "lvsd_svs", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="lvsl_svs", noVL=True).noTest()).noLLVMInstDefine()
-        self.add(I(opc, "LVS", "lvs", "lvss_svs", [SX(T_f32)], [VX(T_u64), SY(T_u32)], llvmInst="lvss_svs", noVL=True).noTest()).noLLVMInstDefine()
+        self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSLvr", noVL=True).noTest()).noLLVMInstDefine()
+        self.add(I(opc, "LVS", "lvs", "lvsd_svs", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSLvr", noVL=True).noTest()).noLLVMInstDefine()
+        self.add(I(opc, "LVS", "lvs", "lvss_svs", [SX(T_f32)], [VX(T_u64), SY(T_u32)], llvmInst="LVSSvr", noVL=True).noTest()).noLLVMInstDefine()
 
     def Inst2f(self, opc, name, instName, expr, hasPacked = True, hasNex = False):
         self.Def(opc, instName, "d", name+".d", [[VX(T_f64), VY(T_f64)]], expr)
@@ -1034,7 +1072,7 @@ class InstTableVEL(InstTable):
             if ('noVL' not in kwargs) or (not kwargs['noVL']):
                 newary.append(outs + ins + [VL])
                 noPassThrough = ('noPassThrough' in kwargs) and (kwargs['noPassThrough'])
-                hasPassThroughOp = any([op.regName() == "vd" for op in ins])
+                hasPassThroughOp = any([op.regName() == "pt" for op in ins])
                 if (not noPassThrough) and (not hasPassThroughOp) and (outs[0] and outs[0].kind == "v"):
                     newary.append(outs + ins + [VD(outs[0].elemType()), VL])
             else:
@@ -1070,14 +1108,14 @@ def createInstructionTable():
     T.Def(0x80, "PFCHV", "nc", "pfchv.nc", [[None, ImmI(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
     T.Def(0x8E, "LSV", "", "lsv", [[VX(T_u64), VD(T_u64), SY(T_u32), SZ(T_u64)]], noVL=True).noTest().noLLVMInstDefine()
     T.LVSm(0x9E)
-    T.Def(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True).noTest().NYI()
-    T.Def(0xB7, "LVM", "i", "lvm", [[VMX, VMD, ImmN(T_u64), SZ(T_u64)]], noVL=True).noTest()
-    T.Def(None, "LVM", "pr", "lvm", [[VMX512, VMD512, SY(T_u64), SZ(T_u64)]], noVL=True).noTest().NYI()
-    T.Def(None, "LVM", "pi", "lvm", [[VMX512, VMD512, ImmN(T_u64), SZ(T_u64)]], noVL=True).noTest()
+    T.Def(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMxrr_x").noTest().NYI()
+    T.Def(0xB7, "LVM", "i", "lvm", [[VMX, VMD, ImmN(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMxir_x").noTest()
+    T.Def(None, "LVM", "pr", "lvm", [[VMX512, VMD512, SY(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMyrr_y").noTest().NYI()
+    T.Def(None, "LVM", "pi", "lvm", [[VMX512, VMD512, ImmN(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMyir_y").noTest()
     T.Def(0xA7, "SVM", "r", "svm", [[SX(T_u64), VMZ, SY(T_u64)]], noVL=True).noTest().NYI()
     T.Def(0xA7, "SVM", "i", "svm", [[SX(T_u64), VMZ, ImmN(T_u64)]], noVL=True).noTest()
-    T.Def(None, "SVM", "pr", "svm", [[SX(T_u64), VMZ512, SY(T_u64)]], noVL=True).noTest().NYI()
-    T.Def(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True).noTest()
+    T.Def(None, "SVM", "pr", "svm", [[SX(T_u64), VMZ512, SY(T_u64)]], noVL=True, llvmInst="SVMyr").noTest().NYI()
+    T.Def(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True, llvmInst="SVMyi").noTest()
     T.VBRDm(0x8C)
     T.VMVm()
     
@@ -1257,17 +1295,17 @@ def createInstructionTable():
     
     T.Section("Table 3-23 Vector Mask Register Instructions", 34)
     T.Def(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}", noVL=True)
-    T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}", noVL=True)
+    T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}", noVL=True, llvmInst="ANDMyy")
     T.Def(0x85, "ORM", "",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}", noVL=True)
-    T.Def(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}", noVL=True)
+    T.Def(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}", noVL=True, llvmInst="ORMyy")
     T.Def(0x86, "XORM", "", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}", noVL=True)
-    T.Def(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}", noVL=True)
+    T.Def(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}", noVL=True, llvmInst="XORMyy")
     T.Def(0x87, "EQVM", "", "eqvm", [[VMX, VMY, VMZ]], "{0} = ~({1} ^ {2})", noVL=True)
-    T.Def(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})", noVL=True)
+    T.Def(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})", noVL=True, llvmInst="EQVMyy")
     T.Def(0x94, "NNDM", "", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}", noVL=True)
-    T.Def(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}", noVL=True)
+    T.Def(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}", noVL=True, llvmInst="NNDMyy")
     T.Def(0x95, "NEGM", "", "negm", [[VMX, VMY]], "{0} = ~{1}", noVL=True)
-    T.Def(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}", noVL=True)
+    T.Def(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}", noVL=True, llvmInst="NEGMy")
     T.Def(0xA4, "PCVM", "", "pcvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA5, "LZVM", "", "lzvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA6, "TOVM", "", "tovm", [[SX(T_u64), VMY]]).noTest();
@@ -1363,7 +1401,7 @@ def gen_vl_index(insts):
     print("default: return -1;")
     for I in insts:
         if I.hasLLVMInstDefine() and I.hasVLOp():
-            index = len(I.outs) + I.ins.index(VL)
+            index = len(I.outs) + movePassTroughOp(I.ins).index(VL)
             print("case VE::{}: return {};".format(I.llvmInst(), index))
 
 
