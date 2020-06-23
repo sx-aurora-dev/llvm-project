@@ -853,6 +853,8 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
         .addReg(Src, getKillRegState(KillSrc));
     } else {
       assert(MI.getOpcode() == VE::LVMyir_y);
+      assert(MI.getOperand(0).getReg() == MI.getOperand(3).getReg() &&
+             "LVMyir_y has different register in 3rd operand");
       BuildMI(*MBB, MI, DL, get(VE::LVMxir_x))
         .addDef(VMX)
         .addImm(Imm)
