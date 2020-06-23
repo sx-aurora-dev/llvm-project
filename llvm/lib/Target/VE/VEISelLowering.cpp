@@ -1888,21 +1888,6 @@ void VETargetLowering::initSPUActions() {
   setOperationAction(ISD::UMULO, MVT::i64, Expand);
   setOperationAction(ISD::SMULO, MVT::i64, Expand);
 
-  setOperationAction(ISD::BITREVERSE, MVT::i32, Promote);
-  setOperationAction(ISD::BITREVERSE, MVT::i64, Legal);
-  setOperationAction(ISD::BSWAP, MVT::i32, Legal);
-  setOperationAction(ISD::BSWAP, MVT::i64, Legal);
-  setOperationAction(ISD::CTPOP, MVT::i32, Legal);
-  setOperationAction(ISD::CTPOP, MVT::i64, Legal);
-  setOperationAction(ISD::CTLZ, MVT::i32, Legal);
-  setOperationAction(ISD::CTLZ, MVT::i64, Legal);
-  setOperationAction(ISD::CTTZ, MVT::i32, Promote);
-  setOperationAction(ISD::CTTZ, MVT::i64, Expand);
-  setOperationAction(ISD::ROTL, MVT::i32, Expand);
-  setOperationAction(ISD::ROTL, MVT::i64, Expand);
-  setOperationAction(ISD::ROTR, MVT::i32, Expand);
-  setOperationAction(ISD::ROTR, MVT::i64, Expand);
-
   // Use the default implementation.
   setOperationAction(ISD::STACKSAVE, MVT::Other, Expand);
   setOperationAction(ISD::STACKRESTORE, MVT::Other, Expand);
