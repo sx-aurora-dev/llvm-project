@@ -15,25 +15,25 @@ define <256 x i32> @shuffle256_rand_ab(<256 x i32> %A, <256 x i32> %B) {
 ; CHECK-NEXT:    and %s3, %s3, (32)0
 ; CHECK-NEXT:    lea.sl %s3, .LCPI0_0@hi(, %s3)
 ; CHECK-NEXT:    vld %v0,8,%s3
-; CHECK-NEXT:    xorm %vm1,%vm0,%vm0
-; CHECK-NEXT:    lea %s3, 1979639787
-; CHECK-NEXT:    lvm %vm1,0,%s3
 ; CHECK-NEXT:    vadds.l %v0,%s1,%v0
-; CHECK-NEXT:    vgtl.zx %v1,%v0,0,0
-; CHECK-NEXT:    lea %s1, .LCPI0_1@lo
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s1, .LCPI0_1@hi(, %s1)
-; CHECK-NEXT:    lea %s3, 252
-; CHECK-NEXT:    lvl %s3
-; CHECK-NEXT:    vld %v0,8,%s1
-; CHECK-NEXT:    lea %s1, 2111784167
-; CHECK-NEXT:    lvm %vm1,1,%s1
-; CHECK-NEXT:    lea %s1, -116737345
+; CHECK-NEXT:    vgtl.zx %v1, %v0, 0, 0
+; CHECK-NEXT:    xorm %vm1,%vm0,%vm0
+; CHECK-NEXT:    lea %s1, 1979639787
+; CHECK-NEXT:    lvm %vm1,0,%s1
+; CHECK-NEXT:    lea %s1, 252
+; CHECK-NEXT:    lea %s3, .LCPI0_1@lo
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    lea.sl %s3, .LCPI0_1@hi(, %s3)
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vld %v0,8,%s3
+; CHECK-NEXT:    lea %s3, 2111784167
+; CHECK-NEXT:    lvm %vm1,1,%s3
+; CHECK-NEXT:    lea %s3, -116737345
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vadds.l %v0,%s2,%v0
-; CHECK-NEXT:    lvl %s3
-; CHECK-NEXT:    vgtl.zx %v0,%v0,0,0
-; CHECK-NEXT:    lvm %vm1,2,%s1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vgtl.zx %v0, %v0, 0, 0
+; CHECK-NEXT:    lvm %vm1,2,%s3
 ; CHECK-NEXT:    lea %s1, -51384867
 ; CHECK-NEXT:    lvm %vm1,3,%s1
 ; CHECK-NEXT:    lvl %s0

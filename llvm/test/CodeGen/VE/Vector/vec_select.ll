@@ -2,18 +2,50 @@
 
 define <192 x double> @vec_select_vvv_v192f64(<192 x i1> %C, <192 x double> %T, <192 x double> %F) {
 ; CHECK-LABEL: vec_select_vvv_v192f64:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, 192
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmrg %v1,%v1,%v0,%vm1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0,(0)1,%v1
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = select <192 x i1> %C, <192 x double> %T, <192 x double> %F
   ret <192 x double> %r
 }
 
 define <256 x double> @vec_select_vvv_v256f64(<256 x i1> %C, <256 x double> %T, <256 x double> %F) {
 ; CHECK-LABEL: vec_select_vvv_v256f64:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmrg %v1,%v1,%v0,%vm1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0,(0)1,%v1
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = select <256 x i1> %C, <256 x double> %T, <256 x double> %F
   ret <256 x double> %r
 }
 
 define <256 x double> @vec_select_svv_v256f64(i1 %SC, <256 x double> %T, <256 x double> %F) {
 ; CHECK-LABEL: vec_select_svv_v256f64:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrdl %v2,%s0
+; CHECK-NEXT:    pvfmk.w.lo.ne %vm1,%v2
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK-NEXT:    lvm %vm2,0,%s0
+; CHECK-NEXT:    lvm %vm2,1,%s0
+; CHECK-NEXT:    lvm %vm2,2,%s0
+; CHECK-NEXT:    lvm %vm2,3,%s0
+; CHECK-NEXT:    orm %vm1,%vm2,%vm1
+; CHECK-NEXT:    vmrg %v1,%v1,%v0,%vm1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0,(0)1,%v1
+; CHECK-NEXT:    or %s11, 0, %s9
   %SC0 = insertelement <256 x i1> undef, i1 %SC, i32 0
   %C = shufflevector <256 x i1> %SC0, <256 x i1> %SC0, <256 x i32> zeroinitializer
   %r = select <256 x i1> %C, <256 x double> %T, <256 x double> %F
@@ -22,6 +54,20 @@ define <256 x double> @vec_select_svv_v256f64(i1 %SC, <256 x double> %T, <256 x 
 
 define <256 x double> @vec_select_ssv_v256f64(i1 %SC, double %ST, <256 x double> %F) {
 ; CHECK-LABEL: vec_select_ssv_v256f64:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, 256
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vbrdl %v1,%s0
+; CHECK-NEXT:    pvfmk.w.lo.ne %vm1,%v1
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK-NEXT:    lvm %vm2,0,%s0
+; CHECK-NEXT:    lvm %vm2,1,%s0
+; CHECK-NEXT:    lvm %vm2,2,%s0
+; CHECK-NEXT:    lvm %vm2,3,%s0
+; CHECK-NEXT:    orm %vm1,%vm2,%vm1
+; CHECK-NEXT:    vbrd %v1,%s1
+; CHECK-NEXT:    vmrg %v0,%v0,%v1,%vm1
+; CHECK-NEXT:    or %s11, 0, %s9
   %SC0 = insertelement <256 x i1> undef, i1 %SC, i32 0
   %C = shufflevector <256 x i1> %SC0, <256 x i1> %SC0, <256 x i32> zeroinitializer
   %ST0 = insertelement <256 x double> undef, double %ST, i32 0
@@ -32,12 +78,34 @@ define <256 x double> @vec_select_ssv_v256f64(i1 %SC, double %ST, <256 x double>
 
 define <256 x i1> @vec_select_mmm_v256f64(<256 x i1> %C, <256 x i1> %T, <256 x i1> %F) {
 ; CHECK-LABEL: vec_select_mmm_v256f64:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    andm %vm2,%vm1,%vm2
+; CHECK-NEXT:    xorm %vm1,%vm1,%vm0
+; CHECK-NEXT:    andm %vm1,%vm1,%vm3
+; CHECK-NEXT:    orm %vm1,%vm1,%vm2
+; CHECK-NEXT:    or %s11, 0, %s9
   %r = select <256 x i1> %C, <256 x i1> %T, <256 x i1> %F
   ret <256 x i1> %r
 }
 
 define <256 x i1> @vec_select_smm_v256f64(i1 %SC, <256 x i1> %T, <256 x i1> %F) {
 ; CHECK-LABEL: vec_select_smm_v256f64:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrdl %v0,%s0
+; CHECK-NEXT:    pvfmk.w.lo.ne %vm3,%v0
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK-NEXT:    lvm %vm4,0,%s0
+; CHECK-NEXT:    lvm %vm4,1,%s0
+; CHECK-NEXT:    lvm %vm4,2,%s0
+; CHECK-NEXT:    lvm %vm4,3,%s0
+; CHECK-NEXT:    orm %vm3,%vm4,%vm3
+; CHECK-NEXT:    andm %vm1,%vm3,%vm1
+; CHECK-NEXT:    xorm %vm3,%vm3,%vm0
+; CHECK-NEXT:    andm %vm2,%vm3,%vm2
+; CHECK-NEXT:    orm %vm1,%vm2,%vm1
+; CHECK-NEXT:    or %s11, 0, %s9
   %SC0 = insertelement <256 x i1> undef, i1 %SC, i32 0
   %C = shufflevector <256 x i1> %SC0, <256 x i1> %SC0, <256 x i32> zeroinitializer
   %r = select <256 x i1> %C, <256 x i1> %T, <256 x i1> %F
@@ -46,6 +114,25 @@ define <256 x i1> @vec_select_smm_v256f64(i1 %SC, <256 x i1> %T, <256 x i1> %F) 
 
 define <256 x i1> @vec_select_ssm_v256f64(i1 %SC, i1 %ST, <256 x i1> %F) {
 ; CHECK-LABEL: vec_select_ssm_v256f64:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, 256
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vbrdl %v0,%s0
+; CHECK-NEXT:    pvfmk.w.lo.ne %vm2,%v0
+; CHECK-NEXT:    or %s0, 0, (0)1
+; CHECK-NEXT:    lvm %vm3,0,%s0
+; CHECK-NEXT:    lvm %vm3,1,%s0
+; CHECK-NEXT:    lvm %vm3,2,%s0
+; CHECK-NEXT:    lvm %vm3,3,%s0
+; CHECK-NEXT:    orm %vm2,%vm3,%vm2
+; CHECK-NEXT:    vbrdl %v0,%s1
+; CHECK-NEXT:    pvfmk.w.lo.ne %vm4,%v0
+; CHECK-NEXT:    orm %vm3,%vm3,%vm4
+; CHECK-NEXT:    andm %vm3,%vm2,%vm3
+; CHECK-NEXT:    xorm %vm2,%vm2,%vm0
+; CHECK-NEXT:    andm %vm1,%vm2,%vm1
+; CHECK-NEXT:    orm %vm1,%vm1,%vm3
+; CHECK-NEXT:    or %s11, 0, %s9
   %SC0 = insertelement <256 x i1> undef, i1 %SC, i32 0
   %C = shufflevector <256 x i1> %SC0, <256 x i1> %SC0, <256 x i32> zeroinitializer
   %ST0 = insertelement <256 x i1> undef, i1 %ST, i32 0

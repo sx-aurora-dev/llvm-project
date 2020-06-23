@@ -56,7 +56,7 @@ define void @vec_scatter_v128f64(<128 x double*> %P, <128 x double> %V, <128 x i
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vsc %v1,%v0,0,0,%vm1
+; CHECK-NEXT:    vsc %v0, %v1, 0, 0, %vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
   call void @llvm.masked.scatter.v128f64.v128p0f64(<128 x double> %V, <128 x double*> %P, i32 16, <128 x i1> %M)
   ret void
@@ -67,7 +67,7 @@ define void @vec_scatter_v256f64(<256 x double*> %P, <256 x double> %V, <256 x i
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vsc %v1,%v0,0,0,%vm1
+; CHECK-NEXT:    vsc %v0, %v1, 0, 0, %vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
   call void @llvm.masked.scatter.v256f64.v256p0f64(<256 x double> %V, <256 x double*> %P, i32 16, <256 x i1> %M)
   ret void
