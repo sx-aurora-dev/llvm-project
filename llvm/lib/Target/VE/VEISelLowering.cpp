@@ -1249,7 +1249,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::ATOMIC_LOAD, VT, Legal);
     setOperationAction(ISD::ATOMIC_STORE, VT, Legal);
     setOperationAction(ISD::ATOMIC_CMP_SWAP, VT, Legal);
-    setOperationAction(ISD::ATOMIC_SWAP, VT, Legal);
+    setOperationAction(ISD::ATOMIC_SWAP, VT, Custom);
 
     setOperationAction(ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS, VT, Expand);
 
@@ -1627,6 +1627,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(VEC_SCATTER)
     TARGET_NODE_CASE(VEC_GATHER)
     TARGET_NODE_CASE(Wrapper)
+    TARGET_NODE_CASE(TS1AM)
   }
 #undef TARGET_NODE_CASE
   return nullptr;
@@ -2393,6 +2394,55 @@ SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
   return DAG.getNode(VEISD::MEMBARRIER, DL, MVT::Other, Op.getOperand(0));
 }
 
+SDValue VETargetLowering::LowerATOMIC_SWAP(SDValue Op,
+                                           SelectionDAG &DAG) const {
+  AtomicSDNode *N = cast<AtomicSDNode>(Op);
+
+  // Custom Lowering 1 byte ATOMIC_SWAP.
+  if (N->getMemoryVT() == MVT::i8) {
+    SDLoc DL(Op);
+
+    SDValue Src = N->getOperand(1);
+    SDValue Value = N->getOperand(2);
+
+    SDValue Const3 = DAG.getConstant(3, DL, MVT::i64);
+    SDValue Const24 = DAG.getConstant(24, DL, MVT::i64);
+
+    // Generate "ts1am" as 1 byte ATOMIC_SWAP.
+    SDValue AlignedAddress =
+        DAG.getNode(ISD::AND, DL, Src.getValueType(),
+                    {Src, DAG.getConstant(-4, DL, MVT::i64)});
+    SDValue Remainder =
+        DAG.getNode(ISD::AND, DL, Src.getValueType(), {Src, Const3});
+    SDValue ShiftedFlag = DAG.getNode(
+        ISD::SHL, DL, MVT::i32, {DAG.getConstant(1, DL, MVT::i32), Remainder});
+    SDValue ShiftBits = DAG.getNode(ISD::SHL, DL, Remainder.getValueType(),
+                                    {Remainder, Const3});
+    SDValue NewValue =
+        DAG.getNode(ISD::SHL, DL, Value.getValueType(), {Value, ShiftBits});
+    SDValue TS1AM =
+        DAG.getAtomic(VEISD::TS1AM, DL, N->getMemoryVT(),
+                      DAG.getVTList(Op.getNode()->getValueType(0),
+                                    Op.getNode()->getValueType(1)),
+                      {N->getChain(), AlignedAddress, ShiftedFlag, NewValue},
+                      N->getMemOperand());
+
+    // Extract 1 byte result.
+    SDValue SUB =
+        DAG.getNode(ISD::SUB, DL, Const24.getValueType(), {Const24, ShiftBits});
+    SDValue ShiftLeftFor1Byte =
+        DAG.getNode(ISD::SHL, DL, TS1AM.getValueType(), {TS1AM, SUB});
+    SDValue ShiftRightFor1Byte =
+        DAG.getNode(ISD::SRA, DL, ShiftLeftFor1Byte.getValueType(),
+                    {ShiftLeftFor1Byte, Const24});
+
+    SDValue Chain = TS1AM.getValue(1);
+    return DAG.getMergeValues({ShiftRightFor1Byte, Chain}, DL);
+  }
+  // Otherwise, let llvm legalize it.
+  return Op;
+}
+
 static Instruction* callIntrinsic(IRBuilder<> &Builder, Intrinsic::ID Id) {
   Module *M = Builder.GetInsertBlock()->getParent()->getParent();
   Function *Func = Intrinsic::getDeclaration(M, Id);
@@ -2823,6 +2873,8 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerSTORE(Op, DAG, *this);
   case ISD::ATOMIC_FENCE:
     return LowerATOMIC_FENCE(Op, DAG);
+  case ISD::ATOMIC_SWAP:
+    return LowerATOMIC_SWAP(Op, DAG);
   case ISD::CTLZ:
   case ISD::CTLZ_ZERO_UNDEF:
     return LowerCTLZ(Op, DAG);
@@ -4390,6 +4442,7 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
   SDLoc dl(N);
 
   switch (N->getOpcode()) {
+  case ISD::ATOMIC_SWAP:
   case ISD::BUILD_VECTOR:
   case ISD::INSERT_VECTOR_ELT:
   case ISD::EXTRACT_VECTOR_ELT:

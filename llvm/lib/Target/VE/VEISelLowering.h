@@ -24,17 +24,17 @@ namespace VEISD {
 enum NodeType : unsigned {
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
-  EQV,         // Equivalence between two integer values.
-  XOR,         // Exclusive-or between two integer values.
-  CMPI,        // Compare between two signed integer values.
-  CMPU,        // Compare between two unsigned integer values.
-  CMPF,        // Compare between two floating-point values.
-  CMPQ,        // Compare between two quad floating-point values.
-  CMOV,        // Select between two values using the result of comparison.
+  EQV,  // Equivalence between two integer values.
+  XOR,  // Exclusive-or between two integer values.
+  CMPI, // Compare between two signed integer values.
+  CMPU, // Compare between two unsigned integer values.
+  CMPF, // Compare between two floating-point values.
+  CMPQ, // Compare between two quad floating-point values.
+  CMOV, // Select between two values using the result of comparison.
 
-  EH_SJLJ_SETJMP,           // SjLj exception handling setjmp.
-  EH_SJLJ_LONGJMP,          // SjLj exception handling longjmp.
-  EH_SJLJ_SETUP_DISPATCH,   // SjLj exception handling setup_dispatch.
+  EH_SJLJ_SETJMP,         // SjLj exception handling setjmp.
+  EH_SJLJ_LONGJMP,        // SjLj exception handling longjmp.
+  EH_SJLJ_SETUP_DISPATCH, // SjLj exception handling setup_dispatch.
 
   Hi,
   Lo, // Hi/Lo operations, typically on a global address.
@@ -44,15 +44,16 @@ enum NodeType : unsigned {
   GETSTACKTOP, // retrieve address of stack top (first address of
                // locals and temporaries)
 
-  MEMBARRIER,  // Compiler barrier only; generate a no-op.
+  MEMBARRIER, // Compiler barrier only; generate a no-op.
 
-  CALL,        // A call instruction.
-  RET_FLAG,    // Return with a flag operand.
+  CALL,            // A call instruction.
+  RET_FLAG,        // Return with a flag operand.
   GLOBAL_BASE_REG, // Global base reg for PIC.
-  FLUSHW,      // FLUSH register windows to stack.
+  FLUSHW,          // FLUSH register windows to stack.
 
-  VEC_BROADCAST,   // a scalar value is broadcast across all vector lanes (Operand 0: the broadcast register)
-  VEC_SEQ,         // sequence vector match (Operand 0: the constant stride)
+  VEC_BROADCAST, // a scalar value is broadcast across all vector lanes (Operand
+                 // 0: the broadcast register)
+  VEC_SEQ,       // sequence vector match (Operand 0: the constant stride)
 
   VEC_VMV,
 
@@ -66,6 +67,7 @@ enum NodeType : unsigned {
   /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
   /// MCSymbol and TargetBlockAddress.
   Wrapper,
+  TS1AM, // HW instruction, TS1AM
 };
 }
 
@@ -219,6 +221,7 @@ public:
   SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerATOMIC_SWAP(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
 
