@@ -187,7 +187,7 @@ class SM_Time_Pseudo<string opName, SDPatternOperator node = null_frag> : SM_Pse
 class SM_Inval_Pseudo <string opName, SDPatternOperator node = null_frag> : SM_Pseudo<
   opName, (outs), (ins), "", [(node)]> {
   let hasSideEffects = 1;
-  let mayStore = 1;
+  let mayStore = 0;
   let has_sdst = 0;
   let has_sbase = 0;
   let has_offset = 0;
@@ -860,7 +860,7 @@ let OtherPredicates = [HasNoSMemTimeInst] in {
 def : GCNPat <
   (i64 (readcyclecounter)),
   (REG_SEQUENCE SReg_64,
-    (S_GETREG_B32 -26595), sub0,
+    (S_GETREG_B32 getHwRegImm<HWREG.SHADER_CYCLES, 0, -12>.ret), sub0,
     (S_MOV_B32 (i32 0)), sub1)
 >;
 } // let OtherPredicates = [HasNoSMemTimeInst]

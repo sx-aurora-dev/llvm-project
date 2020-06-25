@@ -25,6 +25,7 @@ void RocmInstallationDetector::scanLibDevicePath() {
   assert(!LibDevicePath.empty());
 
   const StringRef Suffix(".bc");
+  const StringRef Suffix2(".amdgcn.bc");
 
   std::error_code EC;
   for (llvm::vfs::directory_iterator
@@ -36,7 +37,11 @@ void RocmInstallationDetector::scanLibDevicePath() {
     if (!FileName.endswith(Suffix))
       continue;
 
-    StringRef BaseName = FileName.drop_back(Suffix.size());
+    StringRef BaseName;
+    if (FileName.endswith(Suffix2))
+      BaseName = FileName.drop_back(Suffix2.size());
+    else if (FileName.endswith(Suffix))
+      BaseName = FileName.drop_back(Suffix.size());
 
     if (BaseName == "ocml") {
       OCML = FilePath;
@@ -218,8 +223,6 @@ void RocmInstallationDetector::AddHIPIncludeArgs(const ArgList &DriverArgs,
     llvm::sys::path::append(P, "cuda_wrappers");
     CC1Args.push_back("-internal-isystem");
     CC1Args.push_back(DriverArgs.MakeArgString(P));
-    CC1Args.push_back("-include");
-    CC1Args.push_back("__clang_hip_runtime_wrapper.h");
   }
 
   if (DriverArgs.hasArg(options::OPT_nogpuinc))
@@ -232,6 +235,8 @@ void RocmInstallationDetector::AddHIPIncludeArgs(const ArgList &DriverArgs,
 
   CC1Args.push_back("-internal-isystem");
   CC1Args.push_back(DriverArgs.MakeArgString(getIncludePath()));
+  CC1Args.push_back("-include");
+  CC1Args.push_back("__clang_hip_runtime_wrapper.h");
 }
 
 void amdgpu::Linker::ConstructJob(Compilation &C, const JobAction &JA,

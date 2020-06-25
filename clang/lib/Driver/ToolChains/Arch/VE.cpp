@@ -18,14 +18,12 @@ using namespace clang::driver::tools;
 using namespace clang;
 using namespace llvm::opt;
 
-const char *ve::getVEAsmModeForCPU(StringRef Name,
-                                         const llvm::Triple &Triple) {
+const char *ve::getVEAsmModeForCPU(StringRef Name, const llvm::Triple &Triple) {
   return llvm::StringSwitch<const char *>(Name)
       .Default("");
 }
 
-ve::FloatABI ve::getVEFloatABI(const Driver &D,
-                                        const ArgList &Args) {
+ve::FloatABI ve::getVEFloatABI(const Driver &D, const ArgList &Args) {
   ve::FloatABI ABI = ve::FloatABI::Invalid;
   if (Arg *A = Args.getLastArg(clang::driver::options::OPT_msoft_float,
                                options::OPT_mhard_float,
@@ -60,7 +58,7 @@ ve::FloatABI ve::getVEFloatABI(const Driver &D,
 }
 
 void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
-                                   std::vector<StringRef> &Features) {
+                             std::vector<StringRef> &Features) {
   ve::FloatABI FloatABI = ve::getVEFloatABI(D, Args);
   if (FloatABI == ve::FloatABI::Soft)
     Features.push_back("+soft-float");
