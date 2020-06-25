@@ -29,12 +29,12 @@ enum class FloatABI {
 FloatABI getVEFloatABI(const Driver &D, const llvm::opt::ArgList &Args);
 
 void getVETargetFeatures(const Driver &D, const llvm::opt::ArgList &Args,
-                            std::vector<llvm::StringRef> &Features);
+                         std::vector<llvm::StringRef> &Features);
 const char *getVEAsmModeForCPU(llvm::StringRef Name,
-                                  const llvm::Triple &Triple);
+                               const llvm::Triple &Triple);
 
 } // end namespace ve
-} // end namespace target
+} // end namespace tools
 } // end namespace driver
 } // end namespace clang
 

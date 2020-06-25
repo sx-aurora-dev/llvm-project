@@ -35,6 +35,7 @@
 #include "llvm/CodeGen/CallingConvLower.h"
 #include "llvm/CodeGen/DAGCombine.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
+#include "llvm/CodeGen/GlobalISel/GISelKnownBits.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
@@ -5460,8 +5461,9 @@ SITargetLowering::isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const {
 
 static SDValue
 buildPCRelGlobalAddress(SelectionDAG &DAG, const GlobalValue *GV,
-                        const SDLoc &DL, unsigned Offset, EVT PtrVT,
+                        const SDLoc &DL, int64_t Offset, EVT PtrVT,
                         unsigned GAFlags = SIInstrInfo::MO_NONE) {
+  assert(isInt<32>(Offset + 4) && "32-bit offset is expected!");
   // In order to support pc-relative addressing, the PC_ADD_REL_OFFSET SDNode is
   // lowered to the following code sequence:
   //
@@ -6422,9 +6424,6 @@ SDValue SITargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     return DAG.getNode(AMDGPUISD::DIV_FIXUP, DL, VT,
                        Op.getOperand(1), Op.getOperand(2), Op.getOperand(3));
 
-  case Intrinsic::amdgcn_trig_preop:
-    return DAG.getNode(AMDGPUISD::TRIG_PREOP, DL, VT,
-                       Op.getOperand(1), Op.getOperand(2));
   case Intrinsic::amdgcn_div_scale: {
     const ConstantSDNode *Param = cast<ConstantSDNode>(Op.getOperand(3));
 
@@ -9241,7 +9240,6 @@ bool SITargetLowering::isCanonicalized(SelectionDAG &DAG, SDValue Op,
   case AMDGPUISD::RSQ_CLAMP:
   case AMDGPUISD::RCP_LEGACY:
   case AMDGPUISD::RCP_IFLAG:
-  case AMDGPUISD::TRIG_PREOP:
   case AMDGPUISD::DIV_SCALE:
   case AMDGPUISD::DIV_FMAS:
   case AMDGPUISD::DIV_FIXUP:
@@ -9349,6 +9347,7 @@ bool SITargetLowering::isCanonicalized(SelectionDAG &DAG, SDValue Op,
     case Intrinsic::amdgcn_rsq_clamp:
     case Intrinsic::amdgcn_rcp_legacy:
     case Intrinsic::amdgcn_rsq_legacy:
+    case Intrinsic::amdgcn_trig_preop:
       return true;
     default:
       break;
@@ -11293,6 +11292,27 @@ void SITargetLowering::computeKnownBitsForFrameIndex(
   // wave. We can't use vaddr in MUBUF instructions if we don't know the address
   // calculation won't overflow, so assume the sign bit is never set.
   Known.Zero.setHighBits(getSubtarget()->getKnownHighZeroBitsForFrameIndex());
+}
+
+Align SITargetLowering::computeKnownAlignForTargetInstr(
+  GISelKnownBits &KB, Register R, const MachineRegisterInfo &MRI,
+  unsigned Depth) const {
+  const MachineInstr *MI = MRI.getVRegDef(R);
+  switch (MI->getOpcode()) {
+  case AMDGPU::G_INTRINSIC:
+  case AMDGPU::G_INTRINSIC_W_SIDE_EFFECTS: {
+    // FIXME: Can this move to generic code? What about the case where the call
+    // site specifies a lower alignment?
+    Intrinsic::ID IID = MI->getIntrinsicID();
+    LLVMContext &Ctx = KB.getMachineFunction().getFunction().getContext();
+    AttributeList Attrs = Intrinsic::getAttributes(Ctx, IID);
+    if (MaybeAlign RetAlign = Attrs.getRetAlignment())
+      return *RetAlign;
+    return Align(1);
+  }
+  default:
+    return Align(1);
+  }
 }
 
 Align SITargetLowering::getPrefLoopAlignment(MachineLoop *ML) const {
