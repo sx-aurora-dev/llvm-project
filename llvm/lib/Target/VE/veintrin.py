@@ -181,6 +181,15 @@ def movePassTroughOp(ary):
 def reorderVSTOps(ary):
     return [ary[1], ary[2], ary[0]] + ary[3:]
 
+def reorderVSCOps(ary):
+    return [ary[1], ary[2], ary[3], ary[0]] + ary[4:]
+
+def getLLVMInstArgs(ary, inst = None):
+    if inst in ["VST", "VSTL", "VSTU", "VST2D", "VSTL2D", "VSTU2D"]:
+        return reorderVSTOps(ary)
+    if inst in ["VSC", "VSCL", "VSCU"]:
+        return reorderVSCOps(ary)
+    return movePassTroughOp(ary)
 
 # inst: instruction in the manual. VFAD
 # opc: op code (8bit)
@@ -299,9 +308,7 @@ class Inst(object):
             return ", ".join(["{}:${}".format(op.regClass(), op.regName()) for op in ops])
 
         outs = fmtOps(self.outs)
-        tmp = movePassTroughOp(self.ins)
-        ins = fmtOps(tmp)
-        #ins = fmtOps(self.ins)
+        ins = fmtOps(getLLVMInstArgs(self.ins, self.inst()))
         tmp = [op for op in self.ins if op.regName() not in ["pt", "vl", "ptm"]]
         asmArgs = ",".join(["${}".format(op.regName()) for op in self.outs + tmp])
 
@@ -404,7 +411,7 @@ class InstVEL(Inst):
         #sys.stderr.write("inst={} subop={} asm={}\n".format(inst, kwargs['subop'], asm))
         if 'llvmInst' not in kwargs:
             if asm:
-                suffix = "".join([op.instSuffix for op in movePassTroughOp(ins)])
+                suffix = "".join([op.instSuffix for op in getLLVMInstArgs(ins, inst)])
                 llvmInst = re.sub("\.", "", asm).upper() + suffix
             else:
                 llvmInst = None
@@ -419,7 +426,7 @@ class InstVEL(Inst):
 
     def pattern(self):
         argsL = ", ".join([op.dagOpL() for op in self.ins])
-        argsR = ", ".join([op.dagOpR() for op in movePassTroughOp(self.ins)])
+        argsR = ", ".join([op.dagOpR() for op in getLLVMInstArgs(self.ins, self.inst())])
         l = "({} {})".format(self.llvmIntrinName(), argsL)
         r = "({} {})".format(self.llvmInst(), argsR)
         return "def : Pat<{}, {}>;".format(l, r)
@@ -1403,7 +1410,7 @@ def gen_vl_index(insts):
     print("default: return -1;")
     for I in insts:
         if I.hasLLVMInstDefine() and I.hasVLOp():
-            index = len(I.outs) + movePassTroughOp(I.ins).index(VL)
+            index = len(I.outs) + getLLVMInstArgs(I.ins, I.inst()).index(VL)
             print("case VE::{}: return {};".format(I.llvmInst(), index))
 
 
