@@ -25,6 +25,25 @@ enum VShuffleCodes {
     VE_VSHUFFLE_ZLZL = 15,
 } ;
 
+
+// deprecated
+
+#if 1
+#define _vel_vslaw_vvvl _vel_vslawzx_vvvl
+#define _vel_vslaw_vvvvl _vel_vslawzx_vvvvl
+#define _vel_vslaw_vvsl _vel_vslawzx_vvsl
+#define _vel_vslaw_vvsvl _vel_vslawzx_vvsvl
+#define _vel_vslaw_vvvmvl _vel_vslawzx_vvvmvl
+#define _vel_vslaw_vvsmvl _vel_vslawzx_vvsmvl
+
+#define _vel_vsraw_vvvl _vel_vsrawzx_vvvl
+#define _vel_vsraw_vvvvl _vel_vsrawzx_vvvvl
+#define _vel_vsraw_vvsl _vel_vsrawzx_vvsl
+#define _vel_vsraw_vvsvl _vel_vsrawzx_vvsvl
+#define _vel_vsraw_vvvmvl _vel_vsrawzx_vvvmvl
+#define _vel_vsraw_vvsmvl _vel_vsrawzx_vvsmvl
+#endif
+
 #include <velintrin_gen.h>
 #include <velintrin_approx.h>
 

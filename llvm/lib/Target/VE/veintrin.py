@@ -971,8 +971,8 @@ class InstTable(object):
         ArgsP = self.addMask(ArgsP, VM512)
 
         self.Def(opc, instName, "", name, Args, expr)
-        self.Def(opc, instName, "p", "p"+name+".lo", ArgsP, expr)
-        self.Def(opc, instName, "p", "p"+name+".up", ArgsP, expr)
+        self.Def(opc, instName, "p", "p"+name+".lo", ArgsP, expr).noTest()
+        self.Def(opc, instName, "p", "p"+name+".up", ArgsP, expr).noTest()
         self.Def(opc, instName, "p", "p"+name, ArgsP, expr)
 
     def Shift(self, opc, name, instName, ty, expr):
@@ -992,8 +992,8 @@ class InstTable(object):
         OL = [O_vvv, O_vvs]
         OL = self.addMask(OL, VM512)
 
-        self.Def(opc, instName, "p", "p"+name+".lo", OL, expr)
-        self.Def(opc, instName, "p", "p"+name+".up", OL, expr)
+        self.Def(opc, instName, "p", "p"+name+".lo", OL, expr).noTest()
+        self.Def(opc, instName, "p", "p"+name+".up", OL, expr).noTest()
         self.Def(opc, instName, "p", "p"+name, OL, expr)
 
     def Inst4f(self, opc, name, instName, expr):
@@ -1170,10 +1170,12 @@ def createInstructionTable():
     T.Shift(0xF5, "vsrl", "VSRL", T_u64, "{0} = {1} >> ({2} & 0x3f)")
     T.ShiftPacked(0xF5, "vsrl", "VSRL", T_u32, "{0} = {1} >> ({2} & 0x1f)")
     T.NoImpl("VSRD")
-    T.Shift(0xE6, "vsla.w", "VSLA", T_i32, "{0} = {1} << ({2} & 0x1f)")
+    T.Shift(0xE6, "vsla.w.sx", "VSLA", T_i32, "{0} = {1} << ({2} & 0x1f)")
+    T.Shift(0xE6, "vsla.w.zx", "VSLA", T_i32, "{0} = {1} << ({2} & 0x1f)")
     T.ShiftPacked(0xE6, "vsla", "VSLA", T_i32, "{0} = {1} << ({2} & 0x1f)")
     T.Shift(0xD4, "vsla.l", "VSLAX", T_i64, "{0} = {1} << ({2} & 0x3f)")
-    T.Shift(0xF6, "vsra.w", "VSRA", T_i32, "{0} = {1} >> ({2} & 0x1f)")
+    T.Shift(0xF6, "vsra.w.sx", "VSRA", T_i32, "{0} = {1} >> ({2} & 0x1f)")
+    T.Shift(0xF6, "vsra.w.zx", "VSRA", T_i32, "{0} = {1} >> ({2} & 0x1f)")
     T.ShiftPacked(0xF6, "vsra", "VSRA", T_i32, "{0} = {1} >> ({2} & 0x1f)")
     T.Shift(0xD5, "vsra.l", "VSRAX", T_i64, "{0} = {1} >> ({2} & 0x3f)")
     
