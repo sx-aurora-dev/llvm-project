@@ -54,6 +54,22 @@ let Predicates = [IsNotVectorizeSubTarget] in {
             (LVMyir 0, $sy))))))))>;
 }
 
+// Boardcast for vector mask register.
+def : Pat<(v256i1 (vec_broadcast (i32 0))),
+          (LVMxim_x 3, 0,
+          (LVMxim_x 2, 0,
+          (LVMxim_x 1, 0,
+          (LVMxim 0, 0))))>;
+def : Pat<(v512i1 (vec_broadcast (i32 0))),
+          (LVMyim_y 7, 0,
+          (LVMyim_y 6, 0,
+          (LVMyim_y 5, 0,
+          (LVMyim_y 4, 0,
+          (LVMyim_y 3, 0,
+          (LVMyim_y 2, 0,
+          (LVMyim_y 1, 0,
+          (LVMyim 0, 0))))))))>;
+
 //===----------------------------------------------------------------------===//
 // Vector Instruction Patterns for vectorize subtarget which is being
 // implemented experimatally.
@@ -259,22 +275,18 @@ let Predicates = [IsVectorizeSubTarget] in {
 // Load for
 // v256i1, v512i1
 
-let Predicates = [IsVectorizeSubTarget] in {
-  def : Pat<(v256i1 (load ADDRrii:$addr)),
-            (LDVMrii ADDRrii:$addr)>;
-  def : Pat<(v512i1 (load ADDRrii:$addr)),
-            (LDVM512rii ADDRrii:$addr)>;
-}
+def : Pat<(v256i1 (load ADDRrii:$addr)),
+          (LDVMrii ADDRrii:$addr)>;
+def : Pat<(v512i1 (load ADDRrii:$addr)),
+          (LDVM512rii ADDRrii:$addr)>;
 
 // Store for
 // v256i1, v512i1
 
-let Predicates = [IsVectorizeSubTarget] in {
-  def : Pat<(store v256i1:$vx, ADDRrii:$addr),
-            (STVMrii ADDRrii:$addr, $vx)>;
-  def : Pat<(store v512i1:$vx, ADDRrii:$addr),
-            (STVM512rii ADDRrii:$addr, $vx)>;
-}
+def : Pat<(store v256i1:$vx, ADDRrii:$addr),
+          (STVMrii ADDRrii:$addr, $vx)>;
+def : Pat<(store v512i1:$vx, ADDRrii:$addr),
+          (STVM512rii ADDRrii:$addr, $vx)>;
 
 multiclass ext_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                  ValueType vi1> {

@@ -905,12 +905,17 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::veoldNEGMy: buildVMRInst(MI, get(VE::NEGMx)); return true;
 
   case VE::LVMyir:
-  case VE::LVMyir_y: {
+  case VE::LVMyim:
+  case VE::LVMyir_y:
+  case VE::LVMyim_y: {
     unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
     unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
     int64_t Imm = MI.getOperand(1).getImm();
-    unsigned Src = MI.getOperand(2).getReg();
-    bool KillSrc = MI.getOperand(2).isKill();
+    bool IsSrcReg =
+        MI.getOpcode() == VE::LVMyir || MI.getOpcode() == VE::LVMyir_y;
+    unsigned Src = IsSrcReg ? MI.getOperand(2).getReg() : VE::NoRegister;
+    int64_t MImm = IsSrcReg ? 0 : MI.getOperand(2).getImm();
+    bool KillSrc = IsSrcReg ? MI.getOperand(2).isKill() : false;
     unsigned VMX = VMXl;
     if (Imm >= 4) {
         VMX = VMXu;
@@ -918,13 +923,20 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     }
     MachineBasicBlock* MBB = MI.getParent();
     DebugLoc DL = MI.getDebugLoc();
-    if (MI.getOpcode() == VE::LVMyir) {
+    switch (MI.getOpcode()) {
+    case VE::LVMyir:
       BuildMI(*MBB, MI, DL, get(VE::LVMxir))
         .addDef(VMX)
         .addImm(Imm)
         .addReg(Src, getKillRegState(KillSrc));
-    } else {
-      assert(MI.getOpcode() == VE::LVMyir_y);
+      break;
+    case VE::LVMyim:
+      BuildMI(*MBB, MI, DL, get(VE::LVMxim))
+        .addDef(VMX)
+        .addImm(Imm)
+        .addImm(MImm);
+      break;
+    case VE::LVMyir_y:
       assert(MI.getOperand(0).getReg() == MI.getOperand(3).getReg() &&
              "LVMyir_y has different register in 3rd operand");
       BuildMI(*MBB, MI, DL, get(VE::LVMxir_x))
@@ -932,6 +944,16 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
         .addImm(Imm)
         .addReg(Src, getKillRegState(KillSrc))
         .addReg(VMX);
+      break;
+    case VE::LVMyim_y:
+      assert(MI.getOperand(0).getReg() == MI.getOperand(3).getReg() &&
+             "LVMyim_y has different register in 3rd operand");
+      BuildMI(*MBB, MI, DL, get(VE::LVMxim_x))
+        .addDef(VMX)
+        .addImm(Imm)
+        .addImm(MImm)
+        .addReg(VMX);
+      break;
     }
     MI.eraseFromParent();
     return true;

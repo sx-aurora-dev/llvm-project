@@ -1446,7 +1446,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
       }
 
       setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Expand);
-      setOperationAction(ISD::BUILD_VECTOR,       VT, Expand);
+      if (VT.getVectorElementType() == MVT::i1) {
+        setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
+      } else {
+        setOperationAction(ISD::BUILD_VECTOR, VT, Expand);
+      }
       setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
       setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
       setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
