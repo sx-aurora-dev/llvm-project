@@ -41,7 +41,7 @@ struct ModifiedRPO {
   std::vector<const BasicBlock*> LoopRPO;
   std::map<const BasicBlock*, unsigned> RPOIndex;
   void appendBlock(const BasicBlock &BB) {
-    RPOIndex[&BB] = RPOIndex.size();
+    RPOIndex[&BB] = LoopRPO.size();
     LoopRPO.push_back(&BB);
   }
   unsigned getIndexOf(const BasicBlock& BB) const {

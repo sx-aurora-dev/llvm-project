@@ -171,9 +171,11 @@ static void ComputeStackPO(BlockStack &Stack, const LoopInfo &LI,
       Stack.push_back(SuccBB);
     }
     if (!PushedNodes) {
-      Finalized.insert(NextBB);
-      CallBack(*NextBB);
+      // Never push nodes twice
       Stack.pop_back();
+      if (!Finalized.insert(NextBB).second)
+        continue;
+      CallBack(*NextBB);
     }
   }
 }
@@ -181,6 +183,7 @@ static void ComputeStackPO(BlockStack &Stack, const LoopInfo &LI,
 static void ComputeTopLevelPO(Function &F, const LoopInfo &LI, RPOCB CallBack) {
   VisitedSet Finalized;
   BlockStack Stack;
+  Stack.reserve(24); // FIXME magic number
   Stack.push_back(&F.getEntryBlock());
   ComputeStackPO(Stack, LI, nullptr, nullptr, CallBack, Finalized);
 }
@@ -236,45 +239,37 @@ struct DivergencePropagator {
   const LoopInfo &LI;
   const BasicBlock &DivTermBlock;
 
+  // if BlockLabels[IndexOf(B)] == C then C is the dominating definition at
+  // block B if BlockLabels[IndexOf(B)] ~ undef then we haven't seen B yet if
+  // BlockLabels[IndexOf(B)] == B then B is a join point of disjoint paths from
+  // X or B is an immediate successor of X (initial value).
+  using BlockLabelVec = std::vector<const BasicBlock *>;
+  BlockLabelVec BlockLabels;
   // divergent join and loop exit descriptor.
   std::unique_ptr<ControlDivergenceDesc> DivDesc;
 
   // reached loop exits (by a path disjoint to a path to the loop header)
-  SmallPtrSet<const BasicBlock *, 4> ReachedLoopExits;
-
-  // if DefMap[B] == C then C is the dominating definition at block B
-  // if DefMap[B] ~ undef then we haven't seen B yet
-  // if DefMap[B] == B then B is a join point of disjoint paths from X or B is
-  // an immediate successor of X (initial value).
-  using DefiningBlockMap = std::map<const BasicBlock *, const BasicBlock *>;
-  DefiningBlockMap DefMap;
+  // SmallPtrSet<const BasicBlock *, 4> ReachedLoopExits;
 
   // all blocks with pending visits
-  std::unordered_set<const BasicBlock *> PendingUpdates;
+  // std::unordered_set<const BasicBlock *> PendingUpdates;
 
   DivergencePropagator(const ModifiedRPO &LoopRPOT, const DominatorTree &DT,
                        const PostDominatorTree &PDT, const LoopInfo &LI,
                        const BasicBlock &DivTermBlock)
       : LoopRPOT(LoopRPOT), DT(DT), PDT(PDT), LI(LI),
-        DivTermBlock(DivTermBlock), DivDesc(new ControlDivergenceDesc) {}
-
-  // set the definition at @block and mark @block as pending for a visit
-  void addPending(const BasicBlock &Block, const BasicBlock &DefBlock) {
-    bool WasAdded = DefMap.emplace(&Block, &DefBlock).second;
-    if (WasAdded)
-      PendingUpdates.insert(&Block);
-  }
+        DivTermBlock(DivTermBlock), BlockLabels(LoopRPOT.size(), nullptr),
+        DivDesc(new ControlDivergenceDesc) {}
 
   void printDefs(raw_ostream &Out) {
-    Out << "Propagator::DefMap {\n";
-    for (const auto *Block : LoopRPOT.LoopRPO) {
-      auto It = DefMap.find(Block);
-      Out << Block->getName() << " : ";
-      if (It == DefMap.end()) {
-        Out << "\n";
+    Out << "Propagator::BlockLabels {\n";
+    for (int i = (int)BlockLabels.size() - 1; i > 0; --i) {
+      const auto *Label = BlockLabels[i];
+      Out << LoopRPOT.getBlockAt(i)->getName().str() << "(" <<  i << ") : ";
+      if (!Label) {
+        Out << "<null>\n";
       } else {
-        const auto *DefBlock = It->second;
-        Out << (DefBlock ? DefBlock->getName() : "<null>") << "\n";
+        Out << Label->getName() << "\n";
       }
     }
     Out << "}\n";
@@ -282,20 +277,20 @@ struct DivergencePropagator {
 
   // Push a definition (\p DefBlock) to \p SuccBlock and return whether this
   // raises the definition to '\top'
-  bool computeJoin(const BasicBlock &SuccBlock, const BasicBlock &DefBlock) {
-    // first reaching def?
-    auto ItLastDef = DefMap.find(&SuccBlock);
-    if (ItLastDef == DefMap.end()) {
-      addPending(SuccBlock, DefBlock);
+  // Updates MaxNextBlock to the highest block index that needs to be visited
+  // (assuming MaxNextBlock already points to an interesting block)
+  bool computeJoin(const BasicBlock &SuccBlock, const BasicBlock &PushedLabel) {
+    auto SuccIdx = LoopRPOT.getIndexOf(SuccBlock);
+
+    // unset or same reaching label
+    const auto *OldLabel = BlockLabels[SuccIdx];
+    if (!OldLabel || (OldLabel == &PushedLabel)) {
+      BlockLabels[SuccIdx] = &PushedLabel;
       return false;
     }
 
-    // a join of at least two definitions
-    if (ItLastDef->second == &DefBlock)
-      return false; // No definition update
-
     // Update the definition
-    addPending(SuccBlock, SuccBlock);
+    BlockLabels[SuccIdx] = &SuccBlock;
     return true;
   }
 
@@ -312,7 +307,8 @@ struct DivergencePropagator {
 
     // Identified a divergent loop exit
     DivDesc->LoopDivBlocks.insert(&ExitBlock);
-    LLVM_DEBUG(dbgs() << "\tDivergent loop exit: " << ExitBlock.getName());
+    LLVM_DEBUG(dbgs() << "\tDivergent loop exit: " << ExitBlock.getName() << "\n");
+    return;
   }
 
   // process \p succBlock with reaching definition @defBlock
@@ -337,10 +333,8 @@ struct DivergencePropagator {
     // bootstrap with branch targets
     int BlockIdx = 0;
     for (const auto *SuccBlock : successors(&DivTermBlock)) {
-      DefMap.emplace(SuccBlock, SuccBlock);
-
-      // regular successor
-      PendingUpdates.insert(SuccBlock);
+      auto SuccIdx = LoopRPOT.getIndexOf(*SuccBlock);
+      BlockLabels[SuccIdx] = SuccBlock;
 
       // Find the successor with the highest index to start with
       BlockIdx = std::max<int>(BlockIdx, LoopRPOT.getIndexOf(*SuccBlock));
@@ -358,22 +352,17 @@ struct DivergencePropagator {
     }
 
     // propagate definitions at the immediate successors of the node in RPO
-    for (; BlockIdx >= 0 && !PendingUpdates.empty(); --BlockIdx) {
+    for (; BlockIdx >= 0; --BlockIdx) {
       LLVM_DEBUG(dbgs() << "Before next visit:\n"; printDefs(dbgs()));
 
+      // Any label available here
+      const auto *Label = BlockLabels[BlockIdx];
+      if (!Label)
+        continue;
+
+      // Ok. Get the block
       const auto *Block = LoopRPOT.getBlockAt(BlockIdx);
       LLVM_DEBUG(dbgs() << "SDA::joins. visiting " << Block->getName() << "\n");
-
-      // skip Block if not pending update
-      auto ItPending = PendingUpdates.find(Block);
-      if (ItPending == PendingUpdates.end())
-        continue;
-      PendingUpdates.erase(ItPending);
-
-      // propagate definition at Block to its successors
-      auto ItDef = DefMap.find(Block);
-      const auto *DefBlock = ItDef->second;
-      assert(DefBlock);
 
       auto *BlockLoop = LI.getLoopFor(Block);
       bool IsLoopHeader = BlockLoop && BlockLoop->getHeader() == Block;
@@ -385,12 +374,14 @@ struct DivergencePropagator {
 
         bool IsParentLoop = BlockLoop->contains(&DivTermBlock);
         for (const auto *BlockLoopExit : BlockLoopExits) {
-          visitLoopExitEdge(*BlockLoopExit, *DefBlock, IsParentLoop);
+          visitLoopExitEdge(*BlockLoopExit, *Label, IsParentLoop);
         }
-      } else {
-        for (const auto *SuccBlock : successors(Block)) {
-          visitEdge(*SuccBlock, *DefBlock);
-        }
+        continue;
+      }
+
+      // Acyclic successor case
+      for (const auto *SuccBlock : successors(Block)) {
+        visitEdge(*SuccBlock, *Label);
       }
     }
 
