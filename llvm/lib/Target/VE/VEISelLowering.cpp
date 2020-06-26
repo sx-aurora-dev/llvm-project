@@ -1112,11 +1112,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v16f32, &VE::V64RegClass);
   addRegisterClass(MVT::v16f64, &VE::V64RegClass);
   addRegisterClass(MVT::v8i32, &VE::V64RegClass);
-  //addRegisterClass(MVT::v8i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v8i64, &VE::V64RegClass);
   addRegisterClass(MVT::v8f32, &VE::V64RegClass);
   addRegisterClass(MVT::v8f64, &VE::V64RegClass);
   addRegisterClass(MVT::v4i32, &VE::V64RegClass);
-  //addRegisterClass(MVT::v4i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v4i64, &VE::V64RegClass);
   addRegisterClass(MVT::v4f32, &VE::V64RegClass);
   addRegisterClass(MVT::v4f64, &VE::V64RegClass);
   addRegisterClass(MVT::v2i32, &VE::V64RegClass);
@@ -1125,27 +1125,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v2f64, &VE::V64RegClass);
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
   addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-
-  if (Subtarget->vectorize()) {
-    // We want to use any of vectorization oppotunities in llvm.
-    // So, try to use llvm's SIMD style vectorizations here.
-    //
-    // However, this requires intrinsics with vector mask to use
-    // following bitcast in order to convert between v4i64/v8i64 and
-    // v256i1/v512i1 respectively since C doesn't have 1 bit data types.
-    //
-    //   e.g. (i256i1 (bitcast (v4i64 (llvm.ve.vfmkw.mcv ...))))
-    //                ^^^^^^^^^^^^^^^ this bitcast is needed
-    //
-    addRegisterClass(MVT::v4i64, &VE::V64RegClass);
-    addRegisterClass(MVT::v8i64, &VE::V64RegClass);
-  } else {
-    // FIXME:
-    // llvm-ve uses v4i64/v8i64 for a mask temporally until llvm supports
-    // v256i1/v512i1.
-    addRegisterClass(MVT::v4i64, &VE::VMRegClass);
-    addRegisterClass(MVT::v8i64, &VE::VM512RegClass);
-  }
 
   /// Load & Store {
   for (MVT FPVT : MVT::fp_valuetypes()) {
@@ -1402,13 +1381,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   // Expand DYNAMIC_STACKALLOC
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32, Custom);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Custom);
-
-  if (!Subtarget->vectorize()) {
-    setOperationAction(ISD::STORE, MVT::v4i64, Custom);
-    setOperationAction(ISD::STORE, MVT::v8i64, Custom);
-    setOperationAction(ISD::LOAD, MVT::v4i64, Custom);
-    setOperationAction(ISD::LOAD, MVT::v8i64, Custom);
-  }
 
   for (MVT VT : MVT::vector_valuetypes()) {
     if (VT.getVectorElementType() == MVT::i1 ||
@@ -4464,11 +4436,5 @@ void VETargetLowering::finalizeLowering(MachineFunction& MF) const {
 }
 
 bool VETargetLowering::isVectorMaskType(EVT VT) const {
-  if (Subtarget->vectorize()) {
-    return (VT == MVT::v256i1 || VT == MVT::v512i1);
-  } else {
-    // In default subtarget, v4i64 and v8i64 are dedicated for vector mask
-    return (VT == MVT::v256i1 || VT == MVT::v512i1
-            || VT == MVT::v4i64 || VT == MVT::v8i64);
-  }
+  return (VT == MVT::v256i1 || VT == MVT::v512i1);
 }

@@ -17,43 +17,6 @@ def vec_broadcast : SDNode<"VEISD::VEC_BROADCAST",
 // intrinsics and v256f64 vector regisetr only.
 //===----------------------------------------------------------------------===//
 
-let Predicates = [IsNotVectorizeSubTarget] in {
-  // Load/store of vector registers.
-  def : Pat<(v256f64 (load I64:$addr)),
-            (VLDirl 8, $addr,
-                (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-  def : Pat<(store v256f64:$vx, I64:$addr),
-            (VSTirvl 8, $addr, $vx,
-                (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-
-  // Load/store of vector mask registers.
-  def : Pat<(v4i64 (load ADDRrii:$addr)),
-            (LDVMrii ADDRrii:$addr)>;
-  def : Pat<(store v4i64:$vx, ADDRrii:$addr),
-            (STVMrii ADDRrii:$addr, $vx)>;
-  def : Pat<(v8i64 (load ADDRrii:$addr)),
-            (LDVM512rii ADDRrii:$addr)>;
-  def : Pat<(store v8i64:$vx, ADDRrii:$addr),
-            (STVM512rii ADDRrii:$addr, $vx)>;
-
-  // Boardcast for vector mask register.
-  def : Pat<(v4i64 (vec_broadcast i64:$sy)),
-            (LVMxir_x 3, $sy,
-            (LVMxir_x 2, $sy,
-            (LVMxir_x 1, $sy,
-            (LVMxir 0, $sy))))>;
-
-  def : Pat<(v8i64 (vec_broadcast i64:$sy)),
-            (LVMyir_y 7, $sy,
-            (LVMyir_y 6, $sy,
-            (LVMyir_y 5, $sy,
-            (LVMyir_y 4, $sy,
-            (LVMyir_y 3, $sy,
-            (LVMyir_y 2, $sy,
-            (LVMyir_y 1, $sy,
-            (LVMyir 0, $sy))))))))>;
-}
-
 // Boardcast for vector mask register.
 def : Pat<(v256i1 (vec_broadcast (i32 0))),
           (LVMxim_x 3, 0,
@@ -191,14 +154,12 @@ def truncstorev2i32 : PatFrag<(ops node:$val, node:$ptr),
 // v128i32, v128i64, v128f32, v128f64, v256i32, v256i64, v256f32, v256f64,
 // v512i32, v512f32.
 
-let Predicates = [IsVectorizeSubTarget] in {
-  def : Pat<(v512i32 (load I64:$addr)),
-            (v512i32 (VLDirl 8, $addr,
-                             (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
-  def : Pat<(v512f32 (load I64:$addr)),
-            (v512f32 (VLDirl 8, $addr,
-                             (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
-}
+def : Pat<(v512i32 (load I64:$addr)),
+          (v512i32 (VLDirl 8, $addr,
+                           (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
+def : Pat<(v512f32 (load I64:$addr)),
+          (v512f32 (VLDirl 8, $addr,
+                           (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
 
 multiclass load_for_vector_length<int length> {
   def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i32")
@@ -223,16 +184,14 @@ multiclass load_for_vector_length<int length> {
                       (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32)))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
-  defm : load_for_vector_length<256>;
-  defm : load_for_vector_length<128>;
-  defm : load_for_vector_length<64>;
-  defm : load_for_vector_length<32>;
-  defm : load_for_vector_length<16>;
-  defm : load_for_vector_length<8>;
-  defm : load_for_vector_length<4>;
-  defm : load_for_vector_length<2>;
-}
+defm : load_for_vector_length<256>;
+defm : load_for_vector_length<128>;
+defm : load_for_vector_length<64>;
+defm : load_for_vector_length<32>;
+defm : load_for_vector_length<16>;
+defm : load_for_vector_length<8>;
+defm : load_for_vector_length<4>;
+defm : load_for_vector_length<2>;
 
 multiclass store_for_vector_length<int length> {
   def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
@@ -257,16 +216,14 @@ multiclass store_for_vector_length<int length> {
                      (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
-  defm : store_for_vector_length<256>;
-  defm : store_for_vector_length<128>;
-  defm : store_for_vector_length<64>;
-  defm : store_for_vector_length<32>;
-  defm : store_for_vector_length<16>;
-  defm : store_for_vector_length<8>;
-  defm : store_for_vector_length<4>;
-  defm : store_for_vector_length<2>;
-}
+defm : store_for_vector_length<256>;
+defm : store_for_vector_length<128>;
+defm : store_for_vector_length<64>;
+defm : store_for_vector_length<32>;
+defm : store_for_vector_length<16>;
+defm : store_for_vector_length<8>;
+defm : store_for_vector_length<4>;
+defm : store_for_vector_length<2>;
 
 // Load/store for mask register using stack/symbol is implemented in custom
 // lower.  Only load/store for mask registers using frame index is implemented

@@ -37,8 +37,8 @@ def CC_VE_C_Stack: CallingConv<[
 def CC_VE_RegCall : CallingConv<[
   // vector --> generic vector registers
   CCIfType<[v2i32,   v2i64,   v2f32,   v2f64,
-            v4i32,   /*v4i64,*/   v4f32,   v4f64,
-            v8i32,   /*v8i64,*/   v8f32,   v8f64,
+            v4i32,   v4i64,   v4f32,   v4f64,
+            v8i32,   v8i64,   v8f32,   v8f64,
             v16i32,  v16i64,  v16f32,  v16f64,
             v32i32,  v32i64,  v32f32,  v32f64,
             v64i32,  v64i64,  v64f32,  v64f64,
@@ -47,25 +47,13 @@ def CC_VE_RegCall : CallingConv<[
             v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
 
-  CCIfSubtarget<"vectorize()",
-    CCIfType<[v4i64, v8i64],
-             CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
-
   // vector mask --> generic vector mask registers
-  CCIfType<[v256i1, v4i64],
+  CCIfType<[v256i1],
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>,
 
-  CCIfNotSubtarget<"vectorize()",
-    CCIfType<[v4i64],
-             CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
-
   // pair of vector mask --> generic vector mask registers
-  CCIfType<[v512i1, v8i64],
+  CCIfType<[v512i1],
            CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>,
-
-  CCIfNotSubtarget<"vectorize()",
-    CCIfType<[v8i64],
-             CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>>,
 
   // Alternatively, they are assigned to the stack in 8-byte aligned units.
   CCDelegateTo<CC_VE_C_Stack>
@@ -125,8 +113,8 @@ def CC_VE2 : CallingConv<[
 def RetCC_VE_RegCall : CallingConv<[
   // vector --> generic vector registers
   CCIfType<[v2i32,   v2i64,   v2f32,   v2f64,
-            v4i32,   /*v4i64,*/   v4f32,   v4f64,
-            v8i32,   /*v8i64,*/   v8f32,   v8f64,
+            v4i32,   v4i64,   v4f32,   v4f64,
+            v8i32,   v8i64,   v8f32,   v8f64,
             v16i32,  v16i64,  v16f32,  v16f64,
             v32i32,  v32i64,  v32f32,  v32f64,
             v64i32,  v64i64,  v64f32,  v64f64,
@@ -135,26 +123,14 @@ def RetCC_VE_RegCall : CallingConv<[
             v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
 
-  CCIfSubtarget<"vectorize()",
-    CCIfType<[v4i64, v8i64],
-             CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
-
   // vector mask --> generic vector mask registers
-  CCIfType<[v256i1, v4i64],
+  CCIfType<[v256i1],
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>,
 
-  CCIfNotSubtarget<"vectorize()",
-    CCIfType<[v4i64],
-             CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
-
   // pair of vector mask --> generic vector mask registers
-  CCIfType<[v512i1, v8i64],
+  CCIfType<[v512i1],
            CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
                                    [VM1, VM1, VM3]>>,
-
-  CCIfNotSubtarget<"vectorize()",
-    CCIfType<[v8i64],
-             CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>>,
 ]>;
 
 def RetCC_VE : CallingConv<[

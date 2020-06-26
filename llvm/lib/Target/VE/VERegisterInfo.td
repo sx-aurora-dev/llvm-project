@@ -185,9 +185,10 @@ def V64 : RegisterClass<"VE",
                              VIX)>;
 
 // vm0 is reserved for always true
-def VM : RegisterClass<"VE", [v256i1, v4i64], 64, (sequence "VM%u", 0, 15)>;
-def VM512 : RegisterClass<"VE", [v512i1, v8i64], 64, (sequence "VMP%u", 0, 7)>;
+def VM : RegisterClass<"VE", [v256i1], 64, (sequence "VM%u", 0, 15)>;
+def VM512 : RegisterClass<"VE", [v512i1], 64, (sequence "VMP%u", 0, 7)>;
 
+// FIXME: following VM_/VM512_ will be obsoleted soon.
 // Above vector mask registers includes v4i64 and v8i64 to allow vector
 // mask data tyeps as a parameter of intrinsic instructions without
 // necessary bitcast.
