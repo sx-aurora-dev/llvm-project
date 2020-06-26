@@ -23,11 +23,11 @@ define dso_local void @vbrdl_vsmvl_imm(i64* %0, i32* %1, i64* %2, i32 signext %3
   %14 = select i1 %13, i32 %12, i32 256
   %15 = bitcast i32* %9 to i8*
   %16 = tail call <256 x double> @llvm.ve.vl.vldlzx.vssl(i64 4, i8* %15, i32 %14)
-  %17 = tail call <4 x i64> @llvm.ve.vl.vfmkwgt.mvl(<256 x double> %16, i32 %14)
+  %17 = tail call <256 x i1> @llvm.ve.vl.vfmkwgt.mvl(<256 x double> %16, i32 %14)
   %18 = bitcast i64* %10 to i8*
   %19 = tail call <256 x double> @llvm.ve.vl.vld.vssl(i64 8, i8* %18, i32 %14)
   %20 = bitcast i64* %8 to i8*
-  %21 = tail call <256 x double> @llvm.ve.vl.vbrdl.vsmvl(i64 3, <4 x i64> %17, <256 x double> %19, i32 %14)
+  %21 = tail call <256 x double> @llvm.ve.vl.vbrdl.vsmvl(i64 3, <256 x i1> %17, <256 x double> %19, i32 %14)
   tail call void @llvm.ve.vl.vst.vssl(<256 x double> %21, i64 8, i8* %20, i32 %14)
   %22 = getelementptr inbounds i64, i64* %8, i64 256
   %23 = getelementptr inbounds i32, i32* %9, i64 256
@@ -41,13 +41,13 @@ define dso_local void @vbrdl_vsmvl_imm(i64* %0, i32* %1, i64* %2, i32 signext %3
 declare <256 x double> @llvm.ve.vl.vldlzx.vssl(i64, i8*, i32) #1
 
 ; Function Attrs: nounwind readnone
-declare <4 x i64> @llvm.ve.vl.vfmkwgt.mvl(<256 x double>, i32) #2
+declare <256 x i1> @llvm.ve.vl.vfmkwgt.mvl(<256 x double>, i32) #2
 
 ; Function Attrs: nounwind readonly
 declare <256 x double> @llvm.ve.vl.vld.vssl(i64, i8*, i32) #1
 
 ; Function Attrs: nounwind readnone
-declare <256 x double> @llvm.ve.vl.vbrdl.vsmvl(i64, <4 x i64>, <256 x double>, i32) #2
+declare <256 x double> @llvm.ve.vl.vbrdl.vsmvl(i64, <256 x i1>, <256 x double>, i32) #2
 
 ; Function Attrs: nounwind writeonly
 declare void @llvm.ve.vl.vst.vssl(<256 x double>, i64, i8*, i32) #3

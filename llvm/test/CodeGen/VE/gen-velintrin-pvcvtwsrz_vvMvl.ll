@@ -27,11 +27,11 @@ define dso_local void @pvcvtwsrz_vvMvl(i32* %0, float* %1, i32* %2, i32* %3, i32
   %19 = tail call <256 x double> @llvm.ve.vl.vld.vssl(i64 8, i8* %18, i32 %17)
   %20 = bitcast i32* %11 to i8*
   %21 = tail call <256 x double> @llvm.ve.vl.vld.vssl(i64 8, i8* %20, i32 %17)
-  %22 = tail call <8 x i64> @llvm.ve.vl.pvfmkwgt.Mvl(<256 x double> %21, i32 %17)
+  %22 = tail call <512 x i1> @llvm.ve.vl.pvfmkwgt.Mvl(<256 x double> %21, i32 %17)
   %23 = bitcast i32* %12 to i8*
   %24 = tail call <256 x double> @llvm.ve.vl.vld.vssl(i64 8, i8* %23, i32 %17)
   %25 = bitcast i32* %9 to i8*
-  %26 = tail call <256 x double> @llvm.ve.vl.pvcvtwsrz.vvMvl(<256 x double> %19, <8 x i64> %22, <256 x double> %24, i32 %17)
+  %26 = tail call <256 x double> @llvm.ve.vl.pvcvtwsrz.vvMvl(<256 x double> %19, <512 x i1> %22, <256 x double> %24, i32 %17)
   tail call void @llvm.ve.vl.vst.vssl(<256 x double> %26, i64 8, i8* %25, i32 %17)
   %27 = getelementptr inbounds i32, i32* %9, i64 512
   %28 = getelementptr inbounds float, float* %10, i64 512
@@ -46,10 +46,10 @@ define dso_local void @pvcvtwsrz_vvMvl(i32* %0, float* %1, i32* %2, i32* %3, i32
 declare <256 x double> @llvm.ve.vl.vld.vssl(i64, i8*, i32) #1
 
 ; Function Attrs: nounwind readnone
-declare <8 x i64> @llvm.ve.vl.pvfmkwgt.Mvl(<256 x double>, i32) #2
+declare <512 x i1> @llvm.ve.vl.pvfmkwgt.Mvl(<256 x double>, i32) #2
 
 ; Function Attrs: nounwind readnone
-declare <256 x double> @llvm.ve.vl.pvcvtwsrz.vvMvl(<256 x double>, <8 x i64>, <256 x double>, i32) #2
+declare <256 x double> @llvm.ve.vl.pvcvtwsrz.vvMvl(<256 x double>, <512 x i1>, <256 x double>, i32) #2
 
 ; Function Attrs: nounwind writeonly
 declare void @llvm.ve.vl.vst.vssl(<256 x double>, i64, i8*, i32) #3

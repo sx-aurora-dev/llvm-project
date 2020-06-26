@@ -32,11 +32,11 @@ define dso_local void @vfmsbs_vvvvmvl(float* %0, float* %1, float* %2, float* %3
   %26 = tail call <256 x double> @llvm.ve.vl.vldu.vssl(i64 4, i8* %25, i32 %20)
   %27 = bitcast i32* %15 to i8*
   %28 = tail call <256 x double> @llvm.ve.vl.vldlzx.vssl(i64 4, i8* %27, i32 %20)
-  %29 = tail call <4 x i64> @llvm.ve.vl.vfmkwgt.mvl(<256 x double> %28, i32 %20)
+  %29 = tail call <256 x i1> @llvm.ve.vl.vfmkwgt.mvl(<256 x double> %28, i32 %20)
   %30 = bitcast float* %16 to i8*
   %31 = tail call <256 x double> @llvm.ve.vl.vldu.vssl(i64 4, i8* %30, i32 %20)
   %32 = bitcast float* %11 to i8*
-  %33 = tail call <256 x double> @llvm.ve.vl.vfmsbs.vvvvmvl(<256 x double> %22, <256 x double> %24, <256 x double> %26, <4 x i64> %29, <256 x double> %31, i32 %20)
+  %33 = tail call <256 x double> @llvm.ve.vl.vfmsbs.vvvvmvl(<256 x double> %22, <256 x double> %24, <256 x double> %26, <256 x i1> %29, <256 x double> %31, i32 %20)
   tail call void @llvm.ve.vl.vstu.vssl(<256 x double> %33, i64 4, i8* %32, i32 %20)
   %34 = getelementptr inbounds float, float* %11, i64 256
   %35 = getelementptr inbounds float, float* %12, i64 256
@@ -56,10 +56,10 @@ declare <256 x double> @llvm.ve.vl.vldu.vssl(i64, i8*, i32) #1
 declare <256 x double> @llvm.ve.vl.vldlzx.vssl(i64, i8*, i32) #1
 
 ; Function Attrs: nounwind readnone
-declare <4 x i64> @llvm.ve.vl.vfmkwgt.mvl(<256 x double>, i32) #2
+declare <256 x i1> @llvm.ve.vl.vfmkwgt.mvl(<256 x double>, i32) #2
 
 ; Function Attrs: nounwind readnone
-declare <256 x double> @llvm.ve.vl.vfmsbs.vvvvmvl(<256 x double>, <256 x double>, <256 x double>, <4 x i64>, <256 x double>, i32) #2
+declare <256 x double> @llvm.ve.vl.vfmsbs.vvvvmvl(<256 x double>, <256 x double>, <256 x double>, <256 x i1>, <256 x double>, i32) #2
 
 ; Function Attrs: nounwind writeonly
 declare void @llvm.ve.vl.vstu.vssl(<256 x double>, i64, i8*, i32) #3

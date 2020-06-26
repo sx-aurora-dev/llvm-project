@@ -26,11 +26,11 @@ define dso_local void @vcmpswsx_vsvmvl(i32* %0, i32 signext %1, i32* %2, i32* %3
   %19 = tail call <256 x double> @llvm.ve.vl.vldlsx.vssl(i64 4, i8* %18, i32 %17)
   %20 = bitcast i32* %12 to i8*
   %21 = tail call <256 x double> @llvm.ve.vl.vldlzx.vssl(i64 4, i8* %20, i32 %17)
-  %22 = tail call <4 x i64> @llvm.ve.vl.vfmkwgt.mvl(<256 x double> %21, i32 %17)
+  %22 = tail call <256 x i1> @llvm.ve.vl.vfmkwgt.mvl(<256 x double> %21, i32 %17)
   %23 = bitcast i32* %13 to i8*
   %24 = tail call <256 x double> @llvm.ve.vl.vldlsx.vssl(i64 4, i8* %23, i32 %17)
   %25 = bitcast i32* %10 to i8*
-  %26 = tail call <256 x double> @llvm.ve.vl.vcmpswsx.vsvmvl(i32 %1, <256 x double> %19, <4 x i64> %22, <256 x double> %24, i32 %17)
+  %26 = tail call <256 x double> @llvm.ve.vl.vcmpswsx.vsvmvl(i32 %1, <256 x double> %19, <256 x i1> %22, <256 x double> %24, i32 %17)
   tail call void @llvm.ve.vl.vstl.vssl(<256 x double> %26, i64 4, i8* %25, i32 %17)
   %27 = getelementptr inbounds i32, i32* %10, i64 256
   %28 = getelementptr inbounds i32, i32* %11, i64 256
@@ -48,10 +48,10 @@ declare <256 x double> @llvm.ve.vl.vldlsx.vssl(i64, i8*, i32) #1
 declare <256 x double> @llvm.ve.vl.vldlzx.vssl(i64, i8*, i32) #1
 
 ; Function Attrs: nounwind readnone
-declare <4 x i64> @llvm.ve.vl.vfmkwgt.mvl(<256 x double>, i32) #2
+declare <256 x i1> @llvm.ve.vl.vfmkwgt.mvl(<256 x double>, i32) #2
 
 ; Function Attrs: nounwind readnone
-declare <256 x double> @llvm.ve.vl.vcmpswsx.vsvmvl(i32, <256 x double>, <4 x i64>, <256 x double>, i32) #2
+declare <256 x double> @llvm.ve.vl.vcmpswsx.vsvmvl(i32, <256 x double>, <256 x i1>, <256 x double>, i32) #2
 
 ; Function Attrs: nounwind writeonly
 declare void @llvm.ve.vl.vstl.vssl(<256 x double>, i64, i8*, i32) #3
