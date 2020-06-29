@@ -4511,6 +4511,8 @@ void VETargetLowering::insertSSPDeclarations(Module &M) const {
 }
 
 void VETargetLowering::finalizeLowering(MachineFunction& MF) const {
+  for (auto &MBB : MF)
+    MBB.addLiveIn(VE::VL);
   TargetLoweringBase::finalizeLowering(MF);
 }
 
