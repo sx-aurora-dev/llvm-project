@@ -296,30 +296,31 @@ struct DivergencePropagator {
 
   // visiting a virtual loop exit edge from the loop header --> temporal
   // divergence on join
-  void visitLoopExitEdge(const BasicBlock &ExitBlock,
+  bool visitLoopExitEdge(const BasicBlock &ExitBlock,
                          const BasicBlock &DefBlock, bool FromParentLoop) {
     // Pushing from a non-parent loop cannot cause temporal divergence.
     if (!FromParentLoop)
       return visitEdge(ExitBlock, DefBlock);
 
     if (!computeJoin(ExitBlock, DefBlock))
-      return;
+      return false;
 
     // Identified a divergent loop exit
     DivDesc->LoopDivBlocks.insert(&ExitBlock);
     LLVM_DEBUG(dbgs() << "\tDivergent loop exit: " << ExitBlock.getName() << "\n");
-    return;
+    return true;
   }
 
   // process \p succBlock with reaching definition @defBlock
   // the original divergent branch was in @parentLoop (if any)
-  void visitEdge(const BasicBlock &SuccBlock, const BasicBlock &DefBlock) {
+  bool visitEdge(const BasicBlock &SuccBlock, const BasicBlock &DefBlock) {
     if (!computeJoin(SuccBlock, DefBlock))
-      return;
+      return false;
 
     // Divergent, disjoint paths join.
     DivDesc->JoinDivBlocks.insert(&SuccBlock);
     LLVM_DEBUG(dbgs() << "\tDivergent join: " << SuccBlock.getName());
+    return true;
   }
 
   std::unique_ptr<ControlDivergenceDesc> computeJoinPoints() {
@@ -330,14 +331,20 @@ struct DivergencePropagator {
 
     const auto *DivBlockLoop = LI.getLoopFor(&DivTermBlock);
 
+    // Early stopping criterion
+    int FloorIdx = LoopRPOT.size() - 1;
+    const BasicBlock* FloorLabel = nullptr;
+
     // bootstrap with branch targets
     int BlockIdx = 0;
+
     for (const auto *SuccBlock : successors(&DivTermBlock)) {
       auto SuccIdx = LoopRPOT.getIndexOf(*SuccBlock);
       BlockLabels[SuccIdx] = SuccBlock;
 
       // Find the successor with the highest index to start with
-      BlockIdx = std::max<int>(BlockIdx, LoopRPOT.getIndexOf(*SuccBlock));
+      BlockIdx = std::max<int>(BlockIdx, SuccIdx);
+      FloorIdx = std::min<int>(FloorIdx, SuccIdx);
 
       // Identify immediate divergent loop exits
       if (!DivBlockLoop)
@@ -352,7 +359,7 @@ struct DivergencePropagator {
     }
 
     // propagate definitions at the immediate successors of the node in RPO
-    for (; BlockIdx >= 0; --BlockIdx) {
+    for (; BlockIdx >= FloorIdx; --BlockIdx) {
       LLVM_DEBUG(dbgs() << "Before next visit:\n"; printDefs(dbgs()));
 
       // Any label available here
@@ -366,6 +373,8 @@ struct DivergencePropagator {
 
       auto *BlockLoop = LI.getLoopFor(Block);
       bool IsLoopHeader = BlockLoop && BlockLoop->getHeader() == Block;
+      bool CausedJoin = false;
+      int LoweredFloorIdx = FloorIdx;
       if (IsLoopHeader) {
         // Disconnect from immediate successors and propagate directly to loop
         // exits.
@@ -374,14 +383,25 @@ struct DivergencePropagator {
 
         bool IsParentLoop = BlockLoop->contains(&DivTermBlock);
         for (const auto *BlockLoopExit : BlockLoopExits) {
-          visitLoopExitEdge(*BlockLoopExit, *Label, IsParentLoop);
+          CausedJoin |= visitLoopExitEdge(*BlockLoopExit, *Label, IsParentLoop);
+          LoweredFloorIdx = std::min<int>(LoweredFloorIdx, LoopRPOT.getIndexOf(*BlockLoopExit));
         }
-        continue;
+      } else {
+        // Acyclic successor case
+        for (const auto *SuccBlock : successors(Block)) {
+          CausedJoin |= visitEdge(*SuccBlock, *Label);
+          LoweredFloorIdx = std::min<int>(LoweredFloorIdx, LoopRPOT.getIndexOf(*SuccBlock));
+        }
       }
 
-      // Acyclic successor case
-      for (const auto *SuccBlock : successors(Block)) {
-        visitEdge(*SuccBlock, *Label);
+      // Floor update
+      if (CausedJoin) {
+        // 1. Different labels pushed to successors
+        FloorIdx = LoweredFloorIdx;
+      } else if (FloorLabel != Label) {
+        // 2. No join caused BUT we pushed a label that is different than the last pushed label
+        FloorIdx = LoweredFloorIdx;
+        FloorLabel = Label;
       }
     }
 

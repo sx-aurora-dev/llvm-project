@@ -21,6 +21,7 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include <memory>
+#include <unordered_map>
 
 namespace llvm {
 
@@ -39,7 +40,7 @@ struct ControlDivergenceDesc {
 
 struct ModifiedRPO {
   std::vector<const BasicBlock*> LoopRPO;
-  std::map<const BasicBlock*, unsigned> RPOIndex;
+  std::unordered_map<const BasicBlock*, unsigned> RPOIndex;
   void appendBlock(const BasicBlock &BB) {
     RPOIndex[&BB] = LoopRPO.size();
     LoopRPO.push_back(&BB);
