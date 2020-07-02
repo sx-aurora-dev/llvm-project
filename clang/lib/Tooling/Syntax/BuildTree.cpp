@@ -647,10 +647,48 @@ public:
     return true;
   }
 
+  bool WalkUpFromParenExpr(ParenExpr *S) {
+    Builder.markChildToken(S->getLParen(), syntax::NodeRole::OpenParen);
+    Builder.markExprChild(S->getSubExpr(),
+                          syntax::NodeRole::ParenExpression_subExpression);
+    Builder.markChildToken(S->getRParen(), syntax::NodeRole::CloseParen);
+    Builder.foldNode(Builder.getExprRange(S),
+                     new (allocator()) syntax::ParenExpression, S);
+    return true;
+  }
+
   bool WalkUpFromIntegerLiteral(IntegerLiteral *S) {
     Builder.markChildToken(S->getLocation(), syntax::NodeRole::LiteralToken);
     Builder.foldNode(Builder.getExprRange(S),
                      new (allocator()) syntax::IntegerLiteralExpression, S);
+    return true;
+  }
+
+  bool WalkUpFromCharacterLiteral(CharacterLiteral *S) {
+    Builder.markChildToken(S->getLocation(), syntax::NodeRole::LiteralToken);
+    Builder.foldNode(Builder.getExprRange(S),
+                     new (allocator()) syntax::CharacterLiteralExpression, S);
+    return true;
+  }
+
+  bool WalkUpFromFloatingLiteral(FloatingLiteral *S) {
+    Builder.markChildToken(S->getLocation(), syntax::NodeRole::LiteralToken);
+    Builder.foldNode(Builder.getExprRange(S),
+                     new (allocator()) syntax::FloatingLiteralExpression, S);
+    return true;
+  }
+
+  bool WalkUpFromStringLiteral(StringLiteral *S) {
+    Builder.markChildToken(S->getBeginLoc(), syntax::NodeRole::LiteralToken);
+    Builder.foldNode(Builder.getExprRange(S),
+                     new (allocator()) syntax::StringLiteralExpression, S);
+    return true;
+  }
+
+  bool WalkUpFromCXXBoolLiteralExpr(CXXBoolLiteralExpr *S) {
+    Builder.markChildToken(S->getLocation(), syntax::NodeRole::LiteralToken);
+    Builder.foldNode(Builder.getExprRange(S),
+                     new (allocator()) syntax::BoolLiteralExpression, S);
     return true;
   }
 

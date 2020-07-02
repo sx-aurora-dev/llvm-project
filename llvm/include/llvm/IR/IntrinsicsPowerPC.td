@@ -28,6 +28,10 @@ let TargetPrefix = "ppc" in {  // All intrinsics start with "llvm.ppc.".
     [IntrArgMemOnly, NoCapture<ArgIndex<0>>]>;
   def int_ppc_dcbtst: Intrinsic<[], [llvm_ptr_ty],
     [IntrArgMemOnly, NoCapture<ArgIndex<0>>]>;
+  def int_ppc_dcbt_with_hint: Intrinsic<[], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrArgMemOnly, NoCapture<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>;
+  def int_ppc_dcbtst_with_hint: Intrinsic<[], [llvm_ptr_ty, llvm_i32_ty],
+    [IntrArgMemOnly, NoCapture<ArgIndex<0>>, ImmArg<ArgIndex<1>>]>;
   def int_ppc_dcbz  : Intrinsic<[], [llvm_ptr_ty], []>;
   def int_ppc_dcbzl : Intrinsic<[], [llvm_ptr_ty], []>;
 
@@ -36,6 +40,8 @@ let TargetPrefix = "ppc" in {  // All intrinsics start with "llvm.ppc.".
 
   // sync instruction (i.e. sync 0, a.k.a hwsync)
   def int_ppc_sync : Intrinsic<[], [], []>;
+  // isync instruction
+  def int_ppc_isync : Intrinsic<[], [], []>;
   // lwsync is sync 1
   def int_ppc_lwsync : Intrinsic<[], [], []>;
   // eieio instruction
@@ -66,6 +72,11 @@ let TargetPrefix = "ppc" in {  // All intrinsics start with "llvm.ppc.".
         Intrinsic <[llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty], [IntrNoMem]>;
   def int_ppc_pextd
       : GCCBuiltin<"__builtin_pextd">,
+        Intrinsic <[llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty], [IntrNoMem]>;
+
+  // Centrifuge Doubleword Builtin.
+  def int_ppc_cfuged
+      : GCCBuiltin<"__builtin_cfuged">,
         Intrinsic <[llvm_i64_ty], [llvm_i64_ty, llvm_i64_ty], [IntrNoMem]>;
 
   // Count Leading / Trailing Zeroes under bit Mask Builtins.
@@ -426,6 +437,16 @@ let TargetPrefix = "ppc" in {  // All intrinsics start with "llvm.ppc.".
               Intrinsic<[llvm_v2i64_ty], [llvm_v2i64_ty, llvm_v2i64_ty],
                         [IntrNoMem]>;
 
+  // P10 Vector Centrifuge Builtin.
+  def int_ppc_altivec_vcfuged : GCCBuiltin<"__builtin_altivec_vcfuged">,
+              Intrinsic<[llvm_v2i64_ty], [llvm_v2i64_ty, llvm_v2i64_ty],
+                        [IntrNoMem]>;
+
+  // P10 Vector Gather Every Nth Bit Builtin.
+  def int_ppc_altivec_vgnb : GCCBuiltin<"__builtin_altivec_vgnb">,
+              Intrinsic<[llvm_i64_ty], [llvm_v1i128_ty, llvm_i32_ty],
+                        [IntrNoMem, ImmArg<ArgIndex<1>>]>;
+
    // P10 Vector Clear Bytes
    def int_ppc_altivec_vclrlb :  GCCBuiltin<"__builtin_altivec_vclrlb">,
                Intrinsic<[llvm_v16i8_ty], [llvm_v16i8_ty, llvm_i32_ty],
@@ -433,6 +454,16 @@ let TargetPrefix = "ppc" in {  // All intrinsics start with "llvm.ppc.".
    def int_ppc_altivec_vclrrb :  GCCBuiltin<"__builtin_altivec_vclrrb">,
                Intrinsic<[llvm_v16i8_ty], [llvm_v16i8_ty, llvm_i32_ty],
                          [IntrNoMem]>;
+
+  // P10 Vector Shift Double Bit Immediate.
+  def int_ppc_altivec_vsldbi : GCCBuiltin<"__builtin_altivec_vsldbi">,
+              Intrinsic<[llvm_v16i8_ty],
+                        [llvm_v16i8_ty, llvm_v16i8_ty, llvm_i32_ty],
+                        [IntrNoMem, ImmArg<ArgIndex<2>>]>;
+  def int_ppc_altivec_vsrdbi : GCCBuiltin<"__builtin_altivec_vsrdbi">,
+              Intrinsic<[llvm_v16i8_ty],
+                        [llvm_v16i8_ty, llvm_v16i8_ty, llvm_i32_ty],
+                        [IntrNoMem, ImmArg<ArgIndex<2>>]>;
 }
 
 // Vector average.
@@ -969,6 +1000,11 @@ def int_ppc_vsx_xxinsertw :
       PowerPC_VSX_Intrinsic<"xxinsertw",[llvm_v4i32_ty],
                             [llvm_v4i32_ty,llvm_v2i64_ty,llvm_i32_ty],
                             [IntrNoMem]>;
+def int_ppc_vsx_xxeval :
+      PowerPC_VSX_Intrinsic<"xxeval", [llvm_v2i64_ty],
+                           [llvm_v2i64_ty, llvm_v2i64_ty,
+                            llvm_v2i64_ty, llvm_i32_ty],
+                           [IntrNoMem, ImmArg<ArgIndex<3>>]>;
 def int_ppc_vsx_xxgenpcvbm :
       PowerPC_VSX_Intrinsic<"xxgenpcvbm", [llvm_v16i8_ty],
                             [llvm_v16i8_ty, llvm_i32_ty], [IntrNoMem]>;

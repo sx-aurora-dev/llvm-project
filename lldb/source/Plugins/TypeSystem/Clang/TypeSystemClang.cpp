@@ -1729,10 +1729,8 @@ TypeSystemClang::GetNumBaseClasses(const CXXRecordDecl *cxx_record_decl,
           base_class_end = cxx_record_decl->bases_end();
            base_class != base_class_end; ++base_class) {
         // Skip empty base classes
-        if (omit_empty_base_classes) {
-          if (BaseSpecifierIsEmpty(base_class))
-            continue;
-        }
+        if (BaseSpecifierIsEmpty(base_class))
+          continue;
         ++num_bases;
       }
     } else
@@ -7314,6 +7312,35 @@ clang::VarDecl *TypeSystemClang::AddVariableToRecordType(
   VerifyDecl(var_decl);
 
   return var_decl;
+}
+
+void TypeSystemClang::SetIntegerInitializerForVariable(
+    VarDecl *var, const llvm::APInt &init_value) {
+  assert(!var->hasInit() && "variable already initialized");
+
+  clang::ASTContext &ast = var->getASTContext();
+  QualType qt = var->getType();
+  assert(qt->isIntegralOrEnumerationType() &&
+         "only integer or enum types supported");
+  // If the variable is an enum type, take the underlying integer type as
+  // the type of the integer literal.
+  if (const EnumType *enum_type = llvm::dyn_cast<EnumType>(qt.getTypePtr())) {
+    const EnumDecl *enum_decl = enum_type->getDecl();
+    qt = enum_decl->getIntegerType();
+  }
+  var->setInit(IntegerLiteral::Create(ast, init_value, qt.getUnqualifiedType(),
+                                      SourceLocation()));
+}
+
+void TypeSystemClang::SetFloatingInitializerForVariable(
+    clang::VarDecl *var, const llvm::APFloat &init_value) {
+  assert(!var->hasInit() && "variable already initialized");
+
+  clang::ASTContext &ast = var->getASTContext();
+  QualType qt = var->getType();
+  assert(qt->isFloatingType() && "only floating point types supported");
+  var->setInit(FloatingLiteral::Create(
+      ast, init_value, true, qt.getUnqualifiedType(), SourceLocation()));
 }
 
 clang::CXXMethodDecl *TypeSystemClang::AddMethodToCXXRecordType(
