@@ -77,6 +77,8 @@ class Op(object):
                 return "(LO7 ${})".format(self.name_)
         elif self.kind == 'cc':
             return "{}".format(self.cc_val_)
+        elif self.kind == 'rd':
+            return "{}".format(self.rd_val_)
         else:
             return "{}:${}".format(self.ty_.ValueType, self.name_)
 
@@ -185,6 +187,11 @@ class CCConstOp(Op):
         super(CCConstOp, self).__init__("cc", None, 'cc', "CCOp", "")
         self.cc_val_ = cc_val
 
+class RDConstOp(Op):
+    def __init__(self, rd_val):
+        super(RDConstOp, self).__init__("rd", None, 'rd', "RDOp", "")
+        self.rd_val_ = rd_val
+
 def Args_vvv(ty): return [VX(ty), VY(ty), VZ(ty)]
 def Args_vsv(tyV, tyS = None): 
     if tyS is None:
@@ -210,11 +217,14 @@ def reorderVSTOps(ary):
 def reorderVSCOps(ary):
     return [ary[1], ary[2], ary[3], ary[0]] + ary[4:]
 
-def makeVFMKOps(ary, inst):
+def addCCConstOp(ary, inst):
     cc = inst.kwargs['cc']
     if cc in ["CC_AT", "CC_AF"]:
         return ary
     return [CCConstOp(inst.kwargs['cc'])] + ary
+
+def addRDConstOp(ary, inst):
+    return [RDConstOp(inst.kwargs['rd'])] + ary
 
 def getLLVMInstArgs(ary, inst = None, inst0 = None):
     tmp = inst0 if inst is None else inst.inst()
@@ -223,7 +233,9 @@ def getLLVMInstArgs(ary, inst = None, inst0 = None):
     if tmp in ["VSC", "VSCL", "VSCU"]:
         return reorderVSCOps(ary)
     if tmp in ["VFMK", "VFMS", "VFMF"] and inst is not None:
-        return makeVFMKOps(ary, inst)
+        return addCCConstOp(ary, inst)
+    if tmp in ["VFIX", "VFIXX"] and inst is not None and 'rd' in inst.kwargs:
+        return movePassTroughOp(addRDConstOp(ary, inst))
     return movePassTroughOp(ary)
 
 # inst: instruction in the manual. VFAD
@@ -448,6 +460,7 @@ class InstVEL(Inst):
             if asm:
                 suffix = "".join([op.instSuffix for op in getLLVMInstArgs(ins, None, inst)])
                 llvmInst = re.sub("\.", "", asm).upper() + suffix
+                llvmInst = re.sub("RZ", "", llvmInst) # Remove RD_RZ suffix
             else:
                 llvmInst = None
             kwargs['llvmInst'] = llvmInst
@@ -1097,9 +1110,9 @@ class InstTable(object):
 
     def VFIX(self, opc, inst, subop, asm, OL, ty):
         expr = "{0} = (" + ty + ")({1}+0.5)"
-        self.DefM(opc, inst, subop, asm, OL, expr)
+        self.DefM(opc, inst, subop, asm, OL, expr, rd='RD_NONE').noLLVMInstDefine();
         expr = "{0} = (" + ty + ")({1})"
-        self.DefM(opc, inst, subop + "rz", asm+".rz", OL, expr)
+        self.DefM(opc, inst, subop + "rz", asm+".rz", OL, expr, rd='RD_RZ').noLLVMInstDefine()
 
 class InstTableVEL(InstTable):
     def __init__(self):

@@ -232,5 +232,29 @@ def veoldVFMKSyvyl : Pseudo<(outs VM512:$vmx), (ins CCOp:$cf, V64:$vz, VM512:$vm
   let DisableEncoding = "$vl";
 }
 
+// VFIX, VFIXX
+
+class veoldVCVT<string asm, dag ins> : RV<0xe8, (outs V64:$vx), ins, asm, [], NoItinerary> {
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+multiclass veoldVCVTm<string asm, RegisterClass RC> {
+  def vl : veoldVCVT<asm#"$rd $vx,$vy", (ins RDOp:$rd, V64:$vy, I32:$vl)>;
+
+  let Constraints = "$vx = $pt" in
+  def vl_v : veoldVCVT<asm#"$rd $vx,$vy", (ins RDOp:$rd, V64:$vy, I32:$vl, V64:$pt)>;
+
+  let Constraints = "$vx = $pt" in
+  def vxl_v : veoldVCVT<asm#"$rd $vx,$vy,$vm", (ins RDOp:$rd, V64:$vy, RC:$vm, I32:$vl, V64:$pt)>;
+}
+
+defm veoldVCVTWDSX : veoldVCVTm<"vcvt.w.d.sx", VM>;
+defm veoldVCVTWDZX : veoldVCVTm<"vcvt.w.d.zx", VM>;
+defm veoldVCVTWSSX : veoldVCVTm<"vcvt.w.s.sx", VM>;
+defm veoldVCVTWSZX : veoldVCVTm<"vcvt.w.s.zx", VM>;
+defm veoldPVCVTWS : veoldVCVTm<"pvcvt.w.s", VM512>;
+defm veoldVCVTLD : veoldVCVTm<"vcvt.l.d", VM>;
 
 include "VEInstrVecVL.gen.td"
