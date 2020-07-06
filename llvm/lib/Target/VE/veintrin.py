@@ -75,6 +75,8 @@ class Op(object):
                 return "(ULO7 ${})".format(self.name_)
             else:
                 return "(LO7 ${})".format(self.name_)
+        elif self.kind == 'cc':
+            return "{}".format(self.cc_val_)
         else:
             return "{}:${}".format(self.ty_.ValueType, self.name_)
 
@@ -159,6 +161,30 @@ def ImmN(ty): return ImmOp("I", ty, "N", "uimm6", "i")
 def UImm7(ty): return ImmOp("I", ty, "N", "uimm7", "i")
 def ImmZ(ty): return ImmOp("Z", ty, "Z", "simm7", "z") # FIXME: simm7?
 
+CC_FLOAT = {'af':'CC_AF',
+            'gt':'CC_G',  'lt':'CC_L',
+            'ne':'CC_NE', 'eq':'CC_EQ',
+            'ge':'CC_GE', 'le':'CC_LE',
+            'num':'CC_NUM', 'nan':'CC_NAN',
+            'gtnan':'CC_GNAN',  'ltnan':'CC_LNAN',
+            'nenan':'CC_NENAN', 'eqnan':'CC_EQNAN',
+            'genan':'CC_GENAN', 'lenan':'CC_LENAN',
+            'at':'CC_AT'}
+CC_INT = {'af':'CC_AF',
+          'gt':'CC_IG',  'lt':'CC_IL',
+          'ne':'CC_INE', 'eq':'CC_IEQ',
+          'ge':'CC_IGE', 'le':'CC_ILE',
+          'num':'CC_NUM', 'nan':'CC_NAN',
+          'gtnan':'CC_GNAN',  'ltnan':'CC_LNAN',
+          'nenan':'CC_NENAN', 'eqnan':'CC_EQNAN',
+          'genan':'CC_GENAN', 'lenan':'CC_LENAN',
+          'at':'CC_AT'}
+
+class CCConstOp(Op):
+    def __init__(self, cc_val):
+        super(CCConstOp, self).__init__("cc", None, 'cc', "CCOp", "")
+        self.cc_val_ = cc_val
+
 def Args_vvv(ty): return [VX(ty), VY(ty), VZ(ty)]
 def Args_vsv(tyV, tyS = None): 
     if tyS is None:
@@ -184,11 +210,20 @@ def reorderVSTOps(ary):
 def reorderVSCOps(ary):
     return [ary[1], ary[2], ary[3], ary[0]] + ary[4:]
 
-def getLLVMInstArgs(ary, inst = None):
-    if inst in ["VST", "VSTL", "VSTU", "VST2D", "VSTL2D", "VSTU2D"]:
+def makeVFMKOps(ary, inst):
+    cc = inst.kwargs['cc']
+    if cc in ["CC_AT", "CC_AF"]:
+        return ary
+    return [CCConstOp(inst.kwargs['cc'])] + ary
+
+def getLLVMInstArgs(ary, inst = None, inst0 = None):
+    tmp = inst0 if inst is None else inst.inst()
+    if tmp in ["VST", "VSTL", "VSTU", "VST2D", "VSTL2D", "VSTU2D"]:
         return reorderVSTOps(ary)
-    if inst in ["VSC", "VSCL", "VSCU"]:
+    if tmp in ["VSC", "VSCL", "VSCU"]:
         return reorderVSCOps(ary)
+    if tmp in ["VFMK", "VFMS", "VFMF"] and inst is not None:
+        return makeVFMKOps(ary, inst)
     return movePassTroughOp(ary)
 
 # inst: instruction in the manual. VFAD
@@ -308,7 +343,7 @@ class Inst(object):
             return ", ".join(["{}:${}".format(op.regClass(), op.regName()) for op in ops])
 
         outs = fmtOps(self.outs)
-        ins = fmtOps(getLLVMInstArgs(self.ins, self.inst()))
+        ins = fmtOps(getLLVMInstArgs(self.ins, self))
         tmp = [op for op in self.ins if op.regName() not in ["pt", "vl", "ptm"]]
         asmArgs = ",".join(["${}".format(op.regName()) for op in self.outs + tmp])
 
@@ -411,7 +446,7 @@ class InstVEL(Inst):
         #sys.stderr.write("inst={} subop={} asm={}\n".format(inst, kwargs['subop'], asm))
         if 'llvmInst' not in kwargs:
             if asm:
-                suffix = "".join([op.instSuffix for op in getLLVMInstArgs(ins, inst)])
+                suffix = "".join([op.instSuffix for op in getLLVMInstArgs(ins, None, inst)])
                 llvmInst = re.sub("\.", "", asm).upper() + suffix
             else:
                 llvmInst = None
@@ -426,7 +461,7 @@ class InstVEL(Inst):
 
     def pattern(self):
         argsL = ", ".join([op.dagOpL() for op in self.ins])
-        argsR = ", ".join([op.dagOpR() for op in getLLVMInstArgs(self.ins, self.inst())])
+        argsR = ", ".join([op.dagOpR() for op in getLLVMInstArgs(self.ins, self)])
         l = "({} {})".format(self.llvmIntrinName(), argsL)
         r = "({} {})".format(self.llvmInst(), argsR)
         return "def : Pat<{}, {}>;".format(l, r)
@@ -1229,42 +1264,50 @@ def createInstructionTable():
     T.Def(0x9D, "VEX", "", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
 
     tmp = ["gt", "lt", "ne", "eq", "ge", "le", "num", "nan", "gtnan", "ltnan", "nenan", "eqnan", "genan", "lenan"] 
-    T.Def(0xB4, "VFMK", "", "vfmk.l.at", [[VMX]]).noTest()
-    T.Def(0xB4, "VFMK", "", "vfmk.l.af", [[VMX]]).noTest()
-    T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.at", [[VMX]]).noTest()
-    T.Def(0xB5, "VFMK", "", "pvfmk.w.up.at", [[VMX]]).noTest()
-    T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.af", [[VMX]]).noTest()
-    T.Def(0xB5, "VFMK", "", "pvfmk.w.up.af", [[VMX]]).noTest()
-    T.Def(None, "VFMK", "pat", "pvfmk.at", [[VMX512]]).noTest() # Pseudo
-    T.Def(None, "VFMK", "paf", "pvfmk.af", [[VMX512]]).noTest() # Pseudo
+    T.Def(0xB4, "VFMK", "", "vfmk.l.at", [[VMX]], cc=CC_INT['at'], llvmInst='VFMKLxal').noTest() # i64
+    T.Def(0xB4, "VFMK", "", "vfmk.l.af", [[VMX]], cc=CC_INT['af'], llvmInst='VFMKLxnal').noTest() # i64
+    #T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.at", [[VMX]], cc=CC_INT['at'], llvmInst='VFMKWal').noTest() # i32
+    #T.Def(0xB5, "VFMK", "", "pvfmk.w.up.at", [[VMX]], cc=CC_INT['at'], llvmInst='PVFMKWUPal').noTest() # i32
+    #T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.af", [[VMX]], cc=CC_INT['af'], llvmInst='VFMKWLOnal').noTest() # i32
+    #T.Def(0xB5, "VFMK", "", "pvfmk.w.up.af", [[VMX]], cc=CC_INT['af'], llvmInst='PVFMKWUPnal').noTest() # i32
+    T.Def(None, "VFMK", "pat", "pvfmk.at", [[VMX512]], cc=CC_INT['at'], llvmInst='VFMKyal').noTest().noLLVMInstDefine() # i32, Pseudo
+    T.Def(None, "VFMK", "paf", "pvfmk.af", [[VMX512]], cc=CC_INT['af'], llvmInst='VFMKynal').noTest().noLLVMInstDefine() # i32, Pseudo
+
+    # i64
     for cc in tmp:
-      T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64)]]).noTest()
-      T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64), VM]]).noTest()
+      T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64)]], cc=CC_INT[cc], llvmInst='VFMKLxvl').noTest().noLLVMInstDefine()
+      T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64), VM]], cc=CC_INT[cc], llvmInst='VFMKLxvxl').noTest().noLLVMInstDefine()
+
+    # i32
     for cc in tmp:
-      T.Def(0xB5, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i32)]]).noTest()
-      T.Def(0xB5, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i32), VM]]).noTest()
+      T.Def(0xB5, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='VFMKWxvl').noTest().noLLVMInstDefine()
+      T.Def(0xB5, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i32), VM]], cc=CC_INT[cc], llvmInst='VFMKWxvxl').noTest().noLLVMInstDefine()
     for cc in tmp:
-      T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32)]]).noTest()
-      T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32)]]).noTest()
-      T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32), VM]]).noTest()
-      T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32), VM]]).noTest()
+      T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='PVFMKWLOxvl').noTest().noLLVMInstDefine()
+      T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='PVFMKWUPxvl').noTest().noLLVMInstDefine()
+      T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32), VM]], cc=CC_INT[cc], llvmInst='PVFMKWLOxvxl').noTest().noLLVMInstDefine()
+      T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32), VM]], cc=CC_INT[cc], llvmInst='PVFMKWUPxvxl').noTest().noLLVMInstDefine()
     for cc in tmp:
-      T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, VZ(T_i32)]]).noTest() # Pseudo
-      T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, VZ(T_i32), VM512]]).noTest() # Pseudo
+      T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='VFMKWyvl').noTest().noLLVMInstDefine() # i32, Pseudo
+      T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, VZ(T_i32), VM512]], cc=CC_INT[cc], llvmInst='VFMKWyvyl').noTest().noLLVMInstDefine() # 32, Pseudo
+
+    # f64
     for cc in tmp:
-      T.Def(0xB6, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_f64)]]).noTest()
-      T.Def(0xB6, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_f64), VM]]).noTest()
+      T.Def(0xB6, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_f64)]], cc=CC_FLOAT[cc], llvmInst='VFMKDxvl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_f64), VM]], cc=CC_FLOAT[cc], llvmInst='VFMKDxvxl').noTest().noLLVMInstDefine()
+
+    # f32
     for cc in tmp:
-      T.Def(0xB6, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_f32)]]).noTest()
-      T.Def(0xB6, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_f32), VM]]).noTest()
+      T.Def(0xB6, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='VFMKSxvl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_f32), VM]], cc=CC_FLOAT[cc], llvmInst='VFMKSxvxl').noTest().noLLVMInstDefine()
     for cc in tmp:
-      T.Def(0xB6, "VFMF", "s", "pvfmk.s.lo."+cc, [[VMX, VZ(T_f32)]]).noTest()
-      T.Def(0xB6, "VFMF", "s", "pvfmk.s.up."+cc, [[VMX, VZ(T_f32)]]).noTest()
-      T.Def(0xB6, "VFMF", "s", "pvfmk.s.lo."+cc, [[VMX, VZ(T_f32), VM]]).noTest()
-      T.Def(0xB6, "VFMF", "s", "pvfmk.s.up."+cc, [[VMX, VZ(T_f32), VM]]).noTest()
+      T.Def(0xB6, "VFMF", "s", "pvfmk.s.lo."+cc, [[VMX, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='PVFMKSLOxvl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "s", "pvfmk.s.up."+cc, [[VMX, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='PVFMKSUPxvl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "s", "pvfmk.s.lo."+cc, [[VMX, VZ(T_f32), VM]], cc=CC_FLOAT[cc], llvmInst='PVFMKSLOxvxl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "s", "pvfmk.s.up."+cc, [[VMX, VZ(T_f32), VM]], cc=CC_FLOAT[cc], llvmInst='PVFMKSUPxvxl').noTest().noLLVMInstDefine()
     for cc in tmp:
-      T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32)]]).noTest() # Pseudo
-      T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32), VM512]]).noTest() # Pseudo
+      T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='VFMKSyvl').noTest().noLLVMInstDefine() # Pseudo
+      T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32), VM512]], cc=CC_FLOAT[cc], llvmInst='VFMKSyvyl').noTest().noLLVMInstDefine() # Pseudo
    
     T.Section("Table 3-21 Vector Recursive Relation Instructions", 32)
     T.VSUM(0xEA, "VSUMS", "sx", "vsum.w.sx", [[VX(T_i32), VY(T_i32)]])
@@ -1410,7 +1453,7 @@ def gen_vl_index(insts):
     print("default: return -1;")
     for I in insts:
         if I.hasLLVMInstDefine() and I.hasVLOp():
-            index = len(I.outs) + getLLVMInstArgs(I.ins, I.inst()).index(VL)
+            index = len(I.outs) + getLLVMInstArgs(I.ins, I).index(VL)
             print("case VE::{}: return {};".format(I.llvmInst(), index))
 
 

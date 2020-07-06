@@ -668,6 +668,72 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
     // replace to pvfmk.s.up and pvfmk.s.lo
 
     std::map<int, std::vector<int>> map = {
+      {VE::veoldVFMKyal, {VE::veoldVFMKLxal, VE::veoldVFMKLxal}},
+      {VE::veoldVFMKynal, {VE::veoldVFMKLxnal, VE::veoldVFMKLxnal}},
+      {VE::veoldVFMKWyvl, {VE::veoldPVFMKWUPxvl, VE::veoldPVFMKWLOxvl}},
+      {VE::veoldVFMKWyvyl, {VE::veoldPVFMKWUPxvxl, VE::veoldPVFMKWLOxvxl}},
+      {VE::veoldVFMKSyvl, {VE::veoldPVFMKSUPxvl, VE::veoldPVFMKSLOxvl}},
+      {VE::veoldVFMKSyvyl, {VE::veoldPVFMKSUPxvxl, VE::veoldPVFMKSLOxvxl}},
+    };
+
+    unsigned Opcode = MI.getOpcode();
+
+    if (map.find(Opcode) == map.end()) {
+      report_fatal_error("unexpected opcode for pseudo vfmk");
+    }
+
+    unsigned OpcodeUpper = map[Opcode][0];
+    unsigned OpcodeLower = map[Opcode][1];
+
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc dl = MI.getDebugLoc();
+    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, TI.get(OpcodeUpper));
+    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower));
+
+    // VM512
+    Bu.addReg(GetVM512Upper(MI.getOperand(0).getReg()));
+    Bl.addReg(GetVM512Lower(MI.getOperand(0).getReg()));
+
+    if (MI.getNumExplicitOperands() == 2) { // _Ml: VM512, VL
+      // VL
+      Bu.addReg(MI.getOperand(1).getReg());
+      Bl.addReg(MI.getOperand(1).getReg());
+    } else if (MI.getNumExplicitOperands() == 4) { // _Mvl: VM512, CC, VR, VL
+      // CC
+      Bu.addImm(MI.getOperand(1).getImm());
+      Bl.addImm(MI.getOperand(1).getImm());
+      // VR
+      Bu.addReg(MI.getOperand(2).getReg());
+      Bl.addReg(MI.getOperand(2).getReg());
+      // VL
+      Bu.addReg(MI.getOperand(3).getReg());
+      Bl.addReg(MI.getOperand(3).getReg());
+    } else if (MI.getNumExplicitOperands() == 5) { // _MvMl: VM512, CC, VR, VM512, VL
+      // CC
+      Bu.addImm(MI.getOperand(1).getImm());
+      Bl.addImm(MI.getOperand(1).getImm());
+      // VR
+      Bu.addReg(MI.getOperand(2).getReg());
+      Bl.addReg(MI.getOperand(2).getReg());
+      // VM512
+      Bu.addReg(GetVM512Upper(MI.getOperand(3).getReg()));
+      Bl.addReg(GetVM512Lower(MI.getOperand(3).getReg()));
+      // VL
+      Bu.addReg(MI.getOperand(4).getReg());
+      Bl.addReg(MI.getOperand(4).getReg());
+    } else {
+      report_fatal_error("unexpected number of operands for pvfmk");
+    }
+
+    MI.eraseFromParent();
+}
+#if 0
+static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
+{
+    // replace to pvfmk.w.up and pvfmk.w.lo
+    // replace to pvfmk.s.up and pvfmk.s.lo
+
+    std::map<int, std::vector<int>> map = {
       {VE::veoldPVFMKATl, {VE::veoldPVFMKWUPATl, VE::veoldPVFMKWLOATl}},
       {VE::veoldPVFMKAFl, {VE::veoldPVFMKWUPAFl, VE::veoldPVFMKWLOAFl}},
       {VE::veoldPVFMKWGTvl, {VE::veoldPVFMKWUPGTvl, VE::veoldPVFMKWLOGTvl}},
@@ -777,6 +843,7 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
 
     MI.eraseFromParent();
 }
+#endif
 
 bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   switch (MI.getOpcode()) {
@@ -912,6 +979,12 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     }
     return true;
   }
+  case VE::veoldVFMKyal:
+  case VE::veoldVFMKynal:
+  case VE::veoldVFMKWyvl: case VE::veoldVFMKWyvyl:
+  case VE::veoldVFMKSyvl: case VE::veoldVFMKSyvyl:
+    expandPseudoVFMK_VL(*this, MI);
+#if 0
   case VE::veoldPVFMKATl:
   case VE::veoldPVFMKAFl:
   case VE::veoldPVFMKWGTvl: case VE::veoldPVFMKWGTvxl:
@@ -945,6 +1018,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     expandPseudoVFMK_VL(*this, MI);
     return true;
   }
+#endif
   }
   return false;
 }
