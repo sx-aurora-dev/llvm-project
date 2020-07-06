@@ -707,8 +707,8 @@ SDValue VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   CCInfo.AnalyzeCallOperands(CLI.Outs, CC_VE);
 
   // VE requires to use both register and stack for varargs or no-prototyped
-  // functions.  FIXME: How to check prototype here?
-  bool UseBoth = CLI.IsVarArg /* || CLI.NoProtoType */;
+  // functions.
+  bool UseBoth = CLI.IsVarArg;
 
   // Analyze operands again if it is required to store BOTH.
   SmallVector<CCValAssign, 16> ArgLocs2;
