@@ -26,5 +26,7 @@ def : Pat<(v8i64 (int_ve_vl_insert_vm512u v8i64:$vmx, v4i64:$vmy)),
 def : Pat<(v8i64 (int_ve_vl_insert_vm512l v8i64:$vmx, v4i64:$vmy)),
           (v8i64 (INSERT_SUBREG v8i64:$vmx, v4i64:$vmy, sub_vm_odd))>;
 
+def : Pat<(int_ve_vl_lvss_svs v256f64:$vx, i32:$sy),
+          (EXTRACT_SUBREG (i64 (LVSvi v256f64:$vx, i32:$sy)), sub_f32)>;
 
 include "VEInstrIntrinsicVL.gen.td"

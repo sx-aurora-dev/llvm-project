@@ -302,7 +302,7 @@ class Inst(object):
     def isPacked(self): return ('packed' in self.kwargs) and self.kwargs['packed']
     #def isPseudo(self): return self.opc == None
 
-    def noLLVMInstDefine(self): self.hasLLVMInstDefine_ = False
+    def noLLVMInstDefine(self): self.hasLLVMInstDefine_ = False; return self
     def hasLLVMInstDefine(self): 
         return self.hasLLVMInstDefine_ and (not self.isDummy())
 
@@ -946,9 +946,9 @@ class InstTable(object):
     def LVSm(self, opc):
         I = self.InstClass
         # Manual LLVMInstDefine
-        self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSLvr", noVL=True).noTest()).noLLVMInstDefine()
-        self.add(I(opc, "LVS", "lvs", "lvsd_svs", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSLvr", noVL=True).noTest()).noLLVMInstDefine()
-        self.add(I(opc, "LVS", "lvs", "lvss_svs", [SX(T_f32)], [VX(T_u64), SY(T_u32)], llvmInst="LVSSvr", noVL=True).noTest()).noLLVMInstDefine()
+        self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSvr", noVL=True).noTest()).noLLVMInstDefine()
+        self.add(I(opc, "LVS", "lvs", "lvsd_svs", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSvr", noVL=True).noTest()).noLLVMInstDefine()
+        self.add(I(opc, "LVS", "lvs", "lvss_svs", [SX(T_f32)], [VX(T_u64), SY(T_u32)], noVL=True).noTest()).noLLVMInstDefine().noPat()
 
     def Inst2f(self, opc, name, instName, expr, hasPacked = True, hasNex = False):
         self.Def(opc, instName, "d", name+".d", [[VX(T_f64), VY(T_f64)]], expr)

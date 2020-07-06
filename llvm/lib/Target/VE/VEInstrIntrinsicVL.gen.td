@@ -163,9 +163,8 @@ def : Pat<(int_ve_vl_pfchv_ssl simm7:$I, i64:$sz, i32:$vl), (veoldPFCHVirl (LO7 
 def : Pat<(int_ve_vl_pfchvnc_ssl i64:$sy, i64:$sz, i32:$vl), (veoldPFCHVNCrrl i64:$sy, i64:$sz, i32:$vl)>;
 def : Pat<(int_ve_vl_pfchvnc_ssl simm7:$I, i64:$sz, i32:$vl), (veoldPFCHVNCirl (LO7 $I), i64:$sz, i32:$vl)>;
 def : Pat<(int_ve_vl_lsv_vvss v256f64:$pt, i32:$sy, i64:$sz), (veoldLSVrr_v i32:$sy, i64:$sz, v256f64:$pt)>;
-def : Pat<(int_ve_vl_lvsl_svs v256f64:$vx, i32:$sy), (veoldLVSLvr v256f64:$vx, i32:$sy)>;
-def : Pat<(int_ve_vl_lvsd_svs v256f64:$vx, i32:$sy), (veoldLVSLvr v256f64:$vx, i32:$sy)>;
-def : Pat<(int_ve_vl_lvss_svs v256f64:$vx, i32:$sy), (veoldLVSSvr v256f64:$vx, i32:$sy)>;
+def : Pat<(int_ve_vl_lvsl_svs v256f64:$vx, i32:$sy), (veoldLVSvr v256f64:$vx, i32:$sy)>;
+def : Pat<(int_ve_vl_lvsd_svs v256f64:$vx, i32:$sy), (veoldLVSvr v256f64:$vx, i32:$sy)>;
 def : Pat<(int_ve_vl_lvm_mmss v4i64:$ptm, i64:$sy, i64:$sz), (veoldLVMxrr_x i64:$sy, i64:$sz, v4i64:$ptm)>;
 def : Pat<(int_ve_vl_lvm_mmss v4i64:$ptm, uimm6:$N, i64:$sz), (veoldLVMxir_x (ULO7 $N), i64:$sz, v4i64:$ptm)>;
 def : Pat<(int_ve_vl_lvm_MMss v8i64:$ptm, i64:$sy, i64:$sz), (veoldLVMyrr_y i64:$sy, i64:$sz, v8i64:$ptm)>;

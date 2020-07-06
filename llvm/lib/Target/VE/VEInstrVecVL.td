@@ -1,12 +1,13 @@
 // LVS lvs veoldLVSLvr
-def veoldLVSLvr : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy),
+def veoldLVSvr : RV<0x9e, (outs I64:$sx), (ins V64:$vx, I32:$sy),
        "lvs $sx,$vx($sy)", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
 }
 
-def veoldLVSLvi : RV<0x9e, (outs I64:$sx), (ins V64:$vx, simm7:$sy),
+/*
+def veoldLVSvi : RV<0x9e, (outs I64:$sx), (ins V64:$vx, simm7:$sy),
        "lvs $sx,$vx($sy)", [], NoItinerary>
 {
   let DecoderNamespace = "VEL";
@@ -21,6 +22,7 @@ def veoldLVSSvr : RV<0x9e, (outs F32:$sx), (ins V64:$vx, I32:$sy),
   let DecoderNamespace = "VEL";
   let isCodeGenOnly = 1;
 }
+*/
 
 // inst=LSV asm=lsv intrisic=veoldLSVrr_v
 def veoldLSVrr_v : RV<0x8e, (outs V64:$vx), (ins I32:$sy, I64:$sz, V64:$pt),
