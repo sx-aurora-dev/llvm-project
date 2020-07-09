@@ -1,3 +1,19 @@
+//===----------------------------------------------------------------------===//
+// PowerPC ISA 3.1 specific type constraints.
+//
+
+def SDT_PPCSplat32 : SDTypeProfile<1, 3, [ SDTCisVT<0, v2i64>,
+  SDTCisVec<1>, SDTCisInt<2>, SDTCisInt<3>
+]>;
+
+//===----------------------------------------------------------------------===//
+// ISA 3.1 specific PPCISD nodes.
+//
+
+def PPCxxsplti32dx : SDNode<"PPCISD::XXSPLTI32DX", SDT_PPCSplat32, []>;
+
+//===----------------------------------------------------------------------===//
+
 // PC Relative flag (for instructions that use the address of the prefix for
 // address computations).
 class isPCRel { bit PCRel = 1; }
@@ -224,6 +240,30 @@ class VXForm_RD5_N3_VB5<bits<11> xo, dag OOL, dag IOL, string asmstr,
   let Inst{16-20} = VB;
   let Inst{21-31} = xo;
 }
+
+
+// VX-Form: [PO VRT / UIM RB XO].
+// We use VXForm_1 to implement it, that is, we use "VRA" (5 bit) to represent
+// "/ UIM" (unused bit followed by a 4-bit immediate)
+// Destructive (insert) forms are suffixed with _ins.
+class VXForm_VRT5_UIM5_RB5_ins<bits<11> xo, string opc, list<dag> pattern>
+  : VXForm_1<xo, (outs vrrc:$vD), (ins vrrc:$vDi, u4imm:$UIM, g8rc:$rB),
+             !strconcat(opc, " $vD, $rB, $UIM"), IIC_VecGeneral, pattern>,
+             RegConstraint<"$vDi = $vD">, NoEncode<"$vDi">;
+
+// VX-Form: [PO VRT RA VRB XO].
+// Destructive (insert) forms are suffixed with _ins.
+class VXForm_VTB5_RA5_ins<bits<11> xo, string opc, list<dag> pattern>
+  : VXForm_1<xo, (outs vrrc:$vD), (ins vrrc:$vDi, g8rc:$rA, vrrc:$vB),
+             !strconcat(opc, " $vD, $rA, $vB"), IIC_VecGeneral, pattern>,
+             RegConstraint<"$vDi = $vD">, NoEncode<"$vDi">;
+
+// VX-Form: [PO VRT RA RB XO].
+// Destructive (insert) forms are suffixed with _ins.
+class VXForm_VRT5_RAB5_ins<bits<11> xo, string opc, list<dag> pattern>
+  : VXForm_1<xo, (outs vrrc:$vD), (ins vrrc:$vDi, g8rc:$rA, g8rc:$rB),
+             !strconcat(opc, " $vD, $rA, $rB"), IIC_VecGeneral, pattern>,
+             RegConstraint<"$vDi = $vD">, NoEncode<"$vDi">;
 
 // VN-Form: [PO VRT VRA VRB PS SD XO]
 // SD is "Shift Direction"
@@ -708,8 +748,11 @@ let Predicates = [PrefixInstrs] in {
                                             (PPCxxspltidp i32:$IMM32))]>;
   def XXSPLTI32DX :
       8RR_DForm_IMM32_XT6_IX<32, 0, (outs vsrc:$XT),
-                             (ins vsrc:$XTi, i1imm:$IX, i32imm:$IMM32),
-                             "xxsplti32dx $XT, $IX, $IMM32", IIC_VecGeneral, []>,
+                             (ins vsrc:$XTi, u1imm:$IX, i32imm:$IMM32),
+                             "xxsplti32dx $XT, $IX, $IMM32", IIC_VecGeneral,
+                             [(set v2i64:$XT,
+                                   (PPCxxsplti32dx v2i64:$XTi, i32:$IX,
+                                                   i32:$IMM32))]>,
                              RegConstraint<"$XTi = $XT">, NoEncode<"$XTi">;
   def XXPERMX :
     8RR_XX4Form_IMM3_XTABC6<34, 0, (outs vsrc:$XT), (ins vsrc:$XA, vsrc:$XB,
@@ -751,6 +794,87 @@ let Predicates = [IsISA3_1] in {
                                       (int_ppc_altivec_vsrdbi v16i8:$VRA,
                                                               v16i8:$VRB, 
                                                               i32:$SH))]>;
+  def VINSW : 
+    VXForm_VRT5_UIM5_RB5_ins<207, "vinsw",
+                             [(set v4i32:$vD,
+                                   (int_ppc_altivec_vinsw v4i32:$vDi, i64:$rB,
+                                                          timm:$UIM))]>;
+  def VINSD :
+    VXForm_VRT5_UIM5_RB5_ins<463, "vinsd",
+                             [(set v2i64:$vD,
+                                   (int_ppc_altivec_vinsd v2i64:$vDi, i64:$rB,
+                                                          timm:$UIM))]>;
+  def VINSBVLX :
+    VXForm_VTB5_RA5_ins<15, "vinsbvlx",
+                        [(set v16i8:$vD,
+                              (int_ppc_altivec_vinsbvlx v16i8:$vDi, i64:$rA,
+                                                        v16i8:$vB))]>;
+  def VINSBVRX :
+    VXForm_VTB5_RA5_ins<271, "vinsbvrx",
+                        [(set v16i8:$vD,
+                              (int_ppc_altivec_vinsbvrx v16i8:$vDi, i64:$rA,
+                                                        v16i8:$vB))]>;
+  def VINSHVLX :
+    VXForm_VTB5_RA5_ins<79, "vinshvlx",
+                        [(set v8i16:$vD,
+                              (int_ppc_altivec_vinshvlx v8i16:$vDi, i64:$rA,
+                                                        v8i16:$vB))]>;
+  def VINSHVRX :
+    VXForm_VTB5_RA5_ins<335, "vinshvrx",
+                        [(set v8i16:$vD,
+                              (int_ppc_altivec_vinshvrx v8i16:$vDi, i64:$rA,
+                                                        v8i16:$vB))]>;
+  def VINSWVLX :
+    VXForm_VTB5_RA5_ins<143, "vinswvlx",
+                        [(set v4i32:$vD,
+                              (int_ppc_altivec_vinswvlx v4i32:$vDi, i64:$rA,
+                                                        v4i32:$vB))]>;
+  def VINSWVRX :
+    VXForm_VTB5_RA5_ins<399, "vinswvrx",
+                        [(set v4i32:$vD,
+                              (int_ppc_altivec_vinswvrx v4i32:$vDi, i64:$rA,
+                                                        v4i32:$vB))]>;
+  def VINSBLX :
+    VXForm_VRT5_RAB5_ins<527, "vinsblx",
+                         [(set v16i8:$vD,
+                               (int_ppc_altivec_vinsblx v16i8:$vDi, i64:$rA,
+                                                        i64:$rB))]>;
+  def VINSBRX :
+    VXForm_VRT5_RAB5_ins<783, "vinsbrx",
+                         [(set v16i8:$vD,
+                               (int_ppc_altivec_vinsbrx v16i8:$vDi, i64:$rA,
+                                                        i64:$rB))]>;
+  def VINSHLX :
+    VXForm_VRT5_RAB5_ins<591, "vinshlx",
+                         [(set v8i16:$vD,
+                               (int_ppc_altivec_vinshlx v8i16:$vDi, i64:$rA,
+                                                        i64:$rB))]>;
+  def VINSHRX :
+    VXForm_VRT5_RAB5_ins<847, "vinshrx",
+                         [(set v8i16:$vD,
+                               (int_ppc_altivec_vinshrx v8i16:$vDi, i64:$rA,
+                                                        i64:$rB))]>;
+  def VINSWLX :
+    VXForm_VRT5_RAB5_ins<655, "vinswlx",
+                         [(set v4i32:$vD,
+                               (int_ppc_altivec_vinswlx v4i32:$vDi, i64:$rA,
+                                                        i64:$rB))]>;
+  def VINSWRX :
+    VXForm_VRT5_RAB5_ins<911, "vinswrx",
+                         [(set v4i32:$vD,
+                               (int_ppc_altivec_vinswrx v4i32:$vDi, i64:$rA,
+                                                        i64:$rB))]>;
+  def VINSDLX :
+    VXForm_VRT5_RAB5_ins<719, "vinsdlx",
+                         [(set v2i64:$vD,
+                               (int_ppc_altivec_vinsdlx v2i64:$vDi, i64:$rA,
+                                                        i64:$rB))]>;
+  def VINSDRX :
+    VXForm_VRT5_RAB5_ins<975, "vinsdrx",
+                         [(set v2i64:$vD,
+                               (int_ppc_altivec_vinsdrx v2i64:$vDi, i64:$rA,
+                                                        i64:$rB))]>;
+
    def VPDEPD : VXForm_1<1485, (outs vrrc:$vD), (ins vrrc:$vA, vrrc:$vB),
                          "vpdepd $vD, $vA, $vB", IIC_VecGeneral,
                          [(set v2i64:$vD,
@@ -845,3 +969,25 @@ let AddedComplexity = 400, Predicates = [PrefixInstrs] in {
            (COPY_TO_REGCLASS (XXSPLTIDP (getFPAs32BitInt fpimm:$A)),
                              VSFRC)>;
 }
+
+let Predicates = [PrefixInstrs] in {
+  def : Pat<(v16i8 (int_ppc_vsx_xxpermx v16i8:$A, v16i8:$B, v16i8:$C, timm:$D)),
+            (COPY_TO_REGCLASS (XXPERMX (COPY_TO_REGCLASS $A, VSRC),
+                                       (COPY_TO_REGCLASS $B, VSRC),
+                                       (COPY_TO_REGCLASS $C, VSRC), $D), VSRC)>;
+  def : Pat<(v16i8 (int_ppc_vsx_xxblendvb v16i8:$A, v16i8:$B, v16i8:$C)),
+            (COPY_TO_REGCLASS
+                   (XXBLENDVB (COPY_TO_REGCLASS $A, VSRC),
+                              (COPY_TO_REGCLASS $B, VSRC),
+                              (COPY_TO_REGCLASS $C, VSRC)), VSRC)>;
+  def : Pat<(v8i16 (int_ppc_vsx_xxblendvh v8i16:$A, v8i16:$B, v8i16:$C)),
+            (COPY_TO_REGCLASS
+                   (XXBLENDVH (COPY_TO_REGCLASS $A, VSRC),
+                              (COPY_TO_REGCLASS $B, VSRC),
+                              (COPY_TO_REGCLASS $C, VSRC)), VSRC)>;
+  def : Pat<(int_ppc_vsx_xxblendvw v4i32:$A, v4i32:$B, v4i32:$C),
+            (XXBLENDVW $A, $B, $C)>;
+  def : Pat<(int_ppc_vsx_xxblendvd v2i64:$A, v2i64:$B, v2i64:$C),
+            (XXBLENDVD $A, $B, $C)>;
+}
+

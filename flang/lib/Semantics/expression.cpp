@@ -909,7 +909,10 @@ MaybeExpr ExpressionAnalyzer::Analyze(const parser::ArrayElement &ae) {
       return std::nullopt;
     } else if (baseExpr->Rank() == 0) {
       if (const Symbol * symbol{GetLastSymbol(*baseExpr)}) {
-        Say("'%s' is not an array"_err_en_US, symbol->name());
+        if (!context_.HasError(symbol)) {
+          Say("'%s' is not an array"_err_en_US, symbol->name());
+          context_.SetError(const_cast<Symbol &>(*symbol));
+        }
       }
     } else if (std::optional<DataRef> dataRef{
                    ExtractDataRef(std::move(*baseExpr))}) {
@@ -1082,12 +1085,21 @@ MaybeExpr ExpressionAnalyzer::Analyze(const parser::CoindexedNamedObject &x) {
             symbol.name(), symbol.Corank(), numCosubscripts);
       }
     }
-    // TODO: stat=/team=/team_number=
+    for (const auto &imageSelSpec :
+        std::get<std::list<parser::ImageSelectorSpec>>(x.imageSelector.t)) {
+      std::visit(
+          common::visitors{
+              [&](const auto &x) { Analyze(x.v); },
+          },
+          imageSelSpec.u);
+    }
     // Reverse the chain of symbols so that the base is first and coarray
     // ultimate component is last.
-    return Designate(
-        DataRef{CoarrayRef{SymbolVector{reversed.crbegin(), reversed.crend()},
-            std::move(subscripts), std::move(cosubscripts)}});
+    if (cosubsOk) {
+      return Designate(
+          DataRef{CoarrayRef{SymbolVector{reversed.crbegin(), reversed.crend()},
+              std::move(subscripts), std::move(cosubscripts)}});
+    }
   }
   return std::nullopt;
 }
@@ -2018,7 +2030,7 @@ void ExpressionAnalyzer::Analyze(const parser::CallStmt &callStmt) {
       CHECK(proc);
       if (CheckCall(call.source, *proc, callee->arguments)) {
         bool hasAlternateReturns{
-            analyzer.GetActuals().size() < actualArgList.size()};
+            callee->arguments.size() < actualArgList.size()};
         callStmt.typedCall.reset(new ProcedureRef{std::move(*proc),
             std::move(callee->arguments), hasAlternateReturns});
       }

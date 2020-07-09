@@ -503,6 +503,7 @@ namespace {
     bool isMaskZeroExtended(SDNode *N) const;
     bool tryShiftAmountMod(SDNode *N);
     bool tryShrinkShlLogicImm(SDNode *N);
+    bool tryVPTERNLOG(SDNode *N);
     bool tryVPTESTM(SDNode *Root, SDValue Setcc, SDValue Mask);
     bool tryMatchBitSelect(SDNode *N);
 
@@ -3929,6 +3930,85 @@ bool X86DAGToDAGISel::tryShrinkShlLogicImm(SDNode *N) {
   return true;
 }
 
+// Try to match two logic ops to a VPTERNLOG.
+// FIXME: Handle inverted inputs?
+// FIXME: Handle more complex patterns that use an operand more than once?
+bool X86DAGToDAGISel::tryVPTERNLOG(SDNode *N) {
+  MVT NVT = N->getSimpleValueType(0);
+
+  // Make sure we support VPTERNLOG.
+  if (!NVT.isVector() || !Subtarget->hasAVX512() ||
+      NVT.getVectorElementType() == MVT::i1)
+    return false;
+
+  // We need VLX for 128/256-bit.
+  if (!(Subtarget->hasVLX() || NVT.is512BitVector()))
+    return false;
+
+  unsigned Opc1 = N->getOpcode();
+  SDValue N0 = N->getOperand(0);
+  SDValue N1 = N->getOperand(1);
+
+  auto isLogicOp = [](unsigned Opc) {
+    return Opc == ISD::AND || Opc == ISD::OR || Opc == ISD::XOR ||
+           Opc == X86ISD::ANDNP;
+  };
+
+  SDValue A, B, C;
+  unsigned Opc2;
+  if (isLogicOp(N1.getOpcode()) && N1.hasOneUse()) {
+    Opc2 = N1.getOpcode();
+    A = N0;
+    B = N1.getOperand(0);
+    C = N1.getOperand(1);
+  } else if (isLogicOp(N0.getOpcode()) && N0.hasOneUse()) {
+    Opc2 = N0.getOpcode();
+    A = N1;
+    B = N0.getOperand(0);
+    C = N0.getOperand(1);
+  } else
+    return false;
+
+  uint64_t Imm;
+  switch (Opc1) {
+  default: llvm_unreachable("Unexpected opcode!");
+  case ISD::AND:
+    switch (Opc2) {
+    default: llvm_unreachable("Unexpected opcode!");
+    case ISD::AND:      Imm = 0x80; break;
+    case ISD::OR:       Imm = 0xe0; break;
+    case ISD::XOR:      Imm = 0x60; break;
+    case X86ISD::ANDNP: Imm = 0x20; break;
+    }
+    break;
+  case ISD::OR:
+    switch (Opc2) {
+    default: llvm_unreachable("Unexpected opcode!");
+    case ISD::AND:      Imm = 0xf8; break;
+    case ISD::OR:       Imm = 0xfe; break;
+    case ISD::XOR:      Imm = 0xf6; break;
+    case X86ISD::ANDNP: Imm = 0xf2; break;
+    }
+    break;
+  case ISD::XOR:
+    switch (Opc2) {
+    default: llvm_unreachable("Unexpected opcode!");
+    case ISD::AND:      Imm = 0x78; break;
+    case ISD::OR:       Imm = 0x1e; break;
+    case ISD::XOR:      Imm = 0x96; break;
+    case X86ISD::ANDNP: Imm = 0xd2; break;
+    }
+    break;
+  }
+
+  SDLoc DL(N);
+  SDValue New = CurDAG->getNode(X86ISD::VPTERNLOG, DL, NVT, A, B, C,
+                                CurDAG->getTargetConstant(Imm, DL, MVT::i8));
+  ReplaceNode(N, New.getNode());
+  SelectCode(New.getNode());
+  return true;
+}
+
 /// If the high bits of an 'and' operand are known zero, try setting the
 /// high bits of an 'and' constant operand to produce a smaller encoding by
 /// creating a small, sign-extended negative immediate rather than a large
@@ -4355,8 +4435,39 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
 
       break;
     }
+    case Intrinsic::x86_tileloadd64:
+    case Intrinsic::x86_tileloaddt164:
+    case Intrinsic::x86_tilestored64: {
+      if (!Subtarget->hasAMXTILE())
+        break;
+      unsigned Opc;
+      switch (IntNo) {
+      default: llvm_unreachable("Unexpected intrinsic!");
+      case Intrinsic::x86_tileloadd64:   Opc = X86::PTILELOADD; break;
+      case Intrinsic::x86_tileloaddt164: Opc = X86::PTILELOADDT1; break;
+      case Intrinsic::x86_tilestored64:  Opc = X86::PTILESTORED; break;
+      }
+      // FIXME: Match displacement and scale.
+      unsigned TIndex = Node->getConstantOperandVal(2);
+      SDValue TReg = getI8Imm(TIndex, dl);
+      SDValue Base = Node->getOperand(3);
+      SDValue Scale = getI8Imm(1, dl);
+      SDValue Index = Node->getOperand(4);
+      SDValue Disp = CurDAG->getTargetConstant(0, dl, MVT::i32);
+      SDValue Segment = CurDAG->getRegister(0, MVT::i16);
+      SDValue Chain = Node->getOperand(0);
+      MachineSDNode *CNode;
+      if (Opc == X86::PTILESTORED) {
+        SDValue Ops[] = { Base, Scale, Index, Disp, Segment, TReg, Chain };
+        CNode = CurDAG->getMachineNode(Opc, dl, MVT::Other, Ops);
+      } else {
+        SDValue Ops[] = { TReg, Base, Scale, Index, Disp, Segment, Chain };
+        CNode = CurDAG->getMachineNode(Opc, dl, MVT::Other, Ops);
+      }
+      ReplaceNode(Node, CNode);
+      return;
     }
-
+    }
     break;
   }
   case ISD::BRIND: {
@@ -4432,8 +4543,9 @@ void X86DAGToDAGISel::Select(SDNode *Node) {
   case ISD::XOR:
     if (tryShrinkShlLogicImm(Node))
       return;
-
     if (Opcode == ISD::OR && tryMatchBitSelect(Node))
+      return;
+    if (tryVPTERNLOG(Node))
       return;
 
     LLVM_FALLTHROUGH;
