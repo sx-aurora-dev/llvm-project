@@ -204,6 +204,7 @@ StringRef sys::detail::getHostCPUNameForARM(StringRef ProcCpuinfoContent) {
             .Case("0xd09", "cortex-a73")
             .Case("0xd0a", "cortex-a75")
             .Case("0xd0b", "cortex-a76")
+            .Case("0xd0d", "cortex-a77")
             .Case("0xd0c", "neoverse-n1")
             .Default("generic");
   }
@@ -867,7 +868,7 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
         }
         break;
       }
-      if (testFeature(X86::FEATURE_EM64T)) {
+      if (testFeature(X86::FEATURE_64BIT)) {
         *Type = X86::INTEL_CORE2; // "core2"
         *Subtype = X86::INTEL_CORE2_65;
         break;
@@ -893,7 +894,7 @@ getIntelProcessorTypeAndSubtype(unsigned Family, unsigned Model,
     }
     break;
   case 15: {
-    if (testFeature(X86::FEATURE_EM64T)) {
+    if (testFeature(X86::FEATURE_64BIT)) {
       *Type = X86::INTEL_NOCONA;
       break;
     }
@@ -1139,7 +1140,7 @@ static void getAvailableFeatures(unsigned ECX, unsigned EDX, unsigned MaxLeaf,
     setFeature(X86::FEATURE_FMA4);
 
   if (HasExtLeaf1 && ((EDX >> 29) & 1))
-    setFeature(X86::FEATURE_EM64T);
+    setFeature(X86::FEATURE_64BIT);
 }
 
 StringRef sys::getHostCPUName() {

@@ -187,6 +187,10 @@ enum NodeType : unsigned {
   SADDV,
   UADDV,
 
+  // Vector rounding halving addition
+  SRHADD,
+  URHADD,
+
   // Vector across-lanes min/max
   // Only the lower result lane is defined.
   SMINV,
@@ -846,6 +850,7 @@ private:
   SDValue LowerToPredicatedOp(SDValue Op, SelectionDAG &DAG,
                               unsigned NewOp) const;
   SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerINSERT_SUBVECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVectorSRA_SRL_SHL(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerShiftLeftParts(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerShiftRightParts(SDValue Op, SelectionDAG &DAG) const;
@@ -863,6 +868,7 @@ private:
   SDValue LowerCONCAT_VECTORS(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerFSINCOS(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVSCALE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerTRUNCATE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVECREDUCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_LOAD_SUB(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_LOAD_AND(SDValue Op, SelectionDAG &DAG) const;

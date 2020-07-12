@@ -857,6 +857,12 @@ void InputSection::relocateNonAlloc(uint8_t *buf, ArrayRef<RelTy> rels) {
   const bool isDebugLocOrRanges =
       isDebug && (name == ".debug_loc" || name == ".debug_ranges");
   const bool isDebugLine = isDebug && name == ".debug_line";
+  Optional<uint64_t> tombstone;
+  for (const auto &patAndValue : llvm::reverse(config->deadRelocInNonAlloc))
+    if (patAndValue.first.match(this->name)) {
+      tombstone = patAndValue.second;
+      break;
+    }
 
   for (const RelTy &rel : rels) {
     RelType type = rel.getType(config->isMips64EL);
@@ -907,12 +913,8 @@ void InputSection::relocateNonAlloc(uint8_t *buf, ArrayRef<RelTy> rels) {
       continue;
     }
 
-    if (sym.isTls() && !Out::tlsPhdr) {
-      target->relocateNoSym(bufLoc, type, 0);
-      continue;
-    }
-
-    if (isDebug && type == target->symbolicRel) {
+    if (tombstone ||
+        (isDebug && (type == target->symbolicRel || expr == R_DTPREL))) {
       // Resolve relocations in .debug_* referencing (discarded symbols or ICF
       // folded section symbols) to a tombstone value. Resolving to addend is
       // unsatisfactory because the result address range may collide with a
@@ -923,6 +925,10 @@ void InputSection::relocateNonAlloc(uint8_t *buf, ArrayRef<RelTy> rels) {
       // .debug_* sections. We have to ignore the addend because we don't want
       // to resolve an address attribute (which may have a non-zero addend) to
       // -1+addend (wrap around to a low address).
+      //
+      // R_DTPREL type relocations represent an offset into the dynamic thread
+      // vector. The computed value is st_value plus a non-negative offset.
+      // Negative values are invalid, so -1 can be used as the tombstone value.
       //
       // If the referenced symbol is discarded (made Undefined), or the
       // section defining the referenced symbol is garbage collected,
@@ -936,8 +942,11 @@ void InputSection::relocateNonAlloc(uint8_t *buf, ArrayRef<RelTy> rels) {
       auto *ds = dyn_cast<Defined>(&sym);
       if (!sym.getOutputSection() ||
           (ds && ds->section->repl != ds->section && !isDebugLine)) {
-        target->relocateNoSym(bufLoc, type,
-                              isDebugLocOrRanges ? UINT64_MAX - 1 : UINT64_MAX);
+        // If -z dead-reloc-in-nonalloc= is specified, respect it.
+        const uint64_t value =
+            tombstone ? SignExtend64<bits>(*tombstone)
+                      : (isDebugLocOrRanges ? UINT64_MAX - 1 : UINT64_MAX);
+        target->relocateNoSym(bufLoc, type, value);
         continue;
       }
     }

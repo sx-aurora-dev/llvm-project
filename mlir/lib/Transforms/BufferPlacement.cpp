@@ -142,6 +142,12 @@ private:
         this->aliases[std::get<0>(entry)].insert(std::get<1>(entry));
     };
 
+    // Add additional aliases created by view changes to the alias list.
+    op->walk([&](ViewLikeOpInterface viewInterface) {
+      aliases[viewInterface.getViewSource()].insert(
+          viewInterface.getOperation()->getResult(0));
+    });
+
     // Query all branch interfaces to link block argument aliases.
     op->walk([&](BranchOpInterface branchInterface) {
       Block *parentBlock = branchInterface.getOperation()->getBlock();
@@ -694,15 +700,19 @@ BufferAssignmentPlacer::computeAllocPosition(OpResult result) {
 BufferAssignmentTypeConverter::BufferAssignmentTypeConverter() {
   // Keep all types unchanged.
   addConversion([](Type type) { return type; });
-  // A type conversion that converts ranked-tensor type to memref type.
+  // Convert RankedTensorType to MemRefType.
   addConversion([](RankedTensorType type) {
     return (Type)MemRefType::get(type.getShape(), type.getElementType());
+  });
+  // Convert UnrankedTensorType to UnrankedMemRefType.
+  addConversion([](UnrankedTensorType type) {
+    return (Type)UnrankedMemRefType::get(type.getElementType(), 0);
   });
 }
 
 /// Checks if `type` has been converted from non-memref type to memref.
 bool BufferAssignmentTypeConverter::isConvertedMemref(Type type, Type before) {
-  return type.isa<MemRefType>() && !before.isa<MemRefType>();
+  return type.isa<BaseMemRefType>() && !before.isa<BaseMemRefType>();
 }
 
 //===----------------------------------------------------------------------===//
