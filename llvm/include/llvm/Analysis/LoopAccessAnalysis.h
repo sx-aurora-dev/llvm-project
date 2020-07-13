@@ -192,6 +192,9 @@ public:
     ++AccessIdx;
   }
 
+  void outerLoopCheck(DepCandidates &AccessSets, MemAccessInfoList &CheckDeps,
+                      const ValueToValueMap &Strides);
+
   /// Check whether the dependencies between the accesses are safe.
   ///
   /// Only checks sets with elements in \p CheckDeps.

@@ -1657,10 +1657,202 @@ MemoryDepChecker::isDependent(const MemAccessInfo &A, unsigned AIdx,
   return Dependence::BackwardVectorizable;
 }
 
+bool breakSCEV(ScalarEvolution *SE, const SCEV *Expr,
+               SmallVectorImpl<const SCEV *> &Subscripts) {
+  const SCEV *AccessFn = Expr;
+
+  dbgs() << "AccessFn: " << *AccessFn << "\n";
+
+  const SCEVUnknown *BasePointer =
+      dyn_cast<SCEVUnknown>(SE->getPointerBase(AccessFn));
+  // Do not delinearize if we cannot find the base pointer.
+  if (!BasePointer)
+    return false;
+  dbgs() << "Base Pointer: " << *BasePointer << "\n";
+  AccessFn = SE->getMinusSCEV(AccessFn, BasePointer);
+
+  SmallVector<const SCEV *, 3> Sizes;
+  // TODO: Replace the element size.
+  SE->delinearize(AccessFn, Subscripts, Sizes, SE->getConstant(APInt(64, 8)));
+
+  if (Subscripts.size() == 0 || Sizes.size() == 0 ||
+      Subscripts.size() != Sizes.size()) {
+    dbgs() << "failed to delinearize\n";
+    return false;
+  }
+
+  dbgs() << "Base offset: " << *BasePointer << "\n";
+  dbgs() << "ArrayDecl[UnknownSize]";
+  int Size = Subscripts.size();
+  for (int i = 0; i < Size - 1; i++)
+    dbgs() << "[" << *Sizes[i] << "]";
+  dbgs() << " with elements of " << *Sizes[Size - 1] << " bytes.\n";
+
+  dbgs() << "ArrayRef";
+  for (int i = 0; i < Size; i++)
+    dbgs() << "[" << *Subscripts[i] << "]";
+  dbgs() << "\n";
+
+  return true;
+}
+
+struct Direction {
+  char dir;
+  int dist;
+};
+
+// Assuming only 2-d dir vectors
+// for now.
+struct DirVector {
+  bool valid;
+  Direction outer;
+  Direction inner;
+};
+
+Direction getDirection(ScalarEvolution *SE, const SCEV *E1, const SCEV *E2,
+                  bool &valid) {
+  const SCEV *Diff = SE->getMinusSCEV(E1, E2);
+  const SCEVConstant *C = dyn_cast<const SCEVConstant>(Diff);
+
+  if (!C) {
+    valid = false;
+    return {'*', 0};
+  }
+  ConstantInt *V = C->getValue();
+  int64_t Dist = V->getSExtValue();
+  Direction Res = {'<', Dist};
+  if (!Dist)
+    Res.dir = '=';
+  else if (Dist < 0)
+    Res.dir = '>';
+  return Res;
+}
+
+DirVector getDirVector(ScalarEvolution *SE,
+                       SmallVectorImpl<const SCEV *> &Subscripts1,
+                       SmallVectorImpl<const SCEV *> &Subscripts2) {
+
+  assert(Subscripts1.size() == 2);
+  assert(Subscripts1.size() == Subscripts2.size());
+
+  DirVector res = {true};
+
+  res.outer = getDirection(SE, Subscripts1[0], Subscripts2[0], res.valid);
+  res.inner = getDirection(SE, Subscripts1[1], Subscripts2[1], res.valid);
+
+  return res;
+}
+
+void MemoryDepChecker::outerLoopCheck(DepCandidates &AccessSets,
+                                      MemAccessInfoList &CheckDeps,
+                                      const ValueToValueMap &Strides) {
+  dbgs() << "Outer Loop Check\n\n\n";
+
+  MaxSafeDepDistBytes = -1;
+  SmallPtrSet<MemAccessInfo, 8> Visited;
+  for (MemAccessInfo CurAccess : CheckDeps) {
+    if (Visited.count(CurAccess))
+      continue;
+
+    // Get the relevant memory access set.
+    EquivalenceClasses<MemAccessInfo>::iterator I =
+        AccessSets.findValue(AccessSets.getLeaderValue(CurAccess));
+
+    // Check accesses within this set.
+    EquivalenceClasses<MemAccessInfo>::member_iterator AI =
+        AccessSets.member_begin(I);
+    EquivalenceClasses<MemAccessInfo>::member_iterator AE =
+        AccessSets.member_end();
+
+    // Check every access pair.
+    while (AI != AE) {
+      Visited.insert(*AI);
+      bool AIIsWrite = AI->getInt();
+      // Check loads only against next equivalent class, but stores also against
+      // other stores in the same equivalence class - to the same address.
+      EquivalenceClasses<MemAccessInfo>::member_iterator OI =
+          (AIIsWrite ? AI : std::next(AI));
+      while (OI != AE) {
+        // Check every accessing instruction pair in program order.
+        for (std::vector<unsigned>::iterator I1 = Accesses[*AI].begin(),
+                                             I1E = Accesses[*AI].end();
+             I1 != I1E; ++I1)
+          // Scan all accesses of another equivalence class, but only the next
+          // accesses of the same equivalent class.
+          for (std::vector<unsigned>::iterator
+                   I2 = (OI == AI ? std::next(I1) : Accesses[*OI].begin()),
+                   I2E = (OI == AI ? I1E : Accesses[*OI].end());
+               I2 != I2E; ++I2) {
+            auto A = std::make_pair(&*AI, *I1);
+            auto B = std::make_pair(&*OI, *I2);
+
+            assert(*I1 != *I2);
+            if (*I1 > *I2)
+              std::swap(A, B);
+
+            auto Acc1 = *A.first;
+            auto Acc2 = *B.first;
+
+            Value *Ptr1 = Acc1.getPointer();
+            Value *Ptr2 = Acc2.getPointer();
+
+            const Loop *Inner = InnermostLoop;
+            const Loop *Outer = InnermostLoop->getParentLoop();
+            dbgs() << "Inner: " << *Inner << "\n";
+            dbgs() << "Outer: " << *Outer << "\n";
+            ScalarEvolution *SE = PSE.getSE();
+
+            const SCEV *InnerSE1 = SE->getSCEVAtScope(Ptr1, Inner);
+            const SCEV *InnerSE2 = SE->getSCEVAtScope(Ptr2, Inner);
+
+            dbgs() << *Ptr1 << "\n";
+            dbgs() << *InnerSE1 << "\n";
+            dbgs() << "\n";
+            dbgs() << *Ptr2 << "\n";
+            dbgs() << *InnerSE2 << "\n";
+            dbgs() << "\n";
+
+            SmallVector<const SCEV *, 3> Subscripts1, Subscripts2;
+
+            breakSCEV(SE, InnerSE1, Subscripts1);
+            breakSCEV(SE, InnerSE2, Subscripts2);
+
+            DirVector dv = getDirVector(SE, Subscripts2, Subscripts1);
+            if (!dv.valid) {
+              dbgs() << "Invalid direction vector\n";
+            } else {
+              dbgs() << "(" << dv.outer.dir << ", " << dv.inner.dir << ")\n";
+              dbgs() << "Outer loop distance: " << dv.outer.dist << "\n";
+            }
+
+            int VF = 2;
+            bool legal = true;
+            if (dv.outer.dir == '<') {
+              if ((dv.inner.dir == '>' || dv.inner.dir == '=') &&
+                  dv.outer.dist < VF)
+                legal = false;
+            }
+            if (legal)
+              dbgs() << "Can vectorize access.";
+            else
+              dbgs() << "Can't vectorize access.";
+
+            dbgs() << "\n\n\n";
+            ;
+          }
+        ++OI;
+      }
+      AI++;
+    }
+  }
+
+  dbgs() << "\n\n\n";
+}
+
 bool MemoryDepChecker::areDepsSafe(DepCandidates &AccessSets,
                                    MemAccessInfoList &CheckDeps,
                                    const ValueToValueMap &Strides) {
-
+  outerLoopCheck(AccessSets, CheckDeps, Strides); //asdf
   MaxSafeDepDistBytes = -1;
   SmallPtrSet<MemAccessInfo, 8> Visited;
   for (MemAccessInfo CurAccess : CheckDeps) {
