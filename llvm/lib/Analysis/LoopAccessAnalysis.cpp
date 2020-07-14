@@ -1661,7 +1661,7 @@ bool breakSCEV(ScalarEvolution *SE, const SCEV *Expr,
                SmallVectorImpl<const SCEV *> &Subscripts) {
   const SCEV *AccessFn = Expr;
 
-  dbgs() << "AccessFn: " << *AccessFn << "\n";
+  dbgs() << "\n\nAccessFn: " << *AccessFn << "\n";
 
   const SCEVUnknown *BasePointer =
       dyn_cast<SCEVUnknown>(SE->getPointerBase(AccessFn));
@@ -1698,6 +1698,7 @@ bool breakSCEV(ScalarEvolution *SE, const SCEV *Expr,
 
 struct Direction {
   char dir;
+  // TODO: Probably change to SCEV
   int dist;
 };
 
@@ -1709,15 +1710,7 @@ struct DirVector {
   Direction inner;
 };
 
-Direction getDirection(ScalarEvolution *SE, const SCEV *E1, const SCEV *E2,
-                  bool &valid) {
-  const SCEV *Diff = SE->getMinusSCEV(E1, E2);
-  const SCEVConstant *C = dyn_cast<const SCEVConstant>(Diff);
-
-  if (!C) {
-    valid = false;
-    return {'*', 0};
-  }
+Direction getDirectionFromSCEVConstant(const SCEVConstant* C) {
   ConstantInt *V = C->getValue();
   int64_t Dist = V->getSExtValue();
   Direction Res = {'<', Dist};
@@ -1726,6 +1719,47 @@ Direction getDirection(ScalarEvolution *SE, const SCEV *E1, const SCEV *E2,
   else if (Dist < 0)
     Res.dir = '>';
   return Res;
+}
+
+Direction getDirection(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
+                  bool &valid) {
+  // Preconditions:
+  // a) We should have simple AddRecExprs
+  // b) The steps have to be equal
+  // c) For now, the steps also have to be 1, just to be sure.
+  assert(S1->getSCEVType() == scAddRecExpr);
+  assert(S2->getSCEVType() == scAddRecExpr);
+  const SCEVAddRecExpr *E1 = cast<const SCEVAddRecExpr>(S1);
+  const SCEVAddRecExpr *E2 = cast<const SCEVAddRecExpr>(S2);
+  const SCEV *Step1 = E1->getStepRecurrence(*SE);
+  const SCEV *Step2 = E2->getStepRecurrence(*SE);
+  assert(Step1->getSCEVType() == scConstant);
+  assert(Step2->getSCEVType() == scConstant);
+  const SCEVConstant *Step1C = cast<const SCEVConstant>(Step1);
+  const SCEVConstant *Step2C = cast<const SCEVConstant>(Step2);
+  assert(Step1C->getValue()->getSExtValue() == 1);
+  assert(Step2C->getValue()->getSExtValue() == 1);
+
+  // TODO: That order should generally be correct because of the
+  // deterministic guarantees mentioned in the AI / OI loop,
+  // but is it actually for our cases?
+  const SCEV *Diff = SE->getMinusSCEV(E2, E1);
+  // TODO: Handle other things
+  const SCEVConstant *C = dyn_cast<const SCEVConstant>(Diff);
+
+  // Note: Constant here means "loop invariant" but "value known at compile-time".
+  // We're happy with less strict cases, like `-2 + n` too, because they're
+  // loop-invariant (assuming that n is loop-invariant) and we can find
+  // out the distance with a single runtime check.
+
+  if (C) {
+    return getDirectionFromSCEVConstant(C);
+  } else {
+    dbgs() << "Non-constant SCEV distance: " << *Diff << "\n";
+    dbgs() << "Determine its value at runtime\n";
+    valid = false;
+    return {'*', 0};
+  }
 }
 
 DirVector getDirVector(ScalarEvolution *SE,
@@ -1746,7 +1780,7 @@ DirVector getDirVector(ScalarEvolution *SE,
 void MemoryDepChecker::outerLoopCheck(DepCandidates &AccessSets,
                                       MemAccessInfoList &CheckDeps,
                                       const ValueToValueMap &Strides) {
-  dbgs() << "Outer Loop Check\n\n\n";
+  dbgs() << "\n\n ---- Outer Loop Check ----\n\n\n";
 
   MaxSafeDepDistBytes = -1;
   SmallPtrSet<MemAccessInfo, 8> Visited;
@@ -1796,6 +1830,9 @@ void MemoryDepChecker::outerLoopCheck(DepCandidates &AccessSets,
             Value *Ptr1 = Acc1.getPointer();
             Value *Ptr2 = Acc2.getPointer();
 
+            dbgs() << "Ptr1: " << *Ptr1 << "\n";
+            dbgs() << "Ptr2: " << *Ptr2 << "\n";
+
             const Loop *Inner = InnermostLoop;
             const Loop *Outer = InnermostLoop->getParentLoop();
             dbgs() << "Inner: " << *Inner << "\n";
@@ -1814,12 +1851,17 @@ void MemoryDepChecker::outerLoopCheck(DepCandidates &AccessSets,
 
             SmallVector<const SCEV *, 3> Subscripts1, Subscripts2;
 
-            breakSCEV(SE, InnerSE1, Subscripts1);
-            breakSCEV(SE, InnerSE2, Subscripts2);
+            if (!breakSCEV(SE, InnerSE1, Subscripts1))
+              continue;
+            if (!breakSCEV(SE, InnerSE2, Subscripts2))
+              continue;
 
-            DirVector dv = getDirVector(SE, Subscripts2, Subscripts1);
+            dbgs() << "\n";
+
+            DirVector dv = getDirVector(SE, Subscripts1, Subscripts2);
             if (!dv.valid) {
               dbgs() << "Invalid direction vector\n";
+              continue;
             } else {
               dbgs() << "(" << dv.outer.dir << ", " << dv.inner.dir << ")\n";
               dbgs() << "Outer loop distance: " << dv.outer.dist << "\n";
