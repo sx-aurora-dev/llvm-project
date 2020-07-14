@@ -45,5 +45,5 @@ if(${LIBOMPTARGET_DEP_VEO_FOUND})
   set(LIBOMPTARGET_SYSTEM_TARGETS
     "${LIBOMPTARGET_SYSTEM_TARGETS} ${tmachine_triple}" PARENT_SCOPE)
 else()
-    libomptarget_say("Not building nec-aurora plugin: libveo or libveosinfo not found.")
+  libomptarget_say("Not building ve plugin: libveo or libveosinfo not found.")
 endif()
