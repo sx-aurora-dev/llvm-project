@@ -234,12 +234,8 @@ void VEFrameLowering::emitPrologue(MachineFunction &MF,
 
   // Get the number of bytes to allocate from the FrameInfo
   uint64_t NumBytes = MFI.getStackSize();
-#if 0
-  if (FuncInfo->isLeafProc()) {
-    if (NumBytes == 0)
-      return;
-  }
-#endif
+  if (!hasFP(MF) && !hasBP(MF))
+    return;
 
   // The VE ABI requires a reserved 176 bytes area at the top
   // of stack as described in VESubtarget.cpp.  So, we adjust it here.
@@ -331,10 +327,8 @@ void VEFrameLowering::emitEpilogue(MachineFunction &MF,
 
   uint64_t NumBytes = MFI.getStackSize();
 
-#if 0
-  if (NumBytes == 0)
+  if (!hasFP(MF) && !hasBP(MF))
     return;
-#endif
 
 #if 0
   // Emit stack adjust instructions
@@ -356,7 +350,9 @@ bool VEFrameLowering::hasFP(const MachineFunction &MF) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   return MF.getTarget().Options.DisableFramePointerElim(MF) ||
          RegInfo->needsStackRealignment(MF) || MFI.hasVarSizedObjects() ||
-         MFI.isFrameAddressTaken();
+         MFI.isFrameAddressTaken() || MFI.hasCalls() ||
+         MFI.hasStackObjects(); // FIXME: even if hasStackObject, this should
+                                // return false, but it wont’ work ATM.
 }
 
 bool VEFrameLowering::hasBP(const MachineFunction &MF) const {
