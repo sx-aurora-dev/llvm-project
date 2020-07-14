@@ -10,4 +10,6 @@
 #
 ##===----------------------------------------------------------------------===##
 
-add_subdirectory(nvptx)
+if(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
+  add_subdirectory(nvptx)
+endif()
