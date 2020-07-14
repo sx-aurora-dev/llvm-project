@@ -16,6 +16,8 @@
 #          pointers.
 # CUDA : required to control offloading to NVIDIA GPUs.
 # VEOS : required to control offloading to NEC Aurora.
+# VHCALL : required to control offloading from NEC Aurora to the host.
+# VEPSEUDO : required to control offloading from NEC Aurora to the host.
 
 include (FindPackageHandleStandardArgs)
 
@@ -223,6 +225,109 @@ mark_as_advanced(
   LIBOMPTARGET_DEP_VEO_FOUND
   LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS)
 
+<<<<<<< HEAD
+=======
+################################################################################
+# Looking for VHCALL
+################################################################################
+find_path (
+  LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIR
+  NAMES
+    libvhcall.h
+  PATHS
+    /usr/include
+    /usr/local/include
+    /opt/local/include
+    /sw/include
+    /opt/nec/ve/include
+    ENV CPATH
+  PATH_SUFFIXES
+    libvhcall) # TODO is this neccessary?
+
+# Needed on vh side
+find_path (
+  LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIR
+  NAMES
+    libvepseudo.h
+  PATHS
+    /usr/include
+    /usr/local/include
+    /opt/local/include
+    /sw/include
+    /opt/nec/ve/include
+    /opt/nec/ve/veos/include
+    ENV CPATH
+  PATH_SUFFIXES
+    libvhcall) # TODO is this neccessary?
+
+find_library (
+  LIBOMPTARGET_DEP_VHCALL_LIBRARIES
+  NAMES
+    sysve
+  PATHS
+    /usr/lib
+    /usr/local/lib
+    /opt/local/lib
+    /sw/lib
+    /opt/nec/ve/lib
+    ENV LIBRARY_PATH
+    ENV LD_LIBRARY_PATH)
+
+set(LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIRS ${LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIR})
+find_package_handle_standard_args(
+  LIBOMPTARGET_DEP_VHCALL
+  DEFAULT_MSG
+  LIBOMPTARGET_DEP_VHCALL_LIBRARIES
+  LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIRS)
+
+mark_as_advanced(
+  LIBOMPTARGET_DEP_VHCALL_FOUND
+  LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIRS)
+
+################################################################################
+# Looking for VEPSEUDO
+################################################################################
+
+find_path (
+  LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIR
+  NAMES
+    libvepseudo.h
+  PATHS
+    /usr/include
+    /usr/local/include
+    /opt/local/include
+    /sw/include
+    /opt/nec/ve/veos/include
+    ENV CPATH
+  PATH_SUFFIXES
+    libvhcall) # TODO is this neccessary?
+
+find_library (
+  LIBOMPTARGET_DEP_VEPSEUDO_LIBRARIES
+  NAMES
+    vepseudo
+  PATHS
+    /usr/lib
+    /usr/local/lib
+    /opt/local/lib
+    /sw/lib
+    /opt/nec/ve/veos/lib
+    ENV LIBRARY_PATH
+    ENV LD_LIBRARY_PATH)
+
+set(LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIRS ${LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIR})
+find_package_handle_standard_args(
+  LIBOMPTARGET_DEP_VEPSEUDO
+  DEFAULT_MSG
+  LIBOMPTARGET_DEP_VEPSEUDO_LIBRARIES
+  LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIRS)
+
+mark_as_advanced(
+  LIBOMPTARGET_DEP_VEPSEUDO_FOUND
+  LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIRS)
+
+################################################################################
+>>>>>>> 63f32dc7d429... Add cmake lookup for required headers and libraries.
 # Looking for CUDA libdevice subdirectory
 #
 # Special case for Debian/Ubuntu to have nvidia-cuda-toolkit work
