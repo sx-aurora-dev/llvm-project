@@ -65,6 +65,7 @@ else()
 endif()
 endmacro()
 
+# Offloading to these targets from a nec sx-aurora device makes no sense and is thus disabled.
 if(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
   add_subdirectory(aarch64)
   add_subdirectory(cuda)

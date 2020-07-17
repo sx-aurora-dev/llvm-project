@@ -12,6 +12,7 @@ if(${LIBOMPTARGET_DEP_VHCALL_FOUND} AND ${LIBOMPTARGET_DEP_VEPSEUDO_FOUND})
   set(tmachine_triple "x86_64-pc-linux-gnu")
   set(elf_machine_id 62)
 
+  # Build the target plugin on ve side
   if("${LIBOMP_ARCH}" STREQUAL "ve")
     libomptarget_say("Building SX-Aurora VE to VH offloading plugin - ve part.")
     set(additional_libs "")
@@ -44,7 +45,9 @@ if(${LIBOMPTARGET_DEP_VHCALL_FOUND} AND ${LIBOMPTARGET_DEP_VEPSEUDO_FOUND})
     # Report to the parent scope that we are building a plugin.
     set(LIBOMPTARGET_SYSTEM_TARGETS
       "${LIBOMPTARGET_SYSTEM_TARGETS} ${tmachine_triple}" PARENT_SCOPE)
-  else()
+  else() # Build the support library on vector host side
+    # TODO replace this with direct loading of the required libraries and call
+    # them directly with vhcall.
     libomptarget_say("Building SX-Aurora VE to VH offloading plugin - vh part.")
 
     include_directories(${LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIR})
