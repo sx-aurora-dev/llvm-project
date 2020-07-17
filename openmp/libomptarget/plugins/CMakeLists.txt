@@ -66,6 +66,7 @@ endif()
 endmacro()
 
 if("${LIBOMP_ARCH}" STREQUAL "ve")
+  # VE -> VH Offloading
   add_subdirectory(vh)
 else()
   add_subdirectory(aarch64)

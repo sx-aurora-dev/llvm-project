@@ -109,7 +109,6 @@ public:
   }
 
   ~RTLDeviceInfoTy() {
-    // TODO unload libraries with vhcall_uninstall
     for (auto &lib : DynLibs) {
       vhcall_uninstall(lib.Handle);
       if (lib.FileName) {
@@ -120,33 +119,8 @@ public:
 };
 
 static RTLDeviceInfoTy DeviceInfo;
-/*
-static int target_run_function_wait(uint32_t DeviceID, uint64_t FuncAddr,
-                                    struct veo_args *args, uint64_t *RetVal) {
-  DP("Running function with entry point %p\n",
-     reinterpret_cast<void *>(FuncAddr));
-  uint64_t RequestHandle =
-      veo_call_async(DeviceInfo.Contexts[DeviceID], FuncAddr, args);
-  if (RequestHandle == VEO_REQUEST_ID_INVALID) {
-    DP("Execution of entry point %p failed\n",
-       reinterpret_cast<void *>(FuncAddr));
-    return OFFLOAD_FAIL;
-  }
 
-  DP("Function at address %p called (VEO request ID: %" PRIu64 ")\n",
-     reinterpret_cast<void *>(FuncAddr), RequestHandle);
 
-  int ret = veo_call_wait_result(DeviceInfo.Contexts[DeviceID], RequestHandle,
-                                 RetVal);
-  if (ret != 0) {
-    DP("Waiting for entry point %p failed (Error code %d)\n",
-       reinterpret_cast<void *>(FuncAddr), ret);
-    return OFFLOAD_FAIL;
-  }
-  return OFFLOAD_SUCCESS;
-}
-
-*/
 // Return the number of available devices of the type supported by the
 // target RTL.
 // In this case there is the assumption that there is one device.
@@ -400,7 +374,8 @@ int32_t __tgt_rtl_run_target_team_region(int32_t ID, void *Entry, void **Args,
   }
 
   uint64_t RetVal;
-  if (vhcall_invoke_with_args( reinterpret_cast<int64_t>(Entry), TargetArgs, &RetVal) != 0) {
+  auto entrypoint = reinterpret_cast<int64_t>(Entry);
+  if (vhcall_invoke_with_args(entrypoint, TargetArgs, &RetVal) != 0) {
     DP("Execution of entry point %p failed\n", Entry);
     vhcall_args_free(TargetArgs);
     return OFFLOAD_FAIL;
