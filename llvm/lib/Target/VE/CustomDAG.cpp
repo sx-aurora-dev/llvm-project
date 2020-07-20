@@ -246,6 +246,13 @@ bool IsPackedType(EVT SomeVT) {
   return SomeVT.getVectorNumElements() > StandardVectorWidth;
 }
 
+static unsigned
+getScalarSubregIndex(MVT ScalarVT) {
+  if (ScalarVT == MVT::i32) return VE::sub_i32;
+  if (ScalarVT == MVT::f32) return VE::sub_f32;
+  llvm_unreachable("not implemented.. or not a direct I64 subreg after all");
+}
+
 // legalize packed-mode broadcasts into lane replication + broadcast
 SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   if (Op.getOpcode() != VEISD::VEC_BROADCAST)
@@ -258,13 +265,25 @@ SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   auto ScaTy = ScaOp->getValueType(0);
   auto VLOp = Op.getOperand(1);
 
-  // v256x broadcast
+  // v256x broadcast (element has to be i64/f64 always)
   if (!IsPackedType(VT)) {
-    return Op;
+    LLVM_DEBUG(dbgs() << "Legalize v256 broadcast\n");
+    // Already legal
+    auto ScaVT = ScaOp.getSimpleValueType();
+    if (ScaVT == MVT::i64 || ScaVT == MVT::f64)
+      return Op;
+
+    // We need to insert into a `i64` reg for non-packed i32/f32 broadcasts
+    unsigned SubRegIdx = getScalarSubregIndex(ScaVT);
+    SDValue UDReg = DAG.getUNDEF(MVT::i64);
+    auto UpcastOp =
+        DAG.getTargetInsertSubreg(SubRegIdx, DL, MVT::i64, ScaOp, UDReg);
+    return DAG.getNode(VEISD::VEC_BROADCAST, DL, VT, {UpcastOp, VLOp});
   }
 
   LLVM_DEBUG(dbgs() << "Legalize packed broadcast\n");
 
+  // v512x broadcast
   // This is a packed broadcast.
   // replicate the scalar sub reg (f32 or i32) onto the opposing half of the
   // scalar reg and feed it into a I64 -> v256i64 broadcast.
