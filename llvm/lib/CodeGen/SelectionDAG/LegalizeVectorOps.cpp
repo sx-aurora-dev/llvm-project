@@ -849,13 +849,6 @@ void VectorLegalizer::Expand(SDNode *Node, SmallVectorImpl<SDValue> &Results) {
   case ISD::SMULO:
     ExpandMULO(Node, Results);
     return;
-  case ISD::SREM:
-  case ISD::UREM:
-    if (SDValue Res = TLI.expandSUREM(Node, DAG)) {
-      Results.push_back(Res);
-      return;
-    }
-    break;
   case ISD::SDIV:
   case ISD::UDIV:
     if (SDValue Res = TLI.expandSUDIV(Node, DAG)) {
