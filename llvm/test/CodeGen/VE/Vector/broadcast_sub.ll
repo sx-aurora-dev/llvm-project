@@ -4,8 +4,6 @@
 define x86_regcallcc <512 x i32> @subbrdv512i32(<512 x i32>, i32) {
 ; CHECK-LABEL: subbrdv512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    # kill: def $sw0 killed $sx0 killed $sx0 def $sx0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vsubs.w.sx %v0, %s0, %v0
@@ -21,8 +19,6 @@ define x86_regcallcc <512 x i32> @subbrdv512i32(<512 x i32>, i32) {
 define x86_regcallcc <512 x float> @subbrdv512f32(<512 x float>, float) {
 ; CHECK-LABEL: subbrdv512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    # kill: def $sf0 killed $sx0 killed $sx0 def $sx0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pvfsub.up %v0, %s0, %v0
@@ -52,8 +48,6 @@ define x86_regcallcc <256 x i64> @subbrdv256i64(<256 x i64>, i64) {
 define x86_regcallcc <256 x i32> @subbrdv256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: subbrdv256i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    # kill: def $sw0 killed $sx0 killed $sx0 def $sx0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vsubs.w.sx %v0, %s0, %v0
@@ -82,8 +76,6 @@ define x86_regcallcc <256 x double> @subbrdv256f64(<256 x double>, double) {
 define x86_regcallcc <256 x float> @subbrdv256f32(<256 x float>, float) {
 ; CHECK-LABEL: subbrdv256f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    # kill: def $sf0 killed $sx0 killed $sx0 def $sx0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pvfsub.up %v0, %s0, %v0

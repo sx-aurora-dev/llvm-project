@@ -1616,6 +1616,7 @@ struct LoopVectorize : public FunctionPass {
   }
 
   bool runOnFunction(Function &F) override {
+    if (getenv("DISABLE_LV")) return false;
     if (skipFunction(F))
       return false;
 

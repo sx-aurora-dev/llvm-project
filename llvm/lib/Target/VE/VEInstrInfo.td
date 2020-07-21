@@ -39,6 +39,7 @@ include "VEInstrFormats.td"
 //     e.g. 0.0 (0x00000000) or -2.0 (0xC0000000=(2)1).
 //===----------------------------------------------------------------------===//
 
+
 def LO7 : SDNodeXForm<imm, [{
   return CurDAG->getTargetConstant(SignExtend32(N->getSExtValue(), 7),
                                    SDLoc(N), MVT::i32);
@@ -310,6 +311,13 @@ let PredicateCodeUsesOperands = 1 in {
 def true_mask                            : PatLeaf<(vec_broadcast (i32 true), (i32 srcvalue))>;
 def any_broadcast                        : PatFrag<(ops node:$sx), (vec_broadcast node:$sx, (i32 srcvalue))>;
 }
+
+// register extraction match
+def reg_broadcast : ComplexPattern<vAny, 1, "selectBroadcast", [vec_broadcast], []>; // returns the broadcast itself
+
+// return the scalar operand of any_broadcast, suitable for consumption
+def unbcast : SDNodeXForm<vec_broadcast, [{ return extractScalarOperand(N); }]>;
+
 
 
 def CCSIOp : PatLeaf<(cond), [{

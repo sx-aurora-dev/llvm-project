@@ -125,6 +125,10 @@ public:
   bool selectADDRri(SDValue N, SDValue &Base, SDValue &Offset);
   bool selectADDRzi(SDValue N, SDValue &Base, SDValue &Offset);
 
+  // broadcast matching
+  bool selectBroadcast(SDValue N, SDValue &BCast);
+  SDValue extractScalarOperand(SDNode* BCN);
+
   /// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
   /// inline asm expressions.
   bool SelectInlineAsmMemoryOperand(const SDValue &Op,
@@ -145,6 +149,25 @@ private:
   bool matchADDRri(SDValue N, SDValue &Base, SDValue &Offset);
 };
 } // end anonymous namespace
+
+static unsigned
+getScalarSubregIndex(EVT ScalarVT) {
+  if (ScalarVT == MVT::i32) return VE::sub_i32;
+  if (ScalarVT == MVT::f32) return VE::sub_f32;
+  llvm_unreachable("not implemented.. or not a direct I64 subreg after all");
+}
+
+SDValue VEDAGToDAGISel::extractScalarOperand(SDNode* BCN) {
+  auto ScaV = BCN->getOperand(0);
+  return ScaV;
+}
+
+bool VEDAGToDAGISel::selectBroadcast(SDValue N, SDValue &BCast) {
+  if (N->getOpcode() != VEISD::VEC_BROADCAST)
+    return false;
+  BCast = N;
+  return true;
+}
 
 bool VEDAGToDAGISel::selectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
                                    SDValue &Offset) {
