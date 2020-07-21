@@ -43,7 +43,7 @@ define x86_regcallcc <512 x float> @brdv512f32(float) {
 ; CHECK-LABEL: brdv512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    and %s1, %s0, (32)0
+; CHECK-NEXT:    and %s1, %s0, (32)1
 ; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    or %s1, 1, (0)1

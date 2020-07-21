@@ -2154,6 +2154,11 @@ void VETargetLowering::initVPUActions() {
     }
   }
 
+  for (unsigned OC : {ISD::INSERT_VECTOR_ELT, ISD::EXTRACT_VECTOR_ELT}) {
+    setOperationAction(OC, MVT::v512i32, Custom);
+    setOperationAction(OC, MVT::v512f32, Custom);
+  }
+
   // All mask ops
   for (MVT MaskVT : MVT::vector_valuetypes()) {
     if (MaskVT.getVectorElementType() != MVT::i1)
