@@ -15,13 +15,10 @@ define void @test_vp_harness(<256 x i64>* %Out, <256 x i64> %i0) {
 define void @test_vp_add_sub_mul(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_add_sub_mul:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # implicit-def: $v2
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vadds.l %v2,%v0,%v1,%vm1
-; CHECK-NEXT:    # implicit-def: $v3
-; CHECK-NEXT:    vsubs.l %v3,%v0,%v1,%vm1
-; CHECK-NEXT:    # implicit-def: $v0
-; CHECK-NEXT:    vmuls.l %v0,%v2,%v3,%vm1
+; CHECK-NEXT:    vadds.l %v2, %v0, %v1, %vm1
+; CHECK-NEXT:    vsubs.l %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vmuls.l %v0, %v2, %v0, %vm1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -37,11 +34,9 @@ define void @test_vp_add_sub_mul(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64>
 define void @test_vp_su_div(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_su_div:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # implicit-def: $v2
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vdivs.l %v2,%v0,%v1,%vm1
-; CHECK-NEXT:    # implicit-def: $v0
-; CHECK-NEXT:    vdivu.l %v0,%v2,%v1,%vm1
+; CHECK-NEXT:    vdivs.l %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vdivu.l %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -56,23 +51,17 @@ define void @test_vp_su_div(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1,
 define void @test_vp_bitarith(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_bitarith:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # implicit-def: $v2
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vand %v2,%v0,%v1,%vm1
-; CHECK-NEXT:    # implicit-def: $v3
-; CHECK-NEXT:    vor %v3,%v2,%v1,%vm1
-; CHECK-NEXT:    # implicit-def: $v4
-; CHECK-NEXT:    vxor %v4,%v0,%v3,%vm1
-; CHECK-NEXT:    # implicit-def: $v0
-; CHECK-NEXT:    vsra.l %v0,%v4,%v1,%vm1
-; CHECK-NEXT:    # implicit-def: $v1
-; CHECK-NEXT:    vsrl %v1,%v0,%v2,%vm1
-; CHECK-NEXT:    # implicit-def: $v2
-; CHECK-NEXT:    vsll %v2,%v1,%v0,%vm1
+; CHECK-NEXT:    vand %v2, %v0, %v1, %vm1
+; CHECK-NEXT:    vor %v3, %v2, %v1, %vm1
+; CHECK-NEXT:    vxor %v0, %v0, %v3, %vm1
+; CHECK-NEXT:    vsra.l %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vsrl %v1, %v0, %v2, %vm1
+; CHECK-NEXT:    vsll %v0, %v1, %v0, %vm1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v2,8,%s0
+; CHECK-NEXT:    vst %v0,8,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r0 = call <256 x i64> @llvm.vp.and.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i64> @llvm.vp.or.v256i64(<256 x i64> %r0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
