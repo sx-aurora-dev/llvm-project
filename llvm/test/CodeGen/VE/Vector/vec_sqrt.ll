@@ -9,7 +9,7 @@ define fastcc <253 x double> @vec_sqrt_v253f64(<253 x double> %a) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 253
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfsqrt.d %v0,%v0
+; CHECK-NEXT:    vfsqrt.d %v0, %v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = call <253 x double> @llvm.sqrt.v253f64(<253 x double> %a)
   ret <253 x double> %r
