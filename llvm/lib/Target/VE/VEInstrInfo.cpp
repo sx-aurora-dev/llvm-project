@@ -339,6 +339,9 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I, const DebugLoc &DL,
                               MCRegister DestReg, MCRegister SrcReg,
                               bool KillSrc) const {
+  const TargetRegisterInfo *TRI = &getRegisterInfo();
+  if (TRI->isSuperOrSubRegisterEq(DestReg, SrcReg))
+    return;
 
   if (IsAliasOfSX(SrcReg) && IsAliasOfSX(DestReg)) {
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
@@ -351,7 +354,6 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     // TODO: reuse a register if vl is already assigned to a register
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
-    const TargetRegisterInfo *TRI = &getRegisterInfo();
     unsigned TmpReg = VE::SX16;
     unsigned SubTmp = TRI->getSubReg(TmpReg, VE::sub_i32);
     BuildMI(MBB, I, DL, get(VE::LEAzii), TmpReg)
