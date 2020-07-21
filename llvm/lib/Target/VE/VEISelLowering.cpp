@@ -5394,3 +5394,13 @@ void VETargetLowering::insertSSPDeclarations(Module &M) const {
 void VETargetLowering::finalizeLowering(MachineFunction &MF) const {
   TargetLoweringBase::finalizeLowering(MF);
 }
+
+bool VETargetLowering::isVectorMaskType(EVT VT) const {
+  if (Subtarget->enableVPU()) {
+    return (VT == MVT::v256i1 || VT == MVT::v512i1);
+  } else {
+    // In default subtarget, v4i64 and v8i64 are dedicated for vector mask
+    return (VT == MVT::v256i1 || VT == MVT::v512i1
+            || VT == MVT::v4i64 || VT == MVT::v8i64);
+  }
+}
