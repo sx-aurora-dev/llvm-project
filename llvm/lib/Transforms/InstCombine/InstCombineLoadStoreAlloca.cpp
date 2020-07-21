@@ -14,8 +14,8 @@
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/Statistic.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/Loads.h"
-#include "llvm/Transforms/Utils/Local.h"
 #include "llvm/IR/ConstantRange.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfoMetadata.h"
@@ -24,6 +24,7 @@
 #include "llvm/IR/MDBuilder.h"
 #include "llvm/IR/PatternMatch.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Transforms/Utils/Local.h"
 using namespace llvm;
 using namespace PatternMatch;
 
@@ -40,7 +41,7 @@ STATISTIC(NumGlobalCopies, "Number of allocas copied from constant global");
 /// the alloca, and if the source pointer is a pointer to a constant global, we
 /// can optimize this.
 static bool
-isOnlyCopiedFromConstantMemory(AliasAnalysis *AA,
+isOnlyCopiedFromConstantMemory(AAResults *AA,
                                Value *V, MemTransferInst *&TheCopy,
                                SmallVectorImpl<Instruction *> &ToDelete) {
   // We track lifetime intrinsics as we encounter them.  If we decide to go
@@ -144,7 +145,7 @@ isOnlyCopiedFromConstantMemory(AliasAnalysis *AA,
 /// modified by a copy from a constant global.  If we can prove this, we can
 /// replace any uses of the alloca with uses of the global directly.
 static MemTransferInst *
-isOnlyCopiedFromConstantMemory(AliasAnalysis *AA,
+isOnlyCopiedFromConstantMemory(AAResults *AA,
                                AllocaInst *AI,
                                SmallVectorImpl<Instruction *> &ToDelete) {
   MemTransferInst *TheCopy = nullptr;
@@ -365,42 +366,40 @@ Instruction *InstCombiner::visitAllocaInst(AllocaInst &AI) {
     }
   }
 
-  if (AI.getAlignment()) {
-    // Check to see if this allocation is only modified by a memcpy/memmove from
-    // a constant whose alignment is equal to or exceeds that of the allocation.
-    // If this is the case, we can change all users to use the constant global
-    // instead.  This is commonly produced by the CFE by constructs like "void
-    // foo() { int A[] = {1,2,3,4,5,6,7,8,9...}; }" if 'A' is only subsequently
-    // read.
-    SmallVector<Instruction *, 4> ToDelete;
-    if (MemTransferInst *Copy = isOnlyCopiedFromConstantMemory(AA, &AI, ToDelete)) {
-      MaybeAlign AllocaAlign = AI.getAlign();
-      Align SourceAlign = getOrEnforceKnownAlignment(
-          Copy->getSource(), AllocaAlign, DL, &AI, &AC, &DT);
-      if ((!AllocaAlign || *AllocaAlign <= SourceAlign) &&
-          isDereferenceableForAllocaSize(Copy->getSource(), &AI, DL)) {
-        LLVM_DEBUG(dbgs() << "Found alloca equal to global: " << AI << '\n');
-        LLVM_DEBUG(dbgs() << "  memcpy = " << *Copy << '\n');
-        for (unsigned i = 0, e = ToDelete.size(); i != e; ++i)
-          eraseInstFromFunction(*ToDelete[i]);
-        Value *TheSrc = Copy->getSource();
-        auto *SrcTy = TheSrc->getType();
-        auto *DestTy = PointerType::get(AI.getType()->getPointerElementType(),
-                                        SrcTy->getPointerAddressSpace());
-        Value *Cast =
-          Builder.CreatePointerBitCastOrAddrSpaceCast(TheSrc, DestTy);
-        if (AI.getType()->getPointerAddressSpace() ==
-            SrcTy->getPointerAddressSpace()) {
-          Instruction *NewI = replaceInstUsesWith(AI, Cast);
-          eraseInstFromFunction(*Copy);
-          ++NumGlobalCopies;
-          return NewI;
-        }
-
-        PointerReplacer PtrReplacer(*this);
-        PtrReplacer.replacePointer(AI, Cast);
+  // Check to see if this allocation is only modified by a memcpy/memmove from
+  // a constant whose alignment is equal to or exceeds that of the allocation.
+  // If this is the case, we can change all users to use the constant global
+  // instead.  This is commonly produced by the CFE by constructs like "void
+  // foo() { int A[] = {1,2,3,4,5,6,7,8,9...}; }" if 'A' is only subsequently
+  // read.
+  SmallVector<Instruction *, 4> ToDelete;
+  if (MemTransferInst *Copy = isOnlyCopiedFromConstantMemory(AA, &AI, ToDelete)) {
+    Align AllocaAlign = AI.getAlign();
+    Align SourceAlign = getOrEnforceKnownAlignment(
+        Copy->getSource(), AllocaAlign, DL, &AI, &AC, &DT);
+    if (AllocaAlign <= SourceAlign &&
+        isDereferenceableForAllocaSize(Copy->getSource(), &AI, DL)) {
+      LLVM_DEBUG(dbgs() << "Found alloca equal to global: " << AI << '\n');
+      LLVM_DEBUG(dbgs() << "  memcpy = " << *Copy << '\n');
+      for (unsigned i = 0, e = ToDelete.size(); i != e; ++i)
+        eraseInstFromFunction(*ToDelete[i]);
+      Value *TheSrc = Copy->getSource();
+      auto *SrcTy = TheSrc->getType();
+      auto *DestTy = PointerType::get(AI.getType()->getPointerElementType(),
+                                      SrcTy->getPointerAddressSpace());
+      Value *Cast =
+        Builder.CreatePointerBitCastOrAddrSpaceCast(TheSrc, DestTy);
+      if (AI.getType()->getPointerAddressSpace() ==
+          SrcTy->getPointerAddressSpace()) {
+        Instruction *NewI = replaceInstUsesWith(AI, Cast);
+        eraseInstFromFunction(*Copy);
         ++NumGlobalCopies;
+        return NewI;
       }
+
+      PointerReplacer PtrReplacer(*this);
+      PtrReplacer.replacePointer(AI, Cast);
+      ++NumGlobalCopies;
     }
   }
 

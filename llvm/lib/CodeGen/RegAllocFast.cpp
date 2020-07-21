@@ -133,7 +133,6 @@ namespace {
     RegUnitSet UsedInInstr;
 
     void setPhysRegState(MCPhysReg PhysReg, unsigned NewState);
-    bool isPhysRegFree(MCPhysReg PhysReg) const;
 
     /// Mark a physreg as used in this instruction.
     void markRegUsedInInstr(MCPhysReg PhysReg) {
@@ -185,7 +184,10 @@ namespace {
     bool isLastUseOfLocalReg(const MachineOperand &MO) const;
 
     void addKillFlag(const LiveReg &LRI);
+#ifndef NDEBUG
     bool verifyRegStateMapping(const LiveReg &LR) const;
+#endif
+
     void killVirtReg(LiveReg &LR);
     void killVirtReg(Register VirtReg);
     void spillVirtReg(MachineBasicBlock::iterator MI, LiveReg &LR);
@@ -226,7 +228,6 @@ namespace {
     bool mayLiveOut(Register VirtReg);
     bool mayLiveIn(Register VirtReg);
 
-    void printRegUnitState(unsigned State) const;
     void dumpState() const;
   };
 
@@ -240,14 +241,6 @@ INITIALIZE_PASS(RegAllocFast, "regallocfast", "Fast Register Allocator", false,
 void RegAllocFast::setPhysRegState(MCPhysReg PhysReg, unsigned NewState) {
   for (MCRegUnitIterator UI(PhysReg, TRI); UI.isValid(); ++UI)
     RegUnitStates[*UI] = NewState;
-}
-
-bool RegAllocFast::isPhysRegFree(MCPhysReg PhysReg) const {
-  for (MCRegUnitIterator UI(PhysReg, TRI); UI.isValid(); ++UI) {
-    if (RegUnitStates[*UI] != regFree)
-      return false;
-  }
-  return true;
 }
 
 /// This allocates space for the specified virtual register to be held on the
@@ -391,6 +384,7 @@ void RegAllocFast::addKillFlag(const LiveReg &LR) {
   }
 }
 
+#ifndef NDEBUG
 bool RegAllocFast::verifyRegStateMapping(const LiveReg &LR) const {
   for (MCRegUnitIterator UI(LR.PhysReg, TRI); UI.isValid(); ++UI) {
     if (RegUnitStates[*UI] != LR.VirtReg)
@@ -399,6 +393,7 @@ bool RegAllocFast::verifyRegStateMapping(const LiveReg &LR) const {
 
   return true;
 }
+#endif
 
 /// Mark virtreg as no longer available.
 void RegAllocFast::killVirtReg(LiveReg &LR) {
@@ -1161,7 +1156,7 @@ void RegAllocFast::allocateInstruction(MachineInstr &MI) {
 }
 
 void RegAllocFast::handleDebugValue(MachineInstr &MI) {
-  MachineOperand &MO = MI.getOperand(0);
+  MachineOperand &MO = MI.getDebugOperand(0);
 
   // Ignore DBG_VALUEs that aren't based on virtual registers. These are
   // mostly constants and frame indices.

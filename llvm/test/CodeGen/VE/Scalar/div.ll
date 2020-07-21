@@ -47,6 +47,7 @@ define signext i32 @divi32(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: divi32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divs.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = sdiv i32 %a, %b
   ret i32 %r
@@ -80,6 +81,7 @@ define zeroext i32 @divu32(i32 zeroext %a, i32 zeroext %b) {
 ; CHECK-LABEL: divu32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divu.w %s0, %s0, %s1
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = udiv i32 %a, %b
   ret i32 %r
@@ -90,8 +92,8 @@ define signext i16 @divi16(i16 signext %a, i16 signext %b) {
 ; CHECK-LABEL: divi16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divs.w.sx %s0, %s0, %s1
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a32 = sext i16 %a to i32
   %b32 = sext i16 %b to i32
@@ -106,6 +108,7 @@ define zeroext i16 @divu16(i16 zeroext %a, i16 zeroext %b) {
 ; CHECK-LABEL: divu16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divu.w %s0, %s0, %s1
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = udiv i16 %a, %b
   ret i16 %r
@@ -116,8 +119,8 @@ define signext i8 @divi8(i8 signext %a, i8 signext %b) {
 ; CHECK-LABEL: divi8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divs.w.sx %s0, %s0, %s1
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a32 = sext i8 %a to i32
   %b32 = sext i8 %b to i32
@@ -131,6 +134,7 @@ define zeroext i8 @divu8(i8 zeroext %a, i8 zeroext %b) {
 ; CHECK-LABEL: divu8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divu.w %s0, %s0, %s1
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = udiv i8 %a, %b
   ret i8 %r
@@ -187,12 +191,12 @@ define i64 @divi64ri(i64 %a, i64 %b) {
 define signext i32 @divi32ri(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: divi32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    lea %s1, 1431655766
 ; CHECK-NEXT:    muls.l %s0, %s0, %s1
 ; CHECK-NEXT:    srl %s1, %s0, 63
 ; CHECK-NEXT:    srl %s0, %s0, 32
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = sdiv i32 %a, 3
   ret i32 %r
@@ -226,12 +230,10 @@ define i64 @divu64ri(i64 %a, i64 %b) {
 define zeroext i32 @divu32ri(i32 zeroext %a, i32 zeroext %b) {
 ; CHECK-LABEL: divu32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    lea %s1, -1431655765
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    muls.l %s0, %s0, %s1
 ; CHECK-NEXT:    srl %s0, %s0, 33
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = udiv i32 %a, 3
   ret i32 %r
@@ -291,6 +293,7 @@ define signext i32 @divi32li(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: divi32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divs.w.sx %s0, 3, %s1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = sdiv i32 3, %b
   ret i32 %r
@@ -327,6 +330,7 @@ define zeroext i32 @divu32li(i32 zeroext %a, i32 zeroext %b) {
 ; CHECK-LABEL: divu32li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    divu.w %s0, 3, %s1
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = udiv i32 3, %b
   ret i32 %r

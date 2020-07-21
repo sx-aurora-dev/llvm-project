@@ -167,8 +167,7 @@ void VEInstPrinter::printMemASOperandRRM(const MCInst *MI, int OpNum,
   } else {
     printOperand(MI, OpNum + 1, STI, O);
   }
-  if (MI->getOperand(OpNum).isImm() &&
-      MI->getOperand(OpNum).getImm() == 0) {
+  if (MI->getOperand(OpNum).isImm() && MI->getOperand(OpNum).getImm() == 0) {
     if (MI->getOperand(OpNum + 1).isImm() &&
         MI->getOperand(OpNum + 1).getImm() == 0) {
       O << "0";

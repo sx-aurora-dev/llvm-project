@@ -27,7 +27,7 @@ const Builtin::Info VETargetInfo::BuiltinInfo[] = {
 };
 
 void VETargetInfo::getTargetDefines(const LangOptions &Opts,
-                                       MacroBuilder &Builder) const {
+                                    MacroBuilder &Builder) const {
   Builder.defineMacro("_LP64", "1");
   Builder.defineMacro("unix", "1");
   Builder.defineMacro("__unix__", "1");

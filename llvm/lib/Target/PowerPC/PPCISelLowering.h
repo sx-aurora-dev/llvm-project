@@ -97,6 +97,11 @@ namespace llvm {
     ///
     XXSPLT,
 
+    /// XXSPLTI_SP_TO_DP - The PPC VSX splat instructions for immediates for
+    /// converting immediate single precision numbers to double precision
+    /// vector or scalar.
+    XXSPLTI_SP_TO_DP,
+
     /// VECINSERT - The PPC vector insert instruction
     ///
     VECINSERT,
@@ -147,6 +152,9 @@ namespace llvm {
     SRL,
     SRA,
     SHL,
+
+    /// FNMSUB - Negated multiply-subtract instruction.
+    FNMSUB,
 
     /// EXTSWSLI = The PPC extswsli instruction, which does an extend-sign
     /// word and shift left immediate.
@@ -217,6 +225,14 @@ namespace llvm {
     /// Extract a subvector from unsigned integer vector and convert to FP.
     /// As with SINT_VEC_TO_FP, used for converting illegal types.
     UINT_VEC_TO_FP,
+
+    /// PowerPC instructions that have SCALAR_TO_VECTOR semantics tend to
+    /// place the value into the least significant element of the most
+    /// significant doubleword in the vector. This is not element zero for
+    /// anything smaller than a doubleword on either endianness. This node has
+    /// the same semantics as SCALAR_TO_VECTOR except that the value remains in
+    /// the aforementioned location in the vector register.
+    SCALAR_TO_VECTOR_PERMUTED,
 
     // FIXME: Remove these once the ANDI glue bug is fixed:
     /// i1 = ANDI_rec_1_[EQ|GT]_BIT(i32 or i64 x) - Represents the result of the
@@ -674,6 +690,10 @@ namespace llvm {
       return VT.isScalarInteger();
     }
 
+    SDValue getNegatedExpression(SDValue Op, SelectionDAG &DAG, bool LegalOps,
+                                 bool OptForSize, NegatibleCost &Cost,
+                                 unsigned Depth = 0) const override;
+
     /// getSetCCResultType - Return the ISD::SETCC ValueType
     EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Context,
                            EVT VT) const override;
@@ -1096,6 +1116,7 @@ namespace llvm {
     SDValue LowerMUL(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerABS(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerFP_EXTEND(SDValue Op, SelectionDAG &DAG) const;
+    SDValue LowerROTL(SDValue Op, SelectionDAG &DAG) const;
 
     SDValue LowerVectorLoad(SDValue Op, SelectionDAG &DAG) const;
     SDValue LowerVectorStore(SDValue Op, SelectionDAG &DAG) const;
@@ -1202,10 +1223,13 @@ namespace llvm {
     SDValue combineSRL(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue combineMUL(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue combineADD(SDNode *N, DAGCombinerInfo &DCI) const;
+    SDValue combineFMALike(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue combineTRUNCATE(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue combineABS(SDNode *N, DAGCombinerInfo &DCI) const;
     SDValue combineVSelect(SDNode *N, DAGCombinerInfo &DCI) const;
+    SDValue combineVectorShuffle(ShuffleVectorSDNode *SVN,
+                                 SelectionDAG &DAG) const;
     SDValue combineVReverseMemOP(ShuffleVectorSDNode *SVN, LSBaseSDNode *LSBase,
                                  DAGCombinerInfo &DCI) const;
 
@@ -1253,6 +1277,9 @@ namespace llvm {
 
   bool isIntS16Immediate(SDNode *N, int16_t &Imm);
   bool isIntS16Immediate(SDValue Op, int16_t &Imm);
+
+  bool convertToNonDenormSingle(APInt &ArgAPInt);
+  bool convertToNonDenormSingle(APFloat &ArgAPFloat);
 
 } // end namespace llvm
 

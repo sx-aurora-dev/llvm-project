@@ -28,7 +28,6 @@ define double @func_i16fp64(i16* %a) {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __gnu_h2f_ieee@hi(, %s1)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:    srl %s1, (8)1, 1
 ; CHECK-NEXT:    cmps.l %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.d.s %s0, %s0
@@ -61,7 +60,6 @@ define double @func_fp16fp64(half* %a) {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __gnu_h2f_ieee@hi(, %s1)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:    srl %s1, (8)1, 1
 ; CHECK-NEXT:    cmps.l %s1, %s0, %s1
 ; CHECK-NEXT:    cvt.d.s %s0, %s0

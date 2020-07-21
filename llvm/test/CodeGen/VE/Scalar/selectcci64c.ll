@@ -1,12 +1,8 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define i64 @selectccsgti8(i8, i8, i64, i64) {
+define i64 @selectccsgti8(i8 signext, i8 signext, i64, i64) {
 ; CHECK-LABEL: selectccsgti8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    sla.w.sx %s1, %s1, 24
-; CHECK-NEXT:    sra.w.sx %s1, %s1, 24
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 24
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
@@ -16,13 +12,9 @@ define i64 @selectccsgti8(i8, i8, i64, i64) {
   ret i64 %6
 }
 
-define i64 @selectccsgti16(i16, i16, i64, i64) {
+define i64 @selectccsgti16(i16 signext, i16 signext, i64, i64) {
 ; CHECK-LABEL: selectccsgti16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    sla.w.sx %s1, %s1, 16
-; CHECK-NEXT:    sra.w.sx %s1, %s1, 16
-; CHECK-NEXT:    sla.w.sx %s0, %s0, 16
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.gt %s3, %s2, %s0
 ; CHECK-NEXT:    or %s0, 0, %s3
@@ -32,7 +24,7 @@ define i64 @selectccsgti16(i16, i16, i64, i64) {
   ret i64 %6
 }
 
-define i64 @selectccsgti32(i32, i32, i64, i64) {
+define i64 @selectccsgti32(i32 signext, i32 signext, i64, i64) {
 ; CHECK-LABEL: selectccsgti32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1

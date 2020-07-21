@@ -47,8 +47,6 @@ class VEMaskReg<bits<4> enc, string n, list<Register> subregs = [],
 }
 
 let Namespace = "VE" in {
-  def sub_i8      : SubRegIndex<8, 56>;         // Low 8 bit (56..63)
-  def sub_i16     : SubRegIndex<16, 48>;        // Low 16 bit (48..63)
   def sub_i32     : SubRegIndex<32, 32>;        // Low 32 bit (32..63)
   def sub_f32     : SubRegIndex<32>;            // High 32 bit (0..31)
   def sub_even    : SubRegIndex<64>;            // High 64 bit (0..63)
@@ -102,21 +100,9 @@ def VLS : RegisterClass<"VE", [i32], 64, (add VL)>;
 
 let RegAltNameIndices = [AsmName] in {
 
-// Generic integer registers - 8 bits wide
-foreach I = 0-63 in
-  def SB#I : VEReg<I, "sb"#I, [], ["s"#I]>, DwarfRegNum<[I]>;
-
-// Generic integer registers - 16 bits wide
-let SubRegIndices = [sub_i8] in
-foreach I = 0-63 in
-  def SH#I : VEReg<I, "sh"#I, [!cast<VEReg>("SB"#I)], ["s"#I]>,
-                   DwarfRegNum<[I]>;
-
 // Generic integer registers - 32 bits wide
-let SubRegIndices = [sub_i16] in
 foreach I = 0-63 in
-  def SW#I : VEReg<I, "sw"#I, [!cast<VEReg>("SH"#I)], ["s"#I]>,
-                   DwarfRegNum<[I]>;
+  def SW#I : VEReg<I, "sw"#I, [], ["s"#I]>, DwarfRegNum<[I]>;
 
 // Generic floating point registers - 32 bits wide
 //   NOTE: Mark SF#I as alias of SW#I temporary to avoid register allocation
@@ -130,6 +116,18 @@ let SubRegIndices = [sub_i32, sub_f32], CoveredBySubRegs = 1 in
 foreach I = 0-63 in
   def SX#I : VEReg<I, "s"#I, [!cast<VEReg>("SW"#I), !cast<VEReg>("SF"#I)],
                    ["s"#I]>, DwarfRegNum<[I]>;
+
+// Aliases of the S* registers used to hold 128-bit for values (long doubles).
+// Following foreach represents something like:
+//   def Q0 : VEReg<0, "q0", [SX0, SX1], ["s0"]>;
+//   def Q1 : VEReg<2, "q2", [SX2, SX3], ["s2"]>;
+//   ...
+let SubRegIndices = [sub_even, sub_odd], CoveredBySubRegs = 1 in
+foreach I = 0-31 in
+  def Q#I : VEReg<!shl(I,1), "q"#I,
+                  [!cast<VEReg>("SX"#!shl(I,1)),
+                   !cast<VEReg>("SX"#!add(!shl(I,1),1))],
+                  ["s"#!shl(I,1)]>;
 
 // Vector registers - 64 bits wide 256 elements
 foreach I = 0-63 in
@@ -151,32 +149,12 @@ foreach I = 1-7 in
                          !cast<VEMaskReg>("VM"#!add(!shl(I,1),1))],
                         ["vm"#!shl(I,1)]>;
 
-// Aliases of the S* registers used to hold 128-bit for values (long doubles).
-// Following foreach represents something like:
-//   def Q0 : VEReg<0, "q0", [SX0, SX1], ["s0"]>;
-//   def Q1 : VEReg<2, "q2", [SX2, SX3], ["s2"]>;
-//   ...
-let SubRegIndices = [sub_even, sub_odd], CoveredBySubRegs = 1 in
-foreach I = 0-31 in
-  def Q#I : VEReg<!shl(I,1), "q"#I,
-                  [!cast<VEReg>("SX"#!shl(I,1)),
-                   !cast<VEReg>("SX"#!add(!shl(I,1),1))],
-                  ["s"#!shl(I,1)]>;
-
 } // RegAltNameIndices = [AsmName]
 
 // Register classes.
 //
 // The register order is defined in terms of the preferred
 // allocation order.
-def I8  : RegisterClass<"VE", [i8], 8,
-                        (add (sequence "SB%u", 0, 7),
-                             (sequence "SB%u", 34, 63),
-                             (sequence "SB%u", 8, 33))>;
-def I16 : RegisterClass<"VE", [i16], 16,
-                        (add (sequence "SH%u", 0, 7),
-                             (sequence "SH%u", 34, 63),
-                             (sequence "SH%u", 8, 33))>;
 def I32 : RegisterClass<"VE", [i32], 32,
                         (add (sequence "SW%u", 0, 7),
                              (sequence "SW%u", 34, 63),

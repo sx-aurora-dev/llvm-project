@@ -112,7 +112,9 @@ define i64 @mimm_FFFFFFFFFFFFFF80(i64 %a) {
 define i32 @mimm_FFFFFFFFFFFFFF00_i32(i32 %a) {
 ; CHECK-LABEL: mimm_FFFFFFFFFFFFFF00_i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    and %s0, %s0, (56)1
+; CHECK-NEXT:    lea %s1, -256
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    and %s0, %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %res = and i32 %a, -256
   ret i32 %res

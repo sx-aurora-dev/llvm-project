@@ -36,7 +36,6 @@ define zeroext i1 @setccone(double, double) {
 ; CHECK-NEXT:    fcmp.d %s1, %s0, %s1
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.d.ne %s0, (63)0, %s1
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp one double %0, 5.0
   ret i1 %3
@@ -92,7 +91,6 @@ define zeroext i1 @setccord(double, double) {
 ; CHECK-NEXT:    fcmp.d %s1, %s0, %s0
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.d.num %s0, (63)0, %s1
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp ord double %0, 0.0
   ret i1 %3
@@ -104,7 +102,6 @@ define zeroext i1 @setccuno(double, double) {
 ; CHECK-NEXT:    fcmp.d %s1, %s0, %s0
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    cmov.d.nan %s0, (63)0, %s1
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fcmp uno double %0, 0.0
   ret i1 %3

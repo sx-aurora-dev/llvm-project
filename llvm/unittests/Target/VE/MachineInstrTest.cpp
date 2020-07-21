@@ -257,6 +257,14 @@ TEST(VETest, VLIndex) {
     case VFMKWxnaxL:
     case VFMKDxnaxL:
       return 2;
+    case TOVMm:
+    case PCVMx:
+    case LZVMm:
+      return -1;
+    case TOVMml:
+    case PCVMmL:
+    case LZVMxl:
+      return 2;
     }
     return -2;
   };

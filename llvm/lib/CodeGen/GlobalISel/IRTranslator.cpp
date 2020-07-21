@@ -48,7 +48,6 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/InlineAsm.h"
-#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
@@ -233,12 +232,8 @@ int IRTranslator::getOrCreateFrameIndex(const AllocaInst &AI) {
   // Always allocate at least one byte.
   Size = std::max<uint64_t>(Size, 1u);
 
-  unsigned Alignment = AI.getAlignment();
-  if (!Alignment)
-    Alignment = DL->getABITypeAlignment(AI.getAllocatedType());
-
   int &FI = FrameIndices[&AI];
-  FI = MF->getFrameInfo().CreateStackObject(Size, Alignment, false, &AI);
+  FI = MF->getFrameInfo().CreateStackObject(Size, AI.getAlign(), false, &AI);
   return FI;
 }
 
@@ -1072,7 +1067,7 @@ bool IRTranslator::translateGetElementPtr(const User &U,
     BaseReg =
         MIRBuilder.buildSplatVector(LLT::vector(VectorWidth, PtrTy), BaseReg)
             .getReg(0);
-    PtrIRTy = VectorType::get(PtrIRTy, VectorWidth);
+    PtrIRTy = FixedVectorType::get(PtrIRTy, VectorWidth);
     PtrTy = getLLTForType(*PtrIRTy, *DL);
     OffsetIRTy = DL->getIntPtrType(PtrIRTy);
     OffsetTy = getLLTForType(*OffsetIRTy, *DL);
@@ -1304,6 +1299,51 @@ bool IRTranslator::translateSimpleIntrinsic(const CallInst &CI,
 
   MIRBuilder.buildInstr(Op, {getOrCreateVReg(CI)}, VRegs,
                         MachineInstr::copyFlagsFromInstruction(CI));
+  return true;
+}
+
+// TODO: Include ConstainedOps.def when all strict instructions are defined.
+static unsigned getConstrainedOpcode(Intrinsic::ID ID) {
+  switch (ID) {
+  case Intrinsic::experimental_constrained_fadd:
+    return TargetOpcode::G_STRICT_FADD;
+  case Intrinsic::experimental_constrained_fsub:
+    return TargetOpcode::G_STRICT_FSUB;
+  case Intrinsic::experimental_constrained_fmul:
+    return TargetOpcode::G_STRICT_FMUL;
+  case Intrinsic::experimental_constrained_fdiv:
+    return TargetOpcode::G_STRICT_FDIV;
+  case Intrinsic::experimental_constrained_frem:
+    return TargetOpcode::G_STRICT_FREM;
+  case Intrinsic::experimental_constrained_fma:
+    return TargetOpcode::G_STRICT_FMA;
+  case Intrinsic::experimental_constrained_sqrt:
+    return TargetOpcode::G_STRICT_FSQRT;
+  default:
+    return 0;
+  }
+}
+
+bool IRTranslator::translateConstrainedFPIntrinsic(
+  const ConstrainedFPIntrinsic &FPI, MachineIRBuilder &MIRBuilder) {
+  fp::ExceptionBehavior EB = FPI.getExceptionBehavior().getValue();
+
+  unsigned Opcode = getConstrainedOpcode(FPI.getIntrinsicID());
+  if (!Opcode)
+    return false;
+
+  unsigned Flags = MachineInstr::copyFlagsFromInstruction(FPI);
+  if (EB == fp::ExceptionBehavior::ebIgnore)
+    Flags |= MachineInstr::NoFPExcept;
+
+  SmallVector<llvm::SrcOp, 4> VRegs;
+  VRegs.push_back(getOrCreateVReg(*FPI.getArgOperand(0)));
+  if (!FPI.isUnaryOp())
+    VRegs.push_back(getOrCreateVReg(*FPI.getArgOperand(1)));
+  if (FPI.isTernaryOp())
+    VRegs.push_back(getOrCreateVReg(*FPI.getArgOperand(2)));
+
+  MIRBuilder.buildInstr(Opcode, {getOrCreateVReg(FPI)}, VRegs, Flags);
   return true;
 }
 
@@ -1572,6 +1612,12 @@ bool IRTranslator::translateKnownIntrinsic(const CallInst &CI, Intrinsic::ID ID,
       .addUse(getOrCreateVReg(*CI.getArgOperand(1)));
     return true;
   }
+#define INSTRUCTION(NAME, NARG, ROUND_MODE, INTRINSIC)  \
+  case Intrinsic::INTRINSIC:
+#include "llvm/IR/ConstrainedOps.def"
+    return translateConstrainedFPIntrinsic(cast<ConstrainedFPIntrinsic>(CI),
+                                           MIRBuilder);
+
   }
   return false;
 }
@@ -1892,7 +1938,7 @@ bool IRTranslator::translateVAArg(const User &U, MachineIRBuilder &MIRBuilder) {
   // anyway but that's not guaranteed.
   MIRBuilder.buildInstr(TargetOpcode::G_VAARG, {getOrCreateVReg(U)},
                         {getOrCreateVReg(*U.getOperand(0)),
-                         uint64_t(DL->getABITypeAlignment(U.getType()))});
+                         DL->getABITypeAlign(U.getType()).value()});
   return true;
 }
 
@@ -1972,9 +2018,6 @@ bool IRTranslator::translatePHI(const User &U, MachineIRBuilder &MIRBuilder) {
 bool IRTranslator::translateAtomicCmpXchg(const User &U,
                                           MachineIRBuilder &MIRBuilder) {
   const AtomicCmpXchgInst &I = cast<AtomicCmpXchgInst>(U);
-
-  if (I.isWeak())
-    return false;
 
   auto &TLI = *MF->getSubtarget().getTargetLowering();
   auto Flags = TLI.getAtomicMemOperandFlags(I, *DL);
@@ -2144,6 +2187,10 @@ bool IRTranslator::translate(const Instruction &Inst) {
         DebugLoc::get(0, 0, DL.getScope(), DL.getInlinedAt()));
   else
     EntryBuilder->setDebugLoc(DebugLoc());
+
+  auto &TLI = *MF->getSubtarget().getTargetLowering();
+  if (TLI.fallBackToDAGISel(Inst))
+    return false;
 
   switch (Inst.getOpcode()) {
 #define HANDLE_INST(NUM, OPCODE, CLASS)                                        \
@@ -2340,7 +2387,7 @@ bool IRTranslator::runOnMachineFunction(MachineFunction &CurMF) {
   // Lower the actual args into this basic block.
   SmallVector<ArrayRef<Register>, 8> VRegArgs;
   for (const Argument &Arg: F.args()) {
-    if (DL->getTypeStoreSize(Arg.getType()) == 0)
+    if (DL->getTypeStoreSize(Arg.getType()).isZero())
       continue; // Don't handle zero sized types.
     ArrayRef<Register> VRegs = getOrCreateVRegs(Arg);
     VRegArgs.push_back(VRegs);

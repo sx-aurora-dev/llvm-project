@@ -48,33 +48,55 @@ VEInstrInfo::VEInstrInfo(VESubtarget &ST)
 static bool IsIntegerCC(unsigned CC) { return (CC < VECC::CC_AF); }
 
 static VECC::CondCode GetOppositeBranchCondition(VECC::CondCode CC) {
-  switch(CC) {
-  case VECC::CC_IG:     return VECC::CC_ILE;
-  case VECC::CC_IL:     return VECC::CC_IGE;
-  case VECC::CC_INE:    return VECC::CC_IEQ;
-  case VECC::CC_IEQ:    return VECC::CC_INE;
-  case VECC::CC_IGE:    return VECC::CC_IL;
-  case VECC::CC_ILE:    return VECC::CC_IG;
-  case VECC::CC_AF:     return VECC::CC_AT;
-  case VECC::CC_G:      return VECC::CC_LENAN;
-  case VECC::CC_L:      return VECC::CC_GENAN;
-  case VECC::CC_NE:     return VECC::CC_EQNAN;
-  case VECC::CC_EQ:     return VECC::CC_NENAN;
-  case VECC::CC_GE:     return VECC::CC_LNAN;
-  case VECC::CC_LE:     return VECC::CC_GNAN;
-  case VECC::CC_NUM:    return VECC::CC_NAN;
-  case VECC::CC_NAN:    return VECC::CC_NUM;
-  case VECC::CC_GNAN:   return VECC::CC_LE;
-  case VECC::CC_LNAN:   return VECC::CC_GE;
-  case VECC::CC_NENAN:  return VECC::CC_EQ;
-  case VECC::CC_EQNAN:  return VECC::CC_NE;
-  case VECC::CC_GENAN:  return VECC::CC_L;
-  case VECC::CC_LENAN:  return VECC::CC_G;
-  case VECC::CC_AT:     return VECC::CC_AF;
-  case VECC::UNKNOWN:   break;;
+  switch (CC) {
+  case VECC::CC_IG:
+    return VECC::CC_ILE;
+  case VECC::CC_IL:
+    return VECC::CC_IGE;
+  case VECC::CC_INE:
+    return VECC::CC_IEQ;
+  case VECC::CC_IEQ:
+    return VECC::CC_INE;
+  case VECC::CC_IGE:
+    return VECC::CC_IL;
+  case VECC::CC_ILE:
+    return VECC::CC_IG;
+  case VECC::CC_AF:
+    return VECC::CC_AT;
+  case VECC::CC_G:
+    return VECC::CC_LENAN;
+  case VECC::CC_L:
+    return VECC::CC_GENAN;
+  case VECC::CC_NE:
+    return VECC::CC_EQNAN;
+  case VECC::CC_EQ:
+    return VECC::CC_NENAN;
+  case VECC::CC_GE:
+    return VECC::CC_LNAN;
+  case VECC::CC_LE:
+    return VECC::CC_GNAN;
+  case VECC::CC_NUM:
+    return VECC::CC_NAN;
+  case VECC::CC_NAN:
+    return VECC::CC_NUM;
+  case VECC::CC_GNAN:
+    return VECC::CC_LE;
+  case VECC::CC_LNAN:
+    return VECC::CC_GE;
+  case VECC::CC_NENAN:
+    return VECC::CC_EQ;
+  case VECC::CC_EQNAN:
+    return VECC::CC_NE;
+  case VECC::CC_GENAN:
+    return VECC::CC_L;
+  case VECC::CC_LENAN:
+    return VECC::CC_G;
+  case VECC::CC_AT:
+    return VECC::CC_AF;
+  case VECC::UNKNOWN:
+    return VECC::UNKNOWN;
   }
   llvm_unreachable("Invalid cond code");
-  return VECC::UNKNOWN;
 }
 
 // Treat branch relative always like br.l.t as unconditional branch
@@ -330,8 +352,7 @@ void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
 }
 
 static bool IsAliasOfSX(Register Reg) {
-  return VE::I8RegClass.contains(Reg) || VE::I16RegClass.contains(Reg) ||
-         VE::I32RegClass.contains(Reg) || VE::I64RegClass.contains(Reg) ||
+  return VE::I32RegClass.contains(Reg) || VE::I64RegClass.contains(Reg) ||
          VE::F32RegClass.contains(Reg);
 }
 
@@ -813,48 +834,85 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::nndm_MMM: buildVMRInst(MI, get(VE::nndm_mmm)); return true;
   case VE::negm_MM: buildVMRInst(MI, get(VE::negm_mm)); return true;
 
+  case VE::LVMyir:
+  case VE::LVMyir_y: {
+    unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
+    unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
+    int64_t Imm = MI.getOperand(1).getImm();
+    unsigned Src = MI.getOperand(2).getReg();
+    bool KillSrc = MI.getOperand(2).isKill();
+    unsigned VMX = VMXl;
+    if (Imm >= 4) {
+        VMX = VMXu;
+        Imm -= 4;
+    }
+    MachineBasicBlock* MBB = MI.getParent();
+    DebugLoc DL = MI.getDebugLoc();
+    if (MI.getOpcode() == VE::LVMyir) {
+      BuildMI(*MBB, MI, DL, get(VE::LVMxir))
+        .addDef(VMX)
+        .addImm(Imm)
+        .addReg(Src, getKillRegState(KillSrc));
+    } else {
+      assert(MI.getOpcode() == VE::LVMyir_y);
+      assert(MI.getOperand(0).getReg() == MI.getOperand(3).getReg() &&
+             "LVMyir_y has different register in 3rd operand");
+      BuildMI(*MBB, MI, DL, get(VE::LVMxir_x))
+        .addDef(VMX)
+        .addImm(Imm)
+        .addReg(Src, getKillRegState(KillSrc))
+        .addReg(VMX);
+    }
+    MI.eraseFromParent();
+    return true;
+  }
   case VE::lvm_MMIs: {
     unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
     unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
     unsigned VMDu = GetVM512Upper(MI.getOperand(1).getReg());
     unsigned VMDl = GetVM512Upper(MI.getOperand(1).getReg());
-    int64_t imm = MI.getOperand(2).getImm();
+    int64_t Imm = MI.getOperand(2).getImm();
     unsigned VMX = VMXl;
     unsigned VMD = VMDl;
-    if (imm >= 4) {
+    if (Imm >= 4) {
         VMX = VMXu;
         VMD = VMDu;
-        imm -= 4;
+        Imm -= 4;
     }
     MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::lvm_mmIs))
-      .addDef(VMX)
-      .addReg(VMD)
-      .addImm(imm)
-      .addReg(MI.getOperand(3).getReg());
+    DebugLoc DL = MI.getDebugLoc();
+    BuildMI(*MBB, MI, DL, get(VE::LVMxir_x), VMX)
+      .addImm(Imm)
+      .addReg(MI.getOperand(3).getReg())
+      .addReg(VMD);
     MI.eraseFromParent();
     return true;
   }
-
+  case VE::SVMyi:
   case VE::svm_sMI: {
+    unsigned Dest = MI.getOperand(0).getReg();
     unsigned VMZu = GetVM512Upper(MI.getOperand(1).getReg());
     unsigned VMZl = GetVM512Lower(MI.getOperand(1).getReg());
-    int64_t imm = MI.getOperand(2).getImm();
+    bool KillSrc = MI.getOperand(1).isKill();
+    int64_t Imm = MI.getOperand(2).getImm();
     unsigned VMZ = VMZl;
-    if (imm >= 4) {
+    if (Imm >= 4) {
         VMZ = VMZu;
-        imm -= 4;
+        Imm -= 4;
     }
     MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    BuildMI(*MBB, MI, dl, get(VE::svm_smI))
-      .add(MI.getOperand(0))
+    DebugLoc DL = MI.getDebugLoc();
+    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, get(VE::SVMxi), Dest)
       .addReg(VMZ)
-      .addImm(imm);
+      .addImm(Imm);
+    MachineInstr *Inst = MIB.getInstr();
     MI.eraseFromParent();
+    if (KillSrc) {
+      const TargetRegisterInfo *TRI = &getRegisterInfo();
+      Inst->addRegisterKilled(MI.getOperand(1).getReg(), TRI, true);
+    }
     return true;
-                    }
+  }
   case VE::pvfmkat_Ml:
   case VE::pvfmkaf_Ml:
   case VE::pvfmkwgt_Mvl: case VE::pvfmkwgt_MvMl:

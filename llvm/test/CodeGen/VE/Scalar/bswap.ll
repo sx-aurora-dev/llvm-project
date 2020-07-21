@@ -28,9 +28,7 @@ define i64 @func64(i64 %p) {
 define i32 @func32(i32 %p) {
 ; CHECK-LABEL: func32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    bswp %s0, %s0, 1
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i32 @llvm.bswap.i32(i32 %p)
   ret i32 %r
@@ -39,9 +37,11 @@ define i32 @func32(i32 %p) {
 define signext i16 @func16s(i16 signext %p) {
 ; CHECK-LABEL: func16s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    bswp %s0, %s0, 1
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 16
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 16
+; CHECK-NEXT:    sll %s0, %s0, 48
+; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i16 @llvm.bswap.i16(i16 %p)
   ret i16 %r
@@ -50,11 +50,10 @@ define signext i16 @func16s(i16 signext %p) {
 define zeroext i16 @func16z(i16 zeroext %p) {
 ; CHECK-LABEL: func16z:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    bswp %s0, %s0, 1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 16
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i16 @llvm.bswap.i16(i16 %p)
   ret i16 %r
@@ -83,7 +82,6 @@ define signext i32 @func32si() {
 ; CHECK-LABEL: func32si:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, -16777216
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i32 @llvm.bswap.i32(i32 255)
   ret i32 %r
@@ -93,7 +91,7 @@ define zeroext i32 @func32zi() {
 ; CHECK-LABEL: func32zi:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, -16777216
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i32 @llvm.bswap.i32(i32 255)
   ret i32 %r
@@ -103,7 +101,6 @@ define signext i16 @func16si() {
 ; CHECK-LABEL: func16si:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, -256
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i16 @llvm.bswap.i16(i16 255)
   ret i16 %r
@@ -113,7 +110,6 @@ define zeroext i16 @func16zi() {
 ; CHECK-LABEL: func16zi:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 65280
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i16 @llvm.bswap.i16(i16 255)
   ret i16 %r

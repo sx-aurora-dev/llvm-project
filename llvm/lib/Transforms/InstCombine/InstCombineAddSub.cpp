@@ -1317,6 +1317,17 @@ Instruction *InstCombiner::visitAdd(BinaryOperator &I) {
   // X % C0 + (( X / C0 ) % C1) * C0 => X % (C0 * C1)
   if (Value *V = SimplifyAddWithRemainder(I)) return replaceInstUsesWith(I, V);
 
+  // ((X s/ C1) << C2) + X => X s% -C1 where -C1 is 1 << C2
+  const APInt *C1, *C2;
+  if (match(LHS, m_Shl(m_SDiv(m_Specific(RHS), m_APInt(C1)), m_APInt(C2)))) {
+    APInt one(C2->getBitWidth(), 1);
+    APInt minusC1 = -(*C1);
+    if (minusC1 == (one << *C2)) {
+      Constant *NewRHS = ConstantInt::get(RHS->getType(), minusC1);
+      return BinaryOperator::CreateSRem(RHS, NewRHS);
+    }
+  }
+
   // A+B --> A|B iff A and B have no bits set in common.
   if (haveNoCommonBitsSet(LHS, RHS, DL, &AC, &I, &DT))
     return BinaryOperator::CreateOr(LHS, RHS);
@@ -1777,6 +1788,21 @@ Instruction *InstCombiner::visitSub(BinaryOperator &I) {
     Value *XZ = Builder.CreateAdd(X, Z);
     Value *YW = Builder.CreateAdd(Y, Op1);
     return BinaryOperator::CreateSub(XZ, YW);
+  }
+
+  auto m_AddRdx = [](Value *&Vec) {
+    return m_OneUse(
+        m_Intrinsic<Intrinsic::experimental_vector_reduce_add>(m_Value(Vec)));
+  };
+  Value *V0, *V1;
+  if (match(Op0, m_AddRdx(V0)) && match(Op1, m_AddRdx(V1)) &&
+      V0->getType() == V1->getType()) {
+    // Difference of sums is sum of differences:
+    // add_rdx(V0) - add_rdx(V1) --> add_rdx(V0 - V1)
+    Value *Sub = Builder.CreateSub(V0, V1);
+    Value *Rdx = Builder.CreateIntrinsic(
+        Intrinsic::experimental_vector_reduce_add, {Sub->getType()}, {Sub});
+    return replaceInstUsesWith(I, Rdx);
   }
 
   if (Constant *C = dyn_cast<Constant>(Op0)) {

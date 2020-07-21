@@ -164,13 +164,13 @@ void NDTransferOpHelper<ConcreteOp>::emitLoops(Lambda loopBodyBuilder) {
     auto majorLbs = vectorBoundsCapture.getLbs();
     auto majorUbs = vectorBoundsCapture.getUbs();
     auto majorSteps = vectorBoundsCapture.getSteps();
-    SmallVector<Value, 8> majorIvs(vectorBoundsCapture.rank());
-    AffineLoopNestBuilder(majorIvs, majorLbs, majorUbs, majorSteps)([&] {
-      ValueRange indices(xferOp.indices());
-      loopBodyBuilder(majorIvs, indices.take_front(leadingRank),
-                      indices.drop_front(leadingRank).take_front(majorRank),
-                      indices.take_back(minorRank), memrefBoundsCapture);
-    });
+    affineLoopNestBuilder(
+        majorLbs, majorUbs, majorSteps, [&](ValueRange majorIvs) {
+          ValueRange indices(xferOp.indices());
+          loopBodyBuilder(majorIvs, indices.take_front(leadingRank),
+                          indices.drop_front(leadingRank).take_front(majorRank),
+                          indices.take_back(minorRank), memrefBoundsCapture);
+        });
   }
 }
 
@@ -187,7 +187,7 @@ Value NDTransferOpHelper<ConcreteOp>::emitInBoundsCondition(
     using namespace mlir::edsc::op;
     majorIvsPlusOffsets.push_back(iv + off);
     if (xferOp.isMaskedDim(leadingRank + idx)) {
-      Value inBounds = majorIvsPlusOffsets.back() < ub;
+      Value inBounds = slt(majorIvsPlusOffsets.back(), ub);
       inBoundsCondition =
           (inBoundsCondition) ? (inBoundsCondition && inBounds) : inBounds;
     }
@@ -196,13 +196,24 @@ Value NDTransferOpHelper<ConcreteOp>::emitInBoundsCondition(
   return inBoundsCondition;
 }
 
+// TODO: Parallelism and threadlocal considerations.
+static Value setAllocAtFunctionEntry(MemRefType memRefMinorVectorType,
+                                     Operation *op) {
+  auto &b = ScopedContext::getBuilderRef();
+  OpBuilder::InsertionGuard guard(b);
+  b.setInsertionPointToStart(&op->getParentOfType<FuncOp>().front());
+  Value res =
+      std_alloca(memRefMinorVectorType, ValueRange{}, b.getI64IntegerAttr(128));
+  return res;
+}
+
 template <>
 LogicalResult NDTransferOpHelper<TransferReadOp>::doReplace() {
   Value alloc, result;
   if (options.unroll)
     result = std_splat(vectorType, xferOp.padding());
   else
-    alloc = std_alloc(memRefMinorVectorType);
+    alloc = setAllocAtFunctionEntry(memRefMinorVectorType, op);
 
   emitLoops([&](ValueRange majorIvs, ValueRange leadingOffsets,
                 ValueRange majorOffsets, ValueRange minorOffsets,
@@ -297,7 +308,7 @@ template <>
 LogicalResult NDTransferOpHelper<TransferWriteOp>::doReplace() {
   Value alloc;
   if (!options.unroll) {
-    alloc = std_alloc(memRefMinorVectorType);
+    alloc = setAllocAtFunctionEntry(memRefMinorVectorType, op);
     std_store(xferOp.vector(),
               vector_type_cast(MemRefType::get({}, vectorType), alloc));
   }
@@ -422,16 +433,16 @@ clip(TransferOpTy transfer, MemRefBoundsCapture &bounds, ArrayRef<Value> ivs) {
     auto i = memRefAccess[memRefDim];
     if (loopIndex < 0) {
       auto N_minus_1 = N - one;
-      auto select_1 = std_select(i < N, i, N_minus_1);
+      auto select_1 = std_select(slt(i, N), i, N_minus_1);
       clippedScalarAccessExprs[memRefDim] =
-          std_select(i < zero, zero, select_1);
+          std_select(slt(i, zero), zero, select_1);
     } else {
       auto ii = ivs[loopIndex];
       auto i_plus_ii = i + ii;
       auto N_minus_1 = N - one;
-      auto select_1 = std_select(i_plus_ii < N, i_plus_ii, N_minus_1);
+      auto select_1 = std_select(slt(i_plus_ii, N), i_plus_ii, N_minus_1);
       clippedScalarAccessExprs[memRefDim] =
-          std_select(i_plus_ii < zero, zero, select_1);
+          std_select(slt(i_plus_ii, zero), zero, select_1);
     }
   }
 
@@ -640,7 +651,6 @@ namespace {
 struct ConvertVectorToSCFPass
     : public ConvertVectorToSCFBase<ConvertVectorToSCFPass> {
   ConvertVectorToSCFPass() = default;
-  ConvertVectorToSCFPass(const ConvertVectorToSCFPass &pass) {}
   ConvertVectorToSCFPass(const VectorTransferToSCFOptions &options) {
     this->fullUnroll = options.unroll;
   }

@@ -7630,7 +7630,8 @@ TreeTransform<Derived>::TransformCoroutineBodyStmt(CoroutineBodyStmt *S) {
     return StmtError();
   StmtResult FinalSuspend =
       getDerived().TransformStmt(S->getFinalSuspendStmt());
-  if (FinalSuspend.isInvalid())
+  if (FinalSuspend.isInvalid() ||
+      !SemaRef.checkFinalSuspendNoThrow(FinalSuspend.get()))
     return StmtError();
   ScopeInfo->setCoroutineSuspends(InitSuspend.get(), FinalSuspend.get());
   assert(isa<Expr>(InitSuspend.get()) && isa<Expr>(FinalSuspend.get()));
@@ -8086,8 +8087,12 @@ TreeTransform<Derived>::TransformCXXForRangeStmt(CXXForRangeStmt *S) {
                                                   Cond.get(),
                                                   Inc.get(), LoopVar.get(),
                                                   S->getRParenLoc());
-    if (NewStmt.isInvalid())
+    if (NewStmt.isInvalid() && LoopVar.get() != S->getLoopVarStmt()) {
+      // Might not have attached any initializer to the loop variable.
+      getSema().ActOnInitializerError(
+          cast<DeclStmt>(LoopVar.get())->getSingleDecl());
       return StmtError();
+    }
   }
 
   StmtResult Body = getDerived().TransformStmt(S->getBody());
@@ -10559,8 +10564,10 @@ TreeTransform<Derived>::TransformBinaryOperator(BinaryOperator *E) {
     return getDerived().RebuildBinaryOperator(
         E->getOperatorLoc(), E->getOpcode(), LHS.get(), RHS.get());
   Sema::FPFeaturesStateRAII FPFeaturesState(getSema());
-  getSema().CurFPFeatures = E->getFPFeatures(getSema().getLangOpts());
-
+  FPOptionsOverride NewOverrides(E->getFPFeatures(getSema().getLangOpts()));
+  getSema().CurFPFeatures =
+      NewOverrides.applyOverrides(getSema().getLangOpts());
+  getSema().FpPragmaStack.CurrentValue = NewOverrides.getAsOpaqueInt();
   return getDerived().RebuildBinaryOperator(E->getOperatorLoc(), E->getOpcode(),
                                             LHS.get(), RHS.get());
 }
@@ -10614,7 +10621,10 @@ ExprResult
 TreeTransform<Derived>::TransformCompoundAssignOperator(
                                                       CompoundAssignOperator *E) {
   Sema::FPFeaturesStateRAII FPFeaturesState(getSema());
-  getSema().CurFPFeatures = E->getFPFeatures(getSema().getLangOpts());
+  FPOptionsOverride NewOverrides(E->getFPFeatures(getSema().getLangOpts()));
+  getSema().CurFPFeatures =
+      NewOverrides.applyOverrides(getSema().getLangOpts());
+  getSema().FpPragmaStack.CurrentValue = NewOverrides.getAsOpaqueInt();
   return getDerived().TransformBinaryOperator(E);
 }
 
@@ -11089,7 +11099,10 @@ TreeTransform<Derived>::TransformCXXOperatorCallExpr(CXXOperatorCallExpr *E) {
     return SemaRef.MaybeBindToTemporary(E);
 
   Sema::FPFeaturesStateRAII FPFeaturesState(getSema());
-  getSema().CurFPFeatures = E->getFPFeatures();
+  FPOptionsOverride NewOverrides(E->getFPFeatures());
+  getSema().CurFPFeatures =
+      NewOverrides.applyOverrides(getSema().getLangOpts());
+  getSema().FpPragmaStack.CurrentValue = NewOverrides.getAsOpaqueInt();
 
   return getDerived().RebuildCXXOperatorCallExpr(E->getOperator(),
                                                  E->getOperatorLoc(),

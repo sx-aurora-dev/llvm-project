@@ -2,6 +2,63 @@
 // Vector Instruction Patterns
 //===----------------------------------------------------------------------===//
 
+// Custom ISDs
+// VEISD::VEC_SEQ - A vector sequence with a stride.
+// VEISD::VEC_BROADCAST - A vector splat of a scalar value into all vector
+//                        lanes.
+
+def vec_seq : SDNode<"VEISD::VEC_SEQ",
+                     SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
+def vec_broadcast : SDNode<"VEISD::VEC_BROADCAST",
+                           SDTypeProfile<1, 1, [SDTCisVec<0>]>>;
+
+//===----------------------------------------------------------------------===//
+// Vector Instruction Patterns for non vectorize subtarget which supports
+// intrinsics and v256f64 vector regisetr only.
+//===----------------------------------------------------------------------===//
+
+let Predicates = [IsNotVectorizeSubTarget] in {
+  // Load/store of vector registers.
+  def : Pat<(v256f64 (load I64:$addr)),
+            (VLDirl 8, $addr,
+                (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
+  def : Pat<(store v256f64:$vx, I64:$addr),
+            (VSTirvl 8, $addr, $vx,
+                (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
+
+  // Load/store of vector mask registers.
+  def : Pat<(v4i64 (load ADDRrii:$addr)),
+            (LDVMrii ADDRrii:$addr)>;
+  def : Pat<(store v4i64:$vx, ADDRrii:$addr),
+            (STVMrii ADDRrii:$addr, $vx)>;
+  def : Pat<(v8i64 (load ADDRrii:$addr)),
+            (LDVM512rii ADDRrii:$addr)>;
+  def : Pat<(store v8i64:$vx, ADDRrii:$addr),
+            (STVM512rii ADDRrii:$addr, $vx)>;
+
+  // Boardcast for vector mask register.
+  def : Pat<(v4i64 (vec_broadcast i64:$sy)),
+            (LVMxir_x 3, $sy,
+            (LVMxir_x 2, $sy,
+            (LVMxir_x 1, $sy,
+            (LVMxir 0, $sy))))>;
+
+  def : Pat<(v8i64 (vec_broadcast i64:$sy)),
+            (LVMyir_y 7, $sy,
+            (LVMyir_y 6, $sy,
+            (LVMyir_y 5, $sy,
+            (LVMyir_y 4, $sy,
+            (LVMyir_y 3, $sy,
+            (LVMyir_y 2, $sy,
+            (LVMyir_y 1, $sy,
+            (LVMyir 0, $sy))))))))>;
+}
+
+//===----------------------------------------------------------------------===//
+// Vector Instruction Patterns for vectorize subtarget which is being
+// implemented experimatally.
+//===----------------------------------------------------------------------===//
+
 // Pattern Matchings for Generic Vector Instructions
 
 // Mask Insert & Extract
@@ -65,8 +122,6 @@ multiclass MaskArith<ValueType MaskVT, string MaskTag="mmm"> {
 
 defm: MaskArith<v256i1,"mmm">;
 defm: MaskArith<v512i1,"MMM">;
-
-
 
 // Insert & Extract Vector Element
 

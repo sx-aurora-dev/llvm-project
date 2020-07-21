@@ -17,7 +17,6 @@
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCInst.h"
-#include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCParser/MCAsmLexer.h"
 #include "llvm/MC/MCParser/MCAsmParser.h"
 #include "llvm/MC/MCParser/MCParsedAsmOperand.h"
@@ -66,6 +65,8 @@ class VEAsmParser : public MCTargetAsmParser {
   unsigned validateTargetOperandClass(MCParsedAsmOperand &Op,
                                       unsigned Kind) override;
 
+  // Helper function to parse and generate identifier with relocation.
+  const MCExpr *parseIdentifier(StringRef Identifier);
   // Custom parse functions for VE specific operands.
   OperandMatchResultTy parseMEMOperand(OperandVector &Operands);
   OperandMatchResultTy parseMEMAsOperand(OperandVector &Operands);
@@ -78,17 +79,7 @@ class VEAsmParser : public MCTargetAsmParser {
   StringRef splitMnemonic(StringRef Name, SMLoc NameLoc,
                           OperandVector *Operands);
 
-  // Helper function for dealing with %lo / %hi in PIC mode.
-  const VEMCExpr *adjustPICRelocation(VEMCExpr::VariantKind VK,
-                                      const MCExpr *Sym);
-
-  bool matchVEAsmModifiers(const MCExpr *&EVal, const MCExpr* Sym,
-                           StringRef Mod, SMLoc &EndLoc);
   bool parseDirectiveWord(unsigned Size, SMLoc L);
-
-  bool is64Bit() const {
-    return getSTI().getTargetTriple().getArch() == Triple::sparcv9;
-  }
 
 public:
   VEAsmParser(const MCSubtargetInfo &sti, MCAsmParser &parser,
@@ -126,28 +117,24 @@ static const MCPhysReg F32Regs[64] = {
     VE::SF63};
 
 static const MCPhysReg F128Regs[32] = {
-  VE::Q0,  VE::Q1,  VE::Q2,  VE::Q3,
-  VE::Q4,  VE::Q5,  VE::Q6,  VE::Q7,
-  VE::Q8,  VE::Q9,  VE::Q10, VE::Q11,
-  VE::Q12, VE::Q13, VE::Q14, VE::Q15,
-  VE::Q16, VE::Q17, VE::Q18, VE::Q19,
-  VE::Q20, VE::Q21, VE::Q22, VE::Q23,
-  VE::Q24, VE::Q25, VE::Q26, VE::Q27,
-  VE::Q28, VE::Q29, VE::Q30, VE::Q31 };
+    VE::Q0,  VE::Q1,  VE::Q2,  VE::Q3,  VE::Q4,  VE::Q5,  VE::Q6,  VE::Q7,
+    VE::Q8,  VE::Q9,  VE::Q10, VE::Q11, VE::Q12, VE::Q13, VE::Q14, VE::Q15,
+    VE::Q16, VE::Q17, VE::Q18, VE::Q19, VE::Q20, VE::Q21, VE::Q22, VE::Q23,
+    VE::Q24, VE::Q25, VE::Q26, VE::Q27, VE::Q28, VE::Q29, VE::Q30, VE::Q31};
 
 static const MCPhysReg VM512Regs[8] = {
   VE::VMP0, VE::VMP1, VE::VMP2, VE::VMP3,
   VE::VMP4, VE::VMP5, VE::VMP6, VE::VMP7 };
 
 static const MCPhysReg MISCRegs[31] = {
-  VE::USRCC,      VE::PSW,        VE::SAR,        VE::NoRegister,
-  VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::PMMR,
-  VE::PMCR0,      VE::PMCR1,      VE::PMCR2,      VE::PMCR3,
-  VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::NoRegister,
-  VE::PMC0,       VE::PMC1,       VE::PMC2,       VE::PMC3,
-  VE::PMC4,       VE::PMC5,       VE::PMC6,       VE::PMC7,
-  VE::PMC8,       VE::PMC9,       VE::PMC10,      VE::PMC11,
-  VE::PMC12,      VE::PMC13,      VE::PMC14 };
+    VE::USRCC,      VE::PSW,        VE::SAR,        VE::NoRegister,
+    VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::PMMR,
+    VE::PMCR0,      VE::PMCR1,      VE::PMCR2,      VE::PMCR3,
+    VE::NoRegister, VE::NoRegister, VE::NoRegister, VE::NoRegister,
+    VE::PMC0,       VE::PMC1,       VE::PMC2,       VE::PMC3,
+    VE::PMC4,       VE::PMC5,       VE::PMC6,       VE::PMC7,
+    VE::PMC8,       VE::PMC9,       VE::PMC10,      VE::PMC11,
+    VE::PMC12,      VE::PMC13,      VE::PMC14};
 
 namespace {
 
@@ -165,12 +152,12 @@ private:
     k_MemoryZeroRegImm, // base=0, index=reg, disp=imm
     k_MemoryZeroImmImm, // base=0, index=imm, disp=imm
     // SX-Aurora AS form is disp(base).
-    k_MemoryRegImm,     // base=reg, disp=imm
-    k_MemoryZeroImm,    // base=0, disp=imm
-    k_CCOp,             // condition code
-    k_RDOp,             // rounding mode
-    k_MImmOp,           // Special immediate value of sequential bit stream
-                        // of 0 or 1.
+    k_MemoryRegImm,  // base=reg, disp=imm
+    k_MemoryZeroImm, // base=0, disp=imm
+    // Other special cases for Aurora VE
+    k_CCOp,   // condition code
+    k_RDOp,   // rounding mode
+    k_MImmOp, // Special immediate value of sequential bit stream of 0 or 1.
   } Kind;
 
   SMLoc StartLoc, EndLoc;
@@ -236,14 +223,25 @@ public:
   bool isMEMzi() const { return Kind == k_MemoryZeroImm; }
   bool isCCOp() const { return Kind == k_CCOp; }
   bool isRDOp() const { return Kind == k_RDOp; }
-  bool isSImm7() {
+  bool isZero() {
     if (!isImm())
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
-      return isInt<7>(Value);
+      return Value == 0;
+    }
+    return false;
+  }
+  bool isUImm0to2() {
+    if (!isImm())
+      return false;
+
+    // Constant case
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+      int64_t Value = ConstExpr->getValue();
+      return Value >= 0 && Value < 3;
     }
     return false;
   }
@@ -252,7 +250,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<1>(Value);
     }
@@ -263,7 +261,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<2>(Value);
     }
@@ -274,7 +272,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<3>(Value);
     }
@@ -296,7 +294,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<6>(Value);
     }
@@ -307,20 +305,20 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<7>(Value);
     }
     return false;
   }
-  bool isUImm0to2() {
+  bool isSImm7() {
     if (!isImm())
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
-      return Value >= 0 && Value < 3;
+      return isInt<7>(Value);
     }
     return false;
   }
@@ -329,32 +327,9 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(MImm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(MImm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<6>(Value);
-    }
-    return false;
-  }
-  bool isZero() {
-    if (!isImm())
-      return false;
-
-    // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
-      int64_t Value = ConstExpr->getValue();
-      return Value == 0;
-    }
-    return false;
-  }
-  bool isMiscImm() {
-    if (!isImm())
-      return false;
-
-    // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
-      int64_t Value = ConstExpr->getValue();
-      return Value == 0 || Value == 1 || Value == 2 ||
-             (Value >= 7 && Value <= 11) || (Value >= 16 && Value <= 30);
     }
     return false;
   }
@@ -376,7 +351,8 @@ public:
 
   unsigned getMemBase() const {
     assert((Kind == k_MemoryRegRegImm || Kind == k_MemoryRegImmImm ||
-            Kind == k_MemoryRegImm) && "Invalid access!");
+            Kind == k_MemoryRegImm) &&
+           "Invalid access!");
     return Mem.Base;
   }
 
@@ -492,7 +468,11 @@ public:
     addExpr(Inst, Expr);
   }
 
-  void addSImm7Operands(MCInst &Inst, unsigned N) const {
+  void addZeroOperands(MCInst &Inst, unsigned N) const {
+    addImmOperands(Inst, N);
+  }
+
+  void addUImm0to2Operands(MCInst &Inst, unsigned N) const {
     addImmOperands(Inst, N);
   }
 
@@ -520,15 +500,7 @@ public:
     addImmOperands(Inst, N);
   }
 
-  void addUImm0to2Operands(MCInst &Inst, unsigned N) const {
-    addImmOperands(Inst, N);
-  }
-
-  void addZeroOperands(MCInst &Inst, unsigned N) const {
-    addImmOperands(Inst, N);
-  }
-
-  void addMiscImmOperands(MCInst &Inst, unsigned N) const {
+  void addSImm7Operands(MCInst &Inst, unsigned N) const {
     addImmOperands(Inst, N);
   }
 
@@ -536,7 +508,7 @@ public:
     // Add as immediate when possible.  Null MCExpr = 0.
     if (!Expr)
       Inst.addOperand(MCOperand::createImm(0));
-    else if (const MCConstantExpr *CE = dyn_cast<MCConstantExpr>(Expr))
+    else if (const auto *CE = dyn_cast<MCConstantExpr>(Expr))
       Inst.addOperand(MCOperand::createImm(CE->getValue()));
     else
       Inst.addOperand(MCOperand::createExpr(Expr));
@@ -602,7 +574,7 @@ public:
 
   void addMImmOperands(MCInst &Inst, unsigned N) const {
     assert(N == 1 && "Invalid number of operands!");
-    const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(getMImmVal());
+    const auto *ConstExpr = dyn_cast<MCConstantExpr>(getMImmVal());
     assert(ConstExpr && "Null operands!");
     int64_t Value = ConstExpr->getValue();
     if (getM0Flag())
@@ -702,7 +674,7 @@ public:
   }
 
   static bool MorphToMISCReg(VEOperand &Op) {
-    const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Op.getImm());
+    const auto *ConstExpr = dyn_cast<MCConstantExpr>(Op.getImm());
     if (!ConstExpr)
       return false;
     unsigned regIdx = ConstExpr->getValue();
@@ -879,8 +851,8 @@ static StringRef parseCC(StringRef Name, unsigned Prefix, unsigned Suffix,
   // Parse instructions with a conditional code. For example, 'bne' is
   // converted into two operands 'b' and 'ne'.
   StringRef Cond = Name.slice(Prefix, Suffix);
-  VECC::CondCode CondCode = IntegerCC ? stringToVEICondCode(Cond)
-                                      : stringToVEFCondCode(Cond);
+  VECC::CondCode CondCode =
+      IntegerCC ? stringToVEICondCode(Cond) : stringToVEFCondCode(Cond);
 
   // If OmitCC is enabled, CC_AT and CC_AF is treated as a part of mnemonic.
   if (CondCode != VECC::UNKNOWN &&
@@ -907,19 +879,19 @@ static StringRef parseRD(StringRef Name, unsigned Prefix, SMLoc NameLoc,
   // Parse instructions with a conditional code. For example, 'cvt.w.d.sx.rz'
   // is converted into two operands 'cvt.w.d.sx' and '.rz'.
   StringRef RD = Name.substr(Prefix);
-  VERD::RoundingMode RoundingMode = stringToVEIRD(RD);
+  VERD::RoundingMode RoundingMode = stringToVERD(RD);
 
   if (RoundingMode != VERD::UNKNOWN) {
     Name = Name.slice(0, Prefix);
     // push 1st like `cvt.w.d.sx`
     Operands->push_back(VEOperand::CreateToken(Name, NameLoc));
-    SMLoc SuffixLoc = SMLoc::getFromPointer(NameLoc.getPointer() +
-                                            (RD.data() - Name.data()));
-    SMLoc SuffixEnd = SMLoc::getFromPointer(NameLoc.getPointer() +
-                                            (RD.end() - Name.data()));
+    SMLoc SuffixLoc =
+        SMLoc::getFromPointer(NameLoc.getPointer() + (RD.data() - Name.data()));
+    SMLoc SuffixEnd =
+        SMLoc::getFromPointer(NameLoc.getPointer() + (RD.end() - Name.data()));
     // push $round if it has rounding mode
-    Operands->push_back(VEOperand::CreateRDOp(RoundingMode, SuffixLoc,
-                                              SuffixEnd));
+    Operands->push_back(
+        VEOperand::CreateRDOp(RoundingMode, SuffixLoc, SuffixEnd));
   } else {
     Operands->push_back(VEOperand::CreateToken(Name, NameLoc));
   }
@@ -948,8 +920,13 @@ StringRef VEAsmParser::splitMnemonic(StringRef Name, SMLoc NameLoc,
     Mnemonic = parseCC(Name, Start, Next, ICC, true, NameLoc, Operands);
   } else if (Name.startswith("cmov.l.") || Name.startswith("cmov.w.") ||
              Name.startswith("cmov.d.") || Name.startswith("cmov.s.")) {
-    bool ICC = Name[5] == 'l' || Name[5] == 'w' ? true : false;
+    bool ICC = Name[5] == 'l' || Name[5] == 'w';
     Mnemonic = parseCC(Name, 7, Name.size(), ICC, false, NameLoc, Operands);
+  } else if (Name.startswith("cvt.w.d.sx") || Name.startswith("cvt.w.d.zx") ||
+             Name.startswith("cvt.w.s.sx") || Name.startswith("cvt.w.s.zx")) {
+    Mnemonic = parseRD(Name, 10, NameLoc, Operands);
+  } else if (Name.startswith("cvt.l.d")) {
+    Mnemonic = parseRD(Name, 7, NameLoc, Operands);
   } else if (Name.startswith("vfmk.l.") || Name.startswith("vfmk.w.") ||
              Name.startswith("vfmk.d.") || Name.startswith("vfmk.s.")) {
     bool ICC = Name[5] == 'l' || Name[5] == 'w' ? true : false;
@@ -958,11 +935,6 @@ StringRef VEAsmParser::splitMnemonic(StringRef Name, SMLoc NameLoc,
              Name.startswith("pvfmk.s.lo.") || Name.startswith("pvfmk.s.up.")) {
     bool ICC = Name[6] == 'l' || Name[6] == 'w' ? true : false;
     Mnemonic = parseCC(Name, 11, Name.size(), ICC, true, NameLoc, Operands);
-  } else if (Name.startswith("cvt.w.d.sx") || Name.startswith("cvt.w.d.zx") ||
-             Name.startswith("cvt.w.s.sx") || Name.startswith("cvt.w.s.zx")) {
-    Mnemonic = parseRD(Name, 10, NameLoc, Operands);
-  } else if (Name.startswith("cvt.l.d")) {
-    Mnemonic = parseRD(Name, 7, NameLoc, Operands);
   } else if (Name.startswith("vcvt.w.d.sx") || Name.startswith("vcvt.w.d.zx") ||
              Name.startswith("vcvt.w.s.sx") || Name.startswith("vcvt.w.s.zx")) {
     Mnemonic = parseRD(Name, 11, NameLoc, Operands);
@@ -990,7 +962,9 @@ bool VEAsmParser::ParseInstruction(ParseInstructionInfo &Info, StringRef Name,
   // operands correctly.
   applyMnemonicAliases(Name, getAvailableFeatures(), 0);
 
-  // First operand is token for instruction
+  // Split name to first token and the rest, e.g. "bgt.l.t" to "b", "gt", and
+  // ".l.t".  We treat "b" as a mnemonic, "gt" as first operand, and ".l.t"
+  // as second operand.
   StringRef Mnemonic = splitMnemonic(Name, NameLoc, &Operands);
 
   if (getLexer().isNot(AsmToken::EndOfStatement)) {
@@ -1030,9 +1004,9 @@ bool VEAsmParser::ParseDirective(AsmToken DirectiveID) {
     return parseDirectiveWord(4, DirectiveID.getLoc());
 
   if (IDVal == ".nword")
-    return parseDirectiveWord(is64Bit() ? 8 : 4, DirectiveID.getLoc());
+    return parseDirectiveWord(8, DirectiveID.getLoc());
 
-  if (is64Bit() && IDVal == ".xword")
+  if (IDVal == ".xword")
     return parseDirectiveWord(8, DirectiveID.getLoc());
 
   if (IDVal == ".register") {
@@ -1073,6 +1047,29 @@ bool VEAsmParser:: parseDirectiveWord(unsigned Size, SMLoc L) {
   return false;
 }
 
+const MCExpr *VEAsmParser::parseIdentifier(StringRef Identifier) {
+  StringRef Modifier;
+  // Search @modifiers like "symbol@hi".
+  size_t at = Identifier.rfind('@');
+  if (at != 0 || at != StringRef::npos) {
+    std::pair<StringRef, StringRef> Pair = Identifier.rsplit("@");
+    if (!Pair.first.empty() && !Pair.second.empty()) {
+      Identifier = Pair.first;
+      Modifier = Pair.second;
+    }
+  }
+  MCSymbol *Sym = getContext().getOrCreateSymbol(Identifier);
+  const MCExpr *Res =
+      MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None, getContext());
+  VEMCExpr::VariantKind VK = VEMCExpr::parseVariantKind(Modifier);
+  if (VK == VEMCExpr::VK_VE_None) {
+    // Create identifier using default variant kind
+    VEMCExpr::VariantKind Kind = VEMCExpr::VK_VE_REFLONG;
+    return VEMCExpr::create(Kind, Res, getContext());
+  }
+  return VEMCExpr::create(VK, Res, getContext());
+}
+
 OperandMatchResultTy VEAsmParser::parseMEMOperand(OperandVector &Operands) {
   LLVM_DEBUG(dbgs() << "parseMEMOperand\n");
   const AsmToken &Tok = Parser.getTok();
@@ -1104,32 +1101,13 @@ OperandMatchResultTy VEAsmParser::parseMEMOperand(OperandVector &Operands) {
   }
 
   case AsmToken::Identifier: {
-    StringRef Identifier, Modifier;
+    StringRef Identifier;
     if (!getParser().parseIdentifier(Identifier)) {
-      // Search @modifiers like "symbol@hi".
-      size_t at = Identifier.rfind('@');
-      if (at != 0 || at != StringRef::npos) {
-        std::pair<StringRef, StringRef> Pair = Identifier.rsplit("@");
-        if (!Pair.first.empty() && !Pair.second.empty()) {
-          Identifier = Pair.first;
-          Modifier = Pair.second;
-        }
-      }
       E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
-      MCSymbol *Sym = getContext().getOrCreateSymbol(Identifier);
+      const MCExpr *EVal = parseIdentifier(Identifier);
 
-      const MCExpr *Res = MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_None,
-                                                  getContext());
-      const MCExpr *EVal;
-      if (matchVEAsmModifiers(EVal, Res, Modifier, E)) {
-        E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
-        Offset = VEOperand::CreateImm(EVal, S, E);
-      } else {
-        E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
-        VEMCExpr::VariantKind Kind = VEMCExpr::VK_VE_REFLONG;
-        Res = VEMCExpr::create(Kind, Res, getContext());
-        Offset = VEOperand::CreateImm(Res, S, E);
-      }
+      E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+      Offset = VEOperand::CreateImm(EVal, S, E);
     }
     break;
   }
@@ -1209,9 +1187,8 @@ OperandMatchResultTy VEAsmParser::parseMEMOperand(OperandVector &Operands) {
   return MatchOperand_Success;
 }
 
-OperandMatchResultTy
-VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
-  LLVM_DEBUG(dbgs() << "parseMEMAsOpeand\n");
+OperandMatchResultTy VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
+  LLVM_DEBUG(dbgs() << "parseMEMAsOperand\n");
   const AsmToken &Tok = Parser.getTok();
   SMLoc S = Tok.getLoc();
   SMLoc E = Tok.getEndLoc();
@@ -1241,17 +1218,29 @@ VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
     break;
   }
 
+  case AsmToken::Identifier: {
+    StringRef Identifier;
+    if (!getParser().parseIdentifier(Identifier)) {
+      E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+      const MCExpr *EVal = parseIdentifier(Identifier);
+
+      E = SMLoc::getFromPointer(Parser.getTok().getLoc().getPointer() - 1);
+      Offset = VEOperand::CreateImm(EVal, S, E);
+    }
+    break;
+  }
+
   case AsmToken::Percent:
     if (ParseRegister(BaseReg, S, E))
       return MatchOperand_NoMatch;
-    Offset = VEOperand::CreateImm(MCConstantExpr::create(0, getContext()),
-                                  S, E);
+    Offset =
+        VEOperand::CreateImm(MCConstantExpr::create(0, getContext()), S, E);
     break;
 
   case AsmToken::LParen:
     // empty disp (= 0)
-    Offset = VEOperand::CreateImm(MCConstantExpr::create(0, getContext()),
-                                  S, E);
+    Offset =
+        VEOperand::CreateImm(MCConstantExpr::create(0, getContext()), S, E);
     break;
   }
 
@@ -1261,10 +1250,9 @@ VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
 
   case AsmToken::EndOfStatement:
   case AsmToken::Comma:
-    Operands.push_back(
-        BaseReg != VE::NoRegister ?
-            VEOperand::MorphToMEMri(BaseReg, std::move(Offset))
-          : VEOperand::MorphToMEMzi(std::move(Offset)));
+    Operands.push_back(BaseReg != VE::NoRegister
+                           ? VEOperand::MorphToMEMri(BaseReg, std::move(Offset))
+                           : VEOperand::MorphToMEMzi(std::move(Offset)));
     return MatchOperand_Success;
 
   case AsmToken::LParen:
@@ -1294,16 +1282,15 @@ VEAsmParser::parseMEMAsOperand(OperandVector &Operands) {
     return MatchOperand_ParseFail;
 
   Parser.Lex(); // Eat the )
-  Operands.push_back(
-      BaseReg != VE::NoRegister ?
-          VEOperand::MorphToMEMri(BaseReg, std::move(Offset))
-        : VEOperand::MorphToMEMzi(std::move(Offset)));
+  Operands.push_back(BaseReg != VE::NoRegister
+                         ? VEOperand::MorphToMEMri(BaseReg, std::move(Offset))
+                         : VEOperand::MorphToMEMzi(std::move(Offset)));
 
   return MatchOperand_Success;
 }
 
 OperandMatchResultTy VEAsmParser::parseMImmOperand(OperandVector &Operands) {
-  LLVM_DEBUG(dbgs() << "parseMImmOpeand\n");
+  LLVM_DEBUG(dbgs() << "parseMImmOperand\n");
 
   // Parsing "(" + number + ")0/1"
   const AsmToken Tok1 = Parser.getTok();
@@ -1315,8 +1302,7 @@ OperandMatchResultTy VEAsmParser::parseMImmOperand(OperandVector &Operands) {
   const AsmToken Tok2 = Parser.getTok();
   SMLoc E;
   const MCExpr *EVal;
-  if (!Tok2.is(AsmToken::Integer) ||
-      getParser().parseExpression(EVal, E)) {
+  if (!Tok2.is(AsmToken::Integer) || getParser().parseExpression(EVal, E)) {
     getLexer().UnLex(Tok1);
     return MatchOperand_NoMatch;
   }
@@ -1339,8 +1325,8 @@ OperandMatchResultTy VEAsmParser::parseMImmOperand(OperandVector &Operands) {
   }
   Parser.Lex(); // Eat the value.
   SMLoc EndLoc = SMLoc::getFromPointer(Suffix.end());
-  Operands.push_back(VEOperand::CreateMImm(EVal, Suffix == "0", Tok1.getLoc(),
-                                           EndLoc));
+  Operands.push_back(
+      VEOperand::CreateMImm(EVal, Suffix == "0", Tok1.getLoc(), EndLoc));
   return MatchOperand_Success;
 }
 
@@ -1466,70 +1452,6 @@ VEAsmParser::parseVEAsmOperand(std::unique_ptr<VEOperand> &Op) {
   return (Op) ? MatchOperand_Success : MatchOperand_ParseFail;
 }
 
-// Determine if an expression contains a reference to the symbol
-// "_GLOBAL_OFFSET_TABLE_".
-static bool hasGOTReference(const MCExpr *Expr) {
-  switch (Expr->getKind()) {
-  case MCExpr::Target:
-    if (const VEMCExpr *SE = dyn_cast<VEMCExpr>(Expr))
-      return hasGOTReference(SE->getSubExpr());
-    break;
-
-  case MCExpr::Constant:
-    break;
-
-  case MCExpr::Binary: {
-    const MCBinaryExpr *BE = cast<MCBinaryExpr>(Expr);
-    return hasGOTReference(BE->getLHS()) || hasGOTReference(BE->getRHS());
-  }
-
-  case MCExpr::SymbolRef: {
-    const MCSymbolRefExpr &SymRef = *cast<MCSymbolRefExpr>(Expr);
-    return (SymRef.getSymbol().getName() == "_GLOBAL_OFFSET_TABLE_");
-  }
-
-  case MCExpr::Unary:
-    return hasGOTReference(cast<MCUnaryExpr>(Expr)->getSubExpr());
-  }
-  return false;
-}
-
-const VEMCExpr *
-VEAsmParser::adjustPICRelocation(VEMCExpr::VariantKind VK,
-                                    const MCExpr *Sym) {
-  // When in PIC mode, "%lo(...)" and "%hi(...)" behave differently.
-  // If the expression refers contains _GLOBAL_OFFSETE_TABLE, it is
-  // actually a %pc10 or %pc22 relocation. Otherwise, they are interpreted
-  // as %got10 or %got22 relocation.
-
-  if (getContext().getObjectFileInfo()->isPositionIndependent()) {
-    switch(VK) {
-    default: break;
-    case VEMCExpr::VK_VE_LO32:
-      VK = (hasGOTReference(Sym) ? VEMCExpr::VK_VE_PC_LO32
-                                 : VEMCExpr::VK_VE_GOT_LO32);
-      break;
-    case VEMCExpr::VK_VE_HI32:
-      VK = (hasGOTReference(Sym) ? VEMCExpr::VK_VE_PC_HI32
-                                 : VEMCExpr::VK_VE_GOT_HI32);
-      break;
-    }
-  }
-
-  return VEMCExpr::create(VK, Sym, getContext());
-}
-
-bool VEAsmParser::matchVEAsmModifiers(const MCExpr *&EVal, const MCExpr* Sym,
-                                      StringRef Mod, SMLoc &EndLoc) {
-  LLVM_DEBUG(dbgs() << "matchVEAsmModifiers\n");
-
-  VEMCExpr::VariantKind VK = VEMCExpr::parseVariantKind(Mod);
-  if (VK == VEMCExpr::VK_VE_None)
-    return false;
-  EVal = adjustPICRelocation(VK, Sym);
-  return true;
-}
-
 // Force static initialization.
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeVEAsmParser() {
   RegisterMCAsmParser<VEAsmParser> A(getTheVETarget());
@@ -1549,20 +1471,20 @@ unsigned VEAsmParser::validateTargetOperandClass(MCParsedAsmOperand &GOp,
   switch (Kind) {
   default:
     break;
-  case MCK_MISC:
-    if (Op.isImm() && VEOperand::MorphToMISCReg(Op))
-      return MCTargetAsmParser::Match_Success;
-    break;
-  case MCK_F128:
-    if (Op.isReg() && VEOperand::MorphToF128Reg(Op))
-      return MCTargetAsmParser::Match_Success;
-    break;
   case MCK_F32:
     if (Op.isReg() && VEOperand::MorphToF32Reg(Op))
       return MCTargetAsmParser::Match_Success;
     break;
   case MCK_I32:
     if (Op.isReg() && VEOperand::MorphToI32Reg(Op))
+      return MCTargetAsmParser::Match_Success;
+    break;
+  case MCK_F128:
+    if (Op.isReg() && VEOperand::MorphToF128Reg(Op))
+      return MCTargetAsmParser::Match_Success;
+    break;
+  case MCK_MISC:
+    if (Op.isImm() && VEOperand::MorphToMISCReg(Op))
       return MCTargetAsmParser::Match_Success;
     break;
   case MCK_VM512:

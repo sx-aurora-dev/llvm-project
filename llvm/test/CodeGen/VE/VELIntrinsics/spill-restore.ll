@@ -23,7 +23,7 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lea %s0, -4096(, %s9)
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vst %v0,8,%s0 # 2048-byte Folded Spill
+; CHECK-NEXT:    vst %v0, 8, %s0 # 2048-byte Folded Spill
 ; CHECK-NEXT:    lea %s0, puts@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, puts@hi(, %s0)
@@ -34,7 +34,7 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lea %s0, -4096(, %s9)
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vld %v0,8,%s0 # 2048-byte Folded Reload
+; CHECK-NEXT:    vld %v0, 8, %s0 # 2048-byte Folded Reload
 ; CHECK-NEXT:    lvl %s19
 ; CHECK-NEXT:    vadds.w.sx %v0,3,%v0
 ; CHECK-NEXT:    vst %v0,8,%s18

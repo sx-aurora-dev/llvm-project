@@ -28,6 +28,7 @@
 #include "mlir/IR/Module.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/IR/Types.h"
 
 #include "llvm/Support/CommandLine.h"
@@ -1290,8 +1291,8 @@ public:
       Value b = rewriter.create<vector::BroadcastOp>(loc, rhsType, x);
       Value m;
       if (acc) {
-        Value z = rewriter.create<vector::ExtractOp>(loc, rhsType, acc, pos);
-        m = rewriter.create<vector::FMAOp>(loc, b, op.rhs(), z);
+        Value e = rewriter.create<vector::ExtractOp>(loc, rhsType, acc, pos);
+        m = rewriter.create<vector::FMAOp>(loc, b, op.rhs(), e);
       } else {
         m = rewriter.create<MulFOp>(loc, b, op.rhs());
       }
@@ -1304,14 +1305,15 @@ public:
 
 /// Progressive lowering of ConstantMaskOp.
 /// One:
-///   %x = vector.constant_mask_op [a,b]
+///   %x = vector.constant_mask [a,b]
 /// is replaced by:
 ///   %z = zero-result
-///   %l = vector.constant_mask_op [b]
+///   %l = vector.constant_mask [b]
 ///   %4 = vector.insert %l, %z[0]
 ///   ..
 ///   %x = vector.insert %l, %..[a-1]
-/// which will be folded at LLVM IR level.
+/// until a one-dimensional vector is reached. All these operations
+/// will be folded at LLVM IR level.
 class ConstantMaskOpLowering : public OpRewritePattern<vector::ConstantMaskOp> {
 public:
   using OpRewritePattern<vector::ConstantMaskOp>::OpRewritePattern;
@@ -1325,20 +1327,24 @@ public:
     int64_t rank = dimSizes.size();
     int64_t trueDim = dimSizes[0].cast<IntegerAttr>().getInt();
 
-    Value trueVal;
     if (rank == 1) {
-      trueVal = rewriter.create<ConstantOp>(
-          loc, eltType, rewriter.getIntegerAttr(eltType, 1));
-    } else {
-      VectorType lowType =
-          VectorType::get(dstType.getShape().drop_front(), eltType);
-      SmallVector<int64_t, 4> newDimSizes;
-      for (int64_t r = 1; r < rank; r++)
-        newDimSizes.push_back(dimSizes[r].cast<IntegerAttr>().getInt());
-      trueVal = rewriter.create<vector::ConstantMaskOp>(
-          loc, lowType, rewriter.getI64ArrayAttr(newDimSizes));
+      // Express constant 1-D case in explicit vector form:
+      //   [T,..,T,F,..,F].
+      SmallVector<bool, 4> values(dstType.getDimSize(0));
+      for (int64_t d = 0; d < trueDim; d++)
+        values[d] = true;
+      rewriter.replaceOpWithNewOp<ConstantOp>(
+          op, dstType, rewriter.getBoolVectorAttr(values));
+      return success();
     }
 
+    VectorType lowType =
+        VectorType::get(dstType.getShape().drop_front(), eltType);
+    SmallVector<int64_t, 4> newDimSizes;
+    for (int64_t r = 1; r < rank; r++)
+      newDimSizes.push_back(dimSizes[r].cast<IntegerAttr>().getInt());
+    Value trueVal = rewriter.create<vector::ConstantMaskOp>(
+        loc, lowType, rewriter.getI64ArrayAttr(newDimSizes));
     Value result = rewriter.create<ConstantOp>(loc, dstType,
                                                rewriter.getZeroAttr(dstType));
     for (int64_t d = 0; d < trueDim; d++) {
@@ -1351,6 +1357,16 @@ public:
   }
 };
 
+/// Progressive lowering of CreateMaskOp.
+/// One:
+///   %x = vector.create_mask %a, ... : vector<dx...>
+/// is replaced by:
+///   %l = vector.create_mask ... : vector<...>  ; one lower rank
+///   %0 = cmpi "slt", %ci, %a       |
+///   %1 = select %0, %l, %zeroes    |
+///   %r = vector.insert %1, %pr [i] | d-times
+///   %x = ....
+/// until a one-dimensional vector is reached.
 class CreateMaskOpLowering : public OpRewritePattern<vector::CreateMaskOp> {
 public:
   using OpRewritePattern<vector::CreateMaskOp>::OpRewritePattern;
@@ -1360,30 +1376,41 @@ public:
     auto loc = op.getLoc();
     auto dstType = op.getResult().getType().cast<VectorType>();
     auto eltType = dstType.getElementType();
+    int64_t dim = dstType.getDimSize(0);
     int64_t rank = dstType.getRank();
     Value idx = op.getOperand(0);
 
-    Value trueVal;
-    Value falseVal;
-    if (rank > 1) {
-      VectorType lowType =
-          VectorType::get(dstType.getShape().drop_front(), eltType);
-      trueVal = rewriter.create<vector::CreateMaskOp>(
-          loc, lowType, op.getOperands().drop_front());
-      falseVal = rewriter.create<ConstantOp>(loc, lowType,
-                                             rewriter.getZeroAttr(lowType));
+    if (rank == 1) {
+      // Express dynamic 1-D case in explicit vector form:
+      //   mask = [0,1,..,n-1] < [a,a,..,a]
+      SmallVector<int64_t, 4> values(dim);
+      for (int64_t d = 0; d < dim; d++)
+        values[d] = d;
+      Value indices =
+          rewriter.create<ConstantOp>(loc, rewriter.getI64VectorAttr(values));
+      Value bound =
+          rewriter.create<IndexCastOp>(loc, rewriter.getI64Type(), idx);
+      Value bounds = rewriter.create<SplatOp>(loc, indices.getType(), bound);
+      rewriter.replaceOpWithNewOp<CmpIOp>(op, CmpIPredicate::slt, indices,
+                                          bounds);
+      return success();
     }
 
+    VectorType lowType =
+        VectorType::get(dstType.getShape().drop_front(), eltType);
+    Value trueVal = rewriter.create<vector::CreateMaskOp>(
+        loc, lowType, op.getOperands().drop_front());
+    Value falseVal = rewriter.create<ConstantOp>(loc, lowType,
+                                                 rewriter.getZeroAttr(lowType));
     Value result = rewriter.create<ConstantOp>(loc, dstType,
                                                rewriter.getZeroAttr(dstType));
-    for (int64_t d = 0, dim = dstType.getDimSize(0); d < dim; d++) {
+    for (int64_t d = 0; d < dim; d++) {
       Value bnd = rewriter.create<ConstantOp>(loc, rewriter.getIndexAttr(d));
       Value val = rewriter.create<CmpIOp>(loc, CmpIPredicate::slt, bnd, idx);
-      if (rank > 1)
-        val = rewriter.create<SelectOp>(loc, val, trueVal, falseVal);
+      Value sel = rewriter.create<SelectOp>(loc, val, trueVal, falseVal);
       auto pos = rewriter.getI64ArrayAttr(d);
       result =
-          rewriter.create<vector::InsertOp>(loc, dstType, val, result, pos);
+          rewriter.create<vector::InsertOp>(loc, dstType, sel, result, pos);
     }
     rewriter.replaceOp(op, result);
     return success();
@@ -1452,6 +1479,61 @@ public:
     }
     rewriter.replaceOp(op, desc);
     return success();
+  }
+};
+
+// We typically should not lower general shape cast operations into data
+// movement instructions, since the assumption is that these casts are
+// optimized away during progressive lowering. For completeness, however,
+// we fall back to a reference implementation that moves all elements
+// into the right place if we get here.
+class ShapeCastOpRewritePattern : public OpRewritePattern<vector::ShapeCastOp> {
+public:
+  using OpRewritePattern<vector::ShapeCastOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(vector::ShapeCastOp op,
+                                PatternRewriter &rewriter) const override {
+    Location loc = op.getLoc();
+    auto sourceVectorType = op.getSourceVectorType();
+    auto resultVectorType = op.getResultVectorType();
+    // Intended 2D/1D lowerings with better implementations.
+    int64_t srcRank = sourceVectorType.getRank();
+    int64_t resRank = resultVectorType.getRank();
+    if ((srcRank == 2 && resRank == 1) || (srcRank == 1 && resRank == 2))
+      return failure();
+    // Compute number of elements involved in the reshape.
+    int64_t numElts = 1;
+    for (int64_t r = 0; r < srcRank; r++)
+      numElts *= sourceVectorType.getDimSize(r);
+    // Replace with data movement operations:
+    //    x[0,0,0] = y[0,0]
+    //    x[0,0,1] = y[0,1]
+    //    x[0,1,0] = y[0,2]
+    // etc., incrementing the two index vectors "row-major"
+    // within the source and result shape.
+    SmallVector<int64_t, 4> srcIdx(srcRank);
+    SmallVector<int64_t, 4> resIdx(resRank);
+    Value result = rewriter.create<ConstantOp>(
+        loc, resultVectorType, rewriter.getZeroAttr(resultVectorType));
+    for (int64_t i = 0; i < numElts; i++) {
+      if (i != 0) {
+        incIdx(srcIdx, sourceVectorType, srcRank - 1);
+        incIdx(resIdx, resultVectorType, resRank - 1);
+      }
+      Value e = rewriter.create<vector::ExtractOp>(loc, op.source(), srcIdx);
+      result = rewriter.create<vector::InsertOp>(loc, e, result, resIdx);
+    }
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+
+private:
+  static void incIdx(SmallVector<int64_t, 4> &idx, VectorType tp, int64_t r) {
+    assert(0 <= r && r < tp.getRank());
+    if (++idx[r] == tp.getDimSize(r)) {
+      idx[r] = 0;
+      incIdx(idx, tp, r - 1);
+    }
   }
 };
 
@@ -1650,7 +1732,7 @@ void ContractionOpToOuterProductOpLowering::rewrite(
 ///   ..
 ///   %x = combine %a %b ..
 /// until a pure contraction is reached (no free/batch dimensions),
-/// which is replaced by a fma/reduction op.
+/// which is replaced by a dot-product/reduction pair.
 ///
 /// TODO(ajcbik): break down into transpose/reshape/cast ops
 ///               when they become available to avoid code dup
@@ -1661,6 +1743,11 @@ ContractionOpLowering::matchAndRewrite(vector::ContractionOp op,
 
   // TODO(ajcbik): implement masks.
   if (llvm::size(op.masks()) != 0)
+    return failure();
+  // TODO(thomasraoux): support mixed mode contract lowering.
+  if (op.getLhsType().getElementType() !=
+          getElementTypeOrSelf(op.getAccType()) ||
+      op.getRhsType().getElementType() != getElementTypeOrSelf(op.getAccType()))
     return failure();
 
   // TODO(ntv, ajcbik): implement benefits, cost models.
@@ -1795,11 +1882,9 @@ Value ContractionOpLowering::lowerReduction(vector::ContractionOp op,
   // Base case.
   if (lhsType.getRank() == 1) {
     assert(rhsType.getRank() == 1 && "corrupt contraction");
-    Value zero = rewriter.create<ConstantOp>(loc, lhsType,
-                                             rewriter.getZeroAttr(lhsType));
-    Value fma = rewriter.create<vector::FMAOp>(loc, op.lhs(), op.rhs(), zero);
+    Value m = rewriter.create<MulFOp>(loc, op.lhs(), op.rhs());
     StringAttr kind = rewriter.getStringAttr("add");
-    return rewriter.create<vector::ReductionOp>(loc, resType, kind, fma,
+    return rewriter.create<vector::ReductionOp>(loc, resType, kind, m,
                                                 op.acc());
   }
   // Construct new iterator types and affine map array attribute.
@@ -1853,7 +1938,8 @@ void mlir::vector::populateVectorContractLoweringPatterns(
                   ConstantMaskOpLowering,
                   OuterProductOpLowering,
                   ShapeCastOp2DDownCastRewritePattern,
-                  ShapeCastOp2DUpCastRewritePattern>(context);
+                  ShapeCastOp2DUpCastRewritePattern,
+                  ShapeCastOpRewritePattern>(context);
   patterns.insert<TransposeOpLowering,
                   ContractionOpLowering,
                   ContractionOpToMatmulOpLowering,

@@ -40,6 +40,7 @@ define signext i32 @t_setjmp() {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # Block address taken
 ; CHECK-NEXT:    lea %s0, 1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    ld %s33, 168(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld %s32, 160(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld %s31, 152(, %s9) # 8-byte Folded Reload
