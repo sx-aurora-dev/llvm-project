@@ -3253,8 +3253,9 @@ enum CXTypeKind {
   CXType_UShortAccum = 36,
   CXType_UAccum = 37,
   CXType_ULongAccum = 38,
+  CXType_BFloat16 = 39,
   CXType_FirstBuiltin = CXType_Void,
-  CXType_LastBuiltin = CXType_ULongAccum,
+  CXType_LastBuiltin = CXType_BFloat16,
 
   CXType_Complex = 100,
   CXType_Pointer = 101,
@@ -5933,6 +5934,7 @@ typedef void *CXEvalResult;
  * If cursor is a statement declaration tries to evaluate the
  * statement and if its variable, tries to evaluate its initializer,
  * into its corresponding type.
+ * If it's an expression, tries to evaluate the expression.
  */
 CINDEX_LINKAGE CXEvalResult clang_Cursor_Evaluate(CXCursor C);
 

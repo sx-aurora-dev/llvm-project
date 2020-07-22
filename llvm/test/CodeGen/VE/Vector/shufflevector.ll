@@ -227,8 +227,8 @@ define <256 x i32> @shuffle_4x64(<256 x i32> %src) {
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm1
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = shufflevector <256 x i32> %src, <256 x i32> undef, <256 x i32>
@@ -251,8 +251,8 @@ define <256 x i32> @shuffle_vshift17(<256 x i32> %src) {
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm1
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = shufflevector <256 x i32> %src, <256 x i32> undef, <256 x i32>
@@ -289,8 +289,8 @@ define <32 x i32> @shuffle_v32_repl1to8and0(<32 x i32> %src) {
 ; CHECK-NEXT:    or %s1, -26, (0)1
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmv %v1,%s1,%v0,%vm1
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = shufflevector <32 x i32> %src, <32 x i32> undef, <32 x i32>

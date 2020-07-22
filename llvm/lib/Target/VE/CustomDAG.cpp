@@ -258,13 +258,14 @@ SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   auto ScaTy = ScaOp->getValueType(0);
   auto VLOp = Op.getOperand(1);
 
-  // v256x broadcast
+  // v256x broadcast (element has to be i64/f64 always)
   if (!IsPackedType(VT)) {
     return Op;
   }
 
   LLVM_DEBUG(dbgs() << "Legalize packed broadcast\n");
 
+  // v512x broadcast
   // This is a packed broadcast.
   // replicate the scalar sub reg (f32 or i32) onto the opposing half of the
   // scalar reg and feed it into a I64 -> v256i64 broadcast.

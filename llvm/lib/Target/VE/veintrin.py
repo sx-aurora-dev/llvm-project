@@ -77,7 +77,12 @@ class Op(object):
 
     def dagOpR(self):
         if self.kind == 'I' or self.kind == 'Z':
-            return "(LO7 ${})".format(self.name_)
+            if self.immType == "uimm7":
+                return "(ULO7 ${})".format(self.name_)
+            elif self.immType == "uimm6":
+                return "(ULO7 ${})".format(self.name_)
+            else:
+                return "(LO7 ${})".format(self.name_)
         else:
             return "{}:${}".format(self.ty_.ValueType, self.name_)
 

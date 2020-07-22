@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve -mattr=+vec | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readnone
 define double @fma_d_1(double, double, double) {
@@ -54,8 +54,8 @@ define x86_regcallcc <256 x double> @__regcall3__fma_v256d_1(<256 x double>, <25
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmul.d %v0,%v0,%v1
-; CHECK-NEXT:    vfadd.d %v0,%v0,%v2
+; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
+; CHECK-NEXT:    vfadd.d %v0, %v0, %v2
 ; CHECK-NEXT:    or %s11, 0, %s9
   %4 = fmul <256 x double> %0, %1
   %5 = fadd <256 x double> %4, %2
@@ -68,7 +68,7 @@ define x86_regcallcc <256 x double> @__regcall3__fma_v256d_2(<256 x double>, <25
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmad.d %v0,%v2,%v0,%v1
+; CHECK-NEXT:    vfmad.d %v0, %v2, %v0, %v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %4 = fmul fast <256 x double> %0, %1
   %5 = fadd fast <256 x double> %4, %2
@@ -81,8 +81,8 @@ define x86_regcallcc <256 x float> @__regcall3__fma_v256f_1(<256 x float>, <256 
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmul.s %v0,%v0,%v1
-; CHECK-NEXT:    vfadd.s %v0,%v0,%v2
+; CHECK-NEXT:    pvfmul.up %v0, %v0, %v1
+; CHECK-NEXT:    pvfadd.up %v0, %v0, %v2
 ; CHECK-NEXT:    or %s11, 0, %s9
   %4 = fmul <256 x float> %0, %1
   %5 = fadd <256 x float> %4, %2
@@ -95,7 +95,7 @@ define x86_regcallcc <256 x float> @__regcall3__fma_v256f_2(<256 x float>, <256 
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmad.s %v0,%v2,%v0,%v1
+; CHECK-NEXT:    pvfmad.up %v0, %v2, %v0, %v1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %4 = fmul fast <256 x float> %0, %1
   %5 = fadd fast <256 x float> %4, %2

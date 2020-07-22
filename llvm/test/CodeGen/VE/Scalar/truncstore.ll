@@ -33,7 +33,6 @@ define void @func2(i8 signext %p, i32* %a) {
 define void @func3(i8 signext %p, i64* %a) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    st %s0, (, %s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %p.conv = sext i8 %p to i64
@@ -44,7 +43,6 @@ define void @func3(i8 signext %p, i64* %a) {
 define void @func4(i8 signext %p, i128* %a) {
 ; CHECK-LABEL: func4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    sra.l %s2, %s0, 63
 ; CHECK-NEXT:    st %s0, (, %s1)
 ; CHECK-NEXT:    st %s2, 8(, %s1)
@@ -67,7 +65,6 @@ define void @func5(i16 signext %p, i32* %a) {
 define void @func6(i16 signext %p, i64* %a) {
 ; CHECK-LABEL: func6:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    st %s0, (, %s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %p.conv = sext i16 %p to i64
@@ -78,7 +75,6 @@ define void @func6(i16 signext %p, i64* %a) {
 define void @func7(i16 signext %p, i128* %a) {
 ; CHECK-LABEL: func7:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    sra.l %s2, %s0, 63
 ; CHECK-NEXT:    st %s0, (, %s1)
 ; CHECK-NEXT:    st %s2, 8(, %s1)
@@ -91,7 +87,6 @@ define void @func7(i16 signext %p, i128* %a) {
 define void @func8(i32 signext %p, i64* %a) {
 ; CHECK-LABEL: func8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    st %s0, (, %s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %p.conv = sext i32 %p to i64
@@ -102,7 +97,6 @@ define void @func8(i32 signext %p, i64* %a) {
 define void @func9(i32 signext %p, i128* %a) {
 ; CHECK-LABEL: func9:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    sra.l %s2, %s0, 63
 ; CHECK-NEXT:    st %s0, (, %s1)
 ; CHECK-NEXT:    st %s2, 8(, %s1)

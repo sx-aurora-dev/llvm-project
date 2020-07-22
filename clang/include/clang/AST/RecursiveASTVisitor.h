@@ -669,9 +669,6 @@ bool RecursiveASTVisitor<Derived>::TraverseStmt(Stmt *S,
   return true;
 }
 
-#define DISPATCH(NAME, CLASS, VAR)                                             \
-  return getDerived().Traverse##NAME(static_cast<CLASS *>(VAR))
-
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseType(QualType T) {
   if (T.isNull())
@@ -681,7 +678,8 @@ bool RecursiveASTVisitor<Derived>::TraverseType(QualType T) {
 #define ABSTRACT_TYPE(CLASS, BASE)
 #define TYPE(CLASS, BASE)                                                      \
   case Type::CLASS:                                                            \
-    DISPATCH(CLASS##Type, CLASS##Type, const_cast<Type *>(T.getTypePtr()));
+    return getDerived().Traverse##CLASS##Type(                                 \
+        static_cast<CLASS##Type *>(const_cast<Type *>(T.getTypePtr())));
 #include "clang/AST/TypeNodes.inc"
   }
 
@@ -730,8 +728,6 @@ bool RecursiveASTVisitor<Derived>::TraverseDecl(Decl *D) {
   }
   return true;
 }
-
-#undef DISPATCH
 
 template <typename Derived>
 bool RecursiveASTVisitor<Derived>::TraverseNestedNameSpecifier(
@@ -3004,6 +3000,8 @@ bool RecursiveASTVisitor<Derived>::TraverseOMPClause(OMPClause *C) {
   case llvm::omp::Clause::Enum:                                                \
     break;
 #include "llvm/Frontend/OpenMP/OMPKinds.def"
+  default:
+    break;
   }
   return true;
 }
@@ -3362,6 +3360,17 @@ RecursiveASTVisitor<Derived>::VisitOMPReductionClause(OMPReductionClause *C) {
   }
   for (auto *E : C->reduction_ops()) {
     TRY_TO(TraverseStmt(E));
+  }
+  if (C->getModifier() == OMPC_REDUCTION_inscan) {
+    for (auto *E : C->copy_ops()) {
+      TRY_TO(TraverseStmt(E));
+    }
+    for (auto *E : C->copy_array_temps()) {
+      TRY_TO(TraverseStmt(E));
+    }
+    for (auto *E : C->copy_array_elems()) {
+      TRY_TO(TraverseStmt(E));
+    }
   }
   return true;
 }

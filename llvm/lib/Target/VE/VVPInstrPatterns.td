@@ -12,30 +12,30 @@
 multiclass VectorGather<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, string GTPrefix> {
   // w/o mask
   def : Pat<(DataVT (vvp_gather PtrVt:$addr, (MaskVT true_mask), i32:$avl)),
-                    (!cast<Instruction>(GTPrefix#"_vvssl") $addr, 0, 0, $avl)>;
+                    (!cast<Instruction>(GTPrefix#"vizl") $addr, 0, 0, $avl)>;
   // with mask
   def : Pat<(DataVT (vvp_gather PtrVt:$addr, MaskVT:$mask, i32:$avl)),
-            (!cast<Instruction>(GTPrefix#"_vvssml") $addr, 0, 0, $mask, $avl)>;
+            (!cast<Instruction>(GTPrefix#"vizml") $addr, 0, 0, $mask, $avl)>;
 }
 
-defm : VectorGather<v256f64, v256i64, v256i1, "vgt">;
-defm : VectorGather<v256i64, v256i64, v256i1, "vgt">;
-defm : VectorGather<v256f32, v256i64, v256i1, "vgtu">;
-defm : VectorGather<v256i32, v256i64, v256i1, "vgtlzx">;
+defm : VectorGather<v256f64, v256i64, v256i1, "VGT">;
+defm : VectorGather<v256i64, v256i64, v256i1, "VGT">;
+defm : VectorGather<v256f32, v256i64, v256i1, "VGTU">;
+defm : VectorGather<v256i32, v256i64, v256i1, "VGTLZX">;
 
 multiclass VectorScatter<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, string SCPrefix> {
   // w/o mask
   def : Pat<(vvp_scatter DataVT:$data, PtrVt:$addr, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(SCPrefix#"_vvssl") $data, $addr, 0, 0, $avl)>;
+            (!cast<Instruction>(SCPrefix#"vizvl") $data, 0, 0, $addr, $avl)>;
   // with mask
   def : Pat<(vvp_scatter DataVT:$data, PtrVt:$addr, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(SCPrefix#"_vvssml") $data, $addr, 0, 0, $mask, $avl)>;
+            (!cast<Instruction>(SCPrefix#"vizvml") $data, 0, 0, $addr, $mask, $avl)>;
 }
 
-defm : VectorScatter<v256f64, v256i64, v256i1, "vsc">;
-defm : VectorScatter<v256i64, v256i64, v256i1, "vsc">;
-defm : VectorScatter<v256f32, v256i64, v256i1, "vscu">;
-defm : VectorScatter<v256i32, v256i64, v256i1, "vscl">;
+defm : VectorScatter<v256f64, v256i64, v256i1, "VSC">;
+defm : VectorScatter<v256i64, v256i64, v256i1, "VSC">;
+defm : VectorScatter<v256f32, v256i64, v256i1, "VSCU">;
+defm : VectorScatter<v256i32, v256i64, v256i1, "VSCL">;
 
 // Vector Load and Store
 multiclass VectorLoad<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, int immStride, SDNode GTWithMask, SDNode LDNoMask> {
@@ -51,13 +51,13 @@ multiclass VectorLoad<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, int i
               $avl)>;
 }
 
-multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, int immStride, SDNode LDNoMask, SDNode STNoMask> {
+multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, int immStride, SDNode LDNoMask, SDNode STNoMask> {
   // w/o mask
-  def : Pat<(DataVT (vvp_load PtrVt:$addr, (MaskVT true_mask), i32:$avl)),
+  def : Pat<(DataVT (vvp_load PtrVT:$addr, (MaskVT true_mask), i32:$avl)),
                     (LDNoMask immStride, $addr, $avl)>;
-  // FIXME
-  // def : Pat<(vvp_store PtrVt:$addr, DataVT:$vx, (MaskVT true_mask), i32:$avl),
-  //           (STNoMask $vx, immStride, $addr, $avl)>;
+
+  def : Pat<(vvp_store DataVT:$vx, PtrVT:$addr, (MaskVT true_mask), i32:$avl),
+            (STNoMask $vx, immStride, $addr, $avl)>;
 }
 
 
@@ -70,12 +70,12 @@ defm : VectorLoad<v256i32, i64, v256i1, 4, vgtlzx_vvssml, vldlzx_vIsl>;
 defm : VectorLoadStore_Packed<v512i32, i64, v512i1, 8, vld_vIsl, vst_vIsl>;
 defm : VectorLoadStore_Packed<v512f32, i64, v512i1, 8, vld_vIsl, vst_vIsl>;
 
-multiclass VectorStore<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, int immStride, SDNode STWithMask, SDNode STNoMask> {
+multiclass VectorStore<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, int immStride, SDNode STWithMask, SDNode STNoMask> {
   // w/o mask
-  def : Pat<(vvp_store DataVT:$val, PtrVt:$addr, (MaskVT true_mask), i32:$avl),
+  def : Pat<(vvp_store DataVT:$val, PtrVT:$addr, (MaskVT true_mask), i32:$avl),
             (STNoMask $val, immStride, $addr, $avl)>;
   // with mask
-  def : Pat<(vvp_store DataVT:$val, PtrVt:$addr, MaskVT:$mask, i32:$avl),
+  def : Pat<(vvp_store DataVT:$val, PtrVT:$addr, MaskVT:$mask, i32:$avl),
             (STWithMask $val, immStride, $addr, $mask, $avl)>;
 }
 
@@ -86,80 +86,80 @@ defm : VectorStore<v256i32, i64, v256i1, 4, vstl_vIsml, vstl_vIsl>;
 
 // Floating-point arithmetic
 
-multiclass VectorUnaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName, string MaskToken> {
+multiclass VectorUnaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
   ///// with vvp_select /////
   // with mask
   def : Pat<(vvp_select (OpNode DataVT:$vx, (MaskVT srcvalue), (i32 srcvalue)),
                         DataVT:$vfalse,
                         MaskVT:$mask,
                         i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vv"#MaskToken#"vl") $vx, $mask, $vfalse, $avl)>;
+            (!cast<Instruction>(OpBaseName#"vml_v") $vx, $mask, $avl, $vfalse)>;
 
   ///// w/o mask /////
   // w/o mask
   def : Pat<(OpNode DataVT:$vx, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vvl") $vx, $avl)>;
+            (!cast<Instruction>(OpBaseName#"vl") $vx, $avl)>;
 
   ///// with mask, no select /////
   def : Pat<(OpNode DataVT:$vx, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vv"#MaskToken#"vl") $vx, $mask, (DataVT (IMPLICIT_DEF)), $avl)>;
+            (!cast<Instruction>(OpBaseName#"vml") $vx, $mask, $avl)>;
 }
 
 // Expand both 64bit and 32 bit variant (256 elements)
 multiclass VectorUnaryArith_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
-  defm : VectorUnaryArith_Base<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName, "m">;
-  defm : VectorUnaryArith_Base<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName, "m">;
+  defm : VectorUnaryArith_Base<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
+  defm : VectorUnaryArith_Base<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
 }
 
-multiclass VectorBinaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName, string MaskToken> {
+multiclass VectorBinaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
   ///// with vvp_select /////
   // with mask, broadcast
-  def : Pat<(vvp_select (OpNode (DataVT (any_broadcast ScalarVT:$sx)), DataVT:$vy, (MaskVT srcvalue), (i32 srcvalue)),
+  def : Pat<(vvp_select (OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, (MaskVT srcvalue), (i32 srcvalue)),
                         DataVT:$vfalse,
                         MaskVT:$mask,
                         i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vsv"#MaskToken#"vl") ScalarVT:$sx, $vy, $mask, $vfalse, $avl)>;
+            (!cast<Instruction>(OpBaseName#"rvml_v") $sx, $vy, $mask, $avl, $vfalse)>;
   // with mask
   def : Pat<(vvp_select (OpNode DataVT:$vx, DataVT:$vy, (MaskVT srcvalue), (i32 srcvalue)),
                         DataVT:$vfalse,
                         MaskVT:$mask,
                         i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vvv"#MaskToken#"vl") $vx, $vy, $mask, $vfalse, $avl)>;
+            (!cast<Instruction>(OpBaseName#"vvml_v") $vx, $vy, $mask, $avl, $vfalse)>;
 
   ///// w/o mask /////
   // w/o mask, broadcast
-  def : Pat<(OpNode (DataVT (any_broadcast ScalarVT:$sx)), DataVT:$vy, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vsvl") ScalarVT:$sx, $vy, $avl)>;
+  def : Pat<(OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(OpBaseName#"rvl") $sx, $vy, $avl)>;
   // w/o mask
   def : Pat<(OpNode DataVT:$vx, DataVT:$vy, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vvvl") $vx, $vy, $avl)>;
+            (!cast<Instruction>(OpBaseName#"vvl") $vx, $vy, $avl)>;
 
-  ///// with mask, no select /////
+  //// ///// with mask, no select /////
   // with mask, broadcast
-  def : Pat<(OpNode (DataVT (any_broadcast ScalarVT:$sx)), DataVT:$vy, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vsv"#MaskToken#"vl") ScalarVT:$sx, $vy, $mask, (DataVT (IMPLICIT_DEF)), $avl)>;
+  def : Pat<(OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(OpBaseName#"rvml") $sx, $vy, $mask, $avl)>;
   // with mask
   def : Pat<(OpNode DataVT:$vx, DataVT:$vy, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vvv"#MaskToken#"vl") $vx, $vy, $mask, (DataVT (IMPLICIT_DEF)), $avl)>;
+            (!cast<Instruction>(OpBaseName#"vvml") $vx, $vy, $mask, $avl)>;
 }
 
 // standard binary operator (for i64/f64 data)
-multiclass VectorBinaryArith<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName, string MaskToken="m">
-  : VectorBinaryArith_Base<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName, MaskToken>;
+multiclass VectorBinaryArith<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName>
+  : VectorBinaryArith_Base<OpNode, ScalarVT, DataVT, MaskVT, OpBaseName>;
 
 // Expand both 64bit and 32 bit variant (256 elements)
 multiclass VectorBinaryArith_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
-  defm : VectorBinaryArith_Base<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName, "m">;
-  defm : VectorBinaryArith_Base<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName, "m">;
+  defm : VectorBinaryArith_Base<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
+  defm : VectorBinaryArith_Base<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
 }
 
 multiclass VectorShiftArith<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName, string MaskToken="m"> {
   // w/o mask, broadcast
   def : Pat<(DataVT (OpNode DataVT:$vx, (DataVT (any_broadcast ScalarVT:$sy)), (MaskVT true_mask), i32:$avl)),
-            (!cast<Instruction>(OpBaseName#"_vvsl") $vx, ScalarVT:$sy, $avl)>;
+            (!cast<Instruction>(OpBaseName#"vrl") DataVT:$vx, ScalarVT:$sy, i32:$avl)>;
   // w/o mask
   def : Pat<(DataVT (OpNode DataVT:$vx, DataVT:$vy, MaskVT:$vm, i32:$avl)),
-            (!cast<Instruction>(OpBaseName#"_vvv"#MaskToken#"vl") $vx, $vy, $vm, (DataVT (IMPLICIT_DEF)), $avl)>;
+            (!cast<Instruction>(OpBaseName#"vvml") $vx, $vy, $vm, $avl)>;
   // TODO fold select into op
 }
 
@@ -169,49 +169,49 @@ multiclass VectorShiftArith_ShortLong<SDPatternOperator OpNode, ValueType LongSc
   defm : VectorShiftArith<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
 }
 
-multiclass VectorTernaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName, string MaskToken="m"> {
+multiclass VectorTernaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
   //// Mask + vvp_select /////
   // with mask, broadcast first
   def : Pat<(vvp_select 
-              (OpNode (DataVT (any_broadcast ScalarVT:$sx)), DataVT:$vy, DataVT:$vz, (MaskVT srcvalue), (i32 srcvalue)),
+              (OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, DataVT:$vz, (MaskVT srcvalue), (i32 srcvalue)),
               DataVT:$vfalse,
               MaskVT:$mask,
               i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vsvv"#MaskToken#"vl") ScalarVT:$sx, $vy, $vz, $mask, $vfalse, $avl)>;
+            (!cast<Instruction>(OpBaseName#"rvvml_v") $sx, $vy, $vz, $mask, $avl, $vfalse)>;
   // with mask, broadcast second
-  def : Pat<(vvp_select (OpNode DataVT:$vx, (DataVT (any_broadcast ScalarVT:$sy)), DataVT:$vz, (MaskVT srcvalue), (i32 srcvalue)),
+  def : Pat<(vvp_select (OpNode DataVT:$vx, (any_broadcast ScalarVT:$sy), DataVT:$vz, (MaskVT srcvalue), (i32 srcvalue)),
               DataVT:$vfalse,
               MaskVT:$mask,
               i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vvsv"#MaskToken#"vl") $vx, ScalarVT:$sy, $vz, $mask, $vfalse, $avl)>;
+            (!cast<Instruction>(OpBaseName#"vrvml_v") $vx, $sy, $vz, $mask, $avl, $vfalse)>;
   // with mask
   def : Pat<(vvp_select (OpNode DataVT:$vx, DataVT:$vy, DataVT:$vz, (MaskVT srcvalue), (i32 srcvalue)),
               DataVT:$vfalse,
               MaskVT:$mask,
               i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vvvv"#MaskToken#"vl") $vx, $vy, $vz, $mask, $vfalse, $avl)>;
+            (!cast<Instruction>(OpBaseName#"vvvml_v") $vx, $vy, $vz, $mask, $avl, $vfalse)>;
 
   ///// w/o Mask /////
   // w/o mask, broadcast first
-  def : Pat<(OpNode (DataVT (any_broadcast ScalarVT:$sx)), DataVT:$vy, DataVT:$vz, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vsvvl") ScalarVT:$sx, $vy, $vz, $avl)>;
+  def : Pat<(OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, DataVT:$vz, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(OpBaseName#"rvvl") $sx, $vy, $vz, $avl)>;
   // w/o mask, broadcast second
-  def : Pat<(OpNode DataVT:$vx, (DataVT (any_broadcast ScalarVT:$sy)), DataVT:$vz, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vvsvl") $vx, ScalarVT:$sy, $vz, $avl)>;
+  def : Pat<(OpNode DataVT:$vx, (any_broadcast ScalarVT:$sy), DataVT:$vz, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(OpBaseName#"vrvl") $vx, $sy, $vz, $avl)>;
   // w/o mask
   def : Pat<(OpNode DataVT:$vx, DataVT:$vy, DataVT:$vz, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vvvvl") $vx, $vy, $vz, $avl)>;
+            (!cast<Instruction>(OpBaseName#"vvvl") $vx, $vy, $vz, $avl)>;
 
   ///// Mask /////
   // with mask, broadcast first
-  def : Pat<(OpNode (DataVT (any_broadcast ScalarVT:$sx)), DataVT:$vy, DataVT:$vz, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vsvv"#MaskToken#"vl") ScalarVT:$sx, $vy, $vz, $mask, (DataVT (IMPLICIT_DEF)), $avl)>;
+  def : Pat<(OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, DataVT:$vz, MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(OpBaseName#"rvvml") $sx, $vy, $vz, $mask, $avl)>;
   // with mask, broadcast second
-  def : Pat<(OpNode DataVT:$vx, (DataVT (any_broadcast ScalarVT:$sy)), DataVT:$vz, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vvsv"#MaskToken#"vl") $vx, ScalarVT:$sy, $vz, $mask, (DataVT (IMPLICIT_DEF)), $avl)>;
+  def : Pat<(OpNode DataVT:$vx, (any_broadcast ScalarVT:$sy), DataVT:$vz, MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(OpBaseName#"vrvml") $vx, $sy, $vz, $mask, $avl)>;
   // with mask
   def : Pat<(OpNode DataVT:$vx, DataVT:$vy, DataVT:$vz, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(OpBaseName#"_vvvv"#MaskToken#"vl") $vx, $vy, $vz, $mask, (DataVT (IMPLICIT_DEF)), $avl)>;
+            (!cast<Instruction>(OpBaseName#"vvvml") $vx, $vy, $vz, $mask, $avl)>;
 }
 
 // Expand both 64bit and 32 bit variant (256 elements)
@@ -222,31 +222,32 @@ multiclass VectorTernaryArith_ShortLong<SDPatternOperator OpNode, ValueType Long
 
 
 // Integer arithmetic (256 elements)
-defm : VectorBinaryArith_ShortLong<c_vv_add, i64, v256i64, "vaddsl", i32, v256i32, "vaddswsx">;
-defm : VectorBinaryArith_ShortLong<vvp_sub,  i64, v256i64, "vsubsl", i32, v256i32, "vsubswsx">;
-defm : VectorBinaryArith_ShortLong<c_vv_mul, i64, v256i64, "vmulsl", i32, v256i32, "vmulswsx">;
-defm : VectorBinaryArith_ShortLong<vvp_sdiv, i64, v256i64, "vdivsl", i32, v256i32, "vdivswsx">;
-defm : VectorBinaryArith_ShortLong<vvp_udiv, i64, v256i64, "vdivul", i32, v256i32, "vdivuw">;
+defm : VectorBinaryArith_ShortLong<c_vv_add, i64, v256i64, "VADDSL", i32, v256i32, "VADDSWSX">;
 
-defm : VectorShiftArith_ShortLong<vvp_srl, i64, v256i64, "vsrl",  i32, v256i32, "pvsrllo">;
-defm : VectorShiftArith_ShortLong<vvp_sra, i64, v256i64, "vsral", i32, v256i32, "pvsralo">;
-defm : VectorShiftArith_ShortLong<vvp_shl, i64, v256i64, "vsll",  i32, v256i32, "pvslllo">;
+defm : VectorBinaryArith_ShortLong<vvp_sub,  i64, v256i64, "VSUBSL", i32, v256i32, "VSUBSWSX">;
+defm : VectorBinaryArith_ShortLong<c_vv_mul, i64, v256i64, "VMULSL", i32, v256i32, "VMULSWSX">;
+defm : VectorBinaryArith_ShortLong<vvp_sdiv, i64, v256i64, "VDIVSL", i32, v256i32, "VDIVSWSX">;
+defm : VectorBinaryArith_ShortLong<vvp_udiv, i64, v256i64, "VDIVUL", i32, v256i32, "VDIVUW">;
 
-defm : VectorBinaryArith_ShortLong<vvp_and, i64, v256i64, "vand", i32, v256i32, "pvandlo">;
-defm : VectorBinaryArith_ShortLong<vvp_xor, i64, v256i64, "vxor", i32, v256i32, "pvxorlo">;
-defm : VectorBinaryArith_ShortLong<vvp_or,  i64, v256i64, "vor",  i32, v256i32, "pvorlo">;
+defm : VectorShiftArith_ShortLong<vvp_srl, i64, v256i64, "VSRL",  i32, v256i32, "PVSRLLO">;
+defm : VectorShiftArith_ShortLong<vvp_sra, i64, v256i64, "VSRAL", i32, v256i32, "PVSRALO">;
+defm : VectorShiftArith_ShortLong<vvp_shl, i64, v256i64, "VSLL",  i32, v256i32, "PVSLLLO">;
+
+defm : VectorBinaryArith_ShortLong<vvp_and, i64, v256i64, "VAND", i32, v256i32, "PVANDLO">;
+defm : VectorBinaryArith_ShortLong<vvp_xor, i64, v256i64, "VXOR", i32, v256i32, "PVXORLO">;
+defm : VectorBinaryArith_ShortLong<vvp_or,  i64, v256i64, "VOR",  i32, v256i32, "PVORLO">;
 
 // Floating-point arithmetic (256 elements)
-defm : VectorUnaryArith_ShortLong<vvp_fsqrt, f64, v256f64, "vfsqrtd", f32, v256f32, "vfsqrts">;
-defm : VectorBinaryArith_ShortLong<c_vv_fadd, f64, v256f64, "vfaddd", f32, v256f32, "vfadds">;
-defm : VectorBinaryArith_ShortLong<vvp_fsub,  f64, v256f64, "vfsubd", f32, v256f32, "vfsubs">;
-defm : VectorBinaryArith_ShortLong<c_vv_fmul, f64, v256f64, "vfmuld", f32, v256f32, "vfmuls">;
-defm : VectorBinaryArith_ShortLong<vvp_fdiv,  f64, v256f64, "vfdivd", f32, v256f32, "vfdivs">;
+defm : VectorUnaryArith_ShortLong<vvp_fsqrt, f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
+defm : VectorBinaryArith_ShortLong<c_vv_fadd, f64, v256f64, "VFADDD", f32, v256f32, "PVFADDUP">;
+defm : VectorBinaryArith_ShortLong<vvp_fsub,  f64, v256f64, "VFSUBD", f32, v256f32, "PVFSUBUP">;
+defm : VectorBinaryArith_ShortLong<c_vv_fmul, f64, v256f64, "VFMULD", f32, v256f32, "PVFMULUP">;
+defm : VectorBinaryArith_ShortLong<vvp_fdiv,  f64, v256f64, "VFDIVD", f32, v256f32, "VFDIVS">;
 
-defm : VectorBinaryArith_ShortLong<c_vv_fminnum, f64, v256f64, "vfmind", f32, v256f32, "vfmins">;
-defm : VectorBinaryArith_ShortLong<c_vv_fmaxnum, f64, v256f64, "vfmaxd", f32, v256f32, "vfmaxs">;
+defm : VectorBinaryArith_ShortLong<c_vv_fminnum, f64, v256f64, "VFMIND", f32, v256f32, "VFMINS">;
+defm : VectorBinaryArith_ShortLong<c_vv_fmaxnum, f64, v256f64, "VFMAXD", f32, v256f32, "VFMAXS">;
 
-defm : VectorTernaryArith_ShortLong<c_vv_ffma, f64, v256f64, "vfmadd", f32, v256f32, "vfmads">;
+defm : VectorTernaryArith_ShortLong<c_vv_ffma, f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
 
 // Element-wise select (256 elements)
 multiclass VectorSelect<ValueType DataVT> {
@@ -328,34 +329,35 @@ defm: both_x_to_y<v256i1, v256f64, "d", v256i32, "w", "sxrz">;
 defm : conv_x_to_y<vvp_fpround, v256i1, v256f32, v256f64, "vcvtsd", "m">;
 defm : conv_x_to_y<vvp_fpext,   v256i1, v256f64, v256f32, "vcvtds", "m">;
 
+  // CC_INE = 2, // Not Equal
 // trunc (256 elements)
 def : Pat<(v256i1 (vvp_trunc v256i32:$src, (v256i1 srcvalue), i32:$vl)),
-          (pvfmkwlone_mvl (v256i32 (pvandlo_vsvl (i32 (OR32im 1, 0)), v256i32:$src, i32:$vl)), i32:$vl)>;
+          (v256i1 (PVFMKWLOvl 2, (v256i32 (PVANDLOrvl (EXTRACT_SUBREG (ORim 1, 0), sub_i32), v256i32:$src, i32:$vl)), i32:$vl))>;
 def : Pat<(v256i1 (vvp_trunc v256i64:$src, (v256i1 srcvalue), i32:$vl)),
-          (vfmklne_mvl (v256i64 (vand_vsvl (i64 (ORim 1, 0)), v256i64:$src, i32:$vl)), i32:$vl)>;
+          (v256i1 (VFMKLvl 2, (v256i64 (VANDrvl (ORim 1, 0), v256i64:$src, i32:$vl)), i32:$vl))>;
 def : Pat<(v256i32 (vvp_trunc v256i64:$src, (v256i1 srcvalue), (i32 srcvalue))),
           (COPY_TO_REGCLASS $src, V64)>;
 
 ///// ARITHMETIC /////
 // Integer arithmetic (512 elements)
-defm : VectorBinaryArith_Base<c_vv_add, i64, v512i32, v512i1, "pvaddu", "M">; 
-defm : VectorBinaryArith_Base<vvp_sub,  i64, v512i32, v512i1, "pvsubu", "M">;
-// defm : VectorBinaryArith_Base<vvp_mul,  i64, v512i32, "vmulsl", "M">; // no packed mul
-// defm : VectorBinaryArith_Base<vvp_sdiv, i64, v512i32, "vdivsl", "M">; // no packed sdiv
-// defm : VectorBinaryArith_Base<vvp_udiv, i64, v512i32, "vdivul", "M">; // no packed udiv
-defm : VectorShiftArith<vvp_srl, i64, v512i32, v512i1, "pvsrl", "M">;
-defm : VectorShiftArith<vvp_sra, i64, v512i32, v512i1, "pvsra", "M">;
-defm : VectorShiftArith<vvp_shl, i64, v512i32, v512i1, "pvsll", "M">;
+defm : VectorBinaryArith_Base<c_vv_add, i64, v512i32, v512i1, "PVADDU">; 
+defm : VectorBinaryArith_Base<vvp_sub,  i64, v512i32, v512i1, "PVSUBU">;
+// defm : VectorBinaryArith_Base<vvp_mul,  i64, v512i32, "vmulsl">; // no packed mul
+// defm : VectorBinaryArith_Base<vvp_sdiv, i64, v512i32, "vdivsl">; // no packed sdiv
+// defm : VectorBinaryArith_Base<vvp_udiv, i64, v512i32, "vdivul">; // no packed udiv
+defm : VectorShiftArith<vvp_srl, i64, v512i32, v512i1, "PVSRL">;
+defm : VectorShiftArith<vvp_sra, i64, v512i32, v512i1, "PVSRA">;
+defm : VectorShiftArith<vvp_shl, i64, v512i32, v512i1, "PVSLL">;
 
 
 // Floating-point arithmetic (512 elements)
-defm : VectorBinaryArith_Base<c_vv_fadd,    i64, v512f32, v512i1, "pvfadd", "M">;
-defm : VectorBinaryArith_Base<c_vv_fmul,    i64, v512f32, v512i1, "pvfmul", "M">;
-defm : VectorBinaryArith_Base<vvp_fsub,     i64, v512f32, v512i1, "pvfsub", "M">;
-defm : VectorBinaryArith_Base<c_vv_fminnum, i64, v512f32, v512i1, "pvfmin", "M">;
-defm : VectorBinaryArith_Base<c_vv_fmaxnum, i64, v512f32, v512i1, "pvfmax", "M">;
+defm : VectorBinaryArith_Base<c_vv_fadd,    i64, v512f32, v512i1, "PVFADD">;
+defm : VectorBinaryArith_Base<c_vv_fmul,    i64, v512f32, v512i1, "PVFMUL">;
+defm : VectorBinaryArith_Base<vvp_fsub,     i64, v512f32, v512i1, "PVFSUB">;
+defm : VectorBinaryArith_Base<c_vv_fminnum, i64, v512f32, v512i1, "PVFMIN">;
+defm : VectorBinaryArith_Base<c_vv_fmaxnum, i64, v512f32, v512i1, "PVFMAX">;
 
-defm : VectorTernaryArith_Base<c_vv_ffma, i64, v512f32, v512i1, "pvfmad", "M">;
+defm : VectorTernaryArith_Base<c_vv_ffma, i64, v512f32, v512i1, "PVFMAD">;
 
 // Integer extension (256 elements) //
 // vNi32 to vNi64

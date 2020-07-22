@@ -135,6 +135,11 @@ using namespace SwitchCG;
 /// some float libcalls (6, 8 or 12 bits).
 static unsigned LimitFloatPrecision;
 
+static cl::opt<bool>
+    InsertAssertAlign("insert-assert-align", cl::init(true),
+                      cl::desc("Insert the experimental `assertalign` node."),
+                      cl::ReallyHidden);
+
 static cl::opt<unsigned, true>
     LimitFPPrecision("limit-float-precision",
                      cl::desc("Generate low-precision inline sequences "
@@ -205,12 +210,17 @@ static SDValue getCopyFromParts(SelectionDAG &DAG, const SDLoc &DL,
                                 MVT PartVT, EVT ValueVT, const Value *V,
                                 Optional<CallingConv::ID> CC = None,
                                 Optional<ISD::NodeType> AssertOp = None) {
+  // Let the target assemble the parts if it wants to
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  if (SDValue Val = TLI.joinRegisterPartsIntoValue(DAG, DL, Parts, NumParts,
+                                                   PartVT, ValueVT, CC))
+    return Val;
+
   if (ValueVT.isVector())
     return getCopyFromPartsVector(DAG, DL, Parts, NumParts, PartVT, ValueVT, V,
                                   CC);
 
   assert(NumParts > 0 && "No parts to assemble!");
-  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   SDValue Val = Parts[0];
 
   if (NumParts > 1) {
@@ -512,6 +522,11 @@ static void getCopyToParts(SelectionDAG &DAG, const SDLoc &DL, SDValue Val,
                            const Value *V,
                            Optional<CallingConv::ID> CallConv = None,
                            ISD::NodeType ExtendKind = ISD::ANY_EXTEND) {
+  // Let the target split the parts if it wants to
+  const TargetLowering &TLI = DAG.getTargetLoweringInfo();
+  if (TLI.splitValueIntoRegisterParts(DAG, DL, Val, Parts, NumParts, PartVT,
+                                      CallConv))
+    return;
   EVT ValueVT = Val.getValueType();
 
   // Handle the vector case separately.
@@ -730,12 +745,16 @@ static void getCopyToPartsVector(SelectionDAG &DAG, const SDLoc &DL,
   NumParts = NumRegs; // Silence a compiler warning.
   assert(RegisterVT == PartVT && "Part type doesn't match vector breakdown!");
 
-  unsigned IntermediateNumElts =
-      IntermediateVT.isVector() ? IntermediateVT.getVectorNumElements() : 1;
+  assert(IntermediateVT.isScalableVector() == ValueVT.isScalableVector() &&
+         "Mixing scalable and fixed vectors when copying in parts");
 
-  // Convert the vector to the appropriate type if necessary.
-  auto DestEltCnt = ElementCount(NumIntermediates * IntermediateNumElts,
-                                 ValueVT.isScalableVector());
+  ElementCount DestEltCnt;
+
+  if (IntermediateVT.isVector())
+    DestEltCnt = IntermediateVT.getVectorElementCount() * NumIntermediates;
+  else
+    DestEltCnt = ElementCount(NumIntermediates, false);
+
   EVT BuiltVectorTy = EVT::getVectorVT(
       *DAG.getContext(), IntermediateVT.getScalarType(), DestEltCnt);
   if (ValueVT != BuiltVectorTy) {
@@ -749,6 +768,9 @@ static void getCopyToPartsVector(SelectionDAG &DAG, const SDLoc &DL,
   SmallVector<SDValue, 8> Ops(NumIntermediates);
   for (unsigned i = 0; i != NumIntermediates; ++i) {
     if (IntermediateVT.isVector()) {
+      // This does something sensible for scalable vectors - see the
+      // definition of EXTRACT_SUBVECTOR for further details.
+      unsigned IntermediateNumElts = IntermediateVT.getVectorMinNumElements();
       Ops[i] =
           DAG.getNode(ISD::EXTRACT_SUBVECTOR, DL, IntermediateVT, Val,
                       DAG.getVectorIdxConstant(i * IntermediateNumElts, DL));
@@ -2770,6 +2792,7 @@ void SelectionDAGBuilder::visitInvoke(const InvokeInst &I) {
   // have to do anything here to lower funclet bundles.
   assert(!I.hasOperandBundlesOtherThan({LLVMContext::OB_deopt,
                                         LLVMContext::OB_gc_transition,
+                                        LLVMContext::OB_gc_live,
                                         LLVMContext::OB_funclet,
                                         LLVMContext::OB_cfguardtarget}) &&
          "Cannot lower invokes with arbitrary operand bundles yet!");
@@ -2860,14 +2883,13 @@ void SelectionDAGBuilder::visitCallBr(const CallBrInst &I) {
 
   // Retrieve successors.
   MachineBasicBlock *Return = FuncInfo.MBBMap[I.getDefaultDest()];
-  Return->setInlineAsmBrDefaultTarget();
 
   // Update successor info.
   addSuccessorWithProb(CallBrMBB, Return, BranchProbability::getOne());
   for (unsigned i = 0, e = I.getNumIndirectDests(); i < e; ++i) {
     MachineBasicBlock *Target = FuncInfo.MBBMap[I.getIndirectDest(i)];
     addSuccessorWithProb(CallBrMBB, Target, BranchProbability::getZero());
-    CallBrMBB->addInlineAsmBrIndirectTarget(Target);
+    Target->setIsInlineAsmBrIndirectTarget();
   }
   CallBrMBB->normalizeSuccProbs();
 
@@ -2938,16 +2960,6 @@ void SelectionDAGBuilder::UpdateSplitBlock(MachineBasicBlock *First,
   for (unsigned i = 0, e = SL->BitTestCases.size(); i != e; ++i)
     if (SL->BitTestCases[i].Parent == First)
       SL->BitTestCases[i].Parent = Last;
-
-  // SelectionDAGISel::FinishBasicBlock will add PHI operands for the
-  // successors of the fallthrough block. Here, we add PHI operands for the
-  // successors of the INLINEASM_BR block itself.
-  if (First->getFirstTerminator()->getOpcode() == TargetOpcode::INLINEASM_BR)
-    for (std::pair<MachineInstr *, unsigned> &pair : FuncInfo.PHINodesToUpdate)
-      if (First->isSuccessor(pair.first->getParent()))
-        MachineInstrBuilder(*First->getParent(), pair.first)
-            .addReg(pair.second)
-            .addMBB(First);
 }
 
 void SelectionDAGBuilder::visitIndirectBr(const IndirectBrInst &I) {
@@ -4954,6 +4966,15 @@ void SelectionDAGBuilder::visitTargetIntrinsic(const CallInst &I,
       Result = DAG.getNode(ISD::BITCAST, getCurSDLoc(), VT, Result);
     } else
       Result = lowerRangeToAssertZExt(DAG, I, Result);
+
+    MaybeAlign Alignment = I.getRetAlign();
+    if (!Alignment)
+      Alignment = F->getAttributes().getRetAlignment();
+    // Insert `assertalign` node if there's an alignment.
+    if (InsertAssertAlign && Alignment) {
+      Result =
+          DAG.getAssertAlign(getCurSDLoc(), Result, Alignment.valueOrOne());
+    }
 
     setValue(&I, Result);
   }
@@ -7143,6 +7164,39 @@ void SelectionDAGBuilder::visitIntrinsicCall(const CallInst &I,
                              DAG.getZExtOrTrunc(Const, getCurSDLoc(), PtrVT)));
     return;
   }
+  case Intrinsic::get_active_lane_mask: {
+    auto DL = getCurSDLoc();
+    SDValue Index = getValue(I.getOperand(0));
+    SDValue BTC = getValue(I.getOperand(1));
+    Type *ElementTy = I.getOperand(0)->getType();
+    EVT VT = TLI.getValueType(DAG.getDataLayout(), I.getType());
+    unsigned VecWidth = VT.getVectorNumElements();
+
+    SmallVector<SDValue, 16> OpsBTC;
+    SmallVector<SDValue, 16> OpsIndex;
+    SmallVector<SDValue, 16> OpsStepConstants;
+    for (unsigned i = 0; i < VecWidth; i++) {
+      OpsBTC.push_back(BTC);
+      OpsIndex.push_back(Index);
+      OpsStepConstants.push_back(DAG.getConstant(i, DL, MVT::getVT(ElementTy)));
+    }
+
+    EVT CCVT = MVT::i1;
+    CCVT = EVT::getVectorVT(I.getContext(), CCVT, VecWidth);
+
+    auto VecTy = MVT::getVT(FixedVectorType::get(ElementTy, VecWidth));
+    SDValue VectorIndex = DAG.getBuildVector(VecTy, DL, OpsIndex);
+    SDValue VectorStep = DAG.getBuildVector(VecTy, DL, OpsStepConstants);
+    SDValue VectorInduction = DAG.getNode(
+       ISD::UADDO, DL, DAG.getVTList(VecTy, CCVT), VectorIndex, VectorStep);
+    SDValue VectorBTC = DAG.getBuildVector(VecTy, DL, OpsBTC);
+    SDValue SetCC = DAG.getSetCC(DL, CCVT, VectorInduction.getValue(0),
+                                 VectorBTC, ISD::CondCode::SETULE);
+    setValue(&I, DAG.getNode(ISD::AND, DL, CCVT,
+                             DAG.getNOT(DL, VectorInduction.getValue(1), CCVT),
+                             SetCC));
+    return;
+  }
   }
 }
 
@@ -7651,7 +7705,7 @@ static SDValue getMemCmpLoad(const Value *PtrVal, MVT LoadVT,
     Type *LoadTy =
         Type::getIntNTy(PtrVal->getContext(), LoadVT.getScalarSizeInBits());
     if (LoadVT.isVector())
-      LoadTy = VectorType::get(LoadTy, LoadVT.getVectorNumElements());
+      LoadTy = FixedVectorType::get(LoadTy, LoadVT.getVectorNumElements());
 
     LoadInput = ConstantExpr::getBitCast(const_cast<Constant *>(LoadInput),
                                          PointerType::getUnqual(LoadTy));
@@ -8239,7 +8293,6 @@ public:
   }
 };
 
-using SDISelAsmOperandInfoVector = SmallVector<SDISelAsmOperandInfo, 16>;
 
 } // end anonymous namespace
 
@@ -8301,9 +8354,9 @@ static SDValue getAddressForMemoryInput(SDValue Chain, const SDLoc &Location,
   Type *Ty = OpVal->getType();
   auto &DL = DAG.getDataLayout();
   uint64_t TySize = DL.getTypeAllocSize(Ty);
-  unsigned Align = DL.getPrefTypeAlignment(Ty);
   MachineFunction &MF = DAG.getMachineFunction();
-  int SSFI = MF.getFrameInfo().CreateStackObject(TySize, Align, false);
+  int SSFI = MF.getFrameInfo().CreateStackObject(
+      TySize, DL.getPrefTypeAlign(Ty), false);
   SDValue StackSlot = DAG.getFrameIndex(SSFI, TLI.getFrameIndexTy(DL));
   Chain = DAG.getTruncStore(Chain, Location, OpInfo.CallOperand, StackSlot,
                             MachinePointerInfo::getFixedStack(MF, SSFI),
@@ -8485,7 +8538,7 @@ void SelectionDAGBuilder::visitInlineAsm(const CallBase &Call) {
   const InlineAsm *IA = cast<InlineAsm>(Call.getCalledOperand());
 
   /// ConstraintOperands - Information about all of the constraints.
-  SDISelAsmOperandInfoVector ConstraintOperands;
+  SmallVector<SDISelAsmOperandInfo, 16> ConstraintOperands;
 
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   TargetLowering::AsmOperandInfoVector TargetConstraints = TLI.ParseConstraints(
@@ -9008,7 +9061,7 @@ void SelectionDAGBuilder::visitVAArg(const VAArgInst &I) {
   SDValue V = DAG.getVAArg(
       TLI.getMemValueType(DAG.getDataLayout(), I.getType()), getCurSDLoc(),
       getRoot(), getValue(I.getOperand(0)), DAG.getSrcValue(I.getOperand(0)),
-      DL.getABITypeAlignment(I.getType()));
+      DL.getABITypeAlign(I.getType()).value());
   DAG.setRoot(V.getValue(1));
 
   if (I.getType()->isPointerTy())
@@ -10049,6 +10102,10 @@ void SelectionDAGISel::LowerArguments(const Function &F) {
   SDLoc dl = SDB->getCurSDLoc();
   const DataLayout &DL = DAG.getDataLayout();
   SmallVector<ISD::InputArg, 16> Ins;
+
+  // In Naked functions we aren't going to save any registers.
+  if (F.hasFnAttribute(Attribute::Naked))
+    return;
 
   if (!FuncInfo->CanLowerReturn) {
     // Put in an sret pointer parameter before all the other parameters.

@@ -43,7 +43,14 @@ enum class NodeKind : uint16_t {
   PrefixUnaryOperatorExpression,
   PostfixUnaryOperatorExpression,
   BinaryOperatorExpression,
+  ParenExpression,
+  IntegerLiteralExpression,
+  CharacterLiteralExpression,
+  FloatingLiteralExpression,
+  StringLiteralExpression,
+  BoolLiteralExpression,
   CxxNullPtrExpression,
+  IdExpression,
 
   // Statements.
   UnknownStatement,
@@ -83,13 +90,33 @@ enum class NodeKind : uint16_t {
   ArraySubscript,
   TrailingReturnType,
   ParametersAndQualifiers,
-  MemberPointer
+  MemberPointer,
+  NestedNameSpecifier,
+  NameSpecifier,
+  UnqualifiedId
 };
 /// For debugging purposes.
 llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, NodeKind K);
 
 /// A relation between a parent and child node, e.g. 'left-hand-side of
 /// a binary expression'. Used for implementing accessors.
+///
+/// Some roles describe parent/child relations that occur multiple times in
+/// language grammar. We define only one role to describe all instances of such
+/// recurring relations. For example, grammar for both "if" and "while"
+/// statements requires an opening paren and a closing paren. The opening
+/// paren token is assigned the OpenParen role regardless of whether it appears
+/// as a child of IfStatement or WhileStatement node. More generally, when
+/// grammar requires a certain fixed token (like a specific keyword, or an
+/// opening paren), we define a role for this token and use it across all
+/// grammar rules with the same requirement. Names of such reusable roles end
+/// with a ~Token or a ~Keyword suffix.
+///
+/// Some roles are assigned only to child nodes of one specific parent syntax
+/// node type. Names of such roles start with the name of the parent syntax tree
+/// node type. For example, a syntax node with a role
+/// BinaryOperatorExpression_leftHandSide can only appear as a child of a
+/// BinaryOperatorExpression node.
 enum class NodeRole : uint8_t {
   // Roles common to multiple node kinds.
   /// A node without a parent
@@ -102,18 +129,21 @@ enum class NodeRole : uint8_t {
   CloseParen,
   /// A keywords that introduces some grammar construct, e.g. 'if', 'try', etc.
   IntroducerKeyword,
+  /// A token that represents a literal, e.g. 'nullptr', '1', 'true', etc.
+  LiteralToken,
+  /// Tokens or Keywords
+  ArrowToken,
+  ExternKeyword,
   /// An inner statement for those that have only a single child of kind
   /// statement, e.g. loop body for while, for, etc; inner statement for case,
   /// default, etc.
   BodyStatement,
 
   // Roles specific to particular node kinds.
-  UnaryOperatorExpression_operatorToken,
+  OperatorExpression_operatorToken,
   UnaryOperatorExpression_operand,
   BinaryOperatorExpression_leftHandSide,
-  BinaryOperatorExpression_operatorToken,
   BinaryOperatorExpression_rightHandSide,
-  CxxNullPtrExpression_keyword,
   CaseStatement_value,
   IfStatement_thenStatement,
   IfStatement_elseKeyword,
@@ -125,13 +155,15 @@ enum class NodeRole : uint8_t {
   StaticAssertDeclaration_message,
   SimpleDeclaration_declarator,
   TemplateDeclaration_declaration,
-  ExplicitTemplateInstantiation_externKeyword,
   ExplicitTemplateInstantiation_declaration,
   ArraySubscript_sizeExpression,
-  TrailingReturnType_arrow,
   TrailingReturnType_declarator,
   ParametersAndQualifiers_parameter,
-  ParametersAndQualifiers_trailingReturn
+  ParametersAndQualifiers_trailingReturn,
+  IdExpression_id,
+  IdExpression_qualifier,
+  NestedNameSpecifier_specifier,
+  ParenExpression_subExpression
 };
 /// For debugging purposes.
 llvm::raw_ostream &operator<<(llvm::raw_ostream &OS, NodeRole R);
@@ -158,6 +190,56 @@ public:
   }
 };
 
+/// A sequence of these specifiers make a `nested-name-specifier`.
+/// e.g. the `std::` or `vector<int>::` in `std::vector<int>::size`.
+class NameSpecifier final : public Tree {
+public:
+  NameSpecifier() : Tree(NodeKind::NameSpecifier) {}
+  static bool classof(const Node *N) {
+    return N->kind() == NodeKind::NameSpecifier;
+  }
+};
+
+/// Models a `nested-name-specifier`. C++ [expr.prim.id.qual]
+/// e.g. the `std::vector<int>::` in `std::vector<int>::size`.
+class NestedNameSpecifier final : public Tree {
+public:
+  NestedNameSpecifier() : Tree(NodeKind::NestedNameSpecifier) {}
+  static bool classof(const Node *N) {
+    return N->kind() <= NodeKind::NestedNameSpecifier;
+  }
+  std::vector<syntax::NameSpecifier *> specifiers();
+};
+
+/// Models an `unqualified-id`. C++ [expr.prim.id.unqual]
+/// e.g. the `size` in `std::vector<int>::size`.
+class UnqualifiedId final : public Tree {
+public:
+  UnqualifiedId() : Tree(NodeKind::UnqualifiedId) {}
+  static bool classof(const Node *N) {
+    return N->kind() == NodeKind::UnqualifiedId;
+  }
+};
+
+/// Models an `id-expression`, e.g. `std::vector<int>::size`.
+/// C++ [expr.prim.id]
+/// id-expression:
+///   unqualified-id
+///   qualified-id
+/// qualified-id:
+///   nested-name-specifier template_opt unqualified-id
+class IdExpression final : public Expression {
+public:
+  IdExpression() : Expression(NodeKind::IdExpression) {}
+  static bool classof(const Node *N) {
+    return N->kind() == NodeKind::IdExpression;
+  }
+  syntax::NestedNameSpecifier *qualifier();
+  // TODO after expose `id-expression` from `DependentScopeDeclRefExpr`:
+  // Add accessor for `template_opt`.
+  syntax::UnqualifiedId *unqualifiedId();
+};
+
 /// An expression of an unknown kind, i.e. one not currently handled by the
 /// syntax tree.
 class UnknownExpression final : public Expression {
@@ -168,7 +250,72 @@ public:
   }
 };
 
-/// C++11 'nullptr' expression.
+/// Models a parenthesized expression `(E)`. C++ [expr.prim.paren]
+/// e.g. `(3 + 2)` in `a = 1 + (3 + 2);`
+class ParenExpression final : public Expression {
+public:
+  ParenExpression() : Expression(NodeKind::ParenExpression) {}
+  static bool classof(const Node *N) {
+    return N->kind() == NodeKind::ParenExpression;
+  }
+  syntax::Leaf *openParen();
+  syntax::Expression *subExpression();
+  syntax::Leaf *closeParen();
+};
+
+/// Expression for integer literals. C++ [lex.icon]
+class IntegerLiteralExpression final : public Expression {
+public:
+  IntegerLiteralExpression() : Expression(NodeKind::IntegerLiteralExpression) {}
+  static bool classof(const Node *N) {
+    return N->kind() == NodeKind::IntegerLiteralExpression;
+  }
+  syntax::Leaf *literalToken();
+};
+
+/// Expression for character literals. C++ [lex.ccon]
+class CharacterLiteralExpression final : public Expression {
+public:
+  CharacterLiteralExpression()
+      : Expression(NodeKind::CharacterLiteralExpression) {}
+  static bool classof(const Node *N) {
+    return N->kind() == NodeKind::CharacterLiteralExpression;
+  }
+  syntax::Leaf *literalToken();
+};
+
+/// Expression for floating-point literals. C++ [lex.fcon]
+class FloatingLiteralExpression final : public Expression {
+public:
+  FloatingLiteralExpression()
+      : Expression(NodeKind::FloatingLiteralExpression) {}
+  static bool classof(const Node *N) {
+    return N->kind() == NodeKind::FloatingLiteralExpression;
+  }
+  syntax::Leaf *literalToken();
+};
+
+/// Expression for string-literals. C++ [lex.string]
+class StringLiteralExpression final : public Expression {
+public:
+  StringLiteralExpression() : Expression(NodeKind::StringLiteralExpression) {}
+  static bool classof(const Node *N) {
+    return N->kind() == NodeKind::StringLiteralExpression;
+  }
+  syntax::Leaf *literalToken();
+};
+
+/// Expression for boolean literals. C++ [lex.bool]
+class BoolLiteralExpression final : public Expression {
+public:
+  BoolLiteralExpression() : Expression(NodeKind::BoolLiteralExpression) {}
+  static bool classof(const Node *N) {
+    return N->kind() == NodeKind::BoolLiteralExpression;
+  }
+  syntax::Leaf *literalToken();
+};
+
+/// Expression for the `nullptr` literal. C++ [lex.nullptr]
 class CxxNullPtrExpression final : public Expression {
 public:
   CxxNullPtrExpression() : Expression(NodeKind::CxxNullPtrExpression) {}
@@ -627,7 +774,7 @@ public:
     return N->kind() == NodeKind::TrailingReturnType;
   }
   // TODO: add accessors for specifiers.
-  syntax::Leaf *arrow();
+  syntax::Leaf *arrowToken();
   syntax::SimpleDeclarator *declarator();
 };
 

@@ -72,11 +72,11 @@ bool Type::isUnsignedInteger(unsigned width) {
 }
 
 bool Type::isSignlessIntOrIndex() {
-  return isa<IndexType>() || isSignlessInteger();
+  return isSignlessInteger() || isa<IndexType>();
 }
 
 bool Type::isSignlessIntOrIndexOrFloat() {
-  return isa<IndexType>() || isSignlessInteger() || isa<FloatType>();
+  return isSignlessInteger() || isa<IndexType, FloatType>();
 }
 
 bool Type::isSignlessIntOrFloat() {
@@ -85,7 +85,7 @@ bool Type::isSignlessIntOrFloat() {
 
 bool Type::isIntOrIndex() { return isa<IntegerType>() || isIndex(); }
 
-bool Type::isIntOrFloat() { return isa<IntegerType>() || isa<FloatType>(); }
+bool Type::isIntOrFloat() { return isa<IntegerType, FloatType>(); }
 
 bool Type::isIntOrIndexOrFloat() { return isIntOrFloat() || isIndex(); }
 
@@ -157,12 +157,7 @@ unsigned FloatType::getWidth() {
 /// Returns the floating semantics for the given type.
 const llvm::fltSemantics &FloatType::getFloatSemantics() {
   if (isBF16())
-    // Treat BF16 like a double. This is unfortunate but BF16 fltSemantics is
-    // not defined in LLVM.
-    // TODO(jpienaar): add BF16 to LLVM? fltSemantics are internal to APFloat.cc
-    // else one could add it.
-    //  static const fltSemantics semBF16 = {127, -126, 8, 16};
-    return APFloat::IEEEdouble();
+    return APFloat::BFloat();
   if (isF16())
     return APFloat::IEEEhalf();
   if (isF32())
@@ -204,7 +199,9 @@ int64_t ShapedType::getNumElements() const {
 
 int64_t ShapedType::getRank() const { return getShape().size(); }
 
-bool ShapedType::hasRank() const { return !isa<UnrankedTensorType>(); }
+bool ShapedType::hasRank() const {
+  return !isa<UnrankedMemRefType, UnrankedTensorType>();
+}
 
 int64_t ShapedType::getDimSize(unsigned idx) const {
   assert(idx < getRank() && "invalid index for shaped type");
@@ -236,7 +233,7 @@ int64_t ShapedType::getSizeInBits() const {
   // Tensors can have vectors and other tensors as elements, other shaped types
   // cannot.
   assert(isa<TensorType>() && "unsupported element type");
-  assert((elementType.isa<VectorType>() || elementType.isa<TensorType>()) &&
+  assert((elementType.isa<VectorType, TensorType>()) &&
          "unsupported tensor element type");
   return getNumElements() * elementType.cast<ShapedType>().getSizeInBits();
 }
@@ -401,8 +398,8 @@ MemRefType MemRefType::getImpl(ArrayRef<int64_t> shape, Type elementType,
   auto *context = elementType.getContext();
 
   // Check that memref is formed from allowed types.
-  if (!elementType.isIntOrFloat() && !elementType.isa<VectorType>() &&
-      !elementType.isa<ComplexType>())
+  if (!elementType.isIntOrFloat() &&
+      !elementType.isa<VectorType, ComplexType>())
     return emitOptionalError(location, "invalid memref element type"),
            MemRefType();
 
@@ -479,8 +476,8 @@ LogicalResult
 UnrankedMemRefType::verifyConstructionInvariants(Location loc, Type elementType,
                                                  unsigned memorySpace) {
   // Check that memref is formed from allowed types.
-  if (!elementType.isIntOrFloat() && !elementType.isa<VectorType>() &&
-      !elementType.isa<ComplexType>())
+  if (!elementType.isIntOrFloat() &&
+      !elementType.isa<VectorType, ComplexType>())
     return emitError(loc, "invalid memref element type");
   return success();
 }

@@ -12,7 +12,7 @@ define <1 x i64> @vec_sext_v1_i32_to_i64(<1 x i32> %a) {
 define <1 x i64> @vec_zext_v1_i32_to_i64(<1 x i32> %a) {
 ; CHECK-LABEL: vec_zext_v1_i32_to_i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = zext <1 x i32> %a to <1 x i64>
   ret <1 x i64> %r

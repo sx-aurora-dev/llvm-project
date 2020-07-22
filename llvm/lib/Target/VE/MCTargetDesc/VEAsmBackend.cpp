@@ -100,23 +100,23 @@ public:
   unsigned getNumFixupKinds() const override { return VE::NumTargetFixupKinds; }
 
   const MCFixupKindInfo &getFixupKindInfo(MCFixupKind Kind) const override {
-    const static MCFixupKindInfo InfosLE[VE::NumTargetFixupKinds] = {
-      // name                     offset bits flags
-      { "fixup_ve_reflong",       0,     32,  0 },
-      { "fixup_ve_hi32",          0,     32,  0 },
-      { "fixup_ve_lo32",          0,     32,  0 },
-      { "fixup_ve_pc_hi32",       0,     32,  MCFixupKindInfo::FKF_IsPCRel },
-      { "fixup_ve_pc_lo32",       0,     32,  MCFixupKindInfo::FKF_IsPCRel },
-      { "fixup_ve_got_hi32",      0,     32,  0 },
-      { "fixup_ve_got_lo32",      0,     32,  0 },
-      { "fixup_ve_gotoff_hi32",   0,     32,  0 },
-      { "fixup_ve_gotoff_lo32",   0,     32,  0 },
-      { "fixup_ve_plt_hi32",      0,     32,  0 },
-      { "fixup_ve_plt_lo32",      0,     32,  0 },
-      { "fixup_ve_tls_gd_hi32",   0,     32,  0 },
-      { "fixup_ve_tls_gd_lo32",   0,     32,  0 },
-      { "fixup_ve_tpoff_hi32",    0,     32,  0 },
-      { "fixup_ve_tpoff_lo32",    0,     32,  0 },
+    const static MCFixupKindInfo Infos[VE::NumTargetFixupKinds] = {
+        // name, offset, bits, flags
+        {"fixup_ve_reflong", 0, 32, 0},
+        {"fixup_ve_hi32", 0, 32, 0},
+        {"fixup_ve_lo32", 0, 32, 0},
+        {"fixup_ve_pc_hi32", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
+        {"fixup_ve_pc_lo32", 0, 32, MCFixupKindInfo::FKF_IsPCRel},
+        {"fixup_ve_got_hi32", 0, 32, 0},
+        {"fixup_ve_got_lo32", 0, 32, 0},
+        {"fixup_ve_gotoff_hi32", 0, 32, 0},
+        {"fixup_ve_gotoff_lo32", 0, 32, 0},
+        {"fixup_ve_plt_hi32", 0, 32, 0},
+        {"fixup_ve_plt_lo32", 0, 32, 0},
+        {"fixup_ve_tls_gd_hi32", 0, 32, 0},
+        {"fixup_ve_tls_gd_lo32", 0, 32, 0},
+        {"fixup_ve_tpoff_hi32", 0, 32, 0},
+        {"fixup_ve_tpoff_lo32", 0, 32, 0},
     };
 
     if (Kind < FirstTargetFixupKind)
@@ -124,7 +124,7 @@ public:
 
     assert(unsigned(Kind - FirstTargetFixupKind) < getNumFixupKinds() &&
            "Invalid kind!");
-    return InfosLE[Kind - FirstTargetFixupKind];
+    return Infos[Kind - FirstTargetFixupKind];
   }
 
   bool shouldForceRelocation(const MCAssembler &Asm, const MCFixup &Fixup,
@@ -142,7 +142,9 @@ public:
 
   bool mayNeedRelaxation(const MCInst &Inst,
                          const MCSubtargetInfo &STI) const override {
-    // FIXME.
+    // Not implemented yet.  For example, if we have a branch with
+    // lager than SIMM32 immediate value, we want to relaxation such
+    // branch instructions.
     return false;
   }
 
@@ -151,14 +153,15 @@ public:
   bool fixupNeedsRelaxation(const MCFixup &Fixup, uint64_t Value,
                             const MCRelaxableFragment *DF,
                             const MCAsmLayout &Layout) const override {
-    // FIXME.
-    llvm_unreachable("fixupNeedsRelaxation() unimplemented");
+    // Not implemented yet.  For example, if we have a branch with
+    // lager than SIMM32 immediate value, we want to relaxation such
+    // branch instructions.
     return false;
   }
   void relaxInstruction(MCInst &Inst,
                         const MCSubtargetInfo &STI) const override {
-    // FIXME.
-    llvm_unreachable("relaxInstruction() unimplemented");
+    // Aurora VE doesn't support relaxInstruction yet.
+    llvm_unreachable("relaxInstruction() should not be called");
   }
 
   bool writeNopData(raw_ostream &OS, uint64_t Count) const override {

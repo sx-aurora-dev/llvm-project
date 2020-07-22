@@ -48,7 +48,7 @@ define i32 @caller2() {
 ; CHECK-LABEL: caller2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 10, (0)1
-; CHECK-NEXT:    stl %s0, 248(, %s11)
+; CHECK-NEXT:    st %s0, 248(, %s11)
 ; CHECK-NEXT:    or %s34, 9, (0)1
 ; CHECK-NEXT:    lea %s0, callee2@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -61,7 +61,7 @@ define i32 @caller2() {
 ; CHECK-NEXT:    or %s5, 6, (0)1
 ; CHECK-NEXT:    or %s6, 7, (0)1
 ; CHECK-NEXT:    or %s7, 8, (0)1
-; CHECK-NEXT:    stl %s34, 240(, %s11)
+; CHECK-NEXT:    st %s34, 240(, %s11)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = tail call i32 @callee2(i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10)
@@ -75,29 +75,29 @@ define i32 @caller3() {
 ; CHECK-LABEL: caller3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 10, (0)1
-; CHECK-NEXT:    stl %s0, 248(, %s11)
+; CHECK-NEXT:    st %s0, 248(, %s11)
 ; CHECK-NEXT:    or %s0, 9, (0)1
-; CHECK-NEXT:    stl %s0, 240(, %s11)
+; CHECK-NEXT:    st %s0, 240(, %s11)
 ; CHECK-NEXT:    or %s7, 8, (0)1
-; CHECK-NEXT:    stl %s7, 232(, %s11)
+; CHECK-NEXT:    st %s7, 232(, %s11)
 ; CHECK-NEXT:    or %s6, 7, (0)1
-; CHECK-NEXT:    stl %s6, 224(, %s11)
+; CHECK-NEXT:    st %s6, 224(, %s11)
 ; CHECK-NEXT:    or %s5, 6, (0)1
-; CHECK-NEXT:    stl %s5, 216(, %s11)
+; CHECK-NEXT:    st %s5, 216(, %s11)
 ; CHECK-NEXT:    or %s4, 5, (0)1
-; CHECK-NEXT:    stl %s4, 208(, %s11)
+; CHECK-NEXT:    st %s4, 208(, %s11)
 ; CHECK-NEXT:    lea.sl %s0, 1074790400
 ; CHECK-NEXT:    st %s0, 200(, %s11)
 ; CHECK-NEXT:    or %s2, 3, (0)1
-; CHECK-NEXT:    stl %s2, 192(, %s11)
+; CHECK-NEXT:    st %s2, 192(, %s11)
 ; CHECK-NEXT:    or %s1, 2, (0)1
-; CHECK-NEXT:    stl %s1, 184(, %s11)
+; CHECK-NEXT:    st %s1, 184(, %s11)
 ; CHECK-NEXT:    or %s0, 1, (0)1
 ; CHECK-NEXT:    lea %s3, callee3@lo
 ; CHECK-NEXT:    and %s3, %s3, (32)0
 ; CHECK-NEXT:    lea.sl %s12, callee3@hi(, %s3)
 ; CHECK-NEXT:    lea.sl %s3, 1074790400
-; CHECK-NEXT:    stl %s0, 176(, %s11)
+; CHECK-NEXT:    st %s0, 176(, %s11)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = tail call i32 (i32, ...) @callee3(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10)
@@ -111,7 +111,7 @@ define i32 @caller4() {
 ; CHECK-LABEL: caller4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s0, 10, (0)1
-; CHECK-NEXT:    stl %s0, 248(, %s11)
+; CHECK-NEXT:    st %s0, 248(, %s11)
 ; CHECK-NEXT:    or %s34, 9, (0)1
 ; CHECK-NEXT:    lea %s0, callee4@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -124,7 +124,7 @@ define i32 @caller4() {
 ; CHECK-NEXT:    or %s5, 6, (0)1
 ; CHECK-NEXT:    or %s6, 7, (0)1
 ; CHECK-NEXT:    or %s7, 8, (0)1
-; CHECK-NEXT:    stl %s34, 240(, %s11)
+; CHECK-NEXT:    st %s34, 240(, %s11)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = tail call i32 bitcast (i32 (...)* @callee4 to i32 (i32, i32, i32, double, i32, i32, i32, i32, i32, i32)*)(i32 1, i32 2, i32 3, double 4.000000e+00, i32 5, i32 6, i32 7, i32 8, i32 9, i32 10)

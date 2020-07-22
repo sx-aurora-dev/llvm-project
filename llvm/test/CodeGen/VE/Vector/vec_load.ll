@@ -80,7 +80,7 @@ define x86_regcallcc <128 x double> @vec_gather_v128f64(<128 x double*> %P, <128
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vgt %v0,%v0,0,0,%vm1
+; CHECK-NEXT:    vgt %v0, %v0, 0, 0, %vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = call <128 x double> @llvm.masked.gather.v128f64.v128p0f64(<128 x double*> %P, i32 16, <128 x i1> %M, <128 x double> undef)
   ret <128 x double> %r
@@ -92,7 +92,7 @@ define <256 x double> @vec_gather_v256f64(<256 x double*> %P, <256 x i1> %M) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vgt %v0,%v0,0,0,%vm1
+; CHECK-NEXT:    vgt %v0, %v0, 0, 0, %vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = call <256 x double> @llvm.masked.gather.v256f64.v256p0f64(<256 x double*> %P, i32 16, <256 x i1> %M, <256 x double> undef)
   ret <256 x double> %r
@@ -104,9 +104,9 @@ define <256 x double> @vec_gather_pt_v256f64(<256 x double*> %P, <256 x double> 
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vgt %v2,%v0,0,0,%vm1
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    vgt %v2, %v0, 0, 0, %vm1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmrg %v0,%v1,%v2,%vm1

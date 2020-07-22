@@ -28,7 +28,7 @@ define i128 @selectccsgti16(i16 signext, i16 signext, i128, i128) {
   ret i128 %6
 }
 
-define i128 @selectccsgti32(i32, i32, i128, i128) {
+define i128 @selectccsgti32(i32 signext, i32 signext, i128, i128) {
 ; CHECK-LABEL: selectccsgti32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1

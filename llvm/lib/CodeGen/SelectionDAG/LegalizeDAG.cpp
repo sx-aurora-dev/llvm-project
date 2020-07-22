@@ -3353,8 +3353,7 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
   }
   case ISD::UREM:
   case ISD::SREM:
-    Tmp1 = TLI.expandSUREM(Node, DAG);
-    if (Tmp1) 
+    if (TLI.expandREM(Node, Tmp1, DAG))
       Results.push_back(Tmp1);
     break;
   case ISD::UDIV:

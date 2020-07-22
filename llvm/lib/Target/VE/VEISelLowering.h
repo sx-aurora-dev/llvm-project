@@ -163,7 +163,15 @@ public:
 
   SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
 
+  /// Return true if the target has native support for
+  /// the specified value type and it is 'desirable' to use the type for the
+  /// given node type. e.g. On VE i32 is legal, but undesirable i32 for
+  /// AND/OR/XOR instructions since VE doesn't have those instructions for
+  /// i32.
+  bool isTypeDesirableForOp(unsigned Opc, EVT VT) const override;
+
   SDValue combineExtBoolTrunc(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineTRUNCATE(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineSelectCC(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineSelect(SDNode *N, DAGCombinerInfo &DCI) const;

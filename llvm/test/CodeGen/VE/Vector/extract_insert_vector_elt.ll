@@ -46,7 +46,6 @@ define x86_regcallcc i32 @__regcall3__extract_test(<16 x i32>) {
 ; CHECK-LABEL: __regcall3__extract_test:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lvs %s0,%v0(0)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = extractelement <16 x i32> %0, i32 0
   ret i32 %2
@@ -68,7 +67,6 @@ define x86_regcallcc i32 @__regcall3__extract_v512i32(<512 x i32>) {
 ; CHECK-LABEL: __regcall3__extract_v512i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lvs %s0,%v0(3)
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = extractelement <512 x i32> %0, i32 3
   ret i32 %2
@@ -90,7 +88,6 @@ define x86_regcallcc float @__regcall3__extract_v512f32(<512 x float>) {
 ; CHECK-LABEL: __regcall3__extract_v512f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lvs %s0,%v0(3)
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = extractelement <512 x float> %0, i32 3
   ret float %2
@@ -100,19 +97,18 @@ define x86_regcallcc float @__regcall3__extract_v512f32(<512 x float>) {
 define x86_regcallcc <512 x i32> @__regcall3__insert_v512i32r(<512 x i32>, i32) {
 ; CHECK-LABEL: __regcall3__insert_v512i32r:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lea %s2, 176(, %s11)
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vstl %v0,4,%s2
-; CHECK-NEXT:    lea %s3, 1024(, %s2)
-; CHECK-NEXT:    vstl %v1,4,%s3
+; CHECK-NEXT:    lea %s1, 176(, %s11)
+; CHECK-NEXT:    lea %s2, 1024(, %s1)
+; CHECK-NEXT:    lea %s3, 256
+; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    vstl %v1,4,%s2
+; CHECK-NEXT:    vstl %v0,4,%s1
 ; CHECK-NEXT:    and %s0, %s0, (55)0
 ; CHECK-NEXT:    sll %s0, %s0, 2
 ; CHECK-NEXT:    or %s4, 2, (0)1
 ; CHECK-NEXT:    stl %s4, 176(%s0, %s11)
-; CHECK-NEXT:    vldl.zx %v0,4,%s2
-; CHECK-NEXT:    vldl.zx %v1,4,%s3
+; CHECK-NEXT:    vldl.zx %v0,4,%s1
+; CHECK-NEXT:    vldl.zx %v1,4,%s2
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = insertelement <512 x i32> %0, i32 2, i32 %1
   ret <512 x i32> %3
@@ -122,13 +118,12 @@ define x86_regcallcc <512 x i32> @__regcall3__insert_v512i32r(<512 x i32>, i32) 
 define x86_regcallcc i32 @__regcall3__extract_v512i32r(<512 x i32>, i32) {
 ; CHECK-LABEL: __regcall3__extract_v512i32r:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lea %s2, 176(, %s11)
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vstl %v0,4,%s2
-; CHECK-NEXT:    lea %s2, 1024(, %s2)
+; CHECK-NEXT:    lea %s1, 176(, %s11)
+; CHECK-NEXT:    lea %s2, 1024(, %s1)
+; CHECK-NEXT:    lea %s3, 256
+; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vstl %v1,4,%s2
+; CHECK-NEXT:    vstl %v0,4,%s1
 ; CHECK-NEXT:    and %s0, %s0, (55)0
 ; CHECK-NEXT:    sll %s0, %s0, 2
 ; CHECK-NEXT:    ldl.sx %s0, 176(%s0, %s11)
@@ -141,19 +136,18 @@ define x86_regcallcc i32 @__regcall3__extract_v512i32r(<512 x i32>, i32) {
 define x86_regcallcc <512 x float> @__regcall3__insert_v512f32r(<512 x float>, i32) {
 ; CHECK-LABEL: __regcall3__insert_v512f32r:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lea %s2, 176(, %s11)
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vstu %v0,4,%s2
-; CHECK-NEXT:    lea %s3, 1024(, %s2)
-; CHECK-NEXT:    vstu %v1,4,%s3
+; CHECK-NEXT:    lea %s1, 176(, %s11)
+; CHECK-NEXT:    lea %s2, 1024(, %s1)
+; CHECK-NEXT:    lea %s3, 256
+; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    vstu %v1,4,%s2
+; CHECK-NEXT:    vstu %v0,4,%s1
 ; CHECK-NEXT:    and %s0, %s0, (55)0
 ; CHECK-NEXT:    sll %s0, %s0, 2
 ; CHECK-NEXT:    lea %s4, 1065353216
 ; CHECK-NEXT:    stl %s4, 176(%s0, %s11)
-; CHECK-NEXT:    vldu %v0,4,%s2
-; CHECK-NEXT:    vldu %v1,4,%s3
+; CHECK-NEXT:    vldu %v0,4,%s1
+; CHECK-NEXT:    vldu %v1,4,%s2
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = insertelement <512 x float> %0, float 1.0, i32 %1
   ret <512 x float> %3
@@ -163,13 +157,12 @@ define x86_regcallcc <512 x float> @__regcall3__insert_v512f32r(<512 x float>, i
 define x86_regcallcc float @__regcall3__extract_v512f32r(<512 x float>, i32) {
 ; CHECK-LABEL: __regcall3__extract_v512f32r:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lea %s2, 176(, %s11)
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vstu %v0,4,%s2
-; CHECK-NEXT:    lea %s2, 1024(, %s2)
+; CHECK-NEXT:    lea %s1, 176(, %s11)
+; CHECK-NEXT:    lea %s2, 1024(, %s1)
+; CHECK-NEXT:    lea %s3, 256
+; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vstu %v1,4,%s2
+; CHECK-NEXT:    vstu %v0,4,%s1
 ; CHECK-NEXT:    and %s0, %s0, (55)0
 ; CHECK-NEXT:    sll %s0, %s0, 2
 ; CHECK-NEXT:    ldu %s0, 176(%s0, %s11)

@@ -22,6 +22,7 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AssumeBundleQueries.h"
 #include "llvm/Analysis/AssumptionCache.h"
 #include "llvm/Analysis/InstructionSimplify.h"
@@ -43,13 +44,13 @@
 #include "llvm/IR/PredicatedInst.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
-#include "llvm/IR/IntrinsicsX86.h"
-#include "llvm/IR/IntrinsicsARM.h"
 #include "llvm/IR/IntrinsicsAArch64.h"
+#include "llvm/IR/IntrinsicsAMDGPU.h"
+#include "llvm/IR/IntrinsicsARM.h"
 #include "llvm/IR/IntrinsicsHexagon.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
-#include "llvm/IR/IntrinsicsAMDGPU.h"
 #include "llvm/IR/IntrinsicsPowerPC.h"
+#include "llvm/IR/IntrinsicsX86.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/PatternMatch.h"
@@ -2387,6 +2388,14 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
       return FAdd;
     }
 
+    // fma x, y, 0 -> fmul x, y
+    // This is always valid for -0.0, but requires nsz for +0.0 as
+    // -0.0 + 0.0 = 0.0, which would not be the same as the fmul on its own.
+    if (match(II->getArgOperand(2), m_NegZeroFP()) ||
+        (match(II->getArgOperand(2), m_PosZeroFP()) &&
+         II->getFastMathFlags().noSignedZeros()))
+      return BinaryOperator::CreateFMulFMF(Src0, Src1, II);
+
     break;
   }
   case Intrinsic::copysign: {
@@ -4219,11 +4228,16 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     break;
   case Intrinsic::assume: {
     Value *IIOperand = II->getArgOperand(0);
+    SmallVector<OperandBundleDef, 4> OpBundles;
+    II->getOperandBundlesAsDefs(OpBundles);
+    bool HasOpBundles = !OpBundles.empty();
     // Remove an assume if it is followed by an identical assume.
     // TODO: Do we need this? Unless there are conflicting assumptions, the
     // computeKnownBits(IIOperand) below here eliminates redundant assumes.
     Instruction *Next = II->getNextNonDebugInstruction();
-    if (match(Next, m_Intrinsic<Intrinsic::assume>(m_Specific(IIOperand))))
+    if (HasOpBundles &&
+        match(Next, m_Intrinsic<Intrinsic::assume>(m_Specific(IIOperand))) &&
+        !cast<IntrinsicInst>(Next)->hasOperandBundles())
       return eraseInstFromFunction(CI);
 
     // Canonicalize assume(a && b) -> assume(a); assume(b);
@@ -4233,14 +4247,15 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
     Value *AssumeIntrinsic = II->getCalledOperand();
     Value *A, *B;
     if (match(IIOperand, m_And(m_Value(A), m_Value(B)))) {
-      Builder.CreateCall(AssumeIntrinsicTy, AssumeIntrinsic, A, II->getName());
+      Builder.CreateCall(AssumeIntrinsicTy, AssumeIntrinsic, A, OpBundles,
+                         II->getName());
       Builder.CreateCall(AssumeIntrinsicTy, AssumeIntrinsic, B, II->getName());
       return eraseInstFromFunction(*II);
     }
     // assume(!(a || b)) -> assume(!a); assume(!b);
     if (match(IIOperand, m_Not(m_Or(m_Value(A), m_Value(B))))) {
       Builder.CreateCall(AssumeIntrinsicTy, AssumeIntrinsic,
-                         Builder.CreateNot(A), II->getName());
+                         Builder.CreateNot(A), OpBundles, II->getName());
       Builder.CreateCall(AssumeIntrinsicTy, AssumeIntrinsic,
                          Builder.CreateNot(B), II->getName());
       return eraseInstFromFunction(*II);
@@ -4256,7 +4271,8 @@ Instruction *InstCombiner::visitCallInst(CallInst &CI) {
         isValidAssumeForContext(II, LHS, &DT)) {
       MDNode *MD = MDNode::get(II->getContext(), None);
       LHS->setMetadata(LLVMContext::MD_nonnull, MD);
-      return eraseInstFromFunction(*II);
+      if (!HasOpBundles)
+        return eraseInstFromFunction(*II);
 
       // TODO: apply nonnull return attributes to calls and invokes
       // TODO: apply range metadata for range check patterns?
@@ -4538,7 +4554,7 @@ static void annotateAnyAllocSite(CallBase &Call, const TargetLibraryInfo *TLI) {
                       Attribute::getWithDereferenceableOrNullBytes(
                           Call.getContext(), Op1C->getZExtValue()));
     // Add alignment attribute if alignment is a power of two constant.
-    if (Op0C) {
+    if (Op0C && Op0C->getValue().ult(llvm::Value::MaximumAlignment)) {
       uint64_t AlignmentVal = Op0C->getZExtValue();
       if (llvm::isPowerOf2_64(AlignmentVal))
         Call.addAttribute(AttributeList::ReturnIndex,
@@ -4964,11 +4980,8 @@ bool InstCombiner::transformConstExprCastCall(CallBase &Call) {
   NewCall->setCallingConv(Call.getCallingConv());
   NewCall->setAttributes(NewCallerPAL);
 
-  // Preserve the weight metadata for the new call instruction. The metadata
-  // is used by SamplePGO to check callsite's hotness.
-  uint64_t W;
-  if (Caller->extractProfTotalWeight(W))
-    NewCall->setProfWeight(W);
+  // Preserve prof metadata if any.
+  NewCall->copyMetadata(*Caller, {LLVMContext::MD_prof});
 
   // Insert a cast of the return type as necessary.
   Instruction *NC = NewCall;

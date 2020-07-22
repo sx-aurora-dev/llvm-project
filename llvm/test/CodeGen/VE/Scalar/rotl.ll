@@ -21,12 +21,12 @@ define i64 @func1(i64 %a, i32 %b) {
 define signext i32 @func2(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: func2:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    sla.w.sx %s2, %s0, %s1
 ; CHECK-NEXT:    subs.w.sx %s1, 32, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, %s1
 ; CHECK-NEXT:    or %s0, %s0, %s2
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a.sl = shl i32 %a, %b
   %b.inv = sub nsw i32 32, %b
@@ -38,12 +38,12 @@ define signext i32 @func2(i32 signext %a, i32 signext %b) {
 define zeroext i32 @func3(i32 zeroext %a, i32 zeroext %b) {
 ; CHECK-LABEL: func3:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    sla.w.sx %s2, %s0, %s1
 ; CHECK-NEXT:    subs.w.sx %s1, 32, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, %s1
 ; CHECK-NEXT:    or %s0, %s0, %s2
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %a.sl = shl i32 %a, %b
   %b.inv = sub nsw i32 32, %b

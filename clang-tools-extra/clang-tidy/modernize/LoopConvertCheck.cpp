@@ -476,7 +476,7 @@ LoopConvertCheck::RangeDescriptor::RangeDescriptor()
 
 LoopConvertCheck::LoopConvertCheck(StringRef Name, ClangTidyContext *Context)
     : ClangTidyCheck(Name, Context), TUInfo(new TUTrackingInfo),
-      MaxCopySize(std::stoull(Options.get("MaxCopySize", "16"))),
+      MaxCopySize(Options.get("MaxCopySize", 16ULL)),
       MinConfidence(Options.get("MinConfidence", getConfidenceMapping(),
                                 Confidence::CL_Reasonable)),
       NamingStyle(Options.get("NamingStyle", getStyleMapping(),
@@ -621,6 +621,7 @@ void LoopConvertCheck::doConversion(
   QualType Type = Context->getAutoDeductType();
   if (!Descriptor.ElemType.isNull() && Descriptor.ElemType->isFundamentalType())
     Type = Descriptor.ElemType.getUnqualifiedType();
+  Type = Type.getDesugaredType(*Context);
 
   // If the new variable name is from the aliased variable, then the reference
   // type for the new variable should only be used if the aliased variable was

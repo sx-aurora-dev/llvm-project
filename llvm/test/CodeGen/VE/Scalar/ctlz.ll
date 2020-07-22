@@ -31,10 +31,8 @@ define i64 @func64(i64 %p) {
 define signext i32 @func32s(i32 signext %p) {
 ; CHECK-LABEL: func32s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i32 @llvm.ctlz.i32(i32 %p, i1 true)
   ret i32 %r
@@ -43,10 +41,8 @@ define signext i32 @func32s(i32 signext %p) {
 define zeroext i32 @func32z(i32 zeroext %p) {
 ; CHECK-LABEL: func32z:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i32 @llvm.ctlz.i32(i32 %p, i1 true)
   ret i32 %r
@@ -67,7 +63,6 @@ define i16 @func16s(i16 signext %p) {
 define i16 @func16z(i16 zeroext %p) {
 ; CHECK-LABEL: func16z:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, -16, %s0
@@ -91,7 +86,6 @@ define i8 @func8s(i8 signext %p) {
 define i8 @func8z(i8 zeroext %p) {
 ; CHECK-LABEL: func8z:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 def $sx0
 ; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, -24, %s0

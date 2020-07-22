@@ -23,8 +23,8 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Operator.h"
 #include "llvm/IR/NoFolder.h"
+#include "llvm/IR/Operator.h"
 #include "llvm/IR/Statepoint.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
@@ -71,8 +71,9 @@ Value *IRBuilderBase::getCastedInt8PtrValue(Value *Ptr) {
 static CallInst *createCallHelper(Function *Callee, ArrayRef<Value *> Ops,
                                   IRBuilderBase *Builder,
                                   const Twine &Name = "",
-                                  Instruction *FMFSource = nullptr) {
-  CallInst *CI = Builder->CreateCall(Callee, Ops, Name);
+                                  Instruction *FMFSource = nullptr,
+                                  ArrayRef<OperandBundleDef> OpBundles = {}) {
+  CallInst *CI = Builder->CreateCall(Callee, Ops, OpBundles, Name);
   if (FMFSource)
     CI->copyFastMathFlags(FMFSource);
   return CI;
@@ -449,14 +450,16 @@ CallInst *IRBuilderBase::CreateInvariantStart(Value *Ptr, ConstantInt *Size) {
   return createCallHelper(TheFn, Ops, this);
 }
 
-CallInst *IRBuilderBase::CreateAssumption(Value *Cond) {
+CallInst *
+IRBuilderBase::CreateAssumption(Value *Cond,
+                                ArrayRef<OperandBundleDef> OpBundles) {
   assert(Cond->getType() == getInt1Ty() &&
          "an assumption condition must be of type i1");
 
   Value *Ops[] = { Cond };
   Module *M = BB->getParent()->getParent();
   Function *FnAssume = Intrinsic::getDeclaration(M, Intrinsic::assume);
-  return createCallHelper(FnAssume, Ops, this);
+  return createCallHelper(FnAssume, Ops, this, "", nullptr, OpBundles);
 }
 
 /// Create a call to a Masked Load intrinsic.
@@ -629,11 +632,10 @@ CallInst *IRBuilderBase::CreateMaskedScatter(Value *Data, Value *Ptrs,
   return CreateMaskedIntrinsic(Intrinsic::masked_scatter, Ops, OverloadedTypes);
 }
 
-template <typename T0, typename T1>
+template <typename T0>
 static std::vector<Value *>
 getStatepointArgs(IRBuilderBase &B, uint64_t ID, uint32_t NumPatchBytes,
-                  Value *ActualCallee, uint32_t Flags, ArrayRef<T0> CallArgs,
-                  ArrayRef<T1> GCArgs) {
+                  Value *ActualCallee, uint32_t Flags, ArrayRef<T0> CallArgs) {
   std::vector<Value *> Args;
   Args.push_back(B.getInt64(ID));
   Args.push_back(B.getInt32(NumPatchBytes));
@@ -645,15 +647,15 @@ getStatepointArgs(IRBuilderBase &B, uint64_t ID, uint32_t NumPatchBytes,
   // They will be removed from the signature of gc.statepoint shortly.
   Args.push_back(B.getInt32(0));
   Args.push_back(B.getInt32(0));
-  Args.insert(Args.end(), GCArgs.begin(), GCArgs.end());
-
+  // GC args are now encoded in the gc-live operand bundle
   return Args;
 }
 
-template<typename T1, typename T2>
+template<typename T1, typename T2, typename T3>
 static std::vector<OperandBundleDef>
 getStatepointBundles(Optional<ArrayRef<T1>> TransitionArgs,
-                     Optional<ArrayRef<T2>> DeoptArgs) {
+                     Optional<ArrayRef<T2>> DeoptArgs,
+                     ArrayRef<T3> GCArgs) {
   std::vector<OperandBundleDef> Rval;
   if (DeoptArgs) {
     SmallVector<Value*, 16> DeoptValues;
@@ -665,6 +667,11 @@ getStatepointBundles(Optional<ArrayRef<T1>> TransitionArgs,
     TransitionValues.insert(TransitionValues.end(),
                             TransitionArgs->begin(), TransitionArgs->end());
     Rval.emplace_back("gc-transition", TransitionValues);
+  }
+  if (GCArgs.size()) {
+    SmallVector<Value*, 16> LiveValues;
+    LiveValues.insert(LiveValues.end(), GCArgs.begin(), GCArgs.end());
+    Rval.emplace_back("gc-live", LiveValues);
   }
   return Rval;
 }
@@ -690,10 +697,11 @@ static CallInst *CreateGCStatepointCallCommon(
 
   std::vector<Value *> Args =
       getStatepointArgs(*Builder, ID, NumPatchBytes, ActualCallee, Flags,
-                        CallArgs, GCArgs);
+                        CallArgs);
 
   return Builder->CreateCall(FnStatepoint, Args,
-                             getStatepointBundles(TransitionArgs, DeoptArgs),
+                             getStatepointBundles(TransitionArgs, DeoptArgs,
+                                                  GCArgs),
                              Name);
 }
 
@@ -744,10 +752,11 @@ static InvokeInst *CreateGCStatepointInvokeCommon(
 
   std::vector<Value *> Args =
       getStatepointArgs(*Builder, ID, NumPatchBytes, ActualInvokee, Flags,
-                        InvokeArgs, GCArgs);
+                        InvokeArgs);
 
   return Builder->CreateInvoke(FnStatepoint, NormalDest, UnwindDest, Args,
-                               getStatepointBundles(TransitionArgs, DeoptArgs),
+                               getStatepointBundles(TransitionArgs, DeoptArgs,
+                                                    GCArgs),
                                Name);
 }
 
@@ -1155,63 +1164,37 @@ Value *IRBuilderBase::CreatePreserveStructAccessIndex(
   return Fn;
 }
 
-CallInst *IRBuilderBase::CreateAlignmentAssumptionHelper(
-    const DataLayout &DL, Value *PtrValue, Value *Mask, Type *IntPtrTy,
-    Value *OffsetValue, Value **TheCheck) {
-  Value *PtrIntValue = CreatePtrToInt(PtrValue, IntPtrTy, "ptrint");
-
-  if (OffsetValue) {
-    bool IsOffsetZero = false;
-    if (const auto *CI = dyn_cast<ConstantInt>(OffsetValue))
-      IsOffsetZero = CI->isZero();
-
-    if (!IsOffsetZero) {
-      if (OffsetValue->getType() != IntPtrTy)
-        OffsetValue = CreateIntCast(OffsetValue, IntPtrTy, /*isSigned*/ true,
-                                    "offsetcast");
-      PtrIntValue = CreateSub(PtrIntValue, OffsetValue, "offsetptr");
-    }
-  }
-
-  Value *Zero = ConstantInt::get(IntPtrTy, 0);
-  Value *MaskedPtr = CreateAnd(PtrIntValue, Mask, "maskedptr");
-  Value *InvCond = CreateICmpEQ(MaskedPtr, Zero, "maskcond");
-  if (TheCheck)
-    *TheCheck = InvCond;
-
-  return CreateAssumption(InvCond);
+CallInst *IRBuilderBase::CreateAlignmentAssumptionHelper(const DataLayout &DL,
+                                                         Value *PtrValue,
+                                                         Value *AlignValue,
+                                                         Value *OffsetValue) {
+  SmallVector<Value *, 4> Vals({PtrValue, AlignValue});
+  if (OffsetValue)
+    Vals.push_back(OffsetValue);
+  OperandBundleDefT<Value *> AlignOpB("align", Vals);
+  return CreateAssumption(ConstantInt::getTrue(getContext()), {AlignOpB});
 }
 
-CallInst *IRBuilderBase::CreateAlignmentAssumption(
-    const DataLayout &DL, Value *PtrValue, unsigned Alignment,
-    Value *OffsetValue, Value **TheCheck) {
+CallInst *IRBuilderBase::CreateAlignmentAssumption(const DataLayout &DL,
+                                                   Value *PtrValue,
+                                                   unsigned Alignment,
+                                                   Value *OffsetValue) {
   assert(isa<PointerType>(PtrValue->getType()) &&
          "trying to create an alignment assumption on a non-pointer?");
   assert(Alignment != 0 && "Invalid Alignment");
   auto *PtrTy = cast<PointerType>(PtrValue->getType());
   Type *IntPtrTy = getIntPtrTy(DL, PtrTy->getAddressSpace());
-
-  Value *Mask = ConstantInt::get(IntPtrTy, Alignment - 1);
-  return CreateAlignmentAssumptionHelper(DL, PtrValue, Mask, IntPtrTy,
-                                         OffsetValue, TheCheck);
+  Value *AlignValue = ConstantInt::get(IntPtrTy, Alignment);
+  return CreateAlignmentAssumptionHelper(DL, PtrValue, AlignValue, OffsetValue);
 }
 
-CallInst *IRBuilderBase::CreateAlignmentAssumption(
-    const DataLayout &DL, Value *PtrValue, Value *Alignment,
-    Value *OffsetValue, Value **TheCheck) {
+CallInst *IRBuilderBase::CreateAlignmentAssumption(const DataLayout &DL,
+                                                   Value *PtrValue,
+                                                   Value *Alignment,
+                                                   Value *OffsetValue) {
   assert(isa<PointerType>(PtrValue->getType()) &&
          "trying to create an alignment assumption on a non-pointer?");
-  auto *PtrTy = cast<PointerType>(PtrValue->getType());
-  Type *IntPtrTy = getIntPtrTy(DL, PtrTy->getAddressSpace());
-
-  if (Alignment->getType() != IntPtrTy)
-    Alignment = CreateIntCast(Alignment, IntPtrTy, /*isSigned*/ false,
-                              "alignmentcast");
-
-  Value *Mask = CreateSub(Alignment, ConstantInt::get(IntPtrTy, 1), "mask");
-
-  return CreateAlignmentAssumptionHelper(DL, PtrValue, Mask, IntPtrTy,
-                                         OffsetValue, TheCheck);
+  return CreateAlignmentAssumptionHelper(DL, PtrValue, Alignment, OffsetValue);
 }
 
 IRBuilderDefaultInserter::~IRBuilderDefaultInserter() {}

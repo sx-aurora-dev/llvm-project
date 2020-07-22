@@ -11,6 +11,8 @@
 
 #include "clang/ASTMatchers/ASTMatchFinder.h"
 #include "clang/Frontend/ASTUnit.h"
+#include "clang/Testing/CommandLineArgs.h"
+#include "clang/Testing/TestClangConfig.h"
 #include "clang/Tooling/Tooling.h"
 #include "gtest/gtest.h"
 
@@ -57,21 +59,31 @@ private:
   const std::unique_ptr<BoundNodesCallback> FindResultReviewer;
 };
 
-enum class LanguageMode {
-  Cxx11,
-  Cxx14,
-  Cxx17,
-  Cxx2a,
-  Cxx11OrLater,
-  Cxx14OrLater,
-  Cxx17OrLater,
-  Cxx2aOrLater
-};
+inline ArrayRef<TestLanguage> langCxx11OrLater() {
+  static const TestLanguage Result[] = {Lang_CXX11, Lang_CXX14, Lang_CXX17,
+                                        Lang_CXX20};
+  return ArrayRef<TestLanguage>(Result);
+}
+
+inline ArrayRef<TestLanguage> langCxx14OrLater() {
+  static const TestLanguage Result[] = {Lang_CXX14, Lang_CXX17, Lang_CXX20};
+  return ArrayRef<TestLanguage>(Result);
+}
+
+inline ArrayRef<TestLanguage> langCxx17OrLater() {
+  static const TestLanguage Result[] = {Lang_CXX17, Lang_CXX20};
+  return ArrayRef<TestLanguage>(Result);
+}
+
+inline ArrayRef<TestLanguage> langCxx20OrLater() {
+  static const TestLanguage Result[] = {Lang_CXX20};
+  return ArrayRef<TestLanguage>(Result);
+}
 
 template <typename T>
 testing::AssertionResult matchesConditionally(
     const Twine &Code, const T &AMatcher, bool ExpectMatch,
-    llvm::ArrayRef<llvm::StringRef> CompileArgs,
+    ArrayRef<std::string> CompileArgs,
     const FileContentMappings &VirtualMappedFiles = FileContentMappings(),
     StringRef Filename = "input.cc") {
   bool Found = false, DynamicFound = false;
@@ -83,17 +95,29 @@ testing::AssertionResult matchesConditionally(
     return testing::AssertionFailure() << "Could not add dynamic matcher";
   std::unique_ptr<FrontendActionFactory> Factory(
       newFrontendActionFactory(&Finder));
-  // Some tests need rtti/exceptions on.  Use an unknown-unknown triple so we
-  // don't instantiate the full system toolchain.  On Linux, instantiating the
-  // toolchain involves stat'ing large portions of /usr/lib, and this slows down
-  // not only this test, but all other tests, via contention in the kernel.
-  //
-  // FIXME: This is a hack to work around the fact that there's no way to do the
-  // equivalent of runToolOnCodeWithArgs without instantiating a full Driver.
-  // We should consider having a function, at least for tests, that invokes cc1.
-  std::vector<std::string> Args(CompileArgs.begin(), CompileArgs.end());
-  Args.insert(Args.end(), {"-frtti", "-fexceptions",
-                           "-target", "i386-unknown-unknown"});
+  std::vector<std::string> Args = {
+      // Some tests need rtti/exceptions on.
+      "-frtti", "-fexceptions",
+      // Ensure that tests specify the C++ standard version that they need.
+      "-Werror=c++14-extensions", "-Werror=c++17-extensions",
+      "-Werror=c++20-extensions"};
+  // Append additional arguments at the end to allow overriding the default
+  // choices that we made above.
+  llvm::copy(CompileArgs, std::back_inserter(Args));
+  if (llvm::find(Args, "-target") == Args.end()) {
+    // Use an unknown-unknown triple so we don't instantiate the full system
+    // toolchain.  On Linux, instantiating the toolchain involves stat'ing
+    // large portions of /usr/lib, and this slows down not only this test, but
+    // all other tests, via contention in the kernel.
+    //
+    // FIXME: This is a hack to work around the fact that there's no way to do
+    // the equivalent of runToolOnCodeWithArgs without instantiating a full
+    // Driver.  We should consider having a function, at least for tests, that
+    // invokes cc1.
+    Args.push_back("-target");
+    Args.push_back("i386-unknown-unknown");
+  }
+
   if (!runToolOnCodeWithArgs(
           Factory->create(), Code, Args, Filename, "clang-tool",
           std::make_shared<PCHContainerOperations>(), VirtualMappedFiles)) {
@@ -116,65 +140,13 @@ testing::AssertionResult matchesConditionally(
 }
 
 template <typename T>
-testing::AssertionResult matchesConditionally(
-    const Twine &Code, const T &AMatcher, bool ExpectMatch,
-    llvm::StringRef CompileArg,
-    const FileContentMappings &VirtualMappedFiles = FileContentMappings(),
-    StringRef Filename = "input.cc") {
-  return matchesConditionally(Code, AMatcher, ExpectMatch,
-                              llvm::makeArrayRef(CompileArg),
-                              VirtualMappedFiles, Filename);
-}
-
-template <typename T>
 testing::AssertionResult
 matchesConditionally(const Twine &Code, const T &AMatcher, bool ExpectMatch,
-                     const LanguageMode &Mode) {
-  std::vector<LanguageMode> LangModes;
-  switch (Mode) {
-  case LanguageMode::Cxx11:
-  case LanguageMode::Cxx14:
-  case LanguageMode::Cxx17:
-  case LanguageMode::Cxx2a:
-    LangModes = {Mode};
-    break;
-  case LanguageMode::Cxx11OrLater:
-    LangModes = {LanguageMode::Cxx11, LanguageMode::Cxx14, LanguageMode::Cxx17,
-                 LanguageMode::Cxx2a};
-    break;
-  case LanguageMode::Cxx14OrLater:
-    LangModes = {LanguageMode::Cxx14, LanguageMode::Cxx17, LanguageMode::Cxx2a};
-    break;
-  case LanguageMode::Cxx17OrLater:
-    LangModes = {LanguageMode::Cxx17, LanguageMode::Cxx2a};
-    break;
-  case LanguageMode::Cxx2aOrLater:
-    LangModes = {LanguageMode::Cxx2a};
-  }
-
-  for (auto Mode : LangModes) {
-    StringRef LangModeArg;
-    switch (Mode) {
-    case LanguageMode::Cxx11:
-      LangModeArg = "-std=c++11";
-      break;
-    case LanguageMode::Cxx14:
-      LangModeArg = "-std=c++14";
-      break;
-    case LanguageMode::Cxx17:
-      LangModeArg = "-std=c++17";
-      break;
-    case LanguageMode::Cxx2a:
-      LangModeArg = "-std=c++2a";
-      break;
-    default:
-      llvm_unreachable("Invalid language mode");
-    }
-
-    auto Result = matchesConditionally(Code, AMatcher, ExpectMatch,
-                                       {LangModeArg, "-Werror=c++14-extensions",
-                                        "-Werror=c++17-extensions",
-                                        "-Werror=c++20-extensions"});
+                     ArrayRef<TestLanguage> TestLanguages) {
+  for (auto Lang : TestLanguages) {
+    auto Result = matchesConditionally(
+        Code, AMatcher, ExpectMatch, getCommandLineArgsForTesting(Lang),
+        FileContentMappings(), getFilenameForTesting(Lang));
     if (!Result)
       return Result;
   }
@@ -185,15 +157,15 @@ matchesConditionally(const Twine &Code, const T &AMatcher, bool ExpectMatch,
 template <typename T>
 testing::AssertionResult
 matches(const Twine &Code, const T &AMatcher,
-        const LanguageMode &Mode = LanguageMode::Cxx11) {
-  return matchesConditionally(Code, AMatcher, true, Mode);
+        ArrayRef<TestLanguage> TestLanguages = {Lang_CXX11}) {
+  return matchesConditionally(Code, AMatcher, true, TestLanguages);
 }
 
 template <typename T>
 testing::AssertionResult
 notMatches(const Twine &Code, const T &AMatcher,
-           const LanguageMode &Mode = LanguageMode::Cxx11) {
-  return matchesConditionally(Code, AMatcher, false, Mode);
+           ArrayRef<TestLanguage> TestLanguages = {Lang_CXX11}) {
+  return matchesConditionally(Code, AMatcher, false, TestLanguages);
 }
 
 template <typename T>
@@ -207,20 +179,13 @@ testing::AssertionResult matchesObjC(const Twine &Code, const T &AMatcher,
 
 template <typename T>
 testing::AssertionResult matchesC(const Twine &Code, const T &AMatcher) {
-  return matchesConditionally(Code, AMatcher, true, "", FileContentMappings(),
+  return matchesConditionally(Code, AMatcher, true, {}, FileContentMappings(),
                               "input.c");
-}
-
-template <typename T>
-testing::AssertionResult matchesC99(const Twine &Code, const T &AMatcher) {
-  return matchesConditionally(Code, AMatcher, true, "-std=c99",
-                              FileContentMappings(), "input.c");
 }
 
 template <typename T>
 testing::AssertionResult notMatchesC(const Twine &Code, const T &AMatcher) {
-  return matchesConditionally(Code, AMatcher, false, "", FileContentMappings(),
-                              "input.c");
+  return matchesConditionally(Code, AMatcher, false, {Lang_C89});
 }
 
 template <typename T>
@@ -302,13 +267,13 @@ testing::AssertionResult notMatchesWithCuda(const Twine &Code,
 template <typename T>
 testing::AssertionResult matchesWithOpenMP(const Twine &Code,
                                            const T &AMatcher) {
-  return matchesConditionally(Code, AMatcher, true, "-fopenmp=libomp");
+  return matchesConditionally(Code, AMatcher, true, {"-fopenmp=libomp"});
 }
 
 template <typename T>
 testing::AssertionResult notMatchesWithOpenMP(const Twine &Code,
                                               const T &AMatcher) {
-  return matchesConditionally(Code, AMatcher, false, "-fopenmp=libomp");
+  return matchesConditionally(Code, AMatcher, false, {"-fopenmp=libomp"});
 }
 
 template <typename T>
@@ -447,6 +412,26 @@ private:
   int Count;
   const std::string ExpectedName;
   std::string Name;
+};
+
+class ASTMatchersTest : public ::testing::Test,
+                        public ::testing::WithParamInterface<TestClangConfig> {
+protected:
+  template <typename T>
+  testing::AssertionResult matches(const Twine &Code, const T &AMatcher) {
+    const TestClangConfig &TestConfig = GetParam();
+    return clang::ast_matchers::matchesConditionally(
+        Code, AMatcher, /*ExpectMatch=*/true, TestConfig.getCommandLineArgs(),
+        FileContentMappings(), getFilenameForTesting(TestConfig.Language));
+  }
+
+  template <typename T>
+  testing::AssertionResult notMatches(const Twine &Code, const T &AMatcher) {
+    const TestClangConfig &TestConfig = GetParam();
+    return clang::ast_matchers::matchesConditionally(
+        Code, AMatcher, /*ExpectMatch=*/false, TestConfig.getCommandLineArgs(),
+        FileContentMappings(), getFilenameForTesting(TestConfig.Language));
+  }
 };
 
 } // namespace ast_matchers

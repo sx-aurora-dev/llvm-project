@@ -13,8 +13,8 @@ define x86_regcallcc <1024 x i32> @brdv512i32x2(i32) {
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrdl %v3,%s0
-; CHECK-NEXT:    lea %s12, 256
-; CHECK-NEXT:    lvl %s12
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1,(0)1,%v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %val = insertelement <1024 x i32> undef, i32 %0, i32 0
