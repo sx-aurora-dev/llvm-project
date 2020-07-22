@@ -15,6 +15,8 @@ define void @test_vp_harness(<256 x i64>* %Out, <256 x i64> %i0) {
 define void @test_vp_add_sub_mul(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_add_sub_mul:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vadds.l %v2, %v0, %v1, %vm1
 ; CHECK-NEXT:    vsubs.l %v0, %v0, %v1, %vm1
@@ -34,6 +36,8 @@ define void @test_vp_add_sub_mul(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64>
 define void @test_vp_su_div(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_su_div:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vdivs.l %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    vdivu.l %v0, %v0, %v1, %vm1
@@ -51,6 +55,8 @@ define void @test_vp_su_div(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1,
 define void @test_vp_bitarith(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_bitarith:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vand %v2, %v0, %v1, %vm1
 ; CHECK-NEXT:    vor %v3, %v2, %v1, %vm1

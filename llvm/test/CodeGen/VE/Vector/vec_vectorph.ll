@@ -9,9 +9,9 @@ define <256 x double> @test_cshaw_vector_ph(double %x) {
 ; CHECK-NEXT:    vbrd %v0,%s2
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfadd.d %v0,%s0,%v0
+; CHECK-NEXT:    vfadd.d %v0, %s0, %v0
 ; CHECK-NEXT:    lea.sl %s0, 1071644672
-; CHECK-NEXT:    vfmul.d %v0,%s0,%v0
+; CHECK-NEXT:    vfmul.d %v0, %s0, %v0
 ; CHECK-NEXT:    lvs %s0,%v0(0)
 ; CHECK-NEXT:    vbrd %v0,%s0
 ; CHECK-NEXT:    or %s11, 0, %s9

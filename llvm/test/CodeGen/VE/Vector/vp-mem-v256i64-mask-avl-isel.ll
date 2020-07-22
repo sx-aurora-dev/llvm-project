@@ -15,6 +15,8 @@ define void @test_vp_harness(<256 x i64>* %Out, <256 x i64> %i0) {
 define void @test_vp_memory_i64(<256 x i64>* %VecPtr, <256 x i64*> %PtrVec, <256 x i64> %i0, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_memory_i64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v1
 ; CHECK-NEXT:    # implicit-def: $v2
@@ -36,6 +38,8 @@ define void @test_vp_memory_i64(<256 x i64>* %VecPtr, <256 x i64*> %PtrVec, <256
 define void @test_vp_memory_f64(<256 x double>* %VecPtr, <256 x double*> %PtrVec, <256 x double> %i0, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_memory_f64:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v1
 ; CHECK-NEXT:    # implicit-def: $v2

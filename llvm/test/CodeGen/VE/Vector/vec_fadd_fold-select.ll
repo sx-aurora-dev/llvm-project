@@ -6,7 +6,7 @@ define <256 x float> @vec_add_fold_v256f32(<256 x float> %a, <256 x float> %b, <
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfadd.s %v1,%v0,%v1,%vm1
+; CHECK-NEXT:    pvfadd.up %v1, %v0, %v1, %vm1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1

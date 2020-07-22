@@ -15,6 +15,8 @@ define void @test_vp_harness(<256 x i64>* %Out, <256 x i64> %i0) {
 define void @test_vp_fadd_fsub_fmul_fneg_fma(<256 x double>* %Out, <256 x double> %f0, <256 x double> %f1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fadd_fsub_fmul_fneg_fma:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfadd.d %v2, %v0, %v1, %vm1
 ; CHECK-NEXT:    vfsub.d %v3, %v0, %v1, %vm1
@@ -37,6 +39,8 @@ define void @test_vp_fadd_fsub_fmul_fneg_fma(<256 x double>* %Out, <256 x double
 define void @test_vp_fdiv(<256 x double>* %Out, <256 x double> %f0, <256 x double> %f1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fdiv:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfdiv.d %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    lea %s1, 256
@@ -52,6 +56,8 @@ define void @test_vp_fdiv(<256 x double>* %Out, <256 x double> %f0, <256 x doubl
 define void @test_vp_fmin_fmax(<256 x double>* %O1, <256 x double>* %O2, <256 x double> %f0, <256 x double> %f1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fmin_fmax:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vfmin.d %v2, %v0, %v1, %vm1
 ; CHECK-NEXT:    vfmax.d %v0, %v0, %v1, %vm1
