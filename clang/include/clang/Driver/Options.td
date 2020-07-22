@@ -3237,10 +3237,10 @@ def mvzeroupper : Flag<["-"], "mvzeroupper">, Group<m_x86_Features_Group>;
 def mno_vzeroupper : Flag<["-"], "mno-vzeroupper">, Group<m_x86_Features_Group>;
 
 def mvevec : Flag<["-"], "mvevec">, Group<m_ve_Features_Group>,
-  HelpText<"Enable vectorization for VE">,
+  HelpText<"Enable vectorization (VE only)">,
   Flags<[CC1Option]>;
 def mno_vevec : Flag<["-"], "mno-vevec">, Group<m_ve_Features_Group>,
-  HelpText<"Disable vectorization for VE">,
+  HelpText<"Disable vectorization (VE only)">,
   Flags<[CC1Option]>;
 
 // These are legacy user-facing driver-level option spellings. They are always
