@@ -152,8 +152,10 @@ public:
   bool selectADDRzi(SDValue N, SDValue &Base, SDValue &Offset);
 
   // broadcast matching
+#if 0
   bool selectBroadcast(SDValue N, SDValue &BCast);
   SDValue extractScalarOperand(SDNode* BCN);
+#endif
 
   /// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
   /// inline asm expressions.
@@ -176,6 +178,7 @@ private:
 };
 } // end anonymous namespace
 
+#if 0
 static unsigned
 getScalarSubregIndex(EVT ScalarVT) {
   if (ScalarVT == MVT::i32) return VE::sub_i32;
@@ -194,6 +197,7 @@ bool VEDAGToDAGISel::selectBroadcast(SDValue N, SDValue &BCast) {
   BCast = N;
   return true;
 }
+#endif
 
 bool VEDAGToDAGISel::selectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
                                    SDValue &Offset) {

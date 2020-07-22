@@ -216,15 +216,14 @@ public:
     return Args.size() * VF;
   }
 
-  unsigned getMemoryOpCost(unsigned Opcode, Type *Src, MaybeAlign Alignment,
+  unsigned getMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                            unsigned AddressSpace,
                            TargetTransformInfo::TargetCostKind CostKind,
                            const Instruction *I = nullptr) const {
-    unsigned AlignBytes = Alignment.valueOrOne().value();
-    return getMaskedMemoryOpCost(Opcode, Src, AlignBytes, AddressSpace, CostKind);
+    return getMaskedMemoryOpCost(Opcode, Src, Alignment, AddressSpace, CostKind);
   }
 
-  unsigned getMaskedMemoryOpCost(unsigned Opcode, Type *Src, unsigned Alignment,
+  unsigned getMaskedMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                                  unsigned AddressSpace,
                                  TargetTransformInfo::TargetCostKind CostKind) const {
     if (isa<VectorType>(*Src) && !isVectorLaneType(*Src)) {

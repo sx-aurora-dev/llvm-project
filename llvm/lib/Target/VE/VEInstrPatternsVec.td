@@ -3,15 +3,7 @@
 // intrinsics and v256f64 vector regisetr only.
 //===----------------------------------------------------------------------===//
 
-let Predicates = [IsNotVectorizeSubTarget] in {
-  // Load/store of vector registers.
-  def : Pat<(v256f64 (load I64:$addr)),
-            (VLDirl 8, $addr,
-                (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-  def : Pat<(store v256f64:$vx, I64:$addr),
-            (VSTirvl 8, $addr, $vx,
-                (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-
+let Predicates = [HasFeatureVELIntrin] in {
   // Load/store of vector mask registers.
   def : Pat<(v4i64 (load ADDRrii:$addr)),
             (LDVMrii ADDRrii:$addr)>;
@@ -23,13 +15,13 @@ let Predicates = [IsNotVectorizeSubTarget] in {
             (STVM512rii ADDRrii:$addr, $vx)>;
 
   // Boardcast for vector mask register.
-  def : Pat<(v4i64 (vec_broadcast i64:$sy)),
+  def : Pat<(v4i64 (any_broadcast i64:$sy)),
             (LVMxir_x 3, $sy,
             (LVMxir_x 2, $sy,
             (LVMxir_x 1, $sy,
             (LVMxir 0, $sy))))>;
 
-  def : Pat<(v8i64 (vec_broadcast i64:$sy)),
+  def : Pat<(v8i64 (any_broadcast i64:$sy)),
             (LVMyir_y 7, $sy,
             (LVMyir_y 6, $sy,
             (LVMyir_y 5, $sy,

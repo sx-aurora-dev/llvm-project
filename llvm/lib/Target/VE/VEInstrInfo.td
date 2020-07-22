@@ -334,11 +334,12 @@ def true_mask                            : PatLeaf<(vec_broadcast (i32 true), (i
 def any_broadcast                        : PatFrag<(ops node:$sx), (vec_broadcast node:$sx, (i32 srcvalue))>;
 }
 
+// TODO remove - unused
 // register extraction match
-def reg_broadcast : ComplexPattern<vAny, 1, "selectBroadcast", [vec_broadcast], []>; // returns the broadcast itself
+// def reg_broadcast : ComplexPattern<vAny, 1, "selectBroadcast", [vec_broadcast], []>; // returns the broadcast itself
 
 // return the scalar operand of any_broadcast, suitable for consumption
-def unbcast : SDNodeXForm<vec_broadcast, [{ return extractScalarOperand(N); }]>;
+// def unbcast : SDNodeXForm<vec_broadcast, [{ return extractScalarOperand(N); }]>;
 
 
 
@@ -2709,9 +2710,9 @@ def: Pat<(i64 (repl_i32 i32:$val)),
               (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32))>;
 
 // load an immediate into a register
-def lea_i32         : OutPatFrag<(ins node:$imm), (EXTRACT_SUBREG (LEAzii 0, 0, (LO32 $imm)), sub_i32)>;
-def lea_i64         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 (i32 $imm)))>;
-def lea_u32         : OutPatFrag<(ins node:$imm), (ANDrm (LEAzii 0, 0, (LO32 (i32 $imm))), 32)>;
+def lea_i64         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 $imm))>;
+def lea_i32         : OutPatFrag<(ins node:$imm), (EXTRACT_SUBREG (lea_i64 $imm), sub_i32)>;
+def lea_u32         : OutPatFrag<(ins node:$imm), (ANDrm (lea_i64 $imm), 32)>;
 
 
 // The backend translates VP and regular vector operations into vvp_* nodes
