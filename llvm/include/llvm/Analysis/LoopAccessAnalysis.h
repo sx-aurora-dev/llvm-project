@@ -192,9 +192,6 @@ public:
     ++AccessIdx;
   }
 
-  void outerLoopCheck(DepCandidates &AccessSets, MemAccessInfoList &CheckDeps,
-                      const ValueToValueMap &Strides);
-
   /// Check whether the dependencies between the accesses are safe.
   ///
   /// Only checks sets with elements in \p CheckDeps.
@@ -585,13 +582,10 @@ public:
   const PredicatedScalarEvolution &getPSE() const { return *PSE; }
 
 private:
+  bool canAnalyzeLoop();
   /// Analyze the loop.
   void analyzeLoop(AAResults *AA, LoopInfo *LI,
                    const TargetLibraryInfo *TLI, DominatorTree *DT);
-
-  /// Check if the structure of the loop allows it to be analyzed by this
-  /// pass.
-  bool canAnalyzeLoop();
 
   /// Save the analysis remark.
   ///
