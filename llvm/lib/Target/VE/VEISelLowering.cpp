@@ -2973,7 +2973,6 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG) {
   return DAG.getMergeValues(Ops, dl);
 }
 
-#if 0
 // Lower a vXi1 load into following instructions
 //   LDrii %1, (,%addr)
 //   LVMxir  %vm, 0, %1
@@ -3040,7 +3039,6 @@ static SDValue LowerI1Load(SDValue Op, SelectionDAG &DAG) {
     return SDValue();
   }
 }
-#endif
 
 SDValue VETargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
   LoadSDNode *LdNode = cast<LoadSDNode>(Op.getNode());
@@ -3059,10 +3057,8 @@ SDValue VETargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
 
   if (MemVT == MVT::f128)
     return LowerF128Load(Op, DAG);
-#if 0
   if (isVectorMaskType(MemVT))
     return LowerI1Load(Op, DAG);
-#endif
 
   return Op;
 }
@@ -3113,7 +3109,6 @@ static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
   return DAG.getNode(ISD::TokenFactor, dl, MVT::Other, OutChains);
 }
 
-#if 0
 // Lower a vXi1 store into following instructions
 //   SVMi  %1, %vm, 0
 //   STrii %1, (,%addr)
@@ -3167,7 +3162,6 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
     return SDValue();
   }
 }
-#endif
 
 SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
@@ -3189,10 +3183,8 @@ SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   }
 
   // Non-frame pointer stores for other types
-#if 0
-  if (MemVT == MVT::v256i1 || MemVT == MVT::v512i1)
+  if (isVectorMaskType(MemVT))
     return LowerI1Store(Op, DAG);
-#endif
 
   if (MemVT == MVT::f128)
     return LowerF128Store(Op, DAG);
