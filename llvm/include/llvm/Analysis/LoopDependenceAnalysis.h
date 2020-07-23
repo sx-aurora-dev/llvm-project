@@ -12,8 +12,11 @@
 #ifndef LLVM_ANALYSIS_LOOPDEPENDENCEANALYSIS_H
 #define LLVM_ANALYSIS_LOOPDEPENDENCEANALYSIS_H
 
-#include <llvm/IR/PassManager.h>
-#include <llvm/IR/Function.h>
+#include "llvm/Analysis/AliasAnalysis.h"
+#include "llvm/Analysis/ScalarEvolution.h"
+#include "llvm/IR/Dominators.h"
+#include "llvm/IR/Function.h"
+#include "llvm/IR/PassManager.h"
 
 namespace llvm {
 
@@ -42,10 +45,18 @@ struct LoopDependence {
 class LoopDependenceInfo {
 public:
   // TODO implement
-  LoopDependenceInfo(Function &F, FunctionAnalysisManager &FAM);
+  LoopDependenceInfo(Function &F, ScalarEvolution &SE, TargetLibraryInfo &TLI,
+                     AAResults &AA, DominatorTree &DT, LoopInfo &LI);
 
   // TODO implement
-  const LoopDependence &getDependenceInfo(Loop &L);
+  const LoopDependence getDependenceInfo(Loop &L);
+
+private:
+  ScalarEvolution &SE;
+  const TargetLibraryInfo &TLI;
+  AAResults &AA;
+  DominatorTree &DT;
+  LoopInfo &LI;
 };
 
 /// Analysis pass that exposes the \c LoopDependenceInfo for a function.
