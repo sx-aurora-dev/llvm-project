@@ -38,6 +38,12 @@ struct LoopDependence {
   /// iterations of the loop have a minimum dependence distance of \p DepDist.
   //
   // IRPredicate getParallelPrecondition(DepDist);
+
+  static LoopDependence getPessimisticLoopDependence() {
+    LoopDependence LD;
+    LD.DepDist = 1;
+    return LD;
+  }
 };
 
 /// Interface to query \c LoopDependence information per loop in the analyzed
@@ -49,7 +55,7 @@ public:
                      AAResults &AA, DominatorTree &DT, LoopInfo &LI);
 
   // TODO implement
-  const LoopDependence getDependenceInfo(Loop &L);
+  const LoopDependence getDependenceInfo(const Loop &L) const;
 
 private:
   ScalarEvolution &SE;
