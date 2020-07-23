@@ -260,7 +260,7 @@ private:
   const Loop *InnermostLoop;
 
   /// Maps access locations (ptr, read/write) to program order.
-  DenseMap<MemAccessInfo, std::vector<unsigned> > Accesses;
+  DenseMap<MemAccessInfo, std::vector<unsigned>> Accesses;
 
   /// Memory access instructions in program order.
   SmallVector<Instruction *, 16> InstMap;
@@ -541,7 +541,7 @@ public:
 
   uint64_t getMaxSafeDepDistBytes() const { return MaxSafeDepDistBytes; }
   unsigned getNumStores() const { return NumStores; }
-  unsigned getNumLoads() const { return NumLoads;}
+  unsigned getNumLoads() const { return NumLoads; }
 
   /// The diagnostics report generated for the analysis.  E.g. why we
   /// couldn't analyze the loop.
@@ -582,10 +582,13 @@ public:
   const PredicatedScalarEvolution &getPSE() const { return *PSE; }
 
 private:
-  bool canAnalyzeLoop();
   /// Analyze the loop.
-  void analyzeLoop(AAResults *AA, LoopInfo *LI,
-                   const TargetLibraryInfo *TLI, DominatorTree *DT);
+  void analyzeLoop(AAResults *AA, LoopInfo *LI, const TargetLibraryInfo *TLI,
+                   DominatorTree *DT);
+
+  /// Check if the structure of the loop allows it to be analyzed by this
+  /// pass.
+  bool canAnalyzeLoop();
 
   /// Save the analysis remark.
   ///
@@ -735,8 +738,7 @@ private:
 /// querying the loop access info via AM.getResult<LoopAccessAnalysis>.
 /// getResult return a LoopAccessInfo object.  See this class for the
 /// specifics of what information is provided.
-class LoopAccessAnalysis
-    : public AnalysisInfoMixin<LoopAccessAnalysis> {
+class LoopAccessAnalysis : public AnalysisInfoMixin<LoopAccessAnalysis> {
   friend AnalysisInfoMixin<LoopAccessAnalysis>;
   static AnalysisKey Key;
 
@@ -746,16 +748,16 @@ public:
   Result run(Loop &L, LoopAnalysisManager &AM, LoopStandardAnalysisResults &AR);
 };
 
-inline Instruction *MemoryDepChecker::Dependence::getSource(
-    const LoopAccessInfo &LAI) const {
+inline Instruction *
+MemoryDepChecker::Dependence::getSource(const LoopAccessInfo &LAI) const {
   return LAI.getDepChecker().getMemoryInstructions()[Source];
 }
 
-inline Instruction *MemoryDepChecker::Dependence::getDestination(
-    const LoopAccessInfo &LAI) const {
+inline Instruction *
+MemoryDepChecker::Dependence::getDestination(const LoopAccessInfo &LAI) const {
   return LAI.getDepChecker().getMemoryInstructions()[Destination];
 }
 
-} // End llvm namespace
+} // namespace llvm
 
 #endif
