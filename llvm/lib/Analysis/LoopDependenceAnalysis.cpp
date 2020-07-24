@@ -191,6 +191,138 @@ bool breakSCEV(ScalarEvolution *SE, const SCEV *Expr,
   return true;
 }
 
+static bool isSimpleAddRec(ScalarEvolution &SE, const SCEVAddRecExpr *E) {
+  // TODO: Do we want to make sure that the step is 1?
+  if (E->getStepRecurrence(SE)->getSCEVType() != scConstant)
+    return false;
+  if (E->getStart()->getSCEVType() != scConstant)
+    return false;
+  return true;
+}
+
+static bool subscriptsAreLegal(ScalarEvolution &SE,
+                               const SmallVectorImpl<const SCEV *> &Subscripts,
+                               const Loop *Innermost, size_t NumEnclosedLoops) {
+
+  // For now, the number of subscripts should match the
+  // outer loop vectorization factor (i.e. NumEnclosedLoops + 1) that
+  // we chose for this loop nest we're dealing with. For example,
+  // if we're vectorizing the outer-most loop of a 3-level deep loop nest,
+  // then we should have exactly 3 subscripts in each access.
+  if (Subscripts.size() != NumEnclosedLoops + 1)
+    return false;
+
+  // Make sure that each subscript is either loop-invariant or
+  // it depends on the loop that is in the depth that matches
+  // the subscript's number. For example:
+  // for (i...)
+  //   for (j...)
+  //     for (k...)
+  //       A[x][y][z]
+  //
+  // We have 3 subscripts, with values `x`, `y`, `z`. `x` is no. 0, `y` is no. 1
+  // and `z` is no. 2. `x` should either be loop-invariant or be dependent on
+  // the `i-loop` same for `y` and the `j-loop` and for `z` and the `k-loop`. We
+  // can know on what loop is a subscript dependent - from its SCEV. Note: We're
+  // given the innermost loop, so in the example above, that would be the
+  // `k-loop`. So, we have to start from the end. Note: Determining if something
+  // is loop-invariant is not easy. For example, an AddExpr can be an addition
+  // between a constant and an AddRecExpr in which the latter is not
+  // loop-invariant. And theoretically that can happen in any depth. For now, we
+  // only consider constants as loop-invariants and only handle simple
+  // AddRecExprs.
+  const Loop *Runner = Innermost;
+  for (ssize_t i = Subscripts.size() - 1; i >= 0; --i) {
+    switch (Subscripts[i]->getSCEVType()) {
+    // Those are loop-invariant
+    case scConstant:
+      break;
+    case scAddRecExpr: {
+      const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(Subscripts[i]);
+      dbgs() << "AddRec: " << *AddRec << "\n";
+      if (AddRec->getLoop() == Runner && isSimpleAddRec(SE, AddRec)) {
+        break; // For the switch
+      } else {
+        return false;
+      }
+    } break;
+    default:
+      return false;
+    }
+    Runner = Runner->getParentLoop();
+  }
+  return true;
+}
+
+static bool
+delinearizeAndVerifySubscripts(ScalarEvolution &SE, const SCEV *InitialSCEV,
+                               SmallVectorImpl<const SCEV *> &Subscripts,
+                               const Loop *Innermost, size_t NumEnclosedLoops) {
+  return breakSCEV(&SE, InitialSCEV, Subscripts) &&
+         subscriptsAreLegal(SE, Subscripts, Innermost, NumEnclosedLoops);
+}
+
+struct Direction {
+  char dir;
+  // TODO: Probably change to SCEV
+  int dist;
+};
+
+// Assuming only 2-d dir vectors
+// for now.
+struct DirVector {
+  bool valid;
+  Direction outer;
+  Direction inner;
+};
+
+Direction getDirectionFromSCEVConstant(const SCEVConstant *C) {
+  ConstantInt *V = C->getValue();
+  int64_t Dist = V->getSExtValue();
+  Direction Res = {'<', Dist};
+  if (!Dist)
+    Res.dir = '=';
+  else if (Dist < 0)
+    Res.dir = '>';
+  return Res;
+}
+
+Direction getDirection(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
+                       bool &valid) {
+  // TODO: What about the order here?
+  const SCEV *Diff = SE->getMinusSCEV(S2, S1);
+  // TODO: Handle other things
+  const SCEVConstant *C = dyn_cast<const SCEVConstant>(Diff);
+
+  // Note: Constant here means "loop invariant" but "value known at
+  // compile-time". We're happy with less strict cases, like `-2 + n` too,
+  // because they're loop-invariant (assuming that n is loop-invariant) and we
+  // can find out the distance with a single runtime check.
+
+  if (C) {
+    return getDirectionFromSCEVConstant(C);
+  } else {
+    dbgs() << "Non-constant SCEV distance: " << *Diff << "\n";
+    valid = false;
+    return {'*', 0};
+  }
+}
+
+DirVector getDirVector(ScalarEvolution *SE,
+                       SmallVectorImpl<const SCEV *> &Subscripts1,
+                       SmallVectorImpl<const SCEV *> &Subscripts2) {
+
+  assert(Subscripts1.size() == 2);
+  assert(Subscripts1.size() == Subscripts2.size());
+
+  DirVector res = {true};
+
+  res.outer = getDirection(SE, Subscripts1[0], Subscripts2[0], res.valid);
+  res.inner = getDirection(SE, Subscripts1[1], Subscripts2[1], res.valid);
+
+  return res;
+}
+
 const LoopDependence
 LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   LoopDependence Bail = LoopDependence::getPessimisticLoopDependence();
@@ -215,8 +347,8 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   if (!NestInfo.isPerfectWithAccessOnlyInInnermost) {
     return Bail;
   }
-  // For now, we can only handle 2 and 3-dimensional outer-loop vectorization.
-  if (!(NestInfo.NumEnclosedLoops == 1 || NestInfo.NumEnclosedLoops == 2))
+  // For now, we can only handle 2-dimensional outer-loop vectorization.
+  if (NestInfo.NumEnclosedLoops != 1)
     return Bail;
 
   assert(NestInfo.InnermostLoop);
@@ -229,6 +361,7 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   // that may alias with each other.
   AliasSetTracker AST(AA);
 
+  LoopDependence Res = {std::numeric_limits<ConstDepDist>::max()};
   // Find if there's any illegal instruction and gather
   // loads and stores. Also put the pointers in the AST.
   for (BasicBlock *BB : Inner.blocks()) {
@@ -285,7 +418,7 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   dbgs() << "Analyze access pairs\n\n";
   for (LoadInst *LD : Loads) {
     Value *LPtr = LD->getPointerOperand();
-    
+
     for (StoreInst *ST : Stores) {
       Value *SPtr = ST->getPointerOperand();
       dbgs() << "  "
@@ -308,14 +441,30 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
 
       SmallVector<const SCEV *, 3> Subscripts1, Subscripts2;
 
-      if (!breakSCEV(&SE, LoadSE, Subscripts1))
+      if (!delinearizeAndVerifySubscripts(SE, LoadSE, Subscripts1,
+                                          NestInfo.InnermostLoop,
+                                          NestInfo.NumEnclosedLoops))
+        return Bail;
+      if (!delinearizeAndVerifySubscripts(SE, StoreSE, Subscripts2,
+                                          NestInfo.InnermostLoop,
+                                          NestInfo.NumEnclosedLoops))
+        return Bail;
+
+      DirVector dv = getDirVector(&SE, Subscripts1, Subscripts2);
+      if (!dv.valid) {
+        dbgs() << "Invalid direction vector\n";
         continue;
-      if (!breakSCEV(&SE, StoreSE, Subscripts2))
-        continue;
+      } else {
+        ConstDepDist MaxAllowedVectorizationFactor = dv.outer.dist - 1;
+        if (MaxAllowedVectorizationFactor < Res.DepDist)
+          Res.DepDist = MaxAllowedVectorizationFactor;
+        dbgs() << "(" << dv.outer.dir << ", " << dv.inner.dir << ")\n";
+        dbgs() << "Outer loop distance: " << dv.outer.dist << "\n";
+      }
     }
   }
 
-  dbgs() << "\n\n-------------\n\n";
+  dbgs() << "\n\n----- THE LOOP IS VECTORIZABLE --------\n\n";
 
-  return Bail;
+  return Res;
 }
