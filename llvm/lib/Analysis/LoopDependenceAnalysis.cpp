@@ -523,14 +523,16 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         LLVM_DEBUG(dbgs() << "Invalid direction vector\n");
         continue;
       } else {
-        size_t MaxAllowedVectorizationFactor = dv.outer.dist;
-        Res.possiblyPessimize(MaxAllowedVectorizationFactor);
-        if (Res.isWorstPossible())
-          return Bail;
-
-        LLVM_DEBUG(dbgs() << "(" << dv.outer.dir << ", " << dv.inner.dir
-                          << ")\n";
-                   dbgs() << "Outer loop distance: " << dv.outer.dist << "\n";);
+        if (dv.outer.dir == '<' &&
+            (dv.inner.dir == '>' || dv.inner.dir == '=')) {
+          size_t MaxAllowedVectorizationFactor = dv.outer.dist;
+          Res.possiblyPessimize(MaxAllowedVectorizationFactor);
+          if (Res.isWorstPossible())
+            return Bail;
+          LLVM_DEBUG(
+              dbgs() << "(" << dv.outer.dir << ", " << dv.inner.dir << ")\n";
+              dbgs() << "Outer loop distance: " << dv.outer.dist << "\n";);
+        }
       }
     }
   }
