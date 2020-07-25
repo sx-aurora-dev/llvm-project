@@ -48,7 +48,7 @@ struct LoopDependence {
 
   static LoopDependence getBestPossible() {
     LoopDependence LD;
-    LD.VectorizationFactor = 1;
+    LD.VectorizationFactor = None;
     return LD;
   }
 
