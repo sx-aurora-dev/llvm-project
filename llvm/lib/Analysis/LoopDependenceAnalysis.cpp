@@ -18,6 +18,56 @@
 #include "llvm/Analysis/VectorUtils.h"
 #include "llvm/IR/Instructions.h"
 
+/*
+-- Terminology --
+
+First of all, we assume that all accesses are in the form
+of array accesses (this is a rule that the code does
+not follow strictly, but the exceptions are few and simple).
+
+Index:  It is used to mean the index variable (induction variable) for
+    some loop surrounding an array access. For example, in:
+        A[i][j+1][k-2]
+    `i`, `j` and `k` are indexes.
+
+Subscript: It is used to refer to one of the subscripted
+    positions in an array reference. For example, in:
+      A[i][j+1][k-2]
+    the expressions `i`, `j+1` and `k-2` are subscripts
+    (which use indices). Note that it is also useful
+    to number subscripts. `i` is subscript no. 0,
+    `j+1` is no. 1 and `k-2` is no. 2.
+
+Loop Vectorization Factor: It refers to the number of iterations
+    that can be run in parallel for a specific loop. For
+    example, in:
+      int A[n][m];
+      for (i = 0; i < n; ++i)
+        for (j = 0; j < m; ++j)
+          A[i+2][j] = A[i][j];
+
+    The loop vectorization factor for the `i-loop` is 2, since
+    we can run the loops in groups of 2. This _looks like_ the
+    the following:
+      int A[n][m];
+      for (i = 0; i < n; i+=2)
+        for (j = 0; j < m; ++j) {
+          A[i+2][j] = A[i][j];
+          A[i+3][j] = A[i+1][j];
+        }
+
+    This is like an unroll-and-jam but UAJ is not an accurate
+    description since here the two statements are run sequentially
+    (although both at the same `j-iteration`) while in vectorization
+    they will be run in parallel. As far as DA is concerned,
+    in this example both UAJ and vectorization by a factor of 2
+    are valid but this is not always the case.
+
+    Finally, the `j-loop` has a VF of infinity, since all iterations can
+    be run in parallel.
+
+*/
+
 using namespace llvm;
 
 #define DEBUG_TYPE "loop-dependence"
@@ -36,7 +86,17 @@ LoopDependenceInfo LoopDependenceAnalysis::run(Function &F,
 
 // Iterate all loops in DFS.
 static void iterateAllLoops(LoopDependenceInfo *LDI, const Loop *L) {
-  LDI->getDependenceInfo(*L);
+  LoopDependence Res = LDI->getDependenceInfo(*L);
+  dbgs() << "Loop: " << L->getName() << ": ";
+  if (!Res.VectorizationFactor.hasValue()) {
+    dbgs() << "Is vectorizable for any factor\n";
+  } else {
+    uint64_t VF = Res.VectorizationFactor.getValue();
+    if (VF > 1)
+      dbgs() << "Is vectorizable with VF: " << VF << "\n";
+    else
+      dbgs() << "Is NOT vectorizable\n";
+  }
   for (const Loop *L : L->getSubLoops()) {
     iterateAllLoops(LDI, L);
   }
@@ -152,45 +212,6 @@ isPerfectLoopNestWithAccessesInTheInnermost(const Loop &TheLoop) {
   return Res;
 }
 
-bool breakSCEV(ScalarEvolution *SE, const SCEV *Expr,
-               SmallVectorImpl<const SCEV *> &Subscripts) {
-  const SCEV *AccessFn = Expr;
-
-  dbgs() << "\n\nAccessFn: " << *AccessFn << "\n";
-
-  const SCEVUnknown *BasePointer =
-      dyn_cast<SCEVUnknown>(SE->getPointerBase(AccessFn));
-  // Do not delinearize if we cannot find the base pointer.
-  if (!BasePointer)
-    return false;
-  dbgs() << "Base Pointer: " << *BasePointer << "\n";
-  AccessFn = SE->getMinusSCEV(AccessFn, BasePointer);
-
-  SmallVector<const SCEV *, 3> Sizes;
-  // TODO: Replace the element size.
-  SE->delinearize(AccessFn, Subscripts, Sizes, SE->getConstant(APInt(64, 8)));
-
-  if (Subscripts.size() == 0 || Sizes.size() == 0 ||
-      Subscripts.size() != Sizes.size()) {
-    dbgs() << "failed to delinearize\n";
-    return false;
-  }
-
-  dbgs() << "Base offset: " << *BasePointer << "\n";
-  dbgs() << "ArrayDecl[UnknownSize]";
-  int Size = Subscripts.size();
-  for (int i = 0; i < Size - 1; i++)
-    dbgs() << "[" << *Sizes[i] << "]";
-  dbgs() << " with elements of " << *Sizes[Size - 1] << " bytes.\n";
-
-  dbgs() << "ArrayRef";
-  for (int i = 0; i < Size; i++)
-    dbgs() << "[" << *Subscripts[i] << "]";
-  dbgs() << "\n";
-
-  return true;
-}
-
 static bool isSimpleAddRec(ScalarEvolution &SE, const SCEVAddRecExpr *E) {
   // TODO: Do we want to make sure that the step is 1?
   if (E->getStepRecurrence(SE)->getSCEVType() != scConstant)
@@ -205,8 +226,8 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
                                const Loop *Innermost, size_t NumEnclosedLoops) {
 
   // For now, the number of subscripts should match the
-  // outer loop vectorization factor (i.e. NumEnclosedLoops + 1) that
-  // we chose for this loop nest we're dealing with. For example,
+  // outer loop vectorization level (i.e. NumEnclosedLoops + 1) that
+  // we chose in this loop nest. For example,
   // if we're vectorizing the outer-most loop of a 3-level deep loop nest,
   // then we should have exactly 3 subscripts in each access.
   if (Subscripts.size() != NumEnclosedLoops + 1)
@@ -233,13 +254,13 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
   // AddRecExprs.
   const Loop *Runner = Innermost;
   for (ssize_t i = Subscripts.size() - 1; i >= 0; --i) {
-    switch (Subscripts[i]->getSCEVType()) {
+    const SCEV *S = Subscripts[i];
+    switch (S->getSCEVType()) {
     // Those are loop-invariant
     case scConstant:
       break;
     case scAddRecExpr: {
-      const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(Subscripts[i]);
-      dbgs() << "AddRec: " << *AddRec << "\n";
+      const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
       if (AddRec->getLoop() == Runner && isSimpleAddRec(SE, AddRec)) {
         break; // For the switch
       } else {
@@ -254,11 +275,59 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
   return true;
 }
 
+static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
+                                  SmallVectorImpl<const SCEV *> &Subscripts,
+                                  SmallVectorImpl<const SCEV *> &Sizes,
+                                  const Loop *L) {
+  assert(isa<StoreInst>(Inst) || isa<LoadInst>(Inst));
+  const SCEV *AccessExpr = SE.getSCEVAtScope(getPointerOperand(Inst), L);
+
+  LLVM_DEBUG(dbgs() << "\n\nAccessExpr: " << *AccessExpr << "\n";);
+
+  const SCEVUnknown *BasePointer =
+      dyn_cast<SCEVUnknown>(SE.getPointerBase(AccessExpr));
+  // Do not delinearize if we cannot find the base pointer.
+  if (!BasePointer)
+    return false;
+  LLVM_DEBUG(dbgs() << "Base Pointer: " << *BasePointer << "\n";);
+  // Remove the base pointer from the expr.
+  AccessExpr = SE.getMinusSCEV(AccessExpr, BasePointer);
+
+  SE.delinearize(AccessExpr, Subscripts, Sizes, SE.getElementSize(Inst));
+
+  if (Subscripts.size() == 0 || Sizes.size() == 0 ||
+      Subscripts.size() != Sizes.size()) {
+    LLVM_DEBUG(dbgs() << "Failed to delinearize\n";);
+    return false;
+  }
+
+  LLVM_DEBUG(
+
+    dbgs() << "Base offset: " << *BasePointer << "\n";
+    dbgs() << "ArrayDecl[UnknownSize]";
+    int Size = Subscripts.size();
+    for (int i = 0; i < Size - 1; i++)
+      dbgs() << "[" << *Sizes[i] << "]";
+    dbgs() << " with elements of " << *Sizes[Size - 1] << " bytes.\n";
+
+    dbgs() << "ArrayRef";
+    for (int i = 0; i < Size; i++)
+      dbgs() << "[" << *Subscripts[i] << "]";
+    dbgs() << "\n";
+  
+  );
+
+  return true;
+}
+
 static bool
-delinearizeAndVerifySubscripts(ScalarEvolution &SE, const SCEV *InitialSCEV,
-                               SmallVectorImpl<const SCEV *> &Subscripts,
-                               const Loop *Innermost, size_t NumEnclosedLoops) {
-  return breakSCEV(&SE, InitialSCEV, Subscripts) &&
+delinearizeInstAndVerifySubscripts(ScalarEvolution &SE, Instruction *Inst,
+                                   SmallVectorImpl<const SCEV *> &Subscripts,
+                                   SmallVectorImpl<const SCEV *> &Sizes,
+                                   const Loop *Innermost,
+                                   size_t NumEnclosedLoops) {
+
+  return delinearizeAccessInst(SE, Inst, Subscripts, Sizes, Innermost) &&
          subscriptsAreLegal(SE, Subscripts, Innermost, NumEnclosedLoops);
 }
 
@@ -302,7 +371,7 @@ Direction getDirection(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
   if (C) {
     return getDirectionFromSCEVConstant(C);
   } else {
-    dbgs() << "Non-constant SCEV distance: " << *Diff << "\n";
+    LLVM_DEBUG(dbgs() << "Non-constant SCEV distance: " << *Diff << "\n");
     valid = false;
     return {'*', 0};
   }
@@ -325,7 +394,7 @@ DirVector getDirVector(ScalarEvolution *SE,
 
 const LoopDependence
 LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
-  LoopDependence Bail = LoopDependence::getPessimisticLoopDependence();
+  LoopDependence Bail = LoopDependence::getWorstPossible();
 
   if (L.isAnnotatedParallel())
     return Bail;
@@ -337,13 +406,14 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   // For now, we can only handle a perfect loop nest that has
   // accesses only in the innermost loop.
   LoopNestInfo NestInfo = isPerfectLoopNestWithAccessesInTheInnermost(L);
-  dbgs() << "HeyLoop: " << L << "\n";
-  dbgs() << "    isPerfectWithAccessesInInnermost: "
-         << NestInfo.isPerfectWithAccessOnlyInInnermost << "\n";
-  dbgs() << "    NumEnclosedLoops : " << NestInfo.NumEnclosedLoops << "\n";
-  dbgs() << "    InnerLoop: " << *NestInfo.InnermostLoop << "\n";
-  dbgs() << "    Induction Variable: "
-         << L.getCanonicalInductionVariable()->getName() << "\n";
+  LLVM_DEBUG(dbgs() << "HeyLoop: " << L << "\n";
+             dbgs() << "    isPerfectWithAccessesInInnermost: "
+                    << NestInfo.isPerfectWithAccessOnlyInInnermost << "\n";
+             dbgs() << "    NumEnclosedLoops : " << NestInfo.NumEnclosedLoops
+                    << "\n";
+             dbgs() << "    InnerLoop: " << *NestInfo.InnermostLoop << "\n";
+             dbgs() << "    Induction Variable: "
+                    << L.getCanonicalInductionVariable()->getName() << "\n";);
   if (!NestInfo.isPerfectWithAccessOnlyInInnermost) {
     return Bail;
   }
@@ -361,7 +431,6 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   // that may alias with each other.
   AliasSetTracker AST(AA);
 
-  LoopDependence Res = {std::numeric_limits<ConstDepDist>::max()};
   // Find if there's any illegal instruction and gather
   // loads and stores. Also put the pointers in the AST.
   for (BasicBlock *BB : Inner.blocks()) {
@@ -414,57 +483,57 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   // whether there is a dependence with any of the stores.
   // Eventually, we want to be smarter about it, like LAA.
 
-  dbgs() << "\n\n-------------\n\n";
-  dbgs() << "Analyze access pairs\n\n";
+  // Starting from the best possible dependence (optimistically),
+  // either bail out early for some reason, or try to meet
+  // the best acceptable value (with monotone pessimistic movements).
+  LoopDependence Res = LoopDependence::getBestPossible();
+
+  LLVM_DEBUG(dbgs() << "\n\n-------------\n\n";
+             dbgs() << "Analyze access pairs\n\n";);
   for (LoadInst *LD : Loads) {
     Value *LPtr = LD->getPointerOperand();
 
     for (StoreInst *ST : Stores) {
       Value *SPtr = ST->getPointerOperand();
-      dbgs() << "  "
-             << "Store pointer: " << *SPtr << "\n";
-
       // TODO: Do we care about the order?
 
-      const SCEV *LoadSE = SE.getSCEVAtScope(LPtr, &Inner);
-      const SCEV *StoreSE = SE.getSCEVAtScope(SPtr, &Inner);
+      LLVM_DEBUG(dbgs() << "Load pointer: " << *LPtr << "\n";
+                 dbgs() << *SE.getSCEVAtScope(LPtr, &Inner) << "\n\n";
+                 dbgs() << "Store pointer: " << *SPtr << "\n";
+                 dbgs() << *SE.getSCEVAtScope(SPtr, &Inner) << "\n";);
 
-      dbgs() << "Load pointer: " << *LPtr << "\n";
-      dbgs() << *LoadSE << "\n";
-      dbgs() << "\n";
-      dbgs() << "Store pointer: " << *SPtr << "\n";
-      dbgs() << *StoreSE << "\n";
-      dbgs() << "\n";
-
-      dbgs() << "\n\n------\n\n";
-      dbgs() << "Delinearize SCEVs\n";
+      LLVM_DEBUG(dbgs() << "\n"; dbgs() << "\n\n------\n\n";
+                 dbgs() << "Delinearize SCEVs\n";);
 
       SmallVector<const SCEV *, 3> Subscripts1, Subscripts2;
+      SmallVector<const SCEV *, 3> Sizes1, Sizes2;
 
-      if (!delinearizeAndVerifySubscripts(SE, LoadSE, Subscripts1,
-                                          NestInfo.InnermostLoop,
-                                          NestInfo.NumEnclosedLoops))
+      if (!delinearizeInstAndVerifySubscripts(SE, LD, Subscripts1, Sizes1,
+                                              NestInfo.InnermostLoop,
+                                              NestInfo.NumEnclosedLoops))
         return Bail;
-      if (!delinearizeAndVerifySubscripts(SE, StoreSE, Subscripts2,
-                                          NestInfo.InnermostLoop,
-                                          NestInfo.NumEnclosedLoops))
+      if (!delinearizeInstAndVerifySubscripts(SE, ST, Subscripts2, Sizes2,
+                                              NestInfo.InnermostLoop,
+                                              NestInfo.NumEnclosedLoops))
         return Bail;
 
+      LLVM_DEBUG(dbgs() << "\n");
       DirVector dv = getDirVector(&SE, Subscripts1, Subscripts2);
       if (!dv.valid) {
-        dbgs() << "Invalid direction vector\n";
+        LLVM_DEBUG(dbgs() << "Invalid direction vector\n");
         continue;
       } else {
-        ConstDepDist MaxAllowedVectorizationFactor = dv.outer.dist - 1;
-        if (MaxAllowedVectorizationFactor < Res.DepDist)
-          Res.DepDist = MaxAllowedVectorizationFactor;
-        dbgs() << "(" << dv.outer.dir << ", " << dv.inner.dir << ")\n";
-        dbgs() << "Outer loop distance: " << dv.outer.dist << "\n";
+        size_t MaxAllowedVectorizationFactor = dv.outer.dist;
+        Res.possiblyPessimize(MaxAllowedVectorizationFactor);
+        if (Res.isWorstPossible())
+          return Bail;
+
+        LLVM_DEBUG(dbgs() << "(" << dv.outer.dir << ", " << dv.inner.dir
+                          << ")\n";
+                   dbgs() << "Outer loop distance: " << dv.outer.dist << "\n";);
       }
     }
   }
-
-  dbgs() << "\n\n----- THE LOOP IS VECTORIZABLE --------\n\n";
 
   return Res;
 }

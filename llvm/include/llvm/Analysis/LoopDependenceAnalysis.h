@@ -22,16 +22,17 @@ namespace llvm {
 
 class Loop;
 
-using ConstDepDist = Optional<size_t>;
+using ConstVF = Optional<size_t>;
 
 // Iteration dependence descriptor for a given loop.
 // @baziotis: This is the actual interface. Everyting below is just boilerplate
 // to fit things into LLVM's pass framework.
 struct LoopDependence {
-  /// The minimum dependence distance for iterations of this loop. Or `None` if
-  /// all loop iterations may be run in parallel. A dependence distance of `1`
+  /// The maximum vectorization factor for this loop. That is, how many
+  /// iterations can be run in parallel. Or `None` if
+  /// all loop iterations may be run in parallel. A vectorization factor of `1`
   /// indicates that the loop has to be executed sequentially.
-  ConstDepDist DepDist;
+  ConstVF VectorizationFactor;
 
   /// TODO (sometime in the future)
   /// Return an \c IRPredicate that describes under which condition the
@@ -39,10 +40,34 @@ struct LoopDependence {
   //
   // IRPredicate getParallelPrecondition(DepDist);
 
-  static LoopDependence getPessimisticLoopDependence() {
+  static LoopDependence getWorstPossible() {
     LoopDependence LD;
-    LD.DepDist = 1;
+    LD.VectorizationFactor = 1;
     return LD;
+  }
+
+  static LoopDependence getBestPossible() {
+    LoopDependence LD;
+    LD.VectorizationFactor = 1;
+    return LD;
+  }
+
+  bool isWorse(size_t V) const {
+    if (!VectorizationFactor.hasValue())
+      return true;
+    size_t VF = VectorizationFactor.getValue();
+    return (V < VF);
+  }
+
+  void possiblyPessimize(size_t V) {
+    if (isWorse(V))
+      VectorizationFactor = V;
+  }
+
+  bool isWorstPossible() const {
+    if (!VectorizationFactor.hasValue())
+      return false;
+    return (VectorizationFactor.getValue() == 1);
   }
 };
 
@@ -50,11 +75,9 @@ struct LoopDependence {
 /// function.
 class LoopDependenceInfo {
 public:
-  // TODO implement
   LoopDependenceInfo(Function &F, ScalarEvolution &SE, TargetLibraryInfo &TLI,
                      AAResults &AA, DominatorTree &DT, LoopInfo &LI);
 
-  // TODO implement
   const LoopDependence getDependenceInfo(const Loop &L) const;
 
 private:
