@@ -52,14 +52,16 @@ struct LoopDependence {
     return LD;
   }
 
-  bool isWorse(size_t V) const {
-    if (!VectorizationFactor.hasValue())
+  bool isWorse(ConstVF V) const {
+    if (!V.hasValue())
+      return false;
+    else if (!VectorizationFactor.hasValue())
       return true;
-    size_t VF = VectorizationFactor.getValue();
-    return (V < VF);
+    else
+      return V.getValue() < VectorizationFactor.getValue();
   }
 
-  void possiblyPessimize(size_t V) {
+  void possiblyPessimize(ConstVF V) {
     if (isWorse(V))
       VectorizationFactor = V;
   }
