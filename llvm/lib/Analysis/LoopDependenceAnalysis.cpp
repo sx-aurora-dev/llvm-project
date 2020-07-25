@@ -372,7 +372,7 @@ delinearizeInstAndVerifySubscripts(ScalarEvolution &SE, Instruction *Inst,
          subscriptsAreLegal(SE, Subscripts, Sizes, Innermost, NumEnclosedLoops);
 }
 
-struct Direction {
+struct DepVectorComponent {
   char dir;
   // TODO: Probably change to SCEV
   int dist;
@@ -380,16 +380,15 @@ struct Direction {
 
 // Assuming only 2-d dir vectors
 // for now.
-struct DirVector {
+struct DepVector {
   bool valid;
-  Direction outer;
-  Direction inner;
+  SmallVector<DepVectorComponent, 4> comps;
 };
 
-Direction getDirectionFromSCEVConstant(const SCEVConstant *C) {
+DepVectorComponent getDVComponentFromSCEVConstant(const SCEVConstant *C) {
   ConstantInt *V = C->getValue();
   int64_t Dist = V->getSExtValue();
-  Direction Res = {'<', Dist};
+  DepVectorComponent Res = {'<', Dist};
   if (!Dist)
     Res.dir = '=';
   else if (Dist < 0)
@@ -397,8 +396,8 @@ Direction getDirectionFromSCEVConstant(const SCEVConstant *C) {
   return Res;
 }
 
-Direction getDirection(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
-                       bool &valid) {
+DepVectorComponent getDVComponent(ScalarEvolution *SE, const SCEV *S1,
+                                  const SCEV *S2, bool &valid) {
   // TODO: What about the order here?
   const SCEV *Diff = SE->getMinusSCEV(S2, S1);
   // TODO: Handle other things
@@ -410,7 +409,7 @@ Direction getDirection(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
   // can find out the distance with a single runtime check.
 
   if (C) {
-    return getDirectionFromSCEVConstant(C);
+    return getDVComponentFromSCEVConstant(C);
   } else {
     LLVM_DEBUG(dbgs() << "Non-constant SCEV distance: " << *Diff << "\n");
     valid = false;
@@ -418,19 +417,64 @@ Direction getDirection(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
   }
 }
 
-DirVector getDirVector(ScalarEvolution *SE,
+DepVector getDirVector(ScalarEvolution *SE,
                        SmallVectorImpl<const SCEV *> &Subscripts1,
                        SmallVectorImpl<const SCEV *> &Subscripts2) {
 
   assert(Subscripts1.size() == 2);
   assert(Subscripts1.size() == Subscripts2.size());
 
-  DirVector res = {true};
+  DepVector res = {true};
 
-  res.outer = getDirection(SE, Subscripts1[0], Subscripts2[0], res.valid);
-  res.inner = getDirection(SE, Subscripts1[1], Subscripts2[1], res.valid);
+  res.comps.push_back(
+      getDVComponent(SE, Subscripts1[0], Subscripts2[0], res.valid));
+  res.comps.push_back(
+      getDVComponent(SE, Subscripts1[1], Subscripts2[1], res.valid));
 
   return res;
+}
+
+static bool verifyDirectionVector(DepVector &DV, int NumEnclosedLoops) {
+  for (DepVectorComponent DVC : DV.comps) {
+    if (DVC.dir != '<' && DVC.dir != '>' && DVC.dir != '=')
+      return false;
+    if (DVC.dir == '<' && DVC.dist <= 0)
+      return false;
+    else if (DVC.dir == '>' && DVC.dist >= 0)
+      return false;
+    else if (DVC.dir == '=' && DVC.dist != 0)
+      return false;
+  }
+  if (NumEnclosedLoops == 1) {
+    if (DV.comps.size() != 2)
+      return false;
+    // We can't have a dinstance vector that looks
+    // downwards or directly to the left, because
+    // that would mean that a later iteration
+    // has to happen first!
+    bool isDownwards = DV.comps[0].dir == '>';
+    bool isLeft = (DV.comps[0].dist == 0 && DV.comps[1].dist == '>');
+    if (isDownwards || isLeft)
+      return false;
+    return true;
+  } else {
+    return true;
+  }
+  return false;
+}
+
+static ConstVF getMaxAllowedVecFact(DepVector& DV, int NumEnclosedLoops) {
+  assert(verifyDirectionVector(DV, NumEnclosedLoops));
+  ConstVF Res = LoopDependence::getBestPossible().VectorizationFactor;
+  // Handle outermost loop vectorization in 2-level loop nest.
+  if (NumEnclosedLoops == 1) {
+    if (DV.comps[0].dir == '<' &&
+        (DV.comps[1].dir == '>' || DV.comps[1].dir == '='))
+      Res = (size_t) DV.comps[0].dist;
+  } else {
+    // Handle outermost loop vectorization in 3-level loop nest.
+  }
+  return Res;
 }
 
 const LoopDependence
@@ -559,21 +603,19 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         return Bail;
 
       LLVM_DEBUG(dbgs() << "\n");
-      DirVector dv = getDirVector(&SE, Subscripts1, Subscripts2);
-      if (!dv.valid) {
+      DepVector DV = getDirVector(&SE, Subscripts1, Subscripts2);
+      if (!DV.valid) {
         LLVM_DEBUG(dbgs() << "Invalid direction vector\n");
         continue;
       } else {
-        if (dv.outer.dir == '<' &&
-            (dv.inner.dir == '>' || dv.inner.dir == '=')) {
-          size_t MaxAllowedVectorizationFactor = dv.outer.dist;
-          Res.possiblyPessimize(MaxAllowedVectorizationFactor);
-          if (Res.isWorstPossible())
-            return Bail;
-          LLVM_DEBUG(
-              dbgs() << "(" << dv.outer.dir << ", " << dv.inner.dir << ")\n";
-              dbgs() << "Outer loop distance: " << dv.outer.dist << "\n";);
-        }
+        ConstVF MaxAllowedVectorizationFactor = 
+          getMaxAllowedVecFact(DV, NestInfo.NumEnclosedLoops);
+        Res.possiblyPessimize(MaxAllowedVectorizationFactor);
+        if (Res.isWorstPossible())
+          return Bail;
+        LLVM_DEBUG(
+            dbgs() << "(" << DV.comps[0].dir << ", " << DV.comps[1].dir << ")\n";
+            dbgs() << "Outer loop distance: " << DV.comps[0].dist << "\n";);
       }
     }
   }
