@@ -221,8 +221,45 @@ static bool isSimpleAddRec(ScalarEvolution &SE, const SCEVAddRecExpr *E) {
   return true;
 }
 
+bool subscriptsAreWithinBounds(ScalarEvolution &SE,
+                               const SmallVectorImpl<const SCEV *> &Subscripts,
+                               const SmallVectorImpl<const SCEV *> &Sizes) {
+  // TODO: We are checking whether the subscripts are less than the sizes.
+  // But maybe, we should also check if they're greater than 0.
+  assert(Subscripts.size() > 1);
+  // Remember that Sizes has one less entry than Subscripts because we never
+  // know the first dimension.
+  for (size_t SubIt = 1; SubIt < Subscripts.size(); ++SubIt) {
+    const SCEV *Sub = Subscripts[SubIt];
+    const SCEV *Sz = Sizes[SubIt - 1];
+    // We have already checked the following before calling
+    // this function.
+    assert(Sub->getSCEVType() == scConstant ||
+           Sub->getSCEVType() == scAddRecExpr);
+    const SCEV *MinusOne =
+        SE.getMinusSCEV(Sz, SE.getConstant(Sz->getType(), 1));
+    if (Sub->getSCEVType() == scConstant) {
+      if (SE.getSMaxExpr(Sub, MinusOne) != MinusOne)
+        return false;
+    } else {
+      const SCEVAddRecExpr *SubAR = dyn_cast<SCEVAddRecExpr>(Sub);
+      const SCEV *Max = SE.getSMaxExpr(SubAR->getStart(), MinusOne);
+      dbgs() << "Max (" << Max->getSCEVType() << "): " << *Max << "\n";
+      if (SE.getSMaxExpr(SubAR->getStart(), MinusOne) != MinusOne)
+        return false;
+      const Loop *SurroundingLoop = SubAR->getLoop();
+      const SCEV *NumIterations = SE.getBackedgeTakenCount(SurroundingLoop);
+      const SCEV *ExitValue = SubAR->evaluateAtIteration(NumIterations, SE);
+      if (SE.getSMaxExpr(ExitValue, MinusOne) != MinusOne)
+        return false;
+    }
+  }
+  return true;
+}
+
 static bool subscriptsAreLegal(ScalarEvolution &SE,
                                const SmallVectorImpl<const SCEV *> &Subscripts,
+                               const SmallVectorImpl<const SCEV *> &Sizes,
                                const Loop *Innermost, size_t NumEnclosedLoops) {
 
   // For now, the number of subscripts should match the
@@ -272,6 +309,10 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
     }
     Runner = Runner->getParentLoop();
   }
+
+  //if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
+  //  return false;
+
   return true;
 }
 
@@ -328,7 +369,7 @@ delinearizeInstAndVerifySubscripts(ScalarEvolution &SE, Instruction *Inst,
                                    size_t NumEnclosedLoops) {
 
   return delinearizeAccessInst(SE, Inst, Subscripts, Sizes, Innermost) &&
-         subscriptsAreLegal(SE, Subscripts, Innermost, NumEnclosedLoops);
+         subscriptsAreLegal(SE, Subscripts, Sizes, Innermost, NumEnclosedLoops);
 }
 
 struct Direction {
