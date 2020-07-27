@@ -453,14 +453,14 @@ static bool verifyDirectionVector(DepVector &DV, int NumEnclosedLoops) {
   return false;
 }
 
-static ConstVF getMaxAllowedVecFact(DepVector& DV, int NumEnclosedLoops) {
+static ConstVF getMaxAllowedVecFact(DepVector &DV, int NumEnclosedLoops) {
   assert(verifyDirectionVector(DV, NumEnclosedLoops));
   ConstVF Res = LoopDependence::getBestPossible().VectorizationFactor;
   // Handle outermost loop vectorization in 2-level loop nest.
   if (NumEnclosedLoops == 1) {
     if (DV.comps[0].dir == '<' &&
         (DV.comps[1].dir == '>' || DV.comps[1].dir == '='))
-      Res = (size_t) DV.comps[0].dist;
+      Res = (size_t)DV.comps[0].dist;
   } else {
     // Handle outermost loop vectorization in 3-level loop nest.
   }
@@ -598,14 +598,16 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         LLVM_DEBUG(dbgs() << "Invalid direction vector\n");
         continue;
       } else {
-        ConstVF MaxAllowedVectorizationFactor = 
-          getMaxAllowedVecFact(DV, NestInfo.NumEnclosedLoops);
-        Res.possiblyPessimize(MaxAllowedVectorizationFactor);
+        ConstVF MaxAllowedVectorizationFactor =
+            getMaxAllowedVecFact(DV, NestInfo.NumEnclosedLoops);
+        if (Res.VectorizationFactor < MaxAllowedVectorizationFactor)
+          Res.VectorizationFactor = MaxAllowedVectorizationFactor;
         if (Res.isWorstPossible())
           return Bail;
-        LLVM_DEBUG(
-            dbgs() << "(" << DV.comps[0].dir << ", " << DV.comps[1].dir << ")\n";
-            dbgs() << "Outer loop distance: " << DV.comps[0].dist << "\n";);
+        LLVM_DEBUG(dbgs() << "(" << DV.comps[0].dir << ", " << DV.comps[1].dir
+                          << ")\n";
+                   dbgs() << "Outer loop distance: " << DV.comps[0].dist
+                          << "\n";);
       }
     }
   }
