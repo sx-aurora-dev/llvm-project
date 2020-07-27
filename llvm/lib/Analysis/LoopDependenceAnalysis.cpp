@@ -289,10 +289,13 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
       break;
     case scAddRecExpr: {
       const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
-      if (AddRec->getLoop() == Runner)
+      if (AddRec->getLoop() == Runner) {
         break; // For the switch
-      else
+      } else {
+        LLVM_DEBUG(dbgs() << "Subscript no. " << i
+                          << " AddRecExpr is in invalid dimension.\n");
         return false;
+      }
     } break;
     default:
       return false;
@@ -481,20 +484,26 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   // For now, we can only handle a perfect loop nest that has
   // accesses only in the innermost loop.
   LoopNestInfo NestInfo = isPerfectLoopNestWithAccessesInTheInnermost(L);
-  LLVM_DEBUG(dbgs() << "HeyLoop: " << L << "\n";
-             dbgs() << "    isPerfectWithAccessesInInnermost: "
-                    << NestInfo.isPerfectWithAccessOnlyInInnermost << "\n";
+  if (!NestInfo.isPerfectWithAccessOnlyInInnermost) {
+    LLVM_DEBUG(
+        dbgs()
+            << "Imperfect loop nest and/or accesses not in the innermost loop: "
+            << L << "\n";);
+    return Bail;
+  }
+  LLVM_DEBUG(dbgs() << "Loop: " << L << "\n";
              dbgs() << "    NumEnclosedLoops : " << NestInfo.NumEnclosedLoops
                     << "\n";
              dbgs() << "    InnerLoop: " << *NestInfo.InnermostLoop << "\n";
              dbgs() << "    Induction Variable: "
                     << L.getCanonicalInductionVariable()->getName() << "\n";);
-  if (!NestInfo.isPerfectWithAccessOnlyInInnermost) {
+
+  // For now, we can only handle 2-dimensional outer-loop vectorization.
+  if (NestInfo.NumEnclosedLoops != 1) {
+    LLVM_DEBUG(
+        dbgs() << "We can only handle 2-dimensional loop nests for now.\n");
     return Bail;
   }
-  // For now, we can only handle 2-dimensional outer-loop vectorization.
-  if (NestInfo.NumEnclosedLoops != 1)
-    return Bail;
 
   assert(NestInfo.InnermostLoop);
   const Loop &Inner = *NestInfo.InnermostLoop;
