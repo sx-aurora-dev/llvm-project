@@ -685,7 +685,7 @@ CustomDAG::createTargetAVL(VVPWideningInfo WidenInfo) const {
 
 CustomDAG::TargetMasks
 CustomDAG::createTargetMask(VVPWideningInfo WidenInfo, SDValue RawMask, SDValue RawAVL) {
-  bool IsDynamicAVL = !isa<ConstantSDNode>(RawAVL);
+  bool IsDynamicAVL = RawAVL && !isa<ConstantSDNode>(RawAVL);
 
   // Legalize AVL
   SDValue NewAVL;

@@ -320,10 +320,10 @@ struct CustomDAG {
   SDValue createTargetAVL(VVPWideningInfo WidenInfo) const;
 
   struct TargetMasks {
-    SDValue AVL;
     SDValue Mask;
-    TargetMasks(SDValue AVL, SDValue Mask)
-    : AVL(AVL), Mask(Mask) {}
+    SDValue AVL;
+    TargetMasks(SDValue Mask, SDValue AVL)
+    : Mask(Mask), AVL(AVL) {}
   };
   TargetMasks createTargetMask(VVPWideningInfo, SDValue RawMask, SDValue RawAVL);
 

@@ -983,7 +983,7 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
   MVT ChainVT = Op.getNode()->getSimpleValueType(1);
 
   // create suitable mask and avl parameters (accounts for packing)
-  auto TargetMasks = CDAG.createTargetMask(WidenInfo, SDValue(), OpVectorLength);
+  auto TargetMasks = CDAG.createTargetMask(WidenInfo, Mask, OpVectorLength);
 
   // emit
   auto NewLoadV = CDAG.getNode(VEISD::VVP_LOAD, {DataVT, ChainVT},
@@ -1047,7 +1047,7 @@ SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
       pickResultType(CDAG, Op, Mode);
 
   // create suitable mask and avl parameters (accounts for packing)
-  auto TargetMasks = CDAG.createTargetMask(WidenInfo, SDValue(), OpVectorLength);
+  auto TargetMasks = CDAG.createTargetMask(WidenInfo, Mask, OpVectorLength);
 
   return CDAG.getNode(
       VEISD::VVP_STORE, Op.getNode()->getVTList(),
