@@ -316,6 +316,17 @@ struct CustomDAG {
                        SDValue MaskV, SDValue AVL) const;
   /// } VVP
 
+  SDValue createConstantTargetMask(VVPWideningInfo WidenInfo) const;
+  SDValue createTargetAVL(VVPWideningInfo WidenInfo) const;
+
+  struct TargetMasks {
+    SDValue AVL;
+    SDValue Mask;
+    TargetMasks(SDValue AVL, SDValue Mask)
+    : AVL(AVL), Mask(Mask) {}
+  };
+  TargetMasks createTargetMask(VVPWideningInfo, SDValue RawMask, SDValue RawAVL);
+
   LLVMContext &getContext() { return *DAG.getContext(); }
 };
 

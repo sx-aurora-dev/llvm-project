@@ -646,5 +646,74 @@ SDValue CustomDAG::getVVPGather(EVT LegalResVT, SDValue ChainV, SDValue PtrV,
                      {ChainV, PtrV, MaskV, AVL});
 }
 
+SDValue
+CustomDAG::createConstantTargetMask(VVPWideningInfo WidenInfo) const {
+  /// Use the eventual native vector width for all newly generated operands
+  // we do not want to go through ::ReplaceNodeResults again only to have them
+  // widened
+  unsigned NativeVectorWidth =
+      (WidenInfo.ActiveVectorLength > StandardVectorWidth)
+          ? PackedWidth
+          : StandardVectorWidth;
+
+  // Generate a remainder mask for packed operations
+  Packing PackFlag = WidenInfo.PackedMode ? Packing::Dense : Packing::Normal;
+  if (!WidenInfo.NeedsPackedMasking) {
+    return createUniformConstMask(PackFlag, NativeVectorWidth, true);
+
+  } else {
+    // TODO only really generate a mask if there is a change the operation will
+    // benefit from it (eg, for vfdiv)
+    PackedLaneBits MaskBits;
+    MaskBits.reset();
+    MaskBits.flip();
+    size_t OddRemainderBitPos = WidenInfo.ActiveVectorLength;
+    MaskBits[OddRemainderBitPos] = false;
+    return createConstMask<>(PackedWidth, MaskBits);
+  }
+}
+
+SDValue
+CustomDAG::createTargetAVL(VVPWideningInfo WidenInfo) const {
+  // Legalize the AVL
+  if (WidenInfo.PackedMode) {
+    return getConstEVL((WidenInfo.ActiveVectorLength + 1) / 2);
+  } else {
+    return getConstEVL(WidenInfo.ActiveVectorLength);
+  }
+}
+
+CustomDAG::TargetMasks
+CustomDAG::createTargetMask(VVPWideningInfo WidenInfo, SDValue RawMask, SDValue RawAVL) {
+  bool IsDynamicAVL = !isa<ConstantSDNode>(RawAVL);
+
+  // Legalize AVL
+  SDValue NewAVL;
+  if (!RawAVL) {
+    NewAVL = createTargetAVL(WidenInfo);
+  } else if (auto ConstAVL = dyn_cast<ConstantSDNode>(RawAVL)) {
+    WidenInfo.ActiveVectorLength = std::min<unsigned>(ConstAVL->getZExtValue(), WidenInfo.ActiveVectorLength);
+    NewAVL = createTargetAVL(WidenInfo);
+  } else if (RawAVL && !WidenInfo.PackedMode) {
+    NewAVL = RawAVL;
+  } else {
+    assert(WidenInfo.PackedMode);
+    assert(IsDynamicAVL);
+    
+    auto PlusOne = getNode(ISD::ADD, MVT::i32, {RawAVL, getConstEVL(1)});
+    NewAVL = getNode(ISD::SRL, MVT::i32, {PlusOne, getConstEVL(1)});
+  }
+
+  // Legalize Mask (nothing to do here)
+  SDValue NewMask;
+  if (!RawMask) {
+    NewMask = createConstantTargetMask(WidenInfo);
+  } else {
+    NewMask = RawMask;
+  }
+
+  return CustomDAG::TargetMasks(NewMask, NewAVL);
+}
+
 /// } class CustomDAG
 } // namespace llvm

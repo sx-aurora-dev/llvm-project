@@ -558,54 +558,18 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   assert(VVPOC.hasValue() &&
          "TODO implement this operation in the VVP isel layer");
 
-  // Select the AVL
-  unsigned AdjustedLen = WidenInfo.PackedMode
-                             ? (WidenInfo.ActiveVectorLength + 1) / 2
-                             : WidenInfo.ActiveVectorLength;
-  SDValue LenVal = CDAG.getConstant(AdjustedLen, MVT::i32);
+  // Generate a mask and an AVL
+  auto TargetMasks = CDAG.createTargetMask(WidenInfo, SDValue(), SDValue());
 
   // Is packed mode an option for this OC?
   if (WidenInfo.PackedMode && !SupportsPackedMode(VVPOC.getValue())) {
-    return ExpandToSplitVVP(Op, DAG, Mode, LenVal);
+    return ExpandToSplitVVP(Op, DAG, Mode, TargetMasks.AVL);
   }
-
-  // Over-sized even for packed
-#if 0
-  if (WidenInfo.StaticVectorLength OpVectorLength > WidenInfo.StaticVectorLength) {
-    LLVM_DEBUG(dbgs() << "LowerToVVP: Over-sized vector operation\n");
-    return SDValue();
-  }
-#endif
 
   ///// Widen the actual result type /////
   // FIXME We cannot use the idiomatic type here since that type reflects the
   // operatino vector width (and the element type does not matter as much).
   EVT ResVecTy = CDAG.legalizeVectorType(Op, Mode);
-
-  /// Use the eventual native vector width for all newly generated operands
-  // we do not want to go through ::ReplaceNodeResults again only to have them
-  // widened
-  unsigned NativeVectorWidth =
-      (WidenInfo.ActiveVectorLength > StandardVectorWidth)
-          ? PackedWidth
-          : StandardVectorWidth;
-
-  // Generate a mask for packed operations
-  SDValue MaskVal;
-  Packing PackFlag = WidenInfo.PackedMode ? Packing::Dense : Packing::Normal;
-  if (!WidenInfo.NeedsPackedMasking) {
-    MaskVal = CDAG.createUniformConstMask(PackFlag, NativeVectorWidth, true);
-
-  } else {
-    // TODO only really generate a mask if there is a change the operation will
-    // benefit from it (eg, for vfdiv)
-    PackedLaneBits MaskBits;
-    MaskBits.reset();
-    MaskBits.flip();
-    size_t OddRemainderBitPos = WidenInfo.ActiveVectorLength;
-    MaskBits[OddRemainderBitPos] = false;
-    CDAG.createConstMask<>(PackedWidth, MaskBits);
-  }
 
   // legalize all operands
   SmallVector<SDValue, 4> LegalOperands;
@@ -616,13 +580,13 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   if (isUnaryOp) {
     assert(VVPOC.hasValue());
     return CDAG.getNode(VVPOC.getValue(), ResVecTy,
-                        {LegalOperands[0], MaskVal, LenVal});
+                        {LegalOperands[0], TargetMasks.Mask, TargetMasks.AVL});
   }
 
   if (isBinaryOp) {
     assert(VVPOC.hasValue());
     return CDAG.getNode(VVPOC.getValue(), ResVecTy,
-                        {LegalOperands[0], LegalOperands[1], MaskVal, LenVal});
+                        {LegalOperands[0], LegalOperands[1], TargetMasks.Mask, TargetMasks.AVL});
   }
 
   if (isTernaryOp) {
@@ -633,15 +597,15 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
       // SDNodes).
       return CDAG.getNode(VVPOC.getValue(), ResVecTy,
                           {LegalOperands[2], LegalOperands[0], LegalOperands[1],
-                           MaskVal, LenVal});
+                           TargetMasks.Mask, TargetMasks.AVL});
     }
     case VEISD::VVP_SETCC: {
       return CDAG.getNode(VVPOC.getValue(), ResVecTy,
                           {LegalOperands[0], LegalOperands[1], LegalOperands[2],
-                           MaskVal, LenVal});
+                           TargetMasks.Mask, TargetMasks.AVL});
     }
     case VEISD::VVP_SELECT: {
-      return ExpandSELECT(Op, LegalOperands, ResVecTy, CDAG, LenVal);
+      return ExpandSELECT(Op, LegalOperands, ResVecTy, CDAG, TargetMasks.AVL);
     }
     default:
       llvm_unreachable("Unexpected ternary operator!");
@@ -656,29 +620,29 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
 
     return CDAG.getNode(
         VEISD::VVP_STORE, ChainTy,
-        {ChainVal, PtrVal, LegalizeVecOperand(DataVal, DAG), MaskVal, LenVal});
+        {ChainVal, PtrVal, LegalizeVecOperand(DataVal, DAG), TargetMasks.Mask, TargetMasks.AVL});
   }
 
   if (isConvOp) {
     return CDAG.getNode(VVPOC.getValue(), ResVecTy,
-                        {LegalOperands[0], MaskVal, LenVal});
+                        {LegalOperands[0], TargetMasks.Mask, TargetMasks.AVL});
   }
 
   if (isReduceOp) {
     // FIXME
-    SDValue Attempt = LowerVECREDUCE(Op, DAG);
-    if (Attempt)
-      return Attempt;
+    //SDValue Attempt = LowerVECREDUCE(Op, DAG);
+    //if (Attempt)
+    //  return Attempt;
 
     auto PosOpt = getVVPReductionStartParamPos(VVPOC.getValue());
     if (PosOpt) {
       return CDAG.getNode(
           VVPOC.getValue(), ResVecTy,
-          {LegalOperands[0], LegalOperands[1], MaskVal, LenVal});
+          {LegalOperands[0], LegalOperands[1], TargetMasks.Mask, TargetMasks.AVL});
     }
 
     return CDAG.getNode(VVPOC.getValue(), ResVecTy,
-                        {LegalOperands[0], MaskVal, LenVal});
+                        {LegalOperands[0], TargetMasks.Mask, TargetMasks.AVL});
   }
 
   llvm_unreachable("Cannot lower this op to VVP");
@@ -1012,19 +976,18 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
   // minimize vector length
   OpVectorLength = ReduceVectorLength(Mask, OpVectorLength, VecLenHint, DAG);
 
+  VVPWideningInfo WidenInfo =
+      pickResultType(CDAG, Op, Mode);
+
   EVT DataVT = LegalizeVectorType(MemN->getMemoryVT(), Op, DAG, Mode);
-  // assert(!IsPackedType(DataVT) && "TODO implement packed-mode masked loads");
   MVT ChainVT = Op.getNode()->getSimpleValueType(1);
 
-  // Patch in an all-true mask if required
-  if (!Mask) {
-    Packing PackFlag = IsPackedType(DataVT) ? Packing::Dense : Packing::Normal;
-    Mask = CDAG.createUniformConstMask(PackFlag, DataVT.getVectorNumElements(),
-                                       true);
-  }
+  // create suitable mask and avl parameters (accounts for packing)
+  auto TargetMasks = CDAG.createTargetMask(WidenInfo, SDValue(), OpVectorLength);
 
+  // emit
   auto NewLoadV = CDAG.getNode(VEISD::VVP_LOAD, {DataVT, ChainVT},
-                               {Chain, BasePtr, Mask, OpVectorLength});
+                               {Chain, BasePtr, TargetMasks.Mask, TargetMasks.AVL});
 
   if (!PassThru || PassThru.isUndef()) {
     return NewLoadV;
@@ -1040,6 +1003,7 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
 }
 
 SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
+  VVPExpansionMode Mode = VVPExpansionMode::ToNativeWidth;
   LLVM_DEBUG(dbgs() << "Lowering VP/MSTORE\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
   SDLoc dl(Op);
@@ -1075,8 +1039,19 @@ SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
     Data = VPStoreN->getValue();
   }
 
-  return DAG.getNode(VEISD::VVP_STORE, dl, Op.getNode()->getVTList(),
-                     {Chain, Data, BasePtr, Mask, OpVectorLength});
+  // minimize vector length
+  OpVectorLength = ReduceVectorLength(Mask, OpVectorLength, None, DAG);
+
+  CustomDAG CDAG(*this, DAG, Op);
+  VVPWideningInfo WidenInfo =
+      pickResultType(CDAG, Op, Mode);
+
+  // create suitable mask and avl parameters (accounts for packing)
+  auto TargetMasks = CDAG.createTargetMask(WidenInfo, SDValue(), OpVectorLength);
+
+  return CDAG.getNode(
+      VEISD::VVP_STORE, Op.getNode()->getVTList(),
+      {Chain, Data, BasePtr, TargetMasks.Mask, TargetMasks.AVL});
 }
 
 SDValue VETargetLowering::LowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const {
@@ -1115,14 +1090,17 @@ static SDValue PeekThroughCasts(SDValue Op) {
   }
 }
 
+#if 0
 SDValue VETargetLowering::LowerVECREDUCE(SDValue Op, SelectionDAG &DAG) const {
   ////  def : Pat<(vecreduce_add v256i1:$vy), (PCVM v256i1:$vy,
   ////                     (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
   ////
   ////  // "any" mask test // TODO do we need to set sign bit proper?
   ////  def : Pat<(vecreduce_or v256i1:$vy), (vecreduce_add v256i1:$vy))>;
+  CustomDAG CDAG(*this, DAG, Op);
 
-  SDLoc dl(Op);
+  VVPWideningInfo WidenInfo =
+      pickResultType(CDAG, Op, Mode);
 
   auto V = Op->getOperand(0);
   EVT VTy = V.getValueType();
@@ -1179,6 +1157,7 @@ SDValue VETargetLowering::LowerVECREDUCE(SDValue Op, SelectionDAG &DAG) const {
 
   return Result;
 }
+#endif
 
 SDValue
 VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
