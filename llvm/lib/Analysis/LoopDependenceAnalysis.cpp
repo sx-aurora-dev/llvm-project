@@ -212,15 +212,6 @@ isPerfectLoopNestWithAccessesInTheInnermost(const Loop &TheLoop) {
   return Res;
 }
 
-static bool isSimpleAddRec(ScalarEvolution &SE, const SCEVAddRecExpr *E) {
-  // TODO: Do we want to make sure that the step is 1?
-  if (E->getStepRecurrence(SE)->getSCEVType() != scConstant)
-    return false;
-  if (E->getStart()->getSCEVType() != scConstant)
-    return false;
-  return true;
-}
-
 bool subscriptsAreWithinBounds(ScalarEvolution &SE,
                                const SmallVectorImpl<const SCEV *> &Subscripts,
                                const SmallVectorImpl<const SCEV *> &Sizes) {
@@ -298,11 +289,10 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
       break;
     case scAddRecExpr: {
       const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
-      if (AddRec->getLoop() == Runner && isSimpleAddRec(SE, AddRec)) {
+      if (AddRec->getLoop() == Runner)
         break; // For the switch
-      } else {
+      else
         return false;
-      }
     } break;
     default:
       return false;
