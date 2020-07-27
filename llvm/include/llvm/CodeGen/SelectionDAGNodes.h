@@ -464,6 +464,8 @@ public:
   }
 };
 
+using PosOpt = Optional<unsigned>;
+
 /// Represents one node in the SelectionDAG.
 ///
 class SDNode : public FoldingSetNode, public ilist_node<SDNode> {
@@ -692,6 +694,28 @@ public:
 #define BEGIN_REGISTER_VP_SDNODE(VPID, ...) case ISD::VPID:
 #include "llvm/IR/VPIntrinsics.def"
       return true;
+    }
+  }
+
+  PosOpt getVPMaskPos() const {
+    switch (NodeType) {
+    default:
+      return None;
+
+#define BEGIN_REGISTER_VP_SDNODE(VPID, LEGALARG, DEFNAME, MASKPOS, VLENPOS) \
+    case ISD::VPID: return MASKPOS;
+#include "llvm/IR/VPIntrinsics.def"
+    }
+  }
+
+  PosOpt getVPVectorLenPos() const {
+    switch (NodeType) {
+    default:
+      return None;
+
+#define BEGIN_REGISTER_VP_SDNODE(VPID, LEGALARG, DEFNAME, MASKPOS, VLENPOS) \
+    case ISD::VPID: return VLENPOS;
+#include "llvm/IR/VPIntrinsics.def"
     }
   }
 
