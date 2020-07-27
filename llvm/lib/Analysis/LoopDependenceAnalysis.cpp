@@ -87,7 +87,7 @@ LoopDependenceInfo LoopDependenceAnalysis::run(Function &F,
 // Iterate all loops in DFS.
 static void iterateAllLoops(LoopDependenceInfo *LDI, const Loop *L) {
   LoopDependence Res = LDI->getDependenceInfo(*L);
-  dbgs() << "Loop: " << L->getName() << ": ";
+  dbgs() << "\nLoop: " << L->getName() << ": ";
   if (!Res.VectorizationFactor.hasValue()) {
     dbgs() << "Is vectorizable for any factor\n";
   } else {
@@ -97,6 +97,7 @@ static void iterateAllLoops(LoopDependenceInfo *LDI, const Loop *L) {
     else
       dbgs() << "Is NOT vectorizable\n";
   }
+  dbgs() << "\n";
   for (const Loop *L : L->getSubLoops()) {
     iterateAllLoops(LDI, L);
   }
@@ -258,8 +259,10 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
   // we chose in this loop nest. For example,
   // if we're vectorizing the outer-most loop of a 3-level deep loop nest,
   // then we should have exactly 3 subscripts in each access.
-  if (Subscripts.size() != NumEnclosedLoops + 1)
+  if (!(Subscripts.size() >= NumEnclosedLoops + 1)) {
+    LLVM_DEBUG(dbgs() << "Few dimensions in access\n";);
     return false;
+  }
 
   // Make sure that each subscript is either loop-invariant or
   // it depends on the loop that is in the depth that matches
@@ -281,7 +284,8 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
   // only consider constants as loop-invariants and only handle simple
   // AddRecExprs.
   const Loop *Runner = Innermost;
-  for (ssize_t i = Subscripts.size() - 1; i >= 0; --i) {
+  ssize_t End = Subscripts.size() - (NumEnclosedLoops + 1);
+  for (ssize_t i = Subscripts.size() - 1; i >= End; --i) {
     const SCEV *S = Subscripts[i];
     switch (S->getSCEVType()) {
     // Those are loop-invariant
@@ -303,7 +307,7 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
     Runner = Runner->getParentLoop();
   }
 
-  //if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
+  // if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
   //  return false;
 
   return true;
@@ -337,18 +341,15 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
 
   LLVM_DEBUG(
 
-    dbgs() << "Base offset: " << *BasePointer << "\n";
-    dbgs() << "ArrayDecl[UnknownSize]";
-    int Size = Subscripts.size();
-    for (int i = 0; i < Size - 1; i++)
-      dbgs() << "[" << *Sizes[i] << "]";
-    dbgs() << " with elements of " << *Sizes[Size - 1] << " bytes.\n";
+      dbgs() << "Base offset: " << *BasePointer << "\n";
+      dbgs() << "ArrayDecl[UnknownSize]"; int Size = Subscripts.size();
+      for (int i = 0; i < Size - 1; i++) dbgs() << "[" << *Sizes[i] << "]";
+      dbgs() << " with elements of " << *Sizes[Size - 1] << " bytes.\n";
 
-    dbgs() << "ArrayRef";
-    for (int i = 0; i < Size; i++)
-      dbgs() << "[" << *Subscripts[i] << "]";
-    dbgs() << "\n";
-  
+      dbgs() << "ArrayRef";
+      for (int i = 0; i < Size; i++) dbgs() << "[" << *Subscripts[i] << "]";
+      dbgs() << "\n";
+
   );
 
   return true;
@@ -369,13 +370,33 @@ struct DepVectorComponent {
   char dir;
   // TODO: Probably change to SCEV
   int dist;
+
+  void print() const { dbgs() << "{" << dir << ", " << dist << "}"; }
 };
 
-// Assuming only 2-d dir vectors
-// for now.
 struct DepVector {
   bool valid;
   SmallVector<DepVectorComponent, 4> comps;
+
+  void print() const {
+    if (!valid) {
+      dbgs() << "Invalid DepVector\n";
+      return;
+    }
+    if (comps.size() == 0) {
+      dbgs() << "(Empty)";
+      return;
+    }
+    dbgs() << "(";
+    comps[0].print();
+    for (size_t i = 1; i < comps.size(); ++i) {
+      dbgs() << ", ";
+      comps[i].print();
+    }
+    dbgs() << ")";
+  }
+
+  size_t size() const { return comps.size(); }
 };
 
 DepVectorComponent getDVComponentFromSCEVConstant(const SCEVConstant *C) {
@@ -412,17 +433,19 @@ DepVectorComponent getDVComponent(ScalarEvolution *SE, const SCEV *S1,
 
 DepVector getDirVector(ScalarEvolution *SE,
                        SmallVectorImpl<const SCEV *> &Subscripts1,
-                       SmallVectorImpl<const SCEV *> &Subscripts2) {
+                       SmallVectorImpl<const SCEV *> &Subscripts2,
+                       size_t NumEnclosedLoops) {
 
-  assert(Subscripts1.size() == 2);
   assert(Subscripts1.size() == Subscripts2.size());
+  assert(Subscripts1.size() >= (NumEnclosedLoops + 1));
 
   DepVector res = {true};
 
-  res.comps.push_back(
-      getDVComponent(SE, Subscripts1[0], Subscripts2[0], res.valid));
-  res.comps.push_back(
-      getDVComponent(SE, Subscripts1[1], Subscripts2[1], res.valid));
+  size_t Index = Subscripts1.size() - (NumEnclosedLoops + 1);
+  for (; Index < Subscripts1.size(); ++Index) {
+    res.comps.push_back(
+        getDVComponent(SE, Subscripts1[Index], Subscripts2[Index], res.valid));
+  }
 
   return res;
 }
@@ -438,9 +461,7 @@ static bool verifyDirectionVector(DepVector &DV, int NumEnclosedLoops) {
     else if (DVC.dir == '=' && DVC.dist != 0)
       return false;
   }
-  if (NumEnclosedLoops == 1) {
-    if (DV.comps.size() != 2)
-      return false;
+  if (DV.size() == 2) {
     // We can't have a dinstance vector that looks
     // downwards or directly to the left, because
     // that would mean that a later iteration
@@ -602,9 +623,10 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         return Bail;
 
       LLVM_DEBUG(dbgs() << "\n");
-      DepVector DV = getDirVector(&SE, Subscripts1, Subscripts2);
+      DepVector DV = getDirVector(&SE, Subscripts1, Subscripts2,
+                                  NestInfo.NumEnclosedLoops);
+      LLVM_DEBUG(DV.print(););
       if (!DV.valid) {
-        LLVM_DEBUG(dbgs() << "Invalid direction vector\n");
         continue;
       } else {
         ConstVF MaxAllowedVectorizationFactor =
@@ -613,10 +635,6 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
           Res.VectorizationFactor = MaxAllowedVectorizationFactor;
         if (Res.isWorstPossible())
           return Bail;
-        LLVM_DEBUG(dbgs() << "(" << DV.comps[0].dir << ", " << DV.comps[1].dir
-                          << ")\n";
-                   dbgs() << "Outer loop distance: " << DV.comps[0].dist
-                          << "\n";);
       }
     }
   }
