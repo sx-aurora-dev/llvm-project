@@ -1013,12 +1013,14 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
   OpVectorLength = ReduceVectorLength(Mask, OpVectorLength, VecLenHint, DAG);
 
   EVT DataVT = LegalizeVectorType(MemN->getMemoryVT(), Op, DAG, Mode);
-  assert(!IsPackedType(DataVT) && "TODO implement packed-mode masked loads");
+  // assert(!IsPackedType(DataVT) && "TODO implement packed-mode masked loads");
   MVT ChainVT = Op.getNode()->getSimpleValueType(1);
 
   // Patch in an all-true mask if required
   if (!Mask) {
-    Mask = CDAG.createUniformConstMask(Packing::Normal, DataVT.getVectorNumElements(), true);
+    Packing PackFlag = IsPackedType(DataVT) ? Packing::Dense : Packing::Normal;
+    Mask = CDAG.createUniformConstMask(PackFlag, DataVT.getVectorNumElements(),
+                                       true);
   }
 
   auto NewLoadV = CDAG.getNode(VEISD::VVP_LOAD, {DataVT, ChainVT},
