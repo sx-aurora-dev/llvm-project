@@ -534,7 +534,6 @@ template <typename MaskBits>
 SDValue CustomDAG::createConstMask(unsigned NumElems,
                                    const MaskBits &TrueBits) const {
   Packing Packing = getPackingForMaskBits<>(TrueBits);
-  SDValue MaskV = createUniformConstMask(Packing, TrueBits.size(), false);
 
   // Scan for trivial cases
   bool TrivialMask = true;
@@ -548,14 +547,14 @@ SDValue CustomDAG::createConstMask(unsigned NumElems,
     return createUniformConstMask(Packing, TrueBits.size(), TrueBits[0]);
   }
 
-  assert((Packing == Packing::Normal) && "TODO implement for packed masks");
-
+  SDValue MaskV = createUniformConstMask(Packing, TrueBits.size(), false);
   unsigned RegPartIdx = 0;
   for (unsigned StartIdx = 0; StartIdx < NumElems;
        StartIdx += SXRegSize, ++RegPartIdx) {
     uint64_t ConstReg = 0;
     for (uint i = 0; i < SXRegSize; ++i) {
-      ConstReg |= TrueBits[StartIdx + i] ? (1 << i) : 0;
+      uint64_t LaneMask = ((uint64_t) 1) << i;
+      ConstReg |= TrueBits[StartIdx + i] ? LaneMask : 0;
     }
     // initial mask is all-zero already
     if (!ConstReg)
@@ -583,7 +582,7 @@ SDValue CustomDAG::createSelect(EVT ResVT, SDValue OnTrueV, SDValue OnFalseV,
 
 SDValue CustomDAG::createUniformConstMask(Packing Packing, unsigned NumElements,
                                           bool IsTrue) const {
-  auto MaskVT = getMaskVT(Packing); // getVectorVT(MVT::i1, NumElements);
+  auto MaskVT = getMaskVT(Packing);
 
   // VEISelDAGtoDAG will replace this with the constant-true VM
   auto TrueVal = DAG.getConstant(-1, DL, MVT::i32);
@@ -594,7 +593,7 @@ SDValue CustomDAG::createUniformConstMask(Packing Packing, unsigned NumElements,
   if (IsTrue)
     return Res;
 
-  // negate // TODO respect NumElements
+  // TODO respect NumElements
   return DAG.getNOT(DL, Res, Res.getValueType());
 }
 

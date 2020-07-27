@@ -513,6 +513,9 @@ bool MaskShuffleAnalysis::analyzeVectorSources(bool &AllTrue) const {
 
 // materialize the code to synthesize this operation
 SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
+  Packing PackFlag = LegalMaskVT.getVectorNumElements() > 256 ? Packing::Dense
+                                                              : Packing::Normal;
+
   // this view reflects exactly those insertions that are non-constant and have
   // a MVT::i32 type
   VRegView VectorMV(CDAG, MV);
@@ -524,6 +527,8 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
   const unsigned LegalNumElems = LegalMaskVT.getVectorNumElements();
   bool HasScalarSourceEntries = hasNonZeroEntry(VectorMV);
 
+  // There are insertions of scalar register bits.
+  // CodeGen those as insertions into 'BlendV' to OR-them in later.
   if (HasScalarSourceEntries) {
     LLVM_DEBUG(dbgs() << ":: has non-trivial insertion in VectorMV ::\n";);
     SDValue AVL = CDAG.getConstEVL(NumElems); // FIXME
@@ -536,26 +541,29 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
     BlendV = CDAG.createMaskCast(VecSourceV, AVL);
   }
 
-  // Check for a constant in the bit transfer mask
+  // Check whether this is an all-zero or all-one constant mask (except for scalar register insertions).
+  // If not, transfer the XS-sized chunks from their respective source registers.
   SDValue VMAccu;
   bool AllTrue;
   bool HasTrivialBackground = analyzeVectorSources(AllTrue);
   bool AllTrueBackground = HasTrivialBackground && AllTrue;
-  bool AllFalseBackground = HasTrivialBackground && AllTrue;
+  bool AllFalseBackground = HasTrivialBackground && !AllTrue;
 
   if (!HasScalarSourceEntries && AllTrueBackground) {
     // Must not have spurious `1` entries since what is undefined for the
     // vector/constant sources could be the defined insertion of a bit from a
     // scalar register. Short cut when the only occuring constant is a '1'
-    VMAccu = CDAG.createUniformConstMask(Packing::Normal, LegalNumElems, true);
+    VMAccu = CDAG.createUniformConstMask(PackFlag, LegalNumElems, true);
 
   } else if (AllFalseBackground) {
     // Don't need to check for spurious `1` bits here since
     // the scalar result and the vector/constant results are OR-ed together in
     // the end.
-    VMAccu = SDValue();
+    VMAccu = SDValue(); // Deferring all-false codegen (so we can save on an 'OR' with the blend mask)
 
   } else {
+    // Either non-trivial constant mask or non-trivial incoming bits from other
+    // vector masks.
     VMAccu = CDAG.DAG.getUNDEF(LegalMaskVT);
 
     // There are non-trivial bit transfers from other vector registers
@@ -610,7 +618,7 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
     return BlendV;
   if (VMAccu)
     return VMAccu;
-  return CDAG.createUniformConstMask(Packing::Normal, LegalNumElems, false);
+  return CDAG.createUniformConstMask(PackFlag, LegalNumElems, false);
 }
 
 /// } MaskShuffleAnalysis
