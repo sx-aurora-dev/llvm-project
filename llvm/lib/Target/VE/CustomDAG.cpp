@@ -39,14 +39,19 @@ PosOpt GetVVPOpcode(unsigned OpCode) {
     return OpCode;
 
   switch (OpCode) {
+  default:
+    return None;
+
   case ISD::SCALAR_TO_VECTOR:
     return VEISD::VEC_BROADCAST;
 
   case ISD::SELECT: // additional alias next to VSELECT
     return VEISD::VVP_SELECT;
 
-  default:
-    return None;
+#define HANDLE_VP_TO_VVP(VP_ID, VVP_NAME)                                      \
+  case ISD::VP_ID:                                                             \
+    return VEISD::VVP_NAME;
+
 #define REGISTER_VVP_OP(VVP_NAME, NATIVE_ISD)                                  \
   case ISD::NATIVE_ISD:                                                        \
     return VEISD::VVP_NAME;

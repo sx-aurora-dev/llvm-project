@@ -213,6 +213,11 @@ def : Pat<(v512i32 (vec_pack v256i32:$vlo, v256i32:$vhi, i32:$avl)),
           (vshf_vvvIl $vlo, $vhi, 3, $avl)>;
 def : Pat<(v512f32 (vec_pack v256f32:$vlo, v256f32:$vhi, i32:$avl)),
           (vshf_vvvIl $vlo, $vhi, 2, $avl)>;
+def : Pat<(v512i1 (vec_pack v256i1:$vlo, v256i1:$vhi, (i32 srcvalue))),
+          (INSERT_SUBREG (INSERT_SUBREG
+                         (v512i1 (IMPLICIT_DEF)),
+                         $vlo, sub_vm_even),
+                         $vhi, sub_vm_odd)>;
 
 // Swapping
 multiclass Unpack_Swap<ValueType PackVT> {
@@ -231,6 +236,12 @@ multiclass Unpack_Swap<ValueType PackVT> {
   def : Pat<(v256i32 (vec_unpack_hi PackVT:$vp, i32:$avl)),
             (vshf_vvvIl $vp, $vp, 0, $avl)>; // always pick hi
 }
+
+// mask unpacking
+def : Pat<(v256i1 (vec_unpack_lo v512i1:$vm, (i32 srcvalue))),
+          (EXTRACT_SUBREG $vm, sub_vm_even)>;
+def : Pat<(v256i1 (vec_unpack_hi v512i1:$vm, (i32 srcvalue))),
+          (EXTRACT_SUBREG $vm, sub_vm_odd)>;
 
 defm: Unpack_Swap<v512i32>;
 defm: Unpack_Swap<v512f32>;

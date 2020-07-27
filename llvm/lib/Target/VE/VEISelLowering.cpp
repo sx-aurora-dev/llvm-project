@@ -317,6 +317,7 @@ static SDValue extractPackElem(SDValue Op, CustomDAG &CDAG, PackElem Part,
 SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
                                            VVPExpansionMode Mode,
                                            SDValue AVL) const {
+  LLVM_DEBUG(dbgs() << "ExpandToSplitVVP: "; Op->print(dbgs()); dbgs() << "\n");
   auto OcOpt = GetVVPOpcode(Op.getOpcode());
   assert(OcOpt.hasValue());
   unsigned VVPOC = OcOpt.getValue();
@@ -324,6 +325,15 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
   CustomDAG CDAG(*this, DAG, Op);
 
   EVT ResVT = getSplitVT(Op.getValue(0).getValueType(), CDAG);
+
+  bool FromVP = Op->isVP();
+
+  // override with the VP's own AVL
+  if (FromVP) {
+    auto AVLPos = Op->getVPVectorLenPos();
+    assert(AVLPos);
+    AVL = Op->getOperand(AVLPos.getValue());
+  }
 
   // request the parts
   SDValue PartOps[2];
@@ -333,11 +343,16 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
       SDValue PartV = extractPackElem(Op.getOperand(i), CDAG, Part, AVL);
       OpVec.push_back(PartV);
     }
-    // attach Mask
-    SDValue TrueMask = CDAG.createUniformConstMask(Packing::Normal, 256, true);
-    OpVec.push_back(TrueMask);
-    // attach AVL
-    OpVec.push_back(AVL);
+
+    // VP ops already have an explicit mask and AVL. When expanding from non-VP
+    // attach those additional inputs here.
+    if (!FromVP) {
+      // attach Mask
+      SDValue TrueMask = CDAG.createUniformConstMask(Packing::Normal, 256, true);
+      OpVec.push_back(TrueMask);
+      // attach AVL
+      OpVec.push_back(AVL);
+    }
     PartOps[(int)Part] = CDAG.getNode(VVPOC, ResVT, OpVec);
   }
 
@@ -577,8 +592,9 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
 
   // Generate a mask for packed operations
   SDValue MaskVal;
+  Packing PackFlag = WidenInfo.PackedMode ? Packing::Dense : Packing::Normal;
   if (!WidenInfo.NeedsPackedMasking) {
-    MaskVal = CDAG.createUniformConstMask(Packing::Normal, NativeVectorWidth, true);
+    MaskVal = CDAG.createUniformConstMask(PackFlag, NativeVectorWidth, true);
 
   } else {
     // TODO only really generate a mask if there is a change the operation will
@@ -919,6 +935,12 @@ SDValue VETargetLowering::LowerVPToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansi
     return SDValue();
   }
 
+  // Split into two v256 ops?
+  if (WidenInfo.PackedMode && !SupportsPackedMode(OCOpt.getValue())) {
+    return ExpandToSplitVVP(Op, DAG, Mode, SDValue());
+  }
+
+  // Otw, opt for direct VVP_* lowering
   SDLoc dl(Op);
   unsigned VVPOC = OCOpt.getValue();
   std::vector<SDValue> OpVec;
