@@ -12,7 +12,8 @@
 
 ; Explanation: While the outer distance is 1, the inner distance is also 1
 ; but more importantly, it is positive. In other words, the direction
-; vector is (<, <). So, we can vectorize for any factor
+; vector is (<, <). So, we can vectorize for any factor (i.e. for such
+; direction vectors, we don't care at all)
 
 define void @test(i64 %n, i64 %m, i64* %A) {
 entry:
