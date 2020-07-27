@@ -70,10 +70,17 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
     }
   }
 
-  // Whether to generate VPU instructions (on by default)
+  // Whether to map v4i64, v8i64 to the vector mask register
   if (auto *A = Args.getLastArg(options::OPT_mvelintrin, options::OPT_mno_velintrin)) {
     if (A->getOption().matches(options::OPT_mvelintrin)) {
       Features.push_back("+velintrin");
+    }
+  }
+
+  // Whether to generate VPU instructions (on by default)
+  if (auto *A = Args.getLastArg(options::OPT_mvepacked, options::OPT_mno_vepacked)) {
+    if (A->getOption().matches(options::OPT_mvepacked)) {
+      Features.push_back("+packed");
     }
   }
 }

@@ -3240,6 +3240,13 @@ def mno_velintrin : Flag<["-"], "mno-velintrin">, Group<m_ve_Features_Group>,
   HelpText<"Disable VEL intrinsics for VE">,
   Flags<[CC1Option]>;
 
+def mvepacked : Flag<["-"], "mvepacked">, Group<m_ve_Features_Group>,
+  HelpText<"Enable Packed mode for VE">,
+  Flags<[CC1Option]>;
+def mno_vepacked : Flag<["-"], "mno-packed">, Group<m_ve_Features_Group>,
+  HelpText<"Disable Packed mode for VE">,
+  Flags<[CC1Option]>;
+
 // These are legacy user-facing driver-level option spellings. They are always
 // aliases for options that are spelled using the more common Unix / GNU flag
 // style of double-dash and equals-joined flags.
