@@ -185,12 +185,6 @@ define <2 x float> @vec_add_v2f32(<2 x float> %a, <2 x float> %b) {
 define <3 x float> @vec_add_v3f32(<3 x float> %a, <3 x float> %b) {
 ; CHECK-LABEL: vec_add_v3f32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    # kill: def $sf5 killed $sf5 def $sx5
-; CHECK-NEXT:    # kill: def $sf4 killed $sf4 def $sx4
-; CHECK-NEXT:    # kill: def $sf3 killed $sf3 def $sx3
-; CHECK-NEXT:    # kill: def $sf2 killed $sf2 def $sx2
-; CHECK-NEXT:    # kill: def $sf1 killed $sf1 def $sx1
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 def $sx0
 ; CHECK-NEXT:    lsv %v0(0),%s3
 ; CHECK-NEXT:    lsv %v0(1),%s4
 ; CHECK-NEXT:    lsv %v0(2),%s5
@@ -203,9 +197,6 @@ define <3 x float> @vec_add_v3f32(<3 x float> %a, <3 x float> %b) {
 ; CHECK-NEXT:    lvs %s0,%v0(0)
 ; CHECK-NEXT:    lvs %s1,%v0(1)
 ; CHECK-NEXT:    lvs %s2,%v0(2)
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
-; CHECK-NEXT:    # kill: def $sf1 killed $sf1 killed $sx1
-; CHECK-NEXT:    # kill: def $sf2 killed $sf2 killed $sx2
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = fadd <3 x float> %a, %b
   ret <3 x float> %r
