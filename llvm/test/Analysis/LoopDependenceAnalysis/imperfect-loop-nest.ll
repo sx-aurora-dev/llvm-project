@@ -2,7 +2,7 @@
 
 ; void test(int64_t n, int64_t m, int64_t A[n][m]) {
 ;     for (int64_t i = 0; i < n; ++i) {
-;       for (int64_t j = 0; j < m; ++j) {
+;         for (int64_t j = 0; j < m; ++j) {
 ;             A[i+2][j-1] = A[i][j];
 ;         }
 ;         for (int64_t j = 0; j < m; ++j) {
