@@ -651,9 +651,7 @@ CustomDAG::createConstantTargetMask(VVPWideningInfo WidenInfo) const {
   // we do not want to go through ::ReplaceNodeResults again only to have them
   // widened
   unsigned NativeVectorWidth =
-      (WidenInfo.ActiveVectorLength > StandardVectorWidth)
-          ? PackedWidth
-          : StandardVectorWidth;
+      WidenInfo.PackedMode ? PackedWidth : StandardVectorWidth;
 
   // Generate a remainder mask for packed operations
   Packing PackFlag = WidenInfo.PackedMode ? Packing::Dense : Packing::Normal;
