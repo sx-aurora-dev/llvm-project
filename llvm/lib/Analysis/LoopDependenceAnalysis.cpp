@@ -372,31 +372,54 @@ struct DepVectorComponent {
   int dist;
 
   void print() const { dbgs() << "{" << dir << ", " << dist << "}"; }
+  void reflect() {
+    if (dir == '=')
+      return;
+    dist = -dist;
+    dir = (dir == '<') ? '>' : '<';
+  }
 };
 
 struct DepVector {
   bool valid;
-  SmallVector<DepVectorComponent, 4> comps;
+  SmallVector<DepVectorComponent, 4> Comps;
+
+  const DepVectorComponent operator[](size_t I) const { return Comps[I]; }
+  DepVectorComponent &operator[](size_t I) { return Comps[I]; }
 
   void print() const {
     if (!valid) {
       dbgs() << "Invalid DepVector\n";
       return;
     }
-    if (comps.size() == 0) {
+    if (Comps.size() == 0) {
       dbgs() << "(Empty)";
       return;
     }
     dbgs() << "(";
-    comps[0].print();
-    for (size_t i = 1; i < comps.size(); ++i) {
+    Comps[0].print();
+    for (size_t i = 1; i < Comps.size(); ++i) {
       dbgs() << ", ";
-      comps[i].print();
+      Comps[i].print();
     }
     dbgs() << ")";
   }
 
-  size_t size() const { return comps.size(); }
+  size_t size() const { return Comps.size(); }
+
+  bool verify() const {
+    for (DepVectorComponent DVC : Comps) {
+      if (DVC.dir != '<' && DVC.dir != '>' && DVC.dir != '=')
+        return false;
+      if (DVC.dir == '<' && DVC.dist <= 0)
+        return false;
+      else if (DVC.dir == '>' && DVC.dist >= 0)
+        return false;
+      else if (DVC.dir == '=' && DVC.dist != 0)
+        return false;
+    }
+    return true;
+  }
 };
 
 DepVectorComponent getDVComponentFromSCEVConstant(const SCEVConstant *C) {
@@ -417,7 +440,7 @@ DepVectorComponent getDVComponent(ScalarEvolution *SE, const SCEV *S1,
   // TODO: Handle other things
   const SCEVConstant *C = dyn_cast<const SCEVConstant>(Diff);
 
-  // Note: Constant here means "loop invariant" but "value known at
+  // Note: Constant here means "loop invariant" and also "value known at
   // compile-time". We're happy with less strict cases, like `-2 + n` too,
   // because they're loop-invariant (assuming that n is loop-invariant) and we
   // can find out the distance with a single runtime check.
@@ -439,35 +462,27 @@ DepVector getDirVector(ScalarEvolution *SE,
   assert(Subscripts1.size() == Subscripts2.size());
   assert(Subscripts1.size() >= (NumEnclosedLoops + 1));
 
-  DepVector res = {true};
+  DepVector Res = {true};
 
   size_t Index = Subscripts1.size() - (NumEnclosedLoops + 1);
   for (; Index < Subscripts1.size(); ++Index) {
-    res.comps.push_back(
-        getDVComponent(SE, Subscripts1[Index], Subscripts2[Index], res.valid));
+    Res.Comps.push_back(
+        getDVComponent(SE, Subscripts1[Index], Subscripts2[Index], Res.valid));
   }
 
-  return res;
+  return Res;
 }
 
-static bool verifyDirectionVector(DepVector &DV, int NumEnclosedLoops) {
-  for (DepVectorComponent DVC : DV.comps) {
-    if (DVC.dir != '<' && DVC.dir != '>' && DVC.dir != '=')
-      return false;
-    if (DVC.dir == '<' && DVC.dist <= 0)
-      return false;
-    else if (DVC.dir == '>' && DVC.dist >= 0)
-      return false;
-    else if (DVC.dir == '=' && DVC.dist != 0)
-      return false;
-  }
+static bool verifyIterationDepVector(DepVector &DV, int NumEnclosedLoops) {
+  if (!DV.verify())
+    return false;
   if (DV.size() == 2) {
-    // We can't have a dinstance vector that looks
+    // We can't have an iteration dependence vector that looks
     // downwards or directly to the left, because
     // that would mean that a later iteration
     // has to happen first!
-    bool isDownwards = DV.comps[0].dir == '>';
-    bool isLeft = (DV.comps[0].dist == 0 && DV.comps[1].dist == '>');
+    bool isDownwards = DV[0].dir == '>';
+    bool isLeft = (DV[0].dist == 0 && DV[1].dist == '>');
     if (isDownwards || isLeft)
       return false;
     return true;
@@ -477,14 +492,31 @@ static bool verifyDirectionVector(DepVector &DV, int NumEnclosedLoops) {
   return false;
 }
 
-static ConstVF getMaxAllowedVecFact(DepVector &DV, int NumEnclosedLoops) {
-  assert(verifyDirectionVector(DV, NumEnclosedLoops));
+static DepVector &convertToIterationVector(DepVector& RefDV) {
+  assert(RefDV.size() == 2);
+  bool looksDownwards = RefDV[0].dir == '>';
+  bool looksLeft = (RefDV[0].dist == 0 && RefDV[1].dist == '>');
+  // If it looks downwards or to the left, then we have an anti-dependence.
+  // (there's s a read from a location that in iteration space is after the
+  // (current).
+  // To convert it to an iteration vector, we have to reflect it about
+  // the origin because still the iteration in which the read happens
+  // has to execute before the iteration in which the write happens.
+  if (looksDownwards || looksLeft) {
+    for (DepVectorComponent &DVC : RefDV.Comps) {
+      DVC.reflect();
+    }
+  }
+  return RefDV;
+}
+
+static ConstVF getMaxAllowedVecFact(DepVector &IterDV, int NumEnclosedLoops) {
+  assert(verifyIterationDepVector(IterDV, NumEnclosedLoops));
   ConstVF Res = LoopDependence::getBestPossible().VectorizationFactor;
   // Handle outermost loop vectorization in 2-level loop nest.
   if (NumEnclosedLoops == 1) {
-    if (DV.comps[0].dir == '<' &&
-        (DV.comps[1].dir == '>' || DV.comps[1].dir == '='))
-      Res = (size_t)DV.comps[0].dist;
+    if (IterDV[0].dir == '<' && (IterDV[1].dir == '>' || IterDV[1].dir == '='))
+      Res = (size_t)IterDV[0].dist;
   } else {
     // Handle outermost loop vectorization in 3-level loop nest.
   }
@@ -623,14 +655,15 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         return Bail;
 
       LLVM_DEBUG(dbgs() << "\n");
-      DepVector DV = getDirVector(&SE, Subscripts1, Subscripts2,
-                                  NestInfo.NumEnclosedLoops);
-      LLVM_DEBUG(DV.print(););
-      if (!DV.valid) {
+      DepVector RefDV = getDirVector(&SE, Subscripts1, Subscripts2,
+                                     NestInfo.NumEnclosedLoops);
+      if (!RefDV.valid) {
         continue;
       } else {
+        DepVector &IterDV = convertToIterationVector(RefDV);
+        LLVM_DEBUG(IterDV.print(););
         ConstVF MaxAllowedVectorizationFactor =
-            getMaxAllowedVecFact(DV, NestInfo.NumEnclosedLoops);
+            getMaxAllowedVecFact(IterDV, NestInfo.NumEnclosedLoops);
         if (Res.VectorizationFactor < MaxAllowedVectorizationFactor)
           Res.VectorizationFactor = MaxAllowedVectorizationFactor;
         if (Res.isWorstPossible())
