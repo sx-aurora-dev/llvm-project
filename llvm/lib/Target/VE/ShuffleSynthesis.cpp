@@ -31,7 +31,10 @@ VecLenOpt InferLengthFromMask(SDValue MaskV) {
 
 SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
                            SelectionDAG &DAG) {
-  auto ActualConstVL = dyn_cast<ConstantSDNode>(DynamicVL);
+  ConstantSDNode *ActualConstVL = nullptr;
+  if (DynamicVL) {
+    ActualConstVL = dyn_cast<ConstantSDNode>(DynamicVL);
+  }
   if (!ActualConstVL)
     return DynamicVL;
 

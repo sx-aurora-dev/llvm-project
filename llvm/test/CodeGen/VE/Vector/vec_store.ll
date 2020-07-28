@@ -16,7 +16,7 @@ define void @vec_store_v17f64(<17 x double>* %P, <17 x double> %V) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s1, 17, (0)1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0,8,%s0
+; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   store <17 x double> %V, <17 x double>* %P, align 8
   ret void
@@ -31,7 +31,7 @@ define void @vec_mstore_v128f64(<128 x double>* %P, <128 x double> %V, <128 x i1
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0,8,%s0,%vm1
+; CHECK-NEXT:    vst %v0, 8, %s0, %vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
   call void @llvm.masked.store.v128f64.p0v128f64(<128 x double> %V, <128 x double>* %P, i32 16, <128 x i1> %M)
   ret void
@@ -42,7 +42,7 @@ define void @vec_mstore_v256f64(<256 x double>* %P, <256 x double> %V, <256 x i1
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0,8,%s0,%vm1
+; CHECK-NEXT:    vst %v0, 8, %s0, %vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
   call void @llvm.masked.store.v256f64.p0v256f64(<256 x double> %V, <256 x double>* %P, i32 16, <256 x i1> %M)
   ret void

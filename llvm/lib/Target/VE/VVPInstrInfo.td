@@ -19,12 +19,12 @@ def SDTIntShiftOpVVP : SDTypeProfile<1, 4, [   // shl, sra, srl
 ]>;
 
 // load store
-def SDTLoadVVP : SDTypeProfile<1, 3, [       // vvp load
-  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+def SDTLoadVVP : SDTypeProfile<1, 4, [       // vvp load (ptr, stride, mask, avl) -> data
+  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisInt<2>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
 ]>;
 
-def SDTStoreVVP: SDTypeProfile<0, 4, [       // vvp store
-  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+def SDTStoreVVP: SDTypeProfile<0, 5, [       // vvp store (data, ptr, stride, mask, avl)
+  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisInt<2>, SDTCisVec<3>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
 ]>;
 
 // scatter (Chain, Value, PtrVec, Mask, Vlen)

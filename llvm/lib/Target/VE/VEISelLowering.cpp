@@ -488,7 +488,6 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   bool isTernaryOp = false;
   bool isBinaryOp = false;
   bool isUnaryOp = false;
-  bool isStoreOp = false;
   bool isConvOp = false;
   bool isReduceOp = false;
 
@@ -509,16 +508,13 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
   case ISD::MLOAD:
     return LowerMLOAD(Op, DAG, Mode);
 
+  case ISD::STORE:
   case ISD::MSTORE:
     return LowerMSTORE(Op, DAG);
 
   case ISD::MGATHER:
   case ISD::MSCATTER:
     return LowerMGATHER_MSCATTER(Op, DAG, Mode);
-
-  case ISD::STORE:
-    isStoreOp = true;
-    break;
 
   case ISD::SELECT:
     isTernaryOp = true;
@@ -610,17 +606,6 @@ SDValue VETargetLowering::ExpandToVVP(SDValue Op, SelectionDAG &DAG,
     default:
       llvm_unreachable("Unexpected ternary operator!");
     }
-  }
-
-  if (isStoreOp) {
-    SDValue ChainVal = Op->getOperand(0);
-    SDValue PtrVal = Op->getOperand(1);
-    SDValue DataVal = Op->getOperand(2);
-    MVT ChainTy = MVT::Other;
-
-    return CDAG.getNode(
-        VEISD::VVP_STORE, ChainTy,
-        {ChainVal, PtrVal, LegalizeVecOperand(DataVal, DAG), TargetMasks.Mask, TargetMasks.AVL});
   }
 
   if (isConvOp) {
@@ -986,8 +971,11 @@ SDValue VETargetLowering::LowerMLOAD(SDValue Op, SelectionDAG &DAG,
   auto TargetMasks = CDAG.createTargetMask(WidenInfo, Mask, OpVectorLength);
 
   // emit
+  uint64_t ElemBytes = DataVT.getVectorElementType().getStoreSize();
+  uint64_t PackedBytes = WidenInfo.PackedMode ? 2 * ElemBytes : ElemBytes;
+  auto StrideV = CDAG.getConstant(PackedBytes, MVT::i64);
   auto NewLoadV = CDAG.getNode(VEISD::VVP_LOAD, {DataVT, ChainVT},
-                               {Chain, BasePtr, TargetMasks.Mask, TargetMasks.AVL});
+                               {Chain, BasePtr, StrideV, TargetMasks.Mask, TargetMasks.AVL});
 
   if (!PassThru || PassThru.isUndef()) {
     return NewLoadV;
@@ -1006,7 +994,7 @@ SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
   VVPExpansionMode Mode = VVPExpansionMode::ToNativeWidth;
   LLVM_DEBUG(dbgs() << "Lowering VP/MSTORE\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
-  SDLoc dl(Op);
+  CustomDAG CDAG(*this, DAG, Op);
 
   SDValue BasePtr;
   SDValue Mask;
@@ -1024,12 +1012,11 @@ SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
     Data = MaskedN->getValue();
 
     // Infer the AVL
-    // TODO set to the highest set bit in the mask operand
     Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
     assert(OpVecTyOpt.hasValue());
     EVT OpVecTy = OpVecTyOpt.getValue();
     OpVectorLength =
-        DAG.getConstant(OpVecTy.getVectorNumElements(), dl, MVT::i32);
+        CDAG.getConstant(OpVecTy.getVectorNumElements(), MVT::i32);
 
   } else if (VPStoreN) {
     BasePtr = VPStoreN->getBasePtr();
@@ -1037,21 +1024,30 @@ SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
     Chain = VPStoreN->getChain();
     OpVectorLength = VPStoreN->getVectorLength();
     Data = VPStoreN->getValue();
+  } else {
+    Chain = Op->getOperand(0);
+    Data = Op->getOperand(1);
+    BasePtr = Op->getOperand(2);
+    OpVectorLength =
+        CDAG.getConstant(Data.getValueType().getVectorNumElements(), MVT::i32);
   }
 
   // minimize vector length
   OpVectorLength = ReduceVectorLength(Mask, OpVectorLength, None, DAG);
 
-  CustomDAG CDAG(*this, DAG, Op);
   VVPWideningInfo WidenInfo =
       pickResultType(CDAG, Op, Mode);
 
   // create suitable mask and avl parameters (accounts for packing)
   auto TargetMasks = CDAG.createTargetMask(WidenInfo, Mask, OpVectorLength);
 
+  uint64_t ElemBytes = Data.getValueType().getVectorElementType().getStoreSize();
+  uint64_t PackedBytes = WidenInfo.PackedMode ? 2 * ElemBytes : ElemBytes;
+  auto StrideV = CDAG.getConstant(PackedBytes, MVT::i64);
+
   return CDAG.getNode(
       VEISD::VVP_STORE, Op.getNode()->getVTList(),
-      {Chain, Data, BasePtr, TargetMasks.Mask, TargetMasks.AVL});
+      {Chain, Data, BasePtr, StrideV, TargetMasks.Mask, TargetMasks.AVL});
 }
 
 SDValue VETargetLowering::LowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const {

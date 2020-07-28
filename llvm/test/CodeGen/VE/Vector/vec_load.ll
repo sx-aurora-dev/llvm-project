@@ -16,7 +16,7 @@ define x86_regcallcc <17 x double> @vec_load_v17f64(<17 x double>* %P) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s1, 17, (0)1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vld %v0,8,%s0
+; CHECK-NEXT:    vld %v0, 8, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = load <17 x double>, <17 x double>* %P, align 8
   ret <17 x double> %r
@@ -32,9 +32,9 @@ define x86_regcallcc <128 x double> @vec_mload_v128f64(<128 x double>* %P, <128 
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vmulu.l %v0,8,%v0,%vm1
-; CHECK-NEXT:    vaddu.l %v0,%s0,%v0,%vm1
-; CHECK-NEXT:    vgt %v0,%v0,0,0,%vm1
+; CHECK-NEXT:    vmulu.l %v0, 8, %v0, %vm1
+; CHECK-NEXT:    vaddu.l %v0, %s0, %v0, %vm1
+; CHECK-NEXT:    vgt %v0, %v0, 0, 0, %vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = call <128 x double> @llvm.masked.load.v128f64.p0v128f64(<128 x double>* %P, i32 16, <128 x i1> %M, <128 x double> undef)
   ret <128 x double> %r
@@ -47,9 +47,9 @@ define <256 x double> @vec_mload_v256f64(<256 x double>* %P, <256 x i1> %M) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vmulu.l %v0,8,%v0,%vm1
-; CHECK-NEXT:    vaddu.l %v0,%s0,%v0,%vm1
-; CHECK-NEXT:    vgt %v0,%v0,0,0,%vm1
+; CHECK-NEXT:    vmulu.l %v0, 8, %v0, %vm1
+; CHECK-NEXT:    vaddu.l %v0, %s0, %v0, %vm1
+; CHECK-NEXT:    vgt %v0, %v0, 0, 0, %vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = call <256 x double> @llvm.masked.load.v256f64.p0v256f64(<256 x double>* %P, i32 16, <256 x i1> %M, <256 x double> undef)
   ret <256 x double> %r
@@ -62,9 +62,9 @@ define <256 x double> @vec_mload_pt_v256f64(<256 x double>* %P, <256 x double> %
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v1
-; CHECK-NEXT:    vmulu.l %v1,8,%v1,%vm1
-; CHECK-NEXT:    vaddu.l %v1,%s0,%v1,%vm1
-; CHECK-NEXT:    vgt %v1,%v1,0,0,%vm1
+; CHECK-NEXT:    vmulu.l %v1, 8, %v1, %vm1
+; CHECK-NEXT:    vaddu.l %v1, %s0, %v1, %vm1
+; CHECK-NEXT:    vgt %v1, %v1, 0, 0, %vm1
 ; CHECK-NEXT:    vmrg %v0,%v0,%v1,%vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = call <256 x double> @llvm.masked.load.v256f64.p0v256f64(<256 x double>* %P, i32 16, <256 x i1> %M, <256 x double> %PT)

@@ -9,12 +9,12 @@
 // * fold select/vp.select into patterns to match passthru
 
 // Vector Gather and scatter
-multiclass VectorGather<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, string GTPrefix> {
+multiclass VectorGather<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, string GTPrefix> {
   // w/o mask
-  def : Pat<(DataVT (vvp_gather PtrVt:$addr, (MaskVT true_mask), i32:$avl)),
+  def : Pat<(DataVT (vvp_gather PtrVT:$addr, (MaskVT true_mask), i32:$avl)),
                     (!cast<Instruction>(GTPrefix#"vizl") $addr, 0, 0, $avl)>;
   // with mask
-  def : Pat<(DataVT (vvp_gather PtrVt:$addr, MaskVT:$mask, i32:$avl)),
+  def : Pat<(DataVT (vvp_gather PtrVT:$addr, MaskVT:$mask, i32:$avl)),
             (!cast<Instruction>(GTPrefix#"vizml") $addr, 0, 0, $mask, $avl)>;
 }
 
@@ -23,12 +23,12 @@ defm : VectorGather<v256i64, v256i64, v256i1, "VGT">;
 defm : VectorGather<v256f32, v256i64, v256i1, "VGTU">;
 defm : VectorGather<v256i32, v256i64, v256i1, "VGTLZX">;
 
-multiclass VectorScatter<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, string SCPrefix> {
+multiclass VectorScatter<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, string SCPrefix> {
   // w/o mask
-  def : Pat<(vvp_scatter DataVT:$data, PtrVt:$addr, (MaskVT true_mask), i32:$avl),
+  def : Pat<(vvp_scatter DataVT:$data, PtrVT:$addr, (MaskVT true_mask), i32:$avl),
             (!cast<Instruction>(SCPrefix#"vizvl") $data, 0, 0, $addr, $avl)>;
   // with mask
-  def : Pat<(vvp_scatter DataVT:$data, PtrVt:$addr, MaskVT:$mask, i32:$avl),
+  def : Pat<(vvp_scatter DataVT:$data, PtrVT:$addr, MaskVT:$mask, i32:$avl),
             (!cast<Instruction>(SCPrefix#"vizvml") $data, 0, 0, $addr, $mask, $avl)>;
 }
 
@@ -38,51 +38,65 @@ defm : VectorScatter<v256f32, v256i64, v256i1, "VSCU">;
 defm : VectorScatter<v256i32, v256i64, v256i1, "VSCL">;
 
 // Vector Load and Store
-multiclass VectorLoad<ValueType DataVT, ValueType PtrVt, ValueType MaskVT, int immStride, SDNode GTWithMask, SDNode LDNoMask> {
+multiclass VectorLoad<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode GTWithMask, SDNode LDNoMask> {
+  // w/o mask (imm)
+  def : Pat<(DataVT (vvp_load PtrVT:$addr, (i64 simm7:$stride), (MaskVT true_mask), i32:$avl)),
+                    (!cast<Instruction>(LDNoMask#"irl") (LO7 $stride), $addr, $avl)>;
   // w/o mask
-  def : Pat<(DataVT (vvp_load PtrVt:$addr, (MaskVT true_mask), i32:$avl)),
-                    (LDNoMask immStride, $addr, $avl)>;
+  def : Pat<(DataVT (vvp_load PtrVT:$addr, i64:$stride, (MaskVT true_mask), i32:$avl)),
+                    (!cast<Instruction>(LDNoMask#"rrl") $stride, PtrVT:$addr, $avl)>;
+  // with mask (imm)
+  def : Pat<(DataVT (vvp_load PtrVT:$addr, (i64 simm7:$stride), MaskVT:$mask, i32:$avl)),
+            (!cast<Instruction>(GTWithMask#"vizml")
+              (VADDULrvml $addr, (VMULULivml (LO7 $stride), (VSEQl $avl), $mask, $avl), $mask, $avl),
+              0, 0,
+              $mask,
+              $avl)>;
   // with mask
-  def : Pat<(DataVT (vvp_load PtrVt:$addr, MaskVT:$mask, i32:$avl)),
-            (GTWithMask
-              (vaddul_vsvmvl $addr, (vmulul_vIvmvl immStride, (vseq_vl $avl), $mask, (IMPLICIT_DEF), $avl), $mask, (IMPLICIT_DEF), $avl),
+  def : Pat<(DataVT (vvp_load PtrVT:$addr, i64:$stride, MaskVT:$mask, i32:$avl)),
+            (!cast<Instruction>(GTWithMask#"vizml")
+              (VADDULrvml $addr, (VMULULrvml $stride, (VSEQl $avl), $mask, $avl), $mask, $avl),
               0, 0,
               $mask,
               $avl)>;
 }
 
-multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, int immStride, SDNode LDNoMask, SDNode STNoMask> {
+multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode LDNoMask, SDNode STNoMask> {
   // w/o mask
-  def : Pat<(DataVT (vvp_load PtrVT:$addr, (MaskVT true_mask), i32:$avl)),
-                    (LDNoMask immStride, $addr, $avl)>;
+  def : Pat<(DataVT (vvp_load PtrVT:$addr, i64:$stride, (MaskVT true_mask), i32:$avl)),
+                    (!cast<Instruction>(LDNoMask#"rrl") $stride, $addr, $avl)>;
 
-  def : Pat<(vvp_store DataVT:$vx, PtrVT:$addr, (MaskVT true_mask), i32:$avl),
-            (STNoMask $vx, immStride, $addr, $avl)>;
+  def : Pat<(vvp_store DataVT:$vx, PtrVT:$addr, i64:$stride, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(STNoMask#"rrvl") $stride, $addr, $vx, $avl)>;
 }
 
 
 // Load patterns
-defm : VectorLoad<v256f64, i64, v256i1, 8, vgt_vvssml, vld_vIsl>;
-defm : VectorLoad<v256i64, i64, v256i1, 8, vgt_vvssml, vld_vIsl>;
-defm : VectorLoad<v256f32, i64, v256i1, 4, vgtu_vvssml, vldu_vIsl>;
-defm : VectorLoad<v256i32, i64, v256i1, 4, vgtlzx_vvssml, vldlzx_vIsl>;
+defm : VectorLoad<v256f64, i64, v256i1, "VGT",    "VLD">;
+defm : VectorLoad<v256i64, i64, v256i1, "VGT",    "VLD">;
+defm : VectorLoad<v256f32, i64, v256i1, "VGTU",   "VLDU">;
+defm : VectorLoad<v256i32, i64, v256i1, "VGTLZX", "VLDLZX">;
 // packed load patterns
-defm : VectorLoadStore_Packed<v512i32, i64, v512i1, 8, vld_vIsl, vst_vIsl>;
-defm : VectorLoadStore_Packed<v512f32, i64, v512i1, 8, vld_vIsl, vst_vIsl>;
+defm : VectorLoadStore_Packed<v512i32, i64, v512i1, "VLD", "VST">;
+defm : VectorLoadStore_Packed<v512f32, i64, v512i1, "VLD", "VST">;
 
-multiclass VectorStore<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, int immStride, SDNode STWithMask, SDNode STNoMask> {
+multiclass VectorStore<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode STWithMask, SDNode STNoMask> {
   // w/o mask
-  def : Pat<(vvp_store DataVT:$val, PtrVT:$addr, (MaskVT true_mask), i32:$avl),
-            (STNoMask $val, immStride, $addr, $avl)>;
+  def : Pat<(vvp_store DataVT:$val, PtrVT:$addr, (i64 simm7:$stride), (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(STNoMask#"irvl") (LO7 $stride), $addr, $val, $avl)>;
+  def : Pat<(vvp_store DataVT:$val, PtrVT:$addr, i64:$stride, (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(STNoMask#"rrvl") $stride, $addr, $val, $avl)>;
   // with mask
-  def : Pat<(vvp_store DataVT:$val, PtrVT:$addr, MaskVT:$mask, i32:$avl),
-            (STWithMask $val, immStride, $addr, $mask, $avl)>;
+  def : Pat<(vvp_store DataVT:$val, PtrVT:$addr, (i64 simm7:$stride), MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(STWithMask#"irvml") (LO7 $stride), $addr, $val, $mask, $avl)>;
+  def : Pat<(vvp_store DataVT:$val, PtrVT:$addr, i64:$stride, MaskVT:$mask, i32:$avl),
+            (!cast<Instruction>(STWithMask#"rrvml") $stride, $addr, $val, $mask, $avl)>;
 }
 
-defm : VectorStore<v256f64, i64, v256i1, 8, vst_vIsml, vst_vIsl>;
-defm : VectorStore<v256i64, i64, v256i1, 8, vst_vIsml, vst_vIsl>;
-defm : VectorStore<v256f32, i64, v256i1, 4, vstu_vIsml, vstu_vIsl>; 
-defm : VectorStore<v256i32, i64, v256i1, 4, vstl_vIsml, vstl_vIsl>; 
+defm : VectorStore<v256f64, i64, v256i1, "VST",  "VST">;
+defm : VectorStore<v256i64, i64, v256i1, "VST",  "VST">;
+defm : VectorStore<v256f32, i64, v256i1, "VSTU", "VSTU">; 
+defm : VectorStore<v256i32, i64, v256i1, "VSTL", "VSTL">; 
 
 // Floating-point arithmetic
 
