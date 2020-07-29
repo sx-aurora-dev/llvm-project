@@ -598,10 +598,13 @@ SDValue CustomDAG::createUniformConstMask(Packing Packing, unsigned NumElements,
 
   // VEISelDAGtoDAG will replace this with the constant-true VM
   auto TrueVal = DAG.getConstant(-1, DL, MVT::i32);
-  auto ElemCountN = DAG.getConstant(NumElements, DL, MVT::i32);
 
-  auto Res =
-      DAG.getNode(VEISD::VEC_BROADCAST, DL, MaskVT, {TrueVal, ElemCountN});
+  unsigned AVL = NumElements;
+  if (Packing == Packing::Dense) {
+    AVL = (NumElements + 1) / 2;
+  }
+
+  auto Res = getNode(VEISD::VEC_BROADCAST, MaskVT, {TrueVal, getConstEVL(AVL)});
   if (IsTrue)
     return Res;
 

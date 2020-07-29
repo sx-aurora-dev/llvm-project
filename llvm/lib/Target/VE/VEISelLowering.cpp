@@ -305,7 +305,8 @@ static SDValue
 getLoadStoreChain(SDValue Op) {
   if (Op->getOpcode() == VEISD::VVP_LOAD) {
     return Op->getOperand(0);
-  } else if (Op->getOpcode() == VEISD::VVP_STORE) {
+  }
+  if (Op->getOpcode() == VEISD::VVP_STORE) {
     return Op->getOperand(0);
   }
   if (MemSDNode *MemN = dyn_cast<MemSDNode>(Op.getNode())) {
@@ -318,10 +319,14 @@ static SDValue
 getLoadStorePtr(SDValue Op) {
   if (Op->getOpcode() == VEISD::VVP_LOAD) {
     return Op->getOperand(1);
-  } else if (Op->getOpcode() == VEISD::VVP_STORE) {
+  }
+  if (Op->getOpcode() == VEISD::VVP_STORE) {
     return Op->getOperand(2);
   }
-  if (MemSDNode *MemN = dyn_cast<MemSDNode>(Op.getNode())) {
+  if (auto *MemN = dyn_cast<MaskedLoadStoreSDNode>(Op.getNode())) {
+    return MemN->getBasePtr();
+  }
+  if (auto *MemN = dyn_cast<MemSDNode>(Op.getNode())) {
     return MemN->getBasePtr();
   }
   return SDValue();
@@ -340,7 +345,13 @@ getStoreData(SDValue Op) {
   if (Op->getOpcode() == VEISD::VVP_STORE) {
     return Op->getOperand(1);
   }
-  if (StoreSDNode *StoreN = dyn_cast<StoreSDNode>(Op.getNode())) {
+  if (auto *StoreN = dyn_cast<StoreSDNode>(Op.getNode())) {
+    return StoreN->getValue();
+  }
+  if (auto *StoreN = dyn_cast<MaskedStoreSDNode>(Op.getNode())) {
+    return StoreN->getValue();
+  }
+  if (auto *StoreN = dyn_cast<VPStoreSDNode>(Op.getNode())) {
     return StoreN->getValue();
   }
   return SDValue();
@@ -1229,9 +1240,10 @@ SDValue VETargetLowering::LowerMSTORE(SDValue Op, SelectionDAG &DAG) const {
   CustomDAG CDAG(*this, DAG, Op);
 
   SDValue BasePtr = getLoadStorePtr(Op);
+  SDValue Data = getStoreData(Op);
   SDValue Mask = getLoadStoreMask(Op);
   SDValue Chain = getLoadStoreChain(Op);
-  SDValue Data = getStoreData(Op);
+  assert(Data);
   SDValue AVL = getLoadStoreAVL(Op);
 
   VVPWideningInfo WidenInfo =
