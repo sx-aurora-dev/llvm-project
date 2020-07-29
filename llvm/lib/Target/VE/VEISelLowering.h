@@ -366,6 +366,7 @@ public:
   SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerCONCAT_VECTOR(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
 
   bool isFPImmLegal(const APFloat &Imm, EVT VT,

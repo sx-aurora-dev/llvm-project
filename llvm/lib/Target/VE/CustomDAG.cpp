@@ -776,5 +776,10 @@ CustomDAG::createTargetMask(VVPWideningInfo WidenInfo, SDValue RawMask, SDValue 
   return CustomDAG::TargetMasks(NewMask, NewAVL);
 }
 
+SDValue
+CustomDAG::getTargetInsertSubreg(int SRIdx, EVT VT, SDValue Operand, SDValue SubReg) const {
+  return DAG.getTargetInsertSubreg(SRIdx, DL, VT, Operand, SubReg);
+}
+
 /// } class CustomDAG
 } // namespace llvm

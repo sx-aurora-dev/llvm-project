@@ -2438,6 +2438,8 @@ void VETargetLowering::initVPUActions() {
 
   // All mask ops
   for (MVT MaskVT : MVT::vector_valuetypes()) {
+    if (MaskVT.isScalableVector())
+      continue;
     if (MaskVT.getVectorElementType() != MVT::i1)
       continue;
 
@@ -2455,6 +2457,11 @@ void VETargetLowering::initVPUActions() {
 
     ForAll_setOperationAction(IntReductionOCs, MaskVT, Custom);
     ForAll_setOperationAction(VectorTransformOCs, MaskVT, Custom);
+
+    // Custom packed expansion
+    if (MaskVT.getVectorElementCount().Min > StandardVectorWidth) {
+      setOperationAction(ISD::CONCAT_VECTORS, MaskVT, Custom);
+    }
   }
 
   // Special rules for aliased mask types
@@ -3826,7 +3833,8 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return LowerINTRINSIC_WO_CHAIN(Op, DAG);
   case ISD::BITCAST:
     return LowerBitcast(Op, DAG);
-
+  case ISD::CONCAT_VECTORS:
+    return LowerCONCAT_VECTOR(Op, DAG);
   case ISD::BUILD_VECTOR:
   case ISD::VECTOR_SHUFFLE:
     return LowerVectorShuffleOp(Op, DAG, VVPExpansionMode::ToNativeWidth);
@@ -3899,6 +3907,24 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     return Op->getOperand(0);
   }
   }
+}
+
+SDValue
+VETargetLowering::LowerCONCAT_VECTOR(SDValue Op, SelectionDAG &DAG) const {
+  auto VT = Op.getValueType();
+  assert(VT.getVectorElementType() == MVT::i1);
+
+  // LLVM expansion
+  if (VT.getVectorNumElements() <= 256) {
+    return SDValue();
+  }
+
+  // Interleave the subregisteres
+  CustomDAG CDAG(*this, DAG, Op);
+  auto LoInsert = CDAG.getTargetInsertSubreg(
+      VE::sub_vm_even, VT, CDAG.getImplicitDef(VT), Op->getOperand(0));
+  return CDAG.getTargetInsertSubreg(VE::sub_vm_odd, VT, LoInsert,
+                                    Op->getOperand(1));
 }
 
 /// } Custom Lower

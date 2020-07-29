@@ -271,6 +271,11 @@ multiclass NoopConv<ValueType AVT, ValueType BVT, RegisterClass RT=V64> {
   def : Pat<(BVT (bitconvert AVT:$src)), (COPY_TO_REGCLASS $src, RT)>;
 }
 
+defm : NoopConv<v512i32,v256i64>;
+defm : NoopConv<v512f32,v256i64>;
+defm : NoopConv<v512i32,v256f64>;
+defm : NoopConv<v512f32,v256f64>;
+
 defm : NoopConv<v512i32,v512f32>;
 defm : NoopConv<v256i64,v256f64>;
 defm : NoopConv<v4i1,v256i1,VM>;

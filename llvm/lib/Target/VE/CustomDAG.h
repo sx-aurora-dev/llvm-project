@@ -347,6 +347,13 @@ struct CustomDAG {
   TargetMasks createTargetSplitMask(VVPWideningInfo WidenInfo, SDValue RawMask, SDValue RawAVL, PackElem Part);
 
   LLVMContext &getContext() { return *DAG.getContext(); }
+
+  SDValue getImplicitDef(EVT VT) const {
+    return SDValue(DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, VT), 0);
+  }
+
+  SDValue getTargetInsertSubreg(int SRIdx, EVT VT, SDValue Operand,
+                                SDValue SubReg) const;
 };
 
 } // namespace llvm
