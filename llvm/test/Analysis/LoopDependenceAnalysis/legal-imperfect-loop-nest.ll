@@ -23,6 +23,9 @@
 ; although they are in an imperfect loop nest. This
 ; is because the "imperfectness" is not inside them.
 
+; Temporarily FAILING because we don't handle indexes
+; in accesses that are outside of the loop nest.
+
 define void @test(i64 %x, i64 %y, i64 %z, i64* %A) {
 entry:
   %cmp9 = icmp sgt i64 %x, 0
