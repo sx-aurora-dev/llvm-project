@@ -380,6 +380,49 @@ struct DepVectorComponent {
   }
 };
 
+// A Dependence Vector is the combination of a direction
+// and a distance vector. More importantly, it can be used
+// as either two things:
+// - An Iteration Dependence Vector
+// - An Access Dependence Vector
+
+// An Iteration Dependence Vector signifies the dependences
+// between different iterations in iteration space. To starty simply,
+// let's say we have this 2-dimensional loop nest:
+//  extern int A[n][m];
+//  for (int i = 0; i < n-1; ++i)
+//    for (int j = 0; j < m; ++j)
+//      A[i][j] = A[i+1][j];
+//
+// This has a 2-dimensional iteration space that looks like:
+
+//     i
+// n-1 | (n-1, 0)  (n-1, 1)  (n-1, 2)      (n-1, m-1)
+//    ...
+//   2 | (2, 0)    (2, 1)    (2, 2)        (2, m-1)
+//   1 | (1, 0)    (1, 1)    (1, 2)        (1, m-1)
+//   0 | (0, 0)    (0, 1)    (0, 2)        (0, m-1)
+//     | --------- --------- --------- ... ---------
+//           0         1         2            m-1
+
+// Each cell is an iteration instance, parameterized by
+// the i and j values at this specific instance.
+
+// Now, what we ultimately care about is the dependences in the iteration
+// space. That is, what iteration instance(s) has to be run before
+// some other iteration instance(s) (because remember, vectorization is
+// about running iteration instances in parallel). This is the Iteration
+// Dependence Vector.
+// For example, looking at the code, we can see that in iteration (0, 0) we read
+// a value from cell [1][0]. Then, in iteration (1, 0) we write to that cell.
+// So, iteration (0, 0) has to be run _before_ iteration (1, 0) because
+// otherwise, we won't read the correct value.
+
+// ----
+
+// To be continued...
+
+
 struct DepVector {
   bool valid;
   SmallVector<DepVectorComponent, 4> Comps;
