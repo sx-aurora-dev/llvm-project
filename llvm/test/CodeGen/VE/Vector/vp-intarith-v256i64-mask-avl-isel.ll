@@ -6,7 +6,7 @@ define void @test_vp_harness(<256 x i64>* %Out, <256 x i64> %i0) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0,8,%s0
+; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   store <256 x i64> %i0, <256 x i64>* %Out
   ret void
@@ -24,7 +24,7 @@ define void @test_vp_add_sub_mul(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64>
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0,8,%s0
+; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r0 = call <256 x i64> @llvm.vp.add.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i64> @llvm.vp.sub.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
@@ -44,7 +44,7 @@ define void @test_vp_su_div(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1,
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0,8,%s0
+; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r0 = call <256 x i64> @llvm.vp.sdiv.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i64> @llvm.vp.udiv.v256i64(<256 x i64> %r0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
@@ -67,7 +67,7 @@ define void @test_vp_bitarith(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0,8,%s0
+; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r0 = call <256 x i64> @llvm.vp.and.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i64> @llvm.vp.or.v256i64(<256 x i64> %r0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
