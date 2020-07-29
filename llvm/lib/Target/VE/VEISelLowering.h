@@ -335,8 +335,12 @@ public:
   // This replaces the standard ISD node with VVP VEISD node(s) with a widened
   // result type.
 
-  SDValue ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode,
-                           SDValue AVL) const;
+  SDValue ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
+                           VVPExpansionMode Mode) const;
+  SDValue ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
+                                 VVPExpansionMode Mode) const;
+  SDValue ExpandToSplitReduction(SDValue Op, SelectionDAG &DAG,
+                                 VVPExpansionMode Mode) const;
   // Split \p Op into two VVP_ ops with the native vector width by splitting
   // the i32 and f32 sub elements of the vector operation.
 

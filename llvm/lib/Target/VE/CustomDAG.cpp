@@ -59,6 +59,18 @@ PosOpt GetVVPOpcode(unsigned OpCode) {
   }
 }
 
+bool IsVVPReduction(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    return false;
+
+#define REGISTER_REDUCE_VVP_OP(VVPID, ...)                                     \
+  case VEISD::VVPID:                                                           \
+    return true;
+#include "VVPNodes.inc"
+  }
+}
+
 bool SupportsPackedMode(unsigned Opcode) {
   switch (Opcode) {
   default:
@@ -645,6 +657,16 @@ SDValue CustomDAG::getVVPGather(EVT LegalResVT, SDValue ChainV, SDValue PtrV,
                      {ChainV, PtrV, MaskV, AVL});
 }
 
+SDValue CustomDAG::extractPackElem(SDValue Op, PackElem Part,
+                              SDValue AVL) {
+  EVT OldValVT = Op.getValue(0).getValueType();
+  if (!OldValVT.isVector())
+    return Op;
+
+  // TODO peek through pack operations
+  return CreateUnpack(getSplitVT(OldValVT), Op, Part, AVL);
+}
+
 SDValue
 CustomDAG::createConstantTargetMask(VVPWideningInfo WidenInfo) const {
   /// Use the eventual native vector width for all newly generated operands
@@ -678,6 +700,38 @@ CustomDAG::createTargetAVL(VVPWideningInfo WidenInfo) const {
   } else {
     return getConstEVL(WidenInfo.ActiveVectorLength);
   }
+}
+
+CustomDAG::TargetMasks
+CustomDAG::createTargetSplitMask(VVPWideningInfo WidenInfo, SDValue RawMask, SDValue RawAVL, PackElem Part) {
+  // No masking caused, we simply adjust the AVL for the parts
+  SDValue NewAVL;
+  if (!RawAVL) {
+    unsigned PartAVL = WidenInfo.ActiveVectorLength / 2;
+    if (WidenInfo.NeedsPackedMasking) {
+      PartAVL += (int) (Part == PackElem::Lo);
+    }
+    NewAVL = getConstEVL(PartAVL);
+  } else if (WidenInfo.NeedsPackedMasking) {
+    if (Part == PackElem::Lo) {
+      auto PlusOne = getNode(ISD::ADD, MVT::i32, {RawAVL, getConstEVL(1)});
+      NewAVL = getNode(ISD::SRL, MVT::i32, {PlusOne, getConstEVL(1)});
+    } else {
+      NewAVL = getNode(ISD::SRL, MVT::i32, {RawAVL, getConstEVL(1)});
+    }
+  } else {
+      NewAVL = getNode(ISD::SRL, MVT::i32, {RawAVL, getConstEVL(1)});
+  }
+
+  // Legalize Mask (unpack or all-true)
+  SDValue NewMask;
+  if (!RawMask) {
+    NewMask = createUniformConstMask(Packing::Normal, true);
+  } else {
+    NewMask = extractPackElem(RawMask, Part, NewAVL);
+  }
+
+  return CustomDAG::TargetMasks(NewMask, NewAVL);
 }
 
 CustomDAG::TargetMasks

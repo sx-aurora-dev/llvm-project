@@ -44,6 +44,7 @@ bool SupportsPackedMode(unsigned Opcode);
 
 bool IsVVPOrVEC(unsigned Opcode);
 bool IsVVP(unsigned Opcode);
+bool IsVVPReduction(unsigned Opcode);
 
 // Choses the widest element type
 EVT getFPConvType(SDNode *Op);
@@ -194,6 +195,10 @@ struct CustomDAG {
   // all-true/false mask
   SDValue createUniformConstMask(Packing Packing, unsigned NumElements,
                                  bool IsTrue) const;
+  SDValue createUniformConstMask(Packing Packing, bool IsTrue) const {
+    return createUniformConstMask(
+        Packing, Packing == Packing::Dense ? 512 : 256, IsTrue);
+  }
   SDValue createUniformConstMask(EVT MaskVT, bool IsTrue) const {
     Packing Packing =
         MaskVT.getVectorNumElements() < 256 ? Packing::Dense : Packing::Normal;
@@ -316,6 +321,13 @@ struct CustomDAG {
                        SDValue MaskV, SDValue AVL) const;
   /// } VVP
 
+  EVT getSplitVT(EVT OldValVT) {
+    return getVectorVT(OldValVT.getVectorElementType(), StandardVectorWidth);
+  }
+
+  SDValue extractPackElem(SDValue Op, PackElem Part,
+                                SDValue AVL);
+
   SDValue createConstantTargetMask(VVPWideningInfo WidenInfo) const;
   SDValue createTargetAVL(VVPWideningInfo WidenInfo) const;
 
@@ -325,7 +337,11 @@ struct CustomDAG {
     TargetMasks(SDValue Mask, SDValue AVL)
     : Mask(Mask), AVL(AVL) {}
   };
+
+  // Infer mask & AVL for this VVP op
   TargetMasks createTargetMask(VVPWideningInfo, SDValue RawMask, SDValue RawAVL);
+  // Infer mask & AVL for this split VVP op
+  TargetMasks createTargetSplitMask(VVPWideningInfo WidenInfo, SDValue RawMask, SDValue RawAVL, PackElem Part);
 
   LLVMContext &getContext() { return *DAG.getContext(); }
 };

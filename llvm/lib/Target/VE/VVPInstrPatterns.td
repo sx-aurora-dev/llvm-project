@@ -63,9 +63,14 @@ multiclass VectorLoad<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNod
 
 multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode LDNoMask, SDNode STNoMask> {
   // w/o mask
+  def : Pat<(DataVT (vvp_load PtrVT:$addr, (i64 simm7:$stride), (MaskVT true_mask), i32:$avl)),
+                    (!cast<Instruction>(LDNoMask#"irl") $stride, $addr, $avl)>;
   def : Pat<(DataVT (vvp_load PtrVT:$addr, i64:$stride, (MaskVT true_mask), i32:$avl)),
                     (!cast<Instruction>(LDNoMask#"rrl") $stride, $addr, $avl)>;
 
+  // masked
+  def : Pat<(vvp_store DataVT:$vx, PtrVT:$addr, (i64 simm7:$stride), (MaskVT true_mask), i32:$avl),
+            (!cast<Instruction>(STNoMask#"irvl") $stride, $addr, $vx, $avl)>;
   def : Pat<(vvp_store DataVT:$vx, PtrVT:$addr, i64:$stride, (MaskVT true_mask), i32:$avl),
             (!cast<Instruction>(STNoMask#"rrvl") $stride, $addr, $vx, $avl)>;
 }
