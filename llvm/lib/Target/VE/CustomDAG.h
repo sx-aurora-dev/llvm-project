@@ -314,8 +314,11 @@ struct CustomDAG {
   EVT legalizeVectorType(SDValue Op, VVPExpansionMode) const;
 
   /// VVP {
-  SDValue getVVPLoad(EVT LegalResVT, SDValue Chain, SDValue PtrV, SDValue MaskV,
-                     SDValue AVL) const;
+  SDValue getVVPLoad(EVT LegalResVT, SDValue Chain, SDValue PtrV,
+                     SDValue StrideV, SDValue MaskV, SDValue AVL) const;
+
+  SDValue getVVPStore(SDValue Chain, SDValue DataV, SDValue PtrV,
+                      SDValue StrideV, SDValue MaskV, SDValue AVL) const;
 
   SDValue getVVPGather(EVT LegalResVT, SDValue Chain, SDValue PtrVecV,
                        SDValue MaskV, SDValue AVL) const;

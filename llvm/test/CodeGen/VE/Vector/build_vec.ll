@@ -179,7 +179,7 @@ define i32 @vseq_bad_v256i32() {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s1, .LCPI5_0@hi(, %s1)
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vldl.zx %v0,4,%s1
+; CHECK-NEXT:    vldl.zx %v0, 4, %s1
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)

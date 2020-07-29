@@ -1120,10 +1120,14 @@ struct ConstantElemOp final : public AbstractShuffleOp {
       // FIXME only works for 32/64bit elements
       const unsigned NumBufferElems =
           GetVectorNumElements(VecConstant->getType());
+      const auto *ElemTy = cast<FixedVectorType>(VecConstant->getType())->getElementType();
+      uint64_t Stride = (ElemTy->getPrimitiveSizeInBits().getFixedSize() + 7) /
+                        8; // FIXME should be using datala
       SDValue MaskV = CDAG.createUniformConstMask(
           Packing::Normal, LegalResVT.getVectorNumElements(), true);
-      SDValue VLV = CDAG.getConstEVL(NumBufferElems);
-      ResultV = CDAG.getVVPLoad(LegalResVT, Chain, ConstantPtrV, MaskV, VLV);
+      SDValue StrideV = CDAG.getConstant(Stride, MVT::i64);
+      SDValue AVL = CDAG.getConstEVL(NumBufferElems);
+      ResultV = CDAG.getVVPLoad(LegalResVT, Chain, ConstantPtrV, StrideV, MaskV, AVL);
 #else
       MachinePointerInfo MPI;
       ResultV = CDAG.DAG.getLoad(LegalResVT, CDAG.DL, Chain, ConstantPtrV, MPI);

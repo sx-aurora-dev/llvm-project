@@ -648,10 +648,17 @@ SDValue CustomDAG::getTokenFactor(ArrayRef<SDValue> Tokens) const {
   return DAG.getNode(ISD::TokenFactor, DL, MVT::Other, Tokens);
 }
 
-SDValue CustomDAG::getVVPLoad(EVT LegalResVT, SDValue Chain, SDValue PtrV,
+SDValue CustomDAG::getVVPLoad(EVT LegalResVT, SDValue Chain, SDValue PtrV, SDValue StrideV,
                               SDValue MaskV, SDValue AVL) const {
   return DAG.getNode(VEISD::VVP_LOAD, DL, {LegalResVT, MVT::Other},
-                     {Chain, PtrV, MaskV, AVL});
+                     {Chain, PtrV, StrideV, MaskV, AVL});
+}
+
+SDValue CustomDAG::getVVPStore(SDValue Chain, SDValue DataV, SDValue PtrV,
+                               SDValue StrideV, SDValue MaskV,
+                               SDValue AVL) const {
+  return DAG.getNode(VEISD::VVP_LOAD, DL, MVT::Other,
+                     {Chain, DataV, PtrV, StrideV, MaskV, AVL});
 }
 
 SDValue CustomDAG::getVVPGather(EVT LegalResVT, SDValue ChainV, SDValue PtrV,
