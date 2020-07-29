@@ -48,10 +48,10 @@ struct SparseElementsAttributeStorage;
 
 /// Attributes are known-constant values of operations and functions.
 ///
-/// Instances of the Attribute class are references to immutable, uniqued,
-/// and immortal values owned by MLIRContext. As such, an Attribute is a thin
-/// wrapper around an underlying storage pointer. Attributes are usually passed
-/// by value.
+/// Instances of the Attribute class are references to immortal key-value pairs
+/// with immutable, uniqued key owned by MLIRContext. As such, an Attribute is a
+/// thin wrapper around an underlying storage pointer. Attributes are usually
+/// passed by value.
 class Attribute {
 public:
   /// Integer identifier for all the concrete attribute kinds.
@@ -285,6 +285,12 @@ public:
   llvm::iterator_range<attr_value_iterator<AttrTy>> getAsRange() {
     return llvm::make_range(attr_value_iterator<AttrTy>(begin()),
                             attr_value_iterator<AttrTy>(end()));
+  }
+  template <typename AttrTy, typename UnderlyingTy>
+  auto getAsRange() {
+    return llvm::map_range(getAsRange<AttrTy>(), [](AttrTy attr) {
+      return static_cast<UnderlyingTy>(attr.getValue());
+    });
   }
 };
 

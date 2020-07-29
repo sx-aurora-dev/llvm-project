@@ -14,7 +14,9 @@
 #include "TestRunner.h"
 #include "deltas/Delta.h"
 #include "deltas/ReduceArguments.h"
+#include "deltas/ReduceAttributes.h"
 #include "deltas/ReduceBasicBlocks.h"
+#include "deltas/ReduceFunctionBodies.h"
 #include "deltas/ReduceFunctions.h"
 #include "deltas/ReduceGlobalVars.h"
 #include "deltas/ReduceInstructions.h"
@@ -25,6 +27,7 @@ namespace llvm {
 
 // TODO: Add CLI option to run only specified Passes (for unit tests)
 inline void runDeltaPasses(TestRunner &Tester) {
+  reduceFunctionBodiesDeltaPass(Tester);
   reduceFunctionsDeltaPass(Tester);
   reduceBasicBlocksDeltaPass(Tester);
   reduceGlobalsDeltaPass(Tester);
@@ -32,6 +35,7 @@ inline void runDeltaPasses(TestRunner &Tester) {
   reduceArgumentsDeltaPass(Tester);
   reduceInstructionsDeltaPass(Tester);
   reduceOperandBundesDeltaPass(Tester);
+  reduceAttributesDeltaPass(Tester);
   // TODO: Implement the remaining Delta Passes
 }
 

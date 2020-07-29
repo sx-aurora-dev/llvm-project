@@ -606,12 +606,66 @@ HandleSignalMode GetHandleSignalMode(int signum) {
   return result;
 }
 
+using VersStr = char[64];
+
+static void GetOSVersion(VersStr vers) {
+  uptr len = sizeof(VersStr);
+  if (SANITIZER_IOSSIM) {
+    const char *vers_env = GetEnv("SIMULATOR_RUNTIME_VERSION");
+    if (!vers_env) {
+      Report("ERROR: Running in simulator but SIMULATOR_RUNTIME_VERSION env "
+          "var is not set.\n");
+      Die();
+    }
+    len = internal_strlcpy(vers, vers_env, len);
+  } else {
+    int res =
+        internal_sysctlbyname("kern.osproductversion", vers, &len, nullptr, 0);
+    CHECK_EQ(res, 0);
+  }
+  CHECK_LT(len, sizeof(VersStr));
+}
+
+void ParseVersion(const char *vers, u16 *major, u16 *minor) {
+  // Format: <major>.<minor>[.<patch>]\0
+  CHECK_GE(internal_strlen(vers), 3);
+  const char *p = vers;
+  *major = internal_simple_strtoll(p, &p, /*base=*/10);
+  CHECK_EQ(*p, '.');
+  p += 1;
+  *minor = internal_simple_strtoll(p, &p, /*base=*/10);
+}
+
+// Aligned versions example:
+// macOS 10.15 -- iOS 13 -- tvOS 13 -- watchOS 6
+static void MapToMacos(u16 *major, u16 *minor) {
+  if (TARGET_OS_OSX)
+    return;
+
+  if (SANITIZER_IOS || SANITIZER_TVOS)
+    *major += 2;
+  else if (SANITIZER_WATCHOS)
+    *major += 9;
+  else
+    UNREACHABLE("unsupported platform");
+
+  if (*major >= 16) {  // macOS 11+
+    *major -= 5;
+  } else {  // macOS 10.15 and below
+    *minor = *major;
+    *major = 10;
+  }
+}
+
 static MacosVersion GetMacosAlignedVersionInternal() {
-  u16 kernel_major = GetDarwinKernelVersion().major;
-  const u16 version_offset = 4;
-  CHECK_GE(kernel_major, version_offset);
-  u16 macos_major = kernel_major - version_offset;
-  return MacosVersion(10, macos_major);
+  VersStr vers;
+  GetOSVersion(vers);
+
+  u16 major, minor;
+  ParseVersion(vers, &major, &minor);
+  MapToMacos(&major, &minor);
+
+  return MacosVersion(major, minor);
 }
 
 static_assert(sizeof(MacosVersion) == sizeof(atomic_uint32_t::Type),
@@ -629,24 +683,15 @@ MacosVersion GetMacosAlignedVersion() {
   return *reinterpret_cast<MacosVersion *>(&result);
 }
 
-void ParseVersion(const char *vers, u16 *major, u16 *minor) {
-  // Format: <major>.<minor>.<patch>\0
-  CHECK_GE(internal_strlen(vers), 5);
-  const char *p = vers;
-  *major = internal_simple_strtoll(p, &p, /*base=*/10);
-  CHECK_EQ(*p, '.');
-  p += 1;
-  *minor = internal_simple_strtoll(p, &p, /*base=*/10);
-}
-
 DarwinKernelVersion GetDarwinKernelVersion() {
-  char buf[100];
-  size_t len = sizeof(buf);
-  int res = internal_sysctlbyname("kern.osrelease", buf, &len, nullptr, 0);
+  VersStr vers;
+  uptr len = sizeof(VersStr);
+  int res = internal_sysctlbyname("kern.osrelease", vers, &len, nullptr, 0);
   CHECK_EQ(res, 0);
+  CHECK_LT(len, sizeof(VersStr));
 
   u16 major, minor;
-  ParseVersion(buf, &major, &minor);
+  ParseVersion(vers, &major, &minor);
 
   return DarwinKernelVersion(major, minor);
 }
@@ -834,20 +879,10 @@ bool ReexecDisabled() {
   return false;
 }
 
-extern "C" SANITIZER_WEAK_ATTRIBUTE double dyldVersionNumber;
-static const double kMinDyldVersionWithAutoInterposition = 360.0;
-
-bool DyldNeedsEnvVariable() {
-  // Although sanitizer support was added to LLVM on OS X 10.7+, GCC users
-  // still may want use them on older systems. On older Darwin platforms, dyld
-  // doesn't export dyldVersionNumber symbol and we simply return true.
-  if (!&dyldVersionNumber) return true;
+static bool DyldNeedsEnvVariable() {
   // If running on OS X 10.11+ or iOS 9.0+, dyld will interpose even if
-  // DYLD_INSERT_LIBRARIES is not set. However, checking OS version via
-  // GetMacosAlignedVersion() doesn't work for the simulator. Let's instead
-  // check `dyldVersionNumber`, which is exported by dyld, against a known
-  // version number from the first OS release where this appeared.
-  return dyldVersionNumber < kMinDyldVersionWithAutoInterposition;
+  // DYLD_INSERT_LIBRARIES is not set.
+  return GetMacosAlignedVersion() < MacosVersion(10, 11);
 }
 
 void MaybeReexec() {
@@ -1058,6 +1093,53 @@ uptr GetMaxUserVirtualAddress() {
 
 uptr GetMaxVirtualAddress() {
   return GetMaxUserVirtualAddress();
+}
+
+uptr MapDynamicShadow(uptr shadow_size_bytes, uptr shadow_scale,
+                      uptr min_shadow_base_alignment, uptr &high_mem_end) {
+  const uptr granularity = GetMmapGranularity();
+  const uptr alignment =
+      Max<uptr>(granularity << shadow_scale, 1ULL << min_shadow_base_alignment);
+  const uptr left_padding =
+      Max<uptr>(granularity, 1ULL << min_shadow_base_alignment);
+
+  uptr space_size = shadow_size_bytes + left_padding;
+
+  uptr largest_gap_found = 0;
+  uptr max_occupied_addr = 0;
+  VReport(2, "FindDynamicShadowStart, space_size = %p\n", space_size);
+  uptr shadow_start =
+      FindAvailableMemoryRange(space_size, alignment, granularity,
+                               &largest_gap_found, &max_occupied_addr);
+  // If the shadow doesn't fit, restrict the address space to make it fit.
+  if (shadow_start == 0) {
+    VReport(
+        2,
+        "Shadow doesn't fit, largest_gap_found = %p, max_occupied_addr = %p\n",
+        largest_gap_found, max_occupied_addr);
+    uptr new_max_vm = RoundDownTo(largest_gap_found << shadow_scale, alignment);
+    if (new_max_vm < max_occupied_addr) {
+      Report("Unable to find a memory range for dynamic shadow.\n");
+      Report(
+          "space_size = %p, largest_gap_found = %p, max_occupied_addr = %p, "
+          "new_max_vm = %p\n",
+          space_size, largest_gap_found, max_occupied_addr, new_max_vm);
+      CHECK(0 && "cannot place shadow");
+    }
+    RestrictMemoryToMaxAddress(new_max_vm);
+    high_mem_end = new_max_vm - 1;
+    space_size = (high_mem_end >> shadow_scale) + left_padding;
+    VReport(2, "FindDynamicShadowStart, space_size = %p\n", space_size);
+    shadow_start = FindAvailableMemoryRange(space_size, alignment, granularity,
+                                            nullptr, nullptr);
+    if (shadow_start == 0) {
+      Report("Unable to find a memory range after restricting VM.\n");
+      CHECK(0 && "cannot place shadow after restricting vm");
+    }
+  }
+  CHECK_NE((uptr)0, shadow_start);
+  CHECK(IsAligned(shadow_start, alignment));
+  return shadow_start;
 }
 
 uptr FindAvailableMemoryRange(uptr size, uptr alignment, uptr left_padding,

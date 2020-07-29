@@ -801,6 +801,21 @@ class Foo {})cpp";
          HI.LocalScope = "Foo::";
          HI.Type = "int";
          HI.AccessSpecifier = "public";
+       }},
+       {// No crash on InitListExpr.
+        R"cpp(
+          struct Foo {
+            int a[10];
+          };
+          constexpr Foo k2 = {
+            ^[[{]]1} // FIXME: why the hover range is 1 character?
+          };
+         )cpp",
+       [](HoverInfo &HI) {
+         HI.Name = "expression";
+         HI.Kind = index::SymbolKind::Unknown;
+         HI.Type = "int [10]";
+         HI.Value = "{1}";
        }}};
   for (const auto &Case : Cases) {
     SCOPED_TRACE(Case.Code);
@@ -942,6 +957,16 @@ TEST(Hover, NoHover) {
           template <typename T> void foo() {
             (void)[[size^of]](T);
           })cpp",
+      R"cpp(// should not crash on invalid semantic form of init-list-expr.
+            /*error-ok*/
+            struct Foo {
+              int xyz = 0;
+            };
+            class Bar {};
+            constexpr Foo s = ^{
+              .xyz = Bar(),
+            };
+          )cpp",
       // literals
       "auto x = t^rue;",
       "auto x = '^A';",

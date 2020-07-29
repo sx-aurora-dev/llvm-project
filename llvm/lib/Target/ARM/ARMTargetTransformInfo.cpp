@@ -28,6 +28,9 @@
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/MachineValueType.h"
 #include "llvm/Target/TargetMachine.h"
+#include "llvm/Transforms/InstCombine/InstCombiner.h"
+#include "llvm/Transforms/Utils/Local.h"
+#include "llvm/Transforms/Utils/LoopUtils.h"
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
@@ -45,9 +48,31 @@ static cl::opt<bool> DisableLowOverheadLoops(
   "disable-arm-loloops", cl::Hidden, cl::init(false),
   cl::desc("Disable the generation of low-overhead loops"));
 
-extern cl::opt<bool> DisableTailPredication;
+extern cl::opt<TailPredication::Mode> EnableTailPredication;
 
 extern cl::opt<bool> EnableMaskedGatherScatters;
+
+/// Convert a vector load intrinsic into a simple llvm load instruction.
+/// This is beneficial when the underlying object being addressed comes
+/// from a constant, since we get constant-folding for free.
+static Value *simplifyNeonVld1(const IntrinsicInst &II, unsigned MemAlign,
+                               InstCombiner::BuilderTy &Builder) {
+  auto *IntrAlign = dyn_cast<ConstantInt>(II.getArgOperand(1));
+
+  if (!IntrAlign)
+    return nullptr;
+
+  unsigned Alignment = IntrAlign->getLimitedValue() < MemAlign
+                           ? MemAlign
+                           : IntrAlign->getLimitedValue();
+
+  if (!isPowerOf2_32(Alignment))
+    return nullptr;
+
+  auto *BCastInst = Builder.CreateBitCast(II.getArgOperand(0),
+                                          PointerType::get(II.getType(), 0));
+  return Builder.CreateAlignedLoad(II.getType(), BCastInst, Align(Alignment));
+}
 
 bool ARMTTIImpl::areInlineCompatible(const Function *Caller,
                                      const Function *Callee) const {
@@ -79,6 +104,114 @@ bool ARMTTIImpl::shouldFavorPostInc() const {
   if (ST->hasMVEIntegerOps())
     return true;
   return false;
+}
+
+Optional<Instruction *>
+ARMTTIImpl::instCombineIntrinsic(InstCombiner &IC, IntrinsicInst &II) const {
+  Intrinsic::ID IID = II.getIntrinsicID();
+  switch (IID) {
+  default:
+    break;
+  case Intrinsic::arm_neon_vld1: {
+    Align MemAlign =
+        getKnownAlignment(II.getArgOperand(0), IC.getDataLayout(), &II,
+                          &IC.getAssumptionCache(), &IC.getDominatorTree());
+    if (Value *V = simplifyNeonVld1(II, MemAlign.value(), IC.Builder)) {
+      return IC.replaceInstUsesWith(II, V);
+    }
+    break;
+  }
+
+  case Intrinsic::arm_neon_vld2:
+  case Intrinsic::arm_neon_vld3:
+  case Intrinsic::arm_neon_vld4:
+  case Intrinsic::arm_neon_vld2lane:
+  case Intrinsic::arm_neon_vld3lane:
+  case Intrinsic::arm_neon_vld4lane:
+  case Intrinsic::arm_neon_vst1:
+  case Intrinsic::arm_neon_vst2:
+  case Intrinsic::arm_neon_vst3:
+  case Intrinsic::arm_neon_vst4:
+  case Intrinsic::arm_neon_vst2lane:
+  case Intrinsic::arm_neon_vst3lane:
+  case Intrinsic::arm_neon_vst4lane: {
+    Align MemAlign =
+        getKnownAlignment(II.getArgOperand(0), IC.getDataLayout(), &II,
+                          &IC.getAssumptionCache(), &IC.getDominatorTree());
+    unsigned AlignArg = II.getNumArgOperands() - 1;
+    Value *AlignArgOp = II.getArgOperand(AlignArg);
+    MaybeAlign Align = cast<ConstantInt>(AlignArgOp)->getMaybeAlignValue();
+    if (Align && *Align < MemAlign) {
+      return IC.replaceOperand(
+          II, AlignArg,
+          ConstantInt::get(Type::getInt32Ty(II.getContext()), MemAlign.value(),
+                           false));
+    }
+    break;
+  }
+
+  case Intrinsic::arm_mve_pred_i2v: {
+    Value *Arg = II.getArgOperand(0);
+    Value *ArgArg;
+    if (match(Arg, PatternMatch::m_Intrinsic<Intrinsic::arm_mve_pred_v2i>(
+                       PatternMatch::m_Value(ArgArg))) &&
+        II.getType() == ArgArg->getType()) {
+      return IC.replaceInstUsesWith(II, ArgArg);
+    }
+    Constant *XorMask;
+    if (match(Arg, m_Xor(PatternMatch::m_Intrinsic<Intrinsic::arm_mve_pred_v2i>(
+                             PatternMatch::m_Value(ArgArg)),
+                         PatternMatch::m_Constant(XorMask))) &&
+        II.getType() == ArgArg->getType()) {
+      if (auto *CI = dyn_cast<ConstantInt>(XorMask)) {
+        if (CI->getValue().trunc(16).isAllOnesValue()) {
+          auto TrueVector = IC.Builder.CreateVectorSplat(
+              cast<VectorType>(II.getType())->getNumElements(),
+              IC.Builder.getTrue());
+          return BinaryOperator::Create(Instruction::Xor, ArgArg, TrueVector);
+        }
+      }
+    }
+    KnownBits ScalarKnown(32);
+    if (IC.SimplifyDemandedBits(&II, 0, APInt::getLowBitsSet(32, 16),
+                                ScalarKnown, 0)) {
+      return &II;
+    }
+    break;
+  }
+  case Intrinsic::arm_mve_pred_v2i: {
+    Value *Arg = II.getArgOperand(0);
+    Value *ArgArg;
+    if (match(Arg, PatternMatch::m_Intrinsic<Intrinsic::arm_mve_pred_i2v>(
+                       PatternMatch::m_Value(ArgArg)))) {
+      return IC.replaceInstUsesWith(II, ArgArg);
+    }
+    if (!II.getMetadata(LLVMContext::MD_range)) {
+      Type *IntTy32 = Type::getInt32Ty(II.getContext());
+      Metadata *M[] = {
+          ConstantAsMetadata::get(ConstantInt::get(IntTy32, 0)),
+          ConstantAsMetadata::get(ConstantInt::get(IntTy32, 0xFFFF))};
+      II.setMetadata(LLVMContext::MD_range, MDNode::get(II.getContext(), M));
+      return &II;
+    }
+    break;
+  }
+  case Intrinsic::arm_mve_vadc:
+  case Intrinsic::arm_mve_vadc_predicated: {
+    unsigned CarryOp =
+        (II.getIntrinsicID() == Intrinsic::arm_mve_vadc_predicated) ? 3 : 2;
+    assert(II.getArgOperand(CarryOp)->getType()->getScalarSizeInBits() == 32 &&
+           "Bad type for intrinsic!");
+
+    KnownBits CarryKnown(32);
+    if (IC.SimplifyDemandedBits(&II, CarryOp, APInt::getOneBitSet(32, 29),
+                                CarryKnown)) {
+      return &II;
+    }
+    break;
+  }
+  }
+  return None;
 }
 
 int ARMTTIImpl::getIntImmCost(const APInt &Imm, Type *Ty,
@@ -1405,12 +1538,47 @@ static bool canTailPredicateInstruction(Instruction &I, int &ICmpCount) {
 static bool canTailPredicateLoop(Loop *L, LoopInfo *LI, ScalarEvolution &SE,
                                  const DataLayout &DL,
                                  const LoopAccessInfo *LAI) {
+  LLVM_DEBUG(dbgs() << "Tail-predication: checking allowed instructions\n");
+
+  // If there are live-out values, it is probably a reduction, which needs a
+  // final reduction step after the loop. MVE has a VADDV instruction to reduce
+  // integer vectors, but doesn't have an equivalent one for float vectors. A
+  // live-out value that is not recognised as a reduction will result in the
+  // tail-predicated loop to be reverted to a non-predicated loop and this is
+  // very expensive, i.e. it has a significant performance impact. So, in this
+  // case it's better not to tail-predicate the loop, which is what we check
+  // here. Thus, we allow only 1 live-out value, which has to be an integer
+  // reduction, which matches the loops supported by ARMLowOverheadLoops.
+  // It is important to keep ARMLowOverheadLoops and canTailPredicateLoop in
+  // sync with each other.
+  SmallVector< Instruction *, 8 > LiveOuts;
+  LiveOuts = llvm::findDefsUsedOutsideOfLoop(L);
+  bool IntReductionsDisabled =
+      EnableTailPredication == TailPredication::EnabledNoReductions ||
+      EnableTailPredication == TailPredication::ForceEnabledNoReductions;
+
+  for (auto *I : LiveOuts) {
+    if (!I->getType()->isIntegerTy()) {
+      LLVM_DEBUG(dbgs() << "Don't tail-predicate loop with non-integer "
+                           "live-out value\n");
+      return false;
+    }
+    if (I->getOpcode() != Instruction::Add) {
+      LLVM_DEBUG(dbgs() << "Only add reductions supported\n");
+      return false;
+    }
+    if (IntReductionsDisabled) {
+      LLVM_DEBUG(dbgs() << "Integer add reductions not enabled\n");
+      return false;
+    }
+  }
+
+  // Next, check that all instructions can be tail-predicated.
   PredicatedScalarEvolution PSE = LAI->getPSE();
+  SmallVector<Instruction *, 16> LoadStores;
   int ICmpCount = 0;
   int Stride = 0;
 
-  LLVM_DEBUG(dbgs() << "tail-predication: checking allowed instructions\n");
-  SmallVector<Instruction *, 16> LoadStores;
   for (BasicBlock *BB : L->blocks()) {
     for (Instruction &I : BB->instructionsWithoutDebug()) {
       if (isa<PHINode>(&I))
@@ -1458,8 +1626,10 @@ bool ARMTTIImpl::preferPredicateOverEpilogue(Loop *L, LoopInfo *LI,
                                              TargetLibraryInfo *TLI,
                                              DominatorTree *DT,
                                              const LoopAccessInfo *LAI) {
-  if (DisableTailPredication)
+  if (!EnableTailPredication) {
+    LLVM_DEBUG(dbgs() << "Tail-predication not enabled.\n");
     return false;
+  }
 
   // Creating a predicated vector loop is the first step for generating a
   // tail-predicated hardware loop, for which we need the MVE masked
@@ -1501,7 +1671,7 @@ bool ARMTTIImpl::preferPredicateOverEpilogue(Loop *L, LoopInfo *LI,
 }
 
 bool ARMTTIImpl::emitGetActiveLaneMask() const {
-  if (!ST->hasMVEIntegerOps() || DisableTailPredication)
+  if (!ST->hasMVEIntegerOps() || !EnableTailPredication)
     return false;
 
   // Intrinsic @llvm.get.active.lane.mask is supported.
@@ -1580,6 +1750,11 @@ void ARMTTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
   // taken cost of the backedge.
   if (Cost < 12)
     UP.Force = true;
+}
+
+void ARMTTIImpl::getPeelingPreferences(Loop *L, ScalarEvolution &SE,
+                                       TTI::PeelingPreferences &PP) {
+  BaseT::getPeelingPreferences(L, SE, PP);
 }
 
 bool ARMTTIImpl::useReductionIntrinsic(unsigned Opcode, Type *Ty,

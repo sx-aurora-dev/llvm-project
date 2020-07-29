@@ -3655,9 +3655,9 @@ struct FriendCountAndPosition {
 };
 
 template <class T>
-FriendCountAndPosition getFriendCountAndPosition(
+static FriendCountAndPosition getFriendCountAndPosition(
     const FriendDecl *FD,
-    std::function<T(const FriendDecl *)> GetCanTypeOrDecl) {
+    llvm::function_ref<T(const FriendDecl *)> GetCanTypeOrDecl) {
   unsigned int FriendCount = 0;
   llvm::Optional<unsigned int> FriendPosition;
   const auto *RD = cast<CXXRecordDecl>(FD->getLexicalDeclContext());
@@ -3679,7 +3679,7 @@ FriendCountAndPosition getFriendCountAndPosition(
   return {FriendCount, *FriendPosition};
 }
 
-FriendCountAndPosition getFriendCountAndPosition(const FriendDecl *FD) {
+static FriendCountAndPosition getFriendCountAndPosition(const FriendDecl *FD) {
   if (FD->getFriendType())
     return getFriendCountAndPosition<QualType>(FD, [](const FriendDecl *F) {
       if (TypeSourceInfo *TSI = F->getFriendType())
@@ -4758,11 +4758,10 @@ Error ASTNodeImporter::ImportDefinition(
       return ToImplOrErr.takeError();
   }
 
-  if (shouldForceImportDeclContext(Kind)) {
-    // Import all of the members of this class.
-    if (Error Err = ImportDeclContext(From, /*ForceImport=*/true))
-      return Err;
-  }
+  // Import all of the members of this class.
+  if (Error Err = ImportDeclContext(From, /*ForceImport=*/true))
+    return Err;
+
   return Error::success();
 }
 
@@ -6117,11 +6116,13 @@ ExpectedStmt ASTNodeImporter::VisitWhileStmt(WhileStmt *S) {
   auto ToCond = importChecked(Err, S->getCond());
   auto ToBody = importChecked(Err, S->getBody());
   auto ToWhileLoc = importChecked(Err, S->getWhileLoc());
+  auto ToLParenLoc = importChecked(Err, S->getLParenLoc());
+  auto ToRParenLoc = importChecked(Err, S->getRParenLoc());
   if (Err)
     return std::move(Err);
 
   return WhileStmt::Create(Importer.getToContext(), ToConditionVariable, ToCond,
-                           ToBody, ToWhileLoc);
+                           ToBody, ToWhileLoc, ToLParenLoc, ToRParenLoc);
 }
 
 ExpectedStmt ASTNodeImporter::VisitDoStmt(DoStmt *S) {
@@ -7336,7 +7337,8 @@ ExpectedStmt ASTNodeImporter::VisitCXXMemberCallExpr(CXXMemberCallExpr *E) {
     return std::move(Err);
 
   return CXXMemberCallExpr::Create(Importer.getToContext(), ToCallee, ToArgs,
-                                   ToType, E->getValueKind(), ToRParenLoc);
+                                   ToType, E->getValueKind(), ToRParenLoc,
+                                   E->getFPFeatures());
 }
 
 ExpectedStmt ASTNodeImporter::VisitCXXThisExpr(CXXThisExpr *E) {
@@ -7646,8 +7648,8 @@ ExpectedStmt ASTNodeImporter::VisitCallExpr(CallExpr *E) {
   }
 
   return CallExpr::Create(Importer.getToContext(), ToCallee, ToArgs, ToType,
-                          E->getValueKind(), ToRParenLoc, /*MinNumArgs=*/0,
-                          E->getADLCallKind());
+                          E->getValueKind(), ToRParenLoc, E->getFPFeatures(),
+                          /*MinNumArgs=*/0, E->getADLCallKind());
 }
 
 ExpectedStmt ASTNodeImporter::VisitLambdaExpr(LambdaExpr *E) {

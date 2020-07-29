@@ -449,6 +449,7 @@ SITargetLowering::SITargetLowering(const TargetMachine &TM,
 
   if (Subtarget->has16BitInsts()) {
     setOperationAction(ISD::FPOW, MVT::f16, Promote);
+    setOperationAction(ISD::FPOWI, MVT::f16, Promote);
     setOperationAction(ISD::FLOG, MVT::f16, Custom);
     setOperationAction(ISD::FEXP, MVT::f16, Custom);
     setOperationAction(ISD::FLOG10, MVT::f16, Custom);
@@ -1136,7 +1137,6 @@ bool SITargetLowering::getTgtMemIntrinsic(IntrinsicInfo &Info,
     Info.align.reset();
     Info.flags = MachineMemOperand::MOLoad |
                  MachineMemOperand::MOStore |
-                 MachineMemOperand::MODereferenceable |
                  MachineMemOperand::MOVolatile;
     return true;
   }
@@ -1175,9 +1175,13 @@ bool SITargetLowering::getAddrModeArguments(IntrinsicInst *II,
   case Intrinsic::amdgcn_atomic_dec:
   case Intrinsic::amdgcn_ds_ordered_add:
   case Intrinsic::amdgcn_ds_ordered_swap:
+  case Intrinsic::amdgcn_ds_append:
+  case Intrinsic::amdgcn_ds_consume:
   case Intrinsic::amdgcn_ds_fadd:
   case Intrinsic::amdgcn_ds_fmin:
-  case Intrinsic::amdgcn_ds_fmax: {
+  case Intrinsic::amdgcn_ds_fmax:
+  case Intrinsic::amdgcn_global_atomic_fadd:
+  case Intrinsic::amdgcn_global_atomic_csub: {
     Value *Ptr = II->getArgOperand(0);
     AccessTy = II->getType();
     Ops.push_back(Ptr);
@@ -2253,9 +2257,21 @@ SDValue SITargetLowering::LowerFormalArguments(
       const uint64_t Offset = VA.getLocMemOffset();
       Align Alignment = commonAlignment(KernelArgBaseAlign, Offset);
 
-      SDValue Arg =
-          lowerKernargMemParameter(DAG, VT, MemVT, DL, Chain, Offset, Alignment,
-                                   Ins[i].Flags.isSExt(), &Ins[i]);
+      if (Arg.Flags.isByRef()) {
+        SDValue Ptr = lowerKernArgParameterPtr(DAG, DL, Chain, Offset);
+
+        if (!isNoopAddrSpaceCast(AMDGPUAS::CONSTANT_ADDRESS,
+                                 Arg.Flags.getPointerAddrSpace())) {
+          Ptr = DAG.getAddrSpaceCast(DL, VT, Ptr, AMDGPUAS::CONSTANT_ADDRESS,
+                                     Arg.Flags.getPointerAddrSpace());
+        }
+
+        InVals.push_back(Ptr);
+        continue;
+      }
+
+      SDValue Arg = lowerKernargMemParameter(
+        DAG, VT, MemVT, DL, Chain, Offset, Alignment, Ins[i].Flags.isSExt(), &Ins[i]);
       Chains.push_back(Arg.getValue(1));
 
       auto *ParamTy =
@@ -3849,7 +3865,7 @@ MachineBasicBlock *SITargetLowering::EmitInstrWithCustomInserter(
     MachineOperand SrcReg1Sub1 = TII->buildExtractSubRegOrImm(
         MI, MRI, Src1, Src1RC, AMDGPU::sub1, Src1SubRC);
 
-    unsigned LoOpc = IsAdd ? AMDGPU::V_ADD_I32_e64 : AMDGPU::V_SUB_I32_e64;
+    unsigned LoOpc = IsAdd ? AMDGPU::V_ADD_CO_U32_e64 : AMDGPU::V_SUB_CO_U32_e64;
     MachineInstr *LoHalf = BuildMI(*BB, MI, DL, TII->get(LoOpc), DestSub0)
                                .addReg(CarryReg, RegState::Define)
                                .add(SrcReg0Sub0)
@@ -4111,9 +4127,9 @@ MachineBasicBlock *SITargetLowering::EmitInstrWithCustomInserter(
     MI.eraseFromParent();
     return BB;
   }
-  case AMDGPU::V_ADD_I32_e32:
-  case AMDGPU::V_SUB_I32_e32:
-  case AMDGPU::V_SUBREV_I32_e32: {
+  case AMDGPU::V_ADD_CO_U32_e32:
+  case AMDGPU::V_SUB_CO_U32_e32:
+  case AMDGPU::V_SUBREV_CO_U32_e32: {
     // TODO: Define distinct V_*_I32_Pseudo instructions instead.
     const DebugLoc &DL = MI.getDebugLoc();
     unsigned Opc = MI.getOpcode();
@@ -4478,7 +4494,7 @@ static SDValue adjustLoadValueTypeImpl(SDValue Result, EVT LoadVT,
     EVT IntLoadVT = LoadVT.changeTypeToInteger();
 
     // Workaround legalizer not scalarizing truncate after vector op
-    // legalization byt not creating intermediate vector trunc.
+    // legalization but not creating intermediate vector trunc.
     SmallVector<SDValue, 4> Elts;
     DAG.ExtractVectorElements(Result, Elts);
     for (SDValue &Elt : Elts)
@@ -4567,8 +4583,7 @@ static SDValue lowerICMPIntrinsic(const SITargetLowering &TLI,
   EVT VT = N->getValueType(0);
   const auto *CD = cast<ConstantSDNode>(N->getOperand(3));
   unsigned CondCode = CD->getZExtValue();
-  if (CondCode < ICmpInst::Predicate::FIRST_ICMP_PREDICATE ||
-      CondCode > ICmpInst::Predicate::LAST_ICMP_PREDICATE)
+  if (!ICmpInst::isIntPredicate(static_cast<ICmpInst::Predicate>(CondCode)))
     return DAG.getUNDEF(VT);
 
   ICmpInst::Predicate IcInput = static_cast<ICmpInst::Predicate>(CondCode);
@@ -4604,10 +4619,8 @@ static SDValue lowerFCMPIntrinsic(const SITargetLowering &TLI,
   const auto *CD = cast<ConstantSDNode>(N->getOperand(3));
 
   unsigned CondCode = CD->getZExtValue();
-  if (CondCode < FCmpInst::Predicate::FIRST_FCMP_PREDICATE ||
-      CondCode > FCmpInst::Predicate::LAST_FCMP_PREDICATE) {
+  if (!FCmpInst::isFPPredicate(static_cast<FCmpInst::Predicate>(CondCode)))
     return DAG.getUNDEF(VT);
-  }
 
   SDValue Src0 = N->getOperand(1);
   SDValue Src1 = N->getOperand(2);

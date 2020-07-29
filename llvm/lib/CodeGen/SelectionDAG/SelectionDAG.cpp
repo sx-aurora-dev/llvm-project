@@ -2323,6 +2323,10 @@ bool SelectionDAG::isSplatValue(SDValue V, const APInt &DemandedElts,
     }
     break;
   }
+  case ISD::TRUNCATE:
+  case ISD::SIGN_EXTEND:
+  case ISD::ZERO_EXTEND:
+    return isSplatValue(V.getOperand(0), DemandedElts, UndefElts);
   }
 
   // We don't support other cases than those above for scalable vectors at
@@ -2718,6 +2722,9 @@ KnownBits SelectionDAG::computeKnownBits(SDValue Op, const APInt &DemandedElts,
   case ISD::EXTRACT_SUBVECTOR: {
     // Offset the demanded elts by the subvector index.
     SDValue Src = Op.getOperand(0);
+    // Bail until we can represent demanded elements for scalable vectors.
+    if (Src.getValueType().isScalableVector())
+      break;
     uint64_t Idx = Op.getConstantOperandVal(1);
     unsigned NumSrcElts = Src.getValueType().getVectorNumElements();
     APInt DemandedSrcElts = DemandedElts.zextOrSelf(NumSrcElts).shl(Idx);
@@ -3973,6 +3980,9 @@ unsigned SelectionDAG::ComputeNumSignBits(SDValue Op, const APInt &DemandedElts,
   case ISD::EXTRACT_SUBVECTOR: {
     // Offset the demanded elts by the subvector index.
     SDValue Src = Op.getOperand(0);
+    // Bail until we can represent demanded elements for scalable vectors.
+    if (Src.getValueType().isScalableVector())
+      break;
     uint64_t Idx = Op.getConstantOperandVal(1);
     unsigned NumSrcElts = Src.getValueType().getVectorNumElements();
     APInt DemandedSrcElts = DemandedElts.zextOrSelf(NumSrcElts).shl(Idx);
@@ -4554,7 +4564,7 @@ SDValue SelectionDAG::getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
       // FIXME need to be more flexible about rounding mode.
       (void)V.convert(APFloat::IEEEhalf(),
                       APFloat::rmNearestTiesToEven, &Ignored);
-      return getConstant(V.bitcastToAPInt(), DL, VT);
+      return getConstant(V.bitcastToAPInt().getZExtValue(), DL, VT);
     }
     }
   }
@@ -9639,14 +9649,22 @@ SelectionDAG::GetDependentSplitDestVTs(const EVT &VT, const EVT &EnvVT,
 std::pair<SDValue, SDValue>
 SelectionDAG::SplitVector(const SDValue &N, const SDLoc &DL, const EVT &LoVT,
                           const EVT &HiVT) {
-  assert(LoVT.getVectorNumElements() + HiVT.getVectorNumElements() <=
-         N.getValueType().getVectorNumElements() &&
+  assert(LoVT.isScalableVector() == HiVT.isScalableVector() &&
+         LoVT.isScalableVector() == N.getValueType().isScalableVector() &&
+         "Splitting vector with an invalid mixture of fixed and scalable "
+         "vector types");
+  assert(LoVT.getVectorMinNumElements() + HiVT.getVectorMinNumElements() <=
+             N.getValueType().getVectorMinNumElements() &&
          "More vector elements requested than available!");
   SDValue Lo, Hi;
   Lo =
       getNode(ISD::EXTRACT_SUBVECTOR, DL, LoVT, N, getVectorIdxConstant(0, DL));
+  // For scalable vectors it is safe to use LoVT.getVectorMinNumElements()
+  // (rather than having to use ElementCount), because EXTRACT_SUBVECTOR scales
+  // IDX with the runtime scaling factor of the result vector type. For
+  // fixed-width result vectors, that runtime scaling factor is 1.
   Hi = getNode(ISD::EXTRACT_SUBVECTOR, DL, HiVT, N,
-               getVectorIdxConstant(LoVT.getVectorNumElements(), DL));
+               getVectorIdxConstant(LoVT.getVectorMinNumElements(), DL));
   return std::make_pair(Lo, Hi);
 }
 

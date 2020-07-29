@@ -206,8 +206,6 @@ private:
 
 #pragma mark CommandObjectTargetCreate
 
-// "target create"
-
 class CommandObjectTargetCreate : public CommandObjectParsed {
 public:
   CommandObjectTargetCreate(CommandInterpreter &interpreter)
@@ -218,9 +216,6 @@ public:
         m_option_group(), m_arch_option(),
         m_core_file(LLDB_OPT_SET_1, false, "core", 'c', 0, eArgTypeFilename,
                     "Fullpath to a core file to use for this target."),
-        m_platform_path(LLDB_OPT_SET_1, false, "platform-path", 'P', 0,
-                        eArgTypePath,
-                        "Path to the remote file to use for this target."),
         m_symbol_file(LLDB_OPT_SET_1, false, "symfile", 's', 0,
                       eArgTypeFilename,
                       "Fullpath to a stand alone debug "
@@ -246,7 +241,6 @@ public:
 
     m_option_group.Append(&m_arch_option, LLDB_OPT_SET_ALL, LLDB_OPT_SET_1);
     m_option_group.Append(&m_core_file, LLDB_OPT_SET_ALL, LLDB_OPT_SET_1);
-    m_option_group.Append(&m_platform_path, LLDB_OPT_SET_ALL, LLDB_OPT_SET_1);
     m_option_group.Append(&m_symbol_file, LLDB_OPT_SET_ALL, LLDB_OPT_SET_1);
     m_option_group.Append(&m_remote_file, LLDB_OPT_SET_ALL, LLDB_OPT_SET_1);
     m_option_group.Append(&m_add_dependents, LLDB_OPT_SET_ALL, LLDB_OPT_SET_1);
@@ -449,15 +443,12 @@ private:
   OptionGroupOptions m_option_group;
   OptionGroupArchitecture m_arch_option;
   OptionGroupFile m_core_file;
-  OptionGroupFile m_platform_path;
   OptionGroupFile m_symbol_file;
   OptionGroupFile m_remote_file;
   OptionGroupDependents m_add_dependents;
 };
 
 #pragma mark CommandObjectTargetList
-
-// "target list"
 
 class CommandObjectTargetList : public CommandObjectParsed {
 public:
@@ -489,8 +480,6 @@ protected:
 };
 
 #pragma mark CommandObjectTargetSelect
-
-// "target select"
 
 class CommandObjectTargetSelect : public CommandObjectParsed {
 public:
@@ -550,8 +539,6 @@ protected:
 };
 
 #pragma mark CommandObjectTargetDelete
-
-// "target delete"
 
 class CommandObjectTargetDelete : public CommandObjectParsed {
 public:
@@ -696,8 +683,6 @@ protected:
 };
 
 #pragma mark CommandObjectTargetVariable
-
-// "target variable"
 
 class CommandObjectTargetVariable : public CommandObjectParsed {
   static const uint32_t SHORT_OPTION_FILE = 0x66696c65; // 'file'
@@ -1624,7 +1609,8 @@ static size_t LookupFunctionInModule(CommandInterpreter &interpreter,
   return 0;
 }
 
-static size_t LookupTypeInModule(CommandInterpreter &interpreter, Stream &strm,
+static size_t LookupTypeInModule(Target *target,
+                                 CommandInterpreter &interpreter, Stream &strm,
                                  Module *module, const char *name_cstr,
                                  bool name_is_regex) {
   TypeList type_list;
@@ -1652,7 +1638,7 @@ static size_t LookupTypeInModule(CommandInterpreter &interpreter, Stream &strm,
       // Resolve the clang type so that any forward references to types
       // that haven't yet been parsed will get parsed.
       type_sp->GetFullCompilerType();
-      type_sp->GetDescription(&strm, eDescriptionLevelFull, true);
+      type_sp->GetDescription(&strm, eDescriptionLevelFull, true, target);
       // Print all typedef chains
       TypeSP typedef_type_sp(type_sp);
       TypeSP typedefed_type_sp(typedef_type_sp->GetTypedefType());
@@ -1661,7 +1647,8 @@ static size_t LookupTypeInModule(CommandInterpreter &interpreter, Stream &strm,
         strm.Printf("     typedef '%s': ",
                     typedef_type_sp->GetName().GetCString());
         typedefed_type_sp->GetFullCompilerType();
-        typedefed_type_sp->GetDescription(&strm, eDescriptionLevelFull, true);
+        typedefed_type_sp->GetDescription(&strm, eDescriptionLevelFull, true,
+                                          target);
         typedef_type_sp = typedefed_type_sp;
         typedefed_type_sp = typedef_type_sp->GetTypedefType();
       }
@@ -1671,9 +1658,9 @@ static size_t LookupTypeInModule(CommandInterpreter &interpreter, Stream &strm,
   return type_list.GetSize();
 }
 
-static size_t LookupTypeHere(CommandInterpreter &interpreter, Stream &strm,
-                             Module &module, const char *name_cstr,
-                             bool name_is_regex) {
+static size_t LookupTypeHere(Target *target, CommandInterpreter &interpreter,
+                             Stream &strm, Module &module,
+                             const char *name_cstr, bool name_is_regex) {
   TypeList type_list;
   const uint32_t max_num_matches = UINT32_MAX;
   bool name_is_fully_qualified = false;
@@ -1696,8 +1683,8 @@ static size_t LookupTypeHere(CommandInterpreter &interpreter, Stream &strm,
     // Resolve the clang type so that any forward references to types that
     // haven't yet been parsed will get parsed.
     type_sp->GetFullCompilerType();
-    type_sp->GetDescription(&strm, eDescriptionLevelFull, true);
-    // Print all typedef chains
+    type_sp->GetDescription(&strm, eDescriptionLevelFull, true, target);
+    // Print all typedef chains.
     TypeSP typedef_type_sp(type_sp);
     TypeSP typedefed_type_sp(typedef_type_sp->GetTypedefType());
     while (typedefed_type_sp) {
@@ -1705,7 +1692,8 @@ static size_t LookupTypeHere(CommandInterpreter &interpreter, Stream &strm,
       strm.Printf("     typedef '%s': ",
                   typedef_type_sp->GetName().GetCString());
       typedefed_type_sp->GetFullCompilerType();
-      typedefed_type_sp->GetDescription(&strm, eDescriptionLevelFull, true);
+      typedefed_type_sp->GetDescription(&strm, eDescriptionLevelFull, true,
+                                        target);
       typedef_type_sp = typedefed_type_sp;
       typedefed_type_sp = typedef_type_sp->GetTypedefType();
     }
@@ -3745,9 +3733,9 @@ public:
       return false;
     case eLookupTypeType:
       if (!m_options.m_str.empty()) {
-        if (LookupTypeHere(m_interpreter, result.GetOutputStream(),
-                           *sym_ctx.module_sp, m_options.m_str.c_str(),
-                           m_options.m_use_regex)) {
+        if (LookupTypeHere(&GetSelectedTarget(), m_interpreter,
+                           result.GetOutputStream(), *sym_ctx.module_sp,
+                           m_options.m_str.c_str(), m_options.m_use_regex)) {
           result.SetStatus(eReturnStatusSuccessFinishResult);
           return true;
         }
@@ -3817,9 +3805,9 @@ public:
 
     case eLookupTypeType:
       if (!m_options.m_str.empty()) {
-        if (LookupTypeInModule(m_interpreter, result.GetOutputStream(), module,
-                               m_options.m_str.c_str(),
-                               m_options.m_use_regex)) {
+        if (LookupTypeInModule(
+                &GetSelectedTarget(), m_interpreter, result.GetOutputStream(),
+                module, m_options.m_str.c_str(), m_options.m_use_regex)) {
           result.SetStatus(eReturnStatusSuccessFinishResult);
           return true;
         }
@@ -4332,7 +4320,6 @@ protected:
                 module_spec.GetSymbolFileSpec() = symfile_spec;
             }
 
-            ArchSpec arch;
             bool symfile_exists =
                 FileSystem::Instance().Exists(module_spec.GetSymbolFileSpec());
 
