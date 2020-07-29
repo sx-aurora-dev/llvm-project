@@ -117,7 +117,6 @@ LoopDependenceInfo::LoopDependenceInfo(Function &F, ScalarEvolution &SE,
 }
 
 struct LoopNestInfo {
-  bool isPerfectWithAccessOnlyInInnermost;
 
   // The values below are valid only if \p
   // isPerfectWithAccessOnlyInInnermost is true.
@@ -172,45 +171,44 @@ static bool isAccessingInstruction(const Instruction &I) {
 //   any accesses (instructions that read or write memory).
 // As long as these continue to hold, computes the number
 // of enclosed loops in the loop nest and finds the innermost loop.
+// It returns true if it was successful.
 
 // As a side-effect, it computes the depth of the loop nest.
-static LoopNestInfo
-isPerfectLoopNestWithAccessesInTheInnermost(const Loop &TheLoop) {
-  LoopNestInfo Res = {true, 0, &TheLoop};
-  LoopNestInfo Invalid;
-  Invalid.isPerfectWithAccessOnlyInInnermost = false;
+static bool getNestInfo(const Loop &TheLoop, LoopNestInfo &NestInfo) {
+  NestInfo = { 0, &TheLoop};
 
   // `const` ref makes our life hard so we have to
   // skip the type-system.
   const Loop *L = &TheLoop;
 
+  // If it has no enclosed loops.
   if (L->empty()) {
-    return Res;
+    return true;
   }
 
   while (true) {
     const auto &SubLoops = L->getSubLoops();
     if (SubLoops.size() != 1)
-      return Invalid;
+      return false;
     const Loop *Inner = SubLoops[0];
     for (const BasicBlock *BB : L->getBlocks()) {
       if (!Inner->contains(BB)) {
         for (const Instruction &I : *BB) {
           if (isAccessingInstruction(I))
-            return Invalid;
+            return false;
         }
       }
     }
-    Res.NumEnclosedLoops += 1;
+    NestInfo.NumEnclosedLoops += 1;
 
     L = Inner;
     if (L->empty()) {
-      Res.InnermostLoop = L;
+      NestInfo.InnermostLoop = L;
       break;
     }
   }
 
-  return Res;
+  return true;
 }
 
 bool subscriptsAreWithinBounds(ScalarEvolution &SE,
@@ -252,59 +250,66 @@ bool subscriptsAreWithinBounds(ScalarEvolution &SE,
 static bool subscriptsAreLegal(ScalarEvolution &SE,
                                const SmallVectorImpl<const SCEV *> &Subscripts,
                                const SmallVectorImpl<const SCEV *> &Sizes,
-                               const Loop *Innermost, size_t NumEnclosedLoops) {
+                               LoopNestInfo NestInfo) {
 
-  // For now, the number of subscripts should match the
+  // For now, the number of subscripts should be at least the
   // outer loop vectorization level (i.e. NumEnclosedLoops + 1) that
   // we chose in this loop nest. For example,
   // if we're vectorizing the outer-most loop of a 3-level deep loop nest,
-  // then we should have exactly 3 subscripts in each access.
-  if (!(Subscripts.size() >= NumEnclosedLoops + 1)) {
+  // then we should have at least 3 subscripts in each access.
+  if (!(Subscripts.size() >= NestInfo.NumEnclosedLoops + 1)) {
     LLVM_DEBUG(dbgs() << "Few dimensions in access\n";);
     return false;
   }
+  // We want to check a couple of things:
+  // a) That any SCEV is either constant or AddRec.
+  // b) That any recurrence uses one of the loops in the loop nest.
+  // c) That any loop of the nest is used in at most one recurrence.
+  // Imagine that we have a 3-level loop nest:
+  // for (k)
+  //   for (i)
+  //     for (j)
+  // In essence we can have A[k][i][j], A[i][k][j], ... 
+  // i.e. we can shuffle them. We can also skip some,
+  // like A[k][0][j]. But we can't use an IV that
+  // is not in one of the 3 enclosed loops, e.g. A[l][j][i].
+  // Note that we can have this: A[k][i][0][j]
+  SmallDenseMap<const Loop *, bool> LegalLoops; // true signifies unused
+  // but one of the legal loops. false means it's illegal
+  // to use it.
 
-  // Make sure that each subscript is either loop-invariant or
-  // it depends on the loop that is in the depth that matches
-  // the subscript's number. For example:
-  // for (i...)
-  //   for (j...)
-  //     for (k...)
-  //       A[x][y][z]
-  //
-  // We have 3 subscripts, with values `x`, `y`, `z`. `x` is no. 0, `y` is no. 1
-  // and `z` is no. 2. `x` should either be loop-invariant or be dependent on
-  // the `i-loop` same for `y` and the `j-loop` and for `z` and the `k-loop`. We
-  // can know on what loop is a subscript dependent - from its SCEV. Note: We're
-  // given the innermost loop, so in the example above, that would be the
-  // `k-loop`. So, we have to start from the end. Note: Determining if something
-  // is loop-invariant is not easy. For example, an AddExpr can be an addition
-  // between a constant and an AddRecExpr in which the latter is not
-  // loop-invariant. And theoretically that can happen in any depth. For now, we
-  // only consider constants as loop-invariants and only handle simple
-  // AddRecExprs.
-  const Loop *Runner = Innermost;
-  ssize_t End = Subscripts.size() - (NumEnclosedLoops + 1);
-  for (ssize_t i = Subscripts.size() - 1; i >= End; --i) {
-    const SCEV *S = Subscripts[i];
+  // Add legal loops
+  int Counter = NestInfo.NumEnclosedLoops;
+  const Loop *Runner = NestInfo.InnermostLoop;
+  while (Counter >= 0) {
+    LegalLoops[Runner] = true;
+    Runner = Runner->getParentLoop();
+    Counter--;
+  }
+
+  for (const SCEV *S : Subscripts) {
     switch (S->getSCEVType()) {
-    // Those are loop-invariant
     case scConstant:
       break;
     case scAddRecExpr: {
       const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
-      if (AddRec->getLoop() == Runner) {
-        break; // For the switch
-      } else {
-        LLVM_DEBUG(dbgs() << "Subscript no. " << i
-                          << " AddRecExpr is in invalid dimension.\n");
+      // Check that it uses a legal loop.
+      const Loop *RecLoop = AddRec->getLoop();
+      if (auto &SavePos = LegalLoops[RecLoop])
+        SavePos = false;
+      else
         return false;
-      }
+      // Check that it has a positive step.
+      const SCEV *Step = AddRec->getStepRecurrence(SE);
+      if (Step->getSCEVType() != scConstant)
+        return false;
+      const SCEVConstant *Const = dyn_cast<SCEVConstant>(Step);
+      if (Const->getAPInt().getSExtValue() <= 0)
+        return false;
     } break;
     default:
       return false;
     }
-    Runner = Runner->getParentLoop();
   }
 
   // if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
@@ -359,24 +364,27 @@ static bool
 delinearizeInstAndVerifySubscripts(ScalarEvolution &SE, Instruction *Inst,
                                    SmallVectorImpl<const SCEV *> &Subscripts,
                                    SmallVectorImpl<const SCEV *> &Sizes,
-                                   const Loop *Innermost,
-                                   size_t NumEnclosedLoops) {
+                                   LoopNestInfo NestInfo) {
 
-  return delinearizeAccessInst(SE, Inst, Subscripts, Sizes, Innermost) &&
-         subscriptsAreLegal(SE, Subscripts, Sizes, Innermost, NumEnclosedLoops);
+  return delinearizeAccessInst(SE, Inst, Subscripts, Sizes, NestInfo.InnermostLoop) &&
+         subscriptsAreLegal(SE, Subscripts, Sizes, NestInfo);
 }
 
 struct DepVectorComponent {
-  char dir;
+  char Dir;
   // TODO: Probably change to SCEV
-  int dist;
+  int Dist;
+  const Loop *Loop = nullptr;
 
-  void print() const { dbgs() << "{" << dir << ", " << dist << "}"; }
-  void reflect() {
-    if (dir == '=')
+  void print() const {
+    dbgs() << "{" << Dir << ", " << Dist << ", " << ((Loop) ? Loop->getName() : "") << "}";
+  }
+  void negate() {
+    assert(Dir == '=' || Dir == '<' || Dir == '>');
+    if (Dir == '=')
       return;
-    dist = -dist;
-    dir = (dir == '<') ? '>' : '<';
+    Dist = -Dist;
+    Dir = (Dir == '<') ? '>' : '<';
   }
 };
 
@@ -424,17 +432,17 @@ struct DepVectorComponent {
 
 
 struct DepVector {
-  bool valid;
-  SmallVector<DepVectorComponent, 4> Comps;
+  constexpr static size_t MaxComps = 4;
+  SmallVector<DepVectorComponent, MaxComps> Comps;
+
+  DepVector(int Dimensions) : Comps(Dimensions) {
+    assert(Dimensions <= MaxComps);
+  }
 
   const DepVectorComponent operator[](size_t I) const { return Comps[I]; }
   DepVectorComponent &operator[](size_t I) { return Comps[I]; }
 
   void print() const {
-    if (!valid) {
-      dbgs() << "Invalid DepVector\n";
-      return;
-    }
     if (Comps.size() == 0) {
       dbgs() << "(Empty)";
       return;
@@ -452,34 +460,68 @@ struct DepVector {
 
   bool verify() const {
     for (DepVectorComponent DVC : Comps) {
-      if (DVC.dir != '<' && DVC.dir != '>' && DVC.dir != '=')
+      if (DVC.Dir == '<' && DVC.Dist <= 0)
         return false;
-      if (DVC.dir == '<' && DVC.dist <= 0)
+      else if (DVC.Dir == '>' && DVC.Dist >= 0)
         return false;
-      else if (DVC.dir == '>' && DVC.dist >= 0)
-        return false;
-      else if (DVC.dir == '=' && DVC.dist != 0)
+      else if (DVC.Dir == '=' && DVC.Dist != 0)
         return false;
     }
     return true;
   }
+
+  void reflect() {
+    for (DepVectorComponent &DVC : Comps) {
+      DVC.negate();
+    }
+  }
 };
 
-DepVectorComponent getDVComponentFromSCEVConstant(const SCEVConstant *C) {
+struct DirDistPair {
+  char Dir;
+  int Dist;
+};
+
+DirDistPair getDirDistPairFromSCEVConstant(const SCEVConstant *C) {
   ConstantInt *V = C->getValue();
   int64_t Dist = V->getSExtValue();
-  DepVectorComponent Res = {'<', Dist};
+  DirDistPair Res = {'<', Dist};
   if (!Dist)
-    Res.dir = '=';
+    Res.Dir = '=';
   else if (Dist < 0)
-    Res.dir = '>';
+    Res.Dir = '>';
   return Res;
 }
 
-DepVectorComponent getDVComponent(ScalarEvolution *SE, const SCEV *S1,
-                                  const SCEV *S2, bool &valid) {
+bool getDVComponent(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
+                    DepVectorComponent &DVC) {
+  if (S1->getSCEVType() == scConstant && S2->getSCEVType() == scConstant) {
+    // If they're both constants and equal, then we have dimension squashing.
+    // Otherwise, the two references never alias.
+    if (dyn_cast<SCEVConstant>(S1)->getValue()->getSExtValue() ==
+        dyn_cast<SCEVConstant>(S2)->getValue()->getSExtValue()) {
+      DVC.Dir = 'S';
+      return true;
+    } else {
+      DVC.Dir = 'N';
+      return true;
+    }
+  }
+  if (S1->getSCEVType() != scAddRecExpr && S2->getSCEVType() != scAddRecExpr) {
+    // Can't handle other cases - either both constants or both AddRecs.
+    return false;
+  }
+
+  const SCEVAddRecExpr *AddRec1 = dyn_cast<SCEVAddRecExpr>(S1);
+  const SCEVAddRecExpr *AddRec2 = dyn_cast<SCEVAddRecExpr>(S2);
+
+  if (AddRec1->getLoop() != AddRec2->getLoop())
+    return false;
+
+  const Loop *RecLoop = AddRec1->getLoop();
+
   // TODO: What about the order here?
-  const SCEV *Diff = SE->getMinusSCEV(S2, S1);
+  const SCEV *Diff = SE->getMinusSCEV(AddRec2, AddRec1);
   // TODO: Handle other things
   const SCEVConstant *C = dyn_cast<const SCEVConstant>(Diff);
 
@@ -489,56 +531,136 @@ DepVectorComponent getDVComponent(ScalarEvolution *SE, const SCEV *S1,
   // can find out the distance with a single runtime check.
 
   if (C) {
-    return getDVComponentFromSCEVConstant(C);
+    auto DirDist = getDirDistPairFromSCEVConstant(C);
+    DVC = {DirDist.Dir, DirDist.Dist, RecLoop};
+    return true;
   } else {
     LLVM_DEBUG(dbgs() << "Non-constant SCEV distance: " << *Diff << "\n");
-    valid = false;
-    return {'*', 0};
+    return false;
   }
 }
 
-DepVector getDirVector(ScalarEvolution *SE,
-                       SmallVectorImpl<const SCEV *> &Subscripts1,
-                       SmallVectorImpl<const SCEV *> &Subscripts2,
-                       size_t NumEnclosedLoops) {
+static int findPositionInDV(DepVectorComponent DVC, LoopNestInfo NestInfo) {
+  const Loop *RecLoop = DVC.Loop;
+  const Loop *Runner = NestInfo.InnermostLoop;
+  // This is the position of the first dimension, which is the rightmost.
+  // Because remember that vectors follow the convention of C when it comes
+  // to multi-dimensional description. That is, every new dimension is added
+  // to the left in an access.
+  int Pos = NestInfo.NumEnclosedLoops;
+  while (Runner != nullptr) {
+    if (RecLoop == Runner)
+      return Pos;
+    Pos--;
+    Runner = Runner->getParentLoop();
+  }
+  return -1;
+}
+
+static int findUnusedPosition(SmallVectorImpl<const SCEV *> &Subscripts,
+                              LoopNestInfo NestInfo) {
+
+  SmallDenseMap<const Loop *, int> LegalLoops; // true signifies unused
+  // but one of the legal loops. false means it's illegal
+  // to use it.
+
+  // Add legal loops
+  int Counter = NestInfo.NumEnclosedLoops;
+  const Loop *Runner = NestInfo.InnermostLoop;
+  while (Counter >= 0) {
+    //LegalLoops.insert(std::pair<const Loop *, int>(Runner, Counter));
+    LegalLoops[Runner] = Counter;
+    Runner = Runner->getParentLoop();
+    Counter--;
+  }
+
+  for (const SCEV *Sub : Subscripts) {
+    if (Sub->getSCEVType() == scAddRecExpr) {
+      const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(Sub);
+      const Loop *L = AddRec->getLoop();
+      assert(LegalLoops.find(L) != LegalLoops.end());
+      LegalLoops[L] = -1;
+    }
+  }
+
+  for (auto Pair : LegalLoops) {
+    if (Pair.second != -1)
+      return Pair.second;
+  }
+  return -1;
+}
+
+enum DVValidity {
+  DVV_INVALID,
+  DVV_VALID,
+  DVV_DEFINITELY_VECTORIZABLE
+};
+
+DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
+                  SmallVectorImpl<const SCEV *> &Subscripts1,
+                  SmallVectorImpl<const SCEV *> &Subscripts2,
+                  LoopNestInfo NestInfo) {
 
   assert(Subscripts1.size() == Subscripts2.size());
-  assert(Subscripts1.size() >= (NumEnclosedLoops + 1));
 
-  DepVector Res = {true};
-
-  size_t Index = Subscripts1.size() - (NumEnclosedLoops + 1);
-  for (; Index < Subscripts1.size(); ++Index) {
-    Res.Comps.push_back(
-        getDVComponent(SE, Subscripts1[Index], Subscripts2[Index], Res.valid));
+  for (size_t Index = 0; Index < Subscripts1.size(); ++Index) {
+    DepVectorComponent DVC;
+    if (!getDVComponent(SE, Subscripts1[Index], Subscripts2[Index], DVC))
+      return DVV_INVALID;
+    if (DVC.Dir == 'N')
+      return DVV_DEFINITELY_VECTORIZABLE;
+    if (DVC.Dir == 'S') {
+      // We don't care if we pass Subscripts1 or 2 because
+      // if they use different set of loops they will not agree
+      // anyway, which makes them invalid (see the verification
+      // subscripts).
+      int Pos = findUnusedPosition(Subscripts1, NestInfo);
+      assert(Pos != -1);
+      DV.Comps[Pos] = DVC;
+      continue;
+    }
+    int Pos = findPositionInDV(DVC, NestInfo);
+    assert(Pos != -1);
+    DV.Comps[Pos] = DVC;
   }
 
-  return Res;
+  return DVV_VALID;
 }
 
-static bool verifyIterationDepVector(DepVector &DV, int NumEnclosedLoops) {
-  if (!DV.verify())
-    return false;
-  if (DV.size() == 2) {
-    // We can't have an iteration dependence vector that looks
-    // downwards or directly to the left, because
-    // that would mean that a later iteration
-    // has to happen first!
-    bool isDownwards = DV[0].dir == '>';
-    bool isLeft = (DV[0].dist == 0 && DV[1].dist == '>');
-    if (isDownwards || isLeft)
-      return false;
-    return true;
-  } else {
-    return true;
+static bool areDefinitelyNonAliasing(const DepVector &AccessDV) {
+  for (DepVectorComponent DVC : AccessDV.Comps) {
+    if (DVC.Dir == 'N')
+      return true;
   }
   return false;
 }
 
-static DepVector &convertToIterationVector(DepVector& RefDV) {
-  assert(RefDV.size() == 2);
-  bool looksDownwards = RefDV[0].dir == '>';
-  bool looksLeft = (RefDV[0].dist == 0 && RefDV[1].dist == '>');
+void convertToIterationVector(DepVector& AccessDV) {
+  SmallVectorImpl<DepVectorComponent> &Comps = AccessDV.Comps;
+  // Squash unused dimensions. Maybe we should use a list instead of
+  // a vector - it depends on how common this is.
+
+  // Note that currently squshing works for something
+  // like this:
+  // for (k)
+  //   for (i)
+  //     for (j)
+  //       A[k+2][i-1][0] = A[k][i][0]
+  // i.e. we're squashing the first dimension (the j-loop).
+  // The currently implemented squashing could do quite more
+  // complicated squashing, like in the above loop: A[k+2][0][i-1] = ...
+  // that is, squash the middle dimension, or the last. But
+  // delinearization fails to deduce these subscripts.
+  Comps.erase(
+      std::remove_if(Comps.begin(), Comps.end(),
+                     [](DepVectorComponent DVC) { return DVC.Dir == 'S'; }),
+      Comps.end());
+
+  if (AccessDV.size() < 2)
+    return;
+  assert(AccessDV.size() == 2);
+  bool looksDownwards = AccessDV[0].Dir == '>';
+  bool looksLeft = (AccessDV[0].Dist == 0 && AccessDV[1].Dist == '>');
   // If it looks downwards or to the left, then we have an anti-dependence.
   // (there's s a read from a location that in iteration space is after the
   // (current).
@@ -546,20 +668,17 @@ static DepVector &convertToIterationVector(DepVector& RefDV) {
   // the origin because still the iteration in which the read happens
   // has to execute before the iteration in which the write happens.
   if (looksDownwards || looksLeft) {
-    for (DepVectorComponent &DVC : RefDV.Comps) {
-      DVC.reflect();
-    }
+    AccessDV.reflect();
   }
-  return RefDV;
 }
 
 static ConstVF getMaxAllowedVecFact(DepVector &IterDV, int NumEnclosedLoops) {
-  assert(verifyIterationDepVector(IterDV, NumEnclosedLoops));
+  assert(IterDV.verify());
   ConstVF Res = LoopDependence::getBestPossible().VectorizationFactor;
   // Handle outermost loop vectorization in 2-level loop nest.
-  if (NumEnclosedLoops == 1) {
-    if (IterDV[0].dir == '<' && (IterDV[1].dir == '>' || IterDV[1].dir == '='))
-      Res = (size_t)IterDV[0].dist;
+  if (IterDV.size() == 2) {
+    if (IterDV[0].Dir == '<' && (IterDV[1].Dir == '>' || IterDV[1].Dir == '='))
+      Res = (size_t)IterDV[0].Dist;
   } else {
     // Handle outermost loop vectorization in 3-level loop nest.
   }
@@ -579,8 +698,9 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
 
   // For now, we can only handle a perfect loop nest that has
   // accesses only in the innermost loop.
-  LoopNestInfo NestInfo = isPerfectLoopNestWithAccessesInTheInnermost(L);
-  if (!NestInfo.isPerfectWithAccessOnlyInInnermost) {
+  LoopNestInfo NestInfo;
+  bool isPerfectWithAccessOnlyInInnermost = getNestInfo(L, NestInfo);
+  if (!isPerfectWithAccessOnlyInInnermost) {
     LLVM_DEBUG(
         dbgs()
             << "Imperfect loop nest and/or accesses not in the innermost loop: "
@@ -595,11 +715,11 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
                     << L.getCanonicalInductionVariable()->getName() << "\n";);
 
   // For now, we can only handle 2-dimensional outer-loop vectorization.
-  if (NestInfo.NumEnclosedLoops != 1) {
-    LLVM_DEBUG(
-        dbgs() << "We can only handle 2-dimensional loop nests for now.\n");
-    return Bail;
-  }
+  //if (NestInfo.NumEnclosedLoops != 1) {
+  //  LLVM_DEBUG(
+  //      dbgs() << "We can only handle 2-dimensional loop nests for now.\n");
+  //  return Bail;
+  //}
 
   assert(NestInfo.InnermostLoop);
   const Loop &Inner = *NestInfo.InnermostLoop;
@@ -689,29 +809,33 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
       SmallVector<const SCEV *, 3> Sizes1, Sizes2;
 
       if (!delinearizeInstAndVerifySubscripts(SE, LD, Subscripts1, Sizes1,
-                                              NestInfo.InnermostLoop,
-                                              NestInfo.NumEnclosedLoops))
+                                              NestInfo))
         return Bail;
       if (!delinearizeInstAndVerifySubscripts(SE, ST, Subscripts2, Sizes2,
-                                              NestInfo.InnermostLoop,
-                                              NestInfo.NumEnclosedLoops))
+                                              NestInfo))
         return Bail;
 
       LLVM_DEBUG(dbgs() << "\n");
-      DepVector RefDV = getDirVector(&SE, Subscripts1, Subscripts2,
-                                     NestInfo.NumEnclosedLoops);
-      if (!RefDV.valid) {
+      DepVector AccessDV(NestInfo.NumEnclosedLoops + 1);
+      DVValidity Valid =
+          getDirVector(&SE, AccessDV, Subscripts1, Subscripts2, NestInfo);
+      if (Valid == DVV_INVALID)
+        return Bail;
+      if (Valid == DVV_DEFINITELY_VECTORIZABLE)
         continue;
-      } else {
-        DepVector &IterDV = convertToIterationVector(RefDV);
-        LLVM_DEBUG(IterDV.print(););
-        ConstVF MaxAllowedVectorizationFactor =
-            getMaxAllowedVecFact(IterDV, NestInfo.NumEnclosedLoops);
-        if (Res.VectorizationFactor < MaxAllowedVectorizationFactor)
-          Res.VectorizationFactor = MaxAllowedVectorizationFactor;
-        if (Res.isWorstPossible())
-          return Bail;
-      }
+      convertToIterationVector(AccessDV);
+      // TODO: This definitely has to be changed. We can apply
+      // here LAA's check.
+      if (AccessDV.size() < 2)
+        return Bail;
+      DepVector &IterDV = AccessDV; 
+      LLVM_DEBUG(IterDV.print(););
+      ConstVF MaxAllowedVectorizationFactor =
+          getMaxAllowedVecFact(IterDV, NestInfo.NumEnclosedLoops);
+      if (Res.VectorizationFactor < MaxAllowedVectorizationFactor)
+        Res.VectorizationFactor = MaxAllowedVectorizationFactor;
+      if (Res.isWorstPossible())
+        return Bail;
     }
   }
 

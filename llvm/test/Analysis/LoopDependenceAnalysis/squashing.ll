@@ -4,25 +4,20 @@
 ;   for (int64_t k = 0; k < x; ++k) {
 ;       for (int64_t i = 0; i < y; ++i) {
 ;           for (int64_t j = 0; j < z; ++j) {
-;               A[k][i+2][j] = A[k][i][j];
+;               A[k+2][i-1][0] = A[k][i][0];
 ;           }
 ;       }
 ;   }
 ; }
 
-; CHECK: Loop: for.body: Is NOT vectorizable
-; CHECK: Loop: for.body3: Is vectorizable with VF: 2
 
-; Explanation: Eventually, we want to be able to vectorize
-; the outermost loop (k-loop i.e. for.body), but for now, we want
-; to make sure that we can vectorize the middle-loop
-; (i-loop i.e. for.body3) although it is in a 3-level
-; loop-nest and the accesses are 3-dimensional.
+; CHECK: Loop: for.body: Is vectorizable with VF: 2
 
-; Temporarily FAILING because we don't handle indexes
-; in accesses that are outside of the loop nest.
+; Explanation: We want to check that we're squashing
+; the first dimension (the j-loop) and so, we're
+; falling back to 2-dimensional loop check.
 
-define void @test(i64 %x, i64 %y, i64 %z, i64* %A) #0 {
+define void @test(i64 %x, i64 %y, i64 %z, i64* %A) {
 entry:
   %cmp6 = icmp sgt i64 %x, 0
   br i1 %cmp6, label %for.body, label %for.end17
@@ -44,16 +39,15 @@ for.body6:                                        ; preds = %for.body3, %for.bod
   %arrayidx = getelementptr inbounds i64, i64* %A, i64 %1
   %2 = mul nsw i64 %i.04, %z
   %arrayidx7 = getelementptr inbounds i64, i64* %arrayidx, i64 %2
-  %arrayidx8 = getelementptr inbounds i64, i64* %arrayidx7, i64 %j.02
-  %3 = load i64, i64* %arrayidx8, align 8
+  %3 = load i64, i64* %arrayidx7, align 8
+  %add = add nuw nsw i64 %k.07, 2
   %4 = mul nuw i64 %y, %z
-  %5 = mul nsw i64 %k.07, %4
+  %5 = mul nsw i64 %add, %4
   %arrayidx9 = getelementptr inbounds i64, i64* %A, i64 %5
-  %add = add nuw nsw i64 %i.04, 2
-  %6 = mul nsw i64 %add, %z
+  %sub = add nsw i64 %i.04, -1
+  %6 = mul nsw i64 %sub, %z
   %arrayidx10 = getelementptr inbounds i64, i64* %arrayidx9, i64 %6
-  %arrayidx11 = getelementptr inbounds i64, i64* %arrayidx10, i64 %j.02
-  store i64 %3, i64* %arrayidx11, align 8
+  store i64 %3, i64* %arrayidx10, align 8
   %inc = add nuw nsw i64 %j.02, 1
   %cmp5 = icmp slt i64 %inc, %z
   br i1 %cmp5, label %for.body6, label %for.inc12
