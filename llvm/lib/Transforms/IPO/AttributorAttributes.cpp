@@ -1052,9 +1052,10 @@ ChangeStatus AAReturnedValuesImpl::updateImpl(Attributor &A) {
   // map, NewRVsMap.
   decltype(ReturnedValues) NewRVsMap;
 
-  auto HandleReturnValue = [&](Value *RV, SmallSetVector<ReturnInst *, 4> &RIs) {
-    LLVM_DEBUG(dbgs() << "[AAReturnedValues] Returned value: " << *RV
-                      << " by #" << RIs.size() << " RIs\n");
+  auto HandleReturnValue = [&](Value *RV,
+                               SmallSetVector<ReturnInst *, 4> &RIs) {
+    LLVM_DEBUG(dbgs() << "[AAReturnedValues] Returned value: " << *RV << " by #"
+                      << RIs.size() << " RIs\n");
     CallBase *CB = dyn_cast<CallBase>(RV);
     if (!CB || UnresolvedCalls.count(CB))
       return;
@@ -2468,7 +2469,7 @@ struct AANoAliasCallSiteArgument final : AANoAliasImpl {
         const auto &ReachabilityAA =
             A.getAAFor<AAReachability>(*this, IRPosition::function(*ScopeFn));
 
-        if (!ReachabilityAA.isAssumedReachable(UserI, getCtxI()))
+        if (!ReachabilityAA.isAssumedReachable(A, *UserI, *getCtxI()))
           return true;
 
         if (auto *CB = dyn_cast<CallBase>(UserI)) {
@@ -3424,7 +3425,6 @@ struct AADereferenceableFloating : AADereferenceableImpl {
         DerefBytes = DS.DerefBytesState.getAssumed();
         T.GlobalState &= DS.GlobalState;
       }
-
 
       // For now we do not try to "increase" dereferenceability due to negative
       // indices as we first have to come up with code to deal with loops and
@@ -4669,6 +4669,30 @@ struct AAValueSimplifyCallSiteReturned : AAValueSimplifyReturned {
 struct AAValueSimplifyCallSiteArgument : AAValueSimplifyFloating {
   AAValueSimplifyCallSiteArgument(const IRPosition &IRP, Attributor &A)
       : AAValueSimplifyFloating(IRP, A) {}
+
+  /// See AbstractAttribute::manifest(...).
+  ChangeStatus manifest(Attributor &A) override {
+    ChangeStatus Changed = ChangeStatus::UNCHANGED;
+
+    if (SimplifiedAssociatedValue.hasValue() &&
+        !SimplifiedAssociatedValue.getValue())
+      return Changed;
+
+    Value &V = getAssociatedValue();
+    auto *C = SimplifiedAssociatedValue.hasValue()
+                  ? dyn_cast<Constant>(SimplifiedAssociatedValue.getValue())
+                  : UndefValue::get(V.getType());
+    if (C) {
+      Use &U = cast<CallBase>(&getAnchorValue())->getArgOperandUse(getArgNo());
+      // We can replace the AssociatedValue with the constant.
+      if (&V != C && V.getType() == C->getType()) {
+        if (A.changeUseAfterManifest(U, *C))
+          Changed = ChangeStatus::CHANGED;
+      }
+    }
+
+    return Changed | AAValueSimplify::manifest(A);
+  }
 
   void trackStatistics() const override {
     STATS_DECLTRACK_CSARG_ATTR(value_simplify)

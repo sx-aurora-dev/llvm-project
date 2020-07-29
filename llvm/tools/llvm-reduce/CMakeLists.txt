@@ -14,7 +14,9 @@ add_llvm_tool(llvm-reduce
   TestRunner.cpp
   deltas/Delta.cpp
   deltas/ReduceArguments.cpp
+  deltas/ReduceAttributes.cpp
   deltas/ReduceBasicBlocks.cpp
+  deltas/ReduceFunctionBodies.cpp
   deltas/ReduceFunctions.cpp
   deltas/ReduceGlobalVars.cpp
   deltas/ReduceInstructions.cpp

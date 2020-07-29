@@ -186,7 +186,7 @@ AffineDataCopyGeneration::runOnBlock(Block *block,
   if (curBegin != block->end()) {
     // Can't be a terminator because it would have been skipped above.
     assert(!curBegin->isKnownTerminator() && "can't be a terminator");
-    // Exclude the affine terminator - hence, the std::prev.
+    // Exclude the affine.yield - hence, the std::prev.
     affineDataCopyGenerate(/*begin=*/curBegin, /*end=*/std::prev(block->end()),
                            copyOptions, /*filterMemRef=*/llvm::None, copyNests);
   }
@@ -212,7 +212,7 @@ void AffineDataCopyGeneration::runOnFunction() {
   // Promote any single iteration loops in the copy nests and collect
   // load/stores to simplify.
   SmallVector<Operation *, 4> copyOps;
-  for (auto nest : copyNests)
+  for (Operation *nest : copyNests)
     // With a post order walk, the erasure of loops does not affect
     // continuation of the walk or the collection of load/store ops.
     nest->walk([&](Operation *op) {
@@ -228,6 +228,6 @@ void AffineDataCopyGeneration::runOnFunction() {
   OwningRewritePatternList patterns;
   AffineLoadOp::getCanonicalizationPatterns(patterns, &getContext());
   AffineStoreOp::getCanonicalizationPatterns(patterns, &getContext());
-  for (auto op : copyOps)
+  for (Operation *op : copyOps)
     applyOpPatternsAndFold(op, std::move(patterns));
 }

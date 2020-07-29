@@ -177,6 +177,38 @@ static cl::opt<bool> StackTaggingMergeSetTag(
 
 STATISTIC(NumRedZoneFunctions, "Number of functions using red zone");
 
+/// Returns the argument pop size.
+static uint64_t getArgumentPopSize(MachineFunction &MF,
+                                   MachineBasicBlock &MBB) {
+  MachineBasicBlock::iterator MBBI = MBB.getLastNonDebugInstr();
+  bool IsTailCallReturn = false;
+  if (MBB.end() != MBBI) {
+    unsigned RetOpcode = MBBI->getOpcode();
+    IsTailCallReturn = RetOpcode == AArch64::TCRETURNdi ||
+                       RetOpcode == AArch64::TCRETURNri ||
+                       RetOpcode == AArch64::TCRETURNriBTI;
+  }
+  AArch64FunctionInfo *AFI = MF.getInfo<AArch64FunctionInfo>();
+
+  uint64_t ArgumentPopSize = 0;
+  if (IsTailCallReturn) {
+    MachineOperand &StackAdjust = MBBI->getOperand(1);
+
+    // For a tail-call in a callee-pops-arguments environment, some or all of
+    // the stack may actually be in use for the call's arguments, this is
+    // calculated during LowerCall and consumed here...
+    ArgumentPopSize = StackAdjust.getImm();
+  } else {
+    // ... otherwise the amount to pop is *all* of the argument space,
+    // conveniently stored in the MachineFunctionInfo by
+    // LowerFormalArguments. This will, of course, be zero for the C calling
+    // convention.
+    ArgumentPopSize = AFI->getArgumentStackToRestore();
+  }
+
+  return ArgumentPopSize;
+}
+
 /// This is the biggest offset to the stack pointer we can encode in aarch64
 /// instructions (without using a separate calculation and a temp register).
 /// Note that the exception here are vector stores/loads which cannot encode any
@@ -1160,7 +1192,7 @@ void AArch64FrameLowering::emitPrologue(MachineFunction &MF,
 
   // Process the SVE callee-saves to determine what space needs to be
   // allocated.
-  if (AFI->getSVECalleeSavedStackSize()) {
+  if (int64_t CalleeSavedSize = AFI->getSVECalleeSavedStackSize()) {
     // Find callee save instructions in frame.
     CalleeSavesBegin = MBBI;
     assert(IsSVECalleeSave(CalleeSavesBegin) && "Unexpected instruction");
@@ -1168,11 +1200,7 @@ void AArch64FrameLowering::emitPrologue(MachineFunction &MF,
       ++MBBI;
     CalleeSavesEnd = MBBI;
 
-    int64_t OffsetToFirstCalleeSaveFromSP =
-        MFI.getObjectOffset(AFI->getMaxSVECSFrameIndex());
-    StackOffset OffsetToCalleeSavesFromSP =
-        StackOffset(OffsetToFirstCalleeSaveFromSP, MVT::nxv1i8) + SVEStackSize;
-    AllocateBefore -= OffsetToCalleeSavesFromSP;
+    AllocateBefore = {CalleeSavedSize, MVT::nxv1i8};
     AllocateAfter = SVEStackSize - AllocateBefore;
   }
 
@@ -1416,7 +1444,6 @@ void AArch64FrameLowering::emitEpilogue(MachineFunction &MF,
   const AArch64Subtarget &Subtarget = MF.getSubtarget<AArch64Subtarget>();
   const TargetInstrInfo *TII = Subtarget.getInstrInfo();
   DebugLoc DL;
-  bool IsTailCallReturn = false;
   bool NeedsWinCFI = needsWinCFI(MF);
   bool HasWinCFI = false;
   bool IsFunclet = false;
@@ -1427,10 +1454,6 @@ void AArch64FrameLowering::emitEpilogue(MachineFunction &MF,
 
   if (MBB.end() != MBBI) {
     DL = MBBI->getDebugLoc();
-    unsigned RetOpcode = MBBI->getOpcode();
-    IsTailCallReturn = RetOpcode == AArch64::TCRETURNdi ||
-                       RetOpcode == AArch64::TCRETURNri ||
-                       RetOpcode == AArch64::TCRETURNriBTI;
     IsFunclet = isFuncletReturnInstr(*MBBI);
   }
 
@@ -1445,21 +1468,7 @@ void AArch64FrameLowering::emitEpilogue(MachineFunction &MF,
 
   // Initial and residual are named for consistency with the prologue. Note that
   // in the epilogue, the residual adjustment is executed first.
-  uint64_t ArgumentPopSize = 0;
-  if (IsTailCallReturn) {
-    MachineOperand &StackAdjust = MBBI->getOperand(1);
-
-    // For a tail-call in a callee-pops-arguments environment, some or all of
-    // the stack may actually be in use for the call's arguments, this is
-    // calculated during LowerCall and consumed here...
-    ArgumentPopSize = StackAdjust.getImm();
-  } else {
-    // ... otherwise the amount to pop is *all* of the argument space,
-    // conveniently stored in the MachineFunctionInfo by
-    // LowerFormalArguments. This will, of course, be zero for the C calling
-    // convention.
-    ArgumentPopSize = AFI->getArgumentStackToRestore();
-  }
+  uint64_t ArgumentPopSize = getArgumentPopSize(MF, MBB);
 
   // The stack frame should be like below,
   //
@@ -1569,7 +1578,7 @@ void AArch64FrameLowering::emitEpilogue(MachineFunction &MF,
   // deallocated.
   StackOffset DeallocateBefore = {}, DeallocateAfter = SVEStackSize;
   MachineBasicBlock::iterator RestoreBegin = LastPopI, RestoreEnd = LastPopI;
-  if (AFI->getSVECalleeSavedStackSize()) {
+  if (int64_t CalleeSavedSize = AFI->getSVECalleeSavedStackSize()) {
     RestoreBegin = std::prev(RestoreEnd);;
     while (IsSVECalleeSave(RestoreBegin) &&
            RestoreBegin != MBB.begin())
@@ -1579,23 +1588,21 @@ void AArch64FrameLowering::emitEpilogue(MachineFunction &MF,
     assert(IsSVECalleeSave(RestoreBegin) &&
            IsSVECalleeSave(std::prev(RestoreEnd)) && "Unexpected instruction");
 
-    int64_t OffsetToFirstCalleeSaveFromSP =
-        MFI.getObjectOffset(AFI->getMaxSVECSFrameIndex());
-    StackOffset OffsetToCalleeSavesFromSP =
-        StackOffset(OffsetToFirstCalleeSaveFromSP, MVT::nxv1i8) + SVEStackSize;
-    DeallocateBefore = OffsetToCalleeSavesFromSP;
-    DeallocateAfter = SVEStackSize - DeallocateBefore;
+    StackOffset CalleeSavedSizeAsOffset = {CalleeSavedSize, MVT::nxv1i8};
+    DeallocateBefore = SVEStackSize - CalleeSavedSizeAsOffset;
+    DeallocateAfter = CalleeSavedSizeAsOffset;
   }
 
   // Deallocate the SVE area.
   if (SVEStackSize) {
     if (AFI->isStackRealigned()) {
-      if (AFI->getSVECalleeSavedStackSize())
-        // Set SP to start of SVE area, from which the callee-save reloads
-        // can be done. The code below will deallocate the stack space
+      if (int64_t CalleeSavedSize = AFI->getSVECalleeSavedStackSize())
+        // Set SP to start of SVE callee-save area from which they can
+        // be reloaded. The code below will deallocate the stack space
         // space by moving FP -> SP.
         emitFrameOffset(MBB, RestoreBegin, DL, AArch64::SP, AArch64::FP,
-                        -SVEStackSize, TII, MachineInstr::FrameDestroy);
+                        {-CalleeSavedSize, MVT::nxv1i8}, TII,
+                        MachineInstr::FrameDestroy);
     } else {
       if (AFI->getSVECalleeSavedStackSize()) {
         // Deallocate the non-SVE locals first before we can deallocate (and
@@ -1805,10 +1812,8 @@ StackOffset AArch64FrameLowering::resolveFrameOffsetReference(
         bool CanUseBP = RegInfo->hasBasePointer(MF);
         if (FPOffsetFits && CanUseBP) // Both are ok. Pick the best.
           UseFP = PreferFP;
-        else if (!CanUseBP) { // Can't use BP. Forced to use FP.
-          assert(!SVEStackSize && "Expected BP to be available");
+        else if (!CanUseBP) // Can't use BP. Forced to use FP.
           UseFP = true;
-        }
         // else we can use BP and FP, but the offset from FP won't fit.
         // That will make us scavenge registers which we can probably avoid by
         // using BP. If it won't fit for BP either, we'll scavenge anyway.
@@ -2584,25 +2589,23 @@ static int64_t determineSVEStackObjectOffsets(MachineFrameInfo &MFI,
                                               int &MinCSFrameIndex,
                                               int &MaxCSFrameIndex,
                                               bool AssignOffsets) {
+#ifndef NDEBUG
   // First process all fixed stack objects.
-  int64_t Offset = 0;
   for (int I = MFI.getObjectIndexBegin(); I != 0; ++I)
-    if (MFI.getStackID(I) == TargetStackID::SVEVector) {
-      int64_t FixedOffset = -MFI.getObjectOffset(I);
-      if (FixedOffset > Offset)
-        Offset = FixedOffset;
-    }
+    assert(MFI.getStackID(I) != TargetStackID::SVEVector &&
+           "SVE vectors should never be passed on the stack by value, only by "
+           "reference.");
+#endif
 
   auto Assign = [&MFI](int FI, int64_t Offset) {
     LLVM_DEBUG(dbgs() << "alloc FI(" << FI << ") at SP[" << Offset << "]\n");
     MFI.setObjectOffset(FI, Offset);
   };
 
+  int64_t Offset = 0;
+
   // Then process all callee saved slots.
   if (getSVECalleeSaveSlotRange(MFI, MinCSFrameIndex, MaxCSFrameIndex)) {
-    // Make sure to align the last callee save slot.
-    MFI.setObjectAlignment(MaxCSFrameIndex, Align(16));
-
     // Assign offsets to the callee save slots.
     for (int I = MinCSFrameIndex; I <= MaxCSFrameIndex; ++I) {
       Offset += MFI.getObjectSize(I);
@@ -2611,6 +2614,9 @@ static int64_t determineSVEStackObjectOffsets(MachineFrameInfo &MFI,
         Assign(I, -Offset);
     }
   }
+
+  // Ensure that the Callee-save area is aligned to 16bytes.
+  Offset = alignTo(Offset, Align(16U));
 
   // Create a buffer of SVE objects to allocate and sort it.
   SmallVector<int, 8> ObjectsToAllocate;

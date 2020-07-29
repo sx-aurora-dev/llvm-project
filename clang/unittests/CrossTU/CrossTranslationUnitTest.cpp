@@ -29,7 +29,7 @@ public:
   explicit CTUASTConsumer(clang::CompilerInstance &CI, bool *Success)
       : CTU(CI), Success(Success) {}
 
-  void HandleTranslationUnit(ASTContext &Ctx) {
+  void HandleTranslationUnit(ASTContext &Ctx) override {
     auto FindFInTU = [](const TranslationUnitDecl *TU) {
       const FunctionDecl *FD = nullptr;
       for (const Decl *D : TU->decls()) {
@@ -147,6 +147,7 @@ protected:
   std::unique_ptr<clang::ASTConsumer>
   CreateASTConsumer(clang::CompilerInstance &CI, StringRef) override {
     CI.getAnalyzerOpts()->CTUImportThreshold = OverrideLimit;
+    CI.getAnalyzerOpts()->CTUImportCppThreshold = OverrideLimit;
     return std::make_unique<CTUASTConsumer>(CI, Success);
   }
 

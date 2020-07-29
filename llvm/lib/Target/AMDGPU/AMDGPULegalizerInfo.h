@@ -25,7 +25,7 @@ class LLVMContext;
 class GCNSubtarget;
 
 /// This class provides the information for the target register banks.
-class AMDGPULegalizerInfo : public LegalizerInfo {
+class AMDGPULegalizerInfo final : public LegalizerInfo {
   const GCNSubtarget &ST;
 
 public:
@@ -132,6 +132,9 @@ public:
                               MachineIRBuilder &B) const;
   bool legalizeFDIVFastIntrin(MachineInstr &MI, MachineRegisterInfo &MRI,
                               MachineIRBuilder &B) const;
+
+  bool getImplicitArgPtr(Register DstReg, MachineRegisterInfo &MRI,
+                         MachineIRBuilder &B) const;
 
   bool legalizeImplicitArgPtr(MachineInstr &MI, MachineRegisterInfo &MRI,
                               MachineIRBuilder &B) const;

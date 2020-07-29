@@ -134,7 +134,14 @@ EVT EVT::getExtendedVectorElementType() const {
 
 unsigned EVT::getExtendedVectorNumElements() const {
   assert(isExtended() && "Type is not extended!");
-  return cast<VectorType>(LLVMTy)->getNumElements();
+  ElementCount EC = cast<VectorType>(LLVMTy)->getElementCount();
+  if (EC.Scalable) {
+    WithColor::warning()
+        << "The code that requested the fixed number of elements has made the "
+           "assumption that this vector is not scalable. This assumption was "
+           "not correct, and this may lead to broken code\n";
+  }
+  return EC.Min;
 }
 
 ElementCount EVT::getExtendedVectorElementCount() const {
@@ -318,9 +325,9 @@ Type *EVT::getTypeForEVT(LLVMContext &Context) const {
   case MVT::v32f16:
     return FixedVectorType::get(Type::getHalfTy(Context), 32);
   case MVT::v64f16:
-    return FixedVectorType::get(Type::getBFloatTy(Context), 64);
+    return FixedVectorType::get(Type::getHalfTy(Context), 64);
   case MVT::v128f16:
-    return FixedVectorType::get(Type::getBFloatTy(Context), 128);
+    return FixedVectorType::get(Type::getHalfTy(Context), 128);
   case MVT::v2bf16:
     return FixedVectorType::get(Type::getBFloatTy(Context), 2);
   case MVT::v3bf16:

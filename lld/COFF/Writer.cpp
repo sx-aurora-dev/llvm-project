@@ -1393,7 +1393,7 @@ template <typename PEHeaderTy> void Writer::writeHeader() {
     pe->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_GUARD_CF;
   if (config->integrityCheck)
     pe->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_FORCE_INTEGRITY;
-  if (setNoSEHCharacteristic)
+  if (setNoSEHCharacteristic || config->noSEH)
     pe->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_NO_SEH;
   if (config->terminalServerAware)
     pe->DLLCharacteristics |= IMAGE_DLL_CHARACTERISTICS_TERMINAL_SERVER_AWARE;
@@ -1864,6 +1864,10 @@ void Writer::sortExceptionTable() {
   uint8_t *end = bufAddr(lastPdata) + lastPdata->getSize();
   if (config->machine == AMD64) {
     struct Entry { ulittle32_t begin, end, unwind; };
+    if ((end - begin) % sizeof(Entry) != 0) {
+      fatal("unexpected .pdata size: " + Twine(end - begin) +
+            " is not a multiple of " + Twine(sizeof(Entry)));
+    }
     parallelSort(
         MutableArrayRef<Entry>((Entry *)begin, (Entry *)end),
         [](const Entry &a, const Entry &b) { return a.begin < b.begin; });
@@ -1871,6 +1875,10 @@ void Writer::sortExceptionTable() {
   }
   if (config->machine == ARMNT || config->machine == ARM64) {
     struct Entry { ulittle32_t begin, unwind; };
+    if ((end - begin) % sizeof(Entry) != 0) {
+      fatal("unexpected .pdata size: " + Twine(end - begin) +
+            " is not a multiple of " + Twine(sizeof(Entry)));
+    }
     parallelSort(
         MutableArrayRef<Entry>((Entry *)begin, (Entry *)end),
         [](const Entry &a, const Entry &b) { return a.begin < b.begin; });
