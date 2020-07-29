@@ -312,6 +312,9 @@ getLoadStoreChain(SDValue Op) {
   if (MemSDNode *MemN = dyn_cast<MemSDNode>(Op.getNode())) {
     return MemN->getChain();
   }
+  if (Op->isVP()) {
+    return Op->getOperand(0);
+  }
   return SDValue();
 }
 
@@ -324,6 +327,9 @@ getLoadStorePtr(SDValue Op) {
     return Op->getOperand(2);
   }
   if (auto *MemN = dyn_cast<MaskedLoadStoreSDNode>(Op.getNode())) {
+    return MemN->getBasePtr();
+  }
+  if (auto *MemN = dyn_cast<VPLoadStoreSDNode>(Op.getNode())) {
     return MemN->getBasePtr();
   }
   if (auto *MemN = dyn_cast<MemSDNode>(Op.getNode())) {
@@ -445,7 +451,8 @@ VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
   VVPWideningInfo WidenInfo =
       pickResultType(CDAG, Op, Mode);
 
-  EVT ResVT = CDAG.getSplitVT(Op.getValue(0).getValueType());
+  EVT DataVT = getMemoryDataVT(Op);
+  EVT ResVT = CDAG.getSplitVT(DataVT);
 
   SDValue Passthru = getLoadPassthru(Op);
 
@@ -706,7 +713,7 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
   }
 
   // Does this operation have a dynamic AVL?
-  NeedsPackedMasking |= (bool) getNodeAVL(Op);
+  NeedsPackedMasking |= PackedMode && (bool)getNodeAVL(Op);
 
   return VVPWideningInfo(ResultVT, OpVectorLength, PackedMode, NeedsPackedMasking);
 }
