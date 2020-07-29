@@ -6,7 +6,7 @@ define void @test_vp_harness(<256 x i64>* %Out, <256 x i64> %i0) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0,8,%s0
+; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   store <256 x i64> %i0, <256 x i64>* %Out
   ret void
