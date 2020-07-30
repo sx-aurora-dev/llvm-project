@@ -12,6 +12,7 @@
 
 
 ; CHECK: Loop: for.body: Is vectorizable with VF: 2
+; CHECK: Loop: for.body3: Is NOT vectorizable
 
 ; Explanation: We want to check that we're squashing
 ; the first dimension (the j-loop) and so, we're

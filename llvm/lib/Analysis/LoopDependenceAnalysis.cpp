@@ -263,42 +263,15 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
   }
   // We want to check a couple of things:
   // a) That any SCEV is either constant or AddRec.
-  // b) That any recurrence uses one of the loops in the loop nest.
-  // c) That any loop of the nest is used in at most one recurrence.
-  // Imagine that we have a 3-level loop nest:
-  // for (k)
-  //   for (i)
-  //     for (j)
-  // In essence we can have A[k][i][j], A[i][k][j], ... 
-  // i.e. we can shuffle them. We can also skip some,
-  // like A[k][0][j]. But we can't use an IV that
-  // is not in one of the 3 enclosed loops, e.g. A[l][j][i].
-  // Note that we can have this: A[k][i][0][j]
-  SmallDenseMap<const Loop *, bool> LegalLoops; // true signifies unused
-  // but one of the legal loops. false means it's illegal
-  // to use it.
-
-  // Add legal loops
-  int Counter = NestInfo.NumEnclosedLoops;
-  const Loop *Runner = NestInfo.InnermostLoop;
-  while (Counter >= 0) {
-    LegalLoops[Runner] = true;
-    Runner = Runner->getParentLoop();
-    Counter--;
-  }
-
+  // b) That any loop of the nest is used in at most one recurrence.
+  // Note in that way, we have a subscript recurrence that is based
+  // on an outer loop - that is not included in the loop nest.
   for (const SCEV *S : Subscripts) {
     switch (S->getSCEVType()) {
     case scConstant:
       break;
     case scAddRecExpr: {
       const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(S);
-      // Check that it uses a legal loop.
-      const Loop *RecLoop = AddRec->getLoop();
-      if (auto &SavePos = LegalLoops[RecLoop])
-        SavePos = false;
-      else
-        return false;
       // Check that it has a positive step.
       const SCEV *Step = AddRec->getStepRecurrence(SE);
       if (Step->getSCEVType() != scConstant)
@@ -578,8 +551,8 @@ static int findUnusedPosition(SmallVectorImpl<const SCEV *> &Subscripts,
     if (Sub->getSCEVType() == scAddRecExpr) {
       const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(Sub);
       const Loop *L = AddRec->getLoop();
-      assert(LegalLoops.find(L) != LegalLoops.end());
-      LegalLoops[L] = -1;
+      if (LegalLoops.find(L) != LegalLoops.end())
+        LegalLoops[L] = -1;
     }
   }
 
@@ -620,7 +593,11 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
       continue;
     }
     int Pos = findPositionInDV(DVC, NestInfo);
-    assert(Pos != -1);
+    if (Pos == -1) {
+      // The loop that the recurrence is based on does not
+      // affect this (inner) loop nest.
+      continue;
+    }
     DV.Comps[Pos] = DVC;
   }
 
@@ -656,11 +633,15 @@ void convertToIterationVector(DepVector& AccessDV) {
                      [](DepVectorComponent DVC) { return DVC.Dir == 'S'; }),
       Comps.end());
 
-  if (AccessDV.size() < 2)
+  DepVector &IterDV = AccessDV;
+  assert(IterDV.size() > 0);
+  if (IterDV.size() == 1) {
+    if (IterDV[0].Dist < 0)
+      IterDV[0].negate();
     return;
-  assert(AccessDV.size() == 2);
-  bool looksDownwards = AccessDV[0].Dir == '>';
-  bool looksLeft = (AccessDV[0].Dist == 0 && AccessDV[1].Dist == '>');
+  }
+  bool looksDownwards = IterDV[0].Dir == '>';
+  bool looksLeft = (IterDV[0].Dist == 0 && IterDV[1].Dist == '>');
   // If it looks downwards or to the left, then we have an anti-dependence.
   // (there's s a read from a location that in iteration space is after the
   // (current).
@@ -668,13 +649,16 @@ void convertToIterationVector(DepVector& AccessDV) {
   // the origin because still the iteration in which the read happens
   // has to execute before the iteration in which the write happens.
   if (looksDownwards || looksLeft) {
-    AccessDV.reflect();
+    IterDV.reflect();
   }
 }
 
 static ConstVF getMaxAllowedVecFact(DepVector &IterDV, int NumEnclosedLoops) {
   assert(IterDV.verify());
   ConstVF Res = LoopDependence::getBestPossible().VectorizationFactor;
+  if (IterDV.size() == 1) {
+    return IterDV[0].Dist;
+  }
   // Handle outermost loop vectorization in 2-level loop nest.
   if (IterDV.size() == 2) {
     if (IterDV[0].Dir == '<' && (IterDV[1].Dir == '>' || IterDV[1].Dir == '='))
@@ -693,7 +677,8 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
     return Bail;
 
   // TODO: Is innermost? Use LAA
-  if (L.empty())
+  bool isInnermost = L.empty();
+  if (isInnermost)
     return Bail;
 
   // For now, we can only handle a perfect loop nest that has
@@ -824,10 +809,6 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
       if (Valid == DVV_DEFINITELY_VECTORIZABLE)
         continue;
       convertToIterationVector(AccessDV);
-      // TODO: This definitely has to be changed. We can apply
-      // here LAA's check.
-      if (AccessDV.size() < 2)
-        return Bail;
       DepVector &IterDV = AccessDV; 
       LLVM_DEBUG(IterDV.print(););
       ConstVF MaxAllowedVectorizationFactor =
