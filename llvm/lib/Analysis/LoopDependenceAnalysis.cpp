@@ -164,16 +164,7 @@ static bool isAccessingInstruction(const Instruction &I) {
 }
 
 // This function gathers information about a loop nest
-// as long as this is perfect with accesses only in the
-// innermost level. That is:
-// - Recursively, each sub-loop has at most one sub-loop.
-// - Every sub-loop that is not the innermost must not contain
-//   any accesses (instructions that read or write memory).
-// As long as these continue to hold, computes the number
-// of enclosed loops in the loop nest and finds the innermost loop.
-// It returns true if it was successful.
-
-// As a side-effect, it computes the depth of the loop nest.
+// as long as it is perfect. If it's not, it returns false.
 static bool getNestInfo(const Loop &TheLoop, LoopNestInfo &NestInfo) {
   NestInfo = { 0, &TheLoop};
 
@@ -190,18 +181,8 @@ static bool getNestInfo(const Loop &TheLoop, LoopNestInfo &NestInfo) {
     const auto &SubLoops = L->getSubLoops();
     if (SubLoops.size() != 1)
       return false;
-    const Loop *Inner = SubLoops[0];
-    for (const BasicBlock *BB : L->getBlocks()) {
-      if (!Inner->contains(BB)) {
-        for (const Instruction &I : *BB) {
-          if (isAccessingInstruction(I))
-            return false;
-        }
-      }
-    }
+    L = SubLoops[0];
     NestInfo.NumEnclosedLoops += 1;
-
-    L = Inner;
     if (L->empty()) {
       NestInfo.InnermostLoop = L;
       break;
@@ -251,16 +232,6 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
                                const SmallVectorImpl<const SCEV *> &Subscripts,
                                const SmallVectorImpl<const SCEV *> &Sizes,
                                LoopNestInfo NestInfo) {
-
-  // For now, the number of subscripts should be at least the
-  // outer loop vectorization level (i.e. NumEnclosedLoops + 1) that
-  // we chose in this loop nest. For example,
-  // if we're vectorizing the outer-most loop of a 3-level deep loop nest,
-  // then we should have at least 3 subscripts in each access.
-  if (!(Subscripts.size() >= NestInfo.NumEnclosedLoops + 1)) {
-    LLVM_DEBUG(dbgs() << "Few dimensions in access\n";);
-    return false;
-  }
   // We want to check a couple of things:
   // a) That any SCEV is either constant or AddRec.
   // b) That any loop of the nest is used in at most one recurrence.
@@ -298,7 +269,7 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
   assert(isa<StoreInst>(Inst) || isa<LoadInst>(Inst));
   const SCEV *AccessExpr = SE.getSCEVAtScope(getPointerOperand(Inst), L);
 
-  LLVM_DEBUG(dbgs() << "\n\nAccessExpr: " << *AccessExpr << "\n";);
+  LLVM_DEBUG(dbgs() << "\n\nAccessExpr (" << *AccessExpr->getType() << "): " << *AccessExpr << "\n";);
 
   const SCEVUnknown *BasePointer =
       dyn_cast<SCEVUnknown>(SE.getPointerBase(AccessExpr));
@@ -313,22 +284,38 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
 
   if (Subscripts.size() == 0 || Sizes.size() == 0 ||
       Subscripts.size() != Sizes.size()) {
-    LLVM_DEBUG(dbgs() << "Failed to delinearize\n";);
-    return false;
+    LLVM_DEBUG(dbgs() << "Failed to delinearize. Using a single subscript - the original SCEV\n";);
+    Subscripts.push_back(AccessExpr);
+    return true;
+    // If we have an AddRecExpr, try a little bit harder.
+    // CURRENTLY FAILS
+    //const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(AccessExpr);
+    //Type *Ty = AddRec->getType();
+    //auto &DL = L->getHeader()->getModule()->getDataLayout();
+    //uint64_t TypeByteSize = DL.getTypeAllocSize(Ty);
+    //const SCEV *Normalized = SE.getUDivExpr(AddRec, SE.getConstant(Ty, TypeByteSize));
+    //dbgs() << "Normalized: " << *Normalized << "\n";
+    //Subscripts.push_back(Normalized);
+    //// Push an invalid size just because the sizes of the two vectors
+    //// have to be equal.
+    //Subscripts.push_back(SE.getConstant(Ty, ~0));
+    //return true;
   }
 
-  LLVM_DEBUG(
-
+  //LLVM_DEBUG(
       dbgs() << "Base offset: " << *BasePointer << "\n";
-      dbgs() << "ArrayDecl[UnknownSize]"; int Size = Subscripts.size();
-      for (int i = 0; i < Size - 1; i++) dbgs() << "[" << *Sizes[i] << "]";
+      dbgs() << "ArrayDecl[UnknownSize]";
+      int Size = Subscripts.size();
+      for (int i = 0; i < Size - 1; i++)
+        dbgs() << "[" << *Sizes[i] << "]";
       dbgs() << " with elements of " << *Sizes[Size - 1] << " bytes.\n";
 
       dbgs() << "ArrayRef";
-      for (int i = 0; i < Size; i++) dbgs() << "[" << *Subscripts[i] << "]";
+      for (int i = 0; i < Size; i++)
+        dbgs() << "[" << *Subscripts[i] << "]";
       dbgs() << "\n";
 
-  );
+  //);
 
   return true;
 }
@@ -427,6 +414,7 @@ struct DepVector {
       Comps[i].print();
     }
     dbgs() << ")";
+    dbgs() << "\n";
   }
 
   size_t size() const { return Comps.size(); }
@@ -468,6 +456,8 @@ DirDistPair getDirDistPairFromSCEVConstant(const SCEVConstant *C) {
 
 bool getDVComponent(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
                     DepVectorComponent &DVC) {
+  if (S1->getType() != S2->getType())
+    return false;
   if (S1->getSCEVType() == scConstant && S2->getSCEVType() == scConstant) {
     // If they're both constants and equal, then we have dimension squashing.
     // Otherwise, the two references never alias.
@@ -569,10 +559,26 @@ enum DVValidity {
   DVV_DEFINITELY_VECTORIZABLE
 };
 
+void extendDimensions(ScalarEvolution *SE,
+                      SmallVectorImpl<const SCEV *> &Subscripts,
+                      LoopNestInfo NestInfo) {
+  int NestDimensions = NestInfo.NumEnclosedLoops + 1;
+  if (Subscripts.size() >= NestDimensions)
+    return;
+  int Diff = NestDimensions - (int)Subscripts.size();
+  for (int i = 0; i < Diff; ++i) {
+    // TODO: Change that to actual bits.
+    Subscripts.push_back(SE->getConstant(APInt(64, 0)));
+  }
+}
+
 DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
                   SmallVectorImpl<const SCEV *> &Subscripts1,
                   SmallVectorImpl<const SCEV *> &Subscripts2,
                   LoopNestInfo NestInfo) {
+
+  extendDimensions(SE, Subscripts1, NestInfo);
+  extendDimensions(SE, Subscripts2, NestInfo);
 
   assert(Subscripts1.size() == Subscripts2.size());
 
@@ -589,7 +595,7 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
       // subscripts).
       int Pos = findUnusedPosition(Subscripts1, NestInfo);
       assert(Pos != -1);
-      DV.Comps[Pos] = DVC;
+      DV[Pos] = DVC;
       continue;
     }
     int Pos = findPositionInDV(DVC, NestInfo);
@@ -598,7 +604,7 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
       // affect this (inner) loop nest.
       continue;
     }
-    DV.Comps[Pos] = DVC;
+    DV[Pos] = DVC;
   }
 
   return DVV_VALID;
@@ -657,7 +663,11 @@ static ConstVF getMaxAllowedVecFact(DepVector &IterDV, int NumEnclosedLoops) {
   assert(IterDV.verify());
   ConstVF Res = LoopDependence::getBestPossible().VectorizationFactor;
   if (IterDV.size() == 1) {
-    return IterDV[0].Dist;
+    int Dist = IterDV[0].Dist;
+    if (Dist) {
+      return Dist;
+    }
+    return None;
   }
   // Handle outermost loop vectorization in 2-level loop nest.
   if (IterDV.size() == 2) {
@@ -684,12 +694,9 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   // For now, we can only handle a perfect loop nest that has
   // accesses only in the innermost loop.
   LoopNestInfo NestInfo;
-  bool isPerfectWithAccessOnlyInInnermost = getNestInfo(L, NestInfo);
-  if (!isPerfectWithAccessOnlyInInnermost) {
-    LLVM_DEBUG(
-        dbgs()
-            << "Imperfect loop nest and/or accesses not in the innermost loop: "
-            << L << "\n";);
+  bool isPerfect = getNestInfo(L, NestInfo);
+  if (!isPerfect) {
+    LLVM_DEBUG(dbgs() << "Imperfect loop nest: " << L << "\n";);
     return Bail;
   }
   LLVM_DEBUG(dbgs() << "Loop: " << L << "\n";
@@ -718,7 +725,7 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
 
   // Find if there's any illegal instruction and gather
   // loads and stores. Also put the pointers in the AST.
-  for (BasicBlock *BB : Inner.blocks()) {
+  for (BasicBlock *BB : L.blocks()) {
     for (Instruction &I : *BB) {
       if (auto *Call = dyn_cast<CallBase>(&I)) {
         if (Call->isConvergent())
