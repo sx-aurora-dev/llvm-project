@@ -20,7 +20,7 @@ class VPBuilder {
   // Explicit vector length parameter
   Value * ExplicitVectorLength;
   // Compile-time vector length
-  int StaticVectorLength;
+  ElementCount StaticVectorLength;
 
   // get a valid mask/evl argument for the current predication contet
   Value& RequestPred();
@@ -31,7 +31,7 @@ public:
   : Builder(_builder)
   , Mask(nullptr)
   , ExplicitVectorLength(nullptr)
-  , StaticVectorLength(-1)
+  , StaticVectorLength(0, false)
   {}
 
   Module & getModule() const;
@@ -41,9 +41,23 @@ public:
   VectorType& getVectorType(Type &ElementTy);
 
   // Predication context tracker
-  VPBuilder& setMask(Value * _Mask) { Mask = _Mask;  return *this; }
-  VPBuilder& setEVL(Value * _ExplicitVectorLength) { ExplicitVectorLength = _ExplicitVectorLength; return *this; }
-  VPBuilder& setStaticVL(int VLen) { StaticVectorLength = VLen; return *this; }
+  VPBuilder &setMask(Value *_Mask) {
+    Mask = _Mask;
+    return *this;
+  }
+  VPBuilder &setEVL(Value *_ExplicitVectorLength) {
+    ExplicitVectorLength = _ExplicitVectorLength;
+    return *this;
+  }
+  VPBuilder &setStaticVL(unsigned FixedVL) {
+    StaticVectorLength = ElementCount(FixedVL, false);
+    return *this;
+  }
+  VPBuilder &setStaticVL(ElementCount ScalableVL) {
+    assert(false && "TODO implement vscale handling");
+    StaticVectorLength = ScalableVL;
+    return *this;
+  }
 
   // Create a map-vectorized copy of the instruction \p Inst with the underlying IRBuilder instance.
   // This operation may return nullptr if the instruction could not be vectorized.

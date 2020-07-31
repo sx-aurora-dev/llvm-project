@@ -30,8 +30,9 @@ Value &VPBuilder::RequestEVL() {
   if (ExplicitVectorLength)
     return *ExplicitVectorLength;
 
+  assert(!StaticVectorLength.Scalable && "TODO vscale lowering");
   auto *intTy = Builder.getInt32Ty();
-  return *ConstantInt::get(intTy, StaticVectorLength);
+  return *ConstantInt::get(intTy, StaticVectorLength.Min);
 }
 
 Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
@@ -164,7 +165,7 @@ Value &VPBuilder::CreateGather(Value &PointerVec, MaybeAlign AlignOpt) {
   auto &PointerVecTy = cast<VectorType>(*PointerVec.getType());
   auto &ElemTy = *cast<PointerType>(*PointerVecTy.getElementType())
                       .getPointerElementType();
-  auto &VecTy = *VectorType::get(&ElemTy, PointerVecTy.getNumElements());
+  auto &VecTy = *VectorType::get(&ElemTy, PointerVecTy.getElementCount());
   auto *GatherFunc = Intrinsic::getDeclaration(
       &getModule(), Intrinsic::vp_gather, {&VecTy, &PointerVecTy});
 
