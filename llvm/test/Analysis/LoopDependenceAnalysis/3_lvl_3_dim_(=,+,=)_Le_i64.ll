@@ -10,7 +10,6 @@
 ;   }
 ; }
 
-; CHECK: Loop: for.body: Is vectorizable for any factor
 ; CHECK: Loop: for.body3: Is vectorizable with VF: 2
 
 ; Explanation: Eventually, we want to be able to vectorize
