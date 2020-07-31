@@ -307,7 +307,7 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
     return true;
   }
 
-  //LLVM_DEBUG(
+  LLVM_DEBUG(
       dbgs() << "Base offset: " << *BasePointer << "\n";
       dbgs() << "ArrayDecl[UnknownSize]";
       int Size = Subscripts.size();
@@ -320,7 +320,7 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
         dbgs() << "[" << *Subscripts[i] << "]";
       dbgs() << "\n";
 
-  //);
+  );
 
   return true;
 }
