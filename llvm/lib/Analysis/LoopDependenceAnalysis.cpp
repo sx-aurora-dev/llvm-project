@@ -284,22 +284,27 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
 
   if (Subscripts.size() == 0 || Sizes.size() == 0 ||
       Subscripts.size() != Sizes.size()) {
-    LLVM_DEBUG(dbgs() << "Failed to delinearize. Using a single subscript - the original SCEV\n";);
-    Subscripts.push_back(AccessExpr);
-    return true;
+    LLVM_DEBUG(dbgs() << "Failed to delinearize. Using a single subscript - "
+                         "the original SCEV\n";);
+    if (AccessExpr->getSCEVType() != scAddRecExpr) {
+      Subscripts.push_back(AccessExpr);
+      return true;
+    }
     // If we have an AddRecExpr, try a little bit harder.
-    // CURRENTLY FAILS
-    //const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(AccessExpr);
-    //Type *Ty = AddRec->getType();
-    //auto &DL = L->getHeader()->getModule()->getDataLayout();
-    //uint64_t TypeByteSize = DL.getTypeAllocSize(Ty);
-    //const SCEV *Normalized = SE.getUDivExpr(AddRec, SE.getConstant(Ty, TypeByteSize));
-    //dbgs() << "Normalized: " << *Normalized << "\n";
-    //Subscripts.push_back(Normalized);
-    //// Push an invalid size just because the sizes of the two vectors
-    //// have to be equal.
-    //Subscripts.push_back(SE.getConstant(Ty, ~0));
-    //return true;
+    SCEVAddRecExpr *AddRec = (SCEVAddRecExpr *) cast<SCEVAddRecExpr>(AccessExpr);
+    // TODO: It's important to add run-time checks to verify that
+    // Add wrapping flags.
+    AddRec->setNoWrapFlags(SCEV::NoWrapFlags::FlagNUW);
+    Type *Ty = AddRec->getType();
+    auto &DL = L->getHeader()->getModule()->getDataLayout();
+    uint64_t TypeByteSize = DL.getTypeAllocSize(Ty);
+    const SCEV *Normalized = SE.getUDivExpr(AddRec, SE.getConstant(Ty, TypeByteSize));
+    dbgs() << "Normalized: " << *Normalized << "\n";
+    Subscripts.push_back(Normalized);
+    // Push an invalid size just because the sizes of the two vectors
+    // have to be equal.
+    Subscripts.push_back(SE.getConstant(Ty, ~0));
+    return true;
   }
 
   //LLVM_DEBUG(
@@ -455,7 +460,7 @@ DirDistPair getDirDistPairFromSCEVConstant(const SCEVConstant *C) {
 }
 
 bool getDVComponent(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
-                    DepVectorComponent &DVC) {
+                    DepVectorComponent &DVC, LoopNestInfo NestInfo) {
   if (S1->getType() != S2->getType())
     return false;
   if (S1->getSCEVType() == scConstant && S2->getSCEVType() == scConstant) {
@@ -480,6 +485,27 @@ bool getDVComponent(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
 
   if (AddRec1->getLoop() != AddRec2->getLoop())
     return false;
+
+  // Search for the loop that this subscript uses.
+  // If it uses an outer loop (outer than the loop nest
+  // we care about), then squash it.
+  const Loop *Runner = NestInfo.InnermostLoop;
+  const Loop *Used = AddRec1->getLoop();
+  int Counter = NestInfo.NumEnclosedLoops;
+  bool isOuter = true;
+  while (Counter >= 0) {
+    if (Runner == Used) {
+      isOuter = false;
+      break;
+    }
+    Runner = Runner->getParentLoop();
+    Counter--;
+  }
+
+  if (isOuter) {
+    DVC.Dir = 'S';
+    return true;
+  }
 
   const Loop *RecLoop = AddRec1->getLoop();
 
@@ -523,16 +549,13 @@ static int findPositionInDV(DepVectorComponent DVC, LoopNestInfo NestInfo) {
 static int findUnusedPosition(SmallVectorImpl<const SCEV *> &Subscripts,
                               LoopNestInfo NestInfo) {
 
-  SmallDenseMap<const Loop *, int> LegalLoops; // true signifies unused
-  // but one of the legal loops. false means it's illegal
-  // to use it.
+  SmallDenseMap<const Loop *, int> InnerLoops;
 
-  // Add legal loops
+  // Add used loops
   int Counter = NestInfo.NumEnclosedLoops;
   const Loop *Runner = NestInfo.InnermostLoop;
   while (Counter >= 0) {
-    //LegalLoops.insert(std::pair<const Loop *, int>(Runner, Counter));
-    LegalLoops[Runner] = Counter;
+    InnerLoops[Runner] = Counter;
     Runner = Runner->getParentLoop();
     Counter--;
   }
@@ -541,12 +564,12 @@ static int findUnusedPosition(SmallVectorImpl<const SCEV *> &Subscripts,
     if (Sub->getSCEVType() == scAddRecExpr) {
       const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(Sub);
       const Loop *L = AddRec->getLoop();
-      if (LegalLoops.find(L) != LegalLoops.end())
-        LegalLoops[L] = -1;
+      if (InnerLoops.find(L) != InnerLoops.end())
+        InnerLoops[L] = -1;
     }
   }
 
-  for (auto Pair : LegalLoops) {
+  for (auto Pair : InnerLoops) {
     if (Pair.second != -1)
       return Pair.second;
   }
@@ -584,7 +607,7 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
 
   for (size_t Index = 0; Index < Subscripts1.size(); ++Index) {
     DepVectorComponent DVC;
-    if (!getDVComponent(SE, Subscripts1[Index], Subscripts2[Index], DVC))
+    if (!getDVComponent(SE, Subscripts1[Index], Subscripts2[Index], DVC, NestInfo))
       return DVV_INVALID;
     if (DVC.Dir == 'N')
       return DVV_DEFINITELY_VECTORIZABLE;
@@ -594,7 +617,10 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
       // anyway, which makes them invalid (see the verification
       // subscripts).
       int Pos = findUnusedPosition(Subscripts1, NestInfo);
-      assert(Pos != -1);
+      if (Pos == -1)
+        // We didn't find pos, so we don't have to squash
+        // anything more. Just ignore it.
+        continue;
       DV[Pos] = DVC;
       continue;
     }
