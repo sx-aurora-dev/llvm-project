@@ -225,8 +225,6 @@ mark_as_advanced(
   LIBOMPTARGET_DEP_VEO_FOUND
   LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS)
 
-<<<<<<< HEAD
-=======
 ################################################################################
 # Looking for VHCALL
 ################################################################################
@@ -327,7 +325,6 @@ mark_as_advanced(
   LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIRS)
 
 ################################################################################
->>>>>>> 63f32dc7d429... Add cmake lookup for required headers and libraries.
 # Looking for CUDA libdevice subdirectory
 #
 # Special case for Debian/Ubuntu to have nvidia-cuda-toolkit work
