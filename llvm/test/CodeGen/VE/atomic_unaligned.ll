@@ -19,14 +19,14 @@
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_1() {
 ; CHECK-LABEL: test_atomic_store_1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 1
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, c@hi(, %s0)
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    st1b %s1, (, %s0)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i8 12, i8* @c release, align 32
   ret void
@@ -35,7 +35,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_1seq() {
 ; CHECK-LABEL: test_atomic_store_1seq:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -43,7 +43,7 @@ define void @test_atomic_store_1seq() {
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    st1b %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i8 12, i8* @c seq_cst, align 32
   ret void
@@ -52,14 +52,14 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_2() {
 ; CHECK-LABEL: test_atomic_store_2:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 1
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    st2b %s1, (, %s0)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i16 12, i16* @s release, align 32
   ret void
@@ -68,7 +68,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_2seq() {
 ; CHECK-LABEL: test_atomic_store_2seq:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -76,7 +76,7 @@ define void @test_atomic_store_2seq() {
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    st2b %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i16 12, i16* @s seq_cst, align 32
   ret void
@@ -85,14 +85,14 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_4() {
 ; CHECK-LABEL: test_atomic_store_4:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 1
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, i@hi(, %s0)
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    stl %s1, (, %s0)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i32 12, i32* @i release, align 32
   ret void
@@ -101,7 +101,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_4cst() {
 ; CHECK-LABEL: test_atomic_store_4cst:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -109,7 +109,7 @@ define void @test_atomic_store_4cst() {
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    stl %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i32 12, i32* @i seq_cst, align 32
   ret void
@@ -118,14 +118,14 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_8() {
 ; CHECK-LABEL: test_atomic_store_8:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 1
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, l@hi(, %s0)
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    st %s1, (, %s0)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i64 12, i64* @l release, align 32
   ret void
@@ -134,7 +134,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_8cst() {
 ; CHECK-LABEL: test_atomic_store_8cst:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -142,7 +142,7 @@ define void @test_atomic_store_8cst() {
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    st %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i64 12, i64* @l seq_cst, align 32
   ret void
@@ -191,7 +191,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_load_1() {
 ; CHECK-LABEL: test_atomic_load_1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, c@hi(, %s0)
@@ -199,7 +199,7 @@ define signext i8 @test_atomic_load_1() {
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i8, i8* @c acquire, align 32
   ret i8 %0
@@ -208,7 +208,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_load_1cst() {
 ; CHECK-LABEL: test_atomic_load_1cst:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, c@hi(, %s0)
@@ -216,7 +216,7 @@ define signext i8 @test_atomic_load_1cst() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i8, i8* @c seq_cst, align 32
   ret i8 %0
@@ -225,7 +225,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_load_2() {
 ; CHECK-LABEL: test_atomic_load_2:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
@@ -233,7 +233,7 @@ define signext i16 @test_atomic_load_2() {
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i16, i16* @s acquire, align 32
   ret i16 %0
@@ -242,7 +242,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_load_2cst() {
 ; CHECK-LABEL: test_atomic_load_2cst:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
@@ -250,7 +250,7 @@ define signext i16 @test_atomic_load_2cst() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i16, i16* @s seq_cst, align 32
   ret i16 %0
@@ -259,13 +259,13 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_load_4() {
 ; CHECK-LABEL: test_atomic_load_4:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, i@hi(, %s0)
 ; CHECK-NEXT:    ldl.zx %s0, (, %s0)
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i32, i32* @i acquire, align 32
   ret i32 %0
@@ -274,13 +274,13 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_load_4cst() {
 ; CHECK-LABEL: test_atomic_load_4cst:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, i@hi(, %s0)
 ; CHECK-NEXT:    ldl.zx %s0, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i32, i32* @i seq_cst, align 32
   ret i32 %0
@@ -289,13 +289,13 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_load_8() {
 ; CHECK-LABEL: test_atomic_load_8:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, l@hi(, %s0)
 ; CHECK-NEXT:    ld %s0, (, %s0)
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i64, i64* @l acquire, align 32
   ret i64 %0
@@ -304,13 +304,13 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_load_8cst() {
 ; CHECK-LABEL: test_atomic_load_8cst:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, l@hi(, %s0)
 ; CHECK-NEXT:    ld %s0, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i64, i64* @l seq_cst, align 32
   ret i64 %0
@@ -355,7 +355,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_exchange_1() {
 ; CHECK-LABEL: test_atomic_exchange_1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -372,7 +372,7 @@ define signext i8 @test_atomic_exchange_1() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i8* @c, i8 10 seq_cst
   ret i8 %0
@@ -381,7 +381,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_exchange_1_0() {
 ; CHECK-LABEL: test_atomic_exchange_1_0:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, siiii1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -398,7 +398,7 @@ define signext i8 @test_atomic_exchange_1_0() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 0), i8 14 seq_cst
   ret i8 %0
@@ -407,7 +407,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_exchange_1_1() {
 ; CHECK-LABEL: test_atomic_exchange_1_1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, siiii1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -423,7 +423,7 @@ define signext i8 @test_atomic_exchange_1_1() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 1), i8 15 seq_cst
   ret i8 %0
@@ -432,7 +432,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_exchange_1_2() {
 ; CHECK-LABEL: test_atomic_exchange_1_2:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, siiii1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -449,7 +449,7 @@ define signext i8 @test_atomic_exchange_1_2() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 2), i8 170 seq_cst
   ret i8 %0
@@ -458,7 +458,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_exchange_1_3() {
 ; CHECK-LABEL: test_atomic_exchange_1_3:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, siiii1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -475,7 +475,7 @@ define signext i8 @test_atomic_exchange_1_3() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 3), i8 187 seq_cst
   ret i8 %0
@@ -484,7 +484,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_exchange_2() {
 ; CHECK-LABEL: test_atomic_exchange_2:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -510,7 +510,7 @@ define signext i16 @test_atomic_exchange_2() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i16* @s, i16 28672 seq_cst
   ret i16 %0
@@ -519,7 +519,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_exchange_4() {
 ; CHECK-LABEL: test_atomic_exchange_4:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -527,7 +527,7 @@ define i32 @test_atomic_exchange_4() {
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    ts1am.w %s0, (%s1), 15
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i32* @i, i32 1886417008 seq_cst
   ret i32 %0
@@ -536,7 +536,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_exchange_4_align1() {
 ; CHECK-LABEL: test_atomic_exchange_4_align1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, sci1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -545,7 +545,7 @@ define i32 @test_atomic_exchange_4_align1() {
 ; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 ; CHECK-NEXT:    ts1am.w %s0, 1(%s1), 15
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 1886417008 seq_cst
   ret i32 %0
@@ -554,7 +554,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_exchange_8() {
 ; CHECK-LABEL: test_atomic_exchange_8:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, l@hi(, %s0)
@@ -562,7 +562,7 @@ define i64 @test_atomic_exchange_8() {
 ; CHECK-NEXT:    lea.sl %s0, 1886417008(, %s0)
 ; CHECK-NEXT:    ts1am.l %s0, (%s1), 127
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i64* @l, i64 8102099357864587376 acquire
   ret i64 %0
@@ -571,7 +571,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_exchange_8_align1() {
 ; CHECK-LABEL: test_atomic_exchange_8_align1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, scl1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, scl1@hi(, %s0)
@@ -580,7 +580,7 @@ define i64 @test_atomic_exchange_8_align1() {
 ; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 ; CHECK-NEXT:    ts1am.l %s0, 1(%s1), 127
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i64* getelementptr inbounds (%struct.scl, %struct.scl* @scl1, i32 0, i32 1), i64 8102099357864587376 acquire
   ret i64 %0
@@ -589,7 +589,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_exchange_8_align4() {
 ; CHECK-LABEL: test_atomic_exchange_8_align4:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, sil1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, sil1@hi(, %s0)
@@ -598,7 +598,7 @@ define i64 @test_atomic_exchange_8_align4() {
 ; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 ; CHECK-NEXT:    ts1am.l %s0, 4(%s1), 127
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i64* getelementptr inbounds (%struct.sil, %struct.sil* @sil1, i32 0, i32 1), i64 8102099357864587376 acquire
   ret i64 %0
@@ -628,7 +628,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-LABEL: test_atomic_compare_exchange_1:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    and %s2, %s1, (56)0
 ; CHECK-NEXT:    lea %s1, c@lo
@@ -663,7 +663,7 @@ define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    and %s0, 1, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i8* @c, i8 %0, i8 %1 seq_cst seq_cst
   %3 = extractvalue { i8, i1 } %2, 1
@@ -674,7 +674,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-LABEL: test_atomic_compare_exchange_2:
-; CHECK:       .LBB{{[0-9]+}}_5:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    and %s2, %s1, (48)0
 ; CHECK-NEXT:    lea %s1, s@lo
@@ -709,7 +709,7 @@ define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    and %s0, 1, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i16* @s, i16 %0, i16 %1 seq_cst seq_cst
   %3 = extractvalue { i16, i1 } %2, 1
@@ -720,7 +720,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_compare_exchange_4(i32, i32) {
 ; CHECK-LABEL: test_atomic_compare_exchange_4:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s2, i@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -731,7 +731,7 @@ define i32 @test_atomic_compare_exchange_4(i32, i32) {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i32* @i, i32 %0, i32 %1 seq_cst seq_cst
   %3 = extractvalue { i32, i1 } %2, 1
@@ -742,7 +742,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
 ; CHECK-LABEL: test_atomic_compare_exchange_4_align1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s2, sci1@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -754,7 +754,7 @@ define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 %0, i32 %1 seq_cst seq_cst
   %3 = extractvalue { i32, i1 } %2, 1
@@ -765,7 +765,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -776,7 +776,7 @@ define i64 @test_atomic_compare_exchange_8(i64, i64) {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry: %2 = cmpxchg i64* @l, i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
   %conv = zext i1 %3 to i64
@@ -786,7 +786,7 @@ entry: %2 = cmpxchg i64* @l, i64 %0, i64 %1 seq_cst seq_cst
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_align1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s2, scl1@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -798,7 +798,7 @@ define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i64* getelementptr inbounds (%struct.scl, %struct.scl* @scl1, i32 0, i32 1), i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
@@ -809,7 +809,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_align4:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s2, sil1@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -821,7 +821,7 @@ define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i64* getelementptr inbounds (%struct.sil, %struct.sil* @sil1, i32 0, i32 1), i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
@@ -857,7 +857,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_relaxed(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_relaxed:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
@@ -866,7 +866,7 @@ define i64 @test_atomic_compare_exchange_8_relaxed(i64, i64) {
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 monotonic monotonic
   %3 = extractvalue { i64, i1 } %2, 1
@@ -877,7 +877,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_consume(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_consume:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
@@ -887,7 +887,7 @@ define i64 @test_atomic_compare_exchange_8_consume(i64, i64) {
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 acquire acquire
   %3 = extractvalue { i64, i1 } %2, 1
@@ -898,7 +898,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_acquire(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_acquire:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
@@ -908,7 +908,7 @@ define i64 @test_atomic_compare_exchange_8_acquire(i64, i64) {
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 acquire acquire
   %3 = extractvalue { i64, i1 } %2, 1
@@ -919,7 +919,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_release(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_release:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 1
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -929,7 +929,7 @@ define i64 @test_atomic_compare_exchange_8_release(i64, i64) {
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 release monotonic
   %3 = extractvalue { i64, i1 } %2, 1
@@ -940,7 +940,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_acq_rel(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_acq_rel:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 1
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -951,7 +951,7 @@ define i64 @test_atomic_compare_exchange_8_acq_rel(i64, i64) {
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 acq_rel acquire
   %3 = extractvalue { i64, i1 } %2, 1
@@ -962,7 +962,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_weak(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -973,7 +973,7 @@ define i64 @test_atomic_compare_exchange_8_weak(i64, i64) {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
@@ -984,7 +984,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_weak_relaxed(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_relaxed:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
@@ -993,7 +993,7 @@ define i64 @test_atomic_compare_exchange_8_weak_relaxed(i64, i64) {
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 monotonic monotonic
   %3 = extractvalue { i64, i1 } %2, 1
@@ -1004,7 +1004,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_weak_consume(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_consume:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
@@ -1014,7 +1014,7 @@ define i64 @test_atomic_compare_exchange_8_weak_consume(i64, i64) {
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acquire acquire
   %3 = extractvalue { i64, i1 } %2, 1
@@ -1025,7 +1025,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_weak_acquire(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_acquire:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, l@hi(, %s2)
@@ -1035,7 +1035,7 @@ define i64 @test_atomic_compare_exchange_8_weak_acquire(i64, i64) {
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acquire acquire
   %3 = extractvalue { i64, i1 } %2, 1
@@ -1046,7 +1046,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_weak_release(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_release:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 1
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -1056,7 +1056,7 @@ define i64 @test_atomic_compare_exchange_8_weak_release(i64, i64) {
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 release monotonic
   %3 = extractvalue { i64, i1 } %2, 1
@@ -1067,7 +1067,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8_weak_acq_rel(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_weak_acq_rel:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 1
 ; CHECK-NEXT:    lea %s2, l@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -1078,7 +1078,7 @@ define i64 @test_atomic_compare_exchange_8_weak_acq_rel(i64, i64) {
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acq_rel acquire
   %3 = extractvalue { i64, i1 } %2, 1
@@ -1089,8 +1089,8 @@ entry:
 ; Function Attrs: norecurse nounwind readnone
 define void @test_atomic_fence_relaxed() {
 ; CHECK-LABEL: test_atomic_fence_relaxed:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK:       # %bb.0: # %entry
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   ret void
 }
@@ -1098,9 +1098,9 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_fence_consume() {
 ; CHECK-LABEL: test_atomic_fence_consume:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   fence acquire
   ret void
@@ -1109,9 +1109,9 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_fence_acquire() {
 ; CHECK-LABEL: test_atomic_fence_acquire:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   fence acquire
   ret void
@@ -1120,9 +1120,9 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_fence_release() {
 ; CHECK-LABEL: test_atomic_fence_release:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   fence release
   ret void
@@ -1131,9 +1131,9 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_fence_acq_rel() {
 ; CHECK-LABEL: test_atomic_fence_acq_rel:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   fence acq_rel
   ret void
@@ -1142,9 +1142,9 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_fence_seq_cst() {
 ; CHECK-LABEL: test_atomic_fence_seq_cst:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   fence seq_cst
   ret void
@@ -1153,7 +1153,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_fetch_add_1() {
 ; CHECK-LABEL: test_atomic_fetch_add_1:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1180,7 +1180,7 @@ define signext i8 @test_atomic_fetch_add_1() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw add i8* @c, i8 1 seq_cst
   ret i8 %0
@@ -1189,7 +1189,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_fetch_add_2() {
 ; CHECK-LABEL: test_atomic_fetch_add_2:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1216,7 +1216,7 @@ define signext i16 @test_atomic_fetch_add_2() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw add i16* @s, i16 1 seq_cst
   ret i16 %0
@@ -1225,7 +1225,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_fetch_add_4() {
 ; CHECK-LABEL: test_atomic_fetch_add_4:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1239,7 +1239,7 @@ define i32 @test_atomic_fetch_add_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw add i32* @i, i32 1 seq_cst
   ret i32 %0
@@ -1248,7 +1248,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_fetch_add_8() {
 ; CHECK-LABEL: test_atomic_fetch_add_8:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1262,7 +1262,7 @@ define i64 @test_atomic_fetch_add_8() {
 ; CHECK-NEXT:    brne.l %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw add i64* @l, i64 1 seq_cst
   ret i64 %0
@@ -1291,7 +1291,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_fetch_sub_1() {
 ; CHECK-LABEL: test_atomic_fetch_sub_1:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1318,7 +1318,7 @@ define signext i8 @test_atomic_fetch_sub_1() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw sub i8* @c, i8 1 seq_cst
   ret i8 %0
@@ -1327,7 +1327,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_fetch_sub_2() {
 ; CHECK-LABEL: test_atomic_fetch_sub_2:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1354,7 +1354,7 @@ define signext i16 @test_atomic_fetch_sub_2() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw sub i16* @s, i16 1 seq_cst
   ret i16 %0
@@ -1363,7 +1363,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_fetch_sub_4() {
 ; CHECK-LABEL: test_atomic_fetch_sub_4:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1377,7 +1377,7 @@ define i32 @test_atomic_fetch_sub_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw sub i32* @i, i32 1 seq_cst
   ret i32 %0
@@ -1386,7 +1386,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_fetch_sub_8() {
 ; CHECK-LABEL: test_atomic_fetch_sub_8:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1400,7 +1400,7 @@ define i64 @test_atomic_fetch_sub_8() {
 ; CHECK-NEXT:    brne.l %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw sub i64* @l, i64 1 seq_cst
   ret i64 %0
@@ -1429,7 +1429,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_fetch_and_1() {
 ; CHECK-LABEL: test_atomic_fetch_and_1:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1455,7 +1455,7 @@ define signext i8 @test_atomic_fetch_and_1() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw and i8* @c, i8 1 seq_cst
   ret i8 %0
@@ -1464,7 +1464,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_fetch_and_2() {
 ; CHECK-LABEL: test_atomic_fetch_and_2:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1490,7 +1490,7 @@ define signext i16 @test_atomic_fetch_and_2() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw and i16* @s, i16 1 seq_cst
   ret i16 %0
@@ -1499,7 +1499,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_fetch_and_4() {
 ; CHECK-LABEL: test_atomic_fetch_and_4:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1513,7 +1513,7 @@ define i32 @test_atomic_fetch_and_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw and i32* @i, i32 1 seq_cst
   ret i32 %0
@@ -1522,7 +1522,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_fetch_and_8() {
 ; CHECK-LABEL: test_atomic_fetch_and_8:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1536,7 +1536,7 @@ define i64 @test_atomic_fetch_and_8() {
 ; CHECK-NEXT:    brne.l %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw and i64* @l, i64 1 seq_cst
   ret i64 %0
@@ -1565,7 +1565,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_fetch_or_1() {
 ; CHECK-LABEL: test_atomic_fetch_or_1:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1588,7 +1588,7 @@ define signext i8 @test_atomic_fetch_or_1() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw or i8* @c, i8 1 seq_cst
   ret i8 %0
@@ -1597,7 +1597,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_fetch_or_2() {
 ; CHECK-LABEL: test_atomic_fetch_or_2:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1620,7 +1620,7 @@ define signext i16 @test_atomic_fetch_or_2() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw or i16* @s, i16 1 seq_cst
   ret i16 %0
@@ -1629,7 +1629,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_fetch_or_4() {
 ; CHECK-LABEL: test_atomic_fetch_or_4:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1643,7 +1643,7 @@ define i32 @test_atomic_fetch_or_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw or i32* @i, i32 1 seq_cst
   ret i32 %0
@@ -1652,7 +1652,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_fetch_or_8() {
 ; CHECK-LABEL: test_atomic_fetch_or_8:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1666,7 +1666,7 @@ define i64 @test_atomic_fetch_or_8() {
 ; CHECK-NEXT:    brne.l %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw or i64* @l, i64 1 seq_cst
   ret i64 %0
@@ -1695,7 +1695,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_fetch_xor_1() {
 ; CHECK-LABEL: test_atomic_fetch_xor_1:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1718,7 +1718,7 @@ define signext i8 @test_atomic_fetch_xor_1() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xor i8* @c, i8 1 seq_cst
   ret i8 %0
@@ -1727,7 +1727,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_fetch_xor_2() {
 ; CHECK-LABEL: test_atomic_fetch_xor_2:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1750,7 +1750,7 @@ define signext i16 @test_atomic_fetch_xor_2() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xor i16* @s, i16 1 seq_cst
   ret i16 %0
@@ -1759,7 +1759,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_fetch_xor_4() {
 ; CHECK-LABEL: test_atomic_fetch_xor_4:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1773,7 +1773,7 @@ define i32 @test_atomic_fetch_xor_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xor i32* @i, i32 1 seq_cst
   ret i32 %0
@@ -1782,7 +1782,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_fetch_xor_8() {
 ; CHECK-LABEL: test_atomic_fetch_xor_8:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1796,7 +1796,7 @@ define i64 @test_atomic_fetch_xor_8() {
 ; CHECK-NEXT:    brne.l %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xor i64* @l, i64 1 seq_cst
   ret i64 %0
@@ -1825,7 +1825,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i8 @test_atomic_fetch_nand_1() {
 ; CHECK-LABEL: test_atomic_fetch_nand_1:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1852,7 +1852,7 @@ define signext i8 @test_atomic_fetch_nand_1() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw nand i8* @c, i8 1 seq_cst
   ret i8 %0
@@ -1861,7 +1861,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define signext i16 @test_atomic_fetch_nand_2() {
 ; CHECK-LABEL: test_atomic_fetch_nand_2:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1888,7 +1888,7 @@ define signext i16 @test_atomic_fetch_nand_2() {
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw nand i16* @s, i16 1 seq_cst
   ret i16 %0
@@ -1897,7 +1897,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_fetch_nand_4() {
 ; CHECK-LABEL: test_atomic_fetch_nand_4:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1914,7 +1914,7 @@ define i32 @test_atomic_fetch_nand_4() {
 ; CHECK-NEXT:    brne.w %s0, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw nand i32* @i, i32 1 seq_cst
   ret i32 %0
@@ -1923,7 +1923,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_fetch_nand_8() {
 ; CHECK-LABEL: test_atomic_fetch_nand_8:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1938,7 +1938,7 @@ define i64 @test_atomic_fetch_nand_8() {
 ; CHECK-NEXT:    brne.l %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw nand i64* @l, i64 1 seq_cst
   ret i64 %0
@@ -1967,7 +1967,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_fetch_max_4() {
 ; CHECK-LABEL: test_atomic_fetch_max_4:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -1981,7 +1981,7 @@ define i32 @test_atomic_fetch_max_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw max i32* @i, i32 1 seq_cst
   ret i32 %0
@@ -1990,7 +1990,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_fetch_min_4() {
 ; CHECK-LABEL: test_atomic_fetch_min_4:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -2004,7 +2004,7 @@ define i32 @test_atomic_fetch_min_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw min i32* @i, i32 1 seq_cst
   ret i32 %0
@@ -2013,7 +2013,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_fetch_umax_4() {
 ; CHECK-LABEL: test_atomic_fetch_umax_4:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, ui@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -2029,7 +2029,7 @@ define i32 @test_atomic_fetch_umax_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw umax i32* @ui, i32 1 seq_cst
   ret i32 %0
@@ -2038,7 +2038,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i32 @test_atomic_fetch_umin_4() {
 ; CHECK-LABEL: test_atomic_fetch_umin_4:
-; CHECK:       .LBB{{[0-9]+}}_4:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, ui@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -2054,7 +2054,7 @@ define i32 @test_atomic_fetch_umin_4() {
 ; CHECK-NEXT:    brne.w %s0, %s2, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw umin i32* @ui, i32 1 seq_cst
   ret i32 %0
@@ -2063,7 +2063,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_clear_1() {
 ; CHECK-LABEL: test_atomic_clear_1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -2071,7 +2071,7 @@ define void @test_atomic_clear_1() {
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    st1b %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i8 0, i8* @c seq_cst, align 32
   ret void
@@ -2080,7 +2080,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_clear_2() {
 ; CHECK-LABEL: test_atomic_clear_2:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -2088,7 +2088,7 @@ define void @test_atomic_clear_2() {
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    st1b %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i8 0, i8* bitcast (i16* @s to i8*) seq_cst, align 32
   ret void
@@ -2097,7 +2097,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_clear_4() {
 ; CHECK-LABEL: test_atomic_clear_4:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, i@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -2105,7 +2105,7 @@ define void @test_atomic_clear_4() {
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    st1b %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i8 0, i8* bitcast (i32* @i to i8*) seq_cst, align 32
   ret void
@@ -2114,7 +2114,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_clear_8() {
 ; CHECK-LABEL: test_atomic_clear_8:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, l@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -2122,7 +2122,7 @@ define void @test_atomic_clear_8() {
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    st1b %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i8 0, i8* bitcast (i64* @l to i8*) seq_cst, align 32
   ret void
@@ -2131,7 +2131,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_clear_16() {
 ; CHECK-LABEL: test_atomic_clear_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    lea %s0, it@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -2139,7 +2139,7 @@ define void @test_atomic_clear_16() {
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    st1b %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   store atomic i8 0, i8* bitcast (i128* @it to i8*) seq_cst, align 32
   ret void

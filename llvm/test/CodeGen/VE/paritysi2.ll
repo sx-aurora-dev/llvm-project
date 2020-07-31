@@ -5,7 +5,7 @@
 ; Function Attrs: norecurse nounwind readnone
 define hidden signext i32 @__paritysi2(i32 signext %0) {
 ; CHECK-LABEL: __paritysi2:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 16
 ; CHECK-NEXT:    xor %s0, %s1, %s0
@@ -20,7 +20,7 @@ define hidden signext i32 @__paritysi2(i32 signext %0) {
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s0, %s1, %s0
 ; CHECK-NEXT:    and %s0, 1, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %2 = lshr i32 %0, 16
   %3 = xor i32 %2, %0
   %4 = lshr i32 %3, 8

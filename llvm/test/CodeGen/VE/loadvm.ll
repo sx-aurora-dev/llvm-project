@@ -6,7 +6,7 @@
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i1> @loadv256i1(<256 x i1>* nocapture readonly) {
 ; CHECK-LABEL: loadv256i1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld %s1, (, %s0)
 ; CHECK-NEXT:    ld %s2, 8(, %s0)
 ; CHECK-NEXT:    ld %s3, 16(, %s0)
@@ -15,7 +15,7 @@ define x86_regcallcc <256 x i1> @loadv256i1(<256 x i1>* nocapture readonly) {
 ; CHECK-NEXT:    lvm %vm1, 1, %s2
 ; CHECK-NEXT:    lvm %vm1, 2, %s3
 ; CHECK-NEXT:    lvm %vm1, 3, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %2 = load <256 x i1>, <256 x i1>* %0, align 16
   ret <256 x i1> %2
 }
@@ -24,13 +24,13 @@ define x86_regcallcc <256 x i1> @loadv256i1(<256 x i1>* nocapture readonly) {
 define x86_regcallcc <256 x i1> @loadv256i1stk() {
 ; CHECK-LABEL: loadv256i1stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s16, 176(, %s11)
+; CHECK-NEXT:    ld %s16, -32(, %s9)
 ; CHECK-NEXT:    lvm %vm1, 0, %s16
-; CHECK-NEXT:    ld %s16, 184(, %s11)
+; CHECK-NEXT:    ld %s16, -24(, %s9)
 ; CHECK-NEXT:    lvm %vm1, 1, %s16
-; CHECK-NEXT:    ld %s16, 192(, %s11)
+; CHECK-NEXT:    ld %s16, -16(, %s9)
 ; CHECK-NEXT:    lvm %vm1, 2, %s16
-; CHECK-NEXT:    ld %s16, 200(, %s11)
+; CHECK-NEXT:    ld %s16, -8(, %s9)
 ; CHECK-NEXT:    lvm %vm1, 3, %s16
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca <256 x i1>, align 16
@@ -41,7 +41,7 @@ define x86_regcallcc <256 x i1> @loadv256i1stk() {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i1> @loadv256i1com() {
 ; CHECK-LABEL: loadv256i1com:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, v256i1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, v256i1@hi(, %s0)
@@ -53,7 +53,7 @@ define x86_regcallcc <256 x i1> @loadv256i1com() {
 ; CHECK-NEXT:    lvm %vm1, 1, %s2
 ; CHECK-NEXT:    lvm %vm1, 2, %s3
 ; CHECK-NEXT:    lvm %vm1, 3, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %1 = load <256 x i1>, <256 x i1>* @v256i1, align 16
   ret <256 x i1> %1
 }
@@ -61,7 +61,7 @@ define x86_regcallcc <256 x i1> @loadv256i1com() {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <512 x i1> @loadv512i1(<512 x i1>* nocapture readonly) {
 ; CHECK-LABEL: loadv512i1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld %s1, (, %s0)
 ; CHECK-NEXT:    ld %s2, 8(, %s0)
 ; CHECK-NEXT:    ld %s3, 16(, %s0)
@@ -78,7 +78,7 @@ define x86_regcallcc <512 x i1> @loadv512i1(<512 x i1>* nocapture readonly) {
 ; CHECK-NEXT:    lvm %vm2, 1, %s2
 ; CHECK-NEXT:    lvm %vm2, 2, %s3
 ; CHECK-NEXT:    lvm %vm2, 3, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %2 = load <512 x i1>, <512 x i1>* %0, align 16
   ret <512 x i1> %2
 }
@@ -88,21 +88,21 @@ define x86_regcallcc <512 x i1> @loadv512i1stk() {
 ; CHECK-LABEL: loadv512i1stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # implicit-def: $vmp1
-; CHECK-NEXT:    ld %s16, 176(, %s11)
+; CHECK-NEXT:    ld %s16, -64(, %s9)
 ; CHECK-NEXT:    lvm %vm3, 0, %s16
-; CHECK-NEXT:    ld %s16, 184(, %s11)
+; CHECK-NEXT:    ld %s16, -56(, %s9)
 ; CHECK-NEXT:    lvm %vm3, 1, %s16
-; CHECK-NEXT:    ld %s16, 192(, %s11)
+; CHECK-NEXT:    ld %s16, -48(, %s9)
 ; CHECK-NEXT:    lvm %vm3, 2, %s16
-; CHECK-NEXT:    ld %s16, 200(, %s11)
+; CHECK-NEXT:    ld %s16, -40(, %s9)
 ; CHECK-NEXT:    lvm %vm3, 3, %s16
-; CHECK-NEXT:    ld %s16, 208(, %s11)
+; CHECK-NEXT:    ld %s16, -32(, %s9)
 ; CHECK-NEXT:    lvm %vm2, 0, %s16
-; CHECK-NEXT:    ld %s16, 216(, %s11)
+; CHECK-NEXT:    ld %s16, -24(, %s9)
 ; CHECK-NEXT:    lvm %vm2, 1, %s16
-; CHECK-NEXT:    ld %s16, 224(, %s11)
+; CHECK-NEXT:    ld %s16, -16(, %s9)
 ; CHECK-NEXT:    lvm %vm2, 2, %s16
-; CHECK-NEXT:    ld %s16, 232(, %s11)
+; CHECK-NEXT:    ld %s16, -8(, %s9)
 ; CHECK-NEXT:    lvm %vm2, 3, %s16
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca <512 x i1>, align 16
@@ -113,7 +113,7 @@ define x86_regcallcc <512 x i1> @loadv512i1stk() {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <512 x i1> @loadv512i1com() {
 ; CHECK-LABEL: loadv512i1com:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, v512i1@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, v512i1@hi(, %s0)
@@ -133,7 +133,7 @@ define x86_regcallcc <512 x i1> @loadv512i1com() {
 ; CHECK-NEXT:    lvm %vm2, 1, %s2
 ; CHECK-NEXT:    lvm %vm2, 2, %s3
 ; CHECK-NEXT:    lvm %vm2, 3, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %1 = load <512 x i1>, <512 x i1>* @v512i1, align 16
   ret <512 x i1> %1
 }

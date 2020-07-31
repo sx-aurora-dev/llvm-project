@@ -3,9 +3,9 @@
 ; Function Attrs: nounwind readnone
 define double @fabs_test(double) {
 ; CHECK-LABEL: fabs_test:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (1)0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %2 = tail call double @llvm.fabs.f64(double %0)
   ret double %2
 }
