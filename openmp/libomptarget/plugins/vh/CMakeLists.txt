@@ -20,7 +20,7 @@ if(${LIBOMPTARGET_DEP_VHCALL_FOUND} AND ${LIBOMPTARGET_DEP_VEPSEUDO_FOUND})
                         ${additional_libs})
 
 
-    include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
+    # include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
     include_directories(${LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIR})
 
 
