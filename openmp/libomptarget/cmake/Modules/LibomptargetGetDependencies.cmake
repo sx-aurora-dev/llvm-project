@@ -226,50 +226,24 @@ mark_as_advanced(
   LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS)
 
 ################################################################################
-# Looking for VHCALL
+# Looking for VHCALL (VE side)
 ################################################################################
+
 find_path (
   LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIR
   NAMES
     libvhcall.h
   PATHS
-    /usr/include
-    /usr/local/include
-    /opt/local/include
-    /sw/include
     /opt/nec/ve/include
-    ENV CPATH
   PATH_SUFFIXES
-    libvhcall) # TODO is this neccessary?
-
-# Needed on vh side
-find_path (
-  LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIR
-  NAMES
-    libvepseudo.h
-  PATHS
-    /usr/include
-    /usr/local/include
-    /opt/local/include
-    /sw/include
-    /opt/nec/ve/include
-    /opt/nec/ve/veos/include
-    ENV CPATH
-  PATH_SUFFIXES
-    libvhcall) # TODO is this neccessary?
+    libvhcall)
 
 find_library (
   LIBOMPTARGET_DEP_VHCALL_LIBRARIES
   NAMES
     sysve
   PATHS
-    /usr/lib
-    /usr/local/lib
-    /opt/local/lib
-    /sw/lib
-    /opt/nec/ve/lib
-    ENV LIBRARY_PATH
-    ENV LD_LIBRARY_PATH)
+    /opt/nec/ve/lib)
 
 set(LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIRS ${LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIR})
 find_package_handle_standard_args(
@@ -283,7 +257,7 @@ mark_as_advanced(
   LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIRS)
 
 ################################################################################
-# Looking for VEPSEUDO
+# Looking for VEPSEUDO (VH side)
 ################################################################################
 
 find_path (
@@ -291,25 +265,17 @@ find_path (
   NAMES
     libvepseudo.h
   PATHS
-    /usr/include
-    /usr/local/include
-    /opt/local/include
-    /sw/include
     /opt/nec/ve/veos/include
     ENV CPATH
   PATH_SUFFIXES
-    libvhcall) # TODO is this neccessary?
+    libvhcall)
 
 find_library (
   LIBOMPTARGET_DEP_VEPSEUDO_LIBRARIES
   NAMES
     vepseudo
   PATHS
-    /usr/lib
-    /usr/local/lib
-    /opt/local/lib
-    /sw/lib
-    /opt/nec/ve/veos/lib
+    /opt/nec/ve/veos/lib64
     ENV LIBRARY_PATH
     ENV LD_LIBRARY_PATH)
 
