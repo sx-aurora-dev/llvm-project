@@ -48,6 +48,9 @@
 #include <unistd.h> // For getuid().
 #endif
 
+// FIXME temporary debug flag
+#define IF_DEBUG_OMP if (false)
+
 using namespace clang::driver;
 using namespace clang::driver::tools;
 using namespace clang;
@@ -1320,13 +1323,28 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
   // Add C++ include arguments, if needed.
   if (types::isCXX(Inputs[0].getType())) {
     bool HasStdlibxxIsystem = Args.hasArg(options::OPT_stdlibxx_isystem);
-    forAllAssociatedToolChains(
-        C, JA, getToolChain(),
-        [&Args, &CmdArgs, HasStdlibxxIsystem](const ToolChain &TC) {
+
+        auto AddSysIncludes = [&Args, &CmdArgs, HasStdlibxxIsystem](const ToolChain &TC) {
           HasStdlibxxIsystem ? TC.AddClangCXXStdlibIsystemArgs(Args, CmdArgs)
                              : TC.AddClangCXXStdlibIncludeArgs(Args, CmdArgs);
-        });
+          IF_DEBUG_OMP {
+            llvm::errs() << "With includes (" << HasStdlibxxIsystem << " for TC: " << TC.getArchName() << ") :\n ";
+            for (const auto *CA : CmdArgs) {
+              llvm::errs() << CA << ", ";
+            }
+            llvm::errs() << "\n";
+          }
+        };
+#if 1
+    // only consider the host toolchain     
+    AddSysIncludes(getToolChain());
+#else
+    forAllAssociatedToolChains(
+        C, JA, getToolChain(), AddSysIncludes);
+#endif
   }
+
+
 
   // Add system include arguments for all targets but IAMCU.
   if (!IsIAMCU)
@@ -3909,6 +3927,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   const llvm::Triple &RawTriple = TC.getTriple();
   const llvm::Triple &Triple = TC.getEffectiveTriple();
   const std::string &TripleStr = Triple.getTriple();
+
+  IF_DEBUG_OMP { llvm::errs() << "JAK: " << Action::getClassName(JA.getKind()) << " (" << TripleStr << ")\n"; }
 
   bool KernelOrKext =
       Args.hasArg(options::OPT_mkernel, options::OPT_fapple_kext);
