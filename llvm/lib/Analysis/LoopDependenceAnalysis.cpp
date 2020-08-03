@@ -322,54 +322,16 @@ struct DepVectorComponent {
   }
 };
 
-// A Dependence Vector is the combination of a direction
-// and a distance vector. More importantly, it can be used
-// as either two things:
-// - An Iteration Dependence Vector
-// - An Access Dependence Vector
-
-// An Iteration Dependence Vector signifies the dependences
-// between different iterations in iteration space. To starty simply,
-// let's say we have this 2-dimensional loop nest:
-//  extern int A[n][m];
-//  for (int i = 0; i < n-1; ++i)
-//    for (int j = 0; j < m; ++j)
-//      A[i][j] = A[i+1][j];
-//
-// This has a 2-dimensional iteration space that looks like:
-
-//     i
-// n-1 | (n-1, 0)  (n-1, 1)  (n-1, 2)      (n-1, m-1)
-//    ...
-//   2 | (2, 0)    (2, 1)    (2, 2)        (2, m-1)
-//   1 | (1, 0)    (1, 1)    (1, 2)        (1, m-1)
-//   0 | (0, 0)    (0, 1)    (0, 2)        (0, m-1)
-//     | --------- --------- --------- ... ---------
-//           0         1         2            m-1
-
-// Each cell is an iteration instance, parameterized by
-// the i and j values at this specific instance.
-
-// Now, what we ultimately care about is the dependences in the iteration
-// space. That is, what iteration instance(s) has to be run before
-// some other iteration instance(s) (because remember, vectorization is
-// about running iteration instances in parallel). This is the Iteration
-// Dependence Vector.
-// For example, looking at the code, we can see that in iteration (0, 0) we read
-// a value from cell [1][0]. Then, in iteration (1, 0) we write to that cell.
-// So, iteration (0, 0) has to be run _before_ iteration (1, 0) because
-// otherwise, we won't read the correct value.
-
-// ----
-
-// To be continued...
-
-
 struct DepVector {
   constexpr static size_t MaxComps = 4;
   SmallVector<DepVectorComponent, MaxComps> Comps;
 
   DepVector(int Dimensions) : Comps(Dimensions) {
+    // Start with everything destined to be squashed
+    // and only fill those that don't.
+    for (DepVectorComponent &DVC : Comps) {
+      DVC.Dir = 'S';
+    }
     assert(Dimensions <= MaxComps);
   }
 
@@ -515,53 +477,11 @@ static int findPositionInDV(DepVectorComponent DVC, LoopNestInfo NestInfo) {
   return -1;
 }
 
-static int findUnusedPosition(SmallVectorImpl<const SCEV *> &Subscripts,
-                              LoopNestInfo NestInfo) {
-
-  SmallDenseMap<const Loop *, int> InnerLoops;
-
-  // Add used loops
-  int Pos = NestInfo.NumDimensions - 1;
-  const Loop *Runner = NestInfo.InnermostLoop;
-  while (Pos >= 0) {
-    InnerLoops[Runner] = Pos;
-    Runner = Runner->getParentLoop();
-    Pos--;
-  }
-
-  for (const SCEV *Sub : Subscripts) {
-    if (Sub->getSCEVType() == scAddRecExpr) {
-      const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(Sub);
-      const Loop *L = AddRec->getLoop();
-      if (InnerLoops.find(L) != InnerLoops.end())
-        InnerLoops[L] = -1;
-    }
-  }
-
-  for (auto Pair : InnerLoops) {
-    if (Pair.second != -1)
-      return Pair.second;
-  }
-  return -1;
-}
-
 enum DVValidity {
   DVV_INVALID,
   DVV_VALID,
   DVV_DEFINITELY_VECTORIZABLE
 };
-
-void expandDimensions(ScalarEvolution *SE,
-                      SmallVectorImpl<const SCEV *> &Subscripts,
-                      LoopNestInfo NestInfo) {
-  if (Subscripts.size() >= NestInfo.NumDimensions)
-    return;
-  int Diff = NestInfo.NumDimensions - (int)Subscripts.size();
-  for (int i = 0; i < Diff; ++i) {
-    // TODO: Change that to actual bits.
-    Subscripts.push_back(SE->getConstant(APInt(64, 0)));
-  }
-}
 
 DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
                   SmallVectorImpl<const SCEV *> &Subscripts1,
@@ -576,19 +496,9 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
       return DVV_INVALID;
     if (DVC.Dir == 'N')
       return DVV_DEFINITELY_VECTORIZABLE;
-    if (DVC.Dir == 'S') {
-      // We don't care if we pass Subscripts1 or 2 because
-      // if they use different set of loops they will not agree
-      // anyway, which makes them invalid (see the verification
-      // subscripts).
-      int Pos = findUnusedPosition(Subscripts1, NestInfo);
-      if (Pos == -1)
-        // We didn't find any unused, so we don't have to squash
-        // anything more. Just ignore it.
-        continue;
-      DV[Pos] = DVC;
+    if (DVC.Dir == 'S')
+      // Ignore
       continue;
-    }
     int Pos = findPositionInDV(DVC, NestInfo);
     if (Pos == -1) {
       // The loop that the recurrence is based on does not
@@ -794,8 +704,8 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         return Bail;
 
       LLVM_DEBUG(dbgs() << "\n");
-      expandDimensions(&SE, Subscripts1, NestInfo);
-      expandDimensions(&SE, Subscripts2, NestInfo);
+      //expandDimensions(&SE, Subscripts1, NestInfo);
+      //expandDimensions(&SE, Subscripts2, NestInfo);
       DepVector IterDV(NestInfo.NumDimensions);
       DVValidity Valid =
           getDirVector(&SE, IterDV, Subscripts1, Subscripts2, NestInfo);
