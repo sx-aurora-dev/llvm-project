@@ -17,9 +17,7 @@ if(${LIBOMPTARGET_DEP_VEO_FOUND})
   set(tmachine_triple "ve-unknown-linux-unknown")
   set(elf_machine_id 251)
 
-  include_directories(${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
   include_directories(${LIBOMPTARGET_DEP_VEO_INCLUDE_DIR})
-
 
   # Define macro to be used as prefix of the runtime messages for this target.
   add_definitions("-DTARGET_NAME=${tmachine_name}")
