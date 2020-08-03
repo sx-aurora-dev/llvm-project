@@ -48,9 +48,6 @@
 #include <unistd.h> // For getuid().
 #endif
 
-// FIXME temporary debug flag
-#define IF_DEBUG_OMP if (false)
-
 using namespace clang::driver;
 using namespace clang::driver::tools;
 using namespace clang;
@@ -1324,21 +1321,16 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
   if (types::isCXX(Inputs[0].getType())) {
     bool HasStdlibxxIsystem = Args.hasArg(options::OPT_stdlibxx_isystem);
 
-        auto AddSysIncludes = [&Args, &CmdArgs, HasStdlibxxIsystem](const ToolChain &TC) {
-          HasStdlibxxIsystem ? TC.AddClangCXXStdlibIsystemArgs(Args, CmdArgs)
-                             : TC.AddClangCXXStdlibIncludeArgs(Args, CmdArgs);
-          IF_DEBUG_OMP {
-            llvm::errs() << "With includes (" << HasStdlibxxIsystem << " for TC: " << TC.getArchName() << ") :\n ";
-            for (const auto *CA : CmdArgs) {
-              llvm::errs() << CA << ", ";
-            }
-            llvm::errs() << "\n";
-          }
-        };
-#if 1
-    // only consider the host toolchain     
+    auto AddSysIncludes = [&Args, &CmdArgs, HasStdlibxxIsystem](const ToolChain &TC) {
+      HasStdlibxxIsystem ? TC.AddClangCXXStdlibIsystemArgs(Args, CmdArgs)
+                         : TC.AddClangCXXStdlibIncludeArgs(Args, CmdArgs);
+    };
+
+    // Only consider the paths of the target tool chain
     AddSysIncludes(getToolChain());
-#else
+
+#if 0
+    // LLVM upstream code path. This does not work for use because it adds the system include paths of the VH and the VE compiling for either (eg the glibc header for x86 are accidentally being used also for VE).
     forAllAssociatedToolChains(
         C, JA, getToolChain(), AddSysIncludes);
 #endif
@@ -3927,8 +3919,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   const llvm::Triple &RawTriple = TC.getTriple();
   const llvm::Triple &Triple = TC.getEffectiveTriple();
   const std::string &TripleStr = Triple.getTriple();
-
-  IF_DEBUG_OMP { llvm::errs() << "JAK: " << Action::getClassName(JA.getKind()) << " (" << TripleStr << ")\n"; }
 
   bool KernelOrKext =
       Args.hasArg(options::OPT_mkernel, options::OPT_fapple_kext);
