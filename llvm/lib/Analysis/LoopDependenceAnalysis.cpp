@@ -19,6 +19,16 @@
 #include "llvm/IR/Instructions.h"
 
 /*
+
+------ Documentation ------
+
+The structure of this doc is as follows. First we introduce some
+foundational terminology. Then the algorithm is described in detail, as
+a whole, so that it is obvious how every little piece fits into
+the whole picture. Any other comments in the rest of the code
+are implementation details that are not part of the algorithm per se
+and are implementation details (e.g. why use one data structure over another).
+
 -- Terminology --
 
 First of all, we assume that all accesses are in the form
@@ -65,6 +75,452 @@ Loop Vectorization Factor: It refers to the number of iterations
 
     Finally, the `j-loop` has a VF of infinity, since all iterations can
     be run in parallel.
+
+
+
+
+
+-- Algorithm --
+
+This describes that algorithm to get the vectorization factor
+for a loop, which we'll refer to as the queried loop (QL).
+
+
+
+
+- 0.1 Representing Dependences - Direction and Distance Vectors -
+
+Let's start with an example:
+
+int A[n][m];
+for (int i = 0; i < n-1; ++i)
+  for (int j = 1; j < m; ++j)
+    A[i+1][j-1] = A[i][j];
+
+We have an 2-dimensional loop nest and so a 2-dimensional
+iteration space that looks like this:
+
+    i
+n-2 | (n-2, 0)  (n-2, 1)  (n-2, 2)      (n-2, m-1)
+   ...
+  2 | (2, 0)    (2, 1)    (2, 2)        (2, m-1)
+  1 | (1, 0)    (1, 1)    (1, 2)        (1, m-1)
+    | --------- --------- --------- ... ---------
+          0         1         2            m-1
+
+Each cell is an iteration instance (or simply, an iteration)
+parameterized by the i and j values at this specific instance.
+As time goes forwards, the iterations are executed left to right,
+bottom to top (e.g. (1, 0), which btw is the first iteration,
+precedes (1, 1) which precedes (2, 0)).
+
+Looking at the code again, we'll see that in iteration (1, 1),
+we write to the _memory location_ A[2][0] (it's quite important
+to not confuse the _access space_, i.e. the space of memory locations
+accessed in the loop with the _iteration space_, the space of
+the executed iterations). Then, in iteration (2, 0), we read
+from this same location. So, after vectorization (or any transformation
+for that matter in order for it to be valid) iteration (1, 1)
+must be executed before iteration (2, 0).
+
+What we ultimately care about is the dependences in the iteration
+space like that above. That is, what iteration instance(s) has to
+be run before some other iteration instance(s)
+(because remember, vectorization is about running iteration
+instances in parallel). And we want a compact way to describe
+such dependences.
+
+The most common way is by using a direction or a distance vector.
+The direction vector here would look "upwards" and "to the left" -
+imagine an arrow pointing from (1, 1) (the source) to (2, 0) (the sink).
+We represent that as (<, >). Each entry in the vector describes
+a dimension and the further left the entry, the greater the dimension
+it describes (e.g. here the entry '<' describes the 2nd dimension and
+biggest dimension i.e. the `i`-axis). '<' represents that we're pointing towards
+_greater_ elements in that dimension. In this case, the vector points "upwards",
+i.e. towards higher elements in the `i`-axis. Similarly, '>' represents
+that we're pointing towards _smaller_ elements in that dimension. In
+this case, the vector points "to the left", i.e. towards smaller (or
+further to the left) elements in the `j`-axis. There's a third
+possible entry for a dimension and that is `=`, which just means
+we're pointing to exactly the same value in that dimension. For
+example, the vector (<, =) points _directly_ upwards.
+
+
+Be aware that with this description, the sink of the arrow
+(or the end of it, in this case (2, 0))
+depends on the source (in this case (1, 1)) of it. Different
+literature works describe dependences in the opposite way.
+
+Now, there's also the distance vector which gives us a more
+accurate description of the dependence. For example, it not
+only tells us e.g. that the vector points "upwards" but "how
+far upwards does it point", that is, what is the _distance_
+of the dependence in that direction. In that case, the distance
+vector would be (1, -1). What we call the dependence vector
+in this code is basically a combination of both kinds of vector.
+Each entry has both a direction and a distance.
+
+
+
+
+- 0.2 High-level Overview -
+
+This algorithm could be separated intuitevely in two steps.
+Given that we're processing an N-dimensional loop nest,
+the first step of this algorithm is to get an N-dimensional
+dependence vector that describes the dependences between
+iterations of the N-dimensional iteration space of this nest.
+
+Then, the second and final step is given an N-dimensional
+direction vector, to decide what is the maximum vectorization
+factor that we can apply, assuming that we're interested to
+vectorize the Nth dimension. As of now, in this implementation,
+we have not found a generic way to determine the max
+vectorization factor (or dependence distance) in the Nth
+dimension of an N-dimensional dependence vector. We
+can only handle 1, 2 and 3-dimensional vectors.
+
+
+
+
+- 1. Loop Nest Info -
+
+We start by gathering information about the loop nest. As a loop
+nest we consider anything that is _inside_ the QL (including the QL).
+For now, we can only handle perfect loop nests, so this is something
+we verify and we also find what is the innermost loop and what is
+the dimensionality of the loop nest.
+
+
+
+
+- 2. Gather Accessing Instructions -
+
+The only instructions that we can handle are simple loads and stores.
+The rest of the instructions are in one of the following categories:
+  - Calls that we know are vectorizable (either as intrinsics or because
+    they have a vectorizable counterpart).
+  - Instructions that don't read or write to memory.
+  - Calls that are convergent.
+  - Any other instruction.
+
+The first two categories are safe and we ignore them. Any instruction
+in the last two results in immediate failure.
+
+
+
+
+- 3. Test loads against stores -
+
+We test every load against every store. Before we mention the procedure,
+we should make clear that this is a very naive approach. We should
+only test access pairs that can potentially. We may know (e.g. from the
+Alias Set Tracker) that two pointers can never alias. Then, we should
+never check pairs of instructions in which the one uses the one pointer
+and the other the other.
+
+Second, we should account for output dependences, i.e. stores against
+stores. For now however, the focus is on how do we check an access pair
+and not what pairs we check. This is not a problem since the former
+does not change if the latter changes.
+
+
+
+
+- 4. Delinearization -
+
+Delinearization is the process of lifting linear accesses to
+multi-dimensional space (read the related Appedix to understand why we
+need to do that).
+
+The best case is that we get as many subscripts as the original access,
+with accurate description of the sizes (except the first one, which we
+can't even guess in C/C++ just by looking at the access). Note
+that subscripts are described with SCEVs. Since one doesn't _have to_
+use SCEV, it's rarely referenced in this doc, because one could use
+some other way of describing subscripts. But for now, one has to be familiar
+with SCEV to understand the implementation.
+
+Once we delinearize them, we verify that some constraints hold.
+Progressively we want this verification to have less and less constraints.
+Because they change quite often, this is one of the parts that is described
+in the relevant function.
+
+
+
+
+
+- 5.1 Computing the Dependence Vector -
+
+The input of the deduction phase of the dependence vector
+is an access pair. Each access has a list of subscripts. In the simple
+case, each subscript is an expression of an iteration variable.
+
+Now let's ask the question "how this info helps
+us find dependences between iterations?". Let's take a simple
+example:
+
+for (int j = 0; j < ...; ++j)
+  A[j+1] = A[j];
+
+We have 2 accesses here which access the same space (the space
+of the underlying object `A`). Let's take one of those accesses,
+A[j]. Notice that by using a loop (induction) variable in the subscript,
+we have created an implicit _mapping_ from iteration space
+to access space (or vice versa). To put it simpler, we have
+connected each iteration (which in this case is represented
+by `j`) with a specific cell of `A`. Iteration j = 0 is mapped
+to A[0], iteration j = 1 to A[1] and so on. As a side note,
+the iteration space is aligned with the access space (the first
+iteration is mapped to the first cell, the second iteration to the
+second cell and so on).
+
+We have a similar mapping for the other access, A[j+1]. Here
+j = 0 is mapped to A[1], j = 1 to A[2] and so on (notice that
+the two spaces now are "misaligned" by 1).
+
+The reason that this is important is because a dependence
+between two iterations fundamentally arises because in the one
+we write and in the other we read _from the same cell_ (or in general,
+memory location - note that this is the very reason that
+we only analyze accesses that could potentially access the
+same memory location, aka alias).
+So this mapping from iterations to cells is key.
+
+Another thing to understand here is that iterations are really
+just a representation of time. Imagine that each iteration is a moment
+and then you see that this mapping from iterations to cells,
+for a specific access, is stubbing each cell with a (different)
+moment in which this access happens.
+
+Going back to our example, the access A[j] accesses cell A[1]
+for a read at moment j = 1 while the access A[j+1] accesses
+cell A[1] at moment j = 0 for a write. We don't want these
+two accesses to happen in reverse, as far as _time_ is concerned,
+or to happen in parallel.
+
+Finally, notice that vectorization is about squeezing time. That is,
+if you vectorize a loop by a factor of 4, what previously
+happened in 4 distinct moments, now happens at one moment.
+
+Let's now go back to the example: What we're trying to deduce
+is "how much difference in time have the accesses A[j] and A[j+1]?".
+That's the maximum vectorization factor I can use. That's how
+much moments I can perform _at once_ before I attempt to
+include an illegal moment. And it is
+obvious that the amount of time by which they differ is (j+1) - j,
+i.e. the difference between the subscripts, since the subscripts
+are expressions of the "time variable", i.e. `j`.
+
+Imagine now that the same thing happens when we're having
+multi-dimensional accesses. It's just that now time
+has become a multi-dimensional entity. For example, in an
+access like A[i][j], the "moment" (0, 0) is connected with
+the cell A[0][0]. But the concept is still the same.
+
+The important thing is that if we're analyzing pairs of accesses,
+these accesses have to ultimately have a _constant_ time
+difference. For example, the accesses A[i+1][j-1] and A[i][j]
+still have a constant time difference of (1, -1), but the
+accesses A[j][i] and A[i][j] don't have a constant time difference.
+
+Notice now that this potentially multi-dimensional time difference
+is really the dependence vector. Note that the outer-loop vectorization
+tries to vectorize _one_ loop, so _one_ dimension which also
+applies to the dependence vector (we're trying to
+squeeze moments on one dimension).
+
+
+
+
+- 5.2 Anti-Dependences -
+
+An anti-dependence occurs when the read happens before
+the write, e.g. something like this:
+
+for (int j = 0; j < ...; ++j)
+  A[j] = A[j+1];
+
+In j = 0 we're reading from A[1] and in j = 1 we're writing to it.
+Still, that doesn't change the direction of the dependence vector.
+j = 1 depends on j = 0 and not the opposite. The reason is obviously
+that the order of reads / writes has to be maintained no matter
+what this order is.
+
+Also, notice that it doesn't make sense for a dependence vector
+to point to _previous_ iterations (e.g. point to the left in 1D
+vectors or to the left or downwards in 2D vectors etc.). Because that
+would mean that a _later_ iteration has to happen before a previous
+one. That can arise due to subtractions of the subscripts. Conceptually,
+it's like taking the absolute value in scalar quantities (notice
+that reflecting the final vector is _not_ the same as
+taking the absolute value of each subscript subtraction individually).
+
+
+
+
+- 6. Squashing -
+
+Squashing happens when a dimension of the iteration space does
+not contribute to the elements accessed by an access. For example, in this:
+
+for (int i = 0; i < ...; ++i)
+  for (int j = 0; j < ...; ++j)
+    A[i+1][0] = A[i][0];
+
+The `j` dimension does not contribute anywhere. In fact, it's like the
+j-loop never existed. We can squash this, which means remove it from
+the dependence vector and the dependence vector effectively becomes
+an 1D (although the loop nest is 2D).
+
+Squashing happens for two reasons:
+a) We are analyzing constant subscripts in both accesses and they're
+equal. Then, it's literally like a dimension is non-existent. There's
+a special case here. If they're constant and _not_ equal, then the
+loop is definitely vectorizable (with whatever factor) and we stop immediately.
+This is because then the two accesses never alias (imagine e.g. a 3D access pair
+where the two accesses access different planes).
+
+b) The two subscripts (both) use an iteration variable of a loop that is not
+inside the loop nest. In this case, again this dimension is like it does
+not exist.
+
+Notice that any other combination of subscripts is illegal and results
+in failure.
+
+
+
+
+- 7. Finding the maximum vectorization factor from a dependence vector -
+
+As was previously mentioned, once we have the dependence vector, the first
+thing we do is to reflect if it's needed. Then, we have 3 cases
+that we currently handle.
+
+
+
+- 7.1 1D case -
+
+The 1D case is very simple. The maximum vectorization factor is the
+distance of the only entry in the vector
+
+
+
+- 7.2 2D case -
+
+Remember that in any N-D case with N > 1, we're trying to squeeze together
+iterations in _one_ dimension, the Nth. In the case of 2D, we're
+trying to squeeze iterations by going upwards. Imagine a 2D loop where
+the outer variable is the `i` and the inner the `j`. In the the 2D space,
+the `i` takes values in the y-axis and the `j` in the x-axis. Now imagine
+that we're only executing the inner loop (the j-loop), which looks
+like just going to the right, and we're taking multiple vertical
+iterations at a time (instead of just one).
+
+By "looking" upwards and trying to get as many iterations as we can,
+the only vectors that are worrying are either those that look directly
+upwards or upwards and to the left. For the latter, see figure 8.12,
+from Chapter 8 of the book "Optimizing Compilers for Modern Architectures"
+since in this case, vectorization looks like unroll and jam. Notice that
+there, only the "upwards and to the left" is mentioned as illegal but we
+also have to consider the directly upwards. That is because unroll-and-jam
+on a directly upwards vector is fine because we assume that the iterations
+will be executed one after the other. But on the case of vectorization,
+we assume they'll be executed in _parallel_.
+
+Such vectors are problematic because an iteration that is more to the
+right has to precede an iteration that is upwards. Which makes us
+having to execute the whole `j` axis of iterations for a specific `i`
+before going to greater `i` values. In this case, the maximum vectorization
+factor is the distance in the `i` dimension of the vector because any vertical
+iterations in between have no problem being executed before any
+further to the right iterations.
+
+
+
+
+- 7.3 3D case -
+
+In the 3D case, we're imagining that we're adding another outermost
+loop that is represented in the z-axis. And we're trying to squeeze iterations
+in this axis. The only vectors that are potentially worrying are those
+that have an entry with distance equal to 0. Otherwise, the vector
+starts from a plane and points to a _different_ plane, so we don't care.
+
+But if one entry is 0, then we squash it and fall-back to the 2D case.
+
+
+
+
+-- Appedix: Multi-dimensional array access in C/C++ and in LLVM IR --
+
+What we conceptually and abstractly think of as a multi-dimensional array access
+does not exactly happen in C/C++ and in turn in LLVM IR. We mimic it though
+through pointers and we have two kinds of multi-dimensional accesses.
+
+The first kind is through multi-indirection pointers. That is,
+accessing elements with e.g. a int **p, say p[0][1], is conceptually
+similar to a multi-dimensional array access. We don't have
+many hopes handling such cases mostly because every different
+subscript requires a load and so alias analysis is very difficult.
+Fortunately, people who write high performance code know that so
+they next kind of array accessing.
+Note that if we somehow knew the there's no aliasing, the dependence analysis
+theory would work as in the following kind.
+
+The second is through "actual" multi-dimensional arrays.
+These are arrays that are declared in this form: int A[10][20], where
+each subscript describes the dimension.
+
+There are a lot of nuances depending on where this declaration takes place
+but the important thing to remember is that the underlying object of such
+entities is assumed to be a _contiguous_ buffer. C/C++ takes advantage
+of this fact and when an access happens through such an object, under
+the hood, it's just a linear access (i.e. access in a linear buffer)
+using a single-indirection pointer, which points to the first
+element of the underlying object.
+
+To clarify this, let's say we have this code:
+
+int A[10][20];
+int x = A[1][3];
+
+Let's focus on the access through the object. Under the hood, A is handled
+as a pointer, let's say `p`, to the starting address of a _supposedly_ linear
+buffer that _supposedly_ has 10 * 20 * 4 bytes allocated (assuming
+sizeof(int) == 4).
+
+So, under the hood, this code is: int x = p[1*20 + 3];
+If you pass A to a function, you'll actually see that in LLVM IR the function
+takes just a pointer and the accesses are done through getelementptr. This
+"flattening" of accesses has a couple of subtleties:
+
+1) Take the accesses: A[0][3], A[1][0]. Intuitively, we would think that
+such accesses don't alias. But, remembering that what matters is the
+_flattened_ access in `A`, and taking as an example that the declaration
+of `A` is say: int A[...][2], these two _do_ alias. And note that
+out of bounds access in a _dimension_ (and not the underlying object as a
+whole) is _not UB_, in which case we would not care.
+This means that dependence analysis theory that is based on
+actually multi-dimensional access spaces does not work here and instead we have
+to test the flattened access expressions. This is an unrealistic approach as
+this is a very difficult problem. So, we "cheat" by treating those as
+flattened accesses as if they were multi-dimensional and to do that,
+we have to verify (either statically or at run-time) that each subscript
+is not out of bounds of the respective dimension.
+
+2) But to even cheat is not easy. Some has to "reverse engineer" these
+expressions into multi-dimensional expressions and this is why
+we use SCEV delinearization. Given though that the function _from_ the
+original syntactic sugar _to_ the flattened access is not injective,
+problems are introduced.
+
+One final note is that you can imitate this flattening yourself in
+the source program. If you have an int *p and you do an access like
+p[i*m + j], it compiles to same thing as if you had declared `p` as:
+int p[][m] and accessed p[i][j]. Because it compiles to the same thing,
+it has the same chances for delinearization.
 
 */
 
