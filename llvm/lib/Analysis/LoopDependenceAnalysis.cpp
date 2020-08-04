@@ -540,37 +540,10 @@ LoopDependenceInfo LoopDependenceAnalysis::run(Function &F,
   return LoopDependenceInfo(F, SE, TLI, AA, DT, LI);
 }
 
-// Iterate all loops in DFS.
-static void iterateAllLoops(LoopDependenceInfo *LDI, const Loop *L) {
-  LoopDependence Res = LDI->getDependenceInfo(*L);
-  dbgs() << "\nLoop: " << L->getName() << ": ";
-  if (!Res.VectorizationFactor.hasValue()) {
-    dbgs() << "Is vectorizable for any factor\n";
-  } else {
-    uint64_t VF = Res.VectorizationFactor.getValue();
-    if (VF > 1)
-      dbgs() << "Is vectorizable with VF: " << VF << "\n";
-    else
-      dbgs() << "Is NOT vectorizable\n";
-  }
-  dbgs() << "\n";
-  for (const Loop *L : L->getSubLoops()) {
-    iterateAllLoops(LDI, L);
-  }
-}
-
 LoopDependenceInfo::LoopDependenceInfo(Function &F, ScalarEvolution &SE,
                                        TargetLibraryInfo &TLI, AAResults &AA,
                                        DominatorTree &DT, LoopInfo &LI)
-    : SE(SE), TLI(TLI), AA(AA), DT(DT), LI(LI) {
-
-  // For now, iterate over all loops, and print dependence distance.
-  // Note: LoopInfo gives us only the top-level loops, hence we have to
-  // use recursion to actually get all loops.
-  for (const Loop *L : LI) {
-    iterateAllLoops(this, L);
-  }
-}
+    : SE(SE), TLI(TLI), AA(AA), DT(DT), LI(LI) {}
 
 struct LoopNestInfo {
   int NumDimensions;
@@ -584,7 +557,7 @@ static bool isAccessingInstruction(const Instruction &I) {
 // This function gathers information about a loop nest
 // as long as it is perfect. If it's not, it returns false.
 static bool getNestInfo(const Loop &TheLoop, LoopNestInfo &NestInfo) {
-  NestInfo = { 1, &TheLoop};
+  NestInfo = {1, &TheLoop};
 
   // `const` ref makes our life hard so we have to
   // skip the type-system.
@@ -693,7 +666,8 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
   assert(isa<StoreInst>(Inst) || isa<LoadInst>(Inst));
   const SCEV *AccessExpr = SE.getSCEVAtScope(getPointerOperand(Inst), L);
 
-  LLVM_DEBUG(dbgs() << "\n\nAccessExpr (" << *AccessExpr->getType() << "): " << *AccessExpr << "\n";);
+  LLVM_DEBUG(dbgs() << "\n\nAccessExpr (" << *AccessExpr->getType()
+                    << "): " << *AccessExpr << "\n";);
 
   const SCEVUnknown *BasePointer =
       dyn_cast<SCEVUnknown>(SE.getPointerBase(AccessExpr));
@@ -715,7 +689,7 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
       return true;
     }
     // If we have an AddRecExpr, we have to normalize it.
-    SCEVAddRecExpr *AddRec = (SCEVAddRecExpr *) cast<SCEVAddRecExpr>(AccessExpr);
+    SCEVAddRecExpr *AddRec = (SCEVAddRecExpr *)cast<SCEVAddRecExpr>(AccessExpr);
     // Add wrapping flags. We have to do this otherwise unsigned div later
     // may not work.
     // TODO: It's important to add run-time checks to verify that
@@ -723,7 +697,8 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
     Type *Ty = AddRec->getType();
     auto &DL = L->getHeader()->getModule()->getDataLayout();
     uint64_t TypeByteSize = DL.getTypeAllocSize(Ty);
-    const SCEV *Normalized = SE.getUDivExpr(AddRec, SE.getConstant(Ty, TypeByteSize));
+    const SCEV *Normalized =
+        SE.getUDivExpr(AddRec, SE.getConstant(Ty, TypeByteSize));
     dbgs() << "Normalized: " << *Normalized << "\n";
     Subscripts.push_back(Normalized);
     // Push an invalid size just because the sizes of the two vectors
@@ -734,15 +709,12 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
 
   LLVM_DEBUG(
       dbgs() << "Base offset: " << *BasePointer << "\n";
-      dbgs() << "ArrayDecl[UnknownSize]";
-      int Size = Subscripts.size();
-      for (int i = 0; i < Size - 1; i++)
-        dbgs() << "[" << *Sizes[i] << "]";
+      dbgs() << "ArrayDecl[UnknownSize]"; int Size = Subscripts.size();
+      for (int i = 0; i < Size - 1; i++) dbgs() << "[" << *Sizes[i] << "]";
       dbgs() << " with elements of " << *Sizes[Size - 1] << " bytes.\n";
 
       dbgs() << "ArrayRef";
-      for (int i = 0; i < Size; i++)
-        dbgs() << "[" << *Subscripts[i] << "]";
+      for (int i = 0; i < Size; i++) dbgs() << "[" << *Subscripts[i] << "]";
       dbgs() << "\n";
 
   );
@@ -756,7 +728,8 @@ delinearizeInstAndVerifySubscripts(ScalarEvolution &SE, Instruction *Inst,
                                    SmallVectorImpl<const SCEV *> &Sizes,
                                    LoopNestInfo NestInfo) {
 
-  return delinearizeAccessInst(SE, Inst, Subscripts, Sizes, NestInfo.InnermostLoop) &&
+  return delinearizeAccessInst(SE, Inst, Subscripts, Sizes,
+                               NestInfo.InnermostLoop) &&
          subscriptsAreLegal(SE, Subscripts, Sizes, NestInfo);
 }
 
@@ -767,7 +740,8 @@ struct DepVectorComponent {
   const Loop *Loop = nullptr;
 
   void print() const {
-    dbgs() << "{" << Dir << ", " << Dist << ", " << ((Loop) ? Loop->getName() : "") << "}";
+    dbgs() << "{" << Dir << ", " << Dist << ", "
+           << ((Loop) ? Loop->getName() : "") << "}";
   }
   void negate() {
     assert(Dir == '=' || Dir == '<' || Dir == '>');
@@ -933,22 +907,19 @@ static int findPositionInDV(DepVectorComponent DVC, LoopNestInfo NestInfo) {
   return -1;
 }
 
-enum DVValidity {
-  DVV_INVALID,
-  DVV_VALID,
-  DVV_DEFINITELY_VECTORIZABLE
-};
+enum DVValidity { DVV_INVALID, DVV_VALID, DVV_DEFINITELY_VECTORIZABLE };
 
 DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
-                  SmallVectorImpl<const SCEV *> &Subscripts1,
-                  SmallVectorImpl<const SCEV *> &Subscripts2,
-                  LoopNestInfo NestInfo) {
+                        SmallVectorImpl<const SCEV *> &Subscripts1,
+                        SmallVectorImpl<const SCEV *> &Subscripts2,
+                        LoopNestInfo NestInfo) {
 
   assert(Subscripts1.size() == Subscripts2.size());
 
   for (size_t Index = 0; Index < Subscripts1.size(); ++Index) {
     DepVectorComponent DVC;
-    if (!getDVComponent(SE, Subscripts1[Index], Subscripts2[Index], DVC, NestInfo))
+    if (!getDVComponent(SE, Subscripts1[Index], Subscripts2[Index], DVC,
+                        NestInfo))
       return DVV_INVALID;
     if (DVC.Dir == 'N')
       return DVV_DEFINITELY_VECTORIZABLE;
@@ -1059,8 +1030,7 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
     return Bail;
   }
   LLVM_DEBUG(dbgs() << "Loop: " << L << "\n";
-             dbgs() << "    NumDimensions : " << NestInfo.NumDimensions
-                    << "\n";
+             dbgs() << "    NumDimensions : " << NestInfo.NumDimensions << "\n";
              dbgs() << "    InnerLoop: " << *NestInfo.InnermostLoop << "\n";
              dbgs() << "    Induction Variable: "
                     << L.getCanonicalInductionVariable()->getName() << "\n";);
@@ -1160,8 +1130,8 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         return Bail;
 
       LLVM_DEBUG(dbgs() << "\n");
-      //expandDimensions(&SE, Subscripts1, NestInfo);
-      //expandDimensions(&SE, Subscripts2, NestInfo);
+      // expandDimensions(&SE, Subscripts1, NestInfo);
+      // expandDimensions(&SE, Subscripts2, NestInfo);
       DepVector IterDV(NestInfo.NumDimensions);
       DVValidity Valid =
           getDirVector(&SE, IterDV, Subscripts1, Subscripts2, NestInfo);
@@ -1180,4 +1150,35 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   }
 
   return Res;
+}
+
+/// Printer Pass
+
+// Print results for all loops in DFS.
+static void printAllLoops(LoopDependenceInfo *LDI, const Loop *L) {
+  LoopDependence Res = LDI->getDependenceInfo(*L);
+  dbgs() << "\nLoop: " << L->getName() << ": ";
+  if (!Res.VectorizationFactor.hasValue()) {
+    dbgs() << "Is vectorizable for any factor\n";
+  } else {
+    uint64_t VF = Res.VectorizationFactor.getValue();
+    if (VF > 1)
+      dbgs() << "Is vectorizable with VF: " << VF << "\n";
+    else
+      dbgs() << "Is NOT vectorizable\n";
+  }
+  dbgs() << "\n";
+  for (const Loop *L : L->getSubLoops()) {
+    printAllLoops(LDI, L);
+  }
+}
+
+llvm::PreservedAnalyses
+LoopDependencePrinter::run(Function &F, FunctionAnalysisManager &FAM) {
+  auto &LoopDepInfo = FAM.getResult<LoopDependenceAnalysis>(F);
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
+  for (const Loop *L : LI) {
+    printAllLoops(&LoopDepInfo, L);
+  }
+  return llvm::PreservedAnalyses::all();
 }

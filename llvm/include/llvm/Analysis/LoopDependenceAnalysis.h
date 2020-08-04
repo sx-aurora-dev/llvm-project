@@ -86,8 +86,11 @@ private:
 };
 
 /// Analysis pass that exposes the \c LoopDependenceInfo for a function.
-// Note (TODO): we use a FunctionPass for more flexibility. Potentially switch
-// to a LoopPass sometime if that should work out fine.
+// Note: Right now, this is not a common design for a pass. The "canonical"
+// way is that we query the pass, we get a result and that's the end of it.
+// But now, we query the pass, we get a result and then we query _the result_ to
+// get (analysis) info about a loop (see for example
+// `LoopDependencePrinter::run`).
 class LoopDependenceAnalysis
     : public AnalysisInfoMixin<LoopDependenceAnalysis> {
   friend AnalysisInfoMixin<LoopDependenceAnalysis>;
@@ -97,6 +100,16 @@ public:
   typedef LoopDependenceInfo Result;
 
   LoopDependenceInfo run(Function &F, FunctionAnalysisManager &FAM);
+};
+
+/// Printer pass for LoopDependenceInfo
+class LoopDependencePrinter : public PassInfoMixin<LoopDependencePrinter> {
+public:
+  explicit LoopDependencePrinter(llvm::raw_ostream &os_) : os(os_) {}
+  llvm::PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
+
+private:
+  llvm::raw_ostream &os;
 };
 
 } // namespace llvm
