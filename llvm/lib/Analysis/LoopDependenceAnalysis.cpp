@@ -1041,10 +1041,6 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   SmallVector<LoadInst *, 16> Loads;
   SmallVector<StoreInst *, 16> Stores;
 
-  // The AST tracks _maximal_ sets of pointers
-  // that may alias with each other.
-  AliasSetTracker AST(AA);
-
   // Find if there's any illegal instruction and gather
   // loads and stores. Also put the pointers in the AST.
   for (BasicBlock *BB : L.blocks()) {
@@ -1075,7 +1071,6 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
           return Bail;
 
         Loads.push_back(Ld);
-        AST.add(Ld);
 
         // If this instruction may write to memory and it is not a simple store,
         // then we can't vectorize it.
@@ -1085,13 +1080,9 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
           return Bail;
 
         Stores.push_back(St);
-        AST.add(St);
       } // else -> We don't care about any other instruction.
-    }   // Next instr.
-  }     // Next block.
-
-  // dbgs() << "Dumping the Alias Set Tracker\n";
-  // AST.dump();
+    }
+  }
 
   // TODO: For now, we do a simple quadratic check. For every load, we check
   // whether there is a dependence with any of the stores.
