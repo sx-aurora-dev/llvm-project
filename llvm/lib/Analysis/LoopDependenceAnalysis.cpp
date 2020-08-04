@@ -15,6 +15,7 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AliasSetTracker.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/VectorUtils.h"
 #include "llvm/IR/Instructions.h"
 
@@ -1009,6 +1010,41 @@ static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
   return Res;
 }
 
+static bool definitelyCannotAlias(LoopInfo &LI, const LoadInst *LD,
+                                  const StoreInst *ST) {
+
+  // We want the two sets of underlying objects
+  // to be disjoint. If they indeed are, we want in any pair of
+  // objects from different sets, at least one to have the
+  // the `noalias` attribute.
+
+  auto &DL = LD->getModule()->getDataLayout();
+
+  SmallVector<const Value *, 2> LoadObjects;
+  SmallVector<const Value *, 2> StoreObjects;
+  GetUnderlyingObjects(LD->getPointerOperand(), LoadObjects, DL, &LI);
+  GetUnderlyingObjects(ST->getPointerOperand(), StoreObjects, DL, &LI);
+
+  for (const Value *LObj : LoadObjects) {
+    LLVM_DEBUG(dbgs() << "LObj: " << *LObj << "\n");
+    const Argument *A1 = dyn_cast<Argument>(LObj);
+    if (!A1)
+      return false;
+    for (const Value *SObj : StoreObjects) {
+      LLVM_DEBUG(dbgs() << "SObj: " << *SObj << "\n");
+      if (LObj == SObj)
+        return false;
+      const Argument *A2 = dyn_cast<Argument>(SObj);
+      if (!A2)
+        return false;
+      if (!A1->hasAttribute(Attribute::AttrKind::NoAlias) &&
+          !A2->hasAttribute(Attribute::AttrKind::NoAlias))
+        return false;
+    }
+  }
+  return true;
+}
+
 const LoopDependence
 LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   LoopDependence Bail = LoopDependence::getWorstPossible();
@@ -1100,12 +1136,20 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
 
     for (StoreInst *ST : Stores) {
       Value *SPtr = ST->getPointerOperand();
+
       // TODO: Do we care about the order?
 
-      LLVM_DEBUG(dbgs() << "Load pointer: " << *LPtr << "\n";
+      LLVM_DEBUG(dbgs() << "\nLoad pointer: " << *LPtr << "\n";
                  dbgs() << *SE.getSCEVAtScope(LPtr, &Inner) << "\n\n";
                  dbgs() << "Store pointer: " << *SPtr << "\n";
                  dbgs() << *SE.getSCEVAtScope(SPtr, &Inner) << "\n";);
+
+      // Note: Right now we are probably calling GetUnderlyingObjects()
+      // a lot of times.
+      if (definitelyCannotAlias(LI, LD, ST)) {
+        LLVM_DEBUG(dbgs() << "Definitely can't alias\n";);
+        continue;
+      }
 
       LLVM_DEBUG(dbgs() << "\n"; dbgs() << "\n\n------\n\n";
                  dbgs() << "Delinearize SCEVs\n";);
