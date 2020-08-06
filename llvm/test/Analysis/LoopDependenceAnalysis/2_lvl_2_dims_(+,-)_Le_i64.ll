@@ -9,6 +9,7 @@
 ; }
 
 ; CHECK: Loop: for.body: Is vectorizable with VF: 2
+; CHECK: Loop: for.body3: Is NOT vectorizable
 
 ; Explanation: We have direction vector (<, >) with outer distance
 ; being greater than 1, so we can vectorize in that dinstance

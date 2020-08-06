@@ -948,6 +948,8 @@ static bool areDefinitelyNonAliasing(const DepVector &AccessDV) {
 }
 
 void canonicalizeIterationVector(DepVector &IterDV) {
+  if (!IterDV.size())
+    return;
   SmallVectorImpl<DepVectorComponent> &Comps = IterDV.Comps;
   // Squash unused dimensions. Maybe we should use a list instead of
   // a vector - it depends on how common this is.
@@ -968,7 +970,9 @@ void canonicalizeIterationVector(DepVector &IterDV) {
                      [](DepVectorComponent DVC) { return DVC.Dir == 'S'; }),
       Comps.end());
 
-  assert(IterDV.size() > 0);
+  if (!IterDV.size())
+    return;
+
   if (IterDV.size() > 2)
     return;
   if (IterDV.size() == 1) {
@@ -993,7 +997,8 @@ static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
   assert(IterDV.verify());
   ConstVF Best = LoopDependence::getBestPossible().VectorizationFactor;
   ConstVF Worst = LoopDependence::getWorstPossible().VectorizationFactor;
-  assert(IterDV.size() > 0);
+  if (!IterDV.size())
+    return Best;
   if (IterDV.size() > 2)
     return Worst;
   if (IterDV.size() == 1) {
@@ -1052,11 +1057,6 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   if (L.isAnnotatedParallel())
     return Bail;
 
-  // TODO: Is innermost? Use LAA
-  bool isInnermost = L.empty();
-  if (isInnermost)
-    return Bail;
-
   // For now, we can only handle a perfect loop nest that has
   // accesses only in the innermost loop.
   LoopNestInfo NestInfo;
@@ -1065,11 +1065,11 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
     LLVM_DEBUG(dbgs() << "Imperfect loop nest: " << L << "\n";);
     return Bail;
   }
-  LLVM_DEBUG(dbgs() << "Loop: " << L << "\n";
-             dbgs() << "    NumDimensions : " << NestInfo.NumDimensions << "\n";
-             dbgs() << "    InnerLoop: " << *NestInfo.InnermostLoop << "\n";
-             dbgs() << "    Induction Variable: "
-                    << L.getCanonicalInductionVariable()->getName() << "\n";);
+  //LLVM_DEBUG(dbgs() << "Loop: " << L << "\n";
+  //           dbgs() << "    NumDimensions : " << NestInfo.NumDimensions << "\n";
+  //           dbgs() << "    InnerLoop: " << *NestInfo.InnermostLoop << "\n";
+  //           dbgs() << "    Induction Variable: "
+  //                  << L.getCanonicalInductionVariable()->getName() << "\n";);
 
   assert(NestInfo.InnermostLoop);
   const Loop &Inner = *NestInfo.InnermostLoop;
@@ -1191,6 +1191,7 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
 
 // Print results for all loops in DFS.
 static void printAllLoops(LoopDependenceInfo *LDI, const Loop *L) {
+  assert(L);
   LoopDependence Res = LDI->getDependenceInfo(*L);
   dbgs() << "\nLoop: " << L->getName() << ": ";
   if (!Res.VectorizationFactor.hasValue()) {

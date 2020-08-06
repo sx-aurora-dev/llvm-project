@@ -11,6 +11,7 @@
 ; }
 
 ; CHECK: Loop: for.body: Is vectorizable with VF: 2
+; CHECK: Loop: for.body3: Is NOT vectorizable
 
 ; Explanation: We want to check that we're squashing
 ; the middle dimension in _iteration space_. Check

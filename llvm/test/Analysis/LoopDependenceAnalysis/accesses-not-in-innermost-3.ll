@@ -15,6 +15,7 @@
 
 ; CHECK: Loop: for.body: Is vectorizable for any factor
 ; CHECK: Loop: for.body3: Is vectorizable with VF: 2
+; CHECK: Loop: for.body7: Is vectorizable for any factor
 
 define void @test(i64 %x, i64 %y, i64* %A) {
 entry:

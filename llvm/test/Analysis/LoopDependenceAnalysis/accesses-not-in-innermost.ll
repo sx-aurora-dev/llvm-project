@@ -12,6 +12,7 @@
 ; }
 
 ; CHECK: Loop: for.body: Is vectorizable with VF: 2
+; CHECK: Loop: for.body3: Is vectorizable for any factor
 
 ; Explanation: Basically, it's like the j-loop didn't
 ; exist and the accesses to A were 1D.
