@@ -9,6 +9,7 @@
 ; }
 
 ; CHECK: Loop: for.body: Is NOT vectorizable
+; CHECK: Loop: for.body3: Is vectorizable for any factor
 
 ; Explanation: We want to check that we can handle
 ; (soundly) anti-dependences. Notice here that we

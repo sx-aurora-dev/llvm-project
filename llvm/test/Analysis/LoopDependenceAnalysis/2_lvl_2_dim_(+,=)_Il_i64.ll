@@ -11,6 +11,7 @@
 ; }
 
 ; CHECK: Loop: for.body: Is NOT vectorizable
+; CHECK: Loop: for.body3: Is vectorizable for any factor
 
 ; Explanation: The outer distance is 1 and the inner distance is 0
 ; so, the direction vector is (<, =). We can vectorize such

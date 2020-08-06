@@ -11,6 +11,8 @@
 ; }
 
 ; CHECK: Loop: for.body: Is vectorizable for any factor
+; CHECK: Loop: for.body3: Is vectorizable for any factor
+; CHECK: Loop: for.body6: Is vectorizable for any factor
 
 ; Explanation: Notice that the final index is a constant 1 in
 ; the one access and a constant 0 in the other. Thus (assuming

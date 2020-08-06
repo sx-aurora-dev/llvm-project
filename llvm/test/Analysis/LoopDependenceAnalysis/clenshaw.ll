@@ -15,6 +15,7 @@
 ; }
 
 ; CHECK: Loop: for.body: Is vectorizable for any factor
+; CHECK: Loop: for.body3: Is vectorizable for any factor
 
 ; Explanation: A real-world example that can be vectorized
 ; given that at least `ys`, the (only) memory in which we write,

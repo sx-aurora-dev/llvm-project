@@ -9,6 +9,7 @@
 ; }
 
 ; CHECK: Loop: for.body: Is vectorizable for any factor
+; CHECK: Loop: for.body3: Is vectorizable for any factor
 
 ; Explanation: Notice that the final index is a constant 1 in
 ; the one access and a constant 0 in the other. Thus (assuming
@@ -53,12 +54,3 @@ for.inc9:                                         ; preds = %for.body, %for.body
 for.end11:                                        ; preds = %for.inc9, %entry
   ret void
 }
-
-attributes #0 = { noinline nounwind uwtable "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="none" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="false" "use-soft-float"="false" }
-
-!llvm.module.flags = !{!0, !1}
-!llvm.ident = !{!2}
-
-!0 = !{i32 1, !"wchar_size", i32 2}
-!1 = !{i32 7, !"PIC Level", i32 2}
-!2 = !{!"clang version 11.0.0 (https://github.com/baziotis/llvm-project 238170455f4df61278d2dc971f3873738e25282e)"}

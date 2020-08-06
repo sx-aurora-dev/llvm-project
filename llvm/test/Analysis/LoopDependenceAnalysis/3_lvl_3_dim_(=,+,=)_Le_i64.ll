@@ -11,6 +11,7 @@
 ; }
 
 ; CHECK: Loop: for.body3: Is vectorizable with VF: 2
+; CHECK: Loop: for.body6: Is vectorizable for any factor
 
 ; Explanation: Eventually, we want to be able to vectorize
 ; the outermost loop (k-loop i.e. for.body), but for now, we want
