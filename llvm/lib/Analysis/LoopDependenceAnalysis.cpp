@@ -908,7 +908,7 @@ static int findPositionInDV(DepVectorComponent DVC, LoopNestInfo NestInfo) {
   return -1;
 }
 
-enum DVValidity { DVV_INVALID, DVV_VALID, DVV_DEFINITELY_VECTORIZABLE };
+enum class DVValidity { INVALID, VALID, DEFINITELY_VECTORIZABLE };
 
 DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
                         SmallVectorImpl<const SCEV *> &Subscripts1,
@@ -921,9 +921,9 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
     DepVectorComponent DVC;
     if (!getDVComponent(SE, Subscripts1[Index], Subscripts2[Index], DVC,
                         NestInfo))
-      return DVV_INVALID;
+      return DVValidity::INVALID;
     if (DVC.Dir == 'N')
-      return DVV_DEFINITELY_VECTORIZABLE;
+      return DVValidity::DEFINITELY_VECTORIZABLE;
     if (DVC.Dir == 'S')
       // Ignore
       continue;
@@ -936,7 +936,14 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
     DV[Pos] = DVC;
   }
 
-  return DVV_VALID;
+  // We're interested in vectorizing the outermost
+  // loop. If the outermost (i.e. first) dimension of the DV
+  // is squashed, then the loop does not contribute to
+  // the dependences.
+  if (DV.size() && DV[0].Dir == 'S')
+    return DVValidity::DEFINITELY_VECTORIZABLE;
+
+  return DVValidity::VALID;
 }
 
 static bool areDefinitelyNonAliasing(const DepVector &AccessDV) {
@@ -950,6 +957,7 @@ static bool areDefinitelyNonAliasing(const DepVector &AccessDV) {
 void canonicalizeIterationVector(DepVector &IterDV) {
   if (!IterDV.size())
     return;
+
   SmallVectorImpl<DepVectorComponent> &Comps = IterDV.Comps;
   // Squash unused dimensions. Maybe we should use a list instead of
   // a vector - it depends on how common this is.
@@ -1170,9 +1178,9 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
       DepVector IterDV(NestInfo.NumDimensions);
       DVValidity Valid =
           getDirVector(&SE, IterDV, Subscripts1, Subscripts2, NestInfo);
-      if (Valid == DVV_INVALID)
+      if (Valid == DVValidity::INVALID)
         return Bail;
-      if (Valid == DVV_DEFINITELY_VECTORIZABLE)
+      if (Valid == DVValidity::DEFINITELY_VECTORIZABLE)
         continue;
       canonicalizeIterationVector(IterDV);
       LLVM_DEBUG(IterDV.print(););
