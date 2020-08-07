@@ -19,7 +19,7 @@
 
 ; We also want to check that the inner loop is vectorizable.
 
-define void @test(i64 %n, i64 %m, i64* %A) #0 {
+define void @test(i64 %n, i64 %m, i64* %A) {
 entry:
   %cmp3 = icmp sgt i64 %n, 0
   br i1 %cmp3, label %for.body, label %for.end9
