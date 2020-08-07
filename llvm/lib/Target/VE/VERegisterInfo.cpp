@@ -82,16 +82,16 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
       VE::SX12, // Outer register
       VE::SX13, // Id register for dynamic linker
 
-      VE::SX14, // Thread pointer
-      VE::SX15, // Global offset table register
-      VE::SX16, // Procedure linkage table register
-      VE::SX17, // Linkage-area register
-                // sx18-sx33 are callee-saved registers
-                // sx34-sx63 are temporary registers
-      VE::USRCC,  // User clock counter
-      VE::PSW,  // Program status word
-      VE::SAR,  // Store adress
-      VE::PMMR, // Performance monitor mode
+      VE::SX14,  // Thread pointer
+      VE::SX15,  // Global offset table register
+      VE::SX16,  // Procedure linkage table register
+      VE::SX17,  // Linkage-area register
+                 // sx18-sx33 are callee-saved registers
+                 // sx34-sx63 are temporary registers
+      VE::USRCC, // User clock counter
+      VE::PSW,   // Program status word
+      VE::SAR,   // Store adress
+      VE::PMMR,  // Performance monitor mode
 
       // Performance monitor configuration
       VE::PMCR0, VE::PMCR1, VE::PMCR2, VE::PMCR3,
@@ -102,7 +102,12 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
       VE::PMC14,
 
       // Zero-mask registers
-      VE::VM0, VE::VMP0};
+      VE::VM0, VE::VMP0,
+
+      // FIXME testing VL as reserved register to enable undefined use of $vl
+      // (MachineCodeVerifier fails otw because that one is run before LVLGen
+      // runs and inserts definitions for the register)
+      VE::VL};
 
   for (auto R : ReservedRegs)
     for (MCRegAliasIterator ItAlias(R, this, true); ItAlias.isValid();
