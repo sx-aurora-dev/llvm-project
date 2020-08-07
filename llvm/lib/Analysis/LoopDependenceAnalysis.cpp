@@ -1007,11 +1007,11 @@ static bool areDefinitelyNonAliasing(const DepVector &AccessDV) {
   return false;
 }
 
-void canonicalizeIterationVector(DepVector &IterDV) {
-  if (!IterDV.size())
+void squashIfNeeded(DepVector& DV) {
+  if (!DV.size())
     return;
 
-  SmallVectorImpl<DepVectorComponent> &Comps = IterDV.Comps;
+  SmallVectorImpl<DepVectorComponent> &Comps = DV.Comps;
   // Squash unused dimensions. Maybe we should use a list instead of
   // a vector - it depends on how common this is.
 
@@ -1030,7 +1030,66 @@ void canonicalizeIterationVector(DepVector &IterDV) {
       std::remove_if(Comps.begin(), Comps.end(),
                      [](DepVectorComponent DVC) { return DVC.Dir == 'S'; }),
       Comps.end());
+}
 
+static bool looksDirectlyLeft2D(const DepVector &DV) {
+  assert(DV.size() == 2);
+  return (DV[0].Dir == '=' && DV[1].Dir == '>');
+}
+
+static bool looksDirectlyUpwards2D(const DepVector &DV) {
+  assert(DV.size() == 2);
+  return (DV[0].Dir == '<' && DV[1].Dir == '=');
+}
+
+/// Looks directly downwards, downwards and to the right or to the
+/// left.
+static bool looksDownwards2D(const DepVector &DV) {
+  assert(DV.size() == 2);
+  return DV[0].Dir == '>';
+}
+
+/// Looks directly left, upwards left or downwards left
+static bool looksLeft2D(const DepVector &DV) {
+  assert(DV.size() == 2);
+  return DV[1].Dir == '>';
+}
+
+bool isForwardDependence(DepVector &DV, unsigned LoadPosition,
+                         unsigned StorePosition) {
+  // If the store is before the load and the store
+  // writes further in memory (or at the same memory), then we have a forward
+  // dependence (and we can vectorize). For example:
+  // for (int i = 0; i < ...; ++i) {
+  //   d[i] = y;
+  //   x = d[i];
+  // }
+  // The load will read the _new_ values (the ones about to be written).
+  // If we execute the loop sequentially, we will write a value, read
+  // this value, write a value, read this value etc. The semantics don't
+  // change if instead we: Write 4 values, read 4 values, ...
+
+  if (StorePosition < LoadPosition) {
+    if (DV.size() == 1) {
+      bool WriteIsFurtherOrSame = DV[0].Dist >= 0;
+      if (WriteIsFurtherOrSame)
+        return true;
+    } else if (DV.size() == 2) {
+      bool WritesToPreviousMemory =
+          looksDownwards2D(DV) || looksDirectlyLeft2D(DV);
+      bool WritesFurtherToTheLeft = looksLeft2D(DV);
+      if (looksLeft2D(DV) || WritesToPreviousMemory)
+        return false;
+      return true;
+    }
+  }
+  return false;
+}
+
+/// Reflect if it points to previous iterations - something
+/// that arises because the load accesses memory locations
+/// before the store.
+void reflectIfNeeded(DepVector &IterDV) {
   if (!IterDV.size())
     return;
 
@@ -1041,15 +1100,7 @@ void canonicalizeIterationVector(DepVector &IterDV) {
       IterDV[0].negate();
     return;
   }
-  bool looksDownwards = IterDV[0].Dir == '>';
-  bool looksLeft = (IterDV[0].Dist == 0 && IterDV[1].Dist == '>');
-  // If it looks downwards or to the left, then we have an anti-dependence.
-  // (there's s a read from a location that in iteration space is after the
-  // (current).
-  // To convert it to an iteration vector, we have to reflect it about
-  // the origin because still the iteration in which the read happens
-  // has to execute before the iteration in which the write happens.
-  if (looksDownwards || looksLeft) {
+  if (looksDownwards2D(IterDV) || looksDirectlyLeft2D(IterDV)) {
     IterDV.reflect();
   }
 }
@@ -1071,7 +1122,7 @@ static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
   }
   // Handle outermost loop vectorization in 2-level loop nest.
   ConstVF Res = Best;
-  if (IterDV[0].Dir == '<' && (IterDV[1].Dir == '>' || IterDV[1].Dir == '='))
+  if (looksLeft2D(IterDV) || looksDirectlyUpwards2D(IterDV))
     Res = (size_t)IterDV[0].Dist;
   return Res;
 }
@@ -1111,6 +1162,29 @@ static bool definitelyCannotAlias(LoopInfo &LI, const LoadInst *LD,
   return true;
 }
 
+struct ProgramOrderedAccess {
+  union {
+    LoadInst *Load;
+    StoreInst *Store;
+  };
+  // Greater `Position` means later in program order.
+  unsigned Position;
+
+  static ProgramOrderedAccess get(LoadInst* LD, unsigned Position) {
+    ProgramOrderedAccess POA;
+    POA.Load = LD;
+    POA.Position = Position;
+    return POA;
+  }
+
+  static ProgramOrderedAccess get(StoreInst *ST, unsigned Position) {
+    ProgramOrderedAccess POA;
+    POA.Store = ST;
+    POA.Position = Position;
+    return POA;
+  }
+};
+
 const LoopDependence
 LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   LoopDependence Bail = LoopDependence::getWorstPossible();
@@ -1135,11 +1209,13 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   assert(NestInfo.InnermostLoop);
   const Loop &Inner = *NestInfo.InnermostLoop;
 
-  SmallVector<LoadInst *, 16> Loads;
-  SmallVector<StoreInst *, 16> Stores;
+  SmallVector<ProgramOrderedAccess, 16> Loads;
+  SmallVector<ProgramOrderedAccess, 16> Stores;
 
   // Find if there's any illegal instruction and gather
-  // loads and stores. Also put the pointers in the AST.
+  // loads and stores, along with their program
+  // order. Also put the pointers in the AST.
+  unsigned ProgramOrder = 0;
   for (BasicBlock *BB : L.blocks()) {
     for (Instruction &I : *BB) {
       if (auto *Call = dyn_cast<CallBase>(&I)) {
@@ -1167,7 +1243,8 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         if (!Ld || !Ld->isSimple())
           return Bail;
 
-        Loads.push_back(Ld);
+        Loads.push_back({Ld, ProgramOrder});
+        ProgramOrder++;
 
         // If this instruction may write to memory and it is not a simple store,
         // then we can't vectorize it.
@@ -1176,7 +1253,8 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         if (!St || !St->isSimple())
           return Bail;
 
-        Stores.push_back(St);
+        Stores.push_back(ProgramOrderedAccess::get(St, ProgramOrder));
+        ProgramOrder++;
       } // else -> We don't care about any other instruction.
     }
   }
@@ -1192,11 +1270,13 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
 
   LLVM_DEBUG(dbgs() << "\n\n-------------\n\n";
              dbgs() << "Analyze access pairs\n\n";);
-  for (LoadInst *LD : Loads) {
-    Value *LPtr = LD->getPointerOperand();
+  for (ProgramOrderedAccess LAccess : Loads) {
+    LoadInst *Load = LAccess.Load;
+    Value *LPtr = Load->getPointerOperand();
 
-    for (StoreInst *ST : Stores) {
-      Value *SPtr = ST->getPointerOperand();
+    for (ProgramOrderedAccess SAccess : Stores) {
+      Value *SPtr = SAccess.Store->getPointerOperand();
+      StoreInst *Store = SAccess.Store;
 
       // TODO: Do we care about the order?
 
@@ -1207,7 +1287,7 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
 
       // Note: Right now we are probably calling GetUnderlyingObjects()
       // a lot of times.
-      if (definitelyCannotAlias(LI, LD, ST)) {
+      if (definitelyCannotAlias(LI, Load, Store)) {
         LLVM_DEBUG(dbgs() << "Definitely can't alias\n";);
         continue;
       }
@@ -1218,10 +1298,10 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
       SmallVector<const SCEV *, 3> Subscripts1, Subscripts2;
       SmallVector<const SCEV *, 3> Sizes1, Sizes2;
 
-      if (!delinearizeInstAndVerifySubscripts(SE, LD, Subscripts1, Sizes1,
+      if (!delinearizeInstAndVerifySubscripts(SE, Load, Subscripts1, Sizes1,
                                               NestInfo))
         return Bail;
-      if (!delinearizeInstAndVerifySubscripts(SE, ST, Subscripts2, Sizes2,
+      if (!delinearizeInstAndVerifySubscripts(SE, Store, Subscripts2, Sizes2,
                                               NestInfo))
         return Bail;
 
@@ -1235,7 +1315,12 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         return Bail;
       if (Valid == DVValidity::DEFINITELY_VECTORIZABLE)
         continue;
-      canonicalizeIterationVector(IterDV);
+      squashIfNeeded(IterDV);
+      if (isForwardDependence(IterDV, LAccess.Position, SAccess.Position)) {
+        LLVM_DEBUG(dbgs() << "It is forward dependence, skipping...\n");
+        continue;
+      }
+      reflectIfNeeded(IterDV);
       LLVM_DEBUG(IterDV.print(););
       ConstVF MaxAllowedVectorizationFactor = getMaxAllowedVecFact(IterDV);
       if (Res.VectorizationFactor < MaxAllowedVectorizationFactor)
