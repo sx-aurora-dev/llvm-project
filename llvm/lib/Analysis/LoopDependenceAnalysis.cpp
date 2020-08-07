@@ -790,8 +790,8 @@ delinearizeInstAndVerifySubscripts(ScalarEvolution &SE, Instruction *Inst,
 struct DepVectorComponent {
   char Dir;
   // TODO: Probably change to SCEV
-  int Dist;
-  const Loop *Loop = nullptr;
+  int64_t Dist;
+  const llvm::Loop *Loop = nullptr;
 
   void print() const {
     dbgs() << "{" << Dir << ", " << Dist << ", "
@@ -807,7 +807,7 @@ struct DepVectorComponent {
 };
 
 struct DepVector {
-  constexpr static size_t MaxComps = 4;
+  constexpr static int MaxComps = 4;
   SmallVector<DepVectorComponent, MaxComps> Comps;
 
   DepVector(int Dimensions) : Comps(Dimensions) {
@@ -860,7 +860,7 @@ struct DepVector {
 
 struct DirDistPair {
   char Dir;
-  int Dist;
+  int64_t Dist;
 };
 
 DirDistPair getDirDistPairFromSCEVConstant(const SCEVConstant *C) {
@@ -1078,7 +1078,7 @@ bool isForwardDependence(DepVector &DV, unsigned LoadPosition,
       bool WritesToPreviousMemory =
           looksDownwards2D(DV) || looksDirectlyLeft2D(DV);
       bool WritesFurtherToTheLeft = looksLeft2D(DV);
-      if (looksLeft2D(DV) || WritesToPreviousMemory)
+      if (WritesFurtherToTheLeft || WritesToPreviousMemory)
         return false;
       return true;
     }
