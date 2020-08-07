@@ -252,7 +252,7 @@ in the relevant function.
 
 
 
-- 5.1 Computing the Dependence Vector -
+- 5.1 Computing the Dependence Distance -
 
 The input of the deduction phase of the dependence vector
 is an access pair. Each access has a list of subscripts. In the simple
@@ -307,12 +307,14 @@ happened in 4 distinct moments, now happens at one moment.
 
 Let's now go back to the example: What we're trying to deduce
 is "how much difference in time have the accesses A[j] and A[j+1]?".
-That's the maximum vectorization factor I can use. That's how
-much moments I can perform _at once_ before I attempt to
+That's the maximum vectorization factor we can use and it
+is also their dependence distance. That's how
+much moments we can perform _at once_ before we attempt to
 include an illegal moment. And it is
 obvious that the amount of time by which they differ is (j+1) - j,
 i.e. the difference between the subscripts, since the subscripts
-are expressions of the "time variable", i.e. `j`.
+are expressions of the "time variable", i.e. `j`. This is in
+_absolute value_, more on that later.
 
 Imagine now that the same thing happens when we're having
 multi-dimensional accesses. It's just that now time
@@ -323,11 +325,11 @@ the cell A[0][0]. But the concept is still the same.
 The important thing is that if we're analyzing pairs of accesses,
 these accesses have to ultimately have a _constant_ time
 difference. For example, the accesses A[i+1][j-1] and A[i][j]
-still have a constant time difference of (1, -1), but the
+have a constant time difference of (1, -1), but the
 accesses A[j][i] and A[i][j] don't have a constant time difference.
 
-Notice now that this potentially multi-dimensional time difference
-is really the dependence vector. Note that the outer-loop vectorization
+Again,this potentially multi-dimensional time difference
+is really the dependence distance. Note that the outer-loop vectorization
 tries to vectorize _one_ loop, so _one_ dimension which also
 applies to the dependence vector (we're trying to
 squeeze moments on one dimension).
@@ -338,7 +340,7 @@ squeeze moments on one dimension).
 - 5.2 Anti-Dependences -
 
 An anti-dependence occurs when the read happens before
-the write, e.g. something like this:
+the write in iteration order, e.g. something like this:
 
 for (int j = 0; j < ...; ++j)
   A[j] = A[j+1];
@@ -346,17 +348,22 @@ for (int j = 0; j < ...; ++j)
 In j = 0 we're reading from A[1] and in j = 1 we're writing to it.
 Still, that doesn't change the direction of the dependence vector.
 j = 1 depends on j = 0 and not the opposite. The reason is obviously
-that the order of reads / writes has to be maintained no matter
-what this order is.
+that the order of reads and writes has to be maintained so that
+the reads read the _old_ value (before its (over-)written).
 
-Also, notice that it doesn't make sense for a dependence vector
-to point to _previous_ iterations (e.g. point to the left in 1D
-vectors or to the left or downwards in 2D vectors etc.). Because that
-would mean that a _later_ iteration has to happen before a previous
-one. That can arise due to subtractions of the subscripts. Conceptually,
-it's like taking the absolute value in scalar quantities (notice
-that reflecting the final vector is _not_ the same as
-taking the absolute value of each subscript subtraction individually).
+The other case is of course when we have to preserve that the read
+will read the _new_ values, e.g. in this: A[j+2] = A[j];
+
+The same idea is true for more dimensions.
+
+Now that causes problem, because in the implementation, we try
+to deduce the distance _of_ the store _from_ the load. If the
+store accesses memory locations first, then this distance is
+also the iteration dependence distance. But if it's the opposite,
+then we have some kind of "negative" value. We have to take
+its _reflection_ to find the distance of the iterations. In 1D,
+the reflection is just the absolute value. In all other dimensions,
+it's the reflection of the vector by the origin.
 
 
 
@@ -391,9 +398,55 @@ Notice that any other combination of subscripts is illegal and results
 in failure.
 
 
+- 7. Forward Dependences -
+
+The basic idea behind a forward dependence is that we have a sequence like:
+write, read, write, read
+
+If the write writes either to the same or later addresses from those
+that the read reads, then the read will always read _new_ values written.
+So, if that's the case, can do a bunch of writes together and then a bunch
+of reads (that is, we don't have to preserve the previous values as
+we're moving forward). For example:
+
+for (int i = 0; i < ...; ++i) {
+  d[i] = y;
+  x = d[i];
+}
+The load will read the _new_ values (the ones about to be written).
+If we execute the loop sequentially, we will write a value, read
+this value, write a value, read this value etc. The semantics don't
+change if instead we: Write 4 values, read 4 values, ...
+
+We should mention that for the vectorization to be valid, two things have to hold:
+  * The write should be before the read in program order
+    (so that the write writes first).
+  * The (vectorized) write should always have written to addresses
+    before the read reads from them. To put it otherwise, there must
+    not be a read that accessed an address before the write. In the 1D
+    case that just means that the write should write in further
+    memory addresses (or to the same and assuming that the loop
+    advances in memory access order).
+
+- 7.2 2D case -
+
+  In the 2D case, the same thing holds regarding further memory addresses.
+  That is, if the write does not write to further memory addresses, we don't
+  have a forward dependence. But, it's not enough. For example:
+    for (i)
+      for (j) {
+        A[i+1][j-1] = y;
+        x = A[i][j];
+      }
+
+  The write writes further in memory order, but note that the vectorization will
+  happen vertically. Because the read is "further to the
+  the right" (it reads from a "further to the right" column), the write
+  writes previous memory addresses than those which will be accessed
+  by the read.
 
 
-- 7. Finding the maximum vectorization factor from a dependence vector -
+- 8. Finding the maximum vectorization factor from a dependence vector -
 
 As was previously mentioned, once we have the dependence vector, the first
 thing we do is to reflect if it's needed. Then, we have 3 cases
