@@ -12,12 +12,7 @@
 
 ; CHECK: Loop: for.body: Is NOT vectorizable
 ; CHECK: Loop: for.body3: Is vectorizable for any factor
-; CHECK: Loop: for.body6: Is vectorizable with VF: 2
-
-; Note: for.body3 should be vectorizable for any factor.
-; But it is squashed to 1D iteration vector and it's
-; like we're having only the inner loop. This has to be
-; fixed.
+; CHECK: Loop: for.body6: Is vectorizable for any factor
 
 define void @test(i64 %x, i64 %y, i64 %z, i64* %A) {
 entry:

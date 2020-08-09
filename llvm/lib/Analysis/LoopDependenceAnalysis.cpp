@@ -901,25 +901,6 @@ bool getDVComponent(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
   if (AddRec1->getLoop() != AddRec2->getLoop())
     return false;
 
-  // Search for the loop that this subscript uses.
-  // If it uses an outer loop (outer than the loop nest
-  // we care about), then squash it.
-  const Loop *Runner = NestInfo.InnermostLoop;
-  const Loop *Used = AddRec1->getLoop();
-  bool isOuter = true;
-  for (int I = 0; I < NestInfo.NumDimensions; ++I) {
-    if (Runner == Used) {
-      isOuter = false;
-      break;
-    }
-    Runner = Runner->getParentLoop();
-  }
-
-  if (isOuter) {
-    DVC.Dir = 'S';
-    return true;
-  }
-
   const Loop *RecLoop = AddRec1->getLoop();
 
   // TODO: What about the order here?
@@ -982,6 +963,10 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
       continue;
     int Pos = findPositionInDV(DVC, NestInfo);
     if (Pos == -1) {
+      // The outer dimension is different, hence the two accesses
+      // on the inner loop never alias.
+      if (DVC.Dist != 0)
+        return DVValidity::DEFINITELY_VECTORIZABLE;
       // The loop that the recurrence is based on does not
       // affect this (inner) loop nest.
       continue;

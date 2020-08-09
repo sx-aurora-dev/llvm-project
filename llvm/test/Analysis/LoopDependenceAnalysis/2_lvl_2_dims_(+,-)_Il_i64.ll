@@ -9,7 +9,7 @@
 ; }
 
 ; CHECK: Loop: for.body: Is NOT vectorizable
-; CHECK: Loop: for.body3: Is NOT vectorizable
+; CHECK: Loop: for.body3: Is vectorizable for any factor
 
 ; Explanation: We have direction vector (<, >) with outer distance
 ; being 1, so we can't vectorize.

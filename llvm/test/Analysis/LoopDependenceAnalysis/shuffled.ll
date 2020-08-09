@@ -10,7 +10,7 @@
 
 
 ; CHECK: Loop: for.body: Is vectorizable with VF: 2
-; CHECK: Loop: for.body3: Is vectorizable with VF: 3
+; CHECK: Loop: for.body3: Is vectorizable for any factor
 
 ; Explanation: We want to check that by shuffling the
 ; indices (i.e. j, which is IV of the innermost loop, is used
