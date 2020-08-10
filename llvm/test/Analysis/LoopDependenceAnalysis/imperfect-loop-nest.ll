@@ -11,7 +11,7 @@
 ;     }
 ; }
 
-; CHECK: Loop: for.body: Is NOT vectorizable
+; CHECK: Loop: for.body: Is vectorizable with VF: 2
 ; CHECK: Loop: for.body3: Is vectorizable for any factor
 ; CHECK: Loop: for.body10: Is vectorizable for any factor
 

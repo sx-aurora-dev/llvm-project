@@ -187,14 +187,8 @@ can only handle 1, 2 and 3-dimensional vectors.
 
 - 1. Loop Nest Info -
 
-We start by gathering information about the loop nest. As a loop
-nest we consider anything that is _inside_ the QL (including the QL).
-For now, we can only handle perfect loop nests, so this is something
-we verify and we also find what is the innermost loop and what is
-the dimensionality of the loop nest.
-
-
-
+TODO: We can now handle more complicated things than loop nests.
+Document it!
 
 - 2. Gather Accessing Instructions -
 
@@ -602,39 +596,11 @@ LoopDependenceInfo::LoopDependenceInfo(Function &F, ScalarEvolution &SE,
 struct LoopNestInfo {
   int NumDimensions;
   const Loop *InnermostLoop;
+  const Loop *AnalyzedLoop;
 };
 
 static bool isAccessingInstruction(const Instruction &I) {
   return I.mayReadOrWriteMemory();
-}
-
-// This function gathers information about a loop nest
-// as long as it is perfect. If it's not, it returns false.
-static bool getNestInfo(const Loop &TheLoop, LoopNestInfo &NestInfo) {
-  NestInfo = {1, &TheLoop};
-
-  // `const` ref makes our life hard so we have to
-  // skip the type-system.
-  const Loop *L = &TheLoop;
-
-  // If it has no enclosed loops.
-  if (L->empty()) {
-    return true;
-  }
-
-  while (true) {
-    const auto &SubLoops = L->getSubLoops();
-    if (SubLoops.size() != 1)
-      return false;
-    L = SubLoops[0];
-    NestInfo.NumDimensions += 1;
-    if (L->empty()) {
-      NestInfo.InnermostLoop = L;
-      break;
-    }
-  }
-
-  return true;
 }
 
 bool subscriptsAreWithinBounds(ScalarEvolution &SE,
@@ -1063,7 +1029,7 @@ bool isForwardDependence(DepVector &DV, unsigned LoadPosition,
       bool WritesToPreviousMemory =
           looksDownwards2D(DV) || looksDirectlyLeft2D(DV);
       bool WritesFurtherToTheLeft = looksLeft2D(DV);
-      if (looksLeft2D(DV) || WritesToPreviousMemory)
+      if (WritesFurtherToTheLeft || WritesToPreviousMemory)
         return false;
       return true;
     }
@@ -1170,28 +1136,55 @@ struct ProgramOrderedAccess {
   }
 };
 
-const LoopDependence
-LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
-  LoopDependence Bail = LoopDependence::getWorstPossible();
+static bool isInNest(Instruction& I, LoopNestInfo NestInfo) {
 
-  if (L.isAnnotatedParallel())
-    return Bail;
+  // A nest is considered a path from the outermost loop towards
+  // an innermost loop (any loop can be thought as a tree with
+  // subloops loops being the children). What we would like to know
+  // is if an instruction is inside this path. But, a loop contains()
+  // instructions not only in the loop itself (i.e. not in any subloops
+  // which could be considered a single node in the tree) but also instructions
+  // in all the subloops (i.e. instructions in all sub-trees). So, the idea is to
+  // take the path from the innermost back to the outermost and keep the
+  // one-before-the-outermost in this path. This is basically the only sub-tree
+  // in which we're interested. Any instruction "in the nest" is any
+  // instruction either in that subtree or in the outermost loop excluding other
+  // subloops. So, by checking if the instruction is in any of the other
+  // subloops, we check if it is any subtree that we don't want to analyze.
 
-  // For now, we can only handle a perfect loop nest that has
-  // accesses only in the innermost loop.
-  LoopNestInfo NestInfo;
-  bool isPerfect = getNestInfo(L, NestInfo);
-  if (!isPerfect) {
-    LLVM_DEBUG(dbgs() << "Imperfect loop nest: " << L << "\n";);
-    return Bail;
+  const Loop *L = NestInfo.InnermostLoop;
+  int NumDimensions = NestInfo.NumDimensions;
+  if (NumDimensions == 1)
+    return true;
+  // Remember, NestInfo.AnalyzedLoop is the outermost loop
+  // in the nest.
+  const Loop *OneBeforeOuterMost;
+  NumDimensions--;
+  while (NumDimensions) {
+    OneBeforeOuterMost = L;
+    L = L->getParentLoop();
+    NumDimensions--;
   }
-  //LLVM_DEBUG(dbgs() << "Loop: " << L << "\n";
-  //           dbgs() << "    NumDimensions : " << NestInfo.NumDimensions << "\n";
-  //           dbgs() << "    InnerLoop: " << *NestInfo.InnermostLoop << "\n";
-  //           dbgs() << "    Induction Variable: "
-  //                  << L.getCanonicalInductionVariable()->getName() << "\n";);
+  for (const Loop *Sub : NestInfo.AnalyzedLoop->getSubLoops())
+    if (Sub != OneBeforeOuterMost && Sub->contains(&I))
+      return false;
+  return true;
+}
 
-  assert(NestInfo.InnermostLoop);
+bool operator<(const ConstVF V1, const ConstVF V2) {
+  if (!V1.hasValue())
+    return false;
+  if (!V2.hasValue())
+    return true;
+  return V1.getValue() < V2.getValue();
+}
+
+const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
+                                                LoopInfo &LI,
+                                                ScalarEvolution &SE,
+                                                const TargetLibraryInfo &TLI) {
+  LoopDependence Bail = LoopDependence::getWorstPossible();
+  const Loop &L = *NestInfo.AnalyzedLoop;
   const Loop &Inner = *NestInfo.InnermostLoop;
 
   SmallVector<ProgramOrderedAccess, 16> Loads;
@@ -1228,6 +1221,9 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         if (!Ld || !Ld->isSimple())
           return Bail;
 
+        if (!isInNest(I, NestInfo))
+          continue;
+
         Loads.push_back({Ld, ProgramOrder});
         ProgramOrder++;
 
@@ -1237,6 +1233,9 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         auto *St = dyn_cast<StoreInst>(&I);
         if (!St || !St->isSimple())
           return Bail;
+
+        if (!isInNest(I, NestInfo))
+          continue;
 
         Stores.push_back(ProgramOrderedAccess::get(St, ProgramOrder));
         ProgramOrder++;
@@ -1308,7 +1307,7 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
       reflectIfNeeded(IterDV);
       LLVM_DEBUG(IterDV.print(););
       ConstVF MaxAllowedVectorizationFactor = getMaxAllowedVecFact(IterDV);
-      if (Res.VectorizationFactor < MaxAllowedVectorizationFactor)
+      if (MaxAllowedVectorizationFactor < Res.VectorizationFactor)
         Res.VectorizationFactor = MaxAllowedVectorizationFactor;
       if (Res.isWorstPossible())
         return Bail;
@@ -1316,6 +1315,62 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   }
 
   return Res;
+}
+
+struct DFSNestClipboard {
+
+  DFSNestClipboard(const Loop *_AnalyzedLoop, LoopDependence StartingDep,
+                   int _NumDimensions, LoopInfo &_LI, ScalarEvolution &_SE,
+                   const TargetLibraryInfo &_TLI)
+      : AnalyzedLoop(_AnalyzedLoop), CurrentLoop(_AnalyzedLoop),
+        CurrentDep(StartingDep), NumDimensions(_NumDimensions), LI(_LI),
+        SE(_SE), TLI(_TLI) {}
+
+  const Loop *const AnalyzedLoop;
+  const Loop *CurrentLoop;
+  LoopDependence CurrentDep;
+  int NumDimensions;
+
+  LoopInfo &LI;
+  ScalarEvolution &SE;
+  const TargetLibraryInfo &TLI;
+};
+
+static bool analyzeNestsDFS(DFSNestClipboard *Clip) {
+  const Loop *CurrentLoop = Clip->CurrentLoop;
+
+  if (CurrentLoop->empty()) {
+    LoopNestInfo NestInfo = {Clip->NumDimensions, Clip->CurrentLoop,
+                             Clip->AnalyzedLoop};
+    const LoopDependence Dep =
+        getImperfectNestDependence(NestInfo, Clip->LI, Clip->SE, Clip->TLI);
+    if (Dep.VectorizationFactor < Clip->CurrentDep.VectorizationFactor)
+      Clip->CurrentDep = Dep;
+    return !Clip->CurrentDep.isWorstPossible();
+  }
+
+  const auto &SubLoops = CurrentLoop->getSubLoops();
+  for (const Loop *Sub : SubLoops) {
+    Clip->CurrentLoop = Sub;
+    Clip->NumDimensions += 1;
+    if (!analyzeNestsDFS(Clip))
+      return false;
+    Clip->NumDimensions -= 1;
+  }
+  return true;
+}
+
+const LoopDependence
+LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
+  LoopDependence Bail = LoopDependence::getWorstPossible();
+
+  if (L.isAnnotatedParallel())
+    return LoopDependence::getBestPossible();
+
+  DFSNestClipboard Clip(&L, LoopDependence::getBestPossible(), 1, LI, SE, TLI);
+  analyzeNestsDFS(&Clip);
+
+  return Clip.CurrentDep;
 }
 
 /// Printer Pass

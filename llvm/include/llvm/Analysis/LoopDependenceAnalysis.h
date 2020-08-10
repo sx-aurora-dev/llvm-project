@@ -52,15 +52,6 @@ struct LoopDependence {
     return LD;
   }
 
-  bool operator<(ConstVF V) const {
-    if (!V.hasValue())
-      return false;
-    else if (!VectorizationFactor.hasValue())
-      return true;
-    else
-      return V.getValue() < VectorizationFactor.getValue();
-  }
-
   bool isWorstPossible() const {
     if (!VectorizationFactor.hasValue())
       return false;
