@@ -74,6 +74,12 @@ static inline int32_t elf_check_machine(__tgt_device_image *image,
 
 static inline int32_t elf_is_dynamic(__tgt_device_image *image) {
 
+  // Is the library version incompatible with the header file?
+  if (elf_version(EV_CURRENT) == EV_NONE) {
+    DP("Incompatible ELF library!\n");
+    return 0;
+  }
+
   char *img_begin = (char *)image->ImageStart;
   char *img_end = (char *)image->ImageEnd;
   size_t img_size = img_end - img_begin;
@@ -85,6 +91,11 @@ static inline int32_t elf_is_dynamic(__tgt_device_image *image) {
     return 0;
   }
 
+  // Check if ELF is the right kind.
+  if (elf_kind(e) != ELF_K_ELF) {
+    DP("Unexpected ELF type!\n");
+    return 0;
+  }
   Elf64_Ehdr *eh64 = elf64_getehdr(e);
   Elf32_Ehdr *eh32 = elf32_getehdr(e);
 

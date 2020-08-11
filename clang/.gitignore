@@ -22,6 +22,8 @@
 cscope.files
 cscope.out
 /tags
+/TAGS
+.ftpconfig
 
 #==============================================================================#
 # Directories to ignore (do not add trailing '/'s, they skip symlinks).
