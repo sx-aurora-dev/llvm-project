@@ -1037,8 +1037,8 @@ class InstTable(object):
         ArgsP = self.addMask(ArgsP, VM512)
 
         self.Def(opc, instName, "", name, Args, expr)
-        self.Def(opc, instName, "p", "p"+name+".lo", ArgsP, expr).noTest()
-        self.Def(opc, instName, "p", "p"+name+".up", ArgsP, expr).noTest()
+        #self.Def(opc, instName, "p", "p"+name+".lo", ArgsP, expr).noTest()
+        #self.Def(opc, instName, "p", "p"+name+".up", ArgsP, expr).noTest()
         self.Def(opc, instName, "p", "p"+name, ArgsP, expr)
 
     def Shift(self, opc, name, instName, ty, expr):
@@ -1058,8 +1058,8 @@ class InstTable(object):
         OL = [O_vvv, O_vvs]
         OL = self.addMask(OL, VM512)
 
-        self.Def(opc, instName, "p", "p"+name+".lo", OL, expr).noTest()
-        self.Def(opc, instName, "p", "p"+name+".up", OL, expr).noTest()
+        #self.Def(opc, instName, "p", "p"+name+".lo", OL, expr).noTest()
+        #self.Def(opc, instName, "p", "p"+name+".up", OL, expr).noTest()
         self.Def(opc, instName, "p", "p"+name, OL, expr)
 
     def Inst4f(self, opc, name, instName, expr):
@@ -1225,8 +1225,8 @@ def createInstructionTable():
     T.NoImpl("VPCNT")
     T.NoImpl("VBRV")
     T.Def(0x99, "VSEQ", "", "vseq", [[VX(T_u64)]], "{0} = i").noTest()
-    T.Def(0x99, "VSEQ", "l", "pvseq.lo", [[VX(T_u64)]], "{0} = i").noTest()
-    T.Def(0x99, "VSEQ", "u", "pvseq.up", [[VX(T_u64)]], "{0} = i").noTest()
+    #T.Def(0x99, "VSEQ", "l", "pvseq.lo", [[VX(T_u64)]], "{0} = i").noTest()
+    #T.Def(0x99, "VSEQ", "u", "pvseq.up", [[VX(T_u64)]], "{0} = i").noTest()
     T.Def(0x99, "VSEQ", "p", "pvseq", [[VX(T_u64)]], "{0} = i").noTest()
     
     T.Section("Table 3-18 Vector Shift Instructions", 27)
