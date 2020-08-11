@@ -408,8 +408,14 @@ class SOP2_64_32_32 <string opName, list<dag> pattern=[]> : SOP2_Pseudo <
 class UniformUnaryFrag<SDPatternOperator Op> : PatFrag <
   (ops node:$src0),
   (Op $src0),
-  [{ return !N->isDivergent(); }]
->;
+  [{ return !N->isDivergent(); }]> {
+  // This check is unnecessary as it's captured by the result register
+  // bank constraint.
+  //
+  // FIXME: Should add a way for the emitter to recognize this is a
+  // trivially true predicate to eliminate the check.
+  let GISelPredicateCode = [{return true;}];
+}
 
 class UniformBinFrag<SDPatternOperator Op> : PatFrag <
   (ops node:$src0, node:$src1),
@@ -463,10 +469,15 @@ def S_MAX_U32 : SOP2_32 <"s_max_u32",
 } // End isCommutable = 1
 } // End Defs = [SCC]
 
+// This pattern is restricted to certain subtargets (practically GFX8Plus)
+// because isel sometimes produces an sreg_64 copy to SCC as a by-product
+// of this pattern, and only for subtargets with hasScalarCompareEq64
+// is it possible to map such copy to a single instruction (S_CMP_LG_U64).
 class SelectPat<SDPatternOperator select> : PatFrag <
   (ops node:$src1, node:$src2),
   (select SCC, $src1, $src2),
-  [{ return N->getOperand(0)->hasOneUse() && !N->isDivergent(); }]
+  [{ return Subtarget->hasScalarCompareEq64() &&
+            N->getOperand(0)->hasOneUse() && !N->isDivergent(); }]
 >;
 
 let Uses = [SCC] in {
@@ -806,15 +817,19 @@ let hasSideEffects = 1 in {
 let mayLoad = 1 in {
 // s_getreg_b32 should use hasSideEffects = 1 for tablegen to allow
 // its use in the readcyclecounter selection.
+// FIXME: Need to truncate immediate to 16-bits.
 def S_GETREG_B32 : SOPK_Pseudo <
   "s_getreg_b32",
   (outs SReg_32:$sdst), (ins hwreg:$simm16),
-  "$sdst, $simm16"
->;
+  "$sdst, $simm16",
+  [(set i32:$sdst, (int_amdgcn_s_getreg (i32 timm:$simm16)))]> {
+  let SOPKZext = 1;
+}
 }
 
 let mayLoad = 0, mayStore =0 in {
 
+// FIXME: Need to truncate immediate to 16-bits.
 def S_SETREG_B32 : SOPK_Pseudo <
   "s_setreg_b32",
   (outs), (ins SReg_32:$sdst, hwreg:$simm16),
@@ -1249,14 +1264,6 @@ let SubtargetPredicate = isGFX10Plus in {
   def S_TTRACEDATA_IMM :
     SOPP<0x028, (ins s16imm:$simm16), "s_ttracedata_imm $simm16">;
 } // End SubtargetPredicate = isGFX10Plus
-
-//===----------------------------------------------------------------------===//
-// S_GETREG_B32 Intrinsic Pattern.
-//===----------------------------------------------------------------------===//
-def : GCNPat <
-  (int_amdgcn_s_getreg timm:$simm16),
-  (S_GETREG_B32 (as_i16imm $simm16))
->;
 
 //===----------------------------------------------------------------------===//
 // SOP1 Patterns

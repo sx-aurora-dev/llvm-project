@@ -1,25 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readnone
-define double @divf64(double, double) {
-; CHECK-LABEL: divf64:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    fdiv.d %s0, %s0, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = fdiv double %0, %1
-  ret double %3
-}
-
-; Function Attrs: norecurse nounwind readnone
-define float @divf32(float, float) {
-; CHECK-LABEL: divf32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    fdiv.s %s0, %s0, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = fdiv float %0, %1
-  ret float %3
-}
-
 define i128 @divi128(i128, i128) {
 ; CHECK-LABEL: divi128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -53,6 +34,7 @@ define signext i32 @divi32(i32 signext %a, i32 signext %b) {
   ret i32 %r
 }
 
+; Function Attrs: norecurse nounwind readnone
 define i128 @divu128(i128, i128) {
 ; CHECK-LABEL: divu128:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -75,7 +57,6 @@ define i64 @divu64(i64 %a, i64 %b) {
   ret i64 %r
 }
 
-; Function Attrs: norecurse nounwind readnone
 ; Function Attrs: norecurse nounwind readnone
 define zeroext i32 @divu32(i32 zeroext %a, i32 zeroext %b) {
 ; CHECK-LABEL: divu32:
@@ -102,7 +83,6 @@ define signext i16 @divi16(i16 signext %a, i16 signext %b) {
   ret i16 %r
 }
 
-; Function Attrs: norecurse nounwind readnone
 ; Function Attrs: norecurse nounwind readnone
 define zeroext i16 @divu16(i16 zeroext %a, i16 zeroext %b) {
 ; CHECK-LABEL: divu16:
@@ -141,28 +121,6 @@ define zeroext i8 @divu8(i8 zeroext %a, i8 zeroext %b) {
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define double @divf64ri(double, double) {
-; CHECK-LABEL: divf64ri:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 858993459
-; CHECK-NEXT:    lea.sl %s1, 1072902963(, %s1)
-; CHECK-NEXT:    fdiv.d %s0, %s0, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = fdiv double %0, 1.200000e+00
-  ret double %3
-}
-
-; Function Attrs: norecurse nounwind readnone
-define float @divf32ri(float, float) {
-; CHECK-LABEL: divf32ri:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s1, 1067030938
-; CHECK-NEXT:    fdiv.s %s0, %s0, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = fdiv float %0, 0x3FF3333340000000
-  ret float %3
-}
-
 define i128 @divi128ri(i128) {
 ; CHECK-LABEL: divi128ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -191,17 +149,14 @@ define i64 @divi64ri(i64 %a, i64 %b) {
 define signext i32 @divi32ri(i32 signext %a, i32 signext %b) {
 ; CHECK-LABEL: divi32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, 1431655766
-; CHECK-NEXT:    muls.l %s0, %s0, %s1
-; CHECK-NEXT:    srl %s1, %s0, 63
-; CHECK-NEXT:    srl %s0, %s0, 32
-; CHECK-NEXT:    adds.w.sx %s0, %s0, %s1
+; CHECK-NEXT:    divs.w.sx %s0, %s0, (62)0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = sdiv i32 %a, 3
   ret i32 %r
 }
 
+; Function Attrs: norecurse nounwind readnone
 define i128 @divu128ri(i128) {
 ; CHECK-LABEL: divu128ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -230,38 +185,14 @@ define i64 @divu64ri(i64 %a, i64 %b) {
 define zeroext i32 @divu32ri(i32 zeroext %a, i32 zeroext %b) {
 ; CHECK-LABEL: divu32ri:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s1, -1431655765
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    muls.l %s0, %s0, %s1
-; CHECK-NEXT:    srl %s0, %s0, 33
+; CHECK-NEXT:    divu.w %s0, %s0, (62)0
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = udiv i32 %a, 3
   ret i32 %r
 }
 
 ; Function Attrs: norecurse nounwind readnone
-define double @divf64li(double, double) {
-; CHECK-LABEL: divf64li:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, 858993459
-; CHECK-NEXT:    lea.sl %s0, 1072902963(, %s0)
-; CHECK-NEXT:    fdiv.d %s0, %s0, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = fdiv double 1.200000e+00, %1
-  ret double %3
-}
-
-; Function Attrs: norecurse nounwind readnone
-define float @divf32li(float, float) {
-; CHECK-LABEL: divf32li:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea.sl %s0, 1067030938
-; CHECK-NEXT:    fdiv.s %s0, %s0, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
-  %3 = fdiv float 0x3FF3333340000000, %1
-  ret float %3
-}
-
 define i128 @divi128li(i128) {
 ; CHECK-LABEL: divi128li:
 ; CHECK:       .LBB{{[0-9]+}}_2:
@@ -299,6 +230,7 @@ define signext i32 @divi32li(i32 signext %a, i32 signext %b) {
   ret i32 %r
 }
 
+; Function Attrs: norecurse nounwind readnone
 define i128 @divu128li(i128) {
 ; CHECK-LABEL: divu128li:
 ; CHECK:       .LBB{{[0-9]+}}_2:

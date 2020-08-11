@@ -753,10 +753,10 @@ canonicalizeImmediatelyDeclaredConstraint(const ASTContext &C, Expr *IDC,
       CSE->isInstantiationDependent(), CSE->containsUnexpandedParameterPack());
 
   if (auto *OrigFold = dyn_cast<CXXFoldExpr>(IDC))
-    NewIDC = new (C) CXXFoldExpr(OrigFold->getType(), SourceLocation(), NewIDC,
-                                 BinaryOperatorKind::BO_LAnd,
-                                 SourceLocation(), /*RHS=*/nullptr,
-                                 SourceLocation(), /*NumExpansions=*/None);
+    NewIDC = new (C) CXXFoldExpr(
+        OrigFold->getType(), /*Callee*/nullptr, SourceLocation(), NewIDC,
+        BinaryOperatorKind::BO_LAnd, SourceLocation(), /*RHS=*/nullptr,
+        SourceLocation(), /*NumExpansions=*/None);
   return NewIDC;
 }
 
@@ -919,18 +919,20 @@ static const LangASMap *getAddressSpaceMap(const TargetInfo &T,
     // The fake address space map must have a distinct entry for each
     // language-specific address space.
     static const unsigned FakeAddrSpaceMap[] = {
-        0, // Default
-        1, // opencl_global
-        3, // opencl_local
-        2, // opencl_constant
-        0, // opencl_private
-        4, // opencl_generic
-        5, // cuda_device
-        6, // cuda_constant
-        7, // cuda_shared
-        8, // ptr32_sptr
-        9, // ptr32_uptr
-        10 // ptr64
+        0,  // Default
+        1,  // opencl_global
+        3,  // opencl_local
+        2,  // opencl_constant
+        0,  // opencl_private
+        4,  // opencl_generic
+        5,  // opencl_global_device
+        6,  // opencl_global_host
+        7,  // cuda_device
+        8,  // cuda_constant
+        9,  // cuda_shared
+        10, // ptr32_sptr
+        11, // ptr32_uptr
+        12  // ptr64
     };
     return &FakeAddrSpaceMap;
   } else {
@@ -10323,12 +10325,17 @@ static GVALinkage adjustGVALinkageForAttributes(const ASTContext &Context,
   } else if (D->hasAttr<DLLExportAttr>()) {
     if (L == GVA_DiscardableODR)
       return GVA_StrongODR;
-  } else if (Context.getLangOpts().CUDA && Context.getLangOpts().CUDAIsDevice &&
-             D->hasAttr<CUDAGlobalAttr>()) {
+  } else if (Context.getLangOpts().CUDA && Context.getLangOpts().CUDAIsDevice) {
     // Device-side functions with __global__ attribute must always be
     // visible externally so they can be launched from host.
-    if (L == GVA_DiscardableODR || L == GVA_Internal)
+    if (D->hasAttr<CUDAGlobalAttr>() &&
+        (L == GVA_DiscardableODR || L == GVA_Internal))
       return GVA_StrongODR;
+    // Single source offloading languages like CUDA/HIP need to be able to
+    // access static device variables from host code of the same compilation
+    // unit. This is done by externalizing the static variable.
+    if (Context.shouldExternalizeStaticVar(D))
+      return GVA_StrongExternal;
   }
   return L;
 }
@@ -11182,4 +11189,19 @@ clang::operator<<(const DiagnosticBuilder &DB,
   if (Section.Decl)
     return DB << Section.Decl;
   return DB << "a prior #pragma section";
+}
+
+bool ASTContext::mayExternalizeStaticVar(const Decl *D) const {
+  return !getLangOpts().GPURelocatableDeviceCode &&
+         ((D->hasAttr<CUDADeviceAttr>() &&
+           !D->getAttr<CUDADeviceAttr>()->isImplicit()) ||
+          (D->hasAttr<CUDAConstantAttr>() &&
+           !D->getAttr<CUDAConstantAttr>()->isImplicit())) &&
+         isa<VarDecl>(D) && cast<VarDecl>(D)->isFileVarDecl() &&
+         cast<VarDecl>(D)->getStorageClass() == SC_Static;
+}
+
+bool ASTContext::shouldExternalizeStaticVar(const Decl *D) const {
+  return mayExternalizeStaticVar(D) &&
+         CUDAStaticDeviceVarReferencedByHost.count(cast<VarDecl>(D));
 }

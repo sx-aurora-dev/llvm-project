@@ -813,7 +813,17 @@ public:
   ///
   /// \return a MachineInstrBuilder for the newly created instruction.
   MachineInstrBuilder buildLoad(const DstOp &Res, const SrcOp &Addr,
-                                MachineMemOperand &MMO);
+                                MachineMemOperand &MMO) {
+    return buildLoadInstr(TargetOpcode::G_LOAD, Res, Addr, MMO);
+  }
+
+  /// Build and insert a G_LOAD instruction, while constructing the
+  /// MachineMemOperand.
+  MachineInstrBuilder
+  buildLoad(const DstOp &Res, const SrcOp &Addr, MachinePointerInfo PtrInfo,
+            Align Alignment,
+            MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
+            const AAMDNodes &AAInfo = AAMDNodes());
 
   /// Build and insert `Res = <opcode> Addr, MMO`.
   ///
@@ -846,6 +856,14 @@ public:
   /// \return a MachineInstrBuilder for the newly created instruction.
   MachineInstrBuilder buildStore(const SrcOp &Val, const SrcOp &Addr,
                                  MachineMemOperand &MMO);
+
+  /// Build and insert a G_STORE instruction, while constructing the
+  /// MachineMemOperand.
+  MachineInstrBuilder
+  buildStore(const SrcOp &Val, const SrcOp &Addr, MachinePointerInfo PtrInfo,
+             Align Alignment,
+             MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
+             const AAMDNodes &AAInfo = AAMDNodes());
 
   /// Build and insert `Res0, ... = G_EXTRACT Src, Idx0`.
   ///
@@ -1519,6 +1537,13 @@ public:
                                 const SrcOp &Src1,
                                 Optional<unsigned> Flags = None) {
     return buildInstr(TargetOpcode::G_FSUB, {Dst}, {Src0, Src1}, Flags);
+  }
+
+  /// Build and insert \p Res = G_FDIV \p Op0, \p Op1
+  MachineInstrBuilder buildFDiv(const DstOp &Dst, const SrcOp &Src0,
+                                const SrcOp &Src1,
+                                Optional<unsigned> Flags = None) {
+    return buildInstr(TargetOpcode::G_FDIV, {Dst}, {Src0, Src1}, Flags);
   }
 
   /// Build and insert \p Res = G_FMA \p Op0, \p Op1, \p Op2

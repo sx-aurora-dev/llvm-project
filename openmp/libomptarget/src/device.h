@@ -182,7 +182,8 @@ struct DeviceTy {
                          bool HasPresentModifier);
   void *getTgtPtrBegin(void *HstPtrBegin, int64_t Size);
   void *getTgtPtrBegin(void *HstPtrBegin, int64_t Size, bool &IsLast,
-      bool UpdateRefCount, bool &IsHostPtr);
+                       bool UpdateRefCount, bool &IsHostPtr,
+                       bool MustContain = false);
   int deallocTgtPtr(void *TgtPtrBegin, int64_t Size, bool ForceDelete,
                     bool HasCloseModifier = false);
   int associatePtr(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size);
@@ -210,8 +211,8 @@ struct DeviceTy {
   int32_t submitData(void *TgtPtrBegin, void *HstPtrBegin, int64_t Size,
                      __tgt_async_info *AsyncInfoPtr);
   // Copy data from device back to host
-  int32_t data_retrieve(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size,
-                        __tgt_async_info *AsyncInfoPtr);
+  int32_t retrieveData(void *HstPtrBegin, void *TgtPtrBegin, int64_t Size,
+                       __tgt_async_info *AsyncInfoPtr);
   // Copy data from current device to destination device directly
   int32_t data_exchange(void *SrcPtr, DeviceTy DstDev, void *DstPtr,
                         int64_t Size, __tgt_async_info *AsyncInfoPtr);

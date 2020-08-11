@@ -47,7 +47,7 @@ void MachHeaderSection::addLoadCommand(LoadCommand *lc) {
 }
 
 uint64_t MachHeaderSection::getSize() const {
-  return sizeof(MachO::mach_header_64) + sizeOfCmds;
+  return sizeof(MachO::mach_header_64) + sizeOfCmds + config->headerPad;
 }
 
 void MachHeaderSection::writeTo(uint8_t *buf) const {
@@ -59,8 +59,18 @@ void MachHeaderSection::writeTo(uint8_t *buf) const {
   hdr->ncmds = loadCommands.size();
   hdr->sizeofcmds = sizeOfCmds;
   hdr->flags = MachO::MH_NOUNDEFS | MachO::MH_DYLDLINK | MachO::MH_TWOLEVEL;
+
   if (config->outputType == MachO::MH_DYLIB && !config->hasReexports)
     hdr->flags |= MachO::MH_NO_REEXPORTED_DYLIBS;
+
+  for (OutputSegment *seg : outputSegments) {
+    for (OutputSection *osec : seg->getSections()) {
+      if (isThreadLocalVariables(osec->flags)) {
+        hdr->flags |= MachO::MH_HAS_TLV_DESCRIPTORS;
+        break;
+      }
+    }
+  }
 
   uint8_t *p = reinterpret_cast<uint8_t *>(hdr + 1);
   for (LoadCommand *lc : loadCommands) {
@@ -94,7 +104,7 @@ void GotSection::writeTo(uint8_t *buf) const {
 }
 
 BindingSection::BindingSection()
-    : SyntheticSection(segment_names::linkEdit, section_names::binding) {}
+    : LinkEditSection(segment_names::linkEdit, section_names::binding) {}
 
 bool BindingSection::isNeeded() const {
   return bindings.size() != 0 || in.got->isNeeded();
@@ -301,7 +311,7 @@ void LazyPointerSection::writeTo(uint8_t *buf) const {
 }
 
 LazyBindingSection::LazyBindingSection()
-    : SyntheticSection(segment_names::linkEdit, section_names::lazyBinding) {}
+    : LinkEditSection(segment_names::linkEdit, section_names::lazyBinding) {}
 
 bool LazyBindingSection::isNeeded() const { return in.stubs->isNeeded(); }
 
@@ -344,7 +354,7 @@ uint32_t LazyBindingSection::encode(const DylibSymbol &sym) {
 }
 
 ExportSection::ExportSection()
-    : SyntheticSection(segment_names::linkEdit, section_names::export_) {}
+    : LinkEditSection(segment_names::linkEdit, section_names::export_) {}
 
 void ExportSection::finalizeContents() {
   // TODO: We should check symbol visibility.
@@ -358,11 +368,7 @@ void ExportSection::writeTo(uint8_t *buf) const { trieBuilder.writeTo(buf); }
 
 SymtabSection::SymtabSection(StringTableSection &stringTableSection)
     : SyntheticSection(segment_names::linkEdit, section_names::symbolTable),
-      stringTableSection(stringTableSection) {
-  // TODO: When we introduce the SyntheticSections superclass, we should make
-  // all synthetic sections aligned to WordSize by default.
-  align = WordSize;
-}
+      stringTableSection(stringTableSection) {}
 
 uint64_t SymtabSection::getSize() const {
   return symbols.size() * sizeof(structs::nlist_64);
@@ -392,7 +398,7 @@ void SymtabSection::writeTo(uint8_t *buf) const {
 }
 
 StringTableSection::StringTableSection()
-    : SyntheticSection(segment_names::linkEdit, section_names::stringTable) {}
+    : LinkEditSection(segment_names::linkEdit, section_names::stringTable) {}
 
 uint32_t StringTableSection::addString(StringRef str) {
   uint32_t strx = size;

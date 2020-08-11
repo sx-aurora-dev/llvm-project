@@ -120,6 +120,16 @@ public:
   SDValue lowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
 
+  /// Custom DAGCombine {
+  SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
+
+  SDValue combineExtBoolTrunc(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineTRUNCATE(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineSelectCC(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combineSelect(SDNode *N, DAGCombinerInfo &DCI) const;
+  /// } Custom DAGCombine
+
   SDValue withTargetFlags(SDValue Op, unsigned TF, SelectionDAG &DAG) const;
   SDValue makeHiLoPair(SDValue Op, unsigned HiTF, unsigned LoTF,
                        SelectionDAG &DAG) const;
@@ -146,20 +156,12 @@ public:
   EmitInstrWithCustomInserter(MachineInstr &MI,
                               MachineBasicBlock *MBB) const override;
 
-  SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
-
   /// Return true if the target has native support for
   /// the specified value type and it is 'desirable' to use the type for the
   /// given node type. e.g. On VE i32 is legal, but undesirable i32 for
   /// AND/OR/XOR instructions since VE doesn't have those instructions for
   /// i32.
   bool isTypeDesirableForOp(unsigned Opc, EVT VT) const override;
-
-  SDValue combineExtBoolTrunc(SDNode *N, DAGCombinerInfo &DCI) const;
-  SDValue combineTRUNCATE(SDNode *N, DAGCombinerInfo &DCI) const;
-  SDValue combineSetCC(SDNode *N, DAGCombinerInfo &DCI) const;
-  SDValue combineSelectCC(SDNode *N, DAGCombinerInfo &DCI) const;
-  SDValue combineSelect(SDNode *N, DAGCombinerInfo &DCI) const;
 
   /// This function looks at SETCC that compares integers. It replaces
   /// SETCC with integer arithmetic operations when there is a legal way

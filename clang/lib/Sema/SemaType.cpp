@@ -1543,7 +1543,8 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
         << "__float128";
     Result = Context.Float128Ty;
     break;
-  case DeclSpec::TST_bool: Result = Context.BoolTy; break; // _Bool or bool
+  case DeclSpec::TST_bool:
+    Result = Context.BoolTy; // _Bool or bool
     break;
   case DeclSpec::TST_decimal32:    // _Decimal32
   case DeclSpec::TST_decimal64:    // _Decimal64
@@ -5114,7 +5115,7 @@ static TypeSourceInfo *GetFullTypeForDeclarator(TypeProcessingState &state,
             // is an incomplete type (C99 6.2.5p19) and function decls cannot
             // have parameters of incomplete type.
             if (FTI.NumParams != 1 || FTI.isVariadic) {
-              S.Diag(DeclType.Loc, diag::err_void_only_param);
+              S.Diag(FTI.Params[i].IdentLoc, diag::err_void_only_param);
               ParamTy = Context.IntTy;
               Param->setType(ParamTy);
             } else if (FTI.Params[i].Ident) {
@@ -7968,6 +7969,8 @@ static bool isAddressSpaceKind(const ParsedAttr &attr) {
   return attrKind == ParsedAttr::AT_AddressSpace ||
          attrKind == ParsedAttr::AT_OpenCLPrivateAddressSpace ||
          attrKind == ParsedAttr::AT_OpenCLGlobalAddressSpace ||
+         attrKind == ParsedAttr::AT_OpenCLGlobalDeviceAddressSpace ||
+         attrKind == ParsedAttr::AT_OpenCLGlobalHostAddressSpace ||
          attrKind == ParsedAttr::AT_OpenCLLocalAddressSpace ||
          attrKind == ParsedAttr::AT_OpenCLConstantAddressSpace ||
          attrKind == ParsedAttr::AT_OpenCLGenericAddressSpace;
@@ -8048,6 +8051,8 @@ static void processTypeAttrs(TypeProcessingState &state, QualType &type,
       break;
     case ParsedAttr::AT_OpenCLPrivateAddressSpace:
     case ParsedAttr::AT_OpenCLGlobalAddressSpace:
+    case ParsedAttr::AT_OpenCLGlobalDeviceAddressSpace:
+    case ParsedAttr::AT_OpenCLGlobalHostAddressSpace:
     case ParsedAttr::AT_OpenCLLocalAddressSpace:
     case ParsedAttr::AT_OpenCLConstantAddressSpace:
     case ParsedAttr::AT_OpenCLGenericAddressSpace:
