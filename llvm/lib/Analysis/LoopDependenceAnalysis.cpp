@@ -457,6 +457,10 @@ distance of the only entry in the vector
 
 - 7.2 2D case -
 
+We're imagining that the outer loop is represented in the y-axis.
+But note that the order of entries is not: (x, y) but (y, x)
+(always outermost first).
+
 Remember that in any N-D case with N > 1, we're trying to squeeze together
 iterations in _one_ dimension, the Nth. In the case of 2D, we're
 trying to squeeze iterations by going upwards. Imagine a 2D loop where
@@ -491,12 +495,15 @@ further to the right iterations.
 - 7.3 3D case -
 
 In the 3D case, we're imagining that we're adding another outermost
-loop that is represented in the z-axis. And we're trying to squeeze iterations
-in this axis. The only vectors that are potentially worrying are those
-that have an entry with distance equal to 0. Otherwise, the vector
-starts from a plane and points to a _different_ plane, so we don't care.
+loop that is represented in the z-axis. _However_, the order of entries
+is not: (x, y, z) but (z, y, x) (outermost first).
 
-But if one entry is 0, then we squash it and fall-back to the 2D case.
+We're trying to squeeze iterations in this axis. The only vectors that are
+potentially worrying are those that have a middle entry with distance equal to
+0. Otherwise, the vector starts from a x-z plane and points to a _different_
+plane, so we don't care.
+
+But if the middle entry is 0, then we squash it and fall-back to the 2D case.
 
 
 
@@ -988,6 +995,11 @@ static bool looksDirectlyLeft2D(const DepVector &DV) {
   return (DV[0].Dir == '=' && DV[1].Dir == '>');
 }
 
+static bool looksDirectlyLeft3D(const DepVector &DV) {
+  assert(DV.size() == 3);
+  return (DV[0].Dir == '=' && DV[1].Dir == '=' && DV[1].Dir == '>');
+}
+
 static bool looksDirectlyUpwards2D(const DepVector &DV) {
   assert(DV.size() == 2);
   return (DV[0].Dir == '<' && DV[1].Dir == '=');
@@ -1000,10 +1012,23 @@ static bool looksDownwards2D(const DepVector &DV) {
   return DV[0].Dir == '>';
 }
 
+/// Ditto
+static bool looksDownwards3D(const DepVector &DV) {
+  assert(DV.size() == 3);
+  return DV[1].Dir == '>';
+}
+
 /// Looks directly left, upwards left or downwards left
 static bool looksLeft2D(const DepVector &DV) {
   assert(DV.size() == 2);
   return DV[1].Dir == '>';
+}
+
+/// Looks directly backwards, backwards left / right or backwards
+/// up / down.
+static bool looksBackwards3D(const DepVector& DV) {
+  assert(DV.size() == 3);
+  return DV[0].Dir == '>';
 }
 
 bool isForwardDependence(DepVector &DV, unsigned LoadPosition,
@@ -1032,27 +1057,31 @@ bool isForwardDependence(DepVector &DV, unsigned LoadPosition,
       if (WritesFurtherToTheLeft || WritesToPreviousMemory)
         return false;
       return true;
-    }
+    } // TODO: Handle 3D case.
   }
   return false;
 }
 
 /// Reflect if it points to previous iterations - something
 /// that arises because the load accesses memory locations
-/// before the store.
+/// before the store (in time).
 void reflectIfNeeded(DepVector &IterDV) {
   if (!IterDV.size())
     return;
 
-  if (IterDV.size() > 2)
+  if (IterDV.size() > 3)
     return;
   if (IterDV.size() == 1) {
     if (IterDV[0].Dist < 0)
       IterDV[0].negate();
     return;
-  }
-  if (looksDownwards2D(IterDV) || looksDirectlyLeft2D(IterDV)) {
-    IterDV.reflect();
+  } else if (IterDV.size() == 2) {
+    if (looksDownwards2D(IterDV) || looksDirectlyLeft2D(IterDV))
+      IterDV.reflect();
+  } else {  // 3D case
+    if (looksDirectlyLeft3D(IterDV) || looksDownwards3D(IterDV) ||
+        looksBackwards3D(IterDV))
+      IterDV.reflect();
   }
 }
 
@@ -1062,7 +1091,7 @@ static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
   ConstVF Worst = LoopDependence::getWorstPossible().VectorizationFactor;
   if (!IterDV.size())
     return Best;
-  if (IterDV.size() > 2)
+  if (IterDV.size() > 3)
     return Worst;
   if (IterDV.size() == 1) {
     int Dist = IterDV[0].Dist;
@@ -1070,12 +1099,25 @@ static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
       return Dist;
     }
     return Best;
+  } else {
+    ConstVF Res = Best;
+    if (IterDV.size() == 2) {
+      // Handle outermost loop vectorization in 2-level loop nest.
+      if (looksLeft2D(IterDV) || looksDirectlyUpwards2D(IterDV))
+        Res = (size_t)IterDV[0].Dist;
+      return Res;
+    } else {
+      if (IterDV[1].Dir != '=')
+        return Best;
+      // Otherwise, fall-back to the 2D case.
+      DepVector DVSquashed(2);
+      DVSquashed[0] = IterDV[0];
+      DVSquashed[1] = IterDV[2];
+      return getMaxAllowedVecFact(DVSquashed);
+    }
   }
-  // Handle outermost loop vectorization in 2-level loop nest.
-  ConstVF Res = Best;
-  if (looksLeft2D(IterDV) || looksDirectlyUpwards2D(IterDV))
-    Res = (size_t)IterDV[0].Dist;
-  return Res;
+  assert(0);
+  return Worst;
 }
 
 static bool definitelyCannotAlias(LoopInfo &LI, const LoadInst *LD,
