@@ -1767,6 +1767,16 @@ def veoldVMVrvl_v : RV<0x9c, (outs V64:$vx), (ins I32:$sy, V64:$vz, I32:$vl, V64
   let DisableEncoding = "$vl";
 }
 
+// inst=VMV asm=vmv intrisic=vmv_vsvmvl
+def veoldVMVrvxl_v : RV<0x9c, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, I32:$vl, V64:$pt),
+       "vmv $vx,$sy,$vz,$vm", [], NoItinerary>
+{
+  let Constraints = "$vx = $pt";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VMV asm=vmv intrisic=vmv_vsvl
 def veoldVMVivl : RV<0x9c, (outs V64:$vx), (ins simm7:$N, V64:$vz, I32:$vl),
        "vmv $vx,$N,$vz", [], NoItinerary>
@@ -1779,16 +1789,6 @@ def veoldVMVivl : RV<0x9c, (outs V64:$vx), (ins simm7:$N, V64:$vz, I32:$vl),
 // inst=VMV asm=vmv intrisic=vmv_vsvvl
 def veoldVMVivl_v : RV<0x9c, (outs V64:$vx), (ins simm7:$N, V64:$vz, I32:$vl, V64:$pt),
        "vmv $vx,$N,$vz", [], NoItinerary>
-{
-  let Constraints = "$vx = $pt";
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
-// inst=VMV asm=vmv intrisic=vmv_vsvmvl
-def veoldVMVrvxl_v : RV<0x9c, (outs V64:$vx), (ins I32:$sy, V64:$vz, VM:$vm, I32:$vl, V64:$pt),
-       "vmv $vx,$sy,$vz,$vm", [], NoItinerary>
 {
   let Constraints = "$vx = $pt";
   let DecoderNamespace = "VEL";

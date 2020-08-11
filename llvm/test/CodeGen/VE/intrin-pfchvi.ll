@@ -6,7 +6,7 @@ define void @test(float* %p) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pfchv 4,%s0
+; CHECK-NEXT:    pfchv 4, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = bitcast float* %p to i8*

@@ -271,6 +271,7 @@ class Inst(object):
         self.hasIntrinsicDef_ = True
         self.notYetImplemented_ = False
         self.Obsolete_ = False
+        self.useNewInst_ = True
 
     def inst(self): return self.inst_
     def llvmInst(self): return self.llvmInst_
@@ -430,6 +431,10 @@ class Inst(object):
     def noPat(self): self.hasPat_ = False
     def hasPat(self): return self.hasPat_
 
+    def new(self): self.useNewInst_= True
+    def old(self): self.useNewInst_ = False
+    def useNew(self): return self.useNewInst_
+
 class DummyInst(Inst):
     def __init__(self, opc, inst, func, asm, **kwargs):
         kwargs['llvmInst'] = None
@@ -477,6 +482,10 @@ class InstVEL(Inst):
         argsR = ", ".join([op.dagOpR() for op in getLLVMInstArgs(self.ins, self)])
         l = "({} {})".format(self.llvmIntrinName(), argsL)
         r = "({} {})".format(self.llvmInst(), argsR)
+
+        if self.useNew():
+            r = re.sub('veold', '', r)
+
         return "def : Pat<{}, {}>;".format(l, r)
 
 
@@ -940,14 +949,16 @@ class InstTable(object):
     def VMVm(self):
         O_s = [VX(T_u64), SY(T_u32), VZ(T_u64)]
         O_i = [VX(T_u64), UImm7(T_u32), VZ(T_u64)]
-        O = self.addMask([O_s, O_i])
-        self.Def(0x9C, "VMV", "", "vmv", O).noTest()
+        O_s = self.addMask([O_s])
+        O_i = self.addMask([O_i])
+        self.Def(0x9C, "VMV", "", "vmv", O_s).noTest().noPat()
+        self.Def(0x9C, "VMV", "", "vmv", O_i).noTest()
 
     def LVSm(self, opc):
         I = self.InstClass
         # Manual LLVMInstDefine
-        self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSvr", noVL=True).noTest()).noLLVMInstDefine()
-        self.add(I(opc, "LVS", "lvs", "lvsd_svs", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSvr", noVL=True).noTest()).noLLVMInstDefine()
+        self.add(I(opc, "LVS", "lvs", "lvsl_svs", [SX(T_u64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSvr", noVL=True).noTest()).noLLVMInstDefine().noPat()
+        self.add(I(opc, "LVS", "lvs", "lvsd_svs", [SX(T_f64)], [VX(T_u64), SY(T_u32)], llvmInst="LVSvr", noVL=True).noTest()).noLLVMInstDefine().noPat()
         self.add(I(opc, "LVS", "lvs", "lvss_svs", [SX(T_f32)], [VX(T_u64), SY(T_u32)], noVL=True).noTest()).noLLVMInstDefine().noPat()
 
     def Inst2f(self, opc, name, instName, expr, hasPacked = True, hasNex = False):
@@ -1161,15 +1172,15 @@ def createInstructionTable():
     T.Def(0x80, "PFCHV", "", "pfchv", [[None, ImmI(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
     T.Def(0x80, "PFCHV", "nc", "pfchv.nc", [[None, SY(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
     T.Def(0x80, "PFCHV", "nc", "pfchv.nc", [[None, ImmI(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
-    T.Def(0x8E, "LSV", "", "lsv", [[VX(T_u64), VD(T_u64), SY(T_u32), SZ(T_u64)]], noVL=True).noTest().noLLVMInstDefine()
+    T.Def(0x8E, "LSV", "", "lsv", [[VX(T_u64), VD(T_u64), SY(T_u32), SZ(T_u64)]], noVL=True).noTest().noLLVMInstDefine().noPat()
     T.LVSm(0x9E)
-    T.Def(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMxrr_x").noTest().NYI()
+    T.Def(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMxrr_x").noTest().NYI().old()
     T.Def(0xB7, "LVM", "i", "lvm", [[VMX, VMD, ImmN(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMxir_x").noTest()
-    T.Def(None, "LVM", "pr", "lvm", [[VMX512, VMD512, SY(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMyrr_y").noTest().NYI()
+    T.Def(None, "LVM", "pr", "lvm", [[VMX512, VMD512, SY(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMyrr_y").noTest().NYI().old()
     T.Def(None, "LVM", "pi", "lvm", [[VMX512, VMD512, ImmN(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMyir_y").noTest()
     T.Def(0xA7, "SVM", "r", "svm", [[SX(T_u64), VMZ, SY(T_u64)]], noVL=True).noTest().NYI()
     T.Def(0xA7, "SVM", "i", "svm", [[SX(T_u64), VMZ, ImmN(T_u64)]], noVL=True).noTest()
-    T.Def(None, "SVM", "pr", "svm", [[SX(T_u64), VMZ512, SY(T_u64)]], noVL=True, llvmInst="SVMyr").noTest().NYI()
+    T.Def(None, "SVM", "pr", "svm", [[SX(T_u64), VMZ512, SY(T_u64)]], noVL=True, llvmInst="SVMyr").noTest().NYI().old()
     T.Def(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True, llvmInst="SVMyi").noTest()
     T.VBRDm(0x8C)
     T.VMVm()
@@ -1271,7 +1282,7 @@ def createInstructionTable():
     T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), SY(T_u64), VZ(T_u64), VM]]).noTest()
     T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), ImmI(T_u64), VZ(T_u64), VM]]).noTest()
     T.Def(0xD6, "VMRG", "p", "vmrg.w", [[VX(T_u32), VY(T_u32), VZ(T_u32), VM512]]).noTest()
-    T.Def(0xD6, "VMRG", "p", "vmrg.w", [[VX(T_u32), SY(T_u32), VZ(T_u32), VM512]]).noTest()
+    T.Def(0xD6, "VMRG", "p", "vmrg.w", [[VX(T_u32), SY(T_u32), VZ(T_u32), VM512]]).noTest().noPat()
     T.Def(0xBC, "VSHF", "", "vshf", [[VX(T_u64), VY(T_u64), VZ(T_u64), SY(T_u64)], [VX(T_u64), VY(T_u64), VZ(T_u64), ImmN(T_u64)]])
     T.Def(0x8D, "VCP", "", "vcp", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
     T.Def(0x9D, "VEX", "", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
@@ -1360,17 +1371,17 @@ def createInstructionTable():
     
     T.Section("Table 3-23 Vector Mask Register Instructions", 34)
     T.Def(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}", noVL=True)
-    T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}", noVL=True, llvmInst="ANDMyy")
+    T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}", noVL=True, llvmInst="ANDMyy").old()
     T.Def(0x85, "ORM", "",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}", noVL=True)
-    T.Def(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}", noVL=True, llvmInst="ORMyy")
+    T.Def(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}", noVL=True, llvmInst="ORMyy").old()
     T.Def(0x86, "XORM", "", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}", noVL=True)
-    T.Def(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}", noVL=True, llvmInst="XORMyy")
+    T.Def(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}", noVL=True, llvmInst="XORMyy").old()
     T.Def(0x87, "EQVM", "", "eqvm", [[VMX, VMY, VMZ]], "{0} = ~({1} ^ {2})", noVL=True)
-    T.Def(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})", noVL=True, llvmInst="EQVMyy")
+    T.Def(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})", noVL=True, llvmInst="EQVMyy").old()
     T.Def(0x94, "NNDM", "", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}", noVL=True)
-    T.Def(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}", noVL=True, llvmInst="NNDMyy")
+    T.Def(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}", noVL=True, llvmInst="NNDMyy").old()
     T.Def(0x95, "NEGM", "", "negm", [[VMX, VMY]], "{0} = ~{1}", noVL=True)
-    T.Def(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}", noVL=True, llvmInst="NEGMy")
+    T.Def(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}", noVL=True, llvmInst="NEGMy").old()
     T.Def(0xA4, "PCVM", "", "pcvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA5, "LZVM", "", "lzvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA6, "TOVM", "", "tovm", [[SX(T_u64), VMY]]).noTest();

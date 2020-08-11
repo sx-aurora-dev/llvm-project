@@ -6,7 +6,7 @@ target triple = "ve-unknown-linux-gnu"
 
 ; Function Attrs: nounwind writeonly
 define dso_local void @vbrdl_vsl_imm(i64* %0, i32 signext %1) local_unnamed_addr #0 {
-; CHECK: vbrd %v0,3
+; CHECK: vbrd %v0, 3
   %3 = icmp sgt i32 %1, 0
   br i1 %3, label %5, label %4
 
@@ -42,4 +42,4 @@ attributes #2 = { nounwind writeonly }
 !llvm.ident = !{!1}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 11.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/llvm-project.git 6494a5b9576f8e8af5147e966098a7e8a3dad78f)"}
+!1 = !{!"clang version 12.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/llvm-project.git 519569f90733e9febe5d739348106e4c980bb538)"}

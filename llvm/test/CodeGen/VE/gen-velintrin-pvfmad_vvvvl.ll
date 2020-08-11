@@ -6,7 +6,7 @@ target triple = "ve-unknown-linux-gnu"
 
 ; Function Attrs: nounwind
 define dso_local void @pvfmad_vvvvl(float* %0, float* %1, float* %2, float* %3, i32 signext %4) local_unnamed_addr #0 {
-; CHECK: pvfmad %v0,%v0,%v1,%v2
+; CHECK: pvfmad %v0, %v0, %v1, %v2
   %6 = icmp sgt i32 %4, 0
   br i1 %6, label %8, label %7
 
@@ -59,4 +59,4 @@ attributes #3 = { nounwind writeonly }
 !llvm.ident = !{!1}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 11.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/llvm-project.git 6494a5b9576f8e8af5147e966098a7e8a3dad78f)"}
+!1 = !{!"clang version 12.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/llvm-project.git 519569f90733e9febe5d739348106e4c980bb538)"}

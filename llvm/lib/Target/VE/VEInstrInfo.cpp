@@ -668,6 +668,13 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
     // replace to pvfmk.s.up and pvfmk.s.lo
 
     std::map<int, std::vector<int>> map = {
+      {VE::VFMKyal, {VE::VFMKLxal, VE::VFMKLxal}},
+      {VE::VFMKynal, {VE::VFMKLxnal, VE::VFMKLxnal}},
+      {VE::VFMKWyvl, {VE::PVFMKWUPxvl, VE::PVFMKWLOxvl}},
+      {VE::VFMKWyvyl, {VE::PVFMKWUPxvxl, VE::PVFMKWLOxvxl}},
+      {VE::VFMKSyvl, {VE::PVFMKSUPxvl, VE::PVFMKSLOxvl}},
+      {VE::VFMKSyvyl, {VE::PVFMKSUPxvxl, VE::PVFMKSLOxvxl}},
+
       {VE::veoldVFMKyal, {VE::veoldVFMKLxal, VE::veoldVFMKLxal}},
       {VE::veoldVFMKynal, {VE::veoldVFMKLxnal, VE::veoldVFMKLxnal}},
       {VE::veoldVFMKWyvl, {VE::veoldPVFMKWUPxvl, VE::veoldPVFMKWLOxvl}},
@@ -979,6 +986,10 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     }
     return true;
   }
+  case VE::VFMKyal:
+  case VE::VFMKynal:
+  case VE::VFMKWyvl: case VE::VFMKWyvyl:
+  case VE::VFMKSyvl: case VE::VFMKSyvyl:
   case VE::veoldVFMKyal:
   case VE::veoldVFMKynal:
   case VE::veoldVFMKWyvl: case VE::veoldVFMKWyvyl:

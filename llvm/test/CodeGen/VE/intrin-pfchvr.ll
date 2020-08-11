@@ -6,7 +6,7 @@ define void @test(i64 %offset, float* %p) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, 256
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    pfchv %s0,%s1
+; CHECK-NEXT:    pfchv %s0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %0 = bitcast float* %p to i8*
