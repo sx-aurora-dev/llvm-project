@@ -8,8 +8,6 @@
 
 #include "necaurora-ofld-wrapper.h"
 
-const std::string ClangCompilerCmd = TARGET_COMPILER_CLANG " --target=ve-linux";
-const std::string RVClangCompilerCmd = TARGET_COMPILER_RVCLANG " --target=ve-linux";
 const std::string NCCCompilerCmd = TARGET_COMPILER_NCC;
 
 std::string CompilerCmd;
@@ -25,8 +23,6 @@ int configureTargetCompiler(const std::string& CompilerName) {
               << std::endl;
 
   }
-  if (CompilerName == "clang")   { CompilerCmd = ClangCompilerCmd; return 0; }
-  if (CompilerName == "rvclang") { CompilerCmd = RVClangCompilerCmd; return 0; }
   if (CompilerName == "ncc")     { CompilerCmd = NCCCompilerCmd; return 0; }
   std::cerr << "nec-aurora-build: -fopenmp-nec-compiler=" << CompilerCmd
             << " not recognized"
@@ -38,10 +34,7 @@ int configureTargetCompiler(const std::string& CompilerName) {
 const char *getTargetCompiler() {
   // If no option was specified on the command line chose the builtin default
   if (CompilerCmd.empty()) {
-#ifndef DEFAULT_TARGET_COMPILER_OPTION
-#error "DEFAULT_TARGET_COMPILER_OPTION not specified during build!" 
-#endif
-    configureTargetCompiler(DEFAULT_TARGET_COMPILER_OPTION);
+    configureTargetCompiler("ncc");
   }
   return CompilerCmd.c_str();
 }

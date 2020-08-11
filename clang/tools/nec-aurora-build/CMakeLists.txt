@@ -13,30 +13,15 @@ find_program(NECAURORA_TARGET_COMPILER_NCC
   PATHS
     "/opt/nec/ve/bin/"
     ENV PATH)
-# It is okay if we do not find ncc, we can fallback to Clang or RVCLang and
-# will handlle the missing ncc in code.
+
+# We will handlle the missing ncc in code.
 if (NECAURORA_TARGET_COMPILER_NCC)
-    set(TARGET_COMPILER_NCC "${NECAURORA_TARGET_COMPILER_NCC}")
+  set(TARGET_COMPILER_NCC "${NECAURORA_TARGET_COMPILER_NCC}")
 else()
-    message(WARNING "Could not find ncc compiler. ncc will not be available as VE target compiler")
+  # Enforce default path
+  set(TARGET_COMPILER_NCC "/opt/nec/ve/bin/ncc")
+  message(WARNING "Could not find NCC compiler. Defaulting to ${TARGET_COMPILER_NCC}.")
 endif()
-
-# Set Clang and RVClang target compiler variables
-set(NECAURORA_TARGET_COMPILER_CLANG
-    "${CMAKE_INSTALL_PREFIX}/bin/clang"
-    CACHE
-    FILEPATH
-    "Path to clang used as VE target compiler")
-set(NECAURORA_TARGET_COMPILER_RVCLANG
-    "${CMAKE_INSTALL_PREFIX}/bin/rvclang"
-    CACHE FILEPATH
-    "Path to rvclang used as VE target compiler")
-
-set(NECAURORA_DEFAULT_TARGET_COMPILER
-    "ncc"
-    CACHE STRING
-    "Default target compiler for NEC OpenMP target (-fopenmp-nec-compiler=<this_value>)")
-message("OMPT for SX-Aurora: Using the default target compiler option \"${NECAURORA_DEFAULT_TARGET_COMPILER}\"" )
 
 find_library(
    NECAURORA_LIBVEORUN_STATIC
