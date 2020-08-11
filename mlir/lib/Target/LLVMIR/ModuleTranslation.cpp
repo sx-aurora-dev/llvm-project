@@ -20,6 +20,7 @@
 #include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
 #include "mlir/Support/LLVM.h"
+#include "mlir/Target/LLVMIR/TypeTranslation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 #include "llvm/ADT/SetVector.h"
@@ -303,7 +304,7 @@ ModuleTranslation::ModuleTranslation(Operation *module,
           std::make_unique<DebugTranslation>(module, *this->llvmModule)),
       ompDialect(
           module->getContext()->getRegisteredDialect<omp::OpenMPDialect>()),
-      llvmDialect(module->getContext()->getRegisteredDialect<LLVMDialect>()) {
+      typeTranslator(this->llvmModule->getContext()) {
   assert(satisfiesLLVMModule(mlirModule) &&
          "mlirModule should honor LLVM's module semantics.");
 }
@@ -399,13 +400,13 @@ ModuleTranslation::convertOmpParallel(Operation &opInst,
     llvm::Instruction *codeGenIPBBTI = codeGenIPBB->getTerminator();
 
     builder.SetInsertPoint(codeGenIPBB);
-
-    for (auto &region : opInst.getRegions()) {
-      for (auto &bb : region) {
-        auto *llvmBB = llvm::BasicBlock::Create(
-            llvmContext, "omp.par.region", codeGenIP.getBlock()->getParent());
-        blockMapping[&bb] = llvmBB;
-      }
+    // ParallelOp has only `1` region associated with it.
+    auto &region = cast<omp::ParallelOp>(opInst).getRegion();
+    for (auto &bb : region) {
+      auto *llvmBB = llvm::BasicBlock::Create(
+          llvmContext, "omp.par.region", codeGenIP.getBlock()->getParent());
+      blockMapping[&bb] = llvmBB;
+    }
 
       // Then, convert blocks one by one in topological order to ensure
       // defs are converted before uses.
@@ -433,7 +434,6 @@ ModuleTranslation::convertOmpParallel(Operation &opInst,
       // Finally, after all blocks have been traversed and values mapped,
       // connect the PHI nodes to the results of preceding blocks.
       connectPHINodes(region, valueMapping, blockMapping);
-    }
   };
 
   // TODO: Perform appropriate actions according to the data-sharing
@@ -454,10 +454,19 @@ ModuleTranslation::convertOmpParallel(Operation &opInst,
   // TODO: The various operands of parallel operation are not handled.
   // Parallel operation is created with some default options for now.
   llvm::Value *ifCond = nullptr;
+  if (auto ifExprVar = cast<omp::ParallelOp>(opInst).if_expr_var())
+    ifCond = valueMapping.lookup(ifExprVar);
   llvm::Value *numThreads = nullptr;
+  if (auto numThreadsVar = cast<omp::ParallelOp>(opInst).num_threads_var())
+    numThreads = valueMapping.lookup(numThreadsVar);
+  // TODO: Is the Parallel construct cancellable?
   bool isCancellable = false;
+  // TODO: Determine the actual alloca insertion point, e.g., the function
+  // entry or the alloca insertion point as provided by the body callback
+  // above.
+  llvm::OpenMPIRBuilder::InsertPointTy allocaIP(builder.saveIP());
   builder.restoreIP(ompBuilder->CreateParallel(
-      builder, bodyGenCB, privCB, finiCB, ifCond, numThreads,
+      builder, allocaIP, bodyGenCB, privCB, finiCB, ifCond, numThreads,
       llvm::omp::OMP_PROC_BIND_default, isCancellable));
   return success();
 }
@@ -574,7 +583,7 @@ LogicalResult ModuleTranslation::convertOperation(Operation &opInst,
   }
 
   if (auto lpOp = dyn_cast<LLVM::LandingpadOp>(opInst)) {
-    llvm::Type *ty = lpOp.getType().dyn_cast<LLVMType>().getUnderlyingType();
+    llvm::Type *ty = convertType(lpOp.getType().cast<LLVMType>());
     llvm::LandingPadInst *lpi =
         builder.CreateLandingPad(ty, lpOp.getNumOperands());
 
@@ -661,7 +670,7 @@ LogicalResult ModuleTranslation::convertBlock(Block &bb, bool ignoreArguments) {
       if (!wrappedType)
         return emitError(bb.front().getLoc(),
                          "block argument does not have an LLVM type");
-      llvm::Type *type = wrappedType.getUnderlyingType();
+      llvm::Type *type = convertType(wrappedType);
       llvm::PHINode *phi = builder.CreatePHI(type, numPredecessors);
       valueMapping[arg] = phi;
     }
@@ -683,11 +692,8 @@ LogicalResult ModuleTranslation::convertBlock(Block &bb, bool ignoreArguments) {
 /// Create named global variables that correspond to llvm.mlir.global
 /// definitions.
 LogicalResult ModuleTranslation::convertGlobals() {
-  // Lock access to the llvm context.
-  llvm::sys::SmartScopedLock<true> scopedLock(
-      llvmDialect->getLLVMContextMutex());
   for (auto op : getModuleBody(mlirModule).getOps<LLVM::GlobalOp>()) {
-    llvm::Type *type = op.getType().getUnderlyingType();
+    llvm::Type *type = convertType(op.getType());
     llvm::Constant *cst = llvm::UndefValue::get(type);
     if (op.getValueOrNull()) {
       // String attributes are treated separately because they cannot appear as
@@ -826,7 +832,7 @@ LogicalResult ModuleTranslation::convertOneFunction(LLVMFuncOp func) {
       // NB: Attribute already verified to be boolean, so check if we can indeed
       // attach the attribute to this argument, based on its type.
       auto argTy = mlirArg.getType().dyn_cast<LLVM::LLVMType>();
-      if (!argTy.getUnderlyingType()->isPointerTy())
+      if (!argTy.isPointerTy())
         return func.emitError(
             "llvm.noalias attribute attached to LLVM non-pointer argument");
       if (attr.getValue())
@@ -837,7 +843,7 @@ LogicalResult ModuleTranslation::convertOneFunction(LLVMFuncOp func) {
       // NB: Attribute already verified to be int, so check if we can indeed
       // attach the attribute to this argument, based on its type.
       auto argTy = mlirArg.getType().dyn_cast<LLVM::LLVMType>();
-      if (!argTy.getUnderlyingType()->isPointerTy())
+      if (!argTy.isPointerTy())
         return func.emitError(
             "llvm.align attribute attached to LLVM non-pointer argument");
       llvmArg.addAttrs(
@@ -887,16 +893,12 @@ LogicalResult ModuleTranslation::checkSupportedModuleOps(Operation *m) {
 }
 
 LogicalResult ModuleTranslation::convertFunctionSignatures() {
-  // Lock access to the llvm context.
-  llvm::sys::SmartScopedLock<true> scopedLock(
-      llvmDialect->getLLVMContextMutex());
-
   // Declare all functions first because there may be function calls that form a
   // call graph with cycles, or global initializers that reference functions.
   for (auto function : getModuleBody(mlirModule).getOps<LLVMFuncOp>()) {
     llvm::FunctionCallee llvmFuncCst = llvmModule->getOrInsertFunction(
         function.getName(),
-        cast<llvm::FunctionType>(function.getType().getUnderlyingType()));
+        cast<llvm::FunctionType>(convertType(function.getType())));
     llvm::Function *llvmFunc = cast<llvm::Function>(llvmFuncCst.getCallee());
     llvmFunc->setLinkage(convertLinkageToLLVM(function.linkage()));
     functionMapping[function.getName()] = llvmFunc;
@@ -911,10 +913,6 @@ LogicalResult ModuleTranslation::convertFunctionSignatures() {
 }
 
 LogicalResult ModuleTranslation::convertFunctions() {
-  // Lock access to the llvm context.
-  llvm::sys::SmartScopedLock<true> scopedLock(
-      llvmDialect->getLLVMContextMutex());
-
   // Convert functions.
   for (auto function : getModuleBody(mlirModule).getOps<LLVMFuncOp>()) {
     // Ignore external functions.
@@ -926,6 +924,10 @@ LogicalResult ModuleTranslation::convertFunctions() {
   }
 
   return success();
+}
+
+llvm::Type *ModuleTranslation::convertType(LLVMType type) {
+  return typeTranslator.translateType(type);
 }
 
 /// A helper to look up remapped operands in the value remapping table.`
@@ -940,22 +942,17 @@ ModuleTranslation::lookupValues(ValueRange values) {
   return remapped;
 }
 
-std::unique_ptr<llvm::Module>
-ModuleTranslation::prepareLLVMModule(Operation *m) {
+std::unique_ptr<llvm::Module> ModuleTranslation::prepareLLVMModule(
+    Operation *m, llvm::LLVMContext &llvmContext, StringRef name) {
   auto *dialect = m->getContext()->getRegisteredDialect<LLVM::LLVMDialect>();
   assert(dialect && "LLVM dialect must be registered");
-  // Lock the LLVM context as we might create new types here.
-  llvm::sys::SmartScopedLock<true> scopedLock(dialect->getLLVMContextMutex());
 
-  auto llvmModule = llvm::CloneModule(dialect->getLLVMModule());
-  if (!llvmModule)
-    return nullptr;
-
-  llvm::LLVMContext &llvmContext = llvmModule->getContext();
-  llvm::IRBuilder<> builder(llvmContext);
+  auto llvmModule = std::make_unique<llvm::Module>(name, llvmContext);
+  llvmModule->setDataLayout(dialect->getDataLayout());
 
   // Inject declarations for `malloc` and `free` functions that can be used in
   // memref allocation/deallocation coming from standard ops lowering.
+  llvm::IRBuilder<> builder(llvmContext);
   llvmModule->getOrInsertFunction("malloc", builder.getInt8PtrTy(),
                                   builder.getInt64Ty());
   llvmModule->getOrInsertFunction("free", builder.getVoidTy(),

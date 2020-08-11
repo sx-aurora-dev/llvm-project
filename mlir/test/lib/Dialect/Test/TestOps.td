@@ -1163,6 +1163,16 @@ def TestTypeConsumerOp : TEST_Op<"type_consumer">,
 def TestValidOp : TEST_Op<"valid", [Terminator]>,
   Arguments<(ins Variadic<AnyType>)>;
 
+def TestMergeBlocksOp : TEST_Op<"merge_blocks"> {
+  let summary = "merge_blocks operation";
+  let description = [{
+    Test op with multiple blocks that are merged with Dialect Conversion"
+  }];
+
+  let regions = (region AnyRegion:$body);
+  let results = (outs Variadic<AnyType>:$result);
+}
+
 //===----------------------------------------------------------------------===//
 // Test parser.
 //===----------------------------------------------------------------------===//
@@ -1381,6 +1391,17 @@ def FormatInferVariadicTypeFromNonVariadic
   let assemblyFormat = "$operands attr-dict `:` type($result)";
 }
 
+def FormatOptionalUnitAttr : TEST_Op<"format_optional_unit_attribute"> {
+  let arguments = (ins UnitAttr:$is_optional);
+  let assemblyFormat = "(`is_optional` $is_optional^)? attr-dict";
+}
+
+def FormatOptionalUnitAttrNoElide
+    : TEST_Op<"format_optional_unit_attribute_no_elide"> {
+  let arguments = (ins UnitAttr:$is_optional);
+  let assemblyFormat = "($is_optional^)? attr-dict";
+}
+
 //===----------------------------------------------------------------------===//
 // AllTypesMatch type inference
 //===----------------------------------------------------------------------===//
@@ -1503,6 +1524,33 @@ def TableGenBuildOp2 : TEST_Op<"tblgen_build_2"> {
 def TableGenBuildOp3 : TEST_Op<"tblgen_build_3", [SameVariadicResultSize]> {
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs Variadic<AnyType>:$resultA, Variadic<AnyType>:$resultB);
+}
+
+// Single variadic arg, non variadic results, with SameOperandsAndResultType.
+// Tests suppression of ambiguious build methods for operations with
+// SameOperandsAndResultType trait.
+def TableGenBuildOp4 : TEST_Op<"tblgen_build_4", [SameOperandsAndResultType]> {
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs AnyType:$result);
+}
+
+// Single variadic arg with SameOperandsAndResultType and InferTypeOpInterface.
+// Tests suppression of ambiguious build methods for operations with
+// SameOperandsAndResultType and InferTypeOpInterface.
+def TableGenBuildOp5 : TEST_Op<"tblgen_build_5",
+      [SameOperandsAndResultType, InferTypeOpInterface]> {
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs AnyType:$result);
+
+  let extraClassDeclaration = [{
+    static LogicalResult inferReturnTypes(MLIRContext *, 
+          Optional<Location> location, ValueRange operands,
+          DictionaryAttr attributes, RegionRange regions,
+          SmallVectorImpl<Type> &inferredReturnTypes) {
+      inferredReturnTypes.assign({operands[0].getType()});
+      return success();
+    }
+   }];
 }
 
 #endif // TEST_OPS

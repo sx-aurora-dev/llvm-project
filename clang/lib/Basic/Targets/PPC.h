@@ -67,6 +67,7 @@ class LLVM_LIBRARY_VISIBILITY PPCTargetInfo : public TargetInfo {
   bool HasExtDiv = false;
   bool HasP9Vector = false;
   bool HasSPE = false;
+  bool PairedVectorMemops = false;
   bool HasP10Vector = false;
   bool HasPCRelativeMemops = false;
 
@@ -417,7 +418,7 @@ public:
       ABI = "elfv1";
     }
 
-    if (Triple.isOSFreeBSD() || Triple.isMusl()) {
+    if (Triple.isOSFreeBSD() || Triple.isOSOpenBSD() || Triple.isMusl()) {
       LongDoubleWidth = LongDoubleAlign = 64;
       LongDoubleFormat = &llvm::APFloat::IEEEdouble();
     }

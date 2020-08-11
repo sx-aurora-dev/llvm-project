@@ -374,17 +374,7 @@ protected:
 private:
   /// An OpenMP-IR-Builder instance.
   llvm::OpenMPIRBuilder OMPBuilder;
-  /// Default const ident_t object used for initialization of all other
-  /// ident_t objects.
-  llvm::Constant *DefaultOpenMPPSource = nullptr;
-  using FlagsTy = std::pair<unsigned, unsigned>;
-  /// Map of flags and corresponding default locations.
-  using OpenMPDefaultLocMapTy = llvm::DenseMap<FlagsTy, llvm::Value *>;
-  OpenMPDefaultLocMapTy OpenMPDefaultLocMap;
-  Address getOrCreateDefaultLocation(unsigned Flags);
 
-  QualType IdentQTy;
-  llvm::StructType *IdentTy = nullptr;
   /// Map for SourceLocation and OpenMP runtime library debug locations.
   typedef llvm::DenseMap<unsigned, llvm::Value *> OpenMPDebugLocMapTy;
   OpenMPDebugLocMapTy OpenMPDebugLocMap;
@@ -1614,6 +1604,9 @@ public:
   class TargetDataInfo {
     /// Set to true if device pointer information have to be obtained.
     bool RequiresDevicePointerInfo = false;
+    /// Set to true if Clang emits separate runtime calls for the beginning and
+    /// end of the region.  These calls might have separate map type arrays.
+    bool SeparateBeginEndCalls = false;
 
   public:
     /// The array of base pointer passed to the runtime library.
@@ -1622,8 +1615,14 @@ public:
     llvm::Value *PointersArray = nullptr;
     /// The array of sizes passed to the runtime library.
     llvm::Value *SizesArray = nullptr;
-    /// The array of map types passed to the runtime library.
+    /// The array of map types passed to the runtime library for the beginning
+    /// of the region or for the entire region if there are no separate map
+    /// types for the region end.
     llvm::Value *MapTypesArray = nullptr;
+    /// The array of map types passed to the runtime library for the end of the
+    /// region, or nullptr if there are no separate map types for the region
+    /// end.
+    llvm::Value *MapTypesArrayEnd = nullptr;
     /// The array of user-defined mappers passed to the runtime library.
     llvm::Value *MappersArray = nullptr;
     /// Indicate whether any user-defined mapper exists.
@@ -1635,14 +1634,17 @@ public:
     llvm::DenseMap<const ValueDecl *, Address> CaptureDeviceAddrMap;
 
     explicit TargetDataInfo() {}
-    explicit TargetDataInfo(bool RequiresDevicePointerInfo)
-        : RequiresDevicePointerInfo(RequiresDevicePointerInfo) {}
+    explicit TargetDataInfo(bool RequiresDevicePointerInfo,
+                            bool SeparateBeginEndCalls)
+        : RequiresDevicePointerInfo(RequiresDevicePointerInfo),
+          SeparateBeginEndCalls(SeparateBeginEndCalls) {}
     /// Clear information about the data arrays.
     void clearArrayInfo() {
       BasePointersArray = nullptr;
       PointersArray = nullptr;
       SizesArray = nullptr;
       MapTypesArray = nullptr;
+      MapTypesArrayEnd = nullptr;
       MappersArray = nullptr;
       HasMapper = false;
       NumberOfPtrs = 0u;
@@ -1653,6 +1655,7 @@ public:
              MapTypesArray && (!HasMapper || MappersArray) && NumberOfPtrs;
     }
     bool requiresDevicePointerInfo() { return RequiresDevicePointerInfo; }
+    bool separateBeginEndCalls() { return SeparateBeginEndCalls; }
   };
 
   /// Emit the target data mapping code associated with \a D.

@@ -1118,7 +1118,9 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
   case ISD::SADDSAT:
   case ISD::UADDSAT:
   case ISD::SSUBSAT:
-  case ISD::USUBSAT: {
+  case ISD::USUBSAT:
+  case ISD::SSHLSAT:
+  case ISD::USHLSAT: {
     Action = TLI.getOperationAction(Node->getOpcode(), Node->getValueType(0));
     break;
   }
@@ -3398,7 +3400,7 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
     SmallVector<SDValue, 4> Halves;
     EVT HalfType = EVT(VT).getHalfSizedIntegerVT(*DAG.getContext());
     assert(TLI.isTypeLegal(HalfType));
-    if (TLI.expandMUL_LOHI(Node->getOpcode(), VT, Node, LHS, RHS, Halves,
+    if (TLI.expandMUL_LOHI(Node->getOpcode(), VT, dl, LHS, RHS, Halves,
                            HalfType, DAG,
                            TargetLowering::MulExpansionKind::Always)) {
       for (unsigned i = 0; i < 2; ++i) {
@@ -3475,6 +3477,10 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
   case ISD::SSUBSAT:
   case ISD::USUBSAT:
     Results.push_back(TLI.expandAddSubSat(Node, DAG));
+    break;
+  case ISD::SSHLSAT:
+  case ISD::USHLSAT:
+    Results.push_back(TLI.expandShlSat(Node, DAG));
     break;
   case ISD::SMULFIX:
   case ISD::SMULFIXSAT:

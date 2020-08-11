@@ -18,11 +18,6 @@ using namespace clang::driver::tools;
 using namespace clang;
 using namespace llvm::opt;
 
-const char *ve::getVEAsmModeForCPU(StringRef Name, const llvm::Triple &Triple) {
-  return llvm::StringSwitch<const char *>(Name)
-      .Default("");
-}
-
 ve::FloatABI ve::getVEFloatABI(const Driver &D, const ArgList &Args) {
   ve::FloatABI ABI = ve::FloatABI::Invalid;
   if (Arg *A = Args.getLastArg(clang::driver::options::OPT_msoft_float,

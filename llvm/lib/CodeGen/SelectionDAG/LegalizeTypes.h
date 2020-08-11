@@ -341,7 +341,7 @@ private:
   SDValue PromoteIntRes_VAARG(SDNode *N);
   SDValue PromoteIntRes_VSCALE(SDNode *N);
   SDValue PromoteIntRes_XMULO(SDNode *N, unsigned ResNo);
-  SDValue PromoteIntRes_ADDSUBSAT(SDNode *N);
+  SDValue PromoteIntRes_ADDSUBSHLSAT(SDNode *N);
   SDValue PromoteIntRes_MULFIX(SDNode *N);
   SDValue PromoteIntRes_DIVFIX(SDNode *N);
   SDValue PromoteIntRes_FLT_ROUNDS(SDNode *N);
@@ -442,6 +442,7 @@ private:
   void ExpandIntRes_UADDSUBO          (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_XMULO             (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_ADDSUBSAT         (SDNode *N, SDValue &Lo, SDValue &Hi);
+  void ExpandIntRes_SHLSAT            (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_MULFIX            (SDNode *N, SDValue &Lo, SDValue &Hi);
   void ExpandIntRes_DIVFIX            (SDNode *N, SDValue &Lo, SDValue &Hi);
 
@@ -806,7 +807,7 @@ private:
   void SplitVecRes_LOAD(LoadSDNode *LD, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_MLOAD(MaskedLoadSDNode *MLD, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_MGATHER(MaskedGatherSDNode *MGT, SDValue &Lo, SDValue &Hi);
-  void SplitVecRes_SCALAR_TO_VECTOR(SDNode *N, SDValue &Lo, SDValue &Hi);
+  void SplitVecRes_ScalarOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_SETCC(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_VECTOR_SHUFFLE(ShuffleVectorSDNode *N, SDValue &Lo,
                                   SDValue &Hi);
@@ -862,9 +863,9 @@ private:
   SDValue WidenVecRes_LOAD(SDNode* N);
   SDValue WidenVecRes_MLOAD(MaskedLoadSDNode* N);
   SDValue WidenVecRes_MGATHER(MaskedGatherSDNode* N);
-  SDValue WidenVecRes_SCALAR_TO_VECTOR(SDNode* N);
+  SDValue WidenVecRes_ScalarOp(SDNode* N);
   SDValue WidenVecRes_SELECT(SDNode* N);
-  SDValue WidenVSELECTAndMask(SDNode *N);
+  SDValue WidenVSELECTMask(SDNode *N);
   SDValue WidenVecRes_SELECT_CC(SDNode* N);
   SDValue WidenVecRes_SETCC(SDNode* N);
   SDValue WidenVecRes_STRICT_FSETCC(SDNode* N);

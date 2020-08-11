@@ -1644,6 +1644,17 @@ bool PPCInstrInfo::isPredicated(const MachineInstr &MI) const {
   return false;
 }
 
+bool PPCInstrInfo::isSchedulingBoundary(const MachineInstr &MI,
+                                        const MachineBasicBlock *MBB,
+                                        const MachineFunction &MF) const {
+  // Set MFFS and MTFSF as scheduling boundary to avoid unexpected code motion
+  // across them, since some FP operations may change content of FPSCR.
+  // TODO: Model FPSCR in PPC instruction definitions and remove the workaround
+  if (MI.getOpcode() == PPC::MFFS || MI.getOpcode() == PPC::MTFSF)
+    return true;
+  return TargetInstrInfo::isSchedulingBoundary(MI, MBB, MF);
+}
+
 bool PPCInstrInfo::PredicateInstruction(MachineInstr &MI,
                                         ArrayRef<MachineOperand> Pred) const {
   unsigned OpC = MI.getOpcode();
@@ -4624,7 +4635,8 @@ bool PPCInstrInfo::getMemOperandWithOffsetWidth(
   // Handle only loads/stores with base register followed by immediate offset.
   if (LdSt.getNumExplicitOperands() != 3)
     return false;
-  if (!LdSt.getOperand(1).isImm() || !LdSt.getOperand(2).isReg())
+  if (!LdSt.getOperand(1).isImm() ||
+      (!LdSt.getOperand(2).isReg() && !LdSt.getOperand(2).isFI()))
     return false;
 
   if (!LdSt.hasOneMemOperand())

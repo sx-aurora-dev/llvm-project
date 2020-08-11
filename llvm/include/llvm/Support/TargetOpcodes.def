@@ -294,6 +294,12 @@ HANDLE_TARGET_OPCODE(G_INTRINSIC_TRUNC)
 /// INTRINSIC round intrinsic.
 HANDLE_TARGET_OPCODE(G_INTRINSIC_ROUND)
 
+/// INTRINSIC round to integer intrinsic.
+HANDLE_TARGET_OPCODE(G_INTRINSIC_LRINT)
+
+/// INTRINSIC roundeven intrinsic.
+HANDLE_TARGET_OPCODE(G_INTRINSIC_ROUNDEVEN)
+
 /// INTRINSIC readcyclecounter
 HANDLE_TARGET_OPCODE(G_READCYCLECOUNTER)
 
@@ -468,6 +474,12 @@ HANDLE_TARGET_OPCODE(G_USUBSAT)
 
 /// Generic saturating signed subtraction.
 HANDLE_TARGET_OPCODE(G_SSUBSAT)
+
+/// Generic saturating unsigned left shift.
+HANDLE_TARGET_OPCODE(G_USHLSAT)
+
+/// Generic saturating signed left shift.
+HANDLE_TARGET_OPCODE(G_SSHLSAT)
 
 // Perform signed fixed point multiplication
 HANDLE_TARGET_OPCODE(G_SMULFIX)

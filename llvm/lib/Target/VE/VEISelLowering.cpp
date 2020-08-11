@@ -468,15 +468,19 @@ VETargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
       OutVal = DAG.getNode(ISD::ANY_EXTEND, DL, VA.getLocVT(), OutVal);
       break;
     case CCValAssign::BCvt: {
-      // Perform bitconvert from f32 to i64.
+      // Convert a float return value to i64 with padding.
+      //     63     31   0
+      //    +------+------+
+      //    | float|   0  |
+      //    +------+------+
       assert(VA.getLocVT() == MVT::i64);
       assert(VA.getValVT() == MVT::f32);
       SDValue Undef = SDValue(
           DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
       SDValue Sub_f32 = DAG.getTargetConstant(VE::sub_f32, DL, MVT::i32);
-      OutVal = SDValue(DAG.getMachineNode(
-          TargetOpcode::INSERT_SUBREG, DL, MVT::i64, Undef, OutVal, Sub_f32),
-          0);
+      OutVal = SDValue(DAG.getMachineNode(TargetOpcode::INSERT_SUBREG, DL,
+                                          MVT::i64, Undef, OutVal, Sub_f32),
+                       0);
       break;
     }
     default:
@@ -547,12 +551,17 @@ SDValue VETargetLowering::LowerFormalArguments(
                           DAG.getValueType(VA.getValVT()));
         break;
       case CCValAssign::BCvt: {
-        // Perform bitconvert from i64 to f32.
+        // Extract a float argument from i64 with padding.
+        //     63     31   0
+        //    +------+------+
+        //    | float|   0  |
+        //    +------+------+
         assert(VA.getLocVT() == MVT::i64);
         assert(VA.getValVT() == MVT::f32);
         SDValue Sub_f32 = DAG.getTargetConstant(VE::sub_f32, DL, MVT::i32);
-        Arg = SDValue(DAG.getMachineNode(
-            TargetOpcode::EXTRACT_SUBREG, DL, MVT::f32, Arg, Sub_f32), 0);
+        Arg = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, DL,
+                                         MVT::f32, Arg, Sub_f32),
+                      0);
         break;
       }
       default:
@@ -574,11 +583,12 @@ SDValue VETargetLowering::LowerFormalArguments(
     unsigned Offset = VA.getLocMemOffset() + ArgsBaseOffset;
     unsigned ValSize = VA.getValVT().getSizeInBits() / 8;
 
-    // Adjust float offset by adding 4 since VE allocates 8 bytes data and
-    // store float value like below and llvm try to load only 4 bytes data.
-    // This offset adjustment is required for only LowerFormalArguments.
-    // In LowerCall, float is bit-converted to i64, and stored whole 8 bytes,
-    // so no need any offset adjustment.
+    // Adjust offset for a float argument by adding 4 since the argument is
+    // stored in 8 bytes buffer with offset like below.  LLVM generates
+    // 4 bytes load instruction, so need to adjust offset here.  This
+    // adjustment is required in only LowerFormalArguments.  In LowerCall,
+    // a float argument is converted to i64 first, and stored as 8 bytes
+    // data, which is required by ABI, so no need for adjustment.
     //    0      4
     //    +------+------+
     //    | empty| float|
@@ -806,14 +816,19 @@ SDValue VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
       Arg = DAG.getNode(ISD::ANY_EXTEND, DL, VA.getLocVT(), Arg);
       break;
     case CCValAssign::BCvt: {
-      // Perform bitconvert from f32 to i64.
+      // Convert a float argument to i64 with padding.
+      //     63     31   0
+      //    +------+------+
+      //    | float|   0  |
+      //    +------+------+
       assert(VA.getLocVT() == MVT::i64);
       assert(VA.getValVT() == MVT::f32);
       SDValue Undef = SDValue(
           DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, DL, MVT::i64), 0);
       SDValue Sub_f32 = DAG.getTargetConstant(VE::sub_f32, DL, MVT::i32);
-      Arg = SDValue(DAG.getMachineNode(
-          TargetOpcode::INSERT_SUBREG, DL, MVT::i64, Undef, Arg, Sub_f32), 0);
+      Arg = SDValue(DAG.getMachineNode(TargetOpcode::INSERT_SUBREG, DL,
+                                       MVT::i64, Undef, Arg, Sub_f32),
+                    0);
       break;
     }
     }
@@ -935,12 +950,17 @@ SDValue VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
                        DAG.getValueType(VA.getValVT()));
       break;
     case CCValAssign::BCvt: {
-      // Perform bitconvert from i64 to f32.
+      // Extract a float return value from i64 with padding.
+      //     63     31   0
+      //    +------+------+
+      //    | float|   0  |
+      //    +------+------+
       assert(VA.getLocVT() == MVT::i64);
       assert(VA.getValVT() == MVT::f32);
       SDValue Sub_f32 = DAG.getTargetConstant(VE::sub_f32, DL, MVT::i32);
-      RV = SDValue(DAG.getMachineNode(
-          TargetOpcode::EXTRACT_SUBREG, DL, MVT::f32, RV, Sub_f32), 0);
+      RV = SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, DL,
+                                      MVT::f32, RV, Sub_f32),
+                   0);
       break;
     }
     default:
@@ -1166,6 +1186,15 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::SDIVREM, IntVT, Expand);
     setOperationAction(ISD::UDIVREM, IntVT, Expand);
 
+    // VE has no MULHU/MULHS/UMUL_LOHI/SMUL_LOHI operations.
+    // TODO: Use MPD/MUL instructions to implement SMUL_LOHI/UMUL_LOHI for
+    //       i32 type.
+    setOperationAction(ISD::MULHU, IntVT, Expand);
+    setOperationAction(ISD::MULHS, IntVT, Expand);
+    setOperationAction(ISD::UMUL_LOHI, IntVT, Expand);
+    setOperationAction(ISD::SMUL_LOHI, IntVT, Expand);
+
+    // VE has no CTTZ, ROTL, ROTR operations.
     setOperationAction(ISD::CTTZ, IntVT, Expand);
     setOperationAction(ISD::ROTL, IntVT, Expand);
     setOperationAction(ISD::ROTR, IntVT, Expand);
@@ -2843,62 +2872,62 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default:
     llvm_unreachable("Should not custom lower this!");
+  case ISD::ATOMIC_FENCE:
+    return LowerATOMIC_FENCE(Op, DAG);
+  case ISD::ATOMIC_SWAP:
+    return LowerATOMIC_SWAP(Op, DAG);
+  case ISD::BITCAST:
+    return LowerBitcast(Op, DAG);
   case ISD::BlockAddress:
     return LowerBlockAddress(Op, DAG);
-  case ISD::DYNAMIC_STACKALLOC:
-    return lowerDYNAMIC_STACKALLOC(Op, DAG);
-  case ISD::GlobalAddress:
-    return LowerGlobalAddress(Op, DAG);
-  case ISD::RETURNADDR:
-    return LowerRETURNADDR(Op, DAG, *this, Subtarget);
-  case ISD::FRAMEADDR:
-    return LowerFRAMEADDR(Op, DAG, *this, Subtarget);
-  case ISD::GlobalTLSAddress:
-    return LowerGlobalTLSAddress(Op, DAG);
+  case ISD::BUILD_VECTOR:
+    return LowerBUILD_VECTOR(Op, DAG);
   case ISD::ConstantPool:
     return LowerConstantPool(Op, DAG);
+  case ISD::CTLZ:
+  case ISD::CTLZ_ZERO_UNDEF:
+    return LowerCTLZ(Op, DAG);
+  case ISD::DYNAMIC_STACKALLOC:
+    return lowerDYNAMIC_STACKALLOC(Op, DAG);
   case ISD::EH_SJLJ_SETJMP:
     return LowerEH_SJLJ_SETJMP(Op, DAG);
   case ISD::EH_SJLJ_LONGJMP:
     return LowerEH_SJLJ_LONGJMP(Op, DAG);
   case ISD::EH_SJLJ_SETUP_DISPATCH:
     return LowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
-  case ISD::VASTART:
-    return LowerVASTART(Op, DAG);
-  case ISD::VAARG:
-    return LowerVAARG(Op, DAG);
-  case ISD::LOAD:
-    return LowerLOAD(Op, DAG, *this);
-  case ISD::STORE:
-    return LowerSTORE(Op, DAG, *this);
-  case ISD::ATOMIC_FENCE:
-    return LowerATOMIC_FENCE(Op, DAG);
-  case ISD::ATOMIC_SWAP:
-    return LowerATOMIC_SWAP(Op, DAG);
-  case ISD::CTLZ:
-  case ISD::CTLZ_ZERO_UNDEF:
-    return LowerCTLZ(Op, DAG);
+  case ISD::EXTRACT_VECTOR_ELT:
+    return LowerEXTRACT_VECTOR_ELT(Op, DAG);
+  case ISD::FRAMEADDR:
+    return LowerFRAMEADDR(Op, DAG, *this, Subtarget);
+  case ISD::GlobalAddress:
+    return LowerGlobalAddress(Op, DAG);
+  case ISD::GlobalTLSAddress:
+    return LowerGlobalTLSAddress(Op, DAG);
+  case ISD::INSERT_VECTOR_ELT:
+    return LowerINSERT_VECTOR_ELT(Op, DAG);
   case ISD::INTRINSIC_VOID:
     return LowerINTRINSIC_VOID(Op, DAG);
   case ISD::INTRINSIC_W_CHAIN:
     return LowerINTRINSIC_W_CHAIN(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN:
     return LowerINTRINSIC_WO_CHAIN(Op, DAG);
-  case ISD::BUILD_VECTOR:
-    return LowerBUILD_VECTOR(Op, DAG);
-  case ISD::INSERT_VECTOR_ELT:
-    return LowerINSERT_VECTOR_ELT(Op, DAG);
-  case ISD::EXTRACT_VECTOR_ELT:
-    return LowerEXTRACT_VECTOR_ELT(Op, DAG);
-  case ISD::BITCAST:
-    return LowerBitcast(Op, DAG);
-  case ISD::VECTOR_SHUFFLE:
-    return LowerVECTOR_SHUFFLE(Op, DAG);
-  case ISD::MSCATTER:
+  case ISD::LOAD:
+    return LowerLOAD(Op, DAG, *this);
   case ISD::MGATHER:
+  case ISD::MSCATTER:
     return LowerMGATHER_MSCATTER(Op, DAG);
   case ISD::MLOAD:
     return LowerMLOAD(Op, DAG);
+  case ISD::RETURNADDR:
+    return LowerRETURNADDR(Op, DAG, *this, Subtarget);
+  case ISD::STORE:
+    return LowerSTORE(Op, DAG, *this);
+  case ISD::VAARG:
+    return LowerVAARG(Op, DAG);
+  case ISD::VASTART:
+    return LowerVASTART(Op, DAG);
+  case ISD::VECTOR_SHUFFLE:
+    return LowerVECTOR_SHUFFLE(Op, DAG);
   }
 }
 /// } Custom Lower
@@ -4071,8 +4100,8 @@ static bool isI32Insn(const SDNode *User, const SDNode *N) {
     // doesn't optimize trunc now.
     return false;
   case ISD::SELECT_CC:
-    if (User->getOperand(0).getNode() == N ||
-        User->getOperand(1).getNode() == N)
+    if (User->getOperand(2).getNode() != N &&
+        User->getOperand(3).getNode() != N)
       return true;
     LLVM_FALLTHROUGH;
   case ISD::AND:
@@ -4085,19 +4114,26 @@ static bool isI32Insn(const SDNode *User, const SDNode *N) {
     for (SDNode::use_iterator UI = User->use_begin(), UE = User->use_end();
          UI != UE; ++UI) {
       switch ((*UI)->getOpcode()) {
+      default:
+        // If the use is an instruction which treats the source operand as i32,
+        // it is safe to avoid truncate here.
+        if (isI32Insn(*UI, N))
+          continue;
+        break;
       case ISD::ANY_EXTEND:
       case ISD::SIGN_EXTEND:
-      case ISD::ZERO_EXTEND:
-        // (ext ... (select ... (trunc ...))) is not optimized by llvm, so
-        // optimize it at here.  Similar combination through AND/OR/XOR should
-        // be optimized by llvm, so leave it as is.
+      case ISD::ZERO_EXTEND: {
+        // Special optimizations to the combination of ext and trunc.
+        // (ext ... (select ... (trunc ...))) is safe to avoid truncate here
+        // since this truncate instruction clears higher 32 bits which is filled
+        // by one of ext instructions later.
+        assert(N->getValueType(0) == MVT::i32 &&
+               "find truncate to not i32 integer");
         if (User->getOpcode() == ISD::SELECT_CC ||
             User->getOpcode() == ISD::SELECT)
           continue;
         break;
-      default:
-        if (isI32Insn(*UI, N))
-          continue;
+      }
       }
       return false;
     }
@@ -4128,11 +4164,12 @@ SDValue VETargetLowering::combineTRUNCATE(SDNode *N,
     return SDValue();
 
   // Check all use of this TRUNCATE.
-  for (SDNode::use_iterator UI = N->use_begin(), UE = N->use_end();
-       UI != UE; ++UI) {
+  for (SDNode::use_iterator UI = N->use_begin(), UE = N->use_end(); UI != UE;
+       ++UI) {
     SDNode *User = *UI;
 
-    // Make sure that we're not going to replace TRUNCATE for non i32 instructions.
+    // Make sure that we're not going to replace TRUNCATE for non i32
+    // instructions.
     //
     // FIXME: Although we could sometimes handle this, and it does occur in
     // practice that one of the condition inputs to the select is also one of
@@ -4143,9 +4180,10 @@ SDValue VETargetLowering::combineTRUNCATE(SDNode *N,
     return SDValue();
   }
 
-  SDValue Sub_i32 = DAG.getTargetConstant(VE::sub_i32, DL, MVT::i32);
-  return SDValue(DAG.getMachineNode(
-      TargetOpcode::EXTRACT_SUBREG, DL, VT, N->getOperand(0), Sub_i32), 0);
+  SDValue SubI32 = DAG.getTargetConstant(VE::sub_i32, DL, MVT::i32);
+  return SDValue(DAG.getMachineNode(TargetOpcode::EXTRACT_SUBREG, DL, VT,
+                                    N->getOperand(0), SubI32),
+                 0);
 }
 
 SDValue VETargetLowering::combineSetCC(SDNode *N,
@@ -4256,17 +4294,18 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
                                             DAGCombinerInfo &DCI) const {
   SDLoc dl(N);
   switch (N->getOpcode()) {
-  default: break;
+  default:
+    break;
+  case ISD::ANY_EXTEND:
   case ISD::SIGN_EXTEND:
   case ISD::ZERO_EXTEND:
-  case ISD::ANY_EXTEND:
     return combineExtBoolTrunc(N, DCI);
-  case ISD::TRUNCATE:
-    return combineTRUNCATE(N, DCI);
   case ISD::SETCC:
     return combineSetCC(N, DCI);
   case ISD::SELECT_CC:
     return combineSelectCC(N, DCI);
+  case ISD::TRUNCATE:
+    return combineTRUNCATE(N, DCI);
   }
 
   return SDValue();

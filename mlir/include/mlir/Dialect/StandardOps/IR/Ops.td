@@ -1409,7 +1409,7 @@ def DimOp : Std_Op<"dim", [NoSideEffect]> {
     ```
   }];
 
-  let arguments = (ins AnyTypeOf<[AnyMemRef, AnyTensor],
+  let arguments = (ins AnyTypeOf<[AnyRankedOrUnrankedMemRef, AnyTensor],
                                  "any tensor or memref type">:$memrefOrTensor,
                        Index:$index);
   let results = (outs Index:$result);
@@ -2024,16 +2024,18 @@ def PrefetchOp : Std_Op<"prefetch"> {
 def RankOp : Std_Op<"rank", [NoSideEffect]> {
   let summary = "rank operation";
   let description = [{
-    The `rank` operation takes a tensor operand and returns its rank.
+    The `rank` operation takes a memref/tensor operand and returns its rank.
 
     Example:
 
     ```mlir
-    %1 = rank %0 : tensor<*xf32>
+    %1 = rank %arg0 : tensor<*xf32>
+    %2 = rank %arg1 : memref<*xf32>
     ```
   }];
 
-  let arguments = (ins AnyTensor);
+  let arguments = (ins AnyTypeOf<[AnyRankedOrUnrankedMemRef, AnyTensor],
+                                 "any tensor or memref type">:$memrefOrTensor);
   let results = (outs Index);
   let verifier = ?;
 
@@ -2044,7 +2046,7 @@ def RankOp : Std_Op<"rank", [NoSideEffect]> {
     }]>];
 
   let hasFolder = 1;
-  let assemblyFormat = "operands attr-dict `:` type(operands)";
+  let assemblyFormat = "$memrefOrTensor attr-dict `:` type($memrefOrTensor)";
 }
 
 //===----------------------------------------------------------------------===//
@@ -2932,24 +2934,26 @@ def TensorLoadOp : Std_Op<"tensor_load",
     ```
   }];
 
-  let arguments = (ins Arg<AnyMemRef, "the reference to load from",
-                           [MemRead]>:$memref);
+  let arguments = (ins Arg<AnyRankedOrUnrankedMemRef,
+                       "the reference to load from", [MemRead]>:$memref);
   let results = (outs AnyTensor:$result);
   // TensorLoadOp is fully verified by traits.
   let verifier = ?;
 
   let builders = [OpBuilder<
     "OpBuilder &builder, OperationState &result, Value memref", [{
-      auto memrefType = memref.getType().cast<MemRefType>();
-      auto resultType = RankedTensorType::get(memrefType.getShape(),
-                                              memrefType.getElementType());
       result.addOperands(memref);
-      result.addTypes(resultType);
+      result.addTypes(getTensorTypeFromMemRefType(memref.getType()));
   }]>];
 
   let extraClassDeclaration = [{
     /// The result of a tensor_load is always a tensor.
-    TensorType getType() { return getResult().getType().cast<TensorType>(); }
+    TensorType getType() { 
+      Type resultType = getResult().getType();
+      if (resultType.isa<TensorType>())
+        return resultType.cast<TensorType>();
+      return {};
+    }
   }];
 
   let assemblyFormat = "$memref attr-dict `:` type($memref)";
@@ -2979,9 +2983,8 @@ def TensorStoreOp : Std_Op<"tensor_store",
     ```
   }];
 
-  let arguments = (ins AnyTensor:$tensor,
-                       Arg<AnyMemRef, "the reference to store to",
-                           [MemWrite]>:$memref);
+  let arguments = (ins AnyTensor:$tensor, Arg<AnyRankedOrUnrankedMemRef,
+                       "the reference to store to", [MemWrite]>:$memref);
   // TensorStoreOp is fully verified by traits.
   let verifier = ?;
 
