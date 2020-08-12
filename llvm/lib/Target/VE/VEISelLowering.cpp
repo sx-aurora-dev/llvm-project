@@ -1304,6 +1304,9 @@ static SDValue PeekThroughCasts(SDValue Op) {
   default:
     return Op;
 
+  case ISD::AssertSext:
+  case ISD::AssertZext:
+  case ISD::AssertAlign:
   case ISD::ANY_EXTEND:
   case ISD::ZERO_EXTEND:
   case ISD::SIGN_EXTEND:
