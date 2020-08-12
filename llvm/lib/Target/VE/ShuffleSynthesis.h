@@ -178,6 +178,11 @@ using PartialShuffleCB =
     std::function<void(AbstractShuffleOp *, PartialShuffleState)>;
 
 struct ShuffleStrategy {
+  // Whether this strategy is applicable to non-packed shuffles
+  static bool supportsNormalMode() { return false; }
+  // Whether this strategy is applicable to packed shuffles
+  static bool supportsPackedMode() { return false; }
+
   virtual ~ShuffleStrategy() {}
 
   // apply the shuffle strategy, reporting all partial shuffles that were
@@ -199,6 +204,9 @@ class ShuffleAnalysis {
 
   template<typename Strategy>
   IterControl run(unsigned NumRounds, MaskView & MV, PartialShuffleState &PSS) {
+    if ((MV.getNumElements() > StandardVectorWidth) & !Strategy::supportsPackedMode())
+      return IterControl::IterContinue;
+
     Strategy Strat;
     return runStrategy(Strat, NumRounds, MV, PSS);
   }
