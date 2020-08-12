@@ -1186,30 +1186,54 @@ static bool isInNest(Instruction& I, LoopNestInfo NestInfo) {
   // is if an instruction is inside this path. But, a loop contains()
   // instructions not only in the loop itself (i.e. not in any subloops
   // which could be considered a single node in the tree) but also instructions
-  // in all the subloops (i.e. instructions in all sub-trees). So, the idea is to
-  // take the path from the innermost back to the outermost and keep the
-  // one-before-the-outermost in this path. This is basically the only sub-tree
-  // in which we're interested. Any instruction "in the nest" is any
-  // instruction either in that subtree or in the outermost loop excluding other
-  // subloops. So, by checking if the instruction is in any of the other
-  // subloops, we check if it is any subtree that we don't want to analyze.
+  // in all the subloops (i.e. instructions in all sub-trees). So, the idea is
+  // to take the path from the innermost back to the outermost and keep the
+  // one-before loop every time in this path. This is basically the only
+  // sub-tree in which we're interested. Any instruction "in the nest" is any
+  // instruction either in that subtree or in the outermost loop. So, by
+  // checking if the instruction is in any of the other subloops, we check if it
+  // is any subtree that we don't want to analyze. Example:
+   
+  //   2
+  //  /
+  // 1     4
+  //  \  /
+  //   3
+  //     \
+  //      5
+
+  // Imagine this tree (with the root being 1, the outermost loop and going
+  // towards the right we find the leaves, the innermost loops) that could
+  // come from this source:
+  // for (i) {    - 1 -
+  //   for (j)    - 2 -
+  //   for (j) {  - 3 -
+  //     for (k)  - 4 -
+  //     for (k)  - 5 -
+  //   }
+  // }
+  // And say we're interested in the nest 1 - 3 - 4
+  // The states are going to go like:
+  // OneBefore = 4
+  // L = 3           (we want to check that the instruction is not in the
+  //                  subtree 5)
+  // OneBefore = 3
+  // L = 1           (we want to check that the instruction is not in the
+  //                  subtree 2)
 
   const Loop *L = NestInfo.InnermostLoop;
-  int NumDimensions = NestInfo.NumDimensions;
-  if (NumDimensions == 1)
+  if (L == NestInfo.AnalyzedLoop)
     return true;
-  // Remember, NestInfo.AnalyzedLoop is the outermost loop
-  // in the nest.
-  const Loop *OneBeforeOuterMost;
-  NumDimensions--;
-  while (NumDimensions) {
-    OneBeforeOuterMost = L;
+  const Loop *OneBefore;
+  do {
+    OneBefore = L;
     L = L->getParentLoop();
-    NumDimensions--;
-  }
-  for (const Loop *Sub : NestInfo.AnalyzedLoop->getSubLoops())
-    if (Sub != OneBeforeOuterMost && Sub->contains(&I))
-      return false;
+    for (const Loop *Sub : L->getSubLoops())
+      if (Sub != OneBefore && Sub->contains(&I))
+        return false;
+    // Remember, NestInfo.AnalyzedLoop is the outermost loop
+    // in the nest.
+  } while (L != NestInfo.AnalyzedLoop);
   return true;
 }
 
