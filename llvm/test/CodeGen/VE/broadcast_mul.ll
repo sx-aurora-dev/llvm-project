@@ -85,7 +85,7 @@ define x86_regcallcc <256 x float> @mulbrdv256f32(<256 x float>, float) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvfmul.up %v0, %s0, %v0
+; CHECK-NEXT:    vfmul.s %v0, %s0, %v0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %vec0 = insertelement <256 x float> undef, float %1, i32 0
   %vec = shufflevector <256 x float> %vec0, <256 x float> undef, <256 x i32> zeroinitializer
