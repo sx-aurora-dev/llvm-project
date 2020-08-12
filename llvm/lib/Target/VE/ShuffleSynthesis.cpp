@@ -672,6 +672,11 @@ struct ScalarTransferOp final : public AbstractShuffleOp {
 };
 
 struct ScalarTransferStrategy final : public ShuffleStrategy {
+  // Whether this strategy is applicable to non-packed shuffles
+  static bool supportsNormalMode() { return true; }
+  // Whether this strategy is applicable to packed shuffles
+  static bool supportsPackedMode() { return true; }
+
   void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
                           PartialShuffleCB CB) override {
     PartialShuffleState FinalState;
@@ -735,6 +740,11 @@ struct VMVShuffleOp final : public AbstractShuffleOp {
 };
 
 struct VMVShuffleStrategy final : public ShuffleStrategy {
+  // Whether this strategy is applicable to non-packed shuffles
+  static bool supportsNormalMode() { return true; }
+  // Whether this strategy is applicable to packed shuffles
+  static bool supportsPackedMode() { return false; }
+
   // greedily match the longest subvector move from \p MV starting at \p
   // SrcStartPos and reading from the source vector \p SrcValue.
   // \returns  the last matching position
@@ -957,8 +967,12 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
   }
 };
 
-class LegacyPatternStrategy final : public ShuffleStrategy {
-public:
+struct LegacyPatternStrategy final : public ShuffleStrategy {
+  // Whether this strategy is applicable to non-packed shuffles
+  static bool supportsNormalMode() { return true; }
+  // Whether this strategy is applicable to packed shuffles
+  static bool supportsPackedMode() { return true; }
+
   void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
                           PartialShuffleCB CB) override {
     // Seek the largest, lowest shift amount subvector
@@ -968,6 +982,8 @@ public:
     int64_t Stride = 0;
     unsigned BlockLength = 0;
     unsigned NumElems = 0;
+
+    bool IsPackedMode = MV.getNumElements() > StandardVectorWidth;
 
     BVKind PatternKind =
         AnalyzeMaskView(MV, FirstDef, LastDef, Stride, BlockLength, NumElems);
@@ -980,12 +996,14 @@ public:
     // FIXME move this to TTI
     const unsigned InsertThreshold = 4;
 
+    bool SkipOtherThanBroadcast =
+        (NumElems < InsertThreshold) || (IsPackedMode);
     // Always use broadcast if you can -> this enables implicit broadcast
     // matching during isel (eg vfadd_vsvl) if one operand is a VEC_BROADCAST
     // node
     // TODO preserve the bitmask in VEC_BROADCAST to expand VEC_BROADCAST late
     // into LVS when its not folded
-    if ((PatternKind != BVKind::Broadcast) && (NumElems < InsertThreshold)) {
+    if ((PatternKind != BVKind::Broadcast) && SkipOtherThanBroadcast) {
       return;
     }
 
@@ -1039,8 +1057,12 @@ struct BroadcastOp final : public AbstractShuffleOp {
   }
 };
 
-class BroadcastStrategy final : public ShuffleStrategy {
-public:
+struct BroadcastStrategy final : public ShuffleStrategy {
+  // Whether this strategy is applicable to non-packed shuffles
+  static bool supportsNormalMode() { return true; }
+  // Whether this strategy is applicable to packed shuffles
+  static bool supportsPackedMode() { return false; }
+
   void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
                           PartialShuffleCB CB) override {
 
@@ -1144,8 +1166,12 @@ struct ConstantElemOp final : public AbstractShuffleOp {
   }
 };
 
-class ConstantElemStrategy final : public ShuffleStrategy {
-public:
+struct ConstantElemStrategy final : public ShuffleStrategy {
+  // Whether this strategy is applicable to non-packed shuffles
+  static bool supportsNormalMode() { return true; }
+  // Whether this strategy is applicable to packed shuffles
+  static bool supportsPackedMode() { return true; }
+
   void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
                           PartialShuffleCB CB) override {
 
@@ -1302,8 +1328,12 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
   }
 };
 
-class GatherStrategy final : public ShuffleStrategy {
-public:
+struct GatherStrategy final : public ShuffleStrategy {
+  // Whether this strategy is applicable to non-packed shuffles
+  static bool supportsNormalMode() { return true; }
+  // Whether this strategy is applicable to packed shuffles
+  static bool supportsPackedMode() { return true; }
+
   void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
                           PartialShuffleCB CB) override {
 
