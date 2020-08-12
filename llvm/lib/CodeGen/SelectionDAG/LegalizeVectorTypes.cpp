@@ -872,6 +872,12 @@ void DAGTypeLegalizer::SplitVectorResult(SDNode *N, unsigned ResNo) {
     SplitVecRes_ExtVecInRegOp(N, Lo, Hi);
     break;
 
+  case ISD::AssertSext:
+  case ISD::AssertZext:
+  case ISD::AssertAlign:
+    SplitVecRes_AssertOp(N, Lo, Hi);
+    break;
+
   case ISD::ABS:
   case ISD::BITREVERSE:
   case ISD::BSWAP:
@@ -1268,6 +1274,43 @@ void DAGTypeLegalizer::SplitVecRes_InregOp(SDNode *N, SDValue &Lo,
                    DAG.getValueType(LoVT));
   Hi = DAG.getNode(N->getOpcode(), dl, LHSHi.getValueType(), LHSHi,
                    DAG.getValueType(HiVT));
+}
+
+void DAGTypeLegalizer::SplitVecRes_AssertOp(SDNode *N, SDValue &Lo,
+                                                 SDValue &Hi) {
+  unsigned Opcode = N->getOpcode();
+  SDValue N0 = N->getOperand(0);
+
+  SDLoc dl(N);
+  SDValue InLo, InHi;
+
+  if (getTypeAction(N0.getValueType()) == TargetLowering::TypeSplitVector)
+    GetSplitVector(N0, InLo, InHi);
+  else
+    std::tie(InLo, InHi) = DAG.SplitVectorOperand(N, 0);
+
+  EVT InLoVT = InLo.getValueType();
+  unsigned InNumElements = InLoVT.getVectorNumElements();
+
+  EVT OutLoVT, OutHiVT;
+  std::tie(OutLoVT, OutHiVT) = DAG.GetSplitDestVTs(N->getValueType(0));
+  unsigned OutNumElements = OutLoVT.getVectorNumElements();
+
+  // *_EXTEND_VECTOR_INREG instructions extend the lowest elements of the
+  // input vector (i.e. we only use InLo):
+  // OutLo will extend the first OutNumElements from InLo.
+  // OutHi will extend the next OutNumElements from InLo.
+
+  // Shuffle the elements from InLo for OutHi into the bottom elements to
+  // create a 'fake' InHi.
+  SmallVector<int, 8> SplitHi(InNumElements, -1);
+  for (unsigned i = 0; i != OutNumElements; ++i)
+    SplitHi[i] = i + OutNumElements;
+  InHi = DAG.getVectorShuffle(InLoVT, dl, InLo, DAG.getUNDEF(InLoVT), SplitHi);
+
+  SDValue N1 = N->getOperand(1);
+  Lo = DAG.getNode(Opcode, dl, OutLoVT, {InLo, N1});
+  Hi = DAG.getNode(Opcode, dl, OutHiVT, {InHi, N1});
 }
 
 void DAGTypeLegalizer::SplitVecRes_ExtVecInRegOp(SDNode *N, SDValue &Lo,

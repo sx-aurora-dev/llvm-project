@@ -800,6 +800,7 @@ private:
   void SplitVecRes_ExtendOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_InregOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_ExtVecInRegOp(SDNode *N, SDValue &Lo, SDValue &Hi);
+  void SplitVecRes_AssertOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_StrictFPOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_OverflowOp(SDNode *N, unsigned ResNo,
                               SDValue &Lo, SDValue &Hi);
