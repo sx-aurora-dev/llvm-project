@@ -28,7 +28,7 @@ define x86_regcallcc <256 x i32> @__regcall3__calc3(<256 x i32>, <256 x i32>, <2
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lea %s1, 416(, %s11)
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vldl.zx %v8,4,%s1
+; CHECK-NEXT:    vldl.zx %v8, 4, %s1
 ; CHECK-NEXT:    vadds.w.sx %v0, %v1, %v0
 ; CHECK-NEXT:    vadds.w.sx %v1, %v3, %v2
 ; CHECK-NEXT:    vadds.w.sx %v2, %v5, %v4

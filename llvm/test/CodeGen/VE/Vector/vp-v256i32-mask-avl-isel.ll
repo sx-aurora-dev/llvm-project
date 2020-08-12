@@ -6,7 +6,7 @@ define void @test_vp_harness(<256 x i32>* %Out, <256 x i32> %i0) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vstl %v0,4,%s0
+; CHECK-NEXT:    vstl %v0, 4, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   store <256 x i32> %i0, <256 x i32>* %Out
   ret void
@@ -24,7 +24,7 @@ define void @test_vp_add_sub_mul(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32>
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vstl %v0,4,%s0
+; CHECK-NEXT:    vstl %v0, 4, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r0 = call <256 x i32> @llvm.vp.add.v256i32(<256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i32> @llvm.vp.sub.v256i32(<256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n)
@@ -44,7 +44,7 @@ define void @test_vp_su_div(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i1,
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vstl %v0,4,%s0
+; CHECK-NEXT:    vstl %v0, 4, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r0 = call <256 x i32> @llvm.vp.sdiv.v256i32(<256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i32> @llvm.vp.udiv.v256i32(<256 x i32> %r0, <256 x i32> %i1, <256 x i1> %m, i32 %n)
@@ -68,7 +68,7 @@ define void @test_vp_bitarith(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vstl %v0,4,%s0
+; CHECK-NEXT:    vstl %v0, 4, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r0 = call <256 x i32> @llvm.vp.and.v256i32(<256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i32> @llvm.vp.or.v256i32(<256 x i32> %r0, <256 x i32> %i1, <256 x i1> %m, i32 %n)
@@ -87,14 +87,12 @@ define void @test_vp_memory(<256 x i32>* %VecPtr, <256 x i32*> %PtrVec, <256 x i
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v1
-; CHECK-NEXT:    # implicit-def: $v2
-; CHECK-NEXT:    vmulu.l %v2,4,%v1,%vm1
-; CHECK-NEXT:    # implicit-def: $v1
-; CHECK-NEXT:    vaddu.l %v1,%s0,%v2,%vm1
-; CHECK-NEXT:    vgtl.zx %v1,%v1,0,0,%vm1
+; CHECK-NEXT:    vmulu.l %v1, 4, %v1, %vm1
+; CHECK-NEXT:    vaddu.l %v1, %s0, %v1, %vm1
+; CHECK-NEXT:    vgtl.zx %v1, %v1, 0, 0, %vm1
 ; CHECK-NEXT:    vgtl.zx %v2, %v0, 0, 0, %vm1
 ; CHECK-NEXT:    vscl %v0, %v1, 0, 0, %vm1
-; CHECK-NEXT:    vstl %v2,4,%s0,%vm1
+; CHECK-NEXT:    vstl %v2, 4, %s0, %vm1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r0 = call <256 x i32> @llvm.vp.load.v256i32.p0v256i32(<256 x i32>* %VecPtr, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i32> @llvm.vp.gather.v256i32.v256p0i32(<256 x i32*> %PtrVec, <256 x i1> %m, i32 %n)
