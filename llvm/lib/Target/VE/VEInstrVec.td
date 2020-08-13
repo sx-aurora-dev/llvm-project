@@ -269,7 +269,7 @@ multiclass VSCmm<string opcStr, string argStr, bits<8>opc, dag dag_in> {
   defm "" : VSCbm<opcStr, argStr, opc, dag_in>;
   let m = ?, VE_VLWithMask = 1 in
   defm m : VSCbm<opcStr, argStr#", $m", opc, !con(dag_in, (ins VM_:$m))>;
-  let isCodeGenOnly = 1, VE_VLWithMask = 1 in
+  let m = ?, isCodeGenOnly = 1, VE_VLWithMask = 1 in
   defm x : VSCbm<opcStr, argStr#", $m", opc, !con(dag_in, (ins VM:$m))>;
 }
 let VE_VLIndex = 4 in

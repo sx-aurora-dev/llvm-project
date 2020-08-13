@@ -383,14 +383,14 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         .addReg(SubTmp, getKillRegState(true));
     MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
   } else if (VE::VMRegClass.contains(DestReg, SrcReg))
-    BuildMI(MBB, I, DL, get(VE::veoldANDMxx), DestReg)
+    BuildMI(MBB, I, DL, get(VE::ANDMxx), DestReg)
         .addReg(VE::VM0)
         .addReg(SrcReg, getKillRegState(KillSrc));
   else if (VE::VM512RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
     const unsigned subRegIdx[] = { VE::sub_vm_even, VE::sub_vm_odd };
     unsigned int numSubRegs = 2;
-    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::veoldANDMxx),
+    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDMxx),
                     numSubRegs, subRegIdx);
   } else if (VE::F128RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
@@ -899,12 +899,12 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   }
 #endif
 
-  case VE::veoldANDMyy: buildVMRInst(MI, get(VE::veoldANDMxx)); return true;
-  case VE::veoldORMyy:  buildVMRInst(MI, get(VE::veoldORMxx)); return true;
-  case VE::veoldXORMyy: buildVMRInst(MI, get(VE::veoldXORMxx)); return true;
-  case VE::veoldEQVMyy: buildVMRInst(MI, get(VE::veoldEQVMxx)); return true;
-  case VE::veoldNNDMyy: buildVMRInst(MI, get(VE::veoldNNDMxx)); return true;
-  case VE::veoldNEGMy: buildVMRInst(MI, get(VE::veoldNEGMx)); return true;
+  case VE::veoldANDMyy: buildVMRInst(MI, get(VE::ANDMxx)); return true;
+  case VE::veoldORMyy:  buildVMRInst(MI, get(VE::ORMxx)); return true;
+  case VE::veoldXORMyy: buildVMRInst(MI, get(VE::XORMxx)); return true;
+  case VE::veoldEQVMyy: buildVMRInst(MI, get(VE::EQVMxx)); return true;
+  case VE::veoldNNDMyy: buildVMRInst(MI, get(VE::NNDMxx)); return true;
+  case VE::veoldNEGMy: buildVMRInst(MI, get(VE::NEGMx)); return true;
 
   case VE::LVMyir:
   case VE::LVMyir_y: {

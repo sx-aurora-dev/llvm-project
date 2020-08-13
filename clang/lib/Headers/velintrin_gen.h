@@ -409,6 +409,10 @@
 #define _vel_pveqv_vsvMvl __builtin_ve_vl_pveqv_vsvMvl
 #define _vel_vseq_vl __builtin_ve_vl_vseq_vl
 #define _vel_vseq_vvl __builtin_ve_vl_vseq_vvl
+#define _vel_pvseqlo_vl __builtin_ve_vl_pvseqlo_vl
+#define _vel_pvseqlo_vvl __builtin_ve_vl_pvseqlo_vvl
+#define _vel_pvsequp_vl __builtin_ve_vl_pvsequp_vl
+#define _vel_pvsequp_vvl __builtin_ve_vl_pvsequp_vvl
 #define _vel_pvseq_vl __builtin_ve_vl_pvseq_vl
 #define _vel_pvseq_vvl __builtin_ve_vl_pvseq_vvl
 #define _vel_vsll_vvvl __builtin_ve_vl_vsll_vvvl

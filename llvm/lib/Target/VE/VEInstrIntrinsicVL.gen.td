@@ -607,6 +607,10 @@ def : Pat<(int_ve_vl_pveqv_vvvMvl v256f64:$vy, v256f64:$vz, v8i64:$vm, v256f64:$
 def : Pat<(int_ve_vl_pveqv_vsvMvl i64:$sy, v256f64:$vz, v8i64:$vm, v256f64:$pt, i32:$vl), (PVEQVrvxl_v i64:$sy, v256f64:$vz, v8i64:$vm, i32:$vl, v256f64:$pt)>;
 def : Pat<(int_ve_vl_vseq_vl i32:$vl), (VSEQl i32:$vl)>;
 def : Pat<(int_ve_vl_vseq_vvl v256f64:$pt, i32:$vl), (VSEQl_v i32:$vl, v256f64:$pt)>;
+def : Pat<(int_ve_vl_pvseqlo_vl i32:$vl), (PVSEQLOl i32:$vl)>;
+def : Pat<(int_ve_vl_pvseqlo_vvl v256f64:$pt, i32:$vl), (PVSEQLOl_v i32:$vl, v256f64:$pt)>;
+def : Pat<(int_ve_vl_pvsequp_vl i32:$vl), (PVSEQUPl i32:$vl)>;
+def : Pat<(int_ve_vl_pvsequp_vvl v256f64:$pt, i32:$vl), (PVSEQUPl_v i32:$vl, v256f64:$pt)>;
 def : Pat<(int_ve_vl_pvseq_vl i32:$vl), (PVSEQl i32:$vl)>;
 def : Pat<(int_ve_vl_pvseq_vvl v256f64:$pt, i32:$vl), (PVSEQl_v i32:$vl, v256f64:$pt)>;
 def : Pat<(int_ve_vl_vsll_vvvl v256f64:$vz, v256f64:$vy, i32:$vl), (VSLLvvl v256f64:$vz, v256f64:$vy, i32:$vl)>;

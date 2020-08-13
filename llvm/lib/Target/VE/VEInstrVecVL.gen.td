@@ -5797,6 +5797,44 @@ def veoldVSEQl_v : RV<0x99, (outs V64:$vx), (ins I32:$vl, V64:$pt),
   let DisableEncoding = "$vl";
 }
 
+// inst=VSEQ asm=pvseq.lo intrisic=pvseqlo_vl
+def veoldPVSEQLOl : RV<0x99, (outs V64:$vx), (ins I32:$vl),
+       "pvseq.lo $vx", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VSEQ asm=pvseq.lo intrisic=pvseqlo_vvl
+def veoldPVSEQLOl_v : RV<0x99, (outs V64:$vx), (ins I32:$vl, V64:$pt),
+       "pvseq.lo $vx", [], NoItinerary>
+{
+  let Constraints = "$vx = $pt";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VSEQ asm=pvseq.up intrisic=pvsequp_vl
+def veoldPVSEQUPl : RV<0x99, (outs V64:$vx), (ins I32:$vl),
+       "pvseq.up $vx", [], NoItinerary>
+{
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
+// inst=VSEQ asm=pvseq.up intrisic=pvsequp_vvl
+def veoldPVSEQUPl_v : RV<0x99, (outs V64:$vx), (ins I32:$vl, V64:$pt),
+       "pvseq.up $vx", [], NoItinerary>
+{
+  let Constraints = "$vx = $pt";
+  let DecoderNamespace = "VEL";
+  let isCodeGenOnly = 1;
+  let DisableEncoding = "$vl";
+}
+
 // inst=VSEQ asm=pvseq intrisic=pvseq_vl
 def veoldPVSEQl : RV<0x99, (outs V64:$vx), (ins I32:$vl),
        "pvseq $vx", [], NoItinerary>

@@ -144,7 +144,7 @@ define x86_regcallcc <512 x float> @__regcall3__copyv512f32(<512 x float>, <512 
 define x86_regcallcc <256 x i1> @__regcall3__copyv256i1(<256 x i1>, <256 x i1> returned) {
 ; CHECK-LABEL: __regcall3__copyv256i1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    andm %vm1,%vm0,%vm2
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret <256 x i1> %1
 }
@@ -153,8 +153,8 @@ define x86_regcallcc <256 x i1> @__regcall3__copyv256i1(<256 x i1>, <256 x i1> r
 define x86_regcallcc <512 x i1> @__regcall3__copyv512i1(<512 x i1>, <512 x i1> returned) {
 ; CHECK-LABEL: __regcall3__copyv512i1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    andm %vm2,%vm0,%vm4
-; CHECK-NEXT:    andm %vm3,%vm0,%vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
 ; CHECK-NEXT:    or %s11, 0, %s9
   ret <512 x i1> %1
 }

@@ -6,8 +6,8 @@ target triple = "ve-unknown-linux-gnu"
 
 ; Function Attrs: nofree nounwind
 define dso_local void @andm_MMM(i64* nocapture %0, i64* nocapture readonly %1, i64* nocapture readonly %2, i32 signext %3) local_unnamed_addr #0 {
-; CHECK: andm %vm2,%vm2,%vm4
-; CHECK: andm %vm3,%vm3,%vm5
+; CHECK: andm %vm2, %vm2, %vm4
+; CHECK: andm %vm3, %vm3, %vm5
   %5 = load i64, i64* %1, align 8, !tbaa !2
   %6 = tail call <8 x i64> @llvm.ve.vl.lvm.MMss(<8 x i64> undef, i64 0, i64 %5)
   %7 = load i64, i64* %2, align 8, !tbaa !2
@@ -97,7 +97,7 @@ attributes #1 = { nounwind readnone }
 !llvm.ident = !{!1}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 12.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/llvm-project.git a0d000a8b9fc77dccd0c2af6986053df77759a6e)"}
+!1 = !{!"clang version 12.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/llvm-project.git ea1e45464a3c0492368cbabae9242628b03e399d)"}
 !2 = !{!3, !3, i64 0}
 !3 = !{!"long", !4, i64 0}
 !4 = !{!"omnipotent char", !5, i64 0}
