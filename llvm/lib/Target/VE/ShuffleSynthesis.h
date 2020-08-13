@@ -204,7 +204,10 @@ class ShuffleAnalysis {
 
   template<typename Strategy>
   IterControl run(unsigned NumRounds, MaskView & MV, PartialShuffleState &PSS) {
-    if ((MV.getNumElements() > StandardVectorWidth) & !Strategy::supportsPackedMode())
+    bool IsPackedMask = (MV.getNumElements() > StandardVectorWidth);
+    bool StratSupportsMask = IsPackedMask ? Strategy::supportsPackedMode()
+                                          : Strategy::supportsNormalMode();
+    if (!StratSupportsMask)
       return IterControl::IterContinue;
 
     Strategy Strat;

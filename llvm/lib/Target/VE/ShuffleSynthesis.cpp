@@ -1332,7 +1332,8 @@ struct GatherStrategy final : public ShuffleStrategy {
   // Whether this strategy is applicable to non-packed shuffles
   static bool supportsNormalMode() { return true; }
   // Whether this strategy is applicable to packed shuffles
-  static bool supportsPackedMode() { return true; }
+  // FIXME needs split gather
+  static bool supportsPackedMode() { return false; }
 
   void planPartialShuffle(MaskView &MV, PartialShuffleState FromState,
                           PartialShuffleCB CB) override {
