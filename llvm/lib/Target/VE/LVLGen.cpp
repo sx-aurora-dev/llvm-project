@@ -48,7 +48,7 @@ int LVLGen::getVLIndex(unsigned Opcode) {
 
   switch (Opcode) {
 #include "vl-index.inc"
-  case VE::vor_v1vl: return 3;
+  case VE::veoldVOR1vl: return 3;
   }
 }
 
@@ -80,7 +80,7 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
       LLVM_DEBUG(dbgs() << "Vector instruction found: ");
       LLVM_DEBUG(MI->dump());
       LLVM_DEBUG(dbgs() << "Vector length is " << RegName(Reg) << ". ");
-      LLVM_DEBUG(dbgs() << "Current VL is " 
+      LLVM_DEBUG(dbgs() << "Current VL is "
                  << (hasRegForVL ? RegName(RegForVL) : "unknown") << ". ");
 
       if (!hasRegForVL || RegForVL != Reg) {
@@ -115,7 +115,7 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
   return Changed;
 }
 
-bool LVLGen::runOnMachineFunction(MachineFunction &F) 
+bool LVLGen::runOnMachineFunction(MachineFunction &F)
 {
   LLVM_DEBUG(dbgs() << "********** Begin LVLGen **********\n");
   LLVM_DEBUG(dbgs() << "********** Function: " << F.getName() << '\n');
