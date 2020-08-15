@@ -995,11 +995,6 @@ static bool looksDirectlyLeft2D(const DepVector &DV) {
   return (DV[0].Dir == '=' && DV[1].Dir == '>');
 }
 
-static bool looksDirectlyLeft3D(const DepVector &DV) {
-  assert(DV.size() == 3);
-  return (DV[0].Dir == '=' && DV[1].Dir == '=' && DV[1].Dir == '>');
-}
-
 static bool looksDirectlyUpwards2D(const DepVector &DV) {
   assert(DV.size() == 2);
   return (DV[0].Dir == '<' && DV[1].Dir == '=');
@@ -1010,12 +1005,6 @@ static bool looksDirectlyUpwards2D(const DepVector &DV) {
 static bool looksDownwards2D(const DepVector &DV) {
   assert(DV.size() == 2);
   return DV[0].Dir == '>';
-}
-
-/// Ditto
-static bool looksDownwards3D(const DepVector &DV) {
-  assert(DV.size() == 3);
-  return DV[1].Dir == '>';
 }
 
 /// Looks directly left, upwards left or downwards left
@@ -1079,10 +1068,38 @@ void reflectIfNeeded(DepVector &IterDV) {
     if (looksDownwards2D(IterDV) || looksDirectlyLeft2D(IterDV))
       IterDV.reflect();
   } else {  // 3D case
-    if (looksDirectlyLeft3D(IterDV) || looksDownwards3D(IterDV) ||
-        looksBackwards3D(IterDV))
+    // If it looks backwards, it definitely looks towards
+    // to previous iterations.
+    if (looksBackwards3D(IterDV))
       IterDV.reflect();
+    // If it looks forwards, it definitely looks towards
+    // later iterations. So the only case left is when
+    // 1st dimension (outermost) is 0, in which case fall-back to 
+    // the 2D case for the other two.
+    if (IterDV[0].Dir == '=') {
+      DepVector IterDV2D(2);
+      IterDV2D[0] = IterDV[1];
+      IterDV2D[1] = IterDV[2];
+      reflectIfNeeded(IterDV2D);
+      IterDV[1] = IterDV2D[0];
+      IterDV[2] = IterDV2D[1];
+    }
   }
+}
+
+static ConstVF getMaxAllowedVecFact(DepVector &);
+
+static ConstVF fallback2D(DepVector &IterDV, int Ignore) {
+  assert(Ignore >= 0 && Ignore < 3);
+  DepVector Copy(2);
+  int J = 0;
+  for (int I = 0; I < 3; ++I) {
+    if (I != Ignore) {
+      Copy[J] = IterDV[I];
+      ++J;
+    }
+  }
+  return getMaxAllowedVecFact(Copy);
 }
 
 static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
@@ -1107,13 +1124,16 @@ static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
         Res = (size_t)IterDV[0].Dist;
       return Res;
     } else {
-      if (IterDV[1].Dir != '=')
-        return Best;
-      // Otherwise, fall-back to the 2D case.
-      DepVector DVSquashed(2);
-      DVSquashed[0] = IterDV[0];
-      DVSquashed[1] = IterDV[2];
-      return getMaxAllowedVecFact(DVSquashed);
+      // If any of the dimensions is 0, then fall-back
+      // to a 2D case.
+      for (int I = 0; I < 3; ++I) {
+        if (IterDV[I].Dist == 0)
+          return fallback2D(IterDV, I);
+      }
+      // Otherwise, the vectorization in z-axis
+      // will always 'grab' a later iteration. So,
+      // it's limited by the distance in 'z'.
+      return IterDV[0].Dist;
     }
   }
   assert(0);
