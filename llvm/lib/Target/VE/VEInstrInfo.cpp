@@ -336,7 +336,7 @@ void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
       MachineInstrBuilder MIB = BuildMI(MBB, I, DL, MCID, SubDest)
           .addReg(SubSrc).addImm(0);
       MovMI = MIB.getInstr();
-    } else if (MCID.getOpcode() == VE::veoldANDMxx) {
+    } else if (MCID.getOpcode() == VE::ANDMxx) {
       // generate "ANDM, dest, vm0, src" instruction.
       MachineInstrBuilder MIB = BuildMI(MBB, I, DL, MCID, SubDest)
           .addReg(VE::VM0).addReg(SubSrc);
