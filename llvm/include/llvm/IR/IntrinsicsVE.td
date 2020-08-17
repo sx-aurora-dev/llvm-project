@@ -15,16 +15,16 @@ let TargetPrefix = "ve" in {
         Intrinsic<[llvm_i64_ty], [llvm_ptr_ty], [IntrReadMem]>;
 
   def int_ve_vl_extract_vm512u : GCCBuiltin<"__builtin_ve_vl_extract_vm512u">,
-        Intrinsic<[LLVMType<v4i64>], [LLVMType<v8i64>], [IntrNoMem]>;
+        Intrinsic<[LLVMType<v256i1>], [LLVMType<v512i1>], [IntrNoMem]>;
 
   def int_ve_vl_extract_vm512l : GCCBuiltin<"__builtin_ve_vl_extract_vm512l">,
-        Intrinsic<[LLVMType<v4i64>], [LLVMType<v8i64>], [IntrNoMem]>;
+        Intrinsic<[LLVMType<v256i1>], [LLVMType<v512i1>], [IntrNoMem]>;
 
   def int_ve_vl_insert_vm512u : GCCBuiltin<"__builtin_ve_vl_insert_vm512u">,
-        Intrinsic<[LLVMType<v8i64>], [LLVMType<v8i64>, LLVMType<v4i64>], [IntrNoMem]>;
+        Intrinsic<[LLVMType<v512i1>], [LLVMType<v512i1>, LLVMType<v256i1>], [IntrNoMem]>;
 
   def int_ve_vl_insert_vm512l : GCCBuiltin<"__builtin_ve_vl_insert_vm512l">,
-        Intrinsic<[LLVMType<v8i64>], [LLVMType<v8i64>, LLVMType<v4i64>], [IntrNoMem]>;
+        Intrinsic<[LLVMType<v512i1>], [LLVMType<v512i1>, LLVMType<v256i1>], [IntrNoMem]>;
 
 }
 
