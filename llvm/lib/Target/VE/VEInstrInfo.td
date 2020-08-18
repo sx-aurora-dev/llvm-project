@@ -1871,6 +1871,14 @@ defm : ATMSTm<atomic_store_32, i32, STLrri, STLrii, STLzri, STLzii>;
 defm : ATMSTm<atomic_store_64, i64, STrri, STrii, STzri, STzii>;
 
 // Address calculation and its optimization
+def : Pat<(VEhi tconstpool:$in), (LEASLzii 0, 0, tconstpool:$in)>;
+def : Pat<(VElo tconstpool:$in),
+          (ANDrm (LEAzii 0, 0, tconstpool:$in), !add(32, 64))>;
+def : Pat<(add (VEhi tconstpool:$in1), (VElo tconstpool:$in2)),
+          (LEASLrii (ANDrm (LEAzii 0, 0, tconstpool:$in2), !add(32, 64)), 0,
+                    (tconstpool:$in1))>;
+
+// Address calculation and its optimization
 def : Pat<(VEhi tglobaladdr:$in), (LEASLzii 0, 0, tglobaladdr:$in)>;
 def : Pat<(VElo tglobaladdr:$in),
           (ANDrm (LEAzii 0, 0, tglobaladdr:$in), !add(32, 64))>;

@@ -2457,7 +2457,7 @@ unsigned ASTContext::getPreferredTypeAlign(const Type *T) const {
     return ABIAlign;
 
   if (const auto *RT = T->getAs<RecordType>()) {
-    if (TI.AlignIsRequired)
+    if (TI.AlignIsRequired || RT->getDecl()->isInvalidDecl())
       return ABIAlign;
 
     unsigned PreferredAlign = static_cast<unsigned>(
@@ -2934,14 +2934,27 @@ QualType ASTContext::getAddrSpaceQualType(QualType T,
 }
 
 QualType ASTContext::removeAddrSpaceQualType(QualType T) const {
+  // If the type is not qualified with an address space, just return it
+  // immediately.
+  if (!T.hasAddressSpace())
+    return T;
+
   // If we are composing extended qualifiers together, merge together
   // into one ExtQuals node.
   QualifierCollector Quals;
-  const Type *TypeNode = Quals.strip(T);
+  const Type *TypeNode;
 
-  // If the qualifier doesn't have an address space just return it.
-  if (!Quals.hasAddressSpace())
-    return T;
+  while (T.hasAddressSpace()) {
+    TypeNode = Quals.strip(T);
+
+    // If the type no longer has an address space after stripping qualifiers,
+    // jump out.
+    if (!QualType(TypeNode, 0).hasAddressSpace())
+      break;
+
+    // There might be sugar in the way. Strip it and try again.
+    T = T.getSingleStepDesugaredType(*this);
+  }
 
   Quals.removeAddressSpace();
 
@@ -11173,8 +11186,7 @@ void ASTContext::getFunctionFeatureMap(llvm::StringMap<bool> &FeatureMap,
     std::vector<std::string> Features(FeaturesTmp.begin(), FeaturesTmp.end());
     Target->initFeatureMap(FeatureMap, getDiagnostics(), TargetCPU, Features);
   } else {
-    Target->initFeatureMap(FeatureMap, getDiagnostics(), TargetCPU,
-                           Target->getTargetOpts().Features);
+    FeatureMap = Target->getTargetOpts().FeatureMap;
   }
 }
 

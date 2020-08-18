@@ -110,14 +110,17 @@ public:
   /// Custom Lower {
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
-  SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerLOAD(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSTORE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVAARG(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
 
   /// Custom DAGCombine {
@@ -135,6 +138,7 @@ public:
                        SelectionDAG &DAG) const;
   SDValue makeAddress(SDValue Op, SelectionDAG &DAG) const;
 
+  bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
   bool isFPImmLegal(const APFloat &Imm, EVT VT,
                     bool ForCodeSize) const override;
   /// Returns true if the target allows unaligned memory accesses of the
@@ -194,8 +198,6 @@ public:
   std::pair<unsigned, const TargetRegisterClass *>
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                StringRef Constraint, MVT VT) const override;
-
-  bool isOffsetFoldingLegal(const GlobalAddressSDNode *GA) const override;
 
   /// Override to support customized stack guard loading.
   bool useLoadStackGuardNode() const override;
@@ -281,25 +283,27 @@ public:
 
   bool isVectorMaskType(EVT VT) const;
 
-  /// Target Optimization {
-
-  // SX-Aurora VE s/udiv is 5-9 times slower than multiply.
-  bool isIntDivCheap(EVT, AttributeList) const override { return false; }
-  bool hasStandaloneRem(EVT) const override { return false; }
-
-  bool isCheapToSpeculateCtlz() const override { return true; }
-  bool isCtlzFast() const override { return true; }
-
   bool convertSetCCLogicToBitwiseLogic(EVT VT) const override {
     return true;
   }
-
-  bool hasAndNot(SDValue Y) const override;
 
   // VE supports only vector FMA
   bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
                                   EVT VT) const override
   { return VT.isVector() ? true : false; }
+
+  /// Target Optimization {
+
+  // SX-Aurora VE's s/udiv is 5-9 times slower than multiply.
+  bool isIntDivCheap(EVT, AttributeList) const override { return false; }
+  // VE doesn't have rem.
+  bool hasStandaloneRem(EVT) const override { return false; }
+  // VE LDZ instruction returns 64 if the input is zero.
+  bool isCheapToSpeculateCtlz() const override { return true; }
+  // VE LDZ instruction is fast.
+  bool isCtlzFast() const override { return true; }
+  // VE has NND instruction.
+  bool hasAndNot(SDValue Y) const override;
 
   /// } Target Optimization
 };

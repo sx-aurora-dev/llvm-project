@@ -95,7 +95,7 @@ def VL : VEMiscReg<63, "vl">;
 def VLS : RegisterClass<"VE", [i32], 64, (add VL)>;
 
 //-----------------------------------------------------------------------------
-// Gneric Registers
+// Generic Registers
 //-----------------------------------------------------------------------------
 
 let RegAltNameIndices = [AsmName] in {

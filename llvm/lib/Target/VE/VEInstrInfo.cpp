@@ -316,25 +316,28 @@ bool VEInstrInfo::reverseBranchCondition(
   return false;
 }
 
-void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
-                                  MachineBasicBlock::iterator I,
-                                  const DebugLoc &DL, MCRegister DestReg,
-                                  MCRegister SrcReg, bool KillSrc,
-                                  const MCInstrDesc &MCID,
-                                  unsigned int numSubRegs,
-                                  const unsigned* subRegIdx) const {
-  const TargetRegisterInfo *TRI = &getRegisterInfo();
+static bool IsAliasOfSX(Register Reg) {
+  return VE::I32RegClass.contains(Reg) || VE::I64RegClass.contains(Reg) ||
+         VE::F32RegClass.contains(Reg);
+}
+
+static void copyPhysSubRegs(MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator I, const DebugLoc &DL,
+                            MCRegister DestReg, MCRegister SrcReg, bool KillSrc,
+                            const MCInstrDesc &MCID, unsigned int NumSubRegs,
+                            const unsigned *SubRegIdx,
+                            const TargetRegisterInfo *TRI) {
   MachineInstr *MovMI = nullptr;
 
-  for (unsigned i = 0; i != numSubRegs; ++i) {
-    unsigned SubDest = TRI->getSubReg(DestReg, subRegIdx[i]);
-    unsigned SubSrc  = TRI->getSubReg(SrcReg,  subRegIdx[i]);
+  for (unsigned Idx = 0; Idx != NumSubRegs; ++Idx) {
+    Register SubDest = TRI->getSubReg(DestReg, SubRegIdx[Idx]);
+    Register SubSrc = TRI->getSubReg(SrcReg, SubRegIdx[Idx]);
     assert(SubDest && SubSrc && "Bad sub-register");
 
     if (MCID.getOpcode() == VE::ORri) {
       // generate "ORri, dest, src, 0" instruction.
-      MachineInstrBuilder MIB = BuildMI(MBB, I, DL, MCID, SubDest)
-          .addReg(SubSrc).addImm(0);
+      MachineInstrBuilder MIB =
+          BuildMI(MBB, I, DL, MCID, SubDest).addReg(SubSrc).addImm(0);
       MovMI = MIB.getInstr();
     } else if (MCID.getOpcode() == VE::ANDMxx) {
       // generate "ANDM, dest, vm0, src" instruction.
@@ -349,11 +352,6 @@ void VEInstrInfo::copyPhysSubRegs(MachineBasicBlock &MBB,
   MovMI->addRegisterDefined(DestReg, TRI);
   if (KillSrc)
     MovMI->addRegisterKilled(SrcReg, TRI, true);
-}
-
-static bool IsAliasOfSX(Register Reg) {
-  return VE::I32RegClass.contains(Reg) || VE::I64RegClass.contains(Reg) ||
-         VE::F32RegClass.contains(Reg);
 }
 
 void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
@@ -391,13 +389,13 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     const unsigned subRegIdx[] = { VE::sub_vm_even, VE::sub_vm_odd };
     unsigned int numSubRegs = 2;
     copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDMxx),
-                    numSubRegs, subRegIdx);
+                    numSubRegs, subRegIdx, &getRegisterInfo());
   } else if (VE::F128RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
-    const unsigned subRegIdx[] = { VE::sub_even, VE::sub_odd };
-    unsigned int numSubRegs = 2;
+    const unsigned SubRegIdx[] = {VE::sub_even, VE::sub_odd};
+    unsigned int NumSubRegs = 2;
     copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ORri),
-                    numSubRegs, subRegIdx);
+                    NumSubRegs, SubRegIdx, &getRegisterInfo());
   } else {
     const TargetRegisterInfo *TRI = &getRegisterInfo();
     dbgs() << "Impossible reg-to-reg copy from " << printReg(SrcReg, TRI)

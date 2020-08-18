@@ -46,7 +46,7 @@ define zeroext i32 @func32z(i32 zeroext %p) {
   ret i32 %r
 }
 
-define i16 @func16s(i16 signext %p) {
+define signext i16 @func16s(i16 signext %p) {
 ; CHECK-LABEL: func16s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    and %s0, %s0, (48)0
@@ -56,7 +56,7 @@ define i16 @func16s(i16 signext %p) {
   ret i16 %r
 }
 
-define i16 @func16z(i16 zeroext %p) {
+define zeroext i16 @func16z(i16 zeroext %p) {
 ; CHECK-LABEL: func16z:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    pcnt %s0, %s0
@@ -65,7 +65,7 @@ define i16 @func16z(i16 zeroext %p) {
   ret i16 %r
 }
 
-define i8 @func8s(i8 signext %p) {
+define signext i8 @func8s(i8 signext %p) {
 ; CHECK-LABEL: func8s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    and %s0, %s0, (56)0
@@ -75,7 +75,7 @@ define i8 @func8s(i8 signext %p) {
   ret i8 %r
 }
 
-define i8 @func8z(i8 zeroext %p) {
+define zeroext i8 @func8z(i8 zeroext %p) {
 ; CHECK-LABEL: func8z:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    pcnt %s0, %s0

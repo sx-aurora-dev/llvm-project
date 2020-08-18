@@ -25,10 +25,21 @@ define i64 @func64(i64 %p) {
   ret i64 %r
 }
 
-define i32 @func32(i32 %p) {
-; CHECK-LABEL: func32:
+define signext i32 @func32s(i32 signext %p) {
+; CHECK-LABEL: func32s:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    bswp %s0, %s0, 1
+; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    or %s11, 0, %s9
+  %r = tail call i32 @llvm.bswap.i32(i32 %p)
+  ret i32 %r
+}
+
+define zeroext i32 @func32z(i32 zeroext %p) {
+; CHECK-LABEL: func32z:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    bswp %s0, %s0, 1
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9
   %r = tail call i32 @llvm.bswap.i32(i32 %p)
   ret i32 %r
