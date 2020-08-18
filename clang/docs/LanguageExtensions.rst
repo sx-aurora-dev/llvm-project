@@ -433,6 +433,68 @@ NEON vector types are created using ``neon_vector_type`` and
     return v;
   }
 
+GCC vector types are created using the ``vector_size(N)`` attribute.  The
+argument ``N`` specifies the number of bytes that will be allocated for an
+object of this type.  The size has to be multiple of the size of the vector
+element type. For example:
+
+.. code-block:: c++
+
+  // OK: This declares a vector type with four 'int' elements
+  typedef int int4 __attribute__((vector_size(4 * sizeof(int))));
+
+  // ERROR: '11' is not a multiple of sizeof(int)
+  typedef int int_impossible __attribute__((vector_size(11)));
+
+  int4 foo(int4 a) {
+    int4 v;
+    v = a;
+    return v;
+  }
+
+
+Boolean Vectors
+---------------
+
+Different than GCC, Clang also allows the attribute to be used with boolean
+element types. For example:
+
+.. code-block:: c++
+
+  // legal for Clang, error for GCC:
+  typedef bool bool8 __attribute__((vector_size(1)));
+  // Objects of bool8 type hold 8 bits, sizeof(bool8) == 1
+
+  typedef bool bool32 __attribute__((vector_size(4)));
+  // Objects of bool32 type hold 32 bits, sizeof(bool32) == 4
+
+  bool8 foo(bool8 a) {
+    bool8 v;
+    v = a;
+    return v;
+  }
+
+Boolean vectors are a Clang extension of the GCC vector type. Boolean vectors
+are intended, though not guaranteed, to map to vector mask registers.  The
+semantics of boolean vectors differs from the GCC vector of integer or floating
+point type.  This is mostly because bits are smaller than the smallest
+addressable unit in memory on most architectures.  The size parameter of a
+boolean vector type is the number of bytes in the vector.
+
+The semantics of boolean vectors borrows from C bit-fields with the following
+differences:
+
+* Distinct boolean vectors are always distinct memory objects (there is no
+  packing).
+* Bitwise `~`, `|`, `&`, `^` and `~` are the only allowed operators on boolean
+  vectors.
+
+The memory representation of a boolean vector is the smallest fitting
+power-of-two integer. The alignment is the alignment of that integer type.  This
+permits the use of these types in allocated arrays using the common
+``sizeof(Array)/sizeof(ElementType)`` pattern.
+
+
 Vector Literals
 ---------------
 
@@ -484,6 +546,7 @@ C-style cast                     yes     yes       yes         no
 reinterpret_cast                 yes     no        yes         no
 static_cast                      yes     no        yes         no
 const_cast                       no      no        no          no
+address &v[i]                    no      no        no [#]_     no
 ============================== ======= ======= ============= =======
 
 See also :ref:`langext-__builtin_shufflevector`, :ref:`langext-__builtin_convertvector`.
@@ -493,6 +556,9 @@ See also :ref:`langext-__builtin_shufflevector`, :ref:`langext-__builtin_convert
   it's only available in C++ and uses normal bool conversions (that is, != 0).
   If it's an extension (OpenCL) vector, it's only available in C and OpenCL C.
   And it selects base on signedness of the condition operands (OpenCL v1.1 s6.3.9).
+.. [#] Clang does not allow the address of an element to be taken while GCC
+   allows this. This is intentional for vectors with a boolean element type and
+   not implemented otherwise.
 
 Matrix Types
 ============

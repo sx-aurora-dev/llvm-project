@@ -204,35 +204,35 @@ void CharUsage() {
 
   constexpr auto w = FourCharsVecSize{1, 2, 3, 4} <
                      FourCharsVecSize{4, 3, 2, 1};
-  // CHECK: store <4 x i8> <i8 1, i8 1, i8 0, i8 0>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 true, i1 true, i1 false, i1 false, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto x = FourCharsVecSize{1, 2, 3, 4} >
                      FourCharsVecSize{4, 3, 2, 1};
-  // CHECK: store <4 x i8> <i8 0, i8 0, i8 1, i8 1>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 false, i1 false, i1 true, i1 true, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto y = FourCharsVecSize{1, 2, 3, 4} <=
                      FourCharsVecSize{4, 3, 3, 1};
-  // CHECK: store <4 x i8> <i8 1, i8 1, i8 1, i8 0>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 true, i1 true, i1 true, i1 false, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto z = FourCharsVecSize{1, 2, 3, 4} >=
                      FourCharsVecSize{4, 3, 3, 1};
-  // CHECK: store <4 x i8> <i8 0, i8 0, i8 1, i8 1>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 false, i1 false, i1 true, i1 true, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto A = FourCharsVecSize{1, 2, 3, 4} ==
                      FourCharsVecSize{4, 3, 3, 1};
-  // CHECK: store <4 x i8> <i8 0, i8 0, i8 1, i8 0>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 false, i1 false, i1 true, i1 false, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto B = FourCharsVecSize{1, 2, 3, 4} !=
                      FourCharsVecSize{4, 3, 3, 1};
-  // CHECK: store <4 x i8> <i8 1, i8 1, i8 0, i8 1>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 true, i1 true, i1 false, i1 true, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
 
   constexpr auto C = FourCharsVecSize{1, 2, 3, 4} < 3;
-  // CHECK: store <4 x i8> <i8 1, i8 1, i8 0, i8 0>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 true, i1 true, i1 false, i1 false, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto D = FourCharsVecSize{1, 2, 3, 4} > 3;
-  // CHECK: store <4 x i8> <i8 0, i8 0, i8 0, i8 1>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 false, i1 false, i1 false, i1 true, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto E = FourCharsVecSize{1, 2, 3, 4} <= 3;
-  // CHECK: store <4 x i8> <i8 1, i8 1, i8 1, i8 0>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 true, i1 true, i1 true, i1 false, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto F = FourCharsVecSize{1, 2, 3, 4} >= 3;
-  // CHECK: store <4 x i8> <i8 0, i8 0, i8 1, i8 1>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 false, i1 false, i1 true, i1 true, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto G = FourCharsVecSize{1, 2, 3, 4} == 3;
-  // CHECK: store <4 x i8> <i8 0, i8 0, i8 1, i8 0>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 false, i1 false, i1 true, i1 false, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto H = FourCharsVecSize{1, 2, 3, 4} != 3;
-  // CHECK: store <4 x i8> <i8 1, i8 1, i8 0, i8 1>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 true, i1 true, i1 false, i1 true, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
 
   constexpr auto I = FourCharsVecSize{1, 2, 3, 4} &
                      FourCharsVecSize{4, 3, 2, 1};
@@ -252,15 +252,15 @@ void CharUsage() {
 
   constexpr auto O = FourCharsVecSize{5, 0, 6, 0} &&
                      FourCharsVecSize{5, 5, 0, 0};
-  // CHECK: store <4 x i8> <i8 1, i8 0, i8 0, i8 0>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 true, i1 false, i1 false, i1 false, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto P = FourCharsVecSize{5, 0, 6, 0} ||
                      FourCharsVecSize{5, 5, 0, 0};
-  // CHECK: store <4 x i8> <i8 1, i8 1, i8 1, i8 0>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 true, i1 true, i1 true, i1 false, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
 
   constexpr auto Q = FourCharsVecSize{5, 0, 6, 0} && 3;
-  // CHECK: store <4 x i8> <i8 1, i8 0, i8 1, i8 0>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 true, i1 false, i1 true, i1 false, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
   constexpr auto R = FourCharsVecSize{5, 0, 6, 0} || 3;
-  // CHECK: store <4 x i8> <i8 1, i8 1, i8 1, i8 1>
+  // CHECK: store i8 bitcast (<8 x i1> <i1 true, i1 true, i1 true, i1 true, i1 undef, i1 undef, i1 undef, i1 undef> to i8)
 
   constexpr auto T = CmpMul(a, b);
   // CHECK: store <4 x i8> <i8 108, i8 18, i8 56, i8 72>

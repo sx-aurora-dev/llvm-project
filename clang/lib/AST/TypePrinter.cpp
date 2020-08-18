@@ -645,11 +645,12 @@ void TypePrinter::printVectorBefore(const VectorType *T, raw_ostream &OS) {
     printBefore(T->getElementType(), OS);
     break;
   case VectorType::GenericVector: {
+    auto NumVectorElems = T->getNumElements();
+    auto ElemSizeMultiple =
+        T->isVectorSizeBoolean() ? NumVectorElems / 8 : NumVectorElems;
     // FIXME: We prefer to print the size directly here, but have no way
     // to get the size of the type.
-    OS << "__attribute__((__vector_size__("
-       << T->getNumElements()
-       << " * sizeof(";
+    OS << "__attribute__((__vector_size__(" << ElemSizeMultiple << " * sizeof(";
     print(T->getElementType(), OS, StringRef());
     OS << ")))) ";
     printBefore(T->getElementType(), OS);
