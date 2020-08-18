@@ -1058,8 +1058,23 @@ void reflectIfNeeded(DepVector &IterDV) {
   if (!IterDV.size())
     return;
 
-  if (IterDV.size() > 3)
+  if (IterDV.size() > 4)
     return;
+  if (IterDV.size() == 4) {
+    if (IterDV[0].Dist < 0) {
+      IterDV.reflect();
+    } else if (IterDV[0].Dist == 0) {
+      DepVector IterDV3D(3);
+      IterDV3D[0] = IterDV[1];
+      IterDV3D[1] = IterDV[2];
+      IterDV3D[2] = IterDV[3];
+      reflectIfNeeded(IterDV3D);
+      IterDV[1] = IterDV3D[0];
+      IterDV[2] = IterDV3D[1];
+      IterDV[3] = IterDV3D[2];
+    }
+    return;
+  }
   if (IterDV.size() == 1) {
     if (IterDV[0].Dist < 0)
       IterDV[0].negate();
@@ -1102,14 +1117,36 @@ static ConstVF fallback2D(DepVector &IterDV, int Ignore) {
   return getMaxAllowedVecFact(Copy);
 }
 
+static ConstVF fallback3D(DepVector &IterDV, int Ignore) {
+  assert(Ignore >= 0 && Ignore < 4);
+  DepVector Copy(3);
+  int J = 0;
+  for (int I = 0; I < 4; ++I) {
+    if (I != Ignore) {
+      Copy[J] = IterDV[I];
+      ++J;
+    }
+  }
+  return getMaxAllowedVecFact(Copy);
+}
+
 static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
   assert(IterDV.verify());
   ConstVF Best = LoopDependence::getBestPossible().VectorizationFactor;
   ConstVF Worst = LoopDependence::getWorstPossible().VectorizationFactor;
   if (!IterDV.size())
     return Best;
-  if (IterDV.size() > 3)
+  if (IterDV.size() > 4)
     return Worst;
+
+  if (IterDV.size() == 4) {
+    for (int I = 0; I < 4; ++I) {
+      if (IterDV[I].Dist == 0)
+        return fallback3D(IterDV, I);
+    }
+    return Worst;
+  }
+
   if (IterDV.size() == 1) {
     int Dist = IterDV[0].Dist;
     if (Dist) {
@@ -1156,12 +1193,10 @@ static bool definitelyCannotAlias(LoopInfo &LI, const LoadInst *LD,
   GetUnderlyingObjects(ST->getPointerOperand(), StoreObjects, DL, &LI);
 
   for (const Value *LObj : LoadObjects) {
-    LLVM_DEBUG(dbgs() << "LObj: " << *LObj << "\n");
     const Argument *A1 = dyn_cast<Argument>(LObj);
     if (!A1)
       return false;
     for (const Value *SObj : StoreObjects) {
-      LLVM_DEBUG(dbgs() << "SObj: " << *SObj << "\n");
       if (LObj == SObj)
         return false;
       const Argument *A2 = dyn_cast<Argument>(SObj);
@@ -1347,8 +1382,6 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
     for (ProgramOrderedAccess SAccess : Stores) {
       Value *SPtr = SAccess.Store->getPointerOperand();
       StoreInst *Store = SAccess.Store;
-
-      // TODO: Do we care about the order?
 
       LLVM_DEBUG(dbgs() << "\nLoad pointer: " << *LPtr << "\n";
                  dbgs() << *SE.getSCEVAtScope(LPtr, &Inner) << "\n\n";
