@@ -18,6 +18,57 @@ def clean_patch(in_path, out_path):
 
   raw_lines = [raw_line for raw_line in open(in_path, 'r')]
 
+  # Remove prologue and epilogue from a list
+  modified_lines = []
+  prologue_buf=[]
+  for raw_line in raw_lines:
+    line=raw_line.strip()
+
+    # function body
+    if line.startswith("define"):
+      in_func=True
+      past_sp_copy=False
+      past_first_block=False
+      prologue_buf=[]
+    elif line.startswith("}"):
+      in_func=False
+
+    # not a CHECK line
+    if not line.startswith("; CHECK"):
+      modified_lines.extend(prologue_buf)
+      prologue_buf.clear()
+      modified_lines.append(raw_line)
+      continue
+
+    # keep the function label check
+    if line.startswith("; CHECK-LABEL:"):
+      modified_lines.append(raw_line)
+      continue
+
+    # Push all lines into prologue_buf
+    if not past_first_block:
+      prologue_buf.append(raw_line)
+
+    # block -> rewrite into generic form
+    if line.startswith("; CHECK-NEXT:  .LBB") and not past_first_block:
+      prologue_buf.clear()
+      raw_line = re.sub(r'; CHECK-NEXT:', r'; CHECK:     ', raw_line);
+      modified_lines.append(raw_line)
+      past_first_block=True
+      continue
+
+    # keep checks between function prologue and epilogue
+    if past_first_block and not past_sp_copy:
+      modified_lines.append(raw_line)
+
+    # is this the SP copy check?
+    sp_copy_prefix="; CHECK-NEXT:    or %s11, 0, %s9"
+    if line.startswith(sp_copy_prefix):
+      past_sp_copy=True
+      continue
+
+  raw_lines = modified_lines
+
   with open(out_path, 'w') as out:
     for raw_line in raw_lines:
       line=raw_line.strip()
@@ -31,7 +82,7 @@ def clean_patch(in_path, out_path):
       if line.startswith("define"):
         in_func=True
         past_sp_copy=False
-        past_first_block=False
+        past_first_block=True
         print("ENTER {}".format(line))
       elif line.startswith("}"):
         in_func=False
