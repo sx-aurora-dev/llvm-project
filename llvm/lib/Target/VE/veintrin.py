@@ -39,8 +39,8 @@ T_v256i32 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "int*", T_i32)
 T_v256u64 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "unsigned long int*", T_u64)
 T_v256u32 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "unsigned int*", T_u32)
 
-T_v4u64   = Type("v4i64",   "V4ULi",   "LLVMType<v4i64>", "unsigned int*", T_u64) # for VM
-T_v8u64   = Type("v8i64",   "V8ULi",   "LLVMType<v8i64>", "unsigned int*", T_u64) # for VM512
+T_v4u64   = Type("v256i1",   "V256b",   "LLVMType<v256i1>", "unsigned int*", T_u64) # for VM
+T_v8u64   = Type("v512i1",   "V512b",   "LLVMType<v512i1>", "unsigned int*", T_u64) # for VM512
 
 #T_v8u32   = Type("v8i32",   "V8ULi",   "unsigned int*",  T_u32)
 #T_v16u32  = Type("v16i32",  "V16ULi",  "unsigned int*",  T_u32)
