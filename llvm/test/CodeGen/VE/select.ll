@@ -159,3 +159,57 @@ define fp128 @func_quad(i1 zeroext %0, fp128 %1, fp128 %2) {
   %4 = select i1 %0, fp128 %1, fp128 %2
   ret fp128 %4
 }
+
+; Function Attrs: norecurse nounwind readnone
+define { float, float } @func_fcomp(i1 zeroext %0, float %1, float %2, float %3, float %4) {
+; CHECK-LABEL: func_fcomp:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    cmov.w.ne %s3, %s1, %s0
+; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
+; CHECK-NEXT:    or %s0, 0, %s3
+; CHECK-NEXT:    or %s1, 0, %s4
+; CHECK-NEXT:    b.l.t (, %s10)
+  %6 = select i1 %0, float %1, float %3
+  %7 = select i1 %0, float %2, float %4
+  %8 = insertvalue { float, float } undef, float %6, 0
+  %9 = insertvalue { float, float } %8, float %7, 1
+  ret { float, float } %9
+}
+
+; Function Attrs: norecurse nounwind readnone
+define { double, double } @func_dcomp(i1 zeroext %0, double %1, double %2, double %3, double %4) {
+; CHECK-LABEL: func_dcomp:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    cmov.w.ne %s3, %s1, %s0
+; CHECK-NEXT:    cmov.w.ne %s4, %s2, %s0
+; CHECK-NEXT:    or %s0, 0, %s3
+; CHECK-NEXT:    or %s1, 0, %s4
+; CHECK-NEXT:    b.l.t (, %s10)
+  %6 = select i1 %0, double %1, double %3
+  %7 = select i1 %0, double %2, double %4
+  %8 = insertvalue { double, double } undef, double %6, 0
+  %9 = insertvalue { double, double } %8, double %7, 1
+  ret { double, double } %9
+}
+
+; Function Attrs: norecurse nounwind readnone
+define { fp128, fp128 } @func_qcomp(i1 zeroext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
+; CHECK-LABEL: func_qcomp:
+; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    ld %s35, 240(, %s9)
+; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    cmov.w.ne %s6, %s2, %s0
+; CHECK-NEXT:    cmov.w.ne %s7, %s3, %s0
+; CHECK-NEXT:    cmov.w.ne %s34, %s4, %s0
+; CHECK-NEXT:    cmov.w.ne %s35, %s5, %s0
+; CHECK-NEXT:    or %s0, 0, %s6
+; CHECK-NEXT:    or %s1, 0, %s7
+; CHECK-NEXT:    or %s2, 0, %s34
+; CHECK-NEXT:    or %s3, 0, %s35
+; CHECK-NEXT:    or %s11, 0, %s9
+  %6 = select i1 %0, fp128 %1, fp128 %3
+  %7 = select i1 %0, fp128 %2, fp128 %4
+  %8 = insertvalue { fp128, fp128 } undef, fp128 %6, 0
+  %9 = insertvalue { fp128, fp128 } %8, fp128 %7, 1
+  ret { fp128, fp128 } %9
+}

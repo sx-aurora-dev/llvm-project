@@ -10,6 +10,9 @@ typedef unsigned long uint64_t;
 typedef __int128 int128_t;
 typedef unsigned __int128 uint128_t;
 typedef long double quad;
+typedef _Complex float fcomp;
+typedef _Complex double dcomp;
+typedef _Complex long double qcomp;
 
 #define SELECT(TY) \
 TY func_ ## TY(_Bool cmp, TY a, TY b) { \
@@ -31,6 +34,9 @@ SELECT(uint128_t)
 SELECT(float)
 SELECT(double)
 SELECT(quad)
+SELECT(fcomp)
+SELECT(dcomp)
+SELECT(qcomp)
 #else
 SELECT(quad)
 SELECT(double)

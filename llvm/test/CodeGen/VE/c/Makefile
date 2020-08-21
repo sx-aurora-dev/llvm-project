@@ -1,8 +1,11 @@
-CLANG = $(HOME)/llvm-dev/install/bin/clang
-LLC = $(HOME)/llvm-dev/install/bin/llc
-CLEAN_TEST = $(HOME)/llvm-dev/llvm-project/llvm/utils/clean-test.sh
-UPDATE_LLC_TEST = $(HOME)/llvm-dev/llvm-project/llvm/utils/update_llc_test_checks.py
-PATCH_TEST = $(HOME)/llvm-dev/llvm-project/llvm/utils/patch-test.py
+INSTALLPATH = $(HOME)/llvm-dev/install
+LLVMSRCPATH = ../../../..
+
+CLANG = $(INSTALLPATH)/bin/clang
+LLC = $(INSTALLPATH)/bin/llc
+CLEAN_TEST = $(LLVMSRCPATH)/utils/clean-test.sh
+UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
+PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
 TARGETS = select.ll
 
@@ -15,10 +18,8 @@ all: $(TARGETS)
 	$(CLEAN_TEST) $@
 	sed -e '1i ; RUN: llc < %s -mtriple=ve | FileCheck %s' $@ > $@.tmp && mv $@.tmp $@
 	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
-	grep -v '; NOTE:' $@ > $@.tmp && mv $@.tmp $@
-#	$(PATCH_TEST) $@
-
-all: select.ll
+#	grep -v '; NOTE:' $@ > $@.tmp && mv $@.tmp $@
+	$(PATCH_TEST) $@
 
 clean: FORCE
 	rm -f $(TARGETS)
