@@ -1,4 +1,4 @@
-//===----------- LoopDependenceAnalysis.cpp - Iter Dependences -------------==//
+﻿//===----------- LoopDependenceAnalysis.cpp - Iter Dependences -------------==//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -686,6 +686,96 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
   return true;
 }
 
+static const SCEVConstant* getNegativeSCEVConstant(ScalarEvolution& SE,
+  const SCEVConstant* S) {
+  int NumBits = S->getAPInt().getBitWidth();
+  int64_t Val = S->getValue()->getSExtValue();
+  const SCEVConstant *Res =
+      (const SCEVConstant *)SE.getConstant(APInt(NumBits, -Val, true));
+  return Res;
+}
+
+static const SCEV *getSDivSimpleAddRec(ScalarEvolution &SE,
+                                const SCEVAddRecExpr *AddRec,
+                                const SCEV *Divisor) {
+  // Assert it's "simple".
+  const SCEVConstant *Start = dyn_cast<SCEVConstant>(AddRec->getStart());
+  const SCEVConstant *Step = dyn_cast<SCEVConstant>(AddRec->getStepRecurrence(SE));
+  assert(Start != nullptr);
+  assert(Step != nullptr);
+
+  // If the step / start is negative, negate it so that unsigned division
+  // works and then negate the result again.
+
+  bool StartIsNegative = false;
+  bool StepIsNegative = false;
+  if (Start->getValue()->getSExtValue() < 0) {
+    StartIsNegative = true;
+    Start = getNegativeSCEVConstant(SE, Start);
+  }
+  if (Step->getValue()->getSExtValue() < 0) {
+    StepIsNegative = true;
+    Step = getNegativeSCEVConstant(SE, Step);
+  }
+  SmallVector<const SCEV *, 2> Operands;
+  Operands.push_back(Start);
+  Operands.push_back(Step);
+  AddRec = (SCEVAddRecExpr *)
+      SE.getAddRecExpr(Operands, AddRec->getLoop(), AddRec->getNoWrapFlags());
+
+  // Do the division
+  const SCEVAddRecExpr *Res = dyn_cast<SCEVAddRecExpr>(SE.getUDivExpr(AddRec, Divisor));
+  assert(Res);
+
+  // Negate again what was negative.
+  Start = dyn_cast<SCEVConstant>(Res->getStart());
+  assert(Start != nullptr);
+  if (StartIsNegative) {
+    Start = getNegativeSCEVConstant(SE, Start);
+  }
+  Step = dyn_cast<SCEVConstant>(Res->getStepRecurrence(SE));
+  assert(Step != nullptr);
+  if (StepIsNegative) {
+    Step = getNegativeSCEVConstant(SE, Step);
+  }
+
+  Operands.clear();
+  Operands.push_back(Start);
+  Operands.push_back(Step);
+  Res = (SCEVAddRecExpr *) SE.getAddRecExpr(Operands, Res->getLoop(),
+                                           Res->getNoWrapFlags());
+
+  return Res;
+}
+
+
+static bool
+handleFailedDelinearization(ScalarEvolution &SE, const Loop *L, const SCEV *AccessExpr,
+                            SmallVectorImpl<const SCEV *> &Subscripts,
+                            SmallVectorImpl<const SCEV *> &Sizes) {
+  if (AccessExpr->getSCEVType() != scAddRecExpr) {
+    Subscripts.push_back(AccessExpr);
+    return true;
+  }
+  // If we have an AddRecExpr, we have to normalize it.
+  SCEVAddRecExpr *AddRec = (SCEVAddRecExpr *)cast<SCEVAddRecExpr>(AccessExpr);
+  // Add wrapping flags. We have to do this otherwise unsigned div later
+  // may not work.
+  // TODO: It's important to add run-time checks to verify that
+  AddRec->setNoWrapFlags(SCEV::NoWrapFlags::FlagNUW);
+  Type *Ty = AddRec->getType();
+  auto &DL = L->getHeader()->getModule()->getDataLayout();
+  uint64_t TypeByteSize = DL.getTypeAllocSize(Ty);
+  const SCEV *Divisor = SE.getConstant(Ty, TypeByteSize);
+  const SCEV *Normalized = getSDivSimpleAddRec(SE, AddRec, Divisor);
+  dbgs() << "Normalized: " << *Normalized << "\n";
+  Subscripts.push_back(Normalized);
+  // Push an invalid size just because the sizes of the two vectors
+  // have to be equal.
+  Subscripts.push_back(SE.getConstant(Ty, ~0));
+  return true;
+}
+
 static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
                                   SmallVectorImpl<const SCEV *> &Subscripts,
                                   SmallVectorImpl<const SCEV *> &Sizes,
@@ -711,27 +801,7 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
       Subscripts.size() != Sizes.size()) {
     LLVM_DEBUG(dbgs() << "Failed to delinearize. Using a single subscript - "
                          "the original SCEV\n";);
-    if (AccessExpr->getSCEVType() != scAddRecExpr) {
-      Subscripts.push_back(AccessExpr);
-      return true;
-    }
-    // If we have an AddRecExpr, we have to normalize it.
-    SCEVAddRecExpr *AddRec = (SCEVAddRecExpr *)cast<SCEVAddRecExpr>(AccessExpr);
-    // Add wrapping flags. We have to do this otherwise unsigned div later
-    // may not work.
-    // TODO: It's important to add run-time checks to verify that
-    AddRec->setNoWrapFlags(SCEV::NoWrapFlags::FlagNUW);
-    Type *Ty = AddRec->getType();
-    auto &DL = L->getHeader()->getModule()->getDataLayout();
-    uint64_t TypeByteSize = DL.getTypeAllocSize(Ty);
-    const SCEV *Normalized =
-        SE.getUDivExpr(AddRec, SE.getConstant(Ty, TypeByteSize));
-    dbgs() << "Normalized: " << *Normalized << "\n";
-    Subscripts.push_back(Normalized);
-    // Push an invalid size just because the sizes of the two vectors
-    // have to be equal.
-    Subscripts.push_back(SE.getConstant(Ty, ~0));
-    return true;
+    return handleFailedDelinearization(SE, L, AccessExpr, Subscripts, Sizes);
   }
 
   LLVM_DEBUG(
