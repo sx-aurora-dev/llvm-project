@@ -763,7 +763,7 @@ delinearizeInstAndVerifySubscripts(ScalarEvolution &SE, Instruction *Inst,
 struct DepVectorComponent {
   char Dir;
   // TODO: Probably change to SCEV
-  int Dist;
+  int64_t Dist;
   const Loop *Loop = nullptr;
 
   void print() const {
@@ -777,7 +777,7 @@ struct DepVectorComponent {
     Dist = -Dist;
     Dir = (Dir == '<') ? '>' : '<';
   }
-};
+}; //
 
 struct DepVector {
   constexpr static size_t MaxComps = 4;
@@ -833,7 +833,7 @@ struct DepVector {
 
 struct DirDistPair {
   char Dir;
-  int Dist;
+  int64_t Dist;
 };
 
 DirDistPair getDirDistPairFromSCEVConstant(const SCEVConstant *C) {
