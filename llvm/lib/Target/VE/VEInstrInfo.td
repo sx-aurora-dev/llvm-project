@@ -1087,10 +1087,12 @@ multiclass RMm<string opcStr, bits<8>opc, RegisterClass RC> {
 }
 
 // Section 8.2.1 - LEA
+let isReMaterializable = 1 in {
 let cx = 0, DecoderMethod = "DecodeLoadI64" in
 defm LEA : RMm<"lea", 0x06, I64>;
 let cx = 1, DecoderMethod = "DecodeLoadI64" in
 defm LEASL : RMm<"lea.sl", 0x06, I64>;
+}
 
 def : Pat<(iPTR ADDRrri:$addr), (LEArri MEMrri:$addr)>;
 def : Pat<(iPTR ADDRrii:$addr), (LEArii MEMrii:$addr)>;
@@ -1309,6 +1311,7 @@ def SVOB : RR<0x30, (outs), (ins), "svob">;
 //-----------------------------------------------------------------------------
 
 // Section 8.4.1 - ADD (Add)
+let isReMaterializable = 1 in {
 defm ADDUL : RRm<"addu.l", 0x48, I64, i64>;
 let cx = 1 in defm ADDUW : RRm<"addu.w", 0x48, I32, i32>;
 
@@ -1376,22 +1379,25 @@ let cx = 1, cw = 1 in defm MINSWZX : RRm<"mins.w.zx", 0x78, I32, i32>;
 // Section 8.4.18 - CMX (Compare and Select Maximum/Minimum)
 defm MAXSL : RRm<"maxs.l", 0x68, I64, i64, smax>;
 let cw = 1 in defm MINSL : RRm<"mins.l", 0x68, I64, i64, smin>;
+}
 
 //-----------------------------------------------------------------------------
 // Section 8.5 - Logical Operation Instructions
 //-----------------------------------------------------------------------------
 
+def xor_pat : PatFrags<(ops node:$lhs, node:$rhs),
+                       [(xor node:$lhs, node:$rhs),
+                        (XOR node:$lhs, node:$rhs)]>;
 // Section 8.5.1 - AND (AND)
+let isReMaterializable = 1 in {
 defm AND : RRm<"and", 0x44, I64, i64, and>;
 
 // Section 8.5.2 - OR (OR)
 defm OR : RRm<"or", 0x45, I64, i64, or>;
 
 // Section 8.5.3 - XOR (Exclusive OR)
-def xor_pat : PatFrags<(ops node:$lhs, node:$rhs),
-                       [(xor node:$lhs, node:$rhs),
-                        (XOR node:$lhs, node:$rhs)]>;
 defm XOR : RRm<"xor", 0x46, I64, i64, xor_pat>;
+}
 
 // Section 8.5.4 - EQV (Equivalence)
 defm EQV : RRm<"eqv", 0x47, I64, i64, EQV>;
@@ -1430,6 +1436,7 @@ def : Pat<(i32 (bswap (i32 mimm:$src))),
           (EXTRACT_SUBREG (BSWPmi (MIMM $src), 1), sub_i32)>;
 
 // Section 8.5.11 - CMOV (Conditional Move)
+let isReMaterializable = 1 in {
 let cw = 0, cw2 = 0 in
 defm CMOVL : RRCMOVm<"cmov.l.${cfw}", 0x3B, I64, i64, CMOV>;
 let cw = 1, cw2 = 0 in
@@ -1438,6 +1445,7 @@ let cw = 0, cw2 = 1 in
 defm CMOVD : RRCMOVm<"cmov.d.${cfw}", 0x3B, I64, f64, CMOV, simm7fp>;
 let cw = 1, cw2 = 1 in
 defm CMOVS : RRCMOVm<"cmov.s.${cfw}", 0x3B, F32, f32, CMOV, simm7fp>;
+}
 def : MnemonicAlias<"cmov.l", "cmov.l.at">;
 def : MnemonicAlias<"cmov.w", "cmov.w.at">;
 def : MnemonicAlias<"cmov.d", "cmov.d.at">;
@@ -1447,6 +1455,7 @@ def : MnemonicAlias<"cmov.s", "cmov.s.at">;
 // Section 8.6 - Shift Operation Instructions
 //-----------------------------------------------------------------------------
 
+let isReMaterializable = 1 in {
 // Section 8.6.1 - SLL (Shift Left Logical)
 defm SLL : RRIm<"sll", 0x65, I64, i64, shl>;
 
@@ -1472,6 +1481,7 @@ let cx = 1 in defm SRAWZX : RRIm<"sra.w.zx", 0x76, I32, i32>;
 
 // Section 8.6.8 - SRAX (Shift Right Arithmetic)
 defm SRAL : RRIm<"sra.l", 0x77, I64, i64, sra>;
+}
 
 def : Pat<(i32 (srl i32:$src, (i32 simm7:$val))),
           (EXTRACT_SUBREG (SRLri (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
