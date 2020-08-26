@@ -237,6 +237,8 @@ public:
     return Ty->isFPOrFPVectorTy() &&
            (isVectorLaneType(*Ty) || isVectorRegisterType(*Ty));
   }
+
+  bool shouldBuildLookupTables() const { return false; }
   /// } Heuristics
 
   /// LLVM-VP Support
