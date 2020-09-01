@@ -768,7 +768,7 @@ handleFailedDelinearization(ScalarEvolution &SE, const Loop *L, const SCEV *Acce
   uint64_t TypeByteSize = DL.getTypeAllocSize(Ty);
   const SCEV *Divisor = SE.getConstant(Ty, TypeByteSize);
   const SCEV *Normalized = getSDivSimpleAddRec(SE, AddRec, Divisor);
-  dbgs() << "Normalized: " << *Normalized << "\n";
+  LLVM_DEBUG(dbgs() << "Normalized: " << *Normalized << "\n";);
   Subscripts.push_back(Normalized);
   // Push an invalid size just because the sizes of the two vectors
   // have to be equal.
@@ -1479,8 +1479,6 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
         return Bail;
 
       LLVM_DEBUG(dbgs() << "\n");
-      // expandDimensions(&SE, Subscripts1, NestInfo);
-      // expandDimensions(&SE, Subscripts2, NestInfo);
       DepVector IterDV(NestInfo.NumDimensions);
       DVValidity Valid =
           getDirVector(&SE, IterDV, Subscripts1, Subscripts2, NestInfo);
