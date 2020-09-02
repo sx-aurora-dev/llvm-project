@@ -610,40 +610,105 @@ static bool isAccessingInstruction(const Instruction &I) {
   return I.mayReadOrWriteMemory();
 }
 
+struct MinMaxSCEVPair {
+  const SCEV *Min, *Max;
+};
+
+static void addNoSignedWrapFlag(const SCEV *S) {
+  if (S->getSCEVType() == scAddRecExpr) {
+    SCEVAddRecExpr *AR = (SCEVAddRecExpr *)S;
+    AR->setNoWrapFlags(SCEV::NoWrapFlags::FlagNSW);
+  } else if (S->getSCEVType() == scAddExpr) {
+    SCEVAddExpr *AE = (SCEVAddExpr *)S;
+    AE->setNoWrapFlags(SCEV::NoWrapFlags::FlagNSW);
+  }
+}
+
+/// Return true if it could prove that all min/max pairs
+/// are within bounds. For this setting, within bounds means
+/// that min >= 0 and Max[I] < Sizes[I]. Otherwise, return false.
+// TODO: At some point, instead of just returning true or false, we should
+// return e.g. a vector of checks for those that we couldn't deduce statically.
+static bool verifyMinMaxPairs(ScalarEvolution& SE,
+  const SmallVectorImpl<MinMaxSCEVPair>& MinMaxPairs,
+  const SmallVectorImpl<const SCEV*>& Sizes) {
+
+  // Remember that `Sizes` has the size() of `Subscripts`
+  // when delinearizing, but it actually has one less element.
+  assert(MinMaxPairs.size() > 0);
+  assert(MinMaxPairs.size() == Sizes.size() - 1);
+
+  for (size_t I = 0; I < Sizes.size() - 1; ++I) {
+    MinMaxSCEVPair MMPair = MinMaxPairs[I];
+    assert(MMPair.Min);
+    assert(MMPair.Max);
+    const SCEV *Sz = Sizes[I];
+    assert(Sz);
+    // Probably we don't want to hoist this out because the type
+    // of each subscript may be different.
+    const SCEVConstant *Zero =
+        dyn_cast<SCEVConstant>(SE.getConstant(Sz->getType(), 0, true));
+    assert(Zero);
+    // Verify that Min >= 0.
+    const SCEV *Min = SE.getSMinExpr(Zero, MMPair.Min);
+    dbgs() << "Pair Min: " << *MMPair.Min << "\n";
+    dbgs() << "Min: " << *Min << "\n";
+    if (Min != Zero)
+      return false;
+
+    // Verify that Max[I] < Sizes[I]
+
+    // TODO: We can add NSW flag in C/C++ because signed
+    // overflow is UB. What about other languages ?
+    addNoSignedWrapFlag(MMPair.Max);
+    addNoSignedWrapFlag(Sz);
+    const SCEV *Max = SE.getSMaxExpr(Sz, MMPair.Max);
+    if (Max != Sz)
+      return false;
+    // Also, verify that they're not equal
+    if (SE.getMinusSCEV(MMPair.Max, Sz) == Zero)
+      return false;
+  }
+  return true;
+}
+
 bool subscriptsAreWithinBounds(ScalarEvolution &SE,
                                const SmallVectorImpl<const SCEV *> &Subscripts,
                                const SmallVectorImpl<const SCEV *> &Sizes) {
-  // TODO: We are checking whether the subscripts are less than the sizes.
-  // But maybe, we should also check if they're greater than 0.
-  assert(Subscripts.size() > 1);
+  assert(Subscripts.size() == Sizes.size());
+  if (Subscripts.size() <= 1)
+    return true;
+  // Gather min / max of subscripts.
   // Remember that Sizes has one less entry than Subscripts because we never
   // know the first dimension.
-  for (size_t SubIt = 1; SubIt < Subscripts.size(); ++SubIt) {
+  SmallVector<MinMaxSCEVPair, 4> MinMaxPairs(Sizes.size() - 1);
+  for (size_t SubIt = 1, SzIt = 0; SubIt < Subscripts.size(); ++SubIt, ++SzIt) {
     const SCEV *Sub = Subscripts[SubIt];
-    const SCEV *Sz = Sizes[SubIt - 1];
     // We have already checked the following before calling
     // this function.
     assert(Sub->getSCEVType() == scConstant ||
            Sub->getSCEVType() == scAddRecExpr);
-    const SCEV *MinusOne =
-        SE.getMinusSCEV(Sz, SE.getConstant(Sz->getType(), 1));
+
     if (Sub->getSCEVType() == scConstant) {
-      if (SE.getSMaxExpr(Sub, MinusOne) != MinusOne)
-        return false;
-    } else {
-      const SCEVAddRecExpr *SubAR = dyn_cast<SCEVAddRecExpr>(Sub);
-      const SCEV *Max = SE.getSMaxExpr(SubAR->getStart(), MinusOne);
-      dbgs() << "Max (" << Max->getSCEVType() << "): " << *Max << "\n";
-      if (SE.getSMaxExpr(SubAR->getStart(), MinusOne) != MinusOne)
-        return false;
-      const Loop *SurroundingLoop = SubAR->getLoop();
-      const SCEV *NumIterations = SE.getBackedgeTakenCount(SurroundingLoop);
-      const SCEV *ExitValue = SubAR->evaluateAtIteration(NumIterations, SE);
-      if (SE.getSMaxExpr(ExitValue, MinusOne) != MinusOne)
-        return false;
+      MinMaxPairs[SzIt].Min = MinMaxPairs[SzIt].Max = Sub;
+      continue;
     }
+    const SCEVAddRecExpr *SubAR = dyn_cast<SCEVAddRecExpr>(Sub);
+    assert(SubAR);
+    // Important: This is valid only because we have already tested
+    // that the step is positive.
+    MinMaxPairs[SzIt].Min = SubAR->getStart();
+    assert(SubAR->getStart());
+    // i.e. function-level. This will give us the value of the
+    // subscript after the _whole_ loop nest (i.e. what is considered
+    // usually an exit value but not just for its loop, but the whole
+    // nest, which is the same thing).
+    const Loop *TopLevel = nullptr;
+    // Again, this works because we have tested that the step is positive.
+    MinMaxPairs[SzIt].Max = SE.getSCEVAtScope(Sub, TopLevel);
   }
-  return true;
+
+  return verifyMinMaxPairs(SE, MinMaxPairs, Sizes);
 }
 
 static bool subscriptsAreLegal(ScalarEvolution &SE,
@@ -671,8 +736,8 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
       const SCEV *Step = AddRec->getStepRecurrence(SE);
       if (Step->getSCEVType() != scConstant)
         return false;
-      const SCEVConstant *Const = dyn_cast<SCEVConstant>(Step);
-      if (Const->getAPInt().getSExtValue() <= 0)
+      const SCEVConstant *StepConst = dyn_cast<SCEVConstant>(Step);
+      if (StepConst->getAPInt().getSExtValue() <= 0)
         return false;
     } break;
     default:
@@ -680,8 +745,8 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
     }
   }
 
-  // if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
-  //  return false;
+   if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
+    return false;
 
   return true;
 }
@@ -769,10 +834,12 @@ handleFailedDelinearization(ScalarEvolution &SE, const Loop *L, const SCEV *Acce
   const SCEV *Divisor = SE.getConstant(Ty, TypeByteSize);
   const SCEV *Normalized = getSDivSimpleAddRec(SE, AddRec, Divisor);
   LLVM_DEBUG(dbgs() << "Normalized: " << *Normalized << "\n";);
+  Subscripts.clear();
   Subscripts.push_back(Normalized);
   // Push an invalid size just because the sizes of the two vectors
   // have to be equal.
-  Subscripts.push_back(SE.getConstant(Ty, ~0));
+  Sizes.clear();
+  Sizes.push_back(SE.getConstant(Ty, ~0));
   return true;
 }
 
@@ -825,9 +892,12 @@ delinearizeInstAndVerifySubscripts(ScalarEvolution &SE, Instruction *Inst,
                                    SmallVectorImpl<const SCEV *> &Sizes,
                                    LoopNestInfo NestInfo) {
 
-  return delinearizeAccessInst(SE, Inst, Subscripts, Sizes,
-                               NestInfo.InnermostLoop) &&
-         subscriptsAreLegal(SE, Subscripts, Sizes, NestInfo);
+
+  bool DelinSucc = delinearizeAccessInst(SE, Inst, Subscripts, Sizes,
+                                         NestInfo.InnermostLoop);
+  if (!DelinSucc)
+    return false;
+  return subscriptsAreLegal(SE, Subscripts, Sizes, NestInfo);
 }
 
 struct DepVectorComponent {

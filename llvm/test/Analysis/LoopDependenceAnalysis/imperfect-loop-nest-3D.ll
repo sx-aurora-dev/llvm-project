@@ -27,6 +27,7 @@
 ; (k-loop)-(first i-j (sub-)nest): This has max VF: 3
 ; (k-loop)-(second i-j (sub-)nest): This has max VF: 4
 
+; Currently FAILING for similar reasons as imperfect-loop-nest-3.ll
 
 define void @test(i64 %x, i64 %y, i64 %z, i64* noalias %A, i64* noalias %B) {
 entry:

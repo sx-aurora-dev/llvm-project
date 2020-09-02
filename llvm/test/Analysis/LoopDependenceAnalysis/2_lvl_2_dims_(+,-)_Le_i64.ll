@@ -18,6 +18,11 @@
 ; value but their difference is constant and so
 ; we should be able to find that the loop is vectorizable.
 
+; This is currently FAILING because of bounds-checking. We can't
+; take advantage here of the fact that the difference is constant
+; because for all that to be valid, each subscript (part) should
+; be in-bounds.
+
 define void @test(i64 %n, i64 %m, i32 %x, i64* %A) {
 entry:
   %cmp3 = icmp sgt i64 %n, 0

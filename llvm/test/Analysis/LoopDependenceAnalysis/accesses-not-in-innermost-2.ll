@@ -11,6 +11,10 @@
 ;   }
 ; }
 
+; Currently FAILING because of bounds checking. It doesn't deduce
+; if %y >= 0. I think we can assume that %y, because it is an array
+; size, is bigger or equal to 0.
+
 ; CHECK: Loop: for.body: Is vectorizable with VF: 2
 ; CHECK: Loop: for.body4: Is vectorizable for any factor
 

@@ -16,6 +16,10 @@
 ; work together. See separate test cases for each
 ; of these.
 
+; Currently FAILING because of bounds checking. It doesn't deduce
+; if %z >= 0. I think we can assume that %z, because it is an array
+; size, is bigger or equal to 0.
+
 define void @test(i64 %x, i64 %y, i64 %z, i64* %A) {
 entry:
   %cmp6 = icmp sgt i64 %x, 0
