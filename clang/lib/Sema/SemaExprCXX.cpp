@@ -5946,8 +5946,7 @@ QualType Sema::CheckGNUVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,
   } else if (LHSVT || RHSVT) {
     ResultType = CheckVectorOperands(
         LHS, RHS, QuestionLoc, /*isCompAssign*/ false, /*AllowBothBool*/ true,
-        /*AllowBoolConversions*/ false,
-        /*AllowBoolOperator*/ false);
+        /*AllowBoolConversions*/ false);
     if (ResultType.isNull())
       return {};
   } else {
@@ -6265,10 +6264,9 @@ QualType Sema::CXXCheckConditionalOperands(ExprResult &Cond, ExprResult &LHS,
 
   // Extension: conditional operator involving vector types.
   if (LTy->isVectorType() || RTy->isVectorType())
-    return CheckVectorOperands(LHS, RHS, QuestionLoc, /*isCompAssign*/ false,
-                               /*AllowBothBool*/ true,
-                               /*AllowBoolConversions*/ false,
-                               /*AllowBoolOperator*/ false);
+    return CheckVectorOperands(LHS, RHS, QuestionLoc, /*isCompAssign*/false,
+                               /*AllowBothBool*/true,
+                               /*AllowBoolConversions*/false);
 
   //   -- The second and third operands have arithmetic or enumeration type;
   //      the usual arithmetic conversions are performed to bring them to a
