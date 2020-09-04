@@ -125,7 +125,7 @@ LLVMTypeConverter::LLVMTypeConverter(MLIRContext *ctx)
 /// Create an LLVMTypeConverter using custom LowerToLLVMOptions.
 LLVMTypeConverter::LLVMTypeConverter(MLIRContext *ctx,
                                      const LowerToLLVMOptions &options)
-    : llvmDialect(ctx->getRegisteredDialect<LLVM::LLVMDialect>()),
+    : llvmDialect(ctx->getOrLoadDialect<LLVM::LLVMDialect>()),
       options(options) {
   assert(llvmDialect && "LLVM IR dialect is not registered");
   if (options.indexBitwidth == kDeriveIndexBitwidthFromDataLayout)
@@ -1418,6 +1418,7 @@ using CosOpLowering = VectorConvertToLLVMPattern<CosOp, LLVM::CosOp>;
 using DivFOpLowering = VectorConvertToLLVMPattern<DivFOp, LLVM::FDivOp>;
 using ExpOpLowering = VectorConvertToLLVMPattern<ExpOp, LLVM::ExpOp>;
 using Exp2OpLowering = VectorConvertToLLVMPattern<Exp2Op, LLVM::Exp2Op>;
+using FloorFOpLowering = VectorConvertToLLVMPattern<FloorFOp, LLVM::FFloorOp>;
 using Log10OpLowering = VectorConvertToLLVMPattern<Log10Op, LLVM::Log10Op>;
 using Log2OpLowering = VectorConvertToLLVMPattern<Log2Op, LLVM::Log2Op>;
 using LogOpLowering = VectorConvertToLLVMPattern<LogOp, LLVM::LogOp>;
@@ -1803,8 +1804,8 @@ struct AllocLikeOpLowering : public ConvertOpToLLVMPattern<AllocLikeOp> {
     if (!typeConverter.getOptions().useAlignedAlloc)
       return None;
 
-    if (allocOp.alignment())
-      return allocOp.alignment().getValue().getSExtValue();
+    if (Optional<uint64_t> alignment = allocOp.alignment())
+      return *alignment;
 
     // Whenever we don't have alignment set, we will use an alignment
     // consistent with the element type; since the allocation size has to be a
@@ -1842,8 +1843,7 @@ struct AllocLikeOpLowering : public ConvertOpToLLVMPattern<AllocLikeOp> {
       accessAlignment = nullptr;
       return rewriter.create<LLVM::AllocaOp>(
           loc, elementPtrType, cumulativeSize,
-          allocaOp.alignment() ? allocaOp.alignment().getValue().getSExtValue()
-                               : 0);
+          allocaOp.alignment() ? *allocaOp.alignment() : 0);
     }
 
     // Heap allocations.
@@ -1891,9 +1891,8 @@ struct AllocLikeOpLowering : public ConvertOpToLLVMPattern<AllocLikeOp> {
       callArgs = {alignedAllocAlignmentValue, cumulativeSize};
     } else {
       // Adjust the allocation size to consider alignment.
-      if (allocOp.alignment()) {
-        accessAlignment = createIndexConstant(
-            rewriter, loc, allocOp.alignment().getValue().getSExtValue());
+      if (Optional<uint64_t> alignment = allocOp.alignment()) {
+        accessAlignment = createIndexConstant(rewriter, loc, *alignment);
         cumulativeSize = rewriter.create<LLVM::SubOp>(
             loc,
             rewriter.create<LLVM::AddOp>(loc, cumulativeSize, accessAlignment),
@@ -2536,7 +2535,7 @@ struct PrefetchOpLowering : public LoadStoreOpLowering<PrefetchOp> {
         rewriter.getI32IntegerAttr(prefetchOp.isWrite()));
     auto localityHint = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), llvmI32Type,
-        rewriter.getI32IntegerAttr(prefetchOp.localityHint().getZExtValue()));
+        rewriter.getI32IntegerAttr(prefetchOp.localityHint()));
     auto isData = rewriter.create<LLVM::ConstantOp>(
         op->getLoc(), llvmI32Type,
         rewriter.getI32IntegerAttr(prefetchOp.isDataCache()));
@@ -2629,6 +2628,11 @@ struct SIToFPLowering
   using Super::Super;
 };
 
+struct UIToFPLowering
+    : public OneToOneConvertToLLVMPattern<UIToFPOp, LLVM::UIToFPOp> {
+  using Super::Super;
+};
+
 struct FPExtLowering
     : public OneToOneConvertToLLVMPattern<FPExtOp, LLVM::FPExtOp> {
   using Super::Super;
@@ -2636,6 +2640,11 @@ struct FPExtLowering
 
 struct FPToSILowering
     : public OneToOneConvertToLLVMPattern<FPToSIOp, LLVM::FPToSIOp> {
+  using Super::Super;
+};
+
+struct FPToUILowering
+    : public OneToOneConvertToLLVMPattern<FPToUIOp, LLVM::FPToUIOp> {
   using Super::Super;
 };
 
@@ -3052,7 +3061,7 @@ struct AssumeAlignmentOpLowering
                   ConversionPatternRewriter &rewriter) const override {
     AssumeAlignmentOp::Adaptor transformed(operands);
     Value memref = transformed.memref();
-    unsigned alignment = cast<AssumeAlignmentOp>(op).alignment().getZExtValue();
+    unsigned alignment = cast<AssumeAlignmentOp>(op).alignment();
 
     MemRefDescriptor memRefDescriptor(memref);
     Value ptr = memRefDescriptor.alignedPtr(rewriter, memref.getLoc());
@@ -3285,12 +3294,14 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       DivFOpLowering,
       ExpOpLowering,
       Exp2OpLowering,
+      FloorFOpLowering,
       GenericAtomicRMWOpLowering,
       LogOpLowering,
       Log10OpLowering,
       Log2OpLowering,
       FPExtLowering,
       FPToSILowering,
+      FPToUILowering,
       FPTruncLowering,
       ImOpLowering,
       IndexCastOpLowering,
@@ -3318,6 +3329,7 @@ void mlir::populateStdToLLVMNonMemoryConversionPatterns(
       SubFOpLowering,
       SubIOpLowering,
       TruncateIOpLowering,
+      UIToFPLowering,
       UnsignedDivIOpLowering,
       UnsignedRemIOpLowering,
       UnsignedShiftRightOpLowering,

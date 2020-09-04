@@ -282,9 +282,6 @@ static bool updateOperand(FoldCandidate &Fold,
   assert(!Fold.needsShrink() && "not handled");
 
   if (Fold.isImm()) {
-    // FIXME: ChangeToImmediate should probably clear the subreg flags. It's
-    // reinterpreted as TargetFlags.
-    Old.setSubReg(0);
     Old.ChangeToImmediate(Fold.ImmToFold);
     return true;
   }
@@ -539,7 +536,7 @@ static bool tryToFoldACImm(const SIInstrInfo *TII,
     return false;
 
   Register UseReg = OpToFold.getReg();
-  if (!Register::isVirtualRegister(UseReg))
+  if (!UseReg.isVirtual())
     return false;
 
   if (llvm::find_if(FoldList, [UseMI](const FoldCandidate &FC) {
@@ -834,8 +831,6 @@ void SIFoldOperands::foldOperand(
 
         UseMI->setDesc(TII->get(AMDGPU::S_MOV_B32));
 
-        // FIXME: ChangeToImmediate should clear subreg
-        UseMI->getOperand(1).setSubReg(0);
         if (OpToFold.isImm())
           UseMI->getOperand(1).ChangeToImmediate(OpToFold.getImm());
         else
@@ -1006,8 +1001,7 @@ static MachineOperand *getImmOrMaterializedImm(MachineRegisterInfo &MRI,
                                                MachineOperand &Op) {
   if (Op.isReg()) {
     // If this has a subregister, it obviously is a register source.
-    if (Op.getSubReg() != AMDGPU::NoSubRegister ||
-        !Register::isVirtualRegister(Op.getReg()))
+    if (Op.getSubReg() != AMDGPU::NoSubRegister || !Op.getReg().isVirtual())
       return &Op;
 
     MachineInstr *Def = MRI.getVRegDef(Op.getReg());
@@ -1277,7 +1271,7 @@ void SIFoldOperands::foldInstOperand(MachineInstr &MI,
 
   for (FoldCandidate &Fold : FoldList) {
     assert(!Fold.isReg() || Fold.OpToFold);
-    if (Fold.isReg() && Register::isVirtualRegister(Fold.OpToFold->getReg())) {
+    if (Fold.isReg() && Fold.OpToFold->getReg().isVirtual()) {
       Register Reg = Fold.OpToFold->getReg();
       MachineInstr *DefMI = Fold.OpToFold->getParent();
       if (DefMI->readsRegister(AMDGPU::EXEC, TRI) &&
@@ -1572,7 +1566,7 @@ bool SIFoldOperands::runOnMachineFunction(MachineFunction &MF) {
       if (!FoldingImm && !OpToFold.isReg())
         continue;
 
-      if (OpToFold.isReg() && !Register::isVirtualRegister(OpToFold.getReg()))
+      if (OpToFold.isReg() && !OpToFold.getReg().isVirtual())
         continue;
 
       // Prevent folding operands backwards in the function. For example,
@@ -1582,7 +1576,7 @@ bool SIFoldOperands::runOnMachineFunction(MachineFunction &MF) {
       //    ...
       //    %vgpr0 = V_MOV_B32_e32 1, implicit %exec
       MachineOperand &Dst = MI.getOperand(0);
-      if (Dst.isReg() && !Register::isVirtualRegister(Dst.getReg()))
+      if (Dst.isReg() && !Dst.getReg().isVirtual())
         continue;
 
       foldInstOperand(MI, OpToFold);
