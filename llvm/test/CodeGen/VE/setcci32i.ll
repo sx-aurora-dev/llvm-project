@@ -87,8 +87,9 @@ define zeroext i1 @setccsge(i32 signext, i32 signext) {
 define zeroext i1 @setccslt(i32 signext, i32 signext) {
 ; CHECK-LABEL: setccslt:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cmps.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 31
+; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = icmp slt i32 %0, 0
   ret i1 %3
