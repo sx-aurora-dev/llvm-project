@@ -614,3 +614,19 @@ void FloatVecUsage() {
   constexpr auto Y = CmpSub(a, b);
   // CHECK: store <4 x float> <float 1.200000e+01, float 1.700000e+01, float -1.000000e+00, float -1.000000e+00>
 }
+
+using EightBoolsVecSize __attribute__((vector_size(1))) = bool;
+void BoolVecUsage() {
+  constexpr auto a = EightBoolsVecSize{true, false, true, false} <
+                     EightBoolsVecSize{false, false, true, true};
+  constexpr auto b = EightBoolsVecSize{true, false, true, false} <=
+                     EightBoolsVecSize{false, false, true, true};
+  constexpr auto c = EightBoolsVecSize{true, false, true, false} ==
+                     EightBoolsVecSize{false, false, true, true};
+  constexpr auto d = EightBoolsVecSize{true, false, true, false} !=
+                     EightBoolsVecSize{false, false, true, true};
+  constexpr auto e = EightBoolsVecSize{true, false, true, false} >=
+                     EightBoolsVecSize{false, false, true, true};
+  constexpr auto f = EightBoolsVecSize{true, false, true, false} >
+                     EightBoolsVecSize{false, false, true, true};
+}

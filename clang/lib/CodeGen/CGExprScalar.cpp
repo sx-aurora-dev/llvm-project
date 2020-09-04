@@ -1958,7 +1958,7 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
   case CK_BlockPointerToObjCPointerCast:
   case CK_AnyPointerToBlockPointerCast:
   case CK_BitCast: {
-    Value *Src = Visit(const_cast<Expr*>(E));
+    Value *Src = Visit(const_cast<Expr *>(E));
     llvm::Type *SrcTy = Src->getType();
     llvm::Type *DstTy = ConvertType(DestTy);
     if (SrcTy->isPtrOrPtrVectorTy() && DstTy->isPtrOrPtrVectorTy() &&
@@ -2031,7 +2031,34 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
       return EmitLoadOfLValue(DestLV, CE->getExprLoc());
     }
 
-    return Builder.CreateBitCast(Src, DstTy);
+    // SExt/Trunc Boolean vectors to fit the expected type
+    auto *VecSrcTy = dyn_cast<llvm::VectorType>(Src->getType());
+    auto *VecDstTy = dyn_cast<llvm::VectorType>(DstTy);
+    bool VectorElementCast =
+        VecSrcTy && VecDstTy &&
+        (VecSrcTy->getElementCount() == VecDstTy->getElementCount());
+    bool IsDenseBoolVectorTarget =
+        CGF.getContext().getTargetInfo().hasDenseBoolVectors();
+    if (IsDenseBoolVectorTarget && VecSrcTy &&
+        VecSrcTy->getElementType()->isIntegerTy(1)) {
+      // When casting with the same element count extend this to the native
+      // result size Otw, signextend to 'i8' as an intermediary
+      unsigned DstElemBits =
+          VectorElementCast ? DstTy->getScalarSizeInBits() : 8;
+
+      auto *PlainIntTy = llvm::VectorType::get(Builder.getIntNTy(DstElemBits),
+                                               VecSrcTy->getElementCount());
+      Src = Builder.CreateSExt(Src, PlainIntTy);
+    }
+    Src = Builder.CreateBitCast(Src, DstTy);
+    if (IsDenseBoolVectorTarget && VectorElementCast &&
+        VecDstTy->getElementType()->isIntegerTy(1)) {
+      auto *PlainIntTy =
+          llvm::VectorType::get(Builder.getIntNTy(SrcTy->getScalarSizeInBits()),
+                                VecSrcTy->getElementCount());
+      Src = Builder.CreateTrunc(Src, PlainIntTy);
+    }
+    return Src;
   }
   case CK_AddressSpaceConversion: {
     Expr::EvalResult Result;
@@ -4565,6 +4592,14 @@ static Value *createCastsForTypeOfSameSize(CGBuilderTy &Builder,
   return Builder.CreateIntToPtr(Src, DstTy, Name);
 }
 
+static bool IsGenericBoolVector(QualType Ty) {
+  const auto *ClangVecTy = dyn_cast<VectorType>(Ty);
+  if (!ClangVecTy)
+    return false;
+
+  return ClangVecTy->isVectorSizeBoolean();
+}
+
 Value *ScalarExprEmitter::VisitAsTypeExpr(AsTypeExpr *E) {
   Value *Src  = CGF.EmitScalarExpr(E->getSrcExpr());
   llvm::Type *DstTy = ConvertType(E->getType());
@@ -4578,6 +4613,12 @@ Value *ScalarExprEmitter::VisitAsTypeExpr(AsTypeExpr *E) {
       isa<llvm::VectorType>(DstTy)
           ? cast<llvm::FixedVectorType>(DstTy)->getNumElements()
           : 0;
+
+  // Use bit vector expansion for generic boolean vectors
+  if (CGF.getTarget().hasDenseBoolVectors() &&
+      IsGenericBoolVector(E->getType())) {
+    return CGF.emitBoolVecConversion(Src, NumElementsDst, "astype");
+  }
 
   // Going from vec3 to non-vec3 is a special case and requires a shuffle
   // vector to get a vec4, then a bitcast if the target type is different.

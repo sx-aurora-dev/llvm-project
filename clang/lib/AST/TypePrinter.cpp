@@ -645,13 +645,18 @@ void TypePrinter::printVectorBefore(const VectorType *T, raw_ostream &OS) {
     printBefore(T->getElementType(), OS);
     break;
   case VectorType::GenericVector: {
+    auto NumVectorElems = T->getNumElements();
     // FIXME: We prefer to print the size directly here, but have no way
     // to get the size of the type.
-    OS << "__attribute__((__vector_size__("
-       << T->getNumElements()
-       << " * sizeof(";
-    print(T->getElementType(), OS, StringRef());
-    OS << ")))) ";
+    // FIXME: Only the target knows whether the elements of 'Bool' vectors occpy
+    // one bit or sizeof(char).
+    OS << "__attribute__((__vector_size__(" << NumVectorElems;
+    if (!T->isVectorSizeBoolean()) {
+      OS << " * sizeof(";
+      print(T->getElementType(), OS, StringRef());
+      OS << ")";
+    }
+    OS << "))) ";
     printBefore(T->getElementType(), OS);
     break;
   }

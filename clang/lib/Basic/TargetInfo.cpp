@@ -52,6 +52,10 @@ TargetInfo::TargetInfo(const llvm::Triple &T) : TargetOpts(), Triple(T) {
   FractWidth = FractAlign = 16;
   LongFractWidth = LongFractAlign = 32;
 
+  // By default, each element of a boolean vector occpies one bit. Target that
+  // represent boolean elements as bytes may want to disable this.
+  DenseBoolVector = true;
+
   // Fixed point default integral and fractional bit sizes
   // We give the _Accum 1 fewer fractional bits than their corresponding _Fract
   // types by default to have the same number of fractional bits between _Accum
