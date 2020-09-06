@@ -1,11 +1,11 @@
-// RUN: %clang_cc1 -emit-llvm -debug-info-kind=limited %s -o - | FileCheck %s
-typedef _Bool bool32 __attribute__((__vector_size__(4)));
+// RUN: %clang_cc1 -triple x86_64-linux-pc -emit-llvm -debug-info-kind=limited %s -o - | FileCheck %s
+typedef _Bool bool512 __attribute__((__vector_size__(64)));
 
-bool32 b;
+bool512 b;
 
-// Test that we get an char array type.
+// Test that we get bit-sized bool elements on x86
 // CHECK: !DICompositeType(tag: DW_TAG_array_type,
-// CHECK-SAME:             baseType: ![[CHAR:[0-9]+]]
-// CHECK-SAME:             size: 32
+// CHECK-SAME:             baseType: ![[BOOL:[0-9]+]]
+// CHECK-SAME:             size: 512
 // CHECK-SAME:             DIFlagVector
-// CHECK: ![[CHAR]] = !DIBasicType(name: "char"
+// CHECK: ![[BOOL]] = !DIBasicType(name: "char"

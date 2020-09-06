@@ -77,6 +77,9 @@ struct TransferrableTargetInfo {
   unsigned char FractWidth, FractAlign;
   unsigned char LongFractWidth, LongFractAlign;
 
+  // Whether the elements of a boolean vector are bits.
+  bool DenseBoolVector;
+
   // If true, unsigned fixed point types have the same number of fractional bits
   // as their signed counterparts, forcing the unsigned types to have one extra
   // bit of padding. Otherwise, unsigned fixed point types have
@@ -412,6 +415,9 @@ public:
 
   /// Return the size of '_Bool' and C++ 'bool' for this target, in bits.
   unsigned getBoolWidth() const { return BoolWidth; }
+
+  /// Return whether the size of an element of a bool vector is just one bit.
+  bool hasDenseBoolVectors() const { return DenseBoolVector; }
 
   /// Return the alignment of '_Bool' and C++ 'bool' for this target.
   unsigned getBoolAlign() const { return BoolAlign; }
@@ -1061,6 +1067,9 @@ public:
     return Triple;
   }
 
+  /// Returns the target ID if supported.
+  virtual llvm::Optional<std::string> getTargetID() const { return llvm::None; }
+
   const llvm::DataLayout &getDataLayout() const {
     assert(DataLayout && "Uninitialized DataLayout!");
     return *DataLayout;
@@ -1140,9 +1149,25 @@ public:
   /// Fill a SmallVectorImpl with the valid values to setCPU.
   virtual void fillValidCPUList(SmallVectorImpl<StringRef> &Values) const {}
 
+  /// Fill a SmallVectorImpl with the valid values for tuning CPU.
+  virtual void fillValidTuneCPUList(SmallVectorImpl<StringRef> &Values) const {
+    fillValidCPUList(Values);
+  }
+
   /// brief Determine whether this TargetInfo supports the given CPU name.
   virtual bool isValidCPUName(StringRef Name) const {
     return true;
+  }
+
+  /// brief Determine whether this TargetInfo supports the given CPU name for
+  // tuning.
+  virtual bool isValidTuneCPUName(StringRef Name) const {
+    return isValidCPUName(Name);
+  }
+
+  /// brief Determine whether this TargetInfo supports tune in target attribute.
+  virtual bool supportsTargetAttributeTune() const {
+    return false;
   }
 
   /// Use the specified ABI.

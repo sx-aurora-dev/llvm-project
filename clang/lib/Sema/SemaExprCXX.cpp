@@ -1760,12 +1760,10 @@ Sema::ActOnCXXNew(SourceLocation StartLoc, bool UseGlobal,
             // C++1y [expr.new]p6: Every constant-expression in a noptr-new-declarator
             //   shall be a converted constant expression (5.19) of type std::size_t
             //   and shall evaluate to a strictly positive value.
-            unsigned IntWidth = Context.getTargetInfo().getIntWidth();
-            assert(IntWidth && "Builtin type of size 0?");
-            llvm::APSInt Value(IntWidth);
+            llvm::APSInt Value(Context.getIntWidth(Context.getSizeType()));
             Array.NumElts
              = CheckConvertedConstantExpression(NumElts, Context.getSizeType(), Value,
-                                                CCEK_NewExpr)
+                                                CCEK_ArrayBound)
                  .get();
           } else {
             Array.NumElts
@@ -4325,6 +4323,12 @@ Sema::PerformImplicitConversion(Expr *From, QualType ToType,
                              VK_RValue, /*BasePath=*/nullptr, CCK).get();
     break;
 
+  case ICK_SVE_Vector_Conversion:
+    From = ImpCastExprToType(From, ToType, CK_BitCast, VK_RValue,
+                             /*BasePath=*/nullptr, CCK)
+               .get();
+    break;
+
   case ICK_Vector_Splat: {
     // Vector splat from any arithmetic type to a vector.
     Expr *Elem = prepareVectorSplat(ToType, From).get();
@@ -5899,9 +5903,8 @@ static bool isValidVectorForConditionalCondition(ASTContext &Ctx,
   const QualType EltTy =
       cast<VectorType>(CondTy.getCanonicalType())->getElementType();
 
-  assert(!EltTy->isBooleanType() && !EltTy->isEnumeralType() &&
-         "Vectors cant be boolean or enum types");
-  return EltTy->isIntegralType(Ctx);
+  assert(!EltTy->isEnumeralType() && "Vectors cant be enum types");
+  return EltTy->isIntegralType(Ctx) || EltTy->isBooleanType();
 }
 
 QualType Sema::CheckGNUVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,
@@ -5947,7 +5950,8 @@ QualType Sema::CheckGNUVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,
     ResultType = CheckVectorOperands(
         LHS, RHS, QuestionLoc, /*isCompAssign*/ false, /*AllowBothBool*/ true,
         /*AllowBoolConversions*/ false,
-        /*AllowBoolOperator*/ false);
+        /*AllowBoolOperation*/ true,
+        /*ReportInvalid*/ true);
     if (ResultType.isNull())
       return {};
   } else {
@@ -6268,7 +6272,8 @@ QualType Sema::CXXCheckConditionalOperands(ExprResult &Cond, ExprResult &LHS,
     return CheckVectorOperands(LHS, RHS, QuestionLoc, /*isCompAssign*/ false,
                                /*AllowBothBool*/ true,
                                /*AllowBoolConversions*/ false,
-                               /*AllowBoolOperator*/ false);
+                               /*AllowBoolOperation*/ false,
+                               /*ReportInvalid*/ true);
 
   //   -- The second and third operands have arithmetic or enumeration type;
   //      the usual arithmetic conversions are performed to bring them to a

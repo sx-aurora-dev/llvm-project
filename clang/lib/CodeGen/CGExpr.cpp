@@ -1683,7 +1683,7 @@ llvm::Value *CodeGenFunction::EmitLoadOfScalar(Address Addr, bool Volatile,
   const auto *ClangVecTy = Ty->getAs<VectorType>();
   if (ClangVecTy) {
     // Boolean vectors use `iN` as storage type
-    if (ClangVecTy->isVectorSizeBoolean()) {
+    if (Target.hasDenseBoolVectors() && ClangVecTy->isVectorSizeBoolean()) {
       llvm::Type *ValTy = ConvertType(Ty);
       unsigned ValNumElems =
           cast<llvm::FixedVectorType>(ValTy)->getNumElements();
@@ -1703,14 +1703,13 @@ llvm::Value *CodeGenFunction::EmitLoadOfScalar(Address Addr, bool Volatile,
 
     // Handle vectors of size 3 like size 4 for better performance.
     const llvm::Type *EltTy = Addr.getElementType();
-    const auto *IRVecTy = cast<llvm::VectorType>(EltTy);
+    const auto *VTy = cast<llvm::FixedVectorType>(EltTy);
 
-    if (!CGM.getCodeGenOpts().PreserveVec3Type &&
-        IRVecTy->getNumElements() == 3) {
+    if (!CGM.getCodeGenOpts().PreserveVec3Type && VTy->getNumElements() == 3) {
 
       // Bitcast to vec4 type.
       llvm::VectorType *vec4Ty =
-          llvm::FixedVectorType::get(IRVecTy->getElementType(), 4);
+          llvm::FixedVectorType::get(VTy->getElementType(), 4);
       Address Cast = Builder.CreateElementBitCast(Addr, vec4Ty, "castToVec4");
       // Now load value.
       llvm::Value *V = Builder.CreateLoad(Cast, Volatile, "loadVec4");
@@ -1763,7 +1762,7 @@ llvm::Value *CodeGenFunction::EmitToMemory(llvm::Value *Value, QualType Ty) {
 }
 
 static bool isBooleanVector(QualType Ty) {
-  auto *VecTy = Ty->getAs<VectorType>();
+  const auto *VecTy = Ty->getAs<VectorType>();
   if (!VecTy)
     return false;
   return VecTy->isVectorSizeBoolean();
@@ -1776,7 +1775,7 @@ llvm::Value *CodeGenFunction::EmitFromMemory(llvm::Value *Value, QualType Ty) {
            "wrong value rep of bool");
     return Builder.CreateTrunc(Value, Builder.getInt1Ty(), "tobool");
   }
-  if (isBooleanVector(Ty)) {
+  if (Target.hasDenseBoolVectors() && isBooleanVector(Ty)) {
     const auto *RawIntTy = Value->getType();
     // Bitcast iP --> <P x i1>
     auto *PaddedVecTy = llvm::FixedVectorType::get(
@@ -1806,8 +1805,9 @@ static Address MaybeConvertMatrixAddress(Address Addr, CodeGenFunction &CGF,
   auto *VectorTy = dyn_cast<llvm::VectorType>(
       cast<llvm::PointerType>(Addr.getPointer()->getType())->getElementType());
   if (VectorTy && !IsVector) {
-    auto *ArrayTy = llvm::ArrayType::get(VectorTy->getElementType(),
-                                         VectorTy->getNumElements());
+    auto *ArrayTy = llvm::ArrayType::get(
+        VectorTy->getElementType(),
+        cast<llvm::FixedVectorType>(VectorTy)->getNumElements());
 
     return Address(CGF.Builder.CreateElementBitCast(Addr, ArrayTy));
   }
@@ -1835,8 +1835,8 @@ void CodeGenFunction::EmitStoreOfScalar(llvm::Value *Value, Address Addr,
   llvm::Type *SrcTy = Value->getType();
   const auto *ClangVecTy = Ty->getAs<VectorType>();
   if (ClangVecTy) {
-    auto *IRVecTy = dyn_cast<llvm::FixedVectorType>(SrcTy);
-    if (ClangVecTy->isVectorSizeBoolean()) {
+    auto *VecTy = dyn_cast<llvm::FixedVectorType>(SrcTy);
+    if (Target.hasDenseBoolVectors() && ClangVecTy->isVectorSizeBoolean()) {
       auto *MemIntTy =
           cast<llvm::IntegerType>(Addr.getType()->getPointerElementType());
       // Expand to the memory bit width
@@ -1847,12 +1847,12 @@ void CodeGenFunction::EmitStoreOfScalar(llvm::Value *Value, Address Addr,
       Value = Builder.CreateBitCast(Value, MemIntTy);
     } else if (!CGM.getCodeGenOpts().PreserveVec3Type) {
       // Handle vec3 special.
-      if (IRVecTy && IRVecTy->getNumElements() == 3) {
+      if (VecTy && cast<llvm::FixedVectorType>(VecTy)->getNumElements() == 3) {
         // Our source is a vec3, do a shuffle vector to make it a vec4.
-        Value = Builder.CreateShuffleVector(
-            Value, llvm::UndefValue::get(IRVecTy), ArrayRef<int>{0, 1, 2, -1},
-            "extractVec");
-        SrcTy = llvm::FixedVectorType::get(IRVecTy->getElementType(), 4);
+        Value = Builder.CreateShuffleVector(Value, llvm::UndefValue::get(VecTy),
+                                            ArrayRef<int>{0, 1, 2, -1},
+                                            "extractVec");
+        SrcTy = llvm::FixedVectorType::get(VecTy->getElementType(), 4);
       }
       if (Addr.getElementType() != SrcTy) {
         Addr = Builder.CreateElementBitCast(Addr, SrcTy, "storetmp");
@@ -2273,7 +2273,7 @@ void CodeGenFunction::EmitStoreThroughExtVectorComponentLValue(RValue Src,
   if (const VectorType *VTy = Dst.getType()->getAs<VectorType>()) {
     unsigned NumSrcElts = VTy->getNumElements();
     unsigned NumDstElts =
-        cast<llvm::VectorType>(Vec->getType())->getNumElements();
+        cast<llvm::FixedVectorType>(Vec->getType())->getNumElements();
     if (NumDstElts == NumSrcElts) {
       // Use shuffle vector is the src and destination are the same number of
       // elements and restore the vector mask since it is on the side it will be
