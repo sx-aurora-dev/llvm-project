@@ -8,10 +8,6 @@
 ;   }
 ; }
 
-; Currently FAILING because of bounds checking. It doesn't deduce
-; if %m >= 0. I think we can assume that %m, because it is an array
-; size, is bigger or equal to 0.
-
 ; CHECK: Loop: for.body: Is NOT vectorizable
 ; CHECK: Loop: for.body3: Is vectorizable for any factor
 

@@ -624,6 +624,32 @@ static void addNoSignedWrapFlag(const SCEV *S) {
   }
 }
 
+/// Language / Framework for preconditions
+/// Still experimental...
+
+static bool isLTArraySize(ScalarEvolution& SE, const SCEV* Val, const SCEV *ArrSize) {
+  const SCEVConstant *Zero =
+      dyn_cast<SCEVConstant>(SE.getConstant(Val->getType(), 0, true));
+
+  // Assume that array sizes are positive.
+  if (Val == Zero)
+    return true;
+
+  // TODO: We can add NSW flag in C/C++ because signed
+  // overflow is UB. What about other languages ?
+  addNoSignedWrapFlag(Val);
+  addNoSignedWrapFlag(ArrSize);
+  dbgs() << "ArrSize: " << *ArrSize << "\n";
+  dbgs() << "Val: " << *Val << "\n";
+  const SCEV *Max = SE.getSMaxExpr(ArrSize, Val);
+  if (Max != ArrSize)
+    return false;
+  // Also, verify that they're not equal
+  if (SE.getMinusSCEV(Val, ArrSize) == Zero)
+    return false;
+  return true;
+}
+
 /// Return true if it could prove that all min/max pairs
 /// are within bounds. For this setting, within bounds means
 /// that min >= 0 and Max[I] < Sizes[I]. Otherwise, return false.
@@ -651,22 +677,11 @@ static bool verifyMinMaxPairs(ScalarEvolution& SE,
     assert(Zero);
     // Verify that Min >= 0.
     const SCEV *Min = SE.getSMinExpr(Zero, MMPair.Min);
-    dbgs() << "Pair Min: " << *MMPair.Min << "\n";
-    dbgs() << "Min: " << *Min << "\n";
     if (Min != Zero)
       return false;
 
     // Verify that Max[I] < Sizes[I]
-
-    // TODO: We can add NSW flag in C/C++ because signed
-    // overflow is UB. What about other languages ?
-    addNoSignedWrapFlag(MMPair.Max);
-    addNoSignedWrapFlag(Sz);
-    const SCEV *Max = SE.getSMaxExpr(Sz, MMPair.Max);
-    if (Max != Sz)
-      return false;
-    // Also, verify that they're not equal
-    if (SE.getMinusSCEV(MMPair.Max, Sz) == Zero)
+    if (!isLTArraySize(SE, MMPair.Max, Sz))
       return false;
   }
   return true;

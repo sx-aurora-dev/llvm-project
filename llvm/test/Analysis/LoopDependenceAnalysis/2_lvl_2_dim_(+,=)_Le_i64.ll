@@ -15,10 +15,6 @@
 ; being greater than 1, so we can vectorize in that dinstance
 ; (specifically 2).
 
-; Currently FAILING because of bounds checking. It doesn't deduce
-; if %m >= 0. I think we can assume that %m, because it is an array
-; size, is bigger or equal to 0.
-
 define void @test(i64 %n, i64 %m, i64* %A) {
 entry:
   %sub = sub nsw i64 %n, 2
