@@ -7,7 +7,7 @@ CLEAN_TEST = $(LLVMSRCPATH)/utils/clean-test.sh
 UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
-TARGETS = select.ll
+TARGETS = select.ll fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll
 
 all: $(TARGETS)
 
