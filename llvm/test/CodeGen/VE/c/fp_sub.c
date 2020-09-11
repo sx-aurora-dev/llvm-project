@@ -14,64 +14,64 @@ typedef _Complex float fcomp;
 typedef _Complex double dcomp;
 typedef _Complex long double qcomp;
 
-#define FP_SUB_VAR(TY, FUNC_NAME) \
-TY func_fp_sub_var ## FUNC_NAME(TY a, TY b) { \
+#define FP_SUB_VAR(TY) \
+TY func_sub_var_ ## TY(TY a, TY b) { \
   return a - b ; \
 }
 
-FP_SUB_VAR(float,  1)
-FP_SUB_VAR(double, 2)
-FP_SUB_VAR(quad,   3)
-FP_SUB_VAR(fcomp,  4)
-FP_SUB_VAR(dcomp,  5)
-FP_SUB_VAR(qcomp,  6)
+FP_SUB_VAR(float)
+FP_SUB_VAR(double)
+FP_SUB_VAR(quad)
+FP_SUB_VAR(fcomp)
+FP_SUB_VAR(dcomp)
+FP_SUB_VAR(qcomp)
 
 
-#define FP_SUB_ZERO_BACK(TY, FUNC_NAME) \
-TY func_fp_sub_zero_back ## FUNC_NAME(TY a) { \
+#define FP_SUB_ZERO_BACK(TY) \
+TY func_sub_zero_back_ ## TY(TY a) { \
   return a - 0.0 ; \
 }
 
-FP_SUB_ZERO_BACK(float,  1)
-FP_SUB_ZERO_BACK(double, 2)
-FP_SUB_ZERO_BACK(quad,   3)
-FP_SUB_ZERO_BACK(fcomp,  4)
-FP_SUB_ZERO_BACK(dcomp,  5)
-FP_SUB_ZERO_BACK(qcomp,  6)
+FP_SUB_ZERO_BACK(float)
+FP_SUB_ZERO_BACK(double)
+FP_SUB_ZERO_BACK(quad)
+FP_SUB_ZERO_BACK(fcomp)
+FP_SUB_ZERO_BACK(dcomp)
+FP_SUB_ZERO_BACK(qcomp)
 
-#define FP_SUB_ZERO_FORE(TY, FUNC_NAME) \
-TY func_fp_sub_zero_fore ## FUNC_NAME(TY a) { \
+#define FP_SUB_ZERO_FORE(TY) \
+TY func_sub_zero_fore_ ## TY(TY a) { \
   return  0.0 - a ; \
 }
 
-FP_SUB_ZERO_FORE(float,  1)
-FP_SUB_ZERO_FORE(double, 2)
-FP_SUB_ZERO_FORE(quad,   3)
-FP_SUB_ZERO_FORE(fcomp,  4)
-FP_SUB_ZERO_FORE(dcomp,  5)
-FP_SUB_ZERO_FORE(qcomp,  6)
+FP_SUB_ZERO_FORE(float)
+FP_SUB_ZERO_FORE(double)
+FP_SUB_ZERO_FORE(quad)
+FP_SUB_ZERO_FORE(fcomp)
+FP_SUB_ZERO_FORE(dcomp)
+FP_SUB_ZERO_FORE(qcomp)
 
 
-#define FP_SUB_CONST_BACK(TY, FUNC_NAME) \
-TY func_fp_sub_const_back ## FUNC_NAME(TY a) { \
+#define FP_SUB_CONST_BACK(TY) \
+TY func_sub_const_back_ ## TY(TY a) { \
   return a - (-2.0) ; \
 }
 
-FP_SUB_CONST_BACK(float,  1)
-FP_SUB_CONST_BACK(double, 2)
-FP_SUB_CONST_BACK(quad,   3)
-FP_SUB_CONST_BACK(fcomp,  4)
-FP_SUB_CONST_BACK(dcomp,  5)
-FP_SUB_CONST_BACK(qcomp,  6)
+FP_SUB_CONST_BACK(float)
+FP_SUB_CONST_BACK(double)
+FP_SUB_CONST_BACK(quad)
+FP_SUB_CONST_BACK(fcomp)
+FP_SUB_CONST_BACK(dcomp)
+FP_SUB_CONST_BACK(qcomp)
 
-#define FP_SUB_CONST_FORE(TY, FUNC_NAME) \
-TY func_fp_sub_const_fore ## FUNC_NAME(TY a) { \
+#define FP_SUB_CONST_FORE(TY) \
+TY func__const_fore_ ## TY(TY a) { \
   return  -2.0 - a ; \
 }
 
-FP_SUB_CONST_FORE(float,  1)
-FP_SUB_CONST_FORE(double, 2)
-FP_SUB_CONST_FORE(quad,   3)
-FP_SUB_CONST_FORE(fcomp,  4)
-FP_SUB_CONST_FORE(dcomp,  5)
-FP_SUB_CONST_FORE(qcomp,  6)
+FP_SUB_CONST_FORE(float)
+FP_SUB_CONST_FORE(double)
+FP_SUB_CONST_FORE(quad)
+FP_SUB_CONST_FORE(fcomp)
+FP_SUB_CONST_FORE(dcomp)
+FP_SUB_CONST_FORE(qcomp)

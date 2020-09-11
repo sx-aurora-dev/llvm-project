@@ -14,40 +14,40 @@ typedef _Complex float fcomp;
 typedef _Complex double dcomp;
 typedef _Complex long double qcomp;
 
-#define FP_MUL_VAR(TY, FUNC_NAME) \
-TY func_fp_mul_var ## FUNC_NAME(TY a, TY b) { \
+#define FP_MUL_VAR(TY) \
+TY func_mul_var_ ## TY(TY a, TY b) { \
   return a * b ; \
 }
 
-FP_MUL_VAR(float,  1)
-FP_MUL_VAR(double, 2)
-FP_MUL_VAR(quad,   3)
-FP_MUL_VAR(fcomp,  4)
-FP_MUL_VAR(dcomp,  5)
-FP_MUL_VAR(qcomp,  6)
+FP_MUL_VAR(float)
+FP_MUL_VAR(double)
+FP_MUL_VAR(quad)
+FP_MUL_VAR(fcomp)
+FP_MUL_VAR(dcomp)
+FP_MUL_VAR(qcomp)
 
 
-#define FP_MUL_ZERO(TY, FUNC_NAME) \
-TY func_fp_mul_zero ## FUNC_NAME(TY a) { \
+#define FP_MUL_ZERO(TY) \
+TY func_mul_zero_ ## TY(TY a) { \
   return a * 0.0 ; \
 }
 
-FP_MUL_ZERO(float,  1)
-FP_MUL_ZERO(double, 2)
-FP_MUL_ZERO(quad,   3)
-FP_MUL_ZERO(fcomp,  4)
-FP_MUL_ZERO(dcomp,  5)
-FP_MUL_ZERO(qcomp,  6)
+FP_MUL_ZERO(float)
+FP_MUL_ZERO(double)
+FP_MUL_ZERO(quad)
+FP_MUL_ZERO(fcomp)
+FP_MUL_ZERO(dcomp)
+FP_MUL_ZERO(qcomp)
 
 
-#define FP_MUL_CONST(TY, FUNC_NAME) \
-TY func_fp_mul_const ## FUNC_NAME(TY a) { \
+#define FP_MUL_CONST(TY) \
+TY func_mul_const_ ## TY(TY a) { \
   return a * (-2.0) ; \
 }
 
-FP_MUL_CONST(float,  1)
-FP_MUL_CONST(double, 2)
-FP_MUL_CONST(quad,   3)
-FP_MUL_CONST(fcomp,  4)
-FP_MUL_CONST(dcomp,  5)
-FP_MUL_CONST(qcomp,  6)
+FP_MUL_CONST(float)
+FP_MUL_CONST(double)
+FP_MUL_CONST(quad)
+FP_MUL_CONST(fcomp)
+FP_MUL_CONST(dcomp)
+FP_MUL_CONST(qcomp)

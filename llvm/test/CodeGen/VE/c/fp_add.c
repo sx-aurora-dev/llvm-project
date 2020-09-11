@@ -14,40 +14,40 @@ typedef _Complex float fcomp;
 typedef _Complex double dcomp;
 typedef _Complex long double qcomp;
 
-#define FP_ADD_VAR(TY, FUNC_NAME) \
-TY func_fp_add_var ## FUNC_NAME(TY a, TY b) { \
+#define FP_ADD_VAR(TY) \
+TY func_add_var_ ## TY(TY a, TY b) { \
   return a + b ; \
 }
 
-FP_ADD_VAR(float,  1)
-FP_ADD_VAR(double, 2)
-FP_ADD_VAR(quad,   3)
-FP_ADD_VAR(fcomp,  4)
-FP_ADD_VAR(dcomp,  5)
-FP_ADD_VAR(qcomp,  6)
+FP_ADD_VAR(float)
+FP_ADD_VAR(double)
+FP_ADD_VAR(quad)
+FP_ADD_VAR(fcomp)
+FP_ADD_VAR(dcomp)
+FP_ADD_VAR(qcomp)
 
 
-#define FP_ADD_ZERO(TY, FUNC_NAME) \
-TY func_fp_add_zero ## FUNC_NAME(TY a) { \
+#define FP_ADD_ZERO(TY) \
+TY func_add_zero_ ## TY(TY a) { \
   return  0.0 + a ; \
 }
 
-FP_ADD_ZERO(float,  1)
-FP_ADD_ZERO(double, 2)
-FP_ADD_ZERO(quad,   3)
-FP_ADD_ZERO(fcomp,  4)
-FP_ADD_ZERO(dcomp,  5)
-FP_ADD_ZERO(qcomp,  6)
+FP_ADD_ZERO(float)
+FP_ADD_ZERO(double)
+FP_ADD_ZERO(quad)
+FP_ADD_ZERO(fcomp)
+FP_ADD_ZERO(dcomp)
+FP_ADD_ZERO(qcomp)
 
 
-#define FP_ADD_CONST(TY, FUNC_NAME) \
-TY func_fp_add_const ## FUNC_NAME(TY a) { \
+#define FP_ADD_CONST(TY) \
+TY func_add_const_ ## TY(TY a) { \
   return a + (-2.0) ; \
 }
 
-FP_ADD_CONST(float,  1)
-FP_ADD_CONST(double, 2)
-FP_ADD_CONST(quad,   3)
-FP_ADD_CONST(fcomp,  4)
-FP_ADD_CONST(dcomp,  5)
-FP_ADD_CONST(qcomp,  6)
+FP_ADD_CONST(float)
+FP_ADD_CONST(double)
+FP_ADD_CONST(quad)
+FP_ADD_CONST(fcomp)
+FP_ADD_CONST(dcomp)
+FP_ADD_CONST(qcomp)
