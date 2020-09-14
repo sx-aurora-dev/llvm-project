@@ -7,7 +7,16 @@ CLEAN_TEST = $(LLVMSRCPATH)/utils/clean-test.sh
 UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
-TARGETS = select.ll fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll
+TARGETS = select.ll fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
+          selectcc_int1.ll  \
+          selectcc_int8.ll   selectcc_uint8.ll   \
+          selectcc_int16.ll  selectcc_uint16.ll  \
+          selectcc_int32.ll  selectcc_uint32.ll  \
+          selectcc_int64.ll  selectcc_uint64.ll  \
+          selectcc_int128.ll selectcc_uint128.ll \
+          selectcc_float.ll  selectcc_fcomp.ll   \
+          selectcc_double.ll selectcc_dcomp.ll   \
+          selectcc_quad.ll   selectcc_qcomp.ll
 
 all: $(TARGETS)
 
