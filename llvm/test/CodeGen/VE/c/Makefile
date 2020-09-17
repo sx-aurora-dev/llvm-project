@@ -8,6 +8,14 @@ UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
 TARGETS = select.ll fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
+          fp_ceil.ll fp_copysign.ll fp_cos.ll        \
+          fp_exp.ll fp_exp2.ll fp_fabs.c fp_floor.ll \
+          fp_fma.ll fp_llrint.ll fp_llround.ll       \
+          fp_log.ll fp_log10.ll fp_log2.ll           \
+          fp_lrint.ll fp_lround.ll                   \
+          fp_maxnum.ll fp_nearbyint.ll               \
+          fp_pow.ll fp_rint.ll fp_round.ll fp_sin.ll \
+          fp_sqrt.ll fp_trunc.ll                     \
           selectcc_int1.ll  \
           selectcc_int8.ll   selectcc_uint8.ll   \
           selectcc_int16.ll  selectcc_uint16.ll  \
