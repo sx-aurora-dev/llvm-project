@@ -1,4 +1,4 @@
-; RUN: opt -passes='print<loop-dependence>' -disable-output  < %s 2>&1 | FileCheck %s
+; RUN: opt -passes='loop-simplify,print<loop-dependence>' -disable-output  < %s 2>&1 | FileCheck %s
 
 ; void test(int64_t x, int64_t y, int64_t A[x]) {
 ;   for (int64_t i = 0; i < x - 2; ++i) {

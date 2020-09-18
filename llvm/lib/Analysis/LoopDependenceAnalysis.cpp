@@ -17,7 +17,10 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/VectorUtils.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
 
 /*
 
@@ -687,6 +690,37 @@ static bool verifyMinMaxPairs(ScalarEvolution& SE,
   return true;
 }
 
+static bool addRecHasPositiveConstStep(ScalarEvolution &SE,
+                                       const SCEVAddRecExpr *AR) {
+  const SCEV *Step = AR->getStepRecurrence(SE);
+  if (Step->getSCEVType() != scConstant)
+    return false;
+  const SCEVConstant *StepConst = dyn_cast<SCEVConstant>(Step);
+  if (StepConst->getAPInt().getSExtValue() <= 0)
+    return false;
+  return true;
+}
+
+static MinMaxSCEVPair getMinMaxOfIncreasingAddRec(ScalarEvolution &SE,
+                                                  const SCEVAddRecExpr *AR) {
+  assert(AR);
+  assert(addRecHasPositiveConstStep(SE, AR));
+  MinMaxSCEVPair Res;
+  // Important: This is valid only because we have already tested
+  // that the step is positive.
+  // TODO: We don't take wrapping into consideration. It it wraps,
+  // the minimum value is (possibly) not the start.
+  Res.Min = AR->getStart();
+  // Top-level -> function-level. This will give us the value of the
+  // AR after the _whole_ loop nest (i.e. what is considered
+  // usually an exit value but not just for its loop, but the whole
+  // nest).
+  const Loop *TopLevel = nullptr;
+  // Again, this works because we have tested that the step is positive.
+  Res.Max = SE.getSCEVAtScope(AR, TopLevel);
+  return Res;
+}
+
 bool subscriptsAreWithinBounds(ScalarEvolution &SE,
                                const SmallVectorImpl<const SCEV *> &Subscripts,
                                const SmallVectorImpl<const SCEV *> &Sizes) {
@@ -710,17 +744,7 @@ bool subscriptsAreWithinBounds(ScalarEvolution &SE,
     }
     const SCEVAddRecExpr *SubAR = dyn_cast<SCEVAddRecExpr>(Sub);
     assert(SubAR);
-    // Important: This is valid only because we have already tested
-    // that the step is positive.
-    MinMaxPairs[SzIt].Min = SubAR->getStart();
-    assert(SubAR->getStart());
-    // i.e. function-level. This will give us the value of the
-    // subscript after the _whole_ loop nest (i.e. what is considered
-    // usually an exit value but not just for its loop, but the whole
-    // nest, which is the same thing).
-    const Loop *TopLevel = nullptr;
-    // Again, this works because we have tested that the step is positive.
-    MinMaxPairs[SzIt].Max = SE.getSCEVAtScope(Sub, TopLevel);
+    MinMaxPairs[SzIt] = getMinMaxOfIncreasingAddRec(SE, SubAR);
   }
 
   return verifyMinMaxPairs(SE, MinMaxPairs, Sizes);
@@ -747,12 +771,7 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
       if (UsedLoops[L])
         return false;
       UsedLoops[L] = true;
-      // Check that it has a positive step.
-      const SCEV *Step = AddRec->getStepRecurrence(SE);
-      if (Step->getSCEVType() != scConstant)
-        return false;
-      const SCEVConstant *StepConst = dyn_cast<SCEVConstant>(Step);
-      if (StepConst->getAPInt().getSExtValue() <= 0)
+      if (!addRecHasPositiveConstStep(SE, AddRec))
         return false;
     } break;
     default:
@@ -804,7 +823,11 @@ static const SCEV *getSDivSimpleAddRec(ScalarEvolution &SE,
       SE.getAddRecExpr(Operands, AddRec->getLoop(), AddRec->getNoWrapFlags());
 
   // Do the division
-  const SCEVAddRecExpr *Res = dyn_cast<SCEVAddRecExpr>(SE.getUDivExpr(AddRec, Divisor));
+  dbgs() << "AddRec: " << *AddRec << "\n";
+  dbgs() << "Divisor: " << *Divisor << "\n";
+  const SCEV *UDivExpr = SE.getUDivExpr(AddRec, Divisor);
+  dbgs() << "UDivExpr: " << *UDivExpr << "\n";
+  const SCEVAddRecExpr *Res = dyn_cast<SCEVAddRecExpr>(UDivExpr);
   assert(Res);
 
   // Negate again what was negative.
@@ -1334,37 +1357,85 @@ static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
   return Worst;
 }
 
-static bool definitelyCannotAlias(LoopInfo &LI, const LoadInst *LD,
-                                  const StoreInst *ST) {
+enum class TrivialAliasRes {
+  CANNOT_ALIAS,
+  SAME_OBJECT,
+  CAN_ALIAS,
+};
+
+static TrivialAliasRes trivialAliasCheck(LoopInfo &LI, const DataLayout &DL,
+                                         const Value *Ptr1, const Value *Ptr2) {
 
   // We want the two sets of underlying objects
   // to be disjoint. If they indeed are, we want in any pair of
   // objects from different sets, at least one to have the
   // the `noalias` attribute.
 
-  auto &DL = LD->getModule()->getDataLayout();
+  SmallVector<const Value *, 2> Objects1;
+  SmallVector<const Value *, 2> Objects2;
+  GetUnderlyingObjects(Ptr1, Objects1, DL, &LI);
+  GetUnderlyingObjects(Ptr2, Objects2, DL, &LI);
 
-  SmallVector<const Value *, 2> LoadObjects;
-  SmallVector<const Value *, 2> StoreObjects;
-  GetUnderlyingObjects(LD->getPointerOperand(), LoadObjects, DL, &LI);
-  GetUnderlyingObjects(ST->getPointerOperand(), StoreObjects, DL, &LI);
-
-  for (const Value *LObj : LoadObjects) {
-    const Argument *A1 = dyn_cast<Argument>(LObj);
+  for (const Value *IObj : Objects1) {
+    const Argument *A1 = dyn_cast<Argument>(IObj);
     if (!A1)
-      return false;
-    for (const Value *SObj : StoreObjects) {
-      if (LObj == SObj)
-        return false;
-      const Argument *A2 = dyn_cast<Argument>(SObj);
+      return TrivialAliasRes::CAN_ALIAS;
+    for (const Value *JObj : Objects2) {
+      if (IObj == JObj)
+        return TrivialAliasRes::SAME_OBJECT;
+      const Argument *A2 = dyn_cast<Argument>(JObj);
       if (!A2)
-        return false;
+        return TrivialAliasRes::CAN_ALIAS;
       if (!A1->hasAttribute(Attribute::AttrKind::NoAlias) &&
           !A2->hasAttribute(Attribute::AttrKind::NoAlias))
-        return false;
+        return TrivialAliasRes::CAN_ALIAS;
     }
   }
-  return true;
+  return TrivialAliasRes::CANNOT_ALIAS;
+}
+
+struct RTAliasCheckInfo {
+  MinMaxSCEVPair Bounds1, Bounds2;
+};
+
+enum class CanAliasRes {
+  CANNOT_ALIAS,
+  SAME_OBJECT,
+  CAN_ALIAS_RTCHECK_INFO,
+  CAN_ALIAS_NO_INFO
+};
+
+// None: They can't alias.
+// Otherwise, return info to generate an alias check.
+static CanAliasRes canAlias(ScalarEvolution &SE, LoopInfo &LI,
+                            const DataLayout &DL, const Value *Ptr1,
+                            const Value *Ptr2, const Loop *InnermostLoop,
+                            RTAliasCheckInfo &AliasCheckInfo) {
+  TrivialAliasRes trivialRes = trivialAliasCheck(LI, DL, Ptr1, Ptr2);
+  if (trivialRes == TrivialAliasRes::CANNOT_ALIAS)
+    return CanAliasRes::CANNOT_ALIAS;
+  else if (trivialRes == TrivialAliasRes::SAME_OBJECT)
+    return CanAliasRes::SAME_OBJECT;
+  // else: Fill AliasCheckInfo, if we can
+
+  // TODO: What happens if the asserts fail ? We have to turn those in ifs
+  // and the function should return three "results":
+  // None: They can't alias.
+  // RTAliasCheckInfo: They can alias, here's info to gen an RT check.
+  // Otherwise: They can alias and I can't find info.
+  const SCEVAddRecExpr *S1 = dyn_cast<SCEVAddRecExpr>(
+      SE.getSCEVAtScope((Value *)Ptr1, (Loop *)InnermostLoop));
+  if (!S1)
+    return CanAliasRes::CAN_ALIAS_NO_INFO;
+  const SCEVAddRecExpr *S2 = dyn_cast<SCEVAddRecExpr>(
+      SE.getSCEVAtScope((Value *)Ptr2, (Loop *)InnermostLoop));
+  if (!S2)
+    return CanAliasRes::CAN_ALIAS_NO_INFO;
+
+  AliasCheckInfo.Bounds1 = getMinMaxOfIncreasingAddRec(SE, S1);
+  AliasCheckInfo.Bounds2 = getMinMaxOfIncreasingAddRec(SE, S2);
+
+  return CanAliasRes::CAN_ALIAS_RTCHECK_INFO;
 }
 
 struct ProgramOrderedAccess {
@@ -1457,8 +1528,203 @@ bool operator<(const ConstVF V1, const ConstVF V2) {
   return V1.getValue() < V2.getValue();
 }
 
+//std::pair<Instruction *, Instruction *> llvm::addRuntimeChecks(
+//    Instruction *Loc, Loop *TheLoop,
+//    const SmallVectorImpl<RuntimePointerCheck> &PointerChecks,
+//    ScalarEvolution *SE) {
+//  // TODO: Move noalias annotation code from LoopVersioning here and share with
+//  // LV if possible.
+//  // TODO: Pass  RtPtrChecking instead of PointerChecks and SE separately, if
+//  // possible
+//  const DataLayout &DL = TheLoop->getHeader()->getModule()->getDataLayout();
+//  SCEVExpander Exp(*SE, DL, "induction");
+//  auto ExpandedChecks = expandBounds(PointerChecks, TheLoop, Loc, SE, Exp);
+//
+//  LLVMContext &Ctx = Loc->getContext();
+//  Instruction *FirstInst = nullptr;
+//  IRBuilder<> ChkBuilder(Loc);
+//  // Our instructions might fold to a constant.
+//  Value *MemoryRuntimeCheck = nullptr;
+//
+//  // FIXME: this helper is currently a duplicate of the one in
+//  // LoopVectorize.cpp.
+//  auto GetFirstInst = [](Instruction *FirstInst, Value *V,
+//                         Instruction *Loc) -> Instruction * {
+//    if (FirstInst)
+//      return FirstInst;
+//    if (Instruction *I = dyn_cast<Instruction>(V))
+//      return I->getParent() == Loc->getParent() ? I : nullptr;
+//    return nullptr;
+//  };
+//
+//  for (const auto &Check : ExpandedChecks) {
+//    const PointerBounds &A = Check.first, &B = Check.second;
+//    // Check if two pointers (A and B) conflict where conflict is computed as:
+//    // start(A) <= end(B) && start(B) <= end(A)
+//    unsigned AS0 = A.Start->getType()->getPointerAddressSpace();
+//    unsigned AS1 = B.Start->getType()->getPointerAddressSpace();
+//
+//    assert((AS0 == B.End->getType()->getPointerAddressSpace()) &&
+//           (AS1 == A.End->getType()->getPointerAddressSpace()) &&
+//           "Trying to bounds check pointers with different address spaces");
+//
+//    Type *PtrArithTy0 = Type::getInt8PtrTy(Ctx, AS0);
+//    Type *PtrArithTy1 = Type::getInt8PtrTy(Ctx, AS1);
+//
+//    Value *Start0 = ChkBuilder.CreateBitCast(A.Start, PtrArithTy0, "bc");
+//    Value *Start1 = ChkBuilder.CreateBitCast(B.Start, PtrArithTy1, "bc");
+//    Value *End0 = ChkBuilder.CreateBitCast(A.End, PtrArithTy1, "bc");
+//    Value *End1 = ChkBuilder.CreateBitCast(B.End, PtrArithTy0, "bc");
+//
+//    // [A|B].Start points to the first accessed byte under base [A|B].
+//    // [A|B].End points to the last accessed byte, plus one.
+//    // There is no conflict when the intervals are disjoint:
+//    // NoConflict = (B.Start >= A.End) || (A.Start >= B.End)
+//    //
+//    // bound0 = (B.Start < A.End)
+//    // bound1 = (A.Start < B.End)
+//    //  IsConflict = bound0 & bound1
+//    Value *Cmp0 = ChkBuilder.CreateICmpULT(Start0, End1, "bound0");
+//    FirstInst = GetFirstInst(FirstInst, Cmp0, Loc);
+//    Value *Cmp1 = ChkBuilder.CreateICmpULT(Start1, End0, "bound1");
+//    FirstInst = GetFirstInst(FirstInst, Cmp1, Loc);
+//    Value *IsConflict = ChkBuilder.CreateAnd(Cmp0, Cmp1, "found.conflict");
+//    FirstInst = GetFirstInst(FirstInst, IsConflict, Loc);
+//    if (MemoryRuntimeCheck) {
+//      IsConflict =
+//          ChkBuilder.CreateOr(MemoryRuntimeCheck, IsConflict, "conflict.rdx");
+//      FirstInst = GetFirstInst(FirstInst, IsConflict, Loc);
+//    }
+//    MemoryRuntimeCheck = IsConflict;
+//  }
+//
+//  if (!MemoryRuntimeCheck)
+//    return std::make_pair(nullptr, nullptr);
+//
+//  // We have to do this trickery because the IRBuilder might fold the check to a
+//  // constant expression in which case there is no Instruction anchored in a
+//  // the block.
+//  Instruction *Check =
+//      BinaryOperator::CreateAnd(MemoryRuntimeCheck, ConstantInt::getTrue(Ctx));
+//  ChkBuilder.Insert(Check, "memcheck.conflict");
+//  FirstInst = GetFirstInst(FirstInst, Check, Loc);
+//  return std::make_pair(FirstInst, Check);
+//}
+
+struct ExpandedMinMaxSCEVPair {
+  TrackingVH<Value> Min;
+  TrackingVH<Value> Max;
+};
+
+struct ExpandedRTAliasCheckInfo {
+  ExpandedMinMaxSCEVPair Bounds1, Bounds2;
+};
+
+static ExpandedMinMaxSCEVPair expandBoundsPair(MinMaxSCEVPair MinMax, Instruction *InsertBefore,
+                                               SCEVExpander &SEExpander) {
+  unsigned AddrSpace = MinMax.Min->getType()->getPointerAddressSpace();
+  LLVMContext &Ctx = InsertBefore->getContext();
+  Type *I8PtrTy = Type::getInt8PtrTy(Ctx, AddrSpace);
+  
+  Value *Min = nullptr, *Max = nullptr;
+  Min = SEExpander.expandCodeFor(MinMax.Min, I8PtrTy, InsertBefore);
+  Max= SEExpander.expandCodeFor(MinMax.Max, I8PtrTy, InsertBefore);
+  LLVM_DEBUG(dbgs() << "Expanded Checks -- Min: " << *MinMax.Min
+                    << ", Max: " << *MinMax.Max << "\n";);
+  return {Min, Max};
+}
+
+static SmallVector<ExpandedRTAliasCheckInfo, 4>
+expandBounds(SmallVectorImpl<RTAliasCheckInfo> &AliasChecks,
+             Instruction *InsertBefore, SCEVExpander &SEExpander) {
+  SmallVector<ExpandedRTAliasCheckInfo, 4> ExpandedAliasChecks;
+  for (RTAliasCheckInfo &AC : AliasChecks) {
+    ExpandedRTAliasCheckInfo EAC;
+    EAC.Bounds1 = expandBoundsPair(AC.Bounds1, InsertBefore, SEExpander);
+    EAC.Bounds2 = expandBoundsPair(AC.Bounds2, InsertBefore, SEExpander);
+    ExpandedAliasChecks.push_back(EAC);
+  }
+  return ExpandedAliasChecks;
+}
+
+// TODO: This probably should be moved to the transformation part.
+static void
+emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, const Loop *L,
+                       SmallVectorImpl<RTAliasCheckInfo> &AliasChecks) {
+  if (AliasChecks.empty())
+    return;
+  assert(L->isLoopSimplifyForm());
+  BasicBlock *AliasChecksBlock = L->getLoopPreheader();
+  Instruction *InsertBefore = (Instruction *) AliasChecksBlock->getTerminator();
+
+  const DataLayout &DL = L->getHeader()->getModule()->getDataLayout();
+  
+  SCEVExpander SEExpander(SE, DL, "induction");
+  auto ExpandedChecks = expandBounds(AliasChecks, InsertBefore, SEExpander);
+
+  LLVMContext &Ctx = InsertBefore->getContext();
+  IRBuilder<> CheckBuilder(InsertBefore);
+
+  // Our instructions might fold to a constant.
+  Value *RuntimeCheck = nullptr;
+
+  for (const auto &Check : ExpandedChecks) {
+    ExpandedMinMaxSCEVPair A = Check.Bounds1;
+    ExpandedMinMaxSCEVPair B = Check.Bounds2;
+    // Check if two pointers (A and B) conflict where conflict is computed as:
+    // min(A) <= max(B) && min(B) <= max(A)
+    unsigned AddrSpace = A.Min->getType()->getPointerAddressSpace();
+    assert(AddrSpace == B.Min->getType()->getPointerAddressSpace());
+
+    Type *I8PtrTy = Type::getInt8PtrTy(Ctx, AddrSpace);
+    Value *Min1 = CheckBuilder.CreateBitCast(A.Min, I8PtrTy, "bc");
+    Value *Min2 = CheckBuilder.CreateBitCast(B.Min, I8PtrTy, "bc");
+    Value *Max1 = CheckBuilder.CreateBitCast(A.Max, I8PtrTy, "bc");
+    Value *Max2 = CheckBuilder.CreateBitCast(B.Max, I8PtrTy, "bc");
+
+    // [A|B].Min points to the minimum accessed byte under base [A|B].
+    // [A|B].Max points to the maximum accessed byte.
+    // There is no conflict when the intervals are disjoint:
+    // NoConflict = (B.Min > A.Max) || (A.Min > B.Max)
+    //
+    // bound1 = (B.Min <= A.Max)
+    // bound2 = (A.Min <= B.Max)
+    //  TheyAlias = bound0 & bound1
+    
+    Value *Cmp1 = CheckBuilder.CreateICmpULE(Min1, Max2, "bound1");
+    Value *Cmp2 = CheckBuilder.CreateICmpULE(Min2, Max1, "bound2");
+    Value *TheyAlias = CheckBuilder.CreateAnd(Cmp1, Cmp2, "pointers.alias");
+    if (RuntimeCheck) {
+      TheyAlias =
+          CheckBuilder.CreateOr(RuntimeCheck, TheyAlias, "alias.reduction");
+    }
+    RuntimeCheck = TheyAlias;
+  }
+  // We have to do this trickery because the IRBuilder might fold the check to a
+  // constant expression in which case there is no Instruction anchored in a
+  // the block.
+  RuntimeCheck =
+      BinaryOperator::CreateAnd(RuntimeCheck, ConstantInt::getTrue(Ctx));
+  CheckBuilder.Insert(RuntimeCheck, "rt.alias.check");
+
+  AliasChecksBlock->setName("vectorization.alias.checks");
+  
+  BasicBlock *LoopPreheader =
+      SplitBlock(AliasChecksBlock, AliasChecksBlock->getTerminator(), &DT, &LI,
+                 nullptr, "loop.ph");
+
+  BasicBlock *ExitBlock = L->getExitBlock();
+  // TODO: For now we hope that the loop has only one exit block.
+  // In the end, this should be the preheader of the scalar version of the loop.
+  assert(ExitBlock);
+  Instruction *AliasCheckBranch =
+      BranchInst::Create(ExitBlock, LoopPreheader, RuntimeCheck);
+  ReplaceInstWithInst(AliasChecksBlock->getTerminator(), AliasCheckBranch);
+}
+
 const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
                                                 LoopInfo &LI,
+                                                DominatorTree &DT,
                                                 ScalarEvolution &SE,
                                                 const TargetLibraryInfo &TLI) {
   LoopDependence Bail = LoopDependence::getWorstPossible();
@@ -1530,8 +1796,11 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
   // the best acceptable value (with monotone pessimistic movements).
   LoopDependence Res = LoopDependence::getBestPossible();
 
+  SmallVector<RTAliasCheckInfo, 4> AliasChecks;
+
   LLVM_DEBUG(dbgs() << "\n\n-------------\n\n";
              dbgs() << "Analyze access pairs\n\n";);
+  auto &DL = L.getHeader()->getModule()->getDataLayout();
   for (ProgramOrderedAccess LAccess : Loads) {
     LoadInst *Load = LAccess.Load;
     Value *LPtr = Load->getPointerOperand();
@@ -1547,10 +1816,19 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
 
       // Note: Right now we are probably calling GetUnderlyingObjects()
       // a lot of times.
-      if (definitelyCannotAlias(LI, Load, Store)) {
+      RTAliasCheckInfo AliasCheckInfo;
+      CanAliasRes canAliasRes = canAlias(
+          SE, LI, DL, LPtr, SPtr, NestInfo.InnermostLoop, AliasCheckInfo);
+      if (canAliasRes == CanAliasRes::CANNOT_ALIAS) {
         LLVM_DEBUG(dbgs() << "Definitely can't alias\n";);
         continue;
-      }
+      } else if (canAliasRes == CanAliasRes::CAN_ALIAS_NO_INFO) {
+        LLVM_DEBUG(dbgs() << "They can alias and we have no info for RT check.\n";);
+        return Bail;
+      } else if (canAliasRes == CanAliasRes::CAN_ALIAS_RTCHECK_INFO) {
+        AliasChecks.push_back(AliasCheckInfo);
+        continue;
+      } // else: Same object, the common case... keep going
 
       LLVM_DEBUG(dbgs() << "\n"; dbgs() << "\n\n------\n\n";
                  dbgs() << "Delinearize SCEVs\n";);
@@ -1588,17 +1866,19 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
     }
   }
 
+  emitRuntimeAliasChecks(SE, DT, LI, NestInfo.AnalyzedLoop, AliasChecks);
+
   return Res;
 }
 
 struct DFSNestClipboard {
 
   DFSNestClipboard(const Loop *_AnalyzedLoop, LoopDependence StartingDep,
-                   int _NumDimensions, LoopInfo &_LI, ScalarEvolution &_SE,
-                   const TargetLibraryInfo &_TLI)
+                   int _NumDimensions, LoopInfo &_LI, DominatorTree &_DT,
+                   ScalarEvolution &_SE, const TargetLibraryInfo &_TLI)
       : AnalyzedLoop(_AnalyzedLoop), CurrentLoop(_AnalyzedLoop),
         CurrentDep(StartingDep), NumDimensions(_NumDimensions), LI(_LI),
-        SE(_SE), TLI(_TLI) {}
+        DT(_DT), SE(_SE), TLI(_TLI) {}
 
   const Loop *const AnalyzedLoop;
   const Loop *CurrentLoop;
@@ -1606,6 +1886,7 @@ struct DFSNestClipboard {
   int NumDimensions;
 
   LoopInfo &LI;
+  DominatorTree &DT;
   ScalarEvolution &SE;
   const TargetLibraryInfo &TLI;
 };
@@ -1617,7 +1898,7 @@ static bool analyzeNestsDFS(DFSNestClipboard *Clip) {
     LoopNestInfo NestInfo = {Clip->NumDimensions, Clip->CurrentLoop,
                              Clip->AnalyzedLoop};
     const LoopDependence Dep =
-        getImperfectNestDependence(NestInfo, Clip->LI, Clip->SE, Clip->TLI);
+        getImperfectNestDependence(NestInfo, Clip->LI, Clip->DT, Clip->SE, Clip->TLI);
     if (Dep.VectorizationFactor < Clip->CurrentDep.VectorizationFactor)
       Clip->CurrentDep = Dep;
     return !Clip->CurrentDep.isWorstPossible();
@@ -1641,7 +1922,10 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   if (L.isAnnotatedParallel())
     return LoopDependence::getBestPossible();
 
-  DFSNestClipboard Clip(&L, LoopDependence::getBestPossible(), 1, LI, SE, TLI);
+  if (!L.isLoopSimplifyForm())
+    return LoopDependence::getWorstPossible();
+
+  DFSNestClipboard Clip(&L, LoopDependence::getBestPossible(), 1, LI, DT, SE, TLI);
   analyzeNestsDFS(&Clip);
 
   return Clip.CurrentDep;
