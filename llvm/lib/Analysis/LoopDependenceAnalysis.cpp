@@ -830,7 +830,8 @@ static const SCEV *getSDivSimpleAddRec(ScalarEvolution &SE,
 
 
 static bool
-handleFailedDelinearization(ScalarEvolution &SE, const Loop *L, const SCEV *AccessExpr,
+handleFailedDelinearization(ScalarEvolution &SE, const Loop *L,
+                            const SCEV *AccessExpr, Value *Pointer,
                             SmallVectorImpl<const SCEV *> &Subscripts,
                             SmallVectorImpl<const SCEV *> &Sizes) {
   if (AccessExpr->getSCEVType() != scAddRecExpr) {
@@ -843,9 +844,9 @@ handleFailedDelinearization(ScalarEvolution &SE, const Loop *L, const SCEV *Acce
   // may not work.
   // TODO: It's important to add run-time checks to verify that
   AddRec->setNoWrapFlags(SCEV::NoWrapFlags::FlagNUW);
-  Type *Ty = AddRec->getType();
+  Type *Ty = Pointer->getType();
   auto &DL = L->getHeader()->getModule()->getDataLayout();
-  uint64_t TypeByteSize = DL.getTypeAllocSize(Ty);
+  uint64_t TypeByteSize = DL.getTypeAllocSize(Ty->getPointerElementType());
   const SCEV *Divisor = SE.getConstant(Ty, TypeByteSize);
   const SCEV *Normalized = getSDivSimpleAddRec(SE, AddRec, Divisor);
   LLVM_DEBUG(dbgs() << "Normalized: " << *Normalized << "\n";);
@@ -863,7 +864,8 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
                                   SmallVectorImpl<const SCEV *> &Sizes,
                                   const Loop *L) {
   assert(isa<StoreInst>(Inst) || isa<LoadInst>(Inst));
-  const SCEV *AccessExpr = SE.getSCEVAtScope(getPointerOperand(Inst), L);
+  Value *Pointer = getPointerOperand(Inst);
+  const SCEV *AccessExpr = SE.getSCEVAtScope(Pointer, L);
 
   LLVM_DEBUG(dbgs() << "\n\nAccessExpr (" << *AccessExpr->getType()
                     << "): " << *AccessExpr << "\n";);
@@ -883,7 +885,7 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
       Subscripts.size() != Sizes.size()) {
     LLVM_DEBUG(dbgs() << "Failed to delinearize. Using a single subscript - "
                          "the original SCEV\n";);
-    return handleFailedDelinearization(SE, L, AccessExpr, Subscripts, Sizes);
+    return handleFailedDelinearization(SE, L, AccessExpr, Pointer, Subscripts, Sizes);
   }
 
   LLVM_DEBUG(
@@ -932,7 +934,7 @@ struct DepVectorComponent {
     Dist = -Dist;
     Dir = (Dir == '<') ? '>' : '<';
   }
-}; //
+};
 
 struct DepVector {
   constexpr static size_t MaxComps = 4;
