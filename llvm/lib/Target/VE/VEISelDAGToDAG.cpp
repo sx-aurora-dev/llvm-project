@@ -219,6 +219,10 @@ bool VEDAGToDAGISel::selectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
     return false;
   }
   if (matchADDRrr(Addr, LHS, RHS)) {
+    // Move a frameiindex to LHS.
+    if (dyn_cast<FrameIndexSDNode>(RHS))
+      std::swap(LHS, RHS);
+
     if (matchADDRri(RHS, Index, Offset)) {
       Base = LHS;
       return true;
