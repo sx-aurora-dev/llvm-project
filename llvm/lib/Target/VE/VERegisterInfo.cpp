@@ -160,6 +160,10 @@ static unsigned offset_to_disp(MachineInstr &MI) {
   case NAME ## rir: \
   case NAME ## rii:
 
+#define LDSTrim_kind(NAME) \
+  case NAME ## rri: \
+  case NAME ## zri:
+
   {
     using namespace llvm::VE;
     switch (MI.getOpcode()) {
@@ -169,6 +173,23 @@ static unsigned offset_to_disp(MachineInstr &MI) {
     RRCASm_kind(CASL)
     RRCASm_kind(CASW)
       // These instructions use AS format (reg+imm).
+    LDSTrim_kind(LD)
+    LDSTrim_kind(LDU)
+    LDSTrim_kind(LDLSX)
+    LDSTrim_kind(LDLZX)
+    LDSTrim_kind(LD2BSX)
+    LDSTrim_kind(LD2BZX)
+    LDSTrim_kind(LD1BSX)
+    LDSTrim_kind(LD1BZX)
+    LDSTrim_kind(LDQ)
+    LDSTrim_kind(ST)
+    LDSTrim_kind(STU)
+    LDSTrim_kind(STL)
+    LDSTrim_kind(ST2B)
+    LDSTrim_kind(ST1B)
+    LDSTrim_kind(STQ)
+      // These instructions use ASX format with particular register like
+      // reg1, (reg2+imm).  So, offset from reg2 is only 1.
       OffDisp = 1;
     }
   }
@@ -180,9 +201,7 @@ static unsigned offset_to_disp(MachineInstr &MI) {
 static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
                       MachineInstr &MI, const DebugLoc &dl,
                       unsigned FIOperandNum, int Offset, Register FrameReg) {
-  if (1) {
-      LLVM_DEBUG(dbgs() << "replaceFI: "; MI.dump());
-  }
+  LLVM_DEBUG(dbgs() << "replaceFI: "; MI.dump());
 
   // Replace frame index with a temporal register if the instruction is
   // vector load/store.
@@ -256,6 +275,9 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   assert(SPAdj == 0 && "Unexpected");
 
   MachineInstr &MI = *II;
+  LLVM_DEBUG(dbgs() << "eliminateFrameIndex: "; MI.dump());
+  LLVM_DEBUG(dbgs() << "FIOperandNum: " << FIOperandNum << "\n");
+
   DebugLoc dl = MI.getDebugLoc();
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
   MachineFunction &MF = *MI.getParent()->getParent();
