@@ -911,6 +911,154 @@ void RuntimeDyldELF::resolveBPFRelocation(const SectionEntry &Section,
   }
 }
 
+void RuntimeDyldELF::resolveVERelocation(const SectionEntry &Section,
+                                         uint64_t Offset, uint64_t Value,
+                                         uint32_t Type, int64_t Addend,
+                                         uint64_t SymOffset) {
+  switch (Type) {
+  default:
+    llvm_unreachable("Relocation type not implemented yet!");
+    break;
+  case ELF::R_VE_NONE:
+    break;
+  case ELF::R_VE_REFLONG: {
+    Value += Addend;
+    assert((Type == ELF::R_VE_REFLONG && (Value <= UINT32_MAX)));
+    uint32_t TruncatedAddr = (Value & 0xFFFFFFFF);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) =
+        TruncatedAddr;
+    LLVM_DEBUG(dbgs() << "Writing " << format("%p", TruncatedAddr) << " at "
+                      << format("%p\n", Section.getAddressWithOffset(Offset)));
+    break;
+  }
+  case ELF::R_VE_REFQUAD: {
+    support::ulittle64_t::ref(Section.getAddressWithOffset(Offset)) =
+        Value + Addend;
+    LLVM_DEBUG(dbgs() << "Writing " << format("%p", (Value + Addend)) << " at "
+                      << format("%p\n", Section.getAddressWithOffset(Offset)));
+    break;
+  }
+  case ELF::R_VE_SREL32: {
+    uint64_t FinalAddress = Section.getLoadAddressWithOffset(Offset);
+    int64_t RealOffset = Value + Addend - FinalAddress;
+    assert(isInt<32>(RealOffset));
+    int32_t TruncOffset = (RealOffset & 0xFFFFFFFF);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) =
+        TruncOffset;
+    break;
+  }
+  case ELF::R_VE_HI32: {
+    Value += Addend;
+    uint32_t TruncatedAddr = (Value >> 32);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) =
+        TruncatedAddr;
+    LLVM_DEBUG(dbgs() << "Writing " << format("%p", TruncatedAddr) << " at "
+                      << format("%p\n", Section.getAddressWithOffset(Offset)));
+    break;
+  }
+  case ELF::R_VE_LO32: {
+    Value += Addend;
+    uint32_t TruncatedAddr = (Value & 0xFFFFFFFF);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) =
+        TruncatedAddr;
+    LLVM_DEBUG(dbgs() << "Writing " << format("%p", TruncatedAddr) << " at "
+                      << format("%p\n", Section.getAddressWithOffset(Offset)));
+    break;
+  }
+  case ELF::R_VE_PC_HI32: {
+    uint64_t FinalAddress = Section.getLoadAddressWithOffset(Offset);
+    int64_t RealOffset = Value + Addend - FinalAddress;
+    int32_t TruncOffset = (RealOffset >> 32);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) =
+        TruncOffset;
+    break;
+  }
+  case ELF::R_VE_PC_LO32: {
+    uint64_t FinalAddress = Section.getLoadAddressWithOffset(Offset);
+    int64_t RealOffset = Value + Addend - FinalAddress;
+    int32_t TruncOffset = (RealOffset & 0xFFFFFFFF);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) =
+        TruncOffset;
+    break;
+  }
+  case ELF::R_VE_GOT32:
+  case ELF::R_VE_GOT_HI32:
+  case ELF::R_VE_GOT_LO32: {
+    llvm_unreachable("Relocation type not implemented yet!");
+  }
+  case ELF::R_VE_GOTOFF32: {
+    // Compute Value - GOTBase.
+    uint64_t GOTBase = 0;
+    for (const auto &Section : Sections) {
+      if (Section.getName() == ".got") {
+        GOTBase = Section.getLoadAddressWithOffset(0);
+        break;
+      }
+    }
+    assert(GOTBase != 0 && "missing GOT");
+    // add assertion that data segment size is 32bits, only
+    int64_t GOTOffset = Value - GOTBase + Addend;
+    int32_t TruncOffset = (GOTOffset & 0xFFFFFFFF);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) = TruncOffset;
+    break;
+  }
+  case ELF::R_VE_GOTOFF_HI32: {
+    // Compute Value - GOTBase.
+    uint64_t GOTBase = 0;
+    for (const auto &Section : Sections) {
+      if (Section.getName() == ".got") {
+        GOTBase = Section.getLoadAddressWithOffset(0);
+        break;
+      }
+    }
+    assert(GOTBase != 0 && "missing GOT");
+    int64_t GOTOffset = Value - GOTBase + Addend;
+    int32_t TruncOffset = (GOTOffset >> 32);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) = TruncOffset;
+    break;
+  }
+  case ELF::R_VE_GOTOFF_LO32: {
+    // Compute Value - GOTBase.
+    uint64_t GOTBase = 0;
+    for (const auto &Section : Sections) {
+      if (Section.getName() == ".got") {
+        GOTBase = Section.getLoadAddressWithOffset(0);
+        break;
+      }
+    }
+    assert(GOTBase != 0 && "missing GOT");
+    int64_t GOTOffset = Value - GOTBase + Addend;
+    int32_t TruncOffset = (GOTOffset & 0xFFFFFFFF);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) = TruncOffset;
+    break;
+  }
+  case ELF::R_VE_PLT32: {
+    uint64_t FinalAddress = Section.getLoadAddressWithOffset(Offset);
+    int64_t RealOffset = Value + Addend - FinalAddress;
+    int32_t TruncOffset = (RealOffset & 0xFFFFFFFF);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) =
+        TruncOffset;
+    break;
+  }
+  case ELF::R_VE_PLT_HI32: {
+    uint64_t FinalAddress = Section.getLoadAddressWithOffset(Offset);
+    int64_t RealOffset = Value + Addend - FinalAddress;
+    int32_t TruncOffset = (RealOffset >> 32);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) =
+        TruncOffset;
+    break;
+  }
+  case ELF::R_VE_PLT_LO32: {
+    uint64_t FinalAddress = Section.getLoadAddressWithOffset(Offset);
+    int64_t RealOffset = Value + Addend - FinalAddress;
+    int32_t TruncOffset = (RealOffset & 0xFFFFFFFF);
+    support::ulittle32_t::ref(Section.getAddressWithOffset(Offset)) =
+        TruncOffset;
+    break;
+  }
+  }
+}
+
 // The target location for the relocation is described by RE.SectionID and
 // RE.Offset.  RE.SectionID can be used to find the SectionEntry.  Each
 // SectionEntry has three members describing its location.
@@ -974,6 +1122,9 @@ void RuntimeDyldELF::resolveRelocation(const SectionEntry &Section,
   case Triple::bpfel:
   case Triple::bpfeb:
     resolveBPFRelocation(Section, Offset, Value, Type, Addend);
+    break;
+  case Triple::ve:
+    resolveVERelocation(Section, Offset, Value, Type, Addend, SymOffset);
     break;
   default:
     llvm_unreachable("Unsupported CPU type!");
@@ -1785,6 +1936,7 @@ size_t RuntimeDyldELF::getGOTEntrySize() {
   case Triple::ppc64:
   case Triple::ppc64le:
   case Triple::systemz:
+  case Triple::ve:
     Result = sizeof(uint64_t);
     break;
   case Triple::x86:
