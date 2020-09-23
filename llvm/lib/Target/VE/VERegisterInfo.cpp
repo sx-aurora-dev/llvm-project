@@ -152,27 +152,31 @@ VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
 
 #define DEBUG_TYPE "ve-register-info"
 
-static unsigned offset_to_disp(MachineInstr &MI) {
-  // Default offset in instruction's operands (reg+reg+imm).
-  unsigned OffDisp = 2;
+static unsigned calcImmOffset(MachineInstr &MI, unsigned FIOperandNum) {
 
 #define RRCASm_kind(NAME) \
   case NAME ## rir: \
   case NAME ## rii:
 
 #define LDSTrim_kind(NAME) \
-  case NAME ## rri: \
-  case NAME ## zri:
+  case NAME ## rri:
 
   {
     using namespace llvm::VE;
     switch (MI.getOpcode()) {
+    default:
+      // We assume instructions with operands like reg1, reg2, and imm by
+      // default.  FIOperandNum points reg1, so the offset to immediate
+      // value is:
+      return FIOperandNum + 2;
     case INLINEASM:
     RRCASm_kind(TS1AML)
     RRCASm_kind(TS1AMW)
     RRCASm_kind(CASL)
     RRCASm_kind(CASW)
-      // These instructions use AS format (reg+imm).
+      // These instructions use AS format like reg1 and imm.  So, the offset
+      // to immediate value is:
+      return FIOperandNum + 1;
     LDSTrim_kind(LD)
     LDSTrim_kind(LDU)
     LDSTrim_kind(LDLSX)
@@ -182,20 +186,28 @@ static unsigned offset_to_disp(MachineInstr &MI) {
     LDSTrim_kind(LD1BSX)
     LDSTrim_kind(LD1BZX)
     LDSTrim_kind(LDQ)
+      // These instructions use ASX format like reg1, reg2, and imm.  But,
+      // either reg1 or reg2 are pointed by FIOperandNum.  So, we calculate
+      // the offset of immediate value from FIOperandNum itserlf.
+      if (FIOperandNum == 1)
+        return FIOperandNum + 2;
+      return FIOperandNum + 1;
     LDSTrim_kind(ST)
     LDSTrim_kind(STU)
     LDSTrim_kind(STL)
     LDSTrim_kind(ST2B)
     LDSTrim_kind(ST1B)
     LDSTrim_kind(STQ)
-      // These instructions use ASX format with particular register like
-      // reg1, (reg2+imm).  So, offset from reg2 is only 1.
-      OffDisp = 1;
+      // These instructions use ASX format like reg1, reg2, and imm.  But,
+      // either reg1 or reg2 are pointed by FIOperandNum.  So, we calculate
+      // the offset of immediate value from FIOperandNum itserlf.
+      if (FIOperandNum == 0)
+        return FIOperandNum + 2;
+      return FIOperandNum + 1;
     }
   }
 #undef RRCASm_kind
-
-  return OffDisp;
+#undef LDSTrim_kind
 }
 
 static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
@@ -266,7 +278,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
   // VE has 32 bit offset field, so no need to expand a target instruction.
   // Directly encode it.
   MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
-  MI.getOperand(FIOperandNum + offset_to_disp(MI)).ChangeToImmediate(Offset);
+  MI.getOperand(calcImmOffset(MI, FIOperandNum)).ChangeToImmediate(Offset);
 }
 
 void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
@@ -288,7 +300,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   int Offset;
   Offset = TFI->getFrameIndexReference(MF, FrameIndex, FrameReg);
 
-  Offset += MI.getOperand(FIOperandNum + offset_to_disp(MI)).getImm();
+  Offset += MI.getOperand(calcImmOffset(MI, FIOperandNum)).getImm();
 
   if (MI.getOpcode() == VE::STQrii) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
