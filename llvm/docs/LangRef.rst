@@ -1057,8 +1057,8 @@ Currently, only the following parameter attributes are defined:
     ``byval`` parameters). This is not a valid attribute for return
     values.
 
-    The byval attribute also supports an optional type argument, which must be
-    the same as the pointee type of the argument.
+    The byval attribute also supports an optional type argument, which
+    must be the same as the pointee type of the argument.
 
     The byval attribute also supports specifying an alignment with the
     align attribute. It indicates the alignment of the stack slot to
@@ -1144,13 +1144,17 @@ Currently, only the following parameter attributes are defined:
     See :doc:`InAlloca` for more information on how to use this
     attribute.
 
-``sret``
+``sret`` or ``sret(<ty>)``
     This indicates that the pointer parameter specifies the address of a
     structure that is the return value of the function in the source
     program. This pointer must be guaranteed by the caller to be valid:
     loads and stores to the structure may be assumed by the callee not
     to trap and to be properly aligned. This is not a valid attribute
     for return values.
+
+    The sret attribute also supports an optional type argument, which
+    must be the same as the pointee type of the argument. In the
+    future this will be required.
 
 .. _attr_align:
 
@@ -3553,10 +3557,6 @@ uses with" concept would not hold.
 
 To ensure all uses of a given register observe the same value (even if
 '``undef``'), the :ref:`freeze instruction <i_freeze>` can be used.
-A value is frozen if its uses see the same value.
-An aggregate value or vector is frozen if its elements are frozen.
-The padding of an aggregate isn't considered, since it isn't visible
-without storing it into memory and loading it with a different type.
 
 .. code-block:: llvm
 
@@ -3728,6 +3728,23 @@ Here are some examples:
       br i1 %cmp, label %end, label %end   ; undefined behavior
 
     end:
+
+.. _welldefinedvalues:
+
+Well-Defined Values
+-------------------
+
+Given a program execution, a value is *well defined* if the value does not
+have an undef bit and is not poison in the execution.
+An aggregate value or vector is well defined if its elements are well defined.
+The padding of an aggregate isn't considered, since it isn't visible
+without storing it into memory and loading it with a different type.
+
+A constant of a :ref:`single value <t_single_value>`, non-vector type is well
+defined if it is a non-undef constant. Note that there is no poison constant
+in LLVM.
+The result of :ref:`freeze instruction <i_freeze>` is well defined regardless
+of its operand.
 
 .. _blockaddress:
 
@@ -6885,7 +6902,7 @@ where the first ``param`` is the number of the parameter it describes,
 which can be accessed by the function. This range does not include accesses by
 function calls from ``calls`` list.
 
-where each ``Callee`` decribes how parameter is forwared into other
+where each ``Callee`` describes how parameter is forwarded into other
 functions and looks like:
 
 .. code-block:: text
@@ -9244,6 +9261,12 @@ If the value being loaded is of aggregate type, the bytes that correspond to
 padding may be accessed but are ignored, because it is impossible to observe
 padding from the loaded aggregate value.
 
+If the pointer is not a well-defined value, all of its possible representations
+should be dereferenceable. For example, loading a byte from a pointer to an
+array of type ``[16 x i8]`` with offset ``undef & 31`` is undefined behavior.
+Loading a byte at offset ``undef & 15`` nondeterministically reads one of the
+bytes.
+
 Examples:
 """""""""
 
@@ -9334,6 +9357,12 @@ of bytes, it is unspecified what happens to the extra bits that do not
 belong to the type, but they will typically be overwritten.
 If ``<value>`` is of aggregate type, padding is filled with
 :ref:`undef <undefvalues>`.
+
+If ``<pointer>`` is not a well-defined value, all of its possible
+representations should be dereferenceable. For example, storing a byte to a
+pointer to an array of type ``[16 x i8]`` with offset ``undef & 31`` is
+undefined behavior. Storing a byte to an offset ``undef & 15``
+nondeterministically stores to one of offsets from 0 to 15.
 
 Example:
 """"""""
@@ -12479,14 +12508,17 @@ very cleanly specified and it is unwise to depend on it.
 Semantics:
 """"""""""
 
-The '``llvm.memcpy.*``' intrinsics copy a block of memory from the
-source location to the destination location, which are not allowed to
-overlap. It copies "len" bytes of memory over. If the argument is known
-to be aligned to some boundary, this can be specified as an attribute on
-the argument.
+The '``llvm.memcpy.*``' intrinsics copy a block of memory from the source
+location to the destination location, which must either be equal or
+non-overlapping. It copies "len" bytes of memory over. If the argument is known
+to be aligned to some boundary, this can be specified as an attribute on the
+argument.
 
 If "len" is 0, the pointers may be NULL, dangling, ``undef``, or ``poison``
 pointers. However, they must still be appropriately aligned.
+If "len" isn't a well-defined value, all of its possible representations should
+make the behavior of this ``llvm.memcpy`` defined, otherwise the behavior is
+undefined.
 
 .. _int_memcpy_inline:
 
@@ -12604,6 +12636,9 @@ the argument.
 
 If "len" is 0, the pointers may be NULL, dangling, ``undef``, or ``poison``
 pointers. However, they must still be appropriately aligned.
+If "len" isn't a well-defined value, all of its possible representations should
+make the behavior of this ``llvm.memmove`` defined, otherwise the behavior is
+undefined.
 
 .. _int_memset:
 
@@ -12659,6 +12694,9 @@ the argument.
 
 If "len" is 0, the pointer may be NULL, dangling, ``undef``, or ``poison``
 pointer. However, it must still be appropriately aligned.
+If "len" isn't a well-defined value, all of its possible representations should
+make the behavior of this ``llvm.memset`` defined, otherwise the behavior is
+undefined.
 
 '``llvm.sqrt.*``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -15824,7 +15862,12 @@ The '``llvm.experimental.vector.reduce.fmax.*``' intrinsics do a floating-point
 ``MAX`` reduction of a vector, returning the result as a scalar. The return type
 matches the element-type of the vector input.
 
-If the intrinsic call has the ``nnan`` fast-math flag then the operation can
+This instruction has the same comparison semantics as the '``llvm.maxnum.*``'
+intrinsic. That is, the result will always be a number unless all elements of
+the vector are NaN. For a vector with maximum element magnitude 0.0 and
+containing both +0.0 and -0.0 elements, the sign of the result is unspecified.
+
+If the intrinsic call has the ``nnan`` fast-math flag, then the operation can
 assume that NaNs are not present in the input vector.
 
 Arguments:
@@ -15850,7 +15893,12 @@ The '``llvm.experimental.vector.reduce.fmin.*``' intrinsics do a floating-point
 ``MIN`` reduction of a vector, returning the result as a scalar. The return type
 matches the element-type of the vector input.
 
-If the intrinsic call has the ``nnan`` fast-math flag then the operation can
+This instruction has the same comparison semantics as the '``llvm.minnum.*``'
+intrinsic. That is, the result will always be a number unless all elements of
+the vector are NaN. For a vector with minimum element magnitude 0.0 and
+containing both +0.0 and -0.0 elements, the sign of the result is unspecified.
+
+If the intrinsic call has the ``nnan`` fast-math flag, then the operation can
 assume that NaNs are not present in the input vector.
 
 Arguments:
@@ -15952,8 +16000,8 @@ Arguments:
 """"""""""
 
 The first argument ``%Ptr`` is a pointer type to the returned vector type, and
-correponds to the start address to load from. The second argument ``%Stride``
-is a postive, constant integer with ``%Stride >= <Rows>``. ``%Stride`` is used
+corresponds to the start address to load from. The second argument ``%Stride``
+is a positive, constant integer with ``%Stride >= <Rows>``. ``%Stride`` is used
 to compute the column memory addresses. I.e., for a column ``C``, its start
 memory addresses is calculated with ``%Ptr + C * %Stride``. The third Argument
 ``<IsVolatile>`` is a boolean value.  The fourth and fifth arguments,

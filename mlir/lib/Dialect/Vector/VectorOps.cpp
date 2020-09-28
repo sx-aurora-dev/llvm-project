@@ -132,11 +132,10 @@ static LogicalResult verify(ReductionOp op) {
   auto kind = op.kind();
   Type eltType = op.dest().getType();
   if (kind == "add" || kind == "mul" || kind == "min" || kind == "max") {
-    if (!eltType.isF32() && !eltType.isF64() &&
-        !eltType.isSignlessInteger(32) && !eltType.isSignlessInteger(64))
+    if (!eltType.isIntOrIndexOrFloat())
       return op.emitOpError("unsupported reduction type");
   } else if (kind == "and" || kind == "or" || kind == "xor") {
-    if (!eltType.isSignlessInteger(32) && !eltType.isSignlessInteger(64))
+    if (!eltType.isIntOrIndex())
       return op.emitOpError("unsupported reduction type");
   } else {
     return op.emitOpError("unknown reduction kind: ") << kind;
@@ -146,7 +145,7 @@ static LogicalResult verify(ReductionOp op) {
   if (!op.acc().empty()) {
     if (kind != "add" && kind != "mul")
       return op.emitOpError("no accumulator for reduction kind: ") << kind;
-    if (!eltType.isF32() && !eltType.isF64())
+    if (!eltType.isa<FloatType>())
       return op.emitOpError("no accumulator for type: ") << eltType;
   }
 
@@ -537,6 +536,18 @@ Optional<SmallVector<int64_t, 4>> ContractionOp::getShapeForUnroll() {
 // ExtractElementOp
 //===----------------------------------------------------------------------===//
 
+void vector::ExtractElementOp::build(OpBuilder &builder, OperationState &result,
+                                     Value source, Value position) {
+  result.addOperands({source, position});
+  result.addTypes(source.getType().cast<VectorType>().getElementType());
+}
+
+void vector::ExtractElementOp::build(OpBuilder &builder, OperationState &result,
+                                     Value source, int64_t position) {
+  Value pos = builder.create<ConstantIntOp>(result.location, position, 32);
+  build(builder, result, source, pos);
+}
+
 static LogicalResult verify(vector::ExtractElementOp op) {
   VectorType vectorType = op.getVectorType();
   if (vectorType.getRank() != 1)
@@ -917,6 +928,17 @@ static LogicalResult verify(BroadcastOp op) {
   return success();
 }
 
+OpFoldResult BroadcastOp::fold(ArrayRef<Attribute> operands) {
+  if (!operands[0])
+    return {};
+  auto vectorType = getVectorType();
+  if (operands[0].getType().isIntOrIndexOrFloat())
+    return DenseElementsAttr::get(vectorType, operands[0]);
+  if (auto attr = operands[0].dyn_cast<SplatElementsAttr>())
+    return DenseElementsAttr::get(vectorType, attr.getSplatValue());
+  return {};
+}
+
 //===----------------------------------------------------------------------===//
 // ShuffleOp
 //===----------------------------------------------------------------------===//
@@ -1006,6 +1028,18 @@ static ParseResult parseShuffleOp(OpAsmParser &parser, OperationState &result) {
 //===----------------------------------------------------------------------===//
 // InsertElementOp
 //===----------------------------------------------------------------------===//
+
+void InsertElementOp::build(OpBuilder &builder, OperationState &result,
+                            Value source, Value dest, Value position) {
+  result.addOperands({source, dest, position});
+  result.addTypes(dest.getType());
+}
+
+void InsertElementOp::build(OpBuilder &builder, OperationState &result,
+                            Value source, Value dest, int64_t position) {
+  Value pos = builder.create<ConstantIntOp>(result.location, position, 32);
+  build(builder, result, source, dest, pos);
+}
 
 static LogicalResult verify(InsertElementOp op) {
   auto dstVectorType = op.getDestVectorType();
@@ -2664,11 +2698,5 @@ void mlir::vector::populateVectorToVectorCanonicalizationPatterns(
                   TransposeFolder>(context);
 }
 
-namespace mlir {
-namespace vector {
-
 #define GET_OP_CLASSES
 #include "mlir/Dialect/Vector/VectorOps.cpp.inc"
-
-} // namespace vector
-} // namespace mlir
