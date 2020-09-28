@@ -9,12 +9,12 @@ PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
 TARGETS = select.ll fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
           fp_ceil.ll fp_copysign.ll fp_cos.ll        \
-          fp_exp.ll fp_exp2.ll fp_fabs.c fp_floor.ll \
+          fp_exp.ll fp_exp2.ll fp_fabs.ll fp_floor.ll \
           fp_fma.ll fp_llrint.ll fp_llround.ll       \
           fp_log.ll fp_log10.ll fp_log2.ll           \
           fp_lrint.ll fp_lround.ll                   \
           fp_maxnum.ll fp_nearbyint.ll               \
-          fp_pow.ll fp_rint.ll fp_round.ll fp_sin.ll \
+          fp_pow.ll fp_rint.ll fp_round.ll fp_roundeven.ll fp_sin.ll \
           fp_sqrt.ll fp_trunc.ll                     \
           selectcc_int1.ll  \
           selectcc_int8.ll   selectcc_uint8.ll   \
@@ -35,7 +35,11 @@ all: $(TARGETS)
 	$(CLEAN_TEST) $@
 	sed -e '1i ; RUN: llc < %s -mtriple=ve | FileCheck %s' $@ > $@.tmp && mv $@.tmp $@
 	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
-#	grep -v '; NOTE:' $@ > $@.tmp && mv $@.tmp $@
+	$(PATCH_TEST) $@
+
+fp_roundeven.ll: fp_round.ll
+	sed -e 's/llvm\.round/llvm.roundeven/' -e 's/fp_roundf/fp_roundevenf/' $? > $@
+	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
 	$(PATCH_TEST) $@
 
 clean: FORCE
