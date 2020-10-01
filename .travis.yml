@@ -1,0 +1,8 @@
+language: cpp
+dist: focal
+compiler: gcc
+script:
+  - mkdir -p build
+  - cd build/
+  - cmake ../llvm -DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=VE -DCMAKE_BUILD_TYPE=Release
+  - make
