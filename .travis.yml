@@ -1,8 +1,10 @@
 language: cpp
 dist: focal
 compiler: gcc
+before_install:
+- sudo apt-get -y install ninja-build
 script:
   - mkdir -p build
   - cd build/
-  - cmake ../llvm -DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=VE -DCMAKE_BUILD_TYPE=Release
-  - make
+  - cmake ../llvm -DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=VE -DCMAKE_BUILD_TYPE=Release -G Ninja
+  - ninja
