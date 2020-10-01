@@ -6,5 +6,5 @@ before_install:
 script:
   - mkdir -p build
   - cd build/
-  - cmake ../llvm -DLLVM_TARGETS_TO_BUILD=X86 -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD=VE -DCMAKE_BUILD_TYPE=Release -G Ninja
+  - cmake ../llvm -DLLVM_TARGETS_TO_BUILD=VE -DCMAKE_BUILD_TYPE=Release -G Ninja -DBUILD_SHARED_LIBS=on -DCMAKE_CXX_FLAGS_RELEASE="-O1 -DNDEBUG"
   - ninja
