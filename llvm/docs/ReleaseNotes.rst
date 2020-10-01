@@ -63,16 +63,22 @@ Changes to the LLVM IR
 * Added the ``byref`` attribute to better represent argument passing
   for the `amdgpu_kernel` calling convention.
 
+* Added type parameter to the ``sret`` attribute to continue work on
+  removing pointer element types.
+
 Changes to building LLVM
 ------------------------
 
 Changes to TableGen
 -------------------
 
+* The new "TableGen Programmer's Reference" replaces the "TableGen Language
+  Introduction" and "TableGen Language Reference" documents.
+
 * The syntax for specifying an integer range in a range list has changed.
   The old syntax used a hyphen in the range (e.g., ``{0-9}``). The new syntax
-  uses the "`...`" range punctuator (e.g., ``{0...9}``). The hyphen syntax
-  is deprecated. The "TableGen Language Reference" document has been updated.
+  uses the "`...`" range punctuation (e.g., ``{0...9}``). The hyphen syntax
+  is deprecated.
 
 Changes to the ARM Backend
 --------------------------

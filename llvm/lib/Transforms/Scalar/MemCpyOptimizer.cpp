@@ -423,8 +423,12 @@ Instruction *MemCpyOptPass::tryMergingIntoMemset(Instruction *StartInst,
     if (MSSAU) {
       assert(LastMemDef && MemInsertPoint &&
              "Both LastMemDef and MemInsertPoint need to be set");
-      auto *NewDef = cast<MemoryDef>(
-          MSSAU->createMemoryAccessAfter(AMemSet, LastMemDef, MemInsertPoint));
+      auto *NewDef =
+          cast<MemoryDef>(MemInsertPoint->getMemoryInst() == &*BI
+                              ? MSSAU->createMemoryAccessBefore(
+                                    AMemSet, LastMemDef, MemInsertPoint)
+                              : MSSAU->createMemoryAccessAfter(
+                                    AMemSet, LastMemDef, MemInsertPoint));
       MSSAU->insertDef(NewDef, /*RenameUses=*/true);
       LastMemDef = NewDef;
       MemInsertPoint = NewDef;
@@ -809,7 +813,7 @@ bool MemCpyOptPass::performCallSlotOptzn(Instruction *cpy, Value *cpyDest,
       if (!A->hasStructRetAttr())
         return false;
 
-      Type *StructTy = cast<PointerType>(A->getType())->getElementType();
+      Type *StructTy = A->getParamStructRetType();
       if (!StructTy->isSized()) {
         // The call may never return and hence the copy-instruction may never
         // be executed, and therefore it's not safe to say "the destination

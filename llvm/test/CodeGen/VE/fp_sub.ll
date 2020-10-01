@@ -166,8 +166,11 @@ define { float, float } @func_sub_zero_fore_fcomp(float %0, float %1) {
 ; CHECK-LABEL: func_sub_zero_fore_fcomp:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fsub.s %s0, 0, %s0
-; CHECK-NEXT:    lea.sl %s2, -2147483648
-; CHECK-NEXT:    fsub.s %s1, %s2, %s1
+; CHECK-NEXT:    sra.l %s1, %s1, 32
+; CHECK-NEXT:    lea %s2, -2147483648
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    xor %s1, %s1, %s2
+; CHECK-NEXT:    sll %s1, %s1, 32
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = fsub float 0.000000e+00, %0
   %4 = fneg float %1
@@ -181,8 +184,7 @@ define { double, double } @func_sub_zero_fore_dcomp(double %0, double %1) {
 ; CHECK-LABEL: func_sub_zero_fore_dcomp:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fsub.d %s0, 0, %s0
-; CHECK-NEXT:    lea.sl %s2, -2147483648
-; CHECK-NEXT:    fsub.d %s1, %s2, %s1
+; CHECK-NEXT:    xor %s1, %s1, (1)1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = fsub double 0.000000e+00, %0
   %4 = fneg double %1
@@ -194,20 +196,22 @@ define { double, double } @func_sub_zero_fore_dcomp(double %0, double %1) {
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_sub_zero_fore_qcomp(fp128 %0, fp128 %1) {
 ; CHECK-LABEL: func_sub_zero_fore_qcomp:
-; CHECK:       # %bb.0:
+; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s4, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s4, %s4, (32)0
 ; CHECK-NEXT:    lea.sl %s4, .LCPI{{[0-9]+}}_0@hi(, %s4)
+; CHECK-NEXT:    st %s3, -16(, %s9)
+; CHECK-NEXT:    st %s2, -8(, %s9)
+; CHECK-NEXT:    ld1b.zx %s2, -1(, %s9)
 ; CHECK-NEXT:    ld %s6, 8(, %s4)
 ; CHECK-NEXT:    ld %s7, (, %s4)
-; CHECK-NEXT:    lea %s4, .LCPI{{[0-9]+}}_1@lo
-; CHECK-NEXT:    and %s4, %s4, (32)0
-; CHECK-NEXT:    lea.sl %s4, .LCPI{{[0-9]+}}_1@hi(, %s4)
-; CHECK-NEXT:    ld %s34, 8(, %s4)
-; CHECK-NEXT:    ld %s35, (, %s4)
+; CHECK-NEXT:    lea %s3, 128
+; CHECK-NEXT:    xor %s2, %s2, %s3
+; CHECK-NEXT:    st1b %s2, -1(, %s9)
+; CHECK-NEXT:    ld %s3, -16(, %s9)
+; CHECK-NEXT:    ld %s2, -8(, %s9)
 ; CHECK-NEXT:    fsub.q %s0, %s6, %s0
-; CHECK-NEXT:    fsub.q %s2, %s34, %s2
-; CHECK-NEXT:    b.l.t (, %s10)
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fsub fp128 0xL00000000000000000000000000000000, %0
   %4 = fneg fp128 %1
   %5 = insertvalue { fp128, fp128 } undef, fp128 %3, 0
@@ -338,8 +342,11 @@ define { float, float } @func__const_fore_fcomp(float %0, float %1) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea.sl %s2, -1073741824
 ; CHECK-NEXT:    fsub.s %s0, %s2, %s0
-; CHECK-NEXT:    lea.sl %s2, -2147483648
-; CHECK-NEXT:    fsub.s %s1, %s2, %s1
+; CHECK-NEXT:    sra.l %s1, %s1, 32
+; CHECK-NEXT:    lea %s2, -2147483648
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    xor %s1, %s1, %s2
+; CHECK-NEXT:    sll %s1, %s1, 32
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = fsub float -2.000000e+00, %0
   %4 = fneg float %1
@@ -354,8 +361,7 @@ define { double, double } @func__const_fore_dcomp(double %0, double %1) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea.sl %s2, -1073741824
 ; CHECK-NEXT:    fsub.d %s0, %s2, %s0
-; CHECK-NEXT:    lea.sl %s2, -2147483648
-; CHECK-NEXT:    fsub.d %s1, %s2, %s1
+; CHECK-NEXT:    xor %s1, %s1, (1)1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = fsub double -2.000000e+00, %0
   %4 = fneg double %1
@@ -367,20 +373,22 @@ define { double, double } @func__const_fore_dcomp(double %0, double %1) {
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func__const_fore_qcomp(fp128 %0, fp128 %1) {
 ; CHECK-LABEL: func__const_fore_qcomp:
-; CHECK:       # %bb.0:
+; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s4, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s4, %s4, (32)0
 ; CHECK-NEXT:    lea.sl %s4, .LCPI{{[0-9]+}}_0@hi(, %s4)
+; CHECK-NEXT:    st %s3, -16(, %s9)
+; CHECK-NEXT:    st %s2, -8(, %s9)
+; CHECK-NEXT:    ld1b.zx %s2, -1(, %s9)
 ; CHECK-NEXT:    ld %s6, 8(, %s4)
 ; CHECK-NEXT:    ld %s7, (, %s4)
-; CHECK-NEXT:    lea %s4, .LCPI{{[0-9]+}}_1@lo
-; CHECK-NEXT:    and %s4, %s4, (32)0
-; CHECK-NEXT:    lea.sl %s4, .LCPI{{[0-9]+}}_1@hi(, %s4)
-; CHECK-NEXT:    ld %s34, 8(, %s4)
-; CHECK-NEXT:    ld %s35, (, %s4)
+; CHECK-NEXT:    lea %s3, 128
+; CHECK-NEXT:    xor %s2, %s2, %s3
+; CHECK-NEXT:    st1b %s2, -1(, %s9)
+; CHECK-NEXT:    ld %s3, -16(, %s9)
+; CHECK-NEXT:    ld %s2, -8(, %s9)
 ; CHECK-NEXT:    fsub.q %s0, %s6, %s0
-; CHECK-NEXT:    fsub.q %s2, %s34, %s2
-; CHECK-NEXT:    b.l.t (, %s10)
+; CHECK-NEXT:    or %s11, 0, %s9
   %3 = fsub fp128 0xL0000000000000000C000000000000000, %0
   %4 = fneg fp128 %1
   %5 = insertvalue { fp128, fp128 } undef, fp128 %3, 0
