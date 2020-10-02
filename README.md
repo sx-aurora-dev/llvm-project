@@ -1,5 +1,7 @@
 # LLVM for NEC SX-Aurora VE (llvm-ve-rv 1.8-dev)
 
+[![Build Status](https://travis-ci.com/sx-aurora-dev/llvm-project.svg?branch=hpce%2Fdevelop)](https://travis-ci.com/sx-aurora-dev/llvm-project)
+
 This is a fork of the LLVM repositoy with support for the NEC
 SX-Aurora TSUBASA Vector Engine (VE).
 
