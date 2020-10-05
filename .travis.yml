@@ -1,0 +1,10 @@
+language: cpp
+dist: focal
+compiler: gcc
+before_install:
+- sudo apt-get -y install ninja-build
+script:
+  - mkdir -p build
+  - cd build/
+  - cmake ../llvm -DLLVM_TARGETS_TO_BUILD=VE -DCMAKE_BUILD_TYPE=Release -G Ninja -DBUILD_SHARED_LIBS=on -DCMAKE_CXX_FLAGS_RELEASE="-O0 -DNDEBUG" -DLLVM_ENABLE_ASSERTIONS=OFF
+  - ninja lib/libLLVMVEAsmParser.so lib/libLLVMVEDesc.so lib/libLLVMVEInfo.so lib/libLLVMVECodeGen.so lib/libLLVMVEDisassembler.so

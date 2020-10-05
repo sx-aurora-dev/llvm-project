@@ -68,6 +68,11 @@ def SDTFPUnaryOpVVP  : SDTypeProfile<1, 3, [   // fneg, fsqrt, etc
   SDTCisSameAs<0, 1>, SDTCisFP<0>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
 ]>;
 
+// unary int
+def SDTUnaryOpVVP  : SDTypeProfile<1, 3, [   // ctpop
+  SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisSameNumEltsAs<0, 2>, IsVLVT<3>
+]>;
+
 // gather scatter
 def vvp_scatter : SDNode<"VEISD::VVP_SCATTER",  SDTScatterVVP,
                         [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
@@ -144,6 +149,9 @@ def vvp_ffloor     : SDNode<"VEISD::VVP_FFLOOR", SDTFPUnaryOpVVP>;
 def vvp_sext       : SDNode<"VEISD::VVP_SEXT", SDTIntExtendOpVVP>;
 def vvp_zext       : SDNode<"VEISD::VVP_ZEXT", SDTIntExtendOpVVP>;
 def vvp_trunc      : SDNode<"VEISD::VVP_TRUNC", SDTIntTruncOpVVP>;
+
+// element-wise bitops
+def vvp_ctpop :  SDNode<"VEISD::VVP_CTPOP", SDTUnaryOpVVP>;
 
 // reductions
 def vvp_reduce_fadd         : SDNode<"VEISD::VVP_REDUCE_FADD", SDTReduceVVP>;

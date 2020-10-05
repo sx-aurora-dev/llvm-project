@@ -241,6 +241,8 @@ multiclass VectorTernaryArith_ShortLong<SDPatternOperator OpNode, ValueType Long
 
 
 // Integer arithmetic (256 elements)
+defm : VectorUnaryArith_ShortLong<vvp_ctpop, i64, v256i64, "VPCNT", i32, v256i32, "PVPCNTLO">;
+
 defm : VectorBinaryArith_ShortLong<c_vv_add, i64, v256i64, "VADDSL", i32, v256i32, "VADDSWSX">;
 
 defm : VectorBinaryArith_ShortLong<vvp_sub,  i64, v256i64, "VSUBSL", i32, v256i32, "VSUBSWSX">;
