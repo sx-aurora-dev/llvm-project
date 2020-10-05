@@ -944,7 +944,7 @@ struct DepVectorComponent {
   char Dir;
   // TODO: Probably change to SCEV
   int64_t Dist;
-  const Loop *Loop = nullptr;
+  const llvm::Loop *Loop = nullptr;
 
   void print() const {
     dbgs() << "{" << Dir << ", " << Dist << ", "
