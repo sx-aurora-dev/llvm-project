@@ -379,6 +379,9 @@ multiclass PseudoInstKill <dag ins> {
 defm SI_KILL_I1 : PseudoInstKill <(ins SCSrc_i1:$src, i1imm:$killvalue)>;
 defm SI_KILL_F32_COND_IMM : PseudoInstKill <(ins VSrc_b32:$src0, i32imm:$src1, i32imm:$cond)>;
 
+let Defs = [EXEC] in
+def SI_KILL_CLEANUP : SPseudoInstSI <(outs), (ins)>;
+
 let Defs = [EXEC,VCC] in
 def SI_ILLEGAL_COPY : SPseudoInstSI <
   (outs unknown:$dst), (ins unknown:$src),
@@ -668,7 +671,10 @@ defm SI_SPILL_S256 : SI_SPILL_SGPR <SReg_256>;
 defm SI_SPILL_S512 : SI_SPILL_SGPR <SReg_512>;
 defm SI_SPILL_S1024 : SI_SPILL_SGPR <SReg_1024>;
 
-multiclass SI_SPILL_VGPR <RegisterClass vgpr_class> {
+// VGPR or AGPR spill instructions. In case of AGPR spilling a temp register
+// needs to be used and an extra instruction to move between VGPR and AGPR.
+// UsesTmp adds to the total size of an expanded spill in this case.
+multiclass SI_SPILL_VGPR <RegisterClass vgpr_class, bit UsesTmp = 0> {
   let UseNamedOperandTable = 1, VGPRSpill = 1,
        SchedRW = [WriteVMEM] in {
     def _SAVE : VPseudoInstSI <
@@ -678,7 +684,7 @@ multiclass SI_SPILL_VGPR <RegisterClass vgpr_class> {
       let mayStore = 1;
       let mayLoad = 0;
       // (2 * 4) + (8 * num_subregs) bytes maximum
-      int MaxSize = !add(!shl(!srl(vgpr_class.Size, 5), 3), 8);
+      int MaxSize = !add(!shl(!srl(vgpr_class.Size, 5), !add(UsesTmp, 3)), 8);
       // Size field is unsigned char and cannot fit more.
       let Size = !if(!le(MaxSize, 256), MaxSize, 252);
     }
@@ -691,7 +697,7 @@ multiclass SI_SPILL_VGPR <RegisterClass vgpr_class> {
       let mayLoad = 1;
 
       // (2 * 4) + (8 * num_subregs) bytes maximum
-      int MaxSize = !add(!shl(!srl(vgpr_class.Size, 5), 3), 8);
+      int MaxSize = !add(!shl(!srl(vgpr_class.Size, 5), !add(UsesTmp, 3)), 8);
       // Size field is unsigned char and cannot fit more.
       let Size = !if(!le(MaxSize, 256), MaxSize, 252);
     }
@@ -708,42 +714,15 @@ defm SI_SPILL_V256 : SI_SPILL_VGPR <VReg_256>;
 defm SI_SPILL_V512 : SI_SPILL_VGPR <VReg_512>;
 defm SI_SPILL_V1024 : SI_SPILL_VGPR <VReg_1024>;
 
-multiclass SI_SPILL_AGPR <RegisterClass vgpr_class> {
-  let UseNamedOperandTable = 1, VGPRSpill = 1,
-      Constraints = "@earlyclobber $tmp",
-      SchedRW = [WriteVMEM] in {
-    def _SAVE : VPseudoInstSI <
-      (outs VGPR_32:$tmp),
-      (ins vgpr_class:$vdata, i32imm:$vaddr, SReg_128:$srsrc,
-           SReg_32:$soffset, i32imm:$offset)> {
-      let mayStore = 1;
-      let mayLoad = 0;
-      // (2 * 4) + (16 * num_subregs) bytes maximum
-      int MaxSize = !add(!shl(!srl(vgpr_class.Size, 5), 4), 8);
-      // Size field is unsigned char and cannot fit more.
-      let Size = !if(!le(MaxSize, 256), MaxSize, 252);
-    }
-
-    def _RESTORE : VPseudoInstSI <
-      (outs vgpr_class:$vdata, VGPR_32:$tmp),
-      (ins i32imm:$vaddr, SReg_128:$srsrc, SReg_32:$soffset,
-           i32imm:$offset)> {
-      let mayStore = 0;
-      let mayLoad = 1;
-
-      // (2 * 4) + (16 * num_subregs) bytes maximum
-      int MaxSize = !add(!shl(!srl(vgpr_class.Size, 5), 4), 8);
-      // Size field is unsigned char and cannot fit more.
-      let Size = !if(!le(MaxSize, 256), MaxSize, 252);
-    }
-  } // End UseNamedOperandTable = 1, VGPRSpill = 1, SchedRW = [WriteVMEM]
-}
-
-defm SI_SPILL_A32  : SI_SPILL_AGPR <AGPR_32>;
-defm SI_SPILL_A64  : SI_SPILL_AGPR <AReg_64>;
-defm SI_SPILL_A128 : SI_SPILL_AGPR <AReg_128>;
-defm SI_SPILL_A512 : SI_SPILL_AGPR <AReg_512>;
-defm SI_SPILL_A1024 : SI_SPILL_AGPR <AReg_1024>;
+defm SI_SPILL_A32  : SI_SPILL_VGPR <AGPR_32, 1>;
+defm SI_SPILL_A64  : SI_SPILL_VGPR <AReg_64, 1>;
+defm SI_SPILL_A96  : SI_SPILL_VGPR <AReg_96, 1>;
+defm SI_SPILL_A128 : SI_SPILL_VGPR <AReg_128, 1>;
+defm SI_SPILL_A160 : SI_SPILL_VGPR <AReg_160, 1>;
+defm SI_SPILL_A192 : SI_SPILL_VGPR <AReg_192, 1>;
+defm SI_SPILL_A256 : SI_SPILL_VGPR <AReg_256, 1>;
+defm SI_SPILL_A512 : SI_SPILL_VGPR <AReg_512, 1>;
+defm SI_SPILL_A1024 : SI_SPILL_VGPR <AReg_1024, 1>;
 
 def SI_PC_ADD_REL_OFFSET : SPseudoInstSI <
   (outs SReg_64:$dst),
@@ -1496,8 +1475,13 @@ def : GCNPat <
 >;
 
 def : GCNPat <
- (i32 frameindex:$fi),
- (V_MOV_B32_e32 (i32 (frameindex_to_targetframeindex $fi)))
+  (p5 frameindex:$fi),
+  (V_MOV_B32_e32 (p5 (frameindex_to_targetframeindex $fi)))
+>;
+
+def : GCNPat <
+  (p5 frameindex:$fi),
+  (S_MOV_B32 (p5 (frameindex_to_targetframeindex $fi)))
 >;
 
 def : GCNPat <
@@ -1549,11 +1533,12 @@ class Ext32Pat <SDNode ext> : GCNPat <
 def : Ext32Pat <zext>;
 def : Ext32Pat <anyext>;
 
-// The multiplication scales from [0,1] to the unsigned integer range
+// The multiplication scales from [0,1) to the unsigned integer range,
+// rounding down a bit to avoid unwanted overflow.
 def : GCNPat <
   (AMDGPUurecip i32:$src0),
   (V_CVT_U32_F32_e32
-    (V_MUL_F32_e32 (i32 CONST.FP_UINT_MAX_PLUS_1),
+    (V_MUL_F32_e32 (i32 CONST.FP_4294966784),
                    (V_RCP_IFLAG_F32_e32 (V_CVT_F32_U32_e32 $src0))))
 >;
 
@@ -2209,7 +2194,7 @@ def : GCNPat<
 
 def : GCNPat<
   (add i32:$src0, (i32 NegSubInlineConst32:$src1)),
-  (V_SUB_I32_e64 VS_32:$src0, NegSubInlineConst32:$src1)> {
+  (V_SUB_CO_U32_e64 VS_32:$src0, NegSubInlineConst32:$src1)> {
   let SubtargetPredicate = NotHasAddNoCarryInsts;
 }
 
@@ -2424,10 +2409,12 @@ def G_AMDGPU_ATOMIC_CMPXCHG : AMDGPUGenericInstruction {
 let Namespace = "AMDGPU" in {
 def G_AMDGPU_ATOMIC_INC : G_ATOMICRMW_OP;
 def G_AMDGPU_ATOMIC_DEC : G_ATOMICRMW_OP;
+def G_AMDGPU_ATOMIC_FMIN : G_ATOMICRMW_OP;
+def G_AMDGPU_ATOMIC_FMAX : G_ATOMICRMW_OP;
 }
 
-class BufferAtomicGenericInstruction : AMDGPUGenericInstruction {
-  let OutOperandList = (outs type0:$dst);
+class BufferAtomicGenericInstruction<bit NoRtn = 0> : AMDGPUGenericInstruction {
+  let OutOperandList = !if(NoRtn, (outs), (outs type0:$dst));
   let InOperandList = (ins type0:$vdata, type1:$rsrc, type2:$vindex, type2:$voffset,
                            type2:$soffset, untyped_imm_0:$offset,
                            untyped_imm_0:$cachepolicy, untyped_imm_0:$idxen);
@@ -2448,6 +2435,7 @@ def G_AMDGPU_BUFFER_ATOMIC_OR : BufferAtomicGenericInstruction;
 def G_AMDGPU_BUFFER_ATOMIC_XOR : BufferAtomicGenericInstruction;
 def G_AMDGPU_BUFFER_ATOMIC_INC : BufferAtomicGenericInstruction;
 def G_AMDGPU_BUFFER_ATOMIC_DEC : BufferAtomicGenericInstruction;
+def G_AMDGPU_BUFFER_ATOMIC_FADD : BufferAtomicGenericInstruction<1/*NoRtn*/>;
 
 def G_AMDGPU_BUFFER_ATOMIC_CMPSWAP : AMDGPUGenericInstruction {
   let OutOperandList = (outs type0:$dst);

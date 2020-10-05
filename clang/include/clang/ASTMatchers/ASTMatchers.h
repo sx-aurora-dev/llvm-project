@@ -145,6 +145,7 @@ using TypeLocMatcher = internal::Matcher<TypeLoc>;
 using NestedNameSpecifierMatcher = internal::Matcher<NestedNameSpecifier>;
 using NestedNameSpecifierLocMatcher = internal::Matcher<NestedNameSpecifierLoc>;
 using CXXCtorInitializerMatcher = internal::Matcher<CXXCtorInitializer>;
+using TemplateArgumentLocMatcher = internal::Matcher<TemplateArgumentLoc>;
 /// @}
 
 /// Matches any node.
@@ -283,9 +284,10 @@ AST_POLYMORPHIC_MATCHER(isExpansionInSystemHeader,
 /// \endcode
 ///
 /// Usable as: Matcher<Decl>, Matcher<Stmt>, Matcher<TypeLoc>
-AST_POLYMORPHIC_MATCHER_P(isExpansionInFileMatching,
-                          AST_POLYMORPHIC_SUPPORTED_TYPES(Decl, Stmt, TypeLoc),
-                          std::string, RegExp) {
+AST_POLYMORPHIC_MATCHER_REGEX(isExpansionInFileMatching,
+                              AST_POLYMORPHIC_SUPPORTED_TYPES(Decl, Stmt,
+                                                              TypeLoc),
+                              RegExp) {
   auto &SourceManager = Finder->getASTContext().getSourceManager();
   auto ExpansionLoc = SourceManager.getExpansionLoc(Node.getBeginLoc());
   if (ExpansionLoc.isInvalid()) {
@@ -298,8 +300,7 @@ AST_POLYMORPHIC_MATCHER_P(isExpansionInFileMatching,
   }
 
   auto Filename = FileEntry->getName();
-  llvm::Regex RE(RegExp);
-  return RE.match(Filename);
+  return RegExp->match(Filename);
 }
 
 /// Matches statements that are (transitively) expanded from the named macro.
@@ -515,6 +516,18 @@ extern const internal::VariadicAllOfMatcher<CXXCtorInitializer>
 ///   matches 'int' in C<int>.
 extern const internal::VariadicAllOfMatcher<TemplateArgument> templateArgument;
 
+/// Matches template arguments (with location info).
+///
+/// Given
+/// \code
+///   template <typename T> struct C {};
+///   C<int> c;
+/// \endcode
+/// templateArgumentLoc()
+///   matches 'int' in C<int>.
+extern const internal::VariadicAllOfMatcher<TemplateArgumentLoc>
+    templateArgumentLoc;
+
 /// Matches template name.
 ///
 /// Given
@@ -548,6 +561,18 @@ extern const internal::VariadicDynCastAllOfMatcher<Decl,
 ///   matches 'T', but not 'N'.
 extern const internal::VariadicDynCastAllOfMatcher<Decl, TemplateTypeParmDecl>
     templateTypeParmDecl;
+
+/// Matches template template parameter declarations.
+///
+/// Given
+/// \code
+///   template <template <typename> class Z, int N> struct C {};
+/// \endcode
+/// templateTypeParmDecl()
+///   matches 'Z', but not 'N'.
+extern const internal::VariadicDynCastAllOfMatcher<Decl,
+                                                   TemplateTemplateParmDecl>
+    templateTemplateParmDecl;
 
 /// Matches public C++ declarations and C++ base specifers that specify public
 /// inheritance.
@@ -2748,11 +2773,9 @@ extern const internal::VariadicFunction<internal::Matcher<NamedDecl>, StringRef,
 /// \code
 ///   namespace foo { namespace bar { class X; } }
 /// \endcode
-AST_MATCHER_P(NamedDecl, matchesName, std::string, RegExp) {
-  assert(!RegExp.empty());
+AST_MATCHER_REGEX(NamedDecl, matchesName, RegExp) {
   std::string FullNameString = "::" + Node.getQualifiedNameAsString();
-  llvm::Regex RE(RegExp);
-  return RE.match(FullNameString);
+  return RegExp->match(FullNameString);
 }
 
 /// Matches overloaded operator names.
@@ -2864,7 +2887,7 @@ AST_POLYMORPHIC_MATCHER_P_OVERLOAD(
 /// BaseSpecMatcher.
 ///
 /// Example:
-/// matcher hasAnyBase(hasType(cxxRecordDecl(hasName("SpecialBase")))))
+/// matcher hasAnyBase(hasType(cxxRecordDecl(hasName("SpecialBase"))))
 /// \code
 ///   class Foo;
 ///   class Bar : Foo {};
@@ -2878,6 +2901,26 @@ AST_POLYMORPHIC_MATCHER_P_OVERLOAD(
 AST_MATCHER_P(CXXRecordDecl, hasAnyBase, internal::Matcher<CXXBaseSpecifier>,
               BaseSpecMatcher) {
   return internal::matchesAnyBase(Node, BaseSpecMatcher, Finder, Builder);
+}
+
+/// Matches C++ classes that have a direct base matching \p BaseSpecMatcher.
+///
+/// Example:
+/// matcher hasDirectBase(hasType(cxxRecordDecl(hasName("SpecialBase"))))
+/// \code
+///   class Foo;
+///   class Bar : Foo {};
+///   class Baz : Bar {};
+///   class SpecialBase;
+///   class Proxy : SpecialBase {};  // matches Proxy
+///   class IndirectlyDerived : Proxy {};  // doesn't match
+/// \endcode
+AST_MATCHER_P(CXXRecordDecl, hasDirectBase, internal::Matcher<CXXBaseSpecifier>,
+              BaseSpecMatcher) {
+  return Node.hasDefinition() &&
+         llvm::any_of(Node.bases(), [&](const CXXBaseSpecifier &Base) {
+           return BaseSpecMatcher.matches(Base, Finder, Builder);
+         });
 }
 
 /// Similar to \c isDerivedFrom(), but also matches classes that directly
@@ -3373,11 +3416,9 @@ extern const internal::VariadicFunction<internal::Matcher<ObjCMessageExpr>,
 /// \code
 ///     [self.bodyView loadHTMLString:html baseURL:NULL];
 /// \endcode
-AST_MATCHER_P(ObjCMessageExpr, matchesSelector, std::string, RegExp) {
-  assert(!RegExp.empty());
+AST_MATCHER_REGEX(ObjCMessageExpr, matchesSelector, RegExp) {
   std::string SelectorString = Node.getSelector().getAsString();
-  llvm::Regex RE(RegExp);
-  return RE.match(SelectorString);
+  return RegExp->match(SelectorString);
 }
 
 /// Matches when the selector is the empty selector
@@ -7174,10 +7215,12 @@ AST_MATCHER_P(OMPExecutableDirective, hasAnyClause,
 /// \code
 ///   #pragma omp parallel default(none)
 ///   #pragma omp parallel default(shared)
+///   #pragma omp parallel default(firstprivate)
 ///   #pragma omp parallel
 /// \endcode
 ///
-/// ``ompDefaultClause()`` matches ``default(none)`` and ``default(shared)``.
+/// ``ompDefaultClause()`` matches ``default(none)``, ``default(shared)``, and
+/// ``default(firstprivate)``
 extern const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPDefaultClause>
     ompDefaultClause;
 
@@ -7189,6 +7232,7 @@ extern const internal::VariadicDynCastAllOfMatcher<OMPClause, OMPDefaultClause>
 ///   #pragma omp parallel
 ///   #pragma omp parallel default(none)
 ///   #pragma omp parallel default(shared)
+///   #pragma omp parallel default(firstprivate)
 /// \endcode
 ///
 /// ``ompDefaultClause(isNoneKind())`` matches only ``default(none)``.
@@ -7204,11 +7248,30 @@ AST_MATCHER(OMPDefaultClause, isNoneKind) {
 ///   #pragma omp parallel
 ///   #pragma omp parallel default(none)
 ///   #pragma omp parallel default(shared)
+///   #pragma omp parallel default(firstprivate)
 /// \endcode
 ///
 /// ``ompDefaultClause(isSharedKind())`` matches only ``default(shared)``.
 AST_MATCHER(OMPDefaultClause, isSharedKind) {
   return Node.getDefaultKind() == llvm::omp::OMP_DEFAULT_shared;
+}
+
+/// Matches if the OpenMP ``default`` clause has ``firstprivate`` kind
+/// specified.
+///
+/// Given
+///
+/// \code
+///   #pragma omp parallel
+///   #pragma omp parallel default(none)
+///   #pragma omp parallel default(shared)
+///   #pragma omp parallel default(firstprivate)
+/// \endcode
+///
+/// ``ompDefaultClause(isFirstPrivateKind())`` matches only
+/// ``default(firstprivate)``.
+AST_MATCHER(OMPDefaultClause, isFirstPrivateKind) {
+  return Node.getDefaultKind() == llvm::omp::OMP_DEFAULT_firstprivate;
 }
 
 /// Matches if the OpenMP directive is allowed to contain the specified OpenMP

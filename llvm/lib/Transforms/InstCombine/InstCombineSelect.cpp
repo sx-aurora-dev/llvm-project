@@ -38,6 +38,7 @@
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
 #include "llvm/Transforms/InstCombine/InstCombineWorklist.h"
+#include "llvm/Transforms/InstCombine/InstCombiner.h"
 #include <cassert>
 #include <utility>
 
@@ -57,7 +58,7 @@ static Value *createMinMax(InstCombiner::BuilderTy &Builder,
 /// constant of a binop.
 static Instruction *foldSelectBinOpIdentity(SelectInst &Sel,
                                             const TargetLibraryInfo &TLI,
-                                            InstCombiner &IC) {
+                                            InstCombinerImpl &IC) {
   // The select condition must be an equality compare with a constant operand.
   Value *X;
   Constant *C;
@@ -279,8 +280,8 @@ static APInt getSelectFoldableConstant(BinaryOperator *I) {
 }
 
 /// We have (select c, TI, FI), and we know that TI and FI have the same opcode.
-Instruction *InstCombiner::foldSelectOpOp(SelectInst &SI, Instruction *TI,
-                                          Instruction *FI) {
+Instruction *InstCombinerImpl::foldSelectOpOp(SelectInst &SI, Instruction *TI,
+                                              Instruction *FI) {
   // Don't break up min/max patterns. The hasOneUse checks below prevent that
   // for most cases, but vector min/max with bitcasts can be transformed. If the
   // one-use restrictions are eased for other patterns, we still don't want to
@@ -304,8 +305,8 @@ Instruction *InstCombiner::foldSelectOpOp(SelectInst &SI, Instruction *TI,
     if (auto *CondVTy = dyn_cast<VectorType>(CondTy)) {
       if (!FIOpndTy->isVectorTy())
         return nullptr;
-      if (CondVTy->getNumElements() !=
-          cast<VectorType>(FIOpndTy)->getNumElements())
+      if (cast<FixedVectorType>(CondVTy)->getNumElements() !=
+          cast<FixedVectorType>(FIOpndTy)->getNumElements())
         return nullptr;
 
       // TODO: If the backend knew how to deal with casts better, we could
@@ -418,8 +419,8 @@ static bool isSelect01(const APInt &C1I, const APInt &C2I) {
 
 /// Try to fold the select into one of the operands to allow further
 /// optimization.
-Instruction *InstCombiner::foldSelectIntoOp(SelectInst &SI, Value *TrueVal,
-                                            Value *FalseVal) {
+Instruction *InstCombinerImpl::foldSelectIntoOp(SelectInst &SI, Value *TrueVal,
+                                                Value *FalseVal) {
   // See the comment above GetSelectFoldableOperands for a description of the
   // transformation we are doing here.
   if (auto *TVI = dyn_cast<BinaryOperator>(TrueVal)) {
@@ -1024,9 +1025,9 @@ static bool adjustMinMax(SelectInst &Sel, ICmpInst &Cmp) {
 /// select (icmp Pred X, C1), C2, X --> select (icmp Pred' X, C2), X, C2
 /// Note: if C1 != C2, this will change the icmp constant to the existing
 /// constant operand of the select.
-static Instruction *
-canonicalizeMinMaxWithConstant(SelectInst &Sel, ICmpInst &Cmp,
-                               InstCombiner &IC) {
+static Instruction *canonicalizeMinMaxWithConstant(SelectInst &Sel,
+                                                   ICmpInst &Cmp,
+                                                   InstCombinerImpl &IC) {
   if (!Cmp.hasOneUse() || !isa<Constant>(Cmp.getOperand(1)))
     return nullptr;
 
@@ -1070,7 +1071,7 @@ canonicalizeMinMaxWithConstant(SelectInst &Sel, ICmpInst &Cmp,
 /// Canonicalize all these variants to 1 pattern.
 /// This makes CSE more likely.
 static Instruction *canonicalizeAbsNabs(SelectInst &Sel, ICmpInst &Cmp,
-                                        InstCombiner &IC) {
+                                        InstCombinerImpl &IC) {
   if (!Cmp.hasOneUse() || !isa<Constant>(Cmp.getOperand(1)))
     return nullptr;
 
@@ -1253,7 +1254,7 @@ static Instruction *canonicalizeClampLike(SelectInst &Sel0, ICmpInst &Cmp0,
                                   APInt::getAllOnesValue(
                                       C0->getType()->getScalarSizeInBits()))))
       return nullptr; // Can't do, have all-ones element[s].
-    C0 = AddOne(C0);
+    C0 = InstCombiner::AddOne(C0);
     std::swap(X, Sel1);
     break;
   case ICmpInst::Predicate::ICMP_UGE:
@@ -1313,7 +1314,7 @@ static Instruction *canonicalizeClampLike(SelectInst &Sel0, ICmpInst &Cmp0,
                                   APInt::getSignedMaxValue(
                                       C2->getType()->getScalarSizeInBits()))))
       return nullptr; // Can't do, have signed max element[s].
-    C2 = AddOne(C2);
+    C2 = InstCombiner::AddOne(C2);
     LLVM_FALLTHROUGH;
   case ICmpInst::Predicate::ICMP_SGE:
     // Also non-canonical, but here we don't need to change C2,
@@ -1360,7 +1361,7 @@ static Instruction *canonicalizeClampLike(SelectInst &Sel0, ICmpInst &Cmp0,
 // and swap the hands of select.
 static Instruction *
 tryToReuseConstantFromSelectInComparison(SelectInst &Sel, ICmpInst &Cmp,
-                                         InstCombiner &IC) {
+                                         InstCombinerImpl &IC) {
   ICmpInst::Predicate Pred;
   Value *X;
   Constant *C0;
@@ -1375,7 +1376,7 @@ tryToReuseConstantFromSelectInComparison(SelectInst &Sel, ICmpInst &Cmp,
 
   // If comparison predicate is non-canonical, then we certainly won't be able
   // to make it canonical; canonicalizeCmpWithConstant() already tried.
-  if (!isCanonicalPredicate(Pred))
+  if (!InstCombiner::isCanonicalPredicate(Pred))
     return nullptr;
 
   // If the [input] type of comparison and select type are different, lets abort
@@ -1403,7 +1404,8 @@ tryToReuseConstantFromSelectInComparison(SelectInst &Sel, ICmpInst &Cmp,
     return nullptr;
 
   // Check the constant we'd have with flipped-strictness predicate.
-  auto FlippedStrictness = getFlippedStrictnessPredicateAndConstant(Pred, C0);
+  auto FlippedStrictness =
+      InstCombiner::getFlippedStrictnessPredicateAndConstant(Pred, C0);
   if (!FlippedStrictness)
     return nullptr;
 
@@ -1426,8 +1428,8 @@ tryToReuseConstantFromSelectInComparison(SelectInst &Sel, ICmpInst &Cmp,
 }
 
 /// Visit a SelectInst that has an ICmpInst as its first operand.
-Instruction *InstCombiner::foldSelectInstWithICmp(SelectInst &SI,
-                                                  ICmpInst *ICI) {
+Instruction *InstCombinerImpl::foldSelectInstWithICmp(SelectInst &SI,
+                                                      ICmpInst *ICI) {
   if (Value *V = foldSelectValueEquivalence(SI, *ICI, SQ))
     return replaceInstUsesWith(SI, V);
 
@@ -1579,11 +1581,11 @@ static bool canSelectOperandBeMappingIntoPredBlock(const Value *V,
 
 /// We have an SPF (e.g. a min or max) of an SPF of the form:
 ///   SPF2(SPF1(A, B), C)
-Instruction *InstCombiner::foldSPFofSPF(Instruction *Inner,
-                                        SelectPatternFlavor SPF1,
-                                        Value *A, Value *B,
-                                        Instruction &Outer,
-                                        SelectPatternFlavor SPF2, Value *C) {
+Instruction *InstCombinerImpl::foldSPFofSPF(Instruction *Inner,
+                                            SelectPatternFlavor SPF1, Value *A,
+                                            Value *B, Instruction &Outer,
+                                            SelectPatternFlavor SPF2,
+                                            Value *C) {
   if (Outer.getType() != Inner->getType())
     return nullptr;
 
@@ -1900,7 +1902,7 @@ foldOverflowingAddSubSelect(SelectInst &SI, InstCombiner::BuilderTy &Builder) {
   return CallInst::Create(F, {X, Y});
 }
 
-Instruction *InstCombiner::foldSelectExtConst(SelectInst &Sel) {
+Instruction *InstCombinerImpl::foldSelectExtConst(SelectInst &Sel) {
   Constant *C;
   if (!match(Sel.getTrueValue(), m_Constant(C)) &&
       !match(Sel.getFalseValue(), m_Constant(C)))
@@ -1930,7 +1932,7 @@ Instruction *InstCombiner::foldSelectExtConst(SelectInst &Sel) {
   Type *SelType = Sel.getType();
   Constant *TruncC = ConstantExpr::getTrunc(C, SmallType);
   Constant *ExtC = ConstantExpr::getCast(ExtOpcode, TruncC, SelType);
-  if (ExtC == C) {
+  if (ExtC == C && ExtInst->hasOneUse()) {
     Value *TruncCVal = cast<Value>(TruncC);
     if (ExtInst == Sel.getFalseValue())
       std::swap(X, TruncCVal);
@@ -1969,7 +1971,8 @@ static Instruction *canonicalizeSelectToShuffle(SelectInst &SI) {
   if (!CondVal->getType()->isVectorTy() || !match(CondVal, m_Constant(CondC)))
     return nullptr;
 
-  unsigned NumElts = cast<VectorType>(CondVal->getType())->getNumElements();
+  unsigned NumElts =
+      cast<FixedVectorType>(CondVal->getType())->getNumElements();
   SmallVector<int, 16> Mask;
   Mask.reserve(NumElts);
   for (unsigned i = 0; i != NumElts; ++i) {
@@ -2001,8 +2004,8 @@ static Instruction *canonicalizeSelectToShuffle(SelectInst &SI) {
 /// to a vector select by splatting the condition. A splat may get folded with
 /// other operations in IR and having all operands of a select be vector types
 /// is likely better for vector codegen.
-static Instruction *canonicalizeScalarSelectOfVecs(
-    SelectInst &Sel, InstCombiner &IC) {
+static Instruction *canonicalizeScalarSelectOfVecs(SelectInst &Sel,
+                                                   InstCombinerImpl &IC) {
   auto *Ty = dyn_cast<VectorType>(Sel.getType());
   if (!Ty)
     return nullptr;
@@ -2015,8 +2018,8 @@ static Instruction *canonicalizeScalarSelectOfVecs(
   // select (extelt V, Index), T, F --> select (splat V, Index), T, F
   // Splatting the extracted condition reduces code (we could directly create a
   // splat shuffle of the source vector to eliminate the intermediate step).
-  unsigned NumElts = Ty->getNumElements();
-  return IC.replaceOperand(Sel, 0, IC.Builder.CreateVectorSplat(NumElts, Cond));
+  return IC.replaceOperand(
+      Sel, 0, IC.Builder.CreateVectorSplat(Ty->getElementCount(), Cond));
 }
 
 /// Reuse bitcasted operands between a compare and select:
@@ -2172,7 +2175,7 @@ static Instruction *moveAddAfterMinMax(SelectPatternFlavor SPF, Value *X,
 }
 
 /// Match a sadd_sat or ssub_sat which is using min/max to clamp the value.
-Instruction *InstCombiner::matchSAddSubSat(SelectInst &MinMax1) {
+Instruction *InstCombinerImpl::matchSAddSubSat(SelectInst &MinMax1) {
   Type *Ty = MinMax1.getType();
 
   // We are looking for a tree of:
@@ -2297,7 +2300,8 @@ static Instruction *factorizeMinMaxTree(SelectPatternFlavor SPF, Value *LHS,
 /// funnel shift intrinsic. Example:
 /// rotl32(a, b) --> (b == 0 ? a : ((a >> (32 - b)) | (a << b)))
 ///              --> call llvm.fshl.i32(a, a, b)
-static Instruction *foldSelectRotate(SelectInst &Sel) {
+static Instruction *foldSelectRotate(SelectInst &Sel,
+                                     InstCombiner::BuilderTy &Builder) {
   // The false value of the select must be a rotate of the true value.
   Value *Or0, *Or1;
   if (!match(Sel.getFalseValue(), m_OneUse(m_Or(m_Value(Or0), m_Value(Or1)))))
@@ -2305,8 +2309,10 @@ static Instruction *foldSelectRotate(SelectInst &Sel) {
 
   Value *TVal = Sel.getTrueValue();
   Value *SA0, *SA1;
-  if (!match(Or0, m_OneUse(m_LogicalShift(m_Specific(TVal), m_Value(SA0)))) ||
-      !match(Or1, m_OneUse(m_LogicalShift(m_Specific(TVal), m_Value(SA1)))))
+  if (!match(Or0, m_OneUse(m_LogicalShift(m_Specific(TVal),
+                                          m_ZExtOrSelf(m_Value(SA0))))) ||
+      !match(Or1, m_OneUse(m_LogicalShift(m_Specific(TVal),
+                                          m_ZExtOrSelf(m_Value(SA1))))))
     return nullptr;
 
   auto ShiftOpcode0 = cast<BinaryOperator>(Or0)->getOpcode();
@@ -2344,6 +2350,7 @@ static Instruction *foldSelectRotate(SelectInst &Sel) {
                 (ShAmt == SA1 && ShiftOpcode1 == BinaryOperator::Shl);
   Intrinsic::ID IID = IsFshl ? Intrinsic::fshl : Intrinsic::fshr;
   Function *F = Intrinsic::getDeclaration(Sel.getModule(), IID, Sel.getType());
+  ShAmt = Builder.CreateZExt(ShAmt, Sel.getType());
   return IntrinsicInst::Create(F, { TVal, TVal, ShAmt });
 }
 
@@ -2368,7 +2375,8 @@ static Instruction *foldSelectToCopysign(SelectInst &Sel,
   bool IsTrueIfSignSet;
   ICmpInst::Predicate Pred;
   if (!match(Cond, m_OneUse(m_ICmp(Pred, m_BitCast(m_Value(X)), m_APInt(C)))) ||
-      !isSignBitCheck(Pred, *C, IsTrueIfSignSet) || X->getType() != SelType)
+      !InstCombiner::isSignBitCheck(Pred, *C, IsTrueIfSignSet) ||
+      X->getType() != SelType)
     return nullptr;
 
   // If needed, negate the value that will be the sign argument of the copysign:
@@ -2389,7 +2397,7 @@ static Instruction *foldSelectToCopysign(SelectInst &Sel,
   return CopySign;
 }
 
-Instruction *InstCombiner::foldVectorSelect(SelectInst &Sel) {
+Instruction *InstCombinerImpl::foldVectorSelect(SelectInst &Sel) {
   auto *VecTy = dyn_cast<FixedVectorType>(Sel.getType());
   if (!VecTy)
     return nullptr;
@@ -2443,11 +2451,11 @@ Instruction *InstCombiner::foldVectorSelect(SelectInst &Sel) {
   return nullptr;
 }
 
-static Instruction *foldSelectToPhi(SelectInst &Sel, const DominatorTree &DT,
-                                    InstCombiner::BuilderTy &Builder) {
+static Instruction *foldSelectToPhiImpl(SelectInst &Sel, BasicBlock *BB,
+                                        const DominatorTree &DT,
+                                        InstCombiner::BuilderTy &Builder) {
   // Find the block's immediate dominator that ends with a conditional branch
   // that matches select's condition (maybe inverted).
-  BasicBlock *BB = Sel.getParent();
   auto *IDomNode = DT[BB]->getIDom();
   if (!IDomNode)
     return nullptr;
@@ -2467,6 +2475,10 @@ static Instruction *foldSelectToPhi(SelectInst &Sel, const DominatorTree &DT,
     IfTrue = Sel.getFalseValue();
     IfFalse = Sel.getTrueValue();
   } else
+    return nullptr;
+
+  // Make sure the branches are actually different.
+  if (TrueSucc == FalseSucc)
     return nullptr;
 
   // We want to replace select %cond, %a, %b with a phi that takes value %a
@@ -2500,7 +2512,48 @@ static Instruction *foldSelectToPhi(SelectInst &Sel, const DominatorTree &DT,
   return PN;
 }
 
-Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
+static Instruction *foldSelectToPhi(SelectInst &Sel, const DominatorTree &DT,
+                                    InstCombiner::BuilderTy &Builder) {
+  // Try to replace this select with Phi in one of these blocks.
+  SmallSetVector<BasicBlock *, 4> CandidateBlocks;
+  CandidateBlocks.insert(Sel.getParent());
+  for (Value *V : Sel.operands())
+    if (auto *I = dyn_cast<Instruction>(V))
+      CandidateBlocks.insert(I->getParent());
+
+  for (BasicBlock *BB : CandidateBlocks)
+    if (auto *PN = foldSelectToPhiImpl(Sel, BB, DT, Builder))
+      return PN;
+  return nullptr;
+}
+
+static Value *foldSelectWithFrozenICmp(SelectInst &Sel, InstCombiner::BuilderTy &Builder) {
+  FreezeInst *FI = dyn_cast<FreezeInst>(Sel.getCondition());
+  if (!FI)
+    return nullptr;
+
+  Value *Cond = FI->getOperand(0);
+  Value *TrueVal = Sel.getTrueValue(), *FalseVal = Sel.getFalseValue();
+
+  //   select (freeze(x == y)), x, y --> y
+  //   select (freeze(x != y)), x, y --> x
+  // The freeze should be only used by this select. Otherwise, remaining uses of
+  // the freeze can observe a contradictory value.
+  //   c = freeze(x == y)   ; Let's assume that y = poison & x = 42; c is 0 or 1
+  //   a = select c, x, y   ;
+  //   f(a, c)              ; f(poison, 1) cannot happen, but if a is folded
+  //                        ; to y, this can happen.
+  CmpInst::Predicate Pred;
+  if (FI->hasOneUse() &&
+      match(Cond, m_c_ICmp(Pred, m_Specific(TrueVal), m_Specific(FalseVal))) &&
+      (Pred == ICmpInst::ICMP_EQ || Pred == ICmpInst::ICMP_NE)) {
+    return Pred == ICmpInst::ICMP_EQ ? FalseVal : TrueVal;
+  }
+
+  return nullptr;
+}
+
+Instruction *InstCombinerImpl::visitSelectInst(SelectInst &SI) {
   Value *CondVal = SI.getCondition();
   Value *TrueVal = SI.getTrueValue();
   Value *FalseVal = SI.getFalseValue();
@@ -2532,21 +2585,7 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
   if (Instruction *I = canonicalizeScalarSelectOfVecs(SI, *this))
     return I;
 
-  // Canonicalize a one-use integer compare with a non-canonical predicate by
-  // inverting the predicate and swapping the select operands. This matches a
-  // compare canonicalization for conditional branches.
-  // TODO: Should we do the same for FP compares?
   CmpInst::Predicate Pred;
-  if (match(CondVal, m_OneUse(m_ICmp(Pred, m_Value(), m_Value()))) &&
-      !isCanonicalPredicate(Pred)) {
-    // Swap true/false values and condition.
-    CmpInst *Cond = cast<CmpInst>(CondVal);
-    Cond->setPredicate(CmpInst::getInversePredicate(Pred));
-    SI.swapValues();
-    SI.swapProfMetadata();
-    Worklist.push(Cond);
-    return &SI;
-  }
 
   if (SelType->isIntOrIntVectorTy(1) &&
       TrueVal->getType() == CondVal->getType()) {
@@ -2837,8 +2876,9 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
         return replaceOperand(SI, 1, TrueSI->getTrueValue());
       }
       // select(C0, select(C1, a, b), b) -> select(C0&C1, a, b)
-      // We choose this as normal form to enable folding on the And and shortening
-      // paths for the values (this helps GetUnderlyingObjects() for example).
+      // We choose this as normal form to enable folding on the And and
+      // shortening paths for the values (this helps getUnderlyingObjects() for
+      // example).
       if (TrueSI->getFalseValue() == FalseVal && TrueSI->hasOneUse()) {
         Value *And = Builder.CreateAnd(CondVal, TrueSI->getCondition());
         replaceOperand(SI, 0, And);
@@ -2955,7 +2995,7 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
   if (Instruction *Select = foldSelectBinOpIdentity(SI, TLI, *this))
     return Select;
 
-  if (Instruction *Rot = foldSelectRotate(SI))
+  if (Instruction *Rot = foldSelectRotate(SI, Builder))
     return Rot;
 
   if (Instruction *Copysign = foldSelectToCopysign(SI, Builder))
@@ -2963,6 +3003,9 @@ Instruction *InstCombiner::visitSelectInst(SelectInst &SI) {
 
   if (Instruction *PN = foldSelectToPhi(SI, DT, Builder))
     return replaceInstUsesWith(SI, PN);
+
+  if (Value *Fr = foldSelectWithFrozenICmp(SI, Builder))
+    return replaceInstUsesWith(SI, Fr);
 
   return nullptr;
 }

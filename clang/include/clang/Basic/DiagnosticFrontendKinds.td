@@ -37,6 +37,12 @@ def note_fe_backend_plugin: Note<"%0">, BackendInfo;
 def warn_fe_override_module : Warning<
     "overriding the module target triple with %0">,
     InGroup<DiagGroup<"override-module">>;
+def warn_fe_backend_unsupported_fp_rounding : Warning<
+    "overriding currently unsupported rounding mode on this target">,
+    InGroup<UnsupportedFPOpt>;
+def warn_fe_backend_unsupported_fp_exceptions : Warning<
+    "overriding currently unsupported use of floating point exceptions "
+    "on this target">, InGroup<UnsupportedFPOpt>;
 
 def remark_fe_backend_optimization_remark : Remark<"%0">, BackendInfo,
     InGroup<BackendOptimizationRemark>;
@@ -118,6 +124,9 @@ def warn_fe_serialized_diag_merge_failure : Warning<
     InGroup<SerializedDiagnostics>;
 def warn_fe_serialized_diag_failure : Warning<
     "unable to open file %0 for serializing diagnostics (%1)">,
+    InGroup<SerializedDiagnostics>;
+def warn_fe_serialized_diag_failure_during_finalisation : Warning<
+    "Received warning after diagnostic serialization teardown was underway: %0">,
     InGroup<SerializedDiagnostics>;
 
 def err_verify_missing_line : Error<
@@ -261,8 +270,16 @@ def err_ifunc_resolver_return : Error<
   "ifunc resolver function must return a pointer">;
 
 def warn_atomic_op_misaligned : Warning<
-  "%select{large|misaligned}0 atomic operation may incur "
-  "significant performance penalty">, InGroup<DiagGroup<"atomic-alignment">>;
+  "misaligned atomic operation may incur "
+  "significant performance penalty"
+  "; the expected alignment (%0 bytes) exceeds the actual alignment (%1 bytes)">,
+  InGroup<AtomicAlignment>;
+
+def warn_atomic_op_oversized : Warning<
+  "large atomic operation may incur "
+  "significant performance penalty"
+  "; the access size (%0 bytes) exceeds the max lock-free size (%1  bytes)">,
+InGroup<AtomicAlignment>;
 
 def warn_alias_with_section : Warning<
   "%select{alias|ifunc}1 will not be in section '%0' but in the same section "

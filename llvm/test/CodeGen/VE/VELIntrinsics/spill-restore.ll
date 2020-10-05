@@ -19,7 +19,7 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lea %s19, 256
 ; CHECK-NEXT:    lvl %s19
-; CHECK-NEXT:    vld %v0,8,%s18
+; CHECK-NEXT:    vld %v0, 8, %s18
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lea %s0, -4096(, %s9)
 ; CHECK-NEXT:    lvl %s16
@@ -36,8 +36,8 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vld %v0, 8, %s0 # 2048-byte Folded Reload
 ; CHECK-NEXT:    lvl %s19
-; CHECK-NEXT:    vadds.w.sx %v0,3,%v0
-; CHECK-NEXT:    vst %v0,8,%s18
+; CHECK-NEXT:    vadds.w.sx %v0, 3, %v0
+; CHECK-NEXT:    vst %v0, 8, %s18
 ; CHECK-NEXT:    ld %s19, 56(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld %s18, 48(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    or %s11, 0, %s9

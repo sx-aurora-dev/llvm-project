@@ -338,7 +338,10 @@ enum MetadataCodes {
   METADATA_INDEX_OFFSET = 38,           // [offset]
   METADATA_INDEX = 39,                  // [bitpos]
   METADATA_LABEL = 40,                  // [distinct, scope, name, file, line]
-  METADATA_COMMON_BLOCK = 44,     // [distinct, scope, name, variable,...]
+  METADATA_STRING_TYPE = 41,            // [distinct, name, size, align,...]
+  // Codes 42 and 43 are reserved for support for Fortran array specific debug
+  // info.
+  METADATA_COMMON_BLOCK = 44 // [distinct, scope, name, variable,...]
 };
 
 // The constants block (CONSTANTS_BLOCK_ID) describes emission for each
@@ -643,9 +646,11 @@ enum AttributeKindCodes {
   ATTR_KIND_PREALLOCATED = 65,
   ATTR_KIND_NO_MERGE = 66,
   ATTR_KIND_NULL_POINTER_IS_VALID = 67,
-  ATTR_KIND_MASK = 68,
-  ATTR_KIND_VECTORLENGTH = 69,
-  ATTR_KIND_PASSTHRU = 70,
+  ATTR_KIND_NOUNDEF = 68,
+  ATTR_KIND_BYREF = 69,
+  ATTR_KIND_MASK = 70,
+  ATTR_KIND_VECTORLENGTH = 71,
+  ATTR_KIND_PASSTHRU = 72,
 };
 
 enum ComdatSelectionKindCodes {

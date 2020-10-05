@@ -39,6 +39,31 @@ class DirectiveLanguage {
 
   // Generate include and macro to enable LLVM BitmaskEnum.
   bit enableBitmaskEnumInNamespace = 0;
+
+  // Header file included in the implementation code generated. Ususally the
+  // output file of the declaration code generation. Can be left blank.
+  string includeHeader = "";
+
+  // EnumSet class name used for clauses to generated the allowed clauses map.
+  string clauseEnumSetClass = "";
+
+  // Class holding the clauses in the flang parse-tree.
+  string flangClauseBaseClass = "";
+}
+
+// Information about values accepted by enum-like clauses
+class ClauseVal<string n, int v, bit uv> {
+  // Name of the clause value.
+  string name = n;
+
+  // Integer value of the clause.
+  int value = v;
+
+  // Can user specify this value?
+  bit isUserValue = uv;
+
+  // Set clause value used by default when unknown.
+  bit isDefault = 0;
 }
 
 // Information about a specific clause.
@@ -50,18 +75,54 @@ class Clause<string c> {
   string alternativeName = "";
 
   // Optional class holding value of the clause in clang AST.
-  string clangClass = ?;
+  string clangClass = "";
+
+  // Optional class holding the clause in flang AST. If left blank, the class
+  // is assumed to be the name of the clause with capitalized word and
+  // underscores removed.
+  // ex: async -> Async
+  //     num_threads -> NumThreads
+  string flangClass = "";
+
+  // Optional class holding value of the clause in flang AST.
+  string flangClassValue = "";
+
+  // If set to 1, value is optional. Not optional by default.
+  bit isValueOptional = 0;
+
+  // Name of enum when there is a list of allowed clause values.
+  string enumClauseValue = "";
+
+  // List of allowed clause values
+  list<ClauseVal> allowedClauseValues = [];
+  // If set to 1, value class is part of a list. Single class by default.
+  bit isValueList = 0;
+
+  // Define a default value such as "*".
+  string defaultValue = "";
 
   // Is clause implicit? If clause is set as implicit, the default kind will
   // be return in get<LanguageName>ClauseKind instead of their own kind.
   bit isImplicit = 0;
 
-  // Set directive used by default when unknown. Function returning the kind
+  // Set clause used by default when unknown. Function returning the kind
   // of enumeration will use this clause as the default.
   bit isDefault = 0;
 }
 
-// Information about a specific directive
+// Hold information about clause validity by version.
+class VersionedClause<Clause c, int min = 1, int max = 0x7FFFFFFF> {
+  // Actual clause.
+  Clause clause = c;
+
+  // Mininum version number where this clause is valid.
+  int minVersion = min;
+
+  // Maximum version number where this clause is valid.
+  int maxVersion = max;
+}
+
+// Information about a specific directive.
 class Directive<string d> {
   // Name of the directive. Can be composite directive sepearted by whitespace.
   string name = d;
@@ -71,13 +132,16 @@ class Directive<string d> {
   string alternativeName = "";
 
   // List of allowed clauses for the directive.
-  list<Clause> allowedClauses = ?;
+  list<VersionedClause> allowedClauses = [];
 
   // List of clauses that are allowed to appear only once.
-  list<Clause> allowedOnceClauses = ?;
+  list<VersionedClause> allowedOnceClauses = [];
+
+  // List of clauses that are allowed but mutually exclusive.
+  list<VersionedClause> allowedExclusiveClauses = [];
 
   // List of clauses that are required.
-  list<Clause> requiredClauses = ?;
+  list<VersionedClause> requiredClauses = [];
 
   // Set directive used by default when unknown.
   bit isDefault = 0;

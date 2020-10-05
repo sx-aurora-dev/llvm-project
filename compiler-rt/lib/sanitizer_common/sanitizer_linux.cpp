@@ -187,6 +187,10 @@ uptr internal_munmap(void *addr, uptr length) {
 int internal_mprotect(void *addr, uptr length, int prot) {
   return internal_syscall(SYSCALL(mprotect), (uptr)addr, length, prot);
 }
+
+int internal_madvise(uptr addr, uptr length, int advice) {
+  return internal_syscall(SYSCALL(madvise), addr, length, advice);
+}
 #endif
 
 uptr internal_close(fd_t fd) {
@@ -796,11 +800,29 @@ int internal_sysctl(const int *name, unsigned int namelen, void *oldp,
 #if SANITIZER_FREEBSD
 int internal_sysctlbyname(const char *sname, void *oldp, uptr *oldlenp,
                           const void *newp, uptr newlen) {
-  static decltype(sysctlbyname) *real = nullptr;
-  if (!real)
-    real = (decltype(sysctlbyname) *)dlsym(RTLD_NEXT, "sysctlbyname");
-  CHECK(real);
-  return real(sname, oldp, (size_t *)oldlenp, newp, (size_t)newlen);
+  // Note: this function can be called during startup, so we need to avoid
+  // calling any interceptable functions. On FreeBSD >= 1300045 sysctlbyname()
+  // is a real syscall, but for older versions it calls sysctlnametomib()
+  // followed by sysctl(). To avoid calling the intercepted version and
+  // asserting if this happens during startup, call the real sysctlnametomib()
+  // followed by internal_sysctl() if the syscall is not available.
+#ifdef SYS___sysctlbyname
+  return internal_syscall(SYSCALL(__sysctlbyname), sname,
+                          internal_strlen(sname), oldp, (size_t *)oldlenp, newp,
+                          (size_t)newlen);
+#else
+  static decltype(sysctlnametomib) *real_sysctlnametomib = nullptr;
+  if (!real_sysctlnametomib)
+    real_sysctlnametomib =
+        (decltype(sysctlnametomib) *)dlsym(RTLD_NEXT, "sysctlnametomib");
+  CHECK(real_sysctlnametomib);
+
+  int oid[CTL_MAXNAME];
+  size_t len = CTL_MAXNAME;
+  if (real_sysctlnametomib(sname, oid, &len) == -1)
+    return (-1);
+  return internal_sysctl(oid, len, oldp, oldlenp, newp, newlen);
+#endif
 }
 #endif
 #endif
@@ -2042,13 +2064,13 @@ static void GetPcSpBp(void *context, uptr *pc, uptr *sp, uptr *bp) {
 # ifndef REG_EBP
 #  define REG_EBP  6 // REG_FP
 # endif
-# ifndef REG_ESP
-#  define REG_ESP 17 // REG_SP
+# ifndef REG_UESP
+#  define REG_UESP 17 // REG_SP
 # endif
 # endif
   *pc = ucontext->uc_mcontext.gregs[REG_EIP];
   *bp = ucontext->uc_mcontext.gregs[REG_EBP];
-  *sp = ucontext->uc_mcontext.gregs[REG_ESP];
+  *sp = ucontext->uc_mcontext.gregs[REG_UESP];
 # endif
 #elif defined(__powerpc__) || defined(__powerpc64__)
   ucontext_t *ucontext = (ucontext_t*)context;
@@ -2210,7 +2232,7 @@ void CheckNoDeepBind(const char *filename, int flag) {
   if (flag & RTLD_DEEPBIND) {
     Report(
         "You are trying to dlopen a %s shared library with RTLD_DEEPBIND flag"
-        " which is incompatibe with sanitizer runtime "
+        " which is incompatible with sanitizer runtime "
         "(see https://github.com/google/sanitizers/issues/611 for details"
         "). If you want to run %s library under sanitizers please remove "
         "RTLD_DEEPBIND from dlopen flags.\n",

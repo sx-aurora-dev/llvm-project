@@ -7,10 +7,10 @@
 ; Function Attrs: norecurse nounwind
 define void @fun(%struct.a* noalias nocapture sret %a, i32 %p1, i32 %p2) {
 ; CHECK-LABEL: fun:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    stl %s1, (, %s0)
 ; CHECK-NEXT:    stl %s2, 4(, %s0)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %a.zero = getelementptr inbounds %struct.a, %struct.a* %a, i64 0, i32 0
   store i32 %p1, i32* %a.zero, align 4
   %a.one = getelementptr inbounds %struct.a, %struct.a* %a, i64 0, i32 1

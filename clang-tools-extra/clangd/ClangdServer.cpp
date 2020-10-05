@@ -8,6 +8,7 @@
 
 #include "ClangdServer.h"
 #include "CodeComplete.h"
+#include "Config.h"
 #include "FindSymbols.h"
 #include "Format.h"
 #include "HeaderSourceSwitch.h"
@@ -39,6 +40,7 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/ScopeExit.h"
+#include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Errc.h"
 #include "llvm/Support/Error.h"
@@ -47,9 +49,11 @@
 #include "llvm/Support/ScopedPrinter.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
+#include <chrono>
 #include <future>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <type_traits>
 
 namespace clang {
@@ -107,6 +111,41 @@ private:
   ClangdServer::Callbacks *ServerCallbacks;
   bool TheiaSemanticHighlighting;
 };
+
+// Set of clang-tidy checks that don't work well in clangd, either due to
+// crashes or false positives.
+// Returns a clang-tidy filter string: -check1,-check2.
+llvm::StringRef getUnusableTidyChecks() {
+  static const std::string FalsePositives =
+      llvm::join_items(", ",
+                       // Check relies on seeing ifndef/define/endif directives,
+                       // clangd doesn't replay those when using a preamble.
+                       "-llvm-header-guard");
+  static const std::string CrashingChecks =
+      llvm::join_items(", ",
+                       // Check can choke on invalid (intermediate) c++ code,
+                       // which is often the case when clangd tries to build an
+                       // AST.
+                       "-bugprone-use-after-move");
+  static const std::string UnusableTidyChecks =
+      llvm::join_items(", ", FalsePositives, CrashingChecks);
+  return UnusableTidyChecks;
+}
+
+// Returns a clang-tidy options string: check1,check2.
+llvm::StringRef getDefaultTidyChecks() {
+  // These default checks are chosen for:
+  //  - low false-positive rate
+  //  - providing a lot of value
+  //  - being reasonably efficient
+  static const std::string DefaultChecks = llvm::join_items(
+      ",", "readability-misleading-indentation", "readability-deleted-default",
+      "bugprone-integer-division", "bugprone-sizeof-expression",
+      "bugprone-suspicious-missing-comma", "bugprone-unused-raii",
+      "bugprone-unused-return-value", "misc-unused-using-decls",
+      "misc-unused-alias-decls", "misc-definitions-in-headers");
+  return DefaultChecks;
+}
 } // namespace
 
 ClangdServer::Options ClangdServer::optsForTest() {
@@ -132,9 +171,10 @@ ClangdServer::Options::operator TUScheduler::Options() const {
 ClangdServer::ClangdServer(const GlobalCompilationDatabase &CDB,
                            const ThreadsafeFS &TFS, const Options &Opts,
                            Callbacks *Callbacks)
-    : TFS(TFS),
+    : ConfigProvider(Opts.ConfigProvider), TFS(TFS),
       DynamicIdx(Opts.BuildDynamicSymbolIndex
-                     ? new FileIndex(Opts.HeavyweightDynamicSymbolIndex)
+                     ? new FileIndex(Opts.HeavyweightDynamicSymbolIndex,
+                                     Opts.CollectMainFileRefs)
                      : nullptr),
       GetClangTidyOptions(Opts.GetClangTidyOptions),
       SuggestMissingIncludes(Opts.SuggestMissingIncludes),
@@ -147,7 +187,14 @@ ClangdServer::ClangdServer(const GlobalCompilationDatabase &CDB,
       // FIXME(ioeric): this can be slow and we may be able to index on less
       // critical paths.
       WorkScheduler(
-          CDB, TUScheduler::Options(Opts),
+          CDB,
+          [&, this] {
+            TUScheduler::Options O(Opts);
+            O.ContextProvider = [this](PathRef P) {
+              return createProcessingContext(P);
+            };
+            return O;
+          }(),
           std::make_unique<UpdateIndexCallbacks>(
               DynamicIdx.get(), Callbacks, Opts.TheiaSemanticHighlighting)) {
   // Adds an index to the stack, at higher priority than existing indexes.
@@ -162,15 +209,20 @@ ClangdServer::ClangdServer(const GlobalCompilationDatabase &CDB,
   if (Opts.StaticIndex)
     AddIndex(Opts.StaticIndex);
   if (Opts.BackgroundIndex) {
+    BackgroundIndex::Options BGOpts;
+    BGOpts.ThreadPoolSize = std::max(Opts.AsyncThreadsCount, 1u);
+    BGOpts.OnProgress = [Callbacks](BackgroundQueue::Stats S) {
+      if (Callbacks)
+        Callbacks->onBackgroundIndexProgress(S);
+    };
+    BGOpts.ContextProvider = [this](PathRef P) {
+      return createProcessingContext(P);
+    };
     BackgroundIdx = std::make_unique<BackgroundIndex>(
-        Context::current().clone(), TFS, CDB,
+        TFS, CDB,
         BackgroundIndexStorage::createDiskBackedStorageFactory(
             [&CDB](llvm::StringRef File) { return CDB.getProjectInfo(File); }),
-        std::max(Opts.AsyncThreadsCount, 1u),
-        [Callbacks](BackgroundQueue::Stats S) {
-          if (Callbacks)
-            Callbacks->onBackgroundIndexProgress(S);
-        });
+        std::move(BGOpts));
     AddIndex(BackgroundIdx.get());
   }
   if (DynamicIdx)
@@ -186,6 +238,15 @@ void ClangdServer::addDocument(PathRef File, llvm::StringRef Contents,
   if (GetClangTidyOptions)
     Opts.ClangTidyOpts =
         GetClangTidyOptions(*TFS.view(/*CWD=*/llvm::None), File);
+  if (Opts.ClangTidyOpts.Checks.hasValue()) {
+    // If the set of checks was configured, make sure clangd incompatible ones
+    // are disabled.
+    Opts.ClangTidyOpts.Checks = llvm::join_items(
+        ", ", *Opts.ClangTidyOpts.Checks, getUnusableTidyChecks());
+  } else {
+    // Otherwise provide a nice set of defaults.
+    Opts.ClangTidyOpts.Checks = getDefaultTidyChecks().str();
+  }
   Opts.SuggestMissingIncludes = SuggestMissingIncludes;
 
   // Compile command is set asynchronously during update, as it can be slow.
@@ -335,7 +396,7 @@ void ClangdServer::formatOnType(PathRef File, llvm::StringRef Code,
       Result.push_back(replacementToEdit(Code, R));
     return CB(Result);
   };
-  WorkScheduler.run("FormatOnType", std::move(Action));
+  WorkScheduler.run("FormatOnType", File, std::move(Action));
 }
 
 void ClangdServer::prepareRename(PathRef File, Position Pos,
@@ -515,26 +576,6 @@ void ClangdServer::applyTweak(PathRef File, Range Sel, StringRef TweakID,
   WorkScheduler.runWithAST("ApplyTweak", File, std::move(Action));
 }
 
-void ClangdServer::dumpAST(PathRef File,
-                           llvm::unique_function<void(std::string)> Callback) {
-  auto Action = [Callback = std::move(Callback)](
-                    llvm::Expected<InputsAndAST> InpAST) mutable {
-    if (!InpAST) {
-      llvm::consumeError(InpAST.takeError());
-      return Callback("<no-ast>");
-    }
-    std::string Result;
-
-    llvm::raw_string_ostream ResultOS(Result);
-    clangd::dumpAST(InpAST->AST, ResultOS);
-    ResultOS.flush();
-
-    Callback(Result);
-  };
-
-  WorkScheduler.runWithAST("DumpAST", File, std::move(Action));
-}
-
 void ClangdServer::locateSymbolAt(PathRef File, Position Pos,
                                   Callback<std::vector<LocatedSymbol>> CB) {
   auto Action = [Pos, CB = std::move(CB),
@@ -585,7 +626,7 @@ void ClangdServer::formatCode(PathRef File, llvm::StringRef Code,
         tooling::calculateRangesAfterReplacements(IncludeReplaces, Ranges),
         File)));
   };
-  WorkScheduler.run("Format", std::move(Action));
+  WorkScheduler.run("Format", File, std::move(Action));
 }
 
 void ClangdServer::findDocumentHighlights(
@@ -646,7 +687,7 @@ void ClangdServer::workspaceSymbols(
     llvm::StringRef Query, int Limit,
     Callback<std::vector<SymbolInformation>> CB) {
   WorkScheduler.run(
-      "getWorkspaceSymbols",
+      "getWorkspaceSymbols", /*Path=*/"",
       [Query = Query.str(), Limit, CB = std::move(CB), this]() mutable {
         CB(clangd::getWorkspaceSymbols(Query, Limit, Index,
                                        WorkspaceRoot.getValueOr("")));
@@ -662,6 +703,18 @@ void ClangdServer::documentSymbols(llvm::StringRef File,
         CB(clangd::getDocumentSymbols(InpAST->AST));
       };
   WorkScheduler.runWithAST("documentSymbols", File, std::move(Action),
+                           TUScheduler::InvalidateOnUpdate);
+}
+
+void ClangdServer::foldingRanges(llvm::StringRef File,
+                                 Callback<std::vector<FoldingRange>> CB) {
+  auto Action =
+      [CB = std::move(CB)](llvm::Expected<InputsAndAST> InpAST) mutable {
+        if (!InpAST)
+          return CB(InpAST.takeError());
+        CB(clangd::getFoldingRanges(InpAST->AST));
+      };
+  WorkScheduler.runWithAST("foldingRanges", File, std::move(Action),
                            TUScheduler::InvalidateOnUpdate);
 }
 
@@ -732,8 +785,41 @@ void ClangdServer::semanticHighlights(
                            TUScheduler::InvalidateOnUpdate);
 }
 
+void ClangdServer::customAction(PathRef File, llvm::StringRef Name,
+                                Callback<InputsAndAST> Action) {
+  WorkScheduler.runWithAST(Name, File, std::move(Action));
+}
+
 llvm::StringMap<TUScheduler::FileStats> ClangdServer::fileStats() const {
   return WorkScheduler.fileStats();
+}
+
+Context ClangdServer::createProcessingContext(PathRef File) const {
+  if (!ConfigProvider)
+    return Context::current().clone();
+
+  config::Params Params;
+  // Don't reread config files excessively often.
+  // FIXME: when we see a config file change event, use the event timestamp.
+  Params.FreshTime = std::chrono::steady_clock::now() - std::chrono::seconds(5);
+  llvm::SmallString<256> PosixPath;
+  if (!File.empty()) {
+    assert(llvm::sys::path::is_absolute(File));
+    llvm::sys::path::native(File, PosixPath, llvm::sys::path::Style::posix);
+    Params.Path = PosixPath.str();
+  }
+
+  auto DiagnosticHandler = [](const llvm::SMDiagnostic &Diag) {
+    if (Diag.getKind() == llvm::SourceMgr::DK_Error) {
+      elog("config error at {0}:{1}:{2}: {3}", Diag.getFilename(),
+           Diag.getLineNo(), Diag.getColumnNo(), Diag.getMessage());
+    } else {
+      log("config warning at {0}:{1}:{2}: {3}", Diag.getFilename(),
+          Diag.getLineNo(), Diag.getColumnNo(), Diag.getMessage());
+    }
+  };
+  Config C = ConfigProvider->getConfig(Params, DiagnosticHandler);
+  return Context::current().derive(Config::Key, std::move(C));
 }
 
 LLVM_NODISCARD bool

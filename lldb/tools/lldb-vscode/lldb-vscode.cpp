@@ -39,6 +39,7 @@
 #include <set>
 #include <sstream>
 #include <thread>
+#include <vector>
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/Option/Arg.h"
@@ -342,7 +343,7 @@ void SendStdOutStdErr(lldb::SBProcess &process) {
   char buffer[1024];
   size_t count;
   while ((count = process.GetSTDOUT(buffer, sizeof(buffer))) > 0)
-  g_vsc.SendOutput(OutputType::Stdout, llvm::StringRef(buffer, count));
+    g_vsc.SendOutput(OutputType::Stdout, llvm::StringRef(buffer, count));
   while ((count = process.GetSTDERR(buffer, sizeof(buffer))) > 0)
     g_vsc.SendOutput(OutputType::Stderr, llvm::StringRef(buffer, count));
 }
@@ -432,6 +433,30 @@ void EventThreadFunction() {
             body.try_emplace("reason", "changed");
             bp_event.try_emplace("body", std::move(body));
             g_vsc.SendJSON(llvm::json::Value(std::move(bp_event)));
+          }
+        }
+      } else if (lldb::SBTarget::EventIsTargetEvent(event)) {
+        if (event_mask & lldb::SBTarget::eBroadcastBitModulesLoaded ||
+            event_mask & lldb::SBTarget::eBroadcastBitModulesUnloaded ||
+            event_mask & lldb::SBTarget::eBroadcastBitSymbolsLoaded) {
+          int num_modules = lldb::SBTarget::GetNumModulesFromEvent(event);
+          for (int i = 0; i < num_modules; i++) {
+            auto module = lldb::SBTarget::GetModuleAtIndexFromEvent(i, event);
+            auto module_event = CreateEventObject("module");
+            llvm::json::Value module_value = CreateModule(module);
+            llvm::json::Object body;
+            if (event_mask & lldb::SBTarget::eBroadcastBitModulesLoaded) {
+              body.try_emplace("reason", "new");
+            } else if (event_mask &
+                       lldb::SBTarget::eBroadcastBitModulesUnloaded) {
+              body.try_emplace("reason", "removed");
+            } else if (event_mask &
+                       lldb::SBTarget::eBroadcastBitSymbolsLoaded) {
+              body.try_emplace("reason", "changed");
+            }
+            body.try_emplace("module", module_value);
+            module_event.try_emplace("body", std::move(body));
+            g_vsc.SendJSON(llvm::json::Value(std::move(module_event)));
           }
         }
       } else if (event.BroadcasterMatchesRef(g_vsc.broadcaster)) {
@@ -848,7 +873,9 @@ void request_exceptionInfo(const llvm::json::Object &request) {
 // "CompletionsRequest": {
 //   "allOf": [ { "$ref": "#/definitions/Request" }, {
 //     "type": "object",
-//     "description": "Returns a list of possible completions for a given caret position and text.\nThe CompletionsRequest may only be called if the 'supportsCompletionsRequest' capability exists and is true.",
+//     "description": "Returns a list of possible completions for a given caret
+//     position and text.\nThe CompletionsRequest may only be called if the
+//     'supportsCompletionsRequest' capability exists and is true.",
 //     "properties": {
 //       "command": {
 //         "type": "string",
@@ -867,19 +894,23 @@ void request_exceptionInfo(const llvm::json::Object &request) {
 //   "properties": {
 //     "frameId": {
 //       "type": "integer",
-//       "description": "Returns completions in the scope of this stack frame. If not specified, the completions are returned for the global scope."
+//       "description": "Returns completions in the scope of this stack frame.
+//       If not specified, the completions are returned for the global scope."
 //     },
 //     "text": {
 //       "type": "string",
-//       "description": "One or more source lines. Typically this is the text a user has typed into the debug console before he asked for completion."
+//       "description": "One or more source lines. Typically this is the text a
+//       user has typed into the debug console before he asked for completion."
 //     },
 //     "column": {
 //       "type": "integer",
-//       "description": "The character position for which to determine the completion proposals."
+//       "description": "The character position for which to determine the
+//       completion proposals."
 //     },
 //     "line": {
 //       "type": "integer",
-//       "description": "An optional line for which to determine the completion proposals. If missing the first line of the text is assumed."
+//       "description": "An optional line for which to determine the completion
+//       proposals. If missing the first line of the text is assumed."
 //     }
 //   },
 //   "required": [ "text", "column" ]
@@ -908,39 +939,51 @@ void request_exceptionInfo(const llvm::json::Object &request) {
 // },
 // "CompletionItem": {
 //   "type": "object",
-//   "description": "CompletionItems are the suggestions returned from the CompletionsRequest.",
-//   "properties": {
+//   "description": "CompletionItems are the suggestions returned from the
+//   CompletionsRequest.", "properties": {
 //     "label": {
 //       "type": "string",
-//       "description": "The label of this completion item. By default this is also the text that is inserted when selecting this completion."
+//       "description": "The label of this completion item. By default this is
+//       also the text that is inserted when selecting this completion."
 //     },
 //     "text": {
 //       "type": "string",
-//       "description": "If text is not falsy then it is inserted instead of the label."
+//       "description": "If text is not falsy then it is inserted instead of the
+//       label."
 //     },
 //     "sortText": {
 //       "type": "string",
-//       "description": "A string that should be used when comparing this item with other items. When `falsy` the label is used."
+//       "description": "A string that should be used when comparing this item
+//       with other items. When `falsy` the label is used."
 //     },
 //     "type": {
 //       "$ref": "#/definitions/CompletionItemType",
-//       "description": "The item's type. Typically the client uses this information to render the item in the UI with an icon."
+//       "description": "The item's type. Typically the client uses this
+//       information to render the item in the UI with an icon."
 //     },
 //     "start": {
 //       "type": "integer",
-//       "description": "This value determines the location (in the CompletionsRequest's 'text' attribute) where the completion text is added.\nIf missing the text is added at the location specified by the CompletionsRequest's 'column' attribute."
+//       "description": "This value determines the location (in the
+//       CompletionsRequest's 'text' attribute) where the completion text is
+//       added.\nIf missing the text is added at the location specified by the
+//       CompletionsRequest's 'column' attribute."
 //     },
 //     "length": {
 //       "type": "integer",
-//       "description": "This value determines how many characters are overwritten by the completion text.\nIf missing the value 0 is assumed which results in the completion text being inserted."
+//       "description": "This value determines how many characters are
+//       overwritten by the completion text.\nIf missing the value 0 is assumed
+//       which results in the completion text being inserted."
 //     }
 //   },
 //   "required": [ "label" ]
 // },
 // "CompletionItemType": {
 //   "type": "string",
-//   "description": "Some predefined types for the CompletionItem. Please note that not all clients have specific icons for all of them.",
-//   "enum": [ "method", "function", "constructor", "field", "variable", "class", "interface", "module", "property", "unit", "value", "enum", "keyword", "snippet", "text", "color", "file", "reference", "customcolor" ]
+//   "description": "Some predefined types for the CompletionItem. Please note
+//   that not all clients have specific icons for all of them.", "enum": [
+//   "method", "function", "constructor", "field", "variable", "class",
+//   "interface", "module", "property", "unit", "value", "enum", "keyword",
+//   "snippet", "text", "color", "file", "reference", "customcolor" ]
 // }
 void request_completions(const llvm::json::Object &request) {
   llvm::json::Object response;
@@ -967,9 +1010,7 @@ void request_completions(const llvm::json::Object &request) {
   lldb::SBStringList matches;
   lldb::SBStringList descriptions;
   g_vsc.debugger.GetCommandInterpreter().HandleCompletionWithDescriptions(
-    text.c_str(),
-    actual_column,
-    0, -1, matches, descriptions);
+      text.c_str(), actual_column, 0, -1, matches, descriptions);
   size_t count = std::min((uint32_t)100, matches.GetSize());
   targets.reserve(count);
   for (size_t i = 0; i < count; i++) {
@@ -979,8 +1020,8 @@ void request_completions(const llvm::json::Object &request) {
     llvm::json::Object item;
 
     llvm::StringRef match_ref = match;
-    for(llvm::StringRef commit_point: {".", "->"}) {
-      if (match_ref.contains(commit_point)){
+    for (llvm::StringRef commit_point : {".", "->"}) {
+      if (match_ref.contains(commit_point)) {
         match_ref = match_ref.rsplit(commit_point).second;
       }
     }
@@ -1135,7 +1176,8 @@ void request_evaluate(const llvm::json::Object &request) {
     } else {
       SetValueForKey(value, body, "result");
       auto value_typename = value.GetType().GetDisplayTypeName();
-      EmplaceSafeString(body, "type", value_typename ? value_typename : NO_TYPENAME);
+      EmplaceSafeString(body, "type",
+                        value_typename ? value_typename : NO_TYPENAME);
       if (value.MightHaveChildren()) {
         auto variablesReference = VARIDX_TO_VARREF(g_vsc.variables.GetSize());
         g_vsc.variables.Append(value);
@@ -1143,6 +1185,72 @@ void request_evaluate(const llvm::json::Object &request) {
       } else {
         body.try_emplace("variablesReference", (int64_t)0);
       }
+    }
+  }
+  response.try_emplace("body", std::move(body));
+  g_vsc.SendJSON(llvm::json::Value(std::move(response)));
+}
+
+// "getCompileUnitsRequest": {
+//   "allOf": [ { "$ref": "#/definitions/Request" }, {
+//     "type": "object",
+//     "description": "Compile Unit request; value of command field is
+//                     'getCompileUnits'.",
+//     "properties": {
+//       "command": {
+//         "type": "string",
+//         "enum": [ "getCompileUnits" ]
+//       },
+//       "arguments": {
+//         "$ref": "#/definitions/getCompileUnitRequestArguments"
+//       }
+//     },
+//     "required": [ "command", "arguments" ]
+//   }]
+// },
+// "getCompileUnitsRequestArguments": {
+//   "type": "object",
+//   "description": "Arguments for 'getCompileUnits' request.",
+//   "properties": {
+//     "moduleId": {
+//       "type": "string",
+//       "description": "The ID of the module."
+//     }
+//   },
+//   "required": [ "moduleId" ]
+// },
+// "getCompileUnitsResponse": {
+//   "allOf": [ { "$ref": "#/definitions/Response" }, {
+//     "type": "object",
+//     "description": "Response to 'getCompileUnits' request.",
+//     "properties": {
+//       "body": {
+//         "description": "Response to 'getCompileUnits' request. Array of
+//                         paths of compile units."
+//       }
+//     }
+//   }]
+// }
+
+void request_getCompileUnits(const llvm::json::Object &request) {
+  llvm::json::Object response;
+  FillResponse(request, response);
+  lldb::SBProcess process = g_vsc.target.GetProcess();
+  llvm::json::Object body;
+  llvm::json::Array units;
+  auto arguments = request.getObject("arguments");
+  std::string module_id = std::string(GetString(arguments, "moduleId"));
+  int num_modules = g_vsc.target.GetNumModules();
+  for (int i = 0; i < num_modules; i++) {
+    auto curr_module = g_vsc.target.GetModuleAtIndex(i);
+    if (module_id == curr_module.GetUUIDString()) {
+      int num_units = curr_module.GetNumCompileUnits();
+      for (int j = 0; j < num_units; j++) {
+        auto curr_unit = curr_module.GetCompileUnitAtIndex(j);
+        units.emplace_back(CreateCompileUnit(curr_unit));
+      }
+      body.try_emplace("compileUnits", std::move(units));
+      break;
     }
   }
   response.try_emplace("body", std::move(body));
@@ -1989,7 +2097,7 @@ void request_setFunctionBreakpoints(const llvm::json::Object &request) {
   // Disable any function breakpoints that aren't in the request_bps.
   // There is no call to remove function breakpoints other than calling this
   // function with a smaller or empty "breakpoints" list.
-  for (auto &pair: g_vsc.function_breakpoints) {
+  for (auto &pair : g_vsc.function_breakpoints) {
     auto request_pos = request_bps.find(pair.first());
     if (request_pos == request_bps.end()) {
       // This function breakpoint no longer exists delete it from LLDB
@@ -2007,7 +2115,7 @@ void request_setFunctionBreakpoints(const llvm::json::Object &request) {
     }
   }
   // Remove any breakpoints that are no longer in our list
-  for (const auto &name: remove_names)
+  for (const auto &name : remove_names)
     g_vsc.function_breakpoints.erase(name);
 
   // Any breakpoints that are left in "request_bps" are breakpoints that
@@ -2097,6 +2205,7 @@ void request_source(const llvm::json::Object &request) {
   } else {
     response["success"] = llvm::json::Value(false);
   }
+  EmplaceSafeString(body, "mimeType", "text/x-lldb.disassembly");
   response.try_emplace("body", std::move(body));
   g_vsc.SendJSON(llvm::json::Value(std::move(response)));
 }
@@ -2734,6 +2843,7 @@ const std::map<std::string, RequestCallback> &GetRequestHandlers() {
       REQUEST_CALLBACK(disconnect),
       REQUEST_CALLBACK(evaluate),
       REQUEST_CALLBACK(exceptionInfo),
+      REQUEST_CALLBACK(getCompileUnits),
       REQUEST_CALLBACK(initialize),
       REQUEST_CALLBACK(launch),
       REQUEST_CALLBACK(next),
@@ -2865,7 +2975,8 @@ int main(int argc, char *argv[]) {
         handler_pos->second(*object);
       } else {
         if (g_vsc.log)
-          *g_vsc.log << "error: unhandled command \"" << command.data() << std::endl;
+          *g_vsc.log << "error: unhandled command \"" << command.data()
+                     << std::endl;
         return 1;
       }
     }

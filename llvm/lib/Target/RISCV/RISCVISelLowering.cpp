@@ -25,7 +25,6 @@
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/SelectionDAGISel.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"
 #include "llvm/CodeGen/ValueTypes.h"
 #include "llvm/IR/DiagnosticInfo.h"
@@ -33,6 +32,7 @@
 #include "llvm/IR/IntrinsicsRISCV.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -148,12 +148,27 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::SRL_PARTS, XLenVT, Custom);
   setOperationAction(ISD::SRA_PARTS, XLenVT, Custom);
 
-  setOperationAction(ISD::ROTL, XLenVT, Expand);
-  setOperationAction(ISD::ROTR, XLenVT, Expand);
-  setOperationAction(ISD::BSWAP, XLenVT, Expand);
-  setOperationAction(ISD::CTTZ, XLenVT, Expand);
-  setOperationAction(ISD::CTLZ, XLenVT, Expand);
-  setOperationAction(ISD::CTPOP, XLenVT, Expand);
+  if (!(Subtarget.hasStdExtZbb() || Subtarget.hasStdExtZbp())) {
+    setOperationAction(ISD::ROTL, XLenVT, Expand);
+    setOperationAction(ISD::ROTR, XLenVT, Expand);
+  }
+
+  if (!Subtarget.hasStdExtZbp())
+    setOperationAction(ISD::BSWAP, XLenVT, Expand);
+
+  if (!Subtarget.hasStdExtZbb()) {
+    setOperationAction(ISD::CTTZ, XLenVT, Expand);
+    setOperationAction(ISD::CTLZ, XLenVT, Expand);
+    setOperationAction(ISD::CTPOP, XLenVT, Expand);
+  }
+
+  if (Subtarget.hasStdExtZbp())
+    setOperationAction(ISD::BITREVERSE, XLenVT, Legal);
+
+  if (Subtarget.hasStdExtZbt()) {
+    setOperationAction(ISD::FSHL, XLenVT, Legal);
+    setOperationAction(ISD::FSHR, XLenVT, Legal);
+  }
 
   ISD::CondCode FPCCToExtend[] = {
       ISD::SETOGT, ISD::SETOGE, ISD::SETONE, ISD::SETUEQ, ISD::SETUGT,
@@ -988,7 +1003,6 @@ void RISCVTargetLowering::ReplaceNodeResults(SDNode *N,
   case ISD::BITCAST: {
     assert(N->getValueType(0) == MVT::i32 && Subtarget.is64Bit() &&
            Subtarget.hasStdExtF() && "Unexpected custom legalisation");
-    SDLoc DL(N);
     SDValue Op0 = N->getOperand(0);
     if (Op0.getValueType() != MVT::f32)
       return;
@@ -2976,6 +2990,26 @@ bool RISCVTargetLowering::shouldExtendTypeInLibCall(EVT Type) const {
     return false;
 
   return true;
+}
+
+bool RISCVTargetLowering::decomposeMulByConstant(LLVMContext &Context, EVT VT,
+                                                 SDValue C) const {
+  // Check integral scalar types.
+  if (VT.isScalarInteger()) {
+    // Do not perform the transformation on riscv32 with the M extension.
+    if (!Subtarget.is64Bit() && Subtarget.hasStdExtM())
+      return false;
+    if (auto *ConstNode = dyn_cast<ConstantSDNode>(C.getNode())) {
+      if (ConstNode->getAPIntValue().getBitWidth() > 8 * sizeof(int64_t))
+        return false;
+      int64_t Imm = ConstNode->getSExtValue();
+      if (isPowerOf2_64(Imm + 1) || isPowerOf2_64(Imm - 1) ||
+          isPowerOf2_64(1 - Imm) || isPowerOf2_64(-1 - Imm))
+        return true;
+    }
+  }
+
+  return false;
 }
 
 #define GET_REGISTER_MATCHER

@@ -102,7 +102,7 @@ def SPV_ConstantOp : SPV_Op<"constant", [ConstantLike, NoSideEffect]> {
     %2 = spv.constant [dense<3.0> : vector<2xf32>] : !spv.array<1xvector<2xf32>>
     ```
 
-    TODO(antiagainst): support constant structs
+    TODO: support constant structs
   }];
 
   let arguments = (ins
@@ -361,7 +361,7 @@ def SPV_GlobalVariableOp : SPV_Op<"globalVariable", [InModuleScope, Symbol]> {
 def SPV_ModuleOp : SPV_Op<"module",
                           [IsolatedFromAbove,
                            SingleBlockImplicitTerminator<"ModuleEndOp">,
-                           SymbolTable]> {
+                           SymbolTable, Symbol]> {
   let summary = "The top-level op that defines a SPIR-V module";
 
   let description = [{
@@ -409,7 +409,8 @@ def SPV_ModuleOp : SPV_Op<"module",
   let arguments = (ins
     SPV_AddressingModelAttr:$addressing_model,
     SPV_MemoryModelAttr:$memory_model,
-    OptionalAttr<SPV_VerCapExtAttr>:$vce_triple
+    OptionalAttr<SPV_VerCapExtAttr>:$vce_triple,
+    OptionalAttr<StrAttr>:$sym_name
   );
 
   let results = (outs);
@@ -417,10 +418,12 @@ def SPV_ModuleOp : SPV_Op<"module",
   let regions = (region SizedRegion<1>:$body);
 
   let builders = [
-    OpBuilder<[{OpBuilder &, OperationState &state}]>,
+    OpBuilder<[{OpBuilder &, OperationState &state,
+                Optional<StringRef> name = llvm::None}]>,
     OpBuilder<[{OpBuilder &, OperationState &state,
                 spirv::AddressingModel addressing_model,
-                spirv::MemoryModel memory_model}]>
+                spirv::MemoryModel memory_model,
+                Optional<StringRef> name = llvm::None}]>
   ];
 
   // We need to ensure the block inside the region is properly terminated;
@@ -432,6 +435,11 @@ def SPV_ModuleOp : SPV_Op<"module",
   let autogenSerialization = 0;
 
   let extraClassDeclaration = [{
+
+    bool isOptionalSymbol() { return true; }
+
+    Optional<StringRef> getName() { return sym_name(); }
+
     static StringRef getVCETripleAttrName() { return "vce_triple"; }
 
     Block& getBlock() {
@@ -541,7 +549,7 @@ def SPV_SpecConstantOp : SPV_Op<"specConstant", [InModuleScope, Symbol]> {
     spv.specConstant @spec_const2 spec_id(5) = 42 : i32
     ```
 
-    TODO(antiagainst): support composite spec constants with another op
+    TODO: support composite spec constants with another op
   }];
 
   let arguments = (ins

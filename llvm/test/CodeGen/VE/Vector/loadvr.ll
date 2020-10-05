@@ -5,11 +5,11 @@
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i64> @loadv256i64(<256 x i64>* nocapture readonly) {
 ; CHECK-LABEL: loadv256i64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %2 = load <256 x i64>, <256 x i64>* %0, align 16
   ret <256 x i64> %2
 }
@@ -17,11 +17,11 @@ define x86_regcallcc <256 x i64> @loadv256i64(<256 x i64>* nocapture readonly) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x double> @loadv256f64(<256 x double>* nocapture readonly) {
 ; CHECK-LABEL: loadv256f64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %2 = load <256 x double>, <256 x double>* %0, align 16
   ret <256 x double> %2
 }
@@ -29,11 +29,16 @@ define x86_regcallcc <256 x double> @loadv256f64(<256 x double>* nocapture reado
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i32> @loadv256i32(<256 x i32>* nocapture readonly) {
 ; CHECK-LABEL: loadv256i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
+<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/loadvr.ll
 ; CHECK-NEXT:    vldl.zx %v0, 4, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
+=======
+; CHECK-NEXT:    vldl.sx %v0, 4, %s0
+; CHECK-NEXT:    b.l.t (, %s10)
+>>>>>>> necgh/develop:llvm/test/CodeGen/VE/loadvr.ll
   %2 = load <256 x i32>, <256 x i32>* %0, align 16
   ret <256 x i32> %2
 }
@@ -41,12 +46,18 @@ define x86_regcallcc <256 x i32> @loadv256i32(<256 x i32>* nocapture readonly) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i64> @loadv256i32sext(<256 x i32>* nocapture readonly) {
 ; CHECK-LABEL: loadv256i32sext:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
+<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/loadvr.ll
 ; CHECK-NEXT:    vldl.zx %v0, 4, %s0
 ; CHECK-NEXT:    vadds.w.sx %v0,0,%v0,%vm0
 ; CHECK-NEXT:    or %s11, 0, %s9
+=======
+; CHECK-NEXT:    vldl.sx %v0, 4, %s0
+; CHECK-NEXT:    vadds.w.sx %v0, 0, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+>>>>>>> necgh/develop:llvm/test/CodeGen/VE/loadvr.ll
   %2 = load <256 x i32>, <256 x i32>* %0, align 16
   %3 = sext <256 x i32> %2 to <256 x i64>
   ret <256 x i64> %3
@@ -55,12 +66,18 @@ define x86_regcallcc <256 x i64> @loadv256i32sext(<256 x i32>* nocapture readonl
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i64> @loadv256i32zext(<256 x i32>* nocapture readonly) {
 ; CHECK-LABEL: loadv256i32zext:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
+<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/loadvr.ll
 ; CHECK-NEXT:    vldl.zx %v0, 4, %s0
 ; CHECK-NEXT:    vadds.w.zx %v0,0,%v0,%vm0
 ; CHECK-NEXT:    or %s11, 0, %s9
+=======
+; CHECK-NEXT:    vldl.sx %v0, 4, %s0
+; CHECK-NEXT:    vadds.w.zx %v0, 0, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+>>>>>>> necgh/develop:llvm/test/CodeGen/VE/loadvr.ll
   %2 = load <256 x i32>, <256 x i32>* %0, align 16
   %3 = zext <256 x i32> %2 to <256 x i64>
   ret <256 x i64> %3
@@ -69,11 +86,11 @@ define x86_regcallcc <256 x i64> @loadv256i32zext(<256 x i32>* nocapture readonl
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x float> @loadv256f32(<256 x float>* nocapture readonly) {
 ; CHECK-LABEL: loadv256f32:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vldu %v0, 4, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %2 = load <256 x float>, <256 x float>* %0, align 16
   ret <256 x float> %2
 }
@@ -83,7 +100,7 @@ define x86_regcallcc <256 x i64> @loadv256i64stk() {
 ; CHECK-LABEL: loadv256i64stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lea %s1, 176(, %s11)
+; CHECK-NEXT:    lea %s1, -2048(, %s9)
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vld %v0, 8, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -95,6 +112,7 @@ define x86_regcallcc <256 x i64> @loadv256i64stk() {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i64> @loadv256i64com() {
 ; CHECK-LABEL: loadv256i64com:
+<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/loadvr.ll
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, v256i64@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -103,6 +121,16 @@ define x86_regcallcc <256 x i64> @loadv256i64com() {
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
 ; CHECK-NEXT:    or %s11, 0, %s9
+=======
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s1, v256i64@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s1, v256i64@hi(, %s1)
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vld %v0, 8, %s1
+; CHECK-NEXT:    b.l.t (, %s10)
+>>>>>>> necgh/develop:llvm/test/CodeGen/VE/loadvr.ll
   %1 = load <256 x i64>, <256 x i64>* @v256i64, align 16
   ret <256 x i64> %1
 }

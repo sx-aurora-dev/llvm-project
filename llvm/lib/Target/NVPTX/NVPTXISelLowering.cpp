@@ -19,6 +19,7 @@
 #include "NVPTXTargetObjectFile.h"
 #include "NVPTXUtilities.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/CodeGen/Analysis.h"
@@ -2438,8 +2439,7 @@ static bool isImageOrSamplerVal(const Value *arg, const Module *context) {
   if (!STy || STy->isLiteral())
     return false;
 
-  return std::find(std::begin(specialTypes), std::end(specialTypes),
-                   STy->getName()) != std::end(specialTypes);
+  return llvm::is_contained(specialTypes, STy->getName());
 }
 
 SDValue NVPTXTargetLowering::LowerFormalArguments(
@@ -3780,8 +3780,7 @@ bool NVPTXTargetLowering::getTgtMemIntrinsic(
     Info.ptrVal = I.getArgOperand(0);
     Info.offset = 0;
     Info.flags = MachineMemOperand::MOLoad;
-    Info.align =
-        MaybeAlign(cast<ConstantInt>(I.getArgOperand(1))->getZExtValue());
+    Info.align = cast<ConstantInt>(I.getArgOperand(1))->getMaybeAlignValue();
 
     return true;
   }
@@ -3800,8 +3799,7 @@ bool NVPTXTargetLowering::getTgtMemIntrinsic(
     Info.ptrVal = I.getArgOperand(0);
     Info.offset = 0;
     Info.flags = MachineMemOperand::MOLoad;
-    Info.align =
-        MaybeAlign(cast<ConstantInt>(I.getArgOperand(1))->getZExtValue());
+    Info.align = cast<ConstantInt>(I.getArgOperand(1))->getMaybeAlignValue();
 
     return true;
   }

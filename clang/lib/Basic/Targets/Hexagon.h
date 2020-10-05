@@ -64,6 +64,9 @@ public:
     // for modeling predicate registers in HVX, and the bool -> byte
     // correspondence matches the HVX architecture.
     BoolWidth = BoolAlign = 8;
+    // Make sure that the bool elements of bool vectors have the same size as
+    // the plain boolean type.
+    DenseBoolVector = false;
   }
 
   ArrayRef<Builtin::Info> getTargetBuiltins() const override;

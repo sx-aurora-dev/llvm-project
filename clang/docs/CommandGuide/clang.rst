@@ -146,7 +146,7 @@ Language Selection and Mode Options
 
    ISO C 2017 with GNU extensions
 
- The default C language standard is ``gnu11``, except on PS4, where it is
+ The default C language standard is ``gnu17``, except on PS4, where it is
  ``gnu99``.
 
  Supported values for the C++ language are:
@@ -432,6 +432,12 @@ Code Generation Options
   debug information.  This is the default on Darwin.  Note that Clang will
   never emit type information for types that are not referenced at all by the
   program.
+
+.. option:: -feliminate-unused-debug-types
+
+  By default, Clang does not emit type information for types that are defined
+  but not used in a program. To retain the debug info for these unused types,
+  the negation **-fno-eliminate-unused-debug-types** can be used.
 
 .. option:: -fexceptions
 

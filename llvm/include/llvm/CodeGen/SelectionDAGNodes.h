@@ -1394,8 +1394,18 @@ public:
   }
 
   const SDValue &getChain() const { return getOperand(0); }
+
   const SDValue &getBasePtr() const {
-    return getOperand(getOpcode() == ISD::STORE ? 2 : 1);
+    switch (getOpcode()) {
+    case ISD::STORE:
+    case ISD::MSTORE:
+      return getOperand(2);
+    case ISD::MGATHER:
+    case ISD::MSCATTER:
+      return getOperand(3);
+    default:
+      return getOperand(1);
+    }
   }
 
   // Methods to support isa and dyn_cast
@@ -1590,6 +1600,8 @@ public:
   uint64_t getLimitedValue(uint64_t Limit = UINT64_MAX) {
     return Value->getLimitedValue(Limit);
   }
+  MaybeAlign getMaybeAlignValue() const { return Value->getMaybeAlignValue(); }
+  Align getAlignValue() const { return Value->getAlignValue(); }
 
   bool isOne() const { return Value->isOne(); }
   bool isNullValue() const { return Value->isZero(); }
@@ -2383,9 +2395,6 @@ public:
   // MaskedLoadSDNode (Chain, ptr, offset, mask, passthru)
   // MaskedStoreSDNode (Chain, data, ptr, offset, mask)
   // Mask is a vector of i1 elements
-  const SDValue &getBasePtr() const {
-    return getOperand(getOpcode() == ISD::MLOAD ? 1 : 2);
-  }
   const SDValue &getOffset() const {
     return getOperand(getOpcode() == ISD::MLOAD ? 2 : 3);
   }

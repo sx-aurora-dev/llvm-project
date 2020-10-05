@@ -34,6 +34,7 @@
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Transforms/IPO/ThinLTOBitcodeWriter.h"
+#include "llvm/Transforms/Instrumentation/AddressSanitizer.h"
 #include "llvm/Transforms/Scalar/LoopPassManager.h"
 #include "llvm/Transforms/Utils/Debugify.h"
 
@@ -102,14 +103,13 @@ static cl::opt<std::string> OptimizerLastEPPipeline(
     cl::Hidden);
 
 // Individual pipeline tuning options.
-static cl::opt<bool> DisableLoopUnrolling(
-    "new-pm-disable-loop-unrolling",
-    cl::desc("Disable loop unrolling in all relevant passes"), cl::init(false));
+extern cl::opt<bool> DisableLoopUnrolling;
 
 extern cl::opt<PGOKind> PGOKindFlag;
 extern cl::opt<std::string> ProfileFile;
 extern cl::opt<CSPGOKind> CSPGOKindFlag;
 extern cl::opt<std::string> CSProfileGenFile;
+extern cl::opt<bool> DisableBasicAA;
 
 static cl::opt<std::string>
     ProfileRemappingFile("profile-remapping-file",
@@ -262,7 +262,7 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
     }
   }
   PassInstrumentationCallbacks PIC;
-  StandardInstrumentations SI;
+  StandardInstrumentations SI(DebugPM);
   SI.registerCallbacks(PIC);
 
   PipelineTuningOptions PTO;
@@ -299,6 +299,25 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
         }
         return false;
       });
+  PB.registerPipelineParsingCallback(
+      [](StringRef Name, ModulePassManager &MPM,
+         ArrayRef<PassBuilder::PipelineElement>) {
+        if (Name == "asan-pipeline") {
+          MPM.addPass(
+              RequireAnalysisPass<ASanGlobalsMetadataAnalysis, Module>());
+          MPM.addPass(
+              createModuleToFunctionPassAdaptor(AddressSanitizerPass()));
+          MPM.addPass(ModuleAddressSanitizerPass());
+          return true;
+        } else if (Name == "asan-function-pipeline") {
+          MPM.addPass(
+              RequireAnalysisPass<ASanGlobalsMetadataAnalysis, Module>());
+          MPM.addPass(
+              createModuleToFunctionPassAdaptor(AddressSanitizerPass()));
+          return true;
+        }
+        return false;
+      });
 
 #define HANDLE_EXTENSION(Ext)                                                  \
   get##Ext##PluginInfo().RegisterPassBuilderCallbacks(PB);
@@ -326,6 +345,17 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
       }
     } else {
       NonAAPasses.push_back(PassName);
+    }
+  }
+  // For compatibility with the legacy PM AA pipeline.
+  // AAResultsWrapperPass by default provides basic-aa in the legacy PM
+  // unless -disable-basic-aa is specified.
+  // TODO: remove this once tests implicitly requiring basic-aa use -passes= and
+  // -aa-pipeline=basic-aa.
+  if (!Passes.empty() && !DisableBasicAA) {
+    if (auto Err = PB.parseAAPipeline(AA, "basic-aa")) {
+      errs() << Arg0 << ": " << toString(std::move(Err)) << "\n";
+      return false;
     }
   }
 
@@ -360,8 +390,11 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
     }
   }
   for (auto PassName : NonAAPasses) {
-    if (auto Err =
-            PB.parsePassPipeline(MPM, PassName, VerifyEachPass, DebugPM)) {
+    std::string ModifiedPassName(PassName.begin(), PassName.end());
+    if (PB.isAnalysisPassName(PassName))
+      ModifiedPassName = "require<" + ModifiedPassName + ">";
+    if (auto Err = PB.parsePassPipeline(MPM, ModifiedPassName, VerifyEachPass,
+                                        DebugPM)) {
       errs() << Arg0 << ": " << toString(std::move(Err)) << "\n";
       return false;
     }

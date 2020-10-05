@@ -68,7 +68,7 @@ func @materialize_read(%M: index, %N: index, %O: index, %P: index) {
   // CHECK-NEXT:    affine.for %[[I1:.*]] = 0 to %{{.*}} {
   // CHECK-NEXT:      affine.for %[[I2:.*]] = 0 to %{{.*}} {
   // CHECK-NEXT:        affine.for %[[I3:.*]] = 0 to %{{.*}} step 5 {
-  //      CHECK:          %[[ALLOC:.*]] = alloc() : memref<5x4x3xf32>
+  //      CHECK:          %[[ALLOC:.*]] = alloc() {alignment = 128 : i64} : memref<5x4x3xf32>
   // CHECK-NEXT:          scf.for %[[I4:.*]] = %[[C0]] to %[[C3]] step %[[C1]] {
   // CHECK-NEXT:            scf.for %[[I5:.*]] = %[[C0]] to %[[C4]] step %[[C1]] {
   // CHECK-NEXT:              scf.for %[[I6:.*]] = %[[C0]] to %[[C5]] step %[[C1]] {
@@ -145,7 +145,7 @@ func @materialize_write(%M: index, %N: index, %O: index, %P: index) {
   // CHECK-NEXT:    affine.for %[[I1:.*]] = 0 to %{{.*}} step 4 {
   // CHECK-NEXT:      affine.for %[[I2:.*]] = 0 to %{{.*}} {
   // CHECK-NEXT:        affine.for %[[I3:.*]] = 0 to %{{.*}} step 5 {
-  // CHECK:               %[[ALLOC:.*]] = alloc() : memref<5x4x3xf32>
+  // CHECK:               %[[ALLOC:.*]] = alloc() {alignment = 128 : i64} : memref<5x4x3xf32>
   // CHECK-NEXT:          %[[VECTOR_VIEW:.*]] = vector.type_cast {{.*}} : memref<5x4x3xf32>
   //      CHECK:          store %{{.*}}, {{.*}} : memref<vector<5x4x3xf32>>
   // CHECK-NEXT:          scf.for %[[I4:.*]] = %[[C0]] to %[[C3]] step %[[C1]] {
@@ -353,15 +353,15 @@ func @transfer_write_progressive(%A : memref<?x?xf32>, %base: index, %vec: vecto
 // FULL-UNROLL-DAG: #[[$MAP1:.*]] = affine_map<()[s0] -> (s0 + 1)>
 // FULL-UNROLL-DAG: #[[$MAP2:.*]] = affine_map<()[s0] -> (s0 + 2)>
 
-// CHECK-LABEL: transfer_write_progressive_not_masked(
+// CHECK-LABEL: transfer_write_progressive_unmasked(
 //  CHECK-SAME:   %[[A:[a-zA-Z0-9]+]]: memref<?x?xf32>,
 //  CHECK-SAME:   %[[base:[a-zA-Z0-9]+]]: index,
 //  CHECK-SAME:   %[[vec:[a-zA-Z0-9]+]]: vector<3x15xf32>
-// FULL-UNROLL-LABEL: transfer_write_progressive_not_masked(
+// FULL-UNROLL-LABEL: transfer_write_progressive_unmasked(
 //  FULL-UNROLL-SAME:   %[[A:[a-zA-Z0-9]+]]: memref<?x?xf32>,
 //  FULL-UNROLL-SAME:   %[[base:[a-zA-Z0-9]+]]: index,
 //  FULL-UNROLL-SAME:   %[[vec:[a-zA-Z0-9]+]]: vector<3x15xf32>
-func @transfer_write_progressive_not_masked(%A : memref<?x?xf32>, %base: index, %vec: vector<3x15xf32>) {
+func @transfer_write_progressive_unmasked(%A : memref<?x?xf32>, %base: index, %vec: vector<3x15xf32>) {
   // CHECK-NOT:    scf.if
   // CHECK-NEXT: %[[alloc:.*]] = alloca() {alignment = 128 : i64} : memref<3xvector<15xf32>>
   // CHECK-NEXT: %[[vmemref:.*]] = vector.type_cast %[[alloc]] : memref<3xvector<15xf32>> to memref<vector<3x15xf32>>
@@ -369,17 +369,116 @@ func @transfer_write_progressive_not_masked(%A : memref<?x?xf32>, %base: index, 
   // CHECK-NEXT: affine.for %[[I:.*]] = 0 to 3 {
   // CHECK-NEXT:   %[[add:.*]] = affine.apply #[[$MAP0]](%[[I]])[%[[base]]]
   // CHECK-NEXT:   %[[vec_1d:.*]] = load %0[%[[I]]] : memref<3xvector<15xf32>>
-  // CHECK-NEXT:   vector.transfer_write %[[vec_1d]], %[[A]][%[[add]], %[[base]]] : vector<15xf32>, memref<?x?xf32>
+  // CHECK-NEXT:   vector.transfer_write %[[vec_1d]], %[[A]][%[[add]], %[[base]]] {masked = [false]} : vector<15xf32>, memref<?x?xf32>
 
   // FULL-UNROLL: %[[VEC0:.*]] = vector.extract %[[vec]][0] : vector<3x15xf32>
-  // FULL-UNROLL: vector.transfer_write %[[VEC0]], %[[A]][%[[base]], %[[base]]] : vector<15xf32>, memref<?x?xf32>
+  // FULL-UNROLL: vector.transfer_write %[[VEC0]], %[[A]][%[[base]], %[[base]]] {masked = [false]} : vector<15xf32>, memref<?x?xf32>
   // FULL-UNROLL: %[[I1:.*]] = affine.apply #[[$MAP1]]()[%[[base]]]
   // FULL-UNROLL: %[[VEC1:.*]] = vector.extract %[[vec]][1] : vector<3x15xf32>
-  // FULL-UNROLL: vector.transfer_write %2, %[[A]][%[[I1]], %[[base]]] : vector<15xf32>, memref<?x?xf32>
+  // FULL-UNROLL: vector.transfer_write %2, %[[A]][%[[I1]], %[[base]]] {masked = [false]} : vector<15xf32>, memref<?x?xf32>
   // FULL-UNROLL: %[[I2:.*]] = affine.apply #[[$MAP2]]()[%[[base]]]
   // FULL-UNROLL: %[[VEC2:.*]] = vector.extract %[[vec]][2] : vector<3x15xf32>
-  // FULL-UNROLL: vector.transfer_write %[[VEC2:.*]], %[[A]][%[[I2]], %[[base]]] : vector<15xf32>, memref<?x?xf32>
+  // FULL-UNROLL: vector.transfer_write %[[VEC2:.*]], %[[A]][%[[I2]], %[[base]]] {masked = [false]} : vector<15xf32>, memref<?x?xf32>
   vector.transfer_write %vec, %A[%base, %base] {masked = [false, false]} :
     vector<3x15xf32>, memref<?x?xf32>
   return
 }
+
+// -----
+
+// FULL-UNROLL-LABEL: transfer_read_simple
+func @transfer_read_simple(%A : memref<2x2xf32>) -> vector<2x2xf32> {
+  %c0 = constant 0 : index
+  %f0 = constant 0.0 : f32
+  // FULL-UNROLL-DAG: %[[VC0:.*]] = constant dense<0.000000e+00> : vector<2x2xf32>
+  // FULL-UNROLL-DAG: %[[C0:.*]] = constant 0 : index
+  // FULL-UNROLL-DAG: %[[C1:.*]] = constant 1 : index
+  // FULL-UNROLL: %[[V0:.*]] = vector.transfer_read %{{.*}}[%[[C0]], %[[C0]]]
+  // FULL-UNROLL: %[[RES0:.*]] = vector.insert %[[V0]], %[[VC0]] [0] : vector<2xf32> into vector<2x2xf32>
+  // FULL-UNROLL: %[[V1:.*]] = vector.transfer_read %{{.*}}[%[[C1]], %[[C0]]]
+  // FULL-UNROLL: %[[RES1:.*]] = vector.insert %[[V1]], %[[RES0]] [1] : vector<2xf32> into vector<2x2xf32>
+  %0 = vector.transfer_read %A[%c0, %c0], %f0 : memref<2x2xf32>, vector<2x2xf32>
+  return %0 : vector<2x2xf32>
+}
+
+func @transfer_read_minor_identity(%A : memref<?x?x?x?xf32>) -> vector<3x3xf32> {
+  %c0 = constant 0 : index
+  %f0 = constant 0.0 : f32
+  %0 = vector.transfer_read %A[%c0, %c0, %c0, %c0], %f0
+    { permutation_map = affine_map<(d0, d1, d2, d3) -> (d2, d3)> }
+      : memref<?x?x?x?xf32>, vector<3x3xf32>
+  return %0 : vector<3x3xf32>
+}
+
+// CHECK-LABEL: transfer_read_minor_identity(
+//  CHECK-SAME:   %[[A:.*]]: memref<?x?x?x?xf32>) -> vector<3x3xf32>
+//       CHECK:   %[[c0:.*]] = constant 0 : index
+//       CHECK:   %[[cst:.*]] = constant 0.000000e+00 : f32
+//       CHECK:   %[[c2:.*]] = constant 2 : index
+//       CHECK:   %[[cst0:.*]] = constant dense<0.000000e+00> : vector<3xf32>
+//       CHECK:   %[[m:.*]] = alloca() {alignment = 128 : i64} : memref<3xvector<3xf32>>
+//       CHECK:   %[[d:.*]] = dim %[[A]], %[[c2]] : memref<?x?x?x?xf32>
+//       CHECK:   affine.for %[[arg1:.*]] = 0 to 3 {
+//       CHECK:      %[[cmp:.*]] = cmpi "slt", %[[arg1]], %[[d]] : index
+//       CHECK:      scf.if %[[cmp]] {
+//       CHECK:        %[[tr:.*]] = vector.transfer_read %[[A]][%[[c0]], %[[c0]], %[[arg1]], %[[c0]]], %[[cst]] : memref<?x?x?x?xf32>, vector<3xf32>
+//       CHECK:        store %[[tr]], %[[m]][%[[arg1]]] : memref<3xvector<3xf32>>
+//       CHECK:      } else {
+//       CHECK:        store %[[cst0]], %[[m]][%[[arg1]]] : memref<3xvector<3xf32>>
+//       CHECK:      }
+//       CHECK:    }
+//       CHECK:    %[[cast:.*]] = vector.type_cast %[[m]] : memref<3xvector<3xf32>> to memref<vector<3x3xf32>>
+//       CHECK:    %[[ret:.*]]  = load %[[cast]][] : memref<vector<3x3xf32>>
+//       CHECK:    return %[[ret]] : vector<3x3xf32>
+
+func @transfer_write_minor_identity(%A : vector<3x3xf32>, %B : memref<?x?x?x?xf32>) {
+  %c0 = constant 0 : index
+  %f0 = constant 0.0 : f32
+  vector.transfer_write %A, %B[%c0, %c0, %c0, %c0]
+    { permutation_map = affine_map<(d0, d1, d2, d3) -> (d2, d3)> }
+      : vector<3x3xf32>, memref<?x?x?x?xf32>
+  return
+}
+
+// CHECK-LABEL: transfer_write_minor_identity(
+//  CHECK-SAME:   %[[A:.*]]: vector<3x3xf32>,
+//  CHECK-SAME:   %[[B:.*]]: memref<?x?x?x?xf32>)
+//       CHECK:   %[[c0:.*]] = constant 0 : index
+//       CHECK:   %[[c2:.*]] = constant 2 : index
+//       CHECK:   %[[m:.*]] = alloca() {alignment = 128 : i64} : memref<3xvector<3xf32>>
+//       CHECK:   %[[cast:.*]] = vector.type_cast %[[m]] : memref<3xvector<3xf32>> to memref<vector<3x3xf32>>
+//       CHECK:   store %[[A]], %[[cast]][] : memref<vector<3x3xf32>>
+//       CHECK:   %[[d:.*]] = dim %[[B]], %[[c2]] : memref<?x?x?x?xf32>
+//       CHECK:   affine.for %[[arg2:.*]] = 0 to 3 {
+//       CHECK:      %[[cmp:.*]] = cmpi "slt", %[[arg2]], %[[d]] : index
+//       CHECK:      scf.if %[[cmp]] {
+//       CHECK:        %[[tmp:.*]] = load %[[m]][%[[arg2]]] : memref<3xvector<3xf32>>
+//       CHECK:        vector.transfer_write %[[tmp]], %[[B]][%[[c0]], %[[c0]], %[[arg2]], %[[c0]]] : vector<3xf32>, memref<?x?x?x?xf32>
+//       CHECK:      }
+//       CHECK:    }
+//       CHECK:    return
+
+// -----
+
+func @transfer_read_strided(%A : memref<8x4xf32, affine_map<(d0, d1) -> (d0 + d1 * 8)>>) -> vector<4xf32> {
+  %c0 = constant 0 : index
+  %f0 = constant 0.0 : f32
+  %0 = vector.transfer_read %A[%c0, %c0], %f0
+      : memref<8x4xf32, affine_map<(d0, d1) -> (d0 + d1 * 8)>>, vector<4xf32>
+  return %0 : vector<4xf32>
+}
+
+// CHECK-LABEL: transfer_read_strided(
+// CHECK: scf.for
+// CHECK: load
+
+func @transfer_write_strided(%A : vector<4xf32>, %B : memref<8x4xf32, affine_map<(d0, d1) -> (d0 + d1 * 8)>>) {
+  %c0 = constant 0 : index
+  vector.transfer_write %A, %B[%c0, %c0] :
+    vector<4xf32>, memref<8x4xf32, affine_map<(d0, d1) -> (d0 + d1 * 8)>>
+  return
+}
+
+// CHECK-LABEL: transfer_write_strided(
+// CHECK: scf.for
+// CHECK: store

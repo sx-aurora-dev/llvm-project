@@ -485,17 +485,16 @@ defm atomic_load_xor : ret_noret_binary_atomic_op<atomic_load_xor>;
 defm atomic_load_fadd : ret_noret_binary_atomic_op<atomic_load_fadd, 0>;
 defm AMDGPUatomic_cmp_swap : ret_noret_binary_atomic_op<AMDGPUatomic_cmp_swap>;
 
-
-def load_align8_local : PatFrag <(ops node:$ptr), (load_local node:$ptr)> {
+def load_align8_local : PatFrag<(ops node:$ptr), (load_local node:$ptr)>,
+                        Aligned<8> {
   let IsLoad = 1;
   let IsNonExtLoad = 1;
-  let MinAlignment = 8;
 }
 
-def load_align16_local : PatFrag <(ops node:$ptr), (load_local node:$ptr)> {
+def load_align16_local : PatFrag<(ops node:$ptr), (load_local node:$ptr)>,
+                        Aligned<16> {
   let IsLoad = 1;
   let IsNonExtLoad = 1;
-  let MinAlignment = 16;
 }
 
 def store_align8_local: PatFrag<(ops node:$val, node:$ptr),
@@ -528,7 +527,7 @@ class Constants {
 int TWO_PI = 0x40c90fdb;
 int PI = 0x40490fdb;
 int TWO_PI_INV = 0x3e22f983;
-int FP_UINT_MAX_PLUS_1 = 0x4f800000;    // 1 << 32 in floating point encoding
+int FP_4294966784 = 0x4f7ffffe; // 4294966784 = 4294967296 - 512 = 2^32 - 2^9
 int FP16_ONE = 0x3C00;
 int FP16_NEG_ONE = 0xBC00;
 int FP32_ONE = 0x3f800000;

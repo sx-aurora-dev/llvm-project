@@ -1,7 +1,7 @@
 # Check if lld is built as a standalone project.
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   project(lld)
-  cmake_minimum_required(VERSION 3.4.3)
+  cmake_minimum_required(VERSION 3.13.4)
 
   set(CMAKE_INCLUDE_CURRENT_DIR ON)
   set(LLD_BUILT_STANDALONE TRUE)
@@ -54,6 +54,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
   include(AddLLVM)
   include(TableGen)
   include(HandleLLVMOptions)
+  include(CheckAtomic)
 
   if(LLVM_INCLUDE_TESTS)
     if(CMAKE_VERSION VERSION_LESS 3.12)

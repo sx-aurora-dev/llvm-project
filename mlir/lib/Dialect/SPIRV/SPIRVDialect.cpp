@@ -26,6 +26,7 @@
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringSwitch.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/raw_ostream.h"
 
 namespace mlir {
@@ -69,11 +70,11 @@ struct SPIRVInlinerInterface : public DialectInlinerInterface {
   /// operation registered to the current dialect.
   bool isLegalToInline(Operation *op, Region *dest,
                        BlockAndValueMapping &) const final {
-    // TODO(antiagainst): Enable inlining structured control flows with return.
+    // TODO: Enable inlining structured control flows with return.
     if ((isa<spirv::SelectionOp, spirv::LoopOp>(op)) &&
         containsReturn(op->getRegion(0)))
       return false;
-    // TODO(antiagainst): we need to filter OpKill here to avoid inlining it to
+    // TODO: we need to filter OpKill here to avoid inlining it to
     // a loop continue construct:
     // https://github.com/KhronosGroup/SPIRV-Headers/issues/86
     // However OpKill is fragment shader specific and we don't support it yet.
@@ -112,8 +113,7 @@ struct SPIRVInlinerInterface : public DialectInlinerInterface {
 // SPIR-V Dialect
 //===----------------------------------------------------------------------===//
 
-SPIRVDialect::SPIRVDialect(MLIRContext *context)
-    : Dialect(getDialectNamespace(), context) {
+void SPIRVDialect::initialize() {
   addTypes<ArrayType, CooperativeMatrixNVType, ImageType, MatrixType,
            PointerType, RuntimeArrayType, StructType>();
 
@@ -330,7 +330,7 @@ static Type parseCooperativeMatrixType(SPIRVDialect const &dialect,
   return CooperativeMatrixNVType::get(elementTy, scope, dims[0], dims[1]);
 }
 
-// TODO(ravishankarm) : Reorder methods to be utilities first and parse*Type
+// TODO: Reorder methods to be utilities first and parse*Type
 // methods in alphabetical order
 //
 // storage-class ::= `UniformConstant`
@@ -438,7 +438,7 @@ static Optional<ValTy> parseAndVerify(SPIRVDialect const &dialect,
 template <>
 Optional<Type> parseAndVerify<Type>(SPIRVDialect const &dialect,
                                     DialectAsmParser &parser) {
-  // TODO(ravishankarm): Further verify that the element type can be sampled
+  // TODO: Further verify that the element type can be sampled
   auto ty = parseAndVerifyType(dialect, parser);
   if (!ty)
     return llvm::None;
@@ -723,36 +723,16 @@ static void print(CooperativeMatrixNVType type, DialectAsmPrinter &os) {
 }
 
 static void print(MatrixType type, DialectAsmPrinter &os) {
-  os << "matrix<" << type.getNumElements() << " x " << type.getElementType();
+  os << "matrix<" << type.getNumColumns() << " x " << type.getColumnType();
   os << ">";
 }
 
 void SPIRVDialect::printType(Type type, DialectAsmPrinter &os) const {
-  switch (type.getKind()) {
-  case TypeKind::Array:
-    print(type.cast<ArrayType>(), os);
-    return;
-  case TypeKind::CooperativeMatrix:
-    print(type.cast<CooperativeMatrixNVType>(), os);
-    return;
-  case TypeKind::Pointer:
-    print(type.cast<PointerType>(), os);
-    return;
-  case TypeKind::RuntimeArray:
-    print(type.cast<RuntimeArrayType>(), os);
-    return;
-  case TypeKind::Image:
-    print(type.cast<ImageType>(), os);
-    return;
-  case TypeKind::Struct:
-    print(type.cast<StructType>(), os);
-    return;
-  case TypeKind::Matrix:
-    print(type.cast<MatrixType>(), os);
-    return;
-  default:
-    llvm_unreachable("unhandled SPIR-V type");
-  }
+  TypeSwitch<Type>(type)
+      .Case<ArrayType, CooperativeMatrixNVType, PointerType, RuntimeArrayType,
+            ImageType, StructType, MatrixType>(
+          [&](auto type) { print(type, os); })
+      .Default([](Type) { llvm_unreachable("unhandled SPIR-V type"); });
 }
 
 //===----------------------------------------------------------------------===//
@@ -1054,7 +1034,7 @@ LogicalResult SPIRVDialect::verifyOperationAttribute(Operation *op,
   StringRef symbol = attribute.first.strref();
   Attribute attr = attribute.second;
 
-  // TODO(antiagainst): figure out a way to generate the description from the
+  // TODO: figure out a way to generate the description from the
   // StructAttr definition.
   if (symbol == spirv::getEntryPointABIAttrName()) {
     if (!attr.isa<spirv::EntryPointABIAttr>())
@@ -1102,8 +1082,7 @@ LogicalResult SPIRVDialect::verifyRegionArgAttribute(Operation *op,
                                                      unsigned argIndex,
                                                      NamedAttribute attribute) {
   return verifyRegionAttribute(
-      op->getLoc(),
-      op->getRegion(regionIndex).front().getArgument(argIndex).getType(),
+      op->getLoc(), op->getRegion(regionIndex).getArgument(argIndex).getType(),
       attribute);
 }
 

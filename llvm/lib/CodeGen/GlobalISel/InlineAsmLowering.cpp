@@ -237,6 +237,39 @@ static unsigned getNumOpRegs(const MachineInstr &I, unsigned OpIdx) {
   return InlineAsm::getNumOperandRegisters(Flag);
 }
 
+static bool buildAnyextOrCopy(Register Dst, Register Src,
+                              MachineIRBuilder &MIRBuilder) {
+  const TargetRegisterInfo *TRI =
+      MIRBuilder.getMF().getSubtarget().getRegisterInfo();
+  MachineRegisterInfo *MRI = MIRBuilder.getMRI();
+
+  auto SrcTy = MRI->getType(Src);
+  if (!SrcTy.isValid()) {
+    LLVM_DEBUG(dbgs() << "Source type for copy is not valid\n");
+    return false;
+  }
+  unsigned SrcSize = TRI->getRegSizeInBits(Src, *MRI);
+  unsigned DstSize = TRI->getRegSizeInBits(Dst, *MRI);
+
+  if (DstSize < SrcSize) {
+    LLVM_DEBUG(dbgs() << "Input can't fit in destination reg class\n");
+    return false;
+  }
+
+  // Attempt to anyext small scalar sources.
+  if (DstSize > SrcSize) {
+    if (!SrcTy.isScalar()) {
+      LLVM_DEBUG(dbgs() << "Can't extend non-scalar input to size of"
+                           "destination register class\n");
+      return false;
+    }
+    Src = MIRBuilder.buildAnyExt(LLT::scalar(DstSize), Src).getReg(0);
+  }
+
+  MIRBuilder.buildCopy(Dst, Src);
+  return true;
+}
+
 bool InlineAsmLowering::lowerInlineAsm(
     MachineIRBuilder &MIRBuilder, const CallBase &Call,
     std::function<ArrayRef<Register>(const Value &Val)> GetOrCreateVRegs)
@@ -406,22 +439,39 @@ bool InlineAsmLowering::lowerInlineAsm(
           InstFlagIdx += getNumOpRegs(*Inst, InstFlagIdx) + 1;
         assert(getNumOpRegs(*Inst, InstFlagIdx) == 1 && "Wrong flag");
 
+        unsigned MatchedOperandFlag = Inst->getOperand(InstFlagIdx).getImm();
+        if (InlineAsm::isMemKind(MatchedOperandFlag)) {
+          LLVM_DEBUG(dbgs() << "Matching input constraint to mem operand not "
+                               "supported. This should be target specific.\n");
+          return false;
+        }
+        if (!InlineAsm::isRegDefKind(MatchedOperandFlag) &&
+            !InlineAsm::isRegDefEarlyClobberKind(MatchedOperandFlag)) {
+          LLVM_DEBUG(dbgs() << "Unknown matching constraint\n");
+          return false;
+        }
+
         // We want to tie input to register in next operand.
         unsigned DefRegIdx = InstFlagIdx + 1;
         Register Def = Inst->getOperand(DefRegIdx).getReg();
 
-        // Copy input to new vreg with same reg class as Def
-        const TargetRegisterClass *RC = MRI->getRegClass(Def);
         ArrayRef<Register> SrcRegs = GetOrCreateVRegs(*OpInfo.CallOperandVal);
         assert(SrcRegs.size() == 1 && "Single register is expected here");
-        Register Tmp = MRI->createVirtualRegister(RC);
-        MIRBuilder.buildCopy(Tmp, SrcRegs[0]);
 
-        // Add Flag and input register operand (Tmp) to Inst. Tie Tmp to Def.
+        // When Def is physreg: use given input.
+        Register In = SrcRegs[0];
+        // When Def is vreg: copy input to new vreg with same reg class as Def.
+        if (Def.isVirtual()) {
+          In = MRI->createVirtualRegister(MRI->getRegClass(Def));
+          if (!buildAnyextOrCopy(In, SrcRegs[0], MIRBuilder))
+            return false;
+        }
+
+        // Add Flag and input register operand (In) to Inst. Tie In to Def.
         unsigned UseFlag = InlineAsm::getFlagWord(InlineAsm::Kind_RegUse, 1);
         unsigned Flag = InlineAsm::getFlagWordForMatchingOp(UseFlag, DefIdx);
         Inst.addImm(Flag);
-        Inst.addReg(Tmp);
+        Inst.addReg(In);
         Inst->tieOperands(DefRegIdx, Inst->getNumOperands() - 1);
         break;
       }
@@ -512,8 +562,14 @@ bool InlineAsmLowering::lowerInlineAsm(
       }
 
       unsigned Flag = InlineAsm::getFlagWord(InlineAsm::Kind_RegUse, NumRegs);
+      if (OpInfo.Regs.front().isVirtual()) {
+        // Put the register class of the virtual registers in the flag word.
+        const TargetRegisterClass *RC = MRI->getRegClass(OpInfo.Regs.front());
+        Flag = InlineAsm::getFlagWordForRegClass(Flag, RC->getID());
+      }
       Inst.addImm(Flag);
-      MIRBuilder.buildCopy(OpInfo.Regs[0], SourceRegs[0]);
+      if (!buildAnyextOrCopy(OpInfo.Regs[0], SourceRegs[0], MIRBuilder))
+        return false;
       Inst.addReg(OpInfo.Regs[0]);
       break;
     }
@@ -606,6 +662,7 @@ bool InlineAsmLowering::lowerAsmOperandForConstraint(
   default:
     return false;
   case 'i': // Simple Integer or Relocatable Constant
+  case 'n': // immediate integer with a known value.
     if (ConstantInt *CI = dyn_cast<ConstantInt>(Val)) {
       assert(CI->getBitWidth() <= 64 &&
              "expected immediate to fit into 64-bits");

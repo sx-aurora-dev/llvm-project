@@ -599,6 +599,12 @@ def GetStackTop : SDNode<"VEISD::GETSTACKTOP", SDTNone,
 def MemBarrier : SDNode<"VEISD::MEMBARRIER", SDTNone,
                         [SDNPHasChain, SDNPSideEffect]>;
 
+// TS1AM
+def SDT_TS1AM : SDTypeProfile<1, 3, [SDTCisSameAs<0, 3>, SDTCisInt<2>,
+                                     SDTCisPtrTy<3>]>;
+def ts1am     : SDNode<"VEISD::TS1AM", SDT_TS1AM,
+                       [SDNPHasChain, SDNPMayStore, SDNPMayLoad,
+                        SDNPMemOperand]>;
 
 //===----------------------------------------------------------------------===//
 // VE Flag Conditions
@@ -1702,28 +1708,8 @@ let ry = 0, DecoderMethod = "DecodeStoreASI64" in
 defm SHMB : SHMm<"shm.b", 0x31, I64>;
 
 // Atomic swap
-//   AND $newsrc, $src, -4      ; 4 byte align address
-//   AND $frac, $src, 3         ; $src position in $newsrc
-//   ADD $flag, 0, 1            ; set 1
-//   SLA $flag, $flag, $frac    ; shift 1 for 1byte ts1am
-//   SLA $tmp, $flac, 3         ; calc shift bits for next SLA
-//   SLA $new, $new, $tmp       ; shift $new for 1byte ts1am
-//   TS1AM $new, 0($newsrc), $flag ; 1byte ts1am
-def : Pat<(i32 (atomic_swap_8 i64:$src, i32:$new)),
-          (SRAWSXri
-            (SLAWSXrr
-              (TS1AMWrir
-                (ANDri $src, -4),
-                0,
-                (SLAWSXmr !add(63, 64),
-                          (EXTRACT_SUBREG (ANDri $src, 3), sub_i32)),
-                (SLAWSXrr $new,
-                          (SLAWSXri (EXTRACT_SUBREG (ANDri $src, 3), sub_i32),
-                                    3))),
-              (SUBSWSXir 24,
-                (SLAWSXri (EXTRACT_SUBREG (ANDri $src, 3), sub_i32), 3))),
-            24
-          )>;
+def : Pat<(i32 (ts1am i64:$src, i32:$flag, i32:$new)),
+          (TS1AMWrir $src, 0, $flag, $new)>;
 // def : Pat<(i32 (atomic_swap_16 ADDRri:$src, i32:$new)),
 //           (TS1AMWrii MEMriRRM:$src, 3, $new)>;
 def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
@@ -1948,6 +1934,14 @@ defm : ATMSTm<atomic_store_8, i32, ST1Brri, ST1Brii, ST1Bzri, ST1Bzii>;
 defm : ATMSTm<atomic_store_16, i32, ST2Brri, ST2Brii, ST2Bzri, ST2Bzii>;
 defm : ATMSTm<atomic_store_32, i32, STLrri, STLrii, STLzri, STLzii>;
 defm : ATMSTm<atomic_store_64, i64, STrri, STrii, STzri, STzii>;
+
+// Address calculation and its optimization
+def : Pat<(VEhi tconstpool:$in), (LEASLzii 0, 0, tconstpool:$in)>;
+def : Pat<(VElo tconstpool:$in),
+          (ANDrm (LEAzii 0, 0, tconstpool:$in), !add(32, 64))>;
+def : Pat<(add (VEhi tconstpool:$in1), (VElo tconstpool:$in2)),
+          (LEASLrii (ANDrm (LEAzii 0, 0, tconstpool:$in2), !add(32, 64)), 0,
+                    (tconstpool:$in1))>;
 
 // Address calculation and its optimization
 def : Pat<(VEhi tglobaladdr:$in), (LEASLzii 0, 0, tglobaladdr:$in)>;

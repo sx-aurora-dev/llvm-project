@@ -4,14 +4,14 @@
 
 define i64 @leam(i64 %x) nounwind {
 ; CHECK-LABEL: leam:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, A@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, A@hi(, %s0)
 ; CHECK-NEXT:    #APP
 ; CHECK-NEXT:    lea %s0, (%s0)
 ; CHECK-NEXT:    #NO_APP
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %asmtmp = tail call i64 asm "lea $0, $1", "=r,*m"(i64* @A) nounwind
   ret i64 %asmtmp
 }

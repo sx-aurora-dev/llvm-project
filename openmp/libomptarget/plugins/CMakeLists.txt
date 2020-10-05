@@ -70,6 +70,7 @@ add_subdirectory(vh)
 
 if(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
   add_subdirectory(aarch64)
+  add_subdirectory(amdgpu)
   add_subdirectory(cuda)
   add_subdirectory(ppc64)
   add_subdirectory(ppc64le)

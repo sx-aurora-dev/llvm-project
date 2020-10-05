@@ -90,9 +90,8 @@ bool DIEDwarfExpression::isFrameRegister(const TargetRegisterInfo &TRI,
 
 DwarfUnit::DwarfUnit(dwarf::Tag UnitTag, const DICompileUnit *Node,
                      AsmPrinter *A, DwarfDebug *DW, DwarfFile *DWU)
-    : DIEUnit(A->getDwarfVersion(), A->MAI->getCodePointerSize(), UnitTag),
-      CUNode(Node), Asm(A), DD(DW), DU(DWU), IndexTyDie(nullptr) {
-}
+    : DIEUnit(UnitTag), CUNode(Node), Asm(A), DD(DW), DU(DWU),
+      IndexTyDie(nullptr) {}
 
 DwarfTypeUnit::DwarfTypeUnit(DwarfCompileUnit &CU, AsmPrinter *A,
                              DwarfDebug *DW, DwarfFile *DWU,
@@ -307,23 +306,6 @@ void DwarfUnit::addSectionOffset(DIE &Die, dwarf::Attribute Attribute,
     addUInt(Die, Attribute, dwarf::DW_FORM_data4, Integer);
 }
 
-Optional<MD5::MD5Result> DwarfUnit::getMD5AsBytes(const DIFile *File) const {
-  assert(File);
-  if (DD->getDwarfVersion() < 5)
-    return None;
-  Optional<DIFile::ChecksumInfo<StringRef>> Checksum = File->getChecksum();
-  if (!Checksum || Checksum->Kind != DIFile::CSK_MD5)
-    return None;
-
-  // Convert the string checksum to an MD5Result for the streamer.
-  // The verifier validates the checksum so we assume it's okay.
-  // An MD5 checksum is 16 bytes.
-  std::string ChecksumString = fromHex(Checksum->Value);
-  MD5::MD5Result CKMem;
-  std::copy(ChecksumString.begin(), ChecksumString.end(), CKMem.Bytes.data());
-  return CKMem;
-}
-
 unsigned DwarfTypeUnit::getOrCreateSourceID(const DIFile *File) {
   if (!SplitLineTable)
     return getCU().getOrCreateSourceID(File);
@@ -332,10 +314,9 @@ unsigned DwarfTypeUnit::getOrCreateSourceID(const DIFile *File) {
     // This is a split type unit that needs a line table.
     addSectionOffset(getUnitDie(), dwarf::DW_AT_stmt_list, 0);
   }
-  return SplitLineTable->getFile(File->getDirectory(), File->getFilename(),
-                                 getMD5AsBytes(File),
-                                 Asm->OutContext.getDwarfVersion(),
-                                 File->getSource());
+  return SplitLineTable->getFile(
+      File->getDirectory(), File->getFilename(), DD->getMD5AsBytes(File),
+      Asm->OutContext.getDwarfVersion(), File->getSource());
 }
 
 void DwarfUnit::addOpAddress(DIELoc &Die, const MCSymbol *Sym) {
@@ -353,7 +334,7 @@ void DwarfUnit::addOpAddress(DIELoc &Die, const MCSymbol *Sym) {
   }
 
   addUInt(Die, dwarf::DW_FORM_data1, dwarf::DW_OP_addr);
-  addLabel(Die, dwarf::DW_FORM_udata, Sym);
+  addLabel(Die, dwarf::DW_FORM_addr, Sym);
 }
 
 void DwarfUnit::addLabelDelta(DIE &Die, dwarf::Attribute Attribute,
@@ -654,6 +635,8 @@ DIE *DwarfUnit::createTypeDIE(const DIScope *Context, DIE &ContextDIE,
 
   if (auto *BT = dyn_cast<DIBasicType>(Ty))
     constructTypeDIE(TyDIE, BT);
+  else if (auto *ST = dyn_cast<DIStringType>(Ty))
+    constructTypeDIE(TyDIE, ST);
   else if (auto *STy = dyn_cast<DISubroutineType>(Ty))
     constructTypeDIE(TyDIE, STy);
   else if (auto *CTy = dyn_cast<DICompositeType>(Ty)) {
@@ -772,8 +755,9 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIBasicType *BTy) {
   if (BTy->getTag() == dwarf::DW_TAG_unspecified_type)
     return;
 
-  addUInt(Buffer, dwarf::DW_AT_encoding, dwarf::DW_FORM_data1,
-          BTy->getEncoding());
+  if (BTy->getTag() != dwarf::DW_TAG_string_type)
+    addUInt(Buffer, dwarf::DW_AT_encoding, dwarf::DW_FORM_data1,
+            BTy->getEncoding());
 
   uint64_t Size = BTy->getSizeInBits() >> 3;
   addUInt(Buffer, dwarf::DW_AT_byte_size, None, Size);
@@ -782,6 +766,28 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIBasicType *BTy) {
     addUInt(Buffer, dwarf::DW_AT_endianity, None, dwarf::DW_END_big);
   else if (BTy->isLittleEndian())
     addUInt(Buffer, dwarf::DW_AT_endianity, None, dwarf::DW_END_little);
+}
+
+void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIStringType *STy) {
+  // Get core information.
+  StringRef Name = STy->getName();
+  // Add name if not anonymous or intermediate type.
+  if (!Name.empty())
+    addString(Buffer, dwarf::DW_AT_name, Name);
+
+  if (DIVariable *Var = STy->getStringLength()) {
+    if (auto *VarDIE = getDIE(Var))
+      addDIEEntry(Buffer, dwarf::DW_AT_string_length, *VarDIE);
+  } else {
+    uint64_t Size = STy->getSizeInBits() >> 3;
+    addUInt(Buffer, dwarf::DW_AT_byte_size, None, Size);
+  }
+
+  if (STy->getEncoding()) {
+    // For eventual Unicode support.
+    addUInt(Buffer, dwarf::DW_AT_encoding, dwarf::DW_FORM_data1,
+            STy->getEncoding());
+  }
 }
 
 void DwarfUnit::constructTypeDIE(DIE &Buffer, const DIDerivedType *DTy) {
@@ -910,6 +916,11 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DICompositeType *CTy) {
       }
     }
 
+    // Add template parameters to a class, structure or union types.
+    if (Tag == dwarf::DW_TAG_class_type ||
+        Tag == dwarf::DW_TAG_structure_type || Tag == dwarf::DW_TAG_union_type)
+      addTemplateParams(Buffer, CTy->getTemplateParams());
+
     // Add elements to structure type.
     DINodeArray Elements = CTy->getElements();
     for (const auto *Element : Elements) {
@@ -979,12 +990,6 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DICompositeType *CTy) {
     if (CTy->isObjcClassComplete())
       addFlag(Buffer, dwarf::DW_AT_APPLE_objc_complete_type);
 
-    // Add template parameters to a class, structure or union types.
-    // FIXME: The support isn't in the metadata for this yet.
-    if (Tag == dwarf::DW_TAG_class_type ||
-        Tag == dwarf::DW_TAG_structure_type || Tag == dwarf::DW_TAG_union_type)
-      addTemplateParams(Buffer, CTy->getTemplateParams());
-
     // Add the type's non-standard calling convention.
     uint8_t CC = 0;
     if (CTy->isTypePassByValue())
@@ -1008,8 +1013,10 @@ void DwarfUnit::constructTypeDIE(DIE &Buffer, const DICompositeType *CTy) {
       Tag == dwarf::DW_TAG_class_type || Tag == dwarf::DW_TAG_structure_type ||
       Tag == dwarf::DW_TAG_union_type) {
     // Add size if non-zero (derived types might be zero-sized.)
+    // Ignore the size if it's a non-enum forward decl.
     // TODO: Do we care about size for enum forward declarations?
-    if (Size)
+    if (Size &&
+        (!CTy->isForwardDecl() || Tag == dwarf::DW_TAG_enumeration_type))
       addUInt(Buffer, dwarf::DW_AT_byte_size, None, Size);
     else if (!CTy->isForwardDecl())
       // Add zero size if it is not a forward declaration.
@@ -1417,8 +1424,10 @@ static bool hasVectorBeenPadded(const DICompositeType *CTy) {
          Elements[0]->getTag() == dwarf::DW_TAG_subrange_type &&
          "Invalid vector element array, expected one element of type subrange");
   const auto Subrange = cast<DISubrange>(Elements[0]);
-  const auto CI = Subrange->getCount().get<ConstantInt *>();
-  const int32_t NumVecElements = CI->getSExtValue();
+  const auto NumVecElements =
+      Subrange->getCount()
+          ? Subrange->getCount().get<ConstantInt *>()->getSExtValue()
+          : 0;
 
   // Ensure we found the element count and that the actual size is wide
   // enough to contain the requested size.
@@ -1443,6 +1452,28 @@ void DwarfUnit::constructArrayTypeDIE(DIE &Buffer, const DICompositeType *CTy) {
     DwarfExpr.setMemoryLocationKind();
     DwarfExpr.addExpression(Expr);
     addBlock(Buffer, dwarf::DW_AT_data_location, DwarfExpr.finalize());
+  }
+
+  if (DIVariable *Var = CTy->getAssociated()) {
+    if (auto *VarDIE = getDIE(Var))
+      addDIEEntry(Buffer, dwarf::DW_AT_associated, *VarDIE);
+  } else if (DIExpression *Expr = CTy->getAssociatedExp()) {
+    DIELoc *Loc = new (DIEValueAllocator) DIELoc;
+    DIEDwarfExpression DwarfExpr(*Asm, getCU(), *Loc);
+    DwarfExpr.setMemoryLocationKind();
+    DwarfExpr.addExpression(Expr);
+    addBlock(Buffer, dwarf::DW_AT_associated, DwarfExpr.finalize());
+  }
+
+  if (DIVariable *Var = CTy->getAllocated()) {
+    if (auto *VarDIE = getDIE(Var))
+      addDIEEntry(Buffer, dwarf::DW_AT_allocated, *VarDIE);
+  } else if (DIExpression *Expr = CTy->getAllocatedExp()) {
+    DIELoc *Loc = new (DIEValueAllocator) DIELoc;
+    DIEDwarfExpression DwarfExpr(*Asm, getCU(), *Loc);
+    DwarfExpr.setMemoryLocationKind();
+    DwarfExpr.addExpression(Expr);
+    addBlock(Buffer, dwarf::DW_AT_allocated, DwarfExpr.finalize());
   }
 
   // Emit the element type.

@@ -104,7 +104,7 @@ class EffectOpInterfaceBase<string name, string baseEffect>
       });
     }
 
-    /// Returns if this operation only has the given effect.
+    /// Returns true if this operation only has the given effect.
     template <typename Effect> bool onlyHasEffect() {
       SmallVector<SideEffects::EffectInstance<}] # baseEffect # [{>, 4> effects;
       getEffects(effects);
@@ -113,14 +113,14 @@ class EffectOpInterfaceBase<string name, string baseEffect>
       });
     }
 
-    /// Returns if this operation has no effects.
+    /// Returns true if this operation has no effects.
     bool hasNoEffect() {
       SmallVector<SideEffects::EffectInstance<}] # baseEffect # [{>, 4> effects;
       getEffects(effects);
       return effects.empty();
     }
 
-    /// Returns if the given operation has no effects for this interface.
+    /// Returns true if the given operation has no effects for this interface.
     static bool hasNoEffect(Operation *op) {
       if (auto interface = dyn_cast<}] # name # [{>(op))
         return interface.hasNoEffect();
@@ -142,6 +142,9 @@ class SideEffect<EffectOpInterfaceBase interface, string effectName,
   /// The parent interface that the effect belongs to.
   string interfaceTrait = interface.trait;
 
+  /// The cpp namespace of the interface trait.
+  string cppNamespace = interface.cppNamespace;
+
   /// The derived effect that is being applied.
   string effect = effectName;
 
@@ -155,6 +158,9 @@ class SideEffectsTraitBase<EffectOpInterfaceBase parentInterface,
     : OpInterfaceTrait<""> {
   /// The name of the interface trait to use.
   let trait = parentInterface.trait;
+
+  /// The cpp namespace of the interface trait.
+  string cppNamespace = parentInterface.cppNamespace;
 
   /// The name of the base effects class.
   string baseEffectName = parentInterface.baseEffectName;
@@ -177,6 +183,7 @@ def MemoryEffectsOpInterface
     An interface used to query information about the memory effects applied by
     an operation.
   }];
+  let cppNamespace = "::mlir";
 }
 
 // The base class for defining specific memory effects.

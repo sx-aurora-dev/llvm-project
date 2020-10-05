@@ -23,10 +23,6 @@ namespace Fortran::parser {
 constexpr auto startOmpLine = skipStuffBeforeStatement >> "!$OMP "_sptok;
 constexpr auto endOmpLine = space >> endOfLine;
 
-template <typename A> constexpr decltype(auto) verbatim(A x) {
-  return sourced(construct<Verbatim>(x));
-}
-
 // OpenMP Clauses
 // 2.15.3.1 DEFAULT (PRIVATE | FIRSTPRIVATE | SHARED | NONE)
 TYPE_PARSER(construct<OmpDefaultClause>(
@@ -108,6 +104,11 @@ TYPE_PARSER(construct<OmpReductionOperator>(Parser<DefinedOperator>{}) ||
 TYPE_PARSER(construct<OmpReductionClause>(
     Parser<OmpReductionOperator>{} / ":", nonemptyList(designator)))
 
+// OMP 5.0 2.11.4  ALLOCATE ([allocator:] variable-name-list)
+TYPE_PARSER(construct<OmpAllocateClause>(
+    maybe(construct<OmpAllocateClause::Allocator>(scalarIntExpr) / ":"),
+    Parser<OmpObjectList>{}))
+
 // 2.13.9 DEPEND (SOURCE | SINK : vec | (IN | OUT | INOUT) : list
 TYPE_PARSER(construct<OmpDependSinkVecLength>(
     Parser<DefinedOperator>{}, scalarIntConstantExpr))
@@ -168,7 +169,7 @@ TYPE_PARSER("ALIGNED" >>
     "DEVICE" >> construct<OmpClause>(construct<OmpClause::Device>(
                     parenthesized(scalarIntExpr))) ||
     "DIST_SCHEDULE" >>
-        construct<OmpClause>(construct<OmpClause::DistSchedule>(
+        construct<OmpClause>(construct<OmpDistScheduleClause>(
             parenthesized("STATIC" >> maybe("," >> scalarIntExpr)))) ||
     "FINAL" >> construct<OmpClause>(construct<OmpClause::Final>(
                    parenthesized(scalarLogicalExpr))) ||
@@ -210,6 +211,8 @@ TYPE_PARSER("ALIGNED" >>
         construct<OmpClause>(parenthesized(Parser<OmpProcBindClause>{})) ||
     "REDUCTION" >>
         construct<OmpClause>(parenthesized(Parser<OmpReductionClause>{})) ||
+    "ALLOCATE" >>
+        construct<OmpClause>(parenthesized(Parser<OmpAllocateClause>{})) ||
     "SAFELEN" >> construct<OmpClause>(construct<OmpClause::Safelen>(
                      parenthesized(scalarIntConstantExpr))) ||
     "SCHEDULE" >>
@@ -291,9 +294,19 @@ TYPE_PARSER(sourced(construct<OpenMPCancellationPointConstruct>(
 TYPE_PARSER(sourced(construct<OpenMPCancelConstruct>(verbatim("CANCEL"_tok),
     Parser<OmpCancelType>{}, maybe("IF" >> parenthesized(scalarLogicalExpr)))))
 
-// 2.13.7 Flush construct
-TYPE_PARSER(sourced(construct<OpenMPFlushConstruct>(
-    verbatim("FLUSH"_tok), maybe(parenthesized(Parser<OmpObjectList>{})))))
+// 2.17.8 Flush construct [OpenMP 5.0]
+//        flush -> FLUSH [memory-order-clause] [(variable-name-list)]
+//        memory-order-clause -> acq_rel
+//                               release
+//                               acquire
+TYPE_PARSER(sourced(construct<OmpFlushMemoryClause>(
+    "ACQ_REL" >> pure(OmpFlushMemoryClause::FlushMemoryOrder::AcqRel) ||
+    "RELEASE" >> pure(OmpFlushMemoryClause::FlushMemoryOrder::Release) ||
+    "ACQUIRE" >> pure(OmpFlushMemoryClause::FlushMemoryOrder::Acquire))))
+
+TYPE_PARSER(sourced(construct<OpenMPFlushConstruct>(verbatim("FLUSH"_tok),
+    maybe(Parser<OmpFlushMemoryClause>{}),
+    maybe(parenthesized(Parser<OmpObjectList>{})))))
 
 // Simple Standalone Directives
 TYPE_PARSER(sourced(construct<OmpSimpleStandaloneDirective>(first(

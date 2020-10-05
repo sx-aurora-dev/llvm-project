@@ -65,7 +65,8 @@ public:
     auto linalgOp = rewriter.create<linalg::GenericOp>(
         loc, llvm::None, newArgs, rewriter.getI64IntegerAttr(operands.size()),
         rewriter.getI64IntegerAttr(results.size()), op.indexing_maps(),
-        op.iterator_types(), op.docAttr(), op.library_callAttr());
+        op.iterator_types(), op.docAttr(), op.library_callAttr(),
+        op.symbol_sourceAttr());
 
     // Create a new block in the region of the new Generic Op.
     Block &oldBlock = op.getRegion().front();
@@ -99,11 +100,11 @@ public:
 /// tensors to buffers.
 static void populateConvertLinalgOnTensorsToBuffersPattern(
     MLIRContext *context, BufferAssignmentPlacer *placer,
-    TypeConverter *converter, OwningRewritePatternList *patterns) {
+    BufferAssignmentTypeConverter *converter,
+    OwningRewritePatternList *patterns) {
   populateWithBufferAssignmentOpConversionPatterns<
-      mlir::ReturnOp, mlir::ReturnOp, linalg::CopyOp,
-      /*allowMemrefFunctionResults=*/false>(context, placer, converter,
-                                            patterns);
+      mlir::ReturnOp, mlir::ReturnOp, linalg::CopyOp>(context, placer,
+                                                      converter, patterns);
   patterns->insert<GenericOpConverter>(context, placer, converter);
 }
 
@@ -139,6 +140,9 @@ struct ConvertLinalgOnTensorsToBuffers
                            [&](Type type) { return type.isa<MemRefType>(); }) &&
              converter.isLegal(&funcOp.getBody());
     });
+
+    converter.setResultConversionKind<RankedTensorType, MemRefType>(
+        BufferAssignmentTypeConverter::AppendToArgumentsList);
 
     // Walk over all the functions to apply buffer assignment.
     getOperation().walk([&](FuncOp function) -> WalkResult {

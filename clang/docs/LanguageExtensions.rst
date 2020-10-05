@@ -433,6 +433,73 @@ NEON vector types are created using ``neon_vector_type`` and
     return v;
   }
 
+GCC vector types are created using the ``vector_size(N)`` attribute.  The
+argument ``N`` specifies the number of bytes that will be allocated for an
+object of this type.  The size has to be multiple of the size of the vector
+element type. For example:
+
+.. code-block:: c++
+
+  // OK: This declares a vector type with four 'int' elements
+  typedef int int4 __attribute__((vector_size(4 * sizeof(int))));
+
+  // ERROR: '11' is not a multiple of sizeof(int)
+  typedef int int_impossible __attribute__((vector_size(11)));
+
+  int4 foo(int4 a) {
+    int4 v;
+    v = a;
+    return v;
+  }
+
+
+Boolean Vectors
+---------------
+
+Unlike GCC, Clang also allows the attribute to be used with boolean
+element types. For example:
+
+.. code-block:: c++
+
+  // legal for Clang, error for GCC:
+  typedef bool bool8 __attribute__((vector_size(1)));
+  // Objects of bool8 type hold 8 bits, sizeof(bool8) == 1
+
+  typedef bool bool32 __attribute__((vector_size(4)));
+  // Objects of bool32 type hold 32 bits, sizeof(bool32) == 4
+
+  bool8 foo(bool8 a) {
+    bool8 v;
+    v = a;
+    return v;
+  }
+
+Boolean vectors are a Clang extension of the GCC vector type.  Boolean vectors
+are intended, though not guaranteed, to map to vector mask registers.  The size
+parameter of a boolean vector type is the number of bytes in the vector.  The
+number of elements in a boolean vector of a given size depends on the target.
+For most targets, the boolean vector is dense and each bit in the boolean
+vector is one vector element.  However, some targets (eg Hexagon hvx64), use
+one byte per boolean element.
+
+The semantics of boolean vectors differs from the GCC vector of integer or
+floating point type.  This is mostly because bits are smaller than the smallest
+addressable unit in memory on most architectures.  The semantics of boolean
+vectors borrows from C bit-fields with the following differences:
+
+* Distinct boolean vectors are always distinct memory objects (there is no
+  packing).
+* Only the operators `!`, `~`, `|`, `&`, `^` and comparison are allowed on
+  boolean vectors.
+
+The memory representation of a dense boolean vector is the smallest fitting
+integer.  The alignment is the number of bits rounded up to the next
+power-of-two but at most the maximum vector alignment of the target.  This
+permits the use of boolean vectors whose element count is a power of two in
+allocated arrays using the common ``sizeof(Array)/sizeof(ElementType)``
+pattern.
+
+
 Vector Literals
 ---------------
 
@@ -484,6 +551,7 @@ C-style cast                     yes     yes       yes         no
 reinterpret_cast                 yes     no        yes         no
 static_cast                      yes     no        yes         no
 const_cast                       no      no        no          no
+address &v[i]                    no      no        no [#]_     no
 ============================== ======= ======= ============= =======
 
 See also :ref:`langext-__builtin_shufflevector`, :ref:`langext-__builtin_convertvector`.
@@ -493,6 +561,9 @@ See also :ref:`langext-__builtin_shufflevector`, :ref:`langext-__builtin_convert
   it's only available in C++ and uses normal bool conversions (that is, != 0).
   If it's an extension (OpenCL) vector, it's only available in C and OpenCL C.
   And it selects base on signedness of the condition operands (OpenCL v1.1 s6.3.9).
+.. [#] Clang does not allow the address of an element to be taken while GCC
+   allows this. This is intentional for vectors with a boolean element type and
+   not implemented otherwise.
 
 Matrix Types
 ============
@@ -1719,6 +1790,9 @@ This extension also works in C++ mode, as far as that goes, but does not apply
 to the C++ ``std::complex``.  (In C++11, list initialization allows the same
 syntax to be used with ``std::complex`` with the same meaning.)
 
+For GCC compatibility, ``__builtin_complex(re, im)`` can also be used to
+construct a complex number from the given real and imaginary components.
+
 Builtin Functions
 =================
 
@@ -1807,8 +1881,6 @@ Query for this feature with ``__has_builtin(__builtin_readcyclecounter)``. Note
 that even if present, its use may depend on run-time privilege or other OS
 controlled state.
 
-.. _langext-__builtin_shufflevector:
-
 ``__builtin_dump_struct``
 -------------------------
 
@@ -1854,6 +1926,8 @@ structure and their values for debugging purposes. The builtin accepts a pointer
 to a structure to dump the fields of, and a pointer to a formatted output
 function whose signature must be: ``int (*)(const char *, ...)`` and must
 support the format specifiers used by ``printf()``.
+
+.. _langext-__builtin_shufflevector:
 
 ``__builtin_shufflevector``
 ---------------------------
@@ -1981,7 +2055,7 @@ Query for this feature with ``__has_builtin(__builtin_convertvector)``.
 
 The '``__builtin_bitreverse``' family of builtins is used to reverse
 the bitpattern of an integer value; for example ``0b10110110`` becomes
-``0b01101101``.
+``0b01101101``. These builtins can be used within constant expressions.
 
 ``__builtin_rotateleft``
 ------------------------
@@ -2013,7 +2087,8 @@ the bits in the first argument by the amount in the second argument.
 For example, ``0b10000110`` rotated left by 11 becomes ``0b00110100``.
 The shift value is treated as an unsigned amount modulo the size of
 the arguments. Both arguments and the result have the bitwidth specified
-by the name of the builtin.
+by the name of the builtin. These builtins can be used within constant
+expressions.
 
 ``__builtin_rotateright``
 -------------------------
@@ -2045,7 +2120,8 @@ the bits in the first argument by the amount in the second argument.
 For example, ``0b10000110`` rotated right by 3 becomes ``0b11010000``.
 The shift value is treated as an unsigned amount modulo the size of
 the arguments. Both arguments and the result have the bitwidth specified
-by the name of the builtin.
+by the name of the builtin. These builtins can be used within constant
+expressions.
 
 ``__builtin_unreachable``
 -------------------------
@@ -3598,3 +3674,90 @@ and alignment as the smallest basic type that can contain them. Types that are l
 than 64 bits are handled in the same way as _int128 is handled; they are conceptually
 treated as struct of register size chunks. They number of chunks are the smallest
 number that can contain the types which does not necessarily mean a power-of-2 size.
+
+Intrinsics Support within Constant Expressions
+==============================================
+
+The following builtin intrinsics can be used in constant expressions:
+
+* ``__builtin_bitreverse8``
+* ``__builtin_bitreverse16``
+* ``__builtin_bitreverse32``
+* ``__builtin_bitreverse64``
+* ``__builtin_bswap16``
+* ``__builtin_bswap32``
+* ``__builtin_bswap64``
+* ``__builtin_clrsb``
+* ``__builtin_clrsbl``
+* ``__builtin_clrsbll``
+* ``__builtin_clz``
+* ``__builtin_clzl``
+* ``__builtin_clzll``
+* ``__builtin_clzs``
+* ``__builtin_ctz``
+* ``__builtin_ctzl``
+* ``__builtin_ctzll``
+* ``__builtin_ctzs``
+* ``__builtin_ffs``
+* ``__builtin_ffsl``
+* ``__builtin_ffsll``
+* ``__builtin_fpclassify``
+* ``__builtin_inf``
+* ``__builtin_isinf``
+* ``__builtin_isinf_sign``
+* ``__builtin_isfinite``
+* ``__builtin_isnan``
+* ``__builtin_isnormal``
+* ``__builtin_nan``
+* ``__builtin_nans``
+* ``__builtin_parity``
+* ``__builtin_parityl``
+* ``__builtin_parityll``
+* ``__builtin_popcount``
+* ``__builtin_popcountl``
+* ``__builtin_popcountll``
+* ``__builtin_rotateleft8``
+* ``__builtin_rotateleft16``
+* ``__builtin_rotateleft32``
+* ``__builtin_rotateleft64``
+* ``__builtin_rotateright8``
+* ``__builtin_rotateright16``
+* ``__builtin_rotateright32``
+* ``__builtin_rotateright64``
+
+The following x86-specific intrinsics can be used in constant expressions:
+
+* ``_bit_scan_forward``
+* ``_bit_scan_reverse``
+* ``__bsfd``
+* ``__bsfq``
+* ``__bsrd``
+* ``__bsrq``
+* ``__bswap``
+* ``__bswapd``
+* ``__bswap64``
+* ``__bswapq``
+* ``_castf32_u32``
+* ``_castf64_u64``
+* ``_castu32_f32``
+* ``_castu64_f64``
+* ``_mm_popcnt_u32``
+* ``_mm_popcnt_u64``
+* ``_popcnt32``
+* ``_popcnt64``
+* ``__popcntd``
+* ``__popcntq``
+* ``__rolb``
+* ``__rolw``
+* ``__rold``
+* ``__rolq``
+* ``__rorb``
+* ``__rorw``
+* ``__rord``
+* ``__rorq``
+* ``_rotl``
+* ``_rotr``
+* ``_rotwl``
+* ``_rotwr``
+* ``_lrotl``
+* ``_lrotr``

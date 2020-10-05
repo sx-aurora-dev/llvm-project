@@ -177,7 +177,7 @@ public:
 
   /// Creating related types.
   /// \{
-  CompilerType GetArrayElementType(uint64_t *stride = nullptr) const;
+  CompilerType GetArrayElementType(ExecutionContextScope *exe_scope) const;
 
   CompilerType GetArrayType(uint64_t size) const;
 
@@ -383,7 +383,8 @@ public:
   /// \}
 
   bool GetValueAsScalar(const DataExtractor &data, lldb::offset_t data_offset,
-                        size_t data_byte_size, Scalar &value) const;
+                        size_t data_byte_size, Scalar &value,
+                        ExecutionContextScope *exe_scope) const;
   void Clear() {
     m_type = nullptr;
     m_type_system = nullptr;

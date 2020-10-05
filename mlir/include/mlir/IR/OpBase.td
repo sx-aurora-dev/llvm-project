@@ -144,7 +144,7 @@ class Concat<string pre, Pred child, string suf> :
 // Constraint definitions
 //===----------------------------------------------------------------------===//
 
-// TODO(b/130064155): Merge Constraints into Pred.
+// TODO: Merge Constraints into Pred.
 
 // Base class for named constraints.
 //
@@ -244,6 +244,11 @@ class Dialect {
   // The description of the dialect.
   string description = ?;
 
+  // A list of dialects this dialect will load on construction as dependencies.
+  // These are dialects that this dialect may involved in canonicalization
+  // pattern or interfaces.
+  list<string> dependentDialects = [];
+
   // The C++ namespace that ops of this dialect should be placed into.
   //
   // By default, uses the name of the dialect as the only namespace. To avoid
@@ -314,8 +319,8 @@ class Optional<Type type> : TypeConstraint<type.predicate, type.description> {
 // Note that this does not "inherit" from Type because it would require
 // duplicating Type subclasses for buildable and non-buildable cases to avoid
 // diamond "inheritance".
-// TODO(zinenko): we may extend this to a more general 'Buildable' trait,
-// making some Types and some Attrs buildable.
+// TODO: we may extend this to a more general 'Buildable' trait, making some
+// Types and some Attrs buildable.
 class BuildableType<code builder> {
   // The builder call to invoke (if specified) to construct the BuildableType.
   code builderCall = builder;
@@ -578,7 +583,7 @@ def AnyRankedTensor :
   ShapedContainerType<[AnyType], And<[IsTensorTypePred, HasRankPred]>,
   "ranked tensor">;
 
-// TODO(b/130064155) Have an easy way to add another constraint to a type.
+// TODO: Have an easy way to add another constraint to a type.
 class StaticShapeTensorOf<list<Type> allowedTypes>
     : Type<And<[TensorOf<allowedTypes>.predicate, HasStaticShapePred]>,
            "statically shaped " # TensorOf<allowedTypes>.description>;
@@ -636,7 +641,7 @@ def F16MemRef  : MemRefOf<[F16]>;
 def F32MemRef  : MemRefOf<[F32]>;
 def F64MemRef  : MemRefOf<[F64]>;
 
-// TODO(b/130064155) Have an easy way to add another constraint to a type.
+// TODO: Have an easy way to add another constraint to a type.
 class MemRefRankOf<list<Type> allowedTypes, list<int> ranks> :
     Type<And<[MemRefOf<allowedTypes>.predicate, HasAnyRankOfPred<ranks>]>,
          StrJoin<!foreach(rank, ranks, rank # "D"), "/">.result # " " #
@@ -899,12 +904,24 @@ class SignlessIntegerAttrBase<I attrValType, string descr> :
       descr> {
   let returnType = [{ ::llvm::APInt }];
 }
+// Base class for signless integer attributes of fixed width that have a
+// correpsonding C++ type.
+class TypedSignlessIntegerAttrBase<I attrValType, string retType, string descr>
+    : SignlessIntegerAttrBase<attrValType, descr> {
+  let returnType = retType;
+  let convertFromStorage = "$_self.getValue().getZExtValue()";
+}
 
-def I1Attr  : SignlessIntegerAttrBase<I1,  "1-bit signless integer attribute">;
-def I8Attr  : SignlessIntegerAttrBase<I8,  "8-bit signless integer attribute">;
-def I16Attr : SignlessIntegerAttrBase<I16, "16-bit signless integer attribute">;
-def I32Attr : SignlessIntegerAttrBase<I32, "32-bit signless integer attribute">;
-def I64Attr : SignlessIntegerAttrBase<I64, "64-bit signless integer attribute">;
+def I1Attr  : TypedSignlessIntegerAttrBase<
+    I1,  "bool",     "1-bit signless integer attribute">;
+def I8Attr  : TypedSignlessIntegerAttrBase<
+    I8,  "uint8_t",  "8-bit signless integer attribute">;
+def I16Attr : TypedSignlessIntegerAttrBase<
+    I16, "uint16_t", "16-bit signless integer attribute">;
+def I32Attr : TypedSignlessIntegerAttrBase<
+    I32, "uint32_t", "32-bit signless integer attribute">;
+def I64Attr : TypedSignlessIntegerAttrBase<
+    I64, "uint64_t", "64-bit signless integer attribute">;
 
 // Base class for signed integer attributes of fixed width.
 class SignedIntegerAttrBase<SI attrValType, string descr> :
@@ -916,17 +933,24 @@ class SignedIntegerAttrBase<SI attrValType, string descr> :
       descr> {
   let returnType = [{ ::llvm::APInt }];
 }
+// Base class for signed integer attributes of fixed width that have a
+// correpsonding C++ type.
+class TypedSignedIntegerAttrBase<SI attrValType, string retType, string descr>
+    : SignedIntegerAttrBase<attrValType, descr> {
+  let returnType = retType;
+  let convertFromStorage = "$_self.getValue().getSExtValue()";
+}
 
-def SI1Attr  : SignedIntegerAttrBase<
-    SI1,  "1-bit signed integer attribute">;
-def SI8Attr  : SignedIntegerAttrBase<
-    SI8,  "8-bit signed integer attribute">;
-def SI16Attr : SignedIntegerAttrBase<
-    SI16, "16-bit signed integer attribute">;
-def SI32Attr : SignedIntegerAttrBase<
-    SI32, "32-bit signed integer attribute">;
-def SI64Attr : SignedIntegerAttrBase<
-    SI64, "64-bit signed integer attribute">;
+def SI1Attr  : TypedSignedIntegerAttrBase<
+    SI1,  "bool",    "1-bit signed integer attribute">;
+def SI8Attr  : TypedSignedIntegerAttrBase<
+    SI8,  "int8_t",  "8-bit signed integer attribute">;
+def SI16Attr : TypedSignedIntegerAttrBase<
+    SI16, "int16_t", "16-bit signed integer attribute">;
+def SI32Attr : TypedSignedIntegerAttrBase<
+    SI32, "int32_t", "32-bit signed integer attribute">;
+def SI64Attr : TypedSignedIntegerAttrBase<
+    SI64, "int64_t", "64-bit signed integer attribute">;
 
 // Base class for unsigned integer attributes of fixed width.
 class UnsignedIntegerAttrBase<UI attrValType, string descr> :
@@ -938,17 +962,24 @@ class UnsignedIntegerAttrBase<UI attrValType, string descr> :
       descr> {
   let returnType = [{ ::llvm::APInt }];
 }
+// Base class for unsigned integer attributes of fixed width that have a
+// correpsonding C++ type.
+class TypedUnsignedIntegerAttrBase<UI attrValType, string retType, string descr>
+    : UnsignedIntegerAttrBase<attrValType, descr> {
+  let returnType = retType;
+  let convertFromStorage = "$_self.getValue().getZExtValue()";
+}
 
-def UI1Attr  : UnsignedIntegerAttrBase<
-    UI1,  "1-bit unsigned integer attribute">;
-def UI8Attr  : UnsignedIntegerAttrBase<
-    UI8,  "8-bit unsigned integer attribute">;
-def UI16Attr : UnsignedIntegerAttrBase<
-    UI16, "16-bit unsigned integer attribute">;
-def UI32Attr : UnsignedIntegerAttrBase<
-    UI32, "32-bit unsigned integer attribute">;
-def UI64Attr : UnsignedIntegerAttrBase<
-    UI64, "64-bit unsigned integer attribute">;
+def UI1Attr  : TypedUnsignedIntegerAttrBase<
+    UI1,  "bool",     "1-bit unsigned integer attribute">;
+def UI8Attr  : TypedUnsignedIntegerAttrBase<
+    UI8,  "uint8_t",  "8-bit unsigned integer attribute">;
+def UI16Attr : TypedUnsignedIntegerAttrBase<
+    UI16, "uint16_t", "16-bit unsigned integer attribute">;
+def UI32Attr : TypedUnsignedIntegerAttrBase<
+    UI32, "uint32_t", "32-bit unsigned integer attribute">;
+def UI64Attr : TypedUnsignedIntegerAttrBase<
+    UI64, "uint64_t", "64-bit unsigned integer attribute">;
 
 // Base class for float attributes of fixed width.
 class FloatAttrBase<F attrValType, string descr> :
@@ -973,6 +1004,10 @@ class StringBasedAttr<Pred condition, string descr> : Attr<condition, descr> {
 
 def StrAttr : StringBasedAttr<CPred<"$_self.isa<::mlir::StringAttr>()">,
                               "string attribute">;
+
+// A string attribute that represents the name of a symbol.
+def SymbolNameAttr : StringBasedAttr<CPred<"$_self.isa<::mlir::StringAttr>()">,
+                                     "string attribute">;
 
 // String attribute that has a specific value type.
 class TypedStrAttr<Type ty>
@@ -1083,7 +1118,7 @@ class EnumAttrInfo<string name, list<EnumAttrCaseInfo> cases> {
   // use "::" as the delimiter, e.g., given "A::B", generated code will be
   // placed in `namespace A { namespace B { ... } }`. To avoid placing in any
   // namespace, use "".
-  // TODO(b/134741431): use dialect to provide the namespace.
+  // TODO: use dialect to provide the namespace.
   string cppNamespace = "";
 
   // The name of the utility function that converts a value of the underlying
@@ -1211,7 +1246,7 @@ class DictionaryAttrBase<Pred condition, string description> :
   let convertFromStorage = "$_self";
 }
 
-def DictionaryAttr 
+def DictionaryAttr
     : DictionaryAttrBase<CPred<"$_self.isa<::mlir::DictionaryAttr>()">,
                                "dictionary of named attribute values">;
 
@@ -1585,7 +1620,7 @@ def IsNullAttr : AttrConstraint<
 // An attribute constraint on FlatSymbolRefAttr that requires that the
 // reference point to an op of `opClass` within the closest parent with a symbol
 // table.
-// TODO(riverriddle) Add support for nested symbol references.
+// TODO: Add support for nested symbol references.
 class ReferToOp<string opClass> : AttrConstraint<
     CPred<"isa_and_nonnull<" # opClass # ">("
             "::mlir::SymbolTable::lookupNearestSymbolFrom("
@@ -1693,6 +1728,9 @@ def SameOperandsAndResultElementType :
   NativeOpTrait<"SameOperandsAndResultElementType">;
 // Op is a terminator.
 def Terminator : NativeOpTrait<"IsTerminator">;
+// Op can be safely normalized in the presence of MemRefs with
+// non-identity maps.
+def MemRefsNormalizable : NativeOpTrait<"MemRefsNormalizable">;
 
 // Op's regions have a single block with the specified terminator.
 class SingleBlockImplicitTerminator<string op>
@@ -1711,8 +1749,8 @@ class ParentOneOf<list<string> ops>
 def FirstAttrDerivedResultType :
   GenInternalOpTrait<"FirstAttrDerivedResultType">;
 
-// TODO(antiagainst): Turn the following into normal traits and generate
-// verification for them.
+// TODO: Turn the following into normal traits and generate verification for
+// them.
 
 // All variadic operands of the op have the same number of values.
 // A variadic operand contains an array of values whose array size is only
@@ -1736,6 +1774,9 @@ def AttrSizedOperandSegments : NativeOpTrait<"AttrSizedOperandSegments">;
 // Similar to AttrSizedOperandSegments, but used for results. The attribute
 // should be named as `result_segment_sizes`.
 def AttrSizedResultSegments  : NativeOpTrait<"AttrSizedResultSegments">;
+
+// Op attached regions have no arguments
+def NoRegionArguments : NativeOpTrait<"NoRegionArguments">;
 
 //===----------------------------------------------------------------------===//
 // OpInterface definitions
@@ -1800,6 +1841,12 @@ class Interface<string name> {
   // The name given to the c++ interface class.
   string cppClassName = name;
 
+  // The C++ namespace that this interface should be placed into.
+  //
+  // To specify nested namespaces, use "::" as the delimiter, e.g., given
+  // "A::B", ops will be placed in `namespace A { namespace B { <def> } }`.
+  string cppNamespace = "";
+
   // The list of methods defined by this interface.
   list<InterfaceMethod> methods = [];
 
@@ -1835,6 +1882,7 @@ class DeclareOpInterfaceMethods<OpInterface interface,
       : OpInterface<interface.cppClassName> {
     let description = interface.description;
     let cppClassName = interface.cppClassName;
+    let cppNamespace = interface.cppNamespace;
     let methods = interface.methods;
 
     // This field contains a set of method names that should always have their
@@ -1977,9 +2025,9 @@ class Op<Dialect dialect, string mnemonic, list<OpTrait> props = []> {
   code verifier = ?;
 
   // Whether this op has associated canonicalization patterns.
-  // TODO(b/120163349): figure out a better way to write canonicalization
-  // patterns in TableGen rules directly instead of using this marker
-  // and C++ implementations.
+  // TODO: figure out a better way to write canonicalization patterns in
+  // TableGen rules directly instead of using this marker and C++
+  // implementations.
   bit hasCanonicalizer = 0;
 
   // Whether this op has a folder.
@@ -2021,7 +2069,7 @@ def HasNoUseOf: Constraint<
 
 // These traits often require including "mlir/IR/TypeUtilities.h".
 
-// TODO(b/135033717): Improve the autogenerated error messages.
+// TODO: Improve the autogenerated error messages.
 
 class Rank<string name> :
     StrFunc<"$" # name # ".getType().cast<::mlir::ShapedType>().getRank()">;
@@ -2042,7 +2090,7 @@ class AllMatchPred<list<string> values> :
 class AllMatch<list<string> values, string description> :
     PredOpTrait<description, AllMatchPred<values>>;
 
-// TODO(b/135032064): Only works for non-variadic.
+// TODO: Only works for non-variadic.
 class AllMatchSameOperatorPred<list<string> names, string operator> :
     AllMatchPred<!foreach(n, names, !subst("$_self", "$" # n, operator))>;
 

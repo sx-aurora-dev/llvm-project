@@ -386,8 +386,20 @@ define void @f65() null_pointer_is_valid
   ret void;
 }
 
-; CHECK: define <8 x double> @f66(<8 x double> passthru %0, <8 x i1> mask %1, i32 vlen %2) {
-define <8 x double> @f66(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
+; CHECK: define noundef i32 @f66(i32 noundef %a)
+define noundef i32 @f66(i32 noundef %a)
+{
+  ret i32 %a
+}
+
+; CHECK: define void @f67(i32* byref(i32) %a)
+define void @f67(i32* byref(i32) %a)
+{
+  ret void
+}
+
+; CHECK: define <8 x double> @f68(<8 x double> passthru %0, <8 x i1> mask %1, i32 vlen %2) {
+define <8 x double> @f68(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
   ret <8 x double> undef
 }
 

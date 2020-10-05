@@ -36,5 +36,8 @@ for i in "$@"; do
         -e '/^source_filename = /d' \
         -e '/^target datalayout =/d' \
         -e '/^target triple =/d' $i
+    # shrink multiple empty lines
     sed -i -e '/^$/N;/^\n$/D' $i
+    # remove trailing empty lines
+    sed -i -e :a -e '/^\n*$/{$d;N;};/\n$/ba' $i
 done

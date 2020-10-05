@@ -110,6 +110,7 @@ Optional<MemoryBufferRef> elf::readFile(StringRef path) {
     path = saver.save(config->chroot + path);
 
   log(path);
+  config->dependencyFiles.insert(llvm::CachedHashString(path));
 
   auto mbOrErr = MemoryBuffer::getFile(path, -1, false);
   if (auto ec = mbOrErr.getError()) {
@@ -632,6 +633,8 @@ void ObjFile<ELFT>::initializeSections(bool ignoreComdats) {
       break;
     case SHT_SYMTAB:
     case SHT_STRTAB:
+    case SHT_REL:
+    case SHT_RELA:
     case SHT_NULL:
       break;
     default:
@@ -639,22 +642,34 @@ void ObjFile<ELFT>::initializeSections(bool ignoreComdats) {
     }
   }
 
-  // This block handles SHF_LINK_ORDER.
+  // We have a second loop. It is used to:
+  // 1) handle SHF_LINK_ORDER sections.
+  // 2) create SHT_REL[A] sections. In some cases the section header index of a
+  //    relocation section may be smaller than that of the relocated section. In
+  //    such cases, the relocation section would attempt to reference a target
+  //    section that has not yet been created. For simplicity, delay creation of
+  //    relocation sections until now.
   for (size_t i = 0, e = objSections.size(); i < e; ++i) {
     if (this->sections[i] == &InputSection::discarded)
       continue;
     const Elf_Shdr &sec = objSections[i];
-    if (!(sec.sh_flags & SHF_LINK_ORDER))
+
+    if (sec.sh_type == SHT_REL || sec.sh_type == SHT_RELA)
+      this->sections[i] = createInputSection(sec);
+
+    // A SHF_LINK_ORDER section with sh_link=0 is handled as if it did not have
+    // the flag.
+    if (!(sec.sh_flags & SHF_LINK_ORDER) || !sec.sh_link)
       continue;
 
-    // .ARM.exidx sections have a reverse dependency on the InputSection they
-    // have a SHF_LINK_ORDER dependency, this is identified by the sh_link.
     InputSectionBase *linkSec = nullptr;
     if (sec.sh_link < this->sections.size())
       linkSec = this->sections[sec.sh_link];
     if (!linkSec)
       fatal(toString(this) + ": invalid sh_link index: " + Twine(sec.sh_link));
 
+    // A SHF_LINK_ORDER section is discarded if its linked-to section is
+    // discarded.
     InputSection *isec = cast<InputSection>(this->sections[i]);
     linkSec->dependentSections.push_back(isec);
     if (!isa<InputSection>(linkSec))
@@ -765,20 +780,21 @@ static void updateSupportedARMFeatures(const ARMAttributeParser &attributes) {
 // of zero or more type-length-value fields. We want to find a field of a
 // certain type. It seems a bit too much to just store a 32-bit value, perhaps
 // the ABI is unnecessarily complicated.
-template <class ELFT>
-static uint32_t readAndFeatures(ObjFile<ELFT> *obj, ArrayRef<uint8_t> data) {
+template <class ELFT> static uint32_t readAndFeatures(const InputSection &sec) {
   using Elf_Nhdr = typename ELFT::Nhdr;
   using Elf_Note = typename ELFT::Note;
 
   uint32_t featuresSet = 0;
+  ArrayRef<uint8_t> data = sec.data();
+  auto reportFatal = [&](const uint8_t *place, const char *msg) {
+    fatal(toString(sec.file) + ":(" + sec.name + "+0x" +
+          Twine::utohexstr(place - sec.data().data()) + "): " + msg);
+  };
   while (!data.empty()) {
     // Read one NOTE record.
-    if (data.size() < sizeof(Elf_Nhdr))
-      fatal(toString(obj) + ": .note.gnu.property: section too short");
-
     auto *nhdr = reinterpret_cast<const Elf_Nhdr *>(data.data());
-    if (data.size() < nhdr->getSize())
-      fatal(toString(obj) + ": .note.gnu.property: section too short");
+    if (data.size() < sizeof(Elf_Nhdr) || data.size() < nhdr->getSize())
+      reportFatal(data.data(), "data is too short");
 
     Elf_Note note(*nhdr);
     if (nhdr->n_type != NT_GNU_PROPERTY_TYPE_0 || note.getName() != "GNU") {
@@ -793,25 +809,26 @@ static uint32_t readAndFeatures(ObjFile<ELFT> *obj, ArrayRef<uint8_t> data) {
     // Read a body of a NOTE record, which consists of type-length-value fields.
     ArrayRef<uint8_t> desc = note.getDesc();
     while (!desc.empty()) {
+      const uint8_t *place = desc.data();
       if (desc.size() < 8)
-        fatal(toString(obj) + ": .note.gnu.property: section too short");
-
-      uint32_t type = read32le(desc.data());
-      uint32_t size = read32le(desc.data() + 4);
+        reportFatal(place, "program property is too short");
+      uint32_t type = read32<ELFT::TargetEndianness>(desc.data());
+      uint32_t size = read32<ELFT::TargetEndianness>(desc.data() + 4);
+      desc = desc.slice(8);
+      if (desc.size() < size)
+        reportFatal(place, "program property is too short");
 
       if (type == featureAndType) {
         // We found a FEATURE_1_AND field. There may be more than one of these
         // in a .note.gnu.property section, for a relocatable object we
         // accumulate the bits set.
-        featuresSet |= read32le(desc.data() + 8);
+        if (size < 4)
+          reportFatal(place, "FEATURE_1_AND entry is too short");
+        featuresSet |= read32<ELFT::TargetEndianness>(desc.data());
       }
 
-      // On 64-bit, a payload may be followed by a 4-byte padding to make its
-      // size a multiple of 8.
-      if (ELFT::Is64Bits)
-        size = alignTo(size, 8);
-
-      desc = desc.slice(size + 8); // +8 for Type and Size
+      // Padding is present in the note descriptor, if necessary.
+      desc = desc.slice(alignTo<(ELFT::Is64Bits ? 8 : 4)>(size));
     }
 
     // Go to next NOTE record to look for more FEATURE_1_AND descriptions.
@@ -914,20 +931,6 @@ InputSectionBase *ObjFile<ELFT>::createInputSection(const Elf_Shdr &sec) {
       this->sections[sec.sh_info] = target;
     }
 
-    // This section contains relocation information.
-    // If -r is given, we do not interpret or apply relocation
-    // but just copy relocation sections to output.
-    if (config->relocatable) {
-      InputSection *relocSec = make<InputSection>(*this, sec, name);
-      // We want to add a dependency to target, similar like we do for
-      // -emit-relocs below. This is useful for the case when linker script
-      // contains the "/DISCARD/". It is perhaps uncommon to use a script with
-      // -r, but we faced it in the Linux kernel and have to handle such case
-      // and not to crash.
-      target->dependentSections.push_back(relocSec);
-      return relocSec;
-    }
-
     if (target->firstRelocation)
       fatal(toString(this) +
             ": multiple relocation sections to one section are not supported");
@@ -945,17 +948,17 @@ InputSectionBase *ObjFile<ELFT>::createInputSection(const Elf_Shdr &sec) {
     }
     assert(isUInt<31>(target->numRelocations));
 
-    // Relocation sections processed by the linker are usually removed
-    // from the output, so returning `nullptr` for the normal case.
-    // However, if -emit-relocs is given, we need to leave them in the output.
-    // (Some post link analysis tools need this information.)
-    if (config->emitRelocs) {
-      InputSection *relocSec = make<InputSection>(*this, sec, name);
-      // We will not emit relocation section if target was discarded.
-      target->dependentSections.push_back(relocSec);
-      return relocSec;
-    }
-    return nullptr;
+    // Relocation sections are usually removed from the output, so return
+    // `nullptr` for the normal case. However, if -r or --emit-relocs is
+    // specified, we need to copy them to the output. (Some post link analysis
+    // tools specify --emit-relocs to obtain the information.)
+    if (!config->relocatable && !config->emitRelocs)
+      return nullptr;
+    InputSection *relocSec = make<InputSection>(*this, sec, name);
+    // If the relocated section is discarded (due to /DISCARD/ or
+    // --gc-sections), the relocation section should be discarded as well.
+    target->dependentSections.push_back(relocSec);
+    return relocSec;
   }
   }
 
@@ -984,8 +987,7 @@ InputSectionBase *ObjFile<ELFT>::createInputSection(const Elf_Shdr &sec) {
   // .note.gnu.property containing a single AND'ed bitmap, we discard an input
   // file's .note.gnu.property section.
   if (name == ".note.gnu.property") {
-    ArrayRef<uint8_t> contents = check(this->getObj().getSectionContents(&sec));
-    this->andFeatures = readAndFeatures(this, contents);
+    this->andFeatures = readAndFeatures<ELFT>(InputSection(*this, sec, name));
     return &InputSection::discarded;
   }
 

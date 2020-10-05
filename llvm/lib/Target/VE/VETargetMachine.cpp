@@ -12,7 +12,6 @@
 #include "VETargetMachine.h"
 #include "TargetInfo/VETargetInfo.h"
 #include "VE.h"
-// #include "VETargetObjectFile.h"
 #include "VETargetTransformInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/TargetLoweringObjectFileImpl.h"

@@ -878,6 +878,7 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       case Attribute::NoMerge:
       case Attribute::NoReturn:
       case Attribute::NoSync:
+      case Attribute::NoUndef:
       case Attribute::None:
       case Attribute::NonNull:
       case Attribute::Passthru:
@@ -897,6 +898,7 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       case Attribute::WriteOnly:
       case Attribute::ZExt:
       case Attribute::ImmArg:
+      case Attribute::ByRef:
       case Attribute::EndAttrKinds:
       case Attribute::EmptyKey:
       case Attribute::TombstoneKey:

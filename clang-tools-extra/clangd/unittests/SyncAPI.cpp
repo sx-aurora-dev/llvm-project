@@ -112,26 +112,6 @@ runFormatFile(ClangdServer &Server, PathRef File, StringRef Code) {
   return std::move(*Result);
 }
 
-std::string runDumpAST(ClangdServer &Server, PathRef File) {
-  llvm::Optional<std::string> Result;
-  Server.dumpAST(File, capture(Result));
-  return std::move(*Result);
-}
-
-llvm::Expected<std::vector<SymbolInformation>>
-runWorkspaceSymbols(ClangdServer &Server, llvm::StringRef Query, int Limit) {
-  llvm::Optional<llvm::Expected<std::vector<SymbolInformation>>> Result;
-  Server.workspaceSymbols(Query, Limit, capture(Result));
-  return std::move(*Result);
-}
-
-llvm::Expected<std::vector<DocumentSymbol>>
-runDocumentSymbols(ClangdServer &Server, PathRef File) {
-  llvm::Optional<llvm::Expected<std::vector<DocumentSymbol>>> Result;
-  Server.documentSymbols(File, capture(Result));
-  return std::move(*Result);
-}
-
 SymbolSlab runFuzzyFind(const SymbolIndex &Index, llvm::StringRef Query) {
   FuzzyFindRequest Req;
   Req.Query = std::string(Query);
@@ -166,6 +146,21 @@ runSwitchHeaderSource(ClangdServer &Server, PathRef File) {
   llvm::Optional<llvm::Expected<llvm::Optional<clangd::Path>>> Result;
   Server.switchSourceHeader(File, capture(Result));
   return std::move(*Result);
+}
+
+llvm::Error runCustomAction(ClangdServer &Server, PathRef File,
+                            llvm::function_ref<void(InputsAndAST)> Action) {
+  llvm::Error Result = llvm::Error::success();
+  Notification Done;
+  Server.customAction(File, "Custom", [&](llvm::Expected<InputsAndAST> AST) {
+    if (!AST)
+      Result = AST.takeError();
+    else
+      Action(*AST);
+    Done.notify();
+  });
+  Done.wait();
+  return Result;
 }
 
 } // namespace clangd

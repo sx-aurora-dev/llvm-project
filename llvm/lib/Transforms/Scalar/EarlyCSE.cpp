@@ -288,6 +288,17 @@ static unsigned getHashValueImpl(SimpleValue Val) {
           isa<FreezeInst>(Inst)) &&
          "Invalid/unknown instruction");
 
+  // Handle intrinsics with commutative operands.
+  // TODO: Extend this to handle intrinsics with >2 operands where the 1st
+  //       2 operands are commutative.
+  auto *II = dyn_cast<IntrinsicInst>(Inst);
+  if (II && II->isCommutative() && II->getNumArgOperands() == 2) {
+    Value *LHS = II->getArgOperand(0), *RHS = II->getArgOperand(1);
+    if (LHS > RHS)
+      std::swap(LHS, RHS);
+    return hash_combine(II->getOpcode(), LHS, RHS);
+  }
+
   // Mix in the opcode.
   return hash_combine(
       Inst->getOpcode(),
@@ -338,6 +349,15 @@ static bool isEqualImpl(SimpleValue LHS, SimpleValue RHS) {
     return LHSCmp->getOperand(0) == RHSCmp->getOperand(1) &&
            LHSCmp->getOperand(1) == RHSCmp->getOperand(0) &&
            LHSCmp->getSwappedPredicate() == RHSCmp->getPredicate();
+  }
+
+  // TODO: Extend this for >2 args by matching the trailing N-2 args.
+  auto *LII = dyn_cast<IntrinsicInst>(LHSI);
+  auto *RII = dyn_cast<IntrinsicInst>(RHSI);
+  if (LII && RII && LII->getIntrinsicID() == RII->getIntrinsicID() &&
+      LII->isCommutative() && LII->getNumArgOperands() == 2) {
+    return LII->getArgOperand(0) == RII->getArgOperand(1) &&
+           LII->getArgOperand(1) == RII->getArgOperand(0);
   }
 
   // Min/max/abs can occur with commuted operands, non-canonical predicates,
@@ -620,8 +640,8 @@ private:
   public:
     StackNode(ScopedHTType &AvailableValues, LoadHTType &AvailableLoads,
               InvariantHTType &AvailableInvariants, CallHTType &AvailableCalls,
-              unsigned cg, DomTreeNode *n, DomTreeNode::iterator child,
-              DomTreeNode::iterator end)
+              unsigned cg, DomTreeNode *n, DomTreeNode::const_iterator child,
+              DomTreeNode::const_iterator end)
         : CurrentGeneration(cg), ChildGeneration(cg), Node(n), ChildIter(child),
           EndIter(end),
           Scopes(AvailableValues, AvailableLoads, AvailableInvariants,
@@ -635,7 +655,7 @@ private:
     unsigned childGeneration() { return ChildGeneration; }
     void childGeneration(unsigned generation) { ChildGeneration = generation; }
     DomTreeNode *node() { return Node; }
-    DomTreeNode::iterator childIter() { return ChildIter; }
+    DomTreeNode::const_iterator childIter() { return ChildIter; }
 
     DomTreeNode *nextChild() {
       DomTreeNode *child = *ChildIter;
@@ -643,7 +663,7 @@ private:
       return child;
     }
 
-    DomTreeNode::iterator end() { return EndIter; }
+    DomTreeNode::const_iterator end() { return EndIter; }
     bool isProcessed() { return Processed; }
     void process() { Processed = true; }
 
@@ -651,8 +671,8 @@ private:
     unsigned CurrentGeneration;
     unsigned ChildGeneration;
     DomTreeNode *Node;
-    DomTreeNode::iterator ChildIter;
-    DomTreeNode::iterator EndIter;
+    DomTreeNode::const_iterator ChildIter;
+    DomTreeNode::const_iterator EndIter;
     NodeScope Scopes;
     bool Processed = false;
   };

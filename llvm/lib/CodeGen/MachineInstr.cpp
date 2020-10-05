@@ -147,6 +147,10 @@ MachineInstr::MachineInstr(MachineFunction &MF, const MachineInstr &MI)
   setFlags(MI.Flags);
 }
 
+void MachineInstr::moveBefore(MachineInstr *MovePos) {
+  MovePos->getParent()->splice(MovePos, getParent(), getIterator());
+}
+
 /// getRegInfo - If this instruction is embedded into a MachineFunction,
 /// return the MachineRegisterInfo object for the current function, otherwise
 /// return null.
@@ -1213,7 +1217,7 @@ bool MachineInstr::isSafeToMove(AAResults *AA, bool &SawStore) const {
 
   // See if this instruction does a load.  If so, we have to guarantee that the
   // loaded value doesn't change between the load and the its intended
-  // destination. The check for isInvariantLoad gives the targe the chance to
+  // destination. The check for isInvariantLoad gives the target the chance to
   // classify the load as always returning a constant, e.g. a constant pool
   // load.
   if (mayLoad() && !isDereferenceableInvariantLoad(AA))

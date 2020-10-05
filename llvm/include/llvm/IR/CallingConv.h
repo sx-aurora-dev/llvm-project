@@ -245,10 +245,6 @@ namespace CallingConv {
     /// function.
     VE_VEC_EXPF = 150,
 
-    /// Calling convention used for NEC SX-Aurora VE llvm_grow_stack intrinsic
-    /// function.
-    VE_LLVM_GROW_STACK = 151,
-
     /// The highest possible calling convention ID. Must be some 2^k - 1.
     MaxID = 1023
   };

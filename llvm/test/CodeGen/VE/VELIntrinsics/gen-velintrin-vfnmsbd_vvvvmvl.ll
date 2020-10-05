@@ -1,12 +1,12 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+velintrin | FileCheck %s
 ; ModuleID = 'gen/tests/vfnmsbd_vvvvmvl.c'
 source_filename = "gen/tests/vfnmsbd_vvvvmvl.c"
-target datalayout = "e-m:e-i64:64-n32:64-S64-v64:64:64-v128:64:64-v256:64:64-v512:64:64-v1024:64:64-v2048:64:64-v4096:64:64-v8192:64:64-v16384:64:64"
-target triple = "ve"
+target datalayout = "e-m:e-i64:64-n32:64-S128-v64:64:64-v128:64:64-v256:64:64-v512:64:64-v1024:64:64-v2048:64:64-v4096:64:64-v8192:64:64-v16384:64:64"
+target triple = "ve-unknown-linux-gnu"
 
 ; Function Attrs: nounwind
-define dso_local void @vfnmsbd_vvvvmvl(double*, double*, double*, double*, i32*, double*, i32) local_unnamed_addr #0 {
-; CHECK: vfnmsb.d %v4,%v0,%v1,%v2,%vm1
+define dso_local void @vfnmsbd_vvvvmvl(double* %0, double* %1, double* %2, double* %3, i32* %4, double* %5, i32 signext %6) local_unnamed_addr #0 {
+; CHECK: vfnmsb.d %v4, %v0, %v1, %v2, %vm1
   %8 = icmp sgt i32 %6, 0
   br i1 %8, label %10, label %9
 
@@ -32,11 +32,11 @@ define dso_local void @vfnmsbd_vvvvmvl(double*, double*, double*, double*, i32*,
   %26 = tail call <256 x double> @llvm.ve.vl.vld.vssl(i64 8, i8* %25, i32 %20)
   %27 = bitcast i32* %15 to i8*
   %28 = tail call <256 x double> @llvm.ve.vl.vldlzx.vssl(i64 4, i8* %27, i32 %20)
-  %29 = tail call <4 x i64> @llvm.ve.vl.vfmkwgt.mvl(<256 x double> %28, i32 %20)
+  %29 = tail call <256 x i1> @llvm.ve.vl.vfmkwgt.mvl(<256 x double> %28, i32 %20)
   %30 = bitcast double* %16 to i8*
   %31 = tail call <256 x double> @llvm.ve.vl.vld.vssl(i64 8, i8* %30, i32 %20)
   %32 = bitcast double* %11 to i8*
-  %33 = tail call <256 x double> @llvm.ve.vl.vfnmsbd.vvvvmvl(<256 x double> %22, <256 x double> %24, <256 x double> %26, <4 x i64> %29, <256 x double> %31, i32 %20)
+  %33 = tail call <256 x double> @llvm.ve.vl.vfnmsbd.vvvvmvl(<256 x double> %22, <256 x double> %24, <256 x double> %26, <256 x i1> %29, <256 x double> %31, i32 %20)
   tail call void @llvm.ve.vl.vst.vssl(<256 x double> %33, i64 8, i8* %32, i32 %20)
   %34 = getelementptr inbounds double, double* %11, i64 256
   %35 = getelementptr inbounds double, double* %12, i64 256
@@ -56,15 +56,15 @@ declare <256 x double> @llvm.ve.vl.vld.vssl(i64, i8*, i32) #1
 declare <256 x double> @llvm.ve.vl.vldlzx.vssl(i64, i8*, i32) #1
 
 ; Function Attrs: nounwind readnone
-declare <4 x i64> @llvm.ve.vl.vfmkwgt.mvl(<256 x double>, i32) #2
+declare <256 x i1> @llvm.ve.vl.vfmkwgt.mvl(<256 x double>, i32) #2
 
 ; Function Attrs: nounwind readnone
-declare <256 x double> @llvm.ve.vl.vfnmsbd.vvvvmvl(<256 x double>, <256 x double>, <256 x double>, <4 x i64>, <256 x double>, i32) #2
+declare <256 x double> @llvm.ve.vl.vfnmsbd.vvvvmvl(<256 x double>, <256 x double>, <256 x double>, <256 x i1>, <256 x double>, i32) #2
 
 ; Function Attrs: nounwind writeonly
 declare void @llvm.ve.vl.vst.vssl(<256 x double>, i64, i8*, i32) #3
 
-attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-frame-pointer-elim"="true" "no-frame-pointer-elim-non-leaf" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="false" "stack-protector-buffer-size"="8" "unsafe-fp-math"="false" "use-soft-float"="false" }
+attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "frame-pointer"="all" "less-precise-fpmad"="false" "min-legal-vector-width"="0" "no-infs-fp-math"="false" "no-jump-tables"="false" "no-nans-fp-math"="false" "no-signed-zeros-fp-math"="false" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-features"="-vec" "unsafe-fp-math"="false" "use-soft-float"="false" }
 attributes #1 = { nounwind readonly }
 attributes #2 = { nounwind readnone }
 attributes #3 = { nounwind writeonly }
@@ -73,4 +73,4 @@ attributes #3 = { nounwind writeonly }
 !llvm.ident = !{!1}
 
 !0 = !{i32 1, !"wchar_size", i32 4}
-!1 = !{!"clang version 9.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/clang.git 166ce7eaa48ef1c8891ad1012b2f5819d7674e19) (llvm/llvm.git 538e6ca3317a129b1e492a725935d84bb0a64c7f)"}
+!1 = !{!"clang version 12.0.0 (git@socsv218.svp.cl.nec.co.jp:ve-llvm/llvm-project.git ea1e45464a3c0492368cbabae9242628b03e399d)"}

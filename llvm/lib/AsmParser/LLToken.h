@@ -197,6 +197,7 @@ enum Kind {
   kw_naked,
   kw_nest,
   kw_noalias,
+  kw_noundef,
   kw_nobuiltin,
   kw_nocapture,
   kw_noduplicate,
@@ -242,6 +243,7 @@ enum Kind {
   kw_writeonly,
   kw_zeroext,
   kw_immarg,
+  kw_byref,
 
   kw_type,
   kw_opaque,

@@ -95,6 +95,7 @@ mkdir -p "${LLVM_BUILD_DIR}"
   xcrun cmake \
     -C "${MONOREPO_ROOT}/libcxx/cmake/caches/Apple.cmake" \
     -GNinja \
+    -DCMAKE_MAKE_PROGRAM="$(xcrun --find ninja)" \
     -DCMAKE_INSTALL_PREFIX="${LLVM_INSTALL_DIR}" \
     -DLLVM_ENABLE_PROJECTS="libcxx;libcxxabi" \
     -DCMAKE_OSX_ARCHITECTURES="x86_64" \
@@ -104,7 +105,7 @@ echo "@@@@@@"
 
 
 echo "@@@ Building and installing libc++ and libc++abi @@@"
-ninja -C "${LLVM_BUILD_DIR}" install-cxx install-cxxabi
+xcrun ninja -C "${LLVM_BUILD_DIR}" install-cxx install-cxxabi
 echo "@@@@@@"
 
 
@@ -120,8 +121,10 @@ LIBCXX_ROOT_ON_DEPLOYMENT_TARGET="${PREVIOUS_DYLIBS_DIR}/macOS/libc++/${DEPLOYME
 LIBCXXABI_ROOT_ON_DEPLOYMENT_TARGET="${PREVIOUS_DYLIBS_DIR}/macOS/libc++abi/${DEPLOYMENT_TARGET}"
 
 # Filesystem is supported on Apple platforms starting with macosx10.15.
-if [[ ${DEPLOYMENT_TARGET} =~ "^10.9|10.10|10.11|10.12|10.13|10.14$" ]]; then
-    ENABLE_FILESYSTEM="--param enable_filesystem=False"
+if [[ ${DEPLOYMENT_TARGET} =~ ^10.9|10.10|10.11|10.12|10.13|10.14$ ]]; then
+    ENABLE_FILESYSTEM="--param enable_filesystem=false"
+else
+    ENABLE_FILESYSTEM="--param enable_filesystem=true"
 fi
 
 # TODO: We need to also run the tests for libc++abi.

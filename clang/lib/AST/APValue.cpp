@@ -38,7 +38,7 @@ static_assert(
     "Type is insufficiently aligned");
 
 APValue::LValueBase::LValueBase(const ValueDecl *P, unsigned I, unsigned V)
-    : Ptr(P), Local{I, V} {}
+    : Ptr(P ? cast<ValueDecl>(P->getCanonicalDecl()) : nullptr), Local{I, V} {}
 APValue::LValueBase::LValueBase(const Expr *P, unsigned I, unsigned V)
     : Ptr(P), Local{I, V} {}
 
@@ -82,11 +82,17 @@ bool operator==(const APValue::LValueBase &LHS,
                 const APValue::LValueBase &RHS) {
   if (LHS.Ptr != RHS.Ptr)
     return false;
-  if (LHS.is<TypeInfoLValue>())
+  if (LHS.is<TypeInfoLValue>() || LHS.is<DynamicAllocLValue>())
     return true;
   return LHS.Local.CallIndex == RHS.Local.CallIndex &&
          LHS.Local.Version == RHS.Local.Version;
 }
+}
+
+APValue::LValuePathEntry::LValuePathEntry(BaseOrMemberType BaseOrMember) {
+  if (const Decl *D = BaseOrMember.getPointer())
+    BaseOrMember.setPointer(D->getCanonicalDecl());
+  Value = reinterpret_cast<uintptr_t>(BaseOrMember.getOpaqueValue());
 }
 
 namespace {
@@ -113,14 +119,16 @@ APValue::LValueBase::operator bool () const {
 
 clang::APValue::LValueBase
 llvm::DenseMapInfo<clang::APValue::LValueBase>::getEmptyKey() {
-  return clang::APValue::LValueBase(
-      DenseMapInfo<const ValueDecl*>::getEmptyKey());
+  clang::APValue::LValueBase B;
+  B.Ptr = DenseMapInfo<const ValueDecl*>::getEmptyKey();
+  return B;
 }
 
 clang::APValue::LValueBase
 llvm::DenseMapInfo<clang::APValue::LValueBase>::getTombstoneKey() {
-  return clang::APValue::LValueBase(
-      DenseMapInfo<const ValueDecl*>::getTombstoneKey());
+  clang::APValue::LValueBase B;
+  B.Ptr = DenseMapInfo<const ValueDecl*>::getTombstoneKey();
+  return B;
 }
 
 namespace clang {
@@ -378,11 +386,6 @@ void APValue::swap(APValue &RHS) {
   memcpy(RHS.Data.buffer, TmpData, DataSize);
 }
 
-LLVM_DUMP_METHOD void APValue::dump() const {
-  dump(llvm::errs());
-  llvm::errs() << '\n';
-}
-
 static double GetApproxValue(const llvm::APFloat &F) {
   llvm::APFloat V = F;
   bool ignored;
@@ -391,87 +394,15 @@ static double GetApproxValue(const llvm::APFloat &F) {
   return V.convertToDouble();
 }
 
-void APValue::dump(raw_ostream &OS) const {
-  switch (getKind()) {
-  case None:
-    OS << "None";
-    return;
-  case Indeterminate:
-    OS << "Indeterminate";
-    return;
-  case Int:
-    OS << "Int: " << getInt();
-    return;
-  case Float:
-    OS << "Float: " << GetApproxValue(getFloat());
-    return;
-  case FixedPoint:
-    OS << "FixedPoint : " << getFixedPoint();
-    return;
-  case Vector:
-    OS << "Vector: ";
-    getVectorElt(0).dump(OS);
-    for (unsigned i = 1; i != getVectorLength(); ++i) {
-      OS << ", ";
-      getVectorElt(i).dump(OS);
-    }
-    return;
-  case ComplexInt:
-    OS << "ComplexInt: " << getComplexIntReal() << ", " << getComplexIntImag();
-    return;
-  case ComplexFloat:
-    OS << "ComplexFloat: " << GetApproxValue(getComplexFloatReal())
-       << ", " << GetApproxValue(getComplexFloatImag());
-    return;
-  case LValue:
-    OS << "LValue: <todo>";
-    return;
-  case Array:
-    OS << "Array: ";
-    for (unsigned I = 0, N = getArrayInitializedElts(); I != N; ++I) {
-      getArrayInitializedElt(I).dump(OS);
-      if (I != getArraySize() - 1) OS << ", ";
-    }
-    if (hasArrayFiller()) {
-      OS << getArraySize() - getArrayInitializedElts() << " x ";
-      getArrayFiller().dump(OS);
-    }
-    return;
-  case Struct:
-    OS << "Struct ";
-    if (unsigned N = getStructNumBases()) {
-      OS << " bases: ";
-      getStructBase(0).dump(OS);
-      for (unsigned I = 1; I != N; ++I) {
-        OS << ", ";
-        getStructBase(I).dump(OS);
-      }
-    }
-    if (unsigned N = getStructNumFields()) {
-      OS << " fields: ";
-      getStructField(0).dump(OS);
-      for (unsigned I = 1; I != N; ++I) {
-        OS << ", ";
-        getStructField(I).dump(OS);
-      }
-    }
-    return;
-  case Union:
-    OS << "Union: ";
-    getUnionValue().dump(OS);
-    return;
-  case MemberPointer:
-    OS << "MemberPointer: <todo>";
-    return;
-  case AddrLabelDiff:
-    OS << "AddrLabelDiff: <todo>";
-    return;
-  }
-  llvm_unreachable("Unknown APValue kind!");
-}
-
 void APValue::printPretty(raw_ostream &Out, const ASTContext &Ctx,
                           QualType Ty) const {
+  // There are no objects of type 'void', but values of this type can be
+  // returned from functions.
+  if (Ty->isVoidType()) {
+    Out << "void()";
+    return;
+  }
+
   switch (getKind()) {
   case APValue::None:
     Out << "<out of lifetime>";
@@ -834,8 +765,10 @@ void APValue::MakeMemberPointer(const ValueDecl *Member, bool IsDerivedMember,
   assert(isAbsent() && "Bad state change");
   MemberPointerData *MPD = new ((void*)(char*)Data.buffer) MemberPointerData;
   Kind = MemberPointer;
-  MPD->MemberAndIsDerivedMember.setPointer(Member);
+  MPD->MemberAndIsDerivedMember.setPointer(
+      Member ? cast<ValueDecl>(Member->getCanonicalDecl()) : nullptr);
   MPD->MemberAndIsDerivedMember.setInt(IsDerivedMember);
   MPD->resizePath(Path.size());
-  memcpy(MPD->getPath(), Path.data(), Path.size()*sizeof(const CXXRecordDecl*));
+  for (unsigned I = 0; I != Path.size(); ++I)
+    MPD->getPath()[I] = Path[I]->getCanonicalDecl();
 }

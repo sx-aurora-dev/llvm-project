@@ -17,7 +17,9 @@ include "llvm/CodeGen/SDNodeProperties.td"
 //  Properties we keep track of for intrinsics.
 //===----------------------------------------------------------------------===//
 
-class IntrinsicProperty;
+class IntrinsicProperty<bit is_default = 0> {
+  bit IsDefault = is_default;
+}
 
 // Intr*Mem - Memory properties.  If no property is set, the worst case
 // is assumed (it may read and write any memory it can get access to and it may
@@ -78,6 +80,11 @@ class NoCapture<AttrIndex idx> : IntrinsicProperty {
 // NoAlias - The specified argument pointer is not aliasing other "noalias" pointer
 // arguments of the intrinsic wrt. the intrinsic scope.
 class NoAlias<AttrIndex idx> : IntrinsicProperty {
+  int ArgNo = idx.Value;
+}
+
+// NoUndef - The specified argument is neither undef nor poison.
+class NoUndef<AttrIndex idx> : IntrinsicProperty {
   int ArgNo = idx.Value;
 }
 
@@ -350,13 +357,18 @@ class Intrinsic<list<LLVMType> ret_types,
                 list<LLVMType> param_types = [],
                 list<IntrinsicProperty> intr_properties = [],
                 string name = "",
-                list<SDNodeProperty> sd_properties = []> : SDPatternOperator {
+                list<SDNodeProperty> sd_properties = [],
+                bit disable_default_attributes = 0> : SDPatternOperator {
   string LLVMName = name;
   string TargetPrefix = "";   // Set to a prefix for target-specific intrinsics.
   list<LLVMType> RetTypes = ret_types;
   list<LLVMType> ParamTypes = param_types;
   list<IntrinsicProperty> IntrProperties = intr_properties;
   let Properties = sd_properties;
+
+  // Disable applying IntrinsicProperties that are marked default with
+  // IntrinsicProperty<1>
+  bit DisableDefaultAttributes = disable_default_attributes;
 
   bit isTarget = 0;
 }
@@ -477,6 +489,9 @@ def int_read_register  : Intrinsic<[llvm_anyint_ty], [llvm_metadata_ty],
                                    [IntrReadMem], "llvm.read_register">;
 def int_write_register : Intrinsic<[], [llvm_metadata_ty, llvm_anyint_ty],
                                    [], "llvm.write_register">;
+def int_read_volatile_register  : Intrinsic<[llvm_anyint_ty], [llvm_metadata_ty],
+                                            [IntrHasSideEffects],
+                                             "llvm.read_volatile_register">;
 
 // Gets the address of the local variable area. This is typically a copy of the
 // stack, frame, or base pointer depending on the type of prologue.
@@ -524,7 +539,8 @@ def int_readcyclecounter : Intrinsic<[llvm_i64_ty]>;
 
 // The assume intrinsic is marked as arbitrarily writing so that proper
 // control dependencies will be maintained.
-def int_assume        : Intrinsic<[], [llvm_i1_ty], [IntrWillReturn]>;
+def int_assume        : Intrinsic<[], [llvm_i1_ty], [IntrWillReturn,
+                                                     NoUndef<ArgIndex<0>>]>;
 
 // Stack Protector Intrinsic - The stackprotector intrinsic writes the stack
 // guard to the correct place on the stack frame.
@@ -553,6 +569,7 @@ def int_instrprof_value_profile : Intrinsic<[],
 
 def int_call_preallocated_setup : Intrinsic<[llvm_token_ty], [llvm_i32_ty]>;
 def int_call_preallocated_arg : Intrinsic<[llvm_ptr_ty], [llvm_token_ty, llvm_i32_ty]>;
+def int_call_preallocated_teardown : Intrinsic<[], [llvm_token_ty]>;
 
 //===------------------- Standard C Library Intrinsics --------------------===//
 //
@@ -1014,6 +1031,12 @@ def int_ssub_sat : Intrinsic<[llvm_anyint_ty],
 def int_usub_sat : Intrinsic<[llvm_anyint_ty],
                              [LLVMMatchType<0>, LLVMMatchType<0>],
                              [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_sshl_sat : Intrinsic<[llvm_anyint_ty],
+                             [LLVMMatchType<0>, LLVMMatchType<0>],
+                             [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_ushl_sat : Intrinsic<[llvm_anyint_ty],
+                             [LLVMMatchType<0>, LLVMMatchType<0>],
+                             [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===------------------------- Fixed Point Arithmetic Intrinsics ---------------------===//
 //
@@ -1053,6 +1076,25 @@ def int_sdiv_fix_sat : Intrinsic<[llvm_anyint_ty],
 def int_udiv_fix_sat : Intrinsic<[llvm_anyint_ty],
                                  [LLVMMatchType<0>, LLVMMatchType<0>, llvm_i32_ty],
                                  [IntrNoMem, ImmArg<ArgIndex<2>>]>;
+
+//===------------------ Integer Min/Max/Abs Intrinsics --------------------===//
+//
+def int_abs : Intrinsic<
+    [llvm_anyint_ty], [LLVMMatchType<0>, llvm_i1_ty],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn, ImmArg<ArgIndex<1>>]>;
+
+def int_smax : Intrinsic<
+    [llvm_anyint_ty], [LLVMMatchType<0>, LLVMMatchType<0>],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_smin : Intrinsic<
+    [llvm_anyint_ty], [LLVMMatchType<0>, LLVMMatchType<0>],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_umax : Intrinsic<
+    [llvm_anyint_ty], [LLVMMatchType<0>, LLVMMatchType<0>],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
+def int_umin : Intrinsic<
+    [llvm_anyint_ty], [LLVMMatchType<0>, LLVMMatchType<0>],
+    [IntrNoMem, IntrSpeculatable, IntrWillReturn]>;
 
 //===------------------------- Memory Use Markers -------------------------===//
 //
@@ -1865,7 +1907,7 @@ def int_matrix_multiply
 
 def int_matrix_column_major_load
   : Intrinsic<[llvm_anyvector_ty],
-              [LLVMAnyPointerType<LLVMMatchType<0>>, llvm_i64_ty, llvm_i1_ty,
+              [LLVMPointerToElt<0>, llvm_i64_ty, llvm_i1_ty,
                llvm_i32_ty, llvm_i32_ty],
               [IntrNoSync, IntrWillReturn, IntrArgMemOnly, IntrReadMem,
                NoCapture<ArgIndex<0>>, ImmArg<ArgIndex<2>>, ImmArg<ArgIndex<3>>,
@@ -1873,7 +1915,7 @@ def int_matrix_column_major_load
 
 def int_matrix_column_major_store
   : Intrinsic<[],
-              [llvm_anyvector_ty, LLVMAnyPointerType<LLVMMatchType<0>>,
+              [llvm_anyvector_ty, LLVMPointerToElt<0>,
                llvm_i64_ty, llvm_i1_ty, llvm_i32_ty, llvm_i32_ty],
               [IntrNoSync, IntrWillReturn, IntrArgMemOnly, IntrWriteMem,
                WriteOnly<ArgIndex<1>>, NoCapture<ArgIndex<1>>,

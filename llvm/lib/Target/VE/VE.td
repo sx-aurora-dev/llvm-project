@@ -27,10 +27,6 @@ def FeatureEnableVPU
   : SubtargetFeature<"vpu", "EnableVPU", "true",
                      "Disable the VPU">;
 
-def FeatureVELIntrin
-  : SubtargetFeature<"velintrin", "VELIntrinsicMode", "true",
-                     "Enable VEL intrinsics">;
-
 def IsNoNaNs : Predicate<"TM.Options.NoNaNsFPMath">;
 def HasFeatureVELIntrin : Predicate<"Subtarget->isVELIntrinsicMode()">;
 
