@@ -1375,6 +1375,11 @@ let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLeng
                                 LLVMMatchType<0>,
                                 LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                 llvm_i32_ty]>;
+// Element-wise bitops
+  def int_vp_ctpop : Intrinsic<[ llvm_anyvector_ty ],
+                               [ LLVMMatchType<0>,
+                                 LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                 llvm_i32_ty]>;
 
 // Logical operators
   def int_vp_ashr : Intrinsic<[ llvm_anyvector_ty ],

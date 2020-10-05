@@ -111,6 +111,13 @@
 
 ///// Integer Arithmetic /////
 
+// llvm.vp.ctpop(x,mask,vlen)
+BEGIN_REGISTER_VP_INTRINSIC(vp_ctpop, 1, 2)
+BEGIN_REGISTER_VP_SDNODE(VP_CTPOP, -1, vp_ctpop, 1, 2)
+HANDLE_VP_TO_INTRIN(ctpop)
+HANDLE_VP_IS_UNARY
+END_REGISTER_CASES(vp_ctpop, VP_CTPOP)
+
 // llvm.vp.add(x,y,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_add, 2, 3)
 BEGIN_REGISTER_VP_SDNODE(VP_ADD, -1, vp_add, 2, 3)
@@ -490,6 +497,16 @@ HANDLE_VP_IS_MEMOP(1, 0)
 END_REGISTER_CASES(vp_store, VP_STORE)
 
 // llvm.vp.scatter(ptr,val,mask,vlen)
+// VP gather and scatter - load and store operations for a vector of
+// random addresses with additional mask and vector length operand that
+// prevents memory accesses to the masked-off lanes.
+//
+// Val, OutChain = VP_GATHER(InChain, BasePtr, Index, Scale, Mask, EVL)
+// OutChain = VP_SCATTER(InChain, Value, BasePtr, Index, Scale, Mask, EVL)
+//
+// The Index operand can have more vector elements than the other operands
+// due to type legalization. The extra elements are ignored.
+
 BEGIN_REGISTER_VP_INTRINSIC(vp_scatter, 2, 3)
 BEGIN_REGISTER_VP_SDNODE(VP_SCATTER, 1, vp_scatter, 3, 4)
 HANDLE_VP_TO_INTRIN(masked_scatter)
@@ -514,16 +531,23 @@ END_REGISTER_CASES(vp_gather, VP_GATHER)
 ///// Shuffle & Blend /////
 
 // llvm.vp.compress(x,mask,vlen)
+/// VP_COMPRESS(VEC1, MASK, VLEN) - Returns a vector, of the same type as
+/// VEC1.
 BEGIN_REGISTER_VP_INTRINSIC(vp_compress, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_COMPRESS, -1, vp_compress, 1, 2)
 END_REGISTER_CASES(vp_compress, VP_COMPRESS)
 
 // llvm.vp.expand(x,mask,vlen)
+/// VP_EXPAND(VEC1, MASK, VLEN) - Returns a vector, of the same type as
+/// VEC1.
 BEGIN_REGISTER_VP_INTRINSIC(vp_expand, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_EXPAND, -1, vp_expand, 1, 2)
 END_REGISTER_CASES(vp_expand, VP_EXPAND)
 
 // llvm.vp.vshift(x,amount,mask,vlen)
+/// VP_VSHIFT(VEC1, AMOUNT, MASK, VLEN) - Returns a vector, of the same type as
+/// VEC1. AMOUNT is an integer value. The returned vector is equivalent
+/// to VEC1 shifted by AMOUNT (RETURNED_VEC[idx] = VEC1[idx + AMOUNT]).
 BEGIN_REGISTER_VP_INTRINSIC(vp_vshift, 2, 3)
 BEGIN_REGISTER_VP_SDNODE(VP_VSHIFT, -1, vp_vshift, 2, 3)
 END_REGISTER_CASES(vp_vshift, VP_VSHIFT)
