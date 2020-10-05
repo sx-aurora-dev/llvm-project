@@ -609,10 +609,6 @@ struct LoopNestInfo {
   const Loop *AnalyzedLoop;
 };
 
-static bool isAccessingInstruction(const Instruction &I) {
-  return I.mayReadOrWriteMemory();
-}
-
 struct MinMaxSCEVPair {
   const SCEV *Min, *Max;
 };
@@ -1135,14 +1131,6 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
     return DVValidity::DEFINITELY_VECTORIZABLE;
 
   return DVValidity::VALID;
-}
-
-static bool areDefinitelyNonAliasing(const DepVector &AccessDV) {
-  for (DepVectorComponent DVC : AccessDV.Comps) {
-    if (DVC.Dir == 'N')
-      return true;
-  }
-  return false;
 }
 
 void squashIfNeeded(DepVector& DV) {
@@ -1923,7 +1911,7 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
     return LoopDependence::getBestPossible();
 
   if (!L.isLoopSimplifyForm())
-    return LoopDependence::getWorstPossible();
+    return Bail;
 
   DFSNestClipboard Clip(&L, LoopDependence::getBestPossible(), 1, LI, DT, SE, TLI);
   analyzeNestsDFS(&Clip);
