@@ -5,35 +5,35 @@
 int main(void) {
   int h = 0, j = 0, i = 0;
 
-  #pragma omp target
+  #pragma omp target map(tofrom:h,j,i)
   {
     h += 1;
     j += 1;
     i += 1;
   }
 
-  #pragma omp target device(1)
+  #pragma omp target map(tofrom:h,j,i) device(1)
   {
     h += 1;
     j += 1;
     i += 1;
   }
 
-  #pragma omp target device(2)
+  #pragma omp target map(tofrom:h,j,i) device(2)
   {
     h += 1;
     j += 1;
     i += 1;
   }
 
-  #pragma omp target device(3)
+  #pragma omp target map(tofrom:h,j,i) device(3)
   {
     h += 1;
     j += 1;
     i += 1;
   }
 
-  #pragma omp target device(4)
+  #pragma omp target map(tofrom:h,j,i) device(4)
   {
     h += 1;
     j += 1;
