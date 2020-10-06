@@ -61,6 +61,16 @@ define i8 @uaddv_v64i8(<64 x i8>* %a) #0 {
 ; VBITS_GE_512-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].b
 ; VBITS_GE_512-NEXT: fmov x0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].b, vl32
+; VBITS_EQ_256-DAG: mov w[[A_HI:[0-9]+]], #32
+; VBITS_EQ_256-DAG: ld1b { [[LO:z[0-9]+]].b }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1b { [[HI:z[0-9]+]].b }, [[PG]]/z, [x0, x[[A_HI]]]
+; VBITS_EQ_256-DAG: add [[ADD:z[0-9]+]].b, [[PG]]/m, [[HI]].b, [[LO]].b
+; VBITS_EQ_256-DAG: addv [[REDUCE:d[0-9]+]], [[PG]], [[ADD]].b
+; VBITS_EQ_256-NEXT: fmov x0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <64 x i8>, <64 x i8>* %a
   %res = call i8 @llvm.experimental.vector.reduce.add.v64i8(<64 x i8> %op)
   ret i8 %res
@@ -127,6 +137,16 @@ define i16 @uaddv_v32i16(<32 x i16>* %a) #0 {
 ; VBITS_GE_512-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].h
 ; VBITS_GE_512-NEXT: fmov x0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].h, vl16
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1h { [[LO:z[0-9]+]].h }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1h { [[HI:z[0-9]+]].h }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: add [[ADD:z[0-9]+]].h, [[PG]]/m, [[LO]].h, [[HI]].h
+; VBITS_EQ_256-DAG: addv [[REDUCE:d[0-9]+]], [[PG]], [[ADD]].h
+; VBITS_EQ_256-NEXT: fmov x0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <32 x i16>, <32 x i16>* %a
   %res = call i16 @llvm.experimental.vector.reduce.add.v32i16(<32 x i16> %op)
   ret i16 %res
@@ -134,11 +154,11 @@ define i16 @uaddv_v32i16(<32 x i16>* %a) #0 {
 
 define i16 @uaddv_v64i16(<64 x i16>* %a) #0 {
 ; CHECK-LABEL: uaddv_v64i16:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].h, vl64
-; VBITS_GE_1048-NEXT: ld1h { [[OP:z[0-9]+]].h }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].h
-; VBITS_GE_1048-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].h, vl64
+; VBITS_GE_1024-NEXT: ld1h { [[OP:z[0-9]+]].h }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].h
+; VBITS_GE_1024-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <64 x i16>, <64 x i16>* %a
   %res = call i16 @llvm.experimental.vector.reduce.add.v64i16(<64 x i16> %op)
   ret i16 %res
@@ -193,6 +213,16 @@ define i32 @uaddv_v16i32(<16 x i32>* %a) #0 {
 ; VBITS_GE_512-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].s
 ; VBITS_GE_512-NEXT: fmov x0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].s, vl8
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1w { [[LO:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1w { [[HI:z[0-9]+]].s }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: add [[ADD:z[0-9]+]].s, [[PG]]/m, [[LO]].s, [[HI]].s
+; VBITS_EQ_256-DAG: addv [[REDUCE:d[0-9]+]], [[PG]], [[ADD]].s
+; VBITS_EQ_256-NEXT: fmov x0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <16 x i32>, <16 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.add.v16i32(<16 x i32> %op)
   ret i32 %res
@@ -200,11 +230,11 @@ define i32 @uaddv_v16i32(<16 x i32>* %a) #0 {
 
 define i32 @uaddv_v32i32(<32 x i32>* %a) #0 {
 ; CHECK-LABEL: uaddv_v32i32:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].s, vl32
-; VBITS_GE_1048-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].s
-; VBITS_GE_1048-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].s, vl32
+; VBITS_GE_1024-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].s
+; VBITS_GE_1024-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <32 x i32>, <32 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.add.v32i32(<32 x i32> %op)
   ret i32 %res
@@ -212,11 +242,11 @@ define i32 @uaddv_v32i32(<32 x i32>* %a) #0 {
 
 define i32 @uaddv_v64i32(<64 x i32>* %a) #0 {
 ; CHECK-LABEL: uaddv_v64i32:
-; VBITS_GE_2096: ptrue [[PG:p[0-9]+]].s, vl64
-; VBITS_GE_2096-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
-; VBITS_GE_2096-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].s
-; VBITS_GE_2086-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_2096-NEXT: ret
+; VBITS_GE_2048: ptrue [[PG:p[0-9]+]].s, vl64
+; VBITS_GE_2048-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_GE_2048-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].s
+; VBITS_GE_2048-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_2048-NEXT: ret
   %op = load <64 x i32>, <64 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.add.v64i32(<64 x i32> %op)
   ret i32 %res
@@ -259,6 +289,16 @@ define i64 @uaddv_v8i64(<8 x i64>* %a) #0 {
 ; VBITS_GE_512-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
 ; VBITS_GE_512-NEXT: fmov x0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].d, vl4
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1d { [[LO:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1d { [[HI:z[0-9]+]].d }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: add [[ADD:z[0-9]+]].d, [[PG]]/m, [[LO]].d, [[HI]].d
+; VBITS_EQ_256-DAG: addv [[REDUCE:d[0-9]+]], [[PG]], [[ADD]].d
+; VBITS_EQ_256-NEXT: fmov x0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <8 x i64>, <8 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.add.v8i64(<8 x i64> %op)
   ret i64 %res
@@ -266,11 +306,11 @@ define i64 @uaddv_v8i64(<8 x i64>* %a) #0 {
 
 define i64 @uaddv_v16i64(<16 x i64>* %a) #0 {
 ; CHECK-LABEL: uaddv_v16i64:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].d, vl16
-; VBITS_GE_1048-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
-; VBITS_GE_1048-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].d, vl16
+; VBITS_GE_1024-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
+; VBITS_GE_1024-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <16 x i64>, <16 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.add.v16i64(<16 x i64> %op)
   ret i64 %res
@@ -278,11 +318,11 @@ define i64 @uaddv_v16i64(<16 x i64>* %a) #0 {
 
 define i64 @uaddv_v32i64(<32 x i64>* %a) #0 {
 ; CHECK-LABEL: uaddv_v32i64:
-; VBITS_GE_2096: ptrue [[PG:p[0-9]+]].d, vl32
-; VBITS_GE_2096-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
-; VBITS_GE_2096-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
-; VBITS_GE_2096-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_2096-NEXT: ret
+; VBITS_GE_2048: ptrue [[PG:p[0-9]+]].d, vl32
+; VBITS_GE_2048-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_GE_2048-NEXT: uaddv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
+; VBITS_GE_2048-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_2048-NEXT: ret
   %op = load <32 x i64>, <32 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.add.v32i64(<32 x i64> %op)
   ret i64 %res
@@ -329,6 +369,16 @@ define i8 @smaxv_v64i8(<64 x i8>* %a) #0 {
 ; VBITS_GE_512-NEXT: smaxv b[[REDUCE:[0-9]+]], [[PG]], [[OP]].b
 ; VBITS_GE_512-NEXT: fmov w0, s[[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].b, vl32
+; VBITS_EQ_256-DAG: mov w[[A_HI:[0-9]+]], #32
+; VBITS_EQ_256-DAG: ld1b { [[LO:z[0-9]+]].b }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1b { [[HI:z[0-9]+]].b }, [[PG]]/z, [x0, x[[A_HI]]]
+; VBITS_EQ_256-DAG: smax [[MAX:z[0-9]+]].b, [[PG]]/m, [[HI]].b, [[LO]].b
+; VBITS_EQ_256-DAG: smaxv b[[REDUCE:[0-9]+]], [[PG]], [[MAX]].b
+; VBITS_EQ_256-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <64 x i8>, <64 x i8>* %a
   %res = call i8 @llvm.experimental.vector.reduce.smax.v64i8(<64 x i8> %op)
   ret i8 %res
@@ -395,6 +445,16 @@ define i16 @smaxv_v32i16(<32 x i16>* %a) #0 {
 ; VBITS_GE_512-NEXT: smaxv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
 ; VBITS_GE_512-NEXT: fmov w0, s[[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].h, vl16
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1h { [[LO:z[0-9]+]].h }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1h { [[HI:z[0-9]+]].h }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: smax [[MAX:z[0-9]+]].h, [[PG]]/m, [[LO]].h, [[HI]].h
+; VBITS_EQ_256-DAG: smaxv h[[REDUCE:[0-9]+]], [[PG]], [[MAX]].h
+; VBITS_EQ_256-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <32 x i16>, <32 x i16>* %a
   %res = call i16 @llvm.experimental.vector.reduce.smax.v32i16(<32 x i16> %op)
   ret i16 %res
@@ -402,11 +462,11 @@ define i16 @smaxv_v32i16(<32 x i16>* %a) #0 {
 
 define i16 @smaxv_v64i16(<64 x i16>* %a) #0 {
 ; CHECK-LABEL: smaxv_v64i16:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].h, vl64
-; VBITS_GE_1048-NEXT: ld1h { [[OP:z[0-9]+]].h }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: smaxv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
-; VBITS_GE_1048-NEXT: fmov w0, s[[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].h, vl64
+; VBITS_GE_1024-NEXT: ld1h { [[OP:z[0-9]+]].h }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: smaxv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
+; VBITS_GE_1024-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <64 x i16>, <64 x i16>* %a
   %res = call i16 @llvm.experimental.vector.reduce.smax.v64i16(<64 x i16> %op)
   ret i16 %res
@@ -461,6 +521,16 @@ define i32 @smaxv_v16i32(<16 x i32>* %a) #0 {
 ; VBITS_GE_512-NEXT: smaxv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
 ; VBITS_GE_512-NEXT: fmov w0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].s, vl8
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1w { [[LO:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1w { [[HI:z[0-9]+]].s }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: smax [[MAX:z[0-9]+]].s, [[PG]]/m, [[LO]].s, [[HI]].s
+; VBITS_EQ_256-DAG: smaxv [[REDUCE:s[0-9]+]], [[PG]], [[MAX]].s
+; VBITS_EQ_256-NEXT: fmov w0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <16 x i32>, <16 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.smax.v16i32(<16 x i32> %op)
   ret i32 %res
@@ -468,11 +538,11 @@ define i32 @smaxv_v16i32(<16 x i32>* %a) #0 {
 
 define i32 @smaxv_v32i32(<32 x i32>* %a) #0 {
 ; CHECK-LABEL: smaxv_v32i32:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].s, vl32
-; VBITS_GE_1048-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: smaxv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
-; VBITS_GE_1048-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].s, vl32
+; VBITS_GE_1024-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: smaxv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
+; VBITS_GE_1024-NEXT: fmov w0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <32 x i32>, <32 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.smax.v32i32(<32 x i32> %op)
   ret i32 %res
@@ -480,11 +550,11 @@ define i32 @smaxv_v32i32(<32 x i32>* %a) #0 {
 
 define i32 @smaxv_v64i32(<64 x i32>* %a) #0 {
 ; CHECK-LABEL: smaxv_v64i32:
-; VBITS_GE_2096: ptrue [[PG:p[0-9]+]].s, vl64
-; VBITS_GE_2096-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
-; VBITS_GE_2096-NEXT: smaxv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
-; VBITS_GE_2086-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_2096-NEXT: ret
+; VBITS_GE_2048: ptrue [[PG:p[0-9]+]].s, vl64
+; VBITS_GE_2048-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_GE_2048-NEXT: smaxv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
+; VBITS_GE_2048-NEXT: fmov w0, [[REDUCE]]
+; VBITS_GE_2048-NEXT: ret
   %op = load <64 x i32>, <64 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.smax.v64i32(<64 x i32> %op)
   ret i32 %res
@@ -529,6 +599,16 @@ define i64 @smaxv_v8i64(<8 x i64>* %a) #0 {
 ; VBITS_GE_512-NEXT: smaxv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
 ; VBITS_GE_512-NEXT: fmov x0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].d, vl4
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1d { [[LO:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1d { [[HI:z[0-9]+]].d }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: smax [[MAX:z[0-9]+]].d, [[PG]]/m, [[LO]].d, [[HI]].d
+; VBITS_EQ_256-DAG: smaxv [[REDUCE:d[0-9]+]], [[PG]], [[MAX]].d
+; VBITS_EQ_256-NEXT: fmov x0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <8 x i64>, <8 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.smax.v8i64(<8 x i64> %op)
   ret i64 %res
@@ -536,11 +616,11 @@ define i64 @smaxv_v8i64(<8 x i64>* %a) #0 {
 
 define i64 @smaxv_v16i64(<16 x i64>* %a) #0 {
 ; CHECK-LABEL: smaxv_v16i64:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].d, vl16
-; VBITS_GE_1048-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: smaxv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
-; VBITS_GE_1048-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].d, vl16
+; VBITS_GE_1024-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: smaxv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
+; VBITS_GE_1024-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <16 x i64>, <16 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.smax.v16i64(<16 x i64> %op)
   ret i64 %res
@@ -548,11 +628,11 @@ define i64 @smaxv_v16i64(<16 x i64>* %a) #0 {
 
 define i64 @smaxv_v32i64(<32 x i64>* %a) #0 {
 ; CHECK-LABEL: smaxv_v32i64:
-; VBITS_GE_2096: ptrue [[PG:p[0-9]+]].d, vl32
-; VBITS_GE_2096-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
-; VBITS_GE_2096-NEXT: smaxv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
-; VBITS_GE_2096-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_2096-NEXT: ret
+; VBITS_GE_2048: ptrue [[PG:p[0-9]+]].d, vl32
+; VBITS_GE_2048-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_GE_2048-NEXT: smaxv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
+; VBITS_GE_2048-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_2048-NEXT: ret
   %op = load <32 x i64>, <32 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.smax.v32i64(<32 x i64> %op)
   ret i64 %res
@@ -599,6 +679,16 @@ define i8 @sminv_v64i8(<64 x i8>* %a) #0 {
 ; VBITS_GE_512-NEXT: sminv b[[REDUCE:[0-9]+]], [[PG]], [[OP]].b
 ; VBITS_GE_512-NEXT: fmov w0, s[[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].b, vl32
+; VBITS_EQ_256-DAG: mov w[[A_HI:[0-9]+]], #32
+; VBITS_EQ_256-DAG: ld1b { [[LO:z[0-9]+]].b }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1b { [[HI:z[0-9]+]].b }, [[PG]]/z, [x0, x[[A_HI]]]
+; VBITS_EQ_256-DAG: smin [[MIN:z[0-9]+]].b, [[PG]]/m, [[HI]].b, [[LO]].b
+; VBITS_EQ_256-DAG: sminv b[[REDUCE:[0-9]+]], [[PG]], [[MIN]].b
+; VBITS_EQ_256-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <64 x i8>, <64 x i8>* %a
   %res = call i8 @llvm.experimental.vector.reduce.smin.v64i8(<64 x i8> %op)
   ret i8 %res
@@ -665,6 +755,16 @@ define i16 @sminv_v32i16(<32 x i16>* %a) #0 {
 ; VBITS_GE_512-NEXT: sminv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
 ; VBITS_GE_512-NEXT: fmov w0, s[[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].h, vl16
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1h { [[LO:z[0-9]+]].h }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1h { [[HI:z[0-9]+]].h }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: smin [[MIN:z[0-9]+]].h, [[PG]]/m, [[LO]].h, [[HI]].h
+; VBITS_EQ_256-DAG: sminv h[[REDUCE:[0-9]+]], [[PG]], [[MIN]].h
+; VBITS_EQ_256-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <32 x i16>, <32 x i16>* %a
   %res = call i16 @llvm.experimental.vector.reduce.smin.v32i16(<32 x i16> %op)
   ret i16 %res
@@ -672,11 +772,11 @@ define i16 @sminv_v32i16(<32 x i16>* %a) #0 {
 
 define i16 @sminv_v64i16(<64 x i16>* %a) #0 {
 ; CHECK-LABEL: sminv_v64i16:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].h, vl64
-; VBITS_GE_1048-NEXT: ld1h { [[OP:z[0-9]+]].h }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: sminv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
-; VBITS_GE_1048-NEXT: fmov w0, s[[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].h, vl64
+; VBITS_GE_1024-NEXT: ld1h { [[OP:z[0-9]+]].h }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: sminv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
+; VBITS_GE_1024-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <64 x i16>, <64 x i16>* %a
   %res = call i16 @llvm.experimental.vector.reduce.smin.v64i16(<64 x i16> %op)
   ret i16 %res
@@ -731,6 +831,16 @@ define i32 @sminv_v16i32(<16 x i32>* %a) #0 {
 ; VBITS_GE_512-NEXT: sminv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
 ; VBITS_GE_512-NEXT: fmov w0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].s, vl8
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1w { [[LO:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1w { [[HI:z[0-9]+]].s }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: smin [[MIN:z[0-9]+]].s, [[PG]]/m, [[LO]].s, [[HI]].s
+; VBITS_EQ_256-DAG: sminv [[REDUCE:s[0-9]+]], [[PG]], [[MIN]].s
+; VBITS_EQ_256-NEXT: fmov w0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <16 x i32>, <16 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.smin.v16i32(<16 x i32> %op)
   ret i32 %res
@@ -738,11 +848,11 @@ define i32 @sminv_v16i32(<16 x i32>* %a) #0 {
 
 define i32 @sminv_v32i32(<32 x i32>* %a) #0 {
 ; CHECK-LABEL: sminv_v32i32:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].s, vl32
-; VBITS_GE_1048-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: sminv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
-; VBITS_GE_1048-NEXT: fmov w0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].s, vl32
+; VBITS_GE_1024-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: sminv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
+; VBITS_GE_1024-NEXT: fmov w0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <32 x i32>, <32 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.smin.v32i32(<32 x i32> %op)
   ret i32 %res
@@ -750,11 +860,11 @@ define i32 @sminv_v32i32(<32 x i32>* %a) #0 {
 
 define i32 @sminv_v64i32(<64 x i32>* %a) #0 {
 ; CHECK-LABEL: sminv_v64i32:
-; VBITS_GE_2096: ptrue [[PG:p[0-9]+]].s, vl64
-; VBITS_GE_2096-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
-; VBITS_GE_2096-NEXT: sminv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
-; VBITS_GE_2086-NEXT: fmov w0, [[REDUCE]]
-; VBITS_GE_2096-NEXT: ret
+; VBITS_GE_2048: ptrue [[PG:p[0-9]+]].s, vl64
+; VBITS_GE_2048-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_GE_2048-NEXT: sminv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
+; VBITS_GE_2048-NEXT: fmov w0, [[REDUCE]]
+; VBITS_GE_2048-NEXT: ret
   %op = load <64 x i32>, <64 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.smin.v64i32(<64 x i32> %op)
   ret i32 %res
@@ -799,6 +909,16 @@ define i64 @sminv_v8i64(<8 x i64>* %a) #0 {
 ; VBITS_GE_512-NEXT: sminv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
 ; VBITS_GE_512-NEXT: fmov x0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].d, vl4
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1d { [[LO:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1d { [[HI:z[0-9]+]].d }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: smin [[MIN:z[0-9]+]].d, [[PG]]/m, [[LO]].d, [[HI]].d
+; VBITS_EQ_256-DAG: sminv [[REDUCE:d[0-9]+]], [[PG]], [[MIN]].d
+; VBITS_EQ_256-NEXT: fmov x0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <8 x i64>, <8 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.smin.v8i64(<8 x i64> %op)
   ret i64 %res
@@ -806,11 +926,11 @@ define i64 @sminv_v8i64(<8 x i64>* %a) #0 {
 
 define i64 @sminv_v16i64(<16 x i64>* %a) #0 {
 ; CHECK-LABEL: sminv_v16i64:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].d, vl16
-; VBITS_GE_1048-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: sminv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
-; VBITS_GE_1048-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].d, vl16
+; VBITS_GE_1024-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: sminv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
+; VBITS_GE_1024-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <16 x i64>, <16 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.smin.v16i64(<16 x i64> %op)
   ret i64 %res
@@ -818,11 +938,11 @@ define i64 @sminv_v16i64(<16 x i64>* %a) #0 {
 
 define i64 @sminv_v32i64(<32 x i64>* %a) #0 {
 ; CHECK-LABEL: sminv_v32i64:
-; VBITS_GE_2096: ptrue [[PG:p[0-9]+]].d, vl32
-; VBITS_GE_2096-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
-; VBITS_GE_2096-NEXT: sminv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
-; VBITS_GE_2096-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_2096-NEXT: ret
+; VBITS_GE_2048: ptrue [[PG:p[0-9]+]].d, vl32
+; VBITS_GE_2048-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_GE_2048-NEXT: sminv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
+; VBITS_GE_2048-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_2048-NEXT: ret
   %op = load <32 x i64>, <32 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.smin.v32i64(<32 x i64> %op)
   ret i64 %res
@@ -869,6 +989,16 @@ define i8 @umaxv_v64i8(<64 x i8>* %a) #0 {
 ; VBITS_GE_512-NEXT: umaxv b[[REDUCE:[0-9]+]], [[PG]], [[OP]].b
 ; VBITS_GE_512-NEXT: fmov w0, s[[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].b, vl32
+; VBITS_EQ_256-DAG: mov w[[A_HI:[0-9]+]], #32
+; VBITS_EQ_256-DAG: ld1b { [[LO:z[0-9]+]].b }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1b { [[HI:z[0-9]+]].b }, [[PG]]/z, [x0, x[[A_HI]]]
+; VBITS_EQ_256-DAG: umax [[MAX:z[0-9]+]].b, [[PG]]/m, [[HI]].b, [[LO]].b
+; VBITS_EQ_256-DAG: umaxv b[[REDUCE:[0-9]+]], [[PG]], [[MAX]].b
+; VBITS_EQ_256-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <64 x i8>, <64 x i8>* %a
   %res = call i8 @llvm.experimental.vector.reduce.umax.v64i8(<64 x i8> %op)
   ret i8 %res
@@ -935,6 +1065,16 @@ define i16 @umaxv_v32i16(<32 x i16>* %a) #0 {
 ; VBITS_GE_512-NEXT: umaxv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
 ; VBITS_GE_512-NEXT: fmov w0, s[[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].h, vl16
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1h { [[LO:z[0-9]+]].h }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1h { [[HI:z[0-9]+]].h }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: umax [[MAX:z[0-9]+]].h, [[PG]]/m, [[LO]].h, [[HI]].h
+; VBITS_EQ_256-DAG: umaxv h[[REDUCE:[0-9]+]], [[PG]], [[MAX]].h
+; VBITS_EQ_256-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <32 x i16>, <32 x i16>* %a
   %res = call i16 @llvm.experimental.vector.reduce.umax.v32i16(<32 x i16> %op)
   ret i16 %res
@@ -942,11 +1082,11 @@ define i16 @umaxv_v32i16(<32 x i16>* %a) #0 {
 
 define i16 @umaxv_v64i16(<64 x i16>* %a) #0 {
 ; CHECK-LABEL: umaxv_v64i16:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].h, vl64
-; VBITS_GE_1048-NEXT: ld1h { [[OP:z[0-9]+]].h }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: umaxv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
-; VBITS_GE_1048-NEXT: fmov w0, s[[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].h, vl64
+; VBITS_GE_1024-NEXT: ld1h { [[OP:z[0-9]+]].h }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: umaxv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
+; VBITS_GE_1024-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <64 x i16>, <64 x i16>* %a
   %res = call i16 @llvm.experimental.vector.reduce.umax.v64i16(<64 x i16> %op)
   ret i16 %res
@@ -1001,6 +1141,16 @@ define i32 @umaxv_v16i32(<16 x i32>* %a) #0 {
 ; VBITS_GE_512-NEXT: umaxv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
 ; VBITS_GE_512-NEXT: fmov w0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].s, vl8
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1w { [[LO:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1w { [[HI:z[0-9]+]].s }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: umax [[MAX:z[0-9]+]].s, [[PG]]/m, [[LO]].s, [[HI]].s
+; VBITS_EQ_256-DAG: umaxv [[REDUCE:s[0-9]+]], [[PG]], [[MAX]].s
+; VBITS_EQ_256-NEXT: fmov w0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <16 x i32>, <16 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.umax.v16i32(<16 x i32> %op)
   ret i32 %res
@@ -1008,11 +1158,11 @@ define i32 @umaxv_v16i32(<16 x i32>* %a) #0 {
 
 define i32 @umaxv_v32i32(<32 x i32>* %a) #0 {
 ; CHECK-LABEL: umaxv_v32i32:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].s, vl32
-; VBITS_GE_1048-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: umaxv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
-; VBITS_GE_1048-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].s, vl32
+; VBITS_GE_1024-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: umaxv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
+; VBITS_GE_1024-NEXT: fmov w0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <32 x i32>, <32 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.umax.v32i32(<32 x i32> %op)
   ret i32 %res
@@ -1020,11 +1170,11 @@ define i32 @umaxv_v32i32(<32 x i32>* %a) #0 {
 
 define i32 @umaxv_v64i32(<64 x i32>* %a) #0 {
 ; CHECK-LABEL: umaxv_v64i32:
-; VBITS_GE_2096: ptrue [[PG:p[0-9]+]].s, vl64
-; VBITS_GE_2096-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
-; VBITS_GE_2096-NEXT: umaxv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
-; VBITS_GE_2086-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_2096-NEXT: ret
+; VBITS_GE_2048: ptrue [[PG:p[0-9]+]].s, vl64
+; VBITS_GE_2048-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_GE_2048-NEXT: umaxv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
+; VBITS_GE_2048-NEXT: fmov w0, [[REDUCE]]
+; VBITS_GE_2048-NEXT: ret
   %op = load <64 x i32>, <64 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.umax.v64i32(<64 x i32> %op)
   ret i32 %res
@@ -1069,6 +1219,16 @@ define i64 @umaxv_v8i64(<8 x i64>* %a) #0 {
 ; VBITS_GE_512-NEXT: umaxv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
 ; VBITS_GE_512-NEXT: fmov x0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].d, vl4
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1d { [[LO:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1d { [[HI:z[0-9]+]].d }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: umax [[MAX:z[0-9]+]].d, [[PG]]/m, [[LO]].d, [[HI]].d
+; VBITS_EQ_256-DAG: umaxv [[REDUCE:d[0-9]+]], [[PG]], [[MAX]].d
+; VBITS_EQ_256-NEXT: fmov x0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <8 x i64>, <8 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.umax.v8i64(<8 x i64> %op)
   ret i64 %res
@@ -1076,11 +1236,11 @@ define i64 @umaxv_v8i64(<8 x i64>* %a) #0 {
 
 define i64 @umaxv_v16i64(<16 x i64>* %a) #0 {
 ; CHECK-LABEL: umaxv_v16i64:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].d, vl16
-; VBITS_GE_1048-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: umaxv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
-; VBITS_GE_1048-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].d, vl16
+; VBITS_GE_1024-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: umaxv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
+; VBITS_GE_1024-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <16 x i64>, <16 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.umax.v16i64(<16 x i64> %op)
   ret i64 %res
@@ -1088,11 +1248,11 @@ define i64 @umaxv_v16i64(<16 x i64>* %a) #0 {
 
 define i64 @umaxv_v32i64(<32 x i64>* %a) #0 {
 ; CHECK-LABEL: umaxv_v32i64:
-; VBITS_GE_2096: ptrue [[PG:p[0-9]+]].d, vl32
-; VBITS_GE_2096-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
-; VBITS_GE_2096-NEXT: umaxv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
-; VBITS_GE_2096-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_2096-NEXT: ret
+; VBITS_GE_2048: ptrue [[PG:p[0-9]+]].d, vl32
+; VBITS_GE_2048-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_GE_2048-NEXT: umaxv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
+; VBITS_GE_2048-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_2048-NEXT: ret
   %op = load <32 x i64>, <32 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.umax.v32i64(<32 x i64> %op)
   ret i64 %res
@@ -1139,6 +1299,16 @@ define i8 @uminv_v64i8(<64 x i8>* %a) #0 {
 ; VBITS_GE_512-NEXT: uminv b[[REDUCE:[0-9]+]], [[PG]], [[OP]].b
 ; VBITS_GE_512-NEXT: fmov w0, s[[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].b, vl32
+; VBITS_EQ_256-DAG: mov w[[A_HI:[0-9]+]], #32
+; VBITS_EQ_256-DAG: ld1b { [[LO:z[0-9]+]].b }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1b { [[HI:z[0-9]+]].b }, [[PG]]/z, [x0, x[[A_HI]]]
+; VBITS_EQ_256-DAG: umin [[MIN:z[0-9]+]].b, [[PG]]/m, [[HI]].b, [[LO]].b
+; VBITS_EQ_256-DAG: uminv b[[REDUCE:[0-9]+]], [[PG]], [[MIN]].b
+; VBITS_EQ_256-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <64 x i8>, <64 x i8>* %a
   %res = call i8 @llvm.experimental.vector.reduce.umin.v64i8(<64 x i8> %op)
   ret i8 %res
@@ -1205,6 +1375,16 @@ define i16 @uminv_v32i16(<32 x i16>* %a) #0 {
 ; VBITS_GE_512-NEXT: uminv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
 ; VBITS_GE_512-NEXT: fmov w0, s[[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].h, vl16
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1h { [[LO:z[0-9]+]].h }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1h { [[HI:z[0-9]+]].h }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: umin [[MIN:z[0-9]+]].h, [[PG]]/m, [[LO]].h, [[HI]].h
+; VBITS_EQ_256-DAG: uminv h[[REDUCE:[0-9]+]], [[PG]], [[MIN]].h
+; VBITS_EQ_256-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <32 x i16>, <32 x i16>* %a
   %res = call i16 @llvm.experimental.vector.reduce.umin.v32i16(<32 x i16> %op)
   ret i16 %res
@@ -1212,11 +1392,11 @@ define i16 @uminv_v32i16(<32 x i16>* %a) #0 {
 
 define i16 @uminv_v64i16(<64 x i16>* %a) #0 {
 ; CHECK-LABEL: uminv_v64i16:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].h, vl64
-; VBITS_GE_1048-NEXT: ld1h { [[OP:z[0-9]+]].h }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: uminv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
-; VBITS_GE_1048-NEXT: fmov w0, s[[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].h, vl64
+; VBITS_GE_1024-NEXT: ld1h { [[OP:z[0-9]+]].h }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: uminv h[[REDUCE:[0-9]+]], [[PG]], [[OP]].h
+; VBITS_GE_1024-NEXT: fmov w0, s[[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <64 x i16>, <64 x i16>* %a
   %res = call i16 @llvm.experimental.vector.reduce.umin.v64i16(<64 x i16> %op)
   ret i16 %res
@@ -1271,6 +1451,16 @@ define i32 @uminv_v16i32(<16 x i32>* %a) #0 {
 ; VBITS_GE_512-NEXT: uminv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
 ; VBITS_GE_512-NEXT: fmov w0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].s, vl8
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1w { [[LO:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1w { [[HI:z[0-9]+]].s }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: umin [[MIN:z[0-9]+]].s, [[PG]]/m, [[LO]].s, [[HI]].s
+; VBITS_EQ_256-DAG: uminv [[REDUCE:s[0-9]+]], [[PG]], [[MIN]].s
+; VBITS_EQ_256-NEXT: fmov w0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <16 x i32>, <16 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.umin.v16i32(<16 x i32> %op)
   ret i32 %res
@@ -1278,11 +1468,11 @@ define i32 @uminv_v16i32(<16 x i32>* %a) #0 {
 
 define i32 @uminv_v32i32(<32 x i32>* %a) #0 {
 ; CHECK-LABEL: uminv_v32i32:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].s, vl32
-; VBITS_GE_1048-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: uminv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
-; VBITS_GE_1048-NEXT: fmov w0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].s, vl32
+; VBITS_GE_1024-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: uminv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
+; VBITS_GE_1024-NEXT: fmov w0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <32 x i32>, <32 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.umin.v32i32(<32 x i32> %op)
   ret i32 %res
@@ -1290,11 +1480,11 @@ define i32 @uminv_v32i32(<32 x i32>* %a) #0 {
 
 define i32 @uminv_v64i32(<64 x i32>* %a) #0 {
 ; CHECK-LABEL: uminv_v64i32:
-; VBITS_GE_2096: ptrue [[PG:p[0-9]+]].s, vl64
-; VBITS_GE_2096-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
-; VBITS_GE_2096-NEXT: uminv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
-; VBITS_GE_2086-NEXT: fmov w0, [[REDUCE]]
-; VBITS_GE_2096-NEXT: ret
+; VBITS_GE_2048: ptrue [[PG:p[0-9]+]].s, vl64
+; VBITS_GE_2048-NEXT: ld1w { [[OP:z[0-9]+]].s }, [[PG]]/z, [x0]
+; VBITS_GE_2048-NEXT: uminv [[REDUCE:s[0-9]+]], [[PG]], [[OP]].s
+; VBITS_GE_2048-NEXT: fmov w0, [[REDUCE]]
+; VBITS_GE_2048-NEXT: ret
   %op = load <64 x i32>, <64 x i32>* %a
   %res = call i32 @llvm.experimental.vector.reduce.umin.v64i32(<64 x i32> %op)
   ret i32 %res
@@ -1339,6 +1529,16 @@ define i64 @uminv_v8i64(<8 x i64>* %a) #0 {
 ; VBITS_GE_512-NEXT: uminv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
 ; VBITS_GE_512-NEXT: fmov x0, [[REDUCE]]
 ; VBITS_GE_512-NEXT: ret
+
+; Ensure sensible type legalisation.
+; VBITS_EQ_256-DAG: ptrue [[PG:p[0-9]+]].d, vl4
+; VBITS_EQ_256-DAG: add x[[A_HI:[0-9]+]], x0, #32
+; VBITS_EQ_256-DAG: ld1d { [[LO:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_EQ_256-DAG: ld1d { [[HI:z[0-9]+]].d }, [[PG]]/z, [x[[A_HI]]]
+; VBITS_EQ_256-DAG: umin [[MIN:z[0-9]+]].d, [[PG]]/m, [[LO]].d, [[HI]].d
+; VBITS_EQ_256-DAG: uminv [[REDUCE:d[0-9]+]], [[PG]], [[MIN]].d
+; VBITS_EQ_256-NEXT: fmov x0, [[REDUCE]]
+; VBITS_EQ_256-NEXT: ret
   %op = load <8 x i64>, <8 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.umin.v8i64(<8 x i64> %op)
   ret i64 %res
@@ -1346,11 +1546,11 @@ define i64 @uminv_v8i64(<8 x i64>* %a) #0 {
 
 define i64 @uminv_v16i64(<16 x i64>* %a) #0 {
 ; CHECK-LABEL: uminv_v16i64:
-; VBITS_GE_1048: ptrue [[PG:p[0-9]+]].d, vl16
-; VBITS_GE_1048-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
-; VBITS_GE_1048-NEXT: uminv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
-; VBITS_GE_1048-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_1048-NEXT: ret
+; VBITS_GE_1024: ptrue [[PG:p[0-9]+]].d, vl16
+; VBITS_GE_1024-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_GE_1024-NEXT: uminv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
+; VBITS_GE_1024-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_1024-NEXT: ret
   %op = load <16 x i64>, <16 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.umin.v16i64(<16 x i64> %op)
   ret i64 %res
@@ -1358,11 +1558,11 @@ define i64 @uminv_v16i64(<16 x i64>* %a) #0 {
 
 define i64 @uminv_v32i64(<32 x i64>* %a) #0 {
 ; CHECK-LABEL: uminv_v32i64:
-; VBITS_GE_2096: ptrue [[PG:p[0-9]+]].d, vl32
-; VBITS_GE_2096-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
-; VBITS_GE_2096-NEXT: uminv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
-; VBITS_GE_2096-NEXT: fmov x0, [[REDUCE]]
-; VBITS_GE_2096-NEXT: ret
+; VBITS_GE_2048: ptrue [[PG:p[0-9]+]].d, vl32
+; VBITS_GE_2048-NEXT: ld1d { [[OP:z[0-9]+]].d }, [[PG]]/z, [x0]
+; VBITS_GE_2048-NEXT: uminv [[REDUCE:d[0-9]+]], [[PG]], [[OP]].d
+; VBITS_GE_2048-NEXT: fmov x0, [[REDUCE]]
+; VBITS_GE_2048-NEXT: ret
   %op = load <32 x i64>, <32 x i64>* %a
   %res = call i64 @llvm.experimental.vector.reduce.umin.v32i64(<32 x i64> %op)
   ret i64 %res

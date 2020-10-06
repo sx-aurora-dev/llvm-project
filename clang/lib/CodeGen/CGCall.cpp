@@ -1794,11 +1794,6 @@ void CodeGenModule::getDefaultFunctionAttributes(StringRef Name,
                            llvm::utostr(CodeGenOpts.SSPBufferSize));
     FuncAttrs.addAttribute("no-signed-zeros-fp-math",
                            llvm::toStringRef(LangOpts.NoSignedZero));
-    if (getLangOpts().OpenCL) {
-      FuncAttrs.addAttribute(
-          "correctly-rounded-divide-sqrt-fp-math",
-          llvm::toStringRef(CodeGenOpts.CorrectlyRoundedDivSqrt));
-    }
 
     // TODO: Reciprocal estimate codegen options should apply to instructions?
     const std::vector<std::string> &Recips = CodeGenOpts.Reciprocals;
@@ -2144,7 +2139,7 @@ void CodeGenModule::ConstructAttributeList(
   // Attach attributes to sret.
   if (IRFunctionArgs.hasSRetArg()) {
     llvm::AttrBuilder SRETAttrs;
-    SRETAttrs.addStructRetAttr(getTypes().ConvertTypeForMem(RetTy));
+    SRETAttrs.addAttribute(llvm::Attribute::StructRet);
     hasUsedSRet = true;
     if (RetAI.getInReg())
       SRETAttrs.addAttribute(llvm::Attribute::InReg);
@@ -2279,7 +2274,7 @@ void CodeGenModule::ConstructAttributeList(
       // Add 'sret' if we haven't already used it for something, but
       // only if the result is void.
       if (!hasUsedSRet && RetTy->isVoidType()) {
-        Attrs.addStructRetAttr(getTypes().ConvertTypeForMem(ParamType));
+        Attrs.addAttribute(llvm::Attribute::StructRet);
         hasUsedSRet = true;
       }
 

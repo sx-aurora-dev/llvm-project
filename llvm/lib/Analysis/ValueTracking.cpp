@@ -2561,12 +2561,15 @@ bool isKnownNonZero(const Value *V, const APInt &DemandedElts, unsigned Depth,
         }
       }
     }
-    // Check if all incoming values are non-zero constant.
-    bool AllNonZeroConstants = llvm::all_of(PN->operands(), [](Value *V) {
-      return isa<ConstantInt>(V) && !cast<ConstantInt>(V)->isZero();
+    // Check if all incoming values are non-zero using recursion.
+    Query RecQ = Q;
+    unsigned NewDepth = std::max(Depth, MaxAnalysisRecursionDepth - 1);
+    return llvm::all_of(PN->operands(), [&](const Use &U) {
+      if (U.get() == PN)
+        return true;
+      RecQ.CxtI = PN->getIncomingBlock(U)->getTerminator();
+      return isKnownNonZero(U.get(), DemandedElts, NewDepth, RecQ);
     });
-    if (AllNonZeroConstants)
-      return true;
   }
   // ExtractElement
   else if (const auto *EEI = dyn_cast<ExtractElementInst>(V)) {
@@ -4810,7 +4813,7 @@ static bool canCreateUndefOrPoison(const Operator *Op, bool PoisonOnly) {
 
       bool Safe = llvm::all_of(ShiftAmounts, [](Constant *C) {
         auto *CI = dyn_cast<ConstantInt>(C);
-        return CI && CI->getZExtValue() < C->getType()->getIntegerBitWidth();
+        return CI && CI->getValue().ult(C->getType()->getIntegerBitWidth());
       });
       return !Safe;
     }
@@ -4833,8 +4836,7 @@ static bool canCreateUndefOrPoison(const Operator *Op, bool PoisonOnly) {
     auto *VTy = cast<VectorType>(Op->getOperand(0)->getType());
     unsigned IdxOp = Op->getOpcode() == Instruction::InsertElement ? 2 : 1;
     auto *Idx = dyn_cast<ConstantInt>(Op->getOperand(IdxOp));
-    if (!Idx ||
-        Idx->getZExtValue() >= VTy->getElementCount().getKnownMinValue())
+    if (!Idx || Idx->getValue().uge(VTy->getElementCount().getKnownMinValue()))
       return true;
     return false;
   }
