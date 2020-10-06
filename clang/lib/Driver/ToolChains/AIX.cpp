@@ -156,9 +156,14 @@ void aix::Linker::ConstructJob(Compilation &C, const JobAction &JA,
     getToolChain().AddCXXStdlibLibArgs(Args, CmdArgs);
 
   if (!Args.hasArg(options::OPT_nostdlib, options::OPT_nodefaultlibs)) {
+    AddRunTimeLibs(ToolChain, D, CmdArgs, Args);
+
     // Support POSIX threads if "-pthreads" or "-pthread" is present.
     if (Args.hasArg(options::OPT_pthreads, options::OPT_pthread))
       CmdArgs.push_back("-lpthreads");
+
+    if (D.CCCIsCXX())
+      CmdArgs.push_back("-lm");
 
     CmdArgs.push_back("-lc");
   }
@@ -226,6 +231,10 @@ void AIX::AddCXXStdlibLibArgs(const llvm::opt::ArgList &DriverArgs,
 
 ToolChain::CXXStdlibType AIX::GetDefaultCXXStdlibType() const {
   return ToolChain::CST_Libcxx;
+}
+
+ToolChain::RuntimeLibType AIX::GetDefaultRuntimeLibType() const {
+  return ToolChain::RLT_CompilerRT;
 }
 
 auto AIX::buildAssembler() const -> Tool * { return new aix::Assembler(*this); }

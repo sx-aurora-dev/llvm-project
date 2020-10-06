@@ -1657,16 +1657,9 @@ bool LLParser::ParseOptionalParamAttrs(AttrBuilder &B) {
     }
     case lltok::kw_byval: {
       Type *Ty;
-      if (ParseOptionalTypeAttr(Ty, lltok::kw_byval))
+      if (ParseByValWithOptionalType(Ty))
         return true;
       B.addByValAttr(Ty);
-      continue;
-    }
-    case lltok::kw_sret: {
-      Type *Ty;
-      if (ParseOptionalTypeAttr(Ty, lltok::kw_sret))
-        return true;
-      B.addStructRetAttr(Ty);
       continue;
     }
     case lltok::kw_preallocated: {
@@ -1711,6 +1704,7 @@ bool LLParser::ParseOptionalParamAttrs(AttrBuilder &B) {
     case lltok::kw_readonly:        B.addAttribute(Attribute::ReadOnly); break;
     case lltok::kw_returned:        B.addAttribute(Attribute::Returned); break;
     case lltok::kw_signext:         B.addAttribute(Attribute::SExt); break;
+    case lltok::kw_sret:            B.addAttribute(Attribute::StructRet); break;
     case lltok::kw_swifterror:      B.addAttribute(Attribute::SwiftError); break;
     case lltok::kw_swiftself:       B.addAttribute(Attribute::SwiftSelf); break;
     case lltok::kw_writeonly:       B.addAttribute(Attribute::WriteOnly); break;
@@ -2577,9 +2571,9 @@ bool LLParser::ParseParameterList(SmallVectorImpl<ParamInfo> &ArgList,
 /// ParseByValWithOptionalType
 ///   ::= byval
 ///   ::= byval(<ty>)
-bool LLParser::ParseOptionalTypeAttr(Type *&Result, lltok::Kind AttrName) {
+bool LLParser::ParseByValWithOptionalType(Type *&Result) {
   Result = nullptr;
-  if (!EatIfPresent(AttrName))
+  if (!EatIfPresent(lltok::kw_byval))
     return true;
   if (!EatIfPresent(lltok::lparen))
     return false;
@@ -5351,6 +5345,8 @@ bool LLParser::ConvertValIDToValue(Type *Ty, ValID &ID, Value *&V,
     // The lexer has no type info, so builds all half, bfloat, float, and double
     // FP constants as double.  Fix this here.  Long double does not need this.
     if (&ID.APFloatVal.getSemantics() == &APFloat::IEEEdouble()) {
+      // Check for signaling before potentially converting and losing that info.
+      bool IsSNAN = ID.APFloatVal.isSignaling();
       bool Ignored;
       if (Ty->isHalfTy())
         ID.APFloatVal.convert(APFloat::IEEEhalf(), APFloat::rmNearestTiesToEven,
@@ -5361,6 +5357,14 @@ bool LLParser::ConvertValIDToValue(Type *Ty, ValID &ID, Value *&V,
       else if (Ty->isFloatTy())
         ID.APFloatVal.convert(APFloat::IEEEsingle(), APFloat::rmNearestTiesToEven,
                               &Ignored);
+      if (IsSNAN) {
+        // The convert call above may quiet an SNaN, so manufacture another
+        // SNaN. The bitcast works because the payload (significand) parameter
+        // is truncated to fit.
+        APInt Payload = ID.APFloatVal.bitcastToAPInt();
+        ID.APFloatVal = APFloat::getSNaN(ID.APFloatVal.getSemantics(),
+                                         ID.APFloatVal.isNegative(), &Payload);
+      }
     }
     V = ConstantFP::get(Context, ID.APFloatVal);
 
