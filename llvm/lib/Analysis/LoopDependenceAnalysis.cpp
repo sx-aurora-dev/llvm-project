@@ -638,8 +638,8 @@ static bool isLTArraySize(ScalarEvolution& SE, const SCEV* Val, const SCEV *ArrS
   // overflow is UB. What about other languages ?
   addNoSignedWrapFlag(Val);
   addNoSignedWrapFlag(ArrSize);
-  dbgs() << "ArrSize: " << *ArrSize << "\n";
-  dbgs() << "Val: " << *Val << "\n";
+  LLVM_DEBUG(dbgs() << "ArrSize: " << *ArrSize << "\n");
+  LLVM_DEBUG(dbgs() << "Val: " << *Val << "\n");
   const SCEV *Max = SE.getSMaxExpr(ArrSize, Val);
   if (Max != ArrSize)
     return false;
