@@ -23,16 +23,29 @@ enum class WEIGHT_TYPE {
   FALSEW
 };
 
-static int64_t
-getWeightOfTerminatorBr(BasicBlock *BB, WEIGHT_TYPE WType = WEIGHT_TYPE::TRUEW) {
+enum class ERROR {
+  NONE = 0,
+  NO_BR,  // The terminator is not a conditional branch
+  NO_MD,  // The branch has no metadata
+};
+
+enum class BRANCH_WEIGHT_RESULT {
+  CORRECT,
+  NO_APPROPRIATE_BLOCK,
+  NEVER_REACHED,
+};
+
+static ERROR
+getWeightOfTerminatorBr(BasicBlock *BB, int64_t *Weight, WEIGHT_TYPE WType = WEIGHT_TYPE::TRUEW) {
   BranchInst *CondBr =
     dyn_cast<BranchInst>(BB->getTerminator());
-  assert(CondBr);
+  if (!CondBr || CondBr->isUnconditional()) {
+    return ERROR::NO_BR;
+  }
   MDNode *BrWeightMD = CondBr->getMetadata("prof");
   if (!BrWeightMD) {
-    dbgs() << "PROBLEM!!!: " << *BB << "\n";
+    return ERROR::NO_MD;
   }
-  assert(BrWeightMD);
   Metadata *WeightMD;
   if (WType == WEIGHT_TYPE::TRUEW)
     WeightMD = BrWeightMD->getOperand(1);
@@ -42,20 +55,49 @@ getWeightOfTerminatorBr(BasicBlock *BB, WEIGHT_TYPE WType = WEIGHT_TYPE::TRUEW) 
   ConstantAsMetadata *WeightMDConst =
     dyn_cast<ConstantAsMetadata>(WeightMD);
   assert(WeightMDConst);
-  int64_t Weight =
-    WeightMDConst->getValue()->getUniqueInteger().getSExtValue();
-  return Weight;
-
+  *Weight = WeightMDConst->getValue()->getUniqueInteger().getSExtValue();
+  return ERROR::NONE;
 }
 
-static int64_t
-getLoopBranchWeight(const Loop *L, WEIGHT_TYPE WType = WEIGHT_TYPE::TRUEW) {
+// Return true if an appropriate branch was found. Otherwise, false.
+static BRANCH_WEIGHT_RESULT
+getLoopBranchWeight(const Loop *L, int64_t *Weight, WEIGHT_TYPE WType = WEIGHT_TYPE::TRUEW) {
+  BasicBlock *Header = L->getHeader();
+  assert(Header);
+  ERROR error = ERROR::NONE;
+  if (L->isLoopExiting(Header)) {
+    error = getWeightOfTerminatorBr(Header, Weight, WType);
+    if (error == ERROR::NONE) {
+      return BRANCH_WEIGHT_RESULT::CORRECT;
+    } else if (error == ERROR::NO_MD) {
+      return BRANCH_WEIGHT_RESULT::NEVER_REACHED;
+    } // else: try latch
+    assert(error == ERROR::NO_BR);
+  }
+  BasicBlock *Latch = L->getLoopLatch();
+  // We have run loop-simplify before
+  assert(Latch);
+  if (L->isLoopExiting(Latch)) {
+    error = getWeightOfTerminatorBr(Latch, Weight, WType);
+    if (error == ERROR::NONE) {
+      return BRANCH_WEIGHT_RESULT::CORRECT;
+    } else if (error == ERROR::NO_MD) {
+      return BRANCH_WEIGHT_RESULT::NEVER_REACHED;
+    } // else: try exiting block
+    assert(error == ERROR::NO_BR);
+  }
   BasicBlock *ExitingBlock = L->getExitingBlock();
-  // We want one exiting block because we want one branch
-  // to control whether we exit the loop as it can be used
-  // as a metric of how many times we iterated this loop.
-  assert(ExitingBlock && "The loop has more than one exiting blocks");
-  return getWeightOfTerminatorBr(ExitingBlock, WType);
+  if (!ExitingBlock) {
+    return BRANCH_WEIGHT_RESULT::NO_APPROPRIATE_BLOCK;
+  }
+  error = getWeightOfTerminatorBr(Latch, Weight, WType);
+  if (error == ERROR::NONE) {
+    return BRANCH_WEIGHT_RESULT::CORRECT;
+  } else if (error == ERROR::NO_MD) {
+    return BRANCH_WEIGHT_RESULT::NEVER_REACHED;
+  }
+  assert(error == ERROR::NO_BR);
+  return BRANCH_WEIGHT_RESULT::NO_APPROPRIATE_BLOCK;
 }
 
 static int64_t
@@ -89,14 +131,22 @@ llvm::PreservedAnalyses LoopHotnessStats::run(Function &F,
     LoopLoc.print(os);
     os << "\n";
 
-    int64_t NumReached = numTimesLoopWasReached(L);
-    os << "    Reached: " << NumReached << "\n";
-
-    int64_t TrueWeight = getLoopBranchWeight(L);
-    int64_t FalseWeight = getLoopBranchWeight(L, WEIGHT_TYPE::FALSEW);
-    os << "    True Weight (Trip Count): " << TrueWeight << "\n";
-    os << "    False Weight: " << FalseWeight << "\n";
-    os << "\n";
+    // TripCount is the same as the true weight, although we don't account
+    // for the fact that the loop may have been reached multiple times.
+    int64_t TripCount = -1;
+    os << "    ";
+    switch (getLoopBranchWeight(L, &TripCount)) {
+    case BRANCH_WEIGHT_RESULT::NO_APPROPRIATE_BLOCK:
+    {
+      os << "ERROR: No appropriate block was found.\n";
+    } break;
+    case BRANCH_WEIGHT_RESULT::NEVER_REACHED:
+    {
+      os << "ERROR: Never reached\n";
+    } break;
+    default:
+      os << "(Cumulative) Trip Count: " << TripCount << "\n";
+    }
   }
   return llvm::PreservedAnalyses::all();
 }
