@@ -2698,12 +2698,12 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
   //SDValue VL = DAG.getTargetConstant(resultSize, dl, MVT::i32);
   SDValue firstrotated
 	  = firstrot % 256 != 0
-	  ? SDValue(DAG.getMachineNode(VE::veoldVMVivl, dl, firstVec.getSimpleValueType(),
+	  ? SDValue(DAG.getMachineNode(VE::VMVivl, dl, firstVec.getSimpleValueType(),
 				  {DAG.getConstant(firstrot % 256, dl, i32), firstVec, VL}), 0)
 	  : firstVec;
   SDValue secondrotated
 	  = secondrot % 256 != 0
-	  ? SDValue(DAG.getMachineNode(VE::veoldVMVivl, dl, secondVec.getSimpleValueType(),
+	  ? SDValue(DAG.getMachineNode(VE::VMVivl, dl, secondVec.getSimpleValueType(),
 				  {DAG.getConstant(secondrot % 256, dl, i32), secondVec, VL}), 0)
 	  : secondVec;
 
@@ -2736,7 +2736,7 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
                                       {index, mask, Mask}), 0);
   }
 
-  SDValue returnValue = SDValue(DAG.getMachineNode(VE::veoldVMRGvvxl, dl, Op.getSimpleValueType(),
+  SDValue returnValue = SDValue(DAG.getMachineNode(VE::VMRGvvml, dl, Op.getSimpleValueType(),
 			  {firstrotated, secondrotated, Mask, VL}), 0);
   return returnValue;
 }
