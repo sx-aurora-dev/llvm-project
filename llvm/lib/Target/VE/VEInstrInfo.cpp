@@ -366,7 +366,7 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   } else if (VE::V64RegClass.contains(DestReg, SrcReg)) {
     // Generate following instructions
     //   %sw16 = LEA32zii 256
-    //   veoldVOR1vl %dest, (0)1, %src, %sw16
+    //   VORmvl %dest, (0)1, %src, %sw16
     // TODO: reuse a register if vl is already assigned to a register
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
@@ -375,8 +375,8 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     unsigned SubTmp = TRI->getSubReg(TmpReg, VE::sub_i32);
     BuildMI(MBB, I, DL, get(VE::LEAzii), TmpReg)
         .addImm(0).addImm(0).addImm(256);
-    MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::veoldVOR1vl), DestReg)
-        .addImm(0)
+    MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::VORmvl), DestReg)
+        .addImm(M1(0)) // Represent (0)1.
         .addReg(SrcReg, getKillRegState(KillSrc))
         .addReg(SubTmp, getKillRegState(true));
     MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
