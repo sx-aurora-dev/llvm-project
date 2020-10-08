@@ -93,14 +93,14 @@ define x86_regcallcc <256 x i32> @__regcall3__svv512i32_vmrg1(<256 x i32>, <256 
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmv %v1,%s1,%v1
+; CHECK-NEXT:    vmv %v1, %s1, %v1
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    lvm %vm1, 0, %s1
 ; CHECK-NEXT:    lvm %vm1, 1, %s1
 ; CHECK-NEXT:    lvm %vm1, 2, %s1
 ; CHECK-NEXT:    lea %s1, 255
 ; CHECK-NEXT:    lvm %vm1, 3, %s1
-; CHECK-NEXT:    vmrg %v0,%v0,%v1,%vm1
+; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = shufflevector <256 x i32> %0, <256 x i32> %1, <256 x i32>
     <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,
@@ -145,16 +145,16 @@ define x86_regcallcc <256 x i32> @__regcall3__svv512i32_vmrg2(<256 x i32>, <256 
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmv %v1,%s1,%v1
+; CHECK-NEXT:    vmv %v1, %s1, %v1
 ; CHECK-NEXT:    or %s1, 8, (0)1
-; CHECK-NEXT:    vmv %v0,%s1,%v0
+; CHECK-NEXT:    vmv %v0, %s1, %v0
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    lvm %vm1, 0, %s1
 ; CHECK-NEXT:    lvm %vm1, 1, %s1
 ; CHECK-NEXT:    lvm %vm1, 2, %s1
 ; CHECK-NEXT:    lea %s1, 255
 ; CHECK-NEXT:    lvm %vm1, 3, %s1
-; CHECK-NEXT:    vmrg %v0,%v0,%v1,%vm1
+; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = shufflevector <256 x i32> %0, <256 x i32> %1, <256 x i32>
     <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15,
