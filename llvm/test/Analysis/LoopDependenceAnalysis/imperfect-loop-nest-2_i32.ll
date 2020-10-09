@@ -2,7 +2,7 @@
 
 
 ; IMPORTANT: You _must_ add target data layout otherwise -indvars won't know if it's good to widen.
-target datalayout = "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+target datalayout = "n8:16:32:64"
 
 ; void test(int32_t n, int32_t m, int32_t A[n][m]) {
 ;   for (int32_t i = 0; i < n - 3; ++i) {
