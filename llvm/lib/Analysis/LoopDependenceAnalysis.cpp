@@ -1552,7 +1552,9 @@ expandBounds(SmallVectorImpl<RTAliasCheckInfo> &AliasChecks,
   return ExpandedAliasChecks;
 }
 
-// TODO: This probably should be moved to the transformation part.
+// TODO: This should definitely be moved in the transformation part! Note that
+// because this now transforms the loop, certain already verified preconditions
+// (like the loop being simplified) may not hold anymore.
 static void
 emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, const Loop *L,
                        SmallVectorImpl<RTAliasCheckInfo> &AliasChecks) {
@@ -1771,7 +1773,7 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
     }
   }
 
-  emitRuntimeAliasChecks(SE, DT, LI, NestInfo.AnalyzedLoop, AliasChecks);
+  //emitRuntimeAliasChecks(SE, DT, LI, NestInfo.AnalyzedLoop, AliasChecks);
 
   return Res;
 }
