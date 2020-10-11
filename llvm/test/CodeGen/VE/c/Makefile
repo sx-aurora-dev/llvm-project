@@ -8,7 +8,7 @@ UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
 FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
-  fp_fneg.ll
+  fp_fneg.ll fp_fdiv.ll fp_frem.ll
 
 TARGETS = select.ll $(FOP_TARGETS) \
           fp_ceil.ll fp_copysign.ll fp_cos.ll        \
@@ -43,6 +43,11 @@ all: $(TARGETS)
 
 fp_roundeven.ll: fp_round.ll
 	sed -e 's/llvm\.round/llvm.roundeven/' -e 's/fp_roundf/fp_roundevenf/' $? > $@
+	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
+	$(PATCH_TEST) $@
+
+fp_frem.ll: fp_frem_mod.ll
+	sed -e 's/= fdiv/= frem/' -e 's/fdiv_/frem_/' $? > $@
 	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
 	$(PATCH_TEST) $@
 
