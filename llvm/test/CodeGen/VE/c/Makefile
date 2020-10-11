@@ -7,7 +7,10 @@ CLEAN_TEST = $(LLVMSRCPATH)/utils/clean-test.sh
 UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
-TARGETS = select.ll fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
+FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
+  fp_fneg.ll
+
+TARGETS = select.ll $(FOP_TARGETS) \
           fp_ceil.ll fp_copysign.ll fp_cos.ll        \
           fp_exp.ll fp_exp2.ll fp_fabs.ll fp_floor.ll \
           fp_fma.ll fp_llrint.ll fp_llround.ll       \
