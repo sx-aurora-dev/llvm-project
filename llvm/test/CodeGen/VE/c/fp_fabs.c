@@ -1,124 +1,53 @@
+#include "types.h"
 #include <math.h>
-typedef _Bool int1_t;
-typedef char int8_t;
-typedef unsigned char uint8_t;
-typedef short int16_t;
-typedef unsigned short uint16_t;
-typedef int int32_t;
-typedef unsigned int uint32_t;
-typedef long int64_t;
-typedef unsigned long uint64_t;
-typedef __int128 int128_t;
-typedef unsigned __int128 uint128_t;
-typedef long double quad;
-typedef _Complex float fcomp;
-typedef _Complex double dcomp;
-typedef _Complex long double qcomp;
 
-#define FP_FABSF_VAR(TY) \
-TY func_fp_fabsf_var_ ## TY(TY a) { \
-  return fabsf(a); \
-}
-FP_FABSF_VAR(float)
+/// Test ‘llvm.fabs.*’ Intrinsic
+///
+/// Syntax:
+///   This is an overloaded intrinsic. You can use llvm.fabs on any
+///   floating-point or vector of floating-point type. Not all targets
+///   support all types however.
+///
+/// declare float     @llvm.fabs.f32(float  %Val)
+/// declare double    @llvm.fabs.f64(double %Val)
+/// declare x86_fp80  @llvm.fabs.f80(x86_fp80 %Val)
+/// declare fp128     @llvm.fabs.f128(fp128 %Val)
+/// declare ppc_fp128 @llvm.fabs.ppcf128(ppc_fp128 %Val)
+///
+/// Overview:
+///   The ‘llvm.fabs.*’ intrinsics return the absolute value of the operand.
+///
+/// Arguments:
+///   The argument and return value are floating-point numbers of the same
+///   type.
+///
+/// Semantics:
+///   This function returns the same values as the libm fabs functions would,
+///   and handles error conditions in the same way.
+///
+/// Note:
+///   We test only float/double/fp128.
 
-#define FP_CABSF_VAR(TY) \
-TY func_fp_cabsf_var_ ## TY(TY a) { \
-  return cabsf(a); \
+#define FP_FABS_VAR(TY, FNAME) \
+TY fabs_ ## TY ## _var(TY a) { \
+  return FNAME(a); \
 }
-FP_CABSF_VAR(fcomp)
+FP_FABS_VAR(float, fabsf)
+FP_FABS_VAR(double, fabs)
+FP_FABS_VAR(quad, fabsl)
 
-#define FP_FABS_VAR(TY) \
-TY func_fp_fabs_var_ ## TY(TY a) { \
-  return fabs(a); \
+#define FP_FABS_ZERO(TY, FNAME) \
+TY fabs_ ## TY ## _zero() { \
+  return FNAME((TY)0.0); \
 }
-FP_FABS_VAR(double)
+FP_FABS_ZERO(float, fabsf)
+FP_FABS_ZERO(double, fabs)
+FP_FABS_ZERO(quad, fabsl)
 
-#define FP_CABS_VAR(TY) \
-TY func_fp_cabs_var_ ## TY(TY a) { \
-  return cabs(a); \
+#define FP_FABS_CONST(TY, FNAME) \
+TY fabs_ ## TY ## _const() { \
+  return FNAME((TY)-2.0); \
 }
-FP_CABS_VAR(dcomp)
-
-#define FP_FABSL_VAR(TY) \
-TY func_fp_fabsl_var_ ## TY(TY a) { \
-  return fabsl(a); \
-}
-FP_FABSL_VAR(quad)
-
-#define FP_CABSL_VAR(TY) \
-TY func_fp_cabsl_var_ ## TY(TY a) { \
-  return cabsl(a); \
-}
-FP_CABSL_VAR(qcomp)
-
-#define FP_FABSF_ZERO(TY) \
-TY func_fp_fabsf_zero_ ## TY() { \
-  return  fabsf((TY)0.0) ; \
-}
-FP_FABSF_ZERO(float)
-
-#define FP_CABSF_ZERO(TY) \
-TY func_fp_cabsf_zero_ ## TY() { \
-  return  cabsf((TY)0.0) ; \
-}
-FP_CABSF_ZERO(fcomp)
-
-#define FP_FABS_ZERO(TY) \
-TY func_fp_FABS_zero_ ## TY() { \
-  return  fabs((TY)0.0) ; \
-}
-FP_FABS_ZERO(double)
-
-#define FP_CABS_ZERO(TY) \
-TY func_fp_CABS_zero_ ## TY() { \
-  return  cabs((TY)0.0) ; \
-}
-FP_CABS_ZERO(dcomp)
-
-#define FP_FABSL_ZERO(TY) \
-TY func_fp_fabsl_zero_ ## TY() { \
-  return  fabsl((TY)0.0) ; \
-}
-FP_FABSL_ZERO(quad)
-
-#define FP_CABSL_ZERO(TY) \
-TY func_fp_cabsl_zero_ ## TY() { \
-  return  cabsl((TY)0.0) ; \
-}
-FP_CABSL_ZERO(qcomp)
-
-#define FP_FABSF_CONST(TY) \
-TY func_fp_fabsf_const_ ## TY() { \
-  return fabsf((TY)-2.0); \
-}
-FP_FABSF_CONST(float)
-
-#define FP_CABSF_CONST(TY) \
-TY func_fp_cabsf_const_ ## TY() { \
-  return cabsf((TY)-2.0); \
-}
-FP_CABSF_CONST(fcomp)
-
-#define FP_FABS_CONST(TY) \
-TY func_fp_fabs_const_ ## TY() { \
-  return fabs((TY)-2.0); \
-}
-FP_FABS_CONST(double)
-
-#define FP_CABS_CONST(TY) \
-TY func_fp_cabs_const_ ## TY() { \
-  return cabs((TY)-2.0); \
-}
-FP_CABS_CONST(dcomp)
-
-#define FP_FABSL_CONST(TY) \
-TY func_fp_fabsl_const_ ## TY() { \
-  return fabsl((TY)-2.0); \
-}
-FP_FABSL_CONST(quad)
-
-#define FP_CABSL_CONST(TY) \
-TY func_fp_cabsl_const_ ## TY() { \
-  return cabsl((TY)-2.0); \
-}
-FP_CABSL_CONST(qcomp)
+FP_FABS_CONST(float, fabsf)
+FP_FABS_CONST(double, fabs)
+FP_FABS_CONST(quad, fabsl)
