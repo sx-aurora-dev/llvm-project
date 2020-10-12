@@ -156,9 +156,9 @@ namespace llvm {
       v8f64          = 101,   //    8 x f64
       v16f64         = 102,   //   16 x f64
       v32f64         = 103,   //   32 x f64
-      v64f64         = 104,  //   64 x f64
-      v128f64        = 105,  //  128 x f64
-      v256f64        = 106,  //  256 x f64
+      v64f64         = 104,   //   64 x f64
+      v128f64        = 105,   //  128 x f64
+      v256f64        = 106,   //  256 x f64
 
       FIRST_FP_FIXEDLEN_VECTOR_VALUETYPE = v2f16,
       LAST_FP_FIXEDLEN_VECTOR_VALUETYPE = v256f64,
@@ -403,8 +403,7 @@ namespace llvm {
 
     /// Return true if this is a 1024-bit vector type.
     bool is1024BitVector() const {
-      return (SimpleTy == MVT::v32f32  || SimpleTy == MVT::v16f64 ||
-              SimpleTy == MVT::v1024i1 || SimpleTy == MVT::v128i8 ||
+      return (SimpleTy == MVT::v1024i1 || SimpleTy == MVT::v128i8 ||
               SimpleTy == MVT::v64i16  || SimpleTy == MVT::v32i32 ||
               SimpleTy == MVT::v16i64  || SimpleTy == MVT::v64f16 ||
               SimpleTy == MVT::v32f32  || SimpleTy == MVT::v16f64 ||
@@ -639,8 +638,8 @@ namespace llvm {
       case v256i1:
       case v256i8:
       case v256i32:
-      case v256f32:
       case v256i64:
+      case v256f32:
       case v256f64: return 256;
       case v128i1:
       case v128i8:

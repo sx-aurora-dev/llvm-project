@@ -1127,22 +1127,26 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
 
   /// Load & Store {
-  for (MVT FPVT : MVT::fp_valuetypes()) {
-    for (MVT OtherFPVT : MVT::fp_valuetypes()) {
-      // Turn FP extload into load/fpextend
-      setLoadExtAction(ISD::EXTLOAD, FPVT, OtherFPVT, Expand);
 
-      // Turn FP truncstore into trunc + store.
-      setTruncStoreAction(FPVT, OtherFPVT, Expand);
-    }
-  }
-
-  // VE doesn't have i1 sign extending load
+  // VE doesn't have i1 sign extending load.
   for (MVT VT : MVT::integer_valuetypes()) {
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
     setLoadExtAction(ISD::ZEXTLOAD, VT, MVT::i1, Promote);
     setLoadExtAction(ISD::EXTLOAD, VT, MVT::i1, Promote);
   }
+
+  // VE doesn't have floating point extload/truncstore, so expand them.
+  for (MVT FPVT : MVT::fp_valuetypes()) {
+    for (MVT OtherFPVT : MVT::fp_valuetypes()) {
+      setLoadExtAction(ISD::EXTLOAD, FPVT, OtherFPVT, Expand);
+      setTruncStoreAction(FPVT, OtherFPVT, Expand);
+    }
+  }
+
+  // VE doesn't have fp128 load/store, so expand them in custom lower.
+  setOperationAction(ISD::LOAD, MVT::f128, Custom);
+  setOperationAction(ISD::STORE, MVT::f128, Custom);
+
   /// } Load & Store
 
   // Custom legalize address nodes into LO/HI parts.
@@ -1240,10 +1244,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   // VE doesn't have fdiv of f128.
   setOperationAction(ISD::FDIV, MVT::f128, Expand);
-
-  // VE doesn't have load/store of f128, so use custom-lowering.
-  setOperationAction(ISD::LOAD, MVT::f128, Custom);
-  setOperationAction(ISD::STORE, MVT::f128, Custom);
 
   for (MVT FPVT : {MVT::f32, MVT::f64}) {
     // f32 and f64 uses ConstantFP.  f128 uses ConstantPool.
