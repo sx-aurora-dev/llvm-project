@@ -3622,19 +3622,30 @@ SDValue DAGCombiner::visitMUL(SDNode *N) {
                                       getShiftAmountTy(N0.getValueType()))));
   }
 
-  // Try to transform multiply-by-(power-of-2 +/- 1) into shift and add/sub.
+  // Try to transform:
+  // (1) multiply-by-(power-of-2 +/- 1) into shift and add/sub.
   // mul x, (2^N + 1) --> add (shl x, N), x
   // mul x, (2^N - 1) --> sub (shl x, N), x
   // Examples: x * 33 --> (x << 5) + x
   //           x * 15 --> (x << 4) - x
   //           x * -33 --> -((x << 5) + x)
   //           x * -15 --> -((x << 4) - x) ; this reduces --> x - (x << 4)
+  // (2) multiply-by-(power-of-2 +/- power-of-2) into shifts and add/sub.
+  // mul x, (2^N + 2^M) --> (add (shl x, N), (shl x, M))
+  // mul x, (2^N - 2^M) --> (sub (shl x, N), (shl x, M))
+  // Examples: x * 0x8800 --> (x << 15) + (x << 11)
+  //           x * 0xf800 --> (x << 16) - (x << 11)
+  //           x * -0x8800 --> -((x << 15) + (x << 11))
+  //           x * -0xf800 --> -((x << 16) - (x << 11)) ; (x << 11) - (x << 16)
   if (N1IsConst && TLI.decomposeMulByConstant(*DAG.getContext(), VT, N1)) {
     // TODO: We could handle more general decomposition of any constant by
     //       having the target set a limit on number of ops and making a
     //       callback to determine that sequence (similar to sqrt expansion).
     unsigned MathOp = ISD::DELETED_NODE;
     APInt MulC = ConstValue1.abs();
+    // The constant `2` should be treated as (2^0 + 1).
+    unsigned TZeros = MulC == 2 ? 0 : MulC.countTrailingZeros();
+    MulC.lshrInPlace(TZeros);
     if ((MulC - 1).isPowerOf2())
       MathOp = ISD::ADD;
     else if ((MulC + 1).isPowerOf2())
@@ -3643,12 +3654,17 @@ SDValue DAGCombiner::visitMUL(SDNode *N) {
     if (MathOp != ISD::DELETED_NODE) {
       unsigned ShAmt =
           MathOp == ISD::ADD ? (MulC - 1).logBase2() : (MulC + 1).logBase2();
+      ShAmt += TZeros;
       assert(ShAmt < VT.getScalarSizeInBits() &&
              "multiply-by-constant generated out of bounds shift");
       SDLoc DL(N);
       SDValue Shl =
           DAG.getNode(ISD::SHL, DL, VT, N0, DAG.getConstant(ShAmt, DL, VT));
-      SDValue R = DAG.getNode(MathOp, DL, VT, Shl, N0);
+      SDValue R =
+          TZeros ? DAG.getNode(MathOp, DL, VT, Shl,
+                               DAG.getNode(ISD::SHL, DL, VT, N0,
+                                           DAG.getConstant(TZeros, DL, VT)))
+                 : DAG.getNode(MathOp, DL, VT, Shl, N0);
       if (ConstValue1.isNegative())
         R = DAG.getNode(ISD::SUB, DL, VT, DAG.getConstant(0, DL, VT), R);
       return R;
@@ -14792,8 +14808,8 @@ SDValue DAGCombiner::SplitIndexingFromLoad(LoadSDNode *LD) {
   return DAG.getNode(Opc, SDLoc(LD), BP.getSimpleValueType(), BP, Inc);
 }
 
-static inline int numVectorEltsOrZero(EVT T) {
-  return T.isVector() ? T.getVectorNumElements() : 0;
+static inline ElementCount numVectorEltsOrZero(EVT T) {
+  return T.isVector() ? T.getVectorElementCount() : ElementCount::getFixed(0);
 }
 
 bool DAGCombiner::getTruncatedStoreValue(StoreSDNode *ST, SDValue &Val) {
@@ -14861,6 +14877,24 @@ SDValue DAGCombiner::ForwardStoreValueToDirectLoad(LoadSDNode *LD) {
   EVT STMemType = ST->getMemoryVT();
   EVT STType = ST->getValue().getValueType();
 
+  // There are two cases to consider here:
+  //  1. The store is fixed width and the load is scalable. In this case we
+  //     don't know at compile time if the store completely envelops the load
+  //     so we abandon the optimisation.
+  //  2. The store is scalable and the load is fixed width. We could
+  //     potentially support a limited number of cases here, but there has been
+  //     no cost-benefit analysis to prove it's worth it.
+  bool LdStScalable = LDMemType.isScalableVector();
+  if (LdStScalable != STMemType.isScalableVector())
+    return SDValue();
+
+  // If we are dealing with scalable vectors on a big endian platform the
+  // calculation of offsets below becomes trickier, since we do not know at
+  // compile time the absolute size of the vector. Until we've done more
+  // analysis on big-endian platforms it seems better to bail out for now.
+  if (LdStScalable && DAG.getDataLayout().isBigEndian())
+    return SDValue();
+
   BaseIndexOffset BasePtrLD = BaseIndexOffset::match(LD, DAG);
   BaseIndexOffset BasePtrST = BaseIndexOffset::match(ST, DAG);
   int64_t Offset;
@@ -14872,13 +14906,21 @@ SDValue DAGCombiner::ForwardStoreValueToDirectLoad(LoadSDNode *LD) {
   // the stored value). With Offset=n (for n > 0) the loaded value starts at the
   // n:th least significant byte of the stored value.
   if (DAG.getDataLayout().isBigEndian())
-    Offset = ((int64_t)STMemType.getStoreSizeInBits() -
-              (int64_t)LDMemType.getStoreSizeInBits()) / 8 - Offset;
+    Offset = ((int64_t)STMemType.getStoreSizeInBits().getFixedSize() -
+              (int64_t)LDMemType.getStoreSizeInBits().getFixedSize()) /
+                 8 -
+             Offset;
 
   // Check that the stored value cover all bits that are loaded.
-  bool STCoversLD =
-      (Offset >= 0) &&
-      (Offset * 8 + LDMemType.getSizeInBits() <= STMemType.getSizeInBits());
+  bool STCoversLD;
+
+  TypeSize LdMemSize = LDMemType.getSizeInBits();
+  TypeSize StMemSize = STMemType.getSizeInBits();
+  if (LdStScalable)
+    STCoversLD = (Offset == 0) && LdMemSize == StMemSize;
+  else
+    STCoversLD = (Offset >= 0) && (Offset * 8 + LdMemSize.getFixedSize() <=
+                                   StMemSize.getFixedSize());
 
   auto ReplaceLd = [&](LoadSDNode *LD, SDValue Val, SDValue Chain) -> SDValue {
     if (LD->isIndexed()) {
@@ -14899,15 +14941,15 @@ SDValue DAGCombiner::ForwardStoreValueToDirectLoad(LoadSDNode *LD) {
   // Memory as copy space (potentially masked).
   if (Offset == 0 && LDType == STType && STMemType == LDMemType) {
     // Simple case: Direct non-truncating forwarding
-    if (LDType.getSizeInBits() == LDMemType.getSizeInBits())
+    if (LDType.getSizeInBits() == LdMemSize)
       return ReplaceLd(LD, ST->getValue(), Chain);
     // Can we model the truncate and extension with an and mask?
     if (STType.isInteger() && LDMemType.isInteger() && !STType.isVector() &&
         !LDMemType.isVector() && LD->getExtensionType() != ISD::SEXTLOAD) {
       // Mask to size of LDMemType
       auto Mask =
-          DAG.getConstant(APInt::getLowBitsSet(STType.getSizeInBits(),
-                                               STMemType.getSizeInBits()),
+          DAG.getConstant(APInt::getLowBitsSet(STType.getFixedSizeInBits(),
+                                               StMemSize.getFixedSize()),
                           SDLoc(ST), STType);
       auto Val = DAG.getNode(ISD::AND, SDLoc(LD), LDType, ST->getValue(), Mask);
       return ReplaceLd(LD, Val, Chain);

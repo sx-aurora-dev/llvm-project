@@ -117,12 +117,28 @@ if (CUDA_TOOLKIT_ROOT_DIR)
 endif()
 find_package(CUDA QUIET)
 
+# Disable CUDA if compiling for VE
+# TODO: Need to find a way to compile both VE and CUDA
 if(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
   set(LIBOMPTARGET_DEP_CUDA_FOUND ${CUDA_FOUND})
 else(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
   # force to not compile CUDA libomptarget while compiling native VE libomp
   set(LIBOMPTARGET_DEP_CUDA_FOUND "FALSE")
 endif(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
+
+# Try to get the highest Nvidia GPU architecture the system supports
+if (CUDA_FOUND)
+  cuda_select_nvcc_arch_flags(CUDA_ARCH_FLAGS)
+  string(REGEX MATCH "sm_([0-9]+)" CUDA_ARCH_MATCH_OUTPUT ${CUDA_ARCH_FLAGS})
+  if (NOT DEFINED CUDA_ARCH_MATCH_OUTPUT OR "${CMAKE_MATCH_1}" LESS 35)
+    libomptarget_warning_say("Setting Nvidia GPU architecture support for OpenMP target runtime library to sm_35 by default")
+    set(LIBOMPTARGET_DEP_CUDA_ARCH "35")
+  else()
+    set(LIBOMPTARGET_DEP_CUDA_ARCH "${CMAKE_MATCH_1}")
+  endif()
+endif()
+
+set(LIBOMPTARGET_DEP_CUDA_FOUND ${CUDA_FOUND})
 set(LIBOMPTARGET_DEP_CUDA_INCLUDE_DIRS ${CUDA_INCLUDE_DIRS})
 
 mark_as_advanced(
