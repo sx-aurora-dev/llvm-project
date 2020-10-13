@@ -3,18 +3,18 @@
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <1024 x i32> @brdv512i32x2(i32) {
 ; CHECK-LABEL: brdv512i32x2:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    srl %s1, %s0, 32
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 129
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvbrd %v0,%s0
+; CHECK-NEXT:    pvbrd %v0, %s0
 ; CHECK-NEXT:    lea %s1, 130
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvbrd %v1,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    pvbrd %v1, %s0
+; CHECK-NEXT:    b.l.t (, %s10)
   %val = insertelement <1024 x i32> undef, i32 %0, i32 0
   %r0 = insertelement <1024 x i32> %val, i32 %0, i32 1
   %r1 = insertelement <1024 x i32> %r0, i32 %0, i32 257
@@ -26,26 +26,15 @@ define x86_regcallcc <1024 x i32> @brdv512i32x2(i32) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <512 x i32> @brdv512i32(i32) {
 ; CHECK-LABEL: brdv512i32:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    srl %s1, %s0, 32
-=======
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    sll %s0, %s0, 32
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s1
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK-NEXT:    pvbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK-NEXT:    pvbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <512 x i32> undef, i32 %0, i32 0
   %ret = insertelement <512 x i32> %val, i32 %0, i32 1
   ret <512 x i32> %ret
@@ -54,25 +43,15 @@ define x86_regcallcc <512 x i32> @brdv512i32(i32) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <512 x float> @brdv512f32(float) {
 ; CHECK-LABEL: brdv512f32:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    and %s1, %s0, (32)1
 ; CHECK-NEXT:    sll %s0, %s0, 32
-=======
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    srl %s1, %s0, 32
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s1
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK-NEXT:    pvbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK-NEXT:    pvbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <512 x float> undef, float %0, i32 0
   %ret = insertelement <512 x float> %val, float %0, i32 1
   ret <512 x float> %ret
@@ -81,19 +60,11 @@ define x86_regcallcc <512 x float> @brdv512f32(float) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i64> @brdv256i64(i64) {
 ; CHECK-LABEL: brdv256i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <256 x i64> undef, i64 %0, i32 0
   %ret = insertelement <256 x i64> %val, i64 %0, i32 1
   ret <256 x i64> %ret
@@ -102,19 +73,11 @@ define x86_regcallcc <256 x i64> @brdv256i64(i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x i32> @brdv256i32(i32) {
 ; CHECK-LABEL: brdv256i32:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdl %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdl %v0, %s0
+; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <256 x i32> undef, i32 %0, i32 0
   %ret = insertelement <256 x i32> %val, i32 %0, i32 1
   ret <256 x i32> %ret
@@ -123,19 +86,11 @@ define x86_regcallcc <256 x i32> @brdv256i32(i32) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x double> @brdv256f64(double) {
 ; CHECK-LABEL: brdv256f64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <256 x double> undef, double %0, i32 0
   %ret = insertelement <256 x double> %val, double %0, i32 1
   ret <256 x double> %ret
@@ -144,19 +99,11 @@ define x86_regcallcc <256 x double> @brdv256f64(double) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <256 x float> @brdv256f32(float) {
 ; CHECK-LABEL: brdv256f32:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdu %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrdu %v0, %s0
+; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <256 x float> undef, float %0, i32 0
   %ret = insertelement <256 x float> %val, float %0, i32 1
   ret <256 x float> %ret
@@ -165,19 +112,11 @@ define x86_regcallcc <256 x float> @brdv256f32(float) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <128 x i64> @brdv128i64(i64) {
 ; CHECK-LABEL: brdv128i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 128
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <128 x i64> undef, i64 %0, i32 0
   %ret = insertelement <128 x i64> %val, i64 %0, i32 1
   ret <128 x i64> %ret
@@ -186,19 +125,11 @@ define x86_regcallcc <128 x i64> @brdv128i64(i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <64 x i64> @brdv64i64(i64) {
 ; CHECK-LABEL: brdv64i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 64
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <64 x i64> undef, i64 %0, i32 0
   %ret = insertelement <64 x i64> %val, i64 %0, i32 1
   ret <64 x i64> %ret
@@ -207,19 +138,11 @@ define x86_regcallcc <64 x i64> @brdv64i64(i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <32 x i64> @brdv32i64(i64) {
 ; CHECK-LABEL: brdv32i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 32
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <32 x i64> undef, i64 %0, i32 0
   %ret = insertelement <32 x i64> %val, i64 %0, i32 1
   ret <32 x i64> %ret
@@ -228,19 +151,11 @@ define x86_regcallcc <32 x i64> @brdv32i64(i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <16 x i64> @brdv16i64(i64) {
 ; CHECK-LABEL: brdv16i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 16
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <16 x i64> undef, i64 %0, i32 0
   %ret = insertelement <16 x i64> %val, i64 %0, i32 1
   ret <16 x i64> %ret
@@ -249,19 +164,11 @@ define x86_regcallcc <16 x i64> @brdv16i64(i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <8 x i64> @brdv8i64(i64) {
 ; CHECK-LABEL: brdv8i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 8
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <8 x i64> undef, i64 %0, i32 0
   %ret = insertelement <8 x i64> %val, i64 %0, i32 1
   ret <8 x i64> %ret
@@ -270,19 +177,11 @@ define x86_regcallcc <8 x i64> @brdv8i64(i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <4 x i64> @brdv4i64(i64) {
 ; CHECK-LABEL: brdv4i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 4
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <4 x i64> undef, i64 %0, i32 0
   %ret = insertelement <4 x i64> %val, i64 %0, i32 1
   ret <4 x i64> %ret
@@ -291,19 +190,11 @@ define x86_regcallcc <4 x i64> @brdv4i64(i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <2 x i64> @brdv2i64(i64) {
 ; CHECK-LABEL: brdv2i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Packed/broadcast_packed.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0,%s0
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 2
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast.ll
   %val = insertelement <2 x i64> undef, i64 %0, i32 0
   %ret = insertelement <2 x i64> %val, i64 %0, i32 1
   ret <2 x i64> %ret
