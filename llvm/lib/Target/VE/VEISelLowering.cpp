@@ -4142,6 +4142,10 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     // case ISD::VECREDUCE_AND:
     // case ISD::VECREDUCE_XOR:
 
+  case ISD::LOAD:
+    return LowerLOAD(Op, DAG);
+  case ISD::STORE:
+    return LowerSTORE(Op, DAG);
   case ISD::MLOAD:
     return LowerMLOAD(Op, DAG, VVPExpansionMode::ToNativeWidth);
   case ISD::MSTORE:
