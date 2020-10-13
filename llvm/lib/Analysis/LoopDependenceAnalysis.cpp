@@ -878,12 +878,10 @@ handleFailedDelinearization(ScalarEvolution &SE, const Loop *L,
   return true;
 }
 
-static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
-                                  SmallVectorImpl<const SCEV *> &Subscripts,
-                                  SmallVectorImpl<const SCEV *> &Sizes,
-                                  const Loop *L) {
-  assert(isa<StoreInst>(Inst) || isa<LoadInst>(Inst));
-  Value *Pointer = getPointerOperand(Inst);
+static const SCEV *getSCEVStrippedFromBasePointer(ScalarEvolution &SE,
+                                                  Value *Pointer,
+                                                  const Loop *L) {
+
   const SCEV *AccessExpr = SE.getSCEVAtScope(Pointer, L);
 
   LLVM_DEBUG(dbgs() << "\n\nAccessExpr (" << *AccessExpr->getType()
@@ -893,10 +891,25 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
       dyn_cast<SCEVUnknown>(SE.getPointerBase(AccessExpr));
   // Do not delinearize if we cannot find the base pointer.
   if (!BasePointer)
-    return false;
+    return nullptr;
   LLVM_DEBUG(dbgs() << "Base Pointer: " << *BasePointer << "\n";);
   // Remove the base pointer from the expr.
   AccessExpr = SE.getMinusSCEV(AccessExpr, BasePointer);
+  LLVM_DEBUG(dbgs() << "\n\nAccessExpr (" << *AccessExpr->getType()
+                    << "): " << *AccessExpr << "\n";);
+  return AccessExpr;
+}
+
+static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
+                                  SmallVectorImpl<const SCEV *> &Subscripts,
+                                  SmallVectorImpl<const SCEV *> &Sizes,
+                                  const Loop *L) {
+
+  assert(isa<StoreInst>(Inst) || isa<LoadInst>(Inst));
+  Value *Pointer = getPointerOperand(Inst);
+  const SCEV *AccessExpr = getSCEVStrippedFromBasePointer(SE, Pointer, L);
+  if (!AccessExpr)
+    return false;
 
   SE.delinearize(AccessExpr, Subscripts, Sizes, SE.getElementSize(Inst));
 
@@ -908,7 +921,6 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
   }
 
   LLVM_DEBUG(
-      dbgs() << "Base offset: " << *BasePointer << "\n";
       dbgs() << "ArrayDecl[UnknownSize]"; int Size = Subscripts.size();
       for (int i = 0; i < Size - 1; i++) dbgs() << "[" << *Sizes[i] << "]";
       dbgs() << " with elements of " << *Sizes[Size - 1] << " bytes.\n";
@@ -920,6 +932,117 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
   );
 
   return true;
+}
+
+static void getArraySizes(ScalarEvolution &SE, Value *Obj, SmallVectorImpl<const SCEV*>& Sizes) {
+  Type *Ty = Obj->getType();
+  assert(Ty->isPointerTy());
+  ArrayType *ArrTy = dyn_cast<ArrayType>(Ty->getPointerElementType());
+  assert(ArrTy);
+  // Skip the first size; It's not always present.
+  ArrTy = dyn_cast<ArrayType>(ArrTy->getArrayElementType());
+  while (ArrTy) {
+    uint64_t NumElements = ArrTy->getArrayNumElements();
+    const SCEVConstant *S = dyn_cast<SCEVConstant>(
+        SE.getConstant(Type::getInt64Ty(ArrTy->getContext()), NumElements, false));
+    assert(S);
+    Sizes.push_back(S);
+    ArrTy = dyn_cast<ArrayType>(ArrTy->getArrayElementType());
+  }
+  // Push a dummy value; `Sizes.size()` should be the same as
+  // `Subscripts.size()`
+  Sizes.push_back(SE.getConstant(Type::getInt64Ty(Ty->getContext()), 0, false));
+}
+
+static bool getCumulativeStartingOffset(ScalarEvolution &SE,
+                                            const SCEVAddRecExpr *S, uint64_t &Offset) {
+  assert(S);
+  const SCEV *Save;
+  do {
+    assert(S->getStepRecurrence(SE)->getSCEVType() == scConstant);
+    Save = S->getStart();
+    S = dyn_cast<SCEVAddRecExpr>(Save);
+  } while (S);
+  const SCEVConstant *OffsetSCEV = dyn_cast<SCEVConstant>(Save);
+  if (!OffsetSCEV)
+    return false;
+  Offset = OffsetSCEV->getValue()->getZExtValue();
+  return true;
+}
+
+static void findArraySubscripts(ScalarEvolution &SE, uint64_t Offset,
+                                uint64_t TypeByteSize, const SCEVAddRecExpr *S,
+                                SmallVectorImpl<const SCEV *> &Subscripts,
+                                SmallVectorImpl<const SCEV *> &Sizes) {
+  SmallVector<std::pair<uint64_t, const SCEVAddRecExpr *>, 3> Steps;
+  do {
+    const SCEVConstant *Step = dyn_cast<SCEVConstant>(S->getStepRecurrence(SE));
+    assert(Step);
+    uint64_t StepVal = Step->getValue()->getZExtValue();
+    // Save parent SCEV for later.
+    Steps.push_back({StepVal, S});
+    S = dyn_cast<SCEVAddRecExpr>(S->getStart());
+  } while (S);
+
+  llvm::sort(Steps.begin(), Steps.end());
+
+  dbgs() << "\n";
+  // To be continued: Run the example with [i+2][j+1] and see that you get
+  // bad index offset (index offsets are the DivRes, e.g. in i+2, it is the 2).
+  // To make this work, probably we have to always start with the recurrence
+  // with the biggest step.
+
+  // TODO: Also, we probably want to take into consideration the `Sizes`, to find
+  // out if we have a +1 step or more.
+
+  assert(Subscripts.size() == 0);
+  for (std::pair<uint64_t, const SCEVAddRecExpr *> StepPair : reverse(Steps)) {
+    uint64_t StepVal = StepPair.first;
+    uint64_t DivRes = Offset / StepVal;
+    uint64_t DivMod = Offset % StepVal;
+    LLVM_DEBUG(dbgs() << "Offset: " << Offset << "\n";
+               dbgs() << "StepVal: " << StepVal << "\n";
+               dbgs() << "DivRes: " << DivRes << "\n";
+               dbgs() << "DivMod: " << DivMod << "\n";
+               dbgs() << "---------------------\n";);
+
+    const SCEVAddRecExpr *Parent = StepPair.second;
+    // Construct AddRec SCEV with DivRes as Start
+    // and +1 as Step (see the TODO above).
+    const SCEV *Start = SE.getConstant(Parent->getType(), DivRes, false);
+    const SCEV *Step = SE.getConstant(Parent->getType(), 1, false);
+    const SCEVAddRecExpr *S = dyn_cast<SCEVAddRecExpr>(SE.getAddRecExpr(
+        Start, Step, StepPair.second->getLoop(), Parent->getNoWrapFlags()));
+    assert(S);
+    Subscripts.push_back(S);
+
+    Offset = DivMod;
+  }
+  assert(Subscripts.size() == Sizes.size());
+}
+
+static bool
+delinearizePtrOnGlobalArray(ScalarEvolution &SE, Value *Ptr, Value *Obj,
+                            SmallVectorImpl<const SCEV *> &Subscripts,
+                            SmallVectorImpl<const SCEV *> &Sizes,
+                            LoopNestInfo NestInfo) {
+  const SCEV *AccessExpr =
+      getSCEVStrippedFromBasePointer(SE, Ptr, NestInfo.InnermostLoop);
+  getArraySizes(SE, Obj, Sizes);
+  for (const SCEV *Sz : Sizes) {
+    dbgs() << "Sz: " << *Sz << "\n";
+  }
+  auto &DL = NestInfo.AnalyzedLoop->getHeader()->getModule()->getDataLayout();
+  assert(Ptr->getType()->isPointerTy());
+  uint64_t TypeByteSize = DL.getTypeAllocSize(Ptr->getType()->getPointerElementType());
+  const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(AccessExpr);
+  if (!AddRec)
+    return false;
+  uint64_t Offset = UINT_MAX;
+  if (!getCumulativeStartingOffset(SE, AddRec, Offset))
+    return false;
+  findArraySubscripts(SE, Offset, TypeByteSize, AddRec, Subscripts, Sizes);
+  return subscriptsAreLegal(SE, Subscripts, Sizes, NestInfo);
 }
 
 static bool
@@ -1721,34 +1844,65 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
                  dbgs() << "Store pointer: " << *SPtr << "\n";
                  dbgs() << *SE.getSCEVAtScope(SPtr, &Inner) << "\n";);
 
-      // Note: Right now we are probably calling GetUnderlyingObjects()
-      // a lot of times.
-      RTAliasCheckInfo AliasCheckInfo;
-      CanAliasRes canAliasRes = canAlias(
-          SE, LI, DL, LPtr, SPtr, NestInfo.InnermostLoop, AliasCheckInfo);
-      if (canAliasRes == CanAliasRes::CANNOT_ALIAS) {
-        LLVM_DEBUG(dbgs() << "Definitely can't alias\n";);
-        continue;
-      } else if (canAliasRes == CanAliasRes::CAN_ALIAS_NO_INFO) {
-        LLVM_DEBUG(dbgs() << "They can alias and we have no info for RT check.\n";);
-        return Bail;
-      } else if (canAliasRes == CanAliasRes::CAN_ALIAS_RTCHECK_INFO) {
-        AliasChecks.push_back(AliasCheckInfo);
-        continue;
-      } // else: Same object, the common case... keep going
-
-      LLVM_DEBUG(dbgs() << "\n"; dbgs() << "\n\n------\n\n";
-                 dbgs() << "Delinearize SCEVs\n";);
-
       SmallVector<const SCEV *, 3> Subscripts1, Subscripts2;
       SmallVector<const SCEV *, 3> Sizes1, Sizes2;
 
-      if (!delinearizeInstAndVerifySubscripts(SE, Load, Subscripts1, Sizes1,
-                                              NestInfo))
-        return Bail;
-      if (!delinearizeInstAndVerifySubscripts(SE, Store, Subscripts2, Sizes2,
-                                              NestInfo))
-        return Bail;
+      // Special handling for globals.
+      Value *LObj = GetUnderlyingObject(LPtr, DL);
+      Type *LObjTy = LObj->getType();
+      if (dyn_cast<GlobalValue>(LObj) && LObjTy->isPointerTy() &&
+          LObjTy->getPointerElementType()->isArrayTy()) {
+        Value *SObj = GetUnderlyingObject(SPtr, DL);
+        Type *SObjTy = SObj->getType();
+
+        LLVM_DEBUG(dbgs() << "\n";);
+        LLVM_DEBUG(dbgs() << "LObj: " << *LObj << "\n";);
+        LLVM_DEBUG(dbgs() << "SObj: " << *SObj << "\n";);
+
+        // TODO: For now, we don't know global array and pointer
+        // combination on aliasing.
+        if (!dyn_cast<GlobalValue>(SObj) || !SObjTy->isPointerTy() ||
+            !SObjTy->getPointerElementType()->isArrayTy()) {
+          return Bail;
+        }
+        // They can't alias.
+        if (LObj != SObj)
+          continue;
+
+        if (!delinearizePtrOnGlobalArray(SE, LPtr, LObj, Subscripts1, Sizes1,
+                                         NestInfo))
+          return Bail;
+        if (!delinearizePtrOnGlobalArray(SE, SPtr, SObj, Subscripts2, Sizes2,
+                                         NestInfo))
+          return Bail;
+      } else {
+        // Note: Right now we are probably calling GetUnderlyingObjects()
+        // a lot of times.
+        RTAliasCheckInfo AliasCheckInfo;
+        CanAliasRes canAliasRes = canAlias(
+            SE, LI, DL, LPtr, SPtr, NestInfo.InnermostLoop, AliasCheckInfo);
+        if (canAliasRes == CanAliasRes::CANNOT_ALIAS) {
+          LLVM_DEBUG(dbgs() << "Definitely can't alias\n";);
+          continue;
+        } else if (canAliasRes == CanAliasRes::CAN_ALIAS_NO_INFO) {
+          LLVM_DEBUG(
+              dbgs() << "They can alias and we have no info for RT check.\n";);
+          return Bail;
+        } else if (canAliasRes == CanAliasRes::CAN_ALIAS_RTCHECK_INFO) {
+          AliasChecks.push_back(AliasCheckInfo);
+          continue;
+        } // else: Same object, the common case... keep going
+
+        LLVM_DEBUG(dbgs() << "\n"; dbgs() << "\n\n------\n\n";
+                   dbgs() << "Delinearize SCEVs\n";);
+
+        if (!delinearizeInstAndVerifySubscripts(SE, Load, Subscripts1, Sizes1,
+                                                NestInfo))
+          return Bail;
+        if (!delinearizeInstAndVerifySubscripts(SE, Store, Subscripts2, Sizes2,
+                                                NestInfo))
+          return Bail;
+      }
 
       LLVM_DEBUG(dbgs() << "\n");
       DepVector IterDV(NestInfo.NumDimensions);
