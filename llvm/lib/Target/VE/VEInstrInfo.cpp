@@ -359,8 +359,12 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                               MCRegister DestReg, MCRegister SrcReg,
                               bool KillSrc) const {
   const TargetRegisterInfo *TRI = &getRegisterInfo();
+#if 0
+  // FIXME: expandPostRAPseudos expects an instruction to be inserted.
+  // FIXME: this is not necessary in the present case but not adding an instruction corrupts the state.
   if (TRI->isSuperOrSubRegisterEq(DestReg, SrcReg))
     return;
+#endif
 
   if (IsAliasOfSX(SrcReg) && IsAliasOfSX(DestReg)) {
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
