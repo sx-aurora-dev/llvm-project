@@ -36,6 +36,12 @@ defm: insert_extract_mask<v256i1, "x">;
 // pseudo instruction is used for frameindex related load/store instructions.
 // Custom Lowering is used for other load/store instructions.
 
+def : Pat<(v256i1 (load ADDRrii:$addr)),
+          (LDVMrii ADDRrii:$addr)>;
+
+def : Pat<(v512i1 (load ADDRrii:$addr)),
+          (LDVM512rii ADDRrii:$addr)>;
+
 def : Pat<(store v256i1:$vx, ADDRrii:$addr),
           (STVMrii ADDRrii:$addr, $vx)>;
 

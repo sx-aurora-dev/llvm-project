@@ -2516,8 +2516,7 @@ void VETargetLowering::initVPUActions() {
 
     // Custom lower mask ops
     setOperationAction(ISD::STORE, MaskVT, Custom);
-    // setOperationAction(ISD::LOAD, MaskVT, Custom);
-    // FIXME vm loads,stores should be symmetric?
+    setOperationAction(ISD::LOAD, MaskVT, Custom);
 
     ForAll_setOperationAction(IntReductionOCs, MaskVT, Custom);
     ForAll_setOperationAction(VectorTransformOCs, MaskVT, Custom);
@@ -3495,6 +3494,7 @@ static SDValue LowerF128Load(SDValue Op, SelectionDAG &DAG) {
 //   LVMxir  %vm, 0, %2
 //   ...
 static SDValue LowerI1Load(SDValue Op, SelectionDAG &DAG) {
+  LLVM_DEBUG(dbgs() << "LowerI1LOAD ("; Op->print(dbgs()); dbgs() << ")\n");
   SDLoc DL(Op);
   LoadSDNode *LdNode = dyn_cast<LoadSDNode>(Op.getNode());
   assert(LdNode && LdNode->getOffset().isUndef()
@@ -3556,6 +3556,7 @@ static SDValue LowerI1Load(SDValue Op, SelectionDAG &DAG) {
 }
 
 SDValue VETargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "LowerLOAD ("; Op->print(dbgs()); dbgs() << ")\n");
   LoadSDNode *LdNode = cast<LoadSDNode>(Op.getNode());
   auto MemVT = LdNode->getMemoryVT();
 
@@ -3565,6 +3566,7 @@ SDValue VETargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
 
   SDValue BasePtr = LdNode->getBasePtr();
   if (isa<FrameIndexSDNode>(BasePtr.getNode())) {
+    LLVM_DEBUG(dbgs() << "is LOAD from frameidx. Skpping!\n");
     // Do not expand store instruction with frame index here because of
     // dependency problems.  We expand it later in eliminateFrameIndex().
     return Op;
