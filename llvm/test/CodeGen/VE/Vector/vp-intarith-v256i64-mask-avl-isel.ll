@@ -2,19 +2,19 @@
 
 define void @test_vp_harness(<256 x i64>* %Out, <256 x i64> %i0) {
 ; CHECK-LABEL: test_vp_harness:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vst %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   store <256 x i64> %i0, <256 x i64>* %Out
   ret void
 }
 
 define void @test_vp_add_sub_mul(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_add_sub_mul:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -25,7 +25,7 @@ define void @test_vp_add_sub_mul(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64>
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vst %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <256 x i64> @llvm.vp.add.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i64> @llvm.vp.sub.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   %r2 = call <256 x i64> @llvm.vp.mul.v256i64(<256 x i64> %r0, <256 x i64> %r1, <256 x i1> %m, i32 %n)
@@ -35,7 +35,7 @@ define void @test_vp_add_sub_mul(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64>
 
 define void @test_vp_su_div(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_su_div:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -45,7 +45,7 @@ define void @test_vp_su_div(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1,
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vst %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <256 x i64> @llvm.vp.sdiv.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i64> @llvm.vp.udiv.v256i64(<256 x i64> %r0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   store <256 x i64> %r1, <256 x i64>* %Out
@@ -54,7 +54,7 @@ define void @test_vp_su_div(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1,
 
 define void @test_vp_bitarith(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_bitarith:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -68,7 +68,7 @@ define void @test_vp_bitarith(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vst %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <256 x i64> @llvm.vp.and.v256i64(<256 x i64> %i0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i64> @llvm.vp.or.v256i64(<256 x i64> %r0, <256 x i64> %i1, <256 x i1> %m, i32 %n)
   %r2 = call <256 x i64> @llvm.vp.xor.v256i64(<256 x i64> %i0, <256 x i64> %r1, <256 x i1> %m, i32 %n)

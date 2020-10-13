@@ -2,19 +2,19 @@
 
 define void @test_vp_harness(<256 x i64>* %Out, <256 x i64> %i0) {
 ; CHECK-LABEL: test_vp_harness:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vst %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   store <256 x i64> %i0, <256 x i64>* %Out
   ret void
 }
 
 define void @test_vp_fadd_fsub_fmul_fneg_fma(<256 x double>* %Out, <256 x double> %f0, <256 x double> %f1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fadd_fsub_fmul_fneg_fma:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -26,7 +26,7 @@ define void @test_vp_fadd_fsub_fmul_fneg_fma(<256 x double>* %Out, <256 x double
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vst %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <256 x double> @llvm.vp.fadd.v256f64(<256 x double> %f0, <256 x double> %f1, metadata !"round.tonearest", metadata !"fpexcept.ignore", <256 x i1> %m, i32 %n)
   %r1 = call <256 x double> @llvm.vp.fsub.v256f64(<256 x double> %f0, <256 x double> %f1, metadata !"round.tonearest", metadata !"fpexcept.ignore", <256 x i1> %m, i32 %n)
   %r2 = call <256 x double> @llvm.vp.fmul.v256f64(<256 x double> %r0, <256 x double> %r1, metadata !"round.tonearest", metadata !"fpexcept.ignore", <256 x i1> %m, i32 %n)
@@ -38,7 +38,7 @@ define void @test_vp_fadd_fsub_fmul_fneg_fma(<256 x double>* %Out, <256 x double
 
 define void @test_vp_fdiv(<256 x double>* %Out, <256 x double> %f0, <256 x double> %f1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fdiv:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -47,7 +47,7 @@ define void @test_vp_fdiv(<256 x double>* %Out, <256 x double> %f0, <256 x doubl
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vst %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <256 x double> @llvm.vp.fdiv.v256f64(<256 x double> %f0, <256 x double> %f1, metadata !"round.tonearest", metadata !"fpexcept.ignore", <256 x i1> %m, i32 %n)
   store <256 x double> %r0, <256 x double>* %Out
   ret void
@@ -55,7 +55,7 @@ define void @test_vp_fdiv(<256 x double>* %Out, <256 x double> %f0, <256 x doubl
 
 define void @test_vp_fmin_fmax(<256 x double>* %O1, <256 x double>* %O2, <256 x double> %f0, <256 x double> %f1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fmin_fmax:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
@@ -66,7 +66,7 @@ define void @test_vp_fmin_fmax(<256 x double>* %O1, <256 x double>* %O2, <256 x 
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vst %v2, 8, %s0
 ; CHECK-NEXT:    vst %v0, 8, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <256 x double> @llvm.vp.minnum.v256f64(<256 x double> %f0, <256 x double> %f1, metadata !"round.tonearest", metadata !"fpexcept.ignore", <256 x i1> %m, i32 %n)
   %r1 = call <256 x double> @llvm.vp.maxnum.v256f64(<256 x double> %f0, <256 x double> %f1, metadata !"round.tonearest", metadata !"fpexcept.ignore", <256 x i1> %m, i32 %n)
   store <256 x double> %r0, <256 x double>* %O1

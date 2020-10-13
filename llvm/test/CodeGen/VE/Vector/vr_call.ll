@@ -2,31 +2,30 @@
 
 define x86_regcallcc <256 x i32> @__regcall3__calc1(<256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: __regcall3__calc1:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vadds.w.sx %v0, %v1, %v0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %3 = add <256 x i32> %1, %0
   ret <256 x i32> %3
 }
 
 define <256 x i32> @calc2(<256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: calc2:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vadds.w.sx %v0, %v1, %v0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %3 = add <256 x i32> %1, %0
   ret <256 x i32> %3
 }
 
 define x86_regcallcc <256 x i32> @__regcall3__calc3(<256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: __regcall3__calc3:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lea %s1, 416(, %s11)
+; CHECK:         lea %s0, 256
+; CHECK-NEXT:    lea %s1, 240(, %s9)
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vldl.zx %v8, 4, %s1
 ; CHECK-NEXT:    vadds.w.sx %v0, %v1, %v0
@@ -51,8 +50,7 @@ define x86_regcallcc <256 x i32> @__regcall3__calc3(<256 x i32>, <256 x i32>, <2
 
 define x86_regcallcc <256 x i32> @__regcall3__calc4(<256 x i32>, <256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: __regcall3__calc4:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s16, 256
+; CHECK:         lea %s16, 256
 ; CHECK-NEXT:    lea %s0, -2048(, %s9)
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vst %v0, 8, %s0 # 2048-byte Folded Spill
