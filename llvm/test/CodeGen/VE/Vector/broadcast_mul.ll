@@ -2,26 +2,13 @@
 
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <512 x i32> @mulbrdv512i32(<512 x i32>, i32) {
-; FIXME: mul <512 x i32> is expanded completely with more than 512
-; FIXME: isntructions, so we don't check it atm.  Need to implement
-; FIXME: better code.
-; FIXME-CHECK-LABEL: mulbrdv512i32:
-; FIXME-CHECK:       .LBB{{[0-9]+}}_2:
-; FIXME-CHECK-NEXT:  # kill: def $sw0 killed $sw0 def $sx0
-; FIXME-CHECK-NEXT:  and %s34, %s0, (32)0
-; FIXME-CHECK-NEXT:  sll %s35, %s0, 32
-; FIXME-CHECK-NEXT:  lea %s36, 256
-; FIXME-CHECK-NEXT:  or %s34, %s35, %s34
-; FIXME-CHECK-NEXT:  lvl %s36
-; FIXME-CHECK-NEXT:  pvmuls %v0,%s34,%v0
-; FIXME-CHECK-NEXT:  or %s11, 0, %s9
 ; CHECK-LABEL: mulbrdv512i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.w.sx %v0, %s0, %v0
 ; CHECK-NEXT:    vmuls.w.sx %v1, %s0, %v1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
   %ret = mul <512 x i32> %vec, %0
@@ -31,22 +18,12 @@ define x86_regcallcc <512 x i32> @mulbrdv512i32(<512 x i32>, i32) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <512 x float> @mulbrdv512f32(<512 x float>, float) {
 ; CHECK-LABEL: mulbrdv512f32:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pvfmul.up %v0, %s0, %v0
 ; CHECK-NEXT:    pvfmul.up %v1, %s0, %v1
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    srl %s1, %s0, 32
-; CHECK-NEXT:    or %s0, %s0, %s1
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvfmul %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
   %vec0 = insertelement <512 x float> undef, float %1, i32 0
   %vec = shufflevector <512 x float> %vec0, <512 x float> undef, <512 x i32> zeroinitializer
   %ret = fmul <512 x float> %vec, %0
@@ -101,7 +78,7 @@ define x86_regcallcc <256 x float> @mulbrdv256f32(<256 x float>, float) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmul.s %v0, %s0, %v0
+; CHECK-NEXT:    pvfmul.up %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %vec0 = insertelement <256 x float> undef, float %1, i32 0
   %vec = shufflevector <256 x float> %vec0, <256 x float> undef, <256 x i32> zeroinitializer
@@ -140,13 +117,8 @@ define x86_regcallcc <64 x i64> @mulbrdv64i64(<64 x i64>, i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <32 x i64> @mulbrdv32i64(<32 x i64>, i64) {
 ; CHECK-LABEL: mulbrdv32i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 32, (0)1
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 32
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
+; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.l %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -159,13 +131,8 @@ define x86_regcallcc <32 x i64> @mulbrdv32i64(<32 x i64>, i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <16 x i64> @mulbrdv16i64(<16 x i64>, i64) {
 ; CHECK-LABEL: mulbrdv16i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 16, (0)1
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 16
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
+; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.l %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -178,13 +145,8 @@ define x86_regcallcc <16 x i64> @mulbrdv16i64(<16 x i64>, i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <8 x i64> @mulbrdv8i64(<8 x i64>, i64) {
 ; CHECK-LABEL: mulbrdv8i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 8, (0)1
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 8
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
+; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.l %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -197,13 +159,8 @@ define x86_regcallcc <8 x i64> @mulbrdv8i64(<8 x i64>, i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <4 x i64> @mulbrdv4i64(<4 x i64>, i64) {
 ; CHECK-LABEL: mulbrdv4i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 4, (0)1
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 4
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
+; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.l %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -216,13 +173,8 @@ define x86_regcallcc <4 x i64> @mulbrdv4i64(<4 x i64>, i64) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <2 x i64> @mulbrdv2i64(<2 x i64>, i64) {
 ; CHECK-LABEL: mulbrdv2i64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 2
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vmuls.l %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -263,13 +215,8 @@ define x86_regcallcc <64 x double> @mulbrdv64f64(<64 x double>, double) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <32 x double> @mulbrdv32f64(<32 x double>, double) {
 ; CHECK-LABEL: mulbrdv32f64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 32, (0)1
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 32
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
+; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmul.d %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -282,13 +229,8 @@ define x86_regcallcc <32 x double> @mulbrdv32f64(<32 x double>, double) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <16 x double> @mulbrdv16f64(<16 x double>, double) {
 ; CHECK-LABEL: mulbrdv16f64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 16, (0)1
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 16
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
+; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmul.d %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -301,13 +243,8 @@ define x86_regcallcc <16 x double> @mulbrdv16f64(<16 x double>, double) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <8 x double> @mulbrdv8f64(<8 x double>, double) {
 ; CHECK-LABEL: mulbrdv8f64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 8, (0)1
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 8
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
+; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmul.d %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -320,13 +257,8 @@ define x86_regcallcc <8 x double> @mulbrdv8f64(<8 x double>, double) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <4 x double> @mulbrdv4f64(<4 x double>, double) {
 ; CHECK-LABEL: mulbrdv4f64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 4, (0)1
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 4
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
+; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmul.d %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -339,13 +271,8 @@ define x86_regcallcc <4 x double> @mulbrdv4f64(<4 x double>, double) {
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <2 x double> @mulbrdv2f64(<2 x double>, double) {
 ; CHECK-LABEL: mulbrdv2f64:
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/broadcast_mul.ll
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s1, 2, (0)1
-=======
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 2
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/broadcast_mul.ll
+; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmul.d %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
