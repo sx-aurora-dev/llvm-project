@@ -1135,12 +1135,10 @@ static bool definitelyCannotAlias(LoopInfo &LI, const LoadInst *LD,
   // objects from different sets, at least one to have the
   // the `noalias` attribute.
 
-  auto &DL = LD->getModule()->getDataLayout();
-
   SmallVector<const Value *, 2> LoadObjects;
   SmallVector<const Value *, 2> StoreObjects;
-  GetUnderlyingObjects(LD->getPointerOperand(), LoadObjects, DL, &LI);
-  GetUnderlyingObjects(ST->getPointerOperand(), StoreObjects, DL, &LI);
+  getUnderlyingObjects(LD->getPointerOperand(), LoadObjects, &LI);
+  getUnderlyingObjects(ST->getPointerOperand(), StoreObjects, &LI);
 
   for (const Value *LObj : LoadObjects) {
     LLVM_DEBUG(dbgs() << "LObj: " << *LObj << "\n");
@@ -1285,7 +1283,7 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
                  dbgs() << "Store pointer: " << *SPtr << "\n";
                  dbgs() << *SE.getSCEVAtScope(SPtr, &Inner) << "\n";);
 
-      // Note: Right now we are probably calling GetUnderlyingObjects()
+      // Note: Right now we are probably calling getUnderlyingObjects()
       // a lot of times.
       if (definitelyCannotAlias(LI, Load, Store)) {
         LLVM_DEBUG(dbgs() << "Definitely can't alias\n";);

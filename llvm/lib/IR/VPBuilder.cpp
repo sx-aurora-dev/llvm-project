@@ -30,9 +30,9 @@ Value &VPBuilder::RequestEVL() {
   if (ExplicitVectorLength)
     return *ExplicitVectorLength;
 
-  assert(!StaticVectorLength.Scalable && "TODO vscale lowering");
+  assert(!StaticVectorLength.isScalable() && "TODO vscale lowering");
   auto *intTy = Builder.getInt32Ty();
-  return *ConstantInt::get(intTy, StaticVectorLength.Min);
+  return *ConstantInt::get(intTy, StaticVectorLength.getFixedValue());
 }
 
 Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {

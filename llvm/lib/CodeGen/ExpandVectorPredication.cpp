@@ -247,7 +247,7 @@ void LowerVPCastOperator(VPIntrinsic *VPI) {
 void LowerVPSelect(VPIntrinsic *VPI) {
   auto ElemBits = GetFunctionalVectorElementSize();
   ElementCount ElemCount = VPI->getStaticVectorLength();
-  assert(!ElemCount.Scalable && "TODO scalable type support");
+  assert(!ElemCount.isScalable() && "TODO scalable type support");
 
   IRBuilder<> Builder(cast<Instruction>(VPI));
   auto BitMask = VPI->getOperand(0);
@@ -255,7 +255,7 @@ void LowerVPSelect(VPIntrinsic *VPI) {
   auto OnTrueVal = VPI->getOperand(1);
   auto OnFalseVal = VPI->getOperand(2);
 
-  auto PivotMask = ConvertVLToMask(Builder, PivotVal, ElemBits, ElemCount.Min);
+  auto PivotMask = ConvertVLToMask(Builder, PivotVal, ElemBits, ElemCount.getFixedValue());
   auto CompositeMask = Builder.CreateAnd(BitMask, PivotMask);
   auto NewSelect = Builder.CreateSelect(CompositeMask, OnTrueVal, OnFalseVal,
                                         VPI->getName());
@@ -443,15 +443,15 @@ bool TryLowerVShift(VPIntrinsic *VPI) {
 
   // cannot lower scalable vector size
   auto ElemCount = cast<VectorType>(VPI->getType())->getElementCount();
-  if (ElemCount.Scalable)
+  if (ElemCount.isScalable())
     return false;
-  int VecWidth = ElemCount.Min;
+  int VecWidth = ElemCount.getFixedValue();
 
   auto IntTy = Type::getInt32Ty(VPI->getContext());
 
   // constitute shuffle mask.
   std::vector<Constant *> Elems;
-  for (int i = 0; i < (int)ElemCount.Min; ++i) {
+  for (int i = 0; i < (int)ElemCount.getFixedValue(); ++i) {
     int64_t SrcLane = i - Amount;
     if (SrcLane < 0 || SrcLane >= VecWidth)
       Elems.push_back(UndefValue::get(IntTy));
@@ -560,17 +560,17 @@ bool expandVectorPredication(Function &F, const TargetTransformInfo *TTI) {
     // Determine the lane bit size that should be used to lower this op
     auto ElemBits = GetFunctionalVectorElementSize();
     ElementCount ElemCount = VPI->getStaticVectorLength();
-    assert(!ElemCount.Scalable && "TODO scalable vector support");
+    assert(!ElemCount.isScalable() && "TODO scalable vector support");
 
     // Lower VL to M
     auto *VLMask =
-        ConvertVLToMask(Builder, OldVLParam, ElemBits, ElemCount.Min);
+        ConvertVLToMask(Builder, OldVLParam, ElemBits, ElemCount.getFixedValue());
     auto NewMaskParam = Builder.CreateAnd(VLMask, OldMaskParam);
     VPI->setMaskParam(
         NewMaskParam); // FIXME cannot trivially use the PI abstraction here.
 
     // Disable VL
-    auto FullVL = Builder.getInt32(ElemCount.Min);
+    auto FullVL = Builder.getInt32(ElemCount.getFixedValue());
     VPI->setVectorLengthParam(FullVL);
     assert(VPI->canIgnoreVectorLengthParam() &&
            "transformation did not render the vl param ineffective!");

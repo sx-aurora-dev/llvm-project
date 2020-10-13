@@ -2638,7 +2638,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setBooleanVectorContents(ZeroOrOneBooleanContent);
 
   LLVM_DEBUG(dbgs() << "VPU MODE:       " << Subtarget->enableVPU() << "\n";
-             dbgs() << "PACKED MODE:    " << Subtarget->hasPackedMode() << "\n";
+             dbgs() << "PACKED MODE:    " << Subtarget->hasPackedMode() << "\n"
                     << "\n";);
 
   ///// Registers //////

@@ -2156,8 +2156,8 @@ Instruction *InstCombinerImpl::visitFSub(BinaryOperator &I) {
   return visitFSubGeneric<BinaryOperator, EmptyContext>(I);
 }
 
-template<typename BinaryOpTy, typename MatchContextType>
-Instruction *InstCombiner::visitFSubGeneric(BinaryOpTy &I) {
+template <typename BinaryOpTy, typename MatchContextType>
+Instruction *InstCombinerImpl::visitFSubGeneric(BinaryOpTy &I) {
   MatchContextType MC(cast<Value>(&I));
   MatchContextBuilder<MatchContextType> MCBuilder(MC);
 

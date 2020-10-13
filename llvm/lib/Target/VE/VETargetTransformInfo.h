@@ -205,7 +205,7 @@ public:
 
   unsigned getScalarizationOverhead(VectorType *Ty, const APInt &DemandedElts,
                                     bool Insert, bool Extract) const {
-    auto VecTy = dyn_cast<VectorType>(Ty);
+    auto VecTy = dyn_cast<FixedVectorType>(Ty);
     if (!VecTy)
       return 1;
     return VecTy->getNumElements();
@@ -261,10 +261,10 @@ public:
 
     // Cannot be widened into a legal VVP op
     auto EC = VPI->getStaticVectorLength();
-    if (EC.Scalable)
+    if (EC.isScalable())
       return false;
 
-    if (EC.Min > (hasPackedMode() ? 512 : 256))
+    if (EC.getFixedValue() > (hasPackedMode() ? 512 : 256))
       return false;
 
     // Bail on yet-unimplemented reductions

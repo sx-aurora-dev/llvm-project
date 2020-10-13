@@ -337,7 +337,7 @@ template <int64_t Val> inline constantint_match<Val> m_ConstantInt() {
 /// constants that satisfy a specified predicate.
 /// For vector constants, undefined elements are ignored.
 template <typename Predicate, typename ConstantVal>
-struct cst_pred_ty : public Predicate {
+struct cstval_pred_ty : public Predicate {
   template <typename ITy> bool match(ITy *V) { EmptyContext EContext; return match_context(V, EContext); }
   template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
     if (const auto *CI = dyn_cast<ConstantVal>(V))

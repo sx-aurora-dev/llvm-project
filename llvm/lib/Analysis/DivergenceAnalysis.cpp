@@ -157,6 +157,16 @@ void DivergenceAnalysis::pushUsers(const Value &V) {
   }
 }
 
+static const Instruction *getIfCarriedInstruction(const Use &U,
+                                                  const Loop &DivLoop) {
+  const auto *I = dyn_cast<const Instruction>(&U);
+  if (!I)
+    return nullptr;
+  if (!DivLoop.contains(I))
+    return nullptr;
+  return I;
+}
+
 void DivergenceAnalysis::analyzeTemporalDivergence(const Instruction &I,
                                                    const Loop &OuterDivLoop) {
   if (isAlwaysUniform(I))
@@ -164,30 +174,12 @@ void DivergenceAnalysis::analyzeTemporalDivergence(const Instruction &I,
   if (isDivergent(I))
     return;
 
-  LLVM_DEBUG( dbgs() << "Analyze temporal divergence: " << I.getName() << "\n" );
-  auto *Phi = dyn_cast<const PHINode>(&I);
-  if (Phi) {
-    for (const auto &InVal : Phi->incoming_values()) {
-      const auto *InInst = dyn_cast<const Instruction>(&InVal);
-      if (!InInst)
-        continue;
-      LLVM_DEBUG( dbgs() << "\tinspecting: " << *InInst << "\n" );
-      if (!OuterDivLoop.contains(InInst))
-        continue;
-
-      if (markDivergent(*Phi))
-        pushUsers(*Phi);
-      return;
-    }
-    return;
-  }
-
-  assert(!IsLCSSAForm && "T");
-  for (const auto &Op : I.operands()) {
-    const auto *OpInst = dyn_cast<const Instruction>(&Op);
+  LLVM_DEBUG(dbgs() << "Analyze temporal divergence: " << I.getName() << "\n");
+  assert((isa<PHINode>(I) || !IsLCSSAForm) &&
+         "In LCSSA form all users of loop-exiting defs are Phi nodes.");
+  for (const Use &Op : I.operands()) {
+    const auto *OpInst = getIfCarriedInstruction(Op, OuterDivLoop);
     if (!OpInst)
-      continue;
-    if (!OuterDivLoop.contains(OpInst))
       continue;
     if (markDivergent(I))
       pushUsers(I);
@@ -201,7 +193,7 @@ void DivergenceAnalysis::analyzeLoopExitDivergence(const BasicBlock &DivExit,
                                                    const Loop &OuterDivLoop) {
   // All users are in immediate exit blocks
   if (IsLCSSAForm) {
-    for (auto &Phi : DivExit.phis()) {
+    for (const auto &Phi : DivExit.phis()) {
       analyzeTemporalDivergence(Phi, OuterDivLoop);
     }
     return;
@@ -257,15 +249,15 @@ void DivergenceAnalysis::propagateLoopExitDivergence(const BasicBlock &DivExit,
   LLVM_DEBUG(dbgs() << "\tpropLoopExitDiv " << DivExit.getName() << "\n");
 
   // Find outer-most loop that does not contain \p DivExit
-  // TODO there should be a way to accelerate this
   const Loop *DivLoop = &InnerDivLoop;
   const Loop *OuterDivLoop = DivLoop;
-  while (DivLoop) {
+  const Loop *ExitLevelLoop = LI.getLoopFor(&DivExit);
+  const unsigned LoopExitDepth =
+      ExitLevelLoop ? ExitLevelLoop->getLoopDepth() : 0;
+  while (DivLoop && DivLoop->getLoopDepth() > LoopExitDepth) {
     DivergentLoops.insert(DivLoop); // all crossed loops are divergent
     OuterDivLoop = DivLoop;
     DivLoop = DivLoop->getParentLoop();
-    if (!DivLoop || DivLoop->contains(&DivExit))
-      break;
   }
   LLVM_DEBUG(dbgs() << "\tOuter-most left loop: " << OuterDivLoop->getName()
                     << "\n");
@@ -276,7 +268,8 @@ void DivergenceAnalysis::propagateLoopExitDivergence(const BasicBlock &DivExit,
 // this is a divergent join point - mark all phi nodes as divergent and push
 // them onto the stack.
 void DivergenceAnalysis::taintAndPushPhiNodes(const BasicBlock &JoinBlock) {
-  LLVM_DEBUG(dbgs() << "taintAndPhiNodes in " << JoinBlock.getName() << "\n");
+  LLVM_DEBUG(dbgs() << "taintAndPushPhiNodes in " << JoinBlock.getName()
+                    << "\n");
 
   // ignore divergence outside the region
   if (!inRegion(JoinBlock)) {
@@ -306,7 +299,7 @@ void DivergenceAnalysis::analyzeControlDivergence(const Instruction &Term) {
 
   const auto *BranchLoop = LI.getLoopFor(Term.getParent());
 
-  const auto &DivDesc = SDA.join_blocks(Term);
+  const auto &DivDesc = SDA.getJoinBlocks(Term);
 
   // Iterate over all blocks now reachable by a disjoint path join
   for (const auto *JoinBlock : DivDesc.JoinDivBlocks) {
@@ -322,7 +315,7 @@ void DivergenceAnalysis::analyzeControlDivergence(const Instruction &Term) {
 void DivergenceAnalysis::compute() {
   // Initialize worklist.
   auto DivValuesCopy = DivergentValues;
-  for (auto *DivVal : DivValuesCopy) {
+  for (const auto *DivVal : DivValuesCopy) {
     assert(isDivergent(*DivVal) && "Worklist invariant violated!");
     pushUsers(*DivVal);
   }

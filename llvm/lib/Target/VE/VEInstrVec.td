@@ -703,7 +703,10 @@ multiclass RVSHFm<string opcStr, bits<8>opc, RegisterClass RC,
 let vx = ?, hasSideEffects = 0, Uses = [VL] in
 multiclass RVIbm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
                 dag dag_in, string disEnc = ""> {
-  let Constraints = "$vx = $base", DisableEncoding = disEnc#"$base" in
+  let DisableEncoding = disEnc in
+  def "" : RV<opc, (outs RC:$vx), dag_in,
+              !strconcat(opcStr, " $vx", argStr)>;
+  let isCodeGenOnly = 1, Constraints = "$vx = $base", DisableEncoding = disEnc#"$base" in
   def _v : RV<opc, (outs RC:$vx), !con(dag_in, (ins RC:$base)),
               !strconcat(opcStr, " $vx", argStr)>;
 }

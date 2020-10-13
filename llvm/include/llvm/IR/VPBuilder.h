@@ -27,12 +27,9 @@ class VPBuilder {
   Value& RequestEVL();
 
 public:
-  VPBuilder(IRBuilder<> & _builder)
-  : Builder(_builder)
-  , Mask(nullptr)
-  , ExplicitVectorLength(nullptr)
-  , StaticVectorLength(0, false)
-  {}
+  VPBuilder(IRBuilder<> &_builder)
+      : Builder(_builder), Mask(nullptr), ExplicitVectorLength(nullptr),
+        StaticVectorLength(ElementCount::getFixed(0)) {}
 
   Module & getModule() const;
   LLVMContext & getContext() const { return Builder.getContext(); }
@@ -50,7 +47,7 @@ public:
     return *this;
   }
   VPBuilder &setStaticVL(unsigned FixedVL) {
-    StaticVectorLength = ElementCount(FixedVL, false);
+    StaticVectorLength = ElementCount::getFixed(FixedVL);
     return *this;
   }
   VPBuilder &setStaticVL(ElementCount ScalableVL) {

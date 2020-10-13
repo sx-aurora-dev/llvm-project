@@ -14,42 +14,23 @@
 multiclass insert_extract_mask<ValueType MaskVT, string MaskToken> {
   // extract at imm
   def : Pat<(i64 (vm_extract MaskVT:$vm, uimm7:$idx)),
-                 (!cast<Instruction>("svm_s"#MaskToken#"I") MaskVT:$vm, (LO7 $idx))>;
+                 (!cast<Instruction>("SVM"#MaskToken#"i") MaskVT:$vm, (LO7 $idx))>;
   // extract at sx
   def : Pat<(i64 (vm_extract MaskVT:$vm, i64:$idx)),
-                 (!cast<Instruction>("svm_s"#MaskToken#"s") MaskVT:$vm, i64:$idx)>;
+                 (!cast<Instruction>("SVM"#MaskToken#"r") MaskVT:$vm, i64:$idx)>;
  
   // insert at imm
   def : Pat<(MaskVT (vm_insert MaskVT:$vm, uimm7:$idx, i64:$sy)),
-                    (!cast<Instruction>("lvm_"#MaskToken#MaskToken#"Is") MaskVT:$vm, (LO7 $idx), i64:$sy)>;
+                    (!cast<Instruction>("LVM"#MaskToken#"ir_"#MaskToken) (LO7 $idx), i64:$sy, MaskVT:$vm)>;
   // insert at sx
   def : Pat<(MaskVT (vm_insert MaskVT:$vm, i64:$idx, i64:$sy)),
-                    (!cast<Instruction>("lvm_"#MaskToken#MaskToken#"ss") MaskVT:$vm, i64:$idx, i64:$sy)>;
+                    (!cast<Instruction>("LVM"#MaskToken#"rr_"#MaskToken) i64:$idx, i64:$sy, MaskVT:$vm)>;
 }
 
-defm: insert_extract_mask<v256i1, "m">;
-defm: insert_extract_mask<v512i1, "M">;
+defm: insert_extract_mask<v256i1, "x">;
+// defm: insert_extract_mask<v512i1, "y">; // TODO: implement! SVMyr not available
 
 // Mask Load & Store
-
-def : Pat<(v256i1 (load I64:$addr)),
-          (v256i1 (lvm_mmIs (lvm_mmIs (lvm_mmIs (lvm_mmIs (v256i1 (IMPLICIT_DEF)), 
-                      0, (LDrii $addr, 0, 0)),
-                      1, (LDrii $addr, 0, 8)),
-                      2, (LDrii $addr, 0, 16)),
-                      3, (LDrii $addr, 0, 24)))>;
-
-def : Pat<(v512i1 (load I64:$addr)),
-          (v512i1 (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs
-                  (lvm_MMIs (lvm_MMIs (lvm_MMIs (lvm_MMIs (v512i1 (IMPLICIT_DEF)), 
-                      0, (LDrii $addr, 0, 0)),
-                      1, (LDrii $addr, 0, 8)),
-                      2, (LDrii $addr, 0, 16)),
-                      3, (LDrii $addr, 0, 24)),
-                      4, (LDrii $addr, 0, 32)),
-                      5, (LDrii $addr, 0, 40)),
-                      6, (LDrii $addr, 0, 48)),
-                      7, (LDrii $addr, 0, 56)))>;
 
 // Store for v256i1, v512i1 are implemented in 2 ways.  These STVM/STVM512
 // pseudo instruction is used for frameindex related load/store instructions.
@@ -64,13 +45,31 @@ def : Pat<(store v512i1:$vx, ADDRrii:$addr),
 
 // Mask arithmetic
 multiclass MaskArith<ValueType MaskVT, string MaskTag="mmm"> {
-  def : Pat<(MaskVT (and MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>("andm_"#MaskTag) $ma, $mb)>;
-  def : Pat<(MaskVT (or  MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>("orm_"#MaskTag)  $ma, $mb)>;
-  def : Pat<(MaskVT (xor MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>("xorm_"#MaskTag) $ma, $mb)>;
+  def : Pat<(MaskVT (and MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>("ANDM"#MaskTag#MaskTag) $ma, $mb)>;
+  def : Pat<(MaskVT (or  MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>("ORM"#MaskTag#MaskTag)  $ma, $mb)>;
+  def : Pat<(MaskVT (xor MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>("XORM"#MaskTag#MaskTag) $ma, $mb)>;
 }
 
-defm: MaskArith<v256i1,"mmm">;
-defm: MaskArith<v512i1,"MMM">;
+defm: MaskArith<v256i1,"x">;
+
+// split pattern (unpack splice, pack)
+class SplitPat<ValueType PackedVT, ValueType RegularVT, SDNode N, Instruction VEOp, SubRegIndex subreg_lo, SubRegIndex subreg_hi>
+  : Pat<(PackedVT (N PackedVT:$A, PackedVT:$B)),
+        (PackedVT
+          (INSERT_SUBREG
+            (INSERT_SUBREG
+              (PackedVT (IMPLICIT_DEF)),
+              (VEOp (EXTRACT_SUBREG $A, subreg_hi), (EXTRACT_SUBREG $B, subreg_hi)),
+              subreg_hi),
+            (VEOp (EXTRACT_SUBREG $A, subreg_lo), (EXTRACT_SUBREG $B, subreg_lo)),
+            subreg_lo))>;
+
+// mask unpacking
+class SplitMaskPat<SDNode N, Instruction VEMaskOp> : SplitPat<v512i1, v256i1, N, VEMaskOp, sub_vm_even, sub_vm_odd>;
+
+def: SplitMaskPat<and, ANDMxx>;
+def: SplitMaskPat<or,   ORMxx>;
+def: SplitMaskPat<xor, XORMxx>;
 
 // Insert & Extract Vector Element
 
@@ -79,13 +78,13 @@ defm: MaskArith<v512i1,"MMM">;
 
 multiclass ive_eve_64<ValueType VecVT, ValueType ElemVT> {
   def: Pat<(VecVT (insertelt VecVT:$vx, ElemVT:$val, uimm7:$idx)),
-            (lsv_vvIs VecVT:$vx, imm:$idx, $val)>;
+            (LSVir_v imm:$idx, $val, $vx)>;
   def: Pat<(VecVT (insertelt VecVT:$vx, ElemVT:$val, I64:$sy)),
-            (lsv_vvss VecVT:$vx, $sy, $val)>;
+            (LSVrr_v $sy, $val, $vx)>;
   def: Pat<(ElemVT (extractelt VecVT:$vx, uimm7:$idx)),
-            (lvsl_svI VecVT:$vx, imm:$idx)>;
+            (LVSvi VecVT:$vx, (LO7 $idx))>;
   def: Pat<(ElemVT (extractelt VecVT:$vx, I64:$sy)),
-            (lvsl_svI VecVT:$vx, $sy)>;
+            (LVSvr VecVT:$vx, $sy)>;
 }
 
 defm: ive_eve_64<v256f64, f64>;
@@ -93,18 +92,18 @@ defm: ive_eve_64<v256i64, i64>;
 
 multiclass ive_eve_32<ValueType VecVT, ValueType ElemVT, SubRegIndex SubRegIdx> {
   def: Pat<(VecVT (insertelt VecVT:$vec, ElemVT:$val, uimm7:$idx)),
-           (lsv_vvIs VecVT:$vec,
-                     imm:$idx,
-                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, SubRegIdx))>;
+           (LSVir_v  imm:$idx,
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, SubRegIdx),
+                     VecVT:$vec)>;
   def: Pat<(VecVT (insertelt VecVT:$vec, ElemVT:$val, I64:$sy)),
-           (lsv_vvIs VecVT:$vec,
-                     $sy,
-                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, SubRegIdx))>;
+           (LSVrr_v $sy,
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, SubRegIdx),
+                     VecVT:$vec)>;
 
   def: Pat<(ElemVT (extractelt VecVT:$vec, uimm7:$idx)),
-           (EXTRACT_SUBREG (lvsl_svI VecVT:$vec, imm:$idx), SubRegIdx)>;
+           (EXTRACT_SUBREG (LVSvi VecVT:$vec, imm:$idx), SubRegIdx)>;
   def: Pat<(ElemVT (extractelt VecVT:$vec, I64:$sy)),
-           (EXTRACT_SUBREG (lvsl_svI VecVT:$vec, $sy), SubRegIdx)>;
+           (EXTRACT_SUBREG (LVSvr VecVT:$vec, $sy), SubRegIdx)>;
 }
 
 defm: ive_eve_32<v256f32, f32, sub_f32>;
@@ -127,31 +126,37 @@ defm : narrow_dce<v512i32>;
 // Broadcast
 
 def: Pat<(v512i32 (vec_broadcast i64:$val, i32:$vl)),
-         (pvbrd_vsl $val, $vl)>;
+         (PVBRDrl $val, $vl)>;
 def: Pat<(v512f32 (vec_broadcast i64:$val, i32:$vl)),
-         (pvbrd_vsl $val, $vl)>;
+         (PVBRDrl $val, $vl)>;
 
 multiclass vbrd_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                   ValueType vf32, ValueType vf64> {
   def : Pat<(vi32 (vec_broadcast i32:$sy, i32:$vl)),
-            (vbrdl_vsl i32:$sy, i32:$vl)>;
+            (VBRDrl
+              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
+              i32:$vl)>;
   def : Pat<(vf32 (vec_broadcast f32:$sy, i32:$vl)),
-            (vbrdu_vsl f32:$sy, i32:$vl)>;
+            (VBRDrl
+              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
+              i32:$vl)>;
   def : Pat<(vi64 (vec_broadcast i64:$sy, i32:$vl)),
-            (vbrd_vsl i64:$sy, i32:$vl)>;
+            (VBRDrl i64:$sy, i32:$vl)>;
   def : Pat<(vf64 (vec_broadcast f64:$sy, i32:$vl)),
-            (vbrd_vsl f64:$sy, i32:$vl)>;
+            (VBRDrl f64:$sy, i32:$vl)>;
 }
 
 defm : vbrd_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
 
 // Sequence
 def: Pat<(v512i32 (vec_seq i32:$vl)),
-         (pvseq_vl $vl)>;
+         (PVSEQl $vl)>;
 def: Pat<(v256i64 (vec_seq i32:$vl)),
-         (vseq_vl $vl)>;
+         (VSEQl $vl)>;
 def: Pat<(v256i32 (vec_seq i32:$vl)),
-         (pvseqlo_vl $vl)>;
+         (PVSEQLOl $vl)>;
+def: Pat<(v256f32 (vec_seq i32:$vl)),
+         (PVSEQUPl $vl)>;
 
 // Element shift (VMV)
 multiclass VMV_Patterns<ValueType VecVT> {
@@ -160,30 +165,25 @@ multiclass VMV_Patterns<ValueType VecVT> {
                                VecVT:$vpt,
                                v256i1:$mask,
                                i32:$pivot)),
-            (vmv_vsvmvl $amount, $v, $mask, $vpt, $pivot)>;
+            (VMVrvml_v (INSERT_SUBREG (i64 0), $amount, sub_i32), $v, $mask, $pivot, $vpt)>;
   // standard VMV
   def : Pat<(VecVT (vec_vmv VecVT:$v, i32:$amount, v256i1:$mask, i32:$avl)),
-            (vmv_vsvmvl $amount, $v, $mask, (VecVT (IMPLICIT_DEF)), $avl)>;
+            (VMVrvml (INSERT_SUBREG (i64 0), $amount, sub_i32), $v, $mask, $avl)>;
 }
 defm: VMV_Patterns<v256i32>;
 defm: VMV_Patterns<v256f32>;
 defm: VMV_Patterns<v256i64>;
 defm: VMV_Patterns<v256f64>;
 
-def : Pat<(v256f32 (vec_vmv v256f32:$v, i32:$amount, v256i1:$mask, i32:$avl)),
-          (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
-def : Pat<(v256i32 (vec_vmv v256i32:$v, i32:$amount, v256i1:$mask, i32:$avl)),
-          (vmv_vsvmvl $amount, $v, $mask, (v256i32 (IMPLICIT_DEF)), $avl)>;
-
 // Vector mask popcnt
 def : Pat<(i64 (vec_popcount v256i1:$mask, i32:$avl)),
-          (pcvm_sml $mask, $avl)>;
+          (PCVMxl $mask, $avl)>;
 
 // Packing (type based)
 def : Pat<(v512i32 (vec_pack v256i32:$vlo, v256i32:$vhi, i32:$avl)),
-          (vshf_vvvIl $vlo, $vhi, 3, $avl)>;
+          (VSHFvvil $vlo, $vhi, 3, $avl)>;
 def : Pat<(v512f32 (vec_pack v256f32:$vlo, v256f32:$vhi, i32:$avl)),
-          (vshf_vvvIl $vlo, $vhi, 2, $avl)>;
+          (VSHFvvil $vlo, $vhi, 2, $avl)>;
 def : Pat<(v512i1 (vec_pack v256i1:$vlo, v256i1:$vhi, (i32 srcvalue))),
           (INSERT_SUBREG (INSERT_SUBREG
                          (v512i1 (IMPLICIT_DEF)),
@@ -193,7 +193,7 @@ def : Pat<(v512i1 (vec_pack v256i1:$vlo, v256i1:$vhi, (i32 srcvalue))),
 // Swapping
 multiclass Unpack_Swap<ValueType PackVT> {
   def : Pat<(PackVT (vec_swap PackVT:$vp, i32:$avl)),
-            (vshf_vvvIl $vp, $vp, 8, $avl)>; // exchange hi and lo
+            (VSHFvvil $vp, $vp, 8, $avl)>; // exchange hi and lo
 
   // no-op unpacks
   def : Pat<(v256i32 (vec_unpack_lo PackVT:$vp, (i32 srcvalue))),
@@ -203,9 +203,9 @@ multiclass Unpack_Swap<ValueType PackVT> {
 
   // shuffle unpacks
   def : Pat<(v256f32 (vec_unpack_lo PackVT:$vp, i32:$avl)),
-            (vshf_vvvIl $vp, $vp, 15, $avl)>; // always pick lo
+            (VSHFvvil $vp, $vp, 15, $avl)>; // always pick lo
   def : Pat<(v256i32 (vec_unpack_hi PackVT:$vp, i32:$avl)),
-            (vshf_vvvIl $vp, $vp, 0, $avl)>; // always pick hi
+            (VSHFvvil $vp, $vp, 0, $avl)>; // always pick hi
 }
 
 // mask unpacking
@@ -217,14 +217,15 @@ def : Pat<(v256i1 (vec_unpack_hi v512i1:$vm, (i32 srcvalue))),
 defm: Unpack_Swap<v512i32>;
 defm: Unpack_Swap<v512f32>;
 
+// VFMKLvl (CCOp, VR, VL)
 def : Pat<(vec_tomask v256i64:$vx, i32:$avl),
-          (vfmklne_mvl $vx, $avl)>;
+          (VFMKLxvl CC_INE, $vx, $avl)>;
 def : Pat<(vec_tomask v256f64:$vx, i32:$avl),
-          (vfmklne_mvl $vx, $avl)>;
+          (VFMKLxvl CC_INE, $vx, $avl)>;
 def : Pat<(vec_tomask v256i32:$vx, i32:$avl),
-          (pvfmkwlone_mvl $vx, $avl)>;
+          (PVFMKWLOxvl CC_INE, $vx, $avl)>;
 def : Pat<(vec_tomask v256f32:$vx, i32:$avl),
-          (pvfmkwupne_mvl $vx, $avl)>;
+          (PVFMKWUPxvl CC_NE, $vx, $avl)>;
 
 // Casts
 // def : Pat<(v256i64 (sext_inreg V64:$src, v256i32)),

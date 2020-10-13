@@ -38,18 +38,18 @@ struct ControlDivergenceDesc {
   ConstBlockSet LoopDivBlocks;
 };
 
-struct ModifiedRPO {
-  std::vector<const BasicBlock*> LoopRPO;
-  std::unordered_map<const BasicBlock*, unsigned> RPOIndex;
+struct ModifiedPO {
+  std::vector<const BasicBlock *> LoopPO;
+  std::unordered_map<const BasicBlock *, unsigned> POIndex;
   void appendBlock(const BasicBlock &BB) {
-    RPOIndex[&BB] = LoopRPO.size();
-    LoopRPO.push_back(&BB);
+    POIndex[&BB] = LoopPO.size();
+    LoopPO.push_back(&BB);
   }
-  unsigned getIndexOf(const BasicBlock& BB) const {
-    return RPOIndex.find(&BB)->second;
+  unsigned getIndexOf(const BasicBlock &BB) const {
+    return POIndex.find(&BB)->second;
   }
-  unsigned size() const { return LoopRPO.size(); }
-  const BasicBlock* getBlockAt(unsigned Idx) const { return LoopRPO[Idx]; }
+  unsigned size() const { return LoopPO.size(); }
+  const BasicBlock *getBlockAt(unsigned Idx) const { return LoopPO[Idx]; }
 };
 
 /// \brief Relates points of divergent control to join points in
@@ -72,14 +72,13 @@ public:
   /// header. Those exit blocks are added to the returned set.
   /// If L is the parent loop of \p Term and an exit of L is in the returned
   /// set then L is a divergent loop.
-  const ControlDivergenceDesc &join_blocks(const Instruction &Term);
+  const ControlDivergenceDesc &getJoinBlocks(const Instruction &Term);
 
 private:
   static ControlDivergenceDesc EmptyDivergenceDesc;
 
-  ModifiedRPO LoopRPO;
+  ModifiedPO LoopPO;
 
-  // ReversePostOrderTraversal<const Function *> FuncRPOT;
   const DominatorTree &DT;
   const PostDominatorTree &PDT;
   const LoopInfo &LI;
