@@ -171,10 +171,10 @@ multiclass VMV_Patterns<ValueType VecVT> {
                                VecVT:$vpt,
                                v256i1:$mask,
                                i32:$pivot)),
-            (VMVrvml_v (INSERT_SUBREG (i64 0), $amount, sub_i32), $v, $mask, $pivot, $vpt)>;
+            (VMVrvml_v (COPY_TO_REGCLASS $amount, I64), $v, $mask, $pivot, $vpt)>;
   // standard VMV
   def : Pat<(VecVT (vec_vmv VecVT:$v, i32:$amount, v256i1:$mask, i32:$avl)),
-            (VMVrvml (INSERT_SUBREG (i64 0), $amount, sub_i32), $v, $mask, $avl)>;
+            (VMVrvml (COPY_TO_REGCLASS $amount, I64), $v, $mask, $avl)>;
 }
 defm: VMV_Patterns<v256i32>;
 defm: VMV_Patterns<v256f32>;

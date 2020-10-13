@@ -3,9 +3,9 @@
 ; Function Attrs: nounwind
 define <1 x double> @vec_load_v1f64(<1 x double>* %P) {
 ; CHECK-LABEL: vec_load_v1f64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld %s0, (, %s0)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r = load <1 x double>, <1 x double>* %P, align 8
   ret <1 x double> %r
 }
@@ -13,11 +13,11 @@ define <1 x double> @vec_load_v1f64(<1 x double>* %P) {
 ; Function Attrs: nounwind
 define x86_regcallcc <17 x double> @vec_load_v17f64(<17 x double>* %P) {
 ; CHECK-LABEL: vec_load_v17f64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 17, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r = load <17 x double>, <17 x double>* %P, align 8
   ret <17 x double> %r
 }
@@ -28,14 +28,14 @@ declare <128 x double> @llvm.masked.load.v128f64.p0v128f64(<128 x double>* %0, i
 ; Function Attrs: nounwind
 define x86_regcallcc <128 x double> @vec_mload_v128f64(<128 x double>* %P, <128 x i1> %M) {
 ; CHECK-LABEL: vec_mload_v128f64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v0
 ; CHECK-NEXT:    vmulu.l %v0, 8, %v0, %vm1
 ; CHECK-NEXT:    vaddu.l %v0, %s0, %v0, %vm1
 ; CHECK-NEXT:    vgt %v0, %v0, 0, 0, %vm1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r = call <128 x double> @llvm.masked.load.v128f64.p0v128f64(<128 x double>* %P, i32 16, <128 x i1> %M, <128 x double> undef)
   ret <128 x double> %r
 }
@@ -43,14 +43,14 @@ define x86_regcallcc <128 x double> @vec_mload_v128f64(<128 x double>* %P, <128 
 ; Function Attrs: nounwind
 define <256 x double> @vec_mload_v256f64(<256 x double>* %P, <256 x i1> %M) {
 ; CHECK-LABEL: vec_mload_v256f64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v0
 ; CHECK-NEXT:    vmulu.l %v0, 8, %v0, %vm1
 ; CHECK-NEXT:    vaddu.l %v0, %s0, %v0, %vm1
 ; CHECK-NEXT:    vgt %v0, %v0, 0, 0, %vm1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r = call <256 x double> @llvm.masked.load.v256f64.p0v256f64(<256 x double>* %P, i32 16, <256 x i1> %M, <256 x double> undef)
   ret <256 x double> %r
 }
@@ -58,15 +58,15 @@ define <256 x double> @vec_mload_v256f64(<256 x double>* %P, <256 x i1> %M) {
 ; Function Attrs: nounwind
 define <256 x double> @vec_mload_pt_v256f64(<256 x double>* %P, <256 x double> %PT, <256 x i1> %M) {
 ; CHECK-LABEL: vec_mload_pt_v256f64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vseq %v1
 ; CHECK-NEXT:    vmulu.l %v1, 8, %v1, %vm1
 ; CHECK-NEXT:    vaddu.l %v1, %s0, %v1, %vm1
 ; CHECK-NEXT:    vgt %v1, %v1, 0, 0, %vm1
-; CHECK-NEXT:    vmrg %v0,%v0,%v1,%vm1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    b.l.t (, %s10)
   %r = call <256 x double> @llvm.masked.load.v256f64.p0v256f64(<256 x double>* %P, i32 16, <256 x i1> %M, <256 x double> %PT)
   ret <256 x double> %r
 }
@@ -77,11 +77,11 @@ declare <128 x double> @llvm.masked.gather.v128f64.v128p0f64(<128 x double*> %0,
 ; Function Attrs: nounwind
 define x86_regcallcc <128 x double> @vec_gather_v128f64(<128 x double*> %P, <128 x i1> %M) {
 ; CHECK-LABEL: vec_gather_v128f64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vgt %v0, %v0, 0, 0, %vm1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r = call <128 x double> @llvm.masked.gather.v128f64.v128p0f64(<128 x double*> %P, i32 16, <128 x i1> %M, <128 x double> undef)
   ret <128 x double> %r
 }
@@ -89,11 +89,11 @@ define x86_regcallcc <128 x double> @vec_gather_v128f64(<128 x double*> %P, <128
 ; Function Attrs: nounwind
 define <256 x double> @vec_gather_v256f64(<256 x double*> %P, <256 x i1> %M) {
 ; CHECK-LABEL: vec_gather_v256f64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vgt %v0, %v0, 0, 0, %vm1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %r = call <256 x double> @llvm.masked.gather.v256f64.v256p0f64(<256 x double*> %P, i32 16, <256 x i1> %M, <256 x double> undef)
   ret <256 x double> %r
 }
@@ -101,7 +101,7 @@ define <256 x double> @vec_gather_v256f64(<256 x double*> %P, <256 x i1> %M) {
 ; Function Attrs: nounwind
 define <256 x double> @vec_gather_pt_v256f64(<256 x double*> %P, <256 x double> %PT, <256 x i1> %M) {
 ; CHECK-LABEL: vec_gather_pt_v256f64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vgt %v2, %v0, 0, 0, %vm1
@@ -109,8 +109,8 @@ define <256 x double> @vec_gather_pt_v256f64(<256 x double*> %P, <256 x double> 
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0,(0)1,%v1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmrg %v0,%v1,%v2,%vm1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    vmrg %v0, %v1, %v2, %vm1
+; CHECK-NEXT:    b.l.t (, %s10)
   %r = call <256 x double> @llvm.masked.gather.v256f64.v256p0f64(<256 x double*> %P, i32 16, <256 x i1> %M, <256 x double> %PT)
   ret <256 x double> %r
 }
