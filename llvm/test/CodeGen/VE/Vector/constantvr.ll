@@ -1,18 +1,13 @@
-; RUN: llc < %s -mtriple=ve -mattr=+vec | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
 define x86_regcallcc <256 x float> @m5v256f32() {
 ; CHECK-LABEL: m5v256f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lea.sl %s1, -1063256064
-; CHECK-NEXT:    lvl %s0
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/constantvr.ll
-; CHECK-NEXT:    vbrdu %v0,%s1
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
-; CHECK-NEXT:    vbrdu %v0, %s1
+; CHECK-NEXT:    lea.sl %s0, -1063256064
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vbrd %v0, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/constantvr.ll
   ret <256 x float> <
     float -5.0, float -5.0, float -5.0, float -5.0,
     float -5.0, float -5.0, float -5.0, float -5.0,
@@ -87,13 +82,8 @@ define x86_regcallcc <256 x double> @m5v256f64() {
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lea.sl %s1, -1072431104
 ; CHECK-NEXT:    lvl %s0
-<<<<<<< HEAD:llvm/test/CodeGen/VE/Vector/constantvr.ll
-; CHECK-NEXT:    vbrd %v0,%s1
-; CHECK-NEXT:    or %s11, 0, %s9
-=======
 ; CHECK-NEXT:    vbrd %v0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
->>>>>>> necgh/develop:llvm/test/CodeGen/VE/constantvr.ll
   ret <256 x double> <
     double -5.0, double -5.0, double -5.0, double -5.0,
     double -5.0, double -5.0, double -5.0, double -5.0,
