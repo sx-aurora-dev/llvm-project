@@ -28,7 +28,6 @@ define <256 x i1> @vec_trunc_v256_i32_to_i1(<256 x i32> %a) {
 ; CHECK-LABEL: vec_trunc_v256_i32_to_i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 1, (0)1
-; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pvand.lo %v0, %s0, %v0

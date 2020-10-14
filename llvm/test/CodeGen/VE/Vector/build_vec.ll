@@ -3,8 +3,7 @@
 ; Function Attrs: nounwind
 define i32 @brd_v4i32() {
 ; CHECK-LABEL: brd_v4i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK:         or %s0, 2, (0)1
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
@@ -14,6 +13,11 @@ define i32 @brd_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 2, i32 2, i32 2, i32 2>)
   %elems.sroa.0.8.vec.extract = extractelement <4 x i32> %call, i32 2
@@ -25,8 +29,7 @@ declare <4 x i32> @calc_v4i32(<4 x i32>)
 ; Function Attrs: nounwind
 define i32 @brd_v256i32() {
 ; CHECK-LABEL: brd_v256i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 2, (0)1
+; CHECK:         or %s0, 2, (0)1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
@@ -36,6 +39,11 @@ define i32 @brd_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2, i32 2,
@@ -79,8 +87,7 @@ declare <256 x i32> @calc_v256i32(<256 x i32>)
 ; Function Attrs: nounwind
 define i32 @vseq_v4i32() {
 ; CHECK-LABEL: vseq_v4i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, calc_v4i32@lo
+; CHECK:         lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
 ; CHECK-NEXT:    or %s0, 4, (0)1
@@ -89,6 +96,11 @@ define i32 @vseq_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 1, i32 2, i32 3>)
   %elems.sroa.0.8.vec.extract = extractelement <4 x i32> %call, i32 2
@@ -98,8 +110,7 @@ entry:
 ; Function Attrs: nounwind
 define i32 @vseq_v256i32() {
 ; CHECK-LABEL: vseq_v256i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, calc_v256i32@lo
+; CHECK:         lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 256
@@ -108,6 +119,11 @@ define i32 @vseq_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7,
@@ -149,8 +165,7 @@ entry:
 ; Function Attrs: nounwind
 define i32 @vseq_bad_v4i32() {
 ; CHECK-LABEL: vseq_bad_v4i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 3, (0)1
+; CHECK:         or %s0, 3, (0)1
 ; CHECK-NEXT:    or %s1, 2, (0)1
 ; CHECK-NEXT:    lsv %v0(0), %s1
 ; CHECK-NEXT:    lsv %v0(1), %s0
@@ -164,6 +179,11 @@ define i32 @vseq_bad_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 2, i32 3, i32 4, i32 5>)
   %elems.sroa.0.8.vec.extract = extractelement <4 x i32> %call, i32 2
@@ -173,8 +193,7 @@ entry:
 ; Function Attrs: nounwind
 define i32 @vseq_bad_v256i32() {
 ; CHECK-LABEL: vseq_bad_v256i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK:         lea %s0, 256
 ; CHECK-NEXT:    lea %s1, .LCPI5_0@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s1, .LCPI5_0@hi(, %s1)
@@ -186,6 +205,11 @@ define i32 @vseq_bad_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 8, i32 9, i32 10, i32 11, i32 12, i32 13, i32 14, i32 15,
@@ -227,8 +251,7 @@ entry:
 ; Function Attrs: nounwind
 define i32 @vseqmul_v4i32() {
 ; CHECK-LABEL: vseqmul_v4i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 4, (0)1
+; CHECK:         or %s0, 4, (0)1
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    or %s1, 3, (0)1
@@ -239,6 +262,11 @@ define i32 @vseqmul_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 3, i32 6, i32 9>)
@@ -249,8 +277,7 @@ entry:
 ; Function Attrs: nounwind
 define i32 @vseqmul_v256i32() {
 ; CHECK-LABEL: vseqmul_v256i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK:         lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
 ; CHECK-NEXT:    or %s1, 2, (0)1
@@ -261,6 +288,11 @@ define i32 @vseqmul_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 0, i32 2, i32 4, i32 6, i32 8, i32 10, i32 12, i32 14,
@@ -302,19 +334,22 @@ entry:
 ; Function Attrs: nounwind
 define i32 @vseqsrl_v4i32() {
 ; CHECK-LABEL: vseqsrl_v4i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 1, (0)1
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    or %s1, 4, (0)1
-; CHECK-NEXT:    lvl %s1
+; CHECK:         or %s0, 4, (0)1
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
-; CHECK-NEXT:    pvsrl.lo %v0, %v0, %s0
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    pvsrl.lo %v0, %v0, %s1
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 0, i32 1, i32 1>)
   %elems.sroa.0.8.vec.extract = extractelement <4 x i32> %call, i32 2
@@ -324,19 +359,22 @@ entry:
 ; Function Attrs: nounwind
 define i32 @vseqsrl_v8i32() {
 ; CHECK-LABEL: vseqsrl_v8i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 1, (0)1
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    or %s1, 8, (0)1
-; CHECK-NEXT:    lvl %s1
+; CHECK:         or %s0, 8, (0)1
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
-; CHECK-NEXT:    pvsrl.lo %v0, %v0, %s0
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    pvsrl.lo %v0, %v0, %s1
 ; CHECK-NEXT:    lea %s0, calc_v8i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v8i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <8 x i32> @calc_v8i32(<8 x i32> <i32 0, i32 0, i32 1, i32 1, i32 2, i32 2, i32 3, i32 3>)
   %elems.sroa.0.8.vec.extract = extractelement <8 x i32> %call, i32 2
@@ -348,19 +386,22 @@ declare <8 x i32> @calc_v8i32(<8 x i32>)
 ; Function Attrs: nounwind
 define i32 @vseqsrl_v256i32() {
 ; CHECK-LABEL: vseqsrl_v256i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 1, (0)1
-; CHECK-NEXT:    or %s0, 0, %s0
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
+; CHECK:         lea %s0, 256
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
-; CHECK-NEXT:    pvsrl.lo %v0, %v0, %s0
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    pvsrl.lo %v0, %v0, %s1
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 0, i32 0, i32 1, i32 1, i32 2, i32 2, i32 3, i32 3,
@@ -402,8 +443,7 @@ entry:
 ; Function Attrs: nounwind
 define i32 @vseqand_v4i32() {
 ; CHECK-LABEL: vseqand_v4i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 1, (0)1
+; CHECK:         or %s0, 1, (0)1
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
@@ -415,6 +455,11 @@ define i32 @vseqand_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <4 x i32> @calc_v4i32(<4 x i32> <i32 0, i32 1, i32 0, i32 1>)
   %elems.sroa.0.8.vec.extract = extractelement <4 x i32> %call, i32 2
@@ -424,8 +469,7 @@ entry:
 ; Function Attrs: nounwind
 define i32 @vseqand_v256i32() {
 ; CHECK-LABEL: vseqand_v256i32:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 1, (0)1
+; CHECK:         or %s0, 1, (0)1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
@@ -437,6 +481,11 @@ define i32 @vseqand_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    ld %s16, 32(, %s11)
+; CHECK-NEXT:    ld %s15, 24(, %s11)
+; CHECK-NEXT:    ld %s10, 8(, %s11)
+; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %call = tail call <256 x i32> @calc_v256i32(<256 x i32>
     <i32 0, i32 1, i32 0, i32 1, i32 0, i32 1, i32 0, i32 1,
