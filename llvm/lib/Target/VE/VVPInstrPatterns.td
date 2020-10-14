@@ -137,7 +137,7 @@ multiclass VectorBinaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, 
                         DataVT:$vfalse,
                         MaskVT:$mask,
                         i32:$avl),
-            (!cast<Instruction>(OpBaseName#"rvml_v") (COPY_TO_REGCLASS $sx, I64), $vy, $mask, $avl, $vfalse)>;
+            (!cast<Instruction>(OpBaseName#"rvml_v") ScalarVT:$sx, $vy, $mask, $avl, $vfalse)>;
   // with mask
   def : Pat<(vvp_select (OpNode DataVT:$vx, DataVT:$vy, (MaskVT srcvalue), (i32 srcvalue)),
                         DataVT:$vfalse,
@@ -148,7 +148,7 @@ multiclass VectorBinaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, 
   ///// w/o mask /////
   // w/o mask, broadcast
   def : Pat<(OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, (MaskVT true_mask), i32:$avl),
-            (!cast<Instruction>(OpBaseName#"rvl") (COPY_TO_REGCLASS $sx, I64), $vy, $avl)>;
+            (!cast<Instruction>(OpBaseName#"rvl") ScalarVT:$sx, $vy, $avl)>;
   // w/o mask
   def : Pat<(OpNode DataVT:$vx, DataVT:$vy, (MaskVT true_mask), i32:$avl),
             (!cast<Instruction>(OpBaseName#"vvl") $vx, $vy, $avl)>;
@@ -156,7 +156,7 @@ multiclass VectorBinaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, 
   //// ///// with mask, no select /////
   // with mask, broadcast
   def : Pat<(OpNode (any_broadcast ScalarVT:$sx), DataVT:$vy, MaskVT:$mask, i32:$avl),
-            (!cast<Instruction>(OpBaseName#"rvml") (COPY_TO_REGCLASS $sx, I64), $vy, $mask, $avl)>;
+            (!cast<Instruction>(OpBaseName#"rvml") ScalarVT:$sx, $vy, $mask, $avl)>;
   // with mask
   def : Pat<(OpNode DataVT:$vx, DataVT:$vy, MaskVT:$mask, i32:$avl),
             (!cast<Instruction>(OpBaseName#"vvml") $vx, $vy, $mask, $avl)>;
@@ -175,7 +175,7 @@ multiclass VectorBinaryArith_ShortLong<SDPatternOperator OpNode, ValueType LongS
 multiclass VectorShiftArith<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName, string MaskToken="m"> {
   // w/o mask, broadcast
   def : Pat<(DataVT (OpNode DataVT:$vx, (DataVT (any_broadcast ScalarVT:$sy)), (MaskVT true_mask), i32:$avl)),
-            (!cast<Instruction>(OpBaseName#"vrl") DataVT:$vx, (COPY_TO_REGCLASS $sy, I64), i32:$avl)>;
+            (!cast<Instruction>(OpBaseName#"vrl") DataVT:$vx, ScalarVT:$sy, i32:$avl)>;
   // w/o mask
   def : Pat<(DataVT (OpNode DataVT:$vx, DataVT:$vy, MaskVT:$vm, i32:$avl)),
             (!cast<Instruction>(OpBaseName#"vvml") $vx, $vy, $vm, $avl)>;
