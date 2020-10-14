@@ -2,15 +2,18 @@ INSTALLPATH = $(HOME)/llvm-dev/install
 LLVMSRCPATH = ../../../..
 
 CLANG = $(INSTALLPATH)/bin/clang
+CFLAGS = -target ve -O3 -ffast-math
 LLC = $(INSTALLPATH)/bin/llc
 CLEAN_TEST = $(LLVMSRCPATH)/utils/clean-test.sh
 UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
+IOP_TARGETS = shl.ll shr.ll
+
 FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
   fp_fneg.ll fp_fdiv.ll fp_frem.ll
 
-TARGETS = select.ll $(FOP_TARGETS) \
+TARGETS = select.ll $(IOP_TARGETS) $(FOP_TARGETS) \
           fp_ceil.ll fp_copysign.ll fp_cos.ll        \
           fp_exp.ll fp_exp2.ll fp_fabs.ll fp_floor.ll \
           fp_fma.ll fp_llrint.ll fp_llround.ll       \
@@ -34,7 +37,7 @@ all: $(TARGETS)
 .SUFFIXES: .ll
 
 .c.ll:
-	$(CLANG) -target ve -O3 -S -emit-llvm $<
+	$(CLANG) $(CFLAGS) -S -emit-llvm $<
 	$(CLEAN_TEST) $@
 	-grep '///' $< > /dev/null && (echo; grep '///' $<) | sed -e 's:///:;;;:' | cat - $@ > $@.tmp && mv $@.tmp $@
 	sed -e '1i ; RUN: llc < %s -mtriple=ve | FileCheck %s' $@ > $@.tmp && mv $@.tmp $@
