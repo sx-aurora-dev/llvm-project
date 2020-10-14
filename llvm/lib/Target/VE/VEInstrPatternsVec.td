@@ -84,11 +84,11 @@ def: SplitMaskPat<xor, XORMxx>;
 
 multiclass ive_eve_64<ValueType VecVT, ValueType ElemVT> {
   def: Pat<(VecVT (insertelt VecVT:$vx, ElemVT:$val, uimm7:$idx)),
-            (LSVir_v imm:$idx, $val, $vx)>;
+            (LSVir_v (ULO7 $idx), $val, $vx)>;
   def: Pat<(VecVT (insertelt VecVT:$vx, ElemVT:$val, I64:$sy)),
             (LSVrr_v $sy, $val, $vx)>;
   def: Pat<(ElemVT (extractelt VecVT:$vx, uimm7:$idx)),
-            (LVSvi VecVT:$vx, (LO7 $idx))>;
+            (LVSvi VecVT:$vx, (ULO7 $idx))>;
   def: Pat<(ElemVT (extractelt VecVT:$vx, I64:$sy)),
             (LVSvr VecVT:$vx, $sy)>;
 }
