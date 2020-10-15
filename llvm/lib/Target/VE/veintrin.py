@@ -140,16 +140,16 @@ def VW(ty): return VOp(ty, "vw")
 def VD(ty): return VOp(ty, "pt", "_v") # pass through
 
 VL = Op("l", T_u32, "vl", "I32")
-VM = Op("m", T_v4u64, "vm", "VM", "x")
-VMX = Op("m", T_v4u64, "vmx", "VM", "x")
-VMY = Op("m", T_v4u64, "vmy", "VM", "x")
-VMZ = Op("m", T_v4u64, "vmz", "VM", "x")
-VMD = Op("m", T_v4u64, "ptm", "VM", "_x") # pass through
-VM512 = Op("M", T_v8u64, "vm", "VM512", "x")
-VMX512 = Op("M", T_v8u64, "vmx", "VM512", "x")
-VMY512 = Op("M", T_v8u64, "vmy", "VM512", "x")
-VMZ512 = Op("M", T_v8u64, "vmz", "VM512", "x")
-VMD512 = Op("M", T_v8u64, "ptm", "VM512", "_x") # pass through
+VM = Op("m", T_v4u64, "vm", "VM", "m")
+VMX = Op("m", T_v4u64, "vmx", "VM", "m")
+VMY = Op("m", T_v4u64, "vmy", "VM", "m")
+VMZ = Op("m", T_v4u64, "vmz", "VM", "m")
+VMD = Op("m", T_v4u64, "ptm", "VM", "_m") # pass through
+VM512 = Op("M", T_v8u64, "vm", "VM512", "m")
+VMX512 = Op("M", T_v8u64, "vmx", "VM512", "m")
+VMY512 = Op("M", T_v8u64, "vmy", "VM512", "m")
+VMZ512 = Op("M", T_v8u64, "vmz", "VM512", "m")
+VMD512 = Op("M", T_v8u64, "ptm", "VM512", "_m") # pass through
 
 class ImmOp(Op):
     def __init__(self, kind, ty, name, immType, instSuffix):
@@ -1174,8 +1174,8 @@ def createInstructionTable():
     T.Def(0x80, "PFCHV", "nc", "pfchv.nc", [[None, ImmI(T_i64), SZ(T_voidcp)]]).noTest().inaccessibleMemOrArgMemOnly()
     T.Def(0x8E, "LSV", "", "lsv", [[VX(T_u64), VD(T_u64), SY(T_u32), SZ(T_u64)]], noVL=True).noTest().noLLVMInstDefine().noPat()
     T.LVSm(0x9E)
-    T.Def(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMxrr_x").noTest().NYI().old()
-    T.Def(0xB7, "LVM", "i", "lvm", [[VMX, VMD, ImmN(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMxir_x").noTest()
+    T.Def(0xB7, "LVM", "r", "lvm", [[VMX, VMD, SY(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMrr_m").noTest().NYI().old()
+    T.Def(0xB7, "LVM", "i", "lvm", [[VMX, VMD, ImmN(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMir_m").noTest()
     T.Def(None, "LVM", "pr", "lvm", [[VMX512, VMD512, SY(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMyrr_y").noTest().NYI().old()
     T.Def(None, "LVM", "pi", "lvm", [[VMX512, VMD512, ImmN(T_u64), SZ(T_u64)]], noVL=True, llvmInst="LVMyir_y").noTest()
     T.Def(0xA7, "SVM", "r", "svm", [[SX(T_u64), VMZ, SY(T_u64)]], noVL=True).noTest().NYI()
@@ -1288,8 +1288,8 @@ def createInstructionTable():
     T.Def(0x9D, "VEX", "", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
 
     tmp = ["gt", "lt", "ne", "eq", "ge", "le", "num", "nan", "gtnan", "ltnan", "nenan", "eqnan", "genan", "lenan"] 
-    T.Def(0xB4, "VFMK", "", "vfmk.l.at", [[VMX]], cc=CC_INT['at'], llvmInst='VFMKLxal').noTest() # i64
-    T.Def(0xB4, "VFMK", "", "vfmk.l.af", [[VMX]], cc=CC_INT['af'], llvmInst='VFMKLxnal').noTest() # i64
+    T.Def(0xB4, "VFMK", "", "vfmk.l.at", [[VMX]], cc=CC_INT['at'], llvmInst='VFMKLal').noTest() # i64
+    T.Def(0xB4, "VFMK", "", "vfmk.l.af", [[VMX]], cc=CC_INT['af'], llvmInst='VFMKLnal').noTest() # i64
     #T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.at", [[VMX]], cc=CC_INT['at'], llvmInst='VFMKWal').noTest() # i32
     #T.Def(0xB5, "VFMK", "", "pvfmk.w.up.at", [[VMX]], cc=CC_INT['at'], llvmInst='PVFMKWUPal').noTest() # i32
     #T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.af", [[VMX]], cc=CC_INT['af'], llvmInst='VFMKWLOnal').noTest() # i32
@@ -1299,36 +1299,36 @@ def createInstructionTable():
 
     # i64
     for cc in tmp:
-      T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64)]], cc=CC_INT[cc], llvmInst='VFMKLxvl').noTest().noLLVMInstDefine()
-      T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64), VM]], cc=CC_INT[cc], llvmInst='VFMKLxvxl').noTest().noLLVMInstDefine()
+      T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64)]], cc=CC_INT[cc], llvmInst='VFMKLvl').noTest().noLLVMInstDefine()
+      T.Def(0xB4, "VFMK", "", "vfmk.l."+cc, [[VMX, VZ(T_i64), VM]], cc=CC_INT[cc], llvmInst='VFMKLvml').noTest().noLLVMInstDefine()
 
     # i32
     for cc in tmp:
-      T.Def(0xB5, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='VFMKWxvl').noTest().noLLVMInstDefine()
-      T.Def(0xB5, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i32), VM]], cc=CC_INT[cc], llvmInst='VFMKWxvxl').noTest().noLLVMInstDefine()
+      T.Def(0xB5, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='VFMKWvl').noTest().noLLVMInstDefine()
+      T.Def(0xB5, "VFMS", "", "vfmk.w."+cc, [[VMX, VZ(T_i32), VM]], cc=CC_INT[cc], llvmInst='VFMKWvml').noTest().noLLVMInstDefine()
     for cc in tmp:
-      T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='PVFMKWLOxvl').noTest().noLLVMInstDefine()
-      T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='PVFMKWUPxvl').noTest().noLLVMInstDefine()
-      T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32), VM]], cc=CC_INT[cc], llvmInst='PVFMKWLOxvxl').noTest().noLLVMInstDefine()
-      T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32), VM]], cc=CC_INT[cc], llvmInst='PVFMKWUPxvxl').noTest().noLLVMInstDefine()
+      T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='PVFMKWLOvl').noTest().noLLVMInstDefine()
+      T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='PVFMKWUPvl').noTest().noLLVMInstDefine()
+      T.Def(0xB5, "VFMS", "", "pvfmk.w.lo."+cc, [[VMX, VZ(T_i32), VM]], cc=CC_INT[cc], llvmInst='PVFMKWLOvml').noTest().noLLVMInstDefine()
+      T.Def(0xB5, "VFMS", "", "pvfmk.w.up."+cc, [[VMX, VZ(T_i32), VM]], cc=CC_INT[cc], llvmInst='PVFMKWUPvml').noTest().noLLVMInstDefine()
     for cc in tmp:
       T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, VZ(T_i32)]], cc=CC_INT[cc], llvmInst='VFMKWyvl').noTest().noLLVMInstDefine() # i32, Pseudo
       T.Def(None, "VFMS", "p", "pvfmk.w."+cc, [[VMX512, VZ(T_i32), VM512]], cc=CC_INT[cc], llvmInst='VFMKWyvyl').noTest().noLLVMInstDefine() # 32, Pseudo
 
     # f64
     for cc in tmp:
-      T.Def(0xB6, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_f64)]], cc=CC_FLOAT[cc], llvmInst='VFMKDxvl').noTest().noLLVMInstDefine()
-      T.Def(0xB6, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_f64), VM]], cc=CC_FLOAT[cc], llvmInst='VFMKDxvxl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_f64)]], cc=CC_FLOAT[cc], llvmInst='VFMKDvl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "d", "vfmk.d."+cc, [[VMX, VZ(T_f64), VM]], cc=CC_FLOAT[cc], llvmInst='VFMKDvml').noTest().noLLVMInstDefine()
 
     # f32
     for cc in tmp:
-      T.Def(0xB6, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='VFMKSxvl').noTest().noLLVMInstDefine()
-      T.Def(0xB6, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_f32), VM]], cc=CC_FLOAT[cc], llvmInst='VFMKSxvxl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='VFMKSvl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "s", "vfmk.s."+cc, [[VMX, VZ(T_f32), VM]], cc=CC_FLOAT[cc], llvmInst='VFMKSvml').noTest().noLLVMInstDefine()
     for cc in tmp:
-      T.Def(0xB6, "VFMF", "s", "pvfmk.s.lo."+cc, [[VMX, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='PVFMKSLOxvl').noTest().noLLVMInstDefine()
-      T.Def(0xB6, "VFMF", "s", "pvfmk.s.up."+cc, [[VMX, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='PVFMKSUPxvl').noTest().noLLVMInstDefine()
-      T.Def(0xB6, "VFMF", "s", "pvfmk.s.lo."+cc, [[VMX, VZ(T_f32), VM]], cc=CC_FLOAT[cc], llvmInst='PVFMKSLOxvxl').noTest().noLLVMInstDefine()
-      T.Def(0xB6, "VFMF", "s", "pvfmk.s.up."+cc, [[VMX, VZ(T_f32), VM]], cc=CC_FLOAT[cc], llvmInst='PVFMKSUPxvxl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "s", "pvfmk.s.lo."+cc, [[VMX, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='PVFMKSLOvl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "s", "pvfmk.s.up."+cc, [[VMX, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='PVFMKSUPvl').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "s", "pvfmk.s.lo."+cc, [[VMX, VZ(T_f32), VM]], cc=CC_FLOAT[cc], llvmInst='PVFMKSLOvml').noTest().noLLVMInstDefine()
+      T.Def(0xB6, "VFMF", "s", "pvfmk.s.up."+cc, [[VMX, VZ(T_f32), VM]], cc=CC_FLOAT[cc], llvmInst='PVFMKSUPvml').noTest().noLLVMInstDefine()
     for cc in tmp:
       T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='VFMKSyvl').noTest().noLLVMInstDefine() # Pseudo
       T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32), VM512]], cc=CC_FLOAT[cc], llvmInst='VFMKSyvyl').noTest().noLLVMInstDefine() # Pseudo

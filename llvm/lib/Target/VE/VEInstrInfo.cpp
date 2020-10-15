@@ -339,7 +339,7 @@ static void copyPhysSubRegs(MachineBasicBlock &MBB,
       MachineInstrBuilder MIB =
           BuildMI(MBB, I, DL, MCID, SubDest).addReg(SubSrc).addImm(0);
       MovMI = MIB.getInstr();
-    } else if (MCID.getOpcode() == VE::ANDMxx) {
+    } else if (MCID.getOpcode() == VE::ANDMmm) {
       // generate "ANDM, dest, vm0, src" instruction.
       MachineInstrBuilder MIB = BuildMI(MBB, I, DL, MCID, SubDest)
           .addReg(VE::VM0).addReg(SubSrc);
@@ -381,14 +381,14 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         .addReg(SubTmp, getKillRegState(true));
     MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
   } else if (VE::VMRegClass.contains(DestReg, SrcReg))
-    BuildMI(MBB, I, DL, get(VE::ANDMxx), DestReg)
+    BuildMI(MBB, I, DL, get(VE::ANDMmm), DestReg)
         .addReg(VE::VM0)
         .addReg(SrcReg, getKillRegState(KillSrc));
   else if (VE::VM512RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
     const unsigned subRegIdx[] = { VE::sub_vm_even, VE::sub_vm_odd };
     unsigned int numSubRegs = 2;
-    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDMxx),
+    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDMmm),
                     numSubRegs, subRegIdx, &getRegisterInfo());
   } else if (VE::F128RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
@@ -666,15 +666,15 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
     // replace to pvfmk.s.up and pvfmk.s.lo
 
     std::map<int, std::vector<int>> map = {
-      {VE::VFMKyal, {VE::VFMKLxal, VE::VFMKLxal}},
-      {VE::VFMKynal, {VE::VFMKLxnal, VE::VFMKLxnal}},
-      {VE::VFMKWyvl, {VE::PVFMKWUPxvl, VE::PVFMKWLOxvl}},
-      {VE::VFMKWyvyl, {VE::PVFMKWUPxvxl, VE::PVFMKWLOxvxl}},
-      {VE::VFMKSyvl, {VE::PVFMKSUPxvl, VE::PVFMKSLOxvl}},
-      {VE::VFMKSyvyl, {VE::PVFMKSUPxvxl, VE::PVFMKSLOxvxl}},
+      {VE::VFMKyal, {VE::VFMKLal, VE::VFMKLal}},
+      {VE::VFMKynal, {VE::VFMKLnal, VE::VFMKLnal}},
+      {VE::VFMKWyvl, {VE::PVFMKWUPvl, VE::PVFMKWLOvl}},
+      {VE::VFMKWyvyl, {VE::PVFMKWUPvml, VE::PVFMKWLOvml}},
+      {VE::VFMKSyvl, {VE::PVFMKSUPvl, VE::PVFMKSLOvl}},
+      {VE::VFMKSyvyl, {VE::PVFMKSUPvml, VE::PVFMKSLOvml}},
 
-      {VE::veoldVFMKyal, {VE::veoldVFMKLxal, VE::veoldVFMKLxal}},
-      {VE::veoldVFMKynal, {VE::veoldVFMKLxnal, VE::veoldVFMKLxnal}},
+      {VE::veoldVFMKyal, {VE::veoldVFMKLal, VE::veoldVFMKLal}},
+      {VE::veoldVFMKynal, {VE::veoldVFMKLnal, VE::veoldVFMKLnal}},
       {VE::veoldVFMKWyvl, {VE::veoldPVFMKWUPxvl, VE::veoldPVFMKWLOxvl}},
       {VE::veoldVFMKWyvyl, {VE::veoldPVFMKWUPxvxl, VE::veoldPVFMKWLOxvxl}},
       {VE::veoldVFMKSyvl, {VE::veoldPVFMKSUPxvl, VE::veoldPVFMKSLOxvl}},
@@ -897,12 +897,12 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   }
 #endif
 
-  case VE::veoldANDMyy: buildVMRInst(MI, get(VE::ANDMxx)); return true;
-  case VE::veoldORMyy:  buildVMRInst(MI, get(VE::ORMxx)); return true;
-  case VE::veoldXORMyy: buildVMRInst(MI, get(VE::XORMxx)); return true;
-  case VE::veoldEQVMyy: buildVMRInst(MI, get(VE::EQVMxx)); return true;
-  case VE::veoldNNDMyy: buildVMRInst(MI, get(VE::NNDMxx)); return true;
-  case VE::veoldNEGMy: buildVMRInst(MI, get(VE::NEGMx)); return true;
+  case VE::veoldANDMyy: buildVMRInst(MI, get(VE::ANDMmm)); return true;
+  case VE::veoldORMyy:  buildVMRInst(MI, get(VE::ORMmm)); return true;
+  case VE::veoldXORMyy: buildVMRInst(MI, get(VE::XORMmm)); return true;
+  case VE::veoldEQVMyy: buildVMRInst(MI, get(VE::EQVMmm)); return true;
+  case VE::veoldNNDMyy: buildVMRInst(MI, get(VE::NNDMmm)); return true;
+  case VE::veoldNEGMy: buildVMRInst(MI, get(VE::NEGMm)); return true;
 
   case VE::LVMyir:
   case VE::LVMyim:
@@ -925,13 +925,13 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     DebugLoc DL = MI.getDebugLoc();
     switch (MI.getOpcode()) {
     case VE::LVMyir:
-      BuildMI(*MBB, MI, DL, get(VE::LVMxir))
+      BuildMI(*MBB, MI, DL, get(VE::LVMir))
         .addDef(VMX)
         .addImm(Imm)
         .addReg(Src, getKillRegState(KillSrc));
       break;
     case VE::LVMyim:
-      BuildMI(*MBB, MI, DL, get(VE::LVMxim))
+      BuildMI(*MBB, MI, DL, get(VE::LVMim))
         .addDef(VMX)
         .addImm(Imm)
         .addImm(MImm);
@@ -939,7 +939,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     case VE::LVMyir_y:
       assert(MI.getOperand(0).getReg() == MI.getOperand(3).getReg() &&
              "LVMyir_y has different register in 3rd operand");
-      BuildMI(*MBB, MI, DL, get(VE::LVMxir_x))
+      BuildMI(*MBB, MI, DL, get(VE::LVMir_m))
         .addDef(VMX)
         .addImm(Imm)
         .addReg(Src, getKillRegState(KillSrc))
@@ -948,7 +948,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     case VE::LVMyim_y:
       assert(MI.getOperand(0).getReg() == MI.getOperand(3).getReg() &&
              "LVMyim_y has different register in 3rd operand");
-      BuildMI(*MBB, MI, DL, get(VE::LVMxim_x))
+      BuildMI(*MBB, MI, DL, get(VE::LVMim_m))
         .addDef(VMX)
         .addImm(Imm)
         .addImm(MImm)
@@ -973,7 +973,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     }
     MachineBasicBlock* MBB = MI.getParent();
     DebugLoc DL = MI.getDebugLoc();
-    BuildMI(*MBB, MI, DL, get(VE::LVMxir_x))
+    BuildMI(*MBB, MI, DL, get(VE::LVMir_m))
       .addDef(VMX)
       .addImm(Imm)
       .addReg(MI.getOperand(2).getReg())
@@ -995,7 +995,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     }
     MachineBasicBlock* MBB = MI.getParent();
     DebugLoc DL = MI.getDebugLoc();
-    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, get(VE::SVMxi), Dest)
+    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, get(VE::SVMmi), Dest)
       .addReg(VMZ)
       .addImm(Imm);
     MachineInstr *Inst = MIB.getInstr();

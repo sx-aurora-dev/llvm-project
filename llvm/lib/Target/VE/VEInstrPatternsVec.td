@@ -19,10 +19,10 @@ def vec_broadcast : SDNode<"VEISD::VEC_BROADCAST",
 
 // Boardcast for vector mask register.
 def : Pat<(v256i1 (vec_broadcast (i32 0))),
-          (LVMxim_x 3, 0,
-          (LVMxim_x 2, 0,
-          (LVMxim_x 1, 0,
-          (LVMxim 0, 0))))>;
+          (LVMim_m 3, 0,
+          (LVMim_m 2, 0,
+          (LVMim_m 1, 0,
+          (LVMim 0, 0))))>;
 def : Pat<(v512i1 (vec_broadcast (i32 0))),
           (LVMyim_y 7, 0,
           (LVMyim_y 6, 0,

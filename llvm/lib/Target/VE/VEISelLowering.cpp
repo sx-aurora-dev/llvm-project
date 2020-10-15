@@ -1915,9 +1915,9 @@ static SDValue lowerLoadF128(SDValue Op, SelectionDAG &DAG) {
 
 // Lower a vXi1 load into following instructions
 //   LDrii %1, (,%addr)
-//   LVMxir  %vm, 0, %1
+//   LVMir  %vm, 0, %1
 //   LDrii %2, 8(,%addr)
-//   LVMxir  %vm, 0, %2
+//   LVMir  %vm, 0, %2
 //   ...
 static SDValue lowerLoadI1(SDValue Op, SelectionDAG &DAG) {
   SDLoc DL(Op);
@@ -1946,7 +1946,7 @@ static SDValue lowerLoadI1(SDValue Op, SelectionDAG &DAG) {
                                  MachineMemOperand::MONone);
       OutChains[i] = SDValue(Val.getNode(), 1);
 
-      VM = DAG.getMachineNode(VE::LVMxir_x, DL, MVT::i64,
+      VM = DAG.getMachineNode(VE::LVMir_m, DL, MVT::i64,
                               DAG.getTargetConstant(i, DL, MVT::i64),
                               Val, SDValue(VM, 0));
     }
@@ -2056,7 +2056,7 @@ static SDValue lowerStoreI1(SDValue Op, SelectionDAG &DAG) {
   if (MemVT == MVT::v256i1 || MemVT == MVT::v4i64) {
     SDValue OutChains[4];
     for (int i = 0; i < 4; ++i) {
-      SDNode *V = DAG.getMachineNode(VE::SVMxi, DL, MVT::i64,
+      SDNode *V = DAG.getMachineNode(VE::SVMmi, DL, MVT::i64,
                                      StNode->getValue(),
                                      DAG.getTargetConstant(i, DL, MVT::i64));
       SDValue Addr = DAG.getNode(ISD::ADD, DL, AddrVT, BasePtr,
