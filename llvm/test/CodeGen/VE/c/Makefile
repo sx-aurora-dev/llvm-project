@@ -13,7 +13,7 @@ IOP_TARGETS = shl.ll shr.ll
 FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
   fp_fneg.ll fp_fdiv.ll fp_frem.ll
 
-FMATH_TARGETS = fabs.ll
+FMATH_TARGETS = fabs.ll fsqrt.ll
 
 TARGETS = select.ll $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) \
           fp_ceil.ll fp_copysign.ll fp_cos.ll        \
@@ -23,7 +23,7 @@ TARGETS = select.ll $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) \
           fp_lrint.ll fp_lround.ll                   \
           fp_maxnum.ll fp_nearbyint.ll               \
           fp_pow.ll fp_rint.ll fp_round.ll fp_roundeven.ll fp_sin.ll \
-          fp_sqrt.ll fp_trunc.ll                     \
+          fp_trunc.ll                     \
           selectcc_int1.ll  \
           selectcc_int8.ll   selectcc_uint8.ll   \
           selectcc_int16.ll  selectcc_uint16.ll  \
