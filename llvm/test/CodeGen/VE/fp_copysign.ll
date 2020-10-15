@@ -1,8 +1,36 @@
 ; RUN: llc < %s -mtriple=ve | FileCheck %s
 
+;;; Test ‘llvm.copysign.*’ Intrinsic
+;;;
+;;; Syntax:
+;;;   This is an overloaded intrinsic. You can use llvm.copysign on any
+;;;   floating-point or vector of floating-point type. Not all targets
+;;;   support all types however.
+;;;
+;;; declare float     @llvm.copysign.f32(float  %Mag, float  %Sgn)
+;;; declare double    @llvm.copysign.f64(double %Mag, double %Sgn)
+;;; declare x86_fp80  @llvm.copysign.f80(x86_fp80  %Mag, x86_fp80  %Sgn)
+;;; declare fp128     @llvm.copysign.f128(fp128 %Mag, fp128 %Sgn)
+;;; declare ppc_fp128 @llvm.copysign.ppcf128(ppc_fp128  %Mag, ppc_fp128  %Sgn)
+;;;
+;;; Overview:
+;;;   The ‘llvm.copysign.*’ intrinsics return a value with the magnitude of
+;;;   the first operand and the sign of the second operand.
+;;;
+;;; Arguments:
+;;;   The arguments and return value are floating-point numbers of the same
+;;;   type.
+;;;
+;;; Semantics:
+;;;   This function returns the same values as the libm copysign functions
+;;;   would, and handles error conditions in the same way.
+;;;
+;;; Note:
+;;;   We test only float/double/fp128.
+
 ; Function Attrs: nounwind readnone
-define float @func_fp_copysignf_var_float(float %0, float %1) {
-; CHECK-LABEL: func_fp_copysignf_var_float:
+define float @copysign_float_var(float %0, float %1) {
+; CHECK-LABEL: copysign_float_var:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    sra.l %s1, %s1, 32
 ; CHECK-NEXT:    lea %s2, -2147483648
@@ -21,8 +49,8 @@ define float @func_fp_copysignf_var_float(float %0, float %1) {
 declare float @llvm.copysign.f32(float, float)
 
 ; Function Attrs: nounwind readnone
-define double @func_fp_copysign_var_double(double %0, double %1) {
-; CHECK-LABEL: func_fp_copysign_var_double:
+define double @copysign_double_var(double %0, double %1) {
+; CHECK-LABEL: copysign_double_var:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (1)1
 ; CHECK-NEXT:    and %s0, %s0, (1)0
@@ -36,8 +64,8 @@ define double @func_fp_copysign_var_double(double %0, double %1) {
 declare double @llvm.copysign.f64(double, double)
 
 ; Function Attrs: nounwind readnone
-define fp128 @func_fp_copysignl_var_quad(fp128 %0, fp128 %1) {
-; CHECK-LABEL: func_fp_copysignl_var_quad:
+define fp128 @copysign_quad_var(fp128 %0, fp128 %1) {
+; CHECK-LABEL: copysign_quad_var:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    st %s3, -16(, %s9)
 ; CHECK-NEXT:    st %s2, -8(, %s9)
@@ -61,8 +89,8 @@ define fp128 @func_fp_copysignl_var_quad(fp128 %0, fp128 %1) {
 declare fp128 @llvm.copysign.f128(fp128, fp128)
 
 ; Function Attrs: nounwind readnone
-define float @func_fp_copysignf_zero_float(float %0) {
-; CHECK-LABEL: func_fp_copysignf_zero_float:
+define float @copysign_float_zero(float %0) {
+; CHECK-LABEL: copysign_float_zero:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    sra.l %s0, %s0, 32
 ; CHECK-NEXT:    lea %s1, -2147483648
@@ -75,8 +103,8 @@ define float @func_fp_copysignf_zero_float(float %0) {
 }
 
 ; Function Attrs: nounwind readnone
-define double @func_fp_copysign_zero_double(double %0) {
-; CHECK-LABEL: func_fp_copysign_zero_double:
+define double @copysign_double_zero(double %0) {
+; CHECK-LABEL: copysign_double_zero:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (1)1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -85,8 +113,8 @@ define double @func_fp_copysign_zero_double(double %0) {
 }
 
 ; Function Attrs: nounwind readnone
-define fp128 @func_fp_copysignl_zero_quad(fp128 %0) {
-; CHECK-LABEL: func_fp_copysignl_zero_quad:
+define fp128 @copysign_quad_zero(fp128 %0) {
+; CHECK-LABEL: copysign_quad_zero:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
@@ -112,8 +140,8 @@ define fp128 @func_fp_copysignl_zero_quad(fp128 %0) {
 }
 
 ; Function Attrs: nounwind readnone
-define float @func_fp_copysignf_const_float(float %0) {
-; CHECK-LABEL: func_fp_copysignf_const_float:
+define float @copysign_float_const(float %0) {
+; CHECK-LABEL: copysign_float_const:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    sra.l %s0, %s0, 32
 ; CHECK-NEXT:    lea %s1, -2147483648
@@ -128,8 +156,8 @@ define float @func_fp_copysignf_const_float(float %0) {
 }
 
 ; Function Attrs: nounwind readnone
-define double @func_fp_copysign_const_double(double %0) {
-; CHECK-LABEL: func_fp_copysign_const_double:
+define double @copysign_double_const(double %0) {
+; CHECK-LABEL: copysign_double_const:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (1)1
 ; CHECK-NEXT:    lea.sl %s1, 1073741824
@@ -140,8 +168,8 @@ define double @func_fp_copysign_const_double(double %0) {
 }
 
 ; Function Attrs: nounwind readnone
-define fp128 @func_fp_copysignl_const_quad(fp128 %0) {
-; CHECK-LABEL: func_fp_copysignl_const_quad:
+define fp128 @copysign_quad_const(fp128 %0) {
+; CHECK-LABEL: copysign_quad_const:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s2, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0

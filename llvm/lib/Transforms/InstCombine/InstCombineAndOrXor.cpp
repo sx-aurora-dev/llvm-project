@@ -2067,13 +2067,19 @@ static Instruction *matchFunnelShift(Instruction &Or, InstCombinerImpl &IC) {
 
   Value *ShVal0, *ShVal1, *ShAmt0, *ShAmt1;
   if (!match(Or0, m_OneUse(m_LogicalShift(m_Value(ShVal0), m_Value(ShAmt0)))) ||
-      !match(Or1, m_OneUse(m_LogicalShift(m_Value(ShVal1), m_Value(ShAmt1)))))
+      !match(Or1, m_OneUse(m_LogicalShift(m_Value(ShVal1), m_Value(ShAmt1)))) ||
+      Or0->getOpcode() == Or1->getOpcode())
     return nullptr;
 
-  BinaryOperator::BinaryOps ShiftOpcode0 = Or0->getOpcode();
-  BinaryOperator::BinaryOps ShiftOpcode1 = Or1->getOpcode();
-  if (ShiftOpcode0 == ShiftOpcode1)
-    return nullptr;
+  // Canonicalize to or(shl(ShVal0, ShAmt0), lshr(ShVal1, ShAmt1)).
+  if (Or0->getOpcode() == BinaryOperator::LShr) {
+    std::swap(Or0, Or1);
+    std::swap(ShVal0, ShVal1);
+    std::swap(ShAmt0, ShAmt1);
+  }
+  assert(Or0->getOpcode() == BinaryOperator::Shl &&
+         Or1->getOpcode() == BinaryOperator::LShr &&
+         "Illegal or(shift,shift) pair");
 
   // Match the shift amount operands for a funnel shift pattern. This always
   // matches a subtraction on the R operand.
@@ -2084,15 +2090,12 @@ static Instruction *matchFunnelShift(Instruction &Or, InstCombinerImpl &IC) {
       if (LI->ult(Width) && RI->ult(Width) && (*LI + *RI) == Width)
         return ConstantInt::get(L->getType(), *LI);
 
-    // TODO: Support undefs in non-uniform shift amounts.
     Constant *LC, *RC;
-    if (match(L, m_Constant(LC)) && !LC->containsUndefElement() &&
-        match(R, m_Constant(RC)) && !RC->containsUndefElement() &&
+    if (match(L, m_Constant(LC)) && match(R, m_Constant(RC)) &&
         match(L, m_SpecificInt_ICMP(ICmpInst::ICMP_ULT, APInt(Width, Width))) &&
-        match(R, m_SpecificInt_ICMP(ICmpInst::ICMP_ULT, APInt(Width, Width)))) {
-      if (match(ConstantExpr::getAdd(LC, RC), m_SpecificInt(Width)))
-        return L;
-    }
+        match(R, m_SpecificInt_ICMP(ICmpInst::ICMP_ULT, APInt(Width, Width))) &&
+        match(ConstantExpr::getAdd(LC, RC), m_SpecificIntAllowUndef(Width)))
+      return ConstantExpr::mergeUndefsWith(LC, RC);
 
     // (shl ShVal, X) | (lshr ShVal, (Width - x)) iff X < Width.
     // We limit this to X < Width in case the backend re-expands the intrinsic,
@@ -2134,20 +2137,17 @@ static Instruction *matchFunnelShift(Instruction &Or, InstCombinerImpl &IC) {
   };
 
   Value *ShAmt = matchShiftAmount(ShAmt0, ShAmt1, Width);
-  bool SubIsOnLHS = false;
+  bool IsFshl = true; // Sub on LSHR.
   if (!ShAmt) {
     ShAmt = matchShiftAmount(ShAmt1, ShAmt0, Width);
-    SubIsOnLHS = true;
+    IsFshl = false; // Sub on SHL.
   }
   if (!ShAmt)
     return nullptr;
 
-  bool IsFshl = (!SubIsOnLHS && ShiftOpcode0 == BinaryOperator::Shl) ||
-                (SubIsOnLHS && ShiftOpcode1 == BinaryOperator::Shl);
   Intrinsic::ID IID = IsFshl ? Intrinsic::fshl : Intrinsic::fshr;
   Function *F = Intrinsic::getDeclaration(Or.getModule(), IID, Or.getType());
-  return IntrinsicInst::Create(
-      F, {IsFshl ? ShVal0 : ShVal1, IsFshl ? ShVal1 : ShVal0, ShAmt});
+  return IntrinsicInst::Create(F, {ShVal0, ShVal1, ShAmt});
 }
 
 /// Attempt to combine or(zext(x),shl(zext(y),bw/2) concat packing patterns.
