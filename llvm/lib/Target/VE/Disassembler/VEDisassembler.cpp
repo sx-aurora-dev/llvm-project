@@ -113,13 +113,13 @@ static const unsigned V64RegDecoderTable[] = {
   VE::V56, VE::V57, VE::V58, VE::V59,
   VE::V60, VE::V61, VE::V62, VE::V63 };
 
-static const unsigned VM_RegDecoderTable[] = {
+static const unsigned VMRegDecoderTable[] = {
   VE::VM0,  VE::VM1,  VE::VM2,  VE::VM3,
   VE::VM4,  VE::VM5,  VE::VM6,  VE::VM7,
   VE::VM8,  VE::VM9,  VE::VM10, VE::VM11,
   VE::VM12, VE::VM13, VE::VM14, VE::VM15 };
 
-static const unsigned VM512_RegDecoderTable[] = {
+static const unsigned VM512RegDecoderTable[] = {
   VE::VMP0,  VE::VMP1,  VE::VMP2,  VE::VMP3,
   VE::VMP4,  VE::VMP5,  VE::VMP6,  VE::VMP7 };
 
@@ -188,24 +188,24 @@ static DecodeStatus DecodeV64RegisterClass(MCInst &Inst,
   return MCDisassembler::Success;
 }
 
-static DecodeStatus DecodeVM_RegisterClass(MCInst &Inst,
-                                           unsigned RegNo,
-                                           uint64_t Address,
-                                           const void *Decoder) {
+static DecodeStatus DecodeVMRegisterClass(MCInst &Inst,
+                                          unsigned RegNo,
+                                          uint64_t Address,
+                                          const void *Decoder) {
   if (RegNo > 15)
     return MCDisassembler::Fail;
-  unsigned Reg = VM_RegDecoderTable[RegNo];
+  unsigned Reg = VMRegDecoderTable[RegNo];
   Inst.addOperand(MCOperand::createReg(Reg));
   return MCDisassembler::Success;
 }
 
-static DecodeStatus DecodeVM512_RegisterClass(MCInst &Inst,
-                                              unsigned RegNo,
-                                              uint64_t Address,
-                                              const void *Decoder) {
+static DecodeStatus DecodeVM512RegisterClass(MCInst &Inst,
+                                             unsigned RegNo,
+                                             uint64_t Address,
+                                             const void *Decoder) {
   if (RegNo % 2 || RegNo > 15)
     return MCDisassembler::Fail;
-  unsigned Reg = VM512_RegDecoderTable[RegNo / 2];
+  unsigned Reg = VM512RegDecoderTable[RegNo / 2];
   Inst.addOperand(MCOperand::createReg(Reg));
   return MCDisassembler::Success;
 }
