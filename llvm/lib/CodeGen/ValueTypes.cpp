@@ -309,6 +309,8 @@ Type *EVT::getTypeForEVT(LLVMContext &Context) const {
     return FixedVectorType::get(Type::getInt64Ty(Context), 128);
   case MVT::v256i64:
     return FixedVectorType::get(Type::getInt64Ty(Context), 256);
+  case MVT::v512i64:
+    return FixedVectorType::get(Type::getInt64Ty(Context), 512);
   case MVT::v1i128:
     return FixedVectorType::get(Type::getInt128Ty(Context), 1);
   case MVT::v2f16:
@@ -389,6 +391,8 @@ Type *EVT::getTypeForEVT(LLVMContext &Context) const {
     return FixedVectorType::get(Type::getDoubleTy(Context), 128);
   case MVT::v256f64:
     return FixedVectorType::get(Type::getDoubleTy(Context), 256);
+  case MVT::v512f64:
+    return FixedVectorType::get(Type::getDoubleTy(Context), 512);
   case MVT::nxv1i1:
     return ScalableVectorType::get(Type::getInt1Ty(Context), 1);
   case MVT::nxv2i1:
