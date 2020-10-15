@@ -363,10 +363,10 @@ static void emit_vxl_v(MCStreamer &OutStreamer, unsigned OC,
   OutStreamer.emitInstruction(Inst, STI);
 }
 
-static void emit_rdvxl_v(MCStreamer &OutStreamer, unsigned OC,
+static void emit_rdvxl(MCStreamer &OutStreamer, unsigned OC,
                        MCOperand &RdV,
                        MCOperand &InV,
-                       MCOperand &Mask, MCOperand &PassthruV, MCOperand &VL,
+                       MCOperand &Mask, MCOperand &VL,
                        MCOperand &ResV,
                        const MCSubtargetInfo &STI) {
   MCInst Inst;
@@ -376,40 +376,45 @@ static void emit_rdvxl_v(MCStreamer &OutStreamer, unsigned OC,
   Inst.addOperand(InV); // v
   Inst.addOperand(Mask); // x
   Inst.addOperand(VL); // l
-  Inst.addOperand(PassthruV); // _v
+  // Inst.addOperand(PassthruV); // _v // [implicit]
   // outs
   Inst.addOperand(ResV);
   OutStreamer.emitInstruction(Inst, STI);
 }
 
 static MCOperand getRegOperand(const MachineOperand& MO) {
-  // const MachineOperand &MO = MI->getOperand(0);
+  assert(MO.isReg());
   return MCOperand::createReg(MO.getReg());
+}
+
+static MCOperand getImmOperand(const MachineOperand& MO) {
+  assert(MO.isImm());
+  return MCOperand::createImm(MO.getImm());
 }
 
 void VEAsmPrinter::lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
                                                  const MCSubtargetInfo &STI) {
   switch (MI->getOpcode()) {
     case VE::VCVTLSvxl_v: {
-     auto ResV = getRegOperand(MI->getOperand(0));
-     auto RdOpV = getRegOperand(MI->getOperand(1));
-     auto SrcV = getRegOperand(MI->getOperand(2));
-     auto Mask = getRegOperand(MI->getOperand(3));
-     auto VL = getRegOperand(MI->getOperand(4));
-     auto PassthruV = getRegOperand(MI->getOperand(5));
+      auto ResV = getRegOperand(MI->getOperand(0));
+      auto RdOpV = getImmOperand(MI->getOperand(1));
+      auto SrcV = getRegOperand(MI->getOperand(2));
+      auto Mask = getRegOperand(MI->getOperand(3));
+      auto VL = getRegOperand(MI->getOperand(4));
+      // auto PassthruV = getRegOperand(MI->getOperand(5));
 
       emit_vxl(*OutStreamer, VE::VCVTDSvxl, ResV, SrcV, Mask, VL, STI);
-      emit_rdvxl_v(*OutStreamer, VE::VCVTLDvxl_v, ResV, RdOpV, ResV, Mask, VL, PassthruV, STI);
+      emit_rdvxl(*OutStreamer, VE::VCVTLDvxl, ResV, RdOpV, ResV, Mask, VL, STI);
     } break;
     case VE::VCVTSLvxl_v: {
       auto ResV = getRegOperand(MI->getOperand(0));
       auto SrcV = getRegOperand(MI->getOperand(1));
       auto Mask = getRegOperand(MI->getOperand(2));
       auto VL = getRegOperand(MI->getOperand(3));
-      auto PassthruV = getRegOperand(MI->getOperand(4));
+      // auto PassthruV = getRegOperand(MI->getOperand(4));
 
       emit_vxl(*OutStreamer, VE::VCVTDLvxl, ResV, SrcV, Mask, VL, STI);
-      emit_vxl_v(*OutStreamer, VE::VCVTSDvxl_v, ResV, ResV, Mask, PassthruV, VL, STI);
+      emit_vxl(*OutStreamer, VE::VCVTSDvxl, ResV, ResV, Mask, VL, STI);
     } break;
   }
 }

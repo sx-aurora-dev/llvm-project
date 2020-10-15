@@ -2332,6 +2332,8 @@ void VETargetLowering::initVPUActions() {
       ISD::SMUL_LOHI, ISD::UMUL_LOHI,
 
       // genuinely  unsupported
+      ISD::FP_TO_UINT,
+      ISD::UINT_TO_FP,
       ISD::UREM, ISD::SREM, ISD::SDIVREM, ISD::UDIVREM, ISD::FP16_TO_FP,
       ISD::FP_TO_FP16, END_OF_OCLIST};
 
@@ -2370,12 +2372,11 @@ void VETargetLowering::initVPUActions() {
                                         ISD::SIGN_EXTEND_VECTOR_INREG,
                                         ISD::ZERO_EXTEND_VECTOR_INREG,
                                         ISD::FP_TO_SINT,
-                                        ISD::FP_TO_UINT,
                                         END_OF_OCLIST};
 
   const ISD::NodeType ToFPCastOCs[] = {// casts
                                        ISD::FP_EXTEND, ISD::SINT_TO_FP,
-                                       ISD::UINT_TO_FP, END_OF_OCLIST};
+                                       END_OF_OCLIST};
 
   //
   // reductions
