@@ -35,7 +35,7 @@ define float @fabs_float_var(float %0) {
 ; CHECK-NEXT:    and %s0, %s0, (33)0
 ; CHECK-NEXT:    sll %s0, %s0, 32
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = tail call float @llvm.fabs.f32(float %0)
+  %2 = tail call fast float @llvm.fabs.f32(float %0)
   ret float %2
 }
 
@@ -48,7 +48,7 @@ define double @fabs_double_var(double %0) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (1)0
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = tail call double @llvm.fabs.f64(double %0)
+  %2 = tail call fast double @llvm.fabs.f64(double %0)
   ret double %2
 }
 
@@ -67,7 +67,7 @@ define fp128 @fabs_quad_var(fp128 %0) {
 ; CHECK-NEXT:    ld %s1, -16(, %s9)
 ; CHECK-NEXT:    ld %s0, -8(, %s9)
 ; CHECK-NEXT:    or %s11, 0, %s9
-  %2 = tail call fp128 @llvm.fabs.f128(fp128 %0)
+  %2 = tail call fast fp128 @llvm.fabs.f128(fp128 %0)
   ret fp128 %2
 }
 
@@ -133,6 +133,6 @@ define fp128 @fabs_quad_const() {
 ; CHECK-NEXT:    ld %s0, 8(, %s2)
 ; CHECK-NEXT:    ld %s1, (, %s2)
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %1 = tail call fp128 @llvm.fabs.f128(fp128 0xL0000000000000000C000000000000000)
+  %1 = tail call fast fp128 @llvm.fabs.f128(fp128 0xL0000000000000000C000000000000000)
   ret fp128 %1
 }

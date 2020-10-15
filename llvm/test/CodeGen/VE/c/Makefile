@@ -13,9 +13,11 @@ IOP_TARGETS = shl.ll shr.ll
 FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
   fp_fneg.ll fp_fdiv.ll fp_frem.ll
 
-TARGETS = select.ll $(IOP_TARGETS) $(FOP_TARGETS) \
+FMATH_TARGETS = fabs.ll
+
+TARGETS = select.ll $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) \
           fp_ceil.ll fp_copysign.ll fp_cos.ll        \
-          fp_exp.ll fp_exp2.ll fp_fabs.ll fp_floor.ll \
+          fp_exp.ll fp_exp2.ll fp_floor.ll \
           fp_fma.ll fp_llrint.ll fp_llround.ll       \
           fp_log.ll fp_log10.ll fp_log2.ll           \
           fp_lrint.ll fp_lround.ll                   \
