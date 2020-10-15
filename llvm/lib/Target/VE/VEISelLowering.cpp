@@ -1089,40 +1089,45 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   addRegisterClass(MVT::f32, &VE::F32RegClass);
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
-  addRegisterClass(MVT::v512i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v512f32, &VE::V64RegClass);
-  addRegisterClass(MVT::v256i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v256i64, &VE::V64RegClass);
-  addRegisterClass(MVT::v256f32, &VE::V64RegClass);
-  addRegisterClass(MVT::v256f64, &VE::V64RegClass);
-  addRegisterClass(MVT::v128i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v128i64, &VE::V64RegClass);
-  addRegisterClass(MVT::v128f32, &VE::V64RegClass);
-  addRegisterClass(MVT::v128f64, &VE::V64RegClass);
-  addRegisterClass(MVT::v64i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v64i64, &VE::V64RegClass);
-  addRegisterClass(MVT::v64f32, &VE::V64RegClass);
-  addRegisterClass(MVT::v64f64, &VE::V64RegClass);
-  addRegisterClass(MVT::v32i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v32i64, &VE::V64RegClass);
-  addRegisterClass(MVT::v32f32, &VE::V64RegClass);
-  addRegisterClass(MVT::v32f64, &VE::V64RegClass);
-  addRegisterClass(MVT::v16i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v16i64, &VE::V64RegClass);
-  addRegisterClass(MVT::v16f32, &VE::V64RegClass);
-  addRegisterClass(MVT::v16f64, &VE::V64RegClass);
-  addRegisterClass(MVT::v8i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v8i64, &VE::V64RegClass);
-  addRegisterClass(MVT::v8f32, &VE::V64RegClass);
-  addRegisterClass(MVT::v8f64, &VE::V64RegClass);
-  addRegisterClass(MVT::v4i32, &VE::V64RegClass);
-  addRegisterClass(MVT::v4i64, &VE::V64RegClass);
-  addRegisterClass(MVT::v4f32, &VE::V64RegClass);
-  addRegisterClass(MVT::v4f64, &VE::V64RegClass);
+
   addRegisterClass(MVT::v2i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v4i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v8i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v16i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v32i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v64i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v128i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v256i32, &VE::V64RegClass);
+  addRegisterClass(MVT::v512i32, &VE::V64RegClass);
+
   addRegisterClass(MVT::v2i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v4i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v8i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v16i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v32i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v64i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v128i64, &VE::V64RegClass);
+  addRegisterClass(MVT::v256i64, &VE::V64RegClass);
+
   addRegisterClass(MVT::v2f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v4f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v8f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v16f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v32f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v64f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v128f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v256f32, &VE::V64RegClass);
+  addRegisterClass(MVT::v512f32, &VE::V64RegClass);
+
   addRegisterClass(MVT::v2f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v4f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v8f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v16f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v32f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v64f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v128f64, &VE::V64RegClass);
+  addRegisterClass(MVT::v256f64, &VE::V64RegClass);
+
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
   addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
 
@@ -1170,6 +1175,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Custom);
   /// } Stack
 
+  /// Branch {
+  // VE doesn't have BRCOND
+  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
+  /// } Branch
+
   /// Int Ops {
   for (MVT IntVT : {MVT::i32, MVT::i64}) {
     // VE has no REM or DIVREM operations.
@@ -1177,6 +1187,11 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::SREM, IntVT, Expand);
     setOperationAction(ISD::SDIVREM, IntVT, Expand);
     setOperationAction(ISD::UDIVREM, IntVT, Expand);
+
+    // VE has no SHL_PARTS/SRA_PARTS/SRL_PARTS operations.
+    setOperationAction(ISD::SHL_PARTS, IntVT, Expand);
+    setOperationAction(ISD::SRA_PARTS, IntVT, Expand);
+    setOperationAction(ISD::SRL_PARTS, IntVT, Expand);
 
     // VE has no MULHU/MULHS/UMUL_LOHI/SMUL_LOHI operations.
     // TODO: Use MPD/MUL instructions to implement SMUL_LOHI/UMUL_LOHI for
@@ -1241,6 +1256,14 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   /// } Conversion
 
   /// Floating-point Ops {
+  /// Note: Floating-point operations are fneg, fadd, fsub, fmul, fdiv, frem,
+  ///       and fcmp.
+
+  // VE doesn't have following floating point operations.
+  for (MVT VT : MVT::fp_valuetypes()) {
+    setOperationAction(ISD::FNEG, VT, Expand);
+    setOperationAction(ISD::FREM, VT, Expand);
+  }
 
   // VE doesn't have fdiv of f128.
   setOperationAction(ISD::FDIV, MVT::f128, Expand);
@@ -1251,13 +1274,50 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
   /// } Floating-point Ops
 
+  /// Floating-point math functions {
+
+  // VE doesn't have following floating point math functions.
+  for (MVT VT : MVT::fp_valuetypes()) {
+    setOperationAction(ISD::FCOPYSIGN, VT, Expand);
+
+    // VE has no sclar FMA instruction
+    setOperationAction(ISD::FMA, VT, Expand);
+    setOperationAction(ISD::FMAD, VT, Expand);
+    setOperationAction(ISD::FABS, VT, Expand);
+    setOperationAction(ISD::FSQRT, VT, Expand);
+    setOperationAction(ISD::FSIN, VT, Expand);
+    setOperationAction(ISD::FCOS, VT, Expand);
+    setOperationAction(ISD::FPOWI, VT, Expand);
+    setOperationAction(ISD::FPOW, VT, Expand);
+    setOperationAction(ISD::FLOG, VT, Expand);
+    setOperationAction(ISD::FLOG2, VT, Expand);
+    setOperationAction(ISD::FLOG10, VT, Expand);
+    setOperationAction(ISD::FEXP, VT, Expand);
+    setOperationAction(ISD::FEXP2, VT, Expand);
+    setOperationAction(ISD::FCEIL, VT, Expand);
+    setOperationAction(ISD::FTRUNC, VT, Expand);
+    setOperationAction(ISD::FRINT, VT, Expand);
+    setOperationAction(ISD::FNEARBYINT, VT, Expand);
+    setOperationAction(ISD::FROUND, VT, Expand);
+    setOperationAction(ISD::FFLOOR, VT, Expand);
+    if (VT == MVT::f128) {
+      setOperationAction(ISD::FMINNUM, VT, Expand);
+      setOperationAction(ISD::FMAXNUM, VT, Expand);
+    } else {
+      setOperationAction(ISD::FMINNUM, VT, Legal);
+      setOperationAction(ISD::FMAXNUM, VT, Legal);
+    }
+    setOperationAction(ISD::FMINIMUM, VT, Expand);
+    setOperationAction(ISD::FMAXIMUM, VT, Expand);
+    setOperationAction(ISD::FSINCOS, VT, Expand);
+  }
+
+  /// } Floating-point math functions
+
   // VE has FP_EXTEND/FP_ROUND
   setOperationAction(ISD::FSQRT, MVT::f128, Expand);
   setOperationAction(ISD::FP_EXTEND, MVT::f128, Legal);
   setOperationAction(ISD::FP_ROUND,  MVT::f128, Legal);
-
-  // VE doesn't have BRCOND
-  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
 
   // BRIND/BR_JT are not implemented yet.
   //   FIXME: BRIND instruction is implemented, but JumpTable is not yet.
@@ -1315,56 +1375,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
     setLibcallName(RTLIB::SHL_I128, nullptr);
     setLibcallName(RTLIB::SRL_I128, nullptr);
     setLibcallName(RTLIB::SRA_I128, nullptr);
-  }
-
-  for (MVT VT : MVT::fp_valuetypes()) {
-    // VE has no sclar FMA instruction
-    setOperationAction(ISD::FMA, VT, Expand);
-    setOperationAction(ISD::FMAD, VT, Expand);
-    setOperationAction(ISD::FREM, VT, Expand);
-    setOperationAction(ISD::FNEG, VT, Expand);
-    setOperationAction(ISD::FABS, VT, Expand);
-    setOperationAction(ISD::FSQRT, VT, Expand);
-    setOperationAction(ISD::FSIN, VT, Expand);
-    setOperationAction(ISD::FCOS, VT, Expand);
-    setOperationAction(ISD::FPOWI, VT, Expand);
-    setOperationAction(ISD::FPOW, VT, Expand);
-    setOperationAction(ISD::FLOG, VT, Expand);
-    setOperationAction(ISD::FLOG2, VT, Expand);
-    setOperationAction(ISD::FLOG10, VT, Expand);
-    setOperationAction(ISD::FEXP, VT, Expand);
-    setOperationAction(ISD::FEXP2, VT, Expand);
-    setOperationAction(ISD::FCEIL, VT, Expand);
-    setOperationAction(ISD::FTRUNC, VT, Expand);
-    setOperationAction(ISD::FRINT, VT, Expand);
-    setOperationAction(ISD::FNEARBYINT, VT, Expand);
-    setOperationAction(ISD::FROUND, VT, Expand);
-    setOperationAction(ISD::FFLOOR, VT, Expand);
-    if (VT == MVT::f128) {
-      setOperationAction(ISD::FMINNUM, VT, Expand);
-      setOperationAction(ISD::FMAXNUM, VT, Expand);
-    } else {
-      setOperationAction(ISD::FMINNUM, VT, Legal);
-      setOperationAction(ISD::FMAXNUM, VT, Legal);
-    }
-    setOperationAction(ISD::FMINIMUM, VT, Expand);
-    setOperationAction(ISD::FMAXIMUM, VT, Expand);
-    setOperationAction(ISD::FSINCOS, VT, Expand);
-  }
-
-  // FIXME: VE's FCOPYSIGN is not investivated yet
-  setOperationAction(ISD::FCOPYSIGN, MVT::f128, Expand);
-  setOperationAction(ISD::FCOPYSIGN, MVT::f64, Expand);
-  setOperationAction(ISD::FCOPYSIGN, MVT::f32, Expand);
-
-  // FIXME: VE's SHL_PARTS and others are not investigated yet.
-  setOperationAction(ISD::SHL_PARTS, MVT::i32, Expand);
-  setOperationAction(ISD::SRA_PARTS, MVT::i32, Expand);
-  setOperationAction(ISD::SRL_PARTS, MVT::i32, Expand);
-  if (1) {
-    setOperationAction(ISD::SHL_PARTS, MVT::i64, Expand);
-    setOperationAction(ISD::SRA_PARTS, MVT::i64, Expand);
-    setOperationAction(ISD::SRL_PARTS, MVT::i64, Expand);
   }
 
   // FIXME: temporary disabling Custom BITCAST since such BITCAST

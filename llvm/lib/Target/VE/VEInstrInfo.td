@@ -2633,7 +2633,7 @@ def : Pat<(i32 (and (trunc i64:$src), 0xff)),
 def : Pat<(i32 (and (trunc i64:$src), 0xffff)),
           (EXTRACT_SUBREG (ANDrm $src, !add(48, 64)), sub_i32)>;
 
-// vector instructions
+// Vector instructions.
 include "VEInstrVec.td"
 include "VEInstrVecVL.td"
 

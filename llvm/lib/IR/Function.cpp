@@ -836,7 +836,7 @@ enum IIT_Info {
   IIT_V128 = 47,
   IIT_BF16 = 48,
   IIT_STRUCT9 = 49,
-  IIT_V256 = 50,
+  IIT_V256 = 50
 };
 
 static void DecodeIITType(unsigned &NextElt, ArrayRef<unsigned char> Infos,

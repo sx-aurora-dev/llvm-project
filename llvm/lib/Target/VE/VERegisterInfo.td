@@ -154,7 +154,7 @@ foreach I = 0-15 in
 // Aliases of VMs to use as a pair of two VM for packed instructions
 let SubRegIndices = [sub_vm_even, sub_vm_odd], CoveredBySubRegs = 1 in
 foreach I = 0-7 in
-  def VMP#I : VEMaskReg<!shl(I,1), "vmp"#I, 
+  def VMP#I : VEMaskReg<!shl(I,1), "vmp"#I,
                         [!cast<VEMaskReg>("VM"#!shl(I,1)),
                          !cast<VEMaskReg>("VM"#!add(!shl(I,1),1))],
                         ["vm"#!shl(I,1)]>;
