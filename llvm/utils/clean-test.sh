@@ -29,9 +29,11 @@ for i in "$@"; do
         -e 's/ #[^ ][^ ]*//' \
         -e 's/ local_unnamed_addr//' \
         -e 's/ dso_local//' \
+        -e 's/ !srcloc.*//' \
         -e '/^!llvm.*/d' \
         -e '/^!0 =/d' \
         -e '/^!1 =/d' \
+        -e '/^![0-9][0-9]* = !{i32/d' \
         -e '/^; ModuleID/d' \
         -e '/^source_filename = /d' \
         -e '/^target datalayout =/d' \

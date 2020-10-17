@@ -8,7 +8,7 @@ CLEAN_TEST = $(LLVMSRCPATH)/utils/clean-test.sh
 UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
-IOP_TARGETS = shl.ll shr.ll
+IOP_TARGETS = shl.ll shr.ll brcond.ll
 
 FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
   fp_fneg.ll fp_fdiv.ll fp_frem.ll
