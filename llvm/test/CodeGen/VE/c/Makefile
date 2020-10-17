@@ -8,14 +8,14 @@ CLEAN_TEST = $(LLVMSRCPATH)/utils/clean-test.sh
 UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
-IOP_TARGETS = shl.ll shr.ll brcond.ll br_cc.ll
+IOP_TARGETS = shl.ll shr.ll brcond.ll br_cc.ll select.ll select_cc.ll
 
 FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
   fp_fneg.ll fp_fdiv.ll fp_frem.ll
 
 FMATH_TARGETS = fabs.ll fcopysign.ll fcos.ll fsin.ll fsqrt.ll
 
-TARGETS = select.ll $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) \
+TARGETS = $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) \
           fp_ceil.ll \
           fp_exp.ll fp_exp2.ll fp_floor.ll \
           fp_fma.ll fp_llrint.ll fp_llround.ll       \
