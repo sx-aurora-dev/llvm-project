@@ -1074,6 +1074,25 @@ static const char *RelocationModelName(llvm::Reloc::Model Model) {
   llvm_unreachable("Unknown Reloc::Model kind");
 }
 
+static void HandleAmdgcnLegacyOptions(const Driver &D,
+                                      const ArgList &Args,
+                                      ArgStringList &CmdArgs) {
+  if (auto *CodeObjArg = Args.getLastArg(options::OPT_mcode_object_v3_legacy,
+                                         options::OPT_mno_code_object_v3_legacy)) {
+    if (CodeObjArg->getOption().getID() == options::OPT_mcode_object_v3_legacy) {
+      D.Diag(diag::warn_drv_deprecated_arg) << "-mcode-object-v3" <<
+        "-mllvm --amdhsa-code-object-version=3";
+      CmdArgs.push_back("-mllvm");
+      CmdArgs.push_back("--amdhsa-code-object-version=3");
+    } else {
+      D.Diag(diag::warn_drv_deprecated_arg) << "-mno-code-object-v3" <<
+        "-mllvm --amdhsa-code-object-version=2";
+      CmdArgs.push_back("-mllvm");
+      CmdArgs.push_back("--amdhsa-code-object-version=2");
+    }
+  }
+}
+
 void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
                                     const Driver &D, const ArgList &Args,
                                     ArgStringList &CmdArgs,
@@ -1994,6 +2013,20 @@ void Clang::AddRISCVTargetArgs(const ArgList &Args,
   CmdArgs.push_back(ABIName.data());
 
   SetRISCVSmallDataLimit(getToolChain(), Args, CmdArgs);
+
+  std::string TuneCPU;
+
+  if (const Arg *A = Args.getLastArg(clang::driver::options::OPT_mtune_EQ)) {
+    StringRef Name = A->getValue();
+
+    Name = llvm::RISCV::resolveTuneCPUAlias(Name, Triple.isArch64Bit());
+    TuneCPU = std::string(Name);
+  }
+
+  if (!TuneCPU.empty()) {
+    CmdArgs.push_back("-tune-cpu");
+    CmdArgs.push_back(Args.MakeArgString(TuneCPU));
+  }
 }
 
 void Clang::AddSparcTargetArgs(const ArgList &Args,
@@ -5041,9 +5074,6 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                    /*Default=*/false))
     Args.AddLastArg(CmdArgs, options::OPT_ffixed_point);
 
-  if (Arg *A = Args.getLastArg(options::OPT_fcxx_abi_EQ))
-    A->render(Args, CmdArgs);
-
   // Handle -{std, ansi, trigraphs} -- take the last of -{std, ansi}
   // (-ansi is equivalent to -std=c89 or -std=c++98).
   //
@@ -5511,6 +5541,12 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     if (Args.hasFlag(options::OPT_fgpu_allow_device_init,
                      options::OPT_fno_gpu_allow_device_init, false))
       CmdArgs.push_back("-fgpu-allow-device-init");
+  }
+
+  if (IsCuda || IsHIP) {
+    if (Args.hasFlag(options::OPT_fgpu_defer_diag,
+                     options::OPT_fno_gpu_defer_diag, false))
+      CmdArgs.push_back("-fgpu-defer-diag");
   }
 
   if (Arg *A = Args.getLastArg(options::OPT_fcf_protection_EQ)) {
@@ -6136,6 +6172,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
       CmdArgs.push_back(Args.MakeArgString(OpenMPDeviceInput->getFilename()));
     }
   }
+
+  HandleAmdgcnLegacyOptions(D, Args, CmdArgs);
 
   // For all the host OpenMP offloading compile jobs we need to pass the targets
   // information using -fopenmp-targets= option.
@@ -7099,6 +7137,8 @@ void ClangAs::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-split-dwarf-output");
     CmdArgs.push_back(SplitDebugName(JA, Args, Input, Output));
   }
+
+  HandleAmdgcnLegacyOptions(D, Args, CmdArgs);
 
   assert(Input.isFilename() && "Invalid input.");
   CmdArgs.push_back(Input.getFilename());

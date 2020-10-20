@@ -671,6 +671,9 @@ defm hip_new_launch_api : OptInFFlag<"hip-new-launch-api",
   "Use", "Don't use", " new kernel launching API for HIP">;
 defm gpu_allow_device_init : OptInFFlag<"gpu-allow-device-init",
   "Allow", "Don't allow", " device side init function in HIP">;
+defm gpu_defer_diag : OptInFFlag<"gpu-defer-diag",
+  "Defer", "Don't defer", " host/device related diagnostic messages"
+  " for CUDA/HIP">;
 def gpu_max_threads_per_block_EQ : Joined<["--"], "gpu-max-threads-per-block=">,
   Flags<[CC1Option]>,
   HelpText<"Default max threads per block for kernel launch bounds for HIP">;
@@ -1372,10 +1375,6 @@ def fexperimental_relative_cxx_abi_vtables : Flag<["-"], "fexperimental-relative
 def fno_experimental_relative_cxx_abi_vtables : Flag<["-"], "fno-experimental-relative-c++-abi-vtables">,
   Group<f_Group>, Flags<[CC1Option]>,
   HelpText<"Do not use the experimental C++ class ABI for classes with virtual tables">;
-
-def fcxx_abi_EQ : Joined<["-"], "fc++-abi=">,
-                  Group<f_clang_Group>, Flags<[CC1Option]>,
-                  HelpText<"C++ ABI to use. This will override the target C++ ABI.">;
 
 def flat__namespace : Flag<["-"], "flat_namespace">;
 def flax_vector_conversions_EQ : Joined<["-"], "flax-vector-conversions=">, Group<f_Group>,
@@ -2774,7 +2773,7 @@ def module_file_info : Flag<["-"], "module-file-info">, Flags<[DriverOption,CC1O
   HelpText<"Provide information about a particular module file">;
 def mthumb : Flag<["-"], "mthumb">, Group<m_Group>;
 def mtune_EQ : Joined<["-"], "mtune=">, Group<m_Group>,
-  HelpText<"Only supported on X86. Otherwise accepted for compatibility with GCC.">;
+  HelpText<"Only supported on X86 and RISC-V. Otherwise accepted for compatibility with GCC.">;
 def multi__module : Flag<["-"], "multi_module">;
 def multiply__defined__unused : Separate<["-"], "multiply_defined_unused">;
 def multiply__defined : Separate<["-"], "multiply_defined">;

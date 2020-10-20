@@ -1720,6 +1720,8 @@ def ResultsBroadcastableShape :
   NativeOpTrait<"ResultsBroadcastableShape">;
 // X op Y == Y op X
 def Commutative  : NativeOpTrait<"IsCommutative">;
+// op op X == op X
+def Idempotent  : NativeOpTrait<"IsIdempotent">;
 // op op X == X
 def Involution  : NativeOpTrait<"IsInvolution">;
 // Op behaves like a constant.
@@ -2350,6 +2352,8 @@ class Pat<dag pattern, dag result, list<dag> preds = [],
 class NativeCodeCall<string expr> {
   string expression = expr;
 }
+
+def ConstantLikeMatcher : NativeCodeCall<"success(matchPattern($0->getResult(0), m_Constant(&$1)))">;
 
 //===----------------------------------------------------------------------===//
 // Rewrite directives

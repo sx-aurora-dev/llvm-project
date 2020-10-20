@@ -2986,8 +2986,10 @@ void InnerLoopVectorizer::emitMemRuntimeChecks(Loop *L, BasicBlock *Bypass) {
 
   // We currently don't use LoopVersioning for the actual loop cloning but we
   // still use it to add the noalias metadata.
-  LVer = std::make_unique<LoopVersioning>(*Legal->getLAI(), OrigLoop, LI, DT,
-                                          PSE.getSE());
+  LVer = std::make_unique<LoopVersioning>(
+      *Legal->getLAI(),
+      Legal->getLAI()->getRuntimePointerChecking()->getChecks(), OrigLoop, LI,
+      DT, PSE.getSE());
   LVer->prepareNoAliasMetadata();
 }
 
@@ -4019,8 +4021,8 @@ void InnerLoopVectorizer::fixReduction(PHINode *Phi) {
       RecurrenceDescriptor RdxDesc = Legal->getReductionVars()[Phi];
       if (PreferPredicatedReductionSelect ||
           TTI->preferPredicatedReductionSelect(
-              RdxDesc.getRecurrenceBinOp(RdxDesc.getRecurrenceKind()),
-              Phi->getType(), TargetTransformInfo::ReductionFlags())) {
+              RdxDesc.getRecurrenceBinOp(), Phi->getType(),
+              TargetTransformInfo::ReductionFlags())) {
         auto *VecRdxPhi = cast<PHINode>(getOrCreateVectorValue(Phi, Part));
         VecRdxPhi->setIncomingValueForBlock(
             LI->getLoopFor(LoopVectorBody)->getLoopLatch(), Sel);
@@ -6904,7 +6906,7 @@ void LoopVectorizationCostModel::collectInLoopReductions() {
 
     // If the target would prefer this reduction to happen "in-loop", then we
     // want to record it as such.
-    unsigned Opcode = RdxDesc.getRecurrenceBinOp(RdxDesc.getRecurrenceKind());
+    unsigned Opcode = RdxDesc.getRecurrenceBinOp();
     if (!PreferInLoopReductions &&
         !TTI.preferInLoopReduction(Opcode, Phi->getType(),
                                    TargetTransformInfo::ReductionFlags()))

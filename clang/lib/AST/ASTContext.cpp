@@ -879,15 +879,10 @@ ASTContext::getCanonicalTemplateTemplateParmDecl(
   return CanonTTP;
 }
 
-TargetCXXABI::Kind ASTContext::getCXXABIKind() const {
-  auto Kind = getTargetInfo().getCXXABI().getKind();
-  return getLangOpts().CXXABI.getValueOr(Kind);
-}
-
 CXXABI *ASTContext::createCXXABI(const TargetInfo &T) {
   if (!LangOpts.CPlusPlus) return nullptr;
 
-  switch (getCXXABIKind()) {
+  switch (T.getCXXABI().getKind()) {
   case TargetCXXABI::Fuchsia:
   case TargetCXXABI::GenericARM: // Same as Itanium at this level
   case TargetCXXABI::iOS:
@@ -11306,9 +11301,9 @@ OMPTraitInfo &ASTContext::getNewOMPTraitInfo() {
   return *OMPTraitInfoVector.back();
 }
 
-const DiagnosticBuilder &
-clang::operator<<(const DiagnosticBuilder &DB,
-                  const ASTContext::SectionInfo &Section) {
+const StreamingDiagnostic &clang::
+operator<<(const StreamingDiagnostic &DB,
+           const ASTContext::SectionInfo &Section) {
   if (Section.Decl)
     return DB << Section.Decl;
   return DB << "a prior #pragma section";

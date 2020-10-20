@@ -1278,15 +1278,16 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
 
   // VE doesn't have following floating point math functions.
   for (MVT VT : MVT::fp_valuetypes()) {
+    setOperationAction(ISD::FABS, VT, Expand);
     setOperationAction(ISD::FCOPYSIGN, VT, Expand);
+    setOperationAction(ISD::FCOS, VT, Expand);
+    setOperationAction(ISD::FSIN, VT, Expand);
+    setOperationAction(ISD::FSQRT, VT, Expand);
 
     // VE has no sclar FMA instruction
     setOperationAction(ISD::FMA, VT, Expand);
     setOperationAction(ISD::FMAD, VT, Expand);
     setOperationAction(ISD::FABS, VT, Expand);
-    setOperationAction(ISD::FSQRT, VT, Expand);
-    setOperationAction(ISD::FSIN, VT, Expand);
-    setOperationAction(ISD::FCOS, VT, Expand);
     setOperationAction(ISD::FPOWI, VT, Expand);
     setOperationAction(ISD::FPOW, VT, Expand);
     setOperationAction(ISD::FLOG, VT, Expand);
@@ -1313,11 +1314,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   }
 
   /// } Floating-point math functions
-
-  // VE has FP_EXTEND/FP_ROUND
-  setOperationAction(ISD::FSQRT, MVT::f128, Expand);
-  setOperationAction(ISD::FP_EXTEND, MVT::f128, Legal);
-  setOperationAction(ISD::FP_ROUND,  MVT::f128, Legal);
 
   // BRIND/BR_JT are not implemented yet.
   //   FIXME: BRIND instruction is implemented, but JumpTable is not yet.
