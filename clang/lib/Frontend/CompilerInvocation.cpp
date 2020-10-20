@@ -2647,6 +2647,9 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
   if (Args.hasArg(OPT_fno_cuda_host_device_constexpr))
     Opts.CUDAHostDeviceConstexpr = 0;
 
+  if (Args.hasArg(OPT_fgpu_defer_diag))
+    Opts.GPUDeferDiag = 1;
+
   if (Opts.CUDAIsDevice && Args.hasArg(OPT_fcuda_approx_transcendentals))
     Opts.CUDADeviceApproxTranscendentals = 1;
 
@@ -3513,15 +3516,6 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       Args.hasFlag(OPT_fexperimental_relative_cxx_abi_vtables,
                    OPT_fno_experimental_relative_cxx_abi_vtables,
                    /*default=*/false);
-
-  // The value can be empty, which indicates the system default should be used.
-  StringRef CXXABI = Args.getLastArgValue(OPT_fcxx_abi_EQ);
-  if (!CXXABI.empty()) {
-    if (!TargetCXXABI::isABI(CXXABI))
-      Diags.Report(diag::err_invalid_cxx_abi) << CXXABI;
-    else
-      Opts.CXXABI = TargetCXXABI::getKind(CXXABI);
-  }
 }
 
 static bool isStrictlyPreprocessorAction(frontend::ActionKind Action) {

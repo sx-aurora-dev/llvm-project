@@ -206,12 +206,13 @@ TableGen provides "bang operators" that have a wide variety of uses:
 
 .. productionlist::
    BangOperator: one of
-               : !add    !and         !cast         !con         !dag
-               : !empty  !eq          !foldl        !foreach     !ge
-               : !getop  !gt          !head         !if          !isa
-               : !le     !listconcat  !listsplat    !lt          !mul
-               : !ne     !or          !setop        !shl         !size
-               : !sra    !srl         !strconcat    !subst       !tail
+               : !add     !and         !cast        !con         !dag
+               : !empty   !eq          !foldl       !foreach     !ge
+               : !getop   !gt          !head        !if          !isa
+               : !le      !listconcat  !listsplat   !lt          !mul
+               : !ne      !not         !or          !setop       !shl
+               : !size    !sra         !srl         !strconcat   !subst
+               : !tail    !xor
 
 The ``!cond`` operator has a slightly different
 syntax compared to other bang operators, so it is defined separately:
@@ -273,7 +274,7 @@ wide range of records conveniently and compactly.
     the programmer's intention.
 
 ``bits<``\ *n*\ ``>``
-    The ``bits`` type is a fixed-size integer of arbitrary length *n* that
+    The ``bits`` type is a fixed-sized integer of arbitrary length *n* that
     is treated as separate bits. These bits can be accessed individually.
     A field of this type is useful for representing an instruction operation
     code, register number, or address mode/register/displacement.  The bits of
@@ -288,7 +289,8 @@ wide range of records conveniently and compactly.
 
 ``dag``
     This type represents a nestable directed acyclic graph (DAG) of nodes.
-    Each node has an operator and zero or more operands. A operand can be
+    Each node has an *operator* and zero or more *arguments* (or *operands*).
+    An argument can be
     another ``dag`` object, allowing an arbitrary tree of nodes and edges.
     As an example, DAGs are used to represent code patterns for use by
     the code generator instruction selection algorithms. See `Directed
@@ -1214,33 +1216,34 @@ Directed acyclic graphs (DAGs)
 
 A directed acyclic graph can be represented directly in TableGen using the
 ``dag`` datatype. A DAG node consists of an operator and zero or more
-operands. Each operand can be of any desired type. By using another DAG node
-as an operand, an arbitrary graph of DAG nodes can be built. 
+arguments (or operands). Each argument can be of any desired type. By using
+another DAG node as an argument, an arbitrary graph of DAG nodes can be
+built. 
 
 The syntax of a ``dag`` instance is:
 
-  ``(`` *operator* *operand1*\ ``,`` *operand2*\ ``,`` ... ``)``
+  ``(`` *operator* *argument1*\ ``,`` *argument2*\ ``,`` ... ``)``
 
 The operator must be present and must be a record. There can be zero or more
-operands, separated by commas. The operator and operands can have three
+arguments, separated by commas. The operator and arguments can have three
 formats. 
 
 ====================== =============================================
 Format                 Meaning
 ====================== =============================================
-*value*                operand value
-*value*\ ``:``\ *name* operand value and associated name
-*name*                 operand name with unset (uninitialized) value
+*value*                argument value
+*value*\ ``:``\ *name* argument value and associated name
+*name*                 argument name with unset (uninitialized) value
 ====================== =============================================
 
 The *value* can be any TableGen value. The *name*, if present, must be a
 :token:`TokVarName`, which starts with a dollar sign (``$``). The purpose of
-a name is to tag an operator or operand in a DAG with a particular meaning,
-or to associate an operand in one DAG with a like-named operand in another
+a name is to tag an operator or argument in a DAG with a particular meaning,
+or to associate an argument in one DAG with a like-named argument in another
 DAG.
 
-The following bang operators manipulate DAGs: ``!con``, ``!dag``, ``!foreach``, 
-``!getop``, ``!setop``.
+The following bang operators are useful for working with DAGs:
+``!con``, ``!dag``, ``!empty``, ``!foreach``, ``!getop``, ``!setop``, ``!size``.
 
 Defvar in a record body
 -----------------------
@@ -1447,7 +1450,8 @@ and non-0 as true.
 
 ``!and(``\ *a*\ ``,`` *b*\ ``, ...)``
     This operator does a bitwise AND on *a*, *b*, etc., and produces the
-    result.
+    result. A logical AND can be performed if all the arguments are either
+    0 or 1.
 
 ``!cast<``\ *type*\ ``>(``\ *a*\ ``)``
     This operator performs a cast on *a* and produces the result.
@@ -1505,8 +1509,9 @@ and non-0 as true.
     Example: ``!dag(op, [a1, a2, ?], ["name1", "name2", "name3"])`` results in
     ``(op a1:$name1, a2:$name2, ?:$name3)``.
 
-``!empty(``\ *list*\ ``)``
-    This operator produces 1 if the *list* is empty; 0 otherwise.
+``!empty(``\ *a*\ ``)``
+    This operator produces 1 if the string, list, or DAG *a* is empty; 0 otherwise.
+    A dag is empty if it has no arguments; the operator does not count.
 
 ``!eq(`` *a*\ `,` *b*\ ``)``
     This operator produces 1 if *a* is equal to *b*; 0 otherwise.
@@ -1605,9 +1610,15 @@ and non-0 as true.
     The arguments must be ``bit``, ``int``, or ``string`` values.
     Use ``!cast<string>`` to compare other types of objects.
 
+``!not(``\ *a*\ ``)``
+    This operator performs a logical NOT on *a*, which must be
+    an integer. The argument 0 results in 1 (true); any other
+    argument results in 0 (false).
+
 ``!or(``\ *a*\ ``,`` *b*\ ``, ...)``
     This operator does a bitwise OR on *a*, *b*, etc., and produces the
-    result.
+    result. A logical OR can be performed if all the arguments are either
+    0 or 1.
 
 ``!setop(``\ *dag*\ ``,`` *op*\ ``)``
     This operator produces a DAG node with the same arguments as *dag*, but with its
@@ -1621,7 +1632,8 @@ and non-0 as true.
     is undefined for shift counts outside 0...63.
 
 ``!size(``\ *a*\ ``)``
-    This operator produces the number of elements in the list *a*.
+    This operator produces the size of the string, list, or dag *a*.
+    The size of a DAG is the number of arguments; the operator does not count.
 
 ``!sra(``\ *a*\ ``,`` *count*\ ``)``
     This operator shifts *a* right arithmetically by *count* bits and produces the resulting
@@ -1654,6 +1666,11 @@ and non-0 as true.
 ``!tail(``\ *a*\ ``)``
     This operator produces a new list with all the elements
     of the list *a* except for the zeroth one. (See also ``!head``.)
+
+``!xor(``\ *a*\ ``,`` *b*\ ``, ...)``
+    This operator does a bitwise EXCLUSIVE OR on *a*, *b*, etc., and produces
+    the result. A logical XOR can be performed if all the arguments are either
+    0 or 1.
 
 
 Appendix B: Sample Record
