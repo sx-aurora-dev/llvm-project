@@ -112,11 +112,11 @@ entry:
 define i32 @vseqsrl_v4i32() {
 ; CHECK-LABEL: vseqsrl_v4i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 1, (0)1
-; CHECK-NEXT:    lea %s1, 4
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    lea %s0, 4
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
-; CHECK-NEXT:    pvsrl.lo %v0, %v0, %s0
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    pvsrl.lo %v0, %v0, %s1
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
@@ -133,11 +133,11 @@ entry:
 define i32 @vseqsrl_v8i32() {
 ; CHECK-LABEL: vseqsrl_v8i32:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s0, 1, (0)1
-; CHECK-NEXT:    lea %s1, 8
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    lea %s0, 8
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvseq.lo %v0
-; CHECK-NEXT:    pvsrl.lo %v0, %v0, %s0
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    pvsrl.lo %v0, %v0, %s1
 ; CHECK-NEXT:    lea %s0, calc_v8i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v8i32@hi(, %s0)
