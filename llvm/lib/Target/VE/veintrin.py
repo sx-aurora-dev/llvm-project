@@ -1043,7 +1043,7 @@ class InstTable(object):
 
     def Shift(self, opc, name, instName, ty, expr):
         O_vvv = [VX(ty), VZ(ty), VY(T_u64)]
-        O_vvs = [VX(ty), VZ(ty), SY(T_u64)]
+        O_vvs = [VX(ty), VZ(ty), SY(ty)]
         O_vvN = [VX(ty), VZ(ty), ImmN(T_u64)]
 
         OL = [O_vvv, O_vvs, O_vvN]

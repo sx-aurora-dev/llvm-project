@@ -722,15 +722,15 @@ multiclass shift_for_vector_length<int length, ValueType vi32, ValueType vi64> {
                       (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(shl vi32:$vx, (vi32 (vec_broadcast i32:$sy))),
             (PVSLALOvrl vi32:$vx,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
+                        $sy,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(srl vi32:$vx, (vi32 (vec_broadcast i32:$sy))),
             (PVSRLLOvrl vi32:$vx,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
+                        $sy,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(sra vi32:$vx, (vi32 (vec_broadcast i32:$sy))),
             (PVSRALOvrl vi32:$vx,
-                        (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
+                        $sy,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
 }
 

@@ -5,7 +5,7 @@ target datalayout = "e-m:e-i64:64-n32:64-S128-v64:64:64-v128:64:64-v256:64:64-v5
 target triple = "ve-unknown-linux-gnu"
 
 ; Function Attrs: nounwind
-define dso_local void @vslawsx_vvsl(i32* %0, i32* %1, i64 %2, i32 signext %3) local_unnamed_addr #0 {
+define dso_local void @vslawsx_vvsl(i32* %0, i32* %1, i32 %2, i32 signext %3) local_unnamed_addr #0 {
 ; CHECK: vsla.w.sx %v0, %v0, %s2
   %5 = icmp sgt i32 %3, 0
   br i1 %5, label %7, label %6
@@ -22,7 +22,7 @@ define dso_local void @vslawsx_vvsl(i32* %0, i32* %1, i64 %2, i32 signext %3) lo
   %13 = select i1 %12, i32 %11, i32 256
   %14 = bitcast i32* %9 to i8*
   %15 = tail call <256 x double> @llvm.ve.vl.vldlsx.vssl(i64 4, i8* %14, i32 %13)
-  %16 = tail call <256 x double> @llvm.ve.vl.vslawsx.vvsl(<256 x double> %15, i64 %2, i32 %13)
+  %16 = tail call <256 x double> @llvm.ve.vl.vslawsx.vvsl(<256 x double> %15, i32 %2, i32 %13)
   %17 = bitcast i32* %8 to i8*
   tail call void @llvm.ve.vl.vstl.vssl(<256 x double> %16, i64 4, i8* %17, i32 %13)
   %18 = getelementptr inbounds i32, i32* %8, i64 256
@@ -36,7 +36,7 @@ define dso_local void @vslawsx_vvsl(i32* %0, i32* %1, i64 %2, i32 signext %3) lo
 declare <256 x double> @llvm.ve.vl.vldlsx.vssl(i64, i8*, i32) #1
 
 ; Function Attrs: nounwind readnone
-declare <256 x double> @llvm.ve.vl.vslawsx.vvsl(<256 x double>, i64, i32) #2
+declare <256 x double> @llvm.ve.vl.vslawsx.vvsl(<256 x double>, i32, i32) #2
 
 ; Function Attrs: nounwind writeonly
 declare void @llvm.ve.vl.vstl.vssl(<256 x double>, i64, i8*, i32) #3
