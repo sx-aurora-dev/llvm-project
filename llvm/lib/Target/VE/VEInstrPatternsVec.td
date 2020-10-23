@@ -223,6 +223,12 @@ def : Pat<(v256i1 (vec_unpack_hi v512i1:$vm, (i32 srcvalue))),
 defm: Unpack_Swap<v512i32>;
 defm: Unpack_Swap<v512f32>;
 
+// TODO: optimized pattern
+//      t17: i32 = truncate t2
+//        t25: i64 = VEISD::REPL_I32 t17
+//      t26: v512i32 = VEISD::VEC_BROADCAST t25, Constant:i32<256>
+//    t27: v512i1 = VEISD::VEC_TOMASK t26, Constant:i32<512>
+
 // VFMKLvl (CCOp, VR, VL)
 def : Pat<(vec_tomask v256i64:$vx, i32:$avl),
           (VFMKLxvl CC_INE, $vx, $avl)>;

@@ -171,11 +171,11 @@ struct CustomDAG {
                                  SDValue RegV) const;
 
   /// Packed Mode Support {
-  SDValue CreateUnpack(EVT DestVT, SDValue Vec, PackElem E, SDValue AVL);
+  SDValue CreateUnpack(EVT DestVT, SDValue Vec, PackElem E, SDValue AVL) const;
 
-  SDValue CreatePack(EVT DestVT, SDValue LowV, SDValue HighV, SDValue AVL);
+  SDValue CreatePack(EVT DestVT, SDValue LowV, SDValue HighV, SDValue AVL) const;
 
-  SDValue CreateSwap(EVT DestVT, SDValue V, SDValue AVL);
+  SDValue CreateSwap(EVT DestVT, SDValue V, SDValue AVL) const;
   /// } Packed Mode Support
 
   /// Mask Insert/Extract {
@@ -324,7 +324,7 @@ struct CustomDAG {
                        SDValue MaskV, SDValue AVL) const;
   /// } VVP
 
-  EVT getSplitVT(EVT OldValVT) {
+  EVT getSplitVT(EVT OldValVT) const {
     return getVectorVT(OldValVT.getVectorElementType(), StandardVectorWidth);
   }
 

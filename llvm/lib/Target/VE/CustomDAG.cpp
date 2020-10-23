@@ -463,18 +463,18 @@ SDValue CustomDAG::CreateInsertMask(SDValue MaskV, SDValue ElemV,
 }
 
 SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, PackElem E,
-                                SDValue AVL) {
+                                SDValue AVL) const {
   unsigned OC =
       (E == PackElem::Lo) ? VEISD::VEC_UNPACK_LO : VEISD::VEC_UNPACK_HI;
   return DAG.getNode(OC, DL, DestVT, Vec, AVL);
 }
 
 SDValue CustomDAG::CreatePack(EVT DestVT, SDValue LowV, SDValue HighV,
-                              SDValue AVL) {
+                              SDValue AVL) const {
   return DAG.getNode(VEISD::VEC_PACK, DL, DestVT, LowV, HighV, AVL);
 }
 
-SDValue CustomDAG::CreateSwap(EVT DestVT, SDValue V, SDValue AVL) {
+SDValue CustomDAG::CreateSwap(EVT DestVT, SDValue V, SDValue AVL) const {
   return DAG.getNode(VEISD::VEC_SWAP, DL, DestVT, V, AVL);
 }
 
@@ -635,6 +635,16 @@ SDValue CustomDAG::getVectorInsert(SDValue DestVecV, SDValue ElemV,
 SDValue CustomDAG::createMaskCast(SDValue VectorV, SDValue AVL) const {
   if (IsMaskType(VectorV.getValueType()))
     return VectorV;
+
+  if (IsPackedType(VectorV.getValueType())) {
+    auto ValVT = VectorV.getValueType();
+    auto LoPart = CreateUnpack(getSplitVT(ValVT), VectorV, PackElem::Lo, AVL);
+    auto HiPart = CreateUnpack(getSplitVT(ValVT), VectorV, PackElem::Hi, AVL);
+    auto LoMask = createMaskCast(LoPart, AVL);
+    auto HiMask = createMaskCast(HiPart, AVL);
+    const auto PackedMaskVT = MVT::v512i1;
+    return CreatePack(PackedMaskVT, LoMask, HiMask, AVL);
+  }
 
   return DAG.getNode(VEISD::VEC_TOMASK, DL, getMaskVTFor(VectorV),
                      {VectorV, AVL});
