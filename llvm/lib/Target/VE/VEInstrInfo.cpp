@@ -331,7 +331,14 @@ static void copyPhysSubRegs(MachineBasicBlock &MBB,
 
   for (unsigned Idx = 0; Idx != NumSubRegs; ++Idx) {
     Register SubDest = TRI->getSubReg(DestReg, SubRegIdx[Idx]);
-    Register SubSrc = TRI->getSubReg(SrcReg, SubRegIdx[Idx]);
+    Register SubSrc;
+
+    if (SrcReg == VE::VMP0) {
+      // special case for all-true source reg
+      SubSrc = VE::VM0;
+    } else {
+      SubSrc = TRI->getSubReg(SrcReg, SubRegIdx[Idx]);
+    }
     assert(SubDest && SubSrc && "Bad sub-register");
 
     if (MCID.getOpcode() == VE::ORri) {
