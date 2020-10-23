@@ -1,6 +1,16 @@
 #ifndef __TYPES_H__
 #define __TYPES_H__
+#if __STDC_VERSION__ >= 199901L
+// For C99
 typedef _Bool i1;
+#else
+#ifdef __cplusplus
+// For C++
+typedef bool i1;
+#else
+#error need C++ or C99 to use vector intrinsics for VE
+#endif
+#endif
 typedef char i8;
 typedef unsigned char u8;
 typedef short i16;

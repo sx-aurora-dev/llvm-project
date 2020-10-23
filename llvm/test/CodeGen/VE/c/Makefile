@@ -2,6 +2,7 @@ INSTALLPATH = $(HOME)/llvm-dev/install
 LLVMSRCPATH = ../../../..
 
 CLANG = $(INSTALLPATH)/bin/clang
+CLANGXX = $(INSTALLPATH)/bin/clang++
 CFLAGS = -target ve -O3 -ffast-math
 LLC = $(INSTALLPATH)/bin/llc
 CLEAN_TEST = $(LLVMSRCPATH)/utils/clean-test.sh
@@ -15,7 +16,9 @@ FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
 
 FMATH_TARGETS = fabs.ll fcopysign.ll fcos.ll fsin.ll fsqrt.ll
 
-TARGETS = $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) \
+ATOMIC_TARGETS = atomic_load.ll
+
+TARGETS = $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) $(ATOMIC_TARGETS) \
           fp_ceil.ll \
           fp_exp.ll fp_exp2.ll fp_floor.ll \
           fp_fma.ll fp_llrint.ll fp_llround.ll       \
@@ -40,6 +43,14 @@ all: $(TARGETS)
 
 .c.ll:
 	$(CLANG) $(CFLAGS) -S -emit-llvm $<
+	$(CLEAN_TEST) $@
+	-grep '///' $< > /dev/null && (echo; grep '///' $<) | sed -e 's:///:;;;:' | cat - $@ > $@.tmp && mv $@.tmp $@
+	sed -e '1i ; RUN: llc < %s -mtriple=ve | FileCheck %s' $@ > $@.tmp && mv $@.tmp $@
+	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
+	$(PATCH_TEST) $@
+
+.cpp.ll:
+	$(CLANGXX) $(CFLAGS) -S -emit-llvm $<
 	$(CLEAN_TEST) $@
 	-grep '///' $< > /dev/null && (echo; grep '///' $<) | sed -e 's:///:;;;:' | cat - $@ > $@.tmp && mv $@.tmp $@
 	sed -e '1i ; RUN: llc < %s -mtriple=ve | FileCheck %s' $@ > $@.tmp && mv $@.tmp $@
