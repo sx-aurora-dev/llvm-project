@@ -16,7 +16,7 @@ FOP_TARGETS = fp_add.ll fp_sub.ll fp_mul.ll fp_div.ll \
 
 FMATH_TARGETS = fabs.ll fcopysign.ll fcos.ll fsin.ll fsqrt.ll
 
-ATOMIC_TARGETS = atomic_load.ll
+ATOMIC_TARGETS = atomic_load.ll atomic_store.ll
 
 TARGETS = $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) $(ATOMIC_TARGETS) \
           fp_ceil.ll \
