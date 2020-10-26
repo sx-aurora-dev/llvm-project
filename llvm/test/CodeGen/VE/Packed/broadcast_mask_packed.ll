@@ -11,8 +11,6 @@ define <512 x i1> @brdv512i32x2(i1 %B) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pvbrd %v0, %s0
-; CHECK-NEXT:    lea %s0, 512
-; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vshf %v1, %v0, %v0, 0
 ; CHECK-NEXT:    vfmk.w.ne %vm3, %v1
 ; CHECK-NEXT:    vfmk.w.ne %vm2, %v0

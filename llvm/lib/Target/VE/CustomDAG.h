@@ -266,6 +266,11 @@ struct CustomDAG {
     return getConstant(EVL, MVT::i32);
   }
 
+  // return a valid AVL for this packing and element count
+  inline SDValue getConstEVL(Packing P, uint32_t EVL) const {
+    return getConstant(P == Packing::Normal ? EVL : (EVL + 1) / 2, MVT::i32);
+  }
+
   SDValue getConstant(uint64_t Val, EVT VT, bool IsTarget = false,
                       bool IsOpaque = false) const;
 

@@ -516,8 +516,8 @@ bool MaskShuffleAnalysis::analyzeVectorSources(bool &AllTrue) const {
 
 // materialize the code to synthesize this operation
 SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
-  Packing PackFlag = LegalMaskVT.getVectorNumElements() > 256 ? Packing::Dense
-                                                              : Packing::Normal;
+  Packing PackFlag =
+      IsPackedType(LegalMaskVT) ? Packing::Dense : Packing::Normal;
 
   // this view reflects exactly those insertions that are non-constant and have
   // a MVT::i32 type
@@ -534,7 +534,7 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
   // CodeGen those as insertions into 'BlendV' to OR-them in later.
   if (HasScalarSourceEntries) {
     LLVM_DEBUG(dbgs() << ":: has non-trivial insertion in VectorMV ::\n";);
-    SDValue AVL = CDAG.getConstEVL(NumElems); // FIXME
+    SDValue AVL = CDAG.getConstEVL(PackFlag, NumElems);
     // Synthesize the result vector
     ShuffleAnalysis VSA(VectorMV);
     auto Res = VSA.analyze();
@@ -883,7 +883,8 @@ struct PatternShuffleOp final : public AbstractShuffleOp {
     SDValue OpVectorLength =
         CDAG.getConstant(Packed ? (LastDef + 1) / 2 : LastDef + 1, MVT::i32);
 
-    SDValue TrueMask = CDAG.createUniformConstMask(Packing::Normal, NativeNumElems, true);
+    Packing P = Packed ? Packing::Dense : Packing::Normal;
+    SDValue TrueMask = CDAG.createUniformConstMask(P, NativeNumElems, true);
 
     switch (PatternKind) {
 
@@ -1145,8 +1146,9 @@ struct ConstantElemOp final : public AbstractShuffleOp {
       const auto *ElemTy = cast<FixedVectorType>(VecConstant->getType())->getElementType();
       uint64_t Stride = (ElemTy->getPrimitiveSizeInBits().getFixedSize() + 7) /
                         8; // FIXME should be using datala
+      Packing P = IsPackedType(LegalResVT) ? Packing::Dense : Packing::Normal;
       SDValue MaskV = CDAG.createUniformConstMask(
-          Packing::Normal, LegalResVT.getVectorNumElements(), true);
+          P, LegalResVT.getVectorNumElements(), true);
       SDValue StrideV = CDAG.getConstant(Stride, MVT::i64);
       SDValue AVL = CDAG.getConstEVL(NumBufferElems);
       ResultV = CDAG.getVVPLoad(LegalResVT, Chain, ConstantPtrV, StrideV, MaskV, AVL);
