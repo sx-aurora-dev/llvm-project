@@ -218,8 +218,8 @@ define zeroext i1 @_Z22atomic_load_acquire_i1RNSt3__16atomicIbEE(%"struct.std::_
 ; CHECK-LABEL: _Z22atomic_load_acquire_i1RNSt3__16atomicIbEE:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
-; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    and %s0, 1, %s0
+; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = getelementptr inbounds %"struct.std::__1::atomic", %"struct.std::__1::atomic"* %0, i64 0, i32 0, i32 0, i32 0, i32 0
   %3 = load atomic i8, i8* %2 acquire, align 1
@@ -379,8 +379,8 @@ define zeroext i1 @_Z22atomic_load_seq_cst_i1RNSt3__16atomicIbEE(%"struct.std::_
 ; CHECK-LABEL: _Z22atomic_load_seq_cst_i1RNSt3__16atomicIbEE:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    and %s0, 1, %s0
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = getelementptr inbounds %"struct.std::__1::atomic", %"struct.std::__1::atomic"* %0, i64 0, i32 0, i32 0, i32 0, i32 0
   %3 = load atomic i8, i8* %2 seq_cst, align 1

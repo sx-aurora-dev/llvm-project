@@ -1663,12 +1663,6 @@ def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
 def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
           (TS1AMLrii MEMriRRM:$src, 127, $new)>;
 
-// Fence
-
-def : Pat<(int_ve_fencem1), (FENCEM 1)>;
-def : Pat<(int_ve_fencem2), (FENCEM 2)>;
-def : Pat<(int_ve_fencem3), (FENCEM 3)>;
-
 //===----------------------------------------------------------------------===//
 // SJLJ Exception handling intrinsics
 //===----------------------------------------------------------------------===//

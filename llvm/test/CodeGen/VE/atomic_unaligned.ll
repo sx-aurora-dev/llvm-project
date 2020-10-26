@@ -361,9 +361,9 @@ define signext i8 @test_atomic_exchange_1() {
 ; CHECK-NEXT:    ts1am.w %s3, (%s0), %s1
 ; CHECK-NEXT:    subs.l %s0, 24, %s2
 ; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i8* @c, i8 10 seq_cst
@@ -387,9 +387,9 @@ define signext i8 @test_atomic_exchange_1_0() {
 ; CHECK-NEXT:    ts1am.w %s3, (%s0), %s1
 ; CHECK-NEXT:    subs.l %s0, 24, %s2
 ; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 0), i8 14 seq_cst
@@ -412,9 +412,9 @@ define signext i8 @test_atomic_exchange_1_1() {
 ; CHECK-NEXT:    ts1am.w %s3, (%s1), %s2
 ; CHECK-NEXT:    subs.l %s0, 24, %s0
 ; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 1), i8 15 seq_cst
@@ -438,9 +438,9 @@ define signext i8 @test_atomic_exchange_1_2() {
 ; CHECK-NEXT:    ts1am.w %s3, (%s0), %s1
 ; CHECK-NEXT:    subs.l %s0, 24, %s2
 ; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 2), i8 170 seq_cst
@@ -464,9 +464,9 @@ define signext i8 @test_atomic_exchange_1_3() {
 ; CHECK-NEXT:    ts1am.w %s3, (%s0), %s1
 ; CHECK-NEXT:    subs.l %s0, 24, %s2
 ; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i8* getelementptr inbounds (%struct.siiii, %struct.siiii* @siiii1, i32 0, i32 3), i8 187 seq_cst
@@ -499,9 +499,9 @@ define signext i16 @test_atomic_exchange_2() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xchg i16* @s, i16 28672 seq_cst
@@ -534,10 +534,10 @@ define i32 @test_atomic_exchange_4_align1() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, sci1@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 1886417008
-; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 ; CHECK-NEXT:    ts1am.w %s0, 1(%s1), 15
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
+; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 entry:
   %0 = atomicrmw xchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 1886417008 seq_cst
   ret i32 %0
@@ -569,10 +569,10 @@ define i64 @test_atomic_exchange_8_align1() {
 ; CHECK-NEXT:    lea.sl %s1, scl1@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    lea.sl %s0, 1886417008(, %s0)
-; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 ; CHECK-NEXT:    ts1am.l %s0, 1(%s1), 127
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
+; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 entry:
   %0 = atomicrmw xchg i64* getelementptr inbounds (%struct.scl, %struct.scl* @scl1, i32 0, i32 1), i64 8102099357864587376 acquire
   ret i64 %0
@@ -652,9 +652,9 @@ define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %partword.cmpxchg.end
 ; CHECK-NEXT:    cmps.w.zx %s0, %s4, %s6
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    and %s0, 1, %s0
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i8* @c, i8 %0, i8 %1 seq_cst seq_cst
@@ -698,9 +698,9 @@ define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %partword.cmpxchg.end
 ; CHECK-NEXT:    cmps.w.zx %s0, %s4, %s6
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    and %s0, 1, %s0
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i16* @s, i16 %0, i16 %1 seq_cst seq_cst
@@ -720,9 +720,9 @@ define i32 @test_atomic_compare_exchange_4(i32, i32) {
 ; CHECK-NEXT:    cas.w %s1, (%s2), %s0
 ; CHECK-NEXT:    cmps.w.zx %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i32* @i, i32 %0, i32 %1 seq_cst seq_cst
@@ -742,9 +742,9 @@ define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
 ; CHECK-NEXT:    cas.w %s1, 1(%s2), %s0
 ; CHECK-NEXT:    cmps.w.zx %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 ; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
@@ -765,9 +765,9 @@ define i64 @test_atomic_compare_exchange_8(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry: %2 = cmpxchg i64* @l, i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
@@ -786,9 +786,9 @@ define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, 1(%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 ; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
@@ -809,9 +809,9 @@ define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, 4(%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 ; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
@@ -876,9 +876,9 @@ define i64 @test_atomic_compare_exchange_8_consume(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 acquire acquire
@@ -897,9 +897,9 @@ define i64 @test_atomic_compare_exchange_8_acquire(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 acquire acquire
@@ -940,9 +940,9 @@ define i64 @test_atomic_compare_exchange_8_acq_rel(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg i64* @l, i64 %0, i64 %1 acq_rel acquire
@@ -962,9 +962,9 @@ define i64 @test_atomic_compare_exchange_8_weak(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 seq_cst seq_cst
@@ -1003,9 +1003,9 @@ define i64 @test_atomic_compare_exchange_8_weak_consume(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acquire acquire
@@ -1024,9 +1024,9 @@ define i64 @test_atomic_compare_exchange_8_weak_acquire(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acquire acquire
@@ -1067,9 +1067,9 @@ define i64 @test_atomic_compare_exchange_8_weak_acq_rel(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, (%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %2 = cmpxchg weak i64* @l, i64 %0, i64 %1 acq_rel acquire
@@ -1169,9 +1169,9 @@ define signext i8 @test_atomic_fetch_add_1() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw add i8* @c, i8 1 seq_cst
@@ -1205,9 +1205,9 @@ define signext i16 @test_atomic_fetch_add_2() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw add i16* @s, i16 1 seq_cst
@@ -1307,9 +1307,9 @@ define signext i8 @test_atomic_fetch_sub_1() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw sub i8* @c, i8 1 seq_cst
@@ -1343,9 +1343,9 @@ define signext i16 @test_atomic_fetch_sub_2() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw sub i16* @s, i16 1 seq_cst
@@ -1444,9 +1444,9 @@ define signext i8 @test_atomic_fetch_and_1() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw and i8* @c, i8 1 seq_cst
@@ -1479,9 +1479,9 @@ define signext i16 @test_atomic_fetch_and_2() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw and i16* @s, i16 1 seq_cst
@@ -1577,9 +1577,9 @@ define signext i8 @test_atomic_fetch_or_1() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw or i8* @c, i8 1 seq_cst
@@ -1609,9 +1609,9 @@ define signext i16 @test_atomic_fetch_or_2() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw or i16* @s, i16 1 seq_cst
@@ -1707,9 +1707,9 @@ define signext i8 @test_atomic_fetch_xor_1() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xor i8* @c, i8 1 seq_cst
@@ -1739,9 +1739,9 @@ define signext i16 @test_atomic_fetch_xor_2() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw xor i16* @s, i16 1 seq_cst
@@ -1841,9 +1841,9 @@ define signext i8 @test_atomic_fetch_nand_1() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 56
 ; CHECK-NEXT:    sra.l %s0, %s0, 56
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw nand i8* @c, i8 1 seq_cst
@@ -1877,9 +1877,9 @@ define signext i16 @test_atomic_fetch_nand_2() {
 ; CHECK-NEXT:    and %s1, %s2, (32)0
 ; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    srl %s0, %s1, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = atomicrmw nand i16* @s, i16 1 seq_cst
@@ -2145,9 +2145,9 @@ define i64 @test_atomic_compare_exchange_8stk(i64, i64) {
 ; CHECK-NEXT:    cas.l %s1, 192(%s11), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
-; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
+; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
   %2 = alloca i64, align 32
