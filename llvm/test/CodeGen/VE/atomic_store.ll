@@ -77,7 +77,6 @@ define void @_Z23atomic_store_relaxed_i1RNSt3__16atomicIbEEb(%"struct.std::__1::
 define void @_Z23atomic_store_relaxed_i8RNSt3__16atomicIcEEc(%"struct.std::__1::atomic.0"* nocapture nonnull align 1 dereferenceable(1) %0, i8 signext %1) {
 ; CHECK-LABEL: _Z23atomic_store_relaxed_i8RNSt3__16atomicIcEEc:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    st1b %s1, (, %s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = getelementptr inbounds %"struct.std::__1::atomic.0", %"struct.std::__1::atomic.0"* %0, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0
@@ -100,7 +99,6 @@ define void @_Z23atomic_store_relaxed_u8RNSt3__16atomicIhEEh(%"struct.std::__1::
 define void @_Z24atomic_store_relaxed_i16RNSt3__16atomicIsEEs(%"struct.std::__1::atomic.10"* nocapture nonnull align 2 dereferenceable(2) %0, i16 signext %1) {
 ; CHECK-LABEL: _Z24atomic_store_relaxed_i16RNSt3__16atomicIsEEs:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    st2b %s1, (, %s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = getelementptr inbounds %"struct.std::__1::atomic.10", %"struct.std::__1::atomic.10"* %0, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0
@@ -123,7 +121,6 @@ define void @_Z24atomic_store_relaxed_u16RNSt3__16atomicItEEt(%"struct.std::__1:
 define void @_Z24atomic_store_relaxed_i32RNSt3__16atomicIiEEi(%"struct.std::__1::atomic.20"* nocapture nonnull align 4 dereferenceable(4) %0, i32 signext %1) {
 ; CHECK-LABEL: _Z24atomic_store_relaxed_i32RNSt3__16atomicIiEEi:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    stl %s1, (, %s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = getelementptr inbounds %"struct.std::__1::atomic.20", %"struct.std::__1::atomic.20"* %0, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0
@@ -234,7 +231,6 @@ define void @_Z23atomic_store_release_i8RNSt3__16atomicIcEEc(%"struct.std::__1::
 ; CHECK-LABEL: _Z23atomic_store_release_i8RNSt3__16atomicIcEEc:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fencem 1
-; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    st1b %s1, (, %s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = getelementptr inbounds %"struct.std::__1::atomic.0", %"struct.std::__1::atomic.0"* %0, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0
@@ -259,7 +255,6 @@ define void @_Z24atomic_store_release_i16RNSt3__16atomicIsEEs(%"struct.std::__1:
 ; CHECK-LABEL: _Z24atomic_store_release_i16RNSt3__16atomicIsEEs:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fencem 1
-; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    st2b %s1, (, %s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = getelementptr inbounds %"struct.std::__1::atomic.10", %"struct.std::__1::atomic.10"* %0, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0
@@ -284,7 +279,6 @@ define void @_Z24atomic_store_release_i32RNSt3__16atomicIiEEi(%"struct.std::__1:
 ; CHECK-LABEL: _Z24atomic_store_release_i32RNSt3__16atomicIiEEi:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fencem 1
-; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    stl %s1, (, %s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %3 = getelementptr inbounds %"struct.std::__1::atomic.20", %"struct.std::__1::atomic.20"* %0, i64 0, i32 0, i32 0, i32 0, i32 0, i32 0
@@ -398,7 +392,6 @@ define void @_Z23atomic_store_seq_cst_i1RNSt3__16atomicIbEEb(%"struct.std::__1::
 define void @_Z23atomic_store_seq_cst_i8RNSt3__16atomicIcEEc(%"struct.std::__1::atomic.0"* nocapture nonnull align 1 dereferenceable(1) %0, i8 signext %1) {
 ; CHECK-LABEL: _Z23atomic_store_seq_cst_i8RNSt3__16atomicIcEEc:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    st1b %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
@@ -425,7 +418,6 @@ define void @_Z23atomic_store_seq_cst_u8RNSt3__16atomicIhEEh(%"struct.std::__1::
 define void @_Z24atomic_store_seq_cst_i16RNSt3__16atomicIsEEs(%"struct.std::__1::atomic.10"* nocapture nonnull align 2 dereferenceable(2) %0, i16 signext %1) {
 ; CHECK-LABEL: _Z24atomic_store_seq_cst_i16RNSt3__16atomicIsEEs:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    st2b %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3
@@ -452,7 +444,6 @@ define void @_Z24atomic_store_seq_cst_u16RNSt3__16atomicItEEt(%"struct.std::__1:
 define void @_Z24atomic_store_seq_cst_i32RNSt3__16atomicIiEEi(%"struct.std::__1::atomic.20"* nocapture nonnull align 4 dereferenceable(4) %0, i32 signext %1) {
 ; CHECK-LABEL: _Z24atomic_store_seq_cst_i32RNSt3__16atomicIiEEi:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    stl %s1, (, %s0)
 ; CHECK-NEXT:    fencem 3

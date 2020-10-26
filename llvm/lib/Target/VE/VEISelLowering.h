@@ -107,9 +107,20 @@ public:
                       const SmallVectorImpl<SDValue> &OutVals, const SDLoc &dl,
                       SelectionDAG &DAG) const override;
 
+  /// Helper functions for atomic operations.
+  bool shouldInsertFencesForAtomic(const Instruction *I) const override {
+    // VE uses release consistency, so need fence for each atomics.
+    return true;
+  }
+  Instruction *emitLeadingFence(IRBuilder<> &Builder, Instruction *Inst,
+                                AtomicOrdering Ord) const override;
+  Instruction *emitTrailingFence(IRBuilder<> &Builder, Instruction *Inst,
+                                 AtomicOrdering Ord) const override;
+
   /// Custom Lower {
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
+  SDValue lowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
@@ -253,15 +264,6 @@ public:
   LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
                             const MachineBasicBlock *MBB, unsigned uid,
                             MCContext &Ctx) const override;
-
-  bool shouldInsertFencesForAtomic(const Instruction *I) const override {
-    // VE uses Release consistency, so need fence for each atomics.
-    return true;
-  }
-  Instruction *emitLeadingFence(IRBuilder<> &Builder, Instruction *Inst,
-                                AtomicOrdering Ord) const override;
-  Instruction *emitTrailingFence(IRBuilder<> &Builder, Instruction *Inst,
-                                 AtomicOrdering Ord) const override;
 
   AtomicExpansionKind shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
 

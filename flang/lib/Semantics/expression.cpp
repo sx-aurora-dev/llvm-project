@@ -1700,6 +1700,9 @@ auto ExpressionAnalyzer::AnalyzeProcedureComponentRef(
   const parser::StructureComponent &sc{pcr.v.thing};
   if (MaybeExpr base{Analyze(sc.base)}) {
     if (const Symbol * sym{sc.component.symbol}) {
+      if (context_.HasError(sym)) {
+        return std::nullopt;
+      }
       if (auto *dtExpr{UnwrapExpr<Expr<SomeDerived>>(*base)}) {
         if (sym->has<semantics::GenericDetails>()) {
           AdjustActuals adjustment{
@@ -2157,7 +2160,8 @@ std::optional<characteristics::Procedure> ExpressionAnalyzer::CheckCall(
     }
     if (!procIsAssociated) {
       semantics::CheckArguments(*chars, arguments, GetFoldingContext(),
-          context_.FindScope(callSite), treatExternalAsImplicit);
+          context_.FindScope(callSite), treatExternalAsImplicit,
+          proc.GetSpecificIntrinsic());
       const Symbol *procSymbol{proc.GetSymbol()};
       if (procSymbol && !IsPureProcedure(*procSymbol)) {
         if (const semantics::Scope *

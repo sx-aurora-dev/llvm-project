@@ -553,6 +553,22 @@ multiclass RVLm<string opcStr, bits<8>opc, RegisterClass ScaRC,
   let cs = 1, cy = 0, vz = ? in
   defm mv : RVmm<opcStr, ", $sy, $vz", opc, RC, RCM, (ins mimm:$sy, RC:$vz)>;
 }
+// Generic RV multiclass with 1 argument.
+//   e.g. VLDZ, VPCNT, and VBRV.
+let VE_VLIndex = 2 in
+multiclass RV1m<string opcStr, bits<8>opc, RegisterClass RC,
+                RegisterClass RCM> {
+  let cy = 0, sy = 0, vz = ? in
+  defm v : RVmm<opcStr, ", $vz", opc, RC, RCM, (ins RC:$vz)>;
+}
+// Generic RV multiclass with no argument.
+//   e.g. VSEQ.
+let VE_VLIndex = 1 in
+multiclass RV0m<string opcStr, bits<8>opc, RegisterClass RC,
+                RegisterClass RCM> {
+  let cy = 0, sy = 0 in
+  defm "" : RVmm<opcStr, "", opc, RC, RCM, (ins)>;
+}
 // Generic RV multiclass with 2 arguments for shift operations.
 //   e.g. VSLL, VSRL, VSLA, and etc.
 let VE_VLIndex = 3 in
@@ -577,14 +593,6 @@ multiclass RVSDm<string opcStr, bits<8>opc, RegisterClass RC,
   defm vvi : RVmm<opcStr, ", ($vy, ${vz}), $sy", opc, RC, RCM,
                  (ins RC:$vy, RC:$vz, uimm7:$sy)>;
 }
-// Generic RV multiclass with 1 argument.
-//   e.g. VLDZ, VPCNT, and VBRV.
-let VE_VLIndex = 2 in
-multiclass RV1m<string opcStr, bits<8>opc, RegisterClass RC,
-                RegisterClass RCM> {
-  let cy = 0, sy = 0, vz = ? in
-  defm v : RVmm<opcStr, ", $vz", opc, RC, RCM, (ins RC:$vz)>;
-}
 // Generic RV multiclass with 1 argument using vy field.
 //   e.g. VFSQRT, VRCP, and VRSQRT.
 let VE_VLIndex = 2 in
@@ -592,14 +600,6 @@ multiclass RVF1m<string opcStr, bits<8>opc, RegisterClass RC,
                  RegisterClass RCM> {
   let cy = 0, sy = 0, vy = ? in
   defm v : RVmm<opcStr, ", $vy", opc, RC, RCM, (ins RC:$vy)>;
-}
-// Generic RV multiclass with no argument.
-//   e.g. VSEQ.
-let VE_VLIndex = 1 in
-multiclass RV0m<string opcStr, bits<8>opc, RegisterClass RC,
-                RegisterClass RCM> {
-  let cy = 0, sy = 0 in
-  defm "" : RVmm<opcStr, "", opc, RC, RCM, (ins)>;
 }
 // Special RV multiclass with 3 arguments.
 //   e.g. VSFA
