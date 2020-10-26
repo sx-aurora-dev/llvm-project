@@ -30,6 +30,7 @@ def clean_patch(in_path, out_path):
       in_func=True
       past_sp_copy=False
       past_first_block=False
+      past_monc = False
       prologue_buf=[]
     elif line.startswith("}"):
       in_func=False
