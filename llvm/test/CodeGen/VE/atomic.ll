@@ -449,7 +449,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_exchange_16() {
 ; CHECK-LABEL: test_atomic_exchange_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_exchange_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_exchange_16@hi(, %s0)
@@ -470,7 +470,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_exchange_16_relaxed() {
 ; CHECK-LABEL: test_atomic_exchange_16_relaxed:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_exchange_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_exchange_16@hi(, %s0)
@@ -491,7 +491,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_exchange_16_release() {
 ; CHECK-LABEL: test_atomic_exchange_16_release:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_exchange_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_exchange_16@hi(, %s0)
@@ -512,7 +512,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_exchange_16_acq_rel() {
 ; CHECK-LABEL: test_atomic_exchange_16_acq_rel:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_exchange_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_exchange_16@hi(, %s0)
@@ -533,7 +533,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_exchange_16_seq_cst() {
 ; CHECK-LABEL: test_atomic_exchange_16_seq_cst:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_exchange_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_exchange_16@hi(, %s0)
@@ -574,7 +574,7 @@ define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-NEXT:    cas.w %s4, (%s2), %s6
 ; CHECK-NEXT:    breq.w %s4, %s6, .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.2: # %partword.cmpxchg.failure
-; CHECK-NEXT:    # in Loop: Header=BB55_1 Depth=1
+; CHECK-NEXT:    # in Loop: Header=BB25_1 Depth=1
 ; CHECK-NEXT:    and %s7, %s4, %s3
 ; CHECK-NEXT:    brne.w %s5, %s7, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %partword.cmpxchg.end
@@ -615,7 +615,7 @@ define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-NEXT:    cas.w %s4, (%s2), %s6
 ; CHECK-NEXT:    breq.w %s4, %s6, .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.2: # %partword.cmpxchg.failure
-; CHECK-NEXT:    # in Loop: Header=BB56_1 Depth=1
+; CHECK-NEXT:    # in Loop: Header=BB26_1 Depth=1
 ; CHECK-NEXT:    and %s7, %s4, %s3
 ; CHECK-NEXT:    brne.w %s5, %s7, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %partword.cmpxchg.end
@@ -678,7 +678,7 @@ entry: %2 = cmpxchg i64* @l, i64 %0, i64 %1 seq_cst seq_cst
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_compare_exchange_16(i128, i128) {
 ; CHECK-LABEL: test_atomic_compare_exchange_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    st %s1, -8(, %s9)
 ; CHECK-NEXT:    st %s0, -16(, %s9)
 ; CHECK-NEXT:    lea %s0, __atomic_compare_exchange_16@lo
@@ -1043,7 +1043,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_add_16() {
 ; CHECK-LABEL: test_atomic_fetch_add_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_add_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_add_16@hi(, %s0)
@@ -1171,7 +1171,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_sub_16() {
 ; CHECK-LABEL: test_atomic_fetch_sub_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_sub_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_sub_16@hi(, %s0)
@@ -1293,7 +1293,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_and_16() {
 ; CHECK-LABEL: test_atomic_fetch_and_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_and_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_and_16@hi(, %s0)
@@ -1411,7 +1411,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_or_16() {
 ; CHECK-LABEL: test_atomic_fetch_or_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_or_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_or_16@hi(, %s0)
@@ -1529,7 +1529,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_xor_16() {
 ; CHECK-LABEL: test_atomic_fetch_xor_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_xor_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_xor_16@hi(, %s0)
@@ -1665,7 +1665,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_nand_16() {
 ; CHECK-LABEL: test_atomic_fetch_nand_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_nand_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_nand_16@hi(, %s0)
@@ -1866,7 +1866,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8stk(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8stk:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    cas.l %s1, 192(%s11), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
@@ -1886,7 +1886,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_clear_8stk() {
 ; CHECK-LABEL: test_atomic_clear_8stk:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    st1b %s0, 192(, %s11)
