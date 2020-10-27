@@ -1466,7 +1466,7 @@ def int_vp_icmp : Intrinsic<[ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty> ],
                               llvm_i8_ty,
                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                               llvm_i32_ty ],
-                            [ IntrWillReturn, IntrNoSync, IntrNoMem, Mask<4>, VectorLength<5>, ImmArg<ArgIndex<3>> ]>;
+                            [ IntrWillReturn, IntrNoSync, IntrNoMem, Mask<4>, VectorLength<5>, ImmArg<ArgIndex<2>> ]>;
 
 def int_vp_fcmp : Intrinsic<[ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty> ],
                             [ llvm_anyvector_ty,
@@ -1474,7 +1474,7 @@ def int_vp_fcmp : Intrinsic<[ LLVMScalarOrSameVectorWidth<0, llvm_i1_ty> ],
                               llvm_i8_ty,
                               LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                               llvm_i32_ty ],
-                            [ IntrWillReturn, IntrNoSync, IntrNoMem, Mask<4>, VectorLength<5>, ImmArg<ArgIndex<3>> ]>;
+                            [ IntrWillReturn, IntrNoSync, IntrNoMem, Mask<4>, VectorLength<5>, ImmArg<ArgIndex<2>> ]>;
 
 
 
