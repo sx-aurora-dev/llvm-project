@@ -19,6 +19,7 @@ FMATH_TARGETS = fabs.ll fcopysign.ll fcos.ll fsin.ll fsqrt.ll
 ATOMIC_TARGETS = atomic_fence.ll atomic_load.ll atomic_store.ll
 
 TARGETS = $(IOP_TARGETS) $(FOP_TARGETS) $(FMATH_TARGETS) $(ATOMIC_TARGETS) \
+          br_jt.ll \
           fp_ceil.ll \
           fp_exp.ll fp_exp2.ll fp_floor.ll \
           fp_fma.ll fp_llrint.ll fp_llround.ll       \
