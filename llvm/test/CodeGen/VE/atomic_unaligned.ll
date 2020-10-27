@@ -151,7 +151,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_16() {
 ; CHECK-LABEL: test_atomic_store_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_store_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_store_16@hi(, %s0)
@@ -171,7 +171,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_store_16cst() {
 ; CHECK-LABEL: test_atomic_store_16cst:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_store_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_store_16@hi(, %s0)
@@ -195,10 +195,8 @@ define signext i8 @test_atomic_load_1() {
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, c@hi(, %s0)
-; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
+; CHECK-NEXT:    ld1b.sx %s0, (, %s0)
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    sll %s0, %s0, 56
-; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i8, i8* @c acquire, align 32
@@ -212,10 +210,8 @@ define signext i8 @test_atomic_load_1cst() {
 ; CHECK-NEXT:    lea %s0, c@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, c@hi(, %s0)
-; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
+; CHECK-NEXT:    ld1b.sx %s0, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sll %s0, %s0, 56
-; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i8, i8* @c seq_cst, align 32
@@ -229,10 +225,8 @@ define signext i16 @test_atomic_load_2() {
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
-; CHECK-NEXT:    ld2b.zx %s0, (, %s0)
+; CHECK-NEXT:    ld2b.sx %s0, (, %s0)
 ; CHECK-NEXT:    fencem 2
-; CHECK-NEXT:    sll %s0, %s0, 48
-; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i16, i16* @s acquire, align 32
@@ -246,10 +240,8 @@ define signext i16 @test_atomic_load_2cst() {
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
-; CHECK-NEXT:    ld2b.zx %s0, (, %s0)
+; CHECK-NEXT:    ld2b.sx %s0, (, %s0)
 ; CHECK-NEXT:    fencem 3
-; CHECK-NEXT:    sll %s0, %s0, 48
-; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
   %0 = load atomic i16, i16* @s seq_cst, align 32
@@ -319,7 +311,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_load_16() {
 ; CHECK-LABEL: test_atomic_load_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_load_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_load_16@hi(, %s0)
@@ -337,7 +329,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_load_16cst() {
 ; CHECK-LABEL: test_atomic_load_16cst:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_load_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_load_16@hi(, %s0)
@@ -595,10 +587,10 @@ define i64 @test_atomic_exchange_8_align4() {
 ; CHECK-NEXT:    lea.sl %s1, sil1@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    lea.sl %s0, 1886417008(, %s0)
-; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 ; CHECK-NEXT:    ts1am.l %s0, 4(%s1), 127
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
+; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 entry:
   %0 = atomicrmw xchg i64* getelementptr inbounds (%struct.sil, %struct.sil* @sil1, i32 0, i32 1), i64 8102099357864587376 acquire
   ret i64 %0
@@ -607,7 +599,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_exchange_16() {
 ; CHECK-LABEL: test_atomic_exchange_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_exchange_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_exchange_16@hi(, %s0)
@@ -747,7 +739,6 @@ define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
 ; CHECK-NEXT:    lea %s2, sci1@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, sci1@hi(, %s2)
-; FIXME:       Bus Error occurred due to unaligned cas instruction
 ; CHECK-NEXT:    cas.w %s1, 1(%s2), %s0
 ; CHECK-NEXT:    cmps.w.zx %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
@@ -755,6 +746,7 @@ define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
+; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
   %2 = cmpxchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 %0, i32 %1 seq_cst seq_cst
   %3 = extractvalue { i32, i1 } %2, 1
@@ -791,7 +783,6 @@ define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
 ; CHECK-NEXT:    lea %s2, scl1@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, scl1@hi(, %s2)
-; FIXME:       Bus Error occurred due to unaligned cas instruction
 ; CHECK-NEXT:    cas.l %s1, 1(%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
@@ -799,6 +790,7 @@ define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
+; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
   %2 = cmpxchg i64* getelementptr inbounds (%struct.scl, %struct.scl* @scl1, i32 0, i32 1), i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
@@ -814,7 +806,6 @@ define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
 ; CHECK-NEXT:    lea %s2, sil1@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, sil1@hi(, %s2)
-; FIXME:       Bus Error occurred due to unaligned cas instruction
 ; CHECK-NEXT:    cas.l %s1, 4(%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
@@ -822,6 +813,7 @@ define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
+; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
   %2 = cmpxchg i64* getelementptr inbounds (%struct.sil, %struct.sil* @sil1, i32 0, i32 1), i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
@@ -832,7 +824,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_compare_exchange_16(i128, i128) {
 ; CHECK-LABEL: test_atomic_compare_exchange_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    st %s1, -8(, %s9)
 ; CHECK-NEXT:    st %s0, -16(, %s9)
 ; CHECK-NEXT:    lea %s0, __atomic_compare_exchange_16@lo
@@ -1271,7 +1263,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_add_16() {
 ; CHECK-LABEL: test_atomic_fetch_add_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_add_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_add_16@hi(, %s0)
@@ -1409,7 +1401,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_sub_16() {
 ; CHECK-LABEL: test_atomic_fetch_sub_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_sub_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_sub_16@hi(, %s0)
@@ -1545,7 +1537,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_and_16() {
 ; CHECK-LABEL: test_atomic_fetch_and_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_and_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_and_16@hi(, %s0)
@@ -1675,7 +1667,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_or_16() {
 ; CHECK-LABEL: test_atomic_fetch_or_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_or_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_or_16@hi(, %s0)
@@ -1805,7 +1797,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_xor_16() {
 ; CHECK-LABEL: test_atomic_fetch_xor_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_xor_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_xor_16@hi(, %s0)
@@ -1947,7 +1939,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i128 @test_atomic_fetch_nand_16() {
 ; CHECK-LABEL: test_atomic_fetch_nand_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    lea %s0, __atomic_fetch_nand_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_fetch_nand_16@hi(, %s0)
@@ -2148,7 +2140,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define i64 @test_atomic_compare_exchange_8stk(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8stk:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    cas.l %s1, 192(%s11), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
@@ -2168,7 +2160,7 @@ entry:
 ; Function Attrs: norecurse nounwind
 define void @test_atomic_clear_8stk() {
 ; CHECK-LABEL: test_atomic_clear_8stk:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       .LBB{{[0-9]+}}_2: # %entry
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    st1b %s0, 192(, %s11)

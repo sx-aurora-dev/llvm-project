@@ -13217,10 +13217,11 @@ SDValue DAGCombiner::visitFMA(SDNode *N) {
   EVT VT = N->getValueType(0);
   SDLoc DL(N);
   const TargetOptions &Options = DAG.getTarget().Options;
+  // FMA nodes have flags that propagate to the created nodes.
   SelectionDAG::FlagInserter FlagsInserter(DAG, N);
 
-  // FMA nodes have flags that propagate to the created nodes.
-  bool UnsafeFPMath = Options.UnsafeFPMath || isContractable(N);
+  bool UnsafeFPMath =
+      Options.UnsafeFPMath || N->getFlags().hasAllowReassociation();
 
   // Constant fold FMA.
   if (isa<ConstantFPSDNode>(N0) &&
@@ -17325,11 +17326,12 @@ SDValue DAGCombiner::visitSTORE(SDNode *N) {
           !ST1->getBasePtr().isUndef() &&
           // BaseIndexOffset and the code below requires knowing the size
           // of a vector, so bail out if MemoryVT is scalable.
+          !ST->getMemoryVT().isScalableVector() &&
           !ST1->getMemoryVT().isScalableVector()) {
         const BaseIndexOffset STBase = BaseIndexOffset::match(ST, DAG);
         const BaseIndexOffset ChainBase = BaseIndexOffset::match(ST1, DAG);
-        unsigned STBitSize = ST->getMemoryVT().getSizeInBits();
-        unsigned ChainBitSize = ST1->getMemoryVT().getSizeInBits();
+        unsigned STBitSize = ST->getMemoryVT().getFixedSizeInBits();
+        unsigned ChainBitSize = ST1->getMemoryVT().getFixedSizeInBits();
         // If this is a store who's preceding store to a subset of the current
         // location and no one other node is chained to that store we can
         // effectively drop the store. Do not remove stores to undef as they may

@@ -55,10 +55,6 @@
 
 using namespace clang;
 
-#define DEBUG_TYPE "modules"
-
-ALWAYS_ENABLED_STATISTIC(NumCompiledModules, "Number of compiled modules.");
-
 CompilerInstance::CompilerInstance(
     std::shared_ptr<PCHContainerOperations> PCHContainerOps,
     InMemoryModuleCache *SharedModuleCache)
@@ -350,10 +346,16 @@ static void InitializeFileRemapping(DiagnosticsEngine &Diags,
       continue;
     }
 
-    // Override the contents of the "from" file with the contents of
-    // the "to" file.
-    SourceMgr.overrideFileContents(FromFile, RB.second,
-                                   InitOpts.RetainRemappedFileBuffers);
+    // Override the contents of the "from" file with the contents of the
+    // "to" file. If the caller owns the buffers, then pass a MemoryBufferRef;
+    // otherwise, pass as a std::unique_ptr<MemoryBuffer> to transfer ownership
+    // to the SourceManager.
+    if (InitOpts.RetainRemappedFileBuffers)
+      SourceMgr.overrideFileContents(FromFile, RB.second->getMemBufferRef());
+    else
+      SourceMgr.overrideFileContents(
+          FromFile, std::unique_ptr<llvm::MemoryBuffer>(
+                        const_cast<llvm::MemoryBuffer *>(RB.second)));
   }
 
   // Remap files in the source manager (with other files).
@@ -835,8 +837,7 @@ bool CompilerInstance::InitializeSourceManager(const FrontendInputFile &Input,
           : Input.isSystem() ? SrcMgr::C_System : SrcMgr::C_User;
 
   if (Input.isBuffer()) {
-    SourceMgr.setMainFileID(SourceMgr.createFileID(SourceManager::Unowned,
-                                                   Input.getBuffer(), Kind));
+    SourceMgr.setMainFileID(SourceMgr.createFileID(Input.getBuffer(), Kind));
     assert(SourceMgr.getMainFileID().isValid() &&
            "Couldn't establish MainFileID!");
     return true;
@@ -1067,7 +1068,6 @@ compileModuleImpl(CompilerInstance &ImportingInstance, SourceLocation ImportLoc,
                   llvm::function_ref<void(CompilerInstance &)> PostBuildStep =
                       [](CompilerInstance &) {}) {
   llvm::TimeTraceScope TimeScope("Module Compile", ModuleName);
-  ++NumCompiledModules;
 
   // Construct a compiler invocation for creating this module.
   auto Invocation =

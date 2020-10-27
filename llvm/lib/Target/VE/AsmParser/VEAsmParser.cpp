@@ -1487,8 +1487,8 @@ OperandMatchResultTy VEAsmParser::parseOperand(OperandVector &Operands,
     Operands.push_back(VEOperand::CreateToken(Tok1.getString(), Tok1.getLoc()));
     Operands.push_back(VEOperand::CreateReg(RegNo1, S1, E1));
     Operands.push_back(VEOperand::CreateReg(RegNo2, S2, E2));
-    Operands.push_back(VEOperand::CreateToken(
-        Parser.getTok().getString(), Parser.getTok().getLoc()));
+    Operands.push_back(VEOperand::CreateToken(Parser.getTok().getString(),
+                                              Parser.getTok().getLoc()));
     Parser.Lex(); // Eat the ')'.
     break;
   }

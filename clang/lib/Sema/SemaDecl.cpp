@@ -12958,18 +12958,14 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
 
   // All the following checks are C++ only.
   if (!getLangOpts().CPlusPlus) {
-      // If this variable must be emitted, add it as an initializer for the
-      // current module.
-     if (Context.DeclMustBeEmitted(var) && !ModuleScopes.empty())
-       Context.addModuleInitializer(ModuleScopes.back().Module, var);
-     return;
+    // If this variable must be emitted, add it as an initializer for the
+    // current module.
+    if (Context.DeclMustBeEmitted(var) && !ModuleScopes.empty())
+      Context.addModuleInitializer(ModuleScopes.back().Module, var);
+    return;
   }
 
-  if (auto *DD = dyn_cast<DecompositionDecl>(var))
-    CheckCompleteDecompositionDeclaration(DD);
-
   QualType type = var->getType();
-  if (type->isDependentType()) return;
 
   if (var->hasAttr<BlocksAttr>())
     getCurFunction()->addByrefBlockVar(var);
@@ -12978,79 +12974,93 @@ void Sema::CheckCompleteVariableDeclaration(VarDecl *var) {
   bool IsGlobal = GlobalStorage && !var->isStaticLocal();
   QualType baseType = Context.getBaseElementType(type);
 
-  if (Init && !Init->isValueDependent()) {
-    if (var->isConstexpr()) {
-      SmallVector<PartialDiagnosticAt, 8> Notes;
-      if (!var->evaluateValue(Notes) || !var->isInitICE()) {
-        SourceLocation DiagLoc = var->getLocation();
-        // If the note doesn't add any useful information other than a source
-        // location, fold it into the primary diagnostic.
-        if (Notes.size() == 1 && Notes[0].second.getDiagID() ==
-              diag::note_invalid_subexpr_in_const_expr) {
-          DiagLoc = Notes[0].first;
-          Notes.clear();
-        }
-        Diag(DiagLoc, diag::err_constexpr_var_requires_const_init)
-          << var << Init->getSourceRange();
-        for (unsigned I = 0, N = Notes.size(); I != N; ++I)
-          Diag(Notes[I].first, Notes[I].second);
+  // Check whether the initializer is sufficiently constant.
+  if (!type->isDependentType() && Init && !Init->isValueDependent() &&
+      (GlobalStorage || var->isConstexpr() ||
+       var->mightBeUsableInConstantExpressions(Context))) {
+    // If this variable might have a constant initializer or might be usable in
+    // constant expressions, check whether or not it actually is now.  We can't
+    // do this lazily, because the result might depend on things that change
+    // later, such as which constexpr functions happen to be defined.
+    SmallVector<PartialDiagnosticAt, 8> Notes;
+    bool HasConstInit;
+    if (!getLangOpts().CPlusPlus11) {
+      // Prior to C++11, in contexts where a constant initializer is required,
+      // the set of valid constant initializers is described by syntactic rules
+      // in [expr.const]p2-6.
+      // FIXME: Stricter checking for these rules would be useful for constinit /
+      // -Wglobal-constructors.
+      HasConstInit = checkConstInit();
+
+      // Compute and cache the constant value, and remember that we have a
+      // constant initializer.
+      if (HasConstInit) {
+        (void)var->checkForConstantInitialization(Notes);
+        Notes.clear();
+      } else if (CacheCulprit) {
+        Notes.emplace_back(CacheCulprit->getExprLoc(),
+                           PDiag(diag::note_invalid_subexpr_in_const_expr));
+        Notes.back().second << CacheCulprit->getSourceRange();
       }
-    } else if (var->mightBeUsableInConstantExpressions(Context)) {
-      // Check whether the initializer of a const variable of integral or
-      // enumeration type is an ICE now, since we can't tell whether it was
-      // initialized by a constant expression if we check later.
-      var->checkInitIsICE();
+    } else {
+      // Evaluate the initializer to see if it's a constant initializer.
+      HasConstInit = var->checkForConstantInitialization(Notes);
     }
 
-    // Don't emit further diagnostics about constexpr globals since they
-    // were just diagnosed.
-    if (!var->isConstexpr() && GlobalStorage && var->hasAttr<ConstInitAttr>()) {
-      // FIXME: Need strict checking in C++03 here.
-      bool DiagErr = getLangOpts().CPlusPlus11
-          ? !var->checkInitIsICE() : !checkConstInit();
-      if (DiagErr) {
-        auto *Attr = var->getAttr<ConstInitAttr>();
-        Diag(var->getLocation(), diag::err_require_constant_init_failed)
-          << Init->getSourceRange();
-        Diag(Attr->getLocation(),
-             diag::note_declared_required_constant_init_here)
-            << Attr->getRange() << Attr->isConstinit();
-        if (getLangOpts().CPlusPlus11) {
-          APValue Value;
-          SmallVector<PartialDiagnosticAt, 8> Notes;
-          Init->EvaluateAsInitializer(Value, getASTContext(), var, Notes);
-          for (auto &it : Notes)
-            Diag(it.first, it.second);
-        } else {
-          Diag(CacheCulprit->getExprLoc(),
-               diag::note_invalid_subexpr_in_const_expr)
-              << CacheCulprit->getSourceRange();
-        }
+    if (HasConstInit) {
+      // FIXME: Consider replacing the initializer with a ConstantExpr.
+    } else if (var->isConstexpr()) {
+      SourceLocation DiagLoc = var->getLocation();
+      // If the note doesn't add any useful information other than a source
+      // location, fold it into the primary diagnostic.
+      if (Notes.size() == 1 && Notes[0].second.getDiagID() ==
+                                   diag::note_invalid_subexpr_in_const_expr) {
+        DiagLoc = Notes[0].first;
+        Notes.clear();
       }
-    }
-    else if (!var->isConstexpr() && IsGlobal &&
-             !getDiagnostics().isIgnored(diag::warn_global_constructor,
-                                    var->getLocation())) {
+      Diag(DiagLoc, diag::err_constexpr_var_requires_const_init)
+          << var << Init->getSourceRange();
+      for (unsigned I = 0, N = Notes.size(); I != N; ++I)
+        Diag(Notes[I].first, Notes[I].second);
+    } else if (GlobalStorage && var->hasAttr<ConstInitAttr>()) {
+      auto *Attr = var->getAttr<ConstInitAttr>();
+      Diag(var->getLocation(), diag::err_require_constant_init_failed)
+          << Init->getSourceRange();
+      Diag(Attr->getLocation(), diag::note_declared_required_constant_init_here)
+          << Attr->getRange() << Attr->isConstinit();
+      for (auto &it : Notes)
+        Diag(it.first, it.second);
+    } else if (IsGlobal &&
+               !getDiagnostics().isIgnored(diag::warn_global_constructor,
+                                           var->getLocation())) {
       // Warn about globals which don't have a constant initializer.  Don't
       // warn about globals with a non-trivial destructor because we already
       // warned about them.
       CXXRecordDecl *RD = baseType->getAsCXXRecordDecl();
       if (!(RD && !RD->hasTrivialDestructor())) {
+        // checkConstInit() here permits trivial default initialization even in
+        // C++11 onwards, where such an initializer is not a constant initializer
+        // but nonetheless doesn't require a global constructor.
         if (!checkConstInit())
           Diag(var->getLocation(), diag::warn_global_constructor)
-            << Init->getSourceRange();
+              << Init->getSourceRange();
       }
     }
   }
 
   // Require the destructor.
-  if (const RecordType *recordType = baseType->getAs<RecordType>())
-    FinalizeVarWithDestructor(var, recordType);
+  if (!type->isDependentType())
+    if (const RecordType *recordType = baseType->getAs<RecordType>())
+      FinalizeVarWithDestructor(var, recordType);
 
   // If this variable must be emitted, add it as an initializer for the current
   // module.
   if (Context.DeclMustBeEmitted(var) && !ModuleScopes.empty())
     Context.addModuleInitializer(ModuleScopes.back().Module, var);
+
+  // Build the bindings if this is a structured binding declaration.
+  if (auto *DD = dyn_cast<DecompositionDecl>(var))
+    CheckCompleteDecompositionDeclaration(DD);
 }
 
 /// Determines if a variable's alignment is dependent.
@@ -14275,12 +14285,16 @@ static void diagnoseImplicitlyRetainedSelf(Sema &S) {
 
 Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
                                     bool IsInstantiation) {
+  FunctionScopeInfo *FSI = getCurFunction();
   FunctionDecl *FD = dcl ? dcl->getAsFunction() : nullptr;
+
+  if (FSI->UsesFPIntrin && !FD->hasAttr<StrictFPAttr>())
+    FD->addAttr(StrictFPAttr::CreateImplicit(Context));
 
   sema::AnalysisBasedWarnings::Policy WP = AnalysisWarnings.getDefaultPolicy();
   sema::AnalysisBasedWarnings::Policy *ActivePolicy = nullptr;
 
-  if (getLangOpts().Coroutines && getCurFunction()->isCoroutine())
+  if (getLangOpts().Coroutines && FSI->isCoroutine())
     CheckCompletedCoroutineBody(FD, Body);
 
   // Do not call PopExpressionEvaluationContext() if it is a lambda because one
@@ -14357,7 +14371,7 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
       // to deduce an implicit return type.
       if (FD->getReturnType()->isRecordType() &&
           (!getLangOpts().CPlusPlus || !FD->isDependentContext()))
-        computeNRVO(Body, getCurFunction());
+        computeNRVO(Body, FSI);
     }
 
     // GNU warning -Wmissing-prototypes:
@@ -14481,14 +14495,14 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
                                              MD->getReturnType(), MD);
 
       if (Body)
-        computeNRVO(Body, getCurFunction());
+        computeNRVO(Body, FSI);
     }
-    if (getCurFunction()->ObjCShouldCallSuper) {
+    if (FSI->ObjCShouldCallSuper) {
       Diag(MD->getEndLoc(), diag::warn_objc_missing_super_call)
           << MD->getSelector().getAsString();
-      getCurFunction()->ObjCShouldCallSuper = false;
+      FSI->ObjCShouldCallSuper = false;
     }
-    if (getCurFunction()->ObjCWarnForNoDesignatedInitChain) {
+    if (FSI->ObjCWarnForNoDesignatedInitChain) {
       const ObjCMethodDecl *InitMethod = nullptr;
       bool isDesignated =
           MD->isDesignatedInitializerForTheInterface(&InitMethod);
@@ -14513,14 +14527,14 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
         Diag(InitMethod->getLocation(),
              diag::note_objc_designated_init_marked_here);
       }
-      getCurFunction()->ObjCWarnForNoDesignatedInitChain = false;
+      FSI->ObjCWarnForNoDesignatedInitChain = false;
     }
-    if (getCurFunction()->ObjCWarnForNoInitDelegation) {
+    if (FSI->ObjCWarnForNoInitDelegation) {
       // Don't issue this warning for unavaialable inits.
       if (!MD->isUnavailable())
         Diag(MD->getLocation(),
              diag::warn_objc_secondary_init_missing_init_call);
-      getCurFunction()->ObjCWarnForNoInitDelegation = false;
+      FSI->ObjCWarnForNoInitDelegation = false;
     }
 
     diagnoseImplicitlyRetainedSelf(*this);
@@ -14531,10 +14545,10 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
     return nullptr;
   }
 
-  if (Body && getCurFunction()->HasPotentialAvailabilityViolations)
+  if (Body && FSI->HasPotentialAvailabilityViolations)
     DiagnoseUnguardedAvailabilityViolations(dcl);
 
-  assert(!getCurFunction()->ObjCShouldCallSuper &&
+  assert(!FSI->ObjCShouldCallSuper &&
          "This should only be set for ObjC methods, which should have been "
          "handled in the block above.");
 
@@ -14547,7 +14561,7 @@ Decl *Sema::ActOnFinishFunctionBody(Decl *dcl, Stmt *Body,
       DiagnoseReturnInConstructorExceptionHandler(cast<CXXTryStmt>(Body));
 
     // Verify that gotos and switch cases don't jump into scopes illegally.
-    if (getCurFunction()->NeedsScopeChecking() &&
+    if (FSI->NeedsScopeChecking() &&
         !PP.isCodeCompletionEnabled())
       DiagnoseInvalidJumps(Body);
 
