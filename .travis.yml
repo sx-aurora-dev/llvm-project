@@ -7,5 +7,5 @@ script:
   - mkdir -p build
   - cd build/
   - cmake ../llvm -DLLVM_TARGETS_TO_BUILD=VE -DCMAKE_BUILD_TYPE=Release -G Ninja -DBUILD_SHARED_LIBS=on -DCMAKE_CXX_FLAGS_RELEASE="-O0 -DNDEBUG" -DLLVM_ENABLE_ASSERTIONS=OFF
-  - ninja bin/llc bin/FileCheck bin/count bin/not
+  - ninja
   - ./bin/llvm-lit test/CodeGen/VE
