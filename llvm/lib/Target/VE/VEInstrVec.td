@@ -593,14 +593,6 @@ multiclass RVSDm<string opcStr, bits<8>opc, RegisterClass RC,
   defm vvi : RVmm<opcStr, ", ($vy, ${vz}), $sy", opc, RC, RCM,
                  (ins RC:$vy, RC:$vz, uimm7:$sy)>;
 }
-// Generic RV multiclass with 1 argument using vy field.
-//   e.g. VFSQRT, VRCP, and VRSQRT.
-let VE_VLIndex = 2 in
-multiclass RVF1m<string opcStr, bits<8>opc, RegisterClass RC,
-                 RegisterClass RCM> {
-  let cy = 0, sy = 0, vy = ? in
-  defm v : RVmm<opcStr, ", $vy", opc, RC, RCM, (ins RC:$vy)>;
-}
 // Special RV multiclass with 3 arguments.
 //   e.g. VSFA
 let VE_VLIndex = 4 in
@@ -618,6 +610,14 @@ multiclass RVSAm<string opcStr, bits<8>opc, RegisterClass RC,
   let cy = 0, cz = 0, sz = ?, vz = ? in
   defm vim : RVmm<opcStr, ", $vz, $sy, $sz", opc, RC, RCM,
                   (ins RC:$vz, uimm3:$sy, mimm:$sz)>;
+}
+// Generic RV multiclass with 1 argument using vy field.
+//   e.g. VFSQRT, VRCP, and VRSQRT.
+let VE_VLIndex = 2 in
+multiclass RVF1m<string opcStr, bits<8>opc, RegisterClass RC,
+                 RegisterClass RCM> {
+  let cy = 0, sy = 0, vy = ? in
+  defm v : RVmm<opcStr, ", $vy", opc, RC, RCM, (ins RC:$vy)>;
 }
 // Special RV multiclass with 3 arguments using cs2.
 //   e.g. VFMAD, VFMSB, VFNMAD, and etc.
@@ -648,17 +648,6 @@ multiclass RVFIXm<string opcStr, bits<8> opc, RegisterClass RC,
   let cy = 0, sy = 0, vy = ?, vz = ? in
   defm v : RVmm<opcStr#"$vz", ", $vy", opc, RC, RCM, (ins RDOp:$vz, RC:$vy)>;
 }
-// special RV multiclass with 3 arguments for VSHF.
-//   e.g. VSHF
-let vy = ?, vz = ?, VE_VLIndex = 4 in
-multiclass RVSHFm<string opcStr, bits<8>opc, RegisterClass RC,
-                  Operand SIMM = uimm4> {
-  defm vvr : RVlm<opcStr, ", $vy, $vz, $sy", opc, RC,
-                  (ins RC:$vy, RC:$vz, I64:$sy)>;
-  let cy = 0 in defm vvi : RVlm<opcStr, ", $vy, $vz, $sy", opc, RC,
-                                (ins RC:$vy, RC:$vz, SIMM:$sy)>;
-}
-
 // Multiclass for generic iterative vector calculation
 let vx = ?, hasSideEffects = 0, Uses = [VL] in
 multiclass RVIbm<string opcStr, string argStr, bits<8>opc, RegisterClass RC,
@@ -702,7 +691,16 @@ multiclass RVI3m<string opcStr, bits<8>opc, RegisterClass VRC,
   defm vvi : RVIlm<opcStr, ", $vy, $vz, $sy", opc, VRC,
                    (ins VRC:$vy, VRC:$vz, simm7fp:$sy)>;
 }
-
+// special RV multiclass with 3 arguments for VSHF.
+//   e.g. VSHF
+let vy = ?, vz = ?, VE_VLIndex = 4 in
+multiclass RVSHFm<string opcStr, bits<8>opc, RegisterClass RC,
+                  Operand SIMM = uimm4> {
+  defm vvr : RVlm<opcStr, ", $vy, $vz, $sy", opc, RC,
+                  (ins RC:$vy, RC:$vz, I64:$sy)>;
+  let cy = 0 in defm vvi : RVlm<opcStr, ", $vy, $vz, $sy", opc, RC,
+                                (ins RC:$vy, RC:$vz, SIMM:$sy)>;
+}
 // Multiclass for generic mask calculation
 let vx = ?, hasSideEffects = 0, Uses = [VL] in
 multiclass RVMKbm<string opcStr, string argStr, bits<8>opc, dag dag_out,
