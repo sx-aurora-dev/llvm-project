@@ -287,7 +287,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<4>(Value);
     }
@@ -931,14 +931,6 @@ StringRef VEAsmParser::splitMnemonic(StringRef Name, SMLoc NameLoc,
     Mnemonic = parseRD(Name, 10, NameLoc, Operands);
   } else if (Name.startswith("cvt.l.d")) {
     Mnemonic = parseRD(Name, 7, NameLoc, Operands);
-  } else if (Name.startswith("vfmk.l.") || Name.startswith("vfmk.w.") ||
-             Name.startswith("vfmk.d.") || Name.startswith("vfmk.s.")) {
-    bool ICC = Name[5] == 'l' || Name[5] == 'w' ? true : false;
-    Mnemonic = parseCC(Name, 7, Name.size(), ICC, true, NameLoc, Operands);
-  } else if (Name.startswith("pvfmk.w.lo.") || Name.startswith("pvfmk.w.up.") ||
-             Name.startswith("pvfmk.s.lo.") || Name.startswith("pvfmk.s.up.")) {
-    bool ICC = Name[6] == 'l' || Name[6] == 'w' ? true : false;
-    Mnemonic = parseCC(Name, 11, Name.size(), ICC, true, NameLoc, Operands);
   } else if (Name.startswith("vcvt.w.d.sx") || Name.startswith("vcvt.w.d.zx") ||
              Name.startswith("vcvt.w.s.sx") || Name.startswith("vcvt.w.s.zx")) {
     Mnemonic = parseRD(Name, 11, NameLoc, Operands);
@@ -949,6 +941,14 @@ StringRef VEAsmParser::splitMnemonic(StringRef Name, SMLoc NameLoc,
     Mnemonic = parseRD(Name, 12, NameLoc, Operands);
   } else if (Name.startswith("pvcvt.w.s")) {
     Mnemonic = parseRD(Name, 9, NameLoc, Operands);
+  } else if (Name.startswith("vfmk.l.") || Name.startswith("vfmk.w.") ||
+             Name.startswith("vfmk.d.") || Name.startswith("vfmk.s.")) {
+    bool ICC = Name[5] == 'l' || Name[5] == 'w' ? true : false;
+    Mnemonic = parseCC(Name, 7, Name.size(), ICC, true, NameLoc, Operands);
+  } else if (Name.startswith("pvfmk.w.lo.") || Name.startswith("pvfmk.w.up.") ||
+             Name.startswith("pvfmk.s.lo.") || Name.startswith("pvfmk.s.up.")) {
+    bool ICC = Name[6] == 'l' || Name[6] == 'w' ? true : false;
+    Mnemonic = parseCC(Name, 11, Name.size(), ICC, true, NameLoc, Operands);
   } else {
     Operands->push_back(VEOperand::CreateToken(Mnemonic, NameLoc));
   }
