@@ -672,13 +672,6 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
       {VE::VFMKWyvyl, {VE::PVFMKWUPvml, VE::PVFMKWLOvml}},
       {VE::VFMKSyvl, {VE::PVFMKSUPvl, VE::PVFMKSLOvl}},
       {VE::VFMKSyvyl, {VE::PVFMKSUPvml, VE::PVFMKSLOvml}},
-
-      {VE::veoldVFMKyal, {VE::veoldVFMKLal, VE::veoldVFMKLal}},
-      {VE::veoldVFMKynal, {VE::veoldVFMKLnal, VE::veoldVFMKLnal}},
-      {VE::veoldVFMKWyvl, {VE::veoldPVFMKWUPxvl, VE::veoldPVFMKWLOxvl}},
-      {VE::veoldVFMKWyvyl, {VE::veoldPVFMKWUPxvxl, VE::veoldPVFMKWLOxvxl}},
-      {VE::veoldVFMKSyvl, {VE::veoldPVFMKSUPxvl, VE::veoldPVFMKSLOxvl}},
-      {VE::veoldVFMKSyvyl, {VE::veoldPVFMKSUPxvxl, VE::veoldPVFMKSLOxvxl}},
     };
 
     unsigned Opcode = MI.getOpcode();
@@ -732,123 +725,6 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
 
     MI.eraseFromParent();
 }
-#if 0
-static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
-{
-    // replace to pvfmk.w.up and pvfmk.w.lo
-    // replace to pvfmk.s.up and pvfmk.s.lo
-
-    std::map<int, std::vector<int>> map = {
-      {VE::veoldPVFMKATl, {VE::veoldPVFMKWUPATl, VE::veoldPVFMKWLOATl}},
-      {VE::veoldPVFMKAFl, {VE::veoldPVFMKWUPAFl, VE::veoldPVFMKWLOAFl}},
-      {VE::veoldPVFMKWGTvl, {VE::veoldPVFMKWUPGTvl, VE::veoldPVFMKWLOGTvl}},
-      {VE::veoldPVFMKWLTvl, {VE::veoldPVFMKWUPLTvl, VE::veoldPVFMKWLOLTvl}},
-      {VE::veoldPVFMKWNEvl, {VE::veoldPVFMKWUPNEvl, VE::veoldPVFMKWLONEvl}},
-      {VE::veoldPVFMKWEQvl, {VE::veoldPVFMKWUPEQvl, VE::veoldPVFMKWLOEQvl}},
-      {VE::veoldPVFMKWGEvl, {VE::veoldPVFMKWUPGEvl, VE::veoldPVFMKWLOGEvl}},
-      {VE::veoldPVFMKWLEvl, {VE::veoldPVFMKWUPLEvl, VE::veoldPVFMKWLOLEvl}},
-      {VE::veoldPVFMKWNUMvl, {VE::veoldPVFMKWUPNUMvl, VE::veoldPVFMKWLONUMvl}},
-      {VE::veoldPVFMKWNANvl, {VE::veoldPVFMKWUPNANvl, VE::veoldPVFMKWLONANvl}},
-      {VE::veoldPVFMKWGTNANvl, {VE::veoldPVFMKWUPGTNANvl, VE::veoldPVFMKWLOGTNANvl}},
-      {VE::veoldPVFMKWLTNANvl, {VE::veoldPVFMKWUPLTNANvl, VE::veoldPVFMKWLOLTNANvl}},
-      {VE::veoldPVFMKWNENANvl, {VE::veoldPVFMKWUPNENANvl, VE::veoldPVFMKWLONENANvl}},
-      {VE::veoldPVFMKWEQNANvl, {VE::veoldPVFMKWUPEQNANvl, VE::veoldPVFMKWLOEQNANvl}},
-      {VE::veoldPVFMKWGENANvl, {VE::veoldPVFMKWUPGENANvl, VE::veoldPVFMKWLOGENANvl}},
-      {VE::veoldPVFMKWLENANvl, {VE::veoldPVFMKWUPLENANvl, VE::veoldPVFMKWLOLENANvl}},
-
-      {VE::veoldPVFMKWGTvxl, {VE::veoldPVFMKWUPGTvxl, VE::veoldPVFMKWLOGTvxl}},
-      {VE::veoldPVFMKWLTvxl, {VE::veoldPVFMKWUPLTvxl, VE::veoldPVFMKWLOLTvxl}},
-      {VE::veoldPVFMKWNEvxl, {VE::veoldPVFMKWUPNEvxl, VE::veoldPVFMKWLONEvxl}},
-      {VE::veoldPVFMKWEQvxl, {VE::veoldPVFMKWUPEQvxl, VE::veoldPVFMKWLOEQvxl}},
-      {VE::veoldPVFMKWGEvxl, {VE::veoldPVFMKWUPGEvxl, VE::veoldPVFMKWLOGEvxl}},
-      {VE::veoldPVFMKWLEvxl, {VE::veoldPVFMKWUPLEvxl, VE::veoldPVFMKWLOLEvxl}},
-      {VE::veoldPVFMKWNUMvxl, {VE::veoldPVFMKWUPNUMvxl, VE::veoldPVFMKWLONUMvxl}},
-      {VE::veoldPVFMKWNANvxl, {VE::veoldPVFMKWUPNANvxl, VE::veoldPVFMKWLONANvxl}},
-      {VE::veoldPVFMKWGTNANvxl, {VE::veoldPVFMKWUPGTNANvxl, VE::veoldPVFMKWLOGTNANvxl}},
-      {VE::veoldPVFMKWLTNANvxl, {VE::veoldPVFMKWUPLTNANvxl, VE::veoldPVFMKWLOLTNANvxl}},
-      {VE::veoldPVFMKWNENANvxl, {VE::veoldPVFMKWUPNENANvxl, VE::veoldPVFMKWLONENANvxl}},
-      {VE::veoldPVFMKWEQNANvxl, {VE::veoldPVFMKWUPEQNANvxl, VE::veoldPVFMKWLOEQNANvxl}},
-      {VE::veoldPVFMKWGENANvxl, {VE::veoldPVFMKWUPGENANvxl, VE::veoldPVFMKWLOGENANvxl}},
-      {VE::veoldPVFMKWLENANvxl, {VE::veoldPVFMKWUPLENANvxl, VE::veoldPVFMKWLOLENANvxl}},
-
-      {VE::veoldPVFMKSGTvl, {VE::veoldPVFMKSUPGTvl, VE::veoldPVFMKSLOGTvl}},
-      {VE::veoldPVFMKSGTvxl, {VE::veoldPVFMKSUPGTvxl, VE::veoldPVFMKSLOGTvxl}},
-      {VE::veoldPVFMKSLTvl, {VE::veoldPVFMKSUPLTvl, VE::veoldPVFMKSLOLTvl}},
-      {VE::veoldPVFMKSNEvl, {VE::veoldPVFMKSUPNEvl, VE::veoldPVFMKSLONEvl}},
-      {VE::veoldPVFMKSEQvl, {VE::veoldPVFMKSUPEQvl, VE::veoldPVFMKSLOEQvl}},
-      {VE::veoldPVFMKSGEvl, {VE::veoldPVFMKSUPGEvl, VE::veoldPVFMKSLOGEvl}},
-      {VE::veoldPVFMKSLEvl, {VE::veoldPVFMKSUPLEvl, VE::veoldPVFMKSLOLEvl}},
-      {VE::veoldPVFMKSNUMvl, {VE::veoldPVFMKSUPNUMvl, VE::veoldPVFMKSLONUMvl}},
-      {VE::veoldPVFMKSNANvl, {VE::veoldPVFMKSUPNANvl, VE::veoldPVFMKSLONANvl}},
-      {VE::veoldPVFMKSGTNANvl, {VE::veoldPVFMKSUPGTNANvl, VE::veoldPVFMKSLOGTNANvl}},
-      {VE::veoldPVFMKSLTNANvl, {VE::veoldPVFMKSUPLTNANvl, VE::veoldPVFMKSLOLTNANvl}},
-      {VE::veoldPVFMKSNENANvl, {VE::veoldPVFMKSUPNENANvl, VE::veoldPVFMKSLONENANvl}},
-      {VE::veoldPVFMKSEQNANvl, {VE::veoldPVFMKSUPEQNANvl, VE::veoldPVFMKSLOEQNANvl}},
-      {VE::veoldPVFMKSGENANvl, {VE::veoldPVFMKSUPGENANvl, VE::veoldPVFMKSLOGENANvl}},
-      {VE::veoldPVFMKSLENANvl, {VE::veoldPVFMKSUPLENANvl, VE::veoldPVFMKSLOLENANvl}},
-
-      {VE::veoldPVFMKSGTvxl, {VE::veoldPVFMKSUPGTvxl, VE::veoldPVFMKSLOGTvxl}},
-      {VE::veoldPVFMKSLTvxl, {VE::veoldPVFMKSUPLTvxl, VE::veoldPVFMKSLOLTvxl}},
-      {VE::veoldPVFMKSNEvxl, {VE::veoldPVFMKSUPNEvxl, VE::veoldPVFMKSLONEvxl}},
-      {VE::veoldPVFMKSEQvxl, {VE::veoldPVFMKSUPEQvxl, VE::veoldPVFMKSLOEQvxl}},
-      {VE::veoldPVFMKSGEvxl, {VE::veoldPVFMKSUPGEvxl, VE::veoldPVFMKSLOGEvxl}},
-      {VE::veoldPVFMKSLEvxl, {VE::veoldPVFMKSUPLEvxl, VE::veoldPVFMKSLOLEvxl}},
-      {VE::veoldPVFMKSNUMvxl, {VE::veoldPVFMKSUPNUMvxl, VE::veoldPVFMKSLONUMvxl}},
-      {VE::veoldPVFMKSNANvxl, {VE::veoldPVFMKSUPNANvxl, VE::veoldPVFMKSLONANvxl}},
-      {VE::veoldPVFMKSGTNANvxl, {VE::veoldPVFMKSUPGTNANvxl, VE::veoldPVFMKSLOGTNANvxl}},
-      {VE::veoldPVFMKSLTNANvxl, {VE::veoldPVFMKSUPLTNANvxl, VE::veoldPVFMKSLOLTNANvxl}},
-      {VE::veoldPVFMKSNENANvxl, {VE::veoldPVFMKSUPNENANvxl, VE::veoldPVFMKSLONENANvxl}},
-      {VE::veoldPVFMKSEQNANvxl, {VE::veoldPVFMKSUPEQNANvxl, VE::veoldPVFMKSLOEQNANvxl}},
-      {VE::veoldPVFMKSGENANvxl, {VE::veoldPVFMKSUPGENANvxl, VE::veoldPVFMKSLOGENANvxl}},
-      {VE::veoldPVFMKSLENANvxl, {VE::veoldPVFMKSUPLENANvxl, VE::veoldPVFMKSLOLENANvxl}},
-    };
-
-    unsigned Opcode = MI.getOpcode();
-
-    if (map.find(Opcode) == map.end()) {
-      report_fatal_error("unexpected opcode for pvfmk");
-    }
-
-    unsigned OpcodeUpper = map[Opcode][0];
-    unsigned OpcodeLower = map[Opcode][1];
-
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, TI.get(OpcodeUpper));
-    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower));
-
-    // VM512
-    Bu.addReg(GetVM512Upper(MI.getOperand(0).getReg()));
-    Bl.addReg(GetVM512Lower(MI.getOperand(0).getReg()));
-
-    if (MI.getNumExplicitOperands() == 2) { // _Ml: VM512, VL
-      // VL
-      Bu.addReg(MI.getOperand(1).getReg());
-      Bl.addReg(MI.getOperand(1).getReg());
-    } else if (MI.getNumExplicitOperands() == 3) { // _Mvl: VM512, VR, VL
-      // VR
-      Bu.addReg(MI.getOperand(1).getReg());
-      Bl.addReg(MI.getOperand(1).getReg());
-      // VL
-      Bu.addReg(MI.getOperand(2).getReg());
-      Bl.addReg(MI.getOperand(2).getReg());
-    } else if (MI.getNumExplicitOperands() == 4) { // _MvMl: VM512, VR, VM512, VL
-      // VR
-      Bu.addReg(MI.getOperand(1).getReg());
-      Bl.addReg(MI.getOperand(1).getReg());
-      // VM512
-      Bu.addReg(GetVM512Upper(MI.getOperand(2).getReg()));
-      Bl.addReg(GetVM512Lower(MI.getOperand(2).getReg()));
-      // VL
-      Bu.addReg(MI.getOperand(3).getReg());
-      Bl.addReg(MI.getOperand(3).getReg());
-    } else {
-      report_fatal_error("unexpected number of operands for pvfmk");
-    }
-
-    MI.eraseFromParent();
-}
-#endif
 
 bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   switch (MI.getOpcode()) {
@@ -958,31 +834,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     MI.eraseFromParent();
     return true;
   }
-  case VE::veoldLVMyir_y: {
-    unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
-    unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
-    unsigned VMDu = GetVM512Upper(MI.getOperand(3).getReg());
-    unsigned VMDl = GetVM512Upper(MI.getOperand(3).getReg());
-    int64_t Imm = MI.getOperand(1).getImm();
-    unsigned VMX = VMXl;
-    unsigned VMD = VMDl;
-    if (Imm >= 4) {
-        VMX = VMXu;
-        VMD = VMDu;
-        Imm -= 4;
-    }
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc DL = MI.getDebugLoc();
-    BuildMI(*MBB, MI, DL, get(VE::LVMir_m))
-      .addDef(VMX)
-      .addImm(Imm)
-      .addReg(MI.getOperand(2).getReg())
-      .addReg(VMD);
-    MI.eraseFromParent();
-    return true;
-  }
-  case VE::SVMyi:
-  case VE::veoldSVMyi: {
+  case VE::SVMyi: {
     unsigned Dest = MI.getOperand(0).getReg();
     unsigned VMZu = GetVM512Upper(MI.getOperand(1).getReg());
     unsigned VMZl = GetVM512Lower(MI.getOperand(1).getReg());
@@ -1015,41 +867,6 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::veoldVFMKWyvl: case VE::veoldVFMKWyvyl:
   case VE::veoldVFMKSyvl: case VE::veoldVFMKSyvyl:
     expandPseudoVFMK_VL(*this, MI);
-#if 0
-  case VE::veoldPVFMKATl:
-  case VE::veoldPVFMKAFl:
-  case VE::veoldPVFMKWGTvl: case VE::veoldPVFMKWGTvxl:
-  case VE::veoldPVFMKWLTvl: case VE::veoldPVFMKWLTvxl:
-  case VE::veoldPVFMKWNEvl: case VE::veoldPVFMKWNEvxl:
-  case VE::veoldPVFMKWEQvl: case VE::veoldPVFMKWEQvxl:
-  case VE::veoldPVFMKWGEvl: case VE::veoldPVFMKWGEvxl:
-  case VE::veoldPVFMKWLEvl: case VE::veoldPVFMKWLEvxl:
-  case VE::veoldPVFMKWNUMvl: case VE::veoldPVFMKWNUMvxl:
-  case VE::veoldPVFMKWNANvl: case VE::veoldPVFMKWNANvxl:
-  case VE::veoldPVFMKWGTNANvl: case VE::veoldPVFMKWGTNANvxl:
-  case VE::veoldPVFMKWLTNANvl: case VE::veoldPVFMKWLTNANvxl:
-  case VE::veoldPVFMKWNENANvl: case VE::veoldPVFMKWNENANvxl:
-  case VE::veoldPVFMKWEQNANvl: case VE::veoldPVFMKWEQNANvxl:
-  case VE::veoldPVFMKWGENANvl: case VE::veoldPVFMKWGENANvxl:
-  case VE::veoldPVFMKWLENANvl: case VE::veoldPVFMKWLENANvxl:
-  case VE::veoldPVFMKSGTvl: case VE::veoldPVFMKSGTvxl:
-  case VE::veoldPVFMKSLTvl: case VE::veoldPVFMKSLTvxl:
-  case VE::veoldPVFMKSNEvl: case VE::veoldPVFMKSNEvxl:
-  case VE::veoldPVFMKSEQvl: case VE::veoldPVFMKSEQvxl:
-  case VE::veoldPVFMKSGEvl: case VE::veoldPVFMKSGEvxl:
-  case VE::veoldPVFMKSLEvl: case VE::veoldPVFMKSLEvxl:
-  case VE::veoldPVFMKSNUMvl: case VE::veoldPVFMKSNUMvxl:
-  case VE::veoldPVFMKSNANvl: case VE::veoldPVFMKSNANvxl:
-  case VE::veoldPVFMKSGTNANvl: case VE::veoldPVFMKSGTNANvxl:
-  case VE::veoldPVFMKSLTNANvl: case VE::veoldPVFMKSLTNANvxl:
-  case VE::veoldPVFMKSNENANvl: case VE::veoldPVFMKSNENANvxl:
-  case VE::veoldPVFMKSEQNANvl: case VE::veoldPVFMKSEQNANvxl:
-  case VE::veoldPVFMKSGENANvl: case VE::veoldPVFMKSGENANvxl:
-  case VE::veoldPVFMKSLENANvl: case VE::veoldPVFMKSLENANvxl: {
-    expandPseudoVFMK_VL(*this, MI);
-    return true;
-  }
-#endif
   }
   return false;
 }
