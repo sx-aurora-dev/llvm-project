@@ -41,15 +41,6 @@ def veoldLSVir_v : RV<0x8e, (outs V64:$vx), (ins simm7:$sy, I64:$sz, V64:$pt),
   let isCodeGenOnly = 1;
 }
 
-// tempolary
-def veoldVOR1vl : RV<0xc5, (outs V64:$vx), (ins uimm6:$sy, V64:$vz, I32:$vl),
-       "vor $vx,($sy)1,$vz", [], NoItinerary>
-{
-  let DecoderNamespace = "VEL";
-  let isCodeGenOnly = 1;
-  let DisableEncoding = "$vl";
-}
-
 // vfmk
 
 class PseudoVFMK<dag ins, string asm> : Pseudo<(outs VM512:$vmx), ins, asm, []> {
