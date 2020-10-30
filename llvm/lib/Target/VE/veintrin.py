@@ -349,48 +349,6 @@ class Inst(object):
 
     def hasInst(self): return self.inst_ != None
 
-    def instDefine(self):
-        print("// inst={} asm={} intrisic={}".format(self.inst(), self.asm(), self.intrinsicName()))
-
-        def fmtOps(ops):
-            return ", ".join(["{}:${}".format(op.regClass(), op.regName()) for op in ops])
-
-        outs = fmtOps(self.outs)
-        ins = fmtOps(getLLVMInstArgs(self.ins, self))
-        tmp = [op for op in self.ins if op.regName() not in ["pt", "vl", "ptm"]]
-        asmArgs = ",".join(["${}".format(op.regName()) for op in self.outs + tmp])
-
-        instName = self.llvmInst()
-
-        if self.opc:
-            s = "def {} : RV<0x{:x}, (outs {}), (ins {}),\n".format(instName, self.opc, outs, ins)
-            s += '       "{} {}",'.format(self.asm(), asmArgs) # asmstr
-            s += " [], NoItinerary>\n" # pattern
-        else:
-            s = "def {} : Pseudo<(outs {}), (ins {}),\n".format(instName, outs, ins)
-            s += '       "# {} {}",'.format(self.asm(), asmArgs) # asmstr
-            s += " []>\n" # pattern
-        s += "{\n"
-#        if self.opc:
-#            if len(self.ins) > 2 and self.ins[1].kind == "s":
-#                s += '  let cs = 1;\n'
-#            if self.isPacked():
-#                s += '  let cx = 1;\n'
-#                s += '  let cx2 = 1;\n'
-#            if self.isMasked():
-#                s += '  bits<4> vm;\n'
-#                s += '  let m = vm;\n'
-        if self.hasPassThroughOp():
-            s += '  let Constraints = "${} = $pt";\n'.format(self.outs[0].regName())
-        if self.hasPassThroughMaskOp():
-            s += '  let Constraints = "${} = $ptm";\n'.format(self.outs[0].regName())
-        s += '  let DecoderNamespace = "VEL";\n'
-        s += '  let isCodeGenOnly = 1;\n'
-        if self.hasVLOp():
-            s += '  let DisableEncoding = "$vl";\n'
-        s += "}\n"
-        return s
-
     # to be included from IntrinsicsVE.td
     def intrinsicDefine(self):
         outs = ", ".join(["{}".format(op.intrinDefType()) for op in self.outs])
@@ -444,21 +402,6 @@ class DummyInst(Inst):
     def isDummy(self): return True
 
 class InstVEL(Inst):
-#    def __init__(self, opc, inst, asm, intrinsicName, outs, ins, **kwargs):
-#        #sys.stderr.write("inst={} subop={} asm={}\n".format(inst, kwargs['subop'], asm))
-#        if 'llvmInst' not in kwargs:
-#            if asm:
-#                suffix = "".join([op.kind for op in outs + ins])
-#                llvmInst = re.sub("\.", "", asm) + "_" + suffix
-#            else:
-#                llvmInst = None
-#            kwargs['llvmInst'] = llvmInst
-#
-#        super(InstVEL, self).__init__(opc, inst, asm, intrinsicName, outs, ins, **kwargs)
-#
-#        self.funcPrefix_ = "_vel_"
-#        self.llvmIntrinsicPrefix_ = "_ve_vl_" # we have to start from "_ve_" in LLVM
-
     def __init__(self, opc, inst, asm, intrinsicName, outs, ins, **kwargs):
         #sys.stderr.write("inst={} subop={} asm={}\n".format(inst, kwargs['subop'], asm))
         if 'llvmInst' not in kwargs:
@@ -1371,17 +1314,17 @@ def createInstructionTable():
     
     T.Section("Table 3-23 Vector Mask Register Instructions", 34)
     T.Def(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}", noVL=True)
-    T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}", noVL=True, llvmInst="ANDMyy").old()
+    T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}", noVL=True, llvmInst="ANDMyy")
     T.Def(0x85, "ORM", "",  "orm",  [[VMX, VMY, VMZ]], "{0} = {1} | {2}", noVL=True)
-    T.Def(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}", noVL=True, llvmInst="ORMyy").old()
+    T.Def(None, "ORM", "p",  "orm",  [[VMX512, VMY512, VMZ512]], "{0} = {1} | {2}", noVL=True, llvmInst="ORMyy")
     T.Def(0x86, "XORM", "", "xorm", [[VMX, VMY, VMZ]], "{0} = {1} ^ {2}", noVL=True)
-    T.Def(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}", noVL=True, llvmInst="XORMyy").old()
+    T.Def(None, "XORM", "p", "xorm", [[VMX512, VMY512, VMZ512]], "{0} = {1} ^ {2}", noVL=True, llvmInst="XORMyy")
     T.Def(0x87, "EQVM", "", "eqvm", [[VMX, VMY, VMZ]], "{0} = ~({1} ^ {2})", noVL=True)
-    T.Def(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})", noVL=True, llvmInst="EQVMyy").old()
+    T.Def(None, "EQVM", "p", "eqvm", [[VMX512, VMY512, VMZ512]], "{0} = ~({1} ^ {2})", noVL=True, llvmInst="EQVMyy")
     T.Def(0x94, "NNDM", "", "nndm", [[VMX, VMY, VMZ]], "{0} = (~{1}) & {2}", noVL=True)
-    T.Def(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}", noVL=True, llvmInst="NNDMyy").old()
+    T.Def(None, "NNDM", "p", "nndm", [[VMX512, VMY512, VMZ512]], "{0} = (~{1}) & {2}", noVL=True, llvmInst="NNDMyy")
     T.Def(0x95, "NEGM", "", "negm", [[VMX, VMY]], "{0} = ~{1}", noVL=True)
-    T.Def(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}", noVL=True, llvmInst="NEGMy").old()
+    T.Def(None, "NEGM", "p", "negm", [[VMX512, VMY512]], "{0} = ~{1}", noVL=True, llvmInst="NEGMy")
     T.Def(0xA4, "PCVM", "", "pcvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA5, "LZVM", "", "lzvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA6, "TOVM", "", "tovm", [[SX(T_u64), VMY]]).noTest();
@@ -1448,11 +1391,6 @@ def gen_test(insts, directory):
             else:
                 print(data)
 
-def gen_inst_def(insts):
-    for I in insts:
-        if I.hasLLVMInstDefine():
-            print(I.instDefine())
-
 def gen_intrinsic_def(insts):
     for I in insts:
         if not I.hasImmOp() and I.hasIntrinsicDef():
@@ -1460,7 +1398,7 @@ def gen_intrinsic_def(insts):
 
 def gen_pattern(insts):
     for I in insts:
-        if I.hasInst()and I.hasPat():
+        if I.hasInst() and I.hasPat() and (not I.isNotYetImplemented()):
             print(I.pattern())
 
 def gen_builtin(insts):
@@ -1473,20 +1411,12 @@ def gen_veintrin_h(insts):
         if (not I.hasImmOp()) and I.hasBuiltin():
             print(I.veintrin())
 
-def gen_vl_index(insts):
-    print("default: return -1;")
-    for I in insts:
-        if I.hasLLVMInstDefine() and I.hasVLOp():
-            index = len(I.outs) + getLLVMInstArgs(I.ins, I).index(VL)
-            print("case VE::{}: return {};".format(I.llvmInst(), index))
-
 
 import argparse
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-i', '--intrin', dest="opt_intrin", action="store_true")
-    parser.add_argument('--inst', dest="opt_inst", action="store_true")
     parser.add_argument('-p', "--pattern", dest="opt_pat", action="store_true")
     parser.add_argument('-b', dest="opt_builtin", action="store_true")
     parser.add_argument('--veintrin', dest="opt_veintrin", action="store_true")
@@ -1499,7 +1429,6 @@ def main():
     parser.add_argument('--html-no-link', action="store_true")
     parser.add_argument('-l', dest="opt_lowering", action="store_true")
     parser.add_argument('--test-dir', default="../../llvm-ve-intrinsic-test/gen/tests")
-    parser.add_argument('--vl-index', action="store_true");
     args, others = parser.parse_known_args()
     
     T = createInstructionTable()
@@ -1510,7 +1439,6 @@ def main():
         print("filter: {} -> {}".format(args.opt_filter, len(insts)))
     
     if args.opt_all:
-        args.opt_inst = True
         args.opt_intrin = True
         args.opt_pat = True
         args.opt_builtin = True
@@ -1521,8 +1449,6 @@ def main():
         #args.opt_html = True
         test_dir = None
 
-    if args.opt_inst:
-        gen_inst_def(insts)
     if args.opt_intrin:
         gen_intrinsic_def(insts)
     if args.opt_pat:
@@ -1563,8 +1489,6 @@ def main():
         HtmlManualPrinter().printAll(T, False)
     if args.html_no_link:
         HtmlManualPrinter().printAll(T, True)
-    if args.vl_index:
-        gen_vl_index(insts)
     
 if __name__ == "__main__":
     main()
