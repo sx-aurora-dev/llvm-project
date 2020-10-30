@@ -652,7 +652,7 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
       break;
   }
-  case VE::veoldNEGMy:
+  case VE::NEGMy:
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu);
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl);
       break;
@@ -773,12 +773,12 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   }
 #endif
 
-  case VE::veoldANDMyy: buildVMRInst(MI, get(VE::ANDMmm)); return true;
-  case VE::veoldORMyy:  buildVMRInst(MI, get(VE::ORMmm)); return true;
-  case VE::veoldXORMyy: buildVMRInst(MI, get(VE::XORMmm)); return true;
-  case VE::veoldEQVMyy: buildVMRInst(MI, get(VE::EQVMmm)); return true;
-  case VE::veoldNNDMyy: buildVMRInst(MI, get(VE::NNDMmm)); return true;
-  case VE::veoldNEGMy: buildVMRInst(MI, get(VE::NEGMm)); return true;
+  case VE::ANDMyy: buildVMRInst(MI, get(VE::ANDMmm)); return true;
+  case VE::ORMyy:  buildVMRInst(MI, get(VE::ORMmm)); return true;
+  case VE::XORMyy: buildVMRInst(MI, get(VE::XORMmm)); return true;
+  case VE::EQVMyy: buildVMRInst(MI, get(VE::EQVMmm)); return true;
+  case VE::NNDMyy: buildVMRInst(MI, get(VE::NNDMmm)); return true;
+  case VE::NEGMy: buildVMRInst(MI, get(VE::NEGMm)); return true;
 
   case VE::LVMyir:
   case VE::LVMyim:
