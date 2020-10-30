@@ -1450,7 +1450,7 @@ def gen_test(insts, directory):
 
 def gen_inst_def(insts):
     for I in insts:
-        if (not I.useNew()) and I.hasLLVMInstDefine():
+        if (not I.useNew()) and I.hasLLVMInstDefine() and (not I.isNotYetImplemented()):
             print(I.instDefine())
 
 def gen_intrinsic_def(insts):
@@ -1460,7 +1460,7 @@ def gen_intrinsic_def(insts):
 
 def gen_pattern(insts):
     for I in insts:
-        if I.hasInst()and I.hasPat():
+        if I.hasInst() and I.hasPat() and (not I.isNotYetImplemented()):
             print(I.pattern())
 
 def gen_builtin(insts):
