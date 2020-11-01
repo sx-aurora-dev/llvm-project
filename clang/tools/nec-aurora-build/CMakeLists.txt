@@ -7,6 +7,14 @@ endif()
 find_program(NECAURORA_TARGET_COMPILER_NCC
   NAMES
     ncc
+    ncc-3.1.0
+    ncc-3.0.8
+    ncc-3.0.7
+    ncc-3.0.6
+    ncc-3.0.4
+    ncc-3.0.1
+    ncc-2.5.1
+    ncc-2.4.1
     ncc-2.3.1
     ncc-2.3.0
   DOC "NEC target compiler."
@@ -38,29 +46,54 @@ set(NECAURORA_DEFAULT_TARGET_COMPILER
     "Default target compiler for NEC OpenMP target (-fopenmp-nec-compiler=<this_value>)")
 message("OMPT for SX-Aurora: Using the default target compiler option \"${NECAURORA_DEFAULT_TARGET_COMPILER}\"" )
 
+  find_library(
+      NECAURORA_LIBAVEOVE_STATIC
+    NAMES
+      libaveoVE.a
+    PATHS
+      /usr/lib
+      /usr/local/lib
+      /opt/lcoal/lib
+      /sw/lib
+      /opt/nec/ve/lib
+      ENV LIBRARY_PATH)
+
 find_library(
-   NECAURORA_LIBVEORUN_STATIC
+    NECAURORA_LIBURPCVE_STATIC
   NAMES
-    libveorun.a
+    liburpcVE_omp.a
   PATHS
     /usr/lib
     /usr/local/lib
-    /opt/local/lib
+    /opt/lcoal/lib
     /sw/lib
     /opt/nec/ve/lib
-    ENV LIBRARY_PATH
-    ENV LD_LIBRARY_PATH)
+    ENV LIBRARY_PATH)
 
-set(NECAURORA_STATIC_LINKING_AVAILABLE 1)
+find_library(
+    NECAURORA_LIBVEIO
+  NAMES
+    libveio.so
+  PATHS
+    /usr/lib
+    /usr/local/lib
+    /opt/lcoal/lib
+    /sw/lib
+    /opt/nec/ve/lib
+    ENV LIBRARY_PATH)
 
-if (NECAURORA_LIBVEORUN_STATIC)
-    message(STATUS "Found libveorun.a")
-    set(LIBVEORUN_STATIC_PATH "${NECAURORA_LIBVEORUN_STATIC}")
+# We have all libraries: We can have the wrapper statically link stuff
+if(NECAURORA_LIBAVEOVE_STATIC AND NECAURORA_LIBURPCVE_STATIC AND NECAURORA_LIBVEIO)
+  get_filename_component(LIBVEIO_DIR ${NECAURORA_LIBVEIO} DIRECTORY)
+  set(STATIC_LIBRARY_PATHS "${NECAURORA_LIBAVEOVE_STATIC}")
+  set(STATIC_LIBRARY_PATHS "${STATIC_LIBRARY_PATHS} ${NECAURORA_LIBURPCVE_STATIC}")
+  set(STATIC_LIBRARY_PATHS "${STATIC_LIBRARY_PATHS} -Wl,-rpath,${LIBVEIO_DIR} -lveio")
+else()
+  unset(STATIC_LIBRARY_PATHS)
 endif()
 
 find_package(NECAURORA_LIBELF)
 if(NOT NECAURORA_LIBELF_FOUND)
-  # TODO: Really fatal error? Can we just exclude static linking?
   message(FATAL_ERROR "LIBELF not found.")
 endif()
 
