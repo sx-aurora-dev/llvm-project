@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 
-define zeroext i1 @setcceq(i32 signext, i32 signext) {
+define zeroext i1 @setcceq(i32, i32) {
 ; CHECK-LABEL: setcceq:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
@@ -11,7 +11,7 @@ define zeroext i1 @setcceq(i32 signext, i32 signext) {
   ret i1 %3
 }
 
-define zeroext i1 @setccne(i32 signext, i32 signext) {
+define zeroext i1 @setccne(i32, i32) {
 ; CHECK-LABEL: setccne:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
@@ -22,7 +22,7 @@ define zeroext i1 @setccne(i32 signext, i32 signext) {
   ret i1 %3
 }
 
-define zeroext i1 @setccugt(i32 signext, i32 signext) {
+define zeroext i1 @setccugt(i32, i32) {
 ; CHECK-LABEL: setccugt:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
@@ -32,7 +32,7 @@ define zeroext i1 @setccugt(i32 signext, i32 signext) {
   ret i1 %3
 }
 
-define zeroext i1 @setccuge(i32 signext, i32 signext) {
+define zeroext i1 @setccuge(i32, i32) {
 ; CHECK-LABEL: setccuge:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
@@ -43,7 +43,7 @@ define zeroext i1 @setccuge(i32 signext, i32 signext) {
   ret i1 %3
 }
 
-define zeroext i1 @setccult(i32 signext, i32 signext) {
+define zeroext i1 @setccult(i32, i32) {
 ; CHECK-LABEL: setccult:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.w %s0, %s0, %s1
@@ -53,7 +53,7 @@ define zeroext i1 @setccult(i32 signext, i32 signext) {
   ret i1 %3
 }
 
-define zeroext i1 @setccule(i32 signext, i32 signext) {
+define zeroext i1 @setccule(i32, i32) {
 ; CHECK-LABEL: setccule:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmpu.w %s0, %s1, %s0
@@ -64,7 +64,7 @@ define zeroext i1 @setccule(i32 signext, i32 signext) {
   ret i1 %3
 }
 
-define zeroext i1 @setccsgt(i32 signext, i32 signext) {
+define zeroext i1 @setccsgt(i32, i32) {
 ; CHECK-LABEL: setccsgt:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmps.w.zx %s0, %s1, %s0
@@ -74,7 +74,7 @@ define zeroext i1 @setccsgt(i32 signext, i32 signext) {
   ret i1 %3
 }
 
-define zeroext i1 @setccsge(i32 signext, i32 signext) {
+define zeroext i1 @setccsge(i32, i32) {
 ; CHECK-LABEL: setccsge:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
@@ -85,7 +85,7 @@ define zeroext i1 @setccsge(i32 signext, i32 signext) {
   ret i1 %3
 }
 
-define zeroext i1 @setccslt(i32 signext, i32 signext) {
+define zeroext i1 @setccslt(i32, i32) {
 ; CHECK-LABEL: setccslt:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmps.w.zx %s0, %s0, %s1
@@ -95,7 +95,7 @@ define zeroext i1 @setccslt(i32 signext, i32 signext) {
   ret i1 %3
 }
 
-define zeroext i1 @setccsle(i32 signext, i32 signext) {
+define zeroext i1 @setccsle(i32, i32) {
 ; CHECK-LABEL: setccsle:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    cmps.w.zx %s0, %s1, %s0

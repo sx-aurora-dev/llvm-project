@@ -1071,9 +1071,12 @@ SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
     SDValue RHS = N->getOperand(1);
     APInt LHSMask = APInt::getLowBitsSet(LHS.getValueSizeInBits(), 32);
     APInt RHSMask = APInt::getLowBitsSet(RHS.getValueSizeInBits(), 5);
-    if ((SimplifyDemandedBits(N->getOperand(0), LHSMask, DCI)) ||
-        (SimplifyDemandedBits(N->getOperand(1), RHSMask, DCI)))
-      return SDValue();
+    if (SimplifyDemandedBits(N->getOperand(0), LHSMask, DCI) ||
+        SimplifyDemandedBits(N->getOperand(1), RHSMask, DCI)) {
+      if (N->getOpcode() != ISD::DELETED_NODE)
+        DCI.AddToWorklist(N);
+      return SDValue(N, 0);
+    }
     break;
   }
   case RISCVISD::FMV_X_ANYEXTW_RV64: {
@@ -1083,9 +1086,9 @@ SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
     // conversion is unnecessary and can be replaced with an ANY_EXTEND
     // of the FMV_W_X_RV64 operand.
     if (Op0->getOpcode() == RISCVISD::FMV_W_X_RV64) {
-      SDValue AExtOp =
-          DAG.getNode(ISD::ANY_EXTEND, DL, MVT::i64, Op0.getOperand(0));
-      return DCI.CombineTo(N, AExtOp);
+      assert(Op0.getOperand(0).getValueType() == MVT::i64 &&
+             "Unexpected value type!");
+      return Op0.getOperand(0);
     }
 
     // This is a target-specific version of a DAGCombine performed in
@@ -1098,15 +1101,13 @@ SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
     SDValue NewFMV = DAG.getNode(RISCVISD::FMV_X_ANYEXTW_RV64, DL, MVT::i64,
                                  Op0.getOperand(0));
     APInt SignBit = APInt::getSignMask(32).sext(64);
-    if (Op0.getOpcode() == ISD::FNEG) {
-      return DCI.CombineTo(N,
-                           DAG.getNode(ISD::XOR, DL, MVT::i64, NewFMV,
-                                       DAG.getConstant(SignBit, DL, MVT::i64)));
-    }
+    if (Op0.getOpcode() == ISD::FNEG)
+      return DAG.getNode(ISD::XOR, DL, MVT::i64, NewFMV,
+                         DAG.getConstant(SignBit, DL, MVT::i64));
+
     assert(Op0.getOpcode() == ISD::FABS);
-    return DCI.CombineTo(N,
-                         DAG.getNode(ISD::AND, DL, MVT::i64, NewFMV,
-                                     DAG.getConstant(~SignBit, DL, MVT::i64)));
+    return DAG.getNode(ISD::AND, DL, MVT::i64, NewFMV,
+                       DAG.getConstant(~SignBit, DL, MVT::i64));
   }
   }
 
@@ -2673,7 +2674,7 @@ RISCVTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
   // official names. However, other frontends like `rustc` do not. This allows
   // users of these frontends to use the ABI names for registers in LLVM-style
   // register constraints.
-  Register XRegFromAlias = StringSwitch<Register>(Constraint.lower())
+  unsigned XRegFromAlias = StringSwitch<unsigned>(Constraint.lower())
                                .Case("{zero}", RISCV::X0)
                                .Case("{ra}", RISCV::X1)
                                .Case("{sp}", RISCV::X2)
@@ -2718,8 +2719,8 @@ RISCVTargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
   // The second case is the ABI name of the register, so that frontends can also
   // use the ABI names in register constraint lists.
   if (Subtarget.hasStdExtF() || Subtarget.hasStdExtD()) {
-    std::pair<Register, Register> FReg =
-        StringSwitch<std::pair<Register, Register>>(Constraint.lower())
+    std::pair<unsigned, unsigned> FReg =
+        StringSwitch<std::pair<unsigned, unsigned>>(Constraint.lower())
             .Cases("{f0}", "{ft0}", {RISCV::F0_F, RISCV::F0_D})
             .Cases("{f1}", "{ft1}", {RISCV::F1_F, RISCV::F1_D})
             .Cases("{f2}", "{ft2}", {RISCV::F2_F, RISCV::F2_D})

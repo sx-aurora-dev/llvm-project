@@ -74,6 +74,10 @@ enum NodeType : unsigned {
 class VETargetLowering : public TargetLowering {
   const VESubtarget *Subtarget;
 
+  void initRegisterClasses();
+  void initSPUActions();
+  // TODO void initVPUActions();
+
 public:
   VETargetLowering(const TargetMachine &TM, const VESubtarget &STI);
 
