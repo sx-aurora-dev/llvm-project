@@ -157,10 +157,6 @@ def zero : Operand<i32>, PatLeaf<(imm), [{
     return N->getSExtValue() == 0; }]> {
   let ParserMatchClass = ZeroAsmOperand;
 }
-def zerofp : Operand<i32>, PatLeaf<(fpimm), [{
-    return getFpImmVal(N) == 0; }]> {
-  let ParserMatchClass = ZeroAsmOperand;
-}
 
 // uimm0to2 - Special immediate value represents 0, 1, and 2.
 def UImm0to2AsmOperand : AsmOperandClass {
@@ -244,6 +240,12 @@ def mimm : Operand<i32>, PatLeaf<(imm), [{
     return isMImmVal(getImmVal(N)); }], MIMM> {
   let ParserMatchClass = MImmAsmOperand;
   let PrintMethod = "printMImmOperand";
+}
+
+// zerofp - Generic fp immediate zero value.
+def zerofp : Operand<i32>, PatLeaf<(fpimm), [{
+    return getFpImmVal(N) == 0; }]> {
+  let ParserMatchClass = ZeroAsmOperand;
 }
 
 // simm7fp - Generic fp immediate value.
