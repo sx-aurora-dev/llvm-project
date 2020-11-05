@@ -12,35 +12,23 @@
 ///
 //===----------------------------------------------------------------------===//
 
-
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/Type.h"
 
 #include "TargetRegionVariable.h"
 
-TargetRegionVariable::TargetRegionVariable(const clang::CapturedStmt::Capture *Capture, const std::map<clang::VarDecl *, clang::Expr *> &MappingLowerBounds)
+TargetRegionVariable::TargetRegionVariable(
+    const clang::CapturedStmt::Capture *Capture,
+    const std::map<clang::VarDecl *, clang::Expr *> &MappingLowerBounds)
     : Capture(Capture), Decl(Capture->getCapturedVar()),
-      OmpMappingLowerBound(MappingLowerBounds) {
+      OmpMappingLowerBound(MappingLowerBounds), NumVariableArrayDims(0) {
 
   VarName = Decl->getDeclName().getAsString();
 
-  auto DeclType = Decl->getType();
-  // If Decl is an array: get to the base type
-  if (auto *AT = llvm::dyn_cast<clang::ArrayType>(DeclType.getTypePtr())) {
-    while (auto *NAT =  llvm::dyn_cast<clang::ArrayType>(AT->getElementType().getTypePtr())) {
-      AT = NAT;
-    }
-    TypeName = AT->getElementType().getAsString();
-  } else {
-    TypeName = DeclType.getAsString();
-  }
-
-  if (auto ArrayType = llvm::dyn_cast<clang::ArrayType>(Decl->getType().getTypePtr())) {
-    determineDimensionSizes(ArrayType, 0);
-  }
+  determineShapes(Decl->getType());
 }
-
+/*
 void TargetRegionVariable::determineDimensionSizes(
     const clang::ArrayType *T, unsigned int CurrentDimension) {
   if (auto *SubArray = llvm::dyn_cast_or_null<clang::ConstantArrayType>(T)) {
@@ -62,10 +50,30 @@ void TargetRegionVariable::determineDimensionSizes(
   if (NextDimensionArray) {
     determineDimensionSizes(NextDimensionArray, CurrentDimension);
   }
+}*/
+
+void TargetRegionVariable::determineShapes(const clang::QualType T) {
+  if (const auto *AT = llvm::dyn_cast<clang::ArrayType>(T.getTypePtr())) {
+    if (const auto *CAT = llvm::dyn_cast<clang::ConstantArrayType>(AT)) {
+      Shapes.push_back(TargetRegionVariableShape(CAT));
+    } else if (const auto *VAT = llvm::dyn_cast<clang::VariableArrayType>(AT)) {
+      Shapes.push_back(TargetRegionVariableShape(VAT, NumVariableArrayDims));
+    }
+    NumVariableArrayDims++;
+    return determineShapes(AT->getElementType());
+  } else if (auto *PT = llvm::dyn_cast<clang::PointerType>(T.getTypePtr())) {
+    Shapes.push_back(TargetRegionVariableShape());
+    return determineShapes(PT->getPointeeType());
+  } else {
+    BaseTypeName = T.getAsString();
+  }
 }
 
 bool TargetRegionVariable::isArray() const {
-  return llvm::isa<clang::ArrayType>(Decl->getType().getTypePtr());
+  if (!Shapes.empty() && Shapes[0].isArray()) {
+    return true;
+  }
+  return false;
 }
 
 bool TargetRegionVariable::passedByPointer() const {
