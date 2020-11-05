@@ -115,6 +115,8 @@ public:
   void Leave(const parser::OpenMPCancelConstruct &);
   void Enter(const parser::OpenMPCancellationPointConstruct &);
   void Leave(const parser::OpenMPCancellationPointConstruct &);
+  void Enter(const parser::OpenMPCriticalConstruct &);
+  void Leave(const parser::OpenMPCriticalConstruct &);
 
   void Leave(const parser::OmpClauseList &);
   void Enter(const parser::OmpClause &);
@@ -150,6 +152,7 @@ public:
   void Enter(const parser::OmpClause::IsDevicePtr &);
 
   void Enter(const parser::OmpAlignedClause &);
+  void Enter(const parser::OmpAllocateClause &);
   void Enter(const parser::OmpDefaultClause &);
   void Enter(const parser::OmpDefaultmapClause &);
   void Enter(const parser::OmpDependClause &);

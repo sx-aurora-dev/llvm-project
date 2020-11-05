@@ -22,7 +22,7 @@ define dso_local void @vsrawzx_vvsl_imm(i32* %0, i32* %1, i32 signext %2) local_
   %12 = select i1 %11, i32 %10, i32 256
   %13 = bitcast i32* %8 to i8*
   %14 = tail call <256 x double> @llvm.ve.vl.vldlsx.vssl(i64 4, i8* %13, i32 %12)
-  %15 = tail call <256 x double> @llvm.ve.vl.vsrawzx.vvsl(<256 x double> %14, i64 3, i32 %12)
+  %15 = tail call <256 x double> @llvm.ve.vl.vsrawzx.vvsl(<256 x double> %14, i32 3, i32 %12)
   %16 = bitcast i32* %7 to i8*
   tail call void @llvm.ve.vl.vstl.vssl(<256 x double> %15, i64 4, i8* %16, i32 %12)
   %17 = getelementptr inbounds i32, i32* %7, i64 256
@@ -36,7 +36,7 @@ define dso_local void @vsrawzx_vvsl_imm(i32* %0, i32* %1, i32 signext %2) local_
 declare <256 x double> @llvm.ve.vl.vldlsx.vssl(i64, i8*, i32) #1
 
 ; Function Attrs: nounwind readnone
-declare <256 x double> @llvm.ve.vl.vsrawzx.vvsl(<256 x double>, i64, i32) #2
+declare <256 x double> @llvm.ve.vl.vsrawzx.vvsl(<256 x double>, i32, i32) #2
 
 ; Function Attrs: nounwind writeonly
 declare void @llvm.ve.vl.vstl.vssl(<256 x double>, i64, i8*, i32) #3

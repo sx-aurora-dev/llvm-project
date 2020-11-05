@@ -330,7 +330,7 @@ void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   emitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
-static void emit_vxl(MCStreamer &OutStreamer, unsigned OC,
+static void emit_vml(MCStreamer &OutStreamer, unsigned OC,
                        MCOperand &InV,
                        MCOperand &Mask, MCOperand &VL,
                        MCOperand &ResV,
@@ -346,24 +346,7 @@ static void emit_vxl(MCStreamer &OutStreamer, unsigned OC,
   OutStreamer.emitInstruction(Inst, STI);
 }
 
-static void emit_vxl_v(MCStreamer &OutStreamer, unsigned OC,
-                       MCOperand &InV,
-                       MCOperand &Mask, MCOperand &PassthruV, MCOperand &VL,
-                       MCOperand &ResV,
-                       const MCSubtargetInfo &STI) {
-  MCInst Inst;
-  Inst.setOpcode(OC);
-  // ins
-  Inst.addOperand(InV); // v
-  Inst.addOperand(Mask); // x
-  Inst.addOperand(VL); // l
-  Inst.addOperand(PassthruV); // _v
-  // outs
-  Inst.addOperand(ResV);
-  OutStreamer.emitInstruction(Inst, STI);
-}
-
-static void emit_rdvxl(MCStreamer &OutStreamer, unsigned OC,
+static void emit_rdvml(MCStreamer &OutStreamer, unsigned OC,
                        MCOperand &RdV,
                        MCOperand &InV,
                        MCOperand &Mask, MCOperand &VL,
@@ -395,7 +378,7 @@ static MCOperand getImmOperand(const MachineOperand& MO) {
 void VEAsmPrinter::lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
                                                  const MCSubtargetInfo &STI) {
   switch (MI->getOpcode()) {
-    case VE::VCVTLSvxl_v: {
+    case VE::VCVTLSvml_v: {
       auto ResV = getRegOperand(MI->getOperand(0));
       auto RdOpV = getImmOperand(MI->getOperand(1));
       auto SrcV = getRegOperand(MI->getOperand(2));
@@ -403,18 +386,18 @@ void VEAsmPrinter::lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
       auto VL = getRegOperand(MI->getOperand(4));
       // auto PassthruV = getRegOperand(MI->getOperand(5));
 
-      emit_vxl(*OutStreamer, VE::VCVTDSvxl, ResV, SrcV, Mask, VL, STI);
-      emit_rdvxl(*OutStreamer, VE::VCVTLDvxl, ResV, RdOpV, ResV, Mask, VL, STI);
+      emit_vml(*OutStreamer, VE::VCVTDSvml, ResV, SrcV, Mask, VL, STI);
+      emit_rdvml(*OutStreamer, VE::VCVTLDvml, ResV, RdOpV, ResV, Mask, VL, STI);
     } break;
-    case VE::VCVTSLvxl_v: {
+    case VE::VCVTSLvml_v: {
       auto ResV = getRegOperand(MI->getOperand(0));
       auto SrcV = getRegOperand(MI->getOperand(1));
       auto Mask = getRegOperand(MI->getOperand(2));
       auto VL = getRegOperand(MI->getOperand(3));
       // auto PassthruV = getRegOperand(MI->getOperand(4));
 
-      emit_vxl(*OutStreamer, VE::VCVTDLvxl, ResV, SrcV, Mask, VL, STI);
-      emit_vxl(*OutStreamer, VE::VCVTSDvxl, ResV, ResV, Mask, VL, STI);
+      emit_vml(*OutStreamer, VE::VCVTDLvml, ResV, SrcV, Mask, VL, STI);
+      emit_vml(*OutStreamer, VE::VCVTSDvml, ResV, ResV, Mask, VL, STI);
     } break;
   }
 }
@@ -427,8 +410,8 @@ void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
   case TargetOpcode::DBG_VALUE:
     // FIXME: Debug Value.
     return;
-  case VE::VCVTLSvxl_v:
-  case VE::VCVTSLvxl_v:
+  case VE::VCVTLSvml_v:
+  case VE::VCVTSLvml_v:
     lowerFPConversionAndEmitMCInsts(MI, getSubtargetInfo());
     return;
 

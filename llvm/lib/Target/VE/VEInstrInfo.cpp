@@ -346,7 +346,7 @@ static void copyPhysSubRegs(MachineBasicBlock &MBB,
       MachineInstrBuilder MIB =
           BuildMI(MBB, I, DL, MCID, SubDest).addReg(SubSrc).addImm(0);
       MovMI = MIB.getInstr();
-    } else if (MCID.getOpcode() == VE::ANDMxx) {
+    } else if (MCID.getOpcode() == VE::ANDMmm) {
       // generate "ANDM, dest, vm0, src" instruction.
       MachineInstrBuilder MIB = BuildMI(MBB, I, DL, MCID, SubDest)
           .addReg(VE::VM0).addReg(SubSrc);
@@ -380,7 +380,7 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
   } else if (VE::V64RegClass.contains(DestReg, SrcReg)) {
     // Generate following instructions
     //   %sw16 = LEA32zii 256
-    //   veoldVOR1vl %dest, (0)1, %src, %sw16
+    //   VORmvl %dest, (0)1, %src, %sw16
     // TODO: reuse a register if vl is already assigned to a register
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
@@ -388,20 +388,20 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     unsigned SubTmp = TRI->getSubReg(TmpReg, VE::sub_i32);
     BuildMI(MBB, I, DL, get(VE::LEAzii), TmpReg)
         .addImm(0).addImm(0).addImm(256);
-    MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::veoldVOR1vl), DestReg)
-        .addImm(0)
+    MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::VORmvl), DestReg)
+        .addImm(M1(0)) // Represent (0)1.
         .addReg(SrcReg, getKillRegState(KillSrc))
         .addReg(SubTmp, getKillRegState(true));
     MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
   } else if (VE::VMRegClass.contains(DestReg, SrcReg))
-    BuildMI(MBB, I, DL, get(VE::ANDMxx), DestReg)
+    BuildMI(MBB, I, DL, get(VE::ANDMmm), DestReg)
         .addReg(VE::VM0)
         .addReg(SrcReg, getKillRegState(KillSrc));
   else if (VE::VM512RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
     const unsigned subRegIdx[] = { VE::sub_vm_even, VE::sub_vm_odd };
     unsigned int numSubRegs = 2;
-    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDMxx),
+    copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDMmm),
                     numSubRegs, subRegIdx, &getRegisterInfo());
   } else if (VE::F128RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
@@ -665,7 +665,7 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
       break;
   }
-  case VE::veoldNEGMy:
+  case VE::NEGMy:
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu);
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl);
       break;
@@ -679,19 +679,12 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
     // replace to pvfmk.s.up and pvfmk.s.lo
 
     std::map<int, std::vector<int>> map = {
-      {VE::VFMKyal, {VE::VFMKLxal, VE::VFMKLxal}},
-      {VE::VFMKynal, {VE::VFMKLxnal, VE::VFMKLxnal}},
-      {VE::VFMKWyvl, {VE::PVFMKWUPxvl, VE::PVFMKWLOxvl}},
-      {VE::VFMKWyvyl, {VE::PVFMKWUPxvxl, VE::PVFMKWLOxvxl}},
-      {VE::VFMKSyvl, {VE::PVFMKSUPxvl, VE::PVFMKSLOxvl}},
-      {VE::VFMKSyvyl, {VE::PVFMKSUPxvxl, VE::PVFMKSLOxvxl}},
-
-      {VE::veoldVFMKyal, {VE::veoldVFMKLxal, VE::veoldVFMKLxal}},
-      {VE::veoldVFMKynal, {VE::veoldVFMKLxnal, VE::veoldVFMKLxnal}},
-      {VE::veoldVFMKWyvl, {VE::veoldPVFMKWUPxvl, VE::veoldPVFMKWLOxvl}},
-      {VE::veoldVFMKWyvyl, {VE::veoldPVFMKWUPxvxl, VE::veoldPVFMKWLOxvxl}},
-      {VE::veoldVFMKSyvl, {VE::veoldPVFMKSUPxvl, VE::veoldPVFMKSLOxvl}},
-      {VE::veoldVFMKSyvyl, {VE::veoldPVFMKSUPxvxl, VE::veoldPVFMKSLOxvxl}},
+      {VE::VFMKyal, {VE::VFMKLal, VE::VFMKLal}},
+      {VE::VFMKynal, {VE::VFMKLnal, VE::VFMKLnal}},
+      {VE::VFMKWyvl, {VE::PVFMKWUPvl, VE::PVFMKWLOvl}},
+      {VE::VFMKWyvyl, {VE::PVFMKWUPvml, VE::PVFMKWLOvml}},
+      {VE::VFMKSyvl, {VE::PVFMKSUPvl, VE::PVFMKSLOvl}},
+      {VE::VFMKSyvyl, {VE::PVFMKSUPvml, VE::PVFMKSLOvml}},
     };
 
     unsigned Opcode = MI.getOpcode();
@@ -745,123 +738,6 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
 
     MI.eraseFromParent();
 }
-#if 0
-static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
-{
-    // replace to pvfmk.w.up and pvfmk.w.lo
-    // replace to pvfmk.s.up and pvfmk.s.lo
-
-    std::map<int, std::vector<int>> map = {
-      {VE::veoldPVFMKATl, {VE::veoldPVFMKWUPATl, VE::veoldPVFMKWLOATl}},
-      {VE::veoldPVFMKAFl, {VE::veoldPVFMKWUPAFl, VE::veoldPVFMKWLOAFl}},
-      {VE::veoldPVFMKWGTvl, {VE::veoldPVFMKWUPGTvl, VE::veoldPVFMKWLOGTvl}},
-      {VE::veoldPVFMKWLTvl, {VE::veoldPVFMKWUPLTvl, VE::veoldPVFMKWLOLTvl}},
-      {VE::veoldPVFMKWNEvl, {VE::veoldPVFMKWUPNEvl, VE::veoldPVFMKWLONEvl}},
-      {VE::veoldPVFMKWEQvl, {VE::veoldPVFMKWUPEQvl, VE::veoldPVFMKWLOEQvl}},
-      {VE::veoldPVFMKWGEvl, {VE::veoldPVFMKWUPGEvl, VE::veoldPVFMKWLOGEvl}},
-      {VE::veoldPVFMKWLEvl, {VE::veoldPVFMKWUPLEvl, VE::veoldPVFMKWLOLEvl}},
-      {VE::veoldPVFMKWNUMvl, {VE::veoldPVFMKWUPNUMvl, VE::veoldPVFMKWLONUMvl}},
-      {VE::veoldPVFMKWNANvl, {VE::veoldPVFMKWUPNANvl, VE::veoldPVFMKWLONANvl}},
-      {VE::veoldPVFMKWGTNANvl, {VE::veoldPVFMKWUPGTNANvl, VE::veoldPVFMKWLOGTNANvl}},
-      {VE::veoldPVFMKWLTNANvl, {VE::veoldPVFMKWUPLTNANvl, VE::veoldPVFMKWLOLTNANvl}},
-      {VE::veoldPVFMKWNENANvl, {VE::veoldPVFMKWUPNENANvl, VE::veoldPVFMKWLONENANvl}},
-      {VE::veoldPVFMKWEQNANvl, {VE::veoldPVFMKWUPEQNANvl, VE::veoldPVFMKWLOEQNANvl}},
-      {VE::veoldPVFMKWGENANvl, {VE::veoldPVFMKWUPGENANvl, VE::veoldPVFMKWLOGENANvl}},
-      {VE::veoldPVFMKWLENANvl, {VE::veoldPVFMKWUPLENANvl, VE::veoldPVFMKWLOLENANvl}},
-
-      {VE::veoldPVFMKWGTvxl, {VE::veoldPVFMKWUPGTvxl, VE::veoldPVFMKWLOGTvxl}},
-      {VE::veoldPVFMKWLTvxl, {VE::veoldPVFMKWUPLTvxl, VE::veoldPVFMKWLOLTvxl}},
-      {VE::veoldPVFMKWNEvxl, {VE::veoldPVFMKWUPNEvxl, VE::veoldPVFMKWLONEvxl}},
-      {VE::veoldPVFMKWEQvxl, {VE::veoldPVFMKWUPEQvxl, VE::veoldPVFMKWLOEQvxl}},
-      {VE::veoldPVFMKWGEvxl, {VE::veoldPVFMKWUPGEvxl, VE::veoldPVFMKWLOGEvxl}},
-      {VE::veoldPVFMKWLEvxl, {VE::veoldPVFMKWUPLEvxl, VE::veoldPVFMKWLOLEvxl}},
-      {VE::veoldPVFMKWNUMvxl, {VE::veoldPVFMKWUPNUMvxl, VE::veoldPVFMKWLONUMvxl}},
-      {VE::veoldPVFMKWNANvxl, {VE::veoldPVFMKWUPNANvxl, VE::veoldPVFMKWLONANvxl}},
-      {VE::veoldPVFMKWGTNANvxl, {VE::veoldPVFMKWUPGTNANvxl, VE::veoldPVFMKWLOGTNANvxl}},
-      {VE::veoldPVFMKWLTNANvxl, {VE::veoldPVFMKWUPLTNANvxl, VE::veoldPVFMKWLOLTNANvxl}},
-      {VE::veoldPVFMKWNENANvxl, {VE::veoldPVFMKWUPNENANvxl, VE::veoldPVFMKWLONENANvxl}},
-      {VE::veoldPVFMKWEQNANvxl, {VE::veoldPVFMKWUPEQNANvxl, VE::veoldPVFMKWLOEQNANvxl}},
-      {VE::veoldPVFMKWGENANvxl, {VE::veoldPVFMKWUPGENANvxl, VE::veoldPVFMKWLOGENANvxl}},
-      {VE::veoldPVFMKWLENANvxl, {VE::veoldPVFMKWUPLENANvxl, VE::veoldPVFMKWLOLENANvxl}},
-
-      {VE::veoldPVFMKSGTvl, {VE::veoldPVFMKSUPGTvl, VE::veoldPVFMKSLOGTvl}},
-      {VE::veoldPVFMKSGTvxl, {VE::veoldPVFMKSUPGTvxl, VE::veoldPVFMKSLOGTvxl}},
-      {VE::veoldPVFMKSLTvl, {VE::veoldPVFMKSUPLTvl, VE::veoldPVFMKSLOLTvl}},
-      {VE::veoldPVFMKSNEvl, {VE::veoldPVFMKSUPNEvl, VE::veoldPVFMKSLONEvl}},
-      {VE::veoldPVFMKSEQvl, {VE::veoldPVFMKSUPEQvl, VE::veoldPVFMKSLOEQvl}},
-      {VE::veoldPVFMKSGEvl, {VE::veoldPVFMKSUPGEvl, VE::veoldPVFMKSLOGEvl}},
-      {VE::veoldPVFMKSLEvl, {VE::veoldPVFMKSUPLEvl, VE::veoldPVFMKSLOLEvl}},
-      {VE::veoldPVFMKSNUMvl, {VE::veoldPVFMKSUPNUMvl, VE::veoldPVFMKSLONUMvl}},
-      {VE::veoldPVFMKSNANvl, {VE::veoldPVFMKSUPNANvl, VE::veoldPVFMKSLONANvl}},
-      {VE::veoldPVFMKSGTNANvl, {VE::veoldPVFMKSUPGTNANvl, VE::veoldPVFMKSLOGTNANvl}},
-      {VE::veoldPVFMKSLTNANvl, {VE::veoldPVFMKSUPLTNANvl, VE::veoldPVFMKSLOLTNANvl}},
-      {VE::veoldPVFMKSNENANvl, {VE::veoldPVFMKSUPNENANvl, VE::veoldPVFMKSLONENANvl}},
-      {VE::veoldPVFMKSEQNANvl, {VE::veoldPVFMKSUPEQNANvl, VE::veoldPVFMKSLOEQNANvl}},
-      {VE::veoldPVFMKSGENANvl, {VE::veoldPVFMKSUPGENANvl, VE::veoldPVFMKSLOGENANvl}},
-      {VE::veoldPVFMKSLENANvl, {VE::veoldPVFMKSUPLENANvl, VE::veoldPVFMKSLOLENANvl}},
-
-      {VE::veoldPVFMKSGTvxl, {VE::veoldPVFMKSUPGTvxl, VE::veoldPVFMKSLOGTvxl}},
-      {VE::veoldPVFMKSLTvxl, {VE::veoldPVFMKSUPLTvxl, VE::veoldPVFMKSLOLTvxl}},
-      {VE::veoldPVFMKSNEvxl, {VE::veoldPVFMKSUPNEvxl, VE::veoldPVFMKSLONEvxl}},
-      {VE::veoldPVFMKSEQvxl, {VE::veoldPVFMKSUPEQvxl, VE::veoldPVFMKSLOEQvxl}},
-      {VE::veoldPVFMKSGEvxl, {VE::veoldPVFMKSUPGEvxl, VE::veoldPVFMKSLOGEvxl}},
-      {VE::veoldPVFMKSLEvxl, {VE::veoldPVFMKSUPLEvxl, VE::veoldPVFMKSLOLEvxl}},
-      {VE::veoldPVFMKSNUMvxl, {VE::veoldPVFMKSUPNUMvxl, VE::veoldPVFMKSLONUMvxl}},
-      {VE::veoldPVFMKSNANvxl, {VE::veoldPVFMKSUPNANvxl, VE::veoldPVFMKSLONANvxl}},
-      {VE::veoldPVFMKSGTNANvxl, {VE::veoldPVFMKSUPGTNANvxl, VE::veoldPVFMKSLOGTNANvxl}},
-      {VE::veoldPVFMKSLTNANvxl, {VE::veoldPVFMKSUPLTNANvxl, VE::veoldPVFMKSLOLTNANvxl}},
-      {VE::veoldPVFMKSNENANvxl, {VE::veoldPVFMKSUPNENANvxl, VE::veoldPVFMKSLONENANvxl}},
-      {VE::veoldPVFMKSEQNANvxl, {VE::veoldPVFMKSUPEQNANvxl, VE::veoldPVFMKSLOEQNANvxl}},
-      {VE::veoldPVFMKSGENANvxl, {VE::veoldPVFMKSUPGENANvxl, VE::veoldPVFMKSLOGENANvxl}},
-      {VE::veoldPVFMKSLENANvxl, {VE::veoldPVFMKSUPLENANvxl, VE::veoldPVFMKSLOLENANvxl}},
-    };
-
-    unsigned Opcode = MI.getOpcode();
-
-    if (map.find(Opcode) == map.end()) {
-      report_fatal_error("unexpected opcode for pvfmk");
-    }
-
-    unsigned OpcodeUpper = map[Opcode][0];
-    unsigned OpcodeLower = map[Opcode][1];
-
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, TI.get(OpcodeUpper));
-    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower));
-
-    // VM512
-    Bu.addReg(GetVM512Upper(MI.getOperand(0).getReg()));
-    Bl.addReg(GetVM512Lower(MI.getOperand(0).getReg()));
-
-    if (MI.getNumExplicitOperands() == 2) { // _Ml: VM512, VL
-      // VL
-      Bu.addReg(MI.getOperand(1).getReg());
-      Bl.addReg(MI.getOperand(1).getReg());
-    } else if (MI.getNumExplicitOperands() == 3) { // _Mvl: VM512, VR, VL
-      // VR
-      Bu.addReg(MI.getOperand(1).getReg());
-      Bl.addReg(MI.getOperand(1).getReg());
-      // VL
-      Bu.addReg(MI.getOperand(2).getReg());
-      Bl.addReg(MI.getOperand(2).getReg());
-    } else if (MI.getNumExplicitOperands() == 4) { // _MvMl: VM512, VR, VM512, VL
-      // VR
-      Bu.addReg(MI.getOperand(1).getReg());
-      Bl.addReg(MI.getOperand(1).getReg());
-      // VM512
-      Bu.addReg(GetVM512Upper(MI.getOperand(2).getReg()));
-      Bl.addReg(GetVM512Lower(MI.getOperand(2).getReg()));
-      // VL
-      Bu.addReg(MI.getOperand(3).getReg());
-      Bl.addReg(MI.getOperand(3).getReg());
-    } else {
-      report_fatal_error("unexpected number of operands for pvfmk");
-    }
-
-    MI.eraseFromParent();
-}
-#endif
 
 bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   switch (MI.getOpcode()) {
@@ -910,12 +786,12 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   }
 #endif
 
-  case VE::veoldANDMyy: buildVMRInst(MI, get(VE::ANDMxx)); return true;
-  case VE::veoldORMyy:  buildVMRInst(MI, get(VE::ORMxx)); return true;
-  case VE::veoldXORMyy: buildVMRInst(MI, get(VE::XORMxx)); return true;
-  case VE::veoldEQVMyy: buildVMRInst(MI, get(VE::EQVMxx)); return true;
-  case VE::veoldNNDMyy: buildVMRInst(MI, get(VE::NNDMxx)); return true;
-  case VE::veoldNEGMy: buildVMRInst(MI, get(VE::NEGMx)); return true;
+  case VE::ANDMyy: buildVMRInst(MI, get(VE::ANDMmm)); return true;
+  case VE::ORMyy:  buildVMRInst(MI, get(VE::ORMmm)); return true;
+  case VE::XORMyy: buildVMRInst(MI, get(VE::XORMmm)); return true;
+  case VE::EQVMyy: buildVMRInst(MI, get(VE::EQVMmm)); return true;
+  case VE::NNDMyy: buildVMRInst(MI, get(VE::NNDMmm)); return true;
+  case VE::NEGMy: buildVMRInst(MI, get(VE::NEGMm)); return true;
 
   case VE::LVMyir:
   case VE::LVMyim:
@@ -938,13 +814,13 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     DebugLoc DL = MI.getDebugLoc();
     switch (MI.getOpcode()) {
     case VE::LVMyir:
-      BuildMI(*MBB, MI, DL, get(VE::LVMxir))
+      BuildMI(*MBB, MI, DL, get(VE::LVMir))
         .addDef(VMX)
         .addImm(Imm)
         .addReg(Src, getKillRegState(KillSrc));
       break;
     case VE::LVMyim:
-      BuildMI(*MBB, MI, DL, get(VE::LVMxim))
+      BuildMI(*MBB, MI, DL, get(VE::LVMim))
         .addDef(VMX)
         .addImm(Imm)
         .addImm(MImm);
@@ -952,7 +828,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     case VE::LVMyir_y:
       assert(MI.getOperand(0).getReg() == MI.getOperand(3).getReg() &&
              "LVMyir_y has different register in 3rd operand");
-      BuildMI(*MBB, MI, DL, get(VE::LVMxir_x))
+      BuildMI(*MBB, MI, DL, get(VE::LVMir_m))
         .addDef(VMX)
         .addImm(Imm)
         .addReg(Src, getKillRegState(KillSrc))
@@ -961,7 +837,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     case VE::LVMyim_y:
       assert(MI.getOperand(0).getReg() == MI.getOperand(3).getReg() &&
              "LVMyim_y has different register in 3rd operand");
-      BuildMI(*MBB, MI, DL, get(VE::LVMxim_x))
+      BuildMI(*MBB, MI, DL, get(VE::LVMim_m))
         .addDef(VMX)
         .addImm(Imm)
         .addImm(MImm)
@@ -971,31 +847,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     MI.eraseFromParent();
     return true;
   }
-  case VE::veoldLVMyir_y: {
-    unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
-    unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
-    unsigned VMDu = GetVM512Upper(MI.getOperand(3).getReg());
-    unsigned VMDl = GetVM512Upper(MI.getOperand(3).getReg());
-    int64_t Imm = MI.getOperand(1).getImm();
-    unsigned VMX = VMXl;
-    unsigned VMD = VMDl;
-    if (Imm >= 4) {
-        VMX = VMXu;
-        VMD = VMDu;
-        Imm -= 4;
-    }
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc DL = MI.getDebugLoc();
-    BuildMI(*MBB, MI, DL, get(VE::LVMxir_x))
-      .addDef(VMX)
-      .addImm(Imm)
-      .addReg(MI.getOperand(2).getReg())
-      .addReg(VMD);
-    MI.eraseFromParent();
-    return true;
-  }
-  case VE::SVMyi:
-  case VE::veoldSVMyi: {
+  case VE::SVMyi: {
     unsigned Dest = MI.getOperand(0).getReg();
     unsigned VMZu = GetVM512Upper(MI.getOperand(1).getReg());
     unsigned VMZl = GetVM512Lower(MI.getOperand(1).getReg());
@@ -1008,7 +860,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
     }
     MachineBasicBlock* MBB = MI.getParent();
     DebugLoc DL = MI.getDebugLoc();
-    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, get(VE::SVMxi), Dest)
+    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, get(VE::SVMmi), Dest)
       .addReg(VMZ)
       .addImm(Imm);
     MachineInstr *Inst = MIB.getInstr();
@@ -1023,46 +875,7 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::VFMKynal:
   case VE::VFMKWyvl: case VE::VFMKWyvyl:
   case VE::VFMKSyvl: case VE::VFMKSyvyl:
-  case VE::veoldVFMKyal:
-  case VE::veoldVFMKynal:
-  case VE::veoldVFMKWyvl: case VE::veoldVFMKWyvyl:
-  case VE::veoldVFMKSyvl: case VE::veoldVFMKSyvyl:
     expandPseudoVFMK_VL(*this, MI);
-#if 0
-  case VE::veoldPVFMKATl:
-  case VE::veoldPVFMKAFl:
-  case VE::veoldPVFMKWGTvl: case VE::veoldPVFMKWGTvxl:
-  case VE::veoldPVFMKWLTvl: case VE::veoldPVFMKWLTvxl:
-  case VE::veoldPVFMKWNEvl: case VE::veoldPVFMKWNEvxl:
-  case VE::veoldPVFMKWEQvl: case VE::veoldPVFMKWEQvxl:
-  case VE::veoldPVFMKWGEvl: case VE::veoldPVFMKWGEvxl:
-  case VE::veoldPVFMKWLEvl: case VE::veoldPVFMKWLEvxl:
-  case VE::veoldPVFMKWNUMvl: case VE::veoldPVFMKWNUMvxl:
-  case VE::veoldPVFMKWNANvl: case VE::veoldPVFMKWNANvxl:
-  case VE::veoldPVFMKWGTNANvl: case VE::veoldPVFMKWGTNANvxl:
-  case VE::veoldPVFMKWLTNANvl: case VE::veoldPVFMKWLTNANvxl:
-  case VE::veoldPVFMKWNENANvl: case VE::veoldPVFMKWNENANvxl:
-  case VE::veoldPVFMKWEQNANvl: case VE::veoldPVFMKWEQNANvxl:
-  case VE::veoldPVFMKWGENANvl: case VE::veoldPVFMKWGENANvxl:
-  case VE::veoldPVFMKWLENANvl: case VE::veoldPVFMKWLENANvxl:
-  case VE::veoldPVFMKSGTvl: case VE::veoldPVFMKSGTvxl:
-  case VE::veoldPVFMKSLTvl: case VE::veoldPVFMKSLTvxl:
-  case VE::veoldPVFMKSNEvl: case VE::veoldPVFMKSNEvxl:
-  case VE::veoldPVFMKSEQvl: case VE::veoldPVFMKSEQvxl:
-  case VE::veoldPVFMKSGEvl: case VE::veoldPVFMKSGEvxl:
-  case VE::veoldPVFMKSLEvl: case VE::veoldPVFMKSLEvxl:
-  case VE::veoldPVFMKSNUMvl: case VE::veoldPVFMKSNUMvxl:
-  case VE::veoldPVFMKSNANvl: case VE::veoldPVFMKSNANvxl:
-  case VE::veoldPVFMKSGTNANvl: case VE::veoldPVFMKSGTNANvxl:
-  case VE::veoldPVFMKSLTNANvl: case VE::veoldPVFMKSLTNANvxl:
-  case VE::veoldPVFMKSNENANvl: case VE::veoldPVFMKSNENANvxl:
-  case VE::veoldPVFMKSEQNANvl: case VE::veoldPVFMKSEQNANvxl:
-  case VE::veoldPVFMKSGENANvl: case VE::veoldPVFMKSGENANvxl:
-  case VE::veoldPVFMKSLENANvl: case VE::veoldPVFMKSLENANvxl: {
-    expandPseudoVFMK_VL(*this, MI);
-    return true;
-  }
-#endif
   }
   return false;
 }

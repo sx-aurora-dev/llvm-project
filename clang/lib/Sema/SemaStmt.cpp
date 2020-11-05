@@ -385,6 +385,14 @@ void Sema::ActOnStartOfCompoundStmt(bool IsStmtExpr) {
   PushCompoundScope(IsStmtExpr);
 }
 
+void Sema::ActOnAfterCompoundStatementLeadingPragmas() {
+  if (getCurFPFeatures().isFPConstrained()) {
+    FunctionScopeInfo *FSI = getCurFunction();
+    assert(FSI);
+    FSI->setUsesFPIntrin();
+  }
+}
+
 void Sema::ActOnFinishOfCompoundStmt() {
   PopCompoundScope();
 }
@@ -396,11 +404,6 @@ sema::CompoundScopeInfo &Sema::getCurCompoundScope() const {
 StmtResult Sema::ActOnCompoundStmt(SourceLocation L, SourceLocation R,
                                    ArrayRef<Stmt *> Elts, bool isStmtExpr) {
   const unsigned NumElts = Elts.size();
-
-  // Mark the current function as usng floating point constrained intrinsics
-  if (getCurFPFeatures().isFPConstrained())
-    if (FunctionDecl *F = dyn_cast<FunctionDecl>(CurContext))
-      F->setUsesFPIntrin(true);
 
   // If we're in C89 mode, check that we don't have any decls after stmts.  If
   // so, emit an extension diagnostic.
@@ -467,7 +470,7 @@ Sema::ActOnCaseExpr(SourceLocation CaseLoc, ExprResult Val) {
 
     ExprResult ER = E;
     if (!E->isValueDependent())
-      ER = VerifyIntegerConstantExpression(E);
+      ER = VerifyIntegerConstantExpression(E, AllowFold);
     if (!ER.isInvalid())
       ER = DefaultLvalueConversion(ER.get());
     if (!ER.isInvalid())
@@ -596,6 +599,33 @@ StmtResult Sema::ActOnIfStmt(SourceLocation IfLoc, bool IsConstexpr,
   if (!elseStmt)
     DiagnoseEmptyStmtBody(CondExpr->getEndLoc(), thenStmt,
                           diag::warn_empty_if_body);
+
+  if (IsConstexpr) {
+    auto DiagnoseLikelihood = [&](const Stmt *S) {
+      if (const Attr *A = Stmt::getLikelihoodAttr(S)) {
+        Diags.Report(A->getLocation(),
+                     diag::warn_attribute_has_no_effect_on_if_constexpr)
+            << A << A->getRange();
+        Diags.Report(IfLoc,
+                     diag::note_attribute_has_no_effect_on_if_constexpr_here)
+            << SourceRange(IfLoc, LParenLoc.getLocWithOffset(-1));
+      }
+    };
+    DiagnoseLikelihood(thenStmt);
+    DiagnoseLikelihood(elseStmt);
+  } else {
+    std::tuple<bool, const Attr *, const Attr *> LHC =
+        Stmt::determineLikelihoodConflict(thenStmt, elseStmt);
+    if (std::get<0>(LHC)) {
+      const Attr *ThenAttr = std::get<1>(LHC);
+      const Attr *ElseAttr = std::get<2>(LHC);
+      Diags.Report(ThenAttr->getLocation(),
+                   diag::warn_attributes_likelihood_ifstmt_conflict)
+          << ThenAttr << ThenAttr->getRange();
+      Diags.Report(ElseAttr->getLocation(), diag::note_conflicting_attribute)
+          << ElseAttr << ElseAttr->getRange();
+    }
+  }
 
   return BuildIfStmt(IfLoc, IsConstexpr, LParenLoc, InitStmt, Cond, RParenLoc,
                      thenStmt, ElseLoc, elseStmt);
@@ -1249,10 +1279,10 @@ Sema::ActOnFinishSwitchStmt(SourceLocation SwitchLoc, Stmt *Switch,
 
       // Produce a nice diagnostic if multiple values aren't handled.
       if (!UnhandledNames.empty()) {
-        DiagnosticBuilder DB = Diag(CondExpr->getExprLoc(),
-                                    TheDefaultStmt ? diag::warn_def_missing_case
+        auto DB = Diag(CondExpr->getExprLoc(), TheDefaultStmt
+                                                   ? diag::warn_def_missing_case
                                                    : diag::warn_missing_case)
-                               << (int)UnhandledNames.size();
+                  << (int)UnhandledNames.size();
 
         for (size_t I = 0, E = std::min(UnhandledNames.size(), (size_t)3);
              I != E; ++I)
@@ -3083,7 +3113,7 @@ static void TryMoveInitialization(Sema& S,
                                   bool ConvertingConstructorsOnly,
                                   ExprResult &Res) {
   ImplicitCastExpr AsRvalue(ImplicitCastExpr::OnStack, Value->getType(),
-                            CK_NoOp, Value, VK_XValue);
+                            CK_NoOp, Value, VK_XValue, FPOptionsOverride());
 
   Expr *InitExpr = &AsRvalue;
 
@@ -3138,8 +3168,9 @@ static void TryMoveInitialization(Sema& S,
 
     // Promote "AsRvalue" to the heap, since we now need this
     // expression node to persist.
-    Value = ImplicitCastExpr::Create(S.Context, Value->getType(), CK_NoOp,
-                                     Value, nullptr, VK_XValue);
+    Value =
+        ImplicitCastExpr::Create(S.Context, Value->getType(), CK_NoOp, Value,
+                                 nullptr, VK_XValue, FPOptionsOverride());
 
     // Complete type-checking the initialization of the return type
     // using the constructor we found.

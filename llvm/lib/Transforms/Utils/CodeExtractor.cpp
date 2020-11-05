@@ -928,12 +928,14 @@ Function *CodeExtractor::constructFunction(const ValueSet &inputs,
       case Attribute::SanitizeHWAddress:
       case Attribute::SanitizeMemTag:
       case Attribute::SpeculativeLoadHardening:
+      case Attribute::NoStackProtect:
       case Attribute::StackProtect:
       case Attribute::StackProtectReq:
       case Attribute::StackProtectStrong:
       case Attribute::StrictFP:
       case Attribute::UWTable:
       case Attribute::NoCfCheck:
+      case Attribute::MustProgress:
         break;
       }
 
@@ -1438,7 +1440,7 @@ static void fixupDebugInfoPostExtraction(Function &OldFunc, Function &NewFunc,
   // function arguments, as the parameters don't correspond to anything at the
   // source level.
   assert(OldSP->getUnit() && "Missing compile unit for subprogram");
-  DIBuilder DIB(*OldFunc.getParent(), /*AllowUnresolvedNodes=*/false,
+  DIBuilder DIB(*OldFunc.getParent(), /*AllowUnresolved=*/false,
                 OldSP->getUnit());
   auto SPType = DIB.createSubroutineType(DIB.getOrCreateTypeArray(None));
   DISubprogram::DISPFlags SPFlags = DISubprogram::SPFlagDefinition |
@@ -1743,7 +1745,7 @@ bool CodeExtractor::verifyAssumptionCache(const Function &OldFunc,
                                           const Function &NewFunc,
                                           AssumptionCache *AC) {
   for (auto AssumeVH : AC->assumptions()) {
-    CallInst *I = dyn_cast_or_null<CallInst>(AssumeVH);
+    auto *I = dyn_cast_or_null<CallInst>(AssumeVH);
     if (!I)
       continue;
 
@@ -1755,12 +1757,12 @@ bool CodeExtractor::verifyAssumptionCache(const Function &OldFunc,
     // that were previously in the old function, but that have now been moved
     // to the new function.
     for (auto AffectedValVH : AC->assumptionsFor(I->getOperand(0))) {
-      CallInst *AffectedCI = dyn_cast_or_null<CallInst>(AffectedValVH);
+      auto *AffectedCI = dyn_cast_or_null<CallInst>(AffectedValVH);
       if (!AffectedCI)
         continue;
       if (AffectedCI->getFunction() != &OldFunc)
         return true;
-      auto *AssumedInst = dyn_cast<Instruction>(AffectedCI->getOperand(0));
+      auto *AssumedInst = cast<Instruction>(AffectedCI->getOperand(0));
       if (AssumedInst->getFunction() != &OldFunc)
         return true;
     }

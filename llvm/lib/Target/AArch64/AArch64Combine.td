@@ -19,7 +19,6 @@ def fconstant_to_constant : GICombineRule<
 
 def AArch64PreLegalizerCombinerHelper: GICombinerHelper<
   "AArch64GenPreLegalizerCombinerHelper", [all_combines,
-                                           elide_br_by_inverting_cond,
                                            fconstant_to_constant]> {
   let DisableRuleOption = "aarch64prelegalizercombiner-disable-rule";
   let StateClass = "AArch64PreLegalizerCombinerHelperState";
@@ -76,11 +75,41 @@ def ext: GICombineRule <
 // instruction.
 def shuffle_vector_pseudos : GICombineGroup<[dup, rev, ext, zip, uzp, trn]>;
 
+def vashr_vlshr_imm_matchdata : GIDefMatchData<"int64_t">;
+def vashr_vlshr_imm : GICombineRule<
+  (defs root:$root, vashr_vlshr_imm_matchdata:$matchinfo),
+  (match (wip_match_opcode G_ASHR, G_LSHR):$root,
+          [{ return matchVAshrLshrImm(*${root}, MRI, ${matchinfo}); }]),
+  (apply [{ applyVAshrLshrImm(*${root}, MRI, ${matchinfo}); }])
+>;
+
+def adjust_icmp_imm_matchdata :
+  GIDefMatchData<"std::pair<uint64_t, CmpInst::Predicate>">;
+def adjust_icmp_imm : GICombineRule <
+  (defs root:$root, adjust_icmp_imm_matchdata:$matchinfo),
+  (match (wip_match_opcode G_ICMP):$root,
+          [{ return matchAdjustICmpImmAndPred(*${root}, MRI, ${matchinfo}); }]),
+  (apply [{ applyAdjustICmpImmAndPred(*${root}, ${matchinfo}, B, Observer); }])
+>;
+
+def icmp_lowering : GICombineGroup<[adjust_icmp_imm]>;
+
+// Post-legalization combines which should happen at all optimization levels.
+// (E.g. ones that facilitate matching for the selector) For example, matching
+// pseudos.
+def AArch64PostLegalizerLoweringHelper
+    : GICombinerHelper<"AArch64GenPostLegalizerLoweringHelper",
+                       [shuffle_vector_pseudos, vashr_vlshr_imm,
+                        icmp_lowering]> {
+  let DisableRuleOption = "aarch64postlegalizerlowering-disable-rule";
+}
+
+// Post-legalization combines which are primarily optimizations.
 def AArch64PostLegalizerCombinerHelper
     : GICombinerHelper<"AArch64GenPostLegalizerCombinerHelper",
                        [copy_prop, erase_undef_store, combines_for_extload,
-                        sext_trunc_sextload, shuffle_vector_pseudos,
+                        sext_trunc_sextload,
                         hoist_logic_op_with_same_opcode_hands,
-                        and_trivial_mask]> {
+                        and_trivial_mask, xor_of_and_with_same_reg]> {
   let DisableRuleOption = "aarch64postlegalizercombiner-disable-rule";
 }

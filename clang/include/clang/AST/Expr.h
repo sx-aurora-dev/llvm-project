@@ -413,6 +413,10 @@ public:
     return ClassifyImpl(Ctx, &Loc);
   }
 
+  /// Returns the set of floating point options that apply to this expression.
+  /// Only meaningful for operations on floating point values.
+  FPOptions getFPFeaturesInEffect(const LangOptions &LO) const;
+
   /// getValueKindForType - Given a formal return or parameter type,
   /// give its value kind.
   static ExprValueKind getValueKindForType(QualType T) {
@@ -695,7 +699,8 @@ public:
   /// notes will be produced if the expression is not a constant expression.
   bool EvaluateAsInitializer(APValue &Result, const ASTContext &Ctx,
                              const VarDecl *VD,
-                             SmallVectorImpl<PartialDiagnosticAt> &Notes) const;
+                             SmallVectorImpl<PartialDiagnosticAt> &Notes,
+                             bool IsConstantInitializer) const;
 
   /// EvaluateWithSubstitution - Evaluate an expression as if from the context
   /// of a call to the given function with the given arguments, inside an
@@ -706,13 +711,26 @@ public:
                                 ArrayRef<const Expr*> Args,
                                 const Expr *This = nullptr) const;
 
-  /// Indicates how the constant expression will be used.
-  enum ConstExprUsage { EvaluateForCodeGen, EvaluateForMangling };
+  enum class ConstantExprKind {
+    /// An integer constant expression (an array bound, enumerator, case value,
+    /// bit-field width, or similar) or similar.
+    Normal,
+    /// A non-class template argument. Such a value is only used for mangling,
+    /// not for code generation, so can refer to dllimported functions.
+    NonClassTemplateArgument,
+    /// A class template argument. Such a value is used for code generation.
+    ClassTemplateArgument,
+    /// An immediate invocation. The destruction of the end result of this
+    /// evaluation is not part of the evaluation, but all other temporaries
+    /// are destroyed.
+    ImmediateInvocation,
+  };
 
-  /// Evaluate an expression that is required to be a constant expression.
-  bool EvaluateAsConstantExpr(EvalResult &Result, ConstExprUsage Usage,
-                              const ASTContext &Ctx,
-                              bool InPlace = false) const;
+  /// Evaluate an expression that is required to be a constant expression. Does
+  /// not check the syntactic constraints for C and C++98 constant expressions.
+  bool EvaluateAsConstantExpr(
+      EvalResult &Result, const ASTContext &Ctx,
+      ConstantExprKind Kind = ConstantExprKind::Normal) const;
 
   /// If the current Expr is a pointer, this will try to statically
   /// determine the number of bytes available where the pointer is pointing.
@@ -867,9 +885,9 @@ public:
 
   /// Skip conversion operators. If this Expr is a call to a conversion
   /// operator, return the argument.
-  Expr *IgnoreConversionOperator() LLVM_READONLY;
-  const Expr *IgnoreConversionOperator() const {
-    return const_cast<Expr *>(this)->IgnoreConversionOperator();
+  Expr *IgnoreConversionOperatorSingleStep() LLVM_READONLY;
+  const Expr *IgnoreConversionOperatorSingleStep() const {
+    return const_cast<Expr *>(this)->IgnoreConversionOperatorSingleStep();
   }
 
   /// Skip past any parentheses and lvalue casts which might surround this
@@ -901,9 +919,9 @@ public:
   /// * What IgnoreParens() skips
   /// * CastExpr which represent a derived-to-base cast (CK_DerivedToBase,
   ///   CK_UncheckedDerivedToBase and CK_NoOp)
-  Expr *ignoreParenBaseCasts() LLVM_READONLY;
-  const Expr *ignoreParenBaseCasts() const {
-    return const_cast<Expr *>(this)->ignoreParenBaseCasts();
+  Expr *IgnoreParenBaseCasts() LLVM_READONLY;
+  const Expr *IgnoreParenBaseCasts() const {
+    return const_cast<Expr *>(this)->IgnoreParenBaseCasts();
   }
 
   /// Determine whether this expression is a default function argument.
@@ -960,6 +978,13 @@ public:
            T->getStmtClass() <= lastExprConstant;
   }
 };
+// PointerLikeTypeTraits is specialized so it can be used with a forward-decl of
+// Expr. Verify that we got it right.
+static_assert(llvm::PointerLikeTypeTraits<Expr *>::NumLowBitsAvailable <=
+                  llvm::detail::ConstantLog2<alignof(Expr)>::value,
+              "PointerLikeTypeTraits<Expr*> assumes too much alignment.");
+
+using ConstantExprKind = Expr::ConstantExprKind;
 
 //===----------------------------------------------------------------------===//
 // Wrapper Expressions.
@@ -1921,17 +1946,13 @@ public:
 /// [C99 6.4.2.2] - A predefined identifier such as __func__.
 class PredefinedExpr final
     : public Expr,
-      private llvm::TrailingObjects<PredefinedExpr, Stmt *, Expr *,
-                                    TypeSourceInfo *> {
+      private llvm::TrailingObjects<PredefinedExpr, Stmt *> {
   friend class ASTStmtReader;
   friend TrailingObjects;
 
   // PredefinedExpr is optionally followed by a single trailing
   // "Stmt *" for the predefined identifier. It is present if and only if
   // hasFunctionName() is true and is always a "StringLiteral *".
-  // It can also be followed by a Expr* in the case of a
-  // __builtin_unique_stable_name with an expression, or TypeSourceInfo * if
-  // __builtin_unique_stable_name with a type.
 
 public:
   enum IdentKind {
@@ -1944,18 +1965,12 @@ public:
     PrettyFunction,
     /// The same as PrettyFunction, except that the
     /// 'virtual' keyword is omitted for virtual member functions.
-    PrettyFunctionNoVirtual,
-    UniqueStableNameType,
-    UniqueStableNameExpr,
+    PrettyFunctionNoVirtual
   };
 
 private:
   PredefinedExpr(SourceLocation L, QualType FNTy, IdentKind IK,
                  StringLiteral *SL);
-  PredefinedExpr(SourceLocation L, QualType FNTy, IdentKind IK,
-                 TypeSourceInfo *Info);
-  PredefinedExpr(SourceLocation L, QualType FNTy, IdentKind IK,
-                 Expr *E);
 
   explicit PredefinedExpr(EmptyShell Empty, bool HasFunctionName);
 
@@ -1968,39 +1983,10 @@ private:
     *getTrailingObjects<Stmt *>() = SL;
   }
 
-  void setTypeSourceInfo(TypeSourceInfo *Info) {
-    assert(!hasFunctionName() && getIdentKind() == UniqueStableNameType &&
-           "TypeSourceInfo only valid for UniqueStableName of a Type");
-    *getTrailingObjects<TypeSourceInfo *>() = Info;
-  }
-
-  void setExpr(Expr *E) {
-    assert(!hasFunctionName() && getIdentKind() == UniqueStableNameExpr &&
-           "TypeSourceInfo only valid for UniqueStableName of n Expression.");
-    *getTrailingObjects<Expr *>() = E;
-  }
-
-  size_t numTrailingObjects(OverloadToken<Stmt *>) const {
-    return hasFunctionName();
-  }
-
-  size_t numTrailingObjects(OverloadToken<TypeSourceInfo *>) const {
-    return getIdentKind() == UniqueStableNameType && !hasFunctionName();
-  }
-  size_t numTrailingObjects(OverloadToken<Expr *>) const {
-    return getIdentKind() == UniqueStableNameExpr && !hasFunctionName();
-  }
-
 public:
   /// Create a PredefinedExpr.
   static PredefinedExpr *Create(const ASTContext &Ctx, SourceLocation L,
                                 QualType FNTy, IdentKind IK, StringLiteral *SL);
-  static PredefinedExpr *Create(const ASTContext &Ctx, SourceLocation L,
-                                QualType FNTy, IdentKind IK, StringLiteral *SL,
-                                TypeSourceInfo *Info);
-  static PredefinedExpr *Create(const ASTContext &Ctx, SourceLocation L,
-                                QualType FNTy, IdentKind IK, StringLiteral *SL,
-                                Expr *E);
 
   /// Create an empty PredefinedExpr.
   static PredefinedExpr *CreateEmpty(const ASTContext &Ctx,
@@ -2025,34 +2011,12 @@ public:
                : nullptr;
   }
 
-  TypeSourceInfo *getTypeSourceInfo() {
-    assert(!hasFunctionName() && getIdentKind() == UniqueStableNameType &&
-           "TypeSourceInfo only valid for UniqueStableName of a Type");
-    return *getTrailingObjects<TypeSourceInfo *>();
-  }
-
-  const TypeSourceInfo *getTypeSourceInfo() const {
-    assert(!hasFunctionName() && getIdentKind() == UniqueStableNameType &&
-           "TypeSourceInfo only valid for UniqueStableName of a Type");
-    return *getTrailingObjects<TypeSourceInfo *>();
-  }
-
-  Expr *getExpr() {
-    assert(!hasFunctionName() && getIdentKind() == UniqueStableNameExpr &&
-           "TypeSourceInfo only valid for UniqueStableName of n Expression.");
-    return *getTrailingObjects<Expr *>();
-  }
-
-  const Expr *getExpr() const {
-    assert(!hasFunctionName() && getIdentKind() == UniqueStableNameExpr &&
-           "TypeSourceInfo only valid for UniqueStableName of n Expression.");
-    return *getTrailingObjects<Expr *>();
-  }
-
   static StringRef getIdentKindName(IdentKind IK);
+  StringRef getIdentKindName() const {
+    return getIdentKindName(getIdentKind());
+  }
+
   static std::string ComputeName(IdentKind IK, const Decl *CurrentDecl);
-  static std::string ComputeName(ASTContext &Context, IdentKind IK,
-                                 const QualType Ty);
 
   SourceLocation getBeginLoc() const { return getLocation(); }
   SourceLocation getEndLoc() const { return getLocation(); }
@@ -3440,9 +3404,11 @@ class CastExpr : public Expr {
   }
   CXXBaseSpecifier **path_buffer();
 
+  friend class ASTStmtReader;
+
 protected:
   CastExpr(StmtClass SC, QualType ty, ExprValueKind VK, const CastKind kind,
-           Expr *op, unsigned BasePathSize)
+           Expr *op, unsigned BasePathSize, bool HasFPFeatures)
       : Expr(SC, ty, VK, OK_Ordinary), Op(op) {
     CastExprBits.Kind = kind;
     CastExprBits.PartOfExplicitCast = false;
@@ -3451,15 +3417,25 @@ protected:
            "BasePathSize overflow!");
     setDependence(computeDependence(this));
     assert(CastConsistency());
+    CastExprBits.HasFPFeatures = HasFPFeatures;
   }
 
   /// Construct an empty cast.
-  CastExpr(StmtClass SC, EmptyShell Empty, unsigned BasePathSize)
-    : Expr(SC, Empty) {
+  CastExpr(StmtClass SC, EmptyShell Empty, unsigned BasePathSize,
+           bool HasFPFeatures)
+      : Expr(SC, Empty) {
     CastExprBits.PartOfExplicitCast = false;
     CastExprBits.BasePathSize = BasePathSize;
+    CastExprBits.HasFPFeatures = HasFPFeatures;
     assert((CastExprBits.BasePathSize == BasePathSize) &&
            "BasePathSize overflow!");
+  }
+
+  /// Return a pointer to the trailing FPOptions.
+  /// \pre hasStoredFPFeatures() == true
+  FPOptionsOverride *getTrailingFPFeatures();
+  const FPOptionsOverride *getTrailingFPFeatures() const {
+    return const_cast<CastExpr *>(this)->getTrailingFPFeatures();
   }
 
 public:
@@ -3506,6 +3482,28 @@ public:
     return getTargetFieldForToUnionCast(getType(), getSubExpr()->getType());
   }
 
+  bool hasStoredFPFeatures() const { return CastExprBits.HasFPFeatures; }
+
+  /// Get FPOptionsOverride from trailing storage.
+  FPOptionsOverride getStoredFPFeatures() const {
+    assert(hasStoredFPFeatures());
+    return *getTrailingFPFeatures();
+  }
+
+  // Get the FP features status of this operation. Only meaningful for
+  // operations on floating point types.
+  FPOptions getFPFeaturesInEffect(const LangOptions &LO) const {
+    if (hasStoredFPFeatures())
+      return getStoredFPFeatures().applyOverrides(LO);
+    return FPOptions::defaultWithoutTrailingStorage(LO);
+  }
+
+  FPOptionsOverride getFPFeatures() const {
+    if (hasStoredFPFeatures())
+      return getStoredFPFeatures();
+    return FPOptionsOverride();
+  }
+
   static const FieldDecl *getTargetFieldForToUnionCast(QualType unionType,
                                                        QualType opType);
   static const FieldDecl *getTargetFieldForToUnionCast(const RecordDecl *RD,
@@ -3543,21 +3541,35 @@ public:
 /// @endcode
 class ImplicitCastExpr final
     : public CastExpr,
-      private llvm::TrailingObjects<ImplicitCastExpr, CXXBaseSpecifier *> {
+      private llvm::TrailingObjects<ImplicitCastExpr, CXXBaseSpecifier *,
+                                    FPOptionsOverride> {
 
   ImplicitCastExpr(QualType ty, CastKind kind, Expr *op,
-                   unsigned BasePathLength, ExprValueKind VK)
-    : CastExpr(ImplicitCastExprClass, ty, VK, kind, op, BasePathLength) { }
+                   unsigned BasePathLength, FPOptionsOverride FPO,
+                   ExprValueKind VK)
+      : CastExpr(ImplicitCastExprClass, ty, VK, kind, op, BasePathLength,
+                 FPO.requiresTrailingStorage()) {
+    if (hasStoredFPFeatures())
+      *getTrailingFPFeatures() = FPO;
+  }
 
   /// Construct an empty implicit cast.
-  explicit ImplicitCastExpr(EmptyShell Shell, unsigned PathSize)
-    : CastExpr(ImplicitCastExprClass, Shell, PathSize) { }
+  explicit ImplicitCastExpr(EmptyShell Shell, unsigned PathSize,
+                            bool HasFPFeatures)
+      : CastExpr(ImplicitCastExprClass, Shell, PathSize, HasFPFeatures) {}
+
+  unsigned numTrailingObjects(OverloadToken<CXXBaseSpecifier *>) const {
+    return path_size();
+  }
 
 public:
   enum OnStack_t { OnStack };
   ImplicitCastExpr(OnStack_t _, QualType ty, CastKind kind, Expr *op,
-                   ExprValueKind VK)
-    : CastExpr(ImplicitCastExprClass, ty, VK, kind, op, 0) {
+                   ExprValueKind VK, FPOptionsOverride FPO)
+      : CastExpr(ImplicitCastExprClass, ty, VK, kind, op, 0,
+                 FPO.requiresTrailingStorage()) {
+    if (hasStoredFPFeatures())
+      *getTrailingFPFeatures() = FPO;
   }
 
   bool isPartOfExplicitCast() const { return CastExprBits.PartOfExplicitCast; }
@@ -3568,10 +3580,10 @@ public:
   static ImplicitCastExpr *Create(const ASTContext &Context, QualType T,
                                   CastKind Kind, Expr *Operand,
                                   const CXXCastPath *BasePath,
-                                  ExprValueKind Cat);
+                                  ExprValueKind Cat, FPOptionsOverride FPO);
 
   static ImplicitCastExpr *CreateEmpty(const ASTContext &Context,
-                                       unsigned PathSize);
+                                       unsigned PathSize, bool HasFPFeatures);
 
   SourceLocation getBeginLoc() const LLVM_READONLY {
     return getSubExpr()->getBeginLoc();
@@ -3612,12 +3624,14 @@ class ExplicitCastExpr : public CastExpr {
 protected:
   ExplicitCastExpr(StmtClass SC, QualType exprTy, ExprValueKind VK,
                    CastKind kind, Expr *op, unsigned PathSize,
-                   TypeSourceInfo *writtenTy)
-    : CastExpr(SC, exprTy, VK, kind, op, PathSize), TInfo(writtenTy) {}
+                   bool HasFPFeatures, TypeSourceInfo *writtenTy)
+      : CastExpr(SC, exprTy, VK, kind, op, PathSize, HasFPFeatures),
+        TInfo(writtenTy) {}
 
   /// Construct an empty explicit cast.
-  ExplicitCastExpr(StmtClass SC, EmptyShell Shell, unsigned PathSize)
-    : CastExpr(SC, Shell, PathSize) { }
+  ExplicitCastExpr(StmtClass SC, EmptyShell Shell, unsigned PathSize,
+                   bool HasFPFeatures)
+      : CastExpr(SC, Shell, PathSize, HasFPFeatures) {}
 
 public:
   /// getTypeInfoAsWritten - Returns the type source info for the type
@@ -3640,29 +3654,38 @@ public:
 /// (Type)expr. For example: @c (int)f.
 class CStyleCastExpr final
     : public ExplicitCastExpr,
-      private llvm::TrailingObjects<CStyleCastExpr, CXXBaseSpecifier *> {
+      private llvm::TrailingObjects<CStyleCastExpr, CXXBaseSpecifier *,
+                                    FPOptionsOverride> {
   SourceLocation LPLoc; // the location of the left paren
   SourceLocation RPLoc; // the location of the right paren
 
   CStyleCastExpr(QualType exprTy, ExprValueKind vk, CastKind kind, Expr *op,
-                 unsigned PathSize, TypeSourceInfo *writtenTy,
-                 SourceLocation l, SourceLocation r)
-    : ExplicitCastExpr(CStyleCastExprClass, exprTy, vk, kind, op, PathSize,
-                       writtenTy), LPLoc(l), RPLoc(r) {}
+                 unsigned PathSize, FPOptionsOverride FPO,
+                 TypeSourceInfo *writtenTy, SourceLocation l, SourceLocation r)
+      : ExplicitCastExpr(CStyleCastExprClass, exprTy, vk, kind, op, PathSize,
+                         FPO.requiresTrailingStorage(), writtenTy),
+        LPLoc(l), RPLoc(r) {
+    if (hasStoredFPFeatures())
+      *getTrailingFPFeatures() = FPO;
+  }
 
   /// Construct an empty C-style explicit cast.
-  explicit CStyleCastExpr(EmptyShell Shell, unsigned PathSize)
-    : ExplicitCastExpr(CStyleCastExprClass, Shell, PathSize) { }
+  explicit CStyleCastExpr(EmptyShell Shell, unsigned PathSize,
+                          bool HasFPFeatures)
+      : ExplicitCastExpr(CStyleCastExprClass, Shell, PathSize, HasFPFeatures) {}
+
+  unsigned numTrailingObjects(OverloadToken<CXXBaseSpecifier *>) const {
+    return path_size();
+  }
 
 public:
-  static CStyleCastExpr *Create(const ASTContext &Context, QualType T,
-                                ExprValueKind VK, CastKind K,
-                                Expr *Op, const CXXCastPath *BasePath,
-                                TypeSourceInfo *WrittenTy, SourceLocation L,
-                                SourceLocation R);
+  static CStyleCastExpr *
+  Create(const ASTContext &Context, QualType T, ExprValueKind VK, CastKind K,
+         Expr *Op, const CXXCastPath *BasePath, FPOptionsOverride FPO,
+         TypeSourceInfo *WrittenTy, SourceLocation L, SourceLocation R);
 
   static CStyleCastExpr *CreateEmpty(const ASTContext &Context,
-                                     unsigned PathSize);
+                                     unsigned PathSize, bool HasFPFeatures);
 
   SourceLocation getLParenLoc() const { return LPLoc; }
   void setLParenLoc(SourceLocation L) { LPLoc = L; }

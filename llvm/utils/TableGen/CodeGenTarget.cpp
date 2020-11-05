@@ -211,21 +211,23 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::nxv2bf16:  return "MVT::nxv2bf16";
   case MVT::nxv4bf16:  return "MVT::nxv4bf16";
   case MVT::nxv8bf16:  return "MVT::nxv8bf16";
-  case MVT::nxv1f32:  return "MVT::nxv1f32";
-  case MVT::nxv2f32:  return "MVT::nxv2f32";
-  case MVT::nxv4f32:  return "MVT::nxv4f32";
-  case MVT::nxv8f32:  return "MVT::nxv8f32";
-  case MVT::nxv16f32: return "MVT::nxv16f32";
-  case MVT::nxv1f64:  return "MVT::nxv1f64";
-  case MVT::nxv2f64:  return "MVT::nxv2f64";
-  case MVT::nxv4f64:  return "MVT::nxv4f64";
-  case MVT::nxv8f64:  return "MVT::nxv8f64";
-  case MVT::token:    return "MVT::token";
-  case MVT::Metadata: return "MVT::Metadata";
-  case MVT::iPTR:     return "MVT::iPTR";
-  case MVT::iPTRAny:  return "MVT::iPTRAny";
-  case MVT::Untyped:  return "MVT::Untyped";
-  case MVT::exnref:   return "MVT::exnref";
+  case MVT::nxv1f32:   return "MVT::nxv1f32";
+  case MVT::nxv2f32:   return "MVT::nxv2f32";
+  case MVT::nxv4f32:   return "MVT::nxv4f32";
+  case MVT::nxv8f32:   return "MVT::nxv8f32";
+  case MVT::nxv16f32:  return "MVT::nxv16f32";
+  case MVT::nxv1f64:   return "MVT::nxv1f64";
+  case MVT::nxv2f64:   return "MVT::nxv2f64";
+  case MVT::nxv4f64:   return "MVT::nxv4f64";
+  case MVT::nxv8f64:   return "MVT::nxv8f64";
+  case MVT::token:     return "MVT::token";
+  case MVT::Metadata:  return "MVT::Metadata";
+  case MVT::iPTR:      return "MVT::iPTR";
+  case MVT::iPTRAny:   return "MVT::iPTRAny";
+  case MVT::Untyped:   return "MVT::Untyped";
+  case MVT::exnref:    return "MVT::exnref";
+  case MVT::funcref:   return "MVT::funcref";
+  case MVT::externref: return "MVT::externref";
   default: llvm_unreachable("ILLEGAL VALUE TYPE!");
   }
 }
@@ -271,6 +273,11 @@ StringRef CodeGenTarget::getInstNamespace() const {
   }
 
   return "";
+}
+
+StringRef CodeGenTarget::getRegNamespace() const {
+  auto &RegClasses = RegBank->getRegClasses();
+  return RegClasses.size() > 0 ? RegClasses.front().Namespace : "";
 }
 
 Record *CodeGenTarget::getInstructionSet() const {
@@ -781,9 +788,6 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R,
     IS.ParamTypeDefs.push_back(TyEl);
   }
 
-  // Set default properties to true.
-  setDefaultProperties(R, DefaultProperties);
-
   // Parse the intrinsic properties.
   ListInit *PropList = R->getValueAsListInit("IntrProperties");
   for (unsigned i = 0, e = PropList->size(); i != e; ++i) {
@@ -793,6 +797,9 @@ CodeGenIntrinsic::CodeGenIntrinsic(Record *R,
 
     setProperty(Property);
   }
+
+  // Set default properties to true.
+  setDefaultProperties(R, DefaultProperties);
 
   // Also record the SDPatternOperator Properties.
   Properties = parseSDPatternOperatorProperties(R);
@@ -840,7 +847,7 @@ void CodeGenIntrinsic::setProperty(Record *R) {
   else if (R->getName() == "IntrNoFree")
     isNoFree = true;
   else if (R->getName() == "IntrWillReturn")
-    isWillReturn = true;
+    isWillReturn = !isNoReturn;
   else if (R->getName() == "IntrCold")
     isCold = true;
   else if (R->getName() == "IntrSpeculatable")

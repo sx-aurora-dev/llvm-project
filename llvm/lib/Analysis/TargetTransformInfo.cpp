@@ -71,6 +71,7 @@ IntrinsicCostAttributes::IntrinsicCostAttributes(Intrinsic::ID Id,
   if (const auto *FPMO = dyn_cast<FPMathOperator>(&CI))
     FMF = FPMO->getFastMathFlags();
 
+  Arguments.insert(Arguments.begin(), CI.arg_begin(), CI.arg_end());
   FunctionType *FTy =
     CI.getCalledFunction()->getFunctionType();
   ParamTys.insert(ParamTys.begin(), FTy->param_begin(), FTy->param_end());
@@ -376,6 +377,10 @@ bool TargetTransformInfo::isLSRCostLess(LSRCost &C1, LSRCost &C2) const {
   return TTIImpl->isLSRCostLess(C1, C2);
 }
 
+bool TargetTransformInfo::isNumRegsMajorCostOfLSR() const {
+  return TTIImpl->isNumRegsMajorCostOfLSR();
+}
+
 bool TargetTransformInfo::isProfitableLSRChainElement(Instruction *I) const {
   return TTIImpl->isProfitableLSRChainElement(I);
 }
@@ -572,8 +577,9 @@ int TargetTransformInfo::getIntImmCost(const APInt &Imm, Type *Ty,
 
 int TargetTransformInfo::getIntImmCostInst(unsigned Opcode, unsigned Idx,
                                            const APInt &Imm, Type *Ty,
-                                           TTI::TargetCostKind CostKind) const {
-  int Cost = TTIImpl->getIntImmCostInst(Opcode, Idx, Imm, Ty, CostKind);
+                                           TTI::TargetCostKind CostKind,
+                                           Instruction *Inst) const {
+  int Cost = TTIImpl->getIntImmCostInst(Opcode, Idx, Imm, Ty, CostKind, Inst);
   assert(Cost >= 0 && "TTI should not produce negative costs!");
   return Cost;
 }
@@ -1017,6 +1023,11 @@ bool TargetTransformInfo::useReductionIntrinsic(unsigned Opcode, Type *Ty,
   return TTIImpl->useReductionIntrinsic(Opcode, Ty, Flags);
 }
 
+bool TargetTransformInfo::preferInLoopReduction(unsigned Opcode, Type *Ty,
+                                                ReductionFlags Flags) const {
+  return TTIImpl->preferInLoopReduction(Opcode, Ty, Flags);
+}
+
 bool TargetTransformInfo::preferPredicatedReductionSelect(
     unsigned Opcode, Type *Ty, ReductionFlags Flags) const {
   return TTIImpl->preferPredicatedReductionSelect(Opcode, Ty, Flags);
@@ -1305,6 +1316,18 @@ TTI::ReductionKind TTI::matchVectorSplittingReduction(
   Opcode = RD->Opcode;
   Ty = VecTy;
   return RD->Kind;
+}
+
+TTI::ReductionKind
+TTI::matchVectorReduction(const ExtractElementInst *Root, unsigned &Opcode,
+                          VectorType *&Ty, bool &IsPairwise) {
+  TTI::ReductionKind RdxKind = matchVectorSplittingReduction(Root, Opcode, Ty);
+  if (RdxKind != TTI::ReductionKind::RK_None) {
+    IsPairwise = false;
+    return RdxKind;
+  }
+  IsPairwise = true;
+  return matchPairwiseReduction(Root, Opcode, Ty);
 }
 
 int TargetTransformInfo::getInstructionThroughput(const Instruction *I) const {

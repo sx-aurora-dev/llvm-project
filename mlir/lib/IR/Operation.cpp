@@ -71,29 +71,24 @@ OperationName OperationName::getFromOpaquePointer(void *pointer) {
 
 /// Create a new Operation with the specific fields.
 Operation *Operation::create(Location location, OperationName name,
-                             ArrayRef<Type> resultTypes,
-                             ArrayRef<Value> operands,
+                             TypeRange resultTypes, ValueRange operands,
                              ArrayRef<NamedAttribute> attributes,
-                             ArrayRef<Block *> successors,
-                             unsigned numRegions) {
+                             BlockRange successors, unsigned numRegions) {
   return create(location, name, resultTypes, operands,
                 MutableDictionaryAttr(attributes), successors, numRegions);
 }
 
 /// Create a new Operation from operation state.
 Operation *Operation::create(const OperationState &state) {
-  return Operation::create(state.location, state.name, state.types,
-                           state.operands, state.attributes, state.successors,
-                           state.regions);
+  return create(state.location, state.name, state.types, state.operands,
+                state.attributes, state.successors, state.regions);
 }
 
 /// Create a new Operation with the specific fields.
 Operation *Operation::create(Location location, OperationName name,
-                             ArrayRef<Type> resultTypes,
-                             ArrayRef<Value> operands,
+                             TypeRange resultTypes, ValueRange operands,
                              MutableDictionaryAttr attributes,
-                             ArrayRef<Block *> successors,
-                             RegionRange regions) {
+                             BlockRange successors, RegionRange regions) {
   unsigned numRegions = regions.size();
   Operation *op = create(location, name, resultTypes, operands, attributes,
                          successors, numRegions);
@@ -106,11 +101,9 @@ Operation *Operation::create(Location location, OperationName name,
 /// Overload of create that takes an existing MutableDictionaryAttr to avoid
 /// unnecessarily uniquing a list of attributes.
 Operation *Operation::create(Location location, OperationName name,
-                             ArrayRef<Type> resultTypes,
-                             ArrayRef<Value> operands,
+                             TypeRange resultTypes, ValueRange operands,
                              MutableDictionaryAttr attributes,
-                             ArrayRef<Block *> successors,
-                             unsigned numRegions) {
+                             BlockRange successors, unsigned numRegions) {
   // We only need to allocate additional memory for a subset of results.
   unsigned numTrailingResults = OpResult::getNumTrailing(resultTypes.size());
   unsigned numInlineResults = OpResult::getNumInline(resultTypes.size());
@@ -167,7 +160,7 @@ Operation *Operation::create(Location location, OperationName name,
 }
 
 Operation::Operation(Location location, OperationName name,
-                     ArrayRef<Type> resultTypes, unsigned numSuccessors,
+                     TypeRange resultTypes, unsigned numSuccessors,
                      unsigned numRegions,
                      const MutableDictionaryAttr &attributes,
                      bool hasOperandStorage)
@@ -401,7 +394,7 @@ void Operation::updateOrderIfNecessary() {
   // Check to see if there is a valid order between the two.
   if (prevOrder + 1 == nextOrder)
     return block->recomputeOpOrder();
-  orderIndex = prevOrder + 1 + ((nextOrder - prevOrder) / 2);
+  orderIndex = prevOrder + ((nextOrder - prevOrder) / 2);
 }
 
 //===----------------------------------------------------------------------===//
@@ -611,8 +604,8 @@ Operation *Operation::cloneWithoutRegions(BlockAndValueMapping &mapper) {
     successors.push_back(mapper.lookupOrDefault(successor));
 
   // Create the new operation.
-  auto *newOp = Operation::create(getLoc(), getName(), getResultTypes(),
-                                  operands, attrs, successors, getNumRegions());
+  auto *newOp = create(getLoc(), getName(), getResultTypes(), operands, attrs,
+                       successors, getNumRegions());
 
   // Remember the mapping of any results.
   for (unsigned i = 0, e = getNumResults(); i != e; ++i)
@@ -686,6 +679,26 @@ InFlightDiagnostic OpState::emitRemark(const Twine &message) {
 // Op Trait implementations
 //===----------------------------------------------------------------------===//
 
+OpFoldResult OpTrait::impl::foldIdempotent(Operation *op) {
+  auto *argumentOp = op->getOperand(0).getDefiningOp();
+  if (argumentOp && op->getName() == argumentOp->getName()) {
+    // Replace the outer operation output with the inner operation.
+    return op->getOperand(0);
+  }
+
+  return {};
+}
+
+OpFoldResult OpTrait::impl::foldInvolution(Operation *op) {
+  auto *argumentOp = op->getOperand(0).getDefiningOp();
+  if (argumentOp && op->getName() == argumentOp->getName()) {
+    // Replace the outer involutions output with inner's input.
+    return argumentOp->getOperand(0);
+  }
+
+  return {};
+}
+
 LogicalResult OpTrait::impl::verifyZeroOperands(Operation *op) {
   if (op->getNumOperands() != 0)
     return op->emitOpError() << "requires zero operands";
@@ -725,6 +738,22 @@ static Type getTensorOrVectorElementType(Type type) {
   if (auto tensor = type.dyn_cast<TensorType>())
     return getTensorOrVectorElementType(tensor.getElementType());
   return type;
+}
+
+LogicalResult OpTrait::impl::verifyIsIdempotent(Operation *op) {
+  // FIXME: Add back check for no side effects on operation.
+  // Currently adding it would cause the shared library build
+  // to fail since there would be a dependency of IR on SideEffectInterfaces
+  // which is cyclical.
+  return success();
+}
+
+LogicalResult OpTrait::impl::verifyIsInvolution(Operation *op) {
+  // FIXME: Add back check for no side effects on operation.
+  // Currently adding it would cause the shared library build
+  // to fail since there would be a dependency of IR on SideEffectInterfaces
+  // which is cyclical.
+  return success();
 }
 
 LogicalResult

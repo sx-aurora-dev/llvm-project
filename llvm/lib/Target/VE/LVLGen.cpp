@@ -46,10 +46,7 @@ int LVLGen::getVLIndex(unsigned Opcode) {
   if (HAS_VLINDEX(MCID.TSFlags))
     return GET_VLINDEX(MCID.TSFlags);
 
-  switch (Opcode) {
-#include "vl-index.inc"
-  case VE::veoldVOR1vl: return 3;
-  }
+  return -1;
 }
 
 // returns a register holding a vector length. NoRegister is returned when

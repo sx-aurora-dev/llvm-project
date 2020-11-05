@@ -127,9 +127,8 @@ static const MCPhysReg F128Regs[32] = {
     VE::Q16, VE::Q17, VE::Q18, VE::Q19, VE::Q20, VE::Q21, VE::Q22, VE::Q23,
     VE::Q24, VE::Q25, VE::Q26, VE::Q27, VE::Q28, VE::Q29, VE::Q30, VE::Q31};
 
-static const MCPhysReg VM512Regs[8] = {
-  VE::VMP0, VE::VMP1, VE::VMP2, VE::VMP3,
-  VE::VMP4, VE::VMP5, VE::VMP6, VE::VMP7 };
+static const MCPhysReg VM512Regs[8] = {VE::VMP0, VE::VMP1, VE::VMP2, VE::VMP3,
+                                       VE::VMP4, VE::VMP5, VE::VMP6, VE::VMP7};
 
 static const MCPhysReg MISCRegs[31] = {
     VE::USRCC,      VE::PSW,        VE::SAR,        VE::NoRegister,
@@ -288,7 +287,7 @@ public:
       return false;
 
     // Constant case
-    if (const MCConstantExpr *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
+    if (const auto *ConstExpr = dyn_cast<MCConstantExpr>(Imm.Val)) {
       int64_t Value = ConstExpr->getValue();
       return isUInt<4>(Value);
     }
@@ -692,7 +691,7 @@ public:
 
   static std::unique_ptr<VEOperand>
   MorphToMEMri(unsigned Base, std::unique_ptr<VEOperand> Op) {
-    const MCExpr *Imm  = Op->getImm();
+    const MCExpr *Imm = Op->getImm();
     Op->Kind = k_MemoryRegImm;
     Op->Mem.Base = Base;
     Op->Mem.IndexReg = 0;
@@ -703,7 +702,7 @@ public:
 
   static std::unique_ptr<VEOperand>
   MorphToMEMzi(std::unique_ptr<VEOperand> Op) {
-    const MCExpr *Imm  = Op->getImm();
+    const MCExpr *Imm = Op->getImm();
     Op->Kind = k_MemoryZeroImm;
     Op->Mem.Base = 0;
     Op->Mem.IndexReg = 0;
@@ -932,14 +931,6 @@ StringRef VEAsmParser::splitMnemonic(StringRef Name, SMLoc NameLoc,
     Mnemonic = parseRD(Name, 10, NameLoc, Operands);
   } else if (Name.startswith("cvt.l.d")) {
     Mnemonic = parseRD(Name, 7, NameLoc, Operands);
-  } else if (Name.startswith("vfmk.l.") || Name.startswith("vfmk.w.") ||
-             Name.startswith("vfmk.d.") || Name.startswith("vfmk.s.")) {
-    bool ICC = Name[5] == 'l' || Name[5] == 'w' ? true : false;
-    Mnemonic = parseCC(Name, 7, Name.size(), ICC, true, NameLoc, Operands);
-  } else if (Name.startswith("pvfmk.w.lo.") || Name.startswith("pvfmk.w.up.") ||
-             Name.startswith("pvfmk.s.lo.") || Name.startswith("pvfmk.s.up.")) {
-    bool ICC = Name[6] == 'l' || Name[6] == 'w' ? true : false;
-    Mnemonic = parseCC(Name, 11, Name.size(), ICC, true, NameLoc, Operands);
   } else if (Name.startswith("vcvt.w.d.sx") || Name.startswith("vcvt.w.d.zx") ||
              Name.startswith("vcvt.w.s.sx") || Name.startswith("vcvt.w.s.zx")) {
     Mnemonic = parseRD(Name, 11, NameLoc, Operands);
@@ -950,6 +941,14 @@ StringRef VEAsmParser::splitMnemonic(StringRef Name, SMLoc NameLoc,
     Mnemonic = parseRD(Name, 12, NameLoc, Operands);
   } else if (Name.startswith("pvcvt.w.s")) {
     Mnemonic = parseRD(Name, 9, NameLoc, Operands);
+  } else if (Name.startswith("vfmk.l.") || Name.startswith("vfmk.w.") ||
+             Name.startswith("vfmk.d.") || Name.startswith("vfmk.s.")) {
+    bool ICC = Name[5] == 'l' || Name[5] == 'w' ? true : false;
+    Mnemonic = parseCC(Name, 7, Name.size(), ICC, true, NameLoc, Operands);
+  } else if (Name.startswith("pvfmk.w.lo.") || Name.startswith("pvfmk.w.up.") ||
+             Name.startswith("pvfmk.s.lo.") || Name.startswith("pvfmk.s.up.")) {
+    bool ICC = Name[6] == 'l' || Name[6] == 'w' ? true : false;
+    Mnemonic = parseCC(Name, 11, Name.size(), ICC, true, NameLoc, Operands);
   } else {
     Operands->push_back(VEOperand::CreateToken(Mnemonic, NameLoc));
   }
@@ -1488,8 +1487,8 @@ OperandMatchResultTy VEAsmParser::parseOperand(OperandVector &Operands,
     Operands.push_back(VEOperand::CreateToken(Tok1.getString(), Tok1.getLoc()));
     Operands.push_back(VEOperand::CreateReg(RegNo1, S1, E1));
     Operands.push_back(VEOperand::CreateReg(RegNo2, S2, E2));
-    Operands.push_back(VEOperand::CreateToken(
-        Parser.getTok().getString(), Parser.getTok().getLoc()));
+    Operands.push_back(VEOperand::CreateToken(Parser.getTok().getString(),
+                                              Parser.getTok().getLoc()));
     Parser.Lex(); // Eat the ')'.
     break;
   }
@@ -1520,8 +1519,8 @@ OperandMatchResultTy VEAsmParser::parseOperand(OperandVector &Operands,
 
     Operands.push_back(std::move(Op1));
     Operands.push_back(std::move(Op2));
-    Operands.push_back(VEOperand::CreateToken(
-        Parser.getTok().getString(), Parser.getTok().getLoc()));
+    Operands.push_back(VEOperand::CreateToken(Parser.getTok().getString(),
+                                              Parser.getTok().getLoc()));
     Parser.Lex(); // Eat the ')'.
     break;
   }
@@ -1590,12 +1589,12 @@ unsigned VEAsmParser::validateTargetOperandClass(MCParsedAsmOperand &GOp,
     if (Op.isReg() && VEOperand::MorphToF128Reg(Op))
       return MCTargetAsmParser::Match_Success;
     break;
-  case MCK_MISC:
-    if (Op.isImm() && VEOperand::MorphToMISCReg(Op))
-      return MCTargetAsmParser::Match_Success;
-    break;
   case MCK_VM512:
     if (Op.isReg() && VEOperand::MorphToVM512Reg(Op))
+      return MCTargetAsmParser::Match_Success;
+    break;
+  case MCK_MISC:
+    if (Op.isImm() && VEOperand::MorphToMISCReg(Op))
       return MCTargetAsmParser::Match_Success;
     break;
   }

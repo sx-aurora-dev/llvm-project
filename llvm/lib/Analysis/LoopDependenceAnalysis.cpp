@@ -618,7 +618,7 @@ static bool getNestInfo(const Loop &TheLoop, LoopNestInfo &NestInfo) {
   const Loop *L = &TheLoop;
 
   // If it has no enclosed loops.
-  if (L->empty()) {
+  if (L->isInnermost()) {
     return true;
   }
 
@@ -628,7 +628,7 @@ static bool getNestInfo(const Loop &TheLoop, LoopNestInfo &NestInfo) {
       return false;
     L = SubLoops[0];
     NestInfo.NumDimensions += 1;
-    if (L->empty()) {
+    if (L->isInnermost()) {
       NestInfo.InnermostLoop = L;
       break;
     }

@@ -2196,7 +2196,8 @@ QualType Sema::BuildExtIntType(bool IsUnsigned, Expr *BitWidth,
     return Context.getDependentExtIntType(IsUnsigned, BitWidth);
 
   llvm::APSInt Bits(32);
-  ExprResult ICE = VerifyIntegerConstantExpression(BitWidth, &Bits);
+  ExprResult ICE =
+      VerifyIntegerConstantExpression(BitWidth, &Bits, /*FIXME*/ AllowFold);
 
   if (ICE.isInvalid())
     return QualType();
@@ -2272,9 +2273,8 @@ static ExprResult checkArraySize(Sema &S, Expr *&ArraySize,
     }
   } Diagnoser(VLADiag, VLAIsError);
 
-  ExprResult R = S.VerifyIntegerConstantExpression(
-      ArraySize, &SizeVal, Diagnoser,
-      (S.LangOpts.GNUMode || S.LangOpts.OpenCL));
+  ExprResult R =
+      S.VerifyIntegerConstantExpression(ArraySize, &SizeVal, Diagnoser);
   if (Diagnoser.IsVLA)
     return ExprResult();
   return R;
@@ -2517,9 +2517,10 @@ QualType Sema::BuildVectorType(QualType CurType, Expr *SizeExpr,
                                SourceLocation AttrLoc) {
   // The base type must be boolean or integer (not enumeration) or float, and
   // can't already be a vector.
-  if (!CurType->isDependentType() &&
-      (!CurType->isBuiltinType() ||
-       (!CurType->isIntegerType() && !CurType->isRealFloatingType()))) {
+  if ((!CurType->isDependentType() &&
+       (!CurType->isBuiltinType() ||
+        (!CurType->isIntegerType() && !CurType->isRealFloatingType()))) ||
+      CurType->isArrayType()) {
     Diag(AttrLoc, diag::err_attribute_invalid_vector_type) << CurType;
     return QualType();
   }
@@ -3084,12 +3085,12 @@ void Sema::diagnoseIgnoredQualifiers(unsigned DiagID, unsigned Quals,
 static void diagnoseRedundantReturnTypeQualifiers(Sema &S, QualType RetTy,
                                                   Declarator &D,
                                                   unsigned FunctionChunkIndex) {
-  if (D.getTypeObject(FunctionChunkIndex).Fun.hasTrailingReturnType()) {
-    // FIXME: TypeSourceInfo doesn't preserve location information for
-    // qualifiers.
+  const DeclaratorChunk::FunctionTypeInfo &FTI =
+      D.getTypeObject(FunctionChunkIndex).Fun;
+  if (FTI.hasTrailingReturnType()) {
     S.diagnoseIgnoredQualifiers(diag::warn_qual_return_type,
                                 RetTy.getLocalCVRQualifiers(),
-                                D.getIdentifierLoc());
+                                FTI.getTrailingReturnTypeLoc());
     return;
   }
 
@@ -3375,8 +3376,9 @@ static QualType GetDeclSpecTypeForDeclarator(TypeProcessingState &state,
       Error = 7; // Exception declaration
       break;
     case DeclaratorContext::TemplateParamContext:
-      if (isa<DeducedTemplateSpecializationType>(Deduced))
-        Error = 19; // Template parameter
+      if (isa<DeducedTemplateSpecializationType>(Deduced) &&
+          !SemaRef.getLangOpts().CPlusPlus20)
+        Error = 19; // Template parameter (until C++20)
       else if (!SemaRef.getLangOpts().CPlusPlus17)
         Error = 8; // Template parameter (until C++17)
       break;
@@ -4044,32 +4046,9 @@ classifyPointerDeclarator(Sema &S, QualType type, Declarator &declarator,
     if (auto recordType = type->getAs<RecordType>()) {
       RecordDecl *recordDecl = recordType->getDecl();
 
-      bool isCFError = false;
-      if (S.CFError) {
-        // If we already know about CFError, test it directly.
-        isCFError = (S.CFError == recordDecl);
-      } else {
-        // Check whether this is CFError, which we identify based on its bridge
-        // to NSError. CFErrorRef used to be declared with "objc_bridge" but is
-        // now declared with "objc_bridge_mutable", so look for either one of
-        // the two attributes.
-        if (recordDecl->getTagKind() == TTK_Struct && numNormalPointers > 0) {
-          IdentifierInfo *bridgedType = nullptr;
-          if (auto bridgeAttr = recordDecl->getAttr<ObjCBridgeAttr>())
-            bridgedType = bridgeAttr->getBridgedType();
-          else if (auto bridgeAttr =
-                       recordDecl->getAttr<ObjCBridgeMutableAttr>())
-            bridgedType = bridgeAttr->getBridgedType();
-
-          if (bridgedType == S.getNSErrorIdent()) {
-            S.CFError = recordDecl;
-            isCFError = true;
-          }
-        }
-      }
-
       // If this is CFErrorRef*, report it as such.
-      if (isCFError && numNormalPointers == 2 && numTypeSpecifierPointers < 2) {
+      if (numNormalPointers == 2 && numTypeSpecifierPointers < 2 &&
+          S.isCFError(recordDecl)) {
         return PointerDeclaratorKind::CFErrorRefPointer;
       }
       break;
@@ -4091,6 +4070,31 @@ classifyPointerDeclarator(Sema &S, QualType type, Declarator &declarator,
   default:
     return PointerDeclaratorKind::MultiLevelPointer;
   }
+}
+
+bool Sema::isCFError(RecordDecl *RD) {
+  // If we already know about CFError, test it directly.
+  if (CFError)
+    return CFError == RD;
+
+  // Check whether this is CFError, which we identify based on its bridge to
+  // NSError. CFErrorRef used to be declared with "objc_bridge" but is now
+  // declared with "objc_bridge_mutable", so look for either one of the two
+  // attributes.
+  if (RD->getTagKind() == TTK_Struct) {
+    IdentifierInfo *bridgedType = nullptr;
+    if (auto bridgeAttr = RD->getAttr<ObjCBridgeAttr>())
+      bridgedType = bridgeAttr->getBridgedType();
+    else if (auto bridgeAttr = RD->getAttr<ObjCBridgeMutableAttr>())
+      bridgedType = bridgeAttr->getBridgedType();
+
+    if (bridgedType == getNSErrorIdent()) {
+      CFError = RD;
+      return true;
+    }
+  }
+
+  return false;
 }
 
 static FileID getNullabilityCompletenessCheckFileID(Sema &S,
@@ -4132,7 +4136,8 @@ static FileID getNullabilityCompletenessCheckFileID(Sema &S,
 
 /// Creates a fix-it to insert a C-style nullability keyword at \p pointerLoc,
 /// taking into account whitespace before and after.
-static void fixItNullability(Sema &S, DiagnosticBuilder &Diag,
+template <typename DiagBuilderT>
+static void fixItNullability(Sema &S, DiagBuilderT &Diag,
                              SourceLocation PointerLoc,
                              NullabilityKind Nullability) {
   assert(PointerLoc.isValid());
@@ -8887,7 +8892,17 @@ static QualType getDecltypeForExpr(Sema &S, Expr *E) {
 
   // C++11 [dcl.type.simple]p4:
   //   The type denoted by decltype(e) is defined as follows:
-  //
+
+  // C++20:
+  //     - if E is an unparenthesized id-expression naming a non-type
+  //       template-parameter (13.2), decltype(E) is the type of the
+  //       template-parameter after performing any necessary type deduction
+  // Note that this does not pick up the implicit 'const' for a template
+  // parameter object. This rule makes no difference before C++20 so we apply
+  // it unconditionally.
+  if (const auto *SNTTPE = dyn_cast<SubstNonTypeTemplateParmExpr>(E))
+    return SNTTPE->getParameterType(S.Context);
+
   //     - if e is an unparenthesized id-expression or an unparenthesized class
   //       member access (5.2.5), decltype(e) is the type of the entity named
   //       by e. If there is no such entity, or if e names a set of overloaded
@@ -8896,6 +8911,8 @@ static QualType getDecltypeForExpr(Sema &S, Expr *E) {
   // We apply the same rules for Objective-C ivar and property references.
   if (const DeclRefExpr *DRE = dyn_cast<DeclRefExpr>(E)) {
     const ValueDecl *VD = DRE->getDecl();
+    if (auto *TPO = dyn_cast<TemplateParamObjectDecl>(VD))
+      return TPO->getType().getUnqualifiedType();
     return VD->getType();
   } else if (const MemberExpr *ME = dyn_cast<MemberExpr>(E)) {
     if (const ValueDecl *VD = ME->getMemberDecl())

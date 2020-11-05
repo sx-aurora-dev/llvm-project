@@ -50,6 +50,7 @@ class SIRegisterInfo;
 class AMDGPUInstructionSelector final : public InstructionSelector {
 private:
   MachineRegisterInfo *MRI;
+  const GCNSubtarget *Subtarget;
 
 public:
   AMDGPUInstructionSelector(const GCNSubtarget &STI,
@@ -140,9 +141,12 @@ private:
   bool selectG_EXTRACT_VECTOR_ELT(MachineInstr &I) const;
   bool selectG_INSERT_VECTOR_ELT(MachineInstr &I) const;
   bool selectG_SHUFFLE_VECTOR(MachineInstr &I) const;
+  bool selectAMDGPU_BUFFER_ATOMIC_FADD(MachineInstr &I) const;
+  bool selectGlobalAtomicFaddIntrinsic(MachineInstr &I) const;
+  bool selectBVHIntrinsic(MachineInstr &I) const;
 
-  std::pair<Register, unsigned>
-  selectVOP3ModsImpl(MachineOperand &Root) const;
+  std::pair<Register, unsigned> selectVOP3ModsImpl(MachineOperand &Root,
+                                                   bool AllowAbs = true) const;
 
   InstructionSelector::ComplexRendererFns
   selectVCSRC(MachineOperand &Root) const;
@@ -153,9 +157,13 @@ private:
   InstructionSelector::ComplexRendererFns
   selectVOP3Mods0(MachineOperand &Root) const;
   InstructionSelector::ComplexRendererFns
+  selectVOP3BMods0(MachineOperand &Root) const;
+  InstructionSelector::ComplexRendererFns
   selectVOP3OMods(MachineOperand &Root) const;
   InstructionSelector::ComplexRendererFns
   selectVOP3Mods(MachineOperand &Root) const;
+  InstructionSelector::ComplexRendererFns
+  selectVOP3BMods(MachineOperand &Root) const;
 
   ComplexRendererFns selectVOP3NoMods(MachineOperand &Root) const;
 
@@ -179,11 +187,11 @@ private:
   selectSmrdSgpr(MachineOperand &Root) const;
 
   template <bool Signed>
-  InstructionSelector::ComplexRendererFns
+  std::pair<Register, int>
   selectFlatOffsetImpl(MachineOperand &Root) const;
+
   InstructionSelector::ComplexRendererFns
   selectFlatOffset(MachineOperand &Root) const;
-
   InstructionSelector::ComplexRendererFns
   selectFlatOffsetSigned(MachineOperand &Root) const;
 

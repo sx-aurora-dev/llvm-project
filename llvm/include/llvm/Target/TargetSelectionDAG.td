@@ -517,8 +517,8 @@ def vp_reduce_and   : SDNode<"ISD::VP_REDUCE_AND", SDTReduceVP>;
 def vp_reduce_or    : SDNode<"ISD::VP_REDUCE_OR", SDTReduceVP>;
 def vp_reduce_xor   : SDNode<"ISD::VP_REDUCE_XOR", SDTReduceVP>;
 
-def vp_reduce_strict_fadd  : SDNode<"ISD::VP_REDUCE_STRICT_FADD", SDTReduceStartVP>;
-def vp_reduce_strict_fmul  : SDNode<"ISD::VP_REDUCE_STRICT_FMUL", SDTReduceStartVP>;
+def vp_reduce_seq_fadd  : SDNode<"ISD::VP_REDUCE_SEQ_FADD", SDTReduceStartVP>;
+def vp_reduce_seq_fmul  : SDNode<"ISD::VP_REDUCE_SEQ_FMUL", SDTReduceStartVP>;
 def vp_reduce_fadd  : SDNode<"ISD::VP_REDUCE_FADD", SDTReduceVP>;
 def vp_reduce_fmul  : SDNode<"ISD::VP_REDUCE_FMUL", SDTReduceVP>;
 def vp_reduce_fmin  : SDNode<"ISD::VP_REDUCE_FMIN", SDTReduceVP>;
@@ -756,6 +756,7 @@ def ist        : SDNode<"ISD::STORE"      , SDTIStore,
 def vp_vshift : SDNode<"ISD::VP_VSHIFT", SDTVShiftVP, []>;
 def vector_shuffle : SDNode<"ISD::VECTOR_SHUFFLE", SDTVecShuffle, []>;
 def build_vector : SDNode<"ISD::BUILD_VECTOR", SDTypeProfile<1, -1, []>, []>;
+def splat_vector : SDNode<"ISD::SPLAT_VECTOR", SDTypeProfile<1, 1, []>, []>;
 def scalar_to_vector : SDNode<"ISD::SCALAR_TO_VECTOR", SDTypeProfile<1, 1, []>,
                               []>;
 

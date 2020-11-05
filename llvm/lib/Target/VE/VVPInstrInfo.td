@@ -155,7 +155,7 @@ def vvp_ctpop :  SDNode<"VEISD::VVP_CTPOP", SDTUnaryOpVVP>;
 
 // reductions
 def vvp_reduce_fadd         : SDNode<"VEISD::VVP_REDUCE_FADD", SDTReduceVVP>;
-def vvp_reduce_strict_fadd  : SDNode<"VEISD::VVP_REDUCE_STRICT_FADD", SDTReduceStartVVP>;
+def vvp_reduce_seq_fadd     : SDNode<"VEISD::VVP_REDUCE_SEQ_FADD", SDTReduceStartVVP>;
 
 // int reductions
 def vvp_reduce_add          : SDNode<"VEISD::VVP_REDUCE_ADD", SDTReduceVVP>;

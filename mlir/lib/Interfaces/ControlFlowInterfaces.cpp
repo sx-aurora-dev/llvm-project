@@ -103,13 +103,13 @@ static LogicalResult verifyTypesAlongAllEdges(
       if (sourceNo)
         diag << "Region #" << sourceNo.getValue();
       else
-        diag << op->getName();
+        diag << "parent operands";
 
       diag << " to ";
       if (succRegionNo)
         diag << "Region #" << succRegionNo.getValue();
       else
-        diag << op->getName();
+        diag << "parent results";
       return diag;
     };
 
@@ -117,10 +117,9 @@ static LogicalResult verifyTypesAlongAllEdges(
     TypeRange succInputsTypes = succ.getSuccessorInputs().getTypes();
     if (sourceTypes.size() != succInputsTypes.size()) {
       InFlightDiagnostic diag = op->emitOpError(" region control flow edge ");
-      return printEdgeName(diag)
-             << " has " << sourceTypes.size()
-             << " source operands, but target successor needs "
-             << succInputsTypes.size();
+      return printEdgeName(diag) << ": source has " << sourceTypes.size()
+                                 << " operands, but target successor needs "
+                                 << succInputsTypes.size();
     }
 
     for (auto typesIdx :
@@ -130,8 +129,8 @@ static LogicalResult verifyTypesAlongAllEdges(
       if (sourceType != inputType) {
         InFlightDiagnostic diag = op->emitOpError(" along control flow edge ");
         return printEdgeName(diag)
-               << " source #" << typesIdx.index() << " type " << sourceType
-               << " should match input #" << typesIdx.index() << " type "
+               << ": source type #" << typesIdx.index() << " " << sourceType
+               << " should match input type #" << typesIdx.index() << " "
                << inputType;
       }
     }
@@ -168,7 +167,7 @@ LogicalResult detail::verifyTypesAlongControlFlowEdges(Operation *op) {
   for (unsigned regionNo : llvm::seq(0U, op->getNumRegions())) {
     Region &region = op->getRegion(regionNo);
 
-    // Since the interface cannnot distinguish between different ReturnLike
+    // Since the interface cannot distinguish between different ReturnLike
     // ops within the region branching to different successors, all ReturnLike
     // ops in this region should have the same operand types. We will then use
     // one of them as the representative for type matching.

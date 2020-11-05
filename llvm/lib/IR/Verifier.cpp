@@ -283,6 +283,9 @@ class Verifier : public InstVisitor<Verifier>, VerifierSupport {
   /// Whether the current function has a DISubprogram attached to it.
   bool HasDebugInfo = false;
 
+  /// The current source language.
+  dwarf::SourceLanguage CurrentSourceLang = dwarf::DW_LANG_lo_user;
+
   /// Whether source was present on the first DIFile encountered in each CU.
   DenseMap<const DICompileUnit *, bool> HasSourceDebugInfo;
 
@@ -897,7 +900,9 @@ void Verifier::visitDIScope(const DIScope &N) {
 
 void Verifier::visitDISubrange(const DISubrange &N) {
   AssertDI(N.getTag() == dwarf::DW_TAG_subrange_type, "invalid tag", &N);
-  AssertDI(N.getRawCountNode() || N.getRawUpperBound(),
+  bool HasAssumedSizedArraySupport = dwarf::isFortran(CurrentSourceLang);
+  AssertDI(HasAssumedSizedArraySupport || N.getRawCountNode() ||
+               N.getRawUpperBound(),
            "Subrange must contain count or upperBound", &N);
   AssertDI(!N.getRawCountNode() || !N.getRawUpperBound(),
            "Subrange can have any one of count or upperBound", &N);
@@ -920,6 +925,30 @@ void Verifier::visitDISubrange(const DISubrange &N) {
   auto *Stride = N.getRawStride();
   AssertDI(!Stride || isa<ConstantAsMetadata>(Stride) ||
                isa<DIVariable>(Stride) || isa<DIExpression>(Stride),
+           "Stride must be signed constant or DIVariable or DIExpression", &N);
+}
+
+void Verifier::visitDIGenericSubrange(const DIGenericSubrange &N) {
+  AssertDI(N.getTag() == dwarf::DW_TAG_generic_subrange, "invalid tag", &N);
+  AssertDI(N.getRawCountNode() || N.getRawUpperBound(),
+           "GenericSubrange must contain count or upperBound", &N);
+  AssertDI(!N.getRawCountNode() || !N.getRawUpperBound(),
+           "GenericSubrange can have any one of count or upperBound", &N);
+  auto *CBound = N.getRawCountNode();
+  AssertDI(!CBound || isa<DIVariable>(CBound) || isa<DIExpression>(CBound),
+           "Count must be signed constant or DIVariable or DIExpression", &N);
+  auto *LBound = N.getRawLowerBound();
+  AssertDI(LBound, "GenericSubrange must contain lowerBound", &N);
+  AssertDI(isa<DIVariable>(LBound) || isa<DIExpression>(LBound),
+           "LowerBound must be signed constant or DIVariable or DIExpression",
+           &N);
+  auto *UBound = N.getRawUpperBound();
+  AssertDI(!UBound || isa<DIVariable>(UBound) || isa<DIExpression>(UBound),
+           "UpperBound must be signed constant or DIVariable or DIExpression",
+           &N);
+  auto *Stride = N.getRawStride();
+  AssertDI(Stride, "GenericSubrange must contain stride", &N);
+  AssertDI(isa<DIVariable>(Stride) || isa<DIExpression>(Stride),
            "Stride must be signed constant or DIVariable or DIExpression", &N);
 }
 
@@ -1053,6 +1082,11 @@ void Verifier::visitDICompositeType(const DICompositeType &N) {
     AssertDI(N.getTag() == dwarf::DW_TAG_array_type,
              "allocated can only appear in array type");
   }
+
+  if (N.getRawRank()) {
+    AssertDI(N.getTag() == dwarf::DW_TAG_array_type,
+             "rank can only appear in array type");
+  }
 }
 
 void Verifier::visitDISubroutineType(const DISubroutineType &N) {
@@ -1101,6 +1135,8 @@ void Verifier::visitDICompileUnit(const DICompileUnit &N) {
            N.getRawFile());
   AssertDI(!N.getFile()->getFilename().empty(), "invalid filename", &N,
            N.getFile());
+
+  CurrentSourceLang = (dwarf::SourceLanguage)N.getSourceLanguage();
 
   verifySourceDebugInfo(N, *N.getFile());
 
@@ -1567,6 +1603,7 @@ static bool isFuncOnlyAttr(Attribute::AttrKind Kind) {
   case Attribute::NoInline:
   case Attribute::AlwaysInline:
   case Attribute::OptimizeForSize:
+  case Attribute::NoStackProtect:
   case Attribute::StackProtect:
   case Attribute::StackProtectReq:
   case Attribute::StackProtectStrong:
@@ -1603,6 +1640,7 @@ static bool isFuncOnlyAttr(Attribute::AttrKind Kind) {
   case Attribute::Speculatable:
   case Attribute::StrictFP:
   case Attribute::NullPointerIsValid:
+  case Attribute::MustProgress:
     return true;
   default:
     break;
@@ -1984,6 +2022,19 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
     if (S.getAsInteger(10, N))
       CheckFailed(
           "\"patchable-function-entry\" takes an unsigned integer: " + S, V);
+  }
+  {
+    unsigned N = 0;
+    if (Attrs.hasFnAttribute(Attribute::NoStackProtect))
+      ++N;
+    if (Attrs.hasFnAttribute(Attribute::StackProtect))
+      ++N;
+    if (Attrs.hasFnAttribute(Attribute::StackProtectReq))
+      ++N;
+    if (Attrs.hasFnAttribute(Attribute::StackProtectStrong))
+      ++N;
+    Assert(N < 2,
+           "nossp, ssp, sspreq, sspstrong fn attrs are mutually exclusive", V);
   }
 }
 
@@ -2452,6 +2503,10 @@ void Verifier::visitFunction(const Function &F) {
                  "function must have a single !dbg attachment", &F, I.second);
         AssertDI(isa<DISubprogram>(I.second),
                  "function !dbg attachment must be a subprogram", &F, I.second);
+        AssertDI(cast<DISubprogram>(I.second)->isDistinct(),
+                 "function definition may only have a distinct !dbg attachment",
+                 &F);
+
         auto *SP = cast<DISubprogram>(I.second);
         const Function *&AttachedTo = DISubprogramAttachments[SP];
         AssertDI(!AttachedTo || AttachedTo == &F,
@@ -4509,21 +4564,32 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
       Assert(Elem.Tag->getKey() == "ignore" ||
                  Attribute::isExistingAttribute(Elem.Tag->getKey()),
              "tags must be valid attribute names");
-      Assert(Elem.End - Elem.Begin <= 2, "to many arguments");
       Attribute::AttrKind Kind =
           Attribute::getAttrKindFromName(Elem.Tag->getKey());
+      unsigned ArgCount = Elem.End - Elem.Begin;
+      if (Kind == Attribute::Alignment) {
+        Assert(ArgCount <= 3 && ArgCount >= 2,
+               "alignment assumptions should have 2 or 3 arguments");
+        Assert(Call.getOperand(Elem.Begin)->getType()->isPointerTy(),
+               "first argument should be a pointer");
+        Assert(Call.getOperand(Elem.Begin + 1)->getType()->isIntegerTy(),
+               "second argument should be an integer");
+        if (ArgCount == 3)
+          Assert(Call.getOperand(Elem.Begin + 2)->getType()->isIntegerTy(),
+                 "third argument should be an integer if present");
+        return;
+      }
+      Assert(ArgCount <= 2, "to many arguments");
       if (Kind == Attribute::None)
         break;
       if (Attribute::doesAttrKindHaveArgument(Kind)) {
-        Assert(Elem.End - Elem.Begin == 2,
-               "this attribute should have 2 arguments");
+        Assert(ArgCount == 2, "this attribute should have 2 arguments");
         Assert(isa<ConstantInt>(Call.getOperand(Elem.Begin + 1)),
                "the second argument should be a constant integral value");
       } else if (isFuncOnlyAttr(Kind)) {
-        Assert((Elem.End - Elem.Begin) == 0, "this attribute has no argument");
+        Assert((ArgCount) == 0, "this attribute has no argument");
       } else if (!isFuncOrArgAttr(Kind)) {
-        Assert((Elem.End - Elem.Begin) == 1,
-               "this attribute should have one argument");
+        Assert((ArgCount) == 1, "this attribute should have one argument");
       }
     }
     break;
@@ -5030,6 +5096,14 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
     Type *Ty = Call.getType();
     unsigned Size = Ty->getScalarSizeInBits();
     Assert(Size % 16 == 0, "bswap must be an even number of bytes", &Call);
+    break;
+  }
+  case Intrinsic::invariant_start: {
+    ConstantInt *InvariantSize = dyn_cast<ConstantInt>(Call.getArgOperand(0));
+    Assert(InvariantSize &&
+               (!InvariantSize->isNegative() || InvariantSize->isMinusOne()),
+           "invariant_start parameter must be -1, 0 or a positive number",
+           &Call);
     break;
   }
   case Intrinsic::matrix_multiply:

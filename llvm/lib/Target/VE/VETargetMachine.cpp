@@ -21,6 +21,8 @@
 
 using namespace llvm;
 
+#define DEBUG_TYPE "ve"
+
 extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeVETarget() {
   // Register the target.
   RegisterTargetMachine<VETargetMachine> X(getTheVETarget());
@@ -118,6 +120,7 @@ TargetPassConfig *VETargetMachine::createPassConfig(PassManagerBase &PM) {
 }
 
 void VEPassConfig::addIRPasses() {
+  // VE requires atomic expand pass.
   addPass(createAtomicExpandPass());
   TargetPassConfig::addIRPasses();
 }

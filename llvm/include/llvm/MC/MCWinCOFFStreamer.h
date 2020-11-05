@@ -43,7 +43,8 @@ public:
   void emitLabel(MCSymbol *Symbol, SMLoc Loc = SMLoc()) override;
   void emitAssemblerFlag(MCAssemblerFlag Flag) override;
   void emitThumbFunc(MCSymbol *Func) override;
-  bool emitSymbolAttribute(MCSymbol *Symbol, MCSymbolAttr Attribute) override;
+  bool emitSymbolAttribute(MCSymbol *Symbol, MCSymbolAttr Attribute,
+                           SMLoc Loc = SMLoc()) override;
   void emitSymbolDesc(MCSymbol *Symbol, unsigned DescValue) override;
   void BeginCOFFSymbolDef(MCSymbol const *Symbol) override;
   void EmitCOFFSymbolStorageClass(int StorageClass) override;
@@ -58,6 +59,7 @@ public:
                         unsigned ByteAlignment) override;
   void emitLocalCommonSymbol(MCSymbol *Symbol, uint64_t Size,
                              unsigned ByteAlignment) override;
+  void emitWeakReference(MCSymbol *Alias, const MCSymbol *Symbol) override;
   void emitZerofill(MCSection *Section, MCSymbol *Symbol, uint64_t Size,
                     unsigned ByteAlignment, SMLoc Loc = SMLoc()) override;
   void emitTBSSSymbol(MCSection *Section, MCSymbol *Symbol, uint64_t Size,

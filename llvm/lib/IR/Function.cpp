@@ -141,12 +141,13 @@ bool Argument::hasPointeeInMemoryValueAttr() const {
     return false;
   AttributeList Attrs = getParent()->getAttributes();
   return Attrs.hasParamAttribute(getArgNo(), Attribute::ByVal) ||
+         Attrs.hasParamAttribute(getArgNo(), Attribute::StructRet) ||
          Attrs.hasParamAttribute(getArgNo(), Attribute::InAlloca) ||
          Attrs.hasParamAttribute(getArgNo(), Attribute::Preallocated) ||
          Attrs.hasParamAttribute(getArgNo(), Attribute::ByRef);
 }
 
-/// For a byval, inalloca, or preallocated parameter, get the in-memory
+/// For a byval, sret, inalloca, or preallocated parameter, get the in-memory
 /// parameter type.
 static Type *getMemoryParamAllocType(AttributeSet ParamAttrs, Type *ArgTy) {
   // FIXME: All the type carrying attributes are mutually exclusive, so there
@@ -158,10 +159,11 @@ static Type *getMemoryParamAllocType(AttributeSet ParamAttrs, Type *ArgTy) {
   if (Type *PreAllocTy = ParamAttrs.getPreallocatedType())
     return PreAllocTy;
 
-  // FIXME: inalloca always depends on pointee element type. It's also possible
-  // for byval to miss it.
+  // FIXME: sret and inalloca always depends on pointee element type. It's also
+  // possible for byval to miss it.
   if (ParamAttrs.hasAttribute(Attribute::InAlloca) ||
       ParamAttrs.hasAttribute(Attribute::ByVal) ||
+      ParamAttrs.hasAttribute(Attribute::StructRet) ||
       ParamAttrs.hasAttribute(Attribute::Preallocated))
     return cast<PointerType>(ArgTy)->getElementType();
 
@@ -195,6 +197,11 @@ MaybeAlign Argument::getParamAlign() const {
 Type *Argument::getParamByValType() const {
   assert(getType()->isPointerTy() && "Only pointers have byval types");
   return getParent()->getParamByValType(getArgNo());
+}
+
+Type *Argument::getParamStructRetType() const {
+  assert(getType()->isPointerTy() && "Only pointers have sret types");
+  return getParent()->getParamStructRetType(getArgNo());
 }
 
 Type *Argument::getParamByRefType() const {
@@ -571,6 +578,21 @@ void Function::addDereferenceableOrNullParamAttr(unsigned ArgNo,
   setAttributes(PAL);
 }
 
+DenormalMode Function::getDenormalMode(const fltSemantics &FPType) const {
+  if (&FPType == &APFloat::IEEEsingle()) {
+    Attribute Attr = getFnAttribute("denormal-fp-math-f32");
+    StringRef Val = Attr.getValueAsString();
+    if (!Val.empty())
+      return parseDenormalFPAttribute(Val);
+
+    // If the f32 variant of the attribute isn't specified, try to use the
+    // generic one.
+  }
+
+  Attribute Attr = getFnAttribute("denormal-fp-math");
+  return parseDenormalFPAttribute(Attr.getValueAsString());
+}
+
 const std::string &Function::getGC() const {
   assert(hasGC() && "Function has no collector");
   return getContext().getGC(*this);
@@ -800,20 +822,21 @@ enum IIT_Info {
   IIT_PTR_TO_ELT = 33,
   IIT_VEC_OF_ANYPTRS_TO_ELT = 34,
   IIT_I128 = 35,
-  IIT_V256 = 36,
-  IIT_V512 = 37,
-  IIT_V1024 = 38,
-  IIT_STRUCT6 = 39,
-  IIT_STRUCT7 = 40,
-  IIT_STRUCT8 = 41,
-  IIT_F128 = 42,
-  IIT_VEC_ELEMENT = 43,
-  IIT_SCALABLE_VEC = 44,
-  IIT_SUBDIVIDE2_ARG = 45,
-  IIT_SUBDIVIDE4_ARG = 46,
-  IIT_VEC_OF_BITCASTS_TO_INT = 47,
-  IIT_V128 = 48,
-  IIT_BF16 = 49
+  IIT_V512 = 36,
+  IIT_V1024 = 37,
+  IIT_STRUCT6 = 38,
+  IIT_STRUCT7 = 39,
+  IIT_STRUCT8 = 40,
+  IIT_F128 = 41,
+  IIT_VEC_ELEMENT = 42,
+  IIT_SCALABLE_VEC = 43,
+  IIT_SUBDIVIDE2_ARG = 44,
+  IIT_SUBDIVIDE4_ARG = 45,
+  IIT_VEC_OF_BITCASTS_TO_INT = 46,
+  IIT_V128 = 47,
+  IIT_BF16 = 48,
+  IIT_STRUCT9 = 49,
+  IIT_V256 = 50
 };
 
 static void DecodeIITType(unsigned &NextElt, ArrayRef<unsigned char> Infos,
@@ -979,6 +1002,7 @@ static void DecodeIITType(unsigned &NextElt, ArrayRef<unsigned char> Infos,
   case IIT_EMPTYSTRUCT:
     OutputTable.push_back(IITDescriptor::get(IITDescriptor::Struct, 0));
     return;
+  case IIT_STRUCT9: ++StructElts; LLVM_FALLTHROUGH;
   case IIT_STRUCT8: ++StructElts; LLVM_FALLTHROUGH;
   case IIT_STRUCT7: ++StructElts; LLVM_FALLTHROUGH;
   case IIT_STRUCT6: ++StructElts; LLVM_FALLTHROUGH;
@@ -1406,8 +1430,7 @@ static bool matchIntrinsicType(
       auto *ReferenceType = dyn_cast<VectorType>(ArgTys[RefArgNumber]);
       auto *ThisArgVecTy = dyn_cast<VectorType>(Ty);
       if (!ThisArgVecTy || !ReferenceType ||
-          (cast<FixedVectorType>(ReferenceType)->getNumElements() !=
-           cast<FixedVectorType>(ThisArgVecTy)->getNumElements()))
+          (ReferenceType->getElementCount() != ThisArgVecTy->getElementCount()))
         return true;
       PointerType *ThisArgEltTy =
           dyn_cast<PointerType>(ThisArgVecTy->getElementType());

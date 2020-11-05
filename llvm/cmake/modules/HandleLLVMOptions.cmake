@@ -195,7 +195,7 @@ endif()
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "AIX")
   # -fPIC does not enable the large code model for GCC on AIX but does for XL.
-  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     append("-mcmodel=large" CMAKE_CXX_FLAGS CMAKE_C_FLAGS)
   elseif(CMAKE_CXX_COMPILER_ID MATCHES "XL")
     # XL generates a small number of relocations not of the large model, -bbigtoc is needed.
@@ -408,6 +408,8 @@ elseif(MINGW) # FIXME: Also cygwin?
     append("-Wa,-mbig-obj" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
   endif()
 endif()
+
+option(LLVM_ENABLE_WARNINGS "Enable compiler warnings." ON)
 
 if( MSVC )
   include(ChooseMSVCCRT)
@@ -774,8 +776,7 @@ if(LLVM_USE_SANITIZER)
       endif()
     elseif (LLVM_USE_SANITIZER STREQUAL "Undefined")
       append_common_sanitizer_flags()
-      append("-fsanitize=undefined -fno-sanitize=vptr,function -fno-sanitize-recover=all"
-              CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+      append("${LLVM_UBSAN_FLAGS}" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
     elseif (LLVM_USE_SANITIZER STREQUAL "Thread")
       append_common_sanitizer_flags()
       append("-fsanitize=thread" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
@@ -784,8 +785,8 @@ if(LLVM_USE_SANITIZER)
     elseif (LLVM_USE_SANITIZER STREQUAL "Address;Undefined" OR
             LLVM_USE_SANITIZER STREQUAL "Undefined;Address")
       append_common_sanitizer_flags()
-      append("-fsanitize=address,undefined -fno-sanitize=vptr,function -fno-sanitize-recover=all"
-              CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+      append("-fsanitize=address" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
+      append("${LLVM_UBSAN_FLAGS}" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)
     elseif (LLVM_USE_SANITIZER STREQUAL "Leaks")
       append_common_sanitizer_flags()
       append("-fsanitize=leak" CMAKE_C_FLAGS CMAKE_CXX_FLAGS)

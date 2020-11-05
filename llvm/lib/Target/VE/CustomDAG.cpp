@@ -116,8 +116,8 @@ EVT getLargestConvType(SDNode *Op) {
 
 PosOpt getVVPReductionStartParamPos(unsigned VVPOC) {
   switch (VVPOC) {
-  case VEISD::VVP_REDUCE_STRICT_FADD:
-  case VEISD::VVP_REDUCE_STRICT_FMUL:
+  case VEISD::VVP_REDUCE_SEQ_FADD:
+  case VEISD::VVP_REDUCE_SEQ_FMUL:
     return 0;
   default:
     return None;
@@ -154,8 +154,8 @@ PosOpt getIntrinReductionVectorParamPos(unsigned ISD) {
     case ISD::VECREDUCE_FMAX:
       return 0;
 
-    case ISD::VECREDUCE_STRICT_FADD:
-    case ISD::VECREDUCE_STRICT_FMUL:
+    case ISD::VECREDUCE_SEQ_FADD:
+    case ISD::VECREDUCE_SEQ_FMUL:
       return 1;
   }
   return None;

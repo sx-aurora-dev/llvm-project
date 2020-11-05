@@ -14,6 +14,7 @@ def clean_patch(in_path, out_path):
   print("IN: {} // OUT: {}".format(in_path, out_path))
   in_func = False
   past_first_block = False
+  past_monc = False
   past_sp_copy = False
 
   raw_lines = [raw_line for raw_line in open(in_path, 'r')]
@@ -29,6 +30,7 @@ def clean_patch(in_path, out_path):
       in_func=True
       past_sp_copy=False
       past_first_block=False
+      past_monc = False
       prologue_buf=[]
     elif line.startswith("}"):
       in_func=False
@@ -49,8 +51,11 @@ def clean_patch(in_path, out_path):
     if not past_first_block:
       prologue_buf.append(raw_line)
 
+    if line.startswith("; CHECK-NEXT:    monc"):
+      past_monc = True
+
     # block -> rewrite into generic form
-    if line.startswith("; CHECK-NEXT:  .LBB") and not past_first_block:
+    if line.startswith("; CHECK-NEXT:  .LBB") and not past_first_block and past_monc:
       prologue_buf.clear()
       raw_line = re.sub(r'; CHECK-NEXT:', r'; CHECK:     ', raw_line);
       modified_lines.append(raw_line)

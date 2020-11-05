@@ -3639,6 +3639,16 @@ ConstString TypeSystemClang::GetTypeName(lldb::opaque_compiler_type_t type) {
 
   clang::QualType qual_type(GetQualType(type));
 
+  // Remove certain type sugar from the name. Sugar such as elaborated types
+  // or template types which only serve to improve diagnostics shouldn't
+  // act as their own types from the user's perspective (e.g., formatter
+  // shouldn't format a variable differently depending on how the ser has
+  // specified the type. '::Type' and 'Type' should behave the same).
+  // Typedefs and atomic derived types are not removed as they are actually
+  // useful for identifiying specific types.
+  qual_type = RemoveWrappingTypes(qual_type,
+                                  {clang::Type::Typedef, clang::Type::Atomic});
+
   // For a typedef just return the qualified name.
   if (const auto *typedef_type = qual_type->getAs<clang::TypedefType>()) {
     const clang::TypedefNameDecl *typedef_decl = typedef_type->getDecl();
@@ -4809,6 +4819,12 @@ lldb::Encoding TypeSystemClang::GetEncoding(lldb::opaque_compiler_type_t type,
     case clang::BuiltinType::OCLIntelSubgroupAVCImeDualRefStreamin:
       break;
 
+    // PowerPC -- Matrix Multiply Assist
+    case clang::BuiltinType::VectorPair:
+    case clang::BuiltinType::VectorQuad:
+      break;
+
+    // ARM -- Scalable Vector Extension
     case clang::BuiltinType::SveBool:
     case clang::BuiltinType::SveInt8:
     case clang::BuiltinType::SveInt8x2:
@@ -9564,14 +9580,15 @@ FunctionCaller *TypeSystemClangForExpressions::GetFunctionCaller(
                                  arg_value_list, name);
 }
 
-UtilityFunction *
-TypeSystemClangForExpressions::GetUtilityFunction(const char *text,
-                                                  const char *name) {
+std::unique_ptr<UtilityFunction>
+TypeSystemClangForExpressions::CreateUtilityFunction(std::string text,
+                                                     std::string name) {
   TargetSP target_sp = m_target_wp.lock();
   if (!target_sp)
-    return nullptr;
+    return {};
 
-  return new ClangUtilityFunction(*target_sp.get(), text, name);
+  return std::make_unique<ClangUtilityFunction>(
+      *target_sp.get(), std::move(text), std::move(name));
 }
 
 PersistentExpressionState *

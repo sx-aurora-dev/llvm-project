@@ -1,11 +1,12 @@
 # Main API.
 add_mlir_library(MLIRCAPIIR
+  AffineExpr.cpp
   AffineMap.cpp
+  Diagnostics.cpp
   IR.cpp
   StandardAttributes.cpp
   StandardTypes.cpp
-
-  EXCLUDE_FROM_LIBMLIR
+  Support.cpp
 
   ADDITIONAL_HEADER_DIRS
   ${MLIR_MAIN_INCLUDE_DIR}/mlir-c

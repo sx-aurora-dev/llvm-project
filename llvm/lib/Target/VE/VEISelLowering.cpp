@@ -2396,7 +2396,7 @@ void VETargetLowering::initVPUActions() {
 
   // reductions
   const ISD::NodeType FPOrderedReductionOCs[] = {
-      ISD::VECREDUCE_STRICT_FADD, ISD::VECREDUCE_STRICT_FMUL, END_OF_OCLIST};
+      ISD::VECREDUCE_SEQ_FADD, ISD::VECREDUCE_SEQ_FMUL, END_OF_OCLIST};
 
   // Convenience Opcode loops
   auto ForAll_Opcodes = [](const ISD::NodeType *OCs,
@@ -2890,11 +2890,11 @@ Instruction *VETargetLowering::emitLeadingFence(IRBuilder<> &Builder,
     return nullptr; // Nothing to do
   case AtomicOrdering::Release:
   case AtomicOrdering::AcquireRelease:
-    return callIntrinsic(Builder, Intrinsic::ve_fencem1);
+      return Builder.CreateFence(AtomicOrdering::Release);
   case AtomicOrdering::SequentiallyConsistent:
     if (!Inst->hasAtomicStore())
       return nullptr; // Nothing to do
-    return callIntrinsic(Builder, Intrinsic::ve_fencem3);
+    return Builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
   }
   llvm_unreachable("Unknown fence ordering in emitLeadingFence");
 }
@@ -2911,9 +2911,9 @@ Instruction *VETargetLowering::emitTrailingFence(IRBuilder<> &Builder,
     return nullptr; // Nothing to do
   case AtomicOrdering::Acquire:
   case AtomicOrdering::AcquireRelease:
-    return callIntrinsic(Builder, Intrinsic::ve_fencem2);
+    return Builder.CreateFence(AtomicOrdering::Acquire);
   case AtomicOrdering::SequentiallyConsistent:
-    return callIntrinsic(Builder, Intrinsic::ve_fencem3);
+    return Builder.CreateFence(AtomicOrdering::SequentiallyConsistent);
   }
   llvm_unreachable("Unknown fence ordering in emitTrailingFence");
 }
@@ -3086,7 +3086,7 @@ static SDValue lowerLoadI1(SDValue Op, SelectionDAG &DAG) {
                                  MachineMemOperand::MONone);
       OutChains[i] = SDValue(Val.getNode(), 1);
 
-      VM = DAG.getMachineNode(VE::LVMxir_x, DL, MVT::i64,
+      VM = DAG.getMachineNode(VE::LVMir_m, DL, MVT::i64,
                               DAG.getTargetConstant(i, DL, MVT::i64),
                               Val, SDValue(VM, 0));
     }
@@ -3196,7 +3196,7 @@ static SDValue lowerStoreI1(SDValue Op, SelectionDAG &DAG) {
   if (MemVT == MVT::v256i1 || MemVT == MVT::v4i64) {
     SDValue OutChains[4];
     for (int i = 0; i < 4; ++i) {
-      SDNode *V = DAG.getMachineNode(VE::SVMxi, DL, MVT::i64,
+      SDNode *V = DAG.getMachineNode(VE::SVMmi, DL, MVT::i64,
                                      StNode->getValue(),
                                      DAG.getTargetConstant(i, DL, MVT::i64));
       SDValue Addr = DAG.getNode(ISD::ADD, DL, AddrVT, BasePtr,
@@ -3525,7 +3525,7 @@ static SDValue LowerI1Load(SDValue Op, SelectionDAG &DAG) {
                                  MachineMemOperand::MONone);
       OutChains[i] = SDValue(Val.getNode(), 1);
 
-      VM = DAG.getMachineNode(VE::LVMxir_x, DL, MVT::i64,
+      VM = DAG.getMachineNode(VE::LVMir_m, DL, MVT::i64,
                               DAG.getTargetConstant(i, DL, MVT::i64),
                               Val, SDValue(VM, 0));
     }
@@ -3651,7 +3651,7 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
   if (MemVT == MVT::v256i1 || MemVT == MVT::v4i64) {
     SDValue OutChains[4];
     for (int i = 0; i < 4; ++i) {
-      SDNode *V = DAG.getMachineNode(VE::SVMxi, DL, MVT::i64,
+      SDNode *V = DAG.getMachineNode(VE::SVMmi, DL, MVT::i64,
                                      StNode->getValue(),
                                      DAG.getTargetConstant(i, DL, MVT::i64));
       SDValue Addr = DAG.getNode(ISD::ADD, DL, addrVT, BasePtr,

@@ -1903,8 +1903,8 @@ public:
     EndOpenACC();
     Walk(std::get<std::optional<DoConstruct>>(x.t));
     BeginOpenACC();
-    Walk("!$ACC END ", std::get<std::optional<DoConstruct>>(x.t));
-    Put("\n");
+    Walk("!$ACC END ", std::get<std::optional<AccEndCombinedDirective>>(x.t),
+        "\n");
     EndOpenACC();
   }
   void Unparse(const OpenACCRoutineConstruct &x) {
@@ -2222,19 +2222,10 @@ public:
       break;
     }
   }
-  void Unparse(const OmpMemoryClause &x) {
-    switch (x.v) {
-    case OmpMemoryClause::MemoryOrder::SeqCst:
-      Word("SEQ_CST");
-      break;
-    }
-  }
-  void Unparse(const OmpMemoryClauseList &x) { Walk(" ", x.v, " "); }
-  void Unparse(const OmpMemoryClausePostList &x) { Walk(" ", x.v, " "); }
   void Unparse(const OmpAtomic &x) {
     BeginOpenMP();
     Word("!$OMP ATOMIC");
-    Walk(std::get<OmpMemoryClauseList>(x.t));
+    Walk(std::get<OmpClauseList>(x.t));
     Put("\n");
     EndOpenMP();
     Walk(std::get<Statement<AssignmentStmt>>(x.t));
@@ -2245,9 +2236,9 @@ public:
   void Unparse(const OmpAtomicCapture &x) {
     BeginOpenMP();
     Word("!$OMP ATOMIC");
-    Walk(std::get<OmpMemoryClauseList>(x.t));
+    Walk(std::get<0>(x.t));
     Word(" CAPTURE");
-    Walk(std::get<OmpMemoryClausePostList>(x.t));
+    Walk(std::get<2>(x.t));
     Put("\n");
     EndOpenMP();
     Walk(std::get<OmpAtomicCapture::Stmt1>(x.t));
@@ -2260,9 +2251,9 @@ public:
   void Unparse(const OmpAtomicRead &x) {
     BeginOpenMP();
     Word("!$OMP ATOMIC");
-    Walk(std::get<OmpMemoryClauseList>(x.t));
+    Walk(std::get<0>(x.t));
     Word(" READ");
-    Walk(std::get<OmpMemoryClausePostList>(x.t));
+    Walk(std::get<2>(x.t));
     Put("\n");
     EndOpenMP();
     Walk(std::get<Statement<AssignmentStmt>>(x.t));
@@ -2273,9 +2264,9 @@ public:
   void Unparse(const OmpAtomicUpdate &x) {
     BeginOpenMP();
     Word("!$OMP ATOMIC");
-    Walk(std::get<OmpMemoryClauseList>(x.t));
+    Walk(std::get<0>(x.t));
     Word(" UPDATE");
-    Walk(std::get<OmpMemoryClausePostList>(x.t));
+    Walk(std::get<2>(x.t));
     Put("\n");
     EndOpenMP();
     Walk(std::get<Statement<AssignmentStmt>>(x.t));
@@ -2286,9 +2277,9 @@ public:
   void Unparse(const OmpAtomicWrite &x) {
     BeginOpenMP();
     Word("!$OMP ATOMIC");
-    Walk(std::get<OmpMemoryClauseList>(x.t));
+    Walk(std::get<0>(x.t));
     Word(" WRITE");
-    Walk(std::get<OmpMemoryClausePostList>(x.t));
+    Walk(std::get<2>(x.t));
     Put("\n");
     EndOpenMP();
     Walk(std::get<Statement<AssignmentStmt>>(x.t));
@@ -2300,8 +2291,7 @@ public:
     BeginOpenMP();
     Word("!$OMP CRITICAL");
     Walk(" (", std::get<std::optional<Name>>(x.t), ")");
-    Walk(" HINT(", std::get<std::optional<OmpCriticalDirective::Hint>>(x.t),
-        ")");
+    Walk(std::get<std::optional<OmpClause>>(x.t));
     Put("\n");
     EndOpenMP();
   }
@@ -2431,14 +2421,16 @@ public:
   }
   void Unparse(const OmpFlushMemoryClause &x) {
     switch (x.v) {
-    case OmpFlushMemoryClause::FlushMemoryOrder::AcqRel:
+    case llvm::omp::Clause::OMPC_acq_rel:
       Word("ACQ_REL ");
       break;
-    case OmpFlushMemoryClause::FlushMemoryOrder::Release:
+    case llvm::omp::Clause::OMPC_release:
       Word("RELEASE ");
       break;
-    case OmpFlushMemoryClause::FlushMemoryOrder::Acquire:
+    case llvm::omp::Clause::OMPC_acquire:
       Word("ACQUIRE ");
+      break;
+    default:
       break;
     }
   }

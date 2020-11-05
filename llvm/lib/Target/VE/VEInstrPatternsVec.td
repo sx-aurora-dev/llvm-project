@@ -21,13 +21,14 @@ multiclass insert_extract_mask<ValueType MaskVT, string MaskToken> {
  
   // insert at imm
   def : Pat<(MaskVT (vm_insert MaskVT:$vm, uimm7:$idx, i64:$sy)),
-                    (!cast<Instruction>("LVM"#MaskToken#"ir_"#MaskToken) (LO7 $idx), i64:$sy, MaskVT:$vm)>;
+                    (!cast<Instruction>("LVMir_"#MaskToken) (LO7 $idx), i64:$sy, MaskVT:$vm)>;
   // insert at sx
   def : Pat<(MaskVT (vm_insert MaskVT:$vm, i64:$idx, i64:$sy)),
-                    (!cast<Instruction>("LVM"#MaskToken#"rr_"#MaskToken) i64:$idx, i64:$sy, MaskVT:$vm)>;
+                    (!cast<Instruction>("LVMrr_"#MaskToken) i64:$idx, i64:$sy, MaskVT:$vm)>;
+  // TODO mimm encoding for $sy
 }
 
-defm: insert_extract_mask<v256i1, "x">;
+defm: insert_extract_mask<v256i1, "m">;
 // defm: insert_extract_mask<v512i1, "y">; // TODO: implement! SVMyr not available
 
 // Mask Load & Store
@@ -56,7 +57,7 @@ multiclass MaskArith<ValueType MaskVT, string MaskTag="mmm"> {
   def : Pat<(MaskVT (xor MaskVT:$ma, MaskVT:$mb)), (!cast<Instruction>("XORM"#MaskTag#MaskTag) $ma, $mb)>;
 }
 
-defm: MaskArith<v256i1,"x">;
+defm: MaskArith<v256i1,"m">;
 
 // split pattern (unpack splice, pack)
 class SplitPat<ValueType PackedVT, ValueType RegularVT, SDNode N, Instruction VEOp, SubRegIndex subreg_lo, SubRegIndex subreg_hi>
@@ -73,9 +74,9 @@ class SplitPat<ValueType PackedVT, ValueType RegularVT, SDNode N, Instruction VE
 // mask unpacking
 class SplitMaskPat<SDNode N, Instruction VEMaskOp> : SplitPat<v512i1, v256i1, N, VEMaskOp, sub_vm_even, sub_vm_odd>;
 
-def: SplitMaskPat<and, ANDMxx>;
-def: SplitMaskPat<or,   ORMxx>;
-def: SplitMaskPat<xor, XORMxx>;
+def: SplitMaskPat<and, ANDMmm>;
+def: SplitMaskPat<or,   ORMmm>;
+def: SplitMaskPat<xor, XORMmm>;
 
 // Insert & Extract Vector Element
 
@@ -183,7 +184,7 @@ defm: VMV_Patterns<v256f64>;
 
 // Vector mask popcnt
 def : Pat<(i64 (vec_popcount v256i1:$mask, i32:$avl)),
-          (PCVMxl $mask, $avl)>;
+          (PCVMml $mask, $avl)>;
 
 // Packing (type based)
 def : Pat<(v512i32 (vec_pack v256i32:$vlo, v256i32:$vhi, i32:$avl)),
@@ -231,13 +232,13 @@ defm: Unpack_Swap<v512f32>;
 
 // VFMKLvl (CCOp, VR, VL)
 def : Pat<(vec_tomask v256i64:$vx, i32:$avl),
-          (VFMKLxvl CC_INE, $vx, $avl)>;
+          (VFMKLvl CC_INE, $vx, $avl)>;
 def : Pat<(vec_tomask v256f64:$vx, i32:$avl),
-          (VFMKLxvl CC_INE, $vx, $avl)>;
+          (VFMKLvl CC_INE, $vx, $avl)>;
 def : Pat<(vec_tomask v256i32:$vx, i32:$avl),
-          (PVFMKWLOxvl CC_INE, $vx, $avl)>;
+          (PVFMKWLOvl CC_INE, $vx, $avl)>;
 def : Pat<(vec_tomask v256f32:$vx, i32:$avl),
-          (PVFMKWUPxvl CC_NE, $vx, $avl)>;
+          (PVFMKWUPvl CC_NE, $vx, $avl)>;
 
 // Casts
 // def : Pat<(v256i64 (sext_inreg V64:$src, v256i32)),

@@ -48,7 +48,6 @@
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
-#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/Function.h"
@@ -111,6 +110,9 @@ static cl::opt<bool> GVNEnablePRE("enable-pre", cl::init(true), cl::Hidden);
 static cl::opt<bool> GVNEnableLoadPRE("enable-load-pre", cl::init(true));
 static cl::opt<bool> GVNEnableLoadInLoopPRE("enable-load-in-loop-pre",
                                             cl::init(true));
+static cl::opt<bool>
+GVNEnableSplitBackedgeInLoadPRE("enable-split-backedge-in-load-pre",
+                                cl::init(true));
 static cl::opt<bool> GVNEnableMemDep("enable-gvn-memdep", cl::init(true));
 
 static cl::opt<uint32_t> MaxNumDeps(
@@ -410,9 +412,12 @@ uint32_t GVN::ValueTable::lookupOrAddCall(CallInst *C) {
     }
 
     if (local_dep.isDef()) {
-      CallInst* local_cdep = cast<CallInst>(local_dep.getInst());
+      // For masked load/store intrinsics, the local_dep may actully be
+      // a normal load or store instruction.
+      CallInst *local_cdep = dyn_cast<CallInst>(local_dep.getInst());
 
-      if (local_cdep->getNumArgOperands() != C->getNumArgOperands()) {
+      if (!local_cdep ||
+          local_cdep->getNumArgOperands() != C->getNumArgOperands()) {
         valueNumbering[C] = nextValueNumber;
         return nextValueNumber++;
       }
@@ -635,6 +640,11 @@ bool GVN::isLoadPREEnabled() const {
 
 bool GVN::isLoadInLoopPREEnabled() const {
   return Options.AllowLoadInLoopPRE.getValueOr(GVNEnableLoadInLoopPRE);
+}
+
+bool GVN::isLoadPRESplitBackedgeEnabled() const {
+  return Options.AllowLoadPRESplitBackedge.getValueOr(
+      GVNEnableSplitBackedgeInLoadPRE);
 }
 
 bool GVN::isMemDepEnabled() const {
@@ -1131,7 +1141,6 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
   // backwards through predecessors if needed.
   BasicBlock *LoadBB = LI->getParent();
   BasicBlock *TmpBB = LoadBB;
-  bool IsSafeToSpeculativelyExecute = isSafeToSpeculativelyExecute(LI);
 
   // Check that there is no implicit control flow instructions above our load in
   // its block. If there is an instruction that doesn't always pass the
@@ -1148,8 +1157,9 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
   // because if the index is out of bounds we should deoptimize rather than
   // access the array.
   // Check that there is no guard in this block above our instruction.
-  if (!IsSafeToSpeculativelyExecute && ICF->isDominatedByICFIFromSameBlock(LI))
-    return false;
+  bool MustEnsureSafetyOfSpeculativeExecution =
+      ICF->isDominatedByICFIFromSameBlock(LI);
+
   while (TmpBB->getSinglePredecessor()) {
     TmpBB = TmpBB->getSinglePredecessor();
     if (TmpBB == LoadBB) // Infinite (unreachable) loop.
@@ -1166,8 +1176,8 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
       return false;
 
     // Check that there is no implicit control flow in a block above.
-    if (!IsSafeToSpeculativelyExecute && ICF->hasICF(TmpBB))
-      return false;
+    MustEnsureSafetyOfSpeculativeExecution =
+        MustEnsureSafetyOfSpeculativeExecution || ICF->hasICF(TmpBB);
   }
 
   assert(TmpBB);
@@ -1220,6 +1230,16 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
         return false;
       }
 
+      // Do not split backedge as it will break the canonical loop form.
+      if (!isLoadPRESplitBackedgeEnabled())
+        if (DT->dominates(LoadBB, Pred)) {
+          LLVM_DEBUG(
+              dbgs()
+              << "COULD NOT PRE LOAD BECAUSE OF A BACKEDGE CRITICAL EDGE '"
+              << Pred->getName() << "': " << *LI << '\n');
+          return false;
+        }
+
       CriticalEdgePred.push_back(Pred);
     } else {
       // Only add the predecessors that will not be split for now.
@@ -1238,6 +1258,17 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
   // that one block.
   if (NumUnavailablePreds != 1)
       return false;
+
+  // Now we know where we will insert load. We must ensure that it is safe
+  // to speculatively execute the load at that points.
+  if (MustEnsureSafetyOfSpeculativeExecution) {
+    if (CriticalEdgePred.size())
+      if (!isSafeToSpeculativelyExecute(LI, LoadBB->getFirstNonPHI(), DT))
+        return false;
+    for (auto &PL : PredLoads)
+      if (!isSafeToSpeculativelyExecute(LI, PL.first->getTerminator(), DT))
+        return false;
+  }
 
   // Split critical edges, and update the unavailable predecessors accordingly.
   for (BasicBlock *OrigPred : CriticalEdgePred) {
@@ -1320,8 +1351,7 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
     // Instructions that have been inserted in predecessor(s) to materialize
     // the load address do not retain their original debug locations. Doing
     // so could lead to confusing (but correct) source attributions.
-    if (const DebugLoc &DL = I->getDebugLoc())
-      I->setDebugLoc(DebugLoc::get(0, 0, DL.getScope(), DL.getInlinedAt()));
+    I->updateLocationAfterHoist();
 
     // FIXME: We really _ought_ to insert these value numbers into their
     // parent's availability map.  However, in doing so, we risk getting into
@@ -1608,6 +1638,11 @@ bool GVN::processAssumeIntrinsic(IntrinsicInst *IntrinsicI) {
   // call void @llvm.assume(i1 %cmp)
   // br i1 %cmp, label %bb1, label %bb2 ; will change %cmp to true
   ReplaceOperandsWithMap[V] = True;
+
+  // Similarly, after assume(!NotV) we know that NotV == false.
+  Value *NotV;
+  if (match(V, m_Not(m_Value(NotV))))
+    ReplaceOperandsWithMap[NotV] = ConstantInt::getFalse(V->getContext());
 
   // If we find an equality fact, canonicalize all dominated uses in this block
   // to one of the two values.  We heuristically choice the "oldest" of the
@@ -2425,10 +2460,14 @@ bool GVN::performScalarPRE(Instruction *CurInst) {
   if (isa<GetElementPtrInst>(CurInst))
     return false;
 
-  // We don't currently value number ANY inline asm calls.
-  if (auto *CallB = dyn_cast<CallBase>(CurInst))
+  if (auto *CallB = dyn_cast<CallBase>(CurInst)) {
+    // We don't currently value number ANY inline asm calls.
     if (CallB->isInlineAsm())
       return false;
+    // Don't do PRE on convergent calls.
+    if (CallB->isConvergent())
+      return false;
+  }
 
   uint32_t ValNo = VN.lookup(CurInst);
 
@@ -2850,7 +2889,6 @@ public:
     if (Impl.isMemDepEnabled())
       AU.addRequired<MemoryDependenceWrapperPass>();
     AU.addRequired<AAResultsWrapperPass>();
-
     AU.addPreserved<DominatorTreeWrapperPass>();
     AU.addPreserved<GlobalsAAWrapperPass>();
     AU.addPreserved<TargetLibraryInfoWrapperPass>();

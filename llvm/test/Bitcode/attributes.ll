@@ -27,7 +27,7 @@ define void @f4(i8 inreg %0)
 }
 
 define void @f5(i8* sret %0)
-; CHECK: define void @f5(i8* sret %0)
+; CHECK: define void @f5(i8* sret(i8) %0)
 {
         ret void;
 }
@@ -98,8 +98,8 @@ define void @f16() sspreq
         ret void;
 }
 
-define void @f17(i8 align 4 %0)
-; CHECK: define void @f17(i8 align 4 %0)
+define void @f17(i8* align 4 %0)
+; CHECK: define void @f17(i8* align 4 %0)
 {
         ret void;
 }
@@ -398,8 +398,20 @@ define void @f67(i32* byref(i32) %a)
   ret void
 }
 
-; CHECK: define <8 x double> @f68(<8 x double> passthru %0, <8 x i1> mask %1, i32 vlen %2) {
-define <8 x double> @f68(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
+; CHECK: define void @f68() #41
+define void @f68() mustprogress
+{
+  ret void
+}
+
+; CHECK; define void @f69() #42
+define void @f69() nossp
+{
+  ret void
+}
+
+; CHECK: define <8 x double> @f70(<8 x double> passthru %0, <8 x i1> mask %1, i32 vlen %2) {
+define <8 x double> @f70(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
   ret <8 x double> undef
 }
 
@@ -444,4 +456,6 @@ define <8 x double> @f68(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
 ; CHECK: attributes #38 = { nosync }
 ; CHECK: attributes #39 = { sanitize_memtag }
 ; CHECK: attributes #40 = { null_pointer_is_valid }
+; CHECK: attributes #41 = { mustprogress }
+; CHECK: attributes #42 = { nossp }
 ; CHECK: attributes #[[NOBUILTIN]] = { nobuiltin }

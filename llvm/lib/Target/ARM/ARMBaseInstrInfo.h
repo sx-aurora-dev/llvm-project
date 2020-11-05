@@ -171,28 +171,13 @@ public:
   bool SubsumesPredicate(ArrayRef<MachineOperand> Pred1,
                          ArrayRef<MachineOperand> Pred2) const override;
 
-  bool DefinesPredicate(MachineInstr &MI,
-                        std::vector<MachineOperand> &Pred) const override;
+  bool ClobbersPredicate(MachineInstr &MI, std::vector<MachineOperand> &Pred,
+                         bool SkipDead) const override;
 
   bool isPredicable(const MachineInstr &MI) const override;
 
   // CPSR defined in instruction
   static bool isCPSRDefined(const MachineInstr &MI);
-  bool isAddrMode3OpImm(const MachineInstr &MI, unsigned Op) const;
-  bool isAddrMode3OpMinusReg(const MachineInstr &MI, unsigned Op) const;
-
-  // Load, scaled register offset
-  bool isLdstScaledReg(const MachineInstr &MI, unsigned Op) const;
-  // Load, scaled register offset, not plus LSL2
-  bool isLdstScaledRegNotPlusLsl2(const MachineInstr &MI, unsigned Op) const;
-  // Minus reg for ldstso addr mode
-  bool isLdstSoMinusReg(const MachineInstr &MI, unsigned Op) const;
-  // Scaled register offset in address mode 2
-  bool isAm2ScaledReg(const MachineInstr &MI, unsigned Op) const;
-  // Load multiple, base reg in list
-  bool isLDMBaseRegInList(const MachineInstr &MI) const;
-  // get LDM variable defs size
-  unsigned getLDMVariableDefsSize(const MachineInstr &MI) const;
 
   /// GetInstSize - Returns the size of the specified MachineInstr.
   ///
@@ -452,6 +437,9 @@ private:
   MachineInstr *canFoldIntoMOVCC(Register Reg, const MachineRegisterInfo &MRI,
                                  const TargetInstrInfo *TII) const;
 
+  bool isReallyTriviallyReMaterializable(const MachineInstr &MI,
+                                         AAResults *AA) const override;
+
 private:
   /// Modeling special VFP / NEON fp MLA / MLS hazards.
 
@@ -635,8 +623,7 @@ static inline unsigned getTailPredVectorWidth(unsigned Opcode) {
   return 0;
 }
 
-static inline
-bool isVCTP(MachineInstr *MI) {
+static inline bool isVCTP(const MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default:
     break;

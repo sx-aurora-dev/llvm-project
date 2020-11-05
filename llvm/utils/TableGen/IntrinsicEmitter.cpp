@@ -234,26 +234,27 @@ enum IIT_Info {
   IIT_PTR_TO_ELT = 33,
   IIT_VEC_OF_ANYPTRS_TO_ELT = 34,
   IIT_I128 = 35,
-  IIT_V256 = 36,
-  IIT_V512 = 37,
-  IIT_V1024 = 38,
-  IIT_STRUCT6 = 39,
-  IIT_STRUCT7 = 41,
-  IIT_STRUCT8 = 41,
-  IIT_F128 = 42,
-  IIT_VEC_ELEMENT = 43,
-  IIT_SCALABLE_VEC = 44,
-  IIT_SUBDIVIDE2_ARG = 45,
-  IIT_SUBDIVIDE4_ARG = 46,
-  IIT_VEC_OF_BITCASTS_TO_INT = 47,
-  IIT_V128 = 48,
-  IIT_BF16 = 49
+  IIT_V512 = 36,
+  IIT_V1024 = 37,
+  IIT_STRUCT6 = 38,
+  IIT_STRUCT7 = 39,
+  IIT_STRUCT8 = 40,
+  IIT_F128 = 41,
+  IIT_VEC_ELEMENT = 42,
+  IIT_SCALABLE_VEC = 43,
+  IIT_SUBDIVIDE2_ARG = 44,
+  IIT_SUBDIVIDE4_ARG = 45,
+  IIT_VEC_OF_BITCASTS_TO_INT = 46,
+  IIT_V128 = 47,
+  IIT_BF16 = 48,
+  IIT_STRUCT9 = 49,
+  IIT_V256 = 50
 };
 
 static void EncodeFixedValueType(MVT::SimpleValueType VT,
                                  std::vector<unsigned char> &Sig) {
   if (MVT(VT).isInteger()) {
-    unsigned BitWidth = MVT(VT).getSizeInBits();
+    unsigned BitWidth = MVT(VT).getFixedSizeInBits();
     switch (BitWidth) {
     default: PrintFatalError("unhandled integer type width in intrinsic!");
     case 1: return Sig.push_back(IIT_I1);
@@ -471,6 +472,7 @@ static void ComputeFixedEncoding(const CodeGenIntrinsic &Int,
       case 6: TypeSig.push_back(IIT_STRUCT6); break;
       case 7: TypeSig.push_back(IIT_STRUCT7); break;
       case 8: TypeSig.push_back(IIT_STRUCT8); break;
+      case 9: TypeSig.push_back(IIT_STRUCT9); break;
       default: llvm_unreachable("Unhandled case in struct");
     }
 

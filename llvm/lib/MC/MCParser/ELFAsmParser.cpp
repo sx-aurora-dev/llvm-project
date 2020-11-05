@@ -178,13 +178,13 @@ bool ELFAsmParser::ParseDirectiveSymbolAttribute(StringRef Directive, SMLoc) {
   if (getLexer().isNot(AsmToken::EndOfStatement)) {
     while (true) {
       StringRef Name;
-
+      SMLoc Loc = getTok().getLoc();
       if (getParser().parseIdentifier(Name))
         return TokError("expected identifier in directive");
 
       MCSymbol *Sym = getContext().getOrCreateSymbol(Name);
 
-      getStreamer().emitSymbolAttribute(Sym, Attr);
+      getStreamer().emitSymbolAttribute(Sym, Attr, Loc);
 
       if (getLexer().is(AsmToken::EndOfStatement))
         break;
@@ -626,6 +626,8 @@ EndStmt:
       Type = ELF::SHT_LLVM_DEPENDENT_LIBRARIES;
     else if (TypeName == "llvm_sympart")
       Type = ELF::SHT_LLVM_SYMPART;
+    else if (TypeName == "llvm_bb_addr_map")
+      Type = ELF::SHT_LLVM_BB_ADDR_MAP;
     else if (TypeName.getAsInteger(0, Type))
       return TokError("unknown section type");
   }

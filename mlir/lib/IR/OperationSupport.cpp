@@ -150,6 +150,26 @@ void NamedAttrList::set(StringRef name, Attribute value) {
   return set(mlir::Identifier::get(name, value.getContext()), value);
 }
 
+Attribute
+NamedAttrList::eraseImpl(SmallVectorImpl<NamedAttribute>::iterator it) {
+  if (it == attrs.end())
+    return nullptr;
+
+  // Erasing does not affect the sorted property.
+  Attribute attr = it->second;
+  attrs.erase(it);
+  dictionarySorted.setPointer(nullptr);
+  return attr;
+}
+
+Attribute NamedAttrList::erase(Identifier name) {
+  return eraseImpl(findAttr(attrs, name, isSorted()));
+}
+
+Attribute NamedAttrList::erase(StringRef name) {
+  return eraseImpl(findAttr(attrs, name, isSorted()));
+}
+
 NamedAttrList &
 NamedAttrList::operator=(const SmallVectorImpl<NamedAttribute> &rhs) {
   assign(rhs.begin(), rhs.end());
@@ -169,9 +189,9 @@ OperationState::OperationState(Location location, OperationName name)
     : location(location), name(name) {}
 
 OperationState::OperationState(Location location, StringRef name,
-                               ValueRange operands, ArrayRef<Type> types,
+                               ValueRange operands, TypeRange types,
                                ArrayRef<NamedAttribute> attributes,
-                               ArrayRef<Block *> successors,
+                               BlockRange successors,
                                MutableArrayRef<std::unique_ptr<Region>> regions)
     : location(location), name(name, location->getContext()),
       operands(operands.begin(), operands.end()),
@@ -186,7 +206,7 @@ void OperationState::addOperands(ValueRange newOperands) {
   operands.append(newOperands.begin(), newOperands.end());
 }
 
-void OperationState::addSuccessors(SuccessorRange newSuccessors) {
+void OperationState::addSuccessors(BlockRange newSuccessors) {
   successors.append(newSuccessors.begin(), newSuccessors.end());
 }
 

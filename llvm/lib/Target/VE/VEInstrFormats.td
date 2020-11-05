@@ -215,8 +215,8 @@ class RW<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern = [],
 // RVM type is for vector transfer instructions.
 //-----------------------------------------------------------------------------
 
-class RVM<bits<8>opVal, dag outs, dag ins, string asmstr, list<dag> pattern = [],
-          InstrItinClass itin = NoItinerary>
+class RVM<bits<8>opVal, dag outs, dag ins, string asmstr,
+          list<dag> pattern = [], InstrItinClass itin = NoItinerary>
    : InstVE<outs, ins, asmstr, pattern, itin> {
   bits<1>  cx = 0;
   bits<1>  vc = 0;

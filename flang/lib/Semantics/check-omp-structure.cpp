@@ -95,9 +95,19 @@ void OmpStructureChecker::Enter(const parser::OpenMPBlockConstruct &x) {
   const auto &endBlockDir{std::get<parser::OmpEndBlockDirective>(x.t)};
   const auto &beginDir{std::get<parser::OmpBlockDirective>(beginBlockDir.t)};
   const auto &endDir{std::get<parser::OmpBlockDirective>(endBlockDir.t)};
+  const parser::Block &block{std::get<parser::Block>(x.t)};
+
   CheckMatching<parser::OmpBlockDirective>(beginDir, endDir);
 
   PushContextAndClauseSets(beginDir.source, beginDir.v);
+
+  switch (beginDir.v) {
+  case llvm::omp::OMPD_parallel:
+    CheckNoBranching(block, llvm::omp::OMPD_parallel, beginDir.source);
+    break;
+  default:
+    break;
+  }
 }
 
 void OmpStructureChecker::Leave(const parser::OpenMPBlockConstruct &) {
@@ -127,7 +137,7 @@ void OmpStructureChecker::Enter(const parser::OmpEndSectionsDirective &x) {
     // 2.7.2 end-sections -> END SECTIONS [nowait-clause]
   case llvm::omp::Directive::OMPD_sections:
     SetContextDirectiveEnum(llvm::omp::Directive::OMPD_end_sections);
-    SetContextAllowed(OmpClauseSet{llvm::omp::Clause::OMPC_nowait});
+    SetContextAllowedOnce(OmpClauseSet{llvm::omp::Clause::OMPC_nowait});
     break;
   default:
     // no clauses are allowed
@@ -184,6 +194,15 @@ void OmpStructureChecker::Enter(const parser::OpenMPCancelConstruct &x) {
 }
 
 void OmpStructureChecker::Leave(const parser::OpenMPCancelConstruct &) {
+  dirContext_.pop_back();
+}
+
+void OmpStructureChecker::Enter(const parser::OpenMPCriticalConstruct &x) {
+  const auto &dir{std::get<parser::OmpCriticalDirective>(x.t)};
+  PushContextAndClauseSets(dir.source, llvm::omp::Directive::OMPD_critical);
+}
+
+void OmpStructureChecker::Leave(const parser::OpenMPCriticalConstruct &) {
   dirContext_.pop_back();
 }
 
@@ -455,6 +474,9 @@ void OmpStructureChecker::Enter(const parser::OmpAlignedClause &x) {
     }
   }
   // 2.8.1 TODO: list-item attribute check
+}
+void OmpStructureChecker::Enter(const parser::OmpAllocateClause &) {
+  CheckAllowed(llvm::omp::Clause::OMPC_allocate);
 }
 void OmpStructureChecker::Enter(const parser::OmpDefaultClause &) {
   CheckAllowed(llvm::omp::Clause::OMPC_default);

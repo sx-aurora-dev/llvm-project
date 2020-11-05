@@ -273,7 +273,7 @@ defm : VectorTernaryArith_ShortLong<c_vv_ffma, f64, v256f64, "VFMADD", f32, v256
 // Element-wise select (256 elements)
 multiclass VectorSelect<ValueType DataVT> {
     def :Pat<(DataVT (vvp_select DataVT:$vtrue, DataVT:$vfalse, v256i1:$vm, i32:$pivot)),
-                     (VMRGvvxl_v $vfalse, $vtrue, $vm, $pivot, $vfalse)>;
+                     (VMRGvvml_v $vfalse, $vtrue, $vm, $pivot, $vfalse)>;
 }
 
 defm : VectorSelect<v256f64>;
@@ -285,14 +285,15 @@ defm : VectorSelect<v256f32>;
 
 multiclass Set_CC<ValueType MaskVT, ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv, string MaskTag="m"> {
   def : Pat<(MaskVT (vvp_setcc DataVT:$LHS, DataVT:$RHS, CCMatcher:$cond, MaskVT:$vm, i32:$vl)),
-                    (!cast<Instruction>(FmkBaseName#MaskTag#"v"#MaskTag#"l") (CCConv $cond), (!cast<Instruction>(CmpBaseName#"vvl") $LHS, $RHS, $vl), $vm, $vl)>;
+                    (!cast<Instruction>(FmkBaseName#"v"#MaskTag#"l") (CCConv $cond), (!cast<Instruction>(CmpBaseName#"vvl") $LHS, $RHS, $vl), $vm, $vl)>;
 }
 
 multiclass Set_CC_256<ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv>
-  : Set_CC<v256i1, DataVT, FmkBaseName, CmpBaseName, CCMatcher, CCConv, "x">;
+  : Set_CC<v256i1, DataVT, FmkBaseName, CmpBaseName, CCMatcher, CCConv, "m">;
 
-multiclass Set_CC_512<ValueType DataVT, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv>
-  : Set_CC<v512i1, DataVT, "VFMKW", CmpBaseName, CCMatcher, CCConv, "y">;
+// TODO: requires packing
+// multiclass Set_CC_512<ValueType DataVT, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv>
+//   : Set_CC<v512i1, DataVT, "VFMKW", CmpBaseName, CCMatcher, CCConv, "m">;
 
 // SETCC (256)
 defm : Set_CC_256<v256i64,"VFMKL","VCMPUL",CCUIOp,icond2cc>;
@@ -303,20 +304,20 @@ defm : Set_CC_256<v256i32,"VFMKW","VCMPUW",CCUIOp,icond2cc>;
 defm : Set_CC_256<v256i32,"VFMKW","VCMPSWZX",CCSIOp,icond2cc>;
 defm : Set_CC_256<v256f32,"VFMKS","VFCMPS",cond,fcond2cc>;
 
-// SETCC (packed)
-defm : Set_CC_512<v512i32,"PVCMPU",CCUIOp,icond2cc>;
-defm : Set_CC_512<v512i32,"PVCMPS",CCSIOp,icond2cc>;
-defm : Set_CC_512<v512f32,"PVFCMP",cond,fcond2cc>;
+// SETCC (packed) // FIXME
+// defm : Set_CC_512<v512i32,"PVCMPU",CCUIOp,icond2cc>;
+// defm : Set_CC_512<v512i32,"PVCMPS",CCSIOp,icond2cc>;
+// defm : Set_CC_512<v512f32,"PVFCMP",cond,fcond2cc>;
 
 ///// Conversion /////
 // Pseudo instructions for i64 <> fp32 conversion
-def VCVTLSvxl_v
-  : Pseudo<(outs V64:$vx),(ins RDOp:$rd, V64:$vy, VM:$vm, I32:$vl, V64:$vpt),"# pseudo VCVTLS<rd>vxl_v">;
-    // PseudoInstExpansion<(VCVTLDvxl_v RDOp:$rd, V64:$vx, (VCVTDSvxl_v V64:$vy, VM:$vm, I32:$vl), $vm, $vl, $vpt)>;
+def VCVTLSvml_v
+  : Pseudo<(outs V64:$vx),(ins RDOp:$rd, V64:$vy, VM:$vm, I32:$vl, V64:$vpt),"# pseudo VCVTLS<rd>vml_v">;
+    // PseudoInstExpansion<(VCVTLDvml_v RDOp:$rd, V64:$vx, (VCVTDSvml_v V64:$vy, VM:$vm, I32:$vl), $vm, $vl, $vpt)>;
 
-def VCVTSLvxl_v
-  : Pseudo<(outs V64:$vx), (ins V64:$vy, VM:$vm, I32:$vl, V64:$vpt), "# pseudo VCVTSLvxl_v">;
-    // PseudoInstExpansion<(VCVTSDvxl_v V64:$vx, (VCVTDLvxl_v V64:$vy, VM:$vm, I32:$vl), $vm, $vl, $vpt)>;
+def VCVTSLvml_v
+  : Pseudo<(outs V64:$vx), (ins V64:$vy, VM:$vm, I32:$vl, V64:$vpt), "# pseudo VCVTSLvml_v">;
+    // PseudoInstExpansion<(VCVTSDvml_v V64:$vx, (VCVTDLvml_v V64:$vy, VM:$vm, I32:$vl), $vm, $vl, $vpt)>;
 
 // x_to_y
 multiclass conv_x_to_y<SDPatternOperator MatchOp, ValueType MaskVT, ValueType DestVT, ValueType SrcVT, string ConvBaseName, string MaskToken> {
@@ -346,7 +347,7 @@ multiclass conv_x_to_y_rd<SDPatternOperator MatchOp, ValueType MaskVT, ValueType
                     (!cast<Instruction>(ConvBaseName#"v"#MaskToken#"l_v") RDFlag, $vx, $vm, $vl, (SrcVT (IMPLICIT_DEF)))>;
 }
 
-multiclass both_x_to_y<ValueType MaskVT, ValueType FPVT, string FPTag, string IVT, string ITag, string IExtTag="", RD_VAL RDFlag=RD_NONE, string ConvBaseName="VCVT", string MaskToken="x"> {
+multiclass both_x_to_y<ValueType MaskVT, ValueType FPVT, string FPTag, string IVT, string ITag, string IExtTag="", RD_VAL RDFlag=RD_NONE, string ConvBaseName="VCVT", string MaskToken="m"> {
  defm : conv_x_to_y<vvp_sint_to_fp, MaskVT, FPVT, IVT, ConvBaseName#FPTag#ITag, MaskToken>;
  defm : conv_x_to_y_rd<vvp_fp_to_sint, MaskVT, IVT, FPVT, ConvBaseName#ITag#FPTag#IExtTag, MaskToken, RDFlag>;
 }
@@ -361,8 +362,8 @@ defm: both_x_to_y<v256i1, v256f32, "S", v256i64, "L", "", RD_RZ>;
 defm: both_x_to_y<v256i1, v256f64, "D", v256i32, "W", "SX", RD_RZ>;
 
 // fpext, fpround (256 only)
-defm : conv_x_to_y<vvp_fpround, v256i1, v256f32, v256f64, "VCVTSD", "x">;
-defm : conv_x_to_y<vvp_fpext,   v256i1, v256f64, v256f32, "VCVTDS", "x">;
+defm : conv_x_to_y<vvp_fpround, v256i1, v256f32, v256f64, "VCVTSD", "m">;
+defm : conv_x_to_y<vvp_fpext,   v256i1, v256f64, v256f32, "VCVTDS", "m">;
 
   // CC_INE = 2, // Not Equal
 // trunc (256 elements)
@@ -398,7 +399,7 @@ defm : VectorTernaryArith_Base<c_vv_ffma, i64, v512f32, v512i1, "PVFMAD">;
 // vNi32 to vNi64
 multiclass IExtend32<string NodeExtToken, string ExtToken> {
   def : Pat<(v256i64 (!cast<SDPatternOperator>("vvp_"#NodeExtToken#"ext") v256i32:$vx, v256i1:$vm, i32:$vl)),
-            (!cast<Instruction>("VADDSW"#ExtToken#"Xivxl") 0, $vx, $vm, $vl)>;
+            (!cast<Instruction>("VADDSW"#ExtToken#"Xivml") 0, $vx, $vm, $vl)>;
 }
 defm : IExtend32<"z", "Z">;
 defm : IExtend32<"s", "S">;
@@ -406,7 +407,7 @@ defm : IExtend32<"s", "S">;
 // vNi1 to vNiT
 multiclass IExtend_Mask<ValueType ResVT, string NodeExtToken, string ExtToken, int TrueVal> {
 def : Pat<(ResVT (!cast<SDPatternOperator>("vvp_"#NodeExtToken#"ext") v256i1:$vm, (v256i1 srcvalue), i32:$vl)),
-          (VMRGivxl 0, (VBRDil TrueVal, $vl), $vm, $vl)>;
+          (VMRGivml 0, (VBRDil TrueVal, $vl), $vm, $vl)>;
 }
 multiclass IExtend_Mask_ForRes<ValueType ResVT> {
   defm: IExtend_Mask<ResVT, "z", "Z", 1>;
@@ -429,19 +430,19 @@ defm: IExtend_Mask_ForRes<v256i64>;
 multiclass Reduce_FAdd<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string FPToken, SDPatternOperator neutral_elem> {
 // unordered
 def : Pat <(ResVT (vvp_reduce_fadd VectorVT:$vx, v256i1:$vm, i32:$vl)),
-           (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>("VFSUM"#FPToken#"vxl") $vx, $vm, $vl), 0), ResRC)>;
+           (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>("VFSUM"#FPToken#"vml") $vx, $vm, $vl), 0), ResRC)>;
 
 // ordered & unmasked
-def : Pat <(ResVT (vvp_reduce_strict_fadd (ResVT neutral_elem), VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
+def : Pat <(ResVT (vvp_reduce_seq_fadd (ResVT neutral_elem), VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
            (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>("VFIA"#FPToken#"vil") $vx, 0, $vl), 0), ResRC)>;
-def : Pat <(ResVT (vvp_reduce_strict_fadd ResVT:$sy, VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
+def : Pat <(ResVT (vvp_reduce_seq_fadd ResVT:$sy, VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
            (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>("VFIA"#FPToken#"vrl") $vx, $sy, $vl), 0), ResRC)>;
 
 // ordered & masked
-def : Pat <(ResVT (vvp_reduce_strict_fadd ResVT:$sy, VectorVT:$vx, v256i1:$vm, i32:$vl)),
+def : Pat <(ResVT (vvp_reduce_seq_fadd ResVT:$sy, VectorVT:$vx, v256i1:$vm, i32:$vl)),
            (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi")
                (!cast<Instruction>("VFIA"#FPToken#"vrl")
-                   (VMRGivxl 0, $vx, $vm, $vl),
+                   (VMRGivml 0, $vx, $vm, $vl),
                    $sy,
                    $vl
                ),
@@ -459,7 +460,7 @@ multiclass Reduce_GenericInt<ValueType VectorVT, ValueType ResRC, ValueType ResV
 
   // masked
   def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_"#VVPRedOp) VectorVT:$vx, v256i1:$vm, i32:$vl)),
-             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(RedInstName#"vxl") $vx, $vm, $vl), 0), ResRC)>;
+             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(RedInstName#"vml") $vx, $vm, $vl), 0), ResRC)>;
 }
 
 multiclass IntReduce_ShortLong<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string SumOpName> {

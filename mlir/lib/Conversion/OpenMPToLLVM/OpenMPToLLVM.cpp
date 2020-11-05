@@ -26,8 +26,8 @@ struct ParallelOpConversion : public ConvertToLLVMPattern {
   matchAndRewrite(Operation *op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     auto curOp = cast<omp::ParallelOp>(op);
-    auto newOp = rewriter.create<omp::ParallelOp>(
-        curOp.getLoc(), ArrayRef<Type>(), operands, curOp.getAttrs());
+    auto newOp = rewriter.create<omp::ParallelOp>(curOp.getLoc(), TypeRange(),
+                                                  operands, curOp.getAttrs());
     rewriter.inlineRegionBefore(curOp.region(), newOp.region(),
                                 newOp.region().end());
     if (failed(rewriter.convertRegionTypes(&newOp.region(), typeConverter)))
@@ -67,7 +67,7 @@ void ConvertOpenMPToLLVMPass::runOnOperation() {
       [&](omp::ParallelOp op) { return converter.isLegal(&op.getRegion()); });
   target.addLegalOp<omp::TerminatorOp, omp::TaskyieldOp, omp::FlushOp,
                     omp::BarrierOp, omp::TaskwaitOp>();
-  if (failed(applyPartialConversion(module, target, patterns)))
+  if (failed(applyPartialConversion(module, target, std::move(patterns))))
     signalPassFailure();
 }
 

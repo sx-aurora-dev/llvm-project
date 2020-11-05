@@ -4,173 +4,8 @@
 @vi16 = common dso_local local_unnamed_addr global i16 0, align 4
 @vi32 = common dso_local local_unnamed_addr global i32 0, align 4
 @vi64 = common dso_local local_unnamed_addr global i64 0, align 4
-@vi128 = common dso_local local_unnamed_addr global i128 0, align 4
 @vf32 = common dso_local local_unnamed_addr global float 0.000000e+00, align 4
 @vf64 = common dso_local local_unnamed_addr global double 0.000000e+00, align 4
-@vf128 = common dso_local local_unnamed_addr global fp128 0xL00000000000000000000000000000000, align 4
-
-; Function Attrs: norecurse nounwind readonly
-define fp128 @loadf128(fp128* nocapture readonly %0) {
-; CHECK-LABEL: loadf128:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ld %s2, 8(, %s0)
-; CHECK-NEXT:    ld %s3, (, %s0)
-; CHECK-NEXT:    or %s0, 0, %s2
-; CHECK-NEXT:    or %s1, 0, %s3
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load fp128, fp128* %0, align 4
-  ret fp128 %2
-}
-
-; Function Attrs: norecurse nounwind readonly
-define double @loadf64(double* nocapture readonly %0) {
-; CHECK-LABEL: loadf64:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ld %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load double, double* %0, align 4
-  ret double %2
-}
-
-; Function Attrs: norecurse nounwind readonly
-define float @loadf32(float* nocapture readonly %0) {
-; CHECK-LABEL: loadf32:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ldu %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load float, float* %0, align 4
-  ret float %2
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i128 @loadi128(i128* nocapture readonly %0) {
-; CHECK-LABEL: loadi128:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ld %s2, (, %s0)
-; CHECK-NEXT:    ld %s1, 8(, %s0)
-; CHECK-NEXT:    or %s0, 0, %s2
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i128, i128* %0, align 4
-  ret i128 %2
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i64 @loadi64(i64* nocapture readonly %0) {
-; CHECK-LABEL: loadi64:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ld %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i64, i64* %0, align 4
-  ret i64 %2
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i32 @loadi32(i32* nocapture readonly %0) {
-; CHECK-LABEL: loadi32:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ldl.sx %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i32, i32* %0, align 4
-  ret i32 %2
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i64 @loadi32sext(i32* nocapture readonly %0) {
-; CHECK-LABEL: loadi32sext:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ldl.sx %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i32, i32* %0, align 4
-  %3 = sext i32 %2 to i64
-  ret i64 %3
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i64 @loadi32zext(i32* nocapture readonly %0) {
-; CHECK-LABEL: loadi32zext:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ldl.zx %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i32, i32* %0, align 4
-  %3 = zext i32 %2 to i64
-  ret i64 %3
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i16 @loadi16(i16* nocapture readonly %0) {
-; CHECK-LABEL: loadi16:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ld2b.zx %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i16, i16* %0, align 4
-  ret i16 %2
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i64 @loadi16sext(i16* nocapture readonly %0) {
-; CHECK-LABEL: loadi16sext:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ld2b.sx %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i16, i16* %0, align 4
-  %3 = sext i16 %2 to i64
-  ret i64 %3
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i64 @loadi16zext(i16* nocapture readonly %0) {
-; CHECK-LABEL: loadi16zext:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ld2b.zx %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i16, i16* %0, align 4
-  %3 = zext i16 %2 to i64
-  ret i64 %3
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i8 @loadi8(i8* nocapture readonly %0) {
-; CHECK-LABEL: loadi8:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i8, i8* %0, align 4
-  ret i8 %2
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i64 @loadi8sext(i8* nocapture readonly %0) {
-; CHECK-LABEL: loadi8sext:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ld1b.sx %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i8, i8* %0, align 4
-  %3 = sext i8 %2 to i64
-  ret i64 %3
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i64 @loadi8zext(i8* nocapture readonly %0) {
-; CHECK-LABEL: loadi8zext:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    ld1b.zx %s0, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %2 = load i8, i8* %0, align 4
-  %3 = zext i8 %2 to i64
-  ret i64 %3
-}
-
-; Function Attrs: norecurse nounwind readonly
-define fp128 @loadf128stk() {
-; CHECK-LABEL: loadf128stk:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s1, -16(, %s9)
-; CHECK-NEXT:    ld %s0, -8(, %s9)
-; CHECK-NEXT:    or %s11, 0, %s9
-  %addr = alloca fp128, align 4
-  %1 = load fp128, fp128* %addr, align 4
-  ret fp128 %1
-}
 
 ; Function Attrs: norecurse nounwind readonly
 define double @loadf64stk() {
@@ -192,18 +27,6 @@ define float @loadf32stk() {
   %addr = alloca float, align 4
   %1 = load float, float* %addr, align 4
   ret float %1
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i128 @loadi128stk() {
-; CHECK-LABEL: loadi128stk:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s0, -16(, %s9)
-; CHECK-NEXT:    ld %s1, -8(, %s9)
-; CHECK-NEXT:    or %s11, 0, %s9
-  %addr = alloca i128, align 4
-  %1 = load i128, i128* %addr, align 4
-  ret i128 %1
 }
 
 ; Function Attrs: norecurse nounwind readonly
@@ -251,20 +74,6 @@ define i8 @loadi8stk() {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define fp128 @loadf128com() {
-; CHECK-LABEL: loadf128com:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, vf128@lo
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s2, vf128@hi(, %s0)
-; CHECK-NEXT:    ld %s0, 8(, %s2)
-; CHECK-NEXT:    ld %s1, (, %s2)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %1 = load fp128, fp128* @vf128, align 4
-  ret fp128 %1
-}
-
-; Function Attrs: norecurse nounwind readonly
 define double @loadf64com() {
 ; CHECK-LABEL: loadf64com:
 ; CHECK:       # %bb.0:
@@ -288,20 +97,6 @@ define float @loadf32com() {
 ; CHECK-NEXT:    b.l.t (, %s10)
   %1 = load float, float* @vf32, align 4
   ret float %1
-}
-
-; Function Attrs: norecurse nounwind readonly
-define i128 @loadi128com() {
-; CHECK-LABEL: loadi128com:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, vi128@lo
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s1, vi128@hi(, %s0)
-; CHECK-NEXT:    ld %s0, (, %s1)
-; CHECK-NEXT:    ld %s1, 8(, %s1)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %1 = load i128, i128* @vi128, align 4
-  ret i128 %1
 }
 
 ; Function Attrs: norecurse nounwind readonly

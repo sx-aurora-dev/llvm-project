@@ -84,7 +84,8 @@ int AArch64TTIImpl::getIntImmCost(const APInt &Imm, Type *Ty,
 
 int AArch64TTIImpl::getIntImmCostInst(unsigned Opcode, unsigned Idx,
                                       const APInt &Imm, Type *Ty,
-                                      TTI::TargetCostKind CostKind) {
+                                      TTI::TargetCostKind CostKind,
+                                      Instruction *Inst) {
   assert(Ty->isIntegerTy());
 
   unsigned BitSize = Ty->getPrimitiveSizeInBits();
@@ -192,6 +193,10 @@ int AArch64TTIImpl::getIntImmCostIntrin(Intrinsic::ID IID, unsigned Idx,
     if ((Idx < 4) || (Imm.getBitWidth() <= 64 && isInt<64>(Imm.getSExtValue())))
       return TTI::TCC_Free;
     break;
+  case Intrinsic::experimental_gc_statepoint:
+    if ((Idx < 5) || (Imm.getBitWidth() <= 64 && isInt<64>(Imm.getSExtValue())))
+      return TTI::TCC_Free;
+    break;
   }
   return AArch64TTIImpl::getIntImmCost(Imm, Ty, CostKind);
 }
@@ -203,6 +208,28 @@ AArch64TTIImpl::getPopcntSupport(unsigned TyWidth) {
     return TTI::PSK_FastHardware;
   // TODO: AArch64TargetLowering::LowerCTPOP() supports 128bit popcount.
   return TTI::PSK_Software;
+}
+
+unsigned
+AArch64TTIImpl::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
+                                      TTI::TargetCostKind CostKind) {
+  auto *RetTy = ICA.getReturnType();
+  switch (ICA.getID()) {
+  case Intrinsic::smin:
+  case Intrinsic::umin:
+  case Intrinsic::smax:
+  case Intrinsic::umax: {
+    static const auto ValidMinMaxTys = {MVT::v8i8,  MVT::v16i8, MVT::v4i16,
+                                        MVT::v8i16, MVT::v2i32, MVT::v4i32};
+    auto LT = TLI->getTypeLegalizationCost(DL, RetTy);
+    if (any_of(ValidMinMaxTys, [&LT](MVT M) { return M == LT.second; }))
+      return LT.first;
+    break;
+  }
+  default:
+    break;
+  }
+  return BaseT::getIntrinsicInstrCost(ICA, CostKind);
 }
 
 bool AArch64TTIImpl::isWideningInstruction(Type *DstTy, unsigned Opcode,
@@ -450,7 +477,7 @@ int AArch64TTIImpl::getExtractWithExtendCost(unsigned Opcode, Type *Dst,
 
   // The destination type should be larger than the element type. If not, get
   // the default cost for the extend.
-  if (DstVT.getSizeInBits() < SrcVT.getSizeInBits())
+  if (DstVT.getFixedSizeInBits() < SrcVT.getFixedSizeInBits())
     return Cost + getCastInstrCost(Opcode, Dst, Src, TTI::CastContextHint::None,
                                    CostKind);
 

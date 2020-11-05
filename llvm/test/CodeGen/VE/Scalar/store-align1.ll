@@ -4,137 +4,8 @@
 @vi16 = common dso_local local_unnamed_addr global i16 0, align 1
 @vi32 = common dso_local local_unnamed_addr global i32 0, align 1
 @vi64 = common dso_local local_unnamed_addr global i64 0, align 1
-@vi128 = common dso_local local_unnamed_addr global i128 0, align 1
 @vf32 = common dso_local local_unnamed_addr global float 0.000000e+00, align 1
 @vf64 = common dso_local local_unnamed_addr global double 0.000000e+00, align 1
-@vf128 = common dso_local local_unnamed_addr global fp128 0xL00000000000000000000000000000000, align 1
-
-; Function Attrs: norecurse nounwind readonly
-define void @storef128(fp128* nocapture %0, fp128 %1) {
-; CHECK-LABEL: storef128:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    st %s2, 8(, %s0)
-; CHECK-NEXT:    st %s3, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  store fp128 %1, fp128* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storef64(double* nocapture %0, double %1) {
-; CHECK-LABEL: storef64:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    st %s1, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  store double %1, double* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storef32(float* nocapture %0, float %1) {
-; CHECK-LABEL: storef32:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    stu %s1, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  store float %1, float* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storei128(i128* nocapture %0, i128 %1) {
-; CHECK-LABEL: storei128:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    st %s2, 8(, %s0)
-; CHECK-NEXT:    st %s1, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  store i128 %1, i128* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storei64(i64* nocapture %0, i64 %1) {
-; CHECK-LABEL: storei64:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    st %s1, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  store i64 %1, i64* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storei32(i32* nocapture %0, i32 %1) {
-; CHECK-LABEL: storei32:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    stl %s1, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  store i32 %1, i32* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storei32tr(i32* nocapture %0, i64 %1) {
-; CHECK-LABEL: storei32tr:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    stl %s1, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = trunc i64 %1 to i32
-  store i32 %3, i32* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storei16(i16* nocapture %0, i16 %1) {
-; CHECK-LABEL: storei16:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    st2b %s1, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  store i16 %1, i16* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storei16tr(i16* nocapture %0, i64 %1) {
-; CHECK-LABEL: storei16tr:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    st2b %s1, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = trunc i64 %1 to i16
-  store i16 %3, i16* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storei8(i8* nocapture %0, i8 %1) {
-; CHECK-LABEL: storei8:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    st1b %s1, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  store i8 %1, i8* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storei8tr(i8* nocapture %0, i64 %1) {
-; CHECK-LABEL: storei8tr:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    st1b %s1, (, %s0)
-; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = trunc i64 %1 to i8
-  store i8 %3, i8* %0, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storef128stk(fp128 %0) {
-; CHECK-LABEL: storef128stk:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    st %s1, -16(, %s9)
-; CHECK-NEXT:    st %s0, -8(, %s9)
-; CHECK-NEXT:    or %s11, 0, %s9
-  %addr = alloca fp128, align 1
-  store fp128 %0, fp128* %addr, align 1
-  ret void
-}
 
 ; Function Attrs: norecurse nounwind readonly
 define void @storef64stk(double %0) {
@@ -155,18 +26,6 @@ define void @storef32stk(float %0) {
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca float, align 1
   store float %0, float* %addr, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storei128stk(i128 %0) {
-; CHECK-LABEL: storei128stk:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    st %s1, -8(, %s9)
-; CHECK-NEXT:    st %s0, -16(, %s9)
-; CHECK-NEXT:    or %s11, 0, %s9
-  %addr = alloca i128, align 1
-  store i128 %0, i128* %addr, align 1
   ret void
 }
 
@@ -215,20 +74,6 @@ define void @storei8stk(i8 %0) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define void @storef128com(fp128 %0) {
-; CHECK-LABEL: storef128com:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s2, vf128@lo
-; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s2, vf128@hi(, %s2)
-; CHECK-NEXT:    st %s0, 8(, %s2)
-; CHECK-NEXT:    st %s1, (, %s2)
-; CHECK-NEXT:    b.l.t (, %s10)
-  store fp128 %0, fp128* @vf128, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
 define void @storef64com(double %0) {
 ; CHECK-LABEL: storef64com:
 ; CHECK:       # %bb.0:
@@ -251,20 +96,6 @@ define void @storef32com(float %0) {
 ; CHECK-NEXT:    stu %s0, (, %s1)
 ; CHECK-NEXT:    b.l.t (, %s10)
   store float %0, float* @vf32, align 1
-  ret void
-}
-
-; Function Attrs: norecurse nounwind readonly
-define void @storei128com(i128 %0) {
-; CHECK-LABEL: storei128com:
-; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s2, vi128@lo
-; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s2, vi128@hi(, %s2)
-; CHECK-NEXT:    st %s1, 8(, %s2)
-; CHECK-NEXT:    st %s0, (, %s2)
-; CHECK-NEXT:    b.l.t (, %s10)
-  store i128 %0, i128* @vi128, align 1
   ret void
 }
 

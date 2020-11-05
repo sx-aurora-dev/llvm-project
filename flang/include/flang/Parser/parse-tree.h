@@ -3594,9 +3594,8 @@ struct OpenMPDeclarativeConstruct {
 // 2.13.2 CRITICAL [Name] <block> END CRITICAL [Name]
 struct OmpCriticalDirective {
   TUPLE_CLASS_BOILERPLATE(OmpCriticalDirective);
-  WRAPPER_CLASS(Hint, ConstantExpr);
   CharBlock source;
-  std::tuple<Verbatim, std::optional<Name>, std::optional<Hint>> t;
+  std::tuple<Verbatim, std::optional<Name>, std::optional<OmpClause>> t;
 };
 struct OmpEndCriticalDirective {
   TUPLE_CLASS_BOILERPLATE(OmpEndCriticalDirective);
@@ -3608,61 +3607,57 @@ struct OpenMPCriticalConstruct {
   std::tuple<OmpCriticalDirective, Block, OmpEndCriticalDirective> t;
 };
 
-// 2.13.6 atomic -> ATOMIC [seq_cst[,]] atomic-clause [[,]seq_cst] |
-//                  ATOMIC [seq_cst]
+// 2.17.7 atomic -> ATOMIC [clause[,]] atomic-clause [[,]clause] |
+//                  ATOMIC [clause]
+//        clause -> memory-order-clause | HINT(hint-expression)
+//        memory-order-clause -> SEQ_CST | ACQ_REL | RELEASE | ACQUIRE | RELAXED
 //        atomic-clause -> READ | WRITE | UPDATE | CAPTURE
 
 // END ATOMIC
 EMPTY_CLASS(OmpEndAtomic);
 
-// ATOMIC Memory related clause
-struct OmpMemoryClause {
-  ENUM_CLASS(MemoryOrder, SeqCst)
-  WRAPPER_CLASS_BOILERPLATE(OmpMemoryClause, MemoryOrder);
-  CharBlock source;
-};
-
-WRAPPER_CLASS(OmpMemoryClauseList, std::list<OmpMemoryClause>);
-WRAPPER_CLASS(OmpMemoryClausePostList, std::list<OmpMemoryClause>);
-
 // ATOMIC READ
 struct OmpAtomicRead {
   TUPLE_CLASS_BOILERPLATE(OmpAtomicRead);
-  std::tuple<OmpMemoryClauseList, Verbatim, OmpMemoryClausePostList,
-      Statement<AssignmentStmt>, std::optional<OmpEndAtomic>>
+  CharBlock source;
+  std::tuple<OmpClauseList, Verbatim, OmpClauseList, Statement<AssignmentStmt>,
+      std::optional<OmpEndAtomic>>
       t;
 };
 
 // ATOMIC WRITE
 struct OmpAtomicWrite {
   TUPLE_CLASS_BOILERPLATE(OmpAtomicWrite);
-  std::tuple<OmpMemoryClauseList, Verbatim, OmpMemoryClausePostList,
-      Statement<AssignmentStmt>, std::optional<OmpEndAtomic>>
+  CharBlock source;
+  std::tuple<OmpClauseList, Verbatim, OmpClauseList, Statement<AssignmentStmt>,
+      std::optional<OmpEndAtomic>>
       t;
 };
 
 // ATOMIC UPDATE
 struct OmpAtomicUpdate {
   TUPLE_CLASS_BOILERPLATE(OmpAtomicUpdate);
-  std::tuple<OmpMemoryClauseList, Verbatim, OmpMemoryClausePostList,
-      Statement<AssignmentStmt>, std::optional<OmpEndAtomic>>
+  CharBlock source;
+  std::tuple<OmpClauseList, Verbatim, OmpClauseList, Statement<AssignmentStmt>,
+      std::optional<OmpEndAtomic>>
       t;
 };
 
 // ATOMIC CAPTURE
 struct OmpAtomicCapture {
   TUPLE_CLASS_BOILERPLATE(OmpAtomicCapture);
+  CharBlock source;
   WRAPPER_CLASS(Stmt1, Statement<AssignmentStmt>);
   WRAPPER_CLASS(Stmt2, Statement<AssignmentStmt>);
-  std::tuple<OmpMemoryClauseList, Verbatim, OmpMemoryClausePostList, Stmt1,
-      Stmt2, OmpEndAtomic>
+  std::tuple<OmpClauseList, Verbatim, OmpClauseList, Stmt1, Stmt2, OmpEndAtomic>
       t;
 };
 
 // ATOMIC
 struct OmpAtomic {
   TUPLE_CLASS_BOILERPLATE(OmpAtomic);
-  std::tuple<Verbatim, OmpMemoryClauseList, Statement<AssignmentStmt>,
+  CharBlock source;
+  std::tuple<Verbatim, OmpClauseList, Statement<AssignmentStmt>,
       std::optional<OmpEndAtomic>>
       t;
 };
@@ -3707,8 +3702,7 @@ struct OpenMPCancelConstruct {
 //                        release
 //                        acquire
 struct OmpFlushMemoryClause {
-  ENUM_CLASS(FlushMemoryOrder, AcqRel, Release, Acquire)
-  WRAPPER_CLASS_BOILERPLATE(OmpFlushMemoryClause, FlushMemoryOrder);
+  WRAPPER_CLASS_BOILERPLATE(OmpFlushMemoryClause, llvm::omp::Clause);
   CharBlock source;
 };
 
@@ -3976,6 +3970,7 @@ struct OpenACCAtomicConstruct {
   UNION_CLASS_BOILERPLATE(OpenACCAtomicConstruct);
   std::variant<AccAtomicRead, AccAtomicWrite, AccAtomicCapture, AccAtomicUpdate>
       u;
+  CharBlock source;
 };
 
 struct OpenACCBlockConstruct {

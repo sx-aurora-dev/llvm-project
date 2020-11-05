@@ -15,6 +15,7 @@
 #define MLIR_IR_OPERATION_SUPPORT_H
 
 #include "mlir/IR/Attributes.h"
+#include "mlir/IR/BlockSupport.h"
 #include "mlir/IR/Identifier.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/TypeRange.h"
@@ -28,7 +29,6 @@
 #include <memory>
 
 namespace mlir {
-class Block;
 class Dialect;
 class Operation;
 struct OperationState;
@@ -42,7 +42,6 @@ class Pattern;
 class Region;
 class ResultRange;
 class RewritePattern;
-class SuccessorRange;
 class Type;
 class Value;
 class ValueRange;
@@ -258,6 +257,12 @@ public:
   void set(Identifier name, Attribute value);
   void set(StringRef name, Attribute value);
 
+  /// Erase the attribute with the given name from the list. Return the
+  /// attribute that was erased, or nullptr if there was no attribute with such
+  /// name.
+  Attribute erase(Identifier name);
+  Attribute erase(StringRef name);
+
   const_iterator begin() const { return attrs.begin(); }
   const_iterator end() const { return attrs.end(); }
 
@@ -268,6 +273,9 @@ public:
 private:
   /// Return whether the attributes are sorted.
   bool isSorted() const { return dictionarySorted.getInt(); }
+
+  /// Erase the attribute at the given iterator position.
+  Attribute eraseImpl(SmallVectorImpl<NamedAttribute>::iterator it);
 
   // These are marked mutable as they may be modified (e.g., sorted)
   mutable SmallVector<NamedAttribute, 4> attrs;
@@ -364,8 +372,8 @@ public:
   OperationState(Location location, OperationName name);
 
   OperationState(Location location, StringRef name, ValueRange operands,
-                 ArrayRef<Type> types, ArrayRef<NamedAttribute> attributes,
-                 ArrayRef<Block *> successors = {},
+                 TypeRange types, ArrayRef<NamedAttribute> attributes,
+                 BlockRange successors = {},
                  MutableArrayRef<std::unique_ptr<Region>> regions = {});
 
   void addOperands(ValueRange newOperands);
@@ -394,12 +402,8 @@ public:
     attributes.append(newAttributes);
   }
 
-  /// Add an array of successors.
-  void addSuccessors(ArrayRef<Block *> newSuccessors) {
-    successors.append(newSuccessors.begin(), newSuccessors.end());
-  }
   void addSuccessors(Block *successor) { successors.push_back(successor); }
-  void addSuccessors(SuccessorRange newSuccessors);
+  void addSuccessors(BlockRange newSuccessors);
 
   /// Create a region that should be attached to the operation.  These regions
   /// can be filled in immediately without waiting for Operation to be
@@ -567,10 +571,10 @@ public:
   OpPrintingFlags();
   OpPrintingFlags(llvm::NoneType) : OpPrintingFlags() {}
 
-  /// Enable the elision of large elements attributes, by printing a '...'
-  /// instead of the element data. Note: The IR generated with this option is
-  /// not parsable. `largeElementLimit` is used to configure what is considered
-  /// to be a "large" ElementsAttr by providing an upper limit to the number of
+  /// Enables the elision of large elements attributes by printing a lexically
+  /// valid but otherwise meaningless form instead of the element data. The
+  /// `largeElementLimit` is used to configure what is considered to be a
+  /// "large" ElementsAttr by providing an upper limit to the number of
   /// elements.
   OpPrintingFlags &elideLargeElementsAttrs(int64_t largeElementLimit = 16);
 

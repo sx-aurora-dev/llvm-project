@@ -28,6 +28,7 @@
 #include "refactor/Tweak.h"
 #include "support/Logger.h"
 #include "support/Markup.h"
+#include "support/MemoryTree.h"
 #include "support/ThreadsafeFS.h"
 #include "support/Trace.h"
 #include "clang/Format/Format.h"
@@ -180,7 +181,7 @@ ClangdServer::ClangdServer(const GlobalCompilationDatabase &CDB,
       SuggestMissingIncludes(Opts.SuggestMissingIncludes),
       BuildRecoveryAST(Opts.BuildRecoveryAST),
       PreserveRecoveryASTType(Opts.PreserveRecoveryASTType),
-      TweakFilter(Opts.TweakFilter), WorkspaceRoot(Opts.WorkspaceRoot),
+      WorkspaceRoot(Opts.WorkspaceRoot),
       // Pass a callback into `WorkScheduler` to extract symbols from a newly
       // parsed file and rebuild the file index synchronously each time an AST
       // is parsed.
@@ -218,6 +219,7 @@ ClangdServer::ClangdServer(const GlobalCompilationDatabase &CDB,
     BGOpts.ContextProvider = [this](PathRef P) {
       return createProcessingContext(P);
     };
+    BGOpts.CollectMainFileRefs = Opts.CollectMainFileRefs;
     BackgroundIdx = std::make_unique<BackgroundIndex>(
         TFS, CDB,
         BackgroundIndexStorage::createDiskBackedStorageFactory(
@@ -342,8 +344,7 @@ void ClangdServer::signatureHelp(PathRef File, Position Pos,
 
     const auto *PreambleData = IP->Preamble;
     if (!PreambleData)
-      return CB(llvm::createStringError(llvm::inconvertibleErrorCode(),
-                                        "Failed to parse includes"));
+      return CB(error("Failed to parse includes"));
 
     ParseInputs ParseInput{IP->Command, &TFS, IP->Contents.str()};
     ParseInput.Index = Index;
@@ -400,47 +401,38 @@ void ClangdServer::formatOnType(PathRef File, llvm::StringRef Code,
 }
 
 void ClangdServer::prepareRename(PathRef File, Position Pos,
+                                 llvm::Optional<std::string> NewName,
                                  const RenameOptions &RenameOpts,
-                                 Callback<llvm::Optional<Range>> CB) {
-  auto Action = [Pos, File = File.str(), CB = std::move(CB), RenameOpts,
+                                 Callback<RenameResult> CB) {
+  auto Action = [Pos, File = File.str(), CB = std::move(CB),
+                 NewName = std::move(NewName), RenameOpts,
                  this](llvm::Expected<InputsAndAST> InpAST) mutable {
     if (!InpAST)
       return CB(InpAST.takeError());
-    auto &AST = InpAST->AST;
-    const auto &SM = AST.getSourceManager();
-    auto Loc = sourceLocationInMainFile(SM, Pos);
-    if (!Loc)
-      return CB(Loc.takeError());
-    const auto *TouchingIdentifier =
-        spelledIdentifierTouching(*Loc, AST.getTokens());
-    if (!TouchingIdentifier)
-      return CB(llvm::None); // no rename on non-identifiers.
-
-    auto Range = halfOpenToRange(
-        SM, CharSourceRange::getCharRange(TouchingIdentifier->location(),
-                                          TouchingIdentifier->endLocation()));
-
-    if (RenameOpts.AllowCrossFile)
-      // FIXME: we now assume cross-file rename always succeeds, revisit this.
-      return CB(Range);
-
-    // Performing the local rename isn't substantially more expensive than
-    // doing an AST-based check, so we just rename and throw away the results.
-    auto Changes = clangd::rename({Pos, "dummy", AST, File, Index, RenameOpts,
-                                   /*GetDirtyBuffer=*/nullptr});
-    if (!Changes) {
+    // prepareRename is latency-sensitive:
+    //  - for single-file rename, performing rename isn't substantially more
+    //    expensive than doing an AST-based check (the index is used to see if
+    //    the rename is complete);
+    //  - for cross-file rename, we deliberately pass a nullptr index to save
+    //    the cost, thus the result may be incomplete as it only contains
+    //    main-file occurrences;
+    auto Results = clangd::rename(
+        {Pos, NewName.getValueOr("__clangd_rename_dummy"), InpAST->AST, File,
+         RenameOpts.AllowCrossFile ? nullptr : Index, RenameOpts});
+    if (!Results) {
       // LSP says to return null on failure, but that will result in a generic
       // failure message. If we send an LSP error response, clients can surface
       // the message to users (VSCode does).
-      return CB(Changes.takeError());
+      return CB(Results.takeError());
     }
-    return CB(Range);
+    return CB(*Results);
   };
   WorkScheduler.runWithAST("PrepareRename", File, std::move(Action));
 }
 
 void ClangdServer::rename(PathRef File, Position Pos, llvm::StringRef NewName,
-                          const RenameOptions &Opts, Callback<FileEdits> CB) {
+                          const RenameOptions &Opts,
+                          Callback<RenameResult> CB) {
   // A snapshot of all file dirty buffers.
   llvm::StringMap<std::string> Snapshot = WorkScheduler.getAllFileContents();
   auto Action = [File = File.str(), NewName = NewName.str(), Pos, Opts,
@@ -458,24 +450,24 @@ void ClangdServer::rename(PathRef File, Position Pos, llvm::StringRef NewName,
         return llvm::None;
       return It->second;
     };
-    auto Edits = clangd::rename(
+    auto R = clangd::rename(
         {Pos, NewName, InpAST->AST, File, Index, Opts, GetDirtyBuffer});
-    if (!Edits)
-      return CB(Edits.takeError());
+    if (!R)
+      return CB(R.takeError());
 
     if (Opts.WantFormat) {
       auto Style = getFormatStyleForFile(File, InpAST->Inputs.Contents,
                                          *InpAST->Inputs.TFS);
       llvm::Error Err = llvm::Error::success();
-      for (auto &E : *Edits)
+      for (auto &E : R->GlobalChanges)
         Err =
             llvm::joinErrors(reformatEdit(E.getValue(), Style), std::move(Err));
 
       if (Err)
         return CB(std::move(Err));
     }
-    RenameFiles.record(Edits->size());
-    return CB(std::move(*Edits));
+    RenameFiles.record(R->GlobalChanges.size());
+    return CB(*R);
   };
   WorkScheduler.runWithAST("Rename", File, std::move(Action));
 }
@@ -502,13 +494,15 @@ tweakSelection(const Range &Sel, const InputsAndAST &AST) {
   return std::move(Result);
 }
 
-void ClangdServer::enumerateTweaks(PathRef File, Range Sel,
-                                   Callback<std::vector<TweakRef>> CB) {
+void ClangdServer::enumerateTweaks(
+    PathRef File, Range Sel, llvm::unique_function<bool(const Tweak &)> Filter,
+    Callback<std::vector<TweakRef>> CB) {
   // Tracks number of times a tweak has been offered.
   static constexpr trace::Metric TweakAvailable(
       "tweak_available", trace::Metric::Counter, "tweak_id");
   auto Action = [File = File.str(), Sel, CB = std::move(CB),
-                 this](Expected<InputsAndAST> InpAST) mutable {
+                 Filter =
+                     std::move(Filter)](Expected<InputsAndAST> InpAST) mutable {
     if (!InpAST)
       return CB(InpAST.takeError());
     auto Selections = tweakSelection(Sel, *InpAST);
@@ -517,12 +511,12 @@ void ClangdServer::enumerateTweaks(PathRef File, Range Sel,
     std::vector<TweakRef> Res;
     // Don't allow a tweak to fire more than once across ambiguous selections.
     llvm::DenseSet<llvm::StringRef> PreparedTweaks;
-    auto Filter = [&](const Tweak &T) {
-      return TweakFilter(T) && !PreparedTweaks.count(T.id());
+    auto DeduplicatingFilter = [&](const Tweak &T) {
+      return Filter(T) && !PreparedTweaks.count(T.id());
     };
     for (const auto &Sel : *Selections) {
-      for (auto &T : prepareTweaks(*Sel, Filter)) {
-        Res.push_back({T->id(), T->title(), T->intent()});
+      for (auto &T : prepareTweaks(*Sel, DeduplicatingFilter)) {
+        Res.push_back({T->id(), T->title(), T->kind()});
         PreparedTweaks.insert(T->id());
         TweakAvailable.record(1, T->id());
       }
@@ -537,9 +531,12 @@ void ClangdServer::enumerateTweaks(PathRef File, Range Sel,
 
 void ClangdServer::applyTweak(PathRef File, Range Sel, StringRef TweakID,
                               Callback<Tweak::Effect> CB) {
-  // Tracks number of times a tweak has been applied.
+  // Tracks number of times a tweak has been attempted.
   static constexpr trace::Metric TweakAttempt(
       "tweak_attempt", trace::Metric::Counter, "tweak_id");
+  // Tracks number of times a tweak has failed to produce edits.
+  static constexpr trace::Metric TweakFailed(
+      "tweak_failed", trace::Metric::Counter, "tweak_id");
   TweakAttempt.record(1, TweakID);
   auto Action = [File = File.str(), Sel, TweakID = TweakID.str(),
                  CB = std::move(CB),
@@ -570,6 +567,8 @@ void ClangdServer::applyTweak(PathRef File, Range Sel, StringRef TweakID,
         if (llvm::Error Err = reformatEdit(E, Style))
           elog("Failed to format {0}: {1}", It.first(), std::move(Err));
       }
+    } else {
+      TweakFailed.record(1, TweakID);
     }
     return CB(std::move(*Effect));
   };
@@ -829,5 +828,12 @@ ClangdServer::blockUntilIdleForTest(llvm::Optional<double> TimeoutSeconds) {
           BackgroundIdx->blockUntilIdleForTest(TimeoutSeconds));
 }
 
+void ClangdServer::profile(MemoryTree &MT) const {
+  if (DynamicIdx)
+    DynamicIdx->profile(MT.child("dynamic_index"));
+  if (BackgroundIdx)
+    BackgroundIdx->profile(MT.child("background_index"));
+  WorkScheduler.profile(MT.child("tuscheduler"));
+}
 } // namespace clangd
 } // namespace clang

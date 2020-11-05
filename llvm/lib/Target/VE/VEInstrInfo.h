@@ -43,10 +43,9 @@ enum {
   VE_VLMask = 0x07 << VE_VLShift,
 };
 
-#define HAS_VLINDEX(TSF) ((TSF) & VEII::VE_VLInUse)
-#define GET_VLINDEX(TSF) \
-    (HAS_VLINDEX(TSF) ? (int)(((TSF) & VEII::VE_VLMask) >> VEII::VE_VLShift) \
-                      : -1)
+#define HAS_VLINDEX(TSF) ((TSF)&VEII::VE_VLInUse)
+#define GET_VLINDEX(TSF)                                                       \
+  (HAS_VLINDEX(TSF) ? (int)(((TSF)&VEII::VE_VLMask) >> VEII::VE_VLShift) : -1)
 } // end namespace VEII
 
 class VEInstrInfo : public VEGenInstrInfo {

@@ -1408,12 +1408,7 @@ Constant *llvm::ConstantFoldBinaryInstruction(unsigned Opcode, Constant *C1,
         return ConstantFP::get(C1->getContext(), C3V);
       }
     }
-  } else if (IsScalableVector) {
-    // Do not iterate on scalable vector. The number of elements is unknown at
-    // compile-time.
-    // FIXME: this branch can potentially be removed
-    return nullptr;
-  } else if (auto *VTy = dyn_cast<FixedVectorType>(C1->getType())) {
+  } else if (auto *VTy = dyn_cast<VectorType>(C1->getType())) {
     // Fast path for splatted constants.
     if (Constant *C2Splat = C2->getSplatValue()) {
       if (Instruction::isIntDivRem(Opcode) && C2Splat->isNullValue())
@@ -1425,22 +1420,24 @@ Constant *llvm::ConstantFoldBinaryInstruction(unsigned Opcode, Constant *C1,
       }
     }
 
-    // Fold each element and create a vector constant from those constants.
-    SmallVector<Constant*, 16> Result;
-    Type *Ty = IntegerType::get(VTy->getContext(), 32);
-    for (unsigned i = 0, e = VTy->getNumElements(); i != e; ++i) {
-      Constant *ExtractIdx = ConstantInt::get(Ty, i);
-      Constant *LHS = ConstantExpr::getExtractElement(C1, ExtractIdx);
-      Constant *RHS = ConstantExpr::getExtractElement(C2, ExtractIdx);
+    if (auto *FVTy = dyn_cast<FixedVectorType>(VTy)) {
+      // Fold each element and create a vector constant from those constants.
+      SmallVector<Constant*, 16> Result;
+      Type *Ty = IntegerType::get(FVTy->getContext(), 32);
+      for (unsigned i = 0, e = FVTy->getNumElements(); i != e; ++i) {
+        Constant *ExtractIdx = ConstantInt::get(Ty, i);
+        Constant *LHS = ConstantExpr::getExtractElement(C1, ExtractIdx);
+        Constant *RHS = ConstantExpr::getExtractElement(C2, ExtractIdx);
 
-      // If any element of a divisor vector is zero, the whole op is undef.
-      if (Instruction::isIntDivRem(Opcode) && RHS->isNullValue())
-        return UndefValue::get(VTy);
+        // If any element of a divisor vector is zero, the whole op is undef.
+        if (Instruction::isIntDivRem(Opcode) && RHS->isNullValue())
+          return UndefValue::get(VTy);
 
-      Result.push_back(ConstantExpr::get(Opcode, LHS, RHS));
+        Result.push_back(ConstantExpr::get(Opcode, LHS, RHS));
+      }
+
+      return ConstantVector::get(Result);
     }
-
-    return ConstantVector::get(Result);
   }
 
   if (ConstantExpr *CE1 = dyn_cast<ConstantExpr>(C1)) {
@@ -1619,7 +1616,7 @@ static FCmpInst::Predicate evaluateFCmpRelation(Constant *V1, Constant *V2) {
 static ICmpInst::Predicate areGlobalsPotentiallyEqual(const GlobalValue *GV1,
                                                       const GlobalValue *GV2) {
   auto isGlobalUnsafeForEquality = [](const GlobalValue *GV) {
-    if (GV->hasExternalWeakLinkage() || GV->hasWeakAnyLinkage())
+    if (GV->isInterposable() || GV->hasGlobalUnnamedAddr())
       return true;
     if (const auto *GVar = dyn_cast<GlobalVariable>(GV)) {
       Type *Ty = GVar->getValueType();
@@ -1754,9 +1751,15 @@ static ICmpInst::Predicate evaluateICmpRelation(Constant *V1, Constant *V2,
     case Instruction::FPToSI:
       break; // We can't evaluate floating point casts or truncations.
 
+    case Instruction::BitCast:
+      // If this is a global value cast, check to see if the RHS is also a
+      // GlobalValue.
+      if (const GlobalValue *GV = dyn_cast<GlobalValue>(CE1Op0))
+        if (const GlobalValue *GV2 = dyn_cast<GlobalValue>(V2))
+          return areGlobalsPotentiallyEqual(GV, GV2);
+      LLVM_FALLTHROUGH;
     case Instruction::UIToFP:
     case Instruction::SIToFP:
-    case Instruction::BitCast:
     case Instruction::ZExt:
     case Instruction::SExt:
       // We can't evaluate floating point casts or truncations.

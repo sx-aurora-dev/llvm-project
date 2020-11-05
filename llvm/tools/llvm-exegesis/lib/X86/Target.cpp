@@ -53,7 +53,7 @@ static cl::opt<unsigned> LbrSamplingPeriod(
 static const char *isInvalidMemoryInstr(const Instruction &Instr) {
   switch (Instr.Description.TSFlags & X86II::FormMask) {
   default:
-    llvm_unreachable("Unknown FormMask value");
+    return "Unknown FormMask value";
   // These have no memory access.
   case X86II::Pseudo:
   case X86II::RawFrm:
@@ -672,6 +672,23 @@ private:
 
   bool matchesArch(Triple::ArchType Arch) const override {
     return Arch == Triple::x86_64 || Arch == Triple::x86;
+  }
+
+  Error checkFeatureSupport() const override {
+    // LBR is the only feature we conditionally support now.
+    // So if LBR is not requested, then we should be able to run the benchmarks.
+    if (LbrSamplingPeriod == 0)
+      return Error::success();
+
+#if defined(__linux__) && defined(HAVE_LIBPFM) &&                              \
+    defined(LIBPFM_HAS_FIELD_CYCLES)
+    // If the kernel supports it, the hardware still may not have it.
+    return X86LbrCounter::checkLbrSupport();
+#else
+    return llvm::make_error<llvm::StringError>(
+        "LBR not supported on this kernel and/or platform",
+        llvm::errc::not_supported);
+#endif
   }
 
   static const unsigned kUnavailableRegisters[4];

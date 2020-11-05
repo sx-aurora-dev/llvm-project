@@ -39,7 +39,7 @@ TEST(VETest, VLIndex) {
     case VST2Dirvl:
       return 3;
     case VSTU2DNCrzvml:
-    case VSTL2DNCOTrzvxl:
+    case VSTL2DNCOTrzvml:
       return 4;
     case VGTNCsrzm_v:
       return -1;
@@ -48,8 +48,8 @@ TEST(VETest, VLIndex) {
     case VGTLZXNCsirL:
       return 4;
     case VGTNCsrrmL_v:
-    case VGTUNCvrzxL:
-    case VGTLSXsizxl_v:
+    case VGTUNCvrzmL:
+    case VGTLSXsizml_v:
       return 5;
     case VSCNCsrzvm:
       return -1;
@@ -57,8 +57,8 @@ TEST(VETest, VLIndex) {
     case VSCLNCsirvL:
       return 4;
     case VSCOTsrrvmL:
-    case VSCUNCOTvrzvxL:
-    case VSCLsizvxl:
+    case VSCUNCOTvrzvmL:
+    case VSCLsizvml:
       return 5;
     case PFCHVrr:
       return -1;
@@ -69,31 +69,31 @@ TEST(VETest, VLIndex) {
       return -1;
     case VBRDrl:
       return 2;
-    case VBRDixL_v:
+    case VBRDimL_v:
       return 3;
-    case VMVrvx_v:
+    case VMVrvm_v:
       return -1;
     case VMVivl:
       return 3;
     case VMVrvmL_v:
       return 4;
     case VADDULvv_v:
-    case PVADDULOrvx:
+    case PVADDULOrvm:
       return -1;
     case VADDUWvvl_v:
     case PVADDUUPrvL:
       return 3;
-    case PVADDUvvxL_v:
+    case PVADDUvvmL_v:
     case VADDSWSXivml:
     case VADDSLivml:
       return 4;
     case VDIVULvv_v:
-    case VDIVSWSXrvx:
+    case VDIVSWSXrvm:
       return -1;
     case VDIVUWvrl_v:
     case VDIVSWZXviL:
       return 3;
-    case VDIVSLivxL_v:
+    case VDIVSLivmL_v:
     case VDIVSWSXivml:
       return 4;
     // We test casually if instructions are defined using a multiclass already
@@ -104,12 +104,12 @@ TEST(VETest, VLIndex) {
     case VMAXSLivml:
       return 4;
     case VANDvv_v:
-    case PVANDLOrvx:
+    case PVANDLOrvm:
       return -1;
     case PVANDvvl_v:
     case PVANDUPrvL:
       return 3;
-    case VORvvxL_v:
+    case VORvvmL_v:
     case PVORLOmvml:
     case VXORmvml:
     case VEQVmvml:
@@ -118,32 +118,32 @@ TEST(VETest, VLIndex) {
       return -1;
     case VPCNTvL:
       return 2;
-    case VBRVvxl:
+    case VBRVvml:
       return 3;
     case VSEQ:
       return -1;
     case VSEQL:
       return 1;
-    case VSEQxl:
+    case VSEQml:
       return 2;
     case VSLLvv_v:
-    case PVSLLLOvrx:
+    case PVSLLLOvrm:
       return -1;
     case PVSLLvvl_v:
     case PVSRLUPvrL:
       return 3;
-    case VSLLvixL_v:
+    case VSLLvimL_v:
     case PVSRLLOvrml:
-    case VSLALvixL_v:
-    case VSRALvixL_v:
+    case VSLALvimL_v:
+    case VSRALvimL_v:
       return 4;
     case VSLDvvr_v:
-    case VSLDvvix:
+    case VSLDvvim:
       return -1;
     case VSLDvvrl_v:
     case VSRDvviL:
       return 4;
-    case VSLDvvixL_v:
+    case VSLDvvimL_v:
     case VSRDvvrml:
       return 5;
     case VSFAvrr_v:
@@ -163,38 +163,38 @@ TEST(VETest, VLIndex) {
     case VFMAXDivml:
       return 4;
     case VFSQRTDv_v:
-    case VFSQRTSvx:
+    case VFSQRTSvm:
       return -1;
     case VFSQRTDvl_v:
     case VFSQRTDvL:
       return 2;
-    case VFSQRTDvxL_v:
+    case VFSQRTDvmL_v:
     case VFSQRTDvml:
     case VFSQRTDvmL:
       return 3;
     case VFMADDvvv_v:
-    case PVFMADLOvrvx:
+    case PVFMADLOvrvm:
       return -1;
     case PVFMADvivl_v:
     case PVFMADUPvrvL:
       return 4;
-    case VFMADSivvxL_v:
+    case VFMADSivvmL_v:
     case PVFMADLOvrvml:
-    case VFMSBDivvxL_v:
-    case VFNMADDivvxL_v:
-    case VFNMSBDivvxL_v:
+    case VFMSBDivvmL_v:
+    case VFNMADDivvmL_v:
+    case VFNMSBDivvmL_v:
       return 5;
     case VRCPDvmL:
     case VRSQRTDvmL:
     case VRSQRTDNEXvmL:
       return 3;
     case VCVTWDSXv:
-    case VCVTWDZXvx_v:
+    case VCVTWDZXvm_v:
       return -1;
     case VCVTWSSXvl_v:
     case VCVTWSZXvL:
       return 3;
-    case PVCVTWSLOvxL_v:
+    case PVCVTWSLOvmL_v:
     case PVCVTWSUPvml:
     case PVCVTWSvmL:
     case VCVTLDvml:
@@ -231,8 +231,8 @@ TEST(VETest, VLIndex) {
       return 4;
     case VMRGivml:
       return 4;
-    case VCPvxl:
-    case VEXvxl:
+    case VCPvml:
+    case VEXvml:
       return 3;
     case VSHFvvr:
     case VSHFvvr_v:
@@ -241,29 +241,29 @@ TEST(VETest, VLIndex) {
     case VSHFvvrL_v:
       return 4;
     case VFMKLv:
-    case VFMKLxvx:
+    case VFMKLvm:
       return -1;
     case VFMKLvl:
-    case VFMKLxvL:
+    case VFMKLvL:
       return 3;
     case VFMKLvml:
-    case VFMKLxvxL:
+    case VFMKLvmL:
       return 4;
     case VFMKLal:
-    case VFMKLxnaL:
+    case VFMKLnaL:
       return 1;
     case VFMKLaml:
-    case VFMKLxnaxL:
-    case VFMKWxnaxL:
-    case VFMKDxnaxL:
+    case VFMKLnamL:
+    case VFMKWnamL:
+    case VFMKDnamL:
       return 2;
     case TOVMm:
-    case PCVMx:
+    case PCVMm:
     case LZVMm:
       return -1;
     case TOVMml:
     case PCVMmL:
-    case LZVMxl:
+    case LZVMml:
       return 2;
     }
     return -2;

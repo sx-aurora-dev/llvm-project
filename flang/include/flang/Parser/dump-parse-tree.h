@@ -464,7 +464,6 @@ public:
 #include "llvm/Frontend/OpenMP/OMP.cpp.inc"
   NODE(parser, OmpClauseList)
   NODE(parser, OmpCriticalDirective)
-  NODE(OmpCriticalDirective, Hint)
   NODE(parser, OmpDeclareTargetSpecifier)
   NODE(parser, OmpDeclareTargetWithClause)
   NODE(parser, OmpDeclareTargetWithList)
@@ -499,10 +498,11 @@ public:
   NODE(parser, OmpMapType)
   NODE(OmpMapType, Always)
   NODE_ENUM(OmpMapType, Type)
-  NODE(parser, OmpMemoryClause)
-  NODE_ENUM(OmpMemoryClause, MemoryOrder)
-  NODE(parser, OmpMemoryClauseList)
-  NODE(parser, OmpMemoryClausePostList)
+  static std::string GetNodeName(const llvm::omp::Clause &x) {
+    return llvm::Twine(
+        "llvm::omp::Clause = ", llvm::omp::getOpenMPClauseName(x))
+        .str();
+  }
   NODE(parser, OmpNowait)
   NODE(parser, OmpObject)
   NODE(parser, OmpObjectList)
@@ -549,7 +549,6 @@ public:
   NODE(parser, OpenMPDeclareSimdConstruct)
   NODE(parser, OpenMPDeclareTargetConstruct)
   NODE(parser, OmpFlushMemoryClause)
-  NODE_ENUM(OmpFlushMemoryClause, FlushMemoryOrder)
   NODE(parser, OpenMPFlushConstruct)
   NODE(parser, OpenMPLoopConstruct)
   NODE(parser, OpenMPSimpleStandaloneConstruct)

@@ -209,16 +209,16 @@ bool TGParser::SetValue(Record *CurRec, SMLoc Loc, Init *ValName,
     V = BitsInit::get(NewBits);
   }
 
-  if (RV->setValue(V)) {
+  if (RV->setValue(V, Loc)) {
     std::string InitType;
     if (BitsInit *BI = dyn_cast<BitsInit>(V))
       InitType = (Twine("' of type bit initializer with length ") +
                   Twine(BI->getNumBits())).str();
     else if (TypedInit *TI = dyn_cast<TypedInit>(V))
       InitType = (Twine("' of type '") + TI->getType()->getAsString()).str();
-    return Error(Loc, "Value '" + ValName->getAsUnquotedString() +
+    return Error(Loc, "Field '" + ValName->getAsUnquotedString() +
                           "' of type '" + RV->getType()->getAsString() +
-                          "' is incompatible with initializer '" +
+                          "' is incompatible with value '" +
                           V->getAsString() + InitType + "'");
   }
   return false;
@@ -813,12 +813,12 @@ RecTy *TGParser::ParseType() {
       TokError("expected '<' after bits type");
       return nullptr;
     }
-    if (Lex.Lex() != tgtok::IntVal) {  // Eat '<'
+    if (Lex.Lex() != tgtok::IntVal) { // Eat '<'
       TokError("expected integer in bits<n> type");
       return nullptr;
     }
     uint64_t Val = Lex.getCurIntVal();
-    if (Lex.Lex() != tgtok::greater) {  // Eat count.
+    if (Lex.Lex() != tgtok::greater) { // Eat count.
       TokError("expected '>' at end of bits<n> type");
       return nullptr;
     }
@@ -908,12 +908,13 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
   default:
     TokError("unknown operation");
     return nullptr;
+  case tgtok::XNOT:
   case tgtok::XHead:
   case tgtok::XTail:
   case tgtok::XSize:
   case tgtok::XEmpty:
   case tgtok::XCast:
-  case tgtok::XGetOp: {  // Value ::= !unop '(' Value ')'
+  case tgtok::XGetDagOp: { // Value ::= !unop '(' Value ')'
     UnOpInit::UnaryOp Code;
     RecTy *Type = nullptr;
 
@@ -930,6 +931,11 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
         return nullptr;
       }
 
+      break;
+    case tgtok::XNOT:
+      Lex.Lex();  // eat the operation
+      Code = UnOpInit::NOT;
+      Type = IntRecTy::get();
       break;
     case tgtok::XHead:
       Lex.Lex();  // eat the operation
@@ -949,12 +955,12 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
       Code = UnOpInit::EMPTY;
       Type = IntRecTy::get();
       break;
-    case tgtok::XGetOp:
+    case tgtok::XGetDagOp:
       Lex.Lex();  // eat the operation
       if (Lex.getCode() == tgtok::less) {
         // Parse an optional type suffix, so that you can say
-        // !getop<BaseClass>(someDag) as a shorthand for
-        // !cast<BaseClass>(!getop(someDag)).
+        // !getdagop<BaseClass>(someDag) as a shorthand for
+        // !cast<BaseClass>(!getdagop(someDag)).
         Type = ParseOperatorType();
 
         if (!Type) {
@@ -963,13 +969,13 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
         }
 
         if (!isa<RecordRecTy>(Type)) {
-          TokError("type for !getop must be a record type");
+          TokError("type for !getdagop must be a record type");
           // but keep parsing, to consume the operand
         }
       } else {
         Type = RecordRecTy::get({});
       }
-      Code = UnOpInit::GETOP;
+      Code = UnOpInit::GETDAGOP;
       break;
     }
     if (!consume(tgtok::l_paren)) {
@@ -980,56 +986,58 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
     Init *LHS = ParseValue(CurRec);
     if (!LHS) return nullptr;
 
-    if (Code == UnOpInit::HEAD ||
-        Code == UnOpInit::TAIL ||
-        Code == UnOpInit::EMPTY) {
+    if (Code == UnOpInit::EMPTY || Code == UnOpInit::SIZE) {
       ListInit *LHSl = dyn_cast<ListInit>(LHS);
       StringInit *LHSs = dyn_cast<StringInit>(LHS);
+      DagInit *LHSd = dyn_cast<DagInit>(LHS);
       TypedInit *LHSt = dyn_cast<TypedInit>(LHS);
-      if (!LHSl && !LHSs && !LHSt) {
-        TokError("expected list or string type argument in unary operator");
+      if (!LHSl && !LHSs && !LHSd && !LHSt) {
+        TokError("expected string, list, or dag type argument in unary operator");
         return nullptr;
       }
       if (LHSt) {
         ListRecTy *LType = dyn_cast<ListRecTy>(LHSt->getType());
         StringRecTy *SType = dyn_cast<StringRecTy>(LHSt->getType());
-        if (!LType && !SType) {
-          TokError("expected list or string type argument in unary operator");
+        DagRecTy *DType = dyn_cast<DagRecTy>(LHSt->getType());
+        if (!LType && !SType && !DType) {
+          TokError("expected string, list, or dag type argument in unary operator");
           return nullptr;
         }
       }
+    }
 
-      if (Code == UnOpInit::HEAD || Code == UnOpInit::TAIL ||
-          Code == UnOpInit::SIZE) {
-        if (!LHSl && !LHSt) {
+    if (Code == UnOpInit::HEAD || Code == UnOpInit::TAIL) {
+      ListInit *LHSl = dyn_cast<ListInit>(LHS);
+      TypedInit *LHSt = dyn_cast<TypedInit>(LHS);
+      if (!LHSl && !LHSt) {
+        TokError("expected list type argument in unary operator");
+        return nullptr;
+      }
+      if (LHSt) {
+        ListRecTy *LType = dyn_cast<ListRecTy>(LHSt->getType());
+        if (!LType) {
           TokError("expected list type argument in unary operator");
           return nullptr;
         }
       }
 
-      if (Code == UnOpInit::HEAD || Code == UnOpInit::TAIL) {
-        if (LHSl && LHSl->empty()) {
-          TokError("empty list argument in unary operator");
+      if (LHSl && LHSl->empty()) {
+        TokError("empty list argument in unary operator");
+        return nullptr;
+      }
+      if (LHSl) {
+        Init *Item = LHSl->getElement(0);
+        TypedInit *Itemt = dyn_cast<TypedInit>(Item);
+        if (!Itemt) {
+          TokError("untyped list element in unary operator");
           return nullptr;
         }
-        if (LHSl) {
-          Init *Item = LHSl->getElement(0);
-          TypedInit *Itemt = dyn_cast<TypedInit>(Item);
-          if (!Itemt) {
-            TokError("untyped list element in unary operator");
-            return nullptr;
-          }
-          Type = (Code == UnOpInit::HEAD) ? Itemt->getType()
-                                          : ListRecTy::get(Itemt->getType());
-        } else {
-          assert(LHSt && "expected list type argument in unary operator");
-          ListRecTy *LType = dyn_cast<ListRecTy>(LHSt->getType());
-          if (!LType) {
-            TokError("expected list type argument in unary operator");
-            return nullptr;
-          }
-          Type = (Code == UnOpInit::HEAD) ? LType->getElementType() : LType;
-        }
+        Type = (Code == UnOpInit::HEAD) ? Itemt->getType()
+                                        : ListRecTy::get(Itemt->getType());
+      } else {
+        assert(LHSt && "expected list type argument in unary operator");
+        ListRecTy *LType = dyn_cast<ListRecTy>(LHSt->getType());
+        Type = (Code == UnOpInit::HEAD) ? LType->getElementType() : LType;
       }
     }
 
@@ -1067,9 +1075,11 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
 
   case tgtok::XConcat:
   case tgtok::XADD:
+  case tgtok::XSUB:
   case tgtok::XMUL:
   case tgtok::XAND:
   case tgtok::XOR:
+  case tgtok::XXOR:
   case tgtok::XSRA:
   case tgtok::XSRL:
   case tgtok::XSHL:
@@ -1082,7 +1092,7 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
   case tgtok::XListConcat:
   case tgtok::XListSplat:
   case tgtok::XStrConcat:
-  case tgtok::XSetOp: {  // Value ::= !binop '(' Value ',' Value ')'
+  case tgtok::XSetDagOp: { // Value ::= !binop '(' Value ',' Value ')'
     tgtok::TokKind OpTok = Lex.getCode();
     SMLoc OpLoc = Lex.getLoc();
     Lex.Lex();  // eat the operation
@@ -1092,9 +1102,11 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
     default: llvm_unreachable("Unhandled code!");
     case tgtok::XConcat: Code = BinOpInit::CONCAT; break;
     case tgtok::XADD:    Code = BinOpInit::ADD; break;
+    case tgtok::XSUB:    Code = BinOpInit::SUB; break;
     case tgtok::XMUL:    Code = BinOpInit::MUL; break;
     case tgtok::XAND:    Code = BinOpInit::AND; break;
     case tgtok::XOR:     Code = BinOpInit::OR; break;
+    case tgtok::XXOR:    Code = BinOpInit::XOR; break;
     case tgtok::XSRA:    Code = BinOpInit::SRA; break;
     case tgtok::XSRL:    Code = BinOpInit::SRL; break;
     case tgtok::XSHL:    Code = BinOpInit::SHL; break;
@@ -1105,9 +1117,9 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
     case tgtok::XGe:     Code = BinOpInit::GE; break;
     case tgtok::XGt:     Code = BinOpInit::GT; break;
     case tgtok::XListConcat: Code = BinOpInit::LISTCONCAT; break;
-    case tgtok::XListSplat: Code = BinOpInit::LISTSPLAT; break;
-    case tgtok::XStrConcat: Code = BinOpInit::STRCONCAT; break;
-    case tgtok::XSetOp: Code = BinOpInit::SETOP; break;
+    case tgtok::XListSplat:  Code = BinOpInit::LISTSPLAT; break;
+    case tgtok::XStrConcat:  Code = BinOpInit::STRCONCAT; break;
+    case tgtok::XSetDagOp:   Code = BinOpInit::SETDAGOP; break;
     }
 
     RecTy *Type = nullptr;
@@ -1116,16 +1128,18 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
     default:
       llvm_unreachable("Unhandled code!");
     case tgtok::XConcat:
-    case tgtok::XSetOp:
+    case tgtok::XSetDagOp:
       Type = DagRecTy::get();
       ArgType = DagRecTy::get();
       break;
     case tgtok::XAND:
     case tgtok::XOR:
+    case tgtok::XXOR:
     case tgtok::XSRA:
     case tgtok::XSRL:
     case tgtok::XSHL:
     case tgtok::XADD:
+    case tgtok::XSUB:
     case tgtok::XMUL:
       Type = IntRecTy::get();
       ArgType = IntRecTy::get();
@@ -1238,8 +1252,9 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
                              ListType->getAsString() + "'");
           return nullptr;
         }
-        if (Code != BinOpInit::ADD && Code != BinOpInit::AND &&
-            Code != BinOpInit::OR && Code != BinOpInit::SRA &&
+        if (Code != BinOpInit::ADD && Code != BinOpInit::SUB &&
+            Code != BinOpInit::AND && Code != BinOpInit::OR &&
+            Code != BinOpInit::XOR && Code != BinOpInit::SRA &&
             Code != BinOpInit::SRL && Code != BinOpInit::SHL &&
             Code != BinOpInit::MUL)
           ArgType = Resolved;
@@ -1248,7 +1263,7 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
       // Deal with BinOps whose arguments have different types, by
       // rewriting ArgType in between them.
       switch (Code) {
-        case BinOpInit::SETOP:
+        case BinOpInit::SETDAGOP:
           // After parsing the first dag argument, switch to expecting
           // a record, with no restriction on its superclasses.
           ArgType = RecordRecTy::get({});
@@ -1278,7 +1293,7 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
     if (Code == BinOpInit::STRCONCAT || Code == BinOpInit::LISTCONCAT ||
         Code == BinOpInit::CONCAT || Code == BinOpInit::ADD ||
         Code == BinOpInit::AND || Code == BinOpInit::OR ||
-        Code == BinOpInit::MUL) {
+        Code == BinOpInit::XOR || Code == BinOpInit::MUL) {
       while (InitList.size() > 2) {
         Init *RHS = InitList.pop_back_val();
         RHS = (BinOpInit::get(Code, InitList.back(), RHS, Type))->Fold(CurRec);
@@ -1294,7 +1309,8 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
     return nullptr;
   }
 
-  case tgtok::XForEach: { // Value ::= !foreach '(' Id ',' Value ',' Value ')'
+  case tgtok::XForEach: {
+    // Value ::= !foreach '(' Id ',' Value ',' Value ')'
     SMLoc OpLoc = Lex.getLoc();
     Lex.Lex(); // eat the operation
     if (Lex.getCode() != tgtok::l_paren) {
@@ -1367,8 +1383,8 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
       return nullptr;
     }
 
-    // We need to create a temporary record to provide a scope for the iteration
-    // variable while parsing top-level foreach's.
+    // We need to create a temporary record to provide a scope for the
+    // iteration variable.
     std::unique_ptr<Record> ParseRecTmp;
     Record *ParseRec = CurRec;
     if (!ParseRec) {
@@ -1405,7 +1421,7 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
 
   case tgtok::XDag:
   case tgtok::XIf:
-  case tgtok::XSubst: {  // Value ::= !ternop '(' Value ',' Value ',' Value ')'
+  case tgtok::XSubst: { // Value ::= !ternop '(' Value ',' Value ',' Value ')'
     TernOpInit::TernaryOp Code;
     RecTy *Type = nullptr;
 
@@ -1544,7 +1560,7 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
     return ParseOperationCond(CurRec, ItemType);
 
   case tgtok::XFoldl: {
-    // Value ::= !foldl '(' Id ',' Id ',' Value ',' Value ',' Value ')'
+    // Value ::= !foldl '(' Value ',' Value ',' Id ',' Id ',' Expr ')'
     Lex.Lex(); // eat the operation
     if (!consume(tgtok::l_paren)) {
       TokError("expected '(' after !foldl");
@@ -1627,8 +1643,8 @@ Init *TGParser::ParseOperation(Record *CurRec, RecTy *ItemType) {
     }
     Lex.Lex(); // eat the ','
 
-    // We need to create a temporary record to provide a scope for the iteration
-    // variable while parsing top-level foreach's.
+    // We need to create a temporary record to provide a scope for the
+    // two variables.
     std::unique_ptr<Record> ParseRecTmp;
     Record *ParseRec = CurRec;
     if (!ParseRec) {
@@ -1787,6 +1803,7 @@ Init *TGParser::ParseOperationCond(Record *CurRec, RecTy *ItemType) {
 ///   SimpleValue ::= '(' IDValue DagArgList ')'
 ///   SimpleValue ::= CONCATTOK '(' Value ',' Value ')'
 ///   SimpleValue ::= ADDTOK '(' Value ',' Value ')'
+///   SimpleValue ::= SUBTOK '(' Value ',' Value ')'
 ///   SimpleValue ::= SHLTOK '(' Value ',' Value ')'
 ///   SimpleValue ::= SRATOK '(' Value ',' Value ')'
 ///   SimpleValue ::= SRLTOK '(' Value ',' Value ')'
@@ -2039,7 +2056,7 @@ Init *TGParser::ParseSimpleValue(Record *CurRec, RecTy *ItemType,
   case tgtok::l_paren: {         // Value ::= '(' IDValue DagArgList ')'
     Lex.Lex();   // eat the '('
     if (Lex.getCode() != tgtok::Id && Lex.getCode() != tgtok::XCast &&
-        Lex.getCode() != tgtok::question && Lex.getCode() != tgtok::XGetOp) {
+        Lex.getCode() != tgtok::question && Lex.getCode() != tgtok::XGetDagOp) {
       TokError("expected identifier in dag init");
       return nullptr;
     }
@@ -2077,14 +2094,17 @@ Init *TGParser::ParseSimpleValue(Record *CurRec, RecTy *ItemType,
   case tgtok::XSize:
   case tgtok::XEmpty:
   case tgtok::XCast:
-  case tgtok::XGetOp:  // Value ::= !unop '(' Value ')'
+  case tgtok::XGetDagOp: // Value ::= !unop '(' Value ')'
   case tgtok::XIsA:
   case tgtok::XConcat:
   case tgtok::XDag:
   case tgtok::XADD:
+  case tgtok::XSUB:
   case tgtok::XMUL:
+  case tgtok::XNOT:
   case tgtok::XAND:
   case tgtok::XOR:
+  case tgtok::XXOR:
   case tgtok::XSRA:
   case tgtok::XSRL:
   case tgtok::XSHL:
@@ -2097,12 +2117,12 @@ Init *TGParser::ParseSimpleValue(Record *CurRec, RecTy *ItemType,
   case tgtok::XListConcat:
   case tgtok::XListSplat:
   case tgtok::XStrConcat:
-  case tgtok::XSetOp:   // Value ::= !binop '(' Value ',' Value ')'
+  case tgtok::XSetDagOp: // Value ::= !binop '(' Value ',' Value ')'
   case tgtok::XIf:
   case tgtok::XCond:
   case tgtok::XFoldl:
   case tgtok::XForEach:
-  case tgtok::XSubst: {  // Value ::= !ternop '(' Value ',' Value ',' Value ')'
+  case tgtok::XSubst: { // Value ::= !ternop '(' Value ',' Value ',' Value ')'
     return ParseOperation(CurRec, ItemType);
   }
   }
@@ -2172,7 +2192,7 @@ Init *TGParser::ParseValue(Record *CurRec, RecTy *ItemType, IDParseMode Mode) {
       break;
     }
     case tgtok::dot: {
-      if (Lex.Lex() != tgtok::Id) {  // eat the .
+      if (Lex.Lex() != tgtok::Id) { // eat the .
         TokError("expected field identifier after '.'");
         return nullptr;
       }
@@ -2419,7 +2439,7 @@ Init *TGParser::ParseDeclaration(Record *CurRec,
   }
 
   // Add the value.
-  if (AddValue(CurRec, IdLoc, RecordVal(DeclName, Type, HasField)))
+  if (AddValue(CurRec, IdLoc, RecordVal(DeclName, IdLoc, Type, HasField)))
     return nullptr;
 
   // If a value is present, parse it.

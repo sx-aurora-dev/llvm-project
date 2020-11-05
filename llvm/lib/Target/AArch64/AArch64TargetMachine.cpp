@@ -184,6 +184,8 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAArch64Target() {
   initializeAArch64SIMDInstrOptPass(*PR);
   initializeAArch64PreLegalizerCombinerPass(*PR);
   initializeAArch64PostLegalizerCombinerPass(*PR);
+  initializeAArch64PostLegalizerLoweringPass(*PR);
+  initializeAArch64PostSelectOptimizePass(*PR);
   initializeAArch64PromoteConstantPass(*PR);
   initializeAArch64RedundantCopyEliminationPass(*PR);
   initializeAArch64StorePairSuppressPass(*PR);
@@ -455,6 +457,7 @@ void AArch64PassConfig::addIRPasses() {
                                             .forwardSwitchCondToPhi(true)
                                             .convertSwitchToLookupTable(true)
                                             .needCanonicalLoops(false)
+                                            .hoistCommonInsts(true)
                                             .sinkCommonInsts(true)));
 
   // Run LoopDataPrefetch
@@ -543,13 +546,13 @@ bool AArch64PassConfig::addInstSelector() {
 }
 
 bool AArch64PassConfig::addIRTranslator() {
-  addPass(new IRTranslator());
+  addPass(new IRTranslator(getOptLevel()));
   return false;
 }
 
 void AArch64PassConfig::addPreLegalizeMachineIR() {
   bool IsOptNone = getOptLevel() == CodeGenOpt::None;
-  addPass(createAArch64PreLegalizeCombiner(IsOptNone));
+  addPass(createAArch64PreLegalizerCombiner(IsOptNone));
 }
 
 bool AArch64PassConfig::addLegalizeMachineIR() {
@@ -558,11 +561,10 @@ bool AArch64PassConfig::addLegalizeMachineIR() {
 }
 
 void AArch64PassConfig::addPreRegBankSelect() {
-  // For now we don't add this to the pipeline for -O0. We could do in future
-  // if we split the combines into separate O0/opt groupings.
   bool IsOptNone = getOptLevel() == CodeGenOpt::None;
   if (!IsOptNone)
-    addPass(createAArch64PostLegalizeCombiner(IsOptNone));
+    addPass(createAArch64PostLegalizerCombiner(IsOptNone));
+  addPass(createAArch64PostLegalizerLowering());
 }
 
 bool AArch64PassConfig::addRegBankSelect() {
@@ -576,6 +578,8 @@ void AArch64PassConfig::addPreGlobalInstructionSelect() {
 
 bool AArch64PassConfig::addGlobalInstructionSelect() {
   addPass(new InstructionSelect());
+  if (getOptLevel() != CodeGenOpt::None)
+    addPass(createAArch64PostSelectOptimize());
   return false;
 }
 

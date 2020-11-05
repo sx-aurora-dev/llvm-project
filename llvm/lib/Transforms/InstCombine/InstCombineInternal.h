@@ -166,6 +166,7 @@ public:
   Instruction *visitFenceInst(FenceInst &FI);
   Instruction *visitSwitchInst(SwitchInst &SI);
   Instruction *visitReturnInst(ReturnInst &RI);
+  Instruction *visitUnreachableInst(UnreachableInst &I);
   Instruction *
   foldAggregateConstructionIntoAggregateReuse(InsertValueInst &OrigIVI);
   Instruction *visitInsertValueInst(InsertValueInst &IV);
@@ -342,7 +343,7 @@ private:
   Instruction *narrowBinOp(TruncInst &Trunc);
   Instruction *narrowMaskedBinOp(BinaryOperator &And);
   Instruction *narrowMathIfNoOverflow(BinaryOperator &I);
-  Instruction *narrowRotate(TruncInst &Trunc);
+  Instruction *narrowFunnelShift(TruncInst &Trunc);
   Instruction *optimizeBitCastFromPhi(CastInst &CI, PHINode *PN);
   Instruction *matchSAddSubSat(SelectInst &MinMax1);
 
@@ -727,6 +728,7 @@ public:
                             Value *A, Value *B, Instruction &Outer,
                             SelectPatternFlavor SPF2, Value *C);
   Instruction *foldSelectInstWithICmp(SelectInst &SI, ICmpInst *ICI);
+  Instruction *foldSelectValueEquivalence(SelectInst &SI, ICmpInst &ICI);
 
   Instruction *OptAndOp(BinaryOperator *Op, ConstantInt *OpRHS,
                         ConstantInt *AndRHS, BinaryOperator &TheAnd);
@@ -736,9 +738,11 @@ public:
   Instruction *PromoteCastOfAllocation(BitCastInst &CI, AllocaInst &AI);
   bool mergeStoreIntoSuccessor(StoreInst &SI);
 
-  /// Given an 'or' instruction, check to see if it is part of a bswap idiom.
-  /// If so, return the equivalent bswap intrinsic.
-  Instruction *matchBSwap(BinaryOperator &Or);
+  /// Given an 'or' instruction, check to see if it is part of a
+  /// bswap/bitreverse idiom. If so, return the equivalent bswap/bitreverse
+  /// intrinsic.
+  Instruction *matchBSwapOrBitReverse(BinaryOperator &Or, bool MatchBSwaps,
+                                      bool MatchBitReversals);
 
   Instruction *SimplifyAnyMemTransfer(AnyMemTransferInst *MI);
   Instruction *SimplifyAnyMemSet(AnyMemSetInst *MI);
@@ -776,6 +780,8 @@ class Negator final {
 
   using Result = std::pair<ArrayRef<Instruction *> /*NewInstructions*/,
                            Value * /*NegatedRoot*/>;
+
+  std::array<Value *, 2> getSortedOperandsOfBinOp(Instruction *I);
 
   LLVM_NODISCARD Value *visitImpl(Value *V, unsigned Depth);
 

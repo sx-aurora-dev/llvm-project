@@ -247,9 +247,11 @@ namespace llvm {
                               // will be determined by the opcode.
 
       exnref         = 163,   // WebAssembly's exnref type
+      funcref        = 164,   // WebAssembly's funcref type
+      externref      = 165,   // WebAssembly's externref type
 
       FIRST_VALUETYPE =  1,   // This is always the beginning of the list.
-      LAST_VALUETYPE = 164,   // This always remains at the end of the list.
+      LAST_VALUETYPE = 166,   // This always remains at the end of the list.
 
       // This is the current maximum for LAST_VALUETYPE.
       // MVT::MAX_ALLOWED_VALUETYPE is used for asserts and to size bit vectors
@@ -405,8 +407,7 @@ namespace llvm {
 
     /// Return true if this is a 1024-bit vector type.
     bool is1024BitVector() const {
-      return (SimpleTy == MVT::v32f32  || SimpleTy == MVT::v16f64 ||
-              SimpleTy == MVT::v1024i1 || SimpleTy == MVT::v128i8 ||
+      return (SimpleTy == MVT::v1024i1 || SimpleTy == MVT::v128i8 ||
               SimpleTy == MVT::v64i16  || SimpleTy == MVT::v32i32 ||
               SimpleTy == MVT::v16i64  || SimpleTy == MVT::v64f16 ||
               SimpleTy == MVT::v32f32  || SimpleTy == MVT::v16f64 ||
@@ -446,13 +447,43 @@ namespace llvm {
               SimpleTy == MVT::iPTRAny);
     }
 
+    /// Return a vector with the same number of elements as this vector, but
+    /// with the element type converted to an integer type with the same
+    /// bitwidth.
+    MVT changeVectorElementTypeToInteger() const {
+      MVT EltTy = getVectorElementType();
+      MVT IntTy = MVT::getIntegerVT(EltTy.getSizeInBits());
+      MVT VecTy = MVT::getVectorVT(IntTy, getVectorElementCount());
+      assert(VecTy.SimpleTy != MVT::INVALID_SIMPLE_VALUE_TYPE &&
+             "Simple vector VT not representable by simple integer vector VT!");
+      return VecTy;
+    }
+
+    /// Return a VT for a vector type whose attributes match ourselves
+    /// with the exception of the element type that is chosen by the caller.
+    MVT changeVectorElementType(MVT EltVT) const {
+      MVT VecTy = MVT::getVectorVT(EltVT, getVectorElementCount());
+      assert(VecTy.SimpleTy != MVT::INVALID_SIMPLE_VALUE_TYPE &&
+             "Simple vector VT not representable by simple integer vector VT!");
+      return VecTy;
+    }
+
+    /// Return the type converted to an equivalently sized integer or vector
+    /// with integer element type. Similar to changeVectorElementTypeToInteger,
+    /// but also handles scalars.
+    MVT changeTypeToInteger() {
+      if (isVector())
+        return changeVectorElementTypeToInteger();
+      return MVT::getIntegerVT(getSizeInBits());
+    }
+
     /// Return a VT for a vector type with the same element type but
     /// half the number of elements.
     MVT getHalfNumVectorElementsVT() const {
       MVT EltVT = getVectorElementType();
       auto EltCnt = getVectorElementCount();
       assert(EltCnt.isKnownEven() && "Splitting vector, but not in half!");
-      return getVectorVT(EltVT, EltCnt / 2);
+      return getVectorVT(EltVT, EltCnt.divideCoefficientBy(2));
     }
 
     /// Returns true if the given vector is a power of 2.
@@ -645,8 +676,8 @@ namespace llvm {
       case v256i1:
       case v256i8:
       case v256i32:
-      case v256f32:
       case v256i64:
+      case v256f32:
       case v256f64: return 256;
       case v128i1:
       case v128i8:
@@ -970,12 +1001,20 @@ namespace llvm {
       case v1024f32:  return TypeSize::Fixed(32768);
       case v2048i32:
       case v2048f32:  return TypeSize::Fixed(65536);
-      case exnref: return TypeSize::Fixed(0); // opaque type
+      case exnref:
+      case funcref:
+      case externref: return TypeSize::Fixed(0); // opaque type
       }
     }
 
-    TypeSize getScalarSizeInBits() const {
-      return getScalarType().getSizeInBits();
+    /// Return the size of the specified fixed width value type in bits. The
+    /// function will assert if the type is scalable.
+    uint64_t getFixedSizeInBits() const {
+      return getSizeInBits().getFixedSize();
+    }
+
+    uint64_t getScalarSizeInBits() const {
+      return getScalarType().getSizeInBits().getFixedSize();
     }
 
     /// Return the number of bytes overwritten by a store of the specified value
@@ -1001,28 +1040,56 @@ namespace llvm {
 
     /// Returns true if the number of bits for the type is a multiple of an
     /// 8-bit byte.
-    bool isByteSized() const {
-      return getSizeInBits().isByteSized();
+    bool isByteSized() const { return getSizeInBits().isKnownMultipleOf(8); }
+
+    /// Return true if we know at compile time this has more bits than VT.
+    bool knownBitsGT(MVT VT) const {
+      return TypeSize::isKnownGT(getSizeInBits(), VT.getSizeInBits());
+    }
+
+    /// Return true if we know at compile time this has more than or the same
+    /// bits as VT.
+    bool knownBitsGE(MVT VT) const {
+      return TypeSize::isKnownGE(getSizeInBits(), VT.getSizeInBits());
+    }
+
+    /// Return true if we know at compile time this has fewer bits than VT.
+    bool knownBitsLT(MVT VT) const {
+      return TypeSize::isKnownLT(getSizeInBits(), VT.getSizeInBits());
+    }
+
+    /// Return true if we know at compile time this has fewer than or the same
+    /// bits as VT.
+    bool knownBitsLE(MVT VT) const {
+      return TypeSize::isKnownLE(getSizeInBits(), VT.getSizeInBits());
     }
 
     /// Return true if this has more bits than VT.
     bool bitsGT(MVT VT) const {
-      return getSizeInBits() > VT.getSizeInBits();
+      assert(isScalableVector() == VT.isScalableVector() &&
+             "Comparison between scalable and fixed types");
+      return knownBitsGT(VT);
     }
 
     /// Return true if this has no less bits than VT.
     bool bitsGE(MVT VT) const {
-      return getSizeInBits() >= VT.getSizeInBits();
+      assert(isScalableVector() == VT.isScalableVector() &&
+             "Comparison between scalable and fixed types");
+      return knownBitsGE(VT);
     }
 
     /// Return true if this has less bits than VT.
     bool bitsLT(MVT VT) const {
-      return getSizeInBits() < VT.getSizeInBits();
+      assert(isScalableVector() == VT.isScalableVector() &&
+             "Comparison between scalable and fixed types");
+      return knownBitsLT(VT);
     }
 
     /// Return true if this has no more bits than VT.
     bool bitsLE(MVT VT) const {
-      return getSizeInBits() <= VT.getSizeInBits();
+      assert(isScalableVector() == VT.isScalableVector() &&
+             "Comparison between scalable and fixed types");
+      return knownBitsLE(VT);
     }
 
     static MVT getFloatingPointVT(unsigned BitWidth) {

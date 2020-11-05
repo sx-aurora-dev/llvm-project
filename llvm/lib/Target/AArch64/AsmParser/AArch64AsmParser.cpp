@@ -184,6 +184,8 @@ private:
   bool parseDirectiveCFINegateRAState();
   bool parseDirectiveCFIBKeyFrame();
 
+  bool parseDirectiveVariantPCS(SMLoc L);
+
   bool parseDirectiveSEHAllocStack(SMLoc L);
   bool parseDirectiveSEHPrologEnd(SMLoc L);
   bool parseDirectiveSEHSaveR19R20X(SMLoc L);
@@ -5171,6 +5173,8 @@ bool AArch64AsmParser::ParseDirective(AsmToken DirectiveID) {
     parseDirectiveCFIBKeyFrame();
   else if (IDVal == ".arch_extension")
     parseDirectiveArchExtension(Loc);
+  else if (IDVal == ".variant_pcs")
+    parseDirectiveVariantPCS(Loc);
   else if (IsMachO) {
     if (IDVal == MCLOHDirectiveName())
       parseDirectiveLOH(IDVal, Loc);
@@ -5251,6 +5255,7 @@ static void ExpandCryptoAEK(AArch64::ArchKind ArchKind,
     case AArch64::ArchKind::ARMV8_4A:
     case AArch64::ArchKind::ARMV8_5A:
     case AArch64::ArchKind::ARMV8_6A:
+    case AArch64::ArchKind::ARMV8R:
       RequestedExtensions.push_back("sm4");
       RequestedExtensions.push_back("sha3");
       RequestedExtensions.push_back("sha2");
@@ -5649,6 +5654,32 @@ bool AArch64AsmParser::parseDirectiveCFIBKeyFrame() {
   return false;
 }
 
+/// parseDirectiveVariantPCS
+/// ::= .variant_pcs symbolname
+bool AArch64AsmParser::parseDirectiveVariantPCS(SMLoc L) {
+  MCAsmParser &Parser = getParser();
+
+  const AsmToken &Tok = Parser.getTok();
+  if (Tok.isNot(AsmToken::Identifier))
+    return TokError("expected symbol name");
+
+  StringRef SymbolName = Tok.getIdentifier();
+
+  MCSymbol *Sym = getContext().lookupSymbol(SymbolName);
+  if (!Sym)
+    return TokError("unknown symbol in '.variant_pcs' directive");
+
+  Parser.Lex(); // Eat the symbol
+
+  // Shouldn't be any more tokens
+  if (parseToken(AsmToken::EndOfStatement))
+    return addErrorSuffix(" in '.variant_pcs' directive");
+
+  getTargetStreamer().emitDirectiveVariantPCS(Sym);
+
+  return false;
+}
+
 /// parseDirectiveSEHAllocStack
 /// ::= .seh_stackalloc
 bool AArch64AsmParser::parseDirectiveSEHAllocStack(SMLoc L) {
@@ -5725,7 +5756,7 @@ bool AArch64AsmParser::parseDirectiveSEHSaveRegX(SMLoc L) {
 bool AArch64AsmParser::parseDirectiveSEHSaveRegP(SMLoc L) {
   unsigned Reg;
   int64_t Offset;
-  if (parseRegisterInRange(Reg, AArch64::X0, AArch64::X19, AArch64::LR) ||
+  if (parseRegisterInRange(Reg, AArch64::X0, AArch64::X19, AArch64::FP) ||
       parseComma() || parseImmExpr(Offset))
     return true;
   getTargetStreamer().EmitARM64WinCFISaveRegP(Reg, Offset);
@@ -5737,7 +5768,7 @@ bool AArch64AsmParser::parseDirectiveSEHSaveRegP(SMLoc L) {
 bool AArch64AsmParser::parseDirectiveSEHSaveRegPX(SMLoc L) {
   unsigned Reg;
   int64_t Offset;
-  if (parseRegisterInRange(Reg, AArch64::X0, AArch64::X19, AArch64::X28) ||
+  if (parseRegisterInRange(Reg, AArch64::X0, AArch64::X19, AArch64::FP) ||
       parseComma() || parseImmExpr(Offset))
     return true;
   getTargetStreamer().EmitARM64WinCFISaveRegPX(Reg, Offset);
@@ -5789,7 +5820,7 @@ bool AArch64AsmParser::parseDirectiveSEHSaveFRegX(SMLoc L) {
 bool AArch64AsmParser::parseDirectiveSEHSaveFRegP(SMLoc L) {
   unsigned Reg;
   int64_t Offset;
-  if (parseRegisterInRange(Reg, AArch64::D0, AArch64::D8, AArch64::D15) ||
+  if (parseRegisterInRange(Reg, AArch64::D0, AArch64::D8, AArch64::D14) ||
       parseComma() || parseImmExpr(Offset))
     return true;
   getTargetStreamer().EmitARM64WinCFISaveFRegP(Reg, Offset);
@@ -5801,7 +5832,7 @@ bool AArch64AsmParser::parseDirectiveSEHSaveFRegP(SMLoc L) {
 bool AArch64AsmParser::parseDirectiveSEHSaveFRegPX(SMLoc L) {
   unsigned Reg;
   int64_t Offset;
-  if (parseRegisterInRange(Reg, AArch64::D0, AArch64::D8, AArch64::D15) ||
+  if (parseRegisterInRange(Reg, AArch64::D0, AArch64::D8, AArch64::D14) ||
       parseComma() || parseImmExpr(Offset))
     return true;
   getTargetStreamer().EmitARM64WinCFISaveFRegPX(Reg, Offset);

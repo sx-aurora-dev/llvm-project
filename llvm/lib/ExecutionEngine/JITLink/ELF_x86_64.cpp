@@ -125,13 +125,13 @@ static Error optimizeELF_x86_64_GOTAndStubs(LinkGraph &G) {
   for (auto *B : G.blocks())
     for (auto &E : B->edges())
       if (E.getKind() == PCRel32GOTLoad) {
-        assert(E.getOffset() >= 3 && "GOT edge occurs too early in block");
+        // Replace GOT load with LEA only for MOVQ instructions.
+        constexpr uint8_t MOVQRIPRel[] = {0x48, 0x8b};
+        if (E.getOffset() < 3 ||
+            strncmp(B->getContent().data() + E.getOffset() - 3,
+                    reinterpret_cast<const char *>(MOVQRIPRel), 2) != 0)
+          continue;
 
-        // Switch the edge kind to PCRel32: Whether we change the edge target
-        // or not this will be the desired kind.
-        E.setKind(PCRel32);
-
-        // Optimize GOT references.
         auto &GOTBlock = E.getTarget().getBlock();
         assert(GOTBlock.getSize() == G.getPointerSize() &&
                "GOT entry block should be pointer sized");
@@ -142,16 +142,13 @@ static Error optimizeELF_x86_64_GOTAndStubs(LinkGraph &G) {
         JITTargetAddress EdgeAddr = B->getAddress() + E.getOffset();
         JITTargetAddress TargetAddr = GOTTarget.getAddress();
 
-        // Check that this is a recognized MOV instruction.
-        // FIXME: Can we assume this?
-        constexpr uint8_t MOVQRIPRel[] = {0x48, 0x8b};
-        if (strncmp(B->getContent().data() + E.getOffset() - 3,
-                    reinterpret_cast<const char *>(MOVQRIPRel), 2) != 0)
-          continue;
-
         int64_t Displacement = TargetAddr - EdgeAddr + 4;
         if (Displacement >= std::numeric_limits<int32_t>::min() &&
             Displacement <= std::numeric_limits<int32_t>::max()) {
+          // Change the edge kind as we don't go through GOT anymore. This is
+          // for formal correctness only. Technically, the two relocation kinds
+          // are resolved the same way.
+          E.setKind(PCRel32);
           E.setTarget(GOTTarget);
           auto *BlockData = reinterpret_cast<uint8_t *>(
               const_cast<char *>(B->getContent().data()));
@@ -232,6 +229,8 @@ private:
     case ELF::R_X86_64_64:
       return ELF_x86_64_Edges::ELFX86RelocationKind::Pointer64;
     case ELF::R_X86_64_GOTPCREL:
+    case ELF::R_X86_64_GOTPCRELX:
+    case ELF::R_X86_64_REX_GOTPCRELX:
       return ELF_x86_64_Edges::ELFX86RelocationKind::PCRel32GOTLoad;
     }
     return make_error<JITLinkError>("Unsupported x86-64 relocation:" +
@@ -244,7 +243,7 @@ private:
   object::ELFFile<object::ELF64LE>::Elf_Shdr_Range sections;
   SymbolTable SymTab;
 
-  bool isRelocatable() { return Obj.getHeader()->e_type == llvm::ELF::ET_REL; }
+  bool isRelocatable() { return Obj.getHeader().e_type == llvm::ELF::ET_REL; }
 
   support::endianness
   getEndianness(const object::ELFFile<object::ELF64LE> &Obj) {
@@ -253,7 +252,7 @@ private:
 
   // This could also just become part of a template
   unsigned getPointerSize(const object::ELFFile<object::ELF64LE> &Obj) {
-    return Obj.getHeader()->getFileClass() == ELF::ELFCLASS64 ? 8 : 4;
+    return Obj.getHeader().getFileClass() == ELF::ELFCLASS64 ? 8 : 4;
   }
 
   // We don't technically need this right now
@@ -277,7 +276,7 @@ private:
       auto StrTabSec = Obj.getSection(SecRef.sh_link);
       if (!StrTabSec)
         return StrTabSec.takeError();
-      auto StringTable = Obj.getStringTable(*StrTabSec);
+      auto StringTable = Obj.getStringTable(**StrTabSec);
       if (!StringTable)
         return StringTable.takeError();
 
@@ -310,7 +309,7 @@ private:
   Error createNormalizedSections() {
     LLVM_DEBUG(dbgs() << "Creating normalized sections...\n");
     for (auto &SecRef : sections) {
-      auto Name = Obj.getSectionName(&SecRef);
+      auto Name = Obj.getSectionName(SecRef);
       if (!Name)
         return Name.takeError();
       sys::Memory::ProtectionFlags Prot;
@@ -343,7 +342,7 @@ private:
       if (SecRef.sh_type != ELF::SHT_NOBITS) {
         // .sections() already checks that the data is not beyond the end of
         // file
-        auto contents = Obj.getSectionContentsAsArray<char>(&SecRef);
+        auto contents = Obj.getSectionContentsAsArray<char>(SecRef);
         if (!contents)
           return contents.takeError();
 
@@ -357,6 +356,9 @@ private:
         if (SecRef.sh_type == ELF::SHT_SYMTAB)
           // TODO: Dynamic?
           SymTab = SecRef;
+      } else {
+        auto &Section = G->createSection(*Name, Prot);
+        G->createZeroFillBlock(Section, Size, Address, Alignment, 0);
       }
     }
 
@@ -375,7 +377,7 @@ private:
         return make_error<llvm::StringError>("Shouldn't have REL in x64",
                                              llvm::inconvertibleErrorCode());
 
-      auto RelSectName = Obj.getSectionName(&SecRef);
+      auto RelSectName = Obj.getSectionName(SecRef);
       if (!RelSectName)
         return RelSectName.takeError();
       // Deal with .eh_frame later
@@ -386,7 +388,7 @@ private:
       if (!UpdateSection)
         return UpdateSection.takeError();
 
-      auto UpdateSectionName = Obj.getSectionName(*UpdateSection);
+      auto UpdateSectionName = Obj.getSectionName(**UpdateSection);
       if (!UpdateSectionName)
         return UpdateSectionName.takeError();
 
@@ -397,7 +399,7 @@ private:
                 *UpdateSectionName,
             llvm::inconvertibleErrorCode());
 
-      auto Relocations = Obj.relas(&SecRef);
+      auto Relocations = Obj.relas(SecRef);
       if (!Relocations)
         return Relocations.takeError();
 
@@ -409,7 +411,7 @@ private:
                  << "Name: " << Obj.getRelocationTypeName(Type) << "\n";
         });
         auto SymbolIndex = Rela.getSymbol(false);
-        auto Symbol = Obj.getRelocationSymbol(&Rela, &SymTab);
+        auto Symbol = Obj.getRelocationSymbol(Rela, &SymTab);
         if (!Symbol)
           return Symbol.takeError();
 
@@ -472,15 +474,16 @@ private:
       auto StrTabSec = Obj.getSection(SecRef.sh_link);
       if (!StrTabSec)
         return StrTabSec.takeError();
-      auto StringTable = Obj.getStringTable(*StrTabSec);
+      auto StringTable = Obj.getStringTable(**StrTabSec);
       if (!StringTable)
         return StringTable.takeError();
-      auto Name = Obj.getSectionName(&SecRef);
+      auto Name = Obj.getSectionName(SecRef);
       if (!Name)
         return Name.takeError();
       auto Section = G->findSectionByName(*Name);
       if (!Section)
-        return make_error<llvm::StringError>("Could not find a section",
+        return make_error<llvm::StringError>("Could not find a section " +
+                                             *Name,
                                              llvm::inconvertibleErrorCode());
       // we only have one for now
       auto blocks = Section->blocks();
@@ -507,6 +510,17 @@ private:
         // I am not sure on If this is going to hold as an invariant. Revisit.
         if (!Name)
           return Name.takeError();
+
+        if (SymRef.isCommon()) {
+          // Symbols in SHN_COMMON refer to uninitialized data. The st_value
+          // field holds alignment constraints.
+          Symbol &S =
+              G->addCommonSymbol(*Name, Scope::Default, getCommonSection(), 0,
+                                 SymRef.st_size, SymRef.getValue(), false);
+          JITSymbolTable[SymbolIndex] = &S;
+          continue;
+        }
+
         // TODO: weak and hidden
         if (SymRef.isExternal())
           bindings = {Linkage::Strong, Scope::Default};
@@ -520,14 +534,15 @@ private:
           auto DefinedSection = Obj.getSection(SymRef.st_shndx);
           if (!DefinedSection)
             return DefinedSection.takeError();
-          auto sectName = Obj.getSectionName(*DefinedSection);
+          auto sectName = Obj.getSectionName(**DefinedSection);
           if (!sectName)
             return Name.takeError();
 
           auto JitSection = G->findSectionByName(*sectName);
           if (!JitSection)
             return make_error<llvm::StringError>(
-                "Could not find a section", llvm::inconvertibleErrorCode());
+                "Could not find the JitSection " + *sectName,
+                llvm::inconvertibleErrorCode());
           auto bs = JitSection->blocks();
           if (bs.empty())
             return make_error<llvm::StringError>(
@@ -546,18 +561,12 @@ private:
           JITSymbolTable[SymbolIndex] = &S;
         }
 
-        //  }
         // TODO: The following has to be implmented.
         // leaving commented out to save time for future patchs
         /*
           G->addAbsoluteSymbol(*Name, SymRef.getValue(), SymRef.st_size,
           Linkage::Strong, Scope::Default, false);
-
-          if(SymRef.isCommon()) {
-            G->addCommonSymbol(*Name, Scope::Default, getCommonSection(), 0, 0,
-          SymRef.getValue(), false);
-          }
-  */
+        */
       }
     }
     return Error::success();
@@ -630,7 +639,8 @@ private:
     char *FixupPtr = BlockWorkingMem + E.getOffset();
     JITTargetAddress FixupAddress = B.getAddress() + E.getOffset();
     switch (E.getKind()) {
-    case ELFX86RelocationKind::PCRel32: {
+    case ELFX86RelocationKind::PCRel32:
+    case ELFX86RelocationKind::PCRel32GOTLoad: {
       int64_t Value = E.getTarget().getAddress() + E.getAddend() - FixupAddress;
       endian::write32le(FixupPtr, Value);
       break;
