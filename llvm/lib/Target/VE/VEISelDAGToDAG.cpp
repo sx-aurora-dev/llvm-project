@@ -20,6 +20,8 @@
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
+#define DEBUG_TYPE "ve-isel"
+
 //===----------------------------------------------------------------------===//
 // Instruction Selector Implementation
 //===----------------------------------------------------------------------===//
@@ -245,7 +247,7 @@ bool VEDAGToDAGISel::selectADDRzii(SDValue Addr, SDValue &Base, SDValue &Index,
       Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
     return false; // direct calls.
 
-  if (ConstantSDNode *CN = cast<ConstantSDNode>(Addr)) {
+  if (auto *CN = dyn_cast<ConstantSDNode>(Addr)) {
     if (isInt<32>(CN->getSExtValue())) {
       Base = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
       Index = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
@@ -277,7 +279,7 @@ bool VEDAGToDAGISel::selectADDRzi(SDValue Addr, SDValue &Base,
       Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
     return false;  // direct calls.
 
-  if (ConstantSDNode *CN = cast<ConstantSDNode>(Addr)) {
+  if (auto *CN = dyn_cast<ConstantSDNode>(Addr)) {
     if (isInt<32>(CN->getSExtValue())) {
       Base = CurDAG->getTargetConstant(0, SDLoc(Addr), MVT::i32);
       Offset =
@@ -329,7 +331,7 @@ bool VEDAGToDAGISel::matchADDRri(SDValue Addr, SDValue &Base, SDValue &Offset) {
     return false; // direct calls.
 
   if (CurDAG->isBaseWithConstantOffset(Addr)) {
-    ConstantSDNode *CN = cast<ConstantSDNode>(Addr.getOperand(1));
+    auto *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1));
     if (isInt<32>(CN->getSExtValue())) {
       if (FrameIndexSDNode *FIN =
               dyn_cast<FrameIndexSDNode>(Addr.getOperand(0))) {
