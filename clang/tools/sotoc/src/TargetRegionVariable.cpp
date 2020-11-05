@@ -22,7 +22,7 @@ TargetRegionVariable::TargetRegionVariable(
     const clang::CapturedStmt::Capture *Capture,
     const std::map<clang::VarDecl *, clang::Expr *> &MappingLowerBounds)
     : Capture(Capture), Decl(Capture->getCapturedVar()),
-      OmpMappingLowerBound(MappingLowerBounds), NumVariableArrayDims(0) {
+      NumVariableArrayDims(0), OmpMappingLowerBound(MappingLowerBounds) {
 
   VarName = Decl->getDeclName().getAsString();
 
