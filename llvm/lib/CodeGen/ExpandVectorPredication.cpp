@@ -338,9 +338,8 @@ void LowerVPReduction(VPIntrinsic *VPI) {
 
   case Intrinsic::vector_reduce_fadd:
   case Intrinsic::vector_reduce_fmul: {
-    auto TypeArg = RedAccuParam->getType();
     auto RedIntrinFunc =
-        Intrinsic::getDeclaration(M, FunctionalID, {TypeArg, VecTypeArg});
+        Intrinsic::getDeclaration(M, FunctionalID, VecTypeArg);
     NewReduct = Builder.CreateCall(RedIntrinFunc,
                                    {RedAccuParam, RedVectorParam}, I.getName());
   } break;
