@@ -40,10 +40,8 @@ define i64 @uimm7_63(i64 %a) {
 define i128 @uimm7_64(i128 %a) {
 ; CHECK-LABEL: uimm7_64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    or %s1, 0, (0)1
-; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    or %s0, 0, %s1
-; CHECK-NEXT:    or %s1, 0, %s2
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    or %s0, 0, (0)1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %res = shl i128 %a, 64
   ret i128 %res

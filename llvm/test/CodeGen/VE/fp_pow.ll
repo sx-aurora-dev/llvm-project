@@ -109,11 +109,11 @@ define float @func_fp_powf_zero_back_float(float %0) {
 define { float, float } @func_fp_cpowf_zero_back_fcomp(float %0, float %1) {
 ; CHECK-LABEL: func_fp_cpowf_zero_back_fcomp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, cpowf@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s12, cpowf@hi(, %s2)
 ; CHECK-NEXT:    lea.sl %s2, 0
-; CHECK-NEXT:    lea %s3, cpowf@lo
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    lea.sl %s12, cpowf@hi(, %s3)
-; CHECK-NEXT:    or %s3, 0, %s2
+; CHECK-NEXT:    lea.sl %s3, 0
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call { float, float } @cpowf(float %0, float %1, float 0.000000e+00, float 0.000000e+00)
@@ -137,7 +137,7 @@ define { double, double } @func_fp_cpow_zero_back_dcomp(double %0, double %1) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s12, cpow@hi(, %s2)
 ; CHECK-NEXT:    lea.sl %s2, 0
-; CHECK-NEXT:    or %s3, 0, %s2
+; CHECK-NEXT:    lea.sl %s3, 0
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call { double, double } @cpow(double %0, double %1, double 0.000000e+00, double 0.000000e+00)
@@ -182,10 +182,10 @@ define float @func_fp_powf_zero_fore_float(float %0) {
 ; CHECK-LABEL: func_fp_powf_zero_fore_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    lea %s0, powf@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, powf@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    lea %s2, powf@lo
-; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, powf@hi(, %s2)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = tail call float @powf(float 0.000000e+00, float %0)
@@ -198,11 +198,11 @@ define { float, float } @func_fp_cpowf_zero_fore_fcomp(float %0, float %1) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s3, 0, %s1
 ; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    lea %s0, cpowf@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, cpowf@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    lea %s1, cpowf@lo
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, cpowf@hi(, %s1)
-; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call { float, float } @cpowf(float 0.000000e+00, float 0.000000e+00, float %0, float %1)
@@ -234,7 +234,7 @@ define { double, double } @func_fp_cpow_zero_fore_dcomp(double %0, double %1) {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, cpow@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call { double, double } @cpow(double 0.000000e+00, double 0.000000e+00, double %0, double %1)
@@ -289,10 +289,10 @@ define { fp128, fp128 } @func_fp_cpowl_zero_fore_qcomp(fp128 %0, fp128 %1) {
 define float @func_fp_powf_const_back_float(float %0) {
 ; CHECK-LABEL: func_fp_powf_const_back_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s1, powf@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s12, powf@hi(, %s1)
 ; CHECK-NEXT:    lea.sl %s1, -1073741824
-; CHECK-NEXT:    lea %s2, powf@lo
-; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, powf@hi(, %s2)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = tail call float @powf(float %0, float -2.000000e+00)
@@ -303,11 +303,11 @@ define float @func_fp_powf_const_back_float(float %0) {
 define { float, float } @func_fp_cpowf_const_back_fcomp(float %0, float %1) {
 ; CHECK-LABEL: func_fp_cpowf_const_back_fcomp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, cpowf@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s12, cpowf@hi(, %s2)
 ; CHECK-NEXT:    lea.sl %s2, -1073741824
 ; CHECK-NEXT:    lea.sl %s3, 0
-; CHECK-NEXT:    lea %s4, cpowf@lo
-; CHECK-NEXT:    and %s4, %s4, (32)0
-; CHECK-NEXT:    lea.sl %s12, cpowf@hi(, %s4)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call { float, float } @cpowf(float %0, float %1, float -2.000000e+00, float 0.000000e+00)
@@ -389,10 +389,10 @@ define float @func_fp_powf_const_fore_float(float %0) {
 ; CHECK-LABEL: func_fp_powf_const_fore_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    lea %s0, powf@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, powf@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, -1073741824
-; CHECK-NEXT:    lea %s2, powf@lo
-; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, powf@hi(, %s2)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %2 = tail call float @powf(float -2.000000e+00, float %0)
@@ -405,11 +405,11 @@ define { float, float } @func_fp_cpowf_const_fore_fcomp(float %0, float %1) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s3, 0, %s1
 ; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    lea %s0, cpowf@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, cpowf@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, -1073741824
 ; CHECK-NEXT:    lea.sl %s1, 0
-; CHECK-NEXT:    lea %s4, cpowf@lo
-; CHECK-NEXT:    and %s4, %s4, (32)0
-; CHECK-NEXT:    lea.sl %s12, cpowf@hi(, %s4)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call { float, float } @cpowf(float -2.000000e+00, float 0.000000e+00, float %0, float %1)

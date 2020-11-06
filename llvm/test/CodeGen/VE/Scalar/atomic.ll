@@ -480,7 +480,7 @@ define i128 @test_atomic_exchange_16_relaxed() {
 ; CHECK-NEXT:    lea %s1, 1886417008
 ; CHECK-NEXT:    lea.sl %s1, 1886417008(, %s1)
 ; CHECK-NEXT:    or %s2, 0, (0)1
-; CHECK-NEXT:    or %s3, 0, %s2
+; CHECK-NEXT:    or %s3, 0, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
 entry:
@@ -564,8 +564,8 @@ define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-NEXT:    ldl.zx %s4, (, %s2)
 ; CHECK-NEXT:    and %s0, %s0, (56)0
 ; CHECK-NEXT:    lea %s3, -256
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    and %s7, %s4, %s3
+; CHECK-NEXT:    and %s5, %s3, (32)0
+; CHECK-NEXT:    and %s7, %s4, %s5
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %partword.cmpxchg.loop
 ; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    or %s5, 0, %s7
@@ -575,7 +575,8 @@ define signext i8 @test_atomic_compare_exchange_1(i8, i8) {
 ; CHECK-NEXT:    breq.w %s4, %s6, .LBB{{[0-9]+}}_3
 ; CHECK-NEXT:  # %bb.2: # %partword.cmpxchg.failure
 ; CHECK-NEXT:    # in Loop: Header=BB25_1 Depth=1
-; CHECK-NEXT:    and %s7, %s4, %s3
+; CHECK-NEXT:    and %s7, %s3, (32)0
+; CHECK-NEXT:    and %s7, %s4, %s7
 ; CHECK-NEXT:    brne.w %s5, %s7, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_3: # %partword.cmpxchg.end
 ; CHECK-NEXT:    cmps.w.zx %s0, %s4, %s6
@@ -689,7 +690,7 @@ define i128 @test_atomic_compare_exchange_16(i128, i128) {
 ; CHECK-NEXT:    lea.sl %s0, it@hi(, %s0)
 ; CHECK-NEXT:    lea %s1, -16(, %s9)
 ; CHECK-NEXT:    or %s4, 5, (0)1
-; CHECK-NEXT:    or %s5, 0, %s4
+; CHECK-NEXT:    or %s5, 5, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s11, 0, %s9

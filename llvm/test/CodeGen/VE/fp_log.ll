@@ -100,10 +100,10 @@ declare { fp128, fp128 } @clogl(fp128, fp128)
 define float @func_fp_logf_zero_float() {
 ; CHECK-LABEL: func_fp_logf_zero_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, logf@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, logf@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    lea %s1, logf@lo
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, logf@hi(, %s1)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = tail call float @logf(float 0.000000e+00)
@@ -114,11 +114,11 @@ define float @func_fp_logf_zero_float() {
 define { float, float } @func_fp_clogf_zero_fcomp() {
 ; CHECK-LABEL: func_fp_clogf_zero_fcomp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, clogf@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, clogf@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    lea %s1, clogf@lo
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, clogf@hi(, %s1)
-; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = tail call { float, float } @clogf(float 0.000000e+00, float 0.000000e+00)
@@ -147,7 +147,7 @@ define { double, double } @func_fp_clog_zero_dcomp() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, clog@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    lea.sl %s1, 0
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = tail call { double, double } @clog(double 0.000000e+00, double 0.000000e+00)
@@ -196,10 +196,10 @@ define { fp128, fp128 } @func_fp_clogl_zero_qcomp() {
 define float @func_fp_logf_const_float() {
 ; CHECK-LABEL: func_fp_logf_const_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, logf@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, logf@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, -1073741824
-; CHECK-NEXT:    lea %s1, logf@lo
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, logf@hi(, %s1)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = tail call float @logf(float -2.000000e+00)
@@ -210,11 +210,11 @@ define float @func_fp_logf_const_float() {
 define { float, float } @func_fp_clogf_const_fcomp() {
 ; CHECK-LABEL: func_fp_clogf_const_fcomp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, clogf@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, clogf@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, -1073741824
 ; CHECK-NEXT:    lea.sl %s1, 0
-; CHECK-NEXT:    lea %s2, clogf@lo
-; CHECK-NEXT:    and %s2, %s2, (32)0
-; CHECK-NEXT:    lea.sl %s12, clogf@hi(, %s2)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = tail call { float, float } @clogf(float -2.000000e+00, float 0.000000e+00)

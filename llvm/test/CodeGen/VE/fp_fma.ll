@@ -53,10 +53,10 @@ define float @func_fp_fmaf_zero_fore_float(float %0, float %1) {
 ; CHECK-LABEL: func_fp_fmaf_zero_fore_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    lea %s1, fmaf@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s12, fmaf@hi(, %s1)
 ; CHECK-NEXT:    lea.sl %s1, 0
-; CHECK-NEXT:    lea %s3, fmaf@lo
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    lea.sl %s12, fmaf@hi(, %s3)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call float @llvm.fma.f32(float %0, float 0.000000e+00, float %1)
@@ -102,10 +102,10 @@ define fp128 @func_fp_fmal_zero_fore_quad(fp128 %0, fp128 %1) {
 define float @func_fp_fmaf_zero_back_float(float %0, float %1) {
 ; CHECK-LABEL: func_fp_fmaf_zero_back_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, fmaf@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s12, fmaf@hi(, %s2)
 ; CHECK-NEXT:    lea.sl %s2, 0
-; CHECK-NEXT:    lea %s3, fmaf@lo
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    lea.sl %s12, fmaf@hi(, %s3)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call float @llvm.fma.f32(float %0, float %1, float 0.000000e+00)
@@ -149,10 +149,10 @@ define float @func_fp_fmaf_const_fore_float(float %0, float %1) {
 ; CHECK-LABEL: func_fp_fmaf_const_fore_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    lea %s1, fmaf@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s12, fmaf@hi(, %s1)
 ; CHECK-NEXT:    lea.sl %s1, -1073741824
-; CHECK-NEXT:    lea %s3, fmaf@lo
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    lea.sl %s12, fmaf@hi(, %s3)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call float @llvm.fma.f32(float %0, float -2.000000e+00, float %1)
@@ -198,10 +198,10 @@ define fp128 @func_fp_fmal_const_fore_quad(fp128 %0, fp128 %1) {
 define float @func_fp_fmaf_const_back_float(float %0, float %1) {
 ; CHECK-LABEL: func_fp_fmaf_const_back_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s2, fmaf@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s12, fmaf@hi(, %s2)
 ; CHECK-NEXT:    lea.sl %s2, -1073741824
-; CHECK-NEXT:    lea %s3, fmaf@lo
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    lea.sl %s12, fmaf@hi(, %s3)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %3 = tail call float @llvm.fma.f32(float %0, float %1, float -2.000000e+00)

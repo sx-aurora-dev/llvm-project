@@ -26,13 +26,15 @@ define i64 @smulo(i64, i64) {
 define i64 @umulo(i64, i64) {
 ; CHECK-LABEL: umulo:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    or %s4, 0, %s0
 ; CHECK-NEXT:    lea %s0, __multi3@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __multi3@hi(, %s0)
+; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
-; CHECK-NEXT:    or %s0, 0, %s1
-; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    or %s2, 0, %s4
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    cmov.l.ne %s0, (0)0, %s1
 ; CHECK-NEXT:    or %s11, 0, %s9
