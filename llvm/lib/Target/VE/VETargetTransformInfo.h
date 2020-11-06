@@ -65,6 +65,7 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
     ///// FP reductions (supported in in ordered and un-ordered mode)
     case Intrinsic::vp_reduce_fadd:
     case Intrinsic::experimental_vector_reduce_v2_fadd:
+    case Intrinsic::vector_reduce_fadd:
     // case Intrinsic::experimental_vector_reduce_fmin: // TODO
     // case Intrinsic::experimental_vector_reduce_fmax: // TODO
     // case Intrinsic::experimental_vector_reduce_smin: // TODO
@@ -75,6 +76,7 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
 
     ///// FP reduction (Ordered only)
     case Intrinsic::experimental_vector_reduce_v2_fmul:
+    case Intrinsic::vector_reduce_fmul:
       return !Unordered;
 
     ///// int arith
