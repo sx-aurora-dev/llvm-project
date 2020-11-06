@@ -6,7 +6,7 @@ define x86_regcallcc <256 x i32> @__regcall3__copyv256i32(<256 x i32>, <256 x i3
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0,(0)1,%v1
+; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   ret <256 x i32> %1
 }
@@ -17,7 +17,7 @@ define x86_regcallcc <256 x i64> @__regcall3__copyv256i64(<256 x i64>, <256 x i6
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0,(0)1,%v1
+; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   ret <256 x i64> %1
 }
@@ -28,7 +28,7 @@ define x86_regcallcc <256 x float> @__regcall3__copyv256f32(<256 x float>, <256 
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0,(0)1,%v1
+; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   ret <256 x float> %1
 }
@@ -39,7 +39,7 @@ define x86_regcallcc <256 x double> @__regcall3__copyv256f64(<256 x double>, <25
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0,(0)1,%v1
+; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   ret <256 x double> %1
 }
@@ -50,10 +50,10 @@ define x86_regcallcc <512 x i32> @__regcall3__copyv512i32(<512 x i32>, <512 x i3
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1,(0)1,%v3
+; CHECK-NEXT:    vor %v1, (0)1, %v3
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0,(0)1,%v2
+; CHECK-NEXT:    vor %v0, (0)1, %v2
 ; CHECK-NEXT:    b.l.t (, %s10)
   ret <512 x i32> %1
 }
@@ -64,10 +64,10 @@ define x86_regcallcc <512 x float> @__regcall3__copyv512f32(<512 x float>, <512 
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1,(0)1,%v3
+; CHECK-NEXT:    vor %v1, (0)1, %v3
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0,(0)1,%v2
+; CHECK-NEXT:    vor %v0, (0)1, %v2
 ; CHECK-NEXT:    b.l.t (, %s10)
   ret <512 x float> %1
 }

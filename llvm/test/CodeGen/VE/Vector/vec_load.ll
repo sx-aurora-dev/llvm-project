@@ -107,7 +107,7 @@ define <256 x double> @vec_gather_pt_v256f64(<256 x double*> %P, <256 x double> 
 ; CHECK-NEXT:    vgt %v2, %v0, 0, 0, %vm1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0,(0)1,%v1
+; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmrg %v0, %v1, %v2, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)
