@@ -4,10 +4,7 @@
 define x86_regcallcc <256 x double> @_Z4funcDv256_dS_S_(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
 ; CHECK-LABEL: _Z4funcDv256_dS_S_:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lvm %vm1, 0, (0)1
-; CHECK-NEXT:    lvm %vm1, 1, (0)1
-; CHECK-NEXT:    lvm %vm1, 2, (0)1
-; CHECK-NEXT:    lvm %vm1, 3, (0)1
+; CHECK-NEXT:    xorm %vm1, %vm0, %vm0
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfadd.d %v0, %v1, %v2, %vm1
