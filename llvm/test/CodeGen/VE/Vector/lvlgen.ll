@@ -7,17 +7,16 @@ declare <256 x double> @llvm.ve.vl.vfaddd.vvvvl(<256 x double>, <256 x double>, 
 define <256 x double> @test(i8* %p) {
 ; CHECK-LABEL: test:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s2, 64
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vld %v0, 8, %s1
-; CHECK-NEXT:    lea %s2, 128
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vld %v1, 8, %s1
-; CHECK-NEXT:    lea %s2, 256
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vld %v2, 8, %s1
-; CHECK-NEXT:    vfadd.d %v2, %v0, %v1
-; CHECK-NEXT:    vst %v2, 8, %s0
+; CHECK-NEXT:    lea %s1, 64
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vld %v1, 8, %s0
+; CHECK-NEXT:    lea %s1, 128
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vld %v2, 8, %s0
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vld %v0, 8, %s0
+; CHECK-NEXT:    vfadd.d %v0, %v1, %v2
 ; CHECK-NEXT:    b.l.t (, %s10)
   %v1 = tail call <256 x double> @llvm.ve.vl.vld.vssl(i64 8, i8* %p, i32 64)
   %v2 = tail call <256 x double> @llvm.ve.vl.vld.vssl(i64 8, i8* %p, i32 128)
