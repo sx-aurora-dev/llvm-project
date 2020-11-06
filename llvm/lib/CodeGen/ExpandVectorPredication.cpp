@@ -336,8 +336,8 @@ void LowerVPReduction(VPIntrinsic *VPI) {
     assert(!RedAccuParam && "accu dropped");
   } break;
 
-  case Intrinsic::experimental_vector_reduce_v2_fadd:
-  case Intrinsic::experimental_vector_reduce_v2_fmul: {
+  case Intrinsic::vector_reduce_fadd:
+  case Intrinsic::vector_reduce_fmul: {
     auto TypeArg = RedAccuParam->getType();
     auto RedIntrinFunc =
         Intrinsic::getDeclaration(M, FunctionalID, {TypeArg, VecTypeArg});
