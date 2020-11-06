@@ -106,7 +106,7 @@ multiple concrete records all at once. A multiclass can inherit from other
 multiclasses, which means that the multiclass inherits all the definitions
 from its parent multiclasses.
 
-`Appendix B: Sample Record`_ illustrates a complex record in the Intel X86
+`Appendix C: Sample Record`_ illustrates a complex record in the Intel X86
 target and the simple way in which it is defined.
 
 Source Files
@@ -190,14 +190,14 @@ Note that, unlike most languages, TableGen allows :token:`TokIdentifier` to
 begin with an integer. In case of ambiguity, a token is interpreted as a
 numeric literal rather than an identifier.
 
-TableGen has the following reserved words, which cannot be used as
+TableGen has the following reserved keywords, which cannot be used as
 identifiers::
 
    bit        bits          class         code          dag
-   def        else          foreach       defm          defset
-   defvar     field         if            in            include
-   int        let           list          multiclass    string
-   then
+   def        else          false         foreach       defm
+   defset     defvar        field         if            in
+   include    int           let           list          multiclass
+   string     then          true
 
 .. warning::
   The ``field`` reserved word is deprecated.
@@ -209,13 +209,13 @@ TableGen provides "bang operators" that have a wide variety of uses:
 
 .. productionlist::
    BangOperator: one of
-               : !add        !and         !cast        !con         !dag
+               : !add        !and         !cast        !con         !dag 
                : !empty      !eq          !foldl       !foreach     !ge
-               : !getdagop   !gt          !head        !if          !isa
-               : !le         !listconcat  !listsplat   !lt          !mul
-               : !ne         !not         !or          !setdagop    !shl
-               : !size       !sra         !srl         !strconcat   !sub
-               : !subst      !tail        !xor
+               : !getdagop   !gt          !head        !if          !interleave
+               : !isa        !le          !listconcat  !listsplat   !lt
+               : !mul        !ne          !not         !or          !setdagop
+               : !shl        !size        !sra         !srl         !strconcat
+               : !sub        !subst       !tail        !xor
 
 The ``!cond`` operator has a slightly different
 syntax compared to other bang operators, so it is defined separately:
@@ -316,8 +316,9 @@ Values and Expressions
 There are many contexts in TableGen statements where a value is required. A
 common example is in the definition of a record, where each field is
 specified by a name and an optional value. TableGen allows for a reasonable
-number of different forms when building up values. These forms allow the
-TableGen file to be written in a syntax that is natural for the application.
+number of different forms when building up value expressions. These forms
+allow the TableGen file to be written in a syntax that is natural for the
+application.
 
 Note that all of the values have rules for converting them from one type to
 another. For example, these rules allow you to assign a value like ``7``
@@ -325,6 +326,7 @@ to an entity of type ``bits<4>``.
 
 .. productionlist::
    Value: `SimpleValue` `ValueSuffix`*
+        :| `Value` "#" `Value`
    ValueSuffix: "{" `RangeList` "}"
               :| "[" `RangeList` "]"
               :| "." `TokIdentifier`
@@ -354,12 +356,20 @@ simple value is the concatenation of the strings. Code fragments become
 strings and then are indistinguishable from them.
 
 .. productionlist::
-   SimpleValue2: "?"
+   SimpleValue2: "true" | "false"
+
+The ``true`` and ``false`` literals are essentially syntactic sugar for the
+integer values 1 and 0. They improve the readability of TableGen files when
+boolean values are used in field values, bit sequences, ``if`` statements.
+etc. When parsed, these literals are converted to integers.
+
+.. productionlist::
+   SimpleValue3: "?"
 
 A question mark represents an uninitialized value.
 
 .. productionlist::
-   SimpleValue3: "{" [`ValueList`] "}"
+   SimpleValue4: "{" [`ValueList`] "}"
    ValueList: `ValueListNE`
    ValueListNE: `Value` ("," `Value`)*
 
@@ -368,7 +378,7 @@ This value represents a sequence of bits, which can be used to initialize a
 must represent a total of *n* bits.
 
 .. productionlist::
-   SimpleValue4: "[" `ValueList` "]" ["<" `Type` ">"]
+   SimpleValue5: "[" `ValueList` "]" ["<" `Type` ">"]
 
 This value is a list initializer (note the brackets). The values in brackets
 are the elements of the list. The optional :token:`Type` can be used to
@@ -377,7 +387,7 @@ from the given values. TableGen can usually infer the type, although
 sometimes not when the value is the empty list (``[]``).
 
 .. productionlist::
-   SimpleValue5: "(" `DagArg` [`DagArgList`] ")"
+   SimpleValue6: "(" `DagArg` [`DagArgList`] ")"
    DagArgList: `DagArg` ("," `DagArg`)*
    DagArg: `Value` [":" `TokVarName`] | `TokVarName`
 
@@ -386,7 +396,7 @@ This represents a DAG initializer (note the parentheses).  The first
 See `Directed acyclic graphs (DAGs)`_ for more details.
 
 .. productionlist::
-   SimpleValue6: `TokIdentifier`
+   SimpleValue7: `TokIdentifier`
 
 The resulting value is the value of the entity named by the identifier. The
 possible identifiers are described here, but the descriptions will make more
@@ -445,7 +455,7 @@ sense after reading the remainder of this guide.
        def Foo#i;
 
 .. productionlist::
-   SimpleValue7: `ClassID` "<" `ValueListNE` ">"
+   SimpleValue8: `ClassID` "<" `ValueListNE` ">"
 
 This form creates a new anonymous record definition (as would be created by an
 unnamed ``def`` inheriting from the given class with the given template
@@ -456,7 +466,7 @@ Invoking a class in this manner can provide a simple subroutine facility.
 See `Using Classes as Subroutines`_ for more information.
 
 .. productionlist::
-   SimpleValue8: `BangOperator` ["<" `Type` ">"] "(" `ValueListNE` ")"
+   SimpleValue9: `BangOperator` ["<" `Type` ">"] "(" `ValueListNE` ")"
               :| `CondOperator` "(" `CondClause` ("," `CondClause`)* ")"
    CondClause: `Value` ":" `Value`
 
@@ -492,6 +502,28 @@ primary value. Here are the possible suffixes for some primary *value*.
 *value*\ ``.`` *field*
     The final value is the value of the specified *field* in the specified
     record *value*.
+
+The paste operator
+------------------
+
+The paste operator (``#``) is the only infix operator availabe in TableGen
+expressions. It allows you to concatenate strings or lists, but has a few
+unusual features.
+
+The paste operator can be used when specifying the record name in a
+:token:`Def` or :token:`Defm` statement, in which case it must construct a
+string. If an operand is an undefined name (:token:`TokIdentifier`) or the
+name of a global :token:`Defvar` or :token:`Defset`, it is treated as a
+verbatim string of characters. The value of a global name is not used.
+
+The paste operator can be used in all other value expressions, in which case
+it can construct a string or a list. Rather oddly, but consistent with the
+previous case, if the *right-hand-side* operand is an undefined name or a
+global name, it is treated as a verbatim string of characters. The
+left-hand-side operand is treated normally.
+
+`Appendix B: Paste Operator Examples`_ presents examples of the behavior of
+the paste operator.
 
 Statements
 ==========
@@ -614,11 +646,11 @@ A ``def`` statement defines a new concrete record.
 
 .. productionlist::
    Def: "def" [`NameValue`] `RecordBody`
-   NameValue: `Value`
+   NameValue: `Value` (parsed in a special manner)
 
 The name value is optional. If specified, it is parsed in a special mode
 where undefined (unrecognized) identifiers are interpreted as literal
-strings.  In particular, global identifiers are considered unrecognized.
+strings. In particular, global identifiers are considered unrecognized.
 These include global variables defined by ``defvar`` and ``defset``.
 
 If no name value is given, the record is *anonymous*. The final name of an
@@ -1587,6 +1619,12 @@ and non-0 as true.
   ``int``. If the result is not 0, the *then* expression is produced; otherwise
   the *else* expression is produced.
 
+``!interleave(``\ *list*\ ``,`` *delim*\ ``)``
+    This operator concatenates the items in the *list*, interleaving the
+    *delim* string between each pair, and produces the resulting string.
+    The list can be a list of string, int, bits, or bit. An empty list
+    results in an empty string. The delimiter can be the empty string.
+
 ``!isa<``\ *type*\ ``>(``\ *a*\ ``)``
     This operator produces 1 if the type of *a* is a subtype of the given *type*; 0
     otherwise.
@@ -1657,12 +1695,6 @@ and non-0 as true.
     This operator concatenates the string arguments *str1*, *str2*, etc., and
     produces the resulting string.
 
-*str1*\ ``#``\ *str2*
-    The paste operator (``#``) is a shorthand for
-    ``!strconcat`` with two arguments.  It can be used to concatenate operands that
-    are not strings, in which
-    case an implicit ``!cast<string>`` is done on those operands.
-
 ``!sub(``\ *a*\ ``,`` *b*\ ``)``
     This operator subtracts *b* from *a* and produces the arithmetic difference.
 
@@ -1684,8 +1716,61 @@ and non-0 as true.
     the result. A logical XOR can be performed if all the arguments are either
     0 or 1.
 
+Appendix B: Paste Operator Examples
+===================================
 
-Appendix B: Sample Record
+Here is an example illustrating the use of the paste operator in record names.
+
+.. code-block:: text
+
+  defvar suffix = "_suffstring";
+  defvar some_ints = [0, 1, 2, 3];
+
+  def name # suffix {
+  }
+
+  foreach i = [1, 2] in {
+  def rec # i {
+  }
+  }
+
+The first ``def`` does not use the value of the ``suffix`` variable. The
+second def does use the value of the ``i`` iterator variable, because it is not a
+global name. The following records are produced.
+
+.. code-block:: text
+
+  def namesuffix {
+  }
+  def rec1 {
+  }
+  def rec2 {
+  }
+
+Here is a second example illustrating the paste operator in field value expressions.
+
+.. code-block:: text
+
+  def test {
+    string strings = suffix # suffix;
+    list<int> integers = some_ints # [4, 5, 6];
+  }
+
+The ``strings`` field expression uses ``suffix`` on both sides of the paste
+operator. It is evaluated normally on the left hand side, but taken verbatim
+on the right hand side. The ``integers`` field expression uses the value of
+the ``some_ints`` variable and a literal list. The following record is
+produced.
+
+.. code-block:: text
+
+  def test {
+    string strings = "_suffstringsuffix";
+    list<int> ints = [0, 1, 2, 3, 4, 5, 6];
+  }
+
+
+Appendix C: Sample Record
 =========================
 
 One target machine supported by LLVM is the Intel x86. The following output

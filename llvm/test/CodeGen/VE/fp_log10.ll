@@ -52,10 +52,10 @@ declare fp128 @log10l(fp128)
 define float @func_fp_log10f_zero_float() {
 ; CHECK-LABEL: func_fp_log10f_zero_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, log10f@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, log10f@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    lea %s1, log10f@lo
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, log10f@hi(, %s1)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = tail call float @log10f(float 0.000000e+00)
@@ -98,10 +98,10 @@ define fp128 @func_fp_log10l_zero_quad() {
 define float @func_fp_log10f_const_float() {
 ; CHECK-LABEL: func_fp_log10f_const_float:
 ; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK-NEXT:    lea %s0, log10f@lo
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    lea.sl %s12, log10f@hi(, %s0)
 ; CHECK-NEXT:    lea.sl %s0, -1073741824
-; CHECK-NEXT:    lea %s1, log10f@lo
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s12, log10f@hi(, %s1)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = tail call float @log10f(float -2.000000e+00)

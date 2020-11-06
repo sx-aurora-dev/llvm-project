@@ -8,7 +8,7 @@ define void @func(i32* nocapture) {
 ; CHECK-NEXT:    lea %s1, 16(, %s1)
 ; CHECK-NEXT:    or %s2, 0, (0)1
 ; CHECK-NEXT:    lea %s3, 256
-; CHECK-NEXT:    or %s4, 0, %s2
+; CHECK-NEXT:    or %s4, 0, (0)1
 ; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # =>This Inner Loop Header: Depth=1
 ; CHECK-NEXT:    stl %s2, -16(, %s1)
 ; CHECK-NEXT:    or %s5, 1, %s4

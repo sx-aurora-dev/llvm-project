@@ -6616,7 +6616,7 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
              TTI.getCmpSelInstrCost(
                  Instruction::Select, ToVectorTy(Phi->getType(), VF),
                  ToVectorTy(Type::getInt1Ty(Phi->getContext()), VF),
-                 CostKind);
+                 CmpInst::BAD_ICMP_PREDICATE, CostKind);
 
     return TTI.getCFInstrCost(Instruction::PHI, CostKind);
   }
@@ -6705,7 +6705,7 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
       CondTy = VectorType::get(CondTy, VF);
     }
     return TTI.getCmpSelInstrCost(I->getOpcode(), VectorTy, CondTy,
-                                  CostKind, I);
+                                  CmpInst::BAD_ICMP_PREDICATE, CostKind, I);
   }
   case Instruction::ICmp:
   case Instruction::FCmp: {
@@ -6714,8 +6714,8 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
     if (canTruncateToMinimalBitwidth(Op0AsInstruction, VF))
       ValTy = IntegerType::get(ValTy->getContext(), MinBWs[Op0AsInstruction]);
     VectorTy = ToVectorTy(ValTy, VF);
-    return TTI.getCmpSelInstrCost(I->getOpcode(), VectorTy, nullptr, CostKind,
-                                  I);
+    return TTI.getCmpSelInstrCost(I->getOpcode(), VectorTy, nullptr,
+                                  CmpInst::BAD_ICMP_PREDICATE, CostKind, I);
   }
   case Instruction::Store:
   case Instruction::Load: {
