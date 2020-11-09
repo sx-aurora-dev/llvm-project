@@ -322,6 +322,7 @@ def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
                                       == 0; }]>;
 def lozero      : PatLeaf<(imm), [{ return (N->getZExtValue() & 0xffffffff)
                                       == 0; }]>;
+def fpone       : PatLeaf<(fpimm), [{ return getFpImm(N) == 1.0; }]>;
 def fpzero      : PatLeaf<(fpimm), [{ return getFpImmVal(N) == 0; }]>;
 def fplomsbzero : PatLeaf<(fpimm), [{ return (getFpImmVal(N) & 0x80000000)
                                         == 0; }]>;

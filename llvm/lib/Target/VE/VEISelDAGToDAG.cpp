@@ -114,6 +114,30 @@ inline static uint64_t getFpImmVal(const ConstantFPSDNode *N) {
   return Val;
 }
 
+/// getFpImm - get immediate representation of floating point value as a double value.
+inline static double getFpImm(const ConstantFPSDNode *N) {
+  const APInt &Imm = N->getValueAPF().bitcastToAPInt();
+  uint64_t Val = Imm.getZExtValue();
+  if (Imm.getBitWidth() == 32) {
+    // Immediate value of float place places at higher bits on VE.
+    Val <<= 32;
+    union {
+      uint32_t Data;
+      float FpNumber;
+    } CastUnion;
+    CastUnion.Data = Val;
+    return (double)CastUnion.FpNumber;
+  } else {
+    assert((Imm.getBitWidth() == 64) && "Unexpected bit width");
+    union {
+      uint64_t Data;
+      double FpNumber;
+    } CastUnion;
+    CastUnion.Data = Val;
+    return CastUnion.FpNumber;
+  }
+}
+
 /// convMImmVal - Convert a mimm integer immediate value to target immediate.
 inline static uint64_t convMImmVal(uint64_t Val) {
   if (Val == 0)

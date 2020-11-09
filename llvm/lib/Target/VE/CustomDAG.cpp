@@ -130,7 +130,7 @@ PosOpt getVPReductionVectorParamPos(unsigned VPISD) {
   default:
     break;
 #define BEGIN_REGISTER_VP_SDNODE(VPISD, ...) case ISD::VPISD:
-#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS) VecPos = VECTORPOS;
+#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, ...) VecPos = VECTORPOS;
 #define END_REGISTER_VP_SDNODE(VPISD) break;
 #include "llvm/IR/VPIntrinsics.def"
   }

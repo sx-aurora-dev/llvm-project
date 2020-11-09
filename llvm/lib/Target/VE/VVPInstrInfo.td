@@ -156,12 +156,21 @@ def vvp_ctpop :  SDNode<"VEISD::VVP_CTPOP", SDTUnaryOpVVP>;
 // reductions
 def vvp_reduce_fadd         : SDNode<"VEISD::VVP_REDUCE_FADD", SDTReduceVVP>;
 def vvp_reduce_seq_fadd     : SDNode<"VEISD::VVP_REDUCE_SEQ_FADD", SDTReduceStartVVP>;
+def vvp_reduce_fmul         : SDNode<"VEISD::VVP_REDUCE_FMUL", SDTReduceVVP>;
+def vvp_reduce_seq_fmul     : SDNode<"VEISD::VVP_REDUCE_SEQ_FMUL", SDTReduceStartVVP>;
+
+def vvp_reduce_fmin          : SDNode<"VEISD::VVP_REDUCE_FMIN", SDTReduceVVP>;
+def vvp_reduce_fmax          : SDNode<"VEISD::VVP_REDUCE_FMAX", SDTReduceVVP>;
 
 // int reductions
 def vvp_reduce_add          : SDNode<"VEISD::VVP_REDUCE_ADD", SDTReduceVVP>;
 def vvp_reduce_and          : SDNode<"VEISD::VVP_REDUCE_AND", SDTReduceVVP>;
 def vvp_reduce_or           : SDNode<"VEISD::VVP_REDUCE_OR",  SDTReduceVVP>;
 def vvp_reduce_xor          : SDNode<"VEISD::VVP_REDUCE_XOR", SDTReduceVVP>;
+def vvp_reduce_smin         : SDNode<"VEISD::VVP_REDUCE_SMIN", SDTReduceVVP>;
+def vvp_reduce_smax         : SDNode<"VEISD::VVP_REDUCE_SMAX", SDTReduceVVP>;
+def vvp_reduce_umin         : SDNode<"VEISD::VVP_REDUCE_UMIN", SDTReduceVVP>;
+def vvp_reduce_umax         : SDNode<"VEISD::VVP_REDUCE_UMAX", SDTReduceVVP>;
 
 // math funcs
 def vvp_fsqrt                : SDNode<"VEISD::VVP_FSQRT", SDTFPUnaryOpVVP>;

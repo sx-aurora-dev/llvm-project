@@ -62,19 +62,22 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
 
   static bool isSupportedReduction(Intrinsic::ID ReductionID, bool Unordered) {
     switch (ReductionID) {
-    ///// FP reductions (supported in in ordered and un-ordered mode)
+    ///// Fp reductions (iterative and ordered)
     case Intrinsic::vp_reduce_fadd:
     case Intrinsic::experimental_vector_reduce_v2_fadd:
     case Intrinsic::vector_reduce_fadd:
-    // case Intrinsic::experimental_vector_reduce_fmin: // TODO
-    // case Intrinsic::experimental_vector_reduce_fmax: // TODO
-    // case Intrinsic::experimental_vector_reduce_smin: // TODO
-    // case Intrinsic::experimental_vector_reduce_smax: // TODO
-    // case Intrinsic::experimental_vector_reduce_umin: // TODO
-    // case Intrinsic::experimental_vector_reduce_umax: // TODO
+    //
+    case Intrinsic::vp_reduce_fmin:
+    case Intrinsic::vector_reduce_fmin:
+    case Intrinsic::experimental_vector_reduce_fmin:
+    //
+    case Intrinsic::vp_reduce_fmax:
+    case Intrinsic::vector_reduce_fmax:
+    case Intrinsic::experimental_vector_reduce_fmax:
       return true;
 
     ///// FP reduction (Ordered only)
+    case Intrinsic::vp_reduce_fmul:
     case Intrinsic::experimental_vector_reduce_v2_fmul:
     case Intrinsic::vector_reduce_fmul:
       return !Unordered;
@@ -82,6 +85,15 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
     ///// int arith
     case Intrinsic::vp_reduce_add:
     case Intrinsic::experimental_vector_reduce_add:
+    case Intrinsic::vp_reduce_smax:
+    case Intrinsic::experimental_vector_reduce_smax:
+    //
+    // TODO require custom lowering
+    // case Intrinsic::experimental_vector_reduce_smin: // TODO 
+    // case Intrinsic::experimental_vector_reduce_umin: // TODO
+    // case Intrinsic::experimental_vector_reduce_umax: // TODO to smax
+      return true;
+
 
     ///// bit arith
     case Intrinsic::vp_reduce_or:

@@ -427,32 +427,58 @@ defm: IExtend_Mask_ForRes<v256i64>;
 // case VE::vfsums_vvl: return 2;
 // case VE::vfsums_vvml: return 3;
 
-multiclass Reduce_FAdd<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string FPToken, SDPatternOperator neutral_elem> {
-// unordered
-def : Pat <(ResVT (vvp_reduce_fadd VectorVT:$vx, v256i1:$vm, i32:$vl)),
-           (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>("VFSUM"#FPToken#"vml") $vx, $vm, $vl), 0), ResRC)>;
-
-// ordered & unmasked
-def : Pat <(ResVT (vvp_reduce_seq_fadd (ResVT neutral_elem), VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
-           (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>("VFIA"#FPToken#"vil") $vx, 0, $vl), 0), ResRC)>;
-def : Pat <(ResVT (vvp_reduce_seq_fadd ResVT:$sy, VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
-           (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>("VFIA"#FPToken#"vrl") $vx, $sy, $vl), 0), ResRC)>;
-
-// ordered & masked
-def : Pat <(ResVT (vvp_reduce_seq_fadd ResVT:$sy, VectorVT:$vx, v256i1:$vm, i32:$vl)),
-           (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi")
-               (!cast<Instruction>("VFIA"#FPToken#"vrl")
-                   (VMRGivml 0, $vx, $vm, $vl),
-                   $sy,
-                   $vl
-               ),
-               0
-           ), ResRC)>;
+multiclass Reduce_Sequenced<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string VPOp, string VEInst, string FPToken, SDPatternOperator neutral_elem> {
+  // ordered & unmasked
+  def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) (ResVT neutral_elem), VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
+             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(VEInst#FPToken#"vil") $vx, 0, $vl), 0), ResRC)>;
+  def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) ResVT:$sy, VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
+             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(VEInst#FPToken#"vrl") $vx, $sy, $vl), 0), ResRC)>;
+  
+  // ordered & masked
+  def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) ResVT:$sy, VectorVT:$vx, v256i1:$vm, i32:$vl)),
+             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi")
+                 (!cast<Instruction>(VEInst#FPToken#"vrl")
+                     (VMRGivml 0, $vx, $vm, $vl),
+                     $sy,
+                     $vl
+                 ),
+                 0
+             ), ResRC)>;
 }
 
-defm: Reduce_FAdd<v256f64,I64,f64,"D",fpzero>;
-defm: Reduce_FAdd<v256f32,F32,f32,"S",fpzero>;
+multiclass Reduce_Unordered<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string VPOp, string VEInst, string FPToken> {
+ // unordered
+ def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_"#VPOp) VectorVT:$vx, v256i1:$vm, i32:$vl)),
+            (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(VEInst#FPToken#"vml") $vx, $vm, $vl), 0), ResRC)>;
+}
 
+multiclass Reduce_Unordered_Sequenced<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string VPOp, string IterVEInst, string ReorderVEInst, string FPToken, SDPatternOperator neutral_elem> {
+ defm: Reduce_Sequenced<VectorVT, ResRC, ResVT, "fadd", "VFIA", FPToken, neutral_elem>;
+ defm: Reduce_Unordered<VectorVT, ResRC, ResVT, "fadd", "VFSUM", FPToken>;
+}
+
+multiclass Reduce_Unordered_Sequenced_v256<string VPOp, string IterVEInst, string ReorderVEInst, SDPatternOperator lo_neutral, SDPatternOperator neutral_elem> {
+  defm: Reduce_Unordered_Sequenced<v256f64,I64,f64,VPOp, IterVEInst, ReorderVEInst, "D",neutral_elem>;
+  defm: Reduce_Unordered_Sequenced<v256f32,I64,f32,VPOp, IterVEInst, ReorderVEInst, "S",lo_neutral>;
+}
+
+
+multiclass Reduce_FMinMax<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string FPToken> {
+  defm: Reduce_Unordered<VectorVT,ResRC,ResVT,"fmax","VFRMAX",FPToken>;
+  defm: Reduce_Unordered<VectorVT,ResRC,ResVT,"fmin","VFRMIN",FPToken>;
+}
+
+/// reduce FADD,FMUL {
+defm: Reduce_Unordered_Sequenced_v256<"fadd","VFIA","VFSUM",fplozero,fpzero>;
+defm: Reduce_Sequenced<v256f64, I64, f64, "fmul", "VFIM", "D", fpone>;
+defm: Reduce_Sequenced<v256f32, I64, f32, "fmul", "VFIM", "S", fpone>;
+
+defm: Reduce_FMinMax<v256f64,I64,f64,"DFST">;
+defm: Reduce_FMinMax<v256f32,I64,f32,"SFST">;
+/// reduce } FMIN/FMAX
+
+
+/// reduce AND/OR/XOR/ADD {
 multiclass Reduce_GenericInt<ValueType VectorVT, ValueType ResRC, ValueType ResVT, string VVPRedOp, string RedInstName> {
   // unmasked
   def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_"#VVPRedOp) VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
@@ -463,12 +489,14 @@ multiclass Reduce_GenericInt<ValueType VectorVT, ValueType ResRC, ValueType ResV
              (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(RedInstName#"vml") $vx, $vm, $vl), 0), ResRC)>;
 }
 
-multiclass IntReduce_ShortLong<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string SumOpName> {
+multiclass IntReduce_ShortLong<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string SumSuffix, string MinMaxSuffix> {
   defm: Reduce_GenericInt<VectorVT, ResRC, ResVT, "or",  "VROR">;
   defm: Reduce_GenericInt<VectorVT, ResRC, ResVT, "and", "VRAND">;
   defm: Reduce_GenericInt<VectorVT, ResRC, ResVT, "xor", "VRXOR">;
-  defm: Reduce_GenericInt<VectorVT, ResRC, ResVT, "add", SumOpName>;
+  defm: Reduce_GenericInt<VectorVT, ResRC, ResVT, "add", "VSUM"#SumSuffix>;
+  defm: Reduce_GenericInt<VectorVT, ResRC, ResVT, "smax", "VRMAX"#MinMaxSuffix>;
 }
 
-defm: IntReduce_ShortLong<v256i64, I64, i64, "VSUML">;
-defm: IntReduce_ShortLong<v256i32, I32, i32, "VSUMWSX">;
+defm: IntReduce_ShortLong<v256i64, I64, i64, "L","SLFST">;
+defm: IntReduce_ShortLong<v256i32, I32, i32, "WSX","SWFSTSX">;
+/// } reduce AND/OR/XOR/ADD
