@@ -33,6 +33,8 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
   const VESubtarget *getST() const { return ST; }
   const VETargetLowering *getTLI() const { return TLI; }
 
+  // Experimental vectorization
+  bool vectorize() const { return getST()->vectorize(); }
   bool enableVPU() const { return getST()->enableVPU(); }
 
 public:
@@ -43,6 +45,8 @@ public:
   unsigned getNumberOfRegisters(unsigned ClassID) const {
     bool VectorRegs = (ClassID == 1);
     if (VectorRegs) {
+      if (vectorize())
+        return 64;
       // TODO report vregs once vector isel is stable.
       return 0;
     }
@@ -52,6 +56,8 @@ public:
 
   unsigned getRegisterBitWidth(bool Vector) const {
     if (Vector) {
+      if (vectorize())
+        return 256 * 64;
       // TODO report vregs once vector isel is stable.
       return 0;
     }
@@ -59,6 +65,11 @@ public:
   }
 
   unsigned getMinVectorRegisterBitWidth() const {
+    // Let's say 8 vector length minimum.
+    // TODO: Need to implement experimental vectorization first, then
+    //       evaluate minimum vector length for the best performance.
+    if (vectorize())
+      return 8 * 64;
     // TODO report vregs once vector isel is stable.
     return 0;
   }
