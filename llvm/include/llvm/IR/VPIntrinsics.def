@@ -32,7 +32,7 @@
 // This is a reduction intrinsic with accumulator arg at ACCUPOS, reduced vector
 // arg at VECTORPOS.
 #ifndef HANDLE_VP_REDUCTION
-#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS)
+#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, SCALAROC, SCALARINTRIN, SCALARISD)
 #endif
 
 // The intrinsic VPID of llvm.vp.* functionally corresponds to the intrinsic
@@ -81,9 +81,9 @@
 #define HANDLE_VP_IS_XCMP
 #endif
 
-// link this VP ID to a strict VP OC
-#ifndef HANDLE_VP_TO_SEQSD
-#define HANDLE_VP_TO_SEQSD(SEQSD)
+// link this VP ID to a relaxed (fp semantics) VP OC
+#ifndef HANDLE_VP_TO_RELAXEDSD
+#define HANDLE_VP_TO_RELAXEDSD(RELAXEDSD)
 #endif
 
 ///// REGISTER macros /////
@@ -562,101 +562,103 @@ END_REGISTER_CASES(vp_select, VP_SELECT)
 // llvm.vp.reduce.add(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_add, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_ADD, 0, vp_reduce_add, 1, 2)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, ADD, None, ADD)
 HANDLE_VP_TO_INTRIN(vector_reduce_add)
 END_REGISTER_CASES(vp_reduce_add, VP_REDUCE_ADD)
 
 // llvm.vp.reduce.mul(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_mul, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_MUL, 0, vp_reduce_mul, 1, 2)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, MUL, None, MUL)
 HANDLE_VP_TO_INTRIN(vector_reduce_mul)
 END_REGISTER_CASES(vp_reduce_mul, VP_REDUCE_MUL)
 
 // llvm.vp.reduce.and(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_and, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_AND, 0, vp_reduce_and, 1, 2)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, AND, None, AND)
 HANDLE_VP_TO_INTRIN(vector_reduce_and)
 END_REGISTER_CASES(vp_reduce_and, VP_REDUCE_AND)
 
 // llvm.vp.reduce.or(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_or, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_OR, 0, vp_reduce_or, 1, 2)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, OR, None, OR)
 HANDLE_VP_TO_INTRIN(vector_reduce_or)
 END_REGISTER_CASES(vp_reduce_or, VP_REDUCE_OR)
 
 // llvm.vp.reduce.xor(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_xor, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_XOR, 0, vp_reduce_xor, 1, 2)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, XOR, None, XOR)
 HANDLE_VP_TO_INTRIN(vector_reduce_xor)
 END_REGISTER_CASES(vp_reduce_xor, VP_REDUCE_XOR)
 
 // llvm.vp.reduce.smin(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_smin, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_SMIN, 0, vp_reduce_smin, 1, 2)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, None, int_smin, SMIN)
 HANDLE_VP_TO_INTRIN(vector_reduce_smin)
 END_REGISTER_CASES(vp_reduce_smin, VP_REDUCE_SMIN)
 
 // llvm.vp.reduce.smax(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_smax, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_SMAX, 0, vp_reduce_smax, 1, 2)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, None, int_smax, SMAX)
 HANDLE_VP_TO_INTRIN(vector_reduce_smax)
 END_REGISTER_CASES(vp_reduce_smax, VP_REDUCE_SMAX)
 
 // llvm.vp.reduce.umin(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_umin, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_UMIN, 0, vp_reduce_umin, 1, 2)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, None, int_umin, UMIN)
 HANDLE_VP_TO_INTRIN(vector_reduce_umin)
 END_REGISTER_CASES(vp_reduce_umin, VP_REDUCE_UMIN)
 
 // llvm.vp.reduce.umax(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_umax, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_UMAX, 0, vp_reduce_umax, 1, 2)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, None, int_umax, UMAX)
 HANDLE_VP_TO_INTRIN(vector_reduce_umax)
 END_REGISTER_CASES(vp_reduce_umax, VP_REDUCE_UMAX)
 
 // llvm.vp.reduce.fadd(accu,x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fadd, 2, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FADD, 0, vp_reduce_fadd, 1, 2)
-HANDLE_VP_REDUCTION(0, 1)
+BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_SEQ_FADD, 1, vp_reduce_seq_fadd, 1, 2)
+HANDLE_VP_REDUCTION(0, 1, FADD, None, FADD)
 HANDLE_VP_TO_INTRIN(vector_reduce_fadd)
-HANDLE_VP_TO_SEQSD(VP_REDUCE_SEQ_FADD)
-END_REGISTER_CASES(vp_reduce_fadd, VP_REDUCE_FADD)
+HANDLE_VP_TO_RELAXEDSD(VP_REDUCE_FADD)
+END_REGISTER_CASES(vp_reduce_fadd, VP_REDUCE_SEQ_FADD)
 
-// vp_strict_reduce_fadd (associated node)
-BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_SEQ_FADD, 1, vp_reduce_strict_fadd, 2, 3)
-END_REGISTER_VP_SDNODE(VP_REDUCE_SEQ_FADD)
+// vp_reduce_fadd (relaxed fp reduction node)
+BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FADD, 0, vp_reduce_fadd, 2, 3)
+HANDLE_VP_REDUCTION(None, 0, FADD, None, FADD)
+END_REGISTER_VP_SDNODE(VP_REDUCE_FADD)
 
 // llvm.vp.reduce.fmul(accu,x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fmul, 2, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FMUL, 0, vp_reduce_fmul, 1, 2)
-HANDLE_VP_REDUCTION(0, 1)
+BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_SEQ_FMUL, 1, vp_reduce_seq_fmul, 1, 2)
+HANDLE_VP_REDUCTION(0, 1, FMUL, None, FMUL)
 HANDLE_VP_TO_INTRIN(vector_reduce_fmul)
-HANDLE_VP_TO_SEQSD(VP_REDUCE_SEQ_FMUL)
-END_REGISTER_CASES(vp_reduce_fmul, VP_REDUCE_FMUL)
+HANDLE_VP_TO_RELAXEDSD(VP_REDUCE_FMUL)
+END_REGISTER_CASES(vp_reduce_fmul, VP_REDUCE_SEQ_FMUL)
 
 // vp_strict_reduce_fmul (associated node)
-BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_SEQ_FMUL, 1, vp_reduce_strict_fmul, 2, 3)
-END_REGISTER_VP_SDNODE(VP_REDUCE_SEQ_FMUL)
+BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FMUL, 0, vp_reduce_fmul, 2, 3)
+HANDLE_VP_REDUCTION(None, 0, FMUL, None, FMUL)
+END_REGISTER_VP_SDNODE(VP_REDUCE_FMUL)
 
 // llvm.vp.reduce.fmin(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fmin, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FMIN, 0, vp_reduce_fmin, 0, 1)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, None, int_minnum, FMINNUM)
 HANDLE_VP_TO_INTRIN(vector_reduce_fmin)
 END_REGISTER_CASES(vp_reduce_fmin, VP_REDUCE_FMIN)
 
 // llvm.vp.reduce.fmax(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_reduce_fmax, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_REDUCE_FMAX, 0, vp_reduce_fmax, 0, 1)
-HANDLE_VP_REDUCTION(None, 0)
+HANDLE_VP_REDUCTION(None, 0, None, int_maxnum, FMAXNUM)
 HANDLE_VP_TO_INTRIN(vector_reduce_fmax)
 END_REGISTER_CASES(vp_reduce_fmax, VP_REDUCE_FMAX)
 
@@ -676,4 +678,4 @@ END_REGISTER_CASES(vp_reduce_fmax, VP_REDUCE_FMAX)
 #undef HANDLE_VP_FPCONSTRAINT
 #undef HANDLE_VP_REDUCTION
 #undef HANDLE_VP_TO_SDNODE
-#undef HANDLE_VP_TO_SEQSD
+#undef HANDLE_VP_TO_RELAXEDSD

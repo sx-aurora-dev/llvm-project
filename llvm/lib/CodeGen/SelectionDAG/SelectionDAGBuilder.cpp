@@ -7304,15 +7304,15 @@ void SelectionDAGBuilder::visitCmpVP(const VPIntrinsic &I) {
                               MaskOp, LenOp));
 }
 
-static Optional<unsigned> getSequencedVPSD(unsigned VPIntrinsicID) {
-  Optional<unsigned> StrictOC;
-  switch (VPIntrinsicID) {
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_TO_SEQSD(STRICTSD) StrictOC = ISD::STRICTSD;
-#define END_REGISTER_VP_INTRINSIC(...) break;
+static Optional<unsigned> getRelaxedVPSD(unsigned VPOC) {
+  Optional<unsigned> RelaxedOC;
+  switch (VPOC) {
+#define BEGIN_REGISTER_VP_SDNODE(VPID, ...) case ISD::VPID:
+#define HANDLE_VP_TO_RELAXEDSD(RELAXEDSD) RelaxedOC = ISD::RELAXEDSD;
+#define END_REGISTER_VP_SDNODE(...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
-  return StrictOC;
+  return RelaxedOC;
 }
 
 static Optional<unsigned> getISDForVPIntrinsic(const VPIntrinsic &VPIntrin) {
@@ -7331,14 +7331,18 @@ static Optional<unsigned> getISDForVPIntrinsic(const VPIntrinsic &VPIntrin) {
 }
 
 static Optional<unsigned> getScalarISDForVPReduce(unsigned VPOC) {
+  Optional<unsigned> ScalarOC;
   switch (VPOC) {
   default:
-    return None;
+    break;
 
-  // TODO factor into VPIntrinsics.def
-  case ISD::VP_REDUCE_FADD: return ISD::FADD;
-  case ISD::VP_REDUCE_FMUL: return ISD::FMUL;
+#define BEGIN_REGISTER_VP_SDNODE(NODEID, ...) case ISD::NODEID:
+#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, SCAIROC, SCAIRINTRIN, SCASDNODE) \
+    ScalarOC = ISD::SCASDNODE;
+#define END_REGISTER_VP_SDNODE(...) break;
+#include "llvm/IR/VPIntrinsics.def"
   }
+  return ScalarOC;
 }
 
 void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
@@ -7359,28 +7363,32 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
   unsigned ReduceOC = ReduceOCOpt.getValue();
   Optional<unsigned> ScalarOCOpt = getScalarISDForVPReduce(ReduceOC);
   SDValue ResV;
-  if (ScalarOCOpt && FMFSource->hasAllowReassoc()) {
-    LLVM_DEBUG(dbgs() << "visitReduceVP: reassoc-able FP\n";);
+
+  // The reduction op without order constraints (fp only - integer is already unordered)
+  Optional<unsigned> RelaxedOC = getRelaxedVPSD(ReduceOC);
+  assert((!RelaxedOC || FMFSource) && "Expecting relaxable reductions to be fp ops");
+
+  if (RelaxedOC && FMFSource->hasAllowReassoc()) {
+    // fp reduction with reassoc flags -> use the relaxed opcode and scalarize the start value.
+    LLVM_DEBUG(dbgs() << "visitReduceVP: reassoc FP\n";);
     // Re-associatable reduction with an explicit start parameter for the strict
     // case
     SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
     SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
-    auto ReducedV = DAG.getNode(ReduceOC, dl, ResVT, {VectorV, MaskV, EVLV}, OpFlags);
-    ResV = DAG.getNode(ScalarOCOpt.getValue(), dl, ResVT, ScalarV, ReducedV, OpFlags);
+    auto ReducedV = DAG.getNode(RelaxedOC.getValue(), dl, ResVT,
+                                {VectorV, MaskV, EVLV}, OpFlags);
+    ResV = DAG.getNode(ScalarOCOpt.getValue(), dl, ResVT, ScalarV, ReducedV,
+                       OpFlags);
 
-  } else if (ScalarOCOpt) {
-    LLVM_DEBUG(dbgs() << "visitReduceVP: sequenced FP\n";);
-    // Strict reduction (vp_reduce_strict_fadd/fmul)
-    // Reductions are lowered to either VP_REDUCE_SEQ_<OP> or VP_REDUCE_<OP>
-    // depending on the reassoc flag.
-    ReduceOC = getSequencedVPSD(VPIntrin.getIntrinsicID()).getValue();
-
+  } else if (RelaxedOC && !FMFSource->hasAllowReassoc()) {
+    // fp reduction w/o reassoc -> translate to a strigt opcode
+    LLVM_DEBUG(dbgs() << "visitReduceVP: ordered FP\n";);
     SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
     SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
     ResV = DAG.getNode(ReduceOC, dl, ResVT, {ScalarV, VectorV, MaskV, EVLV}, OpFlags);
 
   } else {
-    LLVM_DEBUG(dbgs() << "visitReduceVP: non-sequence-able\n";);
+    LLVM_DEBUG(dbgs() << "visitReduceVP: unordered\n";);
 
     // Re-associatable without strict case and no initial arg (eg ADD reduction)
     SDValue VectorV = getValue(VPIntrin.getArgOperand(0));

@@ -399,7 +399,7 @@ Optional<int> VPIntrinsic::GetReductionVectorParamPos(Intrinsic::ID VPID) {
     return None;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS) ParamPos = VECTORPOS;
+#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, ...) ParamPos = VECTORPOS;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -421,7 +421,7 @@ Optional<int> VPIntrinsic::GetReductionAccuParamPos(Intrinsic::ID VPID) {
     return None;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS) ParamPos = ACCUPOS;
+#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, ...) ParamPos = ACCUPOS;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
