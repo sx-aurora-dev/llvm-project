@@ -1,6 +1,6 @@
 ; RUN: llc -O0 --march=ve %s -o=/dev/stdout | FileCheck %s
 
-define void @test_vp_harness(<256 x i32>* %Out, <256 x i32> %i0) {
+define fastcc void @test_vp_harness(<256 x i32>* %Out, <256 x i32> %i0) {
 ; CHECK-LABEL: test_vp_harness:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -12,15 +12,21 @@ define void @test_vp_harness(<256 x i32>* %Out, <256 x i32> %i0) {
   ret void
 }
 
-define void @test_vp_add_sub_mul(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n) {
+define fastcc void @test_vp_add_sub_mul(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_add_sub_mul:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vadds.w.sx %v2, %v0, %v1, %vm1
-; CHECK-NEXT:    vsubs.w.sx %v0, %v0, %v1, %vm1
-; CHECK-NEXT:    vmuls.w.sx %v0, %v2, %v0, %vm1
+; CHECK-NEXT:    vadds.w.sx %v0, %v1, %v2, %vm1
+; CHECK-NEXT:    vsubs.w.sx %v1, %v1, %v2, %vm1
+; CHECK-NEXT:    vmuls.w.sx %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -33,7 +39,7 @@ define void @test_vp_add_sub_mul(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32>
   ret void
 }
 
-define void @test_vp_su_div(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n) {
+define fastcc void @test_vp_su_div(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_su_div:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
@@ -53,18 +59,24 @@ define void @test_vp_su_div(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i1,
 }
 
 
-define void @test_vp_bitarith(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n) {
+define fastcc void @test_vp_bitarith(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_bitarith:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvand.lo %v2, %v0, %v1, %vm1
-; CHECK-NEXT:    pvor.lo %v3, %v2, %v1, %vm1
-; CHECK-NEXT:    pvxor.lo %v0, %v0, %v3, %vm1
-; CHECK-NEXT:    pvsra.lo %v0, %v0, %v1, %vm1
-; CHECK-NEXT:    pvsrl.lo %v1, %v0, %v2, %vm1
-; CHECK-NEXT:    pvsll.lo %v0, %v1, %v0, %vm1
+; CHECK-NEXT:    pvand.lo %v0, %v1, %v2, %vm1
+; CHECK-NEXT:    pvor.lo %v3, %v0, %v2, %vm1
+; CHECK-NEXT:    pvxor.lo %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    pvsra.lo %v1, %v1, %v2, %vm1
+; CHECK-NEXT:    pvsrl.lo %v0, %v1, %v0, %vm1
+; CHECK-NEXT:    pvsll.lo %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -80,19 +92,22 @@ define void @test_vp_bitarith(<256 x i32>* %Out, <256 x i32> %i0, <256 x i32> %i
   ret void
 }
 
-define void @test_vp_memory(<256 x i32>* %VecPtr, <256 x i32*> %PtrVec, <256 x i32> %i0, <256 x i1> %m, i32 %n) {
+define fastcc void @test_vp_memory(<256 x i32>* %VecPtr, <256 x i32*> %PtrVec, <256 x i32> %i0, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_memory:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vseq %v1
-; CHECK-NEXT:    vmulu.l %v1, 4, %v1, %vm1
-; CHECK-NEXT:    vaddu.l %v1, %s0, %v1, %vm1
-; CHECK-NEXT:    vgtl.zx %v1, %v1, 0, 0, %vm1
-; CHECK-NEXT:    vgtl.zx %v2, %v0, 0, 0, %vm1
-; CHECK-NEXT:    vscl %v0, %v1, 0, 0, %vm1
-; CHECK-NEXT:    vstl %v2, 4, %s0, %vm1
+; CHECK-NEXT:    vseq %v0
+; CHECK-NEXT:    vmulu.l %v0, 4, %v0, %vm1
+; CHECK-NEXT:    vaddu.l %v0, %s0, %v0, %vm1
+; CHECK-NEXT:    vgtl.zx %v1, %v0, 0, 0, %vm1
+; CHECK-NEXT:    vgtl.zx %v0, %v2, 0, 0, %vm1
+; CHECK-NEXT:    vscl %v2, %v1, 0, 0, %vm1
+; CHECK-NEXT:    vstl %v0, 4, %s0, %vm1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <256 x i32> @llvm.vp.load.v256i32.p0v256i32(<256 x i32>* %VecPtr, <256 x i1> %m, i32 %n)
   %r1 = call <256 x i32> @llvm.vp.gather.v256i32.v256p0i32(<256 x i32*> %PtrVec, <256 x i1> %m, i32 %n)
