@@ -41,21 +41,27 @@ public:
         TLI(ST->getTargetLowering()) {}
 
   unsigned getNumberOfRegisters(unsigned ClassID) const {
-    bool Vector = (ClassID == 1);
-    if (Vector) {
-      return 64;
+    bool VectorRegs = (ClassID == 1);
+    if (VectorRegs) {
+      // TODO report vregs once vector isel is stable.
+      return 0;
     }
+
     return 64;
   }
 
   unsigned getRegisterBitWidth(bool Vector) const {
-      if (Vector) {
-          return 256*64;
-      }
-      return 64;
+    if (Vector) {
+      // TODO report vregs once vector isel is stable.
+      return 0;
+    }
+    return 64;
   }
 
-  unsigned getMinVectorRegisterBitWidth() const { return 256*64; }
+  unsigned getMinVectorRegisterBitWidth() const {
+    // TODO report vregs once vector isel is stable.
+    return 0;
+  }
 
   bool isLegalMaskedLoad(Type *DataType, MaybeAlign Alignment) {
 #if 1
