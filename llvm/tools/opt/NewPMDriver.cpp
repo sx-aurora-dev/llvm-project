@@ -30,7 +30,6 @@
 #include "llvm/Passes/PassBuilder.h"
 #include "llvm/Passes/PassPlugin.h"
 #include "llvm/Passes/StandardInstrumentations.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/ToolOutputFile.h"
 #include "llvm/Target/TargetMachine.h"
@@ -41,6 +40,17 @@
 
 using namespace llvm;
 using namespace opt_tool;
+
+namespace llvm {
+cl::opt<bool> DebugifyEach(
+    "debugify-each",
+    cl::desc("Start each pass with debugify and end it with check-debugify"));
+
+cl::opt<std::string>
+    DebugifyExport("debugify-export",
+                   cl::desc("Export per-pass debugify statistics to this file"),
+                   cl::value_desc("filename"));
+} // namespace llvm
 
 static cl::opt<bool>
     DebugPM("debug-pass-manager", cl::Hidden,
@@ -180,10 +190,11 @@ static void registerEPCallbacks(PassBuilder &PB) {
           Err(PB.parsePassPipeline(PM, VectorizerStartEPPipeline));
         });
   if (tryParsePipelineText<ModulePassManager>(PB, PipelineStartEPPipeline))
-    PB.registerPipelineStartEPCallback([&PB](ModulePassManager &PM) {
-      ExitOnError Err("Unable to parse PipelineStartEP pipeline: ");
-      Err(PB.parsePassPipeline(PM, PipelineStartEPPipeline));
-    });
+    PB.registerPipelineStartEPCallback(
+        [&PB](ModulePassManager &PM, PassBuilder::OptimizationLevel) {
+          ExitOnError Err("Unable to parse PipelineStartEP pipeline: ");
+          Err(PB.parsePassPipeline(PM, PipelineStartEPPipeline));
+        });
   if (tryParsePipelineText<FunctionPassManager>(PB, OptimizerLastEPPipeline))
     PB.registerOptimizerLastEPCallback(
         [&PB](ModulePassManager &PM, PassBuilder::OptimizationLevel) {
@@ -249,6 +260,9 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
   PassInstrumentationCallbacks PIC;
   StandardInstrumentations SI(DebugPM, VerifyEachPass);
   SI.registerCallbacks(PIC);
+  DebugifyEachInstrumentation Debugify;
+  if (DebugifyEach)
+    Debugify.registerCallbacks(PIC);
 
   PipelineTuningOptions PTO;
   // LoopUnrolling defaults on to true and DisableLoopUnrolling is initialized
@@ -420,6 +434,9 @@ bool llvm::runPassPipeline(StringRef Arg0, Module &M, TargetMachine *TM,
 
   if (OptRemarkFile)
     OptRemarkFile->keep();
+
+  if (DebugifyEach && !DebugifyExport.empty())
+    exportDebugifyStats(DebugifyExport, Debugify.StatsMap);
 
   return true;
 }

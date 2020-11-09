@@ -273,6 +273,9 @@ template <class ELFT> class ELFState {
                            const ELFYAML::StackSizesSection &Section,
                            ContiguousBlobAccumulator &CBA);
   void writeSectionContent(Elf_Shdr &SHeader,
+                           const ELFYAML::BBAddrMapSection &Section,
+                           ContiguousBlobAccumulator &CBA);
+  void writeSectionContent(Elf_Shdr &SHeader,
                            const ELFYAML::HashSection &Section,
                            ContiguousBlobAccumulator &CBA);
   void writeSectionContent(Elf_Shdr &SHeader,
@@ -756,6 +759,8 @@ void ELFState<ELFT>::initSectionHeaders(std::vector<Elf_Shdr> &SHeaders,
       writeSectionContent(SHeader, *S, CBA);
     } else if (auto S = dyn_cast<ELFYAML::CallGraphProfileSection>(Sec)) {
       writeSectionContent(SHeader, *S, CBA);
+    } else if (auto S = dyn_cast<ELFYAML::BBAddrMapSection>(Sec)) {
+      writeSectionContent(SHeader, *S, CBA);
     } else {
       llvm_unreachable("Unknown section type");
     }
@@ -930,7 +935,8 @@ void ELFState<ELFT>::initStrtabSectionHeader(Elf_Shdr &SHeader, StringRef Name,
   ELFYAML::RawContentSection *RawSec =
       dyn_cast_or_null<ELFYAML::RawContentSection>(YAMLSec);
 
-  SHeader.sh_offset = alignToOffset(CBA, SHeader.sh_addralign, /*Offset=*/None);
+  SHeader.sh_offset = alignToOffset(CBA, SHeader.sh_addralign,
+                                    YAMLSec ? YAMLSec->Offset : None);
 
   if (RawSec && (RawSec->Content || RawSec->Size)) {
     SHeader.sh_size = writeContent(CBA, RawSec->Content, RawSec->Size);
@@ -1312,6 +1318,29 @@ void ELFState<ELFT>::writeSectionContent(
   for (const ELFYAML::StackSizeEntry &E : *Section.Entries) {
     CBA.write<uintX_t>(E.Address, ELFT::TargetEndianness);
     SHeader.sh_size += sizeof(uintX_t) + CBA.writeULEB128(E.Size);
+  }
+}
+
+template <class ELFT>
+void ELFState<ELFT>::writeSectionContent(
+    Elf_Shdr &SHeader, const ELFYAML::BBAddrMapSection &Section,
+    ContiguousBlobAccumulator &CBA) {
+  if (!Section.Entries)
+    return;
+
+  for (const ELFYAML::BBAddrMapEntry &E : *Section.Entries) {
+    // Write the address of the function.
+    CBA.write<uintX_t>(E.Address, ELFT::TargetEndianness);
+    // Write number of BBEntries (number of basic blocks in the function).
+    size_t NumBlocks = E.BBEntries ? E.BBEntries->size() : 0;
+    SHeader.sh_size += sizeof(uintX_t) + CBA.writeULEB128(NumBlocks);
+    if (!NumBlocks)
+      continue;
+    // Write all BBEntries.
+    for (const ELFYAML::BBAddrMapEntry::BBEntry &BBE : *E.BBEntries)
+      SHeader.sh_size += CBA.writeULEB128(BBE.AddressOffset) +
+                         CBA.writeULEB128(BBE.Size) +
+                         CBA.writeULEB128(BBE.Metadata);
   }
 }
 

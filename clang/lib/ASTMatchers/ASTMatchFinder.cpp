@@ -500,6 +500,17 @@ public:
                           const DynTypedMatcher &Matcher,
                           BoundNodesTreeBuilder *Builder, int MaxDepth,
                           TraversalKind Traversal, BindKind Bind) {
+    bool ScopedTraversal = TraversingTemplateInstantiationNotSpelledInSource;
+
+    if (const auto *CTSD = Node.get<ClassTemplateSpecializationDecl>()) {
+      int SK = CTSD->getSpecializationKind();
+      if (SK == TSK_ExplicitInstantiationDeclaration ||
+          SK == TSK_ExplicitInstantiationDefinition)
+        ScopedTraversal = true;
+    }
+
+    TemplateInstantiationNotSpelledInSourceScope RAII(this, ScopedTraversal);
+
     MatchChildASTVisitor Visitor(
       &Matcher, this, Builder, MaxDepth, Traversal, Bind);
     return Visitor.findMatch(Node);
@@ -584,7 +595,45 @@ public:
   bool shouldVisitTemplateInstantiations() const { return true; }
   bool shouldVisitImplicitCode() const { return true; }
 
+  bool IsMatchingInTemplateInstantiationNotSpelledInSource() const override {
+    return TraversingTemplateInstantiationNotSpelledInSource;
+  }
+
+  bool TraverseTemplateInstantiations(ClassTemplateDecl *D) {
+    TemplateInstantiationNotSpelledInSourceScope RAII(this, true);
+    return RecursiveASTVisitor<MatchASTVisitor>::TraverseTemplateInstantiations(
+        D);
+  }
+
+  bool TraverseTemplateInstantiations(VarTemplateDecl *D) {
+    TemplateInstantiationNotSpelledInSourceScope RAII(this, true);
+    return RecursiveASTVisitor<MatchASTVisitor>::TraverseTemplateInstantiations(
+        D);
+  }
+
+  bool TraverseTemplateInstantiations(FunctionTemplateDecl *D) {
+    TemplateInstantiationNotSpelledInSourceScope RAII(this, true);
+    return RecursiveASTVisitor<MatchASTVisitor>::TraverseTemplateInstantiations(
+        D);
+  }
+
 private:
+  bool TraversingTemplateInstantiationNotSpelledInSource = false;
+
+  struct TemplateInstantiationNotSpelledInSourceScope {
+    TemplateInstantiationNotSpelledInSourceScope(MatchASTVisitor *V, bool B)
+        : MV(V), MB(V->TraversingTemplateInstantiationNotSpelledInSource) {
+      V->TraversingTemplateInstantiationNotSpelledInSource = B;
+    }
+    ~TemplateInstantiationNotSpelledInSourceScope() {
+      MV->TraversingTemplateInstantiationNotSpelledInSource = MB;
+    }
+
+  private:
+    MatchASTVisitor *MV;
+    bool MB;
+  };
+
   class TimeBucketRegion {
   public:
     TimeBucketRegion() : Bucket(nullptr) {}

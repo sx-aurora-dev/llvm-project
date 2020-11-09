@@ -1101,29 +1101,18 @@ multiclass RMm<string opcStr, bits<8>opc, RegisterClass RC> {
 }
 
 // Section 8.2.1 - LEA
-let isReMaterializable = 1 in {
-let cx = 0, DecoderMethod = "DecodeLoadI64" in
-defm LEA : RMm<"lea", 0x06, I64>;
-let cx = 1, DecoderMethod = "DecodeLoadI64" in
-defm LEASL : RMm<"lea.sl", 0x06, I64>;
+let isReMaterializable = 1, isAsCheapAsAMove = 1,
+    DecoderMethod = "DecodeLoadI64" in {
+  let cx = 0 in defm LEA : RMm<"lea", 0x06, I64>;
+  let cx = 1 in defm LEASL : RMm<"lea.sl", 0x06, I64>;
 }
 
+// LEA basic patterns.
+//   Need to be defined here to prioritize LEA over ADX.
 def : Pat<(iPTR ADDRrri:$addr), (LEArri MEMrri:$addr)>;
 def : Pat<(iPTR ADDRrii:$addr), (LEArii MEMrii:$addr)>;
 def : Pat<(add I64:$base, simm32:$disp), (LEArii $base, 0, (LO32 $disp))>;
 def : Pat<(add I64:$base, lozero:$disp), (LEASLrii $base, 0, (HI32 $disp))>;
-
-def lea_add : PatFrags<(ops node:$base, node:$idx, node:$disp),
-                       [(add (add node:$base, node:$idx), node:$disp),
-                        (add (add node:$base, node:$disp), node:$idx)]>;
-def : Pat<(lea_add I64:$base, simm7:$idx, simm32:$disp),
-          (LEArii $base, (LO7 $idx), (LO32 $disp))>;
-def : Pat<(lea_add I64:$base, I64:$idx, simm32:$disp),
-          (LEArri $base, $idx, (LO32 $disp))>;
-def : Pat<(lea_add I64:$base, simm7:$idx, lozero:$disp),
-          (LEASLrii $base, (LO7 $idx), (HI32 $disp))>;
-def : Pat<(lea_add I64:$base, I64:$idx, lozero:$disp),
-          (LEASLrri $base, $idx, (HI32 $disp))>;
 
 // Multiclass for load instructions.
 let mayLoad = 1, hasSideEffects = 0 in
@@ -1324,6 +1313,8 @@ def SVOB : RR<0x30, (outs), (ins), "svob">;
 // Section 8.4 - Fixed-point Operation Instructions
 //-----------------------------------------------------------------------------
 
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
+
 // Section 8.4.1 - ADD (Add)
 let isReMaterializable = 1 in {
 defm ADDUL : RRm<"addu.l", 0x48, I64, i64>;
@@ -1346,6 +1337,8 @@ let cx = 1 in defm SUBSWZX : RRNCm<"subs.w.zx", 0x5A, I32, i32>;
 
 // Section 8.4.6 - SBX (Subtract)
 defm SUBSL : RRNCm<"subs.l", 0x5B, I64, i64, sub>;
+
+} // isReMaterializable, isAsCheapAsAMove
 
 // Section 8.4.7 - MPY (Multiply)
 defm MULUL : RRm<"mulu.l", 0x49, I64, i64>;
@@ -1372,6 +1365,8 @@ let cx = 1 in defm DIVSWZX : RRNCm<"divs.w.zx", 0x7B, I32, i32>;
 // Section 8.4.13 - DVX (Divide)
 defm DIVSL : RRNCm<"divs.l", 0x7F, I64, i64, sdiv>;
 
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
+
 // Section 8.4.14 - CMP (Compare)
 defm CMPUL : RRNCm<"cmpu.l", 0x55, I64, i64, CMPU>;
 let cx = 1 in defm CMPUW : RRNCm<"cmpu.w", 0x55, I32, i32, CMPU>;
@@ -1395,6 +1390,8 @@ defm MAXSL : RRm<"maxs.l", 0x68, I64, i64, smax>;
 let cw = 1 in defm MINSL : RRm<"mins.l", 0x68, I64, i64, smin>;
 }
 
+} // isReMaterializable, isAsCheapAsAMove
+
 //-----------------------------------------------------------------------------
 // Section 8.5 - Logical Operation Instructions
 //-----------------------------------------------------------------------------
@@ -1403,22 +1400,29 @@ def xor_pat : PatFrags<(ops node:$lhs, node:$rhs),
                        [(xor node:$lhs, node:$rhs),
                         (XOR node:$lhs, node:$rhs)]>;
 // Section 8.5.1 - AND (AND)
-let isReMaterializable = 1 in {
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm AND : RRm<"and", 0x44, I64, i64, and>;
 
 // Section 8.5.2 - OR (OR)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm OR : RRm<"or", 0x45, I64, i64, or>;
 
 // Section 8.5.3 - XOR (Exclusive OR)
+def xor_pat : PatFrags<(ops node:$lhs, node:$rhs),
+                       [(xor node:$lhs, node:$rhs),
+                        (XOR node:$lhs, node:$rhs)]>;
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm XOR : RRm<"xor", 0x46, I64, i64, xor_pat>;
 }
 
 // Section 8.5.4 - EQV (Equivalence)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm EQV : RRm<"eqv", 0x47, I64, i64, EQV>;
 
 // Section 8.5.5 - NND (Negate AND)
 def and_not : PatFrags<(ops node:$x, node:$y),
                        [(and (not node:$x), node:$y)]>;
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm NND : RRNCm<"nnd", 0x54, I64, i64, and_not>;
 
 // Section 8.5.6 - MRG (Merge)
@@ -1428,16 +1432,20 @@ defm MRG : RRMRGm<"mrg", 0x56, I64, i64>;
 def ctlz_pat : PatFrags<(ops node:$src),
                         [(ctlz node:$src),
                          (ctlz_zero_undef node:$src)]>;
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm LDZ : RRI1m<"ldz", 0x67, I64, i64, ctlz_pat>;
 
 // Section 8.5.8 - PCNT (Population Count)
 defm PCNT : RRI1m<"pcnt", 0x38, I64, i64, ctpop>;
 
 // Section 8.5.9 - BRV (Bit Reverse)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm BRV : RRI1m<"brv", 0x39, I64, i64, bitreverse>;
 
 // Section 8.5.10 - BSWP (Byte Swap)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm BSWP : RRSWPm<"bswp", 0x2B, I64, i64>;
+
 def : Pat<(i64 (bswap i64:$src)),
           (BSWPri $src, 0)>;
 def : Pat<(i64 (bswap (i64 mimm:$src))),
@@ -1471,16 +1479,20 @@ def : MnemonicAlias<"cmov.s", "cmov.s.at">;
 
 let isReMaterializable = 1 in {
 // Section 8.6.1 - SLL (Shift Left Logical)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm SLL : RRIm<"sll", 0x65, I64, i64, shl>;
 
 // Section 8.6.2 - SLD (Shift Left Double)
 defm SLD : RRILDm<"sld", 0x64, I64, i64>;
 
 // Section 8.6.3 - SRL (Shift Right Logical)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm SRL : RRIm<"srl", 0x75, I64, i64, srl>;
 
 // Section 8.6.4 - SRD (Shift Right Double)
 defm SRD : RRIRDm<"srd", 0x74, I64, i64>;
+
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 
 // Section 8.6.5 - SLA (Shift Left Arithmetic)
 defm SLAWSX : RRIm<"sla.w.sx", 0x66, I32, i32, shl>;
@@ -1496,6 +1508,8 @@ let cx = 1 in defm SRAWZX : RRIm<"sra.w.zx", 0x76, I32, i32>;
 // Section 8.6.8 - SRAX (Shift Right Arithmetic)
 defm SRAL : RRIm<"sra.l", 0x77, I64, i64, sra>;
 }
+
+} // isReMaterializable, isAsCheapAsAMove
 
 def : Pat<(i32 (srl i32:$src, (i32 simm7:$val))),
           (EXTRACT_SUBREG (SRLri (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)),
@@ -1794,6 +1808,59 @@ def : Pat<(i64 imm:$val),
           (LEASLrii (ANDrm (LEAzii 0, 0, (LO32 imm:$val)), !add(32, 64)), 0,
                     (HI32 imm:$val))>;
 
+// LEA patterns
+def lea_add : PatFrags<(ops node:$base, node:$idx, node:$disp),
+                       [(add (add node:$base, node:$idx), node:$disp),
+                        (add (add node:$base, node:$disp), node:$idx),
+                        (add node:$base, (add $idx, $disp))]>;
+def : Pat<(lea_add I64:$base, simm7:$idx, simm32:$disp),
+          (LEArii $base, (LO7 $idx), (LO32 $disp))>;
+def : Pat<(lea_add I64:$base, I64:$idx, simm32:$disp),
+          (LEArri $base, $idx, (LO32 $disp))>;
+def : Pat<(lea_add I64:$base, simm7:$idx, lozero:$disp),
+          (LEASLrii $base, (LO7 $idx), (HI32 $disp))>;
+def : Pat<(lea_add I64:$base, I64:$idx, lozero:$disp),
+          (LEASLrri $base, $idx, (HI32 $disp))>;
+
+// Address calculation patterns and optimizations
+//
+// Generate following instructions:
+//   1. LEA %reg, label@LO32
+//      AND %reg, %reg, (32)0
+//   2. LEASL %reg, label@HI32
+//   3. (LEA %reg, label@LO32)
+//      (AND %reg, %reg, (32)0)
+//      LEASL %reg, label@HI32(, %reg)
+//   4. (LEA %reg, label@LO32)
+//      (AND %reg, %reg, (32)0)
+//      LEASL %reg, label@HI32(%reg, %got)
+//
+def velo_only : OutPatFrag<(ops node:$lo),
+                           (ANDrm (LEAzii 0, 0, $lo), !add(32, 64))>;
+def vehi_only : OutPatFrag<(ops node:$hi),
+                           (LEASLzii 0, 0, $hi)>;
+def vehi_lo : OutPatFrag<(ops node:$hi, node:$lo),
+                         (LEASLrii $lo, 0, $hi)>;
+def vehi_loimm : OutPatFrag<(ops node:$hi, node:$lo, node:$idx),
+                            (LEASLrii $lo, $idx, $hi)>;
+def vehi_baselo : OutPatFrag<(ops node:$base, node:$hi, node:$lo),
+                             (LEASLrri $base, $lo, $hi)>;
+foreach type = [ "tblockaddress", "tconstpool", "texternalsym", "tglobaladdr",
+                 "tglobaltlsaddr" ] in {
+  def : Pat<(VElo !cast<SDNode>(type):$lo), (velo_only $lo)>;
+  def : Pat<(VEhi !cast<SDNode>(type):$hi), (vehi_only $hi)>;
+  def : Pat<(add (VEhi !cast<SDNode>(type):$hi), I64:$lo), (vehi_lo $hi, $lo)>;
+  def : Pat<(add (add (VEhi !cast<SDNode>(type):$hi), I64:$lo), simm7:$val),
+            (vehi_loimm $hi, $lo, (LO7 $val))>;
+  def : Pat<(add I64:$base, (add (VEhi !cast<SDNode>(type):$hi), I64:$lo)),
+            (vehi_baselo $base, $hi, $lo)>;
+}
+
+// Address calculation of mcsym
+def : Pat<(i64 mcsym:$src),
+          (LEASLrii (ANDrm (LEAzii 0, 0, (LO32 mcsym:$src)), !add(32, 64)), 0,
+                    (HI32 mcsym:$src))>;
+
 // floating point
 def : Pat<(f32 fpimm:$val),
           (EXTRACT_SUBREG (LEASLzii 0, 0, (HIFP32 $val)), sub_f32)>;
@@ -2027,81 +2094,6 @@ multiclass TRATMSTm<SDPatternOperator from,
 defm : TRATMSTm<atomic_store_8, i32, ST1Brri, ST1Brii, ST1Bzri, ST1Bzii>;
 defm : TRATMSTm<atomic_store_16, i32, ST2Brri, ST2Brii, ST2Bzri, ST2Bzii>;
 defm : TRATMSTm<atomic_store_32, i32, STLrri, STLrii, STLzri, STLzii>;
-
-// Address calculation and its optimization
-def : Pat<(VEhi tconstpool:$in), (LEASLzii 0, 0, tconstpool:$in)>;
-def : Pat<(VElo tconstpool:$in),
-          (ANDrm (LEAzii 0, 0, tconstpool:$in), !add(32, 64))>;
-def : Pat<(add (VEhi tconstpool:$in1), (VElo tconstpool:$in2)),
-          (LEASLrii (ANDrm (LEAzii 0, 0, tconstpool:$in2), !add(32, 64)), 0,
-                    (tconstpool:$in1))>;
-
-// Address calculation and its optimization
-def : Pat<(VEhi tglobaladdr:$in), (LEASLzii 0, 0, tglobaladdr:$in)>;
-def : Pat<(VElo tglobaladdr:$in),
-          (ANDrm (LEAzii 0, 0, tglobaladdr:$in), !add(32, 64))>;
-def : Pat<(add (VEhi tglobaladdr:$in1), (VElo tglobaladdr:$in2)),
-          (LEASLrii (ANDrm (LEAzii 0, 0, tglobaladdr:$in2), !add(32, 64)), 0,
-                    (tglobaladdr:$in1))>;
-def : Pat<(add (add (VEhi tglobaladdr:$in1), (VElo tglobaladdr:$in2)),
-               simm7:$val),
-          (LEASLrii (ANDrm (LEAzii 0, 0, tglobaladdr:$in2), !add(32, 64)),
-                    (LO7 $val), (tglobaladdr:$in1))>;
-
-// Address calculation and its optimization
-def : Pat<(VEhi tblockaddress:$in), (LEASLzii 0, 0, tblockaddress:$in)>;
-def : Pat<(VElo tblockaddress:$in),
-          (ANDrm (LEAzii 0, 0, tblockaddress:$in), !add(32, 64))>;
-def : Pat<(add (VEhi tblockaddress:$in1), (VElo tblockaddress:$in2)),
-          (LEASLrii (ANDrm (LEAzii 0, 0, tblockaddress:$in2), !add(32, 64)), 0,
-                    (tblockaddress:$in1))>;
-def : Pat<(add (add (VEhi tblockaddress:$in1), (VElo tblockaddress:$in2)),
-               simm7:$val),
-          (LEASLrii (ANDrm (LEAzii 0, 0, tblockaddress:$in2), !add(32, 64)),
-                    (LO7 $val), (tblockaddress:$in1))>;
-
-// GlobalTLS address calculation and its optimization
-def : Pat<(VEhi tglobaltlsaddr:$in), (LEASLzii 0, 0, tglobaltlsaddr:$in)>;
-def : Pat<(VElo tglobaltlsaddr:$in),
-          (ANDrm (LEAzii 0, 0, tglobaltlsaddr:$in), !add(32, 64))>;
-def : Pat<(add (VEhi tglobaltlsaddr:$in1), (VElo tglobaltlsaddr:$in2)),
-          (LEASLrii (ANDrm (LEAzii 0, 0, tglobaltlsaddr:$in2), !add(32, 64)), 0,
-                    (tglobaltlsaddr:$in1))>;
-def : Pat<(add (add (VEhi tglobaltlsaddr:$in1), (VElo tglobaltlsaddr:$in2)),
-               simm7:$val),
-          (LEASLrii (ANDrm (LEAzii 0, 0, tglobaltlsaddr:$in2), !add(32, 64)),
-                    (LO7 $val), (tglobaltlsaddr:$in1))>;
-
-// Address calculation and its optimization
-def : Pat<(VEhi tconstpool:$in), (LEASLzii 0, 0, tconstpool:$in)>;
-def : Pat<(VElo tconstpool:$in),
-          (ANDrm (LEAzii 0, 0, tconstpool:$in), !add(32, 64))>;
-def : Pat<(add (VEhi tconstpool:$in1), (VElo tconstpool:$in2)),
-          (LEASLrii (ANDrm (LEAzii 0, 0, tconstpool:$in2), !add(32, 64)), 0,
-                    (tconstpool:$in1))>;
-def : Pat<(add (add (VEhi tconstpool:$in1), (VElo tconstpool:$in2)),
-               simm7:$val),
-          (LEASLrii (ANDrm (LEAzii 0, 0, tconstpool:$in2), !add(32, 64)),
-                    (LO7 $val), (tconstpool:$in1))>;
-
-// Address calculation and its optimization
-def : Pat<(VEhi texternalsym:$in), (LEASLzii 0, 0, texternalsym:$in)>;
-def : Pat<(VElo texternalsym:$in),
-          (ANDrm (LEAzii 0, 0, texternalsym:$in), !add(32, 64))>;
-def : Pat<(add (VEhi texternalsym:$in1), (VElo texternalsym:$in2)),
-          (LEASLrii (ANDrm (LEAzii 0, 0, texternalsym:$in2), !add(32, 64)), 0,
-                    (texternalsym:$in1))>;
-def : Pat<(add (add (VEhi texternalsym:$in1), (VElo texternalsym:$in2)),
-               simm7:$val),
-          (LEASLrii (ANDrm (LEAzii 0, 0, texternalsym:$in2), !add(32, 64)),
-                    (LO7 $val), (texternalsym:$in1))>;
-
-// Address calculation of mcsym
-def : Pat<(i64 mcsym:$src),
-          (LEASLrii (ANDrm (LEAzii 0, 0, (LO32 mcsym:$src)), !add(32, 64)), 0,
-                    (HI32 mcsym:$src))>;
-
-// Address calculation and its optimization
 
 // Branches
 def : Pat<(br bb:$addr), (BRCFLa bb:$addr)>;

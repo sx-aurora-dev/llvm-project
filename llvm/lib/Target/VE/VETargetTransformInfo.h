@@ -120,6 +120,7 @@ public:
     if (!enableVPU() && VectorRegs) {
       return 0;
     }
+
     return 64;
   }
 

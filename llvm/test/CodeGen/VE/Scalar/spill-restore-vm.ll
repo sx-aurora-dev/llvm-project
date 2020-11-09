@@ -12,10 +12,10 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    lea %s0, memset@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, memset@hi(, %s0)
-; CHECK-NEXT:    lea %s18, -2048(, %s9)
+; CHECK-NEXT:    lea %s0, -2048(, %s9)
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    lea %s2, 2048
-; CHECK-NEXT:    or %s0, 0, %s18
+; CHECK-NEXT:    lea %s18, -2048(, %s9)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lea %s19, 256
 ; CHECK-NEXT:    lvl %s19

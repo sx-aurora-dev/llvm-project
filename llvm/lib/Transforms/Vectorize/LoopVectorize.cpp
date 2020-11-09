@@ -6613,7 +6613,7 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
              TTI.getCmpSelInstrCost(
                  Instruction::Select, ToVectorTy(Phi->getType(), VF),
                  ToVectorTy(Type::getInt1Ty(Phi->getContext()), VF),
-                 CostKind);
+                 CmpInst::BAD_ICMP_PREDICATE, CostKind);
 
     return TTI.getCFInstrCost(Instruction::PHI, CostKind);
   }
@@ -6702,7 +6702,7 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
       CondTy = VectorType::get(CondTy, VF);
     }
     return TTI.getCmpSelInstrCost(I->getOpcode(), VectorTy, CondTy,
-                                  CostKind, I);
+                                  CmpInst::BAD_ICMP_PREDICATE, CostKind, I);
   }
   case Instruction::ICmp:
   case Instruction::FCmp: {
@@ -6711,8 +6711,8 @@ unsigned LoopVectorizationCostModel::getInstructionCost(Instruction *I,
     if (canTruncateToMinimalBitwidth(Op0AsInstruction, VF))
       ValTy = IntegerType::get(ValTy->getContext(), MinBWs[Op0AsInstruction]);
     VectorTy = ToVectorTy(ValTy, VF);
-    return TTI.getCmpSelInstrCost(I->getOpcode(), VectorTy, nullptr, CostKind,
-                                  I);
+    return TTI.getCmpSelInstrCost(I->getOpcode(), VectorTy, nullptr,
+                                  CmpInst::BAD_ICMP_PREDICATE, CostKind, I);
   }
   case Instruction::Store:
   case Instruction::Load: {
@@ -7183,11 +7183,12 @@ static void AddRuntimeUnrollDisableMetaData(Loop *L) {
 
 bool LoopVectorizationPlanner::getDecisionAndClampRange(
     const std::function<bool(ElementCount)> &Predicate, VFRange &Range) {
-  assert(Range.End > Range.Start && "Trying to test an empty VF range.");
-  bool PredicateAtRangeStart = Predicate(ElementCount::getFixed(Range.Start));
+  assert(!Range.isEmpty() && "Trying to test an empty VF range.");
+  bool PredicateAtRangeStart = Predicate(Range.Start);
 
-  for (unsigned TmpVF = Range.Start * 2; TmpVF < Range.End; TmpVF *= 2)
-    if (Predicate(ElementCount::getFixed(TmpVF)) != PredicateAtRangeStart) {
+  for (ElementCount TmpVF = Range.Start * 2;
+       ElementCount::isKnownLT(TmpVF, Range.End); TmpVF *= 2)
+    if (Predicate(TmpVF) != PredicateAtRangeStart) {
       Range.End = TmpVF;
       break;
     }
@@ -7201,8 +7202,10 @@ bool LoopVectorizationPlanner::getDecisionAndClampRange(
 /// vectorization decision can potentially shorten this sub-range during
 /// buildVPlan().
 void LoopVectorizationPlanner::buildVPlans(unsigned MinVF, unsigned MaxVF) {
-  for (unsigned VF = MinVF; VF < MaxVF + 1;) {
-    VFRange SubRange = {VF, MaxVF + 1};
+  auto MaxVFPlusOne = ElementCount::getFixed(MaxVF).getWithIncrement(1);
+  for (ElementCount VF = ElementCount::getFixed(MinVF);
+       ElementCount::isKnownLT(VF, MaxVFPlusOne);) {
+    VFRange SubRange = {VF, MaxVFPlusOne};
     VPlans.push_back(buildVPlan(SubRange));
     VF = SubRange.End;
   }
@@ -7659,8 +7662,10 @@ void LoopVectorizationPlanner::buildVPlansWithVPRecipes(unsigned MinVF,
   for (Instruction *I : DeadInstructions)
     SinkAfter.erase(I);
 
-  for (unsigned VF = MinVF; VF < MaxVF + 1;) {
-    VFRange SubRange = {VF, MaxVF + 1};
+  auto MaxVFPlusOne = ElementCount::getFixed(MaxVF).getWithIncrement(1);
+  for (ElementCount VF = ElementCount::getFixed(MinVF);
+       ElementCount::isKnownLT(VF, MaxVFPlusOne);) {
+    VFRange SubRange = {VF, MaxVFPlusOne};
     VPlans.push_back(buildVPlanWithVPRecipes(SubRange, NeedDef,
                                              DeadInstructions, SinkAfter));
     VF = SubRange.End;
@@ -7837,7 +7842,7 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
   }
 
   // Adjust the recipes for any inloop reductions.
-  if (Range.Start > 1)
+  if (Range.Start.isVector())
     adjustRecipesForInLoopReductions(Plan, RecipeBuilder);
 
   // Finally, if tail is folded by masking, introduce selects between the phi
@@ -7856,10 +7861,10 @@ VPlanPtr LoopVectorizationPlanner::buildVPlanWithVPRecipes(
 
   std::string PlanName;
   raw_string_ostream RSO(PlanName);
-  ElementCount VF = ElementCount::getFixed(Range.Start);
+  ElementCount VF = Range.Start;
   Plan->addVF(VF);
   RSO << "Initial VPlan for VF={" << VF;
-  for (VF *= 2; VF.getKnownMinValue() < Range.End; VF *= 2) {
+  for (VF *= 2; ElementCount::isKnownLT(VF, Range.End); VF *= 2) {
     Plan->addVF(VF);
     RSO << "," << VF;
   }
@@ -7885,8 +7890,9 @@ VPlanPtr LoopVectorizationPlanner::buildVPlan(VFRange &Range) {
   VPlanHCFGBuilder HCFGBuilder(OrigLoop, LI, *Plan);
   HCFGBuilder.buildHierarchicalCFG();
 
-  for (unsigned VF = Range.Start; VF < Range.End; VF *= 2)
-    Plan->addVF(ElementCount::getFixed(VF));
+  for (ElementCount VF = Range.Start; ElementCount::isKnownLT(VF, Range.End);
+       VF *= 2)
+    Plan->addVF(VF);
 
   if (EnableVPlanPredication) {
     VPlanPredicator VPP(*Plan);

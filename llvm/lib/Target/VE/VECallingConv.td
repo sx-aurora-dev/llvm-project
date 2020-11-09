@@ -67,7 +67,12 @@ def CC_VE_VRegCall : CallingConv<[
   CCDelegateTo<CC_VE_C_Stack>
 ]>;
 
-def CC_VE : CallingConv<[
+///// C Calling Convention (VE ABI v2.1) /////
+//
+// Reference:
+//   https://www.nec.com/en/global/prod/hpc/aurora/document/VE-ABI_v2.1.pdf
+//
+def CC_VE_C : CallingConv<[
   // All arguments get passed in generic registers if there is space.
 
   // Promote i1/i8/i16/i32 arguments to i64.
@@ -98,6 +103,7 @@ def CC_VE : CallingConv<[
   CCIfNotVPU<CCDelegateTo<CC_VE_C_Stack>>
 ]>;
 
+///// Standard vararg C Calling Convention (VE ABI v2.1) /////
 // All arguments get passed in stack for varargs function or non-prototyped
 // function.
 def CC_VE2 : CallingConv<[
@@ -143,7 +149,7 @@ def RetCC_VE_VRegCall : CallingConv<[
                                      [VM1, VM1, VM3]>>>
 ]>;
 
-def RetCC_VE : CallingConv<[
+def RetCC_VE_C : CallingConv<[
   // Promote i1/i8/i16/i32 return values to i64.
   CCIfType<[i1, i8, i16, i32], CCPromoteToType<i64>>,
 
