@@ -159,7 +159,7 @@ EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SDValue Op,
 CCAssignFn *getReturnCC(CallingConv::ID CallConv) {
   switch (CallConv) {
   case CallingConv::Fast:
-    return CC_VE_Fast;
+    return RetCC_VE_Fast;
   default:
     return RetCC_VE_C;
   }

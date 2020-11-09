@@ -10,6 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
+
+//===----------------------------------------------------------------------===//
+// Aurora VE
+//===----------------------------------------------------------------------===//
+
 /// CCIfSubtarget - Match if the current subtarget has a feature F.
 class CCIfSubtarget<string F, CCAction A>
     : CCIf<!strconcat("static_cast<const VESubtarget&>"
@@ -22,14 +27,11 @@ class CCIfNotSubtarget<string F, CCAction A>
                        "(State.getMachineFunction().getSubtarget()).", F),
            A>;
 
-class CCIfPackedMode<CCAction A> : CCIfSubtarget<"hasPackedMode()",A>;
-class CCIfNotPackedMode<CCAction A> : CCIfNotSubtarget<"hasPackedMode()",A>;
+class CCIfPacked<CCAction A> : CCIfSubtarget<"hasPackedMode()",A>;
+class CCIfNotPacked<CCAction A> : CCIfNotSubtarget<"hasPackedMode()",A>;
 class CCIfVPU<CCAction A> : CCIfSubtarget<"enableVPU()",A>;
 class CCIfNotVPU<CCAction A> : CCIfNotSubtarget<"enableVPU()",A>;
 
-//===----------------------------------------------------------------------===//
-// Aurora VE
-//===----------------------------------------------------------------------===//
 def CC_VE_C_Stack: CallingConv<[
   // F128 are assigned to the stack in 16-byte aligned units
   CCIfType<[f128], CCAssignToStackWithShadow<16, 16, [SX7]>>,
@@ -38,7 +40,7 @@ def CC_VE_C_Stack: CallingConv<[
   CCAssignToStack<0, 8>
 ]>;
 
-def CC_VE_VRegCall : CallingConv<[
+def CC_VE_RegCall : CallingConv<[
   // vector --> generic vector registers
   CCIfType<[v2i32,   v2i64,   v2f32,   v2f64,
             v4i32,   v4i64,   v4f32,   v4f64,
@@ -47,21 +49,17 @@ def CC_VE_VRegCall : CallingConv<[
             v32i32,  v32i64,  v32f32,  v32f64,
             v64i32,  v64i64,  v64f32,  v64f64,
             v128i32, v128i64, v128f32, v128f64,
-            v256i32, v256f32, v256i64, v256f64],
+            v256i32, v256f32, v256i64, v256f64,
+            v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
-
-  CCIfPackedMode<
-    CCIfType<[v512i32, v512f32],
-             CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
 
   // vector mask --> generic vector mask registers
   CCIfType<[v256i1],
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>,
 
   // pair of vector mask --> generic vector mask registers
-    CCIfType<[v512i1],
-             CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
-                                     [VM1, VM1, VM3]>>,
+  CCIfType<[v512i1],
+           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>,
 
   // Alternatively, they are assigned to the stack in 8-byte aligned units.
   CCDelegateTo<CC_VE_C_Stack>
@@ -98,9 +96,10 @@ def CC_VE_C : CallingConv<[
            CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
                                    [SX0, SX1, SX3, SX5]>>,
 
-  // Unconditionally use the reg-call convention
-  CCIfVPU<  CCDelegateTo<CC_VE_VRegCall>>,
-  CCIfNotVPU<CCDelegateTo<CC_VE_C_Stack>>
+  CCIfCC<"CallingConv::X86_RegCall", CCDelegateTo<CC_VE_RegCall>>,
+
+  // Alternatively, they are assigned to the stack in 8-byte aligned units.
+  CCDelegateTo<CC_VE_C_Stack>
 ]>;
 
 ///// Standard vararg C Calling Convention (VE ABI v2.1) /////
@@ -123,7 +122,7 @@ def CC_VE2 : CallingConv<[
   CCAssignToStack<0, 8>
 ]>;
 
-def RetCC_VE_VRegCall : CallingConv<[
+def RetCC_VE_RegCall : CallingConv<[
   // vector --> generic vector registers
   CCIfType<[v2i32,   v2i64,   v2f32,   v2f64,
             v4i32,   v4i64,   v4f32,   v4f64,
@@ -132,21 +131,18 @@ def RetCC_VE_VRegCall : CallingConv<[
             v32i32,  v32i64,  v32f32,  v32f64,
             v64i32,  v64i64,  v64f32,  v64f64,
             v128i32, v128i64, v128f32, v128f64,
-            v256i32, v256f32, v256i64, v256f64],
+            v256i32, v256f32, v256i64, v256f64,
+            v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>,
-  CCIfPackedMode<
-    CCIfType<[v512i32, v512f32],
-             CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
 
   // vector mask --> generic vector mask registers
   CCIfType<[v256i1],
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>,
 
   // pair of vector mask --> generic vector mask registers
-  CCIfPackedMode<
-    CCIfType<[v512i1],
-             CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
-                                     [VM1, VM1, VM3]>>>
+  CCIfType<[v512i1],
+           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
+                                   [VM1, VM1, VM3]>>,
 ]>;
 
 def RetCC_VE_C : CallingConv<[
@@ -170,9 +166,48 @@ def RetCC_VE_C : CallingConv<[
            CCAssignToRegWithShadow<[Q0, Q1, Q2, Q3],
                                    [SX0, SX1, SX3, SX5]>>,
 
-  // Unconditionally use the reg-call convention
-  CCIfVPU<    CCDelegateTo<RetCC_VE_VRegCall>>,
-  CCIfNotVPU< CCDelegateTo<CC_VE_C_Stack>>
+  CCIfCC<"CallingConv::X86_RegCall", CCDelegateTo<RetCC_VE_RegCall>>
+]>;
+
+///// fastcc - fast vreg passing /////
+def CC_VE_Fast : CallingConv<[
+  // vector --> generic vector registers
+  CCIfVPU<CCIfType<[v256i32, v256f32, v256i64, v256f64,
+            v512i32, v512f32],
+           CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
+
+  CCIfPacked<CCIfType<[v512i32, v512f32],
+           CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
+
+  // vector mask --> generic vector mask registers
+  CCIfVPU<CCIfType<[v256i1],
+           CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
+
+  // pair of vector mask --> generic vector mask registers
+  CCIfPacked<CCIfType<[v512i1],
+           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>>,
+
+  // Default to the standard cc
+  CCDelegateTo<CC_VE_C>
+]>;
+
+def RetCC_VE_Fast : CallingConv<[
+  // vector --> generic vector registers
+  CCIfVPU<CCIfType<[v256i32, v256f32, v256i64, v256f64],
+           CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
+
+  CCIfPacked<CCIfType<[v512i32, v512f32],
+           CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
+            
+
+  // vector mask --> generic vector mask registers
+  CCIfVPU<CCIfType<[v256i1],
+           CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
+
+  // pair of vector mask --> generic vector mask registers
+  CCIfPacked<CCIfType<[v512i1],
+           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
+                                   [VM1, VM1, VM3]>>>,
 ]>;
 
 // Callee-saved registers
@@ -182,7 +217,7 @@ def CSR_RegCall : CalleeSavedRegs<(add (sequence "SX%u", 18, 33),
                                        (sequence "VM%u", 8, 15))>;
 def CSR_NoRegs : CalleeSavedRegs<(add)>;
 
-// vec_expf destroys s0, s1, s5, s6, s11, s61, s62, s63
+// vec_expf destroys s0, s1, s5, s6, s11, s61, s62, s63, v0-6, and vm6
 def CSR_vec_expf : CalleeSavedRegs<(add (sequence "SX%u", 2, 4),
                                         (sequence "SX%u", 7, 10),
                                         (sequence "SX%u", 12, 60),

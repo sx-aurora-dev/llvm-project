@@ -315,7 +315,7 @@ def mimmfp32 : Operand<i32>, PatLeaf<(fpimm), [{
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 
-def true        : PatLeaf<(imm), [{ return N->getSExtValue() !=0 ; }]>;
+def True        : PatLeaf<(imm), [{ return N->getSExtValue() !=0 ; }]>;
 def one         : PatLeaf<(imm), [{ return N->getSExtValue() == 1 ; }]>;
 
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
@@ -337,7 +337,7 @@ def zero_w      : PatLeaf<(imm), [{ return N->getZExtValue() & 0xffffffff == 0; 
 
 // whether the mask is all true
 let PredicateCodeUsesOperands = 1 in {
-def true_mask                            : PatLeaf<(vec_broadcast (i32 true), (i32 srcvalue))>;
+def true_mask                            : PatLeaf<(vec_broadcast (i32 True), (i32 srcvalue))>;
 def any_broadcast                        : PatFrag<(ops node:$sx), (vec_broadcast node:$sx, (i32 srcvalue))>;
 }
 
@@ -1396,9 +1396,6 @@ let cw = 1 in defm MINSL : RRm<"mins.l", 0x68, I64, i64, smin>;
 // Section 8.5 - Logical Operation Instructions
 //-----------------------------------------------------------------------------
 
-def xor_pat : PatFrags<(ops node:$lhs, node:$rhs),
-                       [(xor node:$lhs, node:$rhs),
-                        (XOR node:$lhs, node:$rhs)]>;
 // Section 8.5.1 - AND (AND)
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm AND : RRm<"and", 0x44, I64, i64, and>;
@@ -1413,7 +1410,6 @@ def xor_pat : PatFrags<(ops node:$lhs, node:$rhs),
                         (XOR node:$lhs, node:$rhs)]>;
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm XOR : RRm<"xor", 0x46, I64, i64, xor_pat>;
-}
 
 // Section 8.5.4 - EQV (Equivalence)
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in
