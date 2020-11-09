@@ -130,6 +130,7 @@ defm VLDU : VLDm<"vldu", 0x82, V64>;
 // Section 8.9.3 - VLDL (Vector Load Lower)
 defm VLDLSX : VLDm<"vldl.sx", 0x83, V64>;
 let cx = 1 in defm VLDLZX : VLDm<"vldl.zx", 0x83, V64>;
+def : MnemonicAlias<"vldl", "vldl.zx">;
 
 // Section 8.9.4 - VLD2D (Vector Load 2D)
 defm VLD2D : VLDm<"vld2d", 0xc1, V64>;
