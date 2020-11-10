@@ -241,12 +241,6 @@ def : Pat<(vec_tomask v256f32:$vx, i32:$avl),
           (PVFMKWUPvl CC_NE, $vx, $avl)>;
 
 // Casts
-// def : Pat<(v256i64 (sext_inreg V64:$src, v256i32)),
-//           (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (lea_i32 256)), V64)>;
-// def : Pat<(v256i64 (sext v256i32:$src)),
-//           (COPY_TO_REGCLASS (vaddswsx_vsvl (i32 0), $src, (lea_i32 256)), V64)>;
-// def : Pat<(v256i64 (zext v256i32:$src)),
-//           (COPY_TO_REGCLASS (vaddswzx_vsvl (i32 0), $src, (lea_i32 256)), V64)>;
 def : Pat<(v256i64 (anyext v256i32:$src)),
           (COPY_TO_REGCLASS $src, V64)>; // TODO INSERT_SUBREG
 

@@ -161,7 +161,7 @@ CCAssignFn *getReturnCC(CallingConv::ID CallConv) {
   case CallingConv::Fast:
     return RetCC_VE_Fast;
   default:
-    return RetCC_VE_C;
+    return RetCC_VE_Fast; // hpce/develop default
   }
 }
 
@@ -172,7 +172,7 @@ CCAssignFn *getParamCC(CallingConv::ID CallConv, bool IsVarArg) {
   case CallingConv::Fast:
     return CC_VE_Fast;
   default:
-    return CC_VE_C;
+    return CC_VE_Fast; // hpce/develop default
   }
 }
 

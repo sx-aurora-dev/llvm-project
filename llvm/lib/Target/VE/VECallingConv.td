@@ -27,8 +27,6 @@ class CCIfNotSubtarget<string F, CCAction A>
                        "(State.getMachineFunction().getSubtarget()).", F),
            A>;
 
-class CCIfPacked<CCAction A> : CCIfSubtarget<"hasPackedMode()",A>;
-class CCIfNotPacked<CCAction A> : CCIfNotSubtarget<"hasPackedMode()",A>;
 class CCIfVPU<CCAction A> : CCIfSubtarget<"enableVPU()",A>;
 class CCIfNotVPU<CCAction A> : CCIfNotSubtarget<"enableVPU()",A>;
 
@@ -176,7 +174,7 @@ def CC_VE_Fast : CallingConv<[
             v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
 
-  CCIfPacked<CCIfType<[v512i32, v512f32],
+  CCIfVPU<CCIfType<[v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
 
   // vector mask --> generic vector mask registers
@@ -184,7 +182,7 @@ def CC_VE_Fast : CallingConv<[
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
 
   // pair of vector mask --> generic vector mask registers
-  CCIfPacked<CCIfType<[v512i1],
+  CCIfVPU<CCIfType<[v512i1],
            CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>>,
 
   // Default to the standard cc
@@ -196,18 +194,19 @@ def RetCC_VE_Fast : CallingConv<[
   CCIfVPU<CCIfType<[v256i32, v256f32, v256i64, v256f64],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
 
-  CCIfPacked<CCIfType<[v512i32, v512f32],
+  CCIfVPU<CCIfType<[v512i32, v512f32],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,
             
-
   // vector mask --> generic vector mask registers
   CCIfVPU<CCIfType<[v256i1],
            CCAssignToReg<[VM1, VM2, VM3, VM4, VM5, VM6, VM7]>>>,
 
   // pair of vector mask --> generic vector mask registers
-  CCIfPacked<CCIfType<[v512i1],
+  CCIfVPU<CCIfType<[v512i1],
            CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
                                    [VM1, VM1, VM3]>>>,
+  // Default to the standard cc
+  CCDelegateTo<RetCC_VE_C>
 ]>;
 
 // Callee-saved registers
