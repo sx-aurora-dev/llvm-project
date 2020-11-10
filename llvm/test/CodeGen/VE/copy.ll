@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+packed | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readnone
 define signext i8 @copyi8(i8 signext, i8 returned signext) {
