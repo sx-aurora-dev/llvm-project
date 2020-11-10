@@ -241,6 +241,9 @@ namespace CallingConv {
     /// The remainder matches the regular calling convention.
     WASM_EmscriptenInvoke = 99,
 
+    /// Calling convention used for AMD graphics targets.
+    AMDGPU_Gfx = 100,
+
     /// Calling convention used for NEC SX-Aurora VE vec_expf intrinsic
     /// function.
     VE_VEC_EXPF = 150,

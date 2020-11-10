@@ -194,7 +194,6 @@ public:
   SDValue generateEquivalentLdz(SDNode *N, bool Complement,
                                 SelectionDAG &DAG) const;
 
-  ConstraintType getConstraintType(StringRef Constraint) const override;
   ConstraintWeight
   getSingleConstraintMatchWeight(AsmOperandInfo &info,
                                  const char *constraint) const override;
@@ -210,9 +209,14 @@ public:
     return TargetLowering::getInlineAsmMemConstraint(ConstraintCode);
   }
 
+  /// Inline Assembly {
+
+  ConstraintType getConstraintType(StringRef Constraint) const override;
   std::pair<unsigned, const TargetRegisterClass *>
   getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                StringRef Constraint, MVT VT) const override;
+
+  /// } Inline Assembly
 
   /// Override to support customized stack guard loading.
   bool useLoadStackGuardNode() const override;
