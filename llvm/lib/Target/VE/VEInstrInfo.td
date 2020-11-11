@@ -1316,7 +1316,6 @@ def SVOB : RR<0x30, (outs), (ins), "svob">;
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 
 // Section 8.4.1 - ADD (Add)
-let isReMaterializable = 1 in {
 defm ADDUL : RRm<"addu.l", 0x48, I64, i64>;
 let cx = 1 in defm ADDUW : RRm<"addu.w", 0x48, I32, i32>;
 
@@ -1337,8 +1336,6 @@ let cx = 1 in defm SUBSWZX : RRNCm<"subs.w.zx", 0x5A, I32, i32>;
 
 // Section 8.4.6 - SBX (Subtract)
 defm SUBSL : RRNCm<"subs.l", 0x5B, I64, i64, sub>;
-
-} // isReMaterializable, isAsCheapAsAMove
 
 // Section 8.4.7 - MPY (Multiply)
 defm MULUL : RRm<"mulu.l", 0x49, I64, i64>;
