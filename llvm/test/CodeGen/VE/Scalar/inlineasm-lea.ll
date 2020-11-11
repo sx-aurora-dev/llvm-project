@@ -54,15 +54,3 @@ define i64 @leasl3(i64 %x, i64 %y) nounwind {
   %asmtmp = tail call i64 asm "lea.sl $0, 2048($1, $2)", "=r,r,r"(i64 %y, i64 %x) nounwind
   ret i64 %asmtmp
 }
-
-define i64 @leam(i64 %x) nounwind {
-; CHECK-LABEL: leam:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    st %s0, -8(, %s9)
-; CHECK-NEXT:    #APP
-; CHECK-NEXT:    lea %s0, -8(%s9)
-; CHECK-NEXT:    #NO_APP
-; CHECK-NEXT:    or %s11, 0, %s9
-  %asmtmp = tail call i64 asm "lea $0, $1", "=r,m"(i64 %x) nounwind
-  ret i64 %asmtmp
-}

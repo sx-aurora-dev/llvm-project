@@ -4307,14 +4307,13 @@ bool VETargetLowering::isTypeDesirableForOp(unsigned Opc, EVT VT) const {
 //                         VE Inline Assembly Support
 //===----------------------------------------------------------------------===//
 
-/// getConstraintType - Given a constraint letter, return the type of
-/// constraint it is for this target.
 VETargetLowering::ConstraintType
 VETargetLowering::getConstraintType(StringRef Constraint) const {
   if (Constraint.size() == 1) {
     switch (Constraint[0]) {
-    default:  break;
-    case 'r':
+    default:
+      break;
+    case 'v': // vector registers
     case 'f':
     case 'e':
       return C_RegisterClass;
@@ -4387,27 +4386,37 @@ LowerAsmOperandForConstraint(SDValue Op,
 
 std::pair<unsigned, const TargetRegisterClass *>
 VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
-                                                  StringRef Constraint,
-                                                  MVT VT) const {
+                                               StringRef Constraint,
+                                               MVT VT) const {
+  const TargetRegisterClass *RC = nullptr;
   if (Constraint.size() == 1) {
     switch (Constraint[0]) {
+    default:
+      return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
     case 'r':
-      return std::make_pair(0U, &VE::I64RegClass);
+      RC = &VE::I64RegClass;
+      break;
+    case 'v':
+      RC = &VE::V64RegClass;
+      break;
     case 'f':
       if (VT == MVT::f32 || VT == MVT::f64)
-        return std::make_pair(0U, &VE::I64RegClass);
+        RC = &VE::I64RegClass;
       else if (VT == MVT::f128)
-        return std::make_pair(0U, &VE::F128RegClass);
-      llvm_unreachable("Unknown ValueType for f-register-type!");
+        RC = &VE::F128RegClass;
+      else
+        llvm_unreachable("Unknown ValueType for f-register-type!");
       break;
     case 'e':
       if (VT == MVT::f32 || VT == MVT::f64)
-        return std::make_pair(0U, &VE::I64RegClass);
+        RC = &VE::I64RegClass;
       else if (VT == MVT::f128)
-        return std::make_pair(0U, &VE::F128RegClass);
-      llvm_unreachable("Unknown ValueType for e-register-type!");
+        RC = &VE::F128RegClass;
+      else
+        llvm_unreachable("Unknown ValueType for e-register-type!");
       break;
     }
+    return std::make_pair(0U, RC);
   } else if (!Constraint.empty() && Constraint.size() <= 5
               && Constraint[0] == '{' && *(Constraint.end()-1) == '}') {
     // constraint = '{r<d>}'
