@@ -351,6 +351,7 @@ multiclass LSVm<string opcStr, bits<8>opc, RegisterClass RC> {
   let cy = 0, cz = 0 in
   defm im : LSVbm<opcStr, "(${sy}), $sz", opc, RC, (ins uimm7:$sy, mimm:$sz)>;
 }
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm LSV : LSVm<"lsv", 0x8e, V64>;
 
 // Section 8.9.21 - LVS (Load V to S)
@@ -362,6 +363,7 @@ multiclass LVSm<string opcStr, bits<8>opc, RegisterClass RC> {
   def vi : RR<opc, (outs I64:$sx), (ins RC:$vx, uimm7:$sy),
               opcStr#" $sx, ${vx}(${sy})">;
 }
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm LVS : LVSm<"lvs", 0x9e, V64>;
 
 // Section 8.9.22 - LVM (Load VM)
@@ -388,6 +390,7 @@ multiclass LVMom<string opcStr, bits<8>opc, RegisterClass RCM> {
 multiclass LVMm<string opcStr, bits<8>opc, RegisterClass RCM> {
   defm "" : LVMom<opcStr, opc, RCM>;
 }
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm LVM : LVMm<"lvm", 0xb7, VM>;
 
 // Section 8.9.23 - SVM (Save VM)
@@ -399,6 +402,7 @@ multiclass SVMm<string opcStr, bits<8>opc, RegisterClass RCM> {
   def mi : RR<opc, (outs I64:$sx), (ins RCM:$vz, uimm2:$sy),
               opcStr#" $sx, $vz, $sy">;
 }
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm SVM : SVMm<"svm", 0xa7, VM>;
 
 // Section 8.9.24 - VBRD (Vector Broadcast)
@@ -436,6 +440,7 @@ multiclass VBRDm<string opcStr, bits<8>opc, RegisterClass VRC, RegisterClass RC,
   let cy = 0 in
   defm i : VBRDmm<opcStr, "$sy", opc, VRC, RCM, (ins simm7:$sy)>;
 }
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 let cx = 0, cx2 = 0 in
 defm VBRD : VBRDm<"vbrd", 0x8c, V64, I64, VM>;
 let cx = 0, cx2 = 1 in
@@ -444,6 +449,7 @@ let cx = 1, cx2 = 0 in
 defm VBRDU : VBRDm<"vbrdu", 0x8c, V64, F32, VM>;
 let cx = 1, cx2 = 1 in
 defm PVBRD : VBRDm<"pvbrd", 0x8c, V64, I64, VM512>;
+} // isReMat, isCheapAsMove
 
 // Section 8.9.25 - VMV (Vector Move)
 let vx = ?, vz = ?, hasSideEffects = 0, Uses = [VL] in
@@ -779,6 +785,7 @@ multiclass RVMSm<string opcStr, bits<8> opc, RegisterClass RCM> {
 }
 
 // Section 8.10.1 - VADD (Vector Add)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 let cx = 0, cx2 = 0 in
 defm VADDUL : RVm<"vaddu.l", 0xc8, V64, I64, VM>;
 let cx = 0, cx2 = 1 in {
@@ -790,9 +797,11 @@ let cx = 1, cx2 = 0 in
 defm PVADDUUP : RVm<"pvaddu.up", 0xc8, V64, I64, VM>;
 let cx = 1, cx2 = 1 in
 defm PVADDU : RVm<"pvaddu", 0xc8, V64, I64, VM512>;
+} // isReMat, isCheapAsMove
 def : MnemonicAlias<"vaddu.w", "pvaddu.lo">;
 
 // Section 8.10.2 - VADS (Vector Add Single)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 let cx = 0, cx2 = 0 in
 defm VADDSWSX : RVm<"vadds.w.sx", 0xca, V64, I32, VM>;
 let cx = 0, cx2 = 1 in {
@@ -804,15 +813,18 @@ let cx = 1, cx2 = 0 in
 defm PVADDSUP : RVm<"pvadds.up", 0xca, V64, I64, VM>;
 let cx = 1, cx2 = 1 in
 defm PVADDS : RVm<"pvadds", 0xca, V64, I64, VM512>;
+} // isReMat, isCheapAsMove
 def : MnemonicAlias<"pvadds.lo.sx", "vadds.w.sx">;
 def : MnemonicAlias<"vadds.w.zx", "pvadds.lo">;
 def : MnemonicAlias<"vadds.w", "pvadds.lo">;
 def : MnemonicAlias<"pvadds.lo.zx", "pvadds.lo">;
 
 // Section 8.10.3 - VADX (Vector Add)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in 
 defm VADDSL : RVm<"vadds.l", 0x8b, V64, I64, VM>;
 
 // Section 8.10.4 - VSUB (Vector Subtract)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in  {
 let cx = 0, cx2 = 0 in
 defm VSUBUL : RVm<"vsubu.l", 0xd8, V64, I64, VM>;
 let cx = 0, cx2 = 1 in {
@@ -824,9 +836,11 @@ let cx = 1, cx2 = 0 in
 defm PVSUBUUP : RVm<"pvsubu.up", 0xd8, V64, I64, VM>;
 let cx = 1, cx2 = 1 in
 defm PVSUBU : RVm<"pvsubu", 0xd8, V64, I64, VM512>;
+} // isReMat, isCheapAsMove
 def : MnemonicAlias<"vsubu.w", "pvsubu.lo">;
 
 // Section 8.10.5 - VSBS (Vector Subtract Single)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in  {
 let cx = 0, cx2 = 0 in
 defm VSUBSWSX : RVm<"vsubs.w.sx", 0xda, V64, I32, VM>;
 let cx = 0, cx2 = 1 in {
@@ -838,12 +852,14 @@ let cx = 1, cx2 = 0 in
 defm PVSUBSUP : RVm<"pvsubs.up", 0xda, V64, I64, VM>;
 let cx = 1, cx2 = 1 in
 defm PVSUBS : RVm<"pvsubs", 0xda, V64, I64, VM512>;
+} // isReMat, isCheapAsMove
 def : MnemonicAlias<"pvsubs.lo.sx", "vsubs.w.sx">;
 def : MnemonicAlias<"vsubs.w.zx", "pvsubs.lo">;
 def : MnemonicAlias<"vsubs.w", "pvsubs.lo">;
 def : MnemonicAlias<"pvsubs.lo.zx", "pvsubs.lo">;
 
 // Section 8.10.6 - VSBX (Vector Subtract)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in 
 defm VSUBSL : RVm<"vsubs.l", 0x9b, V64, I64, VM>;
 
 // Section 8.10.7 - VMPY (Vector Multiply)
@@ -959,6 +975,7 @@ defm VMINSL : RVm<"vmins.l", 0x9a, V64, I64, VM>;
 //-----------------------------------------------------------------------------
 
 // Section 8.11.1 - VAND (Vector And)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 let cx = 0, cx2 = 0 in defm VAND : RVLm<"vand", 0xc4, I64, V64, VM>;
 let cx = 0, cx2 = 1 in defm PVANDLO : RVLm<"pvand.lo", 0xc4, I32, V64, VM>;
 let cx = 1, cx2 = 0 in defm PVANDUP : RVLm<"pvand.up", 0xc4, F32, V64, VM>;
@@ -1005,6 +1022,7 @@ let cx = 0, cx2 = 0 in defm VSEQ : RV0m<"vseq", 0x99, V64, VM>;
 let cx = 0, cx2 = 1 in defm PVSEQLO : RV0m<"pvseq.lo", 0x99, V64, VM>;
 let cx = 1, cx2 = 0 in defm PVSEQUP : RV0m<"pvseq.up", 0x99, V64, VM>;
 let cx = 1, cx2 = 1 in defm PVSEQ : RV0m<"pvseq", 0x99, V64, VM512>;
+} // isReMat, isCheapAsMove
 
 //-----------------------------------------------------------------------------
 // Section 8.12 - Vector Shift Operation Instructions
@@ -1450,6 +1468,7 @@ foreach CC = [ "af", "gt", "lt", "ne", "eq", "ge", "le", "at", "num", "nan",
 }
 
 // Section 8.17.4 - ANDM (And VM)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in {
 defm ANDM : RVM2m<"andm", 0x84, VM>;
 
 // Section 8.17.5 - ORM (Or VM)
@@ -1475,6 +1494,7 @@ defm LZVM : RVMSm<"lzvm", 0xa5, VM>;
 
 // Section 8.17.12 - TOVM (Trailing One of VM)
 defm TOVM : RVMSm<"tovm", 0xa6, VM>;
+} // isReMat, isAsCheapAsMove
 
 //-----------------------------------------------------------------------------
 // Section 8.18 - Vector Control Instructions
@@ -1491,6 +1511,7 @@ let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0, Uses = [VL] in
 def SVL : RR<0x2f, (outs I64:$sx), (ins), "svl $sx">;
 
 // Section 8.18.3 - SMVL (Save Maximum Vector Length)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 let cy = 0, sy = 0, cz = 0, sz = 0, hasSideEffects = 0 in
 def SMVL : RR<0x2e, (outs I64:$sx), (ins), "smvl $sx">;
 
