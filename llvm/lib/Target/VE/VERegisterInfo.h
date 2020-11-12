@@ -47,6 +47,13 @@ struct VERegisterInfo : public VEGenRegisterInfo {
 
   unsigned getRegPressureSetLimit(const MachineFunction &MF,
                                   unsigned Idx) const override;
+  bool
+  getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Order,
+                        SmallVectorImpl<MCPhysReg> &Hints,
+                        const MachineFunction &MF,
+                        const VirtRegMap *VRM = nullptr,
+                        const LiveRegMatrix *Matrix = nullptr) const override;
+
 };
 
 } // namespace llvm

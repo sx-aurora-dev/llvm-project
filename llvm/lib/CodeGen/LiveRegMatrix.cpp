@@ -143,6 +143,15 @@ bool LiveRegMatrix::isPhysRegUsed(MCRegister PhysReg) const {
   return false;
 }
 
+unsigned LiveRegMatrix::getNumLiveIntervals(MCRegister PhysReg) const {
+  unsigned Count = 0;
+  for (MCRegUnitIterator Unit(PhysReg, TRI); Unit.isValid(); ++Unit) {
+    const auto &IntervalMap = Matrix[*Unit].getMap();
+    for (const auto &I : IntervalMap) ++Count; //auto It = Matrix[*Unit].getMap().start(); It != ItEnd; ++It, ++Count) {}
+  }
+  return Count;
+}
+
 bool LiveRegMatrix::checkRegMaskInterference(LiveInterval &VirtReg,
                                              MCRegister PhysReg) {
   // Check if the cached information is valid.

@@ -24,6 +24,8 @@
 #include "llvm/IR/Type.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/CodeGen/LiveRegMatrix.h"
 
 using namespace llvm;
 
@@ -100,6 +102,9 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
       VE::PMC0, VE::PMC1, VE::PMC2, VE::PMC3, VE::PMC4, VE::PMC5, VE::PMC6,
       VE::PMC7, VE::PMC8, VE::PMC9, VE::PMC10, VE::PMC11, VE::PMC12, VE::PMC13,
       VE::PMC14,
+
+      // non-allocatable vector register
+      VE::VIX,
 
       // Zero-mask registers
       VE::VM0, VE::VMP0,
@@ -508,5 +513,120 @@ bool VERegisterInfo::canRealignStack(const MachineFunction &MF) const {
   // Otherwise, we'd need a base pointer, but those aren't implemented
   // for VE at the moment.
 
+  return false;
+}
+
+bool
+VERegisterInfo::getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Order,
+                      SmallVectorImpl<MCPhysReg> &Hints,
+                      const MachineFunction &MF,
+                      const VirtRegMap *VRM,
+                      const LiveRegMatrix *Matrix) const {
+  const MachineRegisterInfo &MRI = MF.getRegInfo();
+  const auto *RegClass = MRI.getRegClass(VirtReg);
+
+  if (RegClass != &VE::V64RegClass) {
+    return TargetRegisterInfo::getRegAllocationHints(VirtReg, Order, Hints, MF, VRM, Matrix);
+  }
+
+  llvm::errs() << "=== VReg Allocation (vvreg " << printReg(VirtReg, this) << ") ===\n";
+
+  static const MachineFunction* LastMF = nullptr;
+  static bool FirstVRAlloc = true;
+  static unsigned LastVRIndex = 0; // last allocated vreg
+  if (&MF != LastMF) {
+    LastMF = &MF;
+    llvm::errs() << "\t first allocation\n";
+    FirstVRAlloc = true;
+    LastVRIndex = 0;
+  } else {
+    FirstVRAlloc = false;
+  }
+
+  // FIXME this is the default implementation
+  const std::pair<Register, SmallVector<Register, 4>> &Hints_MRI =
+    MRI.getRegAllocationHints(VirtReg);
+
+  SmallSet<Register, 32> HintedRegs;
+  // Respect any target hint first.
+  bool Skip = (Hints_MRI.first != 0);
+  Register Phys;
+  unsigned VRIndex = 0;
+  for (auto Reg : Hints_MRI.second) {
+    if (Skip) {
+      Skip = false;
+      continue;
+    }
+
+    // Target-independent hints are either a physical or a virtual register.
+    Phys = Reg;
+    if (VRM && Phys.isVirtual())
+      Phys = VRM->getPhys(Phys);
+    break;
+  }
+
+  // There was not hint -> make up a vreg
+  if (!Phys.isValid()) {
+    if (!FirstVRAlloc) {
+      VRIndex = LastVRIndex;
+    } else {
+      // FIXME round robin
+      return false;
+    }
+  }
+
+  llvm::errs() << "\t Initial phys reg: " << printReg(Phys, this) << "\n";
+
+  // FIXME This sometimes causes superfluous VORs though (register hinting is
+  // stronger than vreg-move avoidance it seems) Trigger round robin hinting if
+  // same or a lower/free'd register is reallocated otherwise
+  if (!FirstVRAlloc && (VRIndex <= LastVRIndex)) {
+    const unsigned NumRegs = RegClass->getNumRegs();
+
+    for (unsigned Off = 1; Off < NumRegs; ++Off) {
+      unsigned NextVRIdx =(LastVRIndex + Off) % NumRegs;
+      Phys = VE::V64RegClass.getRegister(NextVRIdx);
+      // Don't add the same reg twice (Hints_MRI may contain multiple virtual
+      // registers allocated to the same physreg).
+      if (!HintedRegs.insert(Phys).second)
+        continue;
+      // Check that Phys is a valid hint in VirtReg's register class.
+      if (!Phys.isPhysical())
+        continue;
+      if (MRI.isReserved(Phys))
+        continue;
+      if (!is_contained(Order, Phys))
+        continue;
+
+      // We've found our round robin register
+      llvm::errs() << "\t RR re-mapped = " << printReg(Phys, this) << "\n";
+      VRIndex = NextVRIdx;
+      Phys = VE::V64RegClass.getRegister(VRIndex);
+      break;
+
+#if 0
+      unsigned NumI = Matrix ? Matrix->getNumLiveIntervals(Phys) : 0;
+      llvm::errs() << "COUNT of vreg " << printReg(Phys, this) << " == " << NumI << "\n";
+
+      if (NumI == 0) break;
+#endif
+    }
+  }
+
+  // Check that Phys is in the allocation order. We shouldn't heed hints
+  // from VirtReg's register class if they aren't in the allocation order. The
+  // target probably has a reason for removing the register.
+#if 0
+  if (!is_contained(Order, Phys))
+    break;
+#endif
+
+  // All clear, tell the register allocator to prefer this register.
+  llvm::errs() << "Hints[" << Hints.size() << "], vreg " << printReg(Phys, this) << " for " << printReg(VirtReg, this) << "\n";
+  Hints.push_back(Phys);
+
+  // Track last allocated vreg
+  LastVRIndex = VRIndex;
+  FirstVRAlloc = false;
   return false;
 }

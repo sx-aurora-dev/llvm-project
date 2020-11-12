@@ -126,6 +126,9 @@ public:
   /// Returns true if the given \p PhysReg has any live intervals assigned.
   bool isPhysRegUsed(MCRegister PhysReg) const;
 
+  /// Returns the number of assigned live intervals of PhysReg.
+  unsigned getNumLiveIntervals(MCRegister PhysReg) const;
+
   //===--------------------------------------------------------------------===//
   // Low-level interface.
   //===--------------------------------------------------------------------===//
