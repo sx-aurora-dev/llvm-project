@@ -50,10 +50,10 @@ static unsigned ComputeUnrollFactor(Loop *L) {
   unsigned NumVecLoad = 0;
   unsigned NumCalls = 0;
 
-  // minimal number of instructions in the loop.
-  const unsigned MinPayload = 24;
-  // maximal number of vops we should not cross.
-  const unsigned MaxPayload = 72;
+  // minimal number of vector instructions in the loop.
+  const unsigned MinPayload = 9;
+  // maximal number of vops we should not cross by unrolling.
+  const unsigned MaxPayload = 36;
 
   for (const auto *BB : L->blocks()) {
     for (const auto &I : *BB) {
@@ -103,8 +103,11 @@ void VETTIImpl::getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
   if (!EnableVectorUnroll)
     return;
   unsigned Factor = ComputeUnrollFactor(L);
-  if (Factor > 1)
-    UP.Count = Factor;
+  if (Factor > 1) {
+    UP.PartialThreshold = UINT_MAX;
+    UP.MaxCount = UP.Count = Factor;
+    UP.Force = true;
+  }
 
   UP.Runtime = UP.Partial = true;
 }
