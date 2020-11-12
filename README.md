@@ -63,5 +63,16 @@ use:
 ### VEL Intrinsics for direct vector programming
 
 See [the manual](https://sx-aurora-dev.github.io/velintrin.html).  To use VEL
-intrinsics, pass the compiler option `-mattr=+velintrin`.  The resulting LLVM
+intrinsics, pass the compiler option `-mattr=+packed`.  The resulting LLVM
 bitcode and objects are compatible with those compiler without this option.
+
+### Clang Experimental Options
+
+To enable packed mode support, call Clang with `-mve-packed`.
+This sets the machine attribute `+packed`.
+
+### LLVM Experimental Options
+
+Clang and llc accept these flags directly, prefix them with `-mllvm ` to use them with Clang.
+
+- `-ve-regalloc=0` disable the experimental improvements to the vector register allocator.

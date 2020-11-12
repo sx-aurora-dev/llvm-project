@@ -32,6 +32,12 @@ using namespace llvm;
 #define GET_REGINFO_TARGET_DESC
 #include "VEGenRegisterInfo.inc"
 
+namespace llvm {
+cl::opt<bool> EnableRoundRobinAlloc(
+    "ve-regalloc", cl::init(false), cl::NotHidden,
+    cl::desc("(Use improved vector register allocation (work in progress)"));
+}
+
 // VE uses %s10 == %lp to keep return address
 VERegisterInfo::VERegisterInfo() : VEGenRegisterInfo(VE::SX10) {}
 
@@ -516,6 +522,10 @@ bool VERegisterInfo::canRealignStack(const MachineFunction &MF) const {
   return false;
 }
 
+static bool UseRoundRobinScheme(const TargetRegisterClass *RegClass) {
+  return EnableRoundRobinAlloc && (RegClass == &VE::V64RegClass);
+}
+
 bool
 VERegisterInfo::getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Order,
                       SmallVectorImpl<MCPhysReg> &Hints,
@@ -525,8 +535,10 @@ VERegisterInfo::getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Orde
   const MachineRegisterInfo &MRI = MF.getRegInfo();
   const auto *RegClass = MRI.getRegClass(VirtReg);
 
-  if (RegClass != &VE::V64RegClass) {
-    return TargetRegisterInfo::getRegAllocationHints(VirtReg, Order, Hints, MF, VRM, Matrix);
+  // Default code path
+  if (!UseRoundRobinScheme(RegClass)) {
+    return TargetRegisterInfo::getRegAllocationHints(VirtReg, Order, Hints, MF,
+                                                     VRM, Matrix);
   }
 
   // llvm::errs() << "=== VReg Allocation (vvreg " << printReg(VirtReg, this) << ") ===\n";
@@ -608,6 +620,8 @@ VERegisterInfo::getRegAllocationHints(Register VirtReg, ArrayRef<MCPhysReg> Orde
 
   // All clear, tell the register allocator to prefer this register.
   // llvm::errs() << "Hints[" << Hints.size() << "], vreg " << printReg(Phys, this) << " for " << printReg(VirtReg, this) << "\n";
+  if (!Phys.isValid())
+    return false;
   Hints.push_back(Phys);
 
   // Track last allocated vreg
