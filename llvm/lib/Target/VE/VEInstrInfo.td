@@ -2709,5 +2709,5 @@ include "VEInstrVecVL.td"
 // generic vector instruction patterns
 include "VEInstrPatternsVec.td"
 
-// vevlintrin
+// The vevlintrin
 include "VEInstrIntrinsicVL.td"
