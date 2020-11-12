@@ -103,6 +103,9 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
       VE::PMC7, VE::PMC8, VE::PMC9, VE::PMC10, VE::PMC11, VE::PMC12, VE::PMC13,
       VE::PMC14,
 
+      // non-allocatable vector register
+      VE::VIX,
+
       // Zero-mask registers
       VE::VM0, VE::VMP0,
 
