@@ -3,7 +3,7 @@
 ;;; Test vector load intrinsic instructions
 ;;;
 ;;; Note:
-;;;   We test VLD*rrl, VLD*irl, VLD*rrl_v, VLD*irl_v
+;;;   We test VLD*rrl, VLD*irl, VLD*rrl_v, and VLD*irl_v instructions.
 
 ; Function Attrs: nounwind
 define void @vld_vssl(i8* %0, i64 %1) {

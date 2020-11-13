@@ -1,12 +1,10 @@
 #include "types.h"
 #include "velintrin.h"
 
-typedef i64 __vr2 __attribute__((__vector_size__(2048)));
-
 /// Test vector load intrinsic instructions
 ///
 /// Note:
-///   We test VLD*rrl, VLD*irl, VLD*rrl_v, VLD*irl_v
+///   We test VLD*rrl, VLD*irl, VLD*rrl_v, and VLD*irl_v instructions.
 
 #define VL_REL(INST) \
 void INST ## _vssl(i8 *p, i64 idx) { \
