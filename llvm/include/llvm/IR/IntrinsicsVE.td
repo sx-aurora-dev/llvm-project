@@ -1,3 +1,5 @@
+// Define intrinsics written by hand
+
 let TargetPrefix = "ve" in {
 
   // VEL Intrinsics
@@ -23,6 +25,5 @@ let TargetPrefix = "ve" in {
 
 }
 
+// Define intrinsics automatically generated
 include "llvm/IR/IntrinsicsVEVL.gen.td"
-
-// vim::set sw=2:
