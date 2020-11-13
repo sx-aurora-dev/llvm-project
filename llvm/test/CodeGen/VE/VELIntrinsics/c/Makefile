@@ -10,7 +10,7 @@ CLEAN_TEST = $(LLVMSRCPATH)/utils/clean-test.sh
 UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
-TARGETS = vld.ll
+TARGETS = vld.ll vst.ll pfchv.ll
 
 all: $(TARGETS)
 
