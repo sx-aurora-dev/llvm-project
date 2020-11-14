@@ -5,12 +5,12 @@ CLANG = $(INSTALLPATH)/bin/clang
 CLANGXX = $(INSTALLPATH)/bin/clang++
 CFLAGS = -target ve -O3 -ffast-math
 LLC = $(INSTALLPATH)/bin/llc
-LLC = $(HOME)/llvm-dev/build-debug/bin/llc
+LLC = $(HOME)/llvm-dev/build/bin/llc
 CLEAN_TEST = $(LLVMSRCPATH)/utils/clean-test.sh
 UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
-TARGETS = vld.ll vst.ll pfchv.ll
+TARGETS = vld.ll vst.ll pfchv.ll lsv.ll
 
 all: $(TARGETS)
 
