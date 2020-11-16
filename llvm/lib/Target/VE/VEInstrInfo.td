@@ -77,17 +77,6 @@ def HIFP32 : SDNodeXForm<fpimm, [{
   return CurDAG->getTargetConstant(Hi_32(getFpImmVal(N)), SDLoc(N), MVT::i32);
 }]>;
 
-/*
-def GetVL : SDNodeXForm<imm, [{
-  // Get a virtual register for VL and return it.
-  MachineFunction& MF = CurDAG->getMachineFunction();
-  unsigned VLReg =
-      MF.getSubtarget<VESubtarget>().getInstrInfo()->getVectorLengthReg(&MF);
-  return CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VLReg,
-                                MVT::i32);
-}]>;
-*/
-
 def icond2cc : SDNodeXForm<cond, [{
   VECC::CondCode VECC = intCondCode2Icc(N->get());
   return CurDAG->getTargetConstant(VECC, SDLoc(N), MVT::i32);
