@@ -24,13 +24,13 @@ define x86_regcallcc <256 x i1> @loadv256i1(<256 x i1>* nocapture readonly) {
 define x86_regcallcc <256 x i1> @loadv256i1stk() {
 ; CHECK-LABEL: loadv256i1stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s16, -32(, %s9)
+; CHECK-NEXT:    ld %s16, 176(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 0, %s16
-; CHECK-NEXT:    ld %s16, -24(, %s9)
+; CHECK-NEXT:    ld %s16, 184(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 1, %s16
-; CHECK-NEXT:    ld %s16, -16(, %s9)
+; CHECK-NEXT:    ld %s16, 192(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 2, %s16
-; CHECK-NEXT:    ld %s16, -8(, %s9)
+; CHECK-NEXT:    ld %s16, 200(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 3, %s16
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca <256 x i1>, align 16
@@ -88,21 +88,21 @@ define x86_regcallcc <512 x i1> @loadv512i1stk() {
 ; CHECK-LABEL: loadv512i1stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    # implicit-def: $vmp1
-; CHECK-NEXT:    ld %s16, -64(, %s9)
+; CHECK-NEXT:    ld %s16, 176(, %s11)
 ; CHECK-NEXT:    lvm %vm3, 0, %s16
-; CHECK-NEXT:    ld %s16, -56(, %s9)
+; CHECK-NEXT:    ld %s16, 184(, %s11)
 ; CHECK-NEXT:    lvm %vm3, 1, %s16
-; CHECK-NEXT:    ld %s16, -48(, %s9)
+; CHECK-NEXT:    ld %s16, 192(, %s11)
 ; CHECK-NEXT:    lvm %vm3, 2, %s16
-; CHECK-NEXT:    ld %s16, -40(, %s9)
+; CHECK-NEXT:    ld %s16, 200(, %s11)
 ; CHECK-NEXT:    lvm %vm3, 3, %s16
-; CHECK-NEXT:    ld %s16, -32(, %s9)
+; CHECK-NEXT:    ld %s16, 208(, %s11)
 ; CHECK-NEXT:    lvm %vm2, 0, %s16
-; CHECK-NEXT:    ld %s16, -24(, %s9)
+; CHECK-NEXT:    ld %s16, 216(, %s11)
 ; CHECK-NEXT:    lvm %vm2, 1, %s16
-; CHECK-NEXT:    ld %s16, -16(, %s9)
+; CHECK-NEXT:    ld %s16, 224(, %s11)
 ; CHECK-NEXT:    lvm %vm2, 2, %s16
-; CHECK-NEXT:    ld %s16, -8(, %s9)
+; CHECK-NEXT:    ld %s16, 232(, %s11)
 ; CHECK-NEXT:    lvm %vm2, 3, %s16
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca <512 x i1>, align 16

@@ -78,7 +78,7 @@ declare i32 @llvm.eh.sjlj.setjmp(i8*)
 ; Function Attrs: noinline nounwind optnone
 define void @t_longjmp() {
 ; CHECK-LABEL: t_longjmp:
-; CHECK:       # %bb.0:
+; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, buf@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, buf@hi(, %s0)

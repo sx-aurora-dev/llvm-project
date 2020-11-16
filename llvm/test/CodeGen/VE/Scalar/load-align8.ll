@@ -11,7 +11,7 @@
 define double @loadf64stk() {
 ; CHECK-LABEL: loadf64stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s0, -8(, %s9)
+; CHECK-NEXT:    ld %s0, 184(, %s11)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca double, align 8
   %1 = load double, double* %addr, align 8
@@ -22,7 +22,7 @@ define double @loadf64stk() {
 define float @loadf32stk() {
 ; CHECK-LABEL: loadf32stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldu %s0, -8(, %s9)
+; CHECK-NEXT:    ldu %s0, 184(, %s11)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca float, align 8
   %1 = load float, float* %addr, align 8
@@ -33,7 +33,7 @@ define float @loadf32stk() {
 define i64 @loadi64stk() {
 ; CHECK-LABEL: loadi64stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s0, -8(, %s9)
+; CHECK-NEXT:    ld %s0, 184(, %s11)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca i64, align 8
   %1 = load i64, i64* %addr, align 8
@@ -44,7 +44,7 @@ define i64 @loadi64stk() {
 define i32 @loadi32stk() {
 ; CHECK-LABEL: loadi32stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s0, -8(, %s9)
+; CHECK-NEXT:    ldl.sx %s0, 184(, %s11)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca i32, align 8
   %1 = load i32, i32* %addr, align 8
@@ -55,7 +55,7 @@ define i32 @loadi32stk() {
 define i16 @loadi16stk() {
 ; CHECK-LABEL: loadi16stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld2b.zx %s0, -8(, %s9)
+; CHECK-NEXT:    ld2b.zx %s0, 184(, %s11)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca i16, align 8
   %1 = load i16, i16* %addr, align 8
@@ -66,7 +66,7 @@ define i16 @loadi16stk() {
 define i8 @loadi8stk() {
 ; CHECK-LABEL: loadi8stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld1b.zx %s0, -8(, %s9)
+; CHECK-NEXT:    ld1b.zx %s0, 184(, %s11)
 ; CHECK-NEXT:    or %s11, 0, %s9
   %addr = alloca i8, align 8
   %1 = load i8, i8* %addr, align 8

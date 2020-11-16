@@ -601,6 +601,7 @@ define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, s@hi(, %s2)
 ; CHECK-NEXT:    and %s2, -4, %s2
+; FIXME: following ld2b.zx should be ldl.sx...
 ; CHECK-NEXT:    ld2b.zx %s3, 2(, %s2)
 ; CHECK-NEXT:    and %s1, %s1, (48)0
 ; CHECK-NEXT:    and %s0, %s0, (48)0
@@ -625,7 +626,6 @@ define signext i16 @test_atomic_compare_exchange_2(i16, i16) {
 ; CHECK-NEXT:    and %s0, 1, %s0
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME: following ld2b.zx should be ldl.sx...
 entry:
   %2 = cmpxchg i16* @s, i16 %0, i16 %1 seq_cst seq_cst
   %3 = extractvalue { i16, i1 } %2, 1
@@ -680,15 +680,15 @@ entry: %2 = cmpxchg i64* @l, i64 %0, i64 %1 seq_cst seq_cst
 define i128 @test_atomic_compare_exchange_16(i128, i128) {
 ; CHECK-LABEL: test_atomic_compare_exchange_16:
 ; CHECK:       .LBB{{[0-9]+}}_2: # %entry
-; CHECK-NEXT:    st %s1, -8(, %s9)
-; CHECK-NEXT:    st %s0, -16(, %s9)
+; CHECK-NEXT:    st %s1, 248(, %s11)
+; CHECK-NEXT:    st %s0, 240(, %s11)
 ; CHECK-NEXT:    lea %s0, __atomic_compare_exchange_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_compare_exchange_16@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, it@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, it@hi(, %s0)
-; CHECK-NEXT:    lea %s1, -16(, %s9)
+; CHECK-NEXT:    lea %s1, 240(, %s11)
 ; CHECK-NEXT:    or %s4, 5, (0)1
 ; CHECK-NEXT:    or %s5, 5, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)

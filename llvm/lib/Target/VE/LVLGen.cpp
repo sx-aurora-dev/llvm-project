@@ -19,25 +19,23 @@ using namespace llvm;
 #define DEBUG_TYPE "lvl-gen"
 
 namespace {
-  struct LVLGen : public MachineFunctionPass {
-    const TargetInstrInfo *TII;
-    const TargetRegisterInfo *TRI;
+struct LVLGen : public MachineFunctionPass {
+  const TargetInstrInfo *TII;
+  const TargetRegisterInfo *TRI;
 
-    static char ID;
-    LVLGen() : MachineFunctionPass(ID) {}
-    bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
-    bool runOnMachineFunction(MachineFunction &F) override;
+  static char ID;
+  LVLGen() : MachineFunctionPass(ID) {}
+  bool runOnMachineBasicBlock(MachineBasicBlock &MBB);
+  bool runOnMachineFunction(MachineFunction &F) override;
 
-    unsigned getVL(const MachineInstr &MI);
-    int getVLIndex(unsigned Opcode);
-  };
-  char LVLGen::ID = 0;
+  unsigned getVL(const MachineInstr &MI);
+  int getVLIndex(unsigned Opcode);
+};
+char LVLGen::ID = 0;
 
 } // end of anonymous namespace
 
-FunctionPass *llvm::createLVLGenPass() {
-  return new LVLGen;
-}
+FunctionPass *llvm::createLVLGenPass() { return new LVLGen; }
 
 int LVLGen::getVLIndex(unsigned Opcode) {
   const MCInstrDesc &MCID = TII->get(Opcode);
@@ -51,25 +49,23 @@ int LVLGen::getVLIndex(unsigned Opcode) {
 
 // returns a register holding a vector length. NoRegister is returned when
 // this MI does not have a vector length.
-unsigned LVLGen::getVL(const MachineInstr &MI)
-{
-  int index = getVLIndex(MI.getOpcode());
-  if (index >= 0)
-    return MI.getOperand(index).getReg();
+unsigned LVLGen::getVL(const MachineInstr &MI) {
+  int Index = getVLIndex(MI.getOpcode());
+  if (Index >= 0)
+    return MI.getOperand(Index).getReg();
 
   return VE::NoRegister;
 }
 
-bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
-{
-#define RegName(no) \
+bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB) {
+#define RegName(no)                                                            \
   (MBB.getParent()->getSubtarget<VESubtarget>().getRegisterInfo()->getName(no))
 
   bool Changed = false;
-  bool hasRegForVL = false;
+  bool HasRegForVL = false;
   unsigned RegForVL;
 
-  for (MachineBasicBlock::iterator I = MBB.begin(); I != MBB.end(); ) {
+  for (MachineBasicBlock::iterator I = MBB.begin(); I != MBB.end();) {
     MachineBasicBlock::iterator MI = I;
 
     unsigned Reg = getVL(*MI);
@@ -78,32 +74,33 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
       LLVM_DEBUG(MI->dump());
       LLVM_DEBUG(dbgs() << "Vector length is " << RegName(Reg) << ". ");
       LLVM_DEBUG(dbgs() << "Current VL is "
-                 << (hasRegForVL ? RegName(RegForVL) : "unknown") << ". ");
+                        << (HasRegForVL ? RegName(RegForVL) : "unknown")
+                        << ". ");
 
-      if (!hasRegForVL || RegForVL != Reg) {
+      if (!HasRegForVL || RegForVL != Reg) {
         LLVM_DEBUG(dbgs() << "Generate a LVL instruction to load "
-                << RegName(Reg) << ".\n");
+                          << RegName(Reg) << ".\n");
         BuildMI(MBB, I, MI->getDebugLoc(), TII->get(VE::LVLr)).addReg(Reg);
-        hasRegForVL = true;
+        HasRegForVL = true;
         RegForVL = Reg;
         Changed = true;
       } else {
         LLVM_DEBUG(dbgs() << "Reuse current VL.\n");
       }
-    } else if (hasRegForVL) {
-      // Old VL is overwritten, so disable hasRegForVL.
+    } else if (HasRegForVL) {
+      // Old VL is overwritten, so disable HasRegForVL.
       if (MI->findRegisterDefOperandIdx(RegForVL, false, false, TRI) != -1) {
         LLVM_DEBUG(dbgs() << RegName(RegForVL) << " is killed: ");
         LLVM_DEBUG(MI->dump());
-        hasRegForVL = false;
+        HasRegForVL = false;
       }
     }
-    if (hasRegForVL) {
-      // The latest VL is killed, so disable hasRegForVL.
+    if (HasRegForVL) {
+      // The latest VL is killed, so disable HasRegForVL.
       if (MI->killsRegister(RegForVL, TRI)) {
         LLVM_DEBUG(dbgs() << RegName(RegForVL) << " is killed: ");
         LLVM_DEBUG(MI->dump());
-        hasRegForVL = false;
+        HasRegForVL = false;
       }
     }
 
@@ -112,20 +109,18 @@ bool LVLGen::runOnMachineBasicBlock(MachineBasicBlock &MBB)
   return Changed;
 }
 
-bool LVLGen::runOnMachineFunction(MachineFunction &F)
-{
+bool LVLGen::runOnMachineFunction(MachineFunction &F) {
   LLVM_DEBUG(dbgs() << "********** Begin LVLGen **********\n");
   LLVM_DEBUG(dbgs() << "********** Function: " << F.getName() << '\n');
   LLVM_DEBUG(F.dump());
 
   bool Changed = false;
 
-  const VESubtarget& Subtarget = F.getSubtarget<VESubtarget>();
+  const VESubtarget &Subtarget = F.getSubtarget<VESubtarget>();
   TII = Subtarget.getInstrInfo();
   TRI = Subtarget.getRegisterInfo();
 
-  for (MachineFunction::iterator FI = F.begin(), FE = F.end();
-       FI != FE; ++FI)
+  for (MachineFunction::iterator FI = F.begin(), FE = F.end(); FI != FE; ++FI)
     Changed |= runOnMachineBasicBlock(*FI);
 
   if (Changed) {
@@ -135,4 +130,3 @@ bool LVLGen::runOnMachineFunction(MachineFunction &F)
   LLVM_DEBUG(dbgs() << "********** End LVLGen **********\n");
   return Changed;
 }
-

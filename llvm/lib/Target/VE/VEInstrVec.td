@@ -33,6 +33,11 @@ def STVM512rii : Pseudo<
     (outs), (ins MEMrii:$addr, VM512:$vmx),
     "# pseudo stvm512 $addr, $vmx", []>;
 }
+
+// Pseudo instructions for VM512 modifications
+//
+// Specifies hasSideEffects = 0 to disable UnmodeledSideEffects.
+
 let hasSideEffects = 0 in {
   let Constraints = "$vx = $vd", DisableEncoding = "$vd" in {
     def LVMyir_y : Pseudo<(outs VM512:$vx), (ins uimm3:$sy, I64:$sz, VM512:$vd),

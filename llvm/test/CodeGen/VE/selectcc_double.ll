@@ -228,8 +228,8 @@ define { double, double } @func_double_dcomp(double %0, double %1, double %2, do
 define { fp128, fp128 } @func_double_qcomp(double %0, double %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_double_qcomp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    fcmp.d %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.d.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.d.eq %s7, %s3, %s0
@@ -460,8 +460,8 @@ define { double, double } @func_double_dcomp_zero(double %0, double %1, double %
 define { fp128, fp128 } @func_double_qcomp_zero(double %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_double_qcomp_zero:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    cmov.d.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.d.eq %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.d.eq %s34, %s4, %s0
@@ -723,8 +723,8 @@ define { double, double } @func_double_dcomp_i(double %0, double %1, double %2, 
 define { fp128, fp128 } @func_double_qcomp_i(double %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_double_qcomp_i:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    lea.sl %s1, 1076363264
 ; CHECK-NEXT:    fcmp.d %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.d.eq %s6, %s2, %s0
@@ -988,8 +988,8 @@ define { double, double } @func_double_dcomp_m(double %0, double %1, double %2, 
 define { fp128, fp128 } @func_double_qcomp_m(double %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_double_qcomp_m:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    lea.sl %s1, -1073741824
 ; CHECK-NEXT:    fcmp.d %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.d.eq %s6, %s2, %s0

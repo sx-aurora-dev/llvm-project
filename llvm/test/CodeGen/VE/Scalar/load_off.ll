@@ -12,7 +12,7 @@
 ; Function Attrs: noinline nounwind optnone
 define signext i8 @loadi8s() {
 ; CHECK-LABEL: loadi8s:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, bufi8@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, bufi8@hi(, %s0)
@@ -26,7 +26,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define signext i16 @loadi16s() {
 ; CHECK-LABEL: loadi16s:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, bufi16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, bufi16@hi(, %s0)
@@ -40,7 +40,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define signext i32 @loadi32s() {
 ; CHECK-LABEL: loadi32s:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, bufi32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, bufi32@hi(, %s0)
@@ -54,7 +54,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define i64 @loadi64s() {
 ; CHECK-LABEL: loadi64s:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, bufi64@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, bufi64@hi(, %s0)
@@ -68,7 +68,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define i128 @loadi128s() {
 ; CHECK-LABEL: loadi128s:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, bufi128@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, bufi128@hi(, %s0)
@@ -83,7 +83,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define zeroext i8 @loadi8z() {
 ; CHECK-LABEL: loadi8z:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, bufi8@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, bufi8@hi(, %s0)
@@ -97,7 +97,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define zeroext i16 @loadi16z() {
 ; CHECK-LABEL: loadi16z:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, bufi16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, bufi16@hi(, %s0)
@@ -111,7 +111,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define zeroext i32 @loadi32z() {
 ; CHECK-LABEL: loadi32z:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, bufi32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, bufi32@hi(, %s0)
@@ -125,7 +125,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define i64 @loadi64z() {
 ; CHECK-LABEL: loadi64z:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, bufi64@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, bufi64@hi(, %s0)
@@ -139,7 +139,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define i128 @loadi128z() {
 ; CHECK-LABEL: loadi128z:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, bufi128@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, bufi128@hi(, %s0)
@@ -154,7 +154,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define float @loadf32() {
 ; CHECK-LABEL: loadf32:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, buff32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, buff32@hi(, %s0)
@@ -168,7 +168,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define double @loadf64() {
 ; CHECK-LABEL: loadf64:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, buff64@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, buff64@hi(, %s0)
@@ -182,7 +182,7 @@ entry:
 ; Function Attrs: noinline nounwind optnone
 define fp128 @loadf128() {
 ; CHECK-LABEL: loadf128:
-; CHECK:       # %bb.0:
+; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, buff128@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s2, buff128@hi(, %s0)

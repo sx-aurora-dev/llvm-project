@@ -362,11 +362,12 @@ if config.android:
     android_api_level = int(android_api_level_str)
   except ValueError:
     lit_config.fatal("Failed to read ro.build.version.sdk (using '%s' as adb): got '%s'" % (adb, android_api_level_str))
+  android_api_level = min(android_api_level, int(config.android_api_level))
   if android_api_level >= 26:
     config.available_features.add('android-26')
   if android_api_level >= 28:
     config.available_features.add('android-28')
-  if android_api_level >= 31 or android_api_codename == 'S':
+  if android_api_level > 30 or (android_api_level == 30 and android_api_codename == 'S'):
     config.available_features.add('android-thread-properties-api')
 
   # Prepare the device.

@@ -371,14 +371,16 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
     const TargetRegisterInfo *TRI = &getRegisterInfo();
-    unsigned TmpReg = VE::SX16;
-    unsigned SubTmp = TRI->getSubReg(TmpReg, VE::sub_i32);
+    Register TmpReg = VE::SX16;
+    Register SubTmp = TRI->getSubReg(TmpReg, VE::sub_i32);
     BuildMI(MBB, I, DL, get(VE::LEAzii), TmpReg)
-        .addImm(0).addImm(0).addImm(256);
+        .addImm(0)
+        .addImm(0)
+        .addImm(256);
     MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::VORmvl), DestReg)
-        .addImm(M1(0)) // Represent (0)1.
-        .addReg(SrcReg, getKillRegState(KillSrc))
-        .addReg(SubTmp, getKillRegState(true));
+                                  .addImm(M1(0)) // Represent (0)1.
+                                  .addReg(SrcReg, getKillRegState(KillSrc))
+                                  .addReg(SubTmp, getKillRegState(true));
     MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
   } else if (VE::VMRegClass.contains(DestReg, SrcReg))
     BuildMI(MBB, I, DL, get(VE::ANDMmm), DestReg)
@@ -803,29 +805,25 @@ Register VEInstrInfo::getGlobalBaseReg(MachineFunction *MF) const {
   return GlobalBaseReg;
 }
 
-static int GetVM512Upper(int no)
-{
-    return (no - VE::VMP0) * 2 + VE::VM0;
+static Register getVM512Upper(Register reg) {
+  return (reg - VE::VMP0) * 2 + VE::VM0;
 }
 
-static int GetVM512Lower(int no)
-{
-    return GetVM512Upper(no) + 1;
-}
+static Register getVM512Lower(Register reg) { return getVM512Upper(reg) + 1; }
 
 static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
   MachineBasicBlock* MBB = MI.getParent();
   DebugLoc dl = MI.getDebugLoc();
 
-  unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
-  unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
-  unsigned VMYu = GetVM512Upper(MI.getOperand(1).getReg());
-  unsigned VMYl = GetVM512Lower(MI.getOperand(1).getReg());
+  unsigned VMXu = getVM512Upper(MI.getOperand(0).getReg());
+  unsigned VMXl = getVM512Lower(MI.getOperand(0).getReg());
+  unsigned VMYu = getVM512Upper(MI.getOperand(1).getReg());
+  unsigned VMYl = getVM512Lower(MI.getOperand(1).getReg());
 
   switch (MI.getOpcode()) {
   default: {
-      unsigned VMZu = GetVM512Upper(MI.getOperand(2).getReg());
-      unsigned VMZl = GetVM512Lower(MI.getOperand(2).getReg());
+      unsigned VMZu = getVM512Upper(MI.getOperand(2).getReg());
+      unsigned VMZl = getVM512Lower(MI.getOperand(2).getReg());
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu);
       BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
       break;
@@ -867,8 +865,8 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
     MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower));
 
     // VM512
-    Bu.addReg(GetVM512Upper(MI.getOperand(0).getReg()));
-    Bl.addReg(GetVM512Lower(MI.getOperand(0).getReg()));
+    Bu.addReg(getVM512Upper(MI.getOperand(0).getReg()));
+    Bl.addReg(getVM512Lower(MI.getOperand(0).getReg()));
 
     if (MI.getNumExplicitOperands() == 2) { // _Ml: VM512, VL
       // VL
@@ -892,8 +890,8 @@ static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
       Bu.addReg(MI.getOperand(2).getReg());
       Bl.addReg(MI.getOperand(2).getReg());
       // VM512
-      Bu.addReg(GetVM512Upper(MI.getOperand(3).getReg()));
-      Bl.addReg(GetVM512Lower(MI.getOperand(3).getReg()));
+      Bu.addReg(getVM512Upper(MI.getOperand(3).getReg()));
+      Bl.addReg(getVM512Lower(MI.getOperand(3).getReg()));
       // VL
       Bu.addReg(MI.getOperand(4).getReg());
       Bl.addReg(MI.getOperand(4).getReg());
@@ -962,72 +960,71 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   case VE::LVMyim:
   case VE::LVMyir_y:
   case VE::LVMyim_y: {
-    unsigned VMXu = GetVM512Upper(MI.getOperand(0).getReg());
-    unsigned VMXl = GetVM512Lower(MI.getOperand(0).getReg());
+    Register VMXu = getVM512Upper(MI.getOperand(0).getReg());
+    Register VMXl = getVM512Lower(MI.getOperand(0).getReg());
     int64_t Imm = MI.getOperand(1).getImm();
     bool IsSrcReg =
         MI.getOpcode() == VE::LVMyir || MI.getOpcode() == VE::LVMyir_y;
-    unsigned Src = IsSrcReg ? MI.getOperand(2).getReg() : VE::NoRegister;
+    Register Src = IsSrcReg ? MI.getOperand(2).getReg() : VE::NoRegister;
     int64_t MImm = IsSrcReg ? 0 : MI.getOperand(2).getImm();
     bool KillSrc = IsSrcReg ? MI.getOperand(2).isKill() : false;
-    unsigned VMX = VMXl;
+    Register VMX = VMXl;
     if (Imm >= 4) {
-        VMX = VMXu;
-        Imm -= 4;
+      VMX = VMXu;
+      Imm -= 4;
     }
-    MachineBasicBlock* MBB = MI.getParent();
+    MachineBasicBlock *MBB = MI.getParent();
     DebugLoc DL = MI.getDebugLoc();
     switch (MI.getOpcode()) {
     case VE::LVMyir:
       BuildMI(*MBB, MI, DL, get(VE::LVMir))
-        .addDef(VMX)
-        .addImm(Imm)
-        .addReg(Src, getKillRegState(KillSrc));
+          .addDef(VMX)
+          .addImm(Imm)
+          .addReg(Src, getKillRegState(KillSrc));
       break;
     case VE::LVMyim:
       BuildMI(*MBB, MI, DL, get(VE::LVMim))
-        .addDef(VMX)
-        .addImm(Imm)
-        .addImm(MImm);
+          .addDef(VMX)
+          .addImm(Imm)
+          .addImm(MImm);
       break;
     case VE::LVMyir_y:
       assert(MI.getOperand(0).getReg() == MI.getOperand(3).getReg() &&
              "LVMyir_y has different register in 3rd operand");
       BuildMI(*MBB, MI, DL, get(VE::LVMir_m))
-        .addDef(VMX)
-        .addImm(Imm)
-        .addReg(Src, getKillRegState(KillSrc))
-        .addReg(VMX);
+          .addDef(VMX)
+          .addImm(Imm)
+          .addReg(Src, getKillRegState(KillSrc))
+          .addReg(VMX);
       break;
     case VE::LVMyim_y:
       assert(MI.getOperand(0).getReg() == MI.getOperand(3).getReg() &&
              "LVMyim_y has different register in 3rd operand");
       BuildMI(*MBB, MI, DL, get(VE::LVMim_m))
-        .addDef(VMX)
-        .addImm(Imm)
-        .addImm(MImm)
-        .addReg(VMX);
+          .addDef(VMX)
+          .addImm(Imm)
+          .addImm(MImm)
+          .addReg(VMX);
       break;
     }
     MI.eraseFromParent();
     return true;
   }
   case VE::SVMyi: {
-    unsigned Dest = MI.getOperand(0).getReg();
-    unsigned VMZu = GetVM512Upper(MI.getOperand(1).getReg());
-    unsigned VMZl = GetVM512Lower(MI.getOperand(1).getReg());
+    Register Dest = MI.getOperand(0).getReg();
+    Register VMZu = getVM512Upper(MI.getOperand(1).getReg());
+    Register VMZl = getVM512Lower(MI.getOperand(1).getReg());
     bool KillSrc = MI.getOperand(1).isKill();
     int64_t Imm = MI.getOperand(2).getImm();
-    unsigned VMZ = VMZl;
+    Register VMZ = VMZl;
     if (Imm >= 4) {
-        VMZ = VMZu;
-        Imm -= 4;
+      VMZ = VMZu;
+      Imm -= 4;
     }
-    MachineBasicBlock* MBB = MI.getParent();
+    MachineBasicBlock *MBB = MI.getParent();
     DebugLoc DL = MI.getDebugLoc();
-    MachineInstrBuilder MIB = BuildMI(*MBB, MI, DL, get(VE::SVMmi), Dest)
-      .addReg(VMZ)
-      .addImm(Imm);
+    MachineInstrBuilder MIB =
+        BuildMI(*MBB, MI, DL, get(VE::SVMmi), Dest).addReg(VMZ).addImm(Imm);
     MachineInstr *Inst = MIB.getInstr();
     MI.eraseFromParent();
     if (KillSrc) {

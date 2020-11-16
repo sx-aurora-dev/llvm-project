@@ -260,10 +260,10 @@ define { double, double } @func_u128_dcomp(i128 %0, i128 %1, double %2, double %
 define { fp128, fp128 } @func_u128_qcomp(i128 %0, i128 %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_u128_qcomp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 256(, %s9)
-; CHECK-NEXT:    ld %s34, 264(, %s9)
-; CHECK-NEXT:    ld %s37, 240(, %s9)
-; CHECK-NEXT:    ld %s36, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 432(, %s11)
+; CHECK-NEXT:    ld %s34, 440(, %s11)
+; CHECK-NEXT:    ld %s37, 416(, %s11)
+; CHECK-NEXT:    ld %s36, 424(, %s11)
 ; CHECK-NEXT:    xor %s1, %s1, %s3
 ; CHECK-NEXT:    xor %s0, %s0, %s2
 ; CHECK-NEXT:    or %s0, %s0, %s1
@@ -512,8 +512,8 @@ define { double, double } @func_u128_dcomp_zero(i128 %0, double %1, double %2, d
 define { fp128, fp128 } @func_u128_qcomp_zero(i128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_u128_qcomp_zero:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s7, %s3, %s0
@@ -776,8 +776,8 @@ define { double, double } @func_u128_dcomp_i(i128 %0, double %1, double %2, doub
 define { fp128, fp128 } @func_u128_qcomp_i(i128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_u128_qcomp_i:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    xor %s0, 12, %s0
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s6, %s2, %s0

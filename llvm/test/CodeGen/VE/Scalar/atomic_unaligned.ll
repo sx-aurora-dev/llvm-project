@@ -538,10 +538,10 @@ define i32 @test_atomic_exchange_4_align1() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, sci1@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 1886417008
+; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 ; CHECK-NEXT:    ts1am.w %s0, 1(%s1), 15
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 entry:
   %0 = atomicrmw xchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 1886417008 seq_cst
   ret i32 %0
@@ -573,10 +573,10 @@ define i64 @test_atomic_exchange_8_align1() {
 ; CHECK-NEXT:    lea.sl %s1, scl1@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    lea.sl %s0, 1886417008(, %s0)
+; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 ; CHECK-NEXT:    ts1am.l %s0, 1(%s1), 127
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 entry:
   %0 = atomicrmw xchg i64* getelementptr inbounds (%struct.scl, %struct.scl* @scl1, i32 0, i32 1), i64 8102099357864587376 acquire
   ret i64 %0
@@ -591,10 +591,10 @@ define i64 @test_atomic_exchange_8_align4() {
 ; CHECK-NEXT:    lea.sl %s1, sil1@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, 1886417008
 ; CHECK-NEXT:    lea.sl %s0, 1886417008(, %s0)
+; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 ; CHECK-NEXT:    ts1am.l %s0, 4(%s1), 127
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 entry:
   %0 = atomicrmw xchg i64* getelementptr inbounds (%struct.sil, %struct.sil* @sil1, i32 0, i32 1), i64 8102099357864587376 acquire
   ret i64 %0
@@ -749,6 +749,7 @@ define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
 ; CHECK-NEXT:    lea %s2, sci1@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, sci1@hi(, %s2)
+; FIXME:       Bus Error occurred due to unaligned cas instruction
 ; CHECK-NEXT:    cas.w %s1, 1(%s2), %s0
 ; CHECK-NEXT:    cmps.w.zx %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
@@ -756,7 +757,6 @@ define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
   %2 = cmpxchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 %0, i32 %1 seq_cst seq_cst
   %3 = extractvalue { i32, i1 } %2, 1
@@ -793,6 +793,7 @@ define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
 ; CHECK-NEXT:    lea %s2, scl1@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, scl1@hi(, %s2)
+; FIXME:       Bus Error occurred due to unaligned cas instruction
 ; CHECK-NEXT:    cas.l %s1, 1(%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
@@ -800,7 +801,6 @@ define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
   %2 = cmpxchg i64* getelementptr inbounds (%struct.scl, %struct.scl* @scl1, i32 0, i32 1), i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
@@ -816,6 +816,7 @@ define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
 ; CHECK-NEXT:    lea %s2, sil1@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, sil1@hi(, %s2)
+; FIXME:       Bus Error occurred due to unaligned cas instruction
 ; CHECK-NEXT:    cas.l %s1, 4(%s2), %s0
 ; CHECK-NEXT:    cmps.l %s0, %s1, %s0
 ; CHECK-NEXT:    ldz %s0, %s0
@@ -823,7 +824,6 @@ define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
   %2 = cmpxchg i64* getelementptr inbounds (%struct.sil, %struct.sil* @sil1, i32 0, i32 1), i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
@@ -835,15 +835,15 @@ entry:
 define i128 @test_atomic_compare_exchange_16(i128, i128) {
 ; CHECK-LABEL: test_atomic_compare_exchange_16:
 ; CHECK:       .LBB{{[0-9]+}}_2: # %entry
-; CHECK-NEXT:    st %s1, -8(, %s9)
-; CHECK-NEXT:    st %s0, -16(, %s9)
+; CHECK-NEXT:    st %s1, 248(, %s11)
+; CHECK-NEXT:    st %s0, 240(, %s11)
 ; CHECK-NEXT:    lea %s0, __atomic_compare_exchange_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_compare_exchange_16@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, it@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, it@hi(, %s0)
-; CHECK-NEXT:    lea %s1, -16(, %s9)
+; CHECK-NEXT:    lea %s1, 240(, %s11)
 ; CHECK-NEXT:    or %s4, 5, (0)1
 ; CHECK-NEXT:    or %s5, 5, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)

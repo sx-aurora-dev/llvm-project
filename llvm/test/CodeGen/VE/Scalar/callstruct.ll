@@ -25,11 +25,11 @@ define void @caller() {
 ; CHECK-NEXT:    lea %s0, callee@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, callee@hi(, %s0)
-; CHECK-NEXT:    lea %s0, -8(, %s9)
+; CHECK-NEXT:    lea %s0, 248(, %s11)
 ; CHECK-NEXT:    or %s1, 3, (0)1
 ; CHECK-NEXT:    or %s2, 4, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    ld %s0, -8(, %s9)
+; CHECK-NEXT:    ld %s0, 248(, %s11)
 ; CHECK-NEXT:    lea %s1, A@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s1, A@hi(, %s1)
