@@ -5349,10 +5349,8 @@ LoopVectorizationCostModel::computeFeasibleMaxVF(unsigned ConstTripCount) {
   LLVM_DEBUG(dbgs() << "LV: The Widest register safe to use is: "
                     << WidestRegister << " bits.\n");
 
-#if 0
   assert(MaxVectorSize <= 256 && "Did not expect to pack so many elements"
                                  " into one vector!");
-#endif
 
   if (MaxVectorSize == 0) {
     LLVM_DEBUG(dbgs() << "LV: The target has no vector registers.\n");
