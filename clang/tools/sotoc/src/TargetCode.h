@@ -24,7 +24,7 @@ class SourceManager;
 
 using TargetCodeFragmentDeque = std::deque<std::shared_ptr<TargetCodeFragment>>;
 
-  extern int clauseparam;
+extern int clauseparam;
 /// A collection of all code from the input file that needs to be copied to the
 /// target source file.
 class TargetCode {
@@ -75,4 +75,6 @@ private:
   void generateFunctionEpilogue(TargetCodeRegion *TCR, llvm::raw_ostream &Out);
   /// Generate a function name for a target region.
   std::string generateFunctionName(TargetCodeRegion *TCR);
+  void generateArgument(const TargetRegionVariable &Aarg,
+                        llvm::raw_ostream &Out);
 };

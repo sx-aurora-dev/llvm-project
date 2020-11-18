@@ -173,7 +173,7 @@ class FindPrivateVariablesVisitor
 
 public:
   FindPrivateVariablesVisitor(clang::SourceLocation TopSourceLocation, clang::SourceManager &SM)
-      : RegionTopSourceLocation(TopSourceLocation), SM(SM) {}
+      : SM(SM), RegionTopSourceLocation(TopSourceLocation) {}
 
   bool VisitExpr(clang::Expr *E);
   std::set<clang::VarDecl *> &getVarSet() {

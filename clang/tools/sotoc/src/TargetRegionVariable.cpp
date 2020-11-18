@@ -12,60 +12,58 @@
 ///
 //===----------------------------------------------------------------------===//
 
-
 #include "clang/AST/Decl.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/Type.h"
 
 #include "TargetRegionVariable.h"
 
-TargetRegionVariable::TargetRegionVariable(const clang::CapturedStmt::Capture *Capture, const std::map<clang::VarDecl *, clang::Expr *> &MappingLowerBounds)
+TargetRegionVariable::TargetRegionVariable(
+    const clang::CapturedStmt::Capture *Capture,
+    const std::map<clang::VarDecl *, clang::Expr *> &MappingLowerBounds)
     : Capture(Capture), Decl(Capture->getCapturedVar()),
-      OmpMappingLowerBound(MappingLowerBounds) {
+      NumVariableArrayDims(0), OmpMappingLowerBound(MappingLowerBounds) {
 
   VarName = Decl->getDeclName().getAsString();
 
-  auto DeclType = Decl->getType();
-  // If Decl is an array: get to the base type
-  if (auto *AT = llvm::dyn_cast<clang::ArrayType>(DeclType.getTypePtr())) {
-    while (auto *NAT =  llvm::dyn_cast<clang::ArrayType>(AT->getElementType().getTypePtr())) {
-      AT = NAT;
-    }
-    TypeName = AT->getElementType().getAsString();
-  } else {
-    TypeName = DeclType.getAsString();
-  }
-
-  if (auto ArrayType = llvm::dyn_cast<clang::ArrayType>(Decl->getType().getTypePtr())) {
-    determineDimensionSizes(ArrayType, 0);
-  }
+  determineShapes(Decl->getType());
 }
 
-void TargetRegionVariable::determineDimensionSizes(
-    const clang::ArrayType *T, unsigned int CurrentDimension) {
-  if (auto *SubArray = llvm::dyn_cast_or_null<clang::ConstantArrayType>(T)) {
-    DimensionSizes.push_back(SubArray->getSize().toString(10, false));
-  } else if (auto *SubArray =
-                 llvm::dyn_cast_or_null<clang::VariableArrayType>(T)) {
-    // For variable sized array dimension we get the size as an additonal
-    // parameter to the target function.
-    std::string PrettyStr = "";
-    llvm::raw_string_ostream PrettyOS(PrettyStr);
-    PrettyOS << "__sotoc_vla_dim" << CurrentDimension << "_" << VarName;
-    DimensionSizes.push_back(PrettyOS.str());
-    VarSizedDimensions.push_back(CurrentDimension);
-  }
-
-  CurrentDimension++;
-  auto *NextDimensionArray = clang::dyn_cast_or_null<clang::ArrayType>(
-      T->getElementType().getTypePtr());
-  if (NextDimensionArray) {
-    determineDimensionSizes(NextDimensionArray, CurrentDimension);
+void TargetRegionVariable::determineShapes(const clang::QualType T) {
+  // We want to determine the shapes of this variable from it's qualifiers
+  if (const auto *AT = llvm::dyn_cast<clang::ArrayType>(T.getTypePtr())) {
+    // We have a constant or variable length array
+    if (const auto *CAT = llvm::dyn_cast<clang::ConstantArrayType>(AT)) {
+      Shapes.push_back(TargetRegionVariableShape(CAT));
+    } else if (const auto *VAT = llvm::dyn_cast<clang::VariableArrayType>(AT)) {
+      Shapes.push_back(TargetRegionVariableShape(VAT, NumVariableArrayDims));
+    }
+    // The variable NumVariableArrayDims is basically stored to keep track how
+    // many array dimensions there are. Each variable length array dimension we
+    // record gets an index, later used to generate the __sotoc_vla_dimX
+    // parameters in which the host sends the variable size to the target
+    // region.
+    NumVariableArrayDims++;
+    return determineShapes(AT->getElementType());
+  } else if (auto *PT = llvm::dyn_cast<clang::PointerType>(T.getTypePtr())) {
+    // Poniters are easy: just record that we have a pointer (default constructed)
+    Shapes.push_back(TargetRegionVariableShape());
+    return determineShapes(PT->getPointeeType());
+  } else if (auto *PT = llvm::dyn_cast<clang::ParenType>(T.getTypePtr())) {
+    // Clang uses ParenType as sugar when there are parenthesis in the type
+    // declaration (I hate my life). Ignore that.
+    return determineShapes(PT->getInnerType());
+  } else {
+    // We have found the base type (without array dimensions or pointer specifiers).
+    BaseTypeName = T.getAsString();
   }
 }
 
 bool TargetRegionVariable::isArray() const {
-  return llvm::isa<clang::ArrayType>(Decl->getType().getTypePtr());
+  if (!Shapes.empty() && Shapes[0].isArray()) {
+    return true;
+  }
+  return false;
 }
 
 bool TargetRegionVariable::passedByPointer() const {

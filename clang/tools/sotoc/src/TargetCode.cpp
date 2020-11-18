@@ -25,9 +25,9 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/raw_ostream.h"
-#include "llvm/Support/FileSystem.h"
 
 #include "Debug.h"
 #include "OmpPragma.h"
@@ -100,6 +100,27 @@ void TargetCode::generateCode(llvm::raw_ostream &Out) {
   Out << "#undef omp_is_initial_device\n";
 }
 
+void TargetCode::generateArgument(const TargetRegionVariable &Arg,
+                                  llvm::raw_ostream &Out) {
+  std::string LHSStore;
+  std::string RHSStore;
+  llvm::raw_string_ostream LHS(LHSStore);
+  llvm::raw_string_ostream RHS(RHSStore);
+
+  for (auto &Shape : Arg.shapes()) {
+    if (Shape.isPointer()) {
+      LHS << "(*";
+      RHS << ")";
+    } else if (Shape.isConstantArray()) {
+      RHS << "[" << Shape.getConstantDimensionExpr() << "]";
+    } else if (Shape.isVariableArray()) {
+      RHS << "[]";
+    }
+  }
+
+  Out << LHS.str() << Arg.name() << RHS.str();
+}
+
 void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
                                           llvm::raw_ostream &Out) {
   bool first = true;
@@ -113,9 +134,9 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
     first = false;
 
     if (Var.isArray()) {
-      for (const unsigned int &d : Var.variabledSizedArrayDimensions()) {
-        Out << "unsigned long long __sotoc_vla_dim" << d << "_" << Var.name()
-            << ", ";
+      for (auto &d : Var.variableArrayShapes()) {
+        Out << "unsigned long long __sotoc_vla_dim"
+            << d.getVariableDimensionIndex() << "_" << Var.name() << ", ";
       }
     }
     // Because arrays are passed by reference and (for our purposes) their type
@@ -127,22 +148,24 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
       // full 64 bit we input into veo. We then later can change the type back
       // to float. I suspect some weirdness with IEEE 754 and the change of
       // variable length from 32 to 64 and back to 32 bit.
-      if (!Var.passedByPointer() && Var.typeName() == "float") {
+      if (!Var.passedByPointer() && Var.baseTypeName() == "float") {
         Out << "unsigned long long __sotoc_conv_var_";
       } else {
-        Out << Var.typeName() << " ";
+        Out << Var.baseTypeName() << " ";
       }
     }
 
     if (Var.passedByPointer()) {
-      Out << "*__sotoc_var_";
+      Out << "*__sotoc_var_" << Var.name();
+    } else {
+      generateArgument(Var, Out);
     }
-    Out << Var.name();
   }
 
   unsigned int clauseParam = 0;
-  for (auto C : TCR->getOMPClauses()){
-    if ((C->getClauseKind() == clang::OpenMPClauseKind::OMPC_num_threads) && !C->isImplicit()) {
+  for (auto C : TCR->getOMPClauses()) {
+    if ((C->getClauseKind() == clang::OpenMPClauseKind::OMPC_num_threads) &&
+        !C->isImplicit()) {
       if (!first) {
         Out << ", ";
       } else {
@@ -152,29 +175,6 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
       clauseParam++;
     }
   }
-
-  /*
-  for (auto *ClauseVar : TCR->ompClausesParams()) {
-    if (!first) {
-      Out << ", ";
-    } else {
-      first = false;
-    }
-
-    // TODO: this is the same code as in TargetRegionVariable.cpp, so we might
-    // want to deduplicated this.
-    auto *ClauseVarType = ClauseVar->getType().getTypePtr();
-    if (auto *AT = llvm::dyn_cast<clang::ArrayType>(ClauseVarType)) {
-      while (auto *NAT =  llvm::dyn_cast<clang::ArrayType>(AT->getElementType().getTypePtr())) {
-        AT = NAT;
-      }
-      Out << AT->getElementType().getAsString() << " *";
-    } else {
-      Out << ClauseVar->getType().getAsString() << " ";
-    }
-    Out << ClauseVar->getName();
-  }
-*/
 
   Out << ")\n{\n";
 
@@ -187,19 +187,26 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
         // Declare the arrays as a pointer. This way we can assign it a pointer
         // However, this also means we have to ignore the first array
         // dimension.
-        Out << "  " << Var.typeName() << " (*" << Var.name() << ")";
+        Out << "  " << Var.baseTypeName() << " (*" << Var.name() << ")";
 
         // For every array dimension other then the first: declare them by
         // adding the array brackets ('[', ']') to the declaration. Also add
         // the size of this dimension if we have it.
         bool first = true;
-        for (auto &dimensionSize: Var.arrayDimensionSizes()) {
-          //We need to discard the first element
+        for (auto &Shape : Var.shapes()) {
+          // We need to discard the first element
           if (first) {
             first = false;
             continue;
           }
-          Out << "[" << dimensionSize << "]";
+          Out << "[";
+          if (Shape.isConstantArray()) {
+            Out << Shape.getConstantDimensionExpr();
+          } else if (Shape.isVariableArray()) {
+            Out << "__sotoc_vla_dim" << Shape.getVariableDimensionIndex() << "_"
+                << Var.name();
+          }
+          Out << "]";
         }
         // After we have declare the array, we also need to assign it.
         // We may also have to adjust the array bounds if we only get a slice
@@ -215,20 +222,21 @@ void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,
         }
       } else {
         // Handle all other types passed by reference
-        Out << Var.typeName() << " " << Var.name() << " = "
+        Out << Var.baseTypeName() << " " << Var.name() << " = "
             << "*__sotoc_var_" << Var.name() << ";\n";
       }
       // After recieving floats as unsigned long long we want to change them
       // back to floats but without conversion as they already are formated
       // according to 32 bit floating point spec.
-    } else if (!Var.isArray() && !Var.passedByPointer() && Var.typeName() == "float") {
-        Out << "float " << Var.name() << " = *(float*)&(__sotoc_conv_var_"
-            << Var.name() << ");\n";
+    } else if (!Var.isArray() && !Var.passedByPointer() &&
+               Var.baseTypeName() == "float") {
+      Out << "float " << Var.name() << " = *(float*)&(__sotoc_conv_var_"
+          << Var.name() << ");\n";
     }
   }
 
   // Generate local declarations.
-  for (auto *privateVar: TCR->privateVars()) {
+  for (auto *privateVar : TCR->privateVars()) {
     Out << "  " << privateVar->getType().getAsString() << " "
         << privateVar->getName() << ";\n";
   }
