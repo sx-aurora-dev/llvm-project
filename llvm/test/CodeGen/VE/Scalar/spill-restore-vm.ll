@@ -7,21 +7,21 @@
 define void @check_spill_restore() {
 ; CHECK-LABEL: check_spill_restore:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    st %s18, 4384(, %s11) # 8-byte Folded Spill
-; CHECK-NEXT:    st %s19, 4392(, %s11) # 8-byte Folded Spill
+; CHECK-NEXT:    st %s18, 48(, %s9) # 8-byte Folded Spill
+; CHECK-NEXT:    st %s19, 56(, %s9) # 8-byte Folded Spill
 ; CHECK-NEXT:    lea %s0, memset@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, memset@hi(, %s0)
-; CHECK-NEXT:    lea %s0, 2288(, %s11)
+; CHECK-NEXT:    lea %s0, -2048(, %s9)
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    lea %s2, 2048
-; CHECK-NEXT:    lea %s18, 2288(, %s11)
+; CHECK-NEXT:    lea %s18, -2048(, %s9)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lea %s19, 256
 ; CHECK-NEXT:    lvl %s19
 ; CHECK-NEXT:    vld %v0, 8, %s18
 ; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lea %s0, 240(, %s11)
+; CHECK-NEXT:    lea %s0, -4096(, %s9)
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vst %v0, 8, %s0 # 2048-byte Folded Spill
 ; CHECK-NEXT:    lea %s0, puts@lo
@@ -32,14 +32,14 @@ define void @check_spill_restore() {
 ; CHECK-NEXT:    lea.sl %s0, .Lstr@hi(, %s0)
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lea %s0, 240(, %s11)
+; CHECK-NEXT:    lea %s0, -4096(, %s9)
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vld %v0, 8, %s0 # 2048-byte Folded Reload
 ; CHECK-NEXT:    lvl %s19
 ; CHECK-NEXT:    vadds.w.sx %v0, 3, %v0
 ; CHECK-NEXT:    vst %v0, 8, %s18
-; CHECK-NEXT:    ld %s19, 4392(, %s11) # 8-byte Folded Reload
-; CHECK-NEXT:    ld %s18, 4384(, %s11) # 8-byte Folded Reload
+; CHECK-NEXT:    ld %s19, 56(, %s9) # 8-byte Folded Reload
+; CHECK-NEXT:    ld %s18, 48(, %s9) # 8-byte Folded Reload
 ; CHECK-NEXT:    or %s11, 0, %s9
   %1 = alloca [256 x i64], align 8
   %2 = bitcast [256 x i64]* %1 to i8*

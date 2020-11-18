@@ -325,7 +325,9 @@ bool VEFrameLowering::hasFP(const MachineFunction &MF) const {
   const MachineFrameInfo &MFI = MF.getFrameInfo();
   return MF.getTarget().Options.DisableFramePointerElim(MF) ||
          RegInfo->needsStackRealignment(MF) || MFI.hasVarSizedObjects() ||
-         MFI.isFrameAddressTaken();
+         MFI.isFrameAddressTaken() || MFI.hasCalls();
+         // FIXME: A hasCalls check should not be here, but generated
+         //        code for ClamAV test won't work without this.
 }
 
 bool VEFrameLowering::hasBP(const MachineFunction &MF) const {

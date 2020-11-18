@@ -166,12 +166,12 @@ define void @_Z25atomic_store_relaxed_i128RNSt3__16atomicInEEn(%"struct.std::__1
 ; CHECK-LABEL: _Z25atomic_store_relaxed_i128RNSt3__16atomicInEEn:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s4, 0, %s0
-; CHECK-NEXT:    st %s2, 248(, %s11)
-; CHECK-NEXT:    st %s1, 240(, %s11)
+; CHECK-NEXT:    st %s2, -8(, %s9)
+; CHECK-NEXT:    st %s1, -16(, %s9)
 ; CHECK-NEXT:    lea %s0, __atomic_store@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_store@hi(, %s0)
-; CHECK-NEXT:    lea %s2, 240(, %s11)
+; CHECK-NEXT:    lea %s2, -16(, %s9)
 ; CHECK-NEXT:    or %s0, 16, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
 ; CHECK-NEXT:    or %s1, 0, %s4
@@ -192,12 +192,12 @@ define void @_Z25atomic_store_relaxed_u128RNSt3__16atomicIoEEo(%"struct.std::__1
 ; CHECK-LABEL: _Z25atomic_store_relaxed_u128RNSt3__16atomicIoEEo:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s4, 0, %s0
-; CHECK-NEXT:    st %s2, 248(, %s11)
-; CHECK-NEXT:    st %s1, 240(, %s11)
+; CHECK-NEXT:    st %s2, -8(, %s9)
+; CHECK-NEXT:    st %s1, -16(, %s9)
 ; CHECK-NEXT:    lea %s0, __atomic_store@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_store@hi(, %s0)
-; CHECK-NEXT:    lea %s2, 240(, %s11)
+; CHECK-NEXT:    lea %s2, -16(, %s9)
 ; CHECK-NEXT:    or %s0, 16, (0)1
 ; CHECK-NEXT:    or %s3, 0, (0)1
 ; CHECK-NEXT:    or %s1, 0, %s4
@@ -327,12 +327,12 @@ define void @_Z25atomic_store_release_i128RNSt3__16atomicInEEn(%"struct.std::__1
 ; CHECK-LABEL: _Z25atomic_store_release_i128RNSt3__16atomicInEEn:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s4, 0, %s0
-; CHECK-NEXT:    st %s2, 248(, %s11)
-; CHECK-NEXT:    st %s1, 240(, %s11)
+; CHECK-NEXT:    st %s2, -8(, %s9)
+; CHECK-NEXT:    st %s1, -16(, %s9)
 ; CHECK-NEXT:    lea %s0, __atomic_store@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_store@hi(, %s0)
-; CHECK-NEXT:    lea %s2, 240(, %s11)
+; CHECK-NEXT:    lea %s2, -16(, %s9)
 ; CHECK-NEXT:    or %s0, 16, (0)1
 ; CHECK-NEXT:    or %s3, 3, (0)1
 ; CHECK-NEXT:    or %s1, 0, %s4
@@ -353,12 +353,12 @@ define void @_Z25atomic_store_release_u128RNSt3__16atomicIoEEo(%"struct.std::__1
 ; CHECK-LABEL: _Z25atomic_store_release_u128RNSt3__16atomicIoEEo:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s4, 0, %s0
-; CHECK-NEXT:    st %s2, 248(, %s11)
-; CHECK-NEXT:    st %s1, 240(, %s11)
+; CHECK-NEXT:    st %s2, -8(, %s9)
+; CHECK-NEXT:    st %s1, -16(, %s9)
 ; CHECK-NEXT:    lea %s0, __atomic_store@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_store@hi(, %s0)
-; CHECK-NEXT:    lea %s2, 240(, %s11)
+; CHECK-NEXT:    lea %s2, -16(, %s9)
 ; CHECK-NEXT:    or %s0, 16, (0)1
 ; CHECK-NEXT:    or %s3, 3, (0)1
 ; CHECK-NEXT:    or %s1, 0, %s4
@@ -497,12 +497,12 @@ define void @_Z25atomic_store_seq_cst_i128RNSt3__16atomicInEEn(%"struct.std::__1
 ; CHECK-LABEL: _Z25atomic_store_seq_cst_i128RNSt3__16atomicInEEn:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s4, 0, %s0
-; CHECK-NEXT:    st %s2, 248(, %s11)
-; CHECK-NEXT:    st %s1, 240(, %s11)
+; CHECK-NEXT:    st %s2, -8(, %s9)
+; CHECK-NEXT:    st %s1, -16(, %s9)
 ; CHECK-NEXT:    lea %s0, __atomic_store@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_store@hi(, %s0)
-; CHECK-NEXT:    lea %s2, 240(, %s11)
+; CHECK-NEXT:    lea %s2, -16(, %s9)
 ; CHECK-NEXT:    or %s0, 16, (0)1
 ; CHECK-NEXT:    or %s3, 5, (0)1
 ; CHECK-NEXT:    or %s1, 0, %s4
@@ -523,12 +523,12 @@ define void @_Z25atomic_store_seq_cst_u128RNSt3__16atomicIoEEo(%"struct.std::__1
 ; CHECK-LABEL: _Z25atomic_store_seq_cst_u128RNSt3__16atomicIoEEo:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s4, 0, %s0
-; CHECK-NEXT:    st %s2, 248(, %s11)
-; CHECK-NEXT:    st %s1, 240(, %s11)
+; CHECK-NEXT:    st %s2, -8(, %s9)
+; CHECK-NEXT:    st %s1, -16(, %s9)
 ; CHECK-NEXT:    lea %s0, __atomic_store@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_store@hi(, %s0)
-; CHECK-NEXT:    lea %s2, 240(, %s11)
+; CHECK-NEXT:    lea %s2, -16(, %s9)
 ; CHECK-NEXT:    or %s0, 16, (0)1
 ; CHECK-NEXT:    or %s3, 5, (0)1
 ; CHECK-NEXT:    or %s1, 0, %s4

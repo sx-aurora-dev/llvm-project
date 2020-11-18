@@ -11,10 +11,10 @@ define void @test(fp128) {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s2, 0, %s0
 ; CHECK-NEXT:    or %s3, 0, %s1
-; CHECK-NEXT:    st %s3, 256(, %s11)
-; CHECK-NEXT:    st %s2, 264(, %s11)
-; CHECK-NEXT:    st %s3, 240(, %s11)
-; CHECK-NEXT:    st %s2, 248(, %s11)
+; CHECK-NEXT:    st %s3, -16(, %s9)
+; CHECK-NEXT:    st %s2, -8(, %s9)
+; CHECK-NEXT:    st %s3, -32(, %s9)
+; CHECK-NEXT:    st %s2, -24(, %s9)
 ; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    st %s0, 200(, %s11)
 ; CHECK-NEXT:    or %s0, 0, %s3
@@ -28,15 +28,15 @@ define void @test(fp128) {
 ; CHECK-NEXT:    lea.sl %s1, printf@hi(, %s1)
 ; CHECK-NEXT:    or %s12, 0, %s1
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    ld %s1, 256(, %s11)
-; CHECK-NEXT:    ld %s0, 264(, %s11)
+; CHECK-NEXT:    ld %s1, -16(, %s9)
+; CHECK-NEXT:    ld %s0, -8(, %s9)
 ; CHECK-NEXT:    lea %s2, test1@lo
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    lea.sl %s2, test1@hi(, %s2)
 ; CHECK-NEXT:    or %s12, 0, %s2
 ; CHECK-NEXT:    bsic %s10, (, %s12)
-; CHECK-NEXT:    ld %s3, 240(, %s11)
-; CHECK-NEXT:    ld %s2, 248(, %s11)
+; CHECK-NEXT:    ld %s3, -32(, %s9)
+; CHECK-NEXT:    ld %s2, -24(, %s9)
 ; CHECK-NEXT:    lea %s0, test2@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s1, test2@hi(, %s0)

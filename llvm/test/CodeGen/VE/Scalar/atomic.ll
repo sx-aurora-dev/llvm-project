@@ -680,15 +680,15 @@ entry: %2 = cmpxchg i64* @l, i64 %0, i64 %1 seq_cst seq_cst
 define i128 @test_atomic_compare_exchange_16(i128, i128) {
 ; CHECK-LABEL: test_atomic_compare_exchange_16:
 ; CHECK:       .LBB{{[0-9]+}}_2: # %entry
-; CHECK-NEXT:    st %s1, 248(, %s11)
-; CHECK-NEXT:    st %s0, 240(, %s11)
+; CHECK-NEXT:    st %s1, -8(, %s9)
+; CHECK-NEXT:    st %s0, -16(, %s9)
 ; CHECK-NEXT:    lea %s0, __atomic_compare_exchange_16@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, __atomic_compare_exchange_16@hi(, %s0)
 ; CHECK-NEXT:    lea %s0, it@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, it@hi(, %s0)
-; CHECK-NEXT:    lea %s1, 240(, %s11)
+; CHECK-NEXT:    lea %s1, -16(, %s9)
 ; CHECK-NEXT:    or %s4, 5, (0)1
 ; CHECK-NEXT:    or %s5, 5, (0)1
 ; CHECK-NEXT:    bsic %s10, (, %s12)

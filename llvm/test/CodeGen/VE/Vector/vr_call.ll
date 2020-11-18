@@ -58,7 +58,7 @@ define x86_regcallcc <256 x i32> @__regcall3__calc4(<256 x i32>, <256 x i32>, <2
 ; CHECK-LABEL: __regcall3__calc4:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lea %s0, 240(, %s11)
+; CHECK-NEXT:    lea %s0, -2048(, %s9)
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vst %v18, 8, %s0 # 2048-byte Folded Spill
 ; CHECK-NEXT:    lea %s16, 256
@@ -78,7 +78,7 @@ define x86_regcallcc <256 x i32> @__regcall3__calc4(<256 x i32>, <256 x i32>, <2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vadds.w.sx %v0, %v0, %v18
 ; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lea %s0, 240(, %s11)
+; CHECK-NEXT:    lea %s0, -2048(, %s9)
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vld %v18, 8, %s0 # 2048-byte Folded Reload
 ; CHECK-NEXT:    or %s11, 0, %s9
