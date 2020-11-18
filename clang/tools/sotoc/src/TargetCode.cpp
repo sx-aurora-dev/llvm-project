@@ -118,7 +118,7 @@ void TargetCode::generateArgument(const TargetRegionVariable &Arg,
     }
   }
 
-  Out << LHSStore << Arg.name() << RHSStore;
+  Out << LHS.str() << Arg.name() << RHS.str();
 }
 
 void TargetCode::generateFunctionPrologue(TargetCodeRegion *TCR,

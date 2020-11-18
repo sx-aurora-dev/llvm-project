@@ -49,6 +49,10 @@ void TargetRegionVariable::determineShapes(const clang::QualType T) {
     // Poniters are easy: just record that we have a pointer (default constructed)
     Shapes.push_back(TargetRegionVariableShape());
     return determineShapes(PT->getPointeeType());
+  } else if (auto *PT = llvm::dyn_cast<clang::ParenType>(T.getTypePtr())) {
+    // Clang uses ParenType as sugar when there are parenthesis in the type
+    // declaration (I hate my life). Ignore that.
+    return determineShapes(PT->getInnerType());
   } else {
     // We have found the base type (without array dimensions or pointer specifiers).
     BaseTypeName = T.getAsString();
