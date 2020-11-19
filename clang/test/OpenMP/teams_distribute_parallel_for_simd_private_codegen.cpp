@@ -144,7 +144,7 @@ int main() {
     // LAMBDA: call void @__kmpc_for_static_fini(
     // LAMBDA: ret void
     [&]() {
-      // LAMBDA: define {{.+}} void [[INNER_LAMBDA]](%{{.+}}* [[ARG_PTR:%.+]])
+      // LAMBDA: define {{.+}} void [[INNER_LAMBDA]]({{.+}} [[ARG_PTR:%.+]])
       // LAMBDA: store %{{.+}}* [[ARG_PTR]], %{{.+}}** [[ARG_PTR_REF:%.+]],
       g = 2;
       g1 = 2;
@@ -180,7 +180,7 @@ int main() {
 }
 
 // CHECK: define {{.*}}i{{[0-9]+}} @main()
-// CHECK: call i32 @__tgt_target_teams_mapper(i64 -1, i8* @{{[^,]+}}, i32 0, i8** null, i8** null, i{{64|32}}* null, i64* null, i8** null, i32 0, i32 0)
+// CHECK: call i32 @__tgt_target_teams_mapper(i64 -1, i8* @{{[^,]+}}, i32 0, i8** null, i8** null, i{{64|32}}* null, i64* null, i8** null, i8** null, i32 0, i32 0)
 // CHECK: call void @[[OFFL1:.+]]()
 // CHECK: {{%.+}} = call{{.*}} i32 @[[TMAIN_INT:.+]]()
 // CHECK:  ret

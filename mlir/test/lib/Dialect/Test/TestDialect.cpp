@@ -9,9 +9,8 @@
 #include "TestDialect.h"
 #include "TestTypes.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/Function.h"
-#include "mlir/IR/Module.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Transforms/FoldUtils.h"
@@ -759,6 +758,15 @@ void SideEffectOp::getEffects(
   }
 }
 
+void SideEffectOp::getEffects(
+    SmallVectorImpl<TestEffects::EffectInstance> &effects) {
+  auto effectsAttr = getAttrOfType<AffineMapAttr>("effect_parameter");
+  if (!effectsAttr)
+    return;
+
+  effects.emplace_back(TestEffects::Concrete::get(), effectsAttr);
+}
+
 //===----------------------------------------------------------------------===//
 // StringAttrPrettyNameOp
 //===----------------------------------------------------------------------===//
@@ -912,6 +920,7 @@ void RegionIfOp::getSuccessorRegions(
 }
 
 #include "TestOpEnums.cpp.inc"
+#include "TestOpInterfaces.cpp.inc"
 #include "TestOpStructs.cpp.inc"
 #include "TestTypeInterfaces.cpp.inc"
 

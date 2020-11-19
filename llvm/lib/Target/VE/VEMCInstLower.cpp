@@ -58,8 +58,6 @@ static MCOperand LowerOperand(const MachineInstr *MI, const MachineOperand &MO,
   case MachineOperand::MO_TargetIndex:
     report_fatal_error("unsupported MO_TargetIndex operand type");
     break;
-  case MachineOperand::MO_JumpTableIndex:
-    return LowerSymbolOperand(MI, MO, AP.GetJTISymbol(MO.getIndex()), AP);
   case MachineOperand::MO_RegisterLiveOut:
     report_fatal_error("unsupported MO_RegistrLiveOut operand type");
     break;
@@ -96,6 +94,8 @@ static MCOperand LowerOperand(const MachineInstr *MI, const MachineOperand &MO,
     return LowerSymbolOperand(MI, MO, AP.getSymbol(MO.getGlobal()), AP);
   case MachineOperand::MO_Immediate:
     return MCOperand::createImm(MO.getImm());
+  case MachineOperand::MO_JumpTableIndex:
+    return LowerSymbolOperand(MI, MO, AP.GetJTISymbol(MO.getIndex()), AP);
   case MachineOperand::MO_MachineBasicBlock:
     return LowerSymbolOperand(MI, MO, MO.getMBB()->getSymbol(), AP);
 
