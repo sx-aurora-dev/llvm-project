@@ -18,7 +18,7 @@
 #include "mlir/Dialect/SPIRV/SPIRVTypes.h"
 #include "mlir/Dialect/SPIRV/TargetAndABI.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/Function.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/FunctionImplementation.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/StandardTypes.h"
@@ -1036,7 +1036,7 @@ static LogicalResult verify(spirv::AccessChainOp accessChainOp) {
 }
 
 //===----------------------------------------------------------------------===//
-// spv._address_of
+// spv.mlir.addressof
 //===----------------------------------------------------------------------===//
 
 void spirv::AddressOfOp::build(OpBuilder &builder, OperationState &state,
@@ -2571,7 +2571,7 @@ static LogicalResult verify(spirv::ModuleOp moduleOp) {
 }
 
 //===----------------------------------------------------------------------===//
-// spv._reference_of
+// spv.mlir.referenceof
 //===----------------------------------------------------------------------===//
 
 static LogicalResult verify(spirv::ReferenceOfOp referenceOfOp) {
