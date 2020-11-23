@@ -158,10 +158,10 @@ EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SDValue Op,
 
 CCAssignFn *getReturnCC(CallingConv::ID CallConv) {
   switch (CallConv) {
-  case CallingConv::Fast:
-    return RetCC_VE_Fast;
   default:
     return RetCC_VE_Fast; // hpce/develop default
+  case CallingConv::Fast:
+    return RetCC_VE_Fast;
   }
 }
 
@@ -169,10 +169,10 @@ CCAssignFn *getParamCC(CallingConv::ID CallConv, bool IsVarArg) {
   if (IsVarArg)
     return CC_VE2;
   switch (CallConv) {
-  case CallingConv::Fast:
-    return CC_VE_Fast;
   default:
     return CC_VE_Fast; // hpce/develop default
+  case CallingConv::Fast:
+    return CC_VE_Fast;
   }
 }
 
@@ -280,8 +280,6 @@ VETargetLowering::LowerSETCCInVectorArithmetic(SDValue Op,
     assert(RawElemTy.isSimple());
     MVT ElemTy = RawElemTy.getSimpleVT();
 
-    // errs() << "Needs expansion: "; Operand.dump(); errs() << " for user: ";
-    // Op.dump();
 
     // materialize an integer expansion
     // vselect (MaskReplacement, VEC_BROADCAST(1), VEC_BROADCAST(0))
@@ -2155,7 +2153,7 @@ void VETargetLowering::initSPUActions() {
   setMinCmpXchgSizeInBits(32);
   setSupportsUnalignedAtomics(false);
 
-  // Use custom inserter, LowerATOMIC_FENCE, for ATOMIC_FENCE.
+  // Use custom inserter, lowerATOMIC_FENCE, for ATOMIC_FENCE.
   setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
 
   for (MVT VT : MVT::integer_valuetypes()) {
@@ -2819,6 +2817,9 @@ SDValue VETargetLowering::withTargetFlags(SDValue Op, unsigned TF,
     return DAG.getTargetExternalSymbol(ES->getSymbol(), ES->getValueType(0),
                                        TF);
 
+  if (const JumpTableSDNode *JT = dyn_cast<JumpTableSDNode>(Op))
+    return DAG.getTargetJumpTable(JT->getIndex(), JT->getValueType(0), TF);
+
   llvm_unreachable("Unhandled address SDNode");
 }
 
@@ -2845,10 +2846,10 @@ SDValue VETargetLowering::makeAddress(SDValue Op, SelectionDAG &DAG) const {
     // function has calls.
     MachineFrameInfo &MFI = DAG.getMachineFunction().getFrameInfo();
     MFI.setHasCalls(true);
+    auto GlobalN = dyn_cast<GlobalAddressSDNode>(Op);
 
-    if (dyn_cast<ConstantPoolSDNode>(Op) != nullptr ||
-        (dyn_cast<GlobalAddressSDNode>(Op) != nullptr &&
-         dyn_cast<GlobalAddressSDNode>(Op)->getGlobal()->hasLocalLinkage())) {
+    if (isa<ConstantPoolSDNode>(Op) || isa<JumpTableSDNode>(Op) ||
+        (GlobalN && GlobalN->getGlobal()->hasLocalLinkage())) {
       // Create following instructions for local linkage PIC code.
       //     lea %reg, label@gotoff_lo
       //     and %reg, %reg, (32)0
@@ -3016,6 +3017,10 @@ SDValue VETargetLowering::LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op,
   SDLoc dl(Op);
   return DAG.getNode(VEISD::EH_SJLJ_SETUP_DISPATCH, dl, MVT::Other,
                      Op.getOperand(0));
+}
+
+SDValue VETargetLowering::lowerJumpTable(SDValue Op, SelectionDAG &DAG) const {
+  return makeAddress(Op, DAG);
 }
 
 // Lower a f128 load into two f64 loads.
@@ -3719,7 +3724,7 @@ SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   return Op;
 }
 
-SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
+SDValue VETargetLowering::lowerATOMIC_FENCE(SDValue Op,
                                             SelectionDAG &DAG) const {
   SDLoc DL(Op);
   AtomicOrdering FenceOrdering = static_cast<AtomicOrdering>(
@@ -4101,7 +4106,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   default:
     llvm_unreachable("Should not custom lower this!");
   case ISD::ATOMIC_FENCE:
-    return LowerATOMIC_FENCE(Op, DAG);
+    return lowerATOMIC_FENCE(Op, DAG);
   case ISD::ATOMIC_SWAP:
     return LowerATOMIC_SWAP(Op, DAG);
   case ISD::BITCAST:
@@ -4153,6 +4158,8 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     // case ISD::VECREDUCE_AND:
     // case ISD::VECREDUCE_XOR:
 
+  case ISD::JumpTable:
+    return lowerJumpTable(Op, DAG);
   case ISD::LOAD:
     return LowerLOAD(Op, DAG);
   case ISD::STORE:
@@ -4237,13 +4244,18 @@ VETargetLowering::LowerCONCAT_VECTOR(SDValue Op, SelectionDAG &DAG) const {
 
 /// } Custom Lower
 
-/// Return the entry encoding for a jump table in the
-/// current function.  The returned value is a member of the
-/// MachineJumpTableInfo::JTEntryKind enum.
+/// JumpTable for VE.
+///
+///   VE cannot generate relocatable symbol in jump table.  VE cannot
+///   generate expressions using symbols in both text segment and data
+///   segment like below.
+///             .4byte  .LBB0_2-.LJTI0_0
+///   So, we generate offset from the top of function like below as
+///   a custom label.
+///             .4byte  .LBB0_2-<function name>
+
 unsigned VETargetLowering::getJumpTableEncoding() const {
-  // VE doesn't support GOT32 style of labels in the current version of nas.
-  // So, we generates a following entry for each jump table.
-  //    .4bytes  .LBB0_2-<function name>
+  // Use custom label for PIC.
   if (isPositionIndependent())
     return MachineJumpTableInfo::EK_Custom32;
 
@@ -4253,15 +4265,40 @@ unsigned VETargetLowering::getJumpTableEncoding() const {
 
 const MCExpr *VETargetLowering::LowerCustomJumpTableEntry(
     const MachineJumpTableInfo *MJTI, const MachineBasicBlock *MBB,
-    unsigned uid, MCContext &Ctx) const {
+    unsigned Uid, MCContext &Ctx) const {
   assert(isPositionIndependent());
-  // VE doesn't support GOT32 style of labels in the current version of nas.
-  // So, we generates a following entry for each jump table.
+
+  // Generate custom label for PIC like below.
   //    .4bytes  .LBB0_2-<function name>
-  auto Value = MCSymbolRefExpr::create(MBB->getSymbol(), Ctx);
+  const auto *Value = MCSymbolRefExpr::create(MBB->getSymbol(), Ctx);
   MCSymbol *Sym = Ctx.getOrCreateSymbol(MBB->getParent()->getName().data());
-  auto Base = MCSymbolRefExpr::create(Sym, Ctx);
+  const auto *Base = MCSymbolRefExpr::create(Sym, Ctx);
   return MCBinaryExpr::createSub(Value, Base, Ctx);
+}
+
+SDValue VETargetLowering::getPICJumpTableRelocBase(SDValue Table,
+                                                   SelectionDAG &DAG) const {
+  assert(isPositionIndependent());
+  SDLoc DL(Table);
+  Function *Function = &DAG.getMachineFunction().getFunction();
+  assert(Function != nullptr);
+  auto PtrTy = getPointerTy(DAG.getDataLayout(), Function->getAddressSpace());
+
+  // In the jump table, we have following values in PIC mode.
+  //    .4bytes  .LBB0_2-<function name>
+  // We need to add this value and the address of this function to generate
+  // .LBB0_2 label correctly under PIC mode.  So, we want to generate following
+  // instructions:
+  //     lea %reg, fun@gotoff_lo
+  //     and %reg, %reg, (32)0
+  //     lea.sl %reg, fun@gotoff_hi(%reg, %got)
+  // In order to do so, we need to genarate correctly marked DAG node using
+  // makeHiLoPair.
+  SDValue Op = DAG.getGlobalAddress(Function, DL, PtrTy);
+  SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_GOTOFF_HI32,
+                              VEMCExpr::VK_VE_GOTOFF_LO32, DAG);
+  SDValue GlobalBase = DAG.getNode(VEISD::GLOBAL_BASE_REG, DL, PtrTy);
+  return DAG.getNode(ISD::ADD, DL, PtrTy, GlobalBase, HiLo);
 }
 
 void VETargetLowering::SetupEntryBlockForSjLj(MachineInstr &MI,
@@ -5650,15 +5687,13 @@ bool VETargetLowering::isTypeDesirableForOp(unsigned Opc, EVT VT) const {
 //                         VE Inline Assembly Support
 //===----------------------------------------------------------------------===//
 
-/// getConstraintType - Given a constraint letter, return the type of
-/// constraint it is for this target.
 VETargetLowering::ConstraintType
 VETargetLowering::getConstraintType(StringRef Constraint) const {
   if (Constraint.size() == 1) {
     switch (Constraint[0]) {
     default:
       break;
-    case 'r':
+    case 'v': // vector registers
     case 'f':
     case 'e':
       return C_RegisterClass;
@@ -5733,26 +5768,35 @@ std::pair<unsigned, const TargetRegisterClass *>
 VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
                                                StringRef Constraint,
                                                MVT VT) const {
+  const TargetRegisterClass *RC = nullptr;
   if (Constraint.size() == 1) {
     switch (Constraint[0]) {
+    default:
+      return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
     case 'r':
-      return std::make_pair(0U, &VE::I64RegClass);
+      RC = &VE::I64RegClass;
+      break;
+    case 'v':
+      RC = &VE::V64RegClass;
+      break;
     case 'f':
       if (VT == MVT::f32 || VT == MVT::f64)
-        return std::make_pair(0U, &VE::I64RegClass);
+        RC = &VE::I64RegClass;
       else if (VT == MVT::f128)
-        return std::make_pair(0U, &VE::F128RegClass);
-      llvm_unreachable("Unknown ValueType for f-register-type!");
+        RC = &VE::F128RegClass;
+      else
+        llvm_unreachable("Unknown ValueType for f-register-type!");
       break;
     case 'e':
       if (VT == MVT::f32 || VT == MVT::f64)
-        return std::make_pair(0U, &VE::I64RegClass);
+        RC = &VE::I64RegClass;
       else if (VT == MVT::f128)
-        return std::make_pair(0U, &VE::F128RegClass);
-      llvm_unreachable("Unknown ValueType for e-register-type!");
+        RC = &VE::F128RegClass;
+      else
+        llvm_unreachable("Unknown ValueType for e-register-type!");
       break;
     }
-
+    return std::make_pair(0U, RC);
   } else if (!Constraint.empty() && Constraint.size() <= 5 &&
              Constraint[0] == '{' && *(Constraint.end() - 1) == '}') {
     // constraint = '{r<d>}'

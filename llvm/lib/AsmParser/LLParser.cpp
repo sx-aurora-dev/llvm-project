@@ -1377,9 +1377,6 @@ bool LLParser::parseFnAttributeValuePairs(AttrBuilder &B,
     case lltok::kw_returns_twice:
       B.addAttribute(Attribute::ReturnsTwice); break;
     case lltok::kw_speculatable: B.addAttribute(Attribute::Speculatable); break;
-    case lltok::kw_nossp:
-      B.addAttribute(Attribute::NoStackProtect);
-      break;
     case lltok::kw_ssp: B.addAttribute(Attribute::StackProtect); break;
     case lltok::kw_sspreq: B.addAttribute(Attribute::StackProtectReq); break;
     case lltok::kw_sspstrong:
@@ -1797,7 +1794,6 @@ bool LLParser::parseOptionalParamAttrs(AttrBuilder &B) {
     case lltok::kw_sanitize_memory:
     case lltok::kw_sanitize_thread:
     case lltok::kw_speculative_load_hardening:
-    case lltok::kw_nossp:
     case lltok::kw_ssp:
     case lltok::kw_sspreq:
     case lltok::kw_sspstrong:
@@ -1909,7 +1905,6 @@ bool LLParser::parseOptionalReturnAttrs(AttrBuilder &B) {
     case lltok::kw_sanitize_memory:
     case lltok::kw_sanitize_thread:
     case lltok::kw_speculative_load_hardening:
-    case lltok::kw_nossp:
     case lltok::kw_ssp:
     case lltok::kw_sspreq:
     case lltok::kw_sspstrong:
@@ -2143,6 +2138,7 @@ bool LLParser::parseOptionalCallingConv(unsigned &CC) {
   case lltok::kw_hhvm_ccc:       CC = CallingConv::HHVM_C; break;
   case lltok::kw_cxx_fast_tlscc: CC = CallingConv::CXX_FAST_TLS; break;
   case lltok::kw_amdgpu_vs:      CC = CallingConv::AMDGPU_VS; break;
+  case lltok::kw_amdgpu_gfx:     CC = CallingConv::AMDGPU_Gfx; break;
   case lltok::kw_amdgpu_ls:      CC = CallingConv::AMDGPU_LS; break;
   case lltok::kw_amdgpu_hs:      CC = CallingConv::AMDGPU_HS; break;
   case lltok::kw_amdgpu_es:      CC = CallingConv::AMDGPU_ES; break;

@@ -1420,56 +1420,6 @@ class SIMCInstr <string pseudo, int subtarget> {
 }
 
 //===----------------------------------------------------------------------===//
-// EXP classes
-//===----------------------------------------------------------------------===//
-
-class EXP_Helper<bit done> : EXPCommon<
-  (outs),
-  (ins exp_tgt:$tgt,
-       ExpSrc0:$src0, ExpSrc1:$src1, ExpSrc2:$src2, ExpSrc3:$src3,
-       exp_vm:$vm, exp_compr:$compr, i32imm:$en),
-  "exp$tgt $src0, $src1, $src2, $src3"#!if(done, " done", "")#"$compr$vm", []> {
-  let AsmMatchConverter = "cvtExp";
-}
-
-// Split EXP instruction into EXP and EXP_DONE so we can set
-// mayLoad for done=1.
-multiclass EXP_m<bit done> {
-  let mayLoad = done, DisableWQM = 1 in {
-    let isPseudo = 1, isCodeGenOnly = 1 in {
-      def "" : EXP_Helper<done>,
-               SIMCInstr <"exp"#!if(done, "_done", ""), SIEncodingFamily.NONE>;
-    }
-
-    let done = done in {
-      def _si : EXP_Helper<done>,
-                SIMCInstr <"exp"#!if(done, "_done", ""), SIEncodingFamily.SI>,
-                EXPe {
-        let AssemblerPredicate = isGFX6GFX7;
-        let DecoderNamespace = "GFX6GFX7";
-        let DisableDecoder = DisableSIDecoder;
-      }
-
-      def _vi : EXP_Helper<done>,
-                SIMCInstr <"exp"#!if(done, "_done", ""), SIEncodingFamily.VI>,
-                EXPe_vi {
-        let AssemblerPredicate = isGFX8GFX9;
-        let DecoderNamespace = "GFX8";
-        let DisableDecoder = DisableVIDecoder;
-      }
-
-      def _gfx10 : EXP_Helper<done>,
-                SIMCInstr <"exp"#!if(done, "_done", ""), SIEncodingFamily.GFX10>,
-                EXPe {
-        let AssemblerPredicate = isGFX10Plus;
-        let DecoderNamespace = "GFX10";
-        let DisableDecoder = DisableSIDecoder;
-      }
-    }
-  }
-}
-
-//===----------------------------------------------------------------------===//
 // Vector ALU classes
 //===----------------------------------------------------------------------===//
 
@@ -2379,7 +2329,6 @@ class VINTRP_Real_si <bits <2> op, string opName, dag outs, dag ins,
   VINTRPCommon <outs, ins, asm, []>,
   VINTRPe <op>,
   SIMCInstr<opName, encodingFamily> {
-  let DisableDecoder = DisableSIDecoder;
 }
 
 class VINTRP_Real_vi <bits <2> op, string opName, dag outs, dag ins,
@@ -2389,7 +2338,6 @@ class VINTRP_Real_vi <bits <2> op, string opName, dag outs, dag ins,
   SIMCInstr<opName, SIEncodingFamily.VI> {
   let AssemblerPredicate = VIAssemblerPredicate;
   let DecoderNamespace = "GFX8";
-  let DisableDecoder = DisableVIDecoder;
 }
 
 // FIXME-GFX10: WIP.

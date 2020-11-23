@@ -1207,7 +1207,7 @@ def int_coro_id_retcon_once : Intrinsic<[llvm_token_ty],
     []>;
 def int_coro_alloc : Intrinsic<[llvm_i1_ty], [llvm_token_ty], []>;
 def int_coro_id_async : Intrinsic<[llvm_token_ty],
-  [llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty, llvm_ptr_ty],
+  [llvm_i32_ty, llvm_i32_ty, llvm_i32_ty, llvm_ptr_ty],
   []>;
 def int_coro_async_context_alloc : Intrinsic<[llvm_ptr_ty],
     [llvm_ptr_ty, llvm_ptr_ty],
@@ -1407,9 +1407,9 @@ let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLeng
                                       llvm_i32_ty]>;
 }
 
-// Binary operators
-let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLength<4>] in {
-  def int_vp_add : Intrinsic<[ llvm_anyvector_ty ],
+// Speculatable Binary operators
+let IntrProperties = [IntrSpeculatable, IntrNoMem, IntrNoSync, IntrWillReturn] in {
+  def int_vp_add : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
                              [ LLVMMatchType<0>,
                                LLVMMatchType<0>,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
@@ -1420,26 +1420,6 @@ let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLeng
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                llvm_i32_ty]>;
   def int_vp_mul  : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
-                              [ LLVMMatchType<0>,
-                                LLVMMatchType<0>,
-                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                llvm_i32_ty]>;
-  def int_vp_sdiv : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
-                              [ LLVMMatchType<0>,
-                                LLVMMatchType<0>,
-                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                llvm_i32_ty]>;
-  def int_vp_udiv : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
-                              [ LLVMMatchType<0>,
-                                LLVMMatchType<0>,
-                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                llvm_i32_ty]>;
-  def int_vp_srem : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
-                              [ LLVMMatchType<0>,
-                                LLVMMatchType<0>,
-                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
-                                llvm_i32_ty]>;
-  def int_vp_urem : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
                               [ LLVMMatchType<0>,
                                 LLVMMatchType<0>,
                                 LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
@@ -1481,7 +1461,30 @@ let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLeng
                                LLVMMatchType<0>,
                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                llvm_i32_ty]>;
+}
 
+// Non-speculatable binary operators.
+let IntrProperties = [IntrNoMem, IntrNoSync, IntrWillReturn] in {
+  def int_vp_sdiv : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
+                              [ LLVMMatchType<0>,
+                                LLVMMatchType<0>,
+                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                llvm_i32_ty]>;
+  def int_vp_udiv : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
+                              [ LLVMMatchType<0>,
+                                LLVMMatchType<0>,
+                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                llvm_i32_ty]>;
+  def int_vp_srem : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
+                              [ LLVMMatchType<0>,
+                                LLVMMatchType<0>,
+                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                llvm_i32_ty]>;
+  def int_vp_urem : DefaultAttrsIntrinsic<[ llvm_anyvector_ty ],
+                              [ LLVMMatchType<0>,
+                                LLVMMatchType<0>,
+                                LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
+                                llvm_i32_ty]>;
 }
 
 // Comparison
@@ -1984,6 +1987,11 @@ def int_matrix_column_major_store
 // will execute.
 def int_set_loop_iterations :
   DefaultAttrsIntrinsic<[], [llvm_anyint_ty], [IntrNoDuplicate]>;
+
+// Same as the above, but produces a value (the same as the input operand) to
+// be fed into the loop.
+def int_start_loop_iterations :
+  DefaultAttrsIntrinsic<[llvm_anyint_ty], [LLVMMatchType<0>], [IntrNoDuplicate]>;
 
 // Specify that the value given is the number of iterations that the next loop
 // will execute. Also test that the given count is not zero, allowing it to

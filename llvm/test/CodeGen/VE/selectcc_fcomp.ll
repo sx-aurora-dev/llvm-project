@@ -365,10 +365,10 @@ define { double, double } @func_fcomp_dcomp(float %0, float %1, float %2, float 
 define { fp128, fp128 } @func_fcomp_qcomp(float %0, float %1, float %2, float %3, fp128 %4, fp128 %5, fp128 %6, fp128 %7) {
 ; CHECK-LABEL: func_fcomp_qcomp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 256(, %s9)
-; CHECK-NEXT:    ld %s34, 264(, %s9)
-; CHECK-NEXT:    ld %s37, 240(, %s9)
-; CHECK-NEXT:    ld %s36, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 432(, %s11)
+; CHECK-NEXT:    ld %s34, 440(, %s11)
+; CHECK-NEXT:    ld %s37, 416(, %s11)
+; CHECK-NEXT:    ld %s36, 424(, %s11)
 ; CHECK-NEXT:    fcmp.s %s0, %s0, %s2
 ; CHECK-NEXT:    or %s2, 0, (0)1
 ; CHECK-NEXT:    or %s38, 0, (0)1
@@ -729,8 +729,8 @@ define { double, double } @func_fcomp_dcomp_zero(float %0, float %1, double %2, 
 define { fp128, fp128 } @func_fcomp_qcomp_zero(float %0, float %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_fcomp_qcomp_zero:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    or %s36, 0, (0)1
 ; CHECK-NEXT:    or %s37, 0, (0)1
 ; CHECK-NEXT:    cmov.s.eq %s37, (63)0, %s0
@@ -1121,8 +1121,8 @@ define { double, double } @func_fcomp_dcomp_i(float %0, float %1, double %2, dou
 define { fp128, fp128 } @func_fcomp_qcomp_i(float %0, float %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_fcomp_qcomp_i:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    lea.sl %s36, 1094713344
 ; CHECK-NEXT:    fcmp.s %s0, %s0, %s36
 ; CHECK-NEXT:    or %s36, 0, (0)1
@@ -1515,8 +1515,8 @@ define { double, double } @func_fcomp_dcomp_m(float %0, float %1, double %2, dou
 define { fp128, fp128 } @func_fcomp_qcomp_m(float %0, float %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_fcomp_qcomp_m:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    lea.sl %s36, -1073741824
 ; CHECK-NEXT:    fcmp.s %s0, %s0, %s36
 ; CHECK-NEXT:    or %s36, 0, (0)1

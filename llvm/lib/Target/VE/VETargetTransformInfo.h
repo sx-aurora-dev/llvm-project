@@ -331,12 +331,6 @@ public:
 
   /// }
 
-  /// Unrolling {
-  // Unroll inner-most vector loops
-  void getUnrollingPreferences(Loop *L, ScalarEvolution &SE,
-                               TargetTransformInfo::UnrollingPreferences &UP);
-  /// } Unrolling
-
   bool shouldExpandReduction(const IntrinsicInst *II) const {
     if (!enableVPU())
       return true;

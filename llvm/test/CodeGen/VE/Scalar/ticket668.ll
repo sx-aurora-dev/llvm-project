@@ -4,6 +4,33 @@
 ; Function Attrs: nounwind
 define void @func(double*, double*, i32*, i32) {
 ; CHECK-LABEL: func:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    brgt.w 1, %s3, .LBB{{[0-9]+}}_3
+; CHECK-NEXT:  # %bb.1:
+; CHECK-NEXT:    lea %s4, 256
+; CHECK-NEXT:    lvl %s4
+; CHECK-NEXT:    vfmk.l.at %vm1
+; CHECK-NEXT:  .LBB{{[0-9]+}}_2: # =>This Inner Loop Header: Depth=1
+; CHECK-NEXT:    mins.w.sx %s5, %s3, %s4
+; CHECK-NEXT:    lvl %s5
+; CHECK-NEXT:    vldl.zx %v0, 4, %s2
+; CHECK-NEXT:    vld %v1, 8, %s0
+; CHECK-NEXT:    vld %v2, 8, %s1
+; CHECK-NEXT:    vfmk.w.gt %vm2, %v0
+; CHECK-NEXT:    nndm %vm1, %vm1, %vm2
+; CHECK-NEXT:    vfadd.d %v1, %v1, %v2, %vm1
+; CHECK-NEXT:    lvl %s4
+; CHECK-NEXT:    vst %v1, 8, %s0
+; CHECK-NEXT:    adds.w.sx %s5, %s5, (0)1
+; CHECK-NEXT:    sll %s6, %s5, 3
+; CHECK-NEXT:    adds.l %s0, %s0, %s6
+; CHECK-NEXT:    adds.l %s1, %s1, %s6
+; CHECK-NEXT:    sll %s5, %s5, 2
+; CHECK-NEXT:    adds.w.sx %s3, -1, %s3
+; CHECK-NEXT:    adds.l %s2, %s2, %s5
+; CHECK-NEXT:    brne.w 0, %s3, .LBB{{[0-9]+}}_2
+; CHECK-NEXT:  .LBB{{[0-9]+}}_3:
+; CHECK-NEXT:    b.l.t (, %s10)
   %5 = icmp sgt i32 %3, 0
   br i1 %5, label %6, label %8
 

@@ -48,7 +48,6 @@ public:
 
   StringRef getPassName() const override { return "VE Assembly Printer"; }
 
-  void printOperand(const MachineInstr *MI, int OpNum, raw_ostream &OS);
   void lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
                                  const MCSubtargetInfo &STI);
   void lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
@@ -65,6 +64,7 @@ public:
   static const char *getRegisterName(unsigned RegNo) {
     return VEInstPrinter::getRegisterName(RegNo);
   }
+  void printOperand(const MachineInstr *MI, int OpNum, raw_ostream &OS);
   bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
                        const char *ExtraCode, raw_ostream &O) override;
   bool PrintAsmMemoryOperand(const MachineInstr *MI, unsigned OpNo,
@@ -440,9 +440,9 @@ void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
 }
 
 void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
-                                   raw_ostream &O) {
+                                raw_ostream &O) {
   const DataLayout &DL = getDataLayout();
-  const MachineOperand &MO = MI->getOperand (OpNum);
+  const MachineOperand &MO = MI->getOperand(OpNum);
   VEMCExpr::VariantKind TF = (VEMCExpr::VariantKind) MO.getTargetFlags();
 
 #ifndef NDEBUG
@@ -533,20 +533,21 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
   VEMCExpr::printVariantKindSuffix(O, TF);
 }
 
-/// PrintAsmOperand - Print out an operand for an inline asm expression.
-///
+// PrintAsmOperand - Print out an operand for an inline asm expression.
 bool VEAsmPrinter::PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,
-                                   const char *ExtraCode,
-                                   raw_ostream &O) {
+                                   const char *ExtraCode, raw_ostream &O) {
   if (ExtraCode && ExtraCode[0]) {
-    if (ExtraCode[1] != 0) return true; // Unknown modifier.
+    if (ExtraCode[1] != 0)
+      return true; // Unknown modifier.
 
     switch (ExtraCode[0]) {
     default:
       // See if this is a generic print operand
       return AsmPrinter::PrintAsmOperand(MI, OpNo, ExtraCode, O);
-    case 'f':
     case 'r':
+    case 'v':
+      break;
+    case 'f':
      break;
     }
   }

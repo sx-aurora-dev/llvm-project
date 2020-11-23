@@ -54,6 +54,8 @@ bool VERegisterInfo::requiresFrameIndexScavenging(
 const MCPhysReg *
 VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   switch (MF->getFunction().getCallingConv()) {
+  case CallingConv::Fast:
+    // Being explicit (same as standard CC).
   default:
     return CSR_SaveList;
   case CallingConv::PreserveAll:
@@ -64,6 +66,8 @@ VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
 const uint32_t *VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                                      CallingConv::ID CC) const {
   switch (CC) {
+  case CallingConv::Fast:
+    // Being explicit (same as standard CC).
   default:
     // NCC default CC does not explictly mention vector (mask) regs - assume
     // that they are clobbered

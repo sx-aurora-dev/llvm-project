@@ -289,23 +289,23 @@ unsigned VPIntrinsic::GetFunctionalOpcodeForVP(Intrinsic::ID ID) {
   default:
     break;
 
-#define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_TO_OC(OC) FunctionalOC = Instruction::OC;
-#define END_REGISTER_VP_INTRINSIC(...) break;
+#define HANDLE_VP_TO_OPC(VPID, OPC)                                            \
+  case Intrinsic::VPID:                                                        \
+    return Instruction::OPC;
 #include "llvm/IR/VPIntrinsics.def"
   }
 
   return FunctionalOC;
 }
 
-Intrinsic::ID VPIntrinsic::GetForOpcode(unsigned OC) {
-  switch (OC) {
+Intrinsic::ID VPIntrinsic::GetForOpcode(unsigned IROPC) {
+  switch (IROPC) {
   default:
     return Intrinsic::not_intrinsic;
 
-#define HANDLE_VP_TO_OC(OC) case Instruction::OC:
-#define END_REGISTER_VP_INTRINSIC(VPID) return Intrinsic::VPID;
-
+#define HANDLE_VP_TO_OPC(VPID, OPC)                                            \
+  case Instruction::OPC:                                                       \
+    return Intrinsic::VPID;
 #include "llvm/IR/VPIntrinsics.def"
   }
 }

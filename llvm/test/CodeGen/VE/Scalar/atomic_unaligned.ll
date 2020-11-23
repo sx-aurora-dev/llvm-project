@@ -530,6 +530,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
+; FIXME: Bus Error occurred due to unaligned ts1am instruction
 define i32 @test_atomic_exchange_4_align1() {
 ; CHECK-LABEL: test_atomic_exchange_4_align1:
 ; CHECK:       # %bb.0: # %entry
@@ -541,7 +542,6 @@ define i32 @test_atomic_exchange_4_align1() {
 ; CHECK-NEXT:    ts1am.w %s0, 1(%s1), 15
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 entry:
   %0 = atomicrmw xchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 1886417008 seq_cst
   ret i32 %0
@@ -565,6 +565,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
+; FIXME: Bus Error occurred due to unaligned ts1am instruction
 define i64 @test_atomic_exchange_8_align1() {
 ; CHECK-LABEL: test_atomic_exchange_8_align1:
 ; CHECK:       # %bb.0: # %entry
@@ -576,13 +577,13 @@ define i64 @test_atomic_exchange_8_align1() {
 ; CHECK-NEXT:    ts1am.l %s0, 1(%s1), 127
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 entry:
   %0 = atomicrmw xchg i64* getelementptr inbounds (%struct.scl, %struct.scl* @scl1, i32 0, i32 1), i64 8102099357864587376 acquire
   ret i64 %0
 }
 
 ; Function Attrs: norecurse nounwind
+; FIXME: Bus Error occurred due to unaligned ts1am instruction
 define i64 @test_atomic_exchange_8_align4() {
 ; CHECK-LABEL: test_atomic_exchange_8_align4:
 ; CHECK:       # %bb.0: # %entry
@@ -594,7 +595,6 @@ define i64 @test_atomic_exchange_8_align4() {
 ; CHECK-NEXT:    ts1am.l %s0, 4(%s1), 127
 ; CHECK-NEXT:    fencem 2
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned ts1am instruction
 entry:
   %0 = atomicrmw xchg i64* getelementptr inbounds (%struct.sil, %struct.sil* @sil1, i32 0, i32 1), i64 8102099357864587376 acquire
   ret i64 %0
@@ -742,6 +742,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
+; FIXME: Bus Error occurred due to unaligned cas instruction
 define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
 ; CHECK-LABEL: test_atomic_compare_exchange_4_align1:
 ; CHECK:       # %bb.0: # %entry
@@ -756,7 +757,6 @@ define i32 @test_atomic_compare_exchange_4_align1(i32, i32) {
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
   %2 = cmpxchg i32* getelementptr inbounds (%struct.sci, %struct.sci* @sci1, i32 0, i32 1), i32 %0, i32 %1 seq_cst seq_cst
   %3 = extractvalue { i32, i1 } %2, 1
@@ -786,6 +786,7 @@ entry: %2 = cmpxchg i64* @l, i64 %0, i64 %1 seq_cst seq_cst
 }
 
 ; Function Attrs: norecurse nounwind
+; FIXME: Bus Error occurred due to unaligned cas instruction
 define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_align1:
 ; CHECK:       # %bb.0: # %entry
@@ -800,7 +801,6 @@ define i64 @test_atomic_compare_exchange_8_align1(i64, i64) {
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
   %2 = cmpxchg i64* getelementptr inbounds (%struct.scl, %struct.scl* @scl1, i32 0, i32 1), i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1
@@ -809,6 +809,7 @@ entry:
 }
 
 ; Function Attrs: norecurse nounwind
+; FIXME: Bus Error occurred due to unaligned cas instruction
 define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
 ; CHECK-LABEL: test_atomic_compare_exchange_8_align4:
 ; CHECK:       # %bb.0: # %entry
@@ -823,7 +824,6 @@ define i64 @test_atomic_compare_exchange_8_align4(i64, i64) {
 ; CHECK-NEXT:    adds.w.zx %s0, %s0, (0)1
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
-; FIXME:       Bus Error occurred due to unaligned cas instruction
 entry:
   %2 = cmpxchg i64* getelementptr inbounds (%struct.sil, %struct.sil* @sil1, i32 0, i32 1), i64 %0, i64 %1 seq_cst seq_cst
   %3 = extractvalue { i64, i1 } %2, 1

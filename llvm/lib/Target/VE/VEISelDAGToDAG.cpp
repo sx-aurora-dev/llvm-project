@@ -116,39 +116,6 @@ inline static uint64_t getFpImmVal(const ConstantFPSDNode *N) {
   return Val;
 }
 
-/// getFpImm - get immediate representation of floating point value as a double value.
-inline static double getFpImm(const ConstantFPSDNode *N) {
-  const APInt &Imm = N->getValueAPF().bitcastToAPInt();
-  uint64_t Val = Imm.getZExtValue();
-  if (Imm.getBitWidth() == 32) {
-    // Immediate value of float place places at higher bits on VE.
-    Val <<= 32;
-    union {
-      uint32_t Data;
-      float FpNumber;
-    } CastUnion;
-    CastUnion.Data = Val;
-    return (double)CastUnion.FpNumber;
-  } else {
-    assert((Imm.getBitWidth() == 64) && "Unexpected bit width");
-    union {
-      uint64_t Data;
-      double FpNumber;
-    } CastUnion;
-    CastUnion.Data = Val;
-    return CastUnion.FpNumber;
-  }
-}
-
-/// convMImmVal - Convert a mimm integer immediate value to target immediate.
-inline static uint64_t convMImmVal(uint64_t Val) {
-  if (Val == 0)
-    return 0; // (0)1
-  if (Val & (1UL << 63))
-    return countLeadingOnes(Val);       // (m)1
-  return countLeadingZeros(Val) | 0x40; // (m)0
-}
-
 //===--------------------------------------------------------------------===//
 /// VEDAGToDAGISel - VE specific code to select VE machine
 /// instructions for SelectionDAG operations.
@@ -378,7 +345,7 @@ bool VEDAGToDAGISel::matchADDRri(SDValue Addr, SDValue &Base, SDValue &Offset) {
     return false; // direct calls.
 
   if (CurDAG->isBaseWithConstantOffset(Addr)) {
-    auto *CN = dyn_cast<ConstantSDNode>(Addr.getOperand(1));
+    ConstantSDNode *CN = cast<ConstantSDNode>(Addr.getOperand(1));
     if (isInt<32>(CN->getSExtValue())) {
       if (FrameIndexSDNode *FIN =
               dyn_cast<FrameIndexSDNode>(Addr.getOperand(0))) {

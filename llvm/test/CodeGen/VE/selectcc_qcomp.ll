@@ -4,8 +4,8 @@
 define zeroext i1 @func_qcomp_1(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i1 zeroext %4, i1 zeroext %5) {
 ; CHECK-LABEL: func_qcomp_1:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s34, 240(, %s9)
-; CHECK-NEXT:    ldl.sx %s35, 248(, %s9)
+; CHECK-NEXT:    ldl.sx %s34, 416(, %s11)
+; CHECK-NEXT:    ldl.sx %s35, 424(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -27,8 +27,8 @@ define zeroext i1 @func_qcomp_1(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i1 zeroe
 define signext i8 @func_qcomp_8(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i8 signext %4, i8 signext %5) {
 ; CHECK-LABEL: func_qcomp_8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s34, 240(, %s9)
-; CHECK-NEXT:    ldl.sx %s35, 248(, %s9)
+; CHECK-NEXT:    ldl.sx %s34, 416(, %s11)
+; CHECK-NEXT:    ldl.sx %s35, 424(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -50,8 +50,8 @@ define signext i8 @func_qcomp_8(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i8 signe
 define zeroext i8 @func_qcomp_u8(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i8 zeroext %4, i8 zeroext %5) {
 ; CHECK-LABEL: func_qcomp_u8:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s34, 240(, %s9)
-; CHECK-NEXT:    ldl.sx %s35, 248(, %s9)
+; CHECK-NEXT:    ldl.sx %s34, 416(, %s11)
+; CHECK-NEXT:    ldl.sx %s35, 424(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -73,8 +73,8 @@ define zeroext i8 @func_qcomp_u8(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i8 zero
 define signext i16 @func_qcomp_16(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i16 signext %4, i16 signext %5) {
 ; CHECK-LABEL: func_qcomp_16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s34, 240(, %s9)
-; CHECK-NEXT:    ldl.sx %s35, 248(, %s9)
+; CHECK-NEXT:    ldl.sx %s34, 416(, %s11)
+; CHECK-NEXT:    ldl.sx %s35, 424(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -96,8 +96,8 @@ define signext i16 @func_qcomp_16(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i16 si
 define zeroext i16 @func_qcomp_u16(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i16 zeroext %4, i16 zeroext %5) {
 ; CHECK-LABEL: func_qcomp_u16:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s34, 240(, %s9)
-; CHECK-NEXT:    ldl.sx %s35, 248(, %s9)
+; CHECK-NEXT:    ldl.sx %s34, 416(, %s11)
+; CHECK-NEXT:    ldl.sx %s35, 424(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -127,8 +127,8 @@ define signext i32 @func_qcomp_32(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i32 si
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 248(, %s9)
-; CHECK-NEXT:    lea %s2, 240(, %s9)
+; CHECK-NEXT:    lea %s1, 424(, %s11)
+; CHECK-NEXT:    lea %s2, 416(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ldl.sx %s0, (, %s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -151,8 +151,8 @@ define zeroext i32 @func_qcomp_u32(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i32 z
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 248(, %s9)
-; CHECK-NEXT:    lea %s2, 240(, %s9)
+; CHECK-NEXT:    lea %s1, 424(, %s11)
+; CHECK-NEXT:    lea %s2, 416(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ldl.zx %s0, (, %s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -175,8 +175,8 @@ define i64 @func_qcomp_64(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i64 %4, i64 %5
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 248(, %s9)
-; CHECK-NEXT:    lea %s2, 240(, %s9)
+; CHECK-NEXT:    lea %s1, 424(, %s11)
+; CHECK-NEXT:    lea %s2, 416(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ld %s0, (, %s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -199,8 +199,8 @@ define i64 @func_qcomp_u64(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i64 %4, i64 %
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 248(, %s9)
-; CHECK-NEXT:    lea %s2, 240(, %s9)
+; CHECK-NEXT:    lea %s1, 424(, %s11)
+; CHECK-NEXT:    lea %s2, 416(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ld %s0, (, %s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -223,8 +223,8 @@ define i128 @func_qcomp_128(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i128 %4, i12
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 256(, %s9)
-; CHECK-NEXT:    lea %s2, 240(, %s9)
+; CHECK-NEXT:    lea %s1, 432(, %s11)
+; CHECK-NEXT:    lea %s2, 416(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ld %s0, (, %s1)
 ; CHECK-NEXT:    ld %s1, 8(, %s1)
@@ -248,8 +248,8 @@ define i128 @func_qcomp_u128(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i128 %4, i1
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 256(, %s9)
-; CHECK-NEXT:    lea %s2, 240(, %s9)
+; CHECK-NEXT:    lea %s1, 432(, %s11)
+; CHECK-NEXT:    lea %s2, 416(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ld %s0, (, %s1)
 ; CHECK-NEXT:    ld %s1, 8(, %s1)
@@ -273,8 +273,8 @@ define float @func_qcomp_float(fp128 %0, fp128 %1, fp128 %2, fp128 %3, float %4,
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 252(, %s9)
-; CHECK-NEXT:    lea %s2, 244(, %s9)
+; CHECK-NEXT:    lea %s1, 428(, %s11)
+; CHECK-NEXT:    lea %s2, 420(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ldu %s0, (, %s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -297,8 +297,8 @@ define double @func_qcomp_double(fp128 %0, fp128 %1, fp128 %2, fp128 %3, double 
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 248(, %s9)
-; CHECK-NEXT:    lea %s2, 240(, %s9)
+; CHECK-NEXT:    lea %s1, 424(, %s11)
+; CHECK-NEXT:    lea %s2, 416(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ld %s0, (, %s1)
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -321,8 +321,8 @@ define fp128 @func_qcomp_quad(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4, 
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s2, 256(, %s9)
-; CHECK-NEXT:    lea %s1, 240(, %s9)
+; CHECK-NEXT:    lea %s2, 432(, %s11)
+; CHECK-NEXT:    lea %s1, 416(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s2, %s1, %s0
 ; CHECK-NEXT:    ld %s0, 8(, %s2)
 ; CHECK-NEXT:    ld %s1, (, %s2)
@@ -346,12 +346,12 @@ define { float, float } @func_qcomp_fcomp(fp128 %0, fp128 %1, fp128 %2, fp128 %3
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    lea %s0, 260(, %s9)
-; CHECK-NEXT:    lea %s2, 244(, %s9)
+; CHECK-NEXT:    lea %s0, 436(, %s11)
+; CHECK-NEXT:    lea %s2, 420(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s0, %s2, %s1
 ; CHECK-NEXT:    ldu %s0, (, %s0)
-; CHECK-NEXT:    lea %s2, 268(, %s9)
-; CHECK-NEXT:    lea %s3, 252(, %s9)
+; CHECK-NEXT:    lea %s2, 444(, %s11)
+; CHECK-NEXT:    lea %s3, 428(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s2, %s3, %s1
 ; CHECK-NEXT:    ldu %s1, (, %s2)
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -377,12 +377,12 @@ define { double, double } @func_qcomp_dcomp(fp128 %0, fp128 %1, fp128 %2, fp128 
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    lea %s0, 256(, %s9)
-; CHECK-NEXT:    lea %s2, 240(, %s9)
+; CHECK-NEXT:    lea %s0, 432(, %s11)
+; CHECK-NEXT:    lea %s2, 416(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s0, %s2, %s1
 ; CHECK-NEXT:    ld %s0, (, %s0)
-; CHECK-NEXT:    lea %s2, 264(, %s9)
-; CHECK-NEXT:    lea %s3, 248(, %s9)
+; CHECK-NEXT:    lea %s2, 440(, %s11)
+; CHECK-NEXT:    lea %s3, 424(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s2, %s3, %s1
 ; CHECK-NEXT:    ld %s1, (, %s2)
 ; CHECK-NEXT:    or %s11, 0, %s9
@@ -408,13 +408,13 @@ define { fp128, fp128 } @func_qcomp_qcomp(fp128 %0, fp128 %1, fp128 %2, fp128 %3
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s2, %s0, (32)0
-; CHECK-NEXT:    lea %s3, 272(, %s9)
-; CHECK-NEXT:    lea %s0, 240(, %s9)
+; CHECK-NEXT:    lea %s3, 448(, %s11)
+; CHECK-NEXT:    lea %s0, 416(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s3, %s0, %s2
 ; CHECK-NEXT:    ld %s0, 8(, %s3)
 ; CHECK-NEXT:    ld %s1, (, %s3)
-; CHECK-NEXT:    lea %s4, 288(, %s9)
-; CHECK-NEXT:    lea %s3, 256(, %s9)
+; CHECK-NEXT:    lea %s4, 464(, %s11)
+; CHECK-NEXT:    lea %s3, 432(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s4, %s3, %s2
 ; CHECK-NEXT:    ld %s2, 8(, %s4)
 ; CHECK-NEXT:    ld %s3, (, %s4)
@@ -879,10 +879,10 @@ define { fp128, fp128 } @func_qcomp_qcomp_zero(fp128 %0, fp128 %1, fp128 %2, fp1
 ; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(, %s34)
 ; CHECK-NEXT:    ld %s38, 8(, %s34)
 ; CHECK-NEXT:    ld %s39, (, %s34)
-; CHECK-NEXT:    ld %s35, 256(, %s9)
-; CHECK-NEXT:    ld %s34, 264(, %s9)
-; CHECK-NEXT:    ld %s37, 240(, %s9)
-; CHECK-NEXT:    ld %s36, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 432(, %s11)
+; CHECK-NEXT:    ld %s34, 440(, %s11)
+; CHECK-NEXT:    ld %s37, 416(, %s11)
+; CHECK-NEXT:    ld %s36, 424(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s38
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s40, 0, (0)1
@@ -1440,10 +1440,10 @@ define { fp128, fp128 } @func_qcomp_qcomp_i(fp128 %0, fp128 %1, fp128 %2, fp128 
 ; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(, %s34)
 ; CHECK-NEXT:    ld %s38, 8(, %s34)
 ; CHECK-NEXT:    ld %s39, (, %s34)
-; CHECK-NEXT:    ld %s35, 256(, %s9)
-; CHECK-NEXT:    ld %s34, 264(, %s9)
-; CHECK-NEXT:    ld %s37, 240(, %s9)
-; CHECK-NEXT:    ld %s36, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 432(, %s11)
+; CHECK-NEXT:    ld %s34, 440(, %s11)
+; CHECK-NEXT:    ld %s37, 416(, %s11)
+; CHECK-NEXT:    ld %s36, 424(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s38
 ; CHECK-NEXT:    lea %s1, .LCPI{{[0-9]+}}_1@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
@@ -2006,10 +2006,10 @@ define { fp128, fp128 } @func_qcomp_qcomp_m(fp128 %0, fp128 %1, fp128 %2, fp128 
 ; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(, %s34)
 ; CHECK-NEXT:    ld %s38, 8(, %s34)
 ; CHECK-NEXT:    ld %s39, (, %s34)
-; CHECK-NEXT:    ld %s35, 256(, %s9)
-; CHECK-NEXT:    ld %s34, 264(, %s9)
-; CHECK-NEXT:    ld %s37, 240(, %s9)
-; CHECK-NEXT:    ld %s36, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 432(, %s11)
+; CHECK-NEXT:    ld %s34, 440(, %s11)
+; CHECK-NEXT:    ld %s37, 416(, %s11)
+; CHECK-NEXT:    ld %s36, 424(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s38
 ; CHECK-NEXT:    lea %s1, .LCPI{{[0-9]+}}_1@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0

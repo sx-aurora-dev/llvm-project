@@ -16,20 +16,22 @@ class ExecTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
-    @expectedFailureAll(archs=['i386'], bugnumber="rdar://28656532")
+    @expectedFailureAll(archs=['i386'],
+                        oslist=no_match(["freebsd"]),
+                        bugnumber="rdar://28656532")
     @expectedFailureAll(oslist=["ios", "tvos", "watchos", "bridgeos"], bugnumber="rdar://problem/34559552") # this exec test has problems on ios systems
     @expectedFailureNetBSD
     @skipIfAsan # rdar://problem/43756823
-    @skipIfFreeBSD  # hangs
     @skipIfWindows
     def test_hitting_exec (self):
         self.do_test(False)
 
-    @expectedFailureAll(archs=['i386'], bugnumber="rdar://28656532")
+    @expectedFailureAll(archs=['i386'],
+                        oslist=no_match(["freebsd"]),
+                        bugnumber="rdar://28656532")
     @expectedFailureAll(oslist=["ios", "tvos", "watchos", "bridgeos"], bugnumber="rdar://problem/34559552") # this exec test has problems on ios systems
     @expectedFailureNetBSD
     @skipIfAsan # rdar://problem/43756823
-    @skipIfFreeBSD  # hangs
     @skipIfWindows
     def test_skipping_exec (self):
         self.do_test(True)

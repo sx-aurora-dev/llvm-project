@@ -379,6 +379,42 @@ add_entrypoint_object(
 )
 
 add_entrypoint_object(
+  ldexp
+  SRCS
+    ldexp.cpp
+  HDRS
+    ldexp.h
+  DEPENDS
+    libc.utils.FPUtil.fputil
+  COMPILE_OPTIONS
+    -O2
+)
+
+add_entrypoint_object(
+  ldexpf
+  SRCS
+    ldexpf.cpp
+  HDRS
+    ldexpf.h
+  DEPENDS
+    libc.utils.FPUtil.fputil
+  COMPILE_OPTIONS
+    -O2
+)
+
+add_entrypoint_object(
+  ldexpl
+  SRCS
+    ldexpl.cpp
+  HDRS
+    ldexpl.h
+  DEPENDS
+    libc.utils.FPUtil.fputil
+  COMPILE_OPTIONS
+    -O2
+)
+
+add_entrypoint_object(
   logb
   SRCS
     logb.cpp
@@ -636,6 +672,42 @@ add_entrypoint_object(
     hypotf.cpp
   HDRS
     hypotf.h
+  DEPENDS
+    libc.utils.FPUtil.fputil
+  COMPILE_OPTIONS
+    -O2
+)
+
+add_entrypoint_object(
+  fdim
+  SRCS
+    fdim.cpp
+  HDRS
+    fdim.h
+  DEPENDS
+    libc.utils.FPUtil.fputil
+  COMPILE_OPTIONS
+    -O2
+)
+
+add_entrypoint_object(
+  fdimf
+  SRCS
+    fdimf.cpp
+  HDRS
+    fdimf.h
+  DEPENDS
+    libc.utils.FPUtil.fputil
+  COMPILE_OPTIONS
+    -O2
+)
+
+add_entrypoint_object(
+  fdiml
+  SRCS
+    fdiml.cpp
+  HDRS
+    fdiml.h
   DEPENDS
     libc.utils.FPUtil.fputil
   COMPILE_OPTIONS

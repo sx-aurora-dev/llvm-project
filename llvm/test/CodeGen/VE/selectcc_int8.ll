@@ -228,8 +228,8 @@ define { double, double } @func_8_dcomp(i8 signext %0, i8 signext %1, double %2,
 define { fp128, fp128 } @func_8_qcomp(i8 signext %0, i8 signext %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_8_qcomp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s7, %s3, %s0
@@ -460,8 +460,8 @@ define { double, double } @func_8_dcomp_zero(i8 signext %0, double %1, double %2
 define { fp128, fp128 } @func_8_qcomp_zero(i8 signext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_8_qcomp_zero:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.w.eq %s34, %s4, %s0
@@ -708,8 +708,8 @@ define { double, double } @func_8_dcomp_i(i8 signext %0, double %1, double %2, d
 define { fp128, fp128 } @func_8_qcomp_i(i8 signext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_8_qcomp_i:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0
@@ -958,8 +958,8 @@ define { double, double } @func_8_dcomp_m(i8 signext %0, double %1, double %2, d
 define { fp128, fp128 } @func_8_qcomp_m(i8 signext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_8_qcomp_m:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    or %s1, -2, (0)1
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0

@@ -1,3 +1,5 @@
+// Define intrinsics written by hand
+
 // Pattern Matchings for VEL Intrinsics
 
 def : Pat<(int_ve_vl_svob), (SVOB)>;
@@ -42,4 +44,21 @@ def : Pat<(int_ve_vl_vmv_vsvl i32:$sy, v256f64:$vz, i32:$vl), (VMVrvl (INSERT_SU
 def : Pat<(int_ve_vl_vmv_vsvvl i32:$sy, v256f64:$vz, v256f64:$pt, i32:$vl), (VMVrvl_v (INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:$sy, sub_i32), v256f64:$vz, i32:$vl, v256f64:$pt)>;
 def : Pat<(int_ve_vl_vmv_vsvmvl i32:$sy, v256f64:$vz, v256i1:$vm, v256f64:$pt, i32:$vl), (VMVrvml_v (INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:$sy, sub_i32), v256f64:$vz, v256i1:$vm, i32:$vl, v256f64:$pt)>;
 
+// The lsv and lvs patterns
+def : Pat<(int_ve_vl_lsv_vvss v256f64:$pt, i32:$sy, i64:$sz),
+          (LSVrr_v (INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:$sy, sub_i32),
+                   i64:$sz, v256f64:$pt)>;
+def : Pat<(int_ve_vl_lvsl_svs v256f64:$vx, i32:$sy),
+          (LVSvr v256f64:$vx,
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:$sy, sub_i32))>;
+def : Pat<(int_ve_vl_lvsd_svs v256f64:$vx, i32:$sy),
+          (LVSvr v256f64:$vx,
+                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:$sy, sub_i32))>;
+def : Pat<(int_ve_vl_lvss_svs v256f64:$vx, i32:$sy),
+          (EXTRACT_SUBREG (LVSvr v256f64:$vx,
+                                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), i32:$sy,
+                                                sub_i32)),
+                          sub_f32)>;
+
+// Define intrinsics automatically generated
 include "VEInstrIntrinsicVL.gen.td"

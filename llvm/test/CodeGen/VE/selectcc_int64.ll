@@ -228,8 +228,8 @@ define { double, double } @func_64_dcomp(i64 %0, i64 %1, double %2, double %3, d
 define { fp128, fp128 } @func_64_qcomp(i64 %0, i64 %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_64_qcomp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    cmps.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s7, %s3, %s0
@@ -460,8 +460,8 @@ define { double, double } @func_64_dcomp_zero(i64 %0, double %1, double %2, doub
 define { fp128, fp128 } @func_64_qcomp_zero(i64 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_64_qcomp_zero:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    cmov.l.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.l.eq %s34, %s4, %s0
@@ -708,8 +708,8 @@ define { double, double } @func_64_dcomp_i(i64 %0, double %1, double %2, double 
 define { fp128, fp128 } @func_64_qcomp_i(i64 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_64_qcomp_i:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    cmps.l %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.l.eq %s6, %s2, %s0
@@ -906,8 +906,7 @@ define double @func_64_double_m(i64 %0, double %1, double %2) {
 define fp128 @func_64_quad_m(i64 %0, fp128 %1, fp128 %2) {
 ; CHECK-LABEL: func_64_quad_m:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    or %s1, -2, (0)1
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    cmps.l %s0, %s0, (63)1
 ; CHECK-NEXT:    cmov.l.eq %s4, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s5, %s3, %s0
 ; CHECK-NEXT:    or %s0, 0, %s4
@@ -958,10 +957,9 @@ define { double, double } @func_64_dcomp_m(i64 %0, double %1, double %2, double 
 define { fp128, fp128 } @func_64_qcomp_m(i64 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_64_qcomp_m:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
-; CHECK-NEXT:    or %s1, -2, (0)1
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK-NEXT:    cmps.l %s0, %s0, (63)1
 ; CHECK-NEXT:    cmov.l.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.l.eq %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.l.eq %s34, %s4, %s0

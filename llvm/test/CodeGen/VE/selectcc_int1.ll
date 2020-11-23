@@ -228,8 +228,8 @@ define { double, double } @func_1_dcomp(i1 zeroext %0, i1 zeroext %1, double %2,
 define { fp128, fp128 } @func_1_qcomp(i1 zeroext %0, i1 zeroext %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_1_qcomp:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    xor %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.ne %s2, %s6, %s0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s7, %s0
@@ -444,8 +444,8 @@ define { double, double } @func_1_dcomp_zero(i1 zeroext %0, double %1, double %2
 define { fp128, fp128 } @func_1_qcomp_zero(i1 zeroext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_1_qcomp_zero:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s2, %s6, %s0
 ; CHECK-NEXT:    cmov.w.ne %s3, %s7, %s0
 ; CHECK-NEXT:    cmov.w.ne %s4, %s34, %s0
@@ -658,8 +658,8 @@ define { double, double } @func_1_dcomp_i(i1 zeroext %0, double %1, double %2, d
 define { fp128, fp128 } @func_1_qcomp_i(i1 zeroext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_1_qcomp_i:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.w.ne %s34, %s4, %s0
@@ -872,8 +872,8 @@ define { double, double } @func_1_dcomp_m(i1 zeroext %0, double %1, double %2, d
 define { fp128, fp128 } @func_1_qcomp_m(i1 zeroext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_1_qcomp_m:
 ; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 240(, %s9)
-; CHECK-NEXT:    ld %s34, 248(, %s9)
+; CHECK-NEXT:    ld %s35, 416(, %s11)
+; CHECK-NEXT:    ld %s34, 424(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.ne %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.w.ne %s34, %s4, %s0
