@@ -15,10 +15,6 @@
 // Instruction format superclass
 //===----------------------------------------------------------------------===//
 
-// Custom intermediate ISDs.
-class IsVLVT<int OpIdx> : SDTCisVT<OpIdx,i32>;
-def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 2,  [SDTCisVec<0>, IsVLVT<2>]>>;
-
 multiclass vbrd_elem32<ValueType v32, ValueType s32, SDPatternOperator ImmOp, SDNodeXForm ImmCast, int SubRegIdx> {
   // VBRDil
   def : Pat<(v32 (vec_broadcast (s32 ImmOp:$sy), i32:$vl)),
@@ -58,13 +54,6 @@ defm : vbrd_elem64<v256i64, i64, simm7, LO7>;
 
 def vec_seq : SDNode<"VEISD::VEC_SEQ",
                      SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
-
-/*
-// Custom intermediate ISDs.
-class IsVLVT<int OpIdx> : SDTCisVT<OpIdx,i32>;
-def vec_broadcast : SDNode<"VEISD::VEC_BROADCAST",
-                           SDTypeProfile<1, 2,  [SDTCisVec<0>, IsVLVT<2>]>>;
-*/
 
 //===----------------------------------------------------------------------===//
 // Vector Instruction Patterns for non vectorize subtarget which supports

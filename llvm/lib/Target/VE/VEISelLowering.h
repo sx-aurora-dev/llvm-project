@@ -68,6 +68,10 @@ enum NodeType : unsigned {
   /// MCSymbol and TargetBlockAddress.
   Wrapper,
   TS1AM, // HW instruction, TS1AM
+
+  // VVP_* nodes.
+#define ADD_VVP_OP(VVP_NAME, ...) VVP_NAME,
+#include "VVPNodes.def"
 };
 }
 
@@ -77,6 +81,8 @@ class VETargetLowering : public TargetLowering {
   void initRegisterClasses();
   void initSPUActions();
   void initVPUActions();
+  void initGenericVectorActions();
+  void initExperimentalVectorActions();
 
 public:
   VETargetLowering(const TargetMachine &TM, const VESubtarget &STI);
@@ -149,6 +155,10 @@ public:
 
   SDValue lowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
+
+  /// VVP Lowering {
+  SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG) const;
+  /// } VVPLowering
 
   /// Custom DAGCombine {
   SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
