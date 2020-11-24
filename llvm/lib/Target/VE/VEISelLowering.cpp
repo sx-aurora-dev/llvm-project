@@ -74,6 +74,22 @@ bool VETargetLowering::CanLowerReturn(
   return CCInfo.CheckReturn(Outs, RetCC);
 }
 
+static const MVT AllVPUVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
+                                      MVT::v256f32, MVT::v512f32, MVT::v256f64};
+static const MVT AllVectorVTs[] =
+    { MVT::v512i32, MVT::v512f32,
+      MVT::v256i32, MVT::v256f32, MVT::v256i64, MVT::v256f64,
+      MVT::v128i32, MVT::v128f32, MVT::v128i64, MVT::v128f64,
+      MVT::v64i32,  MVT::v64f32,  MVT::v64i64,  MVT::v64f64,
+      MVT::v32i32,  MVT::v32f32,  MVT::v32i64,  MVT::v32f64,
+      MVT::v16i32,  MVT::v16f32,  MVT::v16i64,  MVT::v16f64,
+      MVT::v8i32,   MVT::v8f32,   MVT::v8i64,   MVT::v8f64,
+      MVT::v4i32,   MVT::v4f32,   MVT::v4i64,   MVT::v4f64,
+      MVT::v2i32,   MVT::v2f32,   MVT::v2i64,   MVT::v2f64,
+    };
+
+static const MVT AllMaskVTs[] = {MVT::v256i1, MVT::v512i1};
+
 void VETargetLowering::initRegisterClasses() {
   // Set up the register classes.
   addRegisterClass(MVT::i32, &VE::I32RegClass);
@@ -82,48 +98,16 @@ void VETargetLowering::initRegisterClasses() {
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
-  if (Subtarget->enableVPU() || Subtarget->intrinsic() ||
-      Subtarget->vectorize()) {
-    addRegisterClass(MVT::v2i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v4i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v8i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v16i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v32i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v64i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v128i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v256i32, &VE::V64RegClass);
-    addRegisterClass(MVT::v512i32, &VE::V64RegClass);
-
-    addRegisterClass(MVT::v2i64, &VE::V64RegClass);
-    addRegisterClass(MVT::v4i64, &VE::V64RegClass);
-    addRegisterClass(MVT::v8i64, &VE::V64RegClass);
-    addRegisterClass(MVT::v16i64, &VE::V64RegClass);
-    addRegisterClass(MVT::v32i64, &VE::V64RegClass);
-    addRegisterClass(MVT::v64i64, &VE::V64RegClass);
-    addRegisterClass(MVT::v128i64, &VE::V64RegClass);
-    addRegisterClass(MVT::v256i64, &VE::V64RegClass);
-
-    addRegisterClass(MVT::v2f32, &VE::V64RegClass);
-    addRegisterClass(MVT::v4f32, &VE::V64RegClass);
-    addRegisterClass(MVT::v8f32, &VE::V64RegClass);
-    addRegisterClass(MVT::v16f32, &VE::V64RegClass);
-    addRegisterClass(MVT::v32f32, &VE::V64RegClass);
-    addRegisterClass(MVT::v64f32, &VE::V64RegClass);
-    addRegisterClass(MVT::v128f32, &VE::V64RegClass);
-    addRegisterClass(MVT::v256f32, &VE::V64RegClass);
-    addRegisterClass(MVT::v512f32, &VE::V64RegClass);
-
-    addRegisterClass(MVT::v2f64, &VE::V64RegClass);
-    addRegisterClass(MVT::v4f64, &VE::V64RegClass);
-    addRegisterClass(MVT::v8f64, &VE::V64RegClass);
-    addRegisterClass(MVT::v16f64, &VE::V64RegClass);
-    addRegisterClass(MVT::v32f64, &VE::V64RegClass);
-    addRegisterClass(MVT::v64f64, &VE::V64RegClass);
-    addRegisterClass(MVT::v128f64, &VE::V64RegClass);
-    addRegisterClass(MVT::v256f64, &VE::V64RegClass);
-
-    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
-    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+  if (Subtarget->enableVPU()) {
+    for (MVT VecVT : AllVPUVectorVTs)
+      addRegisterClass(VecVT, &VE::V64RegClass);
+    for (MVT MaskVT : AllMaskVTs)
+      addRegisterClass(MaskVT, &VE::VMRegClass);
+  } else if (Subtarget->intrinsic() || Subtarget->vectorize()) {
+    for (MVT VecVT : AllVectorVTs)
+      addRegisterClass(VecVT, &VE::V64RegClass);
+    for (MVT MaskVT : AllMaskVTs)
+      addRegisterClass(MaskVT, &VE::VMRegClass);
   }
 }
 
@@ -798,7 +782,8 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
 }
 
 void VETargetLowering::initVPUActions() {
-  // TODO upstream vector isel
+  for (MVT LegalVecVT : AllVectorVTs)
+    setOperationAction(ISD::BUILD_VECTOR, LegalVecVT, Custom);
 }
 
 SDValue
@@ -1670,6 +1655,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(GETTLSADDR)
     TARGET_NODE_CASE(MEMBARRIER)
     TARGET_NODE_CASE(CALL)
+    TARGET_NODE_CASE(VEC_BROADCAST)
     TARGET_NODE_CASE(RET_FLAG)
     TARGET_NODE_CASE(EQV)
     TARGET_NODE_CASE(XOR)
@@ -1683,7 +1669,6 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(EH_SJLJ_SETUP_DISPATCH)
     TARGET_NODE_CASE(GLOBAL_BASE_REG)
     TARGET_NODE_CASE(FLUSHW)
-    TARGET_NODE_CASE(VEC_BROADCAST)
     TARGET_NODE_CASE(VEC_LVL)
     TARGET_NODE_CASE(VEC_SEQ)
     TARGET_NODE_CASE(VEC_VMV)
@@ -2873,6 +2858,32 @@ SDValue VETargetLowering::LowerEXTRACT_VECTOR_ELT(SDValue Op,
   return Op;
 }
 
+static SDValue getSplatValue(SDNode *N) {
+  if (auto *BuildVec = dyn_cast<BuildVectorSDNode>(N)) {
+    return BuildVec->getSplatValue();
+  }
+  return SDValue();
+}
+
+SDValue VETargetLowering::lowerBUILD_VECTOR(SDValue Op,
+                                            SelectionDAG &DAG) const {
+  SDLoc DL(Op);
+  unsigned NumEls = Op.getValueType().getVectorNumElements();
+  MVT ElemVT = Op.getSimpleValueType().getVectorElementType();
+
+  if (SDValue ScalarV = getSplatValue(Op.getNode())) {
+    // lower to VEC_BROADCAST
+    MVT LegalResVT = MVT::getVectorVT(ElemVT, 256);
+
+    auto AVL = DAG.getConstant(NumEls, DL, MVT::i32);
+    return DAG.getNode(VEISD::VEC_BROADCAST, DL, LegalResVT, Op.getOperand(0),
+                       AVL);
+  }
+
+  // Expand
+  return SDValue();
+}
+
 SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   switch (Op.getOpcode()) {
   default:
@@ -2886,7 +2897,12 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::BlockAddress:
     return lowerBlockAddress(Op, DAG);
   case ISD::BUILD_VECTOR:
-    return LowerBUILD_VECTOR(Op, DAG);
+    if (Subtarget->enableVPU()) {
+      return lowerBUILD_VECTOR(Op, DAG);
+    } else {
+      assert(Subtarget->intrinsic() || Subtarget->vectorize());
+      return LowerBUILD_VECTOR(Op, DAG);
+    }
   case ISD::ConstantPool:
     return lowerConstantPool(Op, DAG);
   case ISD::DYNAMIC_STACKALLOC:

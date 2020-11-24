@@ -2695,8 +2695,8 @@ def : Pat<(i32 (and (trunc i64:$src), 0xffff)),
 include "VEInstrVec.td"
 include "VEInstrVecVL.td"
 
-// generic vector instruction patterns
-include "VEInstrPatternsVec.td"
-
 // The vevlintrin
 include "VEInstrIntrinsicVL.td"
+
+// Patterns and intermediate SD nodes (VEC_*).
+include "VEInstrPatternsVec.td"
