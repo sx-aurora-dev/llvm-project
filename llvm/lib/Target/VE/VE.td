@@ -22,6 +22,10 @@ def FeatureEnableVPU
   : SubtargetFeature<"vpu", "EnableVPU", "true",
                      "Enable the VPU">;
 
+def FeatureIntrinsic
+  : SubtargetFeature<"intrin", "Intrinsic", "true",
+                     "Enable intrinsic instructions">;
+
 def FeatureVectorize
   : SubtargetFeature<"vec", "Vectorize", "true",
                      "Try to vectorize (experimental)">;

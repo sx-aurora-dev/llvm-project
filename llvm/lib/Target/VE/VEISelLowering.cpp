@@ -82,7 +82,8 @@ void VETargetLowering::initRegisterClasses() {
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
-  if (Subtarget->enableVPU()) {
+  if (Subtarget->enableVPU() || Subtarget->intrinsic() ||
+      Subtarget->vectorize()) {
     addRegisterClass(MVT::v2i32, &VE::V64RegClass);
     addRegisterClass(MVT::v4i32, &VE::V64RegClass);
     addRegisterClass(MVT::v8i32, &VE::V64RegClass);
