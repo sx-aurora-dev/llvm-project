@@ -9,8 +9,11 @@
 
 def vec_seq : SDNode<"VEISD::VEC_SEQ",
                      SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
+
+// Custom intermediate ISDs.
+class IsVLVT<int OpIdx> : SDTCisVT<OpIdx,i32>;
 def vec_broadcast : SDNode<"VEISD::VEC_BROADCAST",
-                           SDTypeProfile<1, 1, [SDTCisVec<0>]>>;
+                           SDTypeProfile<1, 2,  [SDTCisVec<0>, IsVLVT<2>]>>;
 
 //===----------------------------------------------------------------------===//
 // Vector Instruction Patterns for non vectorize subtarget which supports
@@ -18,12 +21,12 @@ def vec_broadcast : SDNode<"VEISD::VEC_BROADCAST",
 //===----------------------------------------------------------------------===//
 
 // Boardcast for vector mask register.
-def : Pat<(v256i1 (vec_broadcast (i32 0))),
+def : Pat<(v256i1 (vec_broadcast (i32 0), (i32 256))),
           (LVMim_m 3, 0,
           (LVMim_m 2, 0,
           (LVMim_m 1, 0,
           (LVMim 0, 0))))>;
-def : Pat<(v512i1 (vec_broadcast (i32 0))),
+def : Pat<(v512i1 (vec_broadcast (i32 0), (i32 512))),
           (LVMyim_y 7, 0,
           (LVMyim_y 6, 0,
           (LVMyim_y 5, 0,
@@ -348,14 +351,14 @@ let Predicates = [IsVectorizeSubTarget] in {
 // Broadcast
 
 let Predicates = [IsVectorizeSubTarget] in {
-  def: Pat<(v512i32 (vec_broadcast i32:$val)),
+  def: Pat<(v512i32 (vec_broadcast i32:$val, (i32 512))),
            (PVBRDrl
               (ORrr
                 (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
                 (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
                        !add(32, 64))),
               (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-  def: Pat<(v512f32 (vec_broadcast f32:$val)),
+  def: Pat<(v512f32 (vec_broadcast f32:$val, (i32 512))),
            (PVBRDrl
               (ORrr
                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
@@ -366,16 +369,16 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 multiclass vbrd_for_vector_length<int length, ValueType vi32, ValueType vi64,
                                   ValueType vf32, ValueType vf64> {
-  def : Pat<(vi32 (vec_broadcast i32:$val)),
+  def : Pat<(vi32 (vec_broadcast i32:$val, (i32 length))),
             (VBRDLrl $val,
                      (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(vf32 (vec_broadcast f32:$val)),
+  def : Pat<(vf32 (vec_broadcast f32:$val, (i32 length))),
             (VBRDUrl $val,
                      (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(vi64 (vec_broadcast i64:$val)),
+  def : Pat<(vi64 (vec_broadcast i64:$val, (i32 length))),
             (VBRDrl $val,
                     (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(vf64 (vec_broadcast f64:$val)),
+  def : Pat<(vf64 (vec_broadcast f64:$val, (i32 length))),
             (VBRDrl $val,
                     (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
 }
@@ -414,21 +417,21 @@ let Predicates = [IsVectorizeSubTarget] in {
 // fadd, fsub, fmul, and fdiv for all floating point vector types.
 
 let Predicates = [IsVectorizeSubTarget] in {
-  def : Pat<(fadd (vec_broadcast f32:$val), v512f32:$vz),
+  def : Pat<(fadd (vec_broadcast f32:$val, (i32 512)), v512f32:$vz),
             (PVFADDrvl
               (ORrr
                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
                 (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
                        32)),
               $vz, (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-  def : Pat<(fsub (vec_broadcast f32:$val), v512f32:$vz),
+  def : Pat<(fsub (vec_broadcast f32:$val, (i32 512)), v512f32:$vz),
             (PVFSUBrvl
               (ORrr
                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
                 (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
                        32)),
               $vz, (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-  def : Pat<(fmul (vec_broadcast f32:$val), v512f32:$vz),
+  def : Pat<(fmul (vec_broadcast f32:$val, (i32 512)), v512f32:$vz),
             (PVFMULrvl
               (ORrr
                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
@@ -445,10 +448,10 @@ multiclass farith_for_vector_length<int length, ValueType vf32,
   def : Pat<(fadd vf64:$vy, vf64:$vz),
             (VFADDDvvl vf64:$vy, vf64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fadd (vf32 (vec_broadcast f32:$sy)), vf32:$vz),
+  def : Pat<(fadd (vf32 (vec_broadcast f32:$sy, (i32 length))), vf32:$vz),
             (VFADDSrvl f32:$sy, vf32:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fadd (vf64 (vec_broadcast f64:$sy)), vf64:$vz),
+  def : Pat<(fadd (vf64 (vec_broadcast f64:$sy, (i32 length))), vf64:$vz),
             (VFADDDrvl f64:$sy, vf64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(fsub vf32:$vy, vf32:$vz),
@@ -457,10 +460,10 @@ multiclass farith_for_vector_length<int length, ValueType vf32,
   def : Pat<(fsub vf64:$vy, vf64:$vz),
             (VFSUBDvvl vf64:$vy, vf64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fsub (vf32 (vec_broadcast f32:$sy)), vf32:$vz),
+  def : Pat<(fsub (vf32 (vec_broadcast f32:$sy, (i32 length))), vf32:$vz),
             (VFSUBSrvl f32:$sy, vf32:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fsub (vf64 (vec_broadcast f64:$sy)), vf64:$vz),
+  def : Pat<(fsub (vf64 (vec_broadcast f64:$sy, (i32 length))), vf64:$vz),
             (VFSUBDrvl f64:$sy, vf64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(fmul vf32:$vy, vf32:$vz),
@@ -469,10 +472,10 @@ multiclass farith_for_vector_length<int length, ValueType vf32,
   def : Pat<(fmul vf64:$vy, vf64:$vz),
             (VFMULDvvl vf64:$vy, vf64:$vz,
                          (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fmul (vf32 (vec_broadcast f32:$sy)), vf32:$vz),
+  def : Pat<(fmul (vf32 (vec_broadcast f32:$sy, (i32 length))), vf32:$vz),
             (VFMULSrvl f32:$sy, vf32:$vz,
                          (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fmul (vf64 (vec_broadcast f64:$sy)), vf64:$vz),
+  def : Pat<(fmul (vf64 (vec_broadcast f64:$sy, (i32 length))), vf64:$vz),
             (VFMULDrvl f64:$sy, vf64:$vz,
                          (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(fdiv vf32:$vy, vf32:$vz),
@@ -481,10 +484,10 @@ multiclass farith_for_vector_length<int length, ValueType vf32,
   def : Pat<(fdiv vf64:$vy, vf64:$vz),
             (VFDIVDvvl vf64:$vy, vf64:$vz,
                          (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fdiv (vf32 (vec_broadcast f32:$sy)), vf32:$vz),
+  def : Pat<(fdiv (vf32 (vec_broadcast f32:$sy, (i32 length))), vf32:$vz),
             (VFDIVSrvl f32:$sy, vf32:$vz,
                          (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fdiv (vf64 (vec_broadcast f64:$sy)), vf64:$vz),
+  def : Pat<(fdiv (vf64 (vec_broadcast f64:$sy, (i32 length))), vf64:$vz),
             (VFDIVDrvl f64:$sy, vf64:$vz,
                          (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
 }
@@ -506,21 +509,24 @@ let Predicates = [IsVectorizeSubTarget] in {
 // fma for all floating point vector types.
 
 let Predicates = [IsVectorizeSubTarget] in {
-  def : Pat<(fma (v512f32 (vec_broadcast f32:$sy)), v512f32:$vw, v512f32:$vy),
+  def : Pat<(fma (v512f32 (vec_broadcast f32:$sy, (i32 512))),
+                 v512f32:$vw, v512f32:$vy),
             (PVFMADvrvl v512f32:$vy,
                       (ORrr
                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
                 (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32), 32)),
                       v512f32:$vw,
                       (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-  def : Pat<(fma v512f32:$vw, (v512f32 (vec_broadcast f32:$sy)), v512f32:$vy),
+  def : Pat<(fma v512f32:$vw, (v512f32 (vec_broadcast f32:$sy, (i32 512))),
+                 v512f32:$vy),
             (PVFMADvrvl v512f32:$vy,
                       (ORrr
                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
                 (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32), 32)),
                       v512f32:$vw,
                       (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-  def : Pat<(fma v512f32:$vz, v512f32:$vw, (v512f32 (vec_broadcast f32:$sy))),
+  def : Pat<(fma v512f32:$vz, v512f32:$vw,
+                 (v512f32 (vec_broadcast f32:$sy, (i32 512)))),
             (PVFMADrvvl (ORrr
                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
                 (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32), 32)),
@@ -529,25 +535,31 @@ let Predicates = [IsVectorizeSubTarget] in {
 }
 
 multiclass fma_for_vector_length<int length, ValueType vf32, ValueType vf64> {
-  def : Pat<(fma (vf64 (vec_broadcast f64:$sy)), vf64:$vw, vf64:$vy),
+  def : Pat<(fma (vf64 (vec_broadcast f64:$sy, (i32 length))),
+                 vf64:$vw, vf64:$vy),
             (VFMADDvrvl vf64:$vy, f64:$sy, vf64:$vw,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fma vf64:$vw, (vf64 (vec_broadcast f64:$sy)), vf64:$vy),
+  def : Pat<(fma vf64:$vw, (vf64 (vec_broadcast f64:$sy, (i32 length))),
+                 vf64:$vy),
             (VFMADDvrvl vf64:$vy, f64:$sy, vf64:$vw,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fma vf64:$vz, vf64:$vw, (vf64 (vec_broadcast f64:$sy))),
+  def : Pat<(fma vf64:$vz, vf64:$vw,
+                 (vf64 (vec_broadcast f64:$sy, (i32 length)))),
             (VFMADDrvvl f64:$sy, vf64:$vz, vf64:$vw,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(fma vf64:$vz, vf64:$vw, vf64:$vy),
             (VFMADDvvvl vf64:$vy, vf64:$vz, vf64:$vw,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fma (vf32 (vec_broadcast f32:$sy)), vf32:$vw, vf32:$vy),
+  def : Pat<(fma (vf32 (vec_broadcast f32:$sy, (i32 length))),
+                 vf32:$vw, vf32:$vy),
             (VFMADSvrvl vf32:$vy, f32:$sy, vf32:$vw,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fma vf32:$vw, (vf32 (vec_broadcast f32:$sy)), vf32:$vy),
+  def : Pat<(fma vf32:$vw, (vf32 (vec_broadcast f32:$sy, (i32 length))),
+                 vf32:$vy),
             (VFMADSvrvl vf32:$vy, f32:$sy, vf32:$vw,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(fma vf32:$vz, vf32:$vw, (vf32 (vec_broadcast f32:$sy))),
+  def : Pat<(fma vf32:$vz, vf32:$vw,
+                 (vf32 (vec_broadcast f32:$sy, (i32 length)))),
             (VFMADSrvvl f32:$sy, vf32:$vz, vf32:$vw,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(fma vf32:$vz, vf32:$vw, vf32:$vy),
@@ -572,14 +584,14 @@ let Predicates = [IsVectorizeSubTarget] in {
 // add, sub, mul, sdiv, and udiv for other integer vector types.
 
 let Predicates = [IsVectorizeSubTarget] in {
-  def : Pat<(add (vec_broadcast i32:$val), v512i32:$vz),
+  def : Pat<(add (vec_broadcast i32:$val, (i32 512)), v512i32:$vz),
             (PVADDSrvl
               (ORrr
                 (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
                 (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
                        !add(32, 64))),
               v512i32:$vz, (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-  def : Pat<(sub (vec_broadcast i32:$val), v512i32:$vz),
+  def : Pat<(sub (vec_broadcast i32:$val, (i32 512)), v512i32:$vz),
             (PVSUBSrvl
               (ORrr
                 (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
@@ -595,10 +607,10 @@ multiclass arith_for_vector_length<int length, ValueType vi32, ValueType vi64> {
   def : Pat<(add vi64:$vy, vi64:$vz),
             (VADDSLvvl vi64:$vy, vi64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(add (vi32 (vec_broadcast i32:$sy)), vi32:$vz),
+  def : Pat<(add (vi32 (vec_broadcast i32:$sy, (i32 length))), vi32:$vz),
             (VADDSWSXrvl i32:$sy, vi32:$vz,
                          (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(add (vi64 (vec_broadcast i64:$sy)), vi64:$vz),
+  def : Pat<(add (vi64 (vec_broadcast i64:$sy, (i32 length))), vi64:$vz),
             (VADDSLrvl i64:$sy, vi64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(sub vi32:$vy, vi32:$vz),
@@ -607,10 +619,10 @@ multiclass arith_for_vector_length<int length, ValueType vi32, ValueType vi64> {
   def : Pat<(sub vi64:$vy, vi64:$vz),
             (VSUBSLvvl vi64:$vy, vi64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(sub (vi32 (vec_broadcast i32:$sy)), vi32:$vz),
+  def : Pat<(sub (vi32 (vec_broadcast i32:$sy, (i32 length))), vi32:$vz),
             (VSUBSWSXrvl i32:$sy, vi32:$vz,
                          (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(sub (vi64 (vec_broadcast i64:$sy)), vi64:$vz),
+  def : Pat<(sub (vi64 (vec_broadcast i64:$sy, (i32 length))), vi64:$vz),
             (VSUBSLrvl i64:$sy, vi64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(mul vi32:$vy, vi32:$vz),
@@ -619,10 +631,10 @@ multiclass arith_for_vector_length<int length, ValueType vi32, ValueType vi64> {
   def : Pat<(mul vi64:$vy, vi64:$vz),
             (VMULSLvvl vi64:$vy, vi64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(mul (vi32 (vec_broadcast i32:$sy)), vi32:$vz),
+  def : Pat<(mul (vi32 (vec_broadcast i32:$sy, (i32 length))), vi32:$vz),
             (VMULSWSXrvl i32:$sy, vi32:$vz,
                          (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(mul (vi64 (vec_broadcast i64:$sy)), vi64:$vz),
+  def : Pat<(mul (vi64 (vec_broadcast i64:$sy, (i32 length))), vi64:$vz),
             (VMULSLrvl i64:$sy, vi64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(sdiv vi32:$vy, vi32:$vz),
@@ -631,10 +643,10 @@ multiclass arith_for_vector_length<int length, ValueType vi32, ValueType vi64> {
   def : Pat<(sdiv vi64:$vy, vi64:$vz),
             (VDIVSLvvl vi64:$vy, vi64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(sdiv (vi32 (vec_broadcast i32:$sy)), vi32:$vz),
+  def : Pat<(sdiv (vi32 (vec_broadcast i32:$sy, (i32 length))), vi32:$vz),
             (VDIVSWSXrvl i32:$sy, vi32:$vz,
                          (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(sdiv (vi64 (vec_broadcast i64:$sy)), vi64:$vz),
+  def : Pat<(sdiv (vi64 (vec_broadcast i64:$sy, (i32 length))), vi64:$vz),
             (VDIVSLrvl i64:$sy, vi64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
   def : Pat<(udiv vi32:$vy, vi32:$vz),
@@ -643,10 +655,10 @@ multiclass arith_for_vector_length<int length, ValueType vi32, ValueType vi64> {
   def : Pat<(udiv vi64:$vy, vi64:$vz),
             (VDIVULvvl vi64:$vy, vi64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(udiv (vi32 (vec_broadcast i32:$sy)), vi32:$vz),
+  def : Pat<(udiv (vi32 (vec_broadcast i32:$sy, (i32 length))), vi32:$vz),
             (VDIVUWrvl i32:$sy, vi32:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(udiv (vi64 (vec_broadcast i64:$sy)), vi64:$vz),
+  def : Pat<(udiv (vi64 (vec_broadcast i64:$sy, (i32 length))), vi64:$vz),
             (VDIVULrvl i64:$sy, vi64:$vz,
                        (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
 }
@@ -687,21 +699,21 @@ let Predicates = [IsVectorizeSubTarget] in {
 // shl, srl, and sra for other integer vector types.
 
 let Predicates = [IsVectorizeSubTarget] in {
-  def : Pat<(shl v512i32:$vx, (v512i32 (vec_broadcast i32:$sy))),
+  def : Pat<(shl v512i32:$vx, (v512i32 (vec_broadcast i32:$sy, (i32 512)))),
             (PVSLLvrl v512i32:$vx,
                      (ORrr
                 (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32),
                 (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
                        !add(32, 64))),
                      (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-  def : Pat<(srl v512i32:$vx, (v512i32 (vec_broadcast i32:$sy))),
+  def : Pat<(srl v512i32:$vx, (v512i32 (vec_broadcast i32:$sy, (i32 512)))),
             (PVSRLvrl v512i32:$vx,
                      (ORrr
                 (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32),
                 (ANDrm (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
                        !add(32, 64))),
                      (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
-  def : Pat<(sra v512i32:$vx, (v512i32 (vec_broadcast i32:$sy))),
+  def : Pat<(sra v512i32:$vx, (v512i32 (vec_broadcast i32:$sy, (i32 512)))),
             (PVSRAvrl v512i32:$vx,
                      (ORrr
                 (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32), 32),
@@ -711,24 +723,24 @@ let Predicates = [IsVectorizeSubTarget] in {
 }
 
 multiclass shift_for_vector_length<int length, ValueType vi32, ValueType vi64> {
-  def : Pat<(shl vi64:$vx, (vi64 (vec_broadcast i64:$sy))),
+  def : Pat<(shl vi64:$vx, (vi64 (vec_broadcast i64:$sy, (i32 length)))),
             (VSLALvrl vi64:$vx, i64:$sy,
                       (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(srl vi64:$vx, (vi64 (vec_broadcast i64:$sy))),
+  def : Pat<(srl vi64:$vx, (vi64 (vec_broadcast i64:$sy, (i32 length)))),
             (VSRLvrl vi64:$vx, i64:$sy,
                      (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(sra vi64:$vx, (vi64 (vec_broadcast i64:$sy))),
+  def : Pat<(sra vi64:$vx, (vi64 (vec_broadcast i64:$sy, (i32 length)))),
             (VSRALvrl vi64:$vx, i64:$sy,
                       (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(shl vi32:$vx, (vi32 (vec_broadcast i32:$sy))),
+  def : Pat<(shl vi32:$vx, (vi32 (vec_broadcast i32:$sy, (i32 length)))),
             (PVSLALOvrl vi32:$vx,
                         $sy,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(srl vi32:$vx, (vi32 (vec_broadcast i32:$sy))),
+  def : Pat<(srl vi32:$vx, (vi32 (vec_broadcast i32:$sy, (i32 length)))),
             (PVSRLLOvrl vi32:$vx,
                         $sy,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;
-  def : Pat<(sra vi32:$vx, (vi32 (vec_broadcast i32:$sy))),
+  def : Pat<(sra vi32:$vx, (vi32 (vec_broadcast i32:$sy, (i32 length)))),
             (PVSRALOvrl vi32:$vx,
                         $sy,
                         (EXTRACT_SUBREG (LEAzii 0, 0, length), sub_i32))>;

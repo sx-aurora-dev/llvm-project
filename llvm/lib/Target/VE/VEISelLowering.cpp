@@ -444,8 +444,12 @@ VETargetLowering::LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const {
   //MVT BasePtrVT = BasePtr.getSimpleValueType();
 
   // vindex = vindex + baseptr;
-  SDValue BaseBroadcast = DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, BasePtr);
-  SDValue ScaleBroadcast = DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, N->getScale());
+  int Length = Mask.getNumOperands();
+  auto VL = DAG.getConstant(Length, dl, MVT::i32);
+  SDValue BaseBroadcast =
+      DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, BasePtr, VL);
+  SDValue ScaleBroadcast =
+      DAG.getNode(VEISD::VEC_BROADCAST, dl, IndexVT, N->getScale(), VL);
 
   SDValue index_addr = DAG.getNode(ISD::MUL, dl, IndexVT, {Index, ScaleBroadcast});
 
@@ -597,8 +601,10 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
     if (AllUndef) {
       LLVM_DEBUG(dbgs() << "AllUndef: VEC_BROADCAST ");
       LLVM_DEBUG(BVN->getOperand(0)->dump());
+      int Length = BVN->getNumOperands();
+      auto VL = DAG.getConstant(Length, DL, MVT::i32);
       return DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
-                         BVN->getOperand(0));
+                         BVN->getOperand(0), VL);
     } else if (S2V) {
       LLVM_DEBUG(dbgs() << "isS2V: scalar_to_vector ");
       LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
@@ -607,8 +613,10 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
     } else {
       LLVM_DEBUG(dbgs() << "isBroadCast: VEC_BROADCAST ");
       LLVM_DEBUG(BVN->getOperand(FirstDef)->dump());
+      int Length = BVN->getNumOperands();
+      auto VL = DAG.getConstant(Length, DL, MVT::i32);
       return DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
-                         BVN->getOperand(FirstDef));
+                         BVN->getOperand(FirstDef), VL);
     }
   }
 
@@ -717,7 +725,11 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
       return seq;
     }
 
-    SDValue const_stride = DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(), DAG.getConstant(stride, DL, elemTy));
+    int Length = BVN->getNumOperands();
+    auto VL = DAG.getConstant(Length, DL, MVT::i32);
+    SDValue const_stride =
+        DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                    DAG.getConstant(stride, DL, elemTy), VL);
     SDValue ret = DAG.getNode(ISD::MUL, DL, Op.getSimpleValueType(), {seq, const_stride});
     LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ * VEC_BROADCAST\n");
     LLVM_DEBUG(const_stride.dump());
@@ -732,7 +744,11 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
 
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence = DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(), DAG.getConstant(1, DL, elemTy));
-      SDValue shiftbroadcast = DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(), DAG.getConstant(blockLengthLog, DL, elemTy));
+      int Length = Op.getSimpleValueType().getVectorNumElements();
+      auto VL = DAG.getConstant(Length, DL, MVT::i32);
+      SDValue shiftbroadcast =
+          DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                      DAG.getConstant(blockLengthLog, DL, elemTy), VL);
 
       SDValue shift = DAG.getNode(ISD::SRL, DL, Op.getSimpleValueType(), {sequence, shiftbroadcast});
       LLVM_DEBUG(dbgs() << "BlockStride: VEC_SEQ >> VEC_BROADCAST\n");
@@ -750,7 +766,11 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
 
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence = DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(), DAG.getConstant(1, DL, elemTy));
-      SDValue modulobroadcast = DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(), DAG.getConstant(blockLength - 1, DL, elemTy));
+      int Length = Op.getSimpleValueType().getVectorNumElements();
+      auto VL = DAG.getConstant(Length, DL, MVT::i32);
+      SDValue modulobroadcast =
+          DAG.getNode(VEISD::VEC_BROADCAST, DL, Op.getSimpleValueType(),
+                      DAG.getConstant(blockLength - 1, DL, elemTy), VL);
 
       SDValue modulo = DAG.getNode(ISD::AND, DL, Op.getSimpleValueType(), {sequence, modulobroadcast});
 
@@ -2659,10 +2679,16 @@ SDValue VETargetLowering::LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) con
     if (index >= firstVecLength) {
       index -= firstVecLength;
       SDValue elem = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, dl, ElementType, {secondVec, DAG.getConstant(index, dl, EVT::getIntegerVT(*DAG.getContext(), 64))});
-      return DAG.getNode(VEISD::VEC_BROADCAST, dl, Op.getSimpleValueType(), elem);
+      int Length = Op.getSimpleValueType().getVectorNumElements();
+      auto VL = DAG.getConstant(Length, dl, MVT::i32);
+      return DAG.getNode(VEISD::VEC_BROADCAST, dl, Op.getSimpleValueType(),
+                         elem, VL);
     } else {
       SDValue elem = DAG.getNode(ISD::EXTRACT_VECTOR_ELT, dl, ElementType, {firstVec, DAG.getConstant(index, dl, EVT::getIntegerVT(*DAG.getContext(), 64))});
-      return DAG.getNode(VEISD::VEC_BROADCAST, dl, Op.getSimpleValueType(), elem);
+      int Length = Op.getSimpleValueType().getVectorNumElements();
+      auto VL = DAG.getConstant(Length, dl, MVT::i32);
+      return DAG.getNode(VEISD::VEC_BROADCAST, dl, Op.getSimpleValueType(),
+                         elem, VL);
     }
   }
 
