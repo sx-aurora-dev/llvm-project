@@ -782,6 +782,8 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
 }
 
 void VETargetLowering::initVPUActions() {
+  if (!Subtarget->enableVPU())
+    return;
   for (MVT LegalVecVT : AllVectorVTs)
     setOperationAction(ISD::BUILD_VECTOR, LegalVecVT, Custom);
 }
