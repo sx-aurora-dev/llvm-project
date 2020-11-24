@@ -106,8 +106,8 @@ void VETargetLowering::initRegisterClasses() {
   } else if (Subtarget->intrinsic() || Subtarget->vectorize()) {
     for (MVT VecVT : AllVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
-    for (MVT MaskVT : AllMaskVTs)
-      addRegisterClass(MaskVT, &VE::VMRegClass);
+    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
   }
 }
 
