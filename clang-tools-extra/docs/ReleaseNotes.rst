@@ -57,7 +57,7 @@ The improvements are...
 Improvements to clang-query
 ---------------------------
 
-The improvements are...
+- The IgnoreImplicitCastsAndParentheses traversal mode has been removed.
 
 Improvements to clang-rename
 ----------------------------
@@ -151,6 +151,11 @@ Changes in existing checks
 
 - Removed `google-runtime-references` check because the rule it checks does
   not exist in the Google Style Guide anymore.
+
+- Improved :doc:`readability-redundant-string-init
+  <clang-tidy/checks/readability-redundant-string-init>` check.
+
+  Added `std::basic_string_view` to default list of ``string``-like types.
 
 Improvements to include-fixer
 -----------------------------
