@@ -46,13 +46,13 @@ enum NodeType : unsigned {
 
   MEMBARRIER, // Compiler barrier only; generate a no-op.
 
+  VEC_BROADCAST,    // 0: scalar value, 1: VL
+
   CALL,            // A call instruction.
   RET_FLAG,        // Return with a flag operand.
   GLOBAL_BASE_REG, // Global base reg for PIC.
   FLUSHW,          // FLUSH register windows to stack.
 
-  VEC_BROADCAST, // a scalar value is broadcast across all vector lanes (Operand
-                 // 0: the broadcast register)
   VEC_SEQ,       // sequence vector match (Operand 0: the constant stride)
 
   VEC_VMV,
@@ -146,6 +146,8 @@ public:
   SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVAARG(SDValue Op, SelectionDAG &DAG) const;
+
+  SDValue lowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
 
   /// Custom DAGCombine {
