@@ -62,7 +62,7 @@ DeclResolver::~DeclResolver() {}
 
 void DeclResolver::addDecl(clang::Decl *D) {
 
-  if (AllDecls.count(D) != 0) {
+  if (D->isImplicit() || AllDecls.count(D) != 0) {
     // we have already resolved this Decl
     return;
   }
