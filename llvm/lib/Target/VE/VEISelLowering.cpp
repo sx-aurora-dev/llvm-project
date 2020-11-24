@@ -871,7 +871,7 @@ SDValue VETargetLowering::LowerFormalArguments(
   MachineFunction &MF = DAG.getMachineFunction();
 
   // Get the base offset of the incoming arguments stack space.
-  unsigned ArgsBaseOffset = 176;
+  unsigned ArgsBaseOffset = Subtarget->getRsaSize();
   // Get the size of the preserved arguments area
   unsigned ArgsPreserved = 64;
 
@@ -938,7 +938,7 @@ SDValue VETargetLowering::LowerFormalArguments(
     // The registers are exhausted. This argument was passed on the stack.
     assert(VA.isMemLoc());
     // The CC_VE_Full/Half functions compute stack offsets relative to the
-    // beginning of the arguments area at %fp+176.
+    // beginning of the arguments area at %fp + the size of reserved area.
     unsigned Offset = VA.getLocMemOffset() + ArgsBaseOffset;
     unsigned ValSize = VA.getValVT().getSizeInBits() / 8;
 
@@ -973,7 +973,7 @@ SDValue VETargetLowering::LowerFormalArguments(
   // TODO: need to calculate offset correctly once we support f128.
   unsigned ArgOffset = ArgLocs.size() * 8;
   VEMachineFunctionInfo *FuncInfo = MF.getInfo<VEMachineFunctionInfo>();
-  // Skip the 176 bytes of register save area.
+  // Skip the reserved area at the top of stack.
   FuncInfo->setVarArgsFrameOffset(ArgOffset + ArgsBaseOffset);
 
   return Chain;
@@ -1061,7 +1061,7 @@ SDValue VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
   CLI.IsTailCall = false;
 
   // Get the base offset of the outgoing arguments stack space.
-  unsigned ArgsBaseOffset = 176;
+  unsigned ArgsBaseOffset = Subtarget->getRsaSize();
   // Get the size of the preserved arguments area
   unsigned ArgsPreserved = 8 * 8u;
 
@@ -1204,8 +1204,7 @@ SDValue VETargetLowering::LowerCall(TargetLowering::CallLoweringInfo &CLI,
 
     // Create a store off the stack pointer for this argument.
     SDValue StackPtr = DAG.getRegister(VE::SX11, PtrVT);
-    // The argument area starts at %fp+176 in the callee frame,
-    // %sp+176 in ours.
+    // The argument area starts at %fp/%sp + the size of reserved area.
     SDValue PtrOff =
         DAG.getIntPtrConstant(VA.getLocMemOffset() + ArgsBaseOffset, DL);
     PtrOff = DAG.getNode(ISD::ADD, DL, PtrVT, StackPtr, PtrOff);
@@ -1397,30 +1396,6 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
     unsigned MaxIntSize = 64;
     return (MemVT.getSizeInBits() <= MaxIntSize);
   }
-  return true;
-}
-
-bool VETargetLowering::hasAndNot(SDValue Y) const {
-  EVT VT = Y.getValueType();
-
-  // VE doesn't have vector and not instruction.
-  if (VT.isVector())
-    return false;
-
-  // VE allows different immediate values for X and Y where ~X & Y.
-  // Only simm7 works for X, and only mimm works for Y on VE.  However, this
-  // function is used to check whether an immediate value is OK for and-not
-  // instruction as both X and Y.  Generating additional instruction to
-  // retrieve an immediate value is no good since the purpose of this
-  // function is to convert a series of 3 instructions to another series of
-  // 3 instructions with better parallelism.  Therefore, we return false
-  // for all immediate values now.
-  // FIXME: Change hasAndNot function to have two operands to make it work
-  //        correctly with Aurora VE.
-  if (isa<ConstantSDNode>(Y))
-    return false;
-
-  // It's ok for generic registers.
   return true;
 }
 
@@ -4389,7 +4364,7 @@ bool VETargetLowering::isTypeDesirableForOp(unsigned Opc, EVT VT) const {
 }
 
 //===----------------------------------------------------------------------===//
-//                         VE Inline Assembly Support
+// VE Inline Assembly Support
 //===----------------------------------------------------------------------===//
 
 VETargetLowering::ConstraintType
@@ -4572,4 +4547,40 @@ void VETargetLowering::finalizeLowering(MachineFunction& MF) const {
 
 bool VETargetLowering::isVectorMaskType(EVT VT) const {
   return (VT == MVT::v256i1 || VT == MVT::v512i1);
+}
+
+//===----------------------------------------------------------------------===//
+// VE Target Optimization Support
+//===----------------------------------------------------------------------===//
+
+unsigned VETargetLowering::getMinimumJumpTableEntries() const {
+  // Specify 8 for PIC model to relieve the impact of PIC load instructions.
+  if (isJumpTableRelative())
+    return 8;
+
+  return TargetLowering::getMinimumJumpTableEntries();
+}
+
+bool VETargetLowering::hasAndNot(SDValue Y) const {
+  EVT VT = Y.getValueType();
+
+  // VE doesn't have vector and not instruction.
+  if (VT.isVector())
+    return false;
+
+  // VE allows different immediate values for X and Y where ~X & Y.
+  // Only simm7 works for X, and only mimm works for Y on VE.  However, this
+  // function is used to check whether an immediate value is OK for and-not
+  // instruction as both X and Y.  Generating additional instruction to
+  // retrieve an immediate value is no good since the purpose of this
+  // function is to convert a series of 3 instructions to another series of
+  // 3 instructions with better parallelism.  Therefore, we return false
+  // for all immediate values now.
+  // FIXME: Change hasAndNot function to have two operands to make it work
+  //        correctly with Aurora VE.
+  if (isa<ConstantSDNode>(Y))
+    return false;
+
+  // It's ok for generic registers.
+  return true;
 }

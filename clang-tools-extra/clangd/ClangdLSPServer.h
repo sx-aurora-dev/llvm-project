@@ -93,6 +93,7 @@ private:
   void onDocumentDidChange(const DidChangeTextDocumentParams &);
   void onDocumentDidClose(const DidCloseTextDocumentParams &);
   void onDocumentDidSave(const DidSaveTextDocumentParams &);
+  void onAST(const ASTParams &, Callback<llvm::Optional<ASTNode>>);
   void onDocumentOnTypeFormatting(const DocumentOnTypeFormattingParams &,
                                   Callback<std::vector<TextEdit>>);
   void onDocumentRangeFormatting(const DocumentRangeFormattingParams &,
@@ -114,6 +115,8 @@ private:
                          Callback<std::vector<Location>>);
   void onGoToDefinition(const TextDocumentPositionParams &,
                         Callback<std::vector<Location>>);
+  void onGoToImplementation(const TextDocumentPositionParams &,
+                            Callback<std::vector<Location>>);
   void onReference(const ReferenceParams &, Callback<std::vector<Location>>);
   void onSwitchSourceHeader(const TextDocumentIdentifier &,
                             Callback<llvm::Optional<URIForFile>>);
