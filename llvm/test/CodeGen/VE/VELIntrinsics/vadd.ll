@@ -5,11 +5,11 @@
 ;;; Note:
 ;;;   We test VADD*ivl, VADD*ivl_v, VADD*ivml_v, VADD*rvl, VADD*rvl_v,
 ;;;   VADD*rvml_v, VADD*vvl, VADD*vvl_v, VADD*vvml_v PVADD*vvl, PVADD*vvl_v,
-;;;   PVADD*rvl, PVADD*rvl_v, PVADD*vvml_v and PVADD*rvml_v instructions.
+;;;   PVADD*rvl, PVADD*rvl_v, PVADD*vvml_v, and PVADD*rvml_v instructions.
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvl(i64 %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddsl_vsvl:
+define fastcc <256 x double> @vaddsl_vsvl(i64 %0, <256 x double> %1) {
+; CHECK-LABEL: vaddsl_vsvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
@@ -23,8 +23,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvl(i64 %0, <256 x doub
 declare <256 x double> @llvm.ve.vl.vaddsl.vsvl(i64, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvl_imm(<256 x double> %0) {
-; CHECK-LABEL: __regcall3__vaddsl_vsvl_imm:
+define fastcc <256 x double> @vaddsl_vsvl_imm(<256 x double> %0) {
+; CHECK-LABEL: vaddsl_vsvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -35,8 +35,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvl_imm(<256 x double> 
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvmvl(i64 %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__vaddsl_vsvmvl:
+define fastcc <256 x double> @vaddsl_vsvmvl(i64 %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: vaddsl_vsvmvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
@@ -53,8 +53,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvmvl(i64 %0, <256 x do
 declare <256 x double> @llvm.ve.vl.vaddsl.vsvmvl(i64, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvmvl_imm(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddsl_vsvmvl_imm:
+define fastcc <256 x double> @vaddsl_vsvmvl_imm(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddsl_vsvmvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -68,8 +68,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvmvl_imm(<256 x double
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvvl(i64 %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddsl_vsvvl:
+define fastcc <256 x double> @vaddsl_vsvvl(i64 %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddsl_vsvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
@@ -86,8 +86,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvvl(i64 %0, <256 x dou
 declare <256 x double> @llvm.ve.vl.vaddsl.vsvvl(i64, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvvl_imm(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddsl_vsvvl_imm:
+define fastcc <256 x double> @vaddsl_vsvvl_imm(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: vaddsl_vsvvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -101,8 +101,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddsl_vsvvl_imm(<256 x double>
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddsl_vvvl(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddsl_vvvl:
+define fastcc <256 x double> @vaddsl_vvvl(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: vaddsl_vvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -116,8 +116,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddsl_vvvl(<256 x double> %0, 
 declare <256 x double> @llvm.ve.vl.vaddsl.vvvl(<256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddsl_vvvmvl(<256 x double> %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__vaddsl_vvvmvl:
+define fastcc <256 x double> @vaddsl_vvvmvl(<256 x double> %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: vaddsl_vvvmvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -134,8 +134,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddsl_vvvmvl(<256 x double> %0
 declare <256 x double> @llvm.ve.vl.vaddsl.vvvmvl(<256 x double>, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddsl_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddsl_vvvvl:
+define fastcc <256 x double> @vaddsl_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddsl_vvvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -152,8 +152,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddsl_vvvvl(<256 x double> %0,
 declare <256 x double> @llvm.ve.vl.vaddsl.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvl(i32 signext %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddswsx_vsvl:
+define fastcc <256 x double> @vaddswsx_vsvl(i32 signext %0, <256 x double> %1) {
+; CHECK-LABEL: vaddswsx_vsvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea %s1, 256
@@ -168,8 +168,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvl(i32 signext %0, <
 declare <256 x double> @llvm.ve.vl.vaddswsx.vsvl(i32, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvl_imm(<256 x double> %0) {
-; CHECK-LABEL: __regcall3__vaddswsx_vsvl_imm:
+define fastcc <256 x double> @vaddswsx_vsvl_imm(<256 x double> %0) {
+; CHECK-LABEL: vaddswsx_vsvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -180,8 +180,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvl_imm(<256 x double
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvmvl(i32 signext %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__vaddswsx_vsvmvl:
+define fastcc <256 x double> @vaddswsx_vsvmvl(i32 signext %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: vaddswsx_vsvmvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea %s1, 128
@@ -199,8 +199,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvmvl(i32 signext %0,
 declare <256 x double> @llvm.ve.vl.vaddswsx.vsvmvl(i32, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvmvl_imm(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddswsx_vsvmvl_imm:
+define fastcc <256 x double> @vaddswsx_vsvmvl_imm(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddswsx_vsvmvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -214,8 +214,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvmvl_imm(<256 x doub
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvvl(i32 signext %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddswsx_vsvvl:
+define fastcc <256 x double> @vaddswsx_vsvvl(i32 signext %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddswsx_vsvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea %s1, 128
@@ -233,8 +233,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvvl(i32 signext %0, 
 declare <256 x double> @llvm.ve.vl.vaddswsx.vsvvl(i32, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvvl_imm(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddswsx_vsvvl_imm:
+define fastcc <256 x double> @vaddswsx_vsvvl_imm(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: vaddswsx_vsvvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -248,8 +248,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vsvvl_imm(<256 x doubl
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vvvl(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddswsx_vvvl:
+define fastcc <256 x double> @vaddswsx_vvvl(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: vaddswsx_vvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -263,8 +263,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vvvl(<256 x double> %0
 declare <256 x double> @llvm.ve.vl.vaddswsx.vvvl(<256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vvvmvl(<256 x double> %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__vaddswsx_vvvmvl:
+define fastcc <256 x double> @vaddswsx_vvvmvl(<256 x double> %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: vaddswsx_vvvmvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -281,8 +281,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vvvmvl(<256 x double> 
 declare <256 x double> @llvm.ve.vl.vaddswsx.vvvmvl(<256 x double>, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddswsx_vvvvl:
+define fastcc <256 x double> @vaddswsx_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddswsx_vvvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -299,8 +299,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswsx_vvvvl(<256 x double> %
 declare <256 x double> @llvm.ve.vl.vaddswsx.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvl(i32 signext %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddswzx_vsvl:
+define fastcc <256 x double> @vaddswzx_vsvl(i32 signext %0, <256 x double> %1) {
+; CHECK-LABEL: vaddswzx_vsvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea %s1, 256
@@ -315,8 +315,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvl(i32 signext %0, <
 declare <256 x double> @llvm.ve.vl.vaddswzx.vsvl(i32, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvl_imm(<256 x double> %0) {
-; CHECK-LABEL: __regcall3__vaddswzx_vsvl_imm:
+define fastcc <256 x double> @vaddswzx_vsvl_imm(<256 x double> %0) {
+; CHECK-LABEL: vaddswzx_vsvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -327,8 +327,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvl_imm(<256 x double
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvmvl(i32 signext %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__vaddswzx_vsvmvl:
+define fastcc <256 x double> @vaddswzx_vsvmvl(i32 signext %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: vaddswzx_vsvmvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea %s1, 128
@@ -346,8 +346,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvmvl(i32 signext %0,
 declare <256 x double> @llvm.ve.vl.vaddswzx.vsvmvl(i32, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvmvl_imm(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddswzx_vsvmvl_imm:
+define fastcc <256 x double> @vaddswzx_vsvmvl_imm(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddswzx_vsvmvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -361,8 +361,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvmvl_imm(<256 x doub
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvvl(i32 signext %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddswzx_vsvvl:
+define fastcc <256 x double> @vaddswzx_vsvvl(i32 signext %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddswzx_vsvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea %s1, 128
@@ -380,8 +380,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvvl(i32 signext %0, 
 declare <256 x double> @llvm.ve.vl.vaddswzx.vsvvl(i32, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvvl_imm(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddswzx_vsvvl_imm:
+define fastcc <256 x double> @vaddswzx_vsvvl_imm(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: vaddswzx_vsvvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -395,8 +395,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vsvvl_imm(<256 x doubl
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vvvl(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddswzx_vvvl:
+define fastcc <256 x double> @vaddswzx_vvvl(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: vaddswzx_vvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -410,8 +410,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vvvl(<256 x double> %0
 declare <256 x double> @llvm.ve.vl.vaddswzx.vvvl(<256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vvvmvl(<256 x double> %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__vaddswzx_vvvmvl:
+define fastcc <256 x double> @vaddswzx_vvvmvl(<256 x double> %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: vaddswzx_vvvmvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -428,8 +428,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vvvmvl(<256 x double> 
 declare <256 x double> @llvm.ve.vl.vaddswzx.vvvmvl(<256 x double>, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddswzx_vvvvl:
+define fastcc <256 x double> @vaddswzx_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddswzx_vvvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -446,8 +446,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddswzx_vvvvl(<256 x double> %
 declare <256 x double> @llvm.ve.vl.vaddswzx.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvl(i64 %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddul_vsvl:
+define fastcc <256 x double> @vaddul_vsvl(i64 %0, <256 x double> %1) {
+; CHECK-LABEL: vaddul_vsvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
@@ -461,8 +461,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvl(i64 %0, <256 x doub
 declare <256 x double> @llvm.ve.vl.vaddul.vsvl(i64, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvl_imm(<256 x double> %0) {
-; CHECK-LABEL: __regcall3__vaddul_vsvl_imm:
+define fastcc <256 x double> @vaddul_vsvl_imm(<256 x double> %0) {
+; CHECK-LABEL: vaddul_vsvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -473,8 +473,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvl_imm(<256 x double> 
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvmvl(i64 %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__vaddul_vsvmvl:
+define fastcc <256 x double> @vaddul_vsvmvl(i64 %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: vaddul_vsvmvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
@@ -491,8 +491,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvmvl(i64 %0, <256 x do
 declare <256 x double> @llvm.ve.vl.vaddul.vsvmvl(i64, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvmvl_imm(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddul_vsvmvl_imm:
+define fastcc <256 x double> @vaddul_vsvmvl_imm(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddul_vsvmvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -506,8 +506,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvmvl_imm(<256 x double
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvvl(i64 %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddul_vsvvl:
+define fastcc <256 x double> @vaddul_vsvvl(i64 %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddul_vsvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
@@ -524,8 +524,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvvl(i64 %0, <256 x dou
 declare <256 x double> @llvm.ve.vl.vaddul.vsvvl(i64, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvvl_imm(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddul_vsvvl_imm:
+define fastcc <256 x double> @vaddul_vsvvl_imm(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: vaddul_vsvvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -539,8 +539,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddul_vsvvl_imm(<256 x double>
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddul_vvvl(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vaddul_vvvl:
+define fastcc <256 x double> @vaddul_vvvl(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: vaddul_vvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -554,8 +554,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddul_vvvl(<256 x double> %0, 
 declare <256 x double> @llvm.ve.vl.vaddul.vvvl(<256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddul_vvvmvl(<256 x double> %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__vaddul_vvvmvl:
+define fastcc <256 x double> @vaddul_vvvmvl(<256 x double> %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: vaddul_vvvmvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -572,8 +572,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddul_vvvmvl(<256 x double> %0
 declare <256 x double> @llvm.ve.vl.vaddul.vvvmvl(<256 x double>, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vaddul_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vaddul_vvvvl:
+define fastcc <256 x double> @vaddul_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: vaddul_vvvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -590,8 +590,8 @@ define x86_regcallcc <256 x double> @__regcall3__vaddul_vvvvl(<256 x double> %0,
 declare <256 x double> @llvm.ve.vl.vaddul.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvl(i32 signext %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vadduw_vsvl:
+define fastcc <256 x double> @vadduw_vsvl(i32 signext %0, <256 x double> %1) {
+; CHECK-LABEL: vadduw_vsvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea %s1, 256
@@ -606,8 +606,8 @@ define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvl(i32 signext %0, <25
 declare <256 x double> @llvm.ve.vl.vadduw.vsvl(i32, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvl_imm(<256 x double> %0) {
-; CHECK-LABEL: __regcall3__vadduw_vsvl_imm:
+define fastcc <256 x double> @vadduw_vsvl_imm(<256 x double> %0) {
+; CHECK-LABEL: vadduw_vsvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -618,8 +618,8 @@ define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvl_imm(<256 x double> 
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvmvl(i32 signext %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__vadduw_vsvmvl:
+define fastcc <256 x double> @vadduw_vsvmvl(i32 signext %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: vadduw_vsvmvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea %s1, 128
@@ -637,8 +637,8 @@ define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvmvl(i32 signext %0, <
 declare <256 x double> @llvm.ve.vl.vadduw.vsvmvl(i32, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvmvl_imm(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vadduw_vsvmvl_imm:
+define fastcc <256 x double> @vadduw_vsvmvl_imm(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
+; CHECK-LABEL: vadduw_vsvmvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -652,8 +652,8 @@ define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvmvl_imm(<256 x double
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvvl(i32 signext %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vadduw_vsvvl:
+define fastcc <256 x double> @vadduw_vsvvl(i32 signext %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: vadduw_vsvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea %s1, 128
@@ -671,8 +671,8 @@ define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvvl(i32 signext %0, <2
 declare <256 x double> @llvm.ve.vl.vadduw.vsvvl(i32, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvvl_imm(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vadduw_vsvvl_imm:
+define fastcc <256 x double> @vadduw_vsvvl_imm(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: vadduw_vsvvl_imm:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -686,8 +686,8 @@ define x86_regcallcc <256 x double> @__regcall3__vadduw_vsvvl_imm(<256 x double>
 }
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vadduw_vvvl(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__vadduw_vvvl:
+define fastcc <256 x double> @vadduw_vvvl(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: vadduw_vvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -701,8 +701,8 @@ define x86_regcallcc <256 x double> @__regcall3__vadduw_vvvl(<256 x double> %0, 
 declare <256 x double> @llvm.ve.vl.vadduw.vvvl(<256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vadduw_vvvmvl(<256 x double> %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__vadduw_vvvmvl:
+define fastcc <256 x double> @vadduw_vvvmvl(<256 x double> %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: vadduw_vvvmvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -719,8 +719,8 @@ define x86_regcallcc <256 x double> @__regcall3__vadduw_vvvmvl(<256 x double> %0
 declare <256 x double> @llvm.ve.vl.vadduw.vvvmvl(<256 x double>, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__vadduw_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__vadduw_vvvvl:
+define fastcc <256 x double> @vadduw_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: vadduw_vvvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -737,8 +737,8 @@ define x86_regcallcc <256 x double> @__regcall3__vadduw_vvvvl(<256 x double> %0,
 declare <256 x double> @llvm.ve.vl.vadduw.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvaddu_vvvl(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__pvaddu_vvvl:
+define fastcc <256 x double> @pvaddu_vvvl(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: pvaddu_vvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -752,8 +752,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvaddu_vvvl(<256 x double> %0, 
 declare <256 x double> @llvm.ve.vl.pvaddu.vvvl(<256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvaddu_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__pvaddu_vvvvl:
+define fastcc <256 x double> @pvaddu_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: pvaddu_vvvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -770,8 +770,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvaddu_vvvvl(<256 x double> %0,
 declare <256 x double> @llvm.ve.vl.pvaddu.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvaddu_vsvl(i64 %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__pvaddu_vsvl:
+define fastcc <256 x double> @pvaddu_vsvl(i64 %0, <256 x double> %1) {
+; CHECK-LABEL: pvaddu_vsvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
@@ -785,8 +785,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvaddu_vsvl(i64 %0, <256 x doub
 declare <256 x double> @llvm.ve.vl.pvaddu.vsvl(i64, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvaddu_vsvvl(i64 %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__pvaddu_vsvvl:
+define fastcc <256 x double> @pvaddu_vsvvl(i64 %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: pvaddu_vsvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
@@ -803,8 +803,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvaddu_vsvvl(i64 %0, <256 x dou
 declare <256 x double> @llvm.ve.vl.pvaddu.vsvvl(i64, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvaddu_vvvMvl(<256 x double> %0, <256 x double> %1, <512 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__pvaddu_vvvMvl:
+define fastcc <256 x double> @pvaddu_vvvMvl(<256 x double> %0, <256 x double> %1, <512 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: pvaddu_vvvMvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -821,8 +821,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvaddu_vvvMvl(<256 x double> %0
 declare <256 x double> @llvm.ve.vl.pvaddu.vvvMvl(<256 x double>, <256 x double>, <512 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvaddu_vsvMvl(i64 %0, <256 x double> %1, <512 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__pvaddu_vsvMvl:
+define fastcc <256 x double> @pvaddu_vsvMvl(i64 %0, <256 x double> %1, <512 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: pvaddu_vsvMvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
@@ -839,8 +839,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvaddu_vsvMvl(i64 %0, <256 x do
 declare <256 x double> @llvm.ve.vl.pvaddu.vsvMvl(i64, <256 x double>, <512 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvadds_vvvl(<256 x double> %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__pvadds_vvvl:
+define fastcc <256 x double> @pvadds_vvvl(<256 x double> %0, <256 x double> %1) {
+; CHECK-LABEL: pvadds_vvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
@@ -854,8 +854,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvadds_vvvl(<256 x double> %0, 
 declare <256 x double> @llvm.ve.vl.pvadds.vvvl(<256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvadds_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__pvadds_vvvvl:
+define fastcc <256 x double> @pvadds_vvvvl(<256 x double> %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: pvadds_vvvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -872,8 +872,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvadds_vvvvl(<256 x double> %0,
 declare <256 x double> @llvm.ve.vl.pvadds.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvadds_vsvl(i64 %0, <256 x double> %1) {
-; CHECK-LABEL: __regcall3__pvadds_vsvl:
+define fastcc <256 x double> @pvadds_vsvl(i64 %0, <256 x double> %1) {
+; CHECK-LABEL: pvadds_vsvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
@@ -887,8 +887,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvadds_vsvl(i64 %0, <256 x doub
 declare <256 x double> @llvm.ve.vl.pvadds.vsvl(i64, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvadds_vsvvl(i64 %0, <256 x double> %1, <256 x double> %2) {
-; CHECK-LABEL: __regcall3__pvadds_vsvvl:
+define fastcc <256 x double> @pvadds_vsvvl(i64 %0, <256 x double> %1, <256 x double> %2) {
+; CHECK-LABEL: pvadds_vsvvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
@@ -905,8 +905,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvadds_vsvvl(i64 %0, <256 x dou
 declare <256 x double> @llvm.ve.vl.pvadds.vsvvl(i64, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvadds_vvvMvl(<256 x double> %0, <256 x double> %1, <512 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__pvadds_vvvMvl:
+define fastcc <256 x double> @pvadds_vvvMvl(<256 x double> %0, <256 x double> %1, <512 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: pvadds_vvvMvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
@@ -923,8 +923,8 @@ define x86_regcallcc <256 x double> @__regcall3__pvadds_vvvMvl(<256 x double> %0
 declare <256 x double> @llvm.ve.vl.pvadds.vvvMvl(<256 x double>, <256 x double>, <512 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define x86_regcallcc <256 x double> @__regcall3__pvadds_vsvMvl(i64 %0, <256 x double> %1, <512 x i1> %2, <256 x double> %3) {
-; CHECK-LABEL: __regcall3__pvadds_vsvMvl:
+define fastcc <256 x double> @pvadds_vsvMvl(i64 %0, <256 x double> %1, <512 x i1> %2, <256 x double> %3) {
+; CHECK-LABEL: pvadds_vsvMvl:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1

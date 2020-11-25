@@ -1,7 +1,7 @@
 #include "types.h"
 #include "velintrin.h"
 
-#define REGCALL regcall
+#define REGCALL fastcall
 
 /// Test vector subtract intrinsic instructions
 ///

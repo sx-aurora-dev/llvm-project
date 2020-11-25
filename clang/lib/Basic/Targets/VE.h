@@ -65,6 +65,7 @@ public:
       return CCCR_Warning;
     case CC_C:
     case CC_X86RegCall:
+    case CC_X86FastCall:
       return CCCR_OK;
     }
   }

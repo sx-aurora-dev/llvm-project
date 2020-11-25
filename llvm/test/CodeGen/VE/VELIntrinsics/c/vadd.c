@@ -1,14 +1,14 @@
 #include "types.h"
 #include "velintrin.h"
 
-#define REGCALL regcall
+#define REGCALL fastcall
 
 /// Test vector add intrinsic instructions
 ///
 /// Note:
 ///   We test VADD*ivl, VADD*ivl_v, VADD*ivml_v, VADD*rvl, VADD*rvl_v,
 ///   VADD*rvml_v, VADD*vvl, VADD*vvl_v, VADD*vvml_v PVADD*vvl, PVADD*vvl_v,
-///   PVADD*rvl, PVADD*rvl_v, PVADD*vvml_v and PVADD*rvml_v instructions.
+///   PVADD*rvl, PVADD*rvl_v, PVADD*vvml_v, and PVADD*rvml_v instructions.
 
 #define VADD_TEST(INST, TYPE) \
 __attribute__ ((REGCALL)) \
