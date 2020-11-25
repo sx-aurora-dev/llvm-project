@@ -185,8 +185,9 @@ def F128 : RegisterClass<"VE", [f128], 128,
                              (sequence "Q%u", 4, 16))>;
 
 def V64 : RegisterClass<"VE",
-                        [v512i32, v512f32,
-                         v256i64, v256f64,
+                        [v256f64, // default type for vector registers
+                         v512i32, v512f32,
+                         v256i64, /* v256f64 */
                          v256i32, v256f32],
                         64,
                         (add (sequence "V%u", 0, 63),

@@ -1996,27 +1996,30 @@ VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
 
 void VETargetLowering::initSPUActions() {
   const auto &TM = getTargetMachine();
-  // VE does not have i1 type, so use i32 for setcc operations results.
-  setBooleanContents(ZeroOrOneBooleanContent);
-  setBooleanVectorContents(ZeroOrOneBooleanContent);
 
   /// Load & Store {
-  for (MVT FPVT : MVT::fp_valuetypes()) {
-    for (MVT OtherFPVT : MVT::fp_valuetypes()) {
-      // Turn FP extload into load/fpextend
-      setLoadExtAction(ISD::EXTLOAD, FPVT, OtherFPVT, Expand);
 
-      // Turn FP truncstore into trunc + store.
-      setTruncStoreAction(FPVT, OtherFPVT, Expand);
-    }
-  }
-
-  // VE doesn't have i1 sign extending load
+  // VE doesn't have i1 sign extending load.
   for (MVT VT : MVT::integer_valuetypes()) {
     setLoadExtAction(ISD::SEXTLOAD, VT, MVT::i1, Promote);
     setLoadExtAction(ISD::ZEXTLOAD, VT, MVT::i1, Promote);
     setLoadExtAction(ISD::EXTLOAD, VT, MVT::i1, Promote);
+    // FIXME: upstream has following line.  Need double check.
+    // setTruncStoreAction(VT, MVT::i1, Expand);
   }
+
+  // VE doesn't have floating point extload/truncstore, so expand them.
+  for (MVT FPVT : MVT::fp_valuetypes()) {
+    for (MVT OtherFPVT : MVT::fp_valuetypes()) {
+      setLoadExtAction(ISD::EXTLOAD, FPVT, OtherFPVT, Expand);
+      setTruncStoreAction(FPVT, OtherFPVT, Expand);
+    }
+  }
+
+  // VE doesn't have fp128 load/store, so expand them in custom lower.
+  setOperationAction(ISD::LOAD, MVT::f128, Custom);
+  setOperationAction(ISD::STORE, MVT::f128, Custom);
+
   /// } Load & Store
 
   // Custom legalize address nodes into LO/HI parts.
@@ -2025,6 +2028,7 @@ void VETargetLowering::initSPUActions() {
   setOperationAction(ISD::GlobalAddress, PtrVT, Custom);
   setOperationAction(ISD::GlobalTLSAddress, PtrVT, Custom);
   setOperationAction(ISD::ConstantPool, PtrVT, Custom);
+  setOperationAction(ISD::JumpTable, PtrVT, Custom);
 
   /// VAARG handling {
   setOperationAction(ISD::VASTART, MVT::Other, Custom);
@@ -2040,6 +2044,16 @@ void VETargetLowering::initSPUActions() {
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Custom);
   /// } Stack
 
+  /// Branch {
+
+  // VE doesn't have BRCOND
+  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
+
+  // BR_JT is not implemented yet.
+  setOperationAction(ISD::BR_JT, MVT::Other, Expand);
+
+  /// } Branch
+
   /// Int Ops {
   for (MVT IntVT : {MVT::i32, MVT::i64}) {
     // VE has no REM or DIVREM operations.
@@ -2047,6 +2061,11 @@ void VETargetLowering::initSPUActions() {
     setOperationAction(ISD::SREM, IntVT, Expand);
     setOperationAction(ISD::SDIVREM, IntVT, Expand);
     setOperationAction(ISD::UDIVREM, IntVT, Expand);
+
+    // VE has no SHL_PARTS/SRA_PARTS/SRL_PARTS operations.
+    setOperationAction(ISD::SHL_PARTS, IntVT, Expand);
+    setOperationAction(ISD::SRA_PARTS, IntVT, Expand);
+    setOperationAction(ISD::SRL_PARTS, IntVT, Expand);
 
     // VE has no MULHU/MULHS/UMUL_LOHI/SMUL_LOHI operations.
     // TODO: Use MPD/MUL instructions to implement SMUL_LOHI/UMUL_LOHI for
@@ -2111,13 +2130,17 @@ void VETargetLowering::initSPUActions() {
   /// } Conversion
 
   /// Floating-point Ops {
+  /// Note: Floating-point operations are fneg, fadd, fsub, fmul, fdiv, frem,
+  ///       and fcmp.
+
+  // VE doesn't have following floating point operations.
+  for (MVT VT : MVT::fp_valuetypes()) {
+    setOperationAction(ISD::FNEG, VT, Expand);
+    setOperationAction(ISD::FREM, VT, Expand);
+  }
 
   // VE doesn't have fdiv of f128.
   setOperationAction(ISD::FDIV, MVT::f128, Expand);
-
-  // VE doesn't have load/store of f128, so use custom-lowering.
-  setOperationAction(ISD::LOAD, MVT::f128, Custom);
-  setOperationAction(ISD::STORE, MVT::f128, Custom);
 
   for (MVT FPVT : {MVT::f32, MVT::f64}) {
     // f32 and f64 uses ConstantFP.  f128 uses ConstantPool.
@@ -2125,18 +2148,46 @@ void VETargetLowering::initSPUActions() {
   }
   /// } Floating-point Ops
 
-  // VE has FP_EXTEND/FP_ROUND
-  setOperationAction(ISD::FSQRT, MVT::f128, Expand);
-  setOperationAction(ISD::FP_EXTEND, MVT::f128, Legal);
-  setOperationAction(ISD::FP_ROUND,  MVT::f128, Legal);
+  /// Floating-point math functions {
 
-  // VE doesn't have BRCOND
-  setOperationAction(ISD::BRCOND, MVT::Other, Expand);
+  // VE doesn't have following floating point math functions.
+  for (MVT VT : MVT::fp_valuetypes()) {
+    setOperationAction(ISD::FABS, VT, Expand);
+    setOperationAction(ISD::FCOPYSIGN, VT, Expand);
+    setOperationAction(ISD::FCOS, VT, Expand);
+    setOperationAction(ISD::FSIN, VT, Expand);
+    setOperationAction(ISD::FSQRT, VT, Expand);
 
-  // BRIND/BR_JT are not implemented yet.
-  //   FIXME: BRIND instruction is implemented, but JumpTable is not yet.
-  setOperationAction(ISD::BRIND, MVT::Other, Expand);
-  setOperationAction(ISD::BR_JT, MVT::Other, Expand);
+    // VE has no sclar FMA instruction
+    setOperationAction(ISD::FMA, VT, Expand);
+    setOperationAction(ISD::FMAD, VT, Expand);
+    setOperationAction(ISD::FABS, VT, Expand);
+    setOperationAction(ISD::FPOWI, VT, Expand);
+    setOperationAction(ISD::FPOW, VT, Expand);
+    setOperationAction(ISD::FLOG, VT, Expand);
+    setOperationAction(ISD::FLOG2, VT, Expand);
+    setOperationAction(ISD::FLOG10, VT, Expand);
+    setOperationAction(ISD::FEXP, VT, Expand);
+    setOperationAction(ISD::FEXP2, VT, Expand);
+    setOperationAction(ISD::FCEIL, VT, Expand);
+    setOperationAction(ISD::FTRUNC, VT, Expand);
+    setOperationAction(ISD::FRINT, VT, Expand);
+    setOperationAction(ISD::FNEARBYINT, VT, Expand);
+    setOperationAction(ISD::FROUND, VT, Expand);
+    setOperationAction(ISD::FFLOOR, VT, Expand);
+    if (VT == MVT::f128) {
+      setOperationAction(ISD::FMINNUM, VT, Expand);
+      setOperationAction(ISD::FMAXNUM, VT, Expand);
+    } else {
+      setOperationAction(ISD::FMINNUM, VT, Legal);
+      setOperationAction(ISD::FMAXNUM, VT, Legal);
+    }
+    setOperationAction(ISD::FMINIMUM, VT, Expand);
+    setOperationAction(ISD::FMAXIMUM, VT, Expand);
+    setOperationAction(ISD::FSINCOS, VT, Expand);
+  }
+
+  /// } Floating-point math functions
 
   setOperationAction(ISD::EH_SJLJ_SETJMP, MVT::i32, Custom);
   setOperationAction(ISD::EH_SJLJ_LONGJMP, MVT::Other, Custom);
@@ -2145,15 +2196,15 @@ void VETargetLowering::initSPUActions() {
     setLibcallName(RTLIB::UNWIND_RESUME, "_Unwind_SjLj_Resume");
 
   setTargetDAGCombine(ISD::FADD);
-  // setTargetDAGCombine(ISD::FMA);
+  //setTargetDAGCombine(ISD::FMA);
 
-  // ATOMICs.
-  // Atomics are supported on VE.
+  /// Atomic instructions {
+
   setMaxAtomicSizeInBitsSupported(64);
   setMinCmpXchgSizeInBits(32);
   setSupportsUnalignedAtomics(false);
 
-  // Use custom inserter, lowerATOMIC_FENCE, for ATOMIC_FENCE.
+  // Use custom inserter for ATOMIC_FENCE.
   setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
 
   for (MVT VT : MVT::integer_valuetypes()) {
@@ -2183,100 +2234,28 @@ void VETargetLowering::initSPUActions() {
     setOperationAction(ISD::ATOMIC_LOAD_UMAX, VT, Expand);
   }
 
-  // FIXME: VE's I128 stuff is not investigated yet
-#if 0
-  // These libcalls are not available in 32-bit.
-  setLibcallName(RTLIB::SHL_I128, nullptr);
-  setLibcallName(RTLIB::SRL_I128, nullptr);
-  setLibcallName(RTLIB::SRA_I128, nullptr);
-#endif
+  /// } Atomic isntructions
 
-  for (MVT VT : MVT::fp_valuetypes()) {
-    // VE has no sclar FMA instruction
-    setOperationAction(ISD::FMA, VT, Expand);
-    setOperationAction(ISD::FMAD, VT, Expand);
-    setOperationAction(ISD::FREM, VT, Expand);
-    setOperationAction(ISD::FNEG, VT, Expand);
-    setOperationAction(ISD::FABS, VT, Expand);
-    setOperationAction(ISD::FSQRT, VT, Expand);
-    setOperationAction(ISD::FSIN, VT, Expand);
-    setOperationAction(ISD::FCOS, VT, Expand);
-    setOperationAction(ISD::FPOWI, VT, Expand);
-    setOperationAction(ISD::FPOW, VT, Expand);
-    setOperationAction(ISD::FLOG, VT, Expand);
-    setOperationAction(ISD::FLOG2, VT, Expand);
-    setOperationAction(ISD::FLOG10, VT, Expand);
-    setOperationAction(ISD::FEXP, VT, Expand);
-    setOperationAction(ISD::FEXP2, VT, Expand);
-    setOperationAction(ISD::FCEIL, VT, Expand);
-    setOperationAction(ISD::FTRUNC, VT, Expand);
-    setOperationAction(ISD::FRINT, VT, Expand);
-    setOperationAction(ISD::FNEARBYINT, VT, Expand);
-    setOperationAction(ISD::FROUND, VT, Expand);
-    setOperationAction(ISD::FFLOOR, VT, Expand);
-    if (VT == MVT::f128) {
-      setOperationAction(ISD::FMINNUM, VT, Expand);
-      setOperationAction(ISD::FMAXNUM, VT, Expand);
-    } else {
-      setOperationAction(ISD::FMINNUM, VT, Legal);
-      setOperationAction(ISD::FMAXNUM, VT, Legal);
-    }
-    setOperationAction(ISD::FMINIMUM, VT, Expand);
-    setOperationAction(ISD::FMAXIMUM, VT, Expand);
-    setOperationAction(ISD::FSINCOS, VT, Expand);
+  /// Others.
+
+  // FIXME: VE's I128 stuff is not investivated yet
+  if (!1) {
+    // These libcalls are not available in 32-bit.
+    setLibcallName(RTLIB::SHL_I128, nullptr);
+    setLibcallName(RTLIB::SRL_I128, nullptr);
+    setLibcallName(RTLIB::SRA_I128, nullptr);
   }
 
-  // FIXME: VE's FCOPYSIGN is not investivated yet
-  setOperationAction(ISD::FCOPYSIGN, MVT::f128, Expand);
-  setOperationAction(ISD::FCOPYSIGN, MVT::f64, Expand);
-  setOperationAction(ISD::FCOPYSIGN, MVT::f32, Expand);
-
-  // FIXME: VE's SHL_PARTS and others are not investigated yet.
-  setOperationAction(ISD::SHL_PARTS, MVT::i32, Expand);
-  setOperationAction(ISD::SRA_PARTS, MVT::i32, Expand);
-  setOperationAction(ISD::SRL_PARTS, MVT::i32, Expand);
-  setOperationAction(ISD::SHL_PARTS, MVT::i64, Expand);
-  setOperationAction(ISD::SRA_PARTS, MVT::i64, Expand);
-  setOperationAction(ISD::SRL_PARTS, MVT::i64, Expand);
-
-  // Expands to [SU]MUL_LOHI.
-  setOperationAction(ISD::MULHU, MVT::i32, Expand);
-  setOperationAction(ISD::MULHS, MVT::i32, Expand);
-
-  setOperationAction(ISD::UMUL_LOHI, MVT::i64, Expand);
-  setOperationAction(ISD::SMUL_LOHI, MVT::i64, Expand);
-  setOperationAction(ISD::MULHU, MVT::i64, Expand);
-  setOperationAction(ISD::MULHS, MVT::i64, Expand);
-
-  setOperationAction(ISD::UMULO, MVT::i64, Expand);
-  setOperationAction(ISD::SMULO, MVT::i64, Expand);
-
   // Use the default implementation.
-  setOperationAction(ISD::STACKSAVE, MVT::Other, Expand);
-  setOperationAction(ISD::STACKRESTORE, MVT::Other, Expand);
+  setOperationAction(ISD::STACKSAVE         , MVT::Other, Expand);
+  setOperationAction(ISD::STACKRESTORE      , MVT::Other, Expand);
 
   // Expand DYNAMIC_STACKALLOC
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32, Custom);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Custom);
 
-  // LOAD/STORE for f128 needs to be custom lowered to expand two loads/stores
-  setOperationAction(ISD::LOAD, MVT::f128, Custom);
-  setOperationAction(ISD::STORE, MVT::f128, Custom);
-
-  // VE has FAQ, FSQ, FMQ, and FCQ
-  setOperationAction(ISD::FADD, MVT::f128, Legal);
-  setOperationAction(ISD::FSUB, MVT::f128, Legal);
-  setOperationAction(ISD::FMUL, MVT::f128, Legal);
-  setOperationAction(ISD::FDIV, MVT::f128, Expand);
-  setOperationAction(ISD::FSQRT, MVT::f128, Expand);
-  setOperationAction(ISD::FP_EXTEND, MVT::f128, Legal);
-  setOperationAction(ISD::FP_ROUND, MVT::f128, Legal);
-
   // Other configurations related to f128.
-  setOperationAction(ISD::SELECT, MVT::f128, Legal);
-  setOperationAction(ISD::SELECT_CC, MVT::f128, Legal);
-  setOperationAction(ISD::SETCC, MVT::f128, Legal);
-  setOperationAction(ISD::BR_CC, MVT::f128, Legal);
+  setOperationAction(ISD::BR_CC,     MVT::f128, Legal);
 
   setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
   setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::Other, Custom);
@@ -2288,28 +2267,6 @@ void VETargetLowering::initSPUActions() {
   // On most systems, DEBUGTRAP and TRAP have no difference. The "Expand"
   // here is to inform DAG Legalizer to replace DEBUGTRAP with TRAP.
   setOperationAction(ISD::DEBUGTRAP, MVT::Other, Expand);
-
-  // VE has no REM or DIVREM operations.
-  for (MVT IntVT : MVT::integer_valuetypes()) {
-    setOperationAction(ISD::UREM, IntVT, Expand);
-    setOperationAction(ISD::SREM, IntVT, Expand);
-    setOperationAction(ISD::SDIVREM, IntVT, Expand);
-    setOperationAction(ISD::UDIVREM, IntVT, Expand);
-  }
-
-  /// Conversion {
-  // VE doesn't have instructions for fp<->uint, so expand them by llvm
-  setOperationAction(ISD::FP_TO_UINT, MVT::i32, Promote);
-  setOperationAction(ISD::UINT_TO_FP, MVT::i32, Promote);
-  setOperationAction(ISD::FP_TO_UINT, MVT::i64, Expand);
-  setOperationAction(ISD::UINT_TO_FP, MVT::i64, Expand);
-
-  // fp16 not supported
-  for (MVT FPVT : MVT::fp_valuetypes()) {
-    setOperationAction(ISD::FP16_TO_FP, FPVT, Expand);
-    setOperationAction(ISD::FP_TO_FP16, FPVT, Expand);
-  }
-  /// } Conversion
 }
 
 void VETargetLowering::initVPUActions() {
