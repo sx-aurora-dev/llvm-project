@@ -445,12 +445,6 @@ public:
                               MachineBasicBlock *DispatchBB, int FI) const;
   void finalizeLowering(MachineFunction &MF) const override;
 
-  // VE supports only vector FMA
-  bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
-                                  EVT VT) const override {
-    return VT.isVector();
-  }
-
 #if 0
   // TODO map *ALL* vector types, including EVTs to vregs
   /// Certain combinations of ABIs, Targets and features require that types
@@ -476,12 +470,12 @@ public:
     return true;
   }
 
- // VE supports only vector FMA
-  bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
-                                  EVT VT) const override
-  { return VT.isVector() ? true : false; }
-
   /// Target Optimization {
+  // VE supports only vector FMA
+  bool isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
+                                  EVT VT) const override {
+    return VT.isVector();
+  }
 
   // SX-Aurora VE's s/udiv is 5-9 times slower than multiply.
   bool isIntDivCheap(EVT, AttributeList) const override { return false; }

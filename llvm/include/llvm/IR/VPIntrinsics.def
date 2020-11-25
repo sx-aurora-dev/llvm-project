@@ -49,7 +49,7 @@
 
 // Map this VP intrinsic to its functional Opcode
 #ifndef HANDLE_VP_TO_OPC
-#define HANDLE_VP_TO_OPC(VPID, OC)
+#define HANDLE_VP_TO_OPC(OPC)
 #endif
 
 // Map this VP intrinsic to its cannonical functional intrinsic.

@@ -339,6 +339,9 @@ public:
     bool Unordered = FPRed ? II->getFastMathFlags().allowReassoc() : true;
     return !isSupportedReduction(II->getIntrinsicID(), Unordered);
   }
+
+  void getUnrollingPreferences(Loop *L, ScalarEvolution &,
+                               TargetTransformInfo::UnrollingPreferences &UP);
 };
 
 } // namespace llvm

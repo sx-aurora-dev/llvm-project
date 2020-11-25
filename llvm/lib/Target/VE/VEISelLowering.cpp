@@ -3724,7 +3724,7 @@ SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   return Op;
 }
 
-SDValue VETargetLowering::lowerATOMIC_FENCE(SDValue Op,
+SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
                                             SelectionDAG &DAG) const {
   SDLoc DL(Op);
   AtomicOrdering FenceOrdering = static_cast<AtomicOrdering>(
@@ -4106,7 +4106,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   default:
     llvm_unreachable("Should not custom lower this!");
   case ISD::ATOMIC_FENCE:
-    return lowerATOMIC_FENCE(Op, DAG);
+    return LowerATOMIC_FENCE(Op, DAG);
   case ISD::ATOMIC_SWAP:
     return LowerATOMIC_SWAP(Op, DAG);
   case ISD::BITCAST:
