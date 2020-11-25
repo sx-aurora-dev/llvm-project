@@ -242,6 +242,14 @@ public:
                             TypeHierarchyDirection Direction,
                             Callback<llvm::Optional<TypeHierarchyItem>> CB);
 
+  /// Get information about call hierarchy for a given position.
+  void prepareCallHierarchy(PathRef File, Position Pos,
+                            Callback<std::vector<CallHierarchyItem>> CB);
+
+  /// Resolve incoming calls for a given call hierarchy item.
+  void incomingCalls(const CallHierarchyItem &Item,
+                     Callback<std::vector<CallHierarchyIncomingCall>>);
+
   /// Retrieve the top symbols from the workspace matching a query.
   void workspaceSymbols(StringRef Query, int Limit,
                         Callback<std::vector<SymbolInformation>> CB);
@@ -252,6 +260,10 @@ public:
 
   /// Retrieve ranges that can be used to fold code within the specified file.
   void foldingRanges(StringRef File, Callback<std::vector<FoldingRange>> CB);
+
+  /// Retrieve implementations for virtual method.
+  void findImplementations(PathRef File, Position Pos,
+                           Callback<std::vector<LocatedSymbol>> CB);
 
   /// Retrieve locations for symbol references.
   void findReferences(PathRef File, Position Pos, uint32_t Limit,
@@ -318,6 +330,9 @@ public:
 
   void semanticHighlights(PathRef File,
                           Callback<std::vector<HighlightingToken>>);
+
+  /// Describe the AST subtree for a piece of code.
+  void getAST(PathRef File, Range R, Callback<llvm::Optional<ASTNode>> CB);
 
   /// Runs an arbitrary action that has access to the AST of the specified file.
   /// The action will execute on one of ClangdServer's internal threads.

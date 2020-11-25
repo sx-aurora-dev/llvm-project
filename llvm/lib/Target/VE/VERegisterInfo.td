@@ -193,6 +193,12 @@ def V64 : RegisterClass<"VE",
                         (add (sequence "V%u", 0, 63),
                              VIX)>;
 
+def V16384 : RegisterClass<"VE",
+                        [v256f64, // default type for vector registers
+                         v512i32, v512f32, v256i64, v256i32, v256f32 ], 64,
+                        (add (sequence "V%u", 0, 63),
+                             VIX)>;
+
 // vm0 is reserved for always true
 def VM : RegisterClass<"VE", [v256i1], 64, (sequence "VM%u", 0, 15)>;
 def VM512 : RegisterClass<"VE", [v512i1], 64, (sequence "VMP%u", 0, 7)>;

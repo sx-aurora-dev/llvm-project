@@ -602,7 +602,7 @@ public:
     return thisT()->getScalarizationOverhead(Ty, DemandedElts, Insert, Extract);
   }
 
-  /// Estimate the overhead of scalarizing an instructions unique
+  /// Estimate the overhead of scalarizing an instruction's unique
   /// non-constant operands. The types of the arguments are ordinarily
   /// scalar, in which case the costs are multiplied with VF.
   unsigned getOperandsScalarizationOverhead(ArrayRef<const Value *> Args,
@@ -610,8 +610,14 @@ public:
     unsigned Cost = 0;
     SmallPtrSet<const Value*, 4> UniqueOperands;
     for (const Value *A : Args) {
+      // Disregard things like metadata arguments.
+      Type *Ty = A->getType();
+      if (!Ty->isIntOrIntVectorTy() && !Ty->isFPOrFPVectorTy() &&
+          !Ty->isPtrOrPtrVectorTy())
+        continue;
+
       if (!isa<Constant>(A) && UniqueOperands.insert(A).second) {
-        auto *VecTy = dyn_cast<VectorType>(A->getType());
+        auto *VecTy = dyn_cast<VectorType>(Ty);
         if (VecTy) {
           // If A is a vector operand, VF should be 1 or correspond to A.
           assert((VF == 1 ||
@@ -619,7 +625,7 @@ public:
                  "Vector argument does not match VF");
         }
         else
-          VecTy = FixedVectorType::get(A->getType(), VF);
+          VecTy = FixedVectorType::get(Ty, VF);
 
         Cost += getScalarizationOverhead(VecTy, false, true);
       }
@@ -1390,6 +1396,12 @@ public:
     case Intrinsic::maxnum:
       ISDs.push_back(ISD::FMAXNUM);
       break;
+    case Intrinsic::minimum:
+      ISDs.push_back(ISD::FMINIMUM);
+      break;
+    case Intrinsic::maximum:
+      ISDs.push_back(ISD::FMAXIMUM);
+      break;
     case Intrinsic::copysign:
       ISDs.push_back(ISD::FCOPYSIGN);
       break;
@@ -1430,6 +1442,7 @@ public:
     case Intrinsic::lifetime_start:
     case Intrinsic::lifetime_end:
     case Intrinsic::sideeffect:
+    case Intrinsic::pseudoprobe:
       return 0;
     case Intrinsic::masked_store: {
       Type *Ty = Tys[0];

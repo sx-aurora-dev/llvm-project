@@ -1,3 +1,23 @@
+//===-------------- VVPInstrInfo.td - VVP_* SDNode patterns ---------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines the VE Vector Predicated SDNodes (VVP SDNodes).  VVP
+// SDNodes are an intermediate isel layer between the vector SDNodes emitted by
+// LLVM and the actual VE vector instructions. For example:
+//
+//  ADD(x,y)   -->   VVP_ADD(x,y,mask,evl)   -->   VADDSWSXrvml(x,y,mask,evl)
+//     ^                      ^                            ^
+//  The standard     The VVP layer SDNode.        The VE vector instruction.
+//  SDNode.
+//
+// TODO explain how VVP nodes relate to VP SDNodes once VP ISel is uptream.
+//===----------------------------------------------------------------------===//
+
 ///// V(E) - VP internal nodes
 // fp node types
 

@@ -48,6 +48,8 @@ enum NodeType : unsigned {
 
   MEMBARRIER, // Compiler barrier only; generate a no-op.
 
+  VEC_BROADCAST,    // 0: scalar value, 1: VL
+
   CALL,            // A call instruction.
   RET_FLAG,        // Return with a flag operand.
   GLOBAL_BASE_REG, // Global base reg for PIC.
@@ -71,8 +73,6 @@ enum NodeType : unsigned {
 
   // Create a mask that is true where the vector lane is != 0
   VEC_TOMASK, // 0: Vector value, 1: AVL (no mask)
-  // Broadcast an SX register
-  VEC_BROADCAST, // 0: the value, 1: the vector length (no mask)
   // Create a sequence vector
   VEC_SEQ, // 1: the vector length (no mask)
   VEC_VMV, // custom lowering for vp_vshift
@@ -93,15 +93,15 @@ enum NodeType : unsigned {
   REPL_F32,
   REPL_I32,
 
-// Internal VVP nodes
-#define ADD_VVP_OP(VVP_NAME) VVP_NAME,
-#include "VVPNodes.inc"
-
   /// A wrapper node for TargetConstantPool, TargetJumpTable,
   /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
   /// MCSymbol and TargetBlockAddress.
   Wrapper,
   TS1AM, // HW instruction, TS1AM
+
+  // VVP_* nodes.
+#define ADD_VVP_OP(VVP_NAME, ...) VVP_NAME,
+#include "VVPNodes.def"
 };
 } // namespace VEISD
 
@@ -136,6 +136,8 @@ class VETargetLowering final : public TargetLowering, public VELoweringInfo {
   void initSPUActions();
   // setOperationAction for all vector ops
   void initVPUActions();
+  void initGenericVectorActions();
+  void initExperimentalVectorActions();
 
 public:
   VETargetLowering(const TargetMachine &TM, const VESubtarget &STI);
@@ -215,21 +217,6 @@ public:
 
   SDValue LowerVPToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
 
-  SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
-                                 VVPExpansionMode Mode) const;
-  SDValue LowerVASTART(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerVAARG(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
-
-  // SjLj
-  SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
-
   // Custom Operations
   // SDValue CreateConstMask(SDLoc DL, unsigned NumElements, SelectionDAG &DAG,
   // bool IsTrue=true) const; SDValue CreateBroadcast(SDLoc dl, EVT ResTy,
@@ -283,9 +270,6 @@ public:
   SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerCONCAT_VECTOR(SDValue Op, SelectionDAG &DAG) const;
-  /// } Custom Lower
-
-
   /// } Custom Lower
 
   /// Custom DAGCombine {
@@ -394,7 +378,7 @@ public:
   // Widening configuration & legalizer
   SDValue TryNarrowExtractVectorLoad(SDNode *ExtractN, SelectionDAG &DAG) const;
 
-  SDValue ExpandToVVP(SDValue Op, SelectionDAG &DAG,
+  SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG,
                       VVPExpansionMode Mode) const;
   // main entry point for regular OC to VVP_* ISD expansion
   // Called in TL::ReplaceNodeResults
@@ -476,6 +460,9 @@ public:
                                   EVT VT) const override {
     return VT.isVector();
   }
+
+  // Return lower limit for number of blocks in a jump table.
+  unsigned getMinimumJumpTableEntries() const override;
 
   // SX-Aurora VE's s/udiv is 5-9 times slower than multiply.
   bool isIntDivCheap(EVT, AttributeList) const override { return false; }

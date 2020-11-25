@@ -52,10 +52,10 @@ PosOpt GetVVPOpcode(unsigned OpCode) {
   case ISD::VP_ID:                                                             \
     return VEISD::VVP_NAME;
 
-#define REGISTER_VVP_OP(VVP_NAME, NATIVE_ISD)                                  \
+#define ADD_VVP_OP(VVP_NAME, NATIVE_ISD)                                  \
   case ISD::NATIVE_ISD:                                                        \
     return VEISD::VVP_NAME;
-#include "VVPNodes.inc"
+#include "VVPNodes.def"
   }
 }
 
@@ -64,10 +64,10 @@ bool IsVVPReduction(unsigned Opcode) {
   default:
     return false;
 
-#define REGISTER_REDUCE_VVP_OP(VVPID, ...)                                     \
+#define ADD_REDUCE_VVP_OP(VVPID, ...)                                     \
   case VEISD::VVPID:                                                           \
     return true;
-#include "VVPNodes.inc"
+#include "VVPNodes.def"
   }
 }
 
@@ -79,7 +79,7 @@ bool SupportsPackedMode(unsigned Opcode) {
 #define REGISTER_PACKED(VVP_NAME)                                              \
   case VEISD::VVP_NAME:                                                        \
     return true;
-#include "VVPNodes.inc"
+#include "VVPNodes.def"
   }
 }
 
@@ -101,7 +101,7 @@ bool IsVVP(unsigned Opcode) {
 #define ADD_VVP_OP(VVP_NAME)                                                   \
   case VEISD::VVP_NAME:                                                        \
     return true;
-#include "VVPNodes.inc"
+#include "VVPNodes.def"
   }
 }
 
@@ -206,7 +206,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   case ISD::VP_ID:                                                             \
     OC = VEISD::VVP_ID;                                                        \
     break;
-#include "VVPNodes.inc"
+#include "VVPNodes.def"
   }
 
   // Expect VEISD:: VVP or ISD::non-VP Opcodes here
@@ -224,25 +224,25 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
 
     // Known VP ops
     // all standard un/bin/tern-ary operators
-#define REGISTER_UNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                            \
+#define ADD_UNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                            \
   case VEISD::VVP_NAME:                                                        \
   case ISD::NATIVE_ISD:
-#define REGISTER_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
+#define ADD_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
   case VEISD::VVP_NAME:                                                        \
   case ISD::NATIVE_ISD:
-#define REGISTER_TERNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                          \
+#define ADD_TERNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                          \
   case VEISD::VVP_NAME:                                                        \
   case ISD::NATIVE_ISD:
-#include "VVPNodes.inc"
+#include "VVPNodes.def"
     return Op->getValueType(0);
 
-#define REGISTER_FPCONV_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
+#define ADD_FPCONV_VVP_OP(VVP_NAME, NATIVE_ISD)                           \
   case VEISD::VVP_NAME:                                                        \
   case ISD::NATIVE_ISD:
-#define REGISTER_ICONV_VVP_OP(VVP_NAME, NATIVE_ISD)                            \
+#define ADD_ICONV_VVP_OP(VVP_NAME, NATIVE_ISD)                            \
   case VEISD::VVP_NAME:                                                        \
   case ISD::NATIVE_ISD:
-#include "VVPNodes.inc"
+#include "VVPNodes.def"
     return getLargestConvType(Op);
 
   case VEISD::VEC_TOMASK:

@@ -304,7 +304,6 @@ def mimmfp32 : Operand<i32>, PatLeaf<(fpimm), [{
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
 
-def True        : PatLeaf<(imm), [{ return N->getSExtValue() !=0 ; }]>;
 def one         : PatLeaf<(imm), [{ return N->getSExtValue() == 1 ; }]>;
 
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
@@ -324,20 +323,7 @@ def zero_h      : PatLeaf<(fpimm), [{ return N->isZero() == 0; }]>;
 def zero_l      : PatLeaf<(imm), [{ return N->getZExtValue() == 0; }]>;
 def zero_w      : PatLeaf<(imm), [{ return N->getZExtValue() & 0xffffffff == 0; }]>;
 
-// whether the mask is all true
-let PredicateCodeUsesOperands = 1 in {
-def true_mask                            : PatLeaf<(vec_broadcast (i32 True), (i32 srcvalue))>;
-def any_broadcast                        : PatFrag<(ops node:$sx), (vec_broadcast node:$sx, (i32 srcvalue))>;
-}
-
-// TODO remove - unused
-// register extraction match
-// def reg_broadcast : ComplexPattern<vAny, 1, "selectBroadcast", [vec_broadcast], []>; // returns the broadcast itself
-
-// return the scalar operand of any_broadcast, suitable for consumption
-// def unbcast : SDNodeXForm<vec_broadcast, [{ return extractScalarOperand(N); }]>;
-
-
+def nonzero     : PatLeaf<(imm), [{ return N->getSExtValue() !=0 ; }]>;
 
 def CCSIOp : PatLeaf<(cond), [{
   switch (N->get()) {
@@ -2760,6 +2746,22 @@ def : Pat<(i32 (and (trunc i64:$src), 0xff)),
 def : Pat<(i32 (and (trunc i64:$src), 0xffff)),
           (EXTRACT_SUBREG (ANDrm $src, !add(48, 64)), sub_i32)>;
 
+//===----------------------------------------------------------------------===//
+// Vector Instruction Pattern Stuff
+//===----------------------------------------------------------------------===//
+
+// Custom intermediate ISDs.
+class IsVLVT<int OpIdx> : SDTCisVT<OpIdx,i32>;
+def vec_broadcast       : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 2,
+                                 [SDTCisVec<0>, IsVLVT<2>]>>;
+
+// Whether this is an all-true mask (assuming undef-bits above VL are all-true).
+def true_mask           : PatLeaf<
+                            (vec_broadcast (i32 nonzero), (i32 srcvalue))>;
+// Match any broadcast (ignoring VL).
+def any_broadcast       : PatFrag<(ops node:$sx),
+                                  (vec_broadcast node:$sx, (i32 srcvalue))>;
+
 // Vector instructions.
 include "VEInstrVec.td"
 include "VEInstrVecVL.td"
@@ -2785,11 +2787,10 @@ def lea_u32         : OutPatFrag<(ins node:$imm), (ANDrm (lea_i64 $imm), 32)>;
 // The vvp_nodes are defined in..
 include "VVPInstrInfo.td"
 
-// generic vector instruction patterns
-include "VEInstrPatternsVec.td"
-
 // The vevlintrin
 include "VEInstrIntrinsicVL.td"
+// Patterns and intermediate SD nodes (VEC_*).
+include "VEInstrPatternsVec.td"
 
-// VVP lowering
-include "VVPInstrPatterns.td"
+// Patterns and intermediate SD nodes (VVP_*).
+include "VVPInstrPatternsVec.td"
