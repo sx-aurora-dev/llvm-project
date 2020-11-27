@@ -224,12 +224,16 @@ void VETargetLowering::initRegisterClasses() {
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
-  if (Subtarget->enableVPU()) {
-    for (MVT VecVT : AllVectorVTs)
+  if (!Subtarget->enableVPU())
+    return;
+
+  for (MVT VecVT : AllVectorVTs)
+    if (!IsPackedType(VecVT) || Subtarget->hasPackedMode())
       addRegisterClass(VecVT, &VE::V64RegClass);
-    for (MVT MaskVT : AllMaskVTs)
-      addRegisterClass(MaskVT, &VE::VMRegClass);
-  }
+
+  addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+  if (Subtarget->hasPackedMode())
+    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
 }
 
 SDValue VETargetLowering::ExpandSELECT(SDValue Op,
@@ -1956,7 +1960,7 @@ bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
 }
 
 bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
-                                        const SelectionDAG &DAG) const {
+                                          const SelectionDAG &DAG) const {
   // Do not merge to float value size (128 bytes) if no implicit
   // float attribute is set.
   bool NoFloat = DAG.getMachineFunction().getFunction().hasFnAttribute(
@@ -1965,31 +1969,7 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
   if (NoFloat) {
     unsigned MaxIntSize = 64;
     return (MemVT.getSizeInBits() <= MaxIntSize);
-  }
-  return true;
-}
-
-bool VETargetLowering::hasAndNot(SDValue Y) const {
-  EVT VT = Y.getValueType();
-
-  // VE doesn't have vector and not instruction.
-  if (VT.isVector())
-    return false;
-
-  // VE allows different immediate values for X and Y where ~X & Y.
-  // Only simm7 works for X, and only mimm works for Y on VE.  However, this
-  // function is used to check whether an immediate value is OK for and-not
-  // instruction as both X and Y.  Generating additional instruction to
-  // retrieve an immediate value is no good since the purpose of this
-  // function is to convert a series of 3 instructions to another series of
-  // 3 instructions with better parallelism.  Therefore, we return false
-  // for all immediate values now.
-  // FIXME: Change hasAndNot function to have two operands to make it work
-  //        correctly with Aurora VE.
-  if (isa<ConstantSDNode>(Y))
-    return false;
-
-  // It's ok for generic registers.
+  }        
   return true;
 }
 
@@ -2587,17 +2567,6 @@ void VETargetLowering::initVPUActions() {
   setOperationAction(ISD::VSELECT, MVT::v256i1, Custom);
 }
 
-TargetLowering::AtomicExpansionKind
-VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
-  if (AI->getOperation() == AtomicRMWInst::Xchg) {
-    const DataLayout &DL = AI->getModule()->getDataLayout();
-    if (DL.getTypeStoreSize(AI->getValOperand()->getType()) == 2)
-      return AtomicExpansionKind::CmpXChg; // Uses cas instruction for 2byte
-                                           // atomic_swap
-    return AtomicExpansionKind::None;      // Uses ts1am instruction
-  }
-}
-
 VETargetLowering::VETargetLowering(const TargetMachine &TM,
                                    const VESubtarget &STI)
     : TargetLowering(TM), Subtarget(&STI) {
@@ -2676,7 +2645,6 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(GETSTACKTOP)
     TARGET_NODE_CASE(GETTLSADDR)
     TARGET_NODE_CASE(CALL)
-    TARGET_NODE_CASE(VEC_BROADCAST)
     TARGET_NODE_CASE(RET_FLAG)
     TARGET_NODE_CASE(EQV)
     TARGET_NODE_CASE(XOR)
@@ -2892,11 +2860,6 @@ SDValue VETargetLowering::lowerBlockAddress(SDValue Op,
 }
 
 SDValue VETargetLowering::lowerConstantPool(SDValue Op,
-                                            SelectionDAG &DAG) const {
-  return makeAddress(Op, DAG);
-}
-
-SDValue VETargetLowering::LowerBlockAddress(SDValue Op,
                                             SelectionDAG &DAG) const {
   return makeAddress(Op, DAG);
 }
@@ -6014,42 +5977,4 @@ static Optional<unsigned> getVVPOpcode(unsigned OC) {
 #include "VVPNodes.def"
   }
   return None;
-}
-
-SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG) const {
-  // Can we represent this as a VVP node.
-  auto OCOpt = getVVPOpcode(Op->getOpcode());
-  if (!OCOpt.hasValue())
-    return SDValue();
-  unsigned VVPOC = OCOpt.getValue();
-
-  // The representative and legalized vector type of this operation.
-  EVT OpVecVT = Op.getValueType();
-  EVT LegalVecVT = getTypeToTransformTo(*DAG.getContext(), OpVecVT);
-
-  // Materialize the VL parameter.
-  SDLoc DL(Op);
-  SDValue AVL = DAG.getConstant(OpVecVT.getVectorNumElements(), DL, MVT::i32);
-  MVT MaskVT = MVT::v256i1;
-  SDValue ConstTrue = DAG.getConstant(1, DL, MVT::i32);
-  SDValue Mask = DAG.getNode(VEISD::VEC_BROADCAST, DL, MaskVT,
-                             ConstTrue); // emit a VEISD::VEC_BROADCAST here.
-
-  // Categories we are interested in.
-  bool IsBinaryOp = false;
-
-  switch (VVPOC) {
-#define ADD_BINARY_VVP_OP(VVPNAME, ...)                                        \
-  case VEISD::VVPNAME:                                                         \
-    IsBinaryOp = true;                                                         \
-    break;
-#include "VVPNodes.def"
-  }
-
-  if (IsBinaryOp) {
-    assert(LegalVecVT.isSimple());
-    return DAG.getNode(VVPOC, DL, LegalVecVT, Op->getOperand(0),
-                       Op->getOperand(1), Mask, AVL);
-  }
-  llvm_unreachable("lowerToVVP called for unexpected SDNode.");
 }

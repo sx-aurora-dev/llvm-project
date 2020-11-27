@@ -236,6 +236,8 @@ public:
   SDValue LowerSCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
                                 VVPExpansionMode Mode,
                                 VecLenOpt VecLenHint = None) const;
+  SDValue LowerEXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
+                                 VVPExpansionMode Mode) const;
   SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
                                 VVPExpansionMode Mode,
                                 VecLenOpt VecLenHint = None) const;
@@ -258,6 +260,10 @@ public:
   SDValue LowerTRUNCATE(llvm::SDValue, llvm::SelectionDAG &) const;
   // expand SETCC opernads directly used in vector arithmeticops
   SDValue LowerSETCCInVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
+
+  SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
 
   // Other
   SDValue LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;

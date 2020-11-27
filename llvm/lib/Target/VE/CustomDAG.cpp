@@ -98,7 +98,7 @@ bool IsVVP(unsigned Opcode) {
   switch (Opcode) {
   default:
     return false;
-#define ADD_VVP_OP(VVP_NAME)                                                   \
+#define ADD_VVP_OP(VVP_NAME, NATIVE_ISD)                                       \
   case VEISD::VVP_NAME:                                                        \
     return true;
 #include "VVPNodes.def"

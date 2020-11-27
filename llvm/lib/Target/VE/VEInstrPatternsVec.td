@@ -10,6 +10,22 @@
 
 // Pattern Matchings for Generic Vector Instructions
 
+///// repl_f32 , repl_i32 /////
+
+// Sub-register replication.
+def: Pat<(i64 (repl_f32 f32:$val)),
+            (ORrr
+              (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
+              (ANDrm   (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32))>;
+def: Pat<(i64 (repl_i32 i32:$val)),
+            (ORrr
+              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32))>;
+
+
+
+///// vm_insert, vm_extract /////
+
 // Mask Insert & Extract
 multiclass insert_extract_mask<ValueType MaskVT, string MaskToken> {
   // extract at imm
@@ -31,7 +47,8 @@ multiclass insert_extract_mask<ValueType MaskVT, string MaskToken> {
 defm: insert_extract_mask<v256i1, "m">;
 // defm: insert_extract_mask<v512i1, "y">; // TODO: implement! SVMyr not available
 
-// Mask Load & Store
+
+///// Mask Load & Store /////
 
 // Store for v256i1, v512i1 are implemented in 2 ways.  These STVM/STVM512
 // pseudo instruction is used for frameindex related load/store instructions.
@@ -49,6 +66,8 @@ def : Pat<(store v256i1:$vx, ADDRrii:$addr),
 def : Pat<(store v512i1:$vx, ADDRrii:$addr),
           (STVM512rii ADDRrii:$addr, $vx)>;
 
+
+///// Mask Arithmetic /////
 
 // Mask arithmetic
 multiclass MaskArith<ValueType MaskVT, string MaskTag="mmm"> {
@@ -78,7 +97,8 @@ def: SplitMaskPat<and, ANDMmm>;
 def: SplitMaskPat<or,   ORMmm>;
 def: SplitMaskPat<xor, XORMmm>;
 
-// Insert & Extract Vector Element
+
+//// Insert & Extract Vector Element /////
 
 // Series of INSERT_VECTOR_ELT for all VE vector types,
 // v512i32 and v512f32 is expanded by LowerINSERT_VECTOR_ELT().
@@ -116,7 +136,8 @@ multiclass ive_eve_32<ValueType VecVT, ValueType ElemVT, SubRegIndex SubRegIdx> 
 defm: ive_eve_32<v256f32, f32, sub_f32>;
 defm: ive_eve_32<v256i32, i32, sub_i32>;
 
-// Narrow
+
+///// vec_narrow /////
 
 multiclass narrow_dce<ValueType DataVT> {
   def: Pat<(DataVT (vec_narrow DataVT:$vx, (i32 uimm32))),
@@ -130,32 +151,46 @@ defm : narrow_dce<v256i32>;
 defm : narrow_dce<v512f32>;
 defm : narrow_dce<v512i32>;
 
-// Broadcast
+
+///// vec_broadcast /////
+
+multiclass vbrd_elem32<ValueType v32, ValueType s32, SDPatternOperator ImmOp, SDNodeXForm ImmCast, int SubRegIdx> {
+  // VBRDil
+  def : Pat<(v32 (vec_broadcast (s32 ImmOp:$sy), i32:$vl)),
+            (VBRDil (ImmCast $sy), i32:$vl)>;
+
+  // VBRDrl
+  def : Pat<(v32 (vec_broadcast s32:$sy, i32:$vl)),
+            (VBRDrl
+              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, SubRegIdx),
+              i32:$vl)>;
+}
+
+defm : vbrd_elem32<v256f32, f32, simm7fp, LO7FP, sub_f32>;
+defm : vbrd_elem32<v256i32, i32, simm7, LO7, sub_i32>;
+
+multiclass vbrd_elem64<ValueType v64, ValueType s64, SDPatternOperator ImmOp, SDNodeXForm ImmCast> {
+  // VBRDil
+  def : Pat<(v64 (vec_broadcast (s64 ImmOp:$sy), i32:$vl)),
+            (VBRDil (ImmCast $sy), i32:$vl)>;
+
+  // VBRDrl
+  def : Pat<(v64 (vec_broadcast s64:$sy, i32:$vl)),
+            (VBRDrl s64:$sy, i32:$vl)>;
+}
+
+defm : vbrd_elem64<v256f64, f64, simm7fp, LO7FP>;
+defm : vbrd_elem64<v256i64, i64, simm7, LO7>;
+
 
 def: Pat<(v512i32 (vec_broadcast i64:$val, i32:$vl)),
          (PVBRDrl $val, $vl)>;
 def: Pat<(v512f32 (vec_broadcast i64:$val, i32:$vl)),
          (PVBRDrl $val, $vl)>;
 
-multiclass vbrd_for_vector_length<int length, ValueType vi32, ValueType vi64,
-                                  ValueType vf32, ValueType vf64> {
-  def : Pat<(vi32 (vec_broadcast i32:$sy, i32:$vl)),
-            (VBRDrl
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_i32),
-              i32:$vl)>;
-  def : Pat<(vf32 (vec_broadcast f32:$sy, i32:$vl)),
-            (VBRDrl
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $sy, sub_f32),
-              i32:$vl)>;
-  def : Pat<(vi64 (vec_broadcast i64:$sy, i32:$vl)),
-            (VBRDrl i64:$sy, i32:$vl)>;
-  def : Pat<(vf64 (vec_broadcast f64:$sy, i32:$vl)),
-            (VBRDrl f64:$sy, i32:$vl)>;
-}
 
-defm : vbrd_for_vector_length<256, v256i32, v256i64, v256f32, v256f64>;
+///// vec_seq /////
 
-// Sequence
 def: Pat<(v512i32 (vec_seq i32:$vl)),
          (PVSEQl $vl)>;
 def: Pat<(v256i64 (vec_seq i32:$vl)),
@@ -164,6 +199,9 @@ def: Pat<(v256i32 (vec_seq i32:$vl)),
          (PVSEQLOl $vl)>;
 def: Pat<(v256f32 (vec_seq i32:$vl)),
          (PVSEQUPl $vl)>;
+
+
+///// vec_vmv /////
 
 // Element shift (VMV)
 multiclass VMV_Patterns<ValueType VecVT> {
@@ -182,9 +220,8 @@ defm: VMV_Patterns<v256f32>;
 defm: VMV_Patterns<v256i64>;
 defm: VMV_Patterns<v256f64>;
 
-// Vector mask popcnt
-def : Pat<(i64 (vec_popcount v256i1:$mask, i32:$avl)),
-          (PCVMml $mask, $avl)>;
+
+///// vec_pack /////
 
 // Packing (type based)
 def : Pat<(v512i32 (vec_pack v256i32:$vlo, v256i32:$vhi, i32:$avl)),
@@ -197,7 +234,9 @@ def : Pat<(v512i1 (vec_pack v256i1:$vlo, v256i1:$vhi, (i32 srcvalue))),
                          $vlo, sub_vm_even),
                          $vhi, sub_vm_odd)>;
 
-// Swapping
+
+///// vec_swap, vec_unpack_lo, vec_unpack_hi /////
+
 multiclass Unpack_Swap<ValueType PackVT> {
   def : Pat<(PackVT (vec_swap PackVT:$vp, i32:$avl)),
             (VSHFvvil $vp, $vp, 8, $avl)>; // exchange hi and lo
@@ -224,6 +263,9 @@ def : Pat<(v256i1 (vec_unpack_hi v512i1:$vm, (i32 srcvalue))),
 defm: Unpack_Swap<v512i32>;
 defm: Unpack_Swap<v512f32>;
 
+
+///// vec_tomask /////
+
 // TODO: optimized pattern
 //      t17: i32 = truncate t2
 //        t25: i64 = VEISD::REPL_I32 t17
@@ -239,6 +281,9 @@ def : Pat<(vec_tomask v256i32:$vx, i32:$avl),
           (PVFMKWLOvl CC_INE, $vx, $avl)>;
 def : Pat<(vec_tomask v256f32:$vx, i32:$avl),
           (PVFMKWUPvl CC_NE, $vx, $avl)>;
+
+
+///// Others /////
 
 // Casts
 def : Pat<(v256i64 (anyext v256i32:$src)),
