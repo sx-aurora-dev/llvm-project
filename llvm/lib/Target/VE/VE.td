@@ -33,6 +33,9 @@ def FeatureVectorize
 def IsVectorizeSubTarget : Predicate<"Subtarget->vectorize()">;
 def IsNotVectorizeSubTarget : Predicate<"!Subtarget->vectorize()">;
 
+def IsIntrinsicSubTarget : Predicate<"Subtarget->intrinsic()">;
+def IsNotIntrinsicSubTarget : Predicate<"!Subtarget->intrinsic()">;
+
 def IsNoNaNs : Predicate<"TM.Options.NoNaNsFPMath">;
 
 //===----------------------------------------------------------------------===//

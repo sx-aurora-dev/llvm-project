@@ -74,9 +74,10 @@ bool VETargetLowering::CanLowerReturn(
   return CCInfo.CheckReturn(Outs, RetCC);
 }
 
-static const MVT AllVPUVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
-                                      MVT::v256f32, MVT::v512f32, MVT::v256f64};
-static const MVT AllVectorVTs[] =
+static const MVT AllVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
+                                   MVT::v256f32, MVT::v512f32, MVT::v256f64};
+
+static const MVT WholeVectorVTs[] =
     { MVT::v512i32, MVT::v512f32,
       MVT::v256i32, MVT::v256f32, MVT::v256i64, MVT::v256f64,
       MVT::v128i32, MVT::v128f32, MVT::v128i64, MVT::v128f64,
@@ -99,15 +100,21 @@ void VETargetLowering::initRegisterClasses() {
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
   if (Subtarget->enableVPU()) {
-    for (MVT VecVT : AllVPUVectorVTs)
+    for (MVT VecVT : AllVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
     for (MVT MaskVT : AllMaskVTs)
       addRegisterClass(MaskVT, &VE::VMRegClass);
-  } else if (Subtarget->intrinsic() || Subtarget->vectorize()) {
+  } else if (Subtarget->vectorize()) {
+    for (MVT VecVT : WholeVectorVTs)
+      addRegisterClass(VecVT, &VE::V64RegClass);
+    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+  } else {
+    assert(Subtarget->intrinsic());
     for (MVT VecVT : AllVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
-    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
     addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
   }
 }
 
@@ -784,7 +791,7 @@ VETargetLowering::LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const {
 void VETargetLowering::initVPUActions() {
   if (!Subtarget->enableVPU())
     return;
-  for (MVT LegalVecVT : AllVPUVectorVTs) {
+  for (MVT LegalVecVT : AllVectorVTs) {
     setOperationAction(ISD::BUILD_VECTOR, LegalVecVT, Custom);
     // Translate all vector instructions with legal element types to VVP_*
     // nodes.

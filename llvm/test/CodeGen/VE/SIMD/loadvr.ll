@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve | FileCheck %s
+; RUN: llc < %s -mtriple=ve -mattr=+vec | FileCheck %s
 
 @v256i64 = common dso_local local_unnamed_addr global <256 x i64> zeroinitializer, align 16
 
@@ -36,6 +36,34 @@ define x86_regcallcc <256 x i32> @loadv256i32(<256 x i32>* nocapture readonly) {
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = load <256 x i32>, <256 x i32>* %0, align 16
   ret <256 x i32> %2
+}
+
+; Function Attrs: norecurse nounwind readonly
+define x86_regcallcc <256 x i64> @loadv256i32sext(<256 x i32>* nocapture readonly) {
+; CHECK-LABEL: loadv256i32sext:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vldl.sx %v0, 4, %s0
+; CHECK-NEXT:    vadds.w.sx %v0, 0, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %2 = load <256 x i32>, <256 x i32>* %0, align 16
+  %3 = sext <256 x i32> %2 to <256 x i64>
+  ret <256 x i64> %3
+}
+
+; Function Attrs: norecurse nounwind readonly
+define x86_regcallcc <256 x i64> @loadv256i32zext(<256 x i32>* nocapture readonly) {
+; CHECK-LABEL: loadv256i32zext:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vldl.sx %v0, 4, %s0
+; CHECK-NEXT:    vadds.w.zx %v0, 0, %v0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %2 = load <256 x i32>, <256 x i32>* %0, align 16
+  %3 = zext <256 x i32> %2 to <256 x i64>
+  ret <256 x i64> %3
 }
 
 ; Function Attrs: norecurse nounwind readonly
