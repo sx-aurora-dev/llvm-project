@@ -797,67 +797,16 @@ void VETargetLowering::initVPUActions() {
   }
 }
 
-/// Register generic vector actions which are used under -mattr=+intrin and
-/// -mattr=+vec.
-void VETargetLowering::initGenericVectorActions() {
-  if (!Subtarget->intrinsic() && !Subtarget->vectorize())
+/// Register vector actions for intrinsic instructions which are used under
+/// -mattr=+intrin.
+void VETargetLowering::initIntrinsicActions() {
+  if (!Subtarget->intrinsic())
     return;
 
-  for (MVT VT : MVT::vector_valuetypes()) {
-    if (VT.getVectorElementType() == MVT::i1 ||
-        VT.getVectorElementType() == MVT::i8 ||
-        VT.getVectorElementType() == MVT::i16) {
-      // VE uses vXi1 types but has no generic operations.
-      // VE doesn't support vXi8 and vXi16 value types.
-      // So, we mark them all as expanded.
-
-      // Expand all vector-i8/i16-vector truncstore and extload
-      for (MVT OuterVT : MVT::vector_valuetypes()) {
-        setTruncStoreAction(OuterVT, VT, Expand);
-        setLoadExtAction(ISD::SEXTLOAD, OuterVT, VT, Expand);
-        setLoadExtAction(ISD::ZEXTLOAD, OuterVT, VT, Expand);
-        setLoadExtAction(ISD::EXTLOAD, OuterVT, VT, Expand);
-      }
-      // SExt i1 and ZExt i1 are legal.
-      if (VT.getVectorElementType() == MVT::i1) {
-        setOperationAction(ISD::SIGN_EXTEND, VT, Legal);
-        setOperationAction(ISD::ZERO_EXTEND, VT, Legal);
-        setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
-        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
-      } else {
-        setOperationAction(ISD::SIGN_EXTEND, VT, Expand);
-        setOperationAction(ISD::ZERO_EXTEND, VT, Expand);
-        setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Expand);
-        setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Expand);
-      }
-
-      // STORE for vXi1 needs to be custom lowered to expand multiple
-      // instructions.
-      if (VT.getVectorElementType() == MVT::i1) {
-        setOperationAction(ISD::STORE, VT, Custom);
-        setOperationAction(ISD::LOAD, VT, Custom);
-      }
-
-      setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Expand);
-      if (VT.getVectorElementType() == MVT::i1) {
-        setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
-      } else {
-        setOperationAction(ISD::BUILD_VECTOR, VT, Expand);
-      }
-      setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
-      setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
-      setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
-      setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Expand);
-    } else {
-      setOperationAction(ISD::SCALAR_TO_VECTOR,   VT, Legal);
-      setOperationAction(ISD::INSERT_VECTOR_ELT,  VT, Custom);
-      setOperationAction(ISD::EXTRACT_VECTOR_ELT, VT, Custom);
-      setOperationAction(ISD::BUILD_VECTOR,       VT, Custom);
-      setOperationAction(ISD::CONCAT_VECTORS,     VT, Expand);
-      setOperationAction(ISD::INSERT_SUBVECTOR,   VT, Expand);
-      setOperationAction(ISD::EXTRACT_SUBVECTOR,  VT, Expand);
-      setOperationAction(ISD::VECTOR_SHUFFLE,     VT, Custom);
-    }
+  for (MVT VT : { MVT::v256i1, MVT::v512i1 }) {
+    setOperationAction(ISD::STORE, VT, Custom);
+    setOperationAction(ISD::LOAD, VT, Custom);
+    setOperationAction(ISD::BUILD_VECTOR, VT, Custom);
   }
 }
 
@@ -1673,7 +1622,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   initRegisterClasses();
   initSPUActions();
   initVPUActions();
-  initGenericVectorActions();
+  initIntrinsicActions();
   initExperimentalVectorActions();
 
   setStackPointerRegisterToSaveRestore(VE::SX11);

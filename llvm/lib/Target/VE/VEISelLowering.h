@@ -81,7 +81,7 @@ class VETargetLowering : public TargetLowering {
   void initRegisterClasses();
   void initSPUActions();
   void initVPUActions();
-  void initGenericVectorActions();
+  void initIntrinsicActions();
   void initExperimentalVectorActions();
 
 public:
