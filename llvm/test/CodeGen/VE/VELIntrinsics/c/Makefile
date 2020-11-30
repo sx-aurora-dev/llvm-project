@@ -12,7 +12,7 @@ PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
 LDSTMV_TARGETS = vld.ll vst.ll pfchv.ll lsv.ll lvm.ll vbrd.ll vmv.ll
 ARITH_TARGETS = vadd.ll vsub.ll vmul.ll vdiv.ll vcmp.ll vmax.ll vmin.ll
-LOGICAL_TARGETS = vand.ll
+LOGICAL_TARGETS = vand.ll vor.ll
 
 TARGETS = $(LDSTMV_TARGETS) $(ARITH_TARGETS) $(LOGICAL_TARGETS)
 
