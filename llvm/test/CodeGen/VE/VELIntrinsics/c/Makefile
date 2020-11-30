@@ -11,7 +11,7 @@ UPDATE_LLC_TEST = $(LLVMSRCPATH)/utils/update_llc_test_checks.py
 PATCH_TEST = $(LLVMSRCPATH)/utils/patch-test.py
 
 LDSTMV_TARGETS = vld.ll vst.ll pfchv.ll lsv.ll lvm.ll vbrd.ll vmv.ll
-ARITH_TARGETS = vadd.ll vsub.ll vmul.ll vdiv.ll vcmp.ll vmax.ll
+ARITH_TARGETS = vadd.ll vsub.ll vmul.ll vdiv.ll vcmp.ll vmax.ll vmin.ll
 
 TARGETS = $(LDSTMV_TARGETS) $(ARITH_TARGETS)
 
