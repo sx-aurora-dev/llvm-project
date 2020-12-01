@@ -11,6 +11,7 @@
 #include "Features.inc"
 #include "PathMapping.h"
 #include "Protocol.h"
+#include "TidyProvider.h"
 #include "Transport.h"
 #include "index/Background.h"
 #include "index/Index.h"
@@ -493,7 +494,7 @@ opt<bool> CollectMainFileRefs{
     "collect-main-file-refs",
     cat(Misc),
     desc("Store references to main-file-only symbols in the index"),
-    init(false),
+    init(ClangdServer::Options().CollectMainFileRefs),
 };
 
 #if CLANGD_ENABLE_REMOTE
@@ -528,10 +529,10 @@ public:
           "Expect URI body to be an absolute path starting with '/': {0}",
           Body);
     Body = Body.ltrim('/');
-    llvm::SmallVector<char, 16> Path(Body.begin(), Body.end());
+    llvm::SmallString<16> Path(Body);
     path::native(Path);
     fs::make_absolute(TestScheme::TestDir, Path);
-    return std::string(Path.begin(), Path.end());
+    return std::string(Path);
   }
 
   llvm::Expected<URI>
@@ -837,35 +838,21 @@ clangd accepts flags on the commandline, and in the CLANGD_FLAGS environment var
   }
 
   // Create an empty clang-tidy option.
-  std::mutex ClangTidyOptMu;
-  std::unique_ptr<tidy::ClangTidyOptionsProvider>
-      ClangTidyOptProvider; /*GUARDED_BY(ClangTidyOptMu)*/
+  TidyProvider ClangTidyOptProvider;
   if (EnableClangTidy) {
-    auto EmptyDefaults = tidy::ClangTidyOptions::getDefaults();
-    EmptyDefaults.Checks.reset(); // So we can tell if checks were ever set.
-    EmptyDefaults.User = llvm::sys::Process::GetEnv("USER");
-#ifdef _WIN32
-    if (!EmptyDefaults.User)
-      EmptyDefaults.User = llvm::sys::Process::GetEnv("USERNAME");
-#endif
-    tidy::ClangTidyOptions OverrideClangTidyOptions;
+    std::vector<TidyProvider> Providers;
+    Providers.reserve(4 + EnableConfig);
+    Providers.push_back(provideEnvironment());
+    Providers.push_back(provideClangTidyFiles(TFS));
+    if (EnableConfig)
+      Providers.push_back(provideClangdConfig());
     if (!ClangTidyChecks.empty())
-      OverrideClangTidyOptions.Checks = ClangTidyChecks;
-    ClangTidyOptProvider = std::make_unique<tidy::FileOptionsProvider>(
-        tidy::ClangTidyGlobalOptions(),
-        /* Default */ EmptyDefaults,
-        /* Override */ OverrideClangTidyOptions, TFS.view(/*CWD=*/llvm::None));
-    Opts.GetClangTidyOptions = [&](llvm::vfs::FileSystem &,
-                                   llvm::StringRef File) {
-      // This function must be thread-safe and tidy option providers are not.
-      tidy::ClangTidyOptions Opts;
-      {
-        std::lock_guard<std::mutex> Lock(ClangTidyOptMu);
-        // FIXME: use the FS provided to the function.
-        Opts = ClangTidyOptProvider->getOptions(File);
-      }
-      return Opts;
-    };
+      Providers.push_back(addTidyChecks(ClangTidyChecks));
+    else
+      Providers.push_back(provideDefaultChecks());
+    Providers.push_back(disableUnusableChecks());
+    ClangTidyOptProvider = combine(std::move(Providers));
+    Opts.ClangTidyProvider = ClangTidyOptProvider;
   }
   Opts.AsyncPreambleBuilds = AsyncPreamble;
   Opts.SuggestMissingIncludes = SuggestMissingIncludes;

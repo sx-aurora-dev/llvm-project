@@ -227,9 +227,9 @@ define { double, double } @func_u32_dcomp(i32 zeroext %0, i32 zeroext %1, double
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_u32_qcomp(i32 zeroext %0, i32 zeroext %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_u32_qcomp:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s7, %s3, %s0
@@ -239,7 +239,7 @@ define { fp128, fp128 } @func_u32_qcomp(i32 zeroext %0, i32 zeroext %1, fp128 %2
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = icmp eq i32 %0, %1
   %8 = select i1 %7, fp128 %2, fp128 %4
   %9 = select i1 %7, fp128 %3, fp128 %5
@@ -459,9 +459,9 @@ define { double, double } @func_u32_dcomp_zero(i32 zeroext %0, double %1, double
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_u32_qcomp_zero(i32 zeroext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_u32_qcomp_zero:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.w.eq %s34, %s4, %s0
@@ -470,7 +470,7 @@ define { fp128, fp128 } @func_u32_qcomp_zero(i32 zeroext %0, fp128 %1, fp128 %2,
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %6 = icmp eq i32 %0, 0
   %7 = select i1 %6, fp128 %1, fp128 %3
   %8 = select i1 %6, fp128 %2, fp128 %4
@@ -707,9 +707,9 @@ define { double, double } @func_u32_dcomp_i(i32 zeroext %0, double %1, double %2
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_u32_qcomp_i(i32 zeroext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_u32_qcomp_i:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0
@@ -720,7 +720,7 @@ define { fp128, fp128 } @func_u32_qcomp_i(i32 zeroext %0, fp128 %1, fp128 %2, fp
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %6 = icmp eq i32 %0, 12
   %7 = select i1 %6, fp128 %1, fp128 %3
   %8 = select i1 %6, fp128 %2, fp128 %4
@@ -885,12 +885,12 @@ define { double, double } @func_u32_dcomp_m(i32 zeroext %0, double %1, double %2
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_u32_qcomp_m(i32 zeroext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_u32_qcomp_m:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    or %s1, 0, %s3
 ; CHECK-NEXT:    or %s2, 0, %s4
 ; CHECK-NEXT:    or %s3, 0, %s5
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %6 = insertvalue { fp128, fp128 } undef, fp128 %1, 0
   %7 = insertvalue { fp128, fp128 } %6, fp128 %2, 1
   ret { fp128, fp128 } %7

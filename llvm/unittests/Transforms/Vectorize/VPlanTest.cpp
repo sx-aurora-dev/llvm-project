@@ -470,7 +470,7 @@ TEST(VPRecipeTest, CastVPInterleaveRecipeToVPUser) {
 
   VPValue Addr;
   VPValue Mask;
-  VPInterleaveRecipe Recipe(nullptr, &Addr, &Mask);
+  VPInterleaveRecipe Recipe(nullptr, &Addr, {}, &Mask);
   EXPECT_TRUE(isa<VPUser>(&Recipe));
   VPRecipeBase *BaseR = &Recipe;
   EXPECT_TRUE(isa<VPUser>(BaseR));
@@ -519,6 +519,19 @@ TEST(VPRecipeTest, CastVPWidenMemoryInstructionRecipeToVPUser) {
   EXPECT_TRUE(isa<VPUser>(BaseR));
   EXPECT_EQ(&Recipe, BaseR->toVPUser());
   delete Load;
+}
+
+TEST(VPRecipeTest, CastVPReductionRecipeToVPUser) {
+  LLVMContext C;
+
+  VPValue ChainOp;
+  VPValue VecOp;
+  VPValue CondOp;
+  VPReductionRecipe Recipe(nullptr, nullptr, &ChainOp, &CondOp, &VecOp, false,
+                           nullptr);
+  EXPECT_TRUE(isa<VPUser>(&Recipe));
+  VPRecipeBase *BaseR = &Recipe;
+  EXPECT_TRUE(isa<VPUser>(BaseR));
 }
 
 struct VPDoubleValueDef : public VPUser, public VPDef {

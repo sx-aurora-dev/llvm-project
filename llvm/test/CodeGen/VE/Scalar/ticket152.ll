@@ -3,13 +3,13 @@
 ; Function Attrs: norecurse nounwind readnone
 define i32 @callee(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i8 signext, i16 signext, fp128) {
 ; CHECK-LABEL: callee:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 448(, %s11)
-; CHECK-NEXT:    ld %s34, 456(, %s11)
-; CHECK-NEXT:    ldl.sx %s36, 440(, %s11)
-; CHECK-NEXT:    ldl.sx %s37, 432(, %s11)
-; CHECK-NEXT:    ldl.sx %s38, 424(, %s11)
-; CHECK-NEXT:    ldl.sx %s39, 416(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 272(, %s11)
+; CHECK-NEXT:    ld %s34, 280(, %s11)
+; CHECK-NEXT:    ldl.sx %s36, 264(, %s11)
+; CHECK-NEXT:    ldl.sx %s37, 256(, %s11)
+; CHECK-NEXT:    ldl.sx %s38, 248(, %s11)
+; CHECK-NEXT:    ldl.sx %s39, 240(, %s11)
 ; CHECK-NEXT:    adds.w.sx %s0, %s1, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, %s2
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, %s3
@@ -24,7 +24,7 @@ define i32 @callee(i32, i32, i32, i32, i32, i32, i32, i32, i32, i32, i8 signext,
 ; CHECK-NEXT:    cvt.d.q %s1, %s34
 ; CHECK-NEXT:    cvt.w.d.sx.rz %s1, %s1
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %14 = add nsw i32 %1, %0
   %15 = add nsw i32 %14, %2
   %16 = add nsw i32 %15, %3

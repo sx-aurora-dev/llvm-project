@@ -37,6 +37,7 @@
 #include "llvm/Support/Host.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Path.h"
+#include "llvm/Support/TarWriter.h"
 #include "llvm/Support/TargetSelect.h"
 
 #include <algorithm>
@@ -177,7 +178,7 @@ getSearchPaths(unsigned optionCode, opt::InputArgList &args,
     for (auto root : roots) {
       SmallString<261> buffer(root);
       path::append(buffer, path);
-      if (warnIfNotDirectory(optionLetter, buffer))
+      if (fs::is_directory(buffer))
         paths.push_back(saver.save(buffer.str()));
     }
   }
@@ -548,6 +549,12 @@ static void warnIfUnimplementedOption(const opt::Option &opt) {
   }
 }
 
+static const char *getReproduceOption(opt::InputArgList &args) {
+  if (auto *arg = args.getLastArg(OPT_reproduce))
+    return arg->getValue();
+  return getenv("LLD_REPRODUCE");
+}
+
 bool macho::link(llvm::ArrayRef<const char *> argsArr, bool canExitEarly,
                  raw_ostream &stdoutOS, raw_ostream &stderrOS) {
   lld::stdoutOS = &stdoutOS;
@@ -569,6 +576,20 @@ bool macho::link(llvm::ArrayRef<const char *> argsArr, bool canExitEarly,
     return true;
   }
 
+  if (const char *path = getReproduceOption(args)) {
+    // Note that --reproduce is a debug option so you can ignore it
+    // if you are trying to understand the whole picture of the code.
+    Expected<std::unique_ptr<TarWriter>> errOrWriter =
+        TarWriter::create(path, path::stem(path));
+    if (errOrWriter) {
+      tar = std::move(*errOrWriter);
+      tar->append("response.txt", createResponseFile(args));
+      tar->append("version.txt", getLLDVersion() + "\n");
+    } else {
+      error("--reproduce: " + toString(errOrWriter.takeError()));
+    }
+  }
+
   config = make<Configuration>();
   symtab = make<SymbolTable>();
   target = createTargetInfo(args);
@@ -584,6 +605,7 @@ bool macho::link(llvm::ArrayRef<const char *> argsArr, bool canExitEarly,
   config->runtimePaths = args::getStrings(args, OPT_rpath);
   config->allLoad = args.hasArg(OPT_all_load);
   config->forceLoadObjC = args.hasArg(OPT_ObjC);
+  config->demangle = args.hasArg(OPT_demangle);
 
   if (const opt::Arg *arg = args.getLastArg(OPT_static, OPT_dynamic))
     config->staticLink = (arg->getOption().getID() == OPT_static);

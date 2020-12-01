@@ -952,6 +952,9 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
       std::string(Args.getLastArgValue(OPT_fprofile_sample_use_EQ));
   Opts.DebugInfoForProfiling = Args.hasFlag(
       OPT_fdebug_info_for_profiling, OPT_fno_debug_info_for_profiling, false);
+  Opts.PseudoProbeForProfiling =
+      Args.hasFlag(OPT_fpseudo_probe_for_profiling,
+                   OPT_fno_pseudo_probe_for_profiling, false);
   Opts.DebugNameTable = static_cast<unsigned>(
       Args.hasArg(OPT_ggnu_pubnames)
           ? llvm::DICompileUnit::DebugNameTableKind::GNU
@@ -1433,6 +1436,22 @@ static bool ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args, InputKind IK,
   if (T.isOSAIX() && (Args.hasArg(OPT_mignore_xcoff_visibility) ||
                       !Args.hasArg(OPT_fvisibility)))
     Opts.IgnoreXCOFFVisibility = 1;
+
+  if (Arg *A =
+          Args.getLastArg(OPT_mabi_EQ_vec_default, OPT_mabi_EQ_vec_extabi)) {
+    if (!T.isOSAIX())
+      Diags.Report(diag::err_drv_unsupported_opt_for_target)
+          << A->getSpelling() << T.str();
+
+    const Option &O = A->getOption();
+    if (O.matches(OPT_mabi_EQ_vec_default))
+      Diags.Report(diag::err_aix_default_altivec_abi)
+          << A->getSpelling() << T.str();
+    else {
+      assert(O.matches(OPT_mabi_EQ_vec_extabi));
+      Opts.EnableAIXExtendedAltivecABI = 1;
+    }
+  }
 
   Opts.DependentLibraries = Args.getAllArgValues(OPT_dependent_lib);
   Opts.LinkerOptions = Args.getAllArgValues(OPT_linker_option);
@@ -2424,9 +2443,20 @@ void CompilerInvocation::setLangDefaults(LangOptions &Opts, InputKind IK,
 
   Opts.HIP = IK.getLanguage() == Language::HIP;
   Opts.CUDA = IK.getLanguage() == Language::CUDA || Opts.HIP;
-  if (Opts.CUDA)
-    // Set default FP_CONTRACT to FAST.
+  if (Opts.HIP) {
+    // HIP toolchain does not support 'Fast' FPOpFusion in backends since it
+    // fuses multiplication/addition instructions without contract flag from
+    // device library functions in LLVM bitcode, which causes accuracy loss in
+    // certain math functions, e.g. tan(-1e20) becomes -0.933 instead of 0.8446.
+    // For device library functions in bitcode to work, 'Strict' or 'Standard'
+    // FPOpFusion options in backends is needed. Therefore 'fast-honor-pragmas'
+    // FP contract option is used to allow fuse across statements in frontend
+    // whereas respecting contract flag in backend.
+    Opts.setDefaultFPContractMode(LangOptions::FPM_FastHonorPragmas);
+  } else if (Opts.CUDA) {
+    // Allow fuse across statements disregarding pragmas.
     Opts.setDefaultFPContractMode(LangOptions::FPM_Fast);
+  }
 
   Opts.RenderScript = IK.getLanguage() == Language::RenderScript;
   if (Opts.RenderScript) {
@@ -3057,6 +3087,7 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
                             ? 128
                             : Args.hasArg(OPT_mlong_double_64) ? 64 : 0;
   Opts.PPCIEEELongDouble = Args.hasArg(OPT_mabi_EQ_ieeelongdouble);
+  Opts.EnableAIXExtendedAltivecABI = Args.hasArg(OPT_mabi_EQ_vec_extabi);
   Opts.PICLevel = getLastArgIntValue(Args, OPT_pic_level, 0, Diags);
   Opts.ROPI = Args.hasArg(OPT_fropi);
   Opts.RWPI = Args.hasArg(OPT_frwpi);
@@ -3343,6 +3374,8 @@ static void ParseLangArgs(LangOptions &Opts, ArgList &Args, InputKind IK,
       Opts.setDefaultFPContractMode(LangOptions::FPM_On);
     else if (Val == "off")
       Opts.setDefaultFPContractMode(LangOptions::FPM_Off);
+    else if (Val == "fast-honor-pragmas")
+      Opts.setDefaultFPContractMode(LangOptions::FPM_FastHonorPragmas);
     else
       Diags.Report(diag::err_drv_invalid_value) << A->getAsString(Args) << Val;
   }
@@ -3723,9 +3756,6 @@ static void ParseTargetArgs(TargetOptions &Opts, ArgList &Args,
   Opts.LinkerVersion =
       std::string(Args.getLastArgValue(OPT_target_linker_version));
   Opts.OpenCLExtensionsAsWritten = Args.getAllArgValues(OPT_cl_ext_EQ);
-  Opts.ForceEnableInt128 = Args.hasArg(OPT_fforce_enable_int128);
-  Opts.NVPTXUseShortPointers = Args.hasFlag(
-      options::OPT_fcuda_short_ptr, options::OPT_fno_cuda_short_ptr, false);
   Opts.AllowAMDGPUUnsafeFPAtomics =
       Args.hasFlag(options::OPT_munsafe_fp_atomics,
                    options::OPT_mno_unsafe_fp_atomics, false);

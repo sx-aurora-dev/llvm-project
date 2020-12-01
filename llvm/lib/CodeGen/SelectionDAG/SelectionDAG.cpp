@@ -139,6 +139,15 @@ bool ConstantFPSDNode::isValueValidForType(EVT VT,
 //===----------------------------------------------------------------------===//
 
 bool ISD::isConstantSplatVector(const SDNode *N, APInt &SplatVal) {
+  if (N->getOpcode() == ISD::SPLAT_VECTOR) {
+    unsigned EltSize =
+        N->getValueType(0).getVectorElementType().getSizeInBits();
+    if (auto *Op0 = dyn_cast<ConstantSDNode>(N->getOperand(0))) {
+      SplatVal = Op0->getAPIntValue().truncOrSelf(EltSize);
+      return true;
+    }
+  }
+
   auto *BV = dyn_cast<BuildVectorSDNode>(N);
   if (!BV)
     return false;
@@ -8324,6 +8333,19 @@ SDNode *SelectionDAG::getNodeIfExists(unsigned Opcode, SDVTList VTList,
     }
   }
   return nullptr;
+}
+
+/// doesNodeExist - Check if a node exists without modifying its flags.
+bool SelectionDAG::doesNodeExist(unsigned Opcode, SDVTList VTList,
+                                 ArrayRef<SDValue> Ops) {
+  if (VTList.VTs[VTList.NumVTs - 1] != MVT::Glue) {
+    FoldingSetNodeID ID;
+    AddNodeIDNode(ID, Opcode, VTList, Ops);
+    void *IP = nullptr;
+    if (FindNodeOrInsertPos(ID, SDLoc(), IP))
+      return true;
+  }
+  return false;
 }
 
 /// getDbgValue - Creates a SDDbgValue node.

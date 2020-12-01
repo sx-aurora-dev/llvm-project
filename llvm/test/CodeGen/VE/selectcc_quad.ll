@@ -227,11 +227,11 @@ define { double, double } @func_quad_dcomp(fp128 %0, fp128 %1, double %2, double
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_quad_qcomp(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_quad_qcomp:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
-; CHECK-NEXT:    ld %s37, 432(, %s11)
-; CHECK-NEXT:    ld %s36, 440(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
+; CHECK-NEXT:    ld %s37, 256(, %s11)
+; CHECK-NEXT:    ld %s36, 264(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s2
 ; CHECK-NEXT:    cmov.d.eq %s34, %s4, %s0
 ; CHECK-NEXT:    cmov.d.eq %s35, %s5, %s0
@@ -241,7 +241,7 @@ define { fp128, fp128 } @func_quad_qcomp(fp128 %0, fp128 %1, fp128 %2, fp128 %3,
 ; CHECK-NEXT:    or %s1, 0, %s35
 ; CHECK-NEXT:    or %s2, 0, %s36
 ; CHECK-NEXT:    or %s3, 0, %s37
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %1
   %8 = select i1 %7, fp128 %2, fp128 %4
   %9 = select i1 %7, fp128 %3, fp128 %5
@@ -557,14 +557,14 @@ define { double, double } @func_quad_dcomp_zero(fp128 %0, double %1, double %2, 
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_quad_qcomp_zero(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_quad_qcomp_zero:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
 ; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(, %s34)
 ; CHECK-NEXT:    ld %s36, 8(, %s34)
 ; CHECK-NEXT:    ld %s37, (, %s34)
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s36
 ; CHECK-NEXT:    cmov.d.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.d.eq %s7, %s3, %s0
@@ -574,7 +574,7 @@ define { fp128, fp128 } @func_quad_qcomp_zero(fp128 %0, fp128 %1, fp128 %2, fp12
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %6 = fcmp oeq fp128 %0, 0xL00000000000000000000000000000000
   %7 = select i1 %6, fp128 %1, fp128 %3
   %8 = select i1 %6, fp128 %2, fp128 %4
@@ -890,14 +890,14 @@ define { double, double } @func_quad_dcomp_i(fp128 %0, double %1, double %2, dou
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_quad_qcomp_i(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_quad_qcomp_i:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
 ; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(, %s34)
 ; CHECK-NEXT:    ld %s36, 8(, %s34)
 ; CHECK-NEXT:    ld %s37, (, %s34)
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s36
 ; CHECK-NEXT:    cmov.d.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.d.eq %s7, %s3, %s0
@@ -907,7 +907,7 @@ define { fp128, fp128 } @func_quad_qcomp_i(fp128 %0, fp128 %1, fp128 %2, fp128 %
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %6 = fcmp oeq fp128 %0, 0xL00000000000000004002800000000000
   %7 = select i1 %6, fp128 %1, fp128 %3
   %8 = select i1 %6, fp128 %2, fp128 %4
@@ -1223,14 +1223,14 @@ define { double, double } @func_quad_dcomp_m(fp128 %0, double %1, double %2, dou
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_quad_qcomp_m(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_quad_qcomp_m:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
 ; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(, %s34)
 ; CHECK-NEXT:    ld %s36, 8(, %s34)
 ; CHECK-NEXT:    ld %s37, (, %s34)
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s36
 ; CHECK-NEXT:    cmov.d.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.d.eq %s7, %s3, %s0
@@ -1240,7 +1240,7 @@ define { fp128, fp128 } @func_quad_qcomp_m(fp128 %0, fp128 %1, fp128 %2, fp128 %
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %6 = fcmp oeq fp128 %0, 0xL0000000000000000C000000000000000
   %7 = select i1 %6, fp128 %1, fp128 %3
   %8 = select i1 %6, fp128 %2, fp128 %4

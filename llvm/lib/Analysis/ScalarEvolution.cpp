@@ -3660,28 +3660,42 @@ const SCEV *ScalarEvolution::getUMinExpr(SmallVectorImpl<const SCEV *> &Ops) {
   return getMinMaxExpr(scUMinExpr, Ops);
 }
 
+const SCEV *
+ScalarEvolution::getSizeOfScalableVectorExpr(Type *IntTy,
+                                             ScalableVectorType *ScalableTy) {
+  Constant *NullPtr = Constant::getNullValue(ScalableTy->getPointerTo());
+  Constant *One = ConstantInt::get(IntTy, 1);
+  Constant *GEP = ConstantExpr::getGetElementPtr(ScalableTy, NullPtr, One);
+  // Note that the expression we created is the final expression, we don't
+  // want to simplify it any further Also, if we call a normal getSCEV(),
+  // we'll end up in an endless recursion. So just create an SCEVUnknown.
+  return getUnknown(ConstantExpr::getPtrToInt(GEP, IntTy));
+}
+
 const SCEV *ScalarEvolution::getSizeOfExpr(Type *IntTy, Type *AllocTy) {
-  if (isa<ScalableVectorType>(AllocTy)) {
-    Constant *NullPtr = Constant::getNullValue(AllocTy->getPointerTo());
-    Constant *One = ConstantInt::get(IntTy, 1);
-    Constant *GEP = ConstantExpr::getGetElementPtr(AllocTy, NullPtr, One);
-    // Note that the expression we created is the final expression, we don't
-    // want to simplify it any further Also, if we call a normal getSCEV(),
-    // we'll end up in an endless recursion. So just create an SCEVUnknown.
-    return getUnknown(ConstantExpr::getPtrToInt(GEP, IntTy));
-  }
-  // We can bypass creating a target-independent
-  // constant expression and then folding it back into a ConstantInt.
-  // This is just a compile-time optimization.
+  if (auto *ScalableAllocTy = dyn_cast<ScalableVectorType>(AllocTy))
+    return getSizeOfScalableVectorExpr(IntTy, ScalableAllocTy);
+  // We can bypass creating a target-independent constant expression and then
+  // folding it back into a ConstantInt. This is just a compile-time
+  // optimization.
   return getConstant(IntTy, getDataLayout().getTypeAllocSize(AllocTy));
+}
+
+const SCEV *ScalarEvolution::getStoreSizeOfExpr(Type *IntTy, Type *StoreTy) {
+  if (auto *ScalableStoreTy = dyn_cast<ScalableVectorType>(StoreTy))
+    return getSizeOfScalableVectorExpr(IntTy, ScalableStoreTy);
+  // We can bypass creating a target-independent constant expression and then
+  // folding it back into a ConstantInt. This is just a compile-time
+  // optimization.
+  return getConstant(IntTy, getDataLayout().getTypeStoreSize(StoreTy));
 }
 
 const SCEV *ScalarEvolution::getOffsetOfExpr(Type *IntTy,
                                              StructType *STy,
                                              unsigned FieldNo) {
-  // We can bypass creating a target-independent
-  // constant expression and then folding it back into a ConstantInt.
-  // This is just a compile-time optimization.
+  // We can bypass creating a target-independent constant expression and then
+  // folding it back into a ConstantInt. This is just a compile-time
+  // optimization.
   return getConstant(
       IntTy, getDataLayout().getStructLayout(STy)->getElementOffset(FieldNo));
 }
@@ -9504,19 +9518,15 @@ bool ScalarEvolution::isKnownOnEveryIteration(ICmpInst::Predicate Pred,
 
 Optional<ScalarEvolution::MonotonicPredicateType>
 ScalarEvolution::getMonotonicPredicateType(const SCEVAddRecExpr *LHS,
-                                           ICmpInst::Predicate Pred,
-                                           Optional<const SCEV *> NumIter,
-                                           const Instruction *Context) {
-  assert((!NumIter || !isa<SCEVCouldNotCompute>(*NumIter)) &&
-         "provided number of iterations must be computable!");
-  auto Result = getMonotonicPredicateTypeImpl(LHS, Pred, NumIter, Context);
+                                           ICmpInst::Predicate Pred) {
+  auto Result = getMonotonicPredicateTypeImpl(LHS, Pred);
 
 #ifndef NDEBUG
   // Verify an invariant: inverting the predicate should turn a monotonically
   // increasing change to a monotonically decreasing one, and vice versa.
   if (Result) {
-    auto ResultSwapped = getMonotonicPredicateTypeImpl(
-        LHS, ICmpInst::getSwappedPredicate(Pred), NumIter, Context);
+    auto ResultSwapped =
+        getMonotonicPredicateTypeImpl(LHS, ICmpInst::getSwappedPredicate(Pred));
 
     assert(ResultSwapped.hasValue() && "should be able to analyze both!");
     assert(ResultSwapped.getValue() != Result.getValue() &&
@@ -9529,9 +9539,7 @@ ScalarEvolution::getMonotonicPredicateType(const SCEVAddRecExpr *LHS,
 
 Optional<ScalarEvolution::MonotonicPredicateType>
 ScalarEvolution::getMonotonicPredicateTypeImpl(const SCEVAddRecExpr *LHS,
-                                               ICmpInst::Predicate Pred,
-                                               Optional<const SCEV *> NumIter,
-                                               const Instruction *Context) {
+                                               ICmpInst::Predicate Pred) {
   // A zero step value for LHS means the induction variable is essentially a
   // loop invariant value. We don't really depend on the predicate actually
   // flipping from false to true (for increasing predicates, and the other way
@@ -9550,60 +9558,23 @@ ScalarEvolution::getMonotonicPredicateTypeImpl(const SCEVAddRecExpr *LHS,
   assert((IsGreater || ICmpInst::isLE(Pred) || ICmpInst::isLT(Pred)) &&
          "Should be greater or less!");
 
-  bool IsUnsigned = ICmpInst::isUnsigned(Pred);
-  assert((IsUnsigned || ICmpInst::isSigned(Pred)) &&
-         "Should be either signed or unsigned!");
-  // Check if we can prove no-wrap in the relevant range.
-
-  const SCEV *Step = LHS->getStepRecurrence(*this);
-  bool IsStepNonNegative = isKnownNonNegative(Step);
-  bool IsStepNonPositive = isKnownNonPositive(Step);
-  // We need to know which direction the iteration is going.
-  if (!IsStepNonNegative && !IsStepNonPositive)
-    return None;
-
-  auto ProvedNoWrap = [&]() {
-    // If the AddRec already has the flag, we are done.
-    if (IsUnsigned ? LHS->hasNoUnsignedWrap() : LHS->hasNoSignedWrap())
-      return true;
-
-    if (!NumIter)
-      return false;
-    // We could not prove no-wrap on all iteration space. Can we prove it for
-    // first iterations? In order to achieve it, check that:
-    // 1. The addrec does not self-wrap;
-    // 2. start <= end for non-negative step and start >= end for non-positive
-    // step.
-    bool HasNoSelfWrap = LHS->hasNoSelfWrap();
-    if (!HasNoSelfWrap)
-      // If num iter has same type as the AddRec, and step is +/- 1, even max
-      // possible number of iterations is not enough to self-wrap.
-      if (NumIter.getValue()->getType() == LHS->getType())
-        if (Step == getOne(LHS->getType()) ||
-            Step == getMinusOne(LHS->getType()))
-          HasNoSelfWrap = true;
-    if (!HasNoSelfWrap)
-      return false;
-    const SCEV *Start = LHS->getStart();
-    const SCEV *End = LHS->evaluateAtIteration(*NumIter, *this);
-    ICmpInst::Predicate NoOverflowPred =
-        IsStepNonNegative ? ICmpInst::ICMP_SLE : ICmpInst::ICMP_SGE;
-    if (IsUnsigned)
-      NoOverflowPred = ICmpInst::getUnsignedPredicate(NoOverflowPred);
-    return isKnownPredicateAt(NoOverflowPred, Start, End, Context);
-  };
-
-  // If nothing worked, bail.
-  if (!ProvedNoWrap())
-    return None;
-
-  if (IsUnsigned)
+  // Check that AR does not wrap.
+  if (ICmpInst::isUnsigned(Pred)) {
+    if (!LHS->hasNoUnsignedWrap())
+      return None;
     return IsGreater ? MonotonicallyIncreasing : MonotonicallyDecreasing;
-  else {
-    if (IsStepNonNegative)
+  } else {
+    assert(ICmpInst::isSigned(Pred) &&
+           "Relational predicate is either signed or unsigned!");
+    if (!LHS->hasNoSignedWrap())
+      return None;
+
+    const SCEV *Step = LHS->getStepRecurrence(*this);
+
+    if (isKnownNonNegative(Step))
       return IsGreater ? MonotonicallyIncreasing : MonotonicallyDecreasing;
 
-    if (IsStepNonPositive)
+    if (isKnownNonPositive(Step))
       return !IsGreater ? MonotonicallyIncreasing : MonotonicallyDecreasing;
 
     return None;
@@ -9664,6 +9635,7 @@ ScalarEvolution::getLoopInvariantExitCondDuringFirstIterations(
   // Try to prove the following set of facts:
   // - The predicate is monotonic in the iteration space.
   // - If the check does not fail on the 1st iteration:
+  //   - No overflow will happen during first MaxIter iterations;
   //   - It will not fail on the MaxIter'th iteration.
   // If the check does fail on the 1st iteration, we leave the loop and no
   // other checks matter.
@@ -9681,17 +9653,43 @@ ScalarEvolution::getLoopInvariantExitCondDuringFirstIterations(
   if (!AR || AR->getLoop() != L)
     return None;
 
-  if (!getMonotonicPredicateType(AR, Pred, MaxIter, Context))
+  // The predicate must be relational (i.e. <, <=, >=, >).
+  if (!ICmpInst::isRelational(Pred))
+    return None;
+
+  // TODO: Support steps other than +/- 1.
+  const SCEV *Step = AR->getStepRecurrence(*this);
+  auto *One = getOne(Step->getType());
+  auto *MinusOne = getNegativeSCEV(One);
+  if (Step != One && Step != MinusOne)
+    return None;
+
+  // Type mismatch here means that MaxIter is potentially larger than max
+  // unsigned value in start type, which mean we cannot prove no wrap for the
+  // indvar.
+  if (AR->getType() != MaxIter->getType())
     return None;
 
   // Value of IV on suggested last iteration.
   const SCEV *Last = AR->evaluateAtIteration(MaxIter, *this);
   // Does it still meet the requirement?
-  if (!isKnownPredicateAt(Pred, Last, RHS, Context))
+  if (!isLoopBackedgeGuardedByCond(L, Pred, Last, RHS))
+    return None;
+  // Because step is +/- 1 and MaxIter has same type as Start (i.e. it does
+  // not exceed max unsigned value of this type), this effectively proves
+  // that there is no wrap during the iteration. To prove that there is no
+  // signed/unsigned wrap, we need to check that
+  // Start <= Last for step = 1 or Start >= Last for step = -1.
+  ICmpInst::Predicate NoOverflowPred =
+      CmpInst::isSigned(Pred) ? ICmpInst::ICMP_SLE : ICmpInst::ICMP_ULE;
+  if (Step == MinusOne)
+    NoOverflowPred = CmpInst::getSwappedPredicate(NoOverflowPred);
+  const SCEV *Start = AR->getStart();
+  if (!isKnownPredicateAt(NoOverflowPred, Start, Last, Context))
     return None;
 
   // Everything is fine.
-  return ScalarEvolution::LoopInvariantPredicate(Pred, AR->getStart(), RHS);
+  return ScalarEvolution::LoopInvariantPredicate(Pred, Start, RHS);
 }
 
 bool ScalarEvolution::isKnownPredicateViaConstantRanges(

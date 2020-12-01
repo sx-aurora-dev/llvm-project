@@ -2168,12 +2168,20 @@ void CodeGenModule::ConstructAttributeList(
     if (!CodeGenOpts.NullPointerIsValid &&
         getContext().getTargetAddressSpace(FI.arg_begin()->type) == 0) {
       Attrs.addAttribute(llvm::Attribute::NonNull);
+      Attrs.addDereferenceableAttr(
+          getMinimumObjectSize(
+              FI.arg_begin()->type.castAs<PointerType>()->getPointeeType())
+              .getQuantity());
+    } else {
+      // FIXME dereferenceable should be correct here, regardless of
+      // NullPointerIsValid. However, dereferenceable currently does not always
+      // respect NullPointerIsValid and may imply nonnull and break the program.
+      // See https://reviews.llvm.org/D66618 for discussions.
+      Attrs.addDereferenceableOrNullAttr(
+          getMinimumObjectSize(
+              FI.arg_begin()->type.castAs<PointerType>()->getPointeeType())
+              .getQuantity());
     }
-
-    Attrs.addDereferenceableAttr(
-        getMinimumObjectSize(
-            FI.arg_begin()->type.castAs<PointerType>()->getPointeeType())
-            .getQuantity());
 
     ArgAttrs[IRArgs.first] = llvm::AttributeSet::get(getLLVMContext(), Attrs);
   }
@@ -3153,7 +3161,7 @@ llvm::Value *CodeGenFunction::EmitCMSEClearRecord(llvm::Value *Src,
   const llvm::DataLayout &DataLayout = CGM.getDataLayout();
   int Size = DataLayout.getTypeStoreSize(ITy);
   SmallVector<uint64_t, 4> Bits(Size);
-  setUsedBits(CGM, QTy->getAs<RecordType>(), 0, Bits);
+  setUsedBits(CGM, QTy->castAs<RecordType>(), 0, Bits);
 
   int CharWidth = CGM.getContext().getCharWidth();
   uint64_t Mask =
@@ -3170,7 +3178,7 @@ llvm::Value *CodeGenFunction::EmitCMSEClearRecord(llvm::Value *Src,
   const llvm::DataLayout &DataLayout = CGM.getDataLayout();
   int Size = DataLayout.getTypeStoreSize(ATy);
   SmallVector<uint64_t, 16> Bits(Size);
-  setUsedBits(CGM, QTy->getAs<RecordType>(), 0, Bits);
+  setUsedBits(CGM, QTy->castAs<RecordType>(), 0, Bits);
 
   // Clear each element of the LLVM array.
   int CharWidth = CGM.getContext().getCharWidth();
