@@ -162,7 +162,8 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   }
 
   if (Subtarget.hasStdExtZbp()) {
-    setOperationAction(ISD::BITREVERSE, XLenVT, Legal);
+    setOperationAction(ISD::BITREVERSE, XLenVT, Custom);
+    setOperationAction(ISD::BSWAP, XLenVT, Custom);
 
     if (Subtarget.is64Bit()) {
       setOperationAction(ISD::BITREVERSE, MVT::i32, Custom);
@@ -172,7 +173,12 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
     setOperationAction(ISD::BSWAP, XLenVT, Expand);
   }
 
-  if (!Subtarget.hasStdExtZbb()) {
+  if (Subtarget.hasStdExtZbb()) {
+    setOperationAction(ISD::SMIN, XLenVT, Legal);
+    setOperationAction(ISD::SMAX, XLenVT, Legal);
+    setOperationAction(ISD::UMIN, XLenVT, Legal);
+    setOperationAction(ISD::UMAX, XLenVT, Legal);
+  } else {
     setOperationAction(ISD::CTTZ, XLenVT, Expand);
     setOperationAction(ISD::CTLZ, XLenVT, Expand);
     setOperationAction(ISD::CTPOP, XLenVT, Expand);
@@ -181,6 +187,11 @@ RISCVTargetLowering::RISCVTargetLowering(const TargetMachine &TM,
   if (Subtarget.hasStdExtZbt()) {
     setOperationAction(ISD::FSHL, XLenVT, Legal);
     setOperationAction(ISD::FSHR, XLenVT, Legal);
+
+    if (Subtarget.is64Bit()) {
+      setOperationAction(ISD::FSHL, MVT::i32, Custom);
+      setOperationAction(ISD::FSHR, MVT::i32, Custom);
+    }
   }
 
   ISD::CondCode FPCCToExtend[] = {
@@ -485,6 +496,20 @@ SDValue RISCVTargetLowering::LowerOperation(SDValue Op,
   }
   case ISD::INTRINSIC_WO_CHAIN:
     return LowerINTRINSIC_WO_CHAIN(Op, DAG);
+  case ISD::BSWAP:
+  case ISD::BITREVERSE: {
+    // Convert BSWAP/BITREVERSE to GREVI to enable GREVI combinining.
+    assert(Subtarget.hasStdExtZbp() && "Unexpected custom legalisation");
+    MVT VT = Op.getSimpleValueType();
+    SDLoc DL(Op);
+    // Start with the maximum immediate value which is the bitwidth - 1.
+    unsigned Imm = VT.getSizeInBits() - 1;
+    // If this is BSWAP rather than BITREVERSE, clear the lower 3 bits.
+    if (Op.getOpcode() == ISD::BSWAP)
+      Imm &= ~0x7U;
+    return DAG.getNode(RISCVISD::GREVI, DL, VT, Op.getOperand(0),
+                       DAG.getTargetConstant(Imm, DL, Subtarget.getXLenVT()));
+  }
   }
 }
 
@@ -664,6 +689,10 @@ SDValue RISCVTargetLowering::lowerGlobalTLSAddress(SDValue Op,
   MVT XLenVT = Subtarget.getXLenVT();
 
   TLSModel::Model Model = getTargetMachine().getTLSModel(N->getGlobal());
+
+  if (DAG.getMachineFunction().getFunction().getCallingConv() ==
+      CallingConv::GHC)
+    report_fatal_error("In GHC calling convention TLS is not supported");
 
   SDValue Addr;
   switch (Model) {
@@ -1087,6 +1116,26 @@ void RISCVTargetLowering::ReplaceNodeResults(SDNode *N,
     Results.push_back(DAG.getNode(ISD::TRUNCATE, DL, MVT::i32, GREVIW));
     break;
   }
+  case ISD::FSHL:
+  case ISD::FSHR: {
+    assert(N->getValueType(0) == MVT::i32 && Subtarget.is64Bit() &&
+           Subtarget.hasStdExtZbt() && "Unexpected custom legalisation");
+    SDValue NewOp0 =
+        DAG.getNode(ISD::ANY_EXTEND, DL, MVT::i64, N->getOperand(0));
+    SDValue NewOp1 =
+        DAG.getNode(ISD::ANY_EXTEND, DL, MVT::i64, N->getOperand(1));
+    SDValue NewOp2 =
+        DAG.getNode(ISD::ANY_EXTEND, DL, MVT::i64, N->getOperand(2));
+    // FSLW/FSRW take a 6 bit shift amount but i32 FSHL/FSHR only use 5 bits.
+    // Mask the shift amount to 5 bits.
+    NewOp2 = DAG.getNode(ISD::AND, DL, MVT::i64, NewOp2,
+                         DAG.getConstant(0x1f, DL, MVT::i64));
+    unsigned Opc =
+        N->getOpcode() == ISD::FSHL ? RISCVISD::FSLW : RISCVISD::FSRW;
+    SDValue NewOp = DAG.getNode(Opc, DL, MVT::i64, NewOp0, NewOp1, NewOp2);
+    Results.push_back(DAG.getNode(ISD::TRUNCATE, DL, MVT::i32, NewOp));
+    break;
+  }
   }
 }
 
@@ -1188,14 +1237,15 @@ static Optional<RISCVBitmanipPat> matchRISCVBitmanipPat(SDValue Op) {
 //   (or (BITMANIP_SHL x), (BITMANIP_SRL x))
 static SDValue combineORToGREV(SDValue Op, SelectionDAG &DAG,
                                const RISCVSubtarget &Subtarget) {
-  if (Op.getSimpleValueType() == Subtarget.getXLenVT() ||
-      (Subtarget.is64Bit() && Op.getSimpleValueType() == MVT::i32)) {
+  EVT VT = Op.getValueType();
+
+  if (VT == Subtarget.getXLenVT() || (Subtarget.is64Bit() && VT == MVT::i32)) {
     auto LHS = matchRISCVBitmanipPat(Op.getOperand(0));
     auto RHS = matchRISCVBitmanipPat(Op.getOperand(1));
     if (LHS && RHS && LHS->formsPairWith(*RHS)) {
       SDLoc DL(Op);
       return DAG.getNode(
-          RISCVISD::GREVI, DL, Op.getValueType(), LHS->Op,
+          RISCVISD::GREVI, DL, VT, LHS->Op,
           DAG.getTargetConstant(LHS->ShAmt, DL, Subtarget.getXLenVT()));
     }
   }
@@ -1203,8 +1253,8 @@ static SDValue combineORToGREV(SDValue Op, SelectionDAG &DAG,
 }
 
 // Matches any the following pattern as a GORCI(W) operation
-// 1.  (or (GREVI x, shamt), x)
-// 2.  (or x, (GREVI x, shamt))
+// 1.  (or (GREVI x, shamt), x) if shamt is a power of 2
+// 2.  (or x, (GREVI x, shamt)) if shamt is a power of 2
 // 3.  (or (or (BITMANIP_SHL x), x), (BITMANIP_SRL x))
 // Note that with the variant of 3.,
 //     (or (or (BITMANIP_SHL x), (BITMANIP_SRL x)), x)
@@ -1212,8 +1262,9 @@ static SDValue combineORToGREV(SDValue Op, SelectionDAG &DAG,
 // pattern will be matched to GORC via the first rule above.
 static SDValue combineORToGORC(SDValue Op, SelectionDAG &DAG,
                                const RISCVSubtarget &Subtarget) {
-  if (Op.getSimpleValueType() == Subtarget.getXLenVT() ||
-      (Subtarget.is64Bit() && Op.getSimpleValueType() == MVT::i32)) {
+  EVT VT = Op.getValueType();
+
+  if (VT == Subtarget.getXLenVT() || (Subtarget.is64Bit() && VT == MVT::i32)) {
     SDLoc DL(Op);
     SDValue Op0 = Op.getOperand(0);
     SDValue Op1 = Op.getOperand(1);
@@ -1222,9 +1273,10 @@ static SDValue combineORToGORC(SDValue Op, SelectionDAG &DAG,
     for (const auto &OpPair :
          {std::make_pair(Op0, Op1), std::make_pair(Op1, Op0)}) {
       if (OpPair.first.getOpcode() == RISCVISD::GREVI &&
-          OpPair.first.getOperand(0) == OpPair.second)
-        return DAG.getNode(RISCVISD::GORCI, DL, Op.getValueType(),
-                           OpPair.second, OpPair.first.getOperand(1));
+          OpPair.first.getOperand(0) == OpPair.second &&
+          isPowerOf2_32(OpPair.first.getConstantOperandVal(1)))
+        return DAG.getNode(RISCVISD::GORCI, DL, VT, OpPair.second,
+                           OpPair.first.getOperand(1));
     }
 
     // OR is commutable so canonicalize its OR operand to the left
@@ -1244,11 +1296,40 @@ static SDValue combineORToGORC(SDValue Op, SelectionDAG &DAG,
     auto RHS = matchRISCVBitmanipPat(Op1);
     if (LHS && RHS && LHS->formsPairWith(*RHS) && LHS->Op == OrOp1) {
       return DAG.getNode(
-          RISCVISD::GORCI, DL, Op.getValueType(), LHS->Op,
+          RISCVISD::GORCI, DL, VT, LHS->Op,
           DAG.getTargetConstant(LHS->ShAmt, DL, Subtarget.getXLenVT()));
     }
   }
   return SDValue();
+}
+
+// Combine (GREVI (GREVI x, C2), C1) -> (GREVI x, C1^C2) when C1^C2 is
+// non-zero, and to x when it is. Any repeated GREVI stage undoes itself.
+// Combine (GORCI (GORCI x, C2), C1) -> (GORCI x, C1|C2). Repeated stage does
+// not undo itself, but they are redundant.
+static SDValue combineGREVI_GORCI(SDNode *N, SelectionDAG &DAG) {
+  unsigned ShAmt1 = N->getConstantOperandVal(1);
+  SDValue Src = N->getOperand(0);
+
+  if (Src.getOpcode() != N->getOpcode())
+    return SDValue();
+
+  unsigned ShAmt2 = Src.getConstantOperandVal(1);
+  Src = Src.getOperand(0);
+
+  unsigned CombinedShAmt;
+  if (N->getOpcode() == RISCVISD::GORCI || N->getOpcode() == RISCVISD::GORCIW)
+    CombinedShAmt = ShAmt1 | ShAmt2;
+  else
+    CombinedShAmt = ShAmt1 ^ ShAmt2;
+
+  if (CombinedShAmt == 0)
+    return Src;
+
+  SDLoc DL(N);
+  return DAG.getNode(N->getOpcode(), DL, N->getValueType(0), Src,
+                     DAG.getTargetConstant(CombinedShAmt, DL,
+                                           N->getOperand(1).getValueType()));
 }
 
 SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
@@ -1318,6 +1399,24 @@ SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
     }
     break;
   }
+  case RISCVISD::FSLW:
+  case RISCVISD::FSRW: {
+    // Only the lower 32 bits of Values and lower 6 bits of shift amount are
+    // read.
+    SDValue Op0 = N->getOperand(0);
+    SDValue Op1 = N->getOperand(1);
+    SDValue ShAmt = N->getOperand(2);
+    APInt OpMask = APInt::getLowBitsSet(Op0.getValueSizeInBits(), 32);
+    APInt ShAmtMask = APInt::getLowBitsSet(ShAmt.getValueSizeInBits(), 6);
+    if (SimplifyDemandedBits(Op0, OpMask, DCI) ||
+        SimplifyDemandedBits(Op1, OpMask, DCI) ||
+        SimplifyDemandedBits(ShAmt, ShAmtMask, DCI)) {
+      if (N->getOpcode() != ISD::DELETED_NODE)
+        DCI.AddToWorklist(N);
+      return SDValue(N, 0);
+    }
+    break;
+  }
   case RISCVISD::GREVIW:
   case RISCVISD::GORCIW: {
     // Only the lower 32 bits of the first operand are read
@@ -1328,7 +1427,8 @@ SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
         DCI.AddToWorklist(N);
       return SDValue(N, 0);
     }
-    break;
+
+    return combineGREVI_GORCI(N, DCI.DAG);
   }
   case RISCVISD::FMV_X_ANYEXTW_RV64: {
     SDLoc DL(N);
@@ -1360,6 +1460,9 @@ SDValue RISCVTargetLowering::PerformDAGCombine(SDNode *N,
     return DAG.getNode(ISD::AND, DL, MVT::i64, NewFMV,
                        DAG.getConstant(~SignBit, DL, MVT::i64));
   }
+  case RISCVISD::GREVI:
+  case RISCVISD::GORCI:
+    return combineGREVI_GORCI(N, DCI.DAG);
   case ISD::OR:
     if (auto GREV = combineORToGREV(SDValue(N, 0), DCI.DAG, Subtarget))
       return GREV;
@@ -1433,6 +1536,8 @@ unsigned RISCVTargetLowering::ComputeNumSignBitsForTargetNode(
   case RISCVISD::RORW:
   case RISCVISD::GREVIW:
   case RISCVISD::GORCIW:
+  case RISCVISD::FSLW:
+  case RISCVISD::FSRW:
     // TODO: As the result is sign-extended, this is conservatively correct. A
     // more precise answer could be calculated for SRAW depending on known
     // bits in the shift amount.
@@ -2223,11 +2328,57 @@ static bool CC_RISCV_FastCC(unsigned ValNo, MVT ValVT, MVT LocVT,
   return true; // CC didn't match.
 }
 
+static bool CC_RISCV_GHC(unsigned ValNo, MVT ValVT, MVT LocVT,
+                         CCValAssign::LocInfo LocInfo,
+                         ISD::ArgFlagsTy ArgFlags, CCState &State) {
+
+  if (LocVT == MVT::i32 || LocVT == MVT::i64) {
+    // Pass in STG registers: Base, Sp, Hp, R1, R2, R3, R4, R5, R6, R7, SpLim
+    //                        s1    s2  s3  s4  s5  s6  s7  s8  s9  s10 s11
+    static const MCPhysReg GPRList[] = {
+        RISCV::X9, RISCV::X18, RISCV::X19, RISCV::X20, RISCV::X21, RISCV::X22,
+        RISCV::X23, RISCV::X24, RISCV::X25, RISCV::X26, RISCV::X27};
+    if (unsigned Reg = State.AllocateReg(GPRList)) {
+      State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
+      return false;
+    }
+  }
+
+  if (LocVT == MVT::f32) {
+    // Pass in STG registers: F1, ..., F6
+    //                        fs0 ... fs5
+    static const MCPhysReg FPR32List[] = {RISCV::F8_F, RISCV::F9_F,
+                                          RISCV::F18_F, RISCV::F19_F,
+                                          RISCV::F20_F, RISCV::F21_F};
+    if (unsigned Reg = State.AllocateReg(FPR32List)) {
+      State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
+      return false;
+    }
+  }
+
+  if (LocVT == MVT::f64) {
+    // Pass in STG registers: D1, ..., D6
+    //                        fs6 ... fs11
+    static const MCPhysReg FPR64List[] = {RISCV::F22_D, RISCV::F23_D,
+                                          RISCV::F24_D, RISCV::F25_D,
+                                          RISCV::F26_D, RISCV::F27_D};
+    if (unsigned Reg = State.AllocateReg(FPR64List)) {
+      State.addLoc(CCValAssign::getReg(ValNo, ValVT, Reg, LocVT, LocInfo));
+      return false;
+    }
+  }
+
+  report_fatal_error("No registers left in GHC calling convention");
+  return true;
+}
+
 // Transform physical registers into virtual registers.
 SDValue RISCVTargetLowering::LowerFormalArguments(
     SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
     const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &DL,
     SelectionDAG &DAG, SmallVectorImpl<SDValue> &InVals) const {
+
+  MachineFunction &MF = DAG.getMachineFunction();
 
   switch (CallConv) {
   default:
@@ -2235,9 +2386,12 @@ SDValue RISCVTargetLowering::LowerFormalArguments(
   case CallingConv::C:
   case CallingConv::Fast:
     break;
+  case CallingConv::GHC:
+    if (!MF.getSubtarget().getFeatureBits()[RISCV::FeatureStdExtF] ||
+        !MF.getSubtarget().getFeatureBits()[RISCV::FeatureStdExtD])
+      report_fatal_error(
+        "GHC calling convention requires the F and D instruction set extensions");
   }
-
-  MachineFunction &MF = DAG.getMachineFunction();
 
   const Function &Func = MF.getFunction();
   if (Func.hasFnAttribute("interrupt")) {
@@ -2265,6 +2419,8 @@ SDValue RISCVTargetLowering::LowerFormalArguments(
 
   if (CallConv == CallingConv::Fast)
     CCInfo.AnalyzeFormalArguments(Ins, CC_RISCV_FastCC);
+  else if (CallConv == CallingConv::GHC)
+    CCInfo.AnalyzeFormalArguments(Ins, CC_RISCV_GHC);
   else
     analyzeInputArgs(MF, CCInfo, Ins, /*IsRet=*/false);
 
@@ -2465,6 +2621,8 @@ SDValue RISCVTargetLowering::LowerCall(CallLoweringInfo &CLI,
 
   if (CallConv == CallingConv::Fast)
     ArgCCInfo.AnalyzeCallOperands(Outs, CC_RISCV_FastCC);
+  else if (CallConv == CallingConv::GHC)
+    ArgCCInfo.AnalyzeCallOperands(Outs, CC_RISCV_GHC);
   else
     analyzeOutputArgs(MF, ArgCCInfo, Outs, /*IsRet=*/false, &CLI);
 
@@ -2752,6 +2910,9 @@ RISCVTargetLowering::LowerReturn(SDValue Chain, CallingConv::ID CallConv,
   analyzeOutputArgs(DAG.getMachineFunction(), CCInfo, Outs, /*IsRet=*/true,
                     nullptr);
 
+  if (CallConv == CallingConv::GHC && !RVLocs.empty())
+    report_fatal_error("GHC functions return void only");
+
   SDValue Glue;
   SmallVector<SDValue, 4> RetOps(1, Chain);
 
@@ -2874,6 +3035,8 @@ const char *RISCVTargetLowering::getTargetNodeName(unsigned Opcode) const {
   NODE_NAME_CASE(REMUW)
   NODE_NAME_CASE(ROLW)
   NODE_NAME_CASE(RORW)
+  NODE_NAME_CASE(FSLW)
+  NODE_NAME_CASE(FSRW)
   NODE_NAME_CASE(FMV_W_X_RV64)
   NODE_NAME_CASE(FMV_X_ANYEXTW_RV64)
   NODE_NAME_CASE(READ_CYCLE_WIDE)
@@ -3234,6 +3397,25 @@ Value *RISCVTargetLowering::emitMaskedAtomicCmpXchgIntrinsic(
   if (XLen == 64)
     Result = Builder.CreateTrunc(Result, Builder.getInt32Ty());
   return Result;
+}
+
+bool RISCVTargetLowering::isFMAFasterThanFMulAndFAdd(const MachineFunction &MF,
+                                                     EVT VT) const {
+  VT = VT.getScalarType();
+
+  if (!VT.isSimple())
+    return false;
+
+  switch (VT.getSimpleVT().SimpleTy) {
+  case MVT::f32:
+    return Subtarget.hasStdExtF();
+  case MVT::f64:
+    return Subtarget.hasStdExtD();
+  default:
+    break;
+  }
+
+  return false;
 }
 
 Register RISCVTargetLowering::getExceptionPointerRegister(

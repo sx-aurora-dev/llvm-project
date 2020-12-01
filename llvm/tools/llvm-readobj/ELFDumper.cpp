@@ -2204,10 +2204,9 @@ void ELFDumper<ELFT>::parseDynamicTable() {
       else if (Dyn.getVal() == DT_RELA)
         DynPLTRelRegion.EntSize = sizeof(Elf_Rela);
       else
-        reportError(createError(Twine("unknown DT_PLTREL value of ") +
-                                Twine((uint64_t)Dyn.getVal())),
-                    ObjF.getFileName());
-      DynPLTRelRegion.EntSizePrintName = "";
+        reportUniqueWarning(createError(Twine("unknown DT_PLTREL value of ") +
+                                        Twine((uint64_t)Dyn.getVal())));
+      DynPLTRelRegion.EntSizePrintName = "PLTREL entry size";
       break;
     case ELF::DT_JMPREL:
       DynPLTRelRegion.Addr = toMappedAddr(Dyn.getTag(), Dyn.getPtr());
@@ -2887,12 +2886,12 @@ template <class ELFT> void ELFDumper<ELFT>::printArchSpecificInfo() {
     printMipsReginfo();
     MipsGOTParser<ELFT> Parser(*this);
     if (Error E = Parser.findGOT(dynamic_table(), dynamic_symbols()))
-      reportError(std::move(E), ObjF.getFileName());
+      reportUniqueWarning(std::move(E));
     else if (!Parser.isGotEmpty())
       ELFDumperStyle->printMipsGOT(Parser);
 
     if (Error E = Parser.findPLT(dynamic_table()))
-      reportError(std::move(E), ObjF.getFileName());
+      reportUniqueWarning(std::move(E));
     else if (!Parser.isPltEmpty())
       ELFDumperStyle->printMipsPLT(Parser);
     break;
@@ -5541,6 +5540,60 @@ const StringRef getNoteTypeName(const typename ELFT::Note &Note,
   return FindNote(GenericNoteTypes);
 }
 
+template <class ELFT>
+static void printNotesHelper(
+    const ELFDumper<ELFT> &Dumper,
+    llvm::function_ref<void(Optional<StringRef>, typename ELFT::Off,
+                            typename ELFT::Addr)>
+        StartNotesFn,
+    llvm::function_ref<void(const typename ELFT::Note &)> ProcessNoteFn,
+    llvm::function_ref<void()> FinishNotesFn) {
+  const ELFFile<ELFT> &Obj = *Dumper.getElfObject().getELFFile();
+
+  ArrayRef<typename ELFT::Shdr> Sections = cantFail(Obj.sections());
+  if (Obj.getHeader().e_type != ELF::ET_CORE && !Sections.empty()) {
+    for (const typename ELFT::Shdr &S : Sections) {
+      if (S.sh_type != SHT_NOTE)
+        continue;
+      StartNotesFn(expectedToOptional(Obj.getSectionName(S)), S.sh_offset,
+                   S.sh_size);
+      Error Err = Error::success();
+      for (const typename ELFT::Note Note : Obj.notes(S, Err))
+        ProcessNoteFn(Note);
+      if (Err)
+        Dumper.reportUniqueWarning(
+            createError("unable to read notes from the " + describe(Obj, S) +
+                        ": " + toString(std::move(Err))));
+      FinishNotesFn();
+    }
+    return;
+  }
+
+  Expected<ArrayRef<typename ELFT::Phdr>> PhdrsOrErr = Obj.program_headers();
+  if (!PhdrsOrErr) {
+    Dumper.reportUniqueWarning(createError(
+        "unable to read program headers to locate the PT_NOTE segment: " +
+        toString(PhdrsOrErr.takeError())));
+    return;
+  }
+
+  size_t I = 0;
+  for (const typename ELFT::Phdr &P : *PhdrsOrErr) {
+    ++I;
+    if (P.p_type != PT_NOTE)
+      continue;
+    StartNotesFn(/*SecName=*/None, P.p_offset, P.p_filesz);
+    Error Err = Error::success();
+    for (const typename ELFT::Note Note : Obj.notes(P, Err))
+      ProcessNoteFn(Note);
+    if (Err)
+      Dumper.reportUniqueWarning(createError(
+          "unable to read notes from the PT_NOTE segment with index " +
+          Twine(I) + ": " + toString(std::move(Err))));
+    FinishNotesFn();
+  }
+}
+
 template <class ELFT> void GNUStyle<ELFT>::printNotes() {
   auto PrintHeader = [&](Optional<StringRef> SecName,
                          const typename ELFT::Off Offset,
@@ -5603,39 +5656,7 @@ template <class ELFT> void GNUStyle<ELFT>::printNotes() {
     }
   };
 
-  ArrayRef<Elf_Shdr> Sections = cantFail(this->Obj.sections());
-  if (this->Obj.getHeader().e_type != ELF::ET_CORE && !Sections.empty()) {
-    for (const Elf_Shdr &S : Sections) {
-      if (S.sh_type != SHT_NOTE)
-        continue;
-      PrintHeader(expectedToOptional(this->Obj.getSectionName(S)), S.sh_offset,
-                  S.sh_size);
-      Error Err = Error::success();
-      for (const Elf_Note Note : this->Obj.notes(S, Err))
-        ProcessNote(Note);
-      if (Err)
-        reportError(std::move(Err), this->FileName);
-    }
-  } else {
-    Expected<ArrayRef<Elf_Phdr>> PhdrsOrErr = this->Obj.program_headers();
-    if (!PhdrsOrErr) {
-      this->reportUniqueWarning(createError(
-          "unable to read program headers to locate the PT_NOTE segment: " +
-          toString(PhdrsOrErr.takeError())));
-      return;
-    }
-
-    for (const Elf_Phdr &P : *PhdrsOrErr) {
-      if (P.p_type != PT_NOTE)
-        continue;
-      PrintHeader(/*SecName=*/None, P.p_offset, P.p_filesz);
-      Error Err = Error::success();
-      for (const Elf_Note Note : this->Obj.notes(P, Err))
-        ProcessNote(Note);
-      if (Err)
-        reportError(std::move(Err), this->FileName);
-    }
-  }
+  printNotesHelper(this->dumper(), PrintHeader, ProcessNote, []() {});
 }
 
 template <class ELFT> void GNUStyle<ELFT>::printELFLinkerOptions() {
@@ -6828,13 +6849,17 @@ static void printCoreNoteLLVMStyle(const CoreNote &Note, ScopedPrinter &W) {
 template <class ELFT> void LLVMStyle<ELFT>::printNotes() {
   ListScope L(W, "Notes");
 
-  auto PrintHeader = [&](Optional<StringRef> SecName,
-                         const typename ELFT::Off Offset,
-                         const typename ELFT::Addr Size) {
+  std::unique_ptr<DictScope> NoteScope;
+  auto StartNotes = [&](Optional<StringRef> SecName,
+                        const typename ELFT::Off Offset,
+                        const typename ELFT::Addr Size) {
+    NoteScope = std::make_unique<DictScope>(W, "NoteSection");
     W.printString("Name", SecName ? *SecName : "<?>");
     W.printHex("Offset", Offset);
     W.printHex("Size", Size);
   };
+
+  auto EndNotes = [&] { NoteScope.reset(); };
 
   auto ProcessNote = [&](const Elf_Note &Note) {
     DictScope D2(W, "Note");
@@ -6882,41 +6907,7 @@ template <class ELFT> void LLVMStyle<ELFT>::printNotes() {
     }
   };
 
-  ArrayRef<Elf_Shdr> Sections = cantFail(this->Obj.sections());
-  if (this->Obj.getHeader().e_type != ELF::ET_CORE && !Sections.empty()) {
-    for (const Elf_Shdr &S : Sections) {
-      if (S.sh_type != SHT_NOTE)
-        continue;
-      DictScope D(W, "NoteSection");
-      PrintHeader(expectedToOptional(this->Obj.getSectionName(S)), S.sh_offset,
-                  S.sh_size);
-      Error Err = Error::success();
-      for (auto Note : this->Obj.notes(S, Err))
-        ProcessNote(Note);
-      if (Err)
-        reportError(std::move(Err), this->FileName);
-    }
-  } else {
-    Expected<ArrayRef<Elf_Phdr>> PhdrsOrErr = this->Obj.program_headers();
-    if (!PhdrsOrErr) {
-      this->reportUniqueWarning(createError(
-          "unable to read program headers to locate the PT_NOTE segment: " +
-          toString(PhdrsOrErr.takeError())));
-      return;
-    }
-
-    for (const Elf_Phdr &P : *PhdrsOrErr) {
-      if (P.p_type != PT_NOTE)
-        continue;
-      DictScope D(W, "NoteSection");
-      PrintHeader(/*SecName=*/None, P.p_offset, P.p_filesz);
-      Error Err = Error::success();
-      for (auto Note : this->Obj.notes(P, Err))
-        ProcessNote(Note);
-      if (Err)
-        reportError(std::move(Err), this->FileName);
-    }
-  }
+  printNotesHelper(this->dumper(), StartNotes, ProcessNote, EndNotes);
 }
 
 template <class ELFT> void LLVMStyle<ELFT>::printELFLinkerOptions() {
