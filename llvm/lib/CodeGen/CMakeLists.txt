@@ -8,7 +8,7 @@ add_llvm_component_library(LLVMCodeGen
   BranchRelaxation.cpp
   BreakFalseDeps.cpp
   BuiltinGCs.cpp
-  BBSectionsPrepare.cpp
+  BasicBlockSections.cpp
   CalcSpillWeights.cpp
   CallingConvLower.cpp
   CFGuardLongjmp.cpp
@@ -49,7 +49,6 @@ add_llvm_component_library(LLVMCodeGen
   LatencyPriorityQueue.cpp
   LazyMachineBlockFrequencyInfo.cpp
   LexicalScopes.cpp
-  LiveDebugValues.cpp
   LiveDebugVariables.cpp
   LiveIntervals.cpp
   LiveInterval.cpp
@@ -82,6 +81,7 @@ add_llvm_component_library(LLVMCodeGen
   MachineFunction.cpp
   MachineFunctionPass.cpp
   MachineFunctionPrinterPass.cpp
+  MachineFunctionSplitter.cpp
   MachineInstrBundle.cpp
   MachineInstr.cpp
   MachineLICM.cpp
@@ -92,6 +92,7 @@ add_llvm_component_library(LLVMCodeGen
   MachineOperand.cpp
   MachineOptimizationRemarkEmitter.cpp
   MachineOutliner.cpp
+  MachinePassManager.cpp
   MachinePipeliner.cpp
   MachinePostDominators.cpp
   MachineRegionInfo.cpp
@@ -104,6 +105,7 @@ add_llvm_component_library(LLVMCodeGen
   MachineTraceMetrics.cpp
   MachineVerifier.cpp
   ModuloSchedule.cpp
+  MultiHazardRecognizer.cpp
   PatchableFunction.cpp
   MBFIWrapper.cpp
   MIRPrinter.cpp
@@ -135,6 +137,7 @@ add_llvm_component_library(LLVMCodeGen
   RegisterPressure.cpp
   RegisterScavenging.cpp
   RenameIndependentSubregs.cpp
+  MachineStableHash.cpp
   MIRVRegNamerUtils.cpp
   MIRNamerPass.cpp
   MIRCanonicalizerPass.cpp
@@ -143,7 +146,6 @@ add_llvm_component_library(LLVMCodeGen
   RegUsageInfoPropagate.cpp
   ResetMachineFunctionPass.cpp
   SafeStack.cpp
-  SafeStackColoring.cpp
   SafeStackLayout.cpp
   ScalarizeMaskedMemIntrin.cpp
   ScheduleDAG.cpp
@@ -183,6 +185,10 @@ add_llvm_component_library(LLVMCodeGen
   WinEHPrepare.cpp
   XRayInstrumentation.cpp
 
+  LiveDebugValues/LiveDebugValues.cpp
+  LiveDebugValues/VarLocBasedImpl.cpp
+  LiveDebugValues/InstrRefBasedImpl.cpp
+
   ADDITIONAL_HEADER_DIRS
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/CodeGen
   ${LLVM_MAIN_INCLUDE_DIR}/llvm/CodeGen/PBQP
@@ -191,6 +197,18 @@ add_llvm_component_library(LLVMCodeGen
 
   DEPENDS
   intrinsics_gen
+
+  LINK_COMPONENTS
+  Analysis
+  BitReader
+  BitWriter
+  Core
+  MC
+  ProfileData
+  Scalar
+  Support
+  Target
+  TransformUtils
   )
 
 add_subdirectory(SelectionDAG)

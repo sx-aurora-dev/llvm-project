@@ -22,7 +22,6 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/IndexedMap.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/LiveInterval.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
@@ -40,6 +39,7 @@ namespace llvm {
 
 extern cl::opt<bool> UseSegmentSetForPhysRegs;
 
+class AAResults;
 class BitVector;
 class LiveIntervalCalc;
 class MachineBlockFrequencyInfo;
@@ -56,7 +56,7 @@ class VirtRegMap;
     MachineRegisterInfo* MRI;
     const TargetRegisterInfo* TRI;
     const TargetInstrInfo* TII;
-    AliasAnalysis *AA;
+    AAResults *AA;
     SlotIndexes* Indexes;
     MachineDominatorTree *DomTree = nullptr;
     LiveIntervalCalc *LICalc = nullptr;
@@ -114,8 +114,8 @@ class VirtRegMap;
     LiveInterval &getInterval(Register Reg) {
       if (hasInterval(Reg))
         return *VirtRegIntervals[Reg.id()];
-      else
-        return createAndComputeVirtRegInterval(Reg);
+
+      return createAndComputeVirtRegInterval(Reg);
     }
 
     const LiveInterval &getInterval(Register Reg) const {
@@ -142,14 +142,14 @@ class VirtRegMap;
     }
 
     /// Interval removal.
-    void removeInterval(unsigned Reg) {
+    void removeInterval(Register Reg) {
       delete VirtRegIntervals[Reg];
       VirtRegIntervals[Reg] = nullptr;
     }
 
     /// Given a register and an instruction, adds a live segment from that
     /// instruction to the end of its MBB.
-    LiveInterval::Segment addSegmentToEndOfBlock(unsigned reg,
+    LiveInterval::Segment addSegmentToEndOfBlock(Register Reg,
                                                  MachineInstr &startInst);
 
     /// After removing some uses of a register, shrink its live range to just
@@ -167,7 +167,7 @@ class VirtRegMap;
     /// the lane mask of the subregister range.
     /// This may leave the subrange empty which needs to be cleaned up with
     /// LiveInterval::removeEmptySubranges() afterwards.
-    void shrinkToUses(LiveInterval::SubRange &SR, unsigned Reg);
+    void shrinkToUses(LiveInterval::SubRange &SR, Register Reg);
 
     /// Extend the live range \p LR to reach all points in \p Indices. The
     /// points in the \p Indices array must be jointly dominated by the union
@@ -212,7 +212,7 @@ class VirtRegMap;
       return Indexes;
     }
 
-    AliasAnalysis *getAliasAnalysis() const {
+    AAResults *getAliasAnalysis() const {
       return AA;
     }
 
@@ -423,7 +423,7 @@ class VirtRegMap;
     /// Reg. Subsequent uses should rely on on-demand recomputation.  \note This
     /// method can result in inconsistent liveness tracking if multiple phyical
     /// registers share a regunit, and should be used cautiously.
-    void removeAllRegUnitsForPhysReg(unsigned Reg) {
+    void removeAllRegUnitsForPhysReg(MCRegister Reg) {
       for (MCRegUnitIterator Units(Reg, TRI); Units.isValid(); ++Units)
         removeRegUnit(*Units);
     }
@@ -431,7 +431,7 @@ class VirtRegMap;
     /// Remove value numbers and related live segments starting at position
     /// \p Pos that are part of any liverange of physical register \p Reg or one
     /// of its subregisters.
-    void removePhysRegDefAt(unsigned Reg, SlotIndex Pos);
+    void removePhysRegDefAt(MCRegister Reg, SlotIndex Pos);
 
     /// Remove value number and related live segments of \p LI and its subranges
     /// that start at position \p Pos.
@@ -463,7 +463,7 @@ class VirtRegMap;
     bool computeDeadValues(LiveInterval &LI,
                            SmallVectorImpl<MachineInstr*> *dead);
 
-    static LiveInterval* createInterval(unsigned Reg);
+    static LiveInterval *createInterval(Register Reg);
 
     void printInstrs(raw_ostream &O) const;
     void dumpInstrs() const;
@@ -474,7 +474,7 @@ class VirtRegMap;
 
     using ShrinkToUsesWorkList = SmallVector<std::pair<SlotIndex, VNInfo*>, 16>;
     void extendSegmentsToUses(LiveRange &Segments,
-                              ShrinkToUsesWorkList &WorkList, unsigned Reg,
+                              ShrinkToUsesWorkList &WorkList, Register Reg,
                               LaneBitmask LaneMask);
 
     /// Helper function for repairIntervalsInRange(), walks backwards and
@@ -484,7 +484,7 @@ class VirtRegMap;
     void repairOldRegInRange(MachineBasicBlock::iterator Begin,
                              MachineBasicBlock::iterator End,
                              const SlotIndex endIdx, LiveRange &LR,
-                             unsigned Reg,
+                             Register Reg,
                              LaneBitmask LaneMask = LaneBitmask::getAll());
 
     class HMEditor;

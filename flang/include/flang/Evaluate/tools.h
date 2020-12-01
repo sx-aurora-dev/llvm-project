@@ -331,49 +331,29 @@ template <typename A> const Symbol *GetFirstSymbol(const A &x) {
 template <typename TO, TypeCategory FROMCAT>
 Expr<TO> ConvertToType(Expr<SomeKind<FROMCAT>> &&x) {
   static_assert(IsSpecificIntrinsicType<TO>);
-  if constexpr (FROMCAT != TO::category) {
-    if constexpr (TO::category == TypeCategory::Complex) {
-      using Part = typename TO::Part;
-      Scalar<Part> zero;
-      return Expr<TO>{ComplexConstructor<TO::kind>{
-          ConvertToType<Part>(std::move(x)), Expr<Part>{Constant<Part>{zero}}}};
-    } else if constexpr (FROMCAT == TypeCategory::Complex) {
-      // Extract and convert the real component of a complex value
-      return std::visit(
-          [&](auto &&z) {
-            using ZType = ResultType<decltype(z)>;
-            using Part = typename ZType::Part;
-            return ConvertToType<TO, TypeCategory::Real>(Expr<SomeReal>{
-                Expr<Part>{ComplexComponent<Part::kind>{false, std::move(z)}}});
-          },
-          std::move(x.u));
+  if constexpr (FROMCAT == TO::category) {
+    if (auto *already{std::get_if<Expr<TO>>(&x.u)}) {
+      return std::move(*already);
     } else {
       return Expr<TO>{Convert<TO, FROMCAT>{std::move(x)}};
     }
+  } else if constexpr (TO::category == TypeCategory::Complex) {
+    using Part = typename TO::Part;
+    Scalar<Part> zero;
+    return Expr<TO>{ComplexConstructor<TO::kind>{
+        ConvertToType<Part>(std::move(x)), Expr<Part>{Constant<Part>{zero}}}};
+  } else if constexpr (FROMCAT == TypeCategory::Complex) {
+    // Extract and convert the real component of a complex value
+    return std::visit(
+        [&](auto &&z) {
+          using ZType = ResultType<decltype(z)>;
+          using Part = typename ZType::Part;
+          return ConvertToType<TO, TypeCategory::Real>(Expr<SomeReal>{
+              Expr<Part>{ComplexComponent<Part::kind>{false, std::move(z)}}});
+        },
+        std::move(x.u));
   } else {
-    // Same type category
-    if (auto *already{std::get_if<Expr<TO>>(&x.u)}) {
-      return std::move(*already);
-    }
-    if constexpr (TO::category == TypeCategory::Complex) {
-      // Extract, convert, and recombine the components.
-      return Expr<TO>{std::visit(
-          [](auto &z) {
-            using FromType = ResultType<decltype(z)>;
-            using FromPart = typename FromType::Part;
-            using FromGeneric = SomeKind<TypeCategory::Real>;
-            using ToPart = typename TO::Part;
-            Convert<ToPart, TypeCategory::Real> re{Expr<FromGeneric>{
-                Expr<FromPart>{ComplexComponent<FromType::kind>{false, z}}}};
-            Convert<ToPart, TypeCategory::Real> im{Expr<FromGeneric>{
-                Expr<FromPart>{ComplexComponent<FromType::kind>{true, z}}}};
-            return ComplexConstructor<TO::kind>{
-                AsExpr(std::move(re)), AsExpr(std::move(im))};
-          },
-          x.u)};
-    } else {
-      return Expr<TO>{Convert<TO, TO::category>{std::move(x)}};
-    }
+    return Expr<TO>{Convert<TO, FROMCAT>{std::move(x)}};
   }
 }
 
@@ -523,24 +503,11 @@ template <typename A> Expr<TypeOf<A>> ScalarConstantToExpr(const A &x) {
 }
 
 // Combine two expressions of the same specific numeric type with an operation
-// to produce a new expression.  Implements piecewise addition and subtraction
-// for COMPLEX.
+// to produce a new expression.
 template <template <typename> class OPR, typename SPECIFIC>
 Expr<SPECIFIC> Combine(Expr<SPECIFIC> &&x, Expr<SPECIFIC> &&y) {
   static_assert(IsSpecificIntrinsicType<SPECIFIC>);
-  if constexpr (SPECIFIC::category == TypeCategory::Complex &&
-      (std::is_same_v<OPR<LargestReal>, Add<LargestReal>> ||
-          std::is_same_v<OPR<LargestReal>, Subtract<LargestReal>>)) {
-    static constexpr int kind{SPECIFIC::kind};
-    using Part = Type<TypeCategory::Real, kind>;
-    return AsExpr(ComplexConstructor<kind>{
-        AsExpr(OPR<Part>{AsExpr(ComplexComponent<kind>{false, x}),
-            AsExpr(ComplexComponent<kind>{false, y})}),
-        AsExpr(OPR<Part>{AsExpr(ComplexComponent<kind>{true, x}),
-            AsExpr(ComplexComponent<kind>{true, y})})});
-  } else {
-    return AsExpr(OPR<SPECIFIC>{std::move(x), std::move(y)});
-  }
+  return AsExpr(OPR<SPECIFIC>{std::move(x), std::move(y)});
 }
 
 // Given two expressions of arbitrary kind in the same intrinsic type
@@ -620,15 +587,6 @@ Expr<Type<C, K>> operator-(Expr<Type<C, K>> &&x) {
   return AsExpr(Negate<Type<C, K>>{std::move(x)});
 }
 
-template <int K>
-Expr<Type<TypeCategory::Complex, K>> operator-(
-    Expr<Type<TypeCategory::Complex, K>> &&x) {
-  using Part = Type<TypeCategory::Real, K>;
-  return AsExpr(ComplexConstructor<K>{
-      AsExpr(Negate<Part>{AsExpr(ComplexComponent<K>{false, x})}),
-      AsExpr(Negate<Part>{AsExpr(ComplexComponent<K>{true, x})})});
-}
-
 template <TypeCategory C, int K>
 Expr<Type<C, K>> operator+(Expr<Type<C, K>> &&x, Expr<Type<C, K>> &&y) {
   return AsExpr(Combine<Add, Type<C, K>>(std::move(x), std::move(y)));
@@ -699,6 +657,42 @@ struct TypeKindVisitor {
   int kind;
   VALUE value;
 };
+
+// TypedWrapper() wraps a object in an explicitly typed representation
+// (e.g., Designator<> or FunctionRef<>) that has been instantiated on
+// a dynamically chosen Fortran type.
+template <TypeCategory CATEGORY, template <typename> typename WRAPPER,
+    typename WRAPPED>
+common::IfNoLvalue<std::optional<Expr<SomeType>>, WRAPPED> WrapperHelper(
+    int kind, WRAPPED &&x) {
+  return common::SearchTypes(
+      TypeKindVisitor<CATEGORY, WRAPPER, WRAPPED>{kind, std::move(x)});
+}
+
+template <template <typename> typename WRAPPER, typename WRAPPED>
+common::IfNoLvalue<std::optional<Expr<SomeType>>, WRAPPED> TypedWrapper(
+    const DynamicType &dyType, WRAPPED &&x) {
+  switch (dyType.category()) {
+    SWITCH_COVERS_ALL_CASES
+  case TypeCategory::Integer:
+    return WrapperHelper<TypeCategory::Integer, WRAPPER, WRAPPED>(
+        dyType.kind(), std::move(x));
+  case TypeCategory::Real:
+    return WrapperHelper<TypeCategory::Real, WRAPPER, WRAPPED>(
+        dyType.kind(), std::move(x));
+  case TypeCategory::Complex:
+    return WrapperHelper<TypeCategory::Complex, WRAPPER, WRAPPED>(
+        dyType.kind(), std::move(x));
+  case TypeCategory::Character:
+    return WrapperHelper<TypeCategory::Character, WRAPPER, WRAPPED>(
+        dyType.kind(), std::move(x));
+  case TypeCategory::Logical:
+    return WrapperHelper<TypeCategory::Logical, WRAPPER, WRAPPED>(
+        dyType.kind(), std::move(x));
+  case TypeCategory::Derived:
+    return AsGenericExpr(Expr<SomeDerived>{WRAPPER<SomeDerived>{std::move(x)}});
+  }
+}
 
 // GetLastSymbol() returns the rightmost symbol in an object or procedure
 // designator (which has perhaps been wrapped in an Expr<>), or a null pointer
@@ -777,6 +771,7 @@ template <typename A> bool IsAllocatableOrPointer(const A &x) {
 
 // Procedure and pointer detection predicates
 bool IsProcedure(const Expr<SomeType> &);
+bool IsFunction(const Expr<SomeType> &);
 bool IsProcedurePointer(const Expr<SomeType> &);
 bool IsNullPointer(const Expr<SomeType> &);
 
@@ -828,7 +823,7 @@ parser::Message *AttachDeclaration(parser::Message &, const Symbol &);
 parser::Message *AttachDeclaration(parser::Message *, const Symbol &);
 template <typename MESSAGES, typename... A>
 parser::Message *SayWithDeclaration(
-    MESSAGES &messages, const Symbol &symbol, A &&... x) {
+    MESSAGES &messages, const Symbol &symbol, A &&...x) {
   return AttachDeclaration(messages.Say(std::forward<A>(x)...), symbol);
 }
 
@@ -839,5 +834,55 @@ std::optional<std::string> FindImpureCall(
 std::optional<std::string> FindImpureCall(
     const IntrinsicProcTable &, const ProcedureRef &);
 
+// Predicate: is a scalar expression suitable for naive scalar expansion
+// in the flattening of an array expression?
+// TODO: capture such scalar expansions in temporaries, flatten everything
+struct UnexpandabilityFindingVisitor
+    : public AnyTraverse<UnexpandabilityFindingVisitor> {
+  using Base = AnyTraverse<UnexpandabilityFindingVisitor>;
+  using Base::operator();
+  UnexpandabilityFindingVisitor() : Base{*this} {}
+  template <typename T> bool operator()(const FunctionRef<T> &) { return true; }
+  bool operator()(const CoarrayRef &) { return true; }
+};
+
+template <typename T> bool IsExpandableScalar(const Expr<T> &expr) {
+  return !UnexpandabilityFindingVisitor{}(expr);
+}
+
+// Common handling for procedure pointer compatibility of left- and right-hand
+// sides.  Returns nullopt if they're compatible.  Otherwise, it returns a
+// message that needs to be augmented by the names of the left and right sides
+std::optional<parser::MessageFixedText> CheckProcCompatibility(bool isCall,
+    const std::optional<characteristics::Procedure> &lhsProcedure,
+    const characteristics::Procedure *rhsProcedure);
+
 } // namespace Fortran::evaluate
+
+namespace Fortran::semantics {
+
+class Scope;
+
+// These functions are used in Evaluate so they are defined here rather than in
+// Semantics to avoid a link-time dependency on Semantics.
+
+bool IsVariableName(const Symbol &);
+bool IsPureProcedure(const Symbol &);
+bool IsPureProcedure(const Scope &);
+bool IsFunction(const Symbol &);
+bool IsProcedure(const Symbol &);
+bool IsProcedurePointer(const Symbol &);
+bool IsSaved(const Symbol &); // saved implicitly or explicitly
+bool IsDummy(const Symbol &);
+bool IsFunctionResult(const Symbol &);
+
+// Follow use, host, and construct assocations to a variable, if any.
+const Symbol *GetAssociationRoot(const Symbol &);
+const Symbol *FindCommonBlockContaining(const Symbol &);
+int CountLenParameters(const DerivedTypeSpec &);
+int CountNonConstantLenParameters(const DerivedTypeSpec &);
+const Symbol &GetUsedModule(const UseDetails &);
+
+} // namespace Fortran::semantics
+
 #endif // FORTRAN_EVALUATE_TOOLS_H_

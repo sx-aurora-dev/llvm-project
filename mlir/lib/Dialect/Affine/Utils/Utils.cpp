@@ -14,9 +14,9 @@
 #include "mlir/Dialect/Affine/Utils.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
-#include "mlir/IR/Function.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IntegerSet.h"
-#include "mlir/IR/PatternMatch.h"
+#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -44,7 +44,7 @@ static void promoteIfBlock(AffineIfOp ifOp, bool elseBlock) {
 static Operation *getOutermostInvariantForOp(AffineIfOp ifOp) {
   // Walk up the parents past all for op that this conditional is invariant on.
   auto ifOperands = ifOp.getOperands();
-  auto res = ifOp.getOperation();
+  auto *res = ifOp.getOperation();
   while (!isa<FuncOp>(res->getParentOp())) {
     auto *parentOp = res->getParentOp();
     if (auto forOp = dyn_cast<AffineForOp>(parentOp)) {
@@ -129,8 +129,28 @@ static AffineIfOp hoistAffineIfOp(AffineIfOp ifOp, Operation *hoistOverOp) {
   return hoistedIfOp;
 }
 
+/// Replace affine.for with a 1-d affine.parallel and clone the former's body
+/// into the latter while remapping values.
+void mlir::affineParallelize(AffineForOp forOp) {
+  Location loc = forOp.getLoc();
+  OpBuilder outsideBuilder(forOp);
+  // Creating empty 1-D affine.parallel op.
+  AffineParallelOp newPloop = outsideBuilder.create<AffineParallelOp>(
+      loc, llvm::None, llvm::None, forOp.getLowerBoundMap(),
+      forOp.getLowerBoundOperands(), forOp.getUpperBoundMap(),
+      forOp.getUpperBoundOperands());
+  // Steal the body of the old affine for op and erase it.
+  newPloop.region().takeBody(forOp.region());
+  forOp.erase();
+}
+
 // Returns success if any hoisting happened.
 LogicalResult mlir::hoistAffineIfOp(AffineIfOp ifOp, bool *folded) {
+  // Bail out early if the ifOp returns a result.  TODO: Consider how to
+  // properly support this case.
+  if (ifOp.getNumResults() != 0)
+    return failure();
+
   // Apply canonicalization patterns and folding - this is necessary for the
   // hoisting check to be correct (operands should be composed), and to be more
   // effective (no unused operands). Since the pattern rewriter's folding is
@@ -139,7 +159,8 @@ LogicalResult mlir::hoistAffineIfOp(AffineIfOp ifOp, bool *folded) {
   OwningRewritePatternList patterns;
   AffineIfOp::getCanonicalizationPatterns(patterns, ifOp.getContext());
   bool erased;
-  applyOpPatternsAndFold(ifOp, patterns, &erased);
+  FrozenRewritePatternList frozenPatterns(std::move(patterns));
+  applyOpPatternsAndFold(ifOp, frozenPatterns, &erased);
   if (erased) {
     if (folded)
       *folded = true;
@@ -169,7 +190,7 @@ LogicalResult mlir::hoistAffineIfOp(AffineIfOp ifOp, bool *folded) {
   // a sequence of affine.fors that are all perfectly nested).
   applyPatternsAndFoldGreedily(
       hoistedIfOp.getParentWithTrait<OpTrait::IsIsolatedFromAbove>(),
-      std::move(patterns));
+      frozenPatterns);
 
   return success();
 }

@@ -124,7 +124,7 @@ protected:
   Symbol(StringRef name, Kind k, uint32_t flags, InputFile *f)
       : name(name), file(f), symbolKind(k), referenced(!config->gcSections),
         requiresGOT(false), isUsedInRegularObj(false), forceExport(false),
-        canInline(false), traced(false), flags(flags) {}
+        canInline(false), traced(false), isStub(false), flags(flags) {}
 
   StringRef name;
   InputFile *file;
@@ -156,6 +156,11 @@ public:
 
   // True if this symbol is specified by --trace-symbol option.
   bool traced : 1;
+
+  // True if this symbol is a linker-synthesized stub function (traps when
+  // called) and should otherwise be treated as missing/undefined.  See
+  // SymbolTable::replaceWithUndefined.
+  bool isStub : 1;
 
   uint32_t flags;
 };
@@ -217,6 +222,7 @@ public:
 
   llvm::Optional<StringRef> importName;
   llvm::Optional<StringRef> importModule;
+  DefinedFunction *stubFunction = nullptr;
   bool isCalledDirectly;
 };
 
@@ -264,7 +270,7 @@ class DefinedData : public DataSymbol {
 public:
   // Constructor for regular data symbols originating from input files.
   DefinedData(StringRef name, uint32_t flags, InputFile *f,
-              InputSegment *segment, uint32_t offset, uint32_t size)
+              InputSegment *segment, uint64_t offset, uint64_t size)
       : DataSymbol(name, DefinedDataKind, flags, f), segment(segment),
         offset(offset), size(size) {}
 
@@ -275,19 +281,19 @@ public:
   static bool classof(const Symbol *s) { return s->kind() == DefinedDataKind; }
 
   // Returns the output virtual address of a defined data symbol.
-  uint32_t getVirtualAddress() const;
-  void setVirtualAddress(uint32_t va);
+  uint64_t getVirtualAddress() const;
+  void setVirtualAddress(uint64_t va);
 
   // Returns the offset of a defined data symbol within its OutputSegment.
-  uint32_t getOutputSegmentOffset() const;
-  uint32_t getOutputSegmentIndex() const;
-  uint32_t getSize() const { return size; }
+  uint64_t getOutputSegmentOffset() const;
+  uint64_t getOutputSegmentIndex() const;
+  uint64_t getSize() const { return size; }
 
   InputSegment *segment = nullptr;
+  uint32_t offset = 0;
 
 protected:
-  uint32_t offset = 0;
-  uint32_t size = 0;
+  uint64_t size = 0;
 };
 
 class UndefinedData : public DataSymbol {
@@ -411,6 +417,7 @@ public:
 
   static bool classof(const Symbol *s) { return s->kind() == LazyKind; }
   void fetch();
+  void setWeak();
   MemoryBufferRef getMemberBuffer();
 
   // Lazy symbols can have a signature because they can replace an
@@ -470,6 +477,10 @@ struct WasmSym {
   // Function that directly calls all ctors in priority order.
   static DefinedFunction *callCtors;
 
+  // __wasm_call_dtors
+  // Function that calls the libc/etc. cleanup function.
+  static DefinedFunction *callDtors;
+
   // __wasm_apply_relocs
   // Function that applies relocations to data segment post-instantiation.
   static DefinedFunction *applyRelocs;
@@ -511,7 +522,7 @@ union SymbolUnion {
 // It is important to keep the size of SymbolUnion small for performance and
 // memory usage reasons. 96 bytes is a soft limit based on the size of
 // UndefinedFunction on a 64-bit system.
-static_assert(sizeof(SymbolUnion) <= 112, "SymbolUnion too large");
+static_assert(sizeof(SymbolUnion) <= 120, "SymbolUnion too large");
 
 void printTraceSymbol(Symbol *sym);
 void printTraceSymbolUndefined(StringRef name, const InputFile* file);

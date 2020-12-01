@@ -11,8 +11,8 @@ string(REPLACE ${CMAKE_CFG_INTDIR} ${LLVM_BUILD_MODE} CLANG_TOOLS_DIR ${LLVM_RUN
 set(CLANGD_TEST_DEPS
   clangd
   ClangdTests
-  # No tests for these, but we should still make sure they build.
   clangd-indexer
+  # No tests for it, but we should still make sure they build.
   dexp
   )
 
@@ -21,7 +21,11 @@ if(CLANGD_BUILD_XPC)
   list(APPEND CLANGD_TEST_DEPS ClangdXpcUnitTests)
 endif()
 
-foreach(dep FileCheck count not)
+if(CLANGD_ENABLE_REMOTE)
+  list(APPEND CLANGD_TEST_DEPS clangd-index-server)
+endif()
+
+foreach(dep FileCheck count not llvm-config)
   if(TARGET ${dep})
     list(APPEND CLANGD_TEST_DEPS ${dep})
   endif()

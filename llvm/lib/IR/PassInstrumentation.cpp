@@ -12,10 +12,19 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/IR/PassInstrumentation.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
 
 AnalysisKey PassInstrumentationAnalysis::Key;
+
+bool isSpecialPass(StringRef PassID, const std::vector<StringRef> &Specials) {
+  size_t Pos = PassID.find('<');
+  StringRef Prefix = PassID;
+  if (Pos != StringRef::npos)
+    Prefix = PassID.substr(0, Pos);
+  return any_of(Specials, [Prefix](StringRef S) { return Prefix.endswith(S); });
+}
 
 } // namespace llvm

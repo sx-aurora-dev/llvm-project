@@ -213,7 +213,7 @@ bool NaryReassociatePass::runImpl(Function &F, AssumptionCache *AC_,
   return Changed;
 }
 
-// Whitelist the instruction types NaryReassociate handles for now.
+// Explicitly list the instruction types NaryReassociate handles for now.
 static bool isPotentiallyNaryReassociable(Instruction *I) {
   switch (I->getOpcode()) {
   case Instruction::Add:
@@ -375,8 +375,8 @@ NaryReassociatePass::tryReassociateGEPAtIndex(GetElementPtrInst *GEP,
   // Replace the I-th index with LHS.
   IndexExprs[I] = SE->getSCEV(LHS);
   if (isKnownNonNegative(LHS, *DL, 0, AC, GEP, DT) &&
-      DL->getTypeSizeInBits(LHS->getType()) <
-          DL->getTypeSizeInBits(GEP->getOperand(I)->getType())) {
+      DL->getTypeSizeInBits(LHS->getType()).getFixedSize() <
+          DL->getTypeSizeInBits(GEP->getOperand(I)->getType()).getFixedSize()) {
     // Zero-extend LHS if it is non-negative. InstCombine canonicalizes sext to
     // zext if the source operand is proved non-negative. We should do that
     // consistently so that CandidateExpr more likely appears before. See

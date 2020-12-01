@@ -14,7 +14,7 @@
 #define MLIR_DIALECT_SPIRV_SPIRVOPS_H_
 
 #include "mlir/Dialect/SPIRV/SPIRVTypes.h"
-#include "mlir/IR/Function.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/Support/PointerLikeTypeTraits.h"
@@ -28,11 +28,15 @@ class VerCapExtAttr;
 // TableGen'erated operation interfaces for querying versions, extensions, and
 // capabilities.
 #include "mlir/Dialect/SPIRV/SPIRVAvailability.h.inc"
+} // namespace spirv
+} // namespace mlir
 
 // TablenGen'erated operation declarations.
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SPIRV/SPIRVOps.h.inc"
 
+namespace mlir {
+namespace spirv {
 // TableGen'erated helper functions.
 //
 // Get the name used in the Op to refer to an enum value of the given

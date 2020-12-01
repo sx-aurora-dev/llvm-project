@@ -51,7 +51,6 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
 
   for (const auto &A : Args) {
     if (A->getOption().getKind() != Option::InputClass &&
-        !A->getOption().hasFlag(options::DriverOption) &&
         !A->getOption().hasFlag(options::LinkerInput)) {
 
       // Don't forward any -g arguments to assembly steps.
@@ -63,6 +62,11 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
       if ((isa<AssembleJobAction>(JA) || isa<LinkJobAction>(JA)) &&
           A->getOption().matches(options::OPT_W_Group))
         continue;
+
+      // Don't forward -fopenmp-targets
+      if (A->getOption().matches(options::OPT_fopenmp_targets_EQ)) {
+        continue;
+      }
 
       // Handle Preprocessor Args seperatly
       if (A->getOption().matches(options::OPT_Preprocessor_Group)) {
@@ -132,7 +136,9 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
 
   const char *Exec =
       Args.MakeArgString(getToolChain().GetProgramPath(ToolName));
-  C.addCommand(std::make_unique<Command>(JA, *this, Exec, CmdArgs, Inputs));
+  C.addCommand(std::make_unique<Command>(JA, *this,
+                                         ResponseFileSupport::AtFileCurCP(),
+                                         Exec, CmdArgs, Inputs));
 }
 
 void necauroratools::Common::anchor() {}

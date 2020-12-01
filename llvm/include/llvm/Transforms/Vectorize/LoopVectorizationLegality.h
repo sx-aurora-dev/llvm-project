@@ -198,13 +198,14 @@ class LoopVectorizationLegality {
 public:
   LoopVectorizationLegality(
       Loop *L, PredicatedScalarEvolution &PSE, DominatorTree *DT,
-      TargetTransformInfo *TTI, TargetLibraryInfo *TLI, AliasAnalysis *AA,
+      TargetTransformInfo *TTI, TargetLibraryInfo *TLI, AAResults *AA,
       Function *F, std::function<const LoopAccessInfo &(Loop &)> *GetLAA,
       LoopInfo *LI, OptimizationRemarkEmitter *ORE,
       LoopVectorizationRequirements *R, LoopVectorizeHints *H, DemandedBits *DB,
-      AssumptionCache *AC)
+      AssumptionCache *AC, BlockFrequencyInfo *BFI, ProfileSummaryInfo *PSI)
       : TheLoop(L), LI(LI), PSE(PSE), TTI(TTI), TLI(TLI), DT(DT),
-        GetLAA(GetLAA), ORE(ORE), Requirements(R), Hints(H), DB(DB), AC(AC) {}
+        GetLAA(GetLAA), ORE(ORE), Requirements(R), Hints(H), DB(DB), AC(AC),
+        BFI(BFI), PSI(PSI) {}
 
   /// ReductionList contains the reduction descriptors for all
   /// of the reductions that were found in the loop.
@@ -229,6 +230,7 @@ public:
 
   /// Return true if we can vectorize this loop while folding its tail by
   /// masking, and mark all respective loads/stores for masking.
+  /// This object's state is only modified iff this function returns true.
   bool prepareToFoldTailByMasking();
 
   /// Returns the primary induction variable.
@@ -287,6 +289,19 @@ public:
   /// Returns true if the value V is uniform within the loop.
   bool isUniform(Value *V);
 
+  /// A uniform memory op is a load or store which accesses the same memory
+  /// location on all lanes.
+  bool isUniformMemOp(Instruction &I) {
+    Value *Ptr = getLoadStorePointerOperand(&I);
+    if (!Ptr)
+      return false;
+    // Note: There's nothing inherent which prevents predicated loads and
+    // stores from being uniform.  The current lowering simply doesn't handle
+    // it; in particular, the cost model distinguishes scatter/gather from
+    // scalar w/predication, and we currently rely on the scalar path.
+    return isUniform(Ptr) && !blockNeedsPredication(I.getParent());
+  }
+
   /// Returns the information that we collected about runtime memory check.
   const RuntimePointerChecking *getRuntimePointerChecking() const {
     return LAI->getRuntimePointerChecking();
@@ -296,8 +311,8 @@ public:
 
   unsigned getMaxSafeDepDistBytes() { return LAI->getMaxSafeDepDistBytes(); }
 
-  uint64_t getMaxSafeRegisterWidth() const {
-    return LAI->getDepChecker().getMaxSafeRegisterWidth();
+  uint64_t getMaxSafeVectorWidthInBits() const {
+    return LAI->getDepChecker().getMaxSafeVectorWidthInBits();
   }
 
   bool hasStride(Value *V) { return LAI->hasStride(V); }
@@ -369,8 +384,14 @@ private:
   /// its original trip-count, under a proper guard, which should be preserved.
   /// \p SafePtrs is a list of addresses that are known to be legal and we know
   /// that we can read from them without segfault.
+  /// \p MaskedOp is a list of instructions that have to be transformed into
+  /// calls to the appropriate masked intrinsic when the loop is vectorized.
+  /// \p ConditionalAssumes is a list of assume instructions in predicated
+  /// blocks that must be dropped if the CFG gets flattened.
   bool blockCanBePredicated(BasicBlock *BB, SmallPtrSetImpl<Value *> &SafePtrs,
-                            bool PreserveGuards = false);
+                            SmallPtrSetImpl<const Instruction *> &MaskedOp,
+                            SmallPtrSetImpl<Instruction *> &ConditionalAssumes,
+                            bool PreserveGuards = false) const;
 
   /// Updates the vectorization state by adding \p Phi to the inductions list.
   /// This can set \p Phi as the main induction of the loop if \p Phi is a
@@ -478,6 +499,10 @@ private:
   /// Assume instructions in predicated blocks must be dropped if the CFG gets
   /// flattened.
   SmallPtrSet<Instruction *, 8> ConditionalAssumes;
+
+  /// BFI and PSI are used to check for profile guided size optimizations.
+  BlockFrequencyInfo *BFI;
+  ProfileSummaryInfo *PSI;
 };
 
 } // namespace llvm

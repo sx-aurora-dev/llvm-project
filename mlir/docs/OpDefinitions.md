@@ -1,11 +1,11 @@
-# Table-driven Operation Definition Specification (ODS)
+# Operation Definition Specification (ODS)
 
 In addition to specializing the `mlir::Op` C++ template, MLIR also supports
-defining operations in a table-driven manner. This is achieved via
-[TableGen][TableGen], which is both a generic language and its tooling to
+defining operations and data types in a table-driven manner. This is achieved
+via [TableGen][TableGen], which is both a generic language and its tooling to
 maintain records of domain-specific information. Facts regarding an operation
-are specified concisely into a TableGen record, which will be expanded into an
-equivalent `mlir::Op` C++ template specialization at compiler build time.
+are specified concisely into a TableGen record, which will be expanded into
+an equivalent `mlir::Op` C++ template specialization at compiler build time.
 
 This manual explains in detail all the available mechanisms for defining
 operations in such a table-driven manner. It aims to be a specification instead
@@ -57,8 +57,7 @@ including but not limited to:
 We use TableGen as the language for specifying operation information. TableGen
 itself just provides syntax for writing records; the syntax and constructs
 allowed in a TableGen file (typically with filename suffix `.td`) can be found
-[here][TableGenIntro]. The formal language specification can be found
-[here][TableGenRef]. _Roughly_ speaking,
+[here][TableGenProgRef].
 
 *   TableGen `class` is similar to C++ class; it can be templated and
     subclassed.
@@ -72,7 +71,7 @@ allowed in a TableGen file (typically with filename suffix `.td`) can be found
     be anything, including `dag` itself. We can have names attached to both the
     operator and the arguments like `(MyOp:$op_name MyArg:$arg_name)`.
 
-Please see the [language introduction][TableGenIntro] to learn about all the
+Please see the [language reference][TableGenProgRef] to learn about all the
 types and expressions supported by TableGen.
 
 ## Operation Definition
@@ -346,20 +345,20 @@ involving multiple operands/attributes/results are provided as the second
 template parameter to the `Op` class. They should be deriving from the `OpTrait`
 class. See [Constraints](#constraints) for more information.
 
-### Operation interfaces
+### Interfaces
 
-[Operation interfaces](Interfaces.md#operation-interfaces) allow
-operations to expose method calls without the
-caller needing to know the exact operation type. Operation interfaces
-defined in C++ can be accessed in the ODS framework via the
-`OpInterfaceTrait` class. Aside from using pre-existing interfaces in
-the C++ API, the ODS framework also provides a simplified mechanism
-for defining such interfaces which removes much of the boilerplate
-necessary.
+[Interfaces](Interfaces.md#attribute-operation-type-interfaces) allow for
+attributes, operations, and types to expose method calls without the caller
+needing to know the derived type. Operation interfaces defined in C++ can be
+accessed in the ODS framework via the `OpInterfaceTrait` class. Aside from using
+pre-existing interfaces in the C++ API, the ODS framework also provides a
+simplified mechanism for defining such interfaces which removes much of the
+boilerplate necessary.
 
-Providing a definition of the `OpInterface` class will auto-generate the C++
-classes for the interface. An `OpInterface` includes a name, for the C++ class,
-a description, and a list of interface methods.
+Providing a definition of the `AttrInterface`, `OpInterface`, or `TypeInterface`
+class will auto-generate the C++ classes for the interface. An interface
+includes a name, for the C++ class, a description, and a list of interface
+methods.
 
 ```tablegen
 def MyInterface : OpInterface<"MyInterface"> {
@@ -444,16 +443,17 @@ def MyInterface : OpInterface<"MyInterface"> {
     // Note: `ConcreteOp` corresponds to the derived operation typename.
     InterfaceMethod<"/*insert doc here*/",
       "unsigned", "getNumWithDefault", (ins), /*methodBody=*/[{}], [{
-        ConcreteOp op = cast<ConcreteOp>(getOperation());
+        ConcreteOp op = cast<ConcreteOp>(this->getOperation());
         return op.getNumInputs() + op.getNumOutputs();
     }]>,
   ];
 }
 
-// Interfaces can optionally be wrapped inside DeclareOpInterfaceMethods. This
-// would result in autogenerating declarations for members `foo`, `bar` and
-// `fooStatic`. Methods with bodies are not declared inside the op
-// declaration but instead handled by the op interface trait directly.
+// Operation interfaces can optionally be wrapped inside
+// DeclareOpInterfaceMethods. This would result in autogenerating declarations
+// for members `foo`, `bar` and `fooStatic`. Methods with bodies are not
+// declared inside the op declaration but instead handled by the op interface
+// trait directly.
 def OpWithInferTypeInterfaceOp : Op<...
     [DeclareOpInterfaceMethods<MyInterface>]> { ... }
 
@@ -465,9 +465,9 @@ def OpWithOverrideInferTypeInterfaceOp : Op<...
     [DeclareOpInterfaceMethods<MyInterface, ["getNumWithDefault"]>]> { ... }
 ```
 
-A verification method can also be specified on the `OpInterface` by setting
-`verify`. Setting `verify` results in the generated trait having a `verifyTrait`
-method that is applied to all operations implementing the trait.
+Operation interfaces may also provide a verification method on `OpInterface` by
+setting `verify`. Setting `verify` results in the generated trait having a
+`verifyTrait` method that is applied to all operations implementing the trait.
 
 ### Builder methods
 
@@ -526,10 +526,9 @@ static void build(OpBuilder &odsBuilder, OperationState &odsState,
                   IntegerAttr i32_attr, FloatAttr f32_attr, ...);
 
 // All operands/attributes have aggregate parameters.
-// Generated if InferTypeOpInterface interface is specified.
+// Generated if return type can be inferred.
 static void build(OpBuilder &odsBuilder, OperationState &odsState,
-                  ValueRange operands,
-                  ArrayRef<NamedAttribute> attributes);
+                  ValueRange operands, ArrayRef<NamedAttribute> attributes);
 
 // (And manually specified builders depending on the specific op.)
 ```
@@ -554,6 +553,12 @@ restrictions.) Otherwise, the builder of the third form will still be generated
 but default values for the attributes not at the end of the `arguments` list
 will not be supplied in the builder's signature.
 
+ODS will generate a builder that doesn't require return type specified if
+
+*   Op implements InferTypeOpInterface interface;
+*   All return types are either buildable types or are the same as a given
+    operand (e.g., `AllTypesMatch` constraint between operand and result);
+
 And there may potentially exist other builders depending on the specific op;
 please refer to the
 [generated C++ file](#run-mlir-tblgen-to-see-the-generated-content) for the
@@ -562,47 +567,103 @@ complete list.
 #### Custom builder methods
 
 However, if the above cases cannot satisfy all needs, you can define additional
-convenience build methods with `OpBuilder`.
-
-`OpBuilder` is a class that takes the parameter list and the optional `build()`
-method body. They are separated because we need to generate op declaration and
-definition into separate files. The parameter list should _include_ `Builder
-*builder, OperationState &state`. If the `body` is not provided, _only_ the
-builder declaration will be generated; this provides a way to define complicated
-builders entirely in C++ files.
-
-For example, for the following op:
+convenience build methods in the `builders` field as follows.
 
 ```tablegen
 def MyOp : Op<"my_op", []> {
   let arguments = (ins F32Attr:$attr);
 
-  let results = (outs);
+  let builders = [
+    OpBuilderDAG<(ins "float":$val)>
+  ];
 }
 ```
 
-If we want to define a builder with a default value for the only attribute, we
-can add into `MyOp`:
+The `builders` field is a list of custom builders that are added to the Op
+class. In this example, we provide a convenience builder that takes a floating
+point value instead of an attribute. The `ins` prefix is common to many function
+declarations in ODS, which use a TableGen [`dag`](#tablegen-syntax). What
+follows is a comma-separated list of types (quoted string) and names prefixed
+with the `$` sign. This will generate the declaration of a builder method that
+looks like:
+
+```c++
+class MyOp : /*...*/ {
+  /*...*/
+  static void build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
+                    float val);
+};
+```
+
+Note that the method has two additional leading arguments. These arguments are
+useful to construct the operation. In particular, the method must populate
+`state` with attributes, operands, regions and result types of the operation to
+be constructed. `builder` can be used to construct any IR objects that belong to
+the Op, such as types or nested operations. Since the type and name are
+generated as is in the C++ code, they should be valid C++ constructs for a type
+(in the namespace of the Op) and an identifier (e.g., `class` is not a valid
+identifier).
+
+Implementations of the builder can be provided directly in ODS, using TableGen
+code block as follows.
 
 ```tablegen
-def MyOp : ... {
-  ...
+def MyOp : Op<"my_op", []> {
+  let arguments = (ins F32Attr:$attr);
 
   let builders = [
-    OpBuilder<"OpBuilder &builder, OperationState &state, float val = 0.5f", [{
-      state.addAttribute("attr", builder.getF32FloatAttr(val));
+    OpBuilderDAG<(ins "float":$val), [{
+      $_state.addAttribute("attr", $_builder.getF32FloatAttr(val));
     }]>
   ];
 }
 ```
 
-The generated builder will look like:
+The equivalents of `builder` and `state` arguments are available as `$_builder`
+and `$_state` special variables. The named arguments listed in the `ins` part
+are available directly, e.g. `val`. The body of the builder will be generated by
+substituting special variables and should otherwise be valid C++. While there is
+no limitation on the code size, we encourage one to define only short builders
+inline in ODS and put definitions of longer builders in C++ files.
+
+Finally, if some arguments need a default value, they can be defined using
+`CArg` to wrap the type and this value as follows.
+
+```tablegen
+def MyOp : Op<"my_op", []> {
+  let arguments = (ins F32Attr:$attr);
+
+  let builders = [
+    OpBuilderDAG<(ins CArg<"float", "0.5f">:$val), [{
+      $_state.addAttribute("attr", $_builder.getF32FloatAttr(val));
+    }]>
+  ];
+}
+```
+
+The generated code will use default value in the declaration, but not in the
+definition, as required by C++.
 
 ```c++
-static void build(OpBuilder &builder, OperationState &state, float val = 0.5f) {
+/// Header file.
+class MyOp : /*...*/ {
+  /*...*/
+  static void build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
+                    float val = 0.5f);
+};
+
+/// Source file.
+MyOp::build(::mlir::OpBuilder &builder, ::mlir::OperationState &state,
+            float val) {
   state.addAttribute("attr", builder.getF32FloatAttr(val));
 }
 ```
+
+**Deprecated:** `OpBuilder` class allows one to specify the custom builder
+signature as a raw string, without separating parameters into different `dag`
+arguments. It also supports leading parameters of `OpBuilder &` and
+`OperationState &` types, which will be used instead of the autogenerated ones
+if present.
 
 ### Custom parser and printer methods
 
@@ -621,7 +682,8 @@ let verifier = [{
 ```
 
 Code placed in `verifier` will be called after the auto-generated verification
-code.
+code. The order of trait verification excluding those of `verifier` should not
+be relied upon.
 
 ### Declarative Assembly Format
 
@@ -657,6 +719,12 @@ The available directives are as follows:
     -   Represents the attribute dictionary of the operation, but prefixes the
         dictionary with an `attributes` keyword.
 
+*   `custom` < UserDirective > ( Params )
+
+    -   Represents a custom directive implemented by the user in C++.
+    -   See the [Custom Directives](#custom-directives) section below for more
+        details.
+
 *   `functional-type` ( inputs , results )
 
     -   Formats the `inputs` and `results` arguments as a
@@ -667,6 +735,10 @@ The available directives are as follows:
 *   `operands`
 
     -   Represents all of the operands of an operation.
+
+*   `regions`
+
+    -   Represents all of the regions of an operation.
 
 *   `results`
 
@@ -682,21 +754,116 @@ The available directives are as follows:
     -   `input` must be either an operand or result [variable](#variables), the
         `operands` directive, or the `results` directive.
 
+*   `type_ref` ( input )
+
+    -   Represents a reference to the type of the given input that must have
+        already been resolved.
+    -   `input` must be either an operand or result [variable](#variables), the
+        `operands` directive, or the `results` directive.
+    -   Used to pass previously parsed types to custom directives.
+
 #### Literals
 
 A literal is either a keyword or punctuation surrounded by \`\`.
 
 The following are the set of valid punctuation:
-  `:`, `,`, `=`, `<`, `>`, `(`, `)`, `[`, `]`, `->`
+
+`:`, `,`, `=`, `<`, `>`, `(`, `)`, `{`, `}`, `[`, `]`, `->`, `?`, `+`, `*`
 
 #### Variables
 
 A variable is an entity that has been registered on the operation itself, i.e.
-an argument(attribute or operand), result, successor, etc. In the `CallOp`
-example above, the variables would be `$callee` and `$args`.
+an argument(attribute or operand), region, result, successor, etc. In the
+`CallOp` example above, the variables would be `$callee` and `$args`.
 
 Attribute variables are printed with their respective value type, unless that
 value type is buildable. In those cases, the type of the attribute is elided.
+
+#### Custom Directives
+
+The declarative assembly format specification allows for handling a large
+majority of the common cases when formatting an operation. For the operations
+that require or desire specifying parts of the operation in a form not supported
+by the declarative syntax, custom directives may be specified. A custom
+directive essentially allows for users to use C++ for printing and parsing
+subsections of an otherwise declaratively specified format. Looking at the
+specification of a custom directive above:
+
+```
+custom-directive ::= `custom` `<` UserDirective `>` `(` Params `)`
+```
+
+A custom directive has two main parts: The `UserDirective` and the `Params`. A
+custom directive is transformed into a call to a `print*` and a `parse*` method
+when generating the C++ code for the format. The `UserDirective` is an
+identifier used as a suffix to these two calls, i.e., `custom<MyDirective>(...)`
+would result in calls to `parseMyDirective` and `printMyDirective` within the
+parser and printer respectively. `Params` may be any combination of variables
+(i.e. Attribute, Operand, Successor, etc.), type directives, and `attr-dict`.
+The type directives must refer to a variable, but that variable need not also
+be a parameter to the custom directive.
+
+The arguments to the `parse<UserDirective>` method are firstly a reference to
+the `OpAsmParser`(`OpAsmParser &`), and secondly a set of output parameters
+corresponding to the parameters specified in the format. The mapping of
+declarative parameter to `parse` method argument is detailed below:
+
+*   Attribute Variables
+    -   Single: `<Attribute-Storage-Type>(e.g. Attribute) &`
+    -   Optional: `<Attribute-Storage-Type>(e.g. Attribute) &`
+*   Operand Variables
+    -   Single: `OpAsmParser::OperandType &`
+    -   Optional: `Optional<OpAsmParser::OperandType> &`
+    -   Variadic: `SmallVectorImpl<OpAsmParser::OperandType> &`
+*   Region Variables
+    -   Single: `Region &`
+    -   Variadic: `SmallVectorImpl<std::unique_ptr<Region>> &`
+*   Successor Variables
+    -   Single: `Block *&`
+    -   Variadic: `SmallVectorImpl<Block *> &`
+*   Type Directives
+    -   Single: `Type &`
+    -   Optional: `Type &`
+    -   Variadic: `SmallVectorImpl<Type> &`
+*   TypeRef Directives
+    -   Single: `Type`
+    -   Optional: `Type`
+    -   Variadic: `const SmallVectorImpl<Type> &`
+*   `attr-dict` Directive: `NamedAttrList &`
+
+When a variable is optional, the value should only be specified if the variable
+is present. Otherwise, the value should remain `None` or null.
+
+The arguments to the `print<UserDirective>` method is firstly a reference to
+the `OpAsmPrinter`(`OpAsmPrinter &`), second the op (e.g. `FooOp op` which
+can be `Operation *op` alternatively), and finally a set of output parameters
+corresponding to the parameters specified in the format. The mapping of
+declarative parameter to `print` method argument is detailed below:
+
+*   Attribute Variables
+    -   Single: `<Attribute-Storage-Type>(e.g. Attribute)`
+    -   Optional: `<Attribute-Storage-Type>(e.g. Attribute)`
+*   Operand Variables
+    -   Single: `Value`
+    -   Optional: `Value`
+    -   Variadic: `OperandRange`
+*   Region Variables
+    -   Single: `Region &`
+    -   Variadic: `MutableArrayRef<Region>`
+*   Successor Variables
+    -   Single: `Block *`
+    -   Variadic: `SuccessorRange`
+*   Type Directives
+    -   Single: `Type`
+    -   Optional: `Type`
+    -   Variadic: `TypeRange`
+*   TypeRef Directives
+    -   Single: `Type`
+    -   Optional: `Type`
+    -   Variadic: `TypeRange`
+*   `attr-dict` Directive: `const MutableDictionaryAttr&`
+
+When a variable is optional, the provided value may be null.
 
 #### Optional Groups
 
@@ -706,7 +873,8 @@ of the assembly format can be marked as `optional` based on the presence of this
 information. An optional group is defined by wrapping a set of elements within
 `()` followed by a `?` and has the following requirements:
 
-*   The first element of the group must either be a literal or an operand.
+*   The first element of the group must either be a attribute, literal, operand,
+    or region.
     -   This is because the first element must be optionally parsable.
 *   Exactly one argument variable within the group must be marked as the anchor
     of the group.
@@ -714,18 +882,22 @@ information. An optional group is defined by wrapping a set of elements within
         should be printed/parsed.
     -   An element is marked as the anchor by adding a trailing `^`.
     -   The first element is *not* required to be the anchor of the group.
-*   Literals, variables, and type directives are the only valid elements within
-    the group.
+    -   When a non-variadic region anchors a group, the detector for printing
+        the group is if the region is empty.
+*   Literals, variables, custom directives, and type directives are the only
+    valid elements within the group.
     -   Any attribute variable may be used, but only optional attributes can be
         marked as the anchor.
     -   Only variadic or optional operand arguments can be used.
+    -   All region variables can be used. When a non-variable length region is
+        used, if the group is not present the region is empty.
     -   The operands to a type directive must be defined within the optional
         group.
 
 An example of an operation with an optional group is `std.return`, which has a
 variadic number of operands.
 
-```
+```tablegen
 def ReturnOp : ... {
   let arguments = (ins Variadic<AnyType>:$operands);
 
@@ -735,23 +907,57 @@ def ReturnOp : ... {
 }
 ```
 
+##### Unit Attributes
+
+In MLIR, the [`unit` Attribute](LangRef.md#unit-attribute) is special in that it
+only has one possible value, i.e. it derives meaning from its existence. When a
+unit attribute is used to anchor an optional group and is not the first element
+of the group, the presence of the unit attribute can be directly correlated with
+the presence of the optional group itself. As such, in these situations the unit
+attribute will not be printed or present in the output and will be automatically
+inferred when parsing by the presence of the optional group itself.
+
+For example, the following operation:
+
+```tablegen
+def FooOp : ... {
+  let arguments = (ins UnitAttr:$is_read_only);
+
+  let assemblyFormat = "attr-dict (`is_read_only` $is_read_only^)?";
+}
+```
+
+would be formatted as such:
+
+```mlir
+// When the unit attribute is present:
+foo.op is_read_only
+
+// When the unit attribute is not present:
+foo.op
+```
+
 #### Requirements
 
 The format specification has a certain set of requirements that must be adhered
 to:
 
-1. The output and operation name are never shown as they are fixed and cannot be
-   altered.
-1. All operands within the operation must appear within the format, either
-   individually or with the `operands` directive.
-1. All operand and result types must appear within the format using the various
-   `type` directives, either individually or with the `operands` or `results`
-   directives.
-1. The `attr-dict` directive must always be present.
-1. Must not contain overlapping information; e.g. multiple instances of
-   'attr-dict', types, operands, etc.
-   -  Note that `attr-dict` does not overlap with individual attributes. These
-      attributes will simply be elided when printing the attribute dictionary.
+1.  The output and operation name are never shown as they are fixed and cannot
+    be altered.
+1.  All operands within the operation must appear within the format, either
+    individually or with the `operands` directive.
+1.  All regions within the operation must appear within the format, either
+    individually or with the `regions` directive.
+1.  All successors within the operation must appear within the format, either
+    individually or with the `successors` directive.
+1.  All operand and result types must appear within the format using the various
+    `type` directives, either individually or with the `operands` or `results`
+    directives.
+1.  The `attr-dict` directive must always be present.
+1.  Must not contain overlapping information; e.g. multiple instances of
+    'attr-dict', types, operands, etc.
+    -   Note that `attr-dict` does not overlap with individual attributes. These
+        attributes will simply be elided when printing the attribute dictionary.
 
 ##### Type Inference
 
@@ -773,8 +979,8 @@ There are many operations that have known type equality constraints registered
 as traits on the operation; for example the true, false, and result values of a
 `select` operation often have the same type. The assembly format may inspect
 these equal constraints to discern the types of missing variables. The currently
-supported traits are: `AllTypesMatch`, `SameTypeOperands`, and
-`SameOperandsAndResultType`.
+supported traits are: `AllTypesMatch`, `TypesMatchWith`, `SameTypeOperands`,
+and `SameOperandsAndResultType`.
 
 ### `hasCanonicalizer`
 
@@ -842,9 +1048,8 @@ to access them. For example, for a binary arithmetic operation, it may provide
 `.lhs()` to access the first operand and `.rhs()` to access the second operand.
 
 The operand adaptor class lives in the same namespace as the operation class,
-and has the name of the operation followed by `OperandAdaptor`. A template
-declaration `OperandAdaptor<>` is provided to look up the operand adaptor for
-the given operation.
+and has the name of the operation followed by `Adaptor` as well as an alias
+`Adaptor` inside the op class.
 
 Operand adaptors can be used in function templates that also process operations:
 
@@ -856,7 +1061,7 @@ std::pair<Value, Value> zip(BinaryOpTy &&op) {
 
 void process(AddOp op, ArrayRef<Value> newOperands) {
   zip(op);
-  zip(OperandAdaptor<AddOp>(newOperands));
+  zip(Adaptor<AddOp>(newOperands));
   /*...*/
 }
 ```
@@ -958,9 +1163,9 @@ is used. They serve as "hooks" to the enclosing environment.  This includes
   replaced by the operand/result's type. E.g., for `F32` in `F32:$operand`, its
   `$_self` will be expanded as `getOperand(...).getType()`.
 
-TODO(b/130663252): Reconsider the leading symbol for special placeholders.
-Eventually we want to allow referencing operand/result $-names; such $-names
-can start with underscore.
+TODO: Reconsider the leading symbol for special placeholders. Eventually we want
+to allow referencing operand/result $-names; such $-names can start with
+underscore.
 
 For example, to write an attribute `attr` is an `IntegerAttr`, in C++ you can
 just call `attr.isa<IntegerAttr>()`. The code can be wrapped in a `CPred` as
@@ -1041,7 +1246,7 @@ to convert between the internal storage and the helper method.
 
 ### Attribute decorators
 
-There are a few important attribute adapters/decorators/modifers that can be
+There are a few important attribute adapters/decorators/modifiers that can be
 applied to ODS attributes to specify common additional properties like
 optionality, default values, etc.:
 
@@ -1263,6 +1468,173 @@ llvm::Optional<MyBitEnum> symbolizeMyBitEnum(uint32_t value) {
 }
 ```
 
+## Type Definitions
+
+MLIR defines the TypeDef class hierarchy to enable generation of data types
+from their specifications. A type is defined by specializing the TypeDef
+class with concrete contents for all the fields it requires. For example, an
+integer type could be defined as:
+
+```tablegen
+// All of the types will extend this class.
+class Test_Type<string name> : TypeDef<Test_Dialect, name> { }
+
+// An alternate int type.
+def IntegerType : Test_Type<"TestInteger"> {
+  let mnemonic = "int";
+
+  let summary = "An integer type with special semantics";
+
+  let description = [{
+    An alternate integer type. This type differentiates itself from the
+    standard integer type by not having a SignednessSemantics parameter, just
+    a width.
+  }];
+
+  let parameters = (ins "unsigned":$width);
+
+  // We define the printer inline.
+  let printer = [{
+    $_printer << "int<" << getImpl()->width << ">";
+  }];
+
+  // The parser is defined here also.
+  let parser = [{
+    if (parser.parseLess())
+      return Type();
+    int width;
+    if ($_parser.parseInteger(width))
+      return Type();
+    if ($_parser.parseGreater())
+      return Type();
+    return get(ctxt, width);
+  }];
+```
+
+### Type name
+
+The name of the C++ class which gets generated defaults to
+`<classParamName>Type` (e.g. `TestIntegerType` in the above example). This
+can be overridden via the `cppClassName` field. The field `mnemonic` is
+to specify the asm name for parsing. It is optional and not specifying it
+will imply that no parser or printer methods are attached to this class.
+
+### Type documentation
+
+The `summary` and `description` fields exist and are to be used the same way
+as in Operations. Namely, the summary should be a one-liner and `description`
+should be a longer explanation.
+
+### Type parameters
+
+The `parameters` field is a list of the types parameters. If no parameters
+are specified (the default), this type is considered a singleton type.
+Parameters are in the `"c++Type":$paramName` format.
+To use C++ types as parameters which need allocation in the storage
+constructor, there are two options:
+
+- Set `hasCustomStorageConstructor` to generate the TypeStorage class with
+a constructor which is just declared -- no definition -- so you can write it
+yourself.
+- Use the `TypeParameter` tablegen class instead of the "c++Type" string.
+
+### TypeParameter tablegen class
+
+This is used to further specify attributes about each of the types
+parameters. It includes documentation (`description` and `syntax`), the C++
+type to use, and a custom allocator to use in the storage constructor method.
+
+```tablegen
+// DO NOT DO THIS!
+let parameters = (ins
+  "ArrayRef<int>":$dims);
+```
+
+The default storage constructor blindly copies fields by value. It does not
+know anything about the types. In this case, the ArrayRef<int> requires
+allocation with `dims = allocator.copyInto(dims)`.
+
+You can specify the necessary constructor by specializing the `TypeParameter`
+tblgen class:
+
+```tablegen
+class ArrayRefIntParam :
+    TypeParameter<"::llvm::ArrayRef<int>", "Array of ints"> {
+  let allocator = [{$_dst = $_allocator.copyInto($_self);}];
+}
+
+...
+
+let parameters = (ins
+  ArrayRefIntParam:$dims);
+```
+
+The `allocator` code block has the following substitutions:
+- `$_allocator` is the TypeStorageAllocator in which to allocate objects.
+- `$_dst` is the variable in which to place the allocated data.
+
+MLIR includes several specialized classes for common situations:
+- `StringRefParameter<descriptionOfParam>` for StringRefs.
+- `ArrayRefParameter<arrayOf, descriptionOfParam>` for ArrayRefs of value
+types
+- `SelfAllocationParameter<descriptionOfParam>` for C++ classes which contain
+a method called `allocateInto(StorageAllocator &allocator)` to allocate
+itself into `allocator`.
+- `ArrayRefOfSelfAllocationParameter<arrayOf, descriptionOfParam>` for arrays
+of objects which self-allocate as per the last specialization.
+
+If we were to use one of these included specializations:
+
+```tablegen
+let parameters = (ins
+  ArrayRefParameter<"int", "The dimensions">:$dims
+);
+```
+
+### Parsing and printing
+
+If a mnemonic is specified, the `printer` and `parser` code fields are active.
+The rules for both are:
+- If null, generate just the declaration.
+- If non-null and non-empty, use the code in the definition. The `$_printer`
+or `$_parser` substitutions are valid and should be used.
+- It is an error to have an empty code block.
+
+For each dialect, two "dispatch" functions will be created: one for parsing
+and one for printing. You should add calls to these in your
+`Dialect::printType` and `Dialect::parseType` methods. They are created in
+the dialect's namespace and their function signatures are:
+```c++
+Type generatedTypeParser(MLIRContext* ctxt, DialectAsmParser& parser,
+                         StringRef mnemonic);
+LogicalResult generatedTypePrinter(Type type, DialectAsmPrinter& printer);
+```
+
+The mnemonic, parser, and printer fields are optional. If they're not
+defined, the generated code will not include any parsing or printing code and
+omit the type from the dispatch functions above. In this case, the dialect
+author is responsible for parsing/printing the types in `Dialect::printType`
+and `Dialect::parseType`.
+
+### Other fields
+
+- If the `genStorageClass` field is set to 1 (the default) a storage class is
+generated with member variables corresponding to each of the specified
+`parameters`.
+- If the `genAccessors` field is 1 (the default) accessor methods will be
+generated on the Type class (e.g. `int getWidth() const` in the example
+above).
+- If the `genVerifyInvariantsDecl` field is set, a declaration for a method
+`static LogicalResult verifyConstructionInvariants(Location, parameters...)`
+is added to the class as well as a `getChecked(Location, parameters...)`
+method which gets the result of `verifyConstructionInvariants` before calling
+`get`.
+- The `storageClass` field can be used to set the name of the storage class.
+- The `storageNamespace` field is used to set the namespace where the storage
+class should sit. Defaults to "detail".
+- The `extraClassDeclaration` field is used to include extra code in the
+class declaration.
+
 ## Debugging Tips
 
 ### Run `mlir-tblgen` to see the generated content
@@ -1358,8 +1730,7 @@ requirements that were desirable:
     TODO: document expectation if the dependent op's definition changes.
 
 [TableGen]: https://llvm.org/docs/TableGen/index.html
-[TableGenIntro]: https://llvm.org/docs/TableGen/LangIntro.html
-[TableGenRef]: https://llvm.org/docs/TableGen/LangRef.html
+[TableGenProgRef]: https://llvm.org/docs/TableGen/ProgRef.html
 [TableGenBackend]: https://llvm.org/docs/TableGen/BackEnds.html#introduction
 [OpBase]: https://github.com/llvm/llvm-project/blob/master/mlir/include/mlir/IR/OpBase.td
 [OpDefinitionsGen]: https://github.com/llvm/llvm-project/blob/master/mlir/tools/mlir-tblgen/OpDefinitionsGen.cpp

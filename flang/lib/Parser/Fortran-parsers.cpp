@@ -116,7 +116,8 @@ TYPE_PARSER(first(
     construct<ImplicitPartStmt>(statement(indirect(parameterStmt))),
     construct<ImplicitPartStmt>(statement(indirect(oldParameterStmt))),
     construct<ImplicitPartStmt>(statement(indirect(formatStmt))),
-    construct<ImplicitPartStmt>(statement(indirect(entryStmt)))))
+    construct<ImplicitPartStmt>(statement(indirect(entryStmt))),
+    construct<ImplicitPartStmt>(indirect(compilerDirective))))
 
 // R512 internal-subprogram -> function-subprogram | subroutine-subprogram
 // Internal subprograms are not program units, so their END statements
@@ -643,9 +644,8 @@ constexpr auto objectName{name};
 TYPE_PARSER(construct<EntityDecl>(objectName, maybe(arraySpec),
     maybe(coarraySpec), maybe("*" >> charLength), maybe(initialization)))
 
-// R806 null-init -> function-reference
-// TODO: confirm in semantics that NULL still intrinsic in this scope
-TYPE_PARSER(construct<NullInit>("NULL ( )"_tok) / !"("_tok)
+// R806 null-init -> function-reference   ... which must resolve to NULL()
+TYPE_PARSER(lookAhead(name / "( )") >> construct<NullInit>(expr))
 
 // R807 access-spec -> PUBLIC | PRIVATE
 TYPE_PARSER(construct<AccessSpec>("PUBLIC" >> pure(AccessSpec::Kind::Public)) ||
@@ -826,7 +826,11 @@ TYPE_PARSER(construct<DataStmtRepeat>(intLiteralConstant) ||
 // R845 data-stmt-constant ->
 //        scalar-constant | scalar-constant-subobject |
 //        signed-int-literal-constant | signed-real-literal-constant |
-//        null-init | initial-data-target | structure-constructor
+//        null-init | initial-data-target |
+//        constant-structure-constructor
+// null-init and a structure-constructor without parameters or components
+// are syntactically ambiguous in DATA, so "x()" is misparsed into a
+// null-init then fixed up later in expression semantics.
 // TODO: Some structure constructors can be misrecognized as array
 // references into constant subobjects.
 TYPE_PARSER(sourced(first(
@@ -1171,9 +1175,11 @@ constexpr auto endDirective{space >> endOfLine};
 constexpr auto ignore_tkr{
     "DIR$ IGNORE_TKR" >> optionalList(construct<CompilerDirective::IgnoreTKR>(
                              defaulted(parenthesized(some("tkr"_ch))), name))};
-TYPE_PARSER(
-    beginDirective >> sourced(construct<CompilerDirective>(ignore_tkr) ||
-                          construct<CompilerDirective>("DIR$" >> many(name))) /
+TYPE_PARSER(beginDirective >>
+    sourced(construct<CompilerDirective>(ignore_tkr) ||
+        construct<CompilerDirective>(
+            "DIR$" >> many(construct<CompilerDirective::NameValue>(name,
+                          maybe(("="_tok || ":"_tok) >> digitString64))))) /
         endDirective)
 
 TYPE_PARSER(extension<LanguageFeature::CrayPointer>(construct<BasedPointerStmt>(
@@ -1184,7 +1190,7 @@ TYPE_PARSER(extension<LanguageFeature::CrayPointer>(construct<BasedPointerStmt>(
 TYPE_PARSER(construct<StructureStmt>("STRUCTURE /" >> name / "/", pure(true),
                 optionalList(entityDecl)) ||
     construct<StructureStmt>(
-        "STRUCTURE" >> name, pure(false), defaulted(cut >> many(entityDecl))))
+        "STRUCTURE" >> name, pure(false), pure<std::list<EntityDecl>>()))
 
 TYPE_PARSER(construct<StructureField>(statement(StructureComponents{})) ||
     construct<StructureField>(indirect(Parser<Union>{})) ||

@@ -28,6 +28,9 @@ endforeach(lib)
 if(intrinsics_gen IN_LIST LLVM_COMMON_DEPENDS)
   list(REMOVE_ITEM LLVM_COMMON_DEPENDS intrinsics_gen)
 endif()
+if(omp_gen IN_LIST LLVM_COMMON_DEPENDS)
+  list(REMOVE_ITEM LLVM_COMMON_DEPENDS omp_gen)
+endif()
 
 # Generate LLVMConfig.cmake for the build tree.
 set(LLVM_CONFIG_CODE "
@@ -90,7 +93,6 @@ set(llvm_config_include_buildtree_only_exports)
 file(COPY .
   DESTINATION ${llvm_cmake_builddir}
   FILES_MATCHING PATTERN *.cmake
-  PATTERN .svn EXCLUDE
   PATTERN CMakeFiles EXCLUDE
   )
 
@@ -149,7 +151,6 @@ if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
     DESTINATION ${LLVM_INSTALL_PACKAGE_DIR}
     COMPONENT cmake-exports
     FILES_MATCHING PATTERN *.cmake
-    PATTERN .svn EXCLUDE
     PATTERN LLVMConfig.cmake EXCLUDE
     PATTERN LLVMConfigExtensions.cmake EXCLUDE
     PATTERN LLVMConfigVersion.cmake EXCLUDE

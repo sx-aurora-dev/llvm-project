@@ -15,6 +15,7 @@
 
 #include "Protocol.h"
 #include "support/Context.h"
+#include "support/ThreadsafeFS.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/LangOptions.h"
 #include "clang/Basic/SourceLocation.h"
@@ -167,7 +168,7 @@ llvm::Optional<std::string> getCanonicalPath(const FileEntry *F,
 /// though the latter may have been overridden in main()!
 format::FormatStyle getFormatStyleForFile(llvm::StringRef File,
                                           llvm::StringRef Content,
-                                          llvm::vfs::FileSystem *FS);
+                                          const ThreadsafeFS &TFS);
 
 /// Cleanup and format the given replacements.
 llvm::Expected<tooling::Replacements>
@@ -179,6 +180,8 @@ cleanupAndFormat(StringRef Code, const tooling::Replacements &Replaces,
 struct Edit {
   tooling::Replacements Replacements;
   std::string InitialCode;
+
+  Edit() = default;
 
   Edit(llvm::StringRef Code, tooling::Replacements Reps)
       : Replacements(std::move(Reps)), InitialCode(Code) {}
@@ -245,6 +248,10 @@ struct SpelledWord {
                                               const LangOptions &LangOpts);
 };
 
+/// Return true if the \p TokenName is in the list of reversed keywords of the
+/// language.
+bool isKeyword(llvm::StringRef TokenName, const LangOptions &LangOpts);
+
 /// Heuristically determine namespaces visible at a point, without parsing Code.
 /// This considers using-directives and enclosing namespace-declarations that
 /// are visible (and not obfuscated) in the file itself (not headers).
@@ -292,6 +299,10 @@ EligibleRegion getEligiblePoints(llvm::StringRef Code,
 struct DefinedMacro {
   llvm::StringRef Name;
   const MacroInfo *Info;
+  /// Location of the identifier that names the macro.
+  /// Unlike Info->Location, this translates preamble-patch locations to
+  /// main-file locations.
+  SourceLocation NameLoc;
 };
 /// Gets the macro referenced by \p SpelledTok. It must be a spelled token
 /// aligned to the beginning of an identifier.

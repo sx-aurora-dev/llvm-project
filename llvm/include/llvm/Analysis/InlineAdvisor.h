@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "llvm/Analysis/InlineCost.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/IR/PassManager.h"
 
 namespace llvm {
@@ -23,8 +24,10 @@ class Function;
 class Module;
 class OptimizationRemarkEmitter;
 
-/// There are 3 scenarios we can use the InlineAdvisor:
+/// There are 4 scenarios we can use the InlineAdvisor:
 /// - Default - use manual heuristics.
+///
+/// - MandatoryOnly - only mandatory inlinings (i.e. AlwaysInline).
 ///
 /// - Release mode, the expected mode for production, day to day deployments.
 /// In this mode, when building the compiler, we also compile a pre-trained ML
@@ -36,7 +39,12 @@ class OptimizationRemarkEmitter;
 /// requires the full C Tensorflow API library, and evaluates models
 /// dynamically. This mode also permits generating training logs, for offline
 /// training.
-enum class InliningAdvisorMode : int { Default, Release, Development };
+enum class InliningAdvisorMode : int {
+  Default,
+  MandatoryOnly,
+  Release,
+  Development
+};
 
 class InlineAdvisor;
 /// Capture state between an inlining decision having had been made, and
@@ -48,6 +56,9 @@ class InlineAdvisor;
 /// obligations.
 class InlineAdvice {
 public:
+  InlineAdvice(InlineAdvisor *Advisor, CallBase &CB,
+               OptimizationRemarkEmitter &ORE, bool IsInliningRecommended);
+
   InlineAdvice(InlineAdvice &&) = delete;
   InlineAdvice(const InlineAdvice &) = delete;
   virtual ~InlineAdvice() {
@@ -81,11 +92,10 @@ public:
 
   /// Get the inlining recommendation.
   bool isInliningRecommended() const { return IsInliningRecommended; }
+  const DebugLoc &getOriginalCallSiteDebugLoc() const { return DLoc; }
+  const BasicBlock *getOriginalCallSiteBasicBlock() const { return Block; }
 
 protected:
-  InlineAdvice(InlineAdvisor *Advisor, CallBase &CB,
-               bool IsInliningRecommended);
-
   virtual void recordInliningImpl() {}
   virtual void recordInliningWithCalleeDeletedImpl() {}
   virtual void recordUnsuccessfulInliningImpl(const InlineResult &Result) {}
@@ -95,6 +105,13 @@ protected:
   /// Caller and Callee are pre-inlining.
   Function *const Caller;
   Function *const Callee;
+
+  // Capture the context of CB before inlining, as a successful inlining may
+  // change that context, and we want to report success or failure in the
+  // original context.
+  const DebugLoc DLoc;
+  const BasicBlock *const Block;
+  OptimizationRemarkEmitter &ORE;
   const bool IsInliningRecommended;
 
 private:
@@ -116,8 +133,7 @@ public:
   /// inline or not. \p CB is assumed to be a direct call. \p FAM is assumed to
   /// be up-to-date wrt previous inlining decisions.
   /// Returns an InlineAdvice with the inlining recommendation.
-  virtual std::unique_ptr<InlineAdvice>
-  getAdvice(CallBase &CB, FunctionAnalysisManager &FAM) = 0;
+  virtual std::unique_ptr<InlineAdvice> getAdvice(CallBase &CB) = 0;
 
   /// This must be called when the Inliner pass is entered, to allow the
   /// InlineAdvisor update internal state, as result of function passes run
@@ -130,7 +146,9 @@ public:
   virtual void onPassExit() {}
 
 protected:
-  InlineAdvisor() = default;
+  InlineAdvisor(FunctionAnalysisManager &FAM) : FAM(FAM) {}
+
+  FunctionAnalysisManager &FAM;
 
   /// We may want to defer deleting functions to after the inlining for a whole
   /// module has finished. This allows us to reliably use function pointers as
@@ -141,14 +159,14 @@ protected:
   /// after each SCC inlining (e.g. argument promotion does that).
   void freeDeletedFunctions();
 
-  bool isFunctionDeleted(Function *F) const {
+  bool isFunctionDeleted(const Function *F) const {
     return DeletedFunctions.count(F);
   }
 
 private:
   friend class InlineAdvice;
   void markFunctionAsDeleted(Function *F);
-  std::unordered_set<Function *> DeletedFunctions;
+  std::unordered_set<const Function *> DeletedFunctions;
 };
 
 /// The default (manual heuristics) implementation of the InlineAdvisor. This
@@ -156,14 +174,29 @@ private:
 /// reusable as-is for inliner pass test scenarios, as well as for regular use.
 class DefaultInlineAdvisor : public InlineAdvisor {
 public:
-  DefaultInlineAdvisor(InlineParams Params) : Params(Params) {}
+  DefaultInlineAdvisor(FunctionAnalysisManager &FAM, InlineParams Params)
+      : InlineAdvisor(FAM), Params(Params) {}
 
 private:
-  std::unique_ptr<InlineAdvice>
-  getAdvice(CallBase &CB, FunctionAnalysisManager &FAM) override;
+  std::unique_ptr<InlineAdvice> getAdvice(CallBase &CB) override;
 
   void onPassExit() override { freeDeletedFunctions(); }
+
   InlineParams Params;
+};
+
+/// Advisor recommending only mandatory (AlwaysInline) cases.
+class MandatoryInlineAdvisor final : public InlineAdvisor {
+  std::unique_ptr<InlineAdvice> getAdvice(CallBase &CB) override;
+
+public:
+  MandatoryInlineAdvisor(FunctionAnalysisManager &FAM) : InlineAdvisor(FAM) {}
+
+  enum class MandatoryInliningKind { NotMandatory, Always, Never };
+
+  static MandatoryInliningKind getMandatoryKind(CallBase &CB,
+                                                FunctionAnalysisManager &FAM,
+                                                OptimizationRemarkEmitter &ORE);
 };
 
 /// The InlineAdvisorAnalysis is a module pass because the InlineAdvisor
@@ -173,7 +206,7 @@ public:
   static AnalysisKey Key;
   InlineAdvisorAnalysis() = default;
   struct Result {
-    Result(Module &M, ModuleAnalysisManager &MAM) {}
+    Result(Module &M, ModuleAnalysisManager &MAM) : M(M), MAM(MAM) {}
     bool invalidate(Module &, const PreservedAnalyses &,
                     ModuleAnalysisManager::Invalidator &) {
       // InlineAdvisor must be preserved across analysis invalidations.
@@ -184,11 +217,24 @@ public:
     void clear() { Advisor.reset(); }
 
   private:
+    Module &M;
+    ModuleAnalysisManager &MAM;
     std::unique_ptr<InlineAdvisor> Advisor;
   };
 
   Result run(Module &M, ModuleAnalysisManager &MAM) { return Result(M, MAM); }
 };
+
+#ifdef LLVM_HAVE_TF_AOT
+std::unique_ptr<InlineAdvisor>
+getReleaseModeAdvisor(Module &M, ModuleAnalysisManager &MAM);
+#endif
+
+#ifdef LLVM_HAVE_TF_API
+std::unique_ptr<InlineAdvisor>
+getDevelopmentModeAdvisor(Module &M, ModuleAnalysisManager &MAM,
+                          std::function<bool(CallBase &)> GetDefaultAdvice);
+#endif
 
 // Default (manual policy) decision making helper APIs. Shared with the legacy
 // pass manager inliner.
@@ -199,12 +245,20 @@ public:
 /// inlining should not be attempted.
 Optional<InlineCost>
 shouldInline(CallBase &CB, function_ref<InlineCost(CallBase &CB)> GetInlineCost,
-             OptimizationRemarkEmitter &ORE);
+             OptimizationRemarkEmitter &ORE, bool EnableDeferral = true);
 
 /// Emit ORE message.
 void emitInlinedInto(OptimizationRemarkEmitter &ORE, DebugLoc DLoc,
                      const BasicBlock *Block, const Function &Callee,
-                     const Function &Caller, const InlineCost &IC);
+                     const Function &Caller, const InlineCost &IC,
+                     bool ForProfileContext = false,
+                     const char *PassName = nullptr);
+
+/// get call site location as string
+std::string getCallSiteLocation(DebugLoc DLoc);
+
+/// Add location info to ORE message.
+void addLocationToRemarks(OptimizationRemark &Remark, DebugLoc DLoc);
 
 /// Set the inline-remark attribute.
 void setInlineRemark(CallBase &CB, StringRef Message);

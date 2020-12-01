@@ -26,6 +26,11 @@ class SPV_LogicalBinaryOp<string mnemonic, Type operandsType,
                                 SameOperandsAndResultShape])> {
   let parser = [{ return ::parseLogicalBinaryOp(parser, result); }];
   let printer = [{ return ::printLogicalOp(getOperation(), p); }];
+
+  let builders = [
+    OpBuilderDAG<(ins "Value":$lhs, "Value":$rhs),
+    [{::buildLogicalBinaryOp($_builder, $_state, lhs, rhs);}]>
+  ];
 }
 
 class SPV_LogicalUnaryOp<string mnemonic, Type operandType,
@@ -854,9 +859,8 @@ def SPV_SelectOp : SPV_Op<"Select",
     SPV_SelectType:$result
   );
 
-  let builders = [OpBuilder<[{OpBuilder &builder, OperationState &state,
-                              Value cond, Value trueValue,
-                              Value falseValue}]>];
+  let builders = [
+    OpBuilderDAG<(ins "Value":$cond, "Value":$trueValue, "Value":$falseValue)>];
 
   let assemblyFormat = [{
     operands attr-dict `:` type($condition) `,` type($result)

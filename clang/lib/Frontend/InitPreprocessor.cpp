@@ -403,6 +403,12 @@ static void InitializeStandardPredefinedMacros(const TargetInfo &TI,
     Builder.defineMacro("__STDCPP_DEFAULT_NEW_ALIGNMENT__",
                         Twine(TI.getNewAlign() / TI.getCharWidth()) +
                             TI.getTypeConstantSuffix(TI.getSizeType()));
+
+    //   -- __STDCPP_­THREADS__
+    //      Defined, and has the value integer literal 1, if and only if a
+    //      program can have more than one thread of execution.
+    if (LangOpts.getThreadModel() == LangOptions::ThreadModelKind::POSIX)
+      Builder.defineMacro("__STDCPP_THREADS__", "1");
   }
 
   // In C11 these are environment macros. In C++11 they are only defined
@@ -445,6 +451,9 @@ static void InitializeStandardPredefinedMacros(const TargetInfo &TI,
       case 200:
         Builder.defineMacro("__OPENCL_C_VERSION__", "200");
         break;
+      case 300:
+        Builder.defineMacro("__OPENCL_C_VERSION__", "300");
+        break;
       default:
         llvm_unreachable("Unsupported OpenCL version");
       }
@@ -453,6 +462,7 @@ static void InitializeStandardPredefinedMacros(const TargetInfo &TI,
     Builder.defineMacro("CL_VERSION_1_1", "110");
     Builder.defineMacro("CL_VERSION_1_2", "120");
     Builder.defineMacro("CL_VERSION_2_0", "200");
+    Builder.defineMacro("CL_VERSION_3_0", "300");
 
     if (TI.isLittleEndian())
       Builder.defineMacro("__ENDIAN_LITTLE__");
@@ -1076,12 +1086,12 @@ static void InitializePredefinedMacros(const TargetInfo &TI,
     case 40:
       Builder.defineMacro("_OPENMP", "201307");
       break;
-    case 50:
-      Builder.defineMacro("_OPENMP", "201811");
+    case 45:
+      Builder.defineMacro("_OPENMP", "201511");
       break;
     default:
-      // Default version is OpenMP 4.5
-      Builder.defineMacro("_OPENMP", "201511");
+      // Default version is OpenMP 5.0
+      Builder.defineMacro("_OPENMP", "201811");
       break;
     }
   }

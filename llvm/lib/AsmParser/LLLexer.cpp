@@ -531,6 +531,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(undef);
   KEYWORD(null);
   KEYWORD(none);
+  KEYWORD(poison);
   KEYWORD(to);
   KEYWORD(caller);
   KEYWORD(within);
@@ -624,6 +625,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(amdgpu_ps);
   KEYWORD(amdgpu_cs);
   KEYWORD(amdgpu_kernel);
+  KEYWORD(amdgpu_gfx);
   KEYWORD(tailcc);
 
   KEYWORD(cc);
@@ -664,6 +666,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(noreturn);
   KEYWORD(nosync);
   KEYWORD(nocf_check);
+  KEYWORD(noundef);
   KEYWORD(nounwind);
   KEYWORD(null_pointer_is_valid);
   KEYWORD(optforfuzzing);
@@ -696,6 +699,8 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(writeonly);
   KEYWORD(zeroext);
   KEYWORD(immarg);
+  KEYWORD(byref);
+  KEYWORD(mustprogress);
 
   KEYWORD(type);
   KEYWORD(opaque);
@@ -720,6 +725,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(vscale);
   KEYWORD(x);
   KEYWORD(blockaddress);
+  KEYWORD(dso_local_equivalent);
 
   // Metadata types.
   KEYWORD(distinct);
@@ -741,6 +747,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(name);
   KEYWORD(summaries);
   KEYWORD(flags);
+  KEYWORD(blockcount);
   KEYWORD(linkage);
   KEYWORD(notEligibleToImport);
   KEYWORD(live);
@@ -757,6 +764,8 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(alwaysInline);
   KEYWORD(calls);
   KEYWORD(callee);
+  KEYWORD(params);
+  KEYWORD(param);
   KEYWORD(hotness);
   KEYWORD(unknown);
   KEYWORD(hot);

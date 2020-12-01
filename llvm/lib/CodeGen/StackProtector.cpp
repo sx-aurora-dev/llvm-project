@@ -170,7 +170,8 @@ bool StackProtector::HasAddressTaken(const Instruction *AI,
     // If this instruction accesses memory make sure it doesn't access beyond
     // the bounds of the allocated object.
     Optional<MemoryLocation> MemLoc = MemoryLocation::getOrNone(I);
-    if (MemLoc.hasValue() && MemLoc->Size.getValue() > AllocSize)
+    if (MemLoc.hasValue() && MemLoc->Size.hasValue() &&
+        MemLoc->Size.getValue() > AllocSize)
       return true;
     switch (I->getOpcode()) {
     case Instruction::Store:
@@ -251,10 +252,9 @@ bool StackProtector::HasAddressTaken(const Instruction *AI,
 static const CallInst *findStackProtectorIntrinsic(Function &F) {
   for (const BasicBlock &BB : F)
     for (const Instruction &I : BB)
-      if (const CallInst *CI = dyn_cast<CallInst>(&I))
-        if (CI->getCalledFunction() ==
-            Intrinsic::getDeclaration(F.getParent(), Intrinsic::stackprotector))
-          return CI;
+      if (const auto *II = dyn_cast<IntrinsicInst>(&I))
+        if (II->getIntrinsicID() == Intrinsic::stackprotector)
+          return II;
   return nullptr;
 }
 
@@ -381,7 +381,10 @@ bool StackProtector::RequiresStackProtector() {
 static Value *getStackGuard(const TargetLoweringBase *TLI, Module *M,
                             IRBuilder<> &B,
                             bool *SupportsSelectionDAGSP = nullptr) {
-  if (Value *Guard = TLI->getIRStackGuard(B))
+  Value *Guard = TLI->getIRStackGuard(B);
+  auto GuardMode = TLI->getTargetMachine().Options.StackProtectorGuard;
+  if ((GuardMode == llvm::StackProtectorGuards::TLS ||
+       GuardMode == llvm::StackProtectorGuards::None) && Guard)
     return B.CreateLoad(B.getInt8PtrTy(), Guard, true, "StackGuard");
 
   // Use SelectionDAG SSP handling, since there isn't an IR guard.

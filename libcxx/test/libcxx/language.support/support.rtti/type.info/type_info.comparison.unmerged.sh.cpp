@@ -6,12 +6,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: -fno-rtti
+// UNSUPPORTED: no-rtti
 
-// FILE_DEPENDENCIES: %t.exe
-// RUN: %{cxx} %s %{flags} %{compile_flags} -c -o %t.tu1.o -DTU1 -D_LIBCPP_HAS_MERGED_TYPEINFO_NAMES_DEFAULT=0
-// RUN: %{cxx} %s %{flags} %{compile_flags} -c -o %t.tu2.o -DTU2 -D_LIBCPP_HAS_MERGED_TYPEINFO_NAMES_DEFAULT=0
-// RUN: %{cxx} %s %{flags} %{compile_flags} -c -o %t.main.o -DMAIN -D_LIBCPP_HAS_MERGED_TYPEINFO_NAMES_DEFAULT=0
+// RUN: %{cxx} %s %{flags} %{compile_flags} -c -o %t.tu1.o -DTU1 -D_LIBCPP_TYPEINFO_COMPARISON_IMPLEMENTATION=2
+// RUN: %{cxx} %s %{flags} %{compile_flags} -c -o %t.tu2.o -DTU2 -D_LIBCPP_TYPEINFO_COMPARISON_IMPLEMENTATION=2
+// RUN: %{cxx} %s %{flags} %{compile_flags} -c -o %t.main.o -DMAIN -D_LIBCPP_TYPEINFO_COMPARISON_IMPLEMENTATION=2
 // RUN: %{cxx} %t.tu1.o %t.tu2.o %t.main.o %{flags} %{link_flags} -o %t.exe
 // RUN: %{exec} %t.exe
 
@@ -33,12 +32,13 @@ void register2();
 #elif defined(MAIN)
   std::vector<std::type_index> registry;
 
-  int main() {
+  int main(int, char**) {
     register1();
     register2();
 
     assert(registry.size() == 2);
     assert(registry[0] == registry[1]);
+    return 0;
   }
 #else
 # error

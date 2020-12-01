@@ -85,6 +85,8 @@ bool link(ArrayRef<const char *> args, bool canExitEarly, raw_ostream &stdoutOS,
   lld::stdoutOS = &stdoutOS;
   lld::stderrOS = &stderrOS;
 
+  errorHandler().cleanupCallback = []() { freeArena(); };
+
   errorHandler().logName = args::getFilenameWithoutExe(args[0]);
   errorHandler().errorLimitExceededMsg =
       "too many errors emitted, stopping now (use "
@@ -103,7 +105,6 @@ bool link(ArrayRef<const char *> args, bool canExitEarly, raw_ostream &stdoutOS,
   if (canExitEarly)
     exitLld(errorCount() ? 1 : 0);
 
-  freeArena();
   return !errorCount();
 }
 
@@ -251,8 +252,15 @@ void LinkerDriver::addFile(StringRef path) {
 
     // Handle -whole-archive.
     if (inWholeArchive) {
-      for (MemoryBufferRef &m : getArchiveMembers(mbref))
-        files.push_back(createObjectFile(m, path));
+      for (MemoryBufferRef &m : getArchiveMembers(mbref)) {
+        auto *object = createObjectFile(m, path);
+        // Mark object as live; object members are normally not
+        // live by default but -whole-archive is designed to treat
+        // them as such.
+        object->markLive();
+        files.push_back(object);
+      }
+
       return;
     }
 
@@ -323,15 +331,43 @@ static StringRef getEntry(opt::InputArgList &args) {
   return arg->getValue();
 }
 
+// Determines what we should do if there are remaining unresolved
+// symbols after the name resolution.
+static UnresolvedPolicy getUnresolvedSymbolPolicy(opt::InputArgList &args) {
+  UnresolvedPolicy errorOrWarn = args.hasFlag(OPT_error_unresolved_symbols,
+                                              OPT_warn_unresolved_symbols, true)
+                                     ? UnresolvedPolicy::ReportError
+                                     : UnresolvedPolicy::Warn;
+
+  if (auto *arg = args.getLastArg(OPT_unresolved_symbols)) {
+    StringRef s = arg->getValue();
+    if (s == "ignore-all")
+      return UnresolvedPolicy::Ignore;
+    if (s == "import-functions")
+      return UnresolvedPolicy::ImportFuncs;
+    if (s == "report-all")
+      return errorOrWarn;
+    error("unknown --unresolved-symbols value: " + s);
+  }
+
+  // Legacy --allow-undefined flag which is equivalent to
+  // --unresolve-symbols=ignore-all
+  if (args.hasArg(OPT_allow_undefined))
+    return UnresolvedPolicy::ImportFuncs;
+
+  return errorOrWarn;
+}
+
 // Initializes Config members by the command line options.
 static void readConfigs(opt::InputArgList &args) {
-  config->allowUndefined = args.hasArg(OPT_allow_undefined);
+  config->bsymbolic = args.hasArg(OPT_Bsymbolic);
   config->checkFeatures =
       args.hasFlag(OPT_check_features, OPT_no_check_features, true);
   config->compressRelocations = args.hasArg(OPT_compress_relocations);
   config->demangle = args.hasFlag(OPT_demangle, OPT_no_demangle, true);
   config->disableVerify = args.hasArg(OPT_disable_verify);
   config->emitRelocs = args.hasArg(OPT_emit_relocs);
+  config->experimentalPic = args.hasArg(OPT_experimental_pic);
   config->entry = getEntry(args);
   config->exportAll = args.hasArg(OPT_export_all);
   config->exportTable = args.hasArg(OPT_export_table);
@@ -343,6 +379,7 @@ static void readConfigs(opt::InputArgList &args) {
   config->importTable = args.hasArg(OPT_import_table);
   config->ltoo = args::getInteger(args, OPT_lto_O, 2);
   config->ltoPartitions = args::getInteger(args, OPT_lto_partitions, 1);
+  config->mapFile = args.getLastArgValue(OPT_Map);
   config->optimize = args::getInteger(args, OPT_O, 0);
   config->outputFile = args.getLastArgValue(OPT_o);
   config->relocatable = args.hasArg(OPT_relocatable);
@@ -365,6 +402,7 @@ static void readConfigs(opt::InputArgList &args) {
   config->thinLTOCachePolicy = CHECK(
       parseCachePruningPolicy(args.getLastArgValue(OPT_thinlto_cache_policy)),
       "--thinlto-cache-policy: invalid cache policy");
+  config->unresolvedSymbols = getUnresolvedSymbolPolicy(args);
   errorHandler().verbose = args.hasArg(OPT_verbose);
   LLVM_DEBUG(errorHandler().verbose = true);
 
@@ -377,6 +415,17 @@ static void readConfigs(opt::InputArgList &args) {
   // Default value of exportDynamic depends on `-shared`
   config->exportDynamic =
       args.hasFlag(OPT_export_dynamic, OPT_no_export_dynamic, config->shared);
+
+  // Parse wasm32/64.
+  if (auto *arg = args.getLastArg(OPT_m)) {
+    StringRef s = arg->getValue();
+    if (s == "wasm32")
+      config->is64 = false;
+    else if (s == "wasm64")
+      config->is64 = true;
+    else
+      error("invalid target architecture: " + s);
+  }
 
   // --threads= takes a positive integer and provides the default value for
   // --thinlto-jobs=.
@@ -398,6 +447,9 @@ static void readConfigs(opt::InputArgList &args) {
     for (StringRef s : arg->getValues())
       config->features->push_back(std::string(s));
   }
+
+  if (args.hasArg(OPT_print_map))
+    config->mapFile = "-";
 }
 
 // Some Config members do not directly correspond to any particular
@@ -415,7 +467,7 @@ static void setConfigs() {
 
   if (config->shared) {
     config->importMemory = true;
-    config->allowUndefined = true;
+    config->unresolvedSymbols = UnresolvedPolicy::ImportFuncs;
   }
 }
 
@@ -456,6 +508,27 @@ static void checkOptions(opt::InputArgList &args) {
     if (config->sharedMemory)
       error("-r and --shared-memory may not be used together");
   }
+
+  // To begin to prepare for Module Linking-style shared libraries, start
+  // warning about uses of `-shared` and related flags outside of Experimental
+  // mode, to give anyone using them a heads-up that they will be changing.
+  //
+  // Also, warn about flags which request explicit exports.
+  if (!config->experimentalPic) {
+    // -shared will change meaning when Module Linking is implemented.
+    if (config->shared) {
+      warn("creating shared libraries, with -shared, is not yet stable");
+    }
+
+    // -pie will change meaning when Module Linking is implemented.
+    if (config->pie) {
+      warn("creating PIEs, with -pie, is not yet stable");
+    }
+  }
+
+  if (config->bsymbolic && !config->shared) {
+    warn("-Bsymbolic is only meaningful when combined with -shared");
+  }
 }
 
 // Force Sym to be entered in the output. Used for -u or equivalent.
@@ -495,15 +568,30 @@ createUndefinedGlobal(StringRef name, llvm::wasm::WasmGlobalType *type) {
   return sym;
 }
 
-static GlobalSymbol *createGlobalVariable(StringRef name, bool isMutable,
-                                          int value) {
+static InputGlobal *createGlobal(StringRef name, bool isMutable) {
   llvm::wasm::WasmGlobal wasmGlobal;
-  wasmGlobal.Type = {WASM_TYPE_I32, isMutable};
-  wasmGlobal.InitExpr.Value.Int32 = value;
-  wasmGlobal.InitExpr.Opcode = WASM_OPCODE_I32_CONST;
+  if (config->is64.getValueOr(false)) {
+    wasmGlobal.Type = {WASM_TYPE_I64, isMutable};
+    wasmGlobal.InitExpr.Opcode = WASM_OPCODE_I64_CONST;
+    wasmGlobal.InitExpr.Value.Int64 = 0;
+  } else {
+    wasmGlobal.Type = {WASM_TYPE_I32, isMutable};
+    wasmGlobal.InitExpr.Opcode = WASM_OPCODE_I32_CONST;
+    wasmGlobal.InitExpr.Value.Int32 = 0;
+  }
   wasmGlobal.SymbolName = name;
-  return symtab->addSyntheticGlobal(name, WASM_SYMBOL_VISIBILITY_HIDDEN,
-                                    make<InputGlobal>(wasmGlobal, nullptr));
+  return make<InputGlobal>(wasmGlobal, nullptr);
+}
+
+static GlobalSymbol *createGlobalVariable(StringRef name, bool isMutable) {
+  InputGlobal *g = createGlobal(name, isMutable);
+  return symtab->addSyntheticGlobal(name, WASM_SYMBOL_VISIBILITY_HIDDEN, g);
+}
+
+static GlobalSymbol *createOptionalGlobal(StringRef name, bool isMutable) {
+  InputGlobal *g = createGlobal(name, isMutable);
+  return symtab->addOptionalGlobalSymbols(name, WASM_SYMBOL_VISIBILITY_HIDDEN,
+                                          g);
 }
 
 // Create ABI-defined synthetic symbols
@@ -513,8 +601,12 @@ static void createSyntheticSymbols() {
 
   static WasmSignature nullSignature = {{}, {}};
   static WasmSignature i32ArgSignature = {{}, {ValType::I32}};
+  static WasmSignature i64ArgSignature = {{}, {ValType::I64}};
   static llvm::wasm::WasmGlobalType globalTypeI32 = {WASM_TYPE_I32, false};
+  static llvm::wasm::WasmGlobalType globalTypeI64 = {WASM_TYPE_I64, false};
   static llvm::wasm::WasmGlobalType mutableGlobalTypeI32 = {WASM_TYPE_I32,
+                                                            true};
+  static llvm::wasm::WasmGlobalType mutableGlobalTypeI64 = {WASM_TYPE_I64,
                                                             true};
   WasmSym::callCtors = symtab->addSyntheticFunction(
       "__wasm_call_ctors", WASM_SYMBOL_VISIBILITY_HIDDEN,
@@ -528,23 +620,25 @@ static void createSyntheticSymbols() {
         make<SyntheticFunction>(nullSignature, "__wasm_apply_relocs"));
   }
 
-
   if (config->isPic) {
     WasmSym::stackPointer =
-        createUndefinedGlobal("__stack_pointer", &mutableGlobalTypeI32);
+        createUndefinedGlobal("__stack_pointer", config->is64.getValueOr(false)
+                                                     ? &mutableGlobalTypeI64
+                                                     : &mutableGlobalTypeI32);
     // For PIC code, we import two global variables (__memory_base and
     // __table_base) from the environment and use these as the offset at
     // which to load our static data and function table.
     // See:
     // https://github.com/WebAssembly/tool-conventions/blob/master/DynamicLinking.md
-    WasmSym::memoryBase =
-        createUndefinedGlobal("__memory_base", &globalTypeI32);
+    WasmSym::memoryBase = createUndefinedGlobal(
+        "__memory_base",
+        config->is64.getValueOr(false) ? &globalTypeI64 : &globalTypeI32);
     WasmSym::tableBase = createUndefinedGlobal("__table_base", &globalTypeI32);
     WasmSym::memoryBase->markLive();
     WasmSym::tableBase->markLive();
   } else {
     // For non-PIC code
-    WasmSym::stackPointer = createGlobalVariable("__stack_pointer", true, 0);
+    WasmSym::stackPointer = createGlobalVariable("__stack_pointer", true);
     WasmSym::stackPointer->markLive();
   }
 
@@ -558,12 +652,14 @@ static void createSyntheticSymbols() {
     WasmSym::initMemoryFlag = symtab->addSyntheticDataSymbol(
         "__wasm_init_memory_flag", WASM_SYMBOL_VISIBILITY_HIDDEN);
     assert(WasmSym::initMemoryFlag);
-    WasmSym::tlsBase = createGlobalVariable("__tls_base", true, 0);
-    WasmSym::tlsSize = createGlobalVariable("__tls_size", false, 0);
-    WasmSym::tlsAlign = createGlobalVariable("__tls_align", false, 1);
+    WasmSym::tlsBase = createGlobalVariable("__tls_base", true);
+    WasmSym::tlsSize = createGlobalVariable("__tls_size", false);
+    WasmSym::tlsAlign = createGlobalVariable("__tls_align", false);
     WasmSym::initTLS = symtab->addSyntheticFunction(
         "__wasm_init_tls", WASM_SYMBOL_VISIBILITY_HIDDEN,
-        make<SyntheticFunction>(i32ArgSignature, "__wasm_init_tls"));
+        make<SyntheticFunction>(
+            config->is64.getValueOr(false) ? i64ArgSignature : i32ArgSignature,
+            "__wasm_init_tls"));
   }
 }
 
@@ -582,6 +678,18 @@ static void createOptionalSymbols() {
     WasmSym::definedMemoryBase = symtab->addOptionalDataSymbol("__memory_base");
     WasmSym::definedTableBase = symtab->addOptionalDataSymbol("__table_base");
   }
+
+  // For non-shared memory programs we still need to define __tls_base since we
+  // allow object files built with TLS to be linked into single threaded
+  // programs, and such object files can contains refernced to this symbol.
+  //
+  // However, in this case __tls_base is immutable and points directly to the
+  // start of the `.tdata` static segment.
+  //
+  // __tls_size and __tls_align are not needed in this case since they are only
+  // needed for __wasm_init_tls (which we do not create in this case).
+  if (!config->sharedMemory)
+    WasmSym::tlsBase = createOptionalGlobal("__tls_base", false);
 }
 
 // Reconstructs command line arguments so that so that you can re-run
@@ -728,6 +836,7 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
   v.push_back("wasm-ld (LLVM option parsing)");
   for (auto *arg : args.filtered(OPT_mllvm))
     v.push_back(arg->getValue());
+  cl::ResetAllOptionOccurrences();
   cl::ParseCommandLineOptions(v.size(), v.data());
 
   errorHandler().errorLimit = args::getInteger(args, OPT_error_limit, 20);
@@ -751,7 +860,8 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
   // find that it failed because there was a mistake in their command-line.
   if (auto e = tryCreateFile(config->outputFile))
     error("cannot open output file " + config->outputFile + ": " + e.message());
-  // TODO(sbc): add check for map file too once we add support for that.
+  if (auto e = tryCreateFile(config->mapFile))
+    error("cannot open map file " + config->mapFile + ": " + e.message());
   if (errorCount())
     return;
 
@@ -788,6 +898,29 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
     else
       error("entry symbol not defined (pass --no-entry to suppress): " +
             config->entry);
+  }
+
+  // If the user code defines a `__wasm_call_dtors` function, remember it so
+  // that we can call it from the command export wrappers. Unlike
+  // `__wasm_call_ctors` which we synthesize, `__wasm_call_dtors` is defined
+  // by libc/etc., because destructors are registered dynamically with
+  // `__cxa_atexit` and friends.
+  if (!config->relocatable && !config->shared &&
+      !WasmSym::callCtors->isUsedInRegularObj &&
+      WasmSym::callCtors->getName() != config->entry &&
+      !config->exportedSymbols.count(WasmSym::callCtors->getName())) {
+    if (Symbol *callDtors = handleUndefined("__wasm_call_dtors")) {
+      if (auto *callDtorsFunc = dyn_cast<DefinedFunction>(callDtors)) {
+        if (callDtorsFunc->signature &&
+            (!callDtorsFunc->signature->Params.empty() ||
+             !callDtorsFunc->signature->Returns.empty())) {
+          error("__wasm_call_dtors must have no argument or return values");
+        }
+        WasmSym::callDtors = callDtorsFunc;
+      } else {
+        error("__wasm_call_dtors must be a function");
+      }
+    }
   }
 
   createOptionalSymbols();
@@ -833,12 +966,14 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
     Symbol *sym = symtab->find(arg->getValue());
     if (sym && sym->isDefined())
       sym->forceExport = true;
-    else if (!config->allowUndefined)
+    else if (config->unresolvedSymbols == UnresolvedPolicy::ReportError)
       error(Twine("symbol exported via --export not found: ") +
             arg->getValue());
+    else if (config->unresolvedSymbols == UnresolvedPolicy::Warn)
+      warn(Twine("symbol exported via --export not found: ") + arg->getValue());
   }
 
-  if (!config->relocatable) {
+  if (!config->relocatable && !config->isPic) {
     // Add synthetic dummies for weak undefined functions.  Must happen
     // after LTO otherwise functions may not yet have signatures.
     symtab->handleWeakUndefines();

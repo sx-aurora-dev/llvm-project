@@ -29,7 +29,7 @@ class TargetEnv {
 public:
   explicit TargetEnv(TargetEnvAttr targetAttr);
 
-  Version getVersion();
+  Version getVersion() const;
 
   /// Returns true if the given capability is allowed.
   bool allows(Capability) const;
@@ -43,8 +43,22 @@ public:
   /// Returns llvm::None otherwise.
   Optional<Extension> allows(ArrayRef<Extension>) const;
 
+  /// Returns the vendor ID.
+  Vendor getVendorID() const;
+
+  /// Returns the device type.
+  DeviceType getDeviceType() const;
+
+  /// Returns the device ID.
+  uint32_t getDeviceID() const;
+
   /// Returns the MLIRContext.
   MLIRContext *getContext() const;
+
+  /// Returns the target resource limits.
+  ResourceLimitsAttr getResourceLimits() const;
+
+  TargetEnvAttr getAttr() const { return targetAttr; }
 
   /// Allows implicity converting to the underlying spirv::TargetEnvAttr.
   operator TargetEnvAttr() const { return targetAttr; }
@@ -63,6 +77,10 @@ InterfaceVarABIAttr getInterfaceVarABIAttr(unsigned descriptorSet,
                                            unsigned binding,
                                            Optional<StorageClass> storageClass,
                                            MLIRContext *context);
+
+/// Returns whether the given SPIR-V target (described by TargetEnvAttr) needs
+/// ABI attributes for interface variables (spv.interface_var_abi).
+bool needsInterfaceVarABIAttrs(TargetEnvAttr targetAttr);
 
 /// Returns the attribute name for specifying entry point information.
 StringRef getEntryPointABIAttrName();
@@ -99,6 +117,17 @@ TargetEnvAttr lookupTargetEnv(Operation *op);
 /// containing the given `op` or returns the default target environment as
 /// returned by getDefaultTargetEnv() if not provided.
 TargetEnvAttr lookupTargetEnvOrDefault(Operation *op);
+
+/// Returns addressing model selected based on target environment.
+AddressingModel getAddressingModel(TargetEnvAttr targetAttr);
+
+/// Returns execution model selected based on target environment.
+/// Returns failure if it cannot be selected.
+FailureOr<ExecutionModel> getExecutionModel(TargetEnvAttr targetAttr);
+
+/// Returns memory model selected based on target environment.
+/// Returns failure if it cannot be selected.
+FailureOr<MemoryModel> getMemoryModel(TargetEnvAttr targetAttr);
 
 } // namespace spirv
 } // namespace mlir

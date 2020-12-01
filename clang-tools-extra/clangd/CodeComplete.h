@@ -15,6 +15,7 @@
 #ifndef LLVM_CLANG_TOOLS_EXTRA_CLANGD_CODECOMPLETE_H
 #define LLVM_CLANG_TOOLS_EXTRA_CLANGD_CODECOMPLETE_H
 
+#include "Compiler.h"
 #include "Headers.h"
 #include "Protocol.h"
 #include "Quality.h"
@@ -146,6 +147,29 @@ struct CodeCompleteOptions {
   std::function<void(const CodeCompletion &, const SymbolQualitySignals &,
                      const SymbolRelevanceSignals &, float Score)>
       RecordCCResult;
+
+  /// Model to use for ranking code completion candidates.
+  enum CodeCompletionRankingModel {
+    Heuristics,
+    DecisionForest,
+  } RankingModel = Heuristics;
+
+  /// Callback used to score a CompletionCandidate if DecisionForest ranking
+  /// model is enabled.
+  /// This allows us to inject experimental models and compare them with
+  /// baseline model using A/B testing.
+  std::function<DecisionForestScores(
+      const SymbolQualitySignals &, const SymbolRelevanceSignals &, float Base)>
+      DecisionForestScorer = &evaluateDecisionForest;
+  /// Weight for combining NameMatch and Prediction of DecisionForest.
+  /// CompletionScore is NameMatch * pow(Base, Prediction).
+  /// The optimal value of Base largely depends on the semantics of the model
+  /// and prediction score (e.g. algorithm used during training, number of
+  /// trees, etc.). Usually if the range of Prediciton is [-20, 20] then a Base
+  /// in [1.2, 1.7] works fine.
+  /// Semantics: E.g. For Base = 1.3, if the Prediciton score reduces by 2.6
+  /// points then completion score reduces by 50% or 1.3^(-2.6).
+  float DecisionForestBase = 1.3f;
 };
 
 // Semi-structured representation of a code-complete suggestion for our C++ API.
@@ -270,21 +294,16 @@ struct SpeculativeFuzzyFind {
 /// the speculative result is used by code completion (e.g. speculation failed),
 /// the speculative result is not consumed, and `SpecFuzzyFind` is only
 /// destroyed when the async request finishes.
-CodeCompleteResult codeComplete(PathRef FileName,
-                                const tooling::CompileCommand &Command,
+CodeCompleteResult codeComplete(PathRef FileName, Position Pos,
                                 const PreambleData *Preamble,
-                                StringRef Contents, Position Pos,
-                                IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS,
+                                const ParseInputs &ParseInput,
                                 CodeCompleteOptions Opts,
                                 SpeculativeFuzzyFind *SpecFuzzyFind = nullptr);
 
 /// Get signature help at a specified \p Pos in \p FileName.
-SignatureHelp signatureHelp(PathRef FileName,
-                            const tooling::CompileCommand &Command,
-                            const PreambleData &Preamble, StringRef Contents,
-                            Position Pos,
-                            IntrusiveRefCntPtr<llvm::vfs::FileSystem> VFS,
-                            const SymbolIndex *Index);
+SignatureHelp signatureHelp(PathRef FileName, Position Pos,
+                            const PreambleData &Preamble,
+                            const ParseInputs &ParseInput);
 
 // For index-based completion, we only consider:
 //   * symbols in namespaces or translation unit scopes (e.g. no class

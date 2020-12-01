@@ -13,6 +13,7 @@
 #include "flang/Common/Fortran.h"
 #include "flang/Common/enum-set.h"
 #include "flang/Common/reference.h"
+#include "llvm/ADT/DenseMapInfo.h"
 #include <array>
 #include <list>
 #include <optional>
@@ -219,6 +220,9 @@ public:
   const ProcInterface &interface() const { return interface_; }
   ProcInterface &interface() { return interface_; }
   void set_interface(const ProcInterface &interface) { interface_ = interface; }
+  bool IsInterfaceSet() {
+    return interface_.symbol() != nullptr || interface_.type() != nullptr;
+  }
   inline bool HasExplicitInterface() const;
 
   // Be advised: !init().has_value() => uninitialized pointer,
@@ -244,6 +248,8 @@ public:
   const std::list<SourceName> &paramNames() const { return paramNames_; }
   const SymbolVector &paramDecls() const { return paramDecls_; }
   bool sequence() const { return sequence_; }
+  std::map<SourceName, SymbolRef> &finals() { return finals_; }
+  const std::map<SourceName, SymbolRef> &finals() const { return finals_; }
   bool isForwardReferenced() const { return isForwardReferenced_; }
   void add_paramName(const SourceName &name) { paramNames_.push_back(name); }
   void add_paramDecl(const Symbol &symbol) { paramDecls_.push_back(symbol); }
@@ -265,6 +271,8 @@ public:
     }
   }
 
+  const Symbol *GetFinalForRank(int) const;
+
 private:
   // These are (1) the names of the derived type parameters in the order
   // in which they appear on the type definition statement(s), and (2) the
@@ -275,6 +283,7 @@ private:
   // These are the names of the derived type's components in component
   // order.  A parent component, if any, appears first in this list.
   std::list<SourceName> componentNames_;
+  std::map<SourceName, SymbolRef> finals_; // FINAL :: subr
   bool sequence_{false};
   bool isForwardReferenced_{false};
   friend llvm::raw_ostream &operator<<(
@@ -318,8 +327,6 @@ private:
   std::size_t alignment_{0}; // required alignment in bytes
 };
 
-class FinalProcDetails {}; // TODO
-
 class MiscDetails {
 public:
   ENUM_CLASS(Kind, None, ConstructName, ScopeName, PassName, ComplexPartRe,
@@ -358,7 +365,6 @@ public:
       : location_{location}, symbol_{symbol} {}
   const SourceName &location() const { return location_; }
   const Symbol &symbol() const { return symbol_; }
-  const Symbol &module() const;
 
 private:
   SourceName location_;
@@ -383,6 +389,8 @@ class HostAssocDetails {
 public:
   HostAssocDetails(const Symbol &symbol) : symbol_{symbol} {}
   const Symbol &symbol() const { return symbol_; }
+  bool implicitOrSpecExprError{false};
+  bool implicitOrExplicitTypeError{false};
 
 private:
   SymbolRef symbol_;
@@ -417,7 +425,6 @@ private:
 class GenericDetails {
 public:
   GenericDetails() {}
-  GenericDetails(const SymbolVector &specificProcs);
 
   GenericKind kind() const { return kind_; }
   void set_kind(GenericKind kind) { kind_ = kind; }
@@ -467,17 +474,18 @@ using Details = std::variant<UnknownDetails, MainProgramDetails, ModuleDetails,
     ObjectEntityDetails, ProcEntityDetails, AssocEntityDetails,
     DerivedTypeDetails, UseDetails, UseErrorDetails, HostAssocDetails,
     GenericDetails, ProcBindingDetails, NamelistDetails, CommonBlockDetails,
-    FinalProcDetails, TypeParamDetails, MiscDetails>;
+    TypeParamDetails, MiscDetails>;
 llvm::raw_ostream &operator<<(llvm::raw_ostream &, const Details &);
 std::string DetailsToString(const Details &);
 
 class Symbol {
 public:
   ENUM_CLASS(Flag,
-      Error, // an error has been reported on this symbol
       Function, // symbol is a function
       Subroutine, // symbol is a subroutine
+      StmtFunction, // symbol is a statement function (Function is set too)
       Implicit, // symbol is implicitly typed
+      ImplicitOrError, // symbol must be implicitly typed or it's an error
       ModFile, // symbol came from .mod file
       ParentComp, // symbol is the "parent component" of an extended type
       CrayPointer, CrayPointee,
@@ -485,15 +493,23 @@ public:
       LocalityLocalInit, // named in LOCAL_INIT locality-spec
       LocalityShared, // named in SHARED locality-spec
       InDataStmt, // initialized in a DATA statement
-
+      InNamelist, // flag is set if the symbol is in Namelist statement
+      // OpenACC data-sharing attribute
+      AccPrivate, AccFirstPrivate, AccShared,
+      // OpenACC data-mapping attribute
+      AccCopyIn, AccCopyOut, AccCreate, AccDelete, AccPresent,
+      // OpenACC miscellaneous flags
+      AccCommonBlock, AccThreadPrivate, AccReduction, AccNone, AccPreDetermined,
       // OpenMP data-sharing attribute
       OmpShared, OmpPrivate, OmpLinear, OmpFirstPrivate, OmpLastPrivate,
       // OpenMP data-mapping attribute
       OmpMapTo, OmpMapFrom, OmpMapAlloc, OmpMapRelease, OmpMapDelete,
+      // OpenMP data-copying attribute
+      OmpCopyIn,
       // OpenMP miscellaneous flags
-      OmpCommonBlock, OmpReduction, OmpDeclareSimd, OmpDeclareTarget,
-      OmpThreadprivate, OmpDeclareReduction, OmpFlushed, OmpCriticalLock,
-      OmpIfSpecified, OmpNone, OmpPreDetermined);
+      OmpCommonBlock, OmpReduction, OmpAllocate, OmpDeclareSimd,
+      OmpDeclareTarget, OmpThreadprivate, OmpDeclareReduction, OmpFlushed,
+      OmpCriticalLock, OmpIfSpecified, OmpNone, OmpPreDetermined, OmpAligned);
   using Flags = common::EnumSet<Flag, Flag_enumSize>;
 
   const Scope &owner() const { return *owner_; }
@@ -546,51 +562,13 @@ public:
   bool CanReplaceDetails(const Details &details) const;
 
   // Follow use-associations and host-associations to get the ultimate entity.
-  Symbol &GetUltimate() {
-    return const_cast<Symbol &>(
-        const_cast<const Symbol *>(this)->GetUltimate());
-  }
-  const Symbol &GetUltimate() const {
-    if (const auto *details{detailsIf<UseDetails>()}) {
-      return details->symbol().GetUltimate();
-    } else if (const auto *details{detailsIf<HostAssocDetails>()}) {
-      return details->symbol().GetUltimate();
-    } else {
-      return *this;
-    }
-  }
+  inline Symbol &GetUltimate();
+  inline const Symbol &GetUltimate() const;
 
-  DeclTypeSpec *GetType() {
-    return const_cast<DeclTypeSpec *>(
-        const_cast<const Symbol *>(this)->GetType());
-  }
-  const DeclTypeSpec *GetType() const {
-    return std::visit(
-        common::visitors{
-            [](const EntityDetails &x) { return x.type(); },
-            [](const ObjectEntityDetails &x) { return x.type(); },
-            [](const AssocEntityDetails &x) { return x.type(); },
-            [](const SubprogramDetails &x) {
-              return x.isFunction() ? x.result().GetType() : nullptr;
-            },
-            [](const ProcEntityDetails &x) {
-              if (const Symbol * symbol{x.interface().symbol()}) {
-                return symbol->GetType();
-              } else {
-                return x.interface().type();
-              }
-            },
-            [&](const ProcBindingDetails &x) { return x.symbol().GetType(); },
-            [](const TypeParamDetails &x) { return x.type(); },
-            [](const UseDetails &x) { return x.symbol().GetType(); },
-            [](const HostAssocDetails &x) { return x.symbol().GetType(); },
-            [](const auto &) -> const DeclTypeSpec * { return nullptr; },
-        },
-        details_);
-  }
+  inline DeclTypeSpec *GetType();
+  inline const DeclTypeSpec *GetType() const;
 
   void SetType(const DeclTypeSpec &);
-  bool IsDummy() const;
   bool IsFuncResult() const;
   bool IsObjectArray() const;
   bool IsSubprogram() const;
@@ -747,6 +725,45 @@ inline bool ProcEntityDetails::HasExplicitInterface() const {
   return false;
 }
 
+inline Symbol &Symbol::GetUltimate() {
+  return const_cast<Symbol &>(const_cast<const Symbol *>(this)->GetUltimate());
+}
+inline const Symbol &Symbol::GetUltimate() const {
+  if (const auto *details{detailsIf<UseDetails>()}) {
+    return details->symbol().GetUltimate();
+  } else if (const auto *details{detailsIf<HostAssocDetails>()}) {
+    return details->symbol().GetUltimate();
+  } else {
+    return *this;
+  }
+}
+
+inline DeclTypeSpec *Symbol::GetType() {
+  return const_cast<DeclTypeSpec *>(
+      const_cast<const Symbol *>(this)->GetType());
+}
+inline const DeclTypeSpec *Symbol::GetType() const {
+  return std::visit(
+      common::visitors{
+          [](const EntityDetails &x) { return x.type(); },
+          [](const ObjectEntityDetails &x) { return x.type(); },
+          [](const AssocEntityDetails &x) { return x.type(); },
+          [](const SubprogramDetails &x) {
+            return x.isFunction() ? x.result().GetType() : nullptr;
+          },
+          [](const ProcEntityDetails &x) {
+            const Symbol *symbol{x.interface().symbol()};
+            return symbol ? symbol->GetType() : x.interface().type();
+          },
+          [](const ProcBindingDetails &x) { return x.symbol().GetType(); },
+          [](const TypeParamDetails &x) { return x.type(); },
+          [](const UseDetails &x) { return x.symbol().GetType(); },
+          [](const HostAssocDetails &x) { return x.symbol().GetType(); },
+          [](const auto &) -> const DeclTypeSpec * { return nullptr; },
+      },
+      details_);
+}
+
 inline bool operator<(SymbolRef x, SymbolRef y) { return *x < *y; }
 inline bool operator<(MutableSymbolRef x, MutableSymbolRef y) {
   return *x < *y;
@@ -754,4 +771,30 @@ inline bool operator<(MutableSymbolRef x, MutableSymbolRef y) {
 using SymbolSet = std::set<SymbolRef>;
 
 } // namespace Fortran::semantics
+
+// Define required  info so that SymbolRef can be used inside llvm::DenseMap.
+namespace llvm {
+template <> struct DenseMapInfo<Fortran::semantics::SymbolRef> {
+  static inline Fortran::semantics::SymbolRef getEmptyKey() {
+    auto ptr = DenseMapInfo<const Fortran::semantics::Symbol *>::getEmptyKey();
+    return *reinterpret_cast<Fortran::semantics::SymbolRef *>(&ptr);
+  }
+
+  static inline Fortran::semantics::SymbolRef getTombstoneKey() {
+    auto ptr =
+        DenseMapInfo<const Fortran::semantics::Symbol *>::getTombstoneKey();
+    return *reinterpret_cast<Fortran::semantics::SymbolRef *>(&ptr);
+  }
+
+  static unsigned getHashValue(const Fortran::semantics::SymbolRef &sym) {
+    return DenseMapInfo<const Fortran::semantics::Symbol *>::getHashValue(
+        &sym.get());
+  }
+
+  static bool isEqual(const Fortran::semantics::SymbolRef &LHS,
+      const Fortran::semantics::SymbolRef &RHS) {
+    return LHS == RHS;
+  }
+};
+} // namespace llvm
 #endif // FORTRAN_SEMANTICS_SYMBOL_H_

@@ -9,9 +9,8 @@
 #ifndef LLVM_LIB_TARGET_ARM_ARMFRAMELOWERING_H
 #define LLVM_LIB_TARGET_ARM_ARMFRAMELOWERING_H
 
-#include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/TargetFrameLowering.h"
-#include <vector>
+#include "llvm/Support/TypeSize.h"
 
 namespace llvm {
 
@@ -49,8 +48,8 @@ public:
   bool hasFP(const MachineFunction &MF) const override;
   bool hasReservedCallFrame(const MachineFunction &MF) const override;
   bool canSimplifyCallFramePseudos(const MachineFunction &MF) const override;
-  int getFrameIndexReference(const MachineFunction &MF, int FI,
-                             Register &FrameReg) const override;
+  StackOffset getFrameIndexReference(const MachineFunction &MF, int FI,
+                                     Register &FrameReg) const override;
   int ResolveFrameIndexReference(const MachineFunction &MF, int FI,
                                  Register &FrameReg, int SPAdj) const;
 

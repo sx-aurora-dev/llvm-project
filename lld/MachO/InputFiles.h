@@ -9,14 +9,26 @@
 #ifndef LLD_MACHO_INPUT_FILES_H
 #define LLD_MACHO_INPUT_FILES_H
 
+#include "MachOStructs.h"
+
 #include "lld/Common/LLVM.h"
+#include "lld/Common/Memory.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "llvm/TextAPI/MachO/InterfaceFile.h"
+#include "llvm/TextAPI/MachO/TextAPIReader.h"
 
 #include <map>
 #include <vector>
+
+namespace llvm {
+namespace lto {
+class InputFile;
+} // namespace lto
+class TarWriter;
+} // namespace llvm
 
 namespace lld {
 namespace macho {
@@ -24,6 +36,10 @@ namespace macho {
 class InputSection;
 class Symbol;
 struct Reloc;
+
+// If --reproduce option is given, all input files are written
+// to this tar archive.
+extern std::unique_ptr<llvm::TarWriter> tar;
 
 // If .subsections_via_symbols is set, each InputSection will be split along
 // symbol boundaries. The keys of a SubsectionMap represent the offsets of
@@ -34,13 +50,15 @@ class InputFile {
 public:
   enum Kind {
     ObjKind,
+    OpaqueKind,
     DylibKind,
     ArchiveKind,
+    BitcodeKind,
   };
 
   virtual ~InputFile() = default;
   Kind kind() const { return fileKind; }
-  StringRef getName() const { return mb.getBufferIdentifier(); }
+  StringRef getName() const { return name; }
 
   MemoryBufferRef mb;
   std::vector<Symbol *> symbols;
@@ -48,17 +66,24 @@ public:
   std::vector<SubsectionMap> subsections;
 
 protected:
-  InputFile(Kind kind, MemoryBufferRef mb) : mb(mb), fileKind(kind) {}
+  InputFile(Kind kind, MemoryBufferRef mb)
+      : mb(mb), fileKind(kind), name(mb.getBufferIdentifier()) {}
+
+  InputFile(Kind kind, const llvm::MachO::InterfaceFile &interface)
+      : fileKind(kind), name(saver.save(interface.getPath())) {}
 
   void parseSections(ArrayRef<llvm::MachO::section_64>);
 
-  void parseSymbols(ArrayRef<llvm::MachO::nlist_64> nList, const char *strtab,
+  void parseSymbols(ArrayRef<lld::structs::nlist_64> nList, const char *strtab,
                     bool subsectionsViaSymbols);
+
+  Symbol *parseNonSectionSymbol(const structs::nlist_64 &sym, StringRef name);
 
   void parseRelocations(const llvm::MachO::section_64 &, SubsectionMap &);
 
 private:
   const Kind fileKind;
+  const StringRef name;
 };
 
 // .o file
@@ -66,6 +91,14 @@ class ObjFile : public InputFile {
 public:
   explicit ObjFile(MemoryBufferRef mb);
   static bool classof(const InputFile *f) { return f->kind() == ObjKind; }
+};
+
+// command-line -sectcreate file
+class OpaqueFile : public InputFile {
+public:
+  explicit OpaqueFile(MemoryBufferRef mb, StringRef segName,
+                      StringRef sectName);
+  static bool classof(const InputFile *f) { return f->kind() == OpaqueKind; }
 };
 
 // .dylib file
@@ -79,16 +112,16 @@ public:
   // to the root. On the other hand, if a dylib is being directly loaded
   // (through an -lfoo flag), then `umbrella` should be a nullptr.
   explicit DylibFile(MemoryBufferRef mb, DylibFile *umbrella = nullptr);
-  static bool classof(const InputFile *f) { return f->kind() == DylibKind; }
 
-  // Do not use this constructor!! This is meant only for createLibSystemMock(),
-  // but it cannot be made private as we call it via make().
-  DylibFile();
-  static DylibFile *createLibSystemMock();
+  explicit DylibFile(const llvm::MachO::InterfaceFile &interface,
+                     DylibFile *umbrella = nullptr);
+
+  static bool classof(const InputFile *f) { return f->kind() == DylibKind; }
 
   StringRef dylibName;
   uint64_t ordinal = 0; // Ordinal numbering starts from 1, so 0 is a sentinel
   bool reexport = false;
+  bool forceWeakImport = false;
   std::vector<DylibFile *> reexported;
 };
 
@@ -106,9 +139,20 @@ private:
   llvm::DenseSet<uint64_t> seen;
 };
 
+class BitcodeFile : public InputFile {
+public:
+  explicit BitcodeFile(MemoryBufferRef mb);
+  static bool classof(const InputFile *f) { return f->kind() == BitcodeKind; }
+
+  std::unique_ptr<llvm::lto::InputFile> obj;
+};
+
 extern std::vector<InputFile *> inputFiles;
 
 llvm::Optional<MemoryBufferRef> readFile(StringRef path);
+
+const llvm::MachO::load_command *
+findCommand(const llvm::MachO::mach_header_64 *, uint32_t type);
 
 } // namespace macho
 

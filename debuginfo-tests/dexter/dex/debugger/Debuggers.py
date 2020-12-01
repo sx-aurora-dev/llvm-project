@@ -27,6 +27,7 @@ from dex.debugger.dbgeng.dbgeng import DbgEng
 from dex.debugger.lldb.LLDB import LLDB
 from dex.debugger.visualstudio.VisualStudio2015 import VisualStudio2015
 from dex.debugger.visualstudio.VisualStudio2017 import VisualStudio2017
+from dex.debugger.visualstudio.VisualStudio2019 import VisualStudio2019
 
 
 def _get_potential_debuggers():  # noqa
@@ -38,7 +39,8 @@ def _get_potential_debuggers():  # noqa
         DbgEng.get_option_name(): DbgEng,
         LLDB.get_option_name(): LLDB,
         VisualStudio2015.get_option_name(): VisualStudio2015,
-        VisualStudio2017.get_option_name(): VisualStudio2017
+        VisualStudio2017.get_option_name(): VisualStudio2017,
+        VisualStudio2019.get_option_name(): VisualStudio2019
     }
 
 
@@ -100,6 +102,11 @@ def add_debugger_tool_arguments(parser, context, defaults):
         default=None,
         display_default=defaults.arch,
         help='target architecture')
+    defaults.source_root_dir = ''
+    parser.add_argument(
+        '--source-root-dir',
+        default=None,
+        help='prefix path to ignore when matching debug info and source files.')
 
 
 def handle_debugger_tool_base_options(context, defaults):  # noqa

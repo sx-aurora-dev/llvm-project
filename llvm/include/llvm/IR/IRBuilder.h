@@ -266,11 +266,19 @@ public:
 
   /// Set the exception handling to be used with constrained floating point
   void setDefaultConstrainedExcept(fp::ExceptionBehavior NewExcept) {
+#ifndef NDEBUG
+    Optional<StringRef> ExceptStr = ExceptionBehaviorToStr(NewExcept);
+    assert(ExceptStr.hasValue() && "Garbage strict exception behavior!");
+#endif
     DefaultConstrainedExcept = NewExcept;
   }
 
   /// Set the rounding mode handling to be used with constrained floating point
   void setDefaultConstrainedRounding(RoundingMode NewRounding) {
+#ifndef NDEBUG
+    Optional<StringRef> RoundingStr = RoundingModeToStr(NewRounding);
+    assert(RoundingStr.hasValue() && "Garbage strict rounding mode!");
+#endif
     DefaultConstrainedRounding = NewRounding;
   }
 
@@ -294,8 +302,7 @@ public:
   }
 
   void setConstrainedFPCallAttr(CallInst *I) {
-    if (!I->hasFnAttr(Attribute::StrictFP))
-      I->addAttribute(AttributeList::FunctionIndex, Attribute::StrictFP);
+    I->addAttribute(AttributeList::FunctionIndex, Attribute::StrictFP);
   }
 
   void setDefaultOperandBundles(ArrayRef<OperandBundleDef> OpBundles) {
@@ -386,8 +393,12 @@ public:
   /// filled in with the null terminated string value specified.  The new global
   /// variable will be marked mergable with any others of the same contents.  If
   /// Name is specified, it is the name of the global variable created.
+  ///
+  /// If no module is given via \p M, it is take from the insertion point basic
+  /// block.
   GlobalVariable *CreateGlobalString(StringRef Str, const Twine &Name = "",
-                                     unsigned AddressSpace = 0);
+                                     unsigned AddressSpace = 0,
+                                     Module *M = nullptr);
 
   /// Get a constant value representing either true or false.
   ConstantInt *getInt1(bool V) {
@@ -570,12 +581,22 @@ public:
                         NoAliasTag);
   }
 
+  CallInst *CreateMemTransferInst(
+      Intrinsic::ID IntrID, Value *Dst, MaybeAlign DstAlign, Value *Src,
+      MaybeAlign SrcAlign, Value *Size, bool isVolatile = false,
+      MDNode *TBAATag = nullptr, MDNode *TBAAStructTag = nullptr,
+      MDNode *ScopeTag = nullptr, MDNode *NoAliasTag = nullptr);
+
   CallInst *CreateMemCpy(Value *Dst, MaybeAlign DstAlign, Value *Src,
                          MaybeAlign SrcAlign, Value *Size,
                          bool isVolatile = false, MDNode *TBAATag = nullptr,
                          MDNode *TBAAStructTag = nullptr,
                          MDNode *ScopeTag = nullptr,
-                         MDNode *NoAliasTag = nullptr);
+                         MDNode *NoAliasTag = nullptr) {
+    return CreateMemTransferInst(Intrinsic::memcpy, Dst, DstAlign, Src,
+                                 SrcAlign, Size, isVolatile, TBAATag,
+                                 TBAAStructTag, ScopeTag, NoAliasTag);
+  }
 
   CallInst *CreateMemCpyInline(Value *Dst, MaybeAlign DstAlign, Value *Src,
                                MaybeAlign SrcAlign, Value *Size);
@@ -782,14 +803,18 @@ public:
 
   /// Create an assume intrinsic call that allows the optimizer to
   /// assume that the provided condition will be true.
-  CallInst *CreateAssumption(Value *Cond);
+  ///
+  /// The optional argument \p OpBundles specifies operand bundles that are
+  /// added to the call instruction.
+  CallInst *CreateAssumption(Value *Cond,
+                             ArrayRef<OperandBundleDef> OpBundles = llvm::None);
 
   /// Create a call to the experimental.gc.statepoint intrinsic to
   /// start a new statepoint sequence.
   CallInst *CreateGCStatepointCall(uint64_t ID, uint32_t NumPatchBytes,
                                    Value *ActualCallee,
                                    ArrayRef<Value *> CallArgs,
-                                   ArrayRef<Value *> DeoptArgs,
+                                   Optional<ArrayRef<Value *>> DeoptArgs,
                                    ArrayRef<Value *> GCArgs,
                                    const Twine &Name = "");
 
@@ -797,9 +822,9 @@ public:
   /// start a new statepoint sequence.
   CallInst *CreateGCStatepointCall(uint64_t ID, uint32_t NumPatchBytes,
                                    Value *ActualCallee, uint32_t Flags,
-                                   ArrayRef<Use> CallArgs,
-                                   ArrayRef<Use> TransitionArgs,
-                                   ArrayRef<Use> DeoptArgs,
+                                   ArrayRef<Value *> CallArgs,
+                                   Optional<ArrayRef<Use>> TransitionArgs,
+                                   Optional<ArrayRef<Use>> DeoptArgs,
                                    ArrayRef<Value *> GCArgs,
                                    const Twine &Name = "");
 
@@ -808,7 +833,7 @@ public:
   /// .get()'ed to get the Value pointer.
   CallInst *CreateGCStatepointCall(uint64_t ID, uint32_t NumPatchBytes,
                                    Value *ActualCallee, ArrayRef<Use> CallArgs,
-                                   ArrayRef<Value *> DeoptArgs,
+                                   Optional<ArrayRef<Value *>> DeoptArgs,
                                    ArrayRef<Value *> GCArgs,
                                    const Twine &Name = "");
 
@@ -818,7 +843,7 @@ public:
   CreateGCStatepointInvoke(uint64_t ID, uint32_t NumPatchBytes,
                            Value *ActualInvokee, BasicBlock *NormalDest,
                            BasicBlock *UnwindDest, ArrayRef<Value *> InvokeArgs,
-                           ArrayRef<Value *> DeoptArgs,
+                           Optional<ArrayRef<Value *>> DeoptArgs,
                            ArrayRef<Value *> GCArgs, const Twine &Name = "");
 
   /// Create an invoke to the experimental.gc.statepoint intrinsic to
@@ -826,8 +851,8 @@ public:
   InvokeInst *CreateGCStatepointInvoke(
       uint64_t ID, uint32_t NumPatchBytes, Value *ActualInvokee,
       BasicBlock *NormalDest, BasicBlock *UnwindDest, uint32_t Flags,
-      ArrayRef<Use> InvokeArgs, ArrayRef<Use> TransitionArgs,
-      ArrayRef<Use> DeoptArgs, ArrayRef<Value *> GCArgs,
+      ArrayRef<Value *> InvokeArgs, Optional<ArrayRef<Use>> TransitionArgs,
+      Optional<ArrayRef<Use>> DeoptArgs, ArrayRef<Value *> GCArgs,
       const Twine &Name = "");
 
   // Convenience function for the common case when CallArgs are filled in using
@@ -837,7 +862,7 @@ public:
   CreateGCStatepointInvoke(uint64_t ID, uint32_t NumPatchBytes,
                            Value *ActualInvokee, BasicBlock *NormalDest,
                            BasicBlock *UnwindDest, ArrayRef<Use> InvokeArgs,
-                           ArrayRef<Value *> DeoptArgs,
+                           Optional<ArrayRef<Value *>> DeoptArgs,
                            ArrayRef<Value *> GCArgs, const Twine &Name = "");
 
   /// Create a call to the experimental.gc.result intrinsic to extract
@@ -1733,19 +1758,21 @@ public:
     return Insert(new FenceInst(Context, Ordering, SSID), Name);
   }
 
-  AtomicCmpXchgInst *
-  CreateAtomicCmpXchg(Value *Ptr, Value *Cmp, Value *New,
-                      AtomicOrdering SuccessOrdering,
-                      AtomicOrdering FailureOrdering,
-                      SyncScope::ID SSID = SyncScope::System) {
-    return Insert(new AtomicCmpXchgInst(Ptr, Cmp, New, SuccessOrdering,
-                                        FailureOrdering, SSID));
+  AtomicCmpXchgInst *CreateAtomicCmpXchg(
+      Value *Ptr, Value *Cmp, Value *New, AtomicOrdering SuccessOrdering,
+      AtomicOrdering FailureOrdering, SyncScope::ID SSID = SyncScope::System) {
+    const DataLayout &DL = BB->getModule()->getDataLayout();
+    Align Alignment(DL.getTypeStoreSize(New->getType()));
+    return Insert(new AtomicCmpXchgInst(
+        Ptr, Cmp, New, Alignment, SuccessOrdering, FailureOrdering, SSID));
   }
 
   AtomicRMWInst *CreateAtomicRMW(AtomicRMWInst::BinOp Op, Value *Ptr, Value *Val,
                                  AtomicOrdering Ordering,
                                  SyncScope::ID SSID = SyncScope::System) {
-    return Insert(new AtomicRMWInst(Op, Ptr, Val, Ordering, SSID));
+    const DataLayout &DL = BB->getModule()->getDataLayout();
+    Align Alignment(DL.getTypeStoreSize(Val->getType()));
+    return Insert(new AtomicRMWInst(Op, Ptr, Val, Alignment, Ordering, SSID));
   }
 
   Value *CreateGEP(Value *Ptr, ArrayRef<Value *> IdxList,
@@ -1932,9 +1959,13 @@ public:
 
   /// Same as CreateGlobalString, but return a pointer with "i8*" type
   /// instead of a pointer to array of i8.
+  ///
+  /// If no module is given via \p M, it is take from the insertion point basic
+  /// block.
   Constant *CreateGlobalStringPtr(StringRef Str, const Twine &Name = "",
-                                  unsigned AddressSpace = 0) {
-    GlobalVariable *GV = CreateGlobalString(Str, Name, AddressSpace);
+                                  unsigned AddressSpace = 0,
+                                  Module *M = nullptr) {
+    GlobalVariable *GV = CreateGlobalString(Str, Name, AddressSpace, M);
     Constant *Zero = ConstantInt::get(Type::getInt32Ty(Context), 0);
     Constant *Indices[] = {Zero, Zero};
     return ConstantExpr::getInBoundsGetElementPtr(GV->getValueType(), GV,
@@ -2281,6 +2312,13 @@ public:
     return CreateFCmpHelper(P, LHS, RHS, Name, FPMathTag, false);
   }
 
+  Value *CreateCmp(CmpInst::Predicate Pred, Value *LHS, Value *RHS,
+                   const Twine &Name = "", MDNode *FPMathTag = nullptr) {
+    return CmpInst::isFPPredicate(Pred)
+               ? CreateFCmp(Pred, LHS, RHS, Name, FPMathTag)
+               : CreateICmp(Pred, LHS, RHS, Name);
+  }
+
   // Create a signaling floating-point comparison (i.e. one that raises an FP
   // exception whenever an input is any NaN, signaling or quiet).
   // Note that this differs from CreateFCmp only if IsFPConstrained is true.
@@ -2411,6 +2449,13 @@ public:
     return Insert(new ShuffleVectorInst(V1, V2, Mask), Name);
   }
 
+  /// Create a unary shuffle. The second vector operand of the IR instruction
+  /// is undefined.
+  Value *CreateShuffleVector(Value *V, ArrayRef<int> Mask,
+                             const Twine &Name = "") {
+    return CreateShuffleVector(V, UndefValue::get(V->getType()), Mask, Name);
+  }
+
   Value *CreateExtractValue(Value *Agg,
                             ArrayRef<unsigned> Idxs,
                             const Twine &Name = "") {
@@ -2475,6 +2520,10 @@ public:
   /// NumElts elements.
   Value *CreateVectorSplat(unsigned NumElts, Value *V, const Twine &Name = "");
 
+  /// Return a vector value that contains \arg V broadcasted to \p
+  /// EC elements.
+  Value *CreateVectorSplat(ElementCount EC, Value *V, const Twine &Name = "");
+
   /// Return a value that has been extracted from a larger integer type.
   Value *CreateExtractInteger(const DataLayout &DL, Value *From,
                               IntegerType *ExtractedTy, uint64_t Offset,
@@ -2493,13 +2542,11 @@ public:
 
 private:
   /// Helper function that creates an assume intrinsic call that
-  /// represents an alignment assumption on the provided Ptr, Mask, Type
-  /// and Offset. It may be sometimes useful to do some other logic
-  /// based on this alignment check, thus it can be stored into 'TheCheck'.
+  /// represents an alignment assumption on the provided pointer \p PtrValue
+  /// with offset \p OffsetValue and alignment value \p AlignValue.
   CallInst *CreateAlignmentAssumptionHelper(const DataLayout &DL,
-                                            Value *PtrValue, Value *Mask,
-                                            Type *IntPtrTy, Value *OffsetValue,
-                                            Value **TheCheck);
+                                            Value *PtrValue, Value *AlignValue,
+                                            Value *OffsetValue);
 
 public:
   /// Create an assume intrinsic call that represents an alignment
@@ -2508,13 +2555,9 @@ public:
   /// An optional offset can be provided, and if it is provided, the offset
   /// must be subtracted from the provided pointer to get the pointer with the
   /// specified alignment.
-  ///
-  /// It may be sometimes useful to do some other logic
-  /// based on this alignment check, thus it can be stored into 'TheCheck'.
   CallInst *CreateAlignmentAssumption(const DataLayout &DL, Value *PtrValue,
                                       unsigned Alignment,
-                                      Value *OffsetValue = nullptr,
-                                      Value **TheCheck = nullptr);
+                                      Value *OffsetValue = nullptr);
 
   /// Create an assume intrinsic call that represents an alignment
   /// assumption on the provided pointer.
@@ -2523,15 +2566,11 @@ public:
   /// must be subtracted from the provided pointer to get the pointer with the
   /// specified alignment.
   ///
-  /// It may be sometimes useful to do some other logic
-  /// based on this alignment check, thus it can be stored into 'TheCheck'.
-  ///
   /// This overload handles the condition where the Alignment is dependent
   /// on an existing value rather than a static value.
   CallInst *CreateAlignmentAssumption(const DataLayout &DL, Value *PtrValue,
                                       Value *Alignment,
-                                      Value *OffsetValue = nullptr,
-                                      Value **TheCheck = nullptr);
+                                      Value *OffsetValue = nullptr);
 };
 
 /// This provides a uniform API for creating instructions and inserting

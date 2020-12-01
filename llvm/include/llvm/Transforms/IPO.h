@@ -31,6 +31,13 @@ class raw_ostream;
 
 //===----------------------------------------------------------------------===//
 //
+// This pass adds !annotation metadata to entries in the
+// @llvm.global.annotations global constant.
+//
+ModulePass *createAnnotation2MetadataLegacyPass();
+
+//===----------------------------------------------------------------------===//
+//
 // These functions removes symbols from functions and modules.  If OnlyDebugInfo
 // is true, only debugging information is removed from the module.
 //
@@ -154,12 +161,6 @@ Pass *createArgumentPromotionPass(unsigned maxElements = 3);
 //===----------------------------------------------------------------------===//
 /// createOpenMPOptLegacyPass - OpenMP specific optimizations.
 Pass *createOpenMPOptLegacyPass();
-
-//===----------------------------------------------------------------------===//
-/// createIPConstantPropagationPass - This pass propagates constants from call
-/// sites into the bodies of functions.
-///
-ModulePass *createIPConstantPropagationPass();
 
 //===----------------------------------------------------------------------===//
 /// createIPSCCPPass - This pass propagates constants from call sites into the

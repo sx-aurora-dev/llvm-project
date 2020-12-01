@@ -35,6 +35,7 @@
 #include "llvm/IR/LLVMRemarkStreamer.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IRReader/IRReader.h"
+#include "llvm/LTO/LTOBackend.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -245,8 +246,13 @@ namespace clang {
     bool LinkInModules() {
       for (auto &LM : LinkModules) {
         if (LM.PropagateAttrs)
-          for (Function &F : *LM.Module)
+          for (Function &F : *LM.Module) {
+            // Skip intrinsics. Keep consistent with how intrinsics are created
+            // in LLVM IR.
+            if (F.isIntrinsic())
+              continue;
             Gen->CGM().addDefaultFunctionDefinitionAttributes(F);
+          }
 
         CurLinkModule = LM.Module.get();
 
@@ -398,9 +404,6 @@ namespace clang {
     bool StackSizeDiagHandler(const llvm::DiagnosticInfoStackSize &D);
     /// Specialized handler for unsupported backend feature diagnostic.
     void UnsupportedDiagHandler(const llvm::DiagnosticInfoUnsupported &D);
-    /// Specialized handler for misexpect warnings.
-    /// Note that misexpect remarks are emitted through ORE
-    void MisExpectDiagHandler(const llvm::DiagnosticInfoMisExpect &D);
     /// Specialized handlers for optimization remarks.
     /// Note that these handlers only accept remarks and they always handle
     /// them.
@@ -668,36 +671,6 @@ void BackendConsumer::UnsupportedDiagHandler(
         << Filename << Line << Column;
 }
 
-void BackendConsumer::MisExpectDiagHandler(
-    const llvm::DiagnosticInfoMisExpect &D) {
-  StringRef Filename;
-  unsigned Line, Column;
-  bool BadDebugInfo = false;
-  FullSourceLoc Loc;
-  std::string Msg;
-  raw_string_ostream MsgStream(Msg);
-  DiagnosticPrinterRawOStream DP(MsgStream);
-
-  // Context will be nullptr for IR input files, we will construct the diag
-  // message from llvm::DiagnosticInfoMisExpect.
-  if (Context != nullptr) {
-    Loc = getBestLocationFromDebugLoc(D, BadDebugInfo, Filename, Line, Column);
-    MsgStream << D.getMsg();
-  } else {
-    DiagnosticPrinterRawOStream DP(MsgStream);
-    D.print(DP);
-  }
-  Diags.Report(Loc, diag::warn_profile_data_misexpect) << MsgStream.str();
-
-  if (BadDebugInfo)
-    // If we were not able to translate the file:line:col information
-    // back to a SourceLocation, at least emit a note stating that
-    // we could not translate this location. This can happen in the
-    // case of #line directives.
-    Diags.Report(Loc, diag::note_fe_backend_invalid_loc)
-        << Filename << Line << Column;
-}
-
 void BackendConsumer::EmitOptimizationMessage(
     const llvm::DiagnosticInfoOptimizationBase &D, unsigned DiagID) {
   // We only support warnings and remarks.
@@ -875,9 +848,6 @@ void BackendConsumer::DiagnosticHandlerImpl(const DiagnosticInfo &DI) {
   case llvm::DK_Unsupported:
     UnsupportedDiagHandler(cast<DiagnosticInfoUnsupported>(DI));
     return;
-  case llvm::DK_MisExpect:
-    MisExpectDiagHandler(cast<DiagnosticInfoMisExpect>(DI));
-    return;
   default:
     // Plugin IDs are not bound to any value as they are set dynamically.
     ComputeDiagRemarkID(Severity, backend_plugin, DiagID);
@@ -990,11 +960,9 @@ CodeGenAction::CreateASTConsumer(CompilerInstance &CI, StringRef InFile) {
 
   CoverageSourceInfo *CoverageInfo = nullptr;
   // Add the preprocessor callback only when the coverage mapping is generated.
-  if (CI.getCodeGenOpts().CoverageMapping) {
-    CoverageInfo = new CoverageSourceInfo;
-    CI.getPreprocessor().addPPCallbacks(
-                                    std::unique_ptr<PPCallbacks>(CoverageInfo));
-  }
+  if (CI.getCodeGenOpts().CoverageMapping)
+    CoverageInfo = CodeGen::CoverageMappingModuleGen::setUpCoverageCallbacks(
+        CI.getPreprocessor());
 
   std::unique_ptr<BackendConsumer> Result(new BackendConsumer(
       BA, CI.getDiagnostics(), CI.getHeaderSearchOpts(),
@@ -1063,7 +1031,7 @@ CodeGenAction::loadModule(MemoryBufferRef MBRef) {
     Expected<std::vector<BitcodeModule>> BMsOrErr = getBitcodeModuleList(MBRef);
     if (!BMsOrErr)
       return DiagErrors(BMsOrErr.takeError());
-    BitcodeModule *Bm = FindThinLTOModule(*BMsOrErr);
+    BitcodeModule *Bm = llvm::lto::findThinLTOModule(*BMsOrErr);
     // We have nothing to do if the file contains no ThinLTO module. This is
     // possible if ThinLTO compilation was not able to split module. Content of
     // the file was already processed by indexing and will be passed to the
@@ -1118,11 +1086,10 @@ void CodeGenAction::ExecuteAction() {
     if (BA != Backend_EmitNothing && !OS)
       return;
 
-    bool Invalid;
     SourceManager &SM = CI.getSourceManager();
     FileID FID = SM.getMainFileID();
-    const llvm::MemoryBuffer *MainFile = SM.getBuffer(FID, &Invalid);
-    if (Invalid)
+    Optional<MemoryBufferRef> MainFile = SM.getBufferOrNone(FID);
+    if (!MainFile)
       return;
 
     TheModule = loadModule(*MainFile);
@@ -1137,8 +1104,7 @@ void CodeGenAction::ExecuteAction() {
       TheModule->setTargetTriple(TargetOpts.Triple);
     }
 
-    EmbedBitcode(TheModule.get(), CodeGenOpts,
-                 MainFile->getMemBufferRef());
+    EmbedBitcode(TheModule.get(), CodeGenOpts, *MainFile);
 
     LLVMContext &Ctx = TheModule->getContext();
     Ctx.setInlineAsmDiagnosticHandler(BitcodeInlineAsmDiagHandler,

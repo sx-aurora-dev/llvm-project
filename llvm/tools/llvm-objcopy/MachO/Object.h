@@ -44,6 +44,8 @@ struct Section {
   std::string CanonicalName;
   uint64_t Addr = 0;
   uint64_t Size = 0;
+  // Offset in the input file.
+  Optional<uint32_t> OriginalOffset;
   uint32_t Offset = 0;
   uint32_t Align = 0;
   uint32_t RelOff = 0;
@@ -73,6 +75,10 @@ struct Section {
             getType() == MachO::S_GB_ZEROFILL ||
             getType() == MachO::S_THREAD_LOCAL_ZEROFILL);
   }
+
+  bool hasValidOffset() const {
+    return !(isVirtualSection() || (OriginalOffset && *OriginalOffset == 0));
+  }
 };
 
 struct LoadCommand {
@@ -94,6 +100,9 @@ struct LoadCommand {
 
   // Returns the segment name if the load command is a segment command.
   Optional<StringRef> getSegmentName() const;
+
+  // Returns the segment vm address if the load command is a segment command.
+  Optional<uint64_t> getSegmentVMAddr() const;
 };
 
 // A symbol information. Fields which starts with "n_" are same as them in the
@@ -113,6 +122,11 @@ struct SymbolEntry {
 
   bool isUndefinedSymbol() const {
     return (n_type & MachO::N_TYPE) == MachO::N_UNDF;
+  }
+
+  bool isSwiftSymbol() const {
+    return StringRef(Name).startswith("_$s") ||
+           StringRef(Name).startswith("_$S");
   }
 
   Optional<uint32_t> section() const {
@@ -297,7 +311,12 @@ struct Object {
   IndirectSymbolTable IndirectSymTable;
   LinkData DataInCode;
   LinkData FunctionStarts;
+  LinkData CodeSignature;
 
+  Optional<uint32_t> SwiftVersion;
+
+  /// The index of LC_CODE_SIGNATURE load command if present.
+  Optional<size_t> CodeSignatureCommandIndex;
   /// The index of LC_SYMTAB load command if present.
   Optional<size_t> SymTabCommandIndex;
   /// The index of LC_DYLD_INFO or LC_DYLD_INFO_ONLY load command if present.
@@ -316,17 +335,22 @@ struct Object {
 
   Error
   removeSections(function_ref<bool(const std::unique_ptr<Section> &)> ToRemove);
-  void addLoadCommand(LoadCommand LC);
+
+  Error removeLoadCommands(function_ref<bool(const LoadCommand &)> ToRemove);
+
+  void updateLoadCommandIndexes();
 
   /// Creates a new segment load command in the object and returns a reference
   /// to the newly created load command. The caller should verify that SegName
   /// is not too long (SegName.size() should be less than or equal to 16).
-  LoadCommand &addSegment(StringRef SegName);
+  LoadCommand &addSegment(StringRef SegName, uint64_t SegVMSize);
 
   bool is64Bit() const {
     return Header.Magic == MachO::MH_MAGIC_64 ||
            Header.Magic == MachO::MH_CIGAM_64;
   }
+
+  uint64_t nextAvailableSegmentAddress() const;
 };
 
 } // end namespace macho

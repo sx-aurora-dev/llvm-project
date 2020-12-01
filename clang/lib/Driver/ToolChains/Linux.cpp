@@ -185,17 +185,18 @@ static StringRef getOSLibDir(const llvm::Triple &Triple, const ArgList &Args) {
     return Triple.isArch32Bit() ? "lib" : "lib64";
   }
 
-  // It happens that only x86 and PPC use the 'lib32' variant of oslibdir, and
-  // using that variant while targeting other architectures causes problems
-  // because the libraries are laid out in shared system roots that can't cope
-  // with a 'lib32' library search path being considered. So we only enable
-  // them when we know we may need it.
+  // It happens that only x86, PPC and SPARC use the 'lib32' variant of
+  // oslibdir, and using that variant while targeting other architectures causes
+  // problems because the libraries are laid out in shared system roots that
+  // can't cope with a 'lib32' library search path being considered. So we only
+  // enable them when we know we may need it.
   //
   // FIXME: This is a bit of a hack. We should really unify this code for
   // reasoning about oslibdir spellings with the lib dir spellings in the
   // GCCInstallationDetector, but that is a more significant refactoring.
   if (Triple.getArch() == llvm::Triple::x86 ||
-      Triple.getArch() == llvm::Triple::ppc)
+      Triple.getArch() == llvm::Triple::ppc ||
+      Triple.getArch() == llvm::Triple::sparc)
     return "lib32";
 
   if (Triple.getArch() == llvm::Triple::x86_64 &&
@@ -362,6 +363,10 @@ ToolChain::CXXStdlibType Linux::GetDefaultCXXStdlibType() const {
 bool Linux::HasNativeLLVMSupport() const { return true; }
 
 Tool *Linux::buildLinker() const { return new tools::gnutools::Linker(*this); }
+
+Tool *Linux::buildStaticLibTool() const {
+  return new tools::gnutools::StaticLibTool(*this);
+}
 
 Tool *Linux::buildAssembler() const {
   return new tools::gnutools::Assembler(*this);
@@ -537,6 +542,8 @@ std::string Linux::getDynamicLinker(const ArgList &Args) const {
     Loader = X32 ? "ld-linux-x32.so.2" : "ld-linux-x86-64.so.2";
     break;
   }
+  case llvm::Triple::ve:
+    return "/opt/nec/ve/lib/ld-linux-ve.so.1";
   }
 
   if (Distro == Distro::Exherbo &&
@@ -797,6 +804,11 @@ void Linux::AddCudaIncludeArgs(const ArgList &DriverArgs,
   CudaInstallation.AddCudaIncludeArgs(DriverArgs, CC1Args);
 }
 
+void Linux::AddHIPIncludeArgs(const ArgList &DriverArgs,
+                              ArgStringList &CC1Args) const {
+  RocmInstallation.AddHIPIncludeArgs(DriverArgs, CC1Args);
+}
+
 void Linux::AddIAMCUIncludeArgs(const ArgList &DriverArgs,
                                 ArgStringList &CC1Args) const {
   if (GCCInstallation.isValid()) {
@@ -835,6 +847,7 @@ SanitizerMask Linux::getSupportedSanitizers() const {
                          getTriple().getArch() == llvm::Triple::thumb ||
                          getTriple().getArch() == llvm::Triple::armeb ||
                          getTriple().getArch() == llvm::Triple::thumbeb;
+  const bool IsSystemZ = getTriple().getArch() == llvm::Triple::systemz;
   SanitizerMask Res = ToolChain::getSupportedSanitizers();
   Res |= SanitizerKind::Address;
   Res |= SanitizerKind::PointerCompare;
@@ -847,7 +860,8 @@ SanitizerMask Linux::getSupportedSanitizers() const {
   Res |= SanitizerKind::SafeStack;
   if (IsX86_64 || IsMIPS64 || IsAArch64)
     Res |= SanitizerKind::DataFlow;
-  if (IsX86_64 || IsMIPS64 || IsAArch64 || IsX86 || IsArmArch || IsPowerPC64)
+  if (IsX86_64 || IsMIPS64 || IsAArch64 || IsX86 || IsArmArch || IsPowerPC64 ||
+      IsSystemZ)
     Res |= SanitizerKind::Leak;
   if (IsX86_64 || IsMIPS64 || IsAArch64 || IsPowerPC64)
     Res |= SanitizerKind::Thread;
@@ -867,13 +881,9 @@ SanitizerMask Linux::getSupportedSanitizers() const {
 
 void Linux::addProfileRTLibs(const llvm::opt::ArgList &Args,
                              llvm::opt::ArgStringList &CmdArgs) const {
-  bool Profile = needsProfileRT(Args);
-  if (!Profile && !needsGCovInstrumentation(Args))
-    return;
-
   // Add linker option -u__llvm_profile_runtime to cause runtime
   // initialization module to be linked in.
-  if (Profile)
+  if (needsProfileRT(Args))
     CmdArgs.push_back(Args.MakeArgString(
         Twine("-u", llvm::getInstrProfRuntimeHookVarName())));
   ToolChain::addProfileRTLibs(Args, CmdArgs);

@@ -23,9 +23,8 @@
 #include "llvm/Support/Process.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Support/WithColor.h"
 
-using namespace clang::ast_matchers;
-using namespace clang::driver;
 using namespace clang::tooling;
 using namespace llvm;
 
@@ -169,6 +168,16 @@ each source file in its parent directories.
 )"),
                                    cl::init(""), cl::cat(ClangTidyCategory));
 
+static cl::opt<std::string> ConfigFile("config-file", cl::desc(R"(
+Specify the path of .clang-tidy or custom config file:
+ e.g. --config-file=/some/path/myTidyConfigFile
+This option internally works exactly the same way as
+ --config option after reading specified config file.
+Use either --config-file or --config, not both.
+)"),
+                                       cl::init(""),
+                                       cl::cat(ClangTidyCategory));
+
 static cl::opt<bool> DumpConfig("dump-config", cl::desc(R"(
 Dumps configuration in the YAML format to
 stdout. This option can be used along with a
@@ -228,6 +237,15 @@ over the real file system.
 )"),
                                        cl::value_desc("filename"),
                                        cl::cat(ClangTidyCategory));
+
+static cl::opt<bool> UseColor("use-color", cl::desc(R"(
+Use colors in diagnostics. If not set, colors
+will be used if the terminal connected to
+standard output supports colors.
+This option overrides the 'UseColor' option in
+.clang-tidy file, if any.
+)"),
+                              cl::init(false), cl::cat(ClangTidyCategory));
 
 namespace clang {
 namespace tidy {
@@ -291,20 +309,44 @@ static std::unique_ptr<ClangTidyOptionsProvider> createOptionsProvider(
     OverrideOptions.SystemHeaders = SystemHeaders;
   if (FormatStyle.getNumOccurrences() > 0)
     OverrideOptions.FormatStyle = FormatStyle;
+  if (UseColor.getNumOccurrences() > 0)
+    OverrideOptions.UseColor = UseColor;
 
-  if (!Config.empty()) {
-    if (llvm::ErrorOr<ClangTidyOptions> ParsedConfig =
-            parseConfiguration(Config)) {
+  auto LoadConfig = [&](StringRef Configuration)
+      -> std::unique_ptr<ClangTidyOptionsProvider> {
+    llvm::ErrorOr<ClangTidyOptions> ParsedConfig =
+        parseConfiguration(Configuration);
+    if (ParsedConfig)
       return std::make_unique<ConfigOptionsProvider>(
           GlobalOptions,
-          ClangTidyOptions::getDefaults().mergeWith(DefaultOptions, 0),
-          *ParsedConfig, OverrideOptions);
-    } else {
-      llvm::errs() << "Error: invalid configuration specified.\n"
-                   << ParsedConfig.getError().message() << "\n";
+          ClangTidyOptions::getDefaults().merge(DefaultOptions, 0),
+          *ParsedConfig, OverrideOptions, std::move(FS));
+    llvm::errs() << "Error: invalid configuration specified.\n"
+                 << ParsedConfig.getError().message() << "\n";
+    return nullptr;
+  };
+
+  if (ConfigFile.getNumOccurrences() > 0) {
+    if (Config.getNumOccurrences() > 0) {
+      llvm::errs() << "Error: --config-file and --config are "
+                      "mutually exclusive. Specify only one.\n";
       return nullptr;
     }
+
+    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> Text =
+        llvm::MemoryBuffer::getFile(ConfigFile.c_str());
+    if (std::error_code EC = Text.getError()) {
+      llvm::errs() << "Error: can't read config-file '" << ConfigFile
+                   << "': " << EC.message() << "\n";
+      return nullptr;
+    }
+
+    return LoadConfig((*Text)->getBuffer());
   }
+
+  if (Config.getNumOccurrences() > 0)
+    return LoadConfig(Config);
+
   return std::make_unique<FileOptionsProvider>(GlobalOptions, DefaultOptions,
                                                 OverrideOptions, std::move(FS));
 }
@@ -333,8 +375,14 @@ getVfsFromFile(const std::string &OverlayFile,
 
 int clangTidyMain(int argc, const char **argv) {
   llvm::InitLLVM X(argc, argv);
-  CommonOptionsParser OptionsParser(argc, argv, ClangTidyCategory,
-                                    cl::ZeroOrMore);
+  llvm::Expected<CommonOptionsParser> OptionsParser =
+      CommonOptionsParser::create(argc, argv, ClangTidyCategory,
+                                  cl::ZeroOrMore);
+  if (!OptionsParser) {
+    llvm::WithColor::error() << llvm::toString(OptionsParser.takeError());
+    return 1;
+  }
+
   llvm::IntrusiveRefCntPtr<vfs::OverlayFileSystem> BaseFS(
       new vfs::OverlayFileSystem(vfs::getRealFileSystem()));
 
@@ -365,7 +413,7 @@ int clangTidyMain(int argc, const char **argv) {
   SmallString<256> ProfilePrefix = MakeAbsolute(StoreCheckProfile);
 
   StringRef FileName("dummy");
-  auto PathList = OptionsParser.getSourcePathList();
+  auto PathList = OptionsParser->getSourcePathList();
   if (!PathList.empty()) {
     FileName = PathList.front();
   }
@@ -407,9 +455,8 @@ int clangTidyMain(int argc, const char **argv) {
   if (DumpConfig) {
     EffectiveOptions.CheckOptions =
         getCheckOptions(EffectiveOptions, AllowEnablingAnalyzerAlphaCheckers);
-    llvm::outs() << configurationAsText(
-                        ClangTidyOptions::getDefaults().mergeWith(
-                            EffectiveOptions, 0))
+    llvm::outs() << configurationAsText(ClangTidyOptions::getDefaults().merge(
+                        EffectiveOptions, 0))
                  << "\n";
     return 0;
   }
@@ -433,7 +480,7 @@ int clangTidyMain(int argc, const char **argv) {
   ClangTidyContext Context(std::move(OwningOptionsProvider),
                            AllowEnablingAnalyzerAlphaCheckers);
   std::vector<ClangTidyError> Errors =
-      runClangTidy(Context, OptionsParser.getCompilations(), PathList, BaseFS,
+      runClangTidy(Context, OptionsParser->getCompilations(), PathList, BaseFS,
                    EnableCheckProfile, ProfilePrefix);
   bool FoundErrors = llvm::find_if(Errors, [](const ClangTidyError &E) {
                        return E.DiagLevel == ClangTidyError::Error;
@@ -471,7 +518,7 @@ int clangTidyMain(int argc, const char **argv) {
       llvm::errs() << WErrorCount << " warning" << Plural << " treated as error"
                    << Plural << "\n";
     }
-    return WErrorCount;
+    return 1;
   }
 
   if (FoundErrors) {

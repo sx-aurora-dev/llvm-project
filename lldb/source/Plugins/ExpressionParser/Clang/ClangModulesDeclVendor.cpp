@@ -6,8 +6,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <mutex>
-
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/FrontendActions.h"
@@ -35,8 +33,11 @@
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/LLDBAssert.h"
 #include "lldb/Utility/Log.h"
-#include "lldb/Utility/Reproducer.h"
+#include "lldb/Utility/ReproducerProvider.h"
 #include "lldb/Utility/StreamString.h"
+
+#include <memory>
+#include <mutex>
 
 using namespace lldb_private;
 
@@ -94,8 +95,10 @@ public:
   uint32_t FindDecls(ConstString name, bool append, uint32_t max_matches,
                      std::vector<CompilerDecl> &decls) override;
 
-  void ForEachMacro(const ModuleVector &modules,
-                    std::function<bool(const std::string &)> handler) override;
+  void ForEachMacro(
+      const ModuleVector &modules,
+      std::function<bool(llvm::StringRef, llvm::StringRef)> handler) override;
+
 private:
   void
   ReportModuleExportsHelper(std::set<ClangModulesDeclVendor::ModuleID> &exports,
@@ -130,8 +133,9 @@ StoringDiagnosticConsumer::StoringDiagnosticConsumer() {
   m_log = lldb_private::GetLogIfAllCategoriesSet(LIBLLDB_LOG_EXPRESSIONS);
 
   clang::DiagnosticOptions *m_options = new clang::DiagnosticOptions();
-  m_os.reset(new llvm::raw_string_ostream(m_output));
-  m_diag_printer.reset(new clang::TextDiagnosticPrinter(*m_os, m_options));
+  m_os = std::make_shared<llvm::raw_string_ostream>(m_output);
+  m_diag_printer =
+      std::make_shared<clang::TextDiagnosticPrinter>(*m_os, m_options);
 }
 
 void StoringDiagnosticConsumer::HandleDiagnostic(
@@ -185,9 +189,9 @@ ClangModulesDeclVendorImpl::ClangModulesDeclVendorImpl(
       m_parser(std::move(parser)) {
 
   // Initialize our TypeSystemClang.
-  m_ast_context.reset(
-      new TypeSystemClang("ClangModulesDeclVendor ASTContext",
-                          m_compiler_instance->getASTContext()));
+  m_ast_context =
+      std::make_unique<TypeSystemClang>("ClangModulesDeclVendor ASTContext",
+                                        m_compiler_instance->getASTContext());
 }
 
 void ClangModulesDeclVendorImpl::ReportModuleExportsHelper(
@@ -418,7 +422,7 @@ ClangModulesDeclVendorImpl::FindDecls(ConstString name, bool append,
 
 void ClangModulesDeclVendorImpl::ForEachMacro(
     const ClangModulesDeclVendor::ModuleVector &modules,
-    std::function<bool(const std::string &)> handler) {
+    std::function<bool(llvm::StringRef, llvm::StringRef)> handler) {
   if (!m_enabled) {
     return;
   }
@@ -488,7 +492,8 @@ void ClangModulesDeclVendorImpl::ForEachMacro(
 
     if (macro_info) {
       std::string macro_expansion = "#define ";
-      macro_expansion.append(mi->first->getName().str());
+      llvm::StringRef macro_identifier = mi->first->getName();
+      macro_expansion.append(macro_identifier.str());
 
       {
         if (macro_info->isFunctionLike()) {
@@ -573,7 +578,7 @@ void ClangModulesDeclVendorImpl::ForEachMacro(
           }
         }
 
-        if (handler(macro_expansion)) {
+        if (handler(macro_identifier, macro_expansion)) {
           return;
         }
       }

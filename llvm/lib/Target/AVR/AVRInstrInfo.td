@@ -193,6 +193,7 @@ def brtarget_13 : Operand<OtherVT>
 def call_target : Operand<iPTR>
 {
     let EncoderMethod = "encodeCallTarget";
+    let DecoderMethod = "decodeCallTarget";
 }
 
 // A 16-bit address (which can lead to an R_AVR_16 relocation).
@@ -731,13 +732,23 @@ Defs = [SREG] in
                       "comw\t$rd",
                       [(set i16:$rd, (not i16:$src)), (implicit SREG)]>;
 
-  //:TODO: optimize NEG for wider types
   def NEGRd : FRd<0b1001,
                   0b0100001,
                   (outs GPR8:$rd),
                   (ins GPR8:$src),
                   "neg\t$rd",
                   [(set i8:$rd, (ineg i8:$src)), (implicit SREG)]>;
+
+  // NEGW Rd+1:Rd
+  //
+  // Expands to:
+  // neg Rd+1
+  // neg Rd
+  // sbci Rd+1, 0
+  def NEGWRd : Pseudo<(outs DREGS:$rd),
+                      (ins DREGS:$src),
+                      "negw\t$rd",
+                      [(set i16:$rd, (ineg i16:$src)), (implicit SREG)]>;
 }
 
 // TST Rd
@@ -2047,8 +2058,6 @@ def : Pat<(add i16:$src1, imm:$src2),
           (SUBIWRdK i16:$src1, (imm16_neg_XFORM imm:$src2))>;
 def : Pat<(addc i16:$src1, imm:$src2),
           (SUBIWRdK i16:$src1, (imm16_neg_XFORM imm:$src2))>;
-def : Pat<(adde i16:$src1, imm:$src2),
-          (SBCIWRdK i16:$src1, (imm16_neg_XFORM imm:$src2))>;
 
 def : Pat<(add i8:$src1, imm:$src2),
           (SUBIRdK i8:$src1, (imm8_neg_XFORM imm:$src2))>;

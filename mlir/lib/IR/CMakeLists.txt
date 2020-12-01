@@ -5,22 +5,24 @@ add_mlir_library(MLIRIR
   Attributes.cpp
   Block.cpp
   Builders.cpp
+  BuiltinDialect.cpp
   Diagnostics.cpp
   Dialect.cpp
   Dominance.cpp
-  Function.cpp
   FunctionImplementation.cpp
+  FunctionSupport.cpp
   IntegerSet.cpp
   Location.cpp
   MLIRContext.cpp
-  Module.cpp
   Operation.cpp
   OperationSupport.cpp
   PatternMatch.cpp
   Region.cpp
+  RegionKindInterface.cpp
   StandardTypes.cpp
   SymbolTable.cpp
   Types.cpp
+  TypeRange.cpp
   TypeUtilities.cpp
   Value.cpp
   Verifier.cpp
@@ -30,8 +32,10 @@ add_mlir_library(MLIRIR
   ${MLIR_MAIN_INCLUDE_DIR}/mlir/IR
 
   DEPENDS
+  MLIRBuiltinOpsIncGen
   MLIRCallInterfacesIncGen
-  MLIROpAsmInterfacesIncGen
+  MLIROpAsmInterfaceIncGen
+  MLIRRegionKindInterfaceIncGen
   MLIRSymbolInterfacesIncGen
 
   LINK_LIBS PUBLIC

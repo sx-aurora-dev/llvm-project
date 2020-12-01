@@ -11,7 +11,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/Block.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/Module.h"
+#include "mlir/IR/BuiltinOps.h"
 
 using namespace mlir;
 
@@ -50,7 +50,7 @@ static void ensureDistinctSuccessors(Block &bb) {
 
 void mlir::LLVM::ensureDistinctSuccessors(Operation *op) {
   op->walk([](LLVMFuncOp f) {
-    for (auto &bb : f.getBlocks()) {
+    for (auto &bb : f) {
       ::ensureDistinctSuccessors(bb);
     }
   });

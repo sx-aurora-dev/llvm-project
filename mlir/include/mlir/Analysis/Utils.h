@@ -36,8 +36,14 @@ class Value;
 
 /// Populates 'loops' with IVs of the loops surrounding 'op' ordered from
 /// the outermost 'affine.for' operation to the innermost one.
-//  TODO(bondhugula): handle 'affine.if' ops.
+//  TODO: handle 'affine.if' ops.
 void getLoopIVs(Operation &op, SmallVectorImpl<AffineForOp> *loops);
+
+/// Populates 'ops' with IVs of the loops surrounding `op`, along with
+/// `affine.if` operations interleaved between these loops, ordered from the
+/// outermost `affine.for` or `affine.if` operation to the innermost one.
+void getEnclosingAffineForAndIfOps(Operation &op,
+                                   SmallVectorImpl<Operation *> *ops);
 
 /// Returns the nesting depth of this operation, i.e., the number of loops
 /// surrounding this operation.
@@ -76,6 +82,11 @@ struct ComputationSliceState {
 
   // Clears all bounds and operands in slice state.
   void clearBounds();
+
+  /// Return true if the computation slice is empty.
+  bool isEmpty() const { return ivs.empty(); }
+
+  void dump() const;
 };
 
 /// Computes the computation slice loop bounds for one loop nest as affine maps
@@ -135,7 +146,7 @@ void getComputationSliceState(Operation *depSourceOp, Operation *depSinkOp,
 /// surrounding ops in 'opsB', as a function of IVs and symbols of loop nest
 /// surrounding ops in 'opsA' at 'loopDepth'.
 /// Returns 'success' if union was computed, 'failure' otherwise.
-// TODO(andydavis) Change this API to take 'forOpA'/'forOpB'.
+// TODO: Change this API to take 'forOpA'/'forOpB'.
 LogicalResult computeSliceUnion(ArrayRef<Operation *> opsA,
                                 ArrayRef<Operation *> opsB, unsigned loopDepth,
                                 unsigned numCommonLoops, bool isBackwardSlice,
@@ -150,7 +161,7 @@ LogicalResult computeSliceUnion(ArrayRef<Operation *> opsA,
 // Loop depth is a crucial optimization choice that determines where to
 // materialize the results of the backward slice - presenting a trade-off b/w
 // storage and redundant computation in several cases.
-// TODO(andydavis) Support computation slices with common surrounding loops.
+// TODO: Support computation slices with common surrounding loops.
 AffineForOp insertBackwardComputationSlice(Operation *srcOpInst,
                                            Operation *dstOpInst,
                                            unsigned dstLoopDepth,
@@ -206,7 +217,7 @@ struct MemRefRegion {
   /// The last field is a 2-d FlatAffineConstraints symbolic in %i.
   ///
   LogicalResult compute(Operation *op, unsigned loopDepth,
-                        ComputationSliceState *sliceState = nullptr,
+                        const ComputationSliceState *sliceState = nullptr,
                         bool addMemRefDimBounds = true);
 
   FlatAffineConstraints *getConstraints() { return &cst; }
@@ -271,7 +282,7 @@ struct MemRefRegion {
   /// identifiers since getMemRefRegion() is called with a specific loop depth,
   /// and thus the region is symbolic in the outer surrounding loops at that
   /// depth.
-  // TODO(bondhugula): Replace this to exploit HyperRectangularSet.
+  // TODO: Replace this to exploit HyperRectangularSet.
   FlatAffineConstraints cst;
 };
 
@@ -302,6 +313,11 @@ bool isLoopParallel(AffineForOp forOp);
 /// Returns the simplified integer set. This method runs in time linear in the
 /// number of constraints.
 IntegerSet simplifyIntegerSet(IntegerSet set);
+
+/// Returns the innermost common loop depth for the set of operations in 'ops'.
+unsigned getInnermostCommonLoopDepth(
+    ArrayRef<Operation *> ops,
+    SmallVectorImpl<AffineForOp> *surroundingLoops = nullptr);
 
 } // end namespace mlir
 

@@ -124,12 +124,17 @@ int FunctionComparator::cmpAttrs(const AttributeList L,
 
         Type *TyL = LA.getValueAsType();
         Type *TyR = RA.getValueAsType();
-        if (TyL && TyR)
-          return cmpTypes(TyL, TyR);
+        if (TyL && TyR) {
+          if (int Res = cmpTypes(TyL, TyR))
+            return Res;
+          continue;
+        }
 
         // Two pointers, at least one null, so the comparison result is
         // independent of the value of a real pointer.
-        return cmpNumbers((uint64_t)TyL, (uint64_t)TyR);
+        if (int Res = cmpNumbers((uint64_t)TyL, (uint64_t)TyR))
+          return Res;
+        continue;
       }
       if (LA < RA)
         return -1;
@@ -286,6 +291,7 @@ int FunctionComparator::cmpConstants(const Constant *L,
 
   switch (L->getValueID()) {
   case Value::UndefValueVal:
+  case Value::PoisonValueVal:
   case Value::ConstantTokenNoneVal:
     return TypesRes;
   case Value::ConstantIntVal: {
@@ -329,8 +335,8 @@ int FunctionComparator::cmpConstants(const Constant *L,
   case Value::ConstantVectorVal: {
     const ConstantVector *LV = cast<ConstantVector>(L);
     const ConstantVector *RV = cast<ConstantVector>(R);
-    unsigned NumElementsL = cast<VectorType>(TyL)->getNumElements();
-    unsigned NumElementsR = cast<VectorType>(TyR)->getNumElements();
+    unsigned NumElementsL = cast<FixedVectorType>(TyL)->getNumElements();
+    unsigned NumElementsR = cast<FixedVectorType>(TyR)->getNumElements();
     if (int Res = cmpNumbers(NumElementsL, NumElementsR))
       return Res;
     for (uint64_t i = 0; i < NumElementsL; ++i) {
@@ -488,12 +494,13 @@ int FunctionComparator::cmpTypes(Type *TyL, Type *TyR) const {
   case Type::ScalableVectorTyID: {
     auto *STyL = cast<VectorType>(TyL);
     auto *STyR = cast<VectorType>(TyR);
-    if (STyL->getElementCount().Scalable != STyR->getElementCount().Scalable)
-      return cmpNumbers(STyL->getElementCount().Scalable,
-                        STyR->getElementCount().Scalable);
-    if (STyL->getElementCount().Min != STyR->getElementCount().Min)
-      return cmpNumbers(STyL->getElementCount().Min,
-                        STyR->getElementCount().Min);
+    if (STyL->getElementCount().isScalable() !=
+        STyR->getElementCount().isScalable())
+      return cmpNumbers(STyL->getElementCount().isScalable(),
+                        STyR->getElementCount().isScalable());
+    if (STyL->getElementCount() != STyR->getElementCount())
+      return cmpNumbers(STyL->getElementCount().getKnownMinValue(),
+                        STyR->getElementCount().getKnownMinValue());
     return cmpTypes(STyL->getElementType(), STyR->getElementType());
   }
   }

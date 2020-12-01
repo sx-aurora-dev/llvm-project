@@ -9,11 +9,11 @@
 #ifndef LLVM_LIBC_SRC_MATH_MATH_UTILS_H
 #define LLVM_LIBC_SRC_MATH_MATH_UTILS_H
 
-#include "include/errno.h"
-#include "include/math.h"
 #include "src/__support/common.h"
 #include "src/errno/llvmlibc_errno.h"
 #include "utils/CPP/TypeTraits.h"
+#include <errno.h>
+#include <math.h>
 
 #include <stdint.h>
 
@@ -80,7 +80,7 @@ using EnableIfFloatOrDouble = cpp::EnableIfType<IsFloatOrDouble<T>::Value, int>;
 template <typename T, EnableIfFloatOrDouble<T> = 0>
 T xflow(uint32_t sign, T y) {
   // Underflow happens when two extremely small values are multiplied.
-  // Likewise, overflow happens when two large values are mulitplied.
+  // Likewise, overflow happens when two large values are multiplied.
   y = opt_barrier(sign ? -y : y) * y;
   return with_errno(y, ERANGE);
 }

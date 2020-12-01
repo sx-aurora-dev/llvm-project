@@ -18,17 +18,18 @@ namespace Fortran::runtime {
   CrashArgs(message, ap);
 }
 
-static void (*crashHandler)(const char *, va_list &){nullptr};
+static void (*crashHandler)(const char *, int, const char *, va_list &){
+    nullptr};
 
 void Terminator::RegisterCrashHandler(
-    void (*handler)(const char *, va_list &)) {
+    void (*handler)(const char *, int, const char *, va_list &)) {
   crashHandler = handler;
 }
 
 [[noreturn]] void Terminator::CrashArgs(
     const char *message, va_list &ap) const {
   if (crashHandler) {
-    crashHandler(message, ap);
+    crashHandler(sourceFileName_, sourceLine_, message, ap);
   }
   std::fputs("\nfatal Fortran runtime error", stderr);
   if (sourceFileName_) {
@@ -51,6 +52,11 @@ void Terminator::RegisterCrashHandler(
     const char *predicate, const char *file, int line) const {
   Crash("Internal error: RUNTIME_CHECK(%s) failed at %s(%d)", predicate, file,
       line);
+}
+
+[[noreturn]] void Terminator::CheckFailed(const char *predicate) const {
+  Crash("Internal error: RUNTIME_CHECK(%s) failed at %s(%d)", predicate,
+      sourceFileName_, sourceLine_);
 }
 
 // TODO: These will be defined in the coarray runtime library

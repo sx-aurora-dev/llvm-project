@@ -92,6 +92,92 @@ func @simple_addi() -> i32 {
 
 // -----
 
+// CHECK: func @simple_and
+// CHECK-SAME: [[ARG0:%[a-zA-Z0-9]+]]: i1
+// CHECK-SAME: [[ARG1:%[a-zA-Z0-9]+]]: i32)
+func @simple_and(%arg0 : i1, %arg1 : i32) -> (i1, i32) {
+  %c1 = constant 1 : i1
+  %cAllOnes_32 = constant 4294967295 : i32
+
+  // CHECK: [[C31:%.*]] = constant 31 : i32
+  %c31 = constant 31 : i32
+  %1 = and %arg0, %c1 : i1
+  %2 = and %arg1, %cAllOnes_32 : i32
+
+  // CHECK: [[VAL:%.*]] = and [[ARG1]], [[C31]]
+  %3 = and %2, %c31 : i32
+
+  // CHECK: return [[ARG0]], [[VAL]]
+  return %1, %3 : i1, i32
+}
+
+// -----
+
+// CHECK-LABEL: func @and_index
+//  CHECK-SAME:   [[ARG:%[a-zA-Z0-9]+]]
+func @and_index(%arg0 : index) -> (index) {
+  // CHECK: [[C31:%.*]] = constant 31 : index
+  %c31 = constant 31 : index
+  %c_AllOnes = constant -1 : index
+  %1 = and %arg0, %c31 : index
+
+  // CHECK: and [[ARG]], [[C31]]
+  %2 = and %1, %c_AllOnes : index
+  return %2 : index
+}
+
+// -----
+
+// CHECK: func @tensor_and
+// CHECK-SAME: [[ARG0:%[a-zA-Z0-9]+]]: tensor<2xi32>
+func @tensor_and(%arg0 : tensor<2xi32>) -> tensor<2xi32> {
+  %cAllOnes_32 = constant dense<4294967295> : tensor<2xi32>
+
+  // CHECK: [[C31:%.*]] = constant dense<31> : tensor<2xi32>
+  %c31 = constant dense<31> : tensor<2xi32>
+
+  // CHECK: [[CMIXED:%.*]] = constant dense<[31, -1]> : tensor<2xi32>
+  %c_mixed = constant dense<[31, 4294967295]> : tensor<2xi32>
+
+  %0 = and %arg0, %cAllOnes_32 : tensor<2xi32>
+
+  // CHECK: [[T1:%.*]] = and [[ARG0]], [[C31]]
+  %1 = and %0, %c31 : tensor<2xi32>
+
+  // CHECK: [[T2:%.*]] = and [[T1]], [[CMIXED]]
+  %2 = and %1, %c_mixed : tensor<2xi32>
+
+  // CHECK: return [[T2]]
+  return %2 : tensor<2xi32>
+}
+
+// -----
+
+// CHECK: func @vector_and
+// CHECK-SAME: [[ARG0:%[a-zA-Z0-9]+]]: vector<2xi32>
+func @vector_and(%arg0 : vector<2xi32>) -> vector<2xi32> {
+  %cAllOnes_32 = constant dense<4294967295> : vector<2xi32>
+
+  // CHECK: [[C31:%.*]] = constant dense<31> : vector<2xi32>
+  %c31 = constant dense<31> : vector<2xi32>
+
+  // CHECK: [[CMIXED:%.*]] = constant dense<[31, -1]> : vector<2xi32>
+  %c_mixed = constant dense<[31, 4294967295]> : vector<2xi32>
+
+  %0 = and %arg0, %cAllOnes_32 : vector<2xi32>
+
+  // CHECK: [[T1:%.*]] = and [[ARG0]], [[C31]]
+  %1 = and %0, %c31 : vector<2xi32>
+
+  // CHECK: [[T2:%.*]] = and [[T1]], [[CMIXED]]
+  %2 = and %1, %c_mixed : vector<2xi32>
+
+  // CHECK: return [[T2]]
+  return %2 : vector<2xi32>
+}
+
+// -----
+
 // CHECK-LABEL: func @addi_splat_vector
 func @addi_splat_vector() -> vector<8xi32> {
   %0 = constant dense<1> : vector<8xi32>
@@ -134,16 +220,19 @@ func @subf_splat_vector() -> vector<4xf32> {
 
 // -----
 
-// CHECK-LABEL: func @simple_subi
-func @simple_subi() -> i32 {
+//      CHECK: func @simple_subi
+// CHECK-SAME:   [[ARG0:%[a-zA-Z0-9]+]]
+func @simple_subi(%arg0 : i32) -> (i32, i32) {
   %0 = constant 4 : i32
   %1 = constant 1 : i32
+  %2 = constant 0 : i32
 
   // CHECK-NEXT:[[C3:%.+]] = constant 3 : i32
-  %2 = subi %0, %1 : i32
+  %3 = subi %0, %1 : i32
+  %4 = subi %arg0, %2 : i32
 
-  // CHECK-NEXT: return [[C3]]
-  return %2 : i32
+  // CHECK-NEXT: return [[C3]], [[ARG0]]
+  return %3, %4 : i32, i32
 }
 
 // -----
@@ -313,6 +402,82 @@ func @divi_unsigned_splat_tensor() -> (tensor<4xi32>, tensor<4xi32>, tensor<4xi3
 
 // -----
 
+// CHECK-LABEL: func @simple_floordivi_signed
+func @simple_floordivi_signed() -> (i32, i32, i32, i32, i32) {
+  // CHECK-DAG: [[C0:%.+]] = constant 0
+  %z = constant 0 : i32
+  // CHECK-DAG: [[C6:%.+]] = constant 7
+  %0 = constant 7 : i32
+  %1 = constant 2 : i32
+
+  // floor(7, 2) = 3
+  // CHECK-NEXT: [[C3:%.+]] = constant 3 : i32
+  %2 = floordivi_signed %0, %1 : i32
+
+  %3 = constant -2 : i32
+
+  // floor(7, -2) = -4
+  // CHECK-NEXT: [[CM3:%.+]] = constant -4 : i32
+  %4 = floordivi_signed %0, %3 : i32
+
+  %5 = constant -9 : i32
+
+  // floor(-9, 2) = -5
+  // CHECK-NEXT: [[CM4:%.+]] = constant -5 : i32
+  %6 = floordivi_signed %5, %1 : i32
+
+  %7 = constant -13 : i32
+
+  // floor(-13, -2) = 6
+  // CHECK-NEXT: [[CM5:%.+]] = constant 6 : i32
+  %8 = floordivi_signed %7, %3 : i32
+
+  // CHECK-NEXT: [[XZ:%.+]] = floordivi_signed [[C6]], [[C0]]
+  %9 = floordivi_signed %0, %z : i32
+
+  return %2, %4, %6, %8, %9 : i32, i32, i32, i32, i32
+}
+
+// -----
+
+// CHECK-LABEL: func @simple_ceildivi_signed
+func @simple_ceildivi_signed() -> (i32, i32, i32, i32, i32) {
+  // CHECK-DAG: [[C0:%.+]] = constant 0
+  %z = constant 0 : i32
+  // CHECK-DAG: [[C6:%.+]] = constant 7
+  %0 = constant 7 : i32
+  %1 = constant 2 : i32
+
+  // ceil(7, 2) = 4
+  // CHECK-NEXT: [[C3:%.+]] = constant 4 : i32
+  %2 = ceildivi_signed %0, %1 : i32
+
+  %3 = constant -2 : i32
+
+  // ceil(7, -2) = -3
+  // CHECK-NEXT: [[CM3:%.+]] = constant -3 : i32
+  %4 = ceildivi_signed %0, %3 : i32
+
+  %5 = constant -9 : i32
+
+  // ceil(-9, 2) = -4
+  // CHECK-NEXT: [[CM4:%.+]] = constant -4 : i32
+  %6 = ceildivi_signed %5, %1 : i32
+
+  %7 = constant -15 : i32
+
+  // ceil(-15, -2) = 8
+  // CHECK-NEXT: [[CM5:%.+]] = constant 8 : i32
+  %8 = ceildivi_signed %7, %3 : i32
+
+  // CHECK-NEXT: [[XZ:%.+]] = ceildivi_signed [[C6]], [[C0]]
+  %9 = ceildivi_signed %0, %z : i32
+
+  return %2, %4, %6, %8, %9 : i32, i32, i32, i32, i32
+}
+
+// -----
+
 // CHECK-LABEL: func @simple_remi_signed
 func @simple_remi_signed(%a : i32) -> (i32, i32, i32) {
   %0 = constant 5 : i32
@@ -382,7 +547,8 @@ func @muli_splat_vector() -> vector<4xi32> {
 func @dim(%x : tensor<8x4xf32>) -> index {
 
   // CHECK:[[C4:%.+]] = constant 4 : index
-  %0 = dim %x, 1 : tensor<8x4xf32>
+  %c1 = constant 1 : index
+  %0 = dim %x, %c1 : tensor<8x4xf32>
 
   // CHECK-NEXT: return [[C4]]
   return %0 : index
@@ -394,8 +560,8 @@ func @dim(%x : tensor<8x4xf32>) -> index {
 func @cmpi() -> (i1, i1, i1, i1, i1, i1, i1, i1, i1, i1) {
   %c42 = constant 42 : i32
   %cm1 = constant -1 : i32
-  // CHECK-DAG: [[F:%.+]] = constant 0 : i1
-  // CHECK-DAG: [[T:%.+]] = constant 1 : i1
+  // CHECK-DAG: [[F:%.+]] = constant false
+  // CHECK-DAG: [[T:%.+]] = constant true
   // CHECK-NEXT: return [[F]],
   %0 = cmpi "eq", %c42, %cm1 : i32
   // CHECK-SAME: [[T]],
@@ -425,8 +591,8 @@ func @cmpi() -> (i1, i1, i1, i1, i1, i1, i1, i1, i1, i1) {
 func @cmpf_normal_numbers() -> (i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1) {
   %c42 = constant 42. : f32
   %cm1 = constant -1. : f32
-  // CHECK-DAG: [[F:%.+]] = constant 0 : i1
-  // CHECK-DAG: [[T:%.+]] = constant 1 : i1
+  // CHECK-DAG: [[F:%.+]] = constant false
+  // CHECK-DAG: [[T:%.+]] = constant true
   // CHECK-NEXT: return [[F]],
   %0 = cmpf "false", %c42, %cm1 : f32
   // CHECK-SAME: [[F]],
@@ -468,8 +634,8 @@ func @cmpf_normal_numbers() -> (i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, 
 func @cmpf_nan() -> (i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1) {
   %c42 = constant 42. : f32
   %cqnan = constant 0xFFFFFFFF : f32
-  // CHECK-DAG: [[F:%.+]] = constant 0 : i1
-  // CHECK-DAG: [[T:%.+]] = constant 1 : i1
+  // CHECK-DAG: [[F:%.+]] = constant false
+  // CHECK-DAG: [[T:%.+]] = constant true
   // CHECK-NEXT: return [[F]],
   %0 = cmpf "false", %c42, %cqnan : f32
   // CHECK-SAME: [[F]]
@@ -511,8 +677,8 @@ func @cmpf_nan() -> (i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1,
 func @cmpf_inf() -> (i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1, i1) {
   %c42 = constant 42. : f32
   %cpinf = constant 0x7F800000 : f32
-  // CHECK-DAG: [[F:%.+]] = constant 0 : i1
-  // CHECK-DAG: [[T:%.+]] = constant 1 : i1
+  // CHECK-DAG: [[F:%.+]] = constant false
+  // CHECK-DAG: [[T:%.+]] = constant true
   // CHECK-NEXT: return [[F]],
   %0 = cmpf "false", %c42, %cpinf: f32
   // CHECK-SAME: [[F]]
@@ -596,6 +762,18 @@ func @fold_rank() -> (index) {
 
 // -----
 
+// CHECK-LABEL: func @fold_rank_memref
+func @fold_rank_memref(%arg0 : memref<?x?xf32>) -> (index) {
+  // Fold a rank into a constant
+  // CHECK-NEXT: [[C2:%.+]] = constant 2 : index
+  %rank_0 = rank %arg0 : memref<?x?xf32>
+
+  // CHECK-NEXT: return [[C2]]
+  return %rank_0 : index
+}
+
+// -----
+
 // CHECK-LABEL: func @nested_isolated_region
 func @nested_isolated_region() {
   // CHECK-NEXT: func @isolated_op
@@ -641,4 +819,13 @@ func @splat_fold() -> (vector<4xf32>, tensor<4xf32>) {
   // CHECK-NEXT: [[V:%.*]] = constant dense<1.000000e+00> : vector<4xf32>
   // CHECK-NEXT: [[T:%.*]] = constant dense<1.000000e+00> : tensor<4xf32>
   // CHECK-NEXT: return [[V]], [[T]] : vector<4xf32>, tensor<4xf32>
+}
+
+// -----
+
+// CHECK-LABEL: func @subview_scalar_fold
+func @subview_scalar_fold(%arg0: memref<f32>) -> memref<f32> {
+  // CHECK-NOT: subview
+  %c = subview %arg0[] [] [] : memref<f32> to memref<f32>
+  return %c : memref<f32>
 }

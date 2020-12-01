@@ -164,6 +164,12 @@ CXSourceRange cxloc::translateSourceRange(const SourceManager &SM,
   return Result;
 }
 
+CharSourceRange cxloc::translateCXRangeToCharRange(CXSourceRange R) {
+  return CharSourceRange::getCharRange(
+      SourceLocation::getFromRawEncoding(R.begin_int_data),
+      SourceLocation::getFromRawEncoding(R.end_int_data));
+}
+
 //===----------------------------------------------------------------------===//
 // Cursor visitor.
 //===----------------------------------------------------------------------===//
@@ -1540,6 +1546,8 @@ bool CursorVisitor::VisitBuiltinTypeLoc(BuiltinTypeLoc TL) {
   case BuiltinType::OCLReserveID:
 #define SVE_TYPE(Name, Id, SingletonId) case BuiltinType::Id:
 #include "clang/Basic/AArch64SVEACLETypes.def"
+#define PPC_MMA_VECTOR_TYPE(Name, Id, Size) case BuiltinType::Id:
+#include "clang/Basic/PPCTypes.def"
 #define BUILTIN_TYPE(Id, SingletonId)
 #define SIGNED_TYPE(Id, SingletonId) case BuiltinType::Id:
 #define UNSIGNED_TYPE(Id, SingletonId) case BuiltinType::Id:
@@ -2376,6 +2384,17 @@ void OMPClauseEnqueue::VisitOMPReductionClause(const OMPReductionClause *C) {
   for (auto *E : C->reduction_ops()) {
     Visitor->AddStmt(E);
   }
+  if (C->getModifier() == clang::OMPC_REDUCTION_inscan) {
+    for (auto *E : C->copy_ops()) {
+      Visitor->AddStmt(E);
+    }
+    for (auto *E : C->copy_array_temps()) {
+      Visitor->AddStmt(E);
+    }
+    for (auto *E : C->copy_array_elems()) {
+      Visitor->AddStmt(E);
+    }
+  }
 }
 void OMPClauseEnqueue::VisitOMPTaskReductionClause(
     const OMPTaskReductionClause *C) {
@@ -2487,6 +2506,10 @@ void OMPClauseEnqueue::VisitOMPFromClause(const OMPFromClause *C) {
 }
 void OMPClauseEnqueue::VisitOMPUseDevicePtrClause(
     const OMPUseDevicePtrClause *C) {
+  VisitOMPClauseList(C);
+}
+void OMPClauseEnqueue::VisitOMPUseDeviceAddrClause(
+    const OMPUseDeviceAddrClause *C) {
   VisitOMPClauseList(C);
 }
 void OMPClauseEnqueue::VisitOMPIsDevicePtrClause(
@@ -3257,7 +3280,7 @@ bool CursorVisitor::RunVisitorWorkList(VisitorWorkList &WL) {
       }
       // Visit init captures
       for (auto InitExpr : E->capture_inits()) {
-        if (Visit(InitExpr))
+        if (InitExpr && Visit(InitExpr))
           return true;
       }
 
@@ -3453,7 +3476,7 @@ enum CXErrorCode clang_createTranslationUnit2(CXIndex CIdx,
       ast_filename, CXXIdx->getPCHContainerOperations()->getRawReader(),
       ASTUnit::LoadEverything, Diags, FileSystemOpts, /*UseDebugInfo=*/false,
       CXXIdx->getOnlyLocalDecls(), None, CaptureDiagsKind::All,
-      /*AllowPCHWithCompilerErrors=*/true,
+      /*AllowASTWithCompilerErrors=*/true,
       /*UserFilesAreVolatile=*/true);
   *out_TU = MakeCXTranslationUnit(CXXIdx, std::move(AU));
   return *out_TU ? CXError_Success : CXError_Failure;
@@ -4041,10 +4064,14 @@ static const Expr *evaluateCompoundStmtExpr(const CompoundStmt *CS) {
 }
 
 CXEvalResult clang_Cursor_Evaluate(CXCursor C) {
-  if (const Expr *E =
-          clang_getCursorKind(C) == CXCursor_CompoundStmt
-              ? evaluateCompoundStmtExpr(cast<CompoundStmt>(getCursorStmt(C)))
-              : evaluateDeclExpr(getCursorDecl(C)))
+  const Expr *E = nullptr;
+  if (clang_getCursorKind(C) == CXCursor_CompoundStmt)
+    E = evaluateCompoundStmtExpr(cast<CompoundStmt>(getCursorStmt(C)));
+  else if (clang_isDeclaration(C.kind))
+    E = evaluateDeclExpr(getCursorDecl(C));
+  else if (clang_isExpression(C.kind))
+    E = getCursorExpr(C);
+  if (E)
     return const_cast<CXEvalResult>(
         reinterpret_cast<const void *>(evaluateExpr(const_cast<Expr *>(E), C)));
   return nullptr;
@@ -4337,9 +4364,8 @@ const char *clang_getFileContents(CXTranslationUnit TU, CXFile file,
 
   const SourceManager &SM = cxtu::getASTUnit(TU)->getSourceManager();
   FileID fid = SM.translateFile(static_cast<FileEntry *>(file));
-  bool Invalid = true;
-  const llvm::MemoryBuffer *buf = SM.getBuffer(fid, &Invalid);
-  if (Invalid) {
+  llvm::Optional<llvm::MemoryBufferRef> buf = SM.getBufferOrNone(fid);
+  if (!buf) {
     if (size)
       *size = 0;
     return nullptr;
@@ -6352,6 +6378,7 @@ CXCursor clang_getCursorDefinition(CXCursor C) {
   case Decl::Binding:
   case Decl::MSProperty:
   case Decl::MSGuid:
+  case Decl::TemplateParamObject:
   case Decl::IndirectField:
   case Decl::ObjCIvar:
   case Decl::ObjCAtDefsField:
@@ -8373,7 +8400,9 @@ CXFile clang_Module_getASTFile(CXModule CXMod) {
   if (!CXMod)
     return nullptr;
   Module *Mod = static_cast<Module *>(CXMod);
-  return const_cast<FileEntry *>(Mod->getASTFile());
+  if (auto File = Mod->getASTFile())
+    return const_cast<FileEntry *>(&File->getFileEntry());
+  return nullptr;
 }
 
 CXModule clang_Module_getParent(CXModule CXMod) {
@@ -8824,6 +8853,42 @@ void clang::PrintLibclangResourceUsage(CXTranslationUnit TU) {
             Usage.entries[I].amount);
 
   clang_disposeCXTUResourceUsage(Usage);
+}
+
+CXCursor clang_Cursor_getVarDeclInitializer(CXCursor cursor) {
+  const Decl *const D = getCursorDecl(cursor);
+  if (!D)
+    return clang_getNullCursor();
+  const auto *const VD = dyn_cast<VarDecl>(D);
+  if (!VD)
+    return clang_getNullCursor();
+  const Expr *const Init = VD->getInit();
+  if (!Init)
+    return clang_getNullCursor();
+
+  return cxcursor::MakeCXCursor(Init, VD, cxcursor::getCursorTU(cursor));
+}
+
+int clang_Cursor_hasVarDeclGlobalStorage(CXCursor cursor) {
+  const Decl *const D = getCursorDecl(cursor);
+  if (!D)
+    return -1;
+  const auto *const VD = dyn_cast<VarDecl>(D);
+  if (!VD)
+    return -1;
+
+  return VD->hasGlobalStorage();
+}
+
+int clang_Cursor_hasVarDeclExternalStorage(CXCursor cursor) {
+  const Decl *const D = getCursorDecl(cursor);
+  if (!D)
+    return -1;
+  const auto *const VD = dyn_cast<VarDecl>(D);
+  if (!VD)
+    return -1;
+
+  return VD->hasExternalStorage();
 }
 
 //===----------------------------------------------------------------------===//

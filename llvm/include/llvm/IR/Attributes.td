@@ -1,3 +1,15 @@
+//===- Attributes.td - Defines all LLVM attributes ---------*- tablegen -*-===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+//
+// This file defines all the LLVM attributes.
+//
+//===----------------------------------------------------------------------===//
+
 /// Attribute base class.
 class Attr<string S> {
   // String representation of this attribute in the IR.
@@ -38,6 +50,12 @@ def Builtin : EnumAttr<"builtin">;
 
 /// Pass structure by value.
 def ByVal : TypeAttr<"byval">;
+
+/// Mark in-memory ABI type.
+def ByRef : TypeAttr<"byref">;
+
+/// Parameter or return value may not contain uninitialized or poison bits.
+def NoUndef : EnumAttr<"noundef">;
 
 /// Marks function as being in a cold path.
 def Cold : EnumAttr<"cold">;
@@ -186,7 +204,7 @@ def StackProtectStrong : EnumAttr<"sspstrong">;
 def StrictFP : EnumAttr<"strictfp">;
 
 /// Hidden pointer to structure to return.
-def StructRet : EnumAttr<"sret">;
+def StructRet : TypeAttr<"sret">;
 
 /// AddressSanitizer is on.
 def SanitizeAddress : EnumAttr<"sanitize_address">;
@@ -229,14 +247,19 @@ def WriteOnly : EnumAttr<"writeonly">;
 /// Zero extended before/after call.
 def ZExt : EnumAttr<"zeroext">;
 
+/// Function is required to make Forward Progress.
+def MustProgress : TypeAttr<"mustprogress">;
+
 /// Target-independent string attributes.
 def LessPreciseFPMAD : StrBoolAttr<"less-precise-fpmad">;
 def NoInfsFPMath : StrBoolAttr<"no-infs-fp-math">;
 def NoNansFPMath : StrBoolAttr<"no-nans-fp-math">;
+def NoSignedZerosFPMath : StrBoolAttr<"no-signed-zeros-fp-math">;
 def UnsafeFPMath : StrBoolAttr<"unsafe-fp-math">;
 def NoJumpTables : StrBoolAttr<"no-jump-tables">;
 def NoInlineLineTables : StrBoolAttr<"no-inline-line-tables">;
 def ProfileSampleAccurate : StrBoolAttr<"profile-sample-accurate">;
+def UseSampleProfile : StrBoolAttr<"use-sample-profile">;
 
 class CompatRule<string F> {
   // The name of the function called to check the attribute of the caller and
@@ -255,6 +278,7 @@ def : CompatRule<"isEqual<SanitizeHWAddressAttr>">;
 def : CompatRule<"isEqual<SanitizeMemTagAttr>">;
 def : CompatRule<"isEqual<SafeStackAttr>">;
 def : CompatRule<"isEqual<ShadowCallStackAttr>">;
+def : CompatRule<"isEqual<UseSampleProfileAttr>">;
 
 class MergeRule<string F> {
   // The name of the function called to merge the attributes of the caller and
@@ -268,6 +292,7 @@ class MergeRule<string F> {
 def : MergeRule<"setAND<LessPreciseFPMADAttr>">;
 def : MergeRule<"setAND<NoInfsFPMathAttr>">;
 def : MergeRule<"setAND<NoNansFPMathAttr>">;
+def : MergeRule<"setAND<NoSignedZerosFPMathAttr>">;
 def : MergeRule<"setAND<UnsafeFPMathAttr>">;
 def : MergeRule<"setOR<NoImplicitFloatAttr>">;
 def : MergeRule<"setOR<NoJumpTablesAttr>">;
@@ -278,3 +303,4 @@ def : MergeRule<"adjustCallerStackProbes">;
 def : MergeRule<"adjustCallerStackProbeSize">;
 def : MergeRule<"adjustMinLegalVectorWidth">;
 def : MergeRule<"adjustNullPointerValidAttr">;
+def : MergeRule<"setAND<MustProgressAttr>">;

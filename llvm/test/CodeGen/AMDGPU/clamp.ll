@@ -102,8 +102,8 @@ define amdgpu_kernel void @v_clamp_negzero_maybe_snan_f32(float addrspace(1)* %o
 ; SI: buffer_store_dword [[MED]]
 ; SI: buffer_store_dword [[MAX]]
 
-; GFX89: {{flat|global}}_store_dword v{{\[[0-9]+:[0-9]+\]}}, [[MED]]
-; GFX89: {{flat|global}}_store_dword v{{\[[0-9]+:[0-9]+\]}}, [[MAX]]
+; GFX89: {{flat|global}}_store_dword v{{.+}}, [[MED]]
+; GFX89: {{flat|global}}_store_dword v{{.+}}, [[MAX]]
 define amdgpu_kernel void @v_clamp_multi_use_max_f32(float addrspace(1)* %out, float addrspace(1)* %aptr) #0 {
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %gep0 = getelementptr float, float addrspace(1)* %aptr, i32 %tid
@@ -772,6 +772,6 @@ declare <2 x half> @llvm.maxnum.v2f16(<2 x half>, <2 x half>) #1
 
 attributes #0 = { nounwind "denormal-fp-math-f32"="preserve-sign,preserve-sign" }
 attributes #1 = { nounwind readnone }
-attributes #2 = { nounwind "amdgpu-dx10-clamp"="false" "target-features"="-fp-exceptions" "denormal-fp-math-f32"="preserve-sign,preserve-sign" "no-nans-fp-math"="false" }
-attributes #3 = { nounwind "amdgpu-dx10-clamp"="true" "target-features"="+fp-exceptions" "denormal-fp-math-f32"="preserve-sign,preserve-sign" "no-nans-fp-math"="false" }
-attributes #4 = { nounwind "amdgpu-dx10-clamp"="false" "target-features"="+fp-exceptions" "denormal-fp-math-f32"="preserve-sign,preserve-sign" "no-nans-fp-math"="false" }
+attributes #2 = { nounwind "amdgpu-dx10-clamp"="false" "denormal-fp-math-f32"="preserve-sign,preserve-sign" "no-nans-fp-math"="false" }
+attributes #3 = { nounwind "amdgpu-dx10-clamp"="true" "denormal-fp-math-f32"="preserve-sign,preserve-sign" "no-nans-fp-math"="false" }
+attributes #4 = { nounwind "amdgpu-dx10-clamp"="false" "denormal-fp-math-f32"="preserve-sign,preserve-sign" "no-nans-fp-math"="false" }

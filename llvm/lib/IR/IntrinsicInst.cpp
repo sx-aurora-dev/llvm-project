@@ -246,20 +246,20 @@ unsigned VPIntrinsic::GetFunctionalOpcodeForVP(Intrinsic::ID ID) {
   default:
     return Instruction::Call;
 
-#define HANDLE_VP_TO_OC(VPID, OC)                                              \
+#define HANDLE_VP_TO_OPC(VPID, OPC)                                            \
   case Intrinsic::VPID:                                                        \
-    return Instruction::OC;
+    return Instruction::OPC;
 #include "llvm/IR/VPIntrinsics.def"
   }
 }
 
-Intrinsic::ID VPIntrinsic::GetForOpcode(unsigned OC) {
-  switch (OC) {
+Intrinsic::ID VPIntrinsic::GetForOpcode(unsigned IROPC) {
+  switch (IROPC) {
   default:
     return Intrinsic::not_intrinsic;
 
-#define HANDLE_VP_TO_OC(VPID, OC)                                              \
-  case Instruction::OC:                                                        \
+#define HANDLE_VP_TO_OPC(VPID, OPC)                                            \
+  case Instruction::OPC:                                                       \
     return Intrinsic::VPID;
 #include "llvm/IR/VPIntrinsics.def"
   }
@@ -280,8 +280,8 @@ bool VPIntrinsic::canIgnoreVectorLengthParam() const {
   // the operation. This function returns true when this is detected statically
   // in the IR.
 
-  // Check whether "W == vscale * EC.Min"
-  if (EC.Scalable) {
+  // Check whether "W == vscale * EC.getKnownMinValue()"
+  if (EC.isScalable()) {
     // Undig the DL
     auto ParMod = this->getModule();
     if (!ParMod)
@@ -289,15 +289,10 @@ bool VPIntrinsic::canIgnoreVectorLengthParam() const {
     const auto &DL = ParMod->getDataLayout();
 
     // Compare vscale patterns
-    uint64_t ParamFactor;
-    if (EC.Min > 1 &&
-        match(VLParam, m_c_BinOp(m_ConstantInt(ParamFactor), m_VScale(DL)))) {
-      return ParamFactor >= EC.Min;
-    }
-    if (match(VLParam, m_VScale(DL))) {
-      return ParamFactor;
-    }
-    return false;
+    uint64_t VScaleFactor;
+    if (match(VLParam, m_c_Mul(m_ConstantInt(VScaleFactor), m_VScale(DL))))
+      return VScaleFactor >= EC.getKnownMinValue();
+    return (EC.getKnownMinValue() == 1) && match(VLParam, m_VScale(DL));
   }
 
   // standard SIMD operation
@@ -306,7 +301,7 @@ bool VPIntrinsic::canIgnoreVectorLengthParam() const {
     return false;
 
   uint64_t VLNum = VLConst->getZExtValue();
-  if (VLNum >= EC.Min)
+  if (VLNum >= EC.getKnownMinValue())
     return true;
 
   return false;

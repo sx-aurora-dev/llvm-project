@@ -495,8 +495,7 @@ bool AMDGPULibCalls::isUnsafeMath(const CallInst *CI) const {
 }
 
 bool AMDGPULibCalls::useNativeFunc(const StringRef F) const {
-  return AllNative ||
-         std::find(UseNative.begin(), UseNative.end(), F) != UseNative.end();
+  return AllNative || llvm::is_contained(UseNative, F);
 }
 
 void AMDGPULibCalls::initNativeFuncs() {
@@ -590,15 +589,15 @@ bool AMDGPULibCalls::fold_read_write_pipe(CallInst *CI, IRBuilder<> &B,
   if (!isa<ConstantInt>(PacketSize) || !isa<ConstantInt>(PacketAlign))
     return false;
   unsigned Size = cast<ConstantInt>(PacketSize)->getZExtValue();
-  unsigned Align = cast<ConstantInt>(PacketAlign)->getZExtValue();
-  if (Size != Align || !isPowerOf2_32(Size))
+  Align Alignment = cast<ConstantInt>(PacketAlign)->getAlignValue();
+  if (Alignment != Size)
     return false;
 
   Type *PtrElemTy;
   if (Size <= 8)
     PtrElemTy = Type::getIntNTy(Ctx, Size * 8);
   else
-    PtrElemTy = VectorType::get(Type::getInt64Ty(Ctx), Size / 8);
+    PtrElemTy = FixedVectorType::get(Type::getInt64Ty(Ctx), Size / 8);
   unsigned PtrArgLoc = CI->getNumArgOperands() - 3;
   auto PtrArg = CI->getArgOperand(PtrArgLoc);
   unsigned PtrArgAS = PtrArg->getType()->getPointerAddressSpace();
@@ -1289,6 +1288,7 @@ bool AMDGPULibCalls::fold_sincos(CallInst *CI, IRBuilder<> &B,
   BasicBlock * const CBB = CI->getParent();
 
   int const MaxScan = 30;
+  bool Changed = false;
 
   { // fold in load value.
     LoadInst *LI = dyn_cast<LoadInst>(CArgVal);
@@ -1296,6 +1296,7 @@ bool AMDGPULibCalls::fold_sincos(CallInst *CI, IRBuilder<> &B,
       BasicBlock::iterator BBI = LI->getIterator();
       Value *AvailableVal = FindAvailableLoadedValue(LI, CBB, BBI, MaxScan, AA);
       if (AvailableVal) {
+        Changed = true;
         CArgVal->replaceAllUsesWith(AvailableVal);
         if (CArgVal->getNumUses() == 0)
           LI->eraseFromParent();
@@ -1331,7 +1332,8 @@ bool AMDGPULibCalls::fold_sincos(CallInst *CI, IRBuilder<> &B,
     if (UI) break;
   }
 
-  if (!UI) return false;
+  if (!UI)
+    return Changed;
 
   // Merge the sin and cos.
 
@@ -1340,7 +1342,8 @@ bool AMDGPULibCalls::fold_sincos(CallInst *CI, IRBuilder<> &B,
   AMDGPULibFunc nf(AMDGPULibFunc::EI_SINCOS, fInfo);
   nf.getLeads()[0].PtrKind = AMDGPULibFunc::getEPtrKindFromAddrSpace(AMDGPUAS::FLAT_ADDRESS);
   FunctionCallee Fsincos = getFunction(M, nf);
-  if (!Fsincos) return false;
+  if (!Fsincos)
+    return Changed;
 
   BasicBlock::iterator ItOld = B.GetInsertPoint();
   AllocaInst *Alloc = insertAlloca(UI, B, "__sincos_");
@@ -1730,7 +1733,9 @@ bool AMDGPUSimplifyLibCalls::runOnFunction(Function &F) {
       // Ignore non-calls.
       CallInst *CI = dyn_cast<CallInst>(I);
       ++I;
-      if (!CI) continue;
+      // Ignore intrinsics that do not become real instructions.
+      if (!CI || isa<DbgInfoIntrinsic>(CI) || CI->isLifetimeStartOrEnd())
+        continue;
 
       // Ignore indirect calls.
       Function *Callee = CI->getCalledFunction();

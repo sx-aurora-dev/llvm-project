@@ -220,14 +220,14 @@ namespace test3 {
   };
 
   class Derived3 :
-    Base<0>, // expected-note 2{{deleted because base class 'Base<0>' has an inaccessible destructor}}
+    Base<0>, // expected-note {{deleted because base class 'Base<0>' has an inaccessible destructor}}
     virtual Base<1>,
     Base2,
     virtual Base3
   {};
-  Derived3 d3; // expected-error {{implicitly-deleted default constructor}} expected-error {{attempt to use a deleted function}}
+  Derived3 d3; // expected-error {{implicitly-deleted default constructor}}
 #elif __cplusplus >= 201103L && defined(_MSC_VER)
-  template <unsigned N> class Base { ~Base(); }; // expected-note 9{{declared private here}}
+  template <unsigned N> class Base { ~Base(); }; // expected-note 6{{declared private here}}
   // expected-error@+1 {{inherited virtual base class 'Base<2>' has private destructor}}
   class Base2 : virtual Base<2> { ~Base2(); }; // expected-note 1{{declared private here}}
   // expected-error@+1 {{inherited virtual base class 'Base<3>' has private destructor}}
@@ -249,15 +249,13 @@ namespace test3 {
     ~Derived2() {}
   };
 
-  class Derived3 : // expected-error 3{{has private destructor}}
+  class Derived3 :
     Base<0>, // expected-note {{deleted because base class 'Base<0>' has an inaccessible destructor}}
-             // expected-note@-1 {{destructor of 'Derived3' is implicitly deleted}}
     virtual Base<1>,
     Base2,
     virtual Base3
   {};
-  Derived3 d3; // expected-error {{implicitly-deleted default constructor}} expected-error {{use a deleted function}}
-               // expected-note@-1 {{implicit destructor for}}
+  Derived3 d3; // expected-error {{implicitly-deleted default constructor}}
 #else
 #error "missing case of MSVC cross C++ versions"
 #endif
@@ -272,15 +270,12 @@ namespace test4 {
     operator Public(); // expected-note 2{{member is declared here}}
   };
 
-  class Derived1 : private Base { // expected-note 2 {{declared private here}} \
-                                  // expected-note {{constrained by private inheritance}}
+  class Derived1 : private Base { // expected-note {{constrained by private inheritance}}
     Private test1() { return *this; } // expected-error {{'operator Private' is a private member}}
     Public test2() { return *this; }
   };
-  Private test1(Derived1 &d) { return d; } // expected-error {{'operator Private' is a private member}} \
-                                           // expected-error {{cannot cast 'test4::Derived1' to its private base class}}
-  Public test2(Derived1 &d) { return d; } // expected-error {{cannot cast 'test4::Derived1' to its private base class}} \
-                                          // expected-error {{'operator Public' is a private member}}
+  Private test1(Derived1 &d) { return d; } // expected-error {{'operator Private' is a private member}}
+  Public test2(Derived1 &d) { return d; } // expected-error {{'operator Public' is a private member}}
 
 
   class Derived2 : public Base {
@@ -290,14 +285,12 @@ namespace test4 {
   Private test1(Derived2 &d) { return d; } // expected-error {{'operator Private' is a private member}}
   Public test2(Derived2 &d) { return d; }
 
-  class Derived3 : private Base { // expected-note {{constrained by private inheritance here}} \
-                                  // expected-note {{declared private here}}
+  class Derived3 : private Base { // expected-note {{constrained by private inheritance here}}
   public:
     operator Private();
   };
   Private test1(Derived3 &d) { return d; }
-  Public test2(Derived3 &d) { return d; } // expected-error {{'operator Public' is a private member of 'test4::Base'}} \
-                                          // expected-error {{cannot cast 'test4::Derived3' to its private base class}}
+  Public test2(Derived3 &d) { return d; } // expected-error {{'operator Public' is a private member of 'test4::Base'}}
 
   class Derived4 : public Base {
   public:

@@ -73,6 +73,11 @@ LLVMContext::LLVMContext() : pImpl(new LLVMContextImpl(*this)) {
          "preallocated operand bundle id drifted!");
   (void)PreallocatedEntry;
 
+  auto *GCLiveEntry = pImpl->getOrInsertBundleTag("gc-live");
+  assert(GCLiveEntry->second == LLVMContext::OB_gc_live &&
+         "gc-transition operand bundle id drifted!");
+  (void)GCLiveEntry;
+
   SyncScope::ID SingleThreadSSID =
       pImpl->getOrInsertSyncScopeID("singlethread");
   assert(SingleThreadSSID == SyncScope::SingleThread &&
@@ -141,11 +146,16 @@ bool LLVMContext::getDiagnosticsHotnessRequested() const {
   return pImpl->DiagnosticsHotnessRequested;
 }
 
-void LLVMContext::setDiagnosticsHotnessThreshold(uint64_t Threshold) {
+void LLVMContext::setDiagnosticsHotnessThreshold(Optional<uint64_t> Threshold) {
   pImpl->DiagnosticsHotnessThreshold = Threshold;
 }
+
 uint64_t LLVMContext::getDiagnosticsHotnessThreshold() const {
-  return pImpl->DiagnosticsHotnessThreshold;
+  return pImpl->DiagnosticsHotnessThreshold.getValueOr(UINT64_MAX);
+}
+
+bool LLVMContext::isDiagnosticsHotnessThresholdSetFromPSI() const {
+  return !pImpl->DiagnosticsHotnessThreshold.hasValue();
 }
 
 remarks::RemarkStreamer *LLVMContext::getMainRemarkStreamer() {

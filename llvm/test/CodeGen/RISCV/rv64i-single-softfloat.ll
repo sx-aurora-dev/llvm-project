@@ -174,7 +174,7 @@ define i32 @fcvt_w_s(float %a) nounwind {
 ; RV64I:       # %bb.0:
 ; RV64I-NEXT:    addi sp, sp, -16
 ; RV64I-NEXT:    sd ra, 8(sp)
-; RV64I-NEXT:    call __fixsfdi
+; RV64I-NEXT:    call __fixsfsi
 ; RV64I-NEXT:    ld ra, 8(sp)
 ; RV64I-NEXT:    addi sp, sp, 16
 ; RV64I-NEXT:    ret
@@ -187,7 +187,7 @@ define i32 @fcvt_wu_s(float %a) nounwind {
 ; RV64I:       # %bb.0:
 ; RV64I-NEXT:    addi sp, sp, -16
 ; RV64I-NEXT:    sd ra, 8(sp)
-; RV64I-NEXT:    call __fixunssfdi
+; RV64I-NEXT:    call __fixunssfsi
 ; RV64I-NEXT:    ld ra, 8(sp)
 ; RV64I-NEXT:    addi sp, sp, 16
 ; RV64I-NEXT:    ret
@@ -709,4 +709,65 @@ define float @fp_trunc(double %a) nounwind {
 ; RV64I-NEXT:    ret
   %conv = fptrunc double %a to float
   ret float %conv
+}
+
+define i32 @fp32_to_ui32(float %a) nounwind {
+; RV64I-LABEL: fp32_to_ui32:
+; RV64I:       # %bb.0: # %entry
+; RV64I-NEXT:    addi sp, sp, -16
+; RV64I-NEXT:    sd ra, 8(sp)
+; RV64I-NEXT:    call __fixunssfsi
+; RV64I-NEXT:    ld ra, 8(sp)
+; RV64I-NEXT:    addi sp, sp, 16
+; RV64I-NEXT:    ret
+entry:
+  %conv = fptoui float %a to i32
+  ret i32 %conv
+}
+
+define i32 @fp32_to_si32(float %a) nounwind  {
+; RV64I-LABEL: fp32_to_si32:
+; RV64I:       # %bb.0: # %entry
+; RV64I-NEXT:    addi sp, sp, -16
+; RV64I-NEXT:    sd ra, 8(sp)
+; RV64I-NEXT:    call __fixsfsi
+; RV64I-NEXT:    ld ra, 8(sp)
+; RV64I-NEXT:    addi sp, sp, 16
+; RV64I-NEXT:    ret
+entry:
+  %conv = fptosi float %a to i32
+  ret i32 %conv
+}
+
+
+
+declare i32 @llvm.experimental.constrained.fptoui.i32.f32(float, metadata)
+declare i32 @llvm.experimental.constrained.fptosi.i32.f32(float, metadata)
+
+define i32 @strict_fp32_to_ui32(float %a) nounwind strictfp {
+; RV64I-LABEL: strict_fp32_to_ui32:
+; RV64I:       # %bb.0: # %entry
+; RV64I-NEXT:    addi sp, sp, -16
+; RV64I-NEXT:    sd ra, 8(sp)
+; RV64I-NEXT:    call __fixunssfsi
+; RV64I-NEXT:    ld ra, 8(sp)
+; RV64I-NEXT:    addi sp, sp, 16
+; RV64I-NEXT:    ret
+entry:
+  %conv = tail call i32 @llvm.experimental.constrained.fptoui.i32.f32(float %a, metadata !"fpexcept.strict")
+  ret i32 %conv
+}
+
+define i32 @strict_fp32_to_si32(float %a) nounwind strictfp {
+; RV64I-LABEL: strict_fp32_to_si32:
+; RV64I:       # %bb.0: # %entry
+; RV64I-NEXT:    addi sp, sp, -16
+; RV64I-NEXT:    sd ra, 8(sp)
+; RV64I-NEXT:    call __fixsfsi
+; RV64I-NEXT:    ld ra, 8(sp)
+; RV64I-NEXT:    addi sp, sp, 16
+; RV64I-NEXT:    ret
+entry:
+  %conv = tail call i32 @llvm.experimental.constrained.fptosi.i32.f32(float %a, metadata !"fpexcept.strict")
+  ret i32 %conv
 }

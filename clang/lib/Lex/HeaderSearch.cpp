@@ -164,14 +164,39 @@ std::string HeaderSearch::getPrebuiltModuleFileName(StringRef ModuleName,
   return {};
 }
 
+std::string HeaderSearch::getPrebuiltImplicitModuleFileName(Module *Module) {
+  const FileEntry *ModuleMap =
+      getModuleMap().getModuleMapFileForUniquing(Module);
+  StringRef ModuleName = Module->Name;
+  StringRef ModuleMapPath = ModuleMap->getName();
+  StringRef ModuleCacheHash = HSOpts->DisableModuleHash ? "" : getModuleHash();
+  for (const std::string &Dir : HSOpts->PrebuiltModulePaths) {
+    SmallString<256> CachePath(Dir);
+    llvm::sys::fs::make_absolute(CachePath);
+    llvm::sys::path::append(CachePath, ModuleCacheHash);
+    std::string FileName =
+        getCachedModuleFileNameImpl(ModuleName, ModuleMapPath, CachePath);
+    if (!FileName.empty() && getFileMgr().getFile(FileName))
+      return FileName;
+  }
+  return {};
+}
+
 std::string HeaderSearch::getCachedModuleFileName(StringRef ModuleName,
                                                   StringRef ModuleMapPath) {
+  return getCachedModuleFileNameImpl(ModuleName, ModuleMapPath,
+                                     getModuleCachePath());
+}
+
+std::string HeaderSearch::getCachedModuleFileNameImpl(StringRef ModuleName,
+                                                      StringRef ModuleMapPath,
+                                                      StringRef CachePath) {
   // If we don't have a module cache path or aren't supposed to use one, we
   // can't do anything.
-  if (getModuleCachePath().empty())
+  if (CachePath.empty())
     return {};
 
-  SmallString<256> Result(getModuleCachePath());
+  SmallString<256> Result(CachePath);
   llvm::sys::fs::make_absolute(Result);
 
   if (HSOpts->DisableModuleHash) {
@@ -765,8 +790,7 @@ Optional<FileEntryRef> HeaderSearch::LookupFile(
 
   // This is the header that MSVC's header search would have found.
   ModuleMap::KnownHeader MSSuggestedModule;
-  const FileEntry *MSFE_FE = nullptr;
-  StringRef MSFE_Name;
+  Optional<FileEntryRef> MSFE;
 
   // Unless disabled, check to see if the file is in the #includer's
   // directory.  This cannot be based on CurDir, because each includer could be
@@ -841,8 +865,7 @@ Optional<FileEntryRef> HeaderSearch::LookupFile(
         if (Diags.isIgnored(diag::ext_pp_include_search_ms, IncludeLoc)) {
           return FE;
         } else {
-          MSFE_FE = &FE->getFileEntry();
-          MSFE_Name = FE->getName();
+          MSFE = FE;
           if (SuggestedModule) {
             MSSuggestedModule = *SuggestedModule;
             *SuggestedModule = ModuleMap::KnownHeader();
@@ -853,9 +876,6 @@ Optional<FileEntryRef> HeaderSearch::LookupFile(
       First = false;
     }
   }
-
-  Optional<FileEntryRef> MSFE(MSFE_FE ? FileEntryRef(MSFE_Name, *MSFE_FE)
-                                      : Optional<FileEntryRef>());
 
   CurDir = nullptr;
 
@@ -1167,12 +1187,12 @@ HeaderFileInfo &HeaderSearch::getFileInfo(const FileEntry *FE) {
   HeaderFileInfo *HFI = &FileInfo[FE->getUID()];
   // FIXME: Use a generation count to check whether this is really up to date.
   if (ExternalSource && !HFI->Resolved) {
-    HFI->Resolved = true;
     auto ExternalHFI = ExternalSource->GetHeaderFileInfo(FE);
-
-    HFI = &FileInfo[FE->getUID()];
-    if (ExternalHFI.External)
-      mergeHeaderFileInfo(*HFI, ExternalHFI);
+    if (ExternalHFI.IsValid) {
+      HFI->Resolved = true;
+      if (ExternalHFI.External)
+        mergeHeaderFileInfo(*HFI, ExternalHFI);
+    }
   }
 
   HFI->IsValid = true;
@@ -1199,12 +1219,12 @@ HeaderSearch::getExistingFileInfo(const FileEntry *FE,
     if (!WantExternal && (!HFI->IsValid || HFI->External))
       return nullptr;
     if (!HFI->Resolved) {
-      HFI->Resolved = true;
       auto ExternalHFI = ExternalSource->GetHeaderFileInfo(FE);
-
-      HFI = &FileInfo[FE->getUID()];
-      if (ExternalHFI.External)
-        mergeHeaderFileInfo(*HFI, ExternalHFI);
+      if (ExternalHFI.IsValid) {
+        HFI->Resolved = true;
+        if (ExternalHFI.External)
+          mergeHeaderFileInfo(*HFI, ExternalHFI);
+      }
     }
   } else if (FE->getUID() >= FileInfo.size()) {
     return nullptr;
@@ -1276,14 +1296,12 @@ bool HeaderSearch::ShouldEnterIncludeFile(Preprocessor &PP,
     //
     // It's common that libc++ and system modules will both define such
     // submodules. Make sure cached results for a builtin header won't
-    // prevent other builtin modules to potentially enter the builtin header.
-    // Note that builtins are header guarded and the decision to actually
-    // enter them is postponed to the controlling macros logic below.
+    // prevent other builtin modules from potentially entering the builtin
+    // header. Note that builtins are header guarded and the decision to
+    // actually enter them is postponed to the controlling macros logic below.
     bool TryEnterHdr = false;
     if (FileInfo.isCompilingModuleHeader && FileInfo.isModuleHeader)
-      TryEnterHdr = File->getDir() == ModMap.getBuiltinDir() &&
-                    ModuleMap::isBuiltinHeader(
-                        llvm::sys::path::filename(File->getName()));
+      TryEnterHdr = ModMap.isBuiltinHeader(File);
 
     // Textual headers can be #imported from different modules. Since ObjC
     // headers find in the wild might rely only on #import and do not contain
@@ -1416,19 +1434,30 @@ static bool suggestModule(HeaderSearch &HS, const FileEntry *File,
                           ModuleMap::KnownHeader *SuggestedModule) {
   ModuleMap::KnownHeader Module =
       HS.findModuleForHeader(File, /*AllowTextual*/true);
-  if (SuggestedModule)
-    *SuggestedModule = (Module.getRole() & ModuleMap::TextualHeader)
-                           ? ModuleMap::KnownHeader()
-                           : Module;
 
   // If this module specifies [no_undeclared_includes], we cannot find any
   // file that's in a non-dependency module.
   if (RequestingModule && Module && RequestingModule->NoUndeclaredIncludes) {
-    HS.getModuleMap().resolveUses(RequestingModule, /*Complain*/false);
+    HS.getModuleMap().resolveUses(RequestingModule, /*Complain*/ false);
     if (!RequestingModule->directlyUses(Module.getModule())) {
+      // Builtin headers are a special case. Multiple modules can use the same
+      // builtin as a modular header (see also comment in
+      // ShouldEnterIncludeFile()), so the builtin header may have been
+      // "claimed" by an unrelated module. This shouldn't prevent us from
+      // including the builtin header textually in this module.
+      if (HS.getModuleMap().isBuiltinHeader(File)) {
+        if (SuggestedModule)
+          *SuggestedModule = ModuleMap::KnownHeader();
+        return true;
+      }
       return false;
     }
   }
+
+  if (SuggestedModule)
+    *SuggestedModule = (Module.getRole() & ModuleMap::TextualHeader)
+                           ? ModuleMap::KnownHeader()
+                           : Module;
 
   return true;
 }

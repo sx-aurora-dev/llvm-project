@@ -39,6 +39,7 @@ extern cl::list<std::string> MAttrs;
 extern cl::opt<std::string> MCPU;
 extern cl::opt<bool> NoShowRawInsn;
 extern cl::opt<bool> NoLeadingAddr;
+extern cl::opt<std::string> Prefix;
 extern cl::opt<bool> PrintImmHex;
 extern cl::opt<bool> PrivateHeaders;
 extern cl::opt<bool> Relocations;
@@ -50,8 +51,6 @@ extern cl::opt<std::string> TripleName;
 extern cl::opt<bool> UnwindInfo;
 
 extern StringSet<> FoundSectionSet;
-
-} // namespace objdump
 
 typedef std::function<bool(llvm::object::SectionRef const &)> FilterPredicate;
 
@@ -118,7 +117,6 @@ SectionFilter ToolSectionFilter(llvm::object::ObjectFile const &O,
                                 uint64_t *Idx = nullptr);
 
 bool isRelocAddressLess(object::RelocationRef A, object::RelocationRef B);
-void printRawClangAST(const object::ObjectFile *O);
 void printRelocations(const object::ObjectFile *O);
 void printDynamicRelocations(const object::ObjectFile *O);
 void printSectionHeaders(const object::ObjectFile *O);
@@ -147,6 +145,7 @@ std::string getFileNameForError(const object::Archive::Child &C,
 SymbolInfoTy createSymbolInfo(const object::ObjectFile *Obj,
                               const object::SymbolRef &Symbol);
 
+} // namespace objdump
 } // end namespace llvm
 
 #endif

@@ -101,10 +101,7 @@ public:
 
   unsigned getUniqueID() const { return ID; }
 
-  void createOutputDIE() {
-    NewUnit.emplace(OrigUnit.getVersion(), OrigUnit.getAddressByteSize(),
-                    OrigUnit.getUnitDIE().getTag());
-  }
+  void createOutputDIE() { NewUnit.emplace(OrigUnit.getUnitDIE().getTag()); }
 
   DIE *getOutputUnitDIE() const {
     if (NewUnit)
@@ -122,6 +119,11 @@ public:
 
   DIEInfo &getInfo(unsigned Idx) { return Info[Idx]; }
   const DIEInfo &getInfo(unsigned Idx) const { return Info[Idx]; }
+
+  DIEInfo &getInfo(const DWARFDie &Die) {
+    unsigned Idx = getOrigUnit().getDIEIndex(Die);
+    return Info[Idx];
+  }
 
   uint64_t getStartOffset() const { return StartOffset; }
   uint64_t getNextUnitOffset() const { return NextUnitOffset; }

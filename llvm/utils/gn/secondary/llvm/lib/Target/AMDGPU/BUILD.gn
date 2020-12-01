@@ -42,6 +42,15 @@ tablegen("AMDGPUGenPostLegalizeGICombiner") {
   td_file = "AMDGPUGISel.td"
 }
 
+tablegen("AMDGPUGenRegBankGICombiner") {
+  visibility = [ ":LLVMAMDGPUCodeGen" ]
+  args = [
+    "-gen-global-isel-combiner",
+    "-combiners=AMDGPURegBankCombinerHelper",
+  ]
+  td_file = "AMDGPUGISel.td"
+}
+
 tablegen("AMDGPUGenMCPseudoLowering") {
   visibility = [ ":LLVMAMDGPUCodeGen" ]
   args = [ "-gen-pseudo-lowering" ]
@@ -52,6 +61,11 @@ tablegen("AMDGPUGenRegisterBank") {
   visibility = [ ":LLVMAMDGPUCodeGen" ]
   args = [ "-gen-register-bank" ]
   td_file = "AMDGPU.td"
+}
+
+tablegen("InstCombineTables") {
+  visibility = [ ":LLVMAMDGPUCodeGen" ]
+  args = [ "-gen-searchable-tables" ]
 }
 
 tablegen("R600GenCallingConv") {
@@ -81,7 +95,9 @@ static_library("LLVMAMDGPUCodeGen") {
     ":AMDGPUGenMCPseudoLowering",
     ":AMDGPUGenPostLegalizeGICombiner",
     ":AMDGPUGenPreLegalizeGICombiner",
+    ":AMDGPUGenRegBankGICombiner",
     ":AMDGPUGenRegisterBank",
+    ":InstCombineTables",
     ":R600GenCallingConv",
     ":R600GenDAGISel",
     ":R600GenDFAPacketizer",
@@ -121,8 +137,10 @@ static_library("LLVMAMDGPUCodeGen") {
     "AMDGPUISelDAGToDAG.cpp",
     "AMDGPUISelLowering.cpp",
     "AMDGPUInline.cpp",
+    "AMDGPUInstCombineIntrinsic.cpp",
     "AMDGPUInstrInfo.cpp",
     "AMDGPUInstructionSelector.cpp",
+    "AMDGPULateCodeGenPrepare.cpp",
     "AMDGPULegalizerInfo.cpp",
     "AMDGPULibCalls.cpp",
     "AMDGPULibFunc.cpp",
@@ -141,6 +159,7 @@ static_library("LLVMAMDGPUCodeGen") {
     "AMDGPUPrintfRuntimeBinding.cpp",
     "AMDGPUPromoteAlloca.cpp",
     "AMDGPUPropagateAttributes.cpp",
+    "AMDGPURegBankCombiner.cpp",
     "AMDGPURegisterBankInfo.cpp",
     "AMDGPURewriteOutArguments.cpp",
     "AMDGPUSubtarget.cpp",
@@ -177,7 +196,6 @@ static_library("LLVMAMDGPUCodeGen") {
     "SIAnnotateControlFlow.cpp",
     "SIFixSGPRCopies.cpp",
     "SIFixVGPRCopies.cpp",
-    "SIFixupVectorISel.cpp",
     "SIFoldOperands.cpp",
     "SIFormMemoryClauses.cpp",
     "SIFrameLowering.cpp",
@@ -200,6 +218,7 @@ static_library("LLVMAMDGPUCodeGen") {
     "SIPostRABundler.cpp",
     "SIPreAllocateWWMRegs.cpp",
     "SIPreEmitPeephole.cpp",
+    "SIProgramInfo.cpp",
     "SIRegisterInfo.cpp",
     "SIRemoveShortExecBranches.cpp",
     "SIShrinkInstructions.cpp",

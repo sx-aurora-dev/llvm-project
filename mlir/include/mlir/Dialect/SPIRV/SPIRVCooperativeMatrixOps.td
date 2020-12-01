@@ -39,6 +39,8 @@ def SPV_CooperativeMatrixLengthNVOp : SPV_Op<"CooperativeMatrixLengthNV",
     ```
   }];
 
+  let assemblyFormat = "attr-dict `:` $type";
+
   let availability = [
     MinVersion<SPV_V_1_0>,
     MaxVersion<SPV_V_1_5>,
@@ -99,16 +101,17 @@ def SPV_CooperativeMatrixLoadNVOp : SPV_Op<"CooperativeMatrixLoadNV", []> {
 
     ``` {.ebnf}
     cooperative-matrixload-op ::= ssa-id `=` `spv.CooperativeMatrixLoadNV`
-                              storage-class ssa-use `,` ssa-use `,` ssa-use
+                              ssa-use `,` ssa-use `,` ssa-use
                               (`[` memory-access `]`)? ` : `
+                              pointer-type `as`
                               cooperative-matrix-type
     ```
 
     For example:
 
     ```
-    %0 = spv.CooperativeMatrixLoadNV "StorageBuffer" %ptr, %stride, %colMajor
-         : !spv.coopmatrix<i32, Workgroup, 16, 8>
+    %0 = spv.CooperativeMatrixLoadNV %ptr, %stride, %colMajor
+         : !spv.ptr<i32, StorageBuffer> as !spv.coopmatrix<i32, Workgroup, 16, 8>
     ```
   }];
 
@@ -139,7 +142,7 @@ def SPV_CooperativeMatrixLoadNVOp : SPV_Op<"CooperativeMatrixLoadNV", []> {
 // -----
 
 def SPV_CooperativeMatrixMulAddNVOp : SPV_Op<"CooperativeMatrixMulAddNV",
-  [NoSideEffect]> {
+  [NoSideEffect, AllTypesMatch<["c", "result"]>]> {
   let summary = "See extension SPV_NV_cooperative_matrix";
 
   let description = [{
@@ -186,6 +189,10 @@ def SPV_CooperativeMatrixMulAddNVOp : SPV_Op<"CooperativeMatrixMulAddNV",
     %0 = spv.CooperativeMatrixMulAddNV %arg0, %arg1, %arg2,  :
       !spv.coopmatrix<Subgroup, i32, 8, 16>
     ```
+  }];
+
+  let assemblyFormat = [{
+    operands attr-dict`:` type($a) `,` type($b) `->` type($c)
   }];
 
   let availability = [
@@ -237,16 +244,17 @@ def SPV_CooperativeMatrixStoreNVOp : SPV_Op<"CooperativeMatrixStoreNV", []> {
 
     ``` {.ebnf}
     coop-matrix-store-op ::= `spv.CooperativeMatrixStoreNV `
-                              storage-class ssa-use `, ` ssa-use `, `
                               ssa-use `, ` ssa-use `, `
-                  (`[` memory-access `]`)? `:` spirv-element-type
+                              ssa-use `, ` ssa-use `, `
+                              (`[` memory-access `]`)? `:`
+                              pointer-type `,` spirv-element-type
     ```
 
     For example:
 
     ```
-      spv.CooperativeMatrixStoreNV "StorageBuffer" %arg0, %arg2, %arg1, %arg3 :
-        !spv.coopmatrix<Workgroup, i32, 16, 8>
+      spv.CooperativeMatrixStoreNV %arg0, %arg2, %arg1, %arg3 :
+        !spv.ptr<i32, StorageBuffer>, !spv.coopmatrix<Workgroup, i32, 16, 8>
     ```
   }];
 

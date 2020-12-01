@@ -57,27 +57,7 @@ class Type;
 class Value;
 class ValueHandleBase;
 
-struct DenseMapAPIntKeyInfo {
-  static inline APInt getEmptyKey() {
-    APInt V(nullptr, 0);
-    V.U.VAL = 0;
-    return V;
-  }
-
-  static inline APInt getTombstoneKey() {
-    APInt V(nullptr, 0);
-    V.U.VAL = 1;
-    return V;
-  }
-
-  static unsigned getHashValue(const APInt &Key) {
-    return static_cast<unsigned>(hash_value(Key));
-  }
-
-  static bool isEqual(const APInt &LHS, const APInt &RHS) {
-    return LHS.getBitWidth() == RHS.getBitWidth() && LHS == RHS;
-  }
-};
+using DenseMapAPIntKeyInfo = DenseMapInfo<APInt>;
 
 struct DenseMapAPFloatKeyInfo {
   static inline APFloat getEmptyKey() { return APFloat(APFloat::Bogus(), 1); }
@@ -323,32 +303,76 @@ template <> struct MDNodeKeyImpl<GenericDINode> : MDNodeOpsKey {
 
 template <> struct MDNodeKeyImpl<DISubrange> {
   Metadata *CountNode;
-  int64_t LowerBound;
+  Metadata *LowerBound;
+  Metadata *UpperBound;
+  Metadata *Stride;
 
-  MDNodeKeyImpl(Metadata *CountNode, int64_t LowerBound)
-      : CountNode(CountNode), LowerBound(LowerBound) {}
+  MDNodeKeyImpl(Metadata *CountNode, Metadata *LowerBound, Metadata *UpperBound,
+                Metadata *Stride)
+      : CountNode(CountNode), LowerBound(LowerBound), UpperBound(UpperBound),
+        Stride(Stride) {}
   MDNodeKeyImpl(const DISubrange *N)
-      : CountNode(N->getRawCountNode()),
-        LowerBound(N->getLowerBound()) {}
+      : CountNode(N->getRawCountNode()), LowerBound(N->getRawLowerBound()),
+        UpperBound(N->getRawUpperBound()), Stride(N->getRawStride()) {}
 
   bool isKeyOf(const DISubrange *RHS) const {
-    if (LowerBound != RHS->getLowerBound())
-      return false;
+    auto BoundsEqual = [=](Metadata *Node1, Metadata *Node2) -> bool {
+      if (Node1 == Node2)
+        return true;
 
-    if (auto *RHSCount = RHS->getCount().dyn_cast<ConstantInt*>())
-      if (auto *MD = dyn_cast<ConstantAsMetadata>(CountNode))
-        if (RHSCount->getSExtValue() ==
-            cast<ConstantInt>(MD->getValue())->getSExtValue())
+      ConstantAsMetadata *MD1 = dyn_cast_or_null<ConstantAsMetadata>(Node1);
+      ConstantAsMetadata *MD2 = dyn_cast_or_null<ConstantAsMetadata>(Node2);
+      if (MD1 && MD2) {
+        ConstantInt *CV1 = cast<ConstantInt>(MD1->getValue());
+        ConstantInt *CV2 = cast<ConstantInt>(MD2->getValue());
+        if (CV1->getSExtValue() == CV2->getSExtValue())
           return true;
+      }
+      return false;
+    };
 
-    return CountNode == RHS->getRawCountNode();
+    return BoundsEqual(CountNode, RHS->getRawCountNode()) &&
+           BoundsEqual(LowerBound, RHS->getRawLowerBound()) &&
+           BoundsEqual(UpperBound, RHS->getRawUpperBound()) &&
+           BoundsEqual(Stride, RHS->getRawStride());
   }
 
   unsigned getHashValue() const {
-    if (auto *MD = dyn_cast<ConstantAsMetadata>(CountNode))
+    if (CountNode)
+      if (auto *MD = dyn_cast<ConstantAsMetadata>(CountNode))
+        return hash_combine(cast<ConstantInt>(MD->getValue())->getSExtValue(),
+                            LowerBound, UpperBound, Stride);
+    return hash_combine(CountNode, LowerBound, UpperBound, Stride);
+  }
+};
+
+template <> struct MDNodeKeyImpl<DIGenericSubrange> {
+  Metadata *CountNode;
+  Metadata *LowerBound;
+  Metadata *UpperBound;
+  Metadata *Stride;
+
+  MDNodeKeyImpl(Metadata *CountNode, Metadata *LowerBound, Metadata *UpperBound,
+                Metadata *Stride)
+      : CountNode(CountNode), LowerBound(LowerBound), UpperBound(UpperBound),
+        Stride(Stride) {}
+  MDNodeKeyImpl(const DIGenericSubrange *N)
+      : CountNode(N->getRawCountNode()), LowerBound(N->getRawLowerBound()),
+        UpperBound(N->getRawUpperBound()), Stride(N->getRawStride()) {}
+
+  bool isKeyOf(const DIGenericSubrange *RHS) const {
+    return (CountNode == RHS->getRawCountNode()) &&
+           (LowerBound == RHS->getRawLowerBound()) &&
+           (UpperBound == RHS->getRawUpperBound()) &&
+           (Stride == RHS->getRawStride());
+  }
+
+  unsigned getHashValue() const {
+    auto *MD = dyn_cast_or_null<ConstantAsMetadata>(CountNode);
+    if (CountNode && MD)
       return hash_combine(cast<ConstantInt>(MD->getValue())->getSExtValue(),
-                          LowerBound);
-    return hash_combine(CountNode, LowerBound);
+                          LowerBound, UpperBound, Stride);
+    return hash_combine(CountNode, LowerBound, UpperBound, Stride);
   }
 };
 
@@ -401,6 +425,37 @@ template <> struct MDNodeKeyImpl<DIBasicType> {
   unsigned getHashValue() const {
     return hash_combine(Tag, Name, SizeInBits, AlignInBits, Encoding);
   }
+};
+
+template <> struct MDNodeKeyImpl<DIStringType> {
+  unsigned Tag;
+  MDString *Name;
+  Metadata *StringLength;
+  Metadata *StringLengthExp;
+  uint64_t SizeInBits;
+  uint32_t AlignInBits;
+  unsigned Encoding;
+
+  MDNodeKeyImpl(unsigned Tag, MDString *Name, Metadata *StringLength,
+                Metadata *StringLengthExp, uint64_t SizeInBits,
+                uint32_t AlignInBits, unsigned Encoding)
+      : Tag(Tag), Name(Name), StringLength(StringLength),
+        StringLengthExp(StringLengthExp), SizeInBits(SizeInBits),
+        AlignInBits(AlignInBits), Encoding(Encoding) {}
+  MDNodeKeyImpl(const DIStringType *N)
+      : Tag(N->getTag()), Name(N->getRawName()),
+        StringLength(N->getRawStringLength()),
+        StringLengthExp(N->getRawStringLengthExp()),
+        SizeInBits(N->getSizeInBits()), AlignInBits(N->getAlignInBits()),
+        Encoding(N->getEncoding()) {}
+
+  bool isKeyOf(const DIStringType *RHS) const {
+    return Tag == RHS->getTag() && Name == RHS->getRawName() &&
+           SizeInBits == RHS->getSizeInBits() &&
+           AlignInBits == RHS->getAlignInBits() &&
+           Encoding == RHS->getEncoding();
+  }
+  unsigned getHashValue() const { return hash_combine(Tag, Name, Encoding); }
 };
 
 template <> struct MDNodeKeyImpl<DIDerivedType> {
@@ -511,6 +566,9 @@ template <> struct MDNodeKeyImpl<DICompositeType> {
   MDString *Identifier;
   Metadata *Discriminator;
   Metadata *DataLocation;
+  Metadata *Associated;
+  Metadata *Allocated;
+  Metadata *Rank;
 
   MDNodeKeyImpl(unsigned Tag, MDString *Name, Metadata *File, unsigned Line,
                 Metadata *Scope, Metadata *BaseType, uint64_t SizeInBits,
@@ -518,13 +576,15 @@ template <> struct MDNodeKeyImpl<DICompositeType> {
                 Metadata *Elements, unsigned RuntimeLang,
                 Metadata *VTableHolder, Metadata *TemplateParams,
                 MDString *Identifier, Metadata *Discriminator,
-                Metadata *DataLocation)
+                Metadata *DataLocation, Metadata *Associated,
+                Metadata *Allocated, Metadata *Rank)
       : Tag(Tag), Name(Name), File(File), Line(Line), Scope(Scope),
         BaseType(BaseType), SizeInBits(SizeInBits), OffsetInBits(OffsetInBits),
         AlignInBits(AlignInBits), Flags(Flags), Elements(Elements),
         RuntimeLang(RuntimeLang), VTableHolder(VTableHolder),
         TemplateParams(TemplateParams), Identifier(Identifier),
-        Discriminator(Discriminator), DataLocation(DataLocation) {}
+        Discriminator(Discriminator), DataLocation(DataLocation),
+        Associated(Associated), Allocated(Allocated), Rank(Rank) {}
   MDNodeKeyImpl(const DICompositeType *N)
       : Tag(N->getTag()), Name(N->getRawName()), File(N->getRawFile()),
         Line(N->getLine()), Scope(N->getRawScope()),
@@ -535,7 +595,9 @@ template <> struct MDNodeKeyImpl<DICompositeType> {
         TemplateParams(N->getRawTemplateParams()),
         Identifier(N->getRawIdentifier()),
         Discriminator(N->getRawDiscriminator()),
-        DataLocation(N->getRawDataLocation()) {}
+        DataLocation(N->getRawDataLocation()),
+        Associated(N->getRawAssociated()), Allocated(N->getRawAllocated()),
+        Rank(N->getRawRank()) {}
 
   bool isKeyOf(const DICompositeType *RHS) const {
     return Tag == RHS->getTag() && Name == RHS->getRawName() &&
@@ -550,7 +612,9 @@ template <> struct MDNodeKeyImpl<DICompositeType> {
            TemplateParams == RHS->getRawTemplateParams() &&
            Identifier == RHS->getRawIdentifier() &&
            Discriminator == RHS->getRawDiscriminator() &&
-           DataLocation == RHS->getRawDataLocation();
+           DataLocation == RHS->getRawDataLocation() &&
+           Associated == RHS->getRawAssociated() &&
+           Allocated == RHS->getRawAllocated() && Rank == RHS->getRawRank();
   }
 
   unsigned getHashValue() const {
@@ -1190,33 +1254,48 @@ template <class NodeTy> struct MDNodeInfo {
 #define HANDLE_MDNODE_LEAF(CLASS) using CLASS##Info = MDNodeInfo<CLASS>;
 #include "llvm/IR/Metadata.def"
 
-/// Map-like storage for metadata attachments.
-class MDAttachmentMap {
-  SmallVector<std::pair<unsigned, TrackingMDNodeRef>, 2> Attachments;
+/// Multimap-like storage for metadata attachments.
+class MDAttachments {
+public:
+  struct Attachment {
+    unsigned MDKind;
+    TrackingMDNodeRef Node;
+  };
+
+private:
+  SmallVector<Attachment, 1> Attachments;
 
 public:
   bool empty() const { return Attachments.empty(); }
   size_t size() const { return Attachments.size(); }
 
-  /// Get a particular attachment (if any).
+  /// Returns the first attachment with the given ID or nullptr if no such
+  /// attachment exists.
   MDNode *lookup(unsigned ID) const;
+
+  /// Appends all attachments with the given ID to \c Result in insertion order.
+  /// If the global has no attachments with the given ID, or if ID is invalid,
+  /// leaves Result unchanged.
+  void get(unsigned ID, SmallVectorImpl<MDNode *> &Result) const;
+
+  /// Appends all attachments for the global to \c Result, sorting by attachment
+  /// ID. Attachments with the same ID appear in insertion order. This function
+  /// does \em not clear \c Result.
+  void getAll(SmallVectorImpl<std::pair<unsigned, MDNode *>> &Result) const;
 
   /// Set an attachment to a particular node.
   ///
-  /// Set the \c ID attachment to \c MD, replacing the current attachment at \c
+  /// Set the \c ID attachment to \c MD, replacing the current attachments at \c
   /// ID (if anyway).
-  void set(unsigned ID, MDNode &MD);
+  void set(unsigned ID, MDNode *MD);
 
-  /// Remove an attachment.
+  /// Adds an attachment to a particular node.
+  void insert(unsigned ID, MDNode &MD);
+
+  /// Remove attachments with the given ID.
   ///
-  /// Remove the attachment at \c ID, if any.
+  /// Remove the attachments at \c ID, if any.
   bool erase(unsigned ID);
-
-  /// Copy out all the attachments.
-  ///
-  /// Copies all the current attachments into \c Result, sorting by attachment
-  /// ID.  This function does \em not clear \c Result.
-  void getAll(SmallVectorImpl<std::pair<unsigned, MDNode *>> &Result) const;
 
   /// Erase matching attachments.
   ///
@@ -1225,37 +1304,6 @@ public:
     Attachments.erase(llvm::remove_if(Attachments, shouldRemove),
                       Attachments.end());
   }
-};
-
-/// Multimap-like storage for metadata attachments for globals. This differs
-/// from MDAttachmentMap in that it allows multiple attachments per metadata
-/// kind.
-class MDGlobalAttachmentMap {
-  struct Attachment {
-    unsigned MDKind;
-    TrackingMDNodeRef Node;
-  };
-  SmallVector<Attachment, 1> Attachments;
-
-public:
-  bool empty() const { return Attachments.empty(); }
-
-  /// Appends all attachments with the given ID to \c Result in insertion order.
-  /// If the global has no attachments with the given ID, or if ID is invalid,
-  /// leaves Result unchanged.
-  void get(unsigned ID, SmallVectorImpl<MDNode *> &Result) const;
-
-  /// Returns the first attachment with the given ID or nullptr if no such
-  /// attachment exists.
-  MDNode *lookup(unsigned ID) const;
-
-  void insert(unsigned ID, MDNode &MD);
-  bool erase(unsigned ID);
-
-  /// Appends all attachments for the global to \c Result, sorting by attachment
-  /// ID. Attachments with the same ID appear in insertion order. This function
-  /// does \em not clear \c Result.
-  void getAll(SmallVectorImpl<std::pair<unsigned, MDNode *>> &Result) const;
 };
 
 class LLVMContextImpl {
@@ -1275,7 +1323,26 @@ public:
   std::unique_ptr<DiagnosticHandler> DiagHandler;
   bool RespectDiagnosticFilters = false;
   bool DiagnosticsHotnessRequested = false;
-  uint64_t DiagnosticsHotnessThreshold = 0;
+  /// The minimum hotness value a diagnostic needs in order to be included in
+  /// optimization diagnostics.
+  ///
+  /// The threshold is an Optional value, which maps to one of the 3 states:
+  /// 1). 0            => threshold disabled. All emarks will be printed.
+  /// 2). positive int => manual threshold by user. Remarks with hotness exceed
+  ///                     threshold will be printed.
+  /// 3). None         => 'auto' threshold by user. The actual value is not
+  ///                     available at command line, but will be synced with
+  ///                     hotness threhold from profile summary during
+  ///                     compilation.
+  ///
+  /// State 1 and 2 are considered as terminal states. State transition is
+  /// only allowed from 3 to 2, when the threshold is first synced with profile
+  /// summary. This ensures that the threshold is set only once and stays
+  /// constant.
+  ///
+  /// If threshold option is not specified, it is disabled (0) by default.
+  Optional<uint64_t> DiagnosticsHotnessThreshold = 0;
+
   /// The specialized remark streamer used by LLVM's OptimizationRemarkEmitter.
   std::unique_ptr<LLVMRemarkStreamer> LLVMRS;
 
@@ -1328,10 +1395,15 @@ public:
 
   DenseMap<Type *, std::unique_ptr<UndefValue>> UVConstants;
 
-  StringMap<ConstantDataSequential*> CDSConstants;
+  DenseMap<Type *, std::unique_ptr<PoisonValue>> PVConstants;
+
+  StringMap<std::unique_ptr<ConstantDataSequential>> CDSConstants;
 
   DenseMap<std::pair<const Function *, const BasicBlock *>, BlockAddress *>
     BlockAddresses;
+
+  DenseMap<const GlobalValue *, DSOLocalEquivalent *> DSOLocalEquivalents;
+
   ConstantUniqueMap<ConstantExpr> ExprConstants;
 
   ConstantUniqueMap<InlineAsm> InlineAsms;
@@ -1373,11 +1445,8 @@ public:
   /// CustomMDKindNames - Map to hold the metadata string to ID mapping.
   StringMap<unsigned> CustomMDKindNames;
 
-  /// Collection of per-instruction metadata used in this context.
-  DenseMap<const Instruction *, MDAttachmentMap> InstructionMetadata;
-
-  /// Collection of per-GlobalObject metadata used in this context.
-  DenseMap<const GlobalObject *, MDGlobalAttachmentMap> GlobalObjectMetadata;
+  /// Collection of metadata used in this context.
+  DenseMap<const Value *, MDAttachments> ValueMetadata;
 
   /// Collection of per-GlobalObject sections used in this context.
   DenseMap<const GlobalObject *, StringRef> GlobalObjectSections;

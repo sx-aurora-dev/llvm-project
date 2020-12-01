@@ -128,7 +128,7 @@ TypeSize Type::getPrimitiveSizeInBits() const {
     ElementCount EC = VTy->getElementCount();
     TypeSize ETS = VTy->getElementType()->getPrimitiveSizeInBits();
     assert(!ETS.isScalable() && "Vector type should have fixed-width elements");
-    return {ETS.getFixedSize() * EC.Min, EC.Scalable};
+    return {ETS.getFixedSize() * EC.getKnownMinValue(), EC.isScalable()};
   }
   default: return TypeSize::Fixed(0);
   }
@@ -533,10 +533,6 @@ bool StructType::isLayoutIdentical(StructType *Other) const {
   return elements() == Other->elements();
 }
 
-StructType *Module::getTypeByName(StringRef Name) const {
-  return getContext().pImpl->NamedStructTypes.lookup(Name);
-}
-
 Type *StructType::getTypeAtIndex(const Value *V) const {
   unsigned Idx = (unsigned)cast<Constant>(V)->getUniqueInteger().getZExtValue();
   assert(indexValid(Idx) && "Invalid structure index!");
@@ -548,11 +544,17 @@ bool StructType::indexValid(const Value *V) const {
   // vector case all of the indices must be equal.
   if (!V->getType()->isIntOrIntVectorTy(32))
     return false;
+  if (isa<ScalableVectorType>(V->getType()))
+    return false;
   const Constant *C = dyn_cast<Constant>(V);
   if (C && V->getType()->isVectorTy())
     C = C->getSplatValue();
   const ConstantInt *CU = dyn_cast_or_null<ConstantInt>(C);
   return CU && CU->getZExtValue() < getNumElements();
+}
+
+StructType *StructType::getTypeByName(LLVMContext &C, StringRef Name) {
+  return C.pImpl->NamedStructTypes.lookup(Name);
 }
 
 //===----------------------------------------------------------------------===//
@@ -596,10 +598,10 @@ VectorType::VectorType(Type *ElType, unsigned EQ, Type::TypeID TID)
 }
 
 VectorType *VectorType::get(Type *ElementType, ElementCount EC) {
-  if (EC.Scalable)
-    return ScalableVectorType::get(ElementType, EC.Min);
+  if (EC.isScalable())
+    return ScalableVectorType::get(ElementType, EC.getKnownMinValue());
   else
-    return FixedVectorType::get(ElementType, EC.Min);
+    return FixedVectorType::get(ElementType, EC.getKnownMinValue());
 }
 
 bool VectorType::isValidElementType(Type *ElemTy) {
@@ -617,7 +619,7 @@ FixedVectorType *FixedVectorType::get(Type *ElementType, unsigned NumElts) {
                                             "be an integer, floating point, or "
                                             "pointer type.");
 
-  ElementCount EC(NumElts, false);
+  auto EC = ElementCount::getFixed(NumElts);
 
   LLVMContextImpl *pImpl = ElementType->getContext().pImpl;
   VectorType *&Entry = ElementType->getContext()
@@ -639,7 +641,7 @@ ScalableVectorType *ScalableVectorType::get(Type *ElementType,
                                             "be an integer, floating point, or "
                                             "pointer type.");
 
-  ElementCount EC(MinNumElts, true);
+  auto EC = ElementCount::getScalable(MinNumElts);
 
   LLVMContextImpl *pImpl = ElementType->getContext().pImpl;
   VectorType *&Entry = ElementType->getContext()

@@ -27,7 +27,6 @@
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/CodeGen/DAGCombine.h"
-#include "llvm/CodeGen/FunctionLoweringInfo.h"
 #include "llvm/CodeGen/ISDOpcodes.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/CodeGen/MachineMemOperand.h"
@@ -64,6 +63,7 @@ class ConstantFP;
 class ConstantInt;
 class DataLayout;
 struct fltSemantics;
+class FunctionLoweringInfo;
 class GlobalValue;
 struct KnownBits;
 class LegacyDivergenceAnalysis;
@@ -278,6 +278,7 @@ class SelectionDAG {
   struct CallSiteDbgInfo {
     CallSiteInfo CSInfo;
     MDNode *HeapAllocSite = nullptr;
+    bool NoMerge = false;
   };
 
   DenseMap<const SDNode *, CallSiteDbgInfo> SDCallSiteDbgInfo;
@@ -328,6 +329,29 @@ public:
 
    private:
     virtual void anchor();
+  };
+
+  /// Help to insert SDNodeFlags automatically in transforming. Use
+  /// RAII to save and resume flags in current scope.
+  class FlagInserter {
+    SelectionDAG &DAG;
+    SDNodeFlags Flags;
+    FlagInserter *LastInserter;
+
+  public:
+    FlagInserter(SelectionDAG &SDAG, SDNodeFlags Flags)
+        : DAG(SDAG), Flags(Flags),
+          LastInserter(SDAG.getFlagInserter()) {
+      SDAG.setFlagInserter(this);
+    }
+    FlagInserter(SelectionDAG &SDAG, SDNode *N)
+        : FlagInserter(SDAG, N->getFlags()) {}
+
+    FlagInserter(const FlagInserter &) = delete;
+    FlagInserter &operator=(const FlagInserter &) = delete;
+    ~FlagInserter() { DAG.setFlagInserter(LastInserter); }
+
+    const SDNodeFlags getFlags() const { return Flags; }
   };
 
   /// When true, additional steps are taken to
@@ -431,6 +455,20 @@ public:
   OptimizationRemarkEmitter &getORE() const { return *ORE; }
   ProfileSummaryInfo *getPSI() const { return PSI; }
   BlockFrequencyInfo *getBFI() const { return BFI; }
+
+  FlagInserter *getFlagInserter() { return Inserter; }
+  void setFlagInserter(FlagInserter *FI) { Inserter = FI; }
+
+  /// Just dump dot graph to a user-provided path and title.
+  /// This doesn't open the dot viewer program and
+  /// helps visualization when outside debugging session.
+  /// FileName expects absolute path. If provided
+  /// without any path separators then the file
+  /// will be created in the current directory.
+  /// Error will be emitted if the path is insane.
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  LLVM_DUMP_METHOD void dumpDotGraph(const Twine &FileName, const Twine &Title);
+#endif
 
   /// Pop up a GraphViz/gv window with the DAG rendered using 'dot'.
   void viewGraph(const std::string &Title);
@@ -858,7 +896,7 @@ public:
 
   /// Returns sum of the base pointer and offset.
   /// Unlike getObjectPtrOffset this does not set NoUnsignedWrap by default.
-  SDValue getMemBasePlusOffset(SDValue Base, int64_t Offset, const SDLoc &DL,
+  SDValue getMemBasePlusOffset(SDValue Base, TypeSize Offset, const SDLoc &DL,
                                const SDNodeFlags Flags = SDNodeFlags());
   SDValue getMemBasePlusOffset(SDValue Base, SDValue Offset, const SDLoc &DL,
                                const SDNodeFlags Flags = SDNodeFlags());
@@ -866,7 +904,7 @@ public:
   /// Create an add instruction with appropriate flags when used for
   /// addressing some offset of an object. i.e. if a load is split into multiple
   /// components, create an add nuw from the base pointer to the offset.
-  SDValue getObjectPtrOffset(const SDLoc &SL, SDValue Ptr, int64_t Offset) {
+  SDValue getObjectPtrOffset(const SDLoc &SL, SDValue Ptr, TypeSize Offset) {
     SDNodeFlags Flags;
     Flags.setNoUnsignedWrap(true);
     return getMemBasePlusOffset(Ptr, Offset, SL, Flags);
@@ -919,7 +957,8 @@ public:
   SDValue getVScale(const SDLoc &DL, EVT VT, APInt MulImm) {
     assert(MulImm.getMinSignedBits() <= VT.getSizeInBits() &&
            "Immediate does not fit VT");
-    return getNode(ISD::VSCALE, DL, VT, getConstant(MulImm, DL, VT));
+    return getNode(ISD::VSCALE, DL, VT,
+                   getConstant(MulImm.sextOrTrunc(VT.getSizeInBits()), DL, VT));
   }
 
   /// Return a GLOBAL_OFFSET_TABLE node. This does not have a useful SDLoc.
@@ -932,21 +971,31 @@ public:
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
                   ArrayRef<SDUse> Ops);
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
-                  ArrayRef<SDValue> Ops, const SDNodeFlags Flags = SDNodeFlags());
+                  ArrayRef<SDValue> Ops, const SDNodeFlags Flags);
   SDValue getNode(unsigned Opcode, const SDLoc &DL, ArrayRef<EVT> ResultTys,
                   ArrayRef<SDValue> Ops);
   SDValue getNode(unsigned Opcode, const SDLoc &DL, SDVTList VTList,
-                  ArrayRef<SDValue> Ops, const SDNodeFlags Flags = SDNodeFlags());
+                  ArrayRef<SDValue> Ops, const SDNodeFlags Flags);
+
+  // Use flags from current flag inserter.
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT,
+                  ArrayRef<SDValue> Ops);
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, SDVTList VTList,
+                  ArrayRef<SDValue> Ops);
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue Operand);
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
+                  SDValue N2);
+  SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
+                  SDValue N2, SDValue N3);
 
   // Specialize based on number of operands.
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT);
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue Operand,
-                  const SDNodeFlags Flags = SDNodeFlags());
+                  const SDNodeFlags Flags);
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
-                  SDValue N2, const SDNodeFlags Flags = SDNodeFlags());
+                  SDValue N2, const SDNodeFlags Flags);
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
-                  SDValue N2, SDValue N3,
-                  const SDNodeFlags Flags = SDNodeFlags());
+                  SDValue N2, SDValue N3, const SDNodeFlags Flags);
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
                   SDValue N2, SDValue N3, SDValue N4);
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
@@ -1156,6 +1205,12 @@ public:
   SDValue getLifetimeNode(bool IsStart, const SDLoc &dl, SDValue Chain,
                           int FrameIndex, int64_t Size, int64_t Offset = -1);
 
+  /// Creates a PseudoProbeSDNode with function GUID `Guid` and
+  /// the index of the block `Index` it is probing, as well as the attributes
+  /// `attr` of the probe.
+  SDValue getPseudoProbeNode(const SDLoc &Dl, SDValue Chain, uint64_t Guid,
+                             uint64_t Index, uint32_t Attr);
+
   /// Create a MERGE_VALUES node from the given operands.
   SDValue getMergeValues(ArrayRef<SDValue> Ops, const SDLoc &dl);
 
@@ -1165,14 +1220,15 @@ public:
   /// This function will set the MOLoad flag on MMOFlags, but you can set it if
   /// you want.  The MOStore flag must not be set.
   SDValue getLoad(EVT VT, const SDLoc &dl, SDValue Chain, SDValue Ptr,
-                  MachinePointerInfo PtrInfo, MaybeAlign Alignment,
+                  MachinePointerInfo PtrInfo,
+                  MaybeAlign Alignment = MaybeAlign(),
                   MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
                   const AAMDNodes &AAInfo = AAMDNodes(),
                   const MDNode *Ranges = nullptr);
   /// FIXME: Remove once transition to Align is over.
   inline SDValue
   getLoad(EVT VT, const SDLoc &dl, SDValue Chain, SDValue Ptr,
-          MachinePointerInfo PtrInfo, unsigned Alignment = 0,
+          MachinePointerInfo PtrInfo, unsigned Alignment,
           MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
           const AAMDNodes &AAInfo = AAMDNodes(),
           const MDNode *Ranges = nullptr) {
@@ -1184,14 +1240,14 @@ public:
   SDValue
   getExtLoad(ISD::LoadExtType ExtType, const SDLoc &dl, EVT VT, SDValue Chain,
              SDValue Ptr, MachinePointerInfo PtrInfo, EVT MemVT,
-             MaybeAlign Alignment,
+             MaybeAlign Alignment = MaybeAlign(),
              MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
              const AAMDNodes &AAInfo = AAMDNodes());
   /// FIXME: Remove once transition to Align is over.
   inline SDValue
   getExtLoad(ISD::LoadExtType ExtType, const SDLoc &dl, EVT VT, SDValue Chain,
              SDValue Ptr, MachinePointerInfo PtrInfo, EVT MemVT,
-             unsigned Alignment = 0,
+             unsigned Alignment,
              MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
              const AAMDNodes &AAInfo = AAMDNodes()) {
     return getExtLoad(ExtType, dl, VT, Chain, Ptr, PtrInfo, MemVT,
@@ -1208,13 +1264,12 @@ public:
                   MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
                   const AAMDNodes &AAInfo = AAMDNodes(),
                   const MDNode *Ranges = nullptr);
-  inline SDValue
-  getLoad(ISD::MemIndexedMode AM, ISD::LoadExtType ExtType, EVT VT,
-          const SDLoc &dl, SDValue Chain, SDValue Ptr, SDValue Offset,
-          MachinePointerInfo PtrInfo, EVT MemVT, MaybeAlign Alignment,
-          MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
-          const AAMDNodes &AAInfo = AAMDNodes(),
-          const MDNode *Ranges = nullptr) {
+  inline SDValue getLoad(
+      ISD::MemIndexedMode AM, ISD::LoadExtType ExtType, EVT VT, const SDLoc &dl,
+      SDValue Chain, SDValue Ptr, SDValue Offset, MachinePointerInfo PtrInfo,
+      EVT MemVT, MaybeAlign Alignment = MaybeAlign(),
+      MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
+      const AAMDNodes &AAInfo = AAMDNodes(), const MDNode *Ranges = nullptr) {
     // Ensures that codegen never sees a None Alignment.
     return getLoad(AM, ExtType, VT, dl, Chain, Ptr, Offset, PtrInfo, MemVT,
                    Alignment.getValueOr(getEVTAlign(MemVT)), MMOFlags, AAInfo,
@@ -1224,7 +1279,7 @@ public:
   inline SDValue
   getLoad(ISD::MemIndexedMode AM, ISD::LoadExtType ExtType, EVT VT,
           const SDLoc &dl, SDValue Chain, SDValue Ptr, SDValue Offset,
-          MachinePointerInfo PtrInfo, EVT MemVT, unsigned Alignment = 0,
+          MachinePointerInfo PtrInfo, EVT MemVT, unsigned Alignment,
           MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
           const AAMDNodes &AAInfo = AAMDNodes(),
           const MDNode *Ranges = nullptr) {
@@ -1247,7 +1302,7 @@ public:
            const AAMDNodes &AAInfo = AAMDNodes());
   inline SDValue
   getStore(SDValue Chain, const SDLoc &dl, SDValue Val, SDValue Ptr,
-           MachinePointerInfo PtrInfo, MaybeAlign Alignment,
+           MachinePointerInfo PtrInfo, MaybeAlign Alignment = MaybeAlign(),
            MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
            const AAMDNodes &AAInfo = AAMDNodes()) {
     return getStore(Chain, dl, Val, Ptr, PtrInfo,
@@ -1257,7 +1312,7 @@ public:
   /// FIXME: Remove once transition to Align is over.
   inline SDValue
   getStore(SDValue Chain, const SDLoc &dl, SDValue Val, SDValue Ptr,
-           MachinePointerInfo PtrInfo, unsigned Alignment = 0,
+           MachinePointerInfo PtrInfo, unsigned Alignment,
            MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
            const AAMDNodes &AAInfo = AAMDNodes()) {
     return getStore(Chain, dl, Val, Ptr, PtrInfo, MaybeAlign(Alignment),
@@ -1272,7 +1327,8 @@ public:
                 const AAMDNodes &AAInfo = AAMDNodes());
   inline SDValue
   getTruncStore(SDValue Chain, const SDLoc &dl, SDValue Val, SDValue Ptr,
-                MachinePointerInfo PtrInfo, EVT SVT, MaybeAlign Alignment,
+                MachinePointerInfo PtrInfo, EVT SVT,
+                MaybeAlign Alignment = MaybeAlign(),
                 MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
                 const AAMDNodes &AAInfo = AAMDNodes()) {
     return getTruncStore(Chain, dl, Val, Ptr, PtrInfo, SVT,
@@ -1282,7 +1338,7 @@ public:
   /// FIXME: Remove once transition to Align is over.
   inline SDValue
   getTruncStore(SDValue Chain, const SDLoc &dl, SDValue Val, SDValue Ptr,
-                MachinePointerInfo PtrInfo, EVT SVT, unsigned Alignment = 0,
+                MachinePointerInfo PtrInfo, EVT SVT, unsigned Alignment,
                 MachineMemOperand::Flags MMOFlags = MachineMemOperand::MONone,
                 const AAMDNodes &AAInfo = AAMDNodes()) {
     return getTruncStore(Chain, dl, Val, Ptr, PtrInfo, SVT,
@@ -1311,7 +1367,8 @@ public:
                           ISD::MemIndexType IndexType);
   SDValue getMaskedScatter(SDVTList VTs, EVT VT, const SDLoc &dl,
                            ArrayRef<SDValue> Ops, MachineMemOperand *MMO,
-                           ISD::MemIndexType IndexType);
+                           ISD::MemIndexType IndexType,
+                           bool IsTruncating = false);
 
   /// Construct a node to track a Value* through the backend.
   SDValue getSrcValue(const Value *v);
@@ -1329,6 +1386,9 @@ public:
 
   /// Return a freeze using the SDLoc of the value operand.
   SDValue getFreeze(SDValue V);
+
+  /// Return an AssertAlignSDNode.
+  SDValue getAssertAlign(const SDLoc &DL, SDValue V, Align A);
 
   /// Return the specified value casted to
   /// the target's desired shift amount type.
@@ -1372,6 +1432,9 @@ public:
   /// list.
   void setNodeMemRefs(MachineSDNode *N,
                       ArrayRef<MachineMemOperand *> NewMemRefs);
+
+  // Calculate divergence of node \p N based on its operands.
+  bool calculateDivergence(SDNode *N);
 
   // Propagates the change in divergence to users
   void updateDivergence(SDNode * N);
@@ -1452,8 +1515,13 @@ public:
                                 SDValue Operand, SDValue Subreg);
 
   /// Get the specified node if it's already available, or else return NULL.
-  SDNode *getNodeIfExists(unsigned Opcode, SDVTList VTList, ArrayRef<SDValue> Ops,
-                          const SDNodeFlags Flags = SDNodeFlags());
+  SDNode *getNodeIfExists(unsigned Opcode, SDVTList VTList,
+                          ArrayRef<SDValue> Ops, const SDNodeFlags Flags);
+  SDNode *getNodeIfExists(unsigned Opcode, SDVTList VTList,
+                          ArrayRef<SDValue> Ops);
+
+  /// Check if a node exists without modifying its flags.
+  bool doesNodeExist(unsigned Opcode, SDVTList VTList, ArrayRef<SDValue> Ops);
 
   /// Creates a SDDbgValue node.
   SDDbgValue *getDbgValue(DIVariable *Var, DIExpression *Expr, SDNode *N,
@@ -1547,6 +1615,7 @@ public:
     switch (VT.getScalarType().getSimpleVT().SimpleTy) {
     default: llvm_unreachable("Unknown FP format");
     case MVT::f16:     return APFloat::IEEEhalf();
+    case MVT::bf16:    return APFloat::BFloat();
     case MVT::f32:     return APFloat::IEEEsingle();
     case MVT::f64:     return APFloat::IEEEdouble();
     case MVT::f80:     return APFloat::x87DoubleExtended();
@@ -1594,6 +1663,12 @@ public:
   void salvageDebugInfo(SDNode &N);
 
   void dump() const;
+
+  /// In most cases this function returns the ABI alignment for a given type,
+  /// except for illegal vector types where the alignment exceeds that of the
+  /// stack. In such cases we attempt to break the vector down to a legal type
+  /// and return the ABI alignment for that instead.
+  Align getReducedAlign(EVT VT, bool UseABI);
 
   /// Create a stack temporary based on the size in bytes and the alignment
   SDValue CreateStackTemporary(TypeSize Bytes, Align Alignment);
@@ -1915,6 +1990,18 @@ public:
     return It->second.HeapAllocSite;
   }
 
+  void addNoMergeSiteInfo(const SDNode *Node, bool NoMerge) {
+    if (NoMerge)
+      SDCallSiteDbgInfo[Node].NoMerge = NoMerge;
+  }
+
+  bool getNoMergeSiteInfo(const SDNode *Node) {
+    auto I = SDCallSiteDbgInfo.find(Node);
+    if (I == SDCallSiteDbgInfo.end())
+      return false;
+    return I->second.NoMerge;
+  }
+
   /// Return the current function's default denormal handling kind for the given
   /// floating point type.
   DenormalMode getDenormalMode(EVT VT) const {
@@ -1922,6 +2009,10 @@ public:
   }
 
   bool shouldOptForSize() const;
+
+  /// Get the (commutative) neutral element for the given opcode, if it exists.
+  SDValue getNeutralElement(unsigned Opcode, const SDLoc &DL, EVT VT,
+                            SDNodeFlags Flags);
 
 private:
   void InsertNode(SDNode *N);
@@ -1963,6 +2054,8 @@ private:
 
   std::map<std::pair<std::string, unsigned>, SDNode *> TargetExternalSymbols;
   DenseMap<MCSymbol *, SDNode *> MCSymbols;
+
+  FlagInserter *Inserter = nullptr;
 };
 
 template <> struct GraphTraits<SelectionDAG*> : public GraphTraits<SDNode*> {

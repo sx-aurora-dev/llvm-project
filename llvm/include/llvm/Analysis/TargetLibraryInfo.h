@@ -12,7 +12,6 @@
 #include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/Optional.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Module.h"
@@ -21,6 +20,7 @@
 
 namespace llvm {
 template <typename T> class ArrayRef;
+class Triple;
 
 /// Describes a possible vectorization of a function.
 /// Function 'VectorFnName' is equivalent to 'ScalarFnName' vectorized
@@ -88,6 +88,7 @@ public:
   enum VectorLibrary {
     NoLibrary,  // Don't use any vector library.
     Accelerate, // Use Accelerate framework.
+    LIBMVEC_X86,// GLIBC Vector Math library.
     MASSV,      // IBM MASS vector library.
     SVML        // Intel short vector math library.
   };

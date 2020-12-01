@@ -42,12 +42,11 @@ char ClangUtilityFunction::ID;
 /// \param[in] name
 ///     The name of the function, as used in the text.
 ClangUtilityFunction::ClangUtilityFunction(ExecutionContextScope &exe_scope,
-                                           const char *text, const char *name)
-    : UtilityFunction(exe_scope, text, name) {
-  m_function_text.assign(ClangExpressionSourceCode::g_expression_prefix);
-  if (text && text[0])
-    m_function_text.append(text);
-}
+                                           std::string text, std::string name)
+    : UtilityFunction(
+          exe_scope,
+          std::string(ClangExpressionSourceCode::g_expression_prefix) + text,
+          std::move(name)) {}
 
 ClangUtilityFunction::~ClangUtilityFunction() {}
 
@@ -167,7 +166,7 @@ void ClangUtilityFunction::ClangUtilityFunctionHelper::ResetDeclMap(
     auto *persistent_vars = llvm::cast<ClangPersistentVariables>(state);
     ast_importer = persistent_vars->GetClangASTImporter();
   }
-  m_expr_decl_map_up.reset(
-      new ClangExpressionDeclMap(keep_result_in_memory, nullptr,
-                                 exe_ctx.GetTargetSP(), ast_importer, nullptr));
+  m_expr_decl_map_up = std::make_unique<ClangExpressionDeclMap>(
+      keep_result_in_memory, nullptr, exe_ctx.GetTargetSP(), ast_importer,
+      nullptr);
 }

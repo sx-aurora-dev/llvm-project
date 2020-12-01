@@ -11,6 +11,7 @@
 
 #include "Plugins/Platform/POSIX/PlatformPOSIX.h"
 #include "lldb/Host/FileSystem.h"
+#include "lldb/Host/ProcessLaunchInfo.h"
 #include "lldb/Utility/ConstString.h"
 #include "lldb/Utility/FileSpec.h"
 #include "lldb/Utility/StructuredData.h"
@@ -46,7 +47,7 @@ public:
   GetSharedModule(const lldb_private::ModuleSpec &module_spec,
                   lldb_private::Process *process, lldb::ModuleSP &module_sp,
                   const lldb_private::FileSpecList *module_search_paths_ptr,
-                  lldb::ModuleSP *old_module_sp_ptr,
+                  llvm::SmallVectorImpl<lldb::ModuleSP> *old_modules,
                   bool *did_create_ptr) override;
 
   size_t GetSoftwareBreakpointTrapOpcode(
@@ -65,8 +66,13 @@ public:
   bool x86GetSupportedArchitectureAtIndex(uint32_t idx,
                                           lldb_private::ArchSpec &arch);
 
-  int32_t GetResumeCountForLaunchInfo(
+  uint32_t GetResumeCountForLaunchInfo(
       lldb_private::ProcessLaunchInfo &launch_info) override;
+
+  lldb::ProcessSP DebugProcess(lldb_private::ProcessLaunchInfo &launch_info,
+                               lldb_private::Debugger &debugger,
+                               lldb_private::Target *target,
+                               lldb_private::Status &error) override;
 
   void CalculateTrapHandlerSymbolNames() override;
 
@@ -88,9 +94,6 @@ public:
 
   llvm::Expected<lldb_private::StructuredData::DictionarySP>
   FetchExtendedCrashInformation(lldb_private::Process &process) override;
-
-  static lldb_private::FileSpec GetXcodeContentsDirectory();
-  static lldb_private::FileSpec GetXcodeDeveloperDirectory();
 
   /// Return the toolchain directory the current LLDB instance is located in.
   static lldb_private::FileSpec GetCurrentToolchainDirectory();
@@ -135,7 +138,7 @@ protected:
   virtual lldb_private::Status GetSharedModuleWithLocalCache(
       const lldb_private::ModuleSpec &module_spec, lldb::ModuleSP &module_sp,
       const lldb_private::FileSpecList *module_search_paths_ptr,
-      lldb::ModuleSP *old_module_sp_ptr, bool *did_create_ptr);
+      llvm::SmallVectorImpl<lldb::ModuleSP> *old_modules, bool *did_create_ptr);
 
   struct SDKEnumeratorInfo {
     lldb_private::FileSpec found_path;
@@ -161,18 +164,18 @@ protected:
       const lldb_private::ModuleSpec &module_spec,
       lldb_private::Process *process, lldb::ModuleSP &module_sp,
       const lldb_private::FileSpecList *module_search_paths_ptr,
-      lldb::ModuleSP *old_module_sp_ptr, bool *did_create_ptr);
+      llvm::SmallVectorImpl<lldb::ModuleSP> *old_modules, bool *did_create_ptr);
 
   static std::string FindComponentInPath(llvm::StringRef path,
                                          llvm::StringRef component);
-  static std::string FindXcodeContentsDirectoryInPath(llvm::StringRef path);
 
   std::string m_developer_directory;
   llvm::StringMap<std::string> m_sdk_path;
   std::mutex m_sdk_path_mutex;
 
 private:
-  DISALLOW_COPY_AND_ASSIGN(PlatformDarwin);
+  PlatformDarwin(const PlatformDarwin &) = delete;
+  const PlatformDarwin &operator=(const PlatformDarwin &) = delete;
 };
 
 #endif // LLDB_SOURCE_PLUGINS_PLATFORM_MACOSX_PLATFORMDARWIN_H

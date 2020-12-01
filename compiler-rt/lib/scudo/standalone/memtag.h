@@ -28,9 +28,7 @@ inline constexpr uptr archMemoryTagGranuleSize() { return 16; }
 
 inline uptr untagPointer(uptr Ptr) { return Ptr & ((1ULL << 56) - 1); }
 
-inline uint8_t extractTag(uptr Ptr) {
-  return (Ptr >> 56) & 0xf;
-}
+inline uint8_t extractTag(uptr Ptr) { return (Ptr >> 56) & 0xf; }
 
 #else
 
@@ -82,7 +80,7 @@ inline void enableMemoryTagChecksTestOnly() {
 class ScopedDisableMemoryTagChecks {
   size_t PrevTCO;
 
- public:
+public:
   ScopedDisableMemoryTagChecks() {
     __asm__ __volatile__(".arch_extension mte; mrs %0, tco; msr tco, #1"
                          : "=r"(PrevTCO));
@@ -126,7 +124,8 @@ inline void setRandomTag(void *Ptr, uptr Size, uptr ExcludeMask,
       : "memory");
 }
 
-inline void *prepareTaggedChunk(void *Ptr, uptr Size, uptr BlockEnd) {
+inline void *prepareTaggedChunk(void *Ptr, uptr Size, uptr ExcludeMask,
+                                uptr BlockEnd) {
   // Prepare the granule before the chunk to store the chunk header by setting
   // its tag to 0. Normally its tag will already be 0, but in the case where a
   // chunk holding a low alignment allocation is reused for a higher alignment
@@ -138,7 +137,7 @@ inline void *prepareTaggedChunk(void *Ptr, uptr Size, uptr BlockEnd) {
                        : "memory");
 
   uptr TaggedBegin, TaggedEnd;
-  setRandomTag(Ptr, Size, 0, &TaggedBegin, &TaggedEnd);
+  setRandomTag(Ptr, Size, ExcludeMask, &TaggedBegin, &TaggedEnd);
 
   // Finally, set the tag of the granule past the end of the allocation to 0,
   // to catch linear overflows even if a previous larger allocation used the
@@ -189,8 +188,8 @@ inline void resizeTaggedChunk(uptr OldPtr, uptr NewPtr, uptr BlockEnd) {
 
   2:
   )"
-                       : [ Cur ] "+&r"(RoundOldPtr), [ End ] "+&r"(NewPtr)
-                       : [ BlockEnd ] "r"(BlockEnd)
+                       : [Cur] "+&r"(RoundOldPtr), [End] "+&r"(NewPtr)
+                       : [BlockEnd] "r"(BlockEnd)
                        : "memory");
 }
 
@@ -235,9 +234,11 @@ inline void setRandomTag(void *Ptr, uptr Size, uptr ExcludeMask,
   UNREACHABLE("memory tagging not supported");
 }
 
-inline void *prepareTaggedChunk(void *Ptr, uptr Size, uptr BlockEnd) {
+inline void *prepareTaggedChunk(void *Ptr, uptr Size, uptr ExcludeMask,
+                                uptr BlockEnd) {
   (void)Ptr;
   (void)Size;
+  (void)ExcludeMask;
   (void)BlockEnd;
   UNREACHABLE("memory tagging not supported");
 }

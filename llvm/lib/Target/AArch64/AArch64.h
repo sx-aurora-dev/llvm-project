@@ -38,6 +38,8 @@ FunctionPass *createAArch64ISelDag(AArch64TargetMachine &TM,
                                  CodeGenOpt::Level OptLevel);
 FunctionPass *createAArch64StorePairSuppressPass();
 FunctionPass *createAArch64ExpandPseudoPass();
+FunctionPass *createAArch64SLSHardeningPass();
+FunctionPass *createAArch64IndirectThunks();
 FunctionPass *createAArch64SpeculationHardeningPass();
 FunctionPass *createAArch64LoadStoreOptimizationPass();
 FunctionPass *createAArch64SIMDInstrOptPass();
@@ -56,9 +58,11 @@ ModulePass *createSVEIntrinsicOptsPass();
 InstructionSelector *
 createAArch64InstructionSelector(const AArch64TargetMachine &,
                                  AArch64Subtarget &, AArch64RegisterBankInfo &);
-FunctionPass *createAArch64PreLegalizeCombiner(bool IsOptNone);
-FunctionPass *createAArch64PostLegalizeCombiner(bool IsOptNone);
-FunctionPass *createAArch64StackTaggingPass(bool MergeInit);
+FunctionPass *createAArch64PreLegalizerCombiner(bool IsOptNone);
+FunctionPass *createAArch64PostLegalizerCombiner(bool IsOptNone);
+FunctionPass *createAArch64PostLegalizerLowering();
+FunctionPass *createAArch64PostSelectOptimize();
+FunctionPass *createAArch64StackTaggingPass(bool IsOptNone);
 FunctionPass *createAArch64StackTaggingPreRAPass();
 
 void initializeAArch64A53Fix835769Pass(PassRegistry&);
@@ -72,11 +76,14 @@ void initializeAArch64ConditionalComparesPass(PassRegistry&);
 void initializeAArch64ConditionOptimizerPass(PassRegistry&);
 void initializeAArch64DeadRegisterDefinitionsPass(PassRegistry&);
 void initializeAArch64ExpandPseudoPass(PassRegistry&);
+void initializeAArch64SLSHardeningPass(PassRegistry&);
 void initializeAArch64SpeculationHardeningPass(PassRegistry&);
 void initializeAArch64LoadStoreOptPass(PassRegistry&);
 void initializeAArch64SIMDInstrOptPass(PassRegistry&);
 void initializeAArch64PreLegalizerCombinerPass(PassRegistry&);
 void initializeAArch64PostLegalizerCombinerPass(PassRegistry &);
+void initializeAArch64PostLegalizerLoweringPass(PassRegistry &);
+void initializeAArch64PostSelectOptimizePass(PassRegistry &);
 void initializeAArch64PromoteConstantPass(PassRegistry&);
 void initializeAArch64RedundantCopyEliminationPass(PassRegistry&);
 void initializeAArch64StorePairSuppressPass(PassRegistry&);

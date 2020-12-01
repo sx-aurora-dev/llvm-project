@@ -108,6 +108,8 @@ public:
 
   virtual bool hasMostDerivedReturn(GlobalDecl GD) const { return false; }
 
+  virtual bool useSinitAndSterm() const { return false; }
+
   /// Returns true if the target allows calling a function through a pointer
   /// with a different signature than the actual function (or equivalently,
   /// bitcasting a function or function pointer to a different function type).
@@ -217,12 +219,6 @@ protected:
   /// support an ABI that allows this).  Returns null if no adjustment
   /// is required.
   llvm::Constant *getMemberPointerAdjustment(const CastExpr *E);
-
-  /// Computes the non-virtual adjustment needed for a member pointer
-  /// conversion along an inheritance path stored in an APValue.  Unlike
-  /// getMemberPointerAdjustment(), the adjustment can be negative if the path
-  /// is from a derived type to a base type.
-  CharUnits getMemberPointerPathAdjustment(const APValue &MP);
 
 public:
   virtual void emitVirtualObjectDelete(CodeGenFunction &CGF,
@@ -399,6 +395,13 @@ public:
   addImplicitConstructorArgs(CodeGenFunction &CGF, const CXXConstructorDecl *D,
                              CXXCtorType Type, bool ForVirtualBase,
                              bool Delegating, CallArgList &Args);
+
+  /// Get the implicit (second) parameter that comes after the "this" pointer,
+  /// or nullptr if there is isn't one.
+  virtual llvm::Value *
+  getCXXDestructorImplicitParam(CodeGenFunction &CGF,
+                                const CXXDestructorDecl *DD, CXXDtorType Type,
+                                bool ForVirtualBase, bool Delegating) = 0;
 
   /// Emit the destructor call.
   virtual void EmitDestructorCall(CodeGenFunction &CGF,

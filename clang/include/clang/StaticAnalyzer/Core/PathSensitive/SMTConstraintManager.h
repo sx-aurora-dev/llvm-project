@@ -31,8 +31,9 @@ class SMTConstraintManager : public clang::ento::SimpleConstraintManager {
   mutable llvm::SMTSolverRef Solver = llvm::CreateZ3Solver();
 
 public:
-  SMTConstraintManager(clang::ento::SubEngine *SE, clang::ento::SValBuilder &SB)
-      : SimpleConstraintManager(SE, SB) {}
+  SMTConstraintManager(clang::ento::ExprEngine *EE,
+                       clang::ento::SValBuilder &SB)
+      : SimpleConstraintManager(EE, SB) {}
   virtual ~SMTConstraintManager() = default;
 
   //===------------------------------------------------------------------===//
@@ -121,8 +122,7 @@ public:
       // this method tries to get the interpretation (the actual value) from
       // the solver, which is currently not cached.
 
-      llvm::SMTExprRef Exp =
-          SMTConv::fromData(Solver, SD->getSymbolID(), Ty, Ctx.getTypeSize(Ty));
+      llvm::SMTExprRef Exp = SMTConv::fromData(Solver, Ctx, SD);
 
       Solver->reset();
       addStateConstraints(State);

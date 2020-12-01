@@ -271,7 +271,7 @@ struct PartiallyConstructedSafepointRecord {
 
   /// The *new* gc.statepoint instruction itself.  This produces the token
   /// that normal path gc.relocates and the gc.result are tied to.
-  Instruction *StatepointToken;
+  GCStatepointInst *StatepointToken;
 
   /// Instruction to which exceptional gc relocates are attached
   /// Makes it easier to iterate through them during relocationViaAlloca.
@@ -1320,13 +1320,11 @@ static AttributeList legalizeCallAttributes(LLVMContext &Ctx,
 /// statepoint.
 /// Inputs:
 ///   liveVariables - list of variables to be relocated.
-///   liveStart - index of the first live variable.
 ///   basePtrs - base pointers.
 ///   statepointToken - statepoint instruction to which relocates should be
 ///   bound.
 ///   Builder - Llvm IR builder to be used to construct new calls.
 static void CreateGCRelocates(ArrayRef<Value *> LiveVariables,
-                              const int LiveStart,
                               ArrayRef<Value *> BasePtrs,
                               Instruction *StatepointToken,
                               IRBuilder<> &Builder) {
@@ -1354,7 +1352,8 @@ static void CreateGCRelocates(ArrayRef<Value *> LiveVariables,
     auto AS = Ty->getScalarType()->getPointerAddressSpace();
     Type *NewTy = Type::getInt8PtrTy(M->getContext(), AS);
     if (auto *VT = dyn_cast<VectorType>(Ty))
-      NewTy = VectorType::get(NewTy, VT->getNumElements());
+      NewTy = FixedVectorType::get(NewTy,
+                                   cast<FixedVectorType>(VT)->getNumElements());
     return Intrinsic::getDeclaration(M, Intrinsic::experimental_gc_relocate,
                                      {NewTy});
   };
@@ -1366,9 +1365,8 @@ static void CreateGCRelocates(ArrayRef<Value *> LiveVariables,
 
   for (unsigned i = 0; i < LiveVariables.size(); i++) {
     // Generate the gc.relocate call and save the result
-    Value *BaseIdx =
-      Builder.getInt32(LiveStart + FindIndex(LiveVariables, BasePtrs[i]));
-    Value *LiveIdx = Builder.getInt32(LiveStart + i);
+    Value *BaseIdx = Builder.getInt32(FindIndex(LiveVariables, BasePtrs[i]));
+    Value *LiveIdx = Builder.getInt32(i);
 
     Type *Ty = LiveVariables[i]->getType();
     if (!TypeToDeclMap.count(Ty))
@@ -1489,13 +1487,17 @@ makeStatepointExplicitImpl(CallBase *Call, /* to replace */
   uint32_t NumPatchBytes = 0;
   uint32_t Flags = uint32_t(StatepointFlags::None);
 
-  ArrayRef<Use> CallArgs(Call->arg_begin(), Call->arg_end());
-  ArrayRef<Use> DeoptArgs = GetDeoptBundleOperands(Call);
-  ArrayRef<Use> TransitionArgs;
-  if (auto TransitionBundle =
-          Call->getOperandBundle(LLVMContext::OB_gc_transition)) {
+  SmallVector<Value *, 8> CallArgs;
+  for (Value *Arg : Call->args())
+    CallArgs.push_back(Arg);
+  Optional<ArrayRef<Use>> DeoptArgs;
+  if (auto Bundle = Call->getOperandBundle(LLVMContext::OB_deopt))
+    DeoptArgs = Bundle->Inputs;
+  Optional<ArrayRef<Use>> TransitionArgs;
+  if (auto Bundle = Call->getOperandBundle(LLVMContext::OB_gc_transition)) {
+    TransitionArgs = Bundle->Inputs;
+    // TODO: This flag no longer serves a purpose and can be removed later
     Flags |= uint32_t(StatepointFlags::GCTransition);
-    TransitionArgs = TransitionBundle->Inputs;
   }
 
   // Instead of lowering calls to @llvm.experimental.deoptimize as normal calls
@@ -1520,7 +1522,8 @@ makeStatepointExplicitImpl(CallBase *Call, /* to replace */
 
   Value *CallTarget = Call->getCalledOperand();
   if (Function *F = dyn_cast<Function>(CallTarget)) {
-    if (F->getIntrinsicID() == Intrinsic::experimental_deoptimize) {
+    auto IID = F->getIntrinsicID();
+    if (IID == Intrinsic::experimental_deoptimize) {
       // Calls to llvm.experimental.deoptimize are lowered to calls to the
       // __llvm_deoptimize symbol.  We want to resolve this now, since the
       // verifier does not allow taking the address of an intrinsic function.
@@ -1540,11 +1543,106 @@ makeStatepointExplicitImpl(CallBase *Call, /* to replace */
                        .getCallee();
 
       IsDeoptimize = true;
+    } else if (IID == Intrinsic::memcpy_element_unordered_atomic ||
+               IID == Intrinsic::memmove_element_unordered_atomic) {
+      // Unordered atomic memcpy and memmove intrinsics which are not explicitly
+      // marked as "gc-leaf-function" should be lowered in a GC parseable way.
+      // Specifically, these calls should be lowered to the
+      // __llvm_{memcpy|memmove}_element_unordered_atomic_safepoint symbols.
+      // Similarly to __llvm_deoptimize we want to resolve this now, since the
+      // verifier does not allow taking the address of an intrinsic function.
+      //
+      // Moreover we need to shuffle the arguments for the call in order to
+      // accommodate GC. The underlying source and destination objects might be
+      // relocated during copy operation should the GC occur. To relocate the
+      // derived source and destination pointers the implementation of the
+      // intrinsic should know the corresponding base pointers.
+      //
+      // To make the base pointers available pass them explicitly as arguments:
+      //   memcpy(dest_derived, source_derived, ...) =>
+      //   memcpy(dest_base, dest_offset, source_base, source_offset, ...)
+      auto &Context = Call->getContext();
+      auto &DL = Call->getModule()->getDataLayout();
+      auto GetBaseAndOffset = [&](Value *Derived) {
+        assert(Result.PointerToBase.count(Derived));
+        unsigned AddressSpace = Derived->getType()->getPointerAddressSpace();
+        unsigned IntPtrSize = DL.getPointerSizeInBits(AddressSpace);
+        Value *Base = Result.PointerToBase.find(Derived)->second;
+        Value *Base_int = Builder.CreatePtrToInt(
+            Base, Type::getIntNTy(Context, IntPtrSize));
+        Value *Derived_int = Builder.CreatePtrToInt(
+            Derived, Type::getIntNTy(Context, IntPtrSize));
+        return std::make_pair(Base, Builder.CreateSub(Derived_int, Base_int));
+      };
+
+      auto *Dest = CallArgs[0];
+      Value *DestBase, *DestOffset;
+      std::tie(DestBase, DestOffset) = GetBaseAndOffset(Dest);
+
+      auto *Source = CallArgs[1];
+      Value *SourceBase, *SourceOffset;
+      std::tie(SourceBase, SourceOffset) = GetBaseAndOffset(Source);
+
+      auto *LengthInBytes = CallArgs[2];
+      auto *ElementSizeCI = cast<ConstantInt>(CallArgs[3]);
+
+      CallArgs.clear();
+      CallArgs.push_back(DestBase);
+      CallArgs.push_back(DestOffset);
+      CallArgs.push_back(SourceBase);
+      CallArgs.push_back(SourceOffset);
+      CallArgs.push_back(LengthInBytes);
+
+      SmallVector<Type *, 8> DomainTy;
+      for (Value *Arg : CallArgs)
+        DomainTy.push_back(Arg->getType());
+      auto *FTy = FunctionType::get(Type::getVoidTy(F->getContext()), DomainTy,
+                                    /* isVarArg = */ false);
+
+      auto GetFunctionName = [](Intrinsic::ID IID, ConstantInt *ElementSizeCI) {
+        uint64_t ElementSize = ElementSizeCI->getZExtValue();
+        if (IID == Intrinsic::memcpy_element_unordered_atomic) {
+          switch (ElementSize) {
+          case 1:
+            return "__llvm_memcpy_element_unordered_atomic_safepoint_1";
+          case 2:
+            return "__llvm_memcpy_element_unordered_atomic_safepoint_2";
+          case 4:
+            return "__llvm_memcpy_element_unordered_atomic_safepoint_4";
+          case 8:
+            return "__llvm_memcpy_element_unordered_atomic_safepoint_8";
+          case 16:
+            return "__llvm_memcpy_element_unordered_atomic_safepoint_16";
+          default:
+            llvm_unreachable("unexpected element size!");
+          }
+        }
+        assert(IID == Intrinsic::memmove_element_unordered_atomic);
+        switch (ElementSize) {
+        case 1:
+          return "__llvm_memmove_element_unordered_atomic_safepoint_1";
+        case 2:
+          return "__llvm_memmove_element_unordered_atomic_safepoint_2";
+        case 4:
+          return "__llvm_memmove_element_unordered_atomic_safepoint_4";
+        case 8:
+          return "__llvm_memmove_element_unordered_atomic_safepoint_8";
+        case 16:
+          return "__llvm_memmove_element_unordered_atomic_safepoint_16";
+        default:
+          llvm_unreachable("unexpected element size!");
+        }
+      };
+
+      CallTarget =
+          F->getParent()
+              ->getOrInsertFunction(GetFunctionName(IID, ElementSizeCI), FTy)
+              .getCallee();
     }
   }
 
   // Create the statepoint given all the arguments
-  Instruction *Token = nullptr;
+  GCStatepointInst *Token = nullptr;
   if (auto *CI = dyn_cast<CallInst>(Call)) {
     CallInst *SPCall = Builder.CreateGCStatepointCall(
         StatepointID, NumPatchBytes, CallTarget, Flags, CallArgs,
@@ -1560,7 +1658,7 @@ makeStatepointExplicitImpl(CallBase *Call, /* to replace */
     SPCall->setAttributes(
         legalizeCallAttributes(CI->getContext(), CI->getAttributes()));
 
-    Token = SPCall;
+    Token = cast<GCStatepointInst>(SPCall);
 
     // Put the following gc_result and gc_relocate calls immediately after the
     // the old call (which we're about to delete)
@@ -1587,7 +1685,7 @@ makeStatepointExplicitImpl(CallBase *Call, /* to replace */
     SPInvoke->setAttributes(
         legalizeCallAttributes(II->getContext(), II->getAttributes()));
 
-    Token = SPInvoke;
+    Token = cast<GCStatepointInst>(SPInvoke);
 
     // Generate gc relocates in exceptional path
     BasicBlock *UnwindBlock = II->getUnwindDest();
@@ -1602,9 +1700,7 @@ makeStatepointExplicitImpl(CallBase *Call, /* to replace */
     Instruction *ExceptionalToken = UnwindBlock->getLandingPadInst();
     Result.UnwindToken = ExceptionalToken;
 
-    const unsigned LiveStartIdx = Statepoint(Token).gcArgsStartIdx();
-    CreateGCRelocates(LiveVariables, LiveStartIdx, BasePtrs, ExceptionalToken,
-                      Builder);
+    CreateGCRelocates(LiveVariables, BasePtrs, ExceptionalToken, Builder);
 
     // Generate gc relocates and returns for normal block
     BasicBlock *NormalDest = II->getNormalDest();
@@ -1650,8 +1746,7 @@ makeStatepointExplicitImpl(CallBase *Call, /* to replace */
   Result.StatepointToken = Token;
 
   // Second, create a gc.relocate for every live variable
-  const unsigned LiveStartIdx = Statepoint(Token).gcArgsStartIdx();
-  CreateGCRelocates(LiveVariables, LiveStartIdx, BasePtrs, Token, Builder);
+  CreateGCRelocates(LiveVariables, BasePtrs, Token, Builder);
 }
 
 // Replace an existing gc.statepoint with a new one and a set of gc.relocates
@@ -2028,8 +2123,8 @@ chainToBasePointerCost(SmallVectorImpl<Instruction*> &Chain,
 
       Type *SrcTy = CI->getOperand(0)->getType();
       Cost += TTI.getCastInstrCost(CI->getOpcode(), CI->getType(), SrcTy,
-                                   TargetTransformInfo::TCK_SizeAndLatency,
-                                   CI);
+                                   TTI::getCastContextHint(CI),
+                                   TargetTransformInfo::TCK_SizeAndLatency, CI);
 
     } else if (GetElementPtrInst *GEP = dyn_cast<GetElementPtrInst>(Instr)) {
       // Cost of the address calculation
@@ -2407,9 +2502,8 @@ static bool insertParsePoints(Function &F, DominatorTree &DT,
     // That Value* no longer exists and we need to use the new gc_result.
     // Thankfully, the live set is embedded in the statepoint (and updated), so
     // we just grab that.
-    Statepoint Statepoint(Info.StatepointToken);
-    Live.insert(Live.end(), Statepoint.gc_args_begin(),
-                Statepoint.gc_args_end());
+    Live.insert(Live.end(), Info.StatepointToken->gc_args_begin(),
+                Info.StatepointToken->gc_args_end());
 #ifndef NDEBUG
     // Do some basic sanity checks on our liveness results before performing
     // relocation.  Relocation can and will turn mistakes in liveness results
@@ -2417,7 +2511,7 @@ static bool insertParsePoints(Function &F, DominatorTree &DT,
     // TODO: It would be nice to test consistency as well
     assert(DT.isReachableFromEntry(Info.StatepointToken->getParent()) &&
            "statepoint must be reachable or liveness is meaningless");
-    for (Value *V : Statepoint.gc_args()) {
+    for (Value *V : Info.StatepointToken->gc_args()) {
       if (!isa<Instruction>(V))
         // Non-instruction values trivial dominate all possible uses
         continue;
@@ -2585,8 +2679,27 @@ bool RewriteStatepointsForGC::runOnFunction(Function &F, DominatorTree &DT,
   assert(shouldRewriteStatepointsIn(F) && "mismatch in rewrite decision");
 
   auto NeedsRewrite = [&TLI](Instruction &I) {
-    if (const auto *Call = dyn_cast<CallBase>(&I))
-      return !callsGCLeafFunction(Call, TLI) && !isStatepoint(Call);
+    if (const auto *Call = dyn_cast<CallBase>(&I)) {
+      if (isa<GCStatepointInst>(Call))
+        return false;
+      if (callsGCLeafFunction(Call, TLI))
+        return false;
+
+      // Normally it's up to the frontend to make sure that non-leaf calls also
+      // have proper deopt state if it is required. We make an exception for
+      // element atomic memcpy/memmove intrinsics here. Unlike other intrinsics
+      // these are non-leaf by default. They might be generated by the optimizer
+      // which doesn't know how to produce a proper deopt state. So if we see a
+      // non-leaf memcpy/memmove without deopt state just treat it as a leaf
+      // copy and don't produce a statepoint.
+      if (!AllowStatepointWithNoDeoptInfo &&
+          !Call->getOperandBundle(LLVMContext::OB_deopt)) {
+        assert((isa<AtomicMemCpyInst>(Call) || isa<AtomicMemMoveInst>(Call)) &&
+               "Don't expect any other calls here!");
+        return false;
+      }
+      return true;
+    }
     return false;
   };
 
@@ -2672,8 +2785,9 @@ bool RewriteStatepointsForGC::runOnFunction(Function &F, DominatorTree &DT,
     unsigned VF = 0;
     for (unsigned i = 0; i < I.getNumOperands(); i++)
       if (auto *OpndVTy = dyn_cast<VectorType>(I.getOperand(i)->getType())) {
-        assert(VF == 0 || VF == OpndVTy->getNumElements());
-        VF = OpndVTy->getNumElements();
+        assert(VF == 0 ||
+               VF == cast<FixedVectorType>(OpndVTy)->getNumElements());
+        VF = cast<FixedVectorType>(OpndVTy)->getNumElements();
       }
 
     // It's the vector to scalar traversal through the pointer operand which

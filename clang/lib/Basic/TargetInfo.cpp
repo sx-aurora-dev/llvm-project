@@ -36,6 +36,8 @@ TargetInfo::TargetInfo(const llvm::Triple &T) : TargetOpts(), Triple(T) {
   HasLegalHalfType = false;
   HasFloat128 = false;
   HasFloat16 = false;
+  HasBFloat16 = false;
+  HasStrictFP = false;
   PointerWidth = PointerAlign = 32;
   BoolWidth = BoolAlign = 8;
   IntWidth = IntAlign = 32;
@@ -113,6 +115,7 @@ TargetInfo::TargetInfo(const llvm::Triple &T) : TargetOpts(), Triple(T) {
   HasBuiltinMSVaList = false;
   IsRenderScriptTarget = false;
   HasAArch64SVETypes = false;
+  AllowAMDGPUUnsafeFPAtomics = false;
   ARMCDECoprocMask = 0;
 
   // Default to no types using fpret.
@@ -265,7 +268,8 @@ TargetInfo::IntType TargetInfo::getLeastIntTypeByWidth(unsigned BitWidth,
   return NoInt;
 }
 
-TargetInfo::RealType TargetInfo::getRealTypeByWidth(unsigned BitWidth) const {
+TargetInfo::RealType TargetInfo::getRealTypeByWidth(unsigned BitWidth,
+                                                    bool ExplicitIEEE) const {
   if (getFloatWidth() == BitWidth)
     return Float;
   if (getDoubleWidth() == BitWidth)
@@ -277,6 +281,10 @@ TargetInfo::RealType TargetInfo::getRealTypeByWidth(unsigned BitWidth) const {
       return LongDouble;
     break;
   case 128:
+    // The caller explicitly asked for an IEEE compliant type but we still
+    // have to check if the target supports it.
+    if (ExplicitIEEE)
+      return hasFloat128Type() ? Float128 : NoFloat;
     if (&getLongDoubleFormat() == &llvm::APFloat::PPCDoubleDouble() ||
         &getLongDoubleFormat() == &llvm::APFloat::IEEEquad())
       return LongDouble;

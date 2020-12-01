@@ -14,6 +14,7 @@
 #include "TestFS.h"
 #include "TestIndex.h"
 #include "TestTU.h"
+#include "TidyProvider.h"
 #include "index/MemIndex.h"
 #include "support/Path.h"
 #include "clang/Basic/Diagnostic.h"
@@ -29,6 +30,8 @@ namespace clangd {
 namespace {
 
 using ::testing::_;
+using ::testing::AllOf;
+using ::testing::Contains;
 using ::testing::ElementsAre;
 using ::testing::Field;
 using ::testing::IsEmpty;
@@ -48,6 +51,12 @@ using ::testing::UnorderedElementsAre;
 ::testing::Matcher<const Diag &>
 WithNote(::testing::Matcher<Note> NoteMatcher) {
   return Field(&Diag::Notes, ElementsAre(NoteMatcher));
+}
+
+::testing::Matcher<const Diag &>
+WithNote(::testing::Matcher<Note> NoteMatcher1,
+         ::testing::Matcher<Note> NoteMatcher2) {
+  return Field(&Diag::Notes, UnorderedElementsAre(NoteMatcher1, NoteMatcher2));
 }
 
 MATCHER_P2(Diag, Range, Message,
@@ -121,7 +130,7 @@ o]]();
     }
   )cpp");
   auto TU = TestTU::withCode(Test.code());
-  TU.ClangTidyChecks = "-*,google-explicit-constructor";
+  TU.ClangTidyProvider = addTidyChecks("google-explicit-constructor");
   EXPECT_THAT(
       TU.build().getDiagnostics(),
       ElementsAre(
@@ -193,8 +202,8 @@ TEST(DiagnosticsTest, DeduplicatedClangTidyDiagnostics) {
   auto TU = TestTU::withCode(Test.code());
   // Enable alias clang-tidy checks, these check emits the same diagnostics
   // (except the check name).
-  TU.ClangTidyChecks = "-*, readability-uppercase-literal-suffix, "
-                       "hicpp-uppercase-literal-suffix";
+  TU.ClangTidyProvider = addTidyChecks("readability-uppercase-literal-suffix,"
+                                       "hicpp-uppercase-literal-suffix");
   // Verify that we filter out the duplicated diagnostic message.
   EXPECT_THAT(
       TU.build().getDiagnostics(),
@@ -237,9 +246,10 @@ TEST(DiagnosticsTest, ClangTidy) {
   )cpp");
   auto TU = TestTU::withCode(Test.code());
   TU.HeaderFilename = "assert.h"; // Suppress "not found" error.
-  TU.ClangTidyChecks =
-      "-*, bugprone-sizeof-expression, bugprone-macro-repeated-side-effects, "
-      "modernize-deprecated-headers, modernize-use-trailing-return-type";
+  TU.ClangTidyProvider = addTidyChecks("bugprone-sizeof-expression,"
+                                       "bugprone-macro-repeated-side-effects,"
+                                       "modernize-deprecated-headers,"
+                                       "modernize-use-trailing-return-type");
   EXPECT_THAT(
       TU.build().getDiagnostics(),
       UnorderedElementsAre(
@@ -272,6 +282,68 @@ TEST(DiagnosticsTest, ClangTidy) {
                   "use a trailing return type for this function")))));
 }
 
+TEST(DiagnosticsTest, ClangTidyEOF) {
+  // clang-format off
+  Annotations Test(R"cpp(
+  [[#]]include <b.h>
+  #include "a.h")cpp");
+  // clang-format on
+  auto TU = TestTU::withCode(Test.code());
+  TU.ExtraArgs = {"-isystem."};
+  TU.AdditionalFiles["a.h"] = TU.AdditionalFiles["b.h"] = "";
+  TU.ClangTidyProvider = addTidyChecks("llvm-include-order");
+  EXPECT_THAT(
+      TU.build().getDiagnostics(),
+      Contains(AllOf(Diag(Test.range(), "#includes are not sorted properly"),
+                     DiagSource(Diag::ClangTidy),
+                     DiagName("llvm-include-order"))));
+}
+
+TEST(DiagnosticTest, TemplatesInHeaders) {
+  // Diagnostics from templates defined in headers are placed at the expansion.
+  Annotations Main(R"cpp(
+    Derived<int> [[y]]; // error-ok
+  )cpp");
+  Annotations Header(R"cpp(
+    template <typename T>
+    struct Derived : [[T]] {};
+  )cpp");
+  TestTU TU = TestTU::withCode(Main.code());
+  TU.HeaderCode = Header.code().str();
+  EXPECT_THAT(
+      TU.build().getDiagnostics(),
+      ElementsAre(AllOf(
+          Diag(Main.range(), "in template: base specifier must name a class"),
+          WithNote(Diag(Header.range(), "error occurred here"),
+                   Diag(Main.range(), "in instantiation of template class "
+                                      "'Derived<int>' requested here")))));
+}
+
+TEST(DiagnosticTest, MakeUnique) {
+  // We usually miss diagnostics from header functions as we don't parse them.
+  // std::make_unique is an exception.
+  Annotations Main(R"cpp(
+    struct S { S(char*); };
+    auto x = std::[[make_unique]]<S>(42); // error-ok
+  )cpp");
+  TestTU TU = TestTU::withCode(Main.code());
+  TU.HeaderCode = R"cpp(
+    namespace std {
+    // These mocks aren't quite right - we omit unique_ptr for simplicity.
+    // forward is included to show its body is not needed to get the diagnostic.
+    template <typename T> T&& forward(T& t) { return static_cast<T&&>(t); }
+    template <typename T, typename... A> T* make_unique(A&&... args) {
+       return new T(std::forward<A>(args)...);
+    }
+    }
+  )cpp";
+  EXPECT_THAT(TU.build().getDiagnostics(),
+              UnorderedElementsAre(
+                  Diag(Main.range(),
+                       "in template: "
+                       "no matching constructor for initialization of 'S'")));
+}
+
 TEST(DiagnosticTest, NoMultipleDiagnosticInFlight) {
   Annotations Main(R"cpp(
     template <typename T> struct Foo {
@@ -291,7 +363,7 @@ TEST(DiagnosticTest, NoMultipleDiagnosticInFlight) {
     }
   )cpp");
   TestTU TU = TestTU::withCode(Main.code());
-  TU.ClangTidyChecks = "modernize-loop-convert";
+  TU.ClangTidyProvider = addTidyChecks("modernize-loop-convert");
   EXPECT_THAT(
       TU.build().getDiagnostics(),
       UnorderedElementsAre(::testing::AllOf(
@@ -314,7 +386,7 @@ TEST(DiagnosticTest, ClangTidySuppressionComment) {
     }
   )cpp");
   TestTU TU = TestTU::withCode(Main.code());
-  TU.ClangTidyChecks = "bugprone-integer-division";
+  TU.ClangTidyProvider = addTidyChecks("bugprone-integer-division");
   EXPECT_THAT(
       TU.build().getDiagnostics(),
       UnorderedElementsAre(::testing::AllOf(
@@ -331,8 +403,8 @@ TEST(DiagnosticTest, ClangTidyWarningAsError) {
     }
   )cpp");
   TestTU TU = TestTU::withCode(Main.code());
-  TU.ClangTidyChecks = "bugprone-integer-division";
-  TU.ClangTidyWarningsAsErrors = "bugprone-integer-division";
+  TU.ClangTidyProvider =
+      addTidyChecks("bugprone-integer-division", "bugprone-integer-division");
   EXPECT_THAT(
       TU.build().getDiagnostics(),
       UnorderedElementsAre(::testing::AllOf(
@@ -382,9 +454,42 @@ TEST(DiagnosticTest, ClangTidySuppressionCommentTrumpsWarningAsError) {
     }
   )cpp");
   TestTU TU = TestTU::withCode(Main.code());
-  TU.ClangTidyChecks = "bugprone-integer-division";
-  TU.ClangTidyWarningsAsErrors = "bugprone-integer-division";
+  TU.ClangTidyProvider =
+      addTidyChecks("bugprone-integer-division", "bugprone-integer-division");
   EXPECT_THAT(TU.build().getDiagnostics(), UnorderedElementsAre());
+}
+
+TEST(DiagnosticTest, ClangTidyNoLiteralDataInMacroToken) {
+  Annotations Main(R"cpp(
+    #define SIGTERM 15
+    using pthread_t = int;
+    int pthread_kill(pthread_t thread, int sig);
+    int func() {
+      pthread_t thread;
+      return pthread_kill(thread, 0);
+    }
+  )cpp");
+  TestTU TU = TestTU::withCode(Main.code());
+  TU.ClangTidyProvider = addTidyChecks("bugprone-bad-signal-to-kill-thread");
+  EXPECT_THAT(TU.build().getDiagnostics(), UnorderedElementsAre()); // no-crash
+}
+
+TEST(DiagnosticTest, ElseAfterReturnRange) {
+  Annotations Main(R"cpp(
+    int foo(int cond) {
+    if (cond == 1) {
+      return 42;
+    } [[else]] if (cond == 2) {
+      return 43;
+    }
+    return 44;
+    }
+  )cpp");
+  TestTU TU = TestTU::withCode(Main.code());
+  TU.ClangTidyProvider = addTidyChecks("llvm-else-after-return");
+  EXPECT_THAT(
+      TU.build().getDiagnostics(),
+      ElementsAre(Diag(Main.range(), "do not use 'else' after 'return'")));
 }
 
 TEST(DiagnosticsTest, Preprocessor) {
@@ -404,6 +509,15 @@ TEST(DiagnosticsTest, Preprocessor) {
   EXPECT_THAT(
       TestTU::withCode(Test.code()).build().getDiagnostics(),
       ElementsAre(Diag(Test.range(), "use of undeclared identifier 'b'")));
+}
+
+TEST(DiagnosticsTest, IgnoreVerify) {
+  auto TU = TestTU::withCode(R"cpp(
+    int a; // expected-error {{}}
+  )cpp");
+  TU.ExtraArgs.push_back("-Xclang");
+  TU.ExtraArgs.push_back("-verify");
+  EXPECT_THAT(TU.build().getDiagnostics(), IsEmpty());
 }
 
 // Recursive main-file include is diagnosed, and doesn't crash.
@@ -620,12 +734,21 @@ $insert[[]]namespace ns {
   $nested[[X::]]Nested n;
 }
 class Y : $base[[public ns::X]] {};
-int main() {
-  ns::X *x;
+void test(ns::X *x, ns::X& ref_x) {
   x$access[[->]]f();
+  auto& $type[[[]]a] = *x;
+
+  ns::X $incomplete[[var]];
+  $tag[[ref_x]]->f();
+  $use[[ns::X()]];
+  $sizeof[[sizeof]](ns::X);
+  for (auto it : $for[[ref_x]]);
 }
+
+ns::X $return[[func]]() {}
   )cpp");
   auto TU = TestTU::withCode(Test.code());
+  TU.ExtraArgs.push_back("-std=c++17");
   auto Index = buildIndexWithSymbol(
       {SymbolWithHeader{"ns::X", "unittest:///x.h", "\"x.h\""}});
   TU.ExternalIndex = Index.get();
@@ -635,13 +758,52 @@ int main() {
       UnorderedElementsAre(
           AllOf(Diag(Test.range("nested"),
                      "incomplete type 'ns::X' named in nested name specifier"),
+                DiagName("incomplete_nested_name_spec"),
                 WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
                             "Add include \"x.h\" for symbol ns::X"))),
           AllOf(Diag(Test.range("base"), "base class has incomplete type"),
+                DiagName("incomplete_base_class"),
                 WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
                             "Add include \"x.h\" for symbol ns::X"))),
           AllOf(Diag(Test.range("access"),
                      "member access into incomplete type 'ns::X'"),
+                DiagName("incomplete_member_access"),
+                WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
+                            "Add include \"x.h\" for symbol ns::X"))),
+          AllOf(
+              Diag(Test.range("type"),
+                   "incomplete type 'ns::X' where a complete type is required"),
+              DiagName("incomplete_type"),
+              WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
+                          "Add include \"x.h\" for symbol ns::X"))),
+          AllOf(Diag(Test.range("incomplete"),
+                     "variable has incomplete type 'ns::X'"),
+                DiagName("typecheck_decl_incomplete_type"),
+                WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
+                            "Add include \"x.h\" for symbol ns::X"))),
+          AllOf(
+              Diag(Test.range("tag"), "incomplete definition of type 'ns::X'"),
+              DiagName("typecheck_incomplete_tag"),
+              WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
+                          "Add include \"x.h\" for symbol ns::X"))),
+          AllOf(
+              Diag(Test.range("use"), "invalid use of incomplete type 'ns::X'"),
+              DiagName("invalid_incomplete_type_use"),
+              WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
+                          "Add include \"x.h\" for symbol ns::X"))),
+          AllOf(Diag(Test.range("sizeof"), "invalid application of 'sizeof' to "
+                                           "an incomplete type 'ns::X'"),
+                DiagName("sizeof_alignof_incomplete_or_sizeless_type"),
+                WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
+                            "Add include \"x.h\" for symbol ns::X"))),
+          AllOf(Diag(Test.range("for"),
+                     "cannot use incomplete type 'ns::X' as a range"),
+                DiagName("for_range_incomplete_type"),
+                WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
+                            "Add include \"x.h\" for symbol ns::X"))),
+          AllOf(Diag(Test.range("return"),
+                     "incomplete result type 'ns::X' in function definition"),
+                DiagName("func_def_incomplete_result"),
                 WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
                             "Add include \"x.h\" for symbol ns::X")))));
 }
@@ -704,19 +866,23 @@ void bar() {
       TU.build().getDiagnostics(),
       UnorderedElementsAre(
           AllOf(Diag(Test.range("unqualified1"), "unknown type name 'X'"),
+                DiagName("unknown_typename"),
                 WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
                             "Add include \"x.h\" for symbol ns::X"))),
           Diag(Test.range("unqualified2"), "use of undeclared identifier 'X'"),
           AllOf(Diag(Test.range("qualified1"),
                      "no type named 'X' in namespace 'ns'"),
+                DiagName("typename_nested_not_found"),
                 WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
                             "Add include \"x.h\" for symbol ns::X"))),
           AllOf(Diag(Test.range("qualified2"),
                      "no member named 'X' in namespace 'ns'"),
+                DiagName("no_member"),
                 WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
                             "Add include \"x.h\" for symbol ns::X"))),
           AllOf(Diag(Test.range("global"),
                      "no type named 'Global' in the global namespace"),
+                DiagName("typename_nested_not_found"),
                 WithFix(Fix(Test.range("insert"), "#include \"global.h\"\n",
                             "Add include \"global.h\" for symbol Global")))));
 }
@@ -740,6 +906,7 @@ void foo() {
   EXPECT_THAT(TU.build().getDiagnostics(),
               UnorderedElementsAre(AllOf(
                   Diag(Test.range("unqualified"), "unknown type name 'X'"),
+                  DiagName("unknown_typename"),
                   WithFix(Fix(Test.range("insert"), "#include \"a.h\"\n",
                               "Add include \"a.h\" for symbol na::X"),
                           Fix(Test.range("insert"), "#include \"b.h\"\n",
@@ -820,6 +987,7 @@ void g() {  ns::$[[scope]]::X_Y();  }
       TU.build().getDiagnostics(),
       UnorderedElementsAre(AllOf(
           Diag(Test.range(), "no member named 'scope' in namespace 'ns'"),
+          DiagName("no_member"),
           WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
                       "Add include \"x.h\" for symbol ns::scope::X_Y")))));
 }
@@ -849,22 +1017,26 @@ void f() {
           AllOf(
               Diag(Test.range("q1"), "use of undeclared identifier 'clangd'; "
                                      "did you mean 'clang'?"),
+              DiagName("undeclared_var_use_suggest"),
               WithFix(_, // change clangd to clang
                       Fix(Test.range("insert"), "#include \"x.h\"\n",
                           "Add include \"x.h\" for symbol clang::clangd::X"))),
           AllOf(
               Diag(Test.range("x"), "no type named 'X' in namespace 'clang'"),
+              DiagName("typename_nested_not_found"),
               WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
                           "Add include \"x.h\" for symbol clang::clangd::X"))),
           AllOf(
               Diag(Test.range("q2"), "use of undeclared identifier 'clangd'; "
                                      "did you mean 'clang'?"),
+              DiagName("undeclared_var_use_suggest"),
               WithFix(
-                  _, // change clangd to clangd
+                  _, // change clangd to clang
                   Fix(Test.range("insert"), "#include \"y.h\"\n",
                       "Add include \"y.h\" for symbol clang::clangd::ns::Y"))),
           AllOf(Diag(Test.range("ns"),
                      "no member named 'ns' in namespace 'clang'"),
+                DiagName("no_member"),
                 WithFix(Fix(
                     Test.range("insert"), "#include \"y.h\"\n",
                     "Add include \"y.h\" for symbol clang::clangd::ns::Y")))));
@@ -886,6 +1058,7 @@ namespace c {
   EXPECT_THAT(TU.build().getDiagnostics(),
               UnorderedElementsAre(AllOf(
                   Diag(Test.range(), "no type named 'X' in namespace 'a'"),
+                  DiagName("typename_nested_not_found"),
                   WithFix(Fix(Test.range("insert"), "#include \"x.h\"\n",
                               "Add include \"x.h\" for symbol a::X")))));
 }

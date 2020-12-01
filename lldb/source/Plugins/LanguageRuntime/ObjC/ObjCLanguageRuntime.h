@@ -186,7 +186,8 @@ public:
     TaggedPointerVendor() = default;
 
   private:
-    DISALLOW_COPY_AND_ASSIGN(TaggedPointerVendor);
+    TaggedPointerVendor(const TaggedPointerVendor &) = delete;
+    const TaggedPointerVendor &operator=(const TaggedPointerVendor &) = delete;
   };
 
   ~ObjCLanguageRuntime() override;
@@ -250,7 +251,8 @@ public:
 
   llvm::Optional<CompilerType> GetRuntimeType(CompilerType base_type) override;
 
-  virtual UtilityFunction *CreateObjectChecker(const char *) = 0;
+  virtual llvm::Expected<std::unique_ptr<UtilityFunction>>
+  CreateObjectChecker(std::string name, ExecutionContext &exe_ctx) = 0;
 
   virtual ObjCRuntimeVersions GetRuntimeVersion() const {
     return ObjCRuntimeVersions::eObjC_VersionUnknown;
@@ -299,7 +301,7 @@ public:
 
   /// Check whether the name is "self" or "_cmd" and should show up in
   /// "frame variable".
-  bool IsWhitelistedRuntimeValue(ConstString name) override;
+  bool IsAllowedRuntimeValue(ConstString name) override;
 
 protected:
   // Classes that inherit from ObjCLanguageRuntime can see and modify these
@@ -417,7 +419,8 @@ protected:
 
   void ReadObjCLibraryIfNeeded(const ModuleList &module_list);
 
-  DISALLOW_COPY_AND_ASSIGN(ObjCLanguageRuntime);
+  ObjCLanguageRuntime(const ObjCLanguageRuntime &) = delete;
+  const ObjCLanguageRuntime &operator=(const ObjCLanguageRuntime &) = delete;
 };
 
 } // namespace lldb_private

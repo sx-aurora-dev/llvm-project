@@ -139,6 +139,7 @@ private:
   mutable std::unique_ptr<Tool> Flang;
   mutable std::unique_ptr<Tool> Assemble;
   mutable std::unique_ptr<Tool> Link;
+  mutable std::unique_ptr<Tool> StaticLibTool;
   mutable std::unique_ptr<Tool> IfsMerge;
   mutable std::unique_ptr<Tool> OffloadBundler;
   mutable std::unique_ptr<Tool> OffloadWrapper;
@@ -147,6 +148,7 @@ private:
   Tool *getFlang() const;
   Tool *getAssemble() const;
   Tool *getLink() const;
+  Tool *getStaticLibTool() const;
   Tool *getIfsMerge() const;
   Tool *getClangAs() const;
   Tool *getOffloadBundler() const;
@@ -174,6 +176,7 @@ protected:
 
   virtual Tool *buildAssembler() const;
   virtual Tool *buildLinker() const;
+  virtual Tool *buildStaticLibTool() const;
   virtual Tool *getTool(Action::ActionClass AC) const;
 
   /// \name Utilities for implementing subclasses.
@@ -324,7 +327,17 @@ public:
 
   /// Returns the linker path, respecting the -fuse-ld= argument to determine
   /// the linker suffix or name.
-  std::string GetLinkerPath() const;
+  /// If LinkerIsLLD is non-nullptr, it is set to true if the returned linker
+  /// is LLD. If it's set, it can be assumed that the linker is LLD built
+  /// at the same revision as clang, and clang can make assumptions about
+  /// LLD's supported flags, error output, etc.
+  /// If LinkerIsLLDDarwinNew is non-nullptr, it's set if the linker is
+  /// the new version in lld/MachO.
+  std::string GetLinkerPath(bool *LinkerIsLLD = nullptr,
+                            bool *LinkerIsLLDDarwinNew = nullptr) const;
+
+  /// Returns the linker path for emitting a static library.
+  std::string GetStaticLibToolPath() const;
 
   /// Dispatch to the specific toolchain for verbose printing.
   ///
@@ -376,9 +389,10 @@ public:
   virtual bool useRelaxRelocations() const;
 
   /// GetDefaultStackProtectorLevel - Get the default stack protector level for
-  /// this tool chain (0=off, 1=on, 2=strong, 3=all).
-  virtual unsigned GetDefaultStackProtectorLevel(bool KernelOrKext) const {
-    return 0;
+  /// this tool chain.
+  virtual LangOptions::StackProtectorMode
+  GetDefaultStackProtectorLevel(bool KernelOrKext) const {
+    return LangOptions::SSPOff;
   }
 
   /// Get the default trivial automatic variable initialization.
@@ -413,10 +427,10 @@ public:
   getCompilerRTArgString(const llvm::opt::ArgList &Args, StringRef Component,
                          FileType Type = ToolChain::FT_Static) const;
 
-  std::string getCompilerRTBasename(const llvm::opt::ArgList &Args,
-                                    StringRef Component,
-                                    FileType Type = ToolChain::FT_Static,
-                                    bool AddArch = true) const;
+  virtual std::string
+  getCompilerRTBasename(const llvm::opt::ArgList &Args, StringRef Component,
+                        FileType Type = ToolChain::FT_Static,
+                        bool AddArch = true) const;
 
   // Returns target specific runtime path if it exists.
   virtual Optional<std::string> getRuntimePath() const;
@@ -429,7 +443,7 @@ public:
   std::string getArchSpecificLibPath() const;
 
   // Returns <OSname> part of above.
-  StringRef getOSLibName() const;
+  virtual StringRef getOSLibName() const;
 
   /// needsProfileRT - returns true if instrumentation profile is on.
   static bool needsProfileRT(const llvm::opt::ArgList &Args);
@@ -536,6 +550,10 @@ public:
   /// FIXME: this really belongs on some sort of DeploymentTarget abstraction
   virtual bool hasBlocksRuntime() const { return true; }
 
+  /// Return the sysroot, possibly searching for a default sysroot using
+  /// target-specific logic.
+  virtual std::string computeSysRoot() const;
+
   /// Add the clang cc1 arguments for system include paths.
   ///
   /// This routine is responsible for adding the necessary cc1 arguments to
@@ -616,6 +634,10 @@ public:
   /// Add arguments to use system-specific CUDA includes.
   virtual void AddCudaIncludeArgs(const llvm::opt::ArgList &DriverArgs,
                                   llvm::opt::ArgStringList &CC1Args) const;
+
+  /// Add arguments to use system-specific HIP includes.
+  virtual void AddHIPIncludeArgs(const llvm::opt::ArgList &DriverArgs,
+                                 llvm::opt::ArgStringList &CC1Args) const;
 
   /// Add arguments to use MCU GCC toolchain includes.
   virtual void AddIAMCUIncludeArgs(const llvm::opt::ArgList &DriverArgs,

@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-// UNSUPPORTED: c++98, c++03, c++11, c++14
+// UNSUPPORTED: c++03, c++11, c++14
 // <optional>
 
 // From LWG2451:
@@ -51,7 +51,7 @@ struct Y2
     Y2& operator=(const int&) { return *this; }
 };
 
-class B {};
+struct B { virtual ~B() = default; };
 class D : public B {};
 
 

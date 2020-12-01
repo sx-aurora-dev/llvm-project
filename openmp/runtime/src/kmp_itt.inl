@@ -230,8 +230,9 @@ LINKAGE void __kmp_itt_frame_submit(int gtid, __itt_timestamp begin,
       // Check if team size was changed. Then create new region domain for this
       // location
       unsigned int frm = (loc->reserved_2 & 0x0000FFFF) - 1;
-      if ((frm < KMP_MAX_FRAME_DOMAINS) &&
-          (__kmp_itt_region_team_size[frm] != team_size)) {
+      if (frm >= KMP_MAX_FRAME_DOMAINS)
+        return; // something's gone wrong, returning
+      if (__kmp_itt_region_team_size[frm] != team_size) {
         char *buff = NULL;
         kmp_str_loc_t str_loc = __kmp_str_loc_init(loc->psource, 1);
         buff = __kmp_str_format("%s$omp$parallel:%d@%s:%d:%d", str_loc.func,
@@ -629,7 +630,7 @@ void __kmp_itt_barrier_finished(int gtid, void *object) {
 void *__kmp_itt_taskwait_object(int gtid) {
   void *object = NULL;
 #if USE_ITT_NOTIFY
-  if (__itt_sync_create_ptr) {
+  if (UNLIKELY(__itt_sync_create_ptr)) {
     kmp_info_t *thread = __kmp_thread_from_gtid(gtid);
     kmp_taskdata_t *taskdata = thread->th.th_current_task;
     object = reinterpret_cast<void *>(kmp_uintptr_t(taskdata) +
@@ -676,7 +677,7 @@ void __kmp_itt_task_starting(
     void *object // ITT sync object: barrier or taskwait.
     ) {
 #if USE_ITT_NOTIFY
-  if (object != NULL) {
+  if (UNLIKELY(object != NULL)) {
     KMP_ITT_DEBUG_LOCK();
     __itt_sync_cancel(object);
     KMP_ITT_DEBUG_PRINT("[tsk sta] scan( %p )\n", object);

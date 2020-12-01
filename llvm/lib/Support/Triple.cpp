@@ -15,6 +15,7 @@
 #include "llvm/Support/Host.h"
 #include "llvm/Support/SwapByteOrder.h"
 #include "llvm/Support/TargetParser.h"
+#include "llvm/Support/VersionTuple.h"
 #include <cassert>
 #include <cstring>
 using namespace llvm;
@@ -36,6 +37,7 @@ StringRef Triple::getArchTypeName(ArchType Kind) {
   case avr:            return "avr";
   case bpfeb:          return "bpfeb";
   case bpfel:          return "bpfel";
+  case csky:           return "csky";
   case hexagon:        return "hexagon";
   case hsail64:        return "hsail64";
   case hsail:          return "hsail";
@@ -153,6 +155,7 @@ StringRef Triple::getArchTypePrefix(ArchType Kind) {
   case riscv64:     return "riscv";
 
   case ve:          return "ve";
+  case csky:        return "csky";
   }
 }
 
@@ -162,8 +165,6 @@ StringRef Triple::getVendorTypeName(VendorType Kind) {
 
   case AMD: return "amd";
   case Apple: return "apple";
-  case BGP: return "bgp";
-  case BGQ: return "bgq";
   case CSR: return "csr";
   case Freescale: return "fsl";
   case IBM: return "ibm";
@@ -190,7 +191,6 @@ StringRef Triple::getOSTypeName(OSType Kind) {
   case AMDHSA: return "amdhsa";
   case AMDPAL: return "amdpal";
   case Ananas: return "ananas";
-  case CNK: return "cnk";
   case CUDA: return "cuda";
   case CloudABI: return "cloudabi";
   case Contiki: return "contiki";
@@ -222,6 +222,7 @@ StringRef Triple::getOSTypeName(OSType Kind) {
   case WASI: return "wasi";
   case WatchOS: return "watchos";
   case Win32: return "windows";
+  case ZOS: return "zos";
   }
 
   llvm_unreachable("Invalid OSType");
@@ -326,6 +327,7 @@ Triple::ArchType Triple::getArchTypeForLLVMName(StringRef Name) {
     .Case("renderscript32", renderscript32)
     .Case("renderscript64", renderscript64)
     .Case("ve", ve)
+    .Case("csky", csky)
     .Default(UnknownArch);
 }
 
@@ -456,6 +458,7 @@ static Triple::ArchType parseArch(StringRef ArchName) {
     .Case("ve", Triple::ve)
     .Case("wasm32", Triple::wasm32)
     .Case("wasm64", Triple::wasm64)
+    .Case("csky", Triple::csky)
     .Default(Triple::UnknownArch);
 
   // Some architectures require special parsing logic just to compute the
@@ -476,8 +479,6 @@ static Triple::VendorType parseVendor(StringRef VendorName) {
     .Case("apple", Triple::Apple)
     .Case("pc", Triple::PC)
     .Case("scei", Triple::SCEI)
-    .Case("bgp", Triple::BGP)
-    .Case("bgq", Triple::BGQ)
     .Case("fsl", Triple::Freescale)
     .Case("ibm", Triple::IBM)
     .Case("img", Triple::ImaginationTechnologies)
@@ -511,11 +512,11 @@ static Triple::OSType parseOS(StringRef OSName) {
     .StartsWith("solaris", Triple::Solaris)
     .StartsWith("win32", Triple::Win32)
     .StartsWith("windows", Triple::Win32)
+    .StartsWith("zos", Triple::ZOS)
     .StartsWith("haiku", Triple::Haiku)
     .StartsWith("minix", Triple::Minix)
     .StartsWith("rtems", Triple::RTEMS)
     .StartsWith("nacl", Triple::NaCl)
-    .StartsWith("cnk", Triple::CNK)
     .StartsWith("aix", Triple::AIX)
     .StartsWith("cuda", Triple::CUDA)
     .StartsWith("nvcl", Triple::NVCL)
@@ -566,6 +567,7 @@ static Triple::ObjectFormatType parseFormat(StringRef EnvironmentName) {
     .EndsWith("xcoff", Triple::XCOFF)
     .EndsWith("coff", Triple::COFF)
     .EndsWith("elf", Triple::ELF)
+    .EndsWith("goff", Triple::GOFF)
     .EndsWith("macho", Triple::MachO)
     .EndsWith("wasm", Triple::Wasm)
     .Default(Triple::UnknownObjectFormat);
@@ -657,6 +659,7 @@ static StringRef getObjectFormatTypeName(Triple::ObjectFormatType Kind) {
   case Triple::UnknownObjectFormat: return "";
   case Triple::COFF:  return "coff";
   case Triple::ELF:   return "elf";
+  case Triple::GOFF:  return "goff";
   case Triple::MachO: return "macho";
   case Triple::Wasm:  return "wasm";
   case Triple::XCOFF: return "xcoff";
@@ -689,6 +692,7 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::avr:
   case Triple::bpfeb:
   case Triple::bpfel:
+  case Triple::csky:
   case Triple::hexagon:
   case Triple::hsail64:
   case Triple::hsail:
@@ -715,7 +719,6 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::sparcv9:
   case Triple::spir64:
   case Triple::spir:
-  case Triple::systemz:
   case Triple::tce:
   case Triple::tcele:
   case Triple::thumbeb:
@@ -727,6 +730,11 @@ static Triple::ObjectFormatType getDefaultFormat(const Triple &T) {
   case Triple::ppc:
     if (T.isOSAIX())
       return Triple::XCOFF;
+    return Triple::ELF;
+
+  case Triple::systemz:
+    if (T.isOSzOS())
+      return Triple::GOFF;
     return Triple::ELF;
 
   case Triple::wasm32:
@@ -1096,17 +1104,23 @@ bool Triple::getMacOSXVersion(unsigned &Major, unsigned &Minor,
     // Darwin version numbers are skewed from OS X versions.
     if (Major < 4)
       return false;
-    Micro = 0;
-    Minor = Major - 4;
-    Major = 10;
+    if (Major <= 19) {
+      Micro = 0;
+      Minor = Major - 4;
+      Major = 10;
+    } else {
+      Micro = 0;
+      Minor = 0;
+      // darwin20+ corresponds to macOS 11+.
+      Major = 11 + Major - 20;
+    }
     break;
   case MacOSX:
     // Default to 10.4.
     if (Major == 0) {
       Major = 10;
       Minor = 4;
-    }
-    if (Major != 10)
+    } else if (Major < 10)
       return false;
     break;
   case IOS:
@@ -1252,6 +1266,7 @@ static unsigned getArchPointerBitWidth(llvm::Triple::ArchType Arch) {
   case llvm::Triple::arc:
   case llvm::Triple::arm:
   case llvm::Triple::armeb:
+  case llvm::Triple::csky:
   case llvm::Triple::hexagon:
   case llvm::Triple::hsail:
   case llvm::Triple::kalimba:
@@ -1337,6 +1352,7 @@ Triple Triple::get32BitArchVariant() const {
   case Triple::arc:
   case Triple::arm:
   case Triple::armeb:
+  case Triple::csky:
   case Triple::hexagon:
   case Triple::hsail:
   case Triple::kalimba:
@@ -1388,6 +1404,7 @@ Triple Triple::get64BitArchVariant() const {
   case Triple::UnknownArch:
   case Triple::arc:
   case Triple::avr:
+  case Triple::csky:
   case Triple::hexagon:
   case Triple::kalimba:
   case Triple::lanai:
@@ -1483,6 +1500,7 @@ Triple Triple::getBigEndianArchVariant() const {
   case Triple::x86_64:
   case Triple::xcore:
   case Triple::ve:
+  case Triple::csky:
 
   // ARM is intentionally unsupported here, changing the architecture would
   // drop any arch suffixes.
@@ -1547,6 +1565,7 @@ bool Triple::isLittleEndian() const {
   case Triple::avr:
   case Triple::aurora:
   case Triple::bpfel:
+  case Triple::csky:
   case Triple::hexagon:
   case Triple::hsail64:
   case Triple::hsail:
@@ -1615,6 +1634,52 @@ std::string Triple::merge(const Triple &Other) const {
   return Other.str();
 }
 
+bool Triple::isMacOSXVersionLT(unsigned Major, unsigned Minor,
+                               unsigned Micro) const {
+  assert(isMacOSX() && "Not an OS X triple!");
+
+  // If this is OS X, expect a sane version number.
+  if (getOS() == Triple::MacOSX)
+    return isOSVersionLT(Major, Minor, Micro);
+
+  // Otherwise, compare to the "Darwin" number.
+  if (Major == 10) {
+    return isOSVersionLT(Minor + 4, Micro, 0);
+  } else {
+    assert(Major >= 11 && "Unexpected major version");
+    return isOSVersionLT(Major - 11 + 20, Minor, Micro);
+  }
+}
+
+VersionTuple Triple::getMinimumSupportedOSVersion() const {
+  if (getVendor() != Triple::Apple || getArch() != Triple::aarch64)
+    return VersionTuple();
+  switch (getOS()) {
+  case Triple::MacOSX:
+    // ARM64 slice is supported starting from macOS 11.0+.
+    return VersionTuple(11, 0, 0);
+  case Triple::IOS:
+    // ARM64 slice is supported starting from Mac Catalyst 14 (macOS 11).
+    // ARM64 simulators are supported for iOS 14+.
+    if (isMacCatalystEnvironment() || isSimulatorEnvironment())
+      return VersionTuple(14, 0, 0);
+    break;
+  case Triple::TvOS:
+    // ARM64 simulators are supported for tvOS 14+.
+    if (isSimulatorEnvironment())
+      return VersionTuple(14, 0, 0);
+    break;
+  case Triple::WatchOS:
+    // ARM64 simulators are supported for watchOS 7+.
+    if (isSimulatorEnvironment())
+      return VersionTuple(7, 0, 0);
+    break;
+  default:
+    break;
+  }
+  return VersionTuple();
+}
+
 StringRef Triple::getARMCPUForArch(StringRef MArch) const {
   if (MArch.empty())
     MArch = getArchName();
@@ -1676,4 +1741,17 @@ StringRef Triple::getARMCPUForArch(StringRef MArch) const {
   }
 
   llvm_unreachable("invalid arch name");
+}
+
+VersionTuple Triple::getCanonicalVersionForOS(OSType OSKind,
+                                              const VersionTuple &Version) {
+  switch (OSKind) {
+  case MacOSX:
+    // macOS 10.16 is canonicalized to macOS 11.
+    if (Version == VersionTuple(10, 16))
+      return VersionTuple(11, 0);
+    LLVM_FALLTHROUGH;
+  default:
+    return Version;
+  }
 }

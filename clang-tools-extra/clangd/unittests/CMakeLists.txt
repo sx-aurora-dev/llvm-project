@@ -28,11 +28,15 @@ if (CLANGD_ENABLE_REMOTE)
   set(REMOTE_TEST_SOURCES remote/MarshallingTests.cpp)
 endif()
 
+include(${CMAKE_CURRENT_SOURCE_DIR}/../quality/CompletionModel.cmake)
+gen_decision_forest(${CMAKE_CURRENT_SOURCE_DIR}/decision_forest_model DecisionForestRuntimeTest ::ns1::ns2::test::Example)
+
 add_custom_target(ClangdUnitTests)
 add_unittest(ClangdUnitTests ClangdTests
   Annotations.cpp
   ASTTests.cpp
   BackgroundIndexTests.cpp
+  CallHierarchyTests.cpp
   CanonicalIncludesTests.cpp
   ClangdTests.cpp
   ClangdLSPServerTests.cpp
@@ -41,9 +45,14 @@ add_unittest(ClangdUnitTests ClangdTests
   CollectMacrosTests.cpp
   CompileCommandsTests.cpp
   CompilerTests.cpp
+  ConfigCompileTests.cpp
+  ConfigProviderTests.cpp
+  ConfigYAMLTests.cpp
+  DecisionForestTests.cpp
   DexTests.cpp
   DiagnosticsTests.cpp
   DraftStoreTests.cpp
+  DumpASTTests.cpp
   ExpectedTypeTest.cpp
   FileDistanceTests.cpp
   FileIndexTests.cpp
@@ -59,11 +68,14 @@ add_unittest(ClangdUnitTests ClangdTests
   IndexActionTests.cpp
   IndexTests.cpp
   JSONTransportTests.cpp
+  LoggerTests.cpp
   LSPClient.cpp
+  ModulesTests.cpp
   ParsedASTTests.cpp
   PathMappingTests.cpp
   PreambleTests.cpp
   PrintASTTests.cpp
+  ProjectAwareIndexTests.cpp
   QualityTests.cpp
   RenameTests.cpp
   RIFFTests.cpp
@@ -79,16 +91,19 @@ add_unittest(ClangdUnitTests ClangdTests
   TestFS.cpp
   TestIndex.cpp
   TestTU.cpp
+  TestWorkspace.cpp
   TypeHierarchyTests.cpp
   TweakTests.cpp
   TweakTesting.cpp
   URITests.cpp
   XRefsTests.cpp
+  ${CMAKE_CURRENT_BINARY_DIR}/DecisionForestRuntimeTest.cpp
 
   support/CancellationTests.cpp
   support/ContextTests.cpp
   support/FunctionTests.cpp
   support/MarkupTests.cpp
+  support/MemoryTreeTests.cpp
   support/ThreadingTests.cpp
   support/TestTracer.cpp
   support/TraceTests.cpp
@@ -97,6 +112,11 @@ add_unittest(ClangdUnitTests ClangdTests
 
   $<TARGET_OBJECTS:obj.clangDaemonTweaks>
   )
+
+# Include generated ComletionModel headers.
+target_include_directories(ClangdTests PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
+)
 
 clang_target_link_libraries(ClangdTests
   PRIVATE
@@ -120,14 +140,14 @@ target_link_libraries(ClangdTests
   clangDaemon
   clangdSupport
   clangTidy
-  LLVMSupport
   LLVMTestingSupport
   )
 
 if (CLANGD_ENABLE_REMOTE)
   target_link_libraries(ClangdTests
     PRIVATE
-    clangdRemoteMarshalling)
+    clangdRemoteMarshalling
+    RemoteIndexProto)
 endif()
 
 if (CLANGD_BUILD_XPC)

@@ -64,6 +64,10 @@ extern "C" {
 #include <pmsample.h>
 #endif
 
+extern "C" int
+proc_get_cpumon_params(pid_t pid, int *percentage,
+                       int *interval); // <libproc_internal.h> SPI
+
 //----------------------------------------------------------------------
 // MachTask constructor
 //----------------------------------------------------------------------
@@ -470,6 +474,16 @@ std::string MachTask::GetProfileData(DNBProfileDataScanType scanType) {
     }
 #endif
 
+    if (scanType & eProfileEnergyCPUCap) {
+      int percentage = -1;
+      int interval = -1;
+      int result = proc_get_cpumon_params(pid, &percentage, &interval);
+      if ((result == 0) && (percentage >= 0) && (interval >= 0)) {
+        profile_data_stream << "cpu_cap_p:" << percentage << ';';
+        profile_data_stream << "cpu_cap_t:" << interval << ';';
+      }
+    }
+
     profile_data_stream << "--end--;";
 
     result = profile_data_stream.str();
@@ -581,7 +595,7 @@ bool MachTask::IsValid(task_t task) {
   return false;
 }
 
-bool MachTask::StartExceptionThread(DNBError &err) {
+bool MachTask::StartExceptionThread(bool unmask_signals, DNBError &err) {
   DNBLogThreadedIf(LOG_EXCEPTIONS, "MachTask::%s ( )", __FUNCTION__);
 
   task_t task = TaskPortForProcessID(err);
@@ -608,6 +622,12 @@ bool MachTask::StartExceptionThread(DNBError &err) {
     if (m_exc_port_info.mask == 0) {
       err.SetErrorString("failed to get exception port info");
       return false;
+    }
+
+    if (unmask_signals) {
+      m_exc_port_info.mask = m_exc_port_info.mask &
+                             ~(EXC_MASK_BAD_ACCESS | EXC_MASK_BAD_INSTRUCTION |
+                               EXC_MASK_ARITHMETIC);
     }
 
     // Set the ability to get all exceptions on this port

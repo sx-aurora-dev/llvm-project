@@ -11,8 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "omptargetplugin.h"
-
 #include <algorithm>
 #include <cassert>
 #include <cerrno>
@@ -25,27 +23,22 @@
 #include <vector>
 #include <veosinfo/veosinfo.h>
 
+#include "Debug.h"
+#include "omptargetplugin.h"
+
+#ifndef TARGET_NAME
+#define TARGET_NAME VE
+#endif
+
+#define DEBUG_PREFIX "Target " GETNAME(TARGET_NAME) " RTL"
+
 #ifndef TARGET_ELF_ID
 #define TARGET_ELF_ID 0
 #endif
 
-#ifdef OMPTARGET_DEBUG
-static int DebugLevel = 0;
-
-#define GETNAME2(name) #name
-#define GETNAME(name) GETNAME2(name)
-#define DP(...)                                                                \
-  do {                                                                         \
-    if (DebugLevel > 0) {                                                      \
-      DEBUGP("Target " GETNAME(TARGET_NAME) " RTL", __VA_ARGS__);              \
-    }                                                                          \
-  } while (false)
-#else // OMPTARGET_DEBUG
-#define DP(...)                                                                \
-  {}
-#endif // OMPTARGET_DEBUG
-
 #include "../../common/elf_common.c"
+
+static bool isInit = true;
 
 struct DynLibTy {
   char *FileName;
@@ -111,11 +104,6 @@ public:
   }
 
   RTLDeviceInfoTy() {
-#ifdef OMPTARGET_DEBUG
-    if (char *envStr = getenv("LIBOMPTARGET_DEBUG")) {
-      DebugLevel = std::stoi(envStr);
-    }
-#endif // OMPTARGET_DEBUG
 
     struct ve_nodeinfo node_info;
     ve_node_info(&node_info);
@@ -143,6 +131,8 @@ public:
   }
 
   ~RTLDeviceInfoTy() {
+    isInit = false;
+    DP("Closing VEO contexts\n");
     for (auto &ctx : Contexts) {
       if (ctx != NULL) {
         if (veo_context_close(ctx) != 0) {
@@ -151,6 +141,7 @@ public:
       }
     }
 
+    DP("Destroying VEO process handles\n");
     for (auto &hdl : ProcHandles) {
       if (hdl != NULL) {
         veo_proc_destroy(hdl);
@@ -404,6 +395,10 @@ int32_t __tgt_rtl_data_retrieve(int32_t ID, void *HostPtr, void *TargetPtr,
 // De-allocate the data referenced by target ptr on the device. In case of
 // success, return zero. Otherwise, return an error code.
 int32_t __tgt_rtl_data_delete(int32_t ID, void *TargetPtr) {
+  if (!isInit) {
+    // Workaround for memory manager
+    return OFFLOAD_SUCCESS;
+  }
   int ret =  veo_free_mem(DeviceInfo.ProcHandles[ID], (uint64_t)TargetPtr);
 
   if (ret != 0) {

@@ -113,11 +113,11 @@ defm call_graph_profile_sort: BB<"call-graph-profile-sort",
 // -chroot doesn't have a help text because it is an internal option.
 def chroot: Separate<["--", "-"], "chroot">;
 
-def color_diagnostics: F<"color-diagnostics">,
-  HelpText<"Alias for --color-diagnostics=always">;
-
+defm color_diagnostics: B<"color-diagnostics",
+  "Alias for --color-diagnostics=always",
+  "Alias for --color-diagnostics=never">;
 def color_diagnostics_eq: J<"color-diagnostics=">,
-  HelpText<"Use colors in diagnostics">,
+  HelpText<"Use colors in diagnostics (default: auto)">,
   MetaVarName<"[auto,always,never]">;
 
 defm cref: B<"cref",
@@ -132,6 +132,9 @@ defm demangle: B<"demangle",
     "Demangle symbol names (default)",
     "Do not demangle symbol names">;
 
+defm dependency_file: EEq<"dependency-file", "Write a dependency file">,
+  MetaVarName<"<file>">;
+
 def disable_new_dtags: F<"disable-new-dtags">,
   HelpText<"Disable new dynamic tags">;
 
@@ -145,7 +148,12 @@ def discard_none: F<"discard-none">,
 
 defm dynamic_linker: Eq<"dynamic-linker", "Which dynamic linker to use">;
 
-defm dynamic_list: Eq<"dynamic-list", "Read a list of dynamic symbols">;
+defm dynamic_list : Eq<"dynamic-list",
+   "Read a list of dynamic symbols. (executable) Put matched non-local defined"
+   "symbols to the dynamic symbol table. (shared object) References to matched"
+   "non-local STV_DEFAULT symbols shouldn't be bound to definitions within the "
+   "shared object. Implies -Bsymbolic but does not set DF_SYMBOLIC">,
+   MetaVarName<"<file>">;
 
 defm eh_frame_hdr: B<"eh-frame-hdr",
     "Request creation of .eh_frame_hdr section and PT_GNU_EH_FRAME segment header",
@@ -171,6 +179,9 @@ defm error_limit:
 def error_unresolved_symbols: F<"error-unresolved-symbols">,
   HelpText<"Report unresolved symbols as errors">;
 
+defm error_handling_script: EEq<"error-handling-script",
+    "Specify an error handling script">;
+
 defm exclude_libs: Eq<"exclude-libs", "Exclude static libraries from automatic export">;
 
 defm execute_only: BB<"execute-only",
@@ -181,8 +192,12 @@ defm export_dynamic: B<"export-dynamic",
     "Put symbols in the dynamic symbol table",
     "Do not put symbols in the dynamic symbol table (default)">;
 
-defm export_dynamic_symbol:
-  Eq<"export-dynamic-symbol", "Put a symbol in the dynamic symbol table">;
+defm export_dynamic_symbol : EEq<"export-dynamic-symbol",
+    "(executable) Put matched symbols in the dynamic symbol table. "
+    "(shared object) References to matched non-local STV_DEFAULT symbols "
+    "shouldn't be bound to definitions within the shared object. "
+    "Does not imply -Bsymbolic.">,
+    MetaVarName<"glob">;
 
 defm fatal_warnings: B<"fatal-warnings",
     "Treat warnings as errors",
@@ -259,9 +274,6 @@ def nmagic: F<"nmagic">, MetaVarName<"<magic>">,
 def nostdlib: F<"nostdlib">,
   HelpText<"Only search directories specified on the command line">;
 
-def no_color_diagnostics: F<"no-color-diagnostics">,
-  HelpText<"Do not use colors in diagnostics">;
-
 def no_dynamic_linker: F<"no-dynamic-linker">,
   HelpText<"Inhibit output of .interp section">;
 
@@ -328,7 +340,9 @@ def push_state: F<"push-state">,
 def print_map: F<"print-map">,
   HelpText<"Print a link map to the standard output">;
 
-defm reproduce: Eq<"reproduce", "Write a tar file containing input files and command line options to reproduce link">;
+defm reproduce:
+  Eq<"reproduce",
+     "Write tar file containing inputs and command to reproduce link">;
 
 defm rosegment: BB<"rosegment",
   "Put read-only non-executable sections in their own segment (default)",
@@ -382,15 +396,19 @@ defm threads
          "Number of threads. '1' disables multi-threading. By default all "
          "available hardware threads are used">;
 
-def time_trace: F<"time-trace">, HelpText<"Record time trace">;
-def time_trace_file_eq: J<"time-trace-file=">, HelpText<"Specify time trace output file">;
+def time_trace: FF<"time-trace">, HelpText<"Record time trace">;
+def time_trace_file_eq: JJ<"time-trace-file=">, HelpText<"Specify time trace output file">;
 
-defm time_trace_granularity: Eq<"time-trace-granularity",
+defm time_trace_granularity: EEq<"time-trace-granularity",
   "Minimum time granularity (in microseconds) traced by time profiler">;
 
-defm toc_optimize : B<"toc-optimize",
+defm toc_optimize : BB<"toc-optimize",
     "(PowerPC64) Enable TOC related optimizations (default)",
     "(PowerPC64) Disable TOC related optimizations">;
+
+defm pcrel_optimize : BB<"pcrel-optimize",
+    "(PowerPC64) Enable PC-relative optimizations (default)",
+    "(PowerPC64) Disable PC-relative optimizations">;
 
 def trace: F<"trace">, HelpText<"Print the names of the input files">;
 
@@ -399,7 +417,7 @@ defm trace_symbol: Eq<"trace-symbol", "Trace references to symbols">;
 defm undefined: Eq<"undefined", "Force undefined symbol during linking">,
   MetaVarName<"<symbol>">;
 
-defm undefined_glob: Eq<"undefined-glob", "Force undefined symbol during linking">,
+defm undefined_glob: EEq<"undefined-glob", "Force undefined symbol during linking">,
   MetaVarName<"<pattern>">;
 
 def unique: F<"unique">, HelpText<"Creates a separate output section for every orphan input section">;
@@ -427,7 +445,7 @@ defm warn_backrefs: BB<"warn-backrefs",
     "Do not warn about backward symbol references to fetch archive members (default)">;
 
 defm warn_backrefs_exclude
-    : Eq<"warn-backrefs-exclude",
+    : EEq<"warn-backrefs-exclude",
          "Glob describing an archive (or an object file within --start-lib) "
          "which should be ignored for --warn-backrefs.">,
       MetaVarName<"<glob>">;
@@ -452,7 +470,7 @@ defm whole_archive: B<"whole-archive",
     "Do not force load of all members in a static library (default)">;
 
 defm wrap: Eq<"wrap", "Use wrapper functions for symbol">,
-  MetaVarName<"<symbol>=<symbol>">;
+  MetaVarName<"<symbol>">;
 
 def z: JoinedOrSeparate<["-"], "z">, MetaVarName<"<option>">,
   HelpText<"Linker option extensions">;
@@ -523,12 +541,17 @@ def lto_cs_profile_file: JJ<"lto-cs-profile-file=">,
 def lto_obj_path_eq: JJ<"lto-obj-path=">;
 def lto_sample_profile: JJ<"lto-sample-profile=">,
   HelpText<"Sample profile file path">;
-def lto_whole_program_visibility: FF<"lto-whole-program-visibility">,
-  HelpText<"Asserts that the LTO link has whole program visibility">;
+defm lto_whole_program_visibility: BB<"lto-whole-program-visibility",
+  "Asserts that the LTO link has whole program visibility",
+  "Asserts that the LTO link does not have whole program visibility">;
 def disable_verify: F<"disable-verify">;
 defm mllvm: Eq<"mllvm", "Additional arguments to forward to LLVM's option processing">;
 def opt_remarks_filename: Separate<["--"], "opt-remarks-filename">,
   HelpText<"YAML output file for optimization remarks">;
+defm opt_remarks_hotness_threshold: EEq<"opt-remarks-hotness-threshold",
+  "Minimum profile count required for an optimization remark to be output."
+  " Use 'auto' to apply the threshold from profile summary.">,
+  MetaVarName<"<value>">;
 def opt_remarks_passes: Separate<["--"], "opt-remarks-passes">,
   HelpText<"Regex for the passes that need to be serialized to the output file">;
 def opt_remarks_with_hotness: FF<"opt-remarks-with-hotness">,
@@ -536,9 +559,9 @@ def opt_remarks_with_hotness: FF<"opt-remarks-with-hotness">,
 def opt_remarks_format: Separate<["--"], "opt-remarks-format">,
   HelpText<"The format used for serializing remarks (default: YAML)">;
 def save_temps: F<"save-temps">;
-def lto_basicblock_sections: JJ<"lto-basicblock-sections=">,
+def lto_basic_block_sections: JJ<"lto-basic-block-sections=">,
   HelpText<"Enable basic block sections for LTO">;
-defm lto_unique_bb_section_names: BB<"lto-unique-bb-section-names",
+defm lto_unique_basic_block_section_names: BB<"lto-unique-basic-block-section-names",
     "Give unique names to every basic block section for LTO",
     "Do not give unique names to every basic block section for LTO (default)">;
 def shuffle_sections: JJ<"shuffle-sections=">, MetaVarName<"<seed>">,
@@ -553,6 +576,8 @@ def thinlto_jobs: JJ<"thinlto-jobs=">,
   HelpText<"Number of ThinLTO jobs. Default to --threads=">;
 def thinlto_object_suffix_replace_eq: JJ<"thinlto-object-suffix-replace=">;
 def thinlto_prefix_replace_eq: JJ<"thinlto-prefix-replace=">;
+def thinlto_single_module_eq: JJ<"thinlto-single-module=">,
+  HelpText<"Specific a single module to compile in ThinLTO mode, for debugging only">;
 
 def: J<"plugin-opt=O">, Alias<lto_O>, HelpText<"Alias for --lto-O">;
 def: F<"plugin-opt=debug-pass-manager">,
@@ -575,6 +600,21 @@ def: J<"plugin-opt=cs-profile-path=">,
 def: J<"plugin-opt=obj-path=">,
   Alias<lto_obj_path_eq>,
   HelpText<"Alias for --lto-obj-path=">;
+def: J<"plugin-opt=opt-remarks-filename=">,
+  Alias<opt_remarks_filename>,
+  HelpText<"Alias for --opt-remarks-filename">;
+def: J<"plugin-opt=opt-remarks-passes=">,
+  Alias<opt_remarks_passes>,
+  HelpText<"Alias for --opt-remarks-passes">;
+def: J<"plugin-opt=opt-remarks-format=">,
+  Alias<opt_remarks_format>,
+  HelpText<"Alias for --opt-remarks-format">;
+def: F<"plugin-opt=opt-remarks-with-hotness">,
+  Alias<opt_remarks_with_hotness>,
+  HelpText<"Alias for --opt-remarks-with_hotness">;
+def: J<"plugin-opt=opt-remarks-hotness-threshold=">,
+  Alias<opt_remarks_hotness_threshold>,
+  HelpText<"Alias for --opt-remarks-hotness-threshold">;
 def: J<"plugin-opt=sample-profile=">,
   Alias<lto_sample_profile>, HelpText<"Alias for --lto-sample-profile">;
 def: F<"plugin-opt=save-temps">, Alias<save_temps>, HelpText<"Alias for --save-temps">;
@@ -624,6 +664,7 @@ def: F<"no-copy-dt-needed-entries">;
 def: F<"no-ctors-in-init-array">;
 def: F<"no-keep-memory">;
 def: F<"no-pipeline-knowledge">;
+def: F<"no-relax">;
 def: F<"no-warn-mismatch">;
 def: Flag<["-"], "p">;
 def: Separate<["--", "-"], "rpath-link">;

@@ -490,6 +490,9 @@ public:
   /// Emit the type explicitly casted to.
   void EmitExplicitCastType(QualType Ty);
 
+  /// Emit the type even if it might not be used.
+  void EmitAndRetainType(QualType Ty);
+
   /// Emit C++ using declaration.
   void EmitUsingDecl(const UsingDecl &UD);
 
@@ -509,7 +512,7 @@ public:
   llvm::DIType *getOrCreateStandaloneType(QualType Ty, SourceLocation Loc);
 
   /// Add heapallocsite metadata for MSAllocator calls.
-  void addHeapAllocSiteMetadata(llvm::Instruction *CallSite, QualType Ty,
+  void addHeapAllocSiteMetadata(llvm::CallBase *CallSite, QualType AllocatedTy,
                                 SourceLocation Loc);
 
   void completeType(const EnumDecl *ED);

@@ -1,3 +1,5 @@
+add_llvm_component_group(AMDGPU)
+
 set(LLVM_TARGET_DEFINITIONS AMDGPU.td)
 
 tablegen(LLVM AMDGPUGenAsmMatcher.inc -gen-asm-matcher)
@@ -19,6 +21,8 @@ tablegen(LLVM AMDGPUGenPreLegalizeGICombiner.inc -gen-global-isel-combiner
               -combiners="AMDGPUPreLegalizerCombinerHelper")
 tablegen(LLVM AMDGPUGenPostLegalizeGICombiner.inc -gen-global-isel-combiner
               -combiners="AMDGPUPostLegalizerCombinerHelper")
+tablegen(LLVM AMDGPUGenRegBankGICombiner.inc -gen-global-isel-combiner
+              -combiners="AMDGPURegBankCombinerHelper")
 
 set(LLVM_TARGET_DEFINITIONS R600.td)
 tablegen(LLVM R600GenAsmWriter.inc -gen-asm-writer)
@@ -31,6 +35,10 @@ tablegen(LLVM R600GenRegisterInfo.inc -gen-register-info)
 tablegen(LLVM R600GenSubtargetInfo.inc -gen-subtarget)
 
 add_public_tablegen_target(AMDGPUCommonTableGen)
+
+set(LLVM_TARGET_DEFINITIONS InstCombineTables.td)
+tablegen(LLVM InstCombineTables.inc -gen-searchable-tables)
+add_public_tablegen_target(InstCombineTableGen)
 
 add_llvm_target(AMDGPUCodeGen
   AMDGPUAliasAnalysis.cpp
@@ -46,11 +54,13 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPUFixFunctionBitcasts.cpp
   AMDGPUFrameLowering.cpp
   AMDGPUHSAMetadataStreamer.cpp
+  AMDGPUInstCombineIntrinsic.cpp
   AMDGPUInstrInfo.cpp
   AMDGPUInstructionSelector.cpp
   AMDGPUISelDAGToDAG.cpp
   AMDGPUISelLowering.cpp
   AMDGPUGlobalISelUtils.cpp
+  AMDGPULateCodeGenPrepare.cpp
   AMDGPULegalizerInfo.cpp
   AMDGPULibCalls.cpp
   AMDGPULibFunc.cpp
@@ -67,6 +77,7 @@ add_llvm_target(AMDGPUCodeGen
   AMDGPUPreLegalizerCombiner.cpp
   AMDGPUPromoteAlloca.cpp
   AMDGPUPropagateAttributes.cpp
+  AMDGPURegBankCombiner.cpp
   AMDGPURegisterBankInfo.cpp
   AMDGPURewriteOutArguments.cpp
   AMDGPUSubtarget.cpp
@@ -101,7 +112,6 @@ add_llvm_target(AMDGPUCodeGen
   SIAddIMGInit.cpp
   SIAnnotateControlFlow.cpp
   SIFixSGPRCopies.cpp
-  SIFixupVectorISel.cpp
   SIFixVGPRCopies.cpp
   SIPreAllocateWWMRegs.cpp
   SIFoldOperands.cpp
@@ -124,6 +134,7 @@ add_llvm_target(AMDGPUCodeGen
   SIPeepholeSDWA.cpp
   SIPostRABundler.cpp
   SIPreEmitPeephole.cpp
+  SIProgramInfo.cpp
   SIRegisterInfo.cpp
   SIRemoveShortExecBranches.cpp
   SIShrinkInstructions.cpp
@@ -133,6 +144,29 @@ add_llvm_target(AMDGPUCodeGen
   GCNNSAReassign.cpp
   GCNDPPCombine.cpp
   SIModeRegister.cpp
+
+  LINK_COMPONENTS
+  Analysis
+  AsmPrinter
+  CodeGen
+  Core
+  IPO
+  MC
+  AMDGPUDesc
+  AMDGPUInfo
+  AMDGPUUtils
+  Scalar
+  SelectionDAG
+  Support
+  Target
+  TransformUtils
+  Vectorize
+  GlobalISel
+  BinaryFormat
+  MIRParser
+
+  ADD_TO_COMPONENT
+  AMDGPU
   )
 
 add_subdirectory(AsmParser)

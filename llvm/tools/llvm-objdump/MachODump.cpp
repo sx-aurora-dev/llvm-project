@@ -453,7 +453,8 @@ static void printRelocationTargetName(const MachOObjectFile *O,
   bool isExtern = O->getPlainRelocationExternal(RE);
   uint64_t Val = O->getPlainRelocationSymbolNum(RE);
 
-  if (O->getAnyRelocationType(RE) == MachO::ARM64_RELOC_ADDEND) {
+  if (O->getAnyRelocationType(RE) == MachO::ARM64_RELOC_ADDEND &&
+      (O->getArch() == Triple::aarch64 || O->getArch() == Triple::aarch64_be)) {
     Fmt << format("0x%0" PRIx64, Val);
     return;
   }
@@ -2108,6 +2109,10 @@ static void printCPUType(uint32_t cputype, uint32_t cpusubtype) {
     case MachO::CPU_SUBTYPE_ARM64_ALL:
       outs() << "    cputype CPU_TYPE_ARM64\n";
       outs() << "    cpusubtype CPU_SUBTYPE_ARM64_ALL\n";
+      break;
+    case MachO::CPU_SUBTYPE_ARM64_V8:
+      outs() << "    cputype CPU_TYPE_ARM64\n";
+      outs() << "    cpusubtype CPU_SUBTYPE_ARM64_V8\n";
       break;
     case MachO::CPU_SUBTYPE_ARM64E:
       outs() << "    cputype CPU_TYPE_ARM64\n";
@@ -7195,10 +7200,32 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
   else
     MachOMCPU = MCPU;
 
+#define CHECK_TARGET_INFO_CREATION(NAME)                                       \
+  do {                                                                         \
+    if (!NAME) {                                                               \
+      WithColor::error(errs(), "llvm-objdump")                                 \
+          << "couldn't initialize disassembler for target " << TripleName      \
+          << '\n';                                                             \
+      return;                                                                  \
+    }                                                                          \
+  } while (false)
+#define CHECK_THUMB_TARGET_INFO_CREATION(NAME)                                 \
+  do {                                                                         \
+    if (!NAME) {                                                               \
+      WithColor::error(errs(), "llvm-objdump")                                 \
+          << "couldn't initialize disassembler for target " << ThumbTripleName \
+          << '\n';                                                             \
+      return;                                                                  \
+    }                                                                          \
+  } while (false)
+
   std::unique_ptr<const MCInstrInfo> InstrInfo(TheTarget->createMCInstrInfo());
+  CHECK_TARGET_INFO_CREATION(InstrInfo);
   std::unique_ptr<const MCInstrInfo> ThumbInstrInfo;
-  if (ThumbTarget)
+  if (ThumbTarget) {
     ThumbInstrInfo.reset(ThumbTarget->createMCInstrInfo());
+    CHECK_THUMB_TARGET_INFO_CREATION(ThumbInstrInfo);
+  }
 
   // Package up features to be passed to target/subtarget
   std::string FeaturesStr;
@@ -7213,13 +7240,17 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
   // Set up disassembler.
   std::unique_ptr<const MCRegisterInfo> MRI(
       TheTarget->createMCRegInfo(TripleName));
+  CHECK_TARGET_INFO_CREATION(MRI);
   std::unique_ptr<const MCAsmInfo> AsmInfo(
       TheTarget->createMCAsmInfo(*MRI, TripleName, MCOptions));
+  CHECK_TARGET_INFO_CREATION(AsmInfo);
   std::unique_ptr<const MCSubtargetInfo> STI(
       TheTarget->createMCSubtargetInfo(TripleName, MachOMCPU, FeaturesStr));
+  CHECK_TARGET_INFO_CREATION(STI);
   MCContext Ctx(AsmInfo.get(), MRI.get(), nullptr);
   std::unique_ptr<MCDisassembler> DisAsm(
       TheTarget->createMCDisassembler(*STI, Ctx));
+  CHECK_TARGET_INFO_CREATION(DisAsm);
   std::unique_ptr<MCSymbolizer> Symbolizer;
   struct DisassembleInfo SymbolizerInfo(nullptr, nullptr, nullptr, false);
   std::unique_ptr<MCRelocationInfo> RelInfo(
@@ -7233,6 +7264,7 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
   int AsmPrinterVariant = AsmInfo->getAssemblerDialect();
   std::unique_ptr<MCInstPrinter> IP(TheTarget->createMCInstPrinter(
       Triple(TripleName), AsmPrinterVariant, *AsmInfo, *InstrInfo, *MRI));
+  CHECK_TARGET_INFO_CREATION(IP);
   // Set the display preference for hex vs. decimal immediates.
   IP->setPrintImmHex(PrintImmHex);
   // Comment stream and backing vector.
@@ -7244,12 +7276,6 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
   // (32-bit and 64-bit) comments printed with different spacing before the
   // comment causing different diffs with the 'C' disassembler library API.
   // IP->setCommentStream(CommentStream);
-
-  if (!AsmInfo || !STI || !DisAsm || !IP) {
-    WithColor::error(errs(), "llvm-objdump")
-        << "couldn't initialize disassembler for target " << TripleName << '\n';
-    return;
-  }
 
   // Set up separate thumb disassembler if needed.
   std::unique_ptr<const MCRegisterInfo> ThumbMRI;
@@ -7263,13 +7289,17 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
   std::unique_ptr<MCRelocationInfo> ThumbRelInfo;
   if (ThumbTarget) {
     ThumbMRI.reset(ThumbTarget->createMCRegInfo(ThumbTripleName));
+    CHECK_THUMB_TARGET_INFO_CREATION(ThumbMRI);
     ThumbAsmInfo.reset(
         ThumbTarget->createMCAsmInfo(*ThumbMRI, ThumbTripleName, MCOptions));
+    CHECK_THUMB_TARGET_INFO_CREATION(ThumbAsmInfo);
     ThumbSTI.reset(
         ThumbTarget->createMCSubtargetInfo(ThumbTripleName, MachOMCPU,
                                            FeaturesStr));
+    CHECK_THUMB_TARGET_INFO_CREATION(ThumbSTI);
     ThumbCtx.reset(new MCContext(ThumbAsmInfo.get(), ThumbMRI.get(), nullptr));
     ThumbDisAsm.reset(ThumbTarget->createMCDisassembler(*ThumbSTI, *ThumbCtx));
+    CHECK_THUMB_TARGET_INFO_CREATION(ThumbDisAsm);
     MCContext *PtrThumbCtx = ThumbCtx.get();
     ThumbRelInfo.reset(
         ThumbTarget->createMCRelocationInfo(ThumbTripleName, *PtrThumbCtx));
@@ -7283,16 +7313,13 @@ static void DisassembleMachO(StringRef Filename, MachOObjectFile *MachOOF,
     ThumbIP.reset(ThumbTarget->createMCInstPrinter(
         Triple(ThumbTripleName), ThumbAsmPrinterVariant, *ThumbAsmInfo,
         *ThumbInstrInfo, *ThumbMRI));
+    CHECK_THUMB_TARGET_INFO_CREATION(ThumbIP);
     // Set the display preference for hex vs. decimal immediates.
     ThumbIP->setPrintImmHex(PrintImmHex);
   }
 
-  if (ThumbTarget && (!ThumbAsmInfo || !ThumbSTI || !ThumbDisAsm || !ThumbIP)) {
-    WithColor::error(errs(), "llvm-objdump")
-        << "couldn't initialize disassembler for target " << ThumbTripleName
-        << '\n';
-    return;
-  }
+#undef CHECK_TARGET_INFO_CREATION
+#undef CHECK_THUMB_TARGET_INFO_CREATION
 
   MachO::mach_header Header = MachOOF->getHeader();
 
@@ -8314,6 +8341,9 @@ static void PrintMachHeader(uint32_t magic, uint32_t cputype,
       switch (cpusubtype & ~MachO::CPU_SUBTYPE_MASK) {
       case MachO::CPU_SUBTYPE_ARM64_ALL:
         outs() << "        ALL";
+        break;
+      case MachO::CPU_SUBTYPE_ARM64_V8:
+        outs() << "         V8";
         break;
       case MachO::CPU_SUBTYPE_ARM64E:
         outs() << "          E";

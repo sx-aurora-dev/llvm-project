@@ -58,8 +58,7 @@ using namespace llvm;
 
 /// Allow disabling BasicAA from the AA results. This is particularly useful
 /// when testing to isolate a single AA implementation.
-static cl::opt<bool> DisableBasicAA("disable-basicaa", cl::Hidden,
-                                    cl::init(false));
+cl::opt<bool> DisableBasicAA("disable-basic-aa", cl::Hidden, cl::init(false));
 
 AAResults::AAResults(AAResults &&Arg)
     : TLI(Arg.TLI), AAs(std::move(Arg.AAs)), AADeps(std::move(Arg.AADeps)) {
@@ -215,7 +214,7 @@ ModRefInfo AAResults::getModRefInfo(const CallBase *Call,
         unsigned ArgIdx = std::distance(Call->arg_begin(), AI);
         MemoryLocation ArgLoc =
             MemoryLocation::getForArgument(Call, ArgIdx, TLI);
-        AliasResult ArgAlias = alias(ArgLoc, Loc);
+        AliasResult ArgAlias = alias(ArgLoc, Loc, AAQI);
         if (ArgAlias != NoAlias) {
           ModRefInfo ArgMask = getArgModRefInfo(Call, ArgIdx);
           AllArgsMask = unionModRef(AllArgsMask, ArgMask);
@@ -235,7 +234,7 @@ ModRefInfo AAResults::getModRefInfo(const CallBase *Call,
 
   // If Loc is a constant memory location, the call definitely could not
   // modify the memory location.
-  if (isModSet(Result) && pointsToConstantMemory(Loc, /*OrLocal*/ false))
+  if (isModSet(Result) && pointsToConstantMemory(Loc, AAQI, /*OrLocal*/ false))
     Result = clearMod(Result);
 
   return Result;
@@ -312,7 +311,7 @@ ModRefInfo AAResults::getModRefInfo(const CallBase *Call1,
 
       // ModRefC1 indicates what Call1 might do to Call2ArgLoc, and we use
       // above ArgMask to update dependence info.
-      ModRefInfo ModRefC1 = getModRefInfo(Call1, Call2ArgLoc);
+      ModRefInfo ModRefC1 = getModRefInfo(Call1, Call2ArgLoc, AAQI);
       ArgMask = intersectModRef(ArgMask, ModRefC1);
 
       // Conservatively clear IsMustAlias unless only MustAlias is found.
@@ -353,7 +352,7 @@ ModRefInfo AAResults::getModRefInfo(const CallBase *Call1,
       // might Mod Call1ArgLoc, then we care about either a Mod or a Ref by
       // Call2. If Call1 might Ref, then we care only about a Mod by Call2.
       ModRefInfo ArgModRefC1 = getArgModRefInfo(Call1, Call1ArgIdx);
-      ModRefInfo ModRefC2 = getModRefInfo(Call2, Call1ArgLoc);
+      ModRefInfo ModRefC2 = getModRefInfo(Call2, Call1ArgLoc, AAQI);
       if ((isModSet(ArgModRefC1) && isModOrRefSet(ModRefC2)) ||
           (isRefSet(ArgModRefC1) && isModSet(ModRefC2)))
         R = intersectModRef(unionModRef(R, ArgModRefC1), Result);
@@ -641,8 +640,7 @@ ModRefInfo AAResults::callCapturesBefore(const Instruction *I,
   if (!DT)
     return ModRefInfo::ModRef;
 
-  const Value *Object =
-      GetUnderlyingObject(MemLoc.Ptr, I->getModule()->getDataLayout());
+  const Value *Object = getUnderlyingObject(MemLoc.Ptr);
   if (!isIdentifiedObject(Object) || isa<GlobalValue>(Object) ||
       isa<Constant>(Object))
     return ModRefInfo::ModRef;
@@ -670,7 +668,7 @@ ModRefInfo AAResults::callCapturesBefore(const Instruction *I,
          !Call->isByValArgument(ArgNo)))
       continue;
 
-    AliasResult AR = alias(MemoryLocation(*CI), MemoryLocation(Object));
+    AliasResult AR = alias(*CI, Object);
     // If this is a no-capture pointer argument, see if we can tell that it
     // is impossible to alias the pointer we're checking.  If not, we have to
     // assume that the call could touch the pointer, even though it doesn't

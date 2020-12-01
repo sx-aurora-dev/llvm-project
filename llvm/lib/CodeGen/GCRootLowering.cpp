@@ -57,7 +57,6 @@ public:
 /// GCMetadata record for each function.
 class GCMachineCodeAnalysis : public MachineFunctionPass {
   GCFunctionInfo *FI;
-  MachineModuleInfo *MMI;
   const TargetInstrInfo *TII;
 
   void FindSafePoints(MachineFunction &MF);
@@ -249,7 +248,6 @@ GCMachineCodeAnalysis::GCMachineCodeAnalysis() : MachineFunctionPass(ID) {}
 void GCMachineCodeAnalysis::getAnalysisUsage(AnalysisUsage &AU) const {
   MachineFunctionPass::getAnalysisUsage(AU);
   AU.setPreservesAll();
-  AU.addRequired<MachineModuleInfoWrapperPass>();
   AU.addRequired<GCModuleInfo>();
 }
 
@@ -298,7 +296,10 @@ void GCMachineCodeAnalysis::FindStackOffsets(MachineFunction &MF) {
     } else {
       Register FrameReg; // FIXME: surely GCRoot ought to store the
                          // register that the offset is from?
-      RI->StackOffset = TFI->getFrameIndexReference(MF, RI->Num, FrameReg);
+      auto FrameOffset = TFI->getFrameIndexReference(MF, RI->Num, FrameReg);
+      assert(!FrameOffset.getScalable() &&
+             "Frame offsets with a scalable component are not supported");
+      RI->StackOffset = FrameOffset.getFixed();
       ++RI;
     }
   }
@@ -310,7 +311,6 @@ bool GCMachineCodeAnalysis::runOnMachineFunction(MachineFunction &MF) {
     return false;
 
   FI = &getAnalysis<GCModuleInfo>().getFunctionInfo(MF.getFunction());
-  MMI = &getAnalysis<MachineModuleInfoWrapperPass>().getMMI();
   TII = MF.getSubtarget().getInstrInfo();
 
   // Find the size of the stack frame.  There may be no correct static frame

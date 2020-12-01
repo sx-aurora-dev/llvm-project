@@ -190,14 +190,14 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
           // stack allocation for each one.
           // Inform the Frame Information that we have variable-sized objects.
           MF->getFrameInfo().CreateVariableSizedObject(
-              Alignment <= StackAlign ? 0 : Alignment.value(), AI);
+              Alignment <= StackAlign ? Align(1) : Alignment, AI);
         }
       }
 
       // Look for inline asm that clobbers the SP register.
       if (auto *Call = dyn_cast<CallBase>(&I)) {
         if (Call->isInlineAsm()) {
-          unsigned SP = TLI->getStackPointerRegisterToSaveRestore();
+          Register SP = TLI->getStackPointerRegisterToSaveRestore();
           const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
           std::vector<TargetLowering::AsmOperandInfo> Ops =
               TLI->ParseConstraints(Fn->getParent()->getDataLayout(), TRI,
@@ -360,7 +360,7 @@ void FunctionLoweringInfo::clear() {
   RegFixups.clear();
   RegsWithFixups.clear();
   StatepointStackSlots.clear();
-  StatepointSpillMaps.clear();
+  StatepointRelocationMaps.clear();
   PreferredExtendType.clear();
 }
 

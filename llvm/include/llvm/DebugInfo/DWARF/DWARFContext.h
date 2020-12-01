@@ -72,6 +72,7 @@ class DWARFContext : public DIContext {
   DWARFUnitVector DWOUnits;
   std::unique_ptr<DWARFDebugAbbrev> AbbrevDWO;
   std::unique_ptr<DWARFDebugMacro> MacinfoDWO;
+  std::unique_ptr<DWARFDebugMacro> MacroDWO;
 
   /// The maximum DWARF version of all units.
   unsigned MaxVersion = 0;
@@ -110,8 +111,8 @@ class DWARFContext : public DIContext {
   enum MacroSecType {
     MacinfoSection,
     MacinfoDwoSection,
-    MacroSection
-    // FIXME: Add support for.debug_macro.dwo section.
+    MacroSection,
+    MacroDwoSection
   };
 
 public:
@@ -145,6 +146,7 @@ public:
   bool verify(raw_ostream &OS, DIDumpOptions DumpOpts = {}) override;
 
   using unit_iterator_range = DWARFUnitVector::iterator_range;
+  using compile_unit_range = DWARFUnitVector::compile_unit_range;
 
   /// Get units from .debug_info in this context.
   unit_iterator_range info_section_units() {
@@ -162,10 +164,12 @@ public:
   }
 
   /// Get compile units in this context.
-  unit_iterator_range compile_units() { return info_section_units(); }
+  compile_unit_range compile_units() {
+    return make_filter_range(info_section_units(), isCompileUnit);
+  }
 
-  /// Get type units in this context.
-  unit_iterator_range type_units() { return types_section_units(); }
+  // If you want type_units(), it'll need to be a concat iterator of a filter of
+  // TUs in info_section + all the (all type) units in types_section
 
   /// Get all normal compile/type units in this context.
   unit_iterator_range normal_units() {
@@ -188,10 +192,13 @@ public:
   }
 
   /// Get compile units in the DWO context.
-  unit_iterator_range dwo_compile_units() { return dwo_info_section_units(); }
+  compile_unit_range dwo_compile_units() {
+    return make_filter_range(dwo_info_section_units(), isCompileUnit);
+  }
 
-  /// Get type units in the DWO context.
-  unit_iterator_range dwo_type_units() { return dwo_types_section_units(); }
+  // If you want dwo_type_units(), it'll need to be a concat iterator of a
+  // filter of TUs in dwo_info_section + all the (all type) units in
+  // dwo_types_section.
 
   /// Get all units in the DWO context.
   unit_iterator_range dwo_units() {
@@ -291,6 +298,9 @@ public:
   /// Get a pointer to the parsed DebugMacro information object.
   const DWARFDebugMacro *getDebugMacro();
 
+  /// Get a pointer to the parsed DebugMacroDWO information object.
+  const DWARFDebugMacro *getDebugMacroDWO();
+
   /// Get a reference to the parsed accelerator table object.
   const DWARFDebugNames &getDebugNames();
 
@@ -318,6 +328,9 @@ public:
 
   DataExtractor getStringExtractor() const {
     return DataExtractor(DObj->getStrSection(), false, 0);
+  }
+  DataExtractor getStringDWOExtractor() const {
+    return DataExtractor(DObj->getStrDWOSection(), false, 0);
   }
   DataExtractor getLineStringExtractor() const {
     return DataExtractor(DObj->getLineStrSection(), false, 0);
@@ -353,6 +366,10 @@ public:
   bool isLittleEndian() const { return DObj->isLittleEndian(); }
   static bool isSupportedVersion(unsigned version) {
     return version == 2 || version == 3 || version == 4 || version == 5;
+  }
+
+  static bool isAddressSizeSupported(unsigned AddressSize) {
+    return AddressSize == 2 || AddressSize == 4 || AddressSize == 8;
   }
 
   std::shared_ptr<DWARFContext> getDWOContext(StringRef AbsolutePath);

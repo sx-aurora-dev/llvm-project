@@ -14,9 +14,8 @@ class CModulesTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
-    @skipIfFreeBSD
     @expectedFailureAll(
-        oslist=["linux"],
+        oslist=["freebsd", "linux"],
         bugnumber="http://llvm.org/pr23456 'fopen' has unknown return type")
     @expectedFailureAll(
         oslist=["windows"],
@@ -44,7 +43,9 @@ class CModulesTestCase(TestBase):
                     substrs=[' resolved, hit count = 1'])
 
         # Enable logging of the imported AST.
-        log_file = os.path.join(self.getBuildDir(), "lldb-ast-log.txt")
+        log_file = self.getBuildArtifact("lldb-ast-log.txt")
+        if configuration.is_reproducer_replay():
+            log_file = self.getReproducerRemappedPath(log_file)
         self.runCmd("log enable lldb ast -f '%s'" % log_file)
 
         self.expect(

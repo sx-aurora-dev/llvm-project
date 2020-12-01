@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13.4)
 
 if(POLICY CMP0068)
   cmake_policy(SET CMP0068 NEW)
@@ -44,3 +44,4 @@ add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(test)
 add_subdirectory(standalone-opt)
+add_subdirectory(standalone-translate)

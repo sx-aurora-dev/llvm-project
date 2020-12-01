@@ -33,6 +33,7 @@
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/IR/ModuleSummaryIndex.h"
 #include "llvm/IR/SymbolTableListTraits.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/TypeFinder.h"
@@ -581,7 +582,7 @@ void Module::setProfileSummary(Metadata *M, ProfileSummary::Kind Kind) {
     setModuleFlag(ModFlagBehavior::Error, "ProfileSummary", M);
 }
 
-Metadata *Module::getProfileSummary(bool IsCS) {
+Metadata *Module::getProfileSummary(bool IsCS) const {
   return (IsCS ? getModuleFlag("CSProfileSummary")
                : getModuleFlag("ProfileSummary"));
 }
@@ -672,4 +673,24 @@ GlobalVariable *llvm::collectUsedGlobalVariables(
     Set.insert(G);
   }
   return GV;
+}
+
+void Module::setPartialSampleProfileRatio(const ModuleSummaryIndex &Index) {
+  if (auto *SummaryMD = getProfileSummary(/*IsCS*/ false)) {
+    std::unique_ptr<ProfileSummary> ProfileSummary(
+        ProfileSummary::getFromMD(SummaryMD));
+    if (ProfileSummary) {
+      if (ProfileSummary->getKind() != ProfileSummary::PSK_Sample ||
+          !ProfileSummary->isPartialProfile())
+        return;
+      uint64_t BlockCount = Index.getBlockCount();
+      uint32_t NumCounts = ProfileSummary->getNumCounts();
+      if (!NumCounts)
+        return;
+      double Ratio = (double)BlockCount / NumCounts;
+      ProfileSummary->setPartialProfileRatio(Ratio);
+      setProfileSummary(ProfileSummary->getMD(getContext()),
+                        ProfileSummary::PSK_Sample);
+    }
+  }
 }

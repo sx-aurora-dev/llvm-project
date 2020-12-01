@@ -288,12 +288,19 @@ public:
   lldb::SBAddress GetObjectFileHeaderAddress() const;
   lldb::SBAddress GetObjectFileEntryPointAddress() const;
 
+  /// Get the number of global modules.
+  static uint32_t GetNumberAllocatedModules();
+
+  /// Remove any global modules which are no longer needed.
+  static void GarbageCollectAllocatedModules();
+
 private:
   friend class SBAddress;
   friend class SBFrame;
   friend class SBSection;
   friend class SBSymbolContext;
   friend class SBTarget;
+  friend class SBType;
 
   explicit SBModule(const lldb::ModuleSP &module_sp);
 

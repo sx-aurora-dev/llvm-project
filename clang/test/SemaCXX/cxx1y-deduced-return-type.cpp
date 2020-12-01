@@ -22,7 +22,7 @@ int conv1d = conv1.operator int(); // expected-error {{no member named 'operator
 
 struct Conv2 {
   operator auto() { return 0; }  // expected-note {{previous}}
-  operator auto() { return 0.; } // expected-error {{cannot be redeclared}} expected-error {{cannot initialize return object of type 'auto' with an rvalue of type 'double'}}
+  operator auto() { return 0.; } // expected-error {{cannot be redeclared}}
 };
 
 struct Conv3 {
@@ -617,6 +617,13 @@ namespace PR33222 {
   };
   template<> auto *B<char[1]>::q() { return (int*)0; }
   template<> auto B<char[2]>::q() { return (int*)0; } // expected-error {{return type}}
-  // FIXME: suppress this follow-on error: expected-error@-1 {{cannot initialize}}
   template<> int B<char[3]>::q() { return 0; } // expected-error {{return type}}
+}
+
+namespace PR46637 {
+  using A = auto () -> auto; // expected-error {{'auto' not allowed in type alias}}
+  using B = auto (*)() -> auto; // expected-error {{'auto' not allowed in type alias}}
+  template<auto (*)() -> auto> struct X {}; // expected-error {{'auto' not allowed in template parameter until C++17}}
+  template<typename T> struct Y { T x; };
+  Y<auto() -> auto> y; // expected-error {{'auto' not allowed in template argument}}
 }

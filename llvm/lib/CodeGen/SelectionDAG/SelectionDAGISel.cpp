@@ -75,6 +75,7 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsWebAssembly.h"
 #include "llvm/IR/Metadata.h"
+#include "llvm/IR/Statepoint.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/User.h"
 #include "llvm/IR/Value.h"
@@ -337,7 +338,8 @@ void SelectionDAGISel::getAnalysisUsage(AnalysisUsage &AU) const {
   if (UseMBPI && OptLevel != CodeGenOpt::None)
     AU.addRequired<BranchProbabilityInfoWrapperPass>();
   AU.addRequired<ProfileSummaryInfoWrapperPass>();
-  LazyBlockFrequencyInfoPass::getLazyBFIAnalysisUsage(AU);
+  if (OptLevel != CodeGenOpt::None)
+    LazyBlockFrequencyInfoPass::getLazyBFIAnalysisUsage(AU);
   MachineFunctionPass::getAnalysisUsage(AU);
 }
 
@@ -441,9 +443,9 @@ bool SelectionDAGISel::runOnMachineFunction(MachineFunction &mf) {
   auto *LIWP = getAnalysisIfAvailable<LoopInfoWrapperPass>();
   LoopInfo *LI = LIWP ? &LIWP->getLoopInfo() : nullptr;
   auto *PSI = &getAnalysis<ProfileSummaryInfoWrapperPass>().getPSI();
-  auto *BFI = (PSI && PSI->hasProfileSummary()) ?
-              &getAnalysis<LazyBlockFrequencyInfoPass>().getBFI() :
-              nullptr;
+  BlockFrequencyInfo *BFI = nullptr;
+  if (PSI && PSI->hasProfileSummary() && OptLevel != CodeGenOpt::None)
+    BFI = &getAnalysis<LazyBlockFrequencyInfoPass>().getBFI();
 
   LLVM_DEBUG(dbgs() << "\n\n\n=== " << Fn.getName() << "\n");
 
@@ -622,7 +624,9 @@ bool SelectionDAGISel::runOnMachineFunction(MachineFunction &mf) {
         // Otherwise this is another use or second copy use.
         CopyUseMI = nullptr; break;
       }
-      if (CopyUseMI) {
+      if (CopyUseMI &&
+          TRI.getRegSizeInBits(LDI->second, MRI) ==
+              TRI.getRegSizeInBits(CopyUseMI->getOperand(0).getReg(), MRI)) {
         // Use MI's debug location, which describes where Variable was
         // declared, rather than whatever is attached to CopyUseMI.
         MachineInstr *NewMI =
@@ -657,36 +661,6 @@ bool SelectionDAGISel::runOnMachineFunction(MachineFunction &mf) {
 
   // Determine if floating point is used for msvc
   computeUsesMSVCFloatingPoint(TM.getTargetTriple(), Fn, MF->getMMI());
-
-  // Replace forward-declared registers with the registers containing
-  // the desired value.
-  for (DenseMap<Register, Register>::iterator
-       I = FuncInfo->RegFixups.begin(), E = FuncInfo->RegFixups.end();
-       I != E; ++I) {
-    Register From = I->first;
-    Register To = I->second;
-    // If To is also scheduled to be replaced, find what its ultimate
-    // replacement is.
-    while (true) {
-      DenseMap<Register, Register>::iterator J = FuncInfo->RegFixups.find(To);
-      if (J == E) break;
-      To = J->second;
-    }
-    // Make sure the new register has a sufficiently constrained register class.
-    if (Register::isVirtualRegister(From) && Register::isVirtualRegister(To))
-      MRI.constrainRegClass(To, MRI.getRegClass(From));
-    // Replace it.
-
-
-    // Replacing one register with another won't touch the kill flags.
-    // We need to conservatively clear the kill flags as a kill on the old
-    // register might dominate existing uses of the new register.
-    if (!MRI.use_empty(To))
-      MRI.clearKillFlags(From);
-    MRI.replaceRegWith(From, To);
-  }
-
-  TLI->finalizeLowering(*MF);
 
   // Release function-specific state. SDB and CurDAG are already cleared
   // at this point.
@@ -805,6 +779,11 @@ void SelectionDAGISel::CodeGenAndEmitDAG() {
                     << "'\n";
              CurDAG->dump());
 
+#ifndef NDEBUG
+  if (TTI.hasBranchDivergence())
+    CurDAG->VerifyDAGDiverence();
+#endif
+
   if (ViewDAGCombine1 && MatchFilterBB)
     CurDAG->viewGraph("dag-combine1 input for " + BlockName);
 
@@ -815,15 +794,15 @@ void SelectionDAGISel::CodeGenAndEmitDAG() {
     CurDAG->Combine(BeforeLegalizeTypes, AA, OptLevel);
   }
 
-#ifndef NDEBUG
-  if (TTI.hasBranchDivergence())
-    CurDAG->VerifyDAGDiverence();
-#endif
-
   LLVM_DEBUG(dbgs() << "Optimized lowered selection DAG: "
                     << printMBBReference(*FuncInfo->MBB) << " '" << BlockName
                     << "'\n";
              CurDAG->dump());
+
+#ifndef NDEBUG
+  if (TTI.hasBranchDivergence())
+    CurDAG->VerifyDAGDiverence();
+#endif
 
   // Second step, hack on the DAG until it only uses operations and types that
   // the target supports.
@@ -837,15 +816,15 @@ void SelectionDAGISel::CodeGenAndEmitDAG() {
     Changed = CurDAG->LegalizeTypes();
   }
 
-#ifndef NDEBUG
-  if (TTI.hasBranchDivergence())
-    CurDAG->VerifyDAGDiverence();
-#endif
-
   LLVM_DEBUG(dbgs() << "Type-legalized selection DAG: "
                     << printMBBReference(*FuncInfo->MBB) << " '" << BlockName
                     << "'\n";
              CurDAG->dump());
+
+#ifndef NDEBUG
+  if (TTI.hasBranchDivergence())
+    CurDAG->VerifyDAGDiverence();
+#endif
 
   // Only allow creation of legal node types.
   CurDAG->NewNodesMustHaveLegalTypes = true;
@@ -861,15 +840,15 @@ void SelectionDAGISel::CodeGenAndEmitDAG() {
       CurDAG->Combine(AfterLegalizeTypes, AA, OptLevel);
     }
 
-#ifndef NDEBUG
-    if (TTI.hasBranchDivergence())
-      CurDAG->VerifyDAGDiverence();
-#endif
-
     LLVM_DEBUG(dbgs() << "Optimized type-legalized selection DAG: "
                       << printMBBReference(*FuncInfo->MBB) << " '" << BlockName
                       << "'\n";
                CurDAG->dump());
+
+#ifndef NDEBUG
+    if (TTI.hasBranchDivergence())
+      CurDAG->VerifyDAGDiverence();
+#endif
   }
 
   {
@@ -884,6 +863,11 @@ void SelectionDAGISel::CodeGenAndEmitDAG() {
                       << "'\n";
                CurDAG->dump());
 
+#ifndef NDEBUG
+    if (TTI.hasBranchDivergence())
+      CurDAG->VerifyDAGDiverence();
+#endif
+
     {
       NamedRegionTimer T("legalize_types2", "Type Legalization 2", GroupName,
                          GroupDescription, TimePassesIsEnabled);
@@ -894,6 +878,11 @@ void SelectionDAGISel::CodeGenAndEmitDAG() {
                       << printMBBReference(*FuncInfo->MBB) << " '" << BlockName
                       << "'\n";
                CurDAG->dump());
+
+#ifndef NDEBUG
+    if (TTI.hasBranchDivergence())
+      CurDAG->VerifyDAGDiverence();
+#endif
 
     if (ViewDAGCombineLT && MatchFilterBB)
       CurDAG->viewGraph("dag-combine-lv input for " + BlockName);
@@ -925,15 +914,15 @@ void SelectionDAGISel::CodeGenAndEmitDAG() {
     CurDAG->Legalize();
   }
 
-#ifndef NDEBUG
-  if (TTI.hasBranchDivergence())
-    CurDAG->VerifyDAGDiverence();
-#endif
-
   LLVM_DEBUG(dbgs() << "Legalized selection DAG: "
                     << printMBBReference(*FuncInfo->MBB) << " '" << BlockName
                     << "'\n";
              CurDAG->dump());
+
+#ifndef NDEBUG
+  if (TTI.hasBranchDivergence())
+    CurDAG->VerifyDAGDiverence();
+#endif
 
   if (ViewDAGCombine2 && MatchFilterBB)
     CurDAG->viewGraph("dag-combine2 input for " + BlockName);
@@ -945,15 +934,15 @@ void SelectionDAGISel::CodeGenAndEmitDAG() {
     CurDAG->Combine(AfterLegalizeDAG, AA, OptLevel);
   }
 
-#ifndef NDEBUG
-  if (TTI.hasBranchDivergence())
-    CurDAG->VerifyDAGDiverence();
-#endif
-
   LLVM_DEBUG(dbgs() << "Optimized legalized selection DAG: "
                     << printMBBReference(*FuncInfo->MBB) << " '" << BlockName
                     << "'\n";
              CurDAG->dump());
+
+#ifndef NDEBUG
+  if (TTI.hasBranchDivergence())
+    CurDAG->VerifyDAGDiverence();
+#endif
 
   if (OptLevel != CodeGenOpt::None)
     ComputeLiveOutVRegInfo();
@@ -1278,6 +1267,12 @@ bool SelectionDAGISel::PrepareEHLandingPad() {
   BuildMI(*MBB, FuncInfo->InsertPt, SDB->getCurDebugLoc(), II)
     .addSym(Label);
 
+  // If the unwinder does not preserve all registers, ensure that the
+  // function marks the clobbered registers as used.
+  const TargetRegisterInfo &TRI = *MF->getSubtarget().getRegisterInfo();
+  if (auto *RegMask = TRI.getCustomEHPadPreservedMask(*MF))
+    MF->getRegInfo().addPhysRegsUsedFromRegMask(RegMask);
+
   if (Pers == EHPersonality::Wasm_CXX) {
     if (const auto *CPI = dyn_cast<CatchPadInst>(LLVMBB->getFirstNonPHI()))
       mapWasmLandingPadIndex(MBB, CPI);
@@ -1518,8 +1513,8 @@ void SelectionDAGISel::SelectAllBasicBlocks(const Function &Fn) {
         // to keep track of gc-relocates for a particular gc-statepoint. This is
         // done by SelectionDAGBuilder::LowerAsSTATEPOINT, called before
         // visitGCRelocate.
-        if (isa<CallInst>(Inst) && !isStatepoint(Inst) && !isGCRelocate(Inst) &&
-            !isGCResult(Inst)) {
+        if (isa<CallInst>(Inst) && !isa<GCStatepointInst>(Inst) &&
+            !isa<GCRelocateInst>(Inst) && !isa<GCResultInst>(Inst)) {
           OptimizationRemarkMissed R("sdagisel", "FastISelFailure",
                                      Inst->getDebugLoc(), LLVMBB);
 
@@ -2813,10 +2808,12 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
   case ISD::ANNOTATION_LABEL:
   case ISD::LIFETIME_START:
   case ISD::LIFETIME_END:
+  case ISD::PSEUDO_PROBE:
     NodeToMatch->setNodeId(-1); // Mark selected.
     return;
   case ISD::AssertSext:
   case ISD::AssertZext:
+  case ISD::AssertAlign:
     ReplaceUses(SDValue(NodeToMatch, 0), NodeToMatch->getOperand(0));
     CurDAG->RemoveDeadNode(NodeToMatch);
     return;

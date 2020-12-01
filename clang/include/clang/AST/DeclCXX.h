@@ -713,6 +713,13 @@ public:
   }
 
   /// \c true if we know for sure that this class has a single,
+  /// accessible, unambiguous copy assignment operator that is not deleted.
+  bool hasSimpleCopyAssignment() const {
+    return !hasUserDeclaredCopyAssignment() &&
+           !data().DefaultedCopyAssignmentIsDeleted;
+  }
+
+  /// \c true if we know for sure that this class has a single,
   /// accessible, unambiguous move assignment operator that is not deleted.
   bool hasSimpleMoveAssignment() const {
     return !hasUserDeclaredMoveAssignment() && hasMoveAssignment() &&
@@ -872,6 +879,15 @@ public:
     return data().UserDeclaredSpecialMembers & SMF_CopyAssignment;
   }
 
+  /// Set that we attempted to declare an implicit copy assignment
+  /// operator, but overload resolution failed so we deleted it.
+  void setImplicitCopyAssignmentIsDeleted() {
+    assert((data().DefaultedCopyAssignmentIsDeleted ||
+            needsOverloadResolutionForCopyAssignment()) &&
+           "copy assignment should not be deleted");
+    data().DefaultedCopyAssignmentIsDeleted = true;
+  }
+
   /// Determine whether this class needs an implicit copy
   /// assignment operator to be lazily declared.
   bool needsImplicitCopyAssignment() const {
@@ -881,7 +897,16 @@ public:
   /// Determine whether we need to eagerly declare a defaulted copy
   /// assignment operator for this class.
   bool needsOverloadResolutionForCopyAssignment() const {
-    return data().HasMutableFields;
+    // C++20 [class.copy.assign]p2:
+    //   If the class definition declares a move constructor or move assignment
+    //   operator, the implicitly declared copy assignment operator is defined
+    //   as deleted.
+    // In MSVC mode, sometimes a declared move constructor does not delete an
+    // implicit copy assignment, so defer this choice to Sema.
+    if (data().UserDeclaredSpecialMembers &
+        (SMF_MoveConstructor | SMF_MoveAssignment))
+      return true;
+    return data().NeedOverloadResolutionForCopyAssignment;
   }
 
   /// Determine whether an implicit copy assignment operator for this
@@ -983,8 +1008,13 @@ public:
 
   /// Retrieve the lambda static invoker, the address of which
   /// is returned by the conversion operator, and the body of which
-  /// is forwarded to the lambda call operator.
+  /// is forwarded to the lambda call operator. The version that does not
+  /// take a calling convention uses the 'default' calling convention for free
+  /// functions if the Lambda's calling convention was not modified via
+  /// attribute. Otherwise, it will return the calling convention specified for
+  /// the lambda.
   CXXMethodDecl *getLambdaStaticInvoker() const;
+  CXXMethodDecl *getLambdaStaticInvoker(CallingConv CC) const;
 
   /// Retrieve the generic lambda's template parameter list.
   /// Returns null if the class does not represent a lambda or a generic
@@ -998,6 +1028,9 @@ public:
     assert(isLambda());
     return static_cast<LambdaCaptureDefault>(getLambdaData().CaptureDefault);
   }
+
+  /// Set the captures for this lambda closure type.
+  void setCaptures(ASTContext &Context, ArrayRef<LambdaCapture> Captures);
 
   /// For a closure type, retrieve the mapping from captured
   /// variables and \c this to the non-static data members that store the
@@ -1029,6 +1062,8 @@ public:
     return isLambda() ? captures_begin() + getLambdaData().NumCaptures
                       : nullptr;
   }
+
+  unsigned capture_size() const { return getLambdaData().NumCaptures; }
 
   using conversion_iterator = UnresolvedSetIterator;
 
@@ -1366,6 +1401,11 @@ public:
             hasTrivialDefaultConstructor());
   }
 
+  /// Determine whether this is a structural type.
+  bool isStructural() const {
+    return isLiteral() && data().StructuralIfLiteral;
+  }
+
   /// If this record is an instantiation of a member class,
   /// retrieves the member class from which it was instantiated.
   ///
@@ -1582,58 +1622,6 @@ public:
                                    CXXBasePath &Path,
                                    const CXXRecordDecl *BaseRecord);
 
-  /// Base-class lookup callback that determines whether there exists
-  /// a tag with the given name.
-  ///
-  /// This callback can be used with \c lookupInBases() to find tag members
-  /// of the given name within a C++ class hierarchy.
-  static bool FindTagMember(const CXXBaseSpecifier *Specifier,
-                            CXXBasePath &Path, DeclarationName Name);
-
-  /// Base-class lookup callback that determines whether there exists
-  /// a member with the given name.
-  ///
-  /// This callback can be used with \c lookupInBases() to find members
-  /// of the given name within a C++ class hierarchy.
-  static bool FindOrdinaryMember(const CXXBaseSpecifier *Specifier,
-                                 CXXBasePath &Path, DeclarationName Name);
-
-  /// Base-class lookup callback that determines whether there exists
-  /// a member with the given name.
-  ///
-  /// This callback can be used with \c lookupInBases() to find members
-  /// of the given name within a C++ class hierarchy, including dependent
-  /// classes.
-  static bool
-  FindOrdinaryMemberInDependentClasses(const CXXBaseSpecifier *Specifier,
-                                       CXXBasePath &Path, DeclarationName Name);
-
-  /// Base-class lookup callback that determines whether there exists
-  /// an OpenMP declare reduction member with the given name.
-  ///
-  /// This callback can be used with \c lookupInBases() to find members
-  /// of the given name within a C++ class hierarchy.
-  static bool FindOMPReductionMember(const CXXBaseSpecifier *Specifier,
-                                     CXXBasePath &Path, DeclarationName Name);
-
-  /// Base-class lookup callback that determines whether there exists
-  /// an OpenMP declare mapper member with the given name.
-  ///
-  /// This callback can be used with \c lookupInBases() to find members
-  /// of the given name within a C++ class hierarchy.
-  static bool FindOMPMapperMember(const CXXBaseSpecifier *Specifier,
-                                  CXXBasePath &Path, DeclarationName Name);
-
-  /// Base-class lookup callback that determines whether there exists
-  /// a member with the given name that can be used in a nested-name-specifier.
-  ///
-  /// This callback can be used with \c lookupInBases() to find members of
-  /// the given name within a C++ class hierarchy that can occur within
-  /// nested-name-specifiers.
-  static bool FindNestedNameSpecifierMember(const CXXBaseSpecifier *Specifier,
-                                            CXXBasePath &Path,
-                                            DeclarationName Name);
-
   /// Retrieve the final overriders for each virtual member
   /// function in the class hierarchy where this class is the
   /// most-derived class in the class hierarchy.
@@ -1642,12 +1630,20 @@ public:
   /// Get the indirect primary bases for this class.
   void getIndirectPrimaryBases(CXXIndirectPrimaryBaseSet& Bases) const;
 
+  /// Determine whether this class has a member with the given name, possibly
+  /// in a non-dependent base class.
+  ///
+  /// No check for ambiguity is performed, so this should never be used when
+  /// implementing language semantics, but it may be appropriate for warnings,
+  /// static analysis, or similar.
+  bool hasMemberName(DeclarationName N) const;
+
   /// Performs an imprecise lookup of a dependent name in this class.
   ///
   /// This function does not follow strict semantic rules and should be used
   /// only when lookup rules can be relaxed, e.g. indexing.
   std::vector<const NamedDecl *>
-  lookupDependentName(const DeclarationName &Name,
+  lookupDependentName(DeclarationName Name,
                       llvm::function_ref<bool(const NamedDecl *ND)> Filter);
 
   /// Renders and displays an inheritance diagram
@@ -1847,7 +1843,7 @@ private:
                         const DeclarationNameInfo &NameInfo, QualType T,
                         TypeSourceInfo *TInfo, SourceLocation EndLocation)
       : FunctionDecl(CXXDeductionGuide, C, DC, StartLoc, NameInfo, T, TInfo,
-                     SC_None, false, CSK_unspecified),
+                     SC_None, false, ConstexprSpecKind::Unspecified),
         ExplicitSpec(ES) {
     if (EndLocation.isValid())
       setRangeEnd(EndLocation);
@@ -4040,11 +4036,8 @@ public:
 
 /// Insertion operator for diagnostics.  This allows sending an AccessSpecifier
 /// into a diagnostic with <<.
-const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
-                                    AccessSpecifier AS);
-
-const PartialDiagnostic &operator<<(const PartialDiagnostic &DB,
-                                    AccessSpecifier AS);
+const StreamingDiagnostic &operator<<(const StreamingDiagnostic &DB,
+                                      AccessSpecifier AS);
 
 } // namespace clang
 

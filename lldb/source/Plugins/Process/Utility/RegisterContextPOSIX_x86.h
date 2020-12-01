@@ -15,8 +15,6 @@
 #include "lldb/Target/RegisterContext.h"
 #include "lldb/Utility/Log.h"
 
-class ProcessMonitor;
-
 class RegisterContextPOSIX_x86 : public lldb_private::RegisterContext {
 public:
   RegisterContextPOSIX_x86(lldb_private::Thread &thread,
@@ -46,9 +44,6 @@ public:
   const lldb_private::RegisterSet *GetRegisterSet(size_t set) override;
 
   const char *GetRegisterName(unsigned reg);
-
-  uint32_t ConvertRegisterKindToRegisterNumber(lldb::RegisterKind kind,
-                                               uint32_t num) override;
 
   // Note: prefer kernel definitions over user-land
   enum FPRType {
@@ -111,6 +106,48 @@ public:
   static uint32_t g_invalidate_r14[];
   static uint32_t g_invalidate_r15[];
 
+  static uint32_t g_contained_fip[];
+  static uint32_t g_contained_fdp[];
+
+  static uint32_t g_invalidate_fip[];
+  static uint32_t g_invalidate_fdp[];
+
+  static uint32_t g_contained_st0_32[];
+  static uint32_t g_contained_st1_32[];
+  static uint32_t g_contained_st2_32[];
+  static uint32_t g_contained_st3_32[];
+  static uint32_t g_contained_st4_32[];
+  static uint32_t g_contained_st5_32[];
+  static uint32_t g_contained_st6_32[];
+  static uint32_t g_contained_st7_32[];
+
+  static uint32_t g_invalidate_st0_32[];
+  static uint32_t g_invalidate_st1_32[];
+  static uint32_t g_invalidate_st2_32[];
+  static uint32_t g_invalidate_st3_32[];
+  static uint32_t g_invalidate_st4_32[];
+  static uint32_t g_invalidate_st5_32[];
+  static uint32_t g_invalidate_st6_32[];
+  static uint32_t g_invalidate_st7_32[];
+
+  static uint32_t g_contained_st0_64[];
+  static uint32_t g_contained_st1_64[];
+  static uint32_t g_contained_st2_64[];
+  static uint32_t g_contained_st3_64[];
+  static uint32_t g_contained_st4_64[];
+  static uint32_t g_contained_st5_64[];
+  static uint32_t g_contained_st6_64[];
+  static uint32_t g_contained_st7_64[];
+
+  static uint32_t g_invalidate_st0_64[];
+  static uint32_t g_invalidate_st1_64[];
+  static uint32_t g_invalidate_st2_64[];
+  static uint32_t g_invalidate_st3_64[];
+  static uint32_t g_invalidate_st4_64[];
+  static uint32_t g_invalidate_st5_64[];
+  static uint32_t g_invalidate_st6_64[];
+  static uint32_t g_invalidate_st7_64[];
+
 protected:
   struct RegInfo {
     uint32_t num_registers;
@@ -159,8 +196,6 @@ protected:
   bool IsFPR(unsigned reg);
 
   bool IsAVX(unsigned reg);
-
-  lldb::ByteOrder GetByteOrder();
 
   bool CopyXSTATEtoYMM(uint32_t reg, lldb::ByteOrder byte_order);
   bool CopyYMMtoXSTATE(uint32_t reg, lldb::ByteOrder byte_order);

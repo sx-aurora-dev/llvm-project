@@ -524,6 +524,28 @@ bool DNBArchMachARM64::NotifyException(MachException::Data &exc) {
 
       return true;
     }
+    // detect a __builtin_debugtrap instruction pattern ("brk #0xf000")
+    // and advance the $pc past it, so that the user can continue execution.
+    // Generally speaking, this knowledge should be centralized in lldb, 
+    // recognizing the builtin_trap instruction and knowing how to advance
+    // the pc past it, so that continue etc work.
+    if (exc.exc_data.size() == 2 && exc.exc_data[0] == EXC_ARM_BREAKPOINT) {
+      nub_addr_t pc = GetPC(INVALID_NUB_ADDRESS);
+      if (pc != INVALID_NUB_ADDRESS && pc > 0) {
+        DNBBreakpoint *bp =
+            m_thread->Process()->Breakpoints().FindByAddress(pc);
+        if (bp == nullptr) {
+          uint8_t insnbuf[4];
+          if (m_thread->Process()->ReadMemory(pc, 4, insnbuf) == 4) {
+            uint8_t builtin_debugtrap_insn[4] = {0x00, 0x00, 0x3e,
+                                                 0xd4}; // brk #0xf000
+            if (memcmp(insnbuf, builtin_debugtrap_insn, 4) == 0) {
+              SetPC(pc + 4);
+            }
+          }
+        }
+      }
+    }
     break;
   }
   return false;
@@ -590,23 +612,21 @@ kern_return_t DNBArchMachARM64::EnableHardwareSingleStep(bool enable) {
     return err.Status();
   }
 
+#if defined(__LP64__)
+  uint64_t pc = arm_thread_state64_get_pc (m_state.context.gpr);
+#else
+  uint64_t pc = m_state.context.gpr.__pc;
+#endif
+
   if (enable) {
     DNBLogThreadedIf(LOG_STEP,
                      "%s: Setting MDSCR_EL1 Single Step bit at pc 0x%llx",
-#if defined(__LP64__)
-                     __FUNCTION__, (uint64_t)arm_thread_state64_get_pc (m_state.context.gpr));
-#else
-                     __FUNCTION__, (uint64_t)m_state.context.gpr.__pc);
-#endif
+                     __FUNCTION__, pc);
     m_state.dbg.__mdscr_el1 |= SS_ENABLE;
   } else {
     DNBLogThreadedIf(LOG_STEP,
                      "%s: Clearing MDSCR_EL1 Single Step bit at pc 0x%llx",
-#if defined(__LP64__)
-                     __FUNCTION__, (uint64_t)arm_thread_state64_get_pc (m_state.context.gpr));
-#else
-                     __FUNCTION__, (uint64_t)m_state.context.gpr.__pc);
-#endif
+                     __FUNCTION__, pc);
     m_state.dbg.__mdscr_el1 &= ~(SS_ENABLE);
   }
 

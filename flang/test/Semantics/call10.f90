@@ -157,8 +157,9 @@ module m
     close(1) ! C1597
     !ERROR: External I/O is not allowed in a pure subprogram
     backspace(1) ! C1597
+    !Also checks parsing of variant END FILE spelling
     !ERROR: External I/O is not allowed in a pure subprogram
-    endfile(1) ! C1597
+    end file(1) ! C1597
     !ERROR: External I/O is not allowed in a pure subprogram
     rewind(1) ! C1597
     !ERROR: External I/O is not allowed in a pure subprogram
@@ -185,7 +186,6 @@ module m
                                    ! implicit sync all
     !ERROR: Procedure 'this_image' referenced in pure subprogram 's14' must be pure too
     img = this_image()
-    !ERROR: Procedure 'num_images' referenced in pure subprogram 's14' must be pure too
     nimgs = num_images()
     i = img                       ! i is ready to use
 

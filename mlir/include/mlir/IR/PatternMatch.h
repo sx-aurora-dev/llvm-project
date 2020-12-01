@@ -30,7 +30,8 @@ class PatternBenefit {
   enum { ImpossibleToMatchSentinel = 65535 };
 
 public:
-  /*implicit*/ PatternBenefit(unsigned benefit);
+  PatternBenefit() : representation(ImpossibleToMatchSentinel) {}
+  PatternBenefit(unsigned benefit);
   PatternBenefit(const PatternBenefit &) = default;
   PatternBenefit &operator=(const PatternBenefit &) = default;
 
@@ -48,22 +49,32 @@ public:
   bool operator<(const PatternBenefit &rhs) const {
     return representation < rhs.representation;
   }
+  bool operator>(const PatternBenefit &rhs) const { return rhs < *this; }
+  bool operator<=(const PatternBenefit &rhs) const { return !(*this > rhs); }
+  bool operator>=(const PatternBenefit &rhs) const { return !(*this < rhs); }
 
 private:
-  PatternBenefit() : representation(ImpossibleToMatchSentinel) {}
   unsigned short representation;
 };
 
 //===----------------------------------------------------------------------===//
-// Pattern class
+// Pattern
 //===----------------------------------------------------------------------===//
 
-/// Instances of Pattern can be matched against SSA IR.  These matches get used
-/// in ways dependent on their subclasses and the driver doing the matching.
-/// For example, RewritePatterns implement a rewrite from one matched pattern
-/// to a replacement DAG tile.
+/// This class contains all of the data related to a pattern, but does not
+/// contain any methods or logic for the actual matching. This class is solely
+/// used to interface with the metadata of a pattern, such as the benefit or
+/// root operation.
 class Pattern {
 public:
+  /// Return a list of operations that may be generated when rewriting an
+  /// operation instance with this pattern.
+  ArrayRef<OperationName> getGeneratedOps() const { return generatedOps; }
+
+  /// Return the root node that this pattern matches. Patterns that can match
+  /// multiple root types return None.
+  Optional<OperationName> getRootKind() const { return rootKind; }
+
   /// Return the benefit (the inverse of "cost") of matching this pattern.  The
   /// benefit of a Pattern is always static - rewrites that may have dynamic
   /// benefit can be instantiated multiple times (different Pattern instances)
@@ -71,31 +82,65 @@ public:
   /// condition predicates.
   PatternBenefit getBenefit() const { return benefit; }
 
-  /// Return the root node that this pattern matches.  Patterns that can
-  /// match multiple root types are instantiated once per root.
-  OperationName getRootKind() const { return rootKind; }
-
-  //===--------------------------------------------------------------------===//
-  // Implementation hooks for patterns to implement.
-  //===--------------------------------------------------------------------===//
-
-  /// Attempt to match against code rooted at the specified operation,
-  /// which is the same operation code as getRootKind().
-  virtual LogicalResult match(Operation *op) const = 0;
-
-  virtual ~Pattern() {}
+  /// Returns true if this pattern is known to result in recursive application,
+  /// i.e. this pattern may generate IR that also matches this pattern, but is
+  /// known to bound the recursion. This signals to a rewrite driver that it is
+  /// safe to apply this pattern recursively to generated IR.
+  bool hasBoundedRewriteRecursion() const { return hasBoundedRecursion; }
 
 protected:
-  /// Patterns must specify the root operation name they match against, and can
-  /// also specify the benefit of the pattern matching.
+  /// This class acts as a special tag that makes the desire to match "any"
+  /// operation type explicit. This helps to avoid unnecessary usages of this
+  /// feature, and ensures that the user is making a conscious decision.
+  struct MatchAnyOpTypeTag {};
+
+  /// Construct a pattern with a certain benefit that matches the operation
+  /// with the given root name.
   Pattern(StringRef rootName, PatternBenefit benefit, MLIRContext *context);
+  /// Construct a pattern with a certain benefit that matches any operation
+  /// type. `MatchAnyOpTypeTag` is just a tag to ensure that the "match any"
+  /// behavior is what the user actually desired, `MatchAnyOpTypeTag()` should
+  /// always be supplied here.
+  Pattern(PatternBenefit benefit, MatchAnyOpTypeTag tag);
+  /// Construct a pattern with a certain benefit that matches the operation with
+  /// the given root name. `generatedNames` contains the names of operations
+  /// that may be generated during a successful rewrite.
+  Pattern(StringRef rootName, ArrayRef<StringRef> generatedNames,
+          PatternBenefit benefit, MLIRContext *context);
+  /// Construct a pattern that may match any operation type. `generatedNames`
+  /// contains the names of operations that may be generated during a successful
+  /// rewrite. `MatchAnyOpTypeTag` is just a tag to ensure that the "match any"
+  /// behavior is what the user actually desired, `MatchAnyOpTypeTag()` should
+  /// always be supplied here.
+  Pattern(ArrayRef<StringRef> generatedNames, PatternBenefit benefit,
+          MLIRContext *context, MatchAnyOpTypeTag tag);
+
+  /// Set the flag detailing if this pattern has bounded rewrite recursion or
+  /// not.
+  void setHasBoundedRewriteRecursion(bool hasBoundedRecursionArg = true) {
+    hasBoundedRecursion = hasBoundedRecursionArg;
+  }
 
 private:
-  const OperationName rootKind;
+  /// A list of the potential operations that may be generated when rewriting
+  /// an op with this pattern.
+  SmallVector<OperationName, 2> generatedOps;
+
+  /// The root operation of the pattern. If the pattern matches a specific
+  /// operation, this contains the name of that operation. Contains None
+  /// otherwise.
+  Optional<OperationName> rootKind;
+
+  /// The expected benefit of matching this pattern.
   const PatternBenefit benefit;
 
-  virtual void anchor();
+  /// A boolean flag of whether this pattern has bounded recursion or not.
+  bool hasBoundedRecursion = false;
 };
+
+//===----------------------------------------------------------------------===//
+// RewritePattern
+//===----------------------------------------------------------------------===//
 
 /// RewritePattern is the common base class for all DAG to DAG replacements.
 /// There are two possible usages of this class:
@@ -108,6 +153,8 @@ private:
 ///
 class RewritePattern : public Pattern {
 public:
+  virtual ~RewritePattern() {}
+
   /// Rewrite the IR rooted at the specified operation with the result of
   /// this pattern, generating any new operations with the specified
   /// builder.  If an unexpected error is encountered (an internal
@@ -117,7 +164,7 @@ public:
 
   /// Attempt to match against code rooted at the specified operation,
   /// which is the same operation code as getRootKind().
-  LogicalResult match(Operation *op) const override;
+  virtual LogicalResult match(Operation *op) const;
 
   /// Attempt to match against code rooted at the specified operation,
   /// which is the same operation code as getRootKind(). If successful, this
@@ -131,31 +178,12 @@ public:
     return failure();
   }
 
-  /// Returns true if this pattern is known to result in recursive application,
-  /// i.e. this pattern may generate IR that also matches this pattern, but is
-  /// known to bound the recursion. This signals to a rewriter that it is safe
-  /// to apply this pattern recursively to generated IR.
-  virtual bool hasBoundedRewriteRecursion() const { return false; }
-
-  /// Return a list of operations that may be generated when rewriting an
-  /// operation instance with this pattern.
-  ArrayRef<OperationName> getGeneratedOps() const { return generatedOps; }
-
 protected:
-  /// Patterns must specify the root operation name they match against, and can
-  /// also specify the benefit of the pattern matching.
-  RewritePattern(StringRef rootName, PatternBenefit benefit,
-                 MLIRContext *context)
-      : Pattern(rootName, benefit, context) {}
-  /// Patterns must specify the root operation name they match against, and can
-  /// also specify the benefit of the pattern matching. They can also specify
-  /// the names of operations that may be generated during a successful rewrite.
-  RewritePattern(StringRef rootName, ArrayRef<StringRef> generatedNames,
-                 PatternBenefit benefit, MLIRContext *context);
+  /// Inherit the base constructors from `Pattern`.
+  using Pattern::Pattern;
 
-  /// A list of the potential operations that may be generated when rewriting
-  /// an op with this pattern.
-  SmallVector<OperationName, 2> generatedOps;
+  /// An anchor for the virtual table.
+  virtual void anchor();
 };
 
 /// OpRewritePattern is a wrapper around RewritePattern that allows for
@@ -198,7 +226,7 @@ template <typename SourceOp> struct OpRewritePattern : public RewritePattern {
 };
 
 //===----------------------------------------------------------------------===//
-// PatternRewriter class
+// PatternRewriter
 //===----------------------------------------------------------------------===//
 
 /// This class coordinates the application of a pattern to the current function,
@@ -213,40 +241,6 @@ template <typename SourceOp> struct OpRewritePattern : public RewritePattern {
 ///
 class PatternRewriter : public OpBuilder, public OpBuilder::Listener {
 public:
-  /// Create operation of specific op type at the current insertion point
-  /// without verifying to see if it is valid.
-  template <typename OpTy, typename... Args>
-  OpTy create(Location location, Args... args) {
-    OperationState state(location, OpTy::getOperationName());
-    OpTy::build(*this, state, args...);
-    auto *op = createOperation(state);
-    auto result = dyn_cast<OpTy>(op);
-    assert(result && "Builder didn't return the right type");
-    return result;
-  }
-
-  /// Creates an operation of specific op type at the current insertion point.
-  /// If the result is an invalid op (the verifier hook fails), emit an error
-  /// and return null.
-  template <typename OpTy, typename... Args>
-  OpTy createChecked(Location location, Args... args) {
-    OperationState state(location, OpTy::getOperationName());
-    OpTy::build(*this, state, args...);
-    auto *op = createOperation(state);
-
-    // If the Operation we produce is valid, return it.
-    if (!OpTy::verifyInvariants(op)) {
-      auto result = dyn_cast<OpTy>(op);
-      assert(result && "Builder didn't return the right type");
-      return result;
-    }
-
-    // Otherwise, the error message got emitted.  Just remove the operation
-    // we made.
-    op->erase();
-    return OpTy();
-  }
-
   /// Move the blocks that belong to "region" before the given position in
   /// another region "parent". The two regions must be different. The caller
   /// is responsible for creating or updating the operation transferring flow
@@ -291,6 +285,11 @@ public:
   /// merging.
   virtual void mergeBlocks(Block *source, Block *dest,
                            ValueRange argValues = llvm::None);
+
+  // Merge the operations of block 'source' before the operation 'op'. Source
+  // block should not have existing predecessors or successors.
+  void mergeBlockBefore(Block *source, Operation *op,
+                        ValueRange argValues = llvm::None);
 
   /// Split the operations starting at "before" (inclusive) out of the given
   /// block into a new block, and return it.
@@ -381,7 +380,7 @@ private:
 };
 
 //===----------------------------------------------------------------------===//
-// Pattern-driven rewriters
+// OwningRewritePatternList
 //===----------------------------------------------------------------------===//
 
 class OwningRewritePatternList {
@@ -394,14 +393,20 @@ public:
   /// type `T`.
   template <typename T>
   OwningRewritePatternList(T &&t) {
-    patterns.emplace_back(std::make_unique<T>(t));
+    patterns.emplace_back(std::make_unique<T>(std::forward<T>(t)));
   }
 
   PatternListT::iterator begin() { return patterns.begin(); }
   PatternListT::iterator end() { return patterns.end(); }
   PatternListT::const_iterator begin() const { return patterns.begin(); }
   PatternListT::const_iterator end() const { return patterns.end(); }
+  PatternListT::size_type size() const { return patterns.size(); }
   void clear() { patterns.clear(); }
+
+  /// Take ownership of the patterns held by this list.
+  std::vector<std::unique_ptr<RewritePattern>> takePatterns() {
+    return std::move(patterns);
+  }
 
   //===--------------------------------------------------------------------===//
   // Pattern Insertion
@@ -419,60 +424,28 @@ public:
     // types 'Ts'. This magic is necessary due to a limitation in the places
     // that a parameter pack can be expanded in c++11.
     // FIXME: In c++17 this can be simplified by using 'fold expressions'.
-    using dummy = int[];
-    (void)dummy{
+    (void)std::initializer_list<int>{
         0, (patterns.emplace_back(std::make_unique<Ts>(arg, args...)), 0)...};
     return *this;
+  }
+
+  /// Add an instance of each of the pattern types 'Ts'. Return a reference to
+  /// `this` for chaining insertions.
+  template <typename... Ts> OwningRewritePatternList &insert() {
+    (void)std::initializer_list<int>{
+        0, (patterns.emplace_back(std::make_unique<Ts>()), 0)...};
+    return *this;
+  }
+
+  /// Add the given pattern to the pattern list.
+  void insert(std::unique_ptr<RewritePattern> pattern) {
+    patterns.emplace_back(std::move(pattern));
   }
 
 private:
   PatternListT patterns;
 };
 
-/// This class manages optimization and execution of a group of rewrite
-/// patterns, providing an API for finding and applying, the best match against
-/// a given node.
-///
-class RewritePatternMatcher {
-public:
-  /// Create a RewritePatternMatcher with the specified set of patterns.
-  explicit RewritePatternMatcher(const OwningRewritePatternList &patterns);
-
-  /// Try to match the given operation to a pattern and rewrite it. Return
-  /// true if any pattern matches.
-  bool matchAndRewrite(Operation *op, PatternRewriter &rewriter);
-
-private:
-  RewritePatternMatcher(const RewritePatternMatcher &) = delete;
-  void operator=(const RewritePatternMatcher &) = delete;
-
-  /// The group of patterns that are matched for optimization through this
-  /// matcher.
-  std::vector<RewritePattern *> patterns;
-};
-
-/// Rewrite the regions of the specified operation, which must be isolated from
-/// above, by repeatedly applying the highest benefit patterns in a greedy
-/// work-list driven manner. Return true if no more patterns can be matched in
-/// the result operation regions.
-/// Note: This does not apply patterns to the top-level operation itself.
-/// Note: These methods also perform folding and simple dead-code elimination
-///       before attempting to match any of the provided patterns.
-///
-bool applyPatternsAndFoldGreedily(Operation *op,
-                                  const OwningRewritePatternList &patterns);
-/// Rewrite the given regions, which must be isolated from above.
-bool applyPatternsAndFoldGreedily(MutableArrayRef<Region> regions,
-                                  const OwningRewritePatternList &patterns);
-
-/// Applies the specified patterns on `op` alone while also trying to fold it,
-/// by selecting the highest benefits patterns in a greedy manner. Returns true
-/// if no more patterns can be matched. `erased` is set to true if `op` was
-/// folded away or erased as a result of becoming dead. Note: This does not
-/// apply any patterns recursively to the regions of `op`.
-bool applyOpPatternsAndFold(Operation *op,
-                            const OwningRewritePatternList &patterns,
-                            bool *erased = nullptr);
 } // end namespace mlir
 
 #endif // MLIR_PATTERN_MATCH_H

@@ -1,6 +1,6 @@
 // RUN: mlir-opt %s -split-input-file -test-affine-loop-unswitch | FileCheck %s
 
-// CHECK-DAG: #[[SET:.*]] = affine_set<(d0) : (d0 - 2 >= 0)>
+// CHECK-DAG: #[[$SET:.*]] = affine_set<(d0) : (d0 - 2 >= 0)>
 
 // CHECK-LABEL: func @if_else_imperfect
 func @if_else_imperfect(%A : memref<100xi32>, %B : memref<100xi32>, %v : i32) {
@@ -18,11 +18,11 @@ func @if_else_imperfect(%A : memref<100xi32>, %B : memref<100xi32>, %v : i32) {
   }
   return
 }
-func @external()
+func private @external()
 
 // CHECK:       affine.for %[[I:.*]] = 0 to 100 {
 // CHECK-NEXT:    affine.store %{{.*}}, %[[A]][%[[I]]]
-// CHECK-NEXT:    affine.if #[[SET]](%[[I]]) {
+// CHECK-NEXT:    affine.if #[[$SET]](%[[I]]) {
 // CHECK-NEXT:      affine.for %[[J:.*]] = 0 to 100 {
 // CHECK-NEXT:        affine.store %{{.*}}, %[[A]][%[[J]]]
 // CHECK-NEXT:        affine.store %{{.*}}, %[[B]][%[[J]]]
@@ -40,10 +40,10 @@ func @external()
 
 // -----
 
-func @foo()
-func @bar()
-func @abc()
-func @xyz()
+func private @foo()
+func private @bar()
+func private @abc()
+func private @xyz()
 
 // CHECK-LABEL: func @if_then_perfect
 func @if_then_perfect(%A : memref<100xi32>, %v : i32) {
@@ -255,4 +255,4 @@ func @multiple_if(%N : index) {
 // CHECK-NEXT: }
 // CHECK-NEXT: return
 
-func @external()
+func private @external()

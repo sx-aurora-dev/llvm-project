@@ -20,8 +20,8 @@
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/Module.h"
 #include "mlir/IR/StandardTypes.h"
+#include "mlir/InitAllDialects.h"
 #include "mlir/Parser.h"
 #include "mlir/Support/FileUtilities.h"
 
@@ -30,12 +30,12 @@
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassNameParser.h"
-#include "llvm/IR/Module.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/SourceMgr.h"
 #include "llvm/Support/StringSaver.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include <cstdint>
 #include <numeric>
 
 using namespace mlir;
@@ -54,7 +54,7 @@ struct Options {
   llvm::cl::opt<std::string> mainFuncType{
       "entry-point-result",
       llvm::cl::desc("Textual description of the function type to be called"),
-      llvm::cl::value_desc("f32 | void"), llvm::cl::init("f32")};
+      llvm::cl::value_desc("f32 | i32 | i64 | void"), llvm::cl::init("f32")};
 
   llvm::cl::OptionCategory optFlags{"opt-like flags"};
 
@@ -92,6 +92,23 @@ struct Options {
       "object-filename",
       llvm::cl::desc("Dump JITted-compiled object to file <input file>.o")};
 };
+
+struct CompileAndExecuteConfig {
+  /// LLVM module transformer that is passed to ExecutionEngine.
+  llvm::function_ref<llvm::Error(llvm::Module *)> transformer;
+
+  /// A custom function that is passed to ExecutionEngine. It processes MLIR
+  /// module and creates LLVM IR module.
+  llvm::function_ref<std::unique_ptr<llvm::Module>(ModuleOp,
+                                                   llvm::LLVMContext &)>
+      llvmModuleBuilder;
+
+  /// A custom function that is passed to ExecutinEngine to register symbols at
+  /// runtime.
+  llvm::function_ref<llvm::orc::SymbolMap(llvm::orc::MangleAndInterner)>
+      runtimeSymbolMap;
+};
+
 } // end anonymous namespace
 
 static OwningModuleRef parseMLIRInput(StringRef inputFilename,
@@ -131,22 +148,25 @@ static Optional<unsigned> getCommandLineOptLevel(Options &options) {
 }
 
 // JIT-compile the given module and run "entryPoint" with "args" as arguments.
-static Error
-compileAndExecute(Options &options, ModuleOp module, StringRef entryPoint,
-                  std::function<llvm::Error(llvm::Module *)> transformer,
-                  void **args) {
+static Error compileAndExecute(Options &options, ModuleOp module,
+                               StringRef entryPoint,
+                               CompileAndExecuteConfig config, void **args) {
   Optional<llvm::CodeGenOpt::Level> jitCodeGenOptLevel;
   if (auto clOptLevel = getCommandLineOptLevel(options))
     jitCodeGenOptLevel =
         static_cast<llvm::CodeGenOpt::Level>(clOptLevel.getValue());
   SmallVector<StringRef, 4> libs(options.clSharedLibs.begin(),
                                  options.clSharedLibs.end());
-  auto expectedEngine = mlir::ExecutionEngine::create(module, transformer,
-                                                      jitCodeGenOptLevel, libs);
+  auto expectedEngine = mlir::ExecutionEngine::create(
+      module, config.llvmModuleBuilder, config.transformer, jitCodeGenOptLevel,
+      libs);
   if (!expectedEngine)
     return expectedEngine.takeError();
 
   auto engine = std::move(*expectedEngine);
+  if (config.runtimeSymbolMap)
+    engine->registerSymbols(config.runtimeSymbolMap);
+
   auto expectedFPtr = engine->lookup(entryPoint);
   if (!expectedFPtr)
     return expectedFPtr.takeError();
@@ -162,19 +182,40 @@ compileAndExecute(Options &options, ModuleOp module, StringRef entryPoint,
   return Error::success();
 }
 
-static Error compileAndExecuteVoidFunction(
-    Options &options, ModuleOp module, StringRef entryPoint,
-    std::function<llvm::Error(llvm::Module *)> transformer) {
+static Error compileAndExecuteVoidFunction(Options &options, ModuleOp module,
+                                           StringRef entryPoint,
+                                           CompileAndExecuteConfig config) {
   auto mainFunction = module.lookupSymbol<LLVM::LLVMFuncOp>(entryPoint);
-  if (!mainFunction || mainFunction.getBlocks().empty())
+  if (!mainFunction || mainFunction.empty())
     return make_string_error("entry point not found");
   void *empty = nullptr;
-  return compileAndExecute(options, module, entryPoint, transformer, &empty);
+  return compileAndExecute(options, module, entryPoint, config, &empty);
 }
 
-static Error compileAndExecuteSingleFloatReturnFunction(
-    Options &options, ModuleOp module, StringRef entryPoint,
-    std::function<llvm::Error(llvm::Module *)> transformer) {
+template <typename Type>
+Error checkCompatibleReturnType(LLVM::LLVMFuncOp mainFunction);
+template <>
+Error checkCompatibleReturnType<int32_t>(LLVM::LLVMFuncOp mainFunction) {
+  if (!mainFunction.getType().getFunctionResultType().isIntegerTy(32))
+    return make_string_error("only single llvm.i32 function result supported");
+  return Error::success();
+}
+template <>
+Error checkCompatibleReturnType<int64_t>(LLVM::LLVMFuncOp mainFunction) {
+  if (!mainFunction.getType().getFunctionResultType().isIntegerTy(64))
+    return make_string_error("only single llvm.i64 function result supported");
+  return Error::success();
+}
+template <>
+Error checkCompatibleReturnType<float>(LLVM::LLVMFuncOp mainFunction) {
+  if (!mainFunction.getType().getFunctionResultType().isFloatTy())
+    return make_string_error("only single llvm.f32 function result supported");
+  return Error::success();
+}
+template <typename Type>
+Error compileAndExecuteSingleReturnFunction(Options &options, ModuleOp module,
+                                            StringRef entryPoint,
+                                            CompileAndExecuteConfig config) {
   auto mainFunction = module.lookupSymbol<LLVM::LLVMFuncOp>(entryPoint);
   if (!mainFunction || mainFunction.isExternal())
     return make_string_error("entry point not found");
@@ -182,30 +223,27 @@ static Error compileAndExecuteSingleFloatReturnFunction(
   if (mainFunction.getType().getFunctionNumParams() != 0)
     return make_string_error("function inputs not supported");
 
-  if (!mainFunction.getType().getFunctionResultType().isFloatTy())
-    return make_string_error("only single llvm.f32 function result supported");
+  if (Error error = checkCompatibleReturnType<Type>(mainFunction))
+    return error;
 
-  float res;
+  Type res;
   struct {
     void *data;
   } data;
   data.data = &res;
-  if (auto error = compileAndExecute(options, module, entryPoint, transformer,
+  if (auto error = compileAndExecute(options, module, entryPoint, config,
                                      (void **)&data))
     return error;
 
   // Intentional printing of the output so we can test.
   llvm::outs() << res << '\n';
+
   return Error::success();
 }
 
 /// Entry point for all CPU runners. Expects the common argc/argv arguments for
-/// standard C++ main functions and an mlirTransformer.
-/// The latter is applied after parsing the input into MLIR IR and before
-/// passing the MLIR module to the ExecutionEngine.
-int mlir::JitRunnerMain(
-    int argc, char **argv,
-    function_ref<LogicalResult(mlir::ModuleOp)> mlirTransformer) {
+/// standard C++ main functions.
+int mlir::JitRunnerMain(int argc, char **argv, JitRunnerConfig config) {
   // Create the options struct containing the command line options for the
   // runner. This must come before the command line options are parsed.
   Options options;
@@ -237,14 +275,16 @@ int mlir::JitRunnerMain(
   }
 
   MLIRContext context;
+  registerAllDialects(context.getDialectRegistry());
+
   auto m = parseMLIRInput(options.inputFilename, &context);
   if (!m) {
     llvm::errs() << "could not parse the input IR\n";
     return 1;
   }
 
-  if (mlirTransformer)
-    if (failed(mlirTransformer(m.get())))
+  if (config.mlirTransformer)
+    if (failed(config.mlirTransformer(m.get())))
       return EXIT_FAILURE;
 
   auto tmBuilderOrError = llvm::orc::JITTargetMachineBuilder::detectHost();
@@ -261,21 +301,27 @@ int mlir::JitRunnerMain(
   auto transformer = mlir::makeLLVMPassesTransformer(
       passes, optLevel, /*targetMachine=*/tmOrError->get(), optPosition);
 
+  CompileAndExecuteConfig compileAndExecuteConfig;
+  compileAndExecuteConfig.transformer = transformer;
+  compileAndExecuteConfig.llvmModuleBuilder = config.llvmModuleBuilder;
+  compileAndExecuteConfig.runtimeSymbolMap = config.runtimesymbolMap;
+
   // Get the function used to compile and execute the module.
   using CompileAndExecuteFnT =
-      Error (*)(Options &, ModuleOp, StringRef,
-                std::function<llvm::Error(llvm::Module *)>);
+      Error (*)(Options &, ModuleOp, StringRef, CompileAndExecuteConfig);
   auto compileAndExecuteFn =
-      llvm::StringSwitch<CompileAndExecuteFnT>(options.mainFuncType.getValue())
-          .Case("f32", compileAndExecuteSingleFloatReturnFunction)
+      StringSwitch<CompileAndExecuteFnT>(options.mainFuncType.getValue())
+          .Case("i32", compileAndExecuteSingleReturnFunction<int32_t>)
+          .Case("i64", compileAndExecuteSingleReturnFunction<int64_t>)
+          .Case("f32", compileAndExecuteSingleReturnFunction<float>)
           .Case("void", compileAndExecuteVoidFunction)
           .Default(nullptr);
 
-  Error error =
-      compileAndExecuteFn
-          ? compileAndExecuteFn(options, m.get(),
-                                options.mainFuncName.getValue(), transformer)
-          : make_string_error("unsupported function type");
+  Error error = compileAndExecuteFn
+                    ? compileAndExecuteFn(options, m.get(),
+                                          options.mainFuncName.getValue(),
+                                          compileAndExecuteConfig)
+                    : make_string_error("unsupported function type");
 
   int exitCode = EXIT_SUCCESS;
   llvm::handleAllErrors(std::move(error),

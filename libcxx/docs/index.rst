@@ -38,12 +38,17 @@ Getting Started with libc++
    UsingLibcxx
    BuildingLibcxx
    TestingLibcxx
+   Cxx1yStatus
+   Cxx1zStatus
+   Cxx2aStatus
 
 
 .. toctree::
     :hidden:
 
+    AddingNewCIJobs
     FeatureTestMacroTable
+
 
 Current Status
 --------------
@@ -85,32 +90,54 @@ reasons, but some of the major ones are:
 Platform and Compiler Support
 -----------------------------
 
-libc++ is known to work on the following platforms, using gcc and
-clang.
-Note that functionality provided by ``<atomic>`` is only functional with clang
-and GCC.
+For using the libc++ headers
+############################
+The libc++ headers are known to work on the following platforms, using GCC and
+Clang. Note that functionality provided by ``<atomic>`` is only functional with
+Clang and GCC.
 
-============ ==================== ============ ========================
-OS           Arch                 Compilers    ABI Library
-============ ==================== ============ ========================
-macOS        i386, x86_64         Clang, GCC   libc++abi
-FreeBSD 10+  i386, x86_64, ARM    Clang, GCC   libcxxrt, libc++abi
-Linux        i386, x86_64         Clang, GCC   libc++abi
-============ ==================== ============ ========================
+============ ==================== ============
+OS           Arch                 Compilers
+============ ==================== ============
+macOS 10.9+  i386, x86_64         Clang, GCC
+FreeBSD 10+  i386, x86_64, ARM    Clang, GCC
+Linux        i386, x86_64         Clang, GCC
+============ ==================== ============
 
-The following minimum compiler versions are strongly recommended.
+The following minimum compiler versions are required:
 
 * Clang 4.0 and above
 * GCC 5.0 and above.
 
-The C++03 dialect is only supported for Clang compilers.
+The C++03 dialect is only supported with Clang.
+
+For building the libc++ library
+###############################
+Building the libc++ library (static or shared) requires some features from
+the operating system. As such, it has its own set of (slightly different)
+system requirements.
+
+============ ==================== ============ ========================
+OS           Arch                 Compilers    ABI Library
+============ ==================== ============ ========================
+macOS 10.12+ i386, x86_64         Clang, GCC   libc++abi
+FreeBSD 10+  i386, x86_64, ARM    Clang, GCC   libcxxrt, libc++abi
+Linux        i386, x86_64         Clang, GCC   libc++abi
+============ ==================== ============ ========================
+
+The following minimum compiler versions are required:
+
+* Clang 4.0 and above
+* GCC 5.0 and above.
+
 
 C++ Dialect Support
 ---------------------
 
 * C++11 - Complete
-* `C++14 - Complete <http://libcxx.llvm.org/cxx1y_status.html>`__
-* `C++17 - In Progress <http://libcxx.llvm.org/cxx1z_status.html>`__
+* :ref:`C++14 - Complete <cxx1y-status>`
+* :ref:`C++17 - In Progress <cxx1z-status>`
+* :ref:`C++20 - In Progress <cxx2a-status>`
 * `Post C++14 Technical Specifications - In Progress <http://libcxx.llvm.org/ts1z_status.html>`__
 * :ref:`C++ Feature Test Macro Status <feature-status>`
 
@@ -133,7 +160,6 @@ Design Documents
 .. toctree::
    :maxdepth: 1
 
-   DesignDocs/AvailabilityMarkup
    DesignDocs/DebugMode
    DesignDocs/CapturingConfigInfo
    DesignDocs/ABIVersioning
@@ -143,6 +169,7 @@ Design Documents
    DesignDocs/FileTimeType
    DesignDocs/FeatureTestMacros
    DesignDocs/ExtendedCXX03Support
+   DesignDocs/UniquePtrTrivialAbi
 
 * `<atomic> design <http://libcxx.llvm.org/atomic_design.html>`_
 * `<type_traits> design <http://libcxx.llvm.org/type_traits_design.html>`_
@@ -153,10 +180,9 @@ Design Documents
 Build Bots and Test Coverage
 ----------------------------
 
-* `LLVM Buildbot Builders <http://lab.llvm.org:8011/console>`_
-* `Apple Jenkins Builders <http://lab.llvm.org:8080/green/view/Libcxx/>`_
-* `Windows Appveyor Builders <https://ci.appveyor.com/project/llvm-mirror/libcxx>`_
-* `Code Coverage Results <http://efcs.ca/libcxx-coverage>`_
+* `Buildkite CI pipeline <https://buildkite.com/llvm-project/libcxx-ci>`_
+* `LLVM Buildbot Builders <http://lab.llvm.org:8011>`_
+* :ref:`Adding New CI Jobs <AddingNewCIJobs>`
 
 Getting Involved
 ================

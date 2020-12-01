@@ -118,7 +118,7 @@ void SBError::SetErrorToGenericError() {
   LLDB_RECORD_METHOD_NO_ARGS(void, SBError, SetErrorToGenericError);
 
   CreateIfNeeded();
-  m_opaque_up->SetErrorToErrno();
+  m_opaque_up->SetErrorToGenericError();
 }
 
 void SBError::SetErrorString(const char *err_str) {
@@ -149,7 +149,7 @@ SBError::operator bool() const {
 
 void SBError::CreateIfNeeded() {
   if (m_opaque_up == nullptr)
-    m_opaque_up.reset(new Status());
+    m_opaque_up = std::make_unique<Status>();
 }
 
 lldb_private::Status *SBError::operator->() { return m_opaque_up.get(); }

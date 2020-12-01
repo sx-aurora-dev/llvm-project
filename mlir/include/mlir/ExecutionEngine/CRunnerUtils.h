@@ -18,11 +18,11 @@
 #ifdef _WIN32
 #ifndef MLIR_CRUNNERUTILS_EXPORT
 #ifdef mlir_c_runner_utils_EXPORTS
-/* We are building this library */
+// We are building this library
 #define MLIR_CRUNNERUTILS_EXPORT __declspec(dllexport)
 #define MLIR_CRUNNERUTILS_DEFINE_FUNCTIONS
 #else
-/* We are using this library */
+// We are using this library
 #define MLIR_CRUNNERUTILS_EXPORT __declspec(dllimport)
 #endif // mlir_c_runner_utils_EXPORTS
 #endif // MLIR_CRUNNERUTILS_EXPORT
@@ -32,12 +32,6 @@
 #endif // _WIN32
 
 #include <cstdint>
-
-template <int N>
-void dropFront(int64_t arr[N], int64_t *res) {
-  for (unsigned i = 1; i < N; ++i)
-    *(res + i - 1) = arr[i];
-}
 
 //===----------------------------------------------------------------------===//
 // Codegen-compatible structures for Vector type.
@@ -112,6 +106,12 @@ using Vector3D = Vector<T, D1, D2, D3>;
 template <int D1, int D2, int D3, int D4, typename T>
 using Vector4D = Vector<T, D1, D2, D3, D4>;
 
+template <int N>
+void dropFront(int64_t arr[N], int64_t *res) {
+  for (unsigned i = 1; i < N; ++i)
+    *(res + i - 1) = arr[i];
+}
+
 //===----------------------------------------------------------------------===//
 // Codegen-compatible structures for StridedMemRef type.
 //===----------------------------------------------------------------------===//
@@ -165,16 +165,60 @@ struct UnrankedMemRefType {
 };
 
 //===----------------------------------------------------------------------===//
+// DynamicMemRefType type.
+//===----------------------------------------------------------------------===//
+// A reference to one of the StridedMemRef types.
+template <typename T>
+class DynamicMemRefType {
+public:
+  explicit DynamicMemRefType(const StridedMemRefType<T, 0> &mem_ref)
+      : rank(0), basePtr(mem_ref.basePtr), data(mem_ref.data),
+        offset(mem_ref.offset), sizes(nullptr), strides(nullptr) {}
+  template <int N>
+  explicit DynamicMemRefType(const StridedMemRefType<T, N> &mem_ref)
+      : rank(N), basePtr(mem_ref.basePtr), data(mem_ref.data),
+        offset(mem_ref.offset), sizes(mem_ref.sizes), strides(mem_ref.strides) {
+  }
+  explicit DynamicMemRefType(const UnrankedMemRefType<T> &mem_ref)
+      : rank(mem_ref.rank) {
+    auto *desc = static_cast<StridedMemRefType<T, 1> *>(mem_ref.descriptor);
+    basePtr = desc->basePtr;
+    data = desc->data;
+    offset = desc->offset;
+    sizes = rank == 0 ? nullptr : desc->sizes;
+    strides = sizes + rank;
+  }
+
+  int64_t rank;
+  T *basePtr;
+  T *data;
+  int64_t offset;
+  const int64_t *sizes;
+  const int64_t *strides;
+};
+
+//===----------------------------------------------------------------------===//
 // Small runtime support "lib" for vector.print lowering during codegen.
 //===----------------------------------------------------------------------===//
-extern "C" MLIR_CRUNNERUTILS_EXPORT void print_i1(bool b);
-extern "C" MLIR_CRUNNERUTILS_EXPORT void print_i32(int32_t i);
-extern "C" MLIR_CRUNNERUTILS_EXPORT void print_i64(int64_t l);
-extern "C" MLIR_CRUNNERUTILS_EXPORT void print_f32(float f);
-extern "C" MLIR_CRUNNERUTILS_EXPORT void print_f64(double d);
-extern "C" MLIR_CRUNNERUTILS_EXPORT void print_open();
-extern "C" MLIR_CRUNNERUTILS_EXPORT void print_close();
-extern "C" MLIR_CRUNNERUTILS_EXPORT void print_comma();
-extern "C" MLIR_CRUNNERUTILS_EXPORT void print_newline();
+extern "C" MLIR_CRUNNERUTILS_EXPORT void printI64(int64_t i);
+extern "C" MLIR_CRUNNERUTILS_EXPORT void printU64(uint64_t u);
+extern "C" MLIR_CRUNNERUTILS_EXPORT void printF32(float f);
+extern "C" MLIR_CRUNNERUTILS_EXPORT void printF64(double d);
+extern "C" MLIR_CRUNNERUTILS_EXPORT void printOpen();
+extern "C" MLIR_CRUNNERUTILS_EXPORT void printClose();
+extern "C" MLIR_CRUNNERUTILS_EXPORT void printComma();
+extern "C" MLIR_CRUNNERUTILS_EXPORT void printNewline();
+
+//===----------------------------------------------------------------------===//
+// Small runtime support for sparse tensors.
+//===----------------------------------------------------------------------===//
+extern "C" MLIR_CRUNNERUTILS_EXPORT void openMatrixC(char *filename,
+                                                     uint64_t *mdata,
+                                                     uint64_t *ndata,
+                                                     uint64_t *nnzdata);
+extern "C" MLIR_CRUNNERUTILS_EXPORT void
+readMatrixItemC(uint64_t *idata, uint64_t *jdata, double *ddata);
+extern "C" MLIR_CRUNNERUTILS_EXPORT void closeMatrix();
+extern "C" MLIR_CRUNNERUTILS_EXPORT char *getMatrix(uint64_t id);
 
 #endif // EXECUTIONENGINE_CRUNNERUTILS_H_

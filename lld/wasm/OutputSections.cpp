@@ -87,6 +87,7 @@ void CodeSection::finalizeContents() {
   bodySize = codeSectionHeader.size();
 
   for (InputFunction *func : functions) {
+    func->outputSec = this;
     func->outputOffset = bodySize;
     func->calculateSize();
     bodySize += func->getSize();
@@ -132,12 +133,19 @@ void DataSection::finalizeContents() {
       std::count_if(segments.begin(), segments.end(),
                     [](OutputSegment *segment) { return !segment->isBss; });
 
+#ifndef NDEBUG
+  unsigned activeCount = std::count_if(
+      segments.begin(), segments.end(), [](OutputSegment *segment) {
+        return (segment->initFlags & WASM_SEGMENT_IS_PASSIVE) == 0;
+      });
+#endif
+
+  assert((!config->isPic || activeCount <= 1) &&
+         "Currenly only a single data segment is supported in PIC mode");
+
   writeUleb128(os, segmentCount, "data segment count");
   os.flush();
   bodySize = dataSectionHeader.size();
-
-  assert((!config->isPic || segments.size() <= 1) &&
-         "Currenly only a single data segment is supported in PIC mode");
 
   for (OutputSegment *segment : segments) {
     if (segment->isBss)
@@ -152,6 +160,7 @@ void DataSection::finalizeContents() {
         initExpr.Opcode = WASM_OPCODE_GLOBAL_GET;
         initExpr.Value.Global = WasmSym::memoryBase->getGlobalIndex();
       } else {
+        // FIXME(wvo): I64?
         initExpr.Opcode = WASM_OPCODE_I32_CONST;
         initExpr.Value.Int32 = segment->startVA;
       }
@@ -165,9 +174,11 @@ void DataSection::finalizeContents() {
     log("Data segment: size=" + Twine(segment->size) + ", startVA=" +
         Twine::utohexstr(segment->startVA) + ", name=" + segment->name);
 
-    for (InputSegment *inputSeg : segment->inputSegments)
+    for (InputSegment *inputSeg : segment->inputSegments) {
+      inputSeg->outputSec = this;
       inputSeg->outputOffset = segment->sectionOffset + segment->header.size() +
                                inputSeg->outputSegmentOffset;
+    }
   }
 
   createHeader(bodySize);
@@ -226,8 +237,8 @@ void CustomSection::finalizeContents() {
   os.flush();
 
   for (InputSection *section : inputSections) {
-    section->outputOffset = payloadSize;
     section->outputSec = this;
+    section->outputOffset = payloadSize;
     payloadSize += section->getSize();
   }
 

@@ -1,4 +1,5 @@
-; RUN: opt -print-memderefs -analyze -S <%s | FileCheck %s
+; RUN: opt -print-memderefs -analyze -S < %s -enable-new-pm=0 | FileCheck %s
+; RUN: opt -passes=print-memderefs -S < %s -disable-output 2>&1 | FileCheck %s
 
 ; Uses the print-deref (+ analyze to print) pass to run
 ; isDereferenceablePointer() on many load instruction operands
@@ -20,12 +21,12 @@ declare i32* @foo()
 @globalptr.align16 = external global i8, align 16
 
 ; CHECK-LABEL: 'test'
-define void @test(%struct.A* sret %result,
+define void @test(%struct.A* sret(%struct.A) %result,
                   i32 addrspace(1)* dereferenceable(8) %dparam,
                   i8 addrspace(1)* dereferenceable(32) align 1 %dparam.align1,
                   i8 addrspace(1)* dereferenceable(32) align 16 %dparam.align16,
-                  i8* byval %i8_byval,
-                  %struct.A* byval %A_byval)
+                  i8* byval(i8) %i8_byval,
+                  %struct.A* byval(%struct.A) %A_byval)
     gc "statepoint-example" {
 ; CHECK: The following are dereferenceable:
 entry:
@@ -55,8 +56,8 @@ entry:
     %load3 = load i32, i32 addrspace(1)* %dparam
 
 ; CHECK: %relocate{{.*}}(unaligned)
-    %tok = tail call token (i64, i32, i1 ()*, i32, i32, ...) @llvm.experimental.gc.statepoint.p0f_i1f(i64 0, i32 0, i1 ()* @return_i1, i32 0, i32 0, i32 0, i32 0, i32 addrspace(1)* %dparam)
-    %relocate = call i32 addrspace(1)* @llvm.experimental.gc.relocate.p1i32(token %tok, i32 7, i32 7)
+    %tok = tail call token (i64, i32, i1 ()*, i32, i32, ...) @llvm.experimental.gc.statepoint.p0f_i1f(i64 0, i32 0, i1 ()* @return_i1, i32 0, i32 0, i32 0, i32 0) ["gc-live" (i32 addrspace(1)* %dparam)]
+    %relocate = call i32 addrspace(1)* @llvm.experimental.gc.relocate.p1i32(token %tok, i32 0, i32 0)
     %load4 = load i32, i32 addrspace(1)* %relocate
 
 ; CHECK-NOT: %nparam
@@ -177,7 +178,7 @@ entry:
 define i32 @f_0(i32 %val) {
   %ptr = inttoptr i32 %val to i32*, !dereferenceable !0
   %load29 = load i32, i32* %ptr, align 8
-  ret i32 %load29 
+  ret i32 %load29
 }
 
 ; Just check that we don't crash.

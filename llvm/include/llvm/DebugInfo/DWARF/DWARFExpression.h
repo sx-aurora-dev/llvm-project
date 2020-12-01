@@ -10,10 +10,11 @@
 #define LLVM_DEBUGINFO_DWARFEXPRESSION_H
 
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/Optional.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
-#include "llvm/ADT/Optional.h"
 #include "llvm/BinaryFormat/Dwarf.h"
+#include "llvm/DebugInfo/DIContext.h"
 #include "llvm/Support/DataExtractor.h"
 
 namespace llvm {
@@ -93,8 +94,9 @@ public:
     bool extract(DataExtractor Data, uint8_t AddressSize, uint64_t Offset,
                  Optional<dwarf::DwarfFormat> Format);
     bool isError() { return Error; }
-    bool print(raw_ostream &OS, const DWARFExpression *Expr,
-               const MCRegisterInfo *RegInfo, DWARFUnit *U, bool isEH);
+    bool print(raw_ostream &OS, DIDumpOptions DumpOpts,
+               const DWARFExpression *Expr, const MCRegisterInfo *RegInfo,
+               DWARFUnit *U, bool isEH);
     bool verify(DWARFUnit *U);
   };
 
@@ -126,6 +128,10 @@ public:
       return Op;
     }
 
+    iterator skipBytes(uint64_t Add) {
+      return iterator(Expr, Op.EndOffset + Add);
+    }
+
     // Comparison operators are provided out of line.
     friend bool operator==(const iterator &, const iterator &);
   };
@@ -139,8 +145,15 @@ public:
   iterator begin() const { return iterator(this, 0); }
   iterator end() const { return iterator(this, Data.getData().size()); }
 
-  void print(raw_ostream &OS, const MCRegisterInfo *RegInfo, DWARFUnit *U,
+  void print(raw_ostream &OS, DIDumpOptions DumpOpts,
+             const MCRegisterInfo *RegInfo, DWARFUnit *U,
              bool IsEH = false) const;
+
+  /// Print the expression in a format intended to be compact and useful to a
+  /// user, but not perfectly unambiguous, or capable of representing every
+  /// valid DWARF expression. Returns true if the expression was sucessfully
+  /// printed.
+  bool printCompact(raw_ostream &OS, const MCRegisterInfo &RegInfo);
 
   bool verify(DWARFUnit *U);
 

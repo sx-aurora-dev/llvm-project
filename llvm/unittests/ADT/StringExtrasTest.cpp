@@ -89,6 +89,10 @@ TEST(StringExtrasTest, ToAndFromHex) {
   EXPECT_EQ(EvenStr, toHex(EvenData));
   EXPECT_EQ(EvenData, fromHex(EvenStr));
   EXPECT_EQ(StringRef(EvenStr).lower(), toHex(EvenData, true));
+
+  std::string InvalidStr = "A5ZX";
+  std::string IgnoredOutput;
+  EXPECT_FALSE(tryGetFromHex(InvalidStr, IgnoredOutput));
 }
 
 TEST(StringExtrasTest, to_float) {
@@ -181,4 +185,33 @@ TEST(StringExtras, ConvertToCamelFromSnakeCase) {
   testConvertToCamelCase(true, "_OpName", "_OpName");
   testConvertToCamelCase(true, "Op_Name", "Op_Name");
   testConvertToCamelCase(true, "opName", "OpName");
+}
+
+constexpr uint64_t MaxUint64 = std::numeric_limits<uint64_t>::max();
+constexpr int64_t MaxInt64 = std::numeric_limits<int64_t>::max();
+constexpr int64_t MinInt64 = std::numeric_limits<int64_t>::min();
+
+TEST(StringExtras, UToStr) {
+  EXPECT_EQ("0", utostr(0));
+  EXPECT_EQ("0", utostr(0, /*isNeg=*/false));
+  EXPECT_EQ("1", utostr(1));
+  EXPECT_EQ("1", utostr(1, /*isNeg=*/false));
+  EXPECT_EQ(std::to_string(MaxUint64), utostr(MaxUint64));
+  EXPECT_EQ(std::to_string(MaxUint64), utostr(MaxUint64, /*isNeg=*/false));
+
+  EXPECT_EQ("-0", utostr(0, /*isNeg=*/true));
+  EXPECT_EQ("-1", utostr(1, /*isNeg=*/true));
+  EXPECT_EQ("-" + std::to_string(MaxInt64), utostr(MaxInt64, /*isNeg=*/true));
+  constexpr uint64_t MinusMinInt64 = -static_cast<uint64_t>(MinInt64);
+  EXPECT_EQ("-" + std::to_string(MinusMinInt64),
+            utostr(MinusMinInt64, /*isNeg=*/true));
+  EXPECT_EQ("-" + std::to_string(MaxUint64), utostr(MaxUint64, /*isNeg=*/true));
+}
+
+TEST(StringExtras, IToStr) {
+  EXPECT_EQ("0", itostr(0));
+  EXPECT_EQ("1", itostr(1));
+  EXPECT_EQ("-1", itostr(-1));
+  EXPECT_EQ(std::to_string(MinInt64), itostr(MinInt64));
+  EXPECT_EQ(std::to_string(MaxInt64), itostr(MaxInt64));
 }

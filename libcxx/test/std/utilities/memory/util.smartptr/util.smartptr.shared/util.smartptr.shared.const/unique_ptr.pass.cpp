@@ -37,7 +37,7 @@ struct A
     static int count;
 
     A() {++count;}
-    A(const A&) {++count;}
+    A(const A& other) : B(other) {++count;}
     ~A() {--count;}
 };
 
@@ -94,16 +94,9 @@ int main(int, char**)
         }
         catch (...)
         {
-#if TEST_STD_VER >= 11
             assert(A::count == 1);
             assert(B::count == 1);
             assert(ptr.get() == raw_ptr);
-#else
-            (void) raw_ptr; // silence 'unused variable' warning
-            assert(A::count == 0);
-            assert(B::count == 0);
-            assert(ptr.get() == 0);
-#endif // TEST_STD_VER >= 11
         }
     }
 #endif

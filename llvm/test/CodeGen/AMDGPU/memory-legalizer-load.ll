@@ -1,9 +1,9 @@
 ; RUN: llc -mtriple=amdgcn-amd- -mcpu=gfx803 -verify-machineinstrs < %s | FileCheck --check-prefixes=GCN,GFX8,GFX89 %s
 ; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx803 -verify-machineinstrs < %s | FileCheck --check-prefixes=GCN,GFX8,GFX89 %s
-; RUN: llc -mtriple=amdgcn-amd- -mcpu=gfx900 -verify-machineinstrs -amdgpu-enable-global-sgpr-addr < %s | FileCheck --check-prefixes=GCN,GFX9,GFX89 %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -verify-machineinstrs -amdgpu-enable-global-sgpr-addr < %s | FileCheck --check-prefixes=GCN,GFX9,GFX89 %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1010 -mattr=+code-object-v3 -verify-machineinstrs -amdgpu-enable-global-sgpr-addr < %s | FileCheck --check-prefixes=GCN,GFX10,GFX10WGP %s
-; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1010 -mattr=+code-object-v3,+cumode -verify-machineinstrs -amdgpu-enable-global-sgpr-addr < %s | FileCheck --check-prefixes=GCN,GFX10,GFX10CU %s
+; RUN: llc -mtriple=amdgcn-amd- -mcpu=gfx900 -verify-machineinstrs < %s | FileCheck --check-prefixes=GCN,GFX9,GFX89 %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx900 -verify-machineinstrs < %s | FileCheck --check-prefixes=GCN,GFX9,GFX89 %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1010 -verify-machineinstrs < %s | FileCheck --check-prefixes=GCN,GFX10,GFX10WGP %s
+; RUN: llc -mtriple=amdgcn-amd-amdhsa -mcpu=gfx1010 -mattr=+cumode -verify-machineinstrs < %s | FileCheck --check-prefixes=GCN,GFX10,GFX10CU %s
 
 declare i32 @llvm.amdgcn.workitem.id.x()
 
@@ -454,10 +454,10 @@ entry:
 ; GFX10CU:       .amdhsa_workgroup_processor_mode 0
 ; GFX10-NOT:     .amdhsa_memory_ordered 0
 define amdgpu_kernel void @nontemporal_private_0(
-    i32 addrspace(5)* %in, i32* %out) {
+    i32 addrspace(5)* %in, i32 addrspace(1)* %out) {
 entry:
   %val = load i32, i32 addrspace(5)* %in, align 4, !nontemporal !0
-  store i32 %val, i32* %out
+  store i32 %val, i32 addrspace(1)* %out
   ret void
 }
 
@@ -469,12 +469,12 @@ entry:
 ; GFX10CU:       .amdhsa_workgroup_processor_mode 0
 ; GFX10-NOT:     .amdhsa_memory_ordered 0
 define amdgpu_kernel void @nontemporal_private_1(
-    i32 addrspace(5)* %in, i32* %out) {
+    i32 addrspace(5)* %in, i32 addrspace(1)* %out) {
 entry:
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %val.gep = getelementptr inbounds i32, i32 addrspace(5)* %in, i32 %tid
   %val = load i32, i32 addrspace(5)* %val.gep, align 4, !nontemporal !0
-  store i32 %val, i32* %out
+  store i32 %val, i32 addrspace(1)* %out
   ret void
 }
 
@@ -485,28 +485,28 @@ entry:
 ; GFX10CU:       .amdhsa_workgroup_processor_mode 0
 ; GFX10-NOT:     .amdhsa_memory_ordered 0
 define amdgpu_kernel void @nontemporal_global_0(
-    i32 addrspace(1)* %in, i32* %out) {
+    i32 addrspace(1)* %in, i32 addrspace(1)* %out) {
 entry:
   %val = load i32, i32 addrspace(1)* %in, align 4, !nontemporal !0
-  store i32 %val, i32* %out
+  store i32 %val, i32 addrspace(1)* %out
   ret void
 }
 
 ; GCN-LABEL: {{^}}nontemporal_global_1:
 ; GFX8:  flat_load_dword v{{[0-9]+}}, v[{{[0-9]+}}:{{[0-9]+}}] glc slc{{$}}
-; GFX9:  global_load_dword v{{[0-9]+}}, v[{{[0-9]+}}:{{[0-9]+}}], s[{{[0-9]+}}:{{[0-9]+}}] glc slc{{$}}
-; GFX10: global_load_dword v{{[0-9]+}}, v[{{[0-9]+}}:{{[0-9]+}}], s[{{[0-9]+}}:{{[0-9]+}}] slc{{$}}
+; GFX9:  global_load_dword v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9]+}}:{{[0-9]+}}] glc slc{{$}}
+; GFX10: global_load_dword v{{[0-9]+}}, v{{[0-9]+}}, s[{{[0-9]+}}:{{[0-9]+}}] slc{{$}}
 ; GFX10:         .amdhsa_kernel nontemporal_global_1
 ; GFX10WGP-NOT:  .amdhsa_workgroup_processor_mode 0
 ; GFX10CU:       .amdhsa_workgroup_processor_mode 0
 ; GFX10-NOT:     .amdhsa_memory_ordered 0
 define amdgpu_kernel void @nontemporal_global_1(
-    i32 addrspace(1)* %in, i32* %out) {
+    i32 addrspace(1)* %in, i32 addrspace(1)* %out) {
 entry:
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %val.gep = getelementptr inbounds i32, i32 addrspace(1)* %in, i32 %tid
   %val = load i32, i32 addrspace(1)* %val.gep, align 4, !nontemporal !0
-  store i32 %val, i32* %out
+  store i32 %val, i32 addrspace(1)* %out
   ret void
 }
 
@@ -517,10 +517,10 @@ entry:
 ; GFX10CU:       .amdhsa_workgroup_processor_mode 0
 ; GFX10-NOT:     .amdhsa_memory_ordered 0
 define amdgpu_kernel void @nontemporal_local_0(
-    i32 addrspace(3)* %in, i32* %out) {
+    i32 addrspace(3)* %in, i32 addrspace(1)* %out) {
 entry:
   %val = load i32, i32 addrspace(3)* %in, align 4, !nontemporal !0
-  store i32 %val, i32* %out
+  store i32 %val, i32 addrspace(1)* %out
   ret void
 }
 
@@ -531,12 +531,12 @@ entry:
 ; GFX10CU:       .amdhsa_workgroup_processor_mode 0
 ; GFX10-NOT:     .amdhsa_memory_ordered 0
 define amdgpu_kernel void @nontemporal_local_1(
-    i32 addrspace(3)* %in, i32* %out) {
+    i32 addrspace(3)* %in, i32 addrspace(1)* %out) {
 entry:
   %tid = call i32 @llvm.amdgcn.workitem.id.x()
   %val.gep = getelementptr inbounds i32, i32 addrspace(3)* %in, i32 %tid
   %val = load i32, i32 addrspace(3)* %val.gep, align 4, !nontemporal !0
-  store i32 %val, i32* %out
+  store i32 %val, i32 addrspace(1)* %out
   ret void
 }
 

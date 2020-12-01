@@ -1,8 +1,8 @@
-// RUN: mlir-opt %s | FileCheck %s --dump-input-on-failure
+// RUN: mlir-opt %s | FileCheck %s
 // Verify the printed output can be parsed.
-// RUN: mlir-opt %s | mlir-opt | FileCheck %s --dump-input-on-failure
+// RUN: mlir-opt %s | mlir-opt | FileCheck %s
 // Verify the generic form can be parsed.
-// RUN: mlir-opt -mlir-print-op-generic %s | mlir-opt | FileCheck %s --dump-input-on-failure
+// RUN: mlir-opt -mlir-print-op-generic %s | mlir-opt | FileCheck %s
 
 func @std_for(%arg0 : index, %arg1 : index, %arg2 : index) {
   scf.for %i0 = %arg0 to %arg1 step %arg2 {
@@ -240,3 +240,42 @@ func @conditional_reduce(%buffer: memref<1024xf32>, %lb: index, %ub: index, %ste
 //  CHECK-NEXT: scf.yield %[[IFRES]] : f32
 //  CHECK-NEXT: }
 //  CHECK-NEXT: return %[[RESULT]]
+
+// CHECK-LABEL: @while
+func @while() {
+  %0 = "test.get_some_value"() : () -> i32
+  %1 = "test.get_some_value"() : () -> f32
+
+  // CHECK: = scf.while (%{{.*}} = %{{.*}}, %{{.*}} = %{{.*}}) : (i32, f32) -> (i64, f64) {
+  %2:2 = scf.while (%arg0 = %0, %arg1 = %1) : (i32, f32) -> (i64, f64) {
+    %3:2 = "test.some_operation"(%arg0, %arg1) : (i32, f32) -> (i64, f64)
+    %4 = "test.some_condition"(%arg0, %arg1) : (i32, f32) -> i1
+    // CHECK: scf.condition(%{{.*}}) %{{.*}}, %{{.*}} : i64, f64
+    scf.condition(%4) %3#0, %3#1 : i64, f64
+  // CHECK: } do {
+  } do {
+  // CHECK: ^{{.*}}(%{{.*}}: i64, %{{.*}}: f64):
+  ^bb0(%arg2: i64, %arg3: f64):
+    %5:2 = "test.some_operation"(%arg2, %arg3): (i64, f64) -> (i32, f32)
+    // CHECK: scf.yield %{{.*}}, %{{.*}} : i32, f32
+    scf.yield %5#0, %5#1 : i32, f32
+  // CHECK: attributes {foo = "bar"}
+  } attributes {foo="bar"}
+  return
+}
+
+// CHECK-LABEL: @infinite_while
+func @infinite_while() {
+  %true = constant true
+
+  // CHECK: scf.while  : () -> () {
+  scf.while : () -> () {
+    // CHECK: scf.condition(%{{.*}})
+    scf.condition(%true)
+  // CHECK: } do {
+  } do {
+    // CHECK: scf.yield
+    scf.yield
+  }
+  return
+}

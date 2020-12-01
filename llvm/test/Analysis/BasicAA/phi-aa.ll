@@ -1,4 +1,4 @@
-; RUN: opt < %s -phi-values -basicaa -aa-eval -print-all-alias-modref-info -disable-output 2>&1 | FileCheck %s
+; RUN: opt < %s -phi-values -basic-aa -aa-eval -print-all-alias-modref-info -disable-output 2>&1 | FileCheck %s
 ; RUN: opt < %s -aa-pipeline=basic-aa -passes='require<phi-values>,aa-eval' -print-all-alias-modref-info -disable-output 2>&1 | FileCheck %s
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128"
 target triple = "x86_64-unknown-linux-gnu"
@@ -114,3 +114,62 @@ loop3:
 end:
   ret void
 }
+
+; CHECK-LABEL: phi_and_select
+; CHECK: MustAlias: i32* %p, i32* %s
+define void @phi_and_select(i1 %c, i1 %c2, i32* %x, i32* %y) {
+entry:
+  br i1 %c, label %true, label %false
+
+true:
+  br label %exit
+
+false:
+  br label %exit
+
+exit:
+  %p = phi i32* [ %x, %true ], [ %y, %false ]
+  %s = select i1 %c2, i32* %p, i32* %p
+  store i32 0, i32* %p
+  store i32 0, i32* %s
+  ret void
+}
+
+; CHECK-LABEL: phi_and_phi_cycle
+; CHECK: NoAlias: i32* %p1, i32* %p2
+define void @phi_and_phi_cycle(i32* noalias %x, i32* noalias %y) {
+entry:
+  br label %loop
+
+loop:
+  %p1 = phi i32* [ %x, %entry ], [ %p1.next, %loop ]
+  %p2 = phi i32* [ %y, %entry ], [ %p2.next, %loop ]
+  %p1.next = getelementptr i32, i32* %p1, i64 1
+  %p2.next = getelementptr i32, i32* %p1, i64 2
+  store i32 0, i32* %p1
+  store i32 0, i32* %p2
+  br label %loop
+}
+
+; CHECK-LABEL: phi_and_gep_unknown_size
+; CHECK: Just Mod:   call void @llvm.memset.p0i8.i32(i8* %g, i8 0, i32 %size, i1 false) <->   call void @llvm.memset.p0i8.i32(i8* %z, i8 0, i32 %size, i1 false)
+; TODO: This should be NoModRef.
+define void @phi_and_gep_unknown_size(i1 %c, i8* %x, i8* %y, i8* noalias %z, i32 %size) {
+entry:
+  br i1 %c, label %true, label %false
+
+true:
+  br label %exit
+
+false:
+  br label %exit
+
+exit:
+  %p = phi i8* [ %x, %true ], [ %y, %false ]
+  %g = getelementptr inbounds i8, i8* %p, i64 1
+  call void @llvm.memset.p0i8.i32(i8* %g, i8 0, i32 %size, i1 false)
+  call void @llvm.memset.p0i8.i32(i8* %z, i8 0, i32 %size, i1 false)
+  ret void
+}
+
+declare void @llvm.memset.p0i8.i32(i8*, i8, i32, i1)

@@ -89,6 +89,15 @@ size_t MachOWriter::totalSize() const {
                      sizeof(uint32_t) * O.IndirectSymTable.Symbols.size());
   }
 
+  if (O.CodeSignatureCommandIndex) {
+    const MachO::linkedit_data_command &LinkEditDataCommand =
+        O.LoadCommands[*O.CodeSignatureCommandIndex]
+            .MachOLoadCommand.linkedit_data_command_data;
+    if (LinkEditDataCommand.dataoff)
+      Ends.push_back(LinkEditDataCommand.dataoff +
+                     LinkEditDataCommand.datasize);
+  }
+
   if (O.DataInCodeCommandIndex) {
     const MachO::linkedit_data_command &LinkEditDataCommand =
         O.LoadCommands[*O.DataInCodeCommandIndex]
@@ -112,6 +121,14 @@ size_t MachOWriter::totalSize() const {
   // Otherwise, use the last section / reloction.
   for (const LoadCommand &LC : O.LoadCommands)
     for (const std::unique_ptr<Section> &S : LC.Sections) {
+      if (!S->hasValidOffset()) {
+        assert((S->Offset == 0) && "Skipped section's offset must be zero");
+        assert((S->isVirtualSection() || S->Size == 0) &&
+               "Non-zero-fill sections with zero offset must have zero size");
+        continue;
+      }
+      assert((S->Offset != 0) &&
+             "Non-zero-fill section's offset cannot be zero");
       Ends.push_back(S->Offset + S->Size);
       if (S->RelOff)
         Ends.push_back(S->RelOff +
@@ -231,8 +248,12 @@ void MachOWriter::writeSectionInLoadCommand(const Section &Sec, uint8_t *&Out) {
 void MachOWriter::writeSections() {
   for (const LoadCommand &LC : O.LoadCommands)
     for (const std::unique_ptr<Section> &Sec : LC.Sections) {
-      if (Sec->isVirtualSection())
+      if (!Sec->hasValidOffset()) {
+        assert((Sec->Offset == 0) && "Skipped section's offset must be zero");
+        assert((Sec->isVirtualSection() || Sec->Size == 0) &&
+               "Non-zero-fill sections with zero offset must have zero size");
         continue;
+      }
 
       assert(Sec->Offset && "Section offset can not be zero");
       assert((Sec->Size == Sec->Content.size()) && "Incorrect section size");
@@ -381,28 +402,27 @@ void MachOWriter::writeIndirectSymbolTable() {
   }
 }
 
-void MachOWriter::writeDataInCodeData() {
-  if (!O.DataInCodeCommandIndex)
+void MachOWriter::writeLinkData(Optional<size_t> LCIndex, const LinkData &LD) {
+  if (!LCIndex)
     return;
   const MachO::linkedit_data_command &LinkEditDataCommand =
-      O.LoadCommands[*O.DataInCodeCommandIndex]
-          .MachOLoadCommand.linkedit_data_command_data;
+      O.LoadCommands[*LCIndex].MachOLoadCommand.linkedit_data_command_data;
   char *Out = (char *)B.getBufferStart() + LinkEditDataCommand.dataoff;
-  assert((LinkEditDataCommand.datasize == O.DataInCode.Data.size()) &&
-         "Incorrect data in code data size");
-  memcpy(Out, O.DataInCode.Data.data(), O.DataInCode.Data.size());
+  assert((LinkEditDataCommand.datasize == LD.Data.size()) &&
+         "Incorrect data size");
+  memcpy(Out, LD.Data.data(), LD.Data.size());
+}
+
+void MachOWriter::writeCodeSignatureData() {
+  return writeLinkData(O.CodeSignatureCommandIndex, O.CodeSignature);
+}
+
+void MachOWriter::writeDataInCodeData() {
+  return writeLinkData(O.DataInCodeCommandIndex, O.DataInCode);
 }
 
 void MachOWriter::writeFunctionStartsData() {
-  if (!O.FunctionStartsCommandIndex)
-    return;
-  const MachO::linkedit_data_command &LinkEditDataCommand =
-      O.LoadCommands[*O.FunctionStartsCommandIndex]
-          .MachOLoadCommand.linkedit_data_command_data;
-  char *Out = (char *)B.getBufferStart() + LinkEditDataCommand.dataoff;
-  assert((LinkEditDataCommand.datasize == O.FunctionStarts.Data.size()) &&
-         "Incorrect function starts data size");
-  memcpy(Out, O.FunctionStarts.Data.data(), O.FunctionStarts.Data.size());
+  return writeLinkData(O.FunctionStartsCommandIndex, O.FunctionStarts);
 }
 
 void MachOWriter::writeTail() {
@@ -448,6 +468,16 @@ void MachOWriter::writeTail() {
     if (DySymTabCommand.indirectsymoff)
       Queue.emplace_back(DySymTabCommand.indirectsymoff,
                          &MachOWriter::writeIndirectSymbolTable);
+  }
+
+  if (O.CodeSignatureCommandIndex) {
+    const MachO::linkedit_data_command &LinkEditDataCommand =
+        O.LoadCommands[*O.CodeSignatureCommandIndex]
+            .MachOLoadCommand.linkedit_data_command_data;
+
+    if (LinkEditDataCommand.dataoff)
+      Queue.emplace_back(LinkEditDataCommand.dataoff,
+                         &MachOWriter::writeCodeSignatureData);
   }
 
   if (O.DataInCodeCommandIndex) {

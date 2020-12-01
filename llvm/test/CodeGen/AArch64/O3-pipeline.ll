@@ -9,9 +9,9 @@
 ; CHECK-NEXT: Machine Module Information
 ; CHECK-NEXT: Target Transform Information
 ; CHECK-NEXT: Assumption Cache Tracker
+; CHECK-NEXT: Profile summary info
 ; CHECK-NEXT: Type-Based Alias Analysis
 ; CHECK-NEXT: Scoped NoAlias Alias Analysis
-; CHECK-NEXT: Profile summary info
 ; CHECK-NEXT: Create Garbage Collector Module Metadata
 ; CHECK-NEXT: Machine Branch Probability Analysis
 ; CHECK-NEXT:   ModulePass Manager
@@ -35,6 +35,7 @@
 ; CHECK-NEXT:       Basic Alias Analysis (stateless AA impl)
 ; CHECK-NEXT:       Canonicalize natural loops
 ; CHECK-NEXT:       Loop Pass Manager
+; CHECK-NEXT:         Canonicalize Freeze Instructions in Loops
 ; CHECK-NEXT:         Induction Variable Users
 ; CHECK-NEXT:         Loop Strength Reduction
 ; CHECK-NEXT:       Basic Alias Analysis (stateless AA impl)
@@ -58,16 +59,22 @@
 ; CHECK-NEXT:       Instrument function entry/exit with calls to e.g. mcount() (post inlining)
 ; CHECK-NEXT:       Scalarize Masked Memory Intrinsics
 ; CHECK-NEXT:       Expand reduction intrinsics
+; CHECK-NEXT:     Stack Safety Analysis
+; CHECK-NEXT:       FunctionPass Manager
+; CHECK-NEXT:         Dominator Tree Construction
+; CHECK-NEXT:         Natural Loop Information
+; CHECK-NEXT:         Scalar Evolution Analysis
+; CHECK-NEXT:         Stack Safety Local Analysis
+; CHECK-NEXT:     FunctionPass Manager
 ; CHECK-NEXT:       Dominator Tree Construction
 ; CHECK-NEXT:       Basic Alias Analysis (stateless AA impl)
+; CHECK-NEXT:       Function Alias Analysis Results
+; CHECK-NEXT:       AArch64 Stack Tagging
 ; CHECK-NEXT:       Function Alias Analysis Results
 ; CHECK-NEXT:       Memory SSA
 ; CHECK-NEXT:       Interleaved Load Combine Pass
 ; CHECK-NEXT:       Dominator Tree Construction
 ; CHECK-NEXT:       Interleaved Access Pass
-; CHECK-NEXT:       Basic Alias Analysis (stateless AA impl)
-; CHECK-NEXT:       Function Alias Analysis Results
-; CHECK-NEXT:       AArch64 Stack Tagging
 ; CHECK-NEXT:       Natural Loop Information
 ; CHECK-NEXT:       CodeGen Prepare
 ; CHECK-NEXT:     Rewrite Symbols
@@ -116,6 +123,7 @@
 ; CHECK-NEXT:       AArch64 Stack Tagging PreRA
 ; CHECK-NEXT:       MachineDominator Tree Construction
 ; CHECK-NEXT:       Machine Natural Loop Construction
+; CHECK-NEXT:       Machine Block Frequency Analysis
 ; CHECK-NEXT:       Early Machine Loop Invariant Code Motion
 ; CHECK-NEXT:       MachineDominator Tree Construction
 ; CHECK-NEXT:       Machine Block Frequency Analysis
@@ -171,6 +179,8 @@
 ; CHECK-NEXT:       AArch64 pseudo instruction expansion pass
 ; CHECK-NEXT:       AArch64 load / store optimization pass
 ; CHECK-NEXT:       AArch64 speculation hardening pass
+; CHECK-NEXT:       AArch64 Indirect Thunks
+; CHECK-NEXT:       AArch64 sls hardening pass
 ; CHECK-NEXT:       MachineDominator Tree Construction
 ; CHECK-NEXT:       Machine Natural Loop Construction
 ; CHECK-NEXT:       Falkor HW Prefetch Fix Late Phase
@@ -196,6 +206,17 @@
 ; CHECK-NEXT:       Machine Optimization Remark Emitter
 ; CHECK-NEXT:       AArch64 Assembly Printer
 ; CHECK-NEXT:       Free MachineFunction
+; CHECK-NEXT: Pass Arguments:  -domtree
+; CHECK-NEXT:   FunctionPass Manager
+; CHECK-NEXT:     Dominator Tree Construction
+; CHECK-NEXT: Pass Arguments:  -assumption-cache-tracker -targetlibinfo -domtree -loops -scalar-evolution -stack-safety-local
+; CHECK-NEXT: Assumption Cache Tracker
+; CHECK-NEXT: Target Library Information
+; CHECK-NEXT:   FunctionPass Manager
+; CHECK-NEXT:     Dominator Tree Construction
+; CHECK-NEXT:     Natural Loop Information
+; CHECK-NEXT:     Scalar Evolution Analysis
+; CHECK-NEXT:     Stack Safety Local Analysis
 ; CHECK-NEXT: Pass Arguments:  -domtree
 ; CHECK-NEXT:   FunctionPass Manager
 ; CHECK-NEXT:     Dominator Tree Construction

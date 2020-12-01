@@ -163,7 +163,7 @@ BasicBlock *llvm::InsertPreheaderForLoop(Loop *L, DominatorTree *DT,
 /// if it's not already in there.  Stop predecessor traversal when we reach
 /// StopBlock.
 static void addBlockAndPredsToSet(BasicBlock *InputBB, BasicBlock *StopBlock,
-                                  std::set<BasicBlock*> &Blocks) {
+                                  SmallPtrSetImpl<BasicBlock *> &Blocks) {
   SmallVector<BasicBlock *, 8> Worklist;
   Worklist.push_back(InputBB);
   do {
@@ -171,8 +171,7 @@ static void addBlockAndPredsToSet(BasicBlock *InputBB, BasicBlock *StopBlock,
     if (Blocks.insert(BB).second && BB != StopBlock)
       // If BB is not already processed and it is not a stop block then
       // insert its predecessor in the work list
-      for (pred_iterator I = pred_begin(BB), E = pred_end(BB); I != E; ++I) {
-        BasicBlock *WBB = *I;
+      for (BasicBlock *WBB : predecessors(BB)) {
         Worklist.push_back(WBB);
       }
   } while (!Worklist.empty());
@@ -308,9 +307,8 @@ static Loop *separateNestedLoop(Loop *L, BasicBlock *Preheader,
 
   // Determine which blocks should stay in L and which should be moved out to
   // the Outer loop now.
-  std::set<BasicBlock*> BlocksInL;
-  for (pred_iterator PI=pred_begin(Header), E = pred_end(Header); PI!=E; ++PI) {
-    BasicBlock *P = *PI;
+  SmallPtrSet<BasicBlock *, 4> BlocksInL;
+  for (BasicBlock *P : predecessors(Header)) {
     if (DT->dominates(Header, P))
       addBlockAndPredsToSet(P, Header, BlocksInL);
   }
@@ -619,6 +617,7 @@ ReprocessLoop:
       if (!PreserveLCSSA || LI->replacementPreservesLCSSAForm(PN, V)) {
         PN->replaceAllUsesWith(V);
         PN->eraseFromParent();
+        Changed = true;
       }
     }
 
@@ -690,15 +689,13 @@ ReprocessLoop:
       LLVM_DEBUG(dbgs() << "LoopSimplify: Eliminating exiting block "
                         << ExitingBlock->getName() << "\n");
 
-      assert(pred_begin(ExitingBlock) == pred_end(ExitingBlock));
+      assert(pred_empty(ExitingBlock));
       Changed = true;
       LI->removeBlock(ExitingBlock);
 
       DomTreeNode *Node = DT->getNode(ExitingBlock);
-      const std::vector<DomTreeNodeBase<BasicBlock> *> &Children =
-        Node->getChildren();
-      while (!Children.empty()) {
-        DomTreeNode *Child = Children.front();
+      while (!Node->isLeaf()) {
+        DomTreeNode *Child = Node->back();
         DT->changeImmediateDominator(Child, Node->getIDom());
       }
       DT->eraseNode(ExitingBlock);
@@ -837,8 +834,8 @@ bool LoopSimplify::runOnFunction(Function &F) {
   bool PreserveLCSSA = mustPreserveAnalysisID(LCSSAID);
 
   // Simplify each loop nest in the function.
-  for (LoopInfo::iterator I = LI->begin(), E = LI->end(); I != E; ++I)
-    Changed |= simplifyLoop(*I, DT, LI, SE, AC, MSSAU.get(), PreserveLCSSA);
+  for (auto *L : *LI)
+    Changed |= simplifyLoop(L, DT, LI, SE, AC, MSSAU.get(), PreserveLCSSA);
 
 #ifndef NDEBUG
   if (PreserveLCSSA) {
@@ -867,9 +864,9 @@ PreservedAnalyses LoopSimplifyPass::run(Function &F,
 
   // Note that we don't preserve LCSSA in the new PM, if you need it run LCSSA
   // after simplifying the loops. MemorySSA is preserved if it exists.
-  for (LoopInfo::iterator I = LI->begin(), E = LI->end(); I != E; ++I)
+  for (auto *L : *LI)
     Changed |=
-        simplifyLoop(*I, DT, LI, SE, AC, MSSAU.get(), /*PreserveLCSSA*/ false);
+        simplifyLoop(L, DT, LI, SE, AC, MSSAU.get(), /*PreserveLCSSA*/ false);
 
   if (!Changed)
     return PreservedAnalyses::all();

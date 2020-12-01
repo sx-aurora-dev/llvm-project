@@ -12,13 +12,13 @@
 ; CHECK-NEXT:   call void @llvm.dbg.value(metadata i64 0, metadata !41, metadata !DIExpression(DW_OP_constu, 0, DW_OP_stack_value)), !dbg !44
 ; CHECK-NEXT: }
 
-; CHECK:      ; Function Attrs: nounwind readnone speculatable
+; CHECK:      ; Function Attrs: nofree nosync nounwind readnone speculatable willreturn
 ; CHECK-NEXT: declare void @llvm.dbg.declare(metadata, metadata, metadata) #0
 
-; CHECK:      ; Function Attrs: nounwind readnone speculatable
+; CHECK:      ; Function Attrs: nofree nosync nounwind readnone speculatable willreturn
 ; CHECK-NEXT: declare void @llvm.dbg.value(metadata, metadata, metadata) #0
 
-; CHECK:      attributes #0 = { nounwind readnone speculatable willreturn }
+; CHECK:      attributes #0 = { nofree nosync nounwind readnone speculatable willreturn }
 
 ; CHECK:      !llvm.dbg.cu = !{!0}
 ; CHECK-NEXT: !FooType = !{!28}
@@ -60,7 +60,7 @@
 ; CHECK-NEXT: !33 = !{!6, !6, !34}
 ; CHECK-NEXT: !34 = !DICompositeType(tag: DW_TAG_array_type, baseType: !6, size: 640, flags: DIFlagVector, elements: !35)
 ; CHECK-NEXT: !35 = !{!36}
-; CHECK-NEXT: !36 = !DISubrange(count: 10)
+; CHECK-NEXT: !36 = !DISubrange(count: 10, lowerBound: 0)
 ; CHECK-NEXT: !37 = !{!38, !39, !40, !41}
 ; CHECK-NEXT: !38 = !DILocalVariable(name: "a", arg: 1, scope: !31, file: !1, line: 42, type: !6)
 ; CHECK-NEXT: !39 = !DILocalVariable(name: "b", arg: 2, scope: !31, file: !1, line: 42, type: !6)

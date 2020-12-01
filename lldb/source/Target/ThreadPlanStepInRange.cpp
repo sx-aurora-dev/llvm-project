@@ -47,22 +47,6 @@ ThreadPlanStepInRange::ThreadPlanStepInRange(
                     step_out_avoids_code_without_debug_info);
 }
 
-ThreadPlanStepInRange::ThreadPlanStepInRange(
-    Thread &thread, const AddressRange &range,
-    const SymbolContext &addr_context, const char *step_into_target,
-    lldb::RunMode stop_others, LazyBool step_in_avoids_code_without_debug_info,
-    LazyBool step_out_avoids_code_without_debug_info)
-    : ThreadPlanStepRange(ThreadPlan::eKindStepInRange,
-                          "Step Range stepping in", thread, range, addr_context,
-                          stop_others),
-      ThreadPlanShouldStopHere(this), m_step_past_prologue(true),
-      m_virtual_step(false), m_step_into_target(step_into_target) {
-  SetCallbacks();
-  SetFlagsToDefault();
-  SetupAvoidNoDebug(step_in_avoids_code_without_debug_info,
-                    step_out_avoids_code_without_debug_info);
-}
-
 ThreadPlanStepInRange::~ThreadPlanStepInRange() = default;
 
 void ThreadPlanStepInRange::SetupAvoidNoDebug(
@@ -311,7 +295,7 @@ void ThreadPlanStepInRange::SetAvoidRegexp(const char *name) {
   if (m_avoid_regexp_up)
     *m_avoid_regexp_up = RegularExpression(name_ref);
   else
-    m_avoid_regexp_up.reset(new RegularExpression(name_ref));
+    m_avoid_regexp_up = std::make_unique<RegularExpression>(name_ref);
 }
 
 void ThreadPlanStepInRange::SetDefaultFlagValue(uint32_t new_value) {

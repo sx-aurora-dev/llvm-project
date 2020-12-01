@@ -148,10 +148,10 @@ static cl::opt<int> EnableGlobalISelAtO(
     cl::desc("Enable GlobalISel at or below an opt level (-1 to disable)"),
     cl::init(0));
 
-static cl::opt<bool> EnableSVEIntrinsicOpts(
-    "aarch64-sve-intrinsic-opts", cl::Hidden,
-    cl::desc("Enable SVE intrinsic opts"),
-    cl::init(true));
+static cl::opt<bool>
+    EnableSVEIntrinsicOpts("aarch64-enable-sve-intrinsic-opts", cl::Hidden,
+                           cl::desc("Enable SVE intrinsic opts"),
+                           cl::init(true));
 
 static cl::opt<bool> EnableFalkorHWPFFix("aarch64-enable-falkor-hwpf-fix",
                                          cl::init(true), cl::Hidden);
@@ -184,6 +184,8 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAArch64Target() {
   initializeAArch64SIMDInstrOptPass(*PR);
   initializeAArch64PreLegalizerCombinerPass(*PR);
   initializeAArch64PostLegalizerCombinerPass(*PR);
+  initializeAArch64PostLegalizerLoweringPass(*PR);
+  initializeAArch64PostSelectOptimizePass(*PR);
   initializeAArch64PromoteConstantPass(*PR);
   initializeAArch64RedundantCopyEliminationPass(*PR);
   initializeAArch64StorePairSuppressPass(*PR);
@@ -192,6 +194,7 @@ extern "C" LLVM_EXTERNAL_VISIBILITY void LLVMInitializeAArch64Target() {
   initializeLDTLSCleanupPass(*PR);
   initializeSVEIntrinsicOptsPass(*PR);
   initializeAArch64SpeculationHardeningPass(*PR);
+  initializeAArch64SLSHardeningPass(*PR);
   initializeAArch64StackTaggingPass(*PR);
   initializeAArch64StackTaggingPreRAPass(*PR);
 }
@@ -330,12 +333,10 @@ AArch64TargetMachine::getSubtargetImpl(const Function &F) const {
   Attribute CPUAttr = F.getFnAttribute("target-cpu");
   Attribute FSAttr = F.getFnAttribute("target-features");
 
-  std::string CPU = !CPUAttr.hasAttribute(Attribute::None)
-                        ? CPUAttr.getValueAsString().str()
-                        : TargetCPU;
-  std::string FS = !FSAttr.hasAttribute(Attribute::None)
-                       ? FSAttr.getValueAsString().str()
-                       : TargetFS;
+  std::string CPU =
+      CPUAttr.isValid() ? CPUAttr.getValueAsString().str() : TargetCPU;
+  std::string FS =
+      FSAttr.isValid() ? FSAttr.getValueAsString().str() : TargetFS;
 
   auto &I = SubtargetMap[CPU + FS];
   if (!I) {
@@ -452,7 +453,12 @@ void AArch64PassConfig::addIRPasses() {
   // determine whether it succeeded. We can exploit existing control-flow in
   // ldrex/strex loops to simplify this, but it needs tidying up.
   if (TM->getOptLevel() != CodeGenOpt::None && EnableAtomicTidy)
-    addPass(createCFGSimplificationPass(1, true, true, false, true));
+    addPass(createCFGSimplificationPass(SimplifyCFGOptions()
+                                            .forwardSwitchCondToPhi(true)
+                                            .convertSwitchToLookupTable(true)
+                                            .needCanonicalLoops(false)
+                                            .hoistCommonInsts(true)
+                                            .sinkCommonInsts(true)));
 
   // Run LoopDataPrefetch
   //
@@ -466,6 +472,9 @@ void AArch64PassConfig::addIRPasses() {
   }
 
   TargetPassConfig::addIRPasses();
+
+  addPass(createAArch64StackTaggingPass(
+      /*IsOptNone=*/TM->getOptLevel() == CodeGenOpt::None));
 
   // Match interleaved memory accesses to ldN/stN intrinsics.
   if (TM->getOptLevel() != CodeGenOpt::None) {
@@ -485,9 +494,6 @@ void AArch64PassConfig::addIRPasses() {
     // invariant.
     addPass(createLICMPass());
   }
-
-  addPass(createAArch64StackTaggingPass(/* MergeInit = */ TM->getOptLevel() !=
-                                        CodeGenOpt::None));
 
   // Add Control Flow Guard checks.
   if (TM->getTargetTriple().isOSWindows())
@@ -540,13 +546,13 @@ bool AArch64PassConfig::addInstSelector() {
 }
 
 bool AArch64PassConfig::addIRTranslator() {
-  addPass(new IRTranslator());
+  addPass(new IRTranslator(getOptLevel()));
   return false;
 }
 
 void AArch64PassConfig::addPreLegalizeMachineIR() {
   bool IsOptNone = getOptLevel() == CodeGenOpt::None;
-  addPass(createAArch64PreLegalizeCombiner(IsOptNone));
+  addPass(createAArch64PreLegalizerCombiner(IsOptNone));
 }
 
 bool AArch64PassConfig::addLegalizeMachineIR() {
@@ -555,11 +561,10 @@ bool AArch64PassConfig::addLegalizeMachineIR() {
 }
 
 void AArch64PassConfig::addPreRegBankSelect() {
-  // For now we don't add this to the pipeline for -O0. We could do in future
-  // if we split the combines into separate O0/opt groupings.
   bool IsOptNone = getOptLevel() == CodeGenOpt::None;
   if (!IsOptNone)
-    addPass(createAArch64PostLegalizeCombiner(IsOptNone));
+    addPass(createAArch64PostLegalizerCombiner(IsOptNone));
+  addPass(createAArch64PostLegalizerLowering());
 }
 
 bool AArch64PassConfig::addRegBankSelect() {
@@ -573,6 +578,8 @@ void AArch64PassConfig::addPreGlobalInstructionSelect() {
 
 bool AArch64PassConfig::addGlobalInstructionSelect() {
   addPass(new InstructionSelect());
+  if (getOptLevel() != CodeGenOpt::None)
+    addPass(createAArch64PostSelectOptimize());
   return false;
 }
 
@@ -634,6 +641,9 @@ void AArch64PassConfig::addPreSched2() {
   // FalkorHWPFFixPass to avoid recomputing dominator tree and natural loop
   // info.
   addPass(createAArch64SpeculationHardeningPass());
+
+  addPass(createAArch64IndirectThunks());
+  addPass(createAArch64SLSHardeningPass());
 
   if (TM->getOptLevel() != CodeGenOpt::None) {
     if (EnableFalkorHWPFFix)

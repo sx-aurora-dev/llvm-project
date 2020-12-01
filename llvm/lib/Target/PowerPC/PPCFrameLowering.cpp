@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "MCTargetDesc/PPCPredicates.h"
 #include "PPCFrameLowering.h"
 #include "PPCInstrBuilder.h"
 #include "PPCInstrInfo.h"
@@ -31,20 +32,12 @@ using namespace llvm;
 #define DEBUG_TYPE "framelowering"
 STATISTIC(NumPESpillVSR, "Number of spills to vector in prologue");
 STATISTIC(NumPEReloadVSR, "Number of reloads from vector in epilogue");
+STATISTIC(NumPrologProbed, "Number of prologues probed");
 
 static cl::opt<bool>
 EnablePEVectorSpills("ppc-enable-pe-vector-spills",
                      cl::desc("Enable spills in prologue to vector registers."),
                      cl::init(false), cl::Hidden);
-
-/// VRRegNo - Map from a numbered VR register to its enum value.
-///
-static const MCPhysReg VRRegNo[] = {
- PPC::V0 , PPC::V1 , PPC::V2 , PPC::V3 , PPC::V4 , PPC::V5 , PPC::V6 , PPC::V7 ,
- PPC::V8 , PPC::V9 , PPC::V10, PPC::V11, PPC::V12, PPC::V13, PPC::V14, PPC::V15,
- PPC::V16, PPC::V17, PPC::V18, PPC::V19, PPC::V20, PPC::V21, PPC::V22, PPC::V23,
- PPC::V24, PPC::V25, PPC::V26, PPC::V27, PPC::V28, PPC::V29, PPC::V30, PPC::V31
-};
 
 static unsigned computeReturnSaveOffset(const PPCSubtarget &STI) {
   if (STI.isAIXABI())
@@ -73,10 +66,12 @@ static unsigned computeLinkageSize(const PPCSubtarget &STI) {
 }
 
 static unsigned computeBasePointerSaveOffset(const PPCSubtarget &STI) {
-  // SVR4 ABI: First slot in the general register save area.
-  return STI.isPPC64()
-             ? -16U
-             : STI.getTargetMachine().isPositionIndependent() ? -12U : -8U;
+  // Third slot in the general purpose register save area.
+  if (STI.is32BitELFABI() && STI.getTargetMachine().isPositionIndependent())
+    return -12U;
+
+  // Second slot in the general purpose register save area.
+  return STI.isPPC64() ? -16U : -8U;
 }
 
 static unsigned computeCRSaveOffset(const PPCSubtarget &STI) {
@@ -96,11 +91,6 @@ PPCFrameLowering::PPCFrameLowering(const PPCSubtarget &STI)
 // With the SVR4 ABI, callee-saved registers have fixed offsets on the stack.
 const PPCFrameLowering::SpillSlot *PPCFrameLowering::getCalleeSavedSpillSlots(
     unsigned &NumEntries) const {
-  // Early exit if not using the SVR4 ABI.
-  if (!Subtarget.isSVR4ABI()) {
-    NumEntries = 0;
-    return nullptr;
-  }
 
 // Floating-point register save area offsets.
 #define CALLEE_SAVED_FPRS \
@@ -123,7 +113,8 @@ const PPCFrameLowering::SpillSlot *PPCFrameLowering::getCalleeSavedSpillSlots(
       {PPC::F15, -136},   \
       {PPC::F14, -144}
 
-// 32-bit general purpose register save area offsets.
+// 32-bit general purpose register save area offsets shared by ELF and
+// AIX. AIX has an extra CSR with r13.
 #define CALLEE_SAVED_GPRS32 \
       {PPC::R31, -4},       \
       {PPC::R30, -8},       \
@@ -183,7 +174,7 @@ const PPCFrameLowering::SpillSlot *PPCFrameLowering::getCalleeSavedSpillSlots(
   // Note that the offsets here overlap, but this is fixed up in
   // processFunctionBeforeFrameFinalized.
 
-  static const SpillSlot Offsets[] = {
+  static const SpillSlot ELFOffsets32[] = {
       CALLEE_SAVED_FPRS,
       CALLEE_SAVED_GPRS32,
 
@@ -218,172 +209,48 @@ const PPCFrameLowering::SpillSlot *PPCFrameLowering::getCalleeSavedSpillSlots(
       {PPC::S15, -136},
       {PPC::S14, -144}};
 
-  static const SpillSlot Offsets64[] = {
+  static const SpillSlot ELFOffsets64[] = {
       CALLEE_SAVED_FPRS,
       CALLEE_SAVED_GPRS64,
 
       // VRSAVE save area offset.
       {PPC::VRSAVE, -4},
-
       CALLEE_SAVED_VRS
   };
 
+  static const SpillSlot AIXOffsets32[] = {CALLEE_SAVED_FPRS,
+                                           CALLEE_SAVED_GPRS32,
+                                           // Add AIX's extra CSR.
+                                           {PPC::R13, -76},
+                                           CALLEE_SAVED_VRS};
+
+  static const SpillSlot AIXOffsets64[] = {
+      CALLEE_SAVED_FPRS, CALLEE_SAVED_GPRS64, CALLEE_SAVED_VRS};
+
+  if (Subtarget.is64BitELFABI()) {
+    NumEntries = array_lengthof(ELFOffsets64);
+    return ELFOffsets64;
+  }
+
+  if (Subtarget.is32BitELFABI()) {
+    NumEntries = array_lengthof(ELFOffsets32);
+    return ELFOffsets32;
+  }
+
+  assert(Subtarget.isAIXABI() && "Unexpected ABI.");
+
   if (Subtarget.isPPC64()) {
-    NumEntries = array_lengthof(Offsets64);
-
-    return Offsets64;
-  } else {
-    NumEntries = array_lengthof(Offsets);
-
-    return Offsets;
-  }
-}
-
-/// RemoveVRSaveCode - We have found that this function does not need any code
-/// to manipulate the VRSAVE register, even though it uses vector registers.
-/// This can happen when the only registers used are known to be live in or out
-/// of the function.  Remove all of the VRSAVE related code from the function.
-/// FIXME: The removal of the code results in a compile failure at -O0 when the
-/// function contains a function call, as the GPR containing original VRSAVE
-/// contents is spilled and reloaded around the call.  Without the prolog code,
-/// the spill instruction refers to an undefined register.  This code needs
-/// to account for all uses of that GPR.
-static void RemoveVRSaveCode(MachineInstr &MI) {
-  MachineBasicBlock *Entry = MI.getParent();
-  MachineFunction *MF = Entry->getParent();
-
-  // We know that the MTVRSAVE instruction immediately follows MI.  Remove it.
-  MachineBasicBlock::iterator MBBI = MI;
-  ++MBBI;
-  assert(MBBI != Entry->end() && MBBI->getOpcode() == PPC::MTVRSAVE);
-  MBBI->eraseFromParent();
-
-  bool RemovedAllMTVRSAVEs = true;
-  // See if we can find and remove the MTVRSAVE instruction from all of the
-  // epilog blocks.
-  for (MachineFunction::iterator I = MF->begin(), E = MF->end(); I != E; ++I) {
-    // If last instruction is a return instruction, add an epilogue
-    if (I->isReturnBlock()) {
-      bool FoundIt = false;
-      for (MBBI = I->end(); MBBI != I->begin(); ) {
-        --MBBI;
-        if (MBBI->getOpcode() == PPC::MTVRSAVE) {
-          MBBI->eraseFromParent();  // remove it.
-          FoundIt = true;
-          break;
-        }
-      }
-      RemovedAllMTVRSAVEs &= FoundIt;
-    }
+    NumEntries = array_lengthof(AIXOffsets64);
+    return AIXOffsets64;
   }
 
-  // If we found and removed all MTVRSAVE instructions, remove the read of
-  // VRSAVE as well.
-  if (RemovedAllMTVRSAVEs) {
-    MBBI = MI;
-    assert(MBBI != Entry->begin() && "UPDATE_VRSAVE is first instr in block?");
-    --MBBI;
-    assert(MBBI->getOpcode() == PPC::MFVRSAVE && "VRSAVE instrs wandered?");
-    MBBI->eraseFromParent();
-  }
-
-  // Finally, nuke the UPDATE_VRSAVE.
-  MI.eraseFromParent();
-}
-
-// HandleVRSaveUpdate - MI is the UPDATE_VRSAVE instruction introduced by the
-// instruction selector.  Based on the vector registers that have been used,
-// transform this into the appropriate ORI instruction.
-static void HandleVRSaveUpdate(MachineInstr &MI, const TargetInstrInfo &TII) {
-  MachineFunction *MF = MI.getParent()->getParent();
-  const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
-  DebugLoc dl = MI.getDebugLoc();
-
-  const MachineRegisterInfo &MRI = MF->getRegInfo();
-  unsigned UsedRegMask = 0;
-  for (unsigned i = 0; i != 32; ++i)
-    if (MRI.isPhysRegModified(VRRegNo[i]))
-      UsedRegMask |= 1 << (31-i);
-
-  // Live in and live out values already must be in the mask, so don't bother
-  // marking them.
-  for (std::pair<unsigned, unsigned> LI : MF->getRegInfo().liveins()) {
-    unsigned RegNo = TRI->getEncodingValue(LI.first);
-    if (VRRegNo[RegNo] == LI.first)        // If this really is a vector reg.
-      UsedRegMask &= ~(1 << (31-RegNo));   // Doesn't need to be marked.
-  }
-
-  // Live out registers appear as use operands on return instructions.
-  for (MachineFunction::const_iterator BI = MF->begin(), BE = MF->end();
-       UsedRegMask != 0 && BI != BE; ++BI) {
-    const MachineBasicBlock &MBB = *BI;
-    if (!MBB.isReturnBlock())
-      continue;
-    const MachineInstr &Ret = MBB.back();
-    for (unsigned I = 0, E = Ret.getNumOperands(); I != E; ++I) {
-      const MachineOperand &MO = Ret.getOperand(I);
-      if (!MO.isReg() || !PPC::VRRCRegClass.contains(MO.getReg()))
-        continue;
-      unsigned RegNo = TRI->getEncodingValue(MO.getReg());
-      UsedRegMask &= ~(1 << (31-RegNo));
-    }
-  }
-
-  // If no registers are used, turn this into a copy.
-  if (UsedRegMask == 0) {
-    // Remove all VRSAVE code.
-    RemoveVRSaveCode(MI);
-    return;
-  }
-
-  Register SrcReg = MI.getOperand(1).getReg();
-  Register DstReg = MI.getOperand(0).getReg();
-
-  if ((UsedRegMask & 0xFFFF) == UsedRegMask) {
-    if (DstReg != SrcReg)
-      BuildMI(*MI.getParent(), MI, dl, TII.get(PPC::ORI), DstReg)
-          .addReg(SrcReg)
-          .addImm(UsedRegMask);
-    else
-      BuildMI(*MI.getParent(), MI, dl, TII.get(PPC::ORI), DstReg)
-          .addReg(SrcReg, RegState::Kill)
-          .addImm(UsedRegMask);
-  } else if ((UsedRegMask & 0xFFFF0000) == UsedRegMask) {
-    if (DstReg != SrcReg)
-      BuildMI(*MI.getParent(), MI, dl, TII.get(PPC::ORIS), DstReg)
-          .addReg(SrcReg)
-          .addImm(UsedRegMask >> 16);
-    else
-      BuildMI(*MI.getParent(), MI, dl, TII.get(PPC::ORIS), DstReg)
-          .addReg(SrcReg, RegState::Kill)
-          .addImm(UsedRegMask >> 16);
-  } else {
-    if (DstReg != SrcReg)
-      BuildMI(*MI.getParent(), MI, dl, TII.get(PPC::ORIS), DstReg)
-          .addReg(SrcReg)
-          .addImm(UsedRegMask >> 16);
-    else
-      BuildMI(*MI.getParent(), MI, dl, TII.get(PPC::ORIS), DstReg)
-          .addReg(SrcReg, RegState::Kill)
-          .addImm(UsedRegMask >> 16);
-
-    BuildMI(*MI.getParent(), MI, dl, TII.get(PPC::ORI), DstReg)
-        .addReg(DstReg, RegState::Kill)
-        .addImm(UsedRegMask & 0xFFFF);
-  }
-
-  // Remove the old UPDATE_VRSAVE instruction.
-  MI.eraseFromParent();
+  NumEntries = array_lengthof(AIXOffsets32);
+  return AIXOffsets32;
 }
 
 static bool spillsCR(const MachineFunction &MF) {
   const PPCFunctionInfo *FuncInfo = MF.getInfo<PPCFunctionInfo>();
   return FuncInfo->isCRSpilled();
-}
-
-static bool spillsVRSAVE(const MachineFunction &MF) {
-  const PPCFunctionInfo *FuncInfo = MF.getInfo<PPCFunctionInfo>();
-  return FuncInfo->isVRSAVESpilled();
 }
 
 static bool hasSpills(const MachineFunction &MF) {
@@ -451,7 +318,7 @@ PPCFrameLowering::determineFrameLayout(const MachineFunction &MF,
                        !FI->mustSaveTOC() &&        // No need to save TOC.
                        !RegInfo->hasBasePointer(MF); // No special alignment.
 
-  // Note: for PPC32 SVR4ABI (Non-DarwinABI), we can still generate stackless
+  // Note: for PPC32 SVR4ABI, we can still generate stackless
   // code if all local vars are reg-allocated.
   bool FitsInRedZone = FrameSize <= Subtarget.getRedZoneSize();
 
@@ -658,6 +525,8 @@ PPCFrameLowering::findScratchRegister(MachineBasicBlock *MBB,
 // register is available, we can adjust for that by not overlapping the spill
 // code. However, if we need to realign the stack (i.e. have a base pointer)
 // and the stack frame is large, we need two scratch registers.
+// Also, stack probe requires two scratch registers, one for old sp, one for
+// large frame and large probe size.
 bool
 PPCFrameLowering::twoUniqueScratchRegsRequired(MachineBasicBlock *MBB) const {
   const PPCRegisterInfo *RegInfo = Subtarget.getRegisterInfo();
@@ -669,8 +538,10 @@ PPCFrameLowering::twoUniqueScratchRegsRequired(MachineBasicBlock *MBB) const {
   MachineFrameInfo &MFI = MF.getFrameInfo();
   Align MaxAlign = MFI.getMaxAlign();
   bool HasRedZone = Subtarget.isPPC64() || !Subtarget.isSVR4ABI();
+  const PPCTargetLowering &TLI = *Subtarget.getTargetLowering();
 
-  return (IsLargeFrame || !HasRedZone) && HasBP && MaxAlign > 1;
+  return ((IsLargeFrame || !HasRedZone) && HasBP && MaxAlign > 1) ||
+         TLI.hasInlineStackProbe(MF);
 }
 
 bool PPCFrameLowering::canUseAsPrologue(const MachineBasicBlock &MBB) const {
@@ -736,6 +607,7 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF,
   MachineFrameInfo &MFI = MF.getFrameInfo();
   const PPCInstrInfo &TII = *Subtarget.getInstrInfo();
   const PPCRegisterInfo *RegInfo = Subtarget.getRegisterInfo();
+  const PPCTargetLowering &TLI = *Subtarget.getTargetLowering();
 
   MachineModuleInfo &MMI = MF.getMMI();
   const MCRegisterInfo *MRI = MMI.getContext().getRegisterInfo();
@@ -747,24 +619,8 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF,
   bool isPPC64 = Subtarget.isPPC64();
   // Get the ABI.
   bool isSVR4ABI = Subtarget.isSVR4ABI();
-  bool isAIXABI = Subtarget.isAIXABI();
   bool isELFv2ABI = Subtarget.isELFv2ABI();
-  assert((isSVR4ABI || isAIXABI) && "Unsupported PPC ABI.");
-
-  // Scan the prolog, looking for an UPDATE_VRSAVE instruction.  If we find it,
-  // process it.
-  if (!isSVR4ABI)
-    for (unsigned i = 0; MBBI != MBB.end(); ++i, ++MBBI) {
-      if (MBBI->getOpcode() == PPC::UPDATE_VRSAVE) {
-        if (isAIXABI)
-          report_fatal_error("UPDATE_VRSAVE is unexpected on AIX.");
-        HandleVRSaveUpdate(*MBBI, TII);
-        break;
-      }
-    }
-
-  // Move MBBI back to the beginning of the prologue block.
-  MBBI = MBB.begin();
+  assert((isSVR4ABI || Subtarget.isAIXABI()) && "Unsupported PPC ABI.");
 
   // Work out frame sizes.
   unsigned FrameSize = determineFrameLayoutAndUpdate(MF);
@@ -824,9 +680,8 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF,
          "FrameSize must be >0 to save/restore the FP or LR for 32-bit SVR4.");
 
   // Using the same bool variable as below to suppress compiler warnings.
-  bool SingleScratchReg =
-    findScratchRegister(&MBB, false, twoUniqueScratchRegsRequired(&MBB),
-                        &ScratchReg, &TempReg);
+  bool SingleScratchReg = findScratchRegister(
+      &MBB, false, twoUniqueScratchRegsRequired(&MBB), &ScratchReg, &TempReg);
   assert(SingleScratchReg &&
          "Required number of registers not available in this block");
 
@@ -836,26 +691,18 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF,
 
   int FPOffset = 0;
   if (HasFP) {
-    if (isSVR4ABI) {
-      MachineFrameInfo &MFI = MF.getFrameInfo();
-      int FPIndex = FI->getFramePointerSaveIndex();
-      assert(FPIndex && "No Frame Pointer Save Slot!");
-      FPOffset = MFI.getObjectOffset(FPIndex);
-    } else {
-      FPOffset = getFramePointerSaveOffset();
-    }
+    MachineFrameInfo &MFI = MF.getFrameInfo();
+    int FPIndex = FI->getFramePointerSaveIndex();
+    assert(FPIndex && "No Frame Pointer Save Slot!");
+    FPOffset = MFI.getObjectOffset(FPIndex);
   }
 
   int BPOffset = 0;
   if (HasBP) {
-    if (isSVR4ABI) {
-      MachineFrameInfo &MFI = MF.getFrameInfo();
-      int BPIndex = FI->getBasePointerSaveIndex();
-      assert(BPIndex && "No Base Pointer Save Slot!");
-      BPOffset = MFI.getObjectOffset(BPIndex);
-    } else {
-      BPOffset = getBasePointerSaveOffset();
-    }
+    MachineFrameInfo &MFI = MF.getFrameInfo();
+    int BPIndex = FI->getBasePointerSaveIndex();
+    assert(BPIndex && "No Base Pointer Save Slot!");
+    BPOffset = MFI.getObjectOffset(BPIndex);
   }
 
   int PBPOffset = 0;
@@ -1002,58 +849,81 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF,
   // the negated frame size will be placed in ScratchReg.
   bool HasSTUX = false;
 
-  // This condition must be kept in sync with canUseAsPrologue.
-  if (HasBP && MaxAlign > 1) {
-    if (isPPC64)
-      BuildMI(MBB, MBBI, dl, TII.get(PPC::RLDICL), ScratchReg)
-          .addReg(SPReg)
-          .addImm(0)
-          .addImm(64 - Log2(MaxAlign));
-    else // PPC32...
-      BuildMI(MBB, MBBI, dl, TII.get(PPC::RLWINM), ScratchReg)
-          .addReg(SPReg)
-          .addImm(0)
-          .addImm(32 - Log2(MaxAlign))
-          .addImm(31);
-    if (!isLargeFrame) {
-      BuildMI(MBB, MBBI, dl, SubtractImmCarryingInst, ScratchReg)
-        .addReg(ScratchReg, RegState::Kill)
+  // If FrameSize <= TLI.getStackProbeSize(MF), as POWER ABI requires backchain
+  // pointer is always stored at SP, we will get a free probe due to an essential
+  // STU(X) instruction.
+  if (TLI.hasInlineStackProbe(MF) && FrameSize > TLI.getStackProbeSize(MF)) {
+    // To be consistent with other targets, a pseudo instruction is emitted and
+    // will be later expanded in `inlineStackProbe`.
+    BuildMI(MBB, MBBI, dl,
+            TII.get(isPPC64 ? PPC::PROBED_STACKALLOC_64
+                            : PPC::PROBED_STACKALLOC_32))
+        .addDef(ScratchReg)
+        .addDef(TempReg) // TempReg stores the old sp.
         .addImm(NegFrameSize);
-    } else {
-      assert(!SingleScratchReg && "Only a single scratch reg available");
-      BuildMI(MBB, MBBI, dl, LoadImmShiftedInst, TempReg)
-        .addImm(NegFrameSize >> 16);
-      BuildMI(MBB, MBBI, dl, OrImmInst, TempReg)
-        .addReg(TempReg, RegState::Kill)
-        .addImm(NegFrameSize & 0xFFFF);
-      BuildMI(MBB, MBBI, dl, SubtractCarryingInst, ScratchReg)
-        .addReg(ScratchReg, RegState::Kill)
-        .addReg(TempReg, RegState::Kill);
+    // FIXME: HasSTUX is only read if HasRedZone is not set, in such case, we
+    // update the ScratchReg to meet the assumption that ScratchReg contains
+    // the NegFrameSize. This solution is rather tricky.
+    if (!HasRedZone) {
+      BuildMI(MBB, MBBI, dl, TII.get(PPC::SUBF), ScratchReg)
+          .addReg(TempReg)
+          .addReg(SPReg);
+      HasSTUX = true;
     }
-
-    BuildMI(MBB, MBBI, dl, StoreUpdtIdxInst, SPReg)
-      .addReg(SPReg, RegState::Kill)
-      .addReg(SPReg)
-      .addReg(ScratchReg);
-    HasSTUX = true;
-
-  } else if (!isLargeFrame) {
-    BuildMI(MBB, StackUpdateLoc, dl, StoreUpdtInst, SPReg)
-      .addReg(SPReg)
-      .addImm(NegFrameSize)
-      .addReg(SPReg);
-
   } else {
-    BuildMI(MBB, MBBI, dl, LoadImmShiftedInst, ScratchReg)
-      .addImm(NegFrameSize >> 16);
-    BuildMI(MBB, MBBI, dl, OrImmInst, ScratchReg)
-      .addReg(ScratchReg, RegState::Kill)
-      .addImm(NegFrameSize & 0xFFFF);
-    BuildMI(MBB, MBBI, dl, StoreUpdtIdxInst, SPReg)
-      .addReg(SPReg, RegState::Kill)
-      .addReg(SPReg)
-      .addReg(ScratchReg);
-    HasSTUX = true;
+    // This condition must be kept in sync with canUseAsPrologue.
+    if (HasBP && MaxAlign > 1) {
+      if (isPPC64)
+        BuildMI(MBB, MBBI, dl, TII.get(PPC::RLDICL), ScratchReg)
+            .addReg(SPReg)
+            .addImm(0)
+            .addImm(64 - Log2(MaxAlign));
+      else // PPC32...
+        BuildMI(MBB, MBBI, dl, TII.get(PPC::RLWINM), ScratchReg)
+            .addReg(SPReg)
+            .addImm(0)
+            .addImm(32 - Log2(MaxAlign))
+            .addImm(31);
+      if (!isLargeFrame) {
+        BuildMI(MBB, MBBI, dl, SubtractImmCarryingInst, ScratchReg)
+            .addReg(ScratchReg, RegState::Kill)
+            .addImm(NegFrameSize);
+      } else {
+        assert(!SingleScratchReg && "Only a single scratch reg available");
+        BuildMI(MBB, MBBI, dl, LoadImmShiftedInst, TempReg)
+            .addImm(NegFrameSize >> 16);
+        BuildMI(MBB, MBBI, dl, OrImmInst, TempReg)
+            .addReg(TempReg, RegState::Kill)
+            .addImm(NegFrameSize & 0xFFFF);
+        BuildMI(MBB, MBBI, dl, SubtractCarryingInst, ScratchReg)
+            .addReg(ScratchReg, RegState::Kill)
+            .addReg(TempReg, RegState::Kill);
+      }
+
+      BuildMI(MBB, MBBI, dl, StoreUpdtIdxInst, SPReg)
+          .addReg(SPReg, RegState::Kill)
+          .addReg(SPReg)
+          .addReg(ScratchReg);
+      HasSTUX = true;
+
+    } else if (!isLargeFrame) {
+      BuildMI(MBB, StackUpdateLoc, dl, StoreUpdtInst, SPReg)
+          .addReg(SPReg)
+          .addImm(NegFrameSize)
+          .addReg(SPReg);
+
+    } else {
+      BuildMI(MBB, MBBI, dl, LoadImmShiftedInst, ScratchReg)
+          .addImm(NegFrameSize >> 16);
+      BuildMI(MBB, MBBI, dl, OrImmInst, ScratchReg)
+          .addReg(ScratchReg, RegState::Kill)
+          .addImm(NegFrameSize & 0xFFFF);
+      BuildMI(MBB, MBBI, dl, StoreUpdtIdxInst, SPReg)
+          .addReg(SPReg, RegState::Kill)
+          .addReg(SPReg)
+          .addReg(ScratchReg);
+      HasSTUX = true;
+    }
   }
 
   // Save the TOC register after the stack pointer update if a prologue TOC
@@ -1314,6 +1184,304 @@ void PPCFrameLowering::emitPrologue(MachineFunction &MF,
   }
 }
 
+void PPCFrameLowering::inlineStackProbe(MachineFunction &MF,
+                                        MachineBasicBlock &PrologMBB) const {
+  // TODO: Generate CFI instructions.
+  bool isPPC64 = Subtarget.isPPC64();
+  const PPCTargetLowering &TLI = *Subtarget.getTargetLowering();
+  const PPCInstrInfo &TII = *Subtarget.getInstrInfo();
+  MachineFrameInfo &MFI = MF.getFrameInfo();
+  MachineModuleInfo &MMI = MF.getMMI();
+  const MCRegisterInfo *MRI = MMI.getContext().getRegisterInfo();
+  // AIX assembler does not support cfi directives.
+  const bool needsCFI = MF.needsFrameMoves() && !Subtarget.isAIXABI();
+  auto StackAllocMIPos = llvm::find_if(PrologMBB, [](MachineInstr &MI) {
+    int Opc = MI.getOpcode();
+    return Opc == PPC::PROBED_STACKALLOC_64 || Opc == PPC::PROBED_STACKALLOC_32;
+  });
+  if (StackAllocMIPos == PrologMBB.end())
+    return;
+  const BasicBlock *ProbedBB = PrologMBB.getBasicBlock();
+  MachineBasicBlock *CurrentMBB = &PrologMBB;
+  DebugLoc DL = PrologMBB.findDebugLoc(StackAllocMIPos);
+  MachineInstr &MI = *StackAllocMIPos;
+  int64_t NegFrameSize = MI.getOperand(2).getImm();
+  unsigned ProbeSize = TLI.getStackProbeSize(MF);
+  int64_t NegProbeSize = -(int64_t)ProbeSize;
+  assert(isInt<32>(NegProbeSize) && "Unhandled probe size");
+  int64_t NumBlocks = NegFrameSize / NegProbeSize;
+  int64_t NegResidualSize = NegFrameSize % NegProbeSize;
+  Register SPReg = isPPC64 ? PPC::X1 : PPC::R1;
+  Register ScratchReg = MI.getOperand(0).getReg();
+  Register FPReg = MI.getOperand(1).getReg();
+  const PPCRegisterInfo *RegInfo = Subtarget.getRegisterInfo();
+  bool HasBP = RegInfo->hasBasePointer(MF);
+  Register BPReg = RegInfo->getBaseRegister(MF);
+  Align MaxAlign = MFI.getMaxAlign();
+  const MCInstrDesc &CopyInst = TII.get(isPPC64 ? PPC::OR8 : PPC::OR);
+  // Subroutines to generate .cfi_* directives.
+  auto buildDefCFAReg = [&](MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator MBBI, Register Reg) {
+    unsigned RegNum = MRI->getDwarfRegNum(Reg, true);
+    unsigned CFIIndex = MF.addFrameInst(
+        MCCFIInstruction::createDefCfaRegister(nullptr, RegNum));
+    BuildMI(MBB, MBBI, DL, TII.get(TargetOpcode::CFI_INSTRUCTION))
+        .addCFIIndex(CFIIndex);
+  };
+  auto buildDefCFA = [&](MachineBasicBlock &MBB,
+                         MachineBasicBlock::iterator MBBI, Register Reg,
+                         int Offset) {
+    unsigned RegNum = MRI->getDwarfRegNum(Reg, true);
+    unsigned CFIIndex = MBB.getParent()->addFrameInst(
+        MCCFIInstruction::cfiDefCfa(nullptr, RegNum, Offset));
+    BuildMI(MBB, MBBI, DL, TII.get(TargetOpcode::CFI_INSTRUCTION))
+        .addCFIIndex(CFIIndex);
+  };
+  // Subroutine to determine if we can use the Imm as part of d-form.
+  auto CanUseDForm = [](int64_t Imm) { return isInt<16>(Imm) && Imm % 4 == 0; };
+  // Subroutine to materialize the Imm into TempReg.
+  auto MaterializeImm = [&](MachineBasicBlock &MBB,
+                            MachineBasicBlock::iterator MBBI, int64_t Imm,
+                            Register &TempReg) {
+    assert(isInt<32>(Imm) && "Unhandled imm");
+    if (isInt<16>(Imm))
+      BuildMI(MBB, MBBI, DL, TII.get(isPPC64 ? PPC::LI8 : PPC::LI), TempReg)
+          .addImm(Imm);
+    else {
+      BuildMI(MBB, MBBI, DL, TII.get(isPPC64 ? PPC::LIS8 : PPC::LIS), TempReg)
+          .addImm(Imm >> 16);
+      BuildMI(MBB, MBBI, DL, TII.get(isPPC64 ? PPC::ORI8 : PPC::ORI), TempReg)
+          .addReg(TempReg)
+          .addImm(Imm & 0xFFFF);
+    }
+  };
+  // Subroutine to store frame pointer and decrease stack pointer by probe size.
+  auto allocateAndProbe = [&](MachineBasicBlock &MBB,
+                              MachineBasicBlock::iterator MBBI, int64_t NegSize,
+                              Register NegSizeReg, bool UseDForm,
+                              Register StoreReg) {
+    if (UseDForm)
+      BuildMI(MBB, MBBI, DL, TII.get(isPPC64 ? PPC::STDU : PPC::STWU), SPReg)
+          .addReg(StoreReg)
+          .addImm(NegSize)
+          .addReg(SPReg);
+    else
+      BuildMI(MBB, MBBI, DL, TII.get(isPPC64 ? PPC::STDUX : PPC::STWUX), SPReg)
+          .addReg(StoreReg)
+          .addReg(SPReg)
+          .addReg(NegSizeReg);
+  };
+  // Used to probe realignment gap [stackptr - (stackptr % align), stackptr)
+  // when HasBP && isPPC64. In such scenario, normally we have r0, r1, r12, r30
+  // available and r1 is already copied to r30 which is BPReg. So BPReg stores
+  // the value of stackptr.
+  // First we have to probe tail interval whose size is less than probesize,
+  // i.e., [stackptr - (stackptr % align) % probesize, stackptr). At this stage,
+  // ScratchReg stores the value of ((stackptr % align) % probesize). Then we
+  // probe each block sized probesize until stackptr meets
+  // (stackptr - (stackptr % align)). At this stage, ScratchReg is materialized
+  // as negprobesize. At both stages, TempReg stores the value of
+  // (stackptr - (stackptr % align)).
+  auto dynamicProbe = [&](MachineBasicBlock &MBB,
+                          MachineBasicBlock::iterator MBBI, Register ScratchReg,
+                          Register TempReg) {
+    assert(HasBP && isPPC64 && "Probe alignment part not available");
+    assert(isPowerOf2_64(ProbeSize) && "Probe size should be power of 2");
+    // ScratchReg = stackptr % align
+    BuildMI(MBB, MBBI, DL, TII.get(PPC::RLDICL), ScratchReg)
+        .addReg(BPReg)
+        .addImm(0)
+        .addImm(64 - Log2(MaxAlign));
+    // TempReg = stackptr - (stackptr % align)
+    BuildMI(MBB, MBBI, DL, TII.get(PPC::SUBFC8), TempReg)
+        .addReg(ScratchReg)
+        .addReg(BPReg);
+    // ScratchReg = (stackptr % align) % probesize
+    BuildMI(MBB, MBBI, DL, TII.get(PPC::RLDICL), ScratchReg)
+        .addReg(ScratchReg)
+        .addImm(0)
+        .addImm(64 - Log2(ProbeSize));
+    Register CRReg = PPC::CR0;
+    // If (stackptr % align) % probesize == 0, we should not generate probe
+    // code. Layout of output assembly kinda like:
+    // bb.0:
+    //   ...
+    //   cmpldi $scratchreg, 0
+    //   beq bb.2
+    // bb.1: # Probe tail interval
+    //   neg $scratchreg, $scratchreg
+    //   stdux $bpreg, r1, $scratchreg
+    // bb.2:
+    //   <materialize negprobesize into $scratchreg>
+    //   cmpd r1, $tempreg
+    //   beq bb.4
+    // bb.3: # Loop to probe each block
+    //   stdux $bpreg, r1, $scratchreg
+    //   cmpd r1, $tempreg
+    //   bne bb.3
+    // bb.4:
+    //   ...
+    MachineFunction::iterator MBBInsertPoint = std::next(MBB.getIterator());
+    MachineBasicBlock *ProbeResidualMBB = MF.CreateMachineBasicBlock(ProbedBB);
+    MF.insert(MBBInsertPoint, ProbeResidualMBB);
+    MachineBasicBlock *ProbeLoopPreHeaderMBB =
+        MF.CreateMachineBasicBlock(ProbedBB);
+    MF.insert(MBBInsertPoint, ProbeLoopPreHeaderMBB);
+    MachineBasicBlock *ProbeLoopBodyMBB = MF.CreateMachineBasicBlock(ProbedBB);
+    MF.insert(MBBInsertPoint, ProbeLoopBodyMBB);
+    MachineBasicBlock *ProbeExitMBB = MF.CreateMachineBasicBlock(ProbedBB);
+    MF.insert(MBBInsertPoint, ProbeExitMBB);
+    // bb.4
+    ProbeExitMBB->splice(ProbeExitMBB->end(), &MBB, MBBI, MBB.end());
+    ProbeExitMBB->transferSuccessorsAndUpdatePHIs(&MBB);
+    // bb.0
+    BuildMI(&MBB, DL, TII.get(PPC::CMPDI), CRReg).addReg(ScratchReg).addImm(0);
+    BuildMI(&MBB, DL, TII.get(PPC::BCC))
+        .addImm(PPC::PRED_EQ)
+        .addReg(CRReg)
+        .addMBB(ProbeLoopPreHeaderMBB);
+    MBB.addSuccessor(ProbeResidualMBB);
+    MBB.addSuccessor(ProbeLoopPreHeaderMBB);
+    // bb.1
+    BuildMI(ProbeResidualMBB, DL, TII.get(PPC::NEG8), ScratchReg)
+        .addReg(ScratchReg);
+    allocateAndProbe(*ProbeResidualMBB, ProbeResidualMBB->end(), 0, ScratchReg,
+                     false, BPReg);
+    ProbeResidualMBB->addSuccessor(ProbeLoopPreHeaderMBB);
+    // bb.2
+    MaterializeImm(*ProbeLoopPreHeaderMBB, ProbeLoopPreHeaderMBB->end(),
+                   NegProbeSize, ScratchReg);
+    BuildMI(ProbeLoopPreHeaderMBB, DL, TII.get(PPC::CMPD), CRReg)
+        .addReg(SPReg)
+        .addReg(TempReg);
+    BuildMI(ProbeLoopPreHeaderMBB, DL, TII.get(PPC::BCC))
+        .addImm(PPC::PRED_EQ)
+        .addReg(CRReg)
+        .addMBB(ProbeExitMBB);
+    ProbeLoopPreHeaderMBB->addSuccessor(ProbeLoopBodyMBB);
+    ProbeLoopPreHeaderMBB->addSuccessor(ProbeExitMBB);
+    // bb.3
+    allocateAndProbe(*ProbeLoopBodyMBB, ProbeLoopBodyMBB->end(), 0, ScratchReg,
+                     false, BPReg);
+    BuildMI(ProbeLoopBodyMBB, DL, TII.get(PPC::CMPD), CRReg)
+        .addReg(SPReg)
+        .addReg(TempReg);
+    BuildMI(ProbeLoopBodyMBB, DL, TII.get(PPC::BCC))
+        .addImm(PPC::PRED_NE)
+        .addReg(CRReg)
+        .addMBB(ProbeLoopBodyMBB);
+    ProbeLoopBodyMBB->addSuccessor(ProbeExitMBB);
+    ProbeLoopBodyMBB->addSuccessor(ProbeLoopBodyMBB);
+    // Update liveins.
+    recomputeLiveIns(*ProbeResidualMBB);
+    recomputeLiveIns(*ProbeLoopPreHeaderMBB);
+    recomputeLiveIns(*ProbeLoopBodyMBB);
+    recomputeLiveIns(*ProbeExitMBB);
+    return ProbeExitMBB;
+  };
+  // For case HasBP && MaxAlign > 1, we have to realign the SP by performing
+  // SP = SP - SP % MaxAlign.
+  if (HasBP && MaxAlign > 1) {
+    // FIXME: Currently only probe the gap [stackptr & alignmask, stackptr) in
+    // 64-bit mode.
+    if (isPPC64) {
+      // Use BPReg to calculate CFA.
+      if (needsCFI)
+        buildDefCFA(*CurrentMBB, {MI}, BPReg, 0);
+      // Since we have SPReg copied to BPReg at the moment, FPReg can be used as
+      // TempReg.
+      Register TempReg = FPReg;
+      CurrentMBB = dynamicProbe(*CurrentMBB, {MI}, ScratchReg, TempReg);
+      // Copy BPReg to FPReg to meet the definition of PROBED_STACKALLOC_64.
+      BuildMI(*CurrentMBB, {MI}, DL, CopyInst, FPReg)
+          .addReg(BPReg)
+          .addReg(BPReg);
+    } else {
+      // Initialize current frame pointer.
+      BuildMI(*CurrentMBB, {MI}, DL, CopyInst, FPReg)
+          .addReg(SPReg)
+          .addReg(SPReg);
+      // Use FPReg to calculate CFA.
+      if (needsCFI)
+        buildDefCFA(*CurrentMBB, {MI}, FPReg, 0);
+      BuildMI(*CurrentMBB, {MI}, DL, TII.get(PPC::RLWINM), ScratchReg)
+          .addReg(FPReg)
+          .addImm(0)
+          .addImm(32 - Log2(MaxAlign))
+          .addImm(31);
+      BuildMI(*CurrentMBB, {MI}, DL, TII.get(PPC::SUBFC), SPReg)
+          .addReg(ScratchReg)
+          .addReg(SPReg);
+    }
+  } else {
+    // Initialize current frame pointer.
+    BuildMI(*CurrentMBB, {MI}, DL, CopyInst, FPReg).addReg(SPReg).addReg(SPReg);
+    // Use FPReg to calculate CFA.
+    if (needsCFI)
+      buildDefCFA(*CurrentMBB, {MI}, FPReg, 0);
+  }
+  // Probe residual part.
+  if (NegResidualSize) {
+    bool ResidualUseDForm = CanUseDForm(NegResidualSize);
+    if (!ResidualUseDForm)
+      MaterializeImm(*CurrentMBB, {MI}, NegResidualSize, ScratchReg);
+    allocateAndProbe(*CurrentMBB, {MI}, NegResidualSize, ScratchReg,
+                     ResidualUseDForm, FPReg);
+  }
+  bool UseDForm = CanUseDForm(NegProbeSize);
+  // If number of blocks is small, just probe them directly.
+  if (NumBlocks < 3) {
+    if (!UseDForm)
+      MaterializeImm(*CurrentMBB, {MI}, NegProbeSize, ScratchReg);
+    for (int i = 0; i < NumBlocks; ++i)
+      allocateAndProbe(*CurrentMBB, {MI}, NegProbeSize, ScratchReg, UseDForm,
+                       FPReg);
+    if (needsCFI) {
+      // Restore using SPReg to calculate CFA.
+      buildDefCFAReg(*CurrentMBB, {MI}, SPReg);
+    }
+  } else {
+    // Since CTR is a volatile register and current shrinkwrap implementation
+    // won't choose an MBB in a loop as the PrologMBB, it's safe to synthesize a
+    // CTR loop to probe.
+    // Calculate trip count and stores it in CTRReg.
+    MaterializeImm(*CurrentMBB, {MI}, NumBlocks, ScratchReg);
+    BuildMI(*CurrentMBB, {MI}, DL, TII.get(isPPC64 ? PPC::MTCTR8 : PPC::MTCTR))
+        .addReg(ScratchReg, RegState::Kill);
+    if (!UseDForm)
+      MaterializeImm(*CurrentMBB, {MI}, NegProbeSize, ScratchReg);
+    // Create MBBs of the loop.
+    MachineFunction::iterator MBBInsertPoint =
+        std::next(CurrentMBB->getIterator());
+    MachineBasicBlock *LoopMBB = MF.CreateMachineBasicBlock(ProbedBB);
+    MF.insert(MBBInsertPoint, LoopMBB);
+    MachineBasicBlock *ExitMBB = MF.CreateMachineBasicBlock(ProbedBB);
+    MF.insert(MBBInsertPoint, ExitMBB);
+    // Synthesize the loop body.
+    allocateAndProbe(*LoopMBB, LoopMBB->end(), NegProbeSize, ScratchReg,
+                     UseDForm, FPReg);
+    BuildMI(LoopMBB, DL, TII.get(isPPC64 ? PPC::BDNZ8 : PPC::BDNZ))
+        .addMBB(LoopMBB);
+    LoopMBB->addSuccessor(ExitMBB);
+    LoopMBB->addSuccessor(LoopMBB);
+    // Synthesize the exit MBB.
+    ExitMBB->splice(ExitMBB->end(), CurrentMBB,
+                    std::next(MachineBasicBlock::iterator(MI)),
+                    CurrentMBB->end());
+    ExitMBB->transferSuccessorsAndUpdatePHIs(CurrentMBB);
+    CurrentMBB->addSuccessor(LoopMBB);
+    if (needsCFI) {
+      // Restore using SPReg to calculate CFA.
+      buildDefCFAReg(*ExitMBB, ExitMBB->begin(), SPReg);
+    }
+    // Update liveins.
+    recomputeLiveIns(*LoopMBB);
+    recomputeLiveIns(*ExitMBB);
+  }
+  ++NumPrologProbed;
+  MI.eraseFromParent();
+}
+
 void PPCFrameLowering::emitEpilogue(MachineFunction &MF,
                                     MachineBasicBlock &MBB) const {
   MachineBasicBlock::iterator MBBI = MBB.getFirstTerminator();
@@ -1333,8 +1501,6 @@ void PPCFrameLowering::emitEpilogue(MachineFunction &MF,
 
   // Get processor type.
   bool isPPC64 = Subtarget.isPPC64();
-  // Get the ABI.
-  bool isSVR4ABI = Subtarget.isSVR4ABI();
 
   // Check if the link register (LR) has been saved.
   PPCFunctionInfo *FI = MF.getInfo<PPCFunctionInfo>();
@@ -1382,24 +1548,16 @@ void PPCFrameLowering::emitEpilogue(MachineFunction &MF,
   SingleScratchReg = ScratchReg == TempReg;
 
   if (HasFP) {
-    if (isSVR4ABI) {
-      int FPIndex = FI->getFramePointerSaveIndex();
-      assert(FPIndex && "No Frame Pointer Save Slot!");
-      FPOffset = MFI.getObjectOffset(FPIndex);
-    } else {
-      FPOffset = getFramePointerSaveOffset();
-    }
+    int FPIndex = FI->getFramePointerSaveIndex();
+    assert(FPIndex && "No Frame Pointer Save Slot!");
+    FPOffset = MFI.getObjectOffset(FPIndex);
   }
 
   int BPOffset = 0;
   if (HasBP) {
-    if (isSVR4ABI) {
       int BPIndex = FI->getBasePointerSaveIndex();
       assert(BPIndex && "No Base Pointer Save Slot!");
       BPOffset = MFI.getObjectOffset(BPIndex);
-    } else {
-      BPOffset = getBasePointerSaveOffset();
-    }
   }
 
   int PBPOffset = 0;
@@ -1805,12 +1963,6 @@ void PPCFrameLowering::determineCalleeSaves(MachineFunction &MF,
 
 void PPCFrameLowering::processFunctionBeforeFrameFinalized(MachineFunction &MF,
                                                        RegScavenger *RS) const {
-  // Early exit if not using the SVR4 ABI.
-  if (!Subtarget.isSVR4ABI()) {
-    addScavengingSpillSlot(MF, RS);
-    return;
-  }
-
   // Get callee saved register information.
   MachineFrameInfo &MFI = MF.getFrameInfo();
   const std::vector<CalleeSavedInfo> &CSI = MFI.getCalleeSavedInfo();
@@ -1841,7 +1993,6 @@ void PPCFrameLowering::processFunctionBeforeFrameFinalized(MachineFunction &MF,
   bool HasGPSaveArea = false;
   bool HasG8SaveArea = false;
   bool HasFPSaveArea = false;
-  bool HasVRSAVESaveArea = false;
   bool HasVRSaveArea = false;
 
   SmallVector<CalleeSavedInfo, 18> GPRegs;
@@ -1881,8 +2032,6 @@ void PPCFrameLowering::processFunctionBeforeFrameFinalized(MachineFunction &MF,
     } else if (PPC::CRBITRCRegClass.contains(Reg) ||
                PPC::CRRCRegClass.contains(Reg)) {
       ; // do nothing, as we already know whether CRs are spilled
-    } else if (PPC::VRSAVERCRegClass.contains(Reg)) {
-      HasVRSAVESaveArea = true;
     } else if (PPC::VRRCRegClass.contains(Reg) ||
                PPC::SPERCRegClass.contains(Reg)) {
       // Altivec and SPE are mutually exclusive, but have the same stack
@@ -2005,23 +2154,6 @@ void PPCFrameLowering::processFunctionBeforeFrameFinalized(MachineFunction &MF,
     LowerBound -= 4; // The CR save area is always 4 bytes long.
   }
 
-  if (HasVRSAVESaveArea) {
-    // FIXME SVR4: Is it actually possible to have multiple elements in CSI
-    //             which have the VRSAVE register class?
-    // Adjust the frame index of the VRSAVE spill slot.
-    for (unsigned i = 0, e = CSI.size(); i != e; ++i) {
-      unsigned Reg = CSI[i].getReg();
-
-      if (PPC::VRSAVERCRegClass.contains(Reg)) {
-        int FI = CSI[i].getFrameIdx();
-
-        MFI.setObjectOffset(FI, LowerBound + MFI.getObjectOffset(FI));
-      }
-    }
-
-    LowerBound -= 4; // The VRSAVE save area is always 4 bytes long.
-  }
-
   // Both Altivec and SPE have the same alignment and padding requirements
   // within the stack frame.
   if (HasVRSaveArea) {
@@ -2061,24 +2193,24 @@ PPCFrameLowering::addScavengingSpillSlot(MachineFunction &MF,
   // needed alignment padding.
   unsigned StackSize = determineFrameLayout(MF, true);
   MachineFrameInfo &MFI = MF.getFrameInfo();
-  if (MFI.hasVarSizedObjects() || spillsCR(MF) || spillsVRSAVE(MF) ||
-      hasNonRISpills(MF) || (hasSpills(MF) && !isInt<16>(StackSize))) {
+  if (MFI.hasVarSizedObjects() || spillsCR(MF) || hasNonRISpills(MF) ||
+      (hasSpills(MF) && !isInt<16>(StackSize))) {
     const TargetRegisterClass &GPRC = PPC::GPRCRegClass;
     const TargetRegisterClass &G8RC = PPC::G8RCRegClass;
     const TargetRegisterClass &RC = Subtarget.isPPC64() ? G8RC : GPRC;
     const TargetRegisterInfo &TRI = *Subtarget.getRegisterInfo();
     unsigned Size = TRI.getSpillSize(RC);
-    unsigned Align = TRI.getSpillAlignment(RC);
-    RS->addScavengingFrameIndex(MFI.CreateStackObject(Size, Align, false));
+    Align Alignment = TRI.getSpillAlign(RC);
+    RS->addScavengingFrameIndex(MFI.CreateStackObject(Size, Alignment, false));
 
     // Might we have over-aligned allocas?
     bool HasAlVars =
         MFI.hasVarSizedObjects() && MFI.getMaxAlign() > getStackAlign();
 
     // These kinds of spills might need two registers.
-    if (spillsCR(MF) || spillsVRSAVE(MF) || HasAlVars)
-      RS->addScavengingFrameIndex(MFI.CreateStackObject(Size, Align, false));
-
+    if (spillsCR(MF) || HasAlVars)
+      RS->addScavengingFrameIndex(
+          MFI.CreateStackObject(Size, Alignment, false));
   }
 }
 
@@ -2153,9 +2285,6 @@ bool PPCFrameLowering::spillCalleeSavedRegisters(
 
   for (unsigned i = 0, e = CSI.size(); i != e; ++i) {
     unsigned Reg = CSI[i].getReg();
-    // VRSAVE can appear here if, for example, @llvm.eh.unwind.init() is used.
-    if (Reg == PPC::VRSAVE)
-      continue;
 
     // CR2 through CR4 are the nonvolatile CR fields.
     bool IsCRField = PPC::CR2 <= Reg && Reg <= PPC::CR4;
@@ -2320,10 +2449,6 @@ bool PPCFrameLowering::restoreCalleeSavedRegisters(
   for (unsigned i = 0, e = CSI.size(); i != e; ++i) {
     unsigned Reg = CSI[i].getReg();
 
-    // VRSAVE can appear here if, for example, @llvm.eh.unwind.init() is used.
-    if (Reg == PPC::VRSAVE)
-      continue;
-
     if ((Reg == PPC::X2 || Reg == PPC::R2) && MustSaveTOC)
       continue;
 
@@ -2406,8 +2531,6 @@ unsigned PPCFrameLowering::getFramePointerSaveOffset() const {
 }
 
 unsigned PPCFrameLowering::getBasePointerSaveOffset() const {
-  if (Subtarget.isAIXABI())
-    report_fatal_error("BasePointer is not implemented on AIX yet.");
   return BasePointerSaveOffset;
 }
 

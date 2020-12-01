@@ -267,6 +267,12 @@ DIBasicType *DIBuilder::createBasicType(StringRef Name, uint64_t SizeInBits,
                           0, Encoding, Flags);
 }
 
+DIStringType *DIBuilder::createStringType(StringRef Name, uint64_t SizeInBits) {
+  assert(!Name.empty() && "Unable to create type without name");
+  return DIStringType::get(VMContext, dwarf::DW_TAG_string_type, Name,
+                           SizeInBits, 0);
+}
+
 DIDerivedType *DIBuilder::createQualifiedType(unsigned Tag, DIType *FromTy) {
   return DIDerivedType::get(VMContext, Tag, "", nullptr, 0, nullptr, FromTy, 0,
                             0, 0, None, DINode::FlagZero);
@@ -519,12 +525,24 @@ DICompositeType *DIBuilder::createEnumerationType(
   return CTy;
 }
 
-DICompositeType *DIBuilder::createArrayType(uint64_t Size,
-                                            uint32_t AlignInBits, DIType *Ty,
-                                            DINodeArray Subscripts) {
-  auto *R = DICompositeType::get(VMContext, dwarf::DW_TAG_array_type, "",
-                                 nullptr, 0, nullptr, Ty, Size, AlignInBits, 0,
-                                 DINode::FlagZero, Subscripts, 0, nullptr);
+DICompositeType *DIBuilder::createArrayType(
+    uint64_t Size, uint32_t AlignInBits, DIType *Ty, DINodeArray Subscripts,
+    PointerUnion<DIExpression *, DIVariable *> DL,
+    PointerUnion<DIExpression *, DIVariable *> AS,
+    PointerUnion<DIExpression *, DIVariable *> AL,
+    PointerUnion<DIExpression *, DIVariable *> RK) {
+  auto *R = DICompositeType::get(
+      VMContext, dwarf::DW_TAG_array_type, "", nullptr, 0,
+      nullptr, Ty, Size, AlignInBits, 0, DINode::FlagZero,
+      Subscripts, 0, nullptr, nullptr, "", nullptr,
+      DL.is<DIExpression *>() ? (Metadata *)DL.get<DIExpression *>()
+                              : (Metadata *)DL.get<DIVariable *>(),
+      AS.is<DIExpression *>() ? (Metadata *)AS.get<DIExpression *>()
+                              : (Metadata *)AS.get<DIVariable *>(),
+      AL.is<DIExpression *>() ? (Metadata *)AL.get<DIExpression *>()
+                              : (Metadata *)AL.get<DIVariable *>(),
+      RK.is<DIExpression *>() ? (Metadata *)RK.get<DIExpression *>()
+                              : (Metadata *)RK.get<DIVariable *>());
   trackIfUnresolved(R);
   return R;
 }
@@ -625,11 +643,34 @@ DITypeRefArray DIBuilder::getOrCreateTypeArray(ArrayRef<Metadata *> Elements) {
 }
 
 DISubrange *DIBuilder::getOrCreateSubrange(int64_t Lo, int64_t Count) {
-  return DISubrange::get(VMContext, Count, Lo);
+  auto *LB = ConstantAsMetadata::get(
+      ConstantInt::getSigned(Type::getInt64Ty(VMContext), Lo));
+  auto *CountNode = ConstantAsMetadata::get(
+      ConstantInt::getSigned(Type::getInt64Ty(VMContext), Count));
+  return DISubrange::get(VMContext, CountNode, LB, nullptr, nullptr);
 }
 
 DISubrange *DIBuilder::getOrCreateSubrange(int64_t Lo, Metadata *CountNode) {
-  return DISubrange::get(VMContext, CountNode, Lo);
+  auto *LB = ConstantAsMetadata::get(
+      ConstantInt::getSigned(Type::getInt64Ty(VMContext), Lo));
+  return DISubrange::get(VMContext, CountNode, LB, nullptr, nullptr);
+}
+
+DISubrange *DIBuilder::getOrCreateSubrange(Metadata *CountNode, Metadata *LB,
+                                           Metadata *UB, Metadata *Stride) {
+  return DISubrange::get(VMContext, CountNode, LB, UB, Stride);
+}
+
+DIGenericSubrange *DIBuilder::getOrCreateGenericSubrange(
+    DIGenericSubrange::BoundType CountNode, DIGenericSubrange::BoundType LB,
+    DIGenericSubrange::BoundType UB, DIGenericSubrange::BoundType Stride) {
+  auto ConvToMetadata = [&](DIGenericSubrange::BoundType Bound) -> Metadata * {
+    return Bound.is<DIExpression *>() ? (Metadata *)Bound.get<DIExpression *>()
+                                      : (Metadata *)Bound.get<DIVariable *>();
+  };
+  return DIGenericSubrange::get(VMContext, ConvToMetadata(CountNode),
+                                ConvToMetadata(LB), ConvToMetadata(UB),
+                                ConvToMetadata(Stride));
 }
 
 static void checkGlobalVariableScope(DIScope *Context) {

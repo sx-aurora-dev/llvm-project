@@ -138,6 +138,8 @@ protected:
   PacketResult Handle_memory_read(StringExtractorGDBRemote &packet);
 
   PacketResult Handle_M(StringExtractorGDBRemote &packet);
+  PacketResult Handle__M(StringExtractorGDBRemote &packet);
+  PacketResult Handle__m(StringExtractorGDBRemote &packet);
 
   PacketResult
   Handle_qMemoryRegionInfoSupported(StringExtractorGDBRemote &packet);
@@ -161,6 +163,8 @@ protected:
   PacketResult Handle_jTraceStop(StringExtractorGDBRemote &packet);
 
   PacketResult Handle_jTraceConfigRead(StringExtractorGDBRemote &packet);
+
+  PacketResult Handle_jLLDBTraceSupportedType(StringExtractorGDBRemote &packet);
 
   PacketResult Handle_QRestoreRegisterState(StringExtractorGDBRemote &packet);
 
@@ -224,7 +228,10 @@ private:
   void StopSTDIOForwarding();
 
   // For GDBRemoteCommunicationServerLLGS only
-  DISALLOW_COPY_AND_ASSIGN(GDBRemoteCommunicationServerLLGS);
+  GDBRemoteCommunicationServerLLGS(const GDBRemoteCommunicationServerLLGS &) =
+      delete;
+  const GDBRemoteCommunicationServerLLGS &
+  operator=(const GDBRemoteCommunicationServerLLGS &) = delete;
 };
 
 } // namespace process_gdb_remote

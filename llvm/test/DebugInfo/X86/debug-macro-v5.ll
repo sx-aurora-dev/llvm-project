@@ -1,22 +1,22 @@
 ; This test checks emission of .debug_macro section when
 ; -gdwarf-5 -fdebug-macro is specified.
 
-; RUN: %llc_dwarf -dwarf-version=5 -O0 -filetype=obj < %s | llvm-dwarfdump -v - | FileCheck %s
+; RUN: llc -dwarf-version=5 -O0 -filetype=obj < %s | llvm-dwarfdump -v - | FileCheck %s
 
 ; CHECK-LABEL:  .debug_info contents:
 ; CHECK: DW_AT_macros [DW_FORM_sec_offset] (0x00000000)
 
 ; CHECK-LABEL:  .debug_macro contents:
 ; CHECK-NEXT: 0x00000000:
-; CHECK-NEXT: macro header: version = 0x0005, flags = 0x02, debug_line_offset = 0x0000
+; CHECK-NEXT: macro header: version = 0x0005, flags = 0x02, format = DWARF32, debug_line_offset = 0x00000000
 ; CHECK-NEXT: DW_MACRO_start_file - lineno: 0 filenum: 0
 ; CHECK-NEXT:   DW_MACRO_start_file - lineno: 1 filenum: 1
-; CHECK-NEXT:     DW_MACRO_define_strp - lineno: 1 macro: FOO 5
+; CHECK-NEXT:     DW_MACRO_define_strx - lineno: 1 macro: FOO 5
 ; CHECK-NEXT:   DW_MACRO_end_file
 ; CHECK-NEXT:   DW_MACRO_start_file - lineno: 2 filenum: 2
-; CHECK-NEXT:     DW_MACRO_undef_strp - lineno: 14 macro: YEA
+; CHECK-NEXT:     DW_MACRO_undef_strx - lineno: 14 macro: YEA
 ; CHECK-NEXT:   DW_MACRO_end_file
-; CHECK-NEXT:   DW_MACRO_undef_strp - lineno: 14 macro: YEA
+; CHECK-NEXT:   DW_MACRO_undef_strx - lineno: 14 macro: YEA
 ; CHECK-NEXT: DW_MACRO_end_file
 
 ; ModuleID = 'test.c'

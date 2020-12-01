@@ -90,6 +90,7 @@
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/PriorityWorklist.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallPtrSet.h"
@@ -314,6 +315,16 @@ struct CGSCCUpdateResult {
   /// for a better technique.
   SmallDenseSet<std::pair<LazyCallGraph::Node *, LazyCallGraph::SCC *>, 4>
       &InlinedInternalEdges;
+
+  /// Weak VHs to keep track of indirect calls for the purposes of detecting
+  /// devirtualization.
+  ///
+  /// This is a map to avoid having duplicate entries. If a Value is
+  /// deallocated, its corresponding WeakTrackingVH will be nulled out. When
+  /// checking if a Value is in the map or not, also check if the corresponding
+  /// WeakTrackingVH is null to avoid issues with a new Value sharing the same
+  /// address as a deallocated one.
+  SmallMapVector<Value *, WeakTrackingVH, 16> IndirectVHs;
 };
 
 /// The core module pass which does a post-order walk of the SCCs and
@@ -354,6 +365,8 @@ public:
 
   /// Runs the CGSCC pass across every SCC in the module.
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+
+  static bool isRequired() { return true; }
 
 private:
   CGSCCPassT Pass;
@@ -506,7 +519,7 @@ public:
         PassPA = Pass.run(F, FAM);
       }
 
-      PI.runAfterPass<Function>(Pass, F);
+      PI.runAfterPass<Function>(Pass, F, PassPA);
 
       // We know that the function pass couldn't have invalidated any other
       // function's analyses (that's the contract of a function pass), so
@@ -543,6 +556,8 @@ public:
     return PA;
   }
 
+  static bool isRequired() { return true; }
+
 private:
   FunctionPassT Pass;
 };
@@ -554,6 +569,10 @@ CGSCCToFunctionPassAdaptor<FunctionPassT>
 createCGSCCToFunctionPassAdaptor(FunctionPassT Pass) {
   return CGSCCToFunctionPassAdaptor<FunctionPassT>(std::move(Pass));
 }
+
+/// Checks -abort-on-max-devirt-iterations-reached to see if we should report an
+/// error.
+void maxDevirtIterationsReached();
 
 /// A helper that repeats an SCC pass each time an indirect call is refined to
 /// a direct call by that pass.
@@ -588,9 +607,6 @@ public:
     // a pointer that we can update.
     LazyCallGraph::SCC *C = &InitialC;
 
-    // Collect value handles for all of the indirect call sites.
-    SmallVector<WeakTrackingVH, 8> CallHandles;
-
     // Struct to track the counts of direct and indirect calls in each function
     // of the SCC.
     struct CallCount {
@@ -600,44 +616,46 @@ public:
 
     // Put value handles on all of the indirect calls and return the number of
     // direct calls for each function in the SCC.
-    auto ScanSCC = [](LazyCallGraph::SCC &C,
-                      SmallVectorImpl<WeakTrackingVH> &CallHandles) {
-      assert(CallHandles.empty() && "Must start with a clear set of handles.");
+    auto ScanSCC =
+        [](LazyCallGraph::SCC &C,
+           SmallMapVector<Value *, WeakTrackingVH, 16> &CallHandles) {
+          assert(CallHandles.empty() &&
+                 "Must start with a clear set of handles.");
 
-      SmallDenseMap<Function *, CallCount> CallCounts;
-      CallCount CountLocal = {0, 0};
-      for (LazyCallGraph::Node &N : C) {
-        CallCount &Count =
-            CallCounts.insert(std::make_pair(&N.getFunction(), CountLocal))
-                .first->second;
-        for (Instruction &I : instructions(N.getFunction()))
-          if (auto *CB = dyn_cast<CallBase>(&I)) {
-            if (CB->getCalledFunction()) {
-              ++Count.Direct;
-            } else {
-              ++Count.Indirect;
-              CallHandles.push_back(WeakTrackingVH(&I));
-            }
+          SmallDenseMap<Function *, CallCount> CallCounts;
+          CallCount CountLocal = {0, 0};
+          for (LazyCallGraph::Node &N : C) {
+            CallCount &Count =
+                CallCounts.insert(std::make_pair(&N.getFunction(), CountLocal))
+                    .first->second;
+            for (Instruction &I : instructions(N.getFunction()))
+              if (auto *CB = dyn_cast<CallBase>(&I)) {
+                if (CB->getCalledFunction()) {
+                  ++Count.Direct;
+                } else {
+                  ++Count.Indirect;
+                  CallHandles.insert({CB, WeakTrackingVH(CB)});
+                }
+              }
           }
-      }
 
-      return CallCounts;
-    };
+          return CallCounts;
+        };
 
+    UR.IndirectVHs.clear();
     // Populate the initial call handles and get the initial call counts.
-    auto CallCounts = ScanSCC(*C, CallHandles);
+    auto CallCounts = ScanSCC(*C, UR.IndirectVHs);
 
     for (int Iteration = 0;; ++Iteration) {
-
       if (!PI.runBeforePass<LazyCallGraph::SCC>(Pass, *C))
         continue;
 
       PreservedAnalyses PassPA = Pass.run(*C, AM, CG, UR);
 
       if (UR.InvalidatedSCCs.count(C))
-        PI.runAfterPassInvalidated<LazyCallGraph::SCC>(Pass);
+        PI.runAfterPassInvalidated<LazyCallGraph::SCC>(Pass, PassPA);
       else
-        PI.runAfterPass<LazyCallGraph::SCC>(Pass, *C);
+        PI.runAfterPass<LazyCallGraph::SCC>(Pass, *C, PassPA);
 
       // If the SCC structure has changed, bail immediately and let the outer
       // CGSCC layer handle any iteration to reflect the refined structure.
@@ -651,33 +669,23 @@ public:
       assert(C->begin() != C->end() && "Cannot have an empty SCC!");
 
       // Check whether any of the handles were devirtualized.
-      auto IsDevirtualizedHandle = [&](WeakTrackingVH &CallH) {
-        if (!CallH)
-          return false;
-        auto *CB = dyn_cast<CallBase>(CallH);
-        if (!CB)
-          return false;
-
-        // If the call is still indirect, leave it alone.
-        Function *F = CB->getCalledFunction();
-        if (!F)
-          return false;
-
-        LLVM_DEBUG(dbgs() << "Found devirtualized call from "
-                          << CB->getParent()->getParent()->getName() << " to "
-                          << F->getName() << "\n");
-
-        // We now have a direct call where previously we had an indirect call,
-        // so iterate to process this devirtualization site.
-        return true;
-      };
-      bool Devirt = llvm::any_of(CallHandles, IsDevirtualizedHandle);
+      bool Devirt = llvm::any_of(UR.IndirectVHs, [](auto &P) -> bool {
+        if (P.second) {
+          if (CallBase *CB = dyn_cast<CallBase>(P.second)) {
+            if (CB->getCalledFunction()) {
+              LLVM_DEBUG(dbgs() << "Found devirtualized call: " << *CB << "\n");
+              return true;
+            }
+          }
+        }
+        return false;
+      });
 
       // Rescan to build up a new set of handles and count how many direct
       // calls remain. If we decide to iterate, this also sets up the input to
       // the next iteration.
-      CallHandles.clear();
-      auto NewCallCounts = ScanSCC(*C, CallHandles);
+      UR.IndirectVHs.clear();
+      auto NewCallCounts = ScanSCC(*C, UR.IndirectVHs);
 
       // If we haven't found an explicit devirtualization already see if we
       // have decreased the number of indirect calls and increased the number
@@ -707,6 +715,7 @@ public:
 
       // Otherwise, if we've already hit our max, we're done.
       if (Iteration >= MaxIterations) {
+        maxDevirtIterationsReached();
         LLVM_DEBUG(
             dbgs() << "Found another devirtualization after hitting the max "
                       "number of repetitions ("
@@ -781,7 +790,8 @@ ModuleToPostOrderCGSCCPassAdaptor<CGSCCPassT>::run(Module &M,
 
   CGSCCUpdateResult UR = {
       RCWorklist, CWorklist, InvalidRefSCCSet,         InvalidSCCSet,
-      nullptr,    nullptr,   PreservedAnalyses::all(), InlinedInternalEdges};
+      nullptr,    nullptr,   PreservedAnalyses::all(), InlinedInternalEdges,
+      {}};
 
   // Request PassInstrumentation from analysis manager, will use it to run
   // instrumenting callbacks for the passes later.
@@ -820,6 +830,12 @@ ModuleToPostOrderCGSCCPassAdaptor<CGSCCPassT>::run(Module &M,
       LLVM_DEBUG(dbgs() << "Running an SCC pass across the RefSCC: " << *RC
                         << "\n");
 
+      // The top of the worklist may *also* be the same SCC we just ran over
+      // (and invalidated for). Keep track of that last SCC we processed due
+      // to SCC update to avoid redundant processing when an SCC is both just
+      // updated itself and at the top of the worklist.
+      LazyCallGraph::SCC *LastUpdatedC = nullptr;
+
       // Push the initial SCCs in reverse post-order as we'll pop off the
       // back and so see this in post-order.
       for (LazyCallGraph::SCC &C : llvm::reverse(*RC))
@@ -833,6 +849,10 @@ ModuleToPostOrderCGSCCPassAdaptor<CGSCCPassT>::run(Module &M,
         // scenarios here.
         if (InvalidSCCSet.count(C)) {
           LLVM_DEBUG(dbgs() << "Skipping an invalid SCC...\n");
+          continue;
+        }
+        if (LastUpdatedC == C) {
+          LLVM_DEBUG(dbgs() << "Skipping redundant run on SCC: " << *C << "\n");
           continue;
         }
         if (&C->getOuterRefSCC() != RC) {
@@ -863,11 +883,6 @@ ModuleToPostOrderCGSCCPassAdaptor<CGSCCPassT>::run(Module &M,
         // invalidate the analyses for any SCCs other than themselves which
         // are mutated. However, that seems to lose the robustness of the
         // pass-manager driven invalidation scheme.
-        //
-        // FIXME: This is redundant in one case -- the top of the worklist may
-        // *also* be the same SCC we just ran over (and invalidated for). In
-        // that case, we'll end up doing a redundant invalidation here as
-        // a consequence.
         CGAM.invalidate(*C, UR.CrossSCCPA);
 
         do {
@@ -877,6 +892,7 @@ ModuleToPostOrderCGSCCPassAdaptor<CGSCCPassT>::run(Module &M,
           assert(&C->getOuterRefSCC() == RC &&
                  "Processing an SCC in a different RefSCC!");
 
+          LastUpdatedC = UR.UpdatedC;
           UR.UpdatedRC = nullptr;
           UR.UpdatedC = nullptr;
 
@@ -893,9 +909,9 @@ ModuleToPostOrderCGSCCPassAdaptor<CGSCCPassT>::run(Module &M,
           }
 
           if (UR.InvalidatedSCCs.count(C))
-            PI.runAfterPassInvalidated<LazyCallGraph::SCC>(Pass);
+            PI.runAfterPassInvalidated<LazyCallGraph::SCC>(Pass, PassPA);
           else
-            PI.runAfterPass<LazyCallGraph::SCC>(Pass, *C);
+            PI.runAfterPass<LazyCallGraph::SCC>(Pass, *C, PassPA);
 
           // Update the SCC and RefSCC if necessary.
           C = UR.UpdatedC ? UR.UpdatedC : C;

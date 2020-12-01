@@ -9,10 +9,13 @@
 #ifndef MLIR_PASS_PASSMANAGER_H
 #define MLIR_PASS_PASSMANAGER_H
 
+#include "mlir/IR/Dialect.h"
+#include "mlir/IR/OperationSupport.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/iterator.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include <functional>
 #include <vector>
@@ -23,9 +26,9 @@ class Any;
 
 namespace mlir {
 class AnalysisManager;
+class Identifier;
 class MLIRContext;
 class ModuleOp;
-class OperationName;
 class Operation;
 class Pass;
 class PassInstrumentation;
@@ -33,6 +36,7 @@ class PassInstrumentor;
 
 namespace detail {
 struct OpPassManagerImpl;
+struct PassExecutionState;
 } // end namespace detail
 
 //===----------------------------------------------------------------------===//
@@ -44,6 +48,9 @@ struct OpPassManagerImpl;
 /// other OpPassManagers or the top-level PassManager.
 class OpPassManager {
 public:
+  enum class Nesting { Implicit, Explicit };
+  OpPassManager(Identifier name, Nesting nesting);
+  OpPassManager(StringRef name, Nesting nesting);
   OpPassManager(OpPassManager &&rhs);
   OpPassManager(const OpPassManager &rhs);
   ~OpPassManager();
@@ -51,17 +58,22 @@ public:
 
   /// Iterator over the passes in this pass manager.
   using pass_iterator =
-      llvm::pointee_iterator<std::vector<std::unique_ptr<Pass>>::iterator>;
+      llvm::pointee_iterator<MutableArrayRef<std::unique_ptr<Pass>>::iterator>;
   pass_iterator begin();
   pass_iterator end();
   iterator_range<pass_iterator> getPasses() { return {begin(), end()}; }
 
-  /// Run the held passes over the given operation.
-  LogicalResult run(Operation *op, AnalysisManager am);
+  using const_pass_iterator =
+      llvm::pointee_iterator<ArrayRef<std::unique_ptr<Pass>>::const_iterator>;
+  const_pass_iterator begin() const;
+  const_pass_iterator end() const;
+  iterator_range<const_pass_iterator> getPasses() const {
+    return {begin(), end()};
+  }
 
   /// Nest a new operation pass manager for the given operation kind under this
   /// pass manager.
-  OpPassManager &nest(const OperationName &nestedName);
+  OpPassManager &nest(Identifier nestedName);
   OpPassManager &nest(StringRef nestedName);
   template <typename OpT> OpPassManager &nest() {
     return nest(OpT::getOperationName());
@@ -80,11 +92,11 @@ public:
   /// Returns the number of passes held by this manager.
   size_t size() const;
 
-  /// Return an instance of the context.
-  MLIRContext *getContext() const;
+  /// Return the operation name that this pass manager operates on.
+  Identifier getOpName(MLIRContext &context) const;
 
   /// Return the operation name that this pass manager operates on.
-  const OperationName &getOpName() const;
+  StringRef getOpName() const;
 
   /// Returns the internal implementation instance.
   detail::OpPassManagerImpl &getImpl();
@@ -95,17 +107,32 @@ public:
   /// the correctness of per-pass overrides of Pass::printAsTextualPipeline.
   void printAsTextualPipeline(raw_ostream &os);
 
+  /// Raw dump of the pass manager to llvm::errs().
+  void dump();
+
   /// Merge the pass statistics of this class into 'other'.
   void mergeStatisticsInto(OpPassManager &other);
 
-private:
-  OpPassManager(OperationName name, bool verifyPasses);
+  /// Register dependent dialects for the current pass manager.
+  /// This is forwarding to every pass in this PassManager, see the
+  /// documentation for the same method on the Pass class.
+  void getDependentDialects(DialectRegistry &dialects) const;
 
+  /// Enable or disable the implicit nesting on this particular PassManager.
+  /// This will also apply to any newly nested PassManager built from this
+  /// instance.
+  void setNesting(Nesting nesting);
+
+  /// Return the current nesting mode.
+  Nesting getNesting();
+
+private:
   /// A pointer to an internal implementation instance.
   std::unique_ptr<detail::OpPassManagerImpl> impl;
 
   /// Allow access to the constructor.
   friend class PassManager;
+  friend class Pass;
 
   /// Allow access.
   friend detail::OpPassManagerImpl;
@@ -131,13 +158,15 @@ enum class PassDisplayMode {
 /// The main pass manager and pipeline builder.
 class PassManager : public OpPassManager {
 public:
-  // If verifyPasses is true, the verifier is run after each pass.
-  PassManager(MLIRContext *ctx, bool verifyPasses = true);
+  PassManager(MLIRContext *ctx, Nesting nesting = Nesting::Explicit);
   ~PassManager();
 
   /// Run the passes within this manager on the provided module.
   LLVM_NODISCARD
   LogicalResult run(ModuleOp module);
+
+  /// Return an instance of the context.
+  MLIRContext *getContext() const { return context; }
 
   /// Enable support for the pass manager to generate a reproducer on the event
   /// of a crash or a pass failure. `outputFile` is a .mlir filename used to
@@ -146,6 +175,9 @@ public:
   /// smallest pipeline.
   void enableCrashReproducerGeneration(StringRef outputFile,
                                        bool genLocalReproducer = false);
+
+  /// Runs the verifier after each individual pass.
+  void enableVerifier(bool enabled = true);
 
   //===--------------------------------------------------------------------===//
   // Instrumentations
@@ -171,8 +203,11 @@ public:
     ///   pass, in the case of a non-failure, we should first check if any
     ///   potential mutations were made. This allows for reducing the number of
     ///   logs that don't contain meaningful changes.
-    explicit IRPrinterConfig(bool printModuleScope = false,
-                             bool printAfterOnlyOnChange = false);
+    /// * 'opPrintingFlags' sets up the printing flags to use when printing the
+    ///   IR.
+    explicit IRPrinterConfig(
+        bool printModuleScope = false, bool printAfterOnlyOnChange = false,
+        OpPrintingFlags opPrintingFlags = OpPrintingFlags());
     virtual ~IRPrinterConfig();
 
     /// A hook that may be overridden by a derived config that checks if the IR
@@ -196,6 +231,9 @@ public:
     /// "changed".
     bool shouldPrintAfterOnlyOnChange() const { return printAfterOnlyOnChange; }
 
+    /// Returns the printing flags to be used to print the IR.
+    OpPrintingFlags getOpPrintingFlags() const { return opPrintingFlags; }
+
   private:
     /// A flag that indicates if the IR should be printed at module scope.
     bool printModuleScope;
@@ -203,6 +241,9 @@ public:
     /// A flag that indicates that the IR after a pass should only be printed if
     /// a change is detected.
     bool printAfterOnlyOnChange;
+
+    /// Flags to control printing behavior.
+    OpPrintingFlags opPrintingFlags;
   };
 
   /// Add an instrumentation to print the IR before and after pass execution,
@@ -219,11 +260,17 @@ public:
   /// * 'printAfterOnlyOnChange' signals that when printing the IR after a
   ///   pass, in the case of a non-failure, we should first check if any
   ///   potential mutations were made.
+  /// * 'opPrintingFlags' sets up the printing flags to use when printing the
+  ///   IR.
   /// * 'out' corresponds to the stream to output the printed IR to.
   void enableIRPrinting(
-      std::function<bool(Pass *, Operation *)> shouldPrintBeforePass,
-      std::function<bool(Pass *, Operation *)> shouldPrintAfterPass,
-      bool printModuleScope, bool printAfterOnlyOnChange, raw_ostream &out);
+      std::function<bool(Pass *, Operation *)> shouldPrintBeforePass =
+          [](Pass *, Operation *) { return true; },
+      std::function<bool(Pass *, Operation *)> shouldPrintAfterPass =
+          [](Pass *, Operation *) { return true; },
+      bool printModuleScope = true, bool printAfterOnlyOnChange = true,
+      raw_ostream &out = llvm::errs(),
+      OpPrintingFlags opPrintingFlags = OpPrintingFlags());
 
   //===--------------------------------------------------------------------===//
   // Pass Timing
@@ -277,6 +324,9 @@ private:
   runWithCrashRecovery(MutableArrayRef<std::unique_ptr<Pass>> passes,
                        ModuleOp module, AnalysisManager am);
 
+  /// Context this PassManager was initialized with.
+  MLIRContext *context;
+
   /// Flag that specifies if pass statistics should be dumped.
   Optional<PassDisplayMode> passStatisticsMode;
 
@@ -291,6 +341,9 @@ private:
 
   /// Flag that specifies if the generated crash reproducer should be local.
   bool localReproducer : 1;
+
+  /// A flag that indicates if the IR should be verified in between passes.
+  bool verifyPasses : 1;
 };
 
 /// Register a set of useful command-line options that can be used to configure

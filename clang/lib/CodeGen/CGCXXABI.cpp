@@ -156,6 +156,8 @@ void CGCXXABI::setCXXABIThisValue(CodeGenFunction &CGF, llvm::Value *ThisPtr) {
 
 void CGCXXABI::EmitReturnFromThunk(CodeGenFunction &CGF,
                                    RValue RV, QualType ResultType) {
+  assert(!CGF.hasAggregateEvaluationKind(ResultType) &&
+         "cannot handle aggregates");
   CGF.EmitReturnOfRValue(RV, ResultType);
 }
 
@@ -247,28 +249,6 @@ llvm::Constant *CGCXXABI::getMemberPointerAdjustment(const CastExpr *E) {
   return CGM.GetNonVirtualBaseClassOffset(derivedClass,
                                           E->path_begin(),
                                           E->path_end());
-}
-
-CharUnits CGCXXABI::getMemberPointerPathAdjustment(const APValue &MP) {
-  // TODO: Store base specifiers in APValue member pointer paths so we can
-  // easily reuse CGM.GetNonVirtualBaseClassOffset().
-  const ValueDecl *MPD = MP.getMemberPointerDecl();
-  CharUnits ThisAdjustment = CharUnits::Zero();
-  ArrayRef<const CXXRecordDecl*> Path = MP.getMemberPointerPath();
-  bool DerivedMember = MP.isMemberPointerToDerivedMember();
-  const CXXRecordDecl *RD = cast<CXXRecordDecl>(MPD->getDeclContext());
-  for (unsigned I = 0, N = Path.size(); I != N; ++I) {
-    const CXXRecordDecl *Base = RD;
-    const CXXRecordDecl *Derived = Path[I];
-    if (DerivedMember)
-      std::swap(Base, Derived);
-    ThisAdjustment +=
-      getContext().getASTRecordLayout(Derived).getBaseClassOffset(Base);
-    RD = Path[I];
-  }
-  if (DerivedMember)
-    ThisAdjustment = -ThisAdjustment;
-  return ThisAdjustment;
 }
 
 llvm::BasicBlock *

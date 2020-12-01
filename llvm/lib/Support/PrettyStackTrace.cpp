@@ -25,6 +25,7 @@
 #include <cassert>
 #include <cstdarg>
 #include <cstdio>
+#include <cstring>
 #include <tuple>
 
 #ifdef HAVE_CRASHREPORTERCLIENT_H
@@ -32,6 +33,10 @@
 #endif
 
 using namespace llvm;
+
+static const char *BugReportMsg =
+    "PLEASE submit a bug report to " BUG_REPORT_URL
+    " and include the crash backtrace.\n";
 
 // If backtrace support is not enabled, compile out support for pretty stack
 // traces.  This has the secondary effect of not requiring thread local storage
@@ -142,10 +147,6 @@ using CrashHandlerStringStorage =
 static CrashHandlerStringStorage crashHandlerStringStorage;
 #endif
 
-static const char *BugReportMsg =
-    "PLEASE submit a bug report to " BUG_REPORT_URL
-    " and include the crash backtrace.\n";
-
 /// This callback is run if a fatal signal is delivered to the process, it
 /// prints the pretty stack trace.
 static void CrashHandler(void *) {
@@ -203,9 +204,11 @@ static void printForSigInfoIfNeeded() {
 #endif // ENABLE_BACKTRACES
 
 void llvm::setBugReportMsg(const char *Msg) {
-#if ENABLE_BACKTRACES
   BugReportMsg = Msg;
-#endif
+}
+
+const char *llvm::getBugReportMsg() {
+  return BugReportMsg;
 }
 
 PrettyStackTraceEntry::PrettyStackTraceEntry() {
@@ -251,8 +254,16 @@ void PrettyStackTraceFormat::print(raw_ostream &OS) const { OS << Str << "\n"; }
 void PrettyStackTraceProgram::print(raw_ostream &OS) const {
   OS << "Program arguments: ";
   // Print the argument list.
-  for (unsigned i = 0, e = ArgC; i != e; ++i)
-    OS << ArgV[i] << ' ';
+  for (int I = 0; I < ArgC; ++I) {
+    const bool HaveSpace = ::strchr(ArgV[I], ' ');
+    if (I)
+      OS << ' ';
+    if (HaveSpace)
+      OS << '"';
+    OS.write_escaped(ArgV[I]);
+    if (HaveSpace)
+      OS << '"';
+  }
   OS << '\n';
 }
 

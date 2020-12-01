@@ -54,9 +54,9 @@ static cl::opt<int>
                      cl::ZeroOrMore,
                      cl::desc("Default amount of inlining to perform"));
 
-static cl::opt<bool> PrintDebugInstructionDeltas(
-    "print-instruction-deltas", cl::Hidden, cl::init(false),
-    cl::desc("Prints deltas of cost and threshold per instruction"));
+static cl::opt<bool> PrintInstructionComments(
+    "print-instruction-comments", cl::Hidden, cl::init(false),
+    cl::desc("Prints comments for instruction based on inline cost analysis"));
 
 static cl::opt<int> InlineThreshold(
     "inline-threshold", cl::Hidden, cl::init(225), cl::ZeroOrMore,
@@ -110,6 +110,10 @@ static cl::opt<bool> InlineCallerSupersetNoBuiltin(
     cl::desc("Allow inlining when caller has a superset of callee's nobuiltin "
              "attributes."));
 
+static cl::opt<bool> DisableGEPConstOperand(
+    "disable-gep-const-evaluation", cl::Hidden, cl::init(false),
+    cl::desc("Disables evaluation of GetElementPtr with constant operands"));
+
 namespace {
 class InlineCostCallAnalyzer;
 
@@ -128,14 +132,14 @@ struct InstructionCostDetail {
   bool hasThresholdChanged() const { return ThresholdAfter != ThresholdBefore; }
 };
 
-class CostAnnotationWriter : public AssemblyAnnotationWriter {
-public:
-  // This DenseMap stores the delta change in cost and threshold after
-  // accounting for the given instruction.
-  DenseMap<const Instruction *, InstructionCostDetail> CostThresholdMap;
+class InlineCostAnnotationWriter : public AssemblyAnnotationWriter {
+private:
+  InlineCostCallAnalyzer *const ICCA;
 
+public:
+  InlineCostAnnotationWriter(InlineCostCallAnalyzer *ICCA) : ICCA(ICCA) {}
   virtual void emitInstructionAnnot(const Instruction *I,
-                                    formatted_raw_ostream &OS);
+                                    formatted_raw_ostream &OS) override;
 };
 
 /// Carry out call site analysis, in order to evaluate inlinability.
@@ -402,6 +406,12 @@ public:
 
   InlineResult analyze();
 
+  Optional<Constant*> getSimplifiedValue(Instruction *I) {
+    if (SimplifiedValues.find(I) != SimplifiedValues.end())
+      return SimplifiedValues[I];
+    return None;
+  }
+
   // Keep a bunch of stats about the cost savings found so we can print them
   // out when debugging.
   unsigned NumConstantArgs = 0;
@@ -428,6 +438,11 @@ class InlineCostCallAnalyzer final : public CallAnalyzer {
 
   /// Tunable parameters that control the analysis.
   const InlineParams &Params;
+
+  // This DenseMap stores the delta change in cost and threshold after
+  // accounting for the given instruction. The map is filled only with the
+  // flag PrintInstructionComments on.
+  DenseMap<const Instruction *, InstructionCostDetail> InstructionCostDetailMap;
 
   /// Upper bound for the inlining cost. Bonuses are being applied to account
   /// for speculative "expected profit" of the inlining decision.
@@ -598,19 +613,19 @@ class InlineCostCallAnalyzer final : public CallAnalyzer {
   void onInstructionAnalysisStart(const Instruction *I) override {
     // This function is called to store the initial cost of inlining before
     // the given instruction was assessed.
-    if (!PrintDebugInstructionDeltas)
+    if (!PrintInstructionComments)
       return;
-    Writer.CostThresholdMap[I].CostBefore = Cost;
-    Writer.CostThresholdMap[I].ThresholdBefore = Threshold;
+    InstructionCostDetailMap[I].CostBefore = Cost;
+    InstructionCostDetailMap[I].ThresholdBefore = Threshold;
   }
 
   void onInstructionAnalysisFinish(const Instruction *I) override {
     // This function is called to find new values of cost and threshold after
     // the instruction has been assessed.
-    if (!PrintDebugInstructionDeltas)
+    if (!PrintInstructionComments)
       return;
-    Writer.CostThresholdMap[I].CostAfter = Cost;
-    Writer.CostThresholdMap[I].ThresholdAfter = Threshold;
+    InstructionCostDetailMap[I].CostAfter = Cost;
+    InstructionCostDetailMap[I].ThresholdAfter = Threshold;
   }
 
   InlineResult finalizeAnalysis() override {
@@ -713,12 +728,23 @@ public:
         ComputeFullInlineCost(OptComputeFullInlineCost ||
                               Params.ComputeFullInlineCost || ORE),
         Params(Params), Threshold(Params.DefaultThreshold),
-        BoostIndirectCalls(BoostIndirect), IgnoreThreshold(IgnoreThreshold) {}
+        BoostIndirectCalls(BoostIndirect), IgnoreThreshold(IgnoreThreshold),
+        Writer(this) {}
 
-  /// Annotation Writer for cost annotation
-  CostAnnotationWriter Writer;
+  /// Annotation Writer for instruction details
+  InlineCostAnnotationWriter Writer;
 
   void dump();
+
+  // Prints the same analysis as dump(), but its definition is not dependent
+  // on the build.
+  void print();
+
+  Optional<InstructionCostDetail> getCostDetails(const Instruction *I) {
+    if (InstructionCostDetailMap.find(I) != InstructionCostDetailMap.end())
+      return InstructionCostDetailMap[I];
+    return None;
+  }
 
   virtual ~InlineCostCallAnalyzer() {}
   int getThreshold() { return Threshold; }
@@ -737,23 +763,28 @@ void CallAnalyzer::disableSROAForArg(AllocaInst *SROAArg) {
   disableLoadElimination();
 }
 
-void CostAnnotationWriter::emitInstructionAnnot(const Instruction *I,
+void InlineCostAnnotationWriter::emitInstructionAnnot(const Instruction *I,
                                                 formatted_raw_ostream &OS) {
   // The cost of inlining of the given instruction is printed always.
   // The threshold delta is printed only when it is non-zero. It happens
   // when we decided to give a bonus at a particular instruction.
-  if (CostThresholdMap.count(I) == 0) {
-    OS << "; No analysis for the instruction\n";
-    return;
+  Optional<InstructionCostDetail> Record = ICCA->getCostDetails(I);
+  if (!Record)
+    OS << "; No analysis for the instruction";
+  else {
+    OS << "; cost before = " << Record->CostBefore
+       << ", cost after = " << Record->CostAfter
+       << ", threshold before = " << Record->ThresholdBefore
+       << ", threshold after = " << Record->ThresholdAfter << ", ";
+    OS << "cost delta = " << Record->getCostDelta();
+    if (Record->hasThresholdChanged())
+      OS << ", threshold delta = " << Record->getThresholdDelta();
   }
-  const auto &Record = CostThresholdMap[I];
-  OS << "; cost before = " << Record.CostBefore
-     << ", cost after = " << Record.CostAfter
-     << ", threshold before = " << Record.ThresholdBefore
-     << ", threshold after = " << Record.ThresholdAfter << ", ";
-  OS << "cost delta = " << Record.getCostDelta();
-  if (Record.hasThresholdChanged())
-    OS << ", threshold delta = " << Record.getThresholdDelta();
+  auto C = ICCA->getSimplifiedValue(const_cast<Instruction *>(I));
+  if (C) {
+    OS << ", simplified to ";
+    C.getValue()->print(OS, true);
+  }
   OS << "\n";
 }
 
@@ -810,11 +841,11 @@ bool CallAnalyzer::accumulateGEPOffset(GEPOperator &GEP, APInt &Offset) {
 bool CallAnalyzer::isGEPFree(GetElementPtrInst &GEP) {
   SmallVector<Value *, 4> Operands;
   Operands.push_back(GEP.getOperand(0));
-  for (User::op_iterator I = GEP.idx_begin(), E = GEP.idx_end(); I != E; ++I)
-    if (Constant *SimpleOp = SimplifiedValues.lookup(*I))
+  for (const Use &Op : GEP.indices())
+    if (Constant *SimpleOp = SimplifiedValues.lookup(Op))
       Operands.push_back(SimpleOp);
     else
-      Operands.push_back(*I);
+      Operands.push_back(Op);
   return TargetTransformInfo::TCC_Free ==
          TTI.getUserCost(&GEP, Operands,
                          TargetTransformInfo::TCK_SizeAndLatency);
@@ -826,10 +857,22 @@ bool CallAnalyzer::visitAlloca(AllocaInst &I) {
   if (I.isArrayAllocation()) {
     Constant *Size = SimplifiedValues.lookup(I.getArraySize());
     if (auto *AllocSize = dyn_cast_or_null<ConstantInt>(Size)) {
+      // Sometimes a dynamic alloca could be converted into a static alloca
+      // after this constant prop, and become a huge static alloca on an
+      // unconditional CFG path. Avoid inlining if this is going to happen above
+      // a threshold.
+      // FIXME: If the threshold is removed or lowered too much, we could end up
+      // being too pessimistic and prevent inlining non-problematic code. This
+      // could result in unintended perf regressions. A better overall strategy
+      // is needed to track stack usage during inlining.
       Type *Ty = I.getAllocatedType();
       AllocatedSize = SaturatingMultiplyAdd(
-          AllocSize->getLimitedValue(), DL.getTypeAllocSize(Ty).getFixedSize(),
+          AllocSize->getLimitedValue(), DL.getTypeAllocSize(Ty).getKnownMinSize(),
           AllocatedSize);
+      if (AllocatedSize > InlineConstants::MaxSimplifiedDynamicAllocaToInline) {
+        HasDynamicAlloca = true;
+        return false;
+      }
       return Base::visitAlloca(I);
     }
   }
@@ -838,7 +881,7 @@ bool CallAnalyzer::visitAlloca(AllocaInst &I) {
   if (I.isStaticAlloca()) {
     Type *Ty = I.getAllocatedType();
     AllocatedSize =
-        SaturatingAdd(DL.getTypeAllocSize(Ty).getFixedSize(), AllocatedSize);
+        SaturatingAdd(DL.getTypeAllocSize(Ty).getKnownMinSize(), AllocatedSize);
   }
 
   // We will happily inline static alloca instructions.
@@ -974,11 +1017,21 @@ bool CallAnalyzer::visitGetElementPtr(GetElementPtrInst &I) {
 
   // Lambda to check whether a GEP's indices are all constant.
   auto IsGEPOffsetConstant = [&](GetElementPtrInst &GEP) {
-    for (User::op_iterator I = GEP.idx_begin(), E = GEP.idx_end(); I != E; ++I)
-      if (!isa<Constant>(*I) && !SimplifiedValues.lookup(*I))
+    for (const Use &Op : GEP.indices())
+      if (!isa<Constant>(Op) && !SimplifiedValues.lookup(Op))
         return false;
     return true;
   };
+
+  if (!DisableGEPConstOperand)
+    if (simplifyInstruction(I, [&](SmallVectorImpl<Constant *> &COps) {
+        SmallVector<Constant *, 2> Indices;
+        for (unsigned int Index = 1 ; Index < COps.size() ; ++Index)
+            Indices.push_back(COps[Index]);
+        return ConstantExpr::getGetElementPtr(I.getSourceElementType(), COps[0],
+                                              Indices, I.isInBounds());
+        }))
+      return true;
 
   if ((I.isInBounds() && canFoldInboundsGEP(I)) || IsGEPOffsetConstant(I)) {
     if (SROAArg)
@@ -1048,7 +1101,7 @@ bool CallAnalyzer::visitPtrToInt(PtrToIntInst &I) {
   // integer is large enough to represent the pointer.
   unsigned IntegerSize = I.getType()->getScalarSizeInBits();
   unsigned AS = I.getOperand(0)->getType()->getPointerAddressSpace();
-  if (IntegerSize >= DL.getPointerSizeInBits(AS)) {
+  if (IntegerSize == DL.getPointerSizeInBits(AS)) {
     std::pair<Value *, APInt> BaseAndOffset =
         ConstantOffsetPtrs.lookup(I.getOperand(0));
     if (BaseAndOffset.first)
@@ -1101,7 +1154,8 @@ bool CallAnalyzer::visitCastInst(CastInst &I) {
       }))
     return true;
 
-  // Disable SROA in the face of arbitrary casts we don't whitelist elsewhere.
+  // Disable SROA in the face of arbitrary casts we don't explicitly list
+  // elsewhere.
   disableSROA(I.getOperand(0));
 
   // If this is a floating-point cast, and the target says this operation
@@ -1830,8 +1884,8 @@ bool CallAnalyzer::visitInstruction(Instruction &I) {
 
   // We found something we don't understand or can't handle. Mark any SROA-able
   // values in the operand list as no longer viable.
-  for (User::op_iterator OI = I.op_begin(), OE = I.op_end(); OI != OE; ++OI)
-    disableSROA(*OI);
+  for (const Use &Op : I.operands())
+    disableSROA(Op);
 
   return false;
 }
@@ -1846,7 +1900,7 @@ bool CallAnalyzer::visitInstruction(Instruction &I) {
 InlineResult
 CallAnalyzer::analyzeBlock(BasicBlock *BB,
                            SmallPtrSetImpl<const Value *> &EphValues) {
-  for (BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E; ++I) {
+  for (Instruction &I : *BB) {
     // FIXME: Currently, the number of instructions in a function regardless of
     // our ability to simplify them during inline to constants or dead code,
     // are actually used by the vector bonus heuristic. As long as that's true,
@@ -1857,12 +1911,16 @@ CallAnalyzer::analyzeBlock(BasicBlock *BB,
     if (isa<DbgInfoIntrinsic>(I))
       continue;
 
+    // Skip pseudo-probes.
+    if (isa<PseudoProbeInst>(I))
+      continue;
+
     // Skip ephemeral values.
-    if (EphValues.count(&*I))
+    if (EphValues.count(&I))
       continue;
 
     ++NumInstructions;
-    if (isa<ExtractElementInst>(I) || I->getType()->isVectorTy())
+    if (isa<ExtractElementInst>(I) || I.getType()->isVectorTy())
       ++NumVectorInstructions;
 
     // If the instruction simplified to a constant, there is no cost to this
@@ -1870,14 +1928,14 @@ CallAnalyzer::analyzeBlock(BasicBlock *BB,
     // all of the per-instruction logic. The visit tree returns true if we
     // consumed the instruction in any way, and false if the instruction's base
     // cost should count against inlining.
-    onInstructionAnalysisStart(&*I);
+    onInstructionAnalysisStart(&I);
 
-    if (Base::visit(&*I))
+    if (Base::visit(&I))
       ++NumInstructionsSimplified;
     else
       onMissedSimplification();
 
-    onInstructionAnalysisFinish(&*I);
+    onInstructionAnalysisFinish(&I);
     using namespace ore;
     // If the visit this instruction detected an uninlinable pattern, abort.
     InlineResult IR = InlineResult::success();
@@ -2038,23 +2096,23 @@ InlineResult CallAnalyzer::analyze() {
   // Populate our simplified values by mapping from function arguments to call
   // arguments with known important simplifications.
   auto CAI = CandidateCall.arg_begin();
-  for (Function::arg_iterator FAI = F.arg_begin(), FAE = F.arg_end();
-       FAI != FAE; ++FAI, ++CAI) {
+  for (Argument &FAI : F.args()) {
     assert(CAI != CandidateCall.arg_end());
     if (Constant *C = dyn_cast<Constant>(CAI))
-      SimplifiedValues[&*FAI] = C;
+      SimplifiedValues[&FAI] = C;
 
     Value *PtrArg = *CAI;
     if (ConstantInt *C = stripAndComputeInBoundsConstantOffsets(PtrArg)) {
-      ConstantOffsetPtrs[&*FAI] = std::make_pair(PtrArg, C->getValue());
+      ConstantOffsetPtrs[&FAI] = std::make_pair(PtrArg, C->getValue());
 
       // We can SROA any pointer arguments derived from alloca instructions.
       if (auto *SROAArg = dyn_cast<AllocaInst>(PtrArg)) {
-        SROAArgValues[&*FAI] = SROAArg;
+        SROAArgValues[&FAI] = SROAArg;
         onInitializeSROAArg(SROAArg);
         EnabledSROAAllocas.insert(SROAArg);
       }
     }
+    ++CAI;
   }
   NumConstantArgs = SimplifiedValues.size();
   NumConstantOffsetPtrArgs = ConstantOffsetPtrs.size();
@@ -2155,11 +2213,9 @@ InlineResult CallAnalyzer::analyze() {
   return finalizeAnalysis();
 }
 
-#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
-/// Dump stats about this call's analysis.
-LLVM_DUMP_METHOD void InlineCostCallAnalyzer::dump() {
+void InlineCostCallAnalyzer::print() {
 #define DEBUG_PRINT_STAT(x) dbgs() << "      " #x ": " << x << "\n"
-  if (PrintDebugInstructionDeltas)
+  if (PrintInstructionComments)
     F.print(dbgs(), &Writer);
   DEBUG_PRINT_STAT(NumConstantArgs);
   DEBUG_PRINT_STAT(NumConstantOffsetPtrArgs);
@@ -2175,6 +2231,12 @@ LLVM_DUMP_METHOD void InlineCostCallAnalyzer::dump() {
   DEBUG_PRINT_STAT(Cost);
   DEBUG_PRINT_STAT(Threshold);
 #undef DEBUG_PRINT_STAT
+}
+
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+/// Dump stats about this call's analysis.
+LLVM_DUMP_METHOD void InlineCostCallAnalyzer::dump() {
+  print();
 }
 #endif
 
@@ -2250,7 +2312,8 @@ Optional<int> llvm::getInliningCostEstimate(
                                /*HotCallSiteThreshold*/ {},
                                /*LocallyHotCallSiteThreshold*/ {},
                                /*ColdCallSiteThreshold*/ {},
-                               /* ComputeFullInlineCost*/ true};
+                               /*ComputeFullInlineCost*/ true,
+                               /*EnableDeferral*/ true};
 
   InlineCostCallAnalyzer CA(*Call.getCalledFunction(), Call, Params, CalleeTTI,
                             GetAssumptionCache, GetBFI, PSI, ORE, true,
@@ -2360,19 +2423,19 @@ InlineCost llvm::getInlineCost(
 
 InlineResult llvm::isInlineViable(Function &F) {
   bool ReturnsTwice = F.hasFnAttribute(Attribute::ReturnsTwice);
-  for (Function::iterator BI = F.begin(), BE = F.end(); BI != BE; ++BI) {
+  for (BasicBlock &BB : F) {
     // Disallow inlining of functions which contain indirect branches.
-    if (isa<IndirectBrInst>(BI->getTerminator()))
+    if (isa<IndirectBrInst>(BB.getTerminator()))
       return InlineResult::failure("contains indirect branches");
 
     // Disallow inlining of blockaddresses which are used by non-callbr
     // instructions.
-    if (BI->hasAddressTaken())
-      for (User *U : BlockAddress::get(&*BI)->users())
+    if (BB.hasAddressTaken())
+      for (User *U : BlockAddress::get(&BB)->users())
         if (!isa<CallBrInst>(*U))
           return InlineResult::failure("blockaddress used outside of callbr");
 
-    for (auto &II : *BI) {
+    for (auto &II : BB) {
       CallBase *Call = dyn_cast<CallBase>(&II);
       if (!Call)
         continue;
@@ -2495,4 +2558,41 @@ InlineParams llvm::getInlineParams(unsigned OptLevel, unsigned SizeOptLevel) {
   if (OptLevel > 2)
     Params.LocallyHotCallSiteThreshold = LocallyHotCallSiteThreshold;
   return Params;
+}
+
+PreservedAnalyses
+InlineCostAnnotationPrinterPass::run(Function &F,
+                                     FunctionAnalysisManager &FAM) {
+  PrintInstructionComments = true;
+  std::function<AssumptionCache &(Function &)> GetAssumptionCache = [&](
+      Function &F) -> AssumptionCache & {
+    return FAM.getResult<AssumptionAnalysis>(F);
+  };
+  Module *M = F.getParent();
+  ProfileSummaryInfo PSI(*M);
+  DataLayout DL(M);
+  TargetTransformInfo TTI(DL);
+  // FIXME: Redesign the usage of InlineParams to expand the scope of this pass.
+  // In the current implementation, the type of InlineParams doesn't matter as
+  // the pass serves only for verification of inliner's decisions.
+  // We can add a flag which determines InlineParams for this run. Right now,
+  // the default InlineParams are used.
+  const InlineParams Params = llvm::getInlineParams();
+  for (BasicBlock &BB : F) {
+    for (Instruction &I : BB) {
+      if (CallInst *CI = dyn_cast<CallInst>(&I)) {
+        Function *CalledFunction = CI->getCalledFunction();
+        if (!CalledFunction || CalledFunction->isDeclaration())
+          continue;
+        OptimizationRemarkEmitter ORE(CalledFunction);
+        InlineCostCallAnalyzer ICCA(*CalledFunction, *CI, Params, TTI,
+                                    GetAssumptionCache, nullptr, &PSI, &ORE);
+        ICCA.analyze();
+        OS << "      Analyzing call of " << CalledFunction->getName()
+           << "... (caller:" << CI->getCaller()->getName() << ")\n";
+        ICCA.print();
+      }
+    }
+  }
+  return PreservedAnalyses::all();
 }

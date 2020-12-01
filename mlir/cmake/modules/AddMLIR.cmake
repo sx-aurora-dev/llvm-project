@@ -9,6 +9,8 @@ function(add_mlir_dialect dialect dialect_namespace)
   set(LLVM_TARGET_DEFINITIONS ${dialect}.td)
   mlir_tablegen(${dialect}.h.inc -gen-op-decls)
   mlir_tablegen(${dialect}.cpp.inc -gen-op-defs)
+  mlir_tablegen(${dialect}Types.h.inc -gen-typedef-decls)
+  mlir_tablegen(${dialect}Types.cpp.inc -gen-typedef-defs)
   mlir_tablegen(${dialect}Dialect.h.inc -gen-dialect-decls -dialect=${dialect_namespace})
   add_public_tablegen_target(MLIR${dialect}IncGen)
   add_dependencies(mlir-headers MLIR${dialect}IncGen)
@@ -125,37 +127,70 @@ function(add_mlir_library name)
 
   if(TARGET ${name})
     target_link_libraries(${name} INTERFACE ${LLVM_COMMON_LIBS})
-
-    if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
-      set(export_to_mlirtargets)
-      if (${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
-          "mlir-libraries" IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
-          NOT LLVM_DISTRIBUTION_COMPONENTS)
-          set(export_to_mlirtargets EXPORT MLIRTargets)
-        set_property(GLOBAL PROPERTY MLIR_HAS_EXPORTS True)
-      endif()
-
-      install(TARGETS ${name}
-        COMPONENT ${name}
-        ${export_to_mlirtargets}
-        LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX}
-        ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX}
-        RUNTIME DESTINATION bin)
-
-      if (NOT LLVM_ENABLE_IDE)
-        add_llvm_install_targets(install-${name}
-                                 DEPENDS ${name}
-                                 COMPONENT ${name})
-      endif()
-      set_property(GLOBAL APPEND PROPERTY MLIR_ALL_LIBS ${name})
-    endif()
-    set_property(GLOBAL APPEND PROPERTY MLIR_EXPORTS ${name})
+    add_mlir_library_install(${name})
   else()
     # Add empty "phony" target
     add_custom_target(${name})
   endif()
   set_target_properties(${name} PROPERTIES FOLDER "MLIR libraries")
 endfunction(add_mlir_library)
+
+# Adds an MLIR library target for installation.
+# This is usually done as part of add_mlir_library but is broken out for cases
+# where non-standard library builds can be installed.
+function(add_mlir_library_install name)
+  if (NOT LLVM_INSTALL_TOOLCHAIN_ONLY)
+  set(export_to_mlirtargets)
+  if (${name} IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
+      "mlir-libraries" IN_LIST LLVM_DISTRIBUTION_COMPONENTS OR
+      NOT LLVM_DISTRIBUTION_COMPONENTS)
+      set(export_to_mlirtargets EXPORT MLIRTargets)
+    set_property(GLOBAL PROPERTY MLIR_HAS_EXPORTS True)
+  endif()
+
+  install(TARGETS ${name}
+    COMPONENT ${name}
+    ${export_to_mlirtargets}
+    LIBRARY DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+    ARCHIVE DESTINATION lib${LLVM_LIBDIR_SUFFIX}
+    RUNTIME DESTINATION bin)
+
+  if (NOT LLVM_ENABLE_IDE)
+    add_llvm_install_targets(install-${name}
+                            DEPENDS ${name}
+                            COMPONENT ${name})
+  endif()
+  set_property(GLOBAL APPEND PROPERTY MLIR_ALL_LIBS ${name})
+  endif()
+  set_property(GLOBAL APPEND PROPERTY MLIR_EXPORTS ${name})
+endfunction()
+
+# Declare an mlir library which is part of the public C-API and will be
+# compiled and exported into libMLIRPublicAPI.so/MLIRPublicAPI.dll.
+# This shared library is built regardless of the overall setting of building
+# libMLIR.so (which exports the C++ implementation).
+function(add_mlir_public_c_api_library name)
+  add_mlir_library(${name}
+    ${ARGN}
+    # NOTE: Generates obj.${name} which is used for shared library building.
+    OBJECT
+    EXCLUDE_FROM_LIBMLIR
+    ADDITIONAL_HEADER_DIRS
+    ${MLIR_MAIN_INCLUDE_DIR}/mlir-c
+  )
+  # API libraries compile with hidden visibility and macros that enable
+  # exporting from the DLL. Only apply to the obj lib, which only affects
+  # the exports via a shared library.
+  set_target_properties(obj.${name}
+    PROPERTIES
+    CXX_VISIBILITY_PRESET hidden
+  )
+  target_compile_definitions(obj.${name}
+    PRIVATE
+    -DMLIR_CAPI_BUILDING_LIBRARY=1
+  )
+  set_property(GLOBAL APPEND PROPERTY MLIR_PUBLIC_C_API_LIBS ${name})
+endfunction()
 
 # Declare the library associated with a dialect.
 function(add_mlir_dialect_library name)
@@ -178,7 +213,12 @@ endfunction(add_mlir_translation_library)
 # Verification tools to aid debugging.
 function(mlir_check_link_libraries name)
   if(TARGET ${name})
-    get_target_property(libs ${name} LINK_LIBRARIES)
+    get_target_property(type ${name} TYPE)
+    if (${type} STREQUAL "INTERFACE_LIBRARY")
+      get_target_property(libs ${name} INTERFACE_LINK_LIBRARIES)
+    else()
+      get_target_property(libs ${name} LINK_LIBRARIES)
+    endif()
     # message("${name} libs are: ${libs}")
     set(linking_llvm 0)
     foreach(lib ${libs})

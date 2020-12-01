@@ -383,7 +383,7 @@ ScopDetection::ScopDetection(Function &F, const DominatorTree &DT,
 
 template <class RR, typename... Args>
 inline bool ScopDetection::invalid(DetectionContext &Context, bool Assert,
-                                   Args &&... Arguments) const {
+                                   Args &&...Arguments) const {
   if (!Context.Verifying) {
     RejectLog &Log = Context.Log;
     std::shared_ptr<RR> RejectReason = std::make_shared<RR>(Arguments...);
@@ -1129,7 +1129,7 @@ bool ScopDetection::isValidAccess(Instruction *Inst, const SCEV *AF,
   AAMDNodes AATags;
   Inst->getAAMetadata(AATags);
   AliasSet &AS = Context.AST.getAliasSetFor(
-      MemoryLocation(BP->getValue(), MemoryLocation::UnknownSize, AATags));
+      MemoryLocation::getBeforeOrAfter(BP->getValue(), AATags));
 
   if (!AS.isMustAlias()) {
     if (PollyUseRuntimeAliasChecks) {

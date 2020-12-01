@@ -545,13 +545,13 @@ TEST(Matcher, isInstanceMethod) {
 }
 
 TEST(MatcherCXXMemberCallExpr, On) {
-  auto Snippet1 = R"cc(
+  StringRef Snippet1 = R"cc(
         struct Y {
           void m();
         };
         void z(Y y) { y.m(); }
       )cc";
-  auto Snippet2 = R"cc(
+  StringRef Snippet2 = R"cc(
         struct Y {
           void m();
         };
@@ -566,7 +566,7 @@ TEST(MatcherCXXMemberCallExpr, On) {
   EXPECT_TRUE(matches(Snippet2, MatchesX));
 
   // Parens are ignored.
-  auto Snippet3 = R"cc(
+  StringRef Snippet3 = R"cc(
     struct Y {
       void m();
     };
@@ -578,13 +578,13 @@ TEST(MatcherCXXMemberCallExpr, On) {
 }
 
 TEST(MatcherCXXMemberCallExpr, OnImplicitObjectArgument) {
-  auto Snippet1 = R"cc(
+  StringRef Snippet1 = R"cc(
     struct Y {
       void m();
     };
     void z(Y y) { y.m(); }
   )cc";
-  auto Snippet2 = R"cc(
+  StringRef Snippet2 = R"cc(
     struct Y {
       void m();
     };
@@ -603,7 +603,7 @@ TEST(MatcherCXXMemberCallExpr, OnImplicitObjectArgument) {
   EXPECT_TRUE(notMatches(Snippet2, MatchesX));
 
   // Parens are not ignored.
-  auto Snippet3 = R"cc(
+  StringRef Snippet3 = R"cc(
     struct Y {
       void m();
     };
@@ -617,13 +617,13 @@ TEST(MatcherCXXMemberCallExpr, OnImplicitObjectArgument) {
 }
 
 TEST(Matcher, HasObjectExpr) {
-  auto Snippet1 = R"cc(
+  StringRef Snippet1 = R"cc(
         struct X {
           int m;
           int f(X x) { return x.m; }
         };
       )cc";
-  auto Snippet2 = R"cc(
+  StringRef Snippet2 = R"cc(
         struct X {
           int m;
           int f(X x) { return m; }
@@ -739,6 +739,164 @@ TEST(ForEachArgumentWithParam, HandlesBoundNodesForNonMatches) {
       forEachDescendant(callExpr(forEachArgumentWithParam(
         declRefExpr(to(decl(equalsBoundNode("v")))), parmVarDecl())))),
     std::make_unique<VerifyIdIsBoundTo<VarDecl>>("v", 4)));
+}
+
+TEST(ForEachArgumentWithParamType, ReportsNoFalsePositives) {
+  StatementMatcher ArgumentY =
+      declRefExpr(to(varDecl(hasName("y")))).bind("arg");
+  TypeMatcher IntType = qualType(isInteger()).bind("type");
+  StatementMatcher CallExpr =
+      callExpr(forEachArgumentWithParamType(ArgumentY, IntType));
+
+  // IntParam does not match.
+  EXPECT_TRUE(notMatches("void f(int* i) { int* y; f(y); }", CallExpr));
+  // ArgumentY does not match.
+  EXPECT_TRUE(notMatches("void f(int i) { int x; f(x); }", CallExpr));
+}
+
+TEST(ForEachArgumentWithParamType, MatchesCXXMemberCallExpr) {
+  StatementMatcher ArgumentY =
+      declRefExpr(to(varDecl(hasName("y")))).bind("arg");
+  TypeMatcher IntType = qualType(isInteger()).bind("type");
+  StatementMatcher CallExpr =
+      callExpr(forEachArgumentWithParamType(ArgumentY, IntType));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "struct S {"
+      "  const S& operator[](int i) { return *this; }"
+      "};"
+      "void f(S S1) {"
+      "  int y = 1;"
+      "  S1[y];"
+      "}",
+      CallExpr, std::make_unique<VerifyIdIsBoundTo<QualType>>("type", 1)));
+
+  StatementMatcher CallExpr2 =
+      callExpr(forEachArgumentWithParamType(ArgumentY, IntType));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "struct S {"
+      "  static void g(int i);"
+      "};"
+      "void f() {"
+      "  int y = 1;"
+      "  S::g(y);"
+      "}",
+      CallExpr2, std::make_unique<VerifyIdIsBoundTo<QualType>>("type", 1)));
+}
+
+TEST(ForEachArgumentWithParamType, MatchesCallExpr) {
+  StatementMatcher ArgumentY =
+      declRefExpr(to(varDecl(hasName("y")))).bind("arg");
+  TypeMatcher IntType = qualType(isInteger()).bind("type");
+  StatementMatcher CallExpr =
+      callExpr(forEachArgumentWithParamType(ArgumentY, IntType));
+
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "void f(int i) { int y; f(y); }", CallExpr,
+      std::make_unique<VerifyIdIsBoundTo<QualType>>("type")));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "void f(int i) { int y; f(y); }", CallExpr,
+      std::make_unique<VerifyIdIsBoundTo<DeclRefExpr>>("arg")));
+
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "void f(int i, int j) { int y; f(y, y); }", CallExpr,
+      std::make_unique<VerifyIdIsBoundTo<QualType>>("type", 2)));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "void f(int i, int j) { int y; f(y, y); }", CallExpr,
+      std::make_unique<VerifyIdIsBoundTo<DeclRefExpr>>("arg", 2)));
+}
+
+TEST(ForEachArgumentWithParamType, MatchesConstructExpr) {
+  StatementMatcher ArgumentY =
+      declRefExpr(to(varDecl(hasName("y")))).bind("arg");
+  TypeMatcher IntType = qualType(isInteger()).bind("type");
+  StatementMatcher ConstructExpr =
+      cxxConstructExpr(forEachArgumentWithParamType(ArgumentY, IntType));
+
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "struct C {"
+      "  C(int i) {}"
+      "};"
+      "int y = 0;"
+      "C Obj(y);",
+      ConstructExpr, std::make_unique<VerifyIdIsBoundTo<QualType>>("type")));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "struct C {"
+      "  C(int i) {}"
+      "};"
+      "int y = 0;"
+      "C Obj(y);",
+      ConstructExpr, std::make_unique<VerifyIdIsBoundTo<DeclRefExpr>>("arg")));
+}
+
+TEST(ForEachArgumentWithParamType, HandlesKandRFunctions) {
+  StatementMatcher ArgumentY =
+      declRefExpr(to(varDecl(hasName("y")))).bind("arg");
+  TypeMatcher IntType = qualType(isInteger()).bind("type");
+  StatementMatcher CallExpr =
+      callExpr(forEachArgumentWithParamType(ArgumentY, IntType));
+
+  EXPECT_TRUE(matchesC("void f();\n"
+                       "void call_it(void) { int x, y; f(x, y); }\n"
+                       "void f(a, b) int a, b; {}\n"
+                       "void call_it2(void) { int x, y; f(x, y); }",
+                       CallExpr));
+}
+
+TEST(ForEachArgumentWithParamType, HandlesBoundNodesForNonMatches) {
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "void g(int i, int j) {"
+      "  int a;"
+      "  int b;"
+      "  int c;"
+      "  g(a, 0);"
+      "  g(a, b);"
+      "  g(0, b);"
+      "}",
+      functionDecl(
+          forEachDescendant(varDecl().bind("v")),
+          forEachDescendant(callExpr(forEachArgumentWithParamType(
+              declRefExpr(to(decl(equalsBoundNode("v")))), qualType())))),
+      std::make_unique<VerifyIdIsBoundTo<VarDecl>>("v", 4)));
+}
+
+TEST(ForEachArgumentWithParamType, MatchesFunctionPtrCalls) {
+  StatementMatcher ArgumentY =
+      declRefExpr(to(varDecl(hasName("y")))).bind("arg");
+  TypeMatcher IntType = qualType(builtinType()).bind("type");
+  StatementMatcher CallExpr =
+      callExpr(forEachArgumentWithParamType(ArgumentY, IntType));
+
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "void f(int i) {"
+      "void (*f_ptr)(int) = f; int y; f_ptr(y); }",
+      CallExpr, std::make_unique<VerifyIdIsBoundTo<QualType>>("type")));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "void f(int i) {"
+      "void (*f_ptr)(int) = f; int y; f_ptr(y); }",
+      CallExpr, std::make_unique<VerifyIdIsBoundTo<DeclRefExpr>>("arg")));
+}
+
+TEST(ForEachArgumentWithParamType, MatchesMemberFunctionPtrCalls) {
+  StatementMatcher ArgumentY =
+      declRefExpr(to(varDecl(hasName("y")))).bind("arg");
+  TypeMatcher IntType = qualType(builtinType()).bind("type");
+  StatementMatcher CallExpr =
+      callExpr(forEachArgumentWithParamType(ArgumentY, IntType));
+
+  StringRef S = "struct A {\n"
+                "  int f(int i) { return i + 1; }\n"
+                "  int (A::*x)(int);\n"
+                "};\n"
+                "void f() {\n"
+                "  int y = 42;\n"
+                "  A a;\n"
+                "  a.x = &A::f;\n"
+                "  (a.*(a.x))(y);\n"
+                "}";
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      S, CallExpr, std::make_unique<VerifyIdIsBoundTo<QualType>>("type")));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      S, CallExpr, std::make_unique<VerifyIdIsBoundTo<DeclRefExpr>>("arg")));
 }
 
 TEST(QualType, hasCanonicalType) {
@@ -950,10 +1108,14 @@ TEST(TemplateTypeParmDecl, VarTemplatePartialSpecializationDecl) {
       "template<typename U>\n"
       "template<typename U2>\n"
       "int Struct<U>::field<U2*> = 123;\n";
-  EXPECT_TRUE(matches(input, templateTypeParmDecl(hasName("T"))));
-  EXPECT_TRUE(matches(input, templateTypeParmDecl(hasName("T2"))));
-  EXPECT_TRUE(matches(input, templateTypeParmDecl(hasName("U"))));
-  EXPECT_TRUE(matches(input, templateTypeParmDecl(hasName("U2"))));
+  EXPECT_TRUE(
+      matches(input, templateTypeParmDecl(hasName("T")), langCxx14OrLater()));
+  EXPECT_TRUE(
+      matches(input, templateTypeParmDecl(hasName("T2")), langCxx14OrLater()));
+  EXPECT_TRUE(
+      matches(input, templateTypeParmDecl(hasName("U")), langCxx14OrLater()));
+  EXPECT_TRUE(
+      matches(input, templateTypeParmDecl(hasName("U2")), langCxx14OrLater()));
 }
 
 TEST(TemplateTypeParmDecl, ClassTemplatePartialSpecializationDecl) {
@@ -1450,10 +1612,49 @@ TEST(HasBody, FindsBodyOfForWhileDoLoops) {
                       doStmt(hasBody(compoundStmt()))));
   EXPECT_TRUE(matches("void f() { int p[2]; for (auto x : p) {} }",
                       cxxForRangeStmt(hasBody(compoundStmt()))));
+}
+
+TEST(HasBody, FindsBodyOfFunctions) {
   EXPECT_TRUE(matches("void f() {}", functionDecl(hasBody(compoundStmt()))));
   EXPECT_TRUE(notMatches("void f();", functionDecl(hasBody(compoundStmt()))));
-  EXPECT_TRUE(matches("void f(); void f() {}",
-                      functionDecl(hasBody(compoundStmt()))));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "void f(); void f() {}",
+      functionDecl(hasBody(compoundStmt())).bind("func"),
+      std::make_unique<VerifyIdIsBoundTo<FunctionDecl>>("func", 1)));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "class C { void f(); }; void C::f() {}",
+      cxxMethodDecl(hasBody(compoundStmt())).bind("met"),
+      std::make_unique<VerifyIdIsBoundTo<CXXMethodDecl>>("met", 1)));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "class C { C(); }; C::C() {}",
+      cxxConstructorDecl(hasBody(compoundStmt())).bind("ctr"),
+      std::make_unique<VerifyIdIsBoundTo<CXXConstructorDecl>>("ctr", 1)));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "class C { ~C(); }; C::~C() {}",
+      cxxDestructorDecl(hasBody(compoundStmt())).bind("dtr"),
+      std::make_unique<VerifyIdIsBoundTo<CXXDestructorDecl>>("dtr", 1)));
+}
+
+TEST(HasAnyBody, FindsAnyBodyOfFunctions) {
+  EXPECT_TRUE(matches("void f() {}", functionDecl(hasAnyBody(compoundStmt()))));
+  EXPECT_TRUE(notMatches("void f();",
+                         functionDecl(hasAnyBody(compoundStmt()))));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "void f(); void f() {}",
+      functionDecl(hasAnyBody(compoundStmt())).bind("func"),
+      std::make_unique<VerifyIdIsBoundTo<FunctionDecl>>("func", 2)));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "class C { void f(); }; void C::f() {}",
+      cxxMethodDecl(hasAnyBody(compoundStmt())).bind("met"),
+      std::make_unique<VerifyIdIsBoundTo<CXXMethodDecl>>("met", 2)));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "class C { C(); }; C::C() {}",
+      cxxConstructorDecl(hasAnyBody(compoundStmt())).bind("ctr"),
+      std::make_unique<VerifyIdIsBoundTo<CXXConstructorDecl>>("ctr", 2)));
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      "class C { ~C(); }; C::~C() {}",
+      cxxDestructorDecl(hasAnyBody(compoundStmt())).bind("dtr"),
+      std::make_unique<VerifyIdIsBoundTo<CXXDestructorDecl>>("dtr", 2)));
 }
 
 TEST(HasAnySubstatement, MatchesForTopLevelCompoundStatement) {
@@ -1483,18 +1684,18 @@ TEST(HasAnySubstatement, FindsSubstatementBetweenOthers) {
 TEST(Member, MatchesMemberAllocationFunction) {
   // Fails in C++11 mode
   EXPECT_TRUE(matchesConditionally(
-    "namespace std { typedef typeof(sizeof(int)) size_t; }"
+      "namespace std { typedef typeof(sizeof(int)) size_t; }"
       "class X { void *operator new(std::size_t); };",
-    cxxMethodDecl(ofClass(hasName("X"))), true, "-std=gnu++98"));
+      cxxMethodDecl(ofClass(hasName("X"))), true, {"-std=gnu++03"}));
 
   EXPECT_TRUE(matches("class X { void operator delete(void*); };",
                       cxxMethodDecl(ofClass(hasName("X")))));
 
   // Fails in C++11 mode
   EXPECT_TRUE(matchesConditionally(
-    "namespace std { typedef typeof(sizeof(int)) size_t; }"
+      "namespace std { typedef typeof(sizeof(int)) size_t; }"
       "class X { void operator delete[](void*, std::size_t); };",
-    cxxMethodDecl(ofClass(hasName("X"))), true, "-std=gnu++98"));
+      cxxMethodDecl(ofClass(hasName("X"))), true, {"-std=gnu++03"}));
 }
 
 TEST(HasDestinationType, MatchesSimpleCase) {
@@ -1538,7 +1739,7 @@ TEST(Matcher, IgnoresElidableConstructors) {
               cxxOperatorCallExpr(hasArgument(
                   1, callExpr(hasArgument(
                          0, ignoringElidableConstructorCall(callExpr()))))),
-              LanguageMode::Cxx11OrLater));
+              langCxx11OrLater()));
   EXPECT_TRUE(
       matches("struct H {};"
               "template<typename T> H B(T A);"
@@ -1549,7 +1750,7 @@ TEST(Matcher, IgnoresElidableConstructors) {
               cxxOperatorCallExpr(hasArgument(
                   1, callExpr(hasArgument(0, ignoringElidableConstructorCall(
                                                  integerLiteral()))))),
-              LanguageMode::Cxx11OrLater));
+              langCxx11OrLater()));
   EXPECT_TRUE(matches(
       "struct H {};"
       "H G();"
@@ -1559,7 +1760,7 @@ TEST(Matcher, IgnoresElidableConstructors) {
       varDecl(hasInitializer(anyOf(
           ignoringElidableConstructorCall(callExpr()),
           exprWithCleanups(has(ignoringElidableConstructorCall(callExpr())))))),
-      LanguageMode::Cxx11OrLater));
+      langCxx11OrLater()));
 }
 
 TEST(Matcher, IgnoresElidableInReturn) {
@@ -1569,12 +1770,12 @@ TEST(Matcher, IgnoresElidableInReturn) {
                       "  H g;"
                       "  return g;"
                       "}",
-                      matcher, LanguageMode::Cxx11OrLater));
+                      matcher, langCxx11OrLater()));
   EXPECT_TRUE(notMatches("struct H {};"
                          "H f() {"
                          "  return H();"
                          "}",
-                         matcher, LanguageMode::Cxx11OrLater));
+                         matcher, langCxx11OrLater()));
 }
 
 TEST(Matcher, IgnoreElidableConstructorDoesNotMatchConstructors) {
@@ -1584,7 +1785,7 @@ TEST(Matcher, IgnoreElidableConstructorDoesNotMatchConstructors) {
                       "}",
                       varDecl(hasInitializer(
                           ignoringElidableConstructorCall(cxxConstructExpr()))),
-                      LanguageMode::Cxx11OrLater));
+                      langCxx11OrLater()));
 }
 
 TEST(Matcher, IgnoresElidableDoesNotPreventMatches) {
@@ -1592,7 +1793,7 @@ TEST(Matcher, IgnoresElidableDoesNotPreventMatches) {
                       "  int D = 10;"
                       "}",
                       expr(ignoringElidableConstructorCall(integerLiteral())),
-                      LanguageMode::Cxx11OrLater));
+                      langCxx11OrLater()));
 }
 
 TEST(Matcher, IgnoresElidableInVarInit) {
@@ -1603,13 +1804,13 @@ TEST(Matcher, IgnoresElidableInVarInit) {
                       "void f(H D = G()) {"
                       "  return;"
                       "}",
-                      matcher, LanguageMode::Cxx11OrLater));
+                      matcher, langCxx11OrLater()));
   EXPECT_TRUE(matches("struct H {};"
                       "H G();"
                       "void f() {"
                       "  H D = G();"
                       "}",
-                      matcher, LanguageMode::Cxx11OrLater));
+                      matcher, langCxx11OrLater()));
 }
 
 TEST(IgnoringImplicit, MatchesImplicit) {
@@ -1618,7 +1819,7 @@ TEST(IgnoringImplicit, MatchesImplicit) {
 }
 
 TEST(IgnoringImplicit, MatchesNestedImplicit) {
-  const char *Code = R"(
+  StringRef Code = R"(
 
 struct OtherType;
 
@@ -1662,7 +1863,7 @@ TEST(IgnoringImplicit, DoesNotMatchIncorrectly) {
 
 TEST(Traversal, traverseMatcher) {
 
-  const char *VarDeclCode = R"cpp(
+  StringRef VarDeclCode = R"cpp(
 void foo()
 {
   int i = 3.0;
@@ -1672,8 +1873,8 @@ void foo()
   auto Matcher = varDecl(hasInitializer(floatLiteral()));
 
   EXPECT_TRUE(notMatches(VarDeclCode, traverse(TK_AsIs, Matcher)));
-  EXPECT_TRUE(matches(VarDeclCode,
-                      traverse(TK_IgnoreImplicitCastsAndParentheses, Matcher)));
+  EXPECT_TRUE(
+      matches(VarDeclCode, traverse(TK_IgnoreUnlessSpelledInSource, Matcher)));
 
   auto ParentMatcher = floatLiteral(hasParent(varDecl(hasName("i"))));
 
@@ -1723,7 +1924,7 @@ void foo()
       matches(VarDeclCode, functionDecl(traverse(TK_IgnoreUnlessSpelledInSource,
                                                  hasAnyName("foo", "bar")))));
 
-  const char *Code = R"cpp(
+  StringRef Code = R"cpp(
 void foo(int a)
 {
   int i = 3.0 + a;
@@ -1884,15 +2085,603 @@ void actual_template_test() {
       traverse(TK_AsIs,
                staticAssertDecl(has(implicitCastExpr(has(
                    substNonTypeTemplateParmExpr(has(integerLiteral())))))))));
+  EXPECT_TRUE(matches(
+      Code, traverse(TK_IgnoreUnlessSpelledInSource,
+                     staticAssertDecl(has(declRefExpr(
+                         to(nonTypeTemplateParmDecl(hasName("alignment"))),
+                         hasType(asString("unsigned int"))))))));
 
-  EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                                     staticAssertDecl(has(integerLiteral())))));
+  EXPECT_TRUE(matches(Code, traverse(TK_AsIs, staticAssertDecl(hasDescendant(
+                                                  integerLiteral())))));
+  EXPECT_FALSE(matches(
+      Code, traverse(TK_IgnoreUnlessSpelledInSource,
+                     staticAssertDecl(hasDescendant(integerLiteral())))));
+
+  Code = R"cpp(
+
+struct OneParamCtor {
+  explicit OneParamCtor(int);
+};
+struct TwoParamCtor {
+  explicit TwoParamCtor(int, int);
+};
+
+void varDeclCtors() {
+  {
+  auto var1 = OneParamCtor(5);
+  auto var2 = TwoParamCtor(6, 7);
+  }
+  {
+  OneParamCtor var3(5);
+  TwoParamCtor var4(6, 7);
+  }
+  int i = 0;
+  {
+  auto var5 = OneParamCtor(i);
+  auto var6 = TwoParamCtor(i, 7);
+  }
+  {
+  OneParamCtor var7(i);
+  TwoParamCtor var8(i, 7);
+  }
+}
+
+)cpp";
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_AsIs, varDecl(hasName("var1"), hasInitializer(hasDescendant(
+                                                     cxxConstructExpr()))))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_AsIs, varDecl(hasName("var2"), hasInitializer(hasDescendant(
+                                                     cxxConstructExpr()))))));
+  EXPECT_TRUE(matches(
+      Code, traverse(TK_AsIs, varDecl(hasName("var3"),
+                                      hasInitializer(cxxConstructExpr())))));
+  EXPECT_TRUE(matches(
+      Code, traverse(TK_AsIs, varDecl(hasName("var4"),
+                                      hasInitializer(cxxConstructExpr())))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_AsIs, varDecl(hasName("var5"), hasInitializer(hasDescendant(
+                                                     cxxConstructExpr()))))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_AsIs, varDecl(hasName("var6"), hasInitializer(hasDescendant(
+                                                     cxxConstructExpr()))))));
+  EXPECT_TRUE(matches(
+      Code, traverse(TK_AsIs, varDecl(hasName("var7"),
+                                      hasInitializer(cxxConstructExpr())))));
+  EXPECT_TRUE(matches(
+      Code, traverse(TK_AsIs, varDecl(hasName("var8"),
+                                      hasInitializer(cxxConstructExpr())))));
+
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               varDecl(hasName("var1"), hasInitializer(cxxConstructExpr())))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               varDecl(hasName("var2"), hasInitializer(cxxConstructExpr())))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               varDecl(hasName("var3"), hasInitializer(cxxConstructExpr())))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               varDecl(hasName("var4"), hasInitializer(cxxConstructExpr())))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               varDecl(hasName("var5"), hasInitializer(cxxConstructExpr())))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               varDecl(hasName("var6"), hasInitializer(cxxConstructExpr())))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               varDecl(hasName("var7"), hasInitializer(cxxConstructExpr())))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               varDecl(hasName("var8"), hasInitializer(cxxConstructExpr())))));
+
+  Code = R"cpp(
+
+template<typename T>
+struct TemplStruct {
+  TemplStruct() {}
+  ~TemplStruct() {}
+
+private:
+  T m_t;
+};
+
+template<typename T>
+T timesTwo(T input)
+{
+  return input * 2;
+}
+
+void instantiate()
+{
+  TemplStruct<int> ti;
+  TemplStruct<double> td;
+  (void)timesTwo<int>(2);
+  (void)timesTwo<double>(2);
+}
+
+template class TemplStruct<float>;
+
+extern template class TemplStruct<long>;
+
+template<> class TemplStruct<bool> {
+  TemplStruct() {}
+  ~TemplStruct() {}
+
+  void boolSpecializationMethodOnly() {}
+private:
+  bool m_t;
+};
+
+template float timesTwo(float);
+template<> bool timesTwo<bool>(bool){
+  return true;
+}
+)cpp";
+  {
+    auto M = cxxRecordDecl(hasName("TemplStruct"),
+                           has(fieldDecl(hasType(asString("int")))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = cxxRecordDecl(hasName("TemplStruct"),
+                           has(fieldDecl(hasType(asString("double")))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M =
+        functionDecl(hasName("timesTwo"),
+                     hasParameter(0, parmVarDecl(hasType(asString("int")))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M =
+        functionDecl(hasName("timesTwo"),
+                     hasParameter(0, parmVarDecl(hasType(asString("double")))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    // Match on the integer literal in the explicit instantiation:
+    auto MDef =
+        functionDecl(hasName("timesTwo"),
+                     hasParameter(0, parmVarDecl(hasType(asString("float")))),
+                     hasDescendant(integerLiteral(equals(2))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, MDef)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, MDef)));
+
+    auto MTempl =
+        functionDecl(hasName("timesTwo"),
+                     hasTemplateArgument(0, refersToType(asString("float"))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, MTempl)));
+    // TODO: If we could match on explicit instantiations of function templates,
+    // this would be EXPECT_TRUE.
+    EXPECT_FALSE(
+        matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, MTempl)));
+  }
+  {
+    auto M = functionDecl(hasName("timesTwo"),
+                          hasParameter(0, parmVarDecl(hasType(booleanType()))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    // Match on the field within the explicit instantiation:
+    auto MRecord = cxxRecordDecl(hasName("TemplStruct"),
+                                 has(fieldDecl(hasType(asString("float")))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, MRecord)));
+    EXPECT_FALSE(
+        matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, MRecord)));
+
+    // Match on the explicit template instantiation itself:
+    auto MTempl = classTemplateSpecializationDecl(
+        hasName("TemplStruct"),
+        hasTemplateArgument(0,
+                            templateArgument(refersToType(asString("float")))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, MTempl)));
+    EXPECT_TRUE(
+        matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, MTempl)));
+  }
+  {
+    // The template argument is matchable, but the instantiation is not:
+    auto M = classTemplateSpecializationDecl(
+        hasName("TemplStruct"),
+        hasTemplateArgument(0,
+                            templateArgument(refersToType(asString("float")))),
+        has(cxxConstructorDecl(hasName("TemplStruct"))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    // The template argument is matchable, but the instantiation is not:
+    auto M = classTemplateSpecializationDecl(
+        hasName("TemplStruct"),
+        hasTemplateArgument(0,
+                            templateArgument(refersToType(asString("long")))),
+        has(cxxConstructorDecl(hasName("TemplStruct"))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    // Explicit specialization is written in source and it matches:
+    auto M = classTemplateSpecializationDecl(
+        hasName("TemplStruct"),
+        hasTemplateArgument(0, templateArgument(refersToType(booleanType()))),
+        has(cxxConstructorDecl(hasName("TemplStruct"))),
+        has(cxxMethodDecl(hasName("boolSpecializationMethodOnly"))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+}
+
+TEST(Traversal, traverseNoImplicit) {
+  StringRef Code = R"cpp(
+struct NonTrivial {
+    NonTrivial() {}
+    NonTrivial(const NonTrivial&) {}
+    NonTrivial& operator=(const NonTrivial&) { return *this; }
+
+    ~NonTrivial() {}
+};
+
+struct NoSpecialMethods {
+    NonTrivial nt;
+};
+
+struct ContainsArray {
+    NonTrivial arr[2];
+    ContainsArray& operator=(const ContainsArray &other) = default;
+};
+
+void copyIt()
+{
+    NoSpecialMethods nc1;
+    NoSpecialMethods nc2(nc1);
+    nc2 = nc1;
+
+    ContainsArray ca;
+    ContainsArray ca2;
+    ca2 = ca;
+}
+
+struct HasCtorInits : NoSpecialMethods, NonTrivial
+{
+  int m_i;
+  NonTrivial m_nt;
+  HasCtorInits() : NoSpecialMethods(), m_i(42) {}
+};
+
+struct CtorInitsNonTrivial : NonTrivial
+{
+  int m_i;
+  NonTrivial m_nt;
+  CtorInitsNonTrivial() : NonTrivial(), m_i(42) {}
+};
+
+)cpp";
+  {
+    auto M = cxxRecordDecl(hasName("NoSpecialMethods"),
+                           has(cxxRecordDecl(hasName("NoSpecialMethods"))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+
+    M = cxxRecordDecl(hasName("NoSpecialMethods"),
+                      has(cxxConstructorDecl(isCopyConstructor())));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+
+    M = cxxRecordDecl(hasName("NoSpecialMethods"),
+                      has(cxxMethodDecl(isCopyAssignmentOperator())));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+
+    M = cxxRecordDecl(hasName("NoSpecialMethods"),
+                      has(cxxConstructorDecl(isDefaultConstructor())));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+
+    M = cxxRecordDecl(hasName("NoSpecialMethods"), has(cxxDestructorDecl()));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+
+    M = cxxRecordDecl(hasName("NoSpecialMethods"),
+                      hasMethod(cxxConstructorDecl(isCopyConstructor())));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+
+    M = cxxRecordDecl(hasName("NoSpecialMethods"),
+                      hasMethod(cxxMethodDecl(isCopyAssignmentOperator())));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+
+    M = cxxRecordDecl(hasName("NoSpecialMethods"),
+                      hasMethod(cxxConstructorDecl(isDefaultConstructor())));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+
+    M = cxxRecordDecl(hasName("NoSpecialMethods"),
+                      hasMethod(cxxDestructorDecl()));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    // Because the copy-assignment operator is not spelled in the
+    // source (ie, isImplicit()), we don't match it
+    auto M =
+        cxxOperatorCallExpr(hasType(cxxRecordDecl(hasName("NoSpecialMethods"))),
+                            callee(cxxMethodDecl(isCopyAssignmentOperator())));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    // Compiler generates a forStmt to copy the array
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, forStmt())));
+    EXPECT_FALSE(
+        matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, forStmt())));
+  }
+  {
+    // The defaulted method declaration can be matched, but not its
+    // definition, in IgnoreUnlessSpelledInSource mode
+    auto MDecl = cxxMethodDecl(ofClass(cxxRecordDecl(hasName("ContainsArray"))),
+                               isCopyAssignmentOperator(), isDefaulted());
+
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, MDecl)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, MDecl)));
+
+    auto MDef = cxxMethodDecl(MDecl, has(compoundStmt()));
+
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, MDef)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, MDef)));
+
+    auto MBody = cxxMethodDecl(MDecl, hasBody(compoundStmt()));
+
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, MBody)));
+    EXPECT_FALSE(
+        matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, MBody)));
+
+    auto MIsDefn = cxxMethodDecl(MDecl, isDefinition());
+
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, MIsDefn)));
+    EXPECT_TRUE(
+        matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, MIsDefn)));
+
+    auto MIsInline = cxxMethodDecl(MDecl, isInline());
+
+    EXPECT_FALSE(matches(Code, traverse(TK_AsIs, MIsInline)));
+    EXPECT_FALSE(
+        matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, MIsInline)));
+
+    // The parameter of the defaulted method can still be matched.
+    auto MParm =
+        cxxMethodDecl(MDecl, hasParameter(0, parmVarDecl(hasName("other"))));
+
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, MParm)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, MParm)));
+  }
+  {
+    auto M =
+        cxxConstructorDecl(hasName("HasCtorInits"),
+                           has(cxxCtorInitializer(forField(hasName("m_i")))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M =
+        cxxConstructorDecl(hasName("HasCtorInits"),
+                           has(cxxCtorInitializer(forField(hasName("m_nt")))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = cxxConstructorDecl(hasName("HasCtorInits"),
+                                hasAnyConstructorInitializer(cxxCtorInitializer(
+                                    forField(hasName("m_nt")))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M =
+        cxxConstructorDecl(hasName("HasCtorInits"),
+                           forEachConstructorInitializer(
+                               cxxCtorInitializer(forField(hasName("m_nt")))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = cxxConstructorDecl(
+        hasName("CtorInitsNonTrivial"),
+        has(cxxCtorInitializer(withInitializer(cxxConstructExpr(
+            hasDeclaration(cxxConstructorDecl(hasName("NonTrivial"))))))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = cxxConstructorDecl(
+        hasName("HasCtorInits"),
+        has(cxxCtorInitializer(withInitializer(cxxConstructExpr(hasDeclaration(
+            cxxConstructorDecl(hasName("NoSpecialMethods"))))))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = cxxCtorInitializer(forField(hasName("m_nt")));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+
+  Code = R"cpp(
+  void rangeFor()
+  {
+    int arr[2];
+    for (auto i : arr)
+    {
+
+    }
+  }
+  )cpp";
+  {
+    auto M = cxxForRangeStmt(has(binaryOperator(hasOperatorName("!="))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M =
+        cxxForRangeStmt(hasDescendant(binaryOperator(hasOperatorName("+"))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M =
+        cxxForRangeStmt(hasDescendant(unaryOperator(hasOperatorName("++"))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = cxxForRangeStmt(has(declStmt()));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M =
+        cxxForRangeStmt(hasLoopVariable(varDecl(hasName("i"))),
+                        hasRangeInit(declRefExpr(to(varDecl(hasName("arr"))))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = cxxForRangeStmt(unless(hasInitStatement(stmt())));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = cxxForRangeStmt(hasBody(stmt()));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+
+  Code = R"cpp(
+  void rangeFor()
+  {
+    int arr[2];
+    for (auto& a = arr; auto i : a)
+    {
+
+    }
+  }
+  )cpp";
+  {
+    auto M = cxxForRangeStmt(has(binaryOperator(hasOperatorName("!="))));
+    EXPECT_TRUE(
+        matchesConditionally(Code, traverse(TK_AsIs, M), true, {"-std=c++20"}));
+    EXPECT_FALSE(
+        matchesConditionally(Code, traverse(TK_IgnoreUnlessSpelledInSource, M),
+                             true, {"-std=c++20"}));
+  }
+  {
+    auto M =
+        cxxForRangeStmt(hasDescendant(binaryOperator(hasOperatorName("+"))));
+    EXPECT_TRUE(
+        matchesConditionally(Code, traverse(TK_AsIs, M), true, {"-std=c++20"}));
+    EXPECT_FALSE(
+        matchesConditionally(Code, traverse(TK_IgnoreUnlessSpelledInSource, M),
+                             true, {"-std=c++20"}));
+  }
+  {
+    auto M =
+        cxxForRangeStmt(hasDescendant(unaryOperator(hasOperatorName("++"))));
+    EXPECT_TRUE(
+        matchesConditionally(Code, traverse(TK_AsIs, M), true, {"-std=c++20"}));
+    EXPECT_FALSE(
+        matchesConditionally(Code, traverse(TK_IgnoreUnlessSpelledInSource, M),
+                             true, {"-std=c++20"}));
+  }
+  {
+    auto M = cxxForRangeStmt(has(declStmt()));
+    EXPECT_TRUE(
+        matchesConditionally(Code, traverse(TK_AsIs, M), true, {"-std=c++20"}));
+    EXPECT_FALSE(
+        matchesConditionally(Code, traverse(TK_IgnoreUnlessSpelledInSource, M),
+                             true, {"-std=c++20"}));
+  }
+  {
+    auto M = cxxForRangeStmt(
+        hasInitStatement(declStmt(hasSingleDecl(varDecl(
+            hasName("a"),
+            hasInitializer(declRefExpr(to(varDecl(hasName("arr"))))))))),
+        hasLoopVariable(varDecl(hasName("i"))),
+        hasRangeInit(declRefExpr(to(varDecl(hasName("a"))))));
+    EXPECT_TRUE(
+        matchesConditionally(Code, traverse(TK_AsIs, M), true, {"-std=c++20"}));
+    EXPECT_TRUE(
+        matchesConditionally(Code, traverse(TK_IgnoreUnlessSpelledInSource, M),
+                             true, {"-std=c++20"}));
+  }
+  Code = R"cpp(
+void hasDefaultArg(int i, int j = 0)
+{
+}
+void callDefaultArg()
+{
+  hasDefaultArg(42);
+}
+)cpp";
+  auto hasDefaultArgCall = [](auto InnerMatcher) {
+    return callExpr(callee(functionDecl(hasName("hasDefaultArg"))),
+                    InnerMatcher);
+  };
+  {
+    auto M = hasDefaultArgCall(has(integerLiteral(equals(42))));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = hasDefaultArgCall(has(cxxDefaultArgExpr()));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = hasDefaultArgCall(argumentCountIs(2));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = hasDefaultArgCall(argumentCountIs(1));
+    EXPECT_FALSE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_TRUE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = hasDefaultArgCall(hasArgument(1, cxxDefaultArgExpr()));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
+  {
+    auto M = hasDefaultArgCall(hasAnyArgument(cxxDefaultArgExpr()));
+    EXPECT_TRUE(matches(Code, traverse(TK_AsIs, M)));
+    EXPECT_FALSE(matches(Code, traverse(TK_IgnoreUnlessSpelledInSource, M)));
+  }
 }
 
 template <typename MatcherT>
 bool matcherTemplateWithBinding(StringRef Code, const MatcherT &M) {
   return matchAndVerifyResultTrue(
-      std::string(Code), M.bind("matchedStmt"),
+      Code, M.bind("matchedStmt"),
       std::make_unique<VerifyIdIsBoundTo<ReturnStmt>>("matchedStmt", 1));
 }
 
@@ -1913,7 +2702,7 @@ int foo()
 
 TEST(Traversal, traverseMatcherNesting) {
 
-  const char *Code = R"cpp(
+  StringRef Code = R"cpp(
 float bar(int i)
 {
   return i;
@@ -1926,14 +2715,19 @@ void foo()
 )cpp";
 
   EXPECT_TRUE(
-      matches(Code, traverse(TK_IgnoreImplicitCastsAndParentheses,
+      matches(Code, traverse(TK_IgnoreUnlessSpelledInSource,
                              callExpr(has(callExpr(traverse(
                                  TK_AsIs, callExpr(has(implicitCastExpr(
                                               has(floatLiteral())))))))))));
+
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               traverse(TK_AsIs, implicitCastExpr(has(floatLiteral()))))));
 }
 
 TEST(Traversal, traverseMatcherThroughImplicit) {
-  const char *Code = R"cpp(
+  StringRef Code = R"cpp(
 struct S {
   S(int x);
 };
@@ -1944,8 +2738,7 @@ void constructImplicit() {
 }
   )cpp";
 
-  auto Matcher =
-      traverse(TK_IgnoreImplicitCastsAndParentheses, implicitCastExpr());
+  auto Matcher = traverse(TK_IgnoreUnlessSpelledInSource, implicitCastExpr());
 
   // Verfiy that it does not segfault
   EXPECT_FALSE(matches(Code, Matcher));
@@ -1953,7 +2746,7 @@ void constructImplicit() {
 
 TEST(Traversal, traverseMatcherThroughMemoization) {
 
-  const char *Code = R"cpp(
+  StringRef Code = R"cpp(
 void foo()
 {
   int i = 3.0;
@@ -1972,13 +2765,13 @@ void foo()
   EXPECT_TRUE(matches(
       Code,
       functionDecl(anyOf(hasDescendant(Matcher),
-                         traverse(TK_IgnoreImplicitCastsAndParentheses,
+                         traverse(TK_IgnoreUnlessSpelledInSource,
                                   functionDecl(hasDescendant(Matcher)))))));
 }
 
 TEST(Traversal, traverseUnlessSpelledInSource) {
 
-  const char *Code = R"cpp(
+  StringRef Code = R"cpp(
 
 struct A
 {
@@ -2061,113 +2854,145 @@ void func14() {
 
 )cpp";
 
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func1"))),
-                                hasReturnValue(integerLiteral(equals(42)))))));
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       returnStmt(forFunction(functionDecl(hasName("func1"))),
+                                  hasReturnValue(integerLiteral(equals(42))))),
+              langCxx20OrLater()));
 
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     integerLiteral(equals(42),
-                                    hasParent(returnStmt(forFunction(
-                                        functionDecl(hasName("func1")))))))));
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       integerLiteral(equals(42),
+                                      hasParent(returnStmt(forFunction(
+                                          functionDecl(hasName("func1"))))))),
+              langCxx20OrLater()));
 
   EXPECT_TRUE(matches(
       Code,
       traverse(TK_IgnoreUnlessSpelledInSource,
                returnStmt(forFunction(functionDecl(hasName("func2"))),
                           hasReturnValue(cxxTemporaryObjectExpr(
-                              hasArgument(0, integerLiteral(equals(42)))))))));
+                              hasArgument(0, integerLiteral(equals(42))))))),
+      langCxx20OrLater()));
   EXPECT_TRUE(matches(
       Code,
-      traverse(TK_IgnoreUnlessSpelledInSource,
-               integerLiteral(
-                   equals(42),
-                   hasParent(cxxTemporaryObjectExpr(hasParent(returnStmt(
-                       forFunction(functionDecl(hasName("func2")))))))))));
+      traverse(
+          TK_IgnoreUnlessSpelledInSource,
+          integerLiteral(equals(42),
+                         hasParent(cxxTemporaryObjectExpr(hasParent(returnStmt(
+                             forFunction(functionDecl(hasName("func2"))))))))),
+      langCxx20OrLater()));
 
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func3"))),
-                                hasReturnValue(
-                                    cxxFunctionalCastExpr(hasSourceExpression(
-                                        integerLiteral(equals(42)))))))));
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       returnStmt(forFunction(functionDecl(hasName("func3"))),
+                                  hasReturnValue(cxxConstructExpr(hasArgument(
+                                      0, integerLiteral(equals(42))))))),
+              langCxx20OrLater()));
 
   EXPECT_TRUE(matches(
       Code,
-      traverse(TK_IgnoreUnlessSpelledInSource,
-               integerLiteral(
-                   equals(42),
-                   hasParent(cxxFunctionalCastExpr(hasParent(returnStmt(
-                       forFunction(functionDecl(hasName("func3")))))))))));
+      traverse(
+          TK_IgnoreUnlessSpelledInSource,
+          integerLiteral(equals(42),
+                         hasParent(cxxConstructExpr(hasParent(returnStmt(
+                             forFunction(functionDecl(hasName("func3"))))))))),
+      langCxx20OrLater()));
+
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       returnStmt(forFunction(functionDecl(hasName("func4"))),
+                                  hasReturnValue(cxxTemporaryObjectExpr()))),
+              langCxx20OrLater()));
+
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       returnStmt(forFunction(functionDecl(hasName("func5"))),
+                                  hasReturnValue(cxxTemporaryObjectExpr()))),
+              langCxx20OrLater()));
+
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       returnStmt(forFunction(functionDecl(hasName("func6"))),
+                                  hasReturnValue(cxxTemporaryObjectExpr()))),
+              langCxx20OrLater()));
+
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       returnStmt(forFunction(functionDecl(hasName("func7"))),
+                                  hasReturnValue(cxxTemporaryObjectExpr()))),
+              langCxx20OrLater()));
+
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       returnStmt(forFunction(functionDecl(hasName("func8"))),
+                                  hasReturnValue(cxxFunctionalCastExpr(
+                                      hasSourceExpression(initListExpr()))))),
+              langCxx20OrLater()));
+
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       returnStmt(forFunction(functionDecl(hasName("func9"))),
+                                  hasReturnValue(cxxFunctionalCastExpr(
+                                      hasSourceExpression(initListExpr()))))),
+              langCxx20OrLater()));
 
   EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func4"))),
-                                hasReturnValue(cxxTemporaryObjectExpr())))));
+      Code,
+      traverse(
+          TK_IgnoreUnlessSpelledInSource,
+          returnStmt(forFunction(functionDecl(hasName("func10"))),
+                     hasReturnValue(declRefExpr(to(varDecl(hasName("a"))))))),
+      langCxx20OrLater()));
+
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       declRefExpr(to(varDecl(hasName("a"))),
+                                   hasParent(returnStmt(forFunction(
+                                       functionDecl(hasName("func10"))))))),
+              langCxx20OrLater()));
 
   EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func5"))),
-                                hasReturnValue(cxxTemporaryObjectExpr())))));
+      Code,
+      traverse(
+          TK_IgnoreUnlessSpelledInSource,
+          returnStmt(forFunction(functionDecl(hasName("func11"))),
+                     hasReturnValue(declRefExpr(to(varDecl(hasName("b"))))))),
+      langCxx20OrLater()));
+
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       declRefExpr(to(varDecl(hasName("b"))),
+                                   hasParent(returnStmt(forFunction(
+                                       functionDecl(hasName("func11"))))))),
+              langCxx20OrLater()));
 
   EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func6"))),
-                                hasReturnValue(cxxTemporaryObjectExpr())))));
+      Code,
+      traverse(
+          TK_IgnoreUnlessSpelledInSource,
+          returnStmt(forFunction(functionDecl(hasName("func12"))),
+                     hasReturnValue(declRefExpr(to(varDecl(hasName("c"))))))),
+      langCxx20OrLater()));
 
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func7"))),
-                                hasReturnValue(cxxTemporaryObjectExpr())))));
-
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func8"))),
-                                hasReturnValue(cxxFunctionalCastExpr(
-                                    hasSourceExpression(initListExpr())))))));
-
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func9"))),
-                                hasReturnValue(cxxFunctionalCastExpr(
-                                    hasSourceExpression(initListExpr())))))));
-
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func10"))),
-                                hasReturnValue(
-                                    declRefExpr(to(varDecl(hasName("a")))))))));
-
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     declRefExpr(to(varDecl(hasName("a"))),
-                                 hasParent(returnStmt(forFunction(
-                                     functionDecl(hasName("func10")))))))));
-
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func11"))),
-                                hasReturnValue(
-                                    declRefExpr(to(varDecl(hasName("b")))))))));
-
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     declRefExpr(to(varDecl(hasName("b"))),
-                                 hasParent(returnStmt(forFunction(
-                                     functionDecl(hasName("func11")))))))));
-
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     returnStmt(forFunction(functionDecl(hasName("func12"))),
-                                hasReturnValue(
-                                    declRefExpr(to(varDecl(hasName("c")))))))));
-
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     declRefExpr(to(varDecl(hasName("c"))),
-                                 hasParent(returnStmt(forFunction(
-                                     functionDecl(hasName("func12")))))))));
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       declRefExpr(to(varDecl(hasName("c"))),
+                                   hasParent(returnStmt(forFunction(
+                                       functionDecl(hasName("func12"))))))),
+              langCxx20OrLater()));
 
   EXPECT_TRUE(matches(
       Code,
@@ -2178,13 +3003,16 @@ void func14() {
                      has(declRefExpr(to(varDecl(hasName("a"))))),
                      has(varDecl(hasName("b"), hasInitializer(declRefExpr(to(
                                                    varDecl(hasName("c"))))))),
-                     has(parmVarDecl(hasName("d")))))));
+                     has(parmVarDecl(hasName("d"))))),
+      langCxx20OrLater()));
 
-  EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     declRefExpr(to(varDecl(hasName("a"))),
-                                 hasParent(lambdaExpr(forFunction(
-                                     functionDecl(hasName("func13")))))))));
+  EXPECT_TRUE(
+      matches(Code,
+              traverse(TK_IgnoreUnlessSpelledInSource,
+                       declRefExpr(to(varDecl(hasName("a"))),
+                                   hasParent(lambdaExpr(forFunction(
+                                       functionDecl(hasName("func13"))))))),
+              langCxx20OrLater()));
 
   EXPECT_TRUE(matches(
       Code,
@@ -2192,18 +3020,21 @@ void func14() {
                varDecl(hasName("b"),
                        hasInitializer(declRefExpr(to(varDecl(hasName("c"))))),
                        hasParent(lambdaExpr(
-                           forFunction(functionDecl(hasName("func13")))))))));
+                           forFunction(functionDecl(hasName("func13"))))))),
+      langCxx20OrLater()));
 
   EXPECT_TRUE(matches(
-      Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                     lambdaExpr(
-                         forFunction(functionDecl(hasName("func14"))),
-                         has(templateTypeParmDecl(hasName("TemplateType")))))));
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               lambdaExpr(forFunction(functionDecl(hasName("func14"))),
+                          has(templateTypeParmDecl(hasName("TemplateType"))))),
+      langCxx20OrLater()));
 
-  EXPECT_TRUE(
-      matches(Code, traverse(TK_IgnoreUnlessSpelledInSource,
-                             functionDecl(hasName("func14"),
-                                          hasDescendant(floatLiteral())))));
+  EXPECT_TRUE(matches(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               functionDecl(hasName("func14"), hasDescendant(floatLiteral()))),
+      langCxx20OrLater()));
 }
 
 TEST(IgnoringImpCasts, MatchesImpCasts) {
@@ -2438,68 +3269,63 @@ TEST(SwitchCase, MatchesEachCase) {
 
 TEST(Declaration, HasExplicitSpecifier) {
 
-  EXPECT_TRUE(matchesConditionally(
-      "void f();", functionDecl(hasExplicitSpecifier(constantExpr())), false,
-      "-std=c++2a"));
-  EXPECT_TRUE(matchesConditionally(
-      "template<bool b> struct S { explicit operator int(); };",
-      cxxConversionDecl(hasExplicitSpecifier(constantExpr(has(cxxBoolLiteral())))),
-      false, "-std=c++2a"));
-  EXPECT_TRUE(matchesConditionally(
-      "template<bool b> struct S { explicit(b) operator int(); };",
-      cxxConversionDecl(hasExplicitSpecifier(constantExpr(has(cxxBoolLiteral())))),
-      false, "-std=c++2a"));
+  EXPECT_TRUE(notMatches("void f();",
+                         functionDecl(hasExplicitSpecifier(constantExpr())),
+                         langCxx20OrLater()));
   EXPECT_TRUE(
-      matchesConditionally("struct S { explicit(true) operator int(); };",
-                           traverse(ast_type_traits::TK_AsIs,
-                                    cxxConversionDecl(hasExplicitSpecifier(
-                                        constantExpr(has(cxxBoolLiteral()))))),
-                           true, "-std=c++2a"));
+      notMatches("template<bool b> struct S { explicit operator int(); };",
+                 cxxConversionDecl(
+                     hasExplicitSpecifier(constantExpr(has(cxxBoolLiteral())))),
+                 langCxx20OrLater()));
   EXPECT_TRUE(
-      matchesConditionally("struct S { explicit(false) operator int(); };",
-                           traverse(ast_type_traits::TK_AsIs,
-                                    cxxConversionDecl(hasExplicitSpecifier(
-                                        constantExpr(has(cxxBoolLiteral()))))),
-                           true, "-std=c++2a"));
+      notMatches("template<bool b> struct S { explicit(b) operator int(); };",
+                 cxxConversionDecl(
+                     hasExplicitSpecifier(constantExpr(has(cxxBoolLiteral())))),
+                 langCxx20OrLater()));
+  EXPECT_TRUE(matches("struct S { explicit(true) operator int(); };",
+                      traverse(ast_type_traits::TK_AsIs,
+                               cxxConversionDecl(hasExplicitSpecifier(
+                                   constantExpr(has(cxxBoolLiteral()))))),
+                      langCxx20OrLater()));
+  EXPECT_TRUE(matches("struct S { explicit(false) operator int(); };",
+                      traverse(ast_type_traits::TK_AsIs,
+                               cxxConversionDecl(hasExplicitSpecifier(
+                                   constantExpr(has(cxxBoolLiteral()))))),
+                      langCxx20OrLater()));
+  EXPECT_TRUE(notMatches("template<bool b> struct S { explicit(b) S(int); };",
+                         traverse(ast_type_traits::TK_AsIs,
+                                  cxxConstructorDecl(hasExplicitSpecifier(
+                                      constantExpr(has(cxxBoolLiteral()))))),
+                         langCxx20OrLater()));
+  EXPECT_TRUE(matches("struct S { explicit(true) S(int); };",
+                      traverse(ast_type_traits::TK_AsIs,
+                               cxxConstructorDecl(hasExplicitSpecifier(
+                                   constantExpr(has(cxxBoolLiteral()))))),
+                      langCxx20OrLater()));
+  EXPECT_TRUE(matches("struct S { explicit(false) S(int); };",
+                      traverse(ast_type_traits::TK_AsIs,
+                               cxxConstructorDecl(hasExplicitSpecifier(
+                                   constantExpr(has(cxxBoolLiteral()))))),
+                      langCxx20OrLater()));
   EXPECT_TRUE(
-      matchesConditionally("template<bool b> struct S { explicit(b) S(int); };",
-                           traverse(ast_type_traits::TK_AsIs,
-                                    cxxConstructorDecl(hasExplicitSpecifier(
-                                        constantExpr(has(cxxBoolLiteral()))))),
-                           false, "-std=c++2a"));
-  EXPECT_TRUE(
-      matchesConditionally("struct S { explicit(true) S(int); };",
-                           traverse(ast_type_traits::TK_AsIs,
-                                    cxxConstructorDecl(hasExplicitSpecifier(
-                                        constantExpr(has(cxxBoolLiteral()))))),
-                           true, "-std=c++2a"));
-  EXPECT_TRUE(
-      matchesConditionally("struct S { explicit(false) S(int); };",
-                           traverse(ast_type_traits::TK_AsIs,
-                                    cxxConstructorDecl(hasExplicitSpecifier(
-                                        constantExpr(has(cxxBoolLiteral()))))),
-                           true, "-std=c++2a"));
-  EXPECT_TRUE(matchesConditionally(
-      "template<typename T> struct S { S(int); };"
-      "template<bool b = true> explicit(b) S(int) -> S<int>;",
-      traverse(ast_type_traits::TK_AsIs,
-               cxxDeductionGuideDecl(
-                   hasExplicitSpecifier(constantExpr(has(cxxBoolLiteral()))))),
-      false, "-std=c++2a"));
-  EXPECT_TRUE(
-      matchesConditionally("template<typename T> struct S { S(int); };"
-                           "explicit(true) S(int) -> S<int>;",
-                           traverse(ast_type_traits::TK_AsIs,
-                                    cxxDeductionGuideDecl(hasExplicitSpecifier(
-                                        constantExpr(has(cxxBoolLiteral()))))),
-                           true, "-std=c++2a"));
-  EXPECT_TRUE(
-      matchesConditionally("template<typename T> struct S { S(int); };"
-                           "explicit(false) S(int) -> S<int>;",
-                           traverse(ast_type_traits::TK_AsIs,
-                                    cxxDeductionGuideDecl(hasExplicitSpecifier(
-                                        constantExpr(has(cxxBoolLiteral()))))),
-                           true, "-std=c++2a"));
+      notMatches("template<typename T> struct S { S(int); };"
+                 "template<bool b = true> explicit(b) S(int) -> S<int>;",
+                 traverse(ast_type_traits::TK_AsIs,
+                          cxxDeductionGuideDecl(hasExplicitSpecifier(
+                              constantExpr(has(cxxBoolLiteral()))))),
+                 langCxx20OrLater()));
+  EXPECT_TRUE(matches("template<typename T> struct S { S(int); };"
+                      "explicit(true) S(int) -> S<int>;",
+                      traverse(ast_type_traits::TK_AsIs,
+                               cxxDeductionGuideDecl(hasExplicitSpecifier(
+                                   constantExpr(has(cxxBoolLiteral()))))),
+                      langCxx20OrLater()));
+  EXPECT_TRUE(matches("template<typename T> struct S { S(int); };"
+                      "explicit(false) S(int) -> S<int>;",
+                      traverse(ast_type_traits::TK_AsIs,
+                               cxxDeductionGuideDecl(hasExplicitSpecifier(
+                                   constantExpr(has(cxxBoolLiteral()))))),
+                      langCxx20OrLater()));
 }
 
 TEST(ForEachConstructorInitializer, MatchesInitializers) {
@@ -2541,6 +3367,38 @@ TEST(ForEach, BindsRecursiveCombinations) {
     recordDecl(hasName("C"),
                forEach(recordDecl(forEach(fieldDecl().bind("f"))))),
     std::make_unique<VerifyIdIsBoundTo<FieldDecl>>("f", 4)));
+}
+
+TEST(ForEach, DoesNotIgnoreImplicit) {
+  StringRef Code = R"cpp(
+void foo()
+{
+    int i = 0;
+    int b = 4;
+    i < b;
+}
+)cpp";
+  EXPECT_TRUE(matchAndVerifyResultFalse(
+      Code, binaryOperator(forEach(declRefExpr().bind("dre"))),
+      std::make_unique<VerifyIdIsBoundTo<DeclRefExpr>>("dre", 0)));
+
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      Code,
+      binaryOperator(forEach(
+          implicitCastExpr(hasSourceExpression(declRefExpr().bind("dre"))))),
+      std::make_unique<VerifyIdIsBoundTo<DeclRefExpr>>("dre", 2)));
+
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      Code,
+      binaryOperator(
+          forEach(expr(ignoringImplicit(declRefExpr().bind("dre"))))),
+      std::make_unique<VerifyIdIsBoundTo<DeclRefExpr>>("dre", 2)));
+
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      Code,
+      traverse(TK_IgnoreUnlessSpelledInSource,
+               binaryOperator(forEach(declRefExpr().bind("dre")))),
+      std::make_unique<VerifyIdIsBoundTo<DeclRefExpr>>("dre", 2)));
 }
 
 TEST(ForEachDescendant, BindsOneNode) {
@@ -2597,6 +3455,19 @@ TEST(Has, DoesNotDeleteBindings) {
   EXPECT_TRUE(matchAndVerifyResultTrue(
     "class X { int a; };", recordDecl(decl().bind("x"), has(fieldDecl())),
     std::make_unique<VerifyIdIsBoundTo<Decl>>("x", 1)));
+}
+
+TEST(TemplateArgumentLoc, Matches) {
+  EXPECT_TRUE(matchAndVerifyResultTrue(
+      R"cpp(
+        template <typename A, int B, template <typename> class C> class X {};
+        class A {};
+        const int B = 42;
+        template <typename> class C {};
+        X<A, B, C> x;
+      )cpp",
+      templateArgumentLoc().bind("x"),
+      std::make_unique<VerifyIdIsBoundTo<TemplateArgumentLoc>>("x", 3)));
 }
 
 TEST(LoopingMatchers, DoNotOverwritePreviousMatchResultOnFailure) {
@@ -2826,6 +3697,33 @@ TEST(HasParent, MatchesOnlyParent) {
     compoundStmt(hasParent(ifStmt()))));
 }
 
+TEST(MatcherMemoize, HasParentDiffersFromHas) {
+  // Test introduced after detecting a bug in memoization
+  constexpr auto code = "void f() { throw 1; }";
+  EXPECT_TRUE(notMatches(
+    code,
+    cxxThrowExpr(hasParent(expr()))));
+  EXPECT_TRUE(matches(
+    code,
+    cxxThrowExpr(has(expr()))));
+  EXPECT_TRUE(matches(
+    code,
+    cxxThrowExpr(anyOf(hasParent(expr()), has(expr())))));
+}
+
+TEST(MatcherMemoize, HasDiffersFromHasDescendant) {
+  // Test introduced after detecting a bug in memoization
+  constexpr auto code = "void f() { throw 1+1; }";
+  EXPECT_TRUE(notMatches(
+    code,
+    cxxThrowExpr(has(integerLiteral()))));
+  EXPECT_TRUE(matches(
+    code,
+    cxxThrowExpr(hasDescendant(integerLiteral()))));
+  EXPECT_TRUE(
+      notMatches(code, cxxThrowExpr(allOf(hasDescendant(integerLiteral()),
+                                          has(integerLiteral())))));
+}
 TEST(HasAncestor, MatchesAllAncestors) {
   EXPECT_TRUE(matches(
     "template <typename T> struct C { static void f() { 42; } };"
@@ -3006,8 +3904,8 @@ TEST(NNS, BindsNestedNameSpecifierLocs) {
 }
 
 TEST(NNS, DescendantsOfNestedNameSpecifiers) {
-  std::string Fragment =
-    "namespace a { struct A { struct B { struct C {}; }; }; };"
+  StringRef Fragment =
+      "namespace a { struct A { struct B { struct C {}; }; }; };"
       "void f() { a::A::B::C c; }";
   EXPECT_TRUE(matches(
     Fragment,
@@ -3035,8 +3933,8 @@ TEST(NNS, DescendantsOfNestedNameSpecifiers) {
 }
 
 TEST(NNS, NestedNameSpecifiersAsDescendants) {
-  std::string Fragment =
-    "namespace a { struct A { struct B { struct C {}; }; }; };"
+  StringRef Fragment =
+      "namespace a { struct A { struct B { struct C {}; }; }; };"
       "void f() { a::A::B::C c; }";
   EXPECT_TRUE(matches(
     Fragment,
@@ -3051,8 +3949,8 @@ TEST(NNS, NestedNameSpecifiersAsDescendants) {
 }
 
 TEST(NNSLoc, DescendantsOfNestedNameSpecifierLocs) {
-  std::string Fragment =
-    "namespace a { struct A { struct B { struct C {}; }; }; };"
+  StringRef Fragment =
+      "namespace a { struct A { struct B { struct C {}; }; }; };"
       "void f() { a::A::B::C c; }";
   EXPECT_TRUE(matches(
     Fragment,
@@ -3078,8 +3976,8 @@ TEST(NNSLoc, DescendantsOfNestedNameSpecifierLocs) {
 }
 
 TEST(NNSLoc, NestedNameSpecifierLocsAsDescendants) {
-  std::string Fragment =
-    "namespace a { struct A { struct B { struct C {}; }; }; };"
+  StringRef Fragment =
+      "namespace a { struct A { struct B { struct C {}; }; }; };"
       "void f() { a::A::B::C c; }";
   EXPECT_TRUE(matches(
     Fragment,
@@ -3155,21 +4053,19 @@ TEST(StatementMatcher, HasReturnValue) {
 }
 
 TEST(StatementMatcher, ForFunction) {
-  const auto CppString1 =
-    "struct PosVec {"
-      "  PosVec& operator=(const PosVec&) {"
-      "    auto x = [] { return 1; };"
-      "    return *this;"
-      "  }"
-      "};";
-  const auto CppString2 =
-    "void F() {"
-      "  struct S {"
-      "    void F2() {"
-      "       return;"
-      "    }"
-      "  };"
-      "}";
+  StringRef CppString1 = "struct PosVec {"
+                         "  PosVec& operator=(const PosVec&) {"
+                         "    auto x = [] { return 1; };"
+                         "    return *this;"
+                         "  }"
+                         "};";
+  StringRef CppString2 = "void F() {"
+                         "  struct S {"
+                         "    void F2() {"
+                         "       return;"
+                         "    }"
+                         "  };"
+                         "}";
   EXPECT_TRUE(
     matches(
       CppString1,
@@ -3234,10 +4130,10 @@ TEST(Matcher, ForEachOverriden) {
 }
 
 TEST(Matcher, HasAnyDeclaration) {
-  std::string Fragment = "void foo(int p1);"
-                         "void foo(int *p2);"
-                         "void bar(int p3);"
-                         "template <typename T> void baz(T t) { foo(t); }";
+  StringRef Fragment = "void foo(int p1);"
+                       "void foo(int *p2);"
+                       "void bar(int p3);"
+                       "template <typename T> void baz(T t) { foo(t); }";
 
   EXPECT_TRUE(
       matches(Fragment, unresolvedLookupExpr(hasAnyDeclaration(functionDecl(
@@ -3253,10 +4149,10 @@ TEST(Matcher, HasAnyDeclaration) {
 }
 
 TEST(SubstTemplateTypeParmType, HasReplacementType) {
-  std::string Fragment = "template<typename T>"
-                         "double F(T t);"
-                         "int i;"
-                         "double j = F(i);";
+  StringRef Fragment = "template<typename T>"
+                       "double F(T t);"
+                       "int i;"
+                       "double j = F(i);";
   EXPECT_TRUE(matches(Fragment, substTemplateTypeParmType(hasReplacementType(
                                     qualType(asString("int"))))));
   EXPECT_TRUE(notMatches(Fragment, substTemplateTypeParmType(hasReplacementType(
@@ -3294,24 +4190,24 @@ TEST(CXXNewExpr, PlacementArgs) {
   StatementMatcher IsPlacementNew = cxxNewExpr(hasAnyPlacementArg(anything()));
 
   EXPECT_TRUE(matches(R"(
-    void* operator new(decltype(sizeof(void*)), void*); 
+    void* operator new(decltype(sizeof(void*)), void*);
     int *foo(void* Storage) {
-      return new (Storage) int; 
+      return new (Storage) int;
     })",
                       IsPlacementNew));
 
   EXPECT_TRUE(matches(R"(
-    void* operator new(decltype(sizeof(void*)), void*, unsigned); 
+    void* operator new(decltype(sizeof(void*)), void*, unsigned);
     int *foo(void* Storage) {
-      return new (Storage, 16) int; 
+      return new (Storage, 16) int;
     })",
                       cxxNewExpr(hasPlacementArg(
                           1, ignoringImpCasts(integerLiteral(equals(16)))))));
 
   EXPECT_TRUE(notMatches(R"(
-    void* operator new(decltype(sizeof(void*)), void*); 
+    void* operator new(decltype(sizeof(void*)), void*);
     int *foo(void* Storage) {
-      return new int; 
+      return new int;
     })",
                          IsPlacementNew));
 }

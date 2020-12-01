@@ -60,6 +60,7 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/IntrinsicsPowerPC.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
@@ -244,10 +245,10 @@ INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_END(PPCLoopInstrFormPrep, DEBUG_TYPE, name, false, false)
 
-static const std::string PHINodeNameSuffix    = ".phi";
-static const std::string CastNodeNameSuffix   = ".cast";
-static const std::string GEPNodeIncNameSuffix = ".inc";
-static const std::string GEPNodeOffNameSuffix = ".off";
+static constexpr StringRef PHINodeNameSuffix    = ".phi";
+static constexpr StringRef CastNodeNameSuffix   = ".cast";
+static constexpr StringRef GEPNodeIncNameSuffix = ".inc";
+static constexpr StringRef GEPNodeOffNameSuffix = ".off";
 
 FunctionPass *llvm::createPPCLoopInstrFormPrepPass(PPCTargetMachine &TM) {
   return new PPCLoopInstrFormPrep(TM);
@@ -263,7 +264,7 @@ static bool IsPtrInBounds(Value *BasePtr) {
   return false;
 }
 
-static std::string getInstrName(const Value *I, const std::string Suffix) {
+static std::string getInstrName(const Value *I, StringRef Suffix) {
   assert(I && "Invalid paramater!");
   if (I->hasName())
     return (I->getName() + Suffix).str();
@@ -277,8 +278,11 @@ static Value *GetPointerOperand(Value *MemI) {
   } else if (StoreInst *SMemI = dyn_cast<StoreInst>(MemI)) {
     return SMemI->getPointerOperand();
   } else if (IntrinsicInst *IMemI = dyn_cast<IntrinsicInst>(MemI)) {
-    if (IMemI->getIntrinsicID() == Intrinsic::prefetch)
+    if (IMemI->getIntrinsicID() == Intrinsic::prefetch ||
+        IMemI->getIntrinsicID() == Intrinsic::ppc_mma_lxvp)
       return IMemI->getArgOperand(0);
+    if (IMemI->getIntrinsicID() == Intrinsic::ppc_mma_stxvp)
+      return IMemI->getArgOperand(1);
   }
 
   return nullptr;
@@ -345,9 +349,13 @@ SmallVector<Bucket, 16> PPCLoopInstrFormPrep::collectCandidates(
         MemI = SMemI;
         PtrValue = SMemI->getPointerOperand();
       } else if (IntrinsicInst *IMemI = dyn_cast<IntrinsicInst>(&J)) {
-        if (IMemI->getIntrinsicID() == Intrinsic::prefetch) {
+        if (IMemI->getIntrinsicID() == Intrinsic::prefetch ||
+            IMemI->getIntrinsicID() == Intrinsic::ppc_mma_lxvp) {
           MemI = IMemI;
           PtrValue = IMemI->getArgOperand(0);
+        } else if (IMemI->getIntrinsicID() == Intrinsic::ppc_mma_stxvp) {
+          MemI = IMemI;
+          PtrValue = IMemI->getArgOperand(1);
         } else continue;
       } else continue;
 
@@ -606,6 +614,10 @@ bool PPCLoopInstrFormPrep::rewriteLoadStores(Loop *L, Bucket &BucketChain,
       NewBasePtr = NewPHI;
   }
 
+  // Clear the rewriter cache, because values that are in the rewriter's cache
+  // can be deleted below, causing the AssertingVH in the cache to trigger.
+  SCEVE.clear();
+
   if (Instruction *IDel = dyn_cast<Instruction>(BasePtr))
     BBChanged.insert(IDel->getParent());
   BasePtr->replaceAllUsesWith(NewBasePtr);
@@ -791,7 +803,7 @@ bool PPCLoopInstrFormPrep::runOnLoop(Loop *L) {
   bool MadeChange = false;
 
   // Only prep. the inner-most loop
-  if (!L->empty())
+  if (!L->isInnermost())
     return MadeChange;
 
   // Return if already done enough preparation.
@@ -822,6 +834,11 @@ bool PPCLoopInstrFormPrep::runOnLoop(Loop *L) {
     // There are no update forms for Altivec vector load/stores.
     if (ST && ST->hasAltivec() &&
         PtrValue->getType()->getPointerElementType()->isVectorTy())
+      return false;
+    // There are no update forms for P10 lxvp/stxvp intrinsic.
+    auto *II = dyn_cast<IntrinsicInst>(I);
+    if (II && ((II->getIntrinsicID() == Intrinsic::ppc_mma_lxvp) ||
+               II->getIntrinsicID() == Intrinsic::ppc_mma_stxvp))
       return false;
     // See getPreIndexedAddressParts, the displacement for LDU/STDU has to
     // be 4's multiple (DS-form). For i64 loads/stores when the displacement
@@ -860,7 +877,13 @@ bool PPCLoopInstrFormPrep::runOnLoop(Loop *L) {
   // Check if a load/store has DQ form.
   auto isDQFormCandidate = [&] (const Instruction *I, const Value *PtrValue) {
     assert((PtrValue && I) && "Invalid parameter!");
-    return !isa<IntrinsicInst>(I) && ST && ST->hasP9Vector() &&
+    // Check if it is a P10 lxvp/stxvp intrinsic.
+    auto *II = dyn_cast<IntrinsicInst>(I);
+    if (II)
+      return II->getIntrinsicID() == Intrinsic::ppc_mma_lxvp ||
+             II->getIntrinsicID() == Intrinsic::ppc_mma_stxvp;
+    // Check if it is a P9 vector load/store.
+    return ST && ST->hasP9Vector() &&
            (PtrValue->getType()->getPointerElementType()->isVectorTy());
   };
 

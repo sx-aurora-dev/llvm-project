@@ -15,7 +15,6 @@
 
 #include "AArch64.h"
 #include "AArch64RegisterInfo.h"
-#include "AArch64StackOffset.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/CodeGen/MachineCombinerPattern.h"
 #include "llvm/CodeGen/TargetInstrInfo.h"
@@ -113,10 +112,14 @@ public:
   /// Hint that pairing the given load or store is unprofitable.
   static void suppressLdStPair(MachineInstr &MI);
 
-  bool getMemOperandsWithOffset(
+  Optional<ExtAddrMode>
+  getAddrModeFromMemoryOp(const MachineInstr &MemI,
+                          const TargetRegisterInfo *TRI) const override;
+
+  bool getMemOperandsWithOffsetWidth(
       const MachineInstr &MI, SmallVectorImpl<const MachineOperand *> &BaseOps,
-      int64_t &Offset, bool &OffsetIsScalable, const TargetRegisterInfo *TRI)
-      const override;
+      int64_t &Offset, bool &OffsetIsScalable, unsigned &Width,
+      const TargetRegisterInfo *TRI) const override;
 
   /// If \p OffsetIsScalable is set to 'true', the offset is scaled by `vscale`.
   /// This is true for some SVE instructions like ldr/str that have a
@@ -140,7 +143,7 @@ public:
 
   bool shouldClusterMemOps(ArrayRef<const MachineOperand *> BaseOps1,
                            ArrayRef<const MachineOperand *> BaseOps2,
-                           unsigned NumLoads) const override;
+                           unsigned NumLoads, unsigned NumBytes) const override;
 
   void copyPhysRegTuple(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                         const DebugLoc &DL, MCRegister DestReg,
@@ -188,6 +191,9 @@ public:
                      MachineBasicBlock *&FBB,
                      SmallVectorImpl<MachineOperand> &Cond,
                      bool AllowModify = false) const override;
+  bool analyzeBranchPredicate(MachineBasicBlock &MBB,
+                              MachineBranchPredicate &MBP,
+                              bool AllowModify) const override;
   unsigned removeBranch(MachineBasicBlock &MBB,
                         int *BytesRemoved = nullptr) const override;
   unsigned insertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
@@ -286,6 +292,13 @@ public:
   Optional<ParamLoadedValue> describeLoadedValue(const MachineInstr &MI,
                                                  Register Reg) const override;
 
+  static void decomposeStackOffsetForFrameOffsets(const StackOffset &Offset,
+                                                  int64_t &NumBytes,
+                                                  int64_t &NumPredicateVectors,
+                                                  int64_t &NumDataVectors);
+  static void decomposeStackOffsetForDwarfOffsets(const StackOffset &Offset,
+                                                  int64_t &ByteSized,
+                                                  int64_t &VGSized);
 #define GET_INSTRINFO_HELPER_DECLS
 #include "AArch64GenInstrInfo.inc"
 
@@ -386,8 +399,19 @@ static inline bool isCondBranchOpcode(int Opc) {
 }
 
 static inline bool isIndirectBranchOpcode(int Opc) {
-  return Opc == AArch64::BR;
+  switch (Opc) {
+  case AArch64::BR:
+  case AArch64::BRAA:
+  case AArch64::BRAB:
+  case AArch64::BRAAZ:
+  case AArch64::BRABZ:
+    return true;
+  }
+  return false;
 }
+
+/// Return opcode to be used for indirect calls.
+unsigned getBLRCallOpcode(const MachineFunction &MF);
 
 // struct TSFlags {
 #define TSFLAG_ELEMENT_SIZE_TYPE(X)      (X)       // 3-bits
@@ -431,7 +455,7 @@ enum FalseLaneType {
 
 int getSVEPseudoMap(uint16_t Opcode);
 int getSVERevInstr(uint16_t Opcode);
-int getSVEOrigInstr(uint16_t Opcode);
+int getSVENonRevInstr(uint16_t Opcode);
 }
 
 } // end namespace llvm

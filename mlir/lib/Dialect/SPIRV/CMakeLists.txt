@@ -1,6 +1,3 @@
-if (MSVC)
-  set_source_files_properties(SPIRVDialect.cpp PROPERTIES COMPILE_FLAGS /bigobj)
-endif()
 
 set(LLVM_TARGET_DEFINITIONS SPIRVCanonicalization.td)
 mlir_tablegen(SPIRVCanonicalization.inc -gen-rewriters)
@@ -37,5 +34,6 @@ add_mlir_dialect_library(MLIRSPIRV
   MLIRTransforms
   )
 
+add_subdirectory(Linking)
 add_subdirectory(Serialization)
 add_subdirectory(Transforms)

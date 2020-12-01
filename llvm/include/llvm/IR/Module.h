@@ -46,6 +46,7 @@ class FunctionType;
 class GVMaterializer;
 class LLVMContext;
 class MemoryBuffer;
+class ModuleSummaryIndex;
 class Pass;
 class RandomNumberGenerator;
 template <class PtrType> class SmallPtrSetImpl;
@@ -328,10 +329,6 @@ public:
   /// \see LLVMContext::getOperandBundleTagID
   void getOperandBundleTags(SmallVectorImpl<StringRef> &Result) const;
 
-  /// Return the type with the specified name, or null if there is none by that
-  /// name.
-  StructType *getTypeByName(StringRef Name) const;
-
   std::vector<StructType *> getIdentifiedStructTypes() const;
 
 /// @}
@@ -592,6 +589,7 @@ public:
   const_global_iterator global_begin() const { return GlobalList.begin(); }
   global_iterator       global_end  ()       { return GlobalList.end(); }
   const_global_iterator global_end  () const { return GlobalList.end(); }
+  size_t                global_size () const { return GlobalList.size(); }
   bool                  global_empty() const { return GlobalList.empty(); }
 
   iterator_range<global_iterator> globals() {
@@ -852,7 +850,7 @@ public:
 
   /// Returns profile summary metadata. When IsCS is true, use the context
   /// sensitive profile summary.
-  Metadata *getProfileSummary(bool IsCS);
+  Metadata *getProfileSummary(bool IsCS) const;
   /// @}
 
   /// Returns whether semantic interposition is to be respected.
@@ -882,6 +880,10 @@ public:
 
   /// Take ownership of the given memory buffer.
   void setOwnedMemoryBuffer(std::unique_ptr<MemoryBuffer> MB);
+
+  /// Set the partial sample profile ratio in the profile summary module flag,
+  /// if applicable.
+  void setPartialSampleProfileRatio(const ModuleSummaryIndex &Index);
 };
 
 /// Given "llvm.used" or "llvm.compiler.used" as a global name, collect

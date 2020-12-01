@@ -771,40 +771,53 @@ static void HandleInlinedEHPad(InvokeInst *II, BasicBlock *FirstNewBlock,
   UnwindDest->removePredecessor(InvokeBB);
 }
 
-/// When inlining a call site that has !llvm.mem.parallel_loop_access or
-/// llvm.access.group metadata, that metadata should be propagated to all
-/// memory-accessing cloned instructions.
-static void PropagateParallelLoopAccessMetadata(CallBase &CB,
-                                                ValueToValueMapTy &VMap) {
-  MDNode *M = CB.getMetadata(LLVMContext::MD_mem_parallel_loop_access);
-  MDNode *CallAccessGroup = CB.getMetadata(LLVMContext::MD_access_group);
-  if (!M && !CallAccessGroup)
+/// When inlining a call site that has !llvm.mem.parallel_loop_access,
+/// !llvm.access.group, !alias.scope or !noalias metadata, that metadata should
+/// be propagated to all memory-accessing cloned instructions.
+static void PropagateCallSiteMetadata(CallBase &CB, ValueToValueMapTy &VMap) {
+  MDNode *MemParallelLoopAccess =
+      CB.getMetadata(LLVMContext::MD_mem_parallel_loop_access);
+  MDNode *AccessGroup = CB.getMetadata(LLVMContext::MD_access_group);
+  MDNode *AliasScope = CB.getMetadata(LLVMContext::MD_alias_scope);
+  MDNode *NoAlias = CB.getMetadata(LLVMContext::MD_noalias);
+  if (!MemParallelLoopAccess && !AccessGroup && !AliasScope && !NoAlias)
     return;
 
   for (ValueToValueMapTy::iterator VMI = VMap.begin(), VMIE = VMap.end();
        VMI != VMIE; ++VMI) {
-    if (!VMI->second)
+    // Check that key is an instruction, to skip the Argument mapping, which
+    // points to an instruction in the original function, not the inlined one.
+    if (!VMI->second || !isa<Instruction>(VMI->first))
       continue;
 
     Instruction *NI = dyn_cast<Instruction>(VMI->second);
     if (!NI)
       continue;
 
-    if (M) {
-      if (MDNode *PM =
-              NI->getMetadata(LLVMContext::MD_mem_parallel_loop_access)) {
-        M = MDNode::concatenate(PM, M);
-      NI->setMetadata(LLVMContext::MD_mem_parallel_loop_access, M);
-      } else if (NI->mayReadOrWriteMemory()) {
-        NI->setMetadata(LLVMContext::MD_mem_parallel_loop_access, M);
-      }
+    // This metadata is only relevant for instructions that access memory.
+    if (!NI->mayReadOrWriteMemory())
+      continue;
+
+    if (MemParallelLoopAccess) {
+      // TODO: This probably should not overwrite MemParalleLoopAccess.
+      MemParallelLoopAccess = MDNode::concatenate(
+          NI->getMetadata(LLVMContext::MD_mem_parallel_loop_access),
+          MemParallelLoopAccess);
+      NI->setMetadata(LLVMContext::MD_mem_parallel_loop_access,
+                      MemParallelLoopAccess);
     }
 
-    if (NI->mayReadOrWriteMemory()) {
-      MDNode *UnitedAccGroups = uniteAccessGroups(
-          NI->getMetadata(LLVMContext::MD_access_group), CallAccessGroup);
-      NI->setMetadata(LLVMContext::MD_access_group, UnitedAccGroups);
-    }
+    if (AccessGroup)
+      NI->setMetadata(LLVMContext::MD_access_group, uniteAccessGroups(
+          NI->getMetadata(LLVMContext::MD_access_group), AccessGroup));
+
+    if (AliasScope)
+      NI->setMetadata(LLVMContext::MD_alias_scope, MDNode::concatenate(
+          NI->getMetadata(LLVMContext::MD_alias_scope), AliasScope));
+
+    if (NoAlias)
+      NI->setMetadata(LLVMContext::MD_noalias, MDNode::concatenate(
+          NI->getMetadata(LLVMContext::MD_noalias), NoAlias));
   }
 }
 
@@ -879,38 +892,20 @@ static void CloneAliasScopeMetadata(CallBase &CB, ValueToValueMapTy &VMap) {
   // repacements from the map.
   for (ValueToValueMapTy::iterator VMI = VMap.begin(), VMIE = VMap.end();
        VMI != VMIE; ++VMI) {
-    if (!VMI->second)
+    // Check that key is an instruction, to skip the Argument mapping, which
+    // points to an instruction in the original function, not the inlined one.
+    if (!VMI->second || !isa<Instruction>(VMI->first))
       continue;
 
     Instruction *NI = dyn_cast<Instruction>(VMI->second);
     if (!NI)
       continue;
 
-    if (MDNode *M = NI->getMetadata(LLVMContext::MD_alias_scope)) {
-      MDNode *NewMD = MDMap[M];
-      // If the call site also had alias scope metadata (a list of scopes to
-      // which instructions inside it might belong), propagate those scopes to
-      // the inlined instructions.
-      if (MDNode *CSM = CB.getMetadata(LLVMContext::MD_alias_scope))
-        NewMD = MDNode::concatenate(NewMD, CSM);
-      NI->setMetadata(LLVMContext::MD_alias_scope, NewMD);
-    } else if (NI->mayReadOrWriteMemory()) {
-      if (MDNode *M = CB.getMetadata(LLVMContext::MD_alias_scope))
-        NI->setMetadata(LLVMContext::MD_alias_scope, M);
-    }
+    if (MDNode *M = NI->getMetadata(LLVMContext::MD_alias_scope))
+      NI->setMetadata(LLVMContext::MD_alias_scope, MDMap[M]);
 
-    if (MDNode *M = NI->getMetadata(LLVMContext::MD_noalias)) {
-      MDNode *NewMD = MDMap[M];
-      // If the call site also had noalias metadata (a list of scopes with
-      // which instructions inside it don't alias), propagate those scopes to
-      // the inlined instructions.
-      if (MDNode *CSM = CB.getMetadata(LLVMContext::MD_noalias))
-        NewMD = MDNode::concatenate(NewMD, CSM);
-      NI->setMetadata(LLVMContext::MD_noalias, NewMD);
-    } else if (NI->mayReadOrWriteMemory()) {
-      if (MDNode *M = CB.getMetadata(LLVMContext::MD_noalias))
-        NI->setMetadata(LLVMContext::MD_noalias, M);
-    }
+    if (MDNode *M = NI->getMetadata(LLVMContext::MD_noalias))
+      NI->setMetadata(LLVMContext::MD_noalias, MDMap[M]);
   }
 }
 
@@ -1037,7 +1032,7 @@ static void AddAliasScopeMetadata(CallBase &CB, ValueToValueMapTy &VMap,
       SmallSetVector<const Argument *, 4> NAPtrArgs;
       for (const Value *V : PtrArgs) {
         SmallVector<const Value *, 4> Objects;
-        GetUnderlyingObjects(V, Objects, DL, /* LI = */ nullptr);
+        getUnderlyingObjects(V, Objects, /* LI = */ nullptr);
 
         for (const Value *O : Objects)
           ObjSet.insert(O);
@@ -1245,7 +1240,7 @@ static void AddAlignmentAssumptions(CallBase &CB, InlineFunctionInfo &IFI) {
   Function *CalledFunc = CB.getCalledFunction();
   for (Argument &Arg : CalledFunc->args()) {
     unsigned Align = Arg.getType()->isPointerTy() ? Arg.getParamAlignment() : 0;
-    if (Align && !Arg.hasPassPointeeByValueAttr() && !Arg.hasNUses(0)) {
+    if (Align && !Arg.hasPassPointeeByValueCopyAttr() && !Arg.hasNUses(0)) {
       if (!DTCalculated) {
         DT.recalculate(*CB.getCaller());
         DTCalculated = true;
@@ -1291,7 +1286,11 @@ static void UpdateCallGraphAfterInlining(CallBase &CB,
   }
 
   for (; I != E; ++I) {
-    const Value *OrigCall = I->first;
+    // Skip 'refererence' call records.
+    if (!I->first)
+      continue;
+
+    const Value *OrigCall = *I->first;
 
     ValueToValueMapTy::iterator VMI = VMap.find(OrigCall);
     // Only copy the edge if the call was inlined!
@@ -1860,13 +1859,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
           OpDefs.emplace_back("deopt", std::move(MergedDeoptArgs));
         }
 
-        Instruction *NewI = nullptr;
-        if (isa<CallInst>(ICS))
-          NewI = CallInst::Create(cast<CallInst>(ICS), OpDefs, ICS);
-        else if (isa<CallBrInst>(ICS))
-          NewI = CallBrInst::Create(cast<CallBrInst>(ICS), OpDefs, ICS);
-        else
-          NewI = InvokeInst::Create(cast<InvokeInst>(ICS), OpDefs, ICS);
+        Instruction *NewI = CallBase::Create(ICS, OpDefs, ICS);
 
         // Note: the RAUW does the appropriate fixup in VMap, so we need to do
         // this even if the call returns void.
@@ -1897,8 +1890,8 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
     // function which feed into its return value.
     AddReturnAttributes(CB, VMap);
 
-    // Propagate llvm.mem.parallel_loop_access if necessary.
-    PropagateParallelLoopAccessMetadata(CB, VMap);
+    // Propagate metadata on the callsite if necessary.
+    PropagateCallSiteMetadata(CB, VMap);
 
     // Register any cloned assumptions.
     if (IFI.GetAssumptionCache)
@@ -2063,7 +2056,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
           dyn_cast<ConstantInt>(AI->getArraySize())) {
         auto &DL = Caller->getParent()->getDataLayout();
         Type *AllocaType = AI->getAllocatedType();
-        uint64_t AllocaTypeSize = DL.getTypeAllocSize(AllocaType);
+        TypeSize AllocaTypeSize = DL.getTypeAllocSize(AllocaType);
         uint64_t AllocaArraySize = AIArraySize->getLimitedValue();
 
         // Don't add markers for zero-sized allocas.
@@ -2072,9 +2065,10 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
 
         // Check that array size doesn't saturate uint64_t and doesn't
         // overflow when it's multiplied by type size.
-        if (AllocaArraySize != std::numeric_limits<uint64_t>::max() &&
+        if (!AllocaTypeSize.isScalable() &&
+            AllocaArraySize != std::numeric_limits<uint64_t>::max() &&
             std::numeric_limits<uint64_t>::max() / AllocaArraySize >=
-                AllocaTypeSize) {
+                AllocaTypeSize.getFixedSize()) {
           AllocaSize = ConstantInt::get(Type::getInt64Ty(AI->getContext()),
                                         AllocaArraySize * AllocaTypeSize);
         }
@@ -2162,13 +2156,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
         I->getOperandBundlesAsDefs(OpBundles);
         OpBundles.emplace_back("funclet", CallSiteEHPad);
 
-        Instruction *NewInst;
-        if (auto *CallI = dyn_cast<CallInst>(I))
-          NewInst = CallInst::Create(CallI, OpBundles, CallI);
-        else if (auto *CallBrI = dyn_cast<CallBrInst>(I))
-          NewInst = CallBrInst::Create(CallBrI, OpBundles, CallBrI);
-        else
-          NewInst = InvokeInst::Create(cast<InvokeInst>(I), OpBundles, I);
+        Instruction *NewInst = CallBase::Create(I, OpBundles, I);
         NewInst->takeName(I);
         I->replaceAllUsesWith(NewInst);
         I->eraseFromParent();
@@ -2471,7 +2459,7 @@ llvm::InlineResult llvm::InlineFunction(CallBase &CB, InlineFunctionInfo &IFI,
 
   // If we inlined any musttail calls and the original return is now
   // unreachable, delete it.  It can only contain a bitcast and ret.
-  if (InlinedMustTailCalls && pred_begin(AfterCallBB) == pred_end(AfterCallBB))
+  if (InlinedMustTailCalls && pred_empty(AfterCallBB))
     AfterCallBB->eraseFromParent();
 
   // We should always be able to fold the entry block of the function into the

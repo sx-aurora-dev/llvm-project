@@ -220,7 +220,7 @@ SBDebugger SBDebugger::Create(bool source_init_files,
     interp.get()->SkipLLDBInitFiles(false);
     interp.get()->SkipAppInitFiles(false);
     SBCommandReturnObject result;
-    interp.SourceInitFileInHomeDirectory(result);
+    interp.SourceInitFileInHomeDirectory(result, false);
   } else {
     interp.get()->SkipLLDBInitFiles(true);
     interp.get()->SkipAppInitFiles(true);
@@ -313,7 +313,7 @@ SBError SBDebugger::SetInputFile(SBFile file) {
 
   repro::DataRecorder *recorder = nullptr;
   if (repro::Generator *g = repro::Reproducer::Instance().GetGenerator())
-    recorder = g->GetOrCreate<repro::CommandProvider>().GetNewDataRecorder();
+    recorder = g->GetOrCreate<repro::CommandProvider>().GetNewRecorder();
 
   FileSP file_sp = file.m_opaque_sp;
 
@@ -858,7 +858,7 @@ SBTarget SBDebugger::GetDummyTarget() {
 
   SBTarget sb_target;
   if (m_opaque_sp) {
-    sb_target.SetSP(m_opaque_sp->GetDummyTarget()->shared_from_this());
+    sb_target.SetSP(m_opaque_sp->GetDummyTarget().shared_from_this());
   }
   Log *log(GetLogIfAllCategoriesSet(LIBLLDB_LOG_API));
   LLDB_LOGF(log, "SBDebugger(%p)::GetDummyTarget() => SBTarget(%p)",
@@ -879,8 +879,6 @@ bool SBDebugger::DeleteTarget(lldb::SBTarget &target) {
       result = m_opaque_sp->GetTargetList().DeleteTarget(target_sp);
       target_sp->Destroy();
       target.Clear();
-      const bool mandatory = true;
-      ModuleList::RemoveOrphanSharedModules(mandatory);
     }
   }
 

@@ -73,8 +73,8 @@ public:
   IntegerType getI64Type();
   IntegerType getIntegerType(unsigned width);
   IntegerType getIntegerType(unsigned width, bool isSigned);
-  FunctionType getFunctionType(ArrayRef<Type> inputs, ArrayRef<Type> results);
-  TupleType getTupleType(ArrayRef<Type> elementTypes);
+  FunctionType getFunctionType(TypeRange inputs, TypeRange results);
+  TupleType getTupleType(TypeRange elementTypes);
   NoneType getNoneType();
 
   /// Get or construct an instance of the type 'ty' with provided arguments.
@@ -120,6 +120,7 @@ public:
   IntegerAttr getUI32IntegerAttr(uint32_t value);
 
   /// Vector-typed DenseIntElementsAttr getters. `values` must not be empty.
+  DenseIntElementsAttr getBoolVectorAttr(ArrayRef<bool> values);
   DenseIntElementsAttr getI32VectorAttr(ArrayRef<int32_t> values);
   DenseIntElementsAttr getI64VectorAttr(ArrayRef<int64_t> values);
 
@@ -128,6 +129,7 @@ public:
   /// as attributes.
   DenseIntElementsAttr getI32TensorAttr(ArrayRef<int32_t> values);
   DenseIntElementsAttr getI64TensorAttr(ArrayRef<int64_t> values);
+  DenseIntElementsAttr getIndexTensorAttr(ArrayRef<int64_t> values);
 
   ArrayAttr getAffineMapArrayAttr(ArrayRef<AffineMap> values);
   ArrayAttr getBoolArrayAttr(ArrayRef<bool> values);
@@ -137,6 +139,7 @@ public:
   ArrayAttr getF32ArrayAttr(ArrayRef<float> values);
   ArrayAttr getF64ArrayAttr(ArrayRef<double> values);
   ArrayAttr getStrArrayAttr(ArrayRef<StringRef> values);
+  ArrayAttr getTypeArrayAttr(TypeRange values);
 
   // Affine expressions and affine maps.
   AffineExpr getAffineDimExpr(unsigned position);
@@ -325,6 +328,20 @@ public:
     setInsertionPoint(op->getBlock(), ++Block::iterator(op));
   }
 
+  /// Sets the insertion point to the node after the specified value. If value
+  /// has a defining operation, sets the insertion point to the node after such
+  /// defining operation. This will cause subsequent insertions to go right
+  /// after it. Otherwise, value is a BlockArgumen. Sets the insertion point to
+  /// the start of its block.
+  void setInsertionPointAfterValue(Value val) {
+    if (Operation *op = val.getDefiningOp()) {
+      setInsertionPointAfter(op);
+    } else {
+      auto blockArg = val.cast<BlockArgument>();
+      setInsertionPointToStart(blockArg.getOwner());
+    }
+  }
+
   /// Sets the insertion point to the start of the specified block.
   void setInsertionPointToStart(Block *block) {
     setInsertionPoint(block, block->begin());
@@ -373,6 +390,10 @@ public:
   template <typename OpTy, typename... Args>
   OpTy create(Location location, Args &&... args) {
     OperationState state(location, OpTy::getOperationName());
+    if (!state.name.getAbstractOperation())
+      llvm::report_fatal_error("Building op `" +
+                               state.name.getStringRef().str() +
+                               "` but it isn't registered in this MLIRContext");
     OpTy::build(*this, state, std::forward<Args>(args)...);
     auto *op = createOperation(state);
     auto result = dyn_cast<OpTy>(op);
@@ -389,6 +410,10 @@ public:
     // Create the operation without using 'createOperation' as we don't want to
     // insert it yet.
     OperationState state(location, OpTy::getOperationName());
+    if (!state.name.getAbstractOperation())
+      llvm::report_fatal_error("Building op `" +
+                               state.name.getStringRef().str() +
+                               "` but it isn't registered in this MLIRContext");
     OpTy::build(*this, state, std::forward<Args>(args)...);
     Operation *op = Operation::create(state);
 
@@ -433,10 +458,8 @@ public:
   /// ( leaving them alone if no entry is present).  Replaces references to
   /// cloned sub-operations to the corresponding operation that is copied,
   /// and adds those mappings to the map.
-  Operation *clone(Operation &op, BlockAndValueMapping &mapper) {
-    return insert(op.clone(mapper));
-  }
-  Operation *clone(Operation &op) { return insert(op.clone()); }
+  Operation *clone(Operation &op, BlockAndValueMapping &mapper);
+  Operation *clone(Operation &op);
 
   /// Creates a deep copy of this operation but keep the operation regions
   /// empty. Operands are remapped using `mapper` (if present), and `mapper` is

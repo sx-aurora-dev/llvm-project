@@ -18,7 +18,6 @@
 #include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Object/Binary.h"
 #include "llvm/Support/Error.h"
-#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include <cinttypes>
@@ -162,18 +161,18 @@ public:
   // construction aux.
   static Expected<std::unique_ptr<SymbolicFile>>
   createSymbolicFile(MemoryBufferRef Object, llvm::file_magic Type,
-                     LLVMContext *Context);
+                     LLVMContext *Context, bool InitContent = true);
 
   static Expected<std::unique_ptr<SymbolicFile>>
   createSymbolicFile(MemoryBufferRef Object) {
     return createSymbolicFile(Object, llvm::file_magic::unknown, nullptr);
   }
-  static Expected<OwningBinary<SymbolicFile>>
-  createSymbolicFile(StringRef ObjectPath);
 
   static bool classof(const Binary *v) {
     return v->isSymbolic();
   }
+
+  static bool isSymbolicFile(file_magic Type, const LLVMContext *Context);
 };
 
 inline BasicSymbolRef::BasicSymbolRef(DataRefImpl SymbolP,

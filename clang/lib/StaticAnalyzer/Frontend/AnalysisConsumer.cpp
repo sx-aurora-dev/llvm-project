@@ -150,11 +150,11 @@ public:
       break;
 #define ANALYSIS_DIAGNOSTICS(NAME, CMDFLAG, DESC, CREATEFN)                    \
   case PD_##NAME:                                                              \
-    CREATEFN(*Opts.get(), PathConsumers, OutDir, PP, CTU);                     \
+    CREATEFN(Opts->getDiagOpts(), PathConsumers, OutDir, PP, CTU);             \
     break;
 #include "clang/StaticAnalyzer/Core/Analyses.def"
     default:
-      llvm_unreachable("Unkown analyzer output type!");
+      llvm_unreachable("Unknown analyzer output type!");
     }
 
     // Create the analyzer component creators.
@@ -476,7 +476,7 @@ void AnalysisConsumer::HandleDeclsCallGraph(const unsigned LocalTUDeclsSize) {
 static bool isBisonFile(ASTContext &C) {
   const SourceManager &SM = C.getSourceManager();
   FileID FID = SM.getMainFileID();
-  StringRef Buffer = SM.getBuffer(FID)->getBuffer();
+  StringRef Buffer = SM.getBufferOrFake(FID).getBuffer();
   if (Buffer.startswith("/* A Bison parser, made by"))
     return true;
   return false;

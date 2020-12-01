@@ -559,13 +559,14 @@ TEST_F(TestTypeSystemClang, TestFunctionTemplateConstruction) {
   CompilerType clang_type =
       m_ast->CreateFunctionType(int_type, nullptr, 0U, false, 0U);
   FunctionDecl *func = m_ast->CreateFunctionDeclaration(
-      TU, OptionalClangModuleID(), "foo", clang_type, 0, false);
+      TU, OptionalClangModuleID(), "foo", clang_type, StorageClass::SC_None,
+      false);
   TypeSystemClang::TemplateParameterInfos empty_params;
 
   // Create the actual function template.
   clang::FunctionTemplateDecl *func_template =
       m_ast->CreateFunctionTemplateDecl(TU, OptionalClangModuleID(), func,
-                                        "foo", empty_params);
+                                        empty_params);
 
   EXPECT_EQ(TU, func_template->getDeclContext());
   EXPECT_EQ("foo", func_template->getName());
@@ -590,13 +591,14 @@ TEST_F(TestTypeSystemClang, TestFunctionTemplateInRecordConstruction) {
   // 1. FunctionDecls can't be in a Record (only CXXMethodDecls can).
   // 2. It is mirroring the behavior of DWARFASTParserClang::ParseSubroutine.
   FunctionDecl *func = m_ast->CreateFunctionDeclaration(
-      TU, OptionalClangModuleID(), "foo", clang_type, 0, false);
+      TU, OptionalClangModuleID(), "foo", clang_type, StorageClass::SC_None,
+      false);
   TypeSystemClang::TemplateParameterInfos empty_params;
 
   // Create the actual function template.
   clang::FunctionTemplateDecl *func_template =
       m_ast->CreateFunctionTemplateDecl(record, OptionalClangModuleID(), func,
-                                        "foo", empty_params);
+                                        empty_params);
 
   EXPECT_EQ(record, func_template->getDeclContext());
   EXPECT_EQ("foo", func_template->getName());
@@ -687,4 +689,38 @@ TEST_F(TestTypeSystemClang, TestNotDeletingUserCopyCstrDueToMoveCStr) {
   m_ast->CompleteTagDeclarationDefinition(t);
   auto *record = llvm::cast<CXXRecordDecl>(ClangUtil::GetAsTagDecl(t));
   EXPECT_TRUE(record->hasUserDeclaredCopyConstructor());
+}
+
+TEST_F(TestTypeSystemClang, AddMethodToObjCObjectType) {
+  // Create an interface decl and mark it as having external storage.
+  CompilerType c = m_ast->CreateObjCClass("A", m_ast->GetTranslationUnitDecl(),
+                                          OptionalClangModuleID(),
+                                          /*IsForwardDecl*/ false,
+                                          /*IsInternal*/ false);
+  ObjCInterfaceDecl *interface = m_ast->GetAsObjCInterfaceDecl(c);
+  m_ast->SetHasExternalStorage(c.GetOpaqueQualType(), true);
+  EXPECT_TRUE(interface->hasExternalLexicalStorage());
+
+  // Add a method to the interface.
+  std::vector<CompilerType> args;
+  CompilerType func_type =
+      m_ast->CreateFunctionType(m_ast->GetBasicType(lldb::eBasicTypeInt),
+                                args.data(), args.size(), /*variadic*/ false,
+                                /*quals*/ 0, clang::CallingConv::CC_C);
+  bool variadic = false;
+  bool artificial = false;
+  bool objc_direct = false;
+  clang::ObjCMethodDecl *method = TypeSystemClang::AddMethodToObjCObjectType(
+      c, "-[A foo]", func_type, lldb::eAccessPublic, artificial, variadic,
+      objc_direct);
+  ASSERT_NE(method, nullptr);
+
+  // The interface decl should still have external lexical storage.
+  EXPECT_TRUE(interface->hasExternalLexicalStorage());
+
+  // Test some properties of the created ObjCMethodDecl.
+  EXPECT_FALSE(method->isVariadic());
+  EXPECT_TRUE(method->isImplicit());
+  EXPECT_FALSE(method->isDirectMethod());
+  EXPECT_EQ(method->getDeclName().getObjCSelector().getAsString(), "foo");
 }

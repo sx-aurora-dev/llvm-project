@@ -32,9 +32,11 @@ public:
   [[noreturn]] void CrashArgs(const char *message, va_list &) const;
   [[noreturn]] void CheckFailed(
       const char *predicate, const char *file, int line) const;
+  [[noreturn]] void CheckFailed(const char *predicate) const;
 
   // For test harnessing - overrides CrashArgs().
-  static void RegisterCrashHandler(void (*)(const char *, va_list &));
+  static void RegisterCrashHandler(void (*)(const char *sourceFile,
+      int sourceLine, const char *message, va_list &ap));
 
 private:
   const char *sourceFileName_{nullptr};
@@ -47,6 +49,12 @@ private:
     ; \
   else \
     (terminator).CheckFailed(#pred, __FILE__, __LINE__)
+
+#define INTERNAL_CHECK(pred) \
+  if (pred) \
+    ; \
+  else \
+    Terminator{__FILE__, __LINE__}.CheckFailed(#pred)
 
 void NotifyOtherImagesOfNormalEnd();
 void NotifyOtherImagesOfFailImageStatement();

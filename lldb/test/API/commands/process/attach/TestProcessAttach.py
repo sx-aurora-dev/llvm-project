@@ -21,7 +21,6 @@ class ProcessAttachTestCase(TestBase):
     NO_DEBUG_INFO_TESTCASE = True
 
     @skipIfiOSSimulator
-    @expectedFailureNetBSD
     def test_attach_to_process_by_id(self):
         """Test attach by process id"""
         self.build()
@@ -29,7 +28,6 @@ class ProcessAttachTestCase(TestBase):
 
         # Spawn a new process
         popen = self.spawnSubprocess(exe)
-        self.addTearDownHook(self.cleanupSubprocesses)
 
         self.runCmd("process attach -p " + str(popen.pid))
 
@@ -38,8 +36,7 @@ class ProcessAttachTestCase(TestBase):
         process = target.GetProcess()
         self.assertTrue(process, PROCESS_IS_VALID)
 
-    @expectedFailureNetBSD
-    @skipIfReproducer # Unexpected packet during replay
+    @skipIfReproducer # FIXME: Unexpected packet during (active) replay
     def test_attach_to_process_from_different_dir_by_id(self):
         """Test attach by process id"""
         newdir = self.getBuildArtifact("newdir")
@@ -55,7 +52,6 @@ class ProcessAttachTestCase(TestBase):
 
         # Spawn a new process
         popen = self.spawnSubprocess(exe)
-        self.addTearDownHook(self.cleanupSubprocesses)
 
         os.chdir(newdir)
         self.addTearDownHook(lambda: os.chdir(testdir))
@@ -66,7 +62,6 @@ class ProcessAttachTestCase(TestBase):
         process = target.GetProcess()
         self.assertTrue(process, PROCESS_IS_VALID)
 
-    @expectedFailureNetBSD
     def test_attach_to_process_by_name(self):
         """Test attach by process name"""
         self.build()
@@ -74,7 +69,6 @@ class ProcessAttachTestCase(TestBase):
 
         # Spawn a new process
         popen = self.spawnSubprocess(exe)
-        self.addTearDownHook(self.cleanupSubprocesses)
 
         self.runCmd("process attach -n " + exe_name)
 

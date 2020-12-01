@@ -35,6 +35,8 @@ static_assert(RISCV::F31_F == RISCV::F0_F + 31,
 static_assert(RISCV::F1_D == RISCV::F0_D + 1, "Register list not consecutive");
 static_assert(RISCV::F31_D == RISCV::F0_D + 31,
               "Register list not consecutive");
+static_assert(RISCV::V1 == RISCV::V0 + 1, "Register list not consecutive");
+static_assert(RISCV::V31 == RISCV::V0 + 31, "Register list not consecutive");
 
 RISCVRegisterInfo::RISCVRegisterInfo(unsigned HwMode)
     : RISCVGenRegisterInfo(RISCV::X1, /*DwarfFlavour*/0, /*EHFlavor*/0,
@@ -43,6 +45,8 @@ RISCVRegisterInfo::RISCVRegisterInfo(unsigned HwMode)
 const MCPhysReg *
 RISCVRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   auto &Subtarget = MF->getSubtarget<RISCVSubtarget>();
+  if (MF->getFunction().getCallingConv() == CallingConv::GHC)
+    return CSR_NoRegs_SaveList;
   if (MF->getFunction().hasFnAttribute("interrupt")) {
     if (Subtarget.hasStdExtD())
       return CSR_XLEN_F64_Interrupt_SaveList;
@@ -126,7 +130,7 @@ bool RISCVRegisterInfo::hasReservedSpillSlot(const MachineFunction &MF,
                                              Register Reg,
                                              int &FrameIdx) const {
   const auto *RVFI = MF.getInfo<RISCVMachineFunctionInfo>();
-  if (!RVFI->useSaveRestoreLibCalls())
+  if (!RVFI->useSaveRestoreLibCalls(MF))
     return false;
 
   auto FII = FixedCSRFIMap.find(Reg);
@@ -150,9 +154,10 @@ void RISCVRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   int FrameIndex = MI.getOperand(FIOperandNum).getIndex();
   Register FrameReg;
-  int Offset =
-      getFrameLowering(MF)->getFrameIndexReference(MF, FrameIndex, FrameReg) +
-      MI.getOperand(FIOperandNum + 1).getImm();
+  int Offset = getFrameLowering(MF)
+                   ->getFrameIndexReference(MF, FrameIndex, FrameReg)
+                   .getFixed() +
+               MI.getOperand(FIOperandNum + 1).getImm();
 
   if (!isInt<32>(Offset)) {
     report_fatal_error(
@@ -188,9 +193,11 @@ Register RISCVRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
 
 const uint32_t *
 RISCVRegisterInfo::getCallPreservedMask(const MachineFunction & MF,
-                                        CallingConv::ID /*CC*/) const {
+                                        CallingConv::ID CC) const {
   auto &Subtarget = MF.getSubtarget<RISCVSubtarget>();
 
+  if (CC == CallingConv::GHC)
+    return CSR_NoRegs_RegMask;
   switch (Subtarget.getTargetABI()) {
   default:
     llvm_unreachable("Unrecognized ABI");

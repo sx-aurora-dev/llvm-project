@@ -43,6 +43,7 @@
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/SubtargetFeature.h"
+#include "llvm/Remarks/HotnessThresholdParser.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
@@ -86,6 +87,14 @@ cl::opt<bool> RemarksWithHotness(
     "lto-pass-remarks-with-hotness",
     cl::desc("With PGO, include profile count in optimization remarks"),
     cl::Hidden);
+
+cl::opt<Optional<uint64_t>, false, remarks::HotnessThresholdParser>
+    RemarksHotnessThreshold(
+        "lto-pass-remarks-hotness-threshold",
+        cl::desc("Minimum profile count required for an "
+                 "optimization remark to be output."
+                 " Use 'auto' to apply the threshold from profile summary."),
+        cl::value_desc("uint or 'auto'"), cl::init(0), cl::Hidden);
 
 cl::opt<std::string>
     RemarksFilename("lto-pass-remarks-output",
@@ -374,10 +383,13 @@ bool LTOCodeGenerator::determineTarget() {
   }
 
   TargetMach = createTargetMachine();
+  assert(TargetMach && "Unable to create target machine");
+
   return true;
 }
 
 std::unique_ptr<TargetMachine> LTOCodeGenerator::createTargetMachine() {
+  assert(MArch && "MArch is not set!");
   return std::unique_ptr<TargetMachine>(MArch->createTargetMachine(
       TripleStr, MCpu, FeatureStr, Options, RelocModel, None, CGOptLevel));
 }
@@ -466,8 +478,6 @@ void LTOCodeGenerator::applyScopeRestrictions() {
 
   internalizeModule(*MergedModule, mustPreserveGV);
 
-  MergedModule->addModuleFlag(Module::Error, "LTOPostLink", 1);
-
   ScopeRestrictionsDone = true;
 }
 
@@ -528,9 +538,9 @@ bool LTOCodeGenerator::optimize(bool DisableVerify, bool DisableInline,
   if (!this->determineTarget())
     return false;
 
-  auto DiagFileOrErr =
-      lto::setupLLVMOptimizationRemarks(Context, RemarksFilename, RemarksPasses,
-                                        RemarksFormat, RemarksWithHotness);
+  auto DiagFileOrErr = lto::setupLLVMOptimizationRemarks(
+      Context, RemarksFilename, RemarksPasses, RemarksFormat,
+      RemarksWithHotness, RemarksHotnessThreshold);
   if (!DiagFileOrErr) {
     errs() << "Error: " << toString(DiagFileOrErr.takeError()) << "\n";
     report_fatal_error("Can't get an output file for the remarks");
@@ -558,6 +568,9 @@ bool LTOCodeGenerator::optimize(bool DisableVerify, bool DisableInline,
 
   // Mark which symbols can not be internalized
   this->applyScopeRestrictions();
+
+  // Write LTOPostLink flag for passes that require all the modules.
+  MergedModule->addModuleFlag(Module::Error, "LTOPostLink", 1);
 
   // Instantiate the pass manager to organize the passes.
   legacy::PassManager passes;
@@ -632,9 +645,9 @@ bool LTOCodeGenerator::compileOptimized(ArrayRef<raw_pwrite_stream *> Out) {
   return true;
 }
 
-void LTOCodeGenerator::setCodeGenDebugOptions(ArrayRef<const char *> Options) {
+void LTOCodeGenerator::setCodeGenDebugOptions(ArrayRef<StringRef> Options) {
   for (StringRef Option : Options)
-    CodegenOptions.push_back(std::string(Option));
+    CodegenOptions.push_back(Option.str());
 }
 
 void LTOCodeGenerator::parseCodeGenDebugOptions() {

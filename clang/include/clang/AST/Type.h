@@ -61,6 +61,7 @@ class ExtQuals;
 class QualType;
 class ConceptDecl;
 class TagDecl;
+class TemplateParameterList;
 class Type;
 
 enum {
@@ -480,6 +481,11 @@ public:
            // Otherwise in OpenCLC v2.0 s6.5.5: every address space except
            // for __constant can be used as __generic.
            (A == LangAS::opencl_generic && B != LangAS::opencl_constant) ||
+           // We also define global_device and global_host address spaces,
+           // to distinguish global pointers allocated on host from pointers
+           // allocated on device, which are a subset of __global.
+           (A == LangAS::opencl_global && (B == LangAS::opencl_global_device ||
+                                           B == LangAS::opencl_global_host)) ||
            // Consider pointer size address spaces to be equivalent to default.
            ((isPtrSizeAddressSpace(A) || A == LangAS::Default) &&
             (isPtrSizeAddressSpace(B) || B == LangAS::Default));
@@ -944,6 +950,12 @@ public:
   /// from non-class types (in C++) or all types (in C).
   QualType getNonLValueExprType(const ASTContext &Context) const;
 
+  /// Remove an outer pack expansion type (if any) from this type. Used as part
+  /// of converting the type of a declaration to the type of an expression that
+  /// references that expression. It's meaningless for an expression to have a
+  /// pack expansion type.
+  QualType getNonPackExpansionType() const;
+
   /// Return the specified type with any "sugar" removed from
   /// the type.  This takes off typedefs, typeof's etc.  If the outer level of
   /// the type is already concrete, it returns it unmodified.  This is similar
@@ -1052,7 +1064,7 @@ public:
 
   void dump(const char *s) const;
   void dump() const;
-  void dump(llvm::raw_ostream &OS) const;
+  void dump(llvm::raw_ostream &OS, const ASTContext &Context) const;
 
   void Profile(llvm::FoldingSetNodeID &ID) const {
     ID.AddPointer(getAsOpaquePtr());
@@ -1669,19 +1681,6 @@ protected:
     uint32_t NumElements;
   };
 
-  class ConstantMatrixTypeBitfields {
-    friend class ConstantMatrixType;
-
-    unsigned : NumTypeBits;
-
-    /// Number of rows and columns. Using 20 bits allows supporting very large
-    /// matrixes, while keeping 24 bits to accommodate NumTypeBits.
-    unsigned NumRows : 20;
-    unsigned NumColumns : 20;
-
-    static constexpr uint32_t MaxElementsPerDimension = (1 << 20) - 1;
-  };
-
   class AttributedTypeBitfields {
     friend class AttributedType;
 
@@ -1791,46 +1790,11 @@ protected:
     TypeWithKeywordBitfields TypeWithKeywordBits;
     ElaboratedTypeBitfields ElaboratedTypeBits;
     VectorTypeBitfields VectorTypeBits;
-    ConstantMatrixTypeBitfields ConstantMatrixTypeBits;
     SubstTemplateTypeParmPackTypeBitfields SubstTemplateTypeParmPackTypeBits;
     TemplateSpecializationTypeBitfields TemplateSpecializationTypeBits;
     DependentTemplateSpecializationTypeBitfields
       DependentTemplateSpecializationTypeBits;
     PackExpansionTypeBitfields PackExpansionTypeBits;
-
-    static_assert(sizeof(TypeBitfields) <= 8,
-                  "TypeBitfields is larger than 8 bytes!");
-    static_assert(sizeof(ArrayTypeBitfields) <= 8,
-                  "ArrayTypeBitfields is larger than 8 bytes!");
-    static_assert(sizeof(AttributedTypeBitfields) <= 8,
-                  "AttributedTypeBitfields is larger than 8 bytes!");
-    static_assert(sizeof(AutoTypeBitfields) <= 8,
-                  "AutoTypeBitfields is larger than 8 bytes!");
-    static_assert(sizeof(BuiltinTypeBitfields) <= 8,
-                  "BuiltinTypeBitfields is larger than 8 bytes!");
-    static_assert(sizeof(FunctionTypeBitfields) <= 8,
-                  "FunctionTypeBitfields is larger than 8 bytes!");
-    static_assert(sizeof(ObjCObjectTypeBitfields) <= 8,
-                  "ObjCObjectTypeBitfields is larger than 8 bytes!");
-    static_assert(sizeof(ReferenceTypeBitfields) <= 8,
-                  "ReferenceTypeBitfields is larger than 8 bytes!");
-    static_assert(sizeof(TypeWithKeywordBitfields) <= 8,
-                  "TypeWithKeywordBitfields is larger than 8 bytes!");
-    static_assert(sizeof(ElaboratedTypeBitfields) <= 8,
-                  "ElaboratedTypeBitfields is larger than 8 bytes!");
-    static_assert(sizeof(VectorTypeBitfields) <= 8,
-                  "VectorTypeBitfields is larger than 8 bytes!");
-    static_assert(sizeof(SubstTemplateTypeParmPackTypeBitfields) <= 8,
-                  "SubstTemplateTypeParmPackTypeBitfields is larger"
-                  " than 8 bytes!");
-    static_assert(sizeof(TemplateSpecializationTypeBitfields) <= 8,
-                  "TemplateSpecializationTypeBitfields is larger"
-                  " than 8 bytes!");
-    static_assert(sizeof(DependentTemplateSpecializationTypeBitfields) <= 8,
-                  "DependentTemplateSpecializationTypeBitfields is larger"
-                  " than 8 bytes!");
-    static_assert(sizeof(PackExpansionTypeBitfields) <= 8,
-                  "PackExpansionTypeBitfields is larger than 8 bytes");
   };
 
 private:
@@ -1847,6 +1811,10 @@ protected:
   Type(TypeClass tc, QualType canon, TypeDependence Dependence)
       : ExtQualsTypeCommonBase(this,
                                canon.isNull() ? QualType(this_(), 0) : canon) {
+    static_assert(sizeof(*this) <= 8 + sizeof(ExtQualsTypeCommonBase),
+                  "changing bitfields changed sizeof(Type)!");
+    static_assert(alignof(decltype(*this)) % sizeof(void *) == 0,
+                  "Insufficient alignment!");
     TypeBits.TC = tc;
     TypeBits.Dependence = static_cast<unsigned>(Dependence);
     TypeBits.CacheValid = false;
@@ -1919,6 +1887,16 @@ public:
   bool isSizelessType() const;
   bool isSizelessBuiltinType() const;
 
+  /// Determines if this is a sizeless type supported by the
+  /// 'arm_sve_vector_bits' type attribute, which can be applied to a single
+  /// SVE vector or predicate, excluding tuple types such as svint32x4_t.
+  bool isVLSTBuiltinType() const;
+
+  /// Returns the representative type for the element of an SVE builtin type.
+  /// This is used to represent fixed-length SVE vectors created with the
+  /// 'arm_sve_vector_bits' type attribute as VectorType.
+  QualType getSveEltType(const ASTContext &Ctx) const;
+
   /// Types are partitioned into 3 broad categories (C99 6.2.5p1):
   /// object types, function types, and incomplete types.
 
@@ -1949,6 +1927,9 @@ public:
   /// Return true if this is a literal type
   /// (C++11 [basic.types]p10)
   bool isLiteralType(const ASTContext &Ctx) const;
+
+  /// Determine if this type is a structural type, per C++20 [temp.param]p7.
+  bool isStructuralType() const;
 
   /// Test if this type is a standard-layout type.
   /// (C++0x [basic.type]p9)
@@ -2008,6 +1989,7 @@ public:
   bool isFloatingType() const;     // C99 6.2.5p11 (real floating + complex)
   bool isHalfType() const;         // OpenCL 6.1.1.1, NEON (IEEE 754-2008 half)
   bool isFloat16Type() const;      // C11 extension ISO/IEC TS 18661
+  bool isBFloat16Type() const;
   bool isFloat128Type() const;
   bool isRealType() const;         // C99 6.2.5p17 (real floating + integer)
   bool isArithmeticType() const;   // C99 6.2.5p18 (integer + floating)
@@ -2050,7 +2032,8 @@ public:
   bool isComplexIntegerType() const;            // GCC _Complex integer type.
   bool isVectorType() const;                    // GCC vector type.
   bool isExtVectorType() const;                 // Extended vector type.
-  bool isConstantMatrixType() const;            // Matrix type.
+  bool isMatrixType() const;                    // Matrix type.
+  bool isConstantMatrixType() const;            // Constant matrix type.
   bool isDependentAddressSpaceType() const;     // value-dependent address space qualifier
   bool isObjCObjectPointerType() const;         // pointer to ObjC object
   bool isObjCRetainableType() const;            // ObjC object or block pointer
@@ -2463,7 +2446,7 @@ public:
 
   CanQualType getCanonicalTypeUnqualified() const; // in CanonicalType.h
   void dump() const;
-  void dump(llvm::raw_ostream &OS) const;
+  void dump(llvm::raw_ostream &OS, const ASTContext &Context) const;
 };
 
 /// This will check for a TypedefType by removing any existing sugar
@@ -2505,6 +2488,9 @@ public:
 // SVE Types
 #define SVE_TYPE(Name, Id, SingletonId) Id,
 #include "clang/Basic/AArch64SVEACLETypes.def"
+// PPC MMA Types
+#define PPC_MMA_VECTOR_TYPE(Name, Id, Size) Id,
+#include "clang/Basic/PPCTypes.def"
 // All other builtin types
 #define BUILTIN_TYPE(Id, SingletonId) Id,
 #define LAST_BUILTIN_TYPE(Id) LastKind = Id
@@ -3242,7 +3228,13 @@ public:
     NeonVector,
 
     /// is ARM Neon polynomial vector
-    NeonPolyVector
+    NeonPolyVector,
+
+    /// is AArch64 SVE fixed-length data vector
+    SveFixedLengthDataVector,
+
+    /// is AArch64 SVE fixed-length predicate vector
+    SveFixedLengthPredicateVector
   };
 
 protected:
@@ -3448,7 +3440,14 @@ protected:
   friend class ASTContext;
 
   /// The element type of the matrix.
+  // FIXME: Appears to be unused? There is also MatrixType::ElementType...
   QualType ElementType;
+
+  /// Number of rows and columns.
+  unsigned NumRows;
+  unsigned NumColumns;
+
+  static constexpr unsigned MaxElementsPerDimension = (1 << 20) - 1;
 
   ConstantMatrixType(QualType MatrixElementType, unsigned NRows,
                      unsigned NColumns, QualType CanonElementType);
@@ -3458,20 +3457,24 @@ protected:
 
 public:
   /// Returns the number of rows in the matrix.
-  unsigned getNumRows() const { return ConstantMatrixTypeBits.NumRows; }
+  unsigned getNumRows() const { return NumRows; }
 
   /// Returns the number of columns in the matrix.
-  unsigned getNumColumns() const { return ConstantMatrixTypeBits.NumColumns; }
+  unsigned getNumColumns() const { return NumColumns; }
 
   /// Returns the number of elements required to embed the matrix into a vector.
   unsigned getNumElementsFlattened() const {
-    return ConstantMatrixTypeBits.NumRows * ConstantMatrixTypeBits.NumColumns;
+    return getNumRows() * getNumColumns();
   }
 
   /// Returns true if \p NumElements is a valid matrix dimension.
-  static bool isDimensionValid(uint64_t NumElements) {
-    return NumElements > 0 &&
-           NumElements <= ConstantMatrixTypeBitfields::MaxElementsPerDimension;
+  static constexpr bool isDimensionValid(size_t NumElements) {
+    return NumElements > 0 && NumElements <= MaxElementsPerDimension;
+  }
+
+  /// Returns the maximum number of elements per dimension.
+  static constexpr unsigned getMaxElementsPerDimension() {
+    return MaxElementsPerDimension;
   }
 
   void Profile(llvm::FoldingSetNodeID &ID) {
@@ -4362,11 +4365,7 @@ class TypedefType : public Type {
 protected:
   friend class ASTContext; // ASTContext creates these.
 
-  TypedefType(TypeClass tc, const TypedefNameDecl *D, QualType can)
-      : Type(tc, can, can->getDependence() & ~TypeDependence::UnexpandedPack),
-        Decl(const_cast<TypedefNameDecl *>(D)) {
-    assert(!isa<TypedefType>(can) && "Invalid canonical type");
-  }
+  TypedefType(TypeClass tc, const TypedefNameDecl *D, QualType can);
 
 public:
   TypedefNameDecl *getDecl() const { return Decl; }
@@ -5198,15 +5197,18 @@ public:
 /// enclosing the template arguments.
 void printTemplateArgumentList(raw_ostream &OS,
                                ArrayRef<TemplateArgument> Args,
-                               const PrintingPolicy &Policy);
+                               const PrintingPolicy &Policy,
+                               const TemplateParameterList *TPL = nullptr);
 
 void printTemplateArgumentList(raw_ostream &OS,
                                ArrayRef<TemplateArgumentLoc> Args,
-                               const PrintingPolicy &Policy);
+                               const PrintingPolicy &Policy,
+                               const TemplateParameterList *TPL = nullptr);
 
 void printTemplateArgumentList(raw_ostream &OS,
                                const TemplateArgumentListInfo &Args,
-                               const PrintingPolicy &Policy);
+                               const PrintingPolicy &Policy,
+                               const TemplateParameterList *TPL = nullptr);
 
 /// The injected class name of a C++ class template or class
 /// template partial specialization.  Used to record that a type was
@@ -5603,7 +5605,8 @@ class PackExpansionType : public Type, public llvm::FoldingSetNode {
   PackExpansionType(QualType Pattern, QualType Canon,
                     Optional<unsigned> NumExpansions)
       : Type(PackExpansion, Canon,
-             (Pattern->getDependence() | TypeDependence::Instantiation) &
+             (Pattern->getDependence() | TypeDependence::Dependent |
+              TypeDependence::Instantiation) &
                  ~TypeDependence::UnexpandedPack),
         Pattern(Pattern) {
     PackExpansionTypeBits.NumExpansions =
@@ -5624,8 +5627,8 @@ public:
     return None;
   }
 
-  bool isSugared() const { return !Pattern->isDependentType(); }
-  QualType desugar() const { return isSugared() ? Pattern : QualType(this, 0); }
+  bool isSugared() const { return false; }
+  QualType desugar() const { return QualType(this, 0); }
 
   void Profile(llvm::FoldingSetNodeID &ID) {
     Profile(ID, getPattern(), getNumExpansions());
@@ -6744,6 +6747,10 @@ inline bool Type::isExtVectorType() const {
   return isa<ExtVectorType>(CanonicalType);
 }
 
+inline bool Type::isMatrixType() const {
+  return isa<MatrixType>(CanonicalType);
+}
+
 inline bool Type::isConstantMatrixType() const {
   return isa<ConstantMatrixType>(CanonicalType);
 }
@@ -6926,6 +6933,10 @@ inline bool Type::isFloat16Type() const {
   return isSpecificBuiltinType(BuiltinType::Float16);
 }
 
+inline bool Type::isBFloat16Type() const {
+  return isSpecificBuiltinType(BuiltinType::BFloat16);
+}
+
 inline bool Type::isFloat128Type() const {
   return isSpecificBuiltinType(BuiltinType::Float128);
 }
@@ -7067,55 +7078,28 @@ inline const Type *Type::getPointeeOrArrayElementType() const {
     return type->getBaseElementTypeUnsafe();
   return type;
 }
-/// Insertion operator for diagnostics. This allows sending address spaces into
-/// a diagnostic with <<.
-inline const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
-                                           LangAS AS) {
-  DB.AddTaggedVal(static_cast<std::underlying_type_t<LangAS>>(AS),
-                  DiagnosticsEngine::ArgumentKind::ak_addrspace);
-  return DB;
-}
-
 /// Insertion operator for partial diagnostics. This allows sending adress
 /// spaces into a diagnostic with <<.
-inline const PartialDiagnostic &operator<<(const PartialDiagnostic &PD,
-                                           LangAS AS) {
+inline const StreamingDiagnostic &operator<<(const StreamingDiagnostic &PD,
+                                             LangAS AS) {
   PD.AddTaggedVal(static_cast<std::underlying_type_t<LangAS>>(AS),
                   DiagnosticsEngine::ArgumentKind::ak_addrspace);
   return PD;
 }
 
-/// Insertion operator for diagnostics. This allows sending Qualifiers into a
-/// diagnostic with <<.
-inline const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
-                                           Qualifiers Q) {
-  DB.AddTaggedVal(Q.getAsOpaqueValue(),
-                  DiagnosticsEngine::ArgumentKind::ak_qual);
-  return DB;
-}
-
 /// Insertion operator for partial diagnostics. This allows sending Qualifiers
 /// into a diagnostic with <<.
-inline const PartialDiagnostic &operator<<(const PartialDiagnostic &PD,
-                                           Qualifiers Q) {
+inline const StreamingDiagnostic &operator<<(const StreamingDiagnostic &PD,
+                                             Qualifiers Q) {
   PD.AddTaggedVal(Q.getAsOpaqueValue(),
                   DiagnosticsEngine::ArgumentKind::ak_qual);
   return PD;
 }
 
-/// Insertion operator for diagnostics.  This allows sending QualType's into a
-/// diagnostic with <<.
-inline const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
-                                           QualType T) {
-  DB.AddTaggedVal(reinterpret_cast<intptr_t>(T.getAsOpaquePtr()),
-                  DiagnosticsEngine::ak_qualtype);
-  return DB;
-}
-
 /// Insertion operator for partial diagnostics.  This allows sending QualType's
 /// into a diagnostic with <<.
-inline const PartialDiagnostic &operator<<(const PartialDiagnostic &PD,
-                                           QualType T) {
+inline const StreamingDiagnostic &operator<<(const StreamingDiagnostic &PD,
+                                             QualType T) {
   PD.AddTaggedVal(reinterpret_cast<intptr_t>(T.getAsOpaquePtr()),
                   DiagnosticsEngine::ak_qualtype);
   return PD;

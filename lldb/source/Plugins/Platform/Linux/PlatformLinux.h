@@ -18,8 +18,6 @@ class PlatformLinux : public PlatformPOSIX {
 public:
   PlatformLinux(bool is_host);
 
-  ~PlatformLinux() override;
-
   static void Initialize();
 
   static void Terminate();
@@ -44,13 +42,9 @@ public:
 
   bool GetSupportedArchitectureAtIndex(uint32_t idx, ArchSpec &arch) override;
 
-  int32_t GetResumeCountForLaunchInfo(ProcessLaunchInfo &launch_info) override;
+  uint32_t GetResumeCountForLaunchInfo(ProcessLaunchInfo &launch_info) override;
 
   bool CanDebugProcess() override;
-
-  lldb::ProcessSP DebugProcess(ProcessLaunchInfo &launch_info,
-                               Debugger &debugger, Target *target,
-                               Status &error) override;
 
   void CalculateTrapHandlerSymbolNames() override;
 
@@ -58,9 +52,6 @@ public:
                                   lldb::addr_t length, unsigned prot,
                                   unsigned flags, lldb::addr_t fd,
                                   lldb::addr_t offset) override;
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(PlatformLinux);
 };
 
 } // namespace platform_linux

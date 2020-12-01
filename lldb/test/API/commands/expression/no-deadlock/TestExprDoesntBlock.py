@@ -15,8 +15,8 @@ class ExprDoesntDeadlockTestCase(TestBase):
 
     mydir = TestBase.compute_mydir(__file__)
 
-    @expectedFailureAll(oslist=['freebsd'], bugnumber='llvm.org/pr17946')
     @add_test_categories(["basic_process"])
+    @skipIfReproducer # Timeouts are not currently modeled.
     def test_with_run_command(self):
         """Test that expr will time out and allow other threads to run if it blocks."""
         self.build()

@@ -113,6 +113,7 @@ protected:
   MCSection *DwarfLocDWOSection = nullptr;
   MCSection *DwarfStrOffDWOSection = nullptr;
   MCSection *DwarfMacinfoDWOSection = nullptr;
+  MCSection *DwarfMacroDWOSection = nullptr;
 
   /// The DWARF v5 string offset and address table sections.
   MCSection *DwarfStrOffSection = nullptr;
@@ -214,6 +215,7 @@ protected:
   MCSection *XDataSection = nullptr;
   MCSection *SXDataSection = nullptr;
   MCSection *GFIDsSection = nullptr;
+  MCSection *GIATsSection = nullptr;
   MCSection *GLJMPSection = nullptr;
 
   // XCOFF specific sections
@@ -248,7 +250,6 @@ public:
   MCSection *getDataSection() const { return DataSection; }
   MCSection *getBSSSection() const { return BSSSection; }
   MCSection *getReadOnlySection() const { return ReadOnlySection; }
-  MCSection *getLSDASection() const { return LSDASection; }
   MCSection *getCompactUnwindSection() const { return CompactUnwindSection; }
   MCSection *getDwarfAbbrevSection() const { return DwarfAbbrevSection; }
   MCSection *getDwarfInfoSection() const { return DwarfInfoSection; }
@@ -309,6 +310,7 @@ public:
   MCSection *getDwarfLoclistsDWOSection() const {
     return DwarfLoclistsDWOSection;
   }
+  MCSection *getDwarfMacroDWOSection() const { return DwarfMacroDWOSection; }
   MCSection *getDwarfMacinfoDWOSection() const {
     return DwarfMacinfoDWOSection;
   }
@@ -335,6 +337,8 @@ public:
   MCSection *getRemarksSection() const { return RemarksSection; }
 
   MCSection *getStackSizesSection(const MCSection &TextSec) const;
+
+  MCSection *getBBAddrMapSection(const MCSection &TextSec) const;
 
   // ELF specific sections.
   MCSection *getDataRelROSection() const { return DataRelROSection; }
@@ -394,6 +398,7 @@ public:
   MCSection *getXDataSection() const { return XDataSection; }
   MCSection *getSXDataSection() const { return SXDataSection; }
   MCSection *getGFIDsSection() const { return GFIDsSection; }
+  MCSection *getGIATsSection() const { return GIATsSection; }
   MCSection *getGLJMPSection() const { return GLJMPSection; }
 
   // XCOFF specific sections

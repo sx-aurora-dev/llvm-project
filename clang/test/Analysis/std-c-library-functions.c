@@ -53,11 +53,13 @@
 // CHECK-NEXT: Loaded summary for: int getc(FILE *)
 // CHECK-NEXT: Loaded summary for: int fgetc(FILE *)
 // CHECK-NEXT: Loaded summary for: int getchar()
+// CHECK-NEXT: Loaded summary for: unsigned int fread(void *restrict, size_t, size_t, FILE *restrict)
+// CHECK-NEXT: Loaded summary for: unsigned int fwrite(const void *restrict, size_t, size_t, FILE *restrict)
 // CHECK-NEXT: Loaded summary for: ssize_t read(int, void *, size_t)
 // CHECK-NEXT: Loaded summary for: ssize_t write(int, const void *, size_t)
-// CHECK-NEXT: Loaded summary for: unsigned int fread(void *restrict, size_t, size_t, FILE *)
-// CHECK-NEXT: Loaded summary for: unsigned int fwrite(const void *restrict, size_t, size_t, FILE *restrict)
-// CHECK-NEXT: Loaded summary for: ssize_t getline(char **, size_t *, FILE *)
+// CHECK-NEXT: Loaded summary for: ssize_t getline(char **restrict, size_t *restrict, FILE *restrict)
+// CHECK-NEXT: Loaded summary for: ssize_t getdelim(char **restrict, size_t *restrict, int, FILE *restrict)
+
 
 void clang_analyzer_eval(int);
 
@@ -104,7 +106,7 @@ void test_read_write(int fd, char *buf) {
   }
 }
 
-size_t fread(void *restrict, size_t, size_t, FILE *);
+size_t fread(void *restrict, size_t, size_t, FILE *restrict);
 size_t fwrite(const void *restrict, size_t, size_t, FILE *restrict);
 void test_fread_fwrite(FILE *fp, int *buf) {
 
@@ -126,7 +128,8 @@ void test_fread_uninitialized(void) {
   (void)fread(ptr, sz, nmem, fp); // expected-warning {{1st function call argument is an uninitialized value}}
 }
 
-ssize_t getline(char **, size_t *, FILE *);
+ssize_t getline(char **restrict, size_t *restrict, FILE *restrict);
+ssize_t getdelim(char **restrict, size_t *restrict, int, FILE *restrict);
 void test_getline(FILE *fp) {
   char *line = 0;
   size_t n = 0;

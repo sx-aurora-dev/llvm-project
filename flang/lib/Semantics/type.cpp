@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "flang/Semantics/type.h"
+#include "check-declarations.h"
 #include "flang/Evaluate/fold.h"
 #include "flang/Parser/characters.h"
 #include "flang/Semantics/scope.h"
@@ -97,8 +98,8 @@ void DerivedTypeSpec::CookParameters(evaluate::FoldingContext &foldingContext) {
   }
 }
 
-void DerivedTypeSpec::EvaluateParameters(
-    evaluate::FoldingContext &foldingContext) {
+void DerivedTypeSpec::EvaluateParameters(SemanticsContext &context) {
+  evaluate::FoldingContext &foldingContext{context.foldingContext()};
   CookParameters(foldingContext);
   if (evaluated_) {
     return;
@@ -123,7 +124,7 @@ void DerivedTypeSpec::EvaluateParameters(
             continue;
           }
         }
-        if (!symbol.test(Symbol::Flag::Error)) {
+        if (!context.HasError(symbol)) {
           evaluate::SayWithDeclaration(messages, symbol,
               "Value of type parameter '%s' (%s) is not convertible to its"
               " type"_err_en_US,
@@ -150,7 +151,7 @@ void DerivedTypeSpec::EvaluateParameters(
         auto expr{
             evaluate::Fold(foldingContext, common::Clone(details.init()))};
         AddParamValue(name, ParamValue{std::move(*expr), details.attr()});
-      } else if (!symbol.test(Symbol::Flag::Error)) {
+      } else if (!context.HasError(symbol)) {
         messages.Say(name_,
             "Type parameter '%s' lacks a value and has no default"_err_en_US,
             name);
@@ -165,16 +166,6 @@ void DerivedTypeSpec::AddParamValue(SourceName name, ParamValue &&value) {
   CHECK(pair.second); // name was not already present
 }
 
-int DerivedTypeSpec::NumLengthParameters() const {
-  int result{0};
-  for (const auto &pair : parameters_) {
-    if (pair.second.isLen()) {
-      ++result;
-    }
-  }
-  return result;
-}
-
 bool DerivedTypeSpec::MightBeParameterized() const {
   return !cooked_ || !parameters_.empty();
 }
@@ -184,16 +175,9 @@ bool DerivedTypeSpec::IsForwardReferenced() const {
 }
 
 bool DerivedTypeSpec::HasDefaultInitialization() const {
-  for (const Scope *scope{scope_}; scope;
-       scope = scope->GetDerivedTypeParent()) {
-    for (const auto &pair : *scope) {
-      const Symbol &symbol{*pair.second};
-      if (IsAllocatable(symbol) || IsInitialized(symbol)) {
-        return true;
-      }
-    }
-  }
-  return false;
+  DirectComponentIterator components{*this};
+  return bool{std::find_if(components.begin(), components.end(),
+      [](const Symbol &component) { return IsInitialized(component); })};
 }
 
 ParamValue *DerivedTypeSpec::FindParameter(SourceName target) {
@@ -237,8 +221,7 @@ void DerivedTypeSpec::Instantiate(
         typeSymbol_.name());
     return;
   }
-  CookParameters(foldingContext);
-  EvaluateParameters(foldingContext);
+  EvaluateParameters(context);
   const Scope &typeScope{DEREF(typeSymbol_.scope())};
   if (!MightBeParameterized()) {
     scope_ = &typeScope;
@@ -302,6 +285,7 @@ void DerivedTypeSpec::Instantiate(
   auto restorer{foldingContext.WithPDTInstance(*this)};
   newScope.AddSourceRange(typeScope.sourceRange());
   InstantiateHelper{context, newScope}.InstantiateComponents(typeScope);
+  CheckInstantiatedDerivedType(context, *this);
 }
 
 void InstantiateHelper::InstantiateComponents(const Scope &fromScope) {
@@ -456,7 +440,7 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const DerivedTypeSpec &x) {
   return o << x.AsFortran();
 }
 
-Bound::Bound(int bound) : expr_{bound} {}
+Bound::Bound(common::ConstantSubscript bound) : expr_{bound} {}
 
 llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const Bound &x) {
   if (x.isAssumed()) {
@@ -485,37 +469,6 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &o, const ShapeSpec &x) {
     }
   }
   return o;
-}
-
-bool ArraySpec::IsExplicitShape() const {
-  return CheckAll([](const ShapeSpec &x) { return x.ubound().isExplicit(); });
-}
-bool ArraySpec::IsAssumedShape() const {
-  return CheckAll([](const ShapeSpec &x) { return x.ubound().isDeferred(); });
-}
-bool ArraySpec::IsDeferredShape() const {
-  return CheckAll([](const ShapeSpec &x) {
-    return x.lbound().isDeferred() && x.ubound().isDeferred();
-  });
-}
-bool ArraySpec::IsImpliedShape() const {
-  return !IsAssumedRank() &&
-      CheckAll([](const ShapeSpec &x) { return x.ubound().isAssumed(); });
-}
-bool ArraySpec::IsAssumedSize() const {
-  return !empty() && !IsAssumedRank() && back().ubound().isAssumed() &&
-      std::all_of(begin(), end() - 1,
-          [](const ShapeSpec &x) { return x.ubound().isExplicit(); });
-}
-bool ArraySpec::IsAssumedRank() const {
-  return Rank() == 1 && front().lbound().isAssumed();
-}
-bool ArraySpec::IsConstantShape() const {
-  return CheckAll([](const ShapeSpec &x) {
-    const auto &lb{x.lbound().GetExplicit()};
-    const auto &ub{x.ubound().GetExplicit()};
-    return lb && ub && IsConstantExpr(*lb) && IsConstantExpr(*ub);
-  });
 }
 
 llvm::raw_ostream &operator<<(
@@ -632,35 +585,6 @@ bool DeclTypeSpec::IsSequenceType() const {
     return typeDetails && typeDetails->sequence();
   }
   return false;
-}
-
-IntrinsicTypeSpec *DeclTypeSpec::AsIntrinsic() {
-  switch (category_) {
-  case Numeric:
-    return &std::get<NumericTypeSpec>(typeSpec_);
-  case Logical:
-    return &std::get<LogicalTypeSpec>(typeSpec_);
-  case Character:
-    return &std::get<CharacterTypeSpec>(typeSpec_);
-  default:
-    return nullptr;
-  }
-}
-const IntrinsicTypeSpec *DeclTypeSpec::AsIntrinsic() const {
-  return const_cast<DeclTypeSpec *>(this)->AsIntrinsic();
-}
-
-DerivedTypeSpec *DeclTypeSpec::AsDerived() {
-  switch (category_) {
-  case TypeDerived:
-  case ClassDerived:
-    return &std::get<DerivedTypeSpec>(typeSpec_);
-  default:
-    return nullptr;
-  }
-}
-const DerivedTypeSpec *DeclTypeSpec::AsDerived() const {
-  return const_cast<DeclTypeSpec *>(this)->AsDerived();
 }
 
 const NumericTypeSpec &DeclTypeSpec::numericTypeSpec() const {

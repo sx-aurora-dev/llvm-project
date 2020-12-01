@@ -94,6 +94,10 @@ public:
   // of `TypeAttrBase`).
   bool isTypeAttr() const;
 
+  // Returns true if this attribute is a symbol reference attribute (i.e., a
+  // subclass of `SymbolRefAttr` or `FlatSymbolRefAttr`).
+  bool isSymbolRefAttr() const;
+
   // Returns true if this attribute is an enum attribute (i.e., a subclass of
   // `EnumAttrInfo`)
   bool isEnumAttr() const;
@@ -229,6 +233,9 @@ public:
 
   std::vector<StructFieldAttr> getAllFields() const;
 };
+
+// Name of infer type op interface.
+extern const char *inferTypeOpInterface;
 
 } // end namespace tblgen
 } // end namespace mlir

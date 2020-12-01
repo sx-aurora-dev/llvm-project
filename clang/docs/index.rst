@@ -44,6 +44,7 @@ Using Clang as a Compiler
    OpenCLSupport
    OpenMPSupport
    ThinLTO
+   APINotes
    CommandGuide/index
    FAQ
 
@@ -77,6 +78,7 @@ Using Clang Tools
    ClangCheck
    ClangFormat
    ClangFormatStyleOptions
+   ClangFormattedStatus
 
 Design Documents
 ================

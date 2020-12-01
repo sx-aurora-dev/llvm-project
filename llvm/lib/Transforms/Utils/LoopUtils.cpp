@@ -297,7 +297,7 @@ static Optional<bool> getOptionalBoolLoopAttribute(const Loop *TheLoop,
   llvm_unreachable("unexpected number of options");
 }
 
-static bool getBooleanLoopAttribute(const Loop *TheLoop, StringRef Name) {
+bool llvm::getBooleanLoopAttribute(const Loop *TheLoop, StringRef Name) {
   return getOptionalBoolLoopAttribute(TheLoop, Name).getValueOr(false);
 }
 
@@ -512,9 +512,10 @@ llvm::collectChildrenInLoop(DomTreeNode *N, const Loop *CurLoop) {
 
   AddRegionToWorklist(N);
 
-  for (size_t I = 0; I < Worklist.size(); I++)
-    for (DomTreeNode *Child : Worklist[I]->getChildren())
+  for (size_t I = 0; I < Worklist.size(); I++) {
+    for (DomTreeNode *Child : Worklist[I]->children())
       AddRegionToWorklist(Child);
+  }
 
   return Worklist;
 }
@@ -540,10 +541,6 @@ void llvm::deleteDeadLoop(Loop *L, DominatorTree *DT, ScalarEvolution *SE,
   // to determine what it needs to clean up.
   if (SE)
     SE->forgetLoop(L);
-
-  auto *ExitBlock = L->getUniqueExitBlock();
-  assert(ExitBlock && "Should have a unique exit block!");
-  assert(L->hasDedicatedExits() && "Loop should have dedicated exits!");
 
   auto *OldBr = dyn_cast<BranchInst>(Preheader->getTerminator());
   assert(OldBr && "Preheader must end with a branch");
@@ -574,114 +571,132 @@ void llvm::deleteDeadLoop(Loop *L, DominatorTree *DT, ScalarEvolution *SE,
   // deleting the backedge of the outer loop). If the outer loop is indeed a
   // non-loop, it will be deleted in a future iteration of loop deletion pass.
   IRBuilder<> Builder(OldBr);
-  Builder.CreateCondBr(Builder.getFalse(), L->getHeader(), ExitBlock);
-  // Remove the old branch. The conditional branch becomes a new terminator.
-  OldBr->eraseFromParent();
 
-  // Rewrite phis in the exit block to get their inputs from the Preheader
-  // instead of the exiting block.
-  for (PHINode &P : ExitBlock->phis()) {
-    // Set the zero'th element of Phi to be from the preheader and remove all
-    // other incoming values. Given the loop has dedicated exits, all other
-    // incoming values must be from the exiting blocks.
-    int PredIndex = 0;
-    P.setIncomingBlock(PredIndex, Preheader);
-    // Removes all incoming values from all other exiting blocks (including
-    // duplicate values from an exiting block).
-    // Nuke all entries except the zero'th entry which is the preheader entry.
-    // NOTE! We need to remove Incoming Values in the reverse order as done
-    // below, to keep the indices valid for deletion (removeIncomingValues
-    // updates getNumIncomingValues and shifts all values down into the operand
-    // being deleted).
-    for (unsigned i = 0, e = P.getNumIncomingValues() - 1; i != e; ++i)
-      P.removeIncomingValue(e - i, false);
+  auto *ExitBlock = L->getUniqueExitBlock();
+  if (ExitBlock) {
+    assert(ExitBlock && "Should have a unique exit block!");
+    assert(L->hasDedicatedExits() && "Loop should have dedicated exits!");
 
-    assert((P.getNumIncomingValues() == 1 &&
-            P.getIncomingBlock(PredIndex) == Preheader) &&
-           "Should have exactly one value and that's from the preheader!");
-  }
+    Builder.CreateCondBr(Builder.getFalse(), L->getHeader(), ExitBlock);
+    // Remove the old branch. The conditional branch becomes a new terminator.
+    OldBr->eraseFromParent();
 
-  DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Eager);
-  if (DT) {
-    DTU.applyUpdates({{DominatorTree::Insert, Preheader, ExitBlock}});
-    if (MSSA) {
-      MSSAU->applyUpdates({{DominatorTree::Insert, Preheader, ExitBlock}}, *DT);
-      if (VerifyMemorySSA)
-        MSSA->verifyMemorySSA();
+    // Rewrite phis in the exit block to get their inputs from the Preheader
+    // instead of the exiting block.
+    for (PHINode &P : ExitBlock->phis()) {
+      // Set the zero'th element of Phi to be from the preheader and remove all
+      // other incoming values. Given the loop has dedicated exits, all other
+      // incoming values must be from the exiting blocks.
+      int PredIndex = 0;
+      P.setIncomingBlock(PredIndex, Preheader);
+      // Removes all incoming values from all other exiting blocks (including
+      // duplicate values from an exiting block).
+      // Nuke all entries except the zero'th entry which is the preheader entry.
+      // NOTE! We need to remove Incoming Values in the reverse order as done
+      // below, to keep the indices valid for deletion (removeIncomingValues
+      // updates getNumIncomingValues and shifts all values down into the
+      // operand being deleted).
+      for (unsigned i = 0, e = P.getNumIncomingValues() - 1; i != e; ++i)
+        P.removeIncomingValue(e - i, false);
+
+      assert((P.getNumIncomingValues() == 1 &&
+              P.getIncomingBlock(PredIndex) == Preheader) &&
+             "Should have exactly one value and that's from the preheader!");
     }
-  }
 
-  // Disconnect the loop body by branching directly to its exit.
-  Builder.SetInsertPoint(Preheader->getTerminator());
-  Builder.CreateBr(ExitBlock);
-  // Remove the old branch.
-  Preheader->getTerminator()->eraseFromParent();
-
-  if (DT) {
-    DTU.applyUpdates({{DominatorTree::Delete, Preheader, L->getHeader()}});
-    if (MSSA) {
-      MSSAU->applyUpdates({{DominatorTree::Delete, Preheader, L->getHeader()}},
-                          *DT);
-      if (VerifyMemorySSA)
-        MSSA->verifyMemorySSA();
-      SmallSetVector<BasicBlock *, 8> DeadBlockSet(L->block_begin(),
-                                                   L->block_end());
-      MSSAU->removeBlocks(DeadBlockSet);
+    DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Eager);
+    if (DT) {
+      DTU.applyUpdates({{DominatorTree::Insert, Preheader, ExitBlock}});
+      if (MSSA) {
+        MSSAU->applyUpdates({{DominatorTree::Insert, Preheader, ExitBlock}},
+                            *DT);
+        if (VerifyMemorySSA)
+          MSSA->verifyMemorySSA();
+      }
     }
+
+    // Disconnect the loop body by branching directly to its exit.
+    Builder.SetInsertPoint(Preheader->getTerminator());
+    Builder.CreateBr(ExitBlock);
+    // Remove the old branch.
+    Preheader->getTerminator()->eraseFromParent();
+
+    if (DT) {
+      DTU.applyUpdates({{DominatorTree::Delete, Preheader, L->getHeader()}});
+      if (MSSA) {
+        MSSAU->applyUpdates(
+            {{DominatorTree::Delete, Preheader, L->getHeader()}}, *DT);
+        SmallSetVector<BasicBlock *, 8> DeadBlockSet(L->block_begin(),
+                                                     L->block_end());
+        MSSAU->removeBlocks(DeadBlockSet);
+        if (VerifyMemorySSA)
+          MSSA->verifyMemorySSA();
+      }
+    }
+  } else {
+    assert(L->hasNoExitBlocks() &&
+           "Loop should have either zero or one exit blocks.");
+    Builder.SetInsertPoint(OldBr);
+    Builder.CreateUnreachable();
+    Preheader->getTerminator()->eraseFromParent();
   }
 
   // Use a map to unique and a vector to guarantee deterministic ordering.
   llvm::SmallDenseSet<std::pair<DIVariable *, DIExpression *>, 4> DeadDebugSet;
   llvm::SmallVector<DbgVariableIntrinsic *, 4> DeadDebugInst;
 
-  // Given LCSSA form is satisfied, we should not have users of instructions
-  // within the dead loop outside of the loop. However, LCSSA doesn't take
-  // unreachable uses into account. We handle them here.
-  // We could do it after drop all references (in this case all users in the
-  // loop will be already eliminated and we have less work to do but according
-  // to API doc of User::dropAllReferences only valid operation after dropping
-  // references, is deletion. So let's substitute all usages of
-  // instruction from the loop with undef value of corresponding type first.
-  for (auto *Block : L->blocks())
-    for (Instruction &I : *Block) {
-      auto *Undef = UndefValue::get(I.getType());
-      for (Value::use_iterator UI = I.use_begin(), E = I.use_end(); UI != E;) {
-        Use &U = *UI;
-        ++UI;
-        if (auto *Usr = dyn_cast<Instruction>(U.getUser()))
-          if (L->contains(Usr->getParent()))
-            continue;
-        // If we have a DT then we can check that uses outside a loop only in
-        // unreachable block.
-        if (DT)
-          assert(!DT->isReachableFromEntry(U) &&
-                 "Unexpected user in reachable block");
-        U.set(Undef);
+  if (ExitBlock) {
+    // Given LCSSA form is satisfied, we should not have users of instructions
+    // within the dead loop outside of the loop. However, LCSSA doesn't take
+    // unreachable uses into account. We handle them here.
+    // We could do it after drop all references (in this case all users in the
+    // loop will be already eliminated and we have less work to do but according
+    // to API doc of User::dropAllReferences only valid operation after dropping
+    // references, is deletion. So let's substitute all usages of
+    // instruction from the loop with undef value of corresponding type first.
+    for (auto *Block : L->blocks())
+      for (Instruction &I : *Block) {
+        auto *Undef = UndefValue::get(I.getType());
+        for (Value::use_iterator UI = I.use_begin(), E = I.use_end();
+             UI != E;) {
+          Use &U = *UI;
+          ++UI;
+          if (auto *Usr = dyn_cast<Instruction>(U.getUser()))
+            if (L->contains(Usr->getParent()))
+              continue;
+          // If we have a DT then we can check that uses outside a loop only in
+          // unreachable block.
+          if (DT)
+            assert(!DT->isReachableFromEntry(U) &&
+                   "Unexpected user in reachable block");
+          U.set(Undef);
+        }
+        auto *DVI = dyn_cast<DbgVariableIntrinsic>(&I);
+        if (!DVI)
+          continue;
+        auto Key =
+            DeadDebugSet.find({DVI->getVariable(), DVI->getExpression()});
+        if (Key != DeadDebugSet.end())
+          continue;
+        DeadDebugSet.insert({DVI->getVariable(), DVI->getExpression()});
+        DeadDebugInst.push_back(DVI);
       }
-      auto *DVI = dyn_cast<DbgVariableIntrinsic>(&I);
-      if (!DVI)
-        continue;
-      auto Key = DeadDebugSet.find({DVI->getVariable(), DVI->getExpression()});
-      if (Key != DeadDebugSet.end())
-        continue;
-      DeadDebugSet.insert({DVI->getVariable(), DVI->getExpression()});
-      DeadDebugInst.push_back(DVI);
-    }
 
-  // After the loop has been deleted all the values defined and modified
-  // inside the loop are going to be unavailable.
-  // Since debug values in the loop have been deleted, inserting an undef
-  // dbg.value truncates the range of any dbg.value before the loop where the
-  // loop used to be. This is particularly important for constant values.
-  DIBuilder DIB(*ExitBlock->getModule());
-  Instruction *InsertDbgValueBefore = ExitBlock->getFirstNonPHI();
-  assert(InsertDbgValueBefore &&
-         "There should be a non-PHI instruction in exit block, else these "
-         "instructions will have no parent.");
-  for (auto *DVI : DeadDebugInst)
-    DIB.insertDbgValueIntrinsic(UndefValue::get(Builder.getInt32Ty()),
-                                DVI->getVariable(), DVI->getExpression(),
-                                DVI->getDebugLoc(), InsertDbgValueBefore);
+    // After the loop has been deleted all the values defined and modified
+    // inside the loop are going to be unavailable.
+    // Since debug values in the loop have been deleted, inserting an undef
+    // dbg.value truncates the range of any dbg.value before the loop where the
+    // loop used to be. This is particularly important for constant values.
+    DIBuilder DIB(*ExitBlock->getModule());
+    Instruction *InsertDbgValueBefore = ExitBlock->getFirstNonPHI();
+    assert(InsertDbgValueBefore &&
+           "There should be a non-PHI instruction in exit block, else these "
+           "instructions will have no parent.");
+    for (auto *DVI : DeadDebugInst)
+      DIB.insertDbgValueIntrinsic(UndefValue::get(Builder.getInt32Ty()),
+                                  DVI->getVariable(), DVI->getExpression(),
+                                  DVI->getDebugLoc(), InsertDbgValueBefore);
+  }
 
   // Remove the block from the reference counting scheme, so that we can
   // delete it freely later.
@@ -870,14 +885,7 @@ Value *llvm::createMinMaxOp(IRBuilderBase &Builder,
   FastMathFlags FMF;
   FMF.setFast();
   Builder.setFastMathFlags(FMF);
-
-  Value *Cmp;
-  if (RK == RecurrenceDescriptor::MRK_FloatMin ||
-      RK == RecurrenceDescriptor::MRK_FloatMax)
-    Cmp = Builder.CreateFCmp(P, Left, Right, "rdx.minmax.cmp");
-  else
-    Cmp = Builder.CreateICmp(P, Left, Right, "rdx.minmax.cmp");
-
+  Value *Cmp = Builder.CreateCmp(P, Left, Right, "rdx.minmax.cmp");
   Value *Select = Builder.CreateSelect(Cmp, Left, Right, "rdx.minmax.select");
   return Select;
 }
@@ -888,7 +896,7 @@ llvm::getOrderedReduction(IRBuilderBase &Builder, Value *Acc, Value *Src,
                           unsigned Op,
                           RecurrenceDescriptor::MinMaxRecurrenceKind MinMaxKind,
                           ArrayRef<Value *> RedOps) {
-  unsigned VF = cast<VectorType>(Src->getType())->getNumElements();
+  unsigned VF = cast<FixedVectorType>(Src->getType())->getNumElements();
 
   // Extract and apply reduction ops in ascending order:
   // e.g. ((((Acc + Scl[0]) + Scl[1]) + Scl[2]) + ) ... + Scl[VF-1]
@@ -918,7 +926,7 @@ Value *
 llvm::getShuffleReduction(IRBuilderBase &Builder, Value *Src, unsigned Op,
                           RecurrenceDescriptor::MinMaxRecurrenceKind MinMaxKind,
                           ArrayRef<Value *> RedOps) {
-  unsigned VF = cast<VectorType>(Src->getType())->getNumElements();
+  unsigned VF = cast<FixedVectorType>(Src->getType())->getNumElements();
   // VF is a power of 2 so we can emit the reduction using log2(VF) shuffles
   // and vector ops, reducing the set of values being computed by half each
   // round.
@@ -989,7 +997,7 @@ Value *llvm::createSimpleTargetReduction(
   case Instruction::FAdd:
     BuildFunc = [&]() {
       auto Rdx = Builder.CreateFAddReduce(
-          Constant::getNullValue(SrcVTy->getElementType()), Src);
+          ConstantFP::getNegativeZero(SrcVTy->getElementType()), Src);
       return Rdx;
     };
     break;
@@ -1151,7 +1159,7 @@ static bool isValidRewrite(ScalarEvolution *SE, Value *FromVal, Value *ToVal) {
   // producing an expression involving multiple pointers. Until then, we must
   // bail out here.
   //
-  // Retrieve the pointer operand of the GEP. Don't use GetUnderlyingObject
+  // Retrieve the pointer operand of the GEP. Don't use getUnderlyingObject
   // because it understands lcssa phis while SCEV does not.
   Value *FromPtr = FromVal;
   Value *ToPtr = ToVal;
@@ -1168,7 +1176,7 @@ static bool isValidRewrite(ScalarEvolution *SE, Value *FromVal, Value *ToVal) {
 
     // SCEV may have rewritten an expression that produces the GEP's pointer
     // operand. That's ok as long as the pointer operand has the same base
-    // pointer. Unlike GetUnderlyingObject(), getPointerBase() will find the
+    // pointer. Unlike getUnderlyingObject(), getPointerBase() will find the
     // base of a recurrence. This handles the case in which SCEV expansion
     // converts a pointer type recurrence into a nonrecurrent pointer base
     // indexed by an integer recurrence.

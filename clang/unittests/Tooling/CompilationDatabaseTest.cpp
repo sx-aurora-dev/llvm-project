@@ -281,6 +281,15 @@ TEST_F(FileMatchTrieTest, CannotResolveRelativePath) {
   EXPECT_EQ("Cannot resolve relative paths", Error);
 }
 
+TEST_F(FileMatchTrieTest, SingleFile) {
+  Trie.insert("/root/RootFile.cc");
+  EXPECT_EQ("", find("/root/rootfile.cc"));
+  // Add subpath to avoid `if (Children.empty())` special case
+  // which we hit at previous `find()`.
+  Trie.insert("/root/otherpath/OtherFile.cc");
+  EXPECT_EQ("", find("/root/rootfile.cc"));
+}
+
 TEST(findCompileArgsInJsonDatabase, FindsNothingIfEmpty) {
   std::string ErrorMessage;
   CompileCommand NotFound = findCompileArgsInJsonDatabase(
@@ -374,6 +383,7 @@ TEST(findCompileArgsInJsonDatabase, ParsesCompilerWrappers) {
   std::vector<std::pair<std::string, std::string>> Cases = {
       {"distcc gcc foo.c", "gcc foo.c"},
       {"gomacc clang++ foo.c", "clang++ foo.c"},
+      {"sccache clang++ foo.c", "clang++ foo.c"},
       {"ccache gcc foo.c", "gcc foo.c"},
       {"ccache.exe gcc foo.c", "gcc foo.c"},
       {"ccache g++.exe foo.c", "g++.exe foo.c"},

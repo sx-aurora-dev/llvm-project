@@ -135,11 +135,8 @@ private:
   struct DecomposedGEP {
     // Base pointer of the GEP
     const Value *Base;
-    // Total constant offset w.r.t the base from indexing into structs
-    APInt StructOffset;
-    // Total constant offset w.r.t the base from indexing through
-    // pointers/arrays/vectors
-    APInt OtherOffset;
+    // Total constant offset from base.
+    APInt Offset;
     // Scaled variable (non-constant) indices.
     SmallVector<VariableGEPIndex, 4> VarIndices;
     // Is GEP index scale compile-time constant.
@@ -171,8 +168,9 @@ private:
                       const DataLayout &DL, unsigned Depth, AssumptionCache *AC,
                       DominatorTree *DT, bool &NSW, bool &NUW);
 
-  static bool DecomposeGEPExpression(const Value *V, DecomposedGEP &Decomposed,
-      const DataLayout &DL, AssumptionCache *AC, DominatorTree *DT);
+  static DecomposedGEP
+  DecomposeGEPExpression(const Value *V, const DataLayout &DL,
+                         AssumptionCache *AC, DominatorTree *DT);
 
   static bool isGEPBaseAtNegativeOffset(const GEPOperator *GEPOp,
       const DecomposedGEP &DecompGEP, const DecomposedGEP &DecompObject,
@@ -189,7 +187,7 @@ private:
   bool
   constantOffsetHeuristic(const SmallVectorImpl<VariableGEPIndex> &VarIndices,
                           LocationSize V1Size, LocationSize V2Size,
-                          APInt BaseOffset, AssumptionCache *AC,
+                          const APInt &BaseOffset, AssumptionCache *AC,
                           DominatorTree *DT);
 
   bool isValueEqualInPotentialCycles(const Value *V1, const Value *V2);
@@ -214,8 +212,8 @@ private:
                           const Value *UnderV2, AAQueryInfo &AAQI);
 
   AliasResult aliasCheck(const Value *V1, LocationSize V1Size,
-                         AAMDNodes V1AATag, const Value *V2,
-                         LocationSize V2Size, AAMDNodes V2AATag,
+                         const AAMDNodes &V1AATag, const Value *V2,
+                         LocationSize V2Size, const AAMDNodes &V2AATag,
                          AAQueryInfo &AAQI, const Value *O1 = nullptr,
                          const Value *O2 = nullptr);
 };

@@ -25,12 +25,14 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/NoFolder.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
@@ -205,10 +207,7 @@ bool DeadArgumentEliminationPass::DeleteDeadVarargs(Function &Fn) {
     }
     NewCB->setCallingConv(CB->getCallingConv());
     NewCB->setAttributes(PAL);
-    NewCB->setDebugLoc(CB->getDebugLoc());
-    uint64_t W;
-    if (CB->extractProfTotalWeight(W))
-      NewCB->setProfWeight(W);
+    NewCB->copyMetadata(*CB, {LLVMContext::MD_prof, LLVMContext::MD_dbg});
 
     Args.clear();
 
@@ -290,7 +289,7 @@ bool DeadArgumentEliminationPass::RemoveDeadArgumentsFromCallers(Function &Fn) {
 
   for (Argument &Arg : Fn.args()) {
     if (!Arg.hasSwiftErrorAttr() && Arg.use_empty() &&
-        !Arg.hasPassPointeeByValueAttr()) {
+        !Arg.hasPassPointeeByValueCopyAttr()) {
       if (Arg.isUsedByMetadata()) {
         Arg.replaceAllUsesWith(UndefValue::get(Arg.getType()));
         Changed = true;
@@ -358,7 +357,7 @@ DeadArgumentEliminationPass::Liveness
 DeadArgumentEliminationPass::MarkIfNotLive(RetOrArg Use,
                                            UseVector &MaybeLiveUses) {
   // We're live if our use or its Function is already marked as live.
-  if (LiveFunctions.count(Use.F) || LiveValues.count(Use))
+  if (IsLive(Use))
     return Live;
 
   // We're maybe live otherwise, but remember that we must become live if
@@ -658,10 +657,18 @@ void DeadArgumentEliminationPass::MarkValue(const RetOrArg &RA, Liveness L,
       MarkLive(RA);
       break;
     case MaybeLive:
-      // Note any uses of this value, so this return value can be
-      // marked live whenever one of the uses becomes live.
-      for (const auto &MaybeLiveUse : MaybeLiveUses)
-        Uses.insert(std::make_pair(MaybeLiveUse, RA));
+      assert(!IsLive(RA) && "Use is already live!");
+      for (const auto &MaybeLiveUse : MaybeLiveUses) {
+        if (IsLive(MaybeLiveUse)) {
+          // A use is live, so this value is live.
+          MarkLive(RA);
+          break;
+        } else {
+          // Note any uses of this value, so this value can be
+          // marked live whenever one of the uses becomes live.
+          Uses.insert(std::make_pair(MaybeLiveUse, RA));
+        }
+      }
       break;
   }
 }
@@ -687,15 +694,18 @@ void DeadArgumentEliminationPass::MarkLive(const Function &F) {
 /// mark any values that are used by this value (according to Uses) live as
 /// well.
 void DeadArgumentEliminationPass::MarkLive(const RetOrArg &RA) {
-  if (LiveFunctions.count(RA.F))
-    return; // Function was already marked Live.
+  if (IsLive(RA))
+    return; // Already marked Live.
 
-  if (!LiveValues.insert(RA).second)
-    return; // We were already marked Live.
+  LiveValues.insert(RA);
 
   LLVM_DEBUG(dbgs() << "DeadArgumentEliminationPass - Marking "
                     << RA.getDescription() << " live\n");
   PropagateLiveness(RA);
+}
+
+bool DeadArgumentEliminationPass::IsLive(const RetOrArg &RA) {
+  return LiveFunctions.count(RA.F) || LiveValues.count(RA);
 }
 
 /// PropagateLiveness - Given that RA is a live value, propagate it's liveness
@@ -936,10 +946,7 @@ bool DeadArgumentEliminationPass::RemoveDeadStuffFromFunction(Function *F) {
     }
     NewCB->setCallingConv(CB.getCallingConv());
     NewCB->setAttributes(NewCallPAL);
-    NewCB->setDebugLoc(CB.getDebugLoc());
-    uint64_t W;
-    if (CB.extractProfTotalWeight(W))
-      NewCB->setProfWeight(W);
+    NewCB->copyMetadata(CB, {LLVMContext::MD_prof, LLVMContext::MD_dbg});
     Args.clear();
     ArgAttrVec.clear();
 
@@ -973,16 +980,16 @@ bool DeadArgumentEliminationPass::RemoveDeadStuffFromFunction(Function *F) {
         for (unsigned Ri = 0; Ri != RetCount; ++Ri)
           if (NewRetIdxs[Ri] != -1) {
             Value *V;
+            IRBuilder<NoFolder> IRB(InsertPt);
             if (RetTypes.size() > 1)
               // We are still returning a struct, so extract the value from our
               // return value
-              V = ExtractValueInst::Create(NewCB, NewRetIdxs[Ri], "newret",
-                                           InsertPt);
+              V = IRB.CreateExtractValue(NewCB, NewRetIdxs[Ri], "newret");
             else
               // We are now returning a single element, so just insert that
               V = NewCB;
             // Insert the value at the old position
-            RetVal = InsertValueInst::Create(RetVal, V, Ri, "oldret", InsertPt);
+            RetVal = IRB.CreateInsertValue(RetVal, V, Ri, "oldret");
           }
         // Now, replace all uses of the old call instruction with the return
         // struct we built
@@ -1025,6 +1032,7 @@ bool DeadArgumentEliminationPass::RemoveDeadStuffFromFunction(Function *F) {
   if (F->getReturnType() != NF->getReturnType())
     for (BasicBlock &BB : *NF)
       if (ReturnInst *RI = dyn_cast<ReturnInst>(BB.getTerminator())) {
+        IRBuilder<NoFolder> IRB(RI);
         Value *RetVal = nullptr;
 
         if (!NFTy->getReturnType()->isVoidTy()) {
@@ -1039,14 +1047,14 @@ bool DeadArgumentEliminationPass::RemoveDeadStuffFromFunction(Function *F) {
           RetVal = UndefValue::get(NRetTy);
           for (unsigned RetI = 0; RetI != RetCount; ++RetI)
             if (NewRetIdxs[RetI] != -1) {
-              ExtractValueInst *EV =
-                  ExtractValueInst::Create(OldRet, RetI, "oldret", RI);
+              Value *EV = IRB.CreateExtractValue(OldRet, RetI, "oldret");
+
               if (RetTypes.size() > 1) {
                 // We're still returning a struct, so reinsert the value into
                 // our new return value at the new index
 
-                RetVal = InsertValueInst::Create(RetVal, EV, NewRetIdxs[RetI],
-                                                 "newret", RI);
+                RetVal = IRB.CreateInsertValue(RetVal, EV, NewRetIdxs[RetI],
+                                               "newret");
               } else {
                 // We are now only returning a simple value, so just return the
                 // extracted value.
@@ -1056,7 +1064,8 @@ bool DeadArgumentEliminationPass::RemoveDeadStuffFromFunction(Function *F) {
         }
         // Replace the return instruction with one returning the new return
         // value (possibly 0 if we became void).
-        ReturnInst::Create(F->getContext(), RetVal, RI);
+        auto *NewRet = ReturnInst::Create(F->getContext(), RetVal, RI);
+        NewRet->setDebugLoc(RI->getDebugLoc());
         BB.getInstList().erase(RI);
       }
 

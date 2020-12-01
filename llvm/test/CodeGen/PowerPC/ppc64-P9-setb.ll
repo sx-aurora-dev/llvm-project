@@ -1,5 +1,5 @@
 ; RUN: llc -verify-machineinstrs -mcpu=pwr9 -mtriple=powerpc64le-unknown-unknown \
-; RUN:   -enable-ppc-quad-precision -ppc-asm-full-reg-names < %s | FileCheck %s
+; RUN:   -ppc-asm-full-reg-names < %s | FileCheck %s
 ; RUN: llc -verify-machineinstrs -mcpu=pwr8 -mtriple=powerpc64le-unknown-unknown \
 ; RUN:   -ppc-asm-full-reg-names < %s | FileCheck %s -check-prefix=CHECK-PWR8    \
 ; RUN:   -implicit-check-not "\<setb\>"
@@ -1327,4 +1327,19 @@ define i64 @setbn3(float %a, float %b) {
 ; CHECK-NOT: {{\<setb\>}}
 ; CHECK: isel
 ; CHECK: blr
+}
+
+; Verify this case doesn't crash
+define void @setbn4(i128 %0, i32* %sel.out) {
+entry:
+; CHECK-LABEL: setbn4:
+; CHECK-NOT: {{\<setb\>}}
+; CHECK: isel
+; CHECK: blr
+  %c1 = icmp ult i128 %0, 5192296858534827628530496329220096
+  %c2 = icmp ugt i128 %0, 5192296858534827628530496329220096
+  %ext = zext i1 %c2 to i32
+  %sel = select i1 %c1, i32 -1, i32 %ext
+  store i32 %sel, i32* %sel.out, align 4
+  ret void
 }

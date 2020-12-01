@@ -34,12 +34,26 @@ VERegisterInfo::VERegisterInfo() : VEGenRegisterInfo(VE::SX10) {}
 
 const MCPhysReg *
 VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
-  return CSR_SaveList;
+  switch (MF->getFunction().getCallingConv()) {
+  case CallingConv::Fast:
+    // Being explicit (same as standard CC).
+  default:
+    return CSR_SaveList;
+  case CallingConv::PreserveAll:
+    return CSR_preserve_all_SaveList;
+  }
 }
 
 const uint32_t *VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                                      CallingConv::ID CC) const {
-  return CSR_RegMask;
+  switch (CC) {
+  case CallingConv::Fast:
+    // Being explicit (same as standard CC).
+  default:
+    return CSR_RegMask;
+  case CallingConv::PreserveAll:
+    return CSR_preserve_all_RegMask;
+  }
 }
 
 const uint32_t *VERegisterInfo::getNoPreservedMask() const {
@@ -72,10 +86,22 @@ BitVector VERegisterInfo::getReservedRegs(const MachineFunction &MF) const {
          ++ItAlias)
       Reserved.set(*ItAlias);
 
+  // Reserve constant registers.
+  Reserved.set(VE::VM0);
+  Reserved.set(VE::VMP0);
+
   return Reserved;
 }
 
-bool VERegisterInfo::isConstantPhysReg(MCRegister PhysReg) const { return false; }
+bool VERegisterInfo::isConstantPhysReg(MCRegister PhysReg) const {
+  switch (PhysReg) {
+  case VE::VM0:
+  case VE::VMP0:
+    return true;
+  default:
+    return false;
+  }
+}
 
 const TargetRegisterClass *
 VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
@@ -106,36 +132,45 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
   Register FrameReg;
   int Offset;
-  Offset = TFI->getFrameIndexReference(MF, FrameIndex, FrameReg);
+  Offset = TFI->getFrameIndexReference(MF, FrameIndex, FrameReg).getFixed();
 
   Offset += MI.getOperand(FIOperandNum + 2).getImm();
+
+  if (MI.getOpcode() == VE::STQrii) {
+    const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+    Register SrcReg = MI.getOperand(3).getReg();
+    Register SrcHiReg = getSubReg(SrcReg, VE::sub_even);
+    Register SrcLoReg = getSubReg(SrcReg, VE::sub_odd);
+    // VE stores HiReg to 8(addr) and LoReg to 0(addr)
+    MachineInstr *StMI = BuildMI(*MI.getParent(), II, dl, TII.get(VE::STrii))
+                             .addReg(FrameReg)
+                             .addImm(0)
+                             .addImm(0)
+                             .addReg(SrcLoReg);
+    replaceFI(MF, II, *StMI, dl, 0, Offset, FrameReg);
+    MI.setDesc(TII.get(VE::STrii));
+    MI.getOperand(3).setReg(SrcHiReg);
+    Offset += 8;
+  } else if (MI.getOpcode() == VE::LDQrii) {
+    const TargetInstrInfo &TII = *MF.getSubtarget().getInstrInfo();
+    Register DestReg = MI.getOperand(0).getReg();
+    Register DestHiReg = getSubReg(DestReg, VE::sub_even);
+    Register DestLoReg = getSubReg(DestReg, VE::sub_odd);
+    // VE loads HiReg from 8(addr) and LoReg from 0(addr)
+    MachineInstr *StMI =
+        BuildMI(*MI.getParent(), II, dl, TII.get(VE::LDrii), DestLoReg)
+            .addReg(FrameReg)
+            .addImm(0)
+            .addImm(0);
+    replaceFI(MF, II, *StMI, dl, 1, Offset, FrameReg);
+    MI.setDesc(TII.get(VE::LDrii));
+    MI.getOperand(0).setReg(DestHiReg);
+    Offset += 8;
+  }
 
   replaceFI(MF, II, MI, dl, FIOperandNum, Offset, FrameReg);
 }
 
 Register VERegisterInfo::getFrameRegister(const MachineFunction &MF) const {
   return VE::SX9;
-}
-
-// VE has no architectural need for stack realignment support,
-// except that LLVM unfortunately currently implements overaligned
-// stack objects by depending upon stack realignment support.
-// If that ever changes, this can probably be deleted.
-bool VERegisterInfo::canRealignStack(const MachineFunction &MF) const {
-  if (!TargetRegisterInfo::canRealignStack(MF))
-    return false;
-
-  // VE always has a fixed frame pointer register, so don't need to
-  // worry about needing to reserve it. [even if we don't have a frame
-  // pointer for our frame, it still cannot be used for other things,
-  // or register window traps will be SADNESS.]
-
-  // If there's a reserved call frame, we can use VE to access locals.
-  if (getFrameLowering(MF)->hasReservedCallFrame(MF))
-    return true;
-
-  // Otherwise, we'd need a base pointer, but those aren't implemented
-  // for VE at the moment.
-
-  return false;
 }

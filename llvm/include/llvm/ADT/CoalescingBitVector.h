@@ -16,6 +16,7 @@
 
 #include "llvm/ADT/IntervalMap.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/iterator_range.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -33,15 +34,14 @@ namespace llvm {
 /// performance for non-sequential find() operations.
 ///
 /// \tparam IndexT - The type of the index into the bitvector.
-/// \tparam N - The first N coalesced intervals of set bits are stored in-place.
-template <typename IndexT, unsigned N = 16> class CoalescingBitVector {
+template <typename IndexT> class CoalescingBitVector {
   static_assert(std::is_unsigned<IndexT>::value,
                 "Index must be an unsigned integer.");
 
-  using ThisT = CoalescingBitVector<IndexT, N>;
+  using ThisT = CoalescingBitVector<IndexT>;
 
   /// An interval map for closed integer ranges. The mapped values are unused.
-  using MapT = IntervalMap<IndexT, char, N>;
+  using MapT = IntervalMap<IndexT, char>;
 
   using UnderlyingIterator = typename MapT::const_iterator;
 
@@ -350,6 +350,19 @@ public:
     auto It = const_iterator(UnderlyingIt);
     It.advanceTo(Index);
     return It;
+  }
+
+  /// Return a range iterator which iterates over all of the set bits in the
+  /// half-open range [Start, End).
+  iterator_range<const_iterator> half_open_range(IndexT Start,
+                                                 IndexT End) const {
+    assert(Start < End && "Not a valid range");
+    auto StartIt = find(Start);
+    if (StartIt == end() || *StartIt >= End)
+      return {end(), end()};
+    auto EndIt = StartIt;
+    EndIt.advanceToLowerBound(End);
+    return {StartIt, EndIt};
   }
 
   void print(raw_ostream &OS) const {

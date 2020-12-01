@@ -16,7 +16,7 @@ class TestPlatformProcessConnect(gdbremote_testcase.GdbRemoteTestCaseBase):
     @expectedFailureAll(hostoslist=["windows"], triple='.*-android')
     def test_platform_process_connect(self):
         self.build()
-        self.init_llgs_test(False)
+        self.init_llgs_test()
 
         working_dir = lldb.remote_platform.GetWorkingDirectory()
         src = lldb.SBFileSpec(self.getBuildArtifact("a.out"))
@@ -54,7 +54,6 @@ class TestPlatformProcessConnect(gdbremote_testcase.GdbRemoteTestCaseBase):
             self.debug_monitor_exe,
             commandline_args,
             install_remote=False)
-        self.addTearDownHook(self.cleanupSubprocesses)
 
         socket_id = lldbutil.wait_for_file_on_target(self, port_file)
 

@@ -131,9 +131,12 @@ void RegisterBankEmitter::emitHeader(raw_ostream &OS,
   // <Target>RegisterBankInfo.h
   OS << "namespace llvm {\n"
      << "namespace " << TargetName << " {\n"
-     << "enum {\n";
+     << "enum : unsigned {\n";
+
+  OS << "  InvalidRegBankID = ~0u,\n";
+  unsigned ID = 0;
   for (const auto &Bank : Banks)
-    OS << "  " << Bank.getEnumeratorName() << ",\n";
+    OS << "  " << Bank.getEnumeratorName() << " = " << ID++ << ",\n";
   OS << "  NumRegisterBanks,\n"
      << "};\n"
      << "} // end namespace " << TargetName << "\n"
@@ -279,6 +282,7 @@ void RegisterBankEmitter::run(raw_ostream &OS) {
   StringRef TargetName = Target.getName();
   const CodeGenRegBank &RegisterClassHierarchy = Target.getRegBank();
 
+  Records.startTimer("Analyze records");
   std::vector<RegisterBank> Banks;
   for (const auto &V : Records.getAllDerivedDefinitions("RegisterBank")) {
     SmallPtrSet<const CodeGenRegisterClass *, 8> VisitedRCs;
@@ -300,6 +304,7 @@ void RegisterBankEmitter::run(raw_ostream &OS) {
   }
 
   // Warn about ambiguous MIR caused by register bank/class name clashes.
+  Records.startTimer("Warn ambiguous");
   for (const auto &Class : RegisterClassHierarchy.getRegClasses()) {
     for (const auto &Bank : Banks) {
       if (Bank.getName().lower() == StringRef(Class.getName()).lower()) {
@@ -312,6 +317,7 @@ void RegisterBankEmitter::run(raw_ostream &OS) {
     }
   }
 
+  Records.startTimer("Emit output");
   emitSourceFileHeader("Register Bank Source Fragments", OS);
   OS << "#ifdef GET_REGBANK_DECLARATIONS\n"
      << "#undef GET_REGBANK_DECLARATIONS\n";

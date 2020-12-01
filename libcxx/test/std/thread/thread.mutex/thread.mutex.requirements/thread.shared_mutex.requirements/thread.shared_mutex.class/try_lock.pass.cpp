@@ -7,7 +7,7 @@
 //===----------------------------------------------------------------------===//
 //
 // UNSUPPORTED: libcpp-has-no-threads
-// UNSUPPORTED: c++98, c++03, c++11, c++14
+// UNSUPPORTED: c++03, c++11, c++14
 
 // ALLOW_RETRIES: 2
 
@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <cassert>
 
+#include "make_test_thread.h"
 #include "test_macros.h"
 
 std::shared_mutex m;
@@ -54,7 +55,7 @@ void f()
 int main(int, char**)
 {
     m.lock();
-    std::thread t(f);
+    std::thread t = support::make_test_thread(f);
     std::this_thread::sleep_for(ms(250));
     m.unlock();
     t.join();

@@ -41,11 +41,6 @@
 
 namespace llvm {
 
-class ArrayType;
-class IntegerType;
-class PointerType;
-class StructType;
-class VectorType;
 template <class ConstantClass> struct ConstantAggrKeyType;
 
 /// Base class for constants with no operands.
@@ -156,9 +151,19 @@ public:
     return Val.getSExtValue();
   }
 
-  /// Return the constant as an llvm::Align. Note that this method can assert if
-  /// the value does not fit in 64 bits or is not a power of two.
-  inline Align getAlignValue() const { return Align(getZExtValue()); }
+  /// Return the constant as an llvm::MaybeAlign.
+  /// Note that this method can assert if the value does not fit in 64 bits or
+  /// is not a power of two.
+  inline MaybeAlign getMaybeAlignValue() const {
+    return MaybeAlign(getZExtValue());
+  }
+
+  /// Return the constant as an llvm::Align, interpreting `0` as `Align(1)`.
+  /// Note that this method can assert if the value does not fit in 64 bits or
+  /// is not a power of two.
+  inline Align getAlignValue() const {
+    return getMaybeAlignValue().valueOrOne();
+  }
 
   /// A helper method that can be used to determine if the constant contained
   /// within is equal to a constant.  This only works for very small values,
@@ -303,6 +308,7 @@ public:
   /// Return true if Ty is big enough to represent V.
   static bool isValueValidForType(Type *Ty, const APFloat &V);
   inline const APFloat &getValueAPF() const { return Val; }
+  inline const APFloat &getValue() const { return Val; }
 
   /// Return true if the value is positive or negative zero.
   bool isZero() const { return Val.isZero(); }
@@ -586,14 +592,13 @@ class ConstantDataSequential : public ConstantData {
   /// the same value but different type.  For example, 0,0,0,1 could be a 4
   /// element array of i8, or a 1-element array of i32.  They'll both end up in
   /// the same StringMap bucket, linked up.
-  ConstantDataSequential *Next;
+  std::unique_ptr<ConstantDataSequential> Next;
 
   void destroyConstantImpl();
 
 protected:
   explicit ConstantDataSequential(Type *ty, ValueTy VT, const char *Data)
-      : ConstantData(ty, VT), DataElements(Data), Next(nullptr) {}
-  ~ConstantDataSequential() { delete Next; }
+      : ConstantData(ty, VT), DataElements(Data) {}
 
   static Constant *getImpl(StringRef Bytes, Type *Ty);
 
@@ -883,6 +888,42 @@ struct OperandTraits<BlockAddress> :
 
 DEFINE_TRANSPARENT_OPERAND_ACCESSORS(BlockAddress, Value)
 
+/// Wrapper for a function that represents a value that
+/// functionally represents the original function. This can be a function,
+/// global alias to a function, or an ifunc.
+class DSOLocalEquivalent final : public Constant {
+  friend class Constant;
+
+  DSOLocalEquivalent(GlobalValue *GV);
+
+  void *operator new(size_t s) { return User::operator new(s, 1); }
+
+  void destroyConstantImpl();
+  Value *handleOperandChangeImpl(Value *From, Value *To);
+
+public:
+  /// Return a DSOLocalEquivalent for the specified global value.
+  static DSOLocalEquivalent *get(GlobalValue *GV);
+
+  /// Transparently provide more efficient getOperand methods.
+  DECLARE_TRANSPARENT_OPERAND_ACCESSORS(Value);
+
+  GlobalValue *getGlobalValue() const {
+    return cast<GlobalValue>(Op<0>().get());
+  }
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static bool classof(const Value *V) {
+    return V->getValueID() == DSOLocalEquivalentVal;
+  }
+};
+
+template <>
+struct OperandTraits<DSOLocalEquivalent>
+    : public FixedNumOperandTraits<DSOLocalEquivalent, 1> {};
+
+DEFINE_TRANSPARENT_OPERAND_ACCESSORS(DSOLocalEquivalent, Value)
+
 //===----------------------------------------------------------------------===//
 /// A constant value that is initialized with an expression using
 /// other constant values.
@@ -903,6 +944,8 @@ protected:
     // Operation type (an Instruction opcode) is stored as the SubclassData.
     setValueSubclassData(Opcode);
   }
+
+  ~ConstantExpr() = default;
 
 public:
   // Static methods to construct a ConstantExpr of different kinds.  Note that
@@ -951,6 +994,7 @@ public:
   static Constant *getAnd(Constant *C1, Constant *C2);
   static Constant *getOr(Constant *C1, Constant *C2);
   static Constant *getXor(Constant *C1, Constant *C2);
+  static Constant *getUMin(Constant *C1, Constant *C2);
   static Constant *getShl(Constant *C1, Constant *C2,
                           bool HasNUW = false, bool HasNSW = false);
   static Constant *getLShr(Constant *C1, Constant *C2, bool isExact = false);
@@ -1025,6 +1069,12 @@ public:
   static Constant *getExactLShr(Constant *C1, Constant *C2) {
     return getLShr(C1, C2, true);
   }
+
+  /// If C is a scalar/fixed width vector of known powers of 2, then this
+  /// function returns a new scalar/fixed width vector obtained from logBase2
+  /// of C. Undef vector elements are set to zero.
+  /// Return a null pointer otherwise.
+  static Constant *getExactLogBase2(Constant *C);
 
   /// Return the identity constant for a binary opcode.
   /// The identity constant C is defined as X op C = X and C op X = X for every
@@ -1298,12 +1348,15 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(ConstantExpr, Constant)
 /// can appear to have different bit patterns at each use. See
 /// LangRef.html#undefvalues for details.
 ///
-class UndefValue final : public ConstantData {
+class UndefValue : public ConstantData {
   friend class Constant;
 
   explicit UndefValue(Type *T) : ConstantData(T, UndefValueVal) {}
 
   void destroyConstantImpl();
+
+protected:
+  explicit UndefValue(Type *T, ValueTy vty) : ConstantData(T, vty) {}
 
 public:
   UndefValue(const UndefValue &) = delete;
@@ -1331,7 +1384,49 @@ public:
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Value *V) {
-    return V->getValueID() == UndefValueVal;
+    return V->getValueID() == UndefValueVal ||
+           V->getValueID() == PoisonValueVal;
+  }
+};
+
+//===----------------------------------------------------------------------===//
+/// In order to facilitate speculative execution, many instructions do not
+/// invoke immediate undefined behavior when provided with illegal operands,
+/// and return a poison value instead.
+///
+/// see LangRef.html#poisonvalues for details.
+///
+class PoisonValue final : public UndefValue {
+  friend class Constant;
+
+  explicit PoisonValue(Type *T) : UndefValue(T, PoisonValueVal) {}
+
+  void destroyConstantImpl();
+
+public:
+  PoisonValue(const PoisonValue &) = delete;
+
+  /// Static factory methods - Return an 'poison' object of the specified type.
+  static PoisonValue *get(Type *T);
+
+  /// If this poison has array or vector type, return a poison with the right
+  /// element type.
+  PoisonValue *getSequentialElement() const;
+
+  /// If this poison has struct type, return a poison with the right element
+  /// type for the specified element.
+  PoisonValue *getStructElement(unsigned Elt) const;
+
+  /// Return an poison of the right value for the specified GEP index if we can,
+  /// otherwise return null (e.g. if C is a ConstantExpr).
+  PoisonValue *getElementValue(Constant *C) const;
+
+  /// Return an poison of the right value for the specified GEP index.
+  PoisonValue *getElementValue(unsigned Idx) const;
+
+  /// Methods for support type inquiry through isa, cast, and dyn_cast:
+  static bool classof(const Value *V) {
+    return V->getValueID() == PoisonValueVal;
   }
 };
 

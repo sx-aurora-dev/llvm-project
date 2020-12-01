@@ -1024,9 +1024,13 @@ void ELFWriter::writeSection(const SectionIndexMapTy &SectionIndexMap,
   }
 
   if (Section.getFlags() & ELF::SHF_LINK_ORDER) {
+    // If the value in the associated metadata is not a definition, Sym will be
+    // undefined. Represent this with sh_link=0.
     const MCSymbol *Sym = Section.getLinkedToSymbol();
-    const MCSectionELF *Sec = cast<MCSectionELF>(&Sym->getSection());
-    sh_link = SectionIndexMap.lookup(Sec);
+    if (Sym && Sym->isInSection()) {
+      const MCSectionELF *Sec = cast<MCSectionELF>(&Sym->getSection());
+      sh_link = SectionIndexMap.lookup(Sec);
+    }
   }
 
   WriteSecHdrEntry(StrTabBuilder.getOffset(Section.getName()),
@@ -1276,6 +1280,7 @@ void ELFObjectWriter::executePostLayoutBinding(MCAssembler &Asm,
     // This is the first place we are able to copy this information.
     Alias->setExternal(Symbol.isExternal());
     Alias->setBinding(Symbol.getBinding());
+    Alias->setVisibility(Symbol.getVisibility());
     Alias->setOther(Symbol.getOther());
 
     if (!Symbol.isUndefined() && !Rest.startswith("@@@"))

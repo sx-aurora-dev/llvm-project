@@ -46,6 +46,7 @@ using namespace llvm::object;
 LTOModule::LTOModule(std::unique_ptr<Module> M, MemoryBufferRef MBRef,
                      llvm::TargetMachine *TM)
     : Mod(std::move(M)), MBRef(MBRef), _target(TM) {
+  assert(_target && "target machine is null");
   SymTab.addModule(Mod.get());
 }
 
@@ -414,9 +415,8 @@ void LTOModule::addDefinedFunctionSymbol(StringRef Name, const Function *F) {
 
 void LTOModule::addDefinedSymbol(StringRef Name, const GlobalValue *def,
                                  bool isFunction) {
-  // set alignment part log2() can have rounding errors
-  uint32_t align = def->getAlignment();
-  uint32_t attr = align ? countTrailingZeros(align) : 0;
+  const GlobalObject *go = dyn_cast<GlobalObject>(def);
+  uint32_t attr = go ? Log2(go->getAlign().valueOrOne()) : 0;
 
   // set permissions part
   if (isFunction) {

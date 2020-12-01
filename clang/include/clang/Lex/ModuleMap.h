@@ -328,10 +328,9 @@ private:
   /// \param NeedsFramework If M is not a framework but a missing header would
   ///        be found in case M was, set it to true. False otherwise.
   /// \return The resolved file, if any.
-  const FileEntry *findHeader(Module *M,
-                              const Module::UnresolvedHeaderDirective &Header,
-                              SmallVectorImpl<char> &RelativePathName,
-                              bool &NeedsFramework);
+  Optional<FileEntryRef>
+  findHeader(Module *M, const Module::UnresolvedHeaderDirective &Header,
+             SmallVectorImpl<char> &RelativePathName, bool &NeedsFramework);
 
   /// Resolve the given header directive.
   ///
@@ -413,6 +412,7 @@ public:
 
   /// Is this a compiler builtin header?
   static bool isBuiltinHeader(StringRef FileName);
+  bool isBuiltinHeader(const FileEntry *File);
 
   /// Add a module map callback.
   void addModuleMapCallbacks(std::unique_ptr<ModuleMapCallbacks> Callback) {

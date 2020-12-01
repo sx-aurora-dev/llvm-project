@@ -70,6 +70,9 @@ AArch64TargetInfo::AArch64TargetInfo(const llvm::Triple &Triple,
   LongDoubleWidth = LongDoubleAlign = SuitableAlign = 128;
   LongDoubleFormat = &llvm::APFloat::IEEEquad();
 
+  BFloat16Width = BFloat16Align = 16;
+  BFloat16Format = &llvm::APFloat::BFloat();
+
   // Make __builtin_ms_va_list available.
   HasBuiltinMSVaList = true;
 
@@ -152,8 +155,9 @@ void AArch64TargetInfo::fillValidCPUList(
 
 void AArch64TargetInfo::getTargetDefinesARMV81A(const LangOptions &Opts,
                                                 MacroBuilder &Builder) const {
-  // FIXME: Armv8.1 makes __ARM_FEATURE_CRC32 mandatory. Handle it here.
   Builder.defineMacro("__ARM_FEATURE_QRDMX", "1");
+  Builder.defineMacro("__ARM_FEATURE_ATOMICS", "1");
+  Builder.defineMacro("__ARM_FEATURE_CRC32", "1");
 }
 
 void AArch64TargetInfo::getTargetDefinesARMV82A(const LangOptions &Opts,
@@ -173,8 +177,6 @@ void AArch64TargetInfo::getTargetDefinesARMV83A(const LangOptions &Opts,
 void AArch64TargetInfo::getTargetDefinesARMV84A(const LangOptions &Opts,
                                                 MacroBuilder &Builder) const {
   // Also include the Armv8.3 defines
-  // FIXME: Armv8.4 makes __ARM_FEATURE_ATOMICS, defined in GCC, mandatory.
-  // Add and handle it here.
   getTargetDefinesARMV83A(Opts, Builder);
 }
 
@@ -257,6 +259,24 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
     Builder.defineMacro("__ARM_NEON_FP", "0xE");
   }
 
+  if (FPU & SveMode)
+    Builder.defineMacro("__ARM_FEATURE_SVE", "1");
+
+  if (HasSVE2)
+    Builder.defineMacro("__ARM_FEATURE_SVE2", "1");
+
+  if (HasSVE2 && HasSVE2AES)
+    Builder.defineMacro("__ARM_FEATURE_SVE2_AES", "1");
+
+  if (HasSVE2 && HasSVE2BitPerm)
+    Builder.defineMacro("__ARM_FEATURE_SVE2_BITPERM", "1");
+
+  if (HasSVE2 && HasSVE2SHA3)
+    Builder.defineMacro("__ARM_FEATURE_SVE2_SHA3", "1");
+
+  if (HasSVE2 && HasSVE2SM4)
+    Builder.defineMacro("__ARM_FEATURE_SVE2_SM4", "1");
+
   if (HasCRC)
     Builder.defineMacro("__ARM_FEATURE_CRC32", "1");
 
@@ -282,6 +302,29 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
 
   if (HasMatMul)
     Builder.defineMacro("__ARM_FEATURE_MATMUL_INT8", "1");
+
+  if (HasLSE)
+    Builder.defineMacro("__ARM_FEATURE_ATOMICS", "1");
+
+  if (HasBFloat16) {
+    Builder.defineMacro("__ARM_FEATURE_BF16", "1");
+    Builder.defineMacro("__ARM_FEATURE_BF16_VECTOR_ARITHMETIC", "1");
+    Builder.defineMacro("__ARM_BF16_FORMAT_ALTERNATIVE", "1");
+    Builder.defineMacro("__ARM_FEATURE_BF16_SCALAR_ARITHMETIC", "1");
+  }
+
+  if ((FPU & SveMode) && HasBFloat16) {
+    Builder.defineMacro("__ARM_FEATURE_SVE_BF16", "1");
+  }
+
+  if ((FPU & SveMode) && HasMatmulFP64)
+    Builder.defineMacro("__ARM_FEATURE_SVE_MATMUL_FP64", "1");
+
+  if ((FPU & SveMode) && HasMatmulFP32)
+    Builder.defineMacro("__ARM_FEATURE_SVE_MATMUL_FP32", "1");
+
+  if ((FPU & SveMode) && HasMatMul)
+    Builder.defineMacro("__ARM_FEATURE_SVE_MATMUL_INT8", "1");
 
   if ((FPU & NeonMode) && HasFP16FML)
     Builder.defineMacro("__ARM_FEATURE_FP16FML", "1");
@@ -335,6 +378,11 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
   Builder.defineMacro("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_2");
   Builder.defineMacro("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4");
   Builder.defineMacro("__GCC_HAVE_SYNC_COMPARE_AND_SWAP_8");
+
+  if (Opts.ArmSveVectorBits) {
+    Builder.defineMacro("__ARM_FEATURE_SVE_BITS", Twine(Opts.ArmSveVectorBits));
+    Builder.defineMacro("__ARM_FEATURE_SVE_VECTOR_OPERATORS");
+  }
 }
 
 ArrayRef<Builtin::Info> AArch64TargetInfo::getTargetBuiltins() const {
@@ -345,7 +393,11 @@ ArrayRef<Builtin::Info> AArch64TargetInfo::getTargetBuiltins() const {
 bool AArch64TargetInfo::hasFeature(StringRef Feature) const {
   return Feature == "aarch64" || Feature == "arm64" || Feature == "arm" ||
          (Feature == "neon" && (FPU & NeonMode)) ||
-         (Feature == "sve" && (FPU & SveMode));
+         ((Feature == "sve" || Feature == "sve2" || Feature == "sve2-bitperm" ||
+           Feature == "sve2-aes" || Feature == "sve2-sha3" ||
+           Feature == "sve2-sm4" || Feature == "f64mm" || Feature == "f32mm" ||
+           Feature == "i8mm" || Feature == "bf16") &&
+          (FPU & SveMode));
 }
 
 bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
@@ -360,13 +412,62 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
   HasMTE = false;
   HasTME = false;
   HasMatMul = false;
+  HasBFloat16 = false;
+  HasSVE2 = false;
+  HasSVE2AES = false;
+  HasSVE2SHA3 = false;
+  HasSVE2SM4 = false;
+  HasSVE2BitPerm = false;
+  HasMatmulFP64 = false;
+  HasMatmulFP32 = false;
+  HasLSE = false;
+
   ArchKind = llvm::AArch64::ArchKind::ARMV8A;
 
   for (const auto &Feature : Features) {
     if (Feature == "+neon")
       FPU |= NeonMode;
-    if (Feature == "+sve")
+    if (Feature == "+sve") {
       FPU |= SveMode;
+      HasFullFP16 = 1;
+    }
+    if (Feature == "+sve2") {
+      FPU |= SveMode;
+      HasFullFP16 = 1;
+      HasSVE2 = 1;
+    }
+    if (Feature == "+sve2-aes") {
+      FPU |= SveMode;
+      HasFullFP16 = 1;
+      HasSVE2 = 1;
+      HasSVE2AES = 1;
+    }
+    if (Feature == "+sve2-sha3") {
+      FPU |= SveMode;
+      HasFullFP16 = 1;
+      HasSVE2 = 1;
+      HasSVE2SHA3 = 1;
+    }
+    if (Feature == "+sve2-sm4") {
+      FPU |= SveMode;
+      HasFullFP16 = 1;
+      HasSVE2 = 1;
+      HasSVE2SM4 = 1;
+    }
+    if (Feature == "+sve2-bitperm") {
+      FPU |= SveMode;
+      HasFullFP16 = 1;
+      HasSVE2 = 1;
+      HasSVE2BitPerm = 1;
+    }
+    if (Feature == "+f32mm") {
+      FPU |= SveMode;
+      HasMatmulFP32 = true;
+    }
+    if (Feature == "+f64mm") {
+      FPU |= SveMode;
+      HasMatmulFP64 = true;
+    }
     if (Feature == "+crc")
       HasCRC = true;
     if (Feature == "+crypto")
@@ -385,6 +486,8 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       ArchKind = llvm::AArch64::ArchKind::ARMV8_5A;
     if (Feature == "+v8.6a")
       ArchKind = llvm::AArch64::ArchKind::ARMV8_6A;
+    if (Feature == "+v8r")
+      ArchKind = llvm::AArch64::ArchKind::ARMV8R;
     if (Feature == "+fullfp16")
       HasFullFP16 = true;
     if (Feature == "+dotprod")
@@ -397,6 +500,10 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasTME = true;
     if (Feature == "+i8mm")
       HasMatMul = true;
+    if (Feature == "+bf16")
+      HasBFloat16 = true;
+    if (Feature == "+lse")
+      HasLSE = true;
   }
 
   setDataLayout();
@@ -659,7 +766,9 @@ WindowsARM64TargetInfo::WindowsARM64TargetInfo(const llvm::Triple &Triple,
 }
 
 void WindowsARM64TargetInfo::setDataLayout() {
-  resetDataLayout("e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128");
+  resetDataLayout(Triple.isOSBinFormatMachO()
+                      ? "e-m:o-i64:64-i128:128-n32:64-S128"
+                      : "e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128");
 }
 
 TargetInfo::BuiltinVaListKind

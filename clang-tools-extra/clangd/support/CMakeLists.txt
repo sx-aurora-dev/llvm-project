@@ -19,11 +19,13 @@ include_directories(..)
 add_clang_library(clangdSupport
   Cancellation.cpp
   Context.cpp
-  FSProvider.cpp
+  FileCache.cpp
   Logger.cpp
   Markup.cpp
+  MemoryTree.cpp
   Shutdown.cpp
   Threading.cpp
+  ThreadsafeFS.cpp
   Trace.cpp
 
   LINK_LIBS

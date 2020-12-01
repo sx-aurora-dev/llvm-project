@@ -55,6 +55,9 @@ public:
     /// The entity being initialized is a function parameter.
     EK_Parameter,
 
+    /// The entity being initialized is a non-type template parameter.
+    EK_TemplateParameter,
+
     /// The entity being initialized is the result of a function call.
     EK_Result,
 
@@ -175,7 +178,8 @@ private:
   };
 
   union {
-    /// When Kind == EK_Variable, EK_Member or EK_Binding, the variable.
+    /// When Kind == EK_Variable, EK_Member, EK_Binding, or
+    /// EK_TemplateParameter, the variable, binding, or template parameter.
     VD Variable;
 
     /// When Kind == EK_RelatedResult, the ObjectiveC method where
@@ -278,6 +282,17 @@ public:
     Entity.Type = Context.getVariableArrayDecayedType(Type);
     Entity.Parent = nullptr;
     Entity.Parameter = (Consumed);
+    return Entity;
+  }
+
+  /// Create the initialization entity for a template parameter.
+  static InitializedEntity
+  InitializeTemplateParameter(QualType T, NonTypeTemplateParmDecl *Param) {
+    InitializedEntity Entity;
+    Entity.Kind = EK_TemplateParameter;
+    Entity.Type = T;
+    Entity.Parent = nullptr;
+    Entity.Variable = {Param, false, false};
     return Entity;
   }
 
@@ -439,6 +454,10 @@ public:
   bool isParameterKind() const {
     return (getKind() == EK_Parameter  ||
             getKind() == EK_Parameter_CF_Audited);
+  }
+
+  bool isParamOrTemplateParamKind() const {
+    return isParameterKind() || getKind() == EK_TemplateParameter;
   }
 
   /// Determine whether this initialization consumes the
@@ -689,6 +708,9 @@ public:
     return Context >= IC_StaticCast;
   }
 
+  /// Determine whether this initialization is a static cast.
+  bool isStaticCast() const { return Context == IC_StaticCast; }
+
   /// Determine whether this initialization is a C-style cast.
   bool isCStyleOrFunctionalCast() const {
     return Context >= IC_CStyleCast;
@@ -817,6 +839,9 @@ public:
 
     /// Perform a qualification conversion, producing an lvalue.
     SK_QualificationConversionLValue,
+
+    /// Perform a function reference conversion, see [dcl.init.ref]p4.
+    SK_FunctionReferenceConversion,
 
     /// Perform a conversion adding _Atomic to a type.
     SK_AtomicConversion,
@@ -998,6 +1023,9 @@ public:
 
     /// Non-const lvalue reference binding to a vector element.
     FK_NonConstLValueReferenceBindingToVectorElement,
+
+    /// Non-const lvalue reference binding to a matrix element.
+    FK_NonConstLValueReferenceBindingToMatrixElement,
 
     /// Non-const lvalue reference binding to an lvalue of unrelated
     /// type.
@@ -1262,6 +1290,10 @@ public:
   /// given type.
   void AddQualificationConversionStep(QualType Ty,
                                      ExprValueKind Category);
+
+  /// Add a new step that performs a function reference conversion to the
+  /// given type.
+  void AddFunctionReferenceConversionStep(QualType Ty);
 
   /// Add a new step that performs conversion from non-atomic to atomic
   /// type.
