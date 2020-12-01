@@ -4,7 +4,7 @@
 define void @func(i32* nocapture) {
 ; CHECK-LABEL: func:
 ; CHECK:       .LBB{{[0-9]+}}_4:
-; CHECK-NEXT:    lea %s1, 176(, %s11)
+; CHECK-NEXT:    lea %s1, (, %s11)
 ; CHECK-NEXT:    lea %s1, 16(, %s1)
 ; CHECK-NEXT:    or %s2, 0, (0)1
 ; CHECK-NEXT:    lea %s3, 256
@@ -30,9 +30,10 @@ define void @func(i32* nocapture) {
 ; CHECK-NEXT:    lea %s1, 32(, %s1)
 ; CHECK-NEXT:    brne.l %s4, %s3, .LBB{{[0-9]+}}_1
 ; CHECK-NEXT:  # %bb.2:
-; CHECK-NEXT:    ldl.sx %s1, 176(, %s11)
+; CHECK-NEXT:    ldl.sx %s1, (, %s11)
 ; CHECK-NEXT:    stl %s1, (, %s0)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    lea %s11, 1024(, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
   %2 = alloca [256 x i32], align 16
   %3 = bitcast [256 x i32]* %2 to i8*
   call void @llvm.lifetime.start.p0i8(i64 1024, i8* nonnull %3)

@@ -364,11 +364,11 @@ define { double, double } @func_dcomp_dcomp(double %0, double %1, double %2, dou
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_dcomp_qcomp(double %0, double %1, double %2, double %3, fp128 %4, fp128 %5, fp128 %6, fp128 %7) {
 ; CHECK-LABEL: func_dcomp_qcomp:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 432(, %s11)
-; CHECK-NEXT:    ld %s34, 440(, %s11)
-; CHECK-NEXT:    ld %s37, 416(, %s11)
-; CHECK-NEXT:    ld %s36, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 256(, %s11)
+; CHECK-NEXT:    ld %s34, 264(, %s11)
+; CHECK-NEXT:    ld %s37, 240(, %s11)
+; CHECK-NEXT:    ld %s36, 248(, %s11)
 ; CHECK-NEXT:    fcmp.d %s0, %s0, %s2
 ; CHECK-NEXT:    or %s2, 0, (0)1
 ; CHECK-NEXT:    or %s38, 0, (0)1
@@ -385,7 +385,7 @@ define { fp128, fp128 } @func_dcomp_qcomp(double %0, double %1, double %2, doubl
 ; CHECK-NEXT:    or %s1, 0, %s37
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %9 = fcmp oeq double %0, %2
   %10 = fcmp oeq double %1, %3
   %11 = and i1 %9, %10
@@ -728,9 +728,9 @@ define { double, double } @func_dcomp_dcomp_zero(double %0, double %1, double %2
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_dcomp_qcomp_zero(double %0, double %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_dcomp_qcomp_zero:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    or %s36, 0, (0)1
 ; CHECK-NEXT:    or %s37, 0, (0)1
 ; CHECK-NEXT:    cmov.d.eq %s37, (63)0, %s0
@@ -745,7 +745,7 @@ define { fp128, fp128 } @func_dcomp_qcomp_zero(double %0, double %1, fp128 %2, f
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq double %0, 0.000000e+00
   %8 = fcmp oeq double %1, 0.000000e+00
   %9 = and i1 %7, %8
@@ -1120,9 +1120,9 @@ define { double, double } @func_dcomp_dcomp_i(double %0, double %1, double %2, d
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_dcomp_qcomp_i(double %0, double %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_dcomp_qcomp_i:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    lea.sl %s36, 1076363264
 ; CHECK-NEXT:    fcmp.d %s0, %s0, %s36
 ; CHECK-NEXT:    or %s36, 0, (0)1
@@ -1139,7 +1139,7 @@ define { fp128, fp128 } @func_dcomp_qcomp_i(double %0, double %1, fp128 %2, fp12
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq double %0, 1.200000e+01
   %8 = fcmp oeq double %1, 0.000000e+00
   %9 = and i1 %7, %8
@@ -1514,9 +1514,9 @@ define { double, double } @func_dcomp_dcomp_m(double %0, double %1, double %2, d
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_dcomp_qcomp_m(double %0, double %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_dcomp_qcomp_m:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    lea.sl %s36, -1073741824
 ; CHECK-NEXT:    fcmp.d %s0, %s0, %s36
 ; CHECK-NEXT:    or %s36, 0, (0)1
@@ -1533,7 +1533,7 @@ define { fp128, fp128 } @func_dcomp_qcomp_m(double %0, double %1, fp128 %2, fp12
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq double %0, -2.000000e+00
   %8 = fcmp oeq double %1, 0.000000e+00
   %9 = and i1 %7, %8

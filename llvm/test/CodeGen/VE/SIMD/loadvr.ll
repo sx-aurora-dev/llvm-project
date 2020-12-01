@@ -83,10 +83,11 @@ define x86_regcallcc <256 x i64> @loadv256i64stk() {
 ; CHECK-LABEL: loadv256i64stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lea %s1, 176(, %s11)
+; CHECK-NEXT:    lea %s1, (, %s11)
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vld %v0, 8, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    lea %s11, 2048(, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
   %addr = alloca <256 x i64>, align 16
   %1 = load <256 x i64>, <256 x i64>* %addr, align 16
   ret <256 x i64> %1

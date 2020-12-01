@@ -29,8 +29,9 @@ define signext i32 @hasStackObjects() {
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    or %s1, 3, (0)1
 ; CHECK-NEXT:    or %s0, 3, (0)1
-; CHECK-NEXT:    stl %s1, 188(, %s11)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    stl %s1, 12(, %s11)
+; CHECK-NEXT:    adds.l %s11, 16, %s11
+; CHECK-NEXT:    b.l.t (, %s10)
   %1 = alloca i32, align 4
   store i32 3, i32* %1, align 4
   %2 = load i32, i32* %1, align 4

@@ -27,13 +27,13 @@ define void @storeq(fp128* nocapture, fp128) {
 ; Function Attrs: norecurse nounwind
 define void @ld_l_arg(i8*, fp128, i64, i64, i64, fp128, i64, fp128, i64) {
 ; CHECK-LABEL: ld_l_arg:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s1, 464(, %s11)
-; CHECK-NEXT:    ld %s35, 448(, %s11)
-; CHECK-NEXT:    ld %s34, 456(, %s11)
-; CHECK-NEXT:    ld %s7, 432(, %s11)
-; CHECK-NEXT:    ld %s37, 416(, %s11)
-; CHECK-NEXT:    ld %s36, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s1, 288(, %s11)
+; CHECK-NEXT:    ld %s35, 272(, %s11)
+; CHECK-NEXT:    ld %s34, 280(, %s11)
+; CHECK-NEXT:    ld %s7, 256(, %s11)
+; CHECK-NEXT:    ld %s37, 240(, %s11)
+; CHECK-NEXT:    ld %s36, 248(, %s11)
 ; CHECK-NEXT:    st %s2, 8(, %s0)
 ; CHECK-NEXT:    st %s3, (, %s0)
 ; CHECK-NEXT:    st %s4, (, %s0)
@@ -45,7 +45,7 @@ define void @ld_l_arg(i8*, fp128, i64, i64, i64, fp128, i64, fp128, i64) {
 ; CHECK-NEXT:    st %s34, 8(, %s0)
 ; CHECK-NEXT:    st %s35, (, %s0)
 ; CHECK-NEXT:    st %s1, (, %s0)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %10 = bitcast i8* %0 to fp128*
   store volatile fp128 %1, fp128* %10, align 16, !tbaa !2
   %11 = bitcast i8* %0 to i64*

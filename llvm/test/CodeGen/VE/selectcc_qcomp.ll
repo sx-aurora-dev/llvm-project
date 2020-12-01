@@ -3,9 +3,9 @@
 ; Function Attrs: norecurse nounwind readnone
 define zeroext i1 @func_qcomp_1(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i1 zeroext %4, i1 zeroext %5) {
 ; CHECK-LABEL: func_qcomp_1:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s34, 416(, %s11)
-; CHECK-NEXT:    ldl.sx %s35, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ldl.sx %s34, 240(, %s11)
+; CHECK-NEXT:    ldl.sx %s35, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -15,7 +15,7 @@ define zeroext i1 @func_qcomp_1(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i1 zeroe
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    cmov.w.ne %s35, %s34, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s35, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -26,9 +26,9 @@ define zeroext i1 @func_qcomp_1(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i1 zeroe
 ; Function Attrs: norecurse nounwind readnone
 define signext i8 @func_qcomp_8(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i8 signext %4, i8 signext %5) {
 ; CHECK-LABEL: func_qcomp_8:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s34, 416(, %s11)
-; CHECK-NEXT:    ldl.sx %s35, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ldl.sx %s34, 240(, %s11)
+; CHECK-NEXT:    ldl.sx %s35, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -38,7 +38,7 @@ define signext i8 @func_qcomp_8(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i8 signe
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    cmov.w.ne %s35, %s34, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s35, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -49,9 +49,9 @@ define signext i8 @func_qcomp_8(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i8 signe
 ; Function Attrs: norecurse nounwind readnone
 define zeroext i8 @func_qcomp_u8(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i8 zeroext %4, i8 zeroext %5) {
 ; CHECK-LABEL: func_qcomp_u8:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s34, 416(, %s11)
-; CHECK-NEXT:    ldl.sx %s35, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ldl.sx %s34, 240(, %s11)
+; CHECK-NEXT:    ldl.sx %s35, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -61,7 +61,7 @@ define zeroext i8 @func_qcomp_u8(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i8 zero
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    cmov.w.ne %s35, %s34, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s35, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -72,9 +72,9 @@ define zeroext i8 @func_qcomp_u8(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i8 zero
 ; Function Attrs: norecurse nounwind readnone
 define signext i16 @func_qcomp_16(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i16 signext %4, i16 signext %5) {
 ; CHECK-LABEL: func_qcomp_16:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s34, 416(, %s11)
-; CHECK-NEXT:    ldl.sx %s35, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ldl.sx %s34, 240(, %s11)
+; CHECK-NEXT:    ldl.sx %s35, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -84,7 +84,7 @@ define signext i16 @func_qcomp_16(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i16 si
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    cmov.w.ne %s35, %s34, %s0
 ; CHECK-NEXT:    adds.w.sx %s0, %s35, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -95,9 +95,9 @@ define signext i16 @func_qcomp_16(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i16 si
 ; Function Attrs: norecurse nounwind readnone
 define zeroext i16 @func_qcomp_u16(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i16 zeroext %4, i16 zeroext %5) {
 ; CHECK-LABEL: func_qcomp_u16:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ldl.sx %s34, 416(, %s11)
-; CHECK-NEXT:    ldl.sx %s35, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ldl.sx %s34, 240(, %s11)
+; CHECK-NEXT:    ldl.sx %s35, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -107,7 +107,7 @@ define zeroext i16 @func_qcomp_u16(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i16 z
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    cmov.w.ne %s35, %s34, %s0
 ; CHECK-NEXT:    adds.w.zx %s0, %s35, (0)1
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -118,7 +118,7 @@ define zeroext i16 @func_qcomp_u16(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i16 z
 ; Function Attrs: norecurse nounwind readnone
 define signext i32 @func_qcomp_32(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i32 signext %4, i32 signext %5) {
 ; CHECK-LABEL: func_qcomp_32:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -127,11 +127,11 @@ define signext i32 @func_qcomp_32(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i32 si
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 424(, %s11)
-; CHECK-NEXT:    lea %s2, 416(, %s11)
+; CHECK-NEXT:    lea %s1, 248(, %s11)
+; CHECK-NEXT:    lea %s2, 240(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ldl.sx %s0, (, %s1)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -142,7 +142,7 @@ define signext i32 @func_qcomp_32(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i32 si
 ; Function Attrs: norecurse nounwind readnone
 define zeroext i32 @func_qcomp_u32(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i32 zeroext %4, i32 zeroext %5) {
 ; CHECK-LABEL: func_qcomp_u32:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -151,11 +151,11 @@ define zeroext i32 @func_qcomp_u32(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i32 z
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 424(, %s11)
-; CHECK-NEXT:    lea %s2, 416(, %s11)
+; CHECK-NEXT:    lea %s1, 248(, %s11)
+; CHECK-NEXT:    lea %s2, 240(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ldl.zx %s0, (, %s1)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -166,7 +166,7 @@ define zeroext i32 @func_qcomp_u32(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i32 z
 ; Function Attrs: norecurse nounwind readnone
 define i64 @func_qcomp_64(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i64 %4, i64 %5) {
 ; CHECK-LABEL: func_qcomp_64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -175,11 +175,11 @@ define i64 @func_qcomp_64(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i64 %4, i64 %5
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 424(, %s11)
-; CHECK-NEXT:    lea %s2, 416(, %s11)
+; CHECK-NEXT:    lea %s1, 248(, %s11)
+; CHECK-NEXT:    lea %s2, 240(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ld %s0, (, %s1)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -190,7 +190,7 @@ define i64 @func_qcomp_64(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i64 %4, i64 %5
 ; Function Attrs: norecurse nounwind readnone
 define i64 @func_qcomp_u64(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i64 %4, i64 %5) {
 ; CHECK-LABEL: func_qcomp_u64:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -199,11 +199,11 @@ define i64 @func_qcomp_u64(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i64 %4, i64 %
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 424(, %s11)
-; CHECK-NEXT:    lea %s2, 416(, %s11)
+; CHECK-NEXT:    lea %s1, 248(, %s11)
+; CHECK-NEXT:    lea %s2, 240(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ld %s0, (, %s1)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -214,7 +214,7 @@ define i64 @func_qcomp_u64(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i64 %4, i64 %
 ; Function Attrs: norecurse nounwind readnone
 define i128 @func_qcomp_128(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i128 %4, i128 %5) {
 ; CHECK-LABEL: func_qcomp_128:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -223,12 +223,12 @@ define i128 @func_qcomp_128(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i128 %4, i12
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 432(, %s11)
-; CHECK-NEXT:    lea %s2, 416(, %s11)
+; CHECK-NEXT:    lea %s1, 256(, %s11)
+; CHECK-NEXT:    lea %s2, 240(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ld %s0, (, %s1)
 ; CHECK-NEXT:    ld %s1, 8(, %s1)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -239,7 +239,7 @@ define i128 @func_qcomp_128(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i128 %4, i12
 ; Function Attrs: norecurse nounwind readnone
 define i128 @func_qcomp_u128(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i128 %4, i128 %5) {
 ; CHECK-LABEL: func_qcomp_u128:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -248,12 +248,12 @@ define i128 @func_qcomp_u128(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i128 %4, i1
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 432(, %s11)
-; CHECK-NEXT:    lea %s2, 416(, %s11)
+; CHECK-NEXT:    lea %s1, 256(, %s11)
+; CHECK-NEXT:    lea %s2, 240(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ld %s0, (, %s1)
 ; CHECK-NEXT:    ld %s1, 8(, %s1)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -264,7 +264,7 @@ define i128 @func_qcomp_u128(fp128 %0, fp128 %1, fp128 %2, fp128 %3, i128 %4, i1
 ; Function Attrs: norecurse nounwind readnone
 define float @func_qcomp_float(fp128 %0, fp128 %1, fp128 %2, fp128 %3, float %4, float %5) {
 ; CHECK-LABEL: func_qcomp_float:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -273,11 +273,11 @@ define float @func_qcomp_float(fp128 %0, fp128 %1, fp128 %2, fp128 %3, float %4,
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 428(, %s11)
-; CHECK-NEXT:    lea %s2, 420(, %s11)
+; CHECK-NEXT:    lea %s1, 252(, %s11)
+; CHECK-NEXT:    lea %s2, 244(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ldu %s0, (, %s1)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -288,7 +288,7 @@ define float @func_qcomp_float(fp128 %0, fp128 %1, fp128 %2, fp128 %3, float %4,
 ; Function Attrs: norecurse nounwind readnone
 define double @func_qcomp_double(fp128 %0, fp128 %1, fp128 %2, fp128 %3, double %4, double %5) {
 ; CHECK-LABEL: func_qcomp_double:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -297,11 +297,11 @@ define double @func_qcomp_double(fp128 %0, fp128 %1, fp128 %2, fp128 %3, double 
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s1, 424(, %s11)
-; CHECK-NEXT:    lea %s2, 416(, %s11)
+; CHECK-NEXT:    lea %s1, 248(, %s11)
+; CHECK-NEXT:    lea %s2, 240(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s1, %s2, %s0
 ; CHECK-NEXT:    ld %s0, (, %s1)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -312,7 +312,7 @@ define double @func_qcomp_double(fp128 %0, fp128 %1, fp128 %2, fp128 %3, double 
 ; Function Attrs: norecurse nounwind readnone
 define fp128 @func_qcomp_quad(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_qcomp_quad:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -321,12 +321,12 @@ define fp128 @func_qcomp_quad(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4, 
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea %s2, 432(, %s11)
-; CHECK-NEXT:    lea %s1, 416(, %s11)
+; CHECK-NEXT:    lea %s2, 256(, %s11)
+; CHECK-NEXT:    lea %s1, 240(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s2, %s1, %s0
 ; CHECK-NEXT:    ld %s0, 8(, %s2)
 ; CHECK-NEXT:    ld %s1, (, %s2)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, %2
   %8 = fcmp oeq fp128 %1, %3
   %9 = and i1 %7, %8
@@ -337,7 +337,7 @@ define fp128 @func_qcomp_quad(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4, 
 ; Function Attrs: norecurse nounwind readnone
 define { float, float } @func_qcomp_fcomp(fp128 %0, fp128 %1, fp128 %2, fp128 %3, float %4, float %5, float %6, float %7) {
 ; CHECK-LABEL: func_qcomp_fcomp:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -346,15 +346,15 @@ define { float, float } @func_qcomp_fcomp(fp128 %0, fp128 %1, fp128 %2, fp128 %3
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    lea %s0, 436(, %s11)
-; CHECK-NEXT:    lea %s2, 420(, %s11)
+; CHECK-NEXT:    lea %s0, 260(, %s11)
+; CHECK-NEXT:    lea %s2, 244(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s0, %s2, %s1
 ; CHECK-NEXT:    ldu %s0, (, %s0)
-; CHECK-NEXT:    lea %s2, 444(, %s11)
-; CHECK-NEXT:    lea %s3, 428(, %s11)
+; CHECK-NEXT:    lea %s2, 268(, %s11)
+; CHECK-NEXT:    lea %s3, 252(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s2, %s3, %s1
 ; CHECK-NEXT:    ldu %s1, (, %s2)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %9 = fcmp oeq fp128 %0, %2
   %10 = fcmp oeq fp128 %1, %3
   %11 = and i1 %9, %10
@@ -368,7 +368,7 @@ define { float, float } @func_qcomp_fcomp(fp128 %0, fp128 %1, fp128 %2, fp128 %3
 ; Function Attrs: norecurse nounwind readnone
 define { double, double } @func_qcomp_dcomp(fp128 %0, fp128 %1, fp128 %2, fp128 %3, double %4, double %5, double %6, double %7) {
 ; CHECK-LABEL: func_qcomp_dcomp:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -377,15 +377,15 @@ define { double, double } @func_qcomp_dcomp(fp128 %0, fp128 %1, fp128 %2, fp128 
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    lea %s0, 432(, %s11)
-; CHECK-NEXT:    lea %s2, 416(, %s11)
+; CHECK-NEXT:    lea %s0, 256(, %s11)
+; CHECK-NEXT:    lea %s2, 240(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s0, %s2, %s1
 ; CHECK-NEXT:    ld %s0, (, %s0)
-; CHECK-NEXT:    lea %s2, 440(, %s11)
-; CHECK-NEXT:    lea %s3, 424(, %s11)
+; CHECK-NEXT:    lea %s2, 264(, %s11)
+; CHECK-NEXT:    lea %s3, 248(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s2, %s3, %s1
 ; CHECK-NEXT:    ld %s1, (, %s2)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %9 = fcmp oeq fp128 %0, %2
   %10 = fcmp oeq fp128 %1, %3
   %11 = and i1 %9, %10
@@ -399,7 +399,7 @@ define { double, double } @func_qcomp_dcomp(fp128 %0, fp128 %1, fp128 %2, fp128 
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_qcomp_qcomp(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5, fp128 %6, fp128 %7) {
 ; CHECK-LABEL: func_qcomp_qcomp:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s4
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s4, 0, (0)1
@@ -408,17 +408,17 @@ define { fp128, fp128 } @func_qcomp_qcomp(fp128 %0, fp128 %1, fp128 %2, fp128 %3
 ; CHECK-NEXT:    cmov.d.eq %s1, (63)0, %s0
 ; CHECK-NEXT:    and %s0, %s4, %s1
 ; CHECK-NEXT:    and %s2, %s0, (32)0
-; CHECK-NEXT:    lea %s3, 448(, %s11)
-; CHECK-NEXT:    lea %s0, 416(, %s11)
+; CHECK-NEXT:    lea %s3, 272(, %s11)
+; CHECK-NEXT:    lea %s0, 240(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s3, %s0, %s2
 ; CHECK-NEXT:    ld %s0, 8(, %s3)
 ; CHECK-NEXT:    ld %s1, (, %s3)
-; CHECK-NEXT:    lea %s4, 464(, %s11)
-; CHECK-NEXT:    lea %s3, 432(, %s11)
+; CHECK-NEXT:    lea %s4, 288(, %s11)
+; CHECK-NEXT:    lea %s3, 256(, %s11)
 ; CHECK-NEXT:    cmov.w.ne %s4, %s3, %s2
 ; CHECK-NEXT:    ld %s2, 8(, %s4)
 ; CHECK-NEXT:    ld %s3, (, %s4)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %9 = fcmp oeq fp128 %0, %2
   %10 = fcmp oeq fp128 %1, %3
   %11 = and i1 %9, %10
@@ -873,16 +873,16 @@ define { double, double } @func_qcomp_dcomp_zero(fp128 %0, fp128 %1, double %2, 
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_qcomp_qcomp_zero(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_qcomp_qcomp_zero:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
 ; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(, %s34)
 ; CHECK-NEXT:    ld %s38, 8(, %s34)
 ; CHECK-NEXT:    ld %s39, (, %s34)
-; CHECK-NEXT:    ld %s35, 432(, %s11)
-; CHECK-NEXT:    ld %s34, 440(, %s11)
-; CHECK-NEXT:    ld %s37, 416(, %s11)
-; CHECK-NEXT:    ld %s36, 424(, %s11)
+; CHECK-NEXT:    ld %s35, 256(, %s11)
+; CHECK-NEXT:    ld %s34, 264(, %s11)
+; CHECK-NEXT:    ld %s37, 240(, %s11)
+; CHECK-NEXT:    ld %s36, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s38
 ; CHECK-NEXT:    or %s1, 0, (0)1
 ; CHECK-NEXT:    or %s40, 0, (0)1
@@ -899,7 +899,7 @@ define { fp128, fp128 } @func_qcomp_qcomp_zero(fp128 %0, fp128 %1, fp128 %2, fp1
 ; CHECK-NEXT:    or %s1, 0, %s37
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, 0xL00000000000000000000000000000000
   %8 = fcmp oeq fp128 %1, 0xL00000000000000000000000000000000
   %9 = and i1 %7, %8
@@ -1434,16 +1434,16 @@ define { double, double } @func_qcomp_dcomp_i(fp128 %0, fp128 %1, double %2, dou
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_qcomp_qcomp_i(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_qcomp_qcomp_i:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
 ; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(, %s34)
 ; CHECK-NEXT:    ld %s38, 8(, %s34)
 ; CHECK-NEXT:    ld %s39, (, %s34)
-; CHECK-NEXT:    ld %s35, 432(, %s11)
-; CHECK-NEXT:    ld %s34, 440(, %s11)
-; CHECK-NEXT:    ld %s37, 416(, %s11)
-; CHECK-NEXT:    ld %s36, 424(, %s11)
+; CHECK-NEXT:    ld %s35, 256(, %s11)
+; CHECK-NEXT:    ld %s34, 264(, %s11)
+; CHECK-NEXT:    ld %s37, 240(, %s11)
+; CHECK-NEXT:    ld %s36, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s38
 ; CHECK-NEXT:    lea %s1, .LCPI{{[0-9]+}}_1@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
@@ -1465,7 +1465,7 @@ define { fp128, fp128 } @func_qcomp_qcomp_i(fp128 %0, fp128 %1, fp128 %2, fp128 
 ; CHECK-NEXT:    or %s1, 0, %s37
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, 0xL00000000000000004002800000000000
   %8 = fcmp oeq fp128 %1, 0xL00000000000000000000000000000000
   %9 = and i1 %7, %8
@@ -2000,16 +2000,16 @@ define { double, double } @func_qcomp_dcomp_m(fp128 %0, fp128 %1, double %2, dou
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_qcomp_qcomp_m(fp128 %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_qcomp_qcomp_m:
-; CHECK:       .LBB{{[0-9]+}}_2:
+; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s34, .LCPI{{[0-9]+}}_0@lo
 ; CHECK-NEXT:    and %s34, %s34, (32)0
 ; CHECK-NEXT:    lea.sl %s34, .LCPI{{[0-9]+}}_0@hi(, %s34)
 ; CHECK-NEXT:    ld %s38, 8(, %s34)
 ; CHECK-NEXT:    ld %s39, (, %s34)
-; CHECK-NEXT:    ld %s35, 432(, %s11)
-; CHECK-NEXT:    ld %s34, 440(, %s11)
-; CHECK-NEXT:    ld %s37, 416(, %s11)
-; CHECK-NEXT:    ld %s36, 424(, %s11)
+; CHECK-NEXT:    ld %s35, 256(, %s11)
+; CHECK-NEXT:    ld %s34, 264(, %s11)
+; CHECK-NEXT:    ld %s37, 240(, %s11)
+; CHECK-NEXT:    ld %s36, 248(, %s11)
 ; CHECK-NEXT:    fcmp.q %s0, %s0, %s38
 ; CHECK-NEXT:    lea %s1, .LCPI{{[0-9]+}}_1@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0
@@ -2031,7 +2031,7 @@ define { fp128, fp128 } @func_qcomp_qcomp_m(fp128 %0, fp128 %1, fp128 %2, fp128 
 ; CHECK-NEXT:    or %s1, 0, %s37
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = fcmp oeq fp128 %0, 0xL0000000000000000C000000000000000
   %8 = fcmp oeq fp128 %1, 0xL00000000000000000000000000000000
   %9 = and i1 %7, %8

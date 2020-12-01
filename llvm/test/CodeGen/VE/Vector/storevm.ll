@@ -25,14 +25,15 @@ define x86_regcallcc void @storev256i1stk(<256 x i1>) {
 ; CHECK-LABEL: storev256i1stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    svm %s16, %vm1, 0
-; CHECK-NEXT:    st %s16, 176(, %s11)
+; CHECK-NEXT:    st %s16, (, %s11)
 ; CHECK-NEXT:    svm %s16, %vm1, 1
-; CHECK-NEXT:    st %s16, 184(, %s11)
+; CHECK-NEXT:    st %s16, 8(, %s11)
 ; CHECK-NEXT:    svm %s16, %vm1, 2
-; CHECK-NEXT:    st %s16, 192(, %s11)
+; CHECK-NEXT:    st %s16, 16(, %s11)
 ; CHECK-NEXT:    svm %s16, %vm1, 3
-; CHECK-NEXT:    st %s16, 200(, %s11)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    st %s16, 24(, %s11)
+; CHECK-NEXT:    adds.l %s11, 32, %s11
+; CHECK-NEXT:    b.l.t (, %s10)
   %addr = alloca <256 x i1>, align 16
   store <256 x i1> %0, <256 x i1>* %addr, align 16
   ret void
@@ -88,22 +89,23 @@ define x86_regcallcc void @storev512i1stk(<512 x i1>) {
 ; CHECK-LABEL: storev512i1stk:
 ; CHECK:       .LBB{{[0-9]+}}_2:
 ; CHECK-NEXT:    svm %s16, %vm3, 0
-; CHECK-NEXT:    st %s16, 176(, %s11)
+; CHECK-NEXT:    st %s16, (, %s11)
 ; CHECK-NEXT:    svm %s16, %vm3, 1
-; CHECK-NEXT:    st %s16, 184(, %s11)
+; CHECK-NEXT:    st %s16, 8(, %s11)
 ; CHECK-NEXT:    svm %s16, %vm3, 2
-; CHECK-NEXT:    st %s16, 192(, %s11)
+; CHECK-NEXT:    st %s16, 16(, %s11)
 ; CHECK-NEXT:    svm %s16, %vm3, 3
-; CHECK-NEXT:    st %s16, 200(, %s11)
+; CHECK-NEXT:    st %s16, 24(, %s11)
 ; CHECK-NEXT:    svm %s16, %vm2, 0
-; CHECK-NEXT:    st %s16, 208(, %s11)
+; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    svm %s16, %vm2, 1
-; CHECK-NEXT:    st %s16, 216(, %s11)
+; CHECK-NEXT:    st %s16, 40(, %s11)
 ; CHECK-NEXT:    svm %s16, %vm2, 2
-; CHECK-NEXT:    st %s16, 224(, %s11)
+; CHECK-NEXT:    st %s16, 48(, %s11)
 ; CHECK-NEXT:    svm %s16, %vm2, 3
-; CHECK-NEXT:    st %s16, 232(, %s11)
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    st %s16, 56(, %s11)
+; CHECK-NEXT:    lea %s11, 64(, %s11)
+; CHECK-NEXT:    b.l.t (, %s10)
   %addr = alloca <512 x i1>, align 16
   store <512 x i1> %0, <512 x i1>* %addr, align 16
   ret void

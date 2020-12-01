@@ -227,9 +227,9 @@ define { double, double } @func_16_dcomp(i16 signext %0, i16 signext %1, double 
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_16_qcomp(i16 signext %0, i16 signext %1, fp128 %2, fp128 %3, fp128 %4, fp128 %5) {
 ; CHECK-LABEL: func_16_qcomp:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s7, %s3, %s0
@@ -239,7 +239,7 @@ define { fp128, fp128 } @func_16_qcomp(i16 signext %0, i16 signext %1, fp128 %2,
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %7 = icmp eq i16 %0, %1
   %8 = select i1 %7, fp128 %2, fp128 %4
   %9 = select i1 %7, fp128 %3, fp128 %5
@@ -459,9 +459,9 @@ define { double, double } @func_16_dcomp_zero(i16 signext %0, double %1, double 
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_16_qcomp_zero(i16 signext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_16_qcomp_zero:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0
 ; CHECK-NEXT:    cmov.w.eq %s7, %s3, %s0
 ; CHECK-NEXT:    cmov.w.eq %s34, %s4, %s0
@@ -470,7 +470,7 @@ define { fp128, fp128 } @func_16_qcomp_zero(i16 signext %0, fp128 %1, fp128 %2, 
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %6 = icmp eq i16 %0, 0
   %7 = select i1 %6, fp128 %1, fp128 %3
   %8 = select i1 %6, fp128 %2, fp128 %4
@@ -707,9 +707,9 @@ define { double, double } @func_16_dcomp_i(i16 signext %0, double %1, double %2,
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_16_qcomp_i(i16 signext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_16_qcomp_i:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    or %s1, 12, (0)1
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0
@@ -720,7 +720,7 @@ define { fp128, fp128 } @func_16_qcomp_i(i16 signext %0, fp128 %1, fp128 %2, fp1
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %6 = icmp eq i16 %0, 12
   %7 = select i1 %6, fp128 %1, fp128 %3
   %8 = select i1 %6, fp128 %2, fp128 %4
@@ -957,9 +957,9 @@ define { double, double } @func_16_dcomp_m(i16 signext %0, double %1, double %2,
 ; Function Attrs: norecurse nounwind readnone
 define { fp128, fp128 } @func_16_qcomp_m(i16 signext %0, fp128 %1, fp128 %2, fp128 %3, fp128 %4) {
 ; CHECK-LABEL: func_16_qcomp_m:
-; CHECK:       .LBB{{[0-9]+}}_2:
-; CHECK-NEXT:    ld %s35, 416(, %s11)
-; CHECK-NEXT:    ld %s34, 424(, %s11)
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    ld %s35, 240(, %s11)
+; CHECK-NEXT:    ld %s34, 248(, %s11)
 ; CHECK-NEXT:    or %s1, -2, (0)1
 ; CHECK-NEXT:    cmps.w.sx %s0, %s0, %s1
 ; CHECK-NEXT:    cmov.w.eq %s6, %s2, %s0
@@ -970,7 +970,7 @@ define { fp128, fp128 } @func_16_qcomp_m(i16 signext %0, fp128 %1, fp128 %2, fp1
 ; CHECK-NEXT:    or %s1, 0, %s7
 ; CHECK-NEXT:    or %s2, 0, %s34
 ; CHECK-NEXT:    or %s3, 0, %s35
-; CHECK-NEXT:    or %s11, 0, %s9
+; CHECK-NEXT:    b.l.t (, %s10)
   %6 = icmp eq i16 %0, -2
   %7 = select i1 %6, fp128 %1, fp128 %3
   %8 = select i1 %6, fp128 %2, fp128 %4
