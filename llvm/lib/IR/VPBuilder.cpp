@@ -155,8 +155,9 @@ Value &VPBuilder::CreateScatter(Value &Val, Value &PointerVec,
   if (AlignOpt.hasValue()) {
     unsigned PtrPos =
         VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_scatter).getValue();
-    ScatterCall.addParamAttr(
-        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+    // FIXME 'align' invalid here.
+    // ScatterCall.addParamAttr(
+    //     PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
   }
   return ScatterCall;
 }
@@ -174,8 +175,9 @@ Value &VPBuilder::CreateGather(Value &PointerVec, MaybeAlign AlignOpt) {
   if (AlignOpt.hasValue()) {
     unsigned PtrPos =
         VPIntrinsic::GetMemoryPointerParamPos(Intrinsic::vp_gather).getValue();
-    GatherCall.addParamAttr(
-        PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
+    // FIXME 'align' invalid here.
+    // GatherCall.addParamAttr(
+    //     PtrPos, Attribute::getWithAlignment(getContext(), AlignOpt.getValue()));
   }
   return GatherCall;
 }
