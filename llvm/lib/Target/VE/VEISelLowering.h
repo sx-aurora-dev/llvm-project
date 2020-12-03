@@ -140,21 +140,39 @@ public:
   // EK_LabelDifference32.
 
   SDValue lowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerJumpTable(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerLOAD(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerMGATHER(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerMLOAD(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerMSCATTER(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVAARG(SDValue Op, SelectionDAG &DAG) const;
-
-  SDValue lowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
+
+  /// Custom Lower for SIMD {
+  SDValue lowerSIMD_BUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSIMD_EXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSIMD_INSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSIMD_VECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSIMD_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSIMD_MLOAD(SDValue Op, SelectionDAG &DAG) const;
+  /// } Custom Lower for SIMD
+
+  /// Custom Lower for VVP {
+  SDValue lowerVVP_BUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+  /// } Custom Lower for VVP
 
   /// VVP Lowering {
   SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG) const;
@@ -245,13 +263,6 @@ public:
   void insertSSPDeclarations(Module &M) const override;
 
   SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
-
-  SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
-
-  SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const;
-
-  SDValue LowerMLOAD(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
@@ -271,9 +282,6 @@ public:
   // Should we expand the build vector with shuffles?
   bool shouldExpandBuildVectorWithShuffles(EVT VT,
       unsigned DefinedValues) const override;
-
-  SDValue LowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
 
   bool ShouldShrinkFPConstant(EVT VT) const override {
     // Do not shrink FP constpool if VT == MVT::f128.
