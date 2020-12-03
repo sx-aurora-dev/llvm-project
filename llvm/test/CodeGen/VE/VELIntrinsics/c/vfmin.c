@@ -62,6 +62,6 @@ __vr INST ## _vsvMvl(TYPE l, __vr r, __vm512 m, __vr b) { \
   return _vel_ ## INST ## _vsvMvl(l, r, m, b, 128); \
 }
 
-VFMIN_TEST(vfmind, quad)
-VFMIN_TEST(vfmins, double)
+VFMIN_TEST(vfmind, double)
+VFMIN_TEST(vfmins, float)
 PVFMIN_TEST(pvfmin, i64)

@@ -35,5 +35,5 @@ __vr INST ## _vsvmvl(TYPE l, __vr r, __vm256 m, __vr b) { \
   return _vel_ ## INST ## _vsvmvl(l, r, m, b, 128); \
 }
 
-VFDIV_TEST(vfdivd, quad)
-VFDIV_TEST(vfdivs, double)
+VFDIV_TEST(vfdivd, double)
+VFDIV_TEST(vfdivs, float)

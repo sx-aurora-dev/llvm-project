@@ -62,6 +62,6 @@ __vr INST ## _vsvMvl(TYPE l, __vr r, __vm512 m, __vr b) { \
   return _vel_ ## INST ## _vsvMvl(l, r, m, b, 128); \
 }
 
-VFSUB_TEST(vfsubd, quad)
-VFSUB_TEST(vfsubs, double)
+VFSUB_TEST(vfsubd, double)
+VFSUB_TEST(vfsubs, float)
 PVFSUB_TEST(pvfsub, i64)

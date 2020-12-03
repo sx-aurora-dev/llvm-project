@@ -62,6 +62,6 @@ __vr INST ## _vsvMvl(TYPE l, __vr r, __vm512 m, __vr b) { \
   return _vel_ ## INST ## _vsvMvl(l, r, m, b, 128); \
 }
 
-VFCMP_TEST(vfcmpd, quad)
-VFCMP_TEST(vfcmps, double)
+VFCMP_TEST(vfcmpd, double)
+VFCMP_TEST(vfcmps, float)
 PVFCMP_TEST(pvfcmp, i64)

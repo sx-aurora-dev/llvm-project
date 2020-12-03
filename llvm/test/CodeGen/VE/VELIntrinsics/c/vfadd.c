@@ -62,6 +62,6 @@ __vr INST ## _vsvMvl(TYPE l, __vr r, __vm512 m, __vr b) { \
   return _vel_ ## INST ## _vsvMvl(l, r, m, b, 128); \
 }
 
-VFADD_TEST(vfaddd, quad)
-VFADD_TEST(vfadds, double)
+VFADD_TEST(vfaddd, double)
+VFADD_TEST(vfadds, float)
 PVFADD_TEST(pvfadd, i64)

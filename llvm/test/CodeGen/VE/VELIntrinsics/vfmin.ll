@@ -41,27 +41,24 @@ define fastcc <256 x double> @vfmind_vvvvl(<256 x double> %0, <256 x double> %1,
 declare <256 x double> @llvm.ve.vl.vfmind.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define fastcc <256 x double> @vfmind_vsvl(fp128 %0, <256 x double> %1) {
+define fastcc <256 x double> @vfmind_vsvl(double %0, <256 x double> %1) {
 ; CHECK-LABEL: vfmind_vsvl:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cvt.d.q %s0, %s0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmin.d %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = fptrunc fp128 %0 to double
-  %4 = tail call fast <256 x double> @llvm.ve.vl.vfmind.vsvl(double %3, <256 x double> %1, i32 256)
-  ret <256 x double> %4
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vfmind.vsvl(double %0, <256 x double> %1, i32 256)
+  ret <256 x double> %3
 }
 
 ; Function Attrs: nounwind readnone
 declare <256 x double> @llvm.ve.vl.vfmind.vsvl(double, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define fastcc <256 x double> @vfmind_vsvvl(fp128 %0, <256 x double> %1, <256 x double> %2) {
+define fastcc <256 x double> @vfmind_vsvvl(double %0, <256 x double> %1, <256 x double> %2) {
 ; CHECK-LABEL: vfmind_vsvvl:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cvt.d.q %s0, %s0
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmin.d %v1, %s0, %v0
@@ -69,9 +66,8 @@ define fastcc <256 x double> @vfmind_vsvvl(fp128 %0, <256 x double> %1, <256 x d
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %4 = fptrunc fp128 %0 to double
-  %5 = tail call fast <256 x double> @llvm.ve.vl.vfmind.vsvvl(double %4, <256 x double> %1, <256 x double> %2, i32 128)
-  ret <256 x double> %5
+  %4 = tail call fast <256 x double> @llvm.ve.vl.vfmind.vsvvl(double %0, <256 x double> %1, <256 x double> %2, i32 128)
+  ret <256 x double> %4
 }
 
 ; Function Attrs: nounwind readnone
@@ -96,10 +92,9 @@ define fastcc <256 x double> @vfmind_vvvmvl(<256 x double> %0, <256 x double> %1
 declare <256 x double> @llvm.ve.vl.vfmind.vvvmvl(<256 x double>, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define fastcc <256 x double> @vfmind_vsvmvl(fp128 %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+define fastcc <256 x double> @vfmind_vsvmvl(double %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
 ; CHECK-LABEL: vfmind_vsvmvl:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cvt.d.q %s0, %s0
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmin.d %v1, %s0, %v0, %vm1
@@ -107,9 +102,8 @@ define fastcc <256 x double> @vfmind_vsvmvl(fp128 %0, <256 x double> %1, <256 x 
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %5 = fptrunc fp128 %0 to double
-  %6 = tail call fast <256 x double> @llvm.ve.vl.vfmind.vsvmvl(double %5, <256 x double> %1, <256 x i1> %2, <256 x double> %3, i32 128)
-  ret <256 x double> %6
+  %5 = tail call fast <256 x double> @llvm.ve.vl.vfmind.vsvmvl(double %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3, i32 128)
+  ret <256 x double> %5
 }
 
 ; Function Attrs: nounwind readnone
@@ -149,27 +143,24 @@ define fastcc <256 x double> @vfmins_vvvvl(<256 x double> %0, <256 x double> %1,
 declare <256 x double> @llvm.ve.vl.vfmins.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define fastcc <256 x double> @vfmins_vsvl(double %0, <256 x double> %1) {
+define fastcc <256 x double> @vfmins_vsvl(float %0, <256 x double> %1) {
 ; CHECK-LABEL: vfmins_vsvl:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cvt.s.d %s0, %s0
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmin.s %v0, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = fptrunc double %0 to float
-  %4 = tail call fast <256 x double> @llvm.ve.vl.vfmins.vsvl(float %3, <256 x double> %1, i32 256)
-  ret <256 x double> %4
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vfmins.vsvl(float %0, <256 x double> %1, i32 256)
+  ret <256 x double> %3
 }
 
 ; Function Attrs: nounwind readnone
 declare <256 x double> @llvm.ve.vl.vfmins.vsvl(float, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define fastcc <256 x double> @vfmins_vsvvl(double %0, <256 x double> %1, <256 x double> %2) {
+define fastcc <256 x double> @vfmins_vsvvl(float %0, <256 x double> %1, <256 x double> %2) {
 ; CHECK-LABEL: vfmins_vsvvl:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cvt.s.d %s0, %s0
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmin.s %v1, %s0, %v0
@@ -177,9 +168,8 @@ define fastcc <256 x double> @vfmins_vsvvl(double %0, <256 x double> %1, <256 x 
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %4 = fptrunc double %0 to float
-  %5 = tail call fast <256 x double> @llvm.ve.vl.vfmins.vsvvl(float %4, <256 x double> %1, <256 x double> %2, i32 128)
-  ret <256 x double> %5
+  %4 = tail call fast <256 x double> @llvm.ve.vl.vfmins.vsvvl(float %0, <256 x double> %1, <256 x double> %2, i32 128)
+  ret <256 x double> %4
 }
 
 ; Function Attrs: nounwind readnone
@@ -204,10 +194,9 @@ define fastcc <256 x double> @vfmins_vvvmvl(<256 x double> %0, <256 x double> %1
 declare <256 x double> @llvm.ve.vl.vfmins.vvvmvl(<256 x double>, <256 x double>, <256 x i1>, <256 x double>, i32)
 
 ; Function Attrs: nounwind readnone
-define fastcc <256 x double> @vfmins_vsvmvl(double %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
+define fastcc <256 x double> @vfmins_vsvmvl(float %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3) {
 ; CHECK-LABEL: vfmins_vsvmvl:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    cvt.s.d %s0, %s0
 ; CHECK-NEXT:    lea %s1, 128
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfmin.s %v1, %s0, %v0, %vm1
@@ -215,9 +204,8 @@ define fastcc <256 x double> @vfmins_vsvmvl(double %0, <256 x double> %1, <256 x
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %5 = fptrunc double %0 to float
-  %6 = tail call fast <256 x double> @llvm.ve.vl.vfmins.vsvmvl(float %5, <256 x double> %1, <256 x i1> %2, <256 x double> %3, i32 128)
-  ret <256 x double> %6
+  %5 = tail call fast <256 x double> @llvm.ve.vl.vfmins.vsvmvl(float %0, <256 x double> %1, <256 x i1> %2, <256 x double> %3, i32 128)
+  ret <256 x double> %5
 }
 
 ; Function Attrs: nounwind readnone

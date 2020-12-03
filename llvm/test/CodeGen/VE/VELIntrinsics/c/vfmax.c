@@ -62,6 +62,6 @@ __vr INST ## _vsvMvl(TYPE l, __vr r, __vm512 m, __vr b) { \
   return _vel_ ## INST ## _vsvMvl(l, r, m, b, 128); \
 }
 
-VFMAX_TEST(vfmaxd, quad)
-VFMAX_TEST(vfmaxs, double)
+VFMAX_TEST(vfmaxd, double)
+VFMAX_TEST(vfmaxs, float)
 PVFMAX_TEST(pvfmax, i64)
