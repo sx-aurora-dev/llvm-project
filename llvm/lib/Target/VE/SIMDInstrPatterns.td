@@ -562,7 +562,7 @@ multiclass simd_ive<int length, ValueType vi32, ValueType vi64, ValueType vf32,
                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
                     $vec)>;
   def: Pat<(vi32 (insertelt vi32:$vec, i32:$val, i64:$idx)),
-           (LSVrr_v (EXTRACT_SUBREG $idx, sub_i32),
+           (LSVrr_v $idx,
                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
                     $vec)>;
   def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, uimm7:$idx)),
