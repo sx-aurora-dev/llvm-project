@@ -1,4 +1,4 @@
-add_llvm_component_group(VE)
+add_llvm_component_group(VE HAS_JIT)
 
 set(LLVM_TARGET_DEFINITIONS VE.td)
 
