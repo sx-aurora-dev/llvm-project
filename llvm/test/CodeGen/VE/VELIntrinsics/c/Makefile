@@ -15,7 +15,8 @@ ARITH_TARGETS = vadd.ll vsub.ll vmul.ll vdiv.ll vcmp.ll vmax.ll vmin.ll
 LOGICAL_TARGETS = vand.ll vor.ll vxor.ll veqv.ll vseq.ll
 SHIFT_TARGETS = vsll.ll vsrl.ll vsla.ll vsra.ll vsfa.ll
 FP_ARITH_TARGETS = vfadd.ll vfsub.ll vfmul.ll vfdiv.ll vfsqrt.ll vfcmp.ll \
-	vfmax.ll vfmin.ll vfmad.ll vfmsb.ll vfnmad.ll vfnmsb.ll vrcp.ll vrsqrt.ll
+	vfmax.ll vfmin.ll vfmad.ll vfmsb.ll vfnmad.ll vfnmsb.ll vrcp.ll vrsqrt.ll \
+	vcvt.ll
 
 TARGETS = $(LDSTMV_TARGETS) $(ARITH_TARGETS) $(LOGICAL_TARGETS) \
 	$(SHIFT_TARGETS) $(FP_ARITH_TARGETS)
