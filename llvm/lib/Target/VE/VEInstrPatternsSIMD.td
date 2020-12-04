@@ -574,27 +574,22 @@ multiclass simd_ive<int length, ValueType vi32, ValueType vi64, ValueType vf32,
            (LSVrr_v (EXTRACT_SUBREG $idx, sub_i32),
                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32),
                     $vec)>;
-/*
   def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, uimm7:$idx)),
-           (LSVi vi64:$vec, imm:$idx, $val)>;
+           (LSVir_v (LO7 $idx), $val, $vec)>;
   def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, i64:$idx)),
-           (LSVr vi64:$vec,
-                 (EXTRACT_SUBREG $idx, sub_i32), $val)>;
+           (LSVrr_v $idx, $val, $vec)>;
   def: Pat<(vf32 (insertelt vf32:$vec, f32:$val, uimm7:$idx)),
-           (LSVi vf32:$vec, imm:$idx,
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
+           (LSVir_v (LO7 $idx),
+                    (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+                    $vec)>;
   def: Pat<(vf32 (insertelt vf32:$vec, f32:$val, i64:$idx)),
-           (LSVr vf32:$vec,
-                 (EXTRACT_SUBREG $idx, sub_i32),
-                 (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
+           (LSVrr_v $idx,
+                    (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
+                    $vec)>;
   def: Pat<(vf64 (insertelt vf64:$vec, f64:$val, uimm7:$idx)),
-           (LSVi vf64:$vec, imm:$idx,
-                 (COPY_TO_REGCLASS $val, I64))>;
+           (LSVir_v (LO7 $idx), $val, $vec)>;
   def: Pat<(vf64 (insertelt vf64:$vec, f64:$val, i64:$idx)),
-           (LSVr vf64:$vec,
-                 (EXTRACT_SUBREG $idx, sub_i32),
-                 (COPY_TO_REGCLASS $val, I64))>;
-*/
+           (LSVrr_v $idx, $val, $vec)>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
@@ -615,22 +610,20 @@ multiclass simd_eve<int length, ValueType vi32, ValueType vi64, ValueType vf32,
                     ValueType vf64> {
   def: Pat<(i32 (extractelt vi32:$vec, uimm7:$idx)),
            (EXTRACT_SUBREG (LVSvi vi32:$vec, (LO7 $idx)), sub_i32)>;
-/*
   def: Pat<(i32 (extractelt vi32:$vec, i64:$idx)),
-           (EXTRACT_SUBREG (LVSr vi32:$vec, $idx), sub_i32)>;
+           (EXTRACT_SUBREG (LVSvr vi32:$vec, $idx), sub_i32)>;
   def: Pat<(i64 (extractelt vi64:$vec, uimm7:$idx)),
-           (LVSi vi64:$vec, imm:$idx)>;
+           (LVSvi vi64:$vec, (LO7 $idx))>;
   def: Pat<(i64 (extractelt vi64:$vec, i64:$idx)),
-           (LVSr vi64:$vec, $idx)>;
+           (LVSvr vi64:$vec, $idx)>;
   def: Pat<(f32 (extractelt vf32:$vec, uimm7:$idx)),
-           (EXTRACT_SUBREG (LVSi vf32:$vec, imm:$idx), sub_f32)>;
+           (EXTRACT_SUBREG (LVSvi vf32:$vec, (LO7 $idx)), sub_f32)>;
   def: Pat<(f32 (extractelt vf32:$vec, i64:$idx)),
-           (EXTRACT_SUBREG (LVSr vf32:$vec, $idx), sub_f32)>;
+           (EXTRACT_SUBREG (LVSvr vf32:$vec, $idx), sub_f32)>;
   def: Pat<(f64 (extractelt vf64:$vec, uimm7:$idx)),
-           (LVSi vf64:$vec, imm:$idx)>;
+           (LVSvi vf64:$vec, (LO7 $idx))>;
   def: Pat<(f64 (extractelt vf64:$vec, i64:$idx)),
-           (LVSr vf64:$vec, $idx)>;
-*/
+           (LVSvr vf64:$vec, $idx)>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
