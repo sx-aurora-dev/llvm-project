@@ -247,8 +247,6 @@ public:
   SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
 
-  SDValue LowerBitcast(SDValue Op, SelectionDAG &DAG) const;
-
   SDValue LowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue LowerMGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const;
