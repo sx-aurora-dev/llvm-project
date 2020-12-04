@@ -1,4 +1,4 @@
-; RUN: opt -passes='print<loop-dependence>' -disable-output  < %s 2>&1 | FileCheck %s
+; RUN: opt -indvars < %s 2>&1 | opt -passes='loop-simplify,print<loop-dependence>' -disable-output 2>&1 | FileCheck %s
 
 ; void test(int64_t n, int64_t m, int x, int64_t A[n][m]) {
 ;     for (int64_t i = 0; i < n; ++i) {
@@ -9,7 +9,7 @@
 ; }
 
 ; CHECK: Loop: for.body: Is vectorizable with VF: 2
-; CHECK: Loop: for.body3: Is NOT vectorizable
+; CHECK: Loop: for.body3: Is vectorizable for any factor
 
 ; Explanation: We have direction vector (<, >) with outer distance
 ; being greater than 1, so we can vectorize in that dinstance
@@ -17,6 +17,11 @@
 ; that while `i+2+x` and `i+x` are offset by an unknown
 ; value but their difference is constant and so
 ; we should be able to find that the loop is vectorizable.
+
+; This is currently FAILING because of bounds-checking. We can't
+; take advantage here of the fact that the difference is constant
+; because for all that to be valid, each subscript (part) should
+; be in-bounds.
 
 define void @test(i64 %n, i64 %m, i32 %x, i64* %A) {
 entry:

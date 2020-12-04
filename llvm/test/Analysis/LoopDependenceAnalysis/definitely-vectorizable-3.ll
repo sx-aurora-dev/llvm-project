@@ -4,17 +4,14 @@
 ;   double x;
 ;   for (int64_t i = 0; i < n - 1; ++i) {
 ;     for (int64_t j = 0; j < m - 1; ++j) {
-;       A[i+1][j+1] = 4.2*i;
 ;       x = A[i][j];
+;       A[i+1][j+1] = 4.2*i;
 ;     }
 ;   }
 ; }
 
-
 ; CHECK: Loop: for.body: Is vectorizable for any factor
-
-; Explanation: The writes always access memory
-; locations before reads do.
+; CHECK: Loop: for.body4: Is vectorizable for any factor
 
 define void @test(i64 %n, i64 %m, double* %A) {
 entry:
@@ -30,18 +27,18 @@ for.body:                                         ; preds = %entry, %for.inc9
 
 for.body4:                                        ; preds = %for.body, %for.body4
   %j.02 = phi i64 [ %inc, %for.body4 ], [ 0, %for.body ]
+  %0 = mul nsw i64 %i.05, %m
+  %arrayidx = getelementptr inbounds double, double* %A, i64 %0
+  %arrayidx5 = getelementptr inbounds double, double* %arrayidx, i64 %j.02
+  %1 = load double, double* %arrayidx5, align 8
   %conv = sitofp i64 %i.05 to double
   %mul = fmul double 4.200000e+00, %conv
   %add = add nsw i64 %i.05, 1
-  %0 = mul nsw i64 %add, %m
-  %arrayidx = getelementptr inbounds double, double* %A, i64 %0
-  %add5 = add nsw i64 %j.02, 1
-  %arrayidx6 = getelementptr inbounds double, double* %arrayidx, i64 %add5
-  store double %mul, double* %arrayidx6, align 8
-  %1 = mul nsw i64 %i.05, %m
-  %arrayidx7 = getelementptr inbounds double, double* %A, i64 %1
-  %arrayidx8 = getelementptr inbounds double, double* %arrayidx7, i64 %j.02
-  %2 = load double, double* %arrayidx8, align 8
+  %2 = mul nsw i64 %add, %m
+  %arrayidx6 = getelementptr inbounds double, double* %A, i64 %2
+  %add7 = add nsw i64 %j.02, 1
+  %arrayidx8 = getelementptr inbounds double, double* %arrayidx6, i64 %add7
+  store double %mul, double* %arrayidx8, align 8
   %inc = add nsw i64 %j.02, 1
   %cmp3 = icmp slt i64 %inc, %sub2
   br i1 %cmp3, label %for.body4, label %for.inc9

@@ -1,4 +1,4 @@
-//===----------- LoopDependenceAnalysis.cpp - Iter Dependences -------------==//
+﻿//===----------- LoopDependenceAnalysis.cpp - Iter Dependences -------------==//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -17,7 +17,10 @@
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/VectorUtils.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
+#include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
 
 /*
 
@@ -187,14 +190,8 @@ can only handle 1, 2 and 3-dimensional vectors.
 
 - 1. Loop Nest Info -
 
-We start by gathering information about the loop nest. As a loop
-nest we consider anything that is _inside_ the QL (including the QL).
-For now, we can only handle perfect loop nests, so this is something
-we verify and we also find what is the innermost loop and what is
-the dimensionality of the loop nest.
-
-
-
+TODO: We can now handle more complicated things than loop nests.
+Document it!
 
 - 2. Gather Accessing Instructions -
 
@@ -463,6 +460,10 @@ distance of the only entry in the vector
 
 - 7.2 2D case -
 
+We're imagining that the outer loop is represented in the y-axis.
+But note that the order of entries is not: (x, y) but (y, x)
+(always outermost first).
+
 Remember that in any N-D case with N > 1, we're trying to squeeze together
 iterations in _one_ dimension, the Nth. In the case of 2D, we're
 trying to squeeze iterations by going upwards. Imagine a 2D loop where
@@ -497,12 +498,15 @@ further to the right iterations.
 - 7.3 3D case -
 
 In the 3D case, we're imagining that we're adding another outermost
-loop that is represented in the z-axis. And we're trying to squeeze iterations
-in this axis. The only vectors that are potentially worrying are those
-that have an entry with distance equal to 0. Otherwise, the vector
-starts from a plane and points to a _different_ plane, so we don't care.
+loop that is represented in the z-axis. _However_, the order of entries
+is not: (x, y, z) but (z, y, x) (outermost first).
 
-But if one entry is 0, then we squash it and fall-back to the 2D case.
+We're trying to squeeze iterations in this axis. The only vectors that are
+potentially worrying are those that have a middle entry with distance equal to
+0. Otherwise, the vector starts from a x-z plane and points to a _different_
+plane, so we don't care.
+
+But if the middle entry is 0, then we squash it and fall-back to the 2D case.
 
 
 
@@ -602,75 +606,144 @@ LoopDependenceInfo::LoopDependenceInfo(Function &F, ScalarEvolution &SE,
 struct LoopNestInfo {
   int NumDimensions;
   const Loop *InnermostLoop;
+  const Loop *AnalyzedLoop;
 };
 
-static bool isAccessingInstruction(const Instruction &I) {
-  return I.mayReadOrWriteMemory();
+struct MinMaxSCEVPair {
+  const SCEV *Min, *Max;
+};
+
+static void addNoSignedWrapFlag(const SCEV *S) {
+  if (S->getSCEVType() == scAddRecExpr) {
+    SCEVAddRecExpr *AR = (SCEVAddRecExpr *)S;
+    AR->setNoWrapFlags(SCEV::NoWrapFlags::FlagNSW);
+  } else if (S->getSCEVType() == scAddExpr) {
+    SCEVAddExpr *AE = (SCEVAddExpr *)S;
+    AE->setNoWrapFlags(SCEV::NoWrapFlags::FlagNSW);
+  }
 }
 
-// This function gathers information about a loop nest
-// as long as it is perfect. If it's not, it returns false.
-static bool getNestInfo(const Loop &TheLoop, LoopNestInfo &NestInfo) {
-  NestInfo = {1, &TheLoop};
+/// Language / Framework for preconditions
+/// Still experimental...
 
-  // `const` ref makes our life hard so we have to
-  // skip the type-system.
-  const Loop *L = &TheLoop;
+static bool isLTArraySize(ScalarEvolution& SE, const SCEV* Val, const SCEV *ArrSize) {
+  const SCEVConstant *Zero =
+      dyn_cast<SCEVConstant>(SE.getConstant(Val->getType(), 0, true));
 
-  // If it has no enclosed loops.
-  if (L->isInnermost()) {
+  // Assume that array sizes are positive.
+  if (Val == Zero)
     return true;
-  }
 
-  while (true) {
-    const auto &SubLoops = L->getSubLoops();
-    if (SubLoops.size() != 1)
-      return false;
-    L = SubLoops[0];
-    NestInfo.NumDimensions += 1;
-    if (L->isInnermost()) {
-      NestInfo.InnermostLoop = L;
-      break;
-    }
-  }
-
+  // TODO: We can add NSW flag in C/C++ because signed
+  // overflow is UB. What about other languages ?
+  addNoSignedWrapFlag(Val);
+  addNoSignedWrapFlag(ArrSize);
+  LLVM_DEBUG(dbgs() << "ArrSize: " << *ArrSize << "\n");
+  LLVM_DEBUG(dbgs() << "Val: " << *Val << "\n");
+  const SCEV *Max = SE.getSMaxExpr(ArrSize, Val);
+  if (Max != ArrSize)
+    return false;
+  // Also, verify that they're not equal
+  if (SE.getMinusSCEV(Val, ArrSize) == Zero)
+    return false;
   return true;
+}
+
+/// Return true if it could prove that all min/max pairs
+/// are within bounds. For this setting, within bounds means
+/// that min >= 0 and Max[I] < Sizes[I]. Otherwise, return false.
+// TODO: At some point, instead of just returning true or false, we should
+// return e.g. a vector of checks for those that we couldn't deduce statically.
+static bool verifyMinMaxPairs(ScalarEvolution& SE,
+  const SmallVectorImpl<MinMaxSCEVPair>& MinMaxPairs,
+  const SmallVectorImpl<const SCEV*>& Sizes) {
+
+  // Remember that `Sizes` has the size() of `Subscripts`
+  // when delinearizing, but it actually has one less element.
+  assert(MinMaxPairs.size() > 0);
+  assert(MinMaxPairs.size() == Sizes.size() - 1);
+
+  for (size_t I = 0; I < Sizes.size() - 1; ++I) {
+    MinMaxSCEVPair MMPair = MinMaxPairs[I];
+    assert(MMPair.Min);
+    assert(MMPair.Max);
+    const SCEV *Sz = Sizes[I];
+    assert(Sz);
+    // Probably we don't want to hoist this out because the type
+    // of each subscript may be different.
+    const SCEVConstant *Zero =
+        dyn_cast<SCEVConstant>(SE.getConstant(Sz->getType(), 0, true));
+    assert(Zero);
+    // Verify that Min >= 0.
+    const SCEV *Min = SE.getSMinExpr(Zero, MMPair.Min);
+    if (Min != Zero)
+      return false;
+
+    // Verify that Max[I] < Sizes[I]
+    if (!isLTArraySize(SE, MMPair.Max, Sz))
+      return false;
+  }
+  return true;
+}
+
+static bool addRecHasPositiveConstStep(ScalarEvolution &SE,
+                                       const SCEVAddRecExpr *AR) {
+  const SCEV *Step = AR->getStepRecurrence(SE);
+  if (Step->getSCEVType() != scConstant)
+    return false;
+  const SCEVConstant *StepConst = dyn_cast<SCEVConstant>(Step);
+  if (StepConst->getAPInt().getSExtValue() <= 0)
+    return false;
+  return true;
+}
+
+static MinMaxSCEVPair getMinMaxOfIncreasingAddRec(ScalarEvolution &SE,
+                                                  const SCEVAddRecExpr *AR) {
+  assert(AR);
+  assert(addRecHasPositiveConstStep(SE, AR));
+  MinMaxSCEVPair Res;
+  // Important: This is valid only because we have already tested
+  // that the step is positive.
+  // TODO: We don't take wrapping into consideration. It it wraps,
+  // the minimum value is (possibly) not the start.
+  Res.Min = AR->getStart();
+  // Top-level -> function-level. This will give us the value of the
+  // AR after the _whole_ loop nest (i.e. what is considered
+  // usually an exit value but not just for its loop, but the whole
+  // nest).
+  const Loop *TopLevel = nullptr;
+  // Again, this works because we have tested that the step is positive.
+  Res.Max = SE.getSCEVAtScope(AR, TopLevel);
+  return Res;
 }
 
 bool subscriptsAreWithinBounds(ScalarEvolution &SE,
                                const SmallVectorImpl<const SCEV *> &Subscripts,
                                const SmallVectorImpl<const SCEV *> &Sizes) {
-  // TODO: We are checking whether the subscripts are less than the sizes.
-  // But maybe, we should also check if they're greater than 0.
-  assert(Subscripts.size() > 1);
+  assert(Subscripts.size() == Sizes.size());
+  if (Subscripts.size() <= 1)
+    return true;
+  // Gather min / max of subscripts.
   // Remember that Sizes has one less entry than Subscripts because we never
   // know the first dimension.
-  for (size_t SubIt = 1; SubIt < Subscripts.size(); ++SubIt) {
+  SmallVector<MinMaxSCEVPair, 4> MinMaxPairs(Sizes.size() - 1);
+  for (size_t SubIt = 1, SzIt = 0; SubIt < Subscripts.size(); ++SubIt, ++SzIt) {
     const SCEV *Sub = Subscripts[SubIt];
-    const SCEV *Sz = Sizes[SubIt - 1];
     // We have already checked the following before calling
     // this function.
     assert(Sub->getSCEVType() == scConstant ||
            Sub->getSCEVType() == scAddRecExpr);
-    const SCEV *MinusOne =
-        SE.getMinusSCEV(Sz, SE.getConstant(Sz->getType(), 1));
+
     if (Sub->getSCEVType() == scConstant) {
-      if (SE.getSMaxExpr(Sub, MinusOne) != MinusOne)
-        return false;
-    } else {
-      const SCEVAddRecExpr *SubAR = dyn_cast<SCEVAddRecExpr>(Sub);
-      const SCEV *Max = SE.getSMaxExpr(SubAR->getStart(), MinusOne);
-      dbgs() << "Max (" << Max->getSCEVType() << "): " << *Max << "\n";
-      if (SE.getSMaxExpr(SubAR->getStart(), MinusOne) != MinusOne)
-        return false;
-      const Loop *SurroundingLoop = SubAR->getLoop();
-      const SCEV *NumIterations = SE.getBackedgeTakenCount(SurroundingLoop);
-      const SCEV *ExitValue = SubAR->evaluateAtIteration(NumIterations, SE);
-      if (SE.getSMaxExpr(ExitValue, MinusOne) != MinusOne)
-        return false;
+      MinMaxPairs[SzIt].Min = MinMaxPairs[SzIt].Max = Sub;
+      continue;
     }
+    const SCEVAddRecExpr *SubAR = dyn_cast<SCEVAddRecExpr>(Sub);
+    assert(SubAR);
+    MinMaxPairs[SzIt] = getMinMaxOfIncreasingAddRec(SE, SubAR);
   }
-  return true;
+
+  return verifyMinMaxPairs(SE, MinMaxPairs, Sizes);
 }
 
 static bool subscriptsAreLegal(ScalarEvolution &SE,
@@ -694,12 +767,7 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
       if (UsedLoops[L])
         return false;
       UsedLoops[L] = true;
-      // Check that it has a positive step.
-      const SCEV *Step = AddRec->getStepRecurrence(SE);
-      if (Step->getSCEVType() != scConstant)
-        return false;
-      const SCEVConstant *Const = dyn_cast<SCEVConstant>(Step);
-      if (Const->getAPInt().getSExtValue() <= 0)
+      if (!addRecHasPositiveConstStep(SE, AddRec))
         return false;
     } break;
     default:
@@ -707,18 +775,114 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
     }
   }
 
-  // if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
-  //  return false;
+   if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
+    return false;
 
   return true;
 }
 
-static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
-                                  SmallVectorImpl<const SCEV *> &Subscripts,
-                                  SmallVectorImpl<const SCEV *> &Sizes,
-                                  const Loop *L) {
-  assert(isa<StoreInst>(Inst) || isa<LoadInst>(Inst));
-  const SCEV *AccessExpr = SE.getSCEVAtScope(getPointerOperand(Inst), L);
+static const SCEVConstant* getNegativeSCEVConstant(ScalarEvolution& SE,
+  const SCEVConstant* S) {
+  int NumBits = S->getAPInt().getBitWidth();
+  int64_t Val = S->getValue()->getSExtValue();
+  const SCEVConstant *Res =
+      (const SCEVConstant *)SE.getConstant(APInt(NumBits, -Val, true));
+  return Res;
+}
+
+static const SCEV *getSDivSimpleAddRec(ScalarEvolution &SE,
+                                const SCEVAddRecExpr *AddRec,
+                                const SCEV *Divisor) {
+  // Assert it's "simple".
+  const SCEVConstant *Start = dyn_cast<SCEVConstant>(AddRec->getStart());
+  const SCEVConstant *Step = dyn_cast<SCEVConstant>(AddRec->getStepRecurrence(SE));
+  assert(Start != nullptr);
+  assert(Step != nullptr);
+
+  // If the step / start is negative, negate it so that unsigned division
+  // works and then negate the result again.
+
+  bool StartIsNegative = false;
+  bool StepIsNegative = false;
+  if (Start->getValue()->getSExtValue() < 0) {
+    StartIsNegative = true;
+    Start = getNegativeSCEVConstant(SE, Start);
+  }
+  if (Step->getValue()->getSExtValue() < 0) {
+    StepIsNegative = true;
+    Step = getNegativeSCEVConstant(SE, Step);
+  }
+  SmallVector<const SCEV *, 2> Operands;
+  Operands.push_back(Start);
+  Operands.push_back(Step);
+  AddRec = (SCEVAddRecExpr *)
+      SE.getAddRecExpr(Operands, AddRec->getLoop(), AddRec->getNoWrapFlags());
+
+  // Do the division
+  dbgs() << "AddRec: " << *AddRec << "\n";
+  dbgs() << "Divisor: " << *Divisor << "\n";
+  const SCEV *UDivExpr = SE.getUDivExpr(AddRec, Divisor);
+  dbgs() << "UDivExpr: " << *UDivExpr << "\n";
+  const SCEVAddRecExpr *Res = dyn_cast<SCEVAddRecExpr>(UDivExpr);
+  assert(Res);
+
+  // Negate again what was negative.
+  Start = dyn_cast<SCEVConstant>(Res->getStart());
+  assert(Start != nullptr);
+  if (StartIsNegative) {
+    Start = getNegativeSCEVConstant(SE, Start);
+  }
+  Step = dyn_cast<SCEVConstant>(Res->getStepRecurrence(SE));
+  assert(Step != nullptr);
+  if (StepIsNegative) {
+    Step = getNegativeSCEVConstant(SE, Step);
+  }
+
+  Operands.clear();
+  Operands.push_back(Start);
+  Operands.push_back(Step);
+  Res = (SCEVAddRecExpr *) SE.getAddRecExpr(Operands, Res->getLoop(),
+                                           Res->getNoWrapFlags());
+
+  return Res;
+}
+
+
+static bool
+handleFailedDelinearization(ScalarEvolution &SE, const Loop *L,
+                            const SCEV *AccessExpr, Value *Pointer,
+                            SmallVectorImpl<const SCEV *> &Subscripts,
+                            SmallVectorImpl<const SCEV *> &Sizes) {
+  if (AccessExpr->getSCEVType() != scAddRecExpr) {
+    Subscripts.push_back(AccessExpr);
+    return true;
+  }
+  // If we have an AddRecExpr, we have to normalize it.
+  SCEVAddRecExpr *AddRec = (SCEVAddRecExpr *)cast<SCEVAddRecExpr>(AccessExpr);
+  // Add wrapping flags. We have to do this otherwise unsigned div later
+  // may not work.
+  // TODO: It's important to add run-time checks to verify that
+  AddRec->setNoWrapFlags(SCEV::NoWrapFlags::FlagNUW);
+  Type *Ty = Pointer->getType();
+  auto &DL = L->getHeader()->getModule()->getDataLayout();
+  uint64_t TypeByteSize = DL.getTypeAllocSize(Ty->getPointerElementType());
+  const SCEV *Divisor = SE.getConstant(Ty, TypeByteSize);
+  const SCEV *Normalized = getSDivSimpleAddRec(SE, AddRec, Divisor);
+  LLVM_DEBUG(dbgs() << "Normalized: " << *Normalized << "\n";);
+  Subscripts.clear();
+  Subscripts.push_back(Normalized);
+  // Push an invalid size just because the sizes of the two vectors
+  // have to be equal.
+  Sizes.clear();
+  Sizes.push_back(SE.getConstant(Ty, ~0));
+  return true;
+}
+
+static const SCEV *getSCEVStrippedFromBasePointer(ScalarEvolution &SE,
+                                                  Value *Pointer,
+                                                  const Loop *L) {
+
+  const SCEV *AccessExpr = SE.getSCEVAtScope(Pointer, L);
 
   LLVM_DEBUG(dbgs() << "\n\nAccessExpr (" << *AccessExpr->getType()
                     << "): " << *AccessExpr << "\n";);
@@ -727,10 +891,25 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
       dyn_cast<SCEVUnknown>(SE.getPointerBase(AccessExpr));
   // Do not delinearize if we cannot find the base pointer.
   if (!BasePointer)
-    return false;
+    return nullptr;
   LLVM_DEBUG(dbgs() << "Base Pointer: " << *BasePointer << "\n";);
   // Remove the base pointer from the expr.
   AccessExpr = SE.getMinusSCEV(AccessExpr, BasePointer);
+  LLVM_DEBUG(dbgs() << "\n\nAccessExpr (" << *AccessExpr->getType()
+                    << "): " << *AccessExpr << "\n";);
+  return AccessExpr;
+}
+
+static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
+                                  SmallVectorImpl<const SCEV *> &Subscripts,
+                                  SmallVectorImpl<const SCEV *> &Sizes,
+                                  const Loop *L) {
+
+  assert(isa<StoreInst>(Inst) || isa<LoadInst>(Inst));
+  Value *Pointer = getPointerOperand(Inst);
+  const SCEV *AccessExpr = getSCEVStrippedFromBasePointer(SE, Pointer, L);
+  if (!AccessExpr)
+    return false;
 
   SE.delinearize(AccessExpr, Subscripts, Sizes, SE.getElementSize(Inst));
 
@@ -738,31 +917,10 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
       Subscripts.size() != Sizes.size()) {
     LLVM_DEBUG(dbgs() << "Failed to delinearize. Using a single subscript - "
                          "the original SCEV\n";);
-    if (AccessExpr->getSCEVType() != scAddRecExpr) {
-      Subscripts.push_back(AccessExpr);
-      return true;
-    }
-    // If we have an AddRecExpr, we have to normalize it.
-    SCEVAddRecExpr *AddRec = (SCEVAddRecExpr *)cast<SCEVAddRecExpr>(AccessExpr);
-    // Add wrapping flags. We have to do this otherwise unsigned div later
-    // may not work.
-    // TODO: It's important to add run-time checks to verify that
-    AddRec->setNoWrapFlags(SCEV::NoWrapFlags::FlagNUW);
-    Type *Ty = AddRec->getType();
-    auto &DL = L->getHeader()->getModule()->getDataLayout();
-    uint64_t TypeByteSize = DL.getTypeAllocSize(Ty);
-    const SCEV *Normalized =
-        SE.getUDivExpr(AddRec, SE.getConstant(Ty, TypeByteSize));
-    dbgs() << "Normalized: " << *Normalized << "\n";
-    Subscripts.push_back(Normalized);
-    // Push an invalid size just because the sizes of the two vectors
-    // have to be equal.
-    Subscripts.push_back(SE.getConstant(Ty, ~0));
-    return true;
+    return handleFailedDelinearization(SE, L, AccessExpr, Pointer, Subscripts, Sizes);
   }
 
   LLVM_DEBUG(
-      dbgs() << "Base offset: " << *BasePointer << "\n";
       dbgs() << "ArrayDecl[UnknownSize]"; int Size = Subscripts.size();
       for (int i = 0; i < Size - 1; i++) dbgs() << "[" << *Sizes[i] << "]";
       dbgs() << " with elements of " << *Sizes[Size - 1] << " bytes.\n";
@@ -776,15 +934,129 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
   return true;
 }
 
+static void getArraySizes(ScalarEvolution &SE, Value *Obj, SmallVectorImpl<const SCEV*>& Sizes) {
+  Type *Ty = Obj->getType();
+  assert(Ty->isPointerTy());
+  ArrayType *ArrTy = dyn_cast<ArrayType>(Ty->getPointerElementType());
+  assert(ArrTy);
+  // Skip the first size; It's not always present.
+  ArrTy = dyn_cast<ArrayType>(ArrTy->getArrayElementType());
+  while (ArrTy) {
+    uint64_t NumElements = ArrTy->getArrayNumElements();
+    const SCEVConstant *S = dyn_cast<SCEVConstant>(
+        SE.getConstant(Type::getInt64Ty(ArrTy->getContext()), NumElements, false));
+    assert(S);
+    Sizes.push_back(S);
+    ArrTy = dyn_cast<ArrayType>(ArrTy->getArrayElementType());
+  }
+  // Push a dummy value; `Sizes.size()` should be the same as
+  // `Subscripts.size()`
+  Sizes.push_back(SE.getConstant(Type::getInt64Ty(Ty->getContext()), 0, false));
+}
+
+static bool getCumulativeStartingOffset(ScalarEvolution &SE,
+                                            const SCEVAddRecExpr *S, uint64_t &Offset) {
+  assert(S);
+  const SCEV *Save;
+  do {
+    assert(S->getStepRecurrence(SE)->getSCEVType() == scConstant);
+    Save = S->getStart();
+    S = dyn_cast<SCEVAddRecExpr>(Save);
+  } while (S);
+  const SCEVConstant *OffsetSCEV = dyn_cast<SCEVConstant>(Save);
+  if (!OffsetSCEV)
+    return false;
+  Offset = OffsetSCEV->getValue()->getZExtValue();
+  return true;
+}
+
+static void findArraySubscripts(ScalarEvolution &SE, uint64_t Offset,
+                                uint64_t TypeByteSize, const SCEVAddRecExpr *S,
+                                SmallVectorImpl<const SCEV *> &Subscripts,
+                                SmallVectorImpl<const SCEV *> &Sizes) {
+  SmallVector<std::pair<uint64_t, const SCEVAddRecExpr *>, 3> Steps;
+  do {
+    const SCEVConstant *Step = dyn_cast<SCEVConstant>(S->getStepRecurrence(SE));
+    assert(Step);
+    uint64_t StepVal = Step->getValue()->getZExtValue();
+    // Save parent SCEV for later.
+    Steps.push_back({StepVal, S});
+    S = dyn_cast<SCEVAddRecExpr>(S->getStart());
+  } while (S);
+
+  llvm::sort(Steps.begin(), Steps.end());
+
+  dbgs() << "\n";
+  // To be continued: Run the example with [i+2][j+1] and see that you get
+  // bad index offset (index offsets are the DivRes, e.g. in i+2, it is the 2).
+  // To make this work, probably we have to always start with the recurrence
+  // with the biggest step.
+
+  // TODO: Also, we probably want to take into consideration the `Sizes`, to find
+  // out if we have a +1 step or more.
+
+  assert(Subscripts.size() == 0);
+  for (std::pair<uint64_t, const SCEVAddRecExpr *> StepPair : reverse(Steps)) {
+    uint64_t StepVal = StepPair.first;
+    uint64_t DivRes = Offset / StepVal;
+    uint64_t DivMod = Offset % StepVal;
+    LLVM_DEBUG(dbgs() << "Offset: " << Offset << "\n";
+               dbgs() << "StepVal: " << StepVal << "\n";
+               dbgs() << "DivRes: " << DivRes << "\n";
+               dbgs() << "DivMod: " << DivMod << "\n";
+               dbgs() << "---------------------\n";);
+
+    const SCEVAddRecExpr *Parent = StepPair.second;
+    // Construct AddRec SCEV with DivRes as Start
+    // and +1 as Step (see the TODO above).
+    const SCEV *Start = SE.getConstant(Parent->getType(), DivRes, false);
+    const SCEV *Step = SE.getConstant(Parent->getType(), 1, false);
+    const SCEVAddRecExpr *S = dyn_cast<SCEVAddRecExpr>(SE.getAddRecExpr(
+        Start, Step, StepPair.second->getLoop(), Parent->getNoWrapFlags()));
+    assert(S);
+    Subscripts.push_back(S);
+
+    Offset = DivMod;
+  }
+  assert(Subscripts.size() == Sizes.size());
+}
+
+static bool
+delinearizePtrOnGlobalArray(ScalarEvolution &SE, Value *Ptr, Value *Obj,
+                            SmallVectorImpl<const SCEV *> &Subscripts,
+                            SmallVectorImpl<const SCEV *> &Sizes,
+                            LoopNestInfo NestInfo) {
+  const SCEV *AccessExpr =
+      getSCEVStrippedFromBasePointer(SE, Ptr, NestInfo.InnermostLoop);
+  getArraySizes(SE, Obj, Sizes);
+  for (const SCEV *Sz : Sizes) {
+    dbgs() << "Sz: " << *Sz << "\n";
+  }
+  auto &DL = NestInfo.AnalyzedLoop->getHeader()->getModule()->getDataLayout();
+  assert(Ptr->getType()->isPointerTy());
+  uint64_t TypeByteSize = DL.getTypeAllocSize(Ptr->getType()->getPointerElementType());
+  const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(AccessExpr);
+  if (!AddRec)
+    return false;
+  uint64_t Offset = UINT_MAX;
+  if (!getCumulativeStartingOffset(SE, AddRec, Offset))
+    return false;
+  findArraySubscripts(SE, Offset, TypeByteSize, AddRec, Subscripts, Sizes);
+  return subscriptsAreLegal(SE, Subscripts, Sizes, NestInfo);
+}
+
 static bool
 delinearizeInstAndVerifySubscripts(ScalarEvolution &SE, Instruction *Inst,
                                    SmallVectorImpl<const SCEV *> &Subscripts,
                                    SmallVectorImpl<const SCEV *> &Sizes,
                                    LoopNestInfo NestInfo) {
 
-  return delinearizeAccessInst(SE, Inst, Subscripts, Sizes,
-                               NestInfo.InnermostLoop) &&
-         subscriptsAreLegal(SE, Subscripts, Sizes, NestInfo);
+
+  bool DelinSucc = delinearizeAccessInst(SE, Inst, Subscripts, Sizes,
+                                         NestInfo.InnermostLoop);
+  if (!DelinSucc)
+    return false;
+  return subscriptsAreLegal(SE, Subscripts, Sizes, NestInfo);
 }
 
 struct DepVectorComponent {
@@ -807,7 +1079,7 @@ struct DepVectorComponent {
 };
 
 struct DepVector {
-  constexpr static int MaxComps = 4;
+  constexpr static size_t MaxComps = 4;
   SmallVector<DepVectorComponent, MaxComps> Comps;
 
   DepVector(int Dimensions) : Comps(Dimensions) {
@@ -901,25 +1173,6 @@ bool getDVComponent(ScalarEvolution *SE, const SCEV *S1, const SCEV *S2,
   if (AddRec1->getLoop() != AddRec2->getLoop())
     return false;
 
-  // Search for the loop that this subscript uses.
-  // If it uses an outer loop (outer than the loop nest
-  // we care about), then squash it.
-  const Loop *Runner = NestInfo.InnermostLoop;
-  const Loop *Used = AddRec1->getLoop();
-  bool isOuter = true;
-  for (int I = 0; I < NestInfo.NumDimensions; ++I) {
-    if (Runner == Used) {
-      isOuter = false;
-      break;
-    }
-    Runner = Runner->getParentLoop();
-  }
-
-  if (isOuter) {
-    DVC.Dir = 'S';
-    return true;
-  }
-
   const Loop *RecLoop = AddRec1->getLoop();
 
   // TODO: What about the order here?
@@ -982,6 +1235,10 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
       continue;
     int Pos = findPositionInDV(DVC, NestInfo);
     if (Pos == -1) {
+      // The outer dimension is different, hence the two accesses
+      // on the inner loop never alias.
+      if (DVC.Dist != 0)
+        return DVValidity::DEFINITELY_VECTORIZABLE;
       // The loop that the recurrence is based on does not
       // affect this (inner) loop nest.
       continue;
@@ -997,14 +1254,6 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
     return DVValidity::DEFINITELY_VECTORIZABLE;
 
   return DVValidity::VALID;
-}
-
-static bool areDefinitelyNonAliasing(const DepVector &AccessDV) {
-  for (DepVectorComponent DVC : AccessDV.Comps) {
-    if (DVC.Dir == 'N')
-      return true;
-  }
-  return false;
 }
 
 void squashIfNeeded(DepVector& DV) {
@@ -1055,6 +1304,13 @@ static bool looksLeft2D(const DepVector &DV) {
   return DV[1].Dir == '>';
 }
 
+/// Looks directly backwards, backwards left / right or backwards
+/// up / down.
+static bool looksBackwards3D(const DepVector& DV) {
+  assert(DV.size() == 3);
+  return DV[0].Dir == '>';
+}
+
 bool isForwardDependence(DepVector &DV, unsigned LoadPosition,
                          unsigned StorePosition) {
   // If the store is before the load and the store
@@ -1081,28 +1337,88 @@ bool isForwardDependence(DepVector &DV, unsigned LoadPosition,
       if (WritesFurtherToTheLeft || WritesToPreviousMemory)
         return false;
       return true;
-    }
+    } // TODO: Handle 3D case.
   }
   return false;
 }
 
 /// Reflect if it points to previous iterations - something
 /// that arises because the load accesses memory locations
-/// before the store.
+/// before the store (in time).
 void reflectIfNeeded(DepVector &IterDV) {
   if (!IterDV.size())
     return;
 
-  if (IterDV.size() > 2)
+  if (IterDV.size() > 4)
     return;
+  if (IterDV.size() == 4) {
+    if (IterDV[0].Dist < 0) {
+      IterDV.reflect();
+    } else if (IterDV[0].Dist == 0) {
+      DepVector IterDV3D(3);
+      IterDV3D[0] = IterDV[1];
+      IterDV3D[1] = IterDV[2];
+      IterDV3D[2] = IterDV[3];
+      reflectIfNeeded(IterDV3D);
+      IterDV[1] = IterDV3D[0];
+      IterDV[2] = IterDV3D[1];
+      IterDV[3] = IterDV3D[2];
+    }
+    return;
+  }
   if (IterDV.size() == 1) {
     if (IterDV[0].Dist < 0)
       IterDV[0].negate();
     return;
+  } else if (IterDV.size() == 2) {
+    if (looksDownwards2D(IterDV) || looksDirectlyLeft2D(IterDV))
+      IterDV.reflect();
+  } else {  // 3D case
+    // If it looks backwards, it definitely looks towards
+    // to previous iterations.
+    if (looksBackwards3D(IterDV))
+      IterDV.reflect();
+    // If it looks forwards, it definitely looks towards
+    // later iterations. So the only case left is when
+    // 1st dimension (outermost) is 0, in which case fall-back to 
+    // the 2D case for the other two.
+    if (IterDV[0].Dir == '=') {
+      DepVector IterDV2D(2);
+      IterDV2D[0] = IterDV[1];
+      IterDV2D[1] = IterDV[2];
+      reflectIfNeeded(IterDV2D);
+      IterDV[1] = IterDV2D[0];
+      IterDV[2] = IterDV2D[1];
+    }
   }
-  if (looksDownwards2D(IterDV) || looksDirectlyLeft2D(IterDV)) {
-    IterDV.reflect();
+}
+
+static ConstVF getMaxAllowedVecFact(DepVector &);
+
+static ConstVF fallback2D(DepVector &IterDV, int Ignore) {
+  assert(Ignore >= 0 && Ignore < 3);
+  DepVector Copy(2);
+  int J = 0;
+  for (int I = 0; I < 3; ++I) {
+    if (I != Ignore) {
+      Copy[J] = IterDV[I];
+      ++J;
+    }
   }
+  return getMaxAllowedVecFact(Copy);
+}
+
+static ConstVF fallback3D(DepVector &IterDV, int Ignore) {
+  assert(Ignore >= 0 && Ignore < 4);
+  DepVector Copy(3);
+  int J = 0;
+  for (int I = 0; I < 4; ++I) {
+    if (I != Ignore) {
+      Copy[J] = IterDV[I];
+      ++J;
+    }
+  }
+  return getMaxAllowedVecFact(Copy);
 }
 
 static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
@@ -1111,53 +1427,126 @@ static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
   ConstVF Worst = LoopDependence::getWorstPossible().VectorizationFactor;
   if (!IterDV.size())
     return Best;
-  if (IterDV.size() > 2)
+  if (IterDV.size() > 4)
     return Worst;
+
+  if (IterDV.size() == 4) {
+    for (int I = 0; I < 4; ++I) {
+      if (IterDV[I].Dist == 0)
+        return fallback3D(IterDV, I);
+    }
+    return Worst;
+  }
+
   if (IterDV.size() == 1) {
     int Dist = IterDV[0].Dist;
     if (Dist) {
       return Dist;
     }
     return Best;
+  } else {
+    ConstVF Res = Best;
+    if (IterDV.size() == 2) {
+      // Handle outermost loop vectorization in 2-level loop nest.
+      if (looksLeft2D(IterDV) || looksDirectlyUpwards2D(IterDV))
+        Res = (size_t)IterDV[0].Dist;
+      return Res;
+    } else {
+      // If any of the dimensions is 0, then fall-back
+      // to a 2D case.
+      for (int I = 0; I < 3; ++I) {
+        if (IterDV[I].Dist == 0)
+          return fallback2D(IterDV, I);
+      }
+      // Otherwise, the vectorization in z-axis
+      // will always 'grab' a later iteration. So,
+      // it's limited by the distance in 'z'.
+      return IterDV[0].Dist;
+    }
   }
-  // Handle outermost loop vectorization in 2-level loop nest.
-  ConstVF Res = Best;
-  if (looksLeft2D(IterDV) || looksDirectlyUpwards2D(IterDV))
-    Res = (size_t)IterDV[0].Dist;
-  return Res;
+  assert(0);
+  return Worst;
 }
 
-static bool definitelyCannotAlias(LoopInfo &LI, const LoadInst *LD,
-                                  const StoreInst *ST) {
+enum class TrivialAliasRes {
+  CANNOT_ALIAS,
+  SAME_OBJECT,
+  CAN_ALIAS,
+};
+
+static TrivialAliasRes trivialAliasCheck(LoopInfo &LI, const DataLayout &DL,
+                                         const Value *Ptr1, const Value *Ptr2) {
 
   // We want the two sets of underlying objects
   // to be disjoint. If they indeed are, we want in any pair of
   // objects from different sets, at least one to have the
   // the `noalias` attribute.
 
-  SmallVector<const Value *, 2> LoadObjects;
-  SmallVector<const Value *, 2> StoreObjects;
-  getUnderlyingObjects(LD->getPointerOperand(), LoadObjects, &LI);
-  getUnderlyingObjects(ST->getPointerOperand(), StoreObjects, &LI);
+  SmallVector<const Value *, 2> Objects1;
+  SmallVector<const Value *, 2> Objects2;
+  GetUnderlyingObjects(Ptr1, Objects1, DL, &LI);
+  GetUnderlyingObjects(Ptr2, Objects2, DL, &LI);
 
-  for (const Value *LObj : LoadObjects) {
-    LLVM_DEBUG(dbgs() << "LObj: " << *LObj << "\n");
-    const Argument *A1 = dyn_cast<Argument>(LObj);
+  for (const Value *IObj : Objects1) {
+    const Argument *A1 = dyn_cast<Argument>(IObj);
     if (!A1)
-      return false;
-    for (const Value *SObj : StoreObjects) {
-      LLVM_DEBUG(dbgs() << "SObj: " << *SObj << "\n");
-      if (LObj == SObj)
-        return false;
-      const Argument *A2 = dyn_cast<Argument>(SObj);
+      return TrivialAliasRes::CAN_ALIAS;
+    for (const Value *JObj : Objects2) {
+      if (IObj == JObj)
+        return TrivialAliasRes::SAME_OBJECT;
+      const Argument *A2 = dyn_cast<Argument>(JObj);
       if (!A2)
-        return false;
+        return TrivialAliasRes::CAN_ALIAS;
       if (!A1->hasAttribute(Attribute::AttrKind::NoAlias) &&
           !A2->hasAttribute(Attribute::AttrKind::NoAlias))
-        return false;
+        return TrivialAliasRes::CAN_ALIAS;
     }
   }
-  return true;
+  return TrivialAliasRes::CANNOT_ALIAS;
+}
+
+struct RTAliasCheckInfo {
+  MinMaxSCEVPair Bounds1, Bounds2;
+};
+
+enum class CanAliasRes {
+  CANNOT_ALIAS,
+  SAME_OBJECT,
+  CAN_ALIAS_RTCHECK_INFO,
+  CAN_ALIAS_NO_INFO
+};
+
+// None: They can't alias.
+// Otherwise, return info to generate an alias check.
+static CanAliasRes canAlias(ScalarEvolution &SE, LoopInfo &LI,
+                            const DataLayout &DL, const Value *Ptr1,
+                            const Value *Ptr2, const Loop *InnermostLoop,
+                            RTAliasCheckInfo &AliasCheckInfo) {
+  TrivialAliasRes trivialRes = trivialAliasCheck(LI, DL, Ptr1, Ptr2);
+  if (trivialRes == TrivialAliasRes::CANNOT_ALIAS)
+    return CanAliasRes::CANNOT_ALIAS;
+  else if (trivialRes == TrivialAliasRes::SAME_OBJECT)
+    return CanAliasRes::SAME_OBJECT;
+  // else: Fill AliasCheckInfo, if we can
+
+  // TODO: What happens if the asserts fail ? We have to turn those in ifs
+  // and the function should return three "results":
+  // None: They can't alias.
+  // RTAliasCheckInfo: They can alias, here's info to gen an RT check.
+  // Otherwise: They can alias and I can't find info.
+  const SCEVAddRecExpr *S1 = dyn_cast<SCEVAddRecExpr>(
+      SE.getSCEVAtScope((Value *)Ptr1, (Loop *)InnermostLoop));
+  if (!S1)
+    return CanAliasRes::CAN_ALIAS_NO_INFO;
+  const SCEVAddRecExpr *S2 = dyn_cast<SCEVAddRecExpr>(
+      SE.getSCEVAtScope((Value *)Ptr2, (Loop *)InnermostLoop));
+  if (!S2)
+    return CanAliasRes::CAN_ALIAS_NO_INFO;
+
+  AliasCheckInfo.Bounds1 = getMinMaxOfIncreasingAddRec(SE, S1);
+  AliasCheckInfo.Bounds2 = getMinMaxOfIncreasingAddRec(SE, S2);
+
+  return CanAliasRes::CAN_ALIAS_RTCHECK_INFO;
 }
 
 struct ProgramOrderedAccess {
@@ -1183,28 +1572,193 @@ struct ProgramOrderedAccess {
   }
 };
 
-const LoopDependence
-LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
-  LoopDependence Bail = LoopDependence::getWorstPossible();
+static bool isInNest(Instruction& I, LoopNestInfo NestInfo) {
 
-  if (L.isAnnotatedParallel())
-    return Bail;
+  // A nest is considered a path from the outermost loop towards
+  // an innermost loop (any loop can be thought as a tree with
+  // subloops loops being the children). What we would like to know
+  // is if an instruction is inside this path. But, a loop contains()
+  // instructions not only in the loop itself (i.e. not in any subloops
+  // which could be considered a single node in the tree) but also instructions
+  // in all the subloops (i.e. instructions in all sub-trees). So, the idea is
+  // to take the path from the innermost back to the outermost and keep the
+  // one-before loop every time in this path. This is basically the only
+  // sub-tree in which we're interested. Any instruction "in the nest" is any
+  // instruction either in that subtree or in the outermost loop. So, by
+  // checking if the instruction is in any of the other subloops, we check if it
+  // is any subtree that we don't want to analyze. Example:
+   
+  //   2
+  //  /
+  // 1     4
+  //  \  /
+  //   3
+  //     \
+  //      5
 
-  // For now, we can only handle a perfect loop nest that has
-  // accesses only in the innermost loop.
-  LoopNestInfo NestInfo;
-  bool isPerfect = getNestInfo(L, NestInfo);
-  if (!isPerfect) {
-    LLVM_DEBUG(dbgs() << "Imperfect loop nest: " << L << "\n";);
-    return Bail;
+  // Imagine this tree (with the root being 1, the outermost loop and going
+  // towards the right we find the leaves, the innermost loops) that could
+  // come from this source:
+  // for (i) {    - 1 -
+  //   for (j)    - 2 -
+  //   for (j) {  - 3 -
+  //     for (k)  - 4 -
+  //     for (k)  - 5 -
+  //   }
+  // }
+  // And say we're interested in the nest 1 - 3 - 4
+  // The states are going to go like:
+  // OneBefore = 4
+  // L = 3           (we want to check that the instruction is not in the
+  //                  subtree 5)
+  // OneBefore = 3
+  // L = 1           (we want to check that the instruction is not in the
+  //                  subtree 2)
+
+  const Loop *L = NestInfo.InnermostLoop;
+  if (L == NestInfo.AnalyzedLoop)
+    return true;
+  const Loop *OneBefore;
+  do {
+    OneBefore = L;
+    L = L->getParentLoop();
+    for (const Loop *Sub : L->getSubLoops())
+      if (Sub != OneBefore && Sub->contains(&I))
+        return false;
+    // Remember, NestInfo.AnalyzedLoop is the outermost loop
+    // in the nest.
+  } while (L != NestInfo.AnalyzedLoop);
+  return true;
+}
+
+bool operator<(const ConstVF V1, const ConstVF V2) {
+  if (!V1.hasValue())
+    return false;
+  if (!V2.hasValue())
+    return true;
+  return V1.getValue() < V2.getValue();
+}
+
+struct ExpandedMinMaxSCEVPair {
+  TrackingVH<Value> Min;
+  TrackingVH<Value> Max;
+};
+
+struct ExpandedRTAliasCheckInfo {
+  ExpandedMinMaxSCEVPair Bounds1, Bounds2;
+};
+
+static ExpandedMinMaxSCEVPair expandBoundsPair(MinMaxSCEVPair MinMax, Instruction *InsertBefore,
+                                               SCEVExpander &SEExpander) {
+  unsigned AddrSpace = MinMax.Min->getType()->getPointerAddressSpace();
+  LLVMContext &Ctx = InsertBefore->getContext();
+  Type *I8PtrTy = Type::getInt8PtrTy(Ctx, AddrSpace);
+  
+  Value *Min = nullptr, *Max = nullptr;
+  Min = SEExpander.expandCodeFor(MinMax.Min, I8PtrTy, InsertBefore);
+  Max= SEExpander.expandCodeFor(MinMax.Max, I8PtrTy, InsertBefore);
+  LLVM_DEBUG(dbgs() << "Expanded Checks -- Min: " << *MinMax.Min
+                    << ", Max: " << *MinMax.Max << "\n";);
+  return {Min, Max};
+}
+
+static SmallVector<ExpandedRTAliasCheckInfo, 4>
+expandBounds(SmallVectorImpl<RTAliasCheckInfo> &AliasChecks,
+             Instruction *InsertBefore, SCEVExpander &SEExpander) {
+  SmallVector<ExpandedRTAliasCheckInfo, 4> ExpandedAliasChecks;
+  for (RTAliasCheckInfo &AC : AliasChecks) {
+    ExpandedRTAliasCheckInfo EAC;
+    EAC.Bounds1 = expandBoundsPair(AC.Bounds1, InsertBefore, SEExpander);
+    EAC.Bounds2 = expandBoundsPair(AC.Bounds2, InsertBefore, SEExpander);
+    ExpandedAliasChecks.push_back(EAC);
   }
-  //LLVM_DEBUG(dbgs() << "Loop: " << L << "\n";
-  //           dbgs() << "    NumDimensions : " << NestInfo.NumDimensions << "\n";
-  //           dbgs() << "    InnerLoop: " << *NestInfo.InnermostLoop << "\n";
-  //           dbgs() << "    Induction Variable: "
-  //                  << L.getCanonicalInductionVariable()->getName() << "\n";);
+  return ExpandedAliasChecks;
+}
 
-  assert(NestInfo.InnermostLoop);
+// TODO: This should definitely be moved in the transformation part! Note that
+// because this now transforms the loop, certain already verified preconditions
+// (like the loop being simplified) may not hold anymore.
+static void
+emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, const Loop *L,
+                       SmallVectorImpl<RTAliasCheckInfo> &AliasChecks) {
+  if (AliasChecks.empty())
+    return;
+  assert(L->isLoopSimplifyForm());
+  BasicBlock *AliasChecksBlock = L->getLoopPreheader();
+  Instruction *InsertBefore = (Instruction *) AliasChecksBlock->getTerminator();
+
+  const DataLayout &DL = L->getHeader()->getModule()->getDataLayout();
+  
+  SCEVExpander SEExpander(SE, DL, "induction");
+  auto ExpandedChecks = expandBounds(AliasChecks, InsertBefore, SEExpander);
+
+  LLVMContext &Ctx = InsertBefore->getContext();
+  IRBuilder<> CheckBuilder(InsertBefore);
+
+  // Our instructions might fold to a constant.
+  Value *RuntimeCheck = nullptr;
+
+  for (const auto &Check : ExpandedChecks) {
+    ExpandedMinMaxSCEVPair A = Check.Bounds1;
+    ExpandedMinMaxSCEVPair B = Check.Bounds2;
+    // Check if two pointers (A and B) conflict where conflict is computed as:
+    // min(A) <= max(B) && min(B) <= max(A)
+    unsigned AddrSpace = A.Min->getType()->getPointerAddressSpace();
+    assert(AddrSpace == B.Min->getType()->getPointerAddressSpace());
+
+    Type *I8PtrTy = Type::getInt8PtrTy(Ctx, AddrSpace);
+    Value *Min1 = CheckBuilder.CreateBitCast(A.Min, I8PtrTy, "bc");
+    Value *Min2 = CheckBuilder.CreateBitCast(B.Min, I8PtrTy, "bc");
+    Value *Max1 = CheckBuilder.CreateBitCast(A.Max, I8PtrTy, "bc");
+    Value *Max2 = CheckBuilder.CreateBitCast(B.Max, I8PtrTy, "bc");
+
+    // [A|B].Min points to the minimum accessed byte under base [A|B].
+    // [A|B].Max points to the maximum accessed byte.
+    // There is no conflict when the intervals are disjoint:
+    // NoConflict = (B.Min > A.Max) || (A.Min > B.Max)
+    //
+    // bound1 = (B.Min <= A.Max)
+    // bound2 = (A.Min <= B.Max)
+    //  TheyAlias = bound0 & bound1
+    
+    Value *Cmp1 = CheckBuilder.CreateICmpULE(Min1, Max2, "bound1");
+    Value *Cmp2 = CheckBuilder.CreateICmpULE(Min2, Max1, "bound2");
+    Value *TheyAlias = CheckBuilder.CreateAnd(Cmp1, Cmp2, "pointers.alias");
+    if (RuntimeCheck) {
+      TheyAlias =
+          CheckBuilder.CreateOr(RuntimeCheck, TheyAlias, "alias.reduction");
+    }
+    RuntimeCheck = TheyAlias;
+  }
+  // We have to do this trickery because the IRBuilder might fold the check to a
+  // constant expression in which case there is no Instruction anchored in a
+  // the block.
+  RuntimeCheck =
+      BinaryOperator::CreateAnd(RuntimeCheck, ConstantInt::getTrue(Ctx));
+  CheckBuilder.Insert(RuntimeCheck, "rt.alias.check");
+
+  AliasChecksBlock->setName("vectorization.alias.checks");
+  
+  BasicBlock *LoopPreheader =
+      SplitBlock(AliasChecksBlock, AliasChecksBlock->getTerminator(), &DT, &LI,
+                 nullptr, "loop.ph");
+
+  BasicBlock *ExitBlock = L->getExitBlock();
+  // TODO: For now we hope that the loop has only one exit block.
+  // In the end, this should be the preheader of the scalar version of the loop.
+  assert(ExitBlock);
+  Instruction *AliasCheckBranch =
+      BranchInst::Create(ExitBlock, LoopPreheader, RuntimeCheck);
+  ReplaceInstWithInst(AliasChecksBlock->getTerminator(), AliasCheckBranch);
+}
+
+const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
+                                                LoopInfo &LI,
+                                                DominatorTree &DT,
+                                                ScalarEvolution &SE,
+                                                const TargetLibraryInfo &TLI) {
+  LoopDependence Bail = LoopDependence::getWorstPossible();
+  const Loop &L = *NestInfo.AnalyzedLoop;
   const Loop &Inner = *NestInfo.InnermostLoop;
 
   SmallVector<ProgramOrderedAccess, 16> Loads;
@@ -1241,6 +1795,9 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         if (!Ld || !Ld->isSimple())
           return Bail;
 
+        if (!isInNest(I, NestInfo))
+          continue;
+
         Loads.push_back({Ld, ProgramOrder});
         ProgramOrder++;
 
@@ -1250,6 +1807,9 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
         auto *St = dyn_cast<StoreInst>(&I);
         if (!St || !St->isSimple())
           return Bail;
+
+        if (!isInNest(I, NestInfo))
+          continue;
 
         Stores.push_back(ProgramOrderedAccess::get(St, ProgramOrder));
         ProgramOrder++;
@@ -1266,8 +1826,11 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   // the best acceptable value (with monotone pessimistic movements).
   LoopDependence Res = LoopDependence::getBestPossible();
 
+  SmallVector<RTAliasCheckInfo, 4> AliasChecks;
+
   LLVM_DEBUG(dbgs() << "\n\n-------------\n\n";
              dbgs() << "Analyze access pairs\n\n";);
+  auto &DL = L.getHeader()->getModule()->getDataLayout();
   for (ProgramOrderedAccess LAccess : Loads) {
     LoadInst *Load = LAccess.Load;
     Value *LPtr = Load->getPointerOperand();
@@ -1276,36 +1839,72 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
       Value *SPtr = SAccess.Store->getPointerOperand();
       StoreInst *Store = SAccess.Store;
 
-      // TODO: Do we care about the order?
-
       LLVM_DEBUG(dbgs() << "\nLoad pointer: " << *LPtr << "\n";
                  dbgs() << *SE.getSCEVAtScope(LPtr, &Inner) << "\n\n";
                  dbgs() << "Store pointer: " << *SPtr << "\n";
                  dbgs() << *SE.getSCEVAtScope(SPtr, &Inner) << "\n";);
 
-      // Note: Right now we are probably calling getUnderlyingObjects()
-      // a lot of times.
-      if (definitelyCannotAlias(LI, Load, Store)) {
-        LLVM_DEBUG(dbgs() << "Definitely can't alias\n";);
-        continue;
-      }
-
-      LLVM_DEBUG(dbgs() << "\n"; dbgs() << "\n\n------\n\n";
-                 dbgs() << "Delinearize SCEVs\n";);
-
       SmallVector<const SCEV *, 3> Subscripts1, Subscripts2;
       SmallVector<const SCEV *, 3> Sizes1, Sizes2;
 
-      if (!delinearizeInstAndVerifySubscripts(SE, Load, Subscripts1, Sizes1,
-                                              NestInfo))
-        return Bail;
-      if (!delinearizeInstAndVerifySubscripts(SE, Store, Subscripts2, Sizes2,
-                                              NestInfo))
-        return Bail;
+      // Special handling for globals.
+      Value *LObj = GetUnderlyingObject(LPtr, DL);
+      Type *LObjTy = LObj->getType();
+      if (dyn_cast<GlobalValue>(LObj) && LObjTy->isPointerTy() &&
+          LObjTy->getPointerElementType()->isArrayTy()) {
+        Value *SObj = GetUnderlyingObject(SPtr, DL);
+        Type *SObjTy = SObj->getType();
+
+        LLVM_DEBUG(dbgs() << "\n";);
+        LLVM_DEBUG(dbgs() << "LObj: " << *LObj << "\n";);
+        LLVM_DEBUG(dbgs() << "SObj: " << *SObj << "\n";);
+
+        // TODO: For now, we don't know global array and pointer
+        // combination on aliasing.
+        if (!dyn_cast<GlobalValue>(SObj) || !SObjTy->isPointerTy() ||
+            !SObjTy->getPointerElementType()->isArrayTy()) {
+          return Bail;
+        }
+        // They can't alias.
+        if (LObj != SObj)
+          continue;
+
+        if (!delinearizePtrOnGlobalArray(SE, LPtr, LObj, Subscripts1, Sizes1,
+                                         NestInfo))
+          return Bail;
+        if (!delinearizePtrOnGlobalArray(SE, SPtr, SObj, Subscripts2, Sizes2,
+                                         NestInfo))
+          return Bail;
+      } else {
+        // Note: Right now we are probably calling GetUnderlyingObjects()
+        // a lot of times.
+        RTAliasCheckInfo AliasCheckInfo;
+        CanAliasRes canAliasRes = canAlias(
+            SE, LI, DL, LPtr, SPtr, NestInfo.InnermostLoop, AliasCheckInfo);
+        if (canAliasRes == CanAliasRes::CANNOT_ALIAS) {
+          LLVM_DEBUG(dbgs() << "Definitely can't alias\n";);
+          continue;
+        } else if (canAliasRes == CanAliasRes::CAN_ALIAS_NO_INFO) {
+          LLVM_DEBUG(
+              dbgs() << "They can alias and we have no info for RT check.\n";);
+          return Bail;
+        } else if (canAliasRes == CanAliasRes::CAN_ALIAS_RTCHECK_INFO) {
+          AliasChecks.push_back(AliasCheckInfo);
+          continue;
+        } // else: Same object, the common case... keep going
+
+        LLVM_DEBUG(dbgs() << "\n"; dbgs() << "\n\n------\n\n";
+                   dbgs() << "Delinearize SCEVs\n";);
+
+        if (!delinearizeInstAndVerifySubscripts(SE, Load, Subscripts1, Sizes1,
+                                                NestInfo))
+          return Bail;
+        if (!delinearizeInstAndVerifySubscripts(SE, Store, Subscripts2, Sizes2,
+                                                NestInfo))
+          return Bail;
+      }
 
       LLVM_DEBUG(dbgs() << "\n");
-      // expandDimensions(&SE, Subscripts1, NestInfo);
-      // expandDimensions(&SE, Subscripts2, NestInfo);
       DepVector IterDV(NestInfo.NumDimensions);
       DVValidity Valid =
           getDirVector(&SE, IterDV, Subscripts1, Subscripts2, NestInfo);
@@ -1321,14 +1920,76 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
       reflectIfNeeded(IterDV);
       LLVM_DEBUG(IterDV.print(););
       ConstVF MaxAllowedVectorizationFactor = getMaxAllowedVecFact(IterDV);
-      if (Res.VectorizationFactor < MaxAllowedVectorizationFactor)
+      if (MaxAllowedVectorizationFactor < Res.VectorizationFactor)
         Res.VectorizationFactor = MaxAllowedVectorizationFactor;
       if (Res.isWorstPossible())
         return Bail;
     }
   }
 
+  //emitRuntimeAliasChecks(SE, DT, LI, NestInfo.AnalyzedLoop, AliasChecks);
+
   return Res;
+}
+
+struct DFSNestClipboard {
+
+  DFSNestClipboard(const Loop *_AnalyzedLoop, LoopDependence StartingDep,
+                   int _NumDimensions, LoopInfo &_LI, DominatorTree &_DT,
+                   ScalarEvolution &_SE, const TargetLibraryInfo &_TLI)
+      : AnalyzedLoop(_AnalyzedLoop), CurrentLoop(_AnalyzedLoop),
+        CurrentDep(StartingDep), NumDimensions(_NumDimensions), LI(_LI),
+        DT(_DT), SE(_SE), TLI(_TLI) {}
+
+  const Loop *const AnalyzedLoop;
+  const Loop *CurrentLoop;
+  LoopDependence CurrentDep;
+  int NumDimensions;
+
+  LoopInfo &LI;
+  DominatorTree &DT;
+  ScalarEvolution &SE;
+  const TargetLibraryInfo &TLI;
+};
+
+static bool analyzeNestsDFS(DFSNestClipboard *Clip) {
+  const Loop *CurrentLoop = Clip->CurrentLoop;
+
+  if (CurrentLoop->empty()) {
+    LoopNestInfo NestInfo = {Clip->NumDimensions, Clip->CurrentLoop,
+                             Clip->AnalyzedLoop};
+    const LoopDependence Dep =
+        getImperfectNestDependence(NestInfo, Clip->LI, Clip->DT, Clip->SE, Clip->TLI);
+    if (Dep.VectorizationFactor < Clip->CurrentDep.VectorizationFactor)
+      Clip->CurrentDep = Dep;
+    return !Clip->CurrentDep.isWorstPossible();
+  }
+
+  const auto &SubLoops = CurrentLoop->getSubLoops();
+  for (const Loop *Sub : SubLoops) {
+    Clip->CurrentLoop = Sub;
+    Clip->NumDimensions += 1;
+    if (!analyzeNestsDFS(Clip))
+      return false;
+    Clip->NumDimensions -= 1;
+  }
+  return true;
+}
+
+const LoopDependence
+LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
+  LoopDependence Bail = LoopDependence::getWorstPossible();
+
+  if (L.isAnnotatedParallel())
+    return LoopDependence::getBestPossible();
+
+  if (!L.isLoopSimplifyForm())
+    return Bail;
+
+  DFSNestClipboard Clip(&L, LoopDependence::getBestPossible(), 1, LI, DT, SE, TLI);
+  analyzeNestsDFS(&Clip);
+
+  return Clip.CurrentDep;
 }
 
 /// Printer Pass

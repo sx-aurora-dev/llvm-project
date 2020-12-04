@@ -1,9 +1,9 @@
 ; RUN: opt -indvars < %s 2>&1 | opt -passes='loop-simplify,print<loop-dependence>' -disable-output 2>&1 | FileCheck %s
 
 ; void test(int64_t n, int64_t m, int64_t A[n][m]) {
-;   for (int64_t i = 0; i < n - 2; ++i) {
+;   for (int64_t i = 0; i < n - 3; ++i) {
 ;     for (int64_t j = 1; j < m; ++j)
-;       A[i+2][j-1] = A[i][j];
+;       A[i+3][j-1] = A[i][j];
 ;     for (int64_t j = 1; j < m; ++j)
 ;       A[i+2][j-1] = A[i][j];
 ;   }
@@ -13,9 +13,14 @@
 ; CHECK: Loop: for.body3: Is vectorizable for any factor
 ; CHECK: Loop: for.body11: Is vectorizable for any factor
 
+; Explanation: We want to make sure that the vectorization factor
+; of the i-loop is the minimum of the two nests:
+; (i-loop)-(first j-loop): This has max VF: 3
+; (i-loop)-(second j-loop): This has max VF: 2
+
 define void @test(i64 %n, i64 %m, i64* %A) {
 entry:
-  %sub = sub nsw i64 %n, 2
+  %sub = sub nsw i64 %n, 3
   %cmp5 = icmp slt i64 0, %sub
   br i1 %cmp5, label %for.body, label %for.end23
 
@@ -30,7 +35,7 @@ for.body3:                                        ; preds = %for.body, %for.body
   %arrayidx = getelementptr inbounds i64, i64* %A, i64 %0
   %arrayidx4 = getelementptr inbounds i64, i64* %arrayidx, i64 %j.02
   %1 = load i64, i64* %arrayidx4, align 8
-  %add = add nsw i64 %i.06, 2
+  %add = add nsw i64 %i.06, 3
   %2 = mul nsw i64 %add, %m
   %arrayidx5 = getelementptr inbounds i64, i64* %A, i64 %2
   %sub6 = sub nsw i64 %j.02, 1
