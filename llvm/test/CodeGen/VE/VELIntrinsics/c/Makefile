@@ -17,9 +17,10 @@ SHIFT_TARGETS = vsll.ll vsrl.ll vsla.ll vsra.ll vsfa.ll
 FP_ARITH_TARGETS = vfadd.ll vfsub.ll vfmul.ll vfdiv.ll vfsqrt.ll vfcmp.ll \
 	vfmax.ll vfmin.ll vfmad.ll vfmsb.ll vfnmad.ll vfnmsb.ll vrcp.ll vrsqrt.ll \
 	vcvt.ll
+MERGER_TARGETS = vmrg.ll vshf.ll
 
 TARGETS = $(LDSTMV_TARGETS) $(ARITH_TARGETS) $(LOGICAL_TARGETS) \
-	$(SHIFT_TARGETS) $(FP_ARITH_TARGETS)
+	$(SHIFT_TARGETS) $(FP_ARITH_TARGETS) $(MERGER_TARGETS)
 
 all: $(TARGETS)
 
