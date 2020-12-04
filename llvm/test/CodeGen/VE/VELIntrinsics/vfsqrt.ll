@@ -24,14 +24,14 @@ declare <256 x double> @llvm.ve.vl.vfsqrtd.vvl(<256 x double>, i32)
 define fastcc <256 x double> @vfsqrtd_vvvl(<256 x double> %0, <256 x double> %1) {
 ; CHECK-LABEL: vfsqrtd_vvvl:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfsqrt.d %v1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = tail call fast <256 x double> @llvm.ve.vl.vfsqrtd.vvvl(<256 x double> %0, <256 x double> %1, i32 256)
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vfsqrtd.vvvl(<256 x double> %0, <256 x double> %1, i32 128)
   ret <256 x double> %3
 }
 
@@ -57,14 +57,14 @@ declare <256 x double> @llvm.ve.vl.vfsqrts.vvl(<256 x double>, i32)
 define fastcc <256 x double> @vfsqrts_vvvl(<256 x double> %0, <256 x double> %1) {
 ; CHECK-LABEL: vfsqrts_vvvl:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfsqrt.s %v1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
-  %3 = tail call fast <256 x double> @llvm.ve.vl.vfsqrts.vvvl(<256 x double> %0, <256 x double> %1, i32 256)
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vfsqrts.vvvl(<256 x double> %0, <256 x double> %1, i32 128)
   ret <256 x double> %3
 }
 
