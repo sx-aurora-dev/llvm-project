@@ -222,32 +222,27 @@ let Predicates = [IsVectorizeSubTarget] in {
 }
 
 multiclass simd_store<int length> {
-  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i32"):$vx,
-                   I64:$addr),
-            (VSTLirvl 4, $addr,
-                      !cast<ValueType>("v" # !cast<string>(length) #"i32"):$vx,
-                      (VLEN length))>;
-  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f32"):$vx,
-                   I64:$addr),
-            (VSTUirvl 4, $addr,
-                      !cast<ValueType>("v" # !cast<string>(length) #"f32"):$vx,
-                      (VLEN length))>;
-  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-                   I64:$addr),
-            (VSTirvl 8, $addr,
-                     !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-                     (VLEN length))>;
-  def : Pat<(store !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-                   I64:$addr),
-            (VSTirvl 8, $addr,
-                     !cast<ValueType>("v" # !cast<string>(length) # "f64"):$vx,
-                     (VLEN length))>;
-/*
-  def : Pat<(!cast<PatFrag>("truncstorev" # !cast<string>(length) # "i32")
-               !cast<ValueType>("v" # !cast<string>(length) # "i64"):$vx,
-               I64:$addr),
-            (VSTLir $vx, 4, $addr, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-*/
+  defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
+  defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
+  defvar vf32 = !cast<ValueType>("v" # !cast<string>(length) # "f32");
+  defvar vf64 = !cast<ValueType>("v" # !cast<string>(length) # "f64");
+
+  // Load patterns.
+  def : Pat<(store vi32:$vx, I64:$addr),
+            (VSTLirvl 4, $addr, $vx, (VLEN length))>;
+  def : Pat<(store vf32:$vx, I64:$addr),
+            (VSTUirvl 4, $addr, $vx, (VLEN length))>;
+  def : Pat<(store vi64:$vx, I64:$addr),
+            (VSTirvl 8, $addr, $vx, (VLEN length))>;
+  def : Pat<(store vf64:$vx, I64:$addr),
+            (VSTirvl 8, $addr, $vx, (VLEN length))>;
+
+  defvar truncstore =
+      !cast<PatFrag>("truncstorev" # !cast<string>(length) # "i32");
+
+  // TruncStore patterns.
+  def : Pat<(truncstore vi64:$vx, I64:$addr),
+            (VSTLirvl 4, $addr, $vx, (VLEN length))>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
