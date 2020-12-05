@@ -70,35 +70,25 @@ let Predicates = [IsIntrinsicSubTarget] in {
 
 let Predicates = [IsIntrinsicSubTarget] in {
   def : Pat<(v512i32 (load I64:$addr)),
-            (v512i32 (VLDirl 8, $addr,
-                             (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
+            (v512i32 (VLDirl 8, $addr, (VLEN 256)))>;
   def : Pat<(v512f32 (load I64:$addr)),
-            (v512f32 (VLDirl 8, $addr,
-                             (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
+            (v512f32 (VLDirl 8, $addr, (VLEN 256)))>;
   def : Pat<(v256i32 (load I64:$addr)),
-            (v256i32 (VLDLSXirl 4, $addr,
-                         (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
+            (v256i32 (VLDLSXirl 4, $addr, (VLEN 256)))>;
   def : Pat<(v256f32 (load I64:$addr)),
-            (v256f32 (VLDUirl 4, $addr,
-                         (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
+            (v256f32 (VLDUirl 4, $addr, (VLEN 256)))>;
   def : Pat<(v256f64 (load I64:$addr)),
-            (v256f64 (VLDirl 8, $addr,
-                         (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
+            (v256f64 (VLDirl 8, $addr, (VLEN 256)))>;
   def : Pat<(v256i64 (load I64:$addr)),
-            (v256i64 (VLDirl 8, $addr,
-                         (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32)))>;
+            (v256i64 (VLDirl 8, $addr, (VLEN 256)))>;
   def : Pat<(store v256i32:$vx, I64:$addr),
-            (VSTLirvl 4, $addr, v256i32:$vx,
-                      (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
+            (VSTLirvl 4, $addr, v256i32:$vx, (VLEN 256))>;
   def : Pat<(store v256f32:$vx, I64:$addr),
-            (VSTUirvl 4, $addr, v256f32:$vx,
-                      (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
+            (VSTUirvl 4, $addr, v256f32:$vx, (VLEN 256))>;
   def : Pat<(store v256i64:$vx, I64:$addr),
-            (VSTirvl 8, $addr, v256i64:$vx,
-                     (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
+            (VSTirvl 8, $addr, v256i64:$vx, (VLEN 256))>;
   def : Pat<(store v256f64:$vx, I64:$addr),
-            (VSTirvl 8, $addr, v256f64:$vx,
-                     (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))>;
+            (VSTirvl 8, $addr, v256f64:$vx, (VLEN 256))>;
 }
 
 // Load/store for mask register using stack/symbol is implemented in custom

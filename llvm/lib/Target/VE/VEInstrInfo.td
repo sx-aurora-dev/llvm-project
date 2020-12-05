@@ -2708,6 +2708,12 @@ def true_mask           : PatLeaf<
 def any_broadcast       : PatFrag<(ops node:$sx),
                                   (vec_broadcast node:$sx, (i32 srcvalue))>;
 
+// Easy to write output patterns for vector instructions.
+//   e.g.  (VLDirl 8, $addr, (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))
+//   to    (VLDirl 8, $addr, (VLEN 256)))
+def VLEN : OutPatFrag<(ops node:$length),
+                      (EXTRACT_SUBREG (LEAzii 0, 0, $length), sub_i32)>;
+
 // Vector instructions.
 include "VEInstrVec.td"
 include "VEInstrVecVL.td"
