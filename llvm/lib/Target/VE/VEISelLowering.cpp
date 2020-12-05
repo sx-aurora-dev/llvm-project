@@ -1329,6 +1329,55 @@ SDValue VETargetLowering::lowerATOMIC_FENCE(SDValue Op,
   return DAG.getNode(VEISD::MEMBARRIER, DL, MVT::Other, Op.getOperand(0));
 }
 
+SDValue VETargetLowering::lowerATOMIC_SWAP(SDValue Op,
+                                           SelectionDAG &DAG) const {
+  AtomicSDNode *N = cast<AtomicSDNode>(Op);
+
+  // Custom Lowering 1 byte ATOMIC_SWAP.
+  if (N->getMemoryVT() == MVT::i8) {
+    SDLoc DL(Op);
+
+    SDValue Src = N->getOperand(1);
+    SDValue Value = N->getOperand(2);
+
+    SDValue Const3 = DAG.getConstant(3, DL, MVT::i64);
+    SDValue Const24 = DAG.getConstant(24, DL, MVT::i64);
+
+    // Generate "ts1am" as 1 byte ATOMIC_SWAP.
+    SDValue AlignedAddress =
+        DAG.getNode(ISD::AND, DL, Src.getValueType(),
+                    {Src, DAG.getConstant(-4, DL, MVT::i64)});
+    SDValue Remainder =
+        DAG.getNode(ISD::AND, DL, Src.getValueType(), {Src, Const3});
+    SDValue ShiftedFlag = DAG.getNode(
+        ISD::SHL, DL, MVT::i32, {DAG.getConstant(1, DL, MVT::i32), Remainder});
+    SDValue ShiftBits = DAG.getNode(ISD::SHL, DL, Remainder.getValueType(),
+                                    {Remainder, Const3});
+    SDValue NewValue =
+        DAG.getNode(ISD::SHL, DL, Value.getValueType(), {Value, ShiftBits});
+    SDValue TS1AM =
+        DAG.getAtomic(VEISD::TS1AM, DL, N->getMemoryVT(),
+                      DAG.getVTList(Op.getNode()->getValueType(0),
+                                    Op.getNode()->getValueType(1)),
+                      {N->getChain(), AlignedAddress, ShiftedFlag, NewValue},
+                      N->getMemOperand());
+
+    // Extract 1 byte result.
+    SDValue SUB =
+        DAG.getNode(ISD::SUB, DL, Const24.getValueType(), {Const24, ShiftBits});
+    SDValue ShiftLeftFor1Byte =
+        DAG.getNode(ISD::SHL, DL, TS1AM.getValueType(), {TS1AM, SUB});
+    SDValue ShiftRightFor1Byte =
+        DAG.getNode(ISD::SRA, DL, ShiftLeftFor1Byte.getValueType(),
+                    {ShiftLeftFor1Byte, Const24});
+
+    SDValue Chain = TS1AM.getValue(1);
+    return DAG.getMergeValues({ShiftRightFor1Byte, Chain}, DL);
+  }
+  // Otherwise, let llvm legalize it.
+  return Op;
+}
+
 SDValue VETargetLowering::lowerGlobalAddress(SDValue Op,
                                              SelectionDAG &DAG) const {
   return makeAddress(Op, DAG);
@@ -1389,7 +1438,7 @@ VETargetLowering::lowerToTLSGeneralDynamicModel(SDValue Op,
   return Chain;
 }
 
-SDValue VETargetLowering::LowerToTLSLocalExecModel(SDValue Op,
+SDValue VETargetLowering::lowerToTLSLocalExecModel(SDValue Op,
                                                    SelectionDAG &DAG) const {
   SDLoc dl(Op);
   EVT PtrVT = getPointerTy(DAG.getDataLayout());
@@ -1423,16 +1472,16 @@ SDValue VETargetLowering::lowerGlobalTLSAddress(SDValue Op,
   TLSModel::Model model = getTargetMachine().getTLSModel(GV);
 
   if (model == TLSModel::GeneralDynamic || model == TLSModel::LocalDynamic) {
-    return LowerToTLSGeneralDynamicModel(Op, DAG);
+    return lowerToTLSGeneralDynamicModel(Op, DAG);
   } else if (model == TLSModel::InitialExec || model == TLSModel::LocalExec) {
-    return LowerToTLSLocalExecModel(Op, DAG);
+    return lowerToTLSLocalExecModel(Op, DAG);
   }
   llvm_unreachable("bogus TLS model");
 #endif
 }
 
 SDValue
-VETargetLowering::LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const {
+VETargetLowering::lowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
   return DAG.getNode(VEISD::EH_SJLJ_SETJMP, dl,
                      DAG.getVTList(MVT::i32, MVT::Other), Op.getOperand(0),
@@ -1440,13 +1489,13 @@ VETargetLowering::LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const {
 }
 
 SDValue
-VETargetLowering::LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const {
+VETargetLowering::lowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
   return DAG.getNode(VEISD::EH_SJLJ_LONGJMP, dl, MVT::Other, Op.getOperand(0),
                      Op.getOperand(1));
 }
 
-SDValue VETargetLowering::LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op,
+SDValue VETargetLowering::lowerEH_SJLJ_SETUP_DISPATCH(SDValue Op,
                                                       SelectionDAG &DAG) const {
   SDLoc dl(Op);
   return DAG.getNode(VEISD::EH_SJLJ_SETUP_DISPATCH, dl, MVT::Other,
@@ -1831,7 +1880,7 @@ SDValue VETargetLowering::lowerDYNAMIC_STACKALLOC(SDValue Op,
   return DAG.getMergeValues(Ops, DL);
 }
 
-static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
+static SDValue lowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
                               const VETargetLowering &TLI,
                               const VESubtarget *Subtarget) {
   SDLoc dl(Op);
@@ -1853,7 +1902,7 @@ static SDValue LowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
   return FrameAddr;
 }
 
-static SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
+static SDValue lowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
                                const VETargetLowering &TLI,
                                const VESubtarget *Subtarget) {
   MachineFunction &MF = DAG.getMachineFunction();
@@ -1869,7 +1918,7 @@ static SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
   auto PtrVT = TLI.getPointerTy(MF.getDataLayout());
 
   if (Depth > 0) {
-    SDValue FrameAddr = LowerFRAMEADDR(Op, DAG, TLI, Subtarget);
+    SDValue FrameAddr = lowerFRAMEADDR(Op, DAG, TLI, Subtarget);
     SDValue Offset = DAG.getConstant(8, dl, MVT::i64);
     return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(),
                        DAG.getNode(ISD::ADD, dl, PtrVT, FrameAddr, Offset),
@@ -1885,7 +1934,7 @@ static SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
   return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(), RetAddrFI,
                      MachinePointerInfo());
 #else
-  SDValue FrameAddr = LowerFRAMEADDR(Op, DAG, TLI, Subtarget);
+  SDValue FrameAddr = lowerFRAMEADDR(Op, DAG, TLI, Subtarget);
   SDValue Offset = DAG.getConstant(8, dl, MVT::i64);
   return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(),
                      DAG.getNode(ISD::ADD, dl, PtrVT, FrameAddr, Offset),
@@ -1893,56 +1942,7 @@ static SDValue LowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
 #endif
 }
 
-SDValue VETargetLowering::LowerATOMIC_SWAP(SDValue Op,
-                                           SelectionDAG &DAG) const {
-  AtomicSDNode *N = cast<AtomicSDNode>(Op);
-
-  // Custom Lowering 1 byte ATOMIC_SWAP.
-  if (N->getMemoryVT() == MVT::i8) {
-    SDLoc DL(Op);
-
-    SDValue Src = N->getOperand(1);
-    SDValue Value = N->getOperand(2);
-
-    SDValue Const3 = DAG.getConstant(3, DL, MVT::i64);
-    SDValue Const24 = DAG.getConstant(24, DL, MVT::i64);
-
-    // Generate "ts1am" as 1 byte ATOMIC_SWAP.
-    SDValue AlignedAddress =
-        DAG.getNode(ISD::AND, DL, Src.getValueType(),
-                    {Src, DAG.getConstant(-4, DL, MVT::i64)});
-    SDValue Remainder =
-        DAG.getNode(ISD::AND, DL, Src.getValueType(), {Src, Const3});
-    SDValue ShiftedFlag = DAG.getNode(
-        ISD::SHL, DL, MVT::i32, {DAG.getConstant(1, DL, MVT::i32), Remainder});
-    SDValue ShiftBits = DAG.getNode(ISD::SHL, DL, Remainder.getValueType(),
-                                    {Remainder, Const3});
-    SDValue NewValue =
-        DAG.getNode(ISD::SHL, DL, Value.getValueType(), {Value, ShiftBits});
-    SDValue TS1AM =
-        DAG.getAtomic(VEISD::TS1AM, DL, N->getMemoryVT(),
-                      DAG.getVTList(Op.getNode()->getValueType(0),
-                                    Op.getNode()->getValueType(1)),
-                      {N->getChain(), AlignedAddress, ShiftedFlag, NewValue},
-                      N->getMemOperand());
-
-    // Extract 1 byte result.
-    SDValue SUB =
-        DAG.getNode(ISD::SUB, DL, Const24.getValueType(), {Const24, ShiftBits});
-    SDValue ShiftLeftFor1Byte =
-        DAG.getNode(ISD::SHL, DL, TS1AM.getValueType(), {TS1AM, SUB});
-    SDValue ShiftRightFor1Byte =
-        DAG.getNode(ISD::SRA, DL, ShiftLeftFor1Byte.getValueType(),
-                    {ShiftLeftFor1Byte, Const24});
-
-    SDValue Chain = TS1AM.getValue(1);
-    return DAG.getMergeValues({ShiftRightFor1Byte, Chain}, DL);
-  }
-  // Otherwise, let llvm legalize it.
-  return Op;
-}
-
-SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
+SDValue VETargetLowering::lowerINTRINSIC_WO_CHAIN(SDValue Op,
                                                   SelectionDAG &DAG) const {
   SDLoc dl(Op);
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
@@ -1982,7 +1982,7 @@ SDValue VETargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
   }
 }
 
-SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
+SDValue VETargetLowering::lowerINTRINSIC_W_CHAIN(SDValue Op,
                                                  SelectionDAG &DAG) const {
   SDLoc dl(Op);
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
@@ -1991,7 +1991,7 @@ SDValue VETargetLowering::LowerINTRINSIC_W_CHAIN(SDValue Op,
   }
 }
 
-SDValue VETargetLowering::LowerINTRINSIC_VOID(SDValue Op,
+SDValue VETargetLowering::lowerINTRINSIC_VOID(SDValue Op,
                                               SelectionDAG &DAG) const {
   SDLoc dl(Op);
   unsigned IntNo = cast<ConstantSDNode>(Op.getOperand(1))->getZExtValue();
@@ -2079,7 +2079,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::ATOMIC_FENCE:
     return lowerATOMIC_FENCE(Op, DAG);
   case ISD::ATOMIC_SWAP:
-    return LowerATOMIC_SWAP(Op, DAG);
+    return lowerATOMIC_SWAP(Op, DAG);
   case ISD::BlockAddress:
     return lowerBlockAddress(Op, DAG);
   case ISD::BUILD_VECTOR:
@@ -2089,15 +2089,15 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::DYNAMIC_STACKALLOC:
     return lowerDYNAMIC_STACKALLOC(Op, DAG);
   case ISD::EH_SJLJ_SETJMP:
-    return LowerEH_SJLJ_SETJMP(Op, DAG);
+    return lowerEH_SJLJ_SETJMP(Op, DAG);
   case ISD::EH_SJLJ_LONGJMP:
-    return LowerEH_SJLJ_LONGJMP(Op, DAG);
+    return lowerEH_SJLJ_LONGJMP(Op, DAG);
   case ISD::EH_SJLJ_SETUP_DISPATCH:
-    return LowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
+    return lowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
   case ISD::EXTRACT_VECTOR_ELT:
     return lowerEXTRACT_VECTOR_ELT(Op, DAG);
   case ISD::FRAMEADDR:
-    return LowerFRAMEADDR(Op, DAG, *this, Subtarget);
+    return lowerFRAMEADDR(Op, DAG, *this, Subtarget);
   case ISD::GlobalAddress:
     return lowerGlobalAddress(Op, DAG);
   case ISD::GlobalTLSAddress:
@@ -2105,11 +2105,11 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::INSERT_VECTOR_ELT:
     return lowerINSERT_VECTOR_ELT(Op, DAG);
   case ISD::INTRINSIC_VOID:
-    return LowerINTRINSIC_VOID(Op, DAG);
+    return lowerINTRINSIC_VOID(Op, DAG);
   case ISD::INTRINSIC_W_CHAIN:
-    return LowerINTRINSIC_W_CHAIN(Op, DAG);
+    return lowerINTRINSIC_W_CHAIN(Op, DAG);
   case ISD::INTRINSIC_WO_CHAIN:
-    return LowerINTRINSIC_WO_CHAIN(Op, DAG);
+    return lowerINTRINSIC_WO_CHAIN(Op, DAG);
   case ISD::JumpTable:
     return lowerJumpTable(Op, DAG);
   case ISD::LOAD:
@@ -2121,7 +2121,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   case ISD::MSCATTER:
     return lowerMSCATTER(Op, DAG);
   case ISD::RETURNADDR:
-    return LowerRETURNADDR(Op, DAG, *this, Subtarget);
+    return lowerRETURNADDR(Op, DAG, *this, Subtarget);
   case ISD::STORE:
     return lowerSTORE(Op, DAG);
   case ISD::VASTART:

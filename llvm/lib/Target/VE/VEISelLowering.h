@@ -140,14 +140,21 @@ public:
   // EK_LabelDifference32.
 
   SDValue lowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerATOMIC_SWAP(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerJumpTable(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerLOAD(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerMGATHER(SDValue Op, SelectionDAG &DAG) const;
@@ -155,7 +162,7 @@ public:
   SDValue lowerMSCATTER(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVAARG(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
@@ -264,20 +271,7 @@ public:
 
   SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
 
-  SDValue LowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
-
   unsigned getSRetArgSize(SelectionDAG &DAG, SDValue Callee) const;
-
-  SDValue LowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
-
-  SDValue LowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerATOMIC_SWAP(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
 
   // Should we expand the build vector with shuffles?
   bool shouldExpandBuildVectorWithShuffles(EVT VT,
