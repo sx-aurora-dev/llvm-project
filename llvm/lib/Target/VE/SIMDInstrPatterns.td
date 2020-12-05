@@ -354,25 +354,26 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // fpround and fpextend for vector types.
 
-/*
-multiclass simd_f2f<int length, ValueType vf32, ValueType vf64> {
+multiclass simd_f2f<int length> {
+  defvar vf32 = !cast<ValueType>("v" # !cast<string>(length) # "f32");
+  defvar vf64 = !cast<ValueType>("v" # !cast<string>(length) # "f64");
+
   def : Pat<(vf32 (fpround vf64:$val)),
-            (vf32 (VCVSv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+            (vf32 (VCVTSDvl $val, (VLEN length)))>;
   def : Pat<(vf64 (fpextend vf32:$val)),
-            (vf64 (VCVDv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+            (vf64 (VCVTDSvl $val, (VLEN length)))>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
-  defm : simd_f2f<256, v256f32, v256f64>;
-  defm : simd_f2f<128, v128f32, v128f64>;
-  defm : simd_f2f<64, v64f32, v64f64>;
-  defm : simd_f2f<32, v32f32, v32f64>;
-  defm : simd_f2f<16, v16f32, v16f64>;
-  defm : simd_f2f<8, v8f32, v8f64>;
-  defm : simd_f2f<4, v4f32, v4f64>;
-  defm : simd_f2f<2, v2f32, v2f64>;
+  defm : simd_f2f<256>;
+  defm : simd_f2f<128>;
+  defm : simd_f2f<64>;
+  defm : simd_f2f<32>;
+  defm : simd_f2f<16>;
+  defm : simd_f2f<8>;
+  defm : simd_f2f<4>;
+  defm : simd_f2f<2>;
 }
-*/
 
 // sext and zext
 
