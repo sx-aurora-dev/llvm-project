@@ -175,37 +175,32 @@ let Predicates = [IsVectorizeSubTarget] in {
 }
 
 multiclass simd_load<int length> {
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i32")
-              (load I64:$addr)),
-            (!cast<ValueType>("v" # !cast<string>(length) # "i32")
-              (VLDLSXirl 4, $addr, (VLEN length)))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f32")
-              (load I64:$addr)),
-            (!cast<ValueType>("v" # !cast<string>(length) # "f32")
-              (VLDUirl 4, $addr, (VLEN length)))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "f64")
-              (load I64:$addr)),
-            (!cast<ValueType>("v" # !cast<string>(length) # "f64")
-              (VLDirl 8, $addr, (VLEN length)))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (load I64:$addr)),
-            (!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (VLDirl 8, $addr, (VLEN length)))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (!cast<PatFrag>("extloadv" # !cast<string>(length) # "i32")
-                 I64:$addr)),
-            (!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (VLDLZXirl 4, $addr, (VLEN length)))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (!cast<PatFrag>("sextloadv" # !cast<string>(length) # "i32")
-                 I64:$addr)),
-            (!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (VLDLSXirl 4, $addr, (VLEN length)))>;
-  def : Pat<(!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (!cast<PatFrag>("zextloadv" # !cast<string>(length) # "i32")
-                 I64:$addr)),
-            (!cast<ValueType>("v" # !cast<string>(length) # "i64")
-              (VLDLZXirl 4, $addr, (VLEN length)))>;
+  defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
+  defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
+  defvar vf32 = !cast<ValueType>("v" # !cast<string>(length) # "f32");
+  defvar vf64 = !cast<ValueType>("v" # !cast<string>(length) # "f64");
+
+  // Load patterns.
+  def : Pat<(vi32 (load I64:$addr)),
+            (vi32 (VLDLSXirl 4, $addr, (VLEN length)))>;
+  def : Pat<(vf32 (load I64:$addr)),
+            (vf32 (VLDUirl 4, $addr, (VLEN length)))>;
+  def : Pat<(vf64 (load I64:$addr)),
+            (vf64 (VLDirl 8, $addr, (VLEN length)))>;
+  def : Pat<(vi64 (load I64:$addr)),
+            (vi64 (VLDirl 8, $addr, (VLEN length)))>;
+
+  defvar extload = !cast<PatFrag>("extloadv" # !cast<string>(length) # "i32");
+  defvar sextload = !cast<PatFrag>("sextloadv" # !cast<string>(length) # "i32");
+  defvar zextload = !cast<PatFrag>("zextloadv" # !cast<string>(length) # "i32");
+
+  // *ExtLoad patterns.
+  def : Pat<(vi64 (extload I64:$addr)),
+            (vi64 (VLDLZXirl 4, $addr, (VLEN length)))>;
+  def : Pat<(vi64 (sextload I64:$addr)),
+            (vi64 (VLDLSXirl 4, $addr, (VLEN length)))>;
+  def : Pat<(vi64 (zextload I64:$addr)),
+            (vi64 (VLDLZXirl 4, $addr, (VLEN length)))>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
