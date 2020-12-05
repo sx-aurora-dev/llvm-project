@@ -317,36 +317,39 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // floating-point -> sint
 
-/*
 let Predicates = [IsVectorizeSubTarget] in {
   def : Pat<(v512i32 (fp_to_sint v512f32:$val)),
-            (VFIXpv $val, (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
+            (PVCVTWSvl RD_RZ, $val, (VLEN 256))>;
 }
 
-multiclass simd_f2i<int length, ValueType vi32, ValueType vi64, ValueType vf32,
-                    ValueType vf64> {
+multiclass simd_f2i<int length> {
+  defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
+  defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
+  defvar vf32 = !cast<ValueType>("v" # !cast<string>(length) # "f32");
+  defvar vf64 = !cast<ValueType>("v" # !cast<string>(length) # "f64");
+
   def : Pat<(vi64 (fp_to_sint vf64:$val)),
-            (vi64 (VFIXXv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+            (vi64 (VCVTLDvl RD_RZ, $val, (VLEN length)))>;
   def : Pat<(vi64 (fp_to_sint vf32:$val)),
-            (vi64 (VFIXXv (VCVDv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)),
-                          (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+            (vi64 (VCVTLDvl RD_RZ,
+                            (VCVTDSvl $val, (VLEN length)),
+                            (VLEN length)))>;
   def : Pat<(vi32 (fp_to_sint vf64:$val)),
-            (vi32 (VFIXdsxv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+            (vi32 (VCVTWDZXvl RD_RZ, $val, (VLEN length)))>;
   def : Pat<(vi32 (fp_to_sint vf32:$val)),
-            (vi32 (VFIXssxv $val, (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+            (vi32 (VCVTWSZXvl RD_RZ, $val, (VLEN length)))>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
-  defm : simd_f2i<256, v256i32, v256i64, v256f32, v256f64>;
-  defm : simd_f2i<128, v128i32, v128i64, v128f32, v128f64>;
-  defm : simd_f2i<64, v64i32, v64i64, v64f32, v64f64>;
-  defm : simd_f2i<32, v32i32, v32i64, v32f32, v32f64>;
-  defm : simd_f2i<16, v16i32, v16i64, v16f32, v16f64>;
-  defm : simd_f2i<8, v8i32, v8i64, v8f32, v8f64>;
-  defm : simd_f2i<4, v4i32, v4i64, v4f32, v4f64>;
-  defm : simd_f2i<2, v2i32, v2i64, v2f32, v2f64>;
+  defm : simd_f2i<256>;
+  defm : simd_f2i<128>;
+  defm : simd_f2i<64>;
+  defm : simd_f2i<32>;
+  defm : simd_f2i<16>;
+  defm : simd_f2i<8>;
+  defm : simd_f2i<4>;
+  defm : simd_f2i<2>;
 }
-*/
 
 // fpround and fpextend for vector types.
 
