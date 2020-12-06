@@ -91,6 +91,11 @@ static const MVT WholeVectorVTs[] =
 
 static const MVT AllMaskVTs[] = {MVT::v256i1, MVT::v512i1};
 
+static const MVT WholeMaskVTs[] =
+    { MVT::v256i1, MVT::v128i1, MVT::v64i1,  MVT::v32i1,
+      MVT::v16i1,  MVT::v8i1,   MVT::v4i1,   MVT::v2i1,
+    };
+
 void VETargetLowering::initRegisterClasses() {
   // Set up the register classes.
   addRegisterClass(MVT::i32, &VE::I32RegClass);
@@ -108,7 +113,8 @@ void VETargetLowering::initRegisterClasses() {
     for (MVT VecVT : WholeVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
     addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+    for (MVT MaskVT : WholeMaskVTs)
+      addRegisterClass(MaskVT, &VE::VMRegClass);
   } else {
     assert(Subtarget->intrinsic());
     for (MVT VecVT : AllVectorVTs)

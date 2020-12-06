@@ -377,79 +377,58 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // sext and zext
 
-/*
 let Predicates = [IsVectorizeSubTarget] in {
   def : Pat<(v512i32 (anyext v512i1:$vm)),
-            (v512i32 (VMRGpim 0,
-                (v512i32 (VBRDi -1, (COPY_TO_REGCLASS (LEAzzi 256), VLS))),
-                $vm,
-                (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
+            (PVBRDiml_v -1, $vm, (VLEN 256), (PVBRDil 0, (VLEN 256)))>;
   def : Pat<(v512i32 (sext v512i1:$vm)),
-            (v512i32 (VMRGpim 0,
-                (v512i32 (VBRDi -1, (COPY_TO_REGCLASS (LEAzzi 256), VLS))),
-                $vm,
-                (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
+            (PVBRDiml_v -1, $vm, (VLEN 256), (PVBRDil 0, (VLEN 256)))>;
   def : Pat<(v512i32 (zext v512i1:$vm)),
-            (v512i32 (VMRGpim 0,
-                (v512i32 (VBRDr (i64 0x1000000001),
-                                (COPY_TO_REGCLASS (LEAzzi 256), VLS))),
-                $vm,
-                (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
+            (PVBRDrml_v (i64 0x100000001), $vm, (VLEN 256),
+                (PVBRDil 0, (VLEN 256)))>;
+/* FIXME: This pattern may be better result.
+  def : Pat<(v512i32 (anyext v512i1:$vm)),
+            (VMRGWivml 0, (PVBRDil -1, (VLEN 256)), $vm, (VLEN 256))>;
+*/
 }
-*/
 
-multiclass simd_ext<int length, ValueType vi32, ValueType vi64, ValueType vi1> {
-/*
+multiclass simd_ext<int length> {
+  defvar vi1 = !cast<ValueType>("v" # !cast<string>(length) # "i1");
+  defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
+  defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
+
   def : Pat<(vi64 (anyext vi32:$vx)),
-            (VADSwsxi 0, $vx, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
-*/
+            (VADDSWSXivl 0, $vx, (VLEN length))>;
   def : Pat<(vi64 (sext vi32:$vx)),
             (VADDSWSXivl 0, $vx, (VLEN length))>;
   def : Pat<(vi64 (zext vi32:$vx)),
             (VADDSWZXivl 0, $vx, (VLEN length))>;
-/*
   def : Pat<(vi64 (anyext vi1:$vm)),
-            (vi64 (VMRGim 0,
-                (vi64 (VBRDi -1, (COPY_TO_REGCLASS (LEAzzi length), VLS))),
-                $vm,
-                (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
-  def : Pat<(vi32 (anyext vi1:$vm)),
-            (vi32 (VMRGim 0,
-                (vi32 (VBRDi -1, (COPY_TO_REGCLASS (LEAzzi length), VLS))),
-                $vm,
-                (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+            (VBRDiml_v -1, $vm, (VLEN length), (VBRDil 0, (VLEN length)))>;
   def : Pat<(vi64 (sext vi1:$vm)),
-            (vi64 (VMRGim 0,
-                (vi64 (VBRDi -1, (COPY_TO_REGCLASS (LEAzzi length), VLS))),
-                $vm,
-                (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
-  def : Pat<(vi32 (sext vi1:$vm)),
-            (vi32 (VMRGim 0,
-                (vi32 (VBRDi -1, (COPY_TO_REGCLASS (LEAzzi length), VLS))),
-                $vm,
-                (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+            (VBRDiml_v -1, $vm, (VLEN length), (VBRDil 0, (VLEN length)))>;
   def : Pat<(vi64 (zext vi1:$vm)),
-            (vi64 (VMRGim 0,
-                (vi64 (VBRDi 1, (COPY_TO_REGCLASS (LEAzzi length), VLS))),
-                $vm,
-                (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+            (VBRDiml_v 1, $vm, (VLEN length), (VBRDil 0, (VLEN length)))>;
+  def : Pat<(vi32 (anyext vi1:$vm)),
+            (VBRDLiml_v -1, $vm, (VLEN length), (VBRDLil 0, (VLEN length)))>;
+  def : Pat<(vi32 (sext vi1:$vm)),
+            (VBRDLiml_v -1, $vm, (VLEN length), (VBRDLil 0, (VLEN length)))>;
   def : Pat<(vi32 (zext vi1:$vm)),
-            (vi32 (VMRGim 0,
-                (vi32 (VBRDi 1, (COPY_TO_REGCLASS (LEAzzi length), VLS))),
-                $vm,
-                (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
+            (VBRDLiml_v 1, $vm, (VLEN length), (VBRDLil 0, (VLEN length)))>;
+/* FIXME: This pattern may be better result.
+  def : Pat<(vi32 (anyext vi1:$vm)),
+            (VMRGim 0, (VBRDLil 1, (VLEN length)), $vm, (VLEN length))>;
 */
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
-  defm : simd_ext<256, v256i32, v256i64, v256i1>;
-  defm : simd_ext<128, v128i32, v128i64, v128i1>;
-  defm : simd_ext<64, v64i32, v64i64, v64i1>;
-  defm : simd_ext<32, v32i32, v32i64, v32i1>;
-  defm : simd_ext<16, v16i32, v16i64, v16i1>;
-  defm : simd_ext<8, v8i32, v8i64, v8i1>;
-  defm : simd_ext<4, v4i32, v4i64, v4i1>;
-  defm : simd_ext<2, v2i32, v2i64, v2i1>;
+  defm : simd_ext<256>;
+  defm : simd_ext<128>;
+  defm : simd_ext<64>;
+  defm : simd_ext<32>;
+  defm : simd_ext<16>;
+  defm : simd_ext<8>;
+  defm : simd_ext<4>;
+  defm : simd_ext<2>;
 }
 
 // Bitconvert for vector registers
