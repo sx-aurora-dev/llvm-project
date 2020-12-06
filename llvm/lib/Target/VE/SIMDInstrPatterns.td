@@ -974,30 +974,29 @@ let Predicates = [IsVectorizeSubTarget] in {
 */
 
 // Sequence
-/*
 let Predicates = [IsVectorizeSubTarget] in {
-  def : Pat<(v512i32 (vec_seq (i32 1))), (VSEQpv 256)>;
+  def : Pat<(v512i32 (vec_seq (i32 1))), (PVSEQl (VLEN 256))>;
 }
-*/
 
-multiclass simd_vseq<int length, ValueType vi32, ValueType vi64> {
+multiclass simd_vseq<int length> {
+  defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
+  defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
+
   def : Pat<(vi32 (vec_seq (i32 1))),
             (PVSEQLOl (VLEN length))>;
-/*
   def : Pat<(vi64 (vec_seq (i64 1))),
-            (VSEQv length)>;
-*/
+            (VSEQl (VLEN length))>;
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
-  defm : simd_vseq<256, v256i32, v256i64>;
-  defm : simd_vseq<128, v128i32, v128i64>;
-  defm : simd_vseq<64, v64i32, v64i64>;
-  defm : simd_vseq<32, v32i32, v32i64>;
-  defm : simd_vseq<16, v16i32, v16i64>;
-  defm : simd_vseq<8, v8i32, v8i64>;
-  defm : simd_vseq<4, v4i32, v4i64>;
-  defm : simd_vseq<2, v2i32, v2i64>;
+  defm : simd_vseq<256>;
+  defm : simd_vseq<128>;
+  defm : simd_vseq<64>;
+  defm : simd_vseq<32>;
+  defm : simd_vseq<16>;
+  defm : simd_vseq<8>;
+  defm : simd_vseq<4>;
+  defm : simd_vseq<2>;
 }
 
 // Double-Precision Arithmetic
