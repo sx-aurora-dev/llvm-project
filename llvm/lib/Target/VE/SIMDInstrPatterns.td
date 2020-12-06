@@ -505,8 +505,12 @@ let Predicates = [IsVectorizeSubTarget] in {
            (LSVir 0, (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32))>;
 }
 
-multiclass simd_s2v<int length, ValueType vi32, ValueType vi64, ValueType vf32,
-                    ValueType vf64> {
+multiclass simd_s2v<int length> {
+  defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
+  defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
+  defvar vf32 = !cast<ValueType>("v" # !cast<string>(length) # "f32");
+  defvar vf64 = !cast<ValueType>("v" # !cast<string>(length) # "f64");
+
   def: Pat<(vi32 (scalar_to_vector i32:$val)),
            (LSVir 0, (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32))>;
   def: Pat<(vi64 (scalar_to_vector i64:$val)),
@@ -518,14 +522,14 @@ multiclass simd_s2v<int length, ValueType vi32, ValueType vi64, ValueType vf32,
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
-  defm : simd_s2v<256, v256i32, v256i64, v256f32, v256f64>;
-  defm : simd_s2v<128, v128i32, v128i64, v128f32, v128f64>;
-  defm : simd_s2v<64, v64i32, v64i64, v64f32, v64f64>;
-  defm : simd_s2v<32, v32i32, v32i64, v32f32, v32f64>;
-  defm : simd_s2v<16, v16i32, v16i64, v16f32, v16f64>;
-  defm : simd_s2v<8, v8i32, v8i64, v8f32, v8f64>;
-  defm : simd_s2v<4, v4i32, v4i64, v4f32, v4f64>;
-  defm : simd_s2v<2, v2i32, v2i64, v2f32, v2f64>;
+  defm : simd_s2v<256>;
+  defm : simd_s2v<128>;
+  defm : simd_s2v<64>;
+  defm : simd_s2v<32>;
+  defm : simd_s2v<16>;
+  defm : simd_s2v<8>;
+  defm : simd_s2v<4>;
+  defm : simd_s2v<2>;
 }
 
 // Series of INSERT_VECOR_ELT for all VE vector types,
