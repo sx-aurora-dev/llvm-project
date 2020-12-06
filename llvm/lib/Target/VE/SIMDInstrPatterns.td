@@ -667,8 +667,12 @@ let Predicates = [IsVectorizeSubTarget] in {
               (VLEN 256))>;
 }
 
-multiclass simd_vbrd<int length, ValueType vi32, ValueType vi64, ValueType vf32,
-                     ValueType vf64> {
+multiclass simd_vbrd<int length> {
+  defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
+  defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
+  defvar vf32 = !cast<ValueType>("v" # !cast<string>(length) # "f32");
+  defvar vf64 = !cast<ValueType>("v" # !cast<string>(length) # "f64");
+
   def : Pat<(vi32 (vec_broadcast i32:$val, (i32 length))),
             (VBRDLrl $val, (VLEN length))>;
   def : Pat<(vf32 (vec_broadcast f32:$val, (i32 length))),
@@ -680,14 +684,14 @@ multiclass simd_vbrd<int length, ValueType vi32, ValueType vi64, ValueType vf32,
 }
 
 let Predicates = [IsVectorizeSubTarget] in {
-  defm : simd_vbrd<256, v256i32, v256i64, v256f32, v256f64>;
-  defm : simd_vbrd<128, v128i32, v128i64, v128f32, v128f64>;
-  defm : simd_vbrd<64, v64i32, v64i64, v64f32, v64f64>;
-  defm : simd_vbrd<32, v32i32, v32i64, v32f32, v32f64>;
-  defm : simd_vbrd<16, v16i32, v16i64, v16f32, v16f64>;
-  defm : simd_vbrd<8, v8i32, v8i64, v8f32, v8f64>;
-  defm : simd_vbrd<4, v4i32, v4i64, v4f32, v4f64>;
-  defm : simd_vbrd<2, v2i32, v2i64, v2f32, v2f64>;
+  defm : simd_vbrd<256>;
+  defm : simd_vbrd<128>;
+  defm : simd_vbrd<64>;
+  defm : simd_vbrd<32>;
+  defm : simd_vbrd<16>;
+  defm : simd_vbrd<8>;
+  defm : simd_vbrd<4>;
+  defm : simd_vbrd<2>;
 }
 
 // Condition Code
