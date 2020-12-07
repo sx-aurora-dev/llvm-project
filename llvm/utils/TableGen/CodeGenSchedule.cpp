@@ -283,7 +283,7 @@ static APInt constructOperandMask(ArrayRef<int64_t> Indices) {
 
 static void
 processSTIPredicate(STIPredicateFunction &Fn,
-                    const DenseMap<Record *, unsigned> &ProcModelMap) {
+                    const ProcModelMapTy &ProcModelMap) {
   DenseMap<const Record *, unsigned> Opcode2Index;
   using OpcodeMapPair = std::pair<const Record *, OpcodeInfo>;
   std::vector<OpcodeMapPair> OpcodeMappings;

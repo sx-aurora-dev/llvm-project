@@ -315,11 +315,9 @@ def grp_main : OptionGroup<"main">, HelpText<"MAIN EXECUTABLE">;
 
 def pie : Flag<["-"], "pie">,
      HelpText<"Build a position independent executable (default for macOS 10.7 and later)">,
-     Flags<[HelpHidden]>,
      Group<grp_main>;
 def no_pie : Flag<["-"], "no_pie">,
      HelpText<"Do not build a position independent executable (default for macOS 10.6 and earlier)">,
-     Flags<[HelpHidden]>,
      Group<grp_main>;
 def pagezero_size : Separate<["-"], "pagezero_size">,
      MetaVarName<"<size>">,
@@ -428,8 +426,7 @@ def commons : Separate<["-"], "commons">,
 def grp_introspect : OptionGroup<"introspect">, HelpText<"INTROSPECTING THE LINKER">;
 
 def why_load : Flag<["-"], "why_load">,
-     HelpText<"Log the symbol that compels loading of each object file from a static library">,
-     Flags<[HelpHidden]>,
+     HelpText<"Log why each object file is loaded from a static library">,
      Group<grp_introspect>;
 def whyload : Flag<["-"], "whyload">,
      Alias<why_load>,
@@ -447,7 +444,6 @@ def print_statistics : Flag<["-"], "print_statistics">,
      Group<grp_introspect>;
 def t : Flag<["-"], "t">,
      HelpText<"Log every file the linker loads: object, archive, and dylib">,
-     Flags<[HelpHidden]>,
      Group<grp_introspect>;
 def whatsloaded : Flag<["-"], "whatsloaded">,
      HelpText<"Logs only the object files the linker loads">,
