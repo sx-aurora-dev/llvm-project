@@ -1399,11 +1399,6 @@ SDValue VETargetLowering::lowerConstantPool(SDValue Op,
   return makeAddress(Op, DAG);
 }
 
-SDValue VETargetLowering::LowerConstantPool(SDValue Op,
-                                            SelectionDAG &DAG) const {
-  return makeAddress(Op, DAG);
-}
-
 SDValue
 VETargetLowering::lowerToTLSGeneralDynamicModel(SDValue Op,
                                                 SelectionDAG &DAG) const {

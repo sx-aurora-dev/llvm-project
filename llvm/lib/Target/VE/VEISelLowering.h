@@ -269,8 +269,6 @@ public:
   bool useLoadStackGuardNode() const override;
   void insertSSPDeclarations(Module &M) const override;
 
-  SDValue LowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
-
   unsigned getSRetArgSize(SelectionDAG &DAG, SDValue Callee) const;
 
   // Should we expand the build vector with shuffles?
