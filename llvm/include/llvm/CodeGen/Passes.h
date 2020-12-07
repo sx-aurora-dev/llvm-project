@@ -391,10 +391,6 @@ namespace llvm {
   /// createJumpInstrTables - This pass creates jump-instruction tables.
   ModulePass *createJumpInstrTablesPass();
 
-  /// createForwardControlFlowIntegrityPass - This pass adds control-flow
-  /// integrity.
-  ModulePass *createForwardControlFlowIntegrityPass();
-
   /// InterleavedAccess Pass - This pass identifies and matches interleaved
   /// memory accesses to target specific intrinsics.
   ///
@@ -474,6 +470,9 @@ namespace llvm {
 
   /// Create Hardware Loop pass. \see HardwareLoops.cpp
   FunctionPass *createHardwareLoopsPass();
+
+  /// This pass inserts pseudo probe annotation for callsite profiling.
+  FunctionPass *createPseudoProbeInserter();
 
   /// Create IR Type Promotion pass. \see TypePromotion.cpp
   FunctionPass *createTypePromotionPass();
