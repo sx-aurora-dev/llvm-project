@@ -19,7 +19,7 @@ FP_ARITH_TARGETS = vfadd.ll vfsub.ll vfmul.ll vfdiv.ll vfsqrt.ll vfcmp.ll \
 	vcvt.ll
 MERGER_TARGETS = vmrg.ll vshf.ll vcp.ll vex.ll
 MASK_TARGETS = vfmk.ll
-REDUCTION_TARGETS = vsum.ll vfsum.ll
+REDUCTION_TARGETS = vsum.ll vfsum.ll vrmax.ll vrmin.ll
 
 TARGETS = $(LDSTMV_TARGETS) $(ARITH_TARGETS) $(LOGICAL_TARGETS) \
 	$(SHIFT_TARGETS) $(FP_ARITH_TARGETS) $(MERGER_TARGETS) $(MASK_TARGETS) \
