@@ -16,7 +16,7 @@ LOGICAL_TARGETS = vand.ll vor.ll vxor.ll veqv.ll vseq.ll
 SHIFT_TARGETS = vsll.ll vsrl.ll vsla.ll vsra.ll vsfa.ll
 FP_ARITH_TARGETS = vfadd.ll vfsub.ll vfmul.ll vfdiv.ll vfsqrt.ll vfcmp.ll \
 	vfmax.ll vfmin.ll vfmad.ll vfmsb.ll vfnmad.ll vfnmsb.ll vrcp.ll vrsqrt.ll \
-	vcvt.ll
+	vcvt.ll vfrmax.ll vfrmin.ll
 MERGER_TARGETS = vmrg.ll vshf.ll vcp.ll vex.ll
 MASK_TARGETS = vfmk.ll
 REDUCTION_TARGETS = vsum.ll vfsum.ll vrmax.ll vrmin.ll
