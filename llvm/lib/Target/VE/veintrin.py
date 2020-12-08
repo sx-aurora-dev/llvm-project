@@ -161,7 +161,7 @@ class ImmOp(Op):
 def ImmI(ty): return ImmOp("I", ty, "I", "simm7", "i") # kind, type, varname
 def ImmN(ty): return ImmOp("I", ty, "N", "uimm6", "i")
 def UImm7(ty): return ImmOp("I", ty, "N", "uimm7", "i")
-def ImmZ(ty): return ImmOp("Z", ty, "Z", "simm7", "z") # FIXME: simm7?
+def ImmZ(ty): return ImmOp("Z", ty, "Z", "zero", "z")
 
 CC_FLOAT = {'af':'CC_AF',
             'gt':'CC_G',  'lt':'CC_L',
