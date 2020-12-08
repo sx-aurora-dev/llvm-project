@@ -129,4 +129,4 @@
 // RUN:    FileCheck -check-prefix=LINK %s
 
 // LINK: clang{{.*}} "-cc1"
-// LINK: nld{{.*}} "{{.*}}/crt1.o" "{{.*}}/crti.o"{{.*}}"crtbegin.o"{{.*}}"-lc++" "-lc++abi" "-lunwind" "-lpthread" "-ldl"
+// LINK: nld{{.*}} "{{.*}}crt1.o" "{{.*}}crti.o"{{.*}}"crtbegin.o"{{.*}}"-lc++" "-lc++abi" "-lunwind" "-lpthread" "-ldl"
