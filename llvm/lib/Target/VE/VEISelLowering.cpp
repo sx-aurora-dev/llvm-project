@@ -89,9 +89,7 @@ static const MVT WholeVectorVTs[] =
       MVT::v2i32,   MVT::v2f32,   MVT::v2i64,   MVT::v2f64,
     };
 
-static const MVT AllMaskVTs[] = {MVT::v256i1, MVT::v512i1};
-
-static const MVT WholeMaskVTs[] =
+static const MVT All256MaskVTs[] =
     { MVT::v256i1, MVT::v128i1, MVT::v64i1,  MVT::v32i1,
       MVT::v16i1,  MVT::v8i1,   MVT::v4i1,   MVT::v2i1,
     };
@@ -107,13 +105,13 @@ void VETargetLowering::initRegisterClasses() {
   if (Subtarget->enableVPU()) {
     for (MVT VecVT : AllVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
-    for (MVT MaskVT : AllMaskVTs)
-      addRegisterClass(MaskVT, &VE::VMRegClass);
+    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
   } else if (Subtarget->vectorize()) {
     for (MVT VecVT : WholeVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
     addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-    for (MVT MaskVT : WholeMaskVTs)
+    for (MVT MaskVT : All256MaskVTs)
       addRegisterClass(MaskVT, &VE::VMRegClass);
   } else {
     assert(Subtarget->intrinsic());
