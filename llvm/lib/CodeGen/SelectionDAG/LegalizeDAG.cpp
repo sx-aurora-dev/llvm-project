@@ -3424,6 +3424,7 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
       Results.push_back(Tmp1);
     break;
   case ISD::UDIV:
+  case ISD::SDIV:
     Tmp1 = TLI.expandSUDIV(Node, DAG);
     if (Tmp1) 
       Results.push_back(Tmp1);
