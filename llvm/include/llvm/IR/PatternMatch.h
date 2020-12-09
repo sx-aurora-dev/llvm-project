@@ -417,6 +417,12 @@ template <typename Predicate> struct apf_pred_ty : public Predicate {
   apf_pred_ty(const APFloat *&R) : Res(R) {}
 
   template <typename ITy> bool match(ITy *V) {
+    EmptyContext Empty;
+    return match_context(V, Empty);
+  }
+
+  template <typename ITy, typename MatchContext>
+  bool match_context(ITy *V, MatchContext &MContext) {
     if (const auto *CI = dyn_cast<ConstantFP>(V))
       if (this->isValue(CI->getValue())) {
         Res = &CI->getValue();
