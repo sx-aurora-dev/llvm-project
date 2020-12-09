@@ -7,8 +7,8 @@
 ///
 /// Note:
 ///   We test VAND*vvl, VAND*vvl_v, VAND*rvl, VAND*rvl_v, VAND*vvml_v,
-///   VAND*rvml_v, PVAND*vvl, PVAND*vvl_v, PVAND*rvl, PVAND*rvl_v, PVAND*vvml_v, and
-///   PVAND*rvml_v instructions.
+///   VAND*rvml_v, PVAND*vvl, PVAND*vvl_v, PVAND*rvl, PVAND*rvl_v, PVAND*vvml_v,
+///   and PVAND*rvml_v instructions.
 
 #define VAND_TEST(INST, TYPE) \
 __attribute__ ((REGCALL)) \
