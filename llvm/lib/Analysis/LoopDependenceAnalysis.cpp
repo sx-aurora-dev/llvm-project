@@ -1484,8 +1484,8 @@ static TrivialAliasRes trivialAliasCheck(LoopInfo &LI, const DataLayout &DL,
 
   SmallVector<const Value *, 2> Objects1;
   SmallVector<const Value *, 2> Objects2;
-  GetUnderlyingObjects(Ptr1, Objects1, DL, &LI);
-  GetUnderlyingObjects(Ptr2, Objects2, DL, &LI);
+  getUnderlyingObjects(Ptr1, Objects1, &LI);
+  getUnderlyingObjects(Ptr2, Objects2, &LI);
 
   for (const Value *IObj : Objects1) {
     const Argument *A1 = dyn_cast<Argument>(IObj);
@@ -1639,6 +1639,11 @@ bool operator<(const ConstVF V1, const ConstVF V2) {
   return V1.getValue() < V2.getValue();
 }
 
+// FIXME: factor this out
+#if 0
+// TODO: This should definitely be moved in the transformation part! Note that
+// because this now transforms the loop, certain already verified preconditions
+// (like the loop being simplified) may not hold anymore.
 struct ExpandedMinMaxSCEVPair {
   TrackingVH<Value> Min;
   TrackingVH<Value> Max;
@@ -1675,9 +1680,6 @@ expandBounds(SmallVectorImpl<RTAliasCheckInfo> &AliasChecks,
   return ExpandedAliasChecks;
 }
 
-// TODO: This should definitely be moved in the transformation part! Note that
-// because this now transforms the loop, certain already verified preconditions
-// (like the loop being simplified) may not hold anymore.
 static void
 emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, const Loop *L,
                        SmallVectorImpl<RTAliasCheckInfo> &AliasChecks) {
@@ -1751,6 +1753,7 @@ emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, con
       BranchInst::Create(ExitBlock, LoopPreheader, RuntimeCheck);
   ReplaceInstWithInst(AliasChecksBlock->getTerminator(), AliasCheckBranch);
 }
+#endif
 
 const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
                                                 LoopInfo &LI,
@@ -1848,11 +1851,11 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
       SmallVector<const SCEV *, 3> Sizes1, Sizes2;
 
       // Special handling for globals.
-      Value *LObj = GetUnderlyingObject(LPtr, DL);
+      Value *LObj = getUnderlyingObject(LPtr);
       Type *LObjTy = LObj->getType();
       if (dyn_cast<GlobalValue>(LObj) && LObjTy->isPointerTy() &&
           LObjTy->getPointerElementType()->isArrayTy()) {
-        Value *SObj = GetUnderlyingObject(SPtr, DL);
+        Value *SObj = getUnderlyingObject(SPtr);
         Type *SObjTy = SObj->getType();
 
         LLVM_DEBUG(dbgs() << "\n";);
@@ -1876,7 +1879,7 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
                                          NestInfo))
           return Bail;
       } else {
-        // Note: Right now we are probably calling GetUnderlyingObjects()
+        // Note: Right now we are probably calling getUnderlyingObjects()
         // a lot of times.
         RTAliasCheckInfo AliasCheckInfo;
         CanAliasRes canAliasRes = canAlias(
@@ -1955,7 +1958,7 @@ struct DFSNestClipboard {
 static bool analyzeNestsDFS(DFSNestClipboard *Clip) {
   const Loop *CurrentLoop = Clip->CurrentLoop;
 
-  if (CurrentLoop->empty()) {
+  if (CurrentLoop->isInnermost()) {
     LoopNestInfo NestInfo = {Clip->NumDimensions, Clip->CurrentLoop,
                              Clip->AnalyzedLoop};
     const LoopDependence Dep =
