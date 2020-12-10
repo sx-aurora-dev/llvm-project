@@ -74,6 +74,10 @@ __vr INST ## _vvssml_imm_3(__vr vy, __vm256 vm) { \
 __attribute__ ((REGCALL)) \
 __vr INST ## _vvssmvl_imm_3(__vr vy, __vm256 vm, __vr pt) { \
   return _vel_ ## INST ## _vvssmvl(vy, 8, 0, vm, pt, 128); \
+} \
+__attribute__ ((REGCALL)) \
+__vr INST ## _vvssl_no_imm_1(__vr vy, TYPE sy) { \
+  return _vel_ ## INST ## _vvssl(vy, sy, 8, 256); \
 }
 
 VGT_TEST(vgt, i64)

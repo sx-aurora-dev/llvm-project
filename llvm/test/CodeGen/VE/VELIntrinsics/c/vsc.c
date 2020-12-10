@@ -41,6 +41,10 @@ void INST ## _vvssml_imm_2(__vr vx, __vr vy, TYPE sz, __vm256 vm) { \
 __attribute__ ((REGCALL)) \
 void INST ## _vvssml_imm_3(__vr vx, __vr vy, __vm256 vm) { \
   return _vel_ ## INST ## _vvssml(vx, vy, 8, 0, vm, 256); \
+} \
+__attribute__ ((REGCALL)) \
+void INST ## _vvssl_no_imm_1(__vr vx, __vr vy, TYPE sy) { \
+  return _vel_ ## INST ## _vvssl(vx, vy, sy, 8, 256); \
 }
 
 VSC_TEST(vsc, i64)

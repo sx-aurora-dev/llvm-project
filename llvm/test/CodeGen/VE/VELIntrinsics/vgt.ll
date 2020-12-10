@@ -236,6 +236,19 @@ define fastcc <256 x double> @vgt_vvssmvl_imm_3(<256 x double> %0, <256 x i1> %1
 }
 
 ; Function Attrs: nounwind readonly
+define fastcc <256 x double> @vgt_vvssl_no_imm_1(<256 x double> %0, i64 %1) {
+; CHECK-LABEL: vgt_vvssl_no_imm_1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s2, 8, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vgt %v0, %v0, %s0, %s2
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vgt.vvssl(<256 x double> %0, i64 %1, i64 8, i32 256)
+  ret <256 x double> %3
+}
+
+; Function Attrs: nounwind readonly
 define fastcc <256 x double> @vgtnc_vvssl(<256 x double> %0, i64 %1, i64 %2) {
 ; CHECK-LABEL: vgtnc_vvssl:
 ; CHECK:       # %bb.0:
@@ -461,6 +474,19 @@ define fastcc <256 x double> @vgtnc_vvssmvl_imm_3(<256 x double> %0, <256 x i1> 
 ; CHECK-NEXT:    b.l.t (, %s10)
   %4 = tail call fast <256 x double> @llvm.ve.vl.vgtnc.vvssmvl(<256 x double> %0, i64 8, i64 0, <256 x i1> %1, <256 x double> %2, i32 128)
   ret <256 x double> %4
+}
+
+; Function Attrs: nounwind readonly
+define fastcc <256 x double> @vgtnc_vvssl_no_imm_1(<256 x double> %0, i64 %1) {
+; CHECK-LABEL: vgtnc_vvssl_no_imm_1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s2, 8, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vgt.nc %v0, %v0, %s0, %s2
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vgtnc.vvssl(<256 x double> %0, i64 %1, i64 8, i32 256)
+  ret <256 x double> %3
 }
 
 ; Function Attrs: nounwind readonly
@@ -692,6 +718,19 @@ define fastcc <256 x double> @vgtu_vvssmvl_imm_3(<256 x double> %0, <256 x i1> %
 }
 
 ; Function Attrs: nounwind readonly
+define fastcc <256 x double> @vgtu_vvssl_no_imm_1(<256 x double> %0, i64 %1) {
+; CHECK-LABEL: vgtu_vvssl_no_imm_1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s2, 8, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vgtu %v0, %v0, %s0, %s2
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vgtu.vvssl(<256 x double> %0, i64 %1, i64 8, i32 256)
+  ret <256 x double> %3
+}
+
+; Function Attrs: nounwind readonly
 define fastcc <256 x double> @vgtunc_vvssl(<256 x double> %0, i64 %1, i64 %2) {
 ; CHECK-LABEL: vgtunc_vvssl:
 ; CHECK:       # %bb.0:
@@ -917,6 +956,19 @@ define fastcc <256 x double> @vgtunc_vvssmvl_imm_3(<256 x double> %0, <256 x i1>
 ; CHECK-NEXT:    b.l.t (, %s10)
   %4 = tail call fast <256 x double> @llvm.ve.vl.vgtunc.vvssmvl(<256 x double> %0, i64 8, i64 0, <256 x i1> %1, <256 x double> %2, i32 128)
   ret <256 x double> %4
+}
+
+; Function Attrs: nounwind readonly
+define fastcc <256 x double> @vgtunc_vvssl_no_imm_1(<256 x double> %0, i64 %1) {
+; CHECK-LABEL: vgtunc_vvssl_no_imm_1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s2, 8, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vgtu.nc %v0, %v0, %s0, %s2
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vgtunc.vvssl(<256 x double> %0, i64 %1, i64 8, i32 256)
+  ret <256 x double> %3
 }
 
 ; Function Attrs: nounwind readonly
@@ -1148,6 +1200,19 @@ define fastcc <256 x double> @vgtlsx_vvssmvl_imm_3(<256 x double> %0, <256 x i1>
 }
 
 ; Function Attrs: nounwind readonly
+define fastcc <256 x double> @vgtlsx_vvssl_no_imm_1(<256 x double> %0, i64 %1) {
+; CHECK-LABEL: vgtlsx_vvssl_no_imm_1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s2, 8, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vgtl.sx %v0, %v0, %s0, %s2
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vgtlsx.vvssl(<256 x double> %0, i64 %1, i64 8, i32 256)
+  ret <256 x double> %3
+}
+
+; Function Attrs: nounwind readonly
 define fastcc <256 x double> @vgtlsxnc_vvssl(<256 x double> %0, i64 %1, i64 %2) {
 ; CHECK-LABEL: vgtlsxnc_vvssl:
 ; CHECK:       # %bb.0:
@@ -1373,6 +1438,19 @@ define fastcc <256 x double> @vgtlsxnc_vvssmvl_imm_3(<256 x double> %0, <256 x i
 ; CHECK-NEXT:    b.l.t (, %s10)
   %4 = tail call fast <256 x double> @llvm.ve.vl.vgtlsxnc.vvssmvl(<256 x double> %0, i64 8, i64 0, <256 x i1> %1, <256 x double> %2, i32 128)
   ret <256 x double> %4
+}
+
+; Function Attrs: nounwind readonly
+define fastcc <256 x double> @vgtlsxnc_vvssl_no_imm_1(<256 x double> %0, i64 %1) {
+; CHECK-LABEL: vgtlsxnc_vvssl_no_imm_1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s2, 8, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vgtl.sx.nc %v0, %v0, %s0, %s2
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vgtlsxnc.vvssl(<256 x double> %0, i64 %1, i64 8, i32 256)
+  ret <256 x double> %3
 }
 
 ; Function Attrs: nounwind readonly
@@ -1604,6 +1682,19 @@ define fastcc <256 x double> @vgtlzx_vvssmvl_imm_3(<256 x double> %0, <256 x i1>
 }
 
 ; Function Attrs: nounwind readonly
+define fastcc <256 x double> @vgtlzx_vvssl_no_imm_1(<256 x double> %0, i64 %1) {
+; CHECK-LABEL: vgtlzx_vvssl_no_imm_1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s2, 8, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vgtl.zx %v0, %v0, %s0, %s2
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vgtlzx.vvssl(<256 x double> %0, i64 %1, i64 8, i32 256)
+  ret <256 x double> %3
+}
+
+; Function Attrs: nounwind readonly
 define fastcc <256 x double> @vgtlzxnc_vvssl(<256 x double> %0, i64 %1, i64 %2) {
 ; CHECK-LABEL: vgtlzxnc_vvssl:
 ; CHECK:       # %bb.0:
@@ -1829,4 +1920,17 @@ define fastcc <256 x double> @vgtlzxnc_vvssmvl_imm_3(<256 x double> %0, <256 x i
 ; CHECK-NEXT:    b.l.t (, %s10)
   %4 = tail call fast <256 x double> @llvm.ve.vl.vgtlzxnc.vvssmvl(<256 x double> %0, i64 8, i64 0, <256 x i1> %1, <256 x double> %2, i32 128)
   ret <256 x double> %4
+}
+
+; Function Attrs: nounwind readonly
+define fastcc <256 x double> @vgtlzxnc_vvssl_no_imm_1(<256 x double> %0, i64 %1) {
+; CHECK-LABEL: vgtlzxnc_vvssl_no_imm_1:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    or %s2, 8, (0)1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vgtl.zx.nc %v0, %v0, %s0, %s2
+; CHECK-NEXT:    b.l.t (, %s10)
+  %3 = tail call fast <256 x double> @llvm.ve.vl.vgtlzxnc.vvssl(<256 x double> %0, i64 %1, i64 8, i32 256)
+  ret <256 x double> %3
 }
