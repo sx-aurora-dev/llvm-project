@@ -2443,9 +2443,12 @@ template <int Ind, typename T0, typename T1> struct InsertValue_match {
 
   InsertValue_match(const T0 &Op0, const T1 &Op1) : Op0(Op0), Op1(Op1) {}
 
-  template <typename OpTy> bool match(OpTy *V) {
+  template <typename OpTy> bool match(OpTy *V) { EmptyContext EC; return match_context(V, EC); }
+  template <typename OpTy, typename MatchContext>
+  bool match_context(OpTy *V, MatchContext &MContext) {
     if (auto *I = dyn_cast<InsertValueInst>(V)) {
-      return Op0.match(I->getOperand(0)) && Op1.match(I->getOperand(1)) &&
+      return Op0.match_context(I->getOperand(0), MContext) &&
+             Op1.match_context(I->getOperand(1), MContext) &&
              I->getNumIndices() == 1 && Ind == I->getIndices()[0];
     }
     return false;
