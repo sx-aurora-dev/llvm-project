@@ -147,6 +147,7 @@ static void diagnoseBadTypeAttribute(Sema &S, const ParsedAttr &attr,
 #define NULLABILITY_TYPE_ATTRS_CASELIST                                        \
   case ParsedAttr::AT_TypeNonNull:                                             \
   case ParsedAttr::AT_TypeNullable:                                            \
+  case ParsedAttr::AT_TypeNullableResult:                                      \
   case ParsedAttr::AT_TypeNullUnspecified
 
 namespace {
@@ -1515,6 +1516,7 @@ static QualType ConvertDeclSpecToType(TypeProcessingState &state) {
   }
   case DeclSpec::TST_int128:
     if (!S.Context.getTargetInfo().hasInt128Type() &&
+        !S.getLangOpts().SYCLIsDevice &&
         !(S.getLangOpts().OpenMP && S.getLangOpts().OpenMPIsDevice))
       S.Diag(DS.getTypeSpecTypeLoc(), diag::err_type_unsupported)
         << "__int128";
@@ -3893,6 +3895,11 @@ IdentifierInfo *Sema::getNullabilityKeyword(NullabilityKind nullability) {
       Ident__Nullable = PP.getIdentifierInfo("_Nullable");
     return Ident__Nullable;
 
+  case NullabilityKind::NullableResult:
+    if (!Ident__Nullable_result)
+      Ident__Nullable_result = PP.getIdentifierInfo("_Nullable_result");
+    return Ident__Nullable_result;
+
   case NullabilityKind::Unspecified:
     if (!Ident__Null_unspecified)
       Ident__Null_unspecified = PP.getIdentifierInfo("_Null_unspecified");
@@ -3915,6 +3922,7 @@ static bool hasNullabilityAttr(const ParsedAttributesView &attrs) {
   for (const ParsedAttr &AL : attrs) {
     if (AL.getKind() == ParsedAttr::AT_TypeNonNull ||
         AL.getKind() == ParsedAttr::AT_TypeNullable ||
+        AL.getKind() == ParsedAttr::AT_TypeNullableResult ||
         AL.getKind() == ParsedAttr::AT_TypeNullUnspecified)
       return true;
   }
@@ -4332,6 +4340,9 @@ static Attr *createNullabilityAttr(ASTContext &Ctx, ParsedAttr &Attr,
 
   case NullabilityKind::Nullable:
     return createSimpleAttr<TypeNullableAttr>(Ctx, Attr);
+
+  case NullabilityKind::NullableResult:
+    return createSimpleAttr<TypeNullableResultAttr>(Ctx, Attr);
 
   case NullabilityKind::Unspecified:
     return createSimpleAttr<TypeNullUnspecifiedAttr>(Ctx, Attr);
@@ -7008,6 +7019,9 @@ static NullabilityKind mapNullabilityAttrKind(ParsedAttr::Kind kind) {
   case ParsedAttr::AT_TypeNullable:
     return NullabilityKind::Nullable;
 
+  case ParsedAttr::AT_TypeNullableResult:
+    return NullabilityKind::NullableResult;
+
   case ParsedAttr::AT_TypeNullUnspecified:
     return NullabilityKind::Unspecified;
 
@@ -7954,7 +7968,7 @@ static void HandleOpenCLAccessAttr(QualType &CurType, const ParsedAttr &Attr,
            diag::note_opencl_typedef_access_qualifier) << PrevAccessQual;
   } else if (CurType->isPipeType()) {
     if (Attr.getSemanticSpelling() == OpenCLAccessAttr::Keyword_write_only) {
-      QualType ElemType = CurType->getAs<PipeType>()->getElementType();
+      QualType ElemType = CurType->castAs<PipeType>()->getElementType();
       CurType = S.Context.getWritePipeType(ElemType);
     }
   }
@@ -9008,7 +9022,7 @@ QualType Sema::BuildUnaryTransformType(QualType BaseType,
           return QualType();
         }
 
-        EnumDecl *ED = BaseType->getAs<EnumType>()->getDecl();
+        EnumDecl *ED = BaseType->castAs<EnumType>()->getDecl();
         assert(ED && "EnumType has no EnumDecl");
 
         DiagnoseUseOfDecl(ED, Loc);
