@@ -39,6 +39,13 @@ VEToolChain::VEToolChain(const Driver &D, const llvm::Triple &Triple,
   // These are OK for host, but no go for VE.  So, defines them all
   // from scratch here.
   getFilePaths().clear();
+
+  // Re-add C++ library dir.
+  if (D.CCCIsCXX()) {
+    if (auto CXXStdlibPath = getCXXStdlibPath())
+      getFilePaths().push_back(*CXXStdlibPath);
+  }
+
   getFilePaths().push_back(getArchSpecificLibPath());
   if (getTriple().isMusl())
     getFilePaths().push_back(computeSysRoot() + "/opt/nec/ve/musl/lib");
