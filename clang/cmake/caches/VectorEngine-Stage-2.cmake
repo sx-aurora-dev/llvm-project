@@ -10,7 +10,8 @@ if(NOT BOOTSTRAP_PREFIX)
 	message(FATAL_ERROR "Define -DBOOTSTRAP_PREIFX=<stage-1-installed-prefix>")
 endif()
 
-# Use stage 1 Clang.
+# Use stage 1 binaries.
+set(LLVM_TABLEGEN "${BOOTSTRAP_PREFIX}/bin/llvm-tblgen" CACHE STRING "" FORCE)
 set(CMAKE_C_COMPILER "${BOOTSTRAP_PREFIX}/bin/clang" CACHE STRING "" FORCE)
 set(CMAKE_CXX_COMPILER "${BOOTSTRAP_PREFIX}/bin/clang++" CACHE STRING "" FORCE)
 set(LLVM_TEMPORARILY_ALLOW_OLD_TOOLCHAIN True CACHE BOOL "") # FIXME Stage 1 uses stdc++ for VH.

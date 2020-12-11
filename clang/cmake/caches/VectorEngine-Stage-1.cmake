@@ -29,6 +29,8 @@ set(LLVM_ENABLE_ZLIB False CACHE BOOL "")
 # FIXME Disable RV or we get a cyclic dependency.
 set (LLVM_TOOL_RV_BUILD OFF CACHE STRING "")
 
+set(LLVM_OPTIMIZED_TABLEGEN ON CACHE BOOL "")
+
 # Configure targets and flags.
 set(VE_TARGET "ve-linux")
 set(VH_TARGET "x86_64-unknown-linux-gnu")
