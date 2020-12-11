@@ -35,7 +35,7 @@ set(LLVM_ENABLE_ZLIB False CACHE BOOL "")
 # set(CLANG_UNWIND_LIB "libunwind" CACHE STRING "")
 
 # FIXME Disable RV or we get a cyclic dependency.
-set (LLVM_TOOL_RV_BUILD OFF CACHE STRING "")
+# set (LLVM_TOOL_RV_BUILD OFF CACHE STRING "")
 
 # Configure targets and flags.
 set(VE_TARGET "ve-linux")
