@@ -510,7 +510,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 // Series of SCALAR_TO_VECTOR for all VE vector types,
 //
 // NOTE: Need to shift i32 for v512i32 since v512i32 uses
-//       high 32 bits (0..31) first.
+//       upper 32 bits (0..31) first.
 
 let Predicates = [IsVectorizeSubTarget] in {
   def: Pat<(v512i32 (scalar_to_vector i32:$val)),
