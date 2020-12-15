@@ -41,10 +41,8 @@ VEToolChain::VEToolChain(const Driver &D, const llvm::Triple &Triple,
   getFilePaths().clear();
 
   // Re-add C++ library dir.
-  if (D.CCCIsCXX()) {
-    if (auto CXXStdlibPath = getCXXStdlibPath())
-      getFilePaths().push_back(*CXXStdlibPath);
-  }
+  if (auto CXXStdlibPath = getCXXStdlibPath())
+    getFilePaths().push_back(*CXXStdlibPath);
 
   getFilePaths().push_back(getArchSpecificLibPath());
   if (getTriple().isMusl())
@@ -140,7 +138,19 @@ void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
   assert((GetCXXStdlibType(Args) == ToolChain::CST_Libcxx) &&
          "Only -lc++ (aka libxx) is supported in this toolchain.");
 
+  // Add compiler-rt rpath.
   tools::addArchSpecificRPath(*this, Args, CmdArgs);
+
+  // Wirte up the standard environment path.
+  CmdArgs.push_back("-rpath");
+  CmdArgs.push_back(Args.MakeArgString(getDriver().SysRoot + "/opt/nec/ve/lib"));
+
+  // Add libc++.so rpath.
+  auto CXXStdlibPath = getCXXStdlibPath();
+  if (CXXStdlibPath) {
+    CmdArgs.push_back("-rpath");
+    CmdArgs.push_back(Args.MakeArgString(CXXStdlibPath.getValue()));
+  }
 
   CmdArgs.push_back("-lc++");
   CmdArgs.push_back("-lc++abi");
