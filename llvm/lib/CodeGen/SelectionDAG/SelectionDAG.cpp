@@ -655,44 +655,16 @@ ISD::GetFunctionOpCodeForVP(unsigned OpCode, bool hasFPExcept) {
   }
 }
 
-unsigned
-ISD::GetVPForFunctionOpCode(unsigned OpCode) {
+unsigned ISD::GetVPForFunctionOpCode(unsigned OpCode) {
   switch (OpCode) {
-    default: llvm_unreachable("can not translate this Opcode to VP");
+  default:
+    llvm_unreachable("can not translate this Opcode to VP");
 
-    case VSELECT:  return ISD::VP_SELECT;
-    case ADD:      return ISD::VP_ADD;
-    case SUB:      return ISD::VP_SUB;
-    case MUL:      return ISD::VP_MUL;
-    case SDIV:     return ISD::VP_SDIV;
-    case SREM:     return ISD::VP_SREM;
-    case UDIV:     return ISD::VP_UDIV;
-    case UREM:     return ISD::VP_UREM;
-
-    case AND:      return ISD::VP_AND;
-    case OR:       return ISD::VP_OR;
-    case XOR:      return ISD::VP_XOR;
-    case SHL:      return ISD::VP_SHL;
-    case SRA:      return ISD::VP_SRA;
-    case SRL:      return ISD::VP_SRL;
-
-    case FNEG:     return ISD::VP_FNEG;
-    case STRICT_FADD:
-    case FADD:     return ISD::VP_FADD;
-    case STRICT_FSUB:
-    case FSUB:     return ISD::VP_FSUB;
-    case STRICT_FMUL:
-    case FMUL:     return ISD::VP_FMUL;
-    case STRICT_FDIV:
-    case FDIV:     return ISD::VP_FDIV;
-    case STRICT_FREM:
-    case FREM:     return ISD::VP_FREM;
-
-    case STRICT_FMA:
-    case FMA:      return ISD::VP_FMA;
+#define HANDLE_VP_TO_SD(SDOPC) case ISD::SDOPC:
+#define END_REGISTER_VP_SDNODE(VPOPC) return ISD::VPOPC;
+#include "llvm/IR/VPIntrinsics.def"
   }
 }
-
 
 //===----------------------------------------------------------------------===//
 //                           SDNode Profile Support

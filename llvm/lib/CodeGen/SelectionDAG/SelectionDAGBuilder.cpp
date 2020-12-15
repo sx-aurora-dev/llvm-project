@@ -7377,7 +7377,7 @@ static unsigned getISDForVPIntrinsic(const VPIntrinsic &VPIntrin) {
 #include "llvm/IR/VPIntrinsics.def"
   }
 
-  return ResID;
+  return ResOPC.getValue();
 }
 
 static Optional<unsigned> getScalarISDForVPReduce(unsigned VPOC) {

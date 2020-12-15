@@ -26,11 +26,14 @@ def FeaturePackedMode
   : SubtargetFeature<"packed", "PackedMode", "true",
                      "Enable v512 packed mode (experimental)",[FeatureEnableVPU]>;
 
-def IsIntrinsicSubTarget : Predicate<"Subtarget->intrinsic()">;
-def IsNotIntrinsicSubTarget : Predicate<"!Subtarget->intrinsic()">;
+def FeatureVectorize
+  : SubtargetFeature<"vec", "Vectorize", "true",
+                     "Try to vectorize (experimental)">;
+
+def IsVectorizeSubTarget : Predicate<"Subtarget->vectorize()">;
+def IsNotVectorizeSubTarget : Predicate<"!Subtarget->vectorize()">;
 
 def IsNoNaNs : Predicate<"TM.Options.NoNaNsFPMath">;
-def HasFeatureVELIntrin : Predicate<"Subtarget->isVELIntrinsicMode()">;
 
 //===----------------------------------------------------------------------===//
 // Register File, Calling Conv, Instruction Descriptions

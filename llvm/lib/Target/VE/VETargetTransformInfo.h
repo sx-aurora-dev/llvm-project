@@ -64,29 +64,23 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
     switch (ReductionID) {
     ///// Fp reductions (iterative and ordered)
     case Intrinsic::vp_reduce_fadd:
-    case Intrinsic::experimental_vector_reduce_v2_fadd:
     case Intrinsic::vector_reduce_fadd:
     //
     case Intrinsic::vp_reduce_fmin:
     case Intrinsic::vector_reduce_fmin:
-    case Intrinsic::experimental_vector_reduce_fmin:
     //
     case Intrinsic::vp_reduce_fmax:
     case Intrinsic::vector_reduce_fmax:
-    case Intrinsic::experimental_vector_reduce_fmax:
       return true;
 
     ///// FP reduction (Ordered only)
     case Intrinsic::vp_reduce_fmul:
-    case Intrinsic::experimental_vector_reduce_v2_fmul:
     case Intrinsic::vector_reduce_fmul:
       return !Unordered;
 
     ///// int arith
     case Intrinsic::vp_reduce_add:
-    case Intrinsic::experimental_vector_reduce_add:
     case Intrinsic::vp_reduce_smax:
-    case Intrinsic::experimental_vector_reduce_smax:
     //
     // TODO require custom lowering
     // case Intrinsic::experimental_vector_reduce_smin: // TODO 
@@ -99,9 +93,6 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
     case Intrinsic::vp_reduce_or:
     case Intrinsic::vp_reduce_and:
     case Intrinsic::vp_reduce_xor:
-    case Intrinsic::experimental_vector_reduce_or:
-    case Intrinsic::experimental_vector_reduce_and:
-    case Intrinsic::experimental_vector_reduce_xor:
       return true;
 
     // Otw, run standard reduction expansion

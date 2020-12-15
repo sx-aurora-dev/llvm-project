@@ -15,14 +15,6 @@
 // Vector Instruction Patterns
 //===----------------------------------------------------------------------===//
 
-// Custom ISDs
-// VEISD::VEC_SEQ - A vector sequence with a stride.
-// VEISD::VEC_BROADCAST - A vector splat of a scalar value into all vector
-//                        lanes.
-
-def vec_seq : SDNode<"VEISD::VEC_SEQ",
-                     SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
-
 //===----------------------------------------------------------------------===//
 // Vector Instruction Patterns for non vectorize subtarget which supports
 // intrinsics and v256f64 vector regisetr only.

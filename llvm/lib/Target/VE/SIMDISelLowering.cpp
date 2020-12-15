@@ -917,3 +917,28 @@ VETargetLowering::lowerSIMD_EXTRACT_VECTOR_ELT(SDValue Op,
   // Extraction is legal for other V64 types.
   return Op;
 }
+
+
+SDValue VETargetLowering::LowerOperation_SIMD(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "LowerOp_SIMD: "; Op.dump(&DAG); dbgs() << "\n";);
+
+  switch (Op.getOpcode()) {
+  default:
+    llvm_unreachable("Should not custom lower this!");
+  // vector composition
+  case ISD::BUILD_VECTOR:
+    return lowerSIMD_BUILD_VECTOR(Op, DAG);
+  case ISD::VECTOR_SHUFFLE:
+    return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
+  case ISD::INSERT_VECTOR_ELT:
+    return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
+  case ISD::EXTRACT_VECTOR_ELT:
+    return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
+  case ISD::MSCATTER:
+  case ISD::MGATHER:
+    return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
+  case ISD::MLOAD:
+    return lowerSIMD_MLOAD(Op, DAG);
+  }
+}
+

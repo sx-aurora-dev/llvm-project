@@ -35,57 +35,6 @@
 #define END_REGISTER_VP_SDNODE(VPISD)
 #endif
 
-// This is a reduction intrinsic with accumulator arg at ACCUPOS, reduced vector
-// arg at VECTORPOS.
-#ifndef HANDLE_VP_REDUCTION
-#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, SCALAROC, SCALARINTRIN, SCALARISD)
-#endif
-
-// The intrinsic VPID of llvm.vp.* functionally corresponds to the intrinsic
-// CFPID of llvm.experimental.constrained.*.
-#ifndef HANDLE_VP_TO_CONSTRAINED_INTRIN
-#define HANDLE_VP_TO_CONSTRAINED_INTRIN(CPFID)
-#endif
-
-// This VP intrinsic has constraint fp params.
-// Rounding mode arg pos is ROUNDPOS, exception behavior arg pos is EXCEPT POS.
-#ifndef HANDLE_VP_FPCONSTRAINT
-#define HANDLE_VP_FPCONSTRAINT(ROUNDPOS, EXCEPTPOS)
-#endif
-
-// End the property scope of a VP intrinsic.
-#ifndef END_REGISTER_VP_INTRINSIC
-#define END_REGISTER_VP_INTRINSIC(VPID)
-#endif
-
-// Map this VP intrinsic to its cannonical functional intrinsic.
-#ifndef HANDLE_VP_TO_INTRIN
-#define HANDLE_VP_TO_INTRIN(ID)
-#endif
-
-#ifndef HANDLE_VP_IS_UNARY
-#define HANDLE_VP_IS_UNARY
-#endif
-
-#ifndef HANDLE_VP_IS_BINARY
-#define HANDLE_VP_IS_BINARY
-#endif
-
-#ifndef HANDLE_VP_IS_TERNARY
-#define HANDLE_VP_IS_TERNARY
-#endif
-
-// This VP Intrinsic is a comparison
-// (only count data params)
-#ifndef HANDLE_VP_IS_XCMP
-#define HANDLE_VP_IS_XCMP
-#endif
-
-// link this VP ID to a relaxed (fp semantics) VP OC
-#ifndef HANDLE_VP_TO_RELAXEDSD
-#define HANDLE_VP_TO_RELAXEDSD(RELAXEDSD)
-#endif
-
 ///// REGISTER macros /////
 // These always have to come first
 // This VP Intrinsic is a memory operation
@@ -161,6 +110,63 @@ END_REGISTER_VP_SDNODE(SDOPC)
 #define HANDLE_VP_TO_OPC(OPC)
 #endif
 
+// The intrinsic and/or SDNode is the cannonical VP representation for the
+// SDNode with Opcode \p SDOPC.
+#ifndef HANDLE_VP_TO_SD
+#define HANDLE_VP_TO_SD(SDOPC)
+#endif
+
+// This is a reduction intrinsic with accumulator arg at ACCUPOS, reduced vector
+// arg at VECTORPOS.
+#ifndef HANDLE_VP_REDUCTION
+#define HANDLE_VP_REDUCTION(ACCUPOS, VECTORPOS, SCALAROC, SCALARINTRIN, SCALARISD)
+#endif
+
+// The intrinsic VPID of llvm.vp.* functionally corresponds to the intrinsic
+// CFPID of llvm.experimental.constrained.*.
+#ifndef HANDLE_VP_TO_CONSTRAINED_INTRIN
+#define HANDLE_VP_TO_CONSTRAINED_INTRIN(CPFID)
+#endif
+
+// This VP intrinsic has constraint fp params.
+// Rounding mode arg pos is ROUNDPOS, exception behavior arg pos is EXCEPT POS.
+#ifndef HANDLE_VP_FPCONSTRAINT
+#define HANDLE_VP_FPCONSTRAINT(ROUNDPOS, EXCEPTPOS)
+#endif
+
+// End the property scope of a VP intrinsic.
+#ifndef END_REGISTER_VP_INTRINSIC
+#define END_REGISTER_VP_INTRINSIC(VPID)
+#endif
+
+// Map this VP intrinsic to its cannonical functional intrinsic.
+#ifndef HANDLE_VP_TO_INTRIN
+#define HANDLE_VP_TO_INTRIN(ID)
+#endif
+
+#ifndef HANDLE_VP_IS_UNARY
+#define HANDLE_VP_IS_UNARY
+#endif
+
+#ifndef HANDLE_VP_IS_BINARY
+#define HANDLE_VP_IS_BINARY
+#endif
+
+#ifndef HANDLE_VP_IS_TERNARY
+#define HANDLE_VP_IS_TERNARY
+#endif
+
+// This VP Intrinsic is a comparison
+// (only count data params)
+#ifndef HANDLE_VP_IS_XCMP
+#define HANDLE_VP_IS_XCMP
+#endif
+
+// link this VP ID to a relaxed (fp semantics) VP OC
+#ifndef HANDLE_VP_TO_RELAXEDSD
+#define HANDLE_VP_TO_RELAXEDSD(RELAXEDSD)
+#endif
+
 /// } Property Macros
 
 ///// Integer Arithmetic {
@@ -170,54 +176,51 @@ END_REGISTER_VP_SDNODE(SDOPC)
 #error "The internal helper macro HELPER_REGISTER_BINARY_INT_VP is already defined!"
 #endif
 
-#define HELPER_REGISTER_BINARY_INT_VP(INTRIN, SDOPC, OPC) \
-BEGIN_REGISTER_VP(INTRIN, 2, 3, SDOPC, -1) \
-HANDLE_VP_TO_OPC(OPC) \
-END_REGISTER_VP(INTRIN, SDOPC)
+#define HELPER_REGISTER_BINARY_INT_VP(INTRIN, SDOPC, IROPC) \
+BEGIN_REGISTER_VP(INTRIN, 2, 3, VP_##SDOPC, -1) \
+HANDLE_VP_TO_OPC(IROPC) \
+HANDLE_VP_TO_SD(SDOPC) \
+END_REGISTER_VP(INTRIN, VP_##SDOPC)
 
-HELPER_REGISTER_BINARY_INT_VP(vp_add, VP_ADD, Add)
+HELPER_REGISTER_BINARY_INT_VP(vp_add, ADD, Add)
 
 // llvm.vp.and(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_and, VP_AND, And)
+HELPER_REGISTER_BINARY_INT_VP(vp_and, AND, And)
 
 // llvm.vp.ashr(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_ashr, VP_ASHR, AShr)
+HELPER_REGISTER_BINARY_INT_VP(vp_ashr, SRA, AShr)
 
 // llvm.vp.lshr(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_lshr, VP_LSHR, LShr)
+HELPER_REGISTER_BINARY_INT_VP(vp_lshr, SRL, LShr)
 
 // llvm.vp.mul(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_mul, VP_MUL, Mul)
+HELPER_REGISTER_BINARY_INT_VP(vp_mul, MUL, Mul)
 
 // llvm.vp.or(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_or, VP_OR, Or)
+HELPER_REGISTER_BINARY_INT_VP(vp_or, OR, Or)
 
 // llvm.vp.sdiv(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_sdiv, VP_SDIV, SDiv)
+HELPER_REGISTER_BINARY_INT_VP(vp_sdiv, SDIV, SDiv)
 
 // llvm.vp.shl(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_shl, VP_SHL, Shl)
+HELPER_REGISTER_BINARY_INT_VP(vp_shl, SHL, Shl)
 
 // llvm.vp.srem(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_srem, VP_SREM, SRem)
+HELPER_REGISTER_BINARY_INT_VP(vp_srem, SREM, SRem)
 
 // llvm.vp.sub(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_sub, VP_Sub, Sub)
+HELPER_REGISTER_BINARY_INT_VP(vp_sub, SUB, Sub)
 
 // llvm.vp.udiv(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_udiv, VP_UDIV, UDiv)
+HELPER_REGISTER_BINARY_INT_VP(vp_udiv, UDIV, UDiv)
 
 // llvm.vp.urem(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_urem, VP_UREM, URem)
+HELPER_REGISTER_BINARY_INT_VP(vp_urem, UREM, URem)
 
 // llvm.vp.xor(x,y,mask,vlen)
-HELPER_REGISTER_BINARY_INT_VP(vp_xor, VP_XOR, Xor)
+HELPER_REGISTER_BINARY_INT_VP(vp_xor, XOR, Xor)
 
 #undef HELPER_REGISTER_BINARY_INT_VP
-
-///// } Integer Arithmetic
-
-///// Integer Arithmetic /////
 
 // llvm.vp.ctpop(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_ctpop, 1, 2)
@@ -226,64 +229,46 @@ HANDLE_VP_TO_INTRIN(ctpop)
 HANDLE_VP_IS_UNARY
 END_REGISTER_CASES(vp_ctpop, VP_CTPOP)
 
-///// FP Arithmetic /////
+///// } Integer Arithmetic
+
+///// FP Arithmetic {
+
+#define HELPER_REGISTER_BINARY_FP_VP(IROP, SDOPC, IROPC) \
+BEGIN_REGISTER_VP(vp_##IROP, 4, 5, VP_##SDOPC, -1) \
+HANDLE_VP_IS_BINARY \
+HANDLE_VP_TO_OPC(IROPC) \
+HANDLE_VP_TO_SD(SDOPC) \
+HANDLE_VP_FPCONSTRAINT(2, 3) \
+HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_##IROP) \
+END_REGISTER_VP(vp_##IROP, VP_##SDOPC)
 
 // llvm.vp.fadd(x,y,round,except,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_fadd, 4, 5)
-BEGIN_REGISTER_VP_SDNODE(VP_FADD, -1, vp_fadd, 2, 3)
-HANDLE_VP_FPCONSTRAINT(2, 3)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fadd)
-HANDLE_VP_TO_OPC(FAdd)
-HANDLE_VP_IS_BINARY
-END_REGISTER_CASES(vp_fadd, VP_FADD)
+HELPER_REGISTER_BINARY_FP_VP(fadd, FADD, FAdd)
 
 // llvm.vp.fdiv(x,y,round,except,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_fdiv, 4, 5)
-BEGIN_REGISTER_VP_SDNODE(VP_FDIV, -1, vp_fdiv, 2, 3)
-HANDLE_VP_FPCONSTRAINT(2, 3)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fdiv)
-HANDLE_VP_TO_OPC(FDiv)
-HANDLE_VP_IS_BINARY
-END_REGISTER_CASES(vp_fdiv, VP_FDIV)
+HELPER_REGISTER_BINARY_FP_VP(fdiv, FDIV, FDiv)
 
 // llvm.vp.fmul(x,y,round,except,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_fmul, 4, 5)
-BEGIN_REGISTER_VP_SDNODE(VP_FMUL, -1, vp_fmul, 2, 3)
-HANDLE_VP_FPCONSTRAINT(2, 3)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fmul)
-HANDLE_VP_TO_OPC(FMul)
-HANDLE_VP_IS_BINARY
-END_REGISTER_CASES(vp_fmul, VP_FMUL)
+HELPER_REGISTER_BINARY_FP_VP(fmul, FMUL, FMul)
 
 // llvm.vp.fneg(x,except,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_fneg, 2, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_FNEG, -1, vp_fneg, 1, 2)
-HANDLE_VP_FPCONSTRAINT(None, 1)
-HANDLE_VP_TO_OPC(FNeg)
+BEGIN_REGISTER_VP(vp_fneg, 2, 3, VP_FNEG, -1)
+HANDLE_VP_FPCONSTRAINT(1, None)
+// HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fneg)
+// HANDLE_VP_TO_INTRIN(fneg)
 HANDLE_VP_IS_UNARY
-END_REGISTER_CASES(vp_fneg, VP_FNEG)
+END_REGISTER_VP(vp_fneg, VP_FNEG)
 
 // llvm.vp.frem(x,y,round,except,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_frem, 4, 5)
-BEGIN_REGISTER_VP_SDNODE(VP_FREM, -1, vp_frem, 2, 3)
-HANDLE_VP_FPCONSTRAINT(2, 3)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_frem)
-HANDLE_VP_TO_OPC(FRem)
-HANDLE_VP_IS_BINARY
-END_REGISTER_CASES(vp_frem, VP_FREM)
+HELPER_REGISTER_BINARY_FP_VP(frem, FREM, FRem)
 
 // llvm.vp.fsub(x,y,round,except,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_fsub, 4, 5)
-BEGIN_REGISTER_VP_SDNODE(VP_FSUB, -1, vp_fsub, 2, 3)
-HANDLE_VP_FPCONSTRAINT(2, 3)
-HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fsub)
-HANDLE_VP_TO_OPC(FSub)
-HANDLE_VP_IS_BINARY
-END_REGISTER_CASES(vp_fsub, VP_FSUB)
+HELPER_REGISTER_BINARY_FP_VP(fsub, FSUB, FSub)
+
+#undef HELPER_REGISTER_BINARY_FP_VP
 
 // llvm.vp.fma(x,y,z.round,except,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_fma, 5, 6)
-BEGIN_REGISTER_VP_SDNODE(VP_FMA, -1, vp_fma, 3, 4)
+BEGIN_REGISTER_VP(vp_fma, 5, 6, VP_FMA, -1)
 HANDLE_VP_FPCONSTRAINT(3, 4)
 HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fma)
 HANDLE_VP_TO_INTRIN(fma)
@@ -696,5 +681,6 @@ END_REGISTER_CASES(vp_reduce_fmax, VP_REDUCE_FMAX)
 #undef HANDLE_VP_TO_CONSTRAINED_INTRIN
 #undef HANDLE_VP_TO_INTRIN
 #undef HANDLE_VP_TO_OPC
+#undef HANDLE_VP_TO_SD
 #undef HANDLE_VP_TO_RELAXEDSD
 #undef HANDLE_VP_TO_SDNODE

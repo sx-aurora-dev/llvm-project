@@ -15,6 +15,7 @@
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AliasSetTracker.h"
 #include "llvm/Analysis/LoopInfo.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/VectorUtils.h"
 #include "llvm/IR/IRBuilder.h"
@@ -415,7 +416,8 @@ If we execute the loop sequentially, we will write a value, read
 this value, write a value, read this value etc. The semantics don't
 change if instead we: Write 4 values, read 4 values, ...
 
-We should mention that for the vectorization to be valid, two things have to hold:
+We should mention that for the vectorization to be valid, two things have to
+hold:
   * The write should be before the read in program order
     (so that the write writes first).
   * The (vectorized) write should always have written to addresses
@@ -626,7 +628,8 @@ static void addNoSignedWrapFlag(const SCEV *S) {
 /// Language / Framework for preconditions
 /// Still experimental...
 
-static bool isLTArraySize(ScalarEvolution& SE, const SCEV* Val, const SCEV *ArrSize) {
+static bool isLTArraySize(ScalarEvolution &SE, const SCEV *Val,
+                          const SCEV *ArrSize) {
   const SCEVConstant *Zero =
       dyn_cast<SCEVConstant>(SE.getConstant(Val->getType(), 0, true));
 
@@ -654,9 +657,10 @@ static bool isLTArraySize(ScalarEvolution& SE, const SCEV* Val, const SCEV *ArrS
 /// that min >= 0 and Max[I] < Sizes[I]. Otherwise, return false.
 // TODO: At some point, instead of just returning true or false, we should
 // return e.g. a vector of checks for those that we couldn't deduce statically.
-static bool verifyMinMaxPairs(ScalarEvolution& SE,
-  const SmallVectorImpl<MinMaxSCEVPair>& MinMaxPairs,
-  const SmallVectorImpl<const SCEV*>& Sizes) {
+static bool
+verifyMinMaxPairs(ScalarEvolution &SE,
+                  const SmallVectorImpl<MinMaxSCEVPair> &MinMaxPairs,
+                  const SmallVectorImpl<const SCEV *> &Sizes) {
 
   // Remember that `Sizes` has the size() of `Subscripts`
   // when delinearizing, but it actually has one less element.
@@ -775,14 +779,14 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
     }
   }
 
-   if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
+  if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
     return false;
 
   return true;
 }
 
-static const SCEVConstant* getNegativeSCEVConstant(ScalarEvolution& SE,
-  const SCEVConstant* S) {
+static const SCEVConstant *getNegativeSCEVConstant(ScalarEvolution &SE,
+                                                   const SCEVConstant *S) {
   int NumBits = S->getAPInt().getBitWidth();
   int64_t Val = S->getValue()->getSExtValue();
   const SCEVConstant *Res =
@@ -791,11 +795,12 @@ static const SCEVConstant* getNegativeSCEVConstant(ScalarEvolution& SE,
 }
 
 static const SCEV *getSDivSimpleAddRec(ScalarEvolution &SE,
-                                const SCEVAddRecExpr *AddRec,
-                                const SCEV *Divisor) {
+                                       const SCEVAddRecExpr *AddRec,
+                                       const SCEV *Divisor) {
   // Assert it's "simple".
   const SCEVConstant *Start = dyn_cast<SCEVConstant>(AddRec->getStart());
-  const SCEVConstant *Step = dyn_cast<SCEVConstant>(AddRec->getStepRecurrence(SE));
+  const SCEVConstant *Step =
+      dyn_cast<SCEVConstant>(AddRec->getStepRecurrence(SE));
   assert(Start != nullptr);
   assert(Step != nullptr);
 
@@ -815,8 +820,8 @@ static const SCEV *getSDivSimpleAddRec(ScalarEvolution &SE,
   SmallVector<const SCEV *, 2> Operands;
   Operands.push_back(Start);
   Operands.push_back(Step);
-  AddRec = (SCEVAddRecExpr *)
-      SE.getAddRecExpr(Operands, AddRec->getLoop(), AddRec->getNoWrapFlags());
+  AddRec = (SCEVAddRecExpr *)SE.getAddRecExpr(Operands, AddRec->getLoop(),
+                                              AddRec->getNoWrapFlags());
 
   // Do the division
   dbgs() << "AddRec: " << *AddRec << "\n";
@@ -841,12 +846,11 @@ static const SCEV *getSDivSimpleAddRec(ScalarEvolution &SE,
   Operands.clear();
   Operands.push_back(Start);
   Operands.push_back(Step);
-  Res = (SCEVAddRecExpr *) SE.getAddRecExpr(Operands, Res->getLoop(),
+  Res = (SCEVAddRecExpr *)SE.getAddRecExpr(Operands, Res->getLoop(),
                                            Res->getNoWrapFlags());
 
   return Res;
 }
-
 
 static bool
 handleFailedDelinearization(ScalarEvolution &SE, const Loop *L,
@@ -917,7 +921,8 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
       Subscripts.size() != Sizes.size()) {
     LLVM_DEBUG(dbgs() << "Failed to delinearize. Using a single subscript - "
                          "the original SCEV\n";);
-    return handleFailedDelinearization(SE, L, AccessExpr, Pointer, Subscripts, Sizes);
+    return handleFailedDelinearization(SE, L, AccessExpr, Pointer, Subscripts,
+                                       Sizes);
   }
 
   LLVM_DEBUG(
@@ -934,7 +939,8 @@ static bool delinearizeAccessInst(ScalarEvolution &SE, Instruction *Inst,
   return true;
 }
 
-static void getArraySizes(ScalarEvolution &SE, Value *Obj, SmallVectorImpl<const SCEV*>& Sizes) {
+static void getArraySizes(ScalarEvolution &SE, Value *Obj,
+                          SmallVectorImpl<const SCEV *> &Sizes) {
   Type *Ty = Obj->getType();
   assert(Ty->isPointerTy());
   ArrayType *ArrTy = dyn_cast<ArrayType>(Ty->getPointerElementType());
@@ -943,8 +949,8 @@ static void getArraySizes(ScalarEvolution &SE, Value *Obj, SmallVectorImpl<const
   ArrTy = dyn_cast<ArrayType>(ArrTy->getArrayElementType());
   while (ArrTy) {
     uint64_t NumElements = ArrTy->getArrayNumElements();
-    const SCEVConstant *S = dyn_cast<SCEVConstant>(
-        SE.getConstant(Type::getInt64Ty(ArrTy->getContext()), NumElements, false));
+    const SCEVConstant *S = dyn_cast<SCEVConstant>(SE.getConstant(
+        Type::getInt64Ty(ArrTy->getContext()), NumElements, false));
     assert(S);
     Sizes.push_back(S);
     ArrTy = dyn_cast<ArrayType>(ArrTy->getArrayElementType());
@@ -955,7 +961,8 @@ static void getArraySizes(ScalarEvolution &SE, Value *Obj, SmallVectorImpl<const
 }
 
 static bool getCumulativeStartingOffset(ScalarEvolution &SE,
-                                            const SCEVAddRecExpr *S, uint64_t &Offset) {
+                                        const SCEVAddRecExpr *S,
+                                        uint64_t &Offset) {
   assert(S);
   const SCEV *Save;
   do {
@@ -992,8 +999,8 @@ static void findArraySubscripts(ScalarEvolution &SE, uint64_t Offset,
   // To make this work, probably we have to always start with the recurrence
   // with the biggest step.
 
-  // TODO: Also, we probably want to take into consideration the `Sizes`, to find
-  // out if we have a +1 step or more.
+  // TODO: Also, we probably want to take into consideration the `Sizes`, to
+  // find out if we have a +1 step or more.
 
   assert(Subscripts.size() == 0);
   for (std::pair<uint64_t, const SCEVAddRecExpr *> StepPair : reverse(Steps)) {
@@ -1034,7 +1041,8 @@ delinearizePtrOnGlobalArray(ScalarEvolution &SE, Value *Ptr, Value *Obj,
   }
   auto &DL = NestInfo.AnalyzedLoop->getHeader()->getModule()->getDataLayout();
   assert(Ptr->getType()->isPointerTy());
-  uint64_t TypeByteSize = DL.getTypeAllocSize(Ptr->getType()->getPointerElementType());
+  uint64_t TypeByteSize =
+      DL.getTypeAllocSize(Ptr->getType()->getPointerElementType());
   const SCEVAddRecExpr *AddRec = dyn_cast<SCEVAddRecExpr>(AccessExpr);
   if (!AddRec)
     return false;
@@ -1050,7 +1058,6 @@ delinearizeInstAndVerifySubscripts(ScalarEvolution &SE, Instruction *Inst,
                                    SmallVectorImpl<const SCEV *> &Subscripts,
                                    SmallVectorImpl<const SCEV *> &Sizes,
                                    LoopNestInfo NestInfo) {
-
 
   bool DelinSucc = delinearizeAccessInst(SE, Inst, Subscripts, Sizes,
                                          NestInfo.InnermostLoop);
@@ -1256,7 +1263,7 @@ DVValidity getDirVector(ScalarEvolution *SE, DepVector &DV,
   return DVValidity::VALID;
 }
 
-void squashIfNeeded(DepVector& DV) {
+void squashIfNeeded(DepVector &DV) {
   if (!DV.size())
     return;
 
@@ -1306,7 +1313,7 @@ static bool looksLeft2D(const DepVector &DV) {
 
 /// Looks directly backwards, backwards left / right or backwards
 /// up / down.
-static bool looksBackwards3D(const DepVector& DV) {
+static bool looksBackwards3D(const DepVector &DV) {
   assert(DV.size() == 3);
   return DV[0].Dir == '>';
 }
@@ -1373,14 +1380,14 @@ void reflectIfNeeded(DepVector &IterDV) {
   } else if (IterDV.size() == 2) {
     if (looksDownwards2D(IterDV) || looksDirectlyLeft2D(IterDV))
       IterDV.reflect();
-  } else {  // 3D case
+  } else { // 3D case
     // If it looks backwards, it definitely looks towards
     // to previous iterations.
     if (looksBackwards3D(IterDV))
       IterDV.reflect();
     // If it looks forwards, it definitely looks towards
     // later iterations. So the only case left is when
-    // 1st dimension (outermost) is 0, in which case fall-back to 
+    // 1st dimension (outermost) is 0, in which case fall-back to
     // the 2D case for the other two.
     if (IterDV[0].Dir == '=') {
       DepVector IterDV2D(2);
@@ -1557,7 +1564,7 @@ struct ProgramOrderedAccess {
   // Greater `Position` means later in program order.
   unsigned Position;
 
-  static ProgramOrderedAccess get(LoadInst* LD, unsigned Position) {
+  static ProgramOrderedAccess get(LoadInst *LD, unsigned Position) {
     ProgramOrderedAccess POA;
     POA.Load = LD;
     POA.Position = Position;
@@ -1572,7 +1579,7 @@ struct ProgramOrderedAccess {
   }
 };
 
-static bool isInNest(Instruction& I, LoopNestInfo NestInfo) {
+static bool isInNest(Instruction &I, LoopNestInfo NestInfo) {
 
   // A nest is considered a path from the outermost loop towards
   // an innermost loop (any loop can be thought as a tree with
@@ -1587,7 +1594,7 @@ static bool isInNest(Instruction& I, LoopNestInfo NestInfo) {
   // instruction either in that subtree or in the outermost loop. So, by
   // checking if the instruction is in any of the other subloops, we check if it
   // is any subtree that we don't want to analyze. Example:
-   
+
   //   2
   //  /
   // 1     4
@@ -1756,8 +1763,7 @@ emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, con
 #endif
 
 const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
-                                                LoopInfo &LI,
-                                                DominatorTree &DT,
+                                                LoopInfo &LI, DominatorTree &DT,
                                                 ScalarEvolution &SE,
                                                 const TargetLibraryInfo &TLI) {
   LoopDependence Bail = LoopDependence::getWorstPossible();
@@ -1930,7 +1936,7 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
     }
   }
 
-  //emitRuntimeAliasChecks(SE, DT, LI, NestInfo.AnalyzedLoop, AliasChecks);
+  // emitRuntimeAliasChecks(SE, DT, LI, NestInfo.AnalyzedLoop, AliasChecks);
 
   return Res;
 }
@@ -1961,8 +1967,8 @@ static bool analyzeNestsDFS(DFSNestClipboard *Clip) {
   if (CurrentLoop->isInnermost()) {
     LoopNestInfo NestInfo = {Clip->NumDimensions, Clip->CurrentLoop,
                              Clip->AnalyzedLoop};
-    const LoopDependence Dep =
-        getImperfectNestDependence(NestInfo, Clip->LI, Clip->DT, Clip->SE, Clip->TLI);
+    const LoopDependence Dep = getImperfectNestDependence(
+        NestInfo, Clip->LI, Clip->DT, Clip->SE, Clip->TLI);
     if (Dep.VectorizationFactor < Clip->CurrentDep.VectorizationFactor)
       Clip->CurrentDep = Dep;
     return !Clip->CurrentDep.isWorstPossible();
@@ -1989,7 +1995,8 @@ LoopDependenceInfo::getDependenceInfo(const Loop &L) const {
   if (!L.isLoopSimplifyForm())
     return Bail;
 
-  DFSNestClipboard Clip(&L, LoopDependence::getBestPossible(), 1, LI, DT, SE, TLI);
+  DFSNestClipboard Clip(&L, LoopDependence::getBestPossible(), 1, LI, DT, SE,
+                        TLI);
   analyzeNestsDFS(&Clip);
 
   return Clip.CurrentDep;

@@ -129,11 +129,6 @@ void VETargetLowering::initRegisterClasses() {
       addRegisterClass(MaskVT, &VE::VMRegClass);
     return;
   }
-  assert(Subtarget->intrinsic());
-  for (MVT VecVT : AllVectorVTs)
-    addRegisterClass(VecVT, &VE::V64RegClass);
-  addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-  addRegisterClass(MVT::v256i1, &VE::VMRegClass);
 #endif
 }
 
@@ -998,8 +993,12 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   initRegisterClasses();
   initSPUActions();
   
-  initIntrinsicActions();
+  // initIntrinsicActions();
+
+  // VVP layer isel actions.
   initVPUActions();
+
+  // Fixed SIMD layer isel actions.
   initExperimentalVectorActions();
 
   setStackPointerRegisterToSaveRestore(VE::SX11);
@@ -1023,30 +1022,6 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   setHasMultipleConditionRegisters(true);
 
   computeRegisterProperties(Subtarget->getRegisterInfo());
-}
-
-TargetLowering::LegalizeAction
-VETargetLowering::getActionForExtendedType(unsigned Op, EVT VT) const {
-  switch (Op) {
-#define ADD_VVP_OP(VVP_NAME, ISD_NAME)                                         \
-  case ISD::ISD_NAME:                                                          \
-  case VEISD::VVP_NAME:
-#include "VVPNodes.def"
-    return Custom;
-  default:
-    return Expand;
-  }
-}
-
-TargetLowering::LegalizeAction
-VETargetLowering::getCustomOperationAction(SDNode &Op) const {
-  // Always custom-lower VEC_NARROW to eliminate it
-  if (Op.getOpcode() == VEISD::VEC_NARROW)
-    return Custom;
-  // Otw, only custom lower to perform due widening
-  if (IsVVPOrVEC(Op.getOpcode()) && OpNeedsWidening(Op))
-    return Custom;
-  return Legal;
 }
 
 const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
@@ -1079,7 +1054,10 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(Wrapper)
     TARGET_NODE_CASE(TS1AM)
 
+    TARGET_NODE_CASE(VEC_LVL)
     TARGET_NODE_CASE(VEC_BROADCAST)
+    TARGET_NODE_CASE(VEC_GATHER)
+    TARGET_NODE_CASE(VEC_SCATTER)
     TARGET_NODE_CASE(VEC_NARROW)
     TARGET_NODE_CASE(VEC_SEQ)
     TARGET_NODE_CASE(VEC_VMV)
@@ -1364,23 +1342,6 @@ VETargetLowering::lowerToTLSGeneralDynamicModel(SDValue Op,
   return Chain;
 }
 
-SDValue VETargetLowering::lowerToTLSLocalExecModel(SDValue Op,
-                                                   SelectionDAG & DAG) const {
-  SDLoc dl(Op);
-  EVT PtrVT = getPointerTy(DAG.getDataLayout());
-
-  // Generate following code:
-  //   lea %s0, Op@tpoff_lo
-  //   and %s0, %s0, (32)0
-  //   lea.sl %s0, Op@tpoff_hi(%s0)
-  //   add %s0, %s0, %tp
-  // FIXME: use lea.sl %s0, Op@tpoff_hi(%tp, %s0) for better performance
-  SDValue HiLo = makeHiLoPair(Op, VEMCExpr::VK_VE_TPOFF_HI32,
-                              VEMCExpr::VK_VE_TPOFF_LO32, DAG);
-  return DAG.getNode(ISD::ADD, dl, PtrVT, DAG.getRegister(VE::SX14, PtrVT),
-                     HiLo);
-}
-
 SDValue VETargetLowering::lowerGlobalTLSAddress(SDValue Op,
                                                 SelectionDAG &DAG) const {
   // Current implementation of nld doesn't allow local exec model code
@@ -1400,8 +1361,8 @@ SDValue VETargetLowering::lowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG & DAG)
                      Op.getOperand(1));
 }
 
-      SDValue VETargetLowering::lowerEH_SJLJ_LONGJMP(SDValue Op,
-                                                     SelectionDAG & DAG) const {
+SDValue VETargetLowering::lowerEH_SJLJ_LONGJMP(SDValue Op,
+                                               SelectionDAG &DAG) const {
   SDLoc dl(Op);
   return DAG.getNode(VEISD::EH_SJLJ_LONGJMP, dl, MVT::Other, Op.getOperand(0),
                      Op.getOperand(1));
@@ -1525,7 +1486,13 @@ static SDValue lowerLoadI1(SDValue Op, SelectionDAG &DAG) {
 }
 
 SDValue VETargetLowering::lowerLOAD(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "LowerLOAD ("; Op->print(dbgs()); dbgs() << ")\n");
   LoadSDNode *LdNode = cast<LoadSDNode>(Op.getNode());
+  auto MemVT = LdNode->getMemoryVT();
+
+  // always expand non-mask vector loads to VVP
+  if (MemVT.isVector() && !isVectorMaskType(MemVT))
+    return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   SDValue BasePtr = LdNode->getBasePtr();
   if (isa<FrameIndexSDNode>(BasePtr.getNode())) {
@@ -1534,7 +1501,6 @@ SDValue VETargetLowering::lowerLOAD(SDValue Op, SelectionDAG &DAG) const {
     return Op;
   }
 
-  EVT MemVT = LdNode->getMemoryVT();
   if (MemVT == MVT::f128)
     return lowerLoadF128(Op, DAG);
   if (isVectorMaskType(MemVT))
@@ -1630,27 +1596,6 @@ static SDValue lowerStoreI1(SDValue Op, SelectionDAG &DAG) {
     // Otherwise, ask llvm to expand it.
     return SDValue();
   }
-}
-
-SDValue VETargetLowering::lowerSTORE(SDValue Op, SelectionDAG &DAG) const {
-  StoreSDNode *StNode = cast<StoreSDNode>(Op.getNode());
-  assert(StNode && StNode->getOffset().isUndef() && "Unexpected node type");
-
-  SDValue BasePtr = StNode->getBasePtr();
-  if (isa<FrameIndexSDNode>(BasePtr.getNode())) {
-    // Do not expand store instruction with frame index here because of
-    // dependency problems.  We expand it later in eliminateFrameIndex().
-    return Op;
-  }
-
-  EVT MemVT = StNode->getMemoryVT();
-  if (MemVT == MVT::f128)
-    return lowerStoreF128(Op, DAG);
-  if (isVectorMaskType(MemVT))
-    return lowerStoreI1(Op, DAG);
-
-  // Otherwise, ask llvm to expand it.
-  return SDValue();
 }
 
 SDValue VETargetLowering::lowerVASTART(SDValue Op, SelectionDAG &DAG) const {
@@ -1961,31 +1906,6 @@ static SDValue LowerI1Load(SDValue Op, SelectionDAG &DAG) {
   }
 }
 
-SDValue VETargetLowering::LowerLOAD(SDValue Op, SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "LowerLOAD ("; Op->print(dbgs()); dbgs() << ")\n");
-  LoadSDNode *LdNode = cast<LoadSDNode>(Op.getNode());
-  auto MemVT = LdNode->getMemoryVT();
-
-  // always expand non-mask vector loads to VVP
-  if (MemVT.isVector() && !isVectorMaskType(MemVT))
-    return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
-
-  SDValue BasePtr = LdNode->getBasePtr();
-  if (isa<FrameIndexSDNode>(BasePtr.getNode())) {
-    LLVM_DEBUG(dbgs() << "is LOAD from frameidx. Skpping!\n");
-    // Do not expand store instruction with frame index here because of
-    // dependency problems.  We expand it later in eliminateFrameIndex().
-    return Op;
-  }
-
-  if (MemVT == MVT::f128)
-    return LowerF128Load(Op, DAG);
-  if (isVectorMaskType(MemVT))
-    return LowerI1Load(Op, DAG);
-
-  return Op;
-}
-
 // Lower a f128 store into two f64 stores.
 // Lower a f128 store into two f64 stores.
 static SDValue LowerF128Store(SDValue Op, SelectionDAG &DAG) {
@@ -2076,7 +1996,7 @@ static SDValue LowerI1Store(SDValue Op, SelectionDAG &DAG) {
   }
 }
 
-SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
+SDValue VETargetLowering::lowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   SDLoc dl(Op);
   StoreSDNode *StNode = cast<StoreSDNode>(Op.getNode());
   assert(StNode && StNode->getOffset().isUndef() && "Unexpected node type");
@@ -2106,7 +2026,7 @@ SDValue VETargetLowering::LowerSTORE(SDValue Op, SelectionDAG &DAG) const {
   return Op;
 }
 
-SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
+SDValue VETargetLowering::lowerATOMIC_FENCE(SDValue Op,
                                             SelectionDAG &DAG) const {
   SDLoc DL(Op);
   AtomicOrdering FenceOrdering = static_cast<AtomicOrdering>(
@@ -2149,55 +2069,6 @@ SDValue VETargetLowering::LowerATOMIC_FENCE(SDValue Op,
 
   // MEMBARRIER is a compiler barrier; it codegens to a no-op.
   return DAG.getNode(VEISD::MEMBARRIER, DL, MVT::Other, Op.getOperand(0));
-}
-
-SDValue VETargetLowering::LowerATOMIC_SWAP(SDValue Op,
-                                           SelectionDAG &DAG) const {
-  AtomicSDNode *N = cast<AtomicSDNode>(Op);
-
-  // Custom Lowering 1 byte ATOMIC_SWAP.
-  if (N->getMemoryVT() == MVT::i8) {
-    SDLoc DL(Op);
-
-    SDValue Src = N->getOperand(1);
-    SDValue Value = N->getOperand(2);
-
-    SDValue Const3 = DAG.getConstant(3, DL, MVT::i64);
-    SDValue Const24 = DAG.getConstant(24, DL, MVT::i64);
-
-    // Generate "ts1am" as 1 byte ATOMIC_SWAP.
-    SDValue AlignedAddress =
-        DAG.getNode(ISD::AND, DL, Src.getValueType(),
-                    {Src, DAG.getConstant(-4, DL, MVT::i64)});
-    SDValue Remainder =
-        DAG.getNode(ISD::AND, DL, Src.getValueType(), {Src, Const3});
-    SDValue ShiftedFlag = DAG.getNode(
-        ISD::SHL, DL, MVT::i32, {DAG.getConstant(1, DL, MVT::i32), Remainder});
-    SDValue ShiftBits = DAG.getNode(ISD::SHL, DL, Remainder.getValueType(),
-                                    {Remainder, Const3});
-    SDValue NewValue =
-        DAG.getNode(ISD::SHL, DL, Value.getValueType(), {Value, ShiftBits});
-    SDValue TS1AM =
-        DAG.getAtomic(VEISD::TS1AM, DL, N->getMemoryVT(),
-                      DAG.getVTList(Op.getNode()->getValueType(0),
-                                    Op.getNode()->getValueType(1)),
-                      {N->getChain(), AlignedAddress, ShiftedFlag, NewValue},
-                      N->getMemOperand());
-
-    // Extract 1 byte result.
-    SDValue SUB =
-        DAG.getNode(ISD::SUB, DL, Const24.getValueType(), {Const24, ShiftBits});
-    SDValue ShiftLeftFor1Byte =
-        DAG.getNode(ISD::SHL, DL, TS1AM.getValueType(), {TS1AM, SUB});
-    SDValue ShiftRightFor1Byte =
-        DAG.getNode(ISD::SRA, DL, ShiftLeftFor1Byte.getValueType(),
-                    {ShiftLeftFor1Byte, Const24});
-
-    SDValue Chain = TS1AM.getValue(1);
-    return DAG.getMergeValues({ShiftRightFor1Byte, Chain}, DL);
-  }
-  // Otherwise, let llvm legalize it.
-  return Op;
 }
 
 SDValue VETargetLowering::lowerINTRINSIC_WO_CHAIN(SDValue Op,
@@ -2272,66 +2143,6 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
         return DefinedValues < 3;
 #endif
 }
-
-SDValue VETargetLowering::lowerBUILD_VECTOR(SDValue Op,
-                                            SelectionDAG & DAG) const {
-  if (Subtarget->enableVPU())
-    return lowerVVP_BUILD_VECTOR(Op, DAG);
-  if (Subtarget->intrinsic())
-    return lowerSIMD_BUILD_VECTOR(Op, DAG);
-  if (Subtarget->vectorize())
-    return lowerSIMD_BUILD_VECTOR(Op, DAG);
-  return SDValue();
-}
-
-SDValue VETargetLowering::lowerVECTOR_SHUFFLE(SDValue Op,
-                                              SelectionDAG & DAG) const {
-  if (Subtarget->intrinsic())
-    return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
-  if (Subtarget->vectorize())
-    return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
-  return SDValue();
-}
-
-SDValue VETargetLowering::lowerINSERT_VECTOR_ELT(
-    SDValue Op, SelectionDAG & DAG) const {
-  if (Subtarget->intrinsic())
-    return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
-  if (Subtarget->vectorize())
-    return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
-  return SDValue();
-}
-
-
-SDValue VETargetLowering::lowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG & DAG) {
-  if (Subtarget->intrinsic())
-    return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
-  if (Subtarget->vectorize())
-    return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
-  return SDValue();
-}
-
-SDValue VETargetLowering::lowerMGATHER(SDValue Op, SelectionDAG & DAG)
-    const {
-  if (Subtarget->vectorize())
-    return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
-  return SDValue();
-}
-
-SDValue VETargetLowering::lowerMSCATTER(SDValue Op, SelectionDAG & DAG)
-    const {
-  if (Subtarget->vectorize())
-    return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
-  return SDValue();
-}
-
-SDValue VETargetLowering::lowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
-  if (Subtarget->vectorize())
-    return lowerSIMD_MLOAD(Op, DAG);
-  return SDValue();
-}
-
-/// } Custom Lower
 
 /// JumpTable for VE.
 ///
@@ -3915,21 +3726,6 @@ VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
   return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
 }
 
-static SDValue fixUpOperation(SDValue Val, EVT LegalVT, CustomDAG &CDAG) {
-  if (Val.getValueType() == LegalVT)
-    return Val;
-
-  // SelectionDAGBuilder does not respect TLI::getCCResultVT (do a fixup here)
-  if (Val.getOpcode() == ISD::SETCC && Val.getValueType() == MVT::i1) {
-    SDNode *N = Val.getNode();
-    return CDAG.getNode(ISD::SETCC, LegalVT,
-                        {N->getOperand(0), N->getOperand(1), N->getOperand(2)});
-  }
-
-  return SDValue();
-}
-
-
 // Override to enable LOAD_STACK_GUARD lowering on Linux.
 bool VETargetLowering::useLoadStackGuardNode() const {
   if (!Subtarget->isTargetLinux())
@@ -3987,4 +3783,64 @@ bool VETargetLowering::hasAndNot(SDValue Y) const {
 
   // It's ok for generic registers.
   return true;
+}
+
+SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "LowerOp: "; Op.dump(&DAG); dbgs() << "\n";);
+
+  switch (Op.getOpcode()) {
+  default:
+    if (Subtarget->enableVPU())
+      return LowerOperation_VVP(Op, DAG);
+    else if (Subtarget->vectorize())
+      return LowerOperation_SIMD(Op, DAG);
+    llvm_unreachable("Unexpected Opcode in LowerOperation");
+
+  // Mostly all-scalar lowerings below.
+  case ISD::ATOMIC_FENCE:
+    return lowerATOMIC_FENCE(Op, DAG);
+  case ISD::ATOMIC_SWAP:
+    return lowerATOMIC_SWAP(Op, DAG);
+  case ISD::BlockAddress:
+    return lowerBlockAddress(Op, DAG);
+  case ISD::ConstantPool:
+    return lowerConstantPool(Op, DAG);
+  case ISD::DYNAMIC_STACKALLOC:
+    return lowerDYNAMIC_STACKALLOC(Op, DAG);
+  case ISD::EH_SJLJ_SETJMP:
+    return lowerEH_SJLJ_SETJMP(Op, DAG);
+  case ISD::EH_SJLJ_LONGJMP:
+    return lowerEH_SJLJ_LONGJMP(Op, DAG);
+  case ISD::EH_SJLJ_SETUP_DISPATCH:
+    return lowerEH_SJLJ_SETUP_DISPATCH(Op, DAG);
+  case ISD::FRAMEADDR:
+    return lowerFRAMEADDR(Op, DAG, *this, Subtarget);
+  case ISD::GlobalAddress:
+    return lowerGlobalAddress(Op, DAG);
+  case ISD::GlobalTLSAddress:
+    return lowerGlobalTLSAddress(Op, DAG);
+  case ISD::INTRINSIC_VOID:
+    return lowerINTRINSIC_VOID(Op, DAG);
+  case ISD::INTRINSIC_W_CHAIN:
+    return lowerINTRINSIC_W_CHAIN(Op, DAG);
+  case ISD::INTRINSIC_WO_CHAIN:
+    return lowerINTRINSIC_WO_CHAIN(Op, DAG);
+
+    // case ISD::VECREDUCE_OR:
+    // case ISD::VECREDUCE_AND:
+    // case ISD::VECREDUCE_XOR:
+
+  case ISD::JumpTable:
+    return lowerJumpTable(Op, DAG);
+  case ISD::LOAD:
+    return lowerLOAD(Op, DAG); // Dispatches to VVP lowering.
+  case ISD::STORE:
+    return lowerSTORE(Op, DAG);
+  case ISD::RETURNADDR:
+    return lowerRETURNADDR(Op, DAG, *this, Subtarget);
+  case ISD::VASTART:
+    return lowerVASTART(Op, DAG);
+  case ISD::VAARG:
+    return lowerVAARG(Op, DAG);
+  }
 }
