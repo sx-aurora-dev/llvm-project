@@ -102,23 +102,17 @@ void VETargetLowering::initRegisterClasses() {
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
-  if (Subtarget->enableVPU()) {
-    for (MVT VecVT : AllVectorVTs)
-      addRegisterClass(VecVT, &VE::V64RegClass);
-    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
-  } else if (Subtarget->vectorize()) {
+  if (Subtarget->vectorize()) {
     for (MVT VecVT : WholeVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
     addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
     for (MVT MaskVT : All256MaskVTs)
       addRegisterClass(MaskVT, &VE::VMRegClass);
-  } else {
-    assert(Subtarget->intrinsic());
+  } else if (Subtarget->enableVPU() || Subtarget->intrinsic()) {
     for (MVT VecVT : AllVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
-    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
     addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
   }
 }
 

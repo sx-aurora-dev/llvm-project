@@ -71,8 +71,6 @@ public:
   Type *getBoolTy(int ElemCount = 0) const;
   // Create a ConstantInt of type returned by getIntTy with the value Val.
   ConstantInt *getConstInt(int Val) const;
-  // Create a 'true' or 'false' value of type getBoolTy.
-  ConstantInt *getConstBool(bool Val) const;
   // Get the integer value of V, if it exists.
   Optional<APInt> getIntValue(const Value *Val) const;
   // Is V a constant 0, or a vector of 0s?
@@ -294,8 +292,16 @@ template <> StoreInst *isCandidate<StoreInst>(Instruction *In) {
   return getIfUnordered(dyn_cast<StoreInst>(In));
 }
 
+#if !defined(_MSC_VER) || _MSC_VER >= 1924
+// VS2017 has trouble compiling this:
+// error C2976: 'std::map': too few template arguments
 template <typename Pred, typename... Ts>
-void erase_if(std::map<Ts...> &map, Pred p) {
+void erase_if(std::map<Ts...> &map, Pred p)
+#else
+template <typename Pred, typename T, typename U>
+void erase_if(std::map<T, U> &map, Pred p)
+#endif
+{
   for (auto i = map.begin(), e = map.end(); i != e;) {
     if (p(*i))
       i = map.erase(i);
@@ -485,7 +491,7 @@ auto AlignVectors::createAddressGroups() -> bool {
   auto traverseBlock = [&](DomTreeNode *DomN, auto Visit) -> void {
     BasicBlock &Block = *DomN->getBlock();
     for (Instruction &I : Block) {
-      auto AI = getAddrInfo(I);
+      auto AI = this->getAddrInfo(I); // Use this-> for gcc6.
       if (!AI)
         continue;
       auto F = findBaseAndOffset(*AI);
@@ -804,14 +810,24 @@ auto AlignVectors::realignGroup(const MoveGroup &Move) const -> bool {
     // Stores.
     ByteSpan ASpanV, ASpanM;
 
+    // Return a vector value corresponding to the input value Val:
+    // either <1 x Val> for scalar Val, or Val itself for vector Val.
+    auto MakeVec = [](IRBuilder<> &Builder, Value *Val) -> Value * {
+      Type *Ty = Val->getType();
+      if (Ty->isVectorTy())
+        return Val;
+      auto *VecTy = VectorType::get(Ty, 1, /*Scalable*/ false);
+      return Builder.CreateBitCast(Val, VecTy);
+    };
+
     for (int i = -1; i != NumSectors; ++i) {
       ByteSpan Section = VSpan.section(i * ScLen, ScLen).normalize();
       Value *AccumV = UndefValue::get(SecTy);
       Value *AccumM = HVC.getNullValue(SecTy);
       for (ByteSpan::Block &S : Section) {
         Value *Pay = getPayload(S.Seg.Val);
-        Value *Mask = HVC.rescale(Builder, getMask(S.Seg.Val), Pay->getType(),
-                                  HVC.getByteTy());
+        Value *Mask = HVC.rescale(Builder, MakeVec(Builder, getMask(S.Seg.Val)),
+                                  Pay->getType(), HVC.getByteTy());
         AccumM = HVC.insertb(Builder, AccumM, HVC.vbytes(Builder, Mask),
                              S.Seg.Start, S.Seg.Size, S.Pos);
         AccumV = HVC.insertb(Builder, AccumV, HVC.vbytes(Builder, Pay),
@@ -901,12 +917,6 @@ auto HexagonVectorCombine::getBoolTy(int ElemCount) const -> Type * {
 
 auto HexagonVectorCombine::getConstInt(int Val) const -> ConstantInt * {
   return ConstantInt::getSigned(getIntTy(), Val);
-}
-
-auto HexagonVectorCombine::getConstBool(bool Val) const -> ConstantInt * {
-  Constant *C = Val ? ConstantInt::getTrue(getBoolTy())
-                    : ConstantInt::getFalse(getBoolTy());
-  return cast<ConstantInt>(C);
 }
 
 auto HexagonVectorCombine::isZero(const Value *Val) const -> bool {
@@ -1096,8 +1106,7 @@ auto HexagonVectorCombine::vresize(IRBuilder<> &Builder, Value *Val,
                                    int NewSize, Value *Pad) const -> Value * {
   assert(isa<VectorType>(Val->getType()));
   auto *ValTy = cast<VectorType>(Val->getType());
-  auto *PadTy = Pad->getType();
-  assert(ValTy->getElementType() == PadTy);
+  assert(ValTy->getElementType() == Pad->getType());
 
   int CurSize = ValTy->getElementCount().getFixedValue();
   if (CurSize == NewSize)
@@ -1153,7 +1162,7 @@ auto HexagonVectorCombine::vlsb(IRBuilder<> &Builder, Value *Val) const
 
   Value *Bytes = vbytes(Builder, Val);
   if (auto *VecTy = dyn_cast<VectorType>(Bytes->getType()))
-    return Builder.CreateTrunc(Bytes, getBoolTy(getSizeOf(Bytes)));
+    return Builder.CreateTrunc(Bytes, getBoolTy(getSizeOf(VecTy)));
   // If Bytes is a scalar (i.e. Val was a scalar byte), return i1, not
   // <1 x i1>.
   return Builder.CreateTrunc(Bytes, getBoolTy());
@@ -1181,7 +1190,6 @@ auto HexagonVectorCombine::createHvxIntrinsic(IRBuilder<> &Builder,
   int HwLen = HST.getVectorLength();
   Type *BoolTy = Type::getInt1Ty(F.getContext());
   Type *Int32Ty = Type::getInt32Ty(F.getContext());
-  Type *Int64Ty = Type::getInt64Ty(F.getContext());
   // HVX vector -> v16i32/v32i32
   // HVX vector predicate -> v512i1/v1024i1
   auto getTypeForIntrin = [&](Type *Ty) -> Type * {
@@ -1194,7 +1202,7 @@ auto HexagonVectorCombine::createHvxIntrinsic(IRBuilder<> &Builder,
       return VectorType::get(Int32Ty, HwLen / 4, /*Scalable*/ false);
     }
     // Non-HVX type. It should be a scalar.
-    assert(Ty == Int32Ty || Ty == Int64Ty);
+    assert(Ty == Int32Ty || Ty->isIntegerTy(64));
     return Ty;
   };
 
