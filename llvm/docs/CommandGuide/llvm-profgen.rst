@@ -1,5 +1,5 @@
 llvm-profgen - LLVM SPGO profile generation tool
-=================================================
+================================================
 
 .. program:: llvm-profgen
 
@@ -35,6 +35,12 @@ At least one of the following commands are required:
 OPTIONS
 -------
 :program:`llvm-profgen` supports the following options:
+
+.. option:: --format=[text|binary|extbinary|compbinary|gcc]
+
+  Specify the format of the generated profile. Supported <format>  are `text`,
+  `binary`, `extbinary`, `compbinary`, `gcc`, see `llvm-profdata` for more
+  descriptions of the format.
 
 .. option:: --show-mmap-events
 

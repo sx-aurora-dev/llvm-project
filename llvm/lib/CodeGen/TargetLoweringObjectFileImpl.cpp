@@ -621,7 +621,7 @@ getELFSectionNameForGlobal(const GlobalObject *GO, SectionKind Kind,
   bool HasPrefix = false;
   if (const auto *F = dyn_cast<Function>(GO)) {
     if (Optional<StringRef> Prefix = F->getSectionPrefix()) {
-      Name += *Prefix;
+      raw_svector_ostream(Name) << '.' << *Prefix;
       HasPrefix = true;
     }
   }
@@ -1573,6 +1573,10 @@ MCSection *TargetLoweringObjectFileCOFF::SelectSectionForGlobal(
       MCSymbol *Sym = TM.getSymbol(ComdatGV);
       StringRef COMDATSymName = Sym->getName();
 
+      if (const auto *F = dyn_cast<Function>(GO))
+        if (Optional<StringRef> Prefix = F->getSectionPrefix())
+          raw_svector_ostream(Name) << '$' << *Prefix;
+
       // Append "$symbol" to the section name *before* IR-level mangling is
       // applied when targetting mingw. This is what GCC does, and the ld.bfd
       // COFF linker will not properly handle comdats otherwise.
@@ -2020,7 +2024,7 @@ static MCSectionWasm *selectWasmSectionForGlobal(
   if (const auto *F = dyn_cast<Function>(GO)) {
     const auto &OptionalPrefix = F->getSectionPrefix();
     if (OptionalPrefix)
-      Name += *OptionalPrefix;
+      raw_svector_ostream(Name) << '.' << *OptionalPrefix;
   }
 
   if (EmitUniqueSection && UniqueSectionNames) {
@@ -2272,9 +2276,13 @@ MCSection *TargetLoweringObjectFileXCOFF::getSectionForConstant(
 void TargetLoweringObjectFileXCOFF::Initialize(MCContext &Ctx,
                                                const TargetMachine &TgtM) {
   TargetLoweringObjectFile::Initialize(Ctx, TgtM);
-  TTypeEncoding = 0;
+  TTypeEncoding =
+      dwarf::DW_EH_PE_indirect | dwarf::DW_EH_PE_datarel |
+      (TgtM.getTargetTriple().isArch32Bit() ? dwarf::DW_EH_PE_sdata4
+                                            : dwarf::DW_EH_PE_sdata8);
   PersonalityEncoding = 0;
   LSDAEncoding = 0;
+  CallSiteEncoding = dwarf::DW_EH_PE_udata4;
 }
 
 MCSection *TargetLoweringObjectFileXCOFF::getStaticCtorSection(

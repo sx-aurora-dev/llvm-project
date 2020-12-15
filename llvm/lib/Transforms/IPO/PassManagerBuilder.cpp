@@ -445,8 +445,8 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
     MPM.add(createLoopFlattenPass()); // Flatten loops
     MPM.add(createLoopSimplifyCFGPass());
   }
-  MPM.add(createIndVarSimplifyPass());        // Canonicalize indvars
   MPM.add(createLoopIdiomPass());             // Recognize idioms like memset.
+  MPM.add(createIndVarSimplifyPass());        // Canonicalize indvars
   addExtensionsToPM(EP_LateLoopOptimizations, MPM);
   MPM.add(createLoopDeletionPass());          // Delete dead loops
 
@@ -469,6 +469,9 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
   }
   MPM.add(createMemCpyOptPass());             // Remove memcpy / form memset
   MPM.add(createSCCPPass());                  // Constant prop with SCCP
+
+  if (EnableConstraintElimination)
+    MPM.add(createConstraintEliminationPass());
 
   // Delete dead bit computations (instcombine runs after to fold away the dead
   // computations, and then ADCE will run later to exploit any new DCE
@@ -1055,6 +1058,9 @@ void PassManagerBuilder::addLTOOptimizationPasses(legacy::PassManagerBase &PM) {
   PM.add(createLoopDeletionPass());
   if (EnableLoopInterchange)
     PM.add(createLoopInterchangePass());
+
+  if (EnableConstraintElimination)
+    PM.add(createConstraintEliminationPass());
 
   // Unroll small loops
   PM.add(createSimpleLoopUnrollPass(OptLevel, DisableUnrollLoops,

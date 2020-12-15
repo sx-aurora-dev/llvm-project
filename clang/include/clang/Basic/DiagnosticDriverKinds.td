@@ -79,7 +79,7 @@ def err_drv_cuda_host_arch : Error<"unsupported architecture '%0' for host compi
 def err_drv_mix_cuda_hip : Error<"Mixed Cuda and HIP compilation is not supported.">;
 def err_drv_bad_target_id : Error<"Invalid target ID: %0 (A target ID is a processor name "
   "followed by an optional list of predefined features post-fixed by a plus or minus sign deliminated "
-  "by colon, e.g. 'gfx908:sram-ecc+:xnack-')">;
+  "by colon, e.g. 'gfx908:sramecc+:xnack-')">;
 def err_drv_bad_offload_arch_combo : Error<"Invalid offload arch combinations: %0 and %1 (For a specific "
   "processor, a feature should either exist in all offload archs, or not exist in any offload archs)">;
 def err_drv_invalid_thread_model_for_target : Error<
@@ -117,6 +117,8 @@ def err_drv_command_failure : Error<
   "unable to execute command: %0">;
 def err_drv_invalid_darwin_version : Error<
   "invalid Darwin version number: %0">;
+def err_drv_invalid_diagnotics_hotness_threshold : Error<
+  "invalid argument in '%0', only integer or 'auto' is supported">;
 def err_drv_missing_argument : Error<
   "argument to '%0' is missing (expected %1 value%s1)">;
 def err_drv_invalid_Xarch_argument_with_args : Error<
@@ -531,4 +533,9 @@ def err_drv_invalid_object_mode : Error<"OBJECT_MODE setting %0 is not recognize
 
 def err_drv_invalid_sve_vector_bits : Error<
   "'-msve-vector-bits' is not supported without SVE enabled">;
+
+def err_aix_default_altivec_abi : Error<
+  "The default Altivec ABI on AIX is not yet supported, use '-mabi=vec-extabi' for the extended Altivec ABI">;
+
+def err_aix_altivec : Error<"'-mabi=vec-extabi' and '-mabi=vec-default' require '-maltivec'">;
 }

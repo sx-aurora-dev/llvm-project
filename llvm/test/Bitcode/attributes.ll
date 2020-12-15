@@ -404,11 +404,6 @@ define void @f68() mustprogress
   ret void
 }
 
-; CHECK: define <8 x double> @f69(<8 x double> passthru %0, <8 x i1> mask %1, i32 vlen %2) {
-define <8 x double> @f69(<8 x double> passthru, <8 x i1> mask, i32 vlen) {
-  ret <8 x double> undef
-}
-
 ; CHECK: attributes #0 = { noreturn }
 ; CHECK: attributes #1 = { nounwind }
 ; CHECK: attributes #2 = { readnone }

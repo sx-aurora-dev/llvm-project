@@ -33,7 +33,7 @@ BareMetal::BareMetal(const Driver &D, const llvm::Triple &Triple,
   getProgramPaths().push_back(getDriver().getInstalledDir());
   if (getDriver().getInstalledDir() != getDriver().Dir)
     getProgramPaths().push_back(getDriver().Dir);
-  SmallString<128> SysRoot(getDriver().SysRoot);
+  SmallString<128> SysRoot(computeSysRoot());
   if (!SysRoot.empty()) {
     llvm::sys::path::append(SysRoot, "lib");
     getFilePaths().push_back(std::string(SysRoot));
@@ -59,8 +59,22 @@ static bool isARMBareMetal(const llvm::Triple &Triple) {
   return true;
 }
 
+static bool isRISCVBareMetal(const llvm::Triple &Triple) {
+  if (Triple.getArch() != llvm::Triple::riscv32 &&
+      Triple.getArch() != llvm::Triple::riscv64)
+    return false;
+
+  if (Triple.getVendor() != llvm::Triple::UnknownVendor)
+    return false;
+
+  if (Triple.getOS() != llvm::Triple::UnknownOS)
+    return false;
+
+  return Triple.getEnvironmentName() == "elf";
+}
+
 bool BareMetal::handlesTarget(const llvm::Triple &Triple) {
-  return isARMBareMetal(Triple);
+  return isARMBareMetal(Triple) || isRISCVBareMetal(Triple);
 }
 
 Tool *BareMetal::buildLinker() const {
@@ -80,6 +94,17 @@ std::string BareMetal::getRuntimesDir() const {
   return std::string(Dir.str());
 }
 
+std::string BareMetal::computeSysRoot() const {
+  if (!getDriver().SysRoot.empty())
+    return getDriver().SysRoot;
+
+  SmallString<128> SysRootDir;
+  llvm::sys::path::append(SysRootDir, getDriver().Dir, "../lib/clang-runtimes",
+                          getDriver().getTargetTriple());
+
+  return std::string(SysRootDir);
+}
+
 void BareMetal::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
                                           ArgStringList &CC1Args) const {
   if (DriverArgs.hasArg(options::OPT_nostdinc))
@@ -92,9 +117,11 @@ void BareMetal::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
   }
 
   if (!DriverArgs.hasArg(options::OPT_nostdlibinc)) {
-    SmallString<128> Dir(getDriver().SysRoot);
-    llvm::sys::path::append(Dir, "include");
-    addSystemInclude(DriverArgs, CC1Args, Dir.str());
+    SmallString<128> Dir(computeSysRoot());
+    if (!Dir.empty()) {
+      llvm::sys::path::append(Dir, "include");
+      addSystemInclude(DriverArgs, CC1Args, Dir.str());
+    }
   }
 }
 
@@ -111,7 +138,7 @@ void BareMetal::AddClangCXXStdlibIncludeArgs(
       DriverArgs.hasArg(options::OPT_nostdincxx))
     return;
 
-  StringRef SysRoot = getDriver().SysRoot;
+  std::string SysRoot(computeSysRoot());
   if (SysRoot.empty())
     return;
 

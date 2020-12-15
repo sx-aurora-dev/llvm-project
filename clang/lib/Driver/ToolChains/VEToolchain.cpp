@@ -145,10 +145,10 @@ void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
   CmdArgs.push_back("-lc++");
   CmdArgs.push_back("-lc++abi");
   CmdArgs.push_back("-lunwind");
-  // libc++ requires -lpthread under glibc environment
-  // libunwind requires -ldl under glibc environment
   if (!getTriple().isMusl()) {
+    // libc++ requires -lpthread under glibc environment
     CmdArgs.push_back("-lpthread");
+    // libunwind requires -ldl under glibc environment
     CmdArgs.push_back("-ldl");
   }
 }

@@ -288,7 +288,6 @@ unsigned VPIntrinsic::GetFunctionalOpcodeForVP(Intrinsic::ID ID) {
   switch (ID) {
   default:
     break;
-
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
 #define HANDLE_VP_TO_OPC(OPC) FunctionalOC = Instruction::OPC;
 #define END_REGISTER_VP_INTRINSIC(...) break;

@@ -237,9 +237,6 @@ enum NodeType {
   SREM,
   UREM,
 
-#define BEGIN_REGISTER_VP_SDNODE(VPSDNAME, ...) VPSDNAME,
-#include "llvm/IR/VPIntrinsics.def"
-
   /// SMUL_LOHI/UMUL_LOHI - Multiply two integers of type iN, producing
   /// a signed/unsigned value of type i[2*N], and return the full value as
   /// two results, each of type iN.
@@ -1015,6 +1012,9 @@ enum NodeType {
   /// DEBUGTRAP - Trap intended to get the attention of a debugger.
   DEBUGTRAP,
 
+  /// UBSANTRAP - Trap with an immediate describing the kind of sanitizer failure.
+  UBSANTRAP,
+
   /// PREFETCH - This corresponds to a prefetch intrinsic. The first operand
   /// is the chain.  The other operands are the address to prefetch,
   /// read / write specifier, locality specifier and instruction / data cache
@@ -1156,6 +1156,10 @@ enum NodeType {
   VECREDUCE_SMIN,
   VECREDUCE_UMAX,
   VECREDUCE_UMIN,
+
+// Vector Predication
+#define BEGIN_REGISTER_VP_SDNODE(VPSDID, ...) VPSDID,
+#include "llvm/IR/VPIntrinsics.def"
 
   /// BUILTIN_OP_END - This must be the last enum value in this list.
   /// The target-specific pre-isel opcode values start here.

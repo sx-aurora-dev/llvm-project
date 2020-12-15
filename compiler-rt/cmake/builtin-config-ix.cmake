@@ -30,6 +30,12 @@ _Float16 foo(_Float16 x) {
 "
 )
 
+builtin_check_c_compiler_source(COMPILER_RT_HAS_ASM_LSE
+"
+asm(\".arch armv8-a+lse\");
+asm(\"cas w0, w1, [x2]\");
+")
+
 set(ARM64 aarch64)
 set(ARM32 arm armhf armv6m armv7m armv7em armv7 armv7s armv7k)
 set(HEXAGON hexagon)

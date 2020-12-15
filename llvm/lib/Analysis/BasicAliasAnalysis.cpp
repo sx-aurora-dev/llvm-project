@@ -877,8 +877,8 @@ ModRefInfo BasicAAResult::getModRefInfo(const CallBase *Call,
       // If this is a no-capture pointer argument, see if we can tell that it
       // is impossible to alias the pointer we're checking.
       AliasResult AR = getBestAAResults().alias(
-          MemoryLocation(*CI, LocationSize::unknown()),
-          MemoryLocation(Object, LocationSize::unknown()), AAQI);
+          MemoryLocation::getBeforeOrAfter(*CI),
+          MemoryLocation::getBeforeOrAfter(Object), AAQI);
       if (AR != MustAlias)
         IsMustAlias = false;
       // Operand doesn't alias 'Object', continue looking for other aliases
@@ -924,7 +924,7 @@ ModRefInfo BasicAAResult::getModRefInfo(const CallBase *Call,
   if (isMallocOrCallocLikeFn(Call, &TLI)) {
     // Be conservative if the accessed pointer may alias the allocation -
     // fallback to the generic handling below.
-    if (getBestAAResults().alias(MemoryLocation(Call, LocationSize::unknown()),
+    if (getBestAAResults().alias(MemoryLocation::getBeforeOrAfter(Call),
                                  Loc, AAQI) == NoAlias)
       return ModRefInfo::NoModRef;
   }
@@ -1030,126 +1030,6 @@ ModRefInfo BasicAAResult::getModRefInfo(const CallBase *Call1,
   return AAResultBase::getModRefInfo(Call1, Call2, AAQI);
 }
 
-/// Provide ad-hoc rules to disambiguate accesses through two GEP operators,
-/// both having the exact same pointer operand.
-static AliasResult aliasSameBasePointerGEPs(const GEPOperator *GEP1,
-                                            LocationSize MaybeV1Size,
-                                            const GEPOperator *GEP2,
-                                            LocationSize MaybeV2Size,
-                                            const DataLayout &DL) {
-  assert(GEP1->getPointerOperand()->stripPointerCastsAndInvariantGroups() ==
-             GEP2->getPointerOperand()->stripPointerCastsAndInvariantGroups() &&
-         GEP1->getPointerOperandType() == GEP2->getPointerOperandType() &&
-         "Expected GEPs with the same pointer operand");
-
-  // Try to determine whether GEP1 and GEP2 index through arrays, into structs,
-  // such that the struct field accesses provably cannot alias.
-  // We also need at least two indices (the pointer, and the struct field).
-  if (GEP1->getNumIndices() != GEP2->getNumIndices() ||
-      GEP1->getNumIndices() < 2)
-    return MayAlias;
-
-  // If we don't know the size of the accesses through both GEPs, we can't
-  // determine whether the struct fields accessed can't alias.
-  if (!MaybeV1Size.hasValue() || !MaybeV2Size.hasValue())
-    return MayAlias;
-
-  const uint64_t V1Size = MaybeV1Size.getValue();
-  const uint64_t V2Size = MaybeV2Size.getValue();
-
-  ConstantInt *C1 =
-      dyn_cast<ConstantInt>(GEP1->getOperand(GEP1->getNumOperands() - 1));
-  ConstantInt *C2 =
-      dyn_cast<ConstantInt>(GEP2->getOperand(GEP2->getNumOperands() - 1));
-
-  // If the last (struct) indices are constants and are equal, the other indices
-  // might be also be dynamically equal, so the GEPs can alias.
-  if (C1 && C2) {
-    unsigned BitWidth = std::max(C1->getBitWidth(), C2->getBitWidth());
-    if (C1->getValue().sextOrSelf(BitWidth) ==
-        C2->getValue().sextOrSelf(BitWidth))
-      return MayAlias;
-  }
-
-  // Find the last-indexed type of the GEP, i.e., the type you'd get if
-  // you stripped the last index.
-  // On the way, look at each indexed type.  If there's something other
-  // than an array, different indices can lead to different final types.
-  SmallVector<Value *, 8> IntermediateIndices;
-
-  // Insert the first index; we don't need to check the type indexed
-  // through it as it only drops the pointer indirection.
-  assert(GEP1->getNumIndices() > 1 && "Not enough GEP indices to examine");
-  IntermediateIndices.push_back(GEP1->getOperand(1));
-
-  // Insert all the remaining indices but the last one.
-  // Also, check that they all index through arrays.
-  for (unsigned i = 1, e = GEP1->getNumIndices() - 1; i != e; ++i) {
-    if (!isa<ArrayType>(GetElementPtrInst::getIndexedType(
-            GEP1->getSourceElementType(), IntermediateIndices)))
-      return MayAlias;
-    IntermediateIndices.push_back(GEP1->getOperand(i + 1));
-  }
-
-  auto *Ty = GetElementPtrInst::getIndexedType(
-    GEP1->getSourceElementType(), IntermediateIndices);
-  if (isa<ArrayType>(Ty) || isa<VectorType>(Ty)) {
-    // We know that:
-    // - both GEPs begin indexing from the exact same pointer;
-    // - the last indices in both GEPs are constants, indexing into a sequential
-    //   type (array or vector);
-    // - both GEPs only index through arrays prior to that.
-    //
-    // Because array indices greater than the number of elements are valid in
-    // GEPs, unless we know the intermediate indices are identical between
-    // GEP1 and GEP2 we cannot guarantee that the last indexed arrays don't
-    // partially overlap. We also need to check that the loaded size matches
-    // the element size, otherwise we could still have overlap.
-    Type *LastElementTy = GetElementPtrInst::getTypeAtIndex(Ty, (uint64_t)0);
-    const uint64_t ElementSize =
-        DL.getTypeStoreSize(LastElementTy).getFixedSize();
-    if (V1Size != ElementSize || V2Size != ElementSize)
-      return MayAlias;
-
-    for (unsigned i = 0, e = GEP1->getNumIndices() - 1; i != e; ++i)
-      if (GEP1->getOperand(i + 1) != GEP2->getOperand(i + 1))
-        return MayAlias;
-
-    // Now we know that the array/pointer that GEP1 indexes into and that
-    // that GEP2 indexes into must either precisely overlap or be disjoint.
-    // Because they cannot partially overlap and because fields in an array
-    // cannot overlap, if we can prove the final indices are different between
-    // GEP1 and GEP2, we can conclude GEP1 and GEP2 don't alias.
-
-    // If the last indices are constants, we've already checked they don't
-    // equal each other so we can exit early.
-    if (C1 && C2)
-      return NoAlias;
-    {
-      Value *GEP1LastIdx = GEP1->getOperand(GEP1->getNumOperands() - 1);
-      Value *GEP2LastIdx = GEP2->getOperand(GEP2->getNumOperands() - 1);
-      if (isa<PHINode>(GEP1LastIdx) || isa<PHINode>(GEP2LastIdx)) {
-        // If one of the indices is a PHI node, be safe and only use
-        // computeKnownBits so we don't make any assumptions about the
-        // relationships between the two indices. This is important if we're
-        // asking about values from different loop iterations. See PR32314.
-        // TODO: We may be able to change the check so we only do this when
-        // we definitely looked through a PHINode.
-        if (GEP1LastIdx != GEP2LastIdx &&
-            GEP1LastIdx->getType() == GEP2LastIdx->getType()) {
-          KnownBits Known1 = computeKnownBits(GEP1LastIdx, DL);
-          KnownBits Known2 = computeKnownBits(GEP2LastIdx, DL);
-          if (Known1.Zero.intersects(Known2.One) ||
-              Known1.One.intersects(Known2.Zero))
-            return NoAlias;
-        }
-      } else if (isKnownNonEqual(GEP1LastIdx, GEP2LastIdx, DL))
-        return NoAlias;
-    }
-  }
-  return MayAlias;
-}
-
 // If a we have (a) a GEP and (b) a pointer based on an alloca, and the
 // beginning of the object the GEP points would have a negative offset with
 // repsect to the alloca, that means the GEP can not alias pointer (b).
@@ -1245,9 +1125,9 @@ AliasResult BasicAAResult::aliasGEP(
     if (isGEPBaseAtNegativeOffset(GEP2, DecompGEP2, DecompGEP1, V1Size))
       return NoAlias;
     // Do the base pointers alias?
-    AliasResult BaseAlias =
-        aliasCheck(UnderlyingV1, LocationSize::unknown(), AAMDNodes(),
-                   UnderlyingV2, LocationSize::unknown(), AAMDNodes(), AAQI);
+    AliasResult BaseAlias = aliasCheck(
+        UnderlyingV1, LocationSize::beforeOrAfterPointer(), AAMDNodes(),
+        UnderlyingV2, LocationSize::beforeOrAfterPointer(), AAMDNodes(), AAQI);
 
     // For GEPs with identical offsets, we can preserve the size and AAInfo
     // when performing the alias check on the underlying objects.
@@ -1266,21 +1146,6 @@ AliasResult BasicAAResult::aliasGEP(
       return BaseAlias;
     }
 
-    // Otherwise, we have a MustAlias.  Since the base pointers alias each other
-    // exactly, see if the computed offset from the common pointer tells us
-    // about the relation of the resulting pointer.
-    // If we know the two GEPs are based off of the exact same pointer (and not
-    // just the same underlying object), see if that tells us anything about
-    // the resulting pointers.
-    if (GEP1->getPointerOperand()->stripPointerCastsAndInvariantGroups() ==
-            GEP2->getPointerOperand()->stripPointerCastsAndInvariantGroups() &&
-        GEP1->getPointerOperandType() == GEP2->getPointerOperandType()) {
-      AliasResult R = aliasSameBasePointerGEPs(GEP1, V1Size, GEP2, V2Size, DL);
-      // If we couldn't find anything interesting, don't abandon just yet.
-      if (R != MayAlias)
-        return R;
-    }
-
     // Subtract the GEP2 pointer from the GEP1 pointer to find out their
     // symbolic difference.
     DecompGEP1.Offset -= DecompGEP2.Offset;
@@ -1295,9 +1160,9 @@ AliasResult BasicAAResult::aliasGEP(
     if (!V1Size.hasValue() && !V2Size.hasValue())
       return MayAlias;
 
-    AliasResult R = aliasCheck(UnderlyingV1, LocationSize::unknown(),
-                               AAMDNodes(), V2, LocationSize::unknown(),
-                               V2AAInfo, AAQI, nullptr, UnderlyingV2);
+    AliasResult R = aliasCheck(
+        UnderlyingV1, LocationSize::beforeOrAfterPointer(), AAMDNodes(),
+        V2, V2Size, V2AAInfo, AAQI, nullptr, UnderlyingV2);
     if (R != MustAlias) {
       // If V2 may alias GEP base pointer, conservatively returns MayAlias.
       // If V2 is known not to alias GEP base pointer, then the two values
@@ -1336,9 +1201,7 @@ AliasResult BasicAAResult::aliasGEP(
       // ---------------->|
       // |-->V1Size       |-------> V2Size
       // GEP1             V2
-      // We need to know that V2Size is not unknown, otherwise we might have
-      // stripped a gep with negative index ('gep <ptr>, -1, ...).
-      if (V1Size.hasValue() && V2Size.hasValue()) {
+      if (V1Size.hasValue()) {
         if ((-DecompGEP1.Offset).ult(V1Size.getValue()))
           return PartialAlias;
         return NoAlias;
@@ -1409,6 +1272,32 @@ AliasResult BasicAAResult::aliasGEP(
     if (AllNonPositive && V1Size.hasValue() &&
         (-DecompGEP1.Offset).uge(V1Size.getValue()))
       return NoAlias;
+
+    // Try to determine whether the variable part of the GEP is non-zero, in
+    // which case we can add/subtract a minimum scale from the offset.
+    // TODO: Currently this handles the case of Scale*V0-Scale*V1 where V0!=V1.
+    // We could also handle Scale*V0 where V0!=0.
+    if (V1Size.hasValue() && V2Size.hasValue() &&
+        DecompGEP1.VarIndices.size() == 2) {
+      const VariableGEPIndex &Var0 = DecompGEP1.VarIndices[0];
+      const VariableGEPIndex &Var1 = DecompGEP1.VarIndices[1];
+      // Check that VisitedPhiBBs is empty, to avoid reasoning about inequality
+      // of values across loop iterations.
+      if (Var0.Scale == -Var1.Scale && Var0.ZExtBits == Var1.ZExtBits &&
+          Var0.SExtBits == Var1.SExtBits && VisitedPhiBBs.empty() &&
+          isKnownNonEqual(Var0.V, Var1.V, DL)) {
+        // If the indexes are not equal, the actual offset will have at least
+        // Scale or -Scale added to it.
+        APInt Scale = Var0.Scale.abs();
+        APInt OffsetLo = DecompGEP1.Offset - Scale;
+        APInt OffsetHi = DecompGEP1.Offset + Scale;
+        // Check that an access at OffsetLo or lower, and an access at OffsetHi
+        // or higher both do not alias.
+        if (OffsetLo.isNegative() && (-OffsetLo).uge(V1Size.getValue()) &&
+            OffsetHi.isNonNegative() && OffsetHi.uge(V2Size.getValue()))
+          return NoAlias;
+      }
+    }
 
     if (constantOffsetHeuristic(DecompGEP1.VarIndices, V1Size, V2Size,
                                 DecompGEP1.Offset, &AC, DT))
@@ -1518,27 +1407,16 @@ AliasResult BasicAAResult::aliasPHI(const PHINode *PN, LocationSize PNSize,
     }
 
   SmallVector<Value *, 4> V1Srcs;
-  // For a recursive phi, that recurses through a contant gep, we can perform
-  // aliasing calculations using the other phi operands with an unknown size to
-  // specify that an unknown number of elements after the initial value are
-  // potentially accessed.
+  // If a phi operand recurses back to the phi, we can still determine NoAlias
+  // if we don't alias the underlying objects of the other phi operands, as we
+  // know that the recursive phi needs to be based on them in some way.
   bool isRecursive = false;
   auto CheckForRecPhi = [&](Value *PV) {
     if (!EnableRecPhiAnalysis)
       return false;
-    if (GEPOperator *PVGEP = dyn_cast<GEPOperator>(PV)) {
-      // Check whether the incoming value is a GEP that advances the pointer
-      // result of this PHI node (e.g. in a loop). If this is the case, we
-      // would recurse and always get a MayAlias. Handle this case specially
-      // below. We need to ensure that the phi is inbounds and has a constant
-      // positive operand so that we can check for alias with the initial value
-      // and an unknown but positive size.
-      if (PVGEP->getPointerOperand() == PN && PVGEP->isInBounds() &&
-          PVGEP->getNumIndices() == 1 && isa<ConstantInt>(PVGEP->idx_begin()) &&
-          !cast<ConstantInt>(PVGEP->idx_begin())->isNegative()) {
-        isRecursive = true;
-        return true;
-      }
+    if (getUnderlyingObject(PV) == PN) {
+      isRecursive = true;
+      return true;
     }
     return false;
   };
@@ -1584,11 +1462,11 @@ AliasResult BasicAAResult::aliasPHI(const PHINode *PN, LocationSize PNSize,
   if (V1Srcs.empty())
     return MayAlias;
 
-  // If this PHI node is recursive, set the size of the accessed memory to
-  // unknown to represent all the possible values the GEP could advance the
-  // pointer to.
+  // If this PHI node is recursive, indicate that the pointer may be moved
+  // across iterations. We can only prove NoAlias if different underlying
+  // objects are involved.
   if (isRecursive)
-    PNSize = LocationSize::unknown();
+    PNSize = LocationSize::beforeOrAfterPointer();
 
   // In the recursive alias queries below, we may compare values from two
   // different loop iterations. Keep track of visited phi blocks, which will
@@ -1725,6 +1603,18 @@ AliasResult BasicAAResult::aliasCheck(const Value *V1, LocationSize V1Size,
           O1, getMinimalExtentFrom(*V2, V2Size, DL, NullIsValidLocation), DL,
           TLI, NullIsValidLocation)))
     return NoAlias;
+
+  // If one the accesses may be before the accessed pointer, canonicalize this
+  // by using unknown after-pointer sizes for both accesses. This is
+  // equivalent, because regardless of which pointer is lower, one of them
+  // will always came after the other, as long as the underlying objects aren't
+  // disjoint. We do this so that the rest of BasicAA does not have to deal
+  // with accesses before the base pointer, and to improve cache utilization by
+  // merging equivalent states.
+  if (V1Size.mayBeBeforePointer() || V2Size.mayBeBeforePointer()) {
+    V1Size = LocationSize::afterPointer();
+    V2Size = LocationSize::afterPointer();
+  }
 
   // Check the cache before climbing up use-def chains. This also terminates
   // otherwise infinitely recursive queries.

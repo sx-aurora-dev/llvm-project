@@ -99,36 +99,45 @@ static VECC::CondCode GetOppositeBranchCondition(VECC::CondCode CC) {
   llvm_unreachable("Invalid cond code");
 }
 
-// Treat branch relative always like br.l.t as unconditional branch
-// instructions.
+// Treat a branch relative long always instruction as unconditional branch.
+// For example, br.l.t and br.l.
 static bool isUncondBranchOpcode(int Opc) {
   using namespace llvm::VE;
 
-#define BRKIND(NAME) \
-    (Opc == NAME ## a || Opc == NAME ## a_nt || Opc == NAME ## a_t)
-  return BRKIND(BRCFL) || BRKIND(BRCFW) || BRKIND(BRCFD) || BRKIND(BRCFS);
+#define BRKIND(NAME) (Opc == NAME##a || Opc == NAME##a_nt || Opc == NAME##a_t)
+  // VE has other branch relative always instructions for word/double/float,
+  // but we use only long branches in our lower.  So, sanity check it here.
+  assert(!BRKIND(BRCFW) && !BRKIND(BRCFD) && !BRKIND(BRCFS) &&
+         "Branch relative word/double/float always instructions should not be "
+         "used!");
+  return BRKIND(BRCFL);
 #undef BRKIND
 }
 
-// Treat branch relative conditional like brgt.l.t as conditional branch
-// instructions.
+// Treat branch relative conditional as conditional branch instructions.
+// For example, brgt.l.t and brle.s.nt.
 static bool isCondBranchOpcode(int Opc) {
   using namespace llvm::VE;
 
-#define BRKIND(NAME) \
-    (Opc == NAME ## rr || Opc == NAME ## rr_nt || Opc == NAME ## rr_t || \
-     Opc == NAME ## ir || Opc == NAME ## ir_nt || Opc == NAME ## ir_t)
+#define BRKIND(NAME)                                                           \
+  (Opc == NAME##rr || Opc == NAME##rr_nt || Opc == NAME##rr_t ||               \
+   Opc == NAME##ir || Opc == NAME##ir_nt || Opc == NAME##ir_t)
   return BRKIND(BRCFL) || BRKIND(BRCFW) || BRKIND(BRCFD) || BRKIND(BRCFS);
 #undef BRKIND
 }
 
-// Treat branch always like b.l.t as indirect branch instructions.
+// Treat branch long always instructions as indirect branch.
+// For example, b.l.t and b.l.
 static bool isIndirectBranchOpcode(int Opc) {
   using namespace llvm::VE;
 
-#define BRKIND(NAME) \
-    (Opc == NAME ## ari || Opc == NAME ## ari_nt || Opc == NAME ## ari_t)
-  return BRKIND(BCFL) || BRKIND(BCFW) || BRKIND(BCFD) || BRKIND(BCFS);
+#define BRKIND(NAME)                                                           \
+  (Opc == NAME##ari || Opc == NAME##ari_nt || Opc == NAME##ari_t)
+  // VE has other branch always instructions for word/double/float, but
+  // we use only long branches in our lower.  So, sanity check it here.
+  assert(!BRKIND(BCFW) && !BRKIND(BCFD) && !BRKIND(BCFS) &&
+         "Branch word/double/float always instructions should not be used!");
+  return BRKIND(BCFL);
 #undef BRKIND
 }
 
@@ -849,70 +858,72 @@ static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
   MI.eraseFromParent();
 }
 
-static void expandPseudoVFMK_VL(const TargetInstrInfo& TI, MachineInstr& MI)
-{
-    // replace to pvfmk.w.up and pvfmk.w.lo
-    // replace to pvfmk.s.up and pvfmk.s.lo
+static void addOperandsForVFMK(MachineInstrBuilder &MIB, MachineInstr &MI,
+                               bool Upper) {
+  // VM512
+  MIB.addReg(Upper ? getVM512Upper(MI.getOperand(0).getReg())
+                   : getVM512Lower(MI.getOperand(0).getReg()));
 
-    std::map<int, std::vector<int>> map = {
+  switch (MI.getNumExplicitOperands()) {
+  default:
+    report_fatal_error("unexpected number of operands for pvfmk");
+  case 2: // _Ml: VM512, VL
+    // VL
+    MIB.addReg(MI.getOperand(1).getReg());
+    break;
+  case 4: // _Mvl: VM512, CC, VR, VL
+    // CC
+    MIB.addImm(MI.getOperand(1).getImm());
+    // VR
+    MIB.addReg(MI.getOperand(2).getReg());
+    // VL
+    MIB.addReg(MI.getOperand(3).getReg());
+    break;
+  case 5: // _MvMl: VM512, CC, VR, VM512, VL
+    // CC
+    MIB.addImm(MI.getOperand(1).getImm());
+    // VR
+    MIB.addReg(MI.getOperand(2).getReg());
+    // VM512
+    MIB.addReg(Upper ? getVM512Upper(MI.getOperand(3).getReg())
+                     : getVM512Lower(MI.getOperand(3).getReg()));
+    // VL
+    MIB.addReg(MI.getOperand(4).getReg());
+    break;
+  }
+}
+
+static void expandPseudoVFMK(const TargetInstrInfo &TI, MachineInstr &MI) {
+  // replace to pvfmk.w.up and pvfmk.w.lo
+  // replace to pvfmk.s.up and pvfmk.s.lo
+
+  static std::map<unsigned, std::pair<unsigned, unsigned>> VFMKMap = {
       {VE::VFMKyal, {VE::VFMKLal, VE::VFMKLal}},
       {VE::VFMKynal, {VE::VFMKLnal, VE::VFMKLnal}},
       {VE::VFMKWyvl, {VE::PVFMKWUPvl, VE::PVFMKWLOvl}},
       {VE::VFMKWyvyl, {VE::PVFMKWUPvml, VE::PVFMKWLOvml}},
       {VE::VFMKSyvl, {VE::PVFMKSUPvl, VE::PVFMKSLOvl}},
       {VE::VFMKSyvyl, {VE::PVFMKSUPvml, VE::PVFMKSLOvml}},
-    };
+  };
 
-    unsigned Opcode = MI.getOpcode();
+  unsigned Opcode = MI.getOpcode();
 
-    if (map.find(Opcode) == map.end()) {
-      report_fatal_error("unexpected opcode for pseudo vfmk");
-    }
+  auto Found = VFMKMap.find(Opcode);
+  if (Found == VFMKMap.end())
+    report_fatal_error("unexpected opcode for pseudo vfmk");
 
-    unsigned OpcodeUpper = map[Opcode][0];
-    unsigned OpcodeLower = map[Opcode][1];
+  unsigned OpcodeUpper = (*Found).second.first;
+  unsigned OpcodeLower = (*Found).second.second;
 
-    MachineBasicBlock* MBB = MI.getParent();
-    DebugLoc dl = MI.getDebugLoc();
-    MachineInstrBuilder Bu = BuildMI(*MBB, MI, dl, TI.get(OpcodeUpper));
-    MachineInstrBuilder Bl = BuildMI(*MBB, MI, dl, TI.get(OpcodeLower));
+  MachineBasicBlock *MBB = MI.getParent();
+  DebugLoc DL = MI.getDebugLoc();
 
-    // VM512
-    Bu.addReg(getVM512Upper(MI.getOperand(0).getReg()));
-    Bl.addReg(getVM512Lower(MI.getOperand(0).getReg()));
+  MachineInstrBuilder Bu = BuildMI(*MBB, MI, DL, TI.get(OpcodeUpper));
+  addOperandsForVFMK(Bu, MI, /* Upper */ true);
+  MachineInstrBuilder Bl = BuildMI(*MBB, MI, DL, TI.get(OpcodeLower));
+  addOperandsForVFMK(Bl, MI, /* Upper */ false);
 
-    if (MI.getNumExplicitOperands() == 2) { // _Ml: VM512, VL
-      // VL
-      Bu.addReg(MI.getOperand(1).getReg());
-      Bl.addReg(MI.getOperand(1).getReg());
-    } else if (MI.getNumExplicitOperands() == 4) { // _Mvl: VM512, CC, VR, VL
-      // CC
-      Bu.addImm(MI.getOperand(1).getImm());
-      Bl.addImm(MI.getOperand(1).getImm());
-      // VR
-      Bu.addReg(MI.getOperand(2).getReg());
-      Bl.addReg(MI.getOperand(2).getReg());
-      // VL
-      Bu.addReg(MI.getOperand(3).getReg());
-      Bl.addReg(MI.getOperand(3).getReg());
-    } else if (MI.getNumExplicitOperands() == 5) { // _MvMl: VM512, CC, VR, VM512, VL
-      // CC
-      Bu.addImm(MI.getOperand(1).getImm());
-      Bl.addImm(MI.getOperand(1).getImm());
-      // VR
-      Bu.addReg(MI.getOperand(2).getReg());
-      Bl.addReg(MI.getOperand(2).getReg());
-      // VM512
-      Bu.addReg(getVM512Upper(MI.getOperand(3).getReg()));
-      Bl.addReg(getVM512Lower(MI.getOperand(3).getReg()));
-      // VL
-      Bu.addReg(MI.getOperand(4).getReg());
-      Bl.addReg(MI.getOperand(4).getReg());
-    } else {
-      report_fatal_error("unexpected number of operands for pvfmk");
-    }
-
-    MI.eraseFromParent();
+  MI.eraseFromParent();
 }
 
 bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
@@ -1048,9 +1059,11 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   }
   case VE::VFMKyal:
   case VE::VFMKynal:
-  case VE::VFMKWyvl: case VE::VFMKWyvyl:
-  case VE::VFMKSyvl: case VE::VFMKSyvyl:
-    expandPseudoVFMK_VL(*this, MI);
+  case VE::VFMKWyvl:
+  case VE::VFMKWyvyl:
+  case VE::VFMKSyvl:
+  case VE::VFMKSyvyl:
+    expandPseudoVFMK(*this, MI);
   }
   return false;
 }

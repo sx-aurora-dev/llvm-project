@@ -200,5 +200,8 @@ def V16384 : RegisterClass<"VE",
                              VIX)>;
 
 // vm0 is reserved for always true
-def VM : RegisterClass<"VE", [v256i1], 64, (sequence "VM%u", 0, 15)>;
+def VM : RegisterClass<"VE",
+                       [v256i1, v128i1, v64i1, v32i1,
+                        v16i1,  v8i1,   v4i1,  v2i1 ],
+                       64, (sequence "VM%u", 0, 15)>;
 def VM512 : RegisterClass<"VE", [v512i1], 64, (sequence "VMP%u", 0, 7)>;

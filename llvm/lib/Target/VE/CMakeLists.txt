@@ -1,4 +1,4 @@
-add_llvm_component_group(VE)
+add_llvm_component_group(VE HAS_JIT)
 
 set(LLVM_TARGET_DEFINITIONS VE.td)
 
@@ -30,6 +30,8 @@ add_llvm_target(VECodeGen
   VESubtarget.cpp
   VETargetMachine.cpp
   VETargetTransformInfo.cpp
+  SIMDISelLowering.cpp
+  VVPISelLowering.cpp
 
   LINK_COMPONENTS
   Analysis

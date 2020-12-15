@@ -2591,11 +2591,6 @@ void Verifier::visitBasicBlock(BasicBlock &BB) {
     SmallVector<std::pair<BasicBlock*, Value*>, 8> Values;
     llvm::sort(Preds);
     for (const PHINode &PN : BB.phis()) {
-      // Ensure that PHI nodes have at least one entry!
-      Assert(PN.getNumIncomingValues() != 0,
-             "PHI nodes must have at least one entry.  If the block is dead, "
-             "the PHI should be removed!",
-             &PN);
       Assert(PN.getNumIncomingValues() == Preds.size(),
              "PHINode should have one entry for each predecessor of its "
              "parent basic block!",
@@ -5174,6 +5169,26 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
       Assert(Stride->getZExtValue() >= NumRows->getZExtValue(),
              "Stride must be greater or equal than the number of rows!", IF);
 
+    break;
+  }
+  case Intrinsic::experimental_vector_insert: {
+    VectorType *VecTy = cast<VectorType>(Call.getArgOperand(0)->getType());
+    VectorType *SubVecTy = cast<VectorType>(Call.getArgOperand(1)->getType());
+
+    Assert(VecTy->getElementType() == SubVecTy->getElementType(),
+           "experimental_vector_insert parameters must have the same element "
+           "type.",
+           &Call);
+    break;
+  }
+  case Intrinsic::experimental_vector_extract: {
+    VectorType *ResultTy = cast<VectorType>(Call.getType());
+    VectorType *VecTy = cast<VectorType>(Call.getArgOperand(0)->getType());
+
+    Assert(ResultTy->getElementType() == VecTy->getElementType(),
+           "experimental_vector_extract result must have the same element "
+           "type as the input vector.",
+           &Call);
     break;
   }
   };

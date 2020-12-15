@@ -616,7 +616,7 @@ X86DAGToDAGISel::IsProfitableToFold(SDValue N, SDNode *U, SDNode *Root) const {
         // best of both worlds.
         if (U->getOpcode() == ISD::AND &&
             Imm->getAPIntValue().getBitWidth() == 64 &&
-            Imm->getAPIntValue().isIntN(32))
+            Imm->getAPIntValue().isSignedIntN(32))
           return false;
 
         // If this really a zext_inreg that can be represented with a movzx
@@ -2694,12 +2694,12 @@ bool X86DAGToDAGISel::selectTLSADDRAddr(SDValue N, SDValue &Base,
   AM.Disp += GA->getOffset();
   AM.SymbolFlags = GA->getTargetFlags();
 
-  MVT VT = N.getSimpleValueType();
-  if (VT == MVT::i32) {
+  if (Subtarget->is32Bit()) {
     AM.Scale = 1;
     AM.IndexReg = CurDAG->getRegister(X86::EBX, MVT::i32);
   }
 
+  MVT VT = N.getSimpleValueType();
   getAddressOperands(AM, SDLoc(N), VT, Base, Scale, Index, Disp, Segment);
   return true;
 }

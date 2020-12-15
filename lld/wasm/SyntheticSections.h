@@ -203,7 +203,6 @@ public:
   void assignIndexes() override;
   void writeBody() override;
   void addGlobal(InputGlobal *global);
-  void addDataAddressGlobal(DefinedData *global);
 
   // Add an internal GOT entry global that corresponds to the given symbol.
   // Normally GOT entries are imported and assigned by the external dynamic
@@ -297,7 +296,9 @@ protected:
 // Create the custom "name" section containing debug symbol names.
 class NameSection : public SyntheticSection {
 public:
-  NameSection() : SyntheticSection(llvm::wasm::WASM_SEC_CUSTOM, "name") {}
+  NameSection(ArrayRef<OutputSegment *> segments)
+      : SyntheticSection(llvm::wasm::WASM_SEC_CUSTOM, "name"),
+        segments(segments) {}
   bool isNeeded() const override {
     return !config->stripDebug && !config->stripAll && numNames() > 0;
   }
@@ -305,6 +306,10 @@ public:
   unsigned numNames() const { return numNamedGlobals() + numNamedFunctions(); }
   unsigned numNamedGlobals() const;
   unsigned numNamedFunctions() const;
+  unsigned numNamedDataSegments() const;
+
+protected:
+  ArrayRef<OutputSegment *> segments;
 };
 
 class ProducersSection : public SyntheticSection {

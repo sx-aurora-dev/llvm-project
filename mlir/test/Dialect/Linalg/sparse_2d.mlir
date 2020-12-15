@@ -1071,8 +1071,8 @@ func @matvec(%argA: tensor<16x32xf32>, %argb: tensor<32xf32>, %argx: tensor<16xf
 }
 
 // CHECK-LABEL:   func @sum_reduction(
-// CHECK-SAME:                %[[VAL_0:.*]]: tensor<10x20xf32>,
-// CHECK-SAME:                %[[VAL_1:.*]]: tensor<f32>) -> tensor<f32> {
+// CHECK-SAME:                        %[[VAL_0:.*0]]: tensor<10x20xf32>,
+// CHECK-SAME:                        %[[VAL_1:.*1]]: tensor<f32>) -> tensor<f32> {
 // CHECK:           %[[VAL_2:.*]] = constant 999 : index
 // CHECK:           %[[VAL_3:.*]] = constant 10 : index
 // CHECK:           %[[VAL_4:.*]] = constant 0 : index
@@ -1104,6 +1104,56 @@ func @sum_reduction(%arga: tensor<10x20xf32>, %argx: tensor<f32>) -> tensor<f32>
         linalg.yield %0: f32
   } -> tensor<f32>
   return %0 : tensor<f32>
+}
+
+#trait_scale = {
+  indexing_maps = [
+    affine_map<(i,j) -> (i,j)>,  // A
+    affine_map<(i,j) -> (i,j)>   // X (out)
+  ],
+  sparse = [
+    [ "D", "S" ],  // A
+    [ "D", "D" ]   // X
+  ],
+  iterator_types = ["parallel", "parallel"],
+  doc = "X(i,j) = A(i,j) * SCALE"
+}
+
+// CHECK-LABEL:   func @scale(
+// CHECK-SAME:                %[[VAL_0:.*]]: tensor<?x?xf64>) -> tensor<?x?xf64> {
+// CHECK:           %[[VAL_1:.*]] = constant 2.000000e+00 : f64
+// CHECK:           %[[VAL_2:.*]] = constant 999 : index
+// CHECK:           %[[VAL_3:.*]] = constant 0 : index
+// CHECK:           %[[VAL_4:.*]] = constant 1 : index
+// CHECK:           %[[VAL_5:.*]] = dim %[[VAL_0]], %[[VAL_3]] : tensor<?x?xf64>
+// CHECK:           %[[VAL_6:.*]] = alloca(%[[VAL_2]]) : memref<?xindex>
+// CHECK:           %[[VAL_7:.*]] = alloca(%[[VAL_2]]) : memref<?xindex>
+// CHECK:           %[[VAL_8:.*]] = dim %[[VAL_0]], %[[VAL_4]] : tensor<?x?xf64>
+// CHECK:           %[[VAL_9:.*]] = alloca(%[[VAL_2]]) : memref<?xf64>
+// CHECK:           %[[VAL_10:.*]] = alloca(%[[VAL_5]], %[[VAL_8]]) : memref<?x?xf64>
+// CHECK:           scf.for %[[VAL_11:.*]] = %[[VAL_3]] to %[[VAL_5]] step %[[VAL_4]] {
+// CHECK:             %[[VAL_12:.*]] = load %[[VAL_6]]{{\[}}%[[VAL_11]]] : memref<?xindex>
+// CHECK:             %[[VAL_13:.*]] = addi %[[VAL_11]], %[[VAL_4]] : index
+// CHECK:             %[[VAL_14:.*]] = load %[[VAL_6]]{{\[}}%[[VAL_13]]] : memref<?xindex>
+// CHECK:             scf.for %[[VAL_15:.*]] = %[[VAL_12]] to %[[VAL_14]] step %[[VAL_4]] {
+// CHECK:               %[[VAL_16:.*]] = load %[[VAL_7]]{{\[}}%[[VAL_15]]] : memref<?xindex>
+// CHECK:               %[[VAL_17:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_15]]] : memref<?xf64>
+// CHECK:               %[[VAL_18:.*]] = mulf %[[VAL_17]], %[[VAL_1]] : f64
+// CHECK:               store %[[VAL_18]], %[[VAL_10]]{{\[}}%[[VAL_11]], %[[VAL_16]]] : memref<?x?xf64>
+// CHECK:             }
+// CHECK:           }
+// CHECK:           %[[VAL_19:.*]] = tensor_load %[[VAL_10]] : memref<?x?xf64>
+// CHECK:           return %[[VAL_19]] : tensor<?x?xf64>
+// CHECK:         }
+func @scale(%arga: tensor<?x?xf64>) -> tensor<?x?xf64> {
+  %0 = constant 2.0 : f64
+  %1 = linalg.generic #trait_scale
+    ins(%arga: tensor<?x?xf64>) {
+      ^bb(%a: f64):
+        %2 = mulf %a, %0  : f64
+        linalg.yield %2 : f64
+  } -> tensor<?x?xf64>
+  return %1 : tensor<?x?xf64>
 }
 
 #trait_sampled_dense_dense = {
@@ -1150,19 +1200,19 @@ func @sum_reduction(%arga: tensor<10x20xf32>, %argx: tensor<f32>) -> tensor<f32>
 // CHECK:           scf.for %[[VAL_23:.*]] = %[[VAL_21]] to %[[VAL_22]] step %[[VAL_6]] {
 // CHECK:             %[[VAL_24:.*]] = load %[[VAL_8]]{{\[}}%[[VAL_23]]] : memref<?xindex>
 // CHECK:             scf.for %[[VAL_25:.*]] = %[[VAL_5]] to %[[VAL_15]] step %[[VAL_6]] {
-// CHECK:               %[[VAL_26:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_23]]] : memref<?xindex>
-// CHECK:               %[[VAL_27:.*]] = addi %[[VAL_23]], %[[VAL_6]] : index
-// CHECK:               %[[VAL_28:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_27]]] : memref<?xindex>
-// CHECK:               scf.for %[[VAL_29:.*]] = %[[VAL_26]] to %[[VAL_28]] step %[[VAL_6]] {
-// CHECK:                 %[[VAL_30:.*]] = load %[[VAL_10]]{{\[}}%[[VAL_29]]] : memref<?xindex>
-// CHECK:                 %[[VAL_31:.*]] = load %[[VAL_20]]{{\[}}%[[VAL_24]], %[[VAL_30]]] : memref<?x?xf32>
-// CHECK:                 %[[VAL_32:.*]] = load %[[VAL_11]]{{\[}}%[[VAL_29]]] : memref<?xf32>
-// CHECK:                 %[[VAL_33:.*]] = load %[[VAL_14]]{{\[}}%[[VAL_24]], %[[VAL_25]]] : memref<?x?xf32>
-// CHECK:                 %[[VAL_34:.*]] = load %[[VAL_17]]{{\[}}%[[VAL_25]], %[[VAL_30]]] : memref<?x?xf32>
-// CHECK:                 %[[VAL_35:.*]] = mulf %[[VAL_33]], %[[VAL_34]] : f32
-// CHECK:                 %[[VAL_36:.*]] = mulf %[[VAL_32]], %[[VAL_35]] : f32
-// CHECK:                 %[[VAL_37:.*]] = addf %[[VAL_31]], %[[VAL_36]] : f32
-// CHECK:                 store %[[VAL_37]], %[[VAL_20]]{{\[}}%[[VAL_24]], %[[VAL_30]]] : memref<?x?xf32>
+// CHECK:               %[[VAL_26:.*]] = load %[[VAL_14]]{{\[}}%[[VAL_24]], %[[VAL_25]]] : memref<?x?xf32>
+// CHECK:               %[[VAL_27:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_23]]] : memref<?xindex>
+// CHECK:               %[[VAL_28:.*]] = addi %[[VAL_23]], %[[VAL_6]] : index
+// CHECK:               %[[VAL_29:.*]] = load %[[VAL_9]]{{\[}}%[[VAL_28]]] : memref<?xindex>
+// CHECK:               scf.for %[[VAL_30:.*]] = %[[VAL_27]] to %[[VAL_29]] step %[[VAL_6]] {
+// CHECK:                 %[[VAL_31:.*]] = load %[[VAL_10]]{{\[}}%[[VAL_30]]] : memref<?xindex>
+// CHECK:                 %[[VAL_32:.*]] = load %[[VAL_20]]{{\[}}%[[VAL_24]], %[[VAL_31]]] : memref<?x?xf32>
+// CHECK:                 %[[VAL_33:.*]] = load %[[VAL_11]]{{\[}}%[[VAL_30]]] : memref<?xf32>
+// CHECK:                 %[[VAL_34:.*]] = load %[[VAL_17]]{{\[}}%[[VAL_25]], %[[VAL_31]]] : memref<?x?xf32>
+// CHECK:                 %[[VAL_35:.*]] = mulf %[[VAL_26]], %[[VAL_34]] : f32
+// CHECK:                 %[[VAL_36:.*]] = mulf %[[VAL_33]], %[[VAL_35]] : f32
+// CHECK:                 %[[VAL_37:.*]] = addf %[[VAL_32]], %[[VAL_36]] : f32
+// CHECK:                 store %[[VAL_37]], %[[VAL_20]]{{\[}}%[[VAL_24]], %[[VAL_31]]] : memref<?x?xf32>
 // CHECK:               }
 // CHECK:             }
 // CHECK:           }

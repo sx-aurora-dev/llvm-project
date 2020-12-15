@@ -136,7 +136,7 @@ class VETargetLowering final : public TargetLowering, public VELoweringInfo {
   void initSPUActions();
   // setOperationAction for all vector ops
   void initVPUActions();
-  void initGenericVectorActions();
+  void initIntrinsicActions();
   void initExperimentalVectorActions();
 
 public:
@@ -202,20 +202,30 @@ public:
       SDNode *N, SmallVectorImpl<SDValue> &Results, SelectionDAG &DAG,
       std::function<SDValue(SDValue)> WidenedOpCB) const override;
 
+  SDValue lowerATOMIC_FENCE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerATOMIC_SWAP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerBUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerINSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerINTRINSIC_VOID(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerINTRINSIC_W_CHAIN(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerINTRINSIC_WO_CHAIN(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerJumpTable(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerLOAD(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerMGATHER(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerMLOAD(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerMSCATTER(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerSTORE(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerToTLSGeneralDynamicModel(SDValue Op, SelectionDAG &DAG) const;
-  SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
-  SDValue lowerVAARG(SDValue Op, SelectionDAG &DAG) const;
   // legalize the result vector type for operation \p Op
-
-  SDValue LowerVPToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
 
   // Custom Operations
   // SDValue CreateConstMask(SDLoc DL, unsigned NumElements, SelectionDAG &DAG,
@@ -274,9 +284,34 @@ public:
   SDValue LowerATOMIC_SWAP(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_LOAD(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
-  SDValue LowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const;
+
+  SDValue lowerToTLSLocalExecModel(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVASTART(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVAARG(SDValue Op, SelectionDAG &DAG) const;
+
   SDValue LowerCONCAT_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerVECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower
+  
+  /// Custom Lower for SIMD {
+  SDValue lowerSIMD_BUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSIMD_EXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSIMD_INSERT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSIMD_VECTOR_SHUFFLE(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSIMD_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerSIMD_MLOAD(SDValue Op, SelectionDAG &DAG) const;
+  /// } Custom Lower for SIMD
+
+  /// Custom Lower for VVP {
+  SDValue LowerVPToVVP(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode) const;
+  SDValue LowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const;
+
+  SDValue lowerVVP_BUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
+  /// } Custom Lower for VVP
+
+  /// VVP Lowering {
+  SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG) const;
+  /// } VVPLowering
 
   /// Custom DAGCombine {
   SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
@@ -365,6 +400,7 @@ public:
   bool useLoadStackGuardNode() const override;
   void insertSSPDeclarations(Module &M) const override;
 
+<<<<<<< HEAD
   SDValue getPICJumpTableRelocBase(SDValue Table,
                                    SelectionDAG &DAG) const override;
   // VE doesn't need getPICJumpTableRelocBaseExpr since it is used for only
@@ -407,11 +443,23 @@ public:
   // a VVP VEISD node with a native-width type.
   /// } Vector Lowering
 
+=======
+  unsigned getSRetArgSize(SelectionDAG &DAG, SDValue Callee) const;
+
+>>>>>>> necgh/develop
   // Should we expand the build vector with shuffles?
   bool
   shouldExpandBuildVectorWithShuffles(EVT VT,
                                       unsigned DefinedValues) const override;
 
+<<<<<<< HEAD
+=======
+  bool ShouldShrinkFPConstant(EVT VT) const override {
+    // Do not shrink FP constpool if VT == MVT::f128.
+    // (ldd, call _Q_fdtoq) is more expensive than two ldds.
+    return VT != MVT::f128;
+  }
+>>>>>>> necgh/develop
 
   /// Returns true if the target allows unaligned memory accesses of the
   /// specified type.

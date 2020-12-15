@@ -94,7 +94,7 @@ struct HardwareLoopInfo {
   Loop *L = nullptr;
   BasicBlock *ExitBlock = nullptr;
   BranchInst *ExitBranch = nullptr;
-  const SCEV *ExitCount = nullptr;
+  const SCEV *TripCount = nullptr;
   IntegerType *CountType = nullptr;
   Value *LoopDecrement = nullptr; // Decrement the loop counter by this
                                   // value in every iteration.
@@ -118,7 +118,7 @@ class IntrinsicCostAttributes {
   SmallVector<Type *, 4> ParamTys;
   SmallVector<const Value *, 4> Arguments;
   FastMathFlags FMF;
-  unsigned VF = 1;
+  ElementCount VF = ElementCount::getFixed(1);
   // If ScalarizationCost is UINT_MAX, the cost of scalarizing the
   // arguments and the return value will be computed based on types.
   unsigned ScalarizationCost = std::numeric_limits<unsigned>::max();
@@ -129,15 +129,10 @@ public:
   IntrinsicCostAttributes(Intrinsic::ID Id, const CallBase &CI);
 
   IntrinsicCostAttributes(Intrinsic::ID Id, const CallBase &CI,
-                          unsigned Factor);
-  IntrinsicCostAttributes(Intrinsic::ID Id, const CallBase &CI,
-                          ElementCount Factor)
-      : IntrinsicCostAttributes(Id, CI, Factor.getKnownMinValue()) {
-    assert(!Factor.isScalable());
-  }
+                          ElementCount Factor);
 
   IntrinsicCostAttributes(Intrinsic::ID Id, const CallBase &CI,
-                          unsigned Factor, unsigned ScalarCost);
+                          ElementCount Factor, unsigned ScalarCost);
 
   IntrinsicCostAttributes(Intrinsic::ID Id, Type *RTy,
                           ArrayRef<Type *> Tys, FastMathFlags Flags);
@@ -160,7 +155,7 @@ public:
   Intrinsic::ID getID() const { return IID; }
   const IntrinsicInst *getInst() const { return II; }
   Type *getReturnType() const { return RetTy; }
-  unsigned getVectorFactor() const { return VF; }
+  ElementCount getVectorFactor() const { return VF; }
   FastMathFlags getFlags() const { return FMF; }
   unsigned getScalarizationCost() const { return ScalarizationCost; }
   const SmallVectorImpl<const Value *> &getArgs() const { return Arguments; }

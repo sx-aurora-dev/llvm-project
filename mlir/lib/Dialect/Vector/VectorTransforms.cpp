@@ -2162,7 +2162,7 @@ LogicalResult mlir::vector::splitFullAndPartialTransferPrecondition(
   // Don't split transfer operations directly under IfOp, this avoids applying
   // the pattern recursively.
   // TODO: improve the filtering condition to make it more applicable.
-  if (isa<scf::IfOp>(xferOp.getOperation()->getParentOp()))
+  if (isa<scf::IfOp>(xferOp->getParentOp()))
     return failure();
   return success();
 }
@@ -2417,7 +2417,7 @@ LogicalResult mlir::vector::splitFullAndPartialTransfer(
   // Top of the function `alloc` for transient storage.
   Value alloc;
   {
-    FuncOp funcOp = xferOp.getParentOfType<FuncOp>();
+    FuncOp funcOp = xferOp->getParentOfType<FuncOp>();
     OpBuilder::InsertionGuard guard(b);
     b.setInsertionPointToStart(&funcOp.getRegion().front());
     auto shape = xferOp.getVectorType().getShape();

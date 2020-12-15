@@ -3657,22 +3657,22 @@ input IR as well.
 Poison Values
 -------------
 
+A poison value is a result of an erroneous operation.
 In order to facilitate speculative execution, many instructions do not
 invoke immediate undefined behavior when provided with illegal operands,
 and return a poison value instead.
-
-There is currently no way of representing a poison value in the IR; they
-only exist when produced by operations such as :ref:`add <i_add>` with
-the ``nsw`` flag.
+The string '``poison``' can be used anywhere a constant is expected, and
+operations such as :ref:`add <i_add>` with the ``nsw`` flag can produce
+a poison value.
 
 Poison value behavior is defined in terms of value *dependence*:
 
--  Values other than :ref:`phi <i_phi>` nodes and :ref:`select <i_select>`
-   instructions depend on their operands.
+-  Values other than :ref:`phi <i_phi>` nodes, :ref:`select <i_select>`, and
+   :ref:`freeze <i_freeze>` instructions depend on their operands.
 -  :ref:`Phi <i_phi>` nodes depend on the operand corresponding to
    their dynamic predecessor basic block.
--  Select instructions depend on their condition operand and their
-   selected operand.
+-  :ref:`Select <i_select>` instructions depend on their condition operand and
+   their selected operand.
 -  Function arguments depend on the corresponding actual argument values
    in the dynamic callers of their functions.
 -  :ref:`Call <i_call>` instructions depend on the :ref:`ret <i_ret>`
@@ -3732,18 +3732,19 @@ Here are some examples:
 
     entry:
       %poison = sub nuw i32 0, 1           ; Results in a poison value.
+      %poison2 = sub i32 poison, 1         ; Also results in a poison value.
       %still_poison = and i32 %poison, 0   ; 0, but also poison.
       %poison_yet_again = getelementptr i32, i32* @h, i32 %still_poison
       store i32 0, i32* %poison_yet_again  ; Undefined behavior due to
                                            ; store to poison.
 
       store i32 %poison, i32* @g           ; Poison value stored to memory.
-      %poison2 = load i32, i32* @g         ; Poison value loaded back from memory.
+      %poison3 = load i32, i32* @g         ; Poison value loaded back from memory.
 
       %narrowaddr = bitcast i32* @g to i16*
       %wideaddr = bitcast i32* @g to i64*
-      %poison3 = load i16, i16* %narrowaddr ; Returns a poison value.
-      %poison4 = load i64, i64* %wideaddr   ; Returns a poison value.
+      %poison4 = load i16, i16* %narrowaddr ; Returns a poison value.
+      %poison5 = load i64, i64* %wideaddr   ; Returns a poison value.
 
       %cmp = icmp slt i32 %poison, 0       ; Returns a poison value.
       br i1 %cmp, label %end, label %end   ; undefined behavior
@@ -3762,8 +3763,7 @@ The padding of an aggregate isn't considered, since it isn't visible
 without storing it into memory and loading it with a different type.
 
 A constant of a :ref:`single value <t_single_value>`, non-vector type is well
-defined if it is a non-undef constant. Note that there is no poison constant
-in LLVM.
+defined if it is neither '``undef``' constant nor '``poison``' constant.
 The result of :ref:`freeze instruction <i_freeze>` is well defined regardless
 of its operand.
 
@@ -5955,6 +5955,21 @@ vectorization:
 
    !0 = !{!"llvm.loop.vectorize.predicate.enable", i1 0}
    !1 = !{!"llvm.loop.vectorize.predicate.enable", i1 1}
+
+'``llvm.loop.vectorize.scalable.enable``' Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This metadata selectively enables or disables scalable vectorization for the
+loop, and only has any effect if vectorization for the loop is already enabled.
+The first operand is the string ``llvm.loop.vectorize.scalable.enable``
+and the second operand is a bit. If the bit operand value is 1 scalable
+vectorization is enabled, whereas a value of 0 reverts to the default fixed
+width vectorization:
+
+.. code-block:: llvm
+
+   !0 = !{!"llvm.loop.vectorize.scalable.enable", i1 0}
+   !1 = !{!"llvm.loop.vectorize.scalable.enable", i1 1}
 
 '``llvm.loop.vectorize.width``' Metadata
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -16080,6 +16095,81 @@ Arguments:
 """"""""""
 The argument to this intrinsic must be a vector of floating-point values.
 
+'``llvm.experimental.vector.insert``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+This is an overloaded intrinsic. You can use ``llvm.experimental.vector.insert``
+to insert a fixed-width vector into a scalable vector, but not the other way
+around.
+
+::
+
+      declare <vscale x 4 x float> @llvm.experimental.vector.insert.v4f32(<vscale x 4 x float> %vec, <4 x float> %subvec, i64 %idx)
+      declare <vscale x 2 x double> @llvm.experimental.vector.insert.v2f64(<vscale x 2 x double> %vec, <2 x double> %subvec, i64 %idx)
+
+Overview:
+"""""""""
+
+The '``llvm.experimental.vector.insert.*``' intrinsics insert a vector into another vector
+starting from a given index. The return type matches the type of the vector we
+insert into. Conceptually, this can be used to build a scalable vector out of
+non-scalable vectors.
+
+Arguments:
+""""""""""
+
+The ``vec`` is the vector which ``subvec`` will be inserted into.
+The ``subvec`` is the vector that will be inserted.
+
+``idx`` represents the starting element number at which ``subvec`` will be
+inserted. ``idx`` must be a constant multiple of ``subvec``'s known minimum
+vector length. If ``subvec`` is a scalable vector, ``idx`` is first scaled by
+the runtime scaling factor of ``subvec``. The elements of ``vec`` starting at
+``idx`` are overwritten with ``subvec``. Elements ``idx`` through (``idx`` +
+num_elements(``subvec``) - 1) must be valid ``vec`` indices. If this condition
+cannot be determined statically but is false at runtime, then the result vector
+is undefined.
+
+
+'``llvm.experimental.vector.extract``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+This is an overloaded intrinsic. You can use
+``llvm.experimental.vector.extract`` to extract a fixed-width vector from a
+scalable vector, but not the other way around.
+
+::
+
+      declare <4 x float> @llvm.experimental.vector.extract.v4f32(<vscale x 4 x float> %vec, i64 %idx)
+      declare <2 x double> @llvm.experimental.vector.extract.v2f64(<vscale x 2 x double> %vec, i64 %idx)
+
+Overview:
+"""""""""
+
+The '``llvm.experimental.vector.extract.*``' intrinsics extract a vector from
+within another vector starting from a given index. The return type must be
+explicitly specified. Conceptually, this can be used to decompose a scalable
+vector into non-scalable parts.
+
+Arguments:
+""""""""""
+
+The ``vec`` is the vector from which we will extract a subvector.
+
+The ``idx`` specifies the starting element number within ``vec`` from which a
+subvector is extracted. ``idx`` must be a constant multiple of the known-minimum
+vector length of the result type. If the result type is a scalable vector,
+``idx`` is first scaled by the result type's runtime scaling factor. Elements
+``idx`` through (``idx`` + num_elements(result_type) - 1) must be valid vector
+indices. If this condition cannot be determined statically but is false at
+runtime, then the result vector is undefined. The ``idx`` parameter must be a
+vector index constant type (for most targets this will be an integer pointer
+type).
+
 Matrix Intrinsics
 -----------------
 
@@ -19622,6 +19712,35 @@ Semantics:
 This intrinsic is lowered to code which is intended to cause an
 execution trap with the intention of requesting the attention of a
 debugger.
+
+'``llvm.ubsantrap``' Intrinsic
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+
+::
+
+      declare void @llvm.ubsantrap(i8 immarg) cold noreturn nounwind
+
+Overview:
+"""""""""
+
+The '``llvm.ubsantrap``' intrinsic.
+
+Arguments:
+""""""""""
+
+An integer describing the kind of failure detected.
+
+Semantics:
+""""""""""
+
+This intrinsic is lowered to code which is intended to cause an execution trap,
+embedding the argument into encoding of that trap somehow to discriminate
+crashes if possible.
+
+Equivalent to ``@llvm.trap`` for targets that do not support this behaviour.
 
 '``llvm.stackprotector``' Intrinsic
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

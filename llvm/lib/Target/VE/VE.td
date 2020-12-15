@@ -26,6 +26,9 @@ def FeaturePackedMode
   : SubtargetFeature<"packed", "PackedMode", "true",
                      "Enable v512 packed mode (experimental)",[FeatureEnableVPU]>;
 
+def IsIntrinsicSubTarget : Predicate<"Subtarget->intrinsic()">;
+def IsNotIntrinsicSubTarget : Predicate<"!Subtarget->intrinsic()">;
+
 def IsNoNaNs : Predicate<"TM.Options.NoNaNsFPMath">;
 def HasFeatureVELIntrin : Predicate<"Subtarget->isVELIntrinsicMode()">;
 
