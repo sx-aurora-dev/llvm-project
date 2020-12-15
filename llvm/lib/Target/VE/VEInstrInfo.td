@@ -2700,7 +2700,6 @@ def VLEN : OutPatFrag<(ops node:$length),
 
 // Vector instructions.
 include "VEInstrVec.td"
-include "VEInstrVecVL.td"
 
 // The vevlintrin
 include "VEInstrIntrinsicVL.td"

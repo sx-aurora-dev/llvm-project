@@ -372,12 +372,13 @@ void ExportSection::writeBody() {
 }
 
 bool StartSection::isNeeded() const {
-  return WasmSym::initMemory != nullptr;
+  return WasmSym::startFunction != nullptr;
 }
 
 void StartSection::writeBody() {
   raw_ostream &os = bodyOutputStream;
-  writeUleb128(os, WasmSym::initMemory->getFunctionIndex(), "function index");
+  writeUleb128(os, WasmSym::startFunction->getFunctionIndex(),
+               "function index");
 }
 
 void ElemSection::addEntry(FunctionSymbol *sym) {
@@ -566,7 +567,7 @@ unsigned NameSection::numNamedDataSegments() const {
   unsigned numNames = 0;
 
   for (const OutputSegment *s : segments)
-    if (!s->name.empty())
+    if (!s->name.empty() && !s->isBss)
       ++numNames;
 
   return numNames;
@@ -624,7 +625,10 @@ void NameSection::writeBody() {
     }
     for (Symbol *s : out.globalSec->internalGotSymbols) {
       writeUleb128(sub.os, s->getGOTIndex(), "global index");
-      writeStr(sub.os, toString(*s), "symbol name");
+      if (isa<FunctionSymbol>(s))
+        writeStr(sub.os, "GOT.func.internal." + toString(*s), "symbol name");
+      else
+        writeStr(sub.os, "GOT.data.internal." + toString(*s), "symbol name");
     }
 
     sub.writeTo(bodyOutputStream);
@@ -636,8 +640,10 @@ void NameSection::writeBody() {
     writeUleb128(sub.os, count, "name count");
 
     for (OutputSegment *s : segments) {
-      writeUleb128(sub.os, s->index, "global index");
-      writeStr(sub.os, s->name, "segment name");
+      if (!s->name.empty() && !s->isBss) {
+        writeUleb128(sub.os, s->index, "global index");
+        writeStr(sub.os, s->name, "segment name");
+      }
     }
 
     sub.writeTo(bodyOutputStream);
