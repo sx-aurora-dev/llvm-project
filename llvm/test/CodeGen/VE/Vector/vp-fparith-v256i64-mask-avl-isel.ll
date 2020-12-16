@@ -63,14 +63,7 @@ define void @test_vp_fdiv(<256 x double>* %Out, <256 x double> %f0, <256 x doubl
 define void @test_vp_fmin_fmax(<256 x double>* %O1, <256 x double>* %O2, <256 x double> %f0, <256 x double> %f1, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fmin_fmax:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    st %s9, (, %s11)
-; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
-; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -192
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    adds.l %s11, -16, %s11
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB3_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -82,12 +75,12 @@ define void @test_vp_fmin_fmax(<256 x double>* %O1, <256 x double>* %O2, <256 x 
 ; CHECK-NEXT:    monc
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB3_2:
-; CHECK-NEXT:    st %s2, 184(, %s11) # 8-byte Folded Spill
+; CHECK-NEXT:    st %s2, 8(, %s11) # 8-byte Folded Spill
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v1
 ; CHECK-NEXT:    or %s2, 0, %s0
-; CHECK-NEXT:    ld %s0, 184(, %s11) # 8-byte Folded Reload
+; CHECK-NEXT:    ld %s0, 8(, %s11) # 8-byte Folded Reload
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    lvl %s0
@@ -98,11 +91,7 @@ define void @test_vp_fmin_fmax(<256 x double>* %O1, <256 x double>* %O2, <256 x 
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vst %v1, 8, %s2
 ; CHECK-NEXT:    vst %v0, 8, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
-; CHECK-NEXT:    ld %s10, 8(, %s11)
-; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    adds.l %s11, 16, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <256 x double> @llvm.vp.minnum.v256f64(<256 x double> %f0, <256 x double> %f1, metadata !"round.tonearest", metadata !"fpexcept.ignore", <256 x i1> %m, i32 %n)
   %r1 = call <256 x double> @llvm.vp.maxnum.v256f64(<256 x double> %f0, <256 x double> %f1, metadata !"round.tonearest", metadata !"fpexcept.ignore", <256 x i1> %m, i32 %n)

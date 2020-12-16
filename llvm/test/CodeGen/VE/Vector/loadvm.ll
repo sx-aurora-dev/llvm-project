@@ -25,14 +25,7 @@ define <256 x i1> @loadv256i1(<256 x i1>* nocapture readonly %mp) {
 define <256 x i1> @loadv256i1stk() {
 ; CHECK-LABEL: loadv256i1stk:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    st %s9, (, %s11)
-; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
-; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -208
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    adds.l %s11, -32, %s11
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB1_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -44,19 +37,15 @@ define <256 x i1> @loadv256i1stk() {
 ; CHECK-NEXT:    monc
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB1_2:
-; CHECK-NEXT:    ld %s16, 176(, %s11)
+; CHECK-NEXT:    ld %s16, (, %s11)
 ; CHECK-NEXT:    lvm %vm1, 0, %s16
-; CHECK-NEXT:    ld %s16, 184(, %s11)
+; CHECK-NEXT:    ld %s16, 8(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 1, %s16
-; CHECK-NEXT:    ld %s16, 192(, %s11)
+; CHECK-NEXT:    ld %s16, 16(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 2, %s16
-; CHECK-NEXT:    ld %s16, 200(, %s11)
+; CHECK-NEXT:    ld %s16, 24(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 3, %s16
-; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
-; CHECK-NEXT:    ld %s10, 8(, %s11)
-; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    adds.l %s11, 32, %s11
 ; CHECK-NEXT:    b.l.t (, %s10)
   %addr = alloca <256 x i1>, align 16
   %m = load <256 x i1>, <256 x i1>* %addr, align 16
@@ -112,14 +101,7 @@ define <512 x i1> @loadv512i1(<512 x i1>* nocapture readonly %mp) {
 define <512 x i1> @loadv512i1stk() {
 ; CHECK-LABEL: loadv512i1stk:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    st %s9, (, %s11)
-; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
-; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    adds.l %s11, -64, %s11
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB4_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -131,27 +113,23 @@ define <512 x i1> @loadv512i1stk() {
 ; CHECK-NEXT:    monc
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB4_2:
-; CHECK-NEXT:    ld %s0, 208(, %s11)
+; CHECK-NEXT:    ld %s0, 32(, %s11)
 ; CHECK-NEXT:    lvm %vm2, 0, %s0
-; CHECK-NEXT:    ld %s0, 216(, %s11)
-; CHECK-NEXT:    ld %s1, 224(, %s11)
-; CHECK-NEXT:    ld %s2, 232(, %s11)
-; CHECK-NEXT:    ld %s16, 176(, %s11)
+; CHECK-NEXT:    ld %s0, 40(, %s11)
+; CHECK-NEXT:    ld %s1, 48(, %s11)
+; CHECK-NEXT:    ld %s2, 56(, %s11)
+; CHECK-NEXT:    ld %s16, (, %s11)
 ; CHECK-NEXT:    lvm %vm1, 0, %s16
-; CHECK-NEXT:    ld %s16, 184(, %s11)
+; CHECK-NEXT:    ld %s16, 8(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 1, %s16
-; CHECK-NEXT:    ld %s16, 192(, %s11)
+; CHECK-NEXT:    ld %s16, 16(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 2, %s16
-; CHECK-NEXT:    ld %s16, 200(, %s11)
+; CHECK-NEXT:    ld %s16, 24(, %s11)
 ; CHECK-NEXT:    lvm %vm1, 3, %s16
 ; CHECK-NEXT:    lvm %vm2, 1, %s0
 ; CHECK-NEXT:    lvm %vm2, 2, %s1
 ; CHECK-NEXT:    lvm %vm2, 3, %s2
-; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
-; CHECK-NEXT:    ld %s10, 8(, %s11)
-; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    lea %s11, 64(, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %addr = alloca <512 x i1>, align 16
   %m = load <512 x i1>, <512 x i1>* %addr, align 16

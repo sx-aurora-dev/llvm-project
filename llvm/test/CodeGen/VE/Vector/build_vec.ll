@@ -7,12 +7,8 @@ define i32 @brd_v4i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB0_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -33,8 +29,6 @@ define i32 @brd_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -52,12 +46,8 @@ define i32 @brd_v256i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB1_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -78,8 +68,6 @@ define i32 @brd_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -129,12 +117,8 @@ define i32 @vseq_v4i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB2_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -155,8 +139,6 @@ define i32 @vseq_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -172,12 +154,8 @@ define i32 @vseq_v256i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB3_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -198,8 +176,6 @@ define i32 @vseq_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -247,12 +223,8 @@ define i32 @vseq_bad_v4i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB4_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -278,8 +250,6 @@ define i32 @vseq_bad_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -295,12 +265,8 @@ define i32 @vseq_bad_v256i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB5_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -324,8 +290,6 @@ define i32 @vseq_bad_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -373,12 +337,8 @@ define i32 @vseqmul_v4i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB6_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -401,8 +361,6 @@ define i32 @vseqmul_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -419,12 +377,8 @@ define i32 @vseqmul_v256i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB7_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -447,8 +401,6 @@ define i32 @vseqmul_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -496,12 +448,8 @@ define i32 @vseqsrl_v4i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB8_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -524,8 +472,6 @@ define i32 @vseqsrl_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -541,12 +487,8 @@ define i32 @vseqsrl_v8i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB9_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -569,8 +511,6 @@ define i32 @vseqsrl_v8i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -588,12 +528,8 @@ define i32 @vseqsrl_v256i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB10_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -616,8 +552,6 @@ define i32 @vseqsrl_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -665,12 +599,8 @@ define i32 @vseqand_v4i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB11_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -693,8 +623,6 @@ define i32 @vseqand_v4i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -710,12 +638,8 @@ define i32 @vseqand_v256i32() {
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -240
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -240(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB12_2
 ; CHECK-NEXT:  # %bb.1: # %entry
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -738,8 +662,6 @@ define i32 @vseqand_v256i32() {
 ; CHECK-NEXT:    bsic %s10, (, %s12)
 ; CHECK-NEXT:    lvs %s0, %v0(2)
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)

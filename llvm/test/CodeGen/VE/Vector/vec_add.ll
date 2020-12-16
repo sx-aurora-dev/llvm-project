@@ -126,12 +126,8 @@ define fastcc <128 x i16> @add_vv_v128i16(<128 x i16> %x, <128 x i16> %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s9, (, %s11)
 ; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
 ; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -496
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -496(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB8_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -839,8 +835,6 @@ define fastcc <128 x i16> @add_vv_v128i16(<128 x i16> %x, <128 x i16> %y) {
 ; CHECK-NEXT:    ld %s19, 552(, %s11) # 8-byte Folded Reload
 ; CHECK-NEXT:    ld %s18, 544(, %s11) # 8-byte Folded Reload
 ; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
 ; CHECK-NEXT:    ld %s10, 8(, %s11)
 ; CHECK-NEXT:    ld %s9, (, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)

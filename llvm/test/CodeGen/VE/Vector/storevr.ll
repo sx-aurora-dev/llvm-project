@@ -19,14 +19,7 @@ define x86_regcallcc void @storev256i64(<256 x i64>* nocapture, <256 x i64>) {
 define x86_regcallcc void @storev256i64stk(<256 x i64>) {
 ; CHECK-LABEL: storev256i64stk:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    st %s9, (, %s11)
-; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
-; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -2224
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -2048(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB1_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -39,14 +32,10 @@ define x86_regcallcc void @storev256i64stk(<256 x i64>) {
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB1_2:
 ; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lea %s1, 176(, %s11)
+; CHECK-NEXT:    lea %s1, (, %s11)
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vst %v0, 8, %s1
-; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
-; CHECK-NEXT:    ld %s10, 8(, %s11)
-; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    lea %s11, 2048(, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %addr = alloca <256 x i64>, align 16
   store <256 x i64> %0, <256 x i64>* %addr, align 16
