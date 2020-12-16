@@ -56,29 +56,43 @@ pipeline {
                 }
             }
         }
-        stage('Checkout vetfkernel') {
-            steps {
-                dir('vetfkernel') {
-                    git branch: 'master',
-                        credentialsId: 'marukawa-token',
-                        url: "${REPO_TOP_URL}/ve-tensorflow/vetfkernel.git"
+        stage('Run additional tests') {
+            parallel {
+                stage('Test intrinsic instructions') {
+                    steps {
+                        dir('intrinsic') {
+                            git branch: 'master',
+                                credentialsId: 'marukawa-token',
+                                url: "${REPO_URL}/llvm-ve-intrinsic-test.git"
+                            sh """
+                                make CLANG=${TOP}/llvm-dev/install/bin/clang -j8
+                                ./test.ve 2>&1 | tee z.result
+                                ./check-tests.sh z.result
+                            """
+                        }
+                    }
                 }
-                dir('vetfkernel/libs/vednn') {
-                    git branch: 'vetfkernel',
-                        credentialsId: 'marukawa-token',
-                        url: "${REPO_TOP_URL}/ve-tensorflow/vednn.git"
-                }
-            }
-        }
-        stage('Build vetfkernel') {
-            steps {
-                dir('vetfkernel/build') {
-                    sh """
-                        ${CMAKE} -DCMAKE_BUILD_TYPE="Debug" \
-                            -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
-                            -DNCC_VERSION=-3.0.6 ..
-                        make -j
-                    """
+                stage('Prepare vetfkernel') {
+                    steps {
+                        dir('vetfkernel') {
+                            git branch: 'master',
+                                credentialsId: 'marukawa-token',
+                                url: "${REPO_TOP_URL}/ve-tensorflow/vetfkernel.git"
+                        }
+                        dir('vetfkernel/libs/vednn') {
+                            git branch: 'vetfkernel',
+                                credentialsId: 'marukawa-token',
+                                url: "${REPO_TOP_URL}/ve-tensorflow/vednn.git"
+                        }
+                        dir('vetfkernel/build') {
+                            sh """
+                                ${CMAKE} -DCMAKE_BUILD_TYPE="Debug" \
+                                    -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
+                                    -DNCC_VERSION=-3.0.6 ..
+                                make -j
+                            """
+                        }
+                    }
                 }
             }
         }
