@@ -7491,15 +7491,15 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
 
   // Request Operands
   SmallVector<SDValue, 7> OpValues;
-  auto ExceptPosOpt =
-      VPIntrinsic::GetExceptionBehaviorParamPos(VPIntrin.getIntrinsicID());
-  auto RoundingModePosOpt =
-      VPIntrinsic::GetRoundingModeParamPos(VPIntrin.getIntrinsicID());
+  auto ExceptPosOpt = None;
+      // VPIntrinsic::GetExceptionBehaviorParamPos(VPIntrin.getIntrinsicID());
+  auto RoundingModePosOpt = None;
+      // VPIntrinsic::GetRoundingModeParamPos(VPIntrin.getIntrinsicID());
   for (int i = 0; i < (int)VPIntrin.getNumArgOperands(); ++i) {
-    if (ExceptPosOpt && (i == ExceptPosOpt.getValue()))
-      continue;
-    if (RoundingModePosOpt && (i == RoundingModePosOpt.getValue()))
-      continue;
+    // if (ExceptPosOpt && (i == ExceptPosOpt.getValue()))
+    //   continue;
+    // if (RoundingModePosOpt && (i == RoundingModePosOpt.getValue()))
+    //   continue;
     OpValues.push_back(getValue(VPIntrin.getArgOperand(i)));
   }
 

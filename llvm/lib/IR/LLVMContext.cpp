@@ -78,6 +78,16 @@ LLVMContext::LLVMContext() : pImpl(new LLVMContextImpl(*this)) {
          "gc-transition operand bundle id drifted!");
   (void)GCLiveEntry;
 
+  auto *CFPRoundEntry = pImpl->getOrInsertBundleTag("cfp-round");
+  assert(CFPRoundEntry->second == LLVMContext::OB_cfp_round &&
+         "gc-transition operand bundle id drifted!");
+  (void)CFPRoundEntry;
+
+  auto *CFPExceptEntry = pImpl->getOrInsertBundleTag("cfp-round");
+  assert(CFPExceptEntry->second == LLVMContext::OB_cfp_round &&
+         "gc-transition operand bundle id drifted!");
+  (void)CFPExceptEntry;
+
   SyncScope::ID SingleThreadSSID =
       pImpl->getOrInsertSyncScopeID("singlethread");
   assert(SingleThreadSSID == SyncScope::SingleThread &&

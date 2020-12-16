@@ -522,6 +522,7 @@ private:
   void verifyStatepoint(const CallBase &Call);
   void verifyFrameRecoverIndices();
   void verifySiblingFuncletUnwinds();
+  void verifyConstrainedFPBundles(const Instruction &);
 
   void verifyFragmentExpression(const DbgVariableIntrinsic &I);
   template <typename ValueOrMetadata>
@@ -2306,6 +2307,53 @@ void Verifier::verifySiblingFuncletUnwinds() {
   }
 }
 
+void Verifier::verifyConstrainedFPBundles(const Instruction &I) {
+  auto *CB = dyn_cast<CallBase>(&I);
+  if (!CB)
+    return;
+  auto ExceptBundle = CB->getOperandBundle("cfp-except");
+  auto RoundBundle = CB->getOperandBundle("cfp-round");
+  if (!ExceptBundle && !RoundBundle)
+    return;
+
+  auto *VPIntrin = dyn_cast<VPIntrinsic>(&I);
+  Assert(VPIntrin,
+         "Constraint FP bundles only enabled for Vector Predication Intrinsics",
+         VPIntrin);
+  Assert(!RoundBundle ||
+             VPIntrinsic::HasRoundingMode(VPIntrin->getIntrinsicID()),
+         "Intrinsic does not accept a constraint fp rounding mode.", VPIntrin);
+  Assert(!ExceptBundle ||
+             VPIntrinsic::HasExceptionMode(VPIntrin->getIntrinsicID()),
+         "Intrinsic does not accept a constraint fp exception mode.", VPIntrin);
+
+  if (RoundBundle) {
+    Assert(RoundBundle->Inputs.size() == 1,
+           "Constraint fp rounding mode has only one operand.", VPIntrin);
+    auto &RoundInput = *RoundBundle->Inputs[0];
+    Assert(isa<MetadataAsValue>(RoundInput),
+           "Constraint fp exception mode is not a metadata string.", RoundInput);
+    auto *RoundString = dyn_cast<MDString>(cast<MetadataAsValue>(RoundInput).getMetadata());
+    Assert(RoundString,
+           "Constraint fp rounding mode is not a metadata string.", RoundInput);
+    auto RoundOpt = VPIntrin->getRoundingMode();
+    Assert(RoundOpt.hasValue(), "Invalid rounding mode metadata.", RoundString);
+  }
+
+  if (ExceptBundle) {
+    Assert(ExceptBundle->Inputs.size() == 1,
+           "Constraint fp exception mode has only one operand.", VPIntrin);
+    auto &ExceptInput = *ExceptBundle->Inputs[0];
+    Assert(isa<MetadataAsValue>(ExceptInput),
+           "Constraint fp exception mode is not a metadata string.", ExceptInput);
+    auto *ExceptString = dyn_cast<MDString>(cast<MetadataAsValue>(ExceptInput).getMetadata());
+    Assert(ExceptString,
+           "Constraint fp exception mode is not a metadata string.", ExceptInput);
+    auto ExceptOpt = VPIntrin->getExceptionBehavior();
+    Assert(ExceptOpt.hasValue(), "Invalid exception mode metadata.", ExceptString);
+  }
+}
+
 // visitFunction - Verify that a function is ok.
 //
 void Verifier::visitFunction(const Function &F) {
@@ -3197,7 +3245,9 @@ void Verifier::visitCallBase(CallBase &Call) {
   // and at most one "preallocated" operand bundle.
   bool FoundDeoptBundle = false, FoundFuncletBundle = false,
        FoundGCTransitionBundle = false, FoundCFGuardTargetBundle = false,
-       FoundPreallocatedBundle = false, FoundGCLiveBundle = false;;
+       FoundPreallocatedBundle = false, FoundGCLiveBundle = false,
+       FoundCFPExceptBundle = false, FoundCFPRoundBundle = false;
+  ;
   for (unsigned i = 0, e = Call.getNumOperandBundles(); i < e; ++i) {
     OperandBundleUse BU = Call.getOperandBundleAt(i);
     uint32_t Tag = BU.getTagID();
@@ -3238,6 +3288,14 @@ void Verifier::visitCallBase(CallBase &Call) {
       Assert(!FoundGCLiveBundle, "Multiple gc-live operand bundles",
              Call);
       FoundGCLiveBundle = true;
+    } else if (Tag == LLVMContext::OB_cfp_round) {
+      Assert(!FoundCFPRoundBundle, "Multiple cfp-round operand bundles",
+             Call);
+      FoundCFPRoundBundle = true;
+    } else if (Tag == LLVMContext::OB_cfp_except) {
+      Assert(!FoundCFPExceptBundle, "Multiple cfp-except operand bundles",
+             Call);
+      FoundCFPExceptBundle = true;
     }
   }
 
@@ -4481,6 +4539,8 @@ void Verifier::visitInstruction(Instruction &I) {
     verifyFragmentExpression(*DII);
     verifyNotEntryValue(*DII);
   }
+
+  verifyConstrainedFPBundles(I);
 
   SmallVector<std::pair<unsigned, MDNode *>, 4> MDs;
   I.getAllMetadata(MDs);

@@ -356,29 +356,24 @@ CmpInst::Predicate VPIntrinsic::getCmpPredicate() const {
 }
 
 Optional<RoundingMode> VPIntrinsic::getRoundingMode() const {
-  auto RmParamPos = GetRoundingModeParamPos(getIntrinsicID());
-  if (!RmParamPos)
+  auto Bundle = this->getOperandBundle("cfp-round");
+  if (!Bundle)
     return None;
-
-  Metadata *MD = dyn_cast<MetadataAsValue>(getArgOperand(RmParamPos.getValue()))
-                     ->getMetadata();
+  Metadata *MD = cast<MetadataAsValue>(Bundle->Inputs[0])->getMetadata();
   if (!MD || !isa<MDString>(MD))
     return None;
-  StringRef RoundingArg = cast<MDString>(MD)->getString();
-  return StrToRoundingMode(RoundingArg);
+  return StrToRoundingMode(cast<MDString>(MD)->getString());
 }
 
 Optional<fp::ExceptionBehavior> VPIntrinsic::getExceptionBehavior() const {
-  auto EbParamPos = GetExceptionBehaviorParamPos(getIntrinsicID());
-  if (!EbParamPos)
+  auto Bundle = this->getOperandBundle("cfp-except");
+  if (!Bundle)
     return None;
-
-  Metadata *MD = dyn_cast<MetadataAsValue>(getArgOperand(EbParamPos.getValue()))
-                     ->getMetadata();
+  Metadata *MD = cast<MetadataAsValue>(Bundle->Inputs[0])->getMetadata();
   if (!MD || !isa<MDString>(MD))
     return None;
-  StringRef ExceptionArg = cast<MDString>(MD)->getString();
-  return StrToExceptionBehavior(ExceptionArg);
+
+  return StrToExceptionBehavior(cast<MDString>(MD)->getString());
 }
 
 /// \return The vector to reduce if this is a reduction operation.
@@ -743,35 +738,35 @@ bool VPIntrinsic::IsCompareVPOp(Intrinsic::ID VPID) {
   return IsCompare;
 }
 
-Optional<int>
-VPIntrinsic::GetExceptionBehaviorParamPos(Intrinsic::ID IntrinsicID) {
-  Optional<int> ParamPos = None;
+bool
+VPIntrinsic::HasExceptionMode(Intrinsic::ID IntrinsicID) {
+  Optional<bool> HasExcept;
   switch (IntrinsicID) {
   default:
-    return None;
+    return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_FPCONSTRAINT(ROUNDPOS, EXCEPTPOS) ParamPos = EXCEPTPOS;
+#define HANDLE_VP_FPCONSTRAINT(HASROUND, HASEXCEPT) HasExcept = (bool) HASEXCEPT;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
 
-  return ParamPos;
+  return HasExcept && HasExcept.getValue();
 }
 
-Optional<int> VPIntrinsic::GetRoundingModeParamPos(Intrinsic::ID IntrinsicID) {
-  Optional<int> ParamPos = None;
+bool VPIntrinsic::HasRoundingMode(Intrinsic::ID IntrinsicID) {
+  Optional<bool> HasRound;
   switch (IntrinsicID) {
   default:
-    return None;
+    return false;
 
 #define BEGIN_REGISTER_VP_INTRINSIC(VPID, ...) case Intrinsic::VPID:
-#define HANDLE_VP_FPCONSTRAINT(ROUNDPOS, EXCEPTPOS) ParamPos = ROUNDPOS;
+#define HANDLE_VP_FPCONSTRAINT(HASROUND, HASEXCEPT) HasRound = (bool) HASROUND;
 #define END_REGISTER_VP_INTRINSIC(...) break;
 #include "llvm/IR/VPIntrinsics.def"
   }
 
-  return ParamPos;
+  return HasRound && HasRound.getValue();
 }
 
 Intrinsic::ID VPIntrinsic::GetForIntrinsic(Intrinsic::ID IntrinsicID) {

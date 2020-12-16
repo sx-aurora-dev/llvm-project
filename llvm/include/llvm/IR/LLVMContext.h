@@ -93,6 +93,8 @@ public:
     OB_cfguardtarget = 3, // "cfguardtarget"
     OB_preallocated = 4,  // "preallocated"
     OB_gc_live = 5,       // "gc-live"
+    OB_cfp_round = 6,     // "cfp-round"
+    OB_cfp_except = 7,    // "cfp-except"
   };
 
   /// getMDKindID - Return a unique non-zero ID for the specified metadata kind.

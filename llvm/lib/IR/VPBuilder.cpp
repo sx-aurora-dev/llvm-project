@@ -44,9 +44,6 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
 
   Optional<int> MaskPosOpt = VPIntrinsic::GetMaskParamPos(VPID);
   Optional<int> VLenPosOpt = VPIntrinsic::GetVectorLengthParamPos(VPID);
-  Optional<int> FPRoundPosOpt = VPIntrinsic::GetRoundingModeParamPos(VPID);
-  Optional<int> FPExceptPosOpt =
-      VPIntrinsic::GetExceptionBehaviorParamPos(VPID);
 
   Optional<int> CmpPredPos = None;
   if (isa<CmpInst>(Inst)) {
@@ -66,16 +63,6 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
     if (VLenPosOpt && (i == (size_t)VLenPosOpt.getValue())) {
       VecParams.push_back(&RequestEVL());
     }
-    if (FPRoundPosOpt && (i == (size_t)FPRoundPosOpt.getValue())) {
-      // TODO decode fp env from constrained intrinsics
-      VecParams.push_back(GetConstrainedFPRounding(
-          Builder.getContext(), RoundingMode::NearestTiesToEven));
-    }
-    if (FPExceptPosOpt && (i == (size_t)FPExceptPosOpt.getValue())) {
-      // TODO decode fp env from constrained intrinsics
-      VecParams.push_back(GetConstrainedFPExcept(
-          Builder.getContext(), fp::ExceptionBehavior::ebIgnore));
-    }
     if (CmpPredPos && (i == (size_t)CmpPredPos.getValue())) {
       auto &CmpI = cast<CmpInst>(Inst);
       VecParams.push_back(ConstantInt::get(
@@ -91,8 +78,33 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
   auto VPDecl =
       VPIntrinsic::getDeclarationForParams(&M, VPID, VecParams, VecRetTy);
 
+  // Prepare constraint fp params
+  // FIXME: \p Inst could also be just another VP intrinsic.
+  const auto *CFPIntrin = dyn_cast<ConstrainedFPIntrinsic>(&Inst);
+  SmallVector<OperandBundleDef, 2> ConstraintBundles;
+  if (CFPIntrin) {
+    auto RoundOpt = CFPIntrin->getRoundingMode();
+    if (RoundOpt) {
+      auto *RoundParam =
+          GetConstrainedFPRounding(Builder.getContext(), RoundOpt.getValue());
+      ConstraintBundles.emplace_back("cfp-round", RoundParam);
+    }
+    auto ExceptOpt = CFPIntrin->getExceptionBehavior();
+    if (ExceptOpt) {
+      auto *ExceptParam =
+          GetConstrainedFPExcept(Builder.getContext(), ExceptOpt.getValue());
+      ConstraintBundles.emplace_back("cfp-except", ExceptParam);
+    }
+  }
+
   // Transfer FMF flags
-  auto VPCall = Builder.CreateCall(VPDecl, VecParams, Inst.getName() + ".vp");
+  auto VPCall = Builder.CreateCall(VPDecl, VecParams, ConstraintBundles,
+                                   Inst.getName() + ".vp");
+  if (CFPIntrin) {
+    // FIXME:
+    // VPCall->addAttribute(-1, Attribute::StrictFP);
+  }
+
   auto FPOp = dyn_cast<FPMathOperator>(&Inst);
   if (FPOp && isa<FPMathOperator>(VPCall)) {
     VPCall->setFastMathFlags(FPOp->getFastMathFlags());

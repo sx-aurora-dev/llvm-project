@@ -85,11 +85,13 @@ Instruction *PredicatedBinaryOperator::Create(
   // Encode default environment fp behavior
   LLVMContext &Ctx = V1->getContext();
   SmallVector<Value *, 6> BinOpArgs({V1, V2});
-  if (VPIntrinsic::HasRoundingModeParam(VPID)) {
+  if (VPIntrinsic::HasRoundingMode(VPID)) {
+    // FIXME use a bundle.
     BinOpArgs.push_back(
         GetConstrainedFPRounding(Ctx, RoundingMode::NearestTiesToEven));
   }
-  if (VPIntrinsic::HasExceptionBehaviorParam(VPID)) {
+  if (VPIntrinsic::HasExceptionMode(VPID)) {
+    // FIXME use a bundle.
     BinOpArgs.push_back(
         GetConstrainedFPExcept(Ctx, fp::ExceptionBehavior::ebIgnore));
   }

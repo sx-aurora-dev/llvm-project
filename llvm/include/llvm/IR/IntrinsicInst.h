@@ -252,15 +252,12 @@ public:
 
   // whether the intrinsic has a rounding mode parameter (regardless of
   // setting).
-  static bool HasRoundingModeParam(Intrinsic::ID VPID) { return GetRoundingModeParamPos(VPID) != None; }
+  static bool HasRoundingMode(Intrinsic::ID VPID);
   // whether the intrinsic has a exception behavior parameter (regardless of
   // setting).
-  static bool HasExceptionBehaviorParam(Intrinsic::ID VPID) { return GetExceptionBehaviorParamPos(VPID) != None; }
+  static bool HasExceptionMode(Intrinsic::ID VPID);
   static Optional<int> GetMaskParamPos(Intrinsic::ID IntrinsicID);
   static Optional<int> GetVectorLengthParamPos(Intrinsic::ID IntrinsicID);
-  static Optional<int>
-  GetExceptionBehaviorParamPos(Intrinsic::ID IntrinsicID);
-  static Optional<int> GetRoundingModeParamPos(Intrinsic::ID IntrinsicID);
   // the llvm.vp.* intrinsic for this other kind of intrinsic.
   static Intrinsic::ID GetForIntrinsic(Intrinsic::ID IntrinsicID);
   static Intrinsic::ID GetForOpcode(unsigned OC);

@@ -2700,9 +2700,16 @@ bool LLParser::parseOptionalOperandBundles(
         return true;
 
       Type *Ty = nullptr;
-      Value *Input = nullptr;
-      if (parseType(Ty) || parseValue(Ty, Input, PFS))
+      if (parseType(Ty))
         return true;
+
+      Value *Input = nullptr;
+      if (Ty->isMetadataTy()) {
+        if (parseMetadataAsValue(Input, PFS))
+          return true;
+      } else if (parseValue(Ty, Input, PFS))
+        return true;
+
       Inputs.push_back(Input);
     }
 

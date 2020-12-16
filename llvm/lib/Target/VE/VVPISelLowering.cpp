@@ -1943,11 +1943,15 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
   SDValue SrcV = Op->getOperand(0);
   SDValue IndexV = Op->getOperand(1);
 
+  SDValue MaskV = PeekForMask(SrcV);
+
+  // Dynamic extraction or packed extract.
   auto IndexC = dyn_cast<ConstantSDNode>(IndexV);
-  if (!IndexC) return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
+  if (!IndexC || !MaskV)
+    return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
 
   // Lowering to VM_EXTRACT
-  if (SDValue ActualMaskV = PeekForMask(SrcV)) {
+  if (MaskV) {
     assert(IndexC);
     assert(Op.getValueType().isScalarInteger());
     // unsigned ResSize = Op.getValueType().getSizeInBits(); // Implicit
@@ -1974,7 +1978,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
       ShiftAmount = AbsOffset - (ActualPart * SXRegSize);
     }
 
-    auto ResV = CDAG.CreateExtractMask(ActualMaskV, AdjIndexV);
+    auto ResV = CDAG.CreateExtractMask(MaskV, AdjIndexV);
     ResV = CDAG.createScalarShift(MVT::i64, ResV, ShiftAmount);
 
     // Convert back to actual result type

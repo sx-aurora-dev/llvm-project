@@ -20,14 +20,7 @@ define <1 x i1> @vec_trunc_v1_i64_to_i1(<1 x i64> %a) {
 define <512 x i32> @vec_trunc_v512_i64_to_i32(<512 x i64> %a) {
 ; CHECK-LABEL: vec_trunc_v512_i64_to_i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    st %s9, (, %s11)
-; CHECK-NEXT:    st %s10, 8(, %s11)
-; CHECK-NEXT:    st %s15, 24(, %s11)
-; CHECK-NEXT:    st %s16, 32(, %s11)
-; CHECK-NEXT:    or %s9, 0, %s11
-; CHECK-NEXT:    lea %s13, -2224
-; CHECK-NEXT:    and %s13, %s13, (32)0
-; CHECK-NEXT:    lea.sl %s11, -1(%s13, %s11)
+; CHECK-NEXT:    lea %s11, -2048(, %s11)
 ; CHECK-NEXT:    brge.l.t %s11, %s8, .LBB2_2
 ; CHECK-NEXT:  # %bb.1:
 ; CHECK-NEXT:    ld %s61, 24(, %s14)
@@ -39,18 +32,14 @@ define <512 x i32> @vec_trunc_v512_i64_to_i32(<512 x i64> %a) {
 ; CHECK-NEXT:    monc
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB2_2:
-; CHECK-NEXT:    lea %s0, 176(, %s11)
+; CHECK-NEXT:    lea %s0, (, %s11)
 ; CHECK-NEXT:    lea %s1, 1024(, %s0)
 ; CHECK-NEXT:    lea %s2, 256
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vstl %v1, 4, %s1
 ; CHECK-NEXT:    vstl %v0, 4, %s0
 ; CHECK-NEXT:    vld %v0, 8, %s0
-; CHECK-NEXT:    or %s11, 0, %s9
-; CHECK-NEXT:    ld %s16, 32(, %s11)
-; CHECK-NEXT:    ld %s15, 24(, %s11)
-; CHECK-NEXT:    ld %s10, 8(, %s11)
-; CHECK-NEXT:    ld %s9, (, %s11)
+; CHECK-NEXT:    lea %s11, 2048(, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = trunc <512 x i64> %a to <512 x i32>
   ret <512 x i32> %r
