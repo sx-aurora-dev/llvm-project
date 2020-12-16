@@ -63,7 +63,7 @@ def VEAsmParser : AsmParser {
 class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
-def : Proc<"ve",             []>;
+def : Proc<"generic", []>;
 // def : Processor<"ve", VEItinerary, []>;
 // def : ProcessorModel<"ve", VESchedModel, []>;
 
