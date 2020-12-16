@@ -329,24 +329,19 @@ void VETargetLowering::initSPUActions() {
   // Use custom inserter for ATOMIC_FENCE.
   setOperationAction(ISD::ATOMIC_FENCE, MVT::Other, Custom);
 
+  // Other atomic instructions.
   for (MVT VT : MVT::integer_valuetypes()) {
-    // Several atomic operations are converted to VE instructions well.
-    // Additional memory fences are generated in emitLeadingfence and
-    // emitTrailingFence functions.
-    setOperationAction(ISD::ATOMIC_LOAD, VT, Legal);
-    setOperationAction(ISD::ATOMIC_STORE, VT, Legal);
-    setOperationAction(ISD::ATOMIC_CMP_SWAP, VT, Legal);
+    // Support i8/i16 atomic swap.
     setOperationAction(ISD::ATOMIC_SWAP, VT, Custom);
 
-    setOperationAction(ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS, VT, Expand);
-
-    // FIXME: not supported "atmam" isntructions yet
+    // FIXME: Support "atmam" isntructions.
     setOperationAction(ISD::ATOMIC_LOAD_ADD, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_SUB, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_AND, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_OR, VT, Expand);
 
-    // VE doesn't have follwing instructions
+    // VE doesn't have follwing instructions.
+    setOperationAction(ISD::ATOMIC_CMP_SWAP_WITH_SUCCESS, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_CLR, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_XOR, VT, Expand);
     setOperationAction(ISD::ATOMIC_LOAD_NAND, VT, Expand);
@@ -1031,17 +1026,6 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
   return true;
 }
 
-TargetLowering::AtomicExpansionKind
-VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
-  if (AI->getOperation() == AtomicRMWInst::Xchg){
-    const DataLayout &DL = AI->getModule()->getDataLayout();
-    if (DL.getTypeStoreSize(AI->getValOperand()->getType()) == 2)
-      return AtomicExpansionKind::CmpXChg; // Uses cas instruction for 2byte atomic_swap
-    return AtomicExpansionKind::None; // Uses ts1am instruction
-  }
-  return AtomicExpansionKind::CmpXChg;
-}
-
 VETargetLowering::VETargetLowering(const TargetMachine &TM,
                                    const VESubtarget &STI)
     : TargetLowering(TM), Subtarget(&STI) {
@@ -1085,15 +1069,17 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
   switch ((VEISD::NodeType)Opcode) {
   case VEISD::FIRST_NUMBER:
     break;
-    TARGET_NODE_CASE(Lo)
-    TARGET_NODE_CASE(Hi)
+    TARGET_NODE_CASE(CALL)
     TARGET_NODE_CASE(GETFUNPLT)
     TARGET_NODE_CASE(GETSTACKTOP)
     TARGET_NODE_CASE(GETTLSADDR)
+    TARGET_NODE_CASE(GLOBAL_BASE_REG)
+    TARGET_NODE_CASE(Hi)
+    TARGET_NODE_CASE(Lo)
     TARGET_NODE_CASE(MEMBARRIER)
-    TARGET_NODE_CASE(CALL)
-    TARGET_NODE_CASE(VEC_BROADCAST)
     TARGET_NODE_CASE(RET_FLAG)
+    TARGET_NODE_CASE(TS1AM)
+    TARGET_NODE_CASE(VEC_BROADCAST)
     TARGET_NODE_CASE(EQV)
     TARGET_NODE_CASE(XOR)
     TARGET_NODE_CASE(CMPI)
@@ -1104,7 +1090,6 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(EH_SJLJ_SETJMP)
     TARGET_NODE_CASE(EH_SJLJ_LONGJMP)
     TARGET_NODE_CASE(EH_SJLJ_SETUP_DISPATCH)
-    TARGET_NODE_CASE(GLOBAL_BASE_REG)
     TARGET_NODE_CASE(FLUSHW)
     TARGET_NODE_CASE(VEC_LVL)
     TARGET_NODE_CASE(VEC_SEQ)
@@ -1112,7 +1097,6 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(VEC_SCATTER)
     TARGET_NODE_CASE(VEC_GATHER)
     TARGET_NODE_CASE(Wrapper)
-    TARGET_NODE_CASE(TS1AM)
 
     // Register the VVP_* SDNodes.
 #define ADD_VVP_OP(VVP_NAME, ...) TARGET_NODE_CASE(VVP_NAME)
@@ -1327,50 +1311,111 @@ SDValue VETargetLowering::lowerATOMIC_FENCE(SDValue Op,
   return DAG.getNode(VEISD::MEMBARRIER, DL, MVT::Other, Op.getOperand(0));
 }
 
+TargetLowering::AtomicExpansionKind
+VETargetLowering::shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const {
+  // We have TS1AM implementation for i8/i16/i32/i64, so use it.
+  if (AI->getOperation() == AtomicRMWInst::Xchg) {
+    return AtomicExpansionKind::None;
+  }
+  // FIXME: Support "ATMAM" instruction for LOAD_ADD/SUB/AND/OR.
+
+  // Otherwise, expand it using compare and exchange instruction to not call
+  // __sync_fetch_and_* functions.
+  return AtomicExpansionKind::CmpXChg;
+}
+
+static SDValue prepareTS1AM(SDValue Op, SelectionDAG &DAG, SDValue &Flag,
+                            SDValue &Bits) {
+  SDLoc DL(Op);
+  AtomicSDNode *N = cast<AtomicSDNode>(Op);
+  SDValue Ptr = N->getOperand(1);
+  SDValue Val = N->getOperand(2);
+  EVT PtrVT = Ptr.getValueType();
+  bool Byte = N->getMemoryVT() == MVT::i8;
+  //   Remainder = AND Ptr, 3
+  //   Flag = 1 << Remainder  ; If Byte is true (1 byte swap flag)
+  //   Flag = 3 << Remainder  ; If Byte is false (2 bytes swap flag)
+  //   Bits = Remainder << 3
+  //   NewVal = Val << Bits
+  SDValue Const3 = DAG.getConstant(3, DL, PtrVT);
+  SDValue Remainder = DAG.getNode(ISD::AND, DL, PtrVT, {Ptr, Const3});
+  SDValue Mask = Byte ? DAG.getConstant(1, DL, MVT::i32)
+                      : DAG.getConstant(3, DL, MVT::i32);
+  Flag = DAG.getNode(ISD::SHL, DL, MVT::i32, {Mask, Remainder});
+  Bits = DAG.getNode(ISD::SHL, DL, PtrVT, {Remainder, Const3});
+  return DAG.getNode(ISD::SHL, DL, Val.getValueType(), {Val, Bits});
+}
+
+static SDValue finalizeTS1AM(SDValue Op, SelectionDAG &DAG, SDValue Data,
+                             SDValue Bits) {
+  SDLoc DL(Op);
+  EVT VT = Data.getValueType();
+  bool Byte = cast<AtomicSDNode>(Op)->getMemoryVT() == MVT::i8;
+  //   NewData = Data >> Bits
+  //   Result = NewData & 0xff   ; If Byte is true (1 byte)
+  //   Result = NewData & 0xffff ; If Byte is false (2 bytes)
+
+  SDValue NewData = DAG.getNode(ISD::SRL, DL, VT, Data, Bits);
+  return DAG.getNode(ISD::AND, DL, VT,
+                     {NewData, DAG.getConstant(Byte ? 0xff : 0xffff, DL, VT)});
+}
+
 SDValue VETargetLowering::lowerATOMIC_SWAP(SDValue Op,
                                            SelectionDAG &DAG) const {
+  SDLoc DL(Op);
   AtomicSDNode *N = cast<AtomicSDNode>(Op);
 
-  // Custom Lowering 1 byte ATOMIC_SWAP.
   if (N->getMemoryVT() == MVT::i8) {
-    SDLoc DL(Op);
+    // For i8, use "ts1am"
+    //   Input:
+    //     ATOMIC_SWAP Ptr, Val, Order
+    //
+    //   Output:
+    //     Remainder = AND Ptr, 3
+    //     Flag = 1 << Remainder   ; 1 byte swap flag for TS1AM inst.
+    //     Bits = Remainder << 3
+    //     NewVal = Val << Bits
+    //
+    //     Aligned = AND Ptr, -4
+    //     Data = TS1AM Aligned, Flag, NewVal
+    //
+    //     NewData = Data >> Bits
+    //     Result = NewData & 0xff ; 1 byte result
+    SDValue Flag;
+    SDValue Bits;
+    SDValue NewVal = prepareTS1AM(Op, DAG, Flag, Bits);
 
-    SDValue Src = N->getOperand(1);
-    SDValue Value = N->getOperand(2);
+    SDValue Ptr = N->getOperand(1);
+    SDValue Aligned = DAG.getNode(ISD::AND, DL, Ptr.getValueType(),
+                                  {Ptr, DAG.getConstant(-4, DL, MVT::i64)});
+    SDValue TS1AM = DAG.getAtomic(VEISD::TS1AM, DL, N->getMemoryVT(),
+                                  DAG.getVTList(Op.getNode()->getValueType(0),
+                                                Op.getNode()->getValueType(1)),
+                                  {N->getChain(), Aligned, Flag, NewVal},
+                                  N->getMemOperand());
 
-    SDValue Const3 = DAG.getConstant(3, DL, MVT::i64);
-    SDValue Const24 = DAG.getConstant(24, DL, MVT::i64);
-
-    // Generate "ts1am" as 1 byte ATOMIC_SWAP.
-    SDValue AlignedAddress =
-        DAG.getNode(ISD::AND, DL, Src.getValueType(),
-                    {Src, DAG.getConstant(-4, DL, MVT::i64)});
-    SDValue Remainder =
-        DAG.getNode(ISD::AND, DL, Src.getValueType(), {Src, Const3});
-    SDValue ShiftedFlag = DAG.getNode(
-        ISD::SHL, DL, MVT::i32, {DAG.getConstant(1, DL, MVT::i32), Remainder});
-    SDValue ShiftBits = DAG.getNode(ISD::SHL, DL, Remainder.getValueType(),
-                                    {Remainder, Const3});
-    SDValue NewValue =
-        DAG.getNode(ISD::SHL, DL, Value.getValueType(), {Value, ShiftBits});
-    SDValue TS1AM =
-        DAG.getAtomic(VEISD::TS1AM, DL, N->getMemoryVT(),
-                      DAG.getVTList(Op.getNode()->getValueType(0),
-                                    Op.getNode()->getValueType(1)),
-                      {N->getChain(), AlignedAddress, ShiftedFlag, NewValue},
-                      N->getMemOperand());
-
-    // Extract 1 byte result.
-    SDValue SUB =
-        DAG.getNode(ISD::SUB, DL, Const24.getValueType(), {Const24, ShiftBits});
-    SDValue ShiftLeftFor1Byte =
-        DAG.getNode(ISD::SHL, DL, TS1AM.getValueType(), {TS1AM, SUB});
-    SDValue ShiftRightFor1Byte =
-        DAG.getNode(ISD::SRA, DL, ShiftLeftFor1Byte.getValueType(),
-                    {ShiftLeftFor1Byte, Const24});
-
+    SDValue Result = finalizeTS1AM(Op, DAG, TS1AM, Bits);
     SDValue Chain = TS1AM.getValue(1);
-    return DAG.getMergeValues({ShiftRightFor1Byte, Chain}, DL);
+    return DAG.getMergeValues({Result, Chain}, DL);
+  }
+  if (N->getMemoryVT() == MVT::i16) {
+    // For i16, use "ts1am"
+    SDValue Flag;
+    SDValue Bits;
+    SDValue NewVal = prepareTS1AM(Op, DAG, Flag, Bits);
+
+    SDValue Ptr = N->getOperand(1);
+    SDValue Aligned = DAG.getNode(ISD::AND, DL, Ptr.getValueType(),
+                                  {Ptr, DAG.getConstant(-4, DL, MVT::i64)});
+    SDValue TS1AM = DAG.getAtomic(VEISD::TS1AM, DL, N->getMemoryVT(),
+                                  DAG.getVTList(Op.getNode()->getValueType(0),
+                                                Op.getNode()->getValueType(1)),
+                                  {N->getChain(), Aligned, Flag, NewVal},
+                                  N->getMemOperand());
+
+    SDValue Result = finalizeTS1AM(Op, DAG, TS1AM, Bits);
+    SDValue Chain = TS1AM.getValue(1);
+    return DAG.getMergeValues({Result, Chain}, DL);
   }
   // Otherwise, let llvm legalize it.
   return Op;
@@ -1876,21 +1921,20 @@ SDValue VETargetLowering::lowerDYNAMIC_STACKALLOC(SDValue Op,
 static SDValue lowerFRAMEADDR(SDValue Op, SelectionDAG &DAG,
                               const VETargetLowering &TLI,
                               const VESubtarget *Subtarget) {
-  SDLoc dl(Op);
-  unsigned Depth = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
-
+  SDLoc DL(Op);
   MachineFunction &MF = DAG.getMachineFunction();
+  EVT PtrVT = TLI.getPointerTy(MF.getDataLayout());
+
   MachineFrameInfo &MFI = MF.getFrameInfo();
   MFI.setFrameAddressIsTaken(true);
 
-  EVT PtrVT = TLI.getPointerTy(MF.getDataLayout());
-
+  unsigned Depth = Op.getConstantOperandVal(0);
   const VERegisterInfo *RegInfo = Subtarget->getRegisterInfo();
   unsigned FrameReg = RegInfo->getFrameRegister(MF);
-  SDValue FrameAddr = DAG.getCopyFromReg(DAG.getEntryNode(), dl, FrameReg,
-                                         PtrVT);
+  SDValue FrameAddr =
+      DAG.getCopyFromReg(DAG.getEntryNode(), DL, FrameReg, PtrVT);
   while (Depth--)
-    FrameAddr = DAG.getLoad(Op.getValueType(), dl, DAG.getEntryNode(),
+    FrameAddr = DAG.getLoad(Op.getValueType(), DL, DAG.getEntryNode(),
                             FrameAddr, MachinePointerInfo());
   return FrameAddr;
 }
@@ -2130,6 +2174,26 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   }
 }
 /// } Custom Lower
+
+void VETargetLowering::ReplaceNodeResults(SDNode *N,
+                                          SmallVectorImpl<SDValue> &Results,
+                                          SelectionDAG &DAG) const {
+  switch (N->getOpcode()) {
+  case ISD::ATOMIC_SWAP:
+  case ISD::BUILD_VECTOR:
+  case ISD::INSERT_VECTOR_ELT:
+  case ISD::EXTRACT_VECTOR_ELT:
+  case ISD::VECTOR_SHUFFLE:
+  case ISD::MSCATTER:
+  case ISD::MGATHER:
+  case ISD::MLOAD:
+    // Let LLVM expand atomic swap instruction through LowerOperation.
+    return;
+  default:
+    LLVM_DEBUG(N->dumpr(&DAG));
+    llvm_unreachable("Do not know how to custom type legalize this operation!");
+  }
+}
 
 /// JumpTable for VE.
 ///
@@ -3703,29 +3767,6 @@ VETargetLowering::getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
   }
 
   return TargetLowering::getRegForInlineAsmConstraint(TRI, Constraint, VT);
-}
-
-void VETargetLowering::ReplaceNodeResults(SDNode *N,
-                                             SmallVectorImpl<SDValue>& Results,
-                                             SelectionDAG &DAG) const {
-
-  SDLoc dl(N);
-
-  switch (N->getOpcode()) {
-  case ISD::ATOMIC_SWAP:
-  case ISD::BUILD_VECTOR:
-  case ISD::INSERT_VECTOR_ELT:
-  case ISD::EXTRACT_VECTOR_ELT:
-  case ISD::VECTOR_SHUFFLE:
-  case ISD::MSCATTER:
-  case ISD::MGATHER:
-  case ISD::MLOAD:
-    // ask llvm to expand vector related instructions if those are not legal.
-    return;
-  default:
-    LLVM_DEBUG(N->dumpr(&DAG));
-    llvm_unreachable("Do not know how to custom type legalize this operation!");
-  }
 }
 
 // Override to enable LOAD_STACK_GUARD lowering on Linux.
