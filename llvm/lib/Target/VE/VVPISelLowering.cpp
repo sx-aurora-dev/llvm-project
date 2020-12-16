@@ -328,6 +328,22 @@ static SDValue getSplatValue(SDNode *N) {
   return SDValue();
 }
 
+static const MVT AllVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
+                                   MVT::v256f32, MVT::v512f32, MVT::v256f64};
+
+
+void VETargetLowering::initRegisterClasses_VVP() {
+  // VVP-based backend.
+  for (MVT VecVT : AllVectorVTs)
+    if (!IsPackedType(VecVT) || Subtarget->hasPackedMode())
+      addRegisterClass(VecVT, &VE::V64RegClass);
+
+  addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+  if (Subtarget->hasPackedMode())
+    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+  return;
+}
+
 void VETargetLowering::initVPUActions() {
   if (!Subtarget->enableVPU())
     return;

@@ -129,10 +129,13 @@ struct VVPWideningInfo {
         NeedsPackedMasking(false) {}
 };
 
+bool isPackedType(MVT VecVT);
+
 class VETargetLowering final : public TargetLowering, public VELoweringInfo {
   const VESubtarget *Subtarget;
 
   void initRegisterClasses();
+  void initRegisterClasses_VVP();
 
   // setOperationAction for all scalar ops
   void initSPUActions();

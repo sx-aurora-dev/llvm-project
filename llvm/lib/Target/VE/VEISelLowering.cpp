@@ -75,9 +75,6 @@ bool VETargetLowering::CanLowerReturn(
 }
 
 
-static const MVT AllVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
-                                   MVT::v256f32, MVT::v512f32, MVT::v256f64};
-
 static const MVT WholeVectorVTs[] = {
     MVT::v512i32, MVT::v512f32, MVT::v256i32, MVT::v256f32, MVT::v256i64,
     MVT::v256f64, MVT::v128i32, MVT::v128f32, MVT::v128i64, MVT::v128f64,
@@ -94,34 +91,21 @@ static const MVT All256MaskVTs[] = {
 };
 
 void VETargetLowering::initRegisterClasses() {
-  // Set up the register classes.
+  // Scalar registers.
   addRegisterClass(MVT::i32, &VE::I32RegClass);
   addRegisterClass(MVT::i64, &VE::I64RegClass);
   addRegisterClass(MVT::f32, &VE::F32RegClass);
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
-#if 0
-  if (!Subtarget->enableVPU())
-    return;
-
-  for (MVT VecVT : AllVectorVTs)
-    if (!IsPackedType(VecVT) || Subtarget->hasPackedMode())
-      addRegisterClass(VecVT, &VE::V64RegClass);
-
-  addRegisterClass(MVT::v256i1, &VE::VMRegClass);
-  if (Subtarget->hasPackedMode())
-    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-#else
   if (Subtarget->enableVPU()) {
-    for (MVT VecVT : AllVectorVTs)
-      addRegisterClass(VecVT, &VE::V64RegClass);
-    addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
-    addRegisterClass(MVT::v256i1, &VE::VMRegClass);
+    // VVP backend.
+    initRegisterClasses_VVP();
     return;
   }
   
   if (Subtarget->vectorize()) {
+    // Fixed SIMD backend.
     for (MVT VecVT : WholeVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
     addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
@@ -129,7 +113,6 @@ void VETargetLowering::initRegisterClasses() {
       addRegisterClass(MaskVT, &VE::VMRegClass);
     return;
   }
-#endif
 }
 
 
