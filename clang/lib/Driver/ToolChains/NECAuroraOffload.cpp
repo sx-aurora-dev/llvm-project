@@ -51,6 +51,7 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
 
   for (const auto &A : Args) {
     if (A->getOption().getKind() != Option::InputClass &&
+        !A->getOption().hasFlag(options::NoXarchOption) &&
         !A->getOption().hasFlag(options::LinkerInput)) {
 
       // Don't forward any -g arguments to assembly steps.
@@ -97,7 +98,7 @@ void necauroratools::Common::ConstructJob(Compilation &C, const JobAction &JA,
     std::string mark = "XOT";
     for (uint i = 0; i < A->getNumValues(); ++i) {
       std::string arg = mark;
-      for (const char* c = A->getValue(i); *c != NULL; c++) {
+      for (const char* c = A->getValue(i); *c; c++) {
         if (strncmp(c, " ", 1) != 0) {
           arg.push_back(*c);
         } else {
