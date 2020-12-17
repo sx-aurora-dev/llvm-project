@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve -mattr=-vpu | FileCheck %s
+; RUN: llc < %s -mtriple=ve | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readnone
 define double @fma_d_1(double, double, double) {
