@@ -262,13 +262,12 @@ bool VEDAGToDAGISel::selectADDRri(SDValue Addr, SDValue &Base,
 
 bool VEDAGToDAGISel::selectADDRzi(SDValue Addr, SDValue &Base,
                                   SDValue &Offset) {
-  if (dyn_cast<FrameIndexSDNode>(Addr)) {
+  if (dyn_cast<FrameIndexSDNode>(Addr))
     return false;
-  }
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
       Addr.getOpcode() == ISD::TargetGlobalAddress ||
       Addr.getOpcode() == ISD::TargetGlobalTLSAddress)
-    return false;  // direct calls.
+    return false; // direct calls.
 
   if (auto *CN = dyn_cast<ConstantSDNode>(Addr)) {
     if (isInt<32>(CN->getSExtValue())) {

@@ -1031,7 +1031,7 @@ ExpectedType ASTNodeImporter::VisitBuiltinType(const BuiltinType *T) {
   case BuiltinType::Id: \
     return Importer.getToContext().SingletonId;
 #include "clang/Basic/AArch64SVEACLETypes.def"
-#define PPC_MMA_VECTOR_TYPE(Name, Id, Size) \
+#define PPC_VECTOR_TYPE(Name, Id, Size) \
   case BuiltinType::Id: \
     return Importer.getToContext().Id##Ty;
 #include "clang/Basic/PPCTypes.def"
@@ -8223,7 +8223,7 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
       return make_error<ImportError>(*Error);
     }
 
-    // If FromD has some updated flags after last import, apply it
+    // If FromD has some updated flags after last import, apply it.
     updateFlags(FromD, ToD);
     // If we encounter a cycle during an import then we save the relevant part
     // of the import path associated to the Decl.

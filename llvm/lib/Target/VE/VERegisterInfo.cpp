@@ -23,6 +23,7 @@
 #include "llvm/CodeGen/TargetInstrInfo.h"
 #include "llvm/IR/Type.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 
 using namespace llvm;
@@ -156,27 +157,26 @@ VERegisterInfo::getPointerRegClass(const MachineFunction &MF,
 
 #define DEBUG_TYPE "ve-register-info"
 
-static unsigned offset_to_disp(MachineInstr &MI) {
+static unsigned offsetToDisp(MachineInstr &MI) {
   // Default offset in instruction's operands (reg+reg+imm).
   unsigned OffDisp = 2;
 
-#define RRCASm_kind(NAME) \
-  case NAME ## rir: \
-  case NAME ## rii:
+#define RRCAS_multi_cases(NAME) NAME##rir : case NAME##rii
 
   {
     using namespace llvm::VE;
     switch (MI.getOpcode()) {
     case INLINEASM:
-    RRCASm_kind(TS1AML)
-    RRCASm_kind(TS1AMW)
-    RRCASm_kind(CASL)
-    RRCASm_kind(CASW)
+    case RRCAS_multi_cases(TS1AML):
+    case RRCAS_multi_cases(TS1AMW):
+    case RRCAS_multi_cases(CASL):
+    case RRCAS_multi_cases(CASW):
       // These instructions use AS format (reg+imm).
       OffDisp = 1;
+      break;
     }
   }
-#undef RRCASm_kind
+#undef RRCAS_multi_cases
 
   return OffDisp;
 }
@@ -251,7 +251,7 @@ static void replaceFI(MachineFunction &MF, MachineBasicBlock::iterator II,
   // VE has 32 bit offset field, so no need to expand a target instruction.
   // Directly encode it.
   MI.getOperand(FIOperandNum).ChangeToRegister(FrameReg, false);
-  MI.getOperand(FIOperandNum + offset_to_disp(MI)).ChangeToImmediate(Offset);
+  MI.getOperand(FIOperandNum + offsetToDisp(MI)).ChangeToImmediate(Offset);
 }
 
 void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
@@ -270,7 +270,7 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   int Offset;
   Offset = TFI->getFrameIndexReference(MF, FrameIndex, FrameReg).getFixed();
 
-  Offset += MI.getOperand(FIOperandNum + offset_to_disp(MI)).getImm();
+  Offset += MI.getOperand(FIOperandNum + offsetToDisp(MI)).getImm();
 
   if (MI.getOpcode() == VE::STQrii) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
