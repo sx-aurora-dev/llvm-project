@@ -66,8 +66,7 @@ pipeline {
                                 url: "${REPO_URL}/llvm-ve-intrinsic-test.git"
                             sh """
                                 make CLANG=${TOP}/llvm-dev/install/bin/clang -j8
-                                ./test.ve 2>&1 | tee z.result
-                                ./check-tests.sh z.result
+                                ./test.sh
                             """
                         }
                     }
