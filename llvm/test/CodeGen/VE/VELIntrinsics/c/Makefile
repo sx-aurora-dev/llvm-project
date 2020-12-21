@@ -23,7 +23,7 @@ MASK_TARGETS = vfmk.ll andm.ll orm.ll xorm.ll eqvm.ll nndm.ll negm.ll pcvm.ll \
 	lzvm.ll tovm.ll
 REDUCTION_TARGETS = vsum.ll vfsum.ll vrmax.ll vrmin.ll vrand.ll vror.ll vrxor.ll
 TRANSFER_TARGETS = svob.ll
-OTHERS_TARGETS = pack.ll
+OTHERS_TARGETS = pack.ll extract.ll insert.ll
 
 TARGETS = $(LDSTMV_TARGETS) $(ARITH_TARGETS) $(LOGICAL_TARGETS) \
 	$(SHIFT_TARGETS) $(FP_ARITH_TARGETS) $(MERGER_TARGETS) $(MASK_TARGETS) \
