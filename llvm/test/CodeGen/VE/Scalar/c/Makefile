@@ -98,6 +98,16 @@ load_stk.ll : load_stk.c
 	sed -e '1i ; RUN: llc < %s -mtriple=ve | FileCheck %s' $@ > $@.tmp && mv $@.tmp $@
 	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
 
+lea-opt.ll : lea-opt.c
+	$(CLANG) $(CFLAGS) -S -emit-llvm $<
+	sed -e 's/, !tbaa !2//' -e '/^![2-4]*/d' $@ > $@.tmp && mv $@.tmp $@
+	$(CLEAN_TEST) $@
+	-grep '///' $< > /dev/null && (echo; grep '///' $<) | sed -e 's:///:;;;:' | cat - $@ > $@.tmp && mv $@.tmp $@
+	sed -e '1i ; RUN: llc < %s -mtriple=ve -relocation-model=pic \\\n; RUN:     | FileCheck %s --check-prefix=PIC' $@ > $@.tmp && mv $@.tmp $@
+	sed -e '1i ; RUN: llc < %s -mtriple=ve | FileCheck %s' $@ > $@.tmp && mv $@.tmp $@
+	$(UPDATE_LLC_TEST) --llc-binary=$(LLC) $@
+	$(PATCH_TEST) $@
+
 clean: FORCE
 	rm -f $(TARGETS)
 

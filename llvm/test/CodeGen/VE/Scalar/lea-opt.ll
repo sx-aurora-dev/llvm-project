@@ -9,7 +9,7 @@
 @data = internal global i8 0, align 1
 @buf = internal global %struct.buffer zeroinitializer, align 8
 
-; Function Attrs: norecurse nounwind readnone
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
 define nonnull ptr @lea_basic() {
 ; CHECK-LABEL: lea_basic:
 ; CHECK:       # %bb.0:
@@ -35,8 +35,8 @@ define nonnull ptr @lea_basic() {
   ret ptr @data
 }
 
-; Function Attrs: norecurse nounwind readnone
-define ptr @lea_offset() {
+; Function Attrs: mustprogress nofree norecurse nosync nounwind willreturn memory(none)
+define nonnull ptr @lea_offset() {
 ; CHECK-LABEL: lea_offset:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, buf@lo
@@ -59,5 +59,5 @@ define ptr @lea_offset() {
 ; PIC-NEXT:    ld %s16, 32(, %s11)
 ; PIC-NEXT:    ld %s15, 24(, %s11)
 ; PIC-NEXT:    b.l.t (, %s10)
-  ret ptr getelementptr inbounds (%struct.buffer, ptr @buf, i64 0, i32 1, i64 0)
+  ret ptr getelementptr inbounds (%struct.buffer, ptr @buf, i64 0, i32 1)
 }
