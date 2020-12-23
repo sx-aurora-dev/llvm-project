@@ -164,6 +164,10 @@ void VETargetLowering::initSPUActions() {
   /// Stack {
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i32, Custom);
   setOperationAction(ISD::DYNAMIC_STACKALLOC, MVT::i64, Custom);
+
+  // Use the default implementation.
+  setOperationAction(ISD::STACKSAVE, MVT::Other, Expand);
+  setOperationAction(ISD::STACKRESTORE, MVT::Other, Expand);
   /// } Stack
 
   /// Branch {
@@ -1949,34 +1953,14 @@ static SDValue lowerRETURNADDR(SDValue Op, SelectionDAG &DAG,
   if (TLI.verifyReturnAddressArgumentIsConstant(Op, DAG))
     return SDValue();
 
-  SDLoc dl(Op);
-  unsigned Depth = cast<ConstantSDNode>(Op.getOperand(0))->getZExtValue();
-
-  auto PtrVT = TLI.getPointerTy(MF.getDataLayout());
-
-  if (Depth > 0) {
-    SDValue FrameAddr = lowerFRAMEADDR(Op, DAG, TLI, Subtarget);
-    SDValue Offset = DAG.getConstant(8, dl, MVT::i64);
-    return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(),
-                       DAG.getNode(ISD::ADD, dl, PtrVT, FrameAddr, Offset),
-                       MachinePointerInfo());
-  }
-
-#if 0
-  // FIXME: This implementation doesn't work on VE since we doesn't pre-allocate
-  //        stack (guess).  Need modifications on stack allocation to follow
-  //        other architectures in future.
-  // Just load the return address off the stack.
-  SDValue RetAddrFI = DAG.getFrameIndex(1, PtrVT);
-  return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(), RetAddrFI,
-                     MachinePointerInfo());
-#else
   SDValue FrameAddr = lowerFRAMEADDR(Op, DAG, TLI, Subtarget);
-  SDValue Offset = DAG.getConstant(8, dl, MVT::i64);
-  return DAG.getLoad(PtrVT, dl, DAG.getEntryNode(),
-                     DAG.getNode(ISD::ADD, dl, PtrVT, FrameAddr, Offset),
+
+  SDLoc DL(Op);
+  EVT VT = Op.getValueType();
+  SDValue Offset = DAG.getConstant(8, DL, VT);
+  return DAG.getLoad(VT, DL, DAG.getEntryNode(),
+                     DAG.getNode(ISD::ADD, DL, VT, FrameAddr, Offset),
                      MachinePointerInfo());
-#endif
 }
 
 SDValue VETargetLowering::lowerINTRINSIC_WO_CHAIN(SDValue Op,
