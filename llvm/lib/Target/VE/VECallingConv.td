@@ -53,7 +53,8 @@ def CC_VE_RegCall : CallingConv<[
 
   // pair of vector mask --> generic vector mask registers
   CCIfType<[v512i1],
-           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>,
+           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
+                                   [VM1, VM3, VM5]>>,
 
   // Alternatively, they are assigned to the stack in 8-byte aligned units.
   CCDelegateTo<CC_VE_C_Stack>
@@ -136,7 +137,7 @@ def RetCC_VE_RegCall : CallingConv<[
   // pair of vector mask --> generic vector mask registers
   CCIfType<[v512i1],
            CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
-                                   [VM1, VM1, VM3]>>,
+                                   [VM1, VM3, VM5]>>,
 ]>;
 
 def RetCC_VE_C : CallingConv<[
