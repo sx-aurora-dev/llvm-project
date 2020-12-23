@@ -641,51 +641,6 @@ let Predicates = [IsVectorizeSubTarget] in {
 }
 */
 
-// LVL
-/*
-def : Pat<(vec_lvl i32:$sy), (LVL i32:$sy)>;
-*/
-
-// Broadcast
-
-let Predicates = [IsVectorizeSubTarget] in {
-  def: Pat<(v512i32 (vec_broadcast i32:$val, (i32 512))),
-           (PVBRDrl
-              (ORrr (SLLri (i2l $val), 32), (ANDrm (i2l $val), !add(32, 64))),
-              (VLEN 256))>;
-  def: Pat<(v512f32 (vec_broadcast f32:$val, (i32 512))),
-           (PVBRDrl
-              (ORrr (f2l $val), (SRLri (f2l $val), 32)),
-              (VLEN 256))>;
-}
-
-multiclass simd_vbrd<int length> {
-  defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
-  defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
-  defvar vf32 = !cast<ValueType>("v" # !cast<string>(length) # "f32");
-  defvar vf64 = !cast<ValueType>("v" # !cast<string>(length) # "f64");
-
-  def : Pat<(vi32 (vec_broadcast i32:$val, (i32 length))),
-            (VBRDLrl $val, (VLEN length))>;
-  def : Pat<(vf32 (vec_broadcast f32:$val, (i32 length))),
-            (VBRDUrl $val, (VLEN length))>;
-  def : Pat<(vi64 (vec_broadcast i64:$val, (i32 length))),
-            (VBRDrl $val, (VLEN length))>;
-  def : Pat<(vf64 (vec_broadcast f64:$val, (i32 length))),
-            (VBRDrl $val, (VLEN length))>;
-}
-
-let Predicates = [IsVectorizeSubTarget] in {
-  defm : simd_vbrd<256>;
-  defm : simd_vbrd<128>;
-  defm : simd_vbrd<64>;
-  defm : simd_vbrd<32>;
-  defm : simd_vbrd<16>;
-  defm : simd_vbrd<8>;
-  defm : simd_vbrd<4>;
-  defm : simd_vbrd<2>;
-}
-
 // Condition Code
 /*
 let Predicates = [IsVectorizeSubTarget] in {
@@ -964,32 +919,6 @@ let Predicates = [IsVectorizeSubTarget] in {
   defm : simd_sel<2, v2i32, v2i64, v2f32, v2f64, v2i1>;
 }
 */
-
-// Sequence
-let Predicates = [IsVectorizeSubTarget] in {
-  def : Pat<(v512i32 (vec_seq (i32 1))), (PVSEQl (VLEN 256))>;
-}
-
-multiclass simd_vseq<int length> {
-  defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
-  defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
-
-  def : Pat<(vi32 (vec_seq (i32 1))),
-            (PVSEQLOl (VLEN length))>;
-  def : Pat<(vi64 (vec_seq (i64 1))),
-            (VSEQl (VLEN length))>;
-}
-
-let Predicates = [IsVectorizeSubTarget] in {
-  defm : simd_vseq<256>;
-  defm : simd_vseq<128>;
-  defm : simd_vseq<64>;
-  defm : simd_vseq<32>;
-  defm : simd_vseq<16>;
-  defm : simd_vseq<8>;
-  defm : simd_vseq<4>;
-  defm : simd_vseq<2>;
-}
 
 // Double-Precision Arithmetic
 //

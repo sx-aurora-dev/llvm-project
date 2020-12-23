@@ -2770,4 +2770,4 @@ include "VEInstrPatternsVec.td"
 include "VVPInstrPatternsVec.td"
 
 // Patterns and intermediate SD nodes for fixed length vector instructions.
-// include "SIMDInstrPatterns.td"
+include "SIMDInstrPatterns.td"

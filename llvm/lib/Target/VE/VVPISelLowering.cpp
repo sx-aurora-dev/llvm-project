@@ -864,24 +864,6 @@ SDValue VETargetLowering::lowerVVP_TRUNCATE(SDValue Op, SelectionDAG &DAG) const
   // truncate $x to i1  ---> $x
   return Op.getOperand(0);
 }
-SDValue VETargetLowering::lowerVVP_BUILD_VECTOR(SDValue Op,
-                                                SelectionDAG &DAG) const {
-  SDLoc DL(Op);
-  unsigned NumEls = Op.getValueType().getVectorNumElements();
-  MVT ElemVT = Op.getSimpleValueType().getVectorElementType();
-
-  if (SDValue ScalarV = getSplatValue(Op.getNode())) {
-    // lower to VEC_BROADCAST
-    MVT LegalResVT = MVT::getVectorVT(ElemVT, 256);
-
-    auto AVL = DAG.getConstant(NumEls, DL, MVT::i32);
-    return DAG.getNode(VEISD::VEC_BROADCAST, DL, LegalResVT, Op.getOperand(0),
-                       AVL);
-  }
-
-  // Expand
-  return SDValue();
-}
 
 SDValue VETargetLowering::expandSELECT(SDValue Op,
                                        SmallVectorImpl<SDValue> &LegalOperands,
