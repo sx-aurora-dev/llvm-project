@@ -433,6 +433,21 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // Bitconvert for vector registers
 
+let Predicates = [IsVectorizeSubTarget] in {
+  def : Pat<(v512i32 (bitconvert v512f32:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+  def : Pat<(v512i32 (bitconvert v256f64:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+  def : Pat<(v512i32 (bitconvert v256i64:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+  def : Pat<(v512f32 (bitconvert v512i32:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+  def : Pat<(v512f32 (bitconvert v256f64:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+  def : Pat<(v512f32 (bitconvert v256i64:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+}
+
 multiclass simd_bitconv<int length> {
   defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
   defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
