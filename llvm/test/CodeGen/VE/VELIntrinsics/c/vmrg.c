@@ -35,7 +35,7 @@ __vr INST ## _vsvmvl_imm(__vr r, __vm256 m, __vr b) { \
   return _vel_ ## INST ## _vsvmvl(8, r, m, b, 128); \
 }
 
-#define VMRG_TEST_2(INST) \
+#define VMRG_TEST_2(INST, TYPE) \
 __attribute__ ((REGCALL)) \
 __vr INST ## _vvvMl(__vr l, __vr r, __vm512 m) { \
   return _vel_ ## INST ## _vvvMl(l, r, m, 256); \
@@ -43,7 +43,15 @@ __vr INST ## _vvvMl(__vr l, __vr r, __vm512 m) { \
 __attribute__ ((REGCALL)) \
 __vr INST ## _vvvMvl(__vr l, __vr r, __vm512 m, __vr b) { \
   return _vel_ ## INST ## _vvvMvl(l, r, m, b, 128); \
+} \
+__attribute__ ((REGCALL)) \
+__vr INST ## _vsvMl(TYPE sy, __vr vz, __vm512 vm) { \
+  return _vel_ ## INST ## _vsvMl(sy, vz, vm, 256); \
+} \
+__attribute__ ((REGCALL)) \
+__vr INST ## _vsvMvl(TYPE sy, __vr vz, __vm512 vm, __vr pt) { \
+  return _vel_ ## INST ## _vsvMvl(sy, vz, vm, pt, 128); \
 }
 
 VMRG_TEST_1(vmrg, i64)
-VMRG_TEST_2(vmrgw)
+VMRG_TEST_2(vmrgw, i32)
