@@ -40,10 +40,7 @@ VEToolChain::VEToolChain(const Driver &D, const llvm::Triple &Triple,
   // from scratch here.
   getFilePaths().clear();
   getFilePaths().push_back(getArchSpecificLibPath());
-  if (getTriple().isMusl())
-    getFilePaths().push_back(computeSysRoot() + "/opt/nec/ve/musl/lib");
-  else
-    getFilePaths().push_back(computeSysRoot() + "/opt/nec/ve/lib");
+  getFilePaths().push_back(computeSysRoot() + "/opt/nec/ve/lib");
 }
 
 Tool *VEToolChain::buildAssembler() const {
@@ -87,12 +84,8 @@ void VEToolChain::AddClangSystemIncludeArgs(const ArgList &DriverArgs,
       ArrayRef<StringRef> DirVec(Dirs);
       addSystemIncludes(DriverArgs, CC1Args, DirVec);
     } else {
-      if (getTriple().isMusl())
-        addSystemInclude(DriverArgs, CC1Args,
-                         getDriver().SysRoot + "/opt/nec/ve/musl/include");
-      else
-        addSystemInclude(DriverArgs, CC1Args,
-                         getDriver().SysRoot + "/opt/nec/ve/include");
+      addSystemInclude(DriverArgs, CC1Args,
+                       getDriver().SysRoot + "/opt/nec/ve/include");
     }
   }
 }
@@ -136,12 +129,10 @@ void VEToolChain::AddCXXStdlibLibArgs(const ArgList &Args,
   CmdArgs.push_back("-lc++");
   CmdArgs.push_back("-lc++abi");
   CmdArgs.push_back("-lunwind");
-  if (!getTriple().isMusl()) {
-    // libc++ requires -lpthread under glibc environment
-    CmdArgs.push_back("-lpthread");
-    // libunwind requires -ldl under glibc environment
-    CmdArgs.push_back("-ldl");
-  }
+  // libc++ requires -lpthread under glibc environment
+  CmdArgs.push_back("-lpthread");
+  // libunwind requires -ldl under glibc environment
+  CmdArgs.push_back("-ldl");
 }
 
 llvm::ExceptionHandling
