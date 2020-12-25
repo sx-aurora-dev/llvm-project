@@ -4,15 +4,15 @@
 typedef double __vr __attribute__((__vector_size__(2048)));
 #if __STDC_VERSION__ >= 199901L
 // For C99
-typedef _Bool __vm    __attribute__((__vector_size__(32)));
-typedef _Bool __vm256 __attribute__((__vector_size__(32)));
-typedef _Bool __vm512 __attribute__((__vector_size__(64)));
+typedef _Bool __vm    __attribute__((ext_vector_type(256)));
+typedef _Bool __vm256 __attribute__((ext_vector_type(256)));
+typedef _Bool __vm512 __attribute__((ext_vector_type(512)));
 #else
 #ifdef __cplusplus
 // For C++
-typedef bool __vm    __attribute__((__vector_size__(32)));
-typedef bool __vm256 __attribute__((__vector_size__(32)));
-typedef bool __vm512 __attribute__((__vector_size__(64)));
+typedef bool __vm    __attribute__((ext_vector_type(256)));
+typedef bool __vm256 __attribute__((ext_vector_type(256)));
+typedef bool __vm512 __attribute__((ext_vector_type(512)));
 #else
 #error need C++ or C99 to use vector intrinsics for VE
 #endif
