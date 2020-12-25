@@ -331,7 +331,8 @@ void test_pseudo_dtor(fltx4 *f) {
 typedef __attribute__((ext_vector_type(4))) int vi4;
 const int &reference_to_vec_element = vi4(1).x;
 
-typedef bool good __attribute__((__vector_size__(16)));
+// PR12649
+typedef bool bad __attribute__((__vector_size__(16)));  // expected-error {{invalid vector element type 'bool'}}
 
 namespace Templates {
 template <typename Elt, unsigned long long Size>
@@ -349,7 +350,9 @@ struct PR15730 {
 void Init() {
   const TemplateVectorType<float, 32>::type Works = {};
   const TemplateVectorType<int, 32>::type Works2 = {};
-  const TemplateVectorType<bool, 32>::type BoolWorks = {};
+  // expected-error@#1 {{invalid vector element type 'bool'}}
+  // expected-note@+1 {{in instantiation of template class 'Templates::TemplateVectorType<bool, 32>' requested here}}
+  const TemplateVectorType<bool, 32>::type NoBool = {};
   // expected-error@#1 {{invalid vector element type 'int __attribute__((ext_vector_type(4)))' (vector of 4 'int' values)}}
   // expected-note@+1 {{in instantiation of template class 'Templates::TemplateVectorType<int __attribute__((ext_vector_type(4))), 32>' requested here}}
   const TemplateVectorType<vi4, 32>::type NoComplex = {};

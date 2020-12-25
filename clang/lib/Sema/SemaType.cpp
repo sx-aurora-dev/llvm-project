@@ -2532,10 +2532,10 @@ QualType Sema::BuildArrayType(QualType T, ArrayType::ArraySizeModifier ASM,
 
 QualType Sema::BuildVectorType(QualType CurType, Expr *SizeExpr,
                                SourceLocation AttrLoc) {
-  // The base type must be boolean or integer (not enumeration) or float, and
+  // The base type must be integer (not Boolean or enumeration) or float, and
   // can't already be a vector.
   if ((!CurType->isDependentType() &&
-       (!CurType->isBuiltinType() ||
+       (!CurType->isBuiltinType() || CurType->isBooleanType() ||
         (!CurType->isIntegerType() && !CurType->isRealFloatingType()))) ||
       CurType->isArrayType()) {
     Diag(AttrLoc, diag::err_attribute_invalid_vector_type) << CurType;
@@ -2586,8 +2586,7 @@ QualType Sema::BuildVectorType(QualType CurType, Expr *SizeExpr,
     return QualType();
   }
 
-  uint64_t ElemSizeBits = CurType->isBooleanType() ? 1 : TypeSize;
-  return Context.getVectorType(CurType, VectorSizeBits / ElemSizeBits,
+  return Context.getVectorType(CurType, VectorSizeBits / TypeSize,
                                VectorType::GenericVector);
 }
 
@@ -7642,13 +7641,13 @@ void Sema::adjustMemberFunctionCC(QualType &T, bool IsStatic, bool IsCtorOrDtor,
   T = Context.getAdjustedType(T, Wrapped);
 }
 
-/// HandleVectorSizeAttribute - this attribute is only applicable to boolean,
-/// integral and float scalars, although arrays, pointers, and function return
-/// values are allowed in conjunction with this construct. Aggregates with this
-/// attribute are invalid, even if they are of the same size as a corresponding
-/// scalar. The raw attribute should contain precisely 1 argument, the vector
-/// size for the variable, measured in bytes. If curType and rawAttr are well
-/// formed, this routine will return a new vector type.
+/// HandleVectorSizeAttribute - this attribute is only applicable to integral
+/// and float scalars, although arrays, pointers, and function return values are
+/// allowed in conjunction with this construct. Aggregates with this attribute
+/// are invalid, even if they are of the same size as a corresponding scalar.
+/// The raw attribute should contain precisely 1 argument, the vector size for
+/// the variable, measured in bytes. If curType and rawAttr are well formed,
+/// this routine will return a new vector type.
 static void HandleVectorSizeAttr(QualType &CurType, const ParsedAttr &Attr,
                                  Sema &S) {
   // Check the attribute arguments.

@@ -1933,9 +1933,7 @@ TypeInfo ASTContext::getTypeInfoImpl(const Type *T) const {
   case Type::Vector: {
     const auto *VT = cast<VectorType>(T);
     TypeInfo EltInfo = getTypeInfo(VT->getElementType());
-    Width = (Target->hasDenseBoolVectors() && VT->isVectorSizeBoolean())
-                ? VT->getNumElements()
-                : EltInfo.Width * VT->getNumElements();
+    Width = EltInfo.Width * VT->getNumElements();
     Align = Width;
     // If the alignment is not a power of 2, round up to the next power of 2.
     // This happens for non-power-of-2 length vectors.

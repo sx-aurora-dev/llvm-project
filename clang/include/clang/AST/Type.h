@@ -3260,11 +3260,6 @@ public:
     return VectorKind(VectorTypeBits.VecKind);
   }
 
-  bool isVectorSizeBoolean() const {
-    return (getVectorKind() == VectorKind::GenericVector) &&
-           getElementType()->isBooleanType();
-  }
-
   void Profile(llvm::FoldingSetNodeID &ID) {
     Profile(ID, getElementType(), getNumElements(),
             getTypeClass(), getVectorKind());

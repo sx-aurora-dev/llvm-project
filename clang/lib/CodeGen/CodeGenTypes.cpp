@@ -97,17 +97,6 @@ llvm::Type *CodeGenTypes::ConvertTypeForMem(QualType T, bool ForBitField) {
 
   llvm::Type *R = ConvertType(T);
 
-  // Check for the boolean vector case
-  bool DenseBoolVector = CGM.getTarget().hasDenseBoolVectors();
-  auto *FixedVT = dyn_cast<llvm::FixedVectorType>(R);
-  if (DenseBoolVector && T->isVectorType() && FixedVT &&
-      FixedVT->getElementType()->isIntegerTy(1)) {
-
-    // Pad to at least one byte.
-    uint64_t BytePadded = std::max<uint64_t>(FixedVT->getNumElements(), 8);
-    return llvm::IntegerType::get(FixedVT->getContext(), BytePadded);
-  }
-
   // If this is a bool type, or an ExtIntType in a bitfield representation,
   // map this integer to the target-specified size.
   if ((ForBitField && T->isExtIntType()) ||
@@ -693,10 +682,8 @@ llvm::Type *CodeGenTypes::ConvertType(QualType T) {
   case Type::ExtVector:
   case Type::Vector: {
     const VectorType *VT = cast<VectorType>(Ty);
-    llvm::Type *IRElemTy = VT->getElementType()->isBooleanType()
-                               ? llvm::Type::getInt1Ty(getLLVMContext())
-                               : ConvertType(VT->getElementType());
-    ResultType = llvm::FixedVectorType::get(IRElemTy, VT->getNumElements());
+    ResultType = llvm::FixedVectorType::get(ConvertType(VT->getElementType()),
+                                            VT->getNumElements());
     break;
   }
   case Type::ConstantMatrix: {

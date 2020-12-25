@@ -5923,8 +5923,9 @@ static bool isValidVectorForConditionalCondition(ASTContext &Ctx,
   const QualType EltTy =
       cast<VectorType>(CondTy.getCanonicalType())->getElementType();
 
-  assert(!EltTy->isEnumeralType() && "Vectors cant be enum types");
-  return EltTy->isIntegralType(Ctx) || EltTy->isBooleanType();
+  assert(!EltTy->isBooleanType() && !EltTy->isEnumeralType() &&
+         "Vectors cant be boolean or enum types");
+  return EltTy->isIntegralType(Ctx);
 }
 
 QualType Sema::CheckGNUVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,
@@ -5969,9 +5970,7 @@ QualType Sema::CheckGNUVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,
   } else if (LHSVT || RHSVT) {
     ResultType = CheckVectorOperands(
         LHS, RHS, QuestionLoc, /*isCompAssign*/ false, /*AllowBothBool*/ true,
-        /*AllowBoolConversions*/ false,
-        /*AllowBoolOperation*/ true,
-        /*ReportInvalid*/ true);
+        /*AllowBoolConversions*/ false);
     if (ResultType.isNull())
       return {};
   } else {
@@ -6289,11 +6288,9 @@ QualType Sema::CXXCheckConditionalOperands(ExprResult &Cond, ExprResult &LHS,
 
   // Extension: conditional operator involving vector types.
   if (LTy->isVectorType() || RTy->isVectorType())
-    return CheckVectorOperands(LHS, RHS, QuestionLoc, /*isCompAssign*/ false,
-                               /*AllowBothBool*/ true,
-                               /*AllowBoolConversions*/ false,
-                               /*AllowBoolOperation*/ false,
-                               /*ReportInvalid*/ true);
+    return CheckVectorOperands(LHS, RHS, QuestionLoc, /*isCompAssign*/false,
+                               /*AllowBothBool*/true,
+                               /*AllowBoolConversions*/false);
 
   //   -- The second and third operands have arithmetic or enumeration type;
   //      the usual arithmetic conversions are performed to bring them to a
