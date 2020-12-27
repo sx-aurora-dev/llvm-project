@@ -3934,12 +3934,11 @@ def mno_retpoline_external_thunk : Flag<["-"], "mno-retpoline-external-thunk">, 
 def mvzeroupper : Flag<["-"], "mvzeroupper">, Group<m_x86_Features_Group>;
 def mno_vzeroupper : Flag<["-"], "mno-vzeroupper">, Group<m_x86_Features_Group>;
 
-def mvevec : Flag<["-"], "mvevec">, Group<m_ve_Features_Group>,
-  HelpText<"Enable vectorization (VE only)">,
-  Flags<[CC1Option]>;
-def mno_vevec : Flag<["-"], "mno-vevec">, Group<m_ve_Features_Group>,
-  HelpText<"Disable vectorization (VE only)">,
-  Flags<[CC1Option]>;
+def mvevec : Separate<["-"], "mvevec">, Flags<[CC1Option]>,
+  HelpText<"The vectorize model (VE only): none|intrin|simd|vpu">,
+  Group<m_ve_Features_Group>, Values<"none,intrin,simd,vpu">;
+def mvevec_EQ : Joined<["-"], "mvevec=">,
+  Flags<[CC1Option]>, Group<m_ve_Features_Group>, Alias<mvevec>;
 
 // These are legacy user-facing driver-level option spellings. They are always
 // aliases for options that are spelled using the more common Unix / GNU flag

@@ -58,16 +58,22 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   if (FloatABI == ve::FloatABI::Soft)
     Features.push_back("+soft-float");
 
-  // -mno-vevec is default, unless -mvevec is specified.
-  bool VEVec = false;
-  if (auto *A = Args.getLastArg(options::OPT_mvevec, options::OPT_mno_vevec)) {
-    if (A->getOption().matches(options::OPT_mvevec)) {
-      VEVec = true;
-      Features.push_back("+vec");
-    }
-  }
-
-  if (!VEVec) {
-    Features.push_back("-vec");
+  // Parse -mvevec option.  This option takes one of following arguments.
+  // And pass features respectively.
+  //   -mvevec=intrin -> -mattr=+intrin
+  //   -mvevec=simd   -> -mattr=+simd
+  //   -mvevec=vpu    -> -mattr=+vpu
+  //   -mvevec=none   -> no mattr
+  //   no mvevec      -> -mattr=+intrin
+  if (auto *A = Args.getLastArg(options::OPT_mvevec)) {
+    if (A->containsValue("intrin"))
+      Features.push_back("+intrin");
+    else if (A->containsValue("simd"))
+      Features.push_back("+simd");
+    else if (A->containsValue("vpu"))
+      Features.push_back("+vpu");
+  } else {
+    // Enable -mattr=+intrin by default.
+    Features.push_back("+intrin");
   }
 }
