@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+intrin | FileCheck %s
 
 ; Function Attrs: nounwind readnone
 define x86_regcallcc <256 x double> @_Z4funcDv256_dS_S_(<256 x double> %0, <256 x double> %1, <256 x double> %2) {

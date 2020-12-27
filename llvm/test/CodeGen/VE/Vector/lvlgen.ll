@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+intrin | FileCheck %s
 
 declare <256 x double> @llvm.ve.vl.vld.vssl(i64, i8*, i32)
 declare <256 x double> @llvm.ve.vl.vfaddd.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)

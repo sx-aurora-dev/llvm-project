@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+intrin | FileCheck %s
 
 ; Function Attrs: noinline nounwind optnone
 define <256 x i1> @_Z4funcv() {

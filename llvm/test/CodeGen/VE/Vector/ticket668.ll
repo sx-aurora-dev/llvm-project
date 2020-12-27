@@ -1,5 +1,4 @@
-; RUN: llc -mtriple ve < %s | FileCheck %s
-; RUN: llc -mtriple ve -mattr=-vec < %s | FileCheck %s
+; RUN: llc -mtriple ve -mattr=+vpu < %s | FileCheck %s
 
 ; Function Attrs: nounwind
 define void @func(double*, double*, i32*, i32) {

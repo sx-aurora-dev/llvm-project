@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
 
 @.str.1 = private unnamed_addr constant [7 x i8] c"x=%ld\0A\00", align 1
 @str = private unnamed_addr constant [13 x i8] c"Hello World!\00", align 1

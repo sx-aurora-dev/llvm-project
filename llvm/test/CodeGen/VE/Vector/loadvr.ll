@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve | FileCheck %s
+; RUN: llc < %s -mtriple=ve -mattr=+intrin | FileCheck %s
 
 @v256i64 = common dso_local local_unnamed_addr global <256 x i64> zeroinitializer, align 16
 

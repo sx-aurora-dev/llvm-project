@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve | FileCheck %s
+; RUN: llc < %s -mtriple=ve -mattr=+intrin | FileCheck %s
 
 define x86_regcallcc <256 x i32> @__regcall3__calc1(<256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: __regcall3__calc1:
