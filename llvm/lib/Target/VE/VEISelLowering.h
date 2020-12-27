@@ -74,7 +74,7 @@ class VETargetLowering : public TargetLowering {
   void initSPUActions();
   void initVPUActions();
   void initIntrinsicActions();
-  void initExperimentalVectorActions();
+  void initSIMDActions();
 
 public:
   VETargetLowering(const TargetMachine &TM, const VESubtarget &STI);

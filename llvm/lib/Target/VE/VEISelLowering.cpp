@@ -1049,8 +1049,8 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   initRegisterClasses();
   initSPUActions();
   initVPUActions();
+  initSIMDActions();
   initIntrinsicActions();
-  initExperimentalVectorActions();
 
   setStackPointerRegisterToSaveRestore(VE::SX11);
 

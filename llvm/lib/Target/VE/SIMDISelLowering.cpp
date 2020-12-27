@@ -40,7 +40,7 @@ using namespace llvm;
 #define DEBUG_TYPE "ve-isel"
 
 /// Register experimental vector actions which are used under -mattr=+vec.
-void VETargetLowering::initExperimentalVectorActions() {
+void VETargetLowering::initSIMDActions() {
   if (!Subtarget->simd())
     return;
 
