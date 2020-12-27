@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vec | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+simd | FileCheck %s
 
 declare x86_regcallcc <2 x i32> @calc_v2i32(<2 x i32>)
 declare x86_regcallcc <4 x i32> @calc_v4i32(<4 x i32>)

@@ -26,12 +26,12 @@ def FeatureIntrinsic
   : SubtargetFeature<"intrin", "Intrinsic", "true",
                      "Enable intrinsic instructions">;
 
-def FeatureVectorize
-  : SubtargetFeature<"vec", "Vectorize", "true",
-                     "Try to vectorize (experimental)">;
+def FeatureSimd
+  : SubtargetFeature<"simd", "Simd", "true",
+                     "Enable simd-style fixed length vectorize (experimental)">;
 
-def IsVectorizeSubTarget : Predicate<"Subtarget->vectorize()">;
-def IsNotVectorizeSubTarget : Predicate<"!Subtarget->vectorize()">;
+def IsSimdSubTarget : Predicate<"Subtarget->simd()">;
+def IsNotSimdSubTarget : Predicate<"!Subtarget->simd()">;
 
 def IsIntrinsicSubTarget : Predicate<"Subtarget->intrinsic()">;
 def IsNotIntrinsicSubTarget : Predicate<"!Subtarget->intrinsic()">;

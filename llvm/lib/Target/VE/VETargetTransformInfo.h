@@ -35,8 +35,8 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
 
   bool enableVPU() const { return getST()->enableVPU(); }
   bool intrinsic() const { return getST()->intrinsic(); }
-  // Experimental vectorization
-  bool vectorize() const { return getST()->vectorize(); }
+  // Experimental simd-style fixed length vectorization
+  bool simd() const { return getST()->simd(); }
 
 public:
   explicit VETTIImpl(const VETargetMachine *TM, const Function &F)
@@ -46,7 +46,7 @@ public:
   unsigned getNumberOfRegisters(unsigned ClassID) const {
     bool VectorRegs = (ClassID == 1);
     if (VectorRegs) {
-      if (vectorize())
+      if (simd())
         return 64;
       // TODO report vregs once vector isel is stable.
       return 0;
@@ -57,7 +57,7 @@ public:
 
   unsigned getRegisterBitWidth(bool Vector) const {
     if (Vector) {
-      if (vectorize())
+      if (simd())
         return 256 * 64;
       // TODO report vregs once vector isel is stable.
       return 0;
@@ -69,7 +69,7 @@ public:
     // Let's say 8 vector length minimum.
     // TODO: Need to implement experimental vectorization first, then
     //       evaluate minimum vector length for the best performance.
-    if (vectorize())
+    if (simd())
       return 8 * 64;
     // TODO report vregs once vector isel is stable.
     return 0;

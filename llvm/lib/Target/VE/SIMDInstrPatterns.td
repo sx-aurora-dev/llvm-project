@@ -24,12 +24,11 @@ def vec_seq : SDNode<"VEISD::VEC_SEQ",
                      SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
 
 //===----------------------------------------------------------------------===//
-// Vector Instruction Patterns for non vectorize subtarget which supports
-// intrinsics and v256f64 vector regisetr only.
+// Vector broadcast for vector mask registers.
 //===----------------------------------------------------------------------===//
 
 // Boardcast for vector mask register.
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v256i1 (vec_broadcast (i32 0), (i32 256))),
             (LVMim_m 3, 0,
             (LVMim_m 2, 0,
@@ -47,7 +46,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 }
 
 //===----------------------------------------------------------------------===//
-// Vector Instruction Patterns for vectorize subtarget which is being
+// Fixed length vector instruction patterns for simd subtarget which is being
 // implemented experimatally.
 //===----------------------------------------------------------------------===//
 
@@ -167,7 +166,7 @@ def truncstorev2i32 : PatFrag<(ops node:$val, node:$ptr),
 // v128i32, v128i64, v128f32, v128f64, v256i32, v256i64, v256f32, v256f64,
 // v512i32, v512f32.
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v512i32 (load I64:$addr)),
             (v512i32 (VLDirl 8, $addr, 256))>;
   def : Pat<(v512f32 (load I64:$addr)),
@@ -203,7 +202,7 @@ multiclass simd_load<int length> {
             (vi64 (VLDLZXirl 4, $addr, (VLEN length)))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_load<256>;
   defm : simd_load<128>;
   defm : simd_load<64>;
@@ -214,7 +213,7 @@ let Predicates = [IsVectorizeSubTarget] in {
   defm : simd_load<2>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(store v512i32:$vx, I64:$addr),
             (VSTirvl 8, $addr, $vx, 256)>;
   def : Pat<(store v512f32:$vx, I64:$addr),
@@ -245,7 +244,7 @@ multiclass simd_store<int length> {
             (VSTLirvl 4, $addr, $vx, (VLEN length))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_store<256>;
   defm : simd_store<128>;
   defm : simd_store<64>;
@@ -263,7 +262,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 // Load for
 // v256i1, v512i1
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v256i1 (load ADDRrii:$addr)),
             (LDVMrii ADDRrii:$addr)>;
   def : Pat<(v512i1 (load ADDRrii:$addr)),
@@ -273,7 +272,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 // Store for
 // v256i1, v512i1
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(store v256i1:$vx, ADDRrii:$addr),
             (STVMrii ADDRrii:$addr, $vx)>;
   def : Pat<(store v512i1:$vx, ADDRrii:$addr),
@@ -284,7 +283,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // sint -> floating-point
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v512f32 (sint_to_fp v512i32:$vx)),
             (PVCVTSWvl $vx, (VLEN 256))>;
 }
@@ -305,7 +304,7 @@ multiclass simd_i2f<int length> {
             (VCVTSWvl $vx, (VLEN length))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_i2f<256>;
   defm : simd_i2f<128>;
   defm : simd_i2f<64>;
@@ -318,7 +317,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // floating-point -> sint
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v512i32 (fp_to_sint v512f32:$val)),
             (PVCVTWSvl RD_RZ, $val, (VLEN 256))>;
 }
@@ -341,7 +340,7 @@ multiclass simd_f2i<int length> {
             (vi32 (VCVTWSZXvl RD_RZ, $val, (VLEN length)))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_f2i<256>;
   defm : simd_f2i<128>;
   defm : simd_f2i<64>;
@@ -364,7 +363,7 @@ multiclass simd_f2f<int length> {
             (vf64 (VCVTDSvl $val, (VLEN length)))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_f2f<256>;
   defm : simd_f2f<128>;
   defm : simd_f2f<64>;
@@ -377,7 +376,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // sext and zext
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v512i32 (anyext v512i1:$vm)),
             (PVBRDiml_v -1, $vm, (VLEN 256), (PVBRDil 0, (VLEN 256)))>;
   def : Pat<(v512i32 (sext v512i1:$vm)),
@@ -420,7 +419,7 @@ multiclass simd_ext<int length> {
 */
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_ext<256>;
   defm : simd_ext<128>;
   defm : simd_ext<64>;
@@ -433,7 +432,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // Bitconvert for vector registers
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v512i32 (bitconvert v512f32:$vr)),
             (COPY_TO_REGCLASS $vr, V64)>;
   def : Pat<(v512i32 (bitconvert v256f64:$vr)),
@@ -464,7 +463,7 @@ multiclass simd_bitconv<int length> {
             (vi32 (VSRLvil $vi, 32, (VLEN length)))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_bitconv<256>;
   defm : simd_bitconv<128>;
   defm : simd_bitconv<64>;
@@ -478,7 +477,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 // Bitconvert from i64 to v2i32/v2f32
 
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v2i32 (bitconvert i64:$v)),
             (LSVi (LSVi (v2i32 (IMPLICIT_DEF)), 0, (ANDrm0 $v, 32)),
                   1, (SRLri $v, 32))>;
@@ -492,7 +491,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 // v4i64 or v8i64 and v256i1 or v512i1 respectively
 
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v256i1 (bitconvert v4i64:$v)),
             (v256i1 (V2VM (COPY_TO_REGCLASS $v, V64)))>;
 
@@ -512,7 +511,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 // NOTE: Need to shift i32 for v512i32 since v512i32 uses
 //       upper 32 bits (0..31) first.
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def: Pat<(v512i32 (scalar_to_vector i32:$val)),
            (LSVir 0, (SLLri (i2l $val), 32))>;
   def: Pat<(v512f32 (scalar_to_vector f32:$val)),
@@ -535,7 +534,7 @@ multiclass simd_s2v<int length> {
            (LSVir 0, (COPY_TO_REGCLASS $val, I64))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_s2v<256>;
   defm : simd_s2v<128>;
   defm : simd_s2v<64>;
@@ -573,7 +572,7 @@ multiclass simd_ive<int length> {
            (LSVrr_v $idx, $val, $vec)>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_ive<256>;
   defm : simd_ive<128>;
   defm : simd_ive<64>;
@@ -611,7 +610,7 @@ multiclass simd_eve<int length> {
            (LVSvr vf64:$vec, $idx)>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_eve<256>;
   defm : simd_eve<128>;
   defm : simd_eve<64>;
@@ -642,7 +641,7 @@ def : Pat<(v256f64 (vec_rotate (i32 simm7:$I), v256f64:$vz)),
 
 // Scatter
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(vec_scatter v256i64:$vx, v256i64:$vy),
             (VSCv v256i64:$vx, v256i64:$vy,
                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
@@ -654,7 +653,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 //// Gather
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v256i64 (vec_gather v256i64:$vy)),
             (VGTv v256i64:$vy,
                   (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
@@ -671,7 +670,7 @@ def : Pat<(vec_lvl i32:$sy), (LVL i32:$sy)>;
 
 // Broadcast
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def: Pat<(v512i32 (vec_broadcast i32:$val, (i32 512))),
            (PVBRDrl
               (ORrr (SLLri (i2l $val), 32), (ANDrm (i2l $val), !add(32, 64))),
@@ -698,7 +697,7 @@ multiclass simd_vbrd<int length> {
             (VBRDrl $val, (VLEN length))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_vbrd<256>;
   defm : simd_vbrd<128>;
   defm : simd_vbrd<64>;
@@ -711,7 +710,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // Condition Code
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v512i1 (setcc v512f32:$l, v512f32:$r, cond:$cond)),
             (INSERT_SUBREG (INSERT_SUBREG (v512i1 (IMPLICIT_DEF)),
                 (VFMFsv (fcond2cc $cond),
@@ -854,7 +853,7 @@ multiclass simd_setcc<int length, ValueType vi32, ValueType vi64,
                     (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_setcc<256, v256i32, v256i64, v256f32, v256f64, v256i1>;
   defm : simd_setcc<128, v128i32, v128i64, v128f32, v128f64, v128i1>;
   defm : simd_setcc<64, v64i32, v64i64, v64f32, v64f64, v64i1>;
@@ -865,7 +864,7 @@ let Predicates = [IsVectorizeSubTarget] in {
   defm : simd_setcc<2, v2i32, v2i64, v2f32, v2f64, v2i1>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(setcc v256i64:$vx, v256i64:$vy, CCSIOp:$cond),
             (v256i1 (VFMKv (icond2cc $cond),
                            (VCMPlv v256i64:$vx, v256i64:$vy,
@@ -882,7 +881,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // Vector Select
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v512f32 (vselect v512i1:$m, v512f32:$vy, v512f32:$vz)),
             (v512f32 (VMRGpvm v512f32:$vz, v512f32:$vy, v512i1:$m,
                               (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
@@ -907,7 +906,7 @@ multiclass simv_vsel<int length, ValueType vi32, ValueType vi64, ValueType vf32,
                           (COPY_TO_REGCLASS (LEAzzi 256), VLS)))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simv_vsel<256, v256i32, v256i64, v256f32, v256f64, v256i1>;
   defm : simv_vsel<128, v128i32, v128i64, v128f32, v128f64, v128i1>;
   defm : simv_vsel<64, v64i32, v64i64, v64f32, v64f64, v64i1>;
@@ -921,7 +920,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // Select
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v512f32 (select i32:$pred, v512f32:$t, v512f32:$f)),
             (v512f32 (VMRGpvm v512f32:$f, v512f32:$t,
                      (INSERT_SUBREG (INSERT_SUBREG (v512i1 (IMPLICIT_DEF)),
@@ -976,7 +975,7 @@ multiclass simd_sel<int length, ValueType vi32, ValueType vi64, ValueType vf32,
                      (COPY_TO_REGCLASS (LEAzzi length), VLS)))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_sel<256, v256i32, v256i64, v256f32, v256f64, v256i1>;
   defm : simd_sel<128, v128i32, v128i64, v128f32, v128f64, v128i1>;
   defm : simd_sel<64, v64i32, v64i64, v64f32, v64f64, v64i1>;
@@ -989,7 +988,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 */
 
 // Sequence
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(v512i32 (vec_seq (i32 1))), (PVSEQl (VLEN 256))>;
 }
 
@@ -1003,7 +1002,7 @@ multiclass simd_vseq<int length> {
             (VSEQl (VLEN length))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_vseq<256>;
   defm : simd_vseq<128>;
   defm : simd_vseq<64>;
@@ -1018,7 +1017,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 //
 // fadd, fsub, fmul, and fdiv for all floating point vector types.
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(fadd v512f32:$vy, v512f32:$vz),
             (VFADpv v512f32:$vy, v512f32:$vz,
                     (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
@@ -1033,7 +1032,7 @@ let Predicates = [IsVectorizeSubTarget] in {
                     (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
 }
 */
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(fadd (vec_broadcast f32:$val, (i32 512)), v512f32:$vz),
             (PVFADDrvl
               (ORrr (f2l $val), (SRLri (f2l $val), 32)),
@@ -1089,7 +1088,7 @@ multiclass simd_farith<int length, ValueType vf32, ValueType vf64> {
             (VFDIVDrvl f64:$sy, vf64:$vz, (VLEN length))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_farith<256, v256f32, v256f64>;
   defm : simd_farith<128, v128f32, v128f64>;
   defm : simd_farith<64, v64f32, v64f64>;
@@ -1102,7 +1101,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // fneg for all floating point vector types.
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(fneg v512f32:$vz),
             (VFSBpi 0, v512f32:$vz,
                     (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
@@ -1117,7 +1116,7 @@ multiclass simd_fneg<int length, ValueType vf32, ValueType vf64> {
                     (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_fneg<256, v256f32, v256f64>;
   defm : simd_fneg<128, v128f32, v128f64>;
   defm : simd_fneg<64, v64f32, v64f64>;
@@ -1130,7 +1129,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 */
 
 // fma for all floating point vector types.
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(fma v512f32:$vz, v512f32:$vw, (v512f32 (fneg v512f32:$vy))),
             (PVFMSBvvvl v512f32:$vy, v512f32:$vz, v512f32:$vw, (VLEN 256))>;
   def : Pat<(fma (v512f32 (vec_broadcast f32:$sy, (i32 512))),
@@ -1187,7 +1186,7 @@ multiclass simd_fma<int length, ValueType vf32, ValueType vf64> {
             (VFMADSvvvl vf32:$vy, vf32:$vz, vf32:$vw, (VLEN length))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_fma<256, v256f32, v256f64>;
   defm : simd_fma<128, v128f32, v128f64>;
   defm : simd_fma<64, v64f32, v64f64>;
@@ -1203,7 +1202,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 // add and sub for v512i32
 // add, sub, mul, sdiv, and udiv for other integer vector types.
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
 /*
   def : Pat<(add v512i32:$vy, v512i32:$vz),
             (VADSpv v512i32:$vy, v512i32:$vz,
@@ -1265,7 +1264,7 @@ multiclass simd_arith<int length, ValueType vi32, ValueType vi64> {
             (VDIVULrvl i64:$sy, vi64:$vz, (VLEN length))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_arith<256, v256i32, v256i64>;
   defm : simd_arith<128, v128i32, v128i64>;
   defm : simd_arith<64, v64i32, v64i64>;
@@ -1282,7 +1281,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 // and, or, and xor for other integer vector types.
 
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(and v512i32:$vx, v512i32:$vy),
             (VANDpv v512i32:$vx, v512i32:$vy,
                    (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
@@ -1319,7 +1318,7 @@ multiclass simg_logic<int length, ValueType vi32, ValueType vi64> {
 */
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simg_logic<256, v256i32, v256i64>;
   defm : simg_logic<128, v128i32, v128i64>;
   defm : simg_logic<64, v64i32, v64i64>;
@@ -1335,7 +1334,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 // shl, srl, and sra for v512i32
 // shl, srl, and sra for other integer vector types.
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(shl v512i32:$vx, (v512i32 (vec_broadcast i32:$sy, (i32 512)))),
             (PVSLLvrl v512i32:$vx,
                      (ORrr (SLLri (i2l $sy), 32),
@@ -1354,7 +1353,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 }
 
 /*
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   def : Pat<(shl v512i32:$vx, v512i32:$vy),
             (VSLLpv v512i32:$vx, v512i32:$vy,
                     (COPY_TO_REGCLASS (LEAzzi 256), VLS))>;
@@ -1407,7 +1406,7 @@ multiclass simd_shift<int length, ValueType vi32, ValueType vi64> {
 */
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_shift<256, v256i32, v256i64>;
   defm : simd_shift<128, v128i32, v128i64>;
   defm : simd_shift<64, v64i32, v64i64>;
@@ -1427,7 +1426,7 @@ multiclass simd_trunc<int length, ValueType vi32, ValueType vi64> {
             (VANDli0 32, $val, (COPY_TO_REGCLASS (LEAzzi length), VLS))>;
 }
 
-let Predicates = [IsVectorizeSubTarget] in {
+let Predicates = [IsSimdSubTarget] in {
   defm : simd_trunc<256, v256i32, v256i64>;
   defm : simd_trunc<128, v128i32, v128i64>;
   defm : simd_trunc<64, v64i32, v64i64>;

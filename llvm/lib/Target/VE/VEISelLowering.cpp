@@ -104,7 +104,7 @@ void VETargetLowering::initRegisterClasses() {
   addRegisterClass(MVT::f64, &VE::I64RegClass);
   addRegisterClass(MVT::f128, &VE::F128RegClass);
 
-  if (Subtarget->vectorize()) {
+  if (Subtarget->simd()) {
     for (MVT VecVT : WholeVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
     addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
@@ -422,7 +422,9 @@ void VETargetLowering::initVPUActions() {
 /// Register vector actions for intrinsic instructions which are used under
 /// -mattr=+intrin.
 void VETargetLowering::initIntrinsicActions() {
-  if (!Subtarget->intrinsic())
+  // If any other vertorizers are enabled, disable intrinsic own actions.
+  if (Subtarget->simd() || Subtarget->enableVPU() ||
+      !Subtarget->intrinsic())
     return;
 
   for (MVT VT : { MVT::v256i1, MVT::v512i1 }) {
@@ -1017,9 +1019,9 @@ bool VETargetLowering::allowsMisalignedMemoryAccesses(EVT VT,
 
 bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
                                         const SelectionDAG &DAG) const {
-  // VE's vectorization is experimental, so disable to use vector stores
-  // if vectorize feature is disabled.
-  if (!Subtarget->vectorize()) {
+  // VE's simd-style vectorization is experimental, so disable to use vector
+  // stores if simd feature is disabled.
+  if (!Subtarget->simd()) {
     if (MemVT.isVector()) {
       return false;
     }
@@ -2077,7 +2079,7 @@ static SDValue getSplatValue(SDNode *N) {
 
 SDValue VETargetLowering::lowerBUILD_VECTOR(SDValue Op,
                                             SelectionDAG &DAG) const {
-  if (Subtarget->vectorize())
+  if (Subtarget->simd())
     return lowerSIMD_BUILD_VECTOR(Op, DAG);
   SDLoc DL(Op);
   unsigned NumEls = Op.getValueType().getVectorNumElements();
@@ -2109,27 +2111,27 @@ SDValue VETargetLowering::lowerBUILD_VECTOR(SDValue Op,
 
 SDValue VETargetLowering::lowerVECTOR_SHUFFLE(SDValue Op,
                                               SelectionDAG &DAG) const {
-  if (Subtarget->intrinsic())
+  if (Subtarget->simd())
     return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
-  if (Subtarget->vectorize())
+  if (Subtarget->intrinsic())
     return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
   return SDValue();
 }
 
 SDValue VETargetLowering::lowerMGATHER(SDValue Op, SelectionDAG &DAG) const {
-  if (Subtarget->vectorize())
+  if (Subtarget->simd())
     return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
   return SDValue();
 }
 
 SDValue VETargetLowering::lowerMSCATTER(SDValue Op, SelectionDAG &DAG) const {
-  if (Subtarget->vectorize())
+  if (Subtarget->simd())
     return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
   return SDValue();
 }
 
 SDValue VETargetLowering::lowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
-  if (Subtarget->vectorize())
+  if (Subtarget->simd())
     return lowerSIMD_MLOAD(Op, DAG);
   return SDValue();
 }
@@ -4002,7 +4004,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG) const {
 
 SDValue VETargetLowering::lowerEXTRACT_VECTOR_ELT(SDValue Op,
                                                   SelectionDAG &DAG) const {
-  if (Subtarget->vectorize())
+  if (Subtarget->simd())
     return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
 
   assert(Op.getOpcode() == ISD::EXTRACT_VECTOR_ELT && "Unknown opcode!");
@@ -4049,7 +4051,7 @@ SDValue VETargetLowering::lowerEXTRACT_VECTOR_ELT(SDValue Op,
 
 SDValue VETargetLowering::lowerINSERT_VECTOR_ELT(SDValue Op,
                                                  SelectionDAG &DAG) const {
-  if (Subtarget->vectorize())
+  if (Subtarget->simd())
     return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
 
   assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");

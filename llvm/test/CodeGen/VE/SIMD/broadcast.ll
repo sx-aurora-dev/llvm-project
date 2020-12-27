@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve -mattr=+vec | FileCheck %s
+; RUN: llc < %s -mtriple=ve -mattr=+simd | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readonly
 define x86_regcallcc <512 x i32> @brdv512i32(i32) {

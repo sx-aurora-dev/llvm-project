@@ -41,7 +41,7 @@ using namespace llvm;
 
 /// Register experimental vector actions which are used under -mattr=+vec.
 void VETargetLowering::initExperimentalVectorActions() {
-  if (!Subtarget->vectorize())
+  if (!Subtarget->simd())
     return;
 
   for (MVT VT : MVT::vector_valuetypes()) {
