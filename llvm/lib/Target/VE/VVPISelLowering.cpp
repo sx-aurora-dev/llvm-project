@@ -1213,7 +1213,7 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
     }
     MVT ElemTy = RawElemTy.getSimpleVT();
 
-    if ((ElemTy != MVT::i32 && ElemTy != MVT::f32) ||
+    if ((ElemTy != MVT::i1 && ElemTy != MVT::i32 && ElemTy != MVT::f32) ||
         (OpVectorLength > PackedWidth)) {
       LLVM_DEBUG(dbgs() << "\tToNative: Over-sized data type\n";);
       return VVPWideningInfo();
