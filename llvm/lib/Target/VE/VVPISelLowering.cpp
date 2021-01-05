@@ -236,6 +236,12 @@ static SDValue getGatherScatterMask(SDValue Op) {
 /// } Gather & Scatter Properties
 
 static SDValue getNodeMask(SDValue Op) {
+  // Selection mask.
+  unsigned OC = Op->getOpcode();
+  if (OC == ISD::VSELECT || OC == ISD::SELECT) {
+    return Op->getOperand(0);
+  }
+
   // load, store
   auto LSMask = getLoadStoreMask(Op);
   if (LSMask)
@@ -1101,6 +1107,10 @@ SDValue VETargetLowering::ExpandToSplitReduction(SDValue Op, SelectionDAG &DAG,
   abort();
 }
 
+static bool hasChain(SDNode &N) {
+  return isa<MemSDNode>(N) || N.isStrictFPOpcode() || N.isMemIntrinsic();
+}
+
 SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
                                            VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "ExpandToSplitVVP: "; Op->print(dbgs()); dbgs() << "\n");
@@ -1128,6 +1138,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
   SDValue PartOps[2];
 
   bool HasChain = false;
+
   SDValue UpperPartAVL; // we will use this for packing things back together
   for (PackElem Part : {PackElem::Lo, PackElem::Hi}) {
     // VP ops already have an explicit mask and AVL. When expanding from non-VP
@@ -1150,8 +1161,8 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
         continue;
 
       if (OpV.getValueType() == MVT::Other) {
-        // Chain operand
-        HasChain = true;
+        // Potential chain operand.
+        HasChain = hasChain(*Op.getNode());
         OpVec.push_back(OpV);
       } else {
         // Value operand

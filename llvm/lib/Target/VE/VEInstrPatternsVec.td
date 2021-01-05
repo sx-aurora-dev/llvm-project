@@ -87,9 +87,9 @@ class SplitPat<ValueType PackedVT, ValueType RegularVT, SDNode N, Instruction VE
           (INSERT_SUBREG
             (INSERT_SUBREG
               (PackedVT (IMPLICIT_DEF)),
-              (VEOp (EXTRACT_SUBREG $A, subreg_hi), (EXTRACT_SUBREG $B, subreg_hi)),
+              (RegularVT (VEOp (RegularVT (EXTRACT_SUBREG $A, subreg_hi)), (RegularVT (EXTRACT_SUBREG $B, subreg_hi)))),
               subreg_hi),
-            (VEOp (EXTRACT_SUBREG $A, subreg_lo), (EXTRACT_SUBREG $B, subreg_lo)),
+            (RegularVT (VEOp (RegularVT (EXTRACT_SUBREG $A, subreg_lo)), (RegularVT (EXTRACT_SUBREG $B, subreg_lo)))),
             subreg_lo))>;
 
 // mask unpacking
