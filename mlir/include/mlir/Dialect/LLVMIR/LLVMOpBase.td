@@ -49,8 +49,8 @@ def LLVM_Dialect : Dialect {
 
 // LLVM dialect type.
 def LLVM_Type : DialectType<LLVM_Dialect,
-                            CPred<"$_self.isa<::mlir::LLVM::LLVMType>()">,
-                            "LLVM dialect type">;
+                            CPred<"::mlir::LLVM::isCompatibleType($_self)">,
+                            "LLVM dialect-compatible type">;
 
 // Type constraint accepting LLVM integer types.
 def LLVM_AnyInteger : Type<
@@ -223,9 +223,9 @@ class ListIntSubst<string pattern, list<int> values> {
 // or result in the operation.
 def LLVM_IntrPatterns {
   string operand =
-    [{convertType(opInst.getOperand($0).getType().cast<LLVM::LLVMType>())}];
+    [{convertType(opInst.getOperand($0).getType())}];
   string result =
-    [{convertType(opInst.getResult($0).getType().cast<LLVM::LLVMType>())}];
+    [{convertType(opInst.getResult($0).getType())}];
   string structResult =
     [{convertType(opInst.getResult(0).getType().cast<LLVM::LLVMStructType>()
                                                    .getBody()[$0])}];
@@ -258,10 +258,10 @@ class LLVM_IntrOpBase<Dialect dialect, string opName, string enumName,
     llvm::Function *fn = llvm::Intrinsic::getDeclaration(
         module,
         llvm::Intrinsic::}] # enumName # [{,
-        { }] # StrJoin<!listconcat(
+        { }] # !interleave(!listconcat(
             ListIntSubst<resultPattern, overloadedResults>.lst,
             ListIntSubst<LLVM_IntrPatterns.operand,
-                         overloadedOperands>.lst)>.result # [{
+                         overloadedOperands>.lst), ", ") # [{
         });
     auto operands = lookupValues(opInst.getOperands());
     }] # !if(!gt(numResults, 0), "$res = ", "")
@@ -326,7 +326,8 @@ class LLVM_VectorReductionAcc<string mnem>
     llvm::Function *fn = llvm::Intrinsic::getDeclaration(
         module,
         llvm::Intrinsic::vector_reduce_}] # mnem # [{,
-        { }] # StrJoin<ListIntSubst<LLVM_IntrPatterns.operand, [1]>.lst>.result # [{
+        { }] # !interleave(ListIntSubst<LLVM_IntrPatterns.operand, [1]>.lst,
+                           ", ") # [{
         });
     auto operands = lookupValues(opInst.getOperands());
     llvm::FastMathFlags origFM = builder.getFastMathFlags();

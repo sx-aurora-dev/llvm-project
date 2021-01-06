@@ -1898,7 +1898,7 @@ X86TargetLowering::X86TargetLowering(const X86TargetMachine &TM,
   }
 
   if (Subtarget.hasAMXTILE()) {
-    addRegisterClass(MVT::v256i32, &X86::TILERegClass);
+    addRegisterClass(MVT::x86amx, &X86::TILERegClass);
   }
 
   // We want to custom lower some of our intrinsics.
@@ -3513,8 +3513,7 @@ void VarArgsLoweringHelper::createVarArgAreaAndStoreRegisters(
           DAG.getTargetConstant(FuncInfo->getRegSaveFrameIndex(), DL, MVT::i32));
       SaveXMMOps.push_back(
           DAG.getTargetConstant(FuncInfo->getVarArgsFPOffset(), DL, MVT::i32));
-      SaveXMMOps.insert(SaveXMMOps.end(), LiveXMMRegs.begin(),
-                        LiveXMMRegs.end());
+      llvm::append_range(SaveXMMOps, LiveXMMRegs);
       MemOps.push_back(DAG.getNode(X86ISD::VASTART_SAVE_XMM_REGS, DL,
                                    MVT::Other, SaveXMMOps));
     }
@@ -5344,11 +5343,6 @@ bool X86TargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
   // Make sure we don't merge greater than our preferred vector
   // width.
   if (MemVT.getSizeInBits() > Subtarget.getPreferVectorWidth())
-    return false;
-
-  // Don't merge to x86 amx tile, as we only map MVT::v256i32
-  // to x86 amx tile on amx intrinsics.
-  if (MemVT == MVT::v256i32)
     return false;
 
   return true;
@@ -19107,9 +19101,12 @@ SDValue X86TargetLowering::LowerGlobalOrExternal(SDValue Op, SelectionDAG &DAG,
   if (GV) {
     // Create a target global address if this is a global. If possible, fold the
     // offset into the global address reference. Otherwise, ADD it on later.
+    // Suppress the folding if Offset is negative: movl foo-1, %eax is not
+    // allowed because if the address of foo is 0, the ELF R_X86_64_32
+    // relocation will compute to a negative value, which is invalid.
     int64_t GlobalOffset = 0;
-    if (OpFlags == X86II::MO_NO_FLAG &&
-        X86::isOffsetSuitableForCodeModel(Offset, M)) {
+    if (OpFlags == X86II::MO_NO_FLAG && Offset >= 0 &&
+        X86::isOffsetSuitableForCodeModel(Offset, M, true)) {
       std::swap(GlobalOffset, Offset);
     }
     Result = DAG.getTargetGlobalAddress(GV, dl, PtrVT, GlobalOffset, OpFlags);
@@ -45709,8 +45706,13 @@ static SDValue combineVectorSignBitsTruncation(SDNode *N, const SDLoc &DL,
   // there's no harm in trying pack.
   if (Subtarget.hasAVX512() &&
       !(!Subtarget.useAVX512Regs() && VT.is256BitVector() &&
-        InVT.is512BitVector()))
-    return SDValue();
+        InVT.is512BitVector())) {
+    // PACK should still be worth it for 128/256-bit vectors if the sources were
+    // originally concatenated from subvectors.
+    SmallVector<SDValue> ConcatOps;
+    if (VT.getSizeInBits() > 256 || !collectConcatOps(In.getNode(), ConcatOps))
+      return SDValue();
+  }
 
   unsigned NumPackedSignBits = std::min<unsigned>(SVT.getSizeInBits(), 16);
   unsigned NumPackedZeroBits = Subtarget.hasSSE41() ? NumPackedSignBits : 8;

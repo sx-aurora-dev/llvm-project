@@ -2093,6 +2093,7 @@ public:
   bool isAtomicType() const;                    // C11 _Atomic()
   bool isUndeducedAutoType() const;             // C++11 auto or
                                                 // C++14 decltype(auto)
+  bool isTypedefNameType() const;               // typedef or alias template
 
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
   bool is##Id##Type() const;
@@ -5411,9 +5412,7 @@ class ElaboratedType final
   ElaboratedType(ElaboratedTypeKeyword Keyword, NestedNameSpecifier *NNS,
                  QualType NamedType, QualType CanonType, TagDecl *OwnedTagDecl)
       : TypeWithKeyword(Keyword, Elaborated, CanonType,
-                        NamedType->getDependence() |
-                            (NNS ? toTypeDependence(NNS->getDependence())
-                                 : TypeDependence::None)),
+                        NamedType->getDependence()),
         NNS(NNS), NamedType(NamedType) {
     ElaboratedTypeBits.HasOwnedTagDecl = false;
     if (OwnedTagDecl) {
@@ -7066,6 +7065,15 @@ inline bool Type::isUndeducedType() const {
 /// an overloaded operator.
 inline bool Type::isOverloadableType() const {
   return isDependentType() || isRecordType() || isEnumeralType();
+}
+
+/// Determines whether this type is written as a typedef-name.
+inline bool Type::isTypedefNameType() const {
+  if (getAs<TypedefType>())
+    return true;
+  if (auto *TST = getAs<TemplateSpecializationType>())
+    return TST->isTypeAlias();
+  return false;
 }
 
 /// Determines whether this type can decay to a pointer type.

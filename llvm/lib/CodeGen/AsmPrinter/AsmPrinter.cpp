@@ -483,10 +483,8 @@ MCSymbol *AsmPrinter::getSymbolPreferLocal(const GlobalValue &GV) const {
   if (TM.getTargetTriple().isOSBinFormatELF() && GV.canBenefitFromLocalAlias()) {
     const Module &M = *GV.getParent();
     if (TM.getRelocationModel() != Reloc::Static &&
-        M.getPIELevel() == PIELevel::Default)
-      if (GV.isDSOLocal() || (TM.getTargetTriple().isX86() &&
-                              GV.getParent()->noSemanticInterposition()))
-        return getSymbolWithGlobalValueBase(&GV, "$local");
+        M.getPIELevel() == PIELevel::Default && GV.isDSOLocal())
+      return getSymbolWithGlobalValueBase(&GV, "$local");
   }
   return TM.getSymbol(&GV);
 }
@@ -1972,8 +1970,7 @@ void AsmPrinter::emitConstantPool() {
       unsigned NewOffset = alignTo(Offset, CPE.getAlign());
       OutStreamer->emitZeros(NewOffset - Offset);
 
-      Type *Ty = CPE.getType();
-      Offset = NewOffset + getDataLayout().getTypeAllocSize(Ty);
+      Offset = NewOffset + CPE.getSizeInBytes(getDataLayout());
 
       OutStreamer->emitLabel(Sym);
       if (CPE.isMachineConstantPoolEntry())

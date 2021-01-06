@@ -213,8 +213,12 @@ static bool tryChangeVGPRtoSGPRinCopy(MachineInstr &MI,
     if (UseMI == &MI)
       continue;
     if (MO.isDef() || UseMI->getParent() != MI.getParent() ||
-        UseMI->getOpcode() <= TargetOpcode::GENERIC_OP_END ||
-        !TII->isOperandLegal(*UseMI, UseMI->getOperandNo(&MO), &Src))
+        UseMI->getOpcode() <= TargetOpcode::GENERIC_OP_END)
+      return false;
+
+    unsigned OpIdx = UseMI->getOperandNo(&MO);
+    if (OpIdx >= UseMI->getDesc().getNumOperands() ||
+        !TII->isOperandLegal(*UseMI, OpIdx, &Src))
       return false;
   }
   // Change VGPR to SGPR destination.
@@ -360,8 +364,7 @@ bool searchPredecessors(const MachineBasicBlock *MBB,
     return false;
 
   DenseSet<const MachineBasicBlock *> Visited;
-  SmallVector<MachineBasicBlock *, 4> Worklist(MBB->pred_begin(),
-                                               MBB->pred_end());
+  SmallVector<MachineBasicBlock *, 4> Worklist(MBB->predecessors());
 
   while (!Worklist.empty()) {
     MachineBasicBlock *MBB = Worklist.pop_back_val();

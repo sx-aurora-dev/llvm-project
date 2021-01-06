@@ -1680,38 +1680,6 @@ def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
           (TS1AMLrii MEMriRRM:$src, 127, $new)>;
 
 //===----------------------------------------------------------------------===//
-// SJLJ Exception handling intrinsics
-//===----------------------------------------------------------------------===//
-
-let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1,
-    usesCustomInserter = 1 in {
-  def EH_SjLj_SetJmp  : Pseudo<(outs I32:$dst), (ins I64:$buf),
-                               "# EH_SJLJ_SETJMP",
-                               [(set I32:$dst, (VEeh_sjlj_setjmp I64:$buf))]>;
-  let isTerminator = 1 in {
-  def EH_SjLj_LongJmp : Pseudo<(outs), (ins I64:$buf),
-                               "# EH_SJLJ_LONGJMP",
-                               [(VEeh_sjlj_longjmp I64:$buf)]>;
-  }
-}
-
-let isBarrier = 1, hasSideEffects = 1, usesCustomInserter = 1 in
-  def EH_SjLj_Setup_Dispatch : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
-                                      [(VEeh_sjlj_setup_dispatch)]>;
-
-let isBranch = 1, isTerminator = 1, isCodeGenOnly = 1 in
-  def EH_SjLj_Setup : Pseudo<(outs), (ins brtarget32:$dst),
-                             "# EH_SJlJ_SETUP $dst">;
-
-//===----------------------------------------------------------------------===//
-// Dummy instruction for CPU flow control
-//===----------------------------------------------------------------------===//
-
-let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
-  def TRAP    : Pseudo<(outs), (ins), "# TRAP", [(trap)]>;
-}
-
-//===----------------------------------------------------------------------===//
 // Pattern Matchings
 //===----------------------------------------------------------------------===//
 
@@ -2024,6 +1992,33 @@ def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
           (TS1AMWrii MEMriRRM:$src, 15, $new)>;
 def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
           (TS1AMLrir MEMriRRM:$src, (LEAzii 0, 0, 255), i64:$new)>;
+
+//===----------------------------------------------------------------------===//
+// SJLJ Exception handling patterns
+//===----------------------------------------------------------------------===//
+
+let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1,
+    usesCustomInserter = 1 in {
+  let isTerminator = 1 in
+  def EH_SjLj_LongJmp : Pseudo<(outs), (ins I64:$buf),
+                               "# EH_SJLJ_LONGJMP",
+                               [(VEeh_sjlj_longjmp I64:$buf)]>;
+
+  def EH_SjLj_SetJmp  : Pseudo<(outs I32:$dst), (ins I64:$buf),
+                               "# EH_SJLJ_SETJMP",
+                               [(set I32:$dst, (VEeh_sjlj_setjmp I64:$buf))]>;
+
+  def EH_SjLj_Setup_Dispatch : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
+                                      [(VEeh_sjlj_setup_dispatch)]>;
+}
+
+let isTerminator = 1, isBranch = 1, isCodeGenOnly = 1 in
+  def EH_SjLj_Setup : Pseudo<(outs), (ins brtarget32:$dst),
+                             "# EH_SJlJ_SETUP $dst">;
+
+//===----------------------------------------------------------------------===//
+// Branch related patterns
+//===----------------------------------------------------------------------===//
 
 // Branches
 def : Pat<(br bb:$addr), (BRCFLa bb:$addr)>;

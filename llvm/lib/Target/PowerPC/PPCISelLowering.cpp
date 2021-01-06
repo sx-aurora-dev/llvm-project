@@ -9555,17 +9555,6 @@ SDValue PPCTargetLowering::LowerBUILD_VECTOR(SDValue Op,
       return DAG.getNode(ISD::BITCAST, dl, Op.getValueType(), Res);
     }
 
-    // vsplti + sra self.
-    if (SextVal == (int)((unsigned)i >> TypeShiftAmt)) {
-      SDValue Res = getCanonicalConstSplat(i, SplatSize, MVT::Other, DAG, dl);
-      static const unsigned IIDs[] = { // Intrinsic to use for each size.
-        Intrinsic::ppc_altivec_vsrab, Intrinsic::ppc_altivec_vsrah, 0,
-        Intrinsic::ppc_altivec_vsraw
-      };
-      Res = BuildIntrinsicOp(IIDs[SplatSize-1], Res, Res, DAG, dl);
-      return DAG.getNode(ISD::BITCAST, dl, Op.getValueType(), Res);
-    }
-
     // vsplti + rol self.
     if (SextVal == (int)(((unsigned)i << TypeShiftAmt) |
                          ((unsigned)i >> (SplatBitSize-TypeShiftAmt)))) {
@@ -13237,11 +13226,13 @@ SDValue PPCTargetLowering::DAGCombineTruncBoolExt(SDNode *N,
       KnownBits Op2Known = DAG.computeKnownBits(N->getOperand(1));
 
       // We don't really care about what is known about the first bit (if
-      // anything), so clear it in all masks prior to comparing them.
-      Op1Known.Zero.clearBit(0); Op1Known.One.clearBit(0);
-      Op2Known.Zero.clearBit(0); Op2Known.One.clearBit(0);
+      // anything), so pretend that it is known zero for both to ensure they can
+      // be compared as constants.
+      Op1Known.Zero.setBit(0); Op1Known.One.clearBit(0);
+      Op2Known.Zero.setBit(0); Op2Known.One.clearBit(0);
 
-      if (Op1Known.Zero != Op2Known.Zero || Op1Known.One != Op2Known.One)
+      if (!Op1Known.isConstant() || !Op2Known.isConstant() ||
+          Op1Known.getConstant() != Op2Known.getConstant())
         return SDValue();
     }
   }

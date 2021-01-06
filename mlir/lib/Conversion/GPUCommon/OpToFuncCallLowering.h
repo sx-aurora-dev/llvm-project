@@ -40,7 +40,6 @@ public:
   matchAndRewrite(SourceOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     using LLVM::LLVMFuncOp;
-    using LLVM::LLVMType;
 
     static_assert(
         std::is_base_of<OpTrait::OneResult<SourceOp>, SourceOp>::value,
@@ -54,9 +53,8 @@ public:
     for (Value operand : operands)
       castedOperands.push_back(maybeCast(operand, rewriter));
 
-    LLVMType resultType =
-        castedOperands.front().getType().cast<LLVM::LLVMType>();
-    LLVMType funcType = getFunctionType(resultType, castedOperands);
+    Type resultType = castedOperands.front().getType();
+    Type funcType = getFunctionType(resultType, castedOperands);
     StringRef funcName = getFunctionName(
         funcType.cast<LLVM::LLVMFunctionType>().getReturnType());
     if (funcName.empty())
@@ -80,27 +78,24 @@ public:
 
 private:
   Value maybeCast(Value operand, PatternRewriter &rewriter) const {
-    LLVM::LLVMType type = operand.getType().cast<LLVM::LLVMType>();
+    Type type = operand.getType();
     if (!type.isa<LLVM::LLVMHalfType>())
       return operand;
 
     return rewriter.create<LLVM::FPExtOp>(
-        operand.getLoc(), LLVM::LLVMType::getFloatTy(rewriter.getContext()),
+        operand.getLoc(), LLVM::LLVMFloatType::get(rewriter.getContext()),
         operand);
   }
 
-  LLVM::LLVMType getFunctionType(LLVM::LLVMType resultType,
-                                 ArrayRef<Value> operands) const {
-    using LLVM::LLVMType;
-    SmallVector<LLVMType, 1> operandTypes;
+  Type getFunctionType(Type resultType, ArrayRef<Value> operands) const {
+    SmallVector<Type, 1> operandTypes;
     for (Value operand : operands) {
-      operandTypes.push_back(operand.getType().cast<LLVMType>());
+      operandTypes.push_back(operand.getType());
     }
-    return LLVMType::getFunctionTy(resultType, operandTypes,
-                                   /*isVarArg=*/false);
+    return LLVM::LLVMFunctionType::get(resultType, operandTypes);
   }
 
-  StringRef getFunctionName(LLVM::LLVMType type) const {
+  StringRef getFunctionName(Type type) const {
     if (type.isa<LLVM::LLVMFloatType>())
       return f32Func;
     if (type.isa<LLVM::LLVMDoubleType>())
@@ -108,8 +103,7 @@ private:
     return "";
   }
 
-  LLVM::LLVMFuncOp appendOrGetFuncOp(StringRef funcName,
-                                     LLVM::LLVMType funcType,
+  LLVM::LLVMFuncOp appendOrGetFuncOp(StringRef funcName, Type funcType,
                                      Operation *op) const {
     using LLVM::LLVMFuncOp;
 

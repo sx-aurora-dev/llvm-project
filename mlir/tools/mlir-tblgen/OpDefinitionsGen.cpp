@@ -328,6 +328,9 @@ private:
   // Generates setter for the attributes.
   void genAttrSetters();
 
+  // Generates removers for optional attributes.
+  void genOptionalAttrRemovers();
+
   // Generates getters for named operands.
   void genNamedOperandGetters();
 
@@ -600,6 +603,7 @@ OpEmitter::OpEmitter(const Operator &op,
   genNamedSuccessorGetters();
   genAttrGetters();
   genAttrSetters();
+  genOptionalAttrRemovers();
   genBuilder();
   genParser();
   genPrinter();
@@ -774,6 +778,28 @@ void OpEmitter::genAttrSetters() {
     const auto &attr = namedAttr.attr;
     if (!attr.isDerivedAttr())
       emitAttrWithStorageType(name, attr);
+  }
+}
+
+void OpEmitter::genOptionalAttrRemovers() {
+  // Generate methods for removing optional attributes, instead of having to
+  // use the string interface. Enables better compile time verification.
+  auto emitRemoveAttr = [&](StringRef name) {
+    auto upperInitial = name.take_front().upper();
+    auto suffix = name.drop_front();
+    auto *method = opClass.addMethodAndPrune(
+        "::mlir::Attribute", ("remove" + upperInitial + suffix + "Attr").str());
+    if (!method)
+      return;
+    auto &body = method->body();
+    body << "  return (*this)->removeAttr(\"" << name << "\");";
+  };
+
+  for (const auto &namedAttr : op.getAttributes()) {
+    const auto &name = namedAttr.name;
+    const auto &attr = namedAttr.attr;
+    if (attr.isOptional())
+      emitRemoveAttr(name);
   }
 }
 
@@ -2137,10 +2163,17 @@ void OpEmitter::genTraits() {
   unsigned numVariadicRegions = op.getNumVariadicRegions();
   addSizeCountTrait(opClass, "Region", numRegions, numVariadicRegions);
 
-  // Add result size trait.
+  // Add result size traits.
   int numResults = op.getNumResults();
   int numVariadicResults = op.getNumVariableLengthResults();
   addSizeCountTrait(opClass, "Result", numResults, numVariadicResults);
+
+  // For single result ops with a known specific type, generate a OneTypedResult
+  // trait.
+  if (numResults == 1 && numVariadicResults == 0) {
+    auto cppName = op.getResults().begin()->constraint.getCPPClassName();
+    opClass.addTrait("::mlir::OpTrait::OneTypedResult<" + cppName + ">::Impl");
+  }
 
   // Add successor size trait.
   unsigned numSuccessors = op.getNumSuccessors();

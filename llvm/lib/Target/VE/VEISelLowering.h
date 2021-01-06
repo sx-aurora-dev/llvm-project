@@ -32,24 +32,24 @@ enum NodeType : unsigned {
   CMPQ, // Compare between two quad floating-point values.
   CMOV, // Select between two values using the result of comparison.
 
-  EH_SJLJ_SETJMP,         // SjLj exception handling setjmp.
-  EH_SJLJ_LONGJMP,        // SjLj exception handling longjmp.
-  EH_SJLJ_SETUP_DISPATCH, // SjLj exception handling setup_dispatch.
-
-  CALL,            // A call instruction.
-  GETFUNPLT,       // Load function address through %plt insturction.
-  GETTLSADDR,      // Load address for TLS access.
-  GETSTACKTOP,     // Retrieve address of stack top (first address of
-                   // locals and temporaries).
-  GLOBAL_BASE_REG, // Global base reg for PIC.
   FLUSHW,          // FLUSH register windows to stack.
-  Hi,              // Hi/Lo operations, typically on a global address.
-  Lo,              // Hi/Lo operations, typically on a global address.
-  MEMBARRIER,      // Compiler barrier only; generate a no-op.
-  RET_FLAG,        // Return with a flag operand.
-  TS1AM,           // A TS1AM instruction used for 1/2 bytes swap.
-  VEC_BROADCAST,   // A vector broadcast instruction.
-                   //   0: scalar value, 1: VL
+
+  CALL,                   // A call instruction.
+  EH_SJLJ_LONGJMP,        // SjLj exception handling longjmp.
+  EH_SJLJ_SETJMP,         // SjLj exception handling setjmp.
+  EH_SJLJ_SETUP_DISPATCH, // SjLj exception handling setup_dispatch.
+  GETFUNPLT,              // Load function address through %plt insturction.
+  GETTLSADDR,             // Load address for TLS access.
+  GETSTACKTOP,            // Retrieve address of stack top (first address of
+                          // locals and temporaries).
+  GLOBAL_BASE_REG,        // Global base reg for PIC.
+  Hi,                     // Hi/Lo operations, typically on a global address.
+  Lo,                     // Hi/Lo operations, typically on a global address.
+  MEMBARRIER,             // Compiler barrier only; generate a no-op.
+  RET_FLAG,               // Return with a flag operand.
+  TS1AM,                  // A TS1AM instruction used for 1/2 bytes swap.
+  VEC_BROADCAST,          // A vector broadcast instruction.
+                          //   0: scalar value, 1: VL
   VEC_GATHER,      // Gather instructions.
   VEC_LVL,
   VEC_SCATTER,     // Scatter instructions.
@@ -139,8 +139,8 @@ public:
   SDValue lowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
-  SDValue lowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerEXTRACT_VECTOR_ELT(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
@@ -181,6 +181,29 @@ public:
   SDValue lowerVVP_BUILD_VECTOR(SDValue Op, SelectionDAG &DAG) const;
   /// } Custom Lower for VVP
 
+  /// Custom Inserter {
+  MachineBasicBlock *
+  EmitInstrWithCustomInserter(MachineInstr &MI,
+                              MachineBasicBlock *MBB) const override;
+  MachineBasicBlock *emitEHSjLjLongJmp(MachineInstr &MI,
+                                       MachineBasicBlock *MBB) const;
+  MachineBasicBlock *emitEHSjLjSetJmp(MachineInstr &MI,
+                                      MachineBasicBlock *MBB) const;
+  MachineBasicBlock *emitSjLjDispatchBlock(MachineInstr &MI,
+                                           MachineBasicBlock *BB) const;
+
+  void setupEntryBlockForSjLj(MachineInstr &MI, MachineBasicBlock *MBB,
+                              MachineBasicBlock *DispatchBB, int FI,
+                              int Offset) const;
+  // Setup basic block address.
+  Register prepareMBB(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                      MachineBasicBlock *TargetBB, const DebugLoc &DL) const;
+  // Prepare function/variable address.
+  Register prepareSymbol(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                         StringRef Symbol, const DebugLoc &DL, bool IsLocal,
+                         bool IsCall) const;
+  /// } Custom Inserter
+
   /// VVP Lowering {
   SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG) const;
   /// } VVPLowering
@@ -217,10 +240,6 @@ public:
                                      const APInt &DemandedElts,
                                      const SelectionDAG &DAG,
                                      unsigned Depth = 0) const override;
-
-  MachineBasicBlock *
-  EmitInstrWithCustomInserter(MachineInstr &MI,
-                              MachineBasicBlock *MBB) const override;
 
   /// Return true if the target has native support for
   /// the specified value type and it is 'desirable' to use the type for the
@@ -288,14 +307,6 @@ public:
 
   MachineBasicBlock *expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB,
                                     unsigned BROpcode) const;
-  MachineBasicBlock *emitEHSjLjSetJmp(MachineInstr &MI,
-                                      MachineBasicBlock *MBB) const;
-  MachineBasicBlock *emitEHSjLjLongJmp(MachineInstr &MI,
-                                       MachineBasicBlock *MBB) const;
-  MachineBasicBlock *EmitSjLjDispatchBlock(MachineInstr &MI,
-                                           MachineBasicBlock *BB) const;
-  void SetupEntryBlockForSjLj(MachineInstr &MI, MachineBasicBlock *MBB,
-                              MachineBasicBlock *DispatchBB, int FI) const;
   void finalizeLowering(MachineFunction &MF) const override;
 
   bool isVectorMaskType(EVT VT) const;
