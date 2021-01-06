@@ -5918,14 +5918,14 @@ static bool ConvertForConditional(Sema &Self, ExprResult &E, QualType T) {
 // extension.
 static bool isValidVectorForConditionalCondition(ASTContext &Ctx,
                                                  QualType CondTy) {
-  const auto *VecVT = CondTy->getAs<VectorType>();
-  if (!VecVT || (VecVT->isExtVectorType() && !VecVT->isExtVectorBoolType()))
+  if (!CondTy->isVectorType() || CondTy->isExtVectorType())
     return false;
   const QualType EltTy =
       cast<VectorType>(CondTy.getCanonicalType())->getElementType();
 
-  assert(!EltTy->isEnumeralType() && "Vectors cant be enum types");
-  return EltTy->isIntegralType(Ctx) || EltTy->isBooleanType();
+  assert(!EltTy->isBooleanType() && !EltTy->isEnumeralType() &&
+         "Vectors cant be boolean or enum types");
+  return EltTy->isIntegralType(Ctx);
 }
 
 QualType Sema::CheckGNUVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,
@@ -5947,14 +5947,13 @@ QualType Sema::CheckGNUVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,
 
   // FIXME: In the future we should define what the Extvector conditional
   // operator looks like.
-  // We explicitly allow this for ext_vector_type boolean as a Clang extension.
-  if (isa_and_nonnull<ExtVectorType>(LHSVT) && !LHSVT->isExtVectorBoolType()) {
+  if (LHSVT && isa<ExtVectorType>(LHSVT)) {
     Diag(QuestionLoc, diag::err_conditional_vector_operand_type)
         << /*isExtVector*/ true << LHSType;
     return {};
   }
 
-  if (isa_and_nonnull<ExtVectorType>(RHSVT) && !RHSVT->isExtVectorBoolType()) {
+  if (RHSVT && isa<ExtVectorType>(RHSVT)) {
     Diag(QuestionLoc, diag::err_conditional_vector_operand_type)
         << /*isExtVector*/ true << RHSType;
     return {};
@@ -5971,9 +5970,7 @@ QualType Sema::CheckGNUVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,
   } else if (LHSVT || RHSVT) {
     ResultType = CheckVectorOperands(
         LHS, RHS, QuestionLoc, /*isCompAssign*/ false, /*AllowBothBool*/ true,
-        /*AllowBoolConversions*/ false,
-        /*AllowBoolOperation*/ true,
-        /*ReportInvalid*/ true);
+        /*AllowBoolConversions*/ false);
     if (ResultType.isNull())
       return {};
   } else {
@@ -6291,11 +6288,9 @@ QualType Sema::CXXCheckConditionalOperands(ExprResult &Cond, ExprResult &LHS,
 
   // Extension: conditional operator involving vector types.
   if (LTy->isVectorType() || RTy->isVectorType())
-    return CheckVectorOperands(LHS, RHS, QuestionLoc, /*isCompAssign*/ false,
-                               /*AllowBothBool*/ true,
-                               /*AllowBoolConversions*/ false,
-                               /*AllowBoolOperation*/ false,
-                               /*ReportInvalid*/ true);
+    return CheckVectorOperands(LHS, RHS, QuestionLoc, /*isCompAssign*/false,
+                               /*AllowBothBool*/true,
+                               /*AllowBoolConversions*/false);
 
   //   -- The second and third operands have arithmetic or enumeration type;
   //      the usual arithmetic conversions are performed to bring them to a
