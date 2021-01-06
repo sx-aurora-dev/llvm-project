@@ -2671,3 +2671,21 @@ llvm::MDNode *CodeGenFunction::createProfileOrBranchWeightsForLoop(
 
   return Weights;
 }
+
+llvm::Value *CodeGenFunction::emitBoolVecConversion(llvm::Value *SrcVec,
+                                                    unsigned NumElementsDst,
+                                                    const llvm::Twine &Name) {
+  auto *SrcTy = cast<llvm::FixedVectorType>(SrcVec->getType());
+  unsigned NumElementsSrc = SrcTy->getNumElements();
+  if (NumElementsSrc == NumElementsDst) {
+    return SrcVec;
+  }
+
+  std::vector<int> ShuffleMask(NumElementsDst, -1);
+  for (unsigned MaskIdx = 0;
+       MaskIdx < std::min<>(NumElementsDst, NumElementsSrc); ++MaskIdx) {
+    ShuffleMask[MaskIdx] = MaskIdx;
+  }
+
+  return Builder.CreateShuffleVector(SrcVec, ShuffleMask, Name);
+}
