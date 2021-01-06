@@ -98,8 +98,7 @@ llvm::Type *CodeGenTypes::ConvertTypeForMem(QualType T, bool ForBitField) {
   llvm::Type *R = ConvertType(T);
 
   // Check for the boolean vector case.
-  const auto *VT = T->getAs<VectorType>();
-  if (VT && VT->isExtVectorBoolType()) {
+  if (T->isExtVectorBoolType()) {
     auto *FixedVT = cast<llvm::FixedVectorType>(R);
     // Pad to at least one byte.
     uint64_t BytePadded = std::max<uint64_t>(FixedVT->getNumElements(), 8);

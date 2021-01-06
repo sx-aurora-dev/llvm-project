@@ -64,8 +64,6 @@ class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
 def : Proc<"generic", []>;
-// def : Processor<"ve", VEItinerary, []>;
-// def : ProcessorModel<"ve", VESchedModel, []>;
 
 //===----------------------------------------------------------------------===//
 // Declare the target which we are implementing

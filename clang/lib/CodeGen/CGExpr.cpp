@@ -1745,8 +1745,7 @@ llvm::Value *CodeGenFunction::EmitLoadOfScalar(Address Addr, bool Volatile,
       llvm::Value *V = Builder.CreateLoad(Cast, Volatile, "loadVec4");
 
       // Shuffle vector to get vec3.
-      V = Builder.CreateShuffleVector(V, llvm::UndefValue::get(vec4Ty),
-                                      ArrayRef<int>{0, 1, 2}, "extractVec");
+      V = Builder.CreateShuffleVector(V, ArrayRef<int>{0, 1, 2}, "extractVec");
       return EmitFromMemory(V, Ty);
     }
   }
@@ -1871,8 +1870,7 @@ void CodeGenFunction::EmitStoreOfScalar(llvm::Value *Value, Address Addr,
       // Handle vec3 special.
       if (VecTy && cast<llvm::FixedVectorType>(VecTy)->getNumElements() == 3) {
         // Our source is a vec3, do a shuffle vector to make it a vec4.
-        Value = Builder.CreateShuffleVector(Value, llvm::UndefValue::get(VecTy),
-                                            ArrayRef<int>{0, 1, 2, -1},
+        Value = Builder.CreateShuffleVector(Value, ArrayRef<int>{0, 1, 2, -1},
                                             "extractVec");
         SrcTy = llvm::FixedVectorType::get(VecTy->getElementType(), 4);
       }
@@ -2044,8 +2042,7 @@ RValue CodeGenFunction::EmitLoadOfExtVectorElementLValue(LValue LV) {
   for (unsigned i = 0; i != NumResultElts; ++i)
     Mask.push_back(getAccessedFieldNo(i, Elts));
 
-  Vec = Builder.CreateShuffleVector(Vec, llvm::UndefValue::get(Vec->getType()),
-                                    Mask);
+  Vec = Builder.CreateShuffleVector(Vec, Mask);
   return RValue::get(Vec);
 }
 
@@ -2312,8 +2309,7 @@ void CodeGenFunction::EmitStoreThroughExtVectorComponentLValue(RValue Src,
       for (unsigned i = 0; i != NumSrcElts; ++i)
         Mask[getAccessedFieldNo(i, Elts)] = i;
 
-      Vec = Builder.CreateShuffleVector(
-          SrcVal, llvm::UndefValue::get(Vec->getType()), Mask);
+      Vec = Builder.CreateShuffleVector(SrcVal, Mask);
     } else if (NumDstElts > NumSrcElts) {
       // Extended the source vector to the same length and then shuffle it
       // into the destination.
@@ -2323,8 +2319,7 @@ void CodeGenFunction::EmitStoreThroughExtVectorComponentLValue(RValue Src,
       for (unsigned i = 0; i != NumSrcElts; ++i)
         ExtMask.push_back(i);
       ExtMask.resize(NumDstElts, -1);
-      llvm::Value *ExtSrcVal = Builder.CreateShuffleVector(
-          SrcVal, llvm::UndefValue::get(SrcVal->getType()), ExtMask);
+      llvm::Value *ExtSrcVal = Builder.CreateShuffleVector(SrcVal, ExtMask);
       // build identity
       SmallVector<int, 4> Mask;
       for (unsigned i = 0; i != NumDstElts; ++i)
@@ -3908,7 +3903,7 @@ LValue CodeGenFunction::EmitMatrixSubscriptExpr(const MatrixSubscriptExpr *E) {
   llvm::Value *ColIdx = EmitScalarExpr(E->getColumnIdx());
   llvm::Value *NumRows = Builder.getIntN(
       RowIdx->getType()->getScalarSizeInBits(),
-      E->getBase()->getType()->getAs<ConstantMatrixType>()->getNumRows());
+      E->getBase()->getType()->castAs<ConstantMatrixType>()->getNumRows());
   llvm::Value *FinalIdx =
       Builder.CreateAdd(Builder.CreateMul(ColIdx, NumRows), RowIdx);
   return LValue::MakeMatrixElt(

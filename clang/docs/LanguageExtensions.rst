@@ -463,7 +463,7 @@ C and C++.  For example:
 
   // legal for Clang, error for GCC:
   typedef bool bool4 __attribute__((ext_vector_type(4)));
-  // Objects of bool4 type hold 8 bits, sizeof(bool8) == 1
+  // Objects of bool4 type hold 8 bits, sizeof(bool4) == 1
 
   bool4 foo(bool4 a) {
     bool4 v;

@@ -52,11 +52,10 @@ public:
 
 class FunctionCallBuilder {
 public:
-  FunctionCallBuilder(StringRef functionName, LLVM::LLVMType returnType,
-                      ArrayRef<LLVM::LLVMType> argumentTypes)
+  FunctionCallBuilder(StringRef functionName, Type returnType,
+                      ArrayRef<Type> argumentTypes)
       : functionName(functionName),
-        functionType(LLVM::LLVMFunctionType::get(returnType, argumentTypes,
-                                                 /*isVarArg=*/false)) {}
+        functionType(LLVM::LLVMFunctionType::get(returnType, argumentTypes)) {}
   LLVM::CallOp create(Location loc, OpBuilder &builder,
                       ArrayRef<Value> arguments) const;
 
@@ -74,14 +73,14 @@ public:
 protected:
   MLIRContext *context = &this->getTypeConverter()->getContext();
 
-  LLVM::LLVMType llvmVoidType = LLVM::LLVMType::getVoidTy(context);
-  LLVM::LLVMType llvmPointerType = LLVM::LLVMType::getInt8PtrTy(context);
-  LLVM::LLVMType llvmPointerPointerType =
-      LLVM::LLVMPointerType::get(llvmPointerType);
-  LLVM::LLVMType llvmInt8Type = LLVM::LLVMType::getInt8Ty(context);
-  LLVM::LLVMType llvmInt32Type = LLVM::LLVMType::getInt32Ty(context);
-  LLVM::LLVMType llvmInt64Type = LLVM::LLVMType::getInt64Ty(context);
-  LLVM::LLVMType llvmIntPtrType = LLVM::LLVMType::getIntNTy(
+  Type llvmVoidType = LLVM::LLVMVoidType::get(context);
+  Type llvmPointerType =
+      LLVM::LLVMPointerType::get(LLVM::LLVMIntegerType::get(context, 8));
+  Type llvmPointerPointerType = LLVM::LLVMPointerType::get(llvmPointerType);
+  Type llvmInt8Type = LLVM::LLVMIntegerType::get(context, 8);
+  Type llvmInt32Type = LLVM::LLVMIntegerType::get(context, 32);
+  Type llvmInt64Type = LLVM::LLVMIntegerType::get(context, 64);
+  Type llvmIntPtrType = LLVM::LLVMIntegerType::get(
       context, this->getTypeConverter()->getPointerBitwidth(0));
 
   FunctionCallBuilder moduleLoadCallBuilder = {
@@ -321,7 +320,7 @@ LLVM::CallOp FunctionCallBuilder::create(Location loc, OpBuilder &builder,
 static LogicalResult areAllLLVMTypes(Operation *op, ValueRange operands,
                                      ConversionPatternRewriter &rewriter) {
   if (!llvm::all_of(operands, [](Value value) {
-        return value.getType().isa<LLVM::LLVMType>();
+        return LLVM::isCompatibleType(value.getType());
       }))
     return rewriter.notifyMatchFailure(
         op, "Cannot convert if operands aren't of LLVM type.");
@@ -369,7 +368,7 @@ LogicalResult ConvertAllocOpToGpuRuntimeCallPattern::matchAndRewrite(
   MemRefType memRefType = allocOp.getType();
 
   if (failed(areAllLLVMTypes(allocOp, operands, rewriter)) ||
-      !isSupportedMemRefType(memRefType) ||
+      !isConvertibleAndHasIdentityMaps(memRefType) ||
       failed(isAsyncWithOneDependency(rewriter, allocOp)))
     return failure();
 
@@ -511,11 +510,12 @@ Value ConvertLaunchFuncOpToGpuRuntimeCallPattern::generateParamsArray(
       loc, launchOp.getOperands().take_back(numKernelOperands),
       operands.take_back(numKernelOperands), builder);
   auto numArguments = arguments.size();
-  SmallVector<LLVM::LLVMType, 4> argumentTypes;
+  SmallVector<Type, 4> argumentTypes;
   argumentTypes.reserve(numArguments);
   for (auto argument : arguments)
-    argumentTypes.push_back(argument.getType().cast<LLVM::LLVMType>());
-  auto structType = LLVM::LLVMType::createStructTy(argumentTypes, StringRef());
+    argumentTypes.push_back(argument.getType());
+  auto structType = LLVM::LLVMStructType::getNewIdentified(context, StringRef(),
+                                                           argumentTypes);
   auto one = builder.create<LLVM::ConstantOp>(loc, llvmInt32Type,
                                               builder.getI32IntegerAttr(1));
   auto structPtr = builder.create<LLVM::AllocaOp>(
@@ -670,7 +670,7 @@ LogicalResult ConvertMemcpyOpToGpuRuntimeCallPattern::matchAndRewrite(
   auto memRefType = memcpyOp.src().getType().cast<MemRefType>();
 
   if (failed(areAllLLVMTypes(memcpyOp, operands, rewriter)) ||
-      !isSupportedMemRefType(memRefType) ||
+      !isConvertibleAndHasIdentityMaps(memRefType) ||
       failed(isAsyncWithOneDependency(rewriter, memcpyOp)))
     return failure();
 
@@ -716,10 +716,10 @@ mlir::createGpuToLLVMConversionPass(StringRef gpuBinaryAnnotation) {
 void mlir::populateGpuToLLVMConversionPatterns(
     LLVMTypeConverter &converter, OwningRewritePatternList &patterns,
     StringRef gpuBinaryAnnotation) {
-  converter.addConversion(
-      [context = &converter.getContext()](gpu::AsyncTokenType type) -> Type {
-        return LLVM::LLVMType::getInt8PtrTy(context);
-      });
+  converter.addConversion([context = &converter.getContext()](
+                              gpu::AsyncTokenType type) -> Type {
+    return LLVM::LLVMPointerType::get(LLVM::LLVMIntegerType::get(context, 8));
+  });
   patterns.insert<ConvertAllocOpToGpuRuntimeCallPattern,
                   ConvertDeallocOpToGpuRuntimeCallPattern,
                   ConvertHostRegisterOpToGpuRuntimeCallPattern,

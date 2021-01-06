@@ -381,23 +381,6 @@ void VEAsmPrinter::printOperand(const MachineInstr *MI, int OpNum,
               || TF == VEMCExpr::VK_VE_TLS_IE_HI22
               || TF == VEMCExpr::VK_VE_TLS_LE_HIX22) &&
              "Invalid target flags for address operand on sethi");
-    else if (MI->getOpcode() == SP::TLS_CALL)
-      assert((TF == VEMCExpr::VK_VE_None
-              || TF == VEMCExpr::VK_VE_TLS_GD_CALL
-              || TF == VEMCExpr::VK_VE_TLS_LDM_CALL) &&
-             "Cannot handle target flags on tls call address");
-    else if (MI->getOpcode() == SP::TLS_ADDrr)
-      assert((TF == VEMCExpr::VK_VE_TLS_GD_ADD
-              || TF == VEMCExpr::VK_VE_TLS_LDM_ADD
-              || TF == VEMCExpr::VK_VE_TLS_LDO_ADD
-              || TF == VEMCExpr::VK_VE_TLS_IE_ADD) &&
-             "Cannot handle target flags on add for TLS");
-    else if (MI->getOpcode() == SP::TLS_LDrr)
-      assert(TF == VEMCExpr::VK_VE_TLS_IE_LD &&
-             "Cannot handle target flags on ld for TLS");
-    else if (MI->getOpcode() == SP::TLS_LDXrr)
-      assert(TF == VEMCExpr::VK_VE_TLS_IE_LDX &&
-             "Cannot handle target flags on ldx for TLS");
     else if (MI->getOpcode() == SP::XORri || MI->getOpcode() == SP::XORXri)
       assert((TF == VEMCExpr::VK_VE_TLS_LDO_LOX10
               || TF == VEMCExpr::VK_VE_TLS_LE_LOX10) &&
