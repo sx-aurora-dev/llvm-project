@@ -791,5 +791,17 @@ CustomDAG::getTargetInsertSubreg(int SRIdx, EVT VT, SDValue Operand, SDValue Sub
   return DAG.getTargetInsertSubreg(SRIdx, DL, VT, Operand, SubReg);
 }
 
+SDValue CustomDAG::createIREM(bool IsSigned, SDValue Dividend, SDValue Divisor,
+                              SDValue Mask, SDValue AVL) const {
+  // Based on lib/CodeGen/SelectionDAG/TargetLowering.cpp ::expandREM code.
+  EVT VT = Dividend->getValueType(0);
+  unsigned DivOpc = IsSigned ? VEISD::VVP_SDIV : VEISD::VVP_UDIV;
+
+  // X % Y -> X-X/Y*Y
+  SDValue Divide = getNode(DivOpc, VT, {Dividend, Divisor, Mask, AVL});
+  SDValue Mul = getNode(VEISD::VVP_MUL, VT, {Divide, Divisor, Mask, AVL});
+  return getNode(VEISD::VVP_SUB, VT, {Dividend, Mul, Mask, AVL});
+}
+
 /// } class CustomDAG
 } // namespace llvm

@@ -336,6 +336,7 @@ struct CustomDAG {
   SDValue extractPackElem(SDValue Op, PackElem Part,
                                 SDValue AVL);
 
+  SDValue createIREM(bool IsSigned, SDValue Dividend, SDValue Divisor, SDValue Mask, SDValue AVL) const;
   SDValue createConstantTargetMask(VVPWideningInfo WidenInfo) const;
   SDValue createTargetAVL(VVPWideningInfo WidenInfo) const;
 
