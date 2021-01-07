@@ -2537,7 +2537,10 @@ struct LogicalOp_match {
   LogicalOp_match(const LHS &L, const RHS &R) : L(L), R(R) {}
 
   template <typename T> bool match(T *V) {
-    if (auto *I = dyn_cast<Instruction>(V)) {
+    EmptyContext EC; return match_context(V, EC);
+  }
+  template <typename ITy, typename MatchContext> bool match_context(ITy *V, MatchContext & MContext) {
+    if (auto *I = match_dyn_cast<MatchContext, Instruction>(V)) {
       if (!I->getType()->isIntOrIntVectorTy(1))
         return false;
 
@@ -2545,17 +2548,17 @@ struct LogicalOp_match {
           R.match(I->getOperand(1)))
         return true;
 
-      if (auto *SI = dyn_cast<SelectInst>(I)) {
+      if (auto *SI = match_dyn_cast<MatchContext, SelectInst>(I)) {
         if (Opcode == Instruction::And) {
           if (const auto *C = dyn_cast<Constant>(SI->getFalseValue()))
-            if (C->isNullValue() && L.match(SI->getCondition()) &&
-                R.match(SI->getTrueValue()))
+            if (C->isNullValue() && L.match_context(SI->getCondition(), MContext) &&
+                R.match_context(SI->getTrueValue(), MContext))
               return true;
         } else {
           assert(Opcode == Instruction::Or);
           if (const auto *C = dyn_cast<Constant>(SI->getTrueValue()))
-            if (C->isOneValue() && L.match(SI->getCondition()) &&
-                R.match(SI->getFalseValue()))
+            if (C->isOneValue() && L.match_context(SI->getCondition(), MContext) &&
+                R.match_context(SI->getFalseValue(), MContext))
               return true;
         }
       }
