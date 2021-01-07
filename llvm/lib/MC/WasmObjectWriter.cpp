@@ -405,6 +405,13 @@ void WasmObjectWriter::writeHeader(const MCAssembler &Asm) {
 
 void WasmObjectWriter::executePostLayoutBinding(MCAssembler &Asm,
                                                 const MCAsmLayout &Layout) {
+  // As a stopgap measure until call_indirect instructions start explicitly
+  // referencing the indirect function table via TABLE_NUMBER relocs, ensure
+  // that the indirect function table import makes it to the output if anything
+  // in the compilation unit has caused it to be present.
+  if (auto *Sym = Asm.getContext().lookupSymbol("__indirect_function_table"))
+    Asm.registerSymbol(*Sym);
+
   // Build a map of sections to the function that defines them, for use
   // in recordRelocation.
   for (const MCSymbol &S : Asm.symbols()) {
@@ -1366,6 +1373,9 @@ uint64_t WasmObjectWriter::writeOneObject(MCAssembler &Asm,
       continue;
     if (Mode == DwoMode::DwoOnly && !isDwoSection(Sec))
       continue;
+
+    LLVM_DEBUG(dbgs() << "Processing Section " << SectionName << "  group "
+                      << Section.getGroup() << "\n";);
 
     // .init_array sections are handled specially elsewhere.
     if (SectionName.startswith(".init_array"))

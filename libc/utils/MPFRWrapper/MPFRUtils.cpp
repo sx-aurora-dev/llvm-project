@@ -153,6 +153,28 @@ public:
     return result;
   }
 
+  bool roundToLong(long &result) const {
+    // We first calculate the rounded value. This way, when converting
+    // to long using mpfr_get_si, the rounding direction of MPFR_RNDN
+    // (or any other rounding mode), does not have an influence.
+    MPFRNumber roundedValue = round();
+    mpfr_clear_erangeflag();
+    result = mpfr_get_si(roundedValue.value, MPFR_RNDN);
+    return mpfr_erangeflag_p();
+  }
+
+  bool roundToLong(mpfr_rnd_t rnd, long &result) const {
+    MPFRNumber rint_result;
+    mpfr_rint(rint_result.value, value, rnd);
+    return rint_result.roundToLong(result);
+  }
+
+  MPFRNumber rint(mpfr_rnd_t rnd) const {
+    MPFRNumber result;
+    mpfr_rint(result.value, value, rnd);
+    return result;
+  }
+
   MPFRNumber sin() const {
     MPFRNumber result;
     mpfr_sin(result.value, value, MPFR_RNDN);
@@ -553,7 +575,52 @@ compareBinaryOperationOneOutput<double>(Operation, const BinaryInput<double> &,
 template bool compareBinaryOperationOneOutput<long double>(
     Operation, const BinaryInput<long double> &, long double, double);
 
+static mpfr_rnd_t getMPFRRoundingMode(RoundingMode mode) {
+  switch (mode) {
+  case RoundingMode::Upward:
+    return MPFR_RNDU;
+    break;
+  case RoundingMode::Downward:
+    return MPFR_RNDD;
+    break;
+  case RoundingMode::TowardZero:
+    return MPFR_RNDZ;
+    break;
+  case RoundingMode::Nearest:
+    return MPFR_RNDN;
+    break;
+  }
+}
+
 } // namespace internal
+
+template <typename T> bool RoundToLong(T x, long &result) {
+  MPFRNumber mpfr(x);
+  return mpfr.roundToLong(result);
+}
+
+template bool RoundToLong<float>(float, long &);
+template bool RoundToLong<double>(double, long &);
+template bool RoundToLong<long double>(long double, long &);
+
+template <typename T> bool RoundToLong(T x, RoundingMode mode, long &result) {
+  MPFRNumber mpfr(x);
+  return mpfr.roundToLong(internal::getMPFRRoundingMode(mode), result);
+}
+
+template bool RoundToLong<float>(float, RoundingMode, long &);
+template bool RoundToLong<double>(double, RoundingMode, long &);
+template bool RoundToLong<long double>(long double, RoundingMode, long &);
+
+template <typename T> T Round(T x, RoundingMode mode) {
+  MPFRNumber mpfr(x);
+  MPFRNumber result = mpfr.rint(internal::getMPFRRoundingMode(mode));
+  return result.as<T>();
+}
+
+template float Round<float>(float, RoundingMode);
+template double Round<double>(double, RoundingMode);
+template long double Round<long double>(long double, RoundingMode);
 
 } // namespace mpfr
 } // namespace testing

@@ -119,7 +119,7 @@ bool elf::link(ArrayRef<const char *> args, bool canExitEarly,
 
   config->progName = args[0];
 
-  driver->main(args);
+  driver->linkerMain(args);
 
   // Exit immediately if we don't need to return to the caller.
   // This saves time because the overhead of calling destructors
@@ -152,6 +152,7 @@ static std::tuple<ELFKind, uint16_t, uint8_t> parseEmulation(StringRef emul) {
           .Cases("elf32ltsmip", "elf32ltsmipn32", {ELF32LEKind, EM_MIPS})
           .Case("elf32lriscv", {ELF32LEKind, EM_RISCV})
           .Cases("elf32ppc", "elf32ppclinux", {ELF32BEKind, EM_PPC})
+          .Cases("elf32lppc", "elf32lppclinux", {ELF32LEKind, EM_PPC})
           .Case("elf64btsmip", {ELF64BEKind, EM_MIPS})
           .Case("elf64ltsmip", {ELF64LEKind, EM_MIPS})
           .Case("elf64lriscv", {ELF64LEKind, EM_RISCV})
@@ -161,10 +162,13 @@ static std::tuple<ELFKind, uint16_t, uint8_t> parseEmulation(StringRef emul) {
           .Case("elf_i386", {ELF32LEKind, EM_386})
           .Case("elf_iamcu", {ELF32LEKind, EM_IAMCU})
           .Case("elf64_sparc", {ELF64BEKind, EM_SPARCV9})
+          .Case("msp430elf", {ELF32LEKind, EM_MSP430})
           .Default({ELFNoneKind, EM_NONE});
 
   if (ret.first == ELFNoneKind)
     error("unknown emulation: " + emul);
+  if (ret.second == EM_MSP430)
+    osabi = ELFOSABI_STANDALONE;
   return std::make_tuple(ret.first, ret.second, osabi);
 }
 
@@ -467,7 +471,7 @@ static void checkZOptions(opt::InputArgList &args) {
       error("unknown -z value: " + StringRef(arg->getValue()));
 }
 
-void LinkerDriver::main(ArrayRef<const char *> argsArr) {
+void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
   ELFOptTable parser;
   opt::InputArgList args = parser.parse(argsArr.slice(1));
 
@@ -992,7 +996,7 @@ static void readConfigs(opt::InputArgList &args) {
   config->ltoDebugPassManager = args.hasArg(OPT_lto_debug_pass_manager);
   config->ltoEmitAsm = args.hasArg(OPT_lto_emit_asm);
   config->ltoNewPassManager =
-      args.hasFlag(OPT_lto_new_pass_manager, OPT_no_lto_new_pass_manager,
+      args.hasFlag(OPT_no_lto_legacy_pass_manager, OPT_lto_legacy_pass_manager,
                    LLVM_ENABLE_NEW_PASS_MANAGER);
   config->ltoNewPmPasses = args.getLastArgValue(OPT_lto_newpm_passes);
   config->ltoWholeProgramVisibility =

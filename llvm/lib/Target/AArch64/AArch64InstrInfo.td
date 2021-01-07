@@ -25,6 +25,8 @@ def HasV8_5a         : Predicate<"Subtarget->hasV8_5aOps()">,
                                  AssemblerPredicate<(all_of HasV8_5aOps), "armv8.5a">;
 def HasV8_6a         : Predicate<"Subtarget->hasV8_6aOps()">,
                                  AssemblerPredicate<(all_of HasV8_6aOps), "armv8.6a">;
+def HasV8_7a         : Predicate<"Subtarget->hasV8_7aOps()">,
+                                 AssemblerPredicate<(all_of HasV8_7aOps), "armv8.7a">;
 def HasVH            : Predicate<"Subtarget->hasVH()">,
                        AssemblerPredicate<(all_of FeatureVH), "vh">;
 
@@ -149,6 +151,16 @@ def HasMatMulFP32    : Predicate<"Subtarget->hasMatMulFP32()">,
                        AssemblerPredicate<(all_of FeatureMatMulFP32), "f32mm">;
 def HasMatMulFP64    : Predicate<"Subtarget->hasMatMulFP64()">,
                        AssemblerPredicate<(all_of FeatureMatMulFP64), "f64mm">;
+def HasXS            : Predicate<"Subtarget->hasXS()">,
+                       AssemblerPredicate<(all_of FeatureXS), "xs">;
+def HasWFxT          : Predicate<"Subtarget->hasWFxT()">,
+                       AssemblerPredicate<(all_of FeatureWFxT), "wfxt">;
+def HasLS64          : Predicate<"Subtarget->hasLS64()">,
+                       AssemblerPredicate<(all_of FeatureLS64), "ls64">;
+def HasBRBE          : Predicate<"Subtarget->hasBRBE()">,
+                       AssemblerPredicate<(all_of FeatureBRBE), "brbe">;
+def HasSPE_EEF       : Predicate<"Subtarget->hasSPE_EEF()">,
+                       AssemblerPredicate<(all_of FeatureSPE_EEF), "spe-eef">;
 def IsLE             : Predicate<"Subtarget->isLittleEndian()">;
 def IsBE             : Predicate<"!Subtarget->isLittleEndian()">;
 def IsWindows        : Predicate<"Subtarget->isTargetWindows()">;
@@ -399,6 +411,12 @@ def AArch64call          : SDNode<"AArch64ISD::CALL",
                                 SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>,
                                 [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
                                  SDNPVariadic]>;
+
+def AArch64call_rvmarker: SDNode<"AArch64ISD::CALL_RVMARKER",
+                             SDTypeProfile<0, -1, [SDTCisPtrTy<0>]>,
+                             [SDNPHasChain, SDNPOptInGlue, SDNPOutGlue,
+                              SDNPVariadic]>;
+
 def AArch64brcond        : SDNode<"AArch64ISD::BRCOND", SDT_AArch64Brcond,
                                 [SDNPHasChain]>;
 def AArch64cbz           : SDNode<"AArch64ISD::CBZ", SDT_AArch64cbz,
@@ -783,6 +801,18 @@ def TSB   : CRmSystemI<barrier_op, 0b010, "tsb", []> {
   let Inst{12}   = 0;
   let Predicates = [HasTRACEV8_4];
 }
+
+def DSBnXS  : CRmSystemI<barrier_nxs_op, 0b001, "dsb"> {
+  let CRm{1-0}   = 0b11;
+  let Inst{9-8}  = 0b10;
+  let Predicates = [HasXS];
+}
+
+let Predicates = [HasWFxT] in {
+def WFET : RegInputSystemI<0b0000, 0b000, "wfet">;
+def WFIT : RegInputSystemI<0b0000, 0b001, "wfit">;
+}
+
 }
 
 // ARMv8.2-A Dot Product
@@ -921,6 +951,7 @@ let Predicates = [HasComplxNum, HasNEON, HasFullFP16] in {
   def : Pat<(v8f16 (int_aarch64_neon_vcadd_rot270 (v8f16 V128:$Rn), (v8f16 V128:$Rm))),
             (FCADDv8f16 (v8f16 V128:$Rn), (v8f16 V128:$Rm), (i32 1))>;
 }
+
 let Predicates = [HasComplxNum, HasNEON] in {
   def : Pat<(v2f32 (int_aarch64_neon_vcadd_rot90 (v2f32 V64:$Rn), (v2f32 V64:$Rm))),
             (FCADDv2f32 (v2f32 V64:$Rn), (v2f32 V64:$Rm), (i32 0))>;
@@ -945,14 +976,34 @@ multiclass FCMLA_PATS<ValueType ty, RegisterClass Reg> {
             (!cast<Instruction>("FCMLA" # ty) $Rd, $Rn, $Rm, 3)>;
 }
 
+multiclass FCMLA_LANE_PATS<ValueType ty, RegisterClass Reg, dag RHSDup> {
+  def : Pat<(ty (int_aarch64_neon_vcmla_rot0 (ty Reg:$Rd), (ty Reg:$Rn), RHSDup)),
+            (!cast<Instruction>("FCMLA" # ty # "_indexed") $Rd, $Rn, $Rm, VectorIndexS:$idx, 0)>;
+  def : Pat<(ty (int_aarch64_neon_vcmla_rot90 (ty Reg:$Rd), (ty Reg:$Rn), RHSDup)),
+            (!cast<Instruction>("FCMLA" # ty # "_indexed") $Rd, $Rn, $Rm, VectorIndexS:$idx, 1)>;
+  def : Pat<(ty (int_aarch64_neon_vcmla_rot180 (ty Reg:$Rd), (ty Reg:$Rn), RHSDup)),
+            (!cast<Instruction>("FCMLA" # ty # "_indexed") $Rd, $Rn, $Rm, VectorIndexS:$idx, 2)>;
+  def : Pat<(ty (int_aarch64_neon_vcmla_rot270 (ty Reg:$Rd), (ty Reg:$Rn), RHSDup)),
+            (!cast<Instruction>("FCMLA" # ty # "_indexed") $Rd, $Rn, $Rm, VectorIndexS:$idx, 3)>;
+}
+
+
 let Predicates = [HasComplxNum, HasNEON, HasFullFP16] in {
   defm : FCMLA_PATS<v4f16, V64>;
   defm : FCMLA_PATS<v8f16, V128>;
+
+  defm : FCMLA_LANE_PATS<v4f16, V64,
+                         (v4f16 (bitconvert (v2i32 (AArch64duplane32 (v4i32 V128:$Rm), VectorIndexD:$idx))))>;
+  defm : FCMLA_LANE_PATS<v8f16, V128,
+                         (v8f16 (bitconvert (v4i32 (AArch64duplane32 (v4i32 V128:$Rm), VectorIndexS:$idx))))>;
 }
 let Predicates = [HasComplxNum, HasNEON] in {
   defm : FCMLA_PATS<v2f32, V64>;
   defm : FCMLA_PATS<v4f32, V128>;
   defm : FCMLA_PATS<v2f64, V128>;
+
+  defm : FCMLA_LANE_PATS<v4f32, V128,
+                         (v4f32 (bitconvert (v2i64 (AArch64duplane64 (v2i64 V128:$Rm), VectorIndexD:$idx))))>;
 }
 
 // v8.3a Pointer Authentication
@@ -2089,6 +2140,8 @@ let isCall = 1, Defs = [LR], Uses = [SP] in {
   def BLRNoIP : Pseudo<(outs), (ins GPR64noip:$Rn), []>,
                 Sched<[WriteBrReg]>,
                 PseudoInstExpansion<(BLR GPR64:$Rn)>;
+  def BLR_RVMARKER : Pseudo<(outs), (ins variable_ops), []>,
+                     Sched<[WriteBrReg]>;
 } // isCall
 
 def : Pat<(AArch64call GPR64:$Rn),
@@ -2097,6 +2150,10 @@ def : Pat<(AArch64call GPR64:$Rn),
 def : Pat<(AArch64call GPR64noip:$Rn),
           (BLRNoIP GPR64noip:$Rn)>,
       Requires<[SLSBLRMitigation]>;
+
+def : Pat<(AArch64call_rvmarker GPR64:$Rn),
+          (BLR_RVMARKER GPR64:$Rn)>,
+      Requires<[NoSLSBLRMitigation]>;
 
 let isBranch = 1, isTerminator = 1, isBarrier = 1, isIndirectBranch = 1 in {
 def BR  : BranchReg<0b0000, "br", [(brind GPR64:$Rn)]>;
@@ -7713,6 +7770,15 @@ let AddedComplexity = 10 in {
 
   // FIXME: add patterns to generate vector by element dot product.
   // FIXME: add SVE dot-product patterns.
+}
+
+let Predicates = [HasLS64] in {
+  def LD64B: LoadStore64B<0b101, "ld64b", (ins GPR64sp:$Rn),
+                                          (outs GPR64x8:$Rt)>;
+  def ST64B: LoadStore64B<0b001, "st64b", (ins GPR64sp:$Rn, GPR64x8:$Rt),
+                                          (outs)>;
+  def ST64BV:   Store64BV<0b011, "st64bv">;
+  def ST64BV0:  Store64BV<0b010, "st64bv0">;
 }
 
 include "AArch64InstrAtomics.td"

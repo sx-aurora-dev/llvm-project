@@ -489,7 +489,8 @@ PreservedAnalyses DevirtSCCRepeatedPass::run(LazyCallGraph::SCC &InitialC,
 
     // Otherwise, if we've already hit our max, we're done.
     if (Iteration >= MaxIterations) {
-      maxDevirtIterationsReached();
+      if (AbortOnMaxDevirtIterationsReached)
+        report_fatal_error("Max devirtualization iterations reached");
       LLVM_DEBUG(
           dbgs() << "Found another devirtualization after hitting the max "
                     "number of repetitions ("
@@ -815,11 +816,6 @@ static void updateNewSCCFunctionAnalyses(LazyCallGraph::SCC &C,
   }
 }
 
-void llvm::maxDevirtIterationsReached() {
-  if (AbortOnMaxDevirtIterationsReached)
-    report_fatal_error("Max devirtualization iterations reached");
-}
-
 /// Helper function to update both the \c CGSCCAnalysisManager \p AM and the \c
 /// CGSCCPassManager's \c CGSCCUpdateResult \p UR based on a range of newly
 /// added SCCs.
@@ -1043,23 +1039,20 @@ static LazyCallGraph::SCC &updateCGAndAnalysisManagerForPass(
     DeadTargets.push_back(&E.getNode());
   }
   // Remove the easy cases quickly and actually pull them out of our list.
-  DeadTargets.erase(
-      llvm::remove_if(DeadTargets,
-                      [&](Node *TargetN) {
-                        SCC &TargetC = *G.lookupSCC(*TargetN);
-                        RefSCC &TargetRC = TargetC.getOuterRefSCC();
+  llvm::erase_if(DeadTargets, [&](Node *TargetN) {
+    SCC &TargetC = *G.lookupSCC(*TargetN);
+    RefSCC &TargetRC = TargetC.getOuterRefSCC();
 
-                        // We can't trivially remove internal targets, so skip
-                        // those.
-                        if (&TargetRC == RC)
-                          return false;
+    // We can't trivially remove internal targets, so skip
+    // those.
+    if (&TargetRC == RC)
+      return false;
 
-                        RC->removeOutgoingEdge(N, *TargetN);
-                        LLVM_DEBUG(dbgs() << "Deleting outgoing edge from '"
-                                          << N << "' to '" << TargetN << "'\n");
-                        return true;
-                      }),
-      DeadTargets.end());
+    RC->removeOutgoingEdge(N, *TargetN);
+    LLVM_DEBUG(dbgs() << "Deleting outgoing edge from '" << N << "' to '"
+                      << TargetN << "'\n");
+    return true;
+  });
 
   // Now do a batch removal of the internal ref edges left.
   auto NewRefSCCs = RC->removeInternalRefEdge(N, DeadTargets);

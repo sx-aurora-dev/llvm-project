@@ -1470,12 +1470,21 @@ bool SITargetLowering::allowsMisalignedMemoryAccessesImpl(
     }
   }
 
+  if (AddrSpace == AMDGPUAS::PRIVATE_ADDRESS) {
+    bool AlignedBy4 = Alignment >= Align(4);
+    if (IsFast)
+      *IsFast = AlignedBy4;
+
+    return AlignedBy4 ||
+           Subtarget->enableFlatScratch() ||
+           Subtarget->hasUnalignedScratchAccess();
+  }
+
   // FIXME: We have to be conservative here and assume that flat operations
   // will access scratch.  If we had access to the IR function, then we
   // could determine if any private memory was used in the function.
-  if (!Subtarget->hasUnalignedScratchAccess() &&
-      (AddrSpace == AMDGPUAS::PRIVATE_ADDRESS ||
-       AddrSpace == AMDGPUAS::FLAT_ADDRESS)) {
+  if (AddrSpace == AMDGPUAS::FLAT_ADDRESS &&
+      !Subtarget->hasUnalignedScratchAccess()) {
     bool AlignedBy4 = Alignment >= Align(4);
     if (IsFast)
       *IsFast = AlignedBy4;
@@ -5992,8 +6001,8 @@ SDValue SITargetLowering::lowerImage(SDValue Op,
   unsigned IntrOpcode = Intr->BaseOpcode;
   bool IsGFX10Plus = AMDGPU::isGFX10Plus(*Subtarget);
 
-  SmallVector<EVT, 3> ResultTypes(Op->value_begin(), Op->value_end());
-  SmallVector<EVT, 3> OrigResultTypes(Op->value_begin(), Op->value_end());
+  SmallVector<EVT, 3> ResultTypes(Op->values());
+  SmallVector<EVT, 3> OrigResultTypes(Op->values());
   bool IsD16 = false;
   bool IsG16 = false;
   bool IsA16 = false;
@@ -6588,11 +6597,7 @@ SDValue SITargetLowering::LowerINTRINSIC_WO_CHAIN(SDValue Op,
     if (Subtarget->getGeneration() < AMDGPUSubtarget::VOLCANIC_ISLANDS)
       return SDValue();
 
-    DiagnosticInfoUnsupported BadIntrin(
-      MF.getFunction(), "intrinsic not supported on subtarget",
-      DL.getDebugLoc());
-      DAG.getContext()->diagnose(BadIntrin);
-      return DAG.getUNDEF(VT);
+    return emitRemovedIntrinsicError(DAG, DL, VT);
   }
   case Intrinsic::amdgcn_ldexp:
     return DAG.getNode(AMDGPUISD::LDEXP, DL, VT,
@@ -10857,7 +10862,7 @@ SDValue SITargetLowering::PerformDAGCombine(SDNode *N,
 /// Helper function for adjustWritemask
 static unsigned SubIdx2Lane(unsigned Idx) {
   switch (Idx) {
-  default: return 0;
+  default: return ~0u;
   case AMDGPU::sub0: return 0;
   case AMDGPU::sub1: return 1;
   case AMDGPU::sub2: return 2;
@@ -10917,6 +10922,8 @@ SDNode *SITargetLowering::adjustWritemask(MachineSDNode *&Node,
     // in OldDmask, so it can be any of X,Y,Z,W; Lane==1 is the second bit
     // set, etc.
     Lane = SubIdx2Lane(I->getConstantOperandVal(1));
+    if (Lane == ~0u)
+      return Node;
 
     // Check if the use is for the TFE/LWE generated result at VGPRn+1.
     if (UsesTFC && Lane == TFCLane) {

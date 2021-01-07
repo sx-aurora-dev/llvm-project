@@ -1,5 +1,5 @@
 // RUN: %clang_cc1 -triple x86_64-linux-pc -emit-llvm -debug-info-kind=limited %s -o - | FileCheck %s
-typedef _Bool bool512 __attribute__((__vector_size__(64)));
+typedef _Bool bool512 __attribute__((ext_vector_type(512)));
 
 bool512 b;
 

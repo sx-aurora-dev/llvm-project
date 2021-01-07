@@ -59,6 +59,31 @@ def ImmROTL2RW : SDNodeXForm<imm, [{
                                    N->getValueType(0));
 }]>;
 
+// Check that it is a SLOI (Shift Left Ones Immediate).
+def SLOIPat : PatFrag<(ops node:$A, node:$B),
+                      (or (shl node:$A, node:$B), imm), [{
+  return MatchSLOI(N);
+}]>;
+
+// Check that it is a SROI (Shift Right Ones Immediate).
+def SROIPat : PatFrag<(ops node:$A, node:$B),
+                      (or (srl node:$A, node:$B), imm), [{
+  return MatchSROI(N);
+}]>;
+
+// Check that it is a SROIW (Shift Right Ones Immediate i32 on RV64).
+def SROIWPat : PatFrag<(ops node:$A, node:$B),
+                       (or (srl node:$A, node:$B), imm), [{
+  return MatchSROIW(N);
+}]>;
+
+// Check that it is a SLLIUW (Shift Logical Left Immediate Unsigned i32
+// on RV64).
+def SLLIUWPat : PatFrag<(ops node:$A, node:$B),
+                        (and (shl node:$A, node:$B), imm), [{
+  return MatchSLLIUW(N);
+}]>;
+
 // Checks if this mask has a single 0 bit and cannot be used with ANDI.
 def SBCLRMask : ImmLeaf<XLenVT, [{
   if (Subtarget->is64Bit())
@@ -480,12 +505,10 @@ def C_ZEXTW : RVBInstC<0b10, "c.zext.w">, Sched<[]>;
 //===----------------------------------------------------------------------===//
 
 let Predicates = [HasStdExtZbb, IsRV32] in {
-def : InstAlias<"zext.b $rd, $rs", (ANDI GPR:$rd, GPR:$rs, 0xFF)>;
 def : InstAlias<"zext.h $rd, $rs", (PACK GPR:$rd, GPR:$rs, X0)>;
 } // Predicates = [HasStdExtZbb, IsRV32]
 
 let Predicates = [HasStdExtZbb, IsRV64] in {
-def : InstAlias<"zext.b $rd, $rs", (ANDI GPR:$rd, GPR:$rs, 0xFF)>;
 def : InstAlias<"zext.h $rd, $rs", (PACKW GPR:$rd, GPR:$rs, X0)>;
 def : InstAlias<"zext.w $rd, $rs", (PACK GPR:$rd, GPR:$rs, X0)>;
 } // Predicates = [HasStdExtZbb, IsRV64]
@@ -693,11 +716,6 @@ def : CompressPat<(PACK GPRC:$rs1, GPRC:$rs1, X0),
 //===----------------------------------------------------------------------===//
 // Codegen patterns
 //===----------------------------------------------------------------------===//
-def SLOIPat   : ComplexPattern<XLenVT, 2, "SelectSLOI", [or]>;
-def SROIPat   : ComplexPattern<XLenVT, 2, "SelectSROI", [or]>;
-def SLLIUWPat : ComplexPattern<i64, 2, "SelectSLLIUW", [and]>;
-def SLOIWPat  : ComplexPattern<i64, 2, "SelectSLOIW", [sext_inreg]>;
-def SROIWPat  : ComplexPattern<i64, 2, "SelectSROIW", [or]>;
 
 let Predicates = [HasStdExtZbbOrZbp] in {
 def : Pat<(and GPR:$rs1, (not GPR:$rs2)), (ANDN GPR:$rs1, GPR:$rs2)>;
@@ -902,8 +920,8 @@ def : Pat<(or (or (and (shl GPR:$rs1, (i64 1)), (i64 0x4444444444444444)),
 let Predicates = [HasStdExtZbb, IsRV64] in {
 def : Pat<(and (add GPR:$rs, simm12:$simm12), (i64 0xFFFFFFFF)),
           (ADDIWU GPR:$rs, simm12:$simm12)>;
-def : Pat<(SLLIUWPat GPR:$rs1, uimmlog2xlen:$shamt),
-          (SLLIUW GPR:$rs1, uimmlog2xlen:$shamt)>;
+def : Pat<(SLLIUWPat GPR:$rs1, uimm5:$shamt),
+          (SLLIUW GPR:$rs1, uimm5:$shamt)>;
 def : Pat<(and (add GPR:$rs1, GPR:$rs2), (i64 0xFFFFFFFF)),
           (ADDWU GPR:$rs1, GPR:$rs2)>;
 def : Pat<(and (sub GPR:$rs1, GPR:$rs2), (i64 0xFFFFFFFF)),
@@ -958,10 +976,10 @@ def : Pat<(xor (assertsexti32 GPR:$rs1), SBSETINVWMask:$mask),
 } // Predicates = [HasStdExtZbs, IsRV64]
 
 let Predicates = [HasStdExtZbb, IsRV64] in {
-def : Pat<(SLOIWPat GPR:$rs1, uimmlog2xlen:$shamt),
-          (SLOIW GPR:$rs1, uimmlog2xlen:$shamt)>;
-def : Pat<(SROIWPat GPR:$rs1, uimmlog2xlen:$shamt),
-          (SROIW GPR:$rs1, uimmlog2xlen:$shamt)>;
+def : Pat<(sext_inreg (SLOIPat GPR:$rs1, uimm5:$shamt), i32),
+          (SLOIW GPR:$rs1, uimm5:$shamt)>;
+def : Pat<(SROIWPat GPR:$rs1, uimm5:$shamt),
+          (SROIW GPR:$rs1, uimm5:$shamt)>;
 } // Predicates = [HasStdExtZbb, IsRV64]
 
 let Predicates = [HasStdExtZbp, IsRV64] in {

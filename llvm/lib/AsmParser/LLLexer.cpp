@@ -654,6 +654,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   KEYWORD(nest);
   KEYWORD(noalias);
   KEYWORD(nobuiltin);
+  KEYWORD(nocallback);
   KEYWORD(nocapture);
   KEYWORD(noduplicate);
   KEYWORD(nofree);
@@ -842,6 +843,7 @@ lltok::Kind LLLexer::LexIdentifier() {
   TYPEKEYWORD("label",     Type::getLabelTy(Context));
   TYPEKEYWORD("metadata",  Type::getMetadataTy(Context));
   TYPEKEYWORD("x86_mmx",   Type::getX86_MMXTy(Context));
+  TYPEKEYWORD("x86_amx",   Type::getX86_AMXTy(Context));
   TYPEKEYWORD("token",     Type::getTokenTy(Context));
 
 #undef TYPEKEYWORD

@@ -14,7 +14,7 @@ using TwoFloats = float __attribute__((__vector_size__(8)));
 using FourFloats = float __attribute__((__vector_size__(16)));
 using TwoDoubles = double __attribute__((__vector_size__(16)));
 using FourDoubles = double __attribute__((__vector_size__(32)));
-using EightBools = bool __attribute__((__vector_size__(1)));
+using EightBools = bool __attribute__((ext_vector_type(8)));
 
 EightInts eight_ints;
 EightBools eight_bools;
@@ -24,24 +24,24 @@ bool one_bool;
 // Check the rules of the LHS/RHS of the conditional operator.
 void Operations() {
   // Legal binary
-  (void)(eight_bools | other_eight_bools);
-  (void)(eight_bools & other_eight_bools);
-  (void)(eight_bools ^ other_eight_bools);
-  (void)(~eight_bools);
-  (void)(!eight_bools);
+  // (void)(eight_bools | other_eight_bools);
+  // (void)(eight_bools & other_eight_bools);
+  // (void)(eight_bools ^ other_eight_bools);
+  // (void)(~eight_bools);
+  // (void)(!eight_bools);
 
-  // Legal comparison
-  (void)(eight_bools == other_eight_bools);
-  (void)(eight_bools != other_eight_bools);
-  (void)(eight_bools < other_eight_bools);
-  (void)(eight_bools <= other_eight_bools);
-  (void)(eight_bools > other_eight_bools);
-  (void)(eight_bools >= other_eight_bools);
+  // // Legal comparison
+  // (void)(eight_bools == other_eight_bools);
+  // (void)(eight_bools != other_eight_bools);
+  // (void)(eight_bools < other_eight_bools);
+  // (void)(eight_bools <= other_eight_bools);
+  // (void)(eight_bools > other_eight_bools);
+  // (void)(eight_bools >= other_eight_bools);
 
-  // Legal assignments
-  (void)(eight_bools |= other_eight_bools);
-  (void)(eight_bools &= other_eight_bools);
-  (void)(eight_bools ^= other_eight_bools);
+  // // Legal assignments
+  // (void)(eight_bools |= other_eight_bools);
+  // (void)(eight_bools &= other_eight_bools);
+  // (void)(eight_bools ^= other_eight_bools);
 
   // Illegal operators
   (void)(eight_bools || other_eight_bools); // expected-error@47 {{invalid operands to binary expression ('EightBools' (vector of 8 'bool' values) and 'EightBools')}}
@@ -74,8 +74,19 @@ void Operations() {
   (void)(eight_ints - eight_bools); // expected-error@74 {{cannot convert between vector type 'EightBools' (vector of 8 'bool' values) and vector type 'EightInts' (vector of 8 'int' values) as implicit conversion would cause truncation}}
 }
 
-// Check the conversion to integral type of same size
+// Allow scalar-to-vector broadcast. Do not allow bool vector conversions.
 void Conversions() {
   (void)((long)eight_bools); // expected-error@79 {{C-style cast from vector 'EightBools' (vector of 8 'bool' values) to scalar 'long' of different size}}
-  (void)((char)eight_bools);
+  (void)((EightBools) one_bool); // Scalar-to-vector broadcast.
+  (void)((char)eight_bools); // expected-error@81 {{C-style cast from vector 'EightBools' (vector of 8 'bool' values) to scalar 'char' of different size}}
+}
+
+void foo(const bool& X);
+
+// Disallow element-wise access.
+bool* ElementRefs() {
+  eight_bools.y = false; // expected-error@88 {{illegal vector component name ''y''}}
+  &eight_bools.z;        // expected-error@89 {{illegal vector component name ''z''}}
+  foo(eight_bools.w);    // expected-error@90 {{illegal vector component name ''w''}}
+  foo(eight_bools.wyx);  // expected-error@91 {{illegal vector component name ''wyx''}}
 }

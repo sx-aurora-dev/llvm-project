@@ -79,7 +79,7 @@ llvm::Optional<DriverInfo> parseDriverOutput(llvm::StringRef Output) {
   const char SIS[] = "#include <...> search starts here:";
   const char SIE[] = "End of search list.";
   const char TS[] = "Target: ";
-  llvm::SmallVector<llvm::StringRef, 8> Lines;
+  llvm::SmallVector<llvm::StringRef> Lines;
   Output.split(Lines, '\n', /*MaxSplit=*/-1, /*KeepEmpty=*/false);
 
   enum {
@@ -136,10 +136,26 @@ llvm::Optional<DriverInfo> parseDriverOutput(llvm::StringRef Output) {
 }
 
 llvm::Optional<DriverInfo>
-extractSystemIncludesAndTarget(PathRef Driver, llvm::StringRef Lang,
+extractSystemIncludesAndTarget(llvm::SmallString<128> Driver,
+                               llvm::StringRef Lang,
                                llvm::ArrayRef<std::string> CommandLine,
                                const llvm::Regex &QueryDriverRegex) {
   trace::Span Tracer("Extract system includes and target");
+
+  if (!llvm::sys::path::is_absolute(Driver)) {
+    assert(llvm::none_of(
+        Driver, [](char C) { return llvm::sys::path::is_separator(C); }));
+    auto DriverProgram = llvm::sys::findProgramByName(Driver);
+    if (DriverProgram) {
+      vlog("System include extraction: driver {0} expanded to {1}", Driver,
+           *DriverProgram);
+      Driver = *DriverProgram;
+    } else {
+      elog("System include extraction: driver {0} not found in PATH", Driver);
+      return llvm::None;
+    }
+  }
+
   SPAN_ATTACH(Tracer, "driver", Driver);
   SPAN_ATTACH(Tracer, "lang", Lang);
 
@@ -171,8 +187,8 @@ extractSystemIncludesAndTarget(PathRef Driver, llvm::StringRef Lang,
   llvm::Optional<llvm::StringRef> Redirects[] = {
       {""}, {""}, llvm::StringRef(StdErrPath)};
 
-  llvm::SmallVector<llvm::StringRef, 12> Args = {Driver, "-E", "-x",
-                                                 Lang,   "-",  "-v"};
+  llvm::SmallVector<llvm::StringRef> Args = {Driver, "-E", "-x",
+                                             Lang,   "-",  "-v"};
 
   // These flags will be preserved
   const llvm::StringRef FlagsToPreserve[] = {
@@ -332,7 +348,11 @@ public:
     }
 
     llvm::SmallString<128> Driver(Cmd->CommandLine.front());
-    llvm::sys::fs::make_absolute(Cmd->Directory, Driver);
+    if (llvm::any_of(Driver,
+                       [](char C) { return llvm::sys::path::is_separator(C); }))
+      // Driver is a not a single executable name but instead a path (either
+      // relative or absolute).
+      llvm::sys::fs::make_absolute(Cmd->Directory, Driver);
 
     if (auto Info =
             QueriedDrivers.get(/*Key=*/(Driver + ":" + Lang).str(), [&] {

@@ -2532,10 +2532,10 @@ QualType Sema::BuildArrayType(QualType T, ArrayType::ArraySizeModifier ASM,
 
 QualType Sema::BuildVectorType(QualType CurType, Expr *SizeExpr,
                                SourceLocation AttrLoc) {
-  // The base type must be boolean or integer (not enumeration) or float, and
+  // The base type must be integer (not Boolean or enumeration) or float, and
   // can't already be a vector.
   if ((!CurType->isDependentType() &&
-       (!CurType->isBuiltinType() ||
+       (!CurType->isBuiltinType() || CurType->isBooleanType() ||
         (!CurType->isIntegerType() && !CurType->isRealFloatingType()))) ||
       CurType->isArrayType()) {
     Diag(AttrLoc, diag::err_attribute_invalid_vector_type) << CurType;
@@ -2586,8 +2586,7 @@ QualType Sema::BuildVectorType(QualType CurType, Expr *SizeExpr,
     return QualType();
   }
 
-  uint64_t ElemSizeBits = CurType->isBooleanType() ? 1 : TypeSize;
-  return Context.getVectorType(CurType, VectorSizeBits / ElemSizeBits,
+  return Context.getVectorType(CurType, VectorSizeBits / TypeSize,
                                VectorType::GenericVector);
 }
 
@@ -2603,9 +2602,12 @@ QualType Sema::BuildExtVectorType(QualType T, Expr *ArraySize,
   // reserved data type under OpenCL v2.0 s6.1.4), we don't support selects
   // on bitvectors, and we have no well-defined ABI for bitvectors, so vectors
   // of bool aren't allowed.
+  //
+  // We explictly allow bool elements in ext_vector_type for C/C++.
+  bool IsNoBoolVecLang = getLangOpts().OpenCL || getLangOpts().OpenCLCPlusPlus;
   if ((!T->isDependentType() && !T->isIntegerType() &&
        !T->isRealFloatingType()) ||
-      T->isBooleanType()) {
+      (IsNoBoolVecLang && T->isBooleanType())) {
     Diag(AttrLoc, diag::err_attribute_invalid_vector_type) << T;
     return QualType();
   }
@@ -7642,13 +7644,13 @@ void Sema::adjustMemberFunctionCC(QualType &T, bool IsStatic, bool IsCtorOrDtor,
   T = Context.getAdjustedType(T, Wrapped);
 }
 
-/// HandleVectorSizeAttribute - this attribute is only applicable to boolean,
-/// integral and float scalars, although arrays, pointers, and function return
-/// values are allowed in conjunction with this construct. Aggregates with this
-/// attribute are invalid, even if they are of the same size as a corresponding
-/// scalar. The raw attribute should contain precisely 1 argument, the vector
-/// size for the variable, measured in bytes. If curType and rawAttr are well
-/// formed, this routine will return a new vector type.
+/// HandleVectorSizeAttribute - this attribute is only applicable to integral
+/// and float scalars, although arrays, pointers, and function return values are
+/// allowed in conjunction with this construct. Aggregates with this attribute
+/// are invalid, even if they are of the same size as a corresponding scalar.
+/// The raw attribute should contain precisely 1 argument, the vector size for
+/// the variable, measured in bytes. If curType and rawAttr are well formed,
+/// this routine will return a new vector type.
 static void HandleVectorSizeAttr(QualType &CurType, const ParsedAttr &Attr,
                                  Sema &S) {
   // Check the attribute arguments.
@@ -7800,7 +7802,8 @@ static void HandleNeonVectorTypeAttr(QualType &CurType, const ParsedAttr &Attr,
   // not to need a separate attribute)
   if (!S.Context.getTargetInfo().hasFeature("neon") &&
       !S.Context.getTargetInfo().hasFeature("mve")) {
-    S.Diag(Attr.getLoc(), diag::err_attribute_unsupported) << Attr;
+    S.Diag(Attr.getLoc(), diag::err_attribute_unsupported)
+        << Attr << "'neon' or 'mve'";
     Attr.setInvalid();
     return;
   }
@@ -7843,7 +7846,7 @@ static void HandleArmSveVectorBitsTypeAttr(QualType &CurType, ParsedAttr &Attr,
                                            Sema &S) {
   // Target must have SVE.
   if (!S.Context.getTargetInfo().hasFeature("sve")) {
-    S.Diag(Attr.getLoc(), diag::err_attribute_unsupported) << Attr;
+    S.Diag(Attr.getLoc(), diag::err_attribute_unsupported) << Attr << "'sve'";
     Attr.setInvalid();
     return;
   }
@@ -8993,9 +8996,11 @@ QualType Sema::BuildDecltypeType(Expr *E, SourceLocation Loc,
   assert(!E->hasPlaceholderType() && "unexpected placeholder");
 
   if (AsUnevaluated && CodeSynthesisContexts.empty() &&
-      E->HasSideEffects(Context, false)) {
+      !E->isInstantiationDependent() && E->HasSideEffects(Context, false)) {
     // The expression operand for decltype is in an unevaluated expression
     // context, so side effects could result in unintended consequences.
+    // Exclude instantiation-dependent expressions, because 'decltype' is often
+    // used to build SFINAE gadgets.
     Diag(E->getExprLoc(), diag::warn_side_effects_unevaluated_context);
   }
 

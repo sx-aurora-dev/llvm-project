@@ -24,15 +24,7 @@ namespace {
 
 template <class ELFT>
 class ELFDumper {
-  typedef object::Elf_Sym_Impl<ELFT> Elf_Sym;
-  typedef typename ELFT::Dyn Elf_Dyn;
-  typedef typename ELFT::Shdr Elf_Shdr;
-  typedef typename ELFT::Word Elf_Word;
-  typedef typename ELFT::Rel Elf_Rel;
-  typedef typename ELFT::Rela Elf_Rela;
-  using Elf_Relr = typename ELFT::Relr;
-  using Elf_Nhdr = typename ELFT::Nhdr;
-  using Elf_Note = typename ELFT::Note;
+  LLVM_ELF_IMPORT_TYPES_ELFT(ELFT)
 
   ArrayRef<Elf_Shdr> Sections;
   ArrayRef<Elf_Sym> SymTable;
@@ -661,8 +653,10 @@ template <class ELFT>
 Error ELFDumper<ELFT>::dumpSymbol(const Elf_Sym *Sym, const Elf_Shdr *SymTab,
                                   StringRef StrTable, ELFYAML::Symbol &S) {
   S.Type = Sym->getType();
-  S.Value = Sym->st_value;
-  S.Size = Sym->st_size;
+  if (Sym->st_value)
+    S.Value = (yaml::Hex64)Sym->st_value;
+  if (Sym->st_size)
+    S.Size = (yaml::Hex64)Sym->st_size;
   S.Other = Sym->st_other;
   S.Binding = Sym->getBinding();
 
@@ -1230,8 +1224,8 @@ ELFDumper<ELFT>::dumpHashSection(const Elf_Shdr *Shdr) {
 
   DataExtractor::Cursor Cur(0);
   DataExtractor Data(Content, Obj.isLE(), /*AddressSize=*/0);
-  uint32_t NBucket = Data.getU32(Cur);
-  uint32_t NChain = Data.getU32(Cur);
+  uint64_t NBucket = Data.getU32(Cur);
+  uint64_t NChain = Data.getU32(Cur);
   if (Content.size() != (2 + NBucket + NChain) * 4) {
     S->Content = yaml::BinaryRef(Content);
     if (Cur)
@@ -1269,9 +1263,9 @@ ELFDumper<ELFT>::dumpGnuHashSection(const Elf_Shdr *Shdr) {
 
   ELFYAML::GnuHashHeader Header;
   DataExtractor::Cursor Cur(0);
-  uint32_t NBuckets = Data.getU32(Cur);
+  uint64_t NBuckets = Data.getU32(Cur);
   Header.SymNdx = Data.getU32(Cur);
-  uint32_t MaskWords = Data.getU32(Cur);
+  uint64_t MaskWords = Data.getU32(Cur);
   Header.Shift2 = Data.getU32(Cur);
 
   // Set just the raw binary content if we were unable to read the header
@@ -1306,9 +1300,6 @@ ELFDumper<ELFT>::dumpGnuHashSection(const Elf_Shdr *Shdr) {
 template <class ELFT>
 Expected<ELFYAML::VerdefSection *>
 ELFDumper<ELFT>::dumpVerdefSection(const Elf_Shdr *Shdr) {
-  typedef typename ELFT::Verdef Elf_Verdef;
-  typedef typename ELFT::Verdaux Elf_Verdaux;
-
   auto S = std::make_unique<ELFYAML::VerdefSection>();
   if (Error E = dumpCommonSection(Shdr, *S))
     return std::move(E);
@@ -1358,8 +1349,6 @@ ELFDumper<ELFT>::dumpVerdefSection(const Elf_Shdr *Shdr) {
 template <class ELFT>
 Expected<ELFYAML::SymverSection *>
 ELFDumper<ELFT>::dumpSymverSection(const Elf_Shdr *Shdr) {
-  typedef typename ELFT::Half Elf_Half;
-
   auto S = std::make_unique<ELFYAML::SymverSection>();
   if (Error E = dumpCommonSection(Shdr, *S))
     return std::move(E);
@@ -1378,9 +1367,6 @@ ELFDumper<ELFT>::dumpSymverSection(const Elf_Shdr *Shdr) {
 template <class ELFT>
 Expected<ELFYAML::VerneedSection *>
 ELFDumper<ELFT>::dumpVerneedSection(const Elf_Shdr *Shdr) {
-  typedef typename ELFT::Verneed Elf_Verneed;
-  typedef typename ELFT::Vernaux Elf_Vernaux;
-
   auto S = std::make_unique<ELFYAML::VerneedSection>();
   if (Error E = dumpCommonSection(Shdr, *S))
     return std::move(E);

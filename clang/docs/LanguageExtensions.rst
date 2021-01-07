@@ -456,48 +456,42 @@ element type. For example:
 Boolean Vectors
 ---------------
 
-Unlike GCC, Clang also allows the attribute to be used with boolean
-element types. For example:
+Clang also supports the ext_vector_type attribute with boolean element types in
+C and C++.  For example:
 
 .. code-block:: c++
 
   // legal for Clang, error for GCC:
-  typedef bool bool8 __attribute__((vector_size(1)));
-  // Objects of bool8 type hold 8 bits, sizeof(bool8) == 1
+  typedef bool bool4 __attribute__((ext_vector_type(4)));
+  // Objects of bool4 type hold 8 bits, sizeof(bool4) == 1
 
-  typedef bool bool32 __attribute__((vector_size(4)));
-  // Objects of bool32 type hold 32 bits, sizeof(bool32) == 4
-
-  bool8 foo(bool8 a) {
-    bool8 v;
+  bool4 foo(bool4 a) {
+    bool4 v;
     v = a;
     return v;
   }
 
-Boolean vectors are a Clang extension of the GCC vector type.  Boolean vectors
+Boolean vectors are a Clang extension of the ext vector type.  Boolean vectors
 are intended, though not guaranteed, to map to vector mask registers.  The size
-parameter of a boolean vector type is the number of bytes in the vector.  The
-number of elements in a boolean vector of a given size depends on the target.
-For most targets, the boolean vector is dense and each bit in the boolean
-vector is one vector element.  However, some targets (eg Hexagon hvx64), use
-one byte per boolean element.
+parameter of a boolean vector type is the number of bits in the vector.  The
+boolean vector is dense and each bit in the boolean vector is one vector
+element.
 
-The semantics of boolean vectors differs from the GCC vector of integer or
-floating point type.  This is mostly because bits are smaller than the smallest
-addressable unit in memory on most architectures.  The semantics of boolean
-vectors borrows from C bit-fields with the following differences:
+The semantics of boolean vectors borrows from C bit-fields with the following
+differences:
 
 * Distinct boolean vectors are always distinct memory objects (there is no
   packing).
-* Only the operators `!`, `~`, `|`, `&`, `^` and comparison are allowed on
+* Only the operators `?:`, `!`, `~`, `|`, `&`, `^` and comparison are allowed on
   boolean vectors.
+* Casting a scalar bool value to a boolean vector type means broadcasting the
+  scalar value onto all lanes (same as general ext_vector_type).
+* It is not possible to access or swizzle elements of a boolean vector
+  (different than general ext_vector_type).
 
-The memory representation of a dense boolean vector is the smallest fitting
-integer.  The alignment is the number of bits rounded up to the next
-power-of-two but at most the maximum vector alignment of the target.  This
-permits the use of boolean vectors whose element count is a power of two in
-allocated arrays using the common ``sizeof(Array)/sizeof(ElementType)``
-pattern.
+The size and alignment are both the number of bits rounded up to the next power
+of two, but the alignment is at most the maximum vector alignment of the
+target.
 
 
 Vector Literals
@@ -1810,6 +1804,8 @@ portable wrappers for these.  Many of the Clang versions of these functions are
 implemented directly in terms of :ref:`extended vector support
 <langext-vectors>` instead of builtins, in order to reduce the number of
 builtins that we need to implement.
+
+.. _langext-__builtin_assume:
 
 ``__builtin_assume``
 ------------------------------

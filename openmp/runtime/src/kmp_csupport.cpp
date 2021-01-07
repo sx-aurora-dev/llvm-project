@@ -1249,7 +1249,7 @@ static __forceinline kmp_dyna_lockseq_t __kmp_map_hint_to_lock(uintptr_t hint) {
   if (hint & kmp_lock_hint_hle)
     return KMP_TSX_LOCK(hle);
   if (hint & kmp_lock_hint_rtm)
-    return KMP_CPUINFO_RTM ? KMP_TSX_LOCK(rtm) : __kmp_user_lock_seq;
+    return KMP_CPUINFO_RTM ? KMP_TSX_LOCK(rtm_queuing) : __kmp_user_lock_seq;
   if (hint & kmp_lock_hint_adaptive)
     return KMP_CPUINFO_RTM ? KMP_TSX_LOCK(adaptive) : __kmp_user_lock_seq;
 
@@ -1268,9 +1268,9 @@ static __forceinline kmp_dyna_lockseq_t __kmp_map_hint_to_lock(uintptr_t hint) {
   if ((hint & omp_lock_hint_uncontended) && !(hint & omp_lock_hint_speculative))
     return lockseq_tas;
 
-  // HLE lock for speculation
+  // Use RTM lock for speculation
   if (hint & omp_lock_hint_speculative)
-    return KMP_TSX_LOCK(hle);
+    return KMP_CPUINFO_RTM ? KMP_TSX_LOCK(rtm_spin) : __kmp_user_lock_seq;
 
   return __kmp_user_lock_seq;
 }
@@ -1291,6 +1291,7 @@ __ompt_get_mutex_impl_type(void *user_lock, kmp_indirect_lock_t *ilock = 0) {
       return kmp_mutex_impl_spin;
 #if KMP_USE_TSX
     case locktag_hle:
+    case locktag_rtm_spin:
       return kmp_mutex_impl_speculative;
 #endif
     default:
@@ -1302,7 +1303,7 @@ __ompt_get_mutex_impl_type(void *user_lock, kmp_indirect_lock_t *ilock = 0) {
   switch (ilock->type) {
 #if KMP_USE_TSX
   case locktag_adaptive:
-  case locktag_rtm:
+  case locktag_rtm_queuing:
     return kmp_mutex_impl_speculative;
 #endif
   case locktag_nested_tas:
@@ -1336,7 +1337,8 @@ static kmp_mutex_impl_t __ompt_get_mutex_impl_type() {
     return kmp_mutex_impl_queuing;
 #if KMP_USE_TSX
   case lk_hle:
-  case lk_rtm:
+  case lk_rtm_queuing:
+  case lk_rtm_spin:
   case lk_adaptive:
     return kmp_mutex_impl_speculative;
 #endif
@@ -1839,7 +1841,7 @@ void ompc_set_dynamic(int flag) {
 
   __kmp_save_internal_controls(thread);
 
-  set__dynamic(thread, flag ? TRUE : FALSE);
+  set__dynamic(thread, flag ? true : false);
 }
 
 void ompc_set_nested(int flag) {
@@ -2144,7 +2146,8 @@ __kmp_init_nest_lock_with_hint(ident_t *loc, void **lock,
                                kmp_dyna_lockseq_t seq) {
 #if KMP_USE_TSX
   // Don't have nested lock implementation for speculative locks
-  if (seq == lockseq_hle || seq == lockseq_rtm || seq == lockseq_adaptive)
+  if (seq == lockseq_hle || seq == lockseq_rtm_queuing ||
+      seq == lockseq_rtm_spin || seq == lockseq_adaptive)
     seq = __kmp_user_lock_seq;
 #endif
   switch (seq) {
@@ -3329,7 +3332,7 @@ __kmp_restore_swapped_teams(kmp_info_t *th, kmp_team_t *team, int task_state) {
   th->th.th_team = team;
   th->th.th_team_nproc = team->t.t_nproc;
   th->th.th_task_team = team->t.t_task_team[task_state];
-  th->th.th_task_state = task_state;
+  __kmp_type_convert(task_state, &(th->th.th_task_state));
 }
 
 /* 2.a.i. Reduce Block without a terminating barrier */
@@ -3962,7 +3965,8 @@ void __kmpc_doacross_init(ident_t *loc, int gtid, int num_dims,
 #endif
   if (flags == NULL) {
     // we are the first thread, allocate the array of flags
-    size_t size = trace_count / 8 + 8; // in bytes, use single bit per iteration
+    size_t size =
+        (size_t)trace_count / 8 + 8; // in bytes, use single bit per iteration
     flags = (kmp_uint32 *)__kmp_thread_calloc(th, size, 1);
     KMP_MB();
     sh_buf->doacross_flags = flags;
@@ -3987,7 +3991,8 @@ void __kmpc_doacross_init(ident_t *loc, int gtid, int num_dims,
 
 void __kmpc_doacross_wait(ident_t *loc, int gtid, const kmp_int64 *vec) {
   __kmp_assert_valid_gtid(gtid);
-  kmp_int32 shft, num_dims, i;
+  kmp_int64 shft;
+  size_t num_dims, i;
   kmp_uint32 flag;
   kmp_int64 iter_number; // iteration number of "collapsed" loop nest
   kmp_info_t *th = __kmp_threads[gtid];
@@ -4004,7 +4009,7 @@ void __kmpc_doacross_wait(ident_t *loc, int gtid, const kmp_int64 *vec) {
   // calculate sequential iteration number and check out-of-bounds condition
   pr_buf = th->th.th_dispatch;
   KMP_DEBUG_ASSERT(pr_buf->th_doacross_info != NULL);
-  num_dims = pr_buf->th_doacross_info[0];
+  num_dims = (size_t)pr_buf->th_doacross_info[0];
   lo = pr_buf->th_doacross_info[2];
   up = pr_buf->th_doacross_info[3];
   st = pr_buf->th_doacross_info[4];
@@ -4042,7 +4047,7 @@ void __kmpc_doacross_wait(ident_t *loc, int gtid, const kmp_int64 *vec) {
 #endif
   for (i = 1; i < num_dims; ++i) {
     kmp_int64 iter, ln;
-    kmp_int32 j = i * 4;
+    size_t j = i * 4;
     ln = pr_buf->th_doacross_info[j + 1];
     lo = pr_buf->th_doacross_info[j + 2];
     up = pr_buf->th_doacross_info[j + 3];
@@ -4088,7 +4093,7 @@ void __kmpc_doacross_wait(ident_t *loc, int gtid, const kmp_int64 *vec) {
 #if OMPT_SUPPORT && OMPT_OPTIONAL
   if (ompt_enabled.ompt_callback_dependences) {
     ompt_callbacks.ompt_callback(ompt_callback_dependences)(
-        &(OMPT_CUR_TASK_INFO(th)->task_data), deps, num_dims);
+        &(OMPT_CUR_TASK_INFO(th)->task_data), deps, (kmp_uint32)num_dims);
   }
 #endif
   KA_TRACE(20,
@@ -4098,7 +4103,8 @@ void __kmpc_doacross_wait(ident_t *loc, int gtid, const kmp_int64 *vec) {
 
 void __kmpc_doacross_post(ident_t *loc, int gtid, const kmp_int64 *vec) {
   __kmp_assert_valid_gtid(gtid);
-  kmp_int32 shft, num_dims, i;
+  kmp_int64 shft;
+  size_t num_dims, i;
   kmp_uint32 flag;
   kmp_int64 iter_number; // iteration number of "collapsed" loop nest
   kmp_info_t *th = __kmp_threads[gtid];
@@ -4116,7 +4122,7 @@ void __kmpc_doacross_post(ident_t *loc, int gtid, const kmp_int64 *vec) {
   // out-of-bounds checks)
   pr_buf = th->th.th_dispatch;
   KMP_DEBUG_ASSERT(pr_buf->th_doacross_info != NULL);
-  num_dims = pr_buf->th_doacross_info[0];
+  num_dims = (size_t)pr_buf->th_doacross_info[0];
   lo = pr_buf->th_doacross_info[2];
   st = pr_buf->th_doacross_info[4];
 #if OMPT_SUPPORT && OMPT_OPTIONAL
@@ -4135,7 +4141,7 @@ void __kmpc_doacross_post(ident_t *loc, int gtid, const kmp_int64 *vec) {
 #endif
   for (i = 1; i < num_dims; ++i) {
     kmp_int64 iter, ln;
-    kmp_int32 j = i * 4;
+    size_t j = i * 4;
     ln = pr_buf->th_doacross_info[j + 1];
     lo = pr_buf->th_doacross_info[j + 2];
     st = pr_buf->th_doacross_info[j + 4];
@@ -4155,7 +4161,7 @@ void __kmpc_doacross_post(ident_t *loc, int gtid, const kmp_int64 *vec) {
 #if OMPT_SUPPORT && OMPT_OPTIONAL
   if (ompt_enabled.ompt_callback_dependences) {
     ompt_callbacks.ompt_callback(ompt_callback_dependences)(
-        &(OMPT_CUR_TASK_INFO(th)->task_data), deps, num_dims);
+        &(OMPT_CUR_TASK_INFO(th)->task_data), deps, (kmp_uint32)num_dims);
   }
 #endif
   shft = iter_number % 32; // use 32-bit granularity
@@ -4180,7 +4186,8 @@ void __kmpc_doacross_fini(ident_t *loc, int gtid) {
     KA_TRACE(20, ("__kmpc_doacross_fini() exit: serialized team %p\n", team));
     return; // nothing to do
   }
-  num_done = KMP_TEST_THEN_INC32((kmp_int32 *)pr_buf->th_doacross_info[1]) + 1;
+  num_done =
+      KMP_TEST_THEN_INC32((kmp_uintptr_t)(pr_buf->th_doacross_info[1])) + 1;
   if (num_done == th->th.th_team_nproc) {
     // we are the last thread, need to free shared resources
     int idx = pr_buf->th_doacross_buf_idx - 1;

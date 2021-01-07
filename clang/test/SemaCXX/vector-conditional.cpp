@@ -13,7 +13,7 @@ using TwoFloats = float __attribute__((__vector_size__(8)));
 using FourFloats = float __attribute__((__vector_size__(16)));
 using TwoDoubles = double __attribute__((__vector_size__(16)));
 using FourDoubles = double __attribute__((__vector_size__(32)));
-using EightBools = bool __attribute__((__vector_size__(2)));
+using EightBools = bool __attribute__((ext_vector_type(8)));
 
 FourShorts four_shorts;
 TwoInts two_ints;

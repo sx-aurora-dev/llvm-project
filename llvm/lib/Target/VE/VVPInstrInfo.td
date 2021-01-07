@@ -207,15 +207,15 @@ class vvp_fma_commutative<SDNode RootOp> :
 
 
 // commutative match
-def c_vv_fadd        : vvp_commutative<vvp_fadd>;
-def c_vv_fmul        : vvp_commutative<vvp_fmul>;
-def c_vv_add         : vvp_commutative<vvp_add>;
-def c_vv_mul         : vvp_commutative<vvp_mul>;
-def c_vv_and         : vvp_commutative<vvp_and>;
-def c_vv_or          : vvp_commutative<vvp_xor>;
-def c_vv_xor         : vvp_commutative<vvp_or>;
+def c_vvp_fadd        : vvp_commutative<vvp_fadd>;
+def c_vvp_fmul        : vvp_commutative<vvp_fmul>;
+def c_vvp_add         : vvp_commutative<vvp_add>;
+def c_vvp_mul         : vvp_commutative<vvp_mul>;
+def c_vvp_and         : vvp_commutative<vvp_and>;
+def c_vvp_or          : vvp_commutative<vvp_xor>;
+def c_vvp_xor         : vvp_commutative<vvp_or>;
 
-def c_vv_fminnum     : vvp_commutative<vvp_fminnum>;
-def c_vv_fmaxnum     : vvp_commutative<vvp_fmaxnum>;
+def c_vvp_fminnum     : vvp_commutative<vvp_fminnum>;
+def c_vvp_fmaxnum     : vvp_commutative<vvp_fmaxnum>;
 
-def c_vv_ffma     : vvp_fma_commutative<vvp_ffma>;
+def c_vvp_ffma     : vvp_fma_commutative<vvp_ffma>;

@@ -962,8 +962,10 @@ py::object PyOperation::create(
     llvm::SmallVector<MlirNamedAttribute, 4> mlirNamedAttributes;
     mlirNamedAttributes.reserve(mlirAttributes.size());
     for (auto &it : mlirAttributes)
-      mlirNamedAttributes.push_back(
-          mlirNamedAttributeGet(toMlirStringRef(it.first), it.second));
+      mlirNamedAttributes.push_back(mlirNamedAttributeGet(
+          mlirIdentifierGet(mlirAttributeGetContext(it.second),
+                            toMlirStringRef(it.first)),
+          it.second));
     mlirOperationStateAddAttributes(&state, mlirNamedAttributes.size(),
                                     mlirNamedAttributes.data());
   }
@@ -1134,7 +1136,10 @@ PyAttribute PyAttribute::createFromCapsule(py::object capsule) {
 
 PyNamedAttribute::PyNamedAttribute(MlirAttribute attr, std::string ownedName)
     : ownedName(new std::string(std::move(ownedName))) {
-  namedAttr = mlirNamedAttributeGet(toMlirStringRef(*this->ownedName), attr);
+  namedAttr = mlirNamedAttributeGet(
+      mlirIdentifierGet(mlirAttributeGetContext(attr),
+                        toMlirStringRef(*this->ownedName)),
+      attr);
 }
 
 //------------------------------------------------------------------------------
@@ -1373,8 +1378,9 @@ public:
     }
     MlirNamedAttribute namedAttr =
         mlirOperationGetAttribute(operation->get(), index);
-    return PyNamedAttribute(namedAttr.attribute,
-                            std::string(namedAttr.name.data));
+    return PyNamedAttribute(
+        namedAttr.attribute,
+        std::string(mlirIdentifierStr(namedAttr.name).data));
   }
 
   void dunderSetItem(const std::string &name, PyAttribute attr) {
@@ -1459,6 +1465,83 @@ public:
 
   /// Implemented by derived classes to add methods to the Python subclass.
   static void bindDerived(ClassTy &m) {}
+};
+
+class PyArrayAttribute : public PyConcreteAttribute<PyArrayAttribute> {
+public:
+  static constexpr IsAFunctionTy isaFunction = mlirAttributeIsAArray;
+  static constexpr const char *pyClassName = "ArrayAttr";
+  using PyConcreteAttribute::PyConcreteAttribute;
+
+  class PyArrayAttributeIterator {
+  public:
+    PyArrayAttributeIterator(PyAttribute attr) : attr(attr) {}
+
+    PyArrayAttributeIterator &dunderIter() { return *this; }
+
+    PyAttribute dunderNext() {
+      if (nextIndex >= mlirArrayAttrGetNumElements(attr.get())) {
+        throw py::stop_iteration();
+      }
+      return PyAttribute(attr.getContext(),
+                         mlirArrayAttrGetElement(attr.get(), nextIndex++));
+    }
+
+    static void bind(py::module &m) {
+      py::class_<PyArrayAttributeIterator>(m, "ArrayAttributeIterator")
+          .def("__iter__", &PyArrayAttributeIterator::dunderIter)
+          .def("__next__", &PyArrayAttributeIterator::dunderNext);
+    }
+
+  private:
+    PyAttribute attr;
+    int nextIndex = 0;
+  };
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](py::list attributes, DefaultingPyMlirContext context) {
+          SmallVector<MlirAttribute> mlirAttributes;
+          mlirAttributes.reserve(py::len(attributes));
+          for (auto attribute : attributes) {
+            try {
+              mlirAttributes.push_back(attribute.cast<PyAttribute>());
+            } catch (py::cast_error &err) {
+              std::string msg = std::string("Invalid attribute when attempting "
+                                            "to create an ArrayAttribute (") +
+                                err.what() + ")";
+              throw py::cast_error(msg);
+            } catch (py::reference_cast_error &err) {
+              // This exception seems thrown when the value is "None".
+              std::string msg =
+                  std::string("Invalid attribute (None?) when attempting to "
+                              "create an ArrayAttribute (") +
+                  err.what() + ")";
+              throw py::cast_error(msg);
+            }
+          }
+          MlirAttribute attr = mlirArrayAttrGet(
+              context->get(), mlirAttributes.size(), mlirAttributes.data());
+          return PyArrayAttribute(context->getRef(), attr);
+        },
+        py::arg("attributes"), py::arg("context") = py::none(),
+        "Gets a uniqued Array attribute");
+    c.def("__getitem__",
+          [](PyArrayAttribute &arr, intptr_t i) {
+            if (i >= mlirArrayAttrGetNumElements(arr))
+              throw py::index_error("ArrayAttribute index out of range");
+            return PyAttribute(arr.getContext(),
+                               mlirArrayAttrGetElement(arr, i));
+          })
+        .def("__len__",
+             [](const PyArrayAttribute &arr) {
+               return mlirArrayAttrGetNumElements(arr);
+             })
+        .def("__iter__", [](const PyArrayAttribute &arr) {
+          return PyArrayAttributeIterator(arr);
+        });
+  }
 };
 
 /// Float Point Attribute subclass - FloatAttr.
@@ -1557,6 +1640,33 @@ public:
         "value",
         [](PyBoolAttribute &self) { return mlirBoolAttrGetValue(self); },
         "Returns the value of the bool attribute");
+  }
+};
+
+class PyFlatSymbolRefAttribute
+    : public PyConcreteAttribute<PyFlatSymbolRefAttribute> {
+public:
+  static constexpr IsAFunctionTy isaFunction = mlirAttributeIsAFlatSymbolRef;
+  static constexpr const char *pyClassName = "FlatSymbolRefAttr";
+  using PyConcreteAttribute::PyConcreteAttribute;
+
+  static void bindDerived(ClassTy &c) {
+    c.def_static(
+        "get",
+        [](std::string value, DefaultingPyMlirContext context) {
+          MlirAttribute attr =
+              mlirFlatSymbolRefAttrGet(context->get(), toMlirStringRef(value));
+          return PyFlatSymbolRefAttribute(context->getRef(), attr);
+        },
+        py::arg("value"), py::arg("context") = py::none(),
+        "Gets a uniqued FlatSymbolRef attribute");
+    c.def_property_readonly(
+        "value",
+        [](PyFlatSymbolRefAttribute &self) {
+          MlirStringRef stringRef = mlirFlatSymbolRefAttrGetValue(self);
+          return py::str(stringRef.data, stringRef.length);
+        },
+        "Returns the value of the FlatSymbolRef attribute as a string");
   }
 };
 
@@ -1882,6 +1992,58 @@ public:
 
   static void bindDerived(ClassTy &c) {
     c.def("__getitem__", &PyDenseIntElementsAttribute::dunderGetItem);
+  }
+};
+
+class PyDictAttribute : public PyConcreteAttribute<PyDictAttribute> {
+public:
+  static constexpr IsAFunctionTy isaFunction = mlirAttributeIsADictionary;
+  static constexpr const char *pyClassName = "DictAttr";
+  using PyConcreteAttribute::PyConcreteAttribute;
+
+  intptr_t dunderLen() { return mlirDictionaryAttrGetNumElements(*this); }
+
+  static void bindDerived(ClassTy &c) {
+    c.def("__len__", &PyDictAttribute::dunderLen);
+    c.def_static(
+        "get",
+        [](py::dict attributes, DefaultingPyMlirContext context) {
+          SmallVector<MlirNamedAttribute> mlirNamedAttributes;
+          mlirNamedAttributes.reserve(attributes.size());
+          for (auto &it : attributes) {
+            auto &mlir_attr = it.second.cast<PyAttribute &>();
+            auto name = it.first.cast<std::string>();
+            mlirNamedAttributes.push_back(mlirNamedAttributeGet(
+                mlirIdentifierGet(mlirAttributeGetContext(mlir_attr),
+                                  toMlirStringRef(name)),
+                mlir_attr));
+          }
+          MlirAttribute attr =
+              mlirDictionaryAttrGet(context->get(), mlirNamedAttributes.size(),
+                                    mlirNamedAttributes.data());
+          return PyDictAttribute(context->getRef(), attr);
+        },
+        py::arg("value"), py::arg("context") = py::none(),
+        "Gets an uniqued dict attribute");
+    c.def("__getitem__", [](PyDictAttribute &self, const std::string &name) {
+      MlirAttribute attr =
+          mlirDictionaryAttrGetElementByName(self, toMlirStringRef(name));
+      if (mlirAttributeIsNull(attr)) {
+        throw SetPyError(PyExc_KeyError,
+                         "attempt to access a non-existent attribute");
+      }
+      return PyAttribute(self.getContext(), attr);
+    });
+    c.def("__getitem__", [](PyDictAttribute &self, intptr_t index) {
+      if (index < 0 || index >= self.dunderLen()) {
+        throw SetPyError(PyExc_IndexError,
+                         "attempt to access out of bounds attribute");
+      }
+      MlirNamedAttribute namedAttr = mlirDictionaryAttrGetElement(self, index);
+      return PyNamedAttribute(
+          namedAttr.attribute,
+          std::string(mlirIdentifierStr(namedAttr.name).data));
+    });
   }
 };
 
@@ -2549,6 +2711,27 @@ public:
 } // namespace
 
 //------------------------------------------------------------------------------
+// PyAffineMap.
+//------------------------------------------------------------------------------
+
+bool PyAffineMap::operator==(const PyAffineMap &other) {
+  return mlirAffineMapEqual(affineMap, other.affineMap);
+}
+
+py::object PyAffineMap::getCapsule() {
+  return py::reinterpret_steal<py::object>(mlirPythonAffineMapToCapsule(*this));
+}
+
+PyAffineMap PyAffineMap::createFromCapsule(py::object capsule) {
+  MlirAffineMap rawAffineMap = mlirPythonCapsuleToAffineMap(capsule.ptr());
+  if (mlirAffineMapIsNull(rawAffineMap))
+    throw py::error_already_set();
+  return PyAffineMap(
+      PyMlirContext::forContext(mlirAffineMapGetContext(rawAffineMap)),
+      rawAffineMap);
+}
+
+//------------------------------------------------------------------------------
 // Populates the pybind11 IR submodule.
 //------------------------------------------------------------------------------
 
@@ -2863,7 +3046,14 @@ void mlir::python::populateIRSubmodule(py::module &m) {
            py::arg("enable_debug_info") = false,
            py::arg("pretty_debug_info") = false,
            py::arg("print_generic_op_form") = false,
-           py::arg("use_local_scope") = false, kOperationGetAsmDocstring);
+           py::arg("use_local_scope") = false, kOperationGetAsmDocstring)
+      .def(
+          "verify",
+          [](PyOperationBase &self) {
+            return mlirOperationVerify(self.getOperation());
+          },
+          "Verify the operation and return true if it passes, false if it "
+          "fails.");
 
   py::class_<PyOperation, PyOperationBase>(m, "Operation")
       .def_static("create", &PyOperation::create, py::arg("name"),
@@ -2873,6 +3063,13 @@ void mlir::python::populateIRSubmodule(py::module &m) {
                   py::arg("successors") = py::none(), py::arg("regions") = 0,
                   py::arg("loc") = py::none(), py::arg("ip") = py::none(),
                   kOperationCreateDocstring)
+      .def_property_readonly("name",
+                             [](PyOperation &self) {
+                               MlirOperation operation = self.get();
+                               MlirStringRef name = mlirIdentifierStr(
+                                   mlirOperationGetName(operation));
+                               return py::str(name.data, name.length);
+                             })
       .def_property_readonly(
           "context",
           [](PyOperation &self) { return self.getContext().getObject(); },
@@ -3060,7 +3257,8 @@ void mlir::python::populateIRSubmodule(py::module &m) {
            [](PyNamedAttribute &self) {
              PyPrintAccumulator printAccum;
              printAccum.parts.append("NamedAttribute(");
-             printAccum.parts.append(self.namedAttr.name.data);
+             printAccum.parts.append(
+                 mlirIdentifierStr(self.namedAttr.name).data);
              printAccum.parts.append("=");
              mlirAttributePrint(self.namedAttr.attribute,
                                 printAccum.getCallback(),
@@ -3071,8 +3269,8 @@ void mlir::python::populateIRSubmodule(py::module &m) {
       .def_property_readonly(
           "name",
           [](PyNamedAttribute &self) {
-            return py::str(self.namedAttr.name.data,
-                           self.namedAttr.name.length);
+            return py::str(mlirIdentifierStr(self.namedAttr.name).data,
+                           mlirIdentifierStr(self.namedAttr.name).length);
           },
           "The name of the NamedAttribute binding")
       .def_property_readonly(
@@ -3089,12 +3287,16 @@ void mlir::python::populateIRSubmodule(py::module &m) {
 
   // Builtin attribute bindings.
   PyFloatAttribute::bind(m);
+  PyArrayAttribute::bind(m);
+  PyArrayAttribute::PyArrayAttributeIterator::bind(m);
   PyIntegerAttribute::bind(m);
   PyBoolAttribute::bind(m);
+  PyFlatSymbolRefAttribute::bind(m);
   PyStringAttribute::bind(m);
   PyDenseElementsAttribute::bind(m);
   PyDenseIntElementsAttribute::bind(m);
   PyDenseFPElementsAttribute::bind(m);
+  PyDictAttribute::bind(m);
   PyTypeAttribute::bind(m);
   PyUnitAttribute::bind(m);
 
@@ -3211,4 +3413,29 @@ void mlir::python::populateIRSubmodule(py::module &m) {
   PyOpResultList::bind(m);
   PyRegionIterator::bind(m);
   PyRegionList::bind(m);
+
+  //----------------------------------------------------------------------------
+  // Mapping of PyAffineMap.
+  //----------------------------------------------------------------------------
+  py::class_<PyAffineMap>(m, "AffineMap")
+      .def_property_readonly(MLIR_PYTHON_CAPI_PTR_ATTR,
+                             &PyAffineMap::getCapsule)
+      .def(MLIR_PYTHON_CAPI_FACTORY_ATTR, &PyAffineMap::createFromCapsule)
+      .def_static(
+          "get_empty",
+          [](DefaultingPyMlirContext context) {
+            MlirAffineMap affineMap = mlirAffineMapEmptyGet(context->get());
+            return PyAffineMap(context->getRef(), affineMap);
+          },
+          py::arg("context") = py::none(), "Gets an empty affine map.")
+      .def_property_readonly(
+          "context",
+          [](PyAffineMap &self) { return self.getContext().getObject(); },
+          "Context that owns the Affine Map")
+      .def("__eq__",
+           [](PyAffineMap &self, PyAffineMap &other) { return self == other; })
+      .def("__eq__", [](PyAffineMap &self, py::object &other) { return false; })
+      .def(
+          "dump", [](PyAffineMap &self) { mlirAffineMapDump(self); },
+          kDumpDocstring);
 }

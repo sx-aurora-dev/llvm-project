@@ -57,6 +57,7 @@ public:
     CortexA76,
     CortexA77,
     CortexA78,
+    CortexA78C,
     CortexR82,
     CortexX1,
     ExynosM3,
@@ -86,6 +87,7 @@ protected:
   bool HasV8_4aOps = false;
   bool HasV8_5aOps = false;
   bool HasV8_6aOps = false;
+  bool HasV8_7aOps = false;
 
   bool HasV8_0rOps = false;
   bool HasCONTEXTIDREL2 = false;
@@ -167,6 +169,12 @@ protected:
   bool HasFineGrainedTraps = false;
   bool HasEnhancedCounterVirtualization = false;
 
+  // Armv8.7-A Extensions
+  bool HasXS = false;
+  bool HasWFxT = false;
+  bool HasHCX = false;
+  bool HasLS64 = false;
+
   // Arm SVE2 extensions
   bool HasSVE2 = false;
   bool HasSVE2AES = false;
@@ -177,6 +185,8 @@ protected:
   // Future architecture extensions.
   bool HasETE = false;
   bool HasTRBE = false;
+  bool HasBRBE = false;
+  bool HasSPE_EEF = false;
 
   // HasZeroCycleRegMove - Has zero-cycle register mov instructions.
   bool HasZeroCycleRegMove = false;
@@ -494,6 +504,10 @@ public:
   bool hasTRACEV8_4() const { return HasTRACEV8_4; }
   bool hasAM() const { return HasAM; }
   bool hasAMVS() const { return HasAMVS; }
+  bool hasXS() const { return HasXS; }
+  bool hasWFxT() const { return HasWFxT; }
+  bool hasHCX() const { return HasHCX; }
+  bool hasLS64() const { return HasLS64; }
   bool hasSEL2() const { return HasSEL2; }
   bool hasPMU() const { return HasPMU; }
   bool hasTLB_RMI() const { return HasTLB_RMI; }

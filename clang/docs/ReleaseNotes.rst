@@ -118,6 +118,18 @@ Modified Compiler Flags
   `-fno-delete-null-pointer-checks` has gained the power to remove the
   `nonnull` attribute on `this` for configurations that need it to be nullable.
 - ``-gsplit-dwarf`` no longer implies ``-g2``.
+- ``-fasynchronous-unwind-tables`` is now the default on Linux AArch64/PowerPC.
+  This behavior matches newer GCC.
+  (`D91760 <https://reviews.llvm.org/D91760>`_)
+  (`D92054 <https://reviews.llvm.org/D92054>`_)
+
+Removed Compiler Flags
+-------------------------
+
+The following options no longer exist.
+
+- clang-cl's ``/Zd`` flag no longer exist. But ``-gline-tables-only`` still
+  exists and does the same thing.
 
 New Pragmas in Clang
 --------------------
@@ -272,12 +284,17 @@ clang-format
     };
 
 
-- Experimental Support in clang-format for concepts has been improved, to 
+- Experimental Support in clang-format for concepts has been improved, to
   aid this the follow options have been added
 
 - Option ``IndentRequires`` has been added to indent the ``requires`` keyword
   in templates.
 - Option ``BreakBeforeConceptDeclarations`` has been added to aid the formatting of concepts.
+
+- Option ``IndentPragmas`` has been added to allow #pragma to indented with the current scope level. This is especially useful when using #pragma to mark OpenMP sections of code.
+
+- Option ``SpaceBeforeCaseColon`` has been added to add a space before the
+  colon in a case or default statement.
 
 
 libclang

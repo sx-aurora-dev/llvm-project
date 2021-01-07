@@ -96,45 +96,6 @@ static bool isSignTest(ICmpInst::Predicate &Pred, const APInt &C) {
   return false;
 }
 
-/// Given a signed integer type and a set of known zero and one bits, compute
-/// the maximum and minimum values that could have the specified known zero and
-/// known one bits, returning them in Min/Max.
-/// TODO: Move to method on KnownBits struct?
-static void computeSignedMinMaxValuesFromKnownBits(const KnownBits &Known,
-                                                   APInt &Min, APInt &Max) {
-  assert(Known.getBitWidth() == Min.getBitWidth() &&
-         Known.getBitWidth() == Max.getBitWidth() &&
-         "KnownZero, KnownOne and Min, Max must have equal bitwidth.");
-  APInt UnknownBits = ~(Known.Zero|Known.One);
-
-  // The minimum value is when all unknown bits are zeros, EXCEPT for the sign
-  // bit if it is unknown.
-  Min = Known.One;
-  Max = Known.One|UnknownBits;
-
-  if (UnknownBits.isNegative()) { // Sign bit is unknown
-    Min.setSignBit();
-    Max.clearSignBit();
-  }
-}
-
-/// Given an unsigned integer type and a set of known zero and one bits, compute
-/// the maximum and minimum values that could have the specified known zero and
-/// known one bits, returning them in Min/Max.
-/// TODO: Move to method on KnownBits struct?
-static void computeUnsignedMinMaxValuesFromKnownBits(const KnownBits &Known,
-                                                     APInt &Min, APInt &Max) {
-  assert(Known.getBitWidth() == Min.getBitWidth() &&
-         Known.getBitWidth() == Max.getBitWidth() &&
-         "Ty, KnownZero, KnownOne and Min, Max must have equal bitwidth.");
-  APInt UnknownBits = ~(Known.Zero|Known.One);
-
-  // The minimum value is when the unknown bits are all zeros.
-  Min = Known.One;
-  // The maximum value is when the unknown bits are all ones.
-  Max = Known.One|UnknownBits;
-}
-
 /// This is called when we see this pattern:
 ///   cmp pred (load (gep GV, ...)), cmpcst
 /// where GV is a global variable with a constant initializer. Try to simplify
@@ -899,8 +860,8 @@ Instruction *InstCombinerImpl::foldGEPICmp(GEPOperator *GEPLHS, Value *RHS,
     // For vectors, we apply the same reasoning on a per-lane basis.
     auto *Base = GEPLHS->getPointerOperand();
     if (GEPLHS->getType()->isVectorTy() && Base->getType()->isPointerTy()) {
-      int NumElts = cast<FixedVectorType>(GEPLHS->getType())->getNumElements();
-      Base = Builder.CreateVectorSplat(NumElts, Base);
+      auto EC = cast<VectorType>(GEPLHS->getType())->getElementCount();
+      Base = Builder.CreateVectorSplat(EC, Base);
     }
     return new ICmpInst(Cond, Base,
                         ConstantExpr::getPointerBitCastOrAddrSpaceCast(
@@ -1885,8 +1846,7 @@ Instruction *InstCombinerImpl::foldICmpAndConstant(ICmpInst &Cmp,
     if (ExactLogBase2 != -1 && DL.isLegalInteger(ExactLogBase2 + 1)) {
       Type *NTy = IntegerType::get(Cmp.getContext(), ExactLogBase2 + 1);
       if (auto *AndVTy = dyn_cast<VectorType>(And->getType()))
-        NTy = FixedVectorType::get(
-            NTy, cast<FixedVectorType>(AndVTy)->getNumElements());
+        NTy = VectorType::get(NTy, AndVTy->getElementCount());
       Value *Trunc = Builder.CreateTrunc(X, NTy);
       auto NewPred = Cmp.getPredicate() == CmpInst::ICMP_EQ ? CmpInst::ICMP_SGE
                                                             : CmpInst::ICMP_SLT;
@@ -2192,8 +2152,7 @@ Instruction *InstCombinerImpl::foldICmpShlConstant(ICmpInst &Cmp,
       DL.isLegalInteger(TypeBits - Amt)) {
     Type *TruncTy = IntegerType::get(Cmp.getContext(), TypeBits - Amt);
     if (auto *ShVTy = dyn_cast<VectorType>(ShType))
-      TruncTy = FixedVectorType::get(
-          TruncTy, cast<FixedVectorType>(ShVTy)->getNumElements());
+      TruncTy = VectorType::get(TruncTy, ShVTy->getElementCount());
     Constant *NewC =
         ConstantInt::get(TruncTy, C.ashr(*ShiftAmt).trunc(TypeBits - Amt));
     return new ICmpInst(Pred, Builder.CreateTrunc(X, TruncTy), NewC);
@@ -2827,8 +2786,7 @@ static Instruction *foldICmpBitCast(ICmpInst &Cmp,
 
           Type *NewType = Builder.getIntNTy(XType->getScalarSizeInBits());
           if (auto *XVTy = dyn_cast<VectorType>(XType))
-            NewType = FixedVectorType::get(
-                NewType, cast<FixedVectorType>(XVTy)->getNumElements());
+            NewType = VectorType::get(NewType, XVTy->getElementCount());
           Value *NewBitcast = Builder.CreateBitCast(X, NewType);
           if (TrueIfSigned)
             return new ICmpInst(ICmpInst::ICMP_SLT, NewBitcast,
@@ -3411,8 +3369,8 @@ static Value *foldICmpWithLowBitMaskedVal(ICmpInst &I,
   // those elements by copying an existing, defined, and safe scalar constant.
   Type *OpTy = M->getType();
   auto *VecC = dyn_cast<Constant>(M);
-  if (OpTy->isVectorTy() && VecC && VecC->containsUndefElement()) {
-    auto *OpVTy = cast<FixedVectorType>(OpTy);
+  auto *OpVTy = dyn_cast<FixedVectorType>(OpTy);
+  if (OpVTy && VecC && VecC->containsUndefElement()) {
     Constant *SafeReplacementConstant = nullptr;
     for (unsigned i = 0, e = OpVTy->getNumElements(); i != e; ++i) {
       if (!isa<UndefValue>(VecC->getAggregateElement(i))) {
@@ -5053,11 +5011,15 @@ Instruction *InstCombinerImpl::foldICmpUsingKnownBits(ICmpInst &I) {
   APInt Op0Min(BitWidth, 0), Op0Max(BitWidth, 0);
   APInt Op1Min(BitWidth, 0), Op1Max(BitWidth, 0);
   if (I.isSigned()) {
-    computeSignedMinMaxValuesFromKnownBits(Op0Known, Op0Min, Op0Max);
-    computeSignedMinMaxValuesFromKnownBits(Op1Known, Op1Min, Op1Max);
+    Op0Min = Op0Known.getSignedMinValue();
+    Op0Max = Op0Known.getSignedMaxValue();
+    Op1Min = Op1Known.getSignedMinValue();
+    Op1Max = Op1Known.getSignedMaxValue();
   } else {
-    computeUnsignedMinMaxValuesFromKnownBits(Op0Known, Op0Min, Op0Max);
-    computeUnsignedMinMaxValuesFromKnownBits(Op1Known, Op1Min, Op1Max);
+    Op0Min = Op0Known.getMinValue();
+    Op0Max = Op0Known.getMaxValue();
+    Op1Min = Op1Known.getMinValue();
+    Op1Max = Op1Known.getMaxValue();
   }
 
   // If Min and Max are known to be the same, then SimplifyDemandedBits figured
@@ -5075,11 +5037,9 @@ Instruction *InstCombinerImpl::foldICmpUsingKnownBits(ICmpInst &I) {
     llvm_unreachable("Unknown icmp opcode!");
   case ICmpInst::ICMP_EQ:
   case ICmpInst::ICMP_NE: {
-    if (Op0Max.ult(Op1Min) || Op0Min.ugt(Op1Max)) {
-      return Pred == CmpInst::ICMP_EQ
-                 ? replaceInstUsesWith(I, ConstantInt::getFalse(I.getType()))
-                 : replaceInstUsesWith(I, ConstantInt::getTrue(I.getType()));
-    }
+    if (Op0Max.ult(Op1Min) || Op0Min.ugt(Op1Max))
+      return replaceInstUsesWith(
+          I, ConstantInt::getBool(I.getType(), Pred == CmpInst::ICMP_NE));
 
     // If all bits are known zero except for one, then we know at most one bit
     // is set. If the comparison is against zero, then this is a check to see if

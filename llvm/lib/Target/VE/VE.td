@@ -60,9 +60,7 @@ def VEAsmParser : AsmParser {
 class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
-def : Proc<"ve",             [FeatureEnableVPU]>;
-// def : Processor<"ve", VEItinerary, []>;
-// def : ProcessorModel<"ve", VESchedModel, []>;
+def : Proc<"generic", [FeatureEnableVPU]>;
 
 //===----------------------------------------------------------------------===//
 // Declare the target which we are implementing

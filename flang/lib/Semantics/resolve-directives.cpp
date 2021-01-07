@@ -114,15 +114,16 @@ public:
   template <typename A> bool Pre(const A &) { return true; }
   template <typename A> void Post(const A &) {}
 
-  bool Pre(const parser::SpecificationPart &x) {
-    Walk(std::get<std::list<parser::OpenACCDeclarativeConstruct>>(x.t));
-    return false;
-  }
-
   bool Pre(const parser::OpenACCBlockConstruct &);
   void Post(const parser::OpenACCBlockConstruct &) { PopContext(); }
   bool Pre(const parser::OpenACCCombinedConstruct &);
   void Post(const parser::OpenACCCombinedConstruct &) { PopContext(); }
+
+  bool Pre(const parser::OpenACCDeclarativeConstruct &);
+  void Post(const parser::OpenACCDeclarativeConstruct &) { PopContext(); }
+
+  bool Pre(const parser::OpenACCRoutineConstruct &);
+  bool Pre(const parser::AccBindClause &);
 
   void Post(const parser::AccBeginBlockDirective &) {
     GetContext().withinConstruct = true;
@@ -207,6 +208,7 @@ private:
   void ResolveAccObject(const parser::AccObject &, Symbol::Flag);
   Symbol *ResolveAcc(const parser::Name &, Symbol::Flag, Scope &);
   Symbol *ResolveAcc(Symbol &, Symbol::Flag, Scope &);
+  Symbol *ResolveName(const parser::Name &);
   Symbol *ResolveAccCommonBlockName(const parser::Name *);
   Symbol *DeclareOrMarkOtherAccessEntity(const parser::Name &, Symbol::Flag);
   Symbol *DeclareOrMarkOtherAccessEntity(Symbol &, Symbol::Flag);
@@ -227,6 +229,18 @@ public:
 
   bool Pre(const parser::SpecificationPart &x) {
     Walk(std::get<std::list<parser::OpenMPDeclarativeConstruct>>(x.t));
+    return true;
+  }
+
+  bool Pre(const parser::StmtFunctionStmt &x) {
+    const auto &parsedExpr{std::get<parser::Scalar<parser::Expr>>(x.t)};
+    if (const auto *expr{GetExpr(parsedExpr)}) {
+      for (const Symbol &symbol : evaluate::CollectSymbols(*expr)) {
+        if (!IsStmtFunctionDummy(symbol)) {
+          stmtFunctionExprSymbols_.insert(symbol.GetUltimate());
+        }
+      }
+    }
     return true;
   }
 
@@ -340,6 +354,7 @@ private:
 
   std::vector<const parser::Name *> allocateNames_; // on one directive
   SymbolSet privateDataSharingAttributeObjects_; // on one directive
+  SymbolSet stmtFunctionExprSymbols_;
 
   void AddAllocateName(const parser::Name *&object) {
     allocateNames_.push_back(object);
@@ -375,7 +390,7 @@ private:
       const parser::Name &, const Symbol &, Symbol::Flag);
 
   void CheckAssocLoopLevel(std::int64_t level, const parser::OmpClause *clause);
-  void CheckObjectInNamelist(
+  void CheckPrivateDSAObject(
       const parser::Name &, const Symbol &, Symbol::Flag);
 };
 
@@ -440,6 +455,21 @@ bool AccAttributeVisitor::Pre(const parser::OpenACCBlockConstruct &x) {
   return true;
 }
 
+bool AccAttributeVisitor::Pre(const parser::OpenACCDeclarativeConstruct &x) {
+  if (const auto *declConstruct{
+          std::get_if<parser::OpenACCStandaloneDeclarativeConstruct>(&x.u)}) {
+    const auto &declDir{
+        std::get<parser::AccDeclarativeDirective>(declConstruct->t)};
+    PushContext(declDir.source, llvm::acc::Directive::ACCD_declare);
+  } else if (const auto *routineConstruct{
+                 std::get_if<parser::OpenACCRoutineConstruct>(&x.u)}) {
+    const auto &verbatim{std::get<parser::Verbatim>(routineConstruct->t)};
+    PushContext(verbatim.source, llvm::acc::Directive::ACCD_routine);
+  }
+  ClearDataSharingAttributeObjects();
+  return true;
+}
+
 bool AccAttributeVisitor::Pre(const parser::OpenACCLoopConstruct &x) {
   const auto &beginDir{std::get<parser::AccBeginLoopDirective>(x.t)};
   const auto &loopDir{std::get<parser::AccLoopDirective>(beginDir.t)};
@@ -468,6 +498,35 @@ bool AccAttributeVisitor::Pre(const parser::OpenACCStandaloneConstruct &x) {
     break;
   }
   ClearDataSharingAttributeObjects();
+  return true;
+}
+
+Symbol *AccAttributeVisitor::ResolveName(const parser::Name &name) {
+  Symbol *prev{currScope().FindSymbol(name.source)};
+  if (prev != name.symbol) {
+    name.symbol = prev;
+  }
+  return prev;
+}
+
+bool AccAttributeVisitor::Pre(const parser::OpenACCRoutineConstruct &x) {
+  const auto &optName{std::get<std::optional<parser::Name>>(x.t)};
+  if (optName) {
+    if (!ResolveName(*optName))
+      context_.Say((*optName).source,
+          "No function or subroutine declared for '%s'"_err_en_US,
+          (*optName).source);
+  }
+  return true;
+}
+
+bool AccAttributeVisitor::Pre(const parser::AccBindClause &x) {
+  if (const auto *name{std::get_if<parser::Name>(&x.u)}) {
+    if (!ResolveName(*name))
+      context_.Say(name->source,
+          "No function or subroutine declared for '%s'"_err_en_US,
+          name->source);
+  }
   return true;
 }
 
@@ -592,10 +651,10 @@ void AccAttributeVisitor::PrivatizeAssociatedLoopIndex(
 void AccAttributeVisitor::Post(const parser::AccDefaultClause &x) {
   if (!dirContext_.empty()) {
     switch (x.v) {
-    case parser::AccDefaultClause::Arg::Present:
+    case llvm::acc::DefaultValue::ACC_Default_present:
       SetContextDefaultDSA(Symbol::Flag::AccPresent);
       break;
-    case parser::AccDefaultClause::Arg::None:
+    case llvm::acc::DefaultValue::ACC_Default_none:
       SetContextDefaultDSA(Symbol::Flag::AccNone);
       break;
     }
@@ -875,17 +934,24 @@ void OmpAttributeVisitor::ResolveSeqLoopIndexInParallelOrTaskConstruct(
   }
 }
 
-// 2.15.1.1 Data-sharing Attribute Rules - Predetermined
+// [OMP-4.5]2.15.1.1 Data-sharing Attribute Rules - Predetermined
 //   - A loop iteration variable for a sequential loop in a parallel
 //     or task generating construct is private in the innermost such
 //     construct that encloses the loop
+// Loop iteration variables are not well defined for DO WHILE loop.
+// Use of DO CONCURRENT inside OpenMP construct is unspecified behavior
+// till OpenMP-5.0 standard.
+// In above both cases we skip the privatization of iteration variables.
 bool OmpAttributeVisitor::Pre(const parser::DoConstruct &x) {
-  if (!dirContext_.empty() && GetContext().withinConstruct) {
-    if (const auto &iv{GetLoopIndex(x)}; iv.symbol) {
-      if (!iv.symbol->test(Symbol::Flag::OmpPreDetermined)) {
-        ResolveSeqLoopIndexInParallelOrTaskConstruct(iv);
-      } else {
-        // TODO: conflict checks with explicitly determined DSA
+  // TODO:[OpenMP 5.1] DO CONCURRENT indices are private
+  if (x.IsDoNormal()) {
+    if (!dirContext_.empty() && GetContext().withinConstruct) {
+      if (const auto &iv{GetLoopIndex(x)}; iv.symbol) {
+        if (!iv.symbol->test(Symbol::Flag::OmpPreDetermined)) {
+          ResolveSeqLoopIndexInParallelOrTaskConstruct(iv);
+        } else {
+          // TODO: conflict checks with explicitly determined DSA
+        }
       }
     }
   }
@@ -1110,7 +1176,7 @@ void OmpAttributeVisitor::ResolveOmpObject(
                     CheckMultipleAppearances(*name, *symbol, ompFlag);
                   }
                   if (privateDataSharingAttributeFlags.test(ompFlag)) {
-                    CheckObjectInNamelist(*name, *symbol, ompFlag);
+                    CheckPrivateDSAObject(*name, *symbol, ompFlag);
                   }
 
                   if (ompFlag == Symbol::Flag::OmpAllocate) {
@@ -1264,16 +1330,26 @@ void OmpAttributeVisitor::CheckDataCopyingClause(
   }
 }
 
-void OmpAttributeVisitor::CheckObjectInNamelist(
+void OmpAttributeVisitor::CheckPrivateDSAObject(
     const parser::Name &name, const Symbol &symbol, Symbol::Flag ompFlag) {
-  if (symbol.GetUltimate().test(Symbol::Flag::InNamelist)) {
-    llvm::StringRef clauseName{"PRIVATE"};
-    if (ompFlag == Symbol::Flag::OmpFirstPrivate)
-      clauseName = "FIRSTPRIVATE";
-    else if (ompFlag == Symbol::Flag::OmpLastPrivate)
-      clauseName = "LASTPRIVATE";
+  const auto &ultimateSymbol{symbol.GetUltimate()};
+  llvm::StringRef clauseName{"PRIVATE"};
+  if (ompFlag == Symbol::Flag::OmpFirstPrivate)
+    clauseName = "FIRSTPRIVATE";
+  else if (ompFlag == Symbol::Flag::OmpLastPrivate)
+    clauseName = "LASTPRIVATE";
+
+  if (ultimateSymbol.test(Symbol::Flag::InNamelist)) {
     context_.Say(name.source,
         "Variable '%s' in NAMELIST cannot be in a %s clause"_err_en_US,
+        name.ToString(), clauseName.str());
+  }
+
+  if (stmtFunctionExprSymbols_.find(ultimateSymbol) !=
+      stmtFunctionExprSymbols_.end()) {
+    context_.Say(name.source,
+        "Variable '%s' in STATEMENT FUNCTION expression cannot be in a "
+        "%s clause"_err_en_US,
         name.ToString(), clauseName.str());
   }
 }

@@ -12,6 +12,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FileSystem.h"
+#include "llvm/Support/FileUtilities.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Program.h"
 #include "llvm/Support/raw_ostream.h"
@@ -71,8 +72,12 @@ TEST_F(WrapperGenTest, RunWrapperGenAndGetNoErrors) {
       llvm::None, llvm::StringRef(STDOutFile.get().TmpName),
       llvm::StringRef(STDErrFile.get().TmpName)};
 
-  llvm::StringRef ArgV[] = {ProgPath, llvm::StringRef(IncludeArg),
-                            llvm::StringRef(APIArg), "--name", "strlen"};
+  llvm::StringRef ArgV[] = {ProgPath,
+                            llvm::StringRef(IncludeArg),
+                            llvm::StringRef(APIArg),
+                            "--gen-wrapper",
+                            "--name",
+                            "strlen"};
 
   int ExitCode =
       llvm::sys::ExecuteAndWait(ProgPath, ArgV, llvm::None, Redirects);
@@ -89,8 +94,12 @@ TEST_F(WrapperGenTest, RunWrapperGenOnStrlen) {
       llvm::None, llvm::StringRef(STDOutFile.get().TmpName),
       llvm::StringRef(STDErrFile.get().TmpName)};
 
-  llvm::StringRef ArgV[] = {ProgPath, llvm::StringRef(IncludeArg),
-                            llvm::StringRef(APIArg), "--name", "strlen"};
+  llvm::StringRef ArgV[] = {ProgPath,
+                            llvm::StringRef(IncludeArg),
+                            llvm::StringRef(APIArg),
+                            "--gen-wrapper",
+                            "--name",
+                            "strlen"};
 
   int ExitCode =
       llvm::sys::ExecuteAndWait(ProgPath, ArgV, llvm::None, Redirects);
@@ -115,7 +124,7 @@ TEST_F(WrapperGenTest, RunWrapperGenOnStrlen) {
   // would break this test.
 }
 
-TEST_F(WrapperGenTest, RunWrapperGenOnStrlenWithAliasee) {
+TEST_F(WrapperGenTest, GenAliasForStrlen) {
   llvm::Optional<llvm::StringRef> Redirects[] = {
       llvm::None, llvm::StringRef(STDOutFile.get().TmpName),
       llvm::StringRef(STDErrFile.get().TmpName)};
@@ -123,8 +132,9 @@ TEST_F(WrapperGenTest, RunWrapperGenOnStrlenWithAliasee) {
   llvm::StringRef ArgV[] = {ProgPath,
                             llvm::StringRef(IncludeArg),
                             llvm::StringRef(APIArg),
-                            "--aliasee",
-                            "STRLEN_ALIAS",
+                            "--gen-alias",
+                            "--mangled-name",
+                            "__llvm_libc_strlen_mangled_name",
                             "--name",
                             "strlen"};
 
@@ -141,22 +151,68 @@ TEST_F(WrapperGenTest, RunWrapperGenOnStrlenWithAliasee) {
   auto STDOutOrError = llvm::MemoryBuffer::getFile(STDOutFile.get().TmpName);
   std::string STDOutOutput = STDOutOrError.get()->getBuffer().str();
 
-  ASSERT_EQ(STDOutOutput, "extern \"C\" size_t strlen(const char * __arg0) "
-                          "__attribute__((alias(\"STRLEN_ALIAS\")));\n");
+  ASSERT_EQ(STDOutOutput,
+            "extern \"C\" size_t strlen(const char * __arg0) "
+            "__attribute__((alias(\"__llvm_libc_strlen_mangled_name\")));\n");
   // TODO:(michaelrj) Figure out how to make this output comparison
   // less brittle. Currently it's just comparing the output of the program
   // to an exact string, this means that even a small formatting change
   // would break this test.
 }
 
+TEST_F(WrapperGenTest, DeclStrlenAliasUsingMangledNameFile) {
+  llvm::Optional<llvm::StringRef> Redirects[] = {
+      llvm::None, llvm::StringRef(STDOutFile.get().TmpName),
+      llvm::StringRef(STDErrFile.get().TmpName)};
+
+  const char *MangledNameFileContent =
+      "abc\nxyz__llvm_libc_strlen_mangled_name\nijk\n";
+  llvm::SmallVector<char> MangledNameFilePath;
+  auto MangledNameFileCreateError = llvm::sys::fs::createUniqueFile(
+      "libc-wrappergen-test-aliasee-file-%%-%%-%%-%%.txt", MangledNameFilePath);
+  ASSERT_FALSE(MangledNameFileCreateError);
+  auto MangledNameFileWriteError = llvm::writeFileAtomically(
+      "libc-wrappergen-temp-test-aliasee-file-%%-%%-%%-%%.txt",
+      llvm::StringRef(MangledNameFilePath.data()),
+      llvm::StringRef(MangledNameFileContent));
+  ASSERT_FALSE(MangledNameFileWriteError);
+
+  llvm::StringRef ArgV[] = {ProgPath,
+                            llvm::StringRef(IncludeArg),
+                            llvm::StringRef(APIArg),
+                            "--gen-alias",
+                            "--mangled-name-file",
+                            llvm::StringRef(MangledNameFilePath.data()),
+                            "--name",
+                            "strlen"};
+
+  int ExitCode =
+      llvm::sys::ExecuteAndWait(ProgPath, ArgV, llvm::None, Redirects);
+
+  EXPECT_EQ(ExitCode, 0);
+
+  auto STDErrOrError = llvm::MemoryBuffer::getFile(STDErrFile.get().TmpName);
+  std::string STDErrOutput = STDErrOrError.get()->getBuffer().str();
+
+  ASSERT_EQ(STDErrOutput, "");
+
+  auto STDOutOrError = llvm::MemoryBuffer::getFile(STDOutFile.get().TmpName);
+  std::string STDOutOutput = STDOutOrError.get()->getBuffer().str();
+
+  ASSERT_EQ(
+      STDOutOutput,
+      "extern \"C\" size_t strlen(const char * __arg0) "
+      "__attribute__((alias(\"xyz__llvm_libc_strlen_mangled_name\")));\n");
+}
+
+/////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////////////////////////
 // BAD INPUT TESTS
 // all of the tests after this point are testing inputs that should
 // return errors
 /////////////////////////////////////////////////////////////////////
 
-TEST_F(WrapperGenTest,
-       RunWrapperGenOnStrlenWithAliaseeAndAliaseeFileWhichIsError) {
+TEST_F(WrapperGenTest, RunWrapperGenOnStrlenWithMangledNameAndMangledNameFile) {
   llvm::Optional<llvm::StringRef> Redirects[] = {
       llvm::None, llvm::StringRef(STDOutFile.get().TmpName),
       llvm::StringRef(STDErrFile.get().TmpName)};
@@ -164,10 +220,11 @@ TEST_F(WrapperGenTest,
   llvm::StringRef ArgV[] = {ProgPath,
                             llvm::StringRef(IncludeArg),
                             llvm::StringRef(APIArg),
-                            "--aliasee",
-                            "STRLEN_ALIAS",
-                            "--aliasee-file",
-                            "STRLEN_ALIAS_FILE",
+                            "--gen-alias",
+                            "--mangled-name",
+                            "__llvm_libc_strlen_mangled_name",
+                            "--mangled-name-file",
+                            "non-existant-mangled-name-file.txt",
                             "--name",
                             "strlen"};
 
@@ -179,8 +236,9 @@ TEST_F(WrapperGenTest,
   auto STDErrOrError = llvm::MemoryBuffer::getFile(STDErrFile.get().TmpName);
   std::string STDErrOutput = STDErrOrError.get()->getBuffer().str();
 
-  ASSERT_EQ(STDErrOutput, "error: The options 'aliasee' and 'aliasee-file' "
-                          "cannot be specified simultaniously.\n");
+  ASSERT_EQ(STDErrOutput,
+            "error: The options 'mangled-name' and 'mangled-name-file' "
+            "cannot be specified simultaneously.\n");
 
   auto STDOutOrError = llvm::MemoryBuffer::getFile(STDOutFile.get().TmpName);
   std::string STDOutOutput = STDOutOrError.get()->getBuffer().str();
@@ -195,8 +253,12 @@ TEST_F(WrapperGenTest, RunWrapperGenOnBadFuncName) {
 
   llvm::StringRef BadFuncName = "FAKE_TEST_FUNC";
 
-  llvm::StringRef ArgV[] = {ProgPath, llvm::StringRef(IncludeArg),
-                            llvm::StringRef(APIArg), "--name", BadFuncName};
+  llvm::StringRef ArgV[] = {ProgPath,
+                            llvm::StringRef(IncludeArg),
+                            llvm::StringRef(APIArg),
+                            "--gen-wrapper",
+                            "--name",
+                            BadFuncName};
 
   int ExitCode =
       llvm::sys::ExecuteAndWait(ProgPath, ArgV, llvm::None, Redirects);
@@ -216,17 +278,21 @@ TEST_F(WrapperGenTest, RunWrapperGenOnBadFuncName) {
   ASSERT_EQ(STDOutOutput, "");
 }
 
-TEST_F(WrapperGenTest, RunWrapperGenOnStrlenWithBadAliaseeFile) {
+TEST_F(WrapperGenTest, RunWrapperGenOnStrlenWithBadMangledNameFile) {
   llvm::Optional<llvm::StringRef> Redirects[] = {
       llvm::None, llvm::StringRef(STDOutFile.get().TmpName),
       llvm::StringRef(STDErrFile.get().TmpName)};
 
-  llvm::StringRef BadAliaseeFileName = "FILE_THAT_DOESNT_EXIST.txt";
+  llvm::StringRef BadMangledNameFileName = "FILE_THAT_DOESNT_EXIST.txt";
 
-  llvm::StringRef ArgV[] = {
-      ProgPath,         llvm::StringRef(IncludeArg), llvm::StringRef(APIArg),
-      "--aliasee-file", BadAliaseeFileName,          "--name",
-      "strlen"};
+  llvm::StringRef ArgV[] = {ProgPath,
+                            llvm::StringRef(IncludeArg),
+                            llvm::StringRef(APIArg),
+                            "--gen-alias",
+                            "--mangled-name-file",
+                            BadMangledNameFileName,
+                            "--name",
+                            "strlen"};
 
   int ExitCode =
       llvm::sys::ExecuteAndWait(ProgPath, ArgV, llvm::None, Redirects);
@@ -236,12 +302,45 @@ TEST_F(WrapperGenTest, RunWrapperGenOnStrlenWithBadAliaseeFile) {
   auto STDErrOrError = llvm::MemoryBuffer::getFile(STDErrFile.get().TmpName);
   std::string STDErrOutput = STDErrOrError.get()->getBuffer().str();
 
-  ASSERT_EQ(STDErrOutput, ("error: Unable to read the aliasee file " +
-                           BadAliaseeFileName + "\n")
+  ASSERT_EQ(STDErrOutput, ("error: Unable to read the mangled name file " +
+                           BadMangledNameFileName + "\n")
                               .str());
 
   auto STDOutOrError = llvm::MemoryBuffer::getFile(STDOutFile.get().TmpName);
   std::string STDOutOutput = STDOutOrError.get()->getBuffer().str();
 
   ASSERT_EQ(STDOutOutput, "");
+}
+
+TEST_F(WrapperGenTest, RunWithMangledNameFileMissingLLVMLibcName) {
+  llvm::Optional<llvm::StringRef> Redirects[] = {
+      llvm::None, llvm::StringRef(STDOutFile.get().TmpName),
+      llvm::StringRef(STDErrFile.get().TmpName)};
+
+  llvm::SmallVector<char> MangledNameFilePath;
+  auto MangledNameFileCreateError = llvm::sys::fs::createUniqueFile(
+      "libc-wrappergen-test-mangled-name-file-%%-%%-%%-%%.txt",
+      MangledNameFilePath);
+  ASSERT_FALSE(MangledNameFileCreateError);
+
+  llvm::StringRef ArgV[] = {ProgPath,
+                            llvm::StringRef(IncludeArg),
+                            llvm::StringRef(APIArg),
+                            "--gen-alias",
+                            "--mangled-name-file",
+                            llvm::StringRef(MangledNameFilePath.data()),
+                            "--name",
+                            "strlen"};
+
+  int ExitCode =
+      llvm::sys::ExecuteAndWait(ProgPath, ArgV, llvm::None, Redirects);
+
+  EXPECT_NE(ExitCode, 0);
+
+  auto STDErrOrError = llvm::MemoryBuffer::getFile(STDErrFile.get().TmpName);
+  std::string STDErrOutput = STDErrOrError.get()->getBuffer().str();
+
+  ASSERT_EQ(STDErrOutput, ("error: Did not find an LLVM libc mangled name in " +
+                           MangledNameFilePath + "\n")
+                              .str());
 }

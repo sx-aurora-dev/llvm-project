@@ -353,16 +353,16 @@ define signext i8 @test_atomic_exchange_1() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, c@hi(, %s0)
 ; CHECK-NEXT:    and %s1, 3, %s0
-; CHECK-NEXT:    sll %s2, %s1, 3
+; CHECK-NEXT:    sla.w.sx %s2, %s1, 3
 ; CHECK-NEXT:    or %s3, 10, (0)1
 ; CHECK-NEXT:    sla.w.sx %s3, %s3, %s2
 ; CHECK-NEXT:    and %s0, -4, %s0
 ; CHECK-NEXT:    sla.w.sx %s1, (63)0, %s1
 ; CHECK-NEXT:    ts1am.w %s3, (%s0), %s1
-; CHECK-NEXT:    subs.l %s0, 24, %s2
-; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s3, (32)0
+; CHECK-NEXT:    srl %s0, %s0, %s2
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
@@ -379,16 +379,16 @@ define signext i8 @test_atomic_exchange_1_0() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, siiii1@hi(, %s0)
 ; CHECK-NEXT:    and %s1, 3, %s0
-; CHECK-NEXT:    sll %s2, %s1, 3
+; CHECK-NEXT:    sla.w.sx %s2, %s1, 3
 ; CHECK-NEXT:    or %s3, 14, (0)1
 ; CHECK-NEXT:    sla.w.sx %s3, %s3, %s2
 ; CHECK-NEXT:    and %s0, -4, %s0
 ; CHECK-NEXT:    sla.w.sx %s1, (63)0, %s1
 ; CHECK-NEXT:    ts1am.w %s3, (%s0), %s1
-; CHECK-NEXT:    subs.l %s0, 24, %s2
-; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s3, (32)0
+; CHECK-NEXT:    srl %s0, %s0, %s2
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
@@ -407,13 +407,13 @@ define signext i8 @test_atomic_exchange_1_1() {
 ; CHECK-NEXT:    and %s1, -4, %s0
 ; CHECK-NEXT:    and %s0, 3, %s0
 ; CHECK-NEXT:    sla.w.sx %s2, (63)0, %s0
-; CHECK-NEXT:    sll %s0, %s0, 3
+; CHECK-NEXT:    sla.w.sx %s0, %s0, 3
 ; CHECK-NEXT:    sla.w.sx %s3, (60)0, %s0
 ; CHECK-NEXT:    ts1am.w %s3, (%s1), %s2
-; CHECK-NEXT:    subs.l %s0, 24, %s0
-; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s1, %s3, (32)0
+; CHECK-NEXT:    srl %s0, %s1, %s0
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
@@ -430,16 +430,16 @@ define signext i8 @test_atomic_exchange_1_2() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, siiii1@hi(2, %s0)
 ; CHECK-NEXT:    and %s1, 3, %s0
-; CHECK-NEXT:    sll %s2, %s1, 3
+; CHECK-NEXT:    sla.w.sx %s2, %s1, 3
 ; CHECK-NEXT:    lea %s3, -86
 ; CHECK-NEXT:    sla.w.sx %s3, %s3, %s2
 ; CHECK-NEXT:    and %s0, -4, %s0
 ; CHECK-NEXT:    sla.w.sx %s1, (63)0, %s1
 ; CHECK-NEXT:    ts1am.w %s3, (%s0), %s1
-; CHECK-NEXT:    subs.l %s0, 24, %s2
-; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s3, (32)0
+; CHECK-NEXT:    srl %s0, %s0, %s2
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
@@ -456,16 +456,16 @@ define signext i8 @test_atomic_exchange_1_3() {
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, siiii1@hi(3, %s0)
 ; CHECK-NEXT:    and %s1, 3, %s0
-; CHECK-NEXT:    sll %s2, %s1, 3
+; CHECK-NEXT:    sla.w.sx %s2, %s1, 3
 ; CHECK-NEXT:    lea %s3, -69
 ; CHECK-NEXT:    sla.w.sx %s3, %s3, %s2
 ; CHECK-NEXT:    and %s0, -4, %s0
 ; CHECK-NEXT:    sla.w.sx %s1, (63)0, %s1
 ; CHECK-NEXT:    ts1am.w %s3, (%s0), %s1
-; CHECK-NEXT:    subs.l %s0, 24, %s2
-; CHECK-NEXT:    sla.w.sx %s0, %s3, %s0
-; CHECK-NEXT:    sra.w.sx %s0, %s0, 24
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
+; CHECK-NEXT:    and %s0, %s3, (32)0
+; CHECK-NEXT:    srl %s0, %s0, %s2
+; CHECK-NEXT:    sll %s0, %s0, 56
+; CHECK-NEXT:    sra.l %s0, %s0, 56
 ; CHECK-NEXT:    fencem 3
 ; CHECK-NEXT:    b.l.t (, %s10)
 entry:
@@ -481,28 +481,15 @@ define signext i16 @test_atomic_exchange_2() {
 ; CHECK-NEXT:    lea %s0, s@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s0, s@hi(, %s0)
-; CHECK-NEXT:    and %s1, -4, %s0
-; CHECK-NEXT:    ldl.sx %s3, (, %s1)
-; CHECK-NEXT:    lea %s2, 28672
-; CHECK-NEXT:  .LBB{{[0-9]+}}_1: # %atomicrmw.start
-; CHECK-NEXT:    # =>This Inner Loop Header: Depth=1
-; CHECK-NEXT:    or %s4, 0, %s3
-; CHECK-NEXT:    and %s3, 3, %s0
-; CHECK-NEXT:    sla.w.sx %s3, %s3, 3
-; CHECK-NEXT:    sla.w.sx %s5, (48)0, %s3
-; CHECK-NEXT:    nnd %s5, %s5, %s4
-; CHECK-NEXT:    sla.w.sx %s3, %s2, %s3
-; CHECK-NEXT:    or %s3, %s5, %s3
-; CHECK-NEXT:    cas.w %s3, (%s1), %s4
-; CHECK-NEXT:    brne.w %s3, %s4, .LBB{{[0-9]+}}_1
-; CHECK-NEXT:  # %bb.2: # %atomicrmw.end
+; CHECK-NEXT:    and %s1, 3, %s0
+; CHECK-NEXT:    sla.w.sx %s2, %s1, 3
+; CHECK-NEXT:    lea %s3, 28672
+; CHECK-NEXT:    sla.w.sx %s3, %s3, %s2
+; CHECK-NEXT:    and %s0, -4, %s0
+; CHECK-NEXT:    sla.w.sx %s1, (62)0, %s1
+; CHECK-NEXT:    ts1am.w %s3, (%s0), %s1
 ; CHECK-NEXT:    and %s0, %s3, (32)0
-; CHECK-NEXT:    lea %s1, s@lo
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    lea.sl %s1, s@hi(, %s1)
-; CHECK-NEXT:    and %s1, 3, %s1
-; CHECK-NEXT:    sla.w.sx %s1, %s1, 3
-; CHECK-NEXT:    srl %s0, %s0, %s1
+; CHECK-NEXT:    srl %s0, %s0, %s2
 ; CHECK-NEXT:    sll %s0, %s0, 48
 ; CHECK-NEXT:    sra.l %s0, %s0, 48
 ; CHECK-NEXT:    fencem 3

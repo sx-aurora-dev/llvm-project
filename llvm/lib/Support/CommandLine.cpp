@@ -464,7 +464,7 @@ void Option::addCategory(OptionCategory &C) {
   // must be explicitly added if you want multiple categories that include it.
   if (&C != &GeneralCategory && Categories[0] == &GeneralCategory)
     Categories[0] = &C;
-  else if (find(Categories, &C) == Categories.end())
+  else if (!is_contained(Categories, &C))
     Categories.push_back(&C);
 }
 
@@ -531,11 +531,7 @@ Option *CommandLineParser::LookupOption(SubCommand &Sub, StringRef &Arg,
   // If we have an equals sign, remember the value.
   if (EqualPos == StringRef::npos) {
     // Look up the option.
-    auto I = Sub.OptionsMap.find(Arg);
-    if (I == Sub.OptionsMap.end())
-      return nullptr;
-
-    return I != Sub.OptionsMap.end() ? I->second : nullptr;
+    return Sub.OptionsMap.lookup(Arg);
   }
 
   // If the argument before the = is a valid option name and the option allows
@@ -2590,7 +2586,7 @@ void cl::HideUnrelatedOptions(ArrayRef<const cl::OptionCategory *> Categories,
                               SubCommand &Sub) {
   for (auto &I : Sub.OptionsMap) {
     for (auto &Cat : I.second->Categories) {
-      if (find(Categories, Cat) == Categories.end() && Cat != &GenericCategory)
+      if (!is_contained(Categories, Cat) && Cat != &GenericCategory)
         I.second->setHiddenFlag(cl::ReallyHidden);
     }
   }

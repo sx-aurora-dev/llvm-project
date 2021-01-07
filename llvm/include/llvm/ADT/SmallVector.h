@@ -460,7 +460,8 @@ public:
     this->Size = 0;
   }
 
-  void resize(size_type N) {
+private:
+  template <bool ForOverwrite> void resizeImpl(size_type N) {
     if (N < this->size()) {
       this->destroy_range(this->begin()+N, this->end());
       this->set_size(N);
@@ -468,10 +469,19 @@ public:
       if (this->capacity() < N)
         this->grow(N);
       for (auto I = this->end(), E = this->begin() + N; I != E; ++I)
-        new (&*I) T();
+        if (ForOverwrite)
+          new (&*I) T;
+        else
+          new (&*I) T();
       this->set_size(N);
     }
   }
+
+public:
+  void resize(size_type N) { resizeImpl<false>(N); }
+
+  /// Like resize, but \ref T is POD, the new values won't be initialized.
+  void resize_for_overwrite(size_type N) { resizeImpl<true>(N); }
 
   void resize(size_type N, const T &NV) {
     if (N == this->size())
@@ -1012,8 +1022,16 @@ template <typename T> struct CalculateSmallVectorDefaultInlinedElements {
 /// elements is below that threshold.  This allows normal "small" cases to be
 /// fast without losing generality for large inputs.
 ///
-/// Note that this does not attempt to be exception safe.
+/// \note
+/// In the absence of a well-motivated choice for the number of inlined
+/// elements \p N, it is recommended to use \c SmallVector<T> (that is,
+/// omitting the \p N). This will choose a default number of inlined elements
+/// reasonable for allocation on the stack (for example, trying to keep \c
+/// sizeof(SmallVector<T>) around 64 bytes).
 ///
+/// \warning This does not attempt to be exception safe.
+///
+/// \see https://llvm.org/docs/ProgrammersManual.html#llvm-adt-smallvector-h
 template <typename T,
           unsigned N = CalculateSmallVectorDefaultInlinedElements<T>::value>
 class LLVM_GSL_OWNER SmallVector : public SmallVectorImpl<T>,

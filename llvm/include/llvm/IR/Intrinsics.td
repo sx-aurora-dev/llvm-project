@@ -274,6 +274,8 @@ def llvm_token_ty      : LLVMType<token>;                         // token
 def llvm_x86mmx_ty     : LLVMType<x86mmx>;
 def llvm_ptrx86mmx_ty  : LLVMPointerType<llvm_x86mmx_ty>;         // <1 x i64>*
 
+def llvm_x86amx_ty     : LLVMType<x86amx>;
+
 def llvm_v2i1_ty       : LLVMType<v2i1>;     //   2 x i1
 def llvm_v4i1_ty       : LLVMType<v4i1>;     //   4 x i1
 def llvm_v8i1_ty       : LLVMType<v8i1>;     //   8 x i1
@@ -311,6 +313,7 @@ def llvm_v8i32_ty      : LLVMType<v8i32>;    //  8 x i32
 def llvm_v16i32_ty     : LLVMType<v16i32>;   // 16 x i32
 def llvm_v32i32_ty     : LLVMType<v32i32>;   // 32 x i32
 def llvm_v64i32_ty     : LLVMType<v64i32>;   // 64 x i32
+def llvm_v256i32_ty    : LLVMType<v256i32>;  //256 x i32
 
 def llvm_v1i64_ty      : LLVMType<v1i64>;    //  1 x i64
 def llvm_v2i64_ty      : LLVMType<v2i64>;    //  2 x i64
@@ -1231,6 +1234,8 @@ def int_coro_free : Intrinsic<[llvm_ptr_ty], [llvm_token_ty, llvm_ptr_ty],
                                ReadOnly<ArgIndex<1>>,
                                NoCapture<ArgIndex<1>>]>;
 def int_coro_end : Intrinsic<[llvm_i1_ty], [llvm_ptr_ty, llvm_i1_ty], []>;
+def int_coro_end_async
+    : Intrinsic<[llvm_i1_ty], [llvm_ptr_ty, llvm_i1_ty, llvm_vararg_ty], []>;
 
 def int_coro_frame : Intrinsic<[llvm_ptr_ty], [], [IntrNoMem]>;
 def int_coro_noop : Intrinsic<[llvm_ptr_ty], [], [IntrNoMem]>;
@@ -1309,6 +1314,12 @@ def int_pseudoprobe : Intrinsic<[], [llvm_i64_ty, llvm_i64_ty, llvm_i32_ty],
 let IntrProperties = [IntrNoMem, IntrWillReturn] in {
 def int_convert_to_fp16   : DefaultAttrsIntrinsic<[llvm_i16_ty], [llvm_anyfloat_ty]>;
 def int_convert_from_fp16 : DefaultAttrsIntrinsic<[llvm_anyfloat_ty], [llvm_i16_ty]>;
+}
+
+// Saturating floating point to integer intrinsics
+let IntrProperties = [IntrNoMem, IntrSpeculatable, IntrWillReturn] in {
+def int_fptoui_sat : DefaultAttrsIntrinsic<[llvm_anyint_ty], [llvm_anyfloat_ty]>;
+def int_fptosi_sat : DefaultAttrsIntrinsic<[llvm_anyint_ty], [llvm_anyfloat_ty]>;
 }
 
 // Clear cache intrinsic, default to ignore (ie. emit nothing)

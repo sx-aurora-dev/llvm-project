@@ -4089,13 +4089,23 @@ bool Sema::CheckUnaryExprOrTypeTraitOperand(Expr *E,
 
   bool IsUnevaluatedOperand =
       (ExprKind == UETT_SizeOf || ExprKind == UETT_AlignOf ||
-       ExprKind == UETT_PreferredAlignOf);
+       ExprKind == UETT_PreferredAlignOf || ExprKind == UETT_VecStep);
   if (IsUnevaluatedOperand) {
     ExprResult Result = CheckUnevaluatedOperand(E);
     if (Result.isInvalid())
       return true;
     E = Result.get();
   }
+
+  // The operand for sizeof and alignof is in an unevaluated expression context,
+  // so side effects could result in unintended consequences.
+  // Exclude instantiation-dependent expressions, because 'sizeof' is sometimes
+  // used to build SFINAE gadgets.
+  // FIXME: Should we consider instantiation-dependent operands to 'alignof'?
+  if (IsUnevaluatedOperand && !inTemplateInstantiation() &&
+      !E->isInstantiationDependent() &&
+      E->HasSideEffects(Context, false))
+    Diag(E->getExprLoc(), diag::warn_side_effects_unevaluated_context);
 
   if (ExprKind == UETT_VecStep)
     return CheckVecStepTraitOperandType(*this, ExprTy, E->getExprLoc(),
@@ -4132,12 +4142,6 @@ bool Sema::CheckUnaryExprOrTypeTraitOperand(Expr *E,
         << getTraitSpelling(ExprKind) << E->getSourceRange();
     return true;
   }
-
-  // The operand for sizeof and alignof is in an unevaluated expression context,
-  // so side effects could result in unintended consequences.
-  if (IsUnevaluatedOperand && !inTemplateInstantiation() &&
-      E->HasSideEffects(Context, false))
-    Diag(E->getExprLoc(), diag::warn_side_effects_unevaluated_context);
 
   if (CheckObjCTraitOperandConstraints(*this, ExprTy, E->getExprLoc(),
                                        E->getSourceRange(), ExprKind))
@@ -6055,7 +6059,7 @@ static bool isPlaceholderToRemoveAsArg(QualType type) {
 #define SVE_TYPE(Name, Id, SingletonId) \
   case BuiltinType::Id:
 #include "clang/Basic/AArch64SVEACLETypes.def"
-#define PPC_MMA_VECTOR_TYPE(Name, Id, Size) \
+#define PPC_VECTOR_TYPE(Name, Id, Size) \
   case BuiltinType::Id:
 #include "clang/Basic/PPCTypes.def"
 #define PLACEHOLDER_TYPE(ID, SINGLETON_ID)
@@ -6309,7 +6313,8 @@ ExprResult Sema::ActOnCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
                                MultiExprArg ArgExprs, SourceLocation RParenLoc,
                                Expr *ExecConfig) {
   ExprResult Call =
-      BuildCallExpr(Scope, Fn, LParenLoc, ArgExprs, RParenLoc, ExecConfig);
+      BuildCallExpr(Scope, Fn, LParenLoc, ArgExprs, RParenLoc, ExecConfig,
+                    /*IsExecConfig=*/false, /*AllowRecovery=*/true);
   if (Call.isInvalid())
     return Call;
 
@@ -6337,7 +6342,8 @@ ExprResult Sema::ActOnCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
 /// locations.
 ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
                                MultiExprArg ArgExprs, SourceLocation RParenLoc,
-                               Expr *ExecConfig, bool IsExecConfig) {
+                               Expr *ExecConfig, bool IsExecConfig,
+                               bool AllowRecovery) {
   // Since this might be a postfix expression, get rid of ParenListExprs.
   ExprResult Result = MaybeConvertParenListExprToParenExpr(Scope, Fn);
   if (Result.isInvalid()) return ExprError();
@@ -6397,7 +6403,7 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
 
     if (Fn->getType() == Context.BoundMemberTy) {
       return BuildCallToMemberFunction(Scope, Fn, LParenLoc, ArgExprs,
-                                       RParenLoc);
+                                       RParenLoc, AllowRecovery);
     }
   }
 
@@ -6416,7 +6422,7 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
             Scope, Fn, ULE, LParenLoc, ArgExprs, RParenLoc, ExecConfig,
             /*AllowTypoCorrection=*/true, find.IsAddressOfOperand);
       return BuildCallToMemberFunction(Scope, Fn, LParenLoc, ArgExprs,
-                                       RParenLoc);
+                                       RParenLoc, AllowRecovery);
     }
   }
 
@@ -6478,7 +6484,7 @@ ExprResult Sema::BuildCallExpr(Scope *Scope, Expr *Fn, SourceLocation LParenLoc,
            "should only occur in error-recovery path.");
     QualType ReturnType =
         llvm::isa_and_nonnull<FunctionDecl>(NDecl)
-            ? dyn_cast<FunctionDecl>(NDecl)->getCallResultType()
+            ? cast<FunctionDecl>(NDecl)->getCallResultType()
             : Context.DependentTy;
     return CallExpr::Create(Context, Fn, ArgExprs, ReturnType,
                             Expr::getValueKindForType(ReturnType), RParenLoc,
@@ -7243,13 +7249,11 @@ CastKind Sema::PrepareScalarCast(ExprResult &Src, QualType DestTy) {
   llvm_unreachable("Unhandled scalar cast");
 }
 
-static bool breakDownVectorType(QualType type, uint64_t &len, QualType &eltType,
-                                bool &IsVectorSizeBool) {
+static bool breakDownVectorType(QualType type, uint64_t &len,
+                                QualType &eltType) {
   // Vectors are simple.
-  IsVectorSizeBool = false;
   if (const VectorType *vecType = type->getAs<VectorType>()) {
     len = vecType->getNumElements();
-    IsVectorSizeBool = vecType->isVectorSizeBoolean();
     eltType = vecType->getElementType();
     assert(eltType->isScalarType());
     return true;
@@ -7306,21 +7310,14 @@ bool Sema::areLaxCompatibleVectorTypes(QualType srcTy, QualType destTy) {
 
   uint64_t srcLen, destLen;
   QualType srcEltTy, destEltTy;
-  bool srcBoolVector, destBoolVector;
-  if (!breakDownVectorType(srcTy, srcLen, srcEltTy, srcBoolVector))
-    return false;
-  if (!breakDownVectorType(destTy, destLen, destEltTy, destBoolVector))
-    return false;
-
-  bool HasBitVectors = Context.getTargetInfo().hasDenseBoolVectors();
+  if (!breakDownVectorType(srcTy, srcLen, srcEltTy)) return false;
+  if (!breakDownVectorType(destTy, destLen, destEltTy)) return false;
 
   // ASTContext::getTypeSize will return the size rounded up to a
   // power of 2, so instead of using that, we need to use the raw
   // element size multiplied by the element count.
-  uint64_t srcEltSize =
-      (HasBitVectors & srcBoolVector) ? 1 : Context.getTypeSize(srcEltTy);
-  uint64_t destEltSize =
-      (HasBitVectors & destBoolVector) ? 1 : Context.getTypeSize(destEltTy);
+  uint64_t srcEltSize = Context.getTypeSize(srcEltTy);
+  uint64_t destEltSize = Context.getTypeSize(destEltTy);
 
   return (srcLen * srcEltSize == destLen * destEltSize);
 }
@@ -8090,13 +8087,17 @@ OpenCLCheckVectorConditional(Sema &S, ExprResult &Cond,
   // result as specified in OpenCL v1.1 s6.3.i.
   if (LHS.get()->getType()->isVectorType() ||
       RHS.get()->getType()->isVectorType()) {
-    QualType VecResTy = S.CheckVectorOperands(LHS, RHS, QuestionLoc,
-                                              /*isCompAssign*/ false,
-                                              /*AllowBothBool*/ true,
-                                              /*AllowBoolConversions*/ false,
-                                              /*AllowBooleanOperation*/ false,
-                                              /*ReportInvalid*/ true);
-    if (VecResTy.isNull()) return QualType();
+    bool IsBoolVecLang =
+        !S.getLangOpts().OpenCL && !S.getLangOpts().OpenCLCPlusPlus;
+    QualType VecResTy =
+        S.CheckVectorOperands(LHS, RHS, QuestionLoc,
+                              /*isCompAssign*/ false,
+                              /*AllowBothBool*/ true,
+                              /*AllowBoolConversions*/ false,
+                              /*AllowBooleanOperation*/ IsBoolVecLang,
+                              /*ReportInvalid*/ true);
+    if (VecResTy.isNull())
+      return QualType();
     // The result type must match the condition type as specified in
     // OpenCL v1.1 s6.11.6.
     if (checkVectorResult(S, CondTy, VecResTy, QuestionLoc))
@@ -9877,9 +9878,8 @@ static bool tryGCCVectorConvertAndSplat(Sema &S, ExprResult *Scalar,
   return false;
 }
 
-static bool IsScalarOrVectorSizeBool(QualType Ty) {
-  return Ty->isBooleanType() ||
-         (Ty->isVectorType() && Ty->getAs<VectorType>()->isVectorSizeBoolean());
+static bool isBoolOrExtVectorBoolType(QualType VT) {
+  return VT->isBooleanType() || VT->isExtVectorBoolType();
 }
 
 QualType Sema::CheckVectorOperands(ExprResult &LHS, ExprResult &RHS,
@@ -9918,8 +9918,8 @@ QualType Sema::CheckVectorOperands(ExprResult &LHS, ExprResult &RHS,
     return ReportInvalid ? InvalidOperands(Loc, LHS, RHS) : QualType();
 
   // This operation may not be performed on boolean vectors.
-  if (!AllowBoolOperation && IsScalarOrVectorSizeBool(LHSType) &&
-      IsScalarOrVectorSizeBool(RHSType))
+  if (!AllowBoolOperation && (isBoolOrExtVectorBoolType(LHSType) &&
+                              isBoolOrExtVectorBoolType(RHSType)))
     return ReportInvalid ? InvalidOperands(Loc, LHS, RHS) : QualType();
 
   // If the vector types are identical, return.
@@ -10872,9 +10872,9 @@ static QualType checkVectorShift(Sema &S, ExprResult &LHS, ExprResult &RHS,
   const VectorType *RHSVecTy = RHSType->getAs<VectorType>();
   QualType RHSEleType = RHSVecTy ? RHSVecTy->getElementType() : RHSType;
 
-  // Do not allow shifts for vector_size boolean vectors.
-  if ((LHSVecTy && LHSVecTy->isVectorSizeBoolean()) ||
-      (RHSVecTy && RHSVecTy->isVectorSizeBoolean())) {
+  // Do not allow shifts for boolean vectors.
+  if ((LHSVecTy && LHSVecTy->isExtVectorBoolType()) ||
+      (RHSVecTy && RHSVecTy->isExtVectorBoolType())) {
     S.Diag(Loc, diag::err_typecheck_invalid_operands)
         << LHS.get()->getType() << RHS.get()->getType()
         << LHS.get()->getSourceRange();
@@ -12068,9 +12068,8 @@ QualType Sema::GetSignedVectorType(QualType V) {
     return Context.getExtVectorType(Context.LongLongTy, VTy->getNumElements());
   }
 
-  if (VTy->isVectorSizeBoolean())
-    return Context.getVectorType(Context.BoolTy, VTy->getNumElements(),
-                                 VectorType::GenericVector);
+  if (VTy->isExtVectorBoolType())
+    return Context.getExtVectorType(Context.BoolTy, VTy->getNumElements());
   else if (TypeSize == Context.getTypeSize(Context.LongLongTy))
     return Context.getVectorType(Context.LongLongTy, VTy->getNumElements(),
                                  VectorType::GenericVector);
@@ -15466,10 +15465,6 @@ ExprResult Sema::ActOnBlockStmtExpr(SourceLocation CaretLoc,
 
   PopDeclContext();
 
-  // Pop the block scope now but keep it alive to the end of this function.
-  AnalysisBasedWarnings::Policy WP = AnalysisWarnings.getDefaultPolicy();
-  PoppedFunctionScopePtr ScopeRAII = PopFunctionScopeInfo(&WP, BD, BlockTy);
-
   // Set the captured variables on the block.
   SmallVector<BlockDecl::Capture, 4> Captures;
   for (Capture &Cap : BSI->Captures) {
@@ -15536,6 +15531,10 @@ ExprResult Sema::ActOnBlockStmtExpr(SourceLocation CaretLoc,
     Captures.push_back(NewCap);
   }
   BD->setCaptures(Context, Captures, BSI->CXXThisCaptureIndex != 0);
+
+  // Pop the block scope now but keep it alive to the end of this function.
+  AnalysisBasedWarnings::Policy WP = AnalysisWarnings.getDefaultPolicy();
+  PoppedFunctionScopePtr ScopeRAII = PopFunctionScopeInfo(&WP, BD, BlockTy);
 
   BlockExpr *Result = new (Context) BlockExpr(BD, BlockTy);
 
@@ -19415,7 +19414,7 @@ ExprResult Sema::CheckPlaceholderExpr(Expr *E) {
 #define SVE_TYPE(Name, Id, SingletonId) \
   case BuiltinType::Id:
 #include "clang/Basic/AArch64SVEACLETypes.def"
-#define PPC_MMA_VECTOR_TYPE(Name, Id, Size) \
+#define PPC_VECTOR_TYPE(Name, Id, Size) \
   case BuiltinType::Id:
 #include "clang/Basic/PPCTypes.def"
 #define BUILTIN_TYPE(Id, SingletonId) case BuiltinType::Id:

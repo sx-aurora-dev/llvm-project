@@ -2727,6 +2727,29 @@ TEST_F(FormatTest, FormatTryCatch) {
                "    throw;\n"
                "  }\n"
                "};\n");
+  verifyFormat("class A {\n"
+               "  int a;\n"
+               "  A() try : a(0), b{1} {\n"
+               "  } catch (...) {\n"
+               "    throw;\n"
+               "  }\n"
+               "};\n");
+  verifyFormat("class A {\n"
+               "  int a;\n"
+               "  A() try : a(0), b{1}, c{2} {\n"
+               "  } catch (...) {\n"
+               "    throw;\n"
+               "  }\n"
+               "};\n");
+  verifyFormat("class A {\n"
+               "  int a;\n"
+               "  A() try : a(0), b{1}, c{2} {\n"
+               "    { // New scope.\n"
+               "    }\n"
+               "  } catch (...) {\n"
+               "    throw;\n"
+               "  }\n"
+               "};\n");
 
   // Incomplete try-catch blocks.
   verifyIncompleteFormat("try {} catch (");
@@ -7755,6 +7778,15 @@ TEST_F(FormatTest, UnderstandsUnaryOperators) {
 
   verifyFormat("co_yield -1;");
   verifyFormat("co_return -1;");
+
+  // Check that * is not treated as a binary operator when we set
+  // PointerAlignment as PAS_Left after a keyword and not a declaration.
+  FormatStyle PASLeftStyle = getLLVMStyle();
+  PASLeftStyle.PointerAlignment = FormatStyle::PAS_Left;
+  verifyFormat("co_return *a;", PASLeftStyle);
+  verifyFormat("co_await *a;", PASLeftStyle);
+  verifyFormat("co_yield *a", PASLeftStyle);
+  verifyFormat("return *a;", PASLeftStyle);
 }
 
 TEST_F(FormatTest, DoesNotIndentRelativeToUnaryOperators) {
@@ -11957,6 +11989,20 @@ TEST_F(FormatTest, ConfigurableSpacesInParentheses) {
                "  do_something((int) i);\n"
                "} while (something( ));",
                Spaces);
+
+  verifyFormat("size_t idx = (size_t) (ptr - ((char *) file));", Spaces);
+  verifyFormat("size_t idx = (size_t) a;", Spaces);
+  verifyFormat("size_t idx = (size_t) (a - 1);", Spaces);
+  verifyFormat("size_t idx = (a->*foo)(a - 1);", Spaces);
+  verifyFormat("size_t idx = (a->foo)(a - 1);", Spaces);
+  verifyFormat("size_t idx = (*foo)(a - 1);", Spaces);
+  Spaces.SpaceAfterCStyleCast = false;
+  verifyFormat("size_t idx = (size_t)(ptr - ((char *)file));", Spaces);
+  verifyFormat("size_t idx = (size_t)a;", Spaces);
+  verifyFormat("size_t idx = (size_t)(a - 1);", Spaces);
+  verifyFormat("size_t idx = (a->*foo)(a - 1);", Spaces);
+  verifyFormat("size_t idx = (a->foo)(a - 1);", Spaces);
+  verifyFormat("size_t idx = (*foo)(a - 1);", Spaces);
 }
 
 TEST_F(FormatTest, ConfigurableSpacesInSquareBrackets) {
@@ -12045,6 +12091,17 @@ TEST_F(FormatTest, ConfigurableSpaceBeforeColon) {
                "case 1:\n"
                "default:\n"
                "}");
+  verifyFormat("switch (allBraces) {\n"
+               "case 1: {\n"
+               "  break;\n"
+               "}\n"
+               "case 2: {\n"
+               "  [[fallthrough]];\n"
+               "}\n"
+               "default: {\n"
+               "  break;\n"
+               "}\n"
+               "}");
 
   FormatStyle CtorInitializerStyle = getLLVMStyleWithColumns(30);
   CtorInitializerStyle.SpaceBeforeCtorInitializerColon = false;
@@ -12060,6 +12117,18 @@ TEST_F(FormatTest, ConfigurableSpaceBeforeColon) {
   verifyFormat("switch (x) {\n"
                "case 1:\n"
                "default:\n"
+               "}",
+               CtorInitializerStyle);
+  verifyFormat("switch (allBraces) {\n"
+               "case 1: {\n"
+               "  break;\n"
+               "}\n"
+               "case 2: {\n"
+               "  [[fallthrough]];\n"
+               "}\n"
+               "default: {\n"
+               "  break;\n"
+               "}\n"
                "}",
                CtorInitializerStyle);
   CtorInitializerStyle.BreakConstructorInitializers =
@@ -12102,6 +12171,18 @@ TEST_F(FormatTest, ConfigurableSpaceBeforeColon) {
                "default:\n"
                "}",
                InheritanceStyle);
+  verifyFormat("switch (allBraces) {\n"
+               "case 1: {\n"
+               "  break;\n"
+               "}\n"
+               "case 2: {\n"
+               "  [[fallthrough]];\n"
+               "}\n"
+               "default: {\n"
+               "  break;\n"
+               "}\n"
+               "}",
+               InheritanceStyle);
   InheritanceStyle.BreakInheritanceList = FormatStyle::BILS_AfterColon;
   verifyFormat("class Foooooooooooooooooooooo:\n"
                "    public aaaaaaaaaaaaaaaaaa,\n"
@@ -12142,8 +12223,45 @@ TEST_F(FormatTest, ConfigurableSpaceBeforeColon) {
                "default:\n"
                "}",
                ForLoopStyle);
+  verifyFormat("switch (allBraces) {\n"
+               "case 1: {\n"
+               "  break;\n"
+               "}\n"
+               "case 2: {\n"
+               "  [[fallthrough]];\n"
+               "}\n"
+               "default: {\n"
+               "  break;\n"
+               "}\n"
+               "}",
+               ForLoopStyle);
+
+  FormatStyle CaseStyle = getLLVMStyle();
+  CaseStyle.SpaceBeforeCaseColon = true;
+  verifyFormat("class Foo : public Bar {};", CaseStyle);
+  verifyFormat("Foo::Foo() : foo(1) {}", CaseStyle);
+  verifyFormat("for (auto a : b) {\n}", CaseStyle);
+  verifyFormat("int x = a ? b : c;", CaseStyle);
+  verifyFormat("switch (x) {\n"
+               "case 1 :\n"
+               "default :\n"
+               "}",
+               CaseStyle);
+  verifyFormat("switch (allBraces) {\n"
+               "case 1 : {\n"
+               "  break;\n"
+               "}\n"
+               "case 2 : {\n"
+               "  [[fallthrough]];\n"
+               "}\n"
+               "default : {\n"
+               "  break;\n"
+               "}\n"
+               "}",
+               CaseStyle);
 
   FormatStyle NoSpaceStyle = getLLVMStyle();
+  EXPECT_EQ(NoSpaceStyle.SpaceBeforeCaseColon, false);
   NoSpaceStyle.SpaceBeforeCtorInitializerColon = false;
   NoSpaceStyle.SpaceBeforeInheritanceColon = false;
   NoSpaceStyle.SpaceBeforeRangeBasedForLoopColon = false;
@@ -12161,6 +12279,54 @@ TEST_F(FormatTest, ConfigurableSpaceBeforeColon) {
                "default:\n"
                "}",
                NoSpaceStyle);
+  verifyFormat("switch (allBraces) {\n"
+               "case 1: {\n"
+               "  break;\n"
+               "}\n"
+               "case 2: {\n"
+               "  [[fallthrough]];\n"
+               "}\n"
+               "default: {\n"
+               "  break;\n"
+               "}\n"
+               "}",
+               NoSpaceStyle);
+
+  FormatStyle InvertedSpaceStyle = getLLVMStyle();
+  InvertedSpaceStyle.SpaceBeforeCaseColon = true;
+  InvertedSpaceStyle.SpaceBeforeCtorInitializerColon = false;
+  InvertedSpaceStyle.SpaceBeforeInheritanceColon = false;
+  InvertedSpaceStyle.SpaceBeforeRangeBasedForLoopColon = false;
+  verifyFormat("class Foo: public Bar {};", InvertedSpaceStyle);
+  verifyFormat("Foo::Foo(): foo(1) {}", InvertedSpaceStyle);
+  verifyFormat("for (auto a: b) {\n}", InvertedSpaceStyle);
+  verifyFormat("int x = a ? b : c;", InvertedSpaceStyle);
+  verifyFormat("{\n"
+               "label3:\n"
+               "  int x = 0;\n"
+               "}",
+               InvertedSpaceStyle);
+  verifyFormat("switch (x) {\n"
+               "case 1 :\n"
+               "case 2 : {\n"
+               "  break;\n"
+               "}\n"
+               "default :\n"
+               "  break;\n"
+               "}",
+               InvertedSpaceStyle);
+  verifyFormat("switch (allBraces) {\n"
+               "case 1 : {\n"
+               "  break;\n"
+               "}\n"
+               "case 2 : {\n"
+               "  [[fallthrough]];\n"
+               "}\n"
+               "default : {\n"
+               "  break;\n"
+               "}\n"
+               "}",
+               InvertedSpaceStyle);
 }
 
 TEST_F(FormatTest, ConfigurableSpaceAroundPointerQualifiers) {
@@ -13492,7 +13658,7 @@ TEST_F(FormatTest, WhitesmithsBraceBreaking) {
                "  {\n"
                "  switch (a)\n"
                "    {\n"
-               "    case 2:\n"
+               "  case 2:\n"
                "    {\n"
                "    }\n"
                "    break;\n"
@@ -13504,18 +13670,18 @@ TEST_F(FormatTest, WhitesmithsBraceBreaking) {
                "  {\n"
                "  switch (a)\n"
                "    {\n"
-               "    case 0:\n"
+               "  case 0:\n"
                "    break;\n"
-               "    case 1:\n"
+               "  case 1:\n"
                "    {\n"
                "    foo();\n"
                "    break;\n"
                "    }\n"
-               "    case 2:\n"
+               "  case 2:\n"
                "    {\n"
                "    }\n"
                "    break;\n"
-               "    default:\n"
+               "  default:\n"
                "    break;\n"
                "    }\n"
                "  }\n",
@@ -13525,12 +13691,12 @@ TEST_F(FormatTest, WhitesmithsBraceBreaking) {
                "  {\n"
                "  switch (a)\n"
                "    {\n"
-               "    case 0:\n"
+               "  case 0:\n"
                "    {\n"
                "    foo(x);\n"
                "    }\n"
                "    break;\n"
-               "    default:\n"
+               "  default:\n"
                "    {\n"
                "    foo(1);\n"
                "    }\n"
@@ -14116,6 +14282,7 @@ TEST_F(FormatTest, ParsesConfigurationBools) {
   CHECK_PARSE_BOOL(IndentCaseLabels);
   CHECK_PARSE_BOOL(IndentCaseBlocks);
   CHECK_PARSE_BOOL(IndentGotoLabels);
+  CHECK_PARSE_BOOL(IndentPragmas);
   CHECK_PARSE_BOOL(IndentRequires);
   CHECK_PARSE_BOOL(IndentWrappedFunctionNames);
   CHECK_PARSE_BOOL(KeepEmptyLinesAtTheStartOfBlocks);
@@ -14137,6 +14304,7 @@ TEST_F(FormatTest, ParsesConfigurationBools) {
   CHECK_PARSE_BOOL(SpaceAfterTemplateKeyword);
   CHECK_PARSE_BOOL(SpaceAfterLogicalNot);
   CHECK_PARSE_BOOL(SpaceBeforeAssignmentOperators);
+  CHECK_PARSE_BOOL(SpaceBeforeCaseColon);
   CHECK_PARSE_BOOL(SpaceBeforeCpp11BracedList);
   CHECK_PARSE_BOOL(SpaceBeforeCtorInitializerColon);
   CHECK_PARSE_BOOL(SpaceBeforeInheritanceColon);
@@ -16713,6 +16881,15 @@ TEST_F(FormatTest, GuessLanguageWithCaret) {
       guessLanguage("foo.h", "int(^foo[(kNumEntries + 10)])(char, float);"));
 }
 
+TEST_F(FormatTest, GuessLanguageWithPragmas) {
+  EXPECT_EQ(FormatStyle::LK_Cpp,
+            guessLanguage("foo.h", "__pragma(warning(disable:))"));
+  EXPECT_EQ(FormatStyle::LK_Cpp,
+            guessLanguage("foo.h", "#pragma(warning(disable:))"));
+  EXPECT_EQ(FormatStyle::LK_Cpp,
+            guessLanguage("foo.h", "_Pragma(warning(disable:))"));
+}
+
 TEST_F(FormatTest, FormatsInlineAsmSymbolicNames) {
   // ASM symbolic names are identifiers that must be surrounded by [] without
   // space in between:
@@ -17562,6 +17739,129 @@ TEST_F(FormatTest, ConceptsAndRequires) {
                "struct constant;",
                Style);
 }
+
+TEST_F(FormatTest, IndentPragmas) {
+  FormatStyle Style = getLLVMStyle();
+  Style.IndentPPDirectives = FormatStyle::PPDIS_None;
+
+  Style.IndentPragmas = false;
+  verifyFormat("#pragma once", Style);
+  verifyFormat("#pragma omp simd\n"
+               "for (int i = 0; i < 10; i++) {\n"
+               "}",
+               Style);
+  verifyFormat("void foo() {\n"
+               "#pragma omp simd\n"
+               "  for (int i = 0; i < 10; i++) {\n"
+               "  }\n"
+               "}",
+               Style);
+  verifyFormat("void foo() {\n"
+               "// outer loop\n"
+               "#pragma omp simd\n"
+               "  for (int k = 0; k < 10; k++) {\n"
+               "// inner loop\n"
+               "#pragma omp simd\n"
+               "    for (int j = 0; j < 10; j++) {\n"
+               "    }\n"
+               "  }\n"
+               "}",
+               Style);
+
+  verifyFormat("void foo() {\n"
+               "// outer loop\n"
+               "#if 1\n"
+               "#pragma omp simd\n"
+               "  for (int k = 0; k < 10; k++) {\n"
+               "// inner loop\n"
+               "#pragma omp simd\n"
+               "    for (int j = 0; j < 10; j++) {\n"
+               "    }\n"
+               "  }\n"
+               "#endif\n"
+               "}",
+               Style);
+
+  Style.IndentPragmas = true;
+  verifyFormat("#pragma once", Style);
+  verifyFormat("#pragma omp simd\n"
+               "for (int i = 0; i < 10; i++) {\n"
+               "}",
+               Style);
+  verifyFormat("void foo() {\n"
+               "  #pragma omp simd\n"
+               "  for (int i = 0; i < 10; i++) {\n"
+               "  }\n"
+               "}",
+               Style);
+  verifyFormat("void foo() {\n"
+               "  #pragma omp simd\n"
+               "  for (int i = 0; i < 10; i++) {\n"
+               "    #pragma omp simd\n"
+               "    for (int j = 0; j < 10; j++) {\n"
+               "    }\n"
+               "  }\n"
+               "}",
+               Style);
+
+  verifyFormat("void foo() {\n"
+               "  #pragma omp simd\n"
+               "  for (...) {\n"
+               "    #pragma omp simd\n"
+               "    for (...) {\n"
+               "    }\n"
+               "  }\n"
+               "}",
+               Style);
+
+  Style.IndentPPDirectives = FormatStyle::PPDIS_AfterHash;
+
+  verifyFormat("void foo() {\n"
+               "# pragma omp simd\n"
+               "  for (int i = 0; i < 10; i++) {\n"
+               "#   pragma omp simd\n"
+               "    for (int j = 0; j < 10; j++) {\n"
+               "    }\n"
+               "  }\n"
+               "}",
+               Style);
+
+  verifyFormat("void foo() {\n"
+               "#if 1\n"
+               "# pragma omp simd\n"
+               "  for (int k = 0; k < 10; k++) {\n"
+               "#   pragma omp simd\n"
+               "    for (int j = 0; j < 10; j++) {\n"
+               "    }\n"
+               "  }\n"
+               "#endif\n"
+               "}",
+               Style);
+
+  Style.IndentPPDirectives = FormatStyle::PPDIS_BeforeHash;
+  EXPECT_EQ("void foo() {\n"
+            "#if 1\n"
+            "  #pragma omp simd\n"
+            "  for (int k = 0; k < 10; k++) {\n"
+            "    #pragma omp simd\n"
+            "    for (int j = 0; j < 10; j++) {\n"
+            "    }\n"
+            "  }\n"
+            "#endif\n"
+            "}",
+            format("void foo() {\n"
+                   "#if 1\n"
+                   "  #pragma omp simd\n"
+                   "  for (int k = 0; k < 10; k++) {\n"
+                   "    #pragma omp simd\n"
+                   "    for (int j = 0; j < 10; j++) {\n"
+                   "    }\n"
+                   "  }\n"
+                   "#endif\n"
+                   "}",
+                   Style));
+}
+
 } // namespace
 } // namespace format
 } // namespace clang

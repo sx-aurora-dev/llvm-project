@@ -84,7 +84,7 @@ void MakeSmartPtrCheck::registerMatchers(ast_matchers::MatchFinder *Finder) {
 
   Finder->addMatcher(
       traverse(
-          ast_type_traits::TK_AsIs,
+          TK_AsIs,
           cxxBindTemporaryExpr(has(ignoringParenImpCasts(
               cxxConstructExpr(
                   hasType(getSmartPointerTypeMatcher()), argumentCountIs(1),
@@ -98,7 +98,7 @@ void MakeSmartPtrCheck::registerMatchers(ast_matchers::MatchFinder *Finder) {
       this);
 
   Finder->addMatcher(
-      traverse(ast_type_traits::TK_AsIs,
+      traverse(TK_AsIs,
                cxxMemberCallExpr(
                    thisPointerType(getSmartPointerTypeMatcher()),
                    callee(cxxMethodDecl(hasName("reset"))),
@@ -176,7 +176,7 @@ void MakeSmartPtrCheck::checkConstruct(SourceManager &SM, ASTContext *Ctx,
   }
 
   // Find the location of the template's left angle.
-  size_t LAngle = ExprStr.find("<");
+  size_t LAngle = ExprStr.find('<');
   SourceLocation ConstructCallEnd;
   if (LAngle == StringRef::npos) {
     // If the template argument is missing (because it is part of the alias)
@@ -261,7 +261,7 @@ bool MakeSmartPtrCheck::replaceNew(DiagnosticBuilder &Diag,
                                    const CXXNewExpr *New, SourceManager &SM,
                                    ASTContext *Ctx) {
   auto SkipParensParents = [&](const Expr *E) {
-    TraversalKindScope RAII(*Ctx, ast_type_traits::TK_AsIs);
+    TraversalKindScope RAII(*Ctx, TK_AsIs);
 
     for (const Expr *OldE = nullptr; E != OldE;) {
       OldE = E;

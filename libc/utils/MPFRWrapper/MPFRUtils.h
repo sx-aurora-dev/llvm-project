@@ -237,6 +237,13 @@ getMPFRMatcher(InputType input, OutputType outputUnused, double t) {
   return internal::MPFRMatcher<op, InputType, OutputType>(input, t);
 }
 
+enum class RoundingMode : uint8_t { Upward, Downward, TowardZero, Nearest };
+
+template <typename T> T Round(T x, RoundingMode mode);
+
+template <typename T> bool RoundToLong(T x, long &result);
+template <typename T> bool RoundToLong(T x, RoundingMode mode, long &result);
+
 } // namespace mpfr
 } // namespace testing
 } // namespace __llvm_libc

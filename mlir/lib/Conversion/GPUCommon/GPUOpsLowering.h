@@ -18,17 +18,13 @@
 namespace mlir {
 
 template <unsigned AllocaAddrSpace>
-struct GPUFuncOpLowering : ConvertToLLVMPattern {
-  explicit GPUFuncOpLowering(LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(gpu::GPUFuncOp::getOperationName(),
-                             typeConverter.getDialect()->getContext(),
-                             typeConverter) {}
+struct GPUFuncOpLowering : ConvertOpToLLVMPattern<gpu::GPUFuncOp> {
+  using ConvertOpToLLVMPattern<gpu::GPUFuncOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+  matchAndRewrite(gpu::GPUFuncOp gpuFuncOp, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     assert(operands.empty() && "func op is not expected to have operands");
-    auto gpuFuncOp = cast<gpu::GPUFuncOp>(op);
     Location loc = gpuFuncOp.getLoc();
 
     SmallVector<LLVM::GlobalOp, 3> workgroupBuffers;
@@ -42,8 +38,8 @@ struct GPUFuncOpLowering : ConvertToLLVMPattern {
       uint64_t numElements = type.getNumElements();
 
       auto elementType = typeConverter->convertType(type.getElementType())
-                             .template cast<LLVM::LLVMType>();
-      auto arrayType = LLVM::LLVMType::getArrayTy(elementType, numElements);
+                             .template cast<Type>();
+      auto arrayType = LLVM::LLVMArrayType::get(elementType, numElements);
       std::string name = std::string(
           llvm::formatv("__wg_{0}_{1}", gpuFuncOp.getName(), en.index()));
       auto globalOp = rewriter.create<LLVM::GlobalOp>(
@@ -55,8 +51,8 @@ struct GPUFuncOpLowering : ConvertToLLVMPattern {
 
     // Rewrite the original GPU function to an LLVM function.
     auto funcType = typeConverter->convertType(gpuFuncOp.getType())
-                        .template cast<LLVM::LLVMType>()
-                        .getPointerElementTy();
+                        .template cast<LLVM::LLVMPointerType>()
+                        .getElementType();
 
     // Remap proper input types.
     TypeConverter::SignatureConversion signatureConversion(
@@ -89,7 +85,7 @@ struct GPUFuncOpLowering : ConvertToLLVMPattern {
       // Rewrite workgroup memory attributions to addresses of global buffers.
       rewriter.setInsertionPointToStart(&gpuFuncOp.front());
       unsigned numProperArguments = gpuFuncOp.getNumArguments();
-      auto i32Type = LLVM::LLVMType::getInt32Ty(rewriter.getContext());
+      auto i32Type = LLVM::LLVMIntegerType::get(rewriter.getContext(), 32);
 
       Value zero = nullptr;
       if (!workgroupBuffers.empty())
@@ -98,10 +94,11 @@ struct GPUFuncOpLowering : ConvertToLLVMPattern {
       for (auto en : llvm::enumerate(workgroupBuffers)) {
         LLVM::GlobalOp global = en.value();
         Value address = rewriter.create<LLVM::AddressOfOp>(loc, global);
-        auto elementType = global.getType().getArrayElementType();
+        auto elementType =
+            global.getType().cast<LLVM::LLVMArrayType>().getElementType();
         Value memory = rewriter.create<LLVM::GEPOp>(
-            loc, elementType.getPointerTo(global.addr_space()), address,
-            ArrayRef<Value>{zero, zero});
+            loc, LLVM::LLVMPointerType::get(elementType, global.addr_space()),
+            address, ArrayRef<Value>{zero, zero});
 
         // Build a memref descriptor pointing to the buffer to plug with the
         // existing memref infrastructure. This may use more registers than
@@ -117,7 +114,7 @@ struct GPUFuncOpLowering : ConvertToLLVMPattern {
       // Rewrite private memory attributions to alloca'ed buffers.
       unsigned numWorkgroupAttributions =
           gpuFuncOp.getNumWorkgroupAttributions();
-      auto int64Ty = LLVM::LLVMType::getInt64Ty(rewriter.getContext());
+      auto int64Ty = LLVM::LLVMIntegerType::get(rewriter.getContext(), 64);
       for (auto en : llvm::enumerate(gpuFuncOp.getPrivateAttributions())) {
         Value attribution = en.value();
         auto type = attribution.getType().cast<MemRefType>();
@@ -127,9 +124,10 @@ struct GPUFuncOpLowering : ConvertToLLVMPattern {
         // Explicitly drop memory space when lowering private memory
         // attributions since NVVM models it as `alloca`s in the default
         // memory space and does not support `alloca`s with addrspace(5).
-        auto ptrType = typeConverter->convertType(type.getElementType())
-                           .template cast<LLVM::LLVMType>()
-                           .getPointerTo(AllocaAddrSpace);
+        auto ptrType = LLVM::LLVMPointerType::get(
+            typeConverter->convertType(type.getElementType())
+                .template cast<Type>(),
+            AllocaAddrSpace);
         Value numElements = rewriter.create<LLVM::ConstantOp>(
             gpuFuncOp.getLoc(), int64Ty,
             rewriter.getI64IntegerAttr(type.getNumElements()));
@@ -154,14 +152,11 @@ struct GPUFuncOpLowering : ConvertToLLVMPattern {
   }
 };
 
-struct GPUReturnOpLowering : public ConvertToLLVMPattern {
-  GPUReturnOpLowering(LLVMTypeConverter &typeConverter)
-      : ConvertToLLVMPattern(gpu::ReturnOp::getOperationName(),
-                             typeConverter.getDialect()->getContext(),
-                             typeConverter) {}
+struct GPUReturnOpLowering : public ConvertOpToLLVMPattern<gpu::ReturnOp> {
+  using ConvertOpToLLVMPattern<gpu::ReturnOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(Operation *op, ArrayRef<Value> operands,
+  matchAndRewrite(gpu::ReturnOp op, ArrayRef<Value> operands,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOpWithNewOp<LLVM::ReturnOp>(op, operands);
     return success();

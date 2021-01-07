@@ -313,9 +313,8 @@ static void updateChildPruning(const DWARFDie &Die, CompileUnit &CU,
 /// (i.e., forward declarations that are children of a DW_TAG_module).
 static bool analyzeContextInfo(
     const DWARFDie &DIE, unsigned ParentIdx, CompileUnit &CU,
-    DeclContext *CurrentDeclContext, UniquingStringPool &StringPool,
-    DeclContextTree &Contexts, uint64_t ModulesEndOffset,
-    swiftInterfacesMap *ParseableSwiftInterfaces,
+    DeclContext *CurrentDeclContext, DeclContextTree &Contexts,
+    uint64_t ModulesEndOffset, swiftInterfacesMap *ParseableSwiftInterfaces,
     std::function<void(const Twine &, const DWARFDie &)> ReportWarning,
     bool InImportedModule = false) {
   // LIFO work list.
@@ -366,7 +365,7 @@ static bool analyzeContextInfo(
     if (CU.hasODR() || InClangModule) {
       if (Current.Context) {
         auto PtrInvalidPair = Contexts.getChildDeclContext(
-            *Current.Context, Current.Die, CU, StringPool, InClangModule);
+            *Current.Context, Current.Die, CU, InClangModule);
         Current.Context = PtrInvalidPair.getPointer();
         Info.Ctxt =
             PtrInvalidPair.getInt() ? nullptr : PtrInvalidPair.getPointer();
@@ -421,32 +420,11 @@ void DWARFLinker::cleanupAuxiliarryData(LinkContext &Context) {
   DIEAlloc.Reset();
 }
 
-/// Get the starting and ending (exclusive) offset for the
-/// attribute with index \p Idx descibed by \p Abbrev. \p Offset is
-/// supposed to point to the position of the first attribute described
-/// by \p Abbrev.
-/// \return [StartOffset, EndOffset) as a pair.
-static std::pair<uint64_t, uint64_t>
-getAttributeOffsets(const DWARFAbbreviationDeclaration *Abbrev, unsigned Idx,
-                    uint64_t Offset, const DWARFUnit &Unit) {
-  DataExtractor Data = Unit.getDebugInfoExtractor();
-
-  for (unsigned I = 0; I < Idx; ++I)
-    DWARFFormValue::skipValue(Abbrev->getFormByIndex(I), Data, &Offset,
-                              Unit.getFormParams());
-
-  uint64_t End = Offset;
-  DWARFFormValue::skipValue(Abbrev->getFormByIndex(Idx), Data, &End,
-                            Unit.getFormParams());
-
-  return std::make_pair(Offset, End);
-}
 
 /// Check if a variable describing DIE should be kept.
 /// \returns updated TraversalFlags.
 unsigned DWARFLinker::shouldKeepVariableDIE(AddressesMap &RelocMgr,
                                             const DWARFDie &DIE,
-                                            CompileUnit &Unit,
                                             CompileUnit::DIEInfo &MyInfo,
                                             unsigned Flags) {
   const auto *Abbrev = DIE.getAbbreviationDeclarationPtr();
@@ -458,24 +436,12 @@ unsigned DWARFLinker::shouldKeepVariableDIE(AddressesMap &RelocMgr,
     return Flags | TF_Keep;
   }
 
-  Optional<uint32_t> LocationIdx =
-      Abbrev->findAttributeIndex(dwarf::DW_AT_location);
-  if (!LocationIdx)
-    return Flags;
-
-  uint64_t Offset = DIE.getOffset() + getULEB128Size(Abbrev->getCode());
-  const DWARFUnit &OrigUnit = Unit.getOrigUnit();
-  uint64_t LocationOffset, LocationEndOffset;
-  std::tie(LocationOffset, LocationEndOffset) =
-      getAttributeOffsets(Abbrev, *LocationIdx, Offset, OrigUnit);
-
   // See if there is a relocation to a valid debug map entry inside
   // this variable's location. The order is important here. We want to
   // always check if the variable has a valid relocation, so that the
   // DIEInfo is filled. However, we don't want a static variable in a
   // function to force us to keep the enclosing function.
-  if (!RelocMgr.hasValidRelocationAt(LocationOffset, LocationEndOffset,
-                                     MyInfo) ||
+  if (!RelocMgr.hasLiveMemoryLocation(DIE, MyInfo) ||
       (Flags & TF_InFunctionScope))
     return Flags;
 
@@ -496,24 +462,14 @@ unsigned DWARFLinker::shouldKeepSubprogramDIE(
     AddressesMap &RelocMgr, RangesTy &Ranges, const DWARFDie &DIE,
     const DWARFFile &File, CompileUnit &Unit, CompileUnit::DIEInfo &MyInfo,
     unsigned Flags) {
-  const auto *Abbrev = DIE.getAbbreviationDeclarationPtr();
-
   Flags |= TF_InFunctionScope;
 
-  Optional<uint32_t> LowPcIdx = Abbrev->findAttributeIndex(dwarf::DW_AT_low_pc);
-  if (!LowPcIdx)
+  auto LowPc = dwarf::toAddress(DIE.find(dwarf::DW_AT_low_pc));
+  if (!LowPc)
     return Flags;
 
-  uint64_t Offset = DIE.getOffset() + getULEB128Size(Abbrev->getCode());
-  DWARFUnit &OrigUnit = Unit.getOrigUnit();
-  uint64_t LowPcOffset, LowPcEndOffset;
-  std::tie(LowPcOffset, LowPcEndOffset) =
-      getAttributeOffsets(Abbrev, *LowPcIdx, Offset, OrigUnit);
-
-  auto LowPc = dwarf::toAddress(DIE.find(dwarf::DW_AT_low_pc));
   assert(LowPc.hasValue() && "low_pc attribute is not an address.");
-  if (!LowPc ||
-      !RelocMgr.hasValidRelocationAt(LowPcOffset, LowPcEndOffset, MyInfo))
+  if (!RelocMgr.hasLiveAddressRange(DIE, MyInfo))
     return Flags;
 
   if (Options.Verbose) {
@@ -527,6 +483,8 @@ unsigned DWARFLinker::shouldKeepSubprogramDIE(
   if (DIE.getTag() == dwarf::DW_TAG_label) {
     if (Unit.hasLabelAt(*LowPc))
       return Flags;
+
+    DWARFUnit &OrigUnit = Unit.getOrigUnit();
     // FIXME: dsymutil-classic compat. dsymutil-classic doesn't consider labels
     // that don't fall into the CU's aranges. This is wrong IMO. Debug info
     // generation bugs aside, this is really wrong in the case of labels, where
@@ -563,7 +521,7 @@ unsigned DWARFLinker::shouldKeepDIE(AddressesMap &RelocMgr, RangesTy &Ranges,
   switch (DIE.getTag()) {
   case dwarf::DW_TAG_constant:
   case dwarf::DW_TAG_variable:
-    return shouldKeepVariableDIE(RelocMgr, DIE, Unit, MyInfo, Flags);
+    return shouldKeepVariableDIE(RelocMgr, DIE, MyInfo, Flags);
   case dwarf::DW_TAG_subprogram:
   case dwarf::DW_TAG_label:
     return shouldKeepSubprogramDIE(RelocMgr, Ranges, DIE, File, Unit, MyInfo,
@@ -2018,11 +1976,13 @@ static std::string remapPath(StringRef Path,
   return p.str().str();
 }
 
-bool DWARFLinker::registerModuleReference(
-    DWARFDie CUDie, const DWARFUnit &Unit, const DWARFFile &File,
-    OffsetsStringPool &StringPool, UniquingStringPool &UniquingStringPool,
-    DeclContextTree &ODRContexts, uint64_t ModulesEndOffset, unsigned &UnitID,
-    bool IsLittleEndian, unsigned Indent, bool Quiet) {
+bool DWARFLinker::registerModuleReference(DWARFDie CUDie, const DWARFUnit &Unit,
+                                          const DWARFFile &File,
+                                          OffsetsStringPool &StringPool,
+                                          DeclContextTree &ODRContexts,
+                                          uint64_t ModulesEndOffset,
+                                          unsigned &UnitID, bool IsLittleEndian,
+                                          unsigned Indent, bool Quiet) {
   std::string PCMfile = dwarf::toString(
       CUDie.find({dwarf::DW_AT_dwo_name, dwarf::DW_AT_GNU_dwo_name}), "");
   if (PCMfile.empty())
@@ -2066,10 +2026,9 @@ bool DWARFLinker::registerModuleReference(
   // shouldn't run into an infinite loop, so mark it as processed now.
   ClangModules.insert({PCMfile, DwoId});
 
-  if (Error E =
-          loadClangModule(CUDie, PCMfile, Name, DwoId, File, StringPool,
-                          UniquingStringPool, ODRContexts, ModulesEndOffset,
-                          UnitID, IsLittleEndian, Indent + 2, Quiet)) {
+  if (Error E = loadClangModule(CUDie, PCMfile, Name, DwoId, File, StringPool,
+                                ODRContexts, ModulesEndOffset, UnitID,
+                                IsLittleEndian, Indent + 2, Quiet)) {
     consumeError(std::move(E));
     return false;
   }
@@ -2079,9 +2038,8 @@ bool DWARFLinker::registerModuleReference(
 Error DWARFLinker::loadClangModule(
     DWARFDie CUDie, StringRef Filename, StringRef ModuleName, uint64_t DwoId,
     const DWARFFile &File, OffsetsStringPool &StringPool,
-    UniquingStringPool &UniquingStringPool, DeclContextTree &ODRContexts,
-    uint64_t ModulesEndOffset, unsigned &UnitID, bool IsLittleEndian,
-    unsigned Indent, bool Quiet) {
+    DeclContextTree &ODRContexts, uint64_t ModulesEndOffset, unsigned &UnitID,
+    bool IsLittleEndian, unsigned Indent, bool Quiet) {
   /// Using a SmallString<0> because loadClangModule() is recursive.
   SmallString<0> Path(Options.PrependPath);
   if (sys::path::is_relative(Filename))
@@ -2105,9 +2063,9 @@ Error DWARFLinker::loadClangModule(
     auto CUDie = CU->getUnitDIE(false);
     if (!CUDie)
       continue;
-    if (!registerModuleReference(
-            CUDie, *CU, File, StringPool, UniquingStringPool, ODRContexts,
-            ModulesEndOffset, UnitID, IsLittleEndian, Indent, Quiet)) {
+    if (!registerModuleReference(CUDie, *CU, File, StringPool, ODRContexts,
+                                 ModulesEndOffset, UnitID, IsLittleEndian,
+                                 Indent, Quiet)) {
       if (Unit) {
         std::string Err =
             (Filename +
@@ -2135,9 +2093,8 @@ Error DWARFLinker::loadClangModule(
       Unit = std::make_unique<CompileUnit>(*CU, UnitID++, !Options.NoODR,
                                            ModuleName);
       Unit->setHasInterestingContent();
-      analyzeContextInfo(CUDie, 0, *Unit, &ODRContexts.getRoot(),
-                         UniquingStringPool, ODRContexts, ModulesEndOffset,
-                         Options.ParseableSwiftInterfaces,
+      analyzeContextInfo(CUDie, 0, *Unit, &ODRContexts.getRoot(), ODRContexts,
+                         ModulesEndOffset, Options.ParseableSwiftInterfaces,
                          [&](const Twine &Warning, const DWARFDie &DIE) {
                            reportWarning(Warning, File, &DIE);
                          });
@@ -2351,10 +2308,6 @@ bool DWARFLinker::link() {
   // parallel loop.
   unsigned NumObjects = ObjectContexts.size();
 
-  // This Dwarf string pool which is only used for uniquing. This one should
-  // never be used for offsets as its not thread-safe or predictable.
-  UniquingStringPool UniquingStringPool(nullptr, true);
-
   // This Dwarf string pool which is used for emission. It must be used
   // serially as the order of calling getStringOffset matters for
   // reproducibility.
@@ -2424,7 +2377,7 @@ bool DWARFLinker::link() {
       }
       if (CUDie && !LLVM_UNLIKELY(Options.Update))
         registerModuleReference(CUDie, *CU, OptContext.File, OffsetsStringPool,
-                                UniquingStringPool, ODRContexts, 0, UnitID,
+                                ODRContexts, 0, UnitID,
                                 OptContext.File.Dwarf->isLittleEndian());
     }
   }
@@ -2466,8 +2419,8 @@ bool DWARFLinker::link() {
       auto CUDie = CU->getUnitDIE(false);
       if (!CUDie || LLVM_UNLIKELY(Options.Update) ||
           !registerModuleReference(CUDie, *CU, Context.File, OffsetsStringPool,
-                                   UniquingStringPool, ODRContexts,
-                                   ModulesEndOffset, UnitID, Quiet)) {
+                                   ODRContexts, ModulesEndOffset, UnitID,
+                                   Quiet)) {
         Context.CompileUnits.push_back(std::make_unique<CompileUnit>(
             *CU, UnitID++, !Options.NoODR && !Options.Update, ""));
       }
@@ -2479,9 +2432,8 @@ bool DWARFLinker::link() {
       if (!CUDie)
         continue;
       analyzeContextInfo(CurrentUnit->getOrigUnit().getUnitDIE(), 0,
-                         *CurrentUnit, &ODRContexts.getRoot(),
-                         UniquingStringPool, ODRContexts, ModulesEndOffset,
-                         Options.ParseableSwiftInterfaces,
+                         *CurrentUnit, &ODRContexts.getRoot(), ODRContexts,
+                         ModulesEndOffset, Options.ParseableSwiftInterfaces,
                          [&](const Twine &Warning, const DWARFDie &DIE) {
                            reportWarning(Warning, Context.File, &DIE);
                          });

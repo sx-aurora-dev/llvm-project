@@ -570,6 +570,9 @@ class InheritableAttr : Attr {
 /// attributes, but have historically been written on declarations.
 class DeclOrTypeAttr : InheritableAttr;
 
+/// A attribute is either a declaration attribute or a statement attribute.
+class DeclOrStmtAttr : InheritableAttr;
+
 /// A target-specific attribute.  This class is meant to be used as a mixin
 /// with InheritableAttr or Attr depending on the attribute's needs.
 class TargetSpecificAttr<TargetSpec target> {
@@ -681,7 +684,7 @@ def AlignMac68k : InheritableAttr {
 def AlwaysInline : InheritableAttr {
   let Spellings = [GCC<"always_inline">, Keyword<"__forceinline">];
   let Subjects = SubjectList<[Function]>;
-  let Documentation = [Undocumented];
+  let Documentation = [AlwaysInlineDocs];
 }
 
 def Artificial : InheritableAttr {
@@ -1079,6 +1082,7 @@ def CUDADeviceBuiltinSurfaceType : InheritableAttr {
   let LangOpts = [CUDA];
   let Subjects = SubjectList<[CXXRecord]>;
   let Documentation = [CUDADeviceBuiltinSurfaceTypeDocs];
+  let MeaningfulToClassTemplateDefinition = 1;
 }
 
 def CUDADeviceBuiltinTextureType : InheritableAttr {
@@ -1087,6 +1091,7 @@ def CUDADeviceBuiltinTextureType : InheritableAttr {
   let LangOpts = [CUDA];
   let Subjects = SubjectList<[CXXRecord]>;
   let Documentation = [CUDADeviceBuiltinTextureTypeDocs];
+  let MeaningfulToClassTemplateDefinition = 1;
 }
 
 def CUDAGlobal : InheritableAttr {
@@ -1315,9 +1320,12 @@ def Unlikely : StmtAttr {
   let Documentation = [LikelihoodDocs];
 }
 
-def NoMerge : StmtAttr {
+def NoMerge : DeclOrStmtAttr {
   let Spellings = [Clang<"nomerge">];
   let Documentation = [NoMergeDocs];
+  let InheritEvenIfAlreadyPresent = 1;
+  let Subjects = SubjectList<[Function], ErrorDiag, "functions and statements">;
+  let SimpleHandler = 1;
 }
 
 def FastCall : DeclOrTypeAttr {
@@ -1444,6 +1452,13 @@ def LayoutVersion : InheritableAttr, TargetSpecificAttr<TargetMicrosoftCXXABI> {
   let Args = [UnsignedArgument<"Version">];
   let Subjects = SubjectList<[CXXRecord]>;
   let Documentation = [LayoutVersionDocs];
+}
+
+def Leaf : InheritableAttr {
+  let Spellings = [GCC<"leaf">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [LeafDocs];
+  let SimpleHandler = 1;
 }
 
 def LifetimeBound : DeclOrTypeAttr {
@@ -1781,6 +1796,13 @@ def ReturnsNonNull : InheritableAttr {
   let Spellings = [GCC<"returns_nonnull">];
   let Subjects = SubjectList<[ObjCMethod, Function]>;
   let Documentation = [ReturnsNonNullDocs];
+}
+
+def CalledOnce : Attr {
+  let Spellings = [Clang<"called_once">];
+  let Subjects = SubjectList<[ParmVar]>;
+  let LangOpts = [ObjC];
+  let Documentation = [CalledOnceDocs];
 }
 
 // pass_object_size(N) indicates that the parameter should have
@@ -3516,6 +3538,14 @@ def OMPDeclareVariant : InheritableAttr {
     void printPrettyPragma(raw_ostream & OS, const PrintingPolicy &Policy)
         const;
   }];
+}
+
+def Assumption : InheritableAttr {
+  let Spellings = [Clang<"assume">];
+  let Subjects = SubjectList<[Function, ObjCMethod]>;
+  let InheritEvenIfAlreadyPresent = 1;
+  let Documentation = [AssumptionDocs];
+  let Args = [StringArgument<"Assumption">];
 }
 
 def InternalLinkage : InheritableAttr {

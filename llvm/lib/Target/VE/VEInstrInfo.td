@@ -545,8 +545,8 @@ def MemBarrier : SDNode<"VEISD::MEMBARRIER", SDTNone,
                         [SDNPHasChain, SDNPSideEffect]>;
 
 // TS1AM
-def SDT_TS1AM : SDTypeProfile<1, 3, [SDTCisSameAs<0, 3>, SDTCisInt<2>,
-                                     SDTCisPtrTy<3>]>;
+def SDT_TS1AM : SDTypeProfile<1, 3, [SDTCisSameAs<0, 3>, SDTCisPtrTy<1>,
+                                     SDTCisVT<2, i32>, SDTCisInt<3>]>;
 def ts1am     : SDNode<"VEISD::TS1AM", SDT_TS1AM,
                        [SDNPHasChain, SDNPMayStore, SDNPMayLoad,
                         SDNPMemOperand]>;
@@ -1230,9 +1230,8 @@ defm ATMAM : RRCASm<"atmam", 0x53, I64, i64, uimm0to2>;
 // Section 8.2.20 - CAS (Compare and Swap)
 let DecoderMethod = "DecodeCASI64" in
 defm CASL : RRCASm<"cas.l", 0x62, I64, i64, simm7, atomic_cmp_swap_64>;
-let DecoderMethod = "DecodeCASI32" in
-let cx = 1 in defm CASW : RRCASm<"cas.w", 0x62, I32, i32, simm7,
-                                 atomic_cmp_swap_32>;
+let DecoderMethod = "DecodeCASI32", cx = 1 in
+defm CASW : RRCASm<"cas.w", 0x62, I32, i32, simm7, atomic_cmp_swap_32>;
 
 //-----------------------------------------------------------------------------
 // Section 8.3 - Transfer Control Instructions
@@ -1698,38 +1697,6 @@ def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
           (TS1AMLrii MEMriRRM:$src, 127, $new)>;
 
 //===----------------------------------------------------------------------===//
-// SJLJ Exception handling intrinsics
-//===----------------------------------------------------------------------===//
-
-let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1,
-    usesCustomInserter = 1 in {
-  def EH_SjLj_SetJmp  : Pseudo<(outs I32:$dst), (ins I64:$buf),
-                               "# EH_SJLJ_SETJMP",
-                               [(set I32:$dst, (VEeh_sjlj_setjmp I64:$buf))]>;
-  let isTerminator = 1 in {
-  def EH_SjLj_LongJmp : Pseudo<(outs), (ins I64:$buf),
-                               "# EH_SJLJ_LONGJMP",
-                               [(VEeh_sjlj_longjmp I64:$buf)]>;
-  }
-}
-
-let isBarrier = 1, hasSideEffects = 1, usesCustomInserter = 1 in
-  def EH_SjLj_Setup_Dispatch : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
-                                      [(VEeh_sjlj_setup_dispatch)]>;
-
-let isBranch = 1, isTerminator = 1, isCodeGenOnly = 1 in
-  def EH_SjLj_Setup : Pseudo<(outs), (ins brtarget32:$dst),
-                             "# EH_SJlJ_SETUP $dst">;
-
-//===----------------------------------------------------------------------===//
-// Dummy instruction for CPU flow control
-//===----------------------------------------------------------------------===//
-
-let mayLoad = 1, mayStore = 0, hasSideEffects = 1, isTrap = 1 in {
-  def TRAP    : Pseudo<(outs), (ins), "# TRAP", [(trap)]>;
-}
-
-//===----------------------------------------------------------------------===//
 // Pattern Matchings
 //===----------------------------------------------------------------------===//
 
@@ -1793,8 +1760,8 @@ def vehi_only : OutPatFrag<(ops node:$hi),
                            (LEASLzii 0, 0, $hi)>;
 def vehi_lo : OutPatFrag<(ops node:$hi, node:$lo),
                          (LEASLrii $lo, 0, $hi)>;
-def vehi_loimm : OutPatFrag<(ops node:$hi, node:$lo, node:$idx),
-                            (LEASLrii $lo, $idx, $hi)>;
+def vehi_lo_imm : OutPatFrag<(ops node:$hi, node:$lo, node:$idx),
+                             (LEASLrii $lo, $idx, $hi)>;
 def vehi_baselo : OutPatFrag<(ops node:$base, node:$hi, node:$lo),
                              (LEASLrri $base, $lo, $hi)>;
 foreach type = [ "tblockaddress", "tconstpool", "texternalsym", "tglobaladdr",
@@ -1803,7 +1770,7 @@ foreach type = [ "tblockaddress", "tconstpool", "texternalsym", "tglobaladdr",
   def : Pat<(VEhi !cast<SDNode>(type):$hi), (vehi_only $hi)>;
   def : Pat<(add (VEhi !cast<SDNode>(type):$hi), I64:$lo), (vehi_lo $hi, $lo)>;
   def : Pat<(add (add (VEhi !cast<SDNode>(type):$hi), I64:$lo), simm7:$val),
-            (vehi_loimm $hi, $lo, (LO7 $val))>;
+            (vehi_lo_imm $hi, $lo, (LO7 $val))>;
   def : Pat<(add I64:$base, (add (VEhi !cast<SDNode>(type):$hi), I64:$lo)),
             (vehi_baselo $base, $hi, $lo)>;
 }
@@ -2034,6 +2001,41 @@ multiclass TRATMSTm<SDPatternOperator from,
 defm : TRATMSTm<atomic_store_8, i32, ST1Brri, ST1Brii, ST1Bzri, ST1Bzii>;
 defm : TRATMSTm<atomic_store_16, i32, ST2Brri, ST2Brii, ST2Bzri, ST2Bzii>;
 defm : TRATMSTm<atomic_store_32, i32, STLrri, STLrii, STLzri, STLzii>;
+
+// Atomic swaps
+def : Pat<(i32 (ts1am i64:$src, i32:$flag, i32:$new)),
+          (TS1AMWrir $src, 0, $flag, $new)>;
+def : Pat<(i32 (atomic_swap_32 ADDRri:$src, i32:$new)),
+          (TS1AMWrii MEMriRRM:$src, 15, $new)>;
+def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
+          (TS1AMLrir MEMriRRM:$src, (LEAzii 0, 0, 255), i64:$new)>;
+
+//===----------------------------------------------------------------------===//
+// SJLJ Exception handling patterns
+//===----------------------------------------------------------------------===//
+
+let hasSideEffects = 1, isBarrier = 1, isCodeGenOnly = 1,
+    usesCustomInserter = 1 in {
+  let isTerminator = 1 in
+  def EH_SjLj_LongJmp : Pseudo<(outs), (ins I64:$buf),
+                               "# EH_SJLJ_LONGJMP",
+                               [(VEeh_sjlj_longjmp I64:$buf)]>;
+
+  def EH_SjLj_SetJmp  : Pseudo<(outs I32:$dst), (ins I64:$buf),
+                               "# EH_SJLJ_SETJMP",
+                               [(set I32:$dst, (VEeh_sjlj_setjmp I64:$buf))]>;
+
+  def EH_SjLj_Setup_Dispatch : Pseudo<(outs), (ins), "# EH_SJLJ_SETUP_DISPATCH",
+                                      [(VEeh_sjlj_setup_dispatch)]>;
+}
+
+let isTerminator = 1, isBranch = 1, isCodeGenOnly = 1 in
+  def EH_SjLj_Setup : Pseudo<(outs), (ins brtarget32:$dst),
+                             "# EH_SJlJ_SETUP $dst">;
+
+//===----------------------------------------------------------------------===//
+// Branch related patterns
+//===----------------------------------------------------------------------===//
 
 // Branches
 def : Pat<(br bb:$addr), (BRCFLa bb:$addr)>;
@@ -2748,7 +2750,6 @@ def VLEN : OutPatFrag<(ops node:$length),
 
 // Vector instructions.
 include "VEInstrVec.td"
-include "VEInstrVecVL.td"
 
 // load an immediate into a register
 def lea_i64         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 $imm))>;

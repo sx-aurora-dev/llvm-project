@@ -81,6 +81,7 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/Constant.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/GlobalValue.h"
@@ -754,13 +755,13 @@ static int64_t ExtractImmediate(const SCEV *&S, ScalarEvolution &SE) {
       return C->getValue()->getSExtValue();
     }
   } else if (const SCEVAddExpr *Add = dyn_cast<SCEVAddExpr>(S)) {
-    SmallVector<const SCEV *, 8> NewOps(Add->op_begin(), Add->op_end());
+    SmallVector<const SCEV *, 8> NewOps(Add->operands());
     int64_t Result = ExtractImmediate(NewOps.front(), SE);
     if (Result != 0)
       S = SE.getAddExpr(NewOps);
     return Result;
   } else if (const SCEVAddRecExpr *AR = dyn_cast<SCEVAddRecExpr>(S)) {
-    SmallVector<const SCEV *, 8> NewOps(AR->op_begin(), AR->op_end());
+    SmallVector<const SCEV *, 8> NewOps(AR->operands());
     int64_t Result = ExtractImmediate(NewOps.front(), SE);
     if (Result != 0)
       S = SE.getAddRecExpr(NewOps, AR->getLoop(),
@@ -780,13 +781,13 @@ static GlobalValue *ExtractSymbol(const SCEV *&S, ScalarEvolution &SE) {
       return GV;
     }
   } else if (const SCEVAddExpr *Add = dyn_cast<SCEVAddExpr>(S)) {
-    SmallVector<const SCEV *, 8> NewOps(Add->op_begin(), Add->op_end());
+    SmallVector<const SCEV *, 8> NewOps(Add->operands());
     GlobalValue *Result = ExtractSymbol(NewOps.back(), SE);
     if (Result)
       S = SE.getAddExpr(NewOps);
     return Result;
   } else if (const SCEVAddRecExpr *AR = dyn_cast<SCEVAddRecExpr>(S)) {
-    SmallVector<const SCEV *, 8> NewOps(AR->op_begin(), AR->op_end());
+    SmallVector<const SCEV *, 8> NewOps(AR->operands());
     GlobalValue *Result = ExtractSymbol(NewOps.front(), SE);
     if (Result)
       S = SE.getAddRecExpr(NewOps, AR->getLoop(),
@@ -5774,6 +5775,63 @@ void LoopStrengthReduce::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.addPreserved<MemorySSAWrapperPass>();
 }
 
+using EqualValues = SmallVector<std::tuple<WeakVH, int64_t, DIExpression *>, 4>;
+using EqualValuesMap = DenseMap<DbgValueInst *, EqualValues>;
+
+static void DbgGatherEqualValues(Loop *L, ScalarEvolution &SE,
+                                 EqualValuesMap &DbgValueToEqualSet) {
+  for (auto &B : L->getBlocks()) {
+    for (auto &I : *B) {
+      auto DVI = dyn_cast<DbgValueInst>(&I);
+      if (!DVI)
+        continue;
+      auto V = DVI->getVariableLocation();
+      if (!V || !SE.isSCEVable(V->getType()))
+        continue;
+      auto DbgValueSCEV = SE.getSCEV(V);
+      EqualValues EqSet;
+      for (PHINode &Phi : L->getHeader()->phis()) {
+        if (V->getType() != Phi.getType())
+          continue;
+        if (!SE.isSCEVable(Phi.getType()))
+          continue;
+        auto PhiSCEV = SE.getSCEV(&Phi);
+        Optional<APInt> Offset =
+                SE.computeConstantDifference(DbgValueSCEV, PhiSCEV);
+        if (Offset && Offset->getMinSignedBits() <= 64)
+          EqSet.emplace_back(std::make_tuple(
+              &Phi, Offset.getValue().getSExtValue(), DVI->getExpression()));
+      }
+      DbgValueToEqualSet[DVI] = std::move(EqSet);
+    }
+  }
+}
+
+static void DbgApplyEqualValues(EqualValuesMap &DbgValueToEqualSet) {
+  for (auto A : DbgValueToEqualSet) {
+    auto DVI = A.first;
+    // Only update those that are now undef.
+    if (!isa_and_nonnull<UndefValue>(DVI->getVariableLocation()))
+      continue;
+    for (auto EV : A.second) {
+      auto V = std::get<WeakVH>(EV);
+      if (!V)
+        continue;
+      auto DbgDIExpr = std::get<DIExpression *>(EV);
+      auto Offset = std::get<int64_t>(EV);
+      auto &Ctx = DVI->getContext();
+      DVI->setOperand(0, MetadataAsValue::get(Ctx, ValueAsMetadata::get(V)));
+      if (Offset) {
+        SmallVector<uint64_t, 8> Ops;
+        DIExpression::appendOffset(Ops, Offset);
+        DbgDIExpr = DIExpression::prependOpcodes(DbgDIExpr, Ops, true);
+      }
+      DVI->setOperand(2, MetadataAsValue::get(Ctx, DbgDIExpr));
+      break;
+    }
+  }
+}
+
 static bool ReduceLoopStrength(Loop *L, IVUsers &IU, ScalarEvolution &SE,
                                DominatorTree &DT, LoopInfo &LI,
                                const TargetTransformInfo &TTI,
@@ -5788,6 +5846,11 @@ static bool ReduceLoopStrength(Loop *L, IVUsers &IU, ScalarEvolution &SE,
   // Run the main LSR transformation.
   Changed |=
       LSRInstance(L, IU, SE, DT, LI, TTI, AC, TLI, MSSAU.get()).getChanged();
+
+  // Debug preservation - before we start removing anything create equivalence
+  // sets for the llvm.dbg.value intrinsics.
+  EqualValuesMap DbgValueToEqualSet;
+  DbgGatherEqualValues(L, SE, DbgValueToEqualSet);
 
   // Remove any extra phis created by processing inner loops.
   Changed |= DeleteDeadPHIs(L->getHeader(), &TLI, MSSAU.get());
@@ -5806,6 +5869,9 @@ static bool ReduceLoopStrength(Loop *L, IVUsers &IU, ScalarEvolution &SE,
       DeleteDeadPHIs(L->getHeader(), &TLI, MSSAU.get());
     }
   }
+
+  DbgApplyEqualValues(DbgValueToEqualSet);
+
   return Changed;
 }
 

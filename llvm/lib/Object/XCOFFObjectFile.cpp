@@ -31,7 +31,7 @@ static const uint16_t NoRelMask = 0x0001;
 template <typename T>
 static Expected<const T *> getObject(MemoryBufferRef M, const void *Ptr,
                                      const uint64_t Size = sizeof(T)) {
-  uintptr_t Addr = uintptr_t(Ptr);
+  uintptr_t Addr = reinterpret_cast<uintptr_t>(Ptr);
   if (Error E = Binary::checkOffset(M, Addr, Size))
     return std::move(E);
   return reinterpret_cast<const T *>(Addr);
@@ -283,7 +283,7 @@ XCOFFObjectFile::getSectionContents(DataRefImpl Sec) const {
 
   const uint8_t * ContentStart = base() + OffsetToRaw;
   uint64_t SectionSize = getSectionSize(Sec);
-  if (checkOffset(Data, uintptr_t(ContentStart), SectionSize))
+  if (checkOffset(Data, reinterpret_cast<uintptr_t>(ContentStart), SectionSize))
     return make_error<BinaryError>();
 
   return makeArrayRef(ContentStart,SectionSize);
@@ -939,29 +939,6 @@ static SmallString<32> parseParmsTypeWithVecInfo(uint32_t Value,
   assert(I == ParmsNum &&
          "The total parameters number of fixed-point or floating-point "
          "parameters not equal to the number in the parameter type!");
-  return ParmsType;
-}
-
-static SmallString<32> parseParmsType(uint32_t Value, unsigned ParmsNum) {
-  SmallString<32> ParmsType;
-  for (unsigned I = 0; I < ParmsNum; ++I) {
-    if (I != 0)
-      ParmsType += ", ";
-    if ((Value & TracebackTable::ParmTypeIsFloatingBit) == 0) {
-      // Fixed parameter type.
-      ParmsType += "i";
-      Value <<= 1;
-    } else {
-      if ((Value & TracebackTable::ParmTypeFloatingIsDoubleBit) == 0)
-        // Float parameter type.
-        ParmsType += "f";
-      else
-        // Double parameter type.
-        ParmsType += "d";
-
-      Value <<= 2;
-    }
-  }
   return ParmsType;
 }
 

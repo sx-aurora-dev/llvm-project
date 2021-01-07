@@ -1833,6 +1833,47 @@ RValue CodeGenFunction::emitBuiltinOSLogFormat(const CallExpr &E) {
   return RValue::get(BufAddr.getPointer());
 }
 
+static bool isSpecialUnsignedMultiplySignedResult(
+    unsigned BuiltinID, WidthAndSignedness Op1Info, WidthAndSignedness Op2Info,
+    WidthAndSignedness ResultInfo) {
+  return BuiltinID == Builtin::BI__builtin_mul_overflow &&
+         Op1Info.Width == Op2Info.Width && Op2Info.Width == ResultInfo.Width &&
+         !Op1Info.Signed && !Op2Info.Signed && ResultInfo.Signed;
+}
+
+static RValue EmitCheckedUnsignedMultiplySignedResult(
+    CodeGenFunction &CGF, const clang::Expr *Op1, WidthAndSignedness Op1Info,
+    const clang::Expr *Op2, WidthAndSignedness Op2Info,
+    const clang::Expr *ResultArg, QualType ResultQTy,
+    WidthAndSignedness ResultInfo) {
+  assert(isSpecialUnsignedMultiplySignedResult(
+             Builtin::BI__builtin_mul_overflow, Op1Info, Op2Info, ResultInfo) &&
+         "Cannot specialize this multiply");
+
+  llvm::Value *V1 = CGF.EmitScalarExpr(Op1);
+  llvm::Value *V2 = CGF.EmitScalarExpr(Op2);
+
+  llvm::Value *HasOverflow;
+  llvm::Value *Result = EmitOverflowIntrinsic(
+      CGF, llvm::Intrinsic::umul_with_overflow, V1, V2, HasOverflow);
+
+  // The intrinsic call will detect overflow when the value is > UINT_MAX,
+  // however, since the original builtin had a signed result, we need to report
+  // an overflow when the result is greater than INT_MAX.
+  auto IntMax = llvm::APInt::getSignedMaxValue(ResultInfo.Width);
+  llvm::Value *IntMaxValue = llvm::ConstantInt::get(Result->getType(), IntMax);
+
+  llvm::Value *IntMaxOverflow = CGF.Builder.CreateICmpUGT(Result, IntMaxValue);
+  HasOverflow = CGF.Builder.CreateOr(HasOverflow, IntMaxOverflow);
+
+  bool isVolatile =
+      ResultArg->getType()->getPointeeType().isVolatileQualified();
+  Address ResultPtr = CGF.EmitPointerWithAlignment(ResultArg);
+  CGF.Builder.CreateStore(CGF.EmitToMemory(Result, ResultQTy), ResultPtr,
+                          isVolatile);
+  return RValue::get(HasOverflow);
+}
+
 /// Determine if a binop is a checked mixed-sign multiply we can specialize.
 static bool isSpecialMixedSignMultiply(unsigned BuiltinID,
                                        WidthAndSignedness Op1Info,
@@ -3953,6 +3994,12 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
                                           RightInfo, ResultArg, ResultQTy,
                                           ResultInfo);
 
+    if (isSpecialUnsignedMultiplySignedResult(BuiltinID, LeftInfo, RightInfo,
+                                              ResultInfo))
+      return EmitCheckedUnsignedMultiplySignedResult(
+          *this, LeftArg, LeftInfo, RightArg, RightInfo, ResultArg, ResultQTy,
+          ResultInfo);
+
     WidthAndSignedness EncompassingInfo =
         EncompassingIntegerType({LeftInfo, RightInfo, ResultInfo});
 
@@ -4314,8 +4361,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
           Int32Ty, llvm::ArrayRef<llvm::Type *>(ArgTys), false);
       Value *BCast = Builder.CreatePointerCast(Arg1, I8PTy);
       return RValue::get(
-          Builder.CreateCall(CGM.CreateRuntimeFunction(FTy, Name),
-                             {Arg0, BCast, PacketSize, PacketAlign}));
+          EmitRuntimeCall(CGM.CreateRuntimeFunction(FTy, Name),
+                          {Arg0, BCast, PacketSize, PacketAlign}));
     } else {
       assert(4 == E->getNumArgs() &&
              "Illegal number of parameters to pipe function");
@@ -4333,9 +4380,9 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
       // it to i32.
       if (Arg2->getType() != Int32Ty)
         Arg2 = Builder.CreateZExtOrTrunc(Arg2, Int32Ty);
-      return RValue::get(Builder.CreateCall(
-          CGM.CreateRuntimeFunction(FTy, Name),
-          {Arg0, Arg1, Arg2, BCast, PacketSize, PacketAlign}));
+      return RValue::get(
+          EmitRuntimeCall(CGM.CreateRuntimeFunction(FTy, Name),
+                          {Arg0, Arg1, Arg2, BCast, PacketSize, PacketAlign}));
     }
   }
   // OpenCL v2.0 s6.13.16 ,s9.17.3.5 - Built-in pipe reserve read and write
@@ -4376,9 +4423,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     // it to i32.
     if (Arg1->getType() != Int32Ty)
       Arg1 = Builder.CreateZExtOrTrunc(Arg1, Int32Ty);
-    return RValue::get(
-        Builder.CreateCall(CGM.CreateRuntimeFunction(FTy, Name),
-                           {Arg0, Arg1, PacketSize, PacketAlign}));
+    return RValue::get(EmitRuntimeCall(CGM.CreateRuntimeFunction(FTy, Name),
+                                       {Arg0, Arg1, PacketSize, PacketAlign}));
   }
   // OpenCL v2.0 s6.13.16, s9.17.3.5 - Built-in pipe commit read and write
   // functions
@@ -4414,9 +4460,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
         llvm::FunctionType::get(llvm::Type::getVoidTy(getLLVMContext()),
                                 llvm::ArrayRef<llvm::Type *>(ArgTys), false);
 
-    return RValue::get(
-        Builder.CreateCall(CGM.CreateRuntimeFunction(FTy, Name),
-                           {Arg0, Arg1, PacketSize, PacketAlign}));
+    return RValue::get(EmitRuntimeCall(CGM.CreateRuntimeFunction(FTy, Name),
+                                       {Arg0, Arg1, PacketSize, PacketAlign}));
   }
   // OpenCL v2.0 s6.13.16.4 Built-in pipe query functions
   case Builtin::BIget_pipe_num_packets:
@@ -4439,8 +4484,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
     llvm::FunctionType *FTy = llvm::FunctionType::get(
         Int32Ty, llvm::ArrayRef<llvm::Type *>(ArgTys), false);
 
-    return RValue::get(Builder.CreateCall(CGM.CreateRuntimeFunction(FTy, Name),
-                                          {Arg0, PacketSize, PacketAlign}));
+    return RValue::get(EmitRuntimeCall(CGM.CreateRuntimeFunction(FTy, Name),
+                                       {Arg0, PacketSize, PacketAlign}));
   }
 
   // OpenCL v2.0 s6.13.9 - Address space qualifier functions.
@@ -4462,7 +4507,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
       NewArg = Builder.CreateBitOrPointerCast(Arg0, NewArgT);
     auto NewName = std::string("__") + E->getDirectCallee()->getName().str();
     auto NewCall =
-        Builder.CreateCall(CGM.CreateRuntimeFunction(FTy, NewName), {NewArg});
+        EmitRuntimeCall(CGM.CreateRuntimeFunction(FTy, NewName), {NewArg});
     return RValue::get(Builder.CreateBitOrPointerCast(NewCall,
       ConvertType(E->getType())));
   }
@@ -4505,8 +4550,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
           llvm::AttributeList::get(CGM.getModule().getContext(), 3U, B);
 
       auto RTCall =
-          Builder.CreateCall(CGM.CreateRuntimeFunction(FTy, Name, ByValAttrSet),
-                             {Queue, Flags, Range, Kernel, Block});
+          EmitRuntimeCall(CGM.CreateRuntimeFunction(FTy, Name, ByValAttrSet),
+                          {Queue, Flags, Range, Kernel, Block});
       RTCall->setAttributes(ByValAttrSet);
       return RValue::get(RTCall);
     }
@@ -4565,7 +4610,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
 
       llvm::FunctionType *FTy = llvm::FunctionType::get(Int32Ty, ArgTys, false);
       auto Call = RValue::get(
-          Builder.CreateCall(CGM.CreateRuntimeFunction(FTy, Name), Args));
+          EmitRuntimeCall(CGM.CreateRuntimeFunction(FTy, Name), Args));
       if (TmpSize)
         EmitLifetimeEnd(TmpSize, TmpPtr);
       return Call;
@@ -4623,8 +4668,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
         llvm::FunctionType *FTy = llvm::FunctionType::get(
             Int32Ty, llvm::ArrayRef<llvm::Type *>(ArgTys), false);
         return RValue::get(
-            Builder.CreateCall(CGM.CreateRuntimeFunction(FTy, Name),
-                               llvm::ArrayRef<llvm::Value *>(Args)));
+            EmitRuntimeCall(CGM.CreateRuntimeFunction(FTy, Name),
+                            llvm::ArrayRef<llvm::Value *>(Args)));
       }
       // Has event info and variadics
       // Pass the number of variadics to the runtime function too.
@@ -4640,8 +4685,8 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
       llvm::FunctionType *FTy = llvm::FunctionType::get(
           Int32Ty, llvm::ArrayRef<llvm::Type *>(ArgTys), false);
       auto Call =
-          RValue::get(Builder.CreateCall(CGM.CreateRuntimeFunction(FTy, Name),
-                                         llvm::ArrayRef<llvm::Value *>(Args)));
+          RValue::get(EmitRuntimeCall(CGM.CreateRuntimeFunction(FTy, Name),
+                                      llvm::ArrayRef<llvm::Value *>(Args)));
       if (TmpSize)
         EmitLifetimeEnd(TmpSize, TmpPtr);
       return Call;
@@ -4657,7 +4702,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
         CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(0));
     Value *Kernel = Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
     Value *Arg = Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
-    return RValue::get(Builder.CreateCall(
+    return RValue::get(EmitRuntimeCall(
         CGM.CreateRuntimeFunction(
             llvm::FunctionType::get(IntTy, {GenericVoidPtrTy, GenericVoidPtrTy},
                                     false),
@@ -4671,7 +4716,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
         CGM.getOpenCLRuntime().emitOpenCLEnqueuedBlock(*this, E->getArg(0));
     Value *Kernel = Builder.CreatePointerCast(Info.Kernel, GenericVoidPtrTy);
     Value *Arg = Builder.CreatePointerCast(Info.BlockArg, GenericVoidPtrTy);
-    return RValue::get(Builder.CreateCall(
+    return RValue::get(EmitRuntimeCall(
         CGM.CreateRuntimeFunction(
             llvm::FunctionType::get(IntTy, {GenericVoidPtrTy, GenericVoidPtrTy},
                                     false),
@@ -4692,7 +4737,7 @@ RValue CodeGenFunction::EmitBuiltinExpr(const GlobalDecl GD, unsigned BuiltinID,
         BuiltinID == Builtin::BIget_kernel_max_sub_group_size_for_ndrange
             ? "__get_kernel_max_sub_group_size_for_ndrange_impl"
             : "__get_kernel_sub_group_count_for_ndrange_impl";
-    return RValue::get(Builder.CreateCall(
+    return RValue::get(EmitRuntimeCall(
         CGM.CreateRuntimeFunction(
             llvm::FunctionType::get(
                 IntTy, {NDRange->getType(), GenericVoidPtrTy, GenericVoidPtrTy},
@@ -4997,6 +5042,7 @@ static Value *EmitTargetArchBuiltinExpr(CodeGenFunction *CGF,
   case llvm::Triple::x86_64:
     return CGF->EmitX86BuiltinExpr(BuiltinID, E);
   case llvm::Triple::ppc:
+  case llvm::Triple::ppcle:
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le:
     return CGF->EmitPPCBuiltinExpr(BuiltinID, E);
@@ -5549,6 +5595,14 @@ static const ARMVectorIntrinsicInfo AArch64SIMDIntrinsicMap[] = {
   NEONMAP0(vcltzq_v),
   NEONMAP1(vclz_v, ctlz, Add1ArgType),
   NEONMAP1(vclzq_v, ctlz, Add1ArgType),
+  NEONMAP1(vcmla_rot180_v, aarch64_neon_vcmla_rot180, Add1ArgType),
+  NEONMAP1(vcmla_rot270_v, aarch64_neon_vcmla_rot270, Add1ArgType),
+  NEONMAP1(vcmla_rot90_v, aarch64_neon_vcmla_rot90, Add1ArgType),
+  NEONMAP1(vcmla_v, aarch64_neon_vcmla_rot0, Add1ArgType),
+  NEONMAP1(vcmlaq_rot180_v, aarch64_neon_vcmla_rot180, Add1ArgType),
+  NEONMAP1(vcmlaq_rot270_v, aarch64_neon_vcmla_rot270, Add1ArgType),
+  NEONMAP1(vcmlaq_rot90_v, aarch64_neon_vcmla_rot90, Add1ArgType),
+  NEONMAP1(vcmlaq_v, aarch64_neon_vcmla_rot0, Add1ArgType),
   NEONMAP1(vcnt_v, ctpop, Add1ArgType),
   NEONMAP1(vcntq_v, ctpop, Add1ArgType),
   NEONMAP1(vcvt_f16_f32, aarch64_neon_vcvtfp2hf, 0),
@@ -7689,8 +7743,7 @@ static llvm::Value *VectorUnzip(CGBuilderTy &Builder, llvm::Value *V, bool Odd) 
       cast<llvm::FixedVectorType>(V->getType())->getNumElements();
   for (unsigned i = 0; i < InputElements; i += 2)
     Indices.push_back(i + Odd);
-  return Builder.CreateShuffleVector(V, llvm::UndefValue::get(V->getType()),
-                                     Indices);
+  return Builder.CreateShuffleVector(V, Indices);
 }
 
 static llvm::Value *VectorZip(CGBuilderTy &Builder, llvm::Value *V0,
@@ -7731,8 +7784,7 @@ static llvm::Value *ARMMVEVectorElementReverse(CGBuilderTy &Builder,
   unsigned Mask = ReverseWidth / LaneSize - 1;
   for (unsigned i = 0; i < Elements; i++)
     Indices.push_back(i ^ Mask);
-  return Builder.CreateShuffleVector(V, llvm::UndefValue::get(V->getType()),
-                                     Indices);
+  return Builder.CreateShuffleVector(V, Indices);
 }
 
 Value *CodeGenFunction::EmitARMMVEBuiltinExpr(unsigned BuiltinID,
@@ -11756,8 +11808,7 @@ static Value *EmitX86CvtF16ToFloatExpr(CodeGenFunction &CGF,
   if (NumDstElts !=
       cast<llvm::FixedVectorType>(Src->getType())->getNumElements()) {
     assert(NumDstElts == 4 && "Unexpected vector size");
-    Src = CGF.Builder.CreateShuffleVector(Src, UndefValue::get(Src->getType()),
-                                          ArrayRef<int>{0, 1, 2, 3});
+    Src = CGF.Builder.CreateShuffleVector(Src, ArrayRef<int>{0, 1, 2, 3});
   }
 
   // Bitcast from vXi16 to vXf16.
@@ -12648,7 +12699,6 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
       Indices[i] = i + Index;
 
     Value *Res = Builder.CreateShuffleVector(Ops[0],
-                                             UndefValue::get(Ops[0]->getType()),
                                              makeArrayRef(Indices, NumElts),
                                              "extract");
 
@@ -12688,7 +12738,6 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
       Indices[i] = (i >= SrcNumElts) ? SrcNumElts + (i % SrcNumElts) : i;
 
     Value *Op1 = Builder.CreateShuffleVector(Ops[1],
-                                             UndefValue::get(Ops[1]->getType()),
                                              makeArrayRef(Indices, DstNumElts),
                                              "widen");
 
@@ -12774,8 +12823,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
         Indices[l + i] = l + i;
     }
 
-    return Builder.CreateShuffleVector(Ops[0], UndefValue::get(Ty),
-                                       makeArrayRef(Indices, NumElts),
+    return Builder.CreateShuffleVector(Ops[0], makeArrayRef(Indices, NumElts),
                                        "pshuflw");
   }
   case X86::BI__builtin_ia32_pshufhw:
@@ -12798,8 +12846,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
       }
     }
 
-    return Builder.CreateShuffleVector(Ops[0], UndefValue::get(Ty),
-                                       makeArrayRef(Indices, NumElts),
+    return Builder.CreateShuffleVector(Ops[0], makeArrayRef(Indices, NumElts),
                                        "pshufhw");
   }
   case X86::BI__builtin_ia32_pshufd:
@@ -12828,8 +12875,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
       }
     }
 
-    return Builder.CreateShuffleVector(Ops[0], UndefValue::get(Ty),
-                                       makeArrayRef(Indices, NumElts),
+    return Builder.CreateShuffleVector(Ops[0], makeArrayRef(Indices, NumElts),
                                        "permil");
   }
   case X86::BI__builtin_ia32_shufpd:
@@ -12876,8 +12922,7 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
       for (unsigned i = 0; i != 4; ++i)
         Indices[l + i] = l + ((Imm >> (2 * i)) & 0x3);
 
-    return Builder.CreateShuffleVector(Ops[0], UndefValue::get(Ty),
-                                       makeArrayRef(Indices, NumElts),
+    return Builder.CreateShuffleVector(Ops[0], makeArrayRef(Indices, NumElts),
                                        "perm");
   }
   case X86::BI__builtin_ia32_palignr128:
@@ -13625,6 +13670,18 @@ Value *CodeGenFunction::EmitX86BuiltinExpr(unsigned BuiltinID,
     Function *F =
         CGM.getIntrinsic(Intrinsic::vector_reduce_and, Ops[0]->getType());
     return Builder.CreateCall(F, {Ops[0]});
+  }
+  case X86::BI__builtin_ia32_reduce_fadd_pd512:
+  case X86::BI__builtin_ia32_reduce_fadd_ps512: {
+    Function *F =
+        CGM.getIntrinsic(Intrinsic::vector_reduce_fadd, Ops[1]->getType());
+    return Builder.CreateCall(F, {Ops[0], Ops[1]});
+  }
+  case X86::BI__builtin_ia32_reduce_fmul_pd512:
+  case X86::BI__builtin_ia32_reduce_fmul_ps512: {
+    Function *F =
+        CGM.getIntrinsic(Intrinsic::vector_reduce_fmul, Ops[1]->getType());
+    return Builder.CreateCall(F, {Ops[0], Ops[1]});
   }
   case X86::BI__builtin_ia32_reduce_mul_d512:
   case X86::BI__builtin_ia32_reduce_mul_q512: {
@@ -14844,8 +14901,8 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
   // use custom code generation to expand a builtin call with a pointer to a
   // load (if the corresponding instruction accumulates its result) followed by
   // the call to the intrinsic and a store of the result.
-#define MMA_BUILTIN(Name, Types, Accumulate) \
-  case PPC::BI__builtin_mma_##Name:
+#define CUSTOM_BUILTIN(Name, Types, Accumulate) \
+  case PPC::BI__builtin_##Name:
 #include "clang/Basic/BuiltinsPPC.def"
   {
     // The first argument of these two builtins is a pointer used to store their
@@ -14853,9 +14910,9 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
     // return values. So, here we emit code extracting these values from the
     // intrinsic results and storing them using that pointer.
     if (BuiltinID == PPC::BI__builtin_mma_disassemble_acc ||
-        BuiltinID == PPC::BI__builtin_mma_disassemble_pair) {
+        BuiltinID == PPC::BI__builtin_vsx_disassemble_pair) {
       unsigned NumVecs = 2;
-      auto Intrinsic = Intrinsic::ppc_mma_disassemble_pair;
+      auto Intrinsic = Intrinsic::ppc_vsx_disassemble_pair;
       if (BuiltinID == PPC::BI__builtin_mma_disassemble_acc) {
         NumVecs = 4;
         Intrinsic = Intrinsic::ppc_mma_disassemble_acc;
@@ -14876,16 +14933,16 @@ Value *CodeGenFunction::EmitPPCBuiltinExpr(unsigned BuiltinID,
     }
     bool Accumulate;
     switch (BuiltinID) {
-  #define MMA_BUILTIN(Name, Types, Acc) \
-    case PPC::BI__builtin_mma_##Name: \
-      ID = Intrinsic::ppc_mma_##Name; \
+  #define CUSTOM_BUILTIN(Name, Types, Acc) \
+    case PPC::BI__builtin_##Name: \
+      ID = Intrinsic::ppc_##Name; \
       Accumulate = Acc; \
       break;
   #include "clang/Basic/BuiltinsPPC.def"
     }
-    if (BuiltinID == PPC::BI__builtin_mma_lxvp ||
-        BuiltinID == PPC::BI__builtin_mma_stxvp) {
-      if (BuiltinID == PPC::BI__builtin_mma_lxvp) {
+    if (BuiltinID == PPC::BI__builtin_vsx_lxvp ||
+        BuiltinID == PPC::BI__builtin_vsx_stxvp) {
+      if (BuiltinID == PPC::BI__builtin_vsx_lxvp) {
         Ops[1] = Builder.CreateBitCast(Ops[1], Int8PtrTy);
         Ops[0] = Builder.CreateGEP(Ops[1], Ops[0]);
       } else {
@@ -16868,6 +16925,28 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     Function *Callee = CGM.getIntrinsic(IntNo, ConvertType(E->getType()));
     return Builder.CreateCall(Callee, {LHS, RHS});
   }
+  case WebAssembly::BI__builtin_wasm_extadd_pairwise_i8x16_s_i16x8:
+  case WebAssembly::BI__builtin_wasm_extadd_pairwise_i8x16_u_i16x8:
+  case WebAssembly::BI__builtin_wasm_extadd_pairwise_i16x8_s_i32x4:
+  case WebAssembly::BI__builtin_wasm_extadd_pairwise_i16x8_u_i32x4: {
+    Value *Vec = EmitScalarExpr(E->getArg(0));
+    unsigned IntNo;
+    switch (BuiltinID) {
+    case WebAssembly::BI__builtin_wasm_extadd_pairwise_i8x16_s_i16x8:
+    case WebAssembly::BI__builtin_wasm_extadd_pairwise_i16x8_s_i32x4:
+      IntNo = Intrinsic::wasm_extadd_pairwise_signed;
+      break;
+    case WebAssembly::BI__builtin_wasm_extadd_pairwise_i8x16_u_i16x8:
+    case WebAssembly::BI__builtin_wasm_extadd_pairwise_i16x8_u_i32x4:
+      IntNo = Intrinsic::wasm_extadd_pairwise_unsigned;
+      break;
+    default:
+      llvm_unreachable("unexptected builtin ID");
+    }
+
+    Function *Callee = CGM.getIntrinsic(IntNo, ConvertType(E->getType()));
+    return Builder.CreateCall(Callee, Vec);
+  }
   case WebAssembly::BI__builtin_wasm_bitselect: {
     Value *V1 = EmitScalarExpr(E->getArg(0));
     Value *V2 = EmitScalarExpr(E->getArg(1));
@@ -17092,6 +17171,16 @@ Value *CodeGenFunction::EmitWebAssemblyBuiltinExpr(unsigned BuiltinID,
     }
     Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_shuffle);
     return Builder.CreateCall(Callee, Ops);
+  }
+  case WebAssembly::BI__builtin_wasm_prefetch_t: {
+    Value *Ptr = EmitScalarExpr(E->getArg(0));
+    Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_prefetch_t);
+    return Builder.CreateCall(Callee, Ptr);
+  }
+  case WebAssembly::BI__builtin_wasm_prefetch_nt: {
+    Value *Ptr = EmitScalarExpr(E->getArg(0));
+    Function *Callee = CGM.getIntrinsic(Intrinsic::wasm_prefetch_nt);
+    return Builder.CreateCall(Callee, Ptr);
   }
   default:
     return nullptr;

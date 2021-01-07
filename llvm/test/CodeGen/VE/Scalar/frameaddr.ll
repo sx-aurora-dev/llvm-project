@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-- | FileCheck %s
+; RUN: llc < %s -mtriple=ve | FileCheck %s
 
 define i8* @test1() nounwind {
 ; CHECK-LABEL: test1:

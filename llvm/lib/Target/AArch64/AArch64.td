@@ -400,6 +400,24 @@ def FeatureMatMulFP32 : SubtargetFeature<"f32mm", "HasMatMulFP32",
 def FeatureMatMulFP64 : SubtargetFeature<"f64mm", "HasMatMulFP64",
     "true", "Enable Matrix Multiply FP64 Extension", [FeatureSVE]>;
 
+def FeatureXS : SubtargetFeature<"xs", "HasXS",
+    "true", "Enable Armv8.7-A limited-TLB-maintenance instruction">;
+
+def FeatureWFxT : SubtargetFeature<"wfxt", "HasWFxT",
+    "true", "Enable Armv8.7-A WFET and WFIT instruction">;
+
+def FeatureHCX : SubtargetFeature<
+    "hcx", "HasHCX", "true", "Enable Armv8.7-A HCRX_EL2 system register">;
+
+def FeatureLS64 : SubtargetFeature<"ls64", "HasLS64",
+    "true", "Enable Armv8.7-A LD64B/ST64B Accelerator Extension">;
+
+def FeatureBRBE : SubtargetFeature<"brbe", "HasBRBE",
+    "true", "Enable Branch Record Buffer Extension">;
+
+def FeatureSPE_EEF : SubtargetFeature<"spe-eef", "HasSPE_EEF",
+    "true", "Enable extra register in the Statistical Profiling Extension">;
+
 def FeatureFineGrainedTraps : SubtargetFeature<"fgt", "HasFineGrainedTraps",
     "true", "Enable fine grained virtualization traps extension">;
 
@@ -437,9 +455,12 @@ def HasV8_5aOps : SubtargetFeature<
 
 def HasV8_6aOps : SubtargetFeature<
   "v8.6a", "HasV8_6aOps", "true", "Support ARM v8.6a instructions",
-
   [HasV8_5aOps, FeatureAMVS, FeatureBF16, FeatureFineGrainedTraps,
    FeatureEnhancedCounterVirtualization, FeatureMatMulInt8]>;
+
+def HasV8_7aOps : SubtargetFeature<
+  "v8.7a", "HasV8_7aOps", "true", "Support ARM v8.7a instructions",
+  [HasV8_6aOps, FeatureXS, FeatureWFxT, FeatureHCX]>;
 
 def HasV8_0rOps : SubtargetFeature<
   "v8r", "HasV8_0rOps", "true", "Support ARM v8r instructions",
@@ -669,6 +690,25 @@ def ProcA78 : SubtargetFeature<"cortex-a78", "ARMProcFamily",
                                FeatureFullFP16,
                                FeatureSSBS,
                                FeatureDotProd]>;
+
+def ProcA78C : SubtargetFeature<"cortex-a78c", "ARMProcFamily",
+                                "CortexA78C",
+                                "Cortex-A78C ARM processors", [
+                                HasV8_2aOps,
+                                FeatureCrypto,
+                                FeatureDotProd,
+                                FeatureFMI,
+                                FeatureFP16FML,
+                                FeatureFPARMv8,
+                                FeatureFullFP16,
+                                FeatureFuseAES,
+                                FeatureNEON,
+                                FeaturePA,
+                                FeaturePerfMon,
+                                FeaturePostRAScheduler,
+                                FeatureRCPC,
+                                FeatureSPE,
+                                FeatureSSBS]>;
 
 def ProcR82 : SubtargetFeature<"cortex-r82", "ARMProcFamily",
                                "CortexR82",
@@ -1068,6 +1108,7 @@ def : ProcessorModel<"cortex-a76", CortexA57Model, [ProcA76]>;
 def : ProcessorModel<"cortex-a76ae", CortexA57Model, [ProcA76]>;
 def : ProcessorModel<"cortex-a77", CortexA57Model, [ProcA77]>;
 def : ProcessorModel<"cortex-a78", CortexA57Model, [ProcA78]>;
+def : ProcessorModel<"cortex-a78c", CortexA57Model, [ProcA78C]>;
 def : ProcessorModel<"cortex-r82", CortexA55Model, [ProcR82]>;
 def : ProcessorModel<"cortex-x1", CortexA57Model, [ProcX1]>;
 def : ProcessorModel<"neoverse-e1", CortexA53Model, [ProcNeoverseE1]>;

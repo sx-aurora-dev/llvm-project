@@ -90,30 +90,8 @@ void VEMCCodeEmitter::encodeInstruction(const MCInst &MI, raw_ostream &OS,
   verifyInstructionPredicates(MI,
                               computeAvailableFeatures(STI.getFeatureBits()));
 
-  switch (MI.getOpcode()) {
-  case VE::TRAP:
-    // TRAP is not implemented at the moment.  No actual code.
-    return;
-  }
   uint64_t Bits = getBinaryCodeForInstr(MI, Fixups, STI);
   support::endian::write<uint64_t>(OS, Bits, support::little);
-#if 0
-  unsigned tlsOpNo = 0;
-  switch (MI.getOpcode()) {
-  default: break;
-  case VE::TLS_CALL:   tlsOpNo = 1; break;
-  case VE::TLS_ADDrr:
-  case VE::TLS_ADDXrr:
-  case VE::TLS_LDrr:
-  case VE::TLS_LDXrr:  tlsOpNo = 3; break;
-  }
-  if (tlsOpNo != 0) {
-    const MCOperand &MO = MI.getOperand(tlsOpNo);
-    uint64_t op = getMachineOpValue(MI, MO, Fixups, STI);
-    assert(op == 0 && "Unexpected operand value!");
-    (void)op; // suppress warning.
-  }
-#endif
 
   ++MCNumEmitted; // Keep track of the # of mi's emitted.
 }

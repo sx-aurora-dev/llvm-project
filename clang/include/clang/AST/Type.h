@@ -2032,6 +2032,7 @@ public:
   bool isComplexIntegerType() const;            // GCC _Complex integer type.
   bool isVectorType() const;                    // GCC vector type.
   bool isExtVectorType() const;                 // Extended vector type.
+  bool isExtVectorBoolType() const;             // Extended vector type with bool element.
   bool isMatrixType() const;                    // Matrix type.
   bool isConstantMatrixType() const;            // Constant matrix type.
   bool isDependentAddressSpaceType() const;     // value-dependent address space qualifier
@@ -2093,6 +2094,7 @@ public:
   bool isAtomicType() const;                    // C11 _Atomic()
   bool isUndeducedAutoType() const;             // C++11 auto or
                                                 // C++14 decltype(auto)
+  bool isTypedefNameType() const;               // typedef or alias template
 
 #define IMAGE_TYPE(ImgType, Id, SingletonId, Access, Suffix) \
   bool is##Id##Type() const;
@@ -2489,7 +2491,7 @@ public:
 #define SVE_TYPE(Name, Id, SingletonId) Id,
 #include "clang/Basic/AArch64SVEACLETypes.def"
 // PPC MMA Types
-#define PPC_MMA_VECTOR_TYPE(Name, Id, Size) Id,
+#define PPC_VECTOR_TYPE(Name, Id, Size) Id,
 #include "clang/Basic/PPCTypes.def"
 // All other builtin types
 #define BUILTIN_TYPE(Id, SingletonId) Id,
@@ -3258,11 +3260,6 @@ public:
 
   VectorKind getVectorKind() const {
     return VectorKind(VectorTypeBits.VecKind);
-  }
-
-  bool isVectorSizeBoolean() const {
-    return (getVectorKind() == VectorKind::GenericVector) &&
-           getElementType()->isBooleanType();
   }
 
   void Profile(llvm::FoldingSetNodeID &ID) {
@@ -5117,11 +5114,24 @@ class alignas(8) TemplateSpecializationType
 
 public:
   /// Determine whether any of the given template arguments are dependent.
-  static bool anyDependentTemplateArguments(ArrayRef<TemplateArgumentLoc> Args,
-                                            bool &InstantiationDependent);
-
-  static bool anyDependentTemplateArguments(const TemplateArgumentListInfo &,
-                                            bool &InstantiationDependent);
+  ///
+  /// The converted arguments should be supplied when known; whether an
+  /// argument is dependent can depend on the conversions performed on it
+  /// (for example, a 'const int' passed as a template argument might be
+  /// dependent if the parameter is a reference but non-dependent if the
+  /// parameter is an int).
+  ///
+  /// Note that the \p Args parameter is unused: this is intentional, to remind
+  /// the caller that they need to pass in the converted arguments, not the
+  /// specified arguments.
+  static bool
+  anyDependentTemplateArguments(ArrayRef<TemplateArgumentLoc> Args,
+                                ArrayRef<TemplateArgument> Converted);
+  static bool
+  anyDependentTemplateArguments(const TemplateArgumentListInfo &,
+                                ArrayRef<TemplateArgument> Converted);
+  static bool anyInstantiationDependentTemplateArguments(
+      ArrayRef<TemplateArgumentLoc> Args);
 
   /// True if this template specialization type matches a current
   /// instantiation in the context in which it is found.
@@ -6756,6 +6766,12 @@ inline bool Type::isExtVectorType() const {
   return isa<ExtVectorType>(CanonicalType);
 }
 
+inline bool Type::isExtVectorBoolType() const {
+  if (!isExtVectorType())
+    return false;
+  return cast<ExtVectorType>(CanonicalType)->getElementType()->isBooleanType();
+}
+
 inline bool Type::isMatrixType() const {
   return isa<MatrixType>(CanonicalType);
 }
@@ -7056,6 +7072,15 @@ inline bool Type::isUndeducedType() const {
 /// an overloaded operator.
 inline bool Type::isOverloadableType() const {
   return isDependentType() || isRecordType() || isEnumeralType();
+}
+
+/// Determines whether this type is written as a typedef-name.
+inline bool Type::isTypedefNameType() const {
+  if (getAs<TypedefType>())
+    return true;
+  if (auto *TST = getAs<TemplateSpecializationType>())
+    return TST->isTypeAlias();
+  return false;
 }
 
 /// Determines whether this type can decay to a pointer type.

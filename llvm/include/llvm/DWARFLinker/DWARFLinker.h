@@ -64,14 +64,17 @@ public:
   /// section. Reset current relocation pointer if neccessary.
   virtual bool hasValidRelocs(bool ResetRelocsPtr = true) = 0;
 
-  /// Checks that there is a relocation against .debug_info
-  /// table between \p StartOffset and \p NextOffset.
-  ///
-  /// This function must be called with offsets in strictly ascending
-  /// order because it never looks back at relocations it already 'went past'.
-  /// \returns true and sets Info.InDebugMap if it is the case.
-  virtual bool hasValidRelocationAt(uint64_t StartOffset, uint64_t EndOffset,
-                                    CompileUnit::DIEInfo &Info) = 0;
+  /// Checks that the specified DIE has a DW_AT_Location attribute
+  /// that references into a live code section. This function
+  /// must be called with DIE offsets in strictly ascending order.
+  virtual bool hasLiveMemoryLocation(const DWARFDie &DIE,
+                                     CompileUnit::DIEInfo &Info) = 0;
+
+  /// Checks that the specified DIE has a DW_AT_Low_pc attribute
+  /// that references into a live code section. This function
+  /// must be called with DIE offsets in strictly ascending order.
+  virtual bool hasLiveAddressRange(const DWARFDie &DIE,
+                                   CompileUnit::DIEInfo &Info) = 0;
 
   /// Apply the valid relocations to the buffer \p Data, taking into
   /// account that Data is at \p BaseOffset in the debug_info section.
@@ -464,7 +467,6 @@ private:
   bool registerModuleReference(DWARFDie CUDie, const DWARFUnit &Unit,
                                const DWARFFile &File,
                                OffsetsStringPool &OffsetsStringPool,
-                               UniquingStringPool &UniquingStringPoolStringPool,
                                DeclContextTree &ODRContexts,
                                uint64_t ModulesEndOffset, unsigned &UnitID,
                                bool IsLittleEndian, unsigned Indent = 0,
@@ -477,7 +479,6 @@ private:
                         StringRef ModuleName, uint64_t DwoId,
                         const DWARFFile &File,
                         OffsetsStringPool &OffsetsStringPool,
-                        UniquingStringPool &UniquingStringPool,
                         DeclContextTree &ODRContexts, uint64_t ModulesEndOffset,
                         unsigned &UnitID, bool IsLittleEndian,
                         unsigned Indent = 0, bool Quiet = false);
@@ -497,7 +498,6 @@ private:
   /// Check if a variable describing DIE should be kept.
   /// \returns updated TraversalFlags.
   unsigned shouldKeepVariableDIE(AddressesMap &RelocMgr, const DWARFDie &DIE,
-                                 CompileUnit &Unit,
                                  CompileUnit::DIEInfo &MyInfo, unsigned Flags);
 
   unsigned shouldKeepSubprogramDIE(AddressesMap &RelocMgr, RangesTy &Ranges,

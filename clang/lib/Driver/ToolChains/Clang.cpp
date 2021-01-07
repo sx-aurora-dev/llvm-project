@@ -332,6 +332,7 @@ static void getTargetFeatures(const Driver &D, const llvm::Triple &Triple,
     break;
 
   case llvm::Triple::ppc:
+  case llvm::Triple::ppcle:
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le:
     ppc::getPPCTargetFeatures(D, Triple, Args, Features);
@@ -528,6 +529,7 @@ static bool useFramePointerForTargetByDefault(const ArgList &Args,
     // WebAssembly never wants frame pointers.
     return false;
   case llvm::Triple::ppc:
+  case llvm::Triple::ppcle:
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le:
   case llvm::Triple::riscv32:
@@ -1397,6 +1399,7 @@ static bool isSignedCharDefault(const llvm::Triple &Triple) {
     return false;
 
   case llvm::Triple::hexagon:
+  case llvm::Triple::ppcle:
   case llvm::Triple::ppc64le:
   case llvm::Triple::riscv32:
   case llvm::Triple::riscv64:
@@ -1613,6 +1616,7 @@ void Clang::RenderTargetOptions(const llvm::Triple &EffectiveTriple,
     break;
 
   case llvm::Triple::ppc:
+  case llvm::Triple::ppcle:
   case llvm::Triple::ppc64:
   case llvm::Triple::ppc64le:
     AddPPCTargetArgs(Args, CmdArgs);
@@ -3843,26 +3847,33 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
     }
   }
 
-  unsigned DWARFVersion = 0;
+  unsigned RequestedDWARFVersion = 0; // DWARF version requested by the user
+  unsigned EffectiveDWARFVersion = 0; // DWARF version TC can generate. It may
+                                      // be lower than what the user wanted.
   unsigned DefaultDWARFVersion = ParseDebugDefaultVersion(TC, Args);
   if (EmitDwarf) {
     // Start with the platform default DWARF version
-    DWARFVersion = TC.GetDefaultDwarfVersion();
-    assert(DWARFVersion && "toolchain default DWARF version must be nonzero");
+    RequestedDWARFVersion = TC.GetDefaultDwarfVersion();
+    assert(RequestedDWARFVersion &&
+           "toolchain default DWARF version must be nonzero");
 
     // If the user specified a default DWARF version, that takes precedence
     // over the platform default.
     if (DefaultDWARFVersion)
-      DWARFVersion = DefaultDWARFVersion;
+      RequestedDWARFVersion = DefaultDWARFVersion;
 
     // Override with a user-specified DWARF version
     if (GDwarfN)
       if (auto ExplicitVersion = DwarfVersionNum(GDwarfN->getSpelling()))
-        DWARFVersion = ExplicitVersion;
+        RequestedDWARFVersion = ExplicitVersion;
+    // Clamp effective DWARF version to the max supported by the toolchain.
+    EffectiveDWARFVersion =
+        std::min(RequestedDWARFVersion, TC.getMaxDwarfVersion());
   }
 
   // -gline-directives-only supported only for the DWARF debug info.
-  if (DWARFVersion == 0 && DebugInfoKind == codegenoptions::DebugDirectivesOnly)
+  if (RequestedDWARFVersion == 0 &&
+      DebugInfoKind == codegenoptions::DebugDirectivesOnly)
     DebugInfoKind = codegenoptions::NoDebugInfo;
 
   // We ignore flag -gstrict-dwarf for now.
@@ -3922,9 +3933,15 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
     // fallen back to the target default, so if this is still not at least 5
     // we emit an error.
     const Arg *A = Args.getLastArg(options::OPT_gembed_source);
-    if (DWARFVersion < 5)
+    if (RequestedDWARFVersion < 5)
       D.Diag(diag::err_drv_argument_only_allowed_with)
           << A->getAsString(Args) << "-gdwarf-5";
+    else if (EffectiveDWARFVersion < 5)
+      // The toolchain has reduced allowed dwarf version, so we can't enable
+      // -gembed-source.
+      D.Diag(diag::warn_drv_dwarf_version_limited_by_target)
+          << A->getAsString(Args) << TC.getTripleString() << 5
+          << EffectiveDWARFVersion;
     else if (checkDebugInfoOption(A, Args, D, TC))
       CmdArgs.push_back("-gembed-source");
   }
@@ -3953,7 +3970,7 @@ static void RenderDebugOptions(const ToolChain &TC, const Driver &D,
       DebugInfoKind <= codegenoptions::DebugDirectivesOnly)
     DebugInfoKind = codegenoptions::DebugLineTablesOnly;
 
-  RenderDebugEnablingArgs(Args, CmdArgs, DebugInfoKind, DWARFVersion,
+  RenderDebugEnablingArgs(Args, CmdArgs, DebugInfoKind, EffectiveDWARFVersion,
                           DebuggerTuning);
 
   // -fdebug-macro turns on macro debug info generation.
@@ -4570,12 +4587,31 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back(A->getValue());
   }
 
-  // The default is -fno-semantic-interposition. We render it just because we
-  // require explicit -fno-semantic-interposition to infer dso_local.
-  if (Arg *A = Args.getLastArg(options::OPT_fsemantic_interposition,
-                               options::OPT_fno_semantic_interposition))
-    if (RelocationModel != llvm::Reloc::Static && !IsPIE)
-      A->render(Args, CmdArgs);
+  // -fsemantic-interposition is forwarded to CC1: set the
+  // "SemanticInterposition" metadata to 1 (make some linkages interposable) and
+  // make default visibility external linkage definitions dso_preemptable.
+  //
+  // -fno-semantic-interposition: if the target supports .Lfoo$local local
+  // aliases (make default visibility external linkage definitions dso_local).
+  // This is the CC1 default for ELF to match COFF/Mach-O.
+  //
+  // Otherwise use Clang's traditional behavior: like
+  // -fno-semantic-interposition but local aliases are not used. So references
+  // can be interposed if not optimized out.
+  if (Triple.isOSBinFormatELF()) {
+    Arg *A = Args.getLastArg(options::OPT_fsemantic_interposition,
+                             options::OPT_fno_semantic_interposition);
+    if (RelocationModel != llvm::Reloc::Static && !IsPIE) {
+      // The supported targets need to call AsmPrinter::getSymbolPreferLocal.
+      bool SupportsLocalAlias = Triple.isX86();
+      if (!A)
+        CmdArgs.push_back("-fhalf-no-semantic-interposition");
+      else if (A->getOption().matches(options::OPT_fsemantic_interposition))
+        A->render(Args, CmdArgs);
+      else if (!SupportsLocalAlias)
+        CmdArgs.push_back("-fhalf-no-semantic-interposition");
+    }
+  }
 
   {
     std::string Model;
@@ -4662,7 +4698,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
 
   if (Arg *A = Args.getLastArg(options::OPT_maix_struct_return,
                                options::OPT_msvr4_struct_return)) {
-    if (TC.getArch() != llvm::Triple::ppc) {
+    if (!TC.getTriple().isPPC32()) {
       D.Diag(diag::err_drv_unsupported_opt_for_target)
           << A->getSpelling() << RawTriple.str();
     } else if (A->getOption().matches(options::OPT_maix_struct_return)) {
@@ -4775,7 +4811,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (Arg *A = Args.getLastArg(options::OPT_LongDouble_Group)) {
     if (TC.getTriple().isX86())
       A->render(Args, CmdArgs);
-    else if ((TC.getArch() == llvm::Triple::ppc || TC.getTriple().isPPC64()) &&
+    else if (TC.getTriple().isPPC() &&
              (A->getOption().getID() != options::OPT_mlong_double_80))
       A->render(Args, CmdArgs);
     else
@@ -5857,8 +5893,8 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
                    false))
     CmdArgs.push_back("-fmodules-debuginfo");
 
-  Args.AddLastArg(CmdArgs, options::OPT_fexperimental_new_pass_manager,
-                  options::OPT_fno_experimental_new_pass_manager);
+  Args.AddLastArg(CmdArgs, options::OPT_flegacy_pass_manager,
+                  options::OPT_fno_legacy_pass_manager);
 
   ObjCRuntime Runtime = AddObjCRuntimeArgs(Args, Inputs, CmdArgs, rewriteKind);
   RenderObjCOptions(TC, D, RawTriple, Args, Runtime, rewriteKind != RK_None,
@@ -5879,25 +5915,25 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   if (A) {
     const Option &Opt = A->getOption();
     if (Opt.matches(options::OPT_fsjlj_exceptions))
-      CmdArgs.push_back("-fsjlj-exceptions");
+      CmdArgs.push_back("-exception-model=sjlj");
     if (Opt.matches(options::OPT_fseh_exceptions))
-      CmdArgs.push_back("-fseh-exceptions");
+      CmdArgs.push_back("-exception-model=seh");
     if (Opt.matches(options::OPT_fdwarf_exceptions))
-      CmdArgs.push_back("-fdwarf-exceptions");
+      CmdArgs.push_back("-exception-model=dwarf");
     if (Opt.matches(options::OPT_fwasm_exceptions))
-      CmdArgs.push_back("-fwasm-exceptions");
+      CmdArgs.push_back("-exception-model=wasm");
   } else {
     switch (TC.GetExceptionModel(Args)) {
     default:
       break;
     case llvm::ExceptionHandling::DwarfCFI:
-      CmdArgs.push_back("-fdwarf-exceptions");
+      CmdArgs.push_back("-exception-model=dwarf");
       break;
     case llvm::ExceptionHandling::SjLj:
-      CmdArgs.push_back("-fsjlj-exceptions");
+      CmdArgs.push_back("-exception-model=sjlj");
       break;
     case llvm::ExceptionHandling::WinEH:
-      CmdArgs.push_back("-fseh-exceptions");
+      CmdArgs.push_back("-exception-model=seh");
       break;
     }
   }
@@ -6812,10 +6848,9 @@ void Clang::AddClangCLArgs(const ArgList &Args, types::ID InputType,
     CmdArgs.push_back(Args.MakeArgString(Twine(LangOptions::SSPStrong)));
   }
 
-  // Emit CodeView if -Z7, -Zd, or -gline-tables-only are present.
-  if (Arg *DebugInfoArg =
-          Args.getLastArg(options::OPT__SLASH_Z7, options::OPT__SLASH_Zd,
-                          options::OPT_gline_tables_only)) {
+  // Emit CodeView if -Z7 or -gline-tables-only are present.
+  if (Arg *DebugInfoArg = Args.getLastArg(options::OPT__SLASH_Z7,
+                                          options::OPT_gline_tables_only)) {
     *EmitCodeView = true;
     if (DebugInfoArg->getOption().matches(options::OPT__SLASH_Z7))
       *DebugInfoKind = codegenoptions::LimitedDebugInfo;
@@ -7403,6 +7438,7 @@ void OffloadBundler::ConstructJobMultipleOutputs(
   }
   CmdArgs.push_back(TCArgs.MakeArgString(UB));
   CmdArgs.push_back("-unbundle");
+  CmdArgs.push_back("-allow-missing-bundles");
 
   // All the inputs are encoded as commands.
   C.addCommand(std::make_unique<Command>(

@@ -615,18 +615,18 @@ void FloatVecUsage() {
   // CHECK: store <4 x float> <float 1.200000e+01, float 1.700000e+01, float -1.000000e+00, float -1.000000e+00>
 }
 
-using EightBoolsVecSize __attribute__((vector_size(1))) = bool;
+using EightBoolsExtVector __attribute__((ext_vector_type(8))) = bool;
 void BoolVecUsage() {
-  constexpr auto a = EightBoolsVecSize{true, false, true, false} <
-                     EightBoolsVecSize{false, false, true, true};
-  constexpr auto b = EightBoolsVecSize{true, false, true, false} <=
-                     EightBoolsVecSize{false, false, true, true};
-  constexpr auto c = EightBoolsVecSize{true, false, true, false} ==
-                     EightBoolsVecSize{false, false, true, true};
-  constexpr auto d = EightBoolsVecSize{true, false, true, false} !=
-                     EightBoolsVecSize{false, false, true, true};
-  constexpr auto e = EightBoolsVecSize{true, false, true, false} >=
-                     EightBoolsVecSize{false, false, true, true};
-  constexpr auto f = EightBoolsVecSize{true, false, true, false} >
-                     EightBoolsVecSize{false, false, true, true};
+  constexpr auto a = EightBoolsExtVector{true, false, true, false} <
+                     EightBoolsExtVector{false, false, true, true};
+  constexpr auto b = EightBoolsExtVector{true, false, true, false} <=
+                     EightBoolsExtVector{false, false, true, true};
+  constexpr auto c = EightBoolsExtVector{true, false, true, false} ==
+                     EightBoolsExtVector{false, false, true, true};
+  constexpr auto d = EightBoolsExtVector{true, false, true, false} !=
+                     EightBoolsExtVector{false, false, true, true};
+  constexpr auto e = EightBoolsExtVector{true, false, true, false} >=
+                     EightBoolsExtVector{false, false, true, true};
+  constexpr auto f = EightBoolsExtVector{true, false, true, false} >
+                     EightBoolsExtVector{false, false, true, true};
 }

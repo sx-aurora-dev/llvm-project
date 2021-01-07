@@ -626,6 +626,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_IN_ALLOCA;
   case Attribute::Cold:
     return bitc::ATTR_KIND_COLD;
+  case Attribute::Hot:
+    return bitc::ATTR_KIND_HOT;
   case Attribute::InaccessibleMemOnly:
     return bitc::ATTR_KIND_INACCESSIBLEMEM_ONLY;
   case Attribute::InaccessibleMemOrArgMemOnly:
@@ -646,6 +648,8 @@ static uint64_t getAttrKindEncoding(Attribute::AttrKind Kind) {
     return bitc::ATTR_KIND_NO_ALIAS;
   case Attribute::NoBuiltin:
     return bitc::ATTR_KIND_NO_BUILTIN;
+  case Attribute::NoCallback:
+    return bitc::ATTR_KIND_NO_CALLBACK;
   case Attribute::NoCapture:
     return bitc::ATTR_KIND_NO_CAPTURE;
   case Attribute::NoDuplicate:
@@ -915,6 +919,7 @@ void ModuleBitcodeWriter::writeTypeTable() {
     case Type::LabelTyID:     Code = bitc::TYPE_CODE_LABEL;     break;
     case Type::MetadataTyID:  Code = bitc::TYPE_CODE_METADATA;  break;
     case Type::X86_MMXTyID:   Code = bitc::TYPE_CODE_X86_MMX;   break;
+    case Type::X86_AMXTyID:   Code = bitc::TYPE_CODE_X86_AMX;   break;
     case Type::TokenTyID:     Code = bitc::TYPE_CODE_TOKEN;     break;
     case Type::IntegerTyID:
       // INTEGER: [width]
@@ -1870,6 +1875,7 @@ void ModuleBitcodeWriter::writeDIModule(const DIModule *N,
   for (auto &I : N->operands())
     Record.push_back(VE.getMetadataOrNullID(I));
   Record.push_back(N->getLineNo());
+  Record.push_back(N->getIsDecl());
 
   Stream.EmitRecord(bitc::METADATA_MODULE, Record, Abbrev);
   Record.clear();

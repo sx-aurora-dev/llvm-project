@@ -1350,8 +1350,6 @@ def createInstructionTable():
     T.Dummy(None, "", "unsigned long int _vel_pack_f32a(float const* p)", "load and mul")
     T.Dummy(None, "", "unsigned long int _vel_pack_i32(int a, int b)", "sll,add,or")
  
-    T.Def(None, None, "", "vec_expf", [[VX(T_f32), VY(T_f32)]], "{0} = expf({1})").noBuiltin().noLLVMInstDefine().NYI()
-    T.Def(None, None, "", "vec_exp", [[VX(T_f64), VY(T_f64)]], "{0} = exp({1})").noBuiltin().noLLVMInstDefine().NYI()
     T.Dummy(None, "", "__vm256 _vel_extract_vm512u(__vm512 vm)", "")
     T.Dummy(None, "", "__vm256 _vel_extract_vm512l(__vm512 vm)", "")
     T.Dummy(None, "", "__vm512 _vel_insert_vm512u(__vm512 vmx, __vm256 vmy)", "")

@@ -258,7 +258,6 @@ public:
     iterator begin() { return iterator(Edges.begin(), Edges.end()); }
     iterator end() { return iterator(Edges.end(), Edges.end()); }
 
-    Edge &operator[](int i) { return Edges[i]; }
     Edge &operator[](Node &N) {
       assert(EdgeIndexMap.find(&N) != EdgeIndexMap.end() && "No such edge!");
       auto &E = Edges[EdgeIndexMap.find(&N)->second];
@@ -305,13 +304,6 @@ public:
 
     /// Internal helper to remove the edge to the given function.
     bool removeEdgeInternal(Node &ChildN);
-
-    /// Internal helper to replace an edge key with a new one.
-    ///
-    /// This should be used when the function for a particular node in the
-    /// graph gets replaced and we are updating all of the edges to that node
-    /// to use the new function as the key.
-    void replaceEdgeKey(Function &OldTarget, Function &NewTarget);
   };
 
   /// A node in the call graph.
@@ -605,10 +597,6 @@ public:
     /// - The SCCs list is in fact in post-order.
     void verify();
 #endif
-
-    /// Handle any necessary parent set updates after inserting a trivial ref
-    /// or call edge.
-    void handleTrivialEdgeInsertion(Node &SourceN, Node &TargetN);
 
   public:
     using iterator = pointee_iterator<SmallVectorImpl<SCC *>::const_iterator>;

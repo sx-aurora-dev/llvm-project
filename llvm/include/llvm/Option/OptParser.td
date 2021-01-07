@@ -146,7 +146,7 @@ class ValuesCode<code valuecode> { code ValuesCode = valuecode; }
 
 class ImpliedByAnyOf<list<Option> options, code value = "true"> {
   code ImpliedCheck = !foldl("false", options, accumulator, option,
-                             !strconcat(accumulator, " || ", !cast<string>(option.KeyPath)));
+                             !strconcat(accumulator, " || ", option.KeyPath));
   code ImpliedValue = value;
 }
 
@@ -155,8 +155,17 @@ class MarshallingInfo<code keypath, code defaultvalue> {
   code DefaultValue = defaultvalue;
 }
 
-class MarshallingInfoString<code keypath, code defaultvalue>
-  : MarshallingInfo<keypath, defaultvalue> {}
+class MarshallingInfoString<code keypath, code defaultvalue="std::string()">
+  : MarshallingInfo<keypath, defaultvalue> {
+  code Normalizer = "normalizeString";
+  code Denormalizer = "denormalizeString";
+}
+
+class MarshallingInfoStringInt<code keypath, code defaultvalue="0", code type="unsigned">
+  : MarshallingInfo<keypath, defaultvalue> {
+  code Normalizer = "normalizeStringIntegral<"#type#">";
+  code Denormalizer = "denormalizeString";
+}
 
 class MarshallingInfoFlag<code keypath, code defaultvalue = "false">
   : MarshallingInfo<keypath, defaultvalue> {
@@ -171,11 +180,12 @@ class MarshallingInfoBitfieldFlag<code keypath, code value>
   code ValueExtractor = "(extractMaskValue<unsigned, decltype("#value#"), "#value#">)";
 }
 
-class MarshallingInfoBooleanFlag<code keypath, code defaultvalue, code neg_name, string neg_spelling>
+// Marshalling info for booleans. Applied to the flag setting keypath to false.
+class MarshallingInfoBooleanFlag<code keypath, code defaultvalue, code value, code name,
+                                 code other_value, code other_name>
   : MarshallingInfoFlag<keypath, defaultvalue> {
-  bit ShouldAlwaysEmit = 1;
-  code Normalizer = "makeBooleanFlagNormalizer(OPT_"#neg_name#")";
-  code Denormalizer = "makeBooleanFlagDenormalizer(\""#neg_spelling#"\")";
+  code Normalizer = "makeBooleanOptionNormalizer("#value#", "#other_value#", OPT_"#other_name#")";
+  code Denormalizer = "makeBooleanOptionDenormalizer("#value#")";
 }
 
 // Mixins for additional marshalling attributes.
@@ -188,7 +198,6 @@ class Normalizer<code normalizer> { code Normalizer = normalizer; }
 class Denormalizer<code denormalizer> { code Denormalizer = denormalizer; }
 class NormalizedValuesScope<code scope> { code NormalizedValuesScope = scope; }
 class NormalizedValues<list<code> definitions> { list<code> NormalizedValues = definitions; } 
-class DenormalizeString { code Denormalizer = "denormalizeString"; }
 class AutoNormalizeEnum {
   code Normalizer = "normalizeSimpleEnum";
   code Denormalizer = "denormalizeSimpleEnum";

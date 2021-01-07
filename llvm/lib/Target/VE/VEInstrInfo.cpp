@@ -357,8 +357,8 @@ static void copyPhysSubRegs(MachineBasicBlock &MBB,
       MovMI = MIB.getInstr();
     } else if (MCID.getOpcode() == VE::ANDMmm) {
       // generate "ANDM, dest, vm0, src" instruction.
-      MachineInstrBuilder MIB = BuildMI(MBB, I, DL, MCID, SubDest)
-          .addReg(VE::VM0).addReg(SubSrc);
+      MachineInstrBuilder MIB =
+          BuildMI(MBB, I, DL, MCID, SubDest).addReg(VE::VM0).addReg(SubSrc);
       MovMI = MIB.getInstr();
     } else {
       llvm_unreachable("Unexpected reg-to-reg copy instruction");
@@ -404,16 +404,16 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                                   .addReg(SrcReg, getKillRegState(KillSrc))
                                   .addReg(SubTmp, getKillRegState(true));
     MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
-  } else if (VE::VMRegClass.contains(DestReg, SrcReg))
+  } else if (VE::VMRegClass.contains(DestReg, SrcReg)) {
     BuildMI(MBB, I, DL, get(VE::ANDMmm), DestReg)
         .addReg(VE::VM0)
         .addReg(SrcReg, getKillRegState(KillSrc));
-  else if (VE::VM512RegClass.contains(DestReg, SrcReg)) {
+  } else if (VE::VM512RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
-    const unsigned subRegIdx[] = { VE::sub_vm_even, VE::sub_vm_odd };
-    unsigned int numSubRegs = 2;
+    const unsigned SubRegIdx[] = {VE::sub_vm_even, VE::sub_vm_odd};
+    unsigned int NumSubRegs = 2;
     copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDMmm),
-                    numSubRegs, subRegIdx, &getRegisterInfo());
+                    NumSubRegs, SubRegIdx, &getRegisterInfo());
   } else if (VE::F128RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
     const unsigned SubRegIdx[] = {VE::sub_even, VE::sub_odd};
@@ -833,27 +833,28 @@ static Register getVM512Upper(Register reg) {
 
 static Register getVM512Lower(Register reg) { return getVM512Upper(reg) + 1; }
 
-static void buildVMRInst(MachineInstr& MI, const MCInstrDesc& MCID) {
-  MachineBasicBlock* MBB = MI.getParent();
-  DebugLoc dl = MI.getDebugLoc();
+// Expand pseudo logical vector instructions for VM512 registers.
+static void expandPseudoLogM(MachineInstr &MI, const MCInstrDesc &MCID) {
+  MachineBasicBlock *MBB = MI.getParent();
+  DebugLoc DL = MI.getDebugLoc();
 
-  unsigned VMXu = getVM512Upper(MI.getOperand(0).getReg());
-  unsigned VMXl = getVM512Lower(MI.getOperand(0).getReg());
-  unsigned VMYu = getVM512Upper(MI.getOperand(1).getReg());
-  unsigned VMYl = getVM512Lower(MI.getOperand(1).getReg());
+  Register VMXu = getVM512Upper(MI.getOperand(0).getReg());
+  Register VMXl = getVM512Lower(MI.getOperand(0).getReg());
+  Register VMYu = getVM512Upper(MI.getOperand(1).getReg());
+  Register VMYl = getVM512Lower(MI.getOperand(1).getReg());
 
   switch (MI.getOpcode()) {
   default: {
-      unsigned VMZu = getVM512Upper(MI.getOperand(2).getReg());
-      unsigned VMZl = getVM512Lower(MI.getOperand(2).getReg());
-      BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu);
-      BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
-      break;
+    Register VMZu = getVM512Upper(MI.getOperand(2).getReg());
+    Register VMZl = getVM512Lower(MI.getOperand(2).getReg());
+    BuildMI(*MBB, MI, DL, MCID).addDef(VMXu).addUse(VMYu).addUse(VMZu);
+    BuildMI(*MBB, MI, DL, MCID).addDef(VMXl).addUse(VMYl).addUse(VMZl);
+    break;
   }
   case VE::NEGMy:
-      BuildMI(*MBB, MI, dl, MCID).addDef(VMXu).addUse(VMYu);
-      BuildMI(*MBB, MI, dl, MCID).addDef(VMXl).addUse(VMYl);
-      break;
+    BuildMI(*MBB, MI, DL, MCID).addDef(VMXu).addUse(VMYu);
+    BuildMI(*MBB, MI, DL, MCID).addDef(VMXl).addUse(VMYl);
+    break;
   }
   MI.eraseFromParent();
 }
@@ -973,12 +974,24 @@ bool VEInstrInfo::expandPostRAPseudo(MachineInstr &MI) const {
   }
 #endif
 
-  case VE::ANDMyy: buildVMRInst(MI, get(VE::ANDMmm)); return true;
-  case VE::ORMyy:  buildVMRInst(MI, get(VE::ORMmm)); return true;
-  case VE::XORMyy: buildVMRInst(MI, get(VE::XORMmm)); return true;
-  case VE::EQVMyy: buildVMRInst(MI, get(VE::EQVMmm)); return true;
-  case VE::NNDMyy: buildVMRInst(MI, get(VE::NNDMmm)); return true;
-  case VE::NEGMy: buildVMRInst(MI, get(VE::NEGMm)); return true;
+  case VE::ANDMyy:
+    expandPseudoLogM(MI, get(VE::ANDMmm));
+    return true;
+  case VE::ORMyy:
+    expandPseudoLogM(MI, get(VE::ORMmm));
+    return true;
+  case VE::XORMyy:
+    expandPseudoLogM(MI, get(VE::XORMmm));
+    return true;
+  case VE::EQVMyy:
+    expandPseudoLogM(MI, get(VE::EQVMmm));
+    return true;
+  case VE::NNDMyy:
+    expandPseudoLogM(MI, get(VE::NNDMmm));
+    return true;
+  case VE::NEGMy:
+    expandPseudoLogM(MI, get(VE::NEGMm));
+    return true;
 
   case VE::LVMyir:
   case VE::LVMyim:

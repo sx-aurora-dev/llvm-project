@@ -34,24 +34,22 @@ enum NodeType : unsigned {
   CMPQ, // Compare between two quad floating-point values.
   CMOV, // Select between two values using the result of comparison.
 
-  EH_SJLJ_SETJMP,         // SjLj exception handling setjmp.
-  EH_SJLJ_LONGJMP,        // SjLj exception handling longjmp.
-  EH_SJLJ_SETUP_DISPATCH, // SjLj exception handling setup_dispatch.
-
-  Hi,
-  Lo, // Hi/Lo operations, typically on a global address.
-
-  GETFUNPLT,   // load function address through %plt insturction
-  GETTLSADDR,  // load address for TLS access
-  GETSTACKTOP, // retrieve address of stack top (first address of
-               // locals and temporaries)
-
-  MEMBARRIER, // Compiler barrier only; generate a no-op.
-
-  CALL,            // A call instruction.
-  RET_FLAG,        // Return with a flag operand.
-  GLOBAL_BASE_REG, // Global base reg for PIC.
   FLUSHW,          // FLUSH register windows to stack.
+
+  CALL,                   // A call instruction.
+  EH_SJLJ_LONGJMP,        // SjLj exception handling longjmp.
+  EH_SJLJ_SETJMP,         // SjLj exception handling setjmp.
+  EH_SJLJ_SETUP_DISPATCH, // SjLj exception handling setup_dispatch.
+  GETFUNPLT,              // Load function address through %plt insturction.
+  GETTLSADDR,             // Load address for TLS access.
+  GETSTACKTOP,            // Retrieve address of stack top (first address of
+                          // locals and temporaries).
+  GLOBAL_BASE_REG,        // Global base reg for PIC.
+  Hi,                     // Hi/Lo operations, typically on a global address.
+  Lo,                     // Hi/Lo operations, typically on a global address.
+  MEMBARRIER,             // Compiler barrier only; generate a no-op.
+  RET_FLAG,               // Return with a flag operand.
+  TS1AM,                  // A TS1AM instruction used for 1/2 bytes swap.
 
   // Mask support
   VM_EXTRACT, // VM_EXTRACT(v256i1:mask, i32:i) Extract a SX register from a
@@ -101,7 +99,6 @@ enum NodeType : unsigned {
   /// TargetExternalSymbol, TargetGlobalAddress, TargetGlobalTLSAddress,
   /// MCSymbol and TargetBlockAddress.
   Wrapper,
-  TS1AM, // HW instruction, TS1AM
 
 // VVP_* nodes.
 #define ADD_VVP_OP(VVP_NAME, ...) VVP_NAME,
@@ -185,6 +182,8 @@ public:
                                 AtomicOrdering Ord) const override;
   Instruction *emitTrailingFence(IRBuilder<> &Builder, Instruction *Inst,
                                  AtomicOrdering Ord) const override;
+  TargetLoweringBase::AtomicExpansionKind
+  shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
 
   const MCExpr *LowerCustomJumpTableEntry(const MachineJumpTableInfo *MJTI,
                                           const MachineBasicBlock *MBB,
@@ -231,8 +230,8 @@ public:
   SDValue lowerBlockAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerConstantPool(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerDYNAMIC_STACKALLOC(SDValue Op, SelectionDAG &DAG) const;
-  SDValue lowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerEH_SJLJ_LONGJMP(SDValue Op, SelectionDAG &DAG) const;
+  SDValue lowerEH_SJLJ_SETJMP(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerEH_SJLJ_SETUP_DISPATCH(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
   SDValue lowerGlobalTLSAddress(SDValue Op, SelectionDAG &DAG) const;
@@ -300,6 +299,30 @@ public:
   // Widening configuration & legalizer
   SDValue TryNarrowExtractVectorLoad(SDNode *ExtractN, SelectionDAG &DAG) const;
 
+  /// Custom Inserter {
+  MachineBasicBlock *
+  EmitInstrWithCustomInserter(MachineInstr &MI,
+                              MachineBasicBlock *MBB) const override;
+  MachineBasicBlock *emitEHSjLjLongJmp(MachineInstr &MI,
+                                       MachineBasicBlock *MBB) const;
+  MachineBasicBlock *emitEHSjLjSetJmp(MachineInstr &MI,
+                                      MachineBasicBlock *MBB) const;
+  MachineBasicBlock *emitSjLjDispatchBlock(MachineInstr &MI,
+                                           MachineBasicBlock *BB) const;
+
+  void setupEntryBlockForSjLj(MachineInstr &MI, MachineBasicBlock *MBB,
+                              MachineBasicBlock *DispatchBB, int FI,
+                              int Offset) const;
+  // Setup basic block address.
+  Register prepareMBB(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                      MachineBasicBlock *TargetBB, const DebugLoc &DL) const;
+  // Prepare function/variable address.
+  Register prepareSymbol(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
+                         StringRef Symbol, const DebugLoc &DL, bool IsLocal,
+                         bool IsCall) const;
+  /// } Custom Inserter
+
+  /// VVP Lowering {
   SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG,
                      VVPExpansionMode Mode) const;
   // main entry point for regular OC to VVP_* ISD expansion
@@ -315,7 +338,6 @@ public:
                                  VVPExpansionMode Mode) const;
   SDValue WidenVVPOperation(SDValue Op, SelectionDAG &DAG,
                             VVPExpansionMode Mode) const;
-
   /// } VVPLowering
 
   /// Custom DAGCombine {
@@ -356,10 +378,6 @@ public:
                                      const APInt &DemandedElts,
                                      const SelectionDAG &DAG,
                                      unsigned Depth = 0) const override;
-
-  MachineBasicBlock *
-  EmitInstrWithCustomInserter(MachineInstr &MI,
-                              MachineBasicBlock *MBB) const override;
 
   /// Return true if the target has native support for
   /// the specified value type and it is 'desirable' to use the type for the
@@ -424,19 +442,8 @@ public:
   bool canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
                         const SelectionDAG &DAG) const override;
 
-  AtomicExpansionKind
-  shouldExpandAtomicRMWInIR(AtomicRMWInst *AI) const override;
-
   MachineBasicBlock *expandSelectCC(MachineInstr &MI, MachineBasicBlock *BB,
                                     unsigned BROpcode) const;
-  MachineBasicBlock *emitEHSjLjSetJmp(MachineInstr &MI,
-                                      MachineBasicBlock *MBB) const;
-  MachineBasicBlock *emitEHSjLjLongJmp(MachineInstr &MI,
-                                       MachineBasicBlock *MBB) const;
-  MachineBasicBlock *EmitSjLjDispatchBlock(MachineInstr &MI,
-                                           MachineBasicBlock *BB) const;
-  void SetupEntryBlockForSjLj(MachineInstr &MI, MachineBasicBlock *MBB,
-                              MachineBasicBlock *DispatchBB, int FI) const;
   void finalizeLowering(MachineFunction &MF) const override;
 
 #if 0

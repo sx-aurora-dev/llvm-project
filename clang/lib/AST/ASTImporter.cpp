@@ -264,16 +264,6 @@ namespace clang {
 
     void InitializeImportedDecl(Decl *FromD, Decl *ToD) {
       ToD->IdentifierNamespace = FromD->IdentifierNamespace;
-      if (FromD->hasAttrs())
-        for (const Attr *FromAttr : FromD->getAttrs()) {
-          // FIXME: Return of the error here is not possible until store of
-          // import errors is implemented.
-          auto ToAttrOrErr = import(FromAttr);
-          if (ToAttrOrErr)
-            ToD->addAttr(*ToAttrOrErr);
-          else
-            llvm::consumeError(ToAttrOrErr.takeError());
-        }
       if (FromD->isUsed())
         ToD->setIsUsed();
       if (FromD->isImplicit())
@@ -587,6 +577,7 @@ namespace clang {
     ExpectedStmt VisitVAArgExpr(VAArgExpr *E);
     ExpectedStmt VisitChooseExpr(ChooseExpr *E);
     ExpectedStmt VisitGNUNullExpr(GNUNullExpr *E);
+    ExpectedStmt VisitGenericSelectionExpr(GenericSelectionExpr *E);
     ExpectedStmt VisitPredefinedExpr(PredefinedExpr *E);
     ExpectedStmt VisitDeclRefExpr(DeclRefExpr *E);
     ExpectedStmt VisitImplicitValueInitExpr(ImplicitValueInitExpr *E);
@@ -1041,7 +1032,7 @@ ExpectedType ASTNodeImporter::VisitBuiltinType(const BuiltinType *T) {
   case BuiltinType::Id: \
     return Importer.getToContext().SingletonId;
 #include "clang/Basic/AArch64SVEACLETypes.def"
-#define PPC_MMA_VECTOR_TYPE(Name, Id, Size) \
+#define PPC_VECTOR_TYPE(Name, Id, Size) \
   case BuiltinType::Id: \
     return Importer.getToContext().Id##Ty;
 #include "clang/Basic/PPCTypes.def"
@@ -6536,6 +6527,40 @@ ExpectedStmt ASTNodeImporter::VisitGNUNullExpr(GNUNullExpr *E) {
   return new (Importer.getToContext()) GNUNullExpr(*TypeOrErr, *BeginLocOrErr);
 }
 
+ExpectedStmt
+ASTNodeImporter::VisitGenericSelectionExpr(GenericSelectionExpr *E) {
+  Error Err = Error::success();
+  auto ToGenericLoc = importChecked(Err, E->getGenericLoc());
+  auto *ToControllingExpr = importChecked(Err, E->getControllingExpr());
+  auto ToDefaultLoc = importChecked(Err, E->getDefaultLoc());
+  auto ToRParenLoc = importChecked(Err, E->getRParenLoc());
+  if (Err)
+    return std::move(Err);
+
+  ArrayRef<const TypeSourceInfo *> FromAssocTypes(E->getAssocTypeSourceInfos());
+  SmallVector<TypeSourceInfo *, 1> ToAssocTypes(FromAssocTypes.size());
+  if (Error Err = ImportContainerChecked(FromAssocTypes, ToAssocTypes))
+    return std::move(Err);
+
+  ArrayRef<const Expr *> FromAssocExprs(E->getAssocExprs());
+  SmallVector<Expr *, 1> ToAssocExprs(FromAssocExprs.size());
+  if (Error Err = ImportContainerChecked(FromAssocExprs, ToAssocExprs))
+    return std::move(Err);
+
+  const ASTContext &ToCtx = Importer.getToContext();
+  if (E->isResultDependent()) {
+    return GenericSelectionExpr::Create(
+        ToCtx, ToGenericLoc, ToControllingExpr,
+        llvm::makeArrayRef(ToAssocTypes), llvm::makeArrayRef(ToAssocExprs),
+        ToDefaultLoc, ToRParenLoc, E->containsUnexpandedParameterPack());
+  }
+
+  return GenericSelectionExpr::Create(
+      ToCtx, ToGenericLoc, ToControllingExpr, llvm::makeArrayRef(ToAssocTypes),
+      llvm::makeArrayRef(ToAssocExprs), ToDefaultLoc, ToRParenLoc,
+      E->containsUnexpandedParameterPack(), E->getResultIndex());
+}
+
 ExpectedStmt ASTNodeImporter::VisitPredefinedExpr(PredefinedExpr *E) {
 
   Error Err = Error::success();
@@ -8233,7 +8258,7 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
       return make_error<ImportError>(*Error);
     }
 
-    // If FromD has some updated flags after last import, apply it
+    // If FromD has some updated flags after last import, apply it.
     updateFlags(FromD, ToD);
     // If we encounter a cycle during an import then we save the relevant part
     // of the import path associated to the Decl.
@@ -8327,6 +8352,15 @@ Expected<Decl *> ASTImporter::Import(Decl *FromD) {
 
   // Make sure that ImportImpl registered the imported decl.
   assert(ImportedDecls.count(FromD) != 0 && "Missing call to MapImported?");
+
+  if (FromD->hasAttrs())
+    for (const Attr *FromAttr : FromD->getAttrs()) {
+      auto ToAttrOrErr = Import(FromAttr);
+      if (ToAttrOrErr)
+        ToD->addAttr(*ToAttrOrErr);
+      else
+        return ToAttrOrErr.takeError();
+    }
 
   // Notify subclasses.
   Imported(FromD, ToD);

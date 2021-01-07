@@ -5918,7 +5918,8 @@ static bool ConvertForConditional(Sema &Self, ExprResult &E, QualType T) {
 // extension.
 static bool isValidVectorForConditionalCondition(ASTContext &Ctx,
                                                  QualType CondTy) {
-  if (!CondTy->isVectorType() || CondTy->isExtVectorType())
+  const auto *VecVT = CondTy->getAs<VectorType>();
+  if (!VecVT || (VecVT->isExtVectorType() && !VecVT->isExtVectorBoolType()))
     return false;
   const QualType EltTy =
       cast<VectorType>(CondTy.getCanonicalType())->getElementType();
@@ -5946,13 +5947,14 @@ QualType Sema::CheckGNUVectorConditionalTypes(ExprResult &Cond, ExprResult &LHS,
 
   // FIXME: In the future we should define what the Extvector conditional
   // operator looks like.
-  if (LHSVT && isa<ExtVectorType>(LHSVT)) {
+  // We explicitly allow this for ext_vector_type boolean as a Clang extension.
+  if (isa_and_nonnull<ExtVectorType>(LHSVT) && !LHSVT->isExtVectorBoolType()) {
     Diag(QuestionLoc, diag::err_conditional_vector_operand_type)
         << /*isExtVector*/ true << LHSType;
     return {};
   }
 
-  if (RHSVT && isa<ExtVectorType>(RHSVT)) {
+  if (isa_and_nonnull<ExtVectorType>(RHSVT) && !RHSVT->isExtVectorBoolType()) {
     Diag(QuestionLoc, diag::err_conditional_vector_operand_type)
         << /*isExtVector*/ true << RHSType;
     return {};
@@ -7694,7 +7696,8 @@ ExprResult Sema::BuildCXXNoexceptExpr(SourceLocation KeyLoc, Expr *Operand,
 
   Operand = R.get();
 
-  if (!inTemplateInstantiation() && Operand->HasSideEffects(Context, false)) {
+  if (!inTemplateInstantiation() && !Operand->isInstantiationDependent() &&
+      Operand->HasSideEffects(Context, false)) {
     // The expression operand for noexcept is in an unevaluated expression
     // context, so side effects could result in unintended consequences.
     Diag(Operand->getExprLoc(), diag::warn_side_effects_unevaluated_context);

@@ -1400,9 +1400,7 @@ void Target::SetExecutableModule(ModuleSP &executable_sp,
   ClearModules(false);
 
   if (executable_sp) {
-    static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
-    Timer scoped_timer(func_cat,
-                       "Target::SetExecutableModule (executable = '%s')",
+    LLDB_SCOPED_TIMERF("Target::SetExecutableModule (executable = '%s')",
                        executable_sp->GetFileSpec().GetPath().c_str());
 
     const bool notify = true;
@@ -3516,6 +3514,28 @@ static constexpr OptionEnumValueElement g_x86_dis_flavor_value_types[] = {
     },
 };
 
+static constexpr OptionEnumValueElement g_import_std_module_value_types[] = {
+    {
+        eImportStdModuleFalse,
+        "false",
+        "Never import the 'std' C++ module in the expression parser.",
+    },
+    {
+        eImportStdModuleFallback,
+        "fallback",
+        "Retry evaluating expressions with an imported 'std' C++ module if they"
+        " failed to parse without the module. This allows evaluating more "
+        "complex expressions involving C++ standard library types."
+    },
+    {
+        eImportStdModuleTrue,
+        "true",
+        "Always import the 'std' C++ module. This allows evaluating more "
+        "complex expressions involving C++ standard library types. This feature"
+        " is experimental."
+    },
+};
+
 static constexpr OptionEnumValueElement g_hex_immediate_style_values[] = {
     {
         Disassembler::eHexStyleC,
@@ -3969,10 +3989,10 @@ bool TargetProperties::GetEnableAutoImportClangModules() const {
       nullptr, idx, g_target_properties[idx].default_uint_value != 0);
 }
 
-bool TargetProperties::GetEnableImportStdModule() const {
+ImportStdModule TargetProperties::GetImportStdModule() const {
   const uint32_t idx = ePropertyImportStdModule;
-  return m_collection_sp->GetPropertyAtIndexAsBoolean(
-      nullptr, idx, g_target_properties[idx].default_uint_value != 0);
+  return (ImportStdModule)m_collection_sp->GetPropertyAtIndexAsEnumeration(
+      nullptr, idx, g_target_properties[idx].default_uint_value);
 }
 
 bool TargetProperties::GetEnableAutoApplyFixIts() const {

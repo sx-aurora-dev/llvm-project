@@ -18,7 +18,6 @@
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/AliasAnalysis.h"
-#include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/Pass.h"
 #include <algorithm>
@@ -117,6 +116,9 @@ private:
     unsigned SExtBits;
 
     APInt Scale;
+
+    // Context instruction to use when querying information about this index.
+    const Instruction *CxtI;
 
     bool operator==(const VariableGEPIndex &Other) const {
       return V == Other.V && ZExtBits == Other.ZExtBits &&

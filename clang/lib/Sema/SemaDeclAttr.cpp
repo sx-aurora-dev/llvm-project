@@ -23,6 +23,7 @@
 #include "clang/AST/RecursiveASTVisitor.h"
 #include "clang/AST/Type.h"
 #include "clang/Basic/CharInfo.h"
+#include "clang/Basic/SourceLocation.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetBuiltins.h"
 #include "clang/Basic/TargetInfo.h"
@@ -38,6 +39,7 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
+#include "llvm/IR/Assumptions.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -1391,7 +1393,7 @@ static void handlePreferredName(Sema &S, Decl *D, const ParsedAttr &AL) {
   if (!TSI)
     TSI = S.Context.getTrivialTypeSourceInfo(T, AL.getLoc());
 
-  if (!T.hasQualifiers() && T->getAs<TypedefType>()) {
+  if (!T.hasQualifiers() && T->isTypedefNameType()) {
     // Find the template name, if this type names a template specialization.
     const TemplateDecl *Template = nullptr;
     if (const auto *CTSD = dyn_cast_or_null<ClassTemplateSpecializationDecl>(
@@ -1710,6 +1712,42 @@ void Sema::AddAllocAlignAttr(Decl *D, const AttributeCommonInfo &CI,
   }
 
   D->addAttr(::new (Context) AllocAlignAttr(Context, CI, Idx));
+}
+
+/// Check if \p AssumptionStr is a known assumption and warn if not.
+static void checkAssumptionAttr(Sema &S, SourceLocation Loc,
+                                StringRef AssumptionStr) {
+  if (llvm::KnownAssumptionStrings.count(AssumptionStr))
+    return;
+
+  unsigned BestEditDistance = 3;
+  StringRef Suggestion;
+  for (const auto &KnownAssumptionIt : llvm::KnownAssumptionStrings) {
+    unsigned EditDistance =
+        AssumptionStr.edit_distance(KnownAssumptionIt.getKey());
+    if (EditDistance < BestEditDistance) {
+      Suggestion = KnownAssumptionIt.getKey();
+      BestEditDistance = EditDistance;
+    }
+  }
+
+  if (!Suggestion.empty())
+    S.Diag(Loc, diag::warn_assume_attribute_string_unknown_suggested)
+        << AssumptionStr << Suggestion;
+  else
+    S.Diag(Loc, diag::warn_assume_attribute_string_unknown) << AssumptionStr;
+}
+
+static void handleAssumumptionAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  // Handle the case where the attribute has a text message.
+  StringRef Str;
+  SourceLocation AttrStrLoc;
+  if (!S.checkStringLiteralArgumentAttr(AL, 0, Str, &AttrStrLoc))
+    return;
+
+  checkAssumptionAttr(S, AttrStrLoc, Str);
+
+  D->addAttr(::new (S.Context) AssumptionAttr(S.Context, AL, Str));
 }
 
 /// Normalize the attribute, __foo__ becomes foo.
@@ -3043,8 +3081,14 @@ static void handleSectionAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
   }
 
   SectionAttr *NewAttr = S.mergeSectionAttr(D, AL, Str);
-  if (NewAttr)
+  if (NewAttr) {
     D->addAttr(NewAttr);
+    if (isa<FunctionDecl, FunctionTemplateDecl, ObjCMethodDecl,
+            ObjCPropertyDecl>(D))
+      S.UnifySection(NewAttr->getName(),
+                     ASTContext::PSF_Execute | ASTContext::PSF_Read,
+                     cast<NamedDecl>(D));
+  }
 }
 
 // This is used for `__declspec(code_seg("segname"))` on a decl.
@@ -3647,6 +3691,26 @@ static void handleCallbackAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
 
   D->addAttr(::new (S.Context) CallbackAttr(
       S.Context, AL, EncodingIndices.data(), EncodingIndices.size()));
+}
+
+static bool isFunctionLike(const Type &T) {
+  // Check for explicit function types.
+  // 'called_once' is only supported in Objective-C and it has
+  // function pointers and block pointers.
+  return T.isFunctionPointerType() || T.isBlockPointerType();
+}
+
+/// Handle 'called_once' attribute.
+static void handleCalledOnceAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
+  // 'called_once' only applies to parameters representing functions.
+  QualType T = cast<ParmVarDecl>(D)->getType();
+
+  if (!isFunctionLike(*T)) {
+    S.Diag(AL.getLoc(), diag::err_called_once_attribute_wrong_type);
+    return;
+  }
+
+  D->addAttr(::new (S.Context) CalledOnceAttr(S.Context, AL));
 }
 
 static void handleTransparentUnionAttr(Sema &S, Decl *D, const ParsedAttr &AL) {
@@ -7648,6 +7712,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
   case ParsedAttr::AT_Callback:
     handleCallbackAttr(S, D, AL);
     break;
+  case ParsedAttr::AT_CalledOnce:
+    handleCalledOnceAttr(S, D, AL);
+    break;
   case ParsedAttr::AT_CUDAGlobal:
     handleGlobalAttr(S, D, AL);
     break;
@@ -7714,6 +7781,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case ParsedAttr::AT_AnyX86NoCfCheck:
     handleNoCfCheckAttr(S, D, AL);
+    break;
+  case ParsedAttr::AT_Leaf:
+    handleSimpleAttribute<LeafAttr>(S, D, AL);
     break;
   case ParsedAttr::AT_NoThrow:
     if (!AL.isUsedAsTypeAttr())
@@ -7842,6 +7912,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
   case ParsedAttr::AT_Unavailable:
     handleAttrWithMessage<UnavailableAttr>(S, D, AL);
     break;
+  case ParsedAttr::AT_Assumption:
+    handleAssumumptionAttr(S, D, AL);
+    break;
   case ParsedAttr::AT_ObjCDirect:
     handleObjCDirectAttr(S, D, AL);
     break;
@@ -7865,6 +7938,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
   case ParsedAttr::AT_DisableTailCalls:
     handleSimpleAttributeWithExclusions<DisableTailCallsAttr, NakedAttr>(S, D,
                                                                          AL);
+    break;
+  case ParsedAttr::AT_NoMerge:
+    handleSimpleAttribute<NoMergeAttr>(S, D, AL);
     break;
   case ParsedAttr::AT_Visibility:
     handleVisibilityAttr(S, D, AL, false);

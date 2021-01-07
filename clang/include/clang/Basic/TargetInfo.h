@@ -77,9 +77,6 @@ struct TransferrableTargetInfo {
   unsigned char FractWidth, FractAlign;
   unsigned char LongFractWidth, LongFractAlign;
 
-  // Whether the elements of a boolean vector are bits.
-  bool DenseBoolVector;
-
   // If true, unsigned fixed point types have the same number of fractional bits
   // as their signed counterparts, forcing the unsigned types to have one extra
   // bit of padding. Otherwise, unsigned fixed point types have
@@ -417,9 +414,6 @@ public:
 
   /// Return the size of '_Bool' and C++ 'bool' for this target, in bits.
   unsigned getBoolWidth() const { return BoolWidth; }
-
-  /// Return whether the size of an element of a bool vector is just one bit.
-  bool hasDenseBoolVectors() const { return DenseBoolVector; }
 
   /// Return the alignment of '_Bool' and C++ 'bool' for this target.
   unsigned getBoolAlign() const { return BoolAlign; }

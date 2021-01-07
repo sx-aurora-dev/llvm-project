@@ -290,6 +290,15 @@ def int_wasm_extmul_high_unsigned :
             [LLVMSubdivide2VectorType<0>, LLVMSubdivide2VectorType<0>],
             [IntrNoMem, IntrSpeculatable]>;
 
+def int_wasm_extadd_pairwise_signed :
+  Intrinsic<[llvm_anyvector_ty],
+            [LLVMSubdivide2VectorType<0>],
+            [IntrNoMem, IntrSpeculatable]>;
+def int_wasm_extadd_pairwise_unsigned :
+  Intrinsic<[llvm_anyvector_ty],
+            [LLVMSubdivide2VectorType<0>],
+            [IntrNoMem, IntrSpeculatable]>;
+
 def int_wasm_signselect :
   Intrinsic<[llvm_anyvector_ty],
             [LLVMMatchType<0>, LLVMMatchType<0>, LLVMMatchType<0>],
@@ -301,6 +310,20 @@ def int_wasm_eq :
   Intrinsic<[llvm_v2i64_ty],
             [llvm_v2i64_ty, llvm_v2i64_ty],
             [IntrNoMem, IntrSpeculatable]>;
+
+// TODO: Remove this after experiments have been run. Use the target-agnostic
+// int_prefetch if this becomes specified at some point.
+def int_wasm_prefetch_t :
+  Intrinsic<[], [llvm_ptr_ty],
+            [IntrInaccessibleMemOrArgMemOnly, IntrWillReturn,
+             ReadOnly<ArgIndex<0>>, NoCapture<ArgIndex<0>>],
+            "", [SDNPMemOperand]>;
+
+def int_wasm_prefetch_nt :
+  Intrinsic<[], [llvm_ptr_ty],
+            [IntrInaccessibleMemOrArgMemOnly, IntrWillReturn,
+             ReadOnly<ArgIndex<0>>, NoCapture<ArgIndex<0>>],
+            "", [SDNPMemOperand]>;
 
 //===----------------------------------------------------------------------===//
 // Thread-local storage intrinsics

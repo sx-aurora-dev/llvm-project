@@ -425,6 +425,21 @@ let Predicates = [IsVectorizeSubTarget] in {
 
 // Bitconvert for vector registers
 
+let Predicates = [IsVectorizeSubTarget] in {
+  def : Pat<(v512i32 (bitconvert v512f32:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+  def : Pat<(v512i32 (bitconvert v256f64:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+  def : Pat<(v512i32 (bitconvert v256i64:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+  def : Pat<(v512f32 (bitconvert v512i32:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+  def : Pat<(v512f32 (bitconvert v256f64:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+  def : Pat<(v512f32 (bitconvert v256i64:$vr)),
+            (COPY_TO_REGCLASS $vr, V64)>;
+}
+
 multiclass simd_bitconv<int length> {
   defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
   defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
@@ -487,7 +502,7 @@ let Predicates = [IsVectorizeSubTarget] in {
 // Series of SCALAR_TO_VECTOR for all VE vector types,
 //
 // NOTE: Need to shift i32 for v512i32 since v512i32 uses
-//       high 32 bits (0..31) first.
+//       upper 32 bits (0..31) first.
 
 let Predicates = [IsVectorizeSubTarget] in {
   def: Pat<(v512i32 (scalar_to_vector i32:$val)),

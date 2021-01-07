@@ -100,8 +100,11 @@ protected:
                            llvm::BasicBlock &continuationIP,
                            llvm::IRBuilder<> &builder,
                            LogicalResult &bodyGenStatus);
+  virtual LogicalResult convertOmpWsLoop(Operation &opInst,
+                                         llvm::IRBuilder<> &builder);
+
   /// Converts the type from MLIR LLVM dialect to LLVM.
-  llvm::Type *convertType(LLVMType type);
+  llvm::Type *convertType(Type type);
 
   static std::unique_ptr<llvm::Module>
   prepareLLVMModule(Operation *m, llvm::LLVMContext &llvmContext,
@@ -151,6 +154,11 @@ protected:
   llvm::StringMap<llvm::Function *> functionMapping;
   DenseMap<Value, llvm::Value *> valueMapping;
   DenseMap<Block *, llvm::BasicBlock *> blockMapping;
+
+  /// A mapping between MLIR LLVM dialect terminators and LLVM IR terminators
+  /// they are converted to. This allows for conneting PHI nodes to the source
+  /// values after all operations are converted.
+  DenseMap<Operation *, llvm::Instruction *> branchMapping;
 };
 
 } // namespace LLVM

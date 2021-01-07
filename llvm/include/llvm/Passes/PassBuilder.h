@@ -64,7 +64,7 @@ struct PGOOptions {
     assert(this->Action != NoAction || this->CSAction != NoCSAction ||
            this->DebugInfoForProfiling || this->PseudoProbeForProfiling);
 
-    // Pseudo probe emission does work with -fdebug-info-for-profiling since
+    // Pseudo probe emission does not work with -fdebug-info-for-profiling since
     // they both use the discriminator field of debug lines but for different
     // purposes.
     if (this->DebugInfoForProfiling && this->PseudoProbeForProfiling) {
@@ -123,6 +123,13 @@ public:
   /// Tuning option to enable/disable call graph profile. Its default value is
   /// that of the flag: `-enable-npm-call-graph-profile`.
   bool CallGraphProfile;
+
+  /// Tuning option to enable/disable function merging. Its default value is
+  /// false.
+  bool MergeFunctions;
+
+  /// Uniquefy function linkage name. Its default value is false.
+  bool UniqueLinkageNames;
 };
 
 /// This class provides access to building LLVM's passes.
@@ -456,6 +463,9 @@ public:
 
   /// Build the default `AAManager` with the default alias analysis pipeline
   /// registered.
+  ///
+  /// This also adds target-specific alias analyses registered via
+  /// TargetMachine::registerDefaultAliasAnalyses().
   AAManager buildDefaultAAPipeline();
 
   /// Parse a textual pass pipeline description into a \c

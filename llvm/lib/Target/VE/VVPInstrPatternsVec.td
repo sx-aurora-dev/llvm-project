@@ -243,10 +243,10 @@ multiclass VectorTernaryArith_ShortLong<SDPatternOperator OpNode, ValueType Long
 // Integer arithmetic (256 elements)
 defm : VectorUnaryArith_ShortLong<vvp_ctpop, i64, v256i64, "VPCNT", i32, v256i32, "PVPCNTLO">;
 
-defm : VectorBinaryArith_ShortLong<c_vv_add, i64, v256i64, "VADDSL", i32, v256i32, "VADDSWSX">;
+defm : VectorBinaryArith_ShortLong<c_vvp_add, i64, v256i64, "VADDSL", i32, v256i32, "VADDSWSX">;
 
 defm : VectorBinaryArith_ShortLong<vvp_sub,  i64, v256i64, "VSUBSL", i32, v256i32, "VSUBSWSX">;
-defm : VectorBinaryArith_ShortLong<c_vv_mul, i64, v256i64, "VMULSL", i32, v256i32, "VMULSWSX">;
+defm : VectorBinaryArith_ShortLong<c_vvp_mul, i64, v256i64, "VMULSL", i32, v256i32, "VMULSWSX">;
 defm : VectorBinaryArith_ShortLong<vvp_sdiv, i64, v256i64, "VDIVSL", i32, v256i32, "VDIVSWSX">;
 defm : VectorBinaryArith_ShortLong<vvp_udiv, i64, v256i64, "VDIVUL", i32, v256i32, "VDIVUW">;
 
@@ -260,15 +260,15 @@ defm : VectorBinaryArith_ShortLong<vvp_or,  i64, v256i64, "VOR",  i32, v256i32, 
 
 // Floating-point arithmetic (256 elements)
 defm : VectorUnaryArith_ShortLong<vvp_fsqrt, f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
-defm : VectorBinaryArith_ShortLong<c_vv_fadd, f64, v256f64, "VFADDD", f32, v256f32, "PVFADDUP">;
+defm : VectorBinaryArith_ShortLong<c_vvp_fadd, f64, v256f64, "VFADDD", f32, v256f32, "PVFADDUP">;
 defm : VectorBinaryArith_ShortLong<vvp_fsub,  f64, v256f64, "VFSUBD", f32, v256f32, "PVFSUBUP">;
-defm : VectorBinaryArith_ShortLong<c_vv_fmul, f64, v256f64, "VFMULD", f32, v256f32, "PVFMULUP">;
+defm : VectorBinaryArith_ShortLong<c_vvp_fmul, f64, v256f64, "VFMULD", f32, v256f32, "PVFMULUP">;
 defm : VectorBinaryArith_ShortLong<vvp_fdiv,  f64, v256f64, "VFDIVD", f32, v256f32, "VFDIVS">;
 
-defm : VectorBinaryArith_ShortLong<c_vv_fminnum, f64, v256f64, "VFMIND", f32, v256f32, "VFMINS">;
-defm : VectorBinaryArith_ShortLong<c_vv_fmaxnum, f64, v256f64, "VFMAXD", f32, v256f32, "VFMAXS">;
+defm : VectorBinaryArith_ShortLong<c_vvp_fminnum, f64, v256f64, "VFMIND", f32, v256f32, "VFMINS">;
+defm : VectorBinaryArith_ShortLong<c_vvp_fmaxnum, f64, v256f64, "VFMAXD", f32, v256f32, "VFMAXS">;
 
-defm : VectorTernaryArith_ShortLong<c_vv_ffma, f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
+defm : VectorTernaryArith_ShortLong<c_vvp_ffma, f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
 
 // Element-wise select (256 elements)
 multiclass VectorSelect<ValueType DataVT> {
@@ -376,7 +376,7 @@ def : Pat<(v256i32 (vvp_trunc v256i64:$src, (v256i1 srcvalue), (i32 srcvalue))),
 
 ///// ARITHMETIC /////
 // Integer arithmetic (512 elements)
-defm : VectorBinaryArith_Base<c_vv_add, i64, v512i32, v512i1, "PVADDU">; 
+defm : VectorBinaryArith_Base<c_vvp_add, i64, v512i32, v512i1, "PVADDU">; 
 defm : VectorBinaryArith_Base<vvp_sub,  i64, v512i32, v512i1, "PVSUBU">;
 // defm : VectorBinaryArith_Base<vvp_mul,  i64, v512i32, "vmulsl">; // no packed mul
 // defm : VectorBinaryArith_Base<vvp_sdiv, i64, v512i32, "vdivsl">; // no packed sdiv
@@ -387,13 +387,13 @@ defm : VectorShiftArith<vvp_shl, i64, v512i32, v512i1, "PVSLL">;
 
 
 // Floating-point arithmetic (512 elements)
-defm : VectorBinaryArith_Base<c_vv_fadd,    i64, v512f32, v512i1, "PVFADD">;
-defm : VectorBinaryArith_Base<c_vv_fmul,    i64, v512f32, v512i1, "PVFMUL">;
+defm : VectorBinaryArith_Base<c_vvp_fadd,    i64, v512f32, v512i1, "PVFADD">;
+defm : VectorBinaryArith_Base<c_vvp_fmul,    i64, v512f32, v512i1, "PVFMUL">;
 defm : VectorBinaryArith_Base<vvp_fsub,     i64, v512f32, v512i1, "PVFSUB">;
-defm : VectorBinaryArith_Base<c_vv_fminnum, i64, v512f32, v512i1, "PVFMIN">;
-defm : VectorBinaryArith_Base<c_vv_fmaxnum, i64, v512f32, v512i1, "PVFMAX">;
+defm : VectorBinaryArith_Base<c_vvp_fminnum, i64, v512f32, v512i1, "PVFMIN">;
+defm : VectorBinaryArith_Base<c_vvp_fmaxnum, i64, v512f32, v512i1, "PVFMAX">;
 
-defm : VectorTernaryArith_Base<c_vv_ffma, i64, v512f32, v512i1, "PVFMAD">;
+defm : VectorTernaryArith_Base<c_vvp_ffma, i64, v512f32, v512i1, "PVFMAD">;
 
 // Integer extension (256 elements) //
 // vNi32 to vNi64

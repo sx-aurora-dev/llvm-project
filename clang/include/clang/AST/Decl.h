@@ -1262,6 +1262,9 @@ public:
   /// constant expression, according to the relevant language standard.
   /// This only checks properties of the declaration, and does not check
   /// whether the initializer is in fact a constant expression.
+  ///
+  /// This corresponds to C++20 [expr.const]p3's notion of a
+  /// "potentially-constant" variable.
   bool mightBeUsableInConstantExpressions(const ASTContext &C) const;
 
   /// Determine whether this variable's value can be used in a
@@ -1660,6 +1663,9 @@ public:
   bool isObjCMethodParameter() const {
     return ParmVarDeclBits.IsObjCMethodParam;
   }
+
+  /// Determines whether this parameter is destroyed in the callee function.
+  bool isDestroyedInCallee() const;
 
   unsigned getFunctionScopeDepth() const {
     if (ParmVarDeclBits.IsObjCMethodParam) return 0;
