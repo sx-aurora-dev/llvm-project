@@ -1857,65 +1857,6 @@ SDValue VETargetLowering::lowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const {
 SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
                                                  SelectionDAG &DAG) const {
   assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");
-  EVT VT = Op.getOperand(0).getValueType();
-
-  // Special treatements for packed V64 types.
-  if (VT == MVT::v512i32 || VT == MVT::v512f32) {
-    // Example of codes:
-    //   %packed_v = extractelt %vr, %idx / 2
-    //   %packed_v &= 0xffffffff << ((%idx % 2) ? 0 : 32)
-    //   %packed_v |= %val << (%idx % 2 * 32)
-    //   %vr = insertelt %vr, %packed_v, %idx / 2
-
-    SDValue Vec = Op.getOperand(0);
-    SDValue Val = Op.getOperand(1);
-    SDValue Idx = Op.getOperand(2);
-    EVT i64 = EVT::getIntegerVT(*DAG.getContext(), 64);
-    EVT i32 = EVT::getIntegerVT(*DAG.getContext(), 32);
-    SDLoc dl(Op);
-    // In v512i32 and v512f32, both i32 and f32 values are placed from Low32,
-    // therefore convert f32 to i32 first.
-    SDValue I32Val = Val;
-    if (VT == MVT::v512f32) {
-      I32Val = DAG.getBitcast(i32, Val);
-    }
-    SDValue Result = Op;
-    if (0 /* Idx->isConstant()*/) {
-      // FIXME: optimized implementation using constant values
-    } else {
-      SDValue SetEq = DAG.getCondCode(ISD::SETEQ);
-      // SDValue CcEq = DAG.getConstant(VECC::CC_IEQ, dl, i64);
-      SDValue ZeroConst = DAG.getConstant(0, dl, i64);
-      SDValue OneConst = DAG.getConstant(1, dl, i64);
-      SDValue ThirtyTwoConst = DAG.getConstant(32, dl, i64);
-      SDValue HighMask = DAG.getConstant(0xFFFFFFFF00000000, dl, i64);
-      SDValue HalfIdx = DAG.getNode(ISD::SRL, dl, i64, {Idx, OneConst});
-      SDValue PackedVal =
-          SDValue(DAG.getMachineNode(VE::LVSvr, dl, i64, {Vec, HalfIdx}), 0);
-      SDValue IdxLSB = DAG.getNode(ISD::AND, dl, i64, {Idx, OneConst});
-      SDValue ShiftIdx =
-          DAG.getNode(ISD::SELECT_CC, dl, i64,
-                      {IdxLSB, ZeroConst, ZeroConst, ThirtyTwoConst, SetEq});
-      SDValue Mask = DAG.getNode(ISD::SRL, dl, i64, {HighMask, ShiftIdx});
-      SDValue MaskedVal = DAG.getNode(ISD::AND, dl, i64, {PackedVal, Mask});
-      SDValue BaseVal = SDValue(
-          DAG.getMachineNode(TargetOpcode::IMPLICIT_DEF, dl, MVT::i64), 0);
-      // In v512i32 and v512f32, Both i32 and f32 values are placed from Low32.
-      SDValue SubLow32 = DAG.getTargetConstant(VE::sub_i32, dl, MVT::i32);
-      SDValue I64Val =
-          SDValue(DAG.getMachineNode(TargetOpcode::INSERT_SUBREG, dl, MVT::i64,
-                                     BaseVal, I32Val, SubLow32),
-                  0);
-      SDValue ShiftedVal = DAG.getNode(ISD::SHL, dl, i64, {I64Val, ShiftIdx});
-      SDValue CombinedVal =
-          DAG.getNode(ISD::OR, dl, i64, {ShiftedVal, MaskedVal});
-      Result =
-          SDValue(DAG.getMachineNode(VE::LSVrr_v, dl, Vec.getSimpleValueType(),
-                                     {HalfIdx, CombinedVal, Vec}),
-                  0);
-    }
-    return Result;
-  }
 
   // Lowering to VM_EXTRACT
   SDValue SrcV = Op.getOperand(0);
@@ -1927,8 +1868,7 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
     return CDAG.CreateInsertMask(ActualMaskV, ElemV, IndexV);
   }
 
-  // Insertion is legal for other V64 types.
-  return Op;
+  return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
 }
 
 SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,

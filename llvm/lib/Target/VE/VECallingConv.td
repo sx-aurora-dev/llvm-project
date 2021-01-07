@@ -205,7 +205,7 @@ def RetCC_VE_Fast : CallingConv<[
   // pair of vector mask --> generic vector mask registers
   CCIfVPU<CCIfType<[v512i1],
            CCAssignToRegWithShadow<[VMP1, VMP2, VMP3],
-                                   [VM1, VM3, VM5]>>,
+                                   [VM1, VM3, VM5]>>>,
 
   // Follow the standard C CC for scalars.
   CCDelegateTo<RetCC_VE_C>

@@ -20,7 +20,9 @@ namespace PatternMatch {
 
 // type modification
 template<typename Matcher, typename DestClass>
-struct MatcherCast { };
+struct MatcherCast {
+  using ActualCastType = DestClass;
+};
 
 // whether the Value \p Obj behaves like a \p Class.
 template<typename MatcherClass, typename Class>

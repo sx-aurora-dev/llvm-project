@@ -184,7 +184,14 @@ template <typename Ty> struct match_unless {
 
   match_unless(const Ty &Matcher) : M(Matcher) {}
 
-  template <typename ITy> bool match(ITy *V) { return !M.match(V); }
+  template <typename ITy, typename MatcherContext>
+  bool match_context(ITy *V, MatcherContext &MC) {
+    return !M.match_context(V, MC);
+  }
+  template <typename ITy> bool match(ITy *V) {
+    EmptyContext EC;
+    return match_context(V, EC);
+  }
 };
 
 /// Match if the inner matcher does *NOT* match.
