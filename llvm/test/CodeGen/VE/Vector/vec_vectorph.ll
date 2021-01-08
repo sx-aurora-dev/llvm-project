@@ -4,16 +4,17 @@
 define <256 x double> @test_cshaw_vector_ph(double %x) {
 ; CHECK-LABEL: test_cshaw_vector_ph:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    or %s1, 1, (0)1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v0, 0
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfadd.d %v0, %s0, %v0
-; CHECK-NEXT:    lea.sl %s0, 1071644672
-; CHECK-NEXT:    vfmul.d %v0, %s0, %v0
-; CHECK-NEXT:    lvs %s0, %v0(0)
-; CHECK-NEXT:    vbrd %v0, %s0
+; CHECK-NEXT:    lsv %v0(0), %s0
+; CHECK-NEXT:    lea.sl %s0, 0
+; CHECK-NEXT:    lsv %v1(0), %s0
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vfadd.d %v0, %v0, %v1
+; CHECK-NEXT:    lea.sl %s1, 1071644672
+; CHECK-NEXT:    lsv %v1(0), %s1
+; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    vbrd %v0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r.i0 = insertelement <256 x double> undef, double %x, i32 0
   %rpz = fadd <256 x double> %r.i0, <double 0.000000e+00, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef, double undef>
