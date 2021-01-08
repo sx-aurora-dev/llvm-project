@@ -336,7 +336,7 @@ static SDValue getSplatValue(SDNode *N) {
 
 static const MVT AllVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
                                    MVT::v256f32, MVT::v512f32, MVT::v256f64};
-
+static const MVT PackedVectorVTs[] = {MVT::v512i32, MVT::v512f32};
 
 void VETargetLowering::initRegisterClasses_VVP() {
   // VVP-based backend.
@@ -552,9 +552,11 @@ void VETargetLowering::initVPUActions() {
     }
   }
 
-  for (unsigned OC : {ISD::INSERT_VECTOR_ELT, ISD::EXTRACT_VECTOR_ELT}) {
-    setOperationAction(OC, MVT::v512i32, Custom);
-    setOperationAction(OC, MVT::v512f32, Custom);
+  for (MVT PackedVT : PackedVectorVTs) {
+    setOperationAction(ISD::INSERT_VECTOR_ELT, PackedVT, Custom);
+    setOperationAction(ISD::EXTRACT_VECTOR_ELT, PackedVT.getVectorElementType(),
+                       Custom);
+    setOperationAction(ISD::EXTRACT_VECTOR_ELT, PackedVT, Custom);
   }
 
   // All mask ops
@@ -774,18 +776,6 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
   unsigned NumResults = N->getNumValues();
   assert(NumResults > 0);
 
-  // recognized reductions
-  if (N->getOpcode() == ISD::EXTRACT_VECTOR_ELT) {
-    const ISD::NodeType RecognizedOCList[] = {ISD::ADD, ISD::MUL, ISD::OR,
-                                              ISD::XOR, ISD::AND};
-
-    ISD::NodeType RedOC;
-    SDValue RedRootV = DAG.matchBinOpReduction(N, RedOC, RecognizedOCList);
-    if (RedRootV) {
-      LLVM_DEBUG(dbgs() << "Matched a shuffle reduction pattern!\n";);
-    }
-  }
-
   // if the SDNode has a chain operator on the value output instead
   assert(NumResults <= 2);
   int ValIdx = NumResults - 1;
@@ -844,6 +834,7 @@ VETargetLowering::getPreferredVectorAction(MVT VT) const {
   // This should also widen vNi1 vectors to v256i1/v512i1
   return TypeWidenVector;
 }
+
 SDValue VETargetLowering::lowerVVP_Bitcast(SDValue Op, SelectionDAG &DAG) const {
   if (Op.getSimpleValueType() == MVT::v256i64 &&
       Op.getOperand(0).getSimpleValueType() == MVT::v256f64) {
@@ -1858,11 +1849,12 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
                                                  SelectionDAG &DAG) const {
   assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");
 
-  // Lowering to VM_EXTRACT
+  // Lowering to VM_INSERT
   SDValue SrcV = Op.getOperand(0);
   SDValue ElemV = Op.getOperand(1);
   SDValue IndexV = Op.getOperand(2);
   if (SDValue ActualMaskV = PeekForMask(SrcV)) {
+    // FIXME: Need to translate index!
     assert((Op.getValueType() == MVT::i64) && "not a proper mask extraction");
     CustomDAG CDAG(*this, DAG, Op);
     return CDAG.CreateInsertMask(ActualMaskV, ElemV, IndexV);
@@ -1879,13 +1871,16 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
   SDValue MaskV = PeekForMask(SrcV);
 
   // Dynamic extraction or packed extract.
-  auto IndexC = dyn_cast<ConstantSDNode>(IndexV);
-  if (!IndexC || !MaskV)
+  if (!MaskV)
     return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
 
   // Lowering to VM_EXTRACT
   if (MaskV) {
-    assert(IndexC);
+    auto IndexC = dyn_cast<ConstantSDNode>(IndexV);
+    // assert(IndexC && "Mask extraction at dynamic offset not implemented!");
+    if (!IndexC)
+      return SDValue(); // Expand.
+
     assert(Op.getValueType().isScalarInteger());
     // unsigned ResSize = Op.getValueType().getSizeInBits(); // Implicit
     EVT MaskVT = Op.getOperand(0).getValueType();
@@ -1922,6 +1917,29 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
   return Op;
 }
 
+static bool getUniqueInsertion(SDNode *N, unsigned &UniqueIdx) {
+  if (!isa<BuildVectorSDNode>(N))
+    return false;
+  const auto *BVN = cast<BuildVectorSDNode>(N);
+
+  // Find first non-undef insertion.
+  unsigned Idx;
+  for (Idx = 0; Idx < BVN->getNumOperands(); ++Idx) {
+    auto ElemV = BVN->getOperand(Idx);
+    if (!ElemV->isUndef())
+      break;
+  }
+  // Remember insertion.
+  UniqueIdx = Idx++;
+  // Verify that all other insertions are undef.
+  for (; Idx < BVN->getNumOperands(); ++Idx) {
+    auto ElemV = BVN->getOperand(Idx);
+    if (!ElemV->isUndef())
+      return false;
+  }
+  return true;
+}
+
 SDValue VETargetLowering::lowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
                                                VVPExpansionMode Mode) const {
   SDLoc DL(Op);
@@ -1935,6 +1953,16 @@ SDValue VETargetLowering::lowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
     // TODO IsMaskType(Op.getValueType())) {
     MaskShuffleAnalysis MSA(*MView.get(), CDAG);
     return MSA.synthesize(CDAG, LegalResVT);
+  }
+
+  // If there is just one element, expand to INSERT_VECTOR_ELT.
+  unsigned UniqueIdx;
+  if (getUniqueInsertion(Op.getNode(), UniqueIdx)) {
+    SDValue AccuV = DAG.getUNDEF(Op.getValueType());
+    auto ElemV = Op->getOperand(UniqueIdx);
+    SDValue IdxV = DAG.getConstant(UniqueIdx, DL, MVT::i64);
+    return DAG.getNode(ISD::INSERT_VECTOR_ELT, DL, Op.getValueType(), AccuV,
+                       ElemV, IdxV);
   }
 
   LLVM_DEBUG(dbgs() << "Lowering Shuffle (non-vmask path)\n");
@@ -1959,13 +1987,14 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
   switch (Op.getOpcode()) {
   default:
     llvm_unreachable("Should not custom lower this!");
-  case ISD::EXTRACT_VECTOR_ELT:
-    return lowerVVP_EXTRACT_VECTOR_ELT(Op, DAG);
-  case ISD::INSERT_VECTOR_ELT:
-    return lowerVVP_INSERT_VECTOR_ELT(Op, DAG);
-
   case ISD::BITCAST:
     return lowerVVP_Bitcast(Op, DAG);
+
+  // Element transfer.
+  case ISD::INSERT_VECTOR_ELT:
+    return lowerVVP_INSERT_VECTOR_ELT(Op, DAG);
+  case ISD::EXTRACT_VECTOR_ELT:
+    return lowerVVP_EXTRACT_VECTOR_ELT(Op, DAG);
 
   // vector composition
   case ISD::CONCAT_VECTORS:
