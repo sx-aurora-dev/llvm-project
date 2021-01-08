@@ -614,9 +614,9 @@ define i32 @vseqand_v4i32() {
 ; CHECK-NEXT:  .LBB11_2: # %entry
 ; CHECK-NEXT:    or %s0, 4, (0)1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrd %v0, 1
-; CHECK-NEXT:    pvseq.lo %v1
-; CHECK-NEXT:    pvand.lo %v0, %v1, %v0
+; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
 ; CHECK-NEXT:    lea %s0, calc_v4i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v4i32@hi(, %s0)
@@ -653,9 +653,9 @@ define i32 @vseqand_v256i32() {
 ; CHECK-NEXT:  .LBB12_2: # %entry
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrd %v0, 1
-; CHECK-NEXT:    pvseq.lo %v1
-; CHECK-NEXT:    pvand.lo %v0, %v1, %v0
+; CHECK-NEXT:    pvseq.lo %v0
+; CHECK-NEXT:    or %s1, 1, (0)1
+; CHECK-NEXT:    pvand.lo %v0, %s1, %v0
 ; CHECK-NEXT:    lea %s0, calc_v256i32@lo
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lea.sl %s12, calc_v256i32@hi(, %s0)
