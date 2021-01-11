@@ -270,7 +270,7 @@ defm : VectorBinaryArith_ShortLong<c_vvp_fmaxnum, f64, v256f64, "VFMAXD", f32, v
 
 defm : VectorTernaryArith_ShortLong<c_vvp_ffma, f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
 
-// Element-wise select (256 elements)
+///// Selection /////
 multiclass VectorSelect<ValueType DataVT> {
     def :Pat<(DataVT (vvp_select DataVT:$vtrue, DataVT:$vfalse, v256i1:$vm, i32:$pivot)),
                      (VMRGvvml_v $vfalse, $vtrue, $vm, $pivot, $vfalse)>;
@@ -280,6 +280,15 @@ defm : VectorSelect<v256f64>;
 defm : VectorSelect<v256i64>;
 defm : VectorSelect<v256i32>;
 defm : VectorSelect<v256f32>;
+
+multiclass VectorSelect_Packed<ValueType PackedVT> {
+    def : Pat<(PackedVT (vvp_select PackedVT:$vtrue, PackedVT:$vfalse, v512i1:$vm, i32:$pivot)),
+                        (VMRGWvvml_v $vfalse, $vtrue, $vm, $pivot, $vfalse)>;
+}
+
+defm : VectorSelect_Packed<v512i32>;
+defm : VectorSelect_Packed<v512f32>;
+
 
 ///// Comparison (VVP_SETCC) /////
 
