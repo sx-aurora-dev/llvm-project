@@ -34,6 +34,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
+#include "CustomDAG.h"
 
 #define DEBUG_TYPE "ve-lower"
 
@@ -3410,8 +3411,13 @@ SDValue VETargetLowering::combineSelectCC(SDNode *N,
 SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
                                             DAGCombinerInfo &DCI) const {
   SDLoc dl(N);
-  switch (N->getOpcode()) {
+  unsigned Opcode = N->getOpcode();
+  switch (Opcode) {
   default:
+    if (IsVVP(Opcode))
+      return combineVVP(N, DCI);
+    else if (IsPackingSupportOpcode(Opcode)) 
+      return combinePacking(N, DCI);
     break;
   case ISD::ANY_EXTEND:
   case ISD::SIGN_EXTEND:

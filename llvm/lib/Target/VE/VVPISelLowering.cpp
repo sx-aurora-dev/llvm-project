@@ -2083,3 +2083,100 @@ SDValue VETargetLowering::lowerVVP_CONCAT_VECTOR(SDValue Op,
   return CDAG.getTargetInsertSubreg(VE::sub_vm_odd, VT, LoInsert,
                                     Op->getOperand(1));
 }
+
+SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
+  // TODO: optimize
+  LLVM_DEBUG(dbgs() << "combineVVP: "; N->print(dbgs()); dbgs() << "\n";);
+  switch (N->getOpcode()) {
+    default:
+      break;
+  }
+  return SDValue();
+}
+
+// What 32bit half to pack this scalar VT (or this vector's elem VT to).
+static PackElem getPackElemForVT(EVT VT) {
+  if (VT.isFloatingPoint())
+    return PackElem::Hi;
+  if (VT.isVector())
+    return getPackElemForVT(VT.getVectorElementType());
+  return PackElem::Lo;
+}
+
+static SDValue match_ReplLoHi(SDValue N, PackElem &SrcElem) {
+  switch (N->getOpcode()) {
+  case VEISD::REPL_I32:
+    SrcElem = PackElem::Lo;
+    return N->getOperand(0);
+  case VEISD::REPL_F32:
+    SrcElem = PackElem::Hi;
+    return N->getOperand(0);
+  default:
+    return SDValue();
+  }
+}
+
+static SDValue match_UnpackLoHi(SDValue N, PackElem &SrcElem) {
+  switch (N->getOpcode()) {
+  case VEISD::VEC_UNPACK_LO:
+    SrcElem = PackElem::Lo;
+    return N->getOperand(0);
+  case VEISD::VEC_UNPACK_HI:
+    SrcElem = PackElem::Hi;
+    return N->getOperand(0);
+  default:
+    return SDValue();
+  }
+}
+
+// vec_broadcast(ret, AVL)
+static SDValue match_Broadcast(SDValue N, SDValue & AVL) {
+  if (N->getOpcode() != VEISD::VEC_BROADCAST)
+    return SDValue();
+  AVL = N->getOperand(1);
+  return N->getOperand(0);
+}
+
+// vec_unpack_X(vec_broadcast(ret))
+static SDValue
+match_UnpackBroadcast(SDNode *N, PackElem & UnpackElem, SDValue & BroadcastAVL) {
+  SDValue UnpackedV = match_UnpackLoHi(N->getOperand(0), UnpackElem);
+  if (!UnpackedV) return SDValue();
+  SDValue UnpackedBroadcastV = match_Broadcast(UnpackedV, BroadcastAVL);
+  if (!UnpackedBroadcastV) return SDValue();
+  return UnpackedBroadcastV;
+}
+
+// vec_unpack_X(vec_broadcast(%ret = repl_Y(...), %avl))
+static SDValue match_UnpackBroadcastRepl(SDNode *N, SDValue &AVL) {
+  PackElem UnpackElem;
+  SDValue UnpackedBroadcastV = match_UnpackBroadcast(N, UnpackElem, AVL);
+  if (!UnpackedBroadcastV)
+    return SDValue();
+  PackElem ReplElem;
+  SDValue ReplV = match_ReplLoHi(UnpackedBroadcastV, ReplElem);
+  if (!ReplV)
+    return SDValue();
+
+  return ReplV;
+}
+
+SDValue VETargetLowering::combinePacking(SDNode *N, DAGCombinerInfo &DCI) const {
+  // TODO: optimize
+  LLVM_DEBUG(dbgs() << "combineVVP: "; N->print(dbgs()); dbgs() << "\n";);
+  switch (N->getOpcode()) {
+    case VEISD::VEC_UNPACK_HI:
+    case VEISD::VEC_UNPACK_LO: {
+      SDValue AVL;
+      SDValue ReplV = match_UnpackBroadcastRepl(N, AVL);
+      CustomDAG CDAG(*this, DCI.DAG, N);
+      return CDAG.CreateBroadcast(N->getValueType(0), ReplV, AVL);
+      if (!ReplV)
+        return ReplV;
+    }
+
+    default:
+      break;
+  }
+  return SDValue();
+}

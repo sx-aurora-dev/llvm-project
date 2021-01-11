@@ -46,6 +46,18 @@ bool IsVVPOrVEC(unsigned Opcode);
 bool IsVVP(unsigned Opcode);
 bool IsVVPReduction(unsigned Opcode);
 
+// True, iff this is a VEC_UNPACK_LO/HI, VEC_SWAP or VEC_PACK.
+static inline bool IsPackingSupportOpcode(unsigned Opcode) {
+  switch (Opcode) {
+  case VEISD::VEC_UNPACK_LO:
+  case VEISD::VEC_UNPACK_HI:
+  case VEISD::VEC_PACK:
+  case VEISD::VEC_SWAP:
+    return true;
+  }
+  return false;
+}
+
 // Choses the widest element type
 EVT getFPConvType(SDNode *Op);
 
@@ -144,13 +156,14 @@ struct CustomDAG {
   SelectionDAG &DAG;
   SDLoc DL;
 
+
   CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDLoc DL)
       : VLI(VLI), DAG(DAG), DL(DL) {}
 
   CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDValue WhereOp)
       : VLI(VLI), DAG(DAG), DL(WhereOp) {}
 
-  CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDNode *WhereN)
+  CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, const SDNode *WhereN)
       : VLI(VLI), DAG(DAG), DL(WhereN) {}
 
   SDValue CreateSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const;

@@ -342,6 +342,8 @@ public:
 
   /// Custom DAGCombine {
   SDValue PerformDAGCombine(SDNode *N, DAGCombinerInfo &DCI) const override;
+  SDValue combineVVP(SDNode *N, DAGCombinerInfo &DCI) const;
+  SDValue combinePacking(SDNode *N, DAGCombinerInfo &DCI) const;
 
   SDValue combineExtBoolTrunc(SDNode *N, DAGCombinerInfo &DCI) const;
   SDValue combineTRUNCATE(SDNode *N, DAGCombinerInfo &DCI) const;
