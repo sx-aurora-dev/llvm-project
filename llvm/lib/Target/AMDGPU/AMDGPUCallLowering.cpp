@@ -719,6 +719,8 @@ bool AMDGPUCallLowering::lowerFormalArguments(
 
   uint64_t StackOffset = Assigner.StackOffset;
 
+  uint64_t StackOffset = Assigner.StackOffset;
+
   if (!IsEntryFunc && !AMDGPUTargetMachine::EnableFixedFunctionABI) {
     // Special inputs come after user arguments.
     TLI.allocateSpecialInputVGPRs(CCInfo, MF, *TRI, *Info);
