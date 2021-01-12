@@ -34,8 +34,9 @@ set(LLVM_ENABLE_ZLIB False CACHE BOOL "")
 # set(CLANG_DEFAULT_CXX_STDLIB "libc++" CACHE STRING "")
 # set(CLANG_UNWIND_LIB "libunwind" CACHE STRING "")
 
-# FIXME Disable RV or we get a cyclic dependency.
-# set (LLVM_TOOL_RV_BUILD OFF CACHE STRING "")
+# Region vectorizer
+set (LLVM_TOOL_RV_BUILD ON CACHE STRING "")
+set (LLVM_RVPLUG_LINK_INTO_TOOLS on)
 
 # Configure targets and flags.
 set(VE_TARGET "ve-linux")
