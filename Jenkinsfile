@@ -12,6 +12,11 @@ pipeline {
         REPO_TOP_URL = sh(
             returnStdout: true,
             script: "echo ${env.GIT_URL} | sed -e 's:/[^/]*/[^/]*\$::'").trim()
+
+        // Use VE 0 or 2.
+        VE_NODE_NUMBER = sh(
+            returnStdout: true,
+            script: "echo ${env.EXECUTOR_NUMBER} | sed -e 's:1:2:'").trim()
     }
 
     stages {
@@ -100,7 +105,7 @@ pipeline {
                 dir('vetfkernel') {
                     sh """
                         ./build/test/test01
-                        ${PYTHON} perf.py -e build/test/bench -d perfdb/10B \
+                        ${PYTHON} perf.py -e build/bench/bench -d perfdb/10B \
                             test
                     """
                 }
