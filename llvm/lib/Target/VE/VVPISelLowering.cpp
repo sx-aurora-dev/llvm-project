@@ -2140,7 +2140,7 @@ static SDValue match_Broadcast(SDValue N, SDValue & AVL) {
 // vec_unpack_X(vec_broadcast(ret))
 static SDValue
 match_UnpackBroadcast(SDNode *N, PackElem & UnpackElem, SDValue & BroadcastAVL) {
-  SDValue UnpackedV = match_UnpackLoHi(N->getOperand(0), UnpackElem);
+  SDValue UnpackedV = match_UnpackLoHi(SDValue(N, 0), UnpackElem);
   if (!UnpackedV) return SDValue();
   SDValue UnpackedBroadcastV = match_Broadcast(UnpackedV, BroadcastAVL);
   if (!UnpackedBroadcastV) return SDValue();
@@ -2158,23 +2158,48 @@ static SDValue match_UnpackBroadcastRepl(SDNode *N, SDValue &AVL) {
   if (!ReplV)
     return SDValue();
 
-  return ReplV;
+  return UnpackedBroadcastV;
+}
+
+static SDValue combineUnpackLoHi(CustomDAG &CDAG, SDNode *N,
+                                 VETargetLowering::DAGCombinerInfo &DCI) {
+  // Replace vec_unpack(vec_broadcast(repl_X(V)) with
+  // vec_broadcast(repl_X(V)) to enable folding.
+  SDValue AVL;
+  SDValue ReplV = match_UnpackBroadcastRepl(N, AVL);
+  if (!ReplV) {
+    // TODO Optimize U = unpack_X(pack(lo,hi)) -> lo|hi where 'U' only used by
+    // pack.
+    return SDValue();
+  }
+
+  // Directly replace vec_broadcast(repl_X(V)) with a plain vec_broadcast(V).
+  // Bits read from destination register are the same part as the value that is
+  // replicated? Remove replication!
+  PackElem UsedDestPart = getPackElemForVT(N->getValueType(0));
+  PackElem ReplPart;
+  match_ReplLoHi(ReplV, ReplPart);
+  if (UsedDestPart == ReplPart)
+    return CDAG.CreateBroadcast(N->getValueType(0), ReplV->getOperand(0), AVL);
+
+  // At least simplify to a plain packed broadcast.
+  return CDAG.CreateBroadcast(N->getValueType(0), ReplV, AVL);
 }
 
 SDValue VETargetLowering::combinePacking(SDNode *N, DAGCombinerInfo &DCI) const {
-  // TODO: optimize
-  LLVM_DEBUG(dbgs() << "combineVVP: "; N->print(dbgs()); dbgs() << "\n";);
+  // Perform this shortly before isel.
+  if (!DCI.isAfterLegalizeDAG())
+    return SDValue();
+
+  LLVM_DEBUG(dbgs() << "combinePacking: "; N->print(dbgs(), &DCI.DAG); dbgs() << "\n";);
+  CustomDAG CDAG(*this, DCI.DAG, N);
   switch (N->getOpcode()) {
     case VEISD::VEC_UNPACK_HI:
-    case VEISD::VEC_UNPACK_LO: {
-      SDValue AVL;
-      SDValue ReplV = match_UnpackBroadcastRepl(N, AVL);
-      CustomDAG CDAG(*this, DCI.DAG, N);
-      return CDAG.CreateBroadcast(N->getValueType(0), ReplV, AVL);
-      if (!ReplV)
-        return ReplV;
-    }
+    case VEISD::VEC_UNPACK_LO:
+      return combineUnpackLoHi(CDAG, N, DCI);
 
+    // case VEISD::VEC_PACK:
+    // case VEISD::VEC_SWAP:
     default:
       break;
   }

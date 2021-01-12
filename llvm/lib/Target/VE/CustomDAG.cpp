@@ -485,7 +485,8 @@ SDValue CustomDAG::CreateBroadcast(EVT ResTy, SDValue S,
   SDValue VectorLen;
   if (OpVectorLength.hasValue()) {
     VectorLen = OpVectorLength.getValue();
-  } else {
+  }
+  if (!OpVectorLength.hasValue() || !VectorLen) {
     VectorLen = DAG.getConstant(
         SelectBoundedVectorLength(ResTy.getVectorNumElements()), DL, MVT::i32);
   }
