@@ -57,7 +57,7 @@ class InstVE<dag outs, dag ins, string asmstr, list<dag> pattern,
 
   let DecoderNamespace = "VE";
   field bits<64> SoftFail = 0;
-  
+
   let Itinerary = itin;
 }
 
