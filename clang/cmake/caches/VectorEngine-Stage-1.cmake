@@ -69,8 +69,10 @@ foreach(target ${VE_TARGET})
   set(RUNTIMES_${target}_LIBCXX_CXX_ABI libcxxabi CACHE STRING "")
   set(RUNTIMES_${target}_LIBCXX_ENABLE_STATIC_ABI_LIBRARY True CACHE BOOL "")
   set(RUNTIMES_${target}_LIBCXX_ENABLE_STATIC True CACHE BOOL "")
+
   # FIXME Re-activate once issues with dynamic libc++.so are resolved.
   set(RUNTIMES_${target}_LIBCXX_ENABLE_SHARED False CACHE BOOL "")
+  set(RUNTIMES_${target}_LIBCXXABI_LINK_TESTS_WITH_SHARED_LIBCXX False CACHE BOOL "")
   
   # libopenmp.
   set(RUNTIMES_${target}_LIBOMP_TSAN_SUPPORT False CACHE BOOL "")
