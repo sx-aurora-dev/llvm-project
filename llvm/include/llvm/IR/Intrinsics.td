@@ -1575,8 +1575,6 @@ let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLen
                                [ llvm_anyfloat_ty,
                                  LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                  llvm_i32_ty]>;
-}
-let IntrProperties = [ IntrNoMem, IntrWillReturn, Mask<4>, VectorLength<5> ] in {
   def int_vp_sitofp : Intrinsic<[ llvm_anyfloat_ty ],
                                 [ llvm_anyint_ty,
                                   LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
@@ -1586,15 +1584,10 @@ let IntrProperties = [ IntrNoMem, IntrWillReturn, Mask<4>, VectorLength<5> ] in 
                                 [ llvm_anyint_ty,
                                   LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                   llvm_i32_ty]>;
-}
-
-
-let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLength<3> ] in {
   def int_vp_fptrunc : Intrinsic<[ llvm_anyfloat_ty ],
                                  [ llvm_anyfloat_ty,
                                    LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
                                    llvm_i32_ty]>;
-
 }
 
 // VP single argument constrained intrinsics.
