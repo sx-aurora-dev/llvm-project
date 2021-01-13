@@ -1146,10 +1146,11 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
       }
     }
 
-    // add predicating args and generate part node
+    // Add predicating args and generate part node.
     OpVec.push_back(SplitTM.Mask);
     OpVec.push_back(SplitTM.AVL);
-    PartOps[(int)Part] = CDAG.getNode(VVPOC, ResVT, OpVec);
+    // Emit legal VVP nodes.
+    PartOps[(int)Part] = CDAG.getLegalOpVVP(VVPOC, ResVT, OpVec);
   }
 
   // re-package into a proper packed operation

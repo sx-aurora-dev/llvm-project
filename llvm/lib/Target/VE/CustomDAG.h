@@ -361,6 +361,14 @@ struct CustomDAG {
   // Create this binary operator, expanding it on the fly.
   SDValue getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A, SDValue B, SDValue Mask, SDValue AVL) const;
 
+  SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT,
+                        ArrayRef<SDValue> Ops) const {
+    if (IsBinaryVVP(VVPOpcode))
+      return getLegalBinaryOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
+                                 Ops[3]);
+    return getNode(VVPOpcode, ResVT, Ops);
+  }
+
   struct TargetMasks {
     SDValue Mask;
     SDValue AVL;
