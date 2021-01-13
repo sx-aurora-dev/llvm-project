@@ -46,6 +46,8 @@ bool IsVVPOrVEC(unsigned Opcode);
 bool IsVVP(unsigned Opcode);
 bool IsVVPReduction(unsigned Opcode);
 
+bool IsBinaryVVP(unsigned Opcode);
+
 // True, iff this is a VEC_UNPACK_LO/HI, VEC_SWAP or VEC_PACK.
 static inline bool IsPackingSupportOpcode(unsigned Opcode) {
   switch (Opcode) {
@@ -349,9 +351,15 @@ struct CustomDAG {
   SDValue extractPackElem(SDValue Op, PackElem Part,
                                 SDValue AVL);
 
-  SDValue createIREM(bool IsSigned, SDValue Dividend, SDValue Divisor, SDValue Mask, SDValue AVL) const;
+  SDValue createIDIV(bool IsSigned, EVT ResVT, SDValue Dividend,
+                     SDValue Divisor, SDValue Mask, SDValue AVL) const;
+  SDValue createIREM(bool IsSigned, EVT ResVT, SDValue Dividend,
+                     SDValue Divisor, SDValue Mask, SDValue AVL) const;
   SDValue createConstantTargetMask(VVPWideningInfo WidenInfo) const;
   SDValue createTargetAVL(VVPWideningInfo WidenInfo) const;
+
+  // Create this binary operator, expanding it on the fly.
+  SDValue getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A, SDValue B, SDValue Mask, SDValue AVL) const;
 
   struct TargetMasks {
     SDValue Mask;

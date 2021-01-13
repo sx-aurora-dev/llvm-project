@@ -71,6 +71,15 @@ bool IsVVPReduction(unsigned Opcode) {
   }
 }
 
+bool IsBinaryVVP(unsigned Opcode) {
+  switch (Opcode) {
+#define ADD_BINARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
+#include "VVPNodes.def"
+    return true;
+  }
+  return false;
+}
+
 bool SupportsPackedMode(unsigned Opcode) {
   switch (Opcode) {
   default:
@@ -792,16 +801,33 @@ CustomDAG::getTargetInsertSubreg(int SRIdx, EVT VT, SDValue Operand, SDValue Sub
   return DAG.getTargetInsertSubreg(SRIdx, DL, VT, Operand, SubReg);
 }
 
-SDValue CustomDAG::createIREM(bool IsSigned, SDValue Dividend, SDValue Divisor,
-                              SDValue Mask, SDValue AVL) const {
-  // Based on lib/CodeGen/SelectionDAG/TargetLowering.cpp ::expandREM code.
-  EVT VT = Dividend->getValueType(0);
-  unsigned DivOpc = IsSigned ? VEISD::VVP_SDIV : VEISD::VVP_UDIV;
+SDValue CustomDAG::createIDIV(bool IsSigned, EVT ResVT, SDValue Dividend,
+                              SDValue Divisor, SDValue Mask,
+                              SDValue AVL) const {
+  return getNode(IsSigned ? VEISD::VVP_SDIV : VEISD::VVP_UDIV, ResVT,
+                 {Dividend, Divisor, Mask, AVL});
+}
 
+SDValue CustomDAG::createIREM(bool IsSigned, EVT ResVT, SDValue Dividend,
+                              SDValue Divisor, SDValue Mask,
+                              SDValue AVL) const {
+  // Based on lib/CodeGen/SelectionDAG/TargetLowering.cpp ::expandREM code.
   // X % Y -> X-X/Y*Y
-  SDValue Divide = getNode(DivOpc, VT, {Dividend, Divisor, Mask, AVL});
-  SDValue Mul = getNode(VEISD::VVP_MUL, VT, {Divide, Divisor, Mask, AVL});
-  return getNode(VEISD::VVP_SUB, VT, {Dividend, Mul, Mask, AVL});
+  SDValue Divide = createIDIV(IsSigned, ResVT, Dividend, Divisor, Mask, AVL);
+  SDValue Mul = getNode(VEISD::VVP_MUL, ResVT, {Divide, Divisor, Mask, AVL});
+  return getNode(VEISD::VVP_SUB, ResVT, {Dividend, Mul, Mask, AVL});
+}
+
+SDValue CustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
+                                       SDValue B, SDValue Mask,
+                                       SDValue AVL) const {
+  // On-the-fly expansion of unsupported vector ops.
+  if (VVPOpcode == VEISD::VVP_UREM)
+    return createIREM(false, ResVT, A, B, Mask, AVL);
+  if (VVPOpcode == VEISD::VVP_SREM)
+    return createIREM(true, ResVT, A, B, Mask, AVL);
+  // Lower to the VVP node by default.
+  return getNode(VVPOpcode, ResVT, {A, B, Mask, AVL});
 }
 
 /// } class CustomDAG

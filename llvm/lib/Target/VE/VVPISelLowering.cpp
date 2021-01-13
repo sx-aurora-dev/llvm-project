@@ -1407,9 +1407,8 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
 
   if (isBinaryOp) {
     assert(VVPOC.hasValue());
-    return CDAG.getNode(VVPOC.getValue(), ResVecTy,
-                        {LegalOperands[0], LegalOperands[1], TargetMasks.Mask,
-                         TargetMasks.AVL});
+    return CDAG.getLegalBinaryOpVVP(*VVPOC, ResVecTy, LegalOperands[0], LegalOperands[1],
+                                    TargetMasks.Mask, TargetMasks.AVL);
   }
 
   if (isTernaryOp) {
@@ -1725,6 +1724,10 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   EVT NewResVT = CDAG.legalizeVectorType(Op, Mode);
+  if (IsBinaryVVP(VVPOC)) {
+    return CDAG.getLegalBinaryOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1], OpVec[2], OpVec[3]);
+  }
+
 
   // Create a matching VVP_* node
   assert(WidenInfo.isValid() && "Cannot widen this VP op into VVP");
