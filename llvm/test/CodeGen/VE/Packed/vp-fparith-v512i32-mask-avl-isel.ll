@@ -48,7 +48,7 @@ define void @test_vp_fdiv(<512 x float>* %Out, <512 x float> %f0, <512 x float> 
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vfdiv.s %v0, %v0, %v1, %vm3
-; CHECK-NEXT:    vshf %v0, %v2, %v0, 2
+; CHECK-NEXT:    vshf %v0, %v2, %v0, 8
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vst %v0, 8, %s0
@@ -72,12 +72,12 @@ define void @test_vp_fmin_fmax(<512 x float>* %O1, <512 x float>* %O2, <512 x fl
 ; CHECK-NEXT:    srl %s2, %s2, 1
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vfmin.s %v5, %v0, %v1, %vm3
-; CHECK-NEXT:    vshf %v4, %v4, %v5, 2
+; CHECK-NEXT:    vshf %v4, %v4, %v5, 8
 ; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vfmax.s %v2, %v3, %v2, %vm2
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vfmax.s %v0, %v0, %v1, %vm3
-; CHECK-NEXT:    vshf %v0, %v2, %v0, 2
+; CHECK-NEXT:    vshf %v0, %v2, %v0, 8
 ; CHECK-NEXT:    lea %s2, 256
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vst %v4, 8, %s0

@@ -8,8 +8,8 @@ define <512 x i1> @brdv512i32x2(i1 %B) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vbrd %v0, %s0
-; CHECK-NEXT:    vfmk.w.ne %vm2, %v0
-; CHECK-NEXT:    andm %vm3, %vm0, %vm2
+; CHECK-NEXT:    vfmk.w.ne %vm3, %v0
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
 ; CHECK-NEXT:    b.l.t (, %s10)
   %first = insertelement <512 x i1> undef, i1 %B, i32 0
   %all = shufflevector <512 x i1> %first, <512 x i1> undef, <512 x i32> zeroinitializer

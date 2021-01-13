@@ -324,7 +324,7 @@ define <512 x i32> @vec_mul_v512f32(<512 x i32> %a, <512 x i32> %b) {
 ; CHECK-NEXT:    vshf %v1, %v1, %v1, 0
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 0
 ; CHECK-NEXT:    vmuls.w.sx %v0, %v0, %v1
-; CHECK-NEXT:    vshf %v0, %v2, %v0, 3
+; CHECK-NEXT:    vshf %v0, %v2, %v0, 13
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = mul <512 x i32> %a, %b
   ret <512 x i32> %r
@@ -340,12 +340,12 @@ define <1024 x i32> @vec_mul_v1024f32(<1024 x i32> %a, <1024 x i32> %b) {
 ; CHECK-NEXT:    vshf %v2, %v2, %v2, 0
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 0
 ; CHECK-NEXT:    vmuls.w.sx %v0, %v0, %v2
-; CHECK-NEXT:    vshf %v0, %v4, %v0, 3
+; CHECK-NEXT:    vshf %v0, %v4, %v0, 13
 ; CHECK-NEXT:    vmuls.w.sx %v2, %v1, %v3
 ; CHECK-NEXT:    vshf %v3, %v3, %v3, 0
 ; CHECK-NEXT:    vshf %v1, %v1, %v1, 0
 ; CHECK-NEXT:    vmuls.w.sx %v1, %v1, %v3
-; CHECK-NEXT:    vshf %v1, %v2, %v1, 3
+; CHECK-NEXT:    vshf %v1, %v2, %v1, 13
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = mul <1024 x i32> %a, %b
   ret <1024 x i32> %r

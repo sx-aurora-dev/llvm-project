@@ -52,10 +52,10 @@ define <512 x i1> @vec_trunc_v512_i32_to_i1(<512 x i32> %a) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pvand.lo %v1, %s0, %v0
-; CHECK-NEXT:    vfmk.w.ne %vm2, %v1
+; CHECK-NEXT:    vfmk.w.ne %vm3, %v1
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 0
 ; CHECK-NEXT:    pvand.lo %v0, %s0, %v0
-; CHECK-NEXT:    vfmk.w.ne %vm3, %v0
+; CHECK-NEXT:    vfmk.w.ne %vm2, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = trunc <512 x i32> %a to <512 x i1>
   ret <512 x i1> %r

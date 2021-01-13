@@ -23,7 +23,7 @@ define x86_regcallcc <512 x i32> @sdivbrdv512i32(<512 x i32>, i32) {
 ; CHECK-NEXT:    vdivs.w.sx %v1, %s0, %v0
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 0
 ; CHECK-NEXT:    vdivs.w.sx %v0, %s0, %v0
-; CHECK-NEXT:    vshf %v0, %v1, %v0, 3
+; CHECK-NEXT:    vshf %v0, %v1, %v0, 13
 ; CHECK-NEXT:    b.l.t (, %s10)
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
@@ -53,7 +53,7 @@ define x86_regcallcc <512 x i32> @udivbrdv512i32(<512 x i32>, i32) {
 ; CHECK-NEXT:    vdivu.w %v1, %s0, %v0
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 0
 ; CHECK-NEXT:    vdivu.w %v0, %s0, %v0
-; CHECK-NEXT:    vshf %v0, %v1, %v0, 3
+; CHECK-NEXT:    vshf %v0, %v1, %v0, 13
 ; CHECK-NEXT:    b.l.t (, %s10)
   %vec0 = insertelement <512 x i32> undef, i32 %1, i32 0
   %vec = shufflevector <512 x i32> %vec0, <512 x i32> undef, <512 x i32> zeroinitializer
