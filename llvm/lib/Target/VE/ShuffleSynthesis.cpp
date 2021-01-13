@@ -4,13 +4,11 @@
 
 namespace llvm {
 
-unsigned
-GetVectorNumElements(Type *Ty) {
+unsigned GetVectorNumElements(Type *Ty) {
   return cast<FixedVectorType>(Ty)->getNumElements();
 }
 
-Type*
-GetVectorElementType(Type *Ty) {
+Type *GetVectorElementType(Type *Ty) {
   return cast<FixedVectorType>(Ty)->getElementType();
 }
 
@@ -544,8 +542,9 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
     BlendV = CDAG.createMaskCast(VecSourceV, AVL);
   }
 
-  // Check whether this is an all-zero or all-one constant mask (except for scalar register insertions).
-  // If not, transfer the XS-sized chunks from their respective source registers.
+  // Check whether this is an all-zero or all-one constant mask (except for
+  // scalar register insertions). If not, transfer the XS-sized chunks from
+  // their respective source registers.
   SDValue VMAccu;
   bool AllTrue;
   bool HasTrivialBackground = analyzeVectorSources(AllTrue);
@@ -562,7 +561,8 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
     // Don't need to check for spurious `1` bits here since
     // the scalar result and the vector/constant results are OR-ed together in
     // the end.
-    VMAccu = SDValue(); // Deferring all-false codegen (so we can save on an 'OR' with the blend mask)
+    VMAccu = SDValue(); // Deferring all-false codegen (so we can save on an
+                        // 'OR' with the blend mask)
 
   } else {
     // Either non-trivial constant mask or non-trivial incoming bits from other
@@ -640,7 +640,8 @@ struct ScalarTransferOp final : public AbstractShuffleOp {
   virtual ~ScalarTransferOp() {}
 
   // transfer all insert positions to their destination
-  virtual SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) {
+  virtual SDValue synthesize(MaskView &MV, CustomDAG &CDAG,
+                             SDValue PartialV) override {
     SDValue AccuV = PartialV;
 
     // TODO caching of extracted element..
@@ -668,7 +669,9 @@ struct ScalarTransferOp final : public AbstractShuffleOp {
     return AccuV;
   }
 
-  virtual void print(raw_ostream &out) const { out << "Scalar Transfer"; }
+  virtual void print(raw_ostream &out) const override {
+    out << "Scalar Transfer";
+  }
 };
 
 struct ScalarTransferStrategy final : public ShuffleStrategy {
@@ -1035,7 +1038,7 @@ struct BroadcastOp final : public AbstractShuffleOp {
 
   ~BroadcastOp() {}
 
-  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) {
+  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
     SDValue ScalarSrcV;
     if (SourceElem.isElemInsert()) {
       ScalarSrcV = SourceElem.V;
@@ -1052,7 +1055,7 @@ struct BroadcastOp final : public AbstractShuffleOp {
     return CDAG.createSelect(VecTy, BroadcastV, PartialV, BlendMaskV, PivotV);
   }
 
-  void print(raw_ostream &out) const {
+  void print(raw_ostream &out) const override {
     out << "Broadcast (AVL: " << MaxAVL << ", Elem: ";
     SourceElem.print(out) << "\n";
   }
@@ -1129,7 +1132,7 @@ struct ConstantElemOp final : public AbstractShuffleOp {
   ConstantElemOp(Constant *VecConstant) : VecConstant(VecConstant) {}
   ~ConstantElemOp() {}
 
-  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) {
+  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
     EVT LegalResVT = PartialV.getValueType();
     const EVT PtrVT = MVT::i64;
     // const unsigned LegalNumElems = LegalResVT.getVectorNumElements();
@@ -1143,7 +1146,8 @@ struct ConstantElemOp final : public AbstractShuffleOp {
       // FIXME only works for 32/64bit elements
       const unsigned NumBufferElems =
           GetVectorNumElements(VecConstant->getType());
-      const auto *ElemTy = cast<FixedVectorType>(VecConstant->getType())->getElementType();
+      const auto *ElemTy =
+          cast<FixedVectorType>(VecConstant->getType())->getElementType();
       uint64_t Stride = (ElemTy->getPrimitiveSizeInBits().getFixedSize() + 7) /
                         8; // FIXME should be using datala
       Packing P = IsPackedType(LegalResVT) ? Packing::Dense : Packing::Normal;
@@ -1151,7 +1155,8 @@ struct ConstantElemOp final : public AbstractShuffleOp {
           P, LegalResVT.getVectorNumElements(), true);
       SDValue StrideV = CDAG.getConstant(Stride, MVT::i64);
       SDValue AVL = CDAG.getConstEVL(NumBufferElems);
-      ResultV = CDAG.getVVPLoad(LegalResVT, Chain, ConstantPtrV, StrideV, MaskV, AVL);
+      ResultV =
+          CDAG.getVVPLoad(LegalResVT, Chain, ConstantPtrV, StrideV, MaskV, AVL);
 #else
       MachinePointerInfo MPI;
       ResultV = CDAG.DAG.getLoad(LegalResVT, CDAG.DL, Chain, ConstantPtrV, MPI);
@@ -1161,7 +1166,7 @@ struct ConstantElemOp final : public AbstractShuffleOp {
     return ResultV;
   }
 
-  void print(raw_ostream &out) const {
+  void print(raw_ostream &out) const override {
     out << "ConstantElemShuffle (";
     VecConstant->print(out);
     out << ")\n";
@@ -1244,7 +1249,7 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
 
   ~GatherShuffleOp() {}
 
-  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) {
+  SDValue synthesize(MaskView &MV, CustomDAG &CDAG, SDValue PartialV) override {
     // Spill the requires elements of \p SrcVectorV to the stack
     EVT LegalizedSrcVT =
         CDAG.legalizeVectorType(SrcVectorV, VVPExpansionMode::ToNextWidth);
@@ -1323,7 +1328,7 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
     return CDAG.createSelect(LegalResVT, ElemV, PartialV, MaskV, MaxVLV);
   }
 
-  void print(raw_ostream &out) const {
+  void print(raw_ostream &out) const override {
     out << "GatherShuffle (VL: " << MaxVL << ", SourceVector: ";
     SrcVectorV->print(out);
     out << ")\n";
