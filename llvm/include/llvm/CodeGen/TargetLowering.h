@@ -4055,6 +4055,7 @@ public:
 
   virtual void LowerOperationWrapper(
       SDNode *N, SmallVectorImpl<SDValue> &Results, SelectionDAG &DAG,
+      std::function<SDValue(SDValue)> GetPromotedOperandCB,
       std::function<SDValue(SDValue)> GetWidenedOperandCB) const {
     LowerOperationWrapper(N, Results, DAG);
   }
