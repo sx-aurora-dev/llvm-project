@@ -227,14 +227,14 @@ defm: VMV_Patterns<v256f64>;
 
 // Packing (type based)
 def : Pat<(v512i32 (vec_pack v256i32:$vlo, v256i32:$vhi, i32:$avl)),
-          (VSHFvvil $vlo, $vhi, 3, $avl)>;
+          (VSHFvvil $vlo, $vhi, 13, $avl)>;
 def : Pat<(v512f32 (vec_pack v256f32:$vlo, v256f32:$vhi, i32:$avl)),
-          (VSHFvvil $vlo, $vhi, 2, $avl)>;
+          (VSHFvvil $vlo, $vhi, 8, $avl)>;
 def : Pat<(v512i1 (vec_pack v256i1:$vlo, v256i1:$vhi, (i32 srcvalue))),
           (INSERT_SUBREG (INSERT_SUBREG
                          (v512i1 (IMPLICIT_DEF)),
-                         $vlo, sub_vm_even),
-                         $vhi, sub_vm_odd)>;
+                         $vlo, sub_vm_odd),
+                         $vhi, sub_vm_even)>;
 
 
 ///// vec_swap, vec_unpack_lo, vec_unpack_hi /////
