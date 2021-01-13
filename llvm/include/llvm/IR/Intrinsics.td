@@ -1559,7 +1559,7 @@ def int_vp_select : Intrinsic<[ llvm_anyvector_ty ],
 
 
 // VP fp rounding and truncation
-let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<3>, VectorLength<4> ] in {
+let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLength<3> ] in {
 
   def int_vp_fptosi : Intrinsic<[ llvm_anyint_ty ],
                                 [ llvm_anyfloat_ty,
@@ -1589,7 +1589,7 @@ let IntrProperties = [ IntrNoMem, IntrWillReturn, Mask<4>, VectorLength<5> ] in 
 }
 
 
-let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<4>, VectorLength<5> ] in {
+let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLength<3> ] in {
   def int_vp_fptrunc : Intrinsic<[ llvm_anyfloat_ty ],
                                  [ llvm_anyfloat_ty,
                                    LLVMScalarOrSameVectorWidth<0, llvm_i1_ty>,
@@ -1598,7 +1598,7 @@ let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<4>, VectorLen
 }
 
 // VP single argument constrained intrinsics.
-let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<4>, VectorLength<5> ] in {
+let IntrProperties = [ IntrNoMem, IntrNoSync, IntrWillReturn, Mask<2>, VectorLength<3> ] in {
   // These intrinsics are sensitive to the rounding mode so we need constrained
   // versions of each of them.  When strict rounding and exception control are
   // not required the non-constrained versions of these intrinsics should be
