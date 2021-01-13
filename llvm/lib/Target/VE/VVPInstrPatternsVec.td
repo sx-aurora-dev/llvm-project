@@ -385,6 +385,10 @@ def : Pat<(v256i32 (vvp_trunc v256i64:$src, (v256i1 srcvalue), (i32 srcvalue))),
 
 ///// ARITHMETIC /////
 // Integer arithmetic (512 elements)
+defm : VectorBinaryArith_Base<c_vvp_and, i64, v512i32, v512i1, "PVAND">; 
+defm : VectorBinaryArith_Base<c_vvp_or, i64, v512i32, v512i1, "PVOR">; 
+defm : VectorBinaryArith_Base<c_vvp_xor, i64, v512i32, v512i1, "PVXOR">; 
+
 defm : VectorBinaryArith_Base<c_vvp_add, i64, v512i32, v512i1, "PVADDU">; 
 defm : VectorBinaryArith_Base<vvp_sub,  i64, v512i32, v512i1, "PVSUBU">;
 // defm : VectorBinaryArith_Base<vvp_mul,  i64, v512i32, "vmulsl">; // no packed mul
