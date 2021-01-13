@@ -830,5 +830,9 @@ SDValue CustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
   return getNode(VVPOpcode, ResVT, {A, B, Mask, AVL});
 }
 
+SDValue CustomDAG::getZExtInReg(SDValue Op, EVT VT) const {
+  return DAG.getZeroExtendInReg(Op, DL, VT);
+}
+
 /// } class CustomDAG
 } // namespace llvm

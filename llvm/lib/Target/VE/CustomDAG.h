@@ -381,6 +381,8 @@ struct CustomDAG {
 
   SDValue getTargetInsertSubreg(int SRIdx, EVT VT, SDValue Operand,
                                 SDValue SubReg) const;
+
+  SDValue getZExtInReg(SDValue Op, EVT) const;
 };
 
 } // namespace llvm

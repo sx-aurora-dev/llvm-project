@@ -313,20 +313,6 @@ static SDValue PeekForMask(SDValue Op) {
   return SDValue();
 }
 
-static SDValue fixUpOperation(SDValue Val, EVT LegalVT, CustomDAG &CDAG) {
-  if (Val.getValueType() == LegalVT)
-    return Val;
-
-  // SelectionDAGBuilder does not respect TLI::getCCResultVT (do a fixup here)
-  if (Val.getOpcode() == ISD::SETCC && Val.getValueType() == MVT::i1) {
-    SDNode *N = Val.getNode();
-    return CDAG.getNode(ISD::SETCC, LegalVT,
-                        {N->getOperand(0), N->getOperand(1), N->getOperand(2)});
-  }
-
-  return SDValue();
-}
-
 static SDValue getSplatValue(SDNode *N) {
   if (auto *BuildVec = dyn_cast<BuildVectorSDNode>(N)) {
     return BuildVec->getSplatValue();
@@ -689,6 +675,7 @@ EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SDValue Op,
 // result
 void VETargetLowering::LowerOperationWrapper(
     SDNode *N, SmallVectorImpl<SDValue> &Results, SelectionDAG &DAG,
+    std::function<SDValue(SDValue)> PromotedOpCB,
     std::function<SDValue(SDValue)> WidenedOpCB) const {
   LLVM_DEBUG(dbgs() << "LowerOperationWrapper: "; N->dump(&DAG););
 
@@ -727,19 +714,15 @@ void VETargetLowering::LowerOperationWrapper(
 
     SDValue FixedOp = Op;
 
-    // SETCC
-
     // Re-use widened nodes from ReplaceNodeResult
-    EVT OpDestVecTy =
+    EVT OpDestTy =
         getTypeToTransformTo(*DAG.getContext(), Op.getValueType());
 
-    if (OpDestVecTy != Op.getValueType()) {
-      // run custom widenings first
-      CustomDAG CDAG(*this, DAG, Op);
-      FixedOp = fixUpOperation(Op, OpDestVecTy, CDAG);
-      if (!FixedOp) {
+    if (OpDestTy != Op.getValueType()) {
+      if (OpDestTy.isVector())
         FixedOp = WidenedOpCB(Op);
-      }
+      else
+        FixedOp = PromotedOpCB(Op);
       assert(FixedOp && "No legal operand available!");
     }
 

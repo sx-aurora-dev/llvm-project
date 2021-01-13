@@ -205,6 +205,7 @@ public:
                           SelectionDAG &DAG) const override;
   void LowerOperationWrapper(
       SDNode *N, SmallVectorImpl<SDValue> &Results, SelectionDAG &DAG,
+      std::function<SDValue(SDValue)> PromotedopCB,
       std::function<SDValue(SDValue)> WidenedOpCB) const override;
 
   // legalize the result vector type for operation \p Op
