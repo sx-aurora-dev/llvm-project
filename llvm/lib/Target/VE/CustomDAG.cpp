@@ -430,7 +430,6 @@ SDValue CustomDAG::createScalarShift(EVT ResVT, SDValue Src, int Offset) const {
 // dst[i] = src[i + Offset]
 SDValue CustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
                                       SDValue AVL) const {
-  assert(ResVT.getVectorNumElements() <= 256 && "TODO implement packed mode");
   if (Offset == 0)
     return Src;
 
@@ -438,6 +437,8 @@ SDValue CustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
   if (!Src.getValueType().isVector()) {
     return createScalarShift(ResVT, Src, Offset);
   }
+
+  assert(ResVT.getVectorNumElements() <= 256 && "TODO implement packed mode");
 
   // vector shift
   EVT VecVT = Src.getValueType();

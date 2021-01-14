@@ -368,77 +368,109 @@ static bool hasNonZeroEntry(MaskView &MV) {
   return false;
 }
 
+static unsigned AnalyzePart(BitMaskView &BitMV, unsigned DestPartBase,
+                            unsigned NumPartBits, unsigned NumMissingBits,
+                            std::vector<bool> &MappedPartBits,
+                            MaskShuffleAnalysis::BitSelect &Sel) {
+  // dbgs() << "]=== PART (" << DestPartBase << ") ROUND ===\n";
+  for (unsigned i = 0; i < NumPartBits; ++i) {
+    if (MappedPartBits[i])
+      continue;
+    ElemSelect ES = BitMV.getSourceElem(i + DestPartBase);
+    // Skip both kinds of undef (no value transfered or source is undef).
+    if (!ES.isDefined()) {
+      continue;
+    }
+
+    // Inserted bit constants.
+    if (!ES.isElemTransfer()) {
+      // This only works because we know that the BitMaskView will mask-out
+      // any non-constant bit insertions
+      continue;
+    }
+
+    // Proper bit transfer from a vector mask reg.
+    unsigned SrcPartIdx =
+        (ES.ExtractIdx / SXRegSize); // sx sub-register to chose from
+    // Required shift amount of the elements of the sub register
+    int64_t SrcOffset = (ES.ExtractIdx % SXRegSize);
+    int64_t DestOffset = i - SrcOffset; // shift left by this amount
+
+    // errs() << "  Trans. SrcPart: " << SrcPartIdx << ". Offset: " << SrcOffset
+    // << "\n";
+
+    // First bit transfer in this round.
+    if (!Sel.SrcVal) {
+      Sel.SrcVal = ES.V;
+      Sel.SrcValPart = SrcPartIdx;
+      Sel.ShiftAmount = DestOffset; // Shift by the required amount.
+      Sel.SrcSelMask =
+          1ul << SrcOffset; // Mask out the bit at the source position.
+      NumMissingBits--;
+      MappedPartBits[i] = true;
+      // dbgs() << "NEW CHUNK(" << i << "): "; Sel.print(dbgs());
+      continue;
+    }
+
+    // Copy all bits with similar alignment.
+    if ((Sel.SrcVal == ES.V && Sel.SrcValPart == SrcPartIdx) &&
+        (Sel.ShiftAmount - i) == DestOffset) {
+      Sel.SrcSelMask |= 1ul << i;
+      // dbgs() << "\tJOIN CHUNK(" << i << "): "; Sel.print(dbgs());
+      NumMissingBits--;
+      MappedPartBits[i] = true;
+      continue;
+    }
+
+    // errs() << "    misaligned!\n";
+
+    // misaligned bit // TODO start from here next round
+  }
+  return NumMissingBits;
+}
+
 // match a 64 bit segment, mapping out all source bits
 // FIXME this implies knowledge about the underlying object structure
 MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, CustomDAG &CDAG)
     : MV(MV) {
-  IsConstantOne.reset();
-  UndefBits.reset();
-
-  // First, check for any insertions from scalar registers
-
-  // this view only reflects insertions of actual i1 bits (from other mask
-  // registers, or MVT::i32 constants)
+  // This view only reflects insertions of actual i1 bits (from other mask
+  // registers, or MVT::i32 constants). Insertion of SX register will be masked out.
   BitMaskView BitMV(MV, CDAG);
-
   const unsigned NumEls = BitMV.getNumElements();
   const unsigned SXRegSize = 64;
-  // loop over all sub-registers (sx parts of v256)
+
+  // Detect constants and undef elements.
+  IsConstantOne.reset();
+  UndefBits.reset();
+  for (unsigned i = 0; i < NumEls; ++i) {
+    ElemSelect ES = BitMV.getSourceElem(i);
+    if (!ES.isDefined()) {
+      // Skip both kinds of undef (no value transfered or source is undef).
+      UndefBits[i] = true;
+    } else if (!ES.isElemTransfer()) {
+      // Inserted bit constants.
+      // This only works because we know that the BitMaskView will mask-out
+      // any non-constant bit insertions
+      auto ConstBit = cast<ConstantSDNode>(ES.V);
+      bool IsTrueBit = 0 != ConstBit->getZExtValue();
+      IsConstantOne[i] = IsTrueBit;
+    }
+  }
+
+  // Loop over SX chunks of the destination mask and piece it together with mask & shift operations
   for (unsigned PartIdx = 0; PartIdx * SXRegSize < NumEls; ++PartIdx) {
     const unsigned DestPartBase = PartIdx * SXRegSize;
     const unsigned NumPartBits = std::min(SXRegSize, NumEls - DestPartBase);
 
-    unsigned NumMissingBits = NumPartBits; // keeps track of matcher rouds
-
     // described all
     ResPart Part(PartIdx);
 
+    // errs() << "==== Part " << PartIdx <<" ====\n";
+    unsigned NumMissingBits = NumPartBits; // keeps track of matcher rouds
+    std::vector<bool> MappedPartBits(SXRegSize, false);
     while (NumMissingBits > 0) {
       BitSelect Sel;
-      for (unsigned i = 0; i < NumPartBits; ++i) {
-        ElemSelect ES = BitMV.getSourceElem(i + DestPartBase);
-        // skip both kinds of undef (no value transfered or source is undef)
-        if (!ES.isDefined()) {
-          UndefBits[DestPartBase + i] = true;
-          NumMissingBits--;
-          continue;
-        }
-
-        // inserted bit constants
-        if (!ES.isElemTransfer()) {
-          NumMissingBits--;
-          // This only works because we know that the BitMaskView will mask-out
-          // any non-constant bit insertions
-          auto ConstBit = cast<ConstantSDNode>(ES.V);
-          bool IsTrueBit = 0 != ConstBit->getZExtValue();
-          IsConstantOne[i] = IsTrueBit;
-          continue;
-        }
-
-        // map a new source (and a shift amount)
-        unsigned SrcPartIdx =
-            (ES.ExtractIdx / SXRegSize); // sx sub-register to chose from
-        // required shift amount of the elements of the sub register
-        int64_t ShiftAmount = (ES.ExtractIdx % SXRegSize) - i;
-        if (!Sel.SrcVal) {
-          Sel.SrcVal = ES.V;
-          Sel.SrcValPart = SrcPartIdx;
-          Sel.ShiftAmount = ShiftAmount;
-          Sel.SrcSelMask |= 1 << ES.ExtractIdx;
-          NumMissingBits--;
-          continue;
-        }
-
-        // Copy all bits with similar alignment
-        if ((Sel.SrcVal == ES.V && Sel.SrcValPart == SrcPartIdx) &&
-            Sel.ShiftAmount == ShiftAmount) {
-          Sel.SrcSelMask |= 1 << ES.ExtractIdx;
-          NumMissingBits--;
-          continue;
-        }
-
-        // misaligned bit // TODO start from here next round
-      }
+      NumMissingBits = AnalyzePart(BitMV, DestPartBase, NumPartBits, NumMissingBits, MappedPartBits, Sel);
       if (Sel.SrcVal) {
         Part.Selects.push_back(Sel);
       }
