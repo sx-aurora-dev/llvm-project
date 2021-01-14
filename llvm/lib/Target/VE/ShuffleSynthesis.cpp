@@ -436,6 +436,7 @@ static unsigned AnalyzePart(BitMaskView &BitMV, unsigned DestPartBase,
 // Check whether this is a complete mask reversal and insertion.
 static bool AnalyzeReversal(BitMaskView &BitMV, unsigned DestPartBase,
                             unsigned NumPartBits, MaskShuffleAnalysis::BitReverse & BitReverse) {
+  if (getenv("LLVMVE_NO_REVERSE")) return false;
   if (NumPartBits != SXRegSize)
     return false; // FIXME: Should still work (junk tail.. so what!)
   SDValue SrcV;
@@ -1363,7 +1364,7 @@ struct GatherShuffleOp final : public AbstractShuffleOp {
     EVT LegalResVT = PartialV.getValueType();
     const unsigned LegalNumElems = LegalResVT.getVectorNumElements();
     const unsigned ElemBytes =
-        LegalResVT.getVectorElementType().getStoreSizeInBits();
+        LegalResVT.getVectorElementType().getStoreSizeInBits() / 8;
 
     // ptr offset type
     MVT PtrVT = MVT::i64;
