@@ -173,6 +173,7 @@ struct CustomDAG {
   // create a vector element or scalar bitshift depending on the element type
   // \p ResVT will only be used in case any new node is created
   // dst[i] = src[i + Offset]
+  SDValue createBitReverse(SDValue ScalarReg) const;
   SDValue createElementShift(EVT ResVT, SDValue Src, int Offset,
                              SDValue AVL) const;
   SDValue createScalarShift(EVT ResVT, SDValue Src, int Offset) const;

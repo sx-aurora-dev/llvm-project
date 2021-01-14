@@ -835,5 +835,10 @@ SDValue CustomDAG::getZExtInReg(SDValue Op, EVT VT) const {
   return DAG.getZeroExtendInReg(Op, DL, VT);
 }
 
+SDValue CustomDAG::createBitReverse(SDValue ScalarReg) const {
+  assert(ScalarReg.getValueType() == MVT::i64);
+  return getNode(ISD::BITREVERSE, MVT::i64, ScalarReg);
+}
+
 /// } class CustomDAG
 } // namespace llvm

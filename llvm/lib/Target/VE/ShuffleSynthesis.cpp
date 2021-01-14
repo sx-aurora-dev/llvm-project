@@ -379,11 +379,15 @@ static unsigned AnalyzePart(BitMaskView &BitMV, unsigned DestPartBase,
     ElemSelect ES = BitMV.getSourceElem(i + DestPartBase);
     // Skip both kinds of undef (no value transfered or source is undef).
     if (!ES.isDefined()) {
+      MappedPartBits[i] = true;
+      --NumMissingBits;
       continue;
     }
 
     // Inserted bit constants.
     if (!ES.isElemTransfer()) {
+      MappedPartBits[i] = true;
+      --NumMissingBits;
       // This only works because we know that the BitMaskView will mask-out
       // any non-constant bit insertions
       continue;
@@ -429,6 +433,44 @@ static unsigned AnalyzePart(BitMaskView &BitMV, unsigned DestPartBase,
   return NumMissingBits;
 }
 
+// Check whether this is a complete mask reversal and insertion.
+static bool AnalyzeReversal(BitMaskView &BitMV, unsigned DestPartBase,
+                            unsigned NumPartBits, MaskShuffleAnalysis::BitReverse & BitReverse) {
+  if (NumPartBits != SXRegSize)
+    return false; // FIXME: Should still work (junk tail.. so what!)
+  SDValue SrcV;
+  unsigned SrcPart = 0;
+
+  for (unsigned i = 0; i < NumPartBits; ++i) {
+    ElemSelect ES = BitMV.getSourceElem(i + DestPartBase);
+    // Skip both kinds of undef (no value transfered or source is undef).
+    if (!ES.isDefined()) {
+      return false;
+    }
+    if (!ES.isElemTransfer()) {
+      // This only works because we know that the BitMaskView will mask-out
+      // any non-constant bit insertions
+      return false;
+    }
+
+    // Only one possible source register and part.
+    unsigned ElemSrcPart = ES.getElemIdx() / SXRegSize;
+    if (!SrcV) {
+      SrcV = ES.V;
+      SrcPart = ElemSrcPart;
+    } else if ((SrcV != ES.V) || (SrcPart != ElemSrcPart))
+      return false;
+
+    unsigned SrcOffset = ES.getElemIdx() % SXRegSize;
+    if ((SXRegSize - 1) - SrcOffset != i)
+      return false;
+  }
+
+  BitReverse.SrcVal = SrcV;
+  BitReverse.SrcValPart = SrcPart;
+  return true;
+}
+
 // match a 64 bit segment, mapping out all source bits
 // FIXME this implies knowledge about the underlying object structure
 MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, CustomDAG &CDAG)
@@ -462,10 +504,18 @@ MaskShuffleAnalysis::MaskShuffleAnalysis(MaskView &MV, CustomDAG &CDAG)
     const unsigned DestPartBase = PartIdx * SXRegSize;
     const unsigned NumPartBits = std::min(SXRegSize, NumEls - DestPartBase);
 
-    // described all
+    // Collection of all actions on this result part.
     ResPart Part(PartIdx);
 
     // errs() << "==== Part " << PartIdx <<" ====\n";
+    // Common bit reversal pattern.
+    if (AnalyzeReversal(BitMV, DestPartBase, NumPartBits, Part.BitReversal)) {
+      LLVM_DEBUG(Part.print(dbgs()););
+      Segments.push_back(Part);
+      continue;
+    }
+
+    // Free-form mask bit shuffle.
     unsigned NumMissingBits = NumPartBits; // keeps track of matcher rouds
     std::vector<bool> MappedPartBits(SXRegSize, false);
     while (NumMissingBits > 0) {
@@ -607,7 +657,21 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
 
     // Extract all source parts
     for (auto &ResPart : Segments) {
+      if (ResPart.BitReversal.isValid()) {
+        // TODO de-dup
+        auto & BitRev = ResPart.BitReversal;
+        auto Key =
+            std::pair<SDValue, unsigned>(BitRev.SrcVal, BitRev.SrcValPart);
+        if (SourceParts.find(Key) != SourceParts.end())
+          continue;
+
+        SDValue PartIdxC = CDAG.getConstant(Key.second, MVT::i64);
+        auto SXPart = CDAG.createMaskExtract(Key.first, PartIdxC);
+        SourceParts[Key] = SXPart;
+        continue;
+      }
       for (auto &BitSel : ResPart.Selects) {
+        // TODO de-dup
         auto Key =
             std::pair<SDValue, unsigned>(BitSel.SrcVal, BitSel.SrcValPart);
         if (SourceParts.find(Key) != SourceParts.end())
@@ -621,22 +685,32 @@ SDValue MaskShuffleAnalysis::synthesize(CustomDAG &CDAG, EVT LegalMaskVT) {
 
     // Work through selects, blending and shifting the parts together
     for (auto &ResPart : Segments) {
+      SDValue SXAccu; // synthesized chunk.
 
-      // Synthesize the constant background
-      unsigned BaseConstant = 0;
-      for (unsigned i = 0; i < SXRegSize; ++i) {
-        unsigned BitPos = i + ResPart.ResPartIdx * SXRegSize;
-        if (IsConstantOne[BitPos])
-          BaseConstant |= (1 << i);
-      }
-      SDValue SXAccu = CDAG.getConstant(BaseConstant, MVT::i64);
-
-      // synthesize all operations that feed into this destionation sx part
-      for (auto &BitSel : ResPart.Selects) {
+      if (ResPart.BitReversal.isValid()) {
+        auto & BitRev = ResPart.BitReversal;
         auto ItExtractedSrc = SourceParts.find(
-            std::pair<SDValue, unsigned>(BitSel.SrcVal, BitSel.SrcValPart));
+            std::pair<SDValue, unsigned>(BitRev.SrcVal, BitRev.SrcValPart));
         assert(ItExtractedSrc != SourceParts.end());
-        SXAccu = synthesize(SXAccu, BitSel, ItExtractedSrc->second, CDAG);
+        SXAccu = CDAG.createBitReverse(ItExtractedSrc->second);
+
+      } else {
+        // Synthesize the constant background
+        unsigned BaseConstant = 0;
+        for (unsigned i = 0; i < SXRegSize; ++i) {
+          unsigned BitPos = i + ResPart.ResPartIdx * SXRegSize;
+          if (IsConstantOne[BitPos])
+            BaseConstant |= (1 << i);
+        }
+        SXAccu = CDAG.getConstant(BaseConstant, MVT::i64);
+
+        // synthesize all operations that feed into this destionation sx part
+        for (auto &BitSel : ResPart.Selects) {
+          auto ItExtractedSrc = SourceParts.find(
+              std::pair<SDValue, unsigned>(BitSel.SrcVal, BitSel.SrcValPart));
+          assert(ItExtractedSrc != SourceParts.end());
+          SXAccu = synthesize(SXAccu, BitSel, ItExtractedSrc->second, CDAG);
+        }
       }
 
       // finally, insert the SX part into the the actual VM

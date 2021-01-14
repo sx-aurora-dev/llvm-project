@@ -45,8 +45,8 @@ BVMaskKind AnalyzeBitMaskView(MaskView &MV, unsigned &FirstOne,
 
 // matches mask elements
 struct MaskShuffleAnalysis {
-  // extract bits form the source register part \p SrcPart of \p SrcMask, select
-  // the bits \p SrcSelMask and shift them by \p ShiftAmount
+  // Extract bits form the source register part \p SrcPart of \p SrcMask, select
+  // the bits \p SrcSelMask and shift them by \p ShiftAmount.
   struct BitSelect {
     SDValue SrcVal;
     unsigned SrcValPart; // sx sub-register index of \p SrcVal
@@ -68,13 +68,43 @@ struct MaskShuffleAnalysis {
     }
   };
 
+  // Bit-reverse the source part and insert it.
+  struct BitReverse {
+    SDValue SrcVal;
+    unsigned SrcValPart;
+
+    BitReverse() : SrcVal(), SrcValPart(0) {}
+
+    bool isValid() const { return (bool) SrcVal; }
+
+    raw_ostream &print(raw_ostream &Out) const {
+      Out << "BitReverse (from:";
+      if (SrcVal)
+        SrcVal->print(Out);
+      else
+        Out << "<none>";
+      Out << ", sxpart:" << SrcValPart << ")";
+      return Out;
+    }
+  };
+
   struct ResPart {
     unsigned ResPartIdx;
+    // If valid, this alone defines the result bits of this part by reversing a
+    // source chunk.
+    BitReverse BitReversal;
+    // Otw, this is a list of blend-able mask & shift operations from source
+    // chunks.
     std::vector<BitSelect> Selects;
 
     ResPart(unsigned PartIdx) : ResPartIdx(PartIdx), Selects() {}
     raw_ostream &print(raw_ostream &Out) const {
-      Out << "ResPart:" << ResPartIdx << ", Selects: {\n";
+      Out << "ResPart:" << ResPartIdx;
+      if (BitReversal.isValid()) {
+        BitReversal.print(Out);
+        return Out;
+      }
+      Out << ", Selects: {\n";
       for (auto &BitSel : Selects) {
         Out << "\t";
         BitSel.print(Out) << "\n";
@@ -84,7 +114,7 @@ struct MaskShuffleAnalysis {
     }
 
     bool empty() const {
-      return Selects.empty();
+      return !BitReversal.isValid() && Selects.empty();
     }
   };
 
