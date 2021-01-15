@@ -287,13 +287,19 @@ HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_ceil)
 HANDLE_VP_TO_INTRIN(ceil)
 END_REGISTER_CASES(vp_ceil, VP_FCEIL)
 
+// Truncate fp to nearest integer.
 // llvm.vp.trunc(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_trunc, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_FTRUNC, -1, vp_ftrunc, 1, 2)
+BEGIN_REGISTER_VP_SDNODE(VP_TRUNC, -1, vp_trunc, 1, 2)
 HANDLE_VP_FPCONSTRAINT(1, 2)
 HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_trunc)
 HANDLE_VP_TO_INTRIN(trunc)
-END_REGISTER_CASES(vp_trunc, VP_FTRUNC)
+END_REGISTER_CASES(vp_trunc, VP_TRUNC)
+
+// Truncate high bits in an integer (isel only)
+// BEGIN_REGISTER_VP_SDNODE(VP_ITRUNC, -1, vp_itrunc, 1, 2)
+// HANDLE_VP_TO_OPC(Trunc)
+// END_REGISTER_VP_SDNODE(VP_ITRUNC)
 
 // llvm.vp.floor(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_floor, 1, 2)
@@ -311,12 +317,14 @@ HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fpext)
 HANDLE_VP_TO_OPC(FPExt)
 END_REGISTER_CASES(vp_fpext, VP_FP_EXTEND)
 
+// Truncate double-to-float
 // llvm.vp.fptrunc(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_fptrunc, 1, 2)
+BEGIN_REGISTER_VP_SDNODE(VP_FP_TRUNC, -1, vp_fptrunc, 1, 2)
 HANDLE_VP_FPCONSTRAINT(1, 2)
 HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_fptrunc)
 HANDLE_VP_TO_OPC(FPTrunc)
-END_REGISTER_CASES(vp_fptrunc, VP_FTRUNC)
+END_REGISTER_CASES(vp_fptrunc, VP_FP_TRUNC)
 
 // llvm.vp.fptoui(x,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_fptoui, 1, 2)

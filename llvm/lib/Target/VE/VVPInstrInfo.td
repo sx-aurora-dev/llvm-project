@@ -163,12 +163,13 @@ def vvp_fp_to_sint    : SDNode<"VEISD::VVP_FP_TO_SINT", SDTFPToIntOpVVP>;
 // fpext, fpround
 def vvp_fpround      : SDNode<"VEISD::VVP_FPROUND", SDTFPRoundOpVVP>;
 def vvp_fpext        : SDNode<"VEISD::VVP_FPEXT", SDTFPExtOpVVP>;
+def vvp_fptrunc      : SDNode<"VEISD::VVP_FPTRUNC", SDTFPRoundOpVVP>;
 
 def vvp_ffloor     : SDNode<"VEISD::VVP_FFLOOR", SDTFPUnaryOpVVP>;
 // zext, sext
 def vvp_sext       : SDNode<"VEISD::VVP_SEXT", SDTIntExtendOpVVP>;
 def vvp_zext       : SDNode<"VEISD::VVP_ZEXT", SDTIntExtendOpVVP>;
-def vvp_trunc      : SDNode<"VEISD::VVP_TRUNC", SDTIntTruncOpVVP>;
+def vvp_itrunc      : SDNode<"VEISD::VVP_ITRUNC", SDTIntTruncOpVVP>;
 
 // element-wise bitops
 def vvp_ctpop :  SDNode<"VEISD::VVP_CTPOP", SDTUnaryOpVVP>;
