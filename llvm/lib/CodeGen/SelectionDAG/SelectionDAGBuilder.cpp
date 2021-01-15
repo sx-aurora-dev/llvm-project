@@ -4502,9 +4502,7 @@ void SelectionDAGBuilder::visitGatherVP(const CallInst &I) {
 
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   EVT VT = TLI.getValueType(DAG.getDataLayout(), I.getType());
-  MaybeAlign Align = I.getParamAlign(0);
-  if (!Align)
-    Align = DAG.getEVTAlign(VT);
+  Align Alignment = I.getParamAlign(0).getValueOr(DAG.getEVTAlign(VT));
 
   AAMDNodes AAInfo;
   I.getAAMetadata(AAInfo);
@@ -4516,26 +4514,19 @@ void SelectionDAGBuilder::visitGatherVP(const CallInst &I) {
   ISD::MemIndexType IndexType;
   SDValue Scale;
   const Value *BasePtr = Ptr;
-  bool UniformBase =
-      getUniformBase(BasePtr, Base, Index, IndexType, Scale, this, I.getParent());
-  bool ConstantMemory = false;
-  if (UniformBase && AA &&
-      AA->pointsToConstantMemory(MemoryLocation(
-          BasePtr, LocationSize::precise(VT.getStoreSize()), AAInfo))) {
-    // Do not serialize (non-volatile) loads of constant memory with anything.
-    Root = DAG.getEntryNode();
-    ConstantMemory = true;
-  }
-
+  bool UniformBase = getUniformBase(BasePtr, Base, Index, IndexType, Scale,
+                                    this, I.getParent());
+  unsigned AS = Ptr->getType()->getScalarType()->getPointerAddressSpace();
   MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
-      MachinePointerInfo(UniformBase ? BasePtr : nullptr),
-      MachineMemOperand::MOLoad, VT.getStoreSize(), Align.valueOrOne(), AAInfo,
-      Ranges);
+      MachinePointerInfo(AS), MachineMemOperand::MOLoad,
+      // TODO: Make MachineMemOperands aware of scalable
+      // vectors.
+      MemoryLocation::UnknownSize, Alignment, AAInfo, Ranges);
 
   if (!UniformBase) {
     Base = DAG.getConstant(0, sdl, TLI.getPointerTy(DAG.getDataLayout()));
     Index = getValue(Ptr);
-    IndexType = ISD::SIGNED_SCALED;
+    IndexType = ISD::SIGNED_UNSCALED;
     Scale =
         DAG.getTargetConstant(1, sdl, TLI.getPointerTy(DAG.getDataLayout()));
   }
@@ -4543,9 +4534,7 @@ void SelectionDAGBuilder::visitGatherVP(const CallInst &I) {
   SDValue Gather = DAG.getGatherVP(DAG.getVTList(VT, MVT::Other), VT, sdl, Ops,
                                    MMO, IndexType);
 
-  SDValue OutChain = Gather.getValue(1);
-  if (!ConstantMemory)
-    PendingLoads.push_back(OutChain);
+  PendingLoads.push_back(Gather.getValue(1));
   setValue(&I, Gather);
 }
 
@@ -4558,9 +4547,7 @@ void SelectionDAGBuilder::visitScatterVP(const CallInst &I) {
   SDValue Mask = getValue(I.getArgOperand(2));
   SDValue VLen = getValue(I.getArgOperand(3));
   EVT VT = Src0.getValueType();
-  MaybeAlign Align = I.getParamAlign(1);
-  if (!Align)
-    Align = DAG.getEVTAlign(VT);
+  Align Alignment = I.getParamAlign(1).getValueOr(DAG.getEVTAlign(VT));
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
 
   AAMDNodes AAInfo;
@@ -4570,24 +4557,25 @@ void SelectionDAGBuilder::visitScatterVP(const CallInst &I) {
   SDValue Index;
   ISD::MemIndexType IndexType;
   SDValue Scale;
-  const Value *BasePtr = Ptr;
-  bool UniformBase =
-      getUniformBase(BasePtr, Base, Index, IndexType, Scale, this, I.getParent());
+  bool UniformBase = getUniformBase(Ptr, Base, Index, IndexType, Scale, this,
+                                    I.getParent());
 
-  const Value *MemOpBasePtr = UniformBase ? BasePtr : nullptr;
+  unsigned AS = Ptr->getType()->getScalarType()->getPointerAddressSpace();
   MachineMemOperand *MMO = DAG.getMachineFunction().getMachineMemOperand(
-      MachinePointerInfo(MemOpBasePtr), MachineMemOperand::MOStore,
-      VT.getStoreSize(), Align.valueOrOne(), AAInfo);
+      MachinePointerInfo(AS), MachineMemOperand::MOStore,
+      // TODO: Make MachineMemOperands aware of scalable
+      // vectors.
+      MemoryLocation::UnknownSize, Alignment, AAInfo);
   if (!UniformBase) {
     Base = DAG.getConstant(0, sdl, TLI.getPointerTy(DAG.getDataLayout()));
     Index = getValue(Ptr);
-    IndexType = ISD::SIGNED_SCALED;
+    IndexType = ISD::SIGNED_UNSCALED;
     Scale =
         DAG.getTargetConstant(1, sdl, TLI.getPointerTy(DAG.getDataLayout()));
   }
-  SDValue Ops[] = {getRoot(), Src0, Base, Index, Scale, Mask, VLen};
-  SDValue Scatter =
-      DAG.getScatterVP(DAG.getVTList(MVT::Other), VT, sdl, Ops, MMO, IndexType);
+  SDValue Ops[] = {getMemoryRoot(), Src0, Base, Index, Scale, Mask, VLen};
+  SDValue Scatter = DAG.getScatterVP(DAG.getVTList(MVT::Other), VT, sdl,
+                                         Ops, MMO, IndexType);
   DAG.setRoot(Scatter);
   setValue(&I, Scatter);
 }
@@ -7514,9 +7502,10 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
 
   // Request Operands
   SmallVector<SDValue, 7> OpValues;
-  auto ExceptPosOpt = None;
+  // TODO: Constrained FP.
+  // auto ExceptPosOpt = None;
       // VPIntrinsic::GetExceptionBehaviorParamPos(VPIntrin.getIntrinsicID());
-  auto RoundingModePosOpt = None;
+  // auto RoundingModePosOpt = None;
       // VPIntrinsic::GetRoundingModeParamPos(VPIntrin.getIntrinsicID());
   for (int i = 0; i < (int)VPIntrin.getNumArgOperands(); ++i) {
     // if (ExceptPosOpt && (i == ExceptPosOpt.getValue()))
