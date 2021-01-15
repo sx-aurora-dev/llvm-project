@@ -370,8 +370,9 @@ defm: both_x_to_y<v512i1, v512f32, "S", v512i32, "W", "", RD_NONE, "PVCVT">;
 defm: both_x_to_y<v256i1, v256f32, "S", v256i64, "L", "", RD_RZ>;
 defm: both_x_to_y<v256i1, v256f64, "D", v256i32, "W", "SX", RD_RZ>;
 
-// fpext, fpround (256 only)
-defm : conv_x_to_y<vvp_fpround, v256i1, v256f32, v256f64, "VCVTSD", "m">;
+// fpext, fpround, fptrunc (256 only)
+defm : conv_x_to_y<vvp_fptrunc, v256i1, v256f32, v256f64, "VCVTSD", "m">; // Roudn to nearest fp (correct).
+// defm : conv_x_to_y<vvp_fpround, v256i1, v256f32, v256f64, "VCVTSD", "m">; // Round to nearest integer (FIXME!) ties away from zero.
 defm : conv_x_to_y<vvp_fpext,   v256i1, v256f64, v256f32, "VCVTDS", "m">;
 
   // CC_INE = 2, // Not Equal
