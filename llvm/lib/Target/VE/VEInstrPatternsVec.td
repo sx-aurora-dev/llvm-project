@@ -307,11 +307,11 @@ defm : NoopConv<v256i64,v256f64>;
 defm : NoopConv<v4i1,v256i1,VM>;
 defm : NoopConv<v8i1,v512i1,VM512>;
 
-// actual conversions
+// actual conversions (TODO lift to VVP)
 def : Pat<(v256i32 (bitconvert v256f32:$src)),
-          (VSRALvil (COPY_TO_REGCLASS $src, V64), 32, 256)>;
+          (VSRALvil (COPY_TO_REGCLASS $src, V64), 32, (VLEN 256))>;
 def : Pat<(v256f32 (bitconvert v256i32:$src)),
-          (VSLALvil (COPY_TO_REGCLASS $src, V64), 32, 256)>;
+          (VSLALvil (COPY_TO_REGCLASS $src, V64), 32, (VLEN 256))>;
 
 
 //===----------------------------------------------------------------------===//
