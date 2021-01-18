@@ -1892,7 +1892,7 @@ AttrBuilder AttributeFuncs::typeIncompatible(Type *Ty) {
     Incompatible.addAttribute(Attribute::SExt)
       .addAttribute(Attribute::ZExt);
 
-  if (!Ty->isPointerTy())
+  if (!Ty->isPtrOrPtrVectorTy())
     // Attribute that only apply to pointers.
     Incompatible.addAttribute(Attribute::Nest)
         .addAttribute(Attribute::NoAlias)
