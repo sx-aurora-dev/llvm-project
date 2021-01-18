@@ -15,12 +15,12 @@
 // Sub-register replication.
 def: Pat<(i64 (repl_f32 f32:$val)),
             (ORrr
-              (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
+              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
               (ANDrm   (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32))>;
 def: Pat<(i64 (repl_i32 i32:$val)),
             (ORrr
               (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
-              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32))>;
+              (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32))>;
 
 
 
