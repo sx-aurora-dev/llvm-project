@@ -15,7 +15,9 @@ define void @test_vp_harness(<512 x i32>* %Out, <512 x i32> %i0) {
 define void @test_vp_fadd_fsub_fmul_fneg_fma(<512 x float>* %Out, <512 x float> %f0, <512 x float> %f1, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fadd_fsub_fmul_fneg_fma:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pvfadd %v2, %v0, %v1, %vm2
 ; CHECK-NEXT:    pvfsub %v3, %v0, %v1, %vm2

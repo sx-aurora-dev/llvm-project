@@ -1688,30 +1688,47 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
     return ExpandToSplitVVP(Op, DAG, Mode);
   }
 
+  // create suitable mask and avl parameters (accounts for packing)
+  PosOpt MaskPos = Op->getVPMaskPos();
+  PosOpt AVLPos = Op->getVPVectorLenPos();
+  SDValue Mask = MaskPos ? Op->getOperand(*MaskPos) : SDValue();
+  SDValue AVL = AVLPos ? Op->getOperand(*AVLPos) : SDValue();
+  auto TargetMasks = CDAG.createTargetMask(WidenInfo, Mask, AVL);
+
   // Otw, opt for direct VVP_* lowering
   SDLoc dl(Op);
   unsigned VVPOC = OCOpt.getValue();
   std::vector<SDValue> OpVec;
 
   if (VVPOC == VEISD::VVP_FFMA) {
+    // Custom FMA re-ordering..
     OpVec.push_back(LegalizeVecOperand(Op->getOperand(2), DAG));
     OpVec.push_back(LegalizeVecOperand(Op->getOperand(0), DAG));
     OpVec.push_back(LegalizeVecOperand(Op->getOperand(1), DAG));
-    OpVec.push_back(LegalizeVecOperand(Op->getOperand(3), DAG));
-    OpVec.push_back(LegalizeVecOperand(Op->getOperand(4), DAG));
+    OpVec.push_back(TargetMasks.Mask);
+    OpVec.push_back(TargetMasks.AVL);
 
   } else {
+    // Default.
     unsigned NumOps = Op.getNumOperands();
     for (unsigned i = 0; i < NumOps; ++i) {
+      if (MaskPos && (i == MaskPos)) {
+        OpVec.push_back(TargetMasks.Mask);
+        continue;
+      }
+      if (AVLPos && (i == AVLPos)) {
+        OpVec.push_back(TargetMasks.AVL);
+        continue;
+      }
       OpVec.push_back(LegalizeVecOperand(Op.getOperand(i), DAG));
     }
   }
 
   EVT NewResVT = CDAG.legalizeVectorType(Op, Mode);
   if (IsBinaryVVP(VVPOC)) {
+    // Use on-the-fly expansion for some binary operators.
     return CDAG.getLegalBinaryOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1], OpVec[2], OpVec[3]);
   }
-
 
   // Create a matching VVP_* node
   assert(WidenInfo.isValid() && "Cannot widen this VP op into VVP");
