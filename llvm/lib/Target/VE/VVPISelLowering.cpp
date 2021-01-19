@@ -1069,64 +1069,31 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
   return CDAG.getMergeValues({PackedVals, FusedChains});
 }
 
-SDValue
-VETargetLowering::ExpandToSplitMaskReduction(SDValue Op, SelectionDAG &DAG,
-                                             VVPExpansionMode Mode) const {
-  auto VVPOpcode = *GetVVPOpcode(Op->getOpcode());
-  auto Vec = Op->getOperand(0);
-  auto Mask = Op->getOperand(1);
-  auto AVL = Op->getOperand(1);
-  // TODO Assert that the mask is all-true.
-  CustomDAG CDAG(*this, DAG, Op);
-  SDValue LoV = CDAG.foldAndUnpackMask(Vec, Mask, PackElem::Lo, AVL);
-  SDValue HiV = CDAG.foldAndUnpackMask(Vec, Mask, PackElem::Hi, AVL);
-
-  unsigned JoinOpcode;
-  switch (VVPOpcode) {
-  case VEISD::VVP_REDUCE_AND:
-    JoinOpcode = VEISD::VVP_AND;
-    break;
-  case VEISD::VVP_REDUCE_OR:
-    JoinOpcode = VEISD::VVP_OR;
-    break;
-  case VEISD::VVP_REDUCE_XOR:
-    JoinOpcode = VEISD::VVP_XOR;
-    break;
-  default:
-    abort();
-  }
-
-  auto AllTrueMask = CDAG.createUniformConstMask(Packing::Normal, 256, true);
-  auto JoinedMask = CDAG.getLegalBinaryOpVVP(JoinOpcode, MVT::v256i1, LoV, HiV,
-                                             AllTrueMask, AVL);
-
-  return CDAG.getLegalReductionOpVVP(VVPOpcode, MVT::i32, JoinedMask, Mask,
-                                     AVL);
-}
-
-SDValue VETargetLowering::ExpandToSplitReduction(SDValue Op, SelectionDAG &DAG,
-                                                 VVPExpansionMode Mode) const {
-
-  auto VVPOpcodeOpt = GetVVPOpcode(Op->getOpcode());
-  assert(VVPOpcodeOpt);
-
-  unsigned VVPOpcode = *VVPOpcodeOpt;
-
-  PosOpt VectorPos = getReductionVectorParamPos(VVPOpcode);
-  auto VecVal = Op->getOperand(*VectorPos);
-  if (IsMaskType(VecVal.getValueType())) {
-    return ExpandToSplitMaskReduction(Op, DAG, Mode);
-  }
-
-  // Fail with a meaningful message in 'Release' builds.
-  errs() << "TODO: Implement reductions of this kind: ";
-  Op->print(errs());
-  errs() << " with type " << Op.getValueType().getEVTString() << "\n";
-  abort(); // TODO implement
-}
-
 static bool hasChain(SDNode &N) {
   return isa<MemSDNode>(N) || N.isStrictFPOpcode() || N.isMemIntrinsic();
+}
+
+static unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask) {
+  if (IsMask) {
+    switch (VVPOC) {
+    case VEISD::VVP_REDUCE_UMIN:
+    case VEISD::VVP_REDUCE_SMAX:
+    case VEISD::VVP_REDUCE_MUL:
+    case VEISD::VVP_REDUCE_AND:
+      return ISD::AND;
+    case VEISD::VVP_REDUCE_SMIN:
+    case VEISD::VVP_REDUCE_UMAX:
+    case VEISD::VVP_REDUCE_OR:
+      return ISD::OR;
+    case VEISD::VVP_REDUCE_ADD:
+    case VEISD::VVP_REDUCE_XOR:
+      return ISD::XOR;
+    default:
+      abort();
+    }
+  }
+  // TODO Use VVPNodes.def for this!
+  abort();
 }
 
 SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
@@ -1139,9 +1106,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
   CustomDAG CDAG(*this, DAG, Op);
 
   // Special cases ('impure' SIMD instructions)
-  if (IsVVPReduction(VVPOC)) {
-    return ExpandToSplitReduction(Op, DAG, Mode);
-  } else if (VVPOC == VEISD::VVP_LOAD || VVPOC == VEISD::VVP_STORE) {
+  if (VVPOC == VEISD::VVP_LOAD || VVPOC == VEISD::VVP_STORE) {
     return ExpandToSplitLoadStore(Op, DAG, Mode);
   }
 
@@ -1197,7 +1162,15 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
     PartOps[(int)Part] = CDAG.getLegalOpVVP(VVPOC, ResVT, OpVec);
   }
 
-  // re-package into a proper packed operation
+  // Use a scalar reducer.
+  if (IsVVPReduction(VVPOC)) {
+    bool IsMaskReduction = IsMaskType(Op.getOperand(0).getValueType());
+    // Scalar join.
+    unsigned JoinOpcode = getScalarReductionOpcode(VVPOC, IsMaskReduction);
+    return CDAG.getNode(JoinOpcode, ResVT, PartOps);
+  }
+
+  // Re-package vectors.
   EVT PackedVT = CDAG.legalizeVectorType(Op, Mode);
   SDValue PackedVals =
       CDAG.CreatePack(PackedVT, PartOps[(int)PackElem::Lo],

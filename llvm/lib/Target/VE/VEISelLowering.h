@@ -332,10 +332,6 @@ public:
                            VVPExpansionMode Mode) const;
   SDValue ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
                                  VVPExpansionMode Mode) const;
-  SDValue ExpandToSplitMaskReduction(SDValue Op, SelectionDAG &DAG,
-                                 VVPExpansionMode Mode) const;
-  SDValue ExpandToSplitReduction(SDValue Op, SelectionDAG &DAG,
-                                 VVPExpansionMode Mode) const;
   SDValue WidenVVPOperation(SDValue Op, SelectionDAG &DAG,
                             VVPExpansionMode Mode) const;
   /// } VVPLowering

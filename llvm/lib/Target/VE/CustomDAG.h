@@ -350,6 +350,8 @@ struct CustomDAG {
   /// } VVP
 
   EVT getSplitVT(EVT OldValVT) const {
+    if (!OldValVT.isVector())
+      return OldValVT;
     return getVectorVT(OldValVT.getVectorElementType(), StandardVectorWidth);
   }
 
@@ -369,6 +371,8 @@ struct CustomDAG {
 
   SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT,
                         ArrayRef<SDValue> Ops) const {
+    if (IsVVPReduction(VVPOpcode) && !getVVPReductionStartParamPos(VVPOpcode))
+      return getLegalReductionOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2]);
     if (IsBinaryVVP(VVPOpcode))
       return getLegalBinaryOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
                                  Ops[3]);

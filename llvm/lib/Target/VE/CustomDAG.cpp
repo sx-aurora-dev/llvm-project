@@ -890,30 +890,30 @@ SDValue CustomDAG::getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT,
   }
 
   auto Pop = CreateMaskPopcount(VectorV, AVL);
+  auto LegalPop = DAG.getZExtOrTrunc(Pop, DL, MVT::i32);
 
   switch (VVPOpcode) {
   default:
     abort(); // TODO implement
   case VEISD::VVP_REDUCE_ADD:
   case VEISD::VVP_REDUCE_XOR: {
-    auto OneV = getConstant(1, MVT::i64);
-    return getNode(ISD::AND, MVT::i64, {Pop, OneV});
+    auto OneV = getConstant(1, MVT::i32);
+    return getNode(ISD::AND, MVT::i32, {LegalPop, OneV});
   }
   case VEISD::VVP_REDUCE_UMAX:
   case VEISD::VVP_REDUCE_SMIN:
   case VEISD::VVP_REDUCE_OR: {
     // FIXME: Should be 'true' if \p Mask is all-false..
-    auto ZeroV = getConstant(0, MVT::i64);
+    auto ZeroV = getConstant(0, MVT::i32);
     return getNode(ISD::SETCC, MVT::i32,
-                   {Pop, ZeroV, DAG.getCondCode(ISD::CondCode::SETNE)});
+                   {LegalPop, ZeroV, DAG.getCondCode(ISD::CondCode::SETNE)});
   }
   case VEISD::VVP_REDUCE_UMIN:
   case VEISD::VVP_REDUCE_SMAX:
-  case VEISD::VVP_REDUCE_MUL:                              
+  case VEISD::VVP_REDUCE_MUL:
   case VEISD::VVP_REDUCE_AND: {
-    auto LegalAVL = DAG.getZExtOrTrunc(AVL, DL, MVT::i64);
     return getNode(ISD::SETCC, MVT::i32,
-                   {Pop, LegalAVL, DAG.getCondCode(ISD::CondCode::SETEQ)});
+                   {LegalPop, AVL, DAG.getCondCode(ISD::CondCode::SETEQ)});
   }
   }
 }
