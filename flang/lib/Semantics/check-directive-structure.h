@@ -15,7 +15,6 @@
 #include "flang/Common/enum-set.h"
 #include "flang/Semantics/semantics.h"
 #include "flang/Semantics/tools.h"
-
 #include <unordered_map>
 
 namespace Fortran::semantics {
@@ -43,6 +42,9 @@ public:
 
   template <typename T> bool Pre(const parser::Statement<T> &statement) {
     currentStatementSourcePosition_ = statement.source;
+    if (statement.label.has_value()) {
+      labels_.insert(*statement.label);
+    }
     return true;
   }
 
@@ -53,6 +55,8 @@ public:
     }
   }
   void Post(const parser::StopStmt &) { EmitBranchOutError("STOP"); }
+
+  std::set<parser::Label> labels() { return labels_; }
 
 private:
   parser::MessageFormattedText GetEnclosingMsg() const {
@@ -103,6 +107,7 @@ private:
   parser::CharBlock sourcePosition_;
   std::string upperCaseDirName_;
   D currentDirective_;
+  std::set<parser::Label> labels_;
 };
 
 // Generic structure checker for directives/clauses language such as OpenMP
@@ -134,7 +139,10 @@ protected:
     const PC *clause{nullptr};
     std::multimap<C, const PC *> clauseInfo;
     std::list<C> actualClauses;
+    Symbol *loopIV{nullptr};
   };
+
+  void SetLoopIv(Symbol *symbol) { GetContext().loopIV = symbol; }
 
   // back() is the top of the stack
   DirectiveContext &GetContext() {
@@ -155,6 +163,7 @@ protected:
     GetContext().allowedExclusiveClauses = {};
     GetContext().requiredClauses = {};
     GetContext().clauseInfo = {};
+    GetContext().loopIV = {nullptr};
   }
 
   void SetContextDirectiveSource(const parser::CharBlock &directive) {
@@ -226,6 +235,9 @@ protected:
       SayNotMatching(beginDir.source, endDir.source);
     }
   }
+  // Check illegal branching out of `Parser::Block` for `Parser::Name` based
+  // nodes (examples `Parser::ExitStmt`) along with `Parser::Label`
+  // based nodes (example `Parser::GotoStmt`).
   void CheckNoBranching(const parser::Block &block, D directive,
       const parser::CharBlock &directiveSource);
 
@@ -271,6 +283,11 @@ void DirectiveStructureChecker<D, C, PC, ClauseEnumSize>::CheckNoBranching(
   NoBranchingEnforce<D> noBranchingEnforce{
       context_, directiveSource, directive, ContextDirectiveAsFortran()};
   parser::Walk(block, noBranchingEnforce);
+
+  auto construct{parser::ToUpperCaseLetters(getDirectiveName(directive).str())};
+  LabelEnforce directiveLabelEnforce{context_, noBranchingEnforce.labels(),
+      directiveSource, construct.c_str()};
+  parser::Walk(block, directiveLabelEnforce);
 }
 
 // Check that only clauses included in the given set are present after the given
