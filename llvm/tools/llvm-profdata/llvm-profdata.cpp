@@ -2254,7 +2254,6 @@ static void dumpHotFunctionList(const std::vector<std::string> &ColumnTitle,
     FOS.PadToColumn(ColumnOffset[3]);
     FOS << R.FuncName << "\n";
   }
-  return;
 }
 
 static int
@@ -2430,7 +2429,7 @@ static int show_main(int argc, const char *argv[]) {
   if (OutputFilename.empty())
     OutputFilename = "-";
 
-  if (!Filename.compare(OutputFilename)) {
+  if (Filename == OutputFilename) {
     errs() << sys::path::filename(argv[0])
            << ": Input file name cannot be the same as the output file name!\n";
     return 1;

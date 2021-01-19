@@ -11,3 +11,4 @@
 ##===----------------------------------------------------------------------===##
 
 add_subdirectory(elf_common)
+add_subdirectory(MemoryManager)
