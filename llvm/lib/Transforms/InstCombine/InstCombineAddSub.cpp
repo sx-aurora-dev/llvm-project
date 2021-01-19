@@ -2232,7 +2232,7 @@ Instruction *InstCombinerImpl::visitFSubGeneric(BinaryOpTy &I) {
     return MCBuilder.CreateFNegFMF(FAdd, &I);
   }
 
-  if (isa<Constant>(Op0))
+  if (MatchContextType::IsEmpty && isa<Constant>(Op0))
     if (SelectInst *SI = dyn_cast<SelectInst>(Op1))
       if (Instruction *NV = FoldOpIntoSelect(I, SI))
         return NV;

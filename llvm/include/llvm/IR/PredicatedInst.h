@@ -333,6 +333,8 @@ namespace PatternMatch {
 
 // PredicatedMatchContext for pattern matching
 struct PredicatedContext {
+  static constexpr bool IsEmpty = false;
+
   Value *Mask;
   Value *VectorLength;
   Module *Mod;

@@ -51,6 +51,8 @@ namespace PatternMatch {
 
 // Use verbatim types in default (empty) context.
 struct EmptyContext {
+  static constexpr bool IsEmpty = true;
+
   EmptyContext() {}
 
   EmptyContext(const Value *) {}
