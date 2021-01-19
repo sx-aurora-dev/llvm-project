@@ -514,3 +514,16 @@ multiclass IntReduce_ShortLong<ValueType VectorVT, RegisterClass ResRC, ValueTyp
 defm: IntReduce_ShortLong<v256i64, I64, i64, "L","SLFST">;
 defm: IntReduce_ShortLong<v256i32, I32, i32, "WSX","SWFSTSX">;
 /// } reduce AND/OR/XOR/ADD
+
+
+/// Mask arithmetic {
+multiclass MaskBinaryArith<SDPatternOperator Op, Instruction Inst> {
+  def : Pat <(v256i1 (Op v256i1:$mx, v256i1:$my)),
+             (v256i1 (Inst v256i1:$mx, v256i1:$my))>;
+}
+
+defm: MaskBinaryArith<and,ANDMmm>;
+defm: MaskBinaryArith<or,ORMmm>;
+defm: MaskBinaryArith<xor,XORMmm>;
+
+/// } Mask arithmetic

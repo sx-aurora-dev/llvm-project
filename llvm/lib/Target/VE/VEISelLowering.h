@@ -52,11 +52,12 @@ enum NodeType : unsigned {
   TS1AM,                  // A TS1AM instruction used for 1/2 bytes swap.
 
   // Mask support
+  VM_POPCOUNT, // VM_POPCOUNT(v256i1: mask, i32:avl) -> i64
   VM_EXTRACT, // VM_EXTRACT(v256i1:mask, i32:i) Extract a SX register from a
               // mask register
   VM_INSERT, // VM_INSERT(v256i1:mask, i32:i, i64:val) Insert a SX register into
              // a mask register
-  VM_FIRST = VM_EXTRACT,
+  VM_FIRST = VM_POPCOUNT,
   VM_LAST = VM_INSERT,
 
   /// VEC_ {
@@ -78,10 +79,6 @@ enum NodeType : unsigned {
   // Create a sequence vector
   VEC_SEQ, // 1: the vector length (no mask)
   VEC_VMV, // custom lowering for vp_vshift
-
-  //// Horizontal operations
-  VEC_REDUCE_ANY,
-  VEC_POPCOUNT,
 
   // narrowing marker
   VEC_NARROW, // (Op, vector length)
@@ -334,6 +331,8 @@ public:
   SDValue ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
                            VVPExpansionMode Mode) const;
   SDValue ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
+                                 VVPExpansionMode Mode) const;
+  SDValue ExpandToSplitMaskReduction(SDValue Op, SelectionDAG &DAG,
                                  VVPExpansionMode Mode) const;
   SDValue ExpandToSplitReduction(SDValue Op, SelectionDAG &DAG,
                                  VVPExpansionMode Mode) const;

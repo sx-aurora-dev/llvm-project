@@ -79,6 +79,7 @@ SDValue LegalizeVecOperand(SDValue Op, SelectionDAG &DAG);
 // whether this VVP operation has no mask argument
 bool HasDeadMask(unsigned VVPOC);
 
+bool IsAllTrueMask(SDValue Op);
 //// } VVP Machinery
 
 Optional<unsigned> getVVPReductionStartParamPos(unsigned ISD);
@@ -197,6 +198,9 @@ struct CustomDAG {
   /// Mask Insert/Extract {
   SDValue CreateExtractMask(SDValue MaskV, SDValue IndexV) const;
   SDValue CreateInsertMask(SDValue MaskV, SDValue ElemV, SDValue IndexV) const;
+  SDValue CreateMaskPopcount(SDValue MaskV, SDValue AVL) const;
+  SDValue foldAndUnpackMask(SDValue MaskVector, SDValue Mask, PackElem Part,
+                            SDValue AVL) const;
   /// } Mask Insert/Extract
 
   SDValue CreateBroadcast(EVT ResTy, SDValue S,
@@ -361,6 +365,7 @@ struct CustomDAG {
 
   // Create this binary operator, expanding it on the fly.
   SDValue getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A, SDValue B, SDValue Mask, SDValue AVL) const;
+  SDValue getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV, SDValue Mask, SDValue AVL) const;
 
   SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT,
                         ArrayRef<SDValue> Ops) const {

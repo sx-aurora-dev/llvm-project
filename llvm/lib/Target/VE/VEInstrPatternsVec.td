@@ -24,7 +24,7 @@ def: Pat<(i64 (repl_i32 i32:$val)),
 
 
 
-///// vm_insert, vm_extract /////
+///// Mask insert, extract, popcount /////
 
 // Mask Insert & Extract
 // \p InnerMaskToken compensates for incosistency in LVM/SVM naming scheme with regards to vm256 vs. vm512.
@@ -52,6 +52,9 @@ defm: insert_extract_mask_imm<v256i1, "m", "">;
 defm: insert_extract_mask_reg<v256i1, "m", "">;
 defm: insert_extract_mask_imm<v512i1, "y", "y">;
 
+// mask bit popcount
+def : Pat<(i64 (vm_popcount v256i1:$vm, i32:$avl)),
+               (PCVMml v256i1:$vm, i32:$avl)>;
 
 ///// Mask Load & Store /////
 

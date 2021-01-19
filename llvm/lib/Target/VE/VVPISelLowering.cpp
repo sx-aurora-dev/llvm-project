@@ -313,13 +313,6 @@ static SDValue PeekForMask(SDValue Op) {
   return SDValue();
 }
 
-static SDValue getSplatValue(SDNode *N) {
-  if (auto *BuildVec = dyn_cast<BuildVectorSDNode>(N)) {
-    return BuildVec->getSplatValue();
-  }
-  return SDValue();
-}
-
 static const MVT AllVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
                                    MVT::v256f32, MVT::v512f32, MVT::v256f64};
 static const MVT PackedVectorVTs[] = {MVT::v512i32, MVT::v512f32};
@@ -1076,9 +1069,60 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
   return CDAG.getMergeValues({PackedVals, FusedChains});
 }
 
+SDValue
+VETargetLowering::ExpandToSplitMaskReduction(SDValue Op, SelectionDAG &DAG,
+                                             VVPExpansionMode Mode) const {
+  auto VVPOpcode = *GetVVPOpcode(Op->getOpcode());
+  auto Vec = Op->getOperand(0);
+  auto Mask = Op->getOperand(1);
+  auto AVL = Op->getOperand(1);
+  // TODO Assert that the mask is all-true.
+  CustomDAG CDAG(*this, DAG, Op);
+  SDValue LoV = CDAG.foldAndUnpackMask(Vec, Mask, PackElem::Lo, AVL);
+  SDValue HiV = CDAG.foldAndUnpackMask(Vec, Mask, PackElem::Hi, AVL);
+
+  unsigned JoinOpcode;
+  switch (VVPOpcode) {
+  case VEISD::VVP_REDUCE_AND:
+    JoinOpcode = VEISD::VVP_AND;
+    break;
+  case VEISD::VVP_REDUCE_OR:
+    JoinOpcode = VEISD::VVP_OR;
+    break;
+  case VEISD::VVP_REDUCE_XOR:
+    JoinOpcode = VEISD::VVP_XOR;
+    break;
+  default:
+    abort();
+  }
+
+  auto AllTrueMask = CDAG.createUniformConstMask(Packing::Normal, 256, true);
+  auto JoinedMask = CDAG.getLegalBinaryOpVVP(JoinOpcode, MVT::v256i1, LoV, HiV,
+                                             AllTrueMask, AVL);
+
+  return CDAG.getLegalReductionOpVVP(VVPOpcode, MVT::i32, JoinedMask, Mask,
+                                     AVL);
+}
+
 SDValue VETargetLowering::ExpandToSplitReduction(SDValue Op, SelectionDAG &DAG,
                                                  VVPExpansionMode Mode) const {
-  abort();
+
+  auto VVPOpcodeOpt = GetVVPOpcode(Op->getOpcode());
+  assert(VVPOpcodeOpt);
+
+  unsigned VVPOpcode = *VVPOpcodeOpt;
+
+  PosOpt VectorPos = getReductionVectorParamPos(VVPOpcode);
+  auto VecVal = Op->getOperand(*VectorPos);
+  if (IsMaskType(VecVal.getValueType())) {
+    return ExpandToSplitMaskReduction(Op, DAG, Mode);
+  }
+
+  // Fail with a meaningful message in 'Release' builds.
+  errs() << "TODO: Implement reductions of this kind: ";
+  Op->print(errs());
+  errs() << " with type " << Op.getValueType().getEVTString() << "\n";
+  abort(); // TODO implement
 }
 
 static bool hasChain(SDNode &N) {
@@ -1428,7 +1472,6 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     // SDValue Attempt = LowerVECREDUCE(Op, DAG);
     // if (Attempt)
     //  return Attempt;
-
     auto PosOpt = getVVPReductionStartParamPos(VVPOC.getValue());
     if (PosOpt) {
       return CDAG.getNode(VVPOC.getValue(), ResVecTy,
@@ -1436,8 +1479,9 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
                            TargetMasks.AVL});
     }
 
-    return CDAG.getNode(VVPOC.getValue(), ResVecTy,
-                        {LegalOperands[0], TargetMasks.Mask, TargetMasks.AVL});
+    assert(VVPOC.hasValue());
+    return CDAG.getLegalReductionOpVVP(*VVPOC, ResVecTy, LegalOperands[0],
+                                       TargetMasks.Mask, TargetMasks.AVL);
   }
 
   llvm_unreachable("Cannot lower this op to VVP");
@@ -1728,6 +1772,13 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   if (IsBinaryVVP(VVPOC)) {
     // Use on-the-fly expansion for some binary operators.
     return CDAG.getLegalBinaryOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1], OpVec[2], OpVec[3]);
+  }
+
+  if (IsVVPReduction(VVPOC)) {
+    auto StartPos = getVVPReductionStartParamPos(VVPOC);
+    if (!StartPos)
+      return CDAG.getLegalReductionOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1],
+                                         OpVec[2]);
   }
 
   // Create a matching VVP_* node
