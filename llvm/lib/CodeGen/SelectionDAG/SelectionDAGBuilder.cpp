@@ -7525,7 +7525,8 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
     NodeFlags.copyFMF(*FPIntrin);
 
   SDLoc sdl = getCurSDLoc();
-  SDValue Result = DAG.getNode(Opcode, sdl, VTs, OpValues, NodeFlags);
+  SDValue Result = DAG.getNode(Opcode, sdl, VTs, OpValues);
+  Result->setFlags(NodeFlags);
 
   // Attach chain
   SDValue VPResult;

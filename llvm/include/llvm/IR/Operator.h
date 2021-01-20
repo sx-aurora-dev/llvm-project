@@ -22,6 +22,7 @@
 #include "llvm/IR/Value.h"
 #include "llvm/Support/Casting.h"
 #include <cstddef>
+#include "llvm/IR/IntrinsicInst.h"
 
 namespace llvm {
 
@@ -378,6 +379,11 @@ public:
       Opcode = CE->getOpcode();
     else
       return false;
+
+    // Judge based on function.
+    auto *VPIntrin = dyn_cast<VPIntrinsic>(V);
+    if (VPIntrin)
+      Opcode = VPIntrin->getFunctionalOpcode();
 
     switch (Opcode) {
     case Instruction::FNeg:
