@@ -35,11 +35,27 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
+#include "llvm/Support/CommandLine.h"
 
 #include "CustomDAG.h"
 #include "ShuffleSynthesis.h"
 
 using namespace llvm;
+
+// VE has no masked VLD. Ignore the mask, keep the AVL.
+static cl::opt<bool>
+OptimizeVectorMemory("ve-fast-mem",
+    cl::init(true),
+    cl::desc("Drop VLD masks"),
+    cl::Hidden);
+
+// Optimize packed mode patterns.
+static cl::opt<bool>
+OptimizePackedMode("ve-optimize-packed",
+    cl::init(true),
+    cl::desc("Simplify packed mode patterns"),
+    cl::Hidden);
+
 
 static bool isLegalVectorVT(EVT VT) {
   if (!VT.isVector())
@@ -1793,6 +1809,11 @@ SDValue VETargetLowering::lowerVVP_MLOAD(SDValue Op, SelectionDAG &DAG,
   // create suitable mask and avl parameters (accounts for packing)
   auto TargetMasks = CDAG.createTargetMask(WidenInfo, Mask, AVL);
 
+  // Drop the mask.
+  if (OptimizeVectorMemory)
+    TargetMasks.Mask = CDAG.createUniformConstMask(
+        WidenInfo.PackedMode ? Packing::Dense : Packing::Normal, true);
+
   // emit
   uint64_t ElemBytes = DataVT.getVectorElementType().getStoreSize();
   uint64_t PackedBytes = WidenInfo.PackedMode ? 2 * ElemBytes : ElemBytes;
@@ -2215,6 +2236,8 @@ static SDValue combineUnpackLoHi(CustomDAG &CDAG, SDNode *N,
 }
 
 SDValue VETargetLowering::combinePacking(SDNode *N, DAGCombinerInfo &DCI) const {
+  if (!OptimizePackedMode)
+    return SDValue();
   // Perform this shortly before isel.
   if (!DCI.isAfterLegalizeDAG())
     return SDValue();

@@ -1,4 +1,4 @@
-; RUN: llc -O0 --march=ve %s -o=/dev/stdout | FileCheck %s
+; RUN: llc -O0 --march=ve --ve-fast-mem=0 %s -o=/dev/stdout | FileCheck %s
 
 define void @test_vp_harness(<256 x i64>* %Out, <256 x i64> %i0) {
 ; CHECK-LABEL: test_vp_harness:

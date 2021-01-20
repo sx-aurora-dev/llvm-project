@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed --ve-fast-mem=0 | FileCheck %s
 
 ; Function Attrs: nounwind
 define <1 x double> @vec_load_v1f64(<1 x double>* %P) {
