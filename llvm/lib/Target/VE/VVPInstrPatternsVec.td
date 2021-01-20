@@ -411,6 +411,8 @@ defm : VectorBinaryArith_Base<c_vvp_fminnum, i64, v512f32, v512i1, "PVFMIN">;
 defm : VectorBinaryArith_Base<c_vvp_fmaxnum, i64, v512f32, v512i1, "PVFMAX">;
 
 defm : VectorTernaryArith_Base<c_vvp_ffma, i64, v512f32, v512i1, "PVFMAD">;
+defm : VectorTernaryArith_Base<c_vvp_ffms, i64, v512f32, v512i1, "PVFMSB">;
+defm : VectorTernaryArith_Base<c_vvp_ffmsn, i64, v512f32, v512i1, "PVFNMSB">;
 
 // Integer extension (256 elements) //
 // vNi32 to vNi64
