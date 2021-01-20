@@ -4,12 +4,15 @@
 define fastcc i1 @test_reduce_and(<256 x i1> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_and:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s1, 0, %s0
 ; CHECK-NEXT:    andm %vm1, %vm1, %vm2
-; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pcvm %s0, %vm1
-; CHECK-NEXT:    cmps.l %s0, %s0, %s1
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    cmps.w.zx %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    ldz %s0, %s0
 ; CHECK-NEXT:    srl %s0, %s0, 6
 ; CHECK-NEXT:    or %s1, 0, %s0
@@ -28,8 +31,11 @@ define fastcc i1 @test_reduce_or(<256 x i1> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    andm %vm1, %vm1, %vm2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pcvm %s0, %vm1
-; CHECK-NEXT:    cmpu.l %s0, 0, %s0
-; CHECK-NEXT:    srl %s0, %s0, 63
+; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    cmpu.w %s1, 0, %s0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    srl %s0, %s0, 31
 ; CHECK-NEXT:    or %s1, 0, %s0
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s1
@@ -46,9 +52,7 @@ define fastcc i1 @test_reduce_xor(<256 x i1> %v, <256 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    andm %vm1, %vm1, %vm2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pcvm %s0, %vm1
-; CHECK-NEXT:    and %s1, 1, %s0
-; CHECK-NEXT:    # implicit-def: $sx0
-; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, 1, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call i1 @llvm.vp.reduce.xor.v256i1(<256 x i1> %v, <256 x i1> %m, i32 %n)
   ret i1 %r

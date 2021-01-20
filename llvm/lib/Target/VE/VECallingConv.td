@@ -184,7 +184,7 @@ def CC_VE_Fast : CallingConv<[
 
   // pair of vector mask --> generic vector mask registers
   CCIfVPU<CCIfType<[v512i1],
-           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM1, VM3]>>>,
+           CCAssignToRegWithShadow<[VMP1, VMP2, VMP3], [VM1, VM3, VM5]>>>,
 
   // Default to the standard cc
   CCDelegateTo<CC_VE_C>
