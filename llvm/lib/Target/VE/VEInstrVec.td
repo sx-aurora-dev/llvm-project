@@ -56,7 +56,8 @@ let hasSideEffects = 0, isCodeGenOnly = 1 in {
 }
 
 // VFMK/VFMKW/VFMKS instructions using VM512
-let hasSideEffects = 0, isCodeGenOnly = 1, DisableEncoding = "$vl" in {
+
+let isReMaterializable = 1, isAsCheapAsAMove = 1, hasSideEffects = 0, isCodeGenOnly = 1, DisableEncoding = "$vl" in {
   def VFMKyal : Pseudo<(outs VM512:$vmx), (ins I32:$vl),
                        "# pseudo-vfmk.at $vmx">;
   def VFMKynal : Pseudo<(outs VM512:$vmx), (ins I32:$vl),
@@ -1479,13 +1480,16 @@ defm VEX : RV1m<"vex", 0x9d, V64, VM>;
 //-----------------------------------------------------------------------------
 
 // Section 8.17.1 - VFMK (Vector Form Mask)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in 
 defm VFMKL : RVMKm<"vfmk.l.", 0xb4, V64, VM>;
 def : MnemonicAlias<"vfmk.l", "vfmk.l.at">;
 
 // Section 8.17.2 - VFMS (Vector Form Mask Single)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in  {
 defm VFMKW : RVMKm<"vfmk.w.", 0xb5, V64, VM>;
 let isCodeGenOnly = 1 in defm PVFMKWLO : RVMKm<"vfmk.w.", 0xb5, V64, VM>;
 let cx = 1 in defm PVFMKWUP : RVMKm<"pvfmk.w.up.", 0xb5, V64, VM>;
+}
 def : MnemonicAlias<"vfmk.w", "vfmk.w.at">;
 def : MnemonicAlias<"pvfmk.w.up", "pvfmk.w.up.at">;
 def : MnemonicAlias<"pvfmk.w.lo", "vfmk.w.at">;
@@ -1494,11 +1498,13 @@ foreach CC = [ "af", "gt", "lt", "ne", "eq", "ge", "le", "at" ] in {
 }
 
 // Section 8.17.3 - VFMF (Vector Form Mask Floating Point)
+let isReMaterializable = 1, isAsCheapAsAMove = 1 in  {
 defm VFMKD : RVMKm<"vfmk.d.", 0xb6, V64, VM>;
 let cx2 = 1 in defm PVFMKSLO : RVMKm<"pvfmk.s.lo.", 0xb6, V64, VM>;
 let cx = 1 in {
   defm PVFMKSUP : RVMKm<"pvfmk.s.up.", 0xb6, V64, VM>;
   let isCodeGenOnly = 1 in defm VFMKS : RVMKm<"vfmk.s.", 0xb6, V64, VM>;
+}
 }
 def : MnemonicAlias<"vfmk.d", "vfmk.d.at">;
 def : MnemonicAlias<"pvfmk.s.lo", "pvfmk.s.lo.at">;
