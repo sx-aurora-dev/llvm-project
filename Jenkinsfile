@@ -104,7 +104,8 @@ pipeline {
             steps {
                 dir('vetfkernel') {
                     sh """
-                        ./build/test/test01
+                        ./build/test/vml-test
+                        ./build/test/vetfkernel-test
                         ${PYTHON} perf.py -e build/bench/bench -d perfdb/10B \
                             test
                     """
