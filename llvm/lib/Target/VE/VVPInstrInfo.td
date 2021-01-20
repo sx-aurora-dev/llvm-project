@@ -147,7 +147,7 @@ def vvp_fminnum    : SDNode<"VEISD::VVP_FMINNUM",  SDTFPBinOpVVP>;     // min(x,
 def vvp_fmaxnum    : SDNode<"VEISD::VVP_FMAXNUM",  SDTFPBinOpVVP>;     // max(x, y)
 def vvp_ffma    : SDNode<"VEISD::VVP_FFMA",  SDTFPTernaryOpVVP>; // (y*z) + x
 def vvp_ffms    : SDNode<"VEISD::VVP_FFMS",  SDTFPTernaryOpVVP>; // (y*z) - x
-// def vvp_ffmsn    : SDNode<"VEISD::VVP_FFMSN",  SDTFPTernaryOpVVP>; // (x - (y*z))
+def vvp_ffmsn    : SDNode<"VEISD::VVP_FFMSN",  SDTFPTernaryOpVVP>; // (x - (y*z))
 // def vvp_ffman    : SDNode<"VEISD::VVP_FFMAN",  SDTFPTernaryOpVVP>; // -((y*z) + x)
 
 // select (OnT,OnF,SelM,Pivot) = (lane < Pivot && SelM[lane]) ? OnT[lane] : OnF[lane] 
@@ -222,4 +222,6 @@ def c_vvp_xor         : vvp_commutative<vvp_xor>;
 def c_vvp_fminnum     : vvp_commutative<vvp_fminnum>;
 def c_vvp_fmaxnum     : vvp_commutative<vvp_fmaxnum>;
 
-def c_vvp_ffma     : vvp_fma_commutative<vvp_ffma>;
+def c_vvp_ffma        : vvp_fma_commutative<vvp_ffma>;
+def c_vvp_ffms        : vvp_fma_commutative<vvp_ffms>;
+def c_vvp_ffmsn       : vvp_fma_commutative<vvp_ffmsn>;

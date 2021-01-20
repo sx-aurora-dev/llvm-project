@@ -269,6 +269,9 @@ defm : VectorBinaryArith_ShortLong<c_vvp_fminnum, f64, v256f64, "VFMIND", f32, v
 defm : VectorBinaryArith_ShortLong<c_vvp_fmaxnum, f64, v256f64, "VFMAXD", f32, v256f32, "VFMAXS">;
 
 defm : VectorTernaryArith_ShortLong<c_vvp_ffma, f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
+defm : VectorTernaryArith_ShortLong<c_vvp_ffms, f64, v256f64, "VFMSBD", f32, v256f32, "VFMSBS">;
+defm : VectorTernaryArith_ShortLong<c_vvp_ffmsn, f64, v256f64, "VFNMSBD", f32, v256f32, "VFNMSBS">;
+// TODO: vvp_ffman
 
 ///// Selection /////
 multiclass VectorSelect<ValueType DataVT> {

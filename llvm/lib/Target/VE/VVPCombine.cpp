@@ -42,15 +42,10 @@ OptimizePackedMode("ve-optimize-packed",
 using Matcher = std::function<bool(SDValue)>;
 
 static int match_SomeOperand(SDNode *Op, unsigned VVPOpcode, Matcher M) {
-  if (Op->getOpcode() != VVPOpcode)
-    return false;
-  if ((Op->getOperand(0)->getOpcode() == VEISD::VVP_FMUL) &&
-      M(Op->getOperand(0))) {
-    return 0;
-  }
-  if ((Op->getOperand(1)->getOpcode() == VEISD::VVP_FMUL) &&
-      M(Op->getOperand(1))) {
-    return 1;
+  for (int i = 0; i < 2; ++i) {
+    if ((Op->getOperand(i)->getOpcode() == VVPOpcode) && M(Op->getOperand(i))) {
+      return i;
+    }
   }
   return -1;
 }
@@ -67,6 +62,7 @@ static bool match_FFMA(SDNode *Root, SDValue &VY, SDValue &VZ, SDValue &VW,
   });
   if (MulIdx < 0)
     return false;
+  assert(MulIdx < 2);
   const int LeafIdx = 1 - MulIdx;
 
   // Take apart.
@@ -91,11 +87,13 @@ static bool match_FFMS(SDNode *Root, SDValue &VY, SDValue &VZ, SDValue &VW,
   });
   if (MulIdx < 0)
     return false;
+  assert(MulIdx < 2);
   const int LeafIdx = 1 - MulIdx;
-  Negated = MulIdx == 1;
+  Negated = (MulIdx == 1);
 
   // Take apart.
   SDValue MulV = Root->getOperand(MulIdx);
+  assert(MulV->getOpcode() == VEISD::VVP_FMUL);
   VY = Root->getOperand(LeafIdx);
   VZ = MulV->getOperand(0);
   VW = MulV->getOperand(1);
