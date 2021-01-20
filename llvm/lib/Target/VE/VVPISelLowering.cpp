@@ -40,6 +40,11 @@
 #include "CustomDAG.h"
 #include "ShuffleSynthesis.h"
 
+#ifdef DEBUG_TYPE
+#undef DEBUG_TYPE
+#endif
+#define DEBUG_TYPE "vvp-lower"
+
 using namespace llvm;
 
 // VE has no masked VLD. Ignore the mask, keep the AVL.
@@ -49,12 +54,6 @@ OptimizeVectorMemory("ve-fast-mem",
     cl::desc("Drop VLD masks"),
     cl::Hidden);
 
-// Optimize packed mode patterns.
-static cl::opt<bool>
-OptimizePackedMode("ve-optimize-packed",
-    cl::init(true),
-    cl::desc("Simplify packed mode patterns"),
-    cl::Hidden);
 
 
 static bool isLegalVectorVT(EVT VT) {
@@ -1364,8 +1363,10 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
 
   if (isBinaryOp) {
     assert(VVPOC.hasValue());
-    return CDAG.getLegalBinaryOpVVP(*VVPOC, ResVecTy, LegalOperands[0], LegalOperands[1],
+    auto VVPN =  CDAG.getLegalBinaryOpVVP(*VVPOC, ResVecTy, LegalOperands[0], LegalOperands[1],
                                     TargetMasks.Mask, TargetMasks.AVL);
+    VVPN->setFlags(Op->getFlags());
+    return VVPN;
   }
 
   if (isTernaryOp) {
@@ -1700,7 +1701,9 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   EVT NewResVT = CDAG.legalizeVectorType(Op, Mode);
   if (IsVVPBinaryOp(VVPOC)) {
     // Use on-the-fly expansion for some binary operators.
-    return CDAG.getLegalBinaryOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1], OpVec[2], OpVec[3]);
+    auto VVPN =  CDAG.getLegalBinaryOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1], OpVec[2], OpVec[3]);
+    VVPN->setFlags(Op->getFlags());
+    return VVPN;
   }
 
   if (IsVVPReductionOp(VVPOC)) {
@@ -2043,128 +2046,4 @@ SDValue VETargetLowering::lowerVVP_CONCAT_VECTOR(SDValue Op,
       VE::sub_vm_even, VT, CDAG.getImplicitDef(VT), Op->getOperand(0));
   return CDAG.getTargetInsertSubreg(VE::sub_vm_odd, VT, LoInsert,
                                     Op->getOperand(1));
-}
-
-SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
-  // TODO: optimize
-  LLVM_DEBUG(dbgs() << "combineVVP: "; N->print(dbgs()); dbgs() << "\n";);
-  switch (N->getOpcode()) {
-    default:
-      break;
-  }
-  return SDValue();
-}
-
-// What 32bit half to pack this scalar VT (or this vector's elem VT to).
-static PackElem getPackElemForVT(EVT VT) {
-  if (VT.isFloatingPoint())
-    return PackElem::Hi;
-  if (VT.isVector())
-    return getPackElemForVT(VT.getVectorElementType());
-  return PackElem::Lo;
-}
-
-static SDValue match_ReplLoHi(SDValue N, PackElem &SrcElem) {
-  switch (N->getOpcode()) {
-  case VEISD::REPL_I32:
-    SrcElem = PackElem::Lo;
-    return N->getOperand(0);
-  case VEISD::REPL_F32:
-    SrcElem = PackElem::Hi;
-    return N->getOperand(0);
-  default:
-    return SDValue();
-  }
-}
-
-static SDValue match_UnpackLoHi(SDValue N, PackElem &SrcElem) {
-  switch (N->getOpcode()) {
-  case VEISD::VEC_UNPACK_LO:
-    SrcElem = PackElem::Lo;
-    return N->getOperand(0);
-  case VEISD::VEC_UNPACK_HI:
-    SrcElem = PackElem::Hi;
-    return N->getOperand(0);
-  default:
-    return SDValue();
-  }
-}
-
-// vec_broadcast(ret, AVL)
-static SDValue match_Broadcast(SDValue N, SDValue & AVL) {
-  if (N->getOpcode() != VEISD::VEC_BROADCAST)
-    return SDValue();
-  AVL = N->getOperand(1);
-  return N->getOperand(0);
-}
-
-// vec_unpack_X(vec_broadcast(ret))
-static SDValue
-match_UnpackBroadcast(SDNode *N, PackElem & UnpackElem, SDValue & BroadcastAVL) {
-  SDValue UnpackedV = match_UnpackLoHi(SDValue(N, 0), UnpackElem);
-  if (!UnpackedV) return SDValue();
-  SDValue UnpackedBroadcastV = match_Broadcast(UnpackedV, BroadcastAVL);
-  if (!UnpackedBroadcastV) return SDValue();
-  return UnpackedBroadcastV;
-}
-
-// vec_unpack_X(vec_broadcast(%ret = repl_Y(...), %avl))
-static SDValue match_UnpackBroadcastRepl(SDNode *N, SDValue &AVL) {
-  PackElem UnpackElem;
-  SDValue UnpackedBroadcastV = match_UnpackBroadcast(N, UnpackElem, AVL);
-  if (!UnpackedBroadcastV)
-    return SDValue();
-  PackElem ReplElem;
-  SDValue ReplV = match_ReplLoHi(UnpackedBroadcastV, ReplElem);
-  if (!ReplV)
-    return SDValue();
-
-  return UnpackedBroadcastV;
-}
-
-static SDValue combineUnpackLoHi(CustomDAG &CDAG, SDNode *N,
-                                 VETargetLowering::DAGCombinerInfo &DCI) {
-  // Replace vec_unpack(vec_broadcast(repl_X(V)) with
-  // vec_broadcast(repl_X(V)) to enable folding.
-  SDValue AVL;
-  SDValue ReplV = match_UnpackBroadcastRepl(N, AVL);
-  if (!ReplV) {
-    // TODO Optimize U = unpack_X(pack(lo,hi)) -> lo|hi where 'U' only used by
-    // pack.
-    return SDValue();
-  }
-
-  // Directly replace vec_broadcast(repl_X(V)) with a plain vec_broadcast(V).
-  // Bits read from destination register are the same part as the value that is
-  // replicated? Remove replication!
-  PackElem UsedDestPart = getPackElemForVT(N->getValueType(0));
-  PackElem ReplPart;
-  match_ReplLoHi(ReplV, ReplPart);
-  if (UsedDestPart == ReplPart)
-    return CDAG.CreateBroadcast(N->getValueType(0), ReplV->getOperand(0), AVL);
-
-  // At least simplify to a plain packed broadcast.
-  return CDAG.CreateBroadcast(N->getValueType(0), ReplV, AVL);
-}
-
-SDValue VETargetLowering::combinePacking(SDNode *N, DAGCombinerInfo &DCI) const {
-  if (!OptimizePackedMode)
-    return SDValue();
-  // Perform this shortly before isel.
-  if (!DCI.isAfterLegalizeDAG())
-    return SDValue();
-
-  LLVM_DEBUG(dbgs() << "combinePacking: "; N->print(dbgs(), &DCI.DAG); dbgs() << "\n";);
-  CustomDAG CDAG(*this, DCI.DAG, N);
-  switch (N->getOpcode()) {
-    case VEISD::VEC_UNPACK_HI:
-    case VEISD::VEC_UNPACK_LO:
-      return combineUnpackLoHi(CDAG, N, DCI);
-
-    // case VEISD::VEC_PACK:
-    // case VEISD::VEC_SWAP:
-    default:
-      break;
-  }
-  return SDValue();
 }
