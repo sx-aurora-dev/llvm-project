@@ -17,13 +17,17 @@ Module &VPBuilder::getModule() const {
   return *Builder.GetInsertBlock()->getParent()->getParent();
 }
 
+Value *VPBuilder::getAllTrueMask() {
+  auto *boolTy = Builder.getInt1Ty();
+  auto *maskTy = VectorType::get(boolTy, StaticVectorLength);
+  return ConstantInt::getAllOnesValue(maskTy);
+}
+
 Value &VPBuilder::RequestPred() {
   if (Mask)
     return *Mask;
 
-  auto *boolTy = Builder.getInt1Ty();
-  auto *maskTy = VectorType::get(boolTy, StaticVectorLength);
-  return *ConstantInt::getAllOnesValue(maskTy);
+  return *getAllTrueMask();
 }
 
 Value &VPBuilder::RequestEVL() {
@@ -51,14 +55,23 @@ Value *VPBuilder::CreateVectorCopy(Instruction &Inst, ValArray VecOpArray) {
   }
 
   // TODO transfer alignment
+  // Simply ignore masking where it does not matter.
+  bool IgnoreMask = !Inst.mayHaveSideEffects();
 
   // construct VP vector operands (including pred and evl)
   SmallVector<Value *, 6> VecParams;
   for (size_t i = 0; i < Inst.getNumOperands() + 5; ++i) {
     if (MaskPosOpt && (i == (size_t)MaskPosOpt.getValue())) {
       // First operand of select is mask (singular exception)
-      if (VPID != Intrinsic::vp_select)
+      if (VPID != Intrinsic::vp_select) {
+        Value * VecMask = nullptr;
+        if (IgnoreMask)
+          VecMask = getAllTrueMask();
+        else 
+          VecMask = &RequestPred();
+
         VecParams.push_back(&RequestPred());
+      }
     }
     if (VLenPosOpt && (i == (size_t)VLenPosOpt.getValue())) {
       VecParams.push_back(&RequestEVL());

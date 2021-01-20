@@ -37,6 +37,8 @@ public:
   // The cannonical vector type for this \p ElementTy
   VectorType& getVectorType(Type &ElementTy);
 
+  Value* getAllTrueMask();
+
   // Predication context tracker
   VPBuilder &setMask(Value *_Mask) {
     Mask = _Mask;
