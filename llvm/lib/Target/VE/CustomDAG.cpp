@@ -98,7 +98,7 @@ bool IsVVPConversionOp(unsigned Opcode) {
 
 bool IsVVPReductionOp(unsigned Opcode) {
   switch (Opcode) {
-#define REGISTER_REDUCTION_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
+#define REGISTER_REDUCE_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.def"
     return true;
   }

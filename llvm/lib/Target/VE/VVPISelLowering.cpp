@@ -574,7 +574,7 @@ void VETargetLowering::initVPUActions() {
     }
 
     // Translate all ops with legal element types to VVP_* nodes
-#define ADD_VVP_OP(VVP_NAME, ISD_NAME)                                         \
+#define MAP_VVP_OP(VVP_NAME, ISD_NAME)                                         \
   setOperationAction(ISD::ISD_NAME, VT, Custom);
 #include "VVPNodes.def"
   }
@@ -939,9 +939,8 @@ VETargetLowering::lowerVVP_SCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
 TargetLowering::LegalizeAction
 VETargetLowering::getActionForExtendedType(unsigned Op, EVT VT) const {
   switch (Op) {
-#define ADD_VVP_OP(VVP_NAME, ISD_NAME)                                         \
-  case ISD::ISD_NAME:                                                          \
-  case VEISD::VVP_NAME:
+#define REGISTER_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
+#define MAP_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
 #include "VVPNodes.def"
     return Custom;
   default:
@@ -1998,24 +1997,6 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
   case ISD::SCALAR_TO_VECTOR:
     return lowerVVP_SCALAR_TO_VECTOR(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
-    // case ISD::VECREDUCE_OR:
-    // case ISD::VECREDUCE_AND:
-    // case ISD::VECREDUCE_XOR:
-
-  case ISD::MLOAD:
-    return lowerVVP_MLOAD(Op, DAG, VVPExpansionMode::ToNativeWidth);
-  case ISD::MSTORE:
-    return lowerVVP_MSTORE(Op, DAG);
-  case ISD::MSCATTER:
-  case ISD::MGATHER:
-    return lowerVVP_MGATHER_MSCATTER(Op, DAG, VVPExpansionMode::ToNativeWidth,
-                                 None);
-
-    // modify the return type of SETCC on vectors to v256i1
-    // case ISD::SETCC: return LowerSETCC(Op, DAG);
-
-    // case ISD::TRUNCATE: return LowerTRUNCATE(Op, DAG);
-
     ///// LLVM-VP --> vvp_* /////
 #define BEGIN_REGISTER_VP_SDNODE(VP_NAME, ...) case ISD::VP_NAME:
 #include "llvm/IR/VPIntrinsics.def"
@@ -2023,25 +2004,16 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
 
     ///// non-VP --> vvp_* with native type /////
     // Convert this standard vector op to VVP
+  case ISD::MLOAD:
+  case ISD::MSTORE:
   case ISD::SELECT:
-    // FIXME List all operation that correspond to a VVP operation here
-#define ADD_ICONV_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
-#define ADD_FPCONV_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
-#define ADD_UNARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
-#define ADD_BINARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
-#define ADD_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
-#define ADD_REDUCE_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
+#define MAP_VVP_OP(VVP_NAME, ISD_NAME) case ISD::ISD_NAME:
 #include "VVPNodes.def"
     return lowerToVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
     ///// Widen this VVP operation to the vector type /////
     // Use a native vector type for this VVP_* operation
-    // FIXME List all VVP ops with vector results here
-#define ADD_ICONV_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
-#define ADD_FPCONV_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
-#define ADD_UNARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
-#define ADD_BINARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
-#define ADD_TERNARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
+#define REGISTER_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.def"
 
   case VEISD::VEC_BROADCAST:
@@ -2052,7 +2024,6 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
   // "forget" about the narrowing
   case VEISD::VEC_NARROW:
     return Op->getOperand(0);
-    // case ISD::LOAD - is taking care of VVP widening.
   }
 }
 

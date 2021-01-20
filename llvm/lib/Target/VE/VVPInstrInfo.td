@@ -145,7 +145,10 @@ def vvp_fmul    : SDNode<"VEISD::VVP_FMUL",  SDTFPBinOpVVP>;     // x * y
 def vvp_fdiv    : SDNode<"VEISD::VVP_FDIV",  SDTFPBinOpVVP>;     // x / y
 def vvp_fminnum    : SDNode<"VEISD::VVP_FMINNUM",  SDTFPBinOpVVP>;     // min(x, y)
 def vvp_fmaxnum    : SDNode<"VEISD::VVP_FMAXNUM",  SDTFPBinOpVVP>;     // max(x, y)
-def vvp_ffma    : SDNode<"VEISD::VVP_FFMA",  SDTFPTernaryOpVVP>; // x + (y*z)
+def vvp_ffma    : SDNode<"VEISD::VVP_FFMA",  SDTFPTernaryOpVVP>; // (y*z) + x
+def vvp_ffms    : SDNode<"VEISD::VVP_FFMS",  SDTFPTernaryOpVVP>; // (y*z) - x
+// def vvp_ffmsn    : SDNode<"VEISD::VVP_FFMSN",  SDTFPTernaryOpVVP>; // (x - (y*z))
+// def vvp_ffman    : SDNode<"VEISD::VVP_FFMAN",  SDTFPTernaryOpVVP>; // -((y*z) + x)
 
 // select (OnT,OnF,SelM,Pivot) = (lane < Pivot && SelM[lane]) ? OnT[lane] : OnF[lane] 
 def vvp_select : SDNode<"VEISD::VVP_SELECT", SDTSelectVVP>;      
