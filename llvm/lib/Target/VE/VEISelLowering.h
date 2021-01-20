@@ -98,7 +98,7 @@ enum NodeType : unsigned {
   Wrapper,
 
 // VVP_* nodes.
-#define ADD_VVP_OP(VVP_NAME, ...) VVP_NAME,
+#define REGISTER_VVP_OP(VVP_NAME) VVP_NAME,
 #include "VVPNodes.def"
 };
 } // namespace VEISD

@@ -140,18 +140,6 @@ static bool isSETCC(unsigned OC) {
   }
 }
 
-/// \returns the VVP_* SDNode opcode corresponsing to \p OC.
-static Optional<unsigned> getVVPOpcode(unsigned OC) {
-  switch (OC) {
-#define ADD_VVP_OP(VVPNAME, SDNAME)                                            \
-  case VEISD::VVPNAME:                                                         \
-  case ISD::SDNAME:                                                            \
-    return VEISD::VVPNAME;
-#include "VVPNodes.def"
-  }
-  return None;
-}
-
 /// Load & Store Properties {
 static SDValue getLoadStoreChain(SDValue Op) {
   if (Op->getOpcode() == VEISD::VVP_LOAD) {
@@ -289,18 +277,6 @@ static SDValue getSplitPtrOffset(CustomDAG &CDAG, SDValue Ptr,
     return Ptr;
   return CDAG.getNode(ISD::ADD, MVT::i64,
                       {Ptr, CDAG.getConstant(ElemBytes, MVT::i64)});
-}
-
-static Optional<unsigned> GetVVPForVP(unsigned VPOC) {
-  switch (VPOC) {
-#define HANDLE_VP_TO_VVP(VP_ISD, VVP_VEISD)                                    \
-  case ISD::VP_ISD:                                                            \
-    return VEISD::VVP_VEISD;
-#include "VVPNodes.def"
-
-  default:
-    return None;
-  }
 }
 
 static SDValue PeekThroughCasts(SDValue Op) {
@@ -1179,7 +1155,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   // Use a scalar reducer.
-  if (IsVVPReduction(VVPOC)) {
+  if (IsVVPReductionOp(VVPOC)) {
     bool IsMaskReduction = IsMaskType(Op.getOperand(0).getValueType());
     // Scalar join.
     unsigned JoinOpcode = getScalarReductionOpcode(VVPOC, IsMaskReduction);
@@ -1327,17 +1303,8 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     return SDValue();
   }
 
-  ///// Translate to a VVP layer operation (VVP_* or VEC_*) /////
-  bool isTernaryOp = false;
-  bool isBinaryOp = false;
-  bool isUnaryOp = false;
-  bool isConvOp = false;
-  bool isReduceOp = false;
-
+  // Specialized code paths.
   switch (Op->getOpcode()) {
-  default:
-    return SDValue(); // default on this node
-
   case ISD::BUILD_VECTOR:
   case ISD::VECTOR_SHUFFLE:
     return lowerVectorShuffleOp(Op, DAG, Mode);
@@ -1358,44 +1325,18 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   case ISD::MGATHER:
   case ISD::MSCATTER:
     return lowerVVP_MGATHER_MSCATTER(Op, DAG, Mode);
-
-  case ISD::SELECT:
-    isTernaryOp = true;
-    break;
-
-#define ADD_UNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                                 \
-  case ISD::NATIVE_ISD:                                                        \
-    isUnaryOp = true;                                                          \
-    break;
-#define ADD_BINARY_VVP_OP(VVP_NAME, NATIVE_ISD)                                \
-  case ISD::NATIVE_ISD:                                                        \
-    isBinaryOp = true;                                                         \
-    break;
-#define ADD_TERNARY_VVP_OP(VVP_NAME, NATIVE_ISD)                               \
-  case ISD::NATIVE_ISD:                                                        \
-    isTernaryOp = true;                                                        \
-    break;
-
-#define ADD_ICONV_VVP_OP(VVP_NAME, NATIVE_ISD)                                 \
-  case ISD::NATIVE_ISD:                                                        \
-    isConvOp = true;                                                           \
-    break;
-#define ADD_FPCONV_VVP_OP(VVP_NAME, NATIVE_ISD)                                \
-  case ISD::NATIVE_ISD:                                                        \
-    isConvOp = true;                                                           \
-    break;
-
-#define ADD_REDUCE_VVP_OP(VVP_NAME, NATIVE_ISD)                                \
-  case ISD::NATIVE_ISD:                                                        \
-    isReduceOp = true;                                                         \
-    break;
-#include "VVPNodes.def"
   }
 
-  // Select VVP Op
-  Optional<unsigned> VVPOC = GetVVPOpcode(Op.getOpcode());
-  assert(VVPOC.hasValue() &&
-         "TODO implement this operation in the VVP isel layer");
+  auto VVPOC = GetVVPOpcode(Op.getOpcode());
+  if (!VVPOC)
+    return SDValue();
+
+  ///// Translate to a VVP layer operation (VVP_* or VEC_*) /////
+  bool isTernaryOp = IsVVPTernaryOp(*VVPOC);
+  bool isBinaryOp = IsVVPBinaryOp(*VVPOC);
+  bool isUnaryOp = IsVVPUnaryOp(*VVPOC);
+  bool isConvOp = IsVVPConversionOp(*VVPOC);
+  bool isReduceOp = IsVVPReductionOp(*VVPOC);
 
   // Is packed mode an option for this OC?
   if (WidenInfo.PackedMode && !SupportsPackedMode(VVPOC.getValue())) {
@@ -1758,12 +1699,12 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   EVT NewResVT = CDAG.legalizeVectorType(Op, Mode);
-  if (IsBinaryVVP(VVPOC)) {
+  if (IsVVPBinaryOp(VVPOC)) {
     // Use on-the-fly expansion for some binary operators.
     return CDAG.getLegalBinaryOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1], OpVec[2], OpVec[3]);
   }
 
-  if (IsVVPReduction(VVPOC)) {
+  if (IsVVPReductionOp(VVPOC)) {
     auto StartPos = getVVPReductionStartParamPos(VVPOC);
     if (!StartPos)
       return CDAG.getLegalReductionOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1],

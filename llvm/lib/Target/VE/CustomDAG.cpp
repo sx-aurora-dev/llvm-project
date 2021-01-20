@@ -52,28 +52,53 @@ PosOpt GetVVPOpcode(unsigned OpCode) {
   case ISD::VP_ID:                                                             \
     return VEISD::VVP_NAME;
 
-#define ADD_VVP_OP(VVP_NAME, NATIVE_ISD)                                       \
+#define MAP_VVP_OP(VVP_NAME, NATIVE_ISD)                                       \
   case ISD::NATIVE_ISD:                                                        \
     return VEISD::VVP_NAME;
 #include "VVPNodes.def"
   }
 }
 
-bool IsVVPReduction(unsigned Opcode) {
+bool IsVVPUnaryOp(unsigned Opcode) {
   switch (Opcode) {
-  default:
-    return false;
-
-#define ADD_REDUCE_VVP_OP(VVPID, ...)                                          \
-  case VEISD::VVPID:                                                           \
-    return true;
+#define REGISTER_UNARY_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.def"
+    return true;
   }
+  return false;
 }
 
-bool IsBinaryVVP(unsigned Opcode) {
+bool IsVVPBinaryOp(unsigned Opcode) {
   switch (Opcode) {
-#define ADD_BINARY_VVP_OP(VVP_NAME, ISD_NAME) case VEISD::VVP_NAME:
+#define REGISTER_BINARY_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
+#include "VVPNodes.def"
+    return true;
+  }
+  return false;
+}
+
+bool IsVVPTernaryOp(unsigned Opcode) {
+  switch (Opcode) {
+#define REGISTER_TERNARY_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
+#include "VVPNodes.def"
+    return true;
+  }
+  return false;
+}
+
+bool IsVVPConversionOp(unsigned Opcode) {
+  switch (Opcode) {
+#define REGISTER_ICONV_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
+#define REGISTER_FPCONV_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
+#include "VVPNodes.def"
+    return true;
+  }
+  return false;
+}
+
+bool IsVVPReductionOp(unsigned Opcode) {
+  switch (Opcode) {
+#define REGISTER_REDUCTION_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.def"
     return true;
   }
@@ -107,7 +132,7 @@ bool IsVVP(unsigned Opcode) {
   switch (Opcode) {
   default:
     return false;
-#define ADD_VVP_OP(VVP_NAME, NATIVE_ISD)                                       \
+#define REGISTER_VVP_OP(VVP_NAME)                                              \
   case VEISD::VVP_NAME:                                                        \
     return true;
 #include "VVPNodes.def"
@@ -197,6 +222,18 @@ PosOpt getReductionVectorParamPos(unsigned ISD) {
 }
 
 /// } Node Properties
+
+Optional<unsigned> GetVVPForVP(unsigned VPOC) {
+  switch (VPOC) {
+#define HANDLE_VP_TO_VVP(VP_ISD, VVP_VEISD)                                    \
+  case ISD::VP_ISD:                                                            \
+    return VEISD::VVP_VEISD;
+#include "VVPNodes.def"
+
+  default:
+    return None;
+  }
+}
 
 Optional<EVT> getIdiomaticType(SDNode *Op) {
   // For memory ops -> the transfered data type

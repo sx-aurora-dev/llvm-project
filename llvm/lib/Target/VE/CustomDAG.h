@@ -44,9 +44,14 @@ bool SupportsPackedMode(unsigned Opcode);
 
 bool IsVVPOrVEC(unsigned Opcode);
 bool IsVVP(unsigned Opcode);
-bool IsVVPReduction(unsigned Opcode);
 
-bool IsBinaryVVP(unsigned Opcode);
+bool IsVVPTernaryOp(unsigned Opcode);
+bool IsVVPBinaryOp(unsigned Opcode);
+bool IsVVPUnaryOp(unsigned Opcode);
+bool IsVVPConversionOp(unsigned VVPOC);
+bool IsVVPReductionOp(unsigned VVPOC);
+
+Optional<unsigned> GetVVPForVP(unsigned VPOC);
 
 // True, iff this is a VEC_UNPACK_LO/HI, VEC_SWAP or VEC_PACK.
 static inline bool IsPackingSupportOpcode(unsigned Opcode) {
@@ -371,9 +376,9 @@ struct CustomDAG {
 
   SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT,
                         ArrayRef<SDValue> Ops) const {
-    if (IsVVPReduction(VVPOpcode) && !getVVPReductionStartParamPos(VVPOpcode))
+    if (IsVVPReductionOp(VVPOpcode) && !getVVPReductionStartParamPos(VVPOpcode))
       return getLegalReductionOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2]);
-    if (IsBinaryVVP(VVPOpcode))
+    if (IsVVPBinaryOp(VVPOpcode))
       return getLegalBinaryOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
                                  Ops[3]);
     return getNode(VVPOpcode, ResVT, Ops);

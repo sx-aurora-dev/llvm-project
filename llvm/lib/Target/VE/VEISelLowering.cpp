@@ -1042,7 +1042,7 @@ const char *VETargetLowering::getTargetNodeName(unsigned Opcode) const {
     TARGET_NODE_CASE(REPL_F32)
     TARGET_NODE_CASE(REPL_I32)
     // Register the VVP_* SDNodes.
-#define ADD_VVP_OP(VVP_NAME, ...) TARGET_NODE_CASE(VVP_NAME)
+#define REGISTER_VVP_OP(VVP_NAME) TARGET_NODE_CASE(VVP_NAME)
 #include "VVPNodes.def"
   }
   return nullptr;
