@@ -54,6 +54,9 @@ let Namespace = "VE" in {
   // TODO sub register description for vm512 may be inaccurate
   def sub_vm_even : SubRegIndex<256, -1>;       // k*128 + 64 bit packs (even slots)
   def sub_vm_odd  : SubRegIndex<256, -1>;       // 64 + k*128 + 64 bit packs (odd slots)
+  // Over-packed register.
+  def sub_pack_even : SubRegIndex<16384, -1>;       // k*128 + 64 bit packs (even slots)
+  def sub_pack_odd  : SubRegIndex<16384, -1>;       // 64 + k*128 + 64 bit packs (odd slots)
   def AsmName     : RegAltNameIndex;
 }
 
@@ -141,13 +144,17 @@ foreach I = 0-31 in
                    !cast<VEReg>("SX"#!add(!shl(I,1),1))],
                   ["s"#!shl(I,1)]>;
 
-// (Virtual) over-packed vector registers - 64 bits wide 512 elements
-foreach I = 0-31 in
-  def VP#I : VEVecReg<I, "vp"#I, [], ["vp"#I]>, DwarfRegNum<[!add(64,I)]>;
-
 // Vector registers - 64 bits wide 256 elements
 foreach I = 0-63 in
   def V#I : VEVecReg<I, "v"#I, [], ["v"#I]>, DwarfRegNum<[!add(64,I)]>;
+
+// (Virtual) over-packed vector registers - 64 bits wide 512 elements
+let SubRegIndices = [sub_pack_even, sub_pack_odd], CoveredBySubRegs = 1 in
+foreach I = 0-31 in
+  def VP#I : VEVecReg<!shl(I,1), "vp"#I,
+                      [!cast<VEVecReg>("V"#!shl(I,1)),
+                       !cast<VEVecReg>("V"#!add(!shl(I,1),1))],
+                      ["vp"#!shl(I,1)]>;
 
 // Vector Index Register
 def VIX : VEVecReg<255, "vix", [], ["vix"]>;

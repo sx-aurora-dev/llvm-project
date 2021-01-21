@@ -317,8 +317,11 @@ void VETargetLowering::initRegisterClasses_VVP() {
       addRegisterClass(VecVT, &VE::V64RegClass);
 
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
-  if (Subtarget->hasPackedMode())
+  if (Subtarget->hasPackedMode()) {
+    addRegisterClass(MVT::v512f64, &VE::VPRegClass);
+    addRegisterClass(MVT::v512i64, &VE::VPRegClass);
     addRegisterClass(MVT::v512i1, &VE::VM512RegClass);
+  }
   return;
 }
 
