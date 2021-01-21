@@ -69,6 +69,7 @@ const uint32_t *VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
   switch (CC) {
   case CallingConv::Fast:
     // Being explicit (same as standard CC).
+    return CSR_RegCall_RegMask;
   default:
     // NCC default CC does not explictly mention vector (mask) regs - assume
     // that they are clobbered
