@@ -34,6 +34,16 @@ template <> Packing getPackingForMaskBits(const PackedLaneBits MB) {
 
 /// } Packing
 
+static SDValue getSplatValue(SDNode *N) {
+  if (auto *BuildVec = dyn_cast<BuildVectorSDNode>(N)) {
+    return BuildVec->getSplatValue();
+  }
+  if (N->getOpcode() != VEISD::VEC_BROADCAST)
+    return SDValue();
+
+  return N->getOperand(0);
+}
+
 PosOpt GetVVPOpcode(unsigned OpCode) {
   if (IsVVP(OpCode))
     return OpCode;
@@ -362,16 +372,6 @@ SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   auto ReplOp = DAG.getNode(ReplOC, DL, MVT::i64, ScaOp);
   // auto LegalVecTy = MVT::getVectorVT(MVT::i64, Ty.getVectorNumElements());
   return DAG.getNode(VEISD::VEC_BROADCAST, DL, VT, {ReplOp, VLOp});
-}
-
-static SDValue getSplatValue(SDNode *N) {
-  if (auto *BuildVec = dyn_cast<BuildVectorSDNode>(N)) {
-    return BuildVec->getSplatValue();
-  }
-  if (N->getOpcode() != VEISD::VEC_BROADCAST)
-    return SDValue();
-
-  return N->getOperand(0);
 }
 
 bool IsAllTrueMask(SDValue Op) {
@@ -893,9 +893,21 @@ SDValue CustomDAG::createIREM(bool IsSigned, EVT ResVT, SDValue Dividend,
   return getNode(VEISD::VVP_SUB, ResVT, {Dividend, Mul, Mask, AVL});
 }
 
+static bool match_FPOne(SDValue V) {
+  SDValue S = getSplatValue(V.getNode());
+  if (S) return match_FPOne(S);
+
+  auto FPConst = dyn_cast<ConstantFPSDNode>(V);
+  if (!FPConst) return false;
+
+  return FPConst->isExactlyValue(1.0);
+}
+
 SDValue CustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
                                        SDValue B, SDValue Mask,
-                                       SDValue AVL) const {
+                                       SDValue AVL, SDNodeFlags Flags) const {
+  if (VVPOpcode == VEISD::VVP_FDIV && Flags.hasAllowReciprocal() && match_FPOne(A))
+    return getNode(VEISD::VVP_FRCP, ResVT, {B, Mask, AVL}, Flags);
   // On-the-fly expansion of unsupported vector ops.
   if (VVPOpcode == VEISD::VVP_UREM)
     return createIREM(false, ResVT, A, B, Mask, AVL);

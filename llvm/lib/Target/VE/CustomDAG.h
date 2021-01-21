@@ -245,17 +245,28 @@ struct CustomDAG {
                        SDValue MaskV, SDValue PivotV) const;
 
   /// getNode {
-  SDValue getNode(unsigned OC, SDVTList VTL, ArrayRef<SDValue> OpV) const {
-    return DAG.getNode(OC, DL, VTL, OpV);
+  SDValue getNode(unsigned OC, SDVTList VTL, ArrayRef<SDValue> OpV,
+                  Optional<SDNodeFlags> Flags = None) const {
+    auto N = DAG.getNode(OC, DL, VTL, OpV);
+    if (Flags)
+      N->setFlags(*Flags);
+    return N;
   }
 
-  SDValue getNode(unsigned OC, ArrayRef<EVT> ResVT,
-                  ArrayRef<SDValue> OpV) const {
-    return DAG.getNode(OC, DL, ResVT, OpV);
+  SDValue getNode(unsigned OC, ArrayRef<EVT> ResVT, ArrayRef<SDValue> OpV,
+                  Optional<SDNodeFlags> Flags = None) const {
+    auto N = DAG.getNode(OC, DL, ResVT, OpV);
+    if (Flags)
+      N->setFlags(*Flags);
+    return N;
   }
 
-  SDValue getNode(unsigned OC, EVT ResVT, ArrayRef<SDValue> OpV) const {
-    return DAG.getNode(OC, DL, ResVT, OpV);
+  SDValue getNode(unsigned OC, EVT ResVT, ArrayRef<SDValue> OpV,
+                  Optional<SDNodeFlags> Flags = None) const {
+    auto N = DAG.getNode(OC, DL, ResVT, OpV);
+    if (Flags)
+      N->setFlags(*Flags);
+    return N;
   }
   /// } getNode
 
@@ -371,7 +382,9 @@ struct CustomDAG {
   SDValue createTargetAVL(VVPWideningInfo WidenInfo) const;
 
   // Create this binary operator, expanding it on the fly.
-  SDValue getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A, SDValue B, SDValue Mask, SDValue AVL) const;
+  SDValue getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
+                              SDValue B, SDValue Mask, SDValue AVL,
+                              SDNodeFlags Flags = SDNodeFlags()) const;
   SDValue getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV, SDValue Mask, SDValue AVL) const;
 
   SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT,

@@ -131,7 +131,6 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
       return CDAG.getNode(Opcode, ResVT, {VY, VZ, VW, Mask, AVL});
     }
   } break;
-
   default:
     break;
   }

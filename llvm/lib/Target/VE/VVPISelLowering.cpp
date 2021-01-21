@@ -1364,8 +1364,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   if (isBinaryOp) {
     assert(VVPOC.hasValue());
     auto VVPN =  CDAG.getLegalBinaryOpVVP(*VVPOC, ResVecTy, LegalOperands[0], LegalOperands[1],
-                                    TargetMasks.Mask, TargetMasks.AVL);
-    VVPN->setFlags(Op->getFlags());
+                                    TargetMasks.Mask, TargetMasks.AVL, Op->getFlags());
     return VVPN;
   }
 
@@ -1658,6 +1657,9 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   // Split into two v256 ops?
+  // FIXME:
+  //   Some packed patterns ARE supported (eg PVRCP, PVRSQR, ..)
+  //   We split those at the moment.
   if (WidenInfo.PackedMode && !SupportsPackedMode(OCOpt.getValue())) {
     return ExpandToSplitVVP(Op, DAG, Mode);
   }
@@ -1701,8 +1703,8 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   EVT NewResVT = CDAG.legalizeVectorType(Op, Mode);
   if (IsVVPBinaryOp(VVPOC)) {
     // Use on-the-fly expansion for some binary operators.
-    auto VVPN =  CDAG.getLegalBinaryOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1], OpVec[2], OpVec[3]);
-    VVPN->setFlags(Op->getFlags());
+    auto VVPN = CDAG.getLegalBinaryOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1],
+                                         OpVec[2], OpVec[3], Op->getFlags());
     return VVPN;
   }
 

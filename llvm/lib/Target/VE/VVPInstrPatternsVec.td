@@ -259,6 +259,7 @@ defm : VectorBinaryArith_ShortLong<c_vvp_xor, i64, v256i64, "VXOR", i32, v256i32
 defm : VectorBinaryArith_ShortLong<c_vvp_or,  i64, v256i64, "VOR",  i32, v256i32, "PVORLO">;
 
 // Floating-point arithmetic (256 elements)
+defm : VectorUnaryArith_ShortLong<vvp_frcp, f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
 defm : VectorUnaryArith_ShortLong<vvp_fsqrt, f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
 defm : VectorBinaryArith_ShortLong<c_vvp_fadd, f64, v256f64, "VFADDD", f32, v256f32, "PVFADDUP">;
 defm : VectorBinaryArith_ShortLong<vvp_fsub,  f64, v256f64, "VFSUBD", f32, v256f32, "PVFSUBUP">;
@@ -404,6 +405,8 @@ defm : VectorShiftArith<vvp_shl, i64, v512i32, v512i1, "PVSLL">;
 
 
 // Floating-point arithmetic (512 elements)
+defm : VectorUnaryArith_Base<vvp_frcp,    i64, v512f32, v512i1, "PVRCP">;
+
 defm : VectorBinaryArith_Base<c_vvp_fadd,    i64, v512f32, v512i1, "PVFADD">;
 defm : VectorBinaryArith_Base<c_vvp_fmul,    i64, v512f32, v512i1, "PVFMUL">;
 defm : VectorBinaryArith_Base<vvp_fsub,     i64, v512f32, v512i1, "PVFSUB">;
