@@ -58,6 +58,11 @@ PosOpt GetVVPOpcode(unsigned OpCode) {
   case ISD::SELECT: // additional alias next to VSELECT
     return VEISD::VVP_SELECT;
 
+  case ISD::MLOAD:
+    return VEISD::VVP_LOAD;
+  case ISD::MSTORE:
+    return VEISD::VVP_STORE;
+
 #define HANDLE_VP_TO_VVP(VP_ID, VVP_NAME)                                      \
   case ISD::VP_ID:                                                             \
     return VEISD::VVP_NAME;

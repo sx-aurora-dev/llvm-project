@@ -39,6 +39,11 @@ def CC_VE_C_Stack: CallingConv<[
 ]>;
 
 def CC_VE_RegCall : CallingConv<[
+  // Virtual packed registers.
+  CCIfType<[v512f64, v512i64],
+           CCAssignToRegWithShadow<[VP0, VP1, VP2, VP3],
+                                   [V0,  V2,  V4,  V6]>>,
+
   // vector --> generic vector registers
   CCIfType<[v2i32,   v2i64,   v2f32,   v2f64,
             v4i32,   v4i64,   v4f32,   v4f64,
@@ -170,6 +175,11 @@ def RetCC_VE_C : CallingConv<[
 
 ///// fastcc - fast vreg passing /////
 def CC_VE_Fast : CallingConv<[
+  // Virtual packed registers.
+  CCIfVPU<CCIfType<[v512f64, v512i64],
+           CCAssignToRegWithShadow<[VP0, VP1, VP2, VP3],
+                                   [V0,  V2,  V4,  V6]>>>,
+
   // vector --> generic vector registers
   CCIfVPU<CCIfType<[v256i32, v256f32, v256i64, v256f64,
             v512i32, v512f32],
@@ -191,6 +201,11 @@ def CC_VE_Fast : CallingConv<[
 ]>;
 
 def RetCC_VE_Fast : CallingConv<[
+  // Virtual packed registers.
+  CCIfVPU<CCIfType<[v512f64, v512i64],
+           CCAssignToRegWithShadow<[VP0, VP1, VP2, VP3],
+                                   [V0,  V2,  V4,  V6]>>>,
+
   // vector --> generic vector registers
   CCIfVPU<CCIfType<[v256i32, v256f32, v256i64, v256f64],
            CCAssignToReg<[V0, V1, V2, V3, V4, V5, V6, V7]>>>,

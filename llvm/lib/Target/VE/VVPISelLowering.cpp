@@ -305,8 +305,10 @@ static SDValue PeekForMask(SDValue Op) {
 }
 
 static const MVT AllVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
-                                   MVT::v256f32, MVT::v512f32, MVT::v256f64};
-static const MVT PackedVectorVTs[] = {MVT::v512i32, MVT::v512f32};
+                                   MVT::v256f32, MVT::v512f32, MVT::v256f64,
+                                   MVT::v512f64, MVT::v512i64};
+static const MVT PackedVectorVTs[] = {MVT::v512i32, MVT::v512f32, MVT::v512f64,
+                                      MVT::v512i64};
 
 void VETargetLowering::initRegisterClasses_VVP() {
   // VVP-based backend.
@@ -1199,6 +1201,7 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
   unsigned VectorWidth;
   if (OpVectorLength > StandardVectorWidth) {
     // packed mode only available for 32bit elements up to 512 elements
+    // (virtually also for 64bit elements).
     EVT RawElemTy = OpVecVT.getVectorElementType();
     if (!RawElemTy.isSimple()) {
       LLVM_DEBUG(dbgs() << "\tToNative: Not a simple element type\n";);
@@ -1206,7 +1209,8 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
     }
     MVT ElemTy = RawElemTy.getSimpleVT();
 
-    if ((ElemTy != MVT::i1 && ElemTy != MVT::i32 && ElemTy != MVT::f32) ||
+    if ((ElemTy != MVT::i1 && ElemTy != MVT::i32 && ElemTy != MVT::f32 &&
+         ElemTy != MVT::f64 && ElemTy != MVT::i64) ||
         (OpVectorLength > PackedWidth)) {
       LLVM_DEBUG(dbgs() << "\tToNative: Over-sized data type\n";);
       return VVPWideningInfo();
@@ -1285,14 +1289,10 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   // VP -> VVP expansion
-  if (Op->isVP()) {
+  if (Op->isVP())
     return lowerVPToVVP(Op, DAG, Mode);
-  }
 
   ///// Decide for a vector width /////
-  // This also takes care of splitting
-  // TODO improve packed matching logic
-  // Switch to packed mode (TODO where appropriate)
   CustomDAG CDAG(*this, DAG, Op);
   VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
 
@@ -1301,7 +1301,14 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     return SDValue();
   }
 
-  // Specialized code paths.
+  // (64bit) packed required -> split!
+  EVT ElemVT = OpVecTy.getVectorElementType();
+  const bool IsOverPacked =
+      ElemVT.getScalarSizeInBits() > 32 && WidenInfo.PackedMode;
+  if (IsOverPacked)
+    return ExpandToSplitVVP(Op, DAG, Mode);
+
+  // Specialized code paths for normal or (32bit) packed.
   switch (Op->getOpcode()) {
   case ISD::BUILD_VECTOR:
   case ISD::VECTOR_SHUFFLE:
@@ -1329,17 +1336,16 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   if (!VVPOC)
     return SDValue();
 
+  /// (32bit) packed mode not support -> split!
+  if (WidenInfo.PackedMode && !SupportsPackedMode(*VVPOC))
+    return ExpandToSplitVVP(Op, DAG, Mode);
+
   ///// Translate to a VVP layer operation (VVP_* or VEC_*) /////
   bool isTernaryOp = IsVVPTernaryOp(*VVPOC);
   bool isBinaryOp = IsVVPBinaryOp(*VVPOC);
   bool isUnaryOp = IsVVPUnaryOp(*VVPOC);
   bool isConvOp = IsVVPConversionOp(*VVPOC);
   bool isReduceOp = IsVVPReductionOp(*VVPOC);
-
-  // Is packed mode an option for this OC?
-  if (WidenInfo.PackedMode && !SupportsPackedMode(VVPOC.getValue())) {
-    return ExpandToSplitVVP(Op, DAG, Mode);
-  }
 
   // Generate a mask and an AVL
   auto TargetMasks = CDAG.createTargetMask(WidenInfo, SDValue(), SDValue());

@@ -141,6 +141,10 @@ foreach I = 0-31 in
                    !cast<VEReg>("SX"#!add(!shl(I,1),1))],
                   ["s"#!shl(I,1)]>;
 
+// (Virtual) over-packed vector registers - 64 bits wide 512 elements
+foreach I = 0-31 in
+  def VP#I : VEVecReg<I, "vp"#I, [], ["vp"#I]>, DwarfRegNum<[!add(64,I)]>;
+
 // Vector registers - 64 bits wide 256 elements
 foreach I = 0-63 in
   def V#I : VEVecReg<I, "v"#I, [], ["v"#I]>, DwarfRegNum<[!add(64,I)]>;
@@ -183,6 +187,10 @@ def F128 : RegisterClass<"VE", [f128], 128,
                         (add (sequence "Q%u", 0, 3),
                              (sequence "Q%u", 17, 31),
                              (sequence "Q%u", 4, 16))>;
+
+// Over-packed register type that does not exist in the ISA.
+// This allows us to specify a custom layout (odd, even) from this type to V64.
+def VP: RegisterClass<"VE", [v512f64, v512i64], 32, (add (sequence "VP%u", 0, 31))>;
 
 // Fixed-SIMD isel patterns require all vector types to be present.
 def V64 : RegisterClass<"VE",
