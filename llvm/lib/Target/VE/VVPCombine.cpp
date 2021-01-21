@@ -58,7 +58,7 @@ static bool match_FFMA(SDNode *Root, SDValue &VY, SDValue &VZ, SDValue &VW,
 
   // Detect contractable FMUL leaf.
   int MulIdx = match_SomeOperand(Root, VEISD::VVP_FMUL, [](SDValue Op) {
-    return Op->getFlags().hasAllowContract();
+    return Op->hasOneUse() && Op->getFlags().hasAllowContract();
   });
   if (MulIdx < 0)
     return false;
@@ -83,7 +83,7 @@ static bool match_FFMS(SDNode *Root, SDValue &VY, SDValue &VZ, SDValue &VW,
 
   // Detect contractable FMUL leaf.
   int MulIdx = match_SomeOperand(Root, VEISD::VVP_FMUL, [](SDValue Op) {
-    return Op->getFlags().hasAllowContract();
+    return Op->hasOneUse() && Op->getFlags().hasAllowContract();
   });
   if (MulIdx < 0)
     return false;
