@@ -160,7 +160,7 @@ namespace llvm {
       v64f64         = 105,  //   64 x f64
       v128f64        = 106,  //  128 x f64
       v256f64        = 107,  //  256 x f64
-      v512f64        = 108,  //  256 x f64
+      v512f64        = 108,  //  512 x f64
 
       FIRST_FP_FIXEDLEN_VECTOR_VALUETYPE = v2f16,
       LAST_FP_FIXEDLEN_VECTOR_VALUETYPE = v512f64,
