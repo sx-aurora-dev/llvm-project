@@ -370,6 +370,16 @@ static void copyPhysSubRegs(MachineBasicBlock &MBB,
     MovMI->addRegisterKilled(SrcReg, TRI, true);
 }
 
+MachineInstrBuilder VEInstrInfo::emitVectorRegisterCopy(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator I, const DebugLoc &DL,
+    MCRegister DestReg, MCRegister SrcReg, bool KillSrc,
+    MCRegister AVLReg) const {
+  return BuildMI(MBB, I, DL, get(VE::VORmvl), DestReg)
+      .addImm(M1(0)) // Represent (0)1.
+      .addReg(SrcReg, getKillRegState(KillSrc))
+      .addReg(AVLReg, getKillRegState(true));
+}
+
 void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I, const DebugLoc &DL,
                               MCRegister DestReg, MCRegister SrcReg,
@@ -382,10 +392,23 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     return;
 #endif
 
+  const Register AVLTmpReg = VE::SW16;
+
   if (IsAliasOfSX(SrcReg) && IsAliasOfSX(DestReg)) {
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
         .addReg(SrcReg, getKillRegState(KillSrc))
         .addImm(0);
+  } else if (VE::VPRegClass.contains(DestReg, SrcReg)) {
+    BuildMI(MBB, I, DL, get(VE::LEAzii), AVLTmpReg)
+        .addImm(0)
+        .addImm(0)
+        .addImm(256);
+
+    for (unsigned Part : {VE::sub_pack_even, VE::sub_pack_odd})
+      emitVectorRegisterCopy(MBB, I, DL, TRI->getSubReg(DestReg, Part),
+                             TRI->getSubReg(SrcReg, Part), KillSrc, AVLTmpReg);
+
+    // MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true); // FIXME: required?
   } else if (VE::V64RegClass.contains(DestReg, SrcReg)) {
     // Generate following instructions
     //   %sw16 = LEA32zii 256
@@ -393,17 +416,14 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     // TODO: reuse a register if vl is already assigned to a register
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
-    Register TmpReg = VE::SX16;
-    Register SubTmp = TRI->getSubReg(TmpReg, VE::sub_i32);
-    BuildMI(MBB, I, DL, get(VE::LEAzii), TmpReg)
+    // Register AVLReg = TRI->getSubReg(TmpReg, VE::sub_i32);
+    BuildMI(MBB, I, DL, get(VE::LEAzii), AVLTmpReg)
         .addImm(0)
         .addImm(0)
         .addImm(256);
-    MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::VORmvl), DestReg)
-                                  .addImm(M1(0)) // Represent (0)1.
-                                  .addReg(SrcReg, getKillRegState(KillSrc))
-                                  .addReg(SubTmp, getKillRegState(true));
-    MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
+
+    emitVectorRegisterCopy(MBB, I, DL, DestReg, SrcReg, KillSrc, AVLTmpReg);
+    // MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
   } else if (VE::VMRegClass.contains(DestReg, SrcReg)) {
     BuildMI(MBB, I, DL, get(VE::ANDMmm), DestReg)
         .addReg(VE::VM0)
