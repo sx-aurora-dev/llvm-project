@@ -1095,6 +1095,12 @@ static unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask) {
   abort();
 }
 
+static bool IgnoreOperandForVVPLowering(const SDNode * N, unsigned OpIdx) {
+  if (OpIdx == 1 && (N->getOpcode() == ISD::FP_ROUND))
+     return true;
+  return false;
+}
+
 SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
                                            VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "ExpandToSplitVVP: "; Op->print(dbgs()); dbgs() << "\n");
@@ -1140,6 +1146,10 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
       if (OpV == PackedAVL)
         continue;
       if (OpV == PackedMask)
+        continue;
+
+      // Ignore some metataoperands.
+      if (IgnoreOperandForVVPLowering(Op.getNode(), i))
         continue;
 
       if (OpV.getValueType() == MVT::Other) {
