@@ -53,12 +53,23 @@ define fastcc i64 @extract_ri8_v256i64(<256 x i64> %v) {
   ret i64 %ret
 }
 
-define fastcc i64 @extract_ri_v512i64(<512 x i64> %v) {
-; CHECK-LABEL: extract_ri_v512i64:
+define fastcc i64 @extract_ri_v512i64_even(<512 x i64> %v) {
+; CHECK-LABEL: extract_ri_v512i64_even:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lvs %s0, %v1(116)
+; CHECK-NEXT:    lea %s0, 186
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = extractelement <512 x i64> %v, i32 372
+  ret i64 %ret
+}
+
+define fastcc i64 @extract_ri_v512i64_odd(<512 x i64> %v) {
+; CHECK-LABEL: extract_ri_v512i64_odd:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s0, 186
+; CHECK-NEXT:    lvs %s0, %v1(%s0)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %ret = extractelement <512 x i64> %v, i32 373
   ret i64 %ret
 }
 
@@ -147,12 +158,23 @@ define fastcc double @extract_ri8_v256f64(<256 x double> %v) {
   ret double %ret
 }
 
-define fastcc double @extract_ri_v512f64(<512 x double> %v) {
-; CHECK-LABEL: extract_ri_v512f64:
+define fastcc double @extract_ri_v512f64_even(<512 x double> %v) {
+; CHECK-LABEL: extract_ri_v512f64_even:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lvs %s0, %v1(116)
+; CHECK-NEXT:    lea %s0, 186
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = extractelement <512 x double> %v, i32 372
+  ret double %ret
+}
+
+define fastcc double @extract_ri_v512f64_odd(<512 x double> %v) {
+; CHECK-LABEL: extract_ri_v512f64_odd:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s0, 186
+; CHECK-NEXT:    lvs %s0, %v1(%s0)
+; CHECK-NEXT:    b.l.t (, %s10)
+  %ret = extractelement <512 x double> %v, i32 373
   ret double %ret
 }
 

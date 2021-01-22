@@ -1862,11 +1862,20 @@ SDValue VETargetLowering::lowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const {
                      {V, InverseA, Mask, Avl});
 }
 
+static PackElem getPartForLane(unsigned ElemIdx) {
+  return (ElemIdx % 2 == 0) ? PackElem::Lo : PackElem::Hi;
+}
+
+static PackElem getOtherPart(PackElem Part) {
+  return Part == PackElem::Lo ? PackElem::Hi : PackElem::Lo;
+}
+
 SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
                                                  SelectionDAG &DAG) const {
   assert(Op.getOpcode() == ISD::INSERT_VECTOR_ELT && "Unknown opcode!");
 
   // Lowering to VM_INSERT
+  EVT VecVT = Op.getValueType();
   SDValue SrcV = Op.getOperand(0);
   SDValue ElemV = Op.getOperand(1);
   SDValue IndexV = Op.getOperand(2);
@@ -1877,6 +1886,37 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
     return CDAG.CreateInsertMask(ActualMaskV, ElemV, IndexV);
   }
 
+  // Overpacked operation.
+  if (VecVT == MVT::v512i64 || VecVT == MVT::v512f64) {
+    if (!isa<ConstantSDNode>(IndexV)) {
+      errs() << "TODO: Cannot lower dynamic index element insert!\n";
+      abort();
+    }
+    uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
+    auto Part = getPartForLane(ConstIdx);
+    CustomDAG CDAG(*this, DAG, Op);
+
+    // Meaningful AVL, unused in codegen.
+    SDValue AVL = CDAG.getConstEVL(256);
+
+    // Split into part to keep and part to modify.
+    auto PartVT = (VecVT == MVT::v512i64) ? MVT::v256i64 : MVT::v256f64;
+    auto UnpackedMod = CDAG.CreateUnpack(PartVT, SrcV, Part, AVL);
+    auto UnpackedKeep =
+        CDAG.CreateUnpack(PartVT, SrcV, getOtherPart(Part), AVL);
+
+    // Insert into subreg.
+    auto PackIdx = CDAG.getConstant(ConstIdx / 2, IndexV.getValueType());
+    auto PartInsert = CDAG.getNode(ISD::INSERT_VECTOR_ELT, PartVT,
+                                   {UnpackedMod, ElemV, PackIdx});
+    auto LoweredInsert = lowerSIMD_INSERT_VECTOR_ELT(PartInsert, DAG);
+
+    // Re-package.
+    SDValue NewLo = Part == PackElem::Lo ? LoweredInsert : UnpackedKeep;
+    SDValue NewHi = Part == PackElem::Hi ? LoweredInsert : UnpackedKeep;
+    return CDAG.CreatePack(VecVT, NewLo, NewHi, AVL);
+  }
+
   return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
 }
 
@@ -1884,15 +1924,10 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
                                                   SelectionDAG &DAG) const {
   SDValue SrcV = Op->getOperand(0);
   SDValue IndexV = Op->getOperand(1);
-
-  SDValue MaskV = PeekForMask(SrcV);
-
-  // Dynamic extraction or packed extract.
-  if (!MaskV)
-    return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
+  EVT VecVT = SrcV.getValueType();
 
   // Lowering to VM_EXTRACT
-  if (MaskV) {
+  if (SDValue MaskV = PeekForMask(SrcV)) {
     auto IndexC = dyn_cast<ConstantSDNode>(IndexV);
     // assert(IndexC && "Mask extraction at dynamic offset not implemented!");
     if (!IndexC)
@@ -1930,8 +1965,33 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
     return CDAG.DAG.getAnyExtOrTrunc(ResV, CDAG.DL, Op.getValueType());
   }
 
-  // Extraction is legal for other V64 types.
-  return Op;
+  // Overpacked operation.
+  if (VecVT == MVT::v512i64 || VecVT == MVT::v512f64) {
+    if (!isa<ConstantSDNode>(IndexV)) {
+      errs() << "TODO: Cannot lower dynamic index element extract!\n";
+      abort();
+    }
+    uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
+    auto Part = getPartForLane(ConstIdx);
+    CustomDAG CDAG(*this, DAG, Op);
+
+    // Meaningful AVL, unused in codegen.
+    SDValue AVL = CDAG.getConstEVL(256);
+
+    // Split-off part to extract from.
+    auto PartVT = (VecVT == MVT::v512i64) ? MVT::v256i64 : MVT::v256f64;
+    auto UnpackedMod = CDAG.CreateUnpack(PartVT, SrcV, Part, AVL);
+
+    // Extract from subreg.
+    auto PackIdx = CDAG.getConstant(ConstIdx / 2, IndexV.getValueType());
+    SDValue ExtractFromPart = CDAG.getNode(
+        ISD::EXTRACT_VECTOR_ELT, Op.getValueType(), {UnpackedMod, PackIdx});
+
+    return lowerSIMD_EXTRACT_VECTOR_ELT(ExtractFromPart, DAG);
+  }
+
+  // Dynamic extraction or packed extract.
+  return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
 }
 
 static bool getUniqueInsertion(SDNode *N, unsigned &UniqueIdx) {
