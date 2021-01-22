@@ -1007,6 +1007,10 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
       UpperPartAVL = SplitTM.AVL;
     }
 
+    // Drop the mask.
+    if (OptimizeVectorMemory)
+      SplitTM.Mask = CDAG.createUniformConstMask(Packing::Normal, true);
+
     // Attach non-predicating value operands
     SmallVector<SDValue, 4> OpVec;
 
