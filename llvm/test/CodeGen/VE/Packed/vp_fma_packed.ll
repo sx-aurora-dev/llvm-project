@@ -79,3 +79,106 @@ define fastcc <512 x float> @test_vp_ffma_vvr_512f32(<512 x float> %i0, <512 x f
 
 declare <512 x float> @llvm.vp.fadd.v512f32(<512 x float>, <512 x float>, <512 x i1>, i32)
 declare <512 x float> @llvm.vp.fmul.v512f32(<512 x float>, <512 x float>, <512 x i1>, i32)
+
+;;; 512 x double
+
+define fastcc <512 x double> @test_vp_ffma_vvv_512f64(<512 x double> %i0, <512 x double> %i1, <512 x double> %i2, <512 x i1> %m, i32 %n) {
+; CHECK-LABEL: test_vp_ffma_vvv_512f64:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s0
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vfmad.d %v7, %v5, %v1, %v3, %vm3
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vfmad.d %v6, %v4, %v0, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v6
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v7
+; CHECK-NEXT:    b.l.t (, %s10)
+  %mul = call contract <512 x double> @llvm.vp.fmul.v512f64(<512 x double> %i0, <512 x double> %i1, <512 x i1> %m, i32 %n)
+  %fma = call contract <512 x double> @llvm.vp.fadd.v512f64(<512 x double> %mul, <512 x double> %i2, <512 x i1> %m, i32 %n)
+  ret <512 x double> %fma
+}
+
+define fastcc <512 x double> @test_vp_ffma_rvv_512f64(double %s0, <512 x double> %i1, <512 x double> %i2, <512 x i1> %m, i32 %n) {
+; CHECK-LABEL: test_vp_ffma_rvv_512f64:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    srl %s2, %s2, 1
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vfmad.d %v5, %v3, %s0, %v1, %vm3
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vfmad.d %v4, %v2, %s0, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v4
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v5
+; CHECK-NEXT:    b.l.t (, %s10)
+  %b0 = insertelement <512 x double> undef, double %s0, i32 0
+  %i0 = shufflevector <512 x double> %b0, <512 x double> poison, <512 x i32> zeroinitializer
+  %mul = call contract <512 x double> @llvm.vp.fmul.v512f64(<512 x double> %i0, <512 x double> %i1, <512 x i1> %m, i32 %n)
+  %fma = call contract <512 x double> @llvm.vp.fadd.v512f64(<512 x double> %mul, <512 x double> %i2, <512 x i1> %m, i32 %n)
+  ret <512 x double> %fma
+}
+
+define fastcc <512 x double> @test_vp_ffma_vrv_512f64(<512 x double> %i0, double %s1, <512 x double> %i2, <512 x i1> %m, i32 %n) {
+; CHECK-LABEL: test_vp_ffma_vrv_512f64:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    srl %s2, %s2, 1
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vfmad.d %v5, %v3, %s0, %v1, %vm3
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vfmad.d %v4, %v2, %s0, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v4
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v5
+; CHECK-NEXT:    b.l.t (, %s10)
+  %b1 = insertelement <512 x double> undef, double %s1, i32 0
+  %i1 = shufflevector <512 x double> %b1, <512 x double> poison, <512 x i32> zeroinitializer
+  %mul = call contract <512 x double> @llvm.vp.fmul.v512f64(<512 x double> %i0, <512 x double> %i1, <512 x i1> %m, i32 %n)
+  %fma = call contract <512 x double> @llvm.vp.fadd.v512f64(<512 x double> %mul, <512 x double> %i2, <512 x i1> %m, i32 %n)
+  ret <512 x double> %fma
+}
+
+define fastcc <512 x double> @test_vp_ffma_vvr_512f64(<512 x double> %i0, <512 x double> %i1, double %s2, <512 x i1> %m, i32 %n) {
+; CHECK-LABEL: test_vp_ffma_vvr_512f64:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    srl %s2, %s2, 1
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vfmad.d %v5, %s0, %v1, %v3, %vm3
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vfmad.d %v4, %s0, %v0, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v4
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v5
+; CHECK-NEXT:    b.l.t (, %s10)
+  %b2 = insertelement <512 x double> undef, double %s2, i32 0
+  %i2 = shufflevector <512 x double> %b2, <512 x double> poison, <512 x i32> zeroinitializer
+  %mul = call contract <512 x double> @llvm.vp.fmul.v512f64(<512 x double> %i0, <512 x double> %i1, <512 x i1> %m, i32 %n)
+  %fma = call contract <512 x double> @llvm.vp.fadd.v512f64(<512 x double> %mul, <512 x double> %i2, <512 x i1> %m, i32 %n)
+  ret <512 x double> %fma
+}
+
+declare <512 x double> @llvm.vp.fadd.v512f64(<512 x double>, <512 x double>, <512 x i1>, i32)
+declare <512 x double> @llvm.vp.fmul.v512f64(<512 x double>, <512 x double>, <512 x i1>, i32)

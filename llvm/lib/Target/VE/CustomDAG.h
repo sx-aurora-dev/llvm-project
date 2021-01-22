@@ -134,6 +134,14 @@ static inline MVT getMaskVT(Packing P) {
   return P == Packing::Normal ? MVT::v256i1 : MVT::v512i1;
 }
 
+static PackElem getPackElemForVT(EVT VT) {
+  if (VT.isFloatingPoint())
+    return PackElem::Hi;
+  if (VT.isVector())
+    return getPackElemForVT(VT.getVectorElementType());
+  return PackElem::Lo;
+}
+
 static inline Packing getPackingForVT(EVT VT) {
   assert(VT.isVector());
   return IsPackedType(VT) ? Packing::Dense : Packing::Normal;
@@ -385,16 +393,16 @@ struct CustomDAG {
   SDValue getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
                               SDValue B, SDValue Mask, SDValue AVL,
                               SDNodeFlags Flags = SDNodeFlags()) const;
-  SDValue getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV, SDValue Mask, SDValue AVL) const;
+  SDValue getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV, SDValue Mask, SDValue AVL, SDNodeFlags Flags = SDNodeFlags()) const;
 
-  SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT,
-                        ArrayRef<SDValue> Ops) const {
+  SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT, ArrayRef<SDValue> Ops,
+                        SDNodeFlags Flags = SDNodeFlags()) const {
     if (IsVVPReductionOp(VVPOpcode) && !getVVPReductionStartParamPos(VVPOpcode))
-      return getLegalReductionOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2]);
+      return getLegalReductionOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2], Flags);
     if (IsVVPBinaryOp(VVPOpcode))
       return getLegalBinaryOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
-                                 Ops[3]);
-    return getNode(VVPOpcode, ResVT, Ops);
+                                 Ops[3], Flags);
+    return getNode(VVPOpcode, ResVT, Ops, Flags);
   }
 
   struct TargetMasks {

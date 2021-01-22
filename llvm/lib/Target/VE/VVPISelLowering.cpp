@@ -1168,7 +1168,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
     OpVec.push_back(SplitTM.Mask);
     OpVec.push_back(SplitTM.AVL);
     // Emit legal VVP nodes.
-    PartOps[(int)Part] = CDAG.getLegalOpVVP(VVPOC, ResVT, OpVec);
+    PartOps[(int)Part] = CDAG.getLegalOpVVP(VVPOC, ResVT, OpVec, Op->getFlags());
   }
 
   // Use a scalar reducer.
@@ -1433,7 +1433,8 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
 
     assert(VVPOC.hasValue());
     return CDAG.getLegalReductionOpVVP(*VVPOC, ResVecTy, LegalOperands[0],
-                                       TargetMasks.Mask, TargetMasks.AVL);
+                                       TargetMasks.Mask, TargetMasks.AVL,
+                                       Op->getFlags());
   }
 
   llvm_unreachable("Cannot lower this op to VVP");
@@ -1679,13 +1680,20 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
     return SDValue();
   }
 
+  // (64bit) packed required -> split!
+  auto OpVecTy = *getIdiomaticType(Op.getNode());
+  EVT ElemVT = OpVecTy.getVectorElementType();
+  const bool IsOverPacked =
+      ElemVT.getScalarSizeInBits() > 32 && WidenInfo.PackedMode;
+  if (IsOverPacked)
+    return ExpandToSplitVVP(Op, DAG, Mode);
+
   // Split into two v256 ops?
   // FIXME:
   //   Some packed patterns ARE supported (eg PVRCP, PVRSQR, ..)
   //   We split those at the moment.
-  if (WidenInfo.PackedMode && !SupportsPackedMode(OCOpt.getValue())) {
+  if (WidenInfo.PackedMode && !SupportsPackedMode(OCOpt.getValue()))
     return ExpandToSplitVVP(Op, DAG, Mode);
-  }
 
   // create suitable mask and avl parameters (accounts for packing)
   PosOpt MaskPos = Op->getVPMaskPos();
@@ -1735,7 +1743,7 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
     auto StartPos = getVVPReductionStartParamPos(VVPOC);
     if (!StartPos)
       return CDAG.getLegalReductionOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1],
-                                         OpVec[2]);
+                                         OpVec[2], Op->getFlags());
   }
 
   // Create a matching VVP_* node

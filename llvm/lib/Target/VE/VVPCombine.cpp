@@ -138,14 +138,6 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
 }
 
 // What 32bit half to pack this scalar VT (or this vector's elem VT to).
-static PackElem getPackElemForVT(EVT VT) {
-  if (VT.isFloatingPoint())
-    return PackElem::Hi;
-  if (VT.isVector())
-    return getPackElemForVT(VT.getVectorElementType());
-  return PackElem::Lo;
-}
-
 static SDValue match_ReplLoHi(SDValue N, PackElem &SrcElem) {
   switch (N->getOpcode()) {
   case VEISD::REPL_I32:

@@ -369,7 +369,9 @@ SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   } else if (ScaTy == MVT::i32) {
     ReplOC = VEISD::REPL_I32;
   } else {
-    assert(ScaTy == MVT::i64);
+    // This could either be an over-packed broadcast (i64 or f64) or a proper
+    // packed broadcast with element replication.
+    assert((ScaTy == MVT::i64) || (ScaTy == MVT::f64));
     LLVM_DEBUG(dbgs() << "already using I64 -> unchanged!\n");
     return Op;
   }
@@ -430,6 +432,15 @@ Optional<SDValue> EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG &DAG) {
   if (!Opt)
     return None;
   return DAG.getConstant(Opt.getValue(), DL, MVT::i32);
+}
+
+bool isOverPackedType(EVT VT) {
+  if (!VT.isVector())
+    return false;
+  if (VT.getVectorElementType() == MVT::i64 &&
+      VT.getVectorElementType() == MVT::f64)
+    return false;
+  return VT.getVectorNumElements() > StandardVectorWidth;
 }
 
 bool IsMaskType(EVT VT) {
@@ -547,8 +558,38 @@ SDValue CustomDAG::CreateMaskPopcount(SDValue MaskV, SDValue AVL) const {
   return DAG.getNode(VEISD::VM_POPCOUNT, DL, MVT::i64, MaskV, AVL);
 }
 
+static SDValue foldUnpack(SDValue PackOp, PackElem Part, EVT DestVT) {
+  if (PackOp->getOpcode() != VEISD::VEC_PACK)
+    return SDValue();
+
+  // Check for implicit swapping.
+  // The following are foldable (they are noop):
+  // Any over-packed unpack.
+  // Or:
+  // v256i32 vec_unpack_lo SrcV
+  // v256f32 vec_unpack_hi SrcV
+  EVT SrcVT = PackOp.getValueType();
+  PackElem DestPart = getPackElemForVT(DestVT);
+  if (DestPart != Part && !isOverPackedType(SrcVT))
+    return SDValue();
+
+  if (Part == PackElem::Lo) 
+    return PackOp->getOperand(0);
+  else
+    return PackOp->getOperand(1);
+}
+
 SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, PackElem E,
                                 SDValue AVL) const {
+  // Immediately fold unpack from an overpacked broadcast.
+  if (SDValue SrcBroadcast = getSplatValue(Vec.getNode()))
+    if (isOverPackedType(Vec.getValueType())) 
+      return CreateBroadcast(DestVT, SrcBroadcast, AVL);
+
+  // Immediately fold unpack from pack.
+  if (SDValue PackedV = foldUnpack(Vec, E, DestVT))
+    return PackedV;
+
   unsigned OC =
       (E == PackElem::Lo) ? VEISD::VEC_UNPACK_LO : VEISD::VEC_UNPACK_HI;
   return DAG.getNode(OC, DL, DestVT, Vec, AVL);
@@ -556,6 +597,7 @@ SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, PackElem E,
 
 SDValue CustomDAG::CreatePack(EVT DestVT, SDValue LowV, SDValue HighV,
                               SDValue AVL) const {
+  // TODO Peek through paired unpacks!
   return DAG.getNode(VEISD::VEC_PACK, DL, DestVT, LowV, HighV, AVL);
 }
 
@@ -936,9 +978,9 @@ SDValue CustomDAG::foldAndUnpackMask(SDValue MaskVector, SDValue Mask,
 
 SDValue CustomDAG::getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT,
                                           SDValue VectorV, SDValue Mask,
-                                          SDValue AVL) const {
+                                          SDValue AVL, SDNodeFlags Flags) const {
   if (!IsMaskType(VectorV.getValueType()))
-    return getNode(VVPOpcode, ResVT, {VectorV, Mask, AVL});
+    return getNode(VVPOpcode, ResVT, {VectorV, Mask, AVL}, Flags);
 
   // Mask legalization using vm_popcount
   if (!IsAllTrueMask(Mask)) {
