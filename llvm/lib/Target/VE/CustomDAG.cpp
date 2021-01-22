@@ -914,7 +914,9 @@ SDValue CustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
   if (VVPOpcode == VEISD::VVP_SREM)
     return createIREM(true, ResVT, A, B, Mask, AVL);
   // Lower to the VVP node by default.
-  return getNode(VVPOpcode, ResVT, {A, B, Mask, AVL});
+  SDValue V = getNode(VVPOpcode, ResVT, {A, B, Mask, AVL});
+  V->setFlags(Flags);
+  return V;
 }
 
 SDValue CustomDAG::foldAndUnpackMask(SDValue MaskVector, SDValue Mask,
