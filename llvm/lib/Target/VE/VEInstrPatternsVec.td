@@ -226,6 +226,30 @@ defm: VMV_Patterns<v256i64>;
 defm: VMV_Patterns<v256f64>;
 
 
+///// Packing support /////
+
+
+/// Overpacked types: v512x64 ///
+// These are all lowered to subregister transfers.
+
+multiclass Packing_Overpack<ValueType PackVT, ValueType VecVT> {
+  // vec_pack
+  def : Pat<(PackVT (vec_pack VecVT:$vlo, VecVT:$vhi, (i32 srcvalue))),
+            (INSERT_SUBREG (INSERT_SUBREG
+                           (PackVT (IMPLICIT_DEF)),
+                           $vlo, sub_pack_even),
+                           $vhi, sub_pack_odd)>;
+
+  // vec_unpack_lo/hi
+  def : Pat<(VecVT (vec_unpack_lo PackVT:$vp, (i32 srcvalue))),
+            (EXTRACT_SUBREG $vp, sub_pack_even)>;
+  def : Pat<(VecVT (vec_unpack_hi PackVT:$vp, (i32 srcvalue))),
+            (EXTRACT_SUBREG $vp, sub_pack_odd)>;
+}
+
+defm : Packing_Overpack<v512i64, v256i64>;
+defm : Packing_Overpack<v512f64, v256f64>;
+
 ///// vec_pack /////
 
 // Packing (type based)
@@ -238,17 +262,6 @@ def : Pat<(v512i1 (vec_pack v256i1:$vlo, v256i1:$vhi, (i32 srcvalue))),
                          (v512i1 (IMPLICIT_DEF)),
                          $vlo, sub_vm_odd),
                          $vhi, sub_vm_even)>;
-
-multiclass Packing_Overpack<ValueType PackVT, ValueType VecVT> {
-  def : Pat<(PackVT (vec_pack VecVT:$vlo, VecVT:$vhi, (i32 srcvalue))),
-            (INSERT_SUBREG (INSERT_SUBREG
-                           (PackVT (IMPLICIT_DEF)),
-                           $vlo, sub_pack_even),
-                           $vhi, sub_pack_odd)>;
-}
-
-defm : Packing_Overpack<v512i64, v256i64>;
-defm : Packing_Overpack<v512f64, v256f64>;
 
 ///// vec_swap, vec_unpack_lo, vec_unpack_hi /////
 
