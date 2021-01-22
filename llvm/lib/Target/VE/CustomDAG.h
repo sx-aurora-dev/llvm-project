@@ -89,6 +89,23 @@ bool IsAllTrueMask(SDValue Op);
 
 Optional<unsigned> getVVPReductionStartParamPos(unsigned ISD);
 
+
+Optional<unsigned> getReductionStartParamPos(unsigned ISD);
+
+Optional<unsigned> getReductionVectorParamPos(unsigned ISD);
+
+Optional<unsigned> PeekForNarrow(SDValue Op);
+
+Optional<SDValue> EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG &DAG);
+
+bool IsMaskType(EVT Ty);
+bool isOverPackedType(EVT VT);
+unsigned GetMaskBits(EVT Ty);
+
+// select an appropriate %evl argument for this element count.
+// This will return the correct result for packed mode oeprations (half).
+unsigned SelectBoundedVectorLength(unsigned StaticNumElems);
+
 /// Packing {
 using LaneBits = std::bitset<256>;
 
@@ -142,6 +159,20 @@ static PackElem getPackElemForVT(EVT VT) {
   return PackElem::Lo;
 }
 
+// The subregister VT an unpack of part \p Elem from \p VT would source its
+// result from.
+static MVT getUnpackSourceType(EVT VT, PackElem Elem) {
+  if (!VT.isVector())
+    return Elem == PackElem::Hi ? MVT::f32 : MVT::i32;
+
+  EVT ElemVT = VT.getVectorElementType();
+  if (IsMaskType(VT))
+    return MVT::v256i1;
+  if (isOverPackedType(VT))
+    return ElemVT.isFloatingPoint() ? MVT::v256f64 : MVT::v256i64;
+  return ElemVT.isFloatingPoint() ? MVT::v256f32 : MVT::v256i32;
+}
+
 static inline Packing getPackingForVT(EVT VT) {
   assert(VT.isVector());
   return IsPackedType(VT) ? Packing::Dense : Packing::Normal;
@@ -151,20 +182,8 @@ template <typename MaskBits> Packing getPackingForMaskBits(const MaskBits MB);
 
 /// } Packing
 
-Optional<unsigned> getReductionStartParamPos(unsigned ISD);
 
-Optional<unsigned> getReductionVectorParamPos(unsigned ISD);
 
-Optional<unsigned> PeekForNarrow(SDValue Op);
-
-Optional<SDValue> EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG &DAG);
-
-bool IsMaskType(EVT Ty);
-unsigned GetMaskBits(EVT Ty);
-
-// select an appropriate %evl argument for this element count.
-// This will return the correct result for packed mode oeprations (half).
-unsigned SelectBoundedVectorLength(unsigned StaticNumElems);
 
 /// Helper class for short hand custom node creation ///
 struct CustomDAG {

@@ -620,6 +620,15 @@ SDValue CustomDAG::CreateBroadcast(EVT ResTy, SDValue S,
 
   // FIXME legalize vlen for packed mode!
 
+  // Over-packed case: immediately split this into double packing.
+  if (isOverPackedType(ResTy)) {
+    MVT LegalPartVT = getUnpackSourceType(ResTy, PackElem::Lo);
+    auto PartV = LegalizeBroadcast(
+        DAG.getNode(VEISD::VEC_BROADCAST, DL, LegalPartVT, {S, VectorLen}),
+        DAG);
+    return CreatePack(ResTy, PartV, PartV, VectorLen);
+  }
+
   // Non-mask case
   if (ResTy.getVectorElementType() != MVT::i1) {
     return LegalizeBroadcast(
