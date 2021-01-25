@@ -437,8 +437,8 @@ Optional<SDValue> EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG &DAG) {
 bool isOverPackedType(EVT VT) {
   if (!VT.isVector())
     return false;
-  if (VT.getVectorElementType() == MVT::i64 &&
-      VT.getVectorElementType() == MVT::f64)
+  if (VT.getVectorElementType() != MVT::i64 &&
+      VT.getVectorElementType() != MVT::f64)
     return false;
   return VT.getVectorNumElements() > StandardVectorWidth;
 }

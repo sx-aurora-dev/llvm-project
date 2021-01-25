@@ -54,6 +54,11 @@ OptimizeVectorMemory("ve-fast-mem",
     cl::desc("Drop VLD masks"),
     cl::Hidden);
 
+static cl::opt<bool>
+OptimizeSplitAVL("ve-optimize-split-avl",
+    cl::init(true),
+    cl::desc("Avoid LVL switching for split operations"),
+    cl::Hidden);
 
 
 static bool isLegalVectorVT(EVT VT) {
@@ -997,15 +1002,15 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
   SDValue PartOps[2];
 
   SDValue UpperPartAVL; // we will use this for packing things back together
-  for (PackElem Part : {PackElem::Lo, PackElem::Hi}) {
+  for (PackElem Part : {PackElem::Hi, PackElem::Lo}) {
     // VP ops already have an explicit mask and AVL. When expanding from non-VP
     // attach those additional inputs here.
     auto SplitTM =
         CDAG.createTargetSplitMask(WidenInfo, PackedMask, PackedAVL, Part);
 
-    if (Part == PackElem::Hi) {
+    // Keep track of the (higher) lvl.
+    if (Part == PackElem::Hi)
       UpperPartAVL = SplitTM.AVL;
-    }
 
     // Drop the mask.
     if (OptimizeVectorMemory)
@@ -1022,6 +1027,10 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
       SDValue PartData = CDAG.extractPackElem(PackData, Part, SplitTM.AVL);
       OpVec.push_back(PartData);
     }
+
+    // Avoid `lvl`s at the cost of accessing an off-by-one index.
+    if (OptimizeSplitAVL && OptimizeVectorMemory)
+      SplitTM.AVL = UpperPartAVL;
 
     // Ptr & Stride
     // Push (ptr + ElemBytes * <Part>, 2 * ElemBytes)
@@ -1101,6 +1110,21 @@ static bool IgnoreOperandForVVPLowering(const SDNode * N, unsigned OpIdx) {
   return false;
 }
 
+static bool hasNoSideEffects(unsigned VVPOpcode) {
+  if (IsVVPTernaryOp(VVPOpcode))
+    return VVPOpcode != VEISD::VVP_SELECT;
+  if (IsVVPBinaryOp(VVPOpcode)) {
+    switch (VVPOpcode) {
+    default:
+      return true;
+    case VEISD::VVP_UDIV:
+    case VEISD::VVP_SDIV:
+      return false;
+    }
+  }
+  return false;
+}
+
 SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
                                            VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "ExpandToSplitVVP: "; Op->print(dbgs()); dbgs() << "\n");
@@ -1128,7 +1152,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
   bool HasChain = false;
 
   SDValue UpperPartAVL; // we will use this for packing things back together
-  for (PackElem Part : {PackElem::Lo, PackElem::Hi}) {
+  for (PackElem Part : {PackElem::Hi, PackElem::Lo}) {
     // VP ops already have an explicit mask and AVL. When expanding from non-VP
     // attach those additional inputs here.
     auto SplitTM =
@@ -1163,6 +1187,10 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
         OpVec.push_back(PartV);
       }
     }
+
+    // TODO: Only do this for side-effect free ops
+    if (OptimizeSplitAVL && hasNoSideEffects(VVPOC))
+      SplitTM.AVL = UpperPartAVL;
 
     // Add predicating args and generate part node.
     OpVec.push_back(SplitTM.Mask);
@@ -1771,10 +1799,13 @@ SDValue VETargetLowering::lowerVVP_MLOAD(SDValue Op, SelectionDAG &DAG,
   // analyze the vector length
   VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
 
-  // Split for packed mode
-  if (WidenInfo.NeedsPackedMasking) {
-    return ExpandToSplitVVP(Op, DAG, Mode);
-  }
+  // Split for packed mode (unless we ignore the mask anyway).
+  if (isOverPackedType(MemN->getMemoryVT()) ||
+      (!OptimizeVectorMemory && WidenInfo.NeedsPackedMasking))
+    return ExpandToSplitLoadStore(Op, DAG, Mode);
+
+  if (OptimizeVectorMemory)
+    WidenInfo.NeedsPackedMasking = false;
 
   // minimize vector length
   AVL = ReduceVectorLength(Mask, AVL, VecLenHint, DAG);
