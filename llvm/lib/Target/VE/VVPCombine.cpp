@@ -39,6 +39,12 @@ OptimizePackedMode("ve-optimize-packed",
     cl::desc("Simplify packed mode patterns"),
     cl::Hidden);
 
+static cl::opt<bool> ExpandOverPackedRegisterCopies(
+    "ve-expand-overpacked-copies", cl::init(true),
+    cl::desc("Expand physical register copies during isel to assist register "
+             "coalescing in packed  mode."),
+    cl::Hidden);
+
 using Matcher = std::function<bool(SDValue)>;
 
 static int match_SomeOperand(SDNode *Op, unsigned VVPOpcode, Matcher M) {
@@ -241,4 +247,104 @@ SDValue VETargetLowering::combinePacking(SDNode *N, DAGCombinerInfo &DCI) const 
       break;
   }
   return SDValue();
+}
+
+#if 0
+// FIXME We have to do this in ::LowerFormalArguments
+SDValue VETargetLowering::combineCopyFromRegVVP(SDNode *N,
+                                              DAGCombinerInfo &DCI) const {
+  // Perform this shortly before isel.
+  if (!DCI.isBeforeLegalize())
+    return SDValue();
+  if (!ExpandOverPackedRegisterCopies)
+    return SDValue();
+
+  if (!isOverPackedType(N->getValueType(0)))
+    return SDValue();
+
+  LLVM_DEBUG(dbgs() << "Found over-packed CopyFromReg:";
+             N->print(dbgs(), &DCI.DAG); dbgs() << "\n"; );
+
+  // Decompose & check that this is an over-packed CopyFromReg.
+  auto Chain = N->getOperand(0);
+  auto PhysRegV = N->getOperand(1);
+  auto SrcPhysReg = cast<RegisterSDNode>(PhysRegV)->getReg();
+  assert(SrcPhysReg.isVirtual());
+  auto *TRI = Subtarget->getRegisterInfo();
+
+  EVT PackVT = N->getValueType(0);
+  EVT PartScaVT = PackVT.getScalarType();
+  EVT PartVT;
+  if (PartScaVT == MVT::f64)
+    PartVT = MVT::v256f64;
+  else if (PartScaVT == MVT::i64)
+    PartVT = MVT::v256i64;
+  else
+    llvm_unreachable("Unexpected over-packed type!");
+
+  SDValue LoVal, HiVal;
+
+  // Expand to V64 CopyFromReg.
+  CustomDAG CDAG(*this, DCI.DAG, N);
+  for (auto Part : {PackElem::Lo, PackElem::Hi}) {
+    unsigned SubRegIdx = getOverPackedSubRegIdx(Part);
+    // auto SrcPartReg = TRI->getSubReg(SrcPhysReg, SubRegIdx);
+    unsigned V64SubRegIdx = 2 * SrcPhysReg.virtRegIndex() + (unsigned) Part;
+
+    SDValue CopyVal = CDAG.DAG.getCopyFromReg(Chain, CDAG.DL, SrcPartReg, PartVT);
+    Chain = SDValue(CopyVal.getNode(), 1);
+    if (Part == PackElem::Lo)
+      LoVal = CopyVal;
+    else 
+      HiVal = CopyVal;
+  }
+
+  // Re-package both parts as values and put the chain back in.
+  auto RePacked = CDAG.CreatePack(PackVT, LoVal, HiVal,
+                                  CDAG.getConstEVL(StandardVectorWidth));
+  return CDAG.getMergeValues({RePacked, Chain});
+}
+#endif
+
+SDValue VETargetLowering::combineCopyToRegVVP(SDNode *N,
+                                              DAGCombinerInfo &DCI) const {
+  // Perform this shortly before isel.
+  if (!DCI.isAfterLegalizeDAG())
+    return SDValue();
+  if (!ExpandOverPackedRegisterCopies)
+    return SDValue();
+
+  // Decompose & check that this is an over-packed copy.
+  auto Chain = N->getOperand(0);
+  auto PhysRegV = N->getOperand(1);
+  auto DestPhysReg = cast<RegisterSDNode>(PhysRegV)->getReg();
+  auto SrcV = N->getOperand(2);
+  bool HasSrcGlue = N->getNumOperands() == 4;
+  SDValue SrcGlue;
+  if (HasSrcGlue)
+    SrcGlue = N->getOperand(3);
+  if (!isOverPackedType(SrcV.getValueType()))
+    return SDValue();
+
+  LLVM_DEBUG(dbgs() << "Found over-packed CopyToReg:";
+             N->print(dbgs(), &DCI.DAG); dbgs() << "\n"; );
+
+  // Match a feeding vec_pack operation.
+  if (SrcV->getOpcode() != VEISD::VEC_PACK)
+    return SDValue();
+  SDValue LoSrcVal = SrcV->getOperand(0);
+  SDValue HiSrcVal = SrcV->getOperand(1);
+  auto *TRI = Subtarget->getRegisterInfo();
+
+  // Expand to V64 CopyToReg.
+  CustomDAG CDAG(*this, DCI.DAG, N);
+  for (auto Part : {PackElem::Lo, PackElem::Hi}) {
+    unsigned SubRegIdx = getOverPackedSubRegIdx(Part);
+    auto DestPartReg = TRI->getSubReg(DestPhysReg, SubRegIdx);
+    SDValue PartV =Part == PackElem::Lo ? LoSrcVal : HiSrcVal;
+    Chain = CDAG.DAG.getCopyToReg(Chain, CDAG.DL, DestPartReg, PartV, SrcGlue);
+    SrcGlue = SDValue(Chain.getNode(), 1);
+  }
+
+  return Chain;
 }

@@ -147,6 +147,10 @@ enum class PackElem : int8_t {
   Hi = 1  // float   (32,  0]
 };
 
+static unsigned getOverPackedSubRegIdx(PackElem Part) {
+  return Part == PackElem::Lo ? VE::sub_pack_odd : VE::sub_pack_even;
+}
+
 static inline MVT getMaskVT(Packing P) {
   return P == Packing::Normal ? MVT::v256i1 : MVT::v512i1;
 }

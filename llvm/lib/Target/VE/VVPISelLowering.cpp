@@ -334,6 +334,14 @@ void VETargetLowering::initVPUActions() {
   if (!Subtarget->enableVPU())
     return;
 
+  // Expand CopyToReg(vec_pack (lo, hi)) for over-packed register.
+  // This makes register allocation more efficient (less vreg moves).
+  if (Subtarget->hasPackedMode()) {
+    setTargetDAGCombine(ISD::CopyToReg);
+    // Live-ins are expanded in ::LowerFormalArguments.
+    // setTargetDAGCombine(ISD::CopyFromReg);
+  }
+
   // Vector length legalization
   auto LegalizeVectorLength = [&](unsigned VL) -> unsigned {
     if (this->Subtarget->hasPackedMode()) {

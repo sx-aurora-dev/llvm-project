@@ -138,16 +138,42 @@ SDValue VETargetLowering::LowerFormalArguments(
   // by CC_VE would be correct now.
   CCInfo.AnalyzeFormalArguments(Ins, getParamCC(CallConv, false));
 
+  const VERegisterInfo *TRI = Subtarget->getRegisterInfo();
+
   for (unsigned i = 0, e = ArgLocs.size(); i != e; ++i) {
     CCValAssign &VA = ArgLocs[i];
     if (VA.isRegLoc()) {
       // This argument is passed in a register.
       // All integer register arguments are promoted by the caller to i64.
 
-      // Create a virtual register for the promoted live-in value.
-      unsigned VReg =
-          MF.addLiveIn(VA.getLocReg(), getRegClassFor(VA.getLocVT()));
-      SDValue Arg = DAG.getCopyFromReg(Chain, DL, VReg, VA.getLocVT());
+      // Immediately expand over-packed (v512i64, v512f64) register copies into
+      // their parts.
+      SDValue Arg;
+      if (isOverPackedType(VA.getValVT())) {
+        MVT PartVT = VA.getValVT().getScalarType() == MVT::f64
+                         ? MVT::v256f64
+                         : MVT::v256i64; // TODO re-factor!
+
+        // Create two virtual registers for the V64 subregisters and pack them
+        // into one value.
+        auto LoLocReg = TRI->getSubReg(VA.getLocReg(), getOverPackedSubRegIdx(PackElem::Lo));
+        auto HiLocReg = TRI->getSubReg(VA.getLocReg(), getOverPackedSubRegIdx(PackElem::Hi));
+
+        unsigned VRegLo = MF.addLiveIn(LoLocReg, &VE::V64RegClass);
+        unsigned VRegHi = MF.addLiveIn(HiLocReg, &VE::V64RegClass);
+
+        SDValue ArgLo = DAG.getCopyFromReg(Chain, DL, VRegLo, PartVT);
+        SDValue ArgHi = DAG.getCopyFromReg(Chain, DL, VRegHi, PartVT);
+        CustomDAG CDAG(*this, DAG, DL);
+        Arg = CDAG.CreatePack(VA.getValVT(), ArgLo, ArgHi,
+                              CDAG.getConstEVL(StandardVectorWidth));
+
+      } else {
+        // Create a virtual register for the promoted live-in value.
+        unsigned VReg =
+            MF.addLiveIn(VA.getLocReg(), getRegClassFor(VA.getLocVT()));
+        Arg = DAG.getCopyFromReg(Chain, DL, VReg, VA.getLocVT());
+      }
 
       assert(!VA.needsCustom() && "Unexpected custom lowering");
 
@@ -3418,6 +3444,10 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
     else if (IsPackingSupportOpcode(Opcode)) 
       return combinePacking(N, DCI);
     break;
+  // case ISD::CopyFromReg:
+  //   return combineCopyFromRegVVP(N, DCI);
+  case ISD::CopyToReg:
+    return combineCopyToRegVVP(N, DCI);
   case ISD::ANY_EXTEND:
   case ISD::SIGN_EXTEND:
   case ISD::ZERO_EXTEND:
