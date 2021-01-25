@@ -1118,7 +1118,7 @@ static bool IgnoreOperandForVVPLowering(const SDNode * N, unsigned OpIdx) {
   return false;
 }
 
-static bool hasNoSideEffects(unsigned VVPOpcode) {
+static bool canSafelyIgnoreMask(unsigned VVPOpcode) {
   if (IsVVPTernaryOp(VVPOpcode))
     return VVPOpcode != VEISD::VVP_SELECT;
   if (IsVVPBinaryOp(VVPOpcode)) {
@@ -1196,9 +1196,11 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
       }
     }
 
-    // TODO: Only do this for side-effect free ops
-    if (OptimizeSplitAVL && hasNoSideEffects(VVPOC))
+    // Ignore the mask where possible
+    if (OptimizeSplitAVL)
       SplitTM.AVL = UpperPartAVL;
+    if (canSafelyIgnoreMask(VVPOC))
+      SplitTM.Mask = CDAG.createUniformConstMask(MVT::v256i1, true);
 
     // Add predicating args and generate part node.
     OpVec.push_back(SplitTM.Mask);
@@ -1407,6 +1409,10 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   // FIXME We cannot use the idiomatic type here since that type reflects the
   // operatino vector width (and the element type does not matter as much).
   EVT ResVecTy = CDAG.legalizeVectorType(Op, Mode);
+
+  if (canSafelyIgnoreMask(Op->getOpcode()))
+    TargetMasks.Mask =
+        CDAG.createUniformConstMask(TargetMasks.Mask.getValueType(), true);
 
   // legalize all operands
   SmallVector<SDValue, 4> LegalOperands;
