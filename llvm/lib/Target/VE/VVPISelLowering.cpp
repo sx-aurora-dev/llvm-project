@@ -96,7 +96,7 @@ static bool shouldLowerToVVP(SDNode &N) {
   // Do not VVP expand mask loads/stores
   // FIXME this leaves dangling VP mask stores if not properly legalized
   auto MemN = dyn_cast<MemSDNode>(&N);
-  if (MemN && IsMaskType(MemN->getMemoryVT())) {
+  if (MemN && isMaskType(MemN->getMemoryVT())) {
     return false;
   }
 
@@ -304,7 +304,7 @@ static SDValue PeekForMask(SDValue Op) {
     Op = Op.getOperand(0);
   }
 
-  if (IsMaskType(Op.getValueType()))
+  if (isMaskType(Op.getValueType()))
     return Op;
   return SDValue();
 }
@@ -318,7 +318,7 @@ static const MVT PackedVectorVTs[] = {MVT::v512i32, MVT::v512f32, MVT::v512f64,
 void VETargetLowering::initRegisterClasses_VVP() {
   // VVP-based backend.
   for (MVT VecVT : AllVectorVTs)
-    if (!IsPackedType(VecVT) || Subtarget->hasPackedMode())
+    if (!isPackedType(VecVT) || Subtarget->hasPackedMode())
       addRegisterClass(VecVT, &VE::V64RegClass);
 
   addRegisterClass(MVT::v256i1, &VE::VMRegClass);
@@ -906,7 +906,7 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
     // check whether this is an v256i1 SETCC
     auto Operand = Op->getOperand(i);
     if ((Operand->getOpcode() != ISD::SETCC) ||
-        !IsMaskType(Operand.getSimpleValueType())) {
+        !isMaskType(Operand.getSimpleValueType())) {
       FixedOperandList.push_back(Operand);
       continue;
     }
@@ -1209,7 +1209,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
 
   // Use a scalar reducer.
   if (IsVVPReductionOp(VVPOC)) {
-    bool IsMaskReduction = IsMaskType(Op.getOperand(0).getValueType());
+    bool IsMaskReduction = isMaskType(Op.getOperand(0).getValueType());
     // Scalar join.
     unsigned JoinOpcode = getScalarReductionOpcode(VVPOC, IsMaskReduction);
     return CDAG.getNode(JoinOpcode, ResVT, PartOps);
@@ -2073,8 +2073,8 @@ SDValue VETargetLowering::lowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
   EVT LegalResVT = CDAG.legalizeVectorType(Op, Mode);
 
   // mask to shift + OR expansion
-  if (IsMaskType(Op.getValueType())) {
-    // TODO IsMaskType(Op.getValueType())) {
+  if (isMaskType(Op.getValueType())) {
+    // TODO isMaskType(Op.getValueType())) {
     MaskShuffleAnalysis MSA(*MView.get(), CDAG);
     return MSA.synthesize(CDAG, LegalResVT);
   }

@@ -334,7 +334,7 @@ VecLenOpt MinVectorLength(VecLenOpt A, VecLenOpt B) {
 // Whether direct codegen for this type will result in a packed operation
 // (requiring a packed VL param..)
 
-bool IsPackedType(EVT SomeVT) {
+bool isPackedType(EVT SomeVT) {
   if (!SomeVT.isVector())
     return false;
   return SomeVT.getVectorNumElements() > StandardVectorWidth;
@@ -353,7 +353,7 @@ SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   auto VLOp = Op.getOperand(1);
 
   // v256x broadcast (element has to be i64/f64 always)
-  if (!IsPackedType(VT)) {
+  if (!isPackedType(VT)) {
     return Op;
   }
 
@@ -381,8 +381,20 @@ SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   return DAG.getNode(VEISD::VEC_BROADCAST, DL, VT, {ReplOp, VLOp});
 }
 
+bool isMaskType(EVT VT) {
+  if (!VT.isVector())
+    return false;
+
+  // an actual bit mask type
+  if (VT.getVectorElementType() == MVT::i1)
+    return true;
+
+  // not a mask
+  return false;
+}
+
 bool IsAllTrueMask(SDValue Op) {
-  if (!IsMaskType(Op.getValueType()))
+  if (!isMaskType(Op.getValueType()))
     return false;
   auto SplatV = getSplatValue(Op.getNode());
   if (!SplatV) {
@@ -441,18 +453,6 @@ bool isOverPackedType(EVT VT) {
       VT.getVectorElementType() != MVT::f64)
     return false;
   return VT.getVectorNumElements() > StandardVectorWidth;
-}
-
-bool IsMaskType(EVT VT) {
-  if (!VT.isVector())
-    return false;
-
-  // an actual bit mask type
-  if (VT.getVectorElementType() == MVT::i1)
-    return true;
-
-  // not a mask
-  return false;
 }
 
 unsigned GetMaskBits(EVT VT) {
@@ -524,8 +524,8 @@ SDValue CustomDAG::createElementShift(EVT ResVT, SDValue Src, int Offset,
 
   // vector shift
   EVT VecVT = Src.getValueType();
-  assert(!IsPackedType(VecVT) && "TODO implement");
-  assert(!IsMaskType(VecVT));
+  assert(!isPackedType(VecVT) && "TODO implement");
+  assert(!isMaskType(VecVT));
   return createVMV(ResVT, Src, getConstant(Offset, MVT::i32),
                    createUniformConstMask(Packing::Normal,
                                           VecVT.getVectorNumElements(), true),
@@ -581,9 +581,10 @@ static SDValue foldUnpack(SDValue PackOp, PackElem Part, EVT DestVT) {
 
 SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, PackElem E,
                                 SDValue AVL) const {
-  // Immediately fold unpack from an overpacked broadcast.
+  // Immediately fold unpack from an overpacked broadcast or a constant
+  // broadcast.
   if (SDValue SrcBroadcast = getSplatValue(Vec.getNode()))
-    if (isOverPackedType(Vec.getValueType())) 
+    if (isOverPackedType(Vec.getValueType()) || isMaskType(Vec.getValueType()))
       return CreateBroadcast(DestVT, SrcBroadcast, AVL);
 
   // Immediately fold unpack from pack.
@@ -773,10 +774,10 @@ SDValue CustomDAG::getVectorInsert(SDValue DestVecV, SDValue ElemV,
 }
 
 SDValue CustomDAG::createMaskCast(SDValue VectorV, SDValue AVL) const {
-  if (IsMaskType(VectorV.getValueType()))
+  if (isMaskType(VectorV.getValueType()))
     return VectorV;
 
-  if (IsPackedType(VectorV.getValueType())) {
+  if (isPackedType(VectorV.getValueType())) {
     auto ValVT = VectorV.getValueType();
     auto LoPart = CreateUnpack(getSplitVT(ValVT), VectorV, PackElem::Lo, AVL);
     auto HiPart = CreateUnpack(getSplitVT(ValVT), VectorV, PackElem::Hi, AVL);
@@ -988,7 +989,7 @@ SDValue CustomDAG::foldAndUnpackMask(SDValue MaskVector, SDValue Mask,
 SDValue CustomDAG::getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT,
                                           SDValue VectorV, SDValue Mask,
                                           SDValue AVL, SDNodeFlags Flags) const {
-  if (!IsMaskType(VectorV.getValueType()))
+  if (!isMaskType(VectorV.getValueType()))
     return getNode(VVPOpcode, ResVT, {VectorV, Mask, AVL}, Flags);
 
   // Mask legalization using vm_popcount

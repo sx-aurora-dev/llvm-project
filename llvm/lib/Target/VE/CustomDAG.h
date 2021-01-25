@@ -74,7 +74,9 @@ VecLenOpt MinVectorLength(VecLenOpt A, VecLenOpt B);
 
 // Whether direct codegen for this type will result in a packed operation
 // (requiring a packed VL param..)
-bool IsPackedType(EVT SomeVT);
+bool isPackedType(EVT SomeVT);
+bool isMaskType(EVT VT);
+bool isOverPackedType(EVT VT);
 
 // legalize packed-mode broadcasts into lane replication + broadcast
 SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG);
@@ -98,8 +100,6 @@ Optional<unsigned> PeekForNarrow(SDValue Op);
 
 Optional<SDValue> EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG &DAG);
 
-bool IsMaskType(EVT Ty);
-bool isOverPackedType(EVT VT);
 unsigned GetMaskBits(EVT Ty);
 
 // select an appropriate %evl argument for this element count.
@@ -170,7 +170,7 @@ static MVT getUnpackSourceType(EVT VT, PackElem Elem) {
     return Elem == PackElem::Hi ? MVT::f32 : MVT::i32;
 
   EVT ElemVT = VT.getVectorElementType();
-  if (IsMaskType(VT))
+  if (isMaskType(VT))
     return MVT::v256i1;
   if (isOverPackedType(VT))
     return ElemVT.isFloatingPoint() ? MVT::v256f64 : MVT::v256i64;
@@ -179,7 +179,7 @@ static MVT getUnpackSourceType(EVT VT, PackElem Elem) {
 
 static inline Packing getPackingForVT(EVT VT) {
   assert(VT.isVector());
-  return IsPackedType(VT) ? Packing::Dense : Packing::Normal;
+  return isPackedType(VT) ? Packing::Dense : Packing::Normal;
 }
 
 template <typename MaskBits> Packing getPackingForMaskBits(const MaskBits MB);

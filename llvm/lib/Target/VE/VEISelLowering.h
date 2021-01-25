@@ -123,8 +123,6 @@ struct VVPWideningInfo {
         NeedsPackedMasking(false) {}
 };
 
-bool isPackedType(MVT VecVT);
-
 class VETargetLowering final : public TargetLowering, public VELoweringInfo {
   const VESubtarget *Subtarget;
 
