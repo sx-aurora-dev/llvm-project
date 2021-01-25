@@ -139,6 +139,7 @@ define <512 x double> @vec_add_v512f64(<512 x double> %a, <512 x double> %b) {
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfadd.d %v0, %v0, %v2
 ; CHECK-NEXT:    vfadd.d %v1, %v1, %v3
+; CHECK-NEXT:    # kill: def $v1 killed $v1 def $vp0 killed $v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fadd <512 x double> %a, %b
   ret <512 x double> %r
@@ -154,6 +155,8 @@ define <1024 x double> @vec_add_v1024f64(<1024 x double> %a, <1024 x double> %b)
 ; CHECK-NEXT:    vfadd.d %v1, %v1, %v5
 ; CHECK-NEXT:    vfadd.d %v2, %v2, %v6
 ; CHECK-NEXT:    vfadd.d %v3, %v3, %v7
+; CHECK-NEXT:    # kill: def $v1 killed $v1 def $vp0 killed $v0
+; CHECK-NEXT:    # kill: def $v3 killed $v3 def $vp1 killed $v2
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fadd <1024 x double> %a, %b
   ret <1024 x double> %r

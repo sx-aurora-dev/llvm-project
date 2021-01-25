@@ -146,13 +146,9 @@ define <512 x i64> @vec_add_v512f64(<512 x i64> %a, <512 x i64> %b) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vadds.l %v5, %v1, %v3
-; CHECK-NEXT:    vadds.l %v4, %v0, %v2
-; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0, (0)1, %v4
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1, (0)1, %v5
+; CHECK-NEXT:    vadds.l %v0, %v0, %v2
+; CHECK-NEXT:    vadds.l %v1, %v1, %v3
+; CHECK-NEXT:    # kill: def $v1 killed $v1 def $vp0 killed $v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = add <512 x i64> %a, %b
   ret <512 x i64> %r
@@ -164,20 +160,12 @@ define <1024 x i64> @vec_add_v1024f64(<1024 x i64> %a, <1024 x i64> %b) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vadds.l %v9, %v1, %v5
-; CHECK-NEXT:    vadds.l %v8, %v0, %v4
-; CHECK-NEXT:    vadds.l %v5, %v3, %v7
-; CHECK-NEXT:    vadds.l %v4, %v2, %v6
-; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0, (0)1, %v8
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1, (0)1, %v9
-; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v2, (0)1, %v4
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v3, (0)1, %v5
+; CHECK-NEXT:    vadds.l %v0, %v0, %v4
+; CHECK-NEXT:    vadds.l %v1, %v1, %v5
+; CHECK-NEXT:    vadds.l %v2, %v2, %v6
+; CHECK-NEXT:    vadds.l %v3, %v3, %v7
+; CHECK-NEXT:    # kill: def $v1 killed $v1 def $vp0 killed $v0
+; CHECK-NEXT:    # kill: def $v3 killed $v3 def $vp1 killed $v2
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = add <1024 x i64> %a, %b
   ret <1024 x i64> %r
