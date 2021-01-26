@@ -1034,8 +1034,16 @@ SDValue CustomDAG::getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT,
                                           SDValue VectorV, SDValue Mask,
                                           SDValue AVL,
                                           SDNodeFlags Flags) const {
-  if (!isMaskType(VectorV.getValueType()))
+  if (!isMaskType(VectorV.getValueType())) {
+    // Use sequential 'fmul' reduction.
+    if (VVPOpcode == VEISD::VVP_REDUCE_FMUL) {
+      VVPOpcode = VEISD::VVP_REDUCE_SEQ_FMUL;
+      auto FloatOne = DAG.getConstantFP(
+          1.0, DL, VectorV.getValueType().getVectorElementType());
+      return getNode(VVPOpcode, ResVT, {FloatOne, VectorV, Mask, AVL}, Flags);
+    }
     return getNode(VVPOpcode, ResVT, {VectorV, Mask, AVL}, Flags);
+  }
 
   // Mask legalization using vm_popcount
   if (!IsAllTrueMask(Mask)) {

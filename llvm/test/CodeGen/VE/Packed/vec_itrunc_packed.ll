@@ -22,7 +22,7 @@ define <512 x i32> @vec_trunc_v512_i64_to_i32(<512 x i64> %a) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vshf %v0, %v0, %v1, 13
+; CHECK-NEXT:    vshf %v0, %v1, %v0, 13
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = trunc <512 x i64> %a to <512 x i32>
   ret <512 x i32> %r
@@ -50,9 +50,9 @@ define <512 x i1> @vec_trunc_v512_i64_to_i1(<512 x i64> %a) {
 ; CHECK-NEXT:    or %s0, 1, (0)1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vand %v1, %s0, %v1
-; CHECK-NEXT:    vfmk.l.ne %vm2, %v1
 ; CHECK-NEXT:    vand %v0, %s0, %v0
+; CHECK-NEXT:    vfmk.l.ne %vm2, %v0
+; CHECK-NEXT:    vand %v0, %s0, %v1
 ; CHECK-NEXT:    vfmk.l.ne %vm3, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = trunc <512 x i64> %a to <512 x i1>

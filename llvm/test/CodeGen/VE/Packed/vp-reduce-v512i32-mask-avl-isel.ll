@@ -4,10 +4,17 @@
 define void @test_vp_harness(<512 x i64>* %Out, <512 x i64> %i0) {
 ; CHECK-LABEL: test_vp_harness:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 512
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v1
+; CHECK-NEXT:    # kill: def $v2 killed $v0
+; CHECK-NEXT:    lea %s2, 8(, %s0)
+; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0, 8, %s0
+; CHECK-NEXT:    vst %v0, 16, %s2
+; CHECK-NEXT:    vst %v1, 16, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   store <512 x i64> %i0, <512 x i64>* %Out
   ret void
@@ -18,12 +25,40 @@ define fastcc float @test_reduce_fmul(<512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmul:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    or %s3, 0, %s0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s3
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm1
+; CHECK-NEXT:    lea.sl %s0, 1065353216
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
+; CHECK-NEXT:    vfim.s %v1, %v1, %s0
+; CHECK-NEXT:    lvs %s1, %v1(0)
+; CHECK-NEXT:    adds.w.sx %s4, 1, %s3
+; CHECK-NEXT:    # implicit-def: $sx3
+; CHECK-NEXT:    or %s3, 0, %s4
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    srl %s3, %s3, 1
+; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
+; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 15
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
-; CHECK-NEXT:    lea.sl %s0, 1072693248
-; CHECK-NEXT:    vfim.d %v0, %v0, %s0
+; CHECK-NEXT:    vfim.s %v0, %v0, %s0
 ; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    fmul.s %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call float @llvm.vp.reduce.fmul.v512f32(float 1.0, <512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
@@ -32,12 +67,40 @@ define fastcc float @test_reduce_fmul(<512 x float> %v, <512 x i1> %m, i32 %n) {
 define fastcc float @test_reduce_fmul_start(float %s, <512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmul_start:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    or %s3, 0, %s1
+; CHECK-NEXT:    # implicit-def: $sx1
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm1
+; CHECK-NEXT:    vfim.s %v1, %v1, %s0
+; CHECK-NEXT:    lvs %s1, %v1(0)
+; CHECK-NEXT:    adds.w.sx %s4, 1, %s3
+; CHECK-NEXT:    # implicit-def: $sx3
+; CHECK-NEXT:    or %s3, 0, %s4
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    srl %s3, %s3, 1
+; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
+; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 15
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
-; CHECK-NEXT:    vfim.d %v0, %v0, %s0
+; CHECK-NEXT:    vfim.s %v0, %v0, %s0
 ; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    fmul.s %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call float @llvm.vp.reduce.fmul.v512f32(float %s, <512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
@@ -46,83 +109,41 @@ define fastcc float @test_reduce_fmul_start(float %s, <512 x float> %v, <512 x i
 define fastcc float @test_reduce_fmul_fast(<512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmul_fast:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    andm %vm3, %vm0, %vm1
-; CHECK-NEXT:    lea %s16, 512
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s3, 0, %s0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s3
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    and %s1, %s0, (32)0
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
-; CHECK-NEXT:    # implicit-def: $sx1
-; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lea %s0, 512
-; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrd %v2, %s1
-; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vcmpu.l %v0, %v0, %v2
-; CHECK-NEXT:    andm %vm1, %vm0, %vm0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v0, %vm1
-; CHECK-NEXT:    andm %vm2, %vm2, %vm3
-; CHECK-NEXT:    lea.sl %s1, 1072693248
-; CHECK-NEXT:    vbrd %v0, %s1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
-; CHECK-NEXT:    lea %s1, -128
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    or %s1, 0, %s1
-; CHECK-NEXT:    lea %s2, 128
-; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    lea %s1, 64
-; CHECK-NEXT:    or %s2, 0, %s1
-; CHECK-NEXT:    or %s1, 0, %s2
+; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm1
+; CHECK-NEXT:    lea.sl %s0, 1065353216
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
+; CHECK-NEXT:    vfim.s %v1, %v1, %s0
+; CHECK-NEXT:    lvs %s1, %v1(0)
+; CHECK-NEXT:    adds.w.sx %s4, 1, %s3
+; CHECK-NEXT:    # implicit-def: $sx3
+; CHECK-NEXT:    or %s3, 0, %s4
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    srl %s3, %s3, 1
+; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
+; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 15
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    or %s1, 32, (0)1
-; CHECK-NEXT:    or %s2, 0, %s1
-; CHECK-NEXT:    or %s1, 0, %s2
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    or %s1, 16, (0)1
-; CHECK-NEXT:    or %s2, 0, %s1
-; CHECK-NEXT:    or %s1, 0, %s2
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    or %s1, 8, (0)1
-; CHECK-NEXT:    or %s2, 0, %s1
-; CHECK-NEXT:    or %s1, 0, %s2
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    or %s1, 4, (0)1
-; CHECK-NEXT:    or %s2, 0, %s1
-; CHECK-NEXT:    or %s1, 0, %s2
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
-; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    lvs %s1, %v0(2)
-; CHECK-NEXT:    # implicit-def: $v1
-; CHECK-NEXT:    lsv %v1(0), %s1
-; CHECK-NEXT:    lvs %s1, %v0(3)
-; CHECK-NEXT:    lsv %v1(1), %s1
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    lvs %s1, %v0(1)
-; CHECK-NEXT:    # implicit-def: $v1
-; CHECK-NEXT:    lsv %v1(0), %s1
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
+; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
+; CHECK-NEXT:    vfim.s %v0, %v0, %s0
 ; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    fmul.s %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call fast float @llvm.vp.reduce.fmul.v512f32(float 1.0, <512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
@@ -131,84 +152,43 @@ define fastcc float @test_reduce_fmul_fast(<512 x float> %v, <512 x i1> %m, i32 
 define fastcc float @test_reduce_fmul_start_fast(float %s, <512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmul_start_fast:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    andm %vm3, %vm0, %vm1
-; CHECK-NEXT:    lea %s16, 512
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    or %s4, 0, %s1
+; CHECK-NEXT:    # implicit-def: $sx1
+; CHECK-NEXT:    or %s1, 0, %s4
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    or %s3, 0, %s1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    and %s2, %s1, (32)0
-; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    adds.w.sx %s1, %s1, (0)1
-; CHECK-NEXT:    # implicit-def: $sx2
-; CHECK-NEXT:    or %s2, 0, %s1
-; CHECK-NEXT:    lea %s1, 512
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v2, %s2
-; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vcmpu.l %v0, %v0, %v2
-; CHECK-NEXT:    andm %vm1, %vm0, %vm0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v0, %vm1
-; CHECK-NEXT:    andm %vm2, %vm2, %vm3
-; CHECK-NEXT:    lea.sl %s2, 1072693248
-; CHECK-NEXT:    vbrd %v0, %s2
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
-; CHECK-NEXT:    lea %s2, -128
-; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
-; CHECK-NEXT:    or %s2, 0, %s2
-; CHECK-NEXT:    lea %s3, 128
-; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
 ; CHECK-NEXT:    lvl %s3
-; CHECK-NEXT:    vmv %v1, %s2, %v0, %vm1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    lea %s2, 64
-; CHECK-NEXT:    or %s3, 0, %s2
-; CHECK-NEXT:    or %s2, 0, %s3
+; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm1
+; CHECK-NEXT:    lea.sl %s1, 1065353216
+; CHECK-NEXT:    # kill: def $sf1 killed $sf1 killed $sx1
+; CHECK-NEXT:    vfim.s %v1, %v1, %s1
+; CHECK-NEXT:    lvs %s2, %v1(0)
+; CHECK-NEXT:    adds.w.sx %s5, 1, %s4
+; CHECK-NEXT:    # implicit-def: $sx4
+; CHECK-NEXT:    or %s4, 0, %s5
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    srl %s4, %s4, 1
+; CHECK-NEXT:    # kill: def $sw4 killed $sw4 killed $sx4
+; CHECK-NEXT:    lvl %s4
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 15
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    lvl %s3
-; CHECK-NEXT:    vmv %v1, %s2, %v0, %vm1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    or %s2, 32, (0)1
-; CHECK-NEXT:    or %s3, 0, %s2
-; CHECK-NEXT:    or %s2, 0, %s3
-; CHECK-NEXT:    lvl %s3
-; CHECK-NEXT:    vmv %v1, %s2, %v0, %vm1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    or %s2, 16, (0)1
-; CHECK-NEXT:    or %s3, 0, %s2
-; CHECK-NEXT:    or %s2, 0, %s3
-; CHECK-NEXT:    lvl %s3
-; CHECK-NEXT:    vmv %v1, %s2, %v0, %vm1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    or %s2, 8, (0)1
-; CHECK-NEXT:    or %s3, 0, %s2
-; CHECK-NEXT:    or %s2, 0, %s3
-; CHECK-NEXT:    lvl %s3
-; CHECK-NEXT:    vmv %v1, %s2, %v0, %vm1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    or %s2, 4, (0)1
-; CHECK-NEXT:    or %s3, 0, %s2
-; CHECK-NEXT:    or %s2, 0, %s3
-; CHECK-NEXT:    lvl %s3
-; CHECK-NEXT:    vmv %v1, %s2, %v0, %vm1
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    lvs %s2, %v0(2)
-; CHECK-NEXT:    # implicit-def: $v1
-; CHECK-NEXT:    lsv %v1(0), %s2
-; CHECK-NEXT:    lvs %s2, %v0(3)
-; CHECK-NEXT:    lsv %v1(1), %s2
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
-; CHECK-NEXT:    lvs %s2, %v0(1)
-; CHECK-NEXT:    # implicit-def: $v1
-; CHECK-NEXT:    lsv %v1(0), %s2
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v1
+; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
+; CHECK-NEXT:    vfim.s %v0, %v0, %s1
 ; CHECK-NEXT:    lvs %s1, %v0(0)
-; CHECK-NEXT:    fmul.d %s0, %s0, %s1
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    or %s2, 0, %s2
+; CHECK-NEXT:    fmul.s %s1, %s1, %s2
+; CHECK-NEXT:    fmul.s %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call fast float @llvm.vp.reduce.fmul.v512f32(float %s, <512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
@@ -219,12 +199,40 @@ define fastcc float @test_reduce_fadd(<512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fadd:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
+; CHECK-NEXT:    or %s3, 0, %s0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s3
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm1
 ; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    vfia.d %v0, %v0, %s0
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
+; CHECK-NEXT:    vfia.s %v1, %v1, %s0
+; CHECK-NEXT:    lvs %s1, %v1(0)
+; CHECK-NEXT:    adds.w.sx %s4, 1, %s3
+; CHECK-NEXT:    # implicit-def: $sx3
+; CHECK-NEXT:    or %s3, 0, %s4
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    srl %s3, %s3, 1
+; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
+; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 15
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
+; CHECK-NEXT:    vfia.s %v0, %v0, %s0
 ; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    fadd.s %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call float @llvm.vp.reduce.fadd.v512f32(float 0.0, <512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
@@ -233,12 +241,40 @@ define fastcc float @test_reduce_fadd(<512 x float> %v, <512 x i1> %m, i32 %n) {
 define fastcc float @test_reduce_fadd_start(float %s, <512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fadd_start:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
-; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    or %s3, 0, %s1
+; CHECK-NEXT:    # implicit-def: $sx1
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm1
+; CHECK-NEXT:    vfia.s %v1, %v1, %s0
+; CHECK-NEXT:    lvs %s1, %v1(0)
+; CHECK-NEXT:    adds.w.sx %s4, 1, %s3
+; CHECK-NEXT:    # implicit-def: $sx3
+; CHECK-NEXT:    or %s3, 0, %s4
+; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    srl %s3, %s3, 1
+; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
+; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 15
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm1
-; CHECK-NEXT:    vfia.d %v0, %v0, %s0
+; CHECK-NEXT:    vfia.s %v0, %v0, %s0
 ; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    fadd.s %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call float @llvm.vp.reduce.fadd.v512f32(float %s, <512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
@@ -248,10 +284,32 @@ define fastcc float @test_reduce_fadd_fast(<512 x float> %v, <512 x i1> %m, i32 
 ; CHECK-LABEL: test_reduce_fadd_fast:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfsum.d %v0, %v0, %vm1
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vshf %v1, %v0, %v0, 15
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vfsum.s %v1, %v1, %vm1
+; CHECK-NEXT:    lvs %s0, %v1(0)
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    vfsum.s %v0, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    fadd.s %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call fast float @llvm.vp.reduce.fadd.v512f32(float 0.0, <512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
@@ -260,12 +318,35 @@ define fastcc float @test_reduce_fadd_fast(<512 x float> %v, <512 x i1> %m, i32 
 define fastcc float @test_reduce_fadd_start_fast(float %s, <512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fadd_start_fast:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    adds.w.sx %s3, 1, %s2
+; CHECK-NEXT:    # implicit-def: $sx1
+; CHECK-NEXT:    or %s1, 0, %s3
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfsum.d %v0, %v0, %vm1
-; CHECK-NEXT:    lvs %s1, %v0(0)
-; CHECK-NEXT:    fadd.d %s0, %s0, %s1
+; CHECK-NEXT:    vshf %v1, %v0, %v0, 15
+; CHECK-NEXT:    # implicit-def: $sx1
+; CHECK-NEXT:    or %s1, 0, %s2
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vfsum.s %v1, %v1, %vm1
+; CHECK-NEXT:    lvs %s1, %v1(0)
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    vfsum.s %v0, %v0, %vm1
+; CHECK-NEXT:    lvs %s2, %v0(0)
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    or %s2, 0, %s2
+; CHECK-NEXT:    fadd.s %s1, %s1, %s2
+; CHECK-NEXT:    fadd.s %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call fast float @llvm.vp.reduce.fadd.v512f32(float %s, <512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
@@ -276,10 +357,32 @@ define fastcc float @test_reduce_fmin(<512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmin:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfrmin.d.fst %v0, %v0, %vm1
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vshf %v1, %v0, %v0, 15
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vfrmin.s.fst %v1, %v1, %vm1
+; CHECK-NEXT:    lvs %s0, %v1(0)
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    vfrmin.s.fst %v0, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    fmin.s %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call float @llvm.vp.reduce.fmin.v512f32(<512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
@@ -290,10 +393,32 @@ define fastcc float @test_reduce_fmax(<512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_fmax:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s2
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfrmax.d.fst %v0, %v0, %vm1
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vshf %v1, %v0, %v0, 15
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vfrmax.s.fst %v1, %v1, %vm1
+; CHECK-NEXT:    lvs %s0, %v1(0)
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
+; CHECK-NEXT:    vfrmax.s.fst %v0, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    or %s0, 0, %s0
+; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    fmax.s %s1, %s0, %s1
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call float @llvm.vp.reduce.fmax.v512f32(<512 x float> %v, <512 x i1> %m, i32 %n)
   ret float %r
@@ -303,11 +428,26 @@ define fastcc float @test_reduce_fmax(<512 x float> %v, <512 x i1> %m, i32 %n) {
 define fastcc i64 @test_reduce_add(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_add:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v1
+; CHECK-NEXT:    # kill: def $v2 killed $v0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vsum.l %v0, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    vsum.l %v0, %v1, %vm1
 ; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    adds.l %s0, %s0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call i64 @llvm.vp.reduce.add.v512i64(<512 x i64> %v, <512 x i1> %m, i32 %n)
   ret i64 %r
@@ -316,80 +456,274 @@ define fastcc i64 @test_reduce_add(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 define fastcc i64 @test_reduce_mul(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_mul:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    andm %vm3, %vm0, %vm1
-; CHECK-NEXT:    lea %s16, 512
+; CHECK-NEXT:    andm %vm6, %vm0, %vm2
+; CHECK-NEXT:    andm %vm7, %vm0, %vm3
+; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    vor %v3, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v1
+; CHECK-NEXT:    # implicit-def: $vp0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v2
+; CHECK-NEXT:    # kill: def $v0 killed $v3
 ; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lea %s0, 512
+; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    lea %s2, .LCPI12_0@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s2, .LCPI12_0@hi(, %s2)
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrd %v2, %s1
-; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vcmpu.l %v0, %v0, %v2
+; CHECK-NEXT:    vld %v0, 8, %s2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrd %v1, %s1
+; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
 ; CHECK-NEXT:    andm %vm1, %vm0, %vm0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v0, %vm1
-; CHECK-NEXT:    andm %vm2, %vm2, %vm3
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v0, %vm1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v0, %vm1
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm3
+; CHECK-NEXT:    andm %vm5, %vm0, %vm7
+; CHECK-NEXT:    andm %vm4, %vm4, %vm5
+; CHECK-NEXT:    # kill: def $vm2 killed $vm2 killed $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm6
+; CHECK-NEXT:    andm %vm5, %vm2, %vm3
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm2, %vm0, %vm5
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
 ; CHECK-NEXT:    vbrd %v0, 1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm2
 ; CHECK-NEXT:    lea %s1, -128
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    lea %s2, 128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v4, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v5, %s1, %v1, %vm1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v5
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
+; CHECK-NEXT:    vmuls.l %v1, %v1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmuls.l %v0, %v0, %v2
 ; CHECK-NEXT:    lea %s1, 64
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v4, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v5, %s1, %v1, %vm1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v5
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
+; CHECK-NEXT:    vmuls.l %v1, %v1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmuls.l %v0, %v0, %v2
 ; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v4, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v5, %s1, %v1, %vm1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v5
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
+; CHECK-NEXT:    vmuls.l %v1, %v1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmuls.l %v0, %v0, %v2
 ; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v4, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v5, %s1, %v1, %vm1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v5
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
+; CHECK-NEXT:    vmuls.l %v1, %v1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmuls.l %v0, %v0, %v2
 ; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v4, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v5, %s1, %v1, %vm1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v5
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
+; CHECK-NEXT:    vmuls.l %v1, %v1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmuls.l %v0, %v0, %v2
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v4, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v5, %s1, %v1, %vm1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v5
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
+; CHECK-NEXT:    vmuls.l %v1, %v1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmuls.l %v0, %v0, %v2
 ; CHECK-NEXT:    lvs %s1, %v0(2)
-; CHECK-NEXT:    # implicit-def: $v1
-; CHECK-NEXT:    lsv %v1(0), %s1
+; CHECK-NEXT:    # implicit-def: $v2
+; CHECK-NEXT:    lsv %v2(0), %s1
 ; CHECK-NEXT:    lvs %s1, %v0(3)
-; CHECK-NEXT:    lsv %v1(1), %s1
+; CHECK-NEXT:    lsv %v2(1), %s1
+; CHECK-NEXT:    lvs %s1, %v1(2)
+; CHECK-NEXT:    # implicit-def: $v3
+; CHECK-NEXT:    lsv %v3(0), %s1
+; CHECK-NEXT:    lvs %s1, %v1(3)
+; CHECK-NEXT:    lsv %v3(1), %s1
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmuls.l %v2, %v1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
 ; CHECK-NEXT:    lvs %s1, %v0(1)
 ; CHECK-NEXT:    # implicit-def: $v1
 ; CHECK-NEXT:    lsv %v1(0), %s1
+; CHECK-NEXT:    lvs %s1, %v2(1)
+; CHECK-NEXT:    # implicit-def: $v4
+; CHECK-NEXT:    lsv %v4(0), %s1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    # implicit-def: $v1
+; CHECK-NEXT:    lsv %v1(0), %s1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v1
+; CHECK-NEXT:    # implicit-def: $v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
 ; CHECK-NEXT:    lvs %s0, %v0(0)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -400,11 +734,26 @@ define fastcc i64 @test_reduce_mul(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 define fastcc i64 @test_reduce_and(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_and:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v1
+; CHECK-NEXT:    # kill: def $v2 killed $v0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vrand %v0, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    vrand %v0, %v1, %vm1
 ; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    and %s0, %s0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call i64 @llvm.vp.reduce.and.v512i64(<512 x i64> %v, <512 x i1> %m, i32 %n)
   ret i64 %r
@@ -413,11 +762,26 @@ define fastcc i64 @test_reduce_and(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 define fastcc i64 @test_reduce_or(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_or:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v1
+; CHECK-NEXT:    # kill: def $v2 killed $v0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vror %v0, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    vror %v0, %v1, %vm1
 ; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call i64 @llvm.vp.reduce.or.v512i64(<512 x i64> %v, <512 x i1> %m, i32 %n)
   ret i64 %r
@@ -426,11 +790,26 @@ define fastcc i64 @test_reduce_or(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 define fastcc i64 @test_reduce_xor(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_xor:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v1
+; CHECK-NEXT:    # kill: def $v2 killed $v0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vrxor %v0, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    vrxor %v0, %v1, %vm1
 ; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    xor %s0, %s0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call i64 @llvm.vp.reduce.xor.v512i64(<512 x i64> %v, <512 x i1> %m, i32 %n)
   ret i64 %r
@@ -440,99 +819,366 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; TODO: map to smax
 ; CHECK-LABEL: test_reduce_smin:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    andm %vm3, %vm0, %vm1
-; CHECK-NEXT:    lea %s16, 512
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    vor %v3, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v1
+; CHECK-NEXT:    # implicit-def: $vp0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v2
+; CHECK-NEXT:    # kill: def $v0 killed $v3
 ; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lea %s0, 512
+; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    lea %s2, .LCPI16_0@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s2, .LCPI16_0@hi(, %s2)
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrd %v2, %s1
-; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vcmpu.l %v0, %v0, %v2
-; CHECK-NEXT:    andm %vm1, %vm0, %vm0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v0, %vm1
-; CHECK-NEXT:    andm %vm2, %vm2, %vm3
+; CHECK-NEXT:    vld %v0, 8, %s2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrd %v1, %s1
+; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
+; CHECK-NEXT:    andm %vm2, %vm0, %vm0
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v0, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp3
+; CHECK-NEXT:    andm %vm7, %vm0, %vm3
+; CHECK-NEXT:    andm %vm6, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm7
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm1, %vm3
+; CHECK-NEXT:    andm %vm3, %vm0, %vm6
+; CHECK-NEXT:    # kill: def $vm4 killed $vm4 killed $vmp2
+; CHECK-NEXT:    andm %vm3, %vm3, %vm4
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm4, %vm0, %vm3
+; CHECK-NEXT:    andm %vm5, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
 ; CHECK-NEXT:    lea %s1, -1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s1, 2147483647(, %s1)
 ; CHECK-NEXT:    vbrd %v0, %s1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lea %s1, -128
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    lea %s2, 128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmps.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
+; CHECK-NEXT:    vcmps.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    lea %s1, 64
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v1, %vm1
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmps.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    vcmps.l %v0, %v3, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v4, %v2, %v0
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmps.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
+; CHECK-NEXT:    vcmps.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v1, %vm1
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmps.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    vcmps.l %v0, %v3, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v4, %v2, %v0
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmps.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
+; CHECK-NEXT:    vcmps.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v1, %vm1
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmps.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    vcmps.l %v0, %v3, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v4, %v2, %v0
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lvs %s1, %v0(2)
-; CHECK-NEXT:    # implicit-def: $v1
-; CHECK-NEXT:    lsv %v1(0), %s1
+; CHECK-NEXT:    # implicit-def: $v2
+; CHECK-NEXT:    lsv %v2(0), %s1
 ; CHECK-NEXT:    lvs %s1, %v0(3)
-; CHECK-NEXT:    lsv %v1(1), %s1
-; CHECK-NEXT:    vcmps.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
-; CHECK-NEXT:    lvs %s1, %v1(1)
+; CHECK-NEXT:    lsv %v2(1), %s1
+; CHECK-NEXT:    lvs %s1, %v1(2)
+; CHECK-NEXT:    # implicit-def: $v3
+; CHECK-NEXT:    lsv %v3(0), %s1
+; CHECK-NEXT:    lvs %s1, %v1(3)
+; CHECK-NEXT:    lsv %v3(1), %s1
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v2(1)
 ; CHECK-NEXT:    # implicit-def: $v0
 ; CHECK-NEXT:    lsv %v0(0), %s1
+; CHECK-NEXT:    lvs %s1, %v3(1)
+; CHECK-NEXT:    # implicit-def: $v1
+; CHECK-NEXT:    lsv %v1(0), %s1
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v1, %v3, %v0
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v1, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v4, %v2, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v0, %v0, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v1, %v1, %v2, %vm1
+; CHECK-NEXT:    lvs %s1, %v1(0)
+; CHECK-NEXT:    # implicit-def: $v4
+; CHECK-NEXT:    lsv %v4(0), %s1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
+; CHECK-NEXT:    # implicit-def: $v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmps.l %v0, %v0, %v4
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v2, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    lvs %s0, %v0(0)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -543,11 +1189,26 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 define fastcc i64 @test_reduce_smax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_smax:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v1
+; CHECK-NEXT:    # kill: def $v2 killed $v0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    or %s1, 0, %s0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vrmaxs.l.fst %v0, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    vrmaxs.l.fst %v0, %v1, %vm1
 ; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    maxs.l %s0, %s0, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call i64 @llvm.vp.reduce.smax.v512i64(<512 x i64> %v, <512 x i1> %m, i32 %n)
   ret i64 %r
@@ -557,96 +1218,363 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; TODO: map to smax
 ; CHECK-LABEL: test_reduce_umin:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    andm %vm3, %vm0, %vm1
-; CHECK-NEXT:    lea %s16, 512
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    vor %v3, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v1
+; CHECK-NEXT:    # implicit-def: $vp0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v2
+; CHECK-NEXT:    # kill: def $v0 killed $v3
 ; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lea %s0, 512
+; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    lea %s2, .LCPI18_0@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s2, .LCPI18_0@hi(, %s2)
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrd %v2, %s1
-; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vcmpu.l %v0, %v0, %v2
-; CHECK-NEXT:    andm %vm1, %vm0, %vm0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v0, %vm1
-; CHECK-NEXT:    andm %vm2, %vm2, %vm3
+; CHECK-NEXT:    vld %v0, 8, %s2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrd %v1, %s1
+; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
+; CHECK-NEXT:    andm %vm2, %vm0, %vm0
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v0, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp3
+; CHECK-NEXT:    andm %vm7, %vm0, %vm3
+; CHECK-NEXT:    andm %vm6, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm7
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm1, %vm3
+; CHECK-NEXT:    andm %vm3, %vm0, %vm6
+; CHECK-NEXT:    # kill: def $vm4 killed $vm4 killed $vmp2
+; CHECK-NEXT:    andm %vm3, %vm3, %vm4
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm4, %vm0, %vm3
+; CHECK-NEXT:    andm %vm5, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
 ; CHECK-NEXT:    vbrd %v0, -1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lea %s1, -128
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    lea %s2, 128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
+; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    lea %s1, 64
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v1, %vm1
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
+; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v1, %vm1
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
+; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v1, %vm1
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lvs %s1, %v0(2)
-; CHECK-NEXT:    # implicit-def: $v1
-; CHECK-NEXT:    lsv %v1(0), %s1
+; CHECK-NEXT:    # implicit-def: $v2
+; CHECK-NEXT:    lsv %v2(0), %s1
 ; CHECK-NEXT:    lvs %s1, %v0(3)
-; CHECK-NEXT:    lsv %v1(1), %s1
-; CHECK-NEXT:    vcmpu.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
-; CHECK-NEXT:    lvs %s1, %v1(1)
+; CHECK-NEXT:    lsv %v2(1), %s1
+; CHECK-NEXT:    lvs %s1, %v1(2)
+; CHECK-NEXT:    # implicit-def: $v3
+; CHECK-NEXT:    lsv %v3(0), %s1
+; CHECK-NEXT:    lvs %s1, %v1(3)
+; CHECK-NEXT:    lsv %v3(1), %s1
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v2(1)
 ; CHECK-NEXT:    # implicit-def: $v0
 ; CHECK-NEXT:    lsv %v0(0), %s1
+; CHECK-NEXT:    lvs %s1, %v3(1)
+; CHECK-NEXT:    # implicit-def: $v1
+; CHECK-NEXT:    lsv %v1(0), %s1
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v1, %v3, %v0
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v1, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v2, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v0, %v0, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v1, %v1, %v2, %vm1
+; CHECK-NEXT:    lvs %s1, %v1(0)
+; CHECK-NEXT:    # implicit-def: $v4
+; CHECK-NEXT:    lsv %v4(0), %s1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
+; CHECK-NEXT:    # implicit-def: $v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v0, %v0, %v4
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v2, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    lvs %s0, %v0(0)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -658,96 +1586,363 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; TODO: map to smax
 ; CHECK-LABEL: test_reduce_umax:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    andm %vm3, %vm0, %vm1
-; CHECK-NEXT:    lea %s16, 512
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    vor %v3, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v1
+; CHECK-NEXT:    # implicit-def: $vp0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v2
+; CHECK-NEXT:    # kill: def $v0 killed $v3
 ; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s0
-; CHECK-NEXT:    lea %s0, 512
+; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
+; CHECK-NEXT:    lea %s2, .LCPI19_0@lo
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    lea.sl %s2, .LCPI19_0@hi(, %s2)
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vbrd %v2, %s1
-; CHECK-NEXT:    vseq %v0
-; CHECK-NEXT:    vcmpu.l %v0, %v0, %v2
-; CHECK-NEXT:    andm %vm1, %vm0, %vm0
-; CHECK-NEXT:    vfmk.l.lt %vm2, %v0, %vm1
-; CHECK-NEXT:    andm %vm2, %vm2, %vm3
+; CHECK-NEXT:    vld %v0, 8, %s2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vbrd %v1, %s1
+; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
+; CHECK-NEXT:    andm %vm2, %vm0, %vm0
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
+; CHECK-NEXT:    vfmk.l.lt %vm3, %v0, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp3
+; CHECK-NEXT:    andm %vm7, %vm0, %vm3
+; CHECK-NEXT:    andm %vm6, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm7
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm1, %vm3
+; CHECK-NEXT:    andm %vm3, %vm0, %vm6
+; CHECK-NEXT:    # kill: def $vm4 killed $vm4 killed $vmp2
+; CHECK-NEXT:    andm %vm3, %vm3, %vm4
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm4, %vm0, %vm3
+; CHECK-NEXT:    andm %vm5, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
 ; CHECK-NEXT:    vbrd %v0, 0
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v0
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lea %s1, -128
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    lea %s2, 128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.gt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
+; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    lea %s1, 64
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v1, %vm1
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.gt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
+; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.gt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
+; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v1, %vm1
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.gt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
+; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v1, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.gt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
+; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v1, %vm1
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcmpu.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.gt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm2
+; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
+; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lvs %s1, %v0(2)
-; CHECK-NEXT:    # implicit-def: $v1
-; CHECK-NEXT:    lsv %v1(0), %s1
+; CHECK-NEXT:    # implicit-def: $v2
+; CHECK-NEXT:    lsv %v2(0), %s1
 ; CHECK-NEXT:    lvs %s1, %v0(3)
-; CHECK-NEXT:    lsv %v1(1), %s1
-; CHECK-NEXT:    vcmpu.l %v2, %v0, %v1
-; CHECK-NEXT:    vfmk.l.gt %vm2, %v2, %vm1
-; CHECK-NEXT:    vmrg %v1, %v1, %v0, %vm2
-; CHECK-NEXT:    lvs %s1, %v1(1)
+; CHECK-NEXT:    lsv %v2(1), %s1
+; CHECK-NEXT:    lvs %s1, %v1(2)
+; CHECK-NEXT:    # implicit-def: $v3
+; CHECK-NEXT:    lsv %v3(0), %s1
+; CHECK-NEXT:    lvs %s1, %v1(3)
+; CHECK-NEXT:    lsv %v3(1), %s1
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v3
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v2, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
+; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    lvs %s1, %v2(1)
 ; CHECK-NEXT:    # implicit-def: $v0
 ; CHECK-NEXT:    lsv %v0(0), %s1
+; CHECK-NEXT:    lvs %s1, %v3(1)
+; CHECK-NEXT:    # implicit-def: $v1
+; CHECK-NEXT:    lsv %v1(0), %s1
+; CHECK-NEXT:    # implicit-def: $vp2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v5, (0)1, %v1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v0
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v4
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v1, %v3, %v0
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v1, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v1, (0)1, %v5
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v4, %v2, %v1
+; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vmrg %v0, %v0, %v3, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v1, %v1, %v2, %vm1
+; CHECK-NEXT:    lvs %s1, %v1(0)
+; CHECK-NEXT:    # implicit-def: $v4
+; CHECK-NEXT:    lsv %v4(0), %s1
+; CHECK-NEXT:    # implicit-def: $vp1
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v3, (0)1, %v4
+; CHECK-NEXT:    # implicit-def: $v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v2, (0)1, %v4
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v4, (0)1, %v2
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vcmpu.l %v0, %v0, %v4
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v0, %vm2
+; CHECK-NEXT:    lea %s16, 256
+; CHECK-NEXT:    lvl %s16
+; CHECK-NEXT:    vor %v0, (0)1, %v3
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.gt %vm1, %v2, %vm1
+; CHECK-NEXT:    vfmk.l.gt %vm4, %v2, %vm2
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v0, %v0, %v1, %vm1
 ; CHECK-NEXT:    lvs %s0, %v0(0)
 ; CHECK-NEXT:    b.l.t (, %s10)

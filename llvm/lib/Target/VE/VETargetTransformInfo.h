@@ -76,7 +76,7 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
     ///// FP reduction (Ordered only)
     case Intrinsic::vp_reduce_fmul:
     case Intrinsic::vector_reduce_fmul:
-      return !Unordered;
+      return true;
 
     ///// int arith
     case Intrinsic::vp_reduce_add:
