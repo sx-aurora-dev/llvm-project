@@ -51,13 +51,12 @@ let Namespace = "VE" in {
   def sub_f32     : SubRegIndex<32>;            // High 32 bit (0..31)
   def sub_even    : SubRegIndex<64>;            // High 64 bit (0..63)
   def sub_odd     : SubRegIndex<64, 64>;        // Low 64 bit (64..127)
-  // TODO sub register description for vm512 may be inaccurate
-  def sub_vm_even : SubRegIndex<256, -1>;       // k*128 + 64 bit packs (even slots)
-  def sub_vm_odd  : SubRegIndex<256, -1>;       // 64 + k*128 + 64 bit packs (odd slots)
+  def sub_vm_hi   : SubRegIndex<256, -1>;       // k*128 + 64 bit packs (even slots)
+  def sub_vm_lo   : SubRegIndex<256, -1>;       // 64 + k*128 + 64 bit packs (odd slots)
   // Over-packed register.
-  def sub_pack_even : SubRegIndex<16384, -1>;       // k*128 + 64 bit packs (even slots)
-  def sub_pack_odd  : SubRegIndex<16384, -1>;       // 64 + k*128 + 64 bit packs (odd slots)
-  def AsmName     : RegAltNameIndex;
+  def sub_pack_hi  : SubRegIndex<16384, -1>;       // k*128 + 64 bit packs (even slots)
+  def sub_pack_lo  : SubRegIndex<16384, -1>;       // 64 + k*128 + 64 bit packs (odd slots)
+  def AsmName      : RegAltNameIndex;
 }
 
 //-----------------------------------------------------------------------------
@@ -149,7 +148,7 @@ foreach I = 0-63 in
   def V#I : VEVecReg<I, "v"#I, [], ["v"#I]>, DwarfRegNum<[!add(64,I)]>;
 
 // (Virtual) over-packed vector registers - 64 bits wide 512 elements
-let SubRegIndices = [sub_pack_even, sub_pack_odd], CoveredBySubRegs = 1 in
+let SubRegIndices = [sub_pack_hi, sub_pack_lo], CoveredBySubRegs = 1 in
 foreach I = 0-31 in
   def VP#I : VEVecReg<!shl(I,1), "vp"#I,
                       [!cast<VEVecReg>("V"#!shl(I,1)),
@@ -165,7 +164,7 @@ foreach I = 0-15 in
 // Aliases of VMs to use as a pair of two VM for packed instructions
 def VMP0 : VEMaskReg<0, "vm0", [], ["vm0"]>;
 
-let SubRegIndices = [sub_vm_even, sub_vm_odd], CoveredBySubRegs = 1 in
+let SubRegIndices = [sub_vm_hi, sub_vm_lo], CoveredBySubRegs = 1 in
 foreach I = 1-7 in
   def VMP#I : VEMaskReg<!shl(I,1), "vm"#I,
                         [!cast<VEMaskReg>("VM"#!shl(I,1)),

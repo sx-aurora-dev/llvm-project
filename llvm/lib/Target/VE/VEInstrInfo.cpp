@@ -404,7 +404,7 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         .addImm(0)
         .addImm(256);
 
-    for (unsigned Part : {VE::sub_pack_even, VE::sub_pack_odd})
+    for (unsigned Part : {VE::sub_pack_hi, VE::sub_pack_lo})
       emitVectorRegisterCopy(MBB, I, DL, TRI->getSubReg(DestReg, Part),
                              TRI->getSubReg(SrcReg, Part), KillSrc, AVLTmpReg);
 
@@ -430,7 +430,7 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
         .addReg(SrcReg, getKillRegState(KillSrc));
   } else if (VE::VM512RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
-    const unsigned SubRegIdx[] = {VE::sub_vm_even, VE::sub_vm_odd};
+    const unsigned SubRegIdx[] = {VE::sub_vm_hi, VE::sub_vm_lo};
     unsigned int NumSubRegs = 2;
     copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDMmm),
                     NumSubRegs, SubRegIdx, &getRegisterInfo());

@@ -569,9 +569,12 @@ void VETargetLowering::initVPUActions() {
     ForAll_setOperationAction(VectorTransformOCs, MaskVT, Custom);
 
     // Custom packed expansion
+#if 0
+    // FIXME Using v512i64/v512f64 instead.
     if (MaskVT.getVectorElementCount().getFixedValue() > StandardVectorWidth) {
       setOperationAction(ISD::CONCAT_VECTORS, MaskVT, Custom);
     }
+#endif
   }
 
   // vNt32, vNt64 ops (legal element types)
@@ -2127,8 +2130,10 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
     return lowerVVP_EXTRACT_VECTOR_ELT(Op, DAG);
 
   // vector composition
+#if 0
   case ISD::CONCAT_VECTORS:
     return lowerVVP_CONCAT_VECTOR(Op, DAG);
+#endif
   case ISD::BUILD_VECTOR:
   case ISD::VECTOR_SHUFFLE:
     return lowerVectorShuffleOp(Op, DAG, VVPExpansionMode::ToNativeWidth);
@@ -2168,6 +2173,7 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
   }
 }
 
+#if 0
 SDValue VETargetLowering::lowerVVP_CONCAT_VECTOR(SDValue Op,
                                                  SelectionDAG &DAG) const {
   auto VT = Op.getValueType();
@@ -2181,7 +2187,8 @@ SDValue VETargetLowering::lowerVVP_CONCAT_VECTOR(SDValue Op,
   // Interleave the subregisteres
   CustomDAG CDAG(*this, DAG, Op);
   auto LoInsert = CDAG.getTargetInsertSubreg(
-      VE::sub_vm_even, VT, CDAG.getImplicitDef(VT), Op->getOperand(0));
-  return CDAG.getTargetInsertSubreg(VE::sub_vm_odd, VT, LoInsert,
+      VE::sub_vm_lo, VT, CDAG.getImplicitDef(VT), Op->getOperand(0));
+  return CDAG.getTargetInsertSubreg(VE::sub_vm_hi, VT, LoInsert,
                                     Op->getOperand(1));
 }
+#endif

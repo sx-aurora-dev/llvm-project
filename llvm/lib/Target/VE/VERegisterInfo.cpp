@@ -380,8 +380,8 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   } else if (MI.getOpcode() == VE::STVM512rii) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
     Register SrcReg = MI.getOperand(3).getReg();
-    Register SrcLoReg = getSubReg(SrcReg, VE::sub_vm_odd);
-    Register SrcHiReg = getSubReg(SrcReg, VE::sub_vm_even);
+    Register SrcLoReg = getSubReg(SrcReg, VE::sub_vm_lo);
+    Register SrcHiReg = getSubReg(SrcReg, VE::sub_vm_hi);
     bool isKill = MI.getOperand(3).isKill();
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
@@ -425,8 +425,8 @@ void VERegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   } else if (MI.getOpcode() == VE::LDVM512rii) {
     const TargetInstrInfo &TII = *Subtarget.getInstrInfo();
     Register DestReg = MI.getOperand(0).getReg();
-    Register DestLoReg = getSubReg(DestReg, VE::sub_vm_odd);
-    Register DestHiReg = getSubReg(DestReg, VE::sub_vm_even);
+    Register DestLoReg = getSubReg(DestReg, VE::sub_vm_lo);
+    Register DestHiReg = getSubReg(DestReg, VE::sub_vm_hi);
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
     Register TmpReg = VE::SX16;

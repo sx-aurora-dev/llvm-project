@@ -148,7 +148,7 @@ enum class PackElem : int8_t {
 };
 
 static unsigned getOverPackedSubRegIdx(PackElem Part) {
-  return Part == PackElem::Lo ? VE::sub_pack_odd : VE::sub_pack_even;
+  return Part == PackElem::Lo ? VE::sub_pack_lo : VE::sub_pack_hi;
 }
 
 static inline MVT getMaskVT(Packing P) {
