@@ -72,6 +72,9 @@ Optional<EVT> getIdiomaticType(SDNode *Op);
 
 VecLenOpt MinVectorLength(VecLenOpt A, VecLenOpt B);
 
+// Split this packed type
+EVT splitType(EVT);
+
 // Whether direct codegen for this type will result in a packed operation
 // (requiring a packed VL param..)
 bool isPackedType(EVT SomeVT);
@@ -89,8 +92,9 @@ bool HasDeadMask(unsigned VVPOC);
 bool IsAllTrueMask(SDValue Op);
 //// } VVP Machinery
 
-Optional<unsigned> getVVPReductionStartParamPos(unsigned ISD);
+unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask);
 
+Optional<unsigned> getVVPReductionStartParamPos(unsigned ISD);
 
 Optional<unsigned> getReductionStartParamPos(unsigned ISD);
 
@@ -195,6 +199,7 @@ struct CustomDAG {
   SelectionDAG &DAG;
   SDLoc DL;
 
+  SelectionDAG *getDAG() const { return &DAG; }
 
   CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, SDLoc DL)
       : VLI(VLI), DAG(DAG), DL(DL) {}

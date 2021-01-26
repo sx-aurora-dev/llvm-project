@@ -21,6 +21,7 @@
 namespace llvm {
 class VESubtarget;
 struct CustomDAG;
+struct MaskView;
 
 namespace VEISD {
 enum NodeType : unsigned {
@@ -326,6 +327,9 @@ public:
   // This replaces the standard ISD node with VVP VEISD node(s) with a widened
   // result type.
 
+  SDValue synthesizeView(MaskView &MV, EVT LegalResVT, CustomDAG &CDAG) const;
+  SDValue splitVectorShuffle(SDValue Op, CustomDAG &CDAG,
+                                 VVPExpansionMode Mode) const;
   SDValue ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
                            VVPExpansionMode Mode) const;
   SDValue ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,

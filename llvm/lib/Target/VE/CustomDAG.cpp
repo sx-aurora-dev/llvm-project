@@ -120,6 +120,38 @@ bool IsVVPReductionOp(unsigned Opcode) {
   return false;
 }
 
+unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask) {
+  if (IsMask) {
+    switch (VVPOC) {
+    case VEISD::VVP_REDUCE_UMIN:
+    case VEISD::VVP_REDUCE_SMAX:
+    case VEISD::VVP_REDUCE_MUL:
+    case VEISD::VVP_REDUCE_AND:
+      return ISD::AND;
+    case VEISD::VVP_REDUCE_SMIN:
+    case VEISD::VVP_REDUCE_UMAX:
+    case VEISD::VVP_REDUCE_OR:
+      return ISD::OR;
+    case VEISD::VVP_REDUCE_ADD:
+    case VEISD::VVP_REDUCE_XOR:
+      return ISD::XOR;
+    default:
+      abort();
+    }
+  }
+
+  // Non i1 reduction Opcode.
+  switch (VVPOC) {
+#define HANDLE_VVP_REDUCE_TO_SCALAR(VVP_RED_ISD, REDUCE_ISD)                   \
+  case VEISD::VVP_RED_ISD:                                                     \
+    return ISD::REDUCE_ISD;
+#include "VVPNodes.def"
+  default:
+    break;
+  }
+  llvm_unreachable("Cannot not scalarize this reduction Opcode!");
+}
+
 bool SupportsPackedMode(unsigned Opcode) {
   switch (Opcode) {
   default:
@@ -329,6 +361,15 @@ VecLenOpt MinVectorLength(VecLenOpt A, VecLenOpt B) {
   if (!B)
     return A;
   return std::min<unsigned>(A.getValue(), B.getValue());
+}
+
+EVT splitType(LLVMContext &Ctx, EVT PackedVT, PackElem P) {
+  assert(isPackedType(PackedVT));
+  unsigned PackedNumEls = PackedVT.getVectorNumElements();
+
+  unsigned OneExtra = P == PackElem::Hi ? PackedNumEls % 2 : 0;
+  return EVT::getVectorVT(Ctx, PackedVT.getVectorElementType(),
+                          (PackedNumEls / 2) + OneExtra);
 }
 
 // Whether direct codegen for this type will result in a packed operation
@@ -573,7 +614,7 @@ static SDValue foldUnpack(SDValue PackOp, PackElem Part, EVT DestVT) {
   if (DestPart != Part && !isOverPackedType(SrcVT))
     return SDValue();
 
-  if (Part == PackElem::Lo) 
+  if (Part == PackElem::Lo)
     return PackOp->getOperand(0);
   else
     return PackOp->getOperand(1);
@@ -952,18 +993,21 @@ SDValue CustomDAG::createIREM(bool IsSigned, EVT ResVT, SDValue Dividend,
 
 static bool match_FPOne(SDValue V) {
   SDValue S = getSplatValue(V.getNode());
-  if (S) return match_FPOne(S);
+  if (S)
+    return match_FPOne(S);
 
   auto FPConst = dyn_cast<ConstantFPSDNode>(V);
-  if (!FPConst) return false;
+  if (!FPConst)
+    return false;
 
   return FPConst->isExactlyValue(1.0);
 }
 
 SDValue CustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
-                                       SDValue B, SDValue Mask,
-                                       SDValue AVL, SDNodeFlags Flags) const {
-  if (VVPOpcode == VEISD::VVP_FDIV && Flags.hasAllowReciprocal() && match_FPOne(A))
+                                       SDValue B, SDValue Mask, SDValue AVL,
+                                       SDNodeFlags Flags) const {
+  if (VVPOpcode == VEISD::VVP_FDIV && Flags.hasAllowReciprocal() &&
+      match_FPOne(A))
     return getNode(VEISD::VVP_FRCP, ResVT, {B, Mask, AVL}, Flags);
   // On-the-fly expansion of unsupported vector ops.
   if (VVPOpcode == VEISD::VVP_UREM)
@@ -988,7 +1032,8 @@ SDValue CustomDAG::foldAndUnpackMask(SDValue MaskVector, SDValue Mask,
 
 SDValue CustomDAG::getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT,
                                           SDValue VectorV, SDValue Mask,
-                                          SDValue AVL, SDNodeFlags Flags) const {
+                                          SDValue AVL,
+                                          SDNodeFlags Flags) const {
   if (!isMaskType(VectorV.getValueType()))
     return getNode(VVPOpcode, ResVT, {VectorV, Mask, AVL}, Flags);
 

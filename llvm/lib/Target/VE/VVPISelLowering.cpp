@@ -1092,29 +1092,6 @@ static bool hasChain(SDNode &N) {
   return isa<MemSDNode>(N) || N.isStrictFPOpcode() || N.isMemIntrinsic();
 }
 
-static unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask) {
-  if (IsMask) {
-    switch (VVPOC) {
-    case VEISD::VVP_REDUCE_UMIN:
-    case VEISD::VVP_REDUCE_SMAX:
-    case VEISD::VVP_REDUCE_MUL:
-    case VEISD::VVP_REDUCE_AND:
-      return ISD::AND;
-    case VEISD::VVP_REDUCE_SMIN:
-    case VEISD::VVP_REDUCE_UMAX:
-    case VEISD::VVP_REDUCE_OR:
-      return ISD::OR;
-    case VEISD::VVP_REDUCE_ADD:
-    case VEISD::VVP_REDUCE_XOR:
-      return ISD::XOR;
-    default:
-      abort();
-    }
-  }
-  // TODO Use VVPNodes.def for this!
-  abort();
-}
-
 static bool IgnoreOperandForVVPLowering(const SDNode * N, unsigned OpIdx) {
   if (OpIdx == 1 && (N->getOpcode() == ISD::FP_ROUND))
      return true;
@@ -2073,44 +2050,82 @@ static bool getUniqueInsertion(SDNode *N, unsigned &UniqueIdx) {
   return true;
 }
 
+SDValue VETargetLowering::synthesizeView(MaskView &MV, EVT LegalResVT,
+                                         CustomDAG &CDAG) const {
+  if (isMaskType(LegalResVT)) {
+    MaskShuffleAnalysis MSA(MV, CDAG);
+    return MSA.synthesize(CDAG, LegalResVT);
+  }
+
+  ShuffleAnalysis LoVSA(MV);
+  if (LoVSA.analyze() == ShuffleAnalysis::CanSynthesize)
+    return LoVSA.synthesize(CDAG, LegalResVT);
+  return SDValue();
+}
+
+SDValue VETargetLowering::splitVectorShuffle(SDValue Op, CustomDAG &CDAG,
+                                             VVPExpansionMode Mode) const {
+  EVT LegalResVT = CDAG.legalizeVectorType(Op, Mode);
+  SplitView Split = requestSplitView(Op.getNode(), CDAG);
+  assert(Split.isValid() && "Could not split this over-packed vector shuffle");
+
+  EVT LegalSplitVT = CDAG.getSplitVT(LegalResVT);
+
+  // Synthesize 'lo'
+  SDValue LoRes = synthesizeView(*Split.LoView, LegalSplitVT, CDAG);
+  assert(LoRes && "Could not synthesize 'lo' shuffle.");
+
+  // Synthesize 'hi'
+  SDValue HiRes = synthesizeView(*Split.HiView, LegalSplitVT, CDAG);
+  assert(HiRes && "Could not synthesize 'lo' shuffle.");
+
+  // Re-package
+  return CDAG.CreatePack(LegalResVT, LoRes, HiRes, CDAG.getConstEVL(256));
+}
+
 SDValue VETargetLowering::lowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
                                                VVPExpansionMode Mode) const {
-  SDLoc DL(Op);
+  CustomDAG CDAG(*this, DAG, Op);
+
   std::unique_ptr<MaskView> MView(requestMaskView(Op.getNode()));
 
-  CustomDAG CDAG(*this, DAG, Op);
   EVT LegalResVT = CDAG.legalizeVectorType(Op, Mode);
 
+#if 0
   // mask to shift + OR expansion
   if (isMaskType(Op.getValueType())) {
     // TODO isMaskType(Op.getValueType())) {
     MaskShuffleAnalysis MSA(*MView.get(), CDAG);
     return MSA.synthesize(CDAG, LegalResVT);
   }
+#endif
 
   // If there is just one element, expand to INSERT_VECTOR_ELT.
   unsigned UniqueIdx;
   if (getUniqueInsertion(Op.getNode(), UniqueIdx)) {
     SDValue AccuV = DAG.getUNDEF(Op.getValueType());
     auto ElemV = Op->getOperand(UniqueIdx);
-    SDValue IdxV = DAG.getConstant(UniqueIdx, DL, MVT::i64);
-    return DAG.getNode(ISD::INSERT_VECTOR_ELT, DL, Op.getValueType(), AccuV,
-                       ElemV, IdxV);
+    SDValue IdxV = CDAG.getConstant(UniqueIdx, MVT::i64);
+    return CDAG.getNode(ISD::INSERT_VECTOR_ELT, Op.getValueType(), {AccuV,
+                       ElemV, IdxV});
   }
 
   LLVM_DEBUG(dbgs() << "Lowering Shuffle (non-vmask path)\n");
   // ShuffleVectorSDNode *ShuffleInstr =
   // cast<ShuffleVectorSDNode>(Op.getNode());
 
+  // Try to synthesize in one go
+  if (isOverPackedType(LegalResVT))
+    return splitVectorShuffle(Op, CDAG, Mode);
+
   std::unique_ptr<MaskView> VecView(requestMaskView(Op.getNode()));
   assert(VecView && "Cannot lower this shufffle..");
+  SDValue Res = synthesizeView(*VecView, LegalResVT, CDAG);
+  if (Res)
+    return Res;
 
-  ShuffleAnalysis VSA(*VecView);
-  if (VSA.analyze() == ShuffleAnalysis::CanSynthesize)
-    return VSA.synthesize(CDAG, LegalResVT);
-
-  // fallback to LLVM and hope for the best
-  return SDValue();
+  assert(isPackedType(LegalResVT) && "normal and over-packed EVTs should have been lowered by now!");
+  return splitVectorShuffle(Op, CDAG, Mode);
 }
 
 SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,

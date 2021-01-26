@@ -1532,9 +1532,11 @@ ShuffleAnalysis::AnalyzeResult ShuffleAnalysis::analyze() {
   // Detect simple broadcast, SEQ patterns (that explains the *entire* pattern)
   if (IterBreak == run<LegacyPatternStrategy>(1, MV, PSS))
     return CanSynthesize;
+
   // Load all constant entries from the constant pool.
   if (IterBreak == run<ConstantElemStrategy>(1, MV, PSS))
     return CanSynthesize;
+
   // Broadcast and blend the most frequent single element.
   if (IterBreak == run<BroadcastStrategy>(3, MV, PSS))
     return CanSynthesize;

@@ -318,6 +318,9 @@ SDValue VETargetLowering::combineCopyToRegVVP(SDNode *N,
   auto Chain = N->getOperand(0);
   auto PhysRegV = N->getOperand(1);
   auto DestPhysReg = cast<RegisterSDNode>(PhysRegV)->getReg();
+  // Bail on virtual register copies.
+  if (!DestPhysReg.isPhysical())
+    return SDValue();
   auto SrcV = N->getOperand(2);
   bool HasSrcGlue = N->getNumOperands() == 4;
   SDValue SrcGlue;

@@ -6,6 +6,8 @@
 
 namespace llvm {
 
+struct CustomDAG;
+
 struct ElemSelect {
   SDValue V;          // the value that is chosen
   int64_t ExtractIdx; // whether (>=0) this indicates element extraction
@@ -56,7 +58,7 @@ struct ElemSelect {
 };
 
 struct MaskView {
-
+  virtual SDNode *getNode() const { return nullptr; }
   virtual ~MaskView() {}
 
   // get the element selection at i
@@ -69,6 +71,15 @@ struct MaskView {
     return getValueType().getVectorNumElements();
   }
 };
+
+struct SplitView {
+  std::unique_ptr<MaskView> LoView;
+  std::unique_ptr<MaskView> HiView;
+
+  bool isValid() const { return LoView && HiView; }
+};
+
+SplitView requestSplitView(SDNode *N, CustomDAG &CDAG);
 
 MaskView *requestMaskView(SDNode *N);
 
