@@ -277,6 +277,7 @@ static SDValue getNodeAVL(SDValue Op) {
 
 static SDValue getSplitPtrOffset(CustomDAG &CDAG, SDValue Ptr,
                                  uint64_t ElemBytes, PackElem Part) {
+  // Little-endian byte order.
   if (Part == PackElem::Lo)
     return Ptr;
   return CDAG.getNode(ISD::ADD, MVT::i64,
@@ -1023,8 +1024,8 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
     if (Part == PackElem::Hi)
       UpperPartAVL = SplitTM.AVL;
 
-    // Drop the mask.
-    if (OptimizeVectorMemory)
+    // Drop the mask (for loads).
+    if (VVPOC == VEISD::VVP_LOAD && OptimizeVectorMemory)
       SplitTM.Mask = CDAG.createUniformConstMask(Packing::Normal, true);
 
     // Attach non-predicating value operands

@@ -6,14 +6,10 @@ define fastcc <512 x double> @vec_fpext_v512_float_to_double(<512 x float> %a) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcvt.d.s %v3, %v0, %vm0
-; CHECK-NEXT:    vshf %v0, %v0, %v0, 15
-; CHECK-NEXT:    vcvt.d.s %v2, %v0, %vm0
-; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0, (0)1, %v2
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1, (0)1, %v3
+; CHECK-NEXT:    vshf %v1, %v0, %v0, 15
+; CHECK-NEXT:    vcvt.d.s %v1, %v1, %vm0
+; CHECK-NEXT:    vcvt.d.s %v0, %v0, %vm0
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fpext <512 x float> %a to <512 x double>
   ret <512 x double> %r
@@ -29,16 +25,12 @@ define fastcc <512 x double> @vec_vpfpext_v512_float_to_double(<512 x float> %a,
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vshf %v1, %v0, %v0, 15
-; CHECK-NEXT:    vcvt.d.s %v2, %v1, %vm2
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcvt.d.s %v3, %v0, %vm3
-; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0, (0)1, %v2
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v1, (0)1, %v3
+; CHECK-NEXT:    vcvt.d.s %v1, %v1, %vm3
+; CHECK-NEXT:    vcvt.d.s %v0, %v0, %vm2
+; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = call <512 x double> @llvm.vp.fpext.v512f32.v512f64(<512 x float> %a, <512 x i1> %m, i32 %avl)
   ret <512 x double> %r
