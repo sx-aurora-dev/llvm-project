@@ -40,7 +40,7 @@ using PosOpt = Optional<unsigned>;
 // VVP property queries
 PosOpt GetVVPOpcode(unsigned OpCode);
 
-bool SupportsPackedMode(unsigned Opcode);
+bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT);
 
 bool IsVVPOrVEC(unsigned Opcode);
 bool IsVVP(unsigned Opcode);
@@ -284,7 +284,7 @@ struct CustomDAG {
   }
   SDValue createUniformConstMask(EVT MaskVT, bool IsTrue) const {
     Packing Packing =
-        MaskVT.getVectorNumElements() < 256 ? Packing::Dense : Packing::Normal;
+        MaskVT.getVectorNumElements() <= 256 ? Packing::Normal : Packing::Dense;
     return createUniformConstMask(Packing, MaskVT.getVectorNumElements(),
                                   IsTrue);
   }

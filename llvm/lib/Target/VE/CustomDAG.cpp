@@ -153,14 +153,21 @@ unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask) {
   llvm_unreachable("Cannot not scalarize this reduction Opcode!");
 }
 
-bool SupportsPackedMode(unsigned Opcode) {
+bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT) {
+  bool IsPackedOp = isPackedType(IdiomVT);
+  bool IsMaskOp = IdiomVT.getVectorElementType() == MVT::i1;
+
+  if (IsMaskOp && IsPackedOp) {
+    return false;
+  }
+
   switch (Opcode) {
   default:
     return false;
 
 #define REGISTER_PACKED(VVP_NAME)                                              \
   case VEISD::VVP_NAME:                                                        \
-    return true;
+    return IsPackedOp;
 #include "VVPNodes.def"
   }
 }
@@ -605,14 +612,16 @@ static SDValue foldUnpackFromPack(SDValue PackOp, PackElem Part, EVT DestVT) {
     return SDValue();
 
   // Check for implicit swapping.
-  // The following are foldable (they are noop):
-  // Any over-packed unpack.
+  // The following unpack of pack are foldable (they are noop):
+  //   Any mask unpack.
+  // Or:
+  //   Any over-packed unpack.
   // Or:
   // v256i32 vec_unpack_lo SrcV
   // v256f32 vec_unpack_hi SrcV
   EVT SrcVT = PackOp.getValueType();
   PackElem DestPart = getPackElemForVT(DestVT);
-  if (DestPart != Part && !isOverPackedType(SrcVT))
+  if (!isMaskType(SrcVT) && !isOverPackedType(SrcVT) && (DestPart != Part))
     return SDValue();
 
   if (Part == PackElem::Lo)
@@ -1016,17 +1025,39 @@ static bool match_FPOne(SDValue V) {
   return FPConst->isExactlyValue(1.0);
 }
 
+static Optional<unsigned> getNonVVPMaskOp(unsigned VVPOC, EVT ResVT) {
+  if (!isMaskType(ResVT))
+    return None;
+  switch (VVPOC) {
+  default:
+    return None;
+
+  case VEISD::VVP_AND:
+    return ISD::AND;
+  case VEISD::VVP_OR:
+    return ISD::OR;
+  case VEISD::VVP_XOR:
+    return ISD::XOR;
+  }
+}
 SDValue CustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
                                        SDValue B, SDValue Mask, SDValue AVL,
                                        SDNodeFlags Flags) const {
+  // Ignore AVL, Mask in mask arithmetic and expand to a standard ISD.
+  if (Optional<unsigned> PlainOpc = getNonVVPMaskOp(VVPOpcode, ResVT))
+    return getNode(*PlainOpc, ResVT, {A, B});
+
+  // Fold VFRCP.
   if (VVPOpcode == VEISD::VVP_FDIV && Flags.hasAllowReciprocal() &&
       match_FPOne(A))
     return getNode(VEISD::VVP_FRCP, ResVT, {B, Mask, AVL}, Flags);
-  // On-the-fly expansion of unsupported vector ops.
+
+  // Expand S/UREM.
   if (VVPOpcode == VEISD::VVP_UREM)
     return createIREM(false, ResVT, A, B, Mask, AVL);
   if (VVPOpcode == VEISD::VVP_SREM)
     return createIREM(true, ResVT, A, B, Mask, AVL);
+
   // Lower to the VVP node by default.
   SDValue V = getNode(VVPOpcode, ResVT, {A, B, Mask, AVL});
   V->setFlags(Flags);

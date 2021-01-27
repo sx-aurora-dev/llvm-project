@@ -83,24 +83,25 @@ multiclass MaskArith<ValueType MaskVT, string MaskTag="mmm"> {
 
 defm: MaskArith<v256i1,"m">;
 
+// FIXME: Valid but very inefficient (incurs repetitive unpacking and packing).
 // split pattern (unpack splice, pack)
-class SplitPat<ValueType PackedVT, ValueType RegularVT, SDNode N, Instruction VEOp, SubRegIndex subreg_lo, SubRegIndex subreg_hi>
-  : Pat<(PackedVT (N PackedVT:$A, PackedVT:$B)),
-        (PackedVT
-          (INSERT_SUBREG
-            (INSERT_SUBREG
-              (PackedVT (IMPLICIT_DEF)),
-              (RegularVT (VEOp (RegularVT (EXTRACT_SUBREG $A, subreg_hi)), (RegularVT (EXTRACT_SUBREG $B, subreg_hi)))),
-              subreg_hi),
-            (RegularVT (VEOp (RegularVT (EXTRACT_SUBREG $A, subreg_lo)), (RegularVT (EXTRACT_SUBREG $B, subreg_lo)))),
-            subreg_lo))>;
-
-// mask unpacking
-class SplitMaskPat<SDNode N, Instruction VEMaskOp> : SplitPat<v512i1, v256i1, N, VEMaskOp, sub_vm_lo, sub_vm_hi>;
-
-def: SplitMaskPat<and, ANDMmm>;
-def: SplitMaskPat<or,   ORMmm>;
-def: SplitMaskPat<xor, XORMmm>;
+// class SplitPat<ValueType PackedVT, ValueType RegularVT, SDNode N, Instruction VEOp, SubRegIndex subreg_lo, SubRegIndex subreg_hi>
+//   : Pat<(PackedVT (N PackedVT:$A, PackedVT:$B)),
+//         (PackedVT
+//           (INSERT_SUBREG
+//             (INSERT_SUBREG
+//               (PackedVT (IMPLICIT_DEF)),
+//               (RegularVT (VEOp (RegularVT (EXTRACT_SUBREG $A, subreg_hi)), (RegularVT (EXTRACT_SUBREG $B, subreg_hi)))),
+//               subreg_hi),
+//             (RegularVT (VEOp (RegularVT (EXTRACT_SUBREG $A, subreg_lo)), (RegularVT (EXTRACT_SUBREG $B, subreg_lo)))),
+//             subreg_lo))>;
+// 
+// // mask unpacking
+// class SplitMaskPat<SDNode N, Instruction VEMaskOp> : SplitPat<v512i1, v256i1, N, VEMaskOp, sub_vm_lo, sub_vm_hi>;
+// 
+// def: SplitMaskPat<and, ANDMmm>;
+// def: SplitMaskPat<or,   ORMmm>;
+// def: SplitMaskPat<xor, XORMmm>;
 
 
 //// Insert & Extract Vector Element /////

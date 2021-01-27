@@ -19,10 +19,10 @@ define void @test_vp_fadd_fsub_fmul_fneg_fma(<512 x float>* %Out, <512 x float> 
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvfadd %v2, %v0, %v1, %vm2
-; CHECK-NEXT:    pvfsub %v3, %v0, %v1, %vm2
-; CHECK-NEXT:    pvfmul %v2, %v2, %v3, %vm2
-; CHECK-NEXT:    pvfmad %v0, %v2, %v0, %v1, %vm2
+; CHECK-NEXT:    pvfadd %v2, %v0, %v1
+; CHECK-NEXT:    pvfsub %v3, %v0, %v1
+; CHECK-NEXT:    pvfmul %v2, %v2, %v3
+; CHECK-NEXT:    pvfmad %v0, %v2, %v0, %v1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vst %v0, 8, %s0

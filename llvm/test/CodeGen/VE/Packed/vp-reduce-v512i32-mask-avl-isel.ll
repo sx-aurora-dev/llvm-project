@@ -456,8 +456,8 @@ define fastcc i64 @test_reduce_add(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 define fastcc i64 @test_reduce_mul(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_reduce_mul:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    andm %vm6, %vm0, %vm2
-; CHECK-NEXT:    andm %vm7, %vm0, %vm3
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    andm %vm5, %vm0, %vm3
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v3, (0)1, %v0
@@ -495,34 +495,29 @@ define fastcc i64 @test_reduce_mul(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vbrd %v1, %s1
 ; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm0
-; CHECK-NEXT:    vfmk.l.lt %vm4, %v0, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm5, %v0, %vm1
-; CHECK-NEXT:    # implicit-def: $vmp1
-; CHECK-NEXT:    andm %vm3, %vm0, %vm5
-; CHECK-NEXT:    andm %vm2, %vm0, %vm4
-; CHECK-NEXT:    andm %vm4, %vm0, %vm3
-; CHECK-NEXT:    andm %vm5, %vm0, %vm7
-; CHECK-NEXT:    andm %vm4, %vm4, %vm5
-; CHECK-NEXT:    # kill: def $vm2 killed $vm2 killed $vmp1
-; CHECK-NEXT:    andm %vm3, %vm0, %vm6
-; CHECK-NEXT:    andm %vm5, %vm2, %vm3
-; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    vfmk.l.lt %vm2, %v0
+; CHECK-NEXT:    # implicit-def: $vmp3
+; CHECK-NEXT:    andm %vm7, %vm0, %vm2
+; CHECK-NEXT:    andm %vm6, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm7
 ; CHECK-NEXT:    andm %vm2, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm1, %vm2
+; CHECK-NEXT:    andm %vm1, %vm0, %vm6
 ; CHECK-NEXT:    andm %vm3, %vm0, %vm4
-; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    andm %vm3, %vm1, %vm3
+; CHECK-NEXT:    andm %vm1, %vm0, %vm0
 ; CHECK-NEXT:    vbrd %v0, 1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm4
-; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm3
 ; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm2
 ; CHECK-NEXT:    lea %s1, -128
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
@@ -858,27 +853,22 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vbrd %v1, %s1
 ; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
-; CHECK-NEXT:    andm %vm2, %vm0, %vm0
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v0, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp3
-; CHECK-NEXT:    andm %vm7, %vm0, %vm3
-; CHECK-NEXT:    andm %vm6, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm7
-; CHECK-NEXT:    andm %vm3, %vm0, %vm5
-; CHECK-NEXT:    andm %vm1, %vm1, %vm3
+; CHECK-NEXT:    vfmk.l.lt %vm6, %v0
+; CHECK-NEXT:    # implicit-def: $vmp1
 ; CHECK-NEXT:    andm %vm3, %vm0, %vm6
-; CHECK-NEXT:    # kill: def $vm4 killed $vm4 killed $vmp2
-; CHECK-NEXT:    andm %vm3, %vm3, %vm4
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm4, %vm0, %vm3
-; CHECK-NEXT:    andm %vm5, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    andm %vm6, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm1, %vm6
+; CHECK-NEXT:    # kill: def $vm2 killed $vm2 killed $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm2, %vm3
 ; CHECK-NEXT:    lea %s1, -1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lea.sl %s1, 2147483647(, %s1)
@@ -887,17 +877,17 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm2
 ; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lea %s1, -128
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm0
 ; CHECK-NEXT:    lea %s2, 128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
-; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -910,26 +900,26 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm2
 ; CHECK-NEXT:    lea %s1, 64
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
-; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm1
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -942,26 +932,26 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v0, %v3, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v4, %v2, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm2
 ; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
-; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -974,26 +964,26 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm2
 ; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
-; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm1
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1006,26 +996,26 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v0, %v3, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v4, %v2, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm2
 ; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
-; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1038,26 +1028,26 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm2
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
-; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm1
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1070,19 +1060,19 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v0, %v3, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v4, %v2, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lvs %s1, %v0(2)
 ; CHECK-NEXT:    # implicit-def: $v2
@@ -1106,19 +1096,19 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    lvs %s1, %v2(1)
 ; CHECK-NEXT:    # implicit-def: $v0
@@ -1138,19 +1128,19 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v0, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v1, %v3, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v1, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v4, %v2, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    vmrg %v0, %v0, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v1, %v1, %v2, %vm1
 ; CHECK-NEXT:    lvs %s1, %v1(0)
 ; CHECK-NEXT:    # implicit-def: $v4
@@ -1168,13 +1158,13 @@ define fastcc i64 @test_reduce_smin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v4, (0)1, %v2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v0, %v0, %v4
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v3
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmps.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm4, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v2
 ; CHECK-NEXT:    # implicit-def: $vmp1
 ; CHECK-NEXT:    andm %vm3, %vm0, %vm4
 ; CHECK-NEXT:    andm %vm2, %vm0, %vm1
@@ -1257,43 +1247,38 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vbrd %v1, %s1
 ; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
-; CHECK-NEXT:    andm %vm2, %vm0, %vm0
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v0, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp3
-; CHECK-NEXT:    andm %vm7, %vm0, %vm3
-; CHECK-NEXT:    andm %vm6, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm7
-; CHECK-NEXT:    andm %vm3, %vm0, %vm5
-; CHECK-NEXT:    andm %vm1, %vm1, %vm3
+; CHECK-NEXT:    vfmk.l.lt %vm6, %v0
+; CHECK-NEXT:    # implicit-def: $vmp1
 ; CHECK-NEXT:    andm %vm3, %vm0, %vm6
-; CHECK-NEXT:    # kill: def $vm4 killed $vm4 killed $vmp2
-; CHECK-NEXT:    andm %vm3, %vm3, %vm4
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm4, %vm0, %vm3
-; CHECK-NEXT:    andm %vm5, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    andm %vm6, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm1, %vm6
+; CHECK-NEXT:    # kill: def $vm2 killed $vm2 killed $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm2, %vm3
 ; CHECK-NEXT:    vbrd %v0, -1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm2
 ; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lea %s1, -128
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm0
 ; CHECK-NEXT:    lea %s2, 128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
-; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1306,26 +1291,26 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm2
 ; CHECK-NEXT:    lea %s1, 64
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
-; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm1
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1338,26 +1323,26 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm2
 ; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
-; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1370,26 +1355,26 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm2
 ; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
-; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm1
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1402,26 +1387,26 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm2
 ; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
-; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1434,26 +1419,26 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    vfmk.l.lt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm2
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
-; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm1
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1466,19 +1451,19 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lvs %s1, %v0(2)
 ; CHECK-NEXT:    # implicit-def: $v2
@@ -1502,19 +1487,19 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    lvs %s1, %v2(1)
 ; CHECK-NEXT:    # implicit-def: $v0
@@ -1534,19 +1519,19 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v0, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v1, %v3, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v1, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v2, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    vmrg %v0, %v0, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v1, %v1, %v2, %vm1
 ; CHECK-NEXT:    lvs %s1, %v1(0)
 ; CHECK-NEXT:    # implicit-def: $v4
@@ -1564,13 +1549,13 @@ define fastcc i64 @test_reduce_umin(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v4, (0)1, %v2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v0, %v4
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v3
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.lt %vm4, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm4, %v2
 ; CHECK-NEXT:    # implicit-def: $vmp1
 ; CHECK-NEXT:    andm %vm3, %vm0, %vm4
 ; CHECK-NEXT:    andm %vm2, %vm0, %vm1
@@ -1625,43 +1610,38 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vbrd %v1, %s1
 ; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
-; CHECK-NEXT:    andm %vm2, %vm0, %vm0
-; CHECK-NEXT:    vfmk.l.lt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.lt %vm1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v0, %v1
-; CHECK-NEXT:    vfmk.l.lt %vm3, %v0, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp3
-; CHECK-NEXT:    andm %vm7, %vm0, %vm3
-; CHECK-NEXT:    andm %vm6, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm7
-; CHECK-NEXT:    andm %vm3, %vm0, %vm5
-; CHECK-NEXT:    andm %vm1, %vm1, %vm3
+; CHECK-NEXT:    vfmk.l.lt %vm6, %v0
+; CHECK-NEXT:    # implicit-def: $vmp1
 ; CHECK-NEXT:    andm %vm3, %vm0, %vm6
-; CHECK-NEXT:    # kill: def $vm4 killed $vm4 killed $vmp2
-; CHECK-NEXT:    andm %vm3, %vm3, %vm4
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm4, %vm0, %vm3
-; CHECK-NEXT:    andm %vm5, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
+; CHECK-NEXT:    andm %vm6, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm1, %vm6
+; CHECK-NEXT:    # kill: def $vm2 killed $vm2 killed $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm2, %vm3
 ; CHECK-NEXT:    vbrd %v0, 0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm2
 ; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lea %s1, -128
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    or %s1, 0, %s1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm0
 ; CHECK-NEXT:    lea %s2, 128
 ; CHECK-NEXT:    # kill: def $sw2 killed $sw2 killed $sx2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
-; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1674,26 +1654,26 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.gt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.gt %vm4, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    vfmk.l.gt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm2
 ; CHECK-NEXT:    lea %s1, 64
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
-; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm1
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1706,26 +1686,26 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
-; CHECK-NEXT:    vfmk.l.gt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.gt %vm4, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
-; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
+; CHECK-NEXT:    vfmk.l.gt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm2
 ; CHECK-NEXT:    or %s1, 32, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
-; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1738,26 +1718,26 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.gt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.gt %vm4, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    vfmk.l.gt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm2
 ; CHECK-NEXT:    or %s1, 16, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
-; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm1
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1770,26 +1750,26 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
-; CHECK-NEXT:    vfmk.l.gt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.gt %vm4, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
-; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
+; CHECK-NEXT:    vfmk.l.gt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm2
 ; CHECK-NEXT:    or %s1, 8, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm2
-; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm2
+; CHECK-NEXT:    vmv %v2, %s1, %v0, %vm1
+; CHECK-NEXT:    vmv %v3, %s1, %v1, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1802,26 +1782,26 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.gt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.gt %vm4, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
-; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
-; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
+; CHECK-NEXT:    vfmk.l.gt %vm5, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm5
+; CHECK-NEXT:    andm %vm2, %vm0, %vm4
+; CHECK-NEXT:    andm %vm4, %vm0, %vm2
+; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm3
+; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm2
 ; CHECK-NEXT:    or %s1, 4, (0)1
 ; CHECK-NEXT:    or %s2, 0, %s1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm2
-; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm2
+; CHECK-NEXT:    vmv %v0, %s1, %v2, %vm1
+; CHECK-NEXT:    vmv %v1, %s1, %v3, %vm1
 ; CHECK-NEXT:    # implicit-def: $vp2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
@@ -1834,19 +1814,19 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v1, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v3, %v1
-; CHECK-NEXT:    vfmk.l.gt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v2, %v0
-; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vfmk.l.gt %vm4, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    vmrg %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v0, %v0, %v2, %vm1
 ; CHECK-NEXT:    lvs %s1, %v0(2)
 ; CHECK-NEXT:    # implicit-def: $v2
@@ -1870,19 +1850,19 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v3, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v3
-; CHECK-NEXT:    vfmk.l.gt %vm1, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v2
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v2, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v0, %v2
-; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vfmk.l.gt %vm4, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    vmrg %v3, %v3, %v1, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v2, %v2, %v0, %vm1
 ; CHECK-NEXT:    lvs %s1, %v2(1)
 ; CHECK-NEXT:    # implicit-def: $v0
@@ -1902,19 +1882,19 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v0, (0)1, %v4
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v1, %v3, %v0
-; CHECK-NEXT:    vfmk.l.gt %vm1, %v1, %vm2
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v5
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v4, %v2, %v1
-; CHECK-NEXT:    vfmk.l.gt %vm3, %v4, %vm2
-; CHECK-NEXT:    # implicit-def: $vmp2
-; CHECK-NEXT:    andm %vm5, %vm0, %vm3
-; CHECK-NEXT:    andm %vm4, %vm0, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm4
+; CHECK-NEXT:    vfmk.l.gt %vm4, %v4
+; CHECK-NEXT:    # implicit-def: $vmp1
+; CHECK-NEXT:    andm %vm3, %vm0, %vm4
+; CHECK-NEXT:    andm %vm2, %vm0, %vm1
+; CHECK-NEXT:    andm %vm1, %vm0, %vm2
 ; CHECK-NEXT:    vmrg %v0, %v0, %v3, %vm1
-; CHECK-NEXT:    andm %vm1, %vm0, %vm5
+; CHECK-NEXT:    andm %vm1, %vm0, %vm3
 ; CHECK-NEXT:    vmrg %v1, %v1, %v2, %vm1
 ; CHECK-NEXT:    lvs %s1, %v1(0)
 ; CHECK-NEXT:    # implicit-def: $v4
@@ -1932,13 +1912,13 @@ define fastcc i64 @test_reduce_umax(<512 x i64> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    vor %v4, (0)1, %v2
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v0, %v0, %v4
-; CHECK-NEXT:    vfmk.l.gt %vm1, %v0, %vm2
+; CHECK-NEXT:    vfmk.l.gt %vm1, %v0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v0, (0)1, %v3
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcmpu.l %v2, %v1, %v0
-; CHECK-NEXT:    vfmk.l.gt %vm4, %v2, %vm2
+; CHECK-NEXT:    vfmk.l.gt %vm4, %v2
 ; CHECK-NEXT:    # implicit-def: $vmp1
 ; CHECK-NEXT:    andm %vm3, %vm0, %vm4
 ; CHECK-NEXT:    andm %vm2, %vm0, %vm1

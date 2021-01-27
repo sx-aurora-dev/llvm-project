@@ -55,6 +55,12 @@ OptimizeVectorMemory("ve-fast-mem",
     cl::Hidden);
 
 static cl::opt<bool>
+IgnoreMasks("ve-ignore-masks",
+    cl::init(true),
+    cl::desc("Drop all masks in side-effect free operations."),
+    cl::Hidden);
+
+static cl::opt<bool>
 OptimizeSplitAVL("ve-optimize-split-avl",
     cl::init(true),
     cl::desc("Avoid LVL switching for split operations"),
@@ -569,13 +575,9 @@ void VETargetLowering::initVPUActions() {
     ForAll_setOperationAction(IntReductionOCs, MaskVT, Custom);
     ForAll_setOperationAction(VectorTransformOCs, MaskVT, Custom);
 
-    // Custom packed expansion
-#if 0
-    // FIXME Using v512i64/v512f64 instead.
-    if (MaskVT.getVectorElementCount().getFixedValue() > StandardVectorWidth) {
-      setOperationAction(ISD::CONCAT_VECTORS, MaskVT, Custom);
-    }
-#endif
+    // Custom split packed mask operations.
+    if (isPackedType(MaskVT))
+      ForAll_setOperationAction(IntArithOCs, MaskVT, Custom);
   }
 
   // vNt32, vNt64 ops (legal element types)
@@ -1180,7 +1182,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
     // Ignore the mask where possible
     if (OptimizeSplitAVL)
       SplitTM.AVL = UpperPartAVL;
-    if (canSafelyIgnoreMask(VVPOC))
+    if (IgnoreMasks && canSafelyIgnoreMask(VVPOC))
       SplitTM.Mask = CDAG.createUniformConstMask(MVT::v256i1, true);
 
     // Add predicating args and generate part node.
@@ -1372,8 +1374,8 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   if (!VVPOC)
     return SDValue();
 
-  /// (32bit) packed mode not support -> split!
-  if (WidenInfo.PackedMode && !SupportsPackedMode(*VVPOC))
+  /// (32bit) packed mode not supported -> split!
+  if (WidenInfo.PackedMode && !SupportsPackedMode(*VVPOC, OpVecTy))
     return ExpandToSplitVVP(Op, DAG, Mode);
 
   ///// Translate to a VVP layer operation (VVP_* or VEC_*) /////
@@ -1391,7 +1393,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   // operatino vector width (and the element type does not matter as much).
   EVT ResVecTy = CDAG.legalizeVectorType(Op, Mode);
 
-  if (canSafelyIgnoreMask(Op->getOpcode()))
+  if (IgnoreMasks && canSafelyIgnoreMask(*VVPOC))
     TargetMasks.Mask =
         CDAG.createUniformConstMask(TargetMasks.Mask.getValueType(), true);
 
@@ -1671,8 +1673,7 @@ VETargetLowering::lowerVVP_EXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
 
 SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
                                        VVPExpansionMode Mode) const {
-  auto OCOpt = GetVVPForVP(Op.getOpcode());
-  assert(OCOpt.hasValue());
+  auto VVPOC = GetVVPForVP(Op.getOpcode());
 
   // TODO VP reductions
   switch (Op.getOpcode()) {
@@ -1715,7 +1716,7 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   // FIXME:
   //   Some packed patterns ARE supported (eg PVRCP, PVRSQR, ..)
   //   We split those at the moment.
-  if (WidenInfo.PackedMode && !SupportsPackedMode(OCOpt.getValue()))
+  if (WidenInfo.PackedMode && !SupportsPackedMode(*VVPOC, OpVecTy))
     return ExpandToSplitVVP(Op, DAG, Mode);
 
   // create suitable mask and avl parameters (accounts for packing)
@@ -1725,12 +1726,13 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   SDValue AVL = AVLPos ? Op->getOperand(*AVLPos) : SDValue();
   auto TargetMasks = CDAG.createTargetMask(WidenInfo, Mask, AVL);
 
-  // Otw, opt for direct VVP_* lowering
-  SDLoc dl(Op);
-  unsigned VVPOC = OCOpt.getValue();
-  std::vector<SDValue> OpVec;
+  // Ignore masks where recommendable.
+  if (IgnoreMasks && canSafelyIgnoreMask(*VVPOC))
+    TargetMasks.Mask =
+        CDAG.createUniformConstMask(TargetMasks.Mask.getValueType(), true);
 
-  if (VVPOC == VEISD::VVP_FFMA) {
+  std::vector<SDValue> OpVec;
+  if (*VVPOC == VEISD::VVP_FFMA) {
     // Custom FMA re-ordering..
     OpVec.push_back(LegalizeVecOperand(Op->getOperand(2), DAG));
     OpVec.push_back(LegalizeVecOperand(Op->getOperand(0), DAG));
@@ -1755,23 +1757,23 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   EVT NewResVT = CDAG.legalizeVectorType(Op, Mode);
-  if (IsVVPBinaryOp(VVPOC)) {
+  if (IsVVPBinaryOp(*VVPOC)) {
     // Use on-the-fly expansion for some binary operators.
-    auto VVPN = CDAG.getLegalBinaryOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1],
+    auto VVPN = CDAG.getLegalBinaryOpVVP(*VVPOC, NewResVT, OpVec[0], OpVec[1],
                                          OpVec[2], OpVec[3], Op->getFlags());
     return VVPN;
   }
 
-  if (IsVVPReductionOp(VVPOC)) {
-    auto StartPos = getVVPReductionStartParamPos(VVPOC);
+  if (IsVVPReductionOp(*VVPOC)) {
+    auto StartPos = getVVPReductionStartParamPos(*VVPOC);
     if (!StartPos)
-      return CDAG.getLegalReductionOpVVP(VVPOC, NewResVT, OpVec[0], OpVec[1],
+      return CDAG.getLegalReductionOpVVP(*VVPOC, NewResVT, OpVec[0], OpVec[1],
                                          OpVec[2], Op->getFlags());
   }
 
   // Create a matching VVP_* node
   assert(WidenInfo.isValid() && "Cannot widen this VP op into VVP");
-  SDValue NewV = DAG.getNode(VVPOC, dl, NewResVT, OpVec);
+  SDValue NewV = CDAG.getNode(*VVPOC, NewResVT, OpVec);
   NewV->setFlags(Op->getFlags());
   return NewV;
 }

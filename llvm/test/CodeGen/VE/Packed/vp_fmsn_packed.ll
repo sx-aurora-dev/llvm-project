@@ -10,7 +10,7 @@ define fastcc <512 x float> @test_vp_ffms_vvv_512f32(<512 x float> %i0, <512 x f
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    pvfnmsb %v0, %v2, %v0, %v1, %vm2
+; CHECK-NEXT:    pvfnmsb %v0, %v2, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %mul = call contract <512 x float> @llvm.vp.fmul.v512f32(<512 x float> %i0, <512 x float> %i1, <512 x i1> %m, i32 %n)
   %fma = call contract <512 x float> @llvm.vp.fsub.v512f32(<512 x float> %i2, <512 x float> %mul, <512 x i1> %m, i32 %n)
@@ -28,7 +28,7 @@ define fastcc <512 x float> @test_vp_ffms_rvv_512f32(float %s0, <512 x float> %i
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvfnmsb %v0, %v1, %s0, %v0, %vm2
+; CHECK-NEXT:    pvfnmsb %v0, %v1, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b0 = insertelement <512 x float> undef, float %s0, i32 0
   %i0 = shufflevector <512 x float> %b0, <512 x float> poison, <512 x i32> zeroinitializer
@@ -48,7 +48,7 @@ define fastcc <512 x float> @test_vp_ffms_vrv_512f32(<512 x float> %i0, float %s
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvfnmsb %v0, %v1, %s0, %v0, %vm2
+; CHECK-NEXT:    pvfnmsb %v0, %v1, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b1 = insertelement <512 x float> undef, float %s1, i32 0
   %i1 = shufflevector <512 x float> %b1, <512 x float> poison, <512 x i32> zeroinitializer
@@ -68,7 +68,7 @@ define fastcc <512 x float> @test_vp_ffms_vvr_512f32(<512 x float> %i0, <512 x f
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvfnmsb %v0, %s0, %v0, %v1, %vm2
+; CHECK-NEXT:    pvfnmsb %v0, %s0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b2 = insertelement <512 x float> undef, float %s2, i32 0
   %i2 = shufflevector <512 x float> %b2, <512 x float> poison, <512 x i32> zeroinitializer
