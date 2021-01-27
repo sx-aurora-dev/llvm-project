@@ -1,3 +1,5 @@
+#include "VVPCombine.h"
+
 #include "MCTargetDesc/VEMCExpr.h"
 #include "VEISelLowering.h"
 #include "VEInstrBuilder.h"
@@ -144,7 +146,7 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
 }
 
 // What 32bit half to pack this scalar VT (or this vector's elem VT to).
-static SDValue match_ReplLoHi(SDValue N, PackElem &SrcElem) {
+SDValue llvm::match_ReplLoHi(SDValue N, PackElem &SrcElem) {
   switch (N->getOpcode()) {
   case VEISD::REPL_I32:
     SrcElem = PackElem::Lo;
@@ -180,51 +182,69 @@ static SDValue match_Broadcast(SDValue N, SDValue & AVL) {
 
 // vec_unpack_X(vec_broadcast(ret))
 static SDValue
-match_UnpackBroadcast(SDNode *N, PackElem & UnpackElem, SDValue & BroadcastAVL) {
-  SDValue UnpackedV = match_UnpackLoHi(SDValue(N, 0), UnpackElem);
+match_UnpackBroadcast(SDValue N, PackElem & UnpackElem, SDValue & BroadcastAVL) {
+  SDValue UnpackedV = match_UnpackLoHi(N, UnpackElem);
   if (!UnpackedV) return SDValue();
   SDValue UnpackedBroadcastV = match_Broadcast(UnpackedV, BroadcastAVL);
   if (!UnpackedBroadcastV) return SDValue();
   return UnpackedBroadcastV;
 }
 
-// vec_unpack_X(vec_broadcast(%ret = repl_Y(...), %avl))
-static SDValue match_UnpackBroadcastRepl(SDNode *N, SDValue &AVL) {
-  PackElem UnpackElem;
-  SDValue UnpackedBroadcastV = match_UnpackBroadcast(N, UnpackElem, AVL);
-  if (!UnpackedBroadcastV)
+// broadcast(%ret = repl_X)
+static SDValue
+match_BroadcastRepl(SDValue N, PackElem & ReplElem, SDValue & BroadcastAVL) {
+  SDValue SplatV = match_Broadcast(N, BroadcastAVL);
+  if (!SplatV)
     return SDValue();
-  PackElem ReplElem;
-  SDValue ReplV = match_ReplLoHi(UnpackedBroadcastV, ReplElem);
+  SDValue ReplV = match_ReplLoHi(SplatV, ReplElem);
   if (!ReplV)
     return SDValue();
+  return SplatV;
+}
 
+// vec_unpack_X(vec_broadcast(%ret = repl_Y(...), %avl))
+static SDValue match_UnpackBroadcastRepl(SDValue N, SDValue &AVL) {
+  PackElem UnpackElem;
+  SDValue PackedV = match_UnpackLoHi(N, UnpackElem);
+  if (!PackedV) return SDValue();
+
+  PackElem ReplElem;
+  SDValue UnpackedBroadcastV = match_BroadcastRepl(N, ReplElem, AVL);
   return UnpackedBroadcastV;
 }
 
-static SDValue combineUnpackLoHi(CustomDAG &CDAG, SDNode *N,
-                                 VETargetLowering::DAGCombinerInfo &DCI) {
+SDValue combineUnpackLoHi(CustomDAG &CDAG, SDValue N) {
+  PackElem UnpackElem;
+  SDValue PackedV = match_UnpackLoHi(N, UnpackElem);
+  if (!PackedV)
+    return SDValue();
+
+  SDValue AVL = getUnpackAVL(N);
+  return combineUnpackLoHi(PackedV, UnpackElem, N.getValueType(), AVL, CDAG);
+}
+
+SDValue llvm::combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart, EVT DestVT, SDValue UnpackAVL, const CustomDAG &CDAG) {
+  LLVM_DEBUG(dbgs() << "Online combiningUnpackLoHi from ";
+             CDAG.print(dbgs(), PackedVec) << "\n";);
   // Replace vec_unpack(vec_broadcast(repl_X(V)) with
   // vec_broadcast(repl_X(V)) to enable folding.
+  PackElem ReplElem;
   SDValue AVL;
-  SDValue ReplV = match_UnpackBroadcastRepl(N, AVL);
-  if (!ReplV) {
-    // TODO Optimize U = unpack_X(pack(lo,hi)) -> lo|hi where 'U' only used by
-    // pack.
+  SDValue ReplV = match_BroadcastRepl(PackedVec, ReplElem, AVL);
+  if (!ReplV)
     return SDValue();
-  }
 
   // Directly replace vec_broadcast(repl_X(V)) with a plain vec_broadcast(V).
   // Bits read from destination register are the same part as the value that is
   // replicated? Remove replication!
-  PackElem UsedDestPart = getPackElemForVT(N->getValueType(0));
+  PackElem UsedDestPart = getPackElemForVT(DestVT);
   PackElem ReplPart;
   match_ReplLoHi(ReplV, ReplPart);
   if (UsedDestPart == ReplPart)
-    return CDAG.CreateBroadcast(N->getValueType(0), ReplV->getOperand(0), AVL);
+    return CDAG.CreateBroadcast(DestVT, ReplV->getOperand(0), AVL);
 
   // At least simplify to a plain packed broadcast.
-  return CDAG.CreateBroadcast(N->getValueType(0), ReplV, AVL);
+  return CDAG.CreateBroadcast(DestVT, ReplV, AVL);
 }
 
 SDValue VETargetLowering::combinePacking(SDNode *N, DAGCombinerInfo &DCI) const {
@@ -238,8 +258,14 @@ SDValue VETargetLowering::combinePacking(SDNode *N, DAGCombinerInfo &DCI) const 
   CustomDAG CDAG(*this, DCI.DAG, N);
   switch (N->getOpcode()) {
     case VEISD::VEC_UNPACK_HI:
-    case VEISD::VEC_UNPACK_LO:
-      return combineUnpackLoHi(CDAG, N, DCI);
+    case VEISD::VEC_UNPACK_LO: {
+      SDValue AsVal(N, 0);
+      PackElem UnpackPart = getPartForUnpackOpcode(N->getOpcode());
+      EVT DestVT = N->getValueType(0);
+      SDValue Pack = getUnpackPackOperand(AsVal);
+      SDValue AVL = getUnpackAVL(AsVal);
+      return combineUnpackLoHi(Pack, UnpackPart, DestVT, AVL, CDAG);
+    }
 
     // case VEISD::VEC_PACK:
     // case VEISD::VEC_SWAP:

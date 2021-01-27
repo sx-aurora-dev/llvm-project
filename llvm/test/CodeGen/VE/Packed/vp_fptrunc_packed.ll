@@ -6,8 +6,8 @@ define fastcc <512 x float> @vec_fptrunc_v512_double_to_float(<512 x double> %a)
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcvt.s.d %v0, %v0, %vm0
-; CHECK-NEXT:    vcvt.s.d %v1, %v1, %vm0
+; CHECK-NEXT:    vcvt.s.d %v0, %v0
+; CHECK-NEXT:    vcvt.s.d %v1, %v1
 ; CHECK-NEXT:    vshf %v0, %v1, %v0, 8
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fptrunc <512 x double> %a to <512 x float>

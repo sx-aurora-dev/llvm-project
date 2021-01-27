@@ -15,7 +15,7 @@ define <256 x float> @vec_fptrunc_v256_double_to_float(<256 x double> %a) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vcvt.s.d %v0, %v0, %vm0
+; CHECK-NEXT:    vcvt.s.d %v0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = fptrunc <256 x double> %a to <256 x float>
   ret <256 x float> %r

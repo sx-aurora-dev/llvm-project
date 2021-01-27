@@ -53,18 +53,6 @@ bool IsVVPReductionOp(unsigned VVPOC);
 
 Optional<unsigned> GetVVPForVP(unsigned VPOC);
 
-// True, iff this is a VEC_UNPACK_LO/HI, VEC_SWAP or VEC_PACK.
-static inline bool IsPackingSupportOpcode(unsigned Opcode) {
-  switch (Opcode) {
-  case VEISD::VEC_UNPACK_LO:
-  case VEISD::VEC_UNPACK_HI:
-  case VEISD::VEC_PACK:
-  case VEISD::VEC_SWAP:
-    return true;
-  }
-  return false;
-}
-
 // Choses the widest element type
 EVT getFPConvType(SDNode *Op);
 
@@ -187,6 +175,40 @@ static inline Packing getPackingForVT(EVT VT) {
 }
 
 template <typename MaskBits> Packing getPackingForMaskBits(const MaskBits MB);
+
+// True, iff this is a VEC_UNPACK_LO/HI, VEC_SWAP or VEC_PACK.
+static inline bool IsPackingSupportOpcode(unsigned Opcode) {
+  switch (Opcode) {
+  case VEISD::VEC_UNPACK_LO:
+  case VEISD::VEC_UNPACK_HI:
+  case VEISD::VEC_PACK:
+  case VEISD::VEC_SWAP:
+    return true;
+  }
+  return false;
+}
+
+static bool isUnpackOp(unsigned OPC) {
+  return (OPC == VEISD::VEC_UNPACK_LO) || (OPC == VEISD::VEC_UNPACK_HI);
+}
+
+static PackElem getPartForUnpackOpcode(unsigned OPC) {
+  if (OPC == VEISD::VEC_UNPACK_LO) return PackElem::Lo;
+  if (OPC == VEISD::VEC_UNPACK_HI) return PackElem::Hi;
+  llvm_unreachable("Not an unpack opcode!");
+}
+
+static unsigned getUnpackOpcodeForPart(PackElem Part) {
+  return (Part == PackElem::Lo) ? VEISD::VEC_UNPACK_LO : VEISD::VEC_UNPACK_HI;
+}
+
+static SDValue getUnpackPackOperand(SDValue N) {
+  return N->getOperand(0);
+}
+
+static SDValue getUnpackAVL(SDValue N) {
+  return N->getOperand(1);
+}
 
 /// } Packing
 
@@ -455,6 +477,8 @@ struct CustomDAG {
                                 SDValue SubReg) const;
 
   SDValue getZExtInReg(SDValue Op, EVT) const;
+
+  raw_ostream& print(raw_ostream&, SDValue) const;
 };
 
 } // namespace llvm

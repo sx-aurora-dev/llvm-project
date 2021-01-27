@@ -16,6 +16,7 @@
 #include "VEISelLowering.h"
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/TargetLowering.h"
+#include "VVPCombine.h"
 
 #ifndef DEBUG_TYPE
 #define DEBUG_TYPE "customdag"
@@ -599,7 +600,7 @@ SDValue CustomDAG::CreateMaskPopcount(SDValue MaskV, SDValue AVL) const {
   return DAG.getNode(VEISD::VM_POPCOUNT, DL, MVT::i64, MaskV, AVL);
 }
 
-static SDValue foldUnpack(SDValue PackOp, PackElem Part, EVT DestVT) {
+static SDValue foldUnpackFromPack(SDValue PackOp, PackElem Part, EVT DestVT) {
   if (PackOp->getOpcode() != VEISD::VEC_PACK)
     return SDValue();
 
@@ -620,20 +621,32 @@ static SDValue foldUnpack(SDValue PackOp, PackElem Part, EVT DestVT) {
     return PackOp->getOperand(1);
 }
 
+static SDValue foldUnpackFromBroadcast(SDValue Vec, PackElem Part, EVT DestVT,
+                                       SDValue AVL, const CustomDAG &CDAG) {
+  SDValue Scalar = getSplatValue(Vec.getNode());
+  if (!Scalar)
+    return SDValue();
+
+  // Fold unpack from an overpacked or mask broadcast.
+  if (isOverPackedType(Vec.getValueType()) || isMaskType(Vec.getValueType()))
+    return CDAG.CreateBroadcast(DestVT, Scalar, AVL);
+
+  // Fold unpack from broadcast from replication.
+  if (SDValue Simplified = combineUnpackLoHi(Vec, Part, DestVT, AVL, CDAG))
+    return Simplified;
+
+  return SDValue();
+}
+
 SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, PackElem E,
                                 SDValue AVL) const {
-  // Immediately fold unpack from an overpacked broadcast or a constant
-  // broadcast.
-  if (SDValue SrcBroadcast = getSplatValue(Vec.getNode()))
-    if (isOverPackedType(Vec.getValueType()) || isMaskType(Vec.getValueType()))
-      return CreateBroadcast(DestVT, SrcBroadcast, AVL);
-
+  if (SDValue SimplifiedV = foldUnpackFromBroadcast(Vec, E, DestVT, AVL, *this))
+    return SimplifiedV;
   // Immediately fold unpack from pack.
-  if (SDValue PackedV = foldUnpack(Vec, E, DestVT))
+  if (SDValue PackedV = foldUnpackFromPack(Vec, E, DestVT))
     return PackedV;
 
-  unsigned OC =
-      (E == PackElem::Lo) ? VEISD::VEC_UNPACK_LO : VEISD::VEC_UNPACK_HI;
+  unsigned OC = getUnpackOpcodeForPart(E);
   return DAG.getNode(OC, DL, DestVT, Vec, AVL);
 }
 
@@ -1086,6 +1099,11 @@ SDValue CustomDAG::getZExtInReg(SDValue Op, EVT VT) const {
 SDValue CustomDAG::createBitReverse(SDValue ScalarReg) const {
   assert(ScalarReg.getValueType() == MVT::i64);
   return getNode(ISD::BITREVERSE, MVT::i64, ScalarReg);
+}
+
+raw_ostream &CustomDAG::print(raw_ostream &Out, SDValue V) const {
+  V->print(Out, &DAG);
+  return Out;
 }
 
 /// } class CustomDAG
