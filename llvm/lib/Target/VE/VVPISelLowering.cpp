@@ -1108,6 +1108,8 @@ static bool canSafelyIgnoreMask(unsigned VVPOpcode) {
     switch (VVPOpcode) {
     default:
       return true;
+    case VEISD::VVP_UREM:
+    case VEISD::VVP_SREM:
     case VEISD::VVP_UDIV:
     case VEISD::VVP_SDIV:
       return false;

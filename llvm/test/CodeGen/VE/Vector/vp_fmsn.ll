@@ -8,7 +8,7 @@ define fastcc <256 x float> @test_vp_ffms_vvv_256f32(<256 x float> %i0, <256 x f
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfnmsb.s %v0, %v2, %v0, %v1, %vm1
+; CHECK-NEXT:    vfnmsb.s %v0, %v2, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %mul = call contract <256 x float> @llvm.vp.fmul.v256f32(<256 x float> %i0, <256 x float> %i1, <256 x i1> %m, i32 %n)
   %fma = call contract <256 x float> @llvm.vp.fsub.v256f32(<256 x float> %i2, <256 x float> %mul, <256 x i1> %m, i32 %n)
@@ -20,7 +20,7 @@ define fastcc <256 x float> @test_vp_ffms_rvv_256f32(float %s0, <256 x float> %i
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfnmsb.s %v0, %v1, %s0, %v0, %vm1
+; CHECK-NEXT:    vfnmsb.s %v0, %v1, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b0 = insertelement <256 x float> undef, float %s0, i32 0
   %i0 = shufflevector <256 x float> %b0, <256 x float> poison, <256 x i32> zeroinitializer
@@ -34,7 +34,7 @@ define fastcc <256 x float> @test_vp_ffms_vrv_256f32(<256 x float> %i0, float %s
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfnmsb.s %v0, %v1, %s0, %v0, %vm1
+; CHECK-NEXT:    vfnmsb.s %v0, %v1, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b1 = insertelement <256 x float> undef, float %s1, i32 0
   %i1 = shufflevector <256 x float> %b1, <256 x float> poison, <256 x i32> zeroinitializer
@@ -48,7 +48,7 @@ define fastcc <256 x float> @test_vp_ffms_vvr_256f32(<256 x float> %i0, <256 x f
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfnmsb.s %v0, %s0, %v0, %v1, %vm1
+; CHECK-NEXT:    vfnmsb.s %v0, %s0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b2 = insertelement <256 x float> undef, float %s2, i32 0
   %i2 = shufflevector <256 x float> %b2, <256 x float> poison, <256 x i32> zeroinitializer
@@ -69,7 +69,7 @@ define fastcc <256 x double> @test_vp_ffms_vvv_256f64(<256 x double> %i0, <256 x
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfnmsb.d %v0, %v2, %v0, %v1, %vm1
+; CHECK-NEXT:    vfnmsb.d %v0, %v2, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %mul = call contract <256 x double> @llvm.vp.fmul.v256f64(<256 x double> %i0, <256 x double> %i1, <256 x i1> %m, i32 %n)
   %fma = call contract <256 x double> @llvm.vp.fsub.v256f64(<256 x double> %i2, <256 x double> %mul, <256 x i1> %m, i32 %n)
@@ -81,7 +81,7 @@ define fastcc <256 x double> @test_vp_ffms_rvv_256f64(double %s0, <256 x double>
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfnmsb.d %v0, %v1, %s0, %v0, %vm1
+; CHECK-NEXT:    vfnmsb.d %v0, %v1, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b0 = insertelement <256 x double> undef, double %s0, i32 0
   %i0 = shufflevector <256 x double> %b0, <256 x double> poison, <256 x i32> zeroinitializer
@@ -95,7 +95,7 @@ define fastcc <256 x double> @test_vp_ffms_vrv_256f64(<256 x double> %i0, double
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfnmsb.d %v0, %v1, %s0, %v0, %vm1
+; CHECK-NEXT:    vfnmsb.d %v0, %v1, %s0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b1 = insertelement <256 x double> undef, double %s1, i32 0
   %i1 = shufflevector <256 x double> %b1, <256 x double> poison, <256 x i32> zeroinitializer
@@ -109,7 +109,7 @@ define fastcc <256 x double> @test_vp_ffms_vvr_256f64(<256 x double> %i0, <256 x
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfnmsb.d %v0, %s0, %v0, %v1, %vm1
+; CHECK-NEXT:    vfnmsb.d %v0, %s0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %b2 = insertelement <256 x double> undef, double %s2, i32 0
   %i2 = shufflevector <256 x double> %b2, <256 x double> poison, <256 x i32> zeroinitializer
