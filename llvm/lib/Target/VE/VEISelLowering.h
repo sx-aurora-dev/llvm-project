@@ -17,6 +17,7 @@
 #include "VE.h"
 #include "VELoweringInfo.h"
 #include "llvm/CodeGen/TargetLowering.h"
+#include <set>
 
 namespace llvm {
 class VESubtarget;
@@ -35,7 +36,7 @@ enum NodeType : unsigned {
   CMPQ, // Compare between two quad floating-point values.
   CMOV, // Select between two values using the result of comparison.
 
-  FLUSHW,          // FLUSH register windows to stack.
+  FLUSHW, // FLUSH register windows to stack.
 
   CALL,                   // A call instruction.
   EH_SJLJ_LONGJMP,        // SjLj exception handling longjmp.
@@ -54,8 +55,8 @@ enum NodeType : unsigned {
 
   // Mask support
   VM_POPCOUNT, // VM_POPCOUNT(v256i1: mask, i32:avl) -> i64
-  VM_EXTRACT, // VM_EXTRACT(v256i1:mask, i32:i) Extract a SX register from a
-              // mask register
+  VM_EXTRACT,  // VM_EXTRACT(v256i1:mask, i32:i) Extract a SX register from a
+               // mask register
   VM_INSERT, // VM_INSERT(v256i1:mask, i32:i, i64:val) Insert a SX register into
              // a mask register
   VM_FIRST = VM_POPCOUNT,
@@ -126,6 +127,9 @@ struct VVPWideningInfo {
 };
 
 class VETargetLowering final : public TargetLowering, public VELoweringInfo {
+  // FIXME: Find a more robust solution for this.
+  mutable std::set<const SDNode *> LegalizedVectorNodes;
+
   const VESubtarget *Subtarget;
 
   void initRegisterClasses();
@@ -330,12 +334,13 @@ public:
 
   SDValue synthesizeView(MaskView &MV, EVT LegalResVT, CustomDAG &CDAG) const;
   SDValue splitVectorShuffle(SDValue Op, CustomDAG &CDAG,
-                                 VVPExpansionMode Mode) const;
+                             VVPExpansionMode Mode) const;
   SDValue ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
                            VVPExpansionMode Mode) const;
   SDValue ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
                                  VVPExpansionMode Mode) const;
-  // Convert the mask x AVL into AVL/2 and update the mask as necessary (VVP and VEC only).
+  // Convert the mask x AVL into AVL/2 and update the mask as necessary (VVP and
+  // VEC only).
   SDValue legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const;
 
   // Packed splitting, packed-mode AVL/mask legalization.

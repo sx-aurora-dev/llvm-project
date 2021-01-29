@@ -491,6 +491,9 @@ struct CustomDAG {
   SDValue createTargetAVL(VVPWideningInfo WidenInfo) const;
   /// } AVL Legalization
 
+  // Infer the shortest possible AVL from the provided information.
+  SDValue inferAVL(SDValue AVL, SDValue Mask, EVT IdiomVT) const;
+
   LLVMContext &getContext() { return *DAG.getContext(); }
 
   SDValue getImplicitDef(EVT VT) const {

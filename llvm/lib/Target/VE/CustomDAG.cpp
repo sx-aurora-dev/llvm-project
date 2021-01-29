@@ -17,6 +17,7 @@
 #include "llvm/CodeGen/SelectionDAG.h"
 #include "llvm/CodeGen/TargetLowering.h"
 #include "VVPCombine.h"
+#include "MaskView.h"
 
 #ifndef DEBUG_TYPE
 #define DEBUG_TYPE "customdag"
@@ -36,6 +37,36 @@ template <> Packing getPackingForMaskBits(const PackedLaneBits MB) {
 /// } Packing
 
 /// Node Properties {
+
+Optional<unsigned>
+inferAVLFromMask(SDValue Mask) {
+  if (!Mask) return None;
+
+  std::unique_ptr<MaskView> MV(requestMaskView(Mask.getNode()));
+  if (!MV)
+    return None;
+
+  unsigned FirstDef, LastDef, NumElems;
+  BVMaskKind BVK = AnalyzeBitMaskView(*MV.get(), FirstDef, LastDef, NumElems);
+  if (BVK == BVMaskKind::Interval) {
+    // FIXME \p FirstDef must be == 0
+    return LastDef + 1;
+  }
+
+  //
+  return Mask.getValueType().getVectorNumElements();
+}
+
+SDValue
+CustomDAG::inferAVL(SDValue AVL, SDValue Mask, EVT IdiomVT) const {
+  if (AVL)
+    return AVL;
+  auto ConstMaskAVL = inferAVLFromMask(Mask);
+  auto ConstTypeAVL = IdiomVT.getVectorNumElements();
+  if (!ConstMaskAVL)
+    return getConstEVL(ConstTypeAVL);
+  return getConstEVL(std::min<unsigned>(ConstTypeAVL, *ConstMaskAVL));
+}
 
 PosOpt GetVVPOpcode(unsigned OpCode) {
   if (isVVPOrVEC(OpCode))
@@ -149,9 +180,11 @@ bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT) {
   bool IsPackedOp = isPackedType(IdiomVT);
   bool IsMaskOp = IdiomVT.getVectorElementType() == MVT::i1;
 
+#if 0
   if (IsMaskOp && IsPackedOp) {
     return false;
   }
+#endif
 
   switch (Opcode) {
   default:
@@ -205,10 +238,13 @@ Optional<int> getAVLPos(unsigned Opc) {
   }
 
   // VVP Opcodes.
-  auto MaskOpt = getMaskPos(Opc);
-  if (!MaskOpt)
-    return None;
-  return *MaskOpt + 1;
+  if (IsVVP(Opc)) {
+    auto MaskOpt = getMaskPos(Opc);
+    if (!MaskOpt)
+      return None;
+    return *MaskOpt + 1;
+  }
+  return None;
 }
 
 SDValue getNodeAVL(SDValue Op) {
@@ -221,6 +257,11 @@ Optional<int> getMaskPos(unsigned Opc) {
   auto PosOpt = ISD::GetMaskPosVP(Opc);
   if (PosOpt > -1)
     return PosOpt;
+
+  // Selection mask.
+  if (Opc == ISD::VSELECT || Opc == ISD::SELECT) {
+    return 0;
+  }
 
   switch (Opc) {
   case VEISD::VVP_SELECT:

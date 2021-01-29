@@ -261,4 +261,194 @@ MaskView *requestMaskView(SDNode *N) {
   return nullptr;
 }
 
+/// Simple Analysis {
+BVMaskKind AnalyzeBitMaskView(MaskView &MV, unsigned &FirstOne,
+                              unsigned &FirstZero, unsigned &NumElements) {
+  bool HasFirstOne = false, HasFirstZero = false;
+  FirstOne = 0;
+  FirstZero = 0;
+  NumElements = 0;
+
+  // this matches a 0*1*0* pattern (BVMaskKind::Interval)
+  for (unsigned i = 0; i < MV.getNumElements(); ++i) {
+    auto ES = MV.getSourceElem(i);
+    if (!ES.isDefined())
+      continue;
+    ++NumElements;
+    if (!ES.isElemInsert())
+      return BVMaskKind::Unknown;
+
+    auto CE = dyn_cast<ConstantSDNode>(ES.V);
+    if (!CE)
+      return BVMaskKind::Unknown;
+    bool TrueBit = CE->getZExtValue() != 0;
+
+    if (TrueBit && !HasFirstOne) {
+      FirstOne = i;
+      HasFirstOne = true;
+    } else if (!TrueBit && !HasFirstZero) {
+      FirstZero = i;
+      HasFirstZero = true;
+    } else if (TrueBit) {
+      // flipping bits on again ->abort
+      return BVMaskKind::Unknown;
+    }
+  }
+
+  return BVMaskKind::Interval;
+}
+
+BVKind AnalyzeMaskView(MaskView &MV, unsigned &FirstDef, unsigned &LastDef,
+                       int64_t &Stride, unsigned &BlockLength,
+                       unsigned &NumElements) {
+  // Check UNDEF or FirstDef
+  NumElements = 0;
+  bool AllUndef = true;
+  FirstDef = 0;
+  LastDef = 0;
+  SDValue FirstInsertedV;
+  for (unsigned i = 0; i < MV.getNumElements(); ++i) {
+    auto ES = MV.getSourceElem(i);
+    if (!ES.isDefined())
+      continue;
+    if (!ES.isElemInsert())
+      return BVKind::Unknown;
+    ++NumElements;
+
+    // mark first non-undef position
+    if (AllUndef) {
+      FirstInsertedV = ES.V;
+      FirstDef = i;
+      AllUndef = false;
+    }
+    LastDef = i;
+  }
+  if (AllUndef) {
+    return BVKind::Unknown;
+  }
+
+  // We know at this point that all source elements are scalar insertions or
+  // undef
+
+  // Check broadcast
+  bool IsBroadcast = true;
+  for (unsigned i = FirstDef + 1; i < MV.getNumElements(); ++i) {
+    auto ES = MV.getSourceElem(i);
+    assert((!ES.isDefined() || ES.isElemInsert()) &&
+           "should have quit during first pass");
+
+    bool SameAsFirst = FirstInsertedV == ES.V;
+    if (!SameAsFirst && ES.isDefined()) {
+      IsBroadcast = false;
+    }
+  }
+  if (IsBroadcast)
+    return BVKind::Broadcast;
+
+  ///// Stride pattern detection /////
+  // FIXME clean up
+
+  bool hasConstantStride = true;
+  bool hasBlockStride = false;
+  bool hasBlockStride2 = false;
+  bool firstStride = true;
+  int64_t lastElemValue;
+  BlockLength = 16;
+
+  // Optional<int64_t> InnerStrideOpt;
+  // Optional<int64_t> OuterStrideOpt
+  // Optional<unsigned> BlockSizeOpt;
+
+  for (unsigned i = 0; i < MV.getNumElements(); ++i) {
+    auto ES = MV.getSourceElem(i);
+    if (hasBlockStride) {
+      if (i % BlockLength == 0)
+        Stride = 1;
+      else
+        Stride = 0;
+    }
+
+    if (!ES.isDefined()) {
+      if (hasBlockStride2 && i % BlockLength == 0)
+        lastElemValue = 0;
+      else
+        lastElemValue += Stride;
+      continue;
+    }
+
+    // is this an immediate constant value?
+    auto *constNumElem = dyn_cast<ConstantSDNode>(ES.V);
+    if (!constNumElem) {
+      hasConstantStride = false;
+      hasBlockStride = false;
+      hasBlockStride2 = false;
+      break;
+    }
+
+    // read value
+    int64_t elemValue = constNumElem->getSExtValue();
+
+    if (i == FirstDef) {
+      // FIXME: Currently, this code requies that first value of vseq
+      // is zero.  This is possible to enhance like thses instructions:
+      //        VSEQ $v0
+      //        VBRD $v1, 2
+      //        VADD $v0, $v0, $v1
+      if (elemValue != 0) {
+        hasConstantStride = false;
+        hasBlockStride = false;
+        hasBlockStride2 = false;
+        break;
+      }
+    } else if (i > FirstDef && firstStride) {
+      // first stride
+      Stride = (elemValue - lastElemValue) / (i - FirstDef);
+      firstStride = false;
+    } else if (i > FirstDef) {
+      // later stride
+      if (hasBlockStride2 && elemValue == 0 && i % BlockLength == 0) {
+        lastElemValue = 0;
+        continue;
+      }
+      int64_t thisStride = elemValue - lastElemValue;
+      if (thisStride != Stride) {
+        hasConstantStride = false;
+        if (!hasBlockStride && thisStride == 1 && Stride == 0 &&
+            lastElemValue == 0) {
+          hasBlockStride = true;
+          BlockLength = i;
+        } else if (!hasBlockStride2 && elemValue == 0 &&
+                   lastElemValue + 1 == i) {
+          hasBlockStride2 = true;
+          BlockLength = i;
+        } else {
+          // not blockStride anymore.  e.g. { 0, 1, 2, 3, 0, 0, 0, 0 }
+          hasBlockStride = false;
+          hasBlockStride2 = false;
+          break;
+        }
+      }
+    }
+
+    // track last elem value
+    lastElemValue = elemValue;
+  }
+
+  if (hasConstantStride)
+    return BVKind::Seq;
+  if (hasBlockStride) {
+    int64_t blockLengthLog = log2(BlockLength);
+    if (pow(2, blockLengthLog) == BlockLength)
+      return BVKind::BlockSeq;
+    return BVKind::Unknown;
+  }
+  if (hasBlockStride2) {
+    int64_t blockLengthLog = log2(BlockLength);
+    if (pow(2, blockLengthLog) == BlockLength)
+      return BVKind::SeqBlock;
+  }
+  return BVKind::Unknown;
+}
+/// } Simple Analysis
+
 } // namespace llvm

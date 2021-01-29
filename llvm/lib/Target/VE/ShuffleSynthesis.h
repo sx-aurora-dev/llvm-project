@@ -30,19 +30,6 @@ namespace llvm {
 
 /// Broadcast, Shuffle, Mask Analysis {
 
-VecLenOpt InferLengthFromMask(SDValue MaskV);
-
-SDValue ReduceVectorLength(SDValue Mask, SDValue DynamicVL, VecLenOpt VLHint,
-                           SelectionDAG &DAG);
-
-enum class BVMaskKind : int8_t {
-  Unknown,  // could not infer mask pattern
-  Interval, //  interval of all-ones
-};
-
-BVMaskKind AnalyzeBitMaskView(MaskView &MV, unsigned &FirstOne,
-                              unsigned &FirstZero, unsigned &NumElements);
-
 // matches mask elements
 struct MaskShuffleAnalysis {
   // Extract bits form the source register part \p SrcPart of \p SrcMask, select

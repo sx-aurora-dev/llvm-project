@@ -83,6 +83,27 @@ SplitView requestSplitView(SDNode *N, CustomDAG &CDAG);
 
 MaskView *requestMaskView(SDNode *N);
 
+enum class BVKind : int8_t {
+  Unknown,   // could not infer pattern
+  AllUndef,  // all lanes undef
+  Broadcast, // broadcast
+  Seq,       // (0, .., 255) Sequence
+  SeqBlock,  // (0, .., 15) ^ 16
+  BlockSeq,  // 0^16, 1^16, 2^16
+};
+
+BVKind AnalyzeMaskView(MaskView &MV, unsigned &FirstDef, unsigned &LastDef,
+                       int64_t &Stride, unsigned &BlockLength,
+                       unsigned &NumElements);
+
+enum class BVMaskKind : int8_t {
+  Unknown,  // could not infer mask pattern
+  Interval, //  interval of all-ones
+};
+
+BVMaskKind AnalyzeBitMaskView(MaskView &MV, unsigned &FirstOne,
+                              unsigned &FirstZero, unsigned &NumElements);
+
 } // namespace llvm
 
 // custom specialization of std::hash can be injected in namespace std
