@@ -40,11 +40,11 @@ def SDTIntShiftOpVVP : SDTypeProfile<1, 4, [   // shl, sra, srl
 
 // load store
 def SDTLoadVVP : SDTypeProfile<1, 4, [       // vvp load (ptr, stride, mask, avl) -> data
-  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisInt<2>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
+  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisInt<2>, SDTCisVec<3>, IsVLVT<4>
 ]>;
 
 def SDTStoreVVP: SDTypeProfile<0, 5, [       // vvp store (data, ptr, stride, mask, avl)
-  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisInt<2>, SDTCisVec<3>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
+  SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisInt<2>, SDTCisVec<3>, IsVLVT<4>
 ]>;
 
 // scatter (Chain, Value, PtrVec, Mask, Vlen)
@@ -119,7 +119,9 @@ def SDTReduceVVP : SDTypeProfile<1, 3, [    // vp_reduce (w/o start arg)
 
 
 
-// load store
+// Load & store.
+// Note that a v512f64 packed mode load/store will still have a v256i1 mask.
+// For all other operations NumEls(Mask) == NumEls(IdiomaticVectorType).
 def vvp_load    : SDNode<"VEISD::VVP_LOAD",  SDTLoadVVP,  [SDNPHasChain, SDNPMayLoad, SDNPMemOperand ]>;
 def vvp_store   : SDNode<"VEISD::VVP_STORE", SDTStoreVVP, [SDNPHasChain, SDNPMayStore, SDNPMemOperand]>;
 

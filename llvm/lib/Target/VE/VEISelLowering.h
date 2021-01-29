@@ -101,6 +101,7 @@ enum NodeType : unsigned {
 // VVP_* nodes.
 #define REGISTER_VVP_OP(VVP_NAME) VVP_NAME,
 #include "VVPNodes.def"
+  // TODO: Use 'FIRST_TARGET_MEMORY_OPCODE'
 };
 } // namespace VEISD
 
@@ -334,8 +335,12 @@ public:
                            VVPExpansionMode Mode) const;
   SDValue ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
                                  VVPExpansionMode Mode) const;
-  SDValue WidenVVPOperation(SDValue Op, SelectionDAG &DAG,
-                            VVPExpansionMode Mode) const;
+  // Convert the mask x AVL into AVL/2 and update the mask as necessary (VVP and VEC only).
+  SDValue legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const;
+
+  // Packed splitting, packed-mode AVL/mask legalization.
+  SDValue legalizeInternalLoadStoreOp(SDValue Op, CustomDAG &CDAG) const;
+  SDValue legalizeInternalVectorOp(SDValue Op, SelectionDAG &DAG) const;
   /// } VVPLowering
 
   /// Custom DAGCombine {

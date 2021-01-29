@@ -75,13 +75,18 @@ multiclass VectorLoadStore_Packed<ValueType DataVT, ValueType PtrVT, ValueType M
 
 
 // Load patterns
+// Packed (anomalous mask).
+defm : VectorLoad<v512f32, i64, v256i1, "VGT",    "VLD">;
+defm : VectorLoad<v512i32, i64, v256i1, "VGT",    "VLD">;
+
+// Regular.
 defm : VectorLoad<v256f64, i64, v256i1, "VGT",    "VLD">;
 defm : VectorLoad<v256i64, i64, v256i1, "VGT",    "VLD">;
 defm : VectorLoad<v256f32, i64, v256i1, "VGTU",   "VLDU">;
 defm : VectorLoad<v256i32, i64, v256i1, "VGTLZX", "VLDLZX">;
 // packed load patterns
-defm : VectorLoadStore_Packed<v512i32, i64, v512i1, "VLD", "VST">;
-defm : VectorLoadStore_Packed<v512f32, i64, v512i1, "VLD", "VST">;
+// defm : VectorLoadStore_Packed<v512i32, i64, v512i1, "VLD", "VST">;
+// defm : VectorLoadStore_Packed<v512f32, i64, v512i1, "VLD", "VST">;
 
 multiclass VectorStore<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNode STWithMask, SDNode STNoMask> {
   // Unmasked (imm stride).
@@ -98,6 +103,11 @@ multiclass VectorStore<ValueType DataVT, ValueType PtrVT, ValueType MaskVT, SDNo
             (!cast<Instruction>(STWithMask#"rrvml") $stride, $addr, $val, $mask, $avl)>;
 }
 
+// Packed (anomalous mask).
+defm : VectorStore<v512f32, i64, v256i1, "VST",  "VST">;
+defm : VectorStore<v512i32, i64, v256i1, "VST",  "VST">;
+
+// Regular.
 defm : VectorStore<v256f64, i64, v256i1, "VST",  "VST">;
 defm : VectorStore<v256i64, i64, v256i1, "VST",  "VST">;
 defm : VectorStore<v256f32, i64, v256i1, "VSTU", "VSTU">; 

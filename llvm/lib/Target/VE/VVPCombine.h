@@ -23,6 +23,10 @@ namespace llvm {
   // Simplify unpack.
   SDValue combineUnpackLoHi(CustomDAG &CDAG, SDNode *N);
   SDValue combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart, EVT DestVT, SDValue AVL, const CustomDAG &CDAG);
+
+  bool match_FPOne(SDValue V);
+  SDValue getSplatValue(SDNode *N);
+
 } // namespace llvm
 
 #endif // LLVM_LIB_TARGET_VE_CUSTOMDAG_H

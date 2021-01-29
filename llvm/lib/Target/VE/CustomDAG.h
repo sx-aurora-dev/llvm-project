@@ -40,9 +40,14 @@ using PosOpt = Optional<unsigned>;
 // VVP property queries
 PosOpt GetVVPOpcode(unsigned OpCode);
 
+// TODO:
+// 1. Perform splitting late to have a chance to preserve packable patterns
+//    (PVRCP contraction).
+// 2. Perform AVL,Mask legalization late to avoid clutter (partially legalized
+//    AVL that will turn out not to be needed).
 bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT);
 
-bool IsVVPOrVEC(unsigned Opcode);
+bool isVVPOrVEC(unsigned Opcode);
 bool IsVVP(unsigned Opcode);
 
 bool IsVVPTernaryOp(unsigned Opcode);
@@ -51,12 +56,19 @@ bool IsVVPUnaryOp(unsigned Opcode);
 bool IsVVPConversionOp(unsigned VVPOC);
 bool IsVVPReductionOp(unsigned VVPOC);
 
+// Return the representative vector type of this operation.
+Optional<EVT> getIdiomaticType(SDNode *Op);
+
 Optional<unsigned> GetVVPForVP(unsigned VPOC);
 
-// Choses the widest element type
-EVT getFPConvType(SDNode *Op);
+// Return the mask operand position for this VVP or VEC op.
+Optional<int> getMaskPos(unsigned Opc);
+SDValue getNodeMask(SDValue Op);
 
-Optional<EVT> getIdiomaticType(SDNode *Op);
+// Return the AVL operand position for this VVP or VEC op.
+Optional<int> getAVLPos(unsigned Opc);
+SDValue getNodeAVL(SDValue Op);
+
 
 VecLenOpt MinVectorLength(VecLenOpt A, VecLenOpt B);
 
@@ -68,11 +80,6 @@ EVT splitType(EVT);
 bool isPackedType(EVT SomeVT);
 bool isMaskType(EVT VT);
 bool isOverPackedType(EVT VT);
-
-// legalize packed-mode broadcasts into lane replication + broadcast
-SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG);
-
-SDValue LegalizeVecOperand(SDValue Op, SelectionDAG &DAG);
 
 // whether this VVP operation has no mask argument
 bool HasDeadMask(unsigned VVPOC);
@@ -138,6 +145,14 @@ enum class PackElem : int8_t {
   Lo = 0, // integer (63, 32]
   Hi = 1  // float   (32,  0]
 };
+
+static PackElem getPartForLane(unsigned ElemIdx) {
+  return (ElemIdx % 2 == 0) ? PackElem::Lo : PackElem::Hi;
+}
+
+static PackElem getOtherPart(PackElem Part) {
+  return Part == PackElem::Lo ? PackElem::Hi : PackElem::Lo;
+}
 
 static unsigned getOverPackedSubRegIdx(PackElem Part) {
   return Part == PackElem::Lo ? VE::sub_pack_lo : VE::sub_pack_hi;
@@ -436,8 +451,6 @@ struct CustomDAG {
                      SDValue Divisor, SDValue Mask, SDValue AVL) const;
   SDValue createIREM(bool IsSigned, EVT ResVT, SDValue Dividend,
                      SDValue Divisor, SDValue Mask, SDValue AVL) const;
-  SDValue createConstantTargetMask(VVPWideningInfo WidenInfo) const;
-  SDValue createTargetAVL(VVPWideningInfo WidenInfo) const;
 
   // Create this binary operator, expanding it on the fly.
   SDValue getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
@@ -455,6 +468,11 @@ struct CustomDAG {
     return getNode(VVPOpcode, ResVT, Ops, Flags);
   }
 
+  // The AVL parameter only applies at 64bit element granularity.
+  // In packed mode that means groups of 2 x 32bit elements.
+  // These methods legalize AVL to refer to packs instead at the cost of
+  // additional masking code.
+  /// AVL Legalization {
   struct TargetMasks {
     SDValue Mask;
     SDValue AVL;
@@ -466,6 +484,12 @@ struct CustomDAG {
   TargetMasks createTargetMask(VVPWideningInfo, SDValue RawMask, SDValue RawAVL);
   // Infer mask & AVL for this split VVP op
   TargetMasks createTargetSplitMask(VVPWideningInfo WidenInfo, SDValue RawMask, SDValue RawAVL, PackElem Part);
+
+  SDValue createConstantTargetMask(VVPWideningInfo WidenInfo) const;
+
+  // Create a legalize AVL value for \p WidenInfo.
+  SDValue createTargetAVL(VVPWideningInfo WidenInfo) const;
+  /// } AVL Legalization
 
   LLVMContext &getContext() { return *DAG.getContext(); }
 

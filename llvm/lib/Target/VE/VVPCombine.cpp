@@ -49,6 +49,29 @@ static cl::opt<bool> ExpandOverPackedRegisterCopies(
 
 using Matcher = std::function<bool(SDValue)>;
 
+SDValue llvm::getSplatValue(SDNode *N) {
+  if (auto *BuildVec = dyn_cast<BuildVectorSDNode>(N)) {
+    return BuildVec->getSplatValue();
+  }
+  if (N->getOpcode() != VEISD::VEC_BROADCAST)
+    return SDValue();
+
+  return N->getOperand(0);
+}
+
+bool llvm::match_FPOne(SDValue V) {
+  SDValue S = getSplatValue(V.getNode());
+  if (S)
+    return match_FPOne(S);
+
+  auto FPConst = dyn_cast<ConstantFPSDNode>(V);
+  if (!FPConst)
+    return false;
+
+  return FPConst->isExactlyValue(1.0);
+}
+
+
 static int match_SomeOperand(SDNode *Op, unsigned VVPOpcode, Matcher M) {
   for (int i = 0; i < 2; ++i) {
     if ((Op->getOperand(i)->getOpcode() == VVPOpcode) && M(Op->getOperand(i))) {

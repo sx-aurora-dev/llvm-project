@@ -35,18 +35,10 @@ template <> Packing getPackingForMaskBits(const PackedLaneBits MB) {
 
 /// } Packing
 
-static SDValue getSplatValue(SDNode *N) {
-  if (auto *BuildVec = dyn_cast<BuildVectorSDNode>(N)) {
-    return BuildVec->getSplatValue();
-  }
-  if (N->getOpcode() != VEISD::VEC_BROADCAST)
-    return SDValue();
-
-  return N->getOperand(0);
-}
+/// Node Properties {
 
 PosOpt GetVVPOpcode(unsigned OpCode) {
-  if (IsVVP(OpCode))
+  if (isVVPOrVEC(OpCode))
     return OpCode;
 
   switch (OpCode) {
@@ -165,6 +157,9 @@ bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT) {
   default:
     return false;
 
+  case VEISD::VEC_SEQ:
+  case VEISD::VEC_BROADCAST:
+    return true;
 #define REGISTER_PACKED(VVP_NAME)                                              \
   case VEISD::VVP_NAME:                                                        \
     return IsPackedOp;
@@ -175,7 +170,7 @@ bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT) {
 #define IF_IN_VEISD_RANGE(STARTOC, ENDOC)                                      \
   if ((VEISD::STARTOC <= OC) && (OC <= VEISD::ENDOC))
 
-bool IsVVPOrVEC(unsigned OC) {
+bool isVVPOrVEC(unsigned OC) {
   IF_IN_VEISD_RANGE(VEC_FIRST, VEC_LAST) { return true; }
   IF_IN_VEISD_RANGE(VM_FIRST, VM_LAST) { return true; }
 
@@ -194,14 +189,74 @@ bool IsVVP(unsigned Opcode) {
   }
 }
 
+// Return the mask operand position for this VVP or VEC op.
+Optional<int> getAVLPos(unsigned Opc) {
+  // This is only available for VP SDNodes
+  auto PosOpt = ISD::GetVectorLengthPosVP(Opc);
+  if (PosOpt > -1)
+    return PosOpt;
+
+  // VEC Opcodes and special cases.
+  switch (Opc) {
+  case VEISD::VEC_SEQ:
+    return 0;
+  case VEISD::VEC_BROADCAST:
+    return 1;
+  }
+
+  // VVP Opcodes.
+  auto MaskOpt = getMaskPos(Opc);
+  if (!MaskOpt)
+    return None;
+  return *MaskOpt + 1;
+}
+
+SDValue getNodeAVL(SDValue Op) {
+  auto PosOpt = getAVLPos(Op->getOpcode());
+  return PosOpt ? Op->getOperand(*PosOpt) : SDValue();
+}
+
+// Return the AVL operand position for this VVP Op.
+Optional<int> getMaskPos(unsigned Opc) {
+  auto PosOpt = ISD::GetMaskPosVP(Opc);
+  if (PosOpt > -1)
+    return PosOpt;
+
+  switch (Opc) {
+  case VEISD::VVP_SELECT:
+    return 2;
+  case VEISD::VVP_LOAD:
+    return 3;
+  case VEISD::VVP_STORE:
+    return 4;
+  case VEISD::VVP_GATHER:
+    return 1;
+  case VEISD::VVP_SCATTER:
+    return 2;
+  }
+
+  if (IsVVPUnaryOp(Opc) || IsVVPConversionOp(Opc))
+    return 1;
+  if (IsVVPBinaryOp(Opc))
+    return 2;
+  if (IsVVPTernaryOp(Opc))
+    return 3;
+  if (IsVVPReductionOp(Opc))
+    return *getReductionVectorParamPos(Opc) + 1;
+  return None;
+}
+
+SDValue getNodeMask(SDValue Op) {
+  auto PosOpt = getMaskPos(Op->getOpcode());
+  return PosOpt ? Op->getOperand(*PosOpt) : SDValue();
+}
+
 // Choses the widest element type
 EVT getLargestConvType(SDNode *Op) {
   EVT ResVT = Op->getValueType(0);
   EVT OpVT = Op->getOperand(0).getValueType();
   return ResVT.getStoreSizeInBits() > OpVT.getStoreSizeInBits() ? ResVT : OpVT;
 }
-
-/// Node Properties {
 
 PosOpt getVVPReductionStartParamPos(unsigned VVPOC) {
   switch (VVPOC) {
@@ -251,7 +306,7 @@ PosOpt getIntrinReductionVectorParamPos(unsigned ISD) {
 }
 
 PosOpt getVVPReductionVectorParamPos(unsigned VVPOpcode) {
-  if (!IsVVP(VVPOpcode))
+  if (!IsVVPReductionOp(VVPOpcode))
     return None;
 
   PosOpt StartPosOpt = getVVPReductionStartParamPos(VVPOpcode);
@@ -291,12 +346,6 @@ Optional<unsigned> GetVVPForVP(unsigned VPOC) {
 }
 
 Optional<EVT> getIdiomaticType(SDNode *Op) {
-  // For memory ops -> the transfered data type
-  auto MemN = dyn_cast<MemSDNode>(Op);
-  if (MemN) {
-    return MemN->getMemoryVT();
-  }
-
   // For reductions -> the reduced vector type
   PosOpt RedVecPos = getReductionVectorParamPos(Op->getOpcode());
   if (RedVecPos)
@@ -318,6 +367,9 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   // Expect VEISD:: VVP or ISD::non-VP Opcodes here
   switch (OC) {
   default:
+    // For memory ops -> the transfered data type
+    if (auto MemN = dyn_cast<MemSDNode>(Op))
+      return MemN->getMemoryVT();
     return None;
 
   case ISD::SELECT: // not aliased with VVP_SELECT
@@ -356,10 +408,14 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   case VEISD::VEC_SEQ:
   case VEISD::VEC_BROADCAST:
     return Op->getValueType(0);
+
+  case VEISD::VVP_LOAD:
   case VEISD::VVP_GATHER:
     return Op->getValueType(0);
+
+  case VEISD::VVP_STORE:
   case VEISD::VVP_SCATTER:
-    return Op->getOperand(0)->getValueType(0); // FIXME use memory VT instead
+    return Op->getOperand(1)->getValueType(0);
   }
 }
 
@@ -390,7 +446,7 @@ bool isPackedType(EVT SomeVT) {
 }
 
 // legalize packed-mode broadcasts into lane replication + broadcast
-SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
+static SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   if (Op.getOpcode() != VEISD::VEC_BROADCAST)
     return Op;
 
@@ -402,9 +458,8 @@ SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
   auto VLOp = Op.getOperand(1);
 
   // v256x broadcast (element has to be i64/f64 always)
-  if (!isPackedType(VT)) {
+  if (!isPackedType(VT))
     return Op;
-  }
 
   LLVM_DEBUG(dbgs() << "Legalize packed broadcast\n");
 
@@ -454,14 +509,6 @@ bool IsAllTrueMask(SDValue Op) {
     return ConstSD->getSExtValue() != 0;
   }
   return false;
-}
-
-SDValue LegalizeVecOperand(SDValue Op, SelectionDAG &DAG) {
-  if (!Op.getValueType().isVector())
-    return Op;
-
-  // TODO add operand legalization
-  return LegalizeBroadcast(Op, DAG);
 }
 
 // whether this VVP operation has no mask argument
@@ -803,16 +850,19 @@ SDValue CustomDAG::createUniformConstMask(Packing Packing, unsigned NumElements,
   // VEISelDAGtoDAG will replace this with the constant-true VM
   auto TrueVal = DAG.getConstant(-1, DL, MVT::i32);
 
+#if 0
+  // AVL legalization happens during lowering.
   unsigned AVL = NumElements;
   if (Packing == Packing::Dense) {
     AVL = (NumElements + 1) / 2;
   }
+#endif
 
-  auto Res = getNode(VEISD::VEC_BROADCAST, MaskVT, {TrueVal, getConstEVL(AVL)});
+  auto Res = getNode(VEISD::VEC_BROADCAST, MaskVT,
+                     {TrueVal, getConstEVL(NumElements)});
   if (IsTrue)
     return Res;
 
-  // TODO respect NumElements
   return DAG.getNOT(DL, Res, Res.getValueType());
 }
 
@@ -1011,18 +1061,6 @@ SDValue CustomDAG::createIREM(bool IsSigned, EVT ResVT, SDValue Dividend,
   SDValue Divide = createIDIV(IsSigned, ResVT, Dividend, Divisor, Mask, AVL);
   SDValue Mul = getNode(VEISD::VVP_MUL, ResVT, {Divide, Divisor, Mask, AVL});
   return getNode(VEISD::VVP_SUB, ResVT, {Dividend, Mul, Mask, AVL});
-}
-
-static bool match_FPOne(SDValue V) {
-  SDValue S = getSplatValue(V.getNode());
-  if (S)
-    return match_FPOne(S);
-
-  auto FPConst = dyn_cast<ConstantFPSDNode>(V);
-  if (!FPConst)
-    return false;
-
-  return FPConst->isExactlyValue(1.0);
 }
 
 static Optional<unsigned> getNonVVPMaskOp(unsigned VVPOC, EVT ResVT) {
