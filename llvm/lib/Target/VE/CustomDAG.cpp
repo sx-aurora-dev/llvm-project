@@ -225,9 +225,9 @@ bool IsVVP(unsigned Opcode) {
 // Return the mask operand position for this VVP or VEC op.
 Optional<int> getAVLPos(unsigned Opc) {
   // This is only available for VP SDNodes
-  auto PosOpt = ISD::GetVectorLengthPosVP(Opc);
-  if (PosOpt > -1)
-    return PosOpt;
+  auto PosOpt = ISD::getVPExplicitVectorLengthIdx(Opc);
+  if (PosOpt)
+    return *PosOpt;
 
   // VEC Opcodes and special cases.
   switch (Opc) {
@@ -254,9 +254,9 @@ SDValue getNodeAVL(SDValue Op) {
 
 // Return the AVL operand position for this VVP Op.
 Optional<int> getMaskPos(unsigned Opc) {
-  auto PosOpt = ISD::GetMaskPosVP(Opc);
-  if (PosOpt > -1)
-    return PosOpt;
+  auto PosOpt = ISD::getVPMaskIdx(Opc);
+  if (PosOpt)
+    return *PosOpt;
 
   // Selection mask.
   if (Opc == ISD::VSELECT || Opc == ISD::SELECT) {
