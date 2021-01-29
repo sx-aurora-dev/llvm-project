@@ -493,120 +493,53 @@ ISD::CondCode ISD::getSetCCAndOperation(ISD::CondCode Op1, ISD::CondCode Op2,
 //                           SDNode VP Support
 //===----------------------------------------------------------------------===//
 
-int
-ISD::GetMaskPosVP(unsigned OpCode) {
-  switch (OpCode) {
-    default: return -1;
-
-    case ISD::VP_SELECT:
-      return 2;
-
-    case ISD::VP_FNEG:
-      return 1;
-
-    case ISD::VP_ADD:
-    case ISD::VP_SUB:
-    case ISD::VP_MUL:
-    case ISD::VP_SDIV:
-    case ISD::VP_SREM:
-    case ISD::VP_UDIV:
-    case ISD::VP_UREM:
-
-    case ISD::VP_AND:
-    case ISD::VP_OR:
-    case ISD::VP_XOR:
-    case ISD::VP_SHL:
-    case ISD::VP_SRA:
-    case ISD::VP_SRL:
-
-    case ISD::VP_FADD:
-    case ISD::VP_FMUL:
-    case ISD::VP_FSUB:
-    case ISD::VP_FDIV:
-    case ISD::VP_FREM:
-      return 2;
-
-    case ISD::VP_FMA:
-      return 3;
-
-    case VP_REDUCE_ADD:
-    case VP_REDUCE_MUL:
-    case VP_REDUCE_AND:
-    case VP_REDUCE_OR:
-    case VP_REDUCE_XOR:
-    case VP_REDUCE_SMAX:
-    case VP_REDUCE_SMIN:
-    case VP_REDUCE_UMAX:
-    case VP_REDUCE_UMIN:
-    case VP_REDUCE_FMAX:
-    case VP_REDUCE_FMIN:
-      return 1;
-
-    case VP_REDUCE_FADD:
-    case VP_REDUCE_FMUL:
-      return 2;
-
-    /// FMIN/FMAX nodes can have flags, for NaN/NoNaN variants.
+bool ISD::isVPOpcode(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    return false;
+#define BEGIN_REGISTER_VP_SDNODE(SDOPC, ...)                                   \
+  case ISD::SDOPC:                                                             \
+    return true;
+#include "llvm/IR/VPIntrinsics.def"
   }
 }
 
-int
-ISD::GetVectorLengthPosVP(unsigned OpCode) {
-  switch (OpCode) {
-    default: return -1;
-
-    case VP_SELECT:
-      return 3;
-
-    case VP_FNEG:
-      return 2;
-
-    case VP_ADD:
-    case VP_SUB:
-    case VP_MUL:
-    case VP_SDIV:
-    case VP_SREM:
-    case VP_UDIV:
-    case VP_UREM:
-
-    case VP_AND:
-    case VP_OR:
-    case VP_XOR:
-    case VP_SHL:
-    case VP_SRA:
-    case VP_SRL:
-
-    case VP_FADD:
-    case VP_FMUL:
-    case VP_FDIV:
-    case VP_FREM:
-      return 3;
-
-    case VP_FMA:
-      return 4;
-
-    case VP_REDUCE_ADD:
-    case VP_REDUCE_MUL:
-    case VP_REDUCE_AND:
-    case VP_REDUCE_OR:
-    case VP_REDUCE_XOR:
-    case VP_REDUCE_SMAX:
-    case VP_REDUCE_SMIN:
-    case VP_REDUCE_UMAX:
-    case VP_REDUCE_UMIN:
-    case VP_REDUCE_FMAX:
-    case VP_REDUCE_FMIN:
-      return 2;
-
-    case VP_REDUCE_FADD:
-    case VP_REDUCE_FMUL:
-      return 3;
-
+/// The operand position of the vector mask.
+Optional<unsigned> ISD::getVPMaskIdx(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    return None;
+#define BEGIN_REGISTER_VP_SDNODE(SDOPC, LEGALPOS, TDNAME, MASKPOS, ...)        \
+  case ISD::SDOPC:                                                             \
+    return MASKPOS;
+#include "llvm/IR/VPIntrinsics.def"
   }
 }
 
-unsigned
+/// The operand position of the explicit vector length parameter.
+Optional<unsigned> ISD::getVPExplicitVectorLengthIdx(unsigned Opcode) {
+  switch (Opcode) {
+  default:
+    return None;
+#define BEGIN_REGISTER_VP_SDNODE(SDOPC, LEGALPOS, TDNAME, MASKPOS, EVLPOS)     \
+  case ISD::SDOPC:                                                             \
+    return EVLPOS;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+}
+
+Optional<unsigned>
 ISD::GetFunctionOpCodeForVP(unsigned OpCode, bool hasFPExcept) {
+#if 1
+  switch (OpCode) {
+  default:
+    llvm_unreachable("can not translate this Opcode to VP");
+#define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
+#define HANDLE_VP_TO_SD(SDOPC) return ISD::SDOPC;
+#define END_REGISTER_VP_SDNODE( ...) break;
+#include "llvm/IR/VPIntrinsics.def"
+  }
+#else
   switch (OpCode) {
     default: return OpCode;
 
@@ -653,6 +586,7 @@ ISD::GetFunctionOpCodeForVP(unsigned OpCode, bool hasFPExcept) {
 
     case VP_FMA:    return hasFPExcept ? ISD::STRICT_FMA : ISD::FMA;
   }
+#endif
 }
 
 unsigned ISD::GetVPForFunctionOpCode(unsigned OpCode) {
@@ -7455,7 +7389,7 @@ SDValue SelectionDAG::getIndexedMaskedLoad(SDValue OrigLoad, const SDLoc &dl,
 
 
 SDValue SelectionDAG::getLoadVP(EVT VT, const SDLoc &dl, SDValue Chain,
-                                    SDValue Ptr, SDValue Mask, SDValue VLen, 
+                                    SDValue Ptr, SDValue Mask, SDValue VLen,
                                     EVT MemVT, MachineMemOperand *MMO,
                                     ISD::LoadExtType ExtTy) {
   SDVTList VTs = getVTList(VT, MVT::Other);

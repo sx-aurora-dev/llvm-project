@@ -1334,17 +1334,17 @@ inline unsigned getUnorderedFlavor(CondCode Cond) {
 /// SetCC operation.
 CondCode getSetCCInverse(CondCode Operation, EVT Type);
 
-/// Vector Predication {
-/// Return the mask operand of this VP SDNode.
-/// Otherwise, return -1.
-int GetMaskPosVP(unsigned OpCode);
+bool isVPOpcode(unsigned Opcode);
 
-/// Return the vector length operand of this VP SDNode.
-/// Otherwise, return -1.
-int GetVectorLengthPosVP(unsigned OpCode);
+/// Vector Predication {
+/// The operand position of the vector mask.
+Optional<unsigned> getVPMaskIdx(unsigned Opcode);
+
+/// The operand position of the explicit vector length parameter.
+Optional<unsigned> getVPExplicitVectorLengthIdx(unsigned Opcode);
 
 /// Translate this VP OpCode to an unpredicated instruction OpCode.
-unsigned GetFunctionOpCodeForVP(unsigned VPOpCode, bool hasFPExcept);
+Optional<unsigned> GetFunctionOpCodeForVP(unsigned VPOpCode, bool hasFPExcept);
 
 /// Translate this non-VP Opcode to its corresponding VP Opcode
 unsigned GetVPForFunctionOpCode(unsigned OpCode);

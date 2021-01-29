@@ -879,21 +879,23 @@ VPMatchContext {
   , RootVectorLenOp()
   {
     if (Root->isVP()) {
-      int RootMaskPos = ISD::GetMaskPosVP(Root->getOpcode());
-      if (RootMaskPos != -1) {
-        RootMaskOp = Root->getOperand(RootMaskPos);
+      auto RootMaskPos = ISD::getVPMaskIdx(Root->getOpcode());
+      if (RootMaskPos) {
+        RootMaskOp = Root->getOperand(*RootMaskPos);
       }
 
-      int RootVLenPos = ISD::GetVectorLengthPosVP(Root->getOpcode());
-      if (RootVLenPos != -1) {
-        RootVectorLenOp = Root->getOperand(RootVLenPos);
+      auto RootVLenPos = ISD::getVPExplicitVectorLengthIdx(Root->getOpcode());
+      if (RootVLenPos) {
+        RootVectorLenOp = Root->getOperand(*RootVLenPos);
       }
     }
   }
 
   unsigned getFunctionOpCode(SDValue N) const {
     unsigned VPOpCode = N->getOpcode();
-    return ISD::GetFunctionOpCodeForVP(VPOpCode, !N->getFlags().hasNoFPExcept());
+    auto FuncOpc = ISD::GetFunctionOpCodeForVP(VPOpCode, !N->getFlags().hasNoFPExcept());
+    if (!FuncOpc) return VPOpCode;
+    return *FuncOpc;
   }
 
   bool isCompatible(SDValue OpVal) const {
@@ -902,13 +904,13 @@ VPMatchContext {
 
     } else {
       unsigned VPOpCode = OpVal->getOpcode();
-      int MaskPos = ISD::GetMaskPosVP(VPOpCode);
-      if (MaskPos != -1 && RootMaskOp != OpVal.getOperand(MaskPos)) {
+      auto MaskPos = ISD::getVPMaskIdx(VPOpCode);
+      if (MaskPos && RootMaskOp != OpVal.getOperand(*MaskPos)) {
         return false;
       }
 
-      int VLenPos = ISD::GetVectorLengthPosVP(VPOpCode);
-      if (VLenPos != -1 && RootVectorLenOp != OpVal.getOperand(VLenPos)) {
+      auto VLenPos = ISD::getVPExplicitVectorLengthIdx(VPOpCode);
+      if (VLenPos && RootVectorLenOp != OpVal.getOperand(*VLenPos)) {
         return false;
       }
 
@@ -927,8 +929,8 @@ VPMatchContext {
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue Operand,
                   const SDNodeFlags Flags = SDNodeFlags()) {
     unsigned VPOpcode = ISD::GetVPForFunctionOpCode(Opcode);
-    int MaskPos = ISD::GetMaskPosVP(VPOpcode);
-    int VLenPos = ISD::GetVectorLengthPosVP(VPOpcode);
+    int MaskPos = *ISD::getVPMaskIdx(VPOpcode);
+    int VLenPos = *ISD::getVPExplicitVectorLengthIdx(VPOpcode);
     assert(MaskPos == 1 && VLenPos == 2);
 
     return DAG.getNode(VPOpcode, DL, VT, {Operand, RootMaskOp, RootVectorLenOp}, Flags);
@@ -936,8 +938,8 @@ VPMatchContext {
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
                   SDValue N2, const SDNodeFlags Flags = SDNodeFlags()) {
     unsigned VPOpcode = ISD::GetVPForFunctionOpCode(Opcode);
-    int MaskPos = ISD::GetMaskPosVP(VPOpcode);
-    int VLenPos = ISD::GetVectorLengthPosVP(VPOpcode);
+    int MaskPos = *ISD::getVPMaskIdx(VPOpcode);
+    int VLenPos = *ISD::getVPExplicitVectorLengthIdx(VPOpcode);
     assert(MaskPos == 2 && VLenPos == 3);
 
     return DAG.getNode(VPOpcode, DL, VT, {N1, N2, RootMaskOp, RootVectorLenOp}, Flags);
@@ -946,8 +948,8 @@ VPMatchContext {
                   SDValue N2, SDValue N3,
                   const SDNodeFlags Flags = SDNodeFlags()) {
     unsigned VPOpcode = ISD::GetVPForFunctionOpCode(Opcode);
-    int MaskPos = ISD::GetMaskPosVP(VPOpcode);
-    int VLenPos = ISD::GetVectorLengthPosVP(VPOpcode);
+    int MaskPos = *ISD::getVPMaskIdx(VPOpcode);
+    int VLenPos = *ISD::getVPExplicitVectorLengthIdx(VPOpcode);
     assert(MaskPos == 3 && VLenPos == 4);
 
     return DAG.getNode(VPOpcode, DL, VT, {N1, N2, N3, RootMaskOp, RootVectorLenOp}, Flags);
