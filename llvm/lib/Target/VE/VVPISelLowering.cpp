@@ -949,10 +949,10 @@ VETargetLowering::lowerVVP_SCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
   EVT NativeResTy = CDAG.legalizeVectorType(Op, Mode);
 
   // FIXME
-  Optional<SDValue> OptVL = EVLToVal(
-      MinVectorLength(ResTy.getVectorNumElements(), VecLenHint), DL, DAG);
+  SDValue AVL = CDAG.getConstEVL(
+      *MinVectorLength(ResTy.getVectorNumElements(), VecLenHint));
 
-  return CDAG.CreateBroadcast(NativeResTy, Op.getOperand(0), OptVL);
+  return CDAG.CreateBroadcast(NativeResTy, Op.getOperand(0), AVL);
 }
 
 TargetLowering::LegalizeAction
@@ -1124,7 +1124,6 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
   // Not a packed operation.
   if (!WidenInfo.PackedMode)
     return Op;
-  ;
 
   // Legalize mask & avl.
   auto MaskPos = getMaskPos(Op->getOpcode());
@@ -1559,21 +1558,15 @@ SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
   CustomDAG CDAG(*this, DAG, Op);
   VVPWideningInfo WidenInfo =
       pickResultType(CDAG, Op, VVPExpansionMode::ToNativeWidth);
-  unsigned VVPOC = Op->getOpcode();
-
-  // All 256 element ops are legal.
-  if (!WidenInfo.PackedMode) {
-    LLVM_DEBUG(dbgs() << "-> legal. Not packed.\n"; );
-    return Op;
-  }
+  unsigned VVPOpc = Op->getOpcode();
 
   // More refined treatment of masked load/store.
-  if ((Op->getOpcode() == VEISD::VVP_LOAD) ||
-      (Op->getOpcode() == VEISD::VVP_STORE))
+  if ((VVPOpc == VEISD::VVP_LOAD) ||
+      (VVPOpc == VEISD::VVP_STORE))
     return legalizeInternalLoadStoreOp(Op, CDAG);
 
   // Do we need to perform splitting?
-  if (!SupportsPackedMode(VVPOC, OpVecTy))
+  if (WidenInfo.PackedMode && !SupportsPackedMode(VVPOpc, OpVecTy))
     return ExpandToSplitVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   // This is a packed mode operation -> we (may) need to legalize AVL to refer

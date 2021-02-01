@@ -257,14 +257,24 @@ SDValue llvm::combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart, EVT Dest
   if (!ReplV)
     return SDValue();
 
-  // Directly replace vec_broadcast(repl_X(V)) with a plain vec_broadcast(V).
-  // Bits read from destination register are the same part as the value that is
-  // replicated? Remove replication!
+  // Directly replace the packed vec_broadcast(repl_X(V)) with a plain regular
+  // vec_broadcast(V). Bits read from destination register are the same part as
+  // the value that is replicated? Remove replication!
   PackElem UsedDestPart = getPackElemForVT(DestVT);
   PackElem ReplPart;
   match_ReplLoHi(ReplV, ReplPart);
-  if (UsedDestPart == ReplPart)
-    return CDAG.CreateBroadcast(DestVT, ReplV->getOperand(0), AVL);
+  if (UsedDestPart == ReplPart) {
+    VVPWideningInfo WidenInfo;
+    WidenInfo.ActiveVectorLength =
+        PackedVec.getValueType().getVectorNumElements();
+    WidenInfo.PackedMode = true;
+    WidenInfo.NeedsPackedMasking = false;
+    // Need to use the 'old' type here since ::createTargetMask will use it for
+    // AVL inference.
+    WidenInfo.ResultVT = PackedVec.getValueType();
+    auto LegalMask = CDAG.createTargetMask(WidenInfo, SDValue(), AVL);
+    return CDAG.CreateBroadcast(DestVT, ReplV->getOperand(0), LegalMask.AVL);
+  }
 
   // At least simplify to a plain packed broadcast.
   return CDAG.CreateBroadcast(DestVT, ReplV, AVL);

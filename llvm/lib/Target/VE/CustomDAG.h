@@ -97,8 +97,6 @@ Optional<unsigned> getReductionVectorParamPos(unsigned ISD);
 
 Optional<unsigned> PeekForNarrow(SDValue Op);
 
-Optional<SDValue> EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG &DAG);
-
 unsigned GetMaskBits(EVT Ty);
 
 // select an appropriate %evl argument for this element count.
@@ -281,8 +279,7 @@ struct CustomDAG {
                             SDValue AVL) const;
   /// } Mask Insert/Extract
 
-  SDValue CreateBroadcast(EVT ResTy, SDValue S,
-                          Optional<SDValue> OpVectorLength = None) const;
+  SDValue CreateBroadcast(EVT ResTy, SDValue S, SDValue AVL = SDValue()) const;
 
   // Extract an SX register from a mask
   SDValue createMaskExtract(SDValue MaskV, SDValue Idx) const;
@@ -444,8 +441,7 @@ struct CustomDAG {
     return getVectorVT(OldValVT.getVectorElementType(), StandardVectorWidth);
   }
 
-  SDValue extractPackElem(SDValue Op, PackElem Part,
-                                SDValue AVL);
+  SDValue extractPackElem(SDValue Op, PackElem Part, SDValue AVL) const;
 
   SDValue createIDIV(bool IsSigned, EVT ResVT, SDValue Dividend,
                      SDValue Divisor, SDValue Mask, SDValue AVL) const;
@@ -481,9 +477,11 @@ struct CustomDAG {
   };
 
   // Infer mask & AVL for this VVP op
-  TargetMasks createTargetMask(VVPWideningInfo, SDValue RawMask, SDValue RawAVL);
+  TargetMasks createTargetMask(VVPWideningInfo, SDValue RawMask,
+                               SDValue RawAVL) const;
   // Infer mask & AVL for this split VVP op
-  TargetMasks createTargetSplitMask(VVPWideningInfo WidenInfo, SDValue RawMask, SDValue RawAVL, PackElem Part);
+  TargetMasks createTargetSplitMask(VVPWideningInfo WidenInfo, SDValue RawMask,
+                                    SDValue RawAVL, PackElem Part) const;
 
   SDValue createConstantTargetMask(VVPWideningInfo WidenInfo) const;
 

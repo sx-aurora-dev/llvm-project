@@ -178,7 +178,7 @@ unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask) {
 
 bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT) {
   bool IsPackedOp = isPackedType(IdiomVT);
-  bool IsMaskOp = IdiomVT.getVectorElementType() == MVT::i1;
+  // bool IsMaskOp = IdiomVT.getVectorElementType() == MVT::i1;
 
 #if 0
   if (IsMaskOp && IsPackedOp) {
@@ -222,7 +222,7 @@ bool IsVVP(unsigned Opcode) {
   }
 }
 
-// Return the mask operand position for this VVP or VEC op.
+// Return the AVL operand position for this VVP Op.
 Optional<int> getAVLPos(unsigned Opc) {
   // This is only available for VP SDNodes
   auto PosOpt = ISD::getVPExplicitVectorLengthIdx(Opc);
@@ -231,10 +231,13 @@ Optional<int> getAVLPos(unsigned Opc) {
 
   // VEC Opcodes and special cases.
   switch (Opc) {
-  case VEISD::VEC_SEQ:
-    return 0;
-  case VEISD::VEC_BROADCAST:
-    return 1;
+  case VEISD::VEC_TOMASK:    return 1;
+  case VEISD::VEC_SEQ:       return 0;
+  case VEISD::VEC_BROADCAST: return 1;
+  case VEISD::VEC_UNPACK_HI:
+  case VEISD::VEC_UNPACK_LO: return 1;
+  case VEISD::VEC_SWAP:      return 1;
+  case VEISD::VEC_PACK:      return 2;
   }
 
   // VVP Opcodes.
@@ -247,22 +250,30 @@ Optional<int> getAVLPos(unsigned Opc) {
   return None;
 }
 
-SDValue getNodeAVL(SDValue Op) {
-  auto PosOpt = getAVLPos(Op->getOpcode());
-  return PosOpt ? Op->getOperand(*PosOpt) : SDValue();
-}
-
-// Return the AVL operand position for this VVP Op.
+// Return the mask operand position for this VVP or VEC op.
 Optional<int> getMaskPos(unsigned Opc) {
   auto PosOpt = ISD::getVPMaskIdx(Opc);
   if (PosOpt)
     return *PosOpt;
+
+  // VEC_* opcodes.
+  switch (Opc) {
+    case VEISD::VEC_BROADCAST:
+    case VEISD::VEC_SWAP:
+    case VEISD::VEC_UNPACK_HI:
+    case VEISD::VEC_UNPACK_LO:
+    case VEISD::VEC_PACK:
+    case VEISD::VEC_TOMASK:
+    case VEISD::VEC_SEQ:
+      return None;
+  }
 
   // Selection mask.
   if (Opc == ISD::VSELECT || Opc == ISD::SELECT) {
     return 0;
   }
 
+  // VVP special cases..
   switch (Opc) {
   case VEISD::VVP_SELECT:
     return 2;
@@ -285,6 +296,11 @@ Optional<int> getMaskPos(unsigned Opc) {
   if (IsVVPReductionOp(Opc))
     return *getReductionVectorParamPos(Opc) + 1;
   return None;
+}
+
+SDValue getNodeAVL(SDValue Op) {
+  auto PosOpt = getAVLPos(Op->getOpcode());
+  return PosOpt ? Op->getOperand(*PosOpt) : SDValue();
 }
 
 SDValue getNodeMask(SDValue Op) {
@@ -487,7 +503,7 @@ bool isPackedType(EVT SomeVT) {
 }
 
 // legalize packed-mode broadcasts into lane replication + broadcast
-static SDValue LegalizeBroadcast(SDValue Op, SelectionDAG &DAG) {
+static SDValue supplementPackedReplication(SDValue Op, SelectionDAG &DAG) {
   if (Op.getOpcode() != VEISD::VEC_BROADCAST)
     return Op;
 
@@ -575,12 +591,6 @@ Optional<unsigned> PeekForNarrow(SDValue Op) {
   if (OnlyN->getOpcode() != VEISD::VEC_NARROW)
     return None;
   return cast<ConstantSDNode>(OnlyN->getOperand(1))->getZExtValue();
-}
-
-Optional<SDValue> EVLToVal(VecLenOpt Opt, SDLoc &DL, SelectionDAG &DAG) {
-  if (!Opt)
-    return None;
-  return DAG.getConstant(Opt.getValue(), DL, MVT::i32);
 }
 
 bool isOverPackedType(EVT VT) {
@@ -758,33 +768,27 @@ SDValue CustomDAG::CreateSwap(EVT DestVT, SDValue V, SDValue AVL) const {
 }
 
 SDValue CustomDAG::CreateBroadcast(EVT ResTy, SDValue S,
-                                   Optional<SDValue> OpVectorLength) const {
+                                   SDValue AVL) const {
 
   // Pick VL
-  SDValue VectorLen;
-  if (OpVectorLength.hasValue()) {
-    VectorLen = OpVectorLength.getValue();
-  }
-  if (!OpVectorLength.hasValue() || !VectorLen) {
-    VectorLen = DAG.getConstant(
+  if (!AVL) {
+    AVL = DAG.getConstant(
         SelectBoundedVectorLength(ResTy.getVectorNumElements()), DL, MVT::i32);
   }
-
-  // FIXME legalize vlen for packed mode!
 
   // Over-packed case: immediately split this into double packing.
   if (isOverPackedType(ResTy)) {
     MVT LegalPartVT = getUnpackSourceType(ResTy, PackElem::Lo);
-    auto PartV = LegalizeBroadcast(
-        DAG.getNode(VEISD::VEC_BROADCAST, DL, LegalPartVT, {S, VectorLen}),
+    auto PartV = supplementPackedReplication(
+        DAG.getNode(VEISD::VEC_BROADCAST, DL, LegalPartVT, {S, AVL}),
         DAG);
-    return CreatePack(ResTy, PartV, PartV, VectorLen);
+    return CreatePack(ResTy, PartV, PartV, AVL);
   }
 
   // Non-mask case
   if (ResTy.getVectorElementType() != MVT::i1) {
-    return LegalizeBroadcast(
-        DAG.getNode(VEISD::VEC_BROADCAST, DL, ResTy, {S, VectorLen}), DAG);
+    return supplementPackedReplication(
+        DAG.getNode(VEISD::VEC_BROADCAST, DL, ResTy, {S, AVL}), DAG);
   }
 
   // Mask bit broadcast
@@ -809,9 +813,9 @@ SDValue CustomDAG::CreateBroadcast(EVT ResTy, SDValue S,
 
   // broadcast to vector
   SDValue BCVec =
-      DAG.getNode(VEISD::VEC_BROADCAST, DL, CmpVecTy, {CmpElem, VectorLen});
+      DAG.getNode(VEISD::VEC_BROADCAST, DL, CmpVecTy, {CmpElem, AVL});
   SDValue ZeroVec =
-      CreateBroadcast(CmpVecTy, {DAG.getConstant(0, DL, BoolTy)}, VectorLen);
+      CreateBroadcast(CmpVecTy, {DAG.getConstant(0, DL, BoolTy)}, AVL);
 
   MVT BoolVecTy = MVT::getVectorVT(MVT::i1, ElemCount);
 
@@ -973,7 +977,8 @@ SDValue CustomDAG::getVVPGather(EVT LegalResVT, SDValue ChainV, SDValue PtrV,
                      {ChainV, PtrV, MaskV, AVL});
 }
 
-SDValue CustomDAG::extractPackElem(SDValue Op, PackElem Part, SDValue AVL) {
+SDValue CustomDAG::extractPackElem(SDValue Op, PackElem Part,
+                                   SDValue AVL) const {
   EVT OldValVT = Op.getValue(0).getValueType();
   if (!OldValVT.isVector())
     return Op;
@@ -1017,7 +1022,7 @@ SDValue CustomDAG::createTargetAVL(VVPWideningInfo WidenInfo) const {
 
 CustomDAG::TargetMasks
 CustomDAG::createTargetSplitMask(VVPWideningInfo WidenInfo, SDValue RawMask,
-                                 SDValue RawAVL, PackElem Part) {
+                                 SDValue RawAVL, PackElem Part) const {
   // No masking caused, we simply adjust the AVL for the parts
   SDValue NewAVL;
   if (!RawAVL) {
@@ -1050,7 +1055,7 @@ CustomDAG::createTargetSplitMask(VVPWideningInfo WidenInfo, SDValue RawMask,
 
 CustomDAG::TargetMasks CustomDAG::createTargetMask(VVPWideningInfo WidenInfo,
                                                    SDValue RawMask,
-                                                   SDValue RawAVL) {
+                                                   SDValue RawAVL) const {
   bool IsDynamicAVL = RawAVL && !isa<ConstantSDNode>(RawAVL);
 
   // Legalize AVL
