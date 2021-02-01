@@ -266,6 +266,7 @@ public:
   /// Custom Lower for VVP {
   SDValue LowerOperation_VVP(SDValue Op, SelectionDAG &DAG) const;
 
+  SDValue lowerEntryToken_VVP(SDValue Op, SelectionDAG& DAG) const;
   SDValue lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
                        VVPExpansionMode Mode) const;
   SDValue lowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const;
@@ -286,9 +287,9 @@ public:
   SDValue lowerVVP_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
                                     VVPExpansionMode Mode,
                                     VecLenOpt VecLenHint = None) const;
-  SDValue lowerVVP_MSTORE(SDValue Op, SelectionDAG &DAG) const;
-  SDValue lowerVVP_MLOAD(SDValue Op, SelectionDAG &DAG, VVPExpansionMode Mode,
-                         VecLenOpt VecLenHint = None) const;
+  SDValue lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
+                                VVPExpansionMode Mode,
+                                VecLenOpt VecLenHint = None) const;
   /// } Custom Lower for VVP
 
   EVT LegalizeVectorType(EVT ResTy, SDValue Op, SelectionDAG &DAG,

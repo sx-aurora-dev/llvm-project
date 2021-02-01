@@ -328,6 +328,10 @@ void VETargetLowering::initVPUActions() {
   if (!Subtarget->enableVPU())
     return;
 
+  // The entry token is the first node to be legalized in the SelectionDAG.
+  // Use this to reset the visited internal vector instruction set.
+  setOperationAction(ISD::EntryToken, MVT::Other, Custom);
+
   // Expand CopyToReg(vec_pack (lo, hi)) for over-packed register.
   // This makes register allocation more efficient (less vreg moves).
   if (Subtarget->hasPackedMode()) {
@@ -745,8 +749,6 @@ void VETargetLowering::ReplaceNodeResults(SDNode *N,
                                           SelectionDAG &DAG) const {
 
   // We are replacing node results again -> drop stale SDNode info.
-  LegalizedVectorNodes.clear();
-
   LLVM_DEBUG(dbgs() << "ReplaceNodeResult: "; N->dump(&DAG););
 
   // custom lowering only desired for VPU mode
@@ -1001,7 +1003,6 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
   SDValue PackPtr = getLoadStorePtr(Op);
   SDValue PackData = getStoreData(Op);
   SDValue PackStride = getLoadStoreStride(Op, CDAG);
-  dbgs() << "NODE AVL: "; CDAG.print(dbgs(), PackedAVL) << "\n";
 
   unsigned ChainResIdx = PackData ? 0 : 1;
 
@@ -1397,11 +1398,9 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
 
   case ISD::LOAD:
   case ISD::MLOAD:
-    return lowerVVP_MLOAD(Op, DAG, Mode);
-
   case ISD::STORE:
   case ISD::MSTORE:
-    return lowerVVP_MSTORE(Op, DAG);
+    return lowerVVP_MLOAD_MSTORE(Op, DAG, Mode);
 
   case ISD::MGATHER:
   case ISD::MSCATTER:
@@ -1563,8 +1562,10 @@ SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
   unsigned VVPOC = Op->getOpcode();
 
   // All 256 element ops are legal.
-  if (!WidenInfo.PackedMode)
+  if (!WidenInfo.PackedMode) {
+    LLVM_DEBUG(dbgs() << "-> legal. Not packed.\n"; );
     return Op;
+  }
 
   // More refined treatment of masked load/store.
   if ((Op->getOpcode() == VEISD::VVP_LOAD) ||
@@ -1729,9 +1730,8 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
     return lowerVP_VSHIFT(Op, DAG);
 
   case ISD::VP_LOAD:
-    return lowerVVP_MLOAD(Op, DAG, VVPExpansionMode::ToNativeWidth);
   case ISD::VP_STORE:
-    return lowerVVP_MSTORE(Op, DAG);
+    return lowerVVP_MLOAD_MSTORE(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   case ISD::VP_GATHER:
   case ISD::VP_SCATTER:
@@ -1814,83 +1814,69 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   return NewV;
 }
 
-SDValue VETargetLowering::lowerVVP_MLOAD(SDValue Op, SelectionDAG &DAG,
+SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
                                          VVPExpansionMode Mode,
                                          VecLenOpt VecLenHint) const {
-  LLVM_DEBUG(dbgs() << "Lowering VP/MLOAD to VVP\n");
+  LLVM_DEBUG(dbgs() << "Lowering VP/MLOAD/MSTORE to VVP\n");
   LLVM_DEBUG(Op.dumpr(&DAG));
   CustomDAG CDAG(*this, DAG, Op);
 
+  auto VVPOpc = *GetVVPOpcode(Op->getOpcode());
+  const bool IsLoad = (VVPOpc == VEISD::VVP_LOAD);
+
+  // Shares.
   SDValue BasePtr = getLoadStorePtr(Op);
   SDValue Mask = getLoadStoreMask(Op);
   SDValue Chain = getLoadStoreChain(Op);
-  SDValue PassThru = getLoadPassthru(Op);
   SDValue AVL = getLoadStoreAVL(Op);
+  // Store specific.
+  SDValue Data = getStoreData(Op);
+  // Load specific.
+  SDValue PassThru = getLoadPassthru(Op);
 
   MemSDNode &MemN = *cast<MemSDNode>(Op.getNode());
-  EVT OldResVT = MemN.getMemoryVT();
-  EVT LegalResVT = LegalizeVectorType(OldResVT, Op, DAG, Mode);
+  EVT OldDataVT = MemN.getMemoryVT();
+  EVT LegalDataVT = LegalizeVectorType(OldDataVT, Op, DAG, Mode);
 
   // Eagerly split over-packed vectors.
-  if (isOverPackedType(OldResVT))
+  if (isOverPackedType(OldDataVT))
     return ExpandToSplitLoadStore(Op, DAG, Mode);
 
   // Infer a AVL value from all available hints.
-  AVL = CDAG.inferAVL(AVL, Mask, OldResVT);
+  AVL = CDAG.inferAVL(AVL, Mask, OldDataVT);
 
   // Default to the all-true mask.
   if (!Mask) {
-    Packing P = getPackingForVT(LegalResVT);
+    Packing P = getPackingForVT(LegalDataVT);
     Mask = CDAG.createUniformConstMask(P, true);
   }
 
   // Minimize vector length.
   // AVL = ReduceVectorLength(Mask, AVL, VecLenHint, DAG);
 
-  MVT ChainVT = Op.getNode()->getSimpleValueType(1);
-
-  // Emit.
-  uint64_t ElemBytes = LegalResVT.getVectorElementType().getStoreSize();
+  uint64_t ElemBytes = LegalDataVT.getVectorElementType().getStoreSize();
   auto StrideV = CDAG.getConstant(ElemBytes, MVT::i64);
-  auto NewLoadV = CDAG.getNode(VEISD::VVP_LOAD, {LegalResVT, ChainVT},
-                               {Chain, BasePtr, StrideV, Mask, AVL});
 
-  if (!PassThru || PassThru.isUndef())
-    return NewLoadV;
+  if (IsLoad) {
+    // Emit.
+    auto NewLoadV = CDAG.getNode(VEISD::VVP_LOAD, {LegalDataVT, MVT::Other},
+                                 {Chain, BasePtr, StrideV, Mask, AVL});
 
-  // Re-introduce passthru as a select.
-  // TODO: Use vvp_select.
-  SDValue DataV = CDAG.DAG.getSelect(CDAG.DL, Op.getSimpleValueType(), Mask,
-                                     NewLoadV, PassThru);
-  SDValue NewLoadChainV = SDValue(NewLoadV.getNode(), 1);
+    if (!PassThru || PassThru.isUndef())
+      return NewLoadV;
 
-  // Merge them back into one node.
-  return CDAG.getMergeValues({DataV, NewLoadChainV});
-}
+    // Re-introduce passthru as a select.
+    // TODO: Use vvp_select.
+    SDValue DataV = CDAG.DAG.getSelect(CDAG.DL, Op.getSimpleValueType(), Mask,
+                                       NewLoadV, PassThru);
+    SDValue NewLoadChainV = SDValue(NewLoadV.getNode(), 1);
 
-SDValue VETargetLowering::lowerVVP_MSTORE(SDValue Op, SelectionDAG &DAG) const {
-  VVPExpansionMode Mode = VVPExpansionMode::ToNativeWidth;
-  LLVM_DEBUG(dbgs() << "Lowering VP/MSTORE\n");
-  LLVM_DEBUG(Op.dumpr(&DAG));
-  CustomDAG CDAG(*this, DAG, Op);
+    // Merge them back into one node.
+    return CDAG.getMergeValues({DataV, NewLoadChainV});
+  }
 
-  SDValue BasePtr = getLoadStorePtr(Op);
-  SDValue Data = getStoreData(Op);
-  SDValue Mask = getLoadStoreMask(Op);
-  SDValue Chain = getLoadStoreChain(Op);
-  assert(Data);
-  SDValue AVL = getLoadStoreAVL(Op);
-
-  // Eagerly split over-packed vectors.
-  if (isOverPackedType(Data.getValueType()))
-    return ExpandToSplitVVP(Op, DAG, Mode);
-
-  // Minimize vector length.
-  // AVL = ReduceVectorLength(Mask, AVL, None, DAG);
-
-  uint64_t ElemBytes =
-      Data.getValueType().getVectorElementType().getStoreSize();
-  auto StrideV = CDAG.getConstant(ElemBytes, MVT::i64);
+  // VVP_STORE
+  assert(VVPOpc == VEISD::VVP_STORE);
   return CDAG.getNode(VEISD::VVP_STORE, Op.getNode()->getVTList(),
                       {Chain, Data, BasePtr, StrideV, Mask, AVL});
 }
@@ -2146,7 +2132,7 @@ SDValue VETargetLowering::lowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
 
 SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
                                              SelectionDAG &DAG) const {
-  LLVM_DEBUG(dbgs() << "LowerOp: "; Op.dump(&DAG); dbgs() << "\n";);
+  LLVM_DEBUG(dbgs() << "LowerOp_VVP: "; Op.dump(&DAG); dbgs() << "\n";);
 
   switch (Op.getOpcode()) {
   default:
@@ -2197,8 +2183,10 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
   case VEISD::VEC_BROADCAST:
   case VEISD::VEC_SEQ: {
     // Check whether this node was legalized before.
-    if (LegalizedVectorNodes.count(Op.getNode()))
+    if (LegalizedVectorNodes.count(Op.getNode())) {
+      LLVM_DEBUG( dbgs() << "\tVisited before!\n"; );
       return Op;
+    }
     SDValue LegalVecOp =
         legalizeInternalVectorOp(lowerSETCCInVectorArithmetic(Op, DAG), DAG);
     LegalizedVectorNodes.insert(LegalVecOp.getNode());
@@ -2209,6 +2197,13 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
   case VEISD::VEC_NARROW:
     return Op->getOperand(0);
   }
+}
+
+SDValue VETargetLowering::lowerEntryToken_VVP(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "Resetting LegalizedVectorNodes set!\n";);
+  LegalizedVectorNodes.clear();
+  return Op;
 }
 
 #if 0

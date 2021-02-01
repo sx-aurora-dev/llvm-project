@@ -3699,6 +3699,9 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
       return LowerOperation_SIMD(Op, DAG);
     llvm_unreachable("Unexpected Opcode in LowerOperation");
 
+  case ISD::EntryToken:
+    return lowerEntryToken_VVP(Op, DAG);
+
   // Mostly all-scalar lowerings below.
   case ISD::ATOMIC_FENCE:
     return lowerATOMIC_FENCE(Op, DAG);
