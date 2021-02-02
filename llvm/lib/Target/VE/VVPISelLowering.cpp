@@ -230,16 +230,6 @@ static SDValue getLoadPassthru(SDValue Op) {
   return SDValue();
 }
 
-static SDValue getLoadStoreMask(SDValue Op) {
-  if (auto *MaskedN = dyn_cast<MaskedLoadStoreSDNode>(Op.getNode())) {
-    return MaskedN->getMask();
-  }
-  if (auto *VPLoadN = dyn_cast<VPLoadStoreSDNode>(Op.getNode())) {
-    return VPLoadN->getMask();
-  }
-  return SDValue();
-}
-
 static SDValue getLoadStoreAVL(SDValue Op) {
   if (auto *VPLoadStoreN = dyn_cast<VPLoadStoreSDNode>(Op.getNode())) {
     return VPLoadStoreN->getVectorLength();
@@ -1557,6 +1547,23 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   abort(); // TODO implement
 }
 
+static bool isEvenNumber(SDValue AVL) {
+  auto ConstAVL = dyn_cast<ConstantSDNode>(AVL);
+  if (!ConstAVL)
+    return false;
+
+  return (ConstAVL->getZExtValue() % 2 == 0);
+}
+
+static bool isPackableLoadStore(SDValue Op) {
+  SDValue AVL = getNodeAVL(Op);
+  SDValue Mask = getNodeMask(Op);
+  if ((Op->getOpcode() == VEISD::VVP_LOAD) && OptimizeVectorMemory)
+    return true;
+
+  return IsAllTrueMask(Mask) && isEvenNumber(AVL);
+}
+
 SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
                                                       CustomDAG &CDAG) const {
   LLVM_DEBUG(dbgs() << "Legalize this VVP LOAD, STORE\n");
@@ -1567,17 +1574,17 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
     return Op;
   }
 
+  // TODO: Get better at inferring 'even' AVLs and all true masks.
+  SDValue AVL = getNodeAVL(Op);
+  SDValue Mask = getNodeMask(Op);
   // TODO: this can be refined.. the mask has to be compactable for stores.
-  bool IsPackable =
-      (Op->getOpcode() == VEISD::VVP_LOAD) && OptimizeVectorMemory;
+  bool IsPackable = isPackableLoadStore(Op);
   if (!IsPackable)
     return ExpandToSplitLoadStore(Op, CDAG.DAG,
                                   VVPExpansionMode::ToNativeWidth);
 
   // Packed load/store require special treatment
   auto WidenInfo = pickResultType(CDAG, Op, VVPExpansionMode::ToNativeWidth);
-  SDValue AVL = getNodeAVL(Op);
-  SDValue Mask = getNodeMask(Op);
   auto TargetMask = CDAG.createTargetMask(WidenInfo, Mask, AVL);
 
   SDValue PackStride = getLoadStoreStride(Op, CDAG);
@@ -1876,7 +1883,7 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
 
   // Shares.
   SDValue BasePtr = getLoadStorePtr(Op);
-  SDValue Mask = getLoadStoreMask(Op);
+  SDValue Mask = getNodeMask(Op);
   SDValue Chain = getLoadStoreChain(Op);
   SDValue AVL = getLoadStoreAVL(Op);
   // Store specific.

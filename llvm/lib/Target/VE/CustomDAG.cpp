@@ -250,11 +250,36 @@ Optional<int> getAVLPos(unsigned Opc) {
   return None;
 }
 
+static SDValue getLoadStoreMask(SDValue Op) {
+  if (auto *MaskedN = dyn_cast<MaskedLoadStoreSDNode>(Op.getNode())) {
+    return MaskedN->getMask();
+  }
+  if (auto *VPLoadN = dyn_cast<VPLoadStoreSDNode>(Op.getNode())) {
+    return VPLoadN->getMask();
+  }
+  return SDValue();
+}
+
 // Return the mask operand position for this VVP or VEC op.
 Optional<int> getMaskPos(unsigned Opc) {
+  // VP opcode.
   auto PosOpt = ISD::getVPMaskIdx(Opc);
   if (PosOpt)
     return *PosOpt;
+
+  // Standard opcodes.
+  switch (Opc) {
+    case ISD::VSELECT:
+    case ISD::SELECT:
+      return 0;
+    case ISD::MSCATTER:
+    case ISD::MGATHER:
+      return 2;
+    case ISD::MSTORE:
+      return 4;
+    case ISD::MLOAD:
+      return 3;
+  }
 
   // VEC_* opcodes.
   switch (Opc) {
@@ -266,11 +291,6 @@ Optional<int> getMaskPos(unsigned Opc) {
     case VEISD::VEC_TOMASK:
     case VEISD::VEC_SEQ:
       return None;
-  }
-
-  // Selection mask.
-  if (Opc == ISD::VSELECT || Opc == ISD::SELECT) {
-    return 0;
   }
 
   // VVP special cases..
