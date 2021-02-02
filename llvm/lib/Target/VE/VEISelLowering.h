@@ -129,6 +129,12 @@ struct VVPWideningInfo {
 class VETargetLowering final : public TargetLowering, public VELoweringInfo {
   // FIXME: Find a more robust solution for this.
   mutable std::set<const SDNode *> LegalizedVectorNodes;
+  bool isPackLegalizedInternalNode(const SDNode *N) const {
+    return LegalizedVectorNodes.count(N);
+  }
+  void addPackLegalizedNode(const SDNode *N) const {
+    LegalizedVectorNodes.insert(N);
+  }
 
   const VESubtarget *Subtarget;
 
@@ -209,7 +215,7 @@ public:
       std::function<SDValue(SDValue)> PromotedopCB,
       std::function<SDValue(SDValue)> WidenedOpCB) const override;
 
-  SDNode* widenInternalVectorOperation(SDNode *N, SelectionDAG &DAG) const;
+  SDNode *widenInternalVectorOperation(SDNode *N, SelectionDAG &DAG) const;
   // legalize the result vector type for operation \p Op
 
   // Custom Operations

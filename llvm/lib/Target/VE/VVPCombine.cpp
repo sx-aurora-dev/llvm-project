@@ -21,9 +21,9 @@
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/IntrinsicsVE.h"
 #include "llvm/IR/Module.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
-#include "llvm/Support/CommandLine.h"
 
 #include "CustomDAG.h"
 
@@ -36,10 +36,8 @@ using namespace llvm;
 
 // Optimize packed mode patterns.
 static cl::opt<bool>
-OptimizePackedMode("ve-optimize-packed",
-    cl::init(true),
-    cl::desc("Simplify packed mode patterns"),
-    cl::Hidden);
+    OptimizePackedMode("ve-optimize-packed", cl::init(true),
+                       cl::desc("Simplify packed mode patterns"), cl::Hidden);
 
 static cl::opt<bool> ExpandOverPackedRegisterCopies(
     "ve-expand-overpacked-copies", cl::init(true),
@@ -70,7 +68,6 @@ bool llvm::match_FPOne(SDValue V) {
 
   return FPConst->isExactlyValue(1.0);
 }
-
 
 static int match_SomeOperand(SDNode *Op, unsigned VVPOpcode, Matcher M) {
   for (int i = 0; i < 2; ++i) {
@@ -145,12 +142,16 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
              dbgs() << "\n";);
 
   CustomDAG CDAG(*this, DCI.DAG, N);
+  bool RootIsPackLegalized = isPackLegalizedInternalNode(N);
   switch (N->getOpcode()) {
   case VEISD::VVP_FADD: {
     SDValue VY, VZ, VW, Mask, AVL;
     if (match_FFMA(N, VY, VZ, VW, Mask, AVL)) {
       MVT ResVT = N->getSimpleValueType(0);
-      return CDAG.getNode(VEISD::VVP_FFMA, ResVT, {VY, VZ, VW, Mask, AVL});
+      auto N = CDAG.getNode(VEISD::VVP_FFMA, ResVT, {VY, VZ, VW, Mask, AVL});
+      if (RootIsPackLegalized)
+        addPackLegalizedNode(N.getNode());
+      return N;
     }
   } break;
   case VEISD::VVP_FSUB: {
@@ -159,7 +160,10 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
     if (match_FFMS(N, VY, VZ, VW, Mask, AVL, Negated)) {
       MVT ResVT = N->getSimpleValueType(0);
       unsigned Opcode = Negated ? VEISD::VVP_FFMSN : VEISD::VVP_FFMS;
-      return CDAG.getNode(Opcode, ResVT, {VY, VZ, VW, Mask, AVL});
+      auto N = CDAG.getNode(Opcode, ResVT, {VY, VZ, VW, Mask, AVL});
+      if (RootIsPackLegalized)
+        addPackLegalizedNode(N.getNode());
+      return N;
     }
   } break;
   default:
@@ -196,7 +200,7 @@ static SDValue match_UnpackLoHi(SDValue N, PackElem &SrcElem) {
 }
 
 // vec_broadcast(ret, AVL)
-static SDValue match_Broadcast(SDValue N, SDValue & AVL) {
+static SDValue match_Broadcast(SDValue N, SDValue &AVL) {
   if (N->getOpcode() != VEISD::VEC_BROADCAST)
     return SDValue();
   AVL = N->getOperand(1);
@@ -204,18 +208,20 @@ static SDValue match_Broadcast(SDValue N, SDValue & AVL) {
 }
 
 // vec_unpack_X(vec_broadcast(ret))
-static SDValue
-match_UnpackBroadcast(SDValue N, PackElem & UnpackElem, SDValue & BroadcastAVL) {
+static SDValue match_UnpackBroadcast(SDValue N, PackElem &UnpackElem,
+                                     SDValue &BroadcastAVL) {
   SDValue UnpackedV = match_UnpackLoHi(N, UnpackElem);
-  if (!UnpackedV) return SDValue();
+  if (!UnpackedV)
+    return SDValue();
   SDValue UnpackedBroadcastV = match_Broadcast(UnpackedV, BroadcastAVL);
-  if (!UnpackedBroadcastV) return SDValue();
+  if (!UnpackedBroadcastV)
+    return SDValue();
   return UnpackedBroadcastV;
 }
 
 // broadcast(%ret = repl_X)
-static SDValue
-match_BroadcastRepl(SDValue N, PackElem & ReplElem, SDValue & BroadcastAVL) {
+static SDValue match_BroadcastRepl(SDValue N, PackElem &ReplElem,
+                                   SDValue &BroadcastAVL) {
   SDValue SplatV = match_Broadcast(N, BroadcastAVL);
   if (!SplatV)
     return SDValue();
@@ -229,7 +235,8 @@ match_BroadcastRepl(SDValue N, PackElem & ReplElem, SDValue & BroadcastAVL) {
 static SDValue match_UnpackBroadcastRepl(SDValue N, SDValue &AVL) {
   PackElem UnpackElem;
   SDValue PackedV = match_UnpackLoHi(N, UnpackElem);
-  if (!PackedV) return SDValue();
+  if (!PackedV)
+    return SDValue();
 
   PackElem ReplElem;
   SDValue UnpackedBroadcastV = match_BroadcastRepl(N, ReplElem, AVL);
@@ -246,7 +253,9 @@ SDValue combineUnpackLoHi(CustomDAG &CDAG, SDValue N) {
   return combineUnpackLoHi(PackedV, UnpackElem, N.getValueType(), AVL, CDAG);
 }
 
-SDValue llvm::combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart, EVT DestVT, SDValue UnpackAVL, const CustomDAG &CDAG) {
+SDValue llvm::combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart,
+                                EVT DestVT, SDValue UnpackAVL,
+                                const CustomDAG &CDAG) {
   LLVM_DEBUG(dbgs() << "Online combiningUnpackLoHi from ";
              CDAG.print(dbgs(), PackedVec) << "\n";);
   // Replace vec_unpack(vec_broadcast(repl_X(V)) with
@@ -280,30 +289,32 @@ SDValue llvm::combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart, EVT Dest
   return CDAG.CreateBroadcast(DestVT, ReplV, AVL);
 }
 
-SDValue VETargetLowering::combinePacking(SDNode *N, DAGCombinerInfo &DCI) const {
+SDValue VETargetLowering::combinePacking(SDNode *N,
+                                         DAGCombinerInfo &DCI) const {
   if (!OptimizePackedMode)
     return SDValue();
   // Perform this shortly before isel.
   if (!DCI.isAfterLegalizeDAG())
     return SDValue();
 
-  LLVM_DEBUG(dbgs() << "combinePacking: "; N->print(dbgs(), &DCI.DAG); dbgs() << "\n";);
+  LLVM_DEBUG(dbgs() << "combinePacking: "; N->print(dbgs(), &DCI.DAG);
+             dbgs() << "\n";);
   CustomDAG CDAG(*this, DCI.DAG, N);
   switch (N->getOpcode()) {
-    case VEISD::VEC_UNPACK_HI:
-    case VEISD::VEC_UNPACK_LO: {
-      SDValue AsVal(N, 0);
-      PackElem UnpackPart = getPartForUnpackOpcode(N->getOpcode());
-      EVT DestVT = N->getValueType(0);
-      SDValue Pack = getUnpackPackOperand(AsVal);
-      SDValue AVL = getUnpackAVL(AsVal);
-      return combineUnpackLoHi(Pack, UnpackPart, DestVT, AVL, CDAG);
-    }
+  case VEISD::VEC_UNPACK_HI:
+  case VEISD::VEC_UNPACK_LO: {
+    SDValue AsVal(N, 0);
+    PackElem UnpackPart = getPartForUnpackOpcode(N->getOpcode());
+    EVT DestVT = N->getValueType(0);
+    SDValue Pack = getUnpackPackOperand(AsVal);
+    SDValue AVL = getUnpackAVL(AsVal);
+    return combineUnpackLoHi(Pack, UnpackPart, DestVT, AVL, CDAG);
+  }
 
-    // case VEISD::VEC_PACK:
-    // case VEISD::VEC_SWAP:
-    default:
-      break;
+  // case VEISD::VEC_PACK:
+  // case VEISD::VEC_SWAP:
+  default:
+    break;
   }
   return SDValue();
 }
@@ -354,7 +365,7 @@ SDValue VETargetLowering::combineCopyFromRegVVP(SDNode *N,
     Chain = SDValue(CopyVal.getNode(), 1);
     if (Part == PackElem::Lo)
       LoVal = CopyVal;
-    else 
+    else
       HiVal = CopyVal;
   }
 
@@ -389,7 +400,7 @@ SDValue VETargetLowering::combineCopyToRegVVP(SDNode *N,
     return SDValue();
 
   LLVM_DEBUG(dbgs() << "Found over-packed CopyToReg:";
-             N->print(dbgs(), &DCI.DAG); dbgs() << "\n"; );
+             N->print(dbgs(), &DCI.DAG); dbgs() << "\n";);
 
   // Match a feeding vec_pack operation.
   if (SrcV->getOpcode() != VEISD::VEC_PACK)
@@ -403,7 +414,7 @@ SDValue VETargetLowering::combineCopyToRegVVP(SDNode *N,
   for (auto Part : {PackElem::Lo, PackElem::Hi}) {
     unsigned SubRegIdx = getOverPackedSubRegIdx(Part);
     auto DestPartReg = TRI->getSubReg(DestPhysReg, SubRegIdx);
-    SDValue PartV =Part == PackElem::Lo ? LoSrcVal : HiSrcVal;
+    SDValue PartV = Part == PackElem::Lo ? LoSrcVal : HiSrcVal;
     Chain = CDAG.DAG.getCopyToReg(Chain, CDAG.DL, DestPartReg, PartV, SrcGlue);
     SrcGlue = SDValue(Chain.getNode(), 1);
   }

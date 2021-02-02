@@ -1561,8 +1561,15 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
                                                       CustomDAG &CDAG) const {
   LLVM_DEBUG(dbgs() << "Legalize this VVP LOAD, STORE\n");
 
+  EVT DataVT = *getIdiomaticType(Op.getNode());
+  if (!isPackedType(DataVT)) {
+    LLVM_DEBUG(dbgs() << "Legal!\n");
+    return Op;
+  }
+
   // TODO: this can be refined.. the mask has to be compactable for stores.
-  bool IsPackable = Op->getOpcode() == VEISD::VVP_LOAD && OptimizeVectorMemory;
+  bool IsPackable =
+      (Op->getOpcode() == VEISD::VVP_LOAD) && OptimizeVectorMemory;
   if (!IsPackable)
     return ExpandToSplitLoadStore(Op, CDAG.DAG,
                                   VVPExpansionMode::ToNativeWidth);
