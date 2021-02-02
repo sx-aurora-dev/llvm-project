@@ -987,7 +987,7 @@ SDValue CustomDAG::getVVPLoad(EVT LegalResVT, SDValue Chain, SDValue PtrV,
 SDValue CustomDAG::getVVPStore(SDValue Chain, SDValue DataV, SDValue PtrV,
                                SDValue StrideV, SDValue MaskV,
                                SDValue AVL) const {
-  return DAG.getNode(VEISD::VVP_LOAD, DL, MVT::Other,
+  return DAG.getNode(VEISD::VVP_STORE, DL, MVT::Other,
                      {Chain, DataV, PtrV, StrideV, MaskV, AVL});
 }
 
