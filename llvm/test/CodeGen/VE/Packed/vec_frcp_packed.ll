@@ -89,12 +89,8 @@ define fastcc <512 x float> @vec_frcp_v512f64(<512 x float> %x) {
 ; CHECK-LABEL: vec_frcp_v512f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lea.sl %s1, 1065353216
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfdiv.s %v1, %s1, %v0
-; CHECK-NEXT:    vshf %v0, %v0, %v0, 15
-; CHECK-NEXT:    vfdiv.s %v0, %s1, %v0
-; CHECK-NEXT:    vshf %v0, %v0, %v1, 8
+; CHECK-NEXT:    pvrcp %v0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %sz = insertelement <512 x float> undef, float 1.0, i32 0
   %vone = shufflevector <512 x float> %sz, <512 x float> poison, <512 x i32> zeroinitializer
