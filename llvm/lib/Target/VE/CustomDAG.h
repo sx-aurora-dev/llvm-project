@@ -22,6 +22,19 @@
 
 namespace llvm {
 
+// The predication/masking in a VVP/VEC SDNode consists in a bit mask (mask) and
+// an active vector length (AVL). The AVL parameter only applies at 64bit
+// element granularity. In packed mode that means groups of 2 x 32bit elements.
+// These methods legalize AVL to refer to packs instead at the cost of
+// additional masking code.
+/// AVL Legalization {
+struct TargetMasks {
+  SDValue Mask;
+  SDValue AVL;
+  TargetMasks(SDValue Mask = SDValue(), SDValue AVL = SDValue())
+      : Mask(Mask), AVL(AVL) {}
+};
+
 const unsigned SXRegSize = 64;
 
 /// Helpers {
@@ -68,7 +81,6 @@ SDValue getNodeMask(SDValue Op);
 // Return the AVL operand position for this VVP or VEC op.
 Optional<int> getAVLPos(unsigned Opc);
 SDValue getNodeAVL(SDValue Op);
-
 
 VecLenOpt MinVectorLength(VecLenOpt A, VecLenOpt B);
 
@@ -206,8 +218,10 @@ static bool isUnpackOp(unsigned OPC) {
 }
 
 static PackElem getPartForUnpackOpcode(unsigned OPC) {
-  if (OPC == VEISD::VEC_UNPACK_LO) return PackElem::Lo;
-  if (OPC == VEISD::VEC_UNPACK_HI) return PackElem::Hi;
+  if (OPC == VEISD::VEC_UNPACK_LO)
+    return PackElem::Lo;
+  if (OPC == VEISD::VEC_UNPACK_HI)
+    return PackElem::Hi;
   llvm_unreachable("Not an unpack opcode!");
 }
 
@@ -215,18 +229,11 @@ static unsigned getUnpackOpcodeForPart(PackElem Part) {
   return (Part == PackElem::Lo) ? VEISD::VEC_UNPACK_LO : VEISD::VEC_UNPACK_HI;
 }
 
-static SDValue getUnpackPackOperand(SDValue N) {
-  return N->getOperand(0);
-}
+static SDValue getUnpackPackOperand(SDValue N) { return N->getOperand(0); }
 
-static SDValue getUnpackAVL(SDValue N) {
-  return N->getOperand(1);
-}
+static SDValue getUnpackAVL(SDValue N) { return N->getOperand(1); }
 
 /// } Packing
-
-
-
 
 /// Helper class for short hand custom node creation ///
 struct CustomDAG {
@@ -266,7 +273,8 @@ struct CustomDAG {
   /// Packed Mode Support {
   SDValue CreateUnpack(EVT DestVT, SDValue Vec, PackElem E, SDValue AVL) const;
 
-  SDValue CreatePack(EVT DestVT, SDValue LowV, SDValue HighV, SDValue AVL) const;
+  SDValue CreatePack(EVT DestVT, SDValue LowV, SDValue HighV,
+                     SDValue AVL) const;
 
   SDValue CreateSwap(EVT DestVT, SDValue V, SDValue AVL) const;
   /// } Packed Mode Support
@@ -452,29 +460,20 @@ struct CustomDAG {
   SDValue getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
                               SDValue B, SDValue Mask, SDValue AVL,
                               SDNodeFlags Flags = SDNodeFlags()) const;
-  SDValue getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV, SDValue Mask, SDValue AVL, SDNodeFlags Flags = SDNodeFlags()) const;
+  SDValue getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV,
+                                 SDValue Mask, SDValue AVL,
+                                 SDNodeFlags Flags = SDNodeFlags()) const;
 
   SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT, ArrayRef<SDValue> Ops,
                         SDNodeFlags Flags = SDNodeFlags()) const {
     if (IsVVPReductionOp(VVPOpcode) && !getVVPReductionStartParamPos(VVPOpcode))
-      return getLegalReductionOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2], Flags);
+      return getLegalReductionOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
+                                    Flags);
     if (IsVVPBinaryOp(VVPOpcode))
       return getLegalBinaryOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
                                  Ops[3], Flags);
     return getNode(VVPOpcode, ResVT, Ops, Flags);
   }
-
-  // The AVL parameter only applies at 64bit element granularity.
-  // In packed mode that means groups of 2 x 32bit elements.
-  // These methods legalize AVL to refer to packs instead at the cost of
-  // additional masking code.
-  /// AVL Legalization {
-  struct TargetMasks {
-    SDValue Mask;
-    SDValue AVL;
-    TargetMasks(SDValue Mask, SDValue AVL)
-    : Mask(Mask), AVL(AVL) {}
-  };
 
   // Infer mask & AVL for this VVP op
   TargetMasks createTargetMask(VVPWideningInfo, SDValue RawMask,
@@ -503,7 +502,7 @@ struct CustomDAG {
 
   SDValue getZExtInReg(SDValue Op, EVT) const;
 
-  raw_ostream& print(raw_ostream&, SDValue) const;
+  raw_ostream &print(raw_ostream &, SDValue) const;
 };
 
 } // namespace llvm

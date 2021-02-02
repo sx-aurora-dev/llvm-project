@@ -209,6 +209,7 @@ public:
       std::function<SDValue(SDValue)> PromotedopCB,
       std::function<SDValue(SDValue)> WidenedOpCB) const override;
 
+  SDNode* widenInternalVectorOperation(SDNode *N, SelectionDAG &DAG) const;
   // legalize the result vector type for operation \p Op
 
   // Custom Operations
@@ -258,6 +259,9 @@ public:
   /// } Custom Lower for SIMD
 
   /// VVP Lowering {
+  // internal node tracker reset checkpoint.
+
+  SDValue combineEntryToken_VVP(SDNode *N, DAGCombinerInfo &DCI) const;
   // Expand SETCC operands directly used in vector arithmetic ops.
   SDValue lowerSETCCInVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
   SDValue expandSELECT(SDValue Op, SmallVectorImpl<SDValue> &LegalOperands,
@@ -266,7 +270,6 @@ public:
   /// Custom Lower for VVP {
   SDValue LowerOperation_VVP(SDValue Op, SelectionDAG &DAG) const;
 
-  SDValue lowerEntryToken_VVP(SDValue Op, SelectionDAG& DAG) const;
   SDValue lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
                        VVPExpansionMode Mode) const;
   SDValue lowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const;

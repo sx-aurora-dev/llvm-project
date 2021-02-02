@@ -1020,7 +1020,7 @@ SDValue CustomDAG::createTargetAVL(VVPWideningInfo WidenInfo) const {
   }
 }
 
-CustomDAG::TargetMasks
+TargetMasks
 CustomDAG::createTargetSplitMask(VVPWideningInfo WidenInfo, SDValue RawMask,
                                  SDValue RawAVL, PackElem Part) const {
   // No masking caused, we simply adjust the AVL for the parts
@@ -1050,10 +1050,10 @@ CustomDAG::createTargetSplitMask(VVPWideningInfo WidenInfo, SDValue RawMask,
     NewMask = extractPackElem(RawMask, Part, NewAVL);
   }
 
-  return CustomDAG::TargetMasks(NewMask, NewAVL);
+  return TargetMasks(NewMask, NewAVL);
 }
 
-CustomDAG::TargetMasks CustomDAG::createTargetMask(VVPWideningInfo WidenInfo,
+TargetMasks CustomDAG::createTargetMask(VVPWideningInfo WidenInfo,
                                                    SDValue RawMask,
                                                    SDValue RawAVL) const {
   bool IsDynamicAVL = RawAVL && !isa<ConstantSDNode>(RawAVL);
@@ -1084,7 +1084,7 @@ CustomDAG::TargetMasks CustomDAG::createTargetMask(VVPWideningInfo WidenInfo,
     NewMask = RawMask;
   }
 
-  return CustomDAG::TargetMasks(NewMask, NewAVL);
+  return TargetMasks(NewMask, NewAVL);
 }
 
 SDValue CustomDAG::getTargetInsertSubreg(int SRIdx, EVT VT, SDValue Operand,

@@ -104,7 +104,7 @@ void VETargetLowering::initRegisterClasses() {
     initRegisterClasses_VVP();
     return;
   }
-  
+
   if (Subtarget->vectorize()) {
     // Fixed SIMD backend.
     for (MVT VecVT : WholeVectorVTs)
@@ -985,7 +985,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
                     << "\n";);
   initRegisterClasses();
   initSPUActions();
-  
+
   // initIntrinsicActions();
 
   // VVP layer isel actions.
@@ -3438,10 +3438,12 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
   SDLoc dl(N);
   unsigned Opcode = N->getOpcode();
   switch (Opcode) {
+  case ISD::EntryToken:
+    return combineEntryToken_VVP(N, DCI);
   default:
     if (IsVVP(Opcode))
       return combineVVP(N, DCI);
-    else if (IsPackingSupportOpcode(Opcode)) 
+    else if (IsPackingSupportOpcode(Opcode))
       return combinePacking(N, DCI);
     break;
   // case ISD::CopyFromReg:
@@ -3699,8 +3701,10 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
       return LowerOperation_SIMD(Op, DAG);
     llvm_unreachable("Unexpected Opcode in LowerOperation");
 
+#if 0
   case ISD::EntryToken:
     return lowerEntryToken_VVP(Op, DAG);
+#endif
 
   // Mostly all-scalar lowerings below.
   case ISD::ATOMIC_FENCE:
