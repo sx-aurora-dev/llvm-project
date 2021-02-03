@@ -38,8 +38,7 @@ static bool isDeclInOpenMPHeader(clang::Decl *D) {
 
   clang::SourceManager &SM = D->getASTContext().getSourceManager();
   auto IncludedFile = SM.getFileID(D->getBeginLoc());
-  bool SLocInvalid = false;
-  auto SLocEntry = SM.getSLocEntry(IncludedFile, &SLocInvalid);
+  auto SLocEntry = SM.getSLocEntry(IncludedFile);
   if (SLocEntry.isExpansion()) {
     IncludedFile = SM.getFileID(SLocEntry.getExpansion().getSpellingLoc());
   }
@@ -56,6 +55,40 @@ static bool isDeclInOpenMPHeader(clang::Decl *D) {
     IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
   }
   return false;
+}
+
+static llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D) {
+  clang::SourceManager &SM = D->getASTContext().getSourceManager();
+
+  DEBUGPDECL(D, "Get system header for Decl: ");
+
+  if (!SM.isInSystemHeader(D->getBeginLoc())) {
+    return llvm::Optional<std::string>();
+  }
+
+  // we dont want to include the original system header in which D was
+  // declared, but the system header which exposes D to the user's file
+  // (the last system header in the include stack)
+  auto IncludedFile = SM.getFileID(D->getBeginLoc());
+
+  // Fix for problems with math.h
+  // If our declaration is really a macro expansion, we need to find the actual
+  // spelling location first.
+  auto SLocEntry = SM.getSLocEntry(IncludedFile);
+  if (SLocEntry.isExpansion()) {
+    IncludedFile = SM.getFileID(SLocEntry.getExpansion().getSpellingLoc());
+  }
+
+  auto IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
+
+  while (SM.isInSystemHeader(SM.getLocForStartOfFile(IncludingFile.first)) &&
+         !isHeaderOpenMPHeader(SM.getFileEntryForID(IncludingFile.first)->getName())) {
+    IncludedFile = IncludingFile.first;
+    IncludingFile = SM.getDecomposedIncludedLoc(IncludedFile);
+  }
+
+  return llvm::Optional<std::string>(
+      std::string(SM.getFilename(SM.getLocForStartOfFile(IncludedFile))));
 }
 
 DeclResolver::~DeclResolver() {}

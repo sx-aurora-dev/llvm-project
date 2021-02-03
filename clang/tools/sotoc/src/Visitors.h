@@ -34,8 +34,6 @@ class TargetCodeRegion;
 
 class TypeDeclResolver;
 
-llvm::Optional<std::string> getSystemHeaderForDecl(clang::Decl *D);
-
 /// Traverses (parts of) the AST to find DeclRefExpr that refer to types that
 /// need to be present for that part of the AST to compile correctly. The
 /// visitor is not only used to search through target regions and functions, but
