@@ -11,8 +11,9 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "VEISelLowering.h"
+#include "CustomDAG.h"
 #include "MCTargetDesc/VEMCExpr.h"
+#include "VEISelLowering.h"
 #include "VEInstrBuilder.h"
 #include "VEMachineFunctionInfo.h"
 #include "VERegisterInfo.h"
@@ -34,7 +35,6 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/KnownBits.h"
-#include "CustomDAG.h"
 
 #define DEBUG_TYPE "ve-lower"
 
@@ -74,7 +74,6 @@ bool VETargetLowering::CanLowerReturn(
   CCState CCInfo(CallConv, IsVarArg, MF, RVLocs, Context);
   return CCInfo.CheckReturn(Outs, RetCC);
 }
-
 
 static const MVT WholeVectorVTs[] = {
     MVT::v512i32, MVT::v512f32, MVT::v256i32, MVT::v256f32, MVT::v256i64,
@@ -116,7 +115,6 @@ void VETargetLowering::initRegisterClasses() {
   }
 }
 
-
 SDValue VETargetLowering::LowerFormalArguments(
     SDValue Chain, CallingConv::ID CallConv, bool IsVarArg,
     const SmallVectorImpl<ISD::InputArg> &Ins, const SDLoc &DL,
@@ -149,23 +147,38 @@ SDValue VETargetLowering::LowerFormalArguments(
       // Immediately expand over-packed (v512i64, v512f64) register copies into
       // their parts.
       SDValue Arg;
-      if (isOverPackedType(VA.getValVT())) {
-        MVT PartVT = VA.getValVT().getScalarType() == MVT::f64
-                         ? MVT::v256f64
-                         : MVT::v256i64; // TODO re-factor!
+      MVT ValVT = VA.getValVT();
+      if (isPackedMaskType(ValVT) || isOverPackedType(ValVT)) {
+        MVT PartVT = getUnpackSourceType(ValVT, PackElem::Lo);
 
         // Create two virtual registers for the V64 subregisters and pack them
         // into one value.
-        auto LoLocReg = TRI->getSubReg(VA.getLocReg(), getOverPackedSubRegIdx(PackElem::Lo));
-        auto HiLocReg = TRI->getSubReg(VA.getLocReg(), getOverPackedSubRegIdx(PackElem::Hi));
+        Register LoLocReg, HiLocReg;
+        if (isPackedMaskType(ValVT)) {
+          LoLocReg = TRI->getSubReg(VA.getLocReg(),
+                                    getPackedMaskSubRegIdx(PackElem::Lo));
+          HiLocReg = TRI->getSubReg(VA.getLocReg(),
+                                    getPackedMaskSubRegIdx(PackElem::Hi));
+        } else {
+          LoLocReg = TRI->getSubReg(VA.getLocReg(),
+                                    getOverPackedSubRegIdx(PackElem::Lo));
+          HiLocReg = TRI->getSubReg(VA.getLocReg(),
+                                    getOverPackedSubRegIdx(PackElem::Hi));
+        }
 
-        unsigned VRegLo = MF.addLiveIn(LoLocReg, &VE::V64RegClass);
-        unsigned VRegHi = MF.addLiveIn(HiLocReg, &VE::V64RegClass);
+        Register VRegLo, VRegHi;
+        if (isPackedMaskType(ValVT)) {
+          VRegLo = MF.addLiveIn(LoLocReg, &VE::VMRegClass);
+          VRegHi = MF.addLiveIn(HiLocReg, &VE::VMRegClass);
+        } else {
+          VRegLo = MF.addLiveIn(LoLocReg, &VE::V64RegClass);
+          VRegHi = MF.addLiveIn(HiLocReg, &VE::V64RegClass);
+        }
 
         SDValue ArgLo = DAG.getCopyFromReg(Chain, DL, VRegLo, PartVT);
         SDValue ArgHi = DAG.getCopyFromReg(Chain, DL, VRegHi, PartVT);
         CustomDAG CDAG(*this, DAG, DL);
-        Arg = CDAG.CreatePack(VA.getValVT(), ArgLo, ArgHi,
+        Arg = CDAG.CreatePack(ValVT, ArgLo, ArgHi,
                               CDAG.getConstEVL(StandardVectorWidth));
 
       } else {
@@ -899,7 +912,7 @@ void VETargetLowering::initSPUActions() {
     setLibcallName(RTLIB::UNWIND_RESUME, "_Unwind_SjLj_Resume");
 
   setTargetDAGCombine(ISD::FADD);
-  //setTargetDAGCombine(ISD::FMA);
+  // setTargetDAGCombine(ISD::FMA);
 
   /// Atomic instructions {
 
@@ -958,8 +971,7 @@ void VETargetLowering::initSPUActions() {
   }
 
   // Other configurations related to f128.
-  setOperationAction(ISD::BR_CC,     MVT::f128, Legal);
-
+  setOperationAction(ISD::BR_CC, MVT::f128, Legal);
 
   // TRAP to expand (which turns it into abort).
   setOperationAction(ISD::TRAP, MVT::Other, Expand);
@@ -1965,7 +1977,7 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
   // is not implemented completely yet.
   return false;
 #else
-        return DefinedValues < 3;
+  return DefinedValues < 3;
 #endif
 }
 
@@ -3102,13 +3114,13 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
     //   3 insns are equal to CMP+LEA+CMOV but faster.
     return generateEquivalentLdz(N, false, DAG);
 #else
-              // a == b -> cmov (a EQV b), 1, (a EQV b), SETNE iff a/b are i64
-              //           cmov (a CMP b), 1, 0, SETEQ otherwise
-              //   2 insns which is less than CMP+LEA+CMOV
-              if (SrcVT == MVT::i64)
-                return generateEquivalentBitOp(N, VEISD::EQV, DAG);
-                // FIXME: generate CMP+LEA+CMOV here.
-                // return generateEquivalentCmp(N, false, DAG);
+    // a == b -> cmov (a EQV b), 1, (a EQV b), SETNE iff a/b are i64
+    //           cmov (a CMP b), 1, 0, SETEQ otherwise
+    //   2 insns which is less than CMP+LEA+CMOV
+    if (SrcVT == MVT::i64)
+      return generateEquivalentBitOp(N, VEISD::EQV, DAG);
+      // FIXME: generate CMP+LEA+CMOV here.
+      // return generateEquivalentCmp(N, false, DAG);
 #endif
     break;
   case ISD::SETNE:
@@ -3144,16 +3156,16 @@ SDValue VETargetLowering::optimizeSetCC(SDNode *N, DAGCombinerInfo &DCI) const {
 #endif
 #else
 #if 1
-              // a != b -> (XOR (LDZ (CMP a, b)) >> 6, 1)
-              //   4 insns are more than CMP+LEA+CMOV but faster.
-              return generateEquivalentLdz(N, true, DAG);
+    // a != b -> (XOR (LDZ (CMP a, b)) >> 6, 1)
+    //   4 insns are more than CMP+LEA+CMOV but faster.
+    return generateEquivalentLdz(N, true, DAG);
 #else
-              // a != b -> cmov (a XOR b), 1, (a XOR b), SETNE iff a/b are i64
-              //           cmov (a CMP b), 1, (a CMP b), SETNE otherwise
-              //   2 insns which is less than CMP+LEA+CMOV
-              if (SrcVT == MVT::i64)
-                return generateEquivalentBitOp(N, VEISD::XOR, DAG);
-              return generateEquivalentCmp(N, true, DAG);
+    // a != b -> cmov (a XOR b), 1, (a XOR b), SETNE iff a/b are i64
+    //           cmov (a CMP b), 1, (a CMP b), SETNE otherwise
+    //   2 insns which is less than CMP+LEA+CMOV
+    if (SrcVT == MVT::i64)
+      return generateEquivalentBitOp(N, VEISD::XOR, DAG);
+    return generateEquivalentCmp(N, true, DAG);
 #endif
 #endif
   }

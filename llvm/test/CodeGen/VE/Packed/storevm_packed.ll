@@ -76,6 +76,8 @@ define x86_regcallcc void @storev256i1com(<256 x i1>) {
 define x86_regcallcc void @storev512i1(<512 x i1>* nocapture, <512 x i1>) {
 ; CHECK-LABEL: storev512i1:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # kill: def $vm2 killed $vm2 killed $vmp1 def $vmp1
+; CHECK-NEXT:    # kill: def $vm3 killed $vm3 killed $vmp1 def $vmp1
 ; CHECK-NEXT:    svm %s1, %vm2, 3
 ; CHECK-NEXT:    st %s1, 56(, %s0)
 ; CHECK-NEXT:    svm %s1, %vm2, 2
@@ -113,6 +115,8 @@ define x86_regcallcc void @storev512i1stk(<512 x i1>) {
 ; CHECK-NEXT:    monc
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB4_2:
+; CHECK-NEXT:    # kill: def $vm2 killed $vm2 killed $vmp1 def $vmp1
+; CHECK-NEXT:    # kill: def $vm3 killed $vm3 killed $vmp1 def $vmp1
 ; CHECK-NEXT:    svm %s16, %vm3, 0
 ; CHECK-NEXT:    st %s16, (, %s11)
 ; CHECK-NEXT:    svm %s16, %vm3, 1
@@ -140,6 +144,8 @@ define x86_regcallcc void @storev512i1stk(<512 x i1>) {
 define x86_regcallcc void @storev512i1com(<512 x i1>) {
 ; CHECK-LABEL: storev512i1com:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # kill: def $vm2 killed $vm2 killed $vmp1 def $vmp1
+; CHECK-NEXT:    # kill: def $vm3 killed $vm3 killed $vmp1 def $vmp1
 ; CHECK-NEXT:    svm %s0, %vm2, 3
 ; CHECK-NEXT:    lea %s1, v512i1@lo
 ; CHECK-NEXT:    and %s1, %s1, (32)0

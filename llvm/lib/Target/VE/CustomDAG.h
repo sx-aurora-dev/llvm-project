@@ -171,6 +171,10 @@ static unsigned getOverPackedSubRegIdx(PackElem Part) {
   return Part == PackElem::Lo ? VE::sub_pack_lo : VE::sub_pack_hi;
 }
 
+static unsigned getPackedMaskSubRegIdx(PackElem Part) {
+  return Part == PackElem::Lo ? VE::sub_vm_lo : VE::sub_vm_hi;
+}
+
 static inline MVT getMaskVT(Packing P) {
   return P == Packing::Normal ? MVT::v256i1 : MVT::v512i1;
 }

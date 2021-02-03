@@ -1190,6 +1190,11 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
   auto TargetMasks =
       CDAG.createTargetMask(WidenInfo, getNodeMask(Op), getNodeAVL(Op));
 
+  // Check whether we can safely drop the mask.
+  if (MaskPos && IgnoreMasks && canSafelyIgnoreMask(Op->getOpcode()))
+    TargetMasks.Mask =
+        CDAG.createUniformConstMask(TargetMasks.Mask.getValueType(), true);
+
   // Copy the operand list.
   int NumOp = Op->getNumOperands();
   std::vector<SDValue> FixedOperands;
@@ -1405,7 +1410,8 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
                          NeedsPackedMasking);
 }
 
-SDValue VETargetLowering::splitVectorArithmetic(SDValue Op, SelectionDAG &DAG) const {
+SDValue VETargetLowering::splitVectorArithmetic(SDValue Op,
+                                                SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "::splitMaskArithmetic\n");
   CustomDAG CDAG(*this, DAG, Op);
   SDValue AVL = CDAG.getConstEVL(Op.getValueType().getVectorNumElements());
@@ -1882,27 +1888,11 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   if (IsOverPacked)
     return ExpandToSplitVVP(Op, DAG, Mode);
 
-#if 0
-  // Split into two v256 ops?
-  // FIXME:
-  //   Some packed patterns ARE supported (eg PVRCP, PVRSQR, ..)
-  //   We split those at the moment.
-  if (WidenInfo.PackedMode && !SupportsPackedMode(*VVPOC, OpVecTy))
-    return ExpandToSplitVVP(Op, DAG, Mode);
-#endif
-
   // create suitable mask and avl parameters (accounts for packing)
   PosOpt MaskPos = Op->getVPMaskPos();
   PosOpt AVLPos = Op->getVPVectorLenPos();
   SDValue Mask = getNodeMask(Op);
   SDValue AVL = getNodeAVL(Op);
-
-  // Ignore masks where recommendable.
-#if 0
-  if (IgnoreMasks && canSafelyIgnoreMask(*VVPOC))
-    TargetMasks.Mask =
-        CDAG.createUniformConstMask(TargetMasks.Mask.getValueType(), true);
-#endif
 
   std::vector<SDValue> OpVec;
   if (*VVPOC == VEISD::VVP_FFMA) {
@@ -2305,6 +2295,7 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
   case VEISD::VM_POPCOUNT:
   case VEISD::VEC_TOMASK:
   case VEISD::VEC_BROADCAST:
+  case VEISD::VEC_VMV:
   case VEISD::VEC_SEQ: {
     // Check whether this node was legalized before.
     if (LegalizedVectorNodes.count(Op.getNode())) {

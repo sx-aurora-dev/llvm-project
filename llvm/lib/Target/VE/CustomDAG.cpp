@@ -245,6 +245,8 @@ Optional<int> getAVLPos(unsigned Opc) {
     return 1;
   case VEISD::VEC_PACK:
     return 2;
+  case VEISD::VEC_VMV:
+    return 3;
   }
 
   // VVP Opcodes.
@@ -298,6 +300,8 @@ Optional<int> getMaskPos(unsigned Opc) {
   case VEISD::VEC_TOMASK:
   case VEISD::VEC_SEQ:
     return None;
+  case VEISD::VEC_VMV:
+    return 2;
   }
 
   // VVP special cases..
@@ -481,6 +485,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
     return Op->getOperand(1)->getValueType(0);
 
   // VEC
+  case VEISD::VEC_VMV:
   case VEISD::VEC_TOMASK:
   case VEISD::VEC_NARROW:
   case VEISD::VEC_SEQ:
