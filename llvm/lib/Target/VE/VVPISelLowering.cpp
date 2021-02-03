@@ -917,7 +917,7 @@ SDValue VETargetLowering::expandSELECT(SDValue Op,
   SDValue OnFalseV = LegalOperands[2];
 
   // Expand vNi1 selects into a boolean expression
-  if (Op.getValueType().getVectorElementType() == MVT::i1) {
+  if (isMaskType(Op.getValueType())) {
     auto NotMaskV = CDAG.createNot(MaskV, LegalResVT);
 
     return CDAG.getNode(
@@ -952,26 +952,33 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
 
   // this only applies to vector yielding operations that are not v256i1
   EVT Ty = Op.getValueType();
-  if (!Ty.isVector())
-    return Op;
-  if (Ty.getVectorElementType() == MVT::i1)
+  if (isMaskType(Ty))
     return Op;
 
   // only create an integer expansion if requested to do so
   std::vector<SDValue> FixedOperandList;
   bool NeededExpansion = false;
 
+  auto MaskPos = getMaskPos(Op.getOpcode());
   CustomDAG CDAG(*this, DAG, dl);
 
-  for (size_t i = 0; i < Op->getNumOperands(); ++i) {
+  for (int i = 0; i < (int)Op->getNumOperands(); ++i) {
     // check whether this is an v256i1 SETCC
     auto Operand = Op->getOperand(i);
+    // Do not expand the mask if it is used as a predicate.
+    if (MaskPos && (i == *MaskPos)) {
+      FixedOperandList.push_back(Operand);
+      continue;
+    }
+
+    // Only expand SETCC with a vNi1 type.
     if ((Operand->getOpcode() != ISD::SETCC) ||
         !isMaskType(Operand.getSimpleValueType())) {
       FixedOperandList.push_back(Operand);
       continue;
     }
 
+    // Go ahead and re-write to a vNi32 type (using VSELECT).
     EVT RawElemTy = Ty.getScalarType();
     assert(RawElemTy.isSimple());
     MVT ElemTy = RawElemTy.getSimpleVT();
@@ -1177,6 +1184,8 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
   // Only required for VEC and VVP ops.
   if (!isVVPOrVEC(Op->getOpcode()))
     return Op;
+
+  // FIXME: This appears to be broken for VVP_SELECT!
 
   auto WidenInfo = pickResultType(CDAG, Op, VVPExpansionMode::ToNativeWidth);
 
