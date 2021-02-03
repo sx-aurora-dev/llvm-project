@@ -39,8 +39,7 @@ define fastcc <256 x i32> @urem_vs_v256i32(<256 x i32> %x, i32 %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v1, %s0
-; CHECK-NEXT:    vdivu.w %v1, %v0, %v1
+; CHECK-NEXT:    vdivu.w %v1, %v0, %s0
 ; CHECK-NEXT:    vmuls.w.sx %v1, %s0, %v1
 ; CHECK-NEXT:    vsubs.w.sx %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -90,8 +89,7 @@ define fastcc <256 x i64> @urem_vs_v256i64(<256 x i64> %x, i64 %y) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vbrd %v1, %s0
-; CHECK-NEXT:    vdivu.l %v1, %v0, %v1
+; CHECK-NEXT:    vdivu.l %v1, %v0, %s0
 ; CHECK-NEXT:    vmuls.l %v1, %s0, %v1
 ; CHECK-NEXT:    vsubs.l %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)

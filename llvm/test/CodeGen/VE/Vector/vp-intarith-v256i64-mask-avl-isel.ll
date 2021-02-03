@@ -25,9 +25,9 @@ define void @test_vp_add_sub_mul(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64>
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vadds.l %v0, %v1, %v2, %vm1
-; CHECK-NEXT:    vsubs.l %v1, %v1, %v2, %vm1
-; CHECK-NEXT:    vmuls.l %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vadds.l %v0, %v1, %v2
+; CHECK-NEXT:    vsubs.l %v1, %v1, %v2
+; CHECK-NEXT:    vmuls.l %v0, %v0, %v1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -71,12 +71,12 @@ define void @test_vp_bitarith(<256 x i64>* %Out, <256 x i64> %i0, <256 x i64> %i
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vand %v0, %v1, %v2, %vm1
-; CHECK-NEXT:    vor %v3, %v0, %v2, %vm1
-; CHECK-NEXT:    vxor %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    vsra.l %v1, %v1, %v2, %vm1
-; CHECK-NEXT:    vsrl %v0, %v1, %v0, %vm1
-; CHECK-NEXT:    vsll %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vand %v0, %v1, %v2
+; CHECK-NEXT:    vor %v3, %v0, %v2
+; CHECK-NEXT:    vxor %v1, %v1, %v3
+; CHECK-NEXT:    vsra.l %v1, %v1, %v2
+; CHECK-NEXT:    vsrl %v0, %v1, %v0
+; CHECK-NEXT:    vsll %v0, %v0, %v1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1

@@ -1035,9 +1035,15 @@ VETargetLowering::getActionForExtendedType(unsigned Op, EVT VT) const {
 
 TargetLowering::LegalizeAction
 VETargetLowering::getCustomOperationAction(SDNode &Op) const {
+  switch (Op.getOpcode()) {
   // Always custom-lower VEC_NARROW to eliminate it
-  if (Op.getOpcode() == VEISD::VEC_NARROW)
+  case VEISD::VEC_NARROW:
     return Custom;
+  // Created by us, always legal.
+  case VEISD::VM_EXTRACT:
+  case VEISD::VM_INSERT:
+    return Legal;
+  }
   // Do not custom lower packing support.
   if (isPackingSupportOpcode(Op.getOpcode()))
     return Legal;
@@ -1163,6 +1169,7 @@ static bool IgnoreOperandForVVPLowering(const SDNode *N, unsigned OpIdx) {
 }
 
 static bool canSafelyIgnoreMask(unsigned VVPOpcode) {
+  // Most arithmetic is safe without mask.
   if (isVVPTernaryOp(VVPOpcode))
     return VVPOpcode != VEISD::VVP_SELECT;
   if (isVVPBinaryOp(VVPOpcode)) {
@@ -1185,15 +1192,8 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
   if (!isVVPOrVEC(Op->getOpcode()))
     return Op;
 
-  // FIXME: This appears to be broken for VVP_SELECT!
-
-  auto WidenInfo = pickResultType(CDAG, Op, VVPExpansionMode::ToNativeWidth);
-
-  // Not a packed operation.
-  if (!WidenInfo.PackedMode)
-    return Op;
-
   // Legalize mask & avl.
+  auto WidenInfo = pickResultType(CDAG, Op, VVPExpansionMode::ToNativeWidth);
   auto MaskPos = getMaskPos(Op->getOpcode());
   auto AVLPos = getAVLPos(Op->getOpcode());
   auto TargetMasks =
@@ -1203,6 +1203,8 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
   if (MaskPos && IgnoreMasks && canSafelyIgnoreMask(Op->getOpcode()))
     TargetMasks.Mask =
         CDAG.createUniformConstMask(TargetMasks.Mask.getValueType(), true);
+
+  // TODO: Peephole short-cut (if op not changed).
 
   // Copy the operand list.
   int NumOp = Op->getNumOperands();
@@ -1620,6 +1622,16 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   LLVM_DEBUG(dbgs() << "Legalize this VVP LOAD, STORE\n");
 
   EVT DataVT = *getIdiomaticType(Op.getNode());
+
+  // Ignore the VLD mask as an optimization.
+  if (!isPackedType(DataVT) &&
+      (Op->getOpcode() == VEISD::VVP_LOAD && OptimizeVectorMemory)) {
+    auto AllTrueMask = CDAG.createUniformConstMask(MVT::v256i1, true);
+    return CDAG.getVVPLoad(Op.getValueType(), Op.getOperand(0),
+                           Op.getOperand(1), Op.getOperand(2), AllTrueMask,
+                           Op.getOperand(4));
+  }
+
   if (!isPackedType(DataVT)) {
     LLVM_DEBUG(dbgs() << "Legal!\n");
     return Op;
@@ -1644,7 +1656,7 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   auto Chain = Op->getOperand(0);
   SDValue PackPtr = getLoadStorePtr(Op);
 
-  // Be optimistic about loads..
+  // Be optimistic about loads.. (FIXME: implies OptimizeVectorMemory cl::opt).
   if (Op->getOpcode() == VEISD::VVP_LOAD)
     return CDAG.getVVPLoad(Op.getValueType(), Chain, PackPtr, DoubledStride,
                            NormalMask, TargetMask.AVL);
@@ -1965,9 +1977,6 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
     Packing P = getPackingForVT(LegalDataVT);
     Mask = CDAG.createUniformConstMask(P, true);
   }
-
-  // Minimize vector length.
-  // AVL = ReduceVectorLength(Mask, AVL, VecLenHint, DAG);
 
   uint64_t ElemBytes = LegalDataVT.getVectorElementType().getStoreSize();
   auto StrideV = CDAG.getConstant(ElemBytes, MVT::i64);

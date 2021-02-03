@@ -25,10 +25,10 @@ define void @test_vp_fadd_fsub_fmul_fneg_fma(<256 x double>* %Out, <256 x double
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfadd.d %v0, %v1, %v2, %vm1
-; CHECK-NEXT:    vfsub.d %v3, %v1, %v2, %vm1
-; CHECK-NEXT:    vfmul.d %v0, %v0, %v3, %vm1
-; CHECK-NEXT:    vfmad.d %v0, %v0, %v1, %v2, %vm1
+; CHECK-NEXT:    vfadd.d %v0, %v1, %v2
+; CHECK-NEXT:    vfsub.d %v3, %v1, %v2
+; CHECK-NEXT:    vfmul.d %v0, %v0, %v3
+; CHECK-NEXT:    vfmad.d %v0, %v0, %v1, %v2
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -49,7 +49,7 @@ define void @test_vp_fdiv(<256 x double>* %Out, <256 x double> %f0, <256 x doubl
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfdiv.d %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vfdiv.d %v0, %v0, %v1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -84,8 +84,8 @@ define void @test_vp_fmin_fmax(<256 x double>* %O1, <256 x double>* %O2, <256 x 
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vfmin.d %v1, %v0, %v2, %vm1
-; CHECK-NEXT:    vfmax.d %v0, %v0, %v2, %vm1
+; CHECK-NEXT:    vfmin.d %v1, %v0, %v2
+; CHECK-NEXT:    vfmax.d %v0, %v0, %v2
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    # kill: def $sw0 killed $sw0 killed $sx0
 ; CHECK-NEXT:    lvl %s0

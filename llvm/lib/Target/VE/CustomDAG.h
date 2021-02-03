@@ -160,7 +160,7 @@ enum class PackElem : int8_t {
 };
 
 static PackElem getPartForLane(unsigned ElemIdx) {
-  return (ElemIdx % 2 == 0) ? PackElem::Lo : PackElem::Hi;
+  return (ElemIdx % 2 == 0) ? PackElem::Hi : PackElem::Lo;
 }
 
 static PackElem getOtherPart(PackElem Part) {
@@ -482,7 +482,7 @@ struct CustomDAG {
     return getNode(VVPOpcode, ResVT, Ops, Flags);
   }
 
-  // Infer mask & AVL for this VVP op
+  // Infer mask & AVL for this VVP op.
   TargetMasks createTargetMask(VVPWideningInfo, SDValue RawMask,
                                SDValue RawAVL) const;
   // Infer mask & AVL for this split VVP op

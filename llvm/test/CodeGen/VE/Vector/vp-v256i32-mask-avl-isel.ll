@@ -25,9 +25,9 @@ define fastcc void @test_vp_add_sub_mul(<256 x i32>* %Out, <256 x i32> %i0, <256
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vadds.w.sx %v0, %v1, %v2, %vm1
-; CHECK-NEXT:    vsubs.w.sx %v1, %v1, %v2, %vm1
-; CHECK-NEXT:    vmuls.w.sx %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    vadds.w.sx %v0, %v1, %v2
+; CHECK-NEXT:    vsubs.w.sx %v1, %v1, %v2
+; CHECK-NEXT:    vmuls.w.sx %v0, %v0, %v1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
@@ -72,12 +72,12 @@ define fastcc void @test_vp_bitarith(<256 x i32>* %Out, <256 x i32> %i0, <256 x 
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    pvand.lo %v0, %v1, %v2, %vm1
-; CHECK-NEXT:    pvor.lo %v3, %v0, %v2, %vm1
-; CHECK-NEXT:    pvxor.lo %v1, %v1, %v3, %vm1
-; CHECK-NEXT:    pvsra.lo %v1, %v1, %v2, %vm1
-; CHECK-NEXT:    pvsrl.lo %v0, %v1, %v0, %vm1
-; CHECK-NEXT:    pvsll.lo %v0, %v0, %v1, %vm1
+; CHECK-NEXT:    pvand.lo %v0, %v1, %v2
+; CHECK-NEXT:    pvor.lo %v3, %v0, %v2
+; CHECK-NEXT:    pvxor.lo %v1, %v1, %v3
+; CHECK-NEXT:    pvsra.lo %v1, %v1, %v2
+; CHECK-NEXT:    pvsrl.lo %v0, %v1, %v0
+; CHECK-NEXT:    pvsll.lo %v0, %v0, %v1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
