@@ -533,7 +533,7 @@ ISD::GetFunctionOpCodeForVP(unsigned OpCode, bool hasFPExcept) {
 #if 1
   switch (OpCode) {
   default:
-    llvm_unreachable("can not translate this Opcode to VP");
+    return OpCode;
 #define BEGIN_REGISTER_VP_SDNODE(VPOPC, ...) case ISD::VPOPC:
 #define HANDLE_VP_TO_SD(SDOPC) return ISD::SDOPC;
 #define END_REGISTER_VP_SDNODE( ...) break;
