@@ -178,7 +178,7 @@ SDValue VETargetLowering::LowerFormalArguments(
         SDValue ArgLo = DAG.getCopyFromReg(Chain, DL, VRegLo, PartVT);
         SDValue ArgHi = DAG.getCopyFromReg(Chain, DL, VRegHi, PartVT);
         CustomDAG CDAG(*this, DAG, DL);
-        Arg = CDAG.CreatePack(ValVT, ArgLo, ArgHi,
+        Arg = CDAG.createPack(ValVT, ArgLo, ArgHi,
                               CDAG.getConstEVL(StandardVectorWidth));
 
       } else {
@@ -3453,9 +3453,9 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
   case ISD::EntryToken:
     return combineEntryToken_VVP(N, DCI);
   default:
-    if (IsVVP(Opcode))
+    if (isVVP(Opcode))
       return combineVVP(N, DCI);
-    else if (IsPackingSupportOpcode(Opcode))
+    else if (isPackingSupportOpcode(Opcode))
       return combinePacking(N, DCI);
     break;
   // case ISD::CopyFromReg:

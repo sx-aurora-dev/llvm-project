@@ -51,28 +51,28 @@ using PosOpt = Optional<unsigned>;
 
 //// VVP Machinery {
 // VVP property queries
-PosOpt GetVVPOpcode(unsigned OpCode);
+PosOpt getVVPOpcode(unsigned OpCode);
 
 // TODO:
 // 1. Perform splitting late to have a chance to preserve packable patterns
 //    (PVRCP contraction).
 // 2. Perform AVL,Mask legalization late to avoid clutter (partially legalized
 //    AVL that will turn out not to be needed).
-bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT);
+bool supportsPackedMode(unsigned Opcode, EVT IdiomVT);
 
 bool isVVPOrVEC(unsigned Opcode);
-bool IsVVP(unsigned Opcode);
+bool isVVP(unsigned Opcode);
 
-bool IsVVPTernaryOp(unsigned Opcode);
-bool IsVVPBinaryOp(unsigned Opcode);
-bool IsVVPUnaryOp(unsigned Opcode);
-bool IsVVPConversionOp(unsigned VVPOC);
-bool IsVVPReductionOp(unsigned VVPOC);
+bool isVVPTernaryOp(unsigned Opcode);
+bool isVVPBinaryOp(unsigned Opcode);
+bool isVVPUnaryOp(unsigned Opcode);
+bool isVVPConversionOp(unsigned VVPOC);
+bool isVVPReductionOp(unsigned VVPOC);
 
 // Return the representative vector type of this operation.
 Optional<EVT> getIdiomaticType(SDNode *Op);
 
-Optional<unsigned> GetVVPForVP(unsigned VPOC);
+Optional<unsigned> getVVPForVP(unsigned VPOC);
 
 // Return the mask operand position for this VVP or VEC op.
 Optional<int> getMaskPos(unsigned Opc);
@@ -82,7 +82,7 @@ SDValue getNodeMask(SDValue Op);
 Optional<int> getAVLPos(unsigned Opc);
 SDValue getNodeAVL(SDValue Op);
 
-VecLenOpt MinVectorLength(VecLenOpt A, VecLenOpt B);
+VecLenOpt minVectorLength(VecLenOpt A, VecLenOpt B);
 
 // Split this packed type
 EVT splitType(EVT);
@@ -97,9 +97,9 @@ static inline bool isPackedMaskType(EVT SomeVT) {
 bool isOverPackedType(EVT VT);
 
 // whether this VVP operation has no mask argument
-bool HasDeadMask(unsigned VVPOC);
+bool hasDeadMask(unsigned VVPOC);
 
-bool IsAllTrueMask(SDValue Op);
+bool isAllTrueMask(SDValue Op);
 //// } VVP Machinery
 
 unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask);
@@ -110,13 +110,13 @@ Optional<unsigned> getReductionStartParamPos(unsigned ISD);
 
 Optional<unsigned> getReductionVectorParamPos(unsigned ISD);
 
-Optional<unsigned> PeekForNarrow(SDValue Op);
+Optional<unsigned> peekForNarrow(SDValue Op);
 
-unsigned GetMaskBits(EVT Ty);
+unsigned getMaskBits(EVT Ty);
 
 // select an appropriate %evl argument for this element count.
 // This will return the correct result for packed mode oeprations (half).
-unsigned SelectBoundedVectorLength(unsigned StaticNumElems);
+unsigned selectBoundedVectorLength(unsigned StaticNumElems);
 
 /// Packing {
 using LaneBits = std::bitset<256>;
@@ -209,7 +209,7 @@ static inline Packing getPackingForVT(EVT VT) {
 template <typename MaskBits> Packing getPackingForMaskBits(const MaskBits MB);
 
 // True, iff this is a VEC_UNPACK_LO/HI, VEC_SWAP or VEC_PACK.
-static inline bool IsPackingSupportOpcode(unsigned Opcode) {
+static inline bool isPackingSupportOpcode(unsigned Opcode) {
   switch (Opcode) {
   case VEISD::VEC_UNPACK_LO:
   case VEISD::VEC_UNPACK_HI:
@@ -259,7 +259,7 @@ struct CustomDAG {
   CustomDAG(const VELoweringInfo &VLI, SelectionDAG &DAG, const SDNode *WhereN)
       : VLI(VLI), DAG(DAG), DL(WhereN) {}
 
-  SDValue CreateSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const;
+  SDValue createSeq(EVT ResTy, Optional<SDValue> OpVectorLength) const;
 
   // create a vector element or scalar bitshift depending on the element type
   // \p ResVT will only be used in case any new node is created
@@ -278,23 +278,23 @@ struct CustomDAG {
                                  SDValue RegV) const;
 
   /// Packed Mode Support {
-  SDValue CreateUnpack(EVT DestVT, SDValue Vec, PackElem E, SDValue AVL) const;
+  SDValue createUnpack(EVT DestVT, SDValue Vec, PackElem E, SDValue AVL) const;
 
-  SDValue CreatePack(EVT DestVT, SDValue LowV, SDValue HighV,
+  SDValue createPack(EVT DestVT, SDValue LowV, SDValue HighV,
                      SDValue AVL) const;
 
-  SDValue CreateSwap(EVT DestVT, SDValue V, SDValue AVL) const;
+  SDValue createSwap(EVT DestVT, SDValue V, SDValue AVL) const;
   /// } Packed Mode Support
 
   /// Mask Insert/Extract {
-  SDValue CreateExtractMask(SDValue MaskV, SDValue IndexV) const;
-  SDValue CreateInsertMask(SDValue MaskV, SDValue ElemV, SDValue IndexV) const;
-  SDValue CreateMaskPopcount(SDValue MaskV, SDValue AVL) const;
+  SDValue createExtractMask(SDValue MaskV, SDValue IndexV) const;
+  SDValue createInsertMask(SDValue MaskV, SDValue ElemV, SDValue IndexV) const;
+  SDValue createMaskPopcount(SDValue MaskV, SDValue AVL) const;
   SDValue foldAndUnpackMask(SDValue MaskVector, SDValue Mask, PackElem Part,
                             SDValue AVL) const;
   /// } Mask Insert/Extract
 
-  SDValue CreateBroadcast(EVT ResTy, SDValue S, SDValue AVL = SDValue()) const;
+  SDValue createBroadcast(EVT ResTy, SDValue S, SDValue AVL = SDValue()) const;
 
   // Extract an SX register from a mask
   SDValue createMaskExtract(SDValue MaskV, SDValue Idx) const;
@@ -473,10 +473,10 @@ struct CustomDAG {
 
   SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT, ArrayRef<SDValue> Ops,
                         SDNodeFlags Flags = SDNodeFlags()) const {
-    if (IsVVPReductionOp(VVPOpcode) && !getVVPReductionStartParamPos(VVPOpcode))
+    if (isVVPReductionOp(VVPOpcode) && !getVVPReductionStartParamPos(VVPOpcode))
       return getLegalReductionOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
                                     Flags);
-    if (IsVVPBinaryOp(VVPOpcode))
+    if (isVVPBinaryOp(VVPOpcode))
       return getLegalBinaryOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
                                  Ops[3], Flags);
     return getNode(VVPOpcode, ResVT, Ops, Flags);

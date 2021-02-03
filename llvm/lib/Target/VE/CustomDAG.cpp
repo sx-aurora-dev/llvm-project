@@ -67,7 +67,7 @@ SDValue CustomDAG::inferAVL(SDValue AVL, SDValue Mask, EVT IdiomVT) const {
   return getConstEVL(std::min<unsigned>(ConstTypeAVL, *ConstMaskAVL));
 }
 
-PosOpt GetVVPOpcode(unsigned OpCode) {
+PosOpt getVVPOpcode(unsigned OpCode) {
   if (isVVPOrVEC(OpCode))
     return OpCode;
 
@@ -97,7 +97,7 @@ PosOpt GetVVPOpcode(unsigned OpCode) {
   }
 }
 
-bool IsVVPUnaryOp(unsigned Opcode) {
+bool isVVPUnaryOp(unsigned Opcode) {
   switch (Opcode) {
 #define REGISTER_UNARY_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.def"
@@ -106,7 +106,7 @@ bool IsVVPUnaryOp(unsigned Opcode) {
   return false;
 }
 
-bool IsVVPBinaryOp(unsigned Opcode) {
+bool isVVPBinaryOp(unsigned Opcode) {
   switch (Opcode) {
 #define REGISTER_BINARY_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.def"
@@ -115,7 +115,7 @@ bool IsVVPBinaryOp(unsigned Opcode) {
   return false;
 }
 
-bool IsVVPTernaryOp(unsigned Opcode) {
+bool isVVPTernaryOp(unsigned Opcode) {
   switch (Opcode) {
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.def"
@@ -124,7 +124,7 @@ bool IsVVPTernaryOp(unsigned Opcode) {
   return false;
 }
 
-bool IsVVPConversionOp(unsigned Opcode) {
+bool isVVPConversionOp(unsigned Opcode) {
   switch (Opcode) {
 #define REGISTER_ICONV_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #define REGISTER_FPCONV_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
@@ -134,7 +134,7 @@ bool IsVVPConversionOp(unsigned Opcode) {
   return false;
 }
 
-bool IsVVPReductionOp(unsigned Opcode) {
+bool isVVPReductionOp(unsigned Opcode) {
   switch (Opcode) {
 #define REGISTER_REDUCE_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.def"
@@ -175,7 +175,7 @@ unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask) {
   llvm_unreachable("Cannot not scalarize this reduction Opcode!");
 }
 
-bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT) {
+bool supportsPackedMode(unsigned Opcode, EVT IdiomVT) {
   bool IsPackedOp = isPackedType(IdiomVT);
   bool IsMaskOp = IdiomVT.getVectorElementType() == MVT::i1;
 
@@ -208,11 +208,11 @@ bool isVVPOrVEC(unsigned OC) {
   IF_IN_VEISD_RANGE(VEC_FIRST, VEC_LAST) { return true; }
   IF_IN_VEISD_RANGE(VM_FIRST, VM_LAST) { return true; }
 
-  return IsVVP(OC);
+  return isVVP(OC);
 }
 #undef IF_IN_VEISD_RANGE
 
-bool IsVVP(unsigned Opcode) {
+bool isVVP(unsigned Opcode) {
   switch (Opcode) {
   default:
     return false;
@@ -250,7 +250,7 @@ Optional<int> getAVLPos(unsigned Opc) {
   }
 
   // VVP Opcodes.
-  if (IsVVP(Opc)) {
+  if (isVVP(Opc)) {
     auto MaskOpt = getMaskPos(Opc);
     if (!MaskOpt)
       return None;
@@ -318,13 +318,13 @@ Optional<int> getMaskPos(unsigned Opc) {
     return 2;
   }
 
-  if (IsVVPUnaryOp(Opc) || IsVVPConversionOp(Opc))
+  if (isVVPUnaryOp(Opc) || isVVPConversionOp(Opc))
     return 1;
-  if (IsVVPBinaryOp(Opc))
+  if (isVVPBinaryOp(Opc))
     return 2;
-  if (IsVVPTernaryOp(Opc))
+  if (isVVPTernaryOp(Opc))
     return 3;
-  if (IsVVPReductionOp(Opc))
+  if (isVVPReductionOp(Opc))
     return *getReductionVectorParamPos(Opc) + 1;
   return None;
 }
@@ -394,7 +394,7 @@ PosOpt getIntrinReductionVectorParamPos(unsigned ISD) {
 }
 
 PosOpt getVVPReductionVectorParamPos(unsigned VVPOpcode) {
-  if (!IsVVPReductionOp(VVPOpcode))
+  if (!isVVPReductionOp(VVPOpcode))
     return None;
 
   PosOpt StartPosOpt = getVVPReductionStartParamPos(VVPOpcode);
@@ -421,7 +421,7 @@ PosOpt getReductionVectorParamPos(unsigned ISD) {
 
 /// } Node Properties
 
-Optional<unsigned> GetVVPForVP(unsigned VPOC) {
+Optional<unsigned> getVVPForVP(unsigned VPOC) {
   switch (VPOC) {
 #define HANDLE_VP_TO_VVP(VP_ISD, VVP_VEISD)                                    \
   case ISD::VP_ISD:                                                            \
@@ -442,7 +442,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   unsigned OC = Op->getOpcode();
 
   // Translate to VVP where possible.
-  auto VVPOpc = GetVVPOpcode(OC);
+  auto VVPOpc = getVVPOpcode(OC);
   if (VVPOpc)
     OC = *VVPOpc;
 
@@ -498,7 +498,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   }
 }
 
-VecLenOpt MinVectorLength(VecLenOpt A, VecLenOpt B) {
+VecLenOpt minVectorLength(VecLenOpt A, VecLenOpt B) {
   if (!A)
     return B;
   if (!B)
@@ -576,7 +576,7 @@ bool isMaskType(EVT VT) {
   return false;
 }
 
-bool IsAllTrueMask(SDValue Op) {
+bool isAllTrueMask(SDValue Op) {
   if (!isMaskType(Op.getValueType()))
     return false;
   auto SplatV = getSplatValue(Op.getNode());
@@ -591,7 +591,7 @@ bool IsAllTrueMask(SDValue Op) {
 }
 
 // whether this VVP operation has no mask argument
-bool HasDeadMask(unsigned VVPOC) {
+bool hasDeadMask(unsigned VVPOC) {
   switch (VVPOC) {
   default:
     return false;
@@ -601,10 +601,7 @@ bool HasDeadMask(unsigned VVPOC) {
   }
 }
 
-#if 0
-#endif
-
-Optional<unsigned> PeekForNarrow(SDValue Op) {
+Optional<unsigned> peekForNarrow(SDValue Op) {
   if (!Op.getValueType().isVector())
     return None;
   if (Op->use_size() != 1)
@@ -624,7 +621,7 @@ bool isOverPackedType(EVT VT) {
   return VT.getVectorNumElements() > StandardVectorWidth;
 }
 
-unsigned GetMaskBits(EVT VT) {
+unsigned getMaskBits(EVT VT) {
   if (!VT.isVector())
     return 0;
 
@@ -637,7 +634,7 @@ unsigned GetMaskBits(EVT VT) {
 
 // select an appropriate %evl argument for this element count.
 // This will return the correct result for packed mode oeprations (half).
-unsigned SelectBoundedVectorLength(unsigned StaticNumElems) {
+unsigned selectBoundedVectorLength(unsigned StaticNumElems) {
   if (StaticNumElems > StandardVectorWidth) {
     return (StaticNumElems + 1) / 2;
   }
@@ -647,7 +644,7 @@ unsigned SelectBoundedVectorLength(unsigned StaticNumElems) {
 /// class CustomDAG {
 
 /// Helper class for short hand custom node creation ///
-SDValue CustomDAG::CreateSeq(EVT ResTy,
+SDValue CustomDAG::createSeq(EVT ResTy,
                              Optional<SDValue> OpVectorLength) const {
   // Pick VL
   SDValue VectorLen;
@@ -655,7 +652,7 @@ SDValue CustomDAG::CreateSeq(EVT ResTy,
     VectorLen = OpVectorLength.getValue();
   } else {
     VectorLen = DAG.getConstant(
-        SelectBoundedVectorLength(ResTy.getVectorNumElements()), DL, MVT::i32);
+        selectBoundedVectorLength(ResTy.getVectorNumElements()), DL, MVT::i32);
   }
 
   return DAG.getNode(VEISD::VEC_SEQ, DL, ResTy, VectorLen);
@@ -713,17 +710,17 @@ SDValue CustomDAG::createVMV(EVT ResVT, SDValue SrcV, SDValue OffsetV,
   return DAG.getNode(VEISD::VEC_VMV, DL, ResVT, {SrcV, OffsetV, Mask, Avl});
 }
 
-SDValue CustomDAG::CreateExtractMask(SDValue MaskV, SDValue IndexV) const {
+SDValue CustomDAG::createExtractMask(SDValue MaskV, SDValue IndexV) const {
   return DAG.getNode(VEISD::VM_EXTRACT, DL, MVT::i64, MaskV, IndexV);
 }
 
-SDValue CustomDAG::CreateInsertMask(SDValue MaskV, SDValue ElemV,
+SDValue CustomDAG::createInsertMask(SDValue MaskV, SDValue ElemV,
                                     SDValue IndexV) const {
   return DAG.getNode(VEISD::VM_INSERT, DL, MaskV.getValueType(), MaskV, ElemV,
                      IndexV);
 }
 
-SDValue CustomDAG::CreateMaskPopcount(SDValue MaskV, SDValue AVL) const {
+SDValue CustomDAG::createMaskPopcount(SDValue MaskV, SDValue AVL) const {
   return DAG.getNode(VEISD::VM_POPCOUNT, DL, MVT::i64, MaskV, AVL);
 }
 
@@ -758,7 +755,7 @@ static SDValue foldUnpackFromBroadcast(SDValue Vec, PackElem Part, EVT DestVT,
 
   // Fold unpack from an overpacked or mask broadcast.
   if (isOverPackedType(Vec.getValueType()) || isMaskType(Vec.getValueType()))
-    return CDAG.CreateBroadcast(DestVT, Scalar, AVL);
+    return CDAG.createBroadcast(DestVT, Scalar, AVL);
 
   // Fold unpack from broadcast from replication.
   if (SDValue Simplified = combineUnpackLoHi(Vec, Part, DestVT, AVL, CDAG))
@@ -767,7 +764,7 @@ static SDValue foldUnpackFromBroadcast(SDValue Vec, PackElem Part, EVT DestVT,
   return SDValue();
 }
 
-SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, PackElem E,
+SDValue CustomDAG::createUnpack(EVT DestVT, SDValue Vec, PackElem E,
                                 SDValue AVL) const {
   if (SDValue SimplifiedV = foldUnpackFromBroadcast(Vec, E, DestVT, AVL, *this))
     return SimplifiedV;
@@ -779,22 +776,22 @@ SDValue CustomDAG::CreateUnpack(EVT DestVT, SDValue Vec, PackElem E,
   return DAG.getNode(OC, DL, DestVT, Vec, AVL);
 }
 
-SDValue CustomDAG::CreatePack(EVT DestVT, SDValue LowV, SDValue HighV,
+SDValue CustomDAG::createPack(EVT DestVT, SDValue LowV, SDValue HighV,
                               SDValue AVL) const {
   // TODO Peek through paired unpacks!
   return DAG.getNode(VEISD::VEC_PACK, DL, DestVT, LowV, HighV, AVL);
 }
 
-SDValue CustomDAG::CreateSwap(EVT DestVT, SDValue V, SDValue AVL) const {
+SDValue CustomDAG::createSwap(EVT DestVT, SDValue V, SDValue AVL) const {
   return DAG.getNode(VEISD::VEC_SWAP, DL, DestVT, V, AVL);
 }
 
-SDValue CustomDAG::CreateBroadcast(EVT ResTy, SDValue S, SDValue AVL) const {
+SDValue CustomDAG::createBroadcast(EVT ResTy, SDValue S, SDValue AVL) const {
 
   // Pick VL
   if (!AVL) {
     AVL = DAG.getConstant(
-        SelectBoundedVectorLength(ResTy.getVectorNumElements()), DL, MVT::i32);
+        selectBoundedVectorLength(ResTy.getVectorNumElements()), DL, MVT::i32);
   }
 
   // Over-packed case: immediately split this into double packing.
@@ -802,7 +799,7 @@ SDValue CustomDAG::CreateBroadcast(EVT ResTy, SDValue S, SDValue AVL) const {
     MVT LegalPartVT = getUnpackSourceType(ResTy, PackElem::Lo);
     auto PartV = supplementPackedReplication(
         DAG.getNode(VEISD::VEC_BROADCAST, DL, LegalPartVT, {S, AVL}), DAG);
-    return CreatePack(ResTy, PartV, PartV, AVL);
+    return createPack(ResTy, PartV, PartV, AVL);
   }
 
   // Non-mask case
@@ -835,7 +832,7 @@ SDValue CustomDAG::CreateBroadcast(EVT ResTy, SDValue S, SDValue AVL) const {
   SDValue BCVec =
       DAG.getNode(VEISD::VEC_BROADCAST, DL, CmpVecTy, {CmpElem, AVL});
   SDValue ZeroVec =
-      CreateBroadcast(CmpVecTy, {DAG.getConstant(0, DL, BoolTy)}, AVL);
+      createBroadcast(CmpVecTy, {DAG.getConstant(0, DL, BoolTy)}, AVL);
 
   MVT BoolVecTy = MVT::getVectorVT(MVT::i1, ElemCount);
 
@@ -915,14 +912,6 @@ SDValue CustomDAG::createUniformConstMask(Packing Packing, unsigned NumElements,
   // VEISelDAGtoDAG will replace this with the constant-true VM
   auto TrueVal = DAG.getConstant(-1, DL, MVT::i32);
 
-#if 0
-  // AVL legalization happens during lowering.
-  unsigned AVL = NumElements;
-  if (Packing == Packing::Dense) {
-    AVL = (NumElements + 1) / 2;
-  }
-#endif
-
   auto Res = getNode(VEISD::VEC_BROADCAST, MaskVT,
                      {TrueVal, getConstEVL(NumElements)});
   if (IsTrue)
@@ -957,12 +946,12 @@ SDValue CustomDAG::createMaskCast(SDValue VectorV, SDValue AVL) const {
 
   if (isPackedType(VectorV.getValueType())) {
     auto ValVT = VectorV.getValueType();
-    auto LoPart = CreateUnpack(getSplitVT(ValVT), VectorV, PackElem::Lo, AVL);
-    auto HiPart = CreateUnpack(getSplitVT(ValVT), VectorV, PackElem::Hi, AVL);
+    auto LoPart = createUnpack(getSplitVT(ValVT), VectorV, PackElem::Lo, AVL);
+    auto HiPart = createUnpack(getSplitVT(ValVT), VectorV, PackElem::Hi, AVL);
     auto LoMask = createMaskCast(LoPart, AVL);
     auto HiMask = createMaskCast(HiPart, AVL);
     const auto PackedMaskVT = MVT::v512i1;
-    return CreatePack(PackedMaskVT, LoMask, HiMask, AVL);
+    return createPack(PackedMaskVT, LoMask, HiMask, AVL);
   }
 
   return DAG.getNode(VEISD::VEC_TOMASK, DL, getMaskVTFor(VectorV),
@@ -1004,7 +993,7 @@ SDValue CustomDAG::extractPackElem(SDValue Op, PackElem Part,
     return Op;
 
   // TODO peek through pack operations
-  return CreateUnpack(getSplitVT(OldValVT), Op, Part, AVL);
+  return createUnpack(getSplitVT(OldValVT), Op, Part, AVL);
 }
 
 SDValue CustomDAG::createConstantTargetMask(VVPWideningInfo WidenInfo) const {
@@ -1169,11 +1158,11 @@ SDValue CustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
 
 SDValue CustomDAG::foldAndUnpackMask(SDValue MaskVector, SDValue Mask,
                                      PackElem Part, SDValue AVL) const {
-  auto PartV = CreateUnpack(MVT::v256i1, Mask, Part, AVL);
-  if (IsAllTrueMask(Mask))
+  auto PartV = createUnpack(MVT::v256i1, Mask, Part, AVL);
+  if (isAllTrueMask(Mask))
     return PartV;
 
-  auto PartMask = CreateUnpack(MVT::v256i1, Mask, Part, AVL);
+  auto PartMask = createUnpack(MVT::v256i1, Mask, Part, AVL);
   return getNode(ISD::AND, MVT::v256i1, {PartV, PartMask});
 }
 
@@ -1193,10 +1182,10 @@ SDValue CustomDAG::getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT,
   }
 
   // Mask legalization using vm_popcount
-  if (!IsAllTrueMask(Mask))
+  if (!isAllTrueMask(Mask))
     VectorV = getNode(ISD::AND, Mask.getValueType(), {VectorV, Mask});
 
-  auto Pop = CreateMaskPopcount(VectorV, AVL);
+  auto Pop = createMaskPopcount(VectorV, AVL);
   auto LegalPop = DAG.getZExtOrTrunc(Pop, DL, MVT::i32);
 
   switch (VVPOpcode) {

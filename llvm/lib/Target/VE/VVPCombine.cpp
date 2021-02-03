@@ -282,11 +282,11 @@ SDValue llvm::combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart,
     // AVL inference.
     WidenInfo.ResultVT = PackedVec.getValueType();
     auto LegalMask = CDAG.createTargetMask(WidenInfo, SDValue(), AVL);
-    return CDAG.CreateBroadcast(DestVT, ReplV->getOperand(0), LegalMask.AVL);
+    return CDAG.createBroadcast(DestVT, ReplV->getOperand(0), LegalMask.AVL);
   }
 
   // At least simplify to a plain packed broadcast.
-  return CDAG.CreateBroadcast(DestVT, ReplV, AVL);
+  return CDAG.createBroadcast(DestVT, ReplV, AVL);
 }
 
 SDValue VETargetLowering::combinePacking(SDNode *N,

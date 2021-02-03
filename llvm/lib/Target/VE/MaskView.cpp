@@ -220,7 +220,7 @@ static SplitView splitShuffleVector(ShuffleVectorSDNode &SVN, CustomDAG &CDAG) {
       if (ItCache != UnpackCache.end())
         UnpackedV = ItCache->second;
       else {
-        UnpackedV = CDAG.CreateUnpack(LegalSplitVT, SrcVal, SrcPart, AVL);
+        UnpackedV = CDAG.createUnpack(LegalSplitVT, SrcVal, SrcPart, AVL);
         UnpackCache[CacheKey] = UnpackedV;
       }
 

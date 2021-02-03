@@ -138,7 +138,7 @@ static bool OpNeedsSplitting(SDNode &Op) {
     return false;
 
   EVT OpVecTy = OpVecTyOpt.getValue();
-  return !SupportsPackedMode(Op.getOpcode(), OpVecTy);
+  return !supportsPackedMode(Op.getOpcode(), OpVecTy);
 #if 0
   unsigned OpVectorLength = OpVecTy.getVectorNumElements();
   assert((OpVectorLength <= PackedWidth) &&
@@ -934,7 +934,7 @@ SDValue VETargetLowering::expandSELECT(SDValue Op,
       CDAG.getVectorVT(MVT::i1, LegalResVT.getVectorNumElements());
 
   if (!MaskV.getValueType().isVector()) {
-    CondVecV = CDAG.CreateBroadcast(LegalMaskVT, MaskV, AVL);
+    CondVecV = CDAG.createBroadcast(LegalMaskVT, MaskV, AVL);
     CondVecV = CDAG.createMaskCast(CondVecV, AVL);
   } else {
     CondVecV = MaskV;
@@ -979,10 +979,10 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
     // materialize an integer expansion
     // vselect (MaskReplacement, VEC_BROADCAST(1), VEC_BROADCAST(0))
     auto ConstZero = DAG.getConstant(0, dl, ElemTy);
-    auto ZeroBroadcast = CDAG.CreateBroadcast(Ty, ConstZero);
+    auto ZeroBroadcast = CDAG.createBroadcast(Ty, ConstZero);
 
     auto ConstOne = DAG.getConstant(1, dl, ElemTy);
-    auto OneBroadcast = CDAG.CreateBroadcast(Ty, ConstOne);
+    auto OneBroadcast = CDAG.createBroadcast(Ty, ConstOne);
 
     auto Expanded = DAG.getSelect(dl, Ty, Operand, OneBroadcast, ZeroBroadcast);
     FixedOperandList.push_back(Expanded);
@@ -1009,9 +1009,9 @@ VETargetLowering::lowerVVP_SCALAR_TO_VECTOR(SDValue Op, SelectionDAG &DAG,
 
   // FIXME
   SDValue AVL = CDAG.getConstEVL(
-      *MinVectorLength(ResTy.getVectorNumElements(), VecLenHint));
+      *minVectorLength(ResTy.getVectorNumElements(), VecLenHint));
 
-  return CDAG.CreateBroadcast(NativeResTy, Op.getOperand(0), AVL);
+  return CDAG.createBroadcast(NativeResTy, Op.getOperand(0), AVL);
 }
 
 TargetLowering::LegalizeAction
@@ -1032,7 +1032,7 @@ VETargetLowering::getCustomOperationAction(SDNode &Op) const {
   if (Op.getOpcode() == VEISD::VEC_NARROW)
     return Custom;
   // Do not custom lower packing support.
-  if (IsPackingSupportOpcode(Op.getOpcode()))
+  if (isPackingSupportOpcode(Op.getOpcode()))
     return Legal;
   // Otw, only custom lower to perform due widening
   if (isVVPOrVEC(Op.getOpcode()))
@@ -1044,7 +1044,7 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
                                                  VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "ExpandToSplitLoadStore: "; Op->print(dbgs());
              dbgs() << "\n");
-  auto VVPOC = *GetVVPOpcode(Op.getOpcode());
+  auto VVPOC = *getVVPOpcode(Op.getOpcode());
   assert((VVPOC == VEISD::VVP_LOAD) || (VVPOC == VEISD::VVP_STORE));
 
   CustomDAG CDAG(*this, DAG, Op);
@@ -1133,7 +1133,7 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
   // re-pack into full packed vector result
   EVT PackedVT = CDAG.legalizeVectorType(Op, Mode);
   SDValue PackedVals =
-      CDAG.CreatePack(PackedVT, PartOps[(int)PackElem::Lo],
+      CDAG.createPack(PackedVT, PartOps[(int)PackElem::Lo],
                       PartOps[(int)PackElem::Hi], UpperPartAVL);
 
   // Put the passthru back in
@@ -1156,9 +1156,9 @@ static bool IgnoreOperandForVVPLowering(const SDNode *N, unsigned OpIdx) {
 }
 
 static bool canSafelyIgnoreMask(unsigned VVPOpcode) {
-  if (IsVVPTernaryOp(VVPOpcode))
+  if (isVVPTernaryOp(VVPOpcode))
     return VVPOpcode != VEISD::VVP_SELECT;
-  if (IsVVPBinaryOp(VVPOpcode)) {
+  if (isVVPBinaryOp(VVPOpcode)) {
     switch (VVPOpcode) {
     default:
       return true;
@@ -1220,7 +1220,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
   CustomDAG CDAG(*this, DAG, Op);
 
   LLVM_DEBUG(dbgs() << "ExpandToSplitVVP: "; CDAG.print(dbgs(), Op) << "\n");
-  auto OcOpt = GetVVPOpcode(Op.getOpcode());
+  auto OcOpt = getVVPOpcode(Op.getOpcode());
   assert(OcOpt.hasValue());
   unsigned VVPOC = OcOpt.getValue();
 
@@ -1293,7 +1293,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   // Use a scalar reducer.
-  if (IsVVPReductionOp(VVPOC)) {
+  if (isVVPReductionOp(VVPOC)) {
     bool IsMaskReduction = isMaskType(Op.getOperand(0).getValueType());
     // Scalar join.
     unsigned JoinOpcode = getScalarReductionOpcode(VVPOC, IsMaskReduction);
@@ -1303,7 +1303,7 @@ SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
   // Re-package vectors.
   EVT PackedVT = CDAG.legalizeVectorType(Op, Mode);
   SDValue PackedVals =
-      CDAG.CreatePack(PackedVT, PartOps[(int)PackElem::Lo],
+      CDAG.createPack(PackedVT, PartOps[(int)PackElem::Lo],
                       PartOps[(int)PackElem::Hi], UpperPartAVL);
 
   // Value only node.
@@ -1329,7 +1329,7 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
   EVT OpVecVT = VecVTOpt.getValue();
 
   // try to narrow the vector length
-  Optional<unsigned> NarrowLen = PeekForNarrow(Op);
+  Optional<unsigned> NarrowLen = peekForNarrow(Op);
   unsigned OpVectorLength =
       NarrowLen ? NarrowLen.getValue() : OpVecVT.getVectorNumElements();
 
@@ -1417,14 +1417,14 @@ SDValue VETargetLowering::splitVectorArithmetic(SDValue Op,
   SDValue AVL = CDAG.getConstEVL(Op.getValueType().getVectorNumElements());
   SDValue A = Op->getOperand(0);
   SDValue B = Op->getOperand(1);
-  SDValue LoA = CDAG.CreateUnpack(MVT::v256i1, A, PackElem::Lo, AVL);
-  SDValue HiA = CDAG.CreateUnpack(MVT::v256i1, A, PackElem::Hi, AVL);
-  SDValue LoB = CDAG.CreateUnpack(MVT::v256i1, B, PackElem::Lo, AVL);
-  SDValue HiB = CDAG.CreateUnpack(MVT::v256i1, B, PackElem::Hi, AVL);
+  SDValue LoA = CDAG.createUnpack(MVT::v256i1, A, PackElem::Lo, AVL);
+  SDValue HiA = CDAG.createUnpack(MVT::v256i1, A, PackElem::Hi, AVL);
+  SDValue LoB = CDAG.createUnpack(MVT::v256i1, B, PackElem::Lo, AVL);
+  SDValue HiB = CDAG.createUnpack(MVT::v256i1, B, PackElem::Hi, AVL);
   unsigned Opc = Op.getOpcode();
   auto LoRes = CDAG.getNode(Opc, MVT::v256i1, {LoA, LoB});
   auto HiRes = CDAG.getNode(Opc, MVT::v256i1, {HiA, HiB});
-  return CDAG.CreatePack(MVT::v512i1, LoRes, HiRes, AVL);
+  return CDAG.createPack(MVT::v512i1, LoRes, HiRes, AVL);
 }
 
 SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
@@ -1495,23 +1495,16 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     return lowerVVP_MGATHER_MSCATTER(Op, DAG, Mode);
   }
 
-  auto VVPOC = GetVVPOpcode(Op.getOpcode());
+  auto VVPOC = getVVPOpcode(Op.getOpcode());
   if (!VVPOC)
     return SDValue();
 
-#if 0
-  // TODO: We will split packed mode operation late in ::LowerOperation.
-  /// (32bit) packed mode not supported -> split!
-  if (WidenInfo.PackedMode && !SupportsPackedMode(*VVPOC, OpVecTy))
-    return ExpandToSplitVVP(Op, DAG, Mode);
-#endif
-
   ///// Translate to a VVP layer operation (VVP_* or VEC_*) /////
-  bool isTernaryOp = IsVVPTernaryOp(*VVPOC);
-  bool isBinaryOp = IsVVPBinaryOp(*VVPOC);
-  bool isUnaryOp = IsVVPUnaryOp(*VVPOC);
-  bool isConvOp = IsVVPConversionOp(*VVPOC);
-  bool isReduceOp = IsVVPReductionOp(*VVPOC);
+  bool IsTernaryOp = isVVPTernaryOp(*VVPOC);
+  bool IsBinaryOp = isVVPBinaryOp(*VVPOC);
+  bool IsUnaryOp = isVVPUnaryOp(*VVPOC);
+  bool IsConvOp = isVVPConversionOp(*VVPOC);
+  bool IsReduceOp = isVVPReductionOp(*VVPOC);
 
   // Generate a mask and an AVL.
   // auto TargetMasks = CDAG.createTargetMask(WidenInfo, SDValue(), SDValue());
@@ -1531,13 +1524,13 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     LegalOperands.push_back(Op->getOperand(i));
   }
 
-  if (isUnaryOp) {
+  if (IsUnaryOp) {
     assert(VVPOC.hasValue());
     return CDAG.getNode(VVPOC.getValue(), ResVecTy,
                         {LegalOperands[0], MaskingArgs.Mask, MaskingArgs.AVL});
   }
 
-  if (isBinaryOp) {
+  if (IsBinaryOp) {
     assert(VVPOC.hasValue());
     auto VVPN = CDAG.getLegalBinaryOpVVP(*VVPOC, ResVecTy, LegalOperands[0],
                                          LegalOperands[1], MaskingArgs.Mask,
@@ -1545,7 +1538,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     return VVPN;
   }
 
-  if (isTernaryOp) {
+  if (IsTernaryOp) {
     assert(VVPOC.hasValue());
     switch (VVPOC.getValue()) {
     case VEISD::VVP_FFMA: {
@@ -1568,12 +1561,12 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
     }
   }
 
-  if (isConvOp) {
+  if (IsConvOp) {
     return CDAG.getNode(VVPOC.getValue(), ResVecTy,
                         {LegalOperands[0], MaskingArgs.Mask, MaskingArgs.AVL});
   }
 
-  if (isReduceOp) {
+  if (IsReduceOp) {
     // FIXME
     // SDValue Attempt = LowerVECREDUCE(Op, DAG);
     // if (Attempt)
@@ -1610,7 +1603,7 @@ static bool isPackableLoadStore(SDValue Op) {
   if ((Op->getOpcode() == VEISD::VVP_LOAD) && OptimizeVectorMemory)
     return true;
 
-  return IsAllTrueMask(Mask) && isEvenNumber(AVL);
+  return isAllTrueMask(Mask) && isEvenNumber(AVL);
 }
 
 SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
@@ -1649,7 +1642,7 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
 
   SDValue PackedMask = getNodeMask(Op);
   SDValue PackedData = Op->getOperand(1);
-  assert(IsAllTrueMask(PackedMask) && "TODO in-place expand masked VST");
+  assert(isAllTrueMask(PackedMask) && "TODO in-place expand masked VST");
   return CDAG.getVVPStore(Chain, PackedData, PackPtr, DoubledStride, NormalMask,
                           TargetMask.AVL);
 }
@@ -1663,10 +1656,10 @@ SDValue VETargetLowering::legalizeVM_POPCOUNT(SDValue Op,
     return Op;
 
   CustomDAG CDAG(*this, DAG, Op);
-  SDValue LoMask = CDAG.CreateUnpack(MVT::v256i1, Mask, PackElem::Lo, AVL);
-  SDValue LoCount = CDAG.CreateMaskPopcount(LoMask, AVL);
-  SDValue HiMask = CDAG.CreateUnpack(MVT::v256i1, Mask, PackElem::Hi, AVL);
-  SDValue HiCount = CDAG.CreateMaskPopcount(HiMask, AVL);
+  SDValue LoMask = CDAG.createUnpack(MVT::v256i1, Mask, PackElem::Lo, AVL);
+  SDValue LoCount = CDAG.createMaskPopcount(LoMask, AVL);
+  SDValue HiMask = CDAG.createUnpack(MVT::v256i1, Mask, PackElem::Hi, AVL);
+  SDValue HiCount = CDAG.createMaskPopcount(HiMask, AVL);
   return CDAG.getNode(ISD::ADD, MVT::i64, {LoCount, HiCount});
 }
 
@@ -1675,7 +1668,7 @@ SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
   LLVM_DEBUG(dbgs() << "Legalize this VVP or VEC operation: ";
              Op->print(dbgs(), &DAG); dbgs() << "\n");
   // Already legal.
-  if (IsPackingSupportOpcode(Op->getOpcode()))
+  if (isPackingSupportOpcode(Op->getOpcode()))
     return Op;
 
   // Otw, widen this VVP operation to the next OR native vector width
@@ -1701,7 +1694,7 @@ SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
   }
 
   // Do we need to perform splitting?
-  if (WidenInfo.PackedMode && !SupportsPackedMode(VVPOpc, OpVecTy))
+  if (WidenInfo.PackedMode && !supportsPackedMode(VVPOpc, OpVecTy))
     return ExpandToSplitVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   // This is a packed mode operation -> we (may) need to legalize AVL to refer
@@ -1785,7 +1778,7 @@ VETargetLowering::lowerVVP_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
   if (isOneConstant(Scale)) {
     ScaledIndex = Index;
   } else {
-    SDValue ScaleBroadcast = CDAG.CreateBroadcast(IndexVT, Scale, AVL);
+    SDValue ScaleBroadcast = CDAG.createBroadcast(IndexVT, Scale, AVL);
     ScaledIndex = CDAG.getNode(VEISD::VVP_MUL, IndexVT,
                                {Index, ScaleBroadcast, Mask, AVL});
   }
@@ -1796,7 +1789,7 @@ VETargetLowering::lowerVVP_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
     addresses = ScaledIndex;
   } else {
     // re-constitute pointer vector (basePtr + index * scale)
-    SDValue BaseBroadcast = CDAG.CreateBroadcast(IndexVT, BasePtr, AVL);
+    SDValue BaseBroadcast = CDAG.createBroadcast(IndexVT, BasePtr, AVL);
     addresses = CDAG.getNode(VEISD::VVP_ADD, IndexVT,
                              {BaseBroadcast, ScaledIndex, Mask, AVL});
   }
@@ -1850,7 +1843,7 @@ VETargetLowering::lowerVVP_EXTRACT_SUBVECTOR(SDValue Op, SelectionDAG &DAG,
 SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
                                        VVPExpansionMode Mode) const {
   LLVM_DEBUG(dbgs() << "::lowerVPToVVP\n");
-  auto VVPOC = GetVVPForVP(Op.getOpcode());
+  auto VVPOC = getVVPForVP(Op.getOpcode());
 
   // TODO VP reductions
   switch (Op.getOpcode()) {
@@ -1934,7 +1927,7 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
   LLVM_DEBUG(Op.dumpr(&DAG));
   CustomDAG CDAG(*this, DAG, Op);
 
-  auto VVPOpc = *GetVVPOpcode(Op->getOpcode());
+  auto VVPOpc = *getVVPOpcode(Op->getOpcode());
   const bool IsLoad = (VVPOpc == VEISD::VVP_LOAD);
 
   // Shares.
@@ -2030,7 +2023,7 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
     // FIXME: Need to translate index!
     assert((Op.getValueType() == MVT::i64) && "not a proper mask extraction");
     CustomDAG CDAG(*this, DAG, Op);
-    return CDAG.CreateInsertMask(ActualMaskV, ElemV, IndexV);
+    return CDAG.createInsertMask(ActualMaskV, ElemV, IndexV);
   }
 
   // Overpacked operation.
@@ -2048,9 +2041,9 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
 
     // Split into part to keep and part to modify.
     auto PartVT = (VecVT == MVT::v512i64) ? MVT::v256i64 : MVT::v256f64;
-    auto UnpackedMod = CDAG.CreateUnpack(PartVT, SrcV, Part, AVL);
+    auto UnpackedMod = CDAG.createUnpack(PartVT, SrcV, Part, AVL);
     auto UnpackedKeep =
-        CDAG.CreateUnpack(PartVT, SrcV, getOtherPart(Part), AVL);
+        CDAG.createUnpack(PartVT, SrcV, getOtherPart(Part), AVL);
 
     // Insert into subreg.
     auto PackIdx = CDAG.getConstant(ConstIdx / 2, IndexV.getValueType());
@@ -2061,7 +2054,7 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
     // Re-package.
     SDValue NewLo = Part == PackElem::Lo ? LoweredInsert : UnpackedKeep;
     SDValue NewHi = Part == PackElem::Hi ? LoweredInsert : UnpackedKeep;
-    return CDAG.CreatePack(VecVT, NewLo, NewHi, AVL);
+    return CDAG.createPack(VecVT, NewLo, NewHi, AVL);
   }
 
   return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
@@ -2097,7 +2090,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
       unsigned AbsOffset = PartSize * PartIdx; // bit offset
       unsigned ActualPart =
           AbsOffset / SXRegSize; // actual part when chunked into 64bit elements
-      assert(ActualPart < GetMaskBits(MaskVT) / SXRegSize &&
+      assert(ActualPart < getMaskBits(MaskVT) / SXRegSize &&
              "Mask bits out of range!");
       AdjIndexV = CDAG.getConstant(ActualPart, MVT::i32);
 
@@ -2105,7 +2098,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
       ShiftAmount = AbsOffset - (ActualPart * SXRegSize);
     }
 
-    auto ResV = CDAG.CreateExtractMask(MaskV, AdjIndexV);
+    auto ResV = CDAG.createExtractMask(MaskV, AdjIndexV);
     ResV = CDAG.createScalarShift(MVT::i64, ResV, ShiftAmount);
 
     // Convert back to actual result type
@@ -2127,7 +2120,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
 
     // Split-off part to extract from.
     auto PartVT = (VecVT == MVT::v512i64) ? MVT::v256i64 : MVT::v256f64;
-    auto UnpackedMod = CDAG.CreateUnpack(PartVT, SrcV, Part, AVL);
+    auto UnpackedMod = CDAG.createUnpack(PartVT, SrcV, Part, AVL);
 
     // Extract from subreg.
     auto PackIdx = CDAG.getConstant(ConstIdx / 2, IndexV.getValueType());
@@ -2194,7 +2187,7 @@ SDValue VETargetLowering::splitVectorShuffle(SDValue Op, CustomDAG &CDAG,
   assert(HiRes && "Could not synthesize 'lo' shuffle.");
 
   // Re-package
-  return CDAG.CreatePack(LegalResVT, LoRes, HiRes, CDAG.getConstEVL(256));
+  return CDAG.createPack(LegalResVT, LoRes, HiRes, CDAG.getConstEVL(256));
 }
 
 SDValue VETargetLowering::lowerVectorShuffleOp(SDValue Op, SelectionDAG &DAG,
