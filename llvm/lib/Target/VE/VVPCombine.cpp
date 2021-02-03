@@ -130,25 +130,37 @@ static bool match_FFMS(SDNode *Root, SDValue &VY, SDValue &VZ, SDValue &VW,
   return true;
 }
 
-static Optional<unsigned> match_Reciprocal(SDNode *N, SDValue &VX,
-                                           SDValue &Mask, SDValue &AVL) {
+static bool match_Reciprocal(SDNode *N, SDValue &VX,
+                                         SDValue &Mask, SDValue &AVL) {
   // Fold VFRCP.
   if (N->getOpcode() != VEISD::VVP_FDIV ||
       !N->getFlags().hasAllowReciprocal() || !match_FPOne(N->getOperand(0)))
-    return None;
+    return false;
 
-  Mask  = N->getOperand(2);
-  AVL  = N->getOperand(3);
-
-  // TODO: match & return VRSQR.
+  Mask = N->getOperand(2);
+  AVL = N->getOperand(3);
   VX = N->getOperand(1);
-  return VEISD::VVP_FRCP;
+  return true;
+}
+
+static bool match_AllowReciprocalDiv(SDNode *N, SDValue &VX, SDValue &VY,
+                                     SDValue &Mask, SDValue &AVL) {
+  // Invert VRCP.
+  if (N->getOpcode() != VEISD::VVP_FDIV ||
+      !N->getFlags().hasAllowReciprocal())
+    return false;
+
+  VX = N->getOperand(0);
+  VY = N->getOperand(1);
+  Mask = N->getOperand(2);
+  AVL = N->getOperand(3);
+  return true;
 }
 
 SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
   if (!OptimizePackedMode)
     return SDValue();
-  // Perform this shortly before isel.
+    // Perform this shortly before isel.
 #if 0
   if (!DCI.is())
     return SDValue();
@@ -186,15 +198,32 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
     }
   } break;
 
+  // TODO: Fuse recip(sqrt(vx))
+  case VEISD::VVP_FRCP: {
+    return SDValue();
+  }
+
   // Fuse reciprocals.
   case VEISD::VVP_FDIV: {
     SDValue VX, Mask, AVL;
     MVT ResVT = N->getSimpleValueType(0);
-    if (auto RecipOpc = match_Reciprocal(N, VX, Mask, AVL)) {
-      auto N = CDAG.getNode(*RecipOpc, ResVT, {VX, Mask, AVL});
+    // 1 / vx
+    if (match_Reciprocal(N, VX, Mask, AVL)) {
+      auto N = CDAG.getNode(VEISD::VVP_FRCP, ResVT, {VX, Mask, AVL});
       if (RootIsPackLegalized)
         addPackLegalizedNode(N.getNode());
       return N;
+    }
+    // VX / VY (and allow reciprocal)
+    SDValue VY;
+    if (match_AllowReciprocalDiv(N, VX, VY, Mask, AVL)) {
+      auto RecipV = CDAG.getNode(VEISD::VVP_FRCP, ResVT, {VY, Mask, AVL});
+      auto MulV = CDAG.getNode(VEISD::VVP_FMUL, ResVT, {VX, RecipV, Mask, AVL});
+      if (RootIsPackLegalized) {
+        addPackLegalizedNode(RecipV.getNode());
+        addPackLegalizedNode(MulV.getNode());
+      }
+      return MulV;
     }
   } break;
   default:
@@ -324,7 +353,7 @@ SDValue VETargetLowering::combinePacking(SDNode *N,
                                          DAGCombinerInfo &DCI) const {
   if (!OptimizePackedMode)
     return SDValue();
-  // Perform this shortly before isel.
+    // Perform this shortly before isel.
 #if 0
   if (!DCI.isAfterLegalizeDAG())
     return SDValue();
