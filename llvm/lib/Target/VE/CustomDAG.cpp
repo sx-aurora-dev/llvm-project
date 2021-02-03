@@ -1139,11 +1139,6 @@ SDValue CustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
   if (Optional<unsigned> PlainOpc = getNonVVPMaskOp(VVPOpcode, ResVT))
     return getNode(*PlainOpc, ResVT, {A, B});
 
-  // Fold VFRCP.
-  if (VVPOpcode == VEISD::VVP_FDIV && Flags.hasAllowReciprocal() &&
-      match_FPOne(A))
-    return getNode(VEISD::VVP_FRCP, ResVT, {B, Mask, AVL}, Flags);
-
   // Expand S/UREM.
   if (VVPOpcode == VEISD::VVP_UREM)
     return createIREM(false, ResVT, A, B, Mask, AVL);

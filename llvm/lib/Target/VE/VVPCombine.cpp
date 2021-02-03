@@ -130,12 +130,29 @@ static bool match_FFMS(SDNode *Root, SDValue &VY, SDValue &VZ, SDValue &VW,
   return true;
 }
 
+static Optional<unsigned> match_Reciprocal(SDNode *N, SDValue &VX,
+                                           SDValue &Mask, SDValue &AVL) {
+  // Fold VFRCP.
+  if (N->getOpcode() != VEISD::VVP_FDIV ||
+      !N->getFlags().hasAllowReciprocal() || !match_FPOne(N->getOperand(0)))
+    return None;
+
+  Mask  = N->getOperand(2);
+  AVL  = N->getOperand(3);
+
+  // TODO: match & return VRSQR.
+  VX = N->getOperand(1);
+  return VEISD::VVP_FRCP;
+}
+
 SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
   if (!OptimizePackedMode)
     return SDValue();
   // Perform this shortly before isel.
-  if (!DCI.isAfterLegalizeDAG())
+#if 0
+  if (!DCI.is())
     return SDValue();
+#endif
 
   // TODO: optimize
   LLVM_DEBUG(dbgs() << "combineVVP: "; N->print(dbgs(), &DCI.DAG);
@@ -144,6 +161,8 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
   CustomDAG CDAG(*this, DCI.DAG, N);
   bool RootIsPackLegalized = isPackLegalizedInternalNode(N);
   switch (N->getOpcode()) {
+
+  // Fuse FMA, FMSB, FNMA, FNMSB, ..
   case VEISD::VVP_FADD: {
     SDValue VY, VZ, VW, Mask, AVL;
     if (match_FFMA(N, VY, VZ, VW, Mask, AVL)) {
@@ -161,6 +180,18 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
       MVT ResVT = N->getSimpleValueType(0);
       unsigned Opcode = Negated ? VEISD::VVP_FFMSN : VEISD::VVP_FFMS;
       auto N = CDAG.getNode(Opcode, ResVT, {VY, VZ, VW, Mask, AVL});
+      if (RootIsPackLegalized)
+        addPackLegalizedNode(N.getNode());
+      return N;
+    }
+  } break;
+
+  // Fuse reciprocals.
+  case VEISD::VVP_FDIV: {
+    SDValue VX, Mask, AVL;
+    MVT ResVT = N->getSimpleValueType(0);
+    if (auto RecipOpc = match_Reciprocal(N, VX, Mask, AVL)) {
+      auto N = CDAG.getNode(*RecipOpc, ResVT, {VX, Mask, AVL});
       if (RootIsPackLegalized)
         addPackLegalizedNode(N.getNode());
       return N;
@@ -294,8 +325,10 @@ SDValue VETargetLowering::combinePacking(SDNode *N,
   if (!OptimizePackedMode)
     return SDValue();
   // Perform this shortly before isel.
+#if 0
   if (!DCI.isAfterLegalizeDAG())
     return SDValue();
+#endif
 
   LLVM_DEBUG(dbgs() << "combinePacking: "; N->print(dbgs(), &DCI.DAG);
              dbgs() << "\n";);
