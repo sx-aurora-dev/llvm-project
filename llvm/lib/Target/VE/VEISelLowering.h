@@ -349,6 +349,8 @@ public:
                            VVPExpansionMode Mode) const;
   SDValue ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
                                  VVPExpansionMode Mode) const;
+  // Split this packed (vector) mask operation retaining the ISD opcode.
+  SDValue splitVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
   // Convert the mask x AVL into AVL/2 and update the mask as necessary (VVP and
   // VEC only).
   SDValue legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const;
@@ -356,6 +358,7 @@ public:
   // Packed splitting, packed-mode AVL/mask legalization.
   SDValue legalizeInternalLoadStoreOp(SDValue Op, CustomDAG &CDAG) const;
   SDValue legalizeInternalVectorOp(SDValue Op, SelectionDAG &DAG) const;
+  SDValue legalizeVM_POPCOUNT(SDValue Op, SelectionDAG &DAG) const;
   /// } VVPLowering
 
   /// Custom DAGCombine {

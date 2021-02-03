@@ -177,7 +177,7 @@ unsigned getScalarReductionOpcode(unsigned VVPOC, bool IsMask) {
 
 bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT) {
   bool IsPackedOp = isPackedType(IdiomVT);
-  // bool IsMaskOp = IdiomVT.getVectorElementType() == MVT::i1;
+  bool IsMaskOp = IdiomVT.getVectorElementType() == MVT::i1;
 
 #if 0
   if (IsMaskOp && IsPackedOp) {
@@ -189,13 +189,15 @@ bool SupportsPackedMode(unsigned Opcode, EVT IdiomVT) {
   default:
     return false;
 
+  case VEISD::VM_POPCOUNT:
+    return false;
   case VEISD::VEC_SEQ:
   case VEISD::VEC_BROADCAST:
     return true;
 #define REGISTER_PACKED(VVP_NAME)                                              \
-  case VEISD::VVP_NAME:                                                        \
-    return IsPackedOp;
+  case VEISD::VVP_NAME:
 #include "VVPNodes.def"
+    return IsPackedOp && !IsMaskOp;
   }
 }
 
@@ -440,7 +442,9 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   if (VVPOpc)
     OC = *VVPOpc;
 
-  // Expect VEISD:: VVP or ISD::non-VP Opcodes here
+  // NOTE: Be aware that opcodes are translated to VVP first. If the idiomatic
+  // vector type position changes its time for another switch above the
+  // translation code.
   switch (OC) {
   default:
     // For memory ops -> the transfered data type
@@ -448,6 +452,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
       return MemN->getMemoryVT();
     return None;
 
+  // Standard ISD.
   case ISD::SELECT: // not aliased with VVP_SELECT
   case ISD::CONCAT_VECTORS:
   case ISD::EXTRACT_SUBVECTOR:
@@ -456,8 +461,7 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   case ISD::SCALAR_TO_VECTOR:
     return Op->getValueType(0);
 
-    // Known VP ops
-    // all standard un/bin/tern-ary operators
+    // VVP
 #define REGISTER_UNARY_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #define REGISTER_BINARY_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #define REGISTER_TERNARY_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
@@ -468,13 +472,6 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
 #define REGISTER_ICONV_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.def"
     return getLargestConvType(Op);
-
-  case VEISD::VEC_TOMASK:
-  case VEISD::VEC_NARROW:
-  case VEISD::VEC_SEQ:
-  case VEISD::VEC_BROADCAST:
-    return Op->getValueType(0);
-
   case VEISD::VVP_LOAD:
   case VEISD::VVP_GATHER:
     return Op->getValueType(0);
@@ -482,6 +479,17 @@ Optional<EVT> getIdiomaticType(SDNode *Op) {
   case VEISD::VVP_STORE:
   case VEISD::VVP_SCATTER:
     return Op->getOperand(1)->getValueType(0);
+
+  // VEC
+  case VEISD::VEC_TOMASK:
+  case VEISD::VEC_NARROW:
+  case VEISD::VEC_SEQ:
+  case VEISD::VEC_BROADCAST:
+    return Op->getValueType(0);
+
+  // VM
+  case VEISD::VM_POPCOUNT:
+    return Op->getOperand(0).getValueType();
   }
 }
 
@@ -1180,9 +1188,8 @@ SDValue CustomDAG::getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT,
   }
 
   // Mask legalization using vm_popcount
-  if (!IsAllTrueMask(Mask)) {
-    VectorV = getNode(ISD::AND, MVT::v256i1, {VectorV, Mask});
-  }
+  if (!IsAllTrueMask(Mask))
+    VectorV = getNode(ISD::AND, Mask.getValueType(), {VectorV, Mask});
 
   auto Pop = CreateMaskPopcount(VectorV, AVL);
   auto LegalPop = DAG.getZExtOrTrunc(Pop, DL, MVT::i32);

@@ -91,6 +91,9 @@ EVT splitType(EVT);
 // (requiring a packed VL param..)
 bool isPackedType(EVT SomeVT);
 bool isMaskType(EVT VT);
+static inline bool isPackedMaskType(EVT SomeVT) {
+  return isPackedType(SomeVT) && isMaskType(SomeVT);
+}
 bool isOverPackedType(EVT VT);
 
 // whether this VVP operation has no mask argument

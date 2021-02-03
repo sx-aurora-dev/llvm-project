@@ -89,9 +89,24 @@ static bool hasWidenableSourceVTs(SDNode &N) {
   return true;
 }
 
+static bool isMaskArithmetic(SDNode &N) {
+  switch (N.getOpcode()) {
+  default:
+    return false;
+  case ISD::AND:
+  case ISD::XOR:
+  case ISD::OR:
+    return isPackedMaskType(N.getValueType(0));
+  }
+}
+
 static bool shouldLowerToVVP(SDNode &N) {
   // Already a target node
   if (isVVPOrVEC(N.getOpcode()))
+    return false;
+
+  // Mask arithmetic is unpredicated -> do not lower.
+  if (isMaskArithmetic(N))
     return false;
 
   // Do not VVP expand mask loads/stores
@@ -536,7 +551,7 @@ void VETargetLowering::initVPUActions() {
     setOperationAction(ISD::EXTRACT_VECTOR_ELT, PackedVT, Custom);
   }
 
-  // All mask ops
+  // All mask ops.
   for (MVT MaskVT : MVT::vector_valuetypes()) {
     if (MaskVT.isScalableVector())
       continue;
@@ -561,6 +576,10 @@ void VETargetLowering::initVPUActions() {
     if (isPackedType(MaskVT))
       ForAll_setOperationAction(IntArithOCs, MaskVT, Custom);
   }
+
+  // Packed mask arithmetic.
+  for (unsigned Opc : {ISD::AND, ISD::XOR, ISD::OR})
+    setOperationAction(Opc, MVT::v512i1, Custom);
 
   // vNt32, vNt64 ops (legal element types)
   for (MVT VT : MVT::vector_valuetypes()) {
@@ -1386,9 +1405,33 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
                          NeedsPackedMasking);
 }
 
+SDValue VETargetLowering::splitVectorArithmetic(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "::splitMaskArithmetic\n");
+  CustomDAG CDAG(*this, DAG, Op);
+  SDValue AVL = CDAG.getConstEVL(Op.getValueType().getVectorNumElements());
+  SDValue A = Op->getOperand(0);
+  SDValue B = Op->getOperand(1);
+  SDValue LoA = CDAG.CreateUnpack(MVT::v256i1, A, PackElem::Lo, AVL);
+  SDValue HiA = CDAG.CreateUnpack(MVT::v256i1, A, PackElem::Hi, AVL);
+  SDValue LoB = CDAG.CreateUnpack(MVT::v256i1, B, PackElem::Lo, AVL);
+  SDValue HiB = CDAG.CreateUnpack(MVT::v256i1, B, PackElem::Hi, AVL);
+  unsigned Opc = Op.getOpcode();
+  auto LoRes = CDAG.getNode(Opc, MVT::v256i1, {LoA, LoB});
+  auto HiRes = CDAG.getNode(Opc, MVT::v256i1, {HiA, HiB});
+  return CDAG.CreatePack(MVT::v512i1, LoRes, HiRes, AVL);
+}
+
 SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
                                      VVPExpansionMode Mode) const {
-  LLVM_DEBUG(dbgs() << "Expand to VVP node\n");
+
+  LLVM_DEBUG(dbgs() << "::lowerToVVP\n");
+  if (isMaskArithmetic(*Op.getNode())) {
+    if (isPackedMaskType(Op.getValueType())) {
+      LLVM_DEBUG(dbgs() << "Splitting packed mask arithmetic!\n");
+      return splitVectorArithmetic(Op, DAG);
+    }
+    return Op;
+  }
 
   Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
   EVT OpVecTy = OpVecTyOpt.getValue();
@@ -1605,6 +1648,22 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
                           TargetMask.AVL);
 }
 
+SDValue VETargetLowering::legalizeVM_POPCOUNT(SDValue Op,
+                                              SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "::LegalizeVM_POPCOUNT\n";);
+  auto Mask = Op->getOperand(0);
+  auto AVL = Op->getOperand(1);
+  if (!isPackedType(Mask.getValueType()))
+    return Op;
+
+  CustomDAG CDAG(*this, DAG, Op);
+  SDValue LoMask = CDAG.CreateUnpack(MVT::v256i1, Mask, PackElem::Lo, AVL);
+  SDValue LoCount = CDAG.CreateMaskPopcount(LoMask, AVL);
+  SDValue HiMask = CDAG.CreateUnpack(MVT::v256i1, Mask, PackElem::Hi, AVL);
+  SDValue HiCount = CDAG.CreateMaskPopcount(HiMask, AVL);
+  return CDAG.getNode(ISD::ADD, MVT::i64, {LoCount, HiCount});
+}
+
 SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
                                                    SelectionDAG &DAG) const {
   LLVM_DEBUG(dbgs() << "Legalize this VVP or VEC operation: ";
@@ -1623,10 +1682,17 @@ SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
   VVPWideningInfo WidenInfo =
       pickResultType(CDAG, Op, VVPExpansionMode::ToNativeWidth);
   unsigned VVPOpc = Op->getOpcode();
+  switch (VVPOpc) {
+  default:
+    break;
+  case VEISD::VM_POPCOUNT:
+    return legalizeVM_POPCOUNT(Op, DAG);
 
-  // More refined treatment of masked load/store.
-  if ((VVPOpc == VEISD::VVP_LOAD) || (VVPOpc == VEISD::VVP_STORE))
+    // More refined treatment of masked load/store.
+  case VEISD::VVP_LOAD:
+  case VEISD::VVP_STORE:
     return legalizeInternalLoadStoreOp(Op, CDAG);
+  }
 
   // Do we need to perform splitting?
   if (WidenInfo.PackedMode && !SupportsPackedMode(VVPOpc, OpVecTy))
@@ -2236,6 +2302,7 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
     // 2. Split the operation if it does not support packed mode
 #define REGISTER_VVP_OP(VVP_NAME) case VEISD::VVP_NAME:
 #include "VVPNodes.def"
+  case VEISD::VM_POPCOUNT:
   case VEISD::VEC_TOMASK:
   case VEISD::VEC_BROADCAST:
   case VEISD::VEC_SEQ: {
