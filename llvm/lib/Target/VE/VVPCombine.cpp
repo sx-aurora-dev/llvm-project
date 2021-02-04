@@ -289,10 +289,9 @@ static SDValue match_BroadcastRepl(SDValue N, PackElem &ReplElem,
   SDValue SplatV = match_Broadcast(N, BroadcastAVL);
   if (!SplatV)
     return SDValue();
-  SDValue ReplV = match_ReplLoHi(SplatV, ReplElem);
-  if (!ReplV)
-    return SDValue();
-  return SplatV;
+  if (SDValue ReplV = match_ReplLoHi(SplatV, ReplElem))
+     return SplatV;
+  return SDValue();
 }
 
 // vec_unpack_X(vec_broadcast(%ret = repl_Y(...), %avl))
@@ -336,21 +335,9 @@ SDValue llvm::combineUnpackLoHi(SDValue PackedVec, PackElem UnpackPart,
   PackElem UsedDestPart = getPackElemForVT(DestVT);
   PackElem ReplPart;
   match_ReplLoHi(ReplV, ReplPart);
-  if (UsedDestPart == ReplPart) {
-    VVPWideningInfo WidenInfo;
-    WidenInfo.ActiveVectorLength =
-        PackedVec.getValueType().getVectorNumElements();
-    WidenInfo.PackedMode = true;
-    WidenInfo.NeedsPackedMasking = false;
-    // Need to use the 'old' type here since ::createTargetMask will use it for
-    // AVL inference.
-    WidenInfo.ResultVT = PackedVec.getValueType();
-    auto LegalMask = CDAG.createTargetMask(WidenInfo, SDValue(), AVL);
-    return CDAG.createBroadcast(DestVT, ReplV->getOperand(0), LegalMask.AVL);
-  }
+  if (UsedDestPart != ReplPart) return SDValue();
 
-  // At least simplify to a plain packed broadcast.
-  return CDAG.createBroadcast(DestVT, ReplV, AVL);
+  return CDAG.createBroadcast(DestVT, ReplV->getOperand(0), AVL);
 }
 
 SDValue VETargetLowering::combinePacking(SDNode *N,
