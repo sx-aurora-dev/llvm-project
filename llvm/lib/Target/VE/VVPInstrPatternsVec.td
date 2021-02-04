@@ -220,7 +220,7 @@ multiclass Binary_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, Va
 }
 
 
-multiclass VectorTernaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
+multiclass Ternary<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
   //// Mask + vvp_select /////
   // with mask, broadcast first
   def : Pat<(vvp_select 
@@ -266,9 +266,9 @@ multiclass VectorTernaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT,
 }
 
 // Expand both 64bit and 32 bit variant (256 elements)
-multiclass VectorTernaryArith_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
-  defm : VectorTernaryArith_Base<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
-  defm : VectorTernaryArith_Base<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
+multiclass Ternary_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
+  defm : Ternary<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
+  defm : Ternary<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
 }
 
 
@@ -301,9 +301,9 @@ defm : Binary_ShortLong<vvp_fdiv,  f64, v256f64, "VFDIVD", f32, v256f32, "VFDIVS
 defm : Binary_rv_vv_ShortLong<c_vvp_fminnum, f64, v256f64, "VFMIND", f32, v256f32, "VFMINS">;
 defm : Binary_rv_vv_ShortLong<c_vvp_fmaxnum, f64, v256f64, "VFMAXD", f32, v256f32, "VFMAXS">;
 
-defm : VectorTernaryArith_ShortLong<c_vvp_ffma, f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
-defm : VectorTernaryArith_ShortLong<c_vvp_ffms, f64, v256f64, "VFMSBD", f32, v256f32, "VFMSBS">;
-defm : VectorTernaryArith_ShortLong<c_vvp_ffmsn, f64, v256f64, "VFNMSBD", f32, v256f32, "VFNMSBS">;
+defm : Ternary_ShortLong<c_vvp_ffma, f64, v256f64, "VFMADD", f32, v256f32, "VFMADS">;
+defm : Ternary_ShortLong<c_vvp_ffms, f64, v256f64, "VFMSBD", f32, v256f32, "VFMSBS">;
+defm : Ternary_ShortLong<c_vvp_ffmsn, f64, v256f64, "VFNMSBD", f32, v256f32, "VFNMSBS">;
 // TODO: vvp_ffman
 
 ///// Selection /////
@@ -462,9 +462,9 @@ defm : Binary_rv_vv<vvp_fsub,     i64, v512f32, v512i1, "PVFSUB">;
 defm : Binary_rv_vv<c_vvp_fminnum, i64, v512f32, v512i1, "PVFMIN">;
 defm : Binary_rv_vv<c_vvp_fmaxnum, i64, v512f32, v512i1, "PVFMAX">;
 
-defm : VectorTernaryArith_Base<c_vvp_ffma, i64, v512f32, v512i1, "PVFMAD">;
-defm : VectorTernaryArith_Base<c_vvp_ffms, i64, v512f32, v512i1, "PVFMSB">;
-defm : VectorTernaryArith_Base<c_vvp_ffmsn, i64, v512f32, v512i1, "PVFNMSB">;
+defm : Ternary<c_vvp_ffma, i64, v512f32, v512i1, "PVFMAD">;
+defm : Ternary<c_vvp_ffms, i64, v512f32, v512i1, "PVFMSB">;
+defm : Ternary<c_vvp_ffmsn, i64, v512f32, v512i1, "PVFNMSB">;
 
 // Integer extension (256 elements) //
 // vNi32 to vNi64
