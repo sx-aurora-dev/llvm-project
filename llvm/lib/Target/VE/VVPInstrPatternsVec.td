@@ -329,6 +329,11 @@ defm : VectorSelect_Packed<v512f32>;
 ///// Comparison (VVP_SETCC) /////
 
 multiclass Set_CC<ValueType MaskVT, ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv, string MaskTag="m"> {
+  // TODO: Fused broadcast. Requires adapting SPU reg type to element type (as done for PVFADDUP, etc).
+  // TODO: Predicate inversion to fuse broadcast (may do this in cpp code).
+  // // Unmasked + broadcast
+  // def : Pat<(MaskVT (vvp_setcc (any_broadcast ScalarVT:$LHS), DataVT:$RHS, CCMatcher:$cond, (MaskVT true_mask), i32:$vl)),
+  //                   (!cast<Instruction>(FmkBaseName#"vl") (CCConv $cond), (!cast<Instruction>(CmpBaseName#"rvl") $LHS, $RHS, $vl), $vl)>;
   // unmasked
   def : Pat<(MaskVT (vvp_setcc DataVT:$LHS, DataVT:$RHS, CCMatcher:$cond, (MaskVT true_mask), i32:$vl)),
                     (!cast<Instruction>(FmkBaseName#"vl") (CCConv $cond), (!cast<Instruction>(CmpBaseName#"vvl") $LHS, $RHS, $vl), $vl)>;

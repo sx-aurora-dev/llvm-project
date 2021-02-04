@@ -40,6 +40,13 @@
 
 using namespace llvm;
 
+// VE has no masked VLD. Ignore the mask, keep the AVL.
+static cl::opt<bool> SplitCallRegs(
+    "ve-split-call-regs", cl::init(true),
+    cl::desc("Split overpacked registers and packed mask regs in calls and "
+             "call arguments to assist pack/unpack folding."),
+    cl::Hidden);
+
 //===----------------------------------------------------------------------===//
 // Calling Convention Implementation
 //===----------------------------------------------------------------------===//
@@ -148,7 +155,8 @@ SDValue VETargetLowering::LowerFormalArguments(
       // their parts.
       SDValue Arg;
       MVT ValVT = VA.getValVT();
-      if (isPackedMaskType(ValVT) || isOverPackedType(ValVT)) {
+      if (SplitCallRegs &&
+          (isPackedMaskType(ValVT) || isOverPackedType(ValVT))) {
         MVT PartVT = getUnpackSourceType(ValVT, PackElem::Lo);
 
         // Create two virtual registers for the V64 subregisters and pack them
