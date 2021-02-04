@@ -526,6 +526,11 @@ void VEAsmPrinter::lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
 }
 
 
+#define FPCONV_CASES(BASEOPC) \
+case VE::BASEOPC##vl: \
+case VE::BASEOPC##vml_v: \
+case VE::BASEOPC##vml:
+
 void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default:
@@ -533,8 +538,9 @@ void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
   case TargetOpcode::DBG_VALUE:
     // FIXME: Debug Value.
     return;
-  case VE::VCVTLSvml_v:
-  case VE::VCVTSLvml_v:
+FPCONV_CASES(VCVTLS)
+FPCONV_CASES(VCVTSL)
+#undef FPCONV_CASES
     lowerFPConversionAndEmitMCInsts(MI, getSubtargetInfo());
     return;
 
