@@ -115,7 +115,7 @@ defm : VectorStore<v256i32, i64, v256i1, "VSTL", "VSTL">;
 
 // Floating-point arithmetic
 
-multiclass VectorUnaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
+multiclass Unary<SDPatternOperator OpNode, ValueType ScalarVT, ValueType DataVT, ValueType MaskVT, string OpBaseName> {
   // Masked with select.
   def : Pat<(vvp_select (OpNode DataVT:$vx, (MaskVT srcvalue), (i32 srcvalue)),
                         DataVT:$vfalse,
@@ -133,9 +133,9 @@ multiclass VectorUnaryArith_Base<SDPatternOperator OpNode, ValueType ScalarVT, V
 }
 
 // Expand both 64bit and 32 bit variant (256 elements)
-multiclass VectorUnaryArith_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
-  defm : VectorUnaryArith_Base<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
-  defm : VectorUnaryArith_Base<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
+multiclass Unary_ShortLong<SDPatternOperator OpNode, ValueType LongScalarVT, ValueType LongDataVT, string LongOpBaseName, ValueType ShortScalarVT, ValueType ShortDataVT, string ShortOpBaseName> {
+  defm : Unary<OpNode, LongScalarVT, LongDataVT, v256i1, LongOpBaseName>;
+  defm : Unary<OpNode, ShortScalarVT, ShortDataVT, v256i1, ShortOpBaseName>;
 }
 
 
@@ -273,7 +273,7 @@ multiclass VectorTernaryArith_ShortLong<SDPatternOperator OpNode, ValueType Long
 
 
 // Integer arithmetic (256 elements)
-defm : VectorUnaryArith_ShortLong<vvp_ctpop, i64, v256i64, "VPCNT", i32, v256i32, "PVPCNTLO">;
+defm : Unary_ShortLong<vvp_ctpop, i64, v256i64, "VPCNT", i32, v256i32, "PVPCNTLO">;
 
 defm : Binary_rv_vv_ShortLong<c_vvp_add, i64, v256i64, "VADDSL", i32, v256i32, "VADDSWSX">;
 
@@ -291,8 +291,8 @@ defm : Binary_rv_vv_ShortLong<c_vvp_xor, i64, v256i64, "VXOR", i32, v256i32, "PV
 defm : Binary_rv_vv_ShortLong<c_vvp_or,  i64, v256i64, "VOR",  i32, v256i32, "PVORLO">;
 
 // Floating-point arithmetic (256 elements)
-defm : VectorUnaryArith_ShortLong<vvp_frcp, f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
-defm : VectorUnaryArith_ShortLong<vvp_fsqrt, f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
+defm : Unary_ShortLong<vvp_frcp, f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
+defm : Unary_ShortLong<vvp_fsqrt, f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
 defm : Binary_rv_vv_ShortLong<c_vvp_fadd, f64, v256f64, "VFADDD", f32, v256f32, "PVFADDUP">;
 defm : Binary_rv_vv_ShortLong<vvp_fsub,  f64, v256f64, "VFSUBD", f32, v256f32, "PVFSUBUP">;
 defm : Binary_rv_vv_ShortLong<c_vvp_fmul, f64, v256f64, "VFMULD", f32, v256f32, "PVFMULUP">;
@@ -454,7 +454,7 @@ defm : Binary_vr_vv<vvp_sra, i64, v512i32, v512i1, "PVSRA">;
 defm : Binary_vr_vv<vvp_shl, i64, v512i32, v512i1, "PVSLL">;
 
 // Floating-point arithmetic (512 elements)
-defm : VectorUnaryArith_Base<vvp_frcp,    i64, v512f32, v512i1, "PVRCP">;
+defm : Unary<vvp_frcp,    i64, v512f32, v512i1, "PVRCP">;
 
 defm : Binary_rv_vv<c_vvp_fadd,    i64, v512f32, v512i1, "PVFADD">;
 defm : Binary_rv_vv<c_vvp_fmul,    i64, v512f32, v512i1, "PVFMUL">;
