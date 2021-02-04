@@ -491,8 +491,8 @@ void VEAsmPrinter::lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
   if (RdOpV.isValid()) {
     // vml_v
     if (PassThruV.isValid()) {
-      emit_vml(*OutStreamer, VE::VCVTDSvml, ResV, SrcV, Mask, VL, STI);
-      emit_rdvml_v(*OutStreamer, VE::VCVTLDvml_v, ResV, RdOpV, ResV, Mask, VL, PassThruV, STI);
+      emit_vml_v(*OutStreamer, VE::VCVTDSvml, ResV, SrcV, Mask, VL, PassThruV, STI);
+      emit_rdvml_v(*OutStreamer, VE::VCVTLDvml_v, ResV, RdOpV, ResV, Mask, VL, ResV, STI);
       return;
     }
     // vml
@@ -511,8 +511,8 @@ void VEAsmPrinter::lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
   // Conversion chain: long -> double -> float.
   if (PassThruV.isValid()) {
     // vml_v
-    emit_vml(*OutStreamer, VE::VCVTDLvml, ResV, SrcV, Mask, VL, STI);
-    emit_vml_v(*OutStreamer, VE::VCVTSDvml_v, ResV, ResV, Mask, VL, PassThruV, STI);
+    emit_vml_v(*OutStreamer, VE::VCVTDLvml, ResV, SrcV, Mask, VL, PassThruV,STI);
+    emit_vml_v(*OutStreamer, VE::VCVTSDvml_v, ResV, ResV, Mask, VL, ResV, STI);
   }
   // vml
   if (Mask.isValid()) {

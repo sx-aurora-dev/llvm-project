@@ -366,17 +366,24 @@ defm : Set_CC_256<v256f32,"VFMKS","VFCMPS",cond,fcond2cc>;
 ///// Conversion /////
 
 // Pseudo instructions for i64 <> fp32 conversion
-multiclass PseudoCVT<dag ins_prefix, string PseudoName> {
-  def vml_v
-    : Pseudo<(outs V64:$vx), !con(ins_prefix, (ins V64:$vy, VM:$vm, I32:$vl, V64:$vpt)),"# pseudo "#PseudoName#"vml_v">;
-  def vml
-    : Pseudo<(outs V64:$vx), !con(ins_prefix, (ins V64:$vy, VM:$vm, I32:$vl)), "# pseudo "#PseudoName#"vml">;
-  def vl
-    : Pseudo<(outs V64:$vx), !con(ins_prefix, (ins V64:$vy, I32:$vl)), "# pseudo VCVTSLvml_v">;
+// These get expanded very late - add flags so LVLGen cathes the $vl register here.
+multiclass PseudoCVT<dag ins_prefix, int Offset,string PseudoName> {
+  let VE_Vector = 1, VE_VLInUse = 1 in {
+    let VE_VLIndex = !add(3,Offset) in {
+      def vml_v
+        : Pseudo<(outs V64:$vx), !con(ins_prefix, (ins V64:$vy, VM:$vm, I32:$vl, V64:$vpt)),"# pseudo "#PseudoName#"vml_v">;
+      def vml
+        : Pseudo<(outs V64:$vx), !con(ins_prefix, (ins V64:$vy, VM:$vm, I32:$vl)), "# pseudo "#PseudoName#"vml">;
+    }
+    let VE_VLIndex = !add(2,Offset) in {
+      def vl
+        : Pseudo<(outs V64:$vx), !con(ins_prefix, (ins V64:$vy, I32:$vl)), "# pseudo VCVTSLvml_v">;
+    }
+  }
 }
 
-defm VCVTLS : PseudoCVT<(ins RDOp:$rd), "VCVTLS">;
-defm VCVTSL : PseudoCVT<(ins), "VCVTSL">;
+defm VCVTLS : PseudoCVT<(ins RDOp:$rd), 1, "VCVTLS">;
+defm VCVTSL : PseudoCVT<(ins), 0, "VCVTSL">;
 
 // x_to_y
 multiclass conv_x_to_y<SDPatternOperator MatchOp, ValueType MaskVT, ValueType DestVT, ValueType SrcVT, string ConvBaseName, string MaskToken> {

@@ -6,6 +6,7 @@ define <256 x float> @vec_sitofp_v256f64_v256double(<256 x i64> %x) {
 ; CHECK-LABEL: vec_sitofp_v256f64_v256double:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcvt.d.l %v0, %v0
 ; CHECK-NEXT:    vcvt.s.d %v0, %v0
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -76,11 +77,11 @@ define <512 x float> @vec_sitofp_v512f64_v512double(<512 x i64> %x) {
 ; CHECK-LABEL: vec_sitofp_v512f64_v512double:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcvt.d.l %v0, %v0
 ; CHECK-NEXT:    vcvt.s.d %v0, %v0
 ; CHECK-NEXT:    vcvt.d.l %v1, %v1
 ; CHECK-NEXT:    vcvt.s.d %v1, %v1
-; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vshf %v0, %v1, %v0, 8
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r = sitofp <512 x i64> %x to <512 x float>

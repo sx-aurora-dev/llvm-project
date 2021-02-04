@@ -50,6 +50,7 @@ define <256 x i32> @vec_fptoui_v256f32_v256i32(<256 x float> %x) {
 ; CHECK-LABEL: vec_fptoui_v256f32_v256i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcvt.d.s %v0, %v0
 ; CHECK-NEXT:    vcvt.l.d.rz %v0, %v0
 ; CHECK-NEXT:    vcvt.d.l %v0, %v0
@@ -120,11 +121,11 @@ define <512 x i32> @vec_fptoui_v512f32_v512i32(<512 x float> %x) {
 ; CHECK-LABEL: vec_fptoui_v512f32_v512i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vcvt.d.s %v2, %v0
 ; CHECK-NEXT:    vcvt.l.d.rz %v2, %v2
 ; CHECK-NEXT:    vcvt.d.l %v2, %v0
 ; CHECK-NEXT:    vcvt.s.d %v2, %v2
-; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 15
 ; CHECK-NEXT:    vcvt.d.s %v3, %v0
 ; CHECK-NEXT:    vcvt.l.d.rz %v3, %v3
