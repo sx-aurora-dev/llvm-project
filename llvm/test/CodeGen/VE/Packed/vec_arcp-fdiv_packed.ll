@@ -15,3 +15,17 @@ define fastcc <256 x double> @vec_arcp_fdiv_v256f64(<256 x double> %x, <256 x do
   %r = fdiv arcp <256 x double> %x, %y
   ret <256 x double> %r
 }
+
+; Function Attrs: nounwind
+define fastcc <256 x double> @vec_arcp_fma_fdiv_v256f64(<256 x double> %x, <256 x double> %y, <256 x double> %z) {
+; CHECK-LABEL: vec_arcp_fma_fdiv_v256f64:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vrcp.d %v1, %v1
+; CHECK-NEXT:    vfmad.d %v0, %v2, %v0, %v1
+; CHECK-NEXT:    b.l.t (, %s10)
+  %tmp = fdiv arcp contract <256 x double> %x, %y
+  %r = fadd <256 x double> %tmp, %z
+  ret <256 x double> %r
+}
