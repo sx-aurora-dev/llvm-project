@@ -39,6 +39,11 @@ static cl::opt<bool>
     OptimizePackedMode("ve-optimize-packed", cl::init(true),
                        cl::desc("Simplify packed mode patterns"), cl::Hidden);
 
+// Optimize packed mode patterns.
+static cl::opt<bool>
+    FuseOps("ve-fuse-ops", cl::init(true),
+                       cl::desc("Perform aggressive fmul/fadd/fsub."), cl::Hidden);
+
 static cl::opt<bool> ExpandOverPackedRegisterCopies(
     "ve-expand-overpacked-copies", cl::init(true),
     cl::desc("Expand physical register copies during isel to assist register "
@@ -157,13 +162,9 @@ static bool match_AllowReciprocalDiv(SDNode *N, SDValue &VX, SDValue &VY,
 }
 
 SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
-  if (!OptimizePackedMode)
+  if (!FuseOps)
     return SDValue();
     // Perform this shortly before isel.
-#if 0
-  if (!DCI.is())
-    return SDValue();
-#endif
 
   // TODO: optimize
   LLVM_DEBUG(dbgs() << "combineVVP: "; N->print(dbgs(), &DCI.DAG);
