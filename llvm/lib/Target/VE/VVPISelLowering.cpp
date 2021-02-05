@@ -187,12 +187,6 @@ static SDValue getMemoryPtr(SDValue Op) {
   case VEISD::VVP_STORE:
     return Op->getOperand(2);
   }
-  if (auto *MemN = dyn_cast<MaskedLoadStoreSDNode>(Op.getNode())) {
-    return MemN->getBasePtr();
-  }
-  if (auto *MemN = dyn_cast<VPLoadStoreSDNode>(Op.getNode())) {
-    return MemN->getBasePtr();
-  }
   if (auto *MemN = dyn_cast<MemSDNode>(Op.getNode())) {
     return MemN->getBasePtr();
   }
@@ -250,35 +244,7 @@ static SDValue getStoredValue(SDValue Op) {
   return SDValue();
 }
 
-static SDValue getLoadPassthru(SDValue Op) {
-  if (MaskedLoadSDNode *MaskedN = dyn_cast<MaskedLoadSDNode>(Op.getNode())) {
-    return MaskedN->getPassThru();
-  }
-  return SDValue();
-}
-
-static SDValue getLoadStoreAVL(SDValue Op) {
-  if (auto *VPLoadStoreN = dyn_cast<VPLoadStoreSDNode>(Op.getNode())) {
-    return VPLoadStoreN->getVectorLength();
-  }
-  return SDValue();
-}
-
 /// } Load & Store Properties
-
-/// Gather & Scatter Properties {
-
-static SDValue getGatherScatterMask(SDValue Op) {
-  if (auto *MaskedN = dyn_cast<MaskedGatherScatterSDNode>(Op.getNode())) {
-    return MaskedN->getMask();
-  }
-  if (auto *VPLoadN = dyn_cast<VPGatherScatterSDNode>(Op.getNode())) {
-    return VPLoadN->getMask();
-  }
-  return SDValue();
-}
-
-/// } Gather & Scatter Properties
 
 static SDValue getSplitPtrOffset(SDValue Ptr, SDValue ByteStride, PackElem Part,
                                  CustomDAG &CDAG) {
@@ -319,6 +285,130 @@ static SDValue PeekForMask(SDValue Op) {
     return Op;
   return SDValue();
 }
+
+static bool hasChain(SDNode &N) {
+  return isa<MemSDNode>(N) || N.isStrictFPOpcode() || N.isMemIntrinsic();
+}
+
+static bool IgnoreOperandForVVPLowering(const SDNode *N, unsigned OpIdx) {
+  if (OpIdx == 1 && (N->getOpcode() == ISD::FP_ROUND))
+    return true;
+  return false;
+}
+
+static bool canSafelyIgnoreMask(unsigned VVPOpcode) {
+  // Most arithmetic is safe without mask.
+  if (isVVPTernaryOp(VVPOpcode))
+    return VVPOpcode != VEISD::VVP_SELECT;
+  if (isVVPBinaryOp(VVPOpcode)) {
+    switch (VVPOpcode) {
+    default:
+      return true;
+    case VEISD::VVP_UREM:
+    case VEISD::VVP_SREM:
+    case VEISD::VVP_UDIV:
+    case VEISD::VVP_SDIV:
+      return false;
+    }
+  }
+  return false;
+}
+
+static bool isEvenNumber(SDValue AVL) {
+  auto ConstAVL = dyn_cast<ConstantSDNode>(AVL);
+  if (!ConstAVL)
+    return false;
+
+  return (ConstAVL->getZExtValue() % 2 == 0);
+}
+
+static bool isPackableLoadStore(SDValue Op) {
+  SDValue AVL = getNodeAVL(Op);
+  SDValue Mask = getNodeMask(Op);
+  if ((Op->getOpcode() == VEISD::VVP_LOAD) && OptimizeVectorMemory)
+    return true;
+
+  return isAllTrueMask(Mask) && isEvenNumber(AVL);
+}
+
+static bool getUniqueInsertion(SDNode *N, unsigned &UniqueIdx) {
+  if (!isa<BuildVectorSDNode>(N))
+    return false;
+  const auto *BVN = cast<BuildVectorSDNode>(N);
+
+  // Find first non-undef insertion.
+  unsigned Idx;
+  for (Idx = 0; Idx < BVN->getNumOperands(); ++Idx) {
+    auto ElemV = BVN->getOperand(Idx);
+    if (!ElemV->isUndef())
+      break;
+  }
+  // Remember insertion.
+  UniqueIdx = Idx++;
+  // Verify that all other insertions are undef.
+  for (; Idx < BVN->getNumOperands(); ++Idx) {
+    auto ElemV = BVN->getOperand(Idx);
+    if (!ElemV->isUndef())
+      return false;
+  }
+  return true;
+}
+
+static SDValue getGatherScatterIndex(SDValue Op) {
+  if (auto *N = dyn_cast<MaskedGatherScatterSDNode>(Op.getNode())) {
+    return N->getIndex();
+  }
+  if (auto *N = dyn_cast<VPGatherScatterSDNode>(Op.getNode())) {
+    return N->getIndex();
+  }
+  return SDValue();
+}
+
+static SDValue getGatherScatterScale(SDValue Op) {
+  if (auto *N = dyn_cast<MaskedGatherScatterSDNode>(Op.getNode())) {
+    return N->getScale();
+  }
+  if (auto *N = dyn_cast<VPGatherScatterSDNode>(Op.getNode())) {
+    return N->getScale();
+  }
+  return SDValue();
+}
+
+static SDValue getNodePassthru(SDValue Op) {
+  if (auto *N = dyn_cast<MaskedGatherSDNode>(Op.getNode())) {
+    return N->getPassThru();
+  }
+  if (auto *N = dyn_cast<MaskedLoadSDNode>(Op.getNode())) {
+    return N->getPassThru();
+  }
+  return SDValue();
+}
+
+static SDValue computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
+                                           SDValue Scale, SDValue Index,
+                                           SDValue Mask, SDValue AVL) {
+  EVT IndexVT = Index.getValueType();
+
+  // Apply scale.
+  SDValue ScaledIndex;
+  if (!Scale || isOneConstant(Scale)) {
+    ScaledIndex = Index;
+  } else {
+    SDValue ScaleBroadcast = CDAG.createBroadcast(IndexVT, Scale, AVL);
+    ScaledIndex = CDAG.getNode(VEISD::VVP_MUL, IndexVT,
+                               {Index, ScaleBroadcast, Mask, AVL});
+  }
+
+  // Add basePtr.
+  if (isNullConstant(BasePtr)) {
+    return ScaledIndex;
+  }
+  // re-constitute pointer vector (basePtr + index * scale)
+  SDValue BaseBroadcast = CDAG.createBroadcast(IndexVT, BasePtr, AVL);
+  return CDAG.getNode(VEISD::VVP_ADD, IndexVT,
+                      {BaseBroadcast, ScaledIndex, Mask, AVL});
+}
+
 
 static const MVT AllVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
                                    MVT::v256f32, MVT::v512f32, MVT::v256f64,
@@ -1078,7 +1168,7 @@ SDValue VETargetLowering::splitLoadStore(SDValue Op, SelectionDAG &DAG,
   EVT DataVT = getMemoryDataVT(Op);
   EVT ResVT = CDAG.splitVectorType(DataVT);
 
-  SDValue Passthru = getLoadPassthru(Op);
+  SDValue Passthru = getNodePassthru(Op);
 
   // analyze the operation
   SDValue PackedMask = getNodeMask(Op);
@@ -1168,33 +1258,6 @@ SDValue VETargetLowering::splitLoadStore(SDValue Op, SelectionDAG &DAG,
   return CDAG.getMergeValues({PackedVals, FusedChains});
 }
 
-static bool hasChain(SDNode &N) {
-  return isa<MemSDNode>(N) || N.isStrictFPOpcode() || N.isMemIntrinsic();
-}
-
-static bool IgnoreOperandForVVPLowering(const SDNode *N, unsigned OpIdx) {
-  if (OpIdx == 1 && (N->getOpcode() == ISD::FP_ROUND))
-    return true;
-  return false;
-}
-
-static bool canSafelyIgnoreMask(unsigned VVPOpcode) {
-  // Most arithmetic is safe without mask.
-  if (isVVPTernaryOp(VVPOpcode))
-    return VVPOpcode != VEISD::VVP_SELECT;
-  if (isVVPBinaryOp(VVPOpcode)) {
-    switch (VVPOpcode) {
-    default:
-      return true;
-    case VEISD::VVP_UREM:
-    case VEISD::VVP_SREM:
-    case VEISD::VVP_UDIV:
-    case VEISD::VVP_SDIV:
-      return false;
-    }
-  }
-  return false;
-}
 
 SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
   LLVM_DEBUG(dbgs() << "::legalizePackedAVL\n";);
@@ -1611,22 +1674,6 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   abort(); // TODO implement
 }
 
-static bool isEvenNumber(SDValue AVL) {
-  auto ConstAVL = dyn_cast<ConstantSDNode>(AVL);
-  if (!ConstAVL)
-    return false;
-
-  return (ConstAVL->getZExtValue() % 2 == 0);
-}
-
-static bool isPackableLoadStore(SDValue Op) {
-  SDValue AVL = getNodeAVL(Op);
-  SDValue Mask = getNodeMask(Op);
-  if ((Op->getOpcode() == VEISD::VVP_LOAD) && OptimizeVectorMemory)
-    return true;
-
-  return isAllTrueMask(Mask) && isEvenNumber(AVL);
-}
 
 SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
                                                       CustomDAG &CDAG) const {
@@ -1731,60 +1778,6 @@ SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
   // This is a packed mode operation -> we (may) need to legalize AVL to refer
   // to packs (2x32) instead of elements (32).
   return legalizePackedAVL(Op, CDAG);
-}
-
-static SDValue getGatherScatterIndex(SDValue Op) {
-  if (auto *N = dyn_cast<MaskedGatherScatterSDNode>(Op.getNode())) {
-    return N->getIndex();
-  }
-  if (auto *N = dyn_cast<VPGatherScatterSDNode>(Op.getNode())) {
-    return N->getIndex();
-  }
-  return SDValue();
-}
-
-static SDValue getGatherScatterScale(SDValue Op) {
-  if (auto *N = dyn_cast<MaskedGatherScatterSDNode>(Op.getNode())) {
-    return N->getScale();
-  }
-  if (auto *N = dyn_cast<VPGatherScatterSDNode>(Op.getNode())) {
-    return N->getScale();
-  }
-  return SDValue();
-}
-
-static SDValue getNodePassthru(SDValue Op) {
-  if (auto *N = dyn_cast<MaskedGatherSDNode>(Op.getNode())) {
-    return N->getPassThru();
-  }
-  if (auto *N = dyn_cast<MaskedLoadSDNode>(Op.getNode())) {
-    return N->getPassThru();
-  }
-  return SDValue();
-}
-static SDValue computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
-                                           SDValue Scale, SDValue Index,
-                                           SDValue Mask, SDValue AVL) {
-  EVT IndexVT = Index.getValueType();
-
-  // Apply scale.
-  SDValue ScaledIndex;
-  if (!Scale || isOneConstant(Scale)) {
-    ScaledIndex = Index;
-  } else {
-    SDValue ScaleBroadcast = CDAG.createBroadcast(IndexVT, Scale, AVL);
-    ScaledIndex = CDAG.getNode(VEISD::VVP_MUL, IndexVT,
-                               {Index, ScaleBroadcast, Mask, AVL});
-  }
-
-  // Add basePtr.
-  if (isNullConstant(BasePtr)) {
-    return ScaledIndex;
-  }
-  // re-constitute pointer vector (basePtr + index * scale)
-  SDValue BaseBroadcast = CDAG.createBroadcast(IndexVT, BasePtr, AVL);
-  return CDAG.getNode(VEISD::VVP_ADD, IndexVT,
-                      {BaseBroadcast, ScaledIndex, Mask, AVL});
 }
 
 SDValue VETargetLowering::splitGatherScatter(SDValue Op, SelectionDAG &DAG,
@@ -1906,6 +1899,8 @@ VETargetLowering::lowerVVP_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
   SDValue Scale = getGatherScatterScale(Op);
   SDValue PassThru = getNodePassthru(Op);
   SDValue StoredValue = getStoredValue(Op);
+  if (PassThru && PassThru->isUndef())
+    PassThru = SDValue();
 
   bool IsScatter = (bool)StoredValue;
 
@@ -1933,10 +1928,10 @@ VETargetLowering::lowerVVP_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
   SDValue NewLoadV =
       CDAG.getVVPGather(LegalDataVT, Chain, AddressVec, Mask, AVL);
 
-  if (PassThru.isUndef())
+  if (!PassThru)
     return NewLoadV;
 
-  // re-introduce passthru as a select // TODO CDAG.getSelect
+  // TODO: Use vvp_select
   SDValue DataV =
       CDAG.DAG.getSelect(CDAG.DL, LegalDataVT, Mask, NewLoadV, PassThru);
   SDValue NewLoadChainV = SDValue(NewLoadV.getNode(), 1);
@@ -2059,11 +2054,13 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
   SDValue BasePtr = getMemoryPtr(Op);
   SDValue Mask = getNodeMask(Op);
   SDValue Chain = getNodeChain(Op);
-  SDValue AVL = getLoadStoreAVL(Op);
+  SDValue AVL = getNodeAVL(Op);
   // Store specific.
   SDValue Data = getStoredValue(Op);
   // Load specific.
-  SDValue PassThru = getLoadPassthru(Op);
+  SDValue PassThru = getNodePassthru(Op);
+  if (PassThru && PassThru->isUndef())
+    PassThru = SDValue();
 
   MemSDNode &MemN = *cast<MemSDNode>(Op.getNode());
   EVT OldDataVT = MemN.getMemoryVT();
@@ -2090,7 +2087,7 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
     auto NewLoadV = CDAG.getNode(VEISD::VVP_LOAD, {LegalDataVT, MVT::Other},
                                  {Chain, BasePtr, StrideV, Mask, AVL});
 
-    if (!PassThru || PassThru.isUndef())
+    if (!PassThru)
       return NewLoadV;
 
     // Re-introduce passthru as a select.
@@ -2256,28 +2253,6 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
   return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
 }
 
-static bool getUniqueInsertion(SDNode *N, unsigned &UniqueIdx) {
-  if (!isa<BuildVectorSDNode>(N))
-    return false;
-  const auto *BVN = cast<BuildVectorSDNode>(N);
-
-  // Find first non-undef insertion.
-  unsigned Idx;
-  for (Idx = 0; Idx < BVN->getNumOperands(); ++Idx) {
-    auto ElemV = BVN->getOperand(Idx);
-    if (!ElemV->isUndef())
-      break;
-  }
-  // Remember insertion.
-  UniqueIdx = Idx++;
-  // Verify that all other insertions are undef.
-  for (; Idx < BVN->getNumOperands(); ++Idx) {
-    auto ElemV = BVN->getOperand(Idx);
-    if (!ElemV->isUndef())
-      return false;
-  }
-  return true;
-}
 
 SDValue VETargetLowering::synthesizeView(MaskView &MV, EVT LegalResVT,
                                          CustomDAG &CDAG) const {
