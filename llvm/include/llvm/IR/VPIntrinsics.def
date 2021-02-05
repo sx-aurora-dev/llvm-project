@@ -521,7 +521,7 @@ END_REGISTER_CASES(vp_store, VP_STORE)
 // due to type legalization. The extra elements are ignored.
 
 BEGIN_REGISTER_VP_INTRINSIC(vp_scatter, 2, 3)
-BEGIN_REGISTER_VP_SDNODE(VP_SCATTER, 1, vp_scatter, 3, 4)
+BEGIN_REGISTER_VP_SDNODE(VP_SCATTER, 1, vp_scatter, 5, 6)
 HANDLE_VP_TO_INTRIN(masked_scatter)
 HANDLE_VP_IS_MEMOP(1, 0)
 END_REGISTER_CASES(vp_scatter, VP_SCATTER)
@@ -536,7 +536,7 @@ END_REGISTER_CASES(vp_load, VP_LOAD)
 
 // llvm.vp.gather(ptr,mask,vlen)
 BEGIN_REGISTER_VP_INTRINSIC(vp_gather, 1, 2)
-BEGIN_REGISTER_VP_SDNODE(VP_GATHER, -1, vp_gather, 1, 2)
+BEGIN_REGISTER_VP_SDNODE(VP_GATHER, -1, vp_gather, 4, 5)
 HANDLE_VP_TO_INTRIN(masked_gather)
 HANDLE_VP_IS_MEMOP(0, None)
 END_REGISTER_CASES(vp_gather, VP_GATHER)

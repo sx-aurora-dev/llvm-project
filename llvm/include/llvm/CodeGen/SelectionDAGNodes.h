@@ -1356,6 +1356,8 @@ public:
     switch (getOpcode()) {
     case ISD::STORE:
     case ISD::MSTORE:
+    case ISD::VP_STORE:
+    case ISD::VP_SCATTER:
       return getOperand(2);
     case ISD::MGATHER:
     case ISD::MSCATTER:
