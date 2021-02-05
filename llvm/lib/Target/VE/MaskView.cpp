@@ -1,5 +1,5 @@
-#include "MaskView.h"
 #include "CustomDAG.h"
+#include "MaskView.h"
 
 #define DEBUG_TYPE "ve-maskview"
 
@@ -40,9 +40,7 @@ struct ShuffleVectorView : public MaskView {
 
   virtual SDNode *getNode() const override { return SN; }
 
-  virtual EVT getValueType() const override {
-    return SN->getValueType(0);
-  }
+  virtual EVT getValueType() const override { return SN->getValueType(0); }
 };
 
 // SDNode abstractions
@@ -75,9 +73,7 @@ struct BuildVectorView : public MaskView {
     return ElemSelect();
   }
 
-  virtual EVT getValueType() const override {
-    return BVN->getValueType(0);
-  }
+  virtual EVT getValueType() const override { return BVN->getValueType(0); }
 
   virtual SDNode *getNode() const override { return BVN; }
 };
@@ -97,9 +93,7 @@ struct ExtractSubvectorView : public MaskView {
     return ElemSelect(getSrc(), DestIdx + Offset);
   }
 
-  virtual EVT getValueType() const override {
-    return EVN->getValueType(0);
-  }
+  virtual EVT getValueType() const override { return EVN->getValueType(0); }
 
   virtual SDNode *getNode() const override { return EVN.getNode(); }
 };
@@ -173,7 +167,7 @@ static SplitView splitShuffleVector(ShuffleVectorSDNode &SVN, CustomDAG &CDAG) {
   EVT OrigVT = SVN.getValueType(0);
   EVT LegalResVT = CDAG.legalizeVectorType(SDValue(&SVN, 0),
                                            VVPExpansionMode::ToNativeWidth);
-  EVT LegalSplitVT = CDAG.getSplitVT(LegalResVT);
+  EVT LegalSplitVT = CDAG.splitVectorType(LegalResVT);
   unsigned NumEls = OrigVT.getVectorNumElements();
 
   SDValue LHS = SVN.getOperand(0);

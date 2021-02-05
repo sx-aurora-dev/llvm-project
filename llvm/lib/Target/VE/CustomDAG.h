@@ -448,9 +448,11 @@ struct CustomDAG {
 
   SDValue getVVPGather(EVT LegalResVT, SDValue Chain, SDValue PtrVecV,
                        SDValue MaskV, SDValue AVL) const;
+  SDValue getVVPScatter(SDValue Chain, SDValue DataV, SDValue PtrVecV,
+                       SDValue MaskV, SDValue AVL) const;
   /// } VVP
 
-  EVT getSplitVT(EVT OldValVT) const {
+  EVT splitVectorType(EVT OldValVT) const {
     if (!OldValVT.isVector())
       return OldValVT;
     return getVectorVT(OldValVT.getVectorElementType(), StandardVectorWidth);
@@ -470,9 +472,14 @@ struct CustomDAG {
   SDValue getLegalReductionOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV,
                                  SDValue Mask, SDValue AVL,
                                  SDNodeFlags Flags = SDNodeFlags()) const;
+  SDValue getLegalConvOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV,
+                            SDValue Mask, SDValue AVL,
+                            SDNodeFlags Flags = SDNodeFlags()) const;
 
   SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT, ArrayRef<SDValue> Ops,
                         SDNodeFlags Flags = SDNodeFlags()) const {
+    if (isVVPConversionOp(VVPOpcode))
+      return getLegalConvOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2], Flags);
     if (isVVPReductionOp(VVPOpcode) && !getVVPReductionStartParamPos(VVPOpcode))
       return getLegalReductionOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
                                     Flags);

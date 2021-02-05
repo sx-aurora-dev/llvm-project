@@ -160,27 +160,31 @@ static bool isSETCC(unsigned OC) {
 }
 
 /// Load & Store Properties {
-static SDValue getLoadStoreChain(SDValue Op) {
-  if (Op->getOpcode() == VEISD::VVP_LOAD) {
-    return Op->getOperand(0);
-  }
-  if (Op->getOpcode() == VEISD::VVP_STORE) {
+static SDValue getNodeChain(SDValue Op) {
+  switch (Op->getOpcode()) {
+  case VEISD::VVP_LOAD:
+  case VEISD::VVP_GATHER:
+  case VEISD::VVP_STORE:
+  case VEISD::VVP_SCATTER:
     return Op->getOperand(0);
   }
   if (MemSDNode *MemN = dyn_cast<MemSDNode>(Op.getNode())) {
     return MemN->getChain();
   }
+  // FIXME: Redundant
   if (Op->isVP()) {
     return Op->getOperand(0);
   }
   return SDValue();
 }
 
-static SDValue getLoadStorePtr(SDValue Op) {
-  if (Op->getOpcode() == VEISD::VVP_LOAD) {
+static SDValue getMemoryPtr(SDValue Op) {
+  switch (Op->getOpcode()) {
+  case VEISD::VVP_GATHER:
+  case VEISD::VVP_LOAD:
     return Op->getOperand(1);
-  }
-  if (Op->getOpcode() == VEISD::VVP_STORE) {
+  case VEISD::VVP_SCATTER:
+  case VEISD::VVP_STORE:
     return Op->getOperand(2);
   }
   if (auto *MemN = dyn_cast<MaskedLoadStoreSDNode>(Op.getNode())) {
@@ -222,8 +226,10 @@ static SDValue getLoadStoreStride(SDValue Op, CustomDAG &CDAG) {
   abort();
 }
 
-static SDValue getStoreData(SDValue Op) {
-  if (Op->getOpcode() == VEISD::VVP_STORE) {
+static SDValue getStoredValue(SDValue Op) {
+  switch (Op->getOpcode()) {
+  case VEISD::VVP_STORE:
+  case VEISD::VVP_SCATTER:
     return Op->getOperand(1);
   }
   if (auto *StoreN = dyn_cast<StoreSDNode>(Op.getNode())) {
@@ -233,6 +239,12 @@ static SDValue getStoreData(SDValue Op) {
     return StoreN->getValue();
   }
   if (auto *StoreN = dyn_cast<VPStoreSDNode>(Op.getNode())) {
+    return StoreN->getValue();
+  }
+  if (auto *StoreN = dyn_cast<MaskedScatterSDNode>(Op.getNode())) {
+    return StoreN->getValue();
+  }
+  if (auto *StoreN = dyn_cast<VPScatterSDNode>(Op.getNode())) {
     return StoreN->getValue();
   }
   return SDValue();
@@ -1053,10 +1065,9 @@ VETargetLowering::getCustomOperationAction(SDNode &Op) const {
   return Legal;
 }
 
-SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
-                                                 VVPExpansionMode Mode) const {
-  LLVM_DEBUG(dbgs() << "ExpandToSplitLoadStore: "; Op->print(dbgs());
-             dbgs() << "\n");
+SDValue VETargetLowering::splitLoadStore(SDValue Op, SelectionDAG &DAG,
+                                         VVPExpansionMode Mode) const {
+  LLVM_DEBUG(dbgs() << "splitLoadStore: "; Op->print(dbgs()); dbgs() << "\n");
   auto VVPOC = *getVVPOpcode(Op.getOpcode());
   assert((VVPOC == VEISD::VVP_LOAD) || (VVPOC == VEISD::VVP_STORE));
 
@@ -1065,15 +1076,15 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
   VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
 
   EVT DataVT = getMemoryDataVT(Op);
-  EVT ResVT = CDAG.getSplitVT(DataVT);
+  EVT ResVT = CDAG.splitVectorType(DataVT);
 
   SDValue Passthru = getLoadPassthru(Op);
 
   // analyze the operation
   SDValue PackedMask = getNodeMask(Op);
   SDValue PackedAVL = getNodeAVL(Op);
-  SDValue PackPtr = getLoadStorePtr(Op);
-  SDValue PackData = getStoreData(Op);
+  SDValue PackPtr = getMemoryPtr(Op);
+  SDValue PackData = getStoredValue(Op);
   SDValue PackStride = getLoadStoreStride(Op, CDAG);
 
   unsigned ChainResIdx = PackData ? 0 : 1;
@@ -1100,7 +1111,7 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
     SmallVector<SDValue, 4> OpVec;
 
     // Chain
-    OpVec.push_back(getLoadStoreChain(Op));
+    OpVec.push_back(getNodeChain(Op));
 
     // Data
     if (PackData) {
@@ -1139,9 +1150,8 @@ SDValue VETargetLowering::ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
   SDValue FusedChains = DAG.getTokenFactor(CDAG.DL, ChainVec);
 
   // Chain only [store]
-  if (PackData) {
+  if (PackData)
     return FusedChains;
-  }
 
   // re-pack into full packed vector result
   EVT PackedVT = CDAG.legalizeVectorType(Op, Mode);
@@ -1226,21 +1236,22 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
   return NewN;
 }
 
-SDValue VETargetLowering::ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
-                                           VVPExpansionMode Mode) const {
+SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
+                                        VVPExpansionMode Mode) const {
   CustomDAG CDAG(*this, DAG, Op);
 
-  LLVM_DEBUG(dbgs() << "ExpandToSplitVVP: "; CDAG.print(dbgs(), Op) << "\n");
+  LLVM_DEBUG(dbgs() << "::splitVectorOp: "; CDAG.print(dbgs(), Op) << "\n");
   auto OcOpt = getVVPOpcode(Op.getOpcode());
   assert(OcOpt.hasValue());
   unsigned VVPOC = OcOpt.getValue();
 
   // Special cases ('impure' SIMD instructions)
-  if (VVPOC == VEISD::VVP_LOAD || VVPOC == VEISD::VVP_STORE) {
-    return ExpandToSplitLoadStore(Op, DAG, Mode);
-  }
+  if (VVPOC == VEISD::VVP_LOAD || VVPOC == VEISD::VVP_STORE)
+    return splitLoadStore(Op, DAG, Mode);
+  else if (VVPOC == VEISD::VVP_GATHER || VVPOC == VEISD::VVP_SCATTER)
+    return splitGatherScatter(Op, DAG, Mode);
 
-  EVT ResVT = CDAG.getSplitVT(Op.getValue(0).getValueType());
+  EVT ResVT = CDAG.splitVectorType(Op.getValue(0).getValueType());
 
   // analyze the operation
   VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
@@ -1482,7 +1493,7 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   const bool IsOverPacked =
       ElemVT.getScalarSizeInBits() > 32 && WidenInfo.PackedMode;
   if (IsOverPacked)
-    return ExpandToSplitVVP(Op, DAG, Mode);
+    return splitVectorOp(Op, DAG, Mode);
 
   // Specialized code paths for normal or (32bit) packed.
   switch (Op->getOpcode()) {
@@ -1573,8 +1584,8 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
   }
 
   if (IsConvOp) {
-    return CDAG.getNode(VVPOC.getValue(), ResVecTy,
-                        {LegalOperands[0], MaskingArgs.Mask, MaskingArgs.AVL});
+    return CDAG.getLegalConvOpVVP(VVPOC.getValue(), ResVecTy, LegalOperands[0],
+                                  MaskingArgs.Mask, MaskingArgs.AVL);
   }
 
   if (IsReduceOp) {
@@ -1643,8 +1654,7 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   // TODO: this can be refined.. the mask has to be compactable for stores.
   bool IsPackable = isPackableLoadStore(Op);
   if (!IsPackable)
-    return ExpandToSplitLoadStore(Op, CDAG.DAG,
-                                  VVPExpansionMode::ToNativeWidth);
+    return splitLoadStore(Op, CDAG.DAG, VVPExpansionMode::ToNativeWidth);
 
   // Packed load/store require special treatment
   auto WidenInfo = pickResultType(CDAG, Op, VVPExpansionMode::ToNativeWidth);
@@ -1654,7 +1664,7 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   auto DoubledStride = getSplitPtrStride(PackStride, CDAG);
   auto NormalMask = CDAG.createUniformConstMask(MVT::v256i1, true);
   auto Chain = Op->getOperand(0);
-  SDValue PackPtr = getLoadStorePtr(Op);
+  SDValue PackPtr = getMemoryPtr(Op);
 
   // Be optimistic about loads.. (FIXME: implies OptimizeVectorMemory cl::opt).
   if (Op->getOpcode() == VEISD::VVP_LOAD)
@@ -1716,73 +1726,193 @@ SDValue VETargetLowering::legalizeInternalVectorOp(SDValue Op,
 
   // Do we need to perform splitting?
   if (WidenInfo.PackedMode && !supportsPackedMode(VVPOpc, OpVecTy))
-    return ExpandToSplitVVP(Op, DAG, VVPExpansionMode::ToNativeWidth);
+    return splitVectorOp(Op, DAG, VVPExpansionMode::ToNativeWidth);
 
   // This is a packed mode operation -> we (may) need to legalize AVL to refer
   // to packs (2x32) instead of elements (32).
   return legalizePackedAVL(Op, CDAG);
 }
 
+static SDValue getGatherScatterIndex(SDValue Op) {
+  if (auto *N = dyn_cast<MaskedGatherScatterSDNode>(Op.getNode())) {
+    return N->getIndex();
+  }
+  if (auto *N = dyn_cast<VPGatherScatterSDNode>(Op.getNode())) {
+    return N->getIndex();
+  }
+  return SDValue();
+}
+
+static SDValue getGatherScatterScale(SDValue Op) {
+  if (auto *N = dyn_cast<MaskedGatherScatterSDNode>(Op.getNode())) {
+    return N->getScale();
+  }
+  if (auto *N = dyn_cast<VPGatherScatterSDNode>(Op.getNode())) {
+    return N->getScale();
+  }
+  return SDValue();
+}
+
+static SDValue getNodePassthru(SDValue Op) {
+  if (auto *N = dyn_cast<MaskedGatherSDNode>(Op.getNode())) {
+    return N->getPassThru();
+  }
+  if (auto *N = dyn_cast<MaskedLoadSDNode>(Op.getNode())) {
+    return N->getPassThru();
+  }
+  return SDValue();
+}
+static SDValue computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
+                                           SDValue Scale, SDValue Index,
+                                           SDValue Mask, SDValue AVL) {
+  EVT IndexVT = Index.getValueType();
+
+  // Apply scale.
+  SDValue ScaledIndex;
+  if (!Scale || isOneConstant(Scale)) {
+    ScaledIndex = Index;
+  } else {
+    SDValue ScaleBroadcast = CDAG.createBroadcast(IndexVT, Scale, AVL);
+    ScaledIndex = CDAG.getNode(VEISD::VVP_MUL, IndexVT,
+                               {Index, ScaleBroadcast, Mask, AVL});
+  }
+
+  // Add basePtr.
+  if (isNullConstant(BasePtr)) {
+    return ScaledIndex;
+  }
+  // re-constitute pointer vector (basePtr + index * scale)
+  SDValue BaseBroadcast = CDAG.createBroadcast(IndexVT, BasePtr, AVL);
+  return CDAG.getNode(VEISD::VVP_ADD, IndexVT,
+                      {BaseBroadcast, ScaledIndex, Mask, AVL});
+}
+
+SDValue VETargetLowering::splitGatherScatter(SDValue Op, SelectionDAG &DAG,
+                                             VVPExpansionMode Mode) const {
+
+  LLVM_DEBUG(dbgs() << "::splitGatherScatter\n";);
+
+  CustomDAG CDAG(*this, DAG, Op);
+
+  SDValue PackAVL = getNodeAVL(Op);
+  SDValue Chain = getNodeChain(Op);
+  SDValue BasePtr = getMemoryPtr(Op);
+  SDValue Scale = getGatherScatterScale(Op);
+  SDValue PackPassThru = getNodePassthru(Op);
+  SDValue PackStoredValue = getStoredValue(Op);
+  SDValue PackIndex = getGatherScatterIndex(Op);
+  SDValue PackMask = getNodeMask(Op);
+
+  if (PackPassThru && PackPassThru->isUndef())
+    PackPassThru = SDValue();
+
+  VVPWideningInfo WidenInfo = pickResultType(CDAG, Op, Mode);
+
+  const bool IsScatter = (bool)PackStoredValue;
+  const unsigned ChainResIdx = IsScatter ? 0 : 1;
+
+  EVT OldDataVT =
+      IsScatter ? PackStoredValue.getValueType() : Op.getValueType();
+  EVT LegalDataVT = LegalizeVectorType(OldDataVT, Op, DAG, Mode);
+  const bool SplitPassThru = PackPassThru && isOverPackedType(OldDataVT);
+
+  EVT SplitDataVT = CDAG.splitVectorType(OldDataVT);
+
+  SDValue PartOps[2];
+  SmallVector<SDValue, 2> PartChains(2);
+  SDValue UpperPartAVL; // we will use this for packing things back together
+  for (PackElem Part : {PackElem::Hi, PackElem::Lo}) {
+    // BaseBtr := BasePtr + Scale * Offset.
+
+    auto SplitTM =
+        CDAG.createTargetSplitMask(WidenInfo, PackMask, PackAVL, Part);
+
+    // Keep track of the (higher) lvl.
+    if (Part == PackElem::Hi)
+      UpperPartAVL = SplitTM.AVL;
+
+    // Expand to index computation.
+    // If splitGatherScatter is called on a VVP_GATHER or VVP_SCATTER node this
+    // has already happened during lower(VP)ToVVP.
+    SDValue PartPtr;
+    if (PackIndex) {
+      SDValue PartIndex = CDAG.extractPackElem(PackIndex, Part, SplitTM.AVL);
+      PartPtr = computeGatherScatterAddress(CDAG, BasePtr, Scale, PartIndex,
+                                            SplitTM.Mask, SplitTM.AVL);
+    } else {
+      PartPtr = CDAG.extractPackElem(BasePtr, Part, SplitTM.AVL);
+    }
+
+    // Scatter.
+    SDValue PartOp;
+    if (IsScatter) {
+      SDValue PartStoredValue =
+          CDAG.extractPackElem(PackStoredValue, Part, SplitTM.AVL);
+      PartOp = CDAG.getVVPScatter(Chain, PartStoredValue, PartPtr, SplitTM.Mask,
+                                  SplitTM.AVL);
+    } else {
+      // Gather.
+      PartOp = CDAG.getVVPGather(SplitDataVT, Chain, PartPtr, SplitTM.Mask,
+                                 SplitTM.AVL);
+    }
+
+    PartChains[(int)Part] = SDValue(PartOp.getNode(), ChainResIdx);
+
+    // Overpacked passthru.
+    if (SplitPassThru && PackPassThru) {
+      SDValue PartPassThru =
+          CDAG.extractPackElem(PackPassThru, Part, SplitTM.AVL);
+      PartOp = CDAG.createSelect(SplitDataVT, PartOp, PartPassThru,
+                                 SplitTM.Mask, SplitTM.AVL);
+    }
+
+    PartOps[(int)Part] = PartOp;
+  }
+
+  // Join chains.
+  SDValue FusedChains = DAG.getTokenFactor(CDAG.DL, PartChains);
+
+  if (IsScatter)
+    return FusedChains;
+
+  SDValue RePackedValue =
+      CDAG.createPack(LegalDataVT, PartOps[(int)PackElem::Lo],
+                      PartOps[(int)PackElem::Hi], UpperPartAVL);
+
+  // Packed passthru?
+  if (PackPassThru && !SplitPassThru)
+    RePackedValue = CDAG.createSelect(LegalDataVT, RePackedValue, PackPassThru,
+                                      PackMask, PackAVL);
+
+  return CDAG.getMergeValues({RePackedValue, FusedChains});
+}
+
 SDValue
 VETargetLowering::lowerVVP_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
                                             VVPExpansionMode Mode,
                                             VecLenOpt VecLenHint) const {
-  LLVM_DEBUG(dbgs() << "Lowering MGATHER or MSCATTER\n");
-  // dbgs() << "\nNext Instr:\n";
-  // Op.dumpr(&DAG);
-
-  // Optional<EVT> OpVecTyOpt = getIdiomaticType(Op.getNode());
-  // EVT OpVecTy = OpVecTyOpt.getValue();
+  LLVM_DEBUG(dbgs() << "::lowerVVP_MGATHER_MSCATTER\n";);
 
   CustomDAG CDAG(*this, DAG, Op);
   auto MemN = cast<MemSDNode>(Op.getNode());
   EVT OldDataVT = MemN->getMemoryVT();
   EVT LegalDataVT = LegalizeVectorType(OldDataVT, Op, DAG, Mode);
 
-  SDValue AVL;
-  SDValue Index;
-  SDValue BasePtr;
-  SDValue Mask;
-  SDValue Chain;
-  SDValue Scale;
-  SDValue PassThru;
-  SDValue Source;
+  SDValue AVL = getNodeAVL(Op);
+  SDValue Index = getGatherScatterIndex(Op);
+  SDValue BasePtr = getMemoryPtr(Op);
+  SDValue Mask = getNodeMask(Op);
+  SDValue Chain = getNodeChain(Op);
+  SDValue Scale = getGatherScatterScale(Op);
+  SDValue PassThru = getNodePassthru(Op);
+  SDValue StoredValue = getStoredValue(Op);
 
-  if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::MSCATTER) {
-    MaskedGatherScatterSDNode *N =
-        cast<MaskedGatherScatterSDNode>(Op.getNode());
+  bool IsScatter = (bool)StoredValue;
 
-    Index = N->getIndex();
-    BasePtr = N->getBasePtr();
-    Mask = N->getMask();
-    Chain = N->getChain();
-    Scale = N->getScale();
-  } else if (Op.getOpcode() == ISD::VP_GATHER ||
-             Op.getOpcode() == ISD::VP_SCATTER) {
-    VPGatherScatterSDNode *N = cast<VPGatherScatterSDNode>(Op.getNode());
-
-    AVL = N->getVectorLength();
-    Index = N->getIndex();
-    BasePtr = N->getBasePtr();
-    Mask = N->getMask();
-    Chain = N->getChain();
-    Scale = N->getScale();
-  } else {
-    llvm_unreachable("Unexpected SDNode in lowering function");
-  }
-
-  if (Op.getOpcode() == ISD::MGATHER) {
-    MaskedGatherSDNode *N = cast<MaskedGatherSDNode>(Op.getNode());
-    PassThru = N->getPassThru();
-  } else if (Op.getOpcode() == ISD::MSCATTER) {
-    MaskedScatterSDNode *N = cast<MaskedScatterSDNode>(Op.getNode());
-    Source = N->getValue();
-  } else if (Op.getOpcode() == ISD::VP_GATHER) {
-    PassThru = CDAG.DAG.getUNDEF(Op.getValueType());
-  } else if (Op.getOpcode() == ISD::VP_SCATTER) {
-    VPScatterSDNode *N = cast<VPScatterSDNode>(Op.getNode());
-    Source = N->getValue();
-  }
+  // Immediately split over-packed operations.
+  EVT DataVT = IsScatter ? StoredValue.getValueType() : Op.getValueType();
+  if (isOverPackedType(DataVT))
+    return splitGatherScatter(Op, DAG, Mode);
 
   // Infer AVL.
   AVL = CDAG.inferAVL(AVL, Mask, OldDataVT);
@@ -1794,49 +1924,23 @@ VETargetLowering::lowerVVP_MGATHER_MSCATTER(SDValue Op, SelectionDAG &DAG,
   // Widen the index.
   Index = CDAG.widenOrNarrow(IndexVT, Index);
 
-  // Apply scale.
-  SDValue ScaledIndex;
-  if (isOneConstant(Scale)) {
-    ScaledIndex = Index;
-  } else {
-    SDValue ScaleBroadcast = CDAG.createBroadcast(IndexVT, Scale, AVL);
-    ScaledIndex = CDAG.getNode(VEISD::VVP_MUL, IndexVT,
-                               {Index, ScaleBroadcast, Mask, AVL});
-  }
+  SDValue AddressVec =
+      computeGatherScatterAddress(CDAG, BasePtr, Scale, Index, Mask, AVL);
+  if (IsScatter)
+    return CDAG.getVVPScatter(Chain, StoredValue, AddressVec, Mask, AVL);
 
-  // Add basePtr.
-  SDValue addresses;
-  if (isNullConstant(BasePtr)) {
-    addresses = ScaledIndex;
-  } else {
-    // re-constitute pointer vector (basePtr + index * scale)
-    SDValue BaseBroadcast = CDAG.createBroadcast(IndexVT, BasePtr, AVL);
-    addresses = CDAG.getNode(VEISD::VVP_ADD, IndexVT,
-                             {BaseBroadcast, ScaledIndex, Mask, AVL});
-  }
+  // Gather.
+  SDValue NewLoadV =
+      CDAG.getVVPGather(LegalDataVT, Chain, AddressVec, Mask, AVL);
 
-  if (Op.getOpcode() == ISD::MGATHER || Op.getOpcode() == ISD::VP_GATHER) {
-    EVT ChainVT = Op.getNode()->getValueType(1);
+  if (PassThru.isUndef())
+    return NewLoadV;
 
-    SDValue NewLoadV = CDAG.getNode(VEISD::VVP_GATHER, {LegalDataVT, ChainVT},
-                                    {Chain, addresses, Mask, AVL});
-
-    if (PassThru.isUndef()) {
-      return NewLoadV;
-    }
-
-    // re-introduce passthru as a select // TODO CDAG.getSelect
-    SDValue DataV =
-        CDAG.DAG.getSelect(CDAG.DL, LegalDataVT, Mask, NewLoadV, PassThru);
-    SDValue NewLoadChainV = SDValue(NewLoadV.getNode(), 1);
-    return CDAG.getMergeValues({DataV, NewLoadChainV});
-
-  } else {
-    SDValue store = CDAG.getNode(VEISD::VVP_SCATTER, Op.getNode()->getVTList(),
-                                 {Chain, Source, addresses, Mask, AVL});
-    // store.dumpr(&DAG);
-    return store;
-  }
+  // re-introduce passthru as a select // TODO CDAG.getSelect
+  SDValue DataV =
+      CDAG.DAG.getSelect(CDAG.DL, LegalDataVT, Mask, NewLoadV, PassThru);
+  SDValue NewLoadChainV = SDValue(NewLoadV.getNode(), 1);
+  return CDAG.getMergeValues({DataV, NewLoadChainV});
 }
 
 SDValue
@@ -1900,7 +2004,7 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   const bool IsOverPacked =
       ElemVT.getScalarSizeInBits() > 32 && WidenInfo.PackedMode;
   if (IsOverPacked)
-    return ExpandToSplitVVP(Op, DAG, Mode);
+    return splitVectorOp(Op, DAG, Mode);
 
   // create suitable mask and avl parameters (accounts for packing)
   PosOpt MaskPos = Op->getVPMaskPos();
@@ -1952,12 +2056,12 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
   const bool IsLoad = (VVPOpc == VEISD::VVP_LOAD);
 
   // Shares.
-  SDValue BasePtr = getLoadStorePtr(Op);
+  SDValue BasePtr = getMemoryPtr(Op);
   SDValue Mask = getNodeMask(Op);
-  SDValue Chain = getLoadStoreChain(Op);
+  SDValue Chain = getNodeChain(Op);
   SDValue AVL = getLoadStoreAVL(Op);
   // Store specific.
-  SDValue Data = getStoreData(Op);
+  SDValue Data = getStoredValue(Op);
   // Load specific.
   SDValue PassThru = getLoadPassthru(Op);
 
@@ -1967,7 +2071,7 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
 
   // Eagerly split over-packed vectors.
   if (isOverPackedType(OldDataVT))
-    return ExpandToSplitLoadStore(Op, DAG, Mode);
+    return splitLoadStore(Op, DAG, Mode);
 
   // Infer a AVL value from all available hints.
   AVL = CDAG.inferAVL(AVL, Mask, OldDataVT);
@@ -2194,7 +2298,7 @@ SDValue VETargetLowering::splitVectorShuffle(SDValue Op, CustomDAG &CDAG,
   SplitView Split = requestSplitView(Op.getNode(), CDAG);
   assert(Split.isValid() && "Could not split this over-packed vector shuffle");
 
-  EVT LegalSplitVT = CDAG.getSplitVT(LegalResVT);
+  EVT LegalSplitVT = CDAG.splitVectorType(LegalResVT);
 
   // Synthesize 'lo'
   SDValue LoRes = synthesizeView(*Split.LoView, LegalSplitVT, CDAG);

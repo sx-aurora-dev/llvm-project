@@ -276,8 +276,6 @@ public:
   /// Custom Lower for VVP {
   SDValue LowerOperation_VVP(SDValue Op, SelectionDAG &DAG) const;
 
-  SDValue lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
-                       VVPExpansionMode Mode) const;
   SDValue lowerVP_VSHIFT(SDValue Op, SelectionDAG &DAG) const;
 
   SDValue lowerVVP_TRUNCATE(SDValue Op, SelectionDAG &DAG) const;
@@ -334,7 +332,23 @@ public:
                          bool IsCall) const;
   /// } Custom Inserter
 
+  /// Packed Op Splitting {
+  SDValue synthesizeView(MaskView &MV, EVT LegalResVT, CustomDAG &CDAG) const;
+  SDValue splitVectorShuffle(SDValue Op, CustomDAG &CDAG,
+                             VVPExpansionMode Mode) const;
+  SDValue splitVectorOp(SDValue Op, SelectionDAG &DAG,
+                        VVPExpansionMode Mode) const;
+  SDValue splitGatherScatter(SDValue Op, SelectionDAG &DAG,
+                             VVPExpansionMode Mode) const;
+  SDValue splitLoadStore(SDValue Op, SelectionDAG &DAG,
+                         VVPExpansionMode Mode) const;
+  // Split this packed (vector) mask operation retaining the ISD opcode.
+  SDValue splitVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
+  /// } Packed Op Splitting
+
   /// VVP Lowering {
+  SDValue lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
+                       VVPExpansionMode Mode) const;
   SDValue lowerToVVP(SDValue Op, SelectionDAG &DAG,
                      VVPExpansionMode Mode) const;
   // main entry point for regular OC to VVP_* ISD expansion
@@ -342,15 +356,6 @@ public:
   // This replaces the standard ISD node with VVP VEISD node(s) with a widened
   // result type.
 
-  SDValue synthesizeView(MaskView &MV, EVT LegalResVT, CustomDAG &CDAG) const;
-  SDValue splitVectorShuffle(SDValue Op, CustomDAG &CDAG,
-                             VVPExpansionMode Mode) const;
-  SDValue ExpandToSplitVVP(SDValue Op, SelectionDAG &DAG,
-                           VVPExpansionMode Mode) const;
-  SDValue ExpandToSplitLoadStore(SDValue Op, SelectionDAG &DAG,
-                                 VVPExpansionMode Mode) const;
-  // Split this packed (vector) mask operation retaining the ISD opcode.
-  SDValue splitVectorArithmetic(SDValue Op, SelectionDAG &DAG) const;
   // Convert the mask x AVL into AVL/2 and update the mask as necessary (VVP and
   // VEC only).
   SDValue legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const;
