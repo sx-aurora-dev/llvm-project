@@ -338,6 +338,9 @@ public:
                              VVPExpansionMode Mode) const;
   SDValue splitVectorOp(SDValue Op, SelectionDAG &DAG,
                         VVPExpansionMode Mode) const;
+  SDValue computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
+                                           SDValue Scale, SDValue Index,
+                                           SDValue Mask, SDValue AVL) const;
   SDValue splitGatherScatter(SDValue Op, SelectionDAG &DAG,
                              VVPExpansionMode Mode) const;
   SDValue splitLoadStore(SDValue Op, SelectionDAG &DAG,

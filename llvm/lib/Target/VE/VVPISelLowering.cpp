@@ -384,10 +384,11 @@ static SDValue getNodePassthru(SDValue Op) {
   return SDValue();
 }
 
-static SDValue computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
+SDValue VETargetLowering::computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
                                            SDValue Scale, SDValue Index,
-                                           SDValue Mask, SDValue AVL) {
+                                           SDValue Mask, SDValue AVL) const {
   EVT IndexVT = Index.getValueType();
+  bool SplitOps = isOverPackedType(IndexVT);
 
   // Apply scale.
   SDValue ScaledIndex;
@@ -397,6 +398,9 @@ static SDValue computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
     SDValue ScaleBroadcast = CDAG.createBroadcast(IndexVT, Scale, AVL);
     ScaledIndex = CDAG.getNode(VEISD::VVP_MUL, IndexVT,
                                {Index, ScaleBroadcast, Mask, AVL});
+    if (SplitOps)
+      ScaledIndex =
+          splitVectorOp(ScaledIndex, CDAG.DAG, VVPExpansionMode::ToNativeWidth);
   }
 
   // Add basePtr.
@@ -405,10 +409,11 @@ static SDValue computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
   }
   // re-constitute pointer vector (basePtr + index * scale)
   SDValue BaseBroadcast = CDAG.createBroadcast(IndexVT, BasePtr, AVL);
-  return CDAG.getNode(VEISD::VVP_ADD, IndexVT,
+  auto ResPtr =  CDAG.getNode(VEISD::VVP_ADD, IndexVT,
                       {BaseBroadcast, ScaledIndex, Mask, AVL});
+  if (!SplitOps) return ResPtr;
+  return splitVectorOp(ResPtr, CDAG.DAG, VVPExpansionMode::ToNativeWidth);
 }
-
 
 static const MVT AllVectorVTs[] = {MVT::v256i32, MVT::v512i32, MVT::v256i64,
                                    MVT::v256f32, MVT::v512f32, MVT::v256f64,
@@ -1258,7 +1263,6 @@ SDValue VETargetLowering::splitLoadStore(SDValue Op, SelectionDAG &DAG,
   return CDAG.getMergeValues({PackedVals, FusedChains});
 }
 
-
 SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
   LLVM_DEBUG(dbgs() << "::legalizePackedAVL\n";);
   // Only required for VEC and VVP ops.
@@ -1673,7 +1677,6 @@ SDValue VETargetLowering::lowerToVVP(SDValue Op, SelectionDAG &DAG,
 
   abort(); // TODO implement
 }
-
 
 SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
                                                       CustomDAG &CDAG) const {
@@ -2252,7 +2255,6 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
   // Dynamic extraction or packed extract.
   return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
 }
-
 
 SDValue VETargetLowering::synthesizeView(MaskView &MV, EVT LegalResVT,
                                          CustomDAG &CDAG) const {
