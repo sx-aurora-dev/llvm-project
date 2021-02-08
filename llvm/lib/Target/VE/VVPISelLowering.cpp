@@ -296,7 +296,10 @@ static bool IgnoreOperandForVVPLowering(const SDNode *N, unsigned OpIdx) {
   return false;
 }
 
-static bool canSafelyIgnoreMask(unsigned VVPOpcode) {
+static bool maySafelyIgnoreMask(unsigned VVPOpcode) {
+  if (!IgnoreMasks)
+    return false;
+
   // Most arithmetic is safe without mask.
   if (isVVPTernaryOp(VVPOpcode))
     return VVPOpcode != VEISD::VVP_SELECT;
@@ -308,6 +311,7 @@ static bool canSafelyIgnoreMask(unsigned VVPOpcode) {
     case VEISD::VVP_SREM:
     case VEISD::VVP_UDIV:
     case VEISD::VVP_SDIV:
+    case VEISD::VVP_FDIV:
       return false;
     }
   }
@@ -384,9 +388,10 @@ static SDValue getNodePassthru(SDValue Op) {
   return SDValue();
 }
 
-SDValue VETargetLowering::computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
-                                           SDValue Scale, SDValue Index,
-                                           SDValue Mask, SDValue AVL) const {
+SDValue
+VETargetLowering::computeGatherScatterAddress(CustomDAG &CDAG, SDValue BasePtr,
+                                              SDValue Scale, SDValue Index,
+                                              SDValue Mask, SDValue AVL) const {
   EVT IndexVT = Index.getValueType();
   bool SplitOps = isOverPackedType(IndexVT);
 
@@ -409,9 +414,10 @@ SDValue VETargetLowering::computeGatherScatterAddress(CustomDAG &CDAG, SDValue B
   }
   // re-constitute pointer vector (basePtr + index * scale)
   SDValue BaseBroadcast = CDAG.createBroadcast(IndexVT, BasePtr, AVL);
-  auto ResPtr =  CDAG.getNode(VEISD::VVP_ADD, IndexVT,
-                      {BaseBroadcast, ScaledIndex, Mask, AVL});
-  if (!SplitOps) return ResPtr;
+  auto ResPtr = CDAG.getNode(VEISD::VVP_ADD, IndexVT,
+                             {BaseBroadcast, ScaledIndex, Mask, AVL});
+  if (!SplitOps)
+    return ResPtr;
   return splitVectorOp(ResPtr, CDAG.DAG, VVPExpansionMode::ToNativeWidth);
 }
 
@@ -1277,7 +1283,7 @@ SDValue VETargetLowering::legalizePackedAVL(SDValue Op, CustomDAG &CDAG) const {
       CDAG.createTargetMask(WidenInfo, getNodeMask(Op), getNodeAVL(Op));
 
   // Check whether we can safely drop the mask.
-  if (MaskPos && IgnoreMasks && canSafelyIgnoreMask(Op->getOpcode()))
+  if (MaskPos && maySafelyIgnoreMask(Op->getOpcode()))
     TargetMasks.Mask =
         CDAG.createUniformConstMask(TargetMasks.Mask.getValueType(), true);
 
@@ -1370,7 +1376,7 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
     // Ignore the mask where possible.
     if (OptimizeSplitAVL)
       SplitTM.AVL = UpperPartAVL;
-    if (IgnoreMasks && canSafelyIgnoreMask(VVPOC))
+    if (maySafelyIgnoreMask(VVPOC))
       SplitTM.Mask = CDAG.createUniformConstMask(MVT::v256i1, true);
 
     // Add predicating args and generate part node.
