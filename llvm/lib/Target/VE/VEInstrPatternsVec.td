@@ -278,7 +278,7 @@ multiclass Unpack_Swap<ValueType PackVT> {
 
   // shuffle unpacks
   def : Pat<(v256f32 (vec_unpack_lo PackVT:$vp, i32:$avl)),
-            (VSHFvvil $vp, $vp, 15, $avl)>; // always pick lo
+            (VSHFvvil $vp, $vp, 4, $avl)>; // always pick lo
   def : Pat<(v256i32 (vec_unpack_hi PackVT:$vp, i32:$avl)),
             (VSHFvvil $vp, $vp, 0, $avl)>; // always pick hi
 }
