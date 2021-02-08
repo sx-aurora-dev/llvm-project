@@ -248,8 +248,9 @@ static SDValue getStoredValue(SDValue Op) {
 
 static SDValue getSplitPtrOffset(SDValue Ptr, SDValue ByteStride, PackElem Part,
                                  CustomDAG &CDAG) {
-  // Little-endian byte order.
-  if (Part == PackElem::Lo)
+ // High starts at base ptr but has more significant bits in the 64bit vector
+  // element.
+  if (Part == PackElem::Hi)
     return Ptr;
   return CDAG.getNode(ISD::ADD, MVT::i64, {Ptr, ByteStride});
 }

@@ -1046,7 +1046,7 @@ TargetMasks CustomDAG::createTargetSplitMask(VVPWideningInfo WidenInfo,
     }
     NewAVL = getConstEVL(PartAVL);
   } else if (WidenInfo.NeedsPackedMasking) {
-    if (Part == PackElem::Lo) {
+    if (Part == PackElem::Hi) {
       auto PlusOne = getNode(ISD::ADD, MVT::i32, {RawAVL, getConstEVL(1)});
       NewAVL = getNode(ISD::SRL, MVT::i32, {PlusOne, getConstEVL(1)});
     } else {

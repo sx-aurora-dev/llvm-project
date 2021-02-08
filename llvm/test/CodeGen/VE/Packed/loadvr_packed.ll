@@ -7,14 +7,14 @@
 define fastcc <345 x i32> @loadv345i32(<345 x i32>* nocapture readonly) {
 ; CHECK-LABEL: loadv345i32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 4(, %s0)
-; CHECK-NEXT:    lea %s2, 172
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vldl.zx %v0, 8, %s1
 ; CHECK-NEXT:    lea %s1, 173
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vldl.zx %v1, 8, %s0
+; CHECK-NEXT:    vldl.zx %v0, 8, %s0
+; CHECK-NEXT:    lea %s0, 4(, %s0)
+; CHECK-NEXT:    lea %s2, 172
 ; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vldl.zx %v1, 8, %s0
+; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vshf %v0, %v1, %v0, 13
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = load <345 x i32>, <345 x i32>* %0, align 16
@@ -37,14 +37,14 @@ define fastcc <512 x i32> @loadv512i32(<512 x i32>* nocapture readonly) {
 define fastcc <345 x float> @loadv345f32(<345 x float>* nocapture readonly) {
 ; CHECK-LABEL: loadv345f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 4(, %s0)
-; CHECK-NEXT:    lea %s2, 172
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vldu %v0, 8, %s1
 ; CHECK-NEXT:    lea %s1, 173
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vldu %v1, 8, %s0
+; CHECK-NEXT:    vldu %v0, 8, %s0
+; CHECK-NEXT:    lea %s0, 4(, %s0)
+; CHECK-NEXT:    lea %s2, 172
 ; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vldu %v1, 8, %s0
+; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vshf %v0, %v1, %v0, 8
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = load <345 x float>, <345 x float>* %0, align 16

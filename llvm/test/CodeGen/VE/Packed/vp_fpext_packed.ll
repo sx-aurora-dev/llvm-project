@@ -20,11 +20,11 @@ declare <512 x double> @llvm.vp.fpext.v512f32.v512f64(<512 x float>, <512 x i1>,
 define fastcc <512 x double> @vec_vpfpext_v512_float_to_double(<512 x float> %a, <512 x i1> %m, i32 %avl) {
 ; CHECK-LABEL: vec_vpfpext_v512_float_to_double:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    adds.w.sx %s1, 1, %s0
-; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vshf %v1, %v0, %v0, 15
+; CHECK-NEXT:    adds.w.sx %s0, 1, %s0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    lvl %s0

@@ -85,6 +85,7 @@ declare <512 x float> @llvm.vp.fmul.v512f32(<512 x float>, <512 x float>, <512 x
 define fastcc <512 x double> @test_vp_ffma_vvv_512f64(<512 x double> %i0, <512 x double> %i1, <512 x double> %i2, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_ffma_vvv_512f64:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s0, 1, %s0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    lvl %s0
@@ -100,6 +101,7 @@ define fastcc <512 x double> @test_vp_ffma_vvv_512f64(<512 x double> %i0, <512 x
 define fastcc <512 x double> @test_vp_ffma_rvv_512f64(double %s0, <512 x double> %i1, <512 x double> %i2, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_ffma_rvv_512f64:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
@@ -117,6 +119,7 @@ define fastcc <512 x double> @test_vp_ffma_rvv_512f64(double %s0, <512 x double>
 define fastcc <512 x double> @test_vp_ffma_vrv_512f64(<512 x double> %i0, double %s1, <512 x double> %i2, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_ffma_vrv_512f64:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
@@ -134,6 +137,7 @@ define fastcc <512 x double> @test_vp_ffma_vrv_512f64(<512 x double> %i0, double
 define fastcc <512 x double> @test_vp_ffma_vvr_512f64(<512 x double> %i0, <512 x double> %i1, double %s2, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_ffma_vvr_512f64:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1

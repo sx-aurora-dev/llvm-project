@@ -19,6 +19,7 @@ declare <512 x float> @llvm.vp.fptrunc.v512f32.v512f64(<512 x double>, <512 x i1
 define fastcc <512 x float> @vec_vpfptrunc_v512_double_to_float(<512 x double> %a, <512 x i1> %m, i32 %avl) {
 ; CHECK-LABEL: vec_vpfptrunc_v512_double_to_float:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s0, 1, %s0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
 ; CHECK-NEXT:    lvl %s0

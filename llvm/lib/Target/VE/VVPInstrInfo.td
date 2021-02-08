@@ -38,6 +38,11 @@ def SDTIntShiftOpVVP : SDTypeProfile<1, 4, [   // shl, sra, srl
   SDTCisSameAs<0, 1>, SDTCisInt<0>, SDTCisInt<2>, SDTCisSameNumEltsAs<0, 3>, IsVLVT<4>
 ]>;
 
+// Special case (VX, VY, SX)
+def SDTSFAOpVVP : SDTypeProfile<1, 5, [     // vvp_sfa
+  SDTCisSameAs<0, 1>, SDTCisSameAs<0, 2>, SDTCisInt<0>, SDTCisInt<3>, SDTCisSameNumEltsAs<0, 4>, IsVLVT<5>
+]>;
+
 // load store
 def SDTLoadVVP : SDTypeProfile<1, 4, [       // vvp load (ptr, stride, mask, avl) -> data
   SDTCisVec<0>, SDTCisPtrTy<1>, SDTCisInt<2>, SDTCisVec<3>, IsVLVT<4>
@@ -139,6 +144,9 @@ def vvp_udiv   : SDNode<"VEISD::VVP_UDIV",  SDTIntBinOpVVP>;
 def vvp_srl    : SDNode<"VEISD::VVP_SRL",  SDTIntShiftOpVVP>;
 def vvp_sra    : SDNode<"VEISD::VVP_SRA",  SDTIntShiftOpVVP>;
 def vvp_shl    : SDNode<"VEISD::VVP_SHL",  SDTIntShiftOpVVP>;
+
+// fused
+def vvp_sfa    : SDNode<"VEISD::VVP_ADD",  SDTSFAOpVVP>;
 
 // fp
 def vvp_fadd    : SDNode<"VEISD::VVP_FADD",  SDTFPBinOpVVP>;     // x + y

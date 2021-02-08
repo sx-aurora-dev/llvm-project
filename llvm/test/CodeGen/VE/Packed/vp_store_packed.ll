@@ -5,10 +5,10 @@
 define fastcc void @vec_store_v512f64(<512 x double>* %P, <512 x double> %V) {
 ; CHECK-LABEL: vec_store_v512f64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 8(, %s0)
-; CHECK-NEXT:    lea %s2, 256
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vst %v0, 16, %s1
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vst %v0, 16, %s0
+; CHECK-NEXT:    lea %s0, 8(, %s0)
 ; CHECK-NEXT:    vst %v1, 16, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   store <512 x double> %V, <512 x double>* %P, align 16
@@ -22,10 +22,10 @@ declare void @llvm.masked.store.v512f64.p0v512f64(<512 x double>, <512 x double>
 define fastcc void @vec_mstore_v512f64(<512 x double>* %P, <512 x double> %V, <512 x i1> %M) {
 ; CHECK-LABEL: vec_mstore_v512f64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s1, 8(, %s0)
-; CHECK-NEXT:    lea %s2, 256
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vst %v0, 16, %s1, %vm2
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vst %v0, 16, %s0, %vm2
+; CHECK-NEXT:    lea %s0, 8(, %s0)
 ; CHECK-NEXT:    vst %v1, 16, %s0, %vm3
 ; CHECK-NEXT:    b.l.t (, %s10)
   call void @llvm.masked.store.v512f64.p0v512f64(<512 x double> %V, <512 x double>* %P, i32 16, <512 x i1> %M)
@@ -38,11 +38,12 @@ declare void @llvm.vp.store.v512f64.p0v512f64(<512 x double>, <512 x double>*, <
 define fastcc void @vec_vpstore_v512f64(<512 x double>* %P, <512 x double> %V, <512 x i1> %M, i32 %avl) {
 ; CHECK-LABEL: vec_vpstore_v512f64:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
-; CHECK-NEXT:    lea %s2, 8(, %s0)
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0, 16, %s2, %vm2
+; CHECK-NEXT:    vst %v0, 16, %s0, %vm2
+; CHECK-NEXT:    lea %s0, 8(, %s0)
 ; CHECK-NEXT:    vst %v1, 16, %s0, %vm3
 ; CHECK-NEXT:    b.l.t (, %s10)
   call void @llvm.vp.store.v512f64.p0v512f64(<512 x double> %V, <512 x double>* %P, <512 x i1> %M, i32 %avl)

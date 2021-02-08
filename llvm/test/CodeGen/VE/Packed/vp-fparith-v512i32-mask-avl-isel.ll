@@ -39,17 +39,17 @@ define void @test_vp_fadd_fsub_fmul_fneg_fma(<512 x float>* %Out, <512 x float> 
 define void @test_vp_fdiv(<512 x float>* %Out, <512 x float> %f0, <512 x float> %f1, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fdiv:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
-; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    and %s2, %s1, (32)0
 ; CHECK-NEXT:    srl %s2, %s2, 1
 ; CHECK-NEXT:    lvl %s2
 ; CHECK-NEXT:    vshf %v2, %v1, %v1, 15
 ; CHECK-NEXT:    vshf %v3, %v0, %v0, 15
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vfdiv.s %v2, %v3, %v2
-; CHECK-NEXT:    vfdiv.s %v0, %v0, %v1
+; CHECK-NEXT:    vfdiv.s %v2, %v3, %v2, %vm3
+; CHECK-NEXT:    vfdiv.s %v0, %v0, %v1, %vm2
 ; CHECK-NEXT:    vshf %v0, %v2, %v0, 8
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
@@ -63,12 +63,12 @@ define void @test_vp_fdiv(<512 x float>* %Out, <512 x float> %f0, <512 x float> 
 define void @test_vp_fmin_fmax(<512 x float>* %O1, <512 x float>* %O2, <512 x float> %f0, <512 x float> %f1, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_fmin_fmax:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    adds.w.sx %s3, 1, %s2
-; CHECK-NEXT:    and %s3, %s3, (32)0
+; CHECK-NEXT:    and %s3, %s2, (32)0
 ; CHECK-NEXT:    srl %s3, %s3, 1
 ; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vshf %v2, %v1, %v1, 15
 ; CHECK-NEXT:    vshf %v3, %v0, %v0, 15
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s2
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    srl %s2, %s2, 1
 ; CHECK-NEXT:    lvl %s2
