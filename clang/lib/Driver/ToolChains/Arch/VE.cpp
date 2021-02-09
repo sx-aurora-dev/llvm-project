@@ -32,8 +32,7 @@ ve::FloatABI ve::getVEFloatABI(const Driver &D, const ArgList &Args) {
                 .Case("soft", ve::FloatABI::Soft)
                 .Case("hard", ve::FloatABI::Hard)
                 .Default(ve::FloatABI::Invalid);
-      if (ABI == ve::FloatABI::Invalid &&
-          !StringRef(A->getValue()).empty()) {
+      if (ABI == ve::FloatABI::Invalid && !StringRef(A->getValue()).empty()) {
         D.Diag(clang::diag::err_drv_invalid_mfloat_abi) << A->getAsString(Args);
         ABI = ve::FloatABI::Hard;
       }
@@ -58,24 +57,26 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   if (FloatABI == ve::FloatABI::Soft)
     Features.push_back("+soft-float");
 
-  // Whether to generate VPU instructions (on by default)
+  // Defaults.
+  bool EnableVPU = true;
+  bool EnablePacked = false;
+
+  // Whether to enable v256 VPU registers and isel.
   if (auto *A = Args.getLastArg(options::OPT_mvevpu, options::OPT_mno_vevpu)) {
-    if (A->getOption().matches(options::OPT_mno_vevpu)) {
-      Features.push_back("-vpu");
-    }
+    if (A->getOption().matches(options::OPT_mno_vevpu))
+      EnableVPU = false;
   }
 
-  // Whether to map v4i64, v8i64 to the vector mask register
-  if (auto *A = Args.getLastArg(options::OPT_mvelintrin, options::OPT_mno_velintrin)) {
-    if (A->getOption().matches(options::OPT_mvelintrin)) {
-      Features.push_back("+velintrin");
-    }
+  // Whether to enable v512 VPU registers and isel.
+  if (auto *A =
+          Args.getLastArg(options::OPT_mvepacked, options::OPT_mno_vepacked)) {
+    if (A->getOption().matches(options::OPT_mvepacked))
+      EnablePacked = true;
   }
 
-  // Whether to generate VPU instructions (on by default)
-  if (auto *A = Args.getLastArg(options::OPT_mvepacked, options::OPT_mno_vepacked)) {
-    if (A->getOption().matches(options::OPT_mvepacked)) {
-      Features.push_back("+packed");
-    }
-  }
+  if (EnableVPU)
+    Features.push_back("+vpu");
+  if (EnableVPU && EnablePacked)
+    Features.push_back("+packed");
+
 }
