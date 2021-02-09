@@ -159,6 +159,31 @@ define fastcc <512 x float> @vp_gather_v512f32(<512 x float*> %P, <512 x i1> %M,
   ret <512 x float> %r
 }
 
+; Function Attrs: nounwind
+define fastcc <512 x float> @vp_gather_idx_v512f32(float* %B, <512 x i64> %I, <512 x i1> %M, i32 %avl) {
+; CHECK-LABEL: vp_gather_idx_v512f32:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s1
+; CHECK-NEXT:    and %s2, %s2, (32)0
+; CHECK-NEXT:    srl %s2, %s2, 1
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vmuls.l %v0, 4, %v0
+; CHECK-NEXT:    vadds.l %v0, %s0, %v0
+; CHECK-NEXT:    vgtu %v0, %v0, 0, 0, %vm2
+; CHECK-NEXT:    vmuls.l %v1, 4, %v1
+; CHECK-NEXT:    vadds.l %v1, %s0, %v1
+; CHECK-NEXT:    and %s0, %s1, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vgtu %v1, %v1, 0, 0, %vm3
+; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    vshf %v0, %v1, %v0, 8
+; CHECK-NEXT:    b.l.t (, %s10)
+  %P = getelementptr inbounds float, float* %B, <512 x i64> %I
+  %r = call <512 x float> @llvm.vp.gather.v512f32.v512p0f32(<512 x float*> %P, <512 x i1> %M, i32 %avl)
+  ret <512 x float> %r
+}
+
 declare <256 x double> @llvm.vp.gather.v256f64.v256p0f64(<256 x double*>, <256 x i1> mask, i32 vlen)
 declare <512 x float> @llvm.vp.gather.v512f32.v512p0f32(<512 x float*>, <512 x i1> mask, i32 vlen)
 declare <512 x double> @llvm.vp.gather.v512f64.v512p0f64(<512 x double*>, <512 x i1> mask, i32 vlen)

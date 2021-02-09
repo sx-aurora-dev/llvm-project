@@ -12,15 +12,18 @@
 
 ///// repl_f32 , repl_i32 /////
 
+// def : Pat<(i32 (bitconvert f32:$op)), (l2i (SRALri (f2l $op), 32))>;
+// def : Pat<(f32 (bitconvert i32:$op)), (l2f (SLLri (i2l $op), 32))>;
+
 // Sub-register replication.
 def: Pat<(i64 (repl_f32 f32:$val)),
             (ORrr
-              (SRLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32),
-              (ANDrm   (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_i32), 32))>;
+              (SRLri (f2l $val), 32),
+              (f2l $val))>;
 def: Pat<(i64 (repl_i32 i32:$val)),
             (ORrr
-              (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32),
-              (SLLri (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $val, sub_f32), 32))>;
+              (i2l $val),
+              (SLLri (i2l $val), 32))>;
 
 
 
