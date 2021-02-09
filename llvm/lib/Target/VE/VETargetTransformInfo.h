@@ -25,7 +25,7 @@
 #include "llvm/IR/PredicatedInst.h"
 #include "llvm/IR/Type.h"
 
-static llvm::Type* GetVectorElementType(llvm::Type *Ty) {
+static llvm::Type *GetVectorElementType(llvm::Type *Ty) {
   return llvm::cast<llvm::FixedVectorType>(Ty)->getElementType();
 }
 
@@ -44,6 +44,8 @@ static llvm::Type *GetLaneType(llvm::Type *Ty) {
     return Ty;
   return GetVectorElementType(Ty);
 }
+
+static const unsigned ProhibitiveCost = 2048;
 
 namespace llvm {
 
@@ -81,13 +83,12 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
     ///// int arith
     case Intrinsic::vp_reduce_add:
     case Intrinsic::vp_reduce_smax:
-    //
-    // TODO require custom lowering
-    // case Intrinsic::experimental_vector_reduce_smin: // TODO 
-    // case Intrinsic::experimental_vector_reduce_umin: // TODO
-    // case Intrinsic::experimental_vector_reduce_umax: // TODO to smax
+      //
+      // TODO require custom lowering
+      // case Intrinsic::experimental_vector_reduce_smin: // TODO
+      // case Intrinsic::experimental_vector_reduce_umin: // TODO
+      // case Intrinsic::experimental_vector_reduce_umax: // TODO to smax
       return true;
-
 
     ///// bit arith
     case Intrinsic::vp_reduce_or:
@@ -129,7 +130,7 @@ public:
   static bool isBoolTy(Type *Ty) { return Ty->getPrimitiveSizeInBits() == 1; }
 
   unsigned getVRegCapacity(Type &ElemTy) const {
-    unsigned PackLimit = getST()->hasPackedMode() ? 512 : 256;
+    unsigned PackLimit = hasPackedMode() ? 512 : 256;
     if (ElemTy.isIntegerTy() && ElemTy.getPrimitiveSizeInBits() <= 32)
       return PackLimit;
     if (ElemTy.isFloatTy())
@@ -161,13 +162,16 @@ public:
     return false;
   }
 
-  bool isVectorRegisterType(Type &DT) {
+  bool isVectorRegisterType(Type &DT) const {
+    if (!enableVPU())
+      return false;
+
     auto VTy = dyn_cast<VectorType>(&DT);
     if (!VTy)
       return false;
     auto &ElemTy = *GetVectorElementType(VTy);
 
-    // oversized vector
+    // Oversized vector.
     if (getVRegCapacity(ElemTy) < GetVectorNumElements(VTy))
       return false;
 
@@ -226,15 +230,24 @@ public:
                            unsigned AddressSpace,
                            TargetTransformInfo::TargetCostKind CostKind,
                            const Instruction *I = nullptr) const {
-    return getMaskedMemoryOpCost(Opcode, Src, Alignment, AddressSpace, CostKind);
+    return getMaskedMemoryOpCost(Opcode, Src, Alignment, AddressSpace,
+                                 CostKind);
   }
 
-  unsigned getMaskedMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
-                                 unsigned AddressSpace,
-                                 TargetTransformInfo::TargetCostKind CostKind) const {
-    if (isa<VectorType>(*Src) && !isVectorLaneType(*Src)) {
-      return GetVectorNumElements(Src);
-    }
+  unsigned getGatherScatterOpCost(unsigned Opcode, Type *DataTy,
+                                  const Value *Ptr, bool VariableMask,
+                                  Align Alignment,
+                                  TargetTransformInfo::TargetCostKind CostKind,
+                                  const Instruction *I = nullptr) const {
+    return getMaskedMemoryOpCost(Opcode, DataTy, Align(), 0, CostKind);
+  }
+
+  unsigned
+  getMaskedMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
+                        unsigned AddressSpace,
+                        TargetTransformInfo::TargetCostKind CostKind) const {
+    if (isa<FixedVectorType>(Src) && !isVectorRegisterType(*Src))
+      return ProhibitiveCost * GetVectorNumElements(Src);
     return 1;
   }
 
