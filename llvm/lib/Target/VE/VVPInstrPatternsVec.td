@@ -428,7 +428,7 @@ multiclass both_x_to_y<ValueType MaskVT, ValueType FPVT, string FPTag, string IV
 // iN <> fpN
 defm: both_x_to_y<v256i1, v256f32, "S", v256i32, "W", "SX", RD_RZ>;
 defm: both_x_to_y<v256i1, v256f64, "D", v256i64, "L", "", RD_RZ>;
-defm: both_x_to_y<v512i1, v512f32, "S", v512i32, "W", "", RD_NONE, "PVCVT">;
+defm: both_x_to_y<v512i1, v512f32, "S", v512i32, "W", "", RD_RZ, "PVCVT">;
 
 // t32 <> t64
 defm: both_x_to_y<v256i1, v256f32, "S", v256i64, "L", "", RD_RZ>;

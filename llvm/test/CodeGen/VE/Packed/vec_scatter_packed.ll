@@ -51,7 +51,7 @@ define fastcc void @vec_scatter_v512f32(<512 x float*> %P, <512 x float> %D, <51
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vscu %v0, %v2, 0, 0, %vm2
-; CHECK-NEXT:    vshf %v0, %v2, %v2, 15
+; CHECK-NEXT:    vshf %v0, %v2, %v2, 4
 ; CHECK-NEXT:    vscu %v1, %v0, 0, 0, %vm3
 ; CHECK-NEXT:    b.l.t (, %s10)
   call void @llvm.masked.scatter.v512f32.v512p0f32(<512 x float> %D, <512 x float*> %P, i32 16, <512 x i1> %M)

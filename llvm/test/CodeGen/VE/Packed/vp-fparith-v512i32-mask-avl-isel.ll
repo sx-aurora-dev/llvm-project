@@ -42,8 +42,8 @@ define void @test_vp_fdiv(<512 x float>* %Out, <512 x float> %f0, <512 x float> 
 ; CHECK-NEXT:    and %s2, %s1, (32)0
 ; CHECK-NEXT:    srl %s2, %s2, 1
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vshf %v2, %v1, %v1, 15
-; CHECK-NEXT:    vshf %v3, %v0, %v0, 15
+; CHECK-NEXT:    vshf %v2, %v1, %v1, 4
+; CHECK-NEXT:    vshf %v3, %v0, %v0, 4
 ; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
@@ -66,8 +66,8 @@ define void @test_vp_fmin_fmax(<512 x float>* %O1, <512 x float>* %O2, <512 x fl
 ; CHECK-NEXT:    and %s3, %s2, (32)0
 ; CHECK-NEXT:    srl %s3, %s3, 1
 ; CHECK-NEXT:    lvl %s3
-; CHECK-NEXT:    vshf %v2, %v1, %v1, 15
-; CHECK-NEXT:    vshf %v3, %v0, %v0, 15
+; CHECK-NEXT:    vshf %v2, %v1, %v1, 4
+; CHECK-NEXT:    vshf %v3, %v0, %v0, 4
 ; CHECK-NEXT:    adds.w.sx %s2, 1, %s2
 ; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    srl %s2, %s2, 1

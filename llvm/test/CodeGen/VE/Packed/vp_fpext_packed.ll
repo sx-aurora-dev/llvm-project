@@ -6,7 +6,7 @@ define fastcc <512 x double> @vec_fpext_v512_float_to_double(<512 x float> %a) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
 ; CHECK-NEXT:    lvl %s0
-; CHECK-NEXT:    vshf %v1, %v0, %v0, 15
+; CHECK-NEXT:    vshf %v1, %v0, %v0, 4
 ; CHECK-NEXT:    vcvt.d.s %v1, %v1
 ; CHECK-NEXT:    vcvt.d.s %v0, %v0
 ; CHECK-NEXT:    # kill: def $v0 killed $v0 def $vp0 killed $v1
@@ -23,7 +23,7 @@ define fastcc <512 x double> @vec_vpfpext_v512_float_to_double(<512 x float> %a,
 ; CHECK-NEXT:    and %s1, %s0, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vshf %v1, %v0, %v0, 15
+; CHECK-NEXT:    vshf %v1, %v0, %v0, 4
 ; CHECK-NEXT:    adds.w.sx %s0, 1, %s0
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
