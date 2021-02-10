@@ -1,9 +1,9 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed,+vpu | FileCheck %s
 
 
 declare double @llvm.vector.reduce.fadd.f64.v256f64(double %start_value, <256 x double> %a)
 
-define double @vec_unordered_reduce_fadd_f64(<256 x double> %a, double %s) {
+define fastcc double @vec_unordered_reduce_fadd_f64(<256 x double> %a, double %s) {
 ; CHECK-LABEL: vec_unordered_reduce_fadd_f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -16,7 +16,7 @@ define double @vec_unordered_reduce_fadd_f64(<256 x double> %a, double %s) {
   ret double %r
 }
 
-define double @vec_ordered_reduce_fadd_f64(<256 x double> %a, double %s) {
+define fastcc double @vec_ordered_reduce_fadd_f64(<256 x double> %a, double %s) {
 ; CHECK-LABEL: vec_ordered_reduce_fadd_f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -28,7 +28,7 @@ define double @vec_ordered_reduce_fadd_f64(<256 x double> %a, double %s) {
   ret double %r
 }
 
-define double @vec_unordered_reduce_nostart_fadd_f64(<256 x double> %a) {
+define fastcc double @vec_unordered_reduce_nostart_fadd_f64(<256 x double> %a) {
 ; CHECK-LABEL: vec_unordered_reduce_nostart_fadd_f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -41,7 +41,7 @@ define double @vec_unordered_reduce_nostart_fadd_f64(<256 x double> %a) {
   ret double %r
 }
 
-define double @vec_ordered_reduce_nostart_fadd_f64(<256 x double> %a) {
+define fastcc double @vec_ordered_reduce_nostart_fadd_f64(<256 x double> %a) {
 ; CHECK-LABEL: vec_ordered_reduce_nostart_fadd_f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -56,7 +56,7 @@ define double @vec_ordered_reduce_nostart_fadd_f64(<256 x double> %a) {
 
 declare float @llvm.vector.reduce.fadd.f32.v256f32(float %start_value, <256 x float> %a)
 
-define float @vec_unordered_reduce_fadd_f32(<256 x float> %a, float %s) {
+define fastcc float @vec_unordered_reduce_fadd_f32(<256 x float> %a, float %s) {
 ; CHECK-LABEL: vec_unordered_reduce_fadd_f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -70,7 +70,7 @@ define float @vec_unordered_reduce_fadd_f32(<256 x float> %a, float %s) {
   ret float %r
 }
 
-define float @vec_ordered_reduce_fadd_f32(<256 x float> %a, float %s) {
+define fastcc float @vec_ordered_reduce_fadd_f32(<256 x float> %a, float %s) {
 ; CHECK-LABEL: vec_ordered_reduce_fadd_f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -83,7 +83,7 @@ define float @vec_ordered_reduce_fadd_f32(<256 x float> %a, float %s) {
   ret float %r
 }
 
-define float @vec_unordered_reduce_nostart_fadd_f32(<256 x float> %a) {
+define fastcc float @vec_unordered_reduce_nostart_fadd_f32(<256 x float> %a) {
 ; CHECK-LABEL: vec_unordered_reduce_nostart_fadd_f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -97,7 +97,7 @@ define float @vec_unordered_reduce_nostart_fadd_f32(<256 x float> %a) {
   ret float %r
 }
 
-define float @vec_ordered_reduce_nostart_fadd_f32(<256 x float> %a) {
+define fastcc float @vec_ordered_reduce_nostart_fadd_f32(<256 x float> %a) {
 ; CHECK-LABEL: vec_ordered_reduce_nostart_fadd_f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256

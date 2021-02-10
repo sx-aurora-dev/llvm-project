@@ -1,7 +1,7 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
 
 ; Function Attrs: noinline nounwind readnone
-define <256 x double> @_Z4funcDv256_dS_S_Dv4_m(<256 x double> %0, <256 x double> %1, <256 x double> %2, <256 x i1> %3) {
+define fastcc <256 x double> @_Z4funcDv256_dS_S_Dv4_m(<256 x double> %0, <256 x double> %1, <256 x double> %2, <256 x i1> %3) {
 ; CHECK-LABEL: _Z4funcDv256_dS_S_Dv4_m:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256

@@ -1,6 +1,6 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed,+vpu | FileCheck %s
 
-define <1 x i64> @vec_sext_v1_i32_to_i64(<1 x i32> %a) {
+define fastcc <1 x i64> @vec_sext_v1_i32_to_i64(<1 x i32> %a) {
 ; CHECK-LABEL: vec_sext_v1_i32_to_i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    adds.w.sx %s0, %s0, (0)1
@@ -9,7 +9,7 @@ define <1 x i64> @vec_sext_v1_i32_to_i64(<1 x i32> %a) {
   ret <1 x i64> %r
 }
 
-define <1 x i64> @vec_zext_v1_i32_to_i64(<1 x i32> %a) {
+define fastcc <1 x i64> @vec_zext_v1_i32_to_i64(<1 x i32> %a) {
 ; CHECK-LABEL: vec_zext_v1_i32_to_i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
@@ -19,27 +19,27 @@ define <1 x i64> @vec_zext_v1_i32_to_i64(<1 x i32> %a) {
 }
 
 ; TODO implement a proper v17i1 mapping -,-
-;; define <17 x i64> @vec_zext_v17_i32_to_i64(<17 x i32> %a) {
+;; define fastcc <17 x i64> @vec_zext_v17_i32_to_i64(<17 x i32> %a) {
 ;;   %r = zext <17 x i32> %a to <17 x i64>
 ;;   ret <17 x i64> %r
 ;; }
 ;;
-;; define <17 x i64> @vec_sext_v17_i32_to_i64(<17 x i32> %a) {
+;; define fastcc <17 x i64> @vec_sext_v17_i32_to_i64(<17 x i32> %a) {
 ;;   %r = sext <17 x i32> %a to <17 x i64>
 ;;   ret <17 x i64> %r
 ;; }
 ;;
-;; define <17 x i64> @vec_sext_v17_i1_to_i64(<17 x i1> %a) {
+;; define fastcc <17 x i64> @vec_sext_v17_i1_to_i64(<17 x i1> %a) {
 ;;   %r = sext <17 x i1> %a to <17 x i64>
 ;;   ret <17 x i64> %r
 ;; }
 ;;
-;; define <17 x i64> @vec_zext_v17_i1_to_i64(<17 x i1> %a) {
+;; define fastcc <17 x i64> @vec_zext_v17_i1_to_i64(<17 x i1> %a) {
 ;;   %r = zext <17 x i1> %a to <17 x i64>
 ;;   ret <17 x i64> %r
 ;; }
 
-define <512 x i64> @vec_zext_v512_i32_to_i64(<512 x i32> %a) {
+define fastcc <512 x i64> @vec_zext_v512_i32_to_i64(<512 x i32> %a) {
 ; CHECK-LABEL: vec_zext_v512_i32_to_i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -51,7 +51,7 @@ define <512 x i64> @vec_zext_v512_i32_to_i64(<512 x i32> %a) {
   ret <512 x i64> %r
 }
 
-define <512 x i64> @vec_sext_v512_i32_to_i64(<512 x i32> %a) {
+define fastcc <512 x i64> @vec_sext_v512_i32_to_i64(<512 x i32> %a) {
 ; CHECK-LABEL: vec_sext_v512_i32_to_i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -63,7 +63,7 @@ define <512 x i64> @vec_sext_v512_i32_to_i64(<512 x i32> %a) {
   ret <512 x i64> %r
 }
 
-define <512 x i64> @vec_sext_v512_i1_to_i64(<512 x i1> %a) {
+define fastcc <512 x i64> @vec_sext_v512_i1_to_i64(<512 x i1> %a) {
 ; CHECK-LABEL: vec_sext_v512_i1_to_i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -76,7 +76,7 @@ define <512 x i64> @vec_sext_v512_i1_to_i64(<512 x i1> %a) {
   ret <512 x i64> %r
 }
 
-define <512 x i64> @vec_zext_v512_i1_to_i64(<512 x i1> %a) {
+define fastcc <512 x i64> @vec_zext_v512_i1_to_i64(<512 x i1> %a) {
 ; CHECK-LABEL: vec_zext_v512_i1_to_i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256

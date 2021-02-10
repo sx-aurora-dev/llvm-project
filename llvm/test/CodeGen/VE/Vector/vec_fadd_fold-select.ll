@@ -1,7 +1,7 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed,+vpu | FileCheck %s
 
 ; Function Attrs: nounwind
-define <256 x float> @vec_add_fold_v256f32(<256 x float> %a, <256 x float> %b, <256 x i1> %m) {
+define fastcc <256 x float> @vec_add_fold_v256f32(<256 x float> %a, <256 x float> %b, <256 x i1> %m) {
 ; CHECK-LABEL: vec_add_fold_v256f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256

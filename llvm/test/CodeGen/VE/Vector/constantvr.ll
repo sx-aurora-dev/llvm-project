@@ -1,6 +1,6 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
 
-define x86_regcallcc <256 x float> @m5v256f32() {
+define fastcc <256 x float> @m5v256f32() {
 ; CHECK-LABEL: m5v256f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea.sl %s0, -1063256064
@@ -76,7 +76,7 @@ define x86_regcallcc <256 x float> @m5v256f32() {
   >
 }
 
-define x86_regcallcc <256 x double> @m5v256f64() {
+define fastcc <256 x double> @m5v256f64() {
 ; CHECK-LABEL: m5v256f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256

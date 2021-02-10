@@ -1,7 +1,7 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed,+vpu | FileCheck %s
 
 ; Function Attrs: nounwind
-define <1 x double> @vec_add_v1f64(<1 x double> %a, <1 x double> %b) {
+define fastcc <1 x double> @vec_add_v1f64(<1 x double> %a, <1 x double> %b) {
 ; CHECK-LABEL: vec_add_v1f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fadd.d %s0, %s0, %s1
@@ -11,7 +11,7 @@ define <1 x double> @vec_add_v1f64(<1 x double> %a, <1 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <2 x double> @vec_add_v2f64(<2 x double> %a, <2 x double> %b) {
+define fastcc <2 x double> @vec_add_v2f64(<2 x double> %a, <2 x double> %b) {
 ; CHECK-LABEL: vec_add_v2f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 2, (0)1
@@ -23,7 +23,7 @@ define <2 x double> @vec_add_v2f64(<2 x double> %a, <2 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <3 x double> @vec_add_v3f64(<3 x double> %a, <3 x double> %b) {
+define fastcc <3 x double> @vec_add_v3f64(<3 x double> %a, <3 x double> %b) {
 ; CHECK-LABEL: vec_add_v3f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 3, (0)1
@@ -35,7 +35,7 @@ define <3 x double> @vec_add_v3f64(<3 x double> %a, <3 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <4 x double> @vec_add_v4f64(<4 x double> %a, <4 x double> %b) {
+define fastcc <4 x double> @vec_add_v4f64(<4 x double> %a, <4 x double> %b) {
 ; CHECK-LABEL: vec_add_v4f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 4, (0)1
@@ -47,7 +47,7 @@ define <4 x double> @vec_add_v4f64(<4 x double> %a, <4 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <8 x double> @vec_add_v8f64(<8 x double> %a, <8 x double> %b) {
+define fastcc <8 x double> @vec_add_v8f64(<8 x double> %a, <8 x double> %b) {
 ; CHECK-LABEL: vec_add_v8f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 8, (0)1
@@ -59,7 +59,7 @@ define <8 x double> @vec_add_v8f64(<8 x double> %a, <8 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <16 x double> @vec_add_v16f64(<16 x double> %a, <16 x double> %b) {
+define fastcc <16 x double> @vec_add_v16f64(<16 x double> %a, <16 x double> %b) {
 ; CHECK-LABEL: vec_add_v16f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 16, (0)1
@@ -71,7 +71,7 @@ define <16 x double> @vec_add_v16f64(<16 x double> %a, <16 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <32 x double> @vec_add_v32f64(<32 x double> %a, <32 x double> %b) {
+define fastcc <32 x double> @vec_add_v32f64(<32 x double> %a, <32 x double> %b) {
 ; CHECK-LABEL: vec_add_v32f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 32, (0)1
@@ -83,7 +83,7 @@ define <32 x double> @vec_add_v32f64(<32 x double> %a, <32 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <64 x double> @vec_add_v64f64(<64 x double> %a, <64 x double> %b) {
+define fastcc <64 x double> @vec_add_v64f64(<64 x double> %a, <64 x double> %b) {
 ; CHECK-LABEL: vec_add_v64f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 64
@@ -95,7 +95,7 @@ define <64 x double> @vec_add_v64f64(<64 x double> %a, <64 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <128 x double> @vec_add_v128f64(<128 x double> %a, <128 x double> %b) {
+define fastcc <128 x double> @vec_add_v128f64(<128 x double> %a, <128 x double> %b) {
 ; CHECK-LABEL: vec_add_v128f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
@@ -107,7 +107,7 @@ define <128 x double> @vec_add_v128f64(<128 x double> %a, <128 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <253 x double> @vec_add_v253f64(<253 x double> %a, <253 x double> %b) {
+define fastcc <253 x double> @vec_add_v253f64(<253 x double> %a, <253 x double> %b) {
 ; CHECK-LABEL: vec_add_v253f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 253
@@ -119,7 +119,7 @@ define <253 x double> @vec_add_v253f64(<253 x double> %a, <253 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <256 x double> @vec_add_v256f64(<256 x double> %a, <256 x double> %b) {
+define fastcc <256 x double> @vec_add_v256f64(<256 x double> %a, <256 x double> %b) {
 ; CHECK-LABEL: vec_add_v256f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -131,7 +131,7 @@ define <256 x double> @vec_add_v256f64(<256 x double> %a, <256 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <512 x double> @vec_add_v512f64(<512 x double> %a, <512 x double> %b) {
+define fastcc <512 x double> @vec_add_v512f64(<512 x double> %a, <512 x double> %b) {
 ; CHECK-LABEL: vec_add_v512f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -144,7 +144,7 @@ define <512 x double> @vec_add_v512f64(<512 x double> %a, <512 x double> %b) {
 }
 
 ; Function Attrs: nounwind
-define <1024 x double> @vec_add_v1024f64(<1024 x double> %a, <1024 x double> %b) {
+define fastcc <1024 x double> @vec_add_v1024f64(<1024 x double> %a, <1024 x double> %b) {
 ; CHECK-LABEL: vec_add_v1024f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -160,7 +160,7 @@ define <1024 x double> @vec_add_v1024f64(<1024 x double> %a, <1024 x double> %b)
 
 
 ; Function Attrs: nounwind
-define <1 x float> @vec_add_v1f32(<1 x float> %a, <1 x float> %b) {
+define fastcc <1 x float> @vec_add_v1f32(<1 x float> %a, <1 x float> %b) {
 ; CHECK-LABEL: vec_add_v1f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    fadd.s %s0, %s0, %s1
@@ -170,7 +170,7 @@ define <1 x float> @vec_add_v1f32(<1 x float> %a, <1 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <2 x float> @vec_add_v2f32(<2 x float> %a, <2 x float> %b) {
+define fastcc <2 x float> @vec_add_v2f32(<2 x float> %a, <2 x float> %b) {
 ; CHECK-LABEL: vec_add_v2f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 2, (0)1
@@ -182,7 +182,7 @@ define <2 x float> @vec_add_v2f32(<2 x float> %a, <2 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <3 x float> @vec_add_v3f32(<3 x float> %a, <3 x float> %b) {
+define fastcc <3 x float> @vec_add_v3f32(<3 x float> %a, <3 x float> %b) {
 ; CHECK-LABEL: vec_add_v3f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lsv %v0(0), %s3
@@ -203,7 +203,7 @@ define <3 x float> @vec_add_v3f32(<3 x float> %a, <3 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <4 x float> @vec_add_v4f32(<4 x float> %a, <4 x float> %b) {
+define fastcc <4 x float> @vec_add_v4f32(<4 x float> %a, <4 x float> %b) {
 ; CHECK-LABEL: vec_add_v4f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 4, (0)1
@@ -215,7 +215,7 @@ define <4 x float> @vec_add_v4f32(<4 x float> %a, <4 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <8 x float> @vec_add_v8f32(<8 x float> %a, <8 x float> %b) {
+define fastcc <8 x float> @vec_add_v8f32(<8 x float> %a, <8 x float> %b) {
 ; CHECK-LABEL: vec_add_v8f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 8, (0)1
@@ -227,7 +227,7 @@ define <8 x float> @vec_add_v8f32(<8 x float> %a, <8 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <16 x float> @vec_add_v16f32(<16 x float> %a, <16 x float> %b) {
+define fastcc <16 x float> @vec_add_v16f32(<16 x float> %a, <16 x float> %b) {
 ; CHECK-LABEL: vec_add_v16f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 16, (0)1
@@ -239,7 +239,7 @@ define <16 x float> @vec_add_v16f32(<16 x float> %a, <16 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <32 x float> @vec_add_v32f32(<32 x float> %a, <32 x float> %b) {
+define fastcc <32 x float> @vec_add_v32f32(<32 x float> %a, <32 x float> %b) {
 ; CHECK-LABEL: vec_add_v32f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 32, (0)1
@@ -251,7 +251,7 @@ define <32 x float> @vec_add_v32f32(<32 x float> %a, <32 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <64 x float> @vec_add_v64f32(<64 x float> %a, <64 x float> %b) {
+define fastcc <64 x float> @vec_add_v64f32(<64 x float> %a, <64 x float> %b) {
 ; CHECK-LABEL: vec_add_v64f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 64
@@ -263,7 +263,7 @@ define <64 x float> @vec_add_v64f32(<64 x float> %a, <64 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <128 x float> @vec_add_v128f32(<128 x float> %a, <128 x float> %b) {
+define fastcc <128 x float> @vec_add_v128f32(<128 x float> %a, <128 x float> %b) {
 ; CHECK-LABEL: vec_add_v128f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
@@ -275,7 +275,7 @@ define <128 x float> @vec_add_v128f32(<128 x float> %a, <128 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <253 x float> @vec_add_v253f32(<253 x float> %a, <253 x float> %b) {
+define fastcc <253 x float> @vec_add_v253f32(<253 x float> %a, <253 x float> %b) {
 ; CHECK-LABEL: vec_add_v253f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 253
@@ -287,7 +287,7 @@ define <253 x float> @vec_add_v253f32(<253 x float> %a, <253 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <256 x float> @vec_add_v256f32(<256 x float> %a, <256 x float> %b) {
+define fastcc <256 x float> @vec_add_v256f32(<256 x float> %a, <256 x float> %b) {
 ; CHECK-LABEL: vec_add_v256f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -299,7 +299,7 @@ define <256 x float> @vec_add_v256f32(<256 x float> %a, <256 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <512 x float> @vec_add_v512f32(<512 x float> %a, <512 x float> %b) {
+define fastcc <512 x float> @vec_add_v512f32(<512 x float> %a, <512 x float> %b) {
 ; CHECK-LABEL: vec_add_v512f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -312,7 +312,7 @@ define <512 x float> @vec_add_v512f32(<512 x float> %a, <512 x float> %b) {
 }
 
 ; Function Attrs: nounwind
-define <1024 x float> @vec_add_v1024f32(<1024 x float> %a, <1024 x float> %b) {
+define fastcc <1024 x float> @vec_add_v1024f32(<1024 x float> %a, <1024 x float> %b) {
 ; CHECK-LABEL: vec_add_v1024f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256

@@ -1,10 +1,10 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
 
 declare <256 x double> @llvm.ve.vl.vld.vssl(i64, i8*, i32)
 declare <256 x double> @llvm.ve.vl.vfaddd.vvvvl(<256 x double>, <256 x double>, <256 x double>, i32)
 
 ; Function Attrs: noinline nounwind readnone
-define <256 x double> @test(i8* %p) {
+define fastcc <256 x double> @test(i8* %p) {
 ; CHECK-LABEL: test:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 64

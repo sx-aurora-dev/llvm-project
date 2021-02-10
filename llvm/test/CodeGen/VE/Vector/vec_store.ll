@@ -1,7 +1,7 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed,+vpu | FileCheck %s
 
 ; Function Attrs: nounwind
-define void @vec_store_v1f64(<1 x double>* %P, <1 x double> %V) {
+define fastcc void @vec_store_v1f64(<1 x double>* %P, <1 x double> %V) {
 ; CHECK-LABEL: vec_store_v1f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    st %s1, (, %s0)
@@ -11,7 +11,7 @@ define void @vec_store_v1f64(<1 x double>* %P, <1 x double> %V) {
 }
 
 ; Function Attrs: nounwind
-define void @vec_store_v17f64(<17 x double>* %P, <17 x double> %V) {
+define fastcc void @vec_store_v17f64(<17 x double>* %P, <17 x double> %V) {
 ; CHECK-LABEL: vec_store_v17f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 17, (0)1
@@ -26,7 +26,7 @@ declare void @llvm.masked.store.v256f64.p0v256f64(<256 x double>, <256 x double>
 declare void @llvm.masked.store.v128f64.p0v128f64(<128 x double>, <128 x double>*, i32 immarg, <128 x i1>)
 
 ; Function Attrs: nounwind
-define void @vec_mstore_v128f64(<128 x double>* %P, <128 x double> %V, <128 x i1> %M) {
+define fastcc void @vec_mstore_v128f64(<128 x double>* %P, <128 x double> %V, <128 x i1> %M) {
 ; CHECK-LABEL: vec_mstore_v128f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
@@ -37,7 +37,7 @@ define void @vec_mstore_v128f64(<128 x double>* %P, <128 x double> %V, <128 x i1
   ret void
 }
 
-define void @vec_mstore_v256f64(<256 x double>* %P, <256 x double> %V, <256 x i1> %M) {
+define fastcc void @vec_mstore_v256f64(<256 x double>* %P, <256 x double> %V, <256 x i1> %M) {
 ; CHECK-LABEL: vec_mstore_v256f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -51,7 +51,7 @@ define void @vec_mstore_v256f64(<256 x double>* %P, <256 x double> %V, <256 x i1
 declare void @llvm.masked.scatter.v256f64.v256p0f64(<256 x double>, <256 x double*>, i32 immarg, <256 x i1>)
 declare void @llvm.masked.scatter.v128f64.v128p0f64(<128 x double>, <128 x double*>, i32 immarg, <128 x i1>)
 
-define void @vec_scatter_v128f64(<128 x double*> %P, <128 x double> %V, <128 x i1> %M) {
+define fastcc void @vec_scatter_v128f64(<128 x double*> %P, <128 x double> %V, <128 x i1> %M) {
 ; CHECK-LABEL: vec_scatter_v128f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
@@ -62,7 +62,7 @@ define void @vec_scatter_v128f64(<128 x double*> %P, <128 x double> %V, <128 x i
   ret void
 }
 
-define void @vec_scatter_v256f64(<256 x double*> %P, <256 x double> %V, <256 x i1> %M) {
+define fastcc void @vec_scatter_v256f64(<256 x double*> %P, <256 x double> %V, <256 x i1> %M) {
 ; CHECK-LABEL: vec_scatter_v256f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256

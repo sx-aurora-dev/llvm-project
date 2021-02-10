@@ -1,6 +1,6 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-packed,+vpu | FileCheck %s
 
-define <1 x i1> @vec_trunc_v1_i32_to_i1(<1 x i32> %a) {
+define fastcc <1 x i1> @vec_trunc_v1_i32_to_i1(<1 x i32> %a) {
 ; CHECK-LABEL: vec_trunc_v1_i32_to_i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -8,7 +8,7 @@ define <1 x i1> @vec_trunc_v1_i32_to_i1(<1 x i32> %a) {
   ret <1 x i1> %r
 }
 
-define <1 x i1> @vec_trunc_v1_i64_to_i1(<1 x i64> %a) {
+define fastcc <1 x i1> @vec_trunc_v1_i64_to_i1(<1 x i64> %a) {
 ; CHECK-LABEL: vec_trunc_v1_i64_to_i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -16,7 +16,7 @@ define <1 x i1> @vec_trunc_v1_i64_to_i1(<1 x i64> %a) {
   ret <1 x i1> %r
 }
 
-define <256 x i32> @vec_trunc_v256_i64_to_i32(<256 x i64> %a) {
+define fastcc <256 x i32> @vec_trunc_v256_i64_to_i32(<256 x i64> %a) {
 ; CHECK-LABEL: vec_trunc_v256_i64_to_i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -24,7 +24,7 @@ define <256 x i32> @vec_trunc_v256_i64_to_i32(<256 x i64> %a) {
   ret <256 x i32> %r
 }
 
-define <256 x i1> @vec_trunc_v256_i32_to_i1(<256 x i32> %a) {
+define fastcc <256 x i1> @vec_trunc_v256_i32_to_i1(<256 x i32> %a) {
 ; CHECK-LABEL: vec_trunc_v256_i32_to_i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 1, (0)1
@@ -37,7 +37,7 @@ define <256 x i1> @vec_trunc_v256_i32_to_i1(<256 x i32> %a) {
   ret <256 x i1> %r
 }
 
-define <256 x i1> @vec_trunc_v256_i64_to_i1(<256 x i64> %a) {
+define fastcc <256 x i1> @vec_trunc_v256_i64_to_i1(<256 x i64> %a) {
 ; CHECK-LABEL: vec_trunc_v256_i64_to_i1:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 1, (0)1

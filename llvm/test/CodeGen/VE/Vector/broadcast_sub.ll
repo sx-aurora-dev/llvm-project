@@ -1,7 +1,7 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <512 x i32> @subbrdv512i32(<512 x i32>, i32) {
+define fastcc <512 x i32> @subbrdv512i32(<512 x i32>, i32) {
 ; CHECK-LABEL: subbrdv512i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -16,7 +16,7 @@ define x86_regcallcc <512 x i32> @subbrdv512i32(<512 x i32>, i32) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <512 x float> @subbrdv512f32(<512 x float>, float) {
+define fastcc <512 x float> @subbrdv512f32(<512 x float>, float) {
 ; CHECK-LABEL: subbrdv512f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -31,7 +31,7 @@ define x86_regcallcc <512 x float> @subbrdv512f32(<512 x float>, float) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <256 x i64> @subbrdv256i64(<256 x i64>, i64) {
+define fastcc <256 x i64> @subbrdv256i64(<256 x i64>, i64) {
 ; CHECK-LABEL: subbrdv256i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -45,7 +45,7 @@ define x86_regcallcc <256 x i64> @subbrdv256i64(<256 x i64>, i64) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <256 x i32> @subbrdv256i32(<256 x i32>, i32) {
+define fastcc <256 x i32> @subbrdv256i32(<256 x i32>, i32) {
 ; CHECK-LABEL: subbrdv256i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -59,7 +59,7 @@ define x86_regcallcc <256 x i32> @subbrdv256i32(<256 x i32>, i32) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <256 x double> @subbrdv256f64(<256 x double>, double) {
+define fastcc <256 x double> @subbrdv256f64(<256 x double>, double) {
 ; CHECK-LABEL: subbrdv256f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -73,7 +73,7 @@ define x86_regcallcc <256 x double> @subbrdv256f64(<256 x double>, double) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <256 x float> @subbrdv256f32(<256 x float>, float) {
+define fastcc <256 x float> @subbrdv256f32(<256 x float>, float) {
 ; CHECK-LABEL: subbrdv256f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
@@ -87,7 +87,7 @@ define x86_regcallcc <256 x float> @subbrdv256f32(<256 x float>, float) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <128 x i64> @subbrdv128i64(<128 x i64>, i64) {
+define fastcc <128 x i64> @subbrdv128i64(<128 x i64>, i64) {
 ; CHECK-LABEL: subbrdv128i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
@@ -101,7 +101,7 @@ define x86_regcallcc <128 x i64> @subbrdv128i64(<128 x i64>, i64) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <64 x i64> @subbrdv64i64(<64 x i64>, i64) {
+define fastcc <64 x i64> @subbrdv64i64(<64 x i64>, i64) {
 ; CHECK-LABEL: subbrdv64i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 64
@@ -115,7 +115,7 @@ define x86_regcallcc <64 x i64> @subbrdv64i64(<64 x i64>, i64) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <32 x i64> @subbrdv32i64(<32 x i64>, i64) {
+define fastcc <32 x i64> @subbrdv32i64(<32 x i64>, i64) {
 ; CHECK-LABEL: subbrdv32i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 32, (0)1
@@ -129,7 +129,7 @@ define x86_regcallcc <32 x i64> @subbrdv32i64(<32 x i64>, i64) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <16 x i64> @subbrdv16i64(<16 x i64>, i64) {
+define fastcc <16 x i64> @subbrdv16i64(<16 x i64>, i64) {
 ; CHECK-LABEL: subbrdv16i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 16, (0)1
@@ -143,7 +143,7 @@ define x86_regcallcc <16 x i64> @subbrdv16i64(<16 x i64>, i64) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <8 x i64> @subbrdv8i64(<8 x i64>, i64) {
+define fastcc <8 x i64> @subbrdv8i64(<8 x i64>, i64) {
 ; CHECK-LABEL: subbrdv8i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 8, (0)1
@@ -157,7 +157,7 @@ define x86_regcallcc <8 x i64> @subbrdv8i64(<8 x i64>, i64) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <4 x i64> @subbrdv4i64(<4 x i64>, i64) {
+define fastcc <4 x i64> @subbrdv4i64(<4 x i64>, i64) {
 ; CHECK-LABEL: subbrdv4i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 4, (0)1
@@ -171,7 +171,7 @@ define x86_regcallcc <4 x i64> @subbrdv4i64(<4 x i64>, i64) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <2 x i64> @subbrdv2i64(<2 x i64>, i64) {
+define fastcc <2 x i64> @subbrdv2i64(<2 x i64>, i64) {
 ; CHECK-LABEL: subbrdv2i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 2, (0)1
@@ -185,7 +185,7 @@ define x86_regcallcc <2 x i64> @subbrdv2i64(<2 x i64>, i64) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <128 x double> @subbrdv128f64(<128 x double>, double) {
+define fastcc <128 x double> @subbrdv128f64(<128 x double>, double) {
 ; CHECK-LABEL: subbrdv128f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 128
@@ -199,7 +199,7 @@ define x86_regcallcc <128 x double> @subbrdv128f64(<128 x double>, double) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <64 x double> @subbrdv64f64(<64 x double>, double) {
+define fastcc <64 x double> @subbrdv64f64(<64 x double>, double) {
 ; CHECK-LABEL: subbrdv64f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 64
@@ -213,7 +213,7 @@ define x86_regcallcc <64 x double> @subbrdv64f64(<64 x double>, double) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <32 x double> @subbrdv32f64(<32 x double>, double) {
+define fastcc <32 x double> @subbrdv32f64(<32 x double>, double) {
 ; CHECK-LABEL: subbrdv32f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 32, (0)1
@@ -227,7 +227,7 @@ define x86_regcallcc <32 x double> @subbrdv32f64(<32 x double>, double) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <16 x double> @subbrdv16f64(<16 x double>, double) {
+define fastcc <16 x double> @subbrdv16f64(<16 x double>, double) {
 ; CHECK-LABEL: subbrdv16f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 16, (0)1
@@ -241,7 +241,7 @@ define x86_regcallcc <16 x double> @subbrdv16f64(<16 x double>, double) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <8 x double> @subbrdv8f64(<8 x double>, double) {
+define fastcc <8 x double> @subbrdv8f64(<8 x double>, double) {
 ; CHECK-LABEL: subbrdv8f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 8, (0)1
@@ -255,7 +255,7 @@ define x86_regcallcc <8 x double> @subbrdv8f64(<8 x double>, double) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <4 x double> @subbrdv4f64(<4 x double>, double) {
+define fastcc <4 x double> @subbrdv4f64(<4 x double>, double) {
 ; CHECK-LABEL: subbrdv4f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 4, (0)1
@@ -269,7 +269,7 @@ define x86_regcallcc <4 x double> @subbrdv4f64(<4 x double>, double) {
 }
 
 ; Function Attrs: norecurse nounwind readonly
-define x86_regcallcc <2 x double> @subbrdv2f64(<2 x double>, double) {
+define fastcc <2 x double> @subbrdv2f64(<2 x double>, double) {
 ; CHECK-LABEL: subbrdv2f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s1, 2, (0)1

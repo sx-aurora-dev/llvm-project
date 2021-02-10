@@ -1,7 +1,7 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
 
 ; Function Attrs: noinline nounwind optnone
-define <256 x i1> @_Z4funcv() {
+define fastcc <256 x i1> @_Z4funcv() {
 ; CHECK-LABEL: _Z4funcv:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    xorm %vm1, %vm0, %vm0
