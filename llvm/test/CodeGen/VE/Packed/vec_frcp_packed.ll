@@ -74,7 +74,7 @@ define fastcc <512 x float> @vec_no_frcp_v512f64(<512 x float> %x) {
 ; CHECK-NEXT:    lea.sl %s1, 1065353216
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vfdiv.s %v1, %s1, %v0
-; CHECK-NEXT:    vshf %v0, %v0, %v0, 15
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    vfdiv.s %v0, %s1, %v0
 ; CHECK-NEXT:    vshf %v0, %v0, %v1, 8
 ; CHECK-NEXT:    b.l.t (, %s10)
