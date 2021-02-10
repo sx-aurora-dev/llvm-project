@@ -59,7 +59,7 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
 
   // Defaults.
   bool EnableVPU = true;
-  bool EnablePacked = false;
+  bool EnablePacked = true;
 
   // Whether to enable v256 VPU registers and isel.
   if (auto *A = Args.getLastArg(options::OPT_mvevpu, options::OPT_mno_vevpu)) {
@@ -70,8 +70,8 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   // Whether to enable v512 VPU registers and isel.
   if (auto *A =
           Args.getLastArg(options::OPT_mvepacked, options::OPT_mno_vepacked)) {
-    if (A->getOption().matches(options::OPT_mvepacked))
-      EnablePacked = true;
+    if (A->getOption().matches(options::OPT_mno_vepacked))
+      EnablePacked = false;
   }
 
   if (EnableVPU)
