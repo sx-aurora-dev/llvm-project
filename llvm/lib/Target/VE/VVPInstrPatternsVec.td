@@ -345,10 +345,6 @@ multiclass Set_CC<ValueType MaskVT, ValueType DataVT, string FmkBaseName, string
 multiclass Set_CC_256<ValueType DataVT, string FmkBaseName, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv>
   : Set_CC<v256i1, DataVT, FmkBaseName, CmpBaseName, CCMatcher, CCConv, "m">;
 
-// TODO: requires packing
-// multiclass Set_CC_512<ValueType DataVT, string CmpBaseName, SDPatternOperator CCMatcher, SDPatternOperator CCConv>
-//   : Set_CC<v512i1, DataVT, "VFMKW", CmpBaseName, CCMatcher, CCConv, "m">;
-
 // SETCC (256)
 defm : Set_CC_256<v256i64,"VFMKL","VCMPUL",CCUIOp,icond2cc>;
 defm : Set_CC_256<v256i64,"VFMKL","VCMPSL",CCSIOp,icond2cc>;
@@ -357,11 +353,6 @@ defm : Set_CC_256<v256f64,"VFMKL","VFCMPD",cond,fcond2cc>;
 defm : Set_CC_256<v256i32,"VFMKW","VCMPUW",CCUIOp,icond2cc>;
 defm : Set_CC_256<v256i32,"VFMKW","VCMPSWZX",CCSIOp,icond2cc>;
 defm : Set_CC_256<v256f32,"VFMKS","VFCMPS",cond,fcond2cc>;
-
-// SETCC (packed) // FIXME
-// defm : Set_CC_512<v512i32,"PVCMPU",CCUIOp,icond2cc>;
-// defm : Set_CC_512<v512i32,"PVCMPS",CCSIOp,icond2cc>;
-// defm : Set_CC_512<v512f32,"PVFCMP",cond,fcond2cc>;
 
 ///// Conversion /////
 
