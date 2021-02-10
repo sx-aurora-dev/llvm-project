@@ -228,7 +228,7 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
     const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(MOI->getReg());
     assert(!MOI->getSubReg() && "Physical subreg still around.");
 
-    unsigned Offset = 0;
+    Optional<unsigned> Offset = 0;
     unsigned DwarfRegNum = getDwarfRegNum(MOI->getReg(), TRI);
     unsigned LLVMRegNum = *TRI->getLLVMRegNum(DwarfRegNum, false);
     unsigned SubRegIdx = TRI->getSubRegIndex(LLVMRegNum, MOI->getReg());
@@ -236,7 +236,7 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
       Offset = TRI->getSubRegIdxOffset(SubRegIdx);
 
     Locs.emplace_back(Location::Register, TRI->getSpillSize(*RC),
-                      DwarfRegNum, Offset);
+                      DwarfRegNum, Offset.getValueOr(-1));
     return ++MOI;
   }
 
