@@ -248,7 +248,7 @@ static SDValue getStoredValue(SDValue Op) {
 
 static SDValue getSplitPtrOffset(SDValue Ptr, SDValue ByteStride, PackElem Part,
                                  CustomDAG &CDAG) {
- // High starts at base ptr but has more significant bits in the 64bit vector
+  // High starts at base ptr but has more significant bits in the 64bit vector
   // element.
   if (Part == PackElem::Hi)
     return Ptr;
@@ -1076,6 +1076,13 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
   auto MaskPos = getMaskPos(Op.getOpcode());
   CustomDAG CDAG(*this, DAG, dl);
 
+  // Identify AVL
+  SDValue AVL = getNodeAVL(Op);
+  assert(AVL);
+
+  std::vector<SDValue> Created;
+
+  bool PackLegalized = isPackLegalizedInternalNode(Op.getNode());
   for (int i = 0; i < (int)Op->getNumOperands(); ++i) {
     // check whether this is an v256i1 SETCC
     auto Operand = Op->getOperand(i);
@@ -1099,13 +1106,20 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
 
     // materialize an integer expansion
     // vselect (MaskReplacement, VEC_BROADCAST(1), VEC_BROADCAST(0))
-    auto ConstZero = DAG.getConstant(0, dl, ElemTy);
-    auto ZeroBroadcast = CDAG.createBroadcast(Ty, ConstZero);
+    auto ConstZero = CDAG.getConstant(0, ElemTy);
+    auto ZeroBroadcast = CDAG.createBroadcast(Ty, ConstZero, AVL);
+    if (!PackLegalized)
+      Created.push_back(ZeroBroadcast);
 
-    auto ConstOne = DAG.getConstant(1, dl, ElemTy);
-    auto OneBroadcast = CDAG.createBroadcast(Ty, ConstOne);
+    auto ConstOne = CDAG.getConstant(1, ElemTy);
+    auto OneBroadcast = CDAG.createBroadcast(Ty, ConstOne, AVL);
+    if (!PackLegalized)
+      Created.push_back(OneBroadcast);
 
-    auto Expanded = DAG.getSelect(dl, Ty, Operand, OneBroadcast, ZeroBroadcast);
+    auto Expanded =
+        CDAG.createSelect(Ty, OneBroadcast, ZeroBroadcast, Operand, AVL);
+    if (!PackLegalized)
+      Created.push_back(Expanded);
     FixedOperandList.push_back(Expanded);
     NeededExpansion = true;
   }
@@ -1113,9 +1127,12 @@ VETargetLowering::lowerSETCCInVectorArithmetic(SDValue Op,
   if (!NeededExpansion)
     return Op;
 
-  // re-materialize the operator
-  return DAG.getNode(Op.getOpcode(), dl, Op.getSimpleValueType(),
-                     FixedOperandList);
+  // Re-materialize the operator.
+  auto Ret =
+      CDAG.getLegalOpVVP(Op.getOpcode(), Op.getValueType(), FixedOperandList);
+  for (SDValue V : Created)
+    addPackLegalizedNode(V.getNode());
+  return Ret;
 }
 
 SDValue
