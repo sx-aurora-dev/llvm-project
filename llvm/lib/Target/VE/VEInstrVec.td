@@ -15,6 +15,9 @@ let mayLoad = 1, hasSideEffects = 0 in {
 def LDVRrii : Pseudo<
     (outs V64:$vx), (ins MEMrii:$addr, I32:$vl),
     "# pseudo ldvr $vx, $addr, $vl", []>;
+def LDVPrii : Pseudo<
+    (outs VP:$vx), (ins MEMrii:$addr, I32:$vl),
+    "# pseudo ldvr $vx, $addr, $vl", []>;
 def LDVMrii : Pseudo<
     (outs VM:$vmx), (ins MEMrii:$addr),
     "# pseudo ldvm $vmx, $addr", []>;
@@ -26,6 +29,9 @@ let mayStore = 1, hasSideEffects = 0 in {
 def STVRrii : Pseudo<
     (outs), (ins MEMrii:$addr, V64:$vx, I32:$vl),
     "# pseudo stvr $addr, $vx, $vl", []>;
+def STVPrii : Pseudo<
+    (outs), (ins MEMrii:$addr, VP:$vx, I32:$vl),
+    "# pseudo stvp $addr, $vx, $vl", []>;
 def STVMrii : Pseudo<
     (outs), (ins MEMrii:$addr, VM:$vmx),
     "# pseudo stvm $addr, $vmx", []>;

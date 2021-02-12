@@ -517,6 +517,7 @@ struct CustomDAG {
   SDValue getZExtInReg(SDValue Op, EVT) const;
 
   raw_ostream &print(raw_ostream &, SDValue) const;
+  void dump(SDValue) const;
 };
 
 } // namespace llvm

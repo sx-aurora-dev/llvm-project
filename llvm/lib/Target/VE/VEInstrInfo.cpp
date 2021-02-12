@@ -485,6 +485,7 @@ unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
       MI.getOpcode() == VE::STUrii ||           // F32
       MI.getOpcode() == VE::STQrii ||           // F128 (pseudo)
       MI.getOpcode() == VE::STVRrii ||          // V64 (pseudo)
+      MI.getOpcode() == VE::STVPrii ||          // VP (pseudo)
       MI.getOpcode() == VE::STVMrii ||          // VM (pseudo)
       MI.getOpcode() == VE::STVM512rii          // VM512 (pseudo)
   ) {
@@ -510,6 +511,8 @@ void VEInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - V64\n";
+    } if (RC == &VE::VPRegClass) {
+      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VP\n";
     } else if (RC == &VE::VMRegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
@@ -560,6 +563,14 @@ void VEInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
         .addReg(SrcReg, getKillRegState(isKill))
         .addImm(256)
         .addMemOperand(MMO);
+  } else if (RC == &VE::VPRegClass) {
+    BuildMI(MBB, I, DL, get(VE::STVPrii))
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(isKill))
+        .addImm(256)
+        .addMemOperand(MMO);
   } else if (RC == &VE::VMRegClass) {
     BuildMI(MBB, I, DL, get(VE::STVMrii))
         .addFrameIndex(FI)
@@ -590,6 +601,8 @@ void VEInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - V64\n";
+    } else if (RC == &VE::VPRegClass) {
+      dbgs() << "restore " << printReg(DestReg, TRI) << " - VP\n";
     } else if (RC == &VE::VMRegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
@@ -629,6 +642,13 @@ void VEInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
         .addMemOperand(MMO);
   } else if (RC == &VE::V64RegClass) {
     BuildMI(MBB, I, DL, get(VE::LDVRrii), DestReg)
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addImm(0)
+        .addImm(256)
+        .addMemOperand(MMO);
+  } else if (RC == &VE::VPRegClass) {
+    BuildMI(MBB, I, DL, get(VE::LDVPrii), DestReg)
         .addFrameIndex(FI)
         .addImm(0)
         .addImm(0)

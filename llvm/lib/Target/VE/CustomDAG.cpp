@@ -248,6 +248,12 @@ Optional<int> getAVLPos(unsigned Opc) {
     return 3;
   }
 
+  // VM Opcodes.
+  switch (Opc) {
+  case VEISD::VM_POPCOUNT:
+    return 1;
+  }
+
   // VVP Opcodes.
   if (isVVP(Opc)) {
     auto MaskOpt = getMaskPos(Opc);
@@ -287,6 +293,15 @@ Optional<int> getMaskPos(unsigned Opc) {
     return 4;
   case ISD::MLOAD:
     return 3;
+  }
+
+  // VM_* opcodes.
+  switch (Opc) {
+  case VEISD::VM_POPCOUNT:
+    return 0;
+  case VEISD::VM_INSERT:
+  case VEISD::VM_EXTRACT:
+    return 0;
   }
 
   // VEC_* opcodes.
@@ -945,8 +960,10 @@ SDValue CustomDAG::createMaskCast(SDValue VectorV, SDValue AVL) const {
 
   if (isPackedType(VectorV.getValueType())) {
     auto ValVT = VectorV.getValueType();
-    auto LoPart = createUnpack(splitVectorType(ValVT), VectorV, PackElem::Lo, AVL);
-    auto HiPart = createUnpack(splitVectorType(ValVT), VectorV, PackElem::Hi, AVL);
+    auto LoPart =
+        createUnpack(splitVectorType(ValVT), VectorV, PackElem::Lo, AVL);
+    auto HiPart =
+        createUnpack(splitVectorType(ValVT), VectorV, PackElem::Hi, AVL);
     auto LoMask = createMaskCast(LoPart, AVL);
     auto HiMask = createMaskCast(HiPart, AVL);
     const auto PackedMaskVT = MVT::v512i1;
@@ -1231,6 +1248,8 @@ SDValue CustomDAG::createBitReverse(SDValue ScalarReg) const {
   assert(ScalarReg.getValueType() == MVT::i64);
   return getNode(ISD::BITREVERSE, MVT::i64, ScalarReg);
 }
+
+void CustomDAG::dump(SDValue V) const { print(errs(), V); }
 
 raw_ostream &CustomDAG::print(raw_ostream &Out, SDValue V) const {
   V->print(Out, &DAG);

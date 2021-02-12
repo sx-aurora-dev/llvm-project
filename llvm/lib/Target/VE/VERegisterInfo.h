@@ -18,6 +18,8 @@
 #define GET_REGINFO_HEADER
 #include "VEGenRegisterInfo.inc"
 
+struct MIBuilder;
+
 namespace llvm {
 struct VERegisterInfo : public VEGenRegisterInfo {
   VERegisterInfo();
@@ -52,6 +54,22 @@ struct VERegisterInfo : public VEGenRegisterInfo {
                         const VirtRegMap *VRM = nullptr,
                         const LiveRegMatrix *Matrix = nullptr) const override;
 
+private:
+  void eliminateFrameIndex_VM512(MachineInstr &MI, MIBuilder &MIB,
+                                 Register FrameReg, int Offset,
+                                 int FIOperandNum) const;
+  void eliminateFrameIndex_VM(MachineInstr &MI, MIBuilder &MIB,
+                              Register FrameReg, int Offset,
+                              int FIOperandNum) const;
+  void eliminateFrameIndex_Q(MachineInstr &MI, MIBuilder &MIB,
+                             Register FrameReg, int Offset,
+                             int FIOperandNum) const;
+  void eliminateFrameIndex_V64(MachineInstr &MI, MIBuilder &MIB,
+                               Register FrameReg, int Offset,
+                               int FIOperandNum) const;
+  void eliminateFrameIndex_VP(MachineInstr &MI, MIBuilder &MIB,
+                              Register FrameReg, int Offset,
+                              int FIOperandNum) const;
 };
 
 } // namespace llvm
