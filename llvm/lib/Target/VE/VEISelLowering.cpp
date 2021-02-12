@@ -56,7 +56,7 @@ static cl::opt<bool> SplitCallRegs(
 CCAssignFn *getReturnCC(CallingConv::ID CallConv) {
   switch (CallConv) {
   default:
-    return RetCC_VE_Fast; // hpce/develop default
+    return RetCC_VE_C;
   case CallingConv::Fast:
     return RetCC_VE_Fast;
   }
@@ -67,7 +67,7 @@ CCAssignFn *getParamCC(CallingConv::ID CallConv, bool IsVarArg) {
     return CC_VE2;
   switch (CallConv) {
   default:
-    return CC_VE_Fast; // hpce/develop default
+    return CC_VE_C;
   case CallingConv::Fast:
     return CC_VE_Fast;
   }
