@@ -2,7 +2,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+packed | FileCheck %s
 
 ;; 256 elements
-define <256 x i64> @vec_fptosi_v256f64_v256i64(<256 x double> %x) {
+define fastcc <256 x i64> @vec_fptosi_v256f64_v256i64(<256 x double> %x) {
 ; CHECK-LABEL: vec_fptosi_v256f64_v256i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -13,7 +13,7 @@ define <256 x i64> @vec_fptosi_v256f64_v256i64(<256 x double> %x) {
   ret <256 x i64> %r
 }
 
-define <256 x i64> @vec_fptoui_v256f64_v256i64(<256 x double> %x) {
+define fastcc <256 x i64> @vec_fptoui_v256f64_v256i64(<256 x double> %x) {
 ; CHECK-LABEL: vec_fptoui_v256f64_v256i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -35,7 +35,7 @@ define <256 x i64> @vec_fptoui_v256f64_v256i64(<256 x double> %x) {
   ret <256 x i64> %r
 }
 
-define <256 x i32> @vec_fptosi_v256f32_v256i32(<256 x float> %x) {
+define fastcc <256 x i32> @vec_fptosi_v256f32_v256i32(<256 x float> %x) {
 ; CHECK-LABEL: vec_fptosi_v256f32_v256i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -46,7 +46,7 @@ define <256 x i32> @vec_fptosi_v256f32_v256i32(<256 x float> %x) {
   ret <256 x i32> %r
 }
 
-define <256 x i32> @vec_fptoui_v256f32_v256i32(<256 x float> %x) {
+define fastcc <256 x i32> @vec_fptoui_v256f32_v256i32(<256 x float> %x) {
 ; CHECK-LABEL: vec_fptoui_v256f32_v256i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -62,7 +62,7 @@ define <256 x i32> @vec_fptoui_v256f32_v256i32(<256 x float> %x) {
 
 ;; 512 elements
 
-define <512 x i64> @vec_fptosi_v512f64_v512i64(<512 x double> %x) {
+define fastcc <512 x i64> @vec_fptosi_v512f64_v512i64(<512 x double> %x) {
 ; CHECK-LABEL: vec_fptosi_v512f64_v512i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -75,7 +75,7 @@ define <512 x i64> @vec_fptosi_v512f64_v512i64(<512 x double> %x) {
   ret <512 x i64> %r
 }
 
-define <512 x i64> @vec_fptoui_v512f64_v512i64(<512 x double> %x) {
+define fastcc <512 x i64> @vec_fptoui_v512f64_v512i64(<512 x double> %x) {
 ; CHECK-LABEL: vec_fptoui_v512f64_v512i64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -106,7 +106,7 @@ define <512 x i64> @vec_fptoui_v512f64_v512i64(<512 x double> %x) {
   ret <512 x i64> %r
 }
 
-define <512 x i32> @vec_fptosi_v512f32_v512i32(<512 x float> %x) {
+define fastcc <512 x i32> @vec_fptosi_v512f32_v512i32(<512 x float> %x) {
 ; CHECK-LABEL: vec_fptosi_v512f32_v512i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -117,7 +117,7 @@ define <512 x i32> @vec_fptosi_v512f32_v512i32(<512 x float> %x) {
   ret <512 x i32> %r
 }
 
-define <512 x i32> @vec_fptoui_v512f32_v512i32(<512 x float> %x) {
+define fastcc <512 x i32> @vec_fptoui_v512f32_v512i32(<512 x float> %x) {
 ; CHECK-LABEL: vec_fptoui_v512f32_v512i32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256

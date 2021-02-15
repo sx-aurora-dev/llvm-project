@@ -2,7 +2,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu,+packed | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readnone
-define <512 x i32> @d2ui(<512 x double> %a) {
+define fastcc <512 x i32> @d2ui(<512 x double> %a) {
 ; CHECK-LABEL: d2ui:
 ; CHECK:       # %bb.0: # %entry
 ; CHECK-NEXT:    lea %s0, 256

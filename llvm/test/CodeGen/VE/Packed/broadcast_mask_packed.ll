@@ -2,7 +2,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+packed | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readonly
-define <512 x i1> @brdv512i32x2(i1 %B) {
+define fastcc <512 x i1> @brdv512i32x2(i1 %B) {
 ; CHECK-LABEL: brdv512i32x2:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256

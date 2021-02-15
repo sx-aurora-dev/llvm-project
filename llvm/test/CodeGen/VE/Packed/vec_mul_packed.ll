@@ -2,7 +2,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+packed | FileCheck %s
 
 ; Function Attrs: nounwind
-define <1 x i64> @vec_mul_v1f64(<1 x i64> %a, <1 x i64> %b) {
+define fastcc <1 x i64> @vec_mul_v1f64(<1 x i64> %a, <1 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v1f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    muls.l %s0, %s0, %s1
@@ -12,7 +12,7 @@ define <1 x i64> @vec_mul_v1f64(<1 x i64> %a, <1 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <2 x i64> @vec_mul_v2f64(<2 x i64> %a, <2 x i64> %b) {
+define fastcc <2 x i64> @vec_mul_v2f64(<2 x i64> %a, <2 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v2f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 2, (0)1
@@ -24,7 +24,7 @@ define <2 x i64> @vec_mul_v2f64(<2 x i64> %a, <2 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <3 x i64> @vec_mul_v3f64(<3 x i64> %a, <3 x i64> %b) {
+define fastcc <3 x i64> @vec_mul_v3f64(<3 x i64> %a, <3 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v3f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lsv %v0(0), %s3
@@ -45,7 +45,7 @@ define <3 x i64> @vec_mul_v3f64(<3 x i64> %a, <3 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <4 x i64> @vec_mul_v4f64(<4 x i64> %a, <4 x i64> %b) {
+define fastcc <4 x i64> @vec_mul_v4f64(<4 x i64> %a, <4 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v4f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 4, (0)1
@@ -57,7 +57,7 @@ define <4 x i64> @vec_mul_v4f64(<4 x i64> %a, <4 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <8 x i64> @vec_mul_v8f64(<8 x i64> %a, <8 x i64> %b) {
+define fastcc <8 x i64> @vec_mul_v8f64(<8 x i64> %a, <8 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v8f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 8, (0)1
@@ -69,7 +69,7 @@ define <8 x i64> @vec_mul_v8f64(<8 x i64> %a, <8 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <16 x i64> @vec_mul_v16f64(<16 x i64> %a, <16 x i64> %b) {
+define fastcc <16 x i64> @vec_mul_v16f64(<16 x i64> %a, <16 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v16f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 16, (0)1
@@ -81,7 +81,7 @@ define <16 x i64> @vec_mul_v16f64(<16 x i64> %a, <16 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <32 x i64> @vec_mul_v32f64(<32 x i64> %a, <32 x i64> %b) {
+define fastcc <32 x i64> @vec_mul_v32f64(<32 x i64> %a, <32 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v32f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 32, (0)1
@@ -93,7 +93,7 @@ define <32 x i64> @vec_mul_v32f64(<32 x i64> %a, <32 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <64 x i64> @vec_mul_v64f64(<64 x i64> %a, <64 x i64> %b) {
+define fastcc <64 x i64> @vec_mul_v64f64(<64 x i64> %a, <64 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v64f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 64
@@ -105,7 +105,7 @@ define <64 x i64> @vec_mul_v64f64(<64 x i64> %a, <64 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <128 x i64> @vec_mul_v128f64(<128 x i64> %a, <128 x i64> %b) {
+define fastcc <128 x i64> @vec_mul_v128f64(<128 x i64> %a, <128 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v128f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
@@ -117,7 +117,7 @@ define <128 x i64> @vec_mul_v128f64(<128 x i64> %a, <128 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <253 x i64> @vec_mul_v253f64(<253 x i64> %a, <253 x i64> %b) {
+define fastcc <253 x i64> @vec_mul_v253f64(<253 x i64> %a, <253 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v253f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 253
@@ -129,7 +129,7 @@ define <253 x i64> @vec_mul_v253f64(<253 x i64> %a, <253 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <256 x i64> @vec_mul_v256f64(<256 x i64> %a, <256 x i64> %b) {
+define fastcc <256 x i64> @vec_mul_v256f64(<256 x i64> %a, <256 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v256f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -141,7 +141,7 @@ define <256 x i64> @vec_mul_v256f64(<256 x i64> %a, <256 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <512 x i64> @vec_mul_v512f64(<512 x i64> %a, <512 x i64> %b) {
+define fastcc <512 x i64> @vec_mul_v512f64(<512 x i64> %a, <512 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v512f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -155,7 +155,7 @@ define <512 x i64> @vec_mul_v512f64(<512 x i64> %a, <512 x i64> %b) {
 }
 
 ; Function Attrs: nounwind
-define <1024 x i64> @vec_mul_v1024f64(<1024 x i64> %a, <1024 x i64> %b) {
+define fastcc <1024 x i64> @vec_mul_v1024f64(<1024 x i64> %a, <1024 x i64> %b) {
 ; CHECK-LABEL: vec_mul_v1024f64:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -173,7 +173,7 @@ define <1024 x i64> @vec_mul_v1024f64(<1024 x i64> %a, <1024 x i64> %b) {
 
 
 ; Function Attrs: nounwind
-define <1 x i32> @vec_mul_v1f32(<1 x i32> %a, <1 x i32> %b) {
+define fastcc <1 x i32> @vec_mul_v1f32(<1 x i32> %a, <1 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v1f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    muls.w.sx %s0, %s0, %s1
@@ -183,7 +183,7 @@ define <1 x i32> @vec_mul_v1f32(<1 x i32> %a, <1 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <2 x i32> @vec_mul_v2f32(<2 x i32> %a, <2 x i32> %b) {
+define fastcc <2 x i32> @vec_mul_v2f32(<2 x i32> %a, <2 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v2f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 2, (0)1
@@ -195,7 +195,7 @@ define <2 x i32> @vec_mul_v2f32(<2 x i32> %a, <2 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <3 x i32> @vec_mul_v3f32(<3 x i32> %a, <3 x i32> %b) {
+define fastcc <3 x i32> @vec_mul_v3f32(<3 x i32> %a, <3 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v3f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s4, %s4, (32)0
@@ -222,7 +222,7 @@ define <3 x i32> @vec_mul_v3f32(<3 x i32> %a, <3 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <4 x i32> @vec_mul_v4f32(<4 x i32> %a, <4 x i32> %b) {
+define fastcc <4 x i32> @vec_mul_v4f32(<4 x i32> %a, <4 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v4f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 4, (0)1
@@ -234,7 +234,7 @@ define <4 x i32> @vec_mul_v4f32(<4 x i32> %a, <4 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <8 x i32> @vec_mul_v8f32(<8 x i32> %a, <8 x i32> %b) {
+define fastcc <8 x i32> @vec_mul_v8f32(<8 x i32> %a, <8 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v8f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 8, (0)1
@@ -246,7 +246,7 @@ define <8 x i32> @vec_mul_v8f32(<8 x i32> %a, <8 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <16 x i32> @vec_mul_v16f32(<16 x i32> %a, <16 x i32> %b) {
+define fastcc <16 x i32> @vec_mul_v16f32(<16 x i32> %a, <16 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v16f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 16, (0)1
@@ -258,7 +258,7 @@ define <16 x i32> @vec_mul_v16f32(<16 x i32> %a, <16 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <32 x i32> @vec_mul_v32f32(<32 x i32> %a, <32 x i32> %b) {
+define fastcc <32 x i32> @vec_mul_v32f32(<32 x i32> %a, <32 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v32f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    or %s0, 32, (0)1
@@ -270,7 +270,7 @@ define <32 x i32> @vec_mul_v32f32(<32 x i32> %a, <32 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <64 x i32> @vec_mul_v64f32(<64 x i32> %a, <64 x i32> %b) {
+define fastcc <64 x i32> @vec_mul_v64f32(<64 x i32> %a, <64 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v64f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 64
@@ -282,7 +282,7 @@ define <64 x i32> @vec_mul_v64f32(<64 x i32> %a, <64 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <128 x i32> @vec_mul_v128f32(<128 x i32> %a, <128 x i32> %b) {
+define fastcc <128 x i32> @vec_mul_v128f32(<128 x i32> %a, <128 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v128f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 128
@@ -294,7 +294,7 @@ define <128 x i32> @vec_mul_v128f32(<128 x i32> %a, <128 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <253 x i32> @vec_mul_v253f32(<253 x i32> %a, <253 x i32> %b) {
+define fastcc <253 x i32> @vec_mul_v253f32(<253 x i32> %a, <253 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v253f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 253
@@ -306,7 +306,7 @@ define <253 x i32> @vec_mul_v253f32(<253 x i32> %a, <253 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <256 x i32> @vec_mul_v256f32(<256 x i32> %a, <256 x i32> %b) {
+define fastcc <256 x i32> @vec_mul_v256f32(<256 x i32> %a, <256 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v256f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -318,7 +318,7 @@ define <256 x i32> @vec_mul_v256f32(<256 x i32> %a, <256 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <512 x i32> @vec_mul_v512f32(<512 x i32> %a, <512 x i32> %b) {
+define fastcc <512 x i32> @vec_mul_v512f32(<512 x i32> %a, <512 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v512f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -334,7 +334,7 @@ define <512 x i32> @vec_mul_v512f32(<512 x i32> %a, <512 x i32> %b) {
 }
 
 ; Function Attrs: nounwind
-define <1024 x i32> @vec_mul_v1024f32(<1024 x i32> %a, <1024 x i32> %b) {
+define fastcc <1024 x i32> @vec_mul_v1024f32(<1024 x i32> %a, <1024 x i32> %b) {
 ; CHECK-LABEL: vec_mul_v1024f32:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256

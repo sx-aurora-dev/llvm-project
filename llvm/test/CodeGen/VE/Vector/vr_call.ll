@@ -14,9 +14,11 @@ define fastcc <256 x i32> @__regcall3__calc1(<256 x i32>, <256 x i32>) {
 define <256 x i32> @calc2(<256 x i32>, <256 x i32>) {
 ; CHECK-LABEL: calc2:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s16, 256
-; CHECK-NEXT:    lvl %s16
-; CHECK-NEXT:    vor %v0, (0)1, %v1
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lea %s2, 1264(, %s11)
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vldl.zx %v0, 4, %s2
+; CHECK-NEXT:    vstl %v0, 4, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   ret <256 x i32> %1
 }

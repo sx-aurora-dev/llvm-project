@@ -2,7 +2,7 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+packed | FileCheck %s
 
 ;; 256 elements
-define <256 x double> @vec_sitofp_v256f64_v256double(<256 x i64> %x) {
+define fastcc <256 x double> @vec_sitofp_v256f64_v256double(<256 x i64> %x) {
 ; CHECK-LABEL: vec_sitofp_v256f64_v256double:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -13,7 +13,7 @@ define <256 x double> @vec_sitofp_v256f64_v256double(<256 x i64> %x) {
   ret <256 x double> %r
 }
 
-define <256 x double> @vec_uitofp_v256f64_v256double(<256 x i64> %x) {
+define fastcc <256 x double> @vec_uitofp_v256f64_v256double(<256 x i64> %x) {
 ; CHECK-LABEL: vec_uitofp_v256f64_v256double:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -37,7 +37,7 @@ define <256 x double> @vec_uitofp_v256f64_v256double(<256 x i64> %x) {
   ret <256 x double> %r
 }
 
-define <256 x float> @vec_sitofp_v256f32_v256float(<256 x i32> %x) {
+define fastcc <256 x float> @vec_sitofp_v256f32_v256float(<256 x i32> %x) {
 ; CHECK-LABEL: vec_sitofp_v256f32_v256float:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -48,7 +48,7 @@ define <256 x float> @vec_sitofp_v256f32_v256float(<256 x i32> %x) {
   ret <256 x float> %r
 }
 
-define <256 x float> @vec_uitofp_v256f32_v256float(<256 x i32> %x) {
+define fastcc <256 x float> @vec_uitofp_v256f32_v256float(<256 x i32> %x) {
 ; CHECK-LABEL: vec_uitofp_v256f32_v256float:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -72,7 +72,7 @@ define <256 x float> @vec_uitofp_v256f32_v256float(<256 x i32> %x) {
 }
 
 ;; 512 elements
-define <512 x double> @vec_sitofp_v512f64_v512double(<512 x i64> %x) {
+define fastcc <512 x double> @vec_sitofp_v512f64_v512double(<512 x i64> %x) {
 ; CHECK-LABEL: vec_sitofp_v512f64_v512double:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -85,7 +85,7 @@ define <512 x double> @vec_sitofp_v512f64_v512double(<512 x i64> %x) {
   ret <512 x double> %r
 }
 
-define <512 x double> @vec_uitofp_v512f64_v512double(<512 x i64> %x) {
+define fastcc <512 x double> @vec_uitofp_v512f64_v512double(<512 x i64> %x) {
 ; CHECK-LABEL: vec_uitofp_v512f64_v512double:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -116,7 +116,7 @@ define <512 x double> @vec_uitofp_v512f64_v512double(<512 x i64> %x) {
   ret <512 x double> %r
 }
 
-define <512 x float> @vec_sitofp_v512f32_v512float(<512 x i32> %x) {
+define fastcc <512 x float> @vec_sitofp_v512f32_v512float(<512 x i32> %x) {
 ; CHECK-LABEL: vec_sitofp_v512f32_v512float:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
@@ -127,7 +127,7 @@ define <512 x float> @vec_sitofp_v512f32_v512float(<512 x i32> %x) {
   ret <512 x float> %r
 }
 
-define <512 x float> @vec_uitofp_v512f32_v512float(<512 x i32> %x) {
+define fastcc <512 x float> @vec_uitofp_v512f32_v512float(<512 x i32> %x) {
 ; CHECK-LABEL: vec_uitofp_v512f32_v512float:
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s0, 256
