@@ -3731,7 +3731,7 @@ def mno_vevpu : Flag<["-"], "mno-vevpu">, Group<m_ve_Features_Group>,
 def mvepacked : Flag<["-"], "mvepacked">, Group<m_ve_Features_Group>,
   HelpText<"Enable Packed mode for VE">,
   Flags<[CC1Option]>;
-def mno_vepacked : Flag<["-"], "mno-packed">, Group<m_ve_Features_Group>,
+def mno_vepacked : Flag<["-"], "mno-vepacked">, Group<m_ve_Features_Group>,
   HelpText<"Disable Packed mode for VE">,
   Flags<[CC1Option]>;
 
