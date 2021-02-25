@@ -231,8 +231,8 @@ def CSR : CalleeSavedRegs<(add (sequence "SX%u", 18, 33))>;
 def CSR_RegCall : CalleeSavedRegs<(add (sequence "SX%u", 18, 33),
                                        (sequence "V%u", 18, 33),
                                        (sequence "VP%u", 9, 16),
-                                       (sequence "VM%u", 8, 15),
-                                       (sequence "VMP%u", 4, 7))>;
+                                       (sequence "VM%u", 10, 15),
+                                       (sequence "VMP%u", 5, 7))>;
 def CSR_NoRegs : CalleeSavedRegs<(add)>;
 
 // vec_expf destroys s0, s1, s5, s6, s11, s61, s62, s63, v0-6, and vm6
