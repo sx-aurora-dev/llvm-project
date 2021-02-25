@@ -56,7 +56,7 @@ const MCPhysReg *
 VERegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
   switch (MF->getFunction().getCallingConv()) {
   case CallingConv::Fast:
-    // Being explicit (same as standard CC).
+    return CSR_RegCall_SaveList;
   default:
     return CSR_SaveList;
   case CallingConv::PreserveAll:
@@ -68,7 +68,6 @@ const uint32_t *VERegisterInfo::getCallPreservedMask(const MachineFunction &MF,
                                                      CallingConv::ID CC) const {
   switch (CC) {
   case CallingConv::Fast:
-    // Being explicit (same as standard CC).
     return CSR_RegCall_RegMask;
   default:
     // NCC default CC does not explictly mention vector (mask) regs - assume
