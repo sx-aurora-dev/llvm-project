@@ -19,10 +19,10 @@
 def: Pat<(i64 (repl_f32 f32:$val)),
             (ORrr
               (SRLri (f2l $val), 32),
-              (f2l $val))>;
+              (zero_i32 (f2l $val)))>;
 def: Pat<(i64 (repl_i32 i32:$val)),
             (ORrr
-              (i2l $val),
+              (zero_f32 (i2l $val)),
               (SLLri (i2l $val), 32))>;
 
 

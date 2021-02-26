@@ -1711,13 +1711,18 @@ def f2l : OutPatFrag<(ops node:$expr),
 def l2f : OutPatFrag<(ops node:$expr),
                      (EXTRACT_SUBREG $expr, sub_f32)>;
 
+def zero_i32 : OutPatFrag<(ops node:$expr),
+                          (ANDrm $expr, 32)>;
+def zero_f32 : OutPatFrag<(ops node:$expr),
+                          (ANDrm $expr, !add(32, 64))>;
+
 // Small immediates.
 def : Pat<(i32 simm7:$val), (l2i (ORim (LO7 $val), 0))>;
 def : Pat<(i64 simm7:$val), (ORim (LO7 $val), 0)>;
 // Medium immediates.
 def : Pat<(i32 simm32:$val), (l2i (LEAzii 0, 0, (LO32 $val)))>;
 def : Pat<(i64 simm32:$val), (LEAzii 0, 0, (LO32 $val))>;
-def : Pat<(i64 uimm32:$val), (ANDrm (LEAzii 0, 0, (LO32 $val)), !add(32, 64))>;
+def : Pat<(i64 uimm32:$val), (zero_f32 (LEAzii 0, 0, (LO32 $val)))>;
 // Arbitrary immediates.
 def : Pat<(i64 lozero:$val),
           (LEASLzii 0, 0, (HI32 imm:$val))>;
