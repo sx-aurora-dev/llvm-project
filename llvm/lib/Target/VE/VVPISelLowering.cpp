@@ -1731,6 +1731,8 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
     return splitLoadStore(Op, CDAG.DAG, VVPExpansionMode::ToNativeWidth);
 
   // Packed load/store require special treatment
+  // - The mask refers to packs of 2x32 elements
+  // - A VLD/VST for 64bits has a different byte order than 2x32bit op (32bit elements swapped).
   auto WidenInfo = pickResultType(CDAG, Op, VVPExpansionMode::ToNativeWidth);
   auto TargetMask = CDAG.createTargetMask(WidenInfo, Mask, AVL);
 
@@ -1741,14 +1743,22 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   SDValue PackPtr = getMemoryPtr(Op);
 
   // Be optimistic about loads.. (FIXME: implies OptimizeVectorMemory cl::opt).
-  if (Op->getOpcode() == VEISD::VVP_LOAD)
-    return CDAG.getVVPLoad(Op.getValueType(), Chain, PackPtr, DoubledStride,
-                           NormalMask, TargetMask.AVL);
+  if (Op->getOpcode() == VEISD::VVP_LOAD) {
+    SDValue LoadV = CDAG.getVVPLoad(Op.getValueType(), Chain, PackPtr, DoubledStride,
+                                    NormalMask, TargetMask.AVL);
+    addPackLegalizedNode(LoadV.getNode());
+
+    SDValue SwappedValue = CDAG.createSwap(LoadV.getValueType(), LoadV, TargetMask.AVL);
+    return CDAG.getMergeValues({SwappedValue, SDValue(LoadV.getNode(), 1)});
+  }
 
   SDValue PackedMask = getNodeMask(Op);
   SDValue PackedData = Op->getOperand(1);
+  SDValue SwappedData = CDAG.createSwap(PackedData.getValueType(), PackedData, TargetMask.AVL);
+  addPackLegalizedNode(SwappedData.getNode());
+
   assert(isAllTrueMask(PackedMask) && "TODO in-place expand masked VST");
-  return CDAG.getVVPStore(Chain, PackedData, PackPtr, DoubledStride, NormalMask,
+  return CDAG.getVVPStore(Chain, SwappedData, PackPtr, DoubledStride, NormalMask,
                           TargetMask.AVL);
 }
 
@@ -2420,7 +2430,7 @@ SDValue VETargetLowering::LowerOperation_VVP(SDValue Op,
     }
     SDValue LegalVecOp =
         legalizeInternalVectorOp(lowerSETCCInVectorArithmetic(Op, DAG), DAG);
-    LegalizedVectorNodes.insert(LegalVecOp.getNode());
+    addPackLegalizedNode(LegalVecOp.getNode());
     return LegalVecOp;
   }
 
