@@ -153,7 +153,7 @@ foreach I = 0-31 in
   def VP#I : VEVecReg<!shl(I,1), "vp"#I,
                       [!cast<VEVecReg>("V"#!shl(I,1)),
                        !cast<VEVecReg>("V"#!add(!shl(I,1),1))],
-                      ["vp"#!shl(I,1)]>;
+                      ["v"#!shl(I,1)]>;
 
 // Vector Index Register
 def VIX : VEVecReg<255, "vix", [], ["vix"]>;
