@@ -6,6 +6,7 @@ define fastcc void @test_vp_harness(<512 x i32>* %Out, <512 x i32> %i0) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   store <512 x i32> %i0, <512 x i32>* %Out
@@ -25,6 +26,7 @@ define fastcc void @test_vp_fadd_fsub_fmul_fneg_fma(<512 x float>* %Out, <512 x 
 ; CHECK-NEXT:    pvfmad %v0, %v2, %v0, %v1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <512 x float> @llvm.vp.fadd.v512f32(<512 x float> %f0, <512 x float> %f1, <512 x i1> %m, i32 %n)
@@ -53,6 +55,7 @@ define fastcc void @test_vp_fdiv(<512 x float>* %Out, <512 x float> %f0, <512 x 
 ; CHECK-NEXT:    vshf %v0, %v2, %v0, 8
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <512 x float> @llvm.vp.fdiv.v512f32(<512 x float> %f0, <512 x float> %f1, <512 x i1> %m, i32 %n)
@@ -80,7 +83,9 @@ define fastcc void @test_vp_fmin_fmax(<512 x float>* %O1, <512 x float>* %O2, <5
 ; CHECK-NEXT:    vshf %v0, %v2, %v0, 8
 ; CHECK-NEXT:    lea %s2, 256
 ; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vst %v4, 8, %s0
+; CHECK-NEXT:    vshf %v1, %v4, %v4, 4
+; CHECK-NEXT:    vst %v1, 8, %s0
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    vst %v0, 8, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   %r0 = call <512 x float> @llvm.vp.minnum.v512f32(<512 x float> %f0, <512 x float> %f1, <512 x i1> %m, i32 %n)

@@ -28,6 +28,7 @@ define fastcc <512 x i32> @loadv512i32(<512 x i32>* nocapture readonly) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = load <512 x i32>, <512 x i32>* %0, align 16
   ret <512 x i32> %2
@@ -58,6 +59,7 @@ define fastcc <512 x float> @loadv512f32(<512 x float>* nocapture readonly) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    b.l.t (, %s10)
   %2 = load <512 x float>, <512 x float>* %0, align 16
   ret <512 x float> %2

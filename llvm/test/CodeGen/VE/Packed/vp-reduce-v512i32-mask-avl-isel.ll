@@ -7,6 +7,7 @@ define fastcc void @test_vp_harness(<512 x i32>* %Out, <512 x i32> %i0) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    # kill: def $sw1 killed $sw1 killed $sx1
 ; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   store <512 x i32> %i0, <512 x i32>* %Out
@@ -529,6 +530,7 @@ define fastcc i32 @test_reduce_mul(<512 x i32> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    sll %s2, %s0, 32
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    pvbrd %v0, %s0
 ; CHECK-NEXT:    vmrg.w %v0, %v0, %v1, %vm2
@@ -6462,6 +6464,7 @@ define fastcc i32 @test_reduce_smin(<512 x i32> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    sll %s2, %s0, 32
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    pvbrd %v1, %s0
 ; CHECK-NEXT:    vmrg.w %v1, %v1, %v0, %vm2
@@ -12438,6 +12441,7 @@ define fastcc i32 @test_reduce_umin(<512 x i32> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s2
 ; CHECK-NEXT:    sll %s2, %s0, 32
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    pvbrd %v1, %s0
 ; CHECK-NEXT:    vmrg.w %v1, %v1, %v0, %vm2
@@ -18385,6 +18389,7 @@ define fastcc i32 @test_reduce_umax(<512 x i32> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    # implicit-def: $sx2
 ; CHECK-NEXT:    or %s2, 0, %s3
 ; CHECK-NEXT:    sll %s3, %s2, 32
+; CHECK-NEXT:    and %s2, %s2, (32)0
 ; CHECK-NEXT:    or %s2, %s2, %s3
 ; CHECK-NEXT:    pvbrd %v1, %s2
 ; CHECK-NEXT:    vmrg.w %v1, %v1, %v0, %vm2

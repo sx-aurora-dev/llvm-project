@@ -7,6 +7,7 @@ define fastcc <512 x i32> @subbrdv512i32(<512 x i32>, i32) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    sll %s1, %s0, 32
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
@@ -22,8 +23,9 @@ define fastcc <512 x i32> @subbrdv512i32(<512 x i32>, i32) {
 define fastcc <512 x float> @subbrdv512f32(<512 x float>, float) {
 ; CHECK-LABEL: subbrdv512f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    srl %s1, %s0, 32
-; CHECK-NEXT:    or %s0, %s1, %s0
+; CHECK-NEXT:    and %s1, %s0, (32)1
+; CHECK-NEXT:    srl %s0, %s0, 32
+; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pvfsub %v0, %s0, %v0

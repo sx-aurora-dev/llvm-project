@@ -11,6 +11,7 @@ define fastcc <512 x float> @vec_load_v512f32(<512 x float>* %P) {
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = load <512 x float>, <512 x float>* %P, align 4
   ret <512 x float> %ret
@@ -26,6 +27,7 @@ define fastcc <512 x float> @vec_mload_v512f32(<512 x float>* %P, <512 x i1> %M)
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = call <512 x float> @llvm.masked.load.v512f32.p0v512f32(<512 x float>* %P, i32 16, <512 x i1> %M, <512 x float> undef)
   ret <512 x float> %ret
@@ -42,6 +44,7 @@ define fastcc <512 x float> @vec_vpload_v512f32(<512 x float>* %P, <512 x i1> %M
 ; CHECK-NEXT:    srl %s1, %s1, 1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    vld %v0, 8, %s0
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    b.l.t (, %s10)
   %ret = call <512 x float> @llvm.vp.load.v512f32.p0v512f32(<512 x float>* %P, <512 x i1> %M, i32 %avl)
   ret <512 x float> %ret

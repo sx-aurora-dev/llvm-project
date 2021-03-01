@@ -7,6 +7,7 @@ define x86_regcallcc <1024 x i32> @brdv512i32x2(i32) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    sll %s1, %s0, 32
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    lea %s1, 129
 ; CHECK-NEXT:    lvl %s1
@@ -29,6 +30,7 @@ define x86_regcallcc <512 x i32> @brdv512i32(i32) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    sll %s1, %s0, 32
+; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s1
@@ -43,8 +45,9 @@ define x86_regcallcc <512 x i32> @brdv512i32(i32) {
 define x86_regcallcc <512 x float> @brdv512f32(float) {
 ; CHECK-LABEL: brdv512f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    srl %s1, %s0, 32
-; CHECK-NEXT:    or %s0, %s1, %s0
+; CHECK-NEXT:    and %s1, %s0, (32)1
+; CHECK-NEXT:    srl %s0, %s0, 32
+; CHECK-NEXT:    or %s0, %s0, %s1
 ; CHECK-NEXT:    or %s1, 1, (0)1
 ; CHECK-NEXT:    lvl %s1
 ; CHECK-NEXT:    pvbrd %v0, %s0

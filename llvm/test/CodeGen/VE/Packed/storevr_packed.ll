@@ -9,6 +9,7 @@ define fastcc void @storev512i32(<512 x i32>* nocapture, <512 x i32>) {
 ; CHECK:       # %bb.0:
 ; CHECK-NEXT:    lea %s1, 256
 ; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
 ; CHECK-NEXT:    vst %v0, 8, %s0
 ; CHECK-NEXT:    b.l.t (, %s10)
   store <512 x i32> %1, <512 x i32>* %0, align 16
@@ -32,8 +33,9 @@ define fastcc void @storev512i32stk(<512 x i32>) {
 ; CHECK-NEXT:    or %s0, 0, %s62
 ; CHECK-NEXT:  .LBB1_2:
 ; CHECK-NEXT:    lea %s0, 256
-; CHECK-NEXT:    lea %s1, (, %s11)
 ; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
+; CHECK-NEXT:    lea %s1, (, %s11)
 ; CHECK-NEXT:    vst %v0, 8, %s1
 ; CHECK-NEXT:    lea %s11, 2048(, %s11)
 ; CHECK-NEXT:    b.l.t (, %s10)
@@ -46,12 +48,13 @@ define fastcc void @storev512i32stk(<512 x i32>) {
 define fastcc void @storev512i32com(<512 x i32>) {
 ; CHECK-LABEL: storev512i32com:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, v512i32@lo
-; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    lea.sl %s0, v512i32@hi(, %s0)
-; CHECK-NEXT:    lea %s1, 256
-; CHECK-NEXT:    lvl %s1
-; CHECK-NEXT:    vst %v0, 8, %s0
+; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lvl %s0
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
+; CHECK-NEXT:    lea %s1, v512i32@lo
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    lea.sl %s1, v512i32@hi(, %s1)
+; CHECK-NEXT:    vst %v0, 8, %s1
 ; CHECK-NEXT:    b.l.t (, %s10)
   store <512 x i32> %0, <512 x i32>* @v512i32, align 16
   ret void

@@ -20,8 +20,9 @@ define fastcc <512 x float> @test_vp_ffms_vvv_512f32(<512 x float> %i0, <512 x f
 define fastcc <512 x float> @test_vp_ffms_rvv_512f32(float %s0, <512 x float> %i1, <512 x float> %i2, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_ffms_rvv_512f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    srl %s2, %s0, 32
-; CHECK-NEXT:    or %s0, %s2, %s0
+; CHECK-NEXT:    and %s2, %s0, (32)1
+; CHECK-NEXT:    srl %s0, %s0, 32
+; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
@@ -38,8 +39,9 @@ define fastcc <512 x float> @test_vp_ffms_rvv_512f32(float %s0, <512 x float> %i
 define fastcc <512 x float> @test_vp_ffms_vrv_512f32(<512 x float> %i0, float %s1, <512 x float> %i2, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_ffms_vrv_512f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    srl %s2, %s0, 32
-; CHECK-NEXT:    or %s0, %s2, %s0
+; CHECK-NEXT:    and %s2, %s0, (32)1
+; CHECK-NEXT:    srl %s0, %s0, 32
+; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
@@ -56,8 +58,9 @@ define fastcc <512 x float> @test_vp_ffms_vrv_512f32(<512 x float> %i0, float %s
 define fastcc <512 x float> @test_vp_ffms_vvr_512f32(<512 x float> %i0, <512 x float> %i1, float %s2, <512 x i1> %m, i32 %n) {
 ; CHECK-LABEL: test_vp_ffms_vvr_512f32:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    srl %s2, %s0, 32
-; CHECK-NEXT:    or %s0, %s2, %s0
+; CHECK-NEXT:    and %s2, %s0, (32)1
+; CHECK-NEXT:    srl %s0, %s0, 32
+; CHECK-NEXT:    or %s0, %s0, %s2
 ; CHECK-NEXT:    adds.w.sx %s1, 1, %s1
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
