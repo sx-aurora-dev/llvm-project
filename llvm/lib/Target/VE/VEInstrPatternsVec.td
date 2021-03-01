@@ -271,7 +271,7 @@ def : Pat<(v512i1 (vec_pack v256i1:$vlo, v256i1:$vhi, (i32 srcvalue))),
 
 multiclass Unpack_Swap<ValueType PackVT> {
   def : Pat<(PackVT (vec_swap PackVT:$vp, i32:$avl)),
-            (VSHFvvil $vp, $vp, 8, $avl)>; // exchange hi and lo
+            (VSHFvvil $vp, $vp, 4, $avl)>; // exchange hi and lo
 
   // no-op unpacks
   def : Pat<(v256i32 (vec_unpack_lo PackVT:$vp, (i32 srcvalue))),
