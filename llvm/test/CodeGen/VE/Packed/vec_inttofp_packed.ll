@@ -144,8 +144,9 @@ define fastcc <512 x float> @vec_uitofp_v512f32_v512float(<512 x i32> %x) {
 ; CHECK-NEXT:    vcvt.s.d %v3, %v3
 ; CHECK-NEXT:    vshf %v2, %v2, %v3, 8
 ; CHECK-NEXT:    lea.sl %s1, 1333788672
-; CHECK-NEXT:    srl %s2, %s1, 32
-; CHECK-NEXT:    or %s1, %s2, %s1
+; CHECK-NEXT:    and %s2, %s1, (32)1
+; CHECK-NEXT:    srl %s1, %s1, 32
+; CHECK-NEXT:    or %s1, %s1, %s2
 ; CHECK-NEXT:    pvfmul %v2, %s1, %v2
 ; CHECK-NEXT:    lea %s1, -1
 ; CHECK-NEXT:    and %s1, %s1, (32)0

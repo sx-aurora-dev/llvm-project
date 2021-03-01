@@ -111,8 +111,9 @@ define fastcc <512 x float> @vec_uitofp_v512f64_v512double(<512 x i64> %x) {
 ; CHECK-NEXT:    vcvt.s.d %v1, %v1
 ; CHECK-NEXT:    vshf %v0, %v1, %v0, 8
 ; CHECK-NEXT:    lea.sl %s1, 1333788672
-; CHECK-NEXT:    srl %s2, %s1, 32
-; CHECK-NEXT:    or %s1, %s2, %s1
+; CHECK-NEXT:    and %s2, %s1, (32)1
+; CHECK-NEXT:    srl %s1, %s1, 32
+; CHECK-NEXT:    or %s1, %s1, %s2
 ; CHECK-NEXT:    pvfmul %v0, %s1, %v0
 ; CHECK-NEXT:    pvfadd %v0, %v0, %v2
 ; CHECK-NEXT:    b.l.t (, %s10)
