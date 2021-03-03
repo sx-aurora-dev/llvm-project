@@ -450,7 +450,7 @@ HANDLE_VP_TO_INTRIN(log)
 END_REGISTER_CASES(vp_log, VP_FLOG)
 
 // llvm.vp.log10(x,mask,vlen)
-BEGIN_REGISTER_VP_INTRINSIC(vp_log10, 3, 4)
+BEGIN_REGISTER_VP_INTRINSIC(vp_log10, 1, 2)
 BEGIN_REGISTER_VP_SDNODE(VP_FLOG10, -1, vp_flog10, 1, 2)
 HANDLE_VP_FPCONSTRAINT(1, 2)
 HANDLE_VP_TO_CONSTRAINED_INTRIN(experimental_constrained_log10)
@@ -566,7 +566,7 @@ BEGIN_REGISTER_VP_SDNODE(VP_VSHIFT, -1, vp_vshift, 2, 3)
 END_REGISTER_CASES(vp_vshift, VP_VSHIFT)
 
 // llvm.vp.select(mask,on_true,on_false,pivot,avl)
-BEGIN_REGISTER_VP_INTRINSIC(vp_select, 0, 4)
+BEGIN_REGISTER_VP_INTRINSIC(vp_select, 2, 4)
 BEGIN_REGISTER_VP_SDNODE(VP_SELECT, -1, vp_select, 0, 4)
 END_REGISTER_CASES(vp_select, VP_SELECT)
 
