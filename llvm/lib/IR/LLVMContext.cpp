@@ -80,12 +80,12 @@ LLVMContext::LLVMContext() : pImpl(new LLVMContextImpl(*this)) {
 
   auto *CFPRoundEntry = pImpl->getOrInsertBundleTag("cfp-round");
   assert(CFPRoundEntry->second == LLVMContext::OB_cfp_round &&
-         "gc-transition operand bundle id drifted!");
+         "cfp-round operand bundle id drifted!");
   (void)CFPRoundEntry;
 
-  auto *CFPExceptEntry = pImpl->getOrInsertBundleTag("cfp-round");
-  assert(CFPExceptEntry->second == LLVMContext::OB_cfp_round &&
-         "gc-transition operand bundle id drifted!");
+  auto *CFPExceptEntry = pImpl->getOrInsertBundleTag("cfp-except");
+  assert(CFPExceptEntry->second == LLVMContext::OB_cfp_except &&
+         "cfp-except operand bundle id drifted!");
   (void)CFPExceptEntry;
 
   SyncScope::ID SingleThreadSSID =
