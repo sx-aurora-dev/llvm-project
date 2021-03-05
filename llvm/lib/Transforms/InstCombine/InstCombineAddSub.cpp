@@ -2327,7 +2327,8 @@ Instruction *InstCombinerImpl::visitFSubGeneric(BinaryOpTy &I) {
     auto *BinOp = dyn_cast<BinaryOperator>(&I);
     if (BinOp) {
       auto *F = factorizeFAddFSub(*BinOp, Builder);
-      return F;
+      if (F)
+        return F;
     }
 
     // TODO: This performs reassociative folds for FP ops. Some fraction of the
@@ -2338,9 +2339,9 @@ Instruction *InstCombinerImpl::visitFSubGeneric(BinaryOpTy &I) {
       return replaceInstUsesWith(I, V);
 
     // (X - Y) - Op1 --> X - (Y + Op1)
-    if (match(Op0, m_OneUse(m_FSub(m_Value(X), m_Value(Y))))) {
+    if (MC.try_match(Op0, m_OneUse(m_FSub(m_Value(X), m_Value(Y))))) {
       Value *FAdd = Builder.CreateFAddFMF(Y, Op1, &I);
-      return BinaryOperator::CreateFSubFMF(X, FAdd, &I);
+      return MCBuilder.CreateFSubFMF(X, FAdd, &I);
     }
   }
 
