@@ -45,6 +45,7 @@ static llvm::Type *GetLaneType(llvm::Type *Ty) {
   return GetVectorElementType(Ty);
 }
 
+
 static const unsigned ProhibitiveCost = 2048;
 
 namespace llvm {
@@ -59,8 +60,14 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
   const VESubtarget *getST() const { return ST; }
   const VETargetLowering *getTLI() const { return TLI; }
 
-  bool enableVPU() const { return getST()->enableVPU(); }
-  bool hasPackedMode() const { return getST()->hasPackedMode(); }
+  static bool makeVectorOpsExpensive();
+
+  bool enableVPU() const {
+    return !makeVectorOpsExpensive() && getST()->enableVPU();
+  }
+  bool hasPackedMode() const {
+    return !makeVectorOpsExpensive() && getST()->hasPackedMode();
+  }
 
   static bool isSupportedReduction(Intrinsic::ID ReductionID, bool Unordered) {
     switch (ReductionID) {
@@ -206,7 +213,8 @@ public:
   /// perform for this target. This number depends on the level of parallelism
   /// and the number of execution units in the CPU.
   unsigned getMaxInterleaveFactor(unsigned VF) const {
-    return 3; // 3 FMA units available
+    // 3 FMA units available
+    return enableVPU() ? 3 : 1;
   }
 
   bool prefersVectorizedAddressing() { return true; }

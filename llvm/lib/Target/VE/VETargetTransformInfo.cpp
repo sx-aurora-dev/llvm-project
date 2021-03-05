@@ -25,14 +25,22 @@
 #include "llvm/Transforms/Utils/UnrollLoop.h"
 
 namespace llvm {
-cl::opt<bool> EnableVectorUnroll(
-    "ve-unroll-vector", cl::init(true), cl::NotHidden,
-    cl::desc("Unroll vector loops (work in progress)"));
-}
+cl::opt<bool>
+    EnableVectorUnroll("ve-unroll-vector", cl::init(true), cl::NotHidden,
+                       cl::desc("Unroll vector loops (work in progress)"));
+
+cl::opt<bool> ExpensiveVector(
+    "ve-expensive-vector", cl::init(false),
+    cl::desc(
+        "Discourage vectorization by hiding all vector registers, ops in TTI"),
+    cl::NotHidden);
+} // namespace llvm
 
 using namespace llvm;
 
 #define DEBUG_TYPE "vetti"
+
+bool VETTIImpl::makeVectorOpsExpensive() { return ExpensiveVector; }
 
 static bool IsVectorLoop(Loop *L) {
   for (const auto *BB : L->blocks()) {
