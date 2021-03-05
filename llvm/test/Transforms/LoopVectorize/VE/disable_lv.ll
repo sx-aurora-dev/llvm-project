@@ -1,12 +1,11 @@
-; RUN: opt < %s  -loop-vectorize -mtriple=ve-linux -S | FileCheck %s -check-prefix=VE 
-; RUN: opt < %s  -loop-vectorize -mtriple=x86_64-pc_linux -mcpu=core-avx2 -S | FileCheck %s -check-prefix=AVX
+; RUN: opt < %s  -loop-vectorize -ve-expensive-vector=1 -mtriple=ve-linux -S | FileCheck %s -check-prefix=SCALAR
+; RUN: opt < %s  -loop-vectorize -mtriple=ve-linux -S | FileCheck %s -check-prefix=VECTOR
+; RUN: opt < %s  -loop-vectorize -mtriple=x86_64-pc_linux -mcpu=core-avx2 -S | FileCheck %s -check-prefix=VECTOR
 
-; Make sure LV does not trigger for VE on an appealing loop that vectorizes for x86 AVX.
+; LV must not trigger for VE if TTI is configured to make vector unappealing
 
-; TODO: Remove this test once VE vector isel is deemed stable.
-
-; VE-NOT: llvm.loop.isvectorized
-; AVX: llvm.loop.isvectorized
+; SCALAR-NOT: llvm.loop.isvectorized
+; VECTOR: vector.body
 
 define dso_local void @foo(i32* noalias nocapture %A, i32* noalias nocapture readonly %B, i32 signext %n) local_unnamed_addr {
 entry:
