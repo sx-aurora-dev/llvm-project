@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu | FileCheck %s
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vpu,-packed | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readonly
 define fastcc <512 x float> @fmadrvv512f32(<512 x float>, float) {
