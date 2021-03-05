@@ -178,9 +178,7 @@ public:
 
   Instruction *CreateFNegFMF(Value *Op, Instruction *FMFSource,
                                        const Twine &Name = "") {
-    // FIXME use llvm.vp.fneg
-    Value *Zero = ConstantFP::getNegativeZero(Op->getType());
-    return PredicatedBinaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::FSub, Zero, Op, FMFSource, Name);
+    return PredicatedUnaryOperator::CreateWithCopiedFlags(PC.Mod, PC.Mask, PC.VectorLength, Instruction::FNeg, Op, FMFSource, Name);
   }
 
   // TODO predicated casts

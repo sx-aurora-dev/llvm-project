@@ -59,6 +59,66 @@ PredicatedInstruction::isVectorReduction() const {
   }
 }
 
+Instruction *PredicatedUnaryOperator::Create(
+    Module *Mod, Value *Mask, Value *VectorLen, Instruction::UnaryOps Opc,
+    Value *V, const Twine &Name, BasicBlock *InsertAtEnd,
+    Instruction *InsertBefore) {
+  assert(!(InsertAtEnd && InsertBefore));
+  auto VPID = VPIntrinsic::GetForOpcode(Opc);
+
+  // Default Code Path
+  if ((!Mod || (!Mask && !VectorLen)) || VPID == Intrinsic::not_intrinsic) {
+    if (InsertAtEnd) {
+      return UnaryOperator::Create(Opc, V, Name, InsertAtEnd);
+    } else {
+      return UnaryOperator::Create(Opc, V, Name, InsertBefore);
+    }
+  }
+
+  assert(Mod && "Need a module to emit VP Intrinsics");
+
+  // Fetch the VP intrinsic
+  auto &VecTy = cast<VectorType>(*V->getType());
+  auto *VPFunc =
+      VPIntrinsic::getDeclarationForParams(Mod, VPID, {V}, &VecTy);
+
+  // Encode default environment fp behavior
+
+#if 0
+  // TODO
+  LLVMContext &Ctx = V1->getContext();
+  SmallVector<OperandBundleDef, 2> ConstraintBundles;
+  if (VPIntrinsic::HasRoundingMode(VPID))
+    ConstraintBundles.emplace_back(
+        "cfp-round",
+        GetConstrainedFPRounding(Ctx, RoundingMode::NearestTiesToEven));
+  if (VPIntrinsic::HasExceptionMode(VPID))
+    ConstraintBundles.emplace_back(
+        "cfp-except",
+        GetConstrainedFPExcept(Ctx, fp::ExceptionBehavior::ebIgnore));
+
+  CallInst *CI;
+  if (InsertAtEnd) {
+    CI = CallInst::Create(VPFunc, BinOpArgs, ConstraintBundles, Name, InsertAtEnd);
+  } else {
+    CI = CallInst::Create(VPFunc, BinOpArgs, ConstraintBundles, Name, InsertBefore);
+  }
+#endif
+
+  CallInst *CI;
+  SmallVector<Value *, 3> UnOpArgs({V, Mask, VectorLen});
+  if (InsertAtEnd) {
+    CI = CallInst::Create(VPFunc, UnOpArgs, Name, InsertAtEnd);
+  } else {
+    CI = CallInst::Create(VPFunc, UnOpArgs, Name, InsertBefore);
+  }
+
+  // the VP inst does not touch memory if the exception behavior is
+  // "fpecept.ignore"
+  CI->setDoesNotAccessMemory();
+  return CI;
+}
+
 Instruction *PredicatedBinaryOperator::Create(
     Module *Mod, Value *Mask, Value *VectorLen, Instruction::BinaryOps Opc,
     Value *V1, Value *V2, const Twine &Name, BasicBlock *InsertAtEnd,
@@ -83,23 +143,30 @@ Instruction *PredicatedBinaryOperator::Create(
       VPIntrinsic::getDeclarationForParams(Mod, VPID, {V1, V2}, &VecTy);
 
   // Encode default environment fp behavior
-  LLVMContext &Ctx = V1->getContext();
-  SmallVector<Value *, 6> BinOpArgs({V1, V2});
-  if (VPIntrinsic::HasRoundingMode(VPID)) {
-    // FIXME use a bundle.
-    BinOpArgs.push_back(
-        GetConstrainedFPRounding(Ctx, RoundingMode::NearestTiesToEven));
-  }
-  if (VPIntrinsic::HasExceptionMode(VPID)) {
-    // FIXME use a bundle.
-    BinOpArgs.push_back(
-        GetConstrainedFPExcept(Ctx, fp::ExceptionBehavior::ebIgnore));
-  }
 
-  BinOpArgs.push_back(Mask);
-  BinOpArgs.push_back(VectorLen);
+#if 0
+  // TODO
+  LLVMContext &Ctx = V1->getContext();
+  SmallVector<OperandBundleDef, 2> ConstraintBundles;
+  if (VPIntrinsic::HasRoundingMode(VPID))
+    ConstraintBundles.emplace_back(
+        "cfp-round",
+        GetConstrainedFPRounding(Ctx, RoundingMode::NearestTiesToEven));
+  if (VPIntrinsic::HasExceptionMode(VPID))
+    ConstraintBundles.emplace_back(
+        "cfp-except",
+        GetConstrainedFPExcept(Ctx, fp::ExceptionBehavior::ebIgnore));
 
   CallInst *CI;
+  if (InsertAtEnd) {
+    CI = CallInst::Create(VPFunc, BinOpArgs, ConstraintBundles, Name, InsertAtEnd);
+  } else {
+    CI = CallInst::Create(VPFunc, BinOpArgs, ConstraintBundles, Name, InsertBefore);
+  }
+#endif
+
+  CallInst *CI;
+  SmallVector<Value *, 4> BinOpArgs({V1, V2, Mask, VectorLen});
   if (InsertAtEnd) {
     CI = CallInst::Create(VPFunc, BinOpArgs, Name, InsertAtEnd);
   } else {

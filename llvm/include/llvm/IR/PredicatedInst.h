@@ -154,6 +154,68 @@ public:
   }
 };
 
+class PredicatedUnaryOperator : public PredicatedOperator {
+public:
+  // The PredicatedUnaryOperator class is intended to be used as a utility, and
+  // is never itself instantiated.
+  PredicatedUnaryOperator() = delete;
+  ~PredicatedUnaryOperator() = delete;
+
+  using UnaryOps = Instruction::UnaryOps;
+
+  void *operator new(size_t s) = delete;
+
+  static bool classof(const Instruction *I) {
+    if (isa<UnaryOperator>(I))
+      return true;
+    auto VPInst = dyn_cast<VPIntrinsic>(I);
+    return VPInst && VPInst->isUnaryOp();
+  }
+  static bool classof(const ConstantExpr *CE) {
+    return isa<UnaryOperator>(CE);
+  }
+  static bool classof(const Value *V) {
+    auto *I = dyn_cast<Instruction>(V);
+    if (I && classof(I))
+      return true;
+    auto *CE = dyn_cast<ConstantExpr>(V);
+    return CE && classof(CE);
+  }
+
+  /// Construct a predicated binary instruction, given the opcode and the two
+  /// operands.
+  static Instruction *Create(Module *Mod, Value *Mask, Value *VectorLen,
+                             Instruction::UnaryOps Opc, Value *V,
+                             const Twine &Name, BasicBlock *InsertAtEnd,
+                             Instruction *InsertBefore);
+
+  static Instruction *Create(Module *Mod, Value *Mask, Value *VectorLen,
+                             UnaryOps Opc, Value *V,
+                             const Twine &Name = Twine(),
+                             Instruction *InsertBefore = nullptr) {
+    return Create(Mod, Mask, VectorLen, Opc, V, Name, nullptr,
+                  InsertBefore);
+  }
+
+  static Instruction *Create(Module *Mod, Value *Mask, Value *VectorLen,
+                             UnaryOps Opc, Value *V,
+                             const Twine &Name, BasicBlock *InsertAtEnd) {
+    return Create(Mod, Mask, VectorLen, Opc, V, Name, InsertAtEnd,
+                  nullptr);
+  }
+
+  static Instruction *CreateWithCopiedFlags(Module *Mod, Value *Mask,
+                                            Value *VectorLen, UnaryOps Opc,
+                                            Value *V,
+                                            Instruction *CopyBO,
+                                            const Twine &Name = "") {
+    Instruction *BO =
+        Create(Mod, Mask, VectorLen, Opc, V, Name, nullptr, nullptr);
+    BO->copyIRFlags(CopyBO);
+    return BO;
+  }
+};
+
 class PredicatedBinaryOperator : public PredicatedOperator {
 public:
   // The PredicatedBinaryOperator class is intended to be used as a utility, and
