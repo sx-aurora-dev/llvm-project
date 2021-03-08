@@ -528,6 +528,7 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
   case Intrinsic::vp_srem:
   case Intrinsic::vp_urem:
 
+  case Intrinsic::vp_fneg:
   case Intrinsic::vp_fadd:
   case Intrinsic::vp_fsub:
   case Intrinsic::vp_fmul:
