@@ -142,7 +142,7 @@ define void @test_shuffle(<16 x float> %v0, <16 x float> %v1, <16 x i1> %m, i32 
 ; no generic lowering available: {{call.* @llvm.vp.compress}}
 ; no generic lowering available: {{call.* @llvm.vp.expand}}
 ; CHECK-NOT: {{call.* @llvm.vp.vshift}}
-  %r0 = call <16 x float> @llvm.vp.select.v16f32(<16 x i1> %m, <16 x float> %v0, <16 x float> %v1, i32 %k, i32 %n)
+  %r0 = call <16 x float> @llvm.vp.select.v16f32(<16 x float> %v0, <16 x float> %v1, <16 x i1> %m, i32 %k, i32 %n)
   %r2 = call <16 x float> @llvm.vp.vshift.v16f32(<16 x float> %v0, i32 7, <16 x i1> %m, i32 %n)
   %r3 = call <16 x float> @llvm.vp.compress.v16f32(<16 x float> %v0, <16 x i1> %m, i32 %n)
   %r4 = call <16 x float> @llvm.vp.expand.v16f32(<16 x float> %v0, <16 x i1> %m, i32 %n)
@@ -180,13 +180,13 @@ declare <8 x double> @llvm.vp.fmul.v8f64(<8 x double>, <8 x double>, <8 x i1> ma
 declare <8 x double> @llvm.vp.fdiv.v8f64(<8 x double>, <8 x double>, <8 x i1> mask, i32 vlen)
 declare <8 x double> @llvm.vp.frem.v8f64(<8 x double>, <8 x double>, <8 x i1> mask, i32 vlen)
 declare <8 x double> @llvm.vp.fma.v8f64(<8 x double>, <8 x double>, <8 x double>, <8 x i1> mask, i32 vlen)
-declare <8 x double> @llvm.vp.fneg.v8f64(<8 x double>, metadata, <8 x i1> mask, i32 vlen)
+declare <8 x double> @llvm.vp.fneg.v8f64(<8 x double>, <8 x i1> mask, i32 vlen)
 declare <8 x double> @llvm.vp.minnum.v8f64(<8 x double>, <8 x double>, <8 x i1> mask, i32 vlen)
 declare <8 x double> @llvm.vp.maxnum.v8f64(<8 x double>, <8 x double>, <8 x i1> mask, i32 vlen)
 
 ; cast & conversions
-declare <8 x i64> @llvm.vp.fptosi.v8i64v8f64(<8 x double>, metadata, <8 x i1> mask, i32 vlen)
-declare <8 x i64> @llvm.vp.fptoui.v8i64v8f64(<8 x double>, metadata, <8 x i1> mask, i32 vlen)
+declare <8 x i64> @llvm.vp.fptosi.v8i64v8f64(<8 x double>, <8 x i1> mask, i32 vlen)
+declare <8 x i64> @llvm.vp.fptoui.v8i64v8f64(<8 x double>, <8 x i1> mask, i32 vlen)
 declare <8 x double> @llvm.vp.sitofp.v8f64v8i64(<8 x i64>, <8 x i1> mask, i32 vlen)
 declare <8 x double> @llvm.vp.uitofp.v8f64v8i64(<8 x i64>, <8 x i1> mask, i32 vlen)
 declare <8 x double> @llvm.vp.rint.v8f64(<8 x double> %x, <8 x i1> mask, i32 vlen)
@@ -196,7 +196,7 @@ declare <8 x double> @llvm.vp.ceil.v8f64(<8 x double> %x, <8 x i1> mask, i32 vle
 declare <8 x double> @llvm.vp.floor.v8f64(<8 x double> %x, <8 x i1> mask, i32 vlen)
 declare <8 x double> @llvm.vp.trunc.v8f64(<8 x double> %x, <8 x i1> mask, i32 vlen)
 declare <8 x float> @llvm.vp.fptrunc.v8f32v8f64(<8 x double> %x, <8 x i1> mask, i32 vlen)
-declare <8 x double> @llvm.vp.fpext.v8f64v8f32(<8 x float> %x, metadata, <8 x i1> mask, i32 vlen)
+declare <8 x double> @llvm.vp.fpext.v8f64v8f32(<8 x float> %x, <8 x i1> mask, i32 vlen)
 
 ; math ops
 declare <8 x double> @llvm.vp.pow.v8f64(<8 x double> %x, <8 x double> %y, <8 x i1> mask, i32 vlen)
@@ -232,7 +232,7 @@ declare i32 @llvm.vp.reduce.umax.v16i32(<16 x i32> %v, <16 x i1> %m, i32 %n)
 declare i32 @llvm.vp.reduce.umin.v16i32(<16 x i32> %v, <16 x i1> %m, i32 %n)
 
 ; shuffles
-declare <16 x float> @llvm.vp.select.v16f32(<16 x i1>, <16 x float>, <16 x float>, i32, i32 vlen)
+declare <16 x float> @llvm.vp.select.v16f32(<16 x float>, <16 x float>, <16 x i1>, i32, i32 vlen)
 declare <16 x float> @llvm.vp.vshift.v16f32(<16 x float>, i32, <16 x i1>, i32 vlen)
 declare <16 x float> @llvm.vp.compress.v16f32(<16 x float>, <16 x i1>, i32 vlen)
 declare <16 x float> @llvm.vp.expand.v16f32(<16 x float>, <16 x i1> mask, i32 vlen)

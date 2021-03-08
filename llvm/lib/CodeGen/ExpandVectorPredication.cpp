@@ -250,10 +250,10 @@ void LowerVPSelect(VPIntrinsic *VPI) {
   assert(!ElemCount.isScalable() && "TODO scalable type support");
 
   IRBuilder<> Builder(cast<Instruction>(VPI));
-  auto BitMask = VPI->getOperand(0);
+  auto BitMask = VPI->getOperand(2);
   auto PivotVal = VPI->getOperand(3);
-  auto OnTrueVal = VPI->getOperand(1);
-  auto OnFalseVal = VPI->getOperand(2);
+  auto OnTrueVal = VPI->getOperand(0);
+  auto OnFalseVal = VPI->getOperand(1);
 
   auto PivotMask = ConvertVLToMask(Builder, PivotVal, ElemBits, ElemCount.getFixedValue());
   auto CompositeMask = Builder.CreateAnd(BitMask, PivotMask);
