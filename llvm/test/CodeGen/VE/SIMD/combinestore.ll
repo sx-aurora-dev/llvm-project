@@ -1,6 +1,6 @@
 ; RUN: llc < %s -mtriple=ve-unknown-unknown | FileCheck %s
 ; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=-vec | FileCheck %s
-; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+vec | FileCheck %s -check-prefix=VEC
+; RUN: llc < %s -mtriple=ve-unknown-unknown -mattr=+simd | FileCheck %s -check-prefix=VEC
 
 @data = common global [16 x i32] zeroinitializer, align 4
 @ldata = common global [16 x i64] zeroinitializer, align 8

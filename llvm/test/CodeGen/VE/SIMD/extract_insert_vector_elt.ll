@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve -mattr=+vec | FileCheck %s
+; RUN: llc < %s -mtriple=ve -mattr=+simd | FileCheck %s
 
 ; Function Attrs: norecurse nounwind readnone
 define x86_regcallcc <16 x i32> @__regcall3__insert_test(<16 x i32>) {

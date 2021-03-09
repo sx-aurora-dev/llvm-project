@@ -26,12 +26,16 @@ def FeaturePackedMode
   : SubtargetFeature<"packed", "PackedMode", "true",
                      "Enable v512 packed mode (experimental)",[FeatureEnableVPU]>;
 
-def FeatureVectorize
-  : SubtargetFeature<"vec", "Vectorize", "true",
-                     "Try to vectorize (experimental)">;
+def FeatureSimd
+  : SubtargetFeature<"simd", "Simd", "true",
+                     "Enable simd-style fixed length vectorize (experimental)">;
 
-def IsVectorizeSubTarget : Predicate<"Subtarget->vectorize()">;
-def IsNotVectorizeSubTarget : Predicate<"!Subtarget->vectorize()">;
+// Whether to use VVP-based isel.
+def UseVVP : Predicate<"Subtarget->enableVPU()">;
+
+// Whether to use Fixed-SIMD based isel.
+def IsSimdSubTarget : Predicate<"Subtarget->simd()">;
+def IsNotSimdSubTarget : Predicate<"!Subtarget->simd()">;
 
 def IsNoNaNs : Predicate<"TM.Options.NoNaNsFPMath">;
 

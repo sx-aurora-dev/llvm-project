@@ -2761,19 +2761,23 @@ def lea_i64         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 $imm))>;
 def lea_i32         : OutPatFrag<(ins node:$imm), (EXTRACT_SUBREG (lea_i64 $imm), sub_i32)>;
 def lea_u32         : OutPatFrag<(ins node:$imm), (ANDrm (lea_i64 $imm), 32)>;
 
-
-// The backend translates VP and regular vector operations into vvp_* nodes
-// This file defines the isel patterns
-// The vvp_nodes are defined in..
+// vvp_* SDNode tablegen definitions.
 include "VVPInstrInfo.td"
 
 // The vevlintrin
 include "VEInstrIntrinsicVL.td"
-// Patterns and intermediate SD nodes (VEC_*).
-include "VEInstrPatternsVec.td"
 
-// Patterns and intermediate SD nodes (VVP_*).
-include "VVPInstrPatternsVec.td"
+// VE Vector Predicated ISel (Dynamic VL and VP support).
+let Predicates = [UseVVP] in {
+  // Patterns and intermediate SD nodes (VEC_*).
+  include "VEInstrPatternsVec.td"
+
+  // Patterns and intermediate SD nodes (VVP_*).
+  include "VVPInstrPatternsVec.td"
+}
 
 // Patterns and intermediate SD nodes for fixed length vector instructions.
-include "SIMDInstrPatterns.td"
+// let Predicates = [IsSimdSubTarget] in {
+  include "SIMDInstrPatterns.td"
+// }
+// include "SIMDInstrPatternsVec.td"

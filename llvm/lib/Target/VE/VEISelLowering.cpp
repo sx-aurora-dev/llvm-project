@@ -111,7 +111,7 @@ void VETargetLowering::initRegisterClasses() {
     return;
   }
 
-  if (Subtarget->vectorize()) {
+  if (Subtarget->simd()) {
     // Fixed SIMD backend.
     for (MVT VecVT : WholeVectorVTs)
       addRegisterClass(VecVT, &VE::V64RegClass);
@@ -3717,7 +3717,7 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
   default:
     if (Subtarget->enableVPU())
       return LowerOperation_VVP(Op, DAG);
-    else if (Subtarget->vectorize())
+    else if (Subtarget->simd())
       return LowerOperation_SIMD(Op, DAG);
     llvm_unreachable("Unexpected Opcode in LowerOperation");
 

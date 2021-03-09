@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve -mattr=+vec | FileCheck %s
+; RUN: llc < %s -mtriple=ve -mattr=+simd | FileCheck %s
 
 define x86_regcallcc <256 x float> @m5v256f32() {
 ; CHECK-LABEL: m5v256f32:

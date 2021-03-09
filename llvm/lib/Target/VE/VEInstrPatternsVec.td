@@ -373,25 +373,25 @@ def : Pat<(v512i1 (vec_broadcast (i32 0), (i32 512))),
 // Load and store for particular types.
 // v512i32, v512f32, v256i32, v256f32, v256i64, and v256f64
 
-let Predicates = [IsVectorizeSubTarget] in {
-  def : Pat<(v512i32 (load I64:$addr)),
-            (v512i32 (VLDirl 8, $addr, (VLEN 256)))>;
-  def : Pat<(v512f32 (load I64:$addr)),
-            (v512f32 (VLDirl 8, $addr, (VLEN 256)))>;
-  def : Pat<(v256i32 (load I64:$addr)),
-            (v256i32 (VLDLSXirl 4, $addr, (VLEN 256)))>;
-  def : Pat<(v256f32 (load I64:$addr)),
-            (v256f32 (VLDUirl 4, $addr, (VLEN 256)))>;
-  def : Pat<(v256f64 (load I64:$addr)),
-            (v256f64 (VLDirl 8, $addr, (VLEN 256)))>;
-  def : Pat<(v256i64 (load I64:$addr)),
-            (v256i64 (VLDirl 8, $addr, (VLEN 256)))>;
-  def : Pat<(store v256i32:$vx, I64:$addr),
-            (VSTLirvl 4, $addr, v256i32:$vx, (VLEN 256))>;
-  def : Pat<(store v256f32:$vx, I64:$addr),
-            (VSTUirvl 4, $addr, v256f32:$vx, (VLEN 256))>;
-  def : Pat<(store v256i64:$vx, I64:$addr),
-            (VSTirvl 8, $addr, v256i64:$vx, (VLEN 256))>;
-  def : Pat<(store v256f64:$vx, I64:$addr),
-            (VSTirvl 8, $addr, v256f64:$vx, (VLEN 256))>;
-}
+// let Predicates = [IsSimdSubTarget] in {
+//   def : Pat<(v512i32 (load I64:$addr)),
+//             (v512i32 (VLDirl 8, $addr, (VLEN 256)))>;
+//   def : Pat<(v512f32 (load I64:$addr)),
+//             (v512f32 (VLDirl 8, $addr, (VLEN 256)))>;
+//   def : Pat<(v256i32 (load I64:$addr)),
+//             (v256i32 (VLDLSXirl 4, $addr, (VLEN 256)))>;
+//   def : Pat<(v256f32 (load I64:$addr)),
+//             (v256f32 (VLDUirl 4, $addr, (VLEN 256)))>;
+//   def : Pat<(v256f64 (load I64:$addr)),
+//             (v256f64 (VLDirl 8, $addr, (VLEN 256)))>;
+//   def : Pat<(v256i64 (load I64:$addr)),
+//             (v256i64 (VLDirl 8, $addr, (VLEN 256)))>;
+//   def : Pat<(store v256i32:$vx, I64:$addr),
+//             (VSTLirvl 4, $addr, v256i32:$vx, (VLEN 256))>;
+//   def : Pat<(store v256f32:$vx, I64:$addr),
+//             (VSTUirvl 4, $addr, v256f32:$vx, (VLEN 256))>;
+//   def : Pat<(store v256i64:$vx, I64:$addr),
+//             (VSTirvl 8, $addr, v256i64:$vx, (VLEN 256))>;
+//   def : Pat<(store v256f64:$vx, I64:$addr),
+//             (VSTirvl 8, $addr, v256f64:$vx, (VLEN 256))>;
+// }

@@ -30,7 +30,7 @@ VESubtarget &VESubtarget::initializeSubtargetDependencies(StringRef CPU,
   // Default feature settings
   EnableVPU = false;
   PackedMode = false;
-  Vectorize = false;
+  Simd = false;
 
   // Determine default and user specified characteristics
   std::string CPUName = std::string(CPU);
@@ -48,8 +48,8 @@ VESubtarget::VESubtarget(const Triple &TT, const std::string &CPU,
     : VEGenSubtargetInfo(TT, CPU, /*TuneCPU=*/CPU, FS), TargetTriple(TT),
       InstrInfo(initializeSubtargetDependencies(CPU, FS)), TLInfo(TM, *this),
       FrameLowering(*this) {
-        // Unset '+vpu' if '+vec'.
-        EnableVPU = EnableVPU & !Vectorize;
+        // Unset '+vpu' if '+simd'.
+        EnableVPU = EnableVPU & !Simd;
       }
 
 uint64_t VESubtarget::getAdjustedFrameSize(uint64_t FrameSize) const {

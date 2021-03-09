@@ -41,7 +41,7 @@ using namespace llvm;
 
 /// Register experimental vector actions which are used under -mattr=+vec.
 void VETargetLowering::initExperimentalVectorActions() {
-  if (!Subtarget->vectorize())
+  if (!Subtarget->simd())
     return;
 
   for (MVT VT : MVT::vector_valuetypes()) {
@@ -531,7 +531,7 @@ SDValue VETargetLowering::lowerSIMD_BUILD_VECTOR(SDValue Op,
   if (hasConstantStride) {
     SDValue seq = DAG.getNode(
         VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
-        DAG.getConstant(1, DL, elemTy)); // TODO draw strideTy from elements
+        DAG.getConstant(256, DL, MVT::i32)); // TODO draw strideTy from elements
     if (stride == 1) {
       LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
       LLVM_DEBUG(seq.dump());
@@ -559,7 +559,7 @@ SDValue VETargetLowering::lowerSIMD_BUILD_VECTOR(SDValue Op,
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence =
           DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
-                      DAG.getConstant(1, DL, elemTy));
+                      DAG.getConstant(256, DL, MVT::i32));
       int Length = Op.getSimpleValueType().getVectorNumElements();
       auto VL = DAG.getConstant(Length, DL, MVT::i32);
       SDValue shiftbroadcast =
@@ -584,7 +584,7 @@ SDValue VETargetLowering::lowerSIMD_BUILD_VECTOR(SDValue Op,
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence =
           DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
-                      DAG.getConstant(1, DL, elemTy));
+                      DAG.getConstant(256, DL, MVT::i32));
       int Length = Op.getSimpleValueType().getVectorNumElements();
       auto VL = DAG.getConstant(Length, DL, MVT::i32);
       SDValue modulobroadcast =
@@ -931,6 +931,10 @@ SDValue VETargetLowering::LowerOperation_SIMD(SDValue Op, SelectionDAG &DAG) con
     return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
   case ISD::MLOAD:
     return lowerSIMD_MLOAD(Op, DAG);
+
+  // Explicit fallthrough.
+  case VEISD::VEC_BROADCAST:
+  case VEISD::VEC_SEQ:
+    return Op;
   }
 }
-
