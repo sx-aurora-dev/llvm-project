@@ -159,7 +159,7 @@ SDValue VETargetLowering::LowerFormalArguments(
       // their parts.
       SDValue Arg;
       MVT ValVT = VA.getValVT();
-      if (SplitCallRegs &&
+      if ((Subtarget->enableVPU() && SplitCallRegs) &&
           (isPackedMaskType(ValVT) || isOverPackedType(ValVT))) {
         MVT PartVT = getUnpackSourceType(ValVT, PackElem::Lo);
 
@@ -3559,6 +3559,8 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
   case ISD::EntryToken:
     return combineEntryToken_VVP(N, DCI);
   default:
+    if (!Subtarget->enableVPU())
+      return SDValue();
     if (isVVP(Opcode))
       return combineVVP(N, DCI);
     else if (isPackingSupportOpcode(Opcode))
@@ -3567,7 +3569,9 @@ SDValue VETargetLowering::PerformDAGCombine(SDNode *N,
   // case ISD::CopyFromReg:
   //   return combineCopyFromRegVVP(N, DCI);
   case ISD::CopyToReg:
-    return combineCopyToRegVVP(N, DCI);
+    if (Subtarget->enableVPU())
+      return combineCopyToRegVVP(N, DCI);
+    return SDValue();
   case ISD::ANY_EXTEND:
   case ISD::SIGN_EXTEND:
   case ISD::ZERO_EXTEND:
