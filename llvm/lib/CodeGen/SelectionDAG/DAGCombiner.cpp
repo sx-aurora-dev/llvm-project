@@ -841,17 +841,28 @@ struct EmptyMatchContext {
   // Specialize based on number of operands.
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT) { return DAG.getNode(Opcode, DL, VT); }
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue Operand,
-                  const SDNodeFlags Flags = SDNodeFlags()) {
-    return DAG.getNode(Opcode, DL, VT, Operand, Flags);
+                  Optional<SDNodeFlags> Flags = None) {
+    if (Flags)
+      return DAG.getNode(Opcode, DL, VT, Operand, *Flags);
+    else
+      return DAG.getNode(Opcode, DL, VT, Operand);
   }
+
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
-                  SDValue N2, const SDNodeFlags Flags = SDNodeFlags()) {
-    return DAG.getNode(Opcode, DL, VT, N1, N2, Flags);
+                  SDValue N2, Optional<SDNodeFlags> Flags = None) {
+    if (Flags)
+      return DAG.getNode(Opcode, DL, VT, N1, N2, *Flags);
+    else
+      return DAG.getNode(Opcode, DL, VT, N1, N2);
   }
+
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
                   SDValue N2, SDValue N3,
-                  const SDNodeFlags Flags = SDNodeFlags()) {
-    return DAG.getNode(Opcode, DL, VT, N1, N2, N3, Flags);
+                  Optional<SDNodeFlags> Flags = None) {
+    if (Flags)
+      return DAG.getNode(Opcode, DL, VT, N1, N2, N3, *Flags);
+    else
+      return DAG.getNode(Opcode, DL, VT, N1, N2, N3);
   }
 
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
@@ -927,32 +938,43 @@ VPMatchContext {
   // TODO emit VP intrinsics where MaskOp/VectorLenOp != null
   // SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT) { return DAG.getNode(Opcode, DL, VT); }
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue Operand,
-                  const SDNodeFlags Flags = SDNodeFlags()) {
+                  Optional<SDNodeFlags> Flags = None) {
     unsigned VPOpcode = ISD::GetVPForFunctionOpCode(Opcode);
     int MaskPos = *ISD::getVPMaskIdx(VPOpcode);
     int VLenPos = *ISD::getVPExplicitVectorLengthIdx(VPOpcode);
     assert(MaskPos == 1 && VLenPos == 2);
 
-    return DAG.getNode(VPOpcode, DL, VT, {Operand, RootMaskOp, RootVectorLenOp}, Flags);
+    if (Flags)
+      return DAG.getNode(VPOpcode, DL, VT, {Operand, RootMaskOp, RootVectorLenOp}, *Flags);
+    else 
+      return DAG.getNode(VPOpcode, DL, VT, {Operand, RootMaskOp, RootVectorLenOp});
   }
+
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
-                  SDValue N2, const SDNodeFlags Flags = SDNodeFlags()) {
+                  SDValue N2, Optional<SDNodeFlags> Flags = None) {
     unsigned VPOpcode = ISD::GetVPForFunctionOpCode(Opcode);
     int MaskPos = *ISD::getVPMaskIdx(VPOpcode);
     int VLenPos = *ISD::getVPExplicitVectorLengthIdx(VPOpcode);
     assert(MaskPos == 2 && VLenPos == 3);
 
-    return DAG.getNode(VPOpcode, DL, VT, {N1, N2, RootMaskOp, RootVectorLenOp}, Flags);
+    if (Flags) 
+      return DAG.getNode(VPOpcode, DL, VT, {N1, N2, RootMaskOp, RootVectorLenOp}, *Flags);
+    else
+      return DAG.getNode(VPOpcode, DL, VT, {N1, N2, RootMaskOp, RootVectorLenOp});
   }
+
   SDValue getNode(unsigned Opcode, const SDLoc &DL, EVT VT, SDValue N1,
                   SDValue N2, SDValue N3,
-                  const SDNodeFlags Flags = SDNodeFlags()) {
+                  Optional<SDNodeFlags> Flags = None) {
     unsigned VPOpcode = ISD::GetVPForFunctionOpCode(Opcode);
     int MaskPos = *ISD::getVPMaskIdx(VPOpcode);
     int VLenPos = *ISD::getVPExplicitVectorLengthIdx(VPOpcode);
     assert(MaskPos == 3 && VLenPos == 4);
 
-    return DAG.getNode(VPOpcode, DL, VT, {N1, N2, N3, RootMaskOp, RootVectorLenOp}, Flags);
+    if (Flags)
+      return DAG.getNode(VPOpcode, DL, VT, {N1, N2, N3, RootMaskOp, RootVectorLenOp}, *Flags);
+    else
+      return DAG.getNode(VPOpcode, DL, VT, {N1, N2, N3, RootMaskOp, RootVectorLenOp});
   }
 };
 
@@ -13258,6 +13280,8 @@ SDValue DAGCombiner::visitFMULForFMADistributiveCombine(SDNode *N) {
 }
 
 SDValue DAGCombiner::visitFADD_VP(SDNode *N) {
+  SelectionDAG::FlagInserter FlagsInserter(DAG, N);
+
   // FADD -> FMA combines:
   if (SDValue Fused = visitFADDForFMACombine<VPMatchContext>(N)) {
     AddToWorklist(Fused.getNode());
