@@ -395,7 +395,7 @@ MachineFunction::DeleteMachineInstr(MachineInstr *MI) {
   // be triggered during the implementation of support for the
   // call site info of a new architecture. If the assertion is triggered,
   // back trace will tell where to insert a call to updateCallSiteInfo().
-  assert((!MI->isCall(MachineInstr::IgnoreBundle) ||
+  assert((!MI->isCandidateForCallSiteEntry() ||
           CallSitesInfo.find(MI) == CallSitesInfo.end()) &&
          "Call site info was not updated!");
   // Strip it for parts. The operand array and the MI object itself are
@@ -898,9 +898,12 @@ static const MachineInstr *getCallInstr(const MachineInstr *MI) {
 }
 
 void MachineFunction::eraseCallSiteInfo(const MachineInstr *MI) {
-  assert(MI->isCandidateForCallSiteEntry() &&
-         "Call site info refers only to call (MI) candidates");
-  CallSiteInfoMap::iterator CSIt = getCallSiteInfo(MI);
+  assert(MI->shouldUpdateCallSiteInfo() &&
+         "Call site info refers only to call (MI) candidates or "
+         "candidates inside bundles");
+
+  const MachineInstr *CallMI = getCallInstr(MI);
+  CallSiteInfoMap::iterator CSIt = getCallSiteInfo(CallMI);
   if (CSIt == CallSitesInfo.end())
     return;
   CallSitesInfo.erase(CSIt);
@@ -908,13 +911,15 @@ void MachineFunction::eraseCallSiteInfo(const MachineInstr *MI) {
 
 void MachineFunction::copyCallSiteInfo(const MachineInstr *Old,
                                        const MachineInstr *New) {
-  assert(Old->isCandidateForCallSiteEntry() &&
-         "Call site info refers only to call (MI) candidates");
+  assert(Old->shouldUpdateCallSiteInfo() &&
+         "Call site info refers only to call (MI) candidates or "
+         "candidates inside bundles");
 
   if (!New->isCandidateForCallSiteEntry())
     return eraseCallSiteInfo(Old);
 
-  CallSiteInfoMap::iterator CSIt = getCallSiteInfo(Old);
+  const MachineInstr *OldCallMI = getCallInstr(Old);
+  CallSiteInfoMap::iterator CSIt = getCallSiteInfo(OldCallMI);
   if (CSIt == CallSitesInfo.end())
     return;
 

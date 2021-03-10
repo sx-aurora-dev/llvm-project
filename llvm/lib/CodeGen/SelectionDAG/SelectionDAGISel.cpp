@@ -2910,6 +2910,7 @@ void SelectionDAGISel::SelectCodeCommon(SDNode *NodeToMatch,
     unsigned CurrentOpcodeIndex = MatcherIndex;
 #endif
     BuiltinOpcodes Opcode = (BuiltinOpcodes)MatcherTable[MatcherIndex++];
+    LLVM_DEBUG(dbgs() << "N MatcherIndex=" << CurrentOpcodeIndex << " Opcode=" << Opcode << "\n");
     switch (Opcode) {
     case OPC_Scope: {
       // Okay, the semantics of this operation are that we should push a scope
