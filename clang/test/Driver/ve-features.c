@@ -9,5 +9,5 @@
 // NO-VEVPU-NOT: "-target-feature" "+vpu"
 // VEPACKED: "-target-feature" "+packed"
 // NO-VEPACKED-NOT: "-target-feature" "+packed"
-// VESIMD: "-target-feature" "+simd" "-target-feature" "-vpu" "-target-feature" "-packed"
+// VESIMD: "-target-feature" "-vpu" "-target-feature" "-packed" "-target-feature" "+simd"
 // DEFAULT: "-target-feature" "+vpu" "-target-feature" "+packed"
