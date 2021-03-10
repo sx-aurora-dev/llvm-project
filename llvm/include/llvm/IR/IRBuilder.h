@@ -859,6 +859,7 @@ public:
   CallInst *CreateAssumption(Value *Cond,
                              ArrayRef<OperandBundleDef> OpBundles = llvm::None);
 
+
   /// Call an arithmetic VP intrinsic.
   Instruction *CreateVectorPredicatedInst(unsigned OC, ArrayRef<Value *>,
                              Instruction *FMFSource = nullptr,
@@ -875,6 +876,13 @@ public:
                                    Value *FirstOp, Value *SndOp, Value *Mask,
                                    Value *VectorLength,
                                    const Twine &Name = "");
+
+  /// Create a llvm.experimental.noalias.scope.decl intrinsic call.
+  Instruction *CreateNoAliasScopeDeclaration(Value *Scope);
+  Instruction *CreateNoAliasScopeDeclaration(MDNode *ScopeTag) {
+    return CreateNoAliasScopeDeclaration(
+        MetadataAsValue::get(Context, ScopeTag));
+  }
 
   /// Create a call to the experimental.gc.statepoint intrinsic to
   /// start a new statepoint sequence.

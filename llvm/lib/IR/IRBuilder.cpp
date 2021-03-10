@@ -452,6 +452,13 @@ IRBuilderBase::CreateAssumption(Value *Cond,
   return createCallHelper(FnAssume, Ops, this, "", nullptr, OpBundles);
 }
 
+Instruction *IRBuilderBase::CreateNoAliasScopeDeclaration(Value *Scope) {
+  Module *M = BB->getModule();
+  auto *FnIntrinsic = Intrinsic::getDeclaration(
+      M, Intrinsic::experimental_noalias_scope_decl, {});
+  return createCallHelper(FnIntrinsic, {Scope}, this);
+}
+
 /// Create a call to a Masked Load intrinsic.
 /// \p Ptr       - base pointer for the load
 /// \p Alignment - alignment of the source location
@@ -632,7 +639,7 @@ getStatepointArgs(IRBuilderBase &B, uint64_t ID, uint32_t NumPatchBytes,
   Args.push_back(ActualCallee);
   Args.push_back(B.getInt32(CallArgs.size()));
   Args.push_back(B.getInt32(Flags));
-  Args.insert(Args.end(), CallArgs.begin(), CallArgs.end());
+  llvm::append_range(Args, CallArgs);
   // GC Transition and Deopt args are now always handled via operand bundle.
   // They will be removed from the signature of gc.statepoint shortly.
   Args.push_back(B.getInt32(0));
@@ -649,18 +656,17 @@ getStatepointBundles(Optional<ArrayRef<T1>> TransitionArgs,
   std::vector<OperandBundleDef> Rval;
   if (DeoptArgs) {
     SmallVector<Value*, 16> DeoptValues;
-    DeoptValues.insert(DeoptValues.end(), DeoptArgs->begin(), DeoptArgs->end());
+    llvm::append_range(DeoptValues, *DeoptArgs);
     Rval.emplace_back("deopt", DeoptValues);
   }
   if (TransitionArgs) {
     SmallVector<Value*, 16> TransitionValues;
-    TransitionValues.insert(TransitionValues.end(),
-                            TransitionArgs->begin(), TransitionArgs->end());
+    llvm::append_range(TransitionValues, *TransitionArgs);
     Rval.emplace_back("gc-transition", TransitionValues);
   }
   if (GCArgs.size()) {
     SmallVector<Value*, 16> LiveValues;
-    LiveValues.insert(LiveValues.end(), GCArgs.begin(), GCArgs.end());
+    llvm::append_range(LiveValues, GCArgs);
     Rval.emplace_back("gc-live", LiveValues);
   }
   return Rval;
@@ -1095,9 +1101,7 @@ Value *IRBuilderBase::CreatePreserveArrayAccessIndex(
 
   Value *LastIndexV = getInt32(LastIndex);
   Constant *Zero = ConstantInt::get(Type::getInt32Ty(Context), 0);
-  SmallVector<Value *, 4> IdxList;
-  for (unsigned I = 0; I < Dimension; ++I)
-    IdxList.push_back(Zero);
+  SmallVector<Value *, 4> IdxList(Dimension, Zero);
   IdxList.push_back(LastIndexV);
 
   Type *ResultType =

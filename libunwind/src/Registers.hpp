@@ -36,6 +36,7 @@ enum {
   REGISTERS_SPARC,
   REGISTERS_HEXAGON,
   REGISTERS_RISCV,
+  REGISTERS_VE,
 };
 
 #if defined(_LIBUNWIND_TARGET_I386)
@@ -4001,9 +4002,10 @@ public:
   bool        validVectorRegister(int num) const;
   v128        getVectorRegister(int num) const;
   void        setVectorRegister(int num, v128 value);
-  const char *getRegisterName(int num);
+  static const char *getRegisterName(int num);
   void        jumpto();
   static int  lastDwarfRegNum() { return _LIBUNWIND_HIGHEST_DWARF_REGISTER_VE; }
+  static int  getArch() { return REGISTERS_VE; }
 
   uint64_t  getSP() const         { return _registers.__s[11]; }
   void      setSP(uint64_t value) { _registers.__s[11] = value; }
@@ -4011,19 +4013,20 @@ public:
   void      setIP(uint64_t value) { _registers.__ic = value; }
 
 private:
+  // FIXME: Need to store not only scalar registers but also vector and vector
+  // mask registers.  VEOS uses mcontext_t defined in ucontext.h.  It takes
+  // 524288 bytes (65536*8 bytes), though.  Currently, we use libunwind for
+  // SjLj exception support only, so Registers_ve is not implemented completely.
   struct ve_thread_state_t {
-    uint64_t __s[64];   // s0-s64
-    uint64_t __ic;      // Instruction counter (IC)
-    uint64_t __vixr;    // Vector Index Register
-    uint64_t __vl;      // Vector Length Register
+    uint64_t __s[64]; // s0-s64
+    uint64_t __ic;    // Instruction counter (IC)
+    uint64_t __vixr;  // Vector Index Register
+    uint64_t __vl;    // Vector Length Register
   };
 
   ve_thread_state_t _registers; // total 67 registers
 
-  // Currently no vector registers is preserved since libunwind
-  // supports only 128-bit vector registers.
-
-  static int getScalarRegNum(int num);
+  // Currently no vector register is preserved.
 };
 
 inline Registers_ve::Registers_ve(const void *registers) {
@@ -4054,16 +4057,9 @@ inline bool Registers_ve::validRegister(int regNum) const {
   }
 }
 
-inline int Registers_ve::getScalarRegNum(int num)
-{
-  if (num >= UNW_VE_S0 && num <= UNW_VE_S63)
-    return num - UNW_VE_S0;
-  return 0;
-}
-
 inline uint64_t Registers_ve::getRegister(int regNum) const {
-  if (num >= UNW_VE_S0 && num <= UNW_VE_S63)
-    return _registers.__s[getScalarRegNum(regNum)];
+  if (regNum >= UNW_VE_S0 && regNum <= UNW_VE_S63)
+    return _registers.__s[regNum - UNW_VE_S0];
 
   switch (regNum) {
   case UNW_REG_IP:
@@ -4079,8 +4075,8 @@ inline uint64_t Registers_ve::getRegister(int regNum) const {
 }
 
 inline void Registers_ve::setRegister(int regNum, uint64_t value) {
-  if (num >= UNW_VE_S0 && num <= UNW_VE_S63) {
-    _registers.__s[getScalarRegNum(regNum)] = value;
+  if (regNum >= UNW_VE_S0 && regNum <= UNW_VE_S63) {
+    _registers.__s[regNum - UNW_VE_S0] = value;
     return;
   }
 
@@ -4106,12 +4102,12 @@ inline bool Registers_ve::validFloatRegister(int /* regNum */) const {
 }
 
 inline double Registers_ve::getFloatRegister(int /* regNum */) const {
-  _LIBUNWIND_ABORT("VE float support not implemented");
+  _LIBUNWIND_ABORT("VE doesn't have float registers");
 }
 
 inline void Registers_ve::setFloatRegister(int /* regNum */,
                                            double /* value */) {
-  _LIBUNWIND_ABORT("VE float support not implemented");
+  _LIBUNWIND_ABORT("VE doesn't have float registers");
 }
 
 inline bool Registers_ve::validVectorRegister(int /* regNum */) const {
@@ -4122,7 +4118,8 @@ inline v128 Registers_ve::getVectorRegister(int /* regNum */) const {
   _LIBUNWIND_ABORT("VE vector support not implemented");
 }
 
-inline void Registers_ve::setVectorRegister(int /* regNum */, v128 /* value */) {
+inline void Registers_ve::setVectorRegister(int /* regNum */,
+                                            v128 /* value */) {
   _LIBUNWIND_ABORT("VE vector support not implemented");
 }
 
@@ -4264,6 +4261,166 @@ inline const char *Registers_ve::getRegisterName(int regNum) {
     return "s62";
   case UNW_VE_S63:
     return "s63";
+  case UNW_VE_V0:
+    return "v0";
+  case UNW_VE_V1:
+    return "v1";
+  case UNW_VE_V2:
+    return "v2";
+  case UNW_VE_V3:
+    return "v3";
+  case UNW_VE_V4:
+    return "v4";
+  case UNW_VE_V5:
+    return "v5";
+  case UNW_VE_V6:
+    return "v6";
+  case UNW_VE_V7:
+    return "v7";
+  case UNW_VE_V8:
+    return "v8";
+  case UNW_VE_V9:
+    return "v9";
+  case UNW_VE_V10:
+    return "v10";
+  case UNW_VE_V11:
+    return "v11";
+  case UNW_VE_V12:
+    return "v12";
+  case UNW_VE_V13:
+    return "v13";
+  case UNW_VE_V14:
+    return "v14";
+  case UNW_VE_V15:
+    return "v15";
+  case UNW_VE_V16:
+    return "v16";
+  case UNW_VE_V17:
+    return "v17";
+  case UNW_VE_V18:
+    return "v18";
+  case UNW_VE_V19:
+    return "v19";
+  case UNW_VE_V20:
+    return "v20";
+  case UNW_VE_V21:
+    return "v21";
+  case UNW_VE_V22:
+    return "v22";
+  case UNW_VE_V23:
+    return "v23";
+  case UNW_VE_V24:
+    return "v24";
+  case UNW_VE_V25:
+    return "v25";
+  case UNW_VE_V26:
+    return "v26";
+  case UNW_VE_V27:
+    return "v27";
+  case UNW_VE_V28:
+    return "v28";
+  case UNW_VE_V29:
+    return "v29";
+  case UNW_VE_V30:
+    return "v30";
+  case UNW_VE_V31:
+    return "v31";
+  case UNW_VE_V32:
+    return "v32";
+  case UNW_VE_V33:
+    return "v33";
+  case UNW_VE_V34:
+    return "v34";
+  case UNW_VE_V35:
+    return "v35";
+  case UNW_VE_V36:
+    return "v36";
+  case UNW_VE_V37:
+    return "v37";
+  case UNW_VE_V38:
+    return "v38";
+  case UNW_VE_V39:
+    return "v39";
+  case UNW_VE_V40:
+    return "v40";
+  case UNW_VE_V41:
+    return "v41";
+  case UNW_VE_V42:
+    return "v42";
+  case UNW_VE_V43:
+    return "v43";
+  case UNW_VE_V44:
+    return "v44";
+  case UNW_VE_V45:
+    return "v45";
+  case UNW_VE_V46:
+    return "v46";
+  case UNW_VE_V47:
+    return "v47";
+  case UNW_VE_V48:
+    return "v48";
+  case UNW_VE_V49:
+    return "v49";
+  case UNW_VE_V50:
+    return "v50";
+  case UNW_VE_V51:
+    return "v51";
+  case UNW_VE_V52:
+    return "v52";
+  case UNW_VE_V53:
+    return "v53";
+  case UNW_VE_V54:
+    return "v54";
+  case UNW_VE_V55:
+    return "v55";
+  case UNW_VE_V56:
+    return "v56";
+  case UNW_VE_V57:
+    return "v57";
+  case UNW_VE_V58:
+    return "v58";
+  case UNW_VE_V59:
+    return "v59";
+  case UNW_VE_V60:
+    return "v60";
+  case UNW_VE_V61:
+    return "v61";
+  case UNW_VE_V62:
+    return "v62";
+  case UNW_VE_V63:
+    return "v63";
+  case UNW_VE_VM0:
+    return "vm0";
+  case UNW_VE_VM1:
+    return "vm1";
+  case UNW_VE_VM2:
+    return "vm2";
+  case UNW_VE_VM3:
+    return "vm3";
+  case UNW_VE_VM4:
+    return "vm4";
+  case UNW_VE_VM5:
+    return "vm5";
+  case UNW_VE_VM6:
+    return "vm6";
+  case UNW_VE_VM7:
+    return "vm7";
+  case UNW_VE_VM8:
+    return "vm8";
+  case UNW_VE_VM9:
+    return "vm9";
+  case UNW_VE_VM10:
+    return "vm10";
+  case UNW_VE_VM11:
+    return "vm11";
+  case UNW_VE_VM12:
+    return "vm12";
+  case UNW_VE_VM13:
+    return "vm13";
+  case UNW_VE_VM14:
+    return "vm14";
+  case UNW_VE_VM15:
+    return "vm15";
   }
   return "unknown register";
 }

@@ -82,20 +82,24 @@ bool VETargetLowering::CanLowerReturn(
   return CCInfo.CheckReturn(Outs, RetCC);
 }
 
-static const MVT WholeVectorVTs[] = {
-    MVT::v512i32, MVT::v512f32, MVT::v256i32, MVT::v256f32, MVT::v256i64,
-    MVT::v256f64, MVT::v128i32, MVT::v128f32, MVT::v128i64, MVT::v128f64,
-    MVT::v64i32,  MVT::v64f32,  MVT::v64i64,  MVT::v64f64,  MVT::v32i32,
-    MVT::v32f32,  MVT::v32i64,  MVT::v32f64,  MVT::v16i32,  MVT::v16f32,
-    MVT::v16i64,  MVT::v16f64,  MVT::v8i32,   MVT::v8f32,   MVT::v8i64,
-    MVT::v8f64,   MVT::v4i32,   MVT::v4f32,   MVT::v4i64,   MVT::v4f64,
-    MVT::v2i32,   MVT::v2f32,   MVT::v2i64,   MVT::v2f64,
-};
+static const MVT AllPackedVTs[] = {MVT::v512i32, MVT::v512f32};
 
-static const MVT All256MaskVTs[] = {
-    MVT::v256i1, MVT::v128i1, MVT::v64i1, MVT::v32i1,
-    MVT::v16i1,  MVT::v8i1,   MVT::v4i1,  MVT::v2i1,
-};
+static const MVT WholeVectorVTs[] =
+    { MVT::v512i32, MVT::v512f32,
+      MVT::v256i32, MVT::v256f32, MVT::v256i64, MVT::v256f64,
+      MVT::v128i32, MVT::v128f32, MVT::v128i64, MVT::v128f64,
+      MVT::v64i32,  MVT::v64f32,  MVT::v64i64,  MVT::v64f64,
+      MVT::v32i32,  MVT::v32f32,  MVT::v32i64,  MVT::v32f64,
+      MVT::v16i32,  MVT::v16f32,  MVT::v16i64,  MVT::v16f64,
+      MVT::v8i32,   MVT::v8f32,   MVT::v8i64,   MVT::v8f64,
+      MVT::v4i32,   MVT::v4f32,   MVT::v4i64,   MVT::v4f64,
+      MVT::v2i32,   MVT::v2f32,   MVT::v2i64,   MVT::v2f64,
+    };
+
+static const MVT All256MaskVTs[] =
+    { MVT::v256i1, MVT::v128i1, MVT::v64i1,  MVT::v32i1,
+      MVT::v16i1,  MVT::v8i1,   MVT::v4i1,   MVT::v2i1,
+    };
 
 void VETargetLowering::initRegisterClasses() {
   // Scalar registers.
@@ -714,6 +718,18 @@ bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
   return true;
 }
 
+// bool VETargetLowering::canMergeStoresTo(unsigned AddressSpace, EVT MemVT,
+//                                         const SelectionDAG &DAG) const {
+//   // VE's simd-style vectorization is experimental, so disable to use vector
+//   // stores if simd feature is disabled.
+//   if (!Subtarget->simd()) {
+//     if (MemVT.isVector()) {
+//       return false;
+//     }
+//   }
+// }
+
+
 void VETargetLowering::initSPUActions() {
   const auto &TM = getTargetMachine();
 
@@ -968,16 +984,6 @@ void VETargetLowering::initSPUActions() {
   setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::Other, Custom);
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
 
-  /// Others.
-
-  // FIXME: VE's I128 stuff is not investivated yet
-  if (!1) {
-    // These libcalls are not available in 32-bit.
-    setLibcallName(RTLIB::SHL_I128, nullptr);
-    setLibcallName(RTLIB::SRL_I128, nullptr);
-    setLibcallName(RTLIB::SRA_I128, nullptr);
-  }
-
   // Other configurations related to f128.
   setOperationAction(ISD::BR_CC, MVT::f128, Legal);
 
@@ -1012,7 +1018,7 @@ VETargetLowering::VETargetLowering(const TargetMachine &TM,
   initVPUActions();
 
   // Fixed SIMD layer isel actions.
-  initExperimentalVectorActions();
+  initSIMDActions();
 
   setStackPointerRegisterToSaveRestore(VE::SX11);
 
@@ -1988,6 +1994,98 @@ bool VETargetLowering::shouldExpandBuildVectorWithShuffles(
   return DefinedValues < 3;
 #endif
 }
+
+static bool getUniqueInsertion(SDNode *N, unsigned &UniqueIdx) {
+  if (!isa<BuildVectorSDNode>(N))
+    return false;
+  const auto *BVN = cast<BuildVectorSDNode>(N);
+
+  // Find first non-undef insertion.
+  unsigned Idx;
+  for (Idx = 0; Idx < BVN->getNumOperands(); ++Idx) {
+    auto ElemV = BVN->getOperand(Idx);
+    if (!ElemV->isUndef())
+      break;
+  }
+  // Catch the (hypothetical) all-undef case.
+  if (Idx == BVN->getNumOperands())
+    return false;
+  // Remember insertion.
+  UniqueIdx = Idx++;
+  // Verify that all other insertions are undef.
+  for (; Idx < BVN->getNumOperands(); ++Idx) {
+    auto ElemV = BVN->getOperand(Idx);
+    if (!ElemV->isUndef())
+      return false;
+  }
+  return true;
+}
+
+static SDValue getSplatValue(SDNode *N) {
+  if (auto *BuildVec = dyn_cast<BuildVectorSDNode>(N)) {
+    return BuildVec->getSplatValue();
+  }
+  return SDValue();
+}
+
+// SDValue VETargetLowering::lowerBUILD_VECTOR(SDValue Op,
+//                                             SelectionDAG &DAG) const {
+//   if (Subtarget->simd())
+//     return lowerSIMD_BUILD_VECTOR(Op, DAG);
+//   SDLoc DL(Op);
+//   unsigned NumEls = Op.getValueType().getVectorNumElements();
+//   MVT ElemVT = Op.getSimpleValueType().getVectorElementType();
+// 
+//   // If there is just one element, expand to INSERT_VECTOR_ELT.
+//   unsigned UniqueIdx;
+//   if (getUniqueInsertion(Op.getNode(), UniqueIdx)) {
+//     SDValue AccuV = DAG.getUNDEF(Op.getValueType());
+//     auto ElemV = Op->getOperand(UniqueIdx);
+//     SDValue IdxV = DAG.getConstant(UniqueIdx, DL, MVT::i64);
+//     return DAG.getNode(ISD::INSERT_VECTOR_ELT, DL, Op.getValueType(), AccuV,
+//                        ElemV, IdxV);
+//   }
+// 
+//   // Else emit a broadcast.
+//   if (SDValue ScalarV = getSplatValue(Op.getNode())) {
+//     // lower to VEC_BROADCAST
+//     MVT LegalResVT = MVT::getVectorVT(ElemVT, 256);
+// 
+//     auto AVL = DAG.getConstant(NumEls, DL, MVT::i32);
+//     return DAG.getNode(VEISD::VEC_BROADCAST, DL, LegalResVT, Op.getOperand(0),
+//                        AVL);
+//   }
+// 
+//   // Expand
+//   return SDValue();
+// }
+
+// SDValue VETargetLowering::lowerVECTOR_SHUFFLE(SDValue Op,
+//                                               SelectionDAG &DAG) const {
+//   if (Subtarget->simd())
+//     return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
+//   if (Subtarget->intrinsic())
+//     return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
+//   return SDValue();
+// }
+// 
+// SDValue VETargetLowering::lowerMGATHER(SDValue Op, SelectionDAG &DAG) const {
+//   if (Subtarget->simd())
+//     return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
+//   return SDValue();
+// }
+// 
+// SDValue VETargetLowering::lowerMSCATTER(SDValue Op, SelectionDAG &DAG) const {
+//   if (Subtarget->simd())
+//     return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
+//   return SDValue();
+// }
+// 
+// SDValue VETargetLowering::lowerMLOAD(SDValue Op, SelectionDAG &DAG) const {
+//   if (Subtarget->simd())
+//     return lowerSIMD_MLOAD(Op, DAG);
+//   return SDValue();
+// }
 
 /// } Custom Lower
 
@@ -3720,11 +3818,6 @@ SDValue VETargetLowering::LowerOperation(SDValue Op, SelectionDAG &DAG) const {
     else if (Subtarget->simd())
       return LowerOperation_SIMD(Op, DAG);
     llvm_unreachable("Unexpected Opcode in LowerOperation");
-
-#if 0
-  case ISD::EntryToken:
-    return lowerEntryToken_VVP(Op, DAG);
-#endif
 
   // Mostly all-scalar lowerings below.
   case ISD::ATOMIC_FENCE:

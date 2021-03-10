@@ -12,6 +12,11 @@ pipeline {
         REPO_TOP_URL = sh(
             returnStdout: true,
             script: "echo ${env.GIT_URL} | sed -e 's:/[^/]*/[^/]*\$::'").trim()
+
+        // Use VE 0 or 2.
+        VE_NODE_NUMBER = sh(
+            returnStdout: true,
+            script: "echo ${env.EXECUTOR_NUMBER} | sed -e 's:1:2:'").trim()
     }
 
     stages {
@@ -71,19 +76,19 @@ pipeline {
                         }
                     }
                 }
-                stage('Prepare vetfkernel') {
+                stage('Prepare vml') {
                     steps {
-                        dir('vetfkernel') {
+                        dir('vml') {
                             git branch: 'master',
                                 credentialsId: 'marukawa-token',
-                                url: "${REPO_TOP_URL}/ve-tensorflow/vetfkernel.git"
+                                url: "${REPO_TOP_URL}/ve-tensorflow/vml.git"
                         }
-                        dir('vetfkernel/libs/vednn') {
-                            git branch: 'vetfkernel',
+                        dir('vml/libs/vednn') {
+                            git branch: 'vml',
                                 credentialsId: 'marukawa-token',
                                 url: "${REPO_TOP_URL}/ve-tensorflow/vednn.git"
                         }
-                        dir('vetfkernel/build') {
+                        dir('vml/build') {
                             sh """
                                 ${CMAKE} -DCMAKE_BUILD_TYPE="Debug" \
                                     -DLLVM_DIR=${TOP}/llvm-dev/install/lib/cmake/llvm \
@@ -95,12 +100,12 @@ pipeline {
                 }
             }
         }
-        stage('Check vetfkernel') {
+        stage('Check vml') {
             steps {
-                dir('vetfkernel') {
+                dir('vml/build') {
                     sh """
-                        ./build/test/test01
-                        ${PYTHON} perf.py -e build/test/bench -d perfdb/10B \
+                        make test
+                        ${PYTHON} ../perf.py -e bench/bench -d ../perfdb/10B \
                             test
                     """
                 }

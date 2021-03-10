@@ -267,6 +267,7 @@ WebAssemblyTargetLowering::WebAssemblyTargetLowering(
 
   // Exception handling intrinsics
   setOperationAction(ISD::INTRINSIC_WO_CHAIN, MVT::Other, Custom);
+  setOperationAction(ISD::INTRINSIC_W_CHAIN, MVT::Other, Custom);
   setOperationAction(ISD::INTRINSIC_VOID, MVT::Other, Custom);
 
   setMaxAtomicSizeInBitsSupported(64);
@@ -976,8 +977,7 @@ WebAssemblyTargetLowering::LowerCall(CallLoweringInfo &CLI,
                                                  /*isSS=*/false);
     unsigned ValNo = 0;
     SmallVector<SDValue, 8> Chains;
-    for (SDValue Arg :
-         make_range(OutVals.begin() + NumFixedArgs, OutVals.end())) {
+    for (SDValue Arg : drop_begin(OutVals, NumFixedArgs)) {
       assert(ArgLocs[ValNo].getValNo() == ValNo &&
              "ArgLocs should remain in order and only hold varargs args");
       unsigned Offset = ArgLocs[ValNo++].getLocMemOffset();
@@ -1461,6 +1461,21 @@ SDValue WebAssemblyTargetLowering::LowerVASTART(SDValue Op,
                       MachinePointerInfo(SV));
 }
 
+static SDValue getCppExceptionSymNode(SDValue Op, unsigned TagIndex,
+                                      SelectionDAG &DAG) {
+  // We only support C++ exceptions for now
+  int Tag =
+      cast<ConstantSDNode>(Op.getOperand(TagIndex).getNode())->getZExtValue();
+  if (Tag != WebAssembly::CPP_EXCEPTION)
+    llvm_unreachable("Invalid tag: We only support C++ exceptions for now");
+  auto &MF = DAG.getMachineFunction();
+  const auto &TLI = DAG.getTargetLoweringInfo();
+  MVT PtrVT = TLI.getPointerTy(DAG.getDataLayout());
+  const char *SymName = MF.createExternalSymbolName("__cpp_exception");
+  return DAG.getNode(WebAssemblyISD::Wrapper, SDLoc(Op), PtrVT,
+                     DAG.getTargetExternalSymbol(SymName, PtrVT));
+}
+
 SDValue WebAssemblyTargetLowering::LowerIntrinsic(SDValue Op,
                                                   SelectionDAG &DAG) const {
   MachineFunction &MF = DAG.getMachineFunction();
@@ -1494,21 +1509,26 @@ SDValue WebAssemblyTargetLowering::LowerIntrinsic(SDValue Op,
   }
 
   case Intrinsic::wasm_throw: {
-    // We only support C++ exceptions for now
-    int Tag = cast<ConstantSDNode>(Op.getOperand(2).getNode())->getZExtValue();
-    if (Tag != CPP_EXCEPTION)
-      llvm_unreachable("Invalid tag!");
-    const TargetLowering &TLI = DAG.getTargetLoweringInfo();
-    MVT PtrVT = TLI.getPointerTy(DAG.getDataLayout());
-    const char *SymName = MF.createExternalSymbolName("__cpp_exception");
-    SDValue SymNode = DAG.getNode(WebAssemblyISD::Wrapper, DL, PtrVT,
-                                  DAG.getTargetExternalSymbol(SymName, PtrVT));
+    SDValue SymNode = getCppExceptionSymNode(Op, 2, DAG);
     return DAG.getNode(WebAssemblyISD::THROW, DL,
                        MVT::Other, // outchain type
                        {
                            Op.getOperand(0), // inchain
                            SymNode,          // exception symbol
                            Op.getOperand(3)  // thrown value
+                       });
+  }
+
+  case Intrinsic::wasm_catch: {
+    SDValue SymNode = getCppExceptionSymNode(Op, 2, DAG);
+    return DAG.getNode(WebAssemblyISD::CATCH, DL,
+                       {
+                           MVT::i32,  // outchain type
+                           MVT::Other // return value
+                       },
+                       {
+                           Op.getOperand(0), // inchain
+                           SymNode           // exception symbol
                        });
   }
 
@@ -1629,8 +1649,8 @@ SDValue WebAssemblyTargetLowering::LowerBUILD_VECTOR(SDValue Op,
   SmallVector<SwizzleEntry, 16> SwizzleCounts;
 
   auto AddCount = [](auto &Counts, const auto &Val) {
-    auto CountIt = std::find_if(Counts.begin(), Counts.end(),
-                                [&Val](auto E) { return E.first == Val; });
+    auto CountIt =
+        llvm::find_if(Counts, [&Val](auto E) { return E.first == Val; });
     if (CountIt == Counts.end()) {
       Counts.emplace_back(Val, 1);
     } else {

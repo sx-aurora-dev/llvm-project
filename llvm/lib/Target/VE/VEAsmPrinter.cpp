@@ -185,7 +185,7 @@ static void emitHiLo(MCStreamer &OutStreamer, MCSymbol *GOTSym,
 
 void VEAsmPrinter::lowerGETGOTAndEmitMCInsts(const MachineInstr *MI,
                                              const MCSubtargetInfo &STI) {
-  MCSymbol *GOTLabel   =
+  MCSymbol *GOTLabel =
       OutContext.getOrCreateSymbol(Twine("_GLOBAL_OFFSET_TABLE_"));
 
   const MachineOperand &MO = MI->getOperand(0);
@@ -257,10 +257,10 @@ void VEAsmPrinter::lowerGETFunPLTAndEmitMCInsts(const MachineInstr *MI,
 
   MCOperand RegPLT = MCOperand::createReg(VE::SX16); // PLT
 
-  // lea %dst, %plt_lo(func)(-24)
+  // lea %dst, func@plt_lo(-24)
   // and %dst, %dst, (32)0
   // sic %plt                            ; FIXME: is it safe to use %plt here?
-  // lea.sl %dst, %plt_hi(func)(%plt, %dst)
+  // lea.sl %dst, func@plt_hi(%plt, %dst)
   MCOperand cim24 = MCOperand::createImm(-24);
   MCOperand loImm =
       createGOTRelExprOp(VEMCExpr::VK_VE_PLT_LO32, AddrSym, OutContext);

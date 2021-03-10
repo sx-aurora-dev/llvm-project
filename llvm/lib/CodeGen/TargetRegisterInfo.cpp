@@ -26,6 +26,7 @@
 #include "llvm/CodeGen/VirtRegMap.h"
 #include "llvm/Config/llvm-config.h"
 #include "llvm/IR/Attributes.h"
+#include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/Function.h"
 #include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Support/CommandLine.h"
@@ -509,13 +510,19 @@ TargetRegisterInfo::getRegSizeInBits(Register Reg,
   return getRegSizeInBits(*RC);
 }
 
-Register
-TargetRegisterInfo::lookThruCopyLike(Register SrcReg,
-                                     const MachineRegisterInfo *MRI) const {
+Register TargetRegisterInfo::lookThruCopyLike(Register SrcReg,
+                                              const MachineRegisterInfo *MRI,
+                                              bool *AllDefHaveOneUser) const {
+  if (AllDefHaveOneUser)
+    *AllDefHaveOneUser = true;
+
   while (true) {
     const MachineInstr *MI = MRI->getVRegDef(SrcReg);
-    if (!MI->isCopyLike())
+    if (!MI->isCopyLike()) {
+      if (AllDefHaveOneUser && !MRI->hasOneNonDBGUse(SrcReg))
+        *AllDefHaveOneUser = false;
       return SrcReg;
+    }
 
     Register CopySrcReg;
     if (MI->isCopy())
@@ -525,11 +532,39 @@ TargetRegisterInfo::lookThruCopyLike(Register SrcReg,
       CopySrcReg = MI->getOperand(2).getReg();
     }
 
-    if (!CopySrcReg.isVirtual())
+    if (!CopySrcReg.isVirtual()) {
+      if (AllDefHaveOneUser)
+        *AllDefHaveOneUser = false;
       return CopySrcReg;
+    }
 
     SrcReg = CopySrcReg;
   }
+}
+
+void TargetRegisterInfo::getOffsetOpcodes(
+    const StackOffset &Offset, SmallVectorImpl<uint64_t> &Ops) const {
+  assert(!Offset.getScalable() && "Scalable offsets are not handled");
+  DIExpression::appendOffset(Ops, Offset.getFixed());
+}
+
+DIExpression *
+TargetRegisterInfo::prependOffsetExpression(const DIExpression *Expr,
+                                            unsigned PrependFlags,
+                                            const StackOffset &Offset) const {
+  assert((PrependFlags &
+          ~(DIExpression::DerefBefore | DIExpression::DerefAfter |
+            DIExpression::StackValue | DIExpression::EntryValue)) == 0 &&
+         "Unsupported prepend flag");
+  SmallVector<uint64_t, 16> OffsetExpr;
+  if (PrependFlags & DIExpression::DerefBefore)
+    OffsetExpr.push_back(dwarf::DW_OP_deref);
+  getOffsetOpcodes(Offset, OffsetExpr);
+  if (PrependFlags & DIExpression::DerefAfter)
+    OffsetExpr.push_back(dwarf::DW_OP_deref);
+  return DIExpression::prependOpcodes(Expr, OffsetExpr,
+                                      PrependFlags & DIExpression::StackValue,
+                                      PrependFlags & DIExpression::EntryValue);
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)

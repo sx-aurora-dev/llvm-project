@@ -160,8 +160,8 @@ doPromotion(Function *F, SmallPtrSetImpl<Argument *> &ArgsToPromote,
       // In this table, we will track which indices are loaded from the argument
       // (where direct loads are tracked as no indices).
       ScalarizeTable &ArgIndices = ScalarizedElements[&*I];
-      for (auto Iter = I->user_begin(), End = I->user_end(); Iter != End;) {
-        Instruction *UI = cast<Instruction>(*Iter++);
+      for (User *U : make_early_inc_range(I->users())) {
+        Instruction *UI = cast<Instruction>(U);
         Type *SrcTy;
         if (LoadInst *L = dyn_cast<LoadInst>(UI))
           SrcTy = L->getType();
@@ -822,8 +822,7 @@ static bool canPaddingBeAccessed(Argument *arg) {
 
   // Scan through the uses recursively to make sure the pointer is always used
   // sanely.
-  SmallVector<Value *, 16> WorkList;
-  WorkList.insert(WorkList.end(), arg->user_begin(), arg->user_end());
+  SmallVector<Value *, 16> WorkList(arg->users());
   while (!WorkList.empty()) {
     Value *V = WorkList.back();
     WorkList.pop_back();

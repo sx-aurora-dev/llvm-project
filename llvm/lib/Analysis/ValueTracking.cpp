@@ -1337,8 +1337,8 @@ static void computeKnownBitsFromOperator(const Operator *I,
         AccConstIndices += IndexConst.sextOrTrunc(BitWidth);
         continue;
       } else {
-        ScalingFactor.Zero = ~TypeSizeInBytes;
-        ScalingFactor.One = TypeSizeInBytes;
+        ScalingFactor =
+            KnownBits::makeConstant(APInt(IndexBitWidth, TypeSizeInBytes));
       }
       IndexBits = KnownBits::computeForMul(IndexBits, ScalingFactor);
 
@@ -1353,9 +1353,7 @@ static void computeKnownBitsFromOperator(const Operator *I,
           /*Add=*/true, /*NSW=*/false, Known, IndexBits);
     }
     if (!Known.isUnknown() && !AccConstIndices.isNullValue()) {
-      KnownBits Index(BitWidth);
-      Index.Zero = ~AccConstIndices;
-      Index.One = AccConstIndices;
+      KnownBits Index = KnownBits::makeConstant(AccConstIndices);
       Known = KnownBits::computeForAddSub(
           /*Add=*/true, /*NSW=*/false, Known, Index);
     }
@@ -1818,8 +1816,7 @@ void computeKnownBits(const Value *V, const APInt &DemandedElts,
   const APInt *C;
   if (match(V, m_APInt(C))) {
     // We know all of the bits for a scalar constant or a splat vector constant!
-    Known.One = *C;
-    Known.Zero = ~Known.One;
+    Known = KnownBits::makeConstant(*C);
     return;
   }
   // Null and aggregate-zero are all-zeros.
@@ -4394,7 +4391,7 @@ bool llvm::isSafeToSpeculativelyExecute(const Value *V,
     if (*Denominator == 0)
       return false;
     // It's safe to hoist if the denominator is not 0 or -1.
-    if (*Denominator != -1)
+    if (!Denominator->isAllOnesValue())
       return true;
     // At this point we know that the denominator is -1.  It is safe to hoist as
     // long we know that the numerator is not INT_MIN.
@@ -4737,7 +4734,7 @@ static bool canCreateUndefOrPoison(const Operator *Op, bool PoisonOnly) {
         ShiftAmounts.push_back(C);
 
       bool Safe = llvm::all_of(ShiftAmounts, [](Constant *C) {
-        auto *CI = dyn_cast<ConstantInt>(C);
+        auto *CI = dyn_cast_or_null<ConstantInt>(C);
         return CI && CI->getValue().ult(C->getType()->getIntegerBitWidth());
       });
       return !Safe;
@@ -4895,7 +4892,8 @@ static bool isGuaranteedNotToBeUndefOrPoison(const Value *V,
       return true;
 
     if (C->getType()->isVectorTy() && !isa<ConstantExpr>(C))
-      return (PoisonOnly || !C->containsUndefElement()) &&
+      return (PoisonOnly ? !C->containsPoisonElement()
+                         : !C->containsUndefOrPoisonElement()) &&
              !C->containsConstantExpression();
   }
 
@@ -5636,10 +5634,10 @@ static SelectPatternResult matchSelectPattern(CmpInst::Predicate Pred,
     // elements because those can not be back-propagated for analysis.
     Value *OutputZeroVal = nullptr;
     if (match(TrueVal, m_AnyZeroFP()) && !match(FalseVal, m_AnyZeroFP()) &&
-        !cast<Constant>(TrueVal)->containsUndefElement())
+        !cast<Constant>(TrueVal)->containsUndefOrPoisonElement())
       OutputZeroVal = TrueVal;
     else if (match(FalseVal, m_AnyZeroFP()) && !match(TrueVal, m_AnyZeroFP()) &&
-             !cast<Constant>(FalseVal)->containsUndefElement())
+             !cast<Constant>(FalseVal)->containsUndefOrPoisonElement())
       OutputZeroVal = FalseVal;
 
     if (OutputZeroVal) {

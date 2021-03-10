@@ -192,8 +192,8 @@ struct WasmSymbolInfo {
   // For symbols to be exported from the final module
   Optional<StringRef> ExportName;
   union {
-    // For function or global symbols, the index in function or global index
-    // space.
+    // For function, table, or global symbols, the index in function, table, or
+    // global index space.
     uint32_t ElementIndex;
     // For a data symbols, the address of the data relative to segment.
     WasmDataReference DataRef;
@@ -244,7 +244,6 @@ enum : unsigned {
   WASM_TYPE_F64 = 0x7C,
   WASM_TYPE_V128 = 0x7B,
   WASM_TYPE_FUNCREF = 0x70,
-  WASM_TYPE_EXNREF = 0x68,
   WASM_TYPE_EXTERNREF = 0x6F,
   WASM_TYPE_FUNC = 0x60,
   WASM_TYPE_NORESULT = 0x40, // for blocks with no result values
@@ -379,7 +378,6 @@ enum class ValType {
   F32 = WASM_TYPE_F32,
   F64 = WASM_TYPE_F64,
   V128 = WASM_TYPE_V128,
-  EXNREF = WASM_TYPE_EXNREF,
   FUNCREF = WASM_TYPE_FUNCREF,
   EXTERNREF = WASM_TYPE_EXTERNREF,
 };

@@ -145,8 +145,8 @@ class VETargetLowering final : public TargetLowering, public VELoweringInfo {
   void initSPUActions();
   // setOperationAction for all vector ops
   void initVPUActions();
-  // void initIntrinsicActions();
-  void initExperimentalVectorActions();
+  // setOperationAction for the fixed-SIMD code path
+  void initSIMDActions();
 
 public:
   VETargetLowering(const TargetMachine &TM, const VESubtarget &STI);

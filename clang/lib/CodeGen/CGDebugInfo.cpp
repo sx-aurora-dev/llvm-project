@@ -254,24 +254,12 @@ StringRef CGDebugInfo::getFunctionName(const FunctionDecl *FD) {
   FunctionTemplateSpecializationInfo *Info =
       FD->getTemplateSpecializationInfo();
 
-  // Emit the unqualified name in normal operation. LLVM and the debugger can
-  // compute the fully qualified name from the scope chain. If we're only
-  // emitting line table info, there won't be any scope chains, so emit the
-  // fully qualified name here so that stack traces are more accurate.
-  // FIXME: Do this when emitting DWARF as well as when emitting CodeView after
-  // evaluating the size impact.
-  bool UseQualifiedName = DebugKind == codegenoptions::DebugLineTablesOnly &&
-                          CGM.getCodeGenOpts().EmitCodeView;
-
-  if (!Info && FII && !UseQualifiedName)
+  if (!Info && FII)
     return FII->getName();
 
   SmallString<128> NS;
   llvm::raw_svector_ostream OS(NS);
-  if (!UseQualifiedName)
-    FD->printName(OS);
-  else
-    FD->printQualifiedName(OS, getPrintingPolicy());
+  FD->printName(OS);
 
   // Add any template specialization args.
   if (Info) {
@@ -404,17 +392,26 @@ Optional<StringRef> CGDebugInfo::getSource(const SourceManager &SM,
 }
 
 llvm::DIFile *CGDebugInfo::getOrCreateFile(SourceLocation Loc) {
-  if (!Loc.isValid())
-    // If Location is not valid then use main input file.
-    return TheCU->getFile();
-
   SourceManager &SM = CGM.getContext().getSourceManager();
-  PresumedLoc PLoc = SM.getPresumedLoc(Loc);
+  StringRef FileName;
+  FileID FID;
 
-  StringRef FileName = PLoc.getFilename();
-  if (PLoc.isInvalid() || FileName.empty())
-    // If the location is not valid then use main input file.
-    return TheCU->getFile();
+  if (Loc.isInvalid()) {
+    // The DIFile used by the CU is distinct from the main source file. Call
+    // createFile() below for canonicalization if the source file was specified
+    // with an absolute path.
+    FileName = TheCU->getFile()->getFilename();
+  } else {
+    PresumedLoc PLoc = SM.getPresumedLoc(Loc);
+    FileName = PLoc.getFilename();
+    
+    if (FileName.empty()) {
+      FileName = TheCU->getFile()->getFilename();
+    } else {
+      FileName = PLoc.getFilename();
+    }
+    FID = PLoc.getFileID();
+  }
 
   // Cache the results.
   auto It = DIFileCache.find(FileName.data());
@@ -426,11 +423,7 @@ llvm::DIFile *CGDebugInfo::getOrCreateFile(SourceLocation Loc) {
 
   SmallString<32> Checksum;
 
-  // Compute the checksum if possible. If the location is affected by a #line
-  // directive that refers to a file, PLoc will have an invalid FileID, and we
-  // will correctly get no checksum.
-  Optional<llvm::DIFile::ChecksumKind> CSKind =
-      computeChecksum(PLoc.getFileID(), Checksum);
+  Optional<llvm::DIFile::ChecksumKind> CSKind = computeChecksum(FID, Checksum);
   Optional<llvm::DIFile::ChecksumInfo<StringRef>> CSInfo;
   if (CSKind)
     CSInfo.emplace(*CSKind, Checksum);
@@ -1053,7 +1046,10 @@ CGDebugInfo::getOrCreateRecordFwdDecl(const RecordType *Ty,
       Flags |= llvm::DINode::FlagNonTrivial;
 
   // Create the type.
-  SmallString<256> Identifier = getTypeIdentifier(Ty, CGM, TheCU);
+  SmallString<256> Identifier;
+  // Don't include a linkage name in line tables only.
+  if (CGM.getCodeGenOpts().hasReducedDebugInfo())
+    Identifier = getTypeIdentifier(Ty, CGM, TheCU);
   llvm::DICompositeType *RetTy = DBuilder.createReplaceableCompositeType(
       getTagForRecord(RD), RDName, Ctx, DefUnit, Line, 0, Size, Align, Flags,
       Identifier);
@@ -2104,8 +2100,7 @@ StringRef CGDebugInfo::getDynamicInitializerName(const VarDecl *VD,
 }
 
 void CGDebugInfo::CollectVTableInfo(const CXXRecordDecl *RD, llvm::DIFile *Unit,
-                                    SmallVectorImpl<llvm::Metadata *> &EltTys,
-                                    llvm::DICompositeType *RecordTy) {
+                                    SmallVectorImpl<llvm::Metadata *> &EltTys) {
   // If this class is not dynamic then there is not any vtable info to collect.
   if (!RD->isDynamicClass())
     return;
@@ -2322,6 +2317,9 @@ static bool shouldOmitDefinition(codegenoptions::DebugInfoKind DebugKind,
     if (ES->hasExternalDefinitions(RD) == ExternalASTSource::EK_Always)
       return true;
 
+  if (DebugKind == codegenoptions::DebugLineTablesOnly)
+    return true;
+
   if (DebugKind > codegenoptions::LimitedDebugInfo)
     return false;
 
@@ -2399,7 +2397,7 @@ llvm::DIType *CGDebugInfo::CreateTypeDefinition(const RecordType *Ty) {
   // its members.  Finally, we create a descriptor for the complete type (which
   // may refer to the forward decl if the struct is recursive) and replace all
   // uses of the forward declaration with the final definition.
-  llvm::DICompositeType *FwdDecl = getOrCreateLimitedType(Ty, DefUnit);
+  llvm::DICompositeType *FwdDecl = getOrCreateLimitedType(Ty);
 
   const RecordDecl *D = RD->getDefinition();
   if (!D || !D->isCompleteDefinition())
@@ -2423,7 +2421,7 @@ llvm::DIType *CGDebugInfo::CreateTypeDefinition(const RecordType *Ty) {
   const auto *CXXDecl = dyn_cast<CXXRecordDecl>(RD);
   if (CXXDecl) {
     CollectCXXBases(CXXDecl, DefUnit, EltTys, FwdDecl);
-    CollectVTableInfo(CXXDecl, DefUnit, EltTys, FwdDecl);
+    CollectVTableInfo(CXXDecl, DefUnit, EltTys);
   }
 
   // Collect data fields (including static variables and any initializers).
@@ -3144,10 +3142,7 @@ static QualType UnwrapTypeForDebugInfo(QualType T, const ASTContext &C) {
 }
 
 llvm::DIType *CGDebugInfo::getTypeOrNull(QualType Ty) {
-
-  // Unwrap the type as needed for debug information.
-  Ty = UnwrapTypeForDebugInfo(Ty, CGM.getContext());
-
+  assert(Ty == UnwrapTypeForDebugInfo(Ty, CGM.getContext()));
   auto It = TypeCache.find(Ty.getAsOpaquePtr());
   if (It != TypeCache.end()) {
     // Verify that the debug info still exists.
@@ -3160,8 +3155,6 @@ llvm::DIType *CGDebugInfo::getTypeOrNull(QualType Ty) {
 
 void CGDebugInfo::completeTemplateDefinition(
     const ClassTemplateSpecializationDecl &SD) {
-  if (DebugKind <= codegenoptions::DebugLineTablesOnly)
-    return;
   completeUnusedClass(SD);
 }
 
@@ -3323,8 +3316,8 @@ llvm::DIType *CGDebugInfo::CreateTypeNode(QualType Ty, llvm::DIFile *Unit) {
   llvm_unreachable("type should have been unwrapped!");
 }
 
-llvm::DICompositeType *CGDebugInfo::getOrCreateLimitedType(const RecordType *Ty,
-                                                           llvm::DIFile *Unit) {
+llvm::DICompositeType *
+CGDebugInfo::getOrCreateLimitedType(const RecordType *Ty) {
   QualType QTy(Ty, 0);
 
   auto *T = cast_or_null<llvm::DICompositeType>(getTypeOrNull(QTy));
@@ -3491,7 +3484,11 @@ void CGDebugInfo::collectFunctionDeclProps(GlobalDecl GD, llvm::DIFile *Unit,
                               DebugKind <= codegenoptions::DebugLineTablesOnly))
     LinkageName = StringRef();
 
-  if (CGM.getCodeGenOpts().hasReducedDebugInfo()) {
+  // Emit the function scope in line tables only mode (if CodeView) to
+  // differentiate between function names.
+  if (CGM.getCodeGenOpts().hasReducedDebugInfo() ||
+      (DebugKind == codegenoptions::DebugLineTablesOnly &&
+       CGM.getCodeGenOpts().EmitCodeView)) {
     if (const NamespaceDecl *NSDecl =
             dyn_cast_or_null<NamespaceDecl>(FD->getDeclContext()))
       FDContext = getOrCreateNamespace(NSDecl);
@@ -3500,6 +3497,8 @@ void CGDebugInfo::collectFunctionDeclProps(GlobalDecl GD, llvm::DIFile *Unit,
       llvm::DIScope *Mod = getParentModuleOrNull(RDecl);
       FDContext = getContextDescriptor(RDecl, Mod ? Mod : TheCU);
     }
+  }
+  if (CGM.getCodeGenOpts().hasReducedDebugInfo()) {
     // Check if it is a noreturn-marked function
     if (FD->isNoReturn())
       Flags |= llvm::DINode::FlagNoReturn;
@@ -3811,11 +3810,9 @@ llvm::DISubroutineType *CGDebugInfo::getOrCreateFunctionType(const Decl *D,
   return cast<llvm::DISubroutineType>(getOrCreateType(FnType, F));
 }
 
-void CGDebugInfo::EmitFunctionStart(GlobalDecl GD, SourceLocation Loc,
+void CGDebugInfo::emitFunctionStart(GlobalDecl GD, SourceLocation Loc,
                                     SourceLocation ScopeLoc, QualType FnType,
-                                    llvm::Function *Fn, bool CurFuncIsThunk,
-                                    CGBuilderTy &Builder) {
-
+                                    llvm::Function *Fn, bool CurFuncIsThunk) {
   StringRef Name;
   StringRef LinkageName;
 

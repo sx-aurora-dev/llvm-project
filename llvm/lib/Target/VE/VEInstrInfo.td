@@ -1702,14 +1702,14 @@ def : Pat<(i64 (atomic_swap_64 ADDRri:$src, i64:$new)),
 
 // Basic cast between registers.  This is often used in ISel patterns, so make
 // them as OutPatFrag.
-def i2l : OutPatFrag<(ops node:$expr),
-                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $expr, sub_i32)>;
-def l2i : OutPatFrag<(ops node:$expr),
-                     (EXTRACT_SUBREG $expr, sub_i32)>;
-def f2l : OutPatFrag<(ops node:$expr),
-                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $expr, sub_f32)>;
-def l2f : OutPatFrag<(ops node:$expr),
-                     (EXTRACT_SUBREG $expr, sub_f32)>;
+def i2l : OutPatFrag<(ops node:$exp),
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $exp, sub_i32)>;
+def l2i : OutPatFrag<(ops node:$exp),
+                     (EXTRACT_SUBREG $exp, sub_i32)>;
+def f2l : OutPatFrag<(ops node:$exp),
+                     (INSERT_SUBREG (i64 (IMPLICIT_DEF)), $exp, sub_f32)>;
+def l2f : OutPatFrag<(ops node:$exp),
+                     (EXTRACT_SUBREG $exp, sub_f32)>;
 
 def zero_i32 : OutPatFrag<(ops node:$expr),
                           (ANDrm $expr, 32)>;

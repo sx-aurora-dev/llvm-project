@@ -15,10 +15,9 @@
 #include "AMDGPU.h"
 #include "AMDGPUTargetMachine.h"
 #include "Utils/AMDGPUBaseInfo.h"
-#include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/IR/Module.h"
-#include "llvm/IR/PassManager.h"
-#include "llvm/Transforms/Utils/Cloning.h"
+#include "llvm/Pass.h"
+#include "llvm/Support/CommandLine.h"
 
 using namespace llvm;
 
@@ -55,12 +54,9 @@ char AMDGPUAlwaysInline::ID = 0;
 static void
 recursivelyVisitUsers(GlobalValue &GV,
                       SmallPtrSetImpl<Function *> &FuncsToAlwaysInline) {
-  SmallVector<User *, 16> Stack;
+  SmallVector<User *, 16> Stack(GV.users());
 
   SmallPtrSet<const Value *, 8> Visited;
-
-  for (User *U : GV.users())
-    Stack.push_back(U);
 
   while (!Stack.empty()) {
     User *U = Stack.pop_back_val();

@@ -34,6 +34,7 @@ if(${LIBOMPTARGET_DEP_VEO_FOUND})
 
   target_link_libraries(
     "omptarget.rtl.${tmachine_libname}"
+    elf_common
     ${LIBOMPTARGET_DEP_LIBFFI_LIBRARIES}
     ${LIBOMPTARGET_DEP_LIBELF_LIBRARIES}
     ${additional_libs}

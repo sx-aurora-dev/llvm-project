@@ -195,10 +195,9 @@ def x86mmx : ValueType<64 , 159>;   // X86 MMX value
 def FlagVT : ValueType<0  , 160>;   // Pre-RA sched glue
 def isVoid : ValueType<0  , 161>;   // Produces no value
 def untyped: ValueType<8  , 162>;   // Produces an untyped value
-def exnref : ValueType<0  , 163>;   // WebAssembly's exnref type
-def funcref : ValueType<0  , 164>;   // WebAssembly's funcref type
-def externref : ValueType<0  , 165>;   // WebAssembly's externref type
-def x86amx : ValueType<8192, 166>;   // X86 AMX value
+def funcref : ValueType<0  , 163>;   // WebAssembly's funcref type
+def externref : ValueType<0  , 164>;   // WebAssembly's externref type
+def x86amx : ValueType<8192, 165>;   // X86 AMX value
 
 def token  : ValueType<0  , 248>;   // TokenTy
 def MetadataVT: ValueType<0, 249>;  // Metadata

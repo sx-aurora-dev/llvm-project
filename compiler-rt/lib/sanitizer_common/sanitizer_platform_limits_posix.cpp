@@ -11,18 +11,19 @@
 // Sizes and layouts of platform-specific POSIX data structures.
 //===----------------------------------------------------------------------===//
 
-#include "sanitizer_platform.h"
-
-#if SANITIZER_LINUX || SANITIZER_MAC
+#if defined(__linux__) || defined(__APPLE__)
 // Tests in this file assume that off_t-dependent data structures match the
 // libc ABI. For example, struct dirent here is what readdir() function (as
 // exported from libc) returns, and not the user-facing "dirent", which
 // depends on _FILE_OFFSET_BITS setting.
 // To get this "true" dirent definition, we undefine _FILE_OFFSET_BITS below.
-#ifdef _FILE_OFFSET_BITS
 #undef _FILE_OFFSET_BITS
 #endif
 
+// Must go after undef _FILE_OFFSET_BITS.
+#include "sanitizer_platform.h"
+
+#if SANITIZER_LINUX || SANITIZER_MAC
 // Must go after undef _FILE_OFFSET_BITS.
 #include "sanitizer_glibc_version.h"
 
