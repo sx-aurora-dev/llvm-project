@@ -970,6 +970,18 @@ class InstTable(object):
         O = self.addMask(O)
         self.Def(opc, instName, subop, name, O, "{0} = {1} / {2}")
 
+    def Logical1u(self, opc, name, instName, expr):
+        Args = [[VX(T_u64), VZ(T_u64)]]
+        Args = self.addMask(Args, addVD=False)
+
+        ArgsP = [[VX(T_u32), VZ(T_u32)]]
+        ArgsP = self.addMask(ArgsP, VM512, addVD=False)
+
+        self.Def(opc, instName, "", name, Args, expr)
+        #self.Def(opc, instName, "p", "p"+name+".lo", ArgsP, expr).noTest()
+        #self.Def(opc, instName, "p", "p"+name+".up", ArgsP, expr).noTest()
+        self.Def(opc, instName, "p", "p" + name, ArgsP, expr)
+        
     def Logical(self, opc, name, instName, expr):
         O_u32_vsv = [VX(T_u32), SY(T_u64), VZ(T_u32)]
 
@@ -982,7 +994,8 @@ class InstTable(object):
         self.Def(opc, instName, "", name, Args, expr)
         #self.Def(opc, instName, "p", "p"+name+".lo", ArgsP, expr).noTest()
         #self.Def(opc, instName, "p", "p"+name+".up", ArgsP, expr).noTest()
-        self.Def(opc, instName, "p", "p"+name, ArgsP, expr)
+        self.Def(opc, instName, "p", "p" + name, ArgsP, expr)
+        
 
     def Shift(self, opc, name, instName, ty, expr):
         O_vvv = [VX(ty), VZ(ty), VY(T_u64)]
@@ -1165,7 +1178,7 @@ def createInstructionTable():
     T.Logical(0xC6, "vxor", "VXOR", "{0} = {1} ^ {2}")
     T.Logical(0xC7, "veqv", "VEQV", "{0} = ~({1} ^ {2})")
     T.NoImpl("VLDZ")
-    T.NoImpl("VPCNT")
+    T.Logical1u(0xac, "vpcnt", "VPCNT", "{0} = popcount({1})")
     T.NoImpl("VBRV")
     T.Def(0x99, "VSEQ", "", "vseq", [[VX(T_u64)]], "{0} = i").noTest()
     T.Def(0x99, "VSEQ", "l", "pvseq.lo", [[VX(T_u64)]], "{0} = i").noTest()
