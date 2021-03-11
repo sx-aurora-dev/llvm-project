@@ -199,6 +199,7 @@ SDValue VETargetLowering::combineVVP(SDNode *N, DAGCombinerInfo &DCI) const {
       return N;
     }
   } break;
+  // TODO FFP_FNEG match root
 
   // TODO: Fuse recip(sqrt(vx))
   case VEISD::VVP_FRCP: {

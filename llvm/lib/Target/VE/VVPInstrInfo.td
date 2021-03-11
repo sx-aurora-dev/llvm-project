@@ -149,6 +149,7 @@ def vvp_shl    : SDNode<"VEISD::VVP_SHL",  SDTIntShiftOpVVP>;
 def vvp_sfa    : SDNode<"VEISD::VVP_ADD",  SDTSFAOpVVP>;
 
 // fp
+def vvp_fneg    : SDNode<"VEISD::VVP_FNEG",  SDTFPUnaryOpVVP>;   // 0 - y
 def vvp_fadd    : SDNode<"VEISD::VVP_FADD",  SDTFPBinOpVVP>;     // x + y
 def vvp_fsub    : SDNode<"VEISD::VVP_FSUB",  SDTFPBinOpVVP>;     // x - y
 def vvp_fmul    : SDNode<"VEISD::VVP_FMUL",  SDTFPBinOpVVP>;     // x * y

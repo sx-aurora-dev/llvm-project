@@ -582,3 +582,45 @@ defm: MaskBinaryArith<or,ORMmm>;
 defm: MaskBinaryArith<xor,XORMmm>;
 
 /// } Mask arithmetic
+
+
+/// FNEG {
+
+multiclass FNeg<ValueType DataVT> {
+  // Masked with select.
+  def : Pat<(vvp_select (vvp_fneg DataVT:$vx, (v256i1 srcvalue), (i32 srcvalue)),
+                        DataVT:$vfalse,
+                        v256i1:$mask,
+                        i32:$avl),
+            (VXORmvml_v (i32 1), $vx, $mask, $avl, $vfalse)>;
+  
+  // Unmasked.
+  def : Pat<(vvp_fneg DataVT:$vx, (v256i1 true_mask), i32:$avl),
+            (VXORmvl (i32 1), $vx, $avl)>;
+
+  // Masked.
+  def : Pat<(vvp_fneg DataVT:$vx, v256i1:$mask, i32:$avl),
+            (VXORmvml (i32 1), $vx, $mask, $avl)>;
+}
+
+defm: FNeg<v256f32>;
+defm: FNeg<v256f64>;
+
+///// Packed FNeg /////
+
+// Masked with select.
+def : Pat<(vvp_select (vvp_fneg v512f32:$vx, (v512i1 srcvalue), (i32 srcvalue)),
+                      v512f32:$vfalse,
+                      v512i1:$mask,
+                      i32:$avl),
+          (v512f32 (PVXORrvml_v (packed_fneg_imm ), $vx, $mask, $avl, $vfalse))>;
+
+// Unmasked.
+def : Pat<(vvp_fneg v512f32:$vx, (v512i1 true_mask), i32:$avl),
+          (v512f32 (PVXORrvl (packed_fneg_imm ), $vx, $avl))>;
+
+// Masked.
+def : Pat<(vvp_fneg v512f32:$vx, v512i1:$mask, i32:$avl),
+          (v512f32 (PVXORrvml (packed_fneg_imm ), $vx, $mask, $avl))>;
+
+/// } FNEG

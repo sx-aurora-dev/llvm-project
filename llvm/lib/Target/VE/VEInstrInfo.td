@@ -2757,9 +2757,9 @@ def VLEN : OutPatFrag<(ops node:$length),
 include "VEInstrVec.td"
 
 // load an immediate into a register
-def lea_i64         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 $imm))>;
-def lea_i32         : OutPatFrag<(ins node:$imm), (EXTRACT_SUBREG (lea_i64 $imm), sub_i32)>;
-def lea_u32         : OutPatFrag<(ins node:$imm), (ANDrm (lea_i64 $imm), 32)>;
+def lea_imm32_in_i64         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 $imm))>;
+def lea_i32         : OutPatFrag<(ins node:$imm), (EXTRACT_SUBREG (lea_imm32_in_i64 $imm), sub_i32)>;
+def lea_u32         : OutPatFrag<(ins node:$imm), (ANDrm (lea_imm32_in_i64 $imm), 32)>;
 
 // vvp_* SDNode tablegen definitions.
 include "VVPInstrInfo.td"
@@ -2768,6 +2768,9 @@ include "VVPInstrInfo.td"
 include "VEInstrIntrinsicVL.td"
 
 // VE Vector Predicated ISel (Dynamic VL and VP support).
+def packed_fneg_imm       : OutPatFrag<(ins ),
+                            (i64 (SLLri (i64 (ORim 1, (i32 32))), 31))>;
+
 let Predicates = [UseVVP] in {
   // Patterns and intermediate SD nodes (VEC_*).
   include "VEInstrPatternsVec.td"

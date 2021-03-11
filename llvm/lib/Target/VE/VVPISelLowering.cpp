@@ -2077,6 +2077,9 @@ SDValue VETargetLowering::lowerVPToVVP(SDValue Op, SelectionDAG &DAG,
   return NewV;
 }
 
+// static bool isMisalignedVectorLoadStore(SDValue MemoryOp,  ) {
+// }
+
 SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
                                                 VVPExpansionMode Mode,
                                                 VecLenOpt VecLenHint) const {
