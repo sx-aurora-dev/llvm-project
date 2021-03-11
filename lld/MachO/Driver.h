@@ -15,10 +15,17 @@
 #include "llvm/Option/OptTable.h"
 #include "llvm/Support/MemoryBuffer.h"
 
+namespace llvm {
+namespace MachO {
+class InterfaceFile;
+} // namespace MachO
+} // namespace llvm
+
 namespace lld {
 namespace macho {
 
 class DylibFile;
+class InputFile;
 
 class MachOOptTable : public llvm::opt::OptTable {
 public:
@@ -35,13 +42,24 @@ enum {
 #undef OPTION
 };
 
+void parseLCLinkerOption(InputFile*, unsigned argc, StringRef data);
+
 std::string createResponseFile(const llvm::opt::InputArgList &args);
 
 // Check for both libfoo.dylib and libfoo.tbd (in that order).
 llvm::Optional<std::string> resolveDylibPath(llvm::StringRef path);
 
-llvm::Optional<DylibFile *> makeDylibFromTAPI(llvm::MemoryBufferRef mbref,
-                                              DylibFile *umbrella = nullptr);
+llvm::Optional<DylibFile *> loadDylib(llvm::MemoryBufferRef mbref,
+                                      DylibFile *umbrella = nullptr,
+                                      bool isBundleLoader = false);
+
+llvm::Optional<InputFile *> loadArchiveMember(MemoryBufferRef, uint32_t modTime,
+                                              StringRef archiveName,
+                                              bool objCOnly);
+
+uint32_t getModTime(llvm::StringRef path);
+
+void printArchiveMemberLoad(StringRef reason, const InputFile *);
 
 } // namespace macho
 } // namespace lld

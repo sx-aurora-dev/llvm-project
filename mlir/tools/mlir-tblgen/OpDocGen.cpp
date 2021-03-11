@@ -13,9 +13,9 @@
 
 #include "DocGenUtilities.h"
 #include "mlir/Support/IndentedOstream.h"
+#include "mlir/TableGen/AttrOrTypeDef.h"
 #include "mlir/TableGen/GenInfo.h"
 #include "mlir/TableGen/Operator.h"
-#include "mlir/TableGen/TypeDef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/FormatVariadic.h"
@@ -58,7 +58,7 @@ static void emitNamedConstraint(const T &it, raw_ostream &os) {
     os << "`" << it.name << "`";
   else
     os << "&laquo;unnamed&raquo;";
-  os << " | " << it.constraint.getDescription() << "\n";
+  os << " | " << it.constraint.getSummary() << "\n";
 }
 
 //===----------------------------------------------------------------------===//
@@ -106,7 +106,7 @@ static void emitOpDoc(Operator op, raw_ostream &os) {
     for (const auto &it : op.getAttributes()) {
       StringRef storageType = it.attr.getStorageType();
       os << "`" << it.name << "` | " << storageType << " | "
-         << it.attr.getDescription() << "\n";
+         << it.attr.getSummary() << "\n";
     }
   }
 
@@ -153,8 +153,8 @@ static void emitOpDoc(const RecordKeeper &recordKeeper, raw_ostream &os) {
 //===----------------------------------------------------------------------===//
 
 static void emitTypeDoc(const Type &type, raw_ostream &os) {
-  os << "### " << type.getDescription() << "\n";
-  emitDescription(type.getTypeDescription(), os);
+  os << "### " << type.getSummary() << "\n";
+  emitDescription(type.getDescription(), os);
   os << "\n";
 }
 
@@ -164,7 +164,7 @@ static void emitTypeDoc(const Type &type, raw_ostream &os) {
 
 /// Emit the assembly format of a type.
 static void emitTypeAssemblyFormat(TypeDef td, raw_ostream &os) {
-  SmallVector<TypeParameter, 4> parameters;
+  SmallVector<AttrOrTypeParameter, 4> parameters;
   td.getParameters(parameters);
   if (parameters.size() == 0) {
     os << "\nSyntax: `!" << td.getDialect().getName() << "." << td.getMnemonic()
@@ -192,19 +192,21 @@ static void emitTypeDefDoc(TypeDef td, raw_ostream &os) {
   if (td.getMnemonic() && td.getPrinterCode() && *td.getPrinterCode() == "" &&
       td.getParserCode() && *td.getParserCode() == "")
     emitTypeAssemblyFormat(td, os);
-  if (td.hasDescription())
+  if (td.hasDescription()) {
+    os << "\n";
     mlir::tblgen::emitDescription(td.getDescription(), os);
+  }
 
   // Emit attribute documentation.
-  SmallVector<TypeParameter, 4> parameters;
+  SmallVector<AttrOrTypeParameter, 4> parameters;
   td.getParameters(parameters);
-  if (parameters.size() != 0) {
+  if (!parameters.empty()) {
     os << "\n#### Type parameters:\n\n";
     os << "| Parameter | C++ type | Description |\n"
        << "| :-------: | :-------: | ----------- |\n";
     for (const auto &it : parameters) {
-      auto desc = it.getDescription();
-      os << "| " << it.getName() << " | `" << td.getCppClassName() << "` | "
+      auto desc = it.getSummary();
+      os << "| " << it.getName() << " | `" << it.getCppType() << "` | "
          << (desc ? *desc : "") << " |\n";
     }
   }
@@ -219,7 +221,12 @@ static void emitTypeDefDoc(TypeDef td, raw_ostream &os) {
 static void emitDialectDoc(const Dialect &dialect, ArrayRef<Operator> ops,
                            ArrayRef<Type> types, ArrayRef<TypeDef> typeDefs,
                            raw_ostream &os) {
-  os << "# '" << dialect.getName() << "' Dialect\n\n";
+  os << "# ";
+  if (dialect.getName().empty())
+    os << "Builtin";
+  else
+    os << "'" << dialect.getName() << "'";
+  os << " Dialect\n\n";
   emitIfNotEmpty(dialect.getSummary(), os);
   emitIfNotEmpty(dialect.getDescription(), os);
 

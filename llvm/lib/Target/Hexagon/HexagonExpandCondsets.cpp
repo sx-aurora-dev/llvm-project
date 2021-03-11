@@ -582,17 +582,16 @@ unsigned HexagonExpandCondsets::getCondTfrOpcode(const MachineOperand &SO,
   using namespace Hexagon;
 
   if (SO.isReg()) {
-    Register PhysR;
+    MCRegister PhysR;
     RegisterRef RS = SO;
     if (RS.Reg.isVirtual()) {
       const TargetRegisterClass *VC = MRI->getRegClass(RS.Reg);
       assert(VC->begin() != VC->end() && "Empty register class");
       PhysR = *VC->begin();
     } else {
-      assert(Register::isPhysicalRegister(RS.Reg));
       PhysR = RS.Reg;
     }
-    Register PhysS = (RS.Sub == 0) ? PhysR : TRI->getSubReg(PhysR, RS.Sub);
+    MCRegister PhysS = (RS.Sub == 0) ? PhysR : TRI->getSubReg(PhysR, RS.Sub);
     const TargetRegisterClass *RC = TRI->getMinimalPhysRegClass(PhysS);
     switch (TRI->getRegSizeInBits(*RC)) {
       case 32:
@@ -1174,7 +1173,7 @@ bool HexagonExpandCondsets::coalesceRegisters(RegisterRef R1, RegisterRef R2) {
     }
     L1.addSegment(LiveRange::Segment(I->start, I->end, NewVN));
   }
-  while (L2.begin() != L2.end())
+  while (!L2.empty())
     L2.removeSegment(*L2.begin());
   LIS->removeInterval(R2.Reg);
 

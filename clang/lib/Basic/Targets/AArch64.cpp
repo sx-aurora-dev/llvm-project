@@ -182,6 +182,7 @@ void AArch64TargetInfo::getTargetDefinesARMV84A(const LangOptions &Opts,
 
 void AArch64TargetInfo::getTargetDefinesARMV85A(const LangOptions &Opts,
                                                 MacroBuilder &Builder) const {
+  Builder.defineMacro("__ARM_FEATURE_FRINT", "1");
   // Also include the Armv8.4 defines
   getTargetDefinesARMV84A(Opts, Builder);
 }
@@ -194,6 +195,12 @@ void AArch64TargetInfo::getTargetDefinesARMV86A(const LangOptions &Opts,
   // - __ARM_FEATURE_MATMUL_INT8
   // Handle them here.
   getTargetDefinesARMV85A(Opts, Builder);
+}
+
+void AArch64TargetInfo::getTargetDefinesARMV87A(const LangOptions &Opts,
+                                                MacroBuilder &Builder) const {
+  // Also include the Armv8.6 defines
+  getTargetDefinesARMV86A(Opts, Builder);
 }
 
 void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
@@ -350,6 +357,9 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
   if (Opts.BranchTargetEnforcement)
     Builder.defineMacro("__ARM_FEATURE_BTI_DEFAULT", "1");
 
+  if (HasLS64)
+    Builder.defineMacro("__ARM_FEATURE_LS64", "1");
+
   switch (ArchKind) {
   default:
     break;
@@ -370,6 +380,9 @@ void AArch64TargetInfo::getTargetDefines(const LangOptions &Opts,
     break;
   case llvm::AArch64::ArchKind::ARMV8_6A:
     getTargetDefinesARMV86A(Opts, Builder);
+    break;
+  case llvm::AArch64::ArchKind::ARMV8_7A:
+    getTargetDefinesARMV87A(Opts, Builder);
     break;
   }
 
@@ -411,6 +424,7 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
   HasFP16FML = false;
   HasMTE = false;
   HasTME = false;
+  HasLS64 = false;
   HasMatMul = false;
   HasBFloat16 = false;
   HasSVE2 = false;
@@ -486,6 +500,8 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       ArchKind = llvm::AArch64::ArchKind::ARMV8_5A;
     if (Feature == "+v8.6a")
       ArchKind = llvm::AArch64::ArchKind::ARMV8_6A;
+    if (Feature == "+v8.7a")
+      ArchKind = llvm::AArch64::ArchKind::ARMV8_7A;
     if (Feature == "+v8r")
       ArchKind = llvm::AArch64::ArchKind::ARMV8R;
     if (Feature == "+fullfp16")
@@ -498,12 +514,18 @@ bool AArch64TargetInfo::handleTargetFeatures(std::vector<std::string> &Features,
       HasMTE = true;
     if (Feature == "+tme")
       HasTME = true;
+    if (Feature == "+pauth")
+      HasPAuth = true;
     if (Feature == "+i8mm")
       HasMatMul = true;
     if (Feature == "+bf16")
       HasBFloat16 = true;
     if (Feature == "+lse")
       HasLSE = true;
+    if (Feature == "+ls64")
+      HasLS64 = true;
+    if (Feature == "+flagm")
+      HasFlagM = true;
   }
 
   setDataLayout();
@@ -857,7 +879,7 @@ DarwinAArch64TargetInfo::DarwinAArch64TargetInfo(const llvm::Triple &Triple,
     UseZeroLengthBitfieldAlignment = true;
     TheCXXABI.set(TargetCXXABI::WatchOS);
   } else
-    TheCXXABI.set(TargetCXXABI::iOS64);
+    TheCXXABI.set(TargetCXXABI::AppleARM64);
 }
 
 void DarwinAArch64TargetInfo::getOSDefines(const LangOptions &Opts,
@@ -873,6 +895,9 @@ void DarwinAArch64TargetInfo::getOSDefines(const LangOptions &Opts,
   Builder.defineMacro("__REGISTER_PREFIX__", "");
   Builder.defineMacro("__arm64", "1");
   Builder.defineMacro("__arm64__", "1");
+
+  if (Triple.isArm64e())
+    Builder.defineMacro("__arm64e__", "1");
 
   getDarwinDefines(Builder, Opts, Triple, PlatformName, PlatformMinVersion);
 }

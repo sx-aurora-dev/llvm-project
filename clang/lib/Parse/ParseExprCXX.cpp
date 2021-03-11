@@ -1268,7 +1268,6 @@ ExprResult Parser::ParseLambdaExpressionAfterIntroducer(
               << A.getAttrName()->getName();
   };
 
-  // FIXME: Consider allowing this as an extension for GCC compatibiblity.
   MultiParseScope TemplateParamScope(*this);
   if (Tok.is(tok::less)) {
     Diag(Tok, getLangOpts().CPlusPlus20
@@ -1288,10 +1287,30 @@ ExprResult Parser::ParseLambdaExpressionAfterIntroducer(
       Diag(RAngleLoc,
            diag::err_lambda_template_parameter_list_empty);
     } else {
+      ExprResult RequiresClause;
+      if (TryConsumeToken(tok::kw_requires)) {
+        RequiresClause =
+            Actions.ActOnRequiresClause(ParseConstraintLogicalOrExpression(
+                /*IsTrailingRequiresClause=*/false));
+        if (RequiresClause.isInvalid())
+          SkipUntil({tok::l_brace, tok::l_paren}, StopAtSemi | StopBeforeMatch);
+      }
+
       Actions.ActOnLambdaExplicitTemplateParameterList(
-          LAngleLoc, TemplateParams, RAngleLoc);
+          LAngleLoc, TemplateParams, RAngleLoc, RequiresClause);
       ++CurTemplateDepthTracker;
     }
+  }
+
+  // Implement WG21 P2173, which allows attributes immediately before the
+  // lambda declarator and applies them to the corresponding function operator
+  // or operator template declaration. We accept this as a conforming extension
+  // in all language modes that support lambdas.
+  if (isCXX11AttributeSpecifier()) {
+    Diag(Tok, getLangOpts().CPlusPlus2b
+                  ? diag::warn_cxx20_compat_decl_attrs_on_lambda
+                  : diag::ext_decl_attrs_on_lambda);
+    MaybeParseCXX11Attributes(D);
   }
 
   TypeResult TrailingReturnType;
@@ -1330,12 +1349,9 @@ ExprResult Parser::ParseLambdaExpressionAfterIntroducer(
     SourceLocation DeclEndLoc = RParenLoc;
 
     // GNU-style attributes must be parsed before the mutable specifier to be
-    // compatible with GCC.
-    MaybeParseGNUAttributes(Attr, &DeclEndLoc);
-
-    // MSVC-style attributes must be parsed before the mutable specifier to be
-    // compatible with MSVC.
-    MaybeParseMicrosoftDeclSpecs(Attr, &DeclEndLoc);
+    // compatible with GCC. MSVC-style attributes must be parsed before the
+    // mutable specifier to be compatible with MSVC.
+    MaybeParseAttributes(PAKM_GNU | PAKM_Declspec, Attr);
 
     // Parse mutable-opt and/or constexpr-opt or consteval-opt, and update the
     // DeclEndLoc.

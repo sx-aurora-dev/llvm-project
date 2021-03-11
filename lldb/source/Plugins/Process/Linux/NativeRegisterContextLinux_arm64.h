@@ -12,6 +12,7 @@
 #define lldb_NativeRegisterContextLinux_arm64_h
 
 #include "Plugins/Process/Linux/NativeRegisterContextLinux.h"
+#include "Plugins/Process/Utility/NativeRegisterContextDBReg_arm64.h"
 #include "Plugins/Process/Utility/RegisterInfoPOSIX_arm64.h"
 
 #include <asm/ptrace.h>
@@ -21,7 +22,9 @@ namespace process_linux {
 
 class NativeProcessLinux;
 
-class NativeRegisterContextLinux_arm64 : public NativeRegisterContextLinux {
+class NativeRegisterContextLinux_arm64
+    : public NativeRegisterContextLinux,
+      public NativeRegisterContextDBReg_arm64 {
 public:
   NativeRegisterContextLinux_arm64(const ArchSpec &target_arch,
                                    NativeThreadProtocol &native_thread);
@@ -47,44 +50,9 @@ public:
   std::vector<uint32_t>
   GetExpeditedRegisters(ExpeditedRegs expType) const override;
 
-  // Hardware breakpoints/watchpoint management functions
-
-  uint32_t NumSupportedHardwareBreakpoints() override;
-
-  uint32_t SetHardwareBreakpoint(lldb::addr_t addr, size_t size) override;
-
-  bool ClearHardwareBreakpoint(uint32_t hw_idx) override;
-
-  Status ClearAllHardwareBreakpoints() override;
-
-  Status GetHardwareBreakHitIndex(uint32_t &bp_index,
-                                  lldb::addr_t trap_addr) override;
-
-  uint32_t NumSupportedHardwareWatchpoints() override;
-
-  uint32_t SetHardwareWatchpoint(lldb::addr_t addr, size_t size,
-                                 uint32_t watch_flags) override;
-
-  bool ClearHardwareWatchpoint(uint32_t hw_index) override;
-
-  Status ClearAllHardwareWatchpoints() override;
-
-  Status GetWatchpointHitIndex(uint32_t &wp_index,
-                               lldb::addr_t trap_addr) override;
-
-  lldb::addr_t GetWatchpointHitAddress(uint32_t wp_index) override;
-
-  lldb::addr_t GetWatchpointAddress(uint32_t wp_index) override;
-
-  uint32_t GetWatchpointSize(uint32_t wp_index);
-
-  bool WatchpointIsEnabled(uint32_t wp_index);
-
-  // Debug register type select
-  enum DREGType { eDREGTypeWATCH = 0, eDREGTypeBREAK };
+  bool RegisterOffsetIsDynamic() const override { return true; }
 
 protected:
-
   Status ReadGPR() override;
 
   Status WriteGPR() override;
@@ -94,6 +62,10 @@ protected:
   Status WriteFPR() override;
 
   void *GetGPRBuffer() override { return &m_gpr_arm64; }
+
+  // GetGPRBufferSize returns sizeof arm64 GPR ptrace buffer, it is different
+  // from GetGPRSize which returns sizeof RegisterInfoPOSIX_arm64::GPR.
+  size_t GetGPRBufferSize() { return sizeof(m_gpr_arm64); }
 
   void *GetFPRBuffer() override { return &m_fpr; }
 
@@ -106,7 +78,7 @@ private:
 
   bool m_sve_header_is_valid;
 
-  RegisterInfoPOSIX_arm64::GPR m_gpr_arm64; // 64-bit general purpose registers.
+  struct user_pt_regs m_gpr_arm64; // 64-bit general purpose registers.
 
   RegisterInfoPOSIX_arm64::FPU
       m_fpr; // floating-point registers including extended register sets.
@@ -115,21 +87,6 @@ private:
   struct user_sve_header m_sve_header;
   std::vector<uint8_t> m_sve_ptrace_payload;
 
-  // Debug register info for hardware breakpoints and watchpoints management.
-  struct DREG {
-    lldb::addr_t address;  // Breakpoint/watchpoint address value.
-    lldb::addr_t hit_addr; // Address at which last watchpoint trigger exception
-                           // occurred.
-    lldb::addr_t real_addr; // Address value that should cause target to stop.
-    uint32_t control;       // Breakpoint/watchpoint control value.
-    uint32_t refcount;      // Serves as enable/disable and reference counter.
-  };
-
-  struct DREG m_hbr_regs[16]; // Arm native linux hardware breakpoints
-  struct DREG m_hwp_regs[16]; // Arm native linux hardware watchpoints
-
-  uint32_t m_max_hwp_supported;
-  uint32_t m_max_hbp_supported;
   bool m_refresh_hwdebug_info;
 
   bool IsGPR(unsigned reg) const;
@@ -158,9 +115,9 @@ private:
 
   size_t GetSVEBufferSize() { return m_sve_ptrace_payload.size(); }
 
-  Status ReadHardwareDebugInfo();
+  llvm::Error ReadHardwareDebugInfo() override;
 
-  Status WriteHardwareDebugRegs(int hwbType);
+  llvm::Error WriteHardwareDebugRegs(DREGType hwbType) override;
 
   uint32_t CalculateFprOffset(const RegisterInfo *reg_info) const;
 

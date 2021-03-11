@@ -805,6 +805,9 @@ public:
   /// Returns the Dwarf Version by checking module flags.
   unsigned getDwarfVersion() const;
 
+  /// Returns the DWARF format by checking module flags.
+  bool isDwarf64() const;
+
   /// Returns the CodeView Version by checking module flags.
   /// Returns zero if not present in module.
   unsigned getCodeViewFlag() const;
@@ -855,7 +858,6 @@ public:
 
   /// Returns whether semantic interposition is to be respected.
   bool getSemanticInterposition() const;
-  bool noSemanticInterposition() const;
 
   /// Set whether semantic interposition is to be respected.
   void setSemanticInterposition(bool);
@@ -886,10 +888,11 @@ public:
   void setPartialSampleProfileRatio(const ModuleSummaryIndex &Index);
 };
 
-/// Given "llvm.used" or "llvm.compiler.used" as a global name, collect
-/// the initializer elements of that global in Set and return the global itself.
+/// Given "llvm.used" or "llvm.compiler.used" as a global name, collect the
+/// initializer elements of that global in a SmallVector and return the global
+/// itself.
 GlobalVariable *collectUsedGlobalVariables(const Module &M,
-                                           SmallPtrSetImpl<GlobalValue *> &Set,
+                                           SmallVectorImpl<GlobalValue *> &Vec,
                                            bool CompilerUsed);
 
 /// An raw_ostream inserter for modules.

@@ -285,6 +285,22 @@ def G_UREM : GenericInstruction {
   let isCommutable = false;
 }
 
+// Generic signed division and remainder.
+def G_SDIVREM : GenericInstruction {
+  let OutOperandList = (outs type0:$div, type0:$rem);
+  let InOperandList = (ins type0:$src1, type0:$src2);
+  let hasSideEffects = false;
+  let isCommutable = false;
+}
+
+// Generic unsigned division and remainder.
+def G_UDIVREM : GenericInstruction {
+  let OutOperandList = (outs type0:$div, type0:$rem);
+  let InOperandList = (ins type0:$src1, type0:$src2);
+  let hasSideEffects = false;
+  let isCommutable = false;
+}
+
 // Generic bitwise and.
 def G_AND : GenericInstruction {
   let OutOperandList = (outs type0:$dst);
@@ -1336,4 +1352,24 @@ def G_MEMSET : GenericInstruction {
   let InOperandList = (ins ptype0:$dst_addr, type1:$value, type2:$size, untyped_imm_0:$tailcall);
   let hasSideEffects = false;
   let mayStore = true;
+}
+
+//------------------------------------------------------------------------------
+// Optimization hints
+//------------------------------------------------------------------------------
+
+// Asserts that an operation has already been zero-extended from a specific
+// type.
+def G_ASSERT_ZEXT : GenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src, untyped_imm_0:$sz);
+  let hasSideEffects = false;
+}
+
+// Asserts that an operation has already been sign-extended from a specific
+// type.
+def G_ASSERT_SEXT : GenericInstruction {
+  let OutOperandList = (outs type0:$dst);
+  let InOperandList = (ins type0:$src, untyped_imm_0:$sz);
+  let hasSideEffects = false;
 }

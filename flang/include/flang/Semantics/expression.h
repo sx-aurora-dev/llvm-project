@@ -363,13 +363,15 @@ private:
   const Symbol *ResolveGeneric(const Symbol &, const ActualArguments &,
       const AdjustActuals &, bool mightBeStructureConstructor = false);
   void EmitGenericResolutionError(const Symbol &);
+  const Symbol &AccessSpecific(
+      const Symbol &originalGeneric, const Symbol &specific);
   std::optional<CalleeAndArguments> GetCalleeAndArguments(const parser::Name &,
       ActualArguments &&, bool isSubroutine = false,
       bool mightBeStructureConstructor = false);
   std::optional<CalleeAndArguments> GetCalleeAndArguments(
       const parser::ProcedureDesignator &, ActualArguments &&,
       bool isSubroutine, bool mightBeStructureConstructor = false);
-
+  void CheckBadExplicitType(const SpecificCall &, const Symbol &);
   void CheckForBadRecursion(parser::CharBlock, const semantics::Symbol &);
   bool EnforceTypeConstraint(parser::CharBlock, const MaybeExpr &, TypeCategory,
       bool defaultKind = false);

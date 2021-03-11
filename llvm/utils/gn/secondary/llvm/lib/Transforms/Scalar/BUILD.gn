@@ -76,6 +76,7 @@ static_library("Scalar") {
     "SCCP.cpp",
     "SROA.cpp",
     "Scalar.cpp",
+    "ScalarizeMaskedMemIntrin.cpp",
     "Scalarizer.cpp",
     "SeparateConstOffsetFromGEP.cpp",
     "SimpleLoopUnswitch.cpp",

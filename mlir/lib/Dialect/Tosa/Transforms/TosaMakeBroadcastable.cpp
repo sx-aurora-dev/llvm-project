@@ -46,7 +46,7 @@ using namespace mlir::tosa;
 static void computeReshapeOutput(ArrayRef<int64_t> higherRankShape,
                                  ArrayRef<int64_t> lowerRankShape,
                                  SmallVectorImpl<int64_t> &reshapeOutputShape) {
-  // Intialize new shapes with [1] * higherRank.
+  // Initialize new shapes with [1] * higherRank.
   int64_t higherRank = higherRankShape.size();
   int64_t lowerRank = lowerRankShape.size();
 
@@ -103,7 +103,7 @@ static void computeReshapeOutput(ArrayRef<int64_t> higherRankShape,
   }
 }
 
-/// Common code to reate the reshape op where necessary to make the rank of the
+/// Common code to create the reshape op where necessary to make the rank of the
 /// operations equal. Returns the updated input1 and input2 for the original
 /// input. The caller is expected to use these to rewrite the original operator
 /// with the RESHAPE now in the graph.
@@ -265,7 +265,7 @@ public:
     patterns.insert<ConvertTosaOp<tosa::LogicalLeftShiftOp>>(ctx);
     patterns.insert<ConvertTosaOp<tosa::ArithmeticRightShiftOp>>(ctx);
     patterns.insert<ConvertTosaOp<tosa::LogicalRightShiftOp>>(ctx);
-    applyPatternsAndFoldGreedily(func, std::move(patterns));
+    (void)applyPatternsAndFoldGreedily(func, std::move(patterns));
   }
 };
 } // end anonymous namespace

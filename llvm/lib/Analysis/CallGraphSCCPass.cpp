@@ -21,13 +21,13 @@
 #include "llvm/Analysis/CallGraph.h"
 #include "llvm/IR/AbstractCallSite.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/IRPrintingPasses.h"
 #include "llvm/IR/Intrinsics.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManagers.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/OptBisect.h"
 #include "llvm/IR/PassTimingInfo.h"
+#include "llvm/IR/PrintPasses.h"
 #include "llvm/IR/StructuralHash.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/CommandLine.h"
@@ -454,10 +454,10 @@ bool CGPassManager::RunAllPassesOnSCC(CallGraphSCC &CurSCC, CallGraph &CG,
       std::string Functions;
   #ifndef NDEBUG
       raw_string_ostream OS(Functions);
-      for (CallGraphSCC::iterator I = CurSCC.begin(), E = CurSCC.end();
-           I != E; ++I) {
-        if (I != CurSCC.begin()) OS << ", ";
-        (*I)->print(OS);
+      ListSeparator LS;
+      for (const CallGraphNode *CGN : CurSCC) {
+        OS << LS;
+        CGN->print(OS);
       }
       OS.flush();
   #endif
@@ -734,12 +734,9 @@ Pass *CallGraphSCCPass::createPrinterPass(raw_ostream &OS,
 
 static std::string getDescription(const CallGraphSCC &SCC) {
   std::string Desc = "SCC (";
-  bool First = true;
+  ListSeparator LS;
   for (CallGraphNode *CGN : SCC) {
-    if (First)
-      First = false;
-    else
-      Desc += ", ";
+    Desc += LS;
     Function *F = CGN->getFunction();
     if (F)
       Desc += F->getName();

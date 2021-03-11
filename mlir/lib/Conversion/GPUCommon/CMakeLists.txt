@@ -17,18 +17,18 @@ endif()
 add_mlir_conversion_library(MLIRGPUToGPURuntimeTransforms
   ConvertLaunchFuncToRuntimeCalls.cpp
   ConvertKernelFuncToBlob.cpp
+  GPUOpsLowering.cpp
 
   DEPENDS
   MLIRConversionPassIncGen
   intrinsics_gen
 
   LINK_COMPONENTS
-  Core
-  MC
   ${AMDGPU_LIBS}
   ${NVPTX_LIBS}
 
   LINK_LIBS PUBLIC
+  MLIRAsyncToLLVM
   MLIRGPU
   MLIRIR
   MLIRLLVMIR

@@ -11,7 +11,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ExecutionEngine/Orc/RPC/FDRawByteChannel.h"
+#include "llvm/ExecutionEngine/Orc/Shared/FDRawByteChannel.h"
+#include "llvm/ExecutionEngine/Orc/TargetProcess/JITLoaderGDB.h"
 #include "llvm/ExecutionEngine/Orc/TargetProcess/OrcRPCTPCServer.h"
 #include "llvm/ExecutionEngine/Orc/TargetProcess/RegisterEHFrames.h"
 #include "llvm/Support/DynamicLibrary.h"
@@ -33,7 +34,8 @@ ExitOnError ExitOnErr;
 
 LLVM_ATTRIBUTE_USED void linkComponents() {
   errs() << (void *)&llvm_orc_registerEHFrameSectionWrapper
-         << (void *)&llvm_orc_deregisterEHFrameSectionWrapper;
+         << (void *)&llvm_orc_deregisterEHFrameSectionWrapper
+         << (void *)&llvm_orc_registerJITLoaderGDBWrapper;
 }
 
 void printErrorAndExit(Twine ErrMsg) {
@@ -113,11 +115,11 @@ int main(int argc, char *argv[]) {
   ExitOnErr.setBanner(std::string(argv[0]) + ":");
 
   using JITLinkExecutorEndpoint =
-      rpc::MultiThreadedRPCEndpoint<rpc::FDRawByteChannel>;
+      shared::MultiThreadedRPCEndpoint<shared::FDRawByteChannel>;
 
-  rpc::registerStringError<rpc::FDRawByteChannel>();
+  shared::registerStringError<shared::FDRawByteChannel>();
 
-  rpc::FDRawByteChannel C(InFD, OutFD);
+  shared::FDRawByteChannel C(InFD, OutFD);
   JITLinkExecutorEndpoint EP(C, true);
   OrcRPCTPCServer<JITLinkExecutorEndpoint> Server(EP);
   Server.setProgramName(std::string("llvm-jitlink-executor"));

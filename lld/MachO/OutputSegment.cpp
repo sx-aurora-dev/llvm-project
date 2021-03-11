@@ -31,7 +31,7 @@ static uint32_t initProt(StringRef name) {
 }
 
 static uint32_t maxProt(StringRef name) {
-  assert(config->arch != AK_i386 &&
+  assert(config->target.Arch != AK_i386 &&
          "TODO: i386 has different maxProt requirements");
   return initProt(name);
 }
@@ -49,7 +49,7 @@ void OutputSegment::addOutputSection(OutputSection *osec) {
   sections.push_back(osec);
 }
 
-static llvm::DenseMap<StringRef, OutputSegment *> nameToOutputSegment;
+static DenseMap<StringRef, OutputSegment *> nameToOutputSegment;
 std::vector<OutputSegment *> macho::outputSegments;
 
 OutputSegment *macho::getOrCreateOutputSegment(StringRef name) {

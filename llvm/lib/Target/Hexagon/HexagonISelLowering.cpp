@@ -3151,10 +3151,12 @@ HexagonTargetLowering::ReplaceNodeResults(SDNode *N,
     case ISD::BITCAST:
       // Handle a bitcast from v8i1 to i8.
       if (N->getValueType(0) == MVT::i8) {
-        SDValue P = getInstr(Hexagon::C2_tfrpr, dl, MVT::i32,
-                             N->getOperand(0), DAG);
-        SDValue T = DAG.getAnyExtOrTrunc(P, dl, MVT::i8);
-        Results.push_back(T);
+        if (N->getOperand(0).getValueType() == MVT::v8i1) {
+          SDValue P = getInstr(Hexagon::C2_tfrpr, dl, MVT::i32,
+                               N->getOperand(0), DAG);
+          SDValue T = DAG.getAnyExtOrTrunc(P, dl, MVT::i8);
+          Results.push_back(T);
+        }
       }
       break;
   }
@@ -3440,8 +3442,8 @@ bool HexagonTargetLowering::allowsMemoryAccess(
 }
 
 bool HexagonTargetLowering::allowsMisalignedMemoryAccesses(
-      EVT VT, unsigned AddrSpace, unsigned Alignment,
-      MachineMemOperand::Flags Flags, bool *Fast) const {
+    EVT VT, unsigned AddrSpace, Align Alignment, MachineMemOperand::Flags Flags,
+    bool *Fast) const {
   MVT SVT = VT.getSimpleVT();
   if (Subtarget.isHVXVectorType(SVT, true))
     return allowsHvxMisalignedMemoryAccesses(SVT, Flags, Fast);

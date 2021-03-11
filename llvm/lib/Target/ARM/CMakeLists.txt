@@ -41,6 +41,7 @@ add_llvm_target(ARMCodeGen
   ARMParallelDSP.cpp
   ARMLoadStoreOptimizer.cpp
   ARMLowOverheadLoops.cpp
+  ARMBlockPlacement.cpp
   ARMMCInstLower.cpp
   ARMMachineFunctionInfo.cpp
   ARMMacroFusion.cpp
@@ -48,6 +49,7 @@ add_llvm_target(ARMCodeGen
   ARMOptimizeBarriersPass.cpp
   ARMRegisterBankInfo.cpp
   ARMSelectionDAGInfo.cpp
+  ARMSLSHardening.cpp
   ARMSubtarget.cpp
   ARMTargetMachine.cpp
   ARMTargetObjectFile.cpp
@@ -56,7 +58,7 @@ add_llvm_target(ARMCodeGen
   MVEGatherScatterLowering.cpp
   MVETailPredication.cpp
   MVEVPTBlockPass.cpp
-  MVEVPTOptimisationsPass.cpp
+  MVETPAndVPTOptimisationsPass.cpp
   Thumb1FrameLowering.cpp
   Thumb1InstrInfo.cpp
   ThumbRegisterInfo.cpp

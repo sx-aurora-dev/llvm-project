@@ -870,6 +870,17 @@ Enable use-after-scope detection in AddressSanitizer
 
 Enable ODR indicator globals to avoid false ODR violation reports in partially sanitized programs at the cost of an increase in binary size
 
+.. option:: -fsanitize-address-destructor-kind=<arg>
+
+Set the kind of module destructors emitted by AddressSanitizer instrumentation.
+These destructors are emitted to unregister instrumented global variables when
+code is unloaded (e.g. via `dlclose()`).
+
+Valid options are:
+
+* ``global`` - Emit module destructors that are called via a platform specific array (see `llvm.global_dtors`).
+* ``none`` - Do not emit module destructors.
+
 .. option:: -fsanitize-blacklist=<arg>
 
 Path to blacklist file for sanitizers
@@ -1016,7 +1027,12 @@ Flags controlling how ``#include``\s are resolved to files.
 
 .. option:: -I<dir>, --include-directory <arg>, --include-directory=<arg>
 
-Add directory to include search path. If there are multiple -I options, these directories are searched in the order they are given before the standard system directories are searched. If the same directory is in the SYSTEM include search paths, for example if also specified with -isystem, the -I option will be ignored
+Add directory to include search path. For C++ input, if
+there are multiple -I options, these directories are searched
+in the order they are given before the standard system directories
+are searched. If the same directory is in the SYSTEM include search
+paths, for example if also specified with -isystem, the -I option
+will be ignored
 
 .. option:: -I-, --include-barrier
 
@@ -1138,9 +1154,9 @@ Set directory to include search path with prefix
 
 Add directory to SYSTEM include search path, absolute paths are relative to -isysroot
 
-.. option:: --libomptarget-nvptx-path=<arg>
+.. option:: --libomptarget-nvptx-bc-path=<arg>
 
-Path to libomptarget-nvptx libraries
+Path to libomptarget-nvptx bitcode library
 
 .. option:: --ptxas-path=<arg>
 
@@ -2040,6 +2056,12 @@ Set update method of profile counters (atomic,prefer-atomic,single)
 
 Use instrumentation data for profile-guided optimization. If pathname is a directory, it reads from <pathname>/default.profdata. Otherwise, it reads from file <pathname>.
 
+.. program:: clang1
+.. option:: -fprofile-list=<file>
+.. program:: clang
+
+Filename defining the list of functions/files to instrument. The file uses the sanitizer special case list format.
+
 .. option:: -freciprocal-math, -fno-reciprocal-math
 
 Allow division operations to be reassociated
@@ -2663,6 +2685,10 @@ Align selected branches (fused, jcc, jmp) within 32-byte boundary
 
 Legacy option to specify code object ABI V2 (-mnocode-object-v3) or V3 (-mcode-object-v3) (AMDGPU only)
 
+.. option:: -mcode-object-version=<version>
+
+Specify code object ABI version. Defaults to 4. (AMDGPU only)
+
 .. option:: -mconsole<arg>
 
 .. program:: clang1
@@ -2967,6 +2993,10 @@ Specify CU (-mcumode) or WGP (-mno-cumode) wavefront execution mode (AMDGPU only
 
 Specify SRAM ECC mode (AMDGPU only)
 
+.. option:: -mtgsplit, -mno-tgsplit
+
+Enable threadgroup split execution mode (AMDGPU only)
+
 .. option:: -mxnack, -mno-xnack
 
 Specify XNACK mode (AMDGPU only)
@@ -3141,6 +3171,8 @@ PowerPC
 
 .. option:: -mdirect-move, -mno-direct-move
 
+.. option:: -mefpu2
+
 .. option:: -mfloat128, -mno-float128
 
 .. option:: -mfprnd, -mno-fprnd
@@ -3168,8 +3200,6 @@ PowerPC
 .. option:: -mpower8-vector, -mno-power8-vector
 
 .. option:: -mpower9-vector, -mno-power9-vector
-
-.. option:: -mqpx, -mno-qpx
 
 .. option:: -msecure-plt
 

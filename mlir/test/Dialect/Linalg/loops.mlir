@@ -489,7 +489,7 @@ func @pooling_max_padding(%arg0: memref<?x?xf32>,
 //       CHECKLOOP:           %[[IDY:.*]] = affine.max #[[$clampMinMap]](%[[IY]])
 //       CHECKLOOP:           %[[LHS:.*]] = load %{{.*}}[%[[IDX]], %[[IDY]]] : memref<?x?xf32>
 //       CHECKLOOP:           %[[SEL:.*]] = select %{{.*}}, %[[PAD]], %[[LHS]] : f32
-//       CHECKLOOP:           %[[CMP:.*]] = cmpf "ogt", %[[RHS]], %[[SEL]] : f32
+//       CHECKLOOP:           %[[CMP:.*]] = cmpf ogt, %[[RHS]], %[[SEL]] : f32
 //       CHECKLOOP:           %[[RES:.*]] = select %{{.*}}, %[[RHS]], %[[SEL]] : f32
 //       CHECKLOOP:           store %[[RES]], %{{.*}}[%{{.*}}, %{{.*}}] : memref<?x?xf32>
 
@@ -509,7 +509,7 @@ func @pooling_max_padding(%arg0: memref<?x?xf32>,
 //       CHECKPARALLEL:         %[[IDY:.*]] = affine.max #[[$clampMinMap]](%[[IY]])
 //       CHECKPARALLEL:         %[[LHS:.*]] = load %{{.*}}[%[[IDX]], %[[IDY]]] : memref<?x?xf32>
 //       CHECKPARALLEL:         %[[SEL:.*]] = select %{{.*}}, %[[PAD]], %[[LHS]] : f32
-//       CHECKPARALLEL:         %[[CMP:.*]] = cmpf "ogt", %[[RHS]], %[[SEL]] : f32
+//       CHECKPARALLEL:         %[[CMP:.*]] = cmpf ogt, %[[RHS]], %[[SEL]] : f32
 //       CHECKPARALLEL:         %[[RES:.*]] = select %{{.*}}, %[[RHS]], %[[SEL]] : f32
 //       CHECKPARALLEL:         store %[[RES]], %{{.*}}[%{{.*}}, %{{.*}}] : memref<?x?xf32>
 
@@ -537,7 +537,7 @@ func @pooling_max_padding_i32(%arg0: memref<?x?xi32>,
 //       CHECKLOOP:           %[[IDY:.*]] = affine.max #[[$clampMinMap]](%[[IY]])
 //       CHECKLOOP:           %[[LHS:.*]] = load %{{.*}}[%[[IDX]], %[[IDY]]] : memref<?x?xi32>
 //       CHECKLOOP:           %[[SEL:.*]] = select %{{.*}}, %[[PAD]], %[[LHS]] : i32
-//       CHECKLOOP:           %[[CMP:.*]] = cmpi "sgt", %[[RHS]], %[[SEL]] : i32
+//       CHECKLOOP:           %[[CMP:.*]] = cmpi sgt, %[[RHS]], %[[SEL]] : i32
 //       CHECKLOOP:           %[[RES:.*]] = select %{{.*}}, %[[RHS]], %[[SEL]] : i32
 //       CHECKLOOP:           store %[[RES]], %{{.*}}[%{{.*}}, %{{.*}}] : memref<?x?xi32>
 
@@ -557,7 +557,7 @@ func @pooling_max_padding_i32(%arg0: memref<?x?xi32>,
 //       CHECKPARALLEL:         %[[IDY:.*]] = affine.max #[[$clampMinMap]](%[[IY]])
 //       CHECKPARALLEL:         %[[LHS:.*]] = load %{{.*}}[%[[IDX]], %[[IDY]]] : memref<?x?xi32>
 //       CHECKPARALLEL:         %[[SEL:.*]] = select %{{.*}}, %[[PAD]], %[[LHS]] : i32
-//       CHECKPARALLEL:         %[[CMP:.*]] = cmpi "sgt", %[[RHS]], %[[SEL]] : i32
+//       CHECKPARALLEL:         %[[CMP:.*]] = cmpi sgt, %[[RHS]], %[[SEL]] : i32
 //       CHECKPARALLEL:         %[[RES:.*]] = select %{{.*}}, %[[RHS]], %[[SEL]] : i32
 //       CHECKPARALLEL:         store %[[RES]], %{{.*}}[%{{.*}}, %{{.*}}] : memref<?x?xi32>
 
@@ -623,7 +623,7 @@ func @pooling_min_padding(%arg0: memref<?x?xf32>,
 //       CHECKLOOP:           %[[IDY:.*]] = affine.max #[[$clampMinMap]](%[[IY]])
 //       CHECKLOOP:           %[[LHS:.*]] = load %{{.*}}[%[[IDX]], %[[IDY]]] : memref<?x?xf32>
 //       CHECKLOOP:           %[[SEL:.*]] = select %{{.*}}, %[[PAD]], %[[LHS]] : f32
-//       CHECKLOOP:           %[[CMP:.*]] = cmpf "olt", %[[RHS]], %[[SEL]] : f32
+//       CHECKLOOP:           %[[CMP:.*]] = cmpf olt, %[[RHS]], %[[SEL]] : f32
 //       CHECKLOOP:           %[[RES:.*]] = select %{{.*}}, %[[RHS]], %[[SEL]] : f32
 //       CHECKLOOP:           store %[[RES]], %{{.*}}[%{{.*}}, %{{.*}}] : memref<?x?xf32>
 
@@ -643,7 +643,7 @@ func @pooling_min_padding(%arg0: memref<?x?xf32>,
 //       CHECKPARALLEL:         %[[IDY:.*]] = affine.max #[[$clampMinMap]](%[[IY]])
 //       CHECKPARALLEL:         %[[LHS:.*]] = load %{{.*}}[%[[IDX]], %[[IDY]]] : memref<?x?xf32>
 //       CHECKPARALLEL:         %[[SEL:.*]] = select %{{.*}}, %[[PAD]], %[[LHS]] : f32
-//       CHECKPARALLEL:         %[[CMP:.*]] = cmpf "olt", %[[RHS]], %[[SEL]] : f32
+//       CHECKPARALLEL:         %[[CMP:.*]] = cmpf olt, %[[RHS]], %[[SEL]] : f32
 //       CHECKPARALLEL:         %[[RES:.*]] = select %{{.*}}, %[[RHS]], %[[SEL]] : f32
 //       CHECKPARALLEL:         store %[[RES]], %{{.*}}[%{{.*}}, %{{.*}}] : memref<?x?xf32>
 
@@ -671,7 +671,7 @@ func @pooling_min_padding_i32(%arg0: memref<?x?xi32>,
 //       CHECKLOOP:           %[[IDY:.*]] = affine.max #[[$clampMinMap]](%[[IY]])
 //       CHECKLOOP:           %[[LHS:.*]] = load %{{.*}}[%[[IDX]], %[[IDY]]] : memref<?x?xi32>
 //       CHECKLOOP:           %[[SEL:.*]] = select %{{.*}}, %[[PAD]], %[[LHS]] : i32
-//       CHECKLOOP:           %[[CMP:.*]] = cmpi "slt", %[[RHS]], %[[SEL]] : i32
+//       CHECKLOOP:           %[[CMP:.*]] = cmpi slt, %[[RHS]], %[[SEL]] : i32
 //       CHECKLOOP:           %[[RES:.*]] = select %{{.*}}, %[[RHS]], %[[SEL]] : i32
 //       CHECKLOOP:           store %[[RES]], %{{.*}}[%{{.*}}, %{{.*}}] : memref<?x?xi32>
 
@@ -691,7 +691,7 @@ func @pooling_min_padding_i32(%arg0: memref<?x?xi32>,
 //       CHECKPARALLEL:         %[[IDY:.*]] = affine.max #[[$clampMinMap]](%[[IY]])
 //       CHECKPARALLEL:         %[[LHS:.*]] = load %{{.*}}[%[[IDX]], %[[IDY]]] : memref<?x?xi32>
 //       CHECKPARALLEL:         %[[SEL:.*]] = select %{{.*}}, %[[PAD]], %[[LHS]] : i32
-//       CHECKPARALLEL:         %[[CMP:.*]] = cmpi "slt", %[[RHS]], %[[SEL]] : i32
+//       CHECKPARALLEL:         %[[CMP:.*]] = cmpi slt, %[[RHS]], %[[SEL]] : i32
 //       CHECKPARALLEL:         %[[RES:.*]] = select %{{.*}}, %[[RHS]], %[[SEL]] : i32
 //       CHECKPARALLEL:         store %[[RES]], %{{.*}}[%{{.*}}, %{{.*}}] : memref<?x?xi32>
 
@@ -1074,7 +1074,7 @@ func @indexed_generic_op_1D_reduce(%arg0: memref<?xf32>,
      outs(%arg2 : memref<f32>) {
     ^bb(%i : index, %a: f32, %b: f32, %c: f32) :
       %0 = constant 0 : index
-      %1 = cmpi "eq", %0, %i : index
+      %1 = cmpi eq, %0, %i : index
       %2 = select %1, %b, %c : f32
       %3 = addf %a, %2 : f32
       linalg.yield %3 : f32
@@ -1144,14 +1144,18 @@ func @generic_const_init(%arg0: memref<?xf32>) {
   indexing_maps = #scalar_access,
   library_call = "some_external_fn"
 }
-func @scalar_code(%arg0: memref<f32>, %arg1 : memref<f32>, %arg2 : memref<f32>)
+func @scalar_code(%arg0: memref<f32>, %arg1 : memref<f32>, %arg2 : memref<f32>, %arg3 : i1)
 {
   linalg.generic #scalar_trait
     ins(%arg0, %arg1 : memref<f32>, memref<f32>)
    outs(%arg2 : memref<f32>) {
   ^bb(%a : f32, %b : f32, %c : f32) :
-    %0 = addf %a, %b : f32
-    linalg.yield %0 : f32
+    %result = scf.if %arg3 -> (f32) {
+      scf.yield %a : f32
+    } else {
+      scf.yield %b : f32
+    }
+    linalg.yield %result : f32
   }
   return
 }
@@ -1162,7 +1166,10 @@ func @scalar_code(%arg0: memref<f32>, %arg1 : memref<f32>, %arg2 : memref<f32>)
 //   CHECKLOOP-NOT: scf.for
 //       CHECKLOOP: load %[[ARG0]][]
 //       CHECKLOOP: load %[[ARG1]][]
-//       CHECKLOOP: addf
+//       CHECKLOOP: scf.if
+//       CHECKLOOP: scf.yield
+//       CHECKLOOP: else
+//       CHECKLOOP: scf.yield
 //       CHECKLOOP: store %{{.*}}, %[[ARG2]][]
 
 // CHECKPARALLEL-LABEL: @scalar_code
@@ -1172,7 +1179,10 @@ func @scalar_code(%arg0: memref<f32>, %arg1 : memref<f32>, %arg2 : memref<f32>)
 //   CHECKPARALLEL-NOT: scf.for
 //       CHECKPARALLEL: load %[[ARG0]][]
 //       CHECKPARALLEL: load %[[ARG1]][]
-//       CHECKPARALLEL: addf
+//       CHECKPARALLEL: scf.if
+//       CHECKPARALLEL: scf.yield
+//       CHECKPARALLEL: else
+//       CHECKPARALLEL: scf.yield
 //       CHECKPARALLEL: store %{{.*}}, %[[ARG2]][]
 
 //----------------------------------------------------------------------------//

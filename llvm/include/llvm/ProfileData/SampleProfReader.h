@@ -27,8 +27,9 @@
 //      offsetA[.discriminator]: fnA:num_of_total_samples
 //       offsetA1[.discriminator]: number_of_samples [fn7:num fn8:num ... ]
 //       ...
+//      !CFGChecksum: num
 //
-// This is a nested tree in which the identation represents the nesting level
+// This is a nested tree in which the indentation represents the nesting level
 // of the inline stack. There are no blank lines in the file. And the spacing
 // within a single line is fixed. Additional spaces will result in an error
 // while reading the file.
@@ -47,10 +48,11 @@
 // in the prologue of the function (second number). This head sample
 // count provides an indicator of how frequently the function is invoked.
 //
-// There are two types of lines in the function body.
+// There are three types of lines in the function body.
 //
 // * Sampled line represents the profile information of a source location.
 // * Callsite line represents the profile information of a callsite.
+// * Metadata line represents extra metadata of the function.
 //
 // Each sampled line may contain several items. Some are optional (marked
 // below):
@@ -113,6 +115,18 @@
 // c. Number of samples. This is an integer quantity representing the
 //    total number of samples collected for the inlined instance at this
 //    callsite
+//
+// Metadata line can occur in lines with one indent only, containing extra
+// information for the top-level function. Furthermore, metadata can only
+// occur after all the body samples and callsite samples.
+// Each metadata line may contain a particular type of metadata, marked by
+// the starting characters annotated with !. We process each metadata line
+// independently, hence each metadata line has to form an independent piece
+// of information that does not require cross-line reference.
+// We support the following types of metadata:
+//
+// a. CFG Checksum (a.k.a. function hash):
+//   !CFGChecksum: 12345
 //
 //
 // Binary format
@@ -212,7 +226,6 @@
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/Twine.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/LLVMContext.h"
@@ -233,6 +246,7 @@
 namespace llvm {
 
 class raw_ostream;
+class Twine;
 
 namespace sampleprof {
 
@@ -349,7 +363,11 @@ public:
   /// Print the profile for \p FName on stream \p OS.
   void dumpFunctionProfile(StringRef FName, raw_ostream &OS = dbgs());
 
-  virtual void collectFuncsFrom(const Module &M) {}
+  /// Collect functions with definitions in Module M. For reader which
+  /// support loading function profiles on demand, return true when the
+  /// reader has been given a module. Always return false for reader
+  /// which doesn't support loading function profiles on demand.
+  virtual bool collectFuncsFromModule() { return false; }
 
   /// Print all the profiles on stream \p OS.
   void dump(raw_ostream &OS = dbgs());
@@ -394,7 +412,7 @@ public:
   StringMap<FunctionSamples> &getProfiles() { return Profiles; }
 
   /// Report a parse error message.
-  void reportError(int64_t LineNumber, Twine Msg) const {
+  void reportError(int64_t LineNumber, const Twine &Msg) const {
     Ctx.diagnose(DiagnosticInfoSampleProfile(Buffer->getBufferIdentifier(),
                                              LineNumber, Msg));
   }
@@ -419,6 +437,12 @@ public:
   /// \brief Return the profile format.
   SampleProfileFormat getFormat() const { return Format; }
 
+  /// Whether input profile is based on pseudo probes.
+  bool profileIsProbeBased() const { return ProfileIsProbeBased; }
+
+  /// Whether input profile is fully context-sensitive
+  bool profileIsCS() const { return ProfileIsCS; }
+
   virtual std::unique_ptr<ProfileSymbolList> getProfileSymbolList() {
     return nullptr;
   };
@@ -431,7 +455,15 @@ public:
   /// Return whether names in the profile are all MD5 numbers.
   virtual bool useMD5() { return false; }
 
+  /// Don't read profile without context if the flag is set. This is only meaningful
+  /// for ExtBinary format.
+  virtual void setSkipFlatProf(bool Skip) {}
+  /// Return whether any name in the profile contains ".__uniq." suffix.
+  virtual bool hasUniqSuffix() { return false; }
+
   SampleProfileReaderItaniumRemapper *getRemapper() { return Remapper.get(); }
+
+  void setModule(const Module *Mod) { M = Mod; }
 
 protected:
   /// Map every function to its associated profile.
@@ -461,8 +493,22 @@ protected:
 
   std::unique_ptr<SampleProfileReaderItaniumRemapper> Remapper;
 
+  /// \brief Whether samples are collected based on pseudo probes.
+  bool ProfileIsProbeBased = false;
+
+  /// Whether function profiles are context-sensitive.
+  bool ProfileIsCS = false;
+
+  /// Number of context-sensitive profiles.
+  uint32_t CSProfileCount = 0;
+
   /// \brief The format of sample.
   SampleProfileFormat Format = SPF_None;
+
+  /// \brief The current module being compiled if SampleProfileReader
+  /// is used by compiler. If SampleProfileReader is used by other
+  /// tools which are not compiler, M is usually nullptr.
+  const Module *M = nullptr;
 };
 
 class SampleProfileReaderText : public SampleProfileReader {
@@ -598,9 +644,10 @@ private:
 
 protected:
   std::vector<SecHdrTableEntry> SecHdrTable;
-  std::error_code readSecHdrTableEntry();
+  std::error_code readSecHdrTableEntry(uint32_t Idx);
   std::error_code readSecHdrTable();
 
+  std::error_code readFuncMetadata();
   std::error_code readFuncOffsetTable();
   std::error_code readFuncProfiles();
   std::error_code readMD5NameTable();
@@ -613,6 +660,7 @@ protected:
                                          const SecHdrTableEntry &Entry);
   // placeholder for subclasses to dispatch their own section readers.
   virtual std::error_code readCustomSection(const SecHdrTableEntry &Entry) = 0;
+  virtual ErrorOr<StringRef> readStringFromTable() override;
 
   std::unique_ptr<ProfileSymbolList> ProfSymList;
 
@@ -621,8 +669,12 @@ protected:
   DenseMap<StringRef, uint64_t> FuncOffsetTable;
   /// The set containing the functions to use when compiling a module.
   DenseSet<StringRef> FuncsToUse;
-  /// Use all functions from the input profile.
-  bool UseAllFuncs = true;
+
+  /// Use fixed length MD5 instead of ULEB128 encoding so NameTable doesn't
+  /// need to be read in up front and can be directly accessed using index.
+  bool FixedLengthMD5 = false;
+  /// The starting address of NameTable containing fixed length MD5.
+  const uint8_t *MD5NameMemStart = nullptr;
 
   /// If MD5 is used in NameTable section, the section saves uint64_t data.
   /// The uint64_t data has to be converted to a string and then the string
@@ -632,6 +684,10 @@ protected:
   /// referenced by NameTable (vector of StringRef). We make sure
   /// the lifetime of MD5StringBuf is not shorter than that of NameTable.
   std::unique_ptr<std::vector<std::string>> MD5StringBuf;
+
+  /// If SkipFlatProf is true, skip the sections with
+  /// SecFlagFlat flag.
+  bool SkipFlatProf = false;
 
 public:
   SampleProfileReaderExtBinaryBase(std::unique_ptr<MemoryBuffer> B,
@@ -647,18 +703,18 @@ public:
   uint64_t getFileSize();
   virtual bool dumpSectionInfo(raw_ostream &OS = dbgs()) override;
 
-  /// Collect functions with definitions in Module \p M.
-  void collectFuncsFrom(const Module &M) override;
+  /// Collect functions with definitions in Module M. Return true if
+  /// the reader has been given a module.
+  bool collectFuncsFromModule() override;
 
   /// Return whether names in the profile are all MD5 numbers.
-  virtual bool useMD5() override {
-    assert(!NameTable.empty() && "NameTable should have been initialized");
-    return MD5StringBuf && !MD5StringBuf->empty();
-  }
+  virtual bool useMD5() override { return MD5StringBuf.get(); }
 
   virtual std::unique_ptr<ProfileSymbolList> getProfileSymbolList() override {
     return std::move(ProfSymList);
   };
+
+  virtual void setSkipFlatProf(bool Skip) override { SkipFlatProf = Skip; }
 };
 
 class SampleProfileReaderExtBinary : public SampleProfileReaderExtBinaryBase {
@@ -687,8 +743,6 @@ private:
   DenseMap<StringRef, uint64_t> FuncOffsetTable;
   /// The set containing the functions to use when compiling a module.
   DenseSet<StringRef> FuncsToUse;
-  /// Use all functions from the input profile.
-  bool UseAllFuncs = true;
   virtual std::error_code verifySPMagic(uint64_t Magic) override;
   virtual std::error_code readNameTable() override;
   /// Read a string indirectly via the name table.
@@ -707,8 +761,9 @@ public:
   /// Read samples only for functions to use.
   std::error_code readImpl() override;
 
-  /// Collect functions to be used when compiling Module \p M.
-  void collectFuncsFrom(const Module &M) override;
+  /// Collect functions with definitions in Module M. Return true if
+  /// the reader has been given a module.
+  bool collectFuncsFromModule() override;
 
   /// Return whether names in the profile are all MD5 numbers.
   virtual bool useMD5() override { return true; }

@@ -98,22 +98,29 @@ static void unpackRanges(ArrayRef<Range> ranges, SmallVectorImpl<Value> &lbs,
 namespace mlir {
 namespace linalg {
 
-SmallVector<int64_t, 8> getStaticShape(LinalgOp linalgOp) {
-  SmallVector<int64_t, 8> res;
-  for (Value v : linalgOp.getShapedOperands()) {
-    auto shape = v.getType().cast<ShapedType>().getShape();
-    res.append(shape.begin(), shape.end());
+/// If `size` comes from an AffineMinOp and one of the values of AffineMinOp
+/// is a constant then return a new value set to the smallest such constant.
+/// Otherwise returngetSmallestBoundingIndex nullptr.
+IntegerAttr getSmallestBoundingIndex(Value size) {
+  Optional<int64_t> boundingConst = {};
+  if (auto affineMinOp = size.getDefiningOp<AffineMinOp>()) {
+    for (auto e : affineMinOp.getAffineMap().getResults())
+      if (auto cst = e.dyn_cast<AffineConstantExpr>())
+        boundingConst = boundingConst
+                            ? std::min(boundingConst.getValue(), cst.getValue())
+                            : cst.getValue();
+  } else if (auto constIndexOp = size.getDefiningOp<ConstantOp>()) {
+    if (constIndexOp.getType().isa<IndexType>())
+      boundingConst = constIndexOp.value().cast<IntegerAttr>().getInt();
+  } else if (auto affineApplyOp = size.getDefiningOp<AffineApplyOp>()) {
+    if (auto cExpr = affineApplyOp.getAffineMap()
+                         .getResult(0)
+                         .dyn_cast<AffineConstantExpr>())
+      boundingConst = cExpr.getValue();
   }
-  return res;
-}
-
-Optional<SmallVector<int64_t, 4>> getStaticLoopRanges(LinalgOp linalgOp) {
-  SmallVector<int64_t, 8> viewSizes = getStaticShape(linalgOp);
-  AffineMap invertedMap =
-      inversePermutation(concatAffineMaps(linalgOp.getIndexingMaps()));
-  if (!invertedMap)
-    return {};
-  return invertedMap.compose(viewSizes);
+  if (boundingConst && *boundingConst >= 0)
+    return Builder(size.getContext()).getIndexAttr(*boundingConst);
+  return nullptr;
 }
 
 /// Specialization to build an scf "for" nest.
@@ -123,12 +130,12 @@ void GenerateLoopNest<scf::ForOp>::doit(
     ArrayRef<Attribute> iteratorTypes,
     function_ref<scf::ValueVector(ValueRange, ValueRange)> bodyBuilderFn,
     Optional<LinalgLoopDistributionOptions> distributionOptions) {
-  // Create procInfo so it dominate loops, if appropriate.
+  // Create procInfo so it dominates loops, if appropriate.
   OpBuilder &builder = edsc::ScopedContext::getBuilderRef();
   Location loc = edsc::ScopedContext::getLocation();
   SmallVector<ProcInfo, 2> procInfo;
   if (distributionOptions.hasValue())
-    procInfo = distributionOptions->procInfo(builder, loc, ArrayRef<Range>{});
+    procInfo = distributionOptions->procInfo(builder, loc, loopRanges);
 
   SmallVector<Value, 4> lbs, ubs, steps;
   unpackRanges(loopRanges, lbs, ubs, steps);
@@ -138,11 +145,12 @@ void GenerateLoopNest<scf::ForOp>::doit(
   if (!distributionOptions.hasValue() || loopNest.loops.empty())
     return;
 
-  // TODO: support distributionMethod, which is currently ignored.
+  // Only supports cyclic distribution for now.
   for (auto it : llvm::zip(loopNest.loops, procInfo,
                            distributionOptions->distributionMethod))
-    mapLoopToProcessorIds(std::get<0>(it), std::get<1>(it).procId,
-                          std::get<1>(it).nprocs);
+    if (std::get<2>(it) == DistributionMethod::Cyclic)
+      mapLoopToProcessorIds(std::get<0>(it), std::get<1>(it).procId,
+                            std::get<1>(it).nprocs);
 }
 
 /// Specialization to build affine "for" nest.

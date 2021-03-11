@@ -14,9 +14,9 @@ set(SOTOC_LIBOMP_LIBRARY_DIR ${CMAKE_BINARY_DIR}/lib)
 set(SOTOC_OMP_HEADER_DIR ${CMAKE_BINARY_DIR}/projects/openmp/runtime/src)
 
 
-find_package(PythonInterp REQUIRED)
+find_package(Python3 REQUIRED)
 
-if(NOT PYTHONINTERP_FOUND)
+if(NOT Python3_FOUND)
   message(WARNING "Could not find Python.")
   message(WARNING "The check-sotoc target will not be available!")
   return()
@@ -35,7 +35,7 @@ set(SOTOC_LIT_ARGS "-v;--no-progress-bar;-j 1")
 set(SOTOC_FILECHECK_EXE ${LLVM_TOOLS_BINARY_DIR}/FileCheck${CMAKE_EXECUTABLE_SUFFIX} CACHE FILEPATH "Path to FileCheck utility. Should be built together with other LLVM utilities")
 
 add_custom_target(check-sotoc
-  COMMAND ${PYTHON_EXECUTABLE} ${SOTOC_LLVM_LIT_EXE} ${SOTOC_LIT_ARGS} ${CMAKE_CURRENT_BINARY_DIR}
+  COMMAND ${Python3_EXECUTABLE} ${SOTOC_LLVM_LIT_EXE} ${SOTOC_LIT_ARGS} ${CMAKE_CURRENT_BINARY_DIR}
     DEPENDS sotoc
     COMMENT "Running sotoc tests"
     ${cmake_3_2_USES_TERMINAL}

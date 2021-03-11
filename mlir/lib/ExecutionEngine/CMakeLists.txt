@@ -4,6 +4,7 @@
 set(LLVM_OPTIONAL_SOURCES
   AsyncRuntime.cpp
   CRunnerUtils.cpp
+  CudaRuntimeWrappers.cpp
   SparseUtils.cpp
   ExecutionEngine.cpp
   RunnerUtils.cpp
@@ -43,7 +44,8 @@ add_mlir_library(MLIRExecutionEngine
 
   LINK_LIBS PUBLIC
   MLIRLLVMIR
-  MLIRTargetLLVMIR
+  MLIRLLVMToLLVMIRTranslation
+  MLIRTargetLLVMIRExport
   )
 
 get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
@@ -66,7 +68,8 @@ add_mlir_library(MLIRJitRunner
   MLIRIR
   MLIRParser
   MLIRStandard
-  MLIRTargetLLVMIR
+  MLIRLLVMToLLVMIRTranslation
+  MLIRTargetLLVMIRExport
   MLIRTransforms
   MLIRStandardToLLVM
   MLIRSupport
@@ -80,14 +83,6 @@ add_mlir_library(mlir_c_runner_utils
   EXCLUDE_FROM_LIBMLIR
   )
 set_property(TARGET mlir_c_runner_utils PROPERTY CXX_STANDARD 11)
-
-add_mlir_library(mlir_c_runner_utils_static
-  CRunnerUtils.cpp
-  SparseUtils.cpp
-
-  EXCLUDE_FROM_LIBMLIR
-  )
-set_property(TARGET mlir_c_runner_utils_static PROPERTY CXX_STANDARD 11)
 target_compile_definitions(mlir_c_runner_utils PRIVATE mlir_c_runner_utils_EXPORTS)
 
 add_mlir_library(mlir_runner_utils
@@ -95,9 +90,6 @@ add_mlir_library(mlir_runner_utils
   RunnerUtils.cpp
 
   EXCLUDE_FROM_LIBMLIR
-
-  LINK_LIBS PUBLIC
-  mlir_c_runner_utils_static
 )
 target_compile_definitions(mlir_runner_utils PRIVATE mlir_runner_utils_EXPORTS)
 
@@ -108,7 +100,39 @@ add_mlir_library(mlir_async_runtime
   EXCLUDE_FROM_LIBMLIR
 
   LINK_LIBS PUBLIC
-  mlir_c_runner_utils_static
   ${LLVM_PTHREAD_LIB}
 )
+set_property(TARGET mlir_async_runtime PROPERTY CXX_VISIBILITY_PRESET hidden)
 target_compile_definitions(mlir_async_runtime PRIVATE mlir_async_runtime_EXPORTS)
+
+if(MLIR_CUDA_RUNNER_ENABLED)
+  # Configure CUDA support. Using check_language first allows us to give a
+  # custom error message.
+  include(CheckLanguage)
+  check_language(CUDA)
+  if (CMAKE_CUDA_COMPILER)
+    enable_language(CUDA)
+  else()
+    message(SEND_ERROR
+      "Building the mlir cuda runner requires a working CUDA install")
+  endif()
+
+  # We need the libcuda.so library.
+  find_library(CUDA_RUNTIME_LIBRARY cuda)
+
+  add_mlir_library(mlir_cuda_runtime
+    SHARED
+    CudaRuntimeWrappers.cpp
+
+    EXCLUDE_FROM_LIBMLIR
+  )
+  set_property(TARGET mlir_cuda_runtime PROPERTY CXX_STANDARD 14)
+  target_include_directories(mlir_cuda_runtime
+    PRIVATE
+    ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+  )
+  target_link_libraries(mlir_cuda_runtime
+    PRIVATE
+    ${CUDA_RUNTIME_LIBRARY}
+  )
+endif()

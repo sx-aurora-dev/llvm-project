@@ -89,6 +89,7 @@ template <> struct ScalarEnumerationTraits<NullabilityKind> {
     IO.enumCase(NK, "Nonnull", NullabilityKind::NonNull);
     IO.enumCase(NK, "Optional", NullabilityKind::Nullable);
     IO.enumCase(NK, "Unspecified", NullabilityKind::Unspecified);
+    IO.enumCase(NK, "NullableResult", NullabilityKind::NullableResult);
     // TODO: Mapping this to it's own value would allow for better cross
     // checking. Also the default should be Unknown.
     IO.enumCase(NK, "Scalar", NullabilityKind::Unspecified);
@@ -550,7 +551,7 @@ struct Module {
 
   llvm::Optional<bool> SwiftInferImportAsMember = {llvm::None};
 
-  LLVM_DUMP_METHOD void dump() /*const*/;
+  void dump() /*const*/;
 };
 } // namespace
 
@@ -570,7 +571,7 @@ template <> struct MappingTraits<Module> {
 } // namespace yaml
 } // namespace llvm
 
-void Module::dump() {
+LLVM_DUMP_METHOD void Module::dump() {
   llvm::yaml::Output OS(llvm::errs());
   OS << *this;
 }

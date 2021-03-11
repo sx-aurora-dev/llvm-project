@@ -38,9 +38,11 @@ Getting Started with libc++
    UsingLibcxx
    BuildingLibcxx
    TestingLibcxx
+   Contributing
    Cxx1yStatus
    Cxx1zStatus
    Cxx2aStatus
+   Cxx2bStatus
 
 
 .. toctree::
@@ -138,6 +140,7 @@ C++ Dialect Support
 * :ref:`C++14 - Complete <cxx1y-status>`
 * :ref:`C++17 - In Progress <cxx1z-status>`
 * :ref:`C++20 - In Progress <cxx2a-status>`
+* :ref:`C++2b - In Progress <cxx2b-status>`
 * `Post C++14 Technical Specifications - In Progress <http://libcxx.llvm.org/ts1z_status.html>`__
 * :ref:`C++ Feature Test Macro Status <feature-status>`
 
@@ -170,6 +173,7 @@ Design Documents
    DesignDocs/FeatureTestMacros
    DesignDocs/ExtendedCXX03Support
    DesignDocs/UniquePtrTrivialAbi
+   DesignDocs/NoexceptPolicy
 
 * `<atomic> design <http://libcxx.llvm.org/atomic_design.html>`_
 * `<type_traits> design <http://libcxx.llvm.org/type_traits_design.html>`_
@@ -216,4 +220,4 @@ Quick Links
 * `LLVM Bugzilla <https://bugs.llvm.org/>`_
 * `libcxx-commits Mailing List`_
 * `libcxx-dev Mailing List`_
-* `Browse libc++ Sources <https://github.com/llvm/llvm-project/tree/master/libcxx/>`_
+* `Browse libc++ Sources <https://github.com/llvm/llvm-project/tree/main/libcxx/>`_

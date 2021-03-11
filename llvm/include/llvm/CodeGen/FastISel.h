@@ -490,7 +490,10 @@ protected:
   /// - \c Add has a constant operand.
   bool canFoldAddIntoGEP(const User *GEP, const Value *Add);
 
-  /// Test whether the given value has exactly one use.
+  /// Test whether the register associated with this value has exactly one use,
+  /// in which case that single use is killing. Note that multiple IR values
+  /// may map onto the same register, in which case this is not the same as
+  /// checking that an IR value has one use.
   bool hasTrivialKill(const Value *V);
 
   /// Create a machine mem operand from the given instruction.
@@ -517,7 +520,6 @@ protected:
   bool selectFreeze(const User *I);
   bool selectCast(const User *I, unsigned Opcode);
   bool selectExtractValue(const User *U);
-  bool selectInsertValue(const User *I);
   bool selectXRayCustomEvent(const CallInst *II);
   bool selectXRayTypedEvent(const CallInst *II);
 

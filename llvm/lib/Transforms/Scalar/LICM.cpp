@@ -12,6 +12,13 @@
 // safe.  This pass also promotes must-aliased memory locations in the loop to
 // live in registers, thus hoisting and sinking "invariant" loads and stores.
 //
+// Hoisting operations out of loops is a canonicalization transform.  It
+// enables and simplifies subsequent optimizations in the middle-end.
+// Rematerialization of hoisted instructions to reduce register pressure is the
+// responsibility of the back-end, which has more accurate information about
+// register pressure and also handles other optimizations than LICM that
+// increase live-ranges.
+//
 // This pass uses alias analysis for two purposes:
 //
 //  1. Moving loop invariant loads and calls out of loops.  If we can determine
@@ -214,6 +221,9 @@ struct LegacyLICMPass : public LoopPass {
     if (skipLoop(L))
       return false;
 
+    LLVM_DEBUG(dbgs() << "Perform LICM on Loop with header at block "
+                      << L->getHeader()->getNameOrAsOperand() << "\n");
+
     auto *SE = getAnalysisIfAvailable<ScalarEvolutionWrapperPass>();
     MemorySSA *MSSA = EnableMSSALoopDependency
                           ? (&getAnalysis<MemorySSAWrapperPass>().getMSSA())
@@ -349,6 +359,22 @@ bool LoopInvariantCodeMotion::runOnLoop(
   std::unique_ptr<MemorySSAUpdater> MSSAU;
   std::unique_ptr<SinkAndHoistLICMFlags> Flags;
 
+  // Don't sink stores from loops with coroutine suspend instructions.
+  // LICM would sink instructions into the default destination of
+  // the coroutine switch. The default destination of the switch is to
+  // handle the case where the coroutine is suspended, by which point the
+  // coroutine frame may have been destroyed. No instruction can be sunk there.
+  // FIXME: This would unfortunately hurt the performance of coroutines, however
+  // there is currently no general solution for this. Similar issues could also
+  // potentially happen in other passes where instructions are being moved
+  // across that edge.
+  bool HasCoroSuspendInst = llvm::any_of(L->getBlocks(), [](BasicBlock *BB) {
+    return llvm::any_of(*BB, [](Instruction &I) {
+      IntrinsicInst *II = dyn_cast<IntrinsicInst>(&I);
+      return II && II->getIntrinsicID() == Intrinsic::coro_suspend;
+    });
+  });
+
   if (!MSSA) {
     LLVM_DEBUG(dbgs() << "LICM: Using Alias Set Tracker.\n");
     CurAST = collectAliasInfoForLoop(L, LI, AA);
@@ -395,7 +421,7 @@ bool LoopInvariantCodeMotion::runOnLoop(
   // preheader for SSA updater, so also avoid sinking when no preheader
   // is available.
   if (!DisablePromotion && Preheader && L->hasDedicatedExits() &&
-      !Flags->tooManyMemoryAccesses()) {
+      !Flags->tooManyMemoryAccesses() && !HasCoroSuspendInst) {
     // Figure out the loop exits and their insertion points
     SmallVector<BasicBlock *, 8> ExitBlocks;
     L->getUniqueExitBlocks(ExitBlocks);
@@ -617,7 +643,7 @@ public:
       else if (!TrueDestSucc.empty()) {
         Function *F = TrueDest->getParent();
         auto IsSucc = [&](BasicBlock &BB) { return TrueDestSucc.count(&BB); };
-        auto It = std::find_if(F->begin(), F->end(), IsSucc);
+        auto It = llvm::find_if(*F, IsSucc);
         assert(It != F->end() && "Could not find successor in function");
         CommonSucc = &*It;
       }
@@ -685,15 +711,15 @@ public:
           return BB != Pair.second && (Pair.first->getSuccessor(0) == BB ||
                                        Pair.first->getSuccessor(1) == BB);
         };
-    auto It = std::find_if(HoistableBranches.begin(), HoistableBranches.end(),
-                           HasBBAsSuccessor);
+    auto It = llvm::find_if(HoistableBranches, HasBBAsSuccessor);
 
     // If not involved in a pending branch, hoist to preheader
     BasicBlock *InitialPreheader = CurLoop->getLoopPreheader();
     if (It == HoistableBranches.end()) {
-      LLVM_DEBUG(dbgs() << "LICM using " << InitialPreheader->getName()
-                        << " as hoist destination for " << BB->getName()
-                        << "\n");
+      LLVM_DEBUG(dbgs() << "LICM using "
+                        << InitialPreheader->getNameOrAsOperand()
+                        << " as hoist destination for "
+                        << BB->getNameOrAsOperand() << "\n");
       HoistDestinationMap[BB] = InitialPreheader;
       return InitialPreheader;
     }
@@ -972,7 +998,7 @@ bool llvm::hoistRegion(DomTreeNode *N, AAResults *AA, LoopInfo *LI,
           HoistPoint = Dominator->getTerminator();
         }
         LLVM_DEBUG(dbgs() << "LICM rehoisting to "
-                          << HoistPoint->getParent()->getName()
+                          << HoistPoint->getParent()->getNameOrAsOperand()
                           << ": " << *I << "\n");
         moveInstructionBefore(*I, *HoistPoint, *SafetyInfo, MSSAU, SE);
         HoistPoint = I;
@@ -1463,9 +1489,8 @@ static Instruction *cloneInstructionInExitBlock(
   // invariant instructions, and then walk their operands to re-establish
   // LCSSA. That will eliminate creating PHI nodes just to nuke them when
   // sinking bottom-up.
-  for (User::op_iterator OI = New->op_begin(), OE = New->op_end(); OI != OE;
-       ++OI)
-    if (Instruction *OInst = dyn_cast<Instruction>(*OI))
+  for (Use &Op : New->operands())
+    if (Instruction *OInst = dyn_cast<Instruction>(Op))
       if (Loop *OLoop = LI->getLoopFor(OInst->getParent()))
         if (!OLoop->contains(&PN)) {
           PHINode *OpPN =
@@ -1473,7 +1498,7 @@ static Instruction *cloneInstructionInExitBlock(
                               OInst->getName() + ".lcssa", &ExitBlock.front());
           for (unsigned i = 0, e = PN.getNumIncomingValues(); i != e; ++i)
             OpPN->addIncoming(OInst, PN.getIncomingBlock(i));
-          *OI = OpPN;
+          Op = OpPN;
         }
   return New;
 }
@@ -1731,8 +1756,8 @@ static void hoist(Instruction &I, const DominatorTree *DT, const Loop *CurLoop,
                   BasicBlock *Dest, ICFLoopSafetyInfo *SafetyInfo,
                   MemorySSAUpdater *MSSAU, ScalarEvolution *SE,
                   OptimizationRemarkEmitter *ORE) {
-  LLVM_DEBUG(dbgs() << "LICM hoisting to " << Dest->getName() << ": " << I
-                    << "\n");
+  LLVM_DEBUG(dbgs() << "LICM hoisting to " << Dest->getNameOrAsOperand() << ": "
+                    << I << "\n");
   ORE->emit([&]() {
     return OptimizationRemark(DEBUG_TYPE, "Hoisted", &I) << "hoisting "
                                                          << ore::NV("Inst", &I);

@@ -1,6 +1,7 @@
 add_llvm_component_library(LLVMCore
   AbstractCallSite.cpp
   AsmWriter.cpp
+  Assumptions.cpp
   Attributes.cpp
   AutoUpgrade.cpp
   BasicBlock.cpp
@@ -44,8 +45,11 @@ add_llvm_component_library(LLVMCore
   PassManager.cpp
   PassRegistry.cpp
   PassTimingInfo.cpp
+  PrintPasses.cpp
   SafepointIRVerifier.cpp
   ProfileSummary.cpp
+  PseudoProbe.cpp
+  ReplaceConstant.cpp
   Statepoint.cpp
   StructuralHash.cpp
   Type.cpp

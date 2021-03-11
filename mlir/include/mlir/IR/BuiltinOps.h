@@ -14,9 +14,11 @@
 #define MLIR_IR_BUILTINOPS_H_
 
 #include "mlir/IR/FunctionSupport.h"
-#include "mlir/IR/OwningOpRefBase.h"
+#include "mlir/IR/OwningOpRef.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/CallInterfaces.h"
+#include "mlir/Interfaces/CastInterfaces.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "llvm/Support/PointerLikeTypeTraits.h"
 
 //===----------------------------------------------------------------------===//
@@ -33,9 +35,13 @@
 namespace mlir {
 /// This class acts as an owning reference to a module, and will automatically
 /// destroy the held module on destruction if the held module is valid.
-class OwningModuleRef : public OwningOpRefBase<ModuleOp> {
+// TODO: Remove this class in favor of using OwningOpRef directly.
+class OwningModuleRef : public OwningOpRef<ModuleOp> {
 public:
-  using OwningOpRefBase<ModuleOp>::OwningOpRefBase;
+  using OwningOpRef<ModuleOp>::OwningOpRef;
+  OwningModuleRef() = default;
+  OwningModuleRef(OwningOpRef<ModuleOp> &&other)
+      : OwningOpRef<ModuleOp>(std::move(other)) {}
 };
 } // end namespace mlir
 

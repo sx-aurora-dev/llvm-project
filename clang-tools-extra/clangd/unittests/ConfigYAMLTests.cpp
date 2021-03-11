@@ -60,13 +60,15 @@ CompileFlags:
 Index:
   Background: Skip
 ---
-ClangTidy: 
-  CheckOptions: 
-    IgnoreMacros: true
-    example-check.ExampleOption: 0
+Diagnostics:
+  ClangTidy:
+    CheckOptions:
+      IgnoreMacros: true
+      example-check.ExampleOption: 0
   )yaml";
   auto Results = Fragment::parseYAML(YAML, "config.yaml", Diags.callback());
   EXPECT_THAT(Diags.Diagnostics, IsEmpty());
+  EXPECT_THAT(Diags.Files, ElementsAre("config.yaml"));
   ASSERT_EQ(Results.size(), 4u);
   EXPECT_FALSE(Results[0].If.HasUnrecognizedCondition);
   EXPECT_THAT(Results[0].If.PathMatch, ElementsAre(Val("abc")));
@@ -76,7 +78,7 @@ ClangTidy:
 
   ASSERT_TRUE(Results[2].Index.Background);
   EXPECT_EQ("Skip", *Results[2].Index.Background.getValue());
-  EXPECT_THAT(Results[3].ClangTidy.CheckOptions,
+  EXPECT_THAT(Results[3].Diagnostics.ClangTidy.CheckOptions,
               ElementsAre(PairVal("IgnoreMacros", "true"),
                           PairVal("example-check.ExampleOption", "0")));
 }
@@ -97,7 +99,7 @@ If:
             YAML.range());
 }
 
-TEST(ParseYAML, Diagnostics) {
+TEST(ParseYAML, ConfigDiagnostics) {
   CapturedDiags Diags;
   Annotations YAML(R"yaml(
 If:
@@ -112,7 +114,7 @@ CompileFlags: {$unexpected^
 
   ASSERT_THAT(
       Diags.Diagnostics,
-      ElementsAre(AllOf(DiagMessage("Unknown If key UnknownCondition"),
+      ElementsAre(AllOf(DiagMessage("Unknown If key 'UnknownCondition'"),
                         DiagKind(llvm::SourceMgr::DK_Warning),
                         DiagPos(YAML.range("unknown").start),
                         DiagRange(YAML.range("unknown"))),

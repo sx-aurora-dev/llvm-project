@@ -36,8 +36,8 @@ func @memrefs(memref<2x4xi8, >) // expected-error {{expected list element}}
 func @memrefs(memref<2x4xi8, #map7>) // expected-error {{undefined symbol alias id 'map7'}}
 
 // -----
-// Test non affine map in memref type.
-func @memrefs(memref<2x4xi8, i8>) // expected-error {{expected affine map in memref type}}
+// Test unsupported memory space.
+func @memrefs(memref<2x4xi8, i8>) // expected-error {{unsupported memory space Attribute}}
 
 // -----
 // Test non-existent map in map composition of memref type.
@@ -201,7 +201,7 @@ func @no_terminator() {
 
 // -----
 
-func @illegaltype(i0) // expected-error {{invalid integer width}}
+func @illegaltype(i21312312323120) // expected-error {{invalid integer width}}
 
 // -----
 
@@ -464,7 +464,49 @@ func @dominance_failure() {
   "foo"(%x) : (i32) -> ()    // expected-error {{operand #0 does not dominate this use}}
   br ^bb1
 ^bb1:
-  %x = "bar"() : () -> i32    // expected-note {{operand defined here}}
+  %x = "bar"() : () -> i32    // expected-note {{operand defined here (op in the same region)}}
+  return
+}
+
+// -----
+
+func @dominance_failure() {
+^bb0:
+  "foo"(%x) : (i32) -> ()    // expected-error {{operand #0 does not dominate this use}}
+  %x = "bar"() : () -> i32    // expected-note {{operand defined here (op in the same block)}}
+  br ^bb1
+^bb1:
+  return
+}
+
+// -----
+
+func @dominance_failure() {
+  "foo"() ({
+    "foo"(%x) : (i32) -> ()    // expected-error {{operand #0 does not dominate this use}}
+  }) : () -> ()
+  %x = "bar"() : () -> i32    // expected-note {{operand defined here (op in a parent region)}}
+  return
+}
+
+// -----
+
+func @dominance_failure() {  //  expected-note {{operand defined as a block argument (block #1 in the same region)}}
+^bb0:
+  br ^bb1(%x : i32)    // expected-error {{operand #0 does not dominate this use}}
+^bb1(%x : i32):
+  return
+}
+
+// -----
+
+func @dominance_failure() {  //  expected-note {{operand defined as a block argument (block #1 in a parent region)}}
+^bb0:
+  %f = "foo"() ({
+    "foo"(%x) : (i32) -> ()    // expected-error {{operand #0 does not dominate this use}}
+  }) : () -> (i32)
+  br ^bb1(%f : i32)
+^bb1(%x : i32):
   return
 }
 
@@ -687,6 +729,11 @@ func @elementsattr_toolarge1() -> () {
 
 // -----
 
+// expected-error@+1 {{parsed zero elements, but type ('tensor<i64>') expected at least 1}}
+#attr = dense<> : tensor<i64>
+
+// -----
+
 func @elementsattr_toolarge2() -> () {
 ^bb0:
   "foo"(){bar = dense<[-777]> : tensor<1xi8>} : () -> () // expected-error {{integer constant out of range}}
@@ -764,7 +811,7 @@ func @mixed_named_arguments(f32,
 // `tensor` as operator rather than as a type.
 func @f(f32) {
 ^bb0(%a : f32):
-  %18 = cmpi "slt", %idx, %idx : index
+  %18 = cmpi slt, %idx, %idx : index
   tensor<42 x index  // expected-error {{custom op 'tensor' is unknown}}
   return
 }
@@ -1572,3 +1619,7 @@ func @invalid_region_dominance_with_dominance_free_regions() {
   }
   return
 }
+
+// -----
+
+func @foo() {} // expected-error {{expected non-empty function body}}

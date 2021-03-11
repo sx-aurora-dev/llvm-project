@@ -501,6 +501,8 @@ public:
 
   bool isParsingMasm() const override { return true; }
 
+  bool defineMacro(StringRef Name, StringRef Value) override;
+
   bool lookUpField(StringRef Name, AsmFieldInfo &Info) const override;
   bool lookUpField(StringRef Base, StringRef Member,
                    AsmFieldInfo &Info) const override;
@@ -780,8 +782,6 @@ private:
   /// Maps Codeview def_range types --> CVDefRangeType enum, for Codeview
   /// def_range types parsed by this class.
   StringMap<CVDefRangeType> CVDefRangeTypeMap;
-
-  bool parseInitValue(unsigned Size);
 
   // ".ascii", ".asciz", ".string"
   bool parseDirectiveAscii(StringRef IDVal, bool ZeroTerminated);
@@ -4044,8 +4044,7 @@ bool MasmParser::parseStructInstList(
         return true;
 
       for (int i = 0; i < Repetitions; ++i)
-        Initializers.insert(Initializers.end(), DuplicatedValues.begin(),
-                            DuplicatedValues.end());
+        llvm::append_range(Initializers, DuplicatedValues);
     } else {
       Initializers.emplace_back();
       if (parseStructInitializer(Structure, Initializers.back()))
@@ -6905,6 +6904,19 @@ static int rewritesSort(const AsmRewrite *AsmRewriteA,
   llvm_unreachable("Unstable rewrite sort.");
 }
 
+bool MasmParser::defineMacro(StringRef Name, StringRef Value) {
+  Variable &Var = Variables[Name.lower()];
+  if (Var.Name.empty()) {
+    Var.Name = Name;
+  } else if (!Var.Redefinable) {
+    return TokError("invalid variable redefinition");
+  }
+  Var.Redefinable = true;
+  Var.IsText = true;
+  Var.TextValue = Value.str();
+  return false;
+}
+
 bool MasmParser::lookUpField(StringRef Name, AsmFieldInfo &Info) const {
   const std::pair<StringRef, StringRef> BaseMember = Name.split('.');
   const StringRef Base = BaseMember.first, Member = BaseMember.second;
@@ -7106,7 +7118,7 @@ bool MasmParser::parseMSInlineAsm(
     // Consider implicit defs to be clobbers.  Think of cpuid and push.
     ArrayRef<MCPhysReg> ImpDefs(Desc.getImplicitDefs(),
                                 Desc.getNumImplicitDefs());
-    ClobberRegs.insert(ClobberRegs.end(), ImpDefs.begin(), ImpDefs.end());
+    llvm::append_range(ClobberRegs, ImpDefs);
   }
 
   // Set the number of Outputs and Inputs.

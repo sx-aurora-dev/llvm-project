@@ -2568,7 +2568,15 @@ enum CXCursorKind {
    */
   CXCursor_OMPScanDirective = 287,
 
-  CXCursor_LastStmt = CXCursor_OMPScanDirective,
+  /** OpenMP tile directive.
+   */
+  CXCursor_OMPTileDirective = 288,
+
+  /** OpenMP canonical loop.
+   */
+  CXCursor_OMPCanonicalLoop = 289,
+
+  CXCursor_LastStmt = CXCursor_OMPCanonicalLoop,
 
   /**
    * Cursor that represents the translation unit itself.
@@ -3861,7 +3869,15 @@ enum CXTypeNullabilityKind {
   /**
    * Nullability is not applicable to this type.
    */
-  CXTypeNullability_Invalid = 3
+  CXTypeNullability_Invalid = 3,
+
+  /**
+   * Generally behaves like Nullable, except when used in a block parameter that
+   * was imported into a swift async method. There, swift will assume that the
+   * parameter can get null even if no error occured. _Nullable parameters are
+   * assumed to only get null on error.
+   */
+  CXTypeNullability_NullableResult = 4
 };
 
 /**

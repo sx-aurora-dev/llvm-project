@@ -32,6 +32,7 @@
 #include "llvm/ADT/Triple.h"
 #include "llvm/Frontend/OpenMP/OMPGridValues.h"
 #include "llvm/Support/DataTypes.h"
+#include "llvm/Support/Error.h"
 #include "llvm/Support/VersionTuple.h"
 #include <cassert>
 #include <string>
@@ -217,6 +218,8 @@ protected:
   unsigned IsRenderScriptTarget : 1;
 
   unsigned HasAArch64SVETypes : 1;
+
+  unsigned HasRISCVVTypes : 1;
 
   unsigned AllowAMDGPUUnsafeFPAtomics : 1;
 
@@ -859,6 +862,10 @@ public:
   /// available on this target.
   bool hasAArch64SVETypes() const { return HasAArch64SVETypes; }
 
+  /// Returns whether or not the RISC-V V built-in types are
+  /// available on this target.
+  bool hasRISCVVTypes() const { return HasRISCVVTypes; }
+
   /// Returns whether or not the AMDGPU unsafe floating point atomics are
   /// allowed.
   bool allowAMDGPUUnsafeFPAtomics() const { return AllowAMDGPUUnsafeFPAtomics; }
@@ -1109,15 +1116,15 @@ public:
   /// checking on attribute((section("foo"))) specifiers.
   ///
   /// In this case, "foo" is passed in to be checked.  If the section
-  /// specifier is invalid, the backend should return a non-empty string
-  /// that indicates the problem.
+  /// specifier is invalid, the backend should return an Error that indicates
+  /// the problem.
   ///
   /// This hook is a simple quality of implementation feature to catch errors
   /// and give good diagnostics in cases when the assembler or code generator
   /// would otherwise reject the section specifier.
   ///
-  virtual std::string isValidSectionSpecifier(StringRef SR) const {
-    return "";
+  virtual llvm::Error isValidSectionSpecifier(StringRef SR) const {
+    return llvm::Error::success();
   }
 
   /// Set forced language options.
@@ -1438,21 +1445,39 @@ public:
   /// Set supported OpenCL extensions and optional core features.
   virtual void setSupportedOpenCLOpts() {}
 
+  virtual void supportAllOpenCLOpts(bool V = true) {
+#define OPENCLEXTNAME(Ext) getTargetOpts().OpenCLFeaturesMap[#Ext] = V;
+#include "clang/Basic/OpenCLExtensions.def"
+  }
+
   /// Set supported OpenCL extensions as written on command line
-  virtual void setOpenCLExtensionOpts() {
+  virtual void setCommandLineOpenCLOpts() {
     for (const auto &Ext : getTargetOpts().OpenCLExtensionsAsWritten) {
-      getTargetOpts().SupportedOpenCLOptions.support(Ext);
+      bool IsPrefixed = (Ext[0] == '+' || Ext[0] == '-');
+      std::string Name = IsPrefixed ? Ext.substr(1) : Ext;
+      bool V = IsPrefixed ? Ext[0] == '+' : true;
+
+      if (Name == "all") {
+        supportAllOpenCLOpts(V);
+        continue;
+      }
+
+      getTargetOpts().OpenCLFeaturesMap[Name] = V;
     }
   }
 
+  /// Define OpenCL macros based on target settings and language version
+  void getOpenCLFeatureDefines(const LangOptions &Opts,
+                               MacroBuilder &Builder) const;
+
   /// Get supported OpenCL extensions and optional core features.
-  OpenCLOptions &getSupportedOpenCLOpts() {
-    return getTargetOpts().SupportedOpenCLOptions;
+  llvm::StringMap<bool> &getSupportedOpenCLOpts() {
+    return getTargetOpts().OpenCLFeaturesMap;
   }
 
   /// Get const supported OpenCL extensions and optional core features.
-  const OpenCLOptions &getSupportedOpenCLOpts() const {
-      return getTargetOpts().SupportedOpenCLOptions;
+  const llvm::StringMap<bool> &getSupportedOpenCLOpts() const {
+    return getTargetOpts().OpenCLFeaturesMap;
   }
 
   /// Get address space for OpenCL type.

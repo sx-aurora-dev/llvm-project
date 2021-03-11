@@ -27,69 +27,7 @@
 #include <variant>
 
 #include "test_macros.h"
-#include "type_id.h"
 #include "variant_test_helpers.h"
-
-enum CallType : unsigned {
-  CT_None,
-  CT_NonConst = 1,
-  CT_Const = 2,
-  CT_LValue = 4,
-  CT_RValue = 8
-};
-
-inline constexpr CallType operator|(CallType LHS, CallType RHS) {
-  return static_cast<CallType>(static_cast<unsigned>(LHS) |
-                               static_cast<unsigned>(RHS));
-}
-
-struct ForwardingCallObject {
-
-  template <class... Args>
-  ForwardingCallObject& operator()(Args&&...) & {
-    set_call<Args &&...>(CT_NonConst | CT_LValue);
-    return *this;
-  }
-
-  template <class... Args>
-  const ForwardingCallObject& operator()(Args&&...) const & {
-    set_call<Args &&...>(CT_Const | CT_LValue);
-    return *this;
-  }
-
-  template <class... Args>
-  ForwardingCallObject&& operator()(Args&&...) && {
-    set_call<Args &&...>(CT_NonConst | CT_RValue);
-    return std::move(*this);
-  }
-
-  template <class... Args>
-  const ForwardingCallObject&& operator()(Args&&...) const && {
-    set_call<Args &&...>(CT_Const | CT_RValue);
-    return std::move(*this);
-  }
-
-  template <class... Args> static void set_call(CallType type) {
-    assert(last_call_type == CT_None);
-    assert(last_call_args == nullptr);
-    last_call_type = type;
-    last_call_args = std::addressof(makeArgumentID<Args...>());
-  }
-
-  template <class... Args> static bool check_call(CallType type) {
-    bool result = last_call_type == type && last_call_args &&
-                  *last_call_args == makeArgumentID<Args...>();
-    last_call_type = CT_None;
-    last_call_args = nullptr;
-    return result;
-  }
-
-  static CallType last_call_type;
-  static const TypeID *last_call_args;
-};
-
-CallType ForwardingCallObject::last_call_type = CT_None;
-const TypeID *ForwardingCallObject::last_call_args = nullptr;
 
 void test_call_operator_forwarding() {
   using Fn = ForwardingCallObject;
@@ -296,18 +234,6 @@ void test_return_type() {
   }
 }
 
-struct ReturnFirst {
-  template <class... Args> constexpr int operator()(int f, Args &&...) const {
-    return f;
-  }
-};
-
-struct ReturnArity {
-  template <class... Args> constexpr int operator()(Args &&...) const {
-    return sizeof...(Args);
-  }
-};
-
 void test_constexpr() {
   constexpr ReturnFirst obj{};
   constexpr ReturnArity aobj{};
@@ -412,7 +338,7 @@ void test_exceptions() {
 #endif
 }
 
-// See https://bugs.llvm.org/show_bug.cgi?id=31916
+// See https://llvm.org/PR31916
 void test_caller_accepts_nonconst() {
   struct A {};
   struct Visitor {

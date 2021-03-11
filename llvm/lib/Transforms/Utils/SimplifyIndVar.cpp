@@ -1272,28 +1272,8 @@ Instruction *WidenIV::cloneArithmeticIVUser(WidenIV::NarrowIVDefUse DU,
     }
 
     // WideUse is "WideDef `op.wide` X" as described in the comment.
-    const SCEV *WideUse = nullptr;
-
-    switch (NarrowUse->getOpcode()) {
-    default:
-      llvm_unreachable("No other possibility!");
-
-    case Instruction::Add:
-      WideUse = SE->getAddExpr(WideLHS, WideRHS);
-      break;
-
-    case Instruction::Mul:
-      WideUse = SE->getMulExpr(WideLHS, WideRHS);
-      break;
-
-    case Instruction::UDiv:
-      WideUse = SE->getUDivExpr(WideLHS, WideRHS);
-      break;
-
-    case Instruction::Sub:
-      WideUse = SE->getMinusSCEV(WideLHS, WideRHS);
-      break;
-    }
+    const SCEV *WideUse =
+      getSCEVByOpCode(WideLHS, WideRHS, NarrowUse->getOpcode());
 
     return WideUse == WideAR;
   };
@@ -1332,14 +1312,18 @@ WidenIV::ExtendKind WidenIV::getExtendKind(Instruction *I) {
 
 const SCEV *WidenIV::getSCEVByOpCode(const SCEV *LHS, const SCEV *RHS,
                                      unsigned OpCode) const {
-  if (OpCode == Instruction::Add)
+  switch (OpCode) {
+  case Instruction::Add:
     return SE->getAddExpr(LHS, RHS);
-  if (OpCode == Instruction::Sub)
+  case Instruction::Sub:
     return SE->getMinusSCEV(LHS, RHS);
-  if (OpCode == Instruction::Mul)
+  case Instruction::Mul:
     return SE->getMulExpr(LHS, RHS);
-
-  llvm_unreachable("Unsupported opcode.");
+  case Instruction::UDiv:
+    return SE->getUDivExpr(LHS, RHS);
+  default:
+    llvm_unreachable("Unsupported opcode.");
+  };
 }
 
 /// No-wrap operations can transfer sign extension of their result to their
@@ -1612,6 +1596,9 @@ bool WidenIV::widenWithVariantUse(WidenIV::NarrowIVDefUse DU) {
       return false;
     const SCEV *LHS = SE->getSCEV(OBO->getOperand(0));
     const SCEV *RHS = SE->getSCEV(OBO->getOperand(1));
+    // TODO: Support case for NarrowDef = NarrowUse->getOperand(1).
+    if (NarrowUse->getOperand(0) != NarrowDef)
+      return false;
     if (!SE->isKnownNegative(RHS))
       return false;
     bool ProvedSubNUW = SE->isKnownPredicateAt(
@@ -1667,7 +1654,7 @@ bool WidenIV::widenWithVariantUse(WidenIV::NarrowIVDefUse DU) {
     assert(LoopExitingBlock && L->contains(LoopExitingBlock) &&
            "Not a LCSSA Phi?");
     WidePN->addIncoming(WideBO, LoopExitingBlock);
-    Builder.SetInsertPoint(User->getParent()->getFirstNonPHI());
+    Builder.SetInsertPoint(&*User->getParent()->getFirstInsertionPt());
     auto *TruncPN = Builder.CreateTrunc(WidePN, User->getType());
     User->replaceAllUsesWith(TruncPN);
     DeadInsts.emplace_back(User);
@@ -2089,7 +2076,7 @@ void WidenIV::calculatePostIncRanges(PHINode *OrigPhi) {
   }
 }
 
-PHINode *llvm::createWideIV(WideIVInfo &WI,
+PHINode *llvm::createWideIV(const WideIVInfo &WI,
     LoopInfo *LI, ScalarEvolution *SE, SCEVExpander &Rewriter,
     DominatorTree *DT, SmallVectorImpl<WeakTrackingVH> &DeadInsts,
     unsigned &NumElimExt, unsigned &NumWidened,

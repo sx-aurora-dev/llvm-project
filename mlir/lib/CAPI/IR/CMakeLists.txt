@@ -2,11 +2,13 @@
 add_mlir_public_c_api_library(MLIRCAPIIR
   AffineExpr.cpp
   AffineMap.cpp
+  BuiltinAttributes.cpp
+  BuiltinTypes.cpp
   Diagnostics.cpp
+  DialectHandle.cpp
+  IntegerSet.cpp
   IR.cpp
   Pass.cpp
-  StandardAttributes.cpp
-  StandardTypes.cpp
   Support.cpp
 
   LINK_LIBS PUBLIC

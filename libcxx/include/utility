@@ -191,6 +191,10 @@ template <size_t I>
 template <size_t I>
   inline constexpr in_place_index_t<I> in_place_index{};
 
+// [utility.underlying], to_underlying
+template <class T>
+    constexpr underlying_type_t<T> to_underlying( T value ) noexcept; // C++2b
+
 }  // std
 
 */
@@ -970,7 +974,7 @@ _Size
 __loadword(const void* __p)
 {
     _Size __r;
-    std::memcpy(&__r, __p, sizeof(__r));
+    _VSTD::memcpy(&__r, __p, sizeof(__r));
     return __r;
 }
 
@@ -1189,7 +1193,7 @@ __murmur2_or_cityhash<_Size, 64>::operator()(const void* __key, _Size __len)
     __v = __weak_hash_len_32_with_seeds(__s, __v.second * __k1, __x + __w.first);
     __w = __weak_hash_len_32_with_seeds(__s + 32, __z + __w.second,
                                         __y + __loadword<_Size>(__s + 16));
-    std::swap(__z, __x);
+    _VSTD::swap(__z, __x);
     __s += 64;
     __len -= 64;
   } while (__len != 0);
@@ -1363,6 +1367,16 @@ struct _LIBCPP_TEMPLATE_VIS hash<unsigned char>
     _LIBCPP_INLINE_VISIBILITY
     size_t operator()(unsigned char __v) const _NOEXCEPT {return static_cast<size_t>(__v);}
 };
+
+#ifndef _LIBCPP_NO_HAS_CHAR8_T
+template <>
+struct _LIBCPP_TEMPLATE_VIS hash<char8_t>
+    : public unary_function<char8_t, size_t>
+{
+    _LIBCPP_INLINE_VISIBILITY
+    size_t operator()(char8_t __v) const _NOEXCEPT {return static_cast<size_t>(__v);}
+};
+#endif // !_LIBCPP_NO_HAS_CHAR8_T
 
 #ifndef _LIBCPP_HAS_NO_UNICODE_CHARS
 
@@ -1593,7 +1607,7 @@ using __check_hash_requirements _LIBCPP_NODEBUG_TYPE  = integral_constant<bool,
     __invokable_r<size_t, _Hash, _Key const&>::value
 >;
 
-template <class _Key, class _Hash = std::hash<_Key> >
+template <class _Key, class _Hash = hash<_Key> >
 using __has_enabled_hash _LIBCPP_NODEBUG_TYPE = integral_constant<bool,
     __check_hash_requirements<_Key, _Hash>::value &&
     is_default_constructible<_Hash>::value
@@ -1612,7 +1626,20 @@ template <class _Type, class ...>
 using __enable_hash_helper _LIBCPP_NODEBUG_TYPE = _Type;
 #endif
 
+template <class _Tp>
+_LIBCPP_INLINE_VISIBILITY constexpr typename underlying_type<_Tp>::type
+__to_underlying(_Tp __val) noexcept {
+  return static_cast<typename underlying_type<_Tp>::type>(__val);
+}
 #endif // !_LIBCPP_CXX03_LANG
+
+#if _LIBCPP_STD_VER > 20
+template <class _Tp>
+_LIBCPP_INLINE_VISIBILITY constexpr underlying_type_t<_Tp>
+to_underlying(_Tp __val) noexcept {
+  return _VSTD::__to_underlying(__val);
+}
+#endif
 
 _LIBCPP_END_NAMESPACE_STD
 

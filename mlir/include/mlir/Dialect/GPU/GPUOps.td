@@ -197,7 +197,7 @@ def GPU_GPUFuncOp : GPU_Op<"func", [HasParent<"GPUModuleOp">,
   let skipDefaultBuilders = 1;
 
   let builders = [
-    OpBuilderDAG<(ins "StringRef":$name, "FunctionType":$type,
+    OpBuilder<(ins "StringRef":$name, "FunctionType":$type,
       CArg<"TypeRange", "{}">:$workgroupAttributions,
       CArg<"TypeRange", "{}">:$privateAttributions,
       CArg<"ArrayRef<NamedAttribute>", "{}">:$attrs)>
@@ -207,8 +207,8 @@ def GPU_GPUFuncOp : GPU_Op<"func", [HasParent<"GPUModuleOp">,
     /// Returns `true` if the GPU function defined by this Op is a kernel, i.e.
     /// it is intended to be launched from host.
     bool isKernel() {
-      return getAttrOfType<UnitAttr>(GPUDialect::getKernelFuncAttrName()) !=
-             nullptr;
+      return (*this)->getAttrOfType<UnitAttr>(
+          GPUDialect::getKernelFuncAttrName()) != nullptr;
     }
 
     /// Change the type of this function in place. This is an extremely
@@ -223,8 +223,8 @@ def GPU_GPUFuncOp : GPU_Op<"func", [HasParent<"GPUModuleOp">,
 
     /// Returns the number of buffers located in the workgroup memory.
     unsigned getNumWorkgroupAttributions() {
-      return getAttrOfType<IntegerAttr>(getNumWorkgroupAttributionsAttrName())
-          .getInt();
+      return (*this)->getAttrOfType<IntegerAttr>(
+          getNumWorkgroupAttributionsAttrName()).getInt();
     }
 
     /// Returns a list of block arguments that correspond to buffers located in
@@ -377,7 +377,7 @@ def GPU_LaunchFuncOp : GPU_Op<"launch_func",
   let skipDefaultBuilders = 1;
 
   let builders = [
-    OpBuilderDAG<(ins "GPUFuncOp":$kernelFunc, "KernelDim3":$gridSize,
+    OpBuilder<(ins "GPUFuncOp":$kernelFunc, "KernelDim3":$gridSize,
       "KernelDim3":$blockSize, "ValueRange":$kernelOperands)>
   ];
 
@@ -496,7 +496,7 @@ def GPU_LaunchOp : GPU_Op<"launch">,
   let skipDefaultBuilders = 1;
 
   let builders = [
-    OpBuilderDAG<(ins "Value":$gridSizeX, "Value":$gridSizeY,
+    OpBuilder<(ins "Value":$gridSizeX, "Value":$gridSizeY,
       "Value":$gridSizeZ, "Value":$blockSizeX, "Value":$blockSizeY,
       "Value":$blockSizeZ)>
   ];
@@ -543,7 +543,7 @@ def GPU_ReturnOp : GPU_Op<"return", [HasParent<"GPUFuncOp">, NoSideEffect,
     by an invocation of the `gpu.func`.
   }];
 
-  let builders = [OpBuilderDAG<(ins), [{ // empty}]>];
+  let builders = [OpBuilder<(ins), [{ // empty}]>];
 
   let parser = [{ return parseReturnOp(parser, result); }];
   let printer = [{ p << getOperationName(); }];
@@ -722,7 +722,7 @@ def GPU_GPUModuleOp : GPU_Op<"module", [
 
     ```
   }];
-  let builders = [OpBuilderDAG<(ins "StringRef":$name)>];
+  let builders = [OpBuilder<(ins "StringRef":$name)>];
   let parser = [{ return ::parseGPUModuleOp(parser, result); }];
   let printer = [{ return ::print(p, *this); }];
   let regions = (region SizedRegion<1>:$body);
@@ -806,8 +806,7 @@ def GPU_WaitOp : GPU_Op<"wait", [GPU_AsyncOpInterface]> {
 
 def GPU_AllocOp : GPU_Op<"alloc", [
     GPU_AsyncOpInterface,
-    AttrSizedOperandSegments,
-    MemoryEffects<[MemAlloc<DefaultResource>]>
+    AttrSizedOperandSegments
   ]> {
 
   let summary = "GPU memory allocation operation.";
@@ -831,7 +830,7 @@ def GPU_AllocOp : GPU_Op<"alloc", [
 
   let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
                    Variadic<Index>:$dynamicSizes, Variadic<Index>:$symbolOperands);
-  let results = (outs Res<AnyMemRef, "", [MemAlloc<DefaultResource>]>:$memref,
+  let results = (outs Res<AnyMemRef, "", [MemAlloc]>:$memref,
                  Optional<GPU_AsyncToken>:$asyncToken);
 
   let extraClassDeclaration = [{
@@ -844,9 +843,7 @@ def GPU_AllocOp : GPU_Op<"alloc", [
   }];
 }
 
-def GPU_DeallocOp : GPU_Op<"dealloc", [
-    GPU_AsyncOpInterface, MemoryEffects<[MemFree]>
-  ]> {
+def GPU_DeallocOp : GPU_Op<"dealloc", [GPU_AsyncOpInterface]> {
 
   let summary = "GPU memory deallocation operation";
 
@@ -877,6 +874,39 @@ def GPU_DeallocOp : GPU_Op<"dealloc", [
     custom<AsyncDependencies>(type($asyncToken), $asyncDependencies)
     $memref attr-dict `:` type($memref)
   }];
+}
+
+def GPU_MemcpyOp : GPU_Op<"memcpy", [GPU_AsyncOpInterface]> {
+
+  let summary = "GPU memcpy operation";
+
+  let description = [{
+    The `gpu.memcpy` operation copies the content of one memref to another.
+
+    The op does not execute before all async dependencies have finished
+    executing.
+
+    If the `async` keyword is present, the op is executed asynchronously (i.e.
+    it does not block until the execution has finished on the device). In
+    that case, it returns a !gpu.async.token.
+
+    Example:
+
+    ```mlir
+    %token = gpu.memcpy async [%dep] %dst, %src : memref<?xf32, 1>, memref<?xf32>
+    ```
+  }];
+
+  let arguments = (ins Variadic<GPU_AsyncToken>:$asyncDependencies,
+                   Arg<AnyMemRef, "", [MemWrite]>:$dst,
+                   Arg<AnyMemRef, "", [MemRead]>:$src);
+  let results = (outs Optional<GPU_AsyncToken>:$asyncToken);
+
+  let assemblyFormat = [{
+    custom<AsyncDependencies>(type($asyncToken), $asyncDependencies)
+    $dst`,` $src `:` type($dst)`,` type($src) attr-dict
+  }];
+  let verifier = [{ return ::verify(*this); }];
 }
 
 #endif // GPU_OPS

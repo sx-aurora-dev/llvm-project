@@ -167,10 +167,11 @@ TableGen has two kinds of string literals:
 
 .. productionlist::
    TokString: '"' (non-'"' characters and escapes) '"'
-   TokCodeFragment: "[{" (shortest text not containing "}]") "}]"
+   TokCode: "[{" (shortest text not containing "}]") "}]"
 
-A :token:`TokCodeFragment` is nothing more than a multi-line string literal
-delimited by ``[{`` and ``}]``. It can break across lines.
+A :token:`TokCode` is nothing more than a multi-line string literal
+delimited by ``[{`` and ``}]``. It can break across lines and the
+line breaks are retained in the string.
 
 The current implementation accepts the following escape sequences::
 
@@ -193,11 +194,11 @@ numeric literal rather than an identifier.
 TableGen has the following reserved keywords, which cannot be used as
 identifiers::
 
-   bit        bits          class         code          dag
-   def        else          false         foreach       defm
-   defset     defvar        field         if            in
-   include    int           let           list          multiclass
-   string     then          true
+   assert     bit           bits          class         code
+   dag        def           else          false         foreach
+   defm       defset        defvar        field         if
+   in         include       int           let           list
+   multiclass string        then          true
 
 .. warning::
   The ``field`` reserved word is deprecated.
@@ -215,7 +216,8 @@ TableGen provides "bang operators" that have a wide variety of uses:
                : !interleave !isa         !le          !listconcat  !listsplat
                : !lt         !mul         !ne          !not         !or
                : !setdagop   !shl         !size        !sra         !srl
-               : !strconcat  !sub         !subst       !tail        !xor
+               : !strconcat  !sub         !subst       !substr      !tail
+               : !xor
 
 The ``!cond`` operator has a slightly different
 syntax compared to other bang operators, so it is defined separately:
@@ -254,7 +256,7 @@ high-level types (e.g., ``dag``). This flexibility allows you to describe a
 wide range of records conveniently and compactly.
 
 .. productionlist::
-   Type: "bit" | "int" | "string" | "code" | "dag"
+   Type: "bit" | "int" | "string" | "dag"
        :| "bits" "<" `TokInteger` ">"
        :| "list" "<" `Type` ">"
        :| `ClassID`
@@ -270,11 +272,6 @@ wide range of records conveniently and compactly.
 ``string``
     The ``string`` type represents an ordered sequence of characters of arbitrary
     length.
-
-``code``
-    The ``code`` type represents a code fragment. The values are the same as
-    those for the ``string`` type; the ``code`` type is provided just to indicate
-    the programmer's intention.
 
 ``bits<``\ *n*\ ``>``
     The ``bits`` type is a fixed-sized integer of arbitrary length *n* that
@@ -348,12 +345,12 @@ Simple values
 The :token:`SimpleValue` has a number of forms.
 
 .. productionlist::
-   SimpleValue: `TokInteger` | `TokString`+ | `TokCodeFragment`
+   SimpleValue: `TokInteger` | `TokString`+ | `TokCode`
 
-A value can be an integer literal, a string literal, or a code fragment
-literal. Multiple adjacent string literals are concatenated as in C/C++; the
-simple value is the concatenation of the strings. Code fragments become
-strings and then are indistinguishable from them.
+A value can be an integer literal, a string literal, or a code literal.
+Multiple adjacent string literals are concatenated as in C/C++; the simple
+value is the concatenation of the strings. Code literals become strings and
+are then indistinguishable from them.
 
 .. productionlist::
    SimpleValue2: "true" | "false"
@@ -512,7 +509,7 @@ primary value. Here are the possible suffixes for some primary *value*.
 The paste operator
 ------------------
 
-The paste operator (``#``) is the only infix operator availabe in TableGen
+The paste operator (``#``) is the only infix operator available in TableGen
 expressions. It allows you to concatenate strings or lists, but has a few
 unusual features.
 
@@ -539,8 +536,8 @@ files.
 
 .. productionlist::
    TableGenFile: `Statement`*
-   Statement: `Class` | `Def` | `Defm` | `Defset` | `Defvar` | `Foreach`
-            :| `If` | `Let` | `MultiClass`
+   Statement: `Assert` | `Class` | `Def` | `Defm` | `Defset` | `Defvar`
+            :| `Foreach` | `If` | `Let` | `MultiClass`
 
 The following sections describe each of these top-level statements. 
 
@@ -616,14 +613,16 @@ name of a multiclass.
 
 .. productionlist::
    Body: ";" | "{" `BodyItem`* "}"
-   BodyItem: `Type` `TokIdentifier` ["=" `Value`] ";"
+   BodyItem: (`Type` | "code") `TokIdentifier` ["=" `Value`] ";"
            :| "let" `TokIdentifier` ["{" `RangeList` "}"] "=" `Value` ";"
            :| "defvar" `TokIdentifier` "=" `Value` ";"
+           :| `Assert`
 
 A field definition in the body specifies a field to be included in the class
 or record. If no initial value is specified, then the field's value is
 uninitialized. The type must be specified; TableGen will not infer it from
-the value.
+the value. The keyword ``code`` may be used to emphasize that the field
+has a string value that is code.
 
 The ``let`` form is used to reset a field to a new value. This can be done
 for fields defined directly in the body or fields inherited from
@@ -1249,6 +1248,34 @@ when the bodies are finished (see `Defvar in a Record Body`_ for more details).
 The ``if`` statement can also be used in a record :token:`Body`.
 
 
+``assert`` --- check that a condition is true
+---------------------------------------------
+
+The ``assert`` statement checks a boolean condition to be sure that it is true
+and prints an error message if it is not.
+
+.. productionlist::
+   Assert: "assert" `condition` "," `message` ";"
+
+If the boolean condition is true, the statement does nothing. If the
+condition is false, it prints a nonfatal error message. The **message**, which
+can be an arbitrary string expression, is included in the error message as a
+note. The exact behavior of the ``assert`` statement depends on its
+placement.
+
+* At top level, the assertion is checked immediately.
+
+* In a record definition, the statement is saved and all assertions are
+  checked after the record is completely built.
+
+* In a class definition, the assertions are saved and inherited by all
+  the record definitions that inherit from the class. The assertions are
+  then checked when the records are completely built. [this placement is not
+  yet available]
+
+* In a multiclass definition, ... [this placement is not yet available]
+
+
 Additional Details
 ==================
 
@@ -1725,6 +1752,13 @@ and non-0 as true.
     The *value* can be a record name, in which case the operator produces the *repl*
     record if the *target* record name equals the *value* record name; otherwise it
     produces the *value*.
+
+``!substr(``\ *string*\ ``,`` *start*\ [``,`` *length*]\ ``)``
+    This operator extracts a substring of the given *string*. The starting
+    position of the substring is specified by *start*, which can range
+    between 0 and the length of the string. The length of the substring
+    is specified by *length*; if not specified, the rest of the string is
+    extracted. The *start* and *length* arguments must be integers.
 
 ``!tail(``\ *a*\ ``)``
     This operator produces a new list with all the elements

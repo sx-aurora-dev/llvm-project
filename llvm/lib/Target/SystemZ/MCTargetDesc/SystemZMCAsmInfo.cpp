@@ -17,6 +17,8 @@ SystemZMCAsmInfo::SystemZMCAsmInfo(const Triple &TT) {
   CalleeSaveStackSlotSize = 8;
   IsLittleEndian = false;
 
+  AssemblerDialect = TT.isOSzOS() ? AD_HLASM : AD_ATT;
+
   MaxInstLength = 6;
 
   CommentString = "#";

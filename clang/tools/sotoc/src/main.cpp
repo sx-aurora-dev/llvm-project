@@ -97,9 +97,12 @@ static llvm::cl::extrahelp
              "generates target function code");
 
 int main(int argc, const char **argv) {
-  clang::tooling::CommonOptionsParser option(argc, argv, SotocCategory);
-  clang::tooling::ClangTool tool(option.getCompilations(),
-                                 option.getSourcePathList());
+  auto option = clang::tooling::CommonOptionsParser::create(argc, argv, SotocCategory);
+  if (!option) {
+    return -1;
+  }
+  clang::tooling::ClangTool tool(option->getCompilations(),
+                                 option->getSourcePathList());
 
 #ifdef SOTOC_DEBUG
   SotocDebugLevel =

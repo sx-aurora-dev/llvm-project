@@ -157,7 +157,7 @@ getFileStyleFromOptions(const ClangTidyCheck::OptionsView &Options) {
     StyleString.pop_back();
     StyleString.pop_back();
     auto CaseOptional =
-        Options.getOptional<IdentifierNamingCheck::CaseType>(StyleString);
+        Options.get<IdentifierNamingCheck::CaseType>(StyleString);
 
     if (CaseOptional || !Prefix.empty() || !Postfix.empty() ||
         !IgnoredRegexpStr.empty())
@@ -352,6 +352,10 @@ static bool isParamInMainLikeFunction(const ParmVarDecl &ParmDecl,
     return false;
   if (FDecl->getAccess() != AS_public && FDecl->getAccess() != AS_none)
     return false;
+  // If the function doesn't have a name that's an identifier, can occur if the
+  // function is an operator overload, bail out early.
+  if (!FDecl->getDeclName().isIdentifier())
+    return false;
   enum MainType { None, Main, WMain };
   auto IsCharPtrPtr = [](QualType QType) -> MainType {
     if (QType.isNull())
@@ -393,12 +397,11 @@ static bool isParamInMainLikeFunction(const ParmVarDecl &ParmDecl,
         "(^[Mm]ain([_A-Z]|$))|([a-z0-9_]Main([_A-Z]|$))|(_main(_|$))");
     assert(Matcher.isValid() && "Invalid Matcher for main like functions.");
     return Matcher.match(FDecl->getName());
-  } else {
-    static llvm::Regex Matcher("(^((W[Mm])|(wm))ain([_A-Z]|$))|([a-z0-9_]W[Mm]"
-                               "ain([_A-Z]|$))|(_wmain(_|$))");
-    assert(Matcher.isValid() && "Invalid Matcher for wmain like functions.");
-    return Matcher.match(FDecl->getName());
   }
+  static llvm::Regex Matcher("(^((W[Mm])|(wm))ain([_A-Z]|$))|([a-z0-9_]W[Mm]"
+                             "ain([_A-Z]|$))|(_wmain(_|$))");
+  assert(Matcher.isValid() && "Invalid Matcher for wmain like functions.");
+  return Matcher.match(FDecl->getName());
 }
 
 static std::string
@@ -773,7 +776,8 @@ IdentifierNamingCheck::getStyleForFile(StringRef FileName) const {
   ClangTidyOptions Options = Context->getOptionsForFile(FileName);
   if (Options.Checks && GlobList(*Options.Checks).contains(CheckName)) {
     auto It = NamingStylesCache.try_emplace(
-        Parent, getFileStyleFromOptions({CheckName, Options.CheckOptions}));
+        Parent,
+        getFileStyleFromOptions({CheckName, Options.CheckOptions, Context}));
     assert(It.second);
     return It.first->getValue();
   }

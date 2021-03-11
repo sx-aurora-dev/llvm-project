@@ -109,7 +109,8 @@ while.end:
 
 ; CHECK-LLC:      do_inc2:
 ; CHECK-LLC-NOT:    mov lr,
-; CHECK-LLC:        dls lr, {{.*}}
+; CHECK-LLC:        add.w lr,
+; CHECK-LLC-NOT:    dls lr,
 ; CHECK-LLC-NOT:    mov lr,
 ; CHECK-LLC:      [[LOOP_HEADER:\.LBB[0-9._]+]]:
 ; CHECK-LLC:        le lr, [[LOOP_HEADER]]
@@ -145,8 +146,7 @@ while.end:
 
 ; CHECK: entry:
 ; CHECK: [[ROUND:%[^ ]+]] = add i32 %n, 1
-; CHECK: [[CMP:%[^ ]+]] = icmp slt i32 %n, 2
-; CHECK: [[SMIN:%[^ ]+]] = select i1 [[CMP]], i32 %n, i32 2
+; CHECK: [[SMIN:%[^ ]+]] = call i32 @llvm.smin.i32(i32 %n, i32 2)
 ; CHECK: [[SUB:%[^ ]+]] = sub i32 [[ROUND]], [[SMIN]]
 ; CHECK: [[HALVE:%[^ ]+]] = lshr i32 [[SUB]], 1
 ; CHECK: [[COUNT:%[^ ]+]] = add nuw i32 [[HALVE]], 1
@@ -162,7 +162,8 @@ while.end:
 
 ; CHECK-LLC:      do_dec2
 ; CHECK-LLC-NOT:    mov lr,
-; CHECK-LLC:        dls lr, {{.*}}
+; CHECK-LLC:        add.w lr,
+; CHECK-LLC-NOT:    dls lr,
 ; CHECK-LLC-NOT:    mov lr,
 ; CHECK-LLC:      [[LOOP_HEADER:\.LBB[0-9_]+]]:
 ; CHECK-LLC:        le lr, [[LOOP_HEADER]]

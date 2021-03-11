@@ -19,6 +19,7 @@
 #include <chrono>
 #include <vector>
 
+#include "make_string.h"
 #include "test_macros.h"
 #include "rapid-cxx-test.h"
 #include "format_string.h"
@@ -430,20 +431,6 @@ struct CWDGuard {
 
 // Misc test types
 
-#define MKSTR(Str) {Str, TEST_CONCAT(L, Str), TEST_CONCAT(u, Str), TEST_CONCAT(U, Str)}
-
-struct MultiStringType {
-  const char* s;
-  const wchar_t* w;
-  const char16_t* u16;
-  const char32_t* u32;
-
-  operator const char* () const { return s; }
-  operator const wchar_t* () const { return w; }
-  operator const char16_t* () const { return u16; }
-  operator const char32_t* () const { return u32; }
-};
-
 const MultiStringType PathList[] = {
         MKSTR(""),
         MKSTR(" "),
@@ -601,6 +588,12 @@ void SleepFor(std::chrono::seconds dur) {
 }
 
 inline bool PathEq(fs::path const& LHS, fs::path const& RHS) {
+  return LHS.native() == RHS.native();
+}
+
+inline bool PathEqIgnoreSep(fs::path LHS, fs::path RHS) {
+  LHS.make_preferred();
+  RHS.make_preferred();
   return LHS.native() == RHS.native();
 }
 

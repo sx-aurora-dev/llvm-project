@@ -130,7 +130,7 @@ bool matchAArch64MulConstCombine(
   if (!Const)
     return false;
 
-  const APInt &ConstValue = APInt(Ty.getSizeInBits(), Const->Value, true);
+  const APInt ConstValue = Const->Value.sextOrSelf(Ty.getSizeInBits());
   // The following code is ported from AArch64ISelLowering.
   // Multiplication of a power of two plus/minus one can be done more
   // cheaply as as shift+add/sub. For now, this is true unilaterally. If
@@ -155,8 +155,9 @@ bool matchAArch64MulConstCombine(
     // folded into madd or msub.
     if (MRI.hasOneNonDBGUse(Dst)) {
       MachineInstr &UseMI = *MRI.use_instr_begin(Dst);
-      if (UseMI.getOpcode() == TargetOpcode::G_ADD ||
-          UseMI.getOpcode() == TargetOpcode::G_SUB)
+      unsigned UseOpc = UseMI.getOpcode();
+      if (UseOpc == TargetOpcode::G_ADD || UseOpc == TargetOpcode::G_PTR_ADD ||
+          UseOpc == TargetOpcode::G_SUB)
         return false;
     }
   }

@@ -15,9 +15,13 @@
 #include "llvm-jitlink.h"
 
 #include "llvm/BinaryFormat/Magic.h"
+#include "llvm/ExecutionEngine/Orc/DebugObjectManagerPlugin.h"
 #include "llvm/ExecutionEngine/Orc/ExecutionUtils.h"
+#include "llvm/ExecutionEngine/Orc/TPCDebugObjectRegistrar.h"
 #include "llvm/ExecutionEngine/Orc/TPCDynamicLibrarySearchGenerator.h"
 #include "llvm/ExecutionEngine/Orc/TPCEHFrameRegistrar.h"
+#include "llvm/ExecutionEngine/Orc/TargetProcess/JITLoaderGDB.h"
+#include "llvm/ExecutionEngine/Orc/TargetProcess/RegisterEHFrames.h"
 #include "llvm/MC/MCAsmInfo.h"
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCDisassembler/MCDisassembler.h"
@@ -155,6 +159,12 @@ static cl::opt<std::string> OutOfProcessExecutorConnect(
 
 ExitOnError ExitOnErr;
 
+LLVM_ATTRIBUTE_USED void linkComponents() {
+  errs() << (void *)&llvm_orc_registerEHFrameSectionWrapper
+         << (void *)&llvm_orc_deregisterEHFrameSectionWrapper
+         << (void *)&llvm_orc_registerJITLoaderGDBWrapper;
+}
+
 namespace llvm {
 
 static raw_ostream &
@@ -259,18 +269,17 @@ static void dumpSectionContents(raw_ostream &OS, LinkGraph &G) {
   for (auto &S : G.sections())
     Sections.push_back(&S);
 
-  std::sort(Sections.begin(), Sections.end(),
-            [](const Section *LHS, const Section *RHS) {
-              if (llvm::empty(LHS->symbols()) && llvm::empty(RHS->symbols()))
-                return false;
-              if (llvm::empty(LHS->symbols()))
-                return false;
-              if (llvm::empty(RHS->symbols()))
-                return true;
-              SectionRange LHSRange(*LHS);
-              SectionRange RHSRange(*RHS);
-              return LHSRange.getStart() < RHSRange.getStart();
-            });
+  llvm::sort(Sections, [](const Section *LHS, const Section *RHS) {
+    if (llvm::empty(LHS->symbols()) && llvm::empty(RHS->symbols()))
+      return false;
+    if (llvm::empty(LHS->symbols()))
+      return false;
+    if (llvm::empty(RHS->symbols()))
+      return true;
+    SectionRange LHSRange(*LHS);
+    SectionRange RHSRange(*RHS);
+    return LHSRange.getStart() < RHSRange.getStart();
+  });
 
   for (auto *S : Sections) {
     OS << S->getName() << " content:";
@@ -330,7 +339,7 @@ public:
   }
 
   Expected<std::unique_ptr<JITLinkMemoryManager::Allocation>>
-  allocate(const SegmentsRequestMap &Request) override {
+  allocate(const JITLinkDylib *JD, const SegmentsRequestMap &Request) override {
 
     using AllocationMap = DenseMap<unsigned, sys::MemoryBlock>;
 
@@ -585,7 +594,7 @@ LLVMJITLinkRemoteTargetProcessControl::LaunchExecutor() {
                                  inconvertibleErrorCode());
 #else
 
-  rpc::registerStringError<LLVMJITLinkChannel>();
+  shared::registerStringError<LLVMJITLinkChannel>();
 
   constexpr int ReadEnd = 0;
   constexpr int WriteEnd = 1;
@@ -640,8 +649,8 @@ LLVMJITLinkRemoteTargetProcessControl::LaunchExecutor() {
 
   // Return an RPC channel connected to our end of the pipes.
   auto SSP = std::make_shared<SymbolStringPool>();
-  auto Channel = std::make_unique<rpc::FDRawByteChannel>(FromExecutor[ReadEnd],
-                                                         ToExecutor[WriteEnd]);
+  auto Channel = std::make_unique<shared::FDRawByteChannel>(
+      FromExecutor[ReadEnd], ToExecutor[WriteEnd]);
   auto Endpoint = std::make_unique<LLVMJITLinkRPCEndpoint>(*Channel, true);
 
   auto ReportError = [](Error Err) {
@@ -668,7 +677,7 @@ LLVMJITLinkRemoteTargetProcessControl::ConnectToExecutor() {
                                  inconvertibleErrorCode());
 #else
 
-  rpc::registerStringError<LLVMJITLinkChannel>();
+  shared::registerStringError<LLVMJITLinkChannel>();
 
   StringRef HostNameStr, PortStr;
   std::tie(HostNameStr, PortStr) =
@@ -691,21 +700,41 @@ LLVMJITLinkRemoteTargetProcessControl::ConnectToExecutor() {
                                        " is not a valid integer",
                                    inconvertibleErrorCode());
 
+  addrinfo *AI;
+  addrinfo Hints{};
+  Hints.ai_family = AF_INET;
+  Hints.ai_socktype = SOCK_STREAM;
+  Hints.ai_protocol = PF_INET;
+  Hints.ai_flags = AI_NUMERICSERV;
+  if (getaddrinfo(HostName.c_str(), PortStr.str().c_str(), &Hints, &AI) != 0)
+    return make_error<StringError>("Failed to resolve " + HostName + ":" +
+                                       Twine(Port),
+                                   inconvertibleErrorCode());
+
   int SockFD = socket(PF_INET, SOCK_STREAM, 0);
-  hostent *Server = gethostbyname(HostName.c_str());
   sockaddr_in ServAddr;
   memset(&ServAddr, 0, sizeof(ServAddr));
   ServAddr.sin_family = PF_INET;
-  memmove(&Server->h_addr, &ServAddr.sin_addr.s_addr, Server->h_length);
   ServAddr.sin_port = htons(Port);
-  if (connect(SockFD, reinterpret_cast<sockaddr *>(&ServAddr),
-              sizeof(ServAddr)) < 0)
+
+  // getaddrinfo returns a list of address structures.  Go through the list
+  // to find one we can connect to.
+  int ConnectRC = -1;
+  for (addrinfo *Server = AI; Server; Server = Server->ai_next) {
+    memmove(&Server->ai_addr, &ServAddr.sin_addr.s_addr, Server->ai_addrlen);
+    ConnectRC = connect(SockFD, reinterpret_cast<sockaddr *>(&ServAddr),
+                        sizeof(ServAddr));
+    if (ConnectRC == 0)
+      break;
+  }
+  freeaddrinfo(AI);
+  if (ConnectRC == -1)
     return make_error<StringError>("Failed to connect to " + HostName + ":" +
                                        Twine(Port),
                                    inconvertibleErrorCode());
 
   auto SSP = std::make_shared<SymbolStringPool>();
-  auto Channel = std::make_unique<rpc::FDRawByteChannel>(SockFD, SockFD);
+  auto Channel = std::make_unique<shared::FDRawByteChannel>(SockFD, SockFD);
   auto Endpoint = std::make_unique<LLVMJITLinkRPCEndpoint>(*Channel, true);
 
   auto ReportError = [](Error Err) {
@@ -819,9 +848,12 @@ Session::Session(std::unique_ptr<TargetProcessControl> TPC, Error &Err)
     return;
   }
 
-  if (!NoExec && !this->TPC->getTargetTriple().isOSWindows())
+  if (!NoExec && !this->TPC->getTargetTriple().isOSWindows()) {
     ObjLayer.addPlugin(std::make_unique<EHFrameRegistrationPlugin>(
         ES, ExitOnErr(TPCEHFrameRegistrar::Create(*this->TPC))));
+    ObjLayer.addPlugin(std::make_unique<DebugObjectManagerPlugin>(
+        ES, ExitOnErr(createJITLoaderGDBRegistrar(*this->TPC))));
+  }
 
   ObjLayer.addPlugin(std::make_unique<JITLinkSessionPlugin>(*this));
 

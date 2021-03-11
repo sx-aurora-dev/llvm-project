@@ -28,10 +28,6 @@ namespace mlir {
 class Builder;
 class OpBuilder;
 
-namespace OpTrait {
-template <typename ConcreteType> class OneResult;
-}
-
 /// This class represents success/failure for operation parsing. It is
 /// essentially a simple wrapper class around LogicalResult that allows for
 /// explicit conversion to bool. This allows for the parser to chain together
@@ -45,7 +41,7 @@ public:
   ParseResult(const Diagnostic &) : LogicalResult(failure()) {}
 
   /// Failure is true in a boolean context.
-  explicit operator bool() const { return failed(*this); }
+  explicit operator bool() const { return failed(); }
 };
 /// This class implements `Optional` functionality for ParseResult. We don't
 /// directly use Optional here, because it provides an implicit conversion
@@ -102,29 +98,11 @@ public:
   /// This implicitly converts to Operation*.
   operator Operation *() const { return state; }
 
+  /// Shortcut of `->` to access a member of Operation.
+  Operation *operator->() const { return state; }
+
   /// Return the operation that this refers to.
   Operation *getOperation() { return state; }
-
-  /// Return the dialect that this refers to.
-  Dialect *getDialect() { return getOperation()->getDialect(); }
-
-  /// Return the parent Region of this operation.
-  Region *getParentRegion() { return getOperation()->getParentRegion(); }
-
-  /// Returns the closest surrounding operation that contains this operation
-  /// or nullptr if this is a top-level operation.
-  Operation *getParentOp() { return getOperation()->getParentOp(); }
-
-  /// Return the closest surrounding parent operation that is of type 'OpTy'.
-  template <typename OpTy> OpTy getParentOfType() {
-    return getOperation()->getParentOfType<OpTy>();
-  }
-
-  /// Returns the closest surrounding parent operation with trait `Trait`.
-  template <template <typename T> class Trait>
-  Operation *getParentWithTrait() {
-    return getOperation()->getParentWithTrait<Trait>();
-  }
 
   /// Return the context this operation belongs to.
   MLIRContext *getContext() { return getOperation()->getContext(); }
@@ -143,56 +121,25 @@ public:
 
   /// The source location the operation was defined or derived from.
   Location getLoc() { return state->getLoc(); }
-  void setLoc(Location loc) { state->setLoc(loc); }
 
   /// Return all of the attributes on this operation.
-  ArrayRef<NamedAttribute> getAttrs() { return state->getAttrs(); }
-
-  /// A utility iterator that filters out non-dialect attributes.
-  using dialect_attr_iterator = Operation::dialect_attr_iterator;
-  using dialect_attr_range = Operation::dialect_attr_range;
-
-  /// Return a range corresponding to the dialect attributes for this operation.
-  dialect_attr_range getDialectAttrs() { return state->getDialectAttrs(); }
-  dialect_attr_iterator dialect_attr_begin() {
-    return state->dialect_attr_begin();
-  }
-  dialect_attr_iterator dialect_attr_end() { return state->dialect_attr_end(); }
-
-  /// Return an attribute with the specified name.
-  Attribute getAttr(StringRef name) { return state->getAttr(name); }
-
-  /// If the operation has an attribute of the specified type, return it.
-  template <typename AttrClass> AttrClass getAttrOfType(StringRef name) {
-    return getAttr(name).dyn_cast_or_null<AttrClass>();
+  LLVM_ATTRIBUTE_DEPRECATED(
+      ArrayRef<NamedAttribute> getAttrs(),
+      "Use Operation::getAttrs() instead (replace '.' with '->').") {
+    return state->getAttrs();
   }
 
-  /// If the an attribute exists with the specified name, change it to the new
-  /// value.  Otherwise, add a new attribute with the specified name/value.
-  void setAttr(Identifier name, Attribute value) {
-    state->setAttr(name, value);
-  }
-  void setAttr(StringRef name, Attribute value) {
-    setAttr(Identifier::get(name, getContext()), value);
-  }
-
-  /// Set the attributes held by this operation.
-  void setAttrs(ArrayRef<NamedAttribute> attributes) {
-    state->setAttrs(attributes);
-  }
-  void setAttrs(MutableDictionaryAttr newAttrs) { state->setAttrs(newAttrs); }
-
-  /// Set the dialect attributes for this operation, and preserve all dependent.
-  template <typename DialectAttrs> void setDialectAttrs(DialectAttrs &&attrs) {
-    state->setDialectAttrs(std::move(attrs));
-  }
-
-  /// Remove the attribute with the specified name if it exists.  The return
-  /// value indicates whether the attribute was present or not.
-  MutableDictionaryAttr::RemoveResult removeAttr(Identifier name) {
+  /// Remove the attribute with the specified name if it exists. Return the
+  /// attribute that was erased, or nullptr if there was no attribute with such
+  /// name.
+  LLVM_ATTRIBUTE_DEPRECATED(
+      Attribute removeAttr(Identifier name),
+      "Use Operation::removeAttr() instead (replace '.' with '->').") {
     return state->removeAttr(name);
   }
-  MutableDictionaryAttr::RemoveResult removeAttr(StringRef name) {
+  LLVM_ATTRIBUTE_DEPRECATED(
+      Attribute removeAttr(StringRef name),
+      "Use Operation::removeAttr() instead (replace '.' with '->').") {
     return state->removeAttr(Identifier::get(name, getContext()));
   }
 
@@ -218,12 +165,20 @@ public:
   /// handlers that may be listening.
   InFlightDiagnostic emitRemark(const Twine &message = {});
 
-  /// Walk the operation in postorder, calling the callback for each nested
-  /// operation(including this one).
+  /// Walk the operation by calling the callback for each nested operation
+  /// (including this one), block or region, depending on the callback provided.
+  /// Regions, blocks and operations at the same nesting level are visited in
+  /// lexicographical order. The walk order for enclosing regions, blocks and
+  /// operations with respect to their nested ones is specified by 'Order'
+  /// (post-order by default). A callback on a block or operation is allowed to
+  /// erase that block or operation if either:
+  ///   * the walk is in post-order, or
+  ///   * the walk is in pre-order and the walk is skipped after the erasure.
   /// See Operation::walk for more details.
-  template <typename FnT, typename RetT = detail::walkResultType<FnT>>
+  template <WalkOrder Order = WalkOrder::PostOrder, typename FnT,
+            typename RetT = detail::walkResultType<FnT>>
   RetT walk(FnT &&callback) {
-    return state->walk(std::forward<FnT>(callback));
+    return state->walk<Order>(std::forward<FnT>(callback));
   }
 
   // These are default implementations of customization hooks.
@@ -265,10 +220,24 @@ inline bool operator!=(OpState lhs, OpState rhs) {
   return lhs.getOperation() != rhs.getOperation();
 }
 
+raw_ostream &operator<<(raw_ostream &os, OpFoldResult ofr);
+
 /// This class represents a single result from folding an operation.
 class OpFoldResult : public PointerUnion<Attribute, Value> {
   using PointerUnion<Attribute, Value>::PointerUnion;
+
+public:
+  void dump() { llvm::errs() << *this << "\n"; }
 };
+
+/// Allow printing to a stream.
+inline raw_ostream &operator<<(raw_ostream &os, OpFoldResult ofr) {
+  if (Value value = ofr.dyn_cast<Value>())
+    value.print(os);
+  else
+    ofr.dyn_cast<Attribute>().print(os);
+  return os;
+}
 
 /// Allow printing to a stream.
 inline raw_ostream &operator<<(raw_ostream &os, OpState &op) {
@@ -321,7 +290,7 @@ LogicalResult verifyAtLeastNSuccessors(Operation *op, unsigned numSuccessors);
 LogicalResult verifyOperandSizeAttr(Operation *op, StringRef sizeAttrName);
 LogicalResult verifyResultSizeAttr(Operation *op, StringRef sizeAttrName);
 LogicalResult verifyNoRegionArguments(Operation *op);
-LogicalResult verifyElementwiseMappable(Operation *op);
+LogicalResult verifyElementwise(Operation *op);
 } // namespace impl
 
 /// Helper class for implementing traits.  Clients are not expected to interact
@@ -420,7 +389,8 @@ public:
 ///
 ///   class FooOp : public Op<FooOp, OpTrait::NOperands<2>::Impl> {
 ///
-template <unsigned N> class NOperands {
+template <unsigned N>
+class NOperands {
 public:
   static_assert(N > 1, "use ZeroOperands/OneOperand for N < 2");
 
@@ -439,7 +409,8 @@ public:
 ///
 ///   class FooOp : public Op<FooOp, OpTrait::AtLeastNOperands<2>::Impl> {
 ///
-template <unsigned N> class AtLeastNOperands {
+template <unsigned N>
+class AtLeastNOperands {
 public:
   template <typename ConcreteType>
   class Impl : public detail::MultiOperandTraitBase<ConcreteType,
@@ -513,7 +484,8 @@ public:
 
 /// This class provides the API for ops that are known to have a specified
 /// number of regions.
-template <unsigned N> class NRegions {
+template <unsigned N>
+class NRegions {
 public:
   static_assert(N > 1, "use ZeroRegion/OneRegion for N < 2");
 
@@ -529,7 +501,8 @@ public:
 
 /// This class provides APIs for ops that are known to have at least a specified
 /// number of regions.
-template <unsigned N> class AtLeastNRegions {
+template <unsigned N>
+class AtLeastNRegions {
 public:
   template <typename ConcreteType>
   class Impl : public detail::MultiRegionTraitBase<ConcreteType,
@@ -578,7 +551,8 @@ struct MultiResultTraitBase : public TraitBase<ConcreteType, TraitType> {
 
   /// Replace all uses of results of this operation with the provided 'values'.
   /// 'values' may correspond to an existing operation, or a range of 'Value'.
-  template <typename ValuesT> void replaceAllUsesWith(ValuesT &&values) {
+  template <typename ValuesT>
+  void replaceAllUsesWith(ValuesT &&values) {
     this->getOperation()->replaceAllUsesWith(std::forward<ValuesT>(values));
   }
 
@@ -606,20 +580,19 @@ struct MultiResultTraitBase : public TraitBase<ConcreteType, TraitType> {
 } // end namespace detail
 
 /// This class provides return value APIs for ops that are known to have a
-/// single result.
+/// single result.  ResultType is the concrete type returned by getType().
 template <typename ConcreteType>
 class OneResult : public TraitBase<ConcreteType, OneResult> {
 public:
   Value getResult() { return this->getOperation()->getResult(0); }
-  Type getType() { return getResult().getType(); }
 
   /// If the operation returns a single value, then the Op can be implicitly
   /// converted to an Value. This yields the value of the only result.
   operator Value() { return getResult(); }
 
-  /// Replace all uses of 'this' value with the new value, updating anything in
-  /// the IR that uses 'this' to use the other value instead.  When this returns
-  /// there are zero uses of 'this'.
+  /// Replace all uses of 'this' value with the new value, updating anything
+  /// in the IR that uses 'this' to use the other value instead.  When this
+  /// returns there are zero uses of 'this'.
   void replaceAllUsesWith(Value newValue) {
     getResult().replaceAllUsesWith(newValue);
   }
@@ -634,12 +607,33 @@ public:
   }
 };
 
+/// This trait is used for return value APIs for ops that are known to have a
+/// specific type other than `Type`.  This allows the "getType()" member to be
+/// more specific for an op.  This should be used in conjunction with OneResult,
+/// and occur in the trait list before OneResult.
+template <typename ResultType>
+class OneTypedResult {
+public:
+  /// This class provides return value APIs for ops that are known to have a
+  /// single result.  ResultType is the concrete type returned by getType().
+  template <typename ConcreteType>
+  class Impl
+      : public TraitBase<ConcreteType, OneTypedResult<ResultType>::Impl> {
+  public:
+    ResultType getType() {
+      auto resultTy = this->getOperation()->getResult(0).getType();
+      return resultTy.template cast<ResultType>();
+    }
+  };
+};
+
 /// This class provides the API for ops that are known to have a specified
 /// number of results.  This is used as a trait like this:
 ///
 ///   class FooOp : public Op<FooOp, OpTrait::NResults<2>::Impl> {
 ///
-template <unsigned N> class NResults {
+template <unsigned N>
+class NResults {
 public:
   static_assert(N > 1, "use ZeroResult/OneResult for N < 2");
 
@@ -658,7 +652,8 @@ public:
 ///
 ///   class FooOp : public Op<FooOp, OpTrait::AtLeastNResults<2>::Impl> {
 ///
-template <unsigned N> class AtLeastNResults {
+template <unsigned N>
+class AtLeastNResults {
 public:
   template <typename ConcreteType>
   class Impl : public detail::MultiResultTraitBase<ConcreteType,
@@ -683,10 +678,6 @@ class VariadicResults
 template <typename ConcreteType>
 class IsTerminator : public TraitBase<ConcreteType, IsTerminator> {
 public:
-  static AbstractOperation::OperationProperties getTraitProperties() {
-    return static_cast<AbstractOperation::OperationProperties>(
-        OperationProperty::Terminator);
-  }
   static LogicalResult verifyTrait(Operation *op) {
     return impl::verifyIsTerminator(op);
   }
@@ -805,6 +796,9 @@ struct SingleBlockImplicitTerminator {
     }
 
   public:
+    /// The type of the operation used as the implicit terminator type.
+    using ImplicitTerminatorOpT = TerminatorOpType;
+
     static LogicalResult verifyTrait(Operation *op) {
       for (unsigned i = 0, e = op->getNumRegions(); i < e; ++i) {
         Region &region = op->getRegion(i);
@@ -840,7 +834,7 @@ struct SingleBlockImplicitTerminator {
 
     /// Ensure that the given region has the terminator required by this trait.
     /// If OpBuilder is provided, use it to build the terminator and notify the
-    /// OpBuilder litsteners accordingly. If only a Builder is provided, locally
+    /// OpBuilder listeners accordingly. If only a Builder is provided, locally
     /// construct an OpBuilder with no listeners; this should only be used if no
     /// OpBuilder is available at the call site, e.g., in the parser.
     static void ensureTerminator(Region &region, Builder &builder,
@@ -1010,13 +1004,7 @@ public:
 
 /// This class adds property that the operation is commutative.
 template <typename ConcreteType>
-class IsCommutative : public TraitBase<ConcreteType, IsCommutative> {
-public:
-  static AbstractOperation::OperationProperties getTraitProperties() {
-    return static_cast<AbstractOperation::OperationProperties>(
-        OperationProperty::Commutative);
-  }
-};
+class IsCommutative : public TraitBase<ConcreteType, IsCommutative> {};
 
 /// This class adds property that the operation is an involution.
 /// This means a unary to unary operation "f" that satisfies f(f(x)) = x
@@ -1119,10 +1107,6 @@ template <typename ConcreteType>
 class IsIsolatedFromAbove
     : public TraitBase<ConcreteType, IsIsolatedFromAbove> {
 public:
-  static AbstractOperation::OperationProperties getTraitProperties() {
-    return static_cast<AbstractOperation::OperationProperties>(
-        OperationProperty::IsolatedFromAbove);
-  }
   static LogicalResult verifyTrait(Operation *op) {
     for (auto &region : op->getRegions())
       if (!region.isIsolatedFromAbove(op->getLoc()))
@@ -1156,8 +1140,8 @@ class AutomaticAllocationScope
     : public TraitBase<ConcreteType, AutomaticAllocationScope> {
 public:
   static LogicalResult verifyTrait(Operation *op) {
-    if (op->hasTrait<ZeroRegion>())
-      return op->emitOpError("is expected to have regions");
+    static_assert(!ConcreteType::template hasTrait<ZeroRegion>(),
+                  "expected operation to have one or more regions");
     return success();
   }
 };
@@ -1237,92 +1221,142 @@ template <typename ConcrentType>
 struct MemRefsNormalizable
     : public TraitBase<ConcrentType, MemRefsNormalizable> {};
 
-/// This trait tags scalar ops that also can be applied to vectors/tensors, with
-/// their semantics on vectors/tensors being elementwise application.
+/// This trait tags element-wise ops on vectors or tensors.
 ///
 /// NOTE: Not all ops that are "elementwise" in some abstract sense satisfy this
-/// trait. In particular, broadcasting behavior is not allowed. This trait
-/// describes a set of invariants that allow systematic
-/// vectorization/tensorization, and the reverse, scalarization. The properties
-/// needed for this also can be used to implement a number of
-/// transformations/analyses/interfaces.
+/// trait. In particular, broadcasting behavior is not allowed.
 ///
-/// An `ElementwiseMappable` op must satisfy the following properties:
+/// An `Elementwise` op must satisfy the following properties:
 ///
-/// 1. If any result is a vector (resp. tensor), then at least one operand must
-/// be a vector (resp. tensor).
-/// 2. If any operand is a vector (resp. tensor), then there must be at least
-/// one result, and all results must be vectors (resp. tensors).
-/// 3. The static types of all vector (resp. tensor) operands and results must
-/// have the same shape.
-/// 4. In the case of tensor operands, the dynamic shapes of all tensor operands
-/// must be the same, otherwise the op has undefined behavior.
-/// 5. ("systematic scalarization" property) If an op has vector/tensor
-/// operands/results, then the same op, with the operand/result types changed to
-/// their corresponding element type, shall be a verifier-valid op.
-/// 6. The semantics of the op on vectors (resp. tensors) shall be the same as
-/// applying the scalarized version of the op for each corresponding element of
-/// the vector (resp. tensor) operands in parallel.
-/// 7. ("systematic vectorization/tensorization" property) If an op has
-/// scalar operands/results, the op shall remain verifier-valid if all scalar
-/// operands are replaced with vectors/tensors of the same shape and
-/// corresponding element types.
+/// 1. If any result is a vector/tensor then at least one operand must also be a
+///    vector/tensor.
+/// 2. If any operand is a vector/tensor then there must be at least one result
+///    and all results must be vectors/tensors.
+/// 3. All operand and result vector/tensor types must be of the same shape. The
+///    shape may be dynamic in which case the op's behaviour is undefined for
+///    non-matching shapes.
+/// 4. The operation must be elementwise on its vector/tensor operands and
+///    results. When applied to single-element vectors/tensors, the result must
+///    be the same per elememnt.
 ///
-/// Together, these properties provide an easy way for scalar operations to
-/// conveniently generalize their behavior to vectors/tensors, and systematize
-/// conversion between these forms.
+/// TODO: Avoid hardcoding vector/tensor, and generalize this trait to a new
+/// interface `ElementwiseTypeInterface` that describes the container types for
+/// which the operation is elementwise.
+///
+/// Rationale:
+/// - 1. and 2. guarantee a well-defined iteration space and exclude the cases
+///   of 0 non-scalar operands or 0 non-scalar results, which complicate a
+///   generic definition of the iteration space.
+/// - 3. guarantees that folding can be done across scalars/vectors/tensors with
+///   the same pattern, as otherwise lots of special handling for type
+///   mismatches would be needed.
+/// - 4. guarantees that no error handling is needed. Higher-level dialects
+///   should reify any needed guards or error handling code before lowering to
+///   an `Elementwise` op.
+template <typename ConcreteType>
+struct Elementwise : public TraitBase<ConcreteType, Elementwise> {
+  static LogicalResult verifyTrait(Operation *op) {
+    return ::mlir::OpTrait::impl::verifyElementwise(op);
+  }
+};
+
+/// This trait tags `Elementwise` operatons that can be systematically
+/// scalarized. All vector/tensor operands and results are then replaced by
+/// scalars of the respective element type. Semantically, this is the operation
+/// on a single element of the vector/tensor.
+///
+/// Rationale:
+/// Allow to define the vector/tensor semantics of elementwise operations based
+/// on the same op's behavior on scalars. This provides a constructive procedure
+/// for IR transformations to, e.g., create scalar loop bodies from tensor ops.
+///
+/// Example:
+/// ```
+/// %tensor_select = "std.select"(%pred_tensor, %true_val, %false_val)
+///                      : (tensor<?xi1>, tensor<?xf32>, tensor<?xf32>)
+///                      -> tensor<?xf32>
+/// ```
+/// can be scalarized to
+///
+/// ```
+/// %scalar_select = "std.select"(%pred, %true_val_scalar, %false_val_scalar)
+///                      : (i1, f32, f32) -> f32
+/// ```
+template <typename ConcreteType>
+struct Scalarizable : public TraitBase<ConcreteType, Scalarizable> {
+  static LogicalResult verifyTrait(Operation *op) {
+    static_assert(
+        ConcreteType::template hasTrait<Elementwise>(),
+        "`Scalarizable` trait is only applicable to `Elementwise` ops.");
+    return success();
+  }
+};
+
+/// This trait tags `Elementwise` operatons that can be systematically
+/// vectorized. All scalar operands and results are then replaced by vectors
+/// with the respective element type. Semantically, this is the operation on
+/// multiple elements simultaneously. See also `Tensorizable`.
+///
+/// Rationale:
+/// Provide the reverse to `Scalarizable` which, when chained together, allows
+/// reasoning about the relationship between the tensor and vector case.
+/// Additionally, it permits reasoning about promoting scalars to vectors via
+/// broadcasting in cases like `%select_scalar_pred` below.
+template <typename ConcreteType>
+struct Vectorizable : public TraitBase<ConcreteType, Vectorizable> {
+  static LogicalResult verifyTrait(Operation *op) {
+    static_assert(
+        ConcreteType::template hasTrait<Elementwise>(),
+        "`Vectorizable` trait is only applicable to `Elementwise` ops.");
+    return success();
+  }
+};
+
+/// This trait tags `Elementwise` operatons that can be systematically
+/// tensorized. All scalar operands and results are then replaced by tensors
+/// with the respective element type. Semantically, this is the operation on
+/// multiple elements simultaneously. See also `Vectorizable`.
+///
+/// Rationale:
+/// Provide the reverse to `Scalarizable` which, when chained together, allows
+/// reasoning about the relationship between the tensor and vector case.
+/// Additionally, it permits reasoning about promoting scalars to tensors via
+/// broadcasting in cases like `%select_scalar_pred` below.
 ///
 /// Examples:
 /// ```
 /// %scalar = "std.addf"(%a, %b) : (f32, f32) -> f32
-/// // Applying the systematic vectorization/tensorization property, this op
-/// // must also be valid:
-/// %tensor = "std.addf"(%a_tensor, %b_tensor)
-///           : (tensor<?xf32>, tensor<?xf32>) -> tensor<?xf32>)
-///
-/// // These properties generalize well to the cases of non-scalar operands.
-/// %select_scalar_pred = "std.select"(%pred, %true_val, %false_val)
-///                       : (i1, tensor<?xf32>, tensor<?xf32>) -> tensor<?xf32>
-/// // Applying the systematic vectorization / tensorization property, this
-/// // op must also be valid:
-/// %select_tensor_pred = "std.select"(%pred_tensor, %true_val, %false_val)
-///                       : (tensor<?xi1>, tensor<?xf32>, tensor<?xf32>)
-///                       -> tensor<?xf32>
-/// // Applying the systematic scalarization property, this op must also
-/// // be valid.
-/// %select_scalar = "std.select"(%pred, %true_val_scalar, %false_val_scalar)
-///                  : (i1, f32, f32) -> f32
+/// ```
+/// can be tensorized to
+/// ```
+/// %tensor = "std.addf"(%a, %b) : (tensor<?xf32>, tensor<?xf32>)
+///               -> tensor<?xf32>
 /// ```
 ///
-/// TODO: Avoid hardcoding vector/tensor, and generalize this to any type
-/// implementing a new "ElementwiseMappableTypeInterface" that describes types
-/// for which it makes sense to apply a scalar function to each element.
-///
-/// Rationale:
-/// - 1. and 2. guarantee a well-defined iteration space for 6.
-///   - These also exclude the cases of 0 non-scalar operands or 0 non-scalar
-///     results, which complicate a generic definition of the iteration space.
-/// - 3. guarantees that folding can be done across scalars/vectors/tensors
-///   with the same pattern, as otherwise lots of special handling of type
-///   mismatches would be needed.
-/// - 4. guarantees that no error handling cases need to be considered.
-///   - Higher-level dialects should reify any needed guards / error handling
-///   code before lowering to an ElementwiseMappable op.
-/// - 5. and 6. allow defining the semantics on vectors/tensors via the scalar
-///   semantics and provide a constructive procedure for IR transformations
-///   to e.g. create scalar loop bodies from tensor ops.
-/// - 7. provides the reverse of 5., which when chained together allows
-///   reasoning about the relationship between the tensor and vector case.
-///   Additionally, it permits reasoning about promoting scalars to
-///   vectors/tensors via broadcasting in cases like `%select_scalar_pred`
-///   above.
+/// ```
+/// %scalar_pred = "std.select"(%pred, %true_val, %false_val)
+///                    : (i1, tensor<?xf32>, tensor<?xf32>) -> tensor<?xf32>
+/// ```
+/// can be tensorized to
+/// ```
+/// %tensor_pred = "std.select"(%pred, %true_val, %false_val)
+///                    : (tensor<?xi1>, tensor<?xf32>, tensor<?xf32>)
+///                    -> tensor<?xf32>
+/// ```
 template <typename ConcreteType>
-struct ElementwiseMappable
-    : public TraitBase<ConcreteType, ElementwiseMappable> {
+struct Tensorizable : public TraitBase<ConcreteType, Tensorizable> {
   static LogicalResult verifyTrait(Operation *op) {
-    return ::mlir::OpTrait::impl::verifyElementwiseMappable(op);
+    static_assert(
+        ConcreteType::template hasTrait<Elementwise>(),
+        "`Tensorizable` trait is only applicable to `Elementwise` ops.");
+    return success();
   }
 };
+
+/// Together, `Elementwise`, `Scalarizable`, `Vectorizable`, and `Tensorizable`
+/// provide an easy way for scalar operations to conveniently generalize their
+/// behavior to vectors/tensors, and systematize conversion between these forms.
+bool hasElementwiseMappableTraits(Operation *op);
 
 } // end namespace OpTrait
 
@@ -1435,34 +1469,6 @@ foldTraits(Operation *op, ArrayRef<Attribute> operands,
 }
 
 //===----------------------------------------------------------------------===//
-// Trait Properties
-
-/// Trait to check if T provides a `getTraitProperties` method.
-template <typename T, typename... Args>
-using has_get_trait_properties = decltype(T::getTraitProperties());
-template <typename T>
-using detect_has_get_trait_properties =
-    llvm::is_detected<has_get_trait_properties, T>;
-
-/// The internal implementation of `getTraitProperties` below that returns the
-/// OR of invoking `getTraitProperties` on all of the provided trait types `Ts`.
-template <typename... Ts>
-static AbstractOperation::OperationProperties
-getTraitPropertiesImpl(std::tuple<Ts...> *) {
-  AbstractOperation::OperationProperties result = 0;
-  (void)std::initializer_list<int>{(result |= Ts::getTraitProperties(), 0)...};
-  return result;
-}
-
-/// Given a tuple type containing a set of traits that contain a
-/// `getTraitProperties` method, return the OR of all of the results of invoking
-/// those methods.
-template <typename TraitTupleT>
-static AbstractOperation::OperationProperties getTraitProperties() {
-  return getTraitPropertiesImpl((TraitTupleT *)nullptr);
-}
-
-//===----------------------------------------------------------------------===//
 // Trait Verification
 
 /// Trait to check if T provides a `verifyTrait` method.
@@ -1566,7 +1572,8 @@ private:
   using has_fold = decltype(
       std::declval<T>().fold(std::declval<ArrayRef<Attribute>>(),
                              std::declval<SmallVectorImpl<OpFoldResult> &>()));
-  template <typename T> using detect_has_fold = llvm::is_detected<has_fold, T>;
+  template <typename T>
+  using detect_has_fold = llvm::is_detected<has_fold, T>;
   /// Trait to check if T provides a 'print' method.
   template <typename T, typename... Args>
   using has_print =
@@ -1581,14 +1588,6 @@ private:
   using VerifiableTraitsTupleT =
       typename detail::FilterTypes<op_definition_impl::detect_has_verify_trait,
                                    Traits<ConcreteType>...>::type;
-
-  /// Returns the properties of this operation by combining the properties
-  /// defined by the traits.
-  static AbstractOperation::OperationProperties getOperationProperties() {
-    return op_definition_impl::getTraitProperties<typename detail::FilterTypes<
-        op_definition_impl::detect_has_get_trait_properties,
-        Traits<ConcreteType>...>::type>();
-  }
 
   /// Returns an interface map containing the interfaces registered to this
   /// operation.
@@ -1764,14 +1763,30 @@ ParseResult parseOneResultSameOperandTypeOp(OpAsmParser &parser,
 void printOneResultOp(Operation *op, OpAsmPrinter &p);
 } // namespace impl
 
-// These functions are out-of-line implementations of the methods in CastOp,
-// which avoids them being template instantiated/duplicated.
+// These functions are out-of-line implementations of the methods in
+// CastOpInterface, which avoids them being template instantiated/duplicated.
 namespace impl {
+/// Attempt to fold the given cast operation.
+LogicalResult foldCastInterfaceOp(Operation *op,
+                                  ArrayRef<Attribute> attrOperands,
+                                  SmallVectorImpl<OpFoldResult> &foldResults);
+/// Attempt to verify the given cast operation.
+LogicalResult verifyCastInterfaceOp(
+    Operation *op, function_ref<bool(TypeRange, TypeRange)> areCastCompatible);
+
+// TODO: Remove the parse/print/build here (new ODS functionality obsoletes the
+// need for them, but some older ODS code in `std` still depends on them).
 void buildCastOp(OpBuilder &builder, OperationState &result, Value source,
                  Type destType);
 ParseResult parseCastOp(OpAsmParser &parser, OperationState &result);
 void printCastOp(Operation *op, OpAsmPrinter &p);
+// TODO: These methods are deprecated in favor of CastOpInterface. Remove them
+// when all uses have been updated. Also, consider adding functionality to
+// CastOpInterface to be able to perform the ChainedTensorCast canonicalization
+// generically.
 Value foldCastOp(Operation *op);
+LogicalResult verifyCastOp(Operation *op,
+                           function_ref<bool(Type, Type)> areCastCompatible);
 } // namespace impl
 } // end namespace mlir
 

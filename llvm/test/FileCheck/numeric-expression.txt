@@ -250,12 +250,14 @@ RUN: not FileCheck --check-prefix NUMEXPR-CONSTRAINT-NOMATCH --input-file %s %s 
 RUN:   | FileCheck --check-prefix NUMEXPR-CONSTRAINT-NOMATCH-MSG --strict-whitespace %s
 
 USE DEF FMT EXPL NO MATCH
-12
+UNSI=11
+UNSI: 12
 NUMEXPR-CONSTRAINT-NOMATCH-LABEL: USE DEF FMT EXPL NO MATCH
-NUMEXPR-CONSTRAINT-NOMATCH-NEXT: [[#==UNSI]]
+NUMEXPR-CONSTRAINT-NOMATCH-NEXT: UNSI=[[#UNSI:]]
+NUMEXPR-CONSTRAINT-NOMATCH-NEXT: UNSI: [[#==UNSI]]
 NUMEXPR-CONSTRAINT-NOMATCH-MSG: numeric-expression.txt:[[#@LINE-1]]:34: error: {{N}}UMEXPR-CONSTRAINT-NOMATCH-NEXT: expected string not found in input
-NUMEXPR-CONSTRAINT-NOMATCH-MSG-NEXT: {{N}}UMEXPR-CONSTRAINT-NOMATCH-NEXT: {{\[\[#==UNSI\]\]}}
-NUMEXPR-CONSTRAINT-NOMATCH-MSG-NEXT:   {{^}}                                 ^{{$}}
+NUMEXPR-CONSTRAINT-NOMATCH-MSG-NEXT:  {{N}}UMEXPR-CONSTRAINT-NOMATCH-NEXT: UNSI: {{\[\[#==UNSI\]\]}}
+NUMEXPR-CONSTRAINT-NOMATCH-MSG-NEXT: {{^}}                                 ^{{$}}
 
 ; Empty numeric expression with matching constraint.
 RUN: %ProtectFileCheckOutput \
@@ -366,12 +368,12 @@ UNDEF-USE-NEXT: UNDEFVAR: [[#UNDEFVAR1+UNDEFVAR2]]
 UNDEF-USE-MSG: numeric-expression.txt:[[#@LINE-1]]:17: error: {{U}}NDEF-USE-NEXT: expected string not found in input
 UNDEF-USE-MSG-NEXT:      {{U}}NDEF-USE-NEXT: UNDEFVAR: {{\[\[#UNDEFVAR1\+UNDEFVAR2\]\]}}
 UNDEF-USE-MSG-NEXT:     {{^}}                ^{{$}}
-UNDEF-USE-MSG-NEXT:      numeric-expression.txt:[[#@LINE-6]]:1: note: scanning from here
-UNDEF-USE-MSG-NEXT:      UNDEFVAR: 11
-UNDEF-USE-MSG-NEXT: {{^}}^{{$}}
-UNDEF-USE-MSG-NEXT:      numeric-expression.txt:[[#@LINE-9]]:1: note: uses undefined variable(s): "UNDEFVAR1" "UNDEFVAR2"
-UNDEF-USE-MSG-NEXT:      UNDEFVAR: 11
-UNDEF-USE-MSG-NEXT: {{^}}^{{$}}
+UNDEF-USE-MSG-NEXT:      numeric-expression.txt:[[#@LINE-7]]:14: note: scanning from here
+UNDEF-USE-MSG-NEXT:      UNDEF VAR USE
+UNDEF-USE-MSG-NEXT: {{^}}             ^{{$}}
+UNDEF-USE-MSG-NEXT:      numeric-expression.txt:[[#@LINE-10]]:14: note: uses undefined variable(s): "UNDEFVAR1" "UNDEFVAR2"
+UNDEF-USE-MSG-NEXT:      UNDEF VAR USE
+UNDEF-USE-MSG-NEXT: {{^}}             ^{{$}}
 
 ; Numeric expression with unsupported operator.
 RUN: %ProtectFileCheckOutput \

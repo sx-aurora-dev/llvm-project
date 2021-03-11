@@ -17,6 +17,16 @@
 
 namespace llvm {
 
+void PassInstrumentationCallbacks::addClassToPassName(StringRef ClassName,
+                                                      StringRef PassName) {
+  ClassToPassName[ClassName] = PassName.str();
+}
+
+StringRef
+PassInstrumentationCallbacks::getPassNameForClassName(StringRef ClassName) {
+  return ClassToPassName[ClassName];
+}
+
 AnalysisKey PassInstrumentationAnalysis::Key;
 
 bool isSpecialPass(StringRef PassID, const std::vector<StringRef> &Specials) {

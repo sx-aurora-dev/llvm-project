@@ -26,6 +26,7 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/Magic.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/LTO/LTO.h"
 #include "llvm/Object/ArchiveWriter.h"
 #include "llvm/Object/COFFImportFile.h"
@@ -53,7 +54,7 @@
 using namespace llvm;
 using namespace llvm::object;
 using namespace llvm::COFF;
-using llvm::sys::Process;
+using namespace llvm::sys;
 
 namespace lld {
 namespace coff {
@@ -90,7 +91,7 @@ bool link(ArrayRef<const char *> args, bool canExitEarly, raw_ostream &stdoutOS,
   symtab = make<SymbolTable>();
   driver = make<LinkerDriver>();
 
-  driver->link(args);
+  driver->linkerMain(args);
 
   // Call exit() if we can to avoid calling destructors.
   if (canExitEarly)
@@ -621,6 +622,14 @@ static uint64_t getDefaultImageBase() {
   return config->dll ? 0x10000000 : 0x400000;
 }
 
+static std::string rewritePath(StringRef s) {
+  if (fs::exists(s))
+    return relativeToRoot(s);
+  return std::string(s);
+}
+
+// Reconstructs command line arguments so that so that you can re-run
+// the same command with the same inputs. This is for --reproduce.
 static std::string createResponseFile(const opt::InputArgList &args,
                                       ArrayRef<StringRef> filePaths,
                                       ArrayRef<StringRef> searchPaths) {
@@ -641,6 +650,24 @@ static std::string createResponseFile(const opt::InputArgList &args,
     case OPT_manifestinput:
     case OPT_manifestuac:
       break;
+    case OPT_call_graph_ordering_file:
+    case OPT_deffile:
+    case OPT_natvis:
+      os << arg->getSpelling() << quote(rewritePath(arg->getValue())) << '\n';
+      break;
+    case OPT_order: {
+      StringRef orderFile = arg->getValue();
+      orderFile.consume_front("@");
+      os << arg->getSpelling() << '@' << quote(rewritePath(orderFile)) << '\n';
+      break;
+    }
+    case OPT_pdbstream: {
+      const std::pair<StringRef, StringRef> nameFile =
+          StringRef(arg->getValue()).split("=");
+      os << arg->getSpelling() << nameFile.first << '='
+         << quote(rewritePath(nameFile.second)) << '\n';
+      break;
+    }
     case OPT_implib:
     case OPT_pdb:
     case OPT_pdbstripped:
@@ -837,6 +864,9 @@ static void parseModuleDefs(StringRef path) {
   COFFModuleDefinition m = check(parseCOFFModuleDefinition(
       mb->getMemBufferRef(), config->machine, config->mingw));
 
+  // Include in /reproduce: output if applicable.
+  driver->takeBuffer(std::move(mb));
+
   if (config->outputFile.empty())
     config->outputFile = std::string(saver.save(m.OutputFile));
   config->importName = std::string(saver.save(m.ImportName));
@@ -937,6 +967,9 @@ static void parseOrderFile(StringRef arg) {
     else
       config->order[s] = INT_MIN + config->order.size();
   }
+
+  // Include in /reproduce: output if applicable.
+  driver->takeBuffer(std::move(mb));
 }
 
 static void parseCallGraphFile(StringRef path) {
@@ -977,6 +1010,9 @@ static void parseCallGraphFile(StringRef path) {
       if (SectionChunk *to = findSection(fields[1]))
         config->callGraphProfile[{from, to}] += count;
   }
+
+  // Include in /reproduce: output if applicable.
+  driver->takeBuffer(std::move(mb));
 }
 
 static void readCallGraphsFromObjectFiles() {
@@ -1196,7 +1232,7 @@ Optional<std::string> getReproduceFile(const opt::InputArgList &args) {
   return None;
 }
 
-void LinkerDriver::link(ArrayRef<const char *> argsArr) {
+void LinkerDriver::linkerMain(ArrayRef<const char *> argsArr) {
   ScopedTimer rootTimer(Timer::root());
 
   // Needed for LTO.
@@ -1208,7 +1244,8 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
 
   // If the first command line argument is "/lib", link.exe acts like lib.exe.
   // We call our own implementation of lib.exe that understands bitcode files.
-  if (argsArr.size() > 1 && StringRef(argsArr[1]).equals_lower("/lib")) {
+  if (argsArr.size() > 1 && (StringRef(argsArr[1]).equals_lower("/lib") ||
+                             StringRef(argsArr[1]).equals_lower("-lib"))) {
     if (llvm::libDriverMain(argsArr.slice(1)) != 0)
       fatal("lib failed");
     return;
@@ -1262,7 +1299,7 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
   // because it doesn't start with "/", but we deliberately chose "--" to
   // avoid conflict with /version and for compatibility with clang-cl.
   if (args.hasArg(OPT_dash_dash_version)) {
-    lld::outs() << getLLDVersion() << "\n";
+    message(getLLDVersion());
     return;
   }
 
@@ -1515,10 +1552,11 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
 
   // Handle /opt.
   bool doGC = debug == DebugKind::None || args.hasArg(OPT_profile);
-  unsigned icfLevel =
-      args.hasArg(OPT_profile) ? 0 : 1; // 0: off, 1: limited, 2: on
+  Optional<ICFLevel> icfLevel = None;
+  if (args.hasArg(OPT_profile))
+    icfLevel = ICFLevel::None;
   unsigned tailMerge = 1;
-  bool ltoNewPM = false;
+  bool ltoNewPM = LLVM_ENABLE_NEW_PASS_MANAGER;
   bool ltoDebugPM = false;
   for (auto *arg : args.filtered(OPT_opt)) {
     std::string str = StringRef(arg->getValue()).lower();
@@ -1530,9 +1568,11 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
       } else if (s == "noref") {
         doGC = false;
       } else if (s == "icf" || s.startswith("icf=")) {
-        icfLevel = 2;
+        icfLevel = ICFLevel::All;
+      } else if (s == "safeicf") {
+        icfLevel = ICFLevel::Safe;
       } else if (s == "noicf") {
-        icfLevel = 0;
+        icfLevel = ICFLevel::None;
       } else if (s == "lldtailmerge") {
         tailMerge = 2;
       } else if (s == "nolldtailmerge") {
@@ -1564,16 +1604,12 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
     }
   }
 
-  // Limited ICF is enabled if GC is enabled and ICF was never mentioned
-  // explicitly.
-  // FIXME: LLD only implements "limited" ICF, i.e. it only merges identical
-  // code. If the user passes /OPT:ICF explicitly, LLD should merge identical
-  // comdat readonly data.
-  if (icfLevel == 1 && !doGC)
-    icfLevel = 0;
+  if (!icfLevel)
+    icfLevel = doGC ? ICFLevel::All : ICFLevel::None;
   config->doGC = doGC;
-  config->doICF = icfLevel > 0;
-  config->tailMerge = (tailMerge == 1 && config->doICF) || tailMerge == 2;
+  config->doICF = icfLevel.getValue();
+  config->tailMerge =
+      (tailMerge == 1 && config->doICF != ICFLevel::None) || tailMerge == 2;
   config->ltoNewPassManager = ltoNewPM;
   config->ltoDebugPassManager = ltoDebugPM;
 
@@ -1682,8 +1718,8 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
       args.hasFlag(OPT_allowisolation, OPT_allowisolation_no, true);
   config->incremental =
       args.hasFlag(OPT_incremental, OPT_incremental_no,
-                   !config->doGC && !config->doICF && !args.hasArg(OPT_order) &&
-                       !args.hasArg(OPT_profile));
+                   !config->doGC && config->doICF == ICFLevel::None &&
+                       !args.hasArg(OPT_order) && !args.hasArg(OPT_profile));
   config->integrityCheck =
       args.hasFlag(OPT_integritycheck, OPT_integritycheck_no, false);
   config->cetCompat = args.hasFlag(OPT_cetcompat, OPT_cetcompat_no, false);
@@ -1732,7 +1768,7 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
     config->incremental = false;
   }
 
-  if (config->incremental && config->doICF) {
+  if (config->incremental && config->doICF != ICFLevel::None) {
     warn("ignoring '/incremental' because ICF is enabled; use '/opt:noicf' to "
          "disable");
     config->incremental = false;
@@ -2175,9 +2211,9 @@ void LinkerDriver::link(ArrayRef<const char *> argsArr) {
   convertResources();
 
   // Identify identical COMDAT sections to merge them.
-  if (config->doICF) {
+  if (config->doICF != ICFLevel::None) {
     findKeepUniqueSections();
-    doICF(symtab->getChunks());
+    doICF(symtab->getChunks(), config->doICF);
   }
 
   // Write the result.

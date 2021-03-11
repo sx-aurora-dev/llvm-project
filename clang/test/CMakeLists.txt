@@ -15,7 +15,7 @@ llvm_canonicalize_cmake_booleans(
   CLANG_ENABLE_STATIC_ANALYZER
   CLANG_SPAWN_CC1
   ENABLE_BACKTRACES
-  ENABLE_EXPERIMENTAL_NEW_PASS_MANAGER
+  LLVM_ENABLE_NEW_PASS_MANAGER
   LLVM_ENABLE_ZLIB
   LLVM_ENABLE_PER_TARGET_RUNTIME_DIR
   LLVM_ENABLE_PLUGINS
@@ -122,6 +122,7 @@ if( NOT CLANG_BUILT_STANDALONE )
     llvm-profdata
     llvm-readelf
     llvm-readobj
+    llvm-strip
     llvm-symbolizer
     opt
     split-file

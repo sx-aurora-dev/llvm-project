@@ -609,6 +609,7 @@ void TypePrinting::print(Type *Ty, raw_ostream &OS) {
   case Type::LabelTyID:     OS << "label"; return;
   case Type::MetadataTyID:  OS << "metadata"; return;
   case Type::X86_MMXTyID:   OS << "x86_mmx"; return;
+  case Type::X86_AMXTyID:   OS << "x86_amx"; return;
   case Type::TokenTyID:     OS << "token"; return;
   case Type::IntegerTyID:
     OS << 'i' << cast<IntegerType>(Ty)->getBitWidth();
@@ -1087,9 +1088,8 @@ int SlotTracker::processIndex() {
 
   // Start numbering the TypeIds after the GUIDs.
   TypeIdNext = GUIDNext;
-  for (auto TidIter = TheIndex->typeIds().begin();
-       TidIter != TheIndex->typeIds().end(); TidIter++)
-    CreateTypeIdSlot(TidIter->second.first);
+  for (const auto &TID : TheIndex->typeIds())
+    CreateTypeIdSlot(TID.second.first);
 
   ST_DEBUG("end processIndex!\n");
   return TypeIdNext;
@@ -1239,8 +1239,9 @@ void SlotTracker::CreateFunctionSlot(const Value *V) {
 void SlotTracker::CreateMetadataSlot(const MDNode *N) {
   assert(N && "Can't insert a null Value into SlotTracker!");
 
-  // Don't make slots for DIExpressions. We just print them inline everywhere.
-  if (isa<DIExpression>(N))
+  // Don't make slots for DIExpressions or DIArgLists. We just print them inline
+  // everywhere.
+  if (isa<DIExpression>(N) || isa<DIArgList>(N))
     return;
 
   unsigned DestSlot = mdnNext;
@@ -1367,9 +1368,8 @@ static void WriteConstantInternal(raw_ostream &Out, const Constant *CV,
         // "Inf" or NaN, that atof will accept, but the lexer will not.  Check
         // that the string matches the "[-+]?[0-9]" regex.
         //
-        assert(((StrVal[0] >= '0' && StrVal[0] <= '9') ||
-                ((StrVal[0] == '-' || StrVal[0] == '+') &&
-                 (StrVal[1] >= '0' && StrVal[1] <= '9'))) &&
+        assert((isDigit(StrVal[0]) || ((StrVal[0] == '-' || StrVal[0] == '+') &&
+                                       isDigit(StrVal[1]))) &&
                "[-+]?[0-9] regex does not match!");
         // Reparse stringized version!
         if (APFloat(APFloat::IEEEdouble(), StrVal).convertToDouble() == Val) {
@@ -2245,6 +2245,7 @@ static void writeDIModule(raw_ostream &Out, const DIModule *N,
   Printer.printString("apinotes", N->getAPINotesFile());
   Printer.printMetadata("file", N->getRawFile());
   Printer.printInt("line", N->getLineNo());
+  Printer.printBool("isDecl", N->getIsDecl(), /* Default */ false);
   Out << ")";
 }
 
@@ -2331,22 +2332,37 @@ static void writeDIExpression(raw_ostream &Out, const DIExpression *N,
   Out << "!DIExpression(";
   FieldSeparator FS;
   if (N->isValid()) {
-    for (auto I = N->expr_op_begin(), E = N->expr_op_end(); I != E; ++I) {
-      auto OpStr = dwarf::OperationEncodingString(I->getOp());
+    for (const DIExpression::ExprOperand &Op : N->expr_ops()) {
+      auto OpStr = dwarf::OperationEncodingString(Op.getOp());
       assert(!OpStr.empty() && "Expected valid opcode");
 
       Out << FS << OpStr;
-      if (I->getOp() == dwarf::DW_OP_LLVM_convert) {
-        Out << FS << I->getArg(0);
-        Out << FS << dwarf::AttributeEncodingString(I->getArg(1));
+      if (Op.getOp() == dwarf::DW_OP_LLVM_convert) {
+        Out << FS << Op.getArg(0);
+        Out << FS << dwarf::AttributeEncodingString(Op.getArg(1));
       } else {
-        for (unsigned A = 0, AE = I->getNumArgs(); A != AE; ++A)
-          Out << FS << I->getArg(A);
+        for (unsigned A = 0, AE = Op.getNumArgs(); A != AE; ++A)
+          Out << FS << Op.getArg(A);
       }
     }
   } else {
     for (const auto &I : N->getElements())
       Out << FS << I;
+  }
+  Out << ")";
+}
+
+static void writeDIArgList(raw_ostream &Out, const DIArgList *N,
+                           TypePrinting *TypePrinter, SlotTracker *Machine,
+                           const Module *Context, bool FromValue = false) {
+  assert(FromValue &&
+         "Unexpected DIArgList metadata outside of value argument");
+  Out << "!DIArgList(";
+  FieldSeparator FS;
+  MDFieldPrinter Printer(Out, TypePrinter, Machine, Context);
+  for (Metadata *Arg : N->getArgs()) {
+    Out << FS;
+    WriteAsOperandInternal(Out, Arg, TypePrinter, Machine, Context, true);
   }
   Out << ")";
 }
@@ -2496,10 +2512,14 @@ static void WriteAsOperandInternal(raw_ostream &Out, const Metadata *MD,
                                    TypePrinting *TypePrinter,
                                    SlotTracker *Machine, const Module *Context,
                                    bool FromValue) {
-  // Write DIExpressions inline when used as a value. Improves readability of
-  // debug info intrinsics.
+  // Write DIExpressions and DIArgLists inline when used as a value. Improves
+  // readability of debug info intrinsics.
   if (const DIExpression *Expr = dyn_cast<DIExpression>(MD)) {
     writeDIExpression(Out, Expr, TypePrinter, Machine, Context);
+    return;
+  }
+  if (const DIArgList *ArgList = dyn_cast<DIArgList>(MD)) {
+    writeDIArgList(Out, ArgList, TypePrinter, Machine, Context, FromValue);
     return;
   }
 
@@ -2913,12 +2933,11 @@ void AssemblyWriter::printModuleSummaryIndex() {
   }
 
   // Print the TypeIdMap entries.
-  for (auto TidIter = TheIndex->typeIds().begin();
-       TidIter != TheIndex->typeIds().end(); TidIter++) {
-    Out << "^" << Machine.getTypeIdSlot(TidIter->second.first)
-        << " = typeid: (name: \"" << TidIter->second.first << "\"";
-    printTypeIdSummary(TidIter->second.second);
-    Out << ") ; guid = " << TidIter->first << "\n";
+  for (const auto &TID : TheIndex->typeIds()) {
+    Out << "^" << Machine.getTypeIdSlot(TID.second.first)
+        << " = typeid: (name: \"" << TID.second.first << "\"";
+    printTypeIdSummary(TID.second.second);
+    Out << ") ; guid = " << TID.first << "\n";
   }
 
   // Print the TypeIdCompatibleVtableMap entries.
@@ -3162,6 +3181,18 @@ static std::string getLinkageNameWithSpace(GlobalValue::LinkageTypes LT) {
   return getLinkageName(LT) + " ";
 }
 
+static const char *getVisibilityName(GlobalValue::VisibilityTypes Vis) {
+  switch (Vis) {
+  case GlobalValue::DefaultVisibility:
+    return "default";
+  case GlobalValue::HiddenVisibility:
+    return "hidden";
+  case GlobalValue::ProtectedVisibility:
+    return "protected";
+  }
+  llvm_unreachable("invalid visibility");
+}
+
 void AssemblyWriter::printFunctionSummary(const FunctionSummary *FS) {
   Out << ", insts: " << FS->instCount();
 
@@ -3330,6 +3361,8 @@ void AssemblyWriter::printSummary(const GlobalValueSummary &Summary) {
   Out << "(module: ^" << Machine.getModulePathSlot(Summary.modulePath())
       << ", flags: (";
   Out << "linkage: " << getLinkageName(LT);
+  Out << ", visibility: "
+      << getVisibilityName((GlobalValue::VisibilityTypes)GVFlags.Visibility);
   Out << ", notEligibleToImport: " << GVFlags.NotEligibleToImport;
   Out << ", live: " << GVFlags.Live;
   Out << ", dsoLocal: " << GVFlags.DSOLocal;
@@ -3414,6 +3447,8 @@ void AssemblyWriter::printNamedMDNode(const NamedMDNode *NMD) {
     // Write DIExpressions inline.
     // FIXME: Ban DIExpressions in NamedMDNodes, they will serve no purpose.
     MDNode *Op = NMD->getOperand(i);
+    assert(!isa<DIArgList>(Op) &&
+           "DIArgLists should not appear in NamedMDNodes");
     if (auto *Expr = dyn_cast<DIExpression>(Op)) {
       writeDIExpression(Out, Expr, nullptr, nullptr, nullptr);
       continue;
@@ -4008,14 +4043,14 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
   } else if (const ExtractValueInst *EVI = dyn_cast<ExtractValueInst>(&I)) {
     Out << ' ';
     writeOperand(I.getOperand(0), true);
-    for (const unsigned *i = EVI->idx_begin(), *e = EVI->idx_end(); i != e; ++i)
-      Out << ", " << *i;
+    for (unsigned i : EVI->indices())
+      Out << ", " << i;
   } else if (const InsertValueInst *IVI = dyn_cast<InsertValueInst>(&I)) {
     Out << ' ';
     writeOperand(I.getOperand(0), true); Out << ", ";
     writeOperand(I.getOperand(1), true);
-    for (const unsigned *i = IVI->idx_begin(), *e = IVI->idx_end(); i != e; ++i)
-      Out << ", " << *i;
+    for (unsigned i : IVI->indices())
+      Out << ", " << i;
   } else if (const LandingPadInst *LPI = dyn_cast<LandingPadInst>(&I)) {
     Out << ' ';
     TypePrinter.print(I.getType(), Out);
@@ -4309,9 +4344,11 @@ void AssemblyWriter::printInstruction(const Instruction &I) {
   } else if (const AtomicCmpXchgInst *CXI = dyn_cast<AtomicCmpXchgInst>(&I)) {
     writeAtomicCmpXchg(CXI->getContext(), CXI->getSuccessOrdering(),
                        CXI->getFailureOrdering(), CXI->getSyncScopeID());
+    Out << ", align " << CXI->getAlign().value();
   } else if (const AtomicRMWInst *RMWI = dyn_cast<AtomicRMWInst>(&I)) {
     writeAtomic(RMWI->getContext(), RMWI->getOrdering(),
                 RMWI->getSyncScopeID());
+    Out << ", align " << RMWI->getAlign().value();
   } else if (const FenceInst *FI = dyn_cast<FenceInst>(&I)) {
     writeAtomic(FI->getContext(), FI->getOrdering(), FI->getSyncScopeID());
   } else if (const ShuffleVectorInst *SVI = dyn_cast<ShuffleVectorInst>(&I)) {
@@ -4358,9 +4395,8 @@ void AssemblyWriter::writeMDNode(unsigned Slot, const MDNode *Node) {
 void AssemblyWriter::writeAllMDNodes() {
   SmallVector<const MDNode *, 16> Nodes;
   Nodes.resize(Machine.mdn_size());
-  for (SlotTracker::mdn_iterator I = Machine.mdn_begin(), E = Machine.mdn_end();
-       I != E; ++I)
-    Nodes[I->second] = cast<MDNode>(I->first);
+  for (auto &I : llvm::make_range(Machine.mdn_begin(), Machine.mdn_end()))
+    Nodes[I.second] = cast<MDNode>(I.first);
 
   for (unsigned i = 0, e = Nodes.size(); i != e; ++i) {
     writeMDNode(i, Nodes[i]);
@@ -4415,9 +4451,8 @@ void AssemblyWriter::writeAllAttributeGroups() {
   std::vector<std::pair<AttributeSet, unsigned>> asVec;
   asVec.resize(Machine.as_size());
 
-  for (SlotTracker::as_iterator I = Machine.as_begin(), E = Machine.as_end();
-       I != E; ++I)
-    asVec[I->second] = *I;
+  for (auto &I : llvm::make_range(Machine.as_begin(), Machine.as_end()))
+    asVec[I.second] = I;
 
   for (const auto &I : asVec)
     Out << "attributes #" << I.second << " = { "
@@ -4684,7 +4719,7 @@ static void printMetadataImpl(raw_ostream &ROS, const Metadata &MD,
                          /* FromValue */ true);
 
   auto *N = dyn_cast<MDNode>(&MD);
-  if (OnlyAsOperand || !N || isa<DIExpression>(MD))
+  if (OnlyAsOperand || !N || isa<DIExpression>(MD) || isa<DIArgList>(MD))
     return;
 
   OS << " = ";

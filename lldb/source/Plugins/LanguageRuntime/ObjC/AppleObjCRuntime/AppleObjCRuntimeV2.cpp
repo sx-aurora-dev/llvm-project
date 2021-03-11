@@ -121,14 +121,20 @@ __lldb_apple_objc_v2_get_dynamic_class_info (void *gdb_objc_realized_classes_ptr
     if (grc)
     {
         const unsigned num_classes = grc->num_classes;
+        DEBUG_PRINTF ("num_classes = %u\n", grc->num_classes);
         if (class_infos_ptr)
         {
+            const unsigned num_buckets_minus_one = grc->num_buckets_minus_one;
+            DEBUG_PRINTF ("num_buckets_minus_one = %u\n", num_buckets_minus_one);
+
             const size_t max_class_infos = class_infos_byte_size/sizeof(ClassInfo);
+            DEBUG_PRINTF ("max_class_infos = %u\n", max_class_infos);
+
             ClassInfo *class_infos = (ClassInfo *)class_infos_ptr;
             BucketInfo *buckets = (BucketInfo *)grc->buckets;
-            
+
             uint32_t idx = 0;
-            for (unsigned i=0; i<=grc->num_buckets_minus_one; ++i)
+            for (unsigned i=0; i<=num_buckets_minus_one; ++i)
             {
                 if (buckets[i].name_ptr != NX_MAPNOTAKEY)
                 {
@@ -140,6 +146,7 @@ __lldb_apple_objc_v2_get_dynamic_class_info (void *gdb_objc_realized_classes_ptr
                             h = ((h << 5) + h) + c;
                         class_infos[idx].hash = h;
                         class_infos[idx].isa = buckets[i].isa;
+                        DEBUG_PRINTF ("[%u] isa = %8p %s\n", idx, class_infos[idx].isa, buckets[i].name_ptr);
                     }
                     ++idx;
                 }
@@ -240,8 +247,7 @@ __lldb_apple_objc_v2_get_shared_cache_class_info (void *objc_opt_ro_ptr,
     {
         const objc_opt_t *objc_opt = (objc_opt_t *)objc_opt_ro_ptr;
         const objc_opt_v14_t* objc_opt_v14 = (objc_opt_v14_t*)objc_opt_ro_ptr;
-        const bool is_v14_format = objc_opt->version >= 14;
-        if (is_v14_format)
+        if (objc_opt->version >= 14)
         {
             DEBUG_PRINTF ("objc_opt->version = %u\n", objc_opt_v14->version);
             DEBUG_PRINTF ("objc_opt->flags = %u\n", objc_opt_v14->flags);
@@ -259,7 +265,7 @@ __lldb_apple_objc_v2_get_shared_cache_class_info (void *objc_opt_ro_ptr,
         if (objc_opt->version == 12 || objc_opt->version == 13 || objc_opt->version == 14 || objc_opt->version == 15)
         {
             const objc_clsopt_t* clsopt = NULL;
-            if (is_v14_format)
+            if (objc_opt->version >= 14)
                 clsopt = (const objc_clsopt_t*)((uint8_t *)objc_opt_v14 + objc_opt_v14->clsopt_offset);
             else
                 clsopt = (const objc_clsopt_t*)((uint8_t *)objc_opt + objc_opt->clsopt_offset);
@@ -451,7 +457,7 @@ bool AppleObjCRuntimeV2::GetDynamicTypeAndAddress(
     assert(in_value.GetTargetSP().get() == m_process->CalculateTarget().get());
 
   class_type_or_name.Clear();
-  value_type = Value::ValueType::eValueTypeScalar;
+  value_type = Value::ValueType::Scalar;
 
   // Make sure we can have a dynamic value before starting...
   if (CouldHaveDynamicValue(in_value)) {
@@ -1304,7 +1310,8 @@ AppleObjCRuntimeV2::UpdateISAToDescriptorMapDynamic(
     return DescriptorMapUpdateResult::Fail();
 
   thread_sp->CalculateExecutionContext(exe_ctx);
-  TypeSystemClang *ast = TypeSystemClang::GetScratch(process->GetTarget());
+  TypeSystemClang *ast =
+      ScratchTypeSystemClang::GetForTarget(process->GetTarget());
 
   if (!ast)
     return DescriptorMapUpdateResult::Fail();
@@ -1345,12 +1352,12 @@ AppleObjCRuntimeV2::UpdateISAToDescriptorMapDynamic(
 
     // Next make the runner function for our implementation utility function.
     Value value;
-    value.SetValueType(Value::eValueTypeScalar);
+    value.SetValueType(Value::ValueType::Scalar);
     value.SetCompilerType(clang_void_pointer_type);
     arguments.PushValue(value);
     arguments.PushValue(value);
 
-    value.SetValueType(Value::eValueTypeScalar);
+    value.SetValueType(Value::ValueType::Scalar);
     value.SetCompilerType(clang_uint32_t_type);
     arguments.PushValue(value);
     arguments.PushValue(value);
@@ -1419,7 +1426,7 @@ AppleObjCRuntimeV2::UpdateISAToDescriptorMapDynamic(
     options.SetIsForUtilityExpr(true);
 
     Value return_value;
-    return_value.SetValueType(Value::eValueTypeScalar);
+    return_value.SetValueType(Value::ValueType::Scalar);
     return_value.SetCompilerType(clang_uint32_t_type);
     return_value.GetScalar() = 0;
 
@@ -1547,7 +1554,8 @@ AppleObjCRuntimeV2::UpdateISAToDescriptorMapSharedCache() {
     return DescriptorMapUpdateResult::Fail();
 
   thread_sp->CalculateExecutionContext(exe_ctx);
-  TypeSystemClang *ast = TypeSystemClang::GetScratch(process->GetTarget());
+  TypeSystemClang *ast =
+      ScratchTypeSystemClang::GetForTarget(process->GetTarget());
 
   if (!ast)
     return DescriptorMapUpdateResult::Fail();
@@ -1588,10 +1596,7 @@ AppleObjCRuntimeV2::UpdateISAToDescriptorMapSharedCache() {
 
     ObjCLanguageRuntime *objc_runtime = ObjCLanguageRuntime::Get(*process);
     if (objc_runtime) {
-      const ModuleList &images = process->GetTarget().GetImages();
-      std::lock_guard<std::recursive_mutex> guard(images.GetMutex());
-      for (size_t i = 0; i < images.GetSize(); ++i) {
-        lldb::ModuleSP mod_sp = images.GetModuleAtIndexUnlocked(i);
+      for (lldb::ModuleSP mod_sp : process->GetTarget().GetImages().Modules()) {
         if (objc_runtime->IsModuleObjCLibrary(mod_sp)) {
           const Symbol *symbol =
               mod_sp->FindFirstSymbolWithNameAndType(g_class_getNameRaw_symbol_name, 
@@ -1629,12 +1634,12 @@ AppleObjCRuntimeV2::UpdateISAToDescriptorMapSharedCache() {
 
     // Next make the function caller for our implementation utility function.
     Value value;
-    value.SetValueType(Value::eValueTypeScalar);
+    value.SetValueType(Value::ValueType::Scalar);
     value.SetCompilerType(clang_void_pointer_type);
     arguments.PushValue(value);
     arguments.PushValue(value);
 
-    value.SetValueType(Value::eValueTypeScalar);
+    value.SetValueType(Value::ValueType::Scalar);
     value.SetCompilerType(clang_uint32_t_type);
     arguments.PushValue(value);
     arguments.PushValue(value);
@@ -1699,7 +1704,7 @@ AppleObjCRuntimeV2::UpdateISAToDescriptorMapSharedCache() {
     options.SetIsForUtilityExpr(true);
 
     Value return_value;
-    return_value.SetValueType(Value::eValueTypeScalar);
+    return_value.SetValueType(Value::ValueType::Scalar);
     return_value.SetCompilerType(clang_uint32_t_type);
     return_value.GetScalar() = 0;
 
@@ -1829,10 +1834,9 @@ lldb::addr_t AppleObjCRuntimeV2::GetSharedCacheReadOnlyAddress() {
 }
 
 void AppleObjCRuntimeV2::UpdateISAToDescriptorMapIfNeeded() {
-  Log *log(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_TYPES));
+  LLDB_SCOPED_TIMER();
 
-  static Timer::Category func_cat(LLVM_PRETTY_FUNCTION);
-  Timer scoped_timer(func_cat, LLVM_PRETTY_FUNCTION);
+  Log *log(GetLogIfAnyCategoriesSet(LIBLLDB_LOG_PROCESS | LIBLLDB_LOG_TYPES));
 
   // Else we need to check with our process to see when the map was updated.
   Process *process = GetProcess();
@@ -2609,7 +2613,7 @@ class ObjCExceptionRecognizedStackFrame : public RecognizedStackFrame {
     if (!abi) return;
 
     TypeSystemClang *clang_ast_context =
-        TypeSystemClang::GetScratch(process_sp->GetTarget());
+        ScratchTypeSystemClang::GetForTarget(process_sp->GetTarget());
     if (!clang_ast_context)
       return;
     CompilerType voidstar =
