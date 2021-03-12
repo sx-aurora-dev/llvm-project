@@ -975,9 +975,9 @@ class InstTable(object):
         O_u32 = [[VX(T_u32), VZ(T_u32)]]
         O_pu32 = [[VX(T_u32), VZ(T_u32)]]
 
-        O_u64 = self.addMask(O_u64, addVD=False)
-        O_u32 = self.addMask(O_u32, addVD=False)
-        O_pu32 = self.addMask(O_pu32, VM512, addVD=False)
+        O_u64 = self.addMask(O_u64)
+        O_u32 = self.addMask(O_u32)
+        O_pu32 = self.addMask(O_pu32, VM512)
 
         self.Def(opc, instName, "", name, O_u64).noTest()
         self.Def(opc, instName, "p", "p" + name + ".lo", O_u32).noTest()
