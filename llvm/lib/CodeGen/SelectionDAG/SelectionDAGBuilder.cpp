@@ -4256,6 +4256,24 @@ void SelectionDAGBuilder::visitMaskedStore(const CallInst &I,
   setValue(&I, StoreNode);
 }
 
+static SDValue attachVectorLengthAlignment(const VPIntrinsic &VPI, SDValue VL,
+                                           SelectionDAG &DAG, SDLoc DL) {
+  if (!VPI.getVectorLengthParam())
+    return VL;
+
+  // Redundant.
+  if (isa<ConstantSDNode>(VL))
+    return VL;
+
+  // Attach alignment info.
+  auto EVLAlign = VPI.getParamAlign(
+      *VPIntrinsic::GetVectorLengthParamPos(VPI.getIntrinsicID()));
+  auto EVLAlignValue = EVLAlign.valueOrOne();
+  if (EVLAlignValue > 1)
+    return DAG.getAssertAlign(DL, VL, EVLAlignValue);
+  return VL;
+}
+
 void SelectionDAGBuilder::visitStoreVP(const CallInst &I) {
   SDLoc sdl = getCurSDLoc();
 
@@ -4277,6 +4295,9 @@ void SelectionDAGBuilder::visitStoreVP(const CallInst &I) {
   SDValue Src0 = getValue(Src0Operand);
   SDValue Mask = getValue(MaskOperand);
   SDValue VLen = getValue(VLenOperand);
+
+  VLen =
+      attachVectorLengthAlignment(cast<const VPIntrinsic>(I), VLen, DAG, sdl);
 
   EVT VT = Src0.getValueType();
   if (!Align)
@@ -4521,6 +4542,8 @@ void SelectionDAGBuilder::visitGatherVP(const CallInst &I) {
   const Value *Ptr = I.getArgOperand(0);
   SDValue Mask = getValue(I.getArgOperand(1));
   SDValue VLen = getValue(I.getArgOperand(2));
+  VLen =
+      attachVectorLengthAlignment(cast<const VPIntrinsic>(I), VLen, DAG, sdl);
 
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
   EVT VT = TLI.getValueType(DAG.getDataLayout(), I.getType());
@@ -4568,6 +4591,8 @@ void SelectionDAGBuilder::visitScatterVP(const CallInst &I) {
   SDValue Src0 = getValue(I.getArgOperand(0));
   SDValue Mask = getValue(I.getArgOperand(2));
   SDValue VLen = getValue(I.getArgOperand(3));
+  VLen =
+      attachVectorLengthAlignment(cast<const VPIntrinsic>(I), VLen, DAG, sdl);
   EVT VT = Src0.getValueType();
   Align Alignment = I.getParamAlign(1).getValueOr(DAG.getEVTAlign(VT));
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
@@ -4602,6 +4627,7 @@ void SelectionDAGBuilder::visitScatterVP(const CallInst &I) {
   setValue(&I, Scatter);
 }
 
+
 void SelectionDAGBuilder::visitLoadVP(const CallInst &I) {
   SDLoc sdl = getCurSDLoc();
 
@@ -4621,6 +4647,10 @@ void SelectionDAGBuilder::visitLoadVP(const CallInst &I) {
   SDValue Ptr = getValue(PtrOperand);
   SDValue VLen = getValue(VLenOperand);
   SDValue Mask = getValue(MaskOperand);
+
+  // Attach alignment info.
+  VLen =
+      attachVectorLengthAlignment(cast<const VPIntrinsic>(I), VLen, DAG, sdl);
 
   // infer the return type
   const TargetLowering &TLI = DAG.getTargetLoweringInfo();
@@ -7385,12 +7415,15 @@ void SelectionDAGBuilder::visitCmpVP(const VPIntrinsic &I) {
   SDValue Op2 = getValue(I.getOperand(1));
   // #2 is the condition code
   SDValue MaskOp = getValue(I.getOperand(3));
-  SDValue LenOp = getValue(I.getOperand(4));
+  SDValue VLen = getValue(I.getOperand(4));
+
+  VLen = attachVectorLengthAlignment(cast<const VPIntrinsic>(I), VLen, DAG,
+                                     getCurSDLoc());
 
   EVT DestVT = DAG.getTargetLoweringInfo().getValueType(DAG.getDataLayout(),
                                                         I.getType());
   setValue(&I, DAG.getVPSetCC(getCurSDLoc(), DestVT, Op1, Op2, Condition,
-                              MaskOp, LenOp));
+                              MaskOp, VLen));
 }
 
 static Optional<unsigned> getRelaxedVPSD(unsigned VPOC) {
@@ -7438,7 +7471,8 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
   EVT ResVT = TLI.getValueType(DAG.getDataLayout(), VPIntrin.getType());
 
   SDValue MaskV = getValue(VPIntrin.getMaskParam());
-  SDValue EVLV = getValue(VPIntrin.getVectorLengthParam());
+  SDValue VLen = getValue(VPIntrin.getVectorLengthParam());
+  VLen = attachVectorLengthAlignment(VPIntrin, VLen, DAG, getCurSDLoc());
 
   auto FMFSource = dyn_cast<FPMathOperator>(&VPIntrin);
   SDNodeFlags OpFlags;
@@ -7450,19 +7484,22 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
   Optional<unsigned> ScalarOCOpt = getScalarISDForVPReduce(ReduceOC);
   SDValue ResV;
 
-  // The reduction op without order constraints (fp only - integer is already unordered)
+  // The reduction op without order constraints (fp only - integer is already
+  // unordered)
   Optional<unsigned> RelaxedOC = getRelaxedVPSD(ReduceOC);
-  assert((!RelaxedOC || FMFSource) && "Expecting relaxable reductions to be fp ops");
+  assert((!RelaxedOC || FMFSource) &&
+         "Expecting relaxable reductions to be fp ops");
 
   if (RelaxedOC && FMFSource->hasAllowReassoc()) {
-    // fp reduction with reassoc flags -> use the relaxed opcode and scalarize the start value.
+    // fp reduction with reassoc flags -> use the relaxed opcode and scalarize
+    // the start value.
     LLVM_DEBUG(dbgs() << "visitReduceVP: reassoc FP\n";);
     // Re-associatable reduction with an explicit start parameter for the strict
     // case
     SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
     SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
     auto ReducedV = DAG.getNode(RelaxedOC.getValue(), dl, ResVT,
-                                {VectorV, MaskV, EVLV}, OpFlags);
+                                {VectorV, MaskV, VLen}, OpFlags);
     ResV = DAG.getNode(ScalarOCOpt.getValue(), dl, ResVT, ScalarV, ReducedV,
                        OpFlags);
 
@@ -7471,14 +7508,15 @@ void SelectionDAGBuilder::visitReduceVP(const VPIntrinsic &VPIntrin) {
     LLVM_DEBUG(dbgs() << "visitReduceVP: ordered FP\n";);
     SDValue ScalarV = getValue(VPIntrin.getArgOperand(0));
     SDValue VectorV = getValue(VPIntrin.getArgOperand(1));
-    ResV = DAG.getNode(ReduceOC, dl, ResVT, {ScalarV, VectorV, MaskV, EVLV}, OpFlags);
+    ResV = DAG.getNode(ReduceOC, dl, ResVT, {ScalarV, VectorV, MaskV, VLen},
+                       OpFlags);
 
   } else {
     LLVM_DEBUG(dbgs() << "visitReduceVP: unordered\n";);
 
     // Re-associatable without strict case and no initial arg (eg ADD reduction)
     SDValue VectorV = getValue(VPIntrin.getArgOperand(0));
-    ResV = DAG.getNode(ReduceOC, dl, ResVT, {VectorV, MaskV, EVLV}, OpFlags);
+    ResV = DAG.getNode(ReduceOC, dl, ResVT, {VectorV, MaskV, VLen}, OpFlags);
   }
 
   setValue(&VPIntrin, ResV);
@@ -7523,21 +7561,19 @@ void SelectionDAGBuilder::visitVectorPredicationIntrinsic(
   ComputeValueVTs(TLI, DAG.getDataLayout(), VPIntrin.getType(), ValueVTs);
   SDVTList VTs = DAG.getVTList(ValueVTs);
 
-  // ValueVTs.push_back(MVT::Other); // Out chain
-
   // Request Operands
   SmallVector<SDValue, 7> OpValues;
-  // TODO: Constrained FP.
-  // auto ExceptPosOpt = None;
-      // VPIntrinsic::GetExceptionBehaviorParamPos(VPIntrin.getIntrinsicID());
-  // auto RoundingModePosOpt = None;
-      // VPIntrinsic::GetRoundingModeParamPos(VPIntrin.getIntrinsicID());
+
+  auto EVLPos = VPIntrinsic::GetVectorLengthParamPos(VPIntrin.getIntrinsicID());
   for (int i = 0; i < (int)VPIntrin.getNumArgOperands(); ++i) {
-    // if (ExceptPosOpt && (i == ExceptPosOpt.getValue()))
-    //   continue;
-    // if (RoundingModePosOpt && (i == RoundingModePosOpt.getValue()))
-    //   continue;
-    OpValues.push_back(getValue(VPIntrin.getArgOperand(i)));
+    SDValue ISelOperand = getValue(VPIntrin.getArgOperand(i));
+
+    // Attach alignment info.
+    if (EVLPos && (i == *EVLPos))
+      ISelOperand = attachVectorLengthAlignment(VPIntrin, ISelOperand, DAG,
+                                                getCurSDLoc());
+
+    OpValues.push_back(ISelOperand);
   }
 
   // set exception flags where appropriate
