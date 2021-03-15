@@ -48,6 +48,10 @@
 using namespace llvm;
 
 // VE has no masked VLD. Ignore the mask, keep the AVL.
+static cl::opt<bool> AssumeBestAlignment("ve-assume-best-alignment", cl::init(false),
+                                         cl::desc("Assume optimal alignment for all vector load/stores (ie packed float ptrs are aligned to 8 bytes"),
+                                         cl::Hidden);
+
 static cl::opt<bool> OptimizeVectorMemory("ve-fast-mem", cl::init(true),
                                           cl::desc("Drop VLD masks"),
                                           cl::Hidden);
@@ -2109,6 +2113,14 @@ SDValue VETargetLowering::lowerVVP_MLOAD_MSTORE(SDValue Op, SelectionDAG &DAG,
   // Eagerly split over-packed vectors.
   if (isOverPackedType(OldDataVT))
     return splitLoadStore(Op, DAG, Mode);
+
+  // Eagerly split un-aligned vector loads.
+  if (!AssumeBestAlignment) {
+    // FIXME: This only catches the un-aligned packed-mode case.
+    auto Align = MemN.getAlign();
+    if (isPackedType(OldDataVT) && Align.value() < 8) 
+      return splitLoadStore(Op, DAG, Mode);
+  }
 
   // Infer a AVL value from all available hints.
   AVL = CDAG.inferAVL(AVL, Mask, OldDataVT);
