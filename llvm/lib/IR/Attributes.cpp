@@ -1898,7 +1898,6 @@ AttrBuilder AttributeFuncs::typeIncompatible(Type *Ty) {
         .addAttribute(Attribute::NoAlias)
         .addAttribute(Attribute::NoCapture)
         .addAttribute(Attribute::NonNull)
-        .addAlignmentAttr(1)             // the int here is ignored
         .addDereferenceableAttr(1)       // the int here is ignored
         .addDereferenceableOrNullAttr(1) // the int here is ignored
         .addAttribute(Attribute::ReadNone)
@@ -1908,6 +1907,10 @@ AttrBuilder AttributeFuncs::typeIncompatible(Type *Ty) {
         .addByValAttr(Ty)
         .addStructRetAttr(Ty)
         .addByRefAttr(Ty);
+
+  // Support alignment on all integers, pointers or otw.
+  if (!Ty->isPtrOrPtrVectorTy() && !Ty->isIntOrIntVectorTy())
+    Incompatible.addAlignmentAttr(1);
 
   // Some attributes can apply to all "values" but there are no `void` values.
   if (Ty->isVoidTy())
