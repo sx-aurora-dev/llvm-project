@@ -1437,6 +1437,11 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
 }
 
 static Align getAlign(SDValue Op) {
+  auto ConstN = dyn_cast<ConstantSDNode>(Op);
+  // TODO: Not being fancy here, only need to know whether AVL is even or odd.
+  if (ConstN)
+    return Align((ConstN->getZExtValue() % 2 == 0) ? 2 : 1);
+
   auto AAN = dyn_cast<AssertAlignSDNode>(Op);
   if (!AAN)
     return Align(1);
@@ -1514,9 +1519,7 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
   //// Does this expansion imply packed mode? /////
   LLVM_DEBUG(dbgs() << "\tSelected target width: " << VectorWidth << "\n";);
   bool PackedMode = false;
-  bool NeedsPackedMasking = false;
   if (VectorWidth > StandardVectorWidth) {
-    NeedsPackedMasking = (OpVectorLength % 2 != 0);
     PackedMode = true;
     if (!Subtarget->hasPackedMode()) {
       LLVM_DEBUG(dbgs() << "\tPacked operations not enabled (set "
@@ -1525,12 +1528,20 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
     }
   }
 
-  // Do we need to fold the predicating effect of the AVL into the mask (due to
-  // the coarse-grained nature of AVL in packed mode)?
-  auto AVL = getNodeAVL(Op);
-  if (AVL) {
-    auto AVLAlign = getAlign(AVL);
-    NeedsPackedMasking |= PackedMode && (AVLAlign.value() % 2 != 0);
+  // Analyze whether/how the AVL needs to be folded (odd-values AVL possible).
+  bool NeedsPackedMasking = false;
+  if (PackedMode) {
+    // Do we need to fold the predicating effect of the AVL into the mask (due to
+    // the coarse-grained nature of AVL in packed mode)?
+    auto AVL = getNodeAVL(Op);
+    if (AVL) {
+      auto AVLAlign = getAlign(AVL);
+      NeedsPackedMasking = PackedMode && (AVLAlign.value() % 2 != 0);
+      LLVM_DEBUG(dbgs() << "\tAVL: "; CDAG.print(dbgs(), AVL) << "\n";);
+    } else {
+      NeedsPackedMasking = (OpVectorLength % 2 != 0);
+    }
+    LLVM_DEBUG(dbgs() << "\tPacked Masking: " << NeedsPackedMasking << "\n";);
   }
 
   return VVPWideningInfo(ResultVT, OpVectorLength, PackedMode,

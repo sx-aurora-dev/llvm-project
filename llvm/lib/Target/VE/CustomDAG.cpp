@@ -1098,13 +1098,19 @@ TargetMasks CustomDAG::createTargetMask(VVPWideningInfo WidenInfo,
     NewAVL = createTargetAVL(WidenInfo);
   } else if (RawAVL && !WidenInfo.PackedMode) {
     NewAVL = RawAVL;
-  } else {
+  } else if (RawAVL && WidenInfo.NeedsPackedMasking) {
+    // AVL may be odd - add one to add the 'odd' element in that case.
     assert(WidenInfo.PackedMode);
     assert(IsDynamicAVL);
-
     auto PlusOne = getNode(ISD::ADD, MVT::i32, {RawAVL, getConstEVL(1)});
     NewAVL = getNode(ISD::SRL, MVT::i32, {PlusOne, getConstEVL(1)});
+  } else {
+    // AVL is even - no plus one necessary.
+    NewAVL = getNode(ISD::SRL, MVT::i32, {RawAVL, getConstEVL(1)});
   }
+
+  // FIXME: We currently ignore WidenInfo.NeedsPackedMasking for the mask
+  // (odd-position element in packed mode is not masked off!)
 
   // Legalize Mask (nothing to do here)
   SDValue NewMask;
