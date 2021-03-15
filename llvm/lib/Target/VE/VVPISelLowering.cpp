@@ -1436,6 +1436,13 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
   return CDAG.getMergeValues({PackedVals, FusedChains});
 }
 
+static Align getAlign(SDValue Op) {
+  auto AAN = dyn_cast<AssertAlignSDNode>(Op);
+  if (!AAN)
+    return Align(1);
+  return AAN->getAlign();
+}
+
 VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
                                                  VVPExpansionMode Mode) const {
   Optional<EVT> VecVTOpt = getIdiomaticType(Op.getNode());
@@ -1520,8 +1527,11 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
 
   // Do we need to fold the predicating effect of the AVL into the mask (due to
   // the coarse-grained nature of AVL in packed mode)?
-  // TODO: Does not need masking if AVL is a power-of-two.
-  NeedsPackedMasking |= PackedMode && (bool)getNodeAVL(Op);
+  auto AVL = getNodeAVL(Op);
+  if (AVL) {
+    auto AVLAlign = getAlign(AVL);
+    NeedsPackedMasking |= PackedMode && (AVLAlign.value() % 2 != 0);
+  }
 
   return VVPWideningInfo(ResultVT, OpVectorLength, PackedMode,
                          NeedsPackedMasking);
