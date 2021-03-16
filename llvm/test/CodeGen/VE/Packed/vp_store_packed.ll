@@ -36,6 +36,20 @@ define fastcc void @vec_mstore_v512f32(<512 x float>* %P, <512 x float> %V, <512
   ret void
 }
 
+define fastcc void @vec_mstore_v512f32_aligned(<512 x float>* %P, <512 x float> %V, <512 x i1> %M) {
+; CHECK-LABEL: vec_mstore_v512f32_aligned:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    lea %s1, 256
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vstu %v0, 8, %s0, %vm2
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
+; CHECK-NEXT:    lea %s0, 4(, %s0)
+; CHECK-NEXT:    vstu %v0, 8, %s0, %vm3
+; CHECK-NEXT:    b.l.t (, %s10)
+  call void @llvm.masked.store.v512f32.p0v512f32(<512 x float> %V, <512 x float>* %P, i32 8, <512 x i1> %M)
+  ret void
+}
+
 declare void @llvm.vp.store.v512f32.p0v512f32(<512 x float>, <512 x float>*, <512 x i1>, i32)
 
 ; Function Attrs: nounwind
@@ -56,6 +70,38 @@ define fastcc void @vec_vpstore_v512f32(<512 x float>* %P, <512 x float> %V, <51
 ; CHECK-NEXT:    vstu %v0, 8, %s0, %vm3
 ; CHECK-NEXT:    b.l.t (, %s10)
   call void @llvm.vp.store.v512f32.p0v512f32(<512 x float> %V, <512 x float>* %P, <512 x i1> %M, i32 %avl)
+  ret void
+}
+
+define fastcc void @vec_vpstore_v512f32_aavl(<512 x float>* %P, <512 x float> %V, <512 x i1> %M, i32 %avl) {
+; CHECK-LABEL: vec_vpstore_v512f32_aavl:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vstu %v0, 8, %s0, %vm2
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
+; CHECK-NEXT:    lea %s0, 4(, %s0)
+; CHECK-NEXT:    vstu %v0, 8, %s0, %vm3
+; CHECK-NEXT:    b.l.t (, %s10)
+  call void @llvm.vp.store.v512f32.p0v512f32(<512 x float> %V, <512 x float>* %P, <512 x i1> %M, i32 align 2 %avl)
+  ret void
+}
+
+define fastcc void @vec_vpstore_v512f32_nomask_aavl(<512 x float>* %P, <512 x float> %V, i32 %avl) {
+; CHECK-LABEL: vec_vpstore_v512f32_nomask_aavl:
+; CHECK:       # %bb.0:
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    and %s1, %s1, (32)0
+; CHECK-NEXT:    srl %s1, %s1, 1
+; CHECK-NEXT:    lvl %s1
+; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
+; CHECK-NEXT:    vst %v0, 8, %s0
+; CHECK-NEXT:    b.l.t (, %s10)
+  %one = insertelement <512 x i1> undef, i1 1, i32 0
+  %truemask = shufflevector <512 x i1> %one, <512 x i1> poison, <512 x i32> zeroinitializer
+  call void @llvm.vp.store.v512f32.p0v512f32(<512 x float> %V, <512 x float>* align 8 %P, <512 x i1> %truemask, i32 align 2 %avl)
   ret void
 }
 

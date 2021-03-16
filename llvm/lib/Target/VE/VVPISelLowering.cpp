@@ -323,17 +323,25 @@ static bool maySafelyIgnoreMask(unsigned VVPOpcode) {
   return false;
 }
 
-static bool isEvenNumber(SDValue AVL) {
-  auto ConstAVL = dyn_cast<ConstantSDNode>(AVL);
-  if (!ConstAVL)
-    return false;
+static Align getAlign(SDValue Op) {
+  auto ConstN = dyn_cast<ConstantSDNode>(Op);
+  // TODO: Not being fancy here, only need to know whether AVL is even or odd.
+  if (ConstN)
+    return Align((ConstN->getZExtValue() % 2 == 0) ? 2 : 1);
 
-  return (ConstAVL->getZExtValue() % 2 == 0);
+  auto AAN = dyn_cast<AssertAlignSDNode>(Op);
+  if (!AAN)
+    return Align(1);
+  return AAN->getAlign();
 }
 
-static bool isPackableLoadStore(SDValue Op) {
+static bool isEvenNumber(SDValue AVL) { return getAlign(AVL).value() % 2 == 0; }
+
+static bool isPackableVVPLoadStore(SDValue Op) {
   SDValue AVL = getNodeAVL(Op);
   SDValue Mask = getNodeMask(Op);
+
+  // Ignore the mask and odd-valued AVL when optimizing memops.
   if ((Op->getOpcode() == VEISD::VVP_LOAD) && OptimizeVectorMemory)
     return true;
 
@@ -1436,17 +1444,6 @@ SDValue VETargetLowering::splitVectorOp(SDValue Op, SelectionDAG &DAG,
   return CDAG.getMergeValues({PackedVals, FusedChains});
 }
 
-static Align getAlign(SDValue Op) {
-  auto ConstN = dyn_cast<ConstantSDNode>(Op);
-  // TODO: Not being fancy here, only need to know whether AVL is even or odd.
-  if (ConstN)
-    return Align((ConstN->getZExtValue() % 2 == 0) ? 2 : 1);
-
-  auto AAN = dyn_cast<AssertAlignSDNode>(Op);
-  if (!AAN)
-    return Align(1);
-  return AAN->getAlign();
-}
 
 VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
                                                  VVPExpansionMode Mode) const {
@@ -1535,8 +1532,7 @@ VVPWideningInfo VETargetLowering::pickResultType(CustomDAG &CDAG, SDValue Op,
     // the coarse-grained nature of AVL in packed mode)?
     auto AVL = getNodeAVL(Op);
     if (AVL) {
-      auto AVLAlign = getAlign(AVL);
-      NeedsPackedMasking = PackedMode && (AVLAlign.value() % 2 != 0);
+      NeedsPackedMasking = PackedMode && !isEvenNumber(AVL);
       LLVM_DEBUG(dbgs() << "\tAVL: "; CDAG.print(dbgs(), AVL) << "\n";);
     } else {
       NeedsPackedMasking = (OpVectorLength % 2 != 0);
@@ -1751,7 +1747,7 @@ SDValue VETargetLowering::legalizeInternalLoadStoreOp(SDValue Op,
   SDValue AVL = getNodeAVL(Op);
   SDValue Mask = getNodeMask(Op);
   // TODO: this can be refined.. the mask has to be compactable for stores.
-  bool IsPackable = isPackableLoadStore(Op);
+  bool IsPackable = isPackableVVPLoadStore(Op);
   if (!IsPackable)
     return splitLoadStore(Op, CDAG.DAG, VVPExpansionMode::ToNativeWidth);
 
