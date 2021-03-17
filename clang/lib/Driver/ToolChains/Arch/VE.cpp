@@ -57,7 +57,7 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   if (FloatABI == ve::FloatABI::Soft)
     Features.push_back("+soft-float");
 
-  // Defaults.
+  // Defaults (keep in sync with llvm/lib/Target/VE/VE.td)
   bool EnableVPU = true;
   bool EnablePacked = true;
   bool EnableSIMD = false;
@@ -86,16 +86,12 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   }
 
   // Fixed SIMD
-  if (EnableSIMD) {
-    Features.push_back("-vpu");
-    Features.push_back("-packed");
+  if (EnableSIMD)
     Features.push_back("+simd");
-    return;
-  }
 
   // VVP
-  if (EnableVPU)
-    Features.push_back("+vpu");
-  if (EnableVPU && EnablePacked)
-    Features.push_back("+packed");
+  if (!EnableVPU)
+    Features.push_back("-vpu");
+  if (!EnablePacked)
+    Features.push_back("-packed");
 }
