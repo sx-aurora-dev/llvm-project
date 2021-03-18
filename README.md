@@ -8,7 +8,8 @@ SX-Aurora TSUBASA Vector Engine (VE).
 ### Features
 
 - C, C++ support.
-- VEL intrinsics for low-level vector programming.
+- VE Intrinsics for low-level vector programming.
+- Packed-mode vector code generation by default.
 - Automatic vectorization through LLVM's loop and SLP vectorizers.
 - When combined with RV for SX-Aurora, provides user-guided (and some automatic)
   outer-loop vectorization through the Region Vectorizer.
@@ -60,19 +61,41 @@ use:
     $ clang -mllvm -rv -mllvm -rv-autovec -O3 ...
 
 
-### VEL Intrinsics for direct vector programming
+### VE Intrinsics for direct vector programming
 
-See [the manual](https://sx-aurora-dev.github.io/velintrin.html).  To use VEL
-intrinsics, pass the compiler option `-mattr=+packed`.  The resulting LLVM
-bitcode and objects are compatible with those compiler without this option.
+See [the manual](https://sx-aurora-dev.github.io/velintrin.html).
+There is also [a tutorial](https://sx-aurora-dev.github.io/ve-intrinsics-tutorial/).
 
-### Clang Experimental Options
+### Clang Options
 
-To enable packed mode support, call Clang with `-mve-packed`.
-This sets the machine attribute `+packed`.
+Refer to the [Clang Command Line Reference](Ghttps://clang.llvm.org/docs/ClangCommandLineReference.html) for general compiler flags
+There are VE-specific flags to control vector code generation:
+Note that packed mode code generation and vectorization is enabled by default.
 
-### LLVM Experimental Options
+- `clang -mno-vepacked` disables packed mode support.
+  LLVM and the vectorizers will not use packed instructions.
+  This option is incompatible with VE Intrinsics.
+- `clang -mno-vevpu` disables all vector code support.
+  Disable vector code generation entirely.
+  Vectorizers (of LLVM or RV) will keep all code scalar - no vector instructions will be generated.
+  Incompatible with VE Intrinsics.
+- `clang -mvesimd` switches to the fixed SIMD legacy code generation path (deprecated).
+
+
+### LLVM Advanced Options
 
 Clang and llc accept these flags directly, prefix them with `-mllvm ` to use them with Clang.
 
+##### Code Generation
+
 - `-ve-regalloc=0` disable the experimental improvements to the vector register allocator.
+- `-ve-fast-mem=0` use `VGT` (gather op) for masked loads instead of ignoring the mask.
+- `-ve-ignore-masks=0` do not ignore masks on arithmetic even if it's safe.
+- `-ve-optimize-split-avl=0` use the same VL setting for both non-packed operations when a packed operation is split.
+
+
+##### Cost Modelling
+
+- `-ve-unroll-vector=0` discourage vector loop unrolling.
+- `-ve-expensive-vector=1` penalize vector ops to surpress all automatic vectorization.
+  May help with VE Intrinsics to rule out spurious auto-vectorization.
