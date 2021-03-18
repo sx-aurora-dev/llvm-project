@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve -mattr=+vpu | FileCheck %s
+; RUN: llc < %s -mtriple=ve -mattr=+vpu,+packed | FileCheck %s
 
 ;;; Test vector population count intrinsic instructions
 ;;;
@@ -37,7 +37,6 @@ define fastcc <256 x double> @vpcnt_vvvl(<256 x double> %0, <256 x double> %1) {
 
 ; Function Attrs: nounwind readnone
 declare <256 x double> @llvm.ve.vl.vpcnt.vvvl(<256 x double>, <256 x double>, i32)
-
 
 ; Function Attrs: nounwind readnone
 define fastcc <256 x double> @vpcnt_vvmvl(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
@@ -89,7 +88,6 @@ define fastcc <256 x double> @pvpcntlo_vvvl(<256 x double> %0, <256 x double> %1
 
 ; Function Attrs: nounwind readnone
 declare <256 x double> @llvm.ve.vl.pvpcntlo.vvvl(<256 x double>, <256 x double>, i32)
-
 
 ; Function Attrs: nounwind readnone
 define fastcc <256 x double> @pvpcntlo_vvmvl(<256 x double> %0, <256 x i1> %1, <256 x double> %2) {
@@ -197,7 +195,9 @@ declare <256 x double> @llvm.ve.vl.pvpcnt.vvvl(<256 x double>, <256 x double>, i
 define fastcc <256 x double> @pvpcnt_vvMvl(<256 x double> %0, <512 x i1> %1, <256 x double> %2) {
 ; CHECK-LABEL: pvpcnt_vvMvl:
 ; CHECK:       # %bb.0:
+; CHECK-NEXT:    # kill: def $vm2 killed $vm2 killed $vmp1 def $vmp1
 ; CHECK-NEXT:    lea %s0, 128
+; CHECK-NEXT:    # kill: def $vm3 killed $vm3 killed $vmp1 def $vmp1
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    pvpcnt %v1, %v0, %vm2
 ; CHECK-NEXT:    lea %s16, 256

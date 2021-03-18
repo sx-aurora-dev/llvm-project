@@ -15,11 +15,11 @@ __vr INST##_vvl(__vr v) { \
 } \
 __attribute__((REGCALL)) \
 __vr INST##_vvvl(__vr v, __vr b) { \
-  return _vel_##INST##_vvvl(l, b, 128); \
+  return _vel_##INST##_vvvl(v, b, 128); \
 } \
 __attribute__((REGCALL)) \
 __vr INST##_vvmvl(__vr v, __vm256 m, __vr b) { \
-  return _vel_##INST##_vvmvl(l, m, b, 128); \
+  return _vel_##INST##_vvmvl(v, m, b, 128); \
 }
 
 #define PVPCNT_TEST(INST) \
@@ -29,11 +29,11 @@ __vr INST##_vvl(__vr v) { \
 } \
 __attribute__((REGCALL)) \
 __vr INST##_vvvl(__vr v, __vr b) { \
-  return _vel_##INST##_vvvl(l, b, 128); \
+  return _vel_##INST##_vvvl(v, b, 128); \
 } \
 __attribute__((REGCALL)) \
 __vr INST##_vvMvl(__vr v, __vm512 m, __vr b) { \
-  return _vel_##INST##_vvMvl(l, m, b, 128); \
+  return _vel_##INST##_vvMvl(v, m, b, 128); \
 }
 
 VPCNT_TEST(vpcnt)
