@@ -94,7 +94,7 @@ define fastcc <256 x i64> @and_vs_v256i64(<256 x i64> %x, i64 %y) {
 define fastcc <128 x i64> @and_vv_v128i64(<128 x i64> %x, <128 x i64> %y) {
 ; CHECK-LABEL: and_vv_v128i64:
 ; CHECK:       # %bb.0:
-; CHECK-NEXT:    lea %s0, 256
+; CHECK-NEXT:    lea %s0, 128
 ; CHECK-NEXT:    lvl %s0
 ; CHECK-NEXT:    vand %v0, %v0, %v1
 ; CHECK-NEXT:    b.l.t (, %s10)

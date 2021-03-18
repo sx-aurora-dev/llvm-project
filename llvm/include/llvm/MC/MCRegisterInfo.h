@@ -471,7 +471,7 @@ public:
   /// Get the offset of the bit range covered by a sub-register index.
   /// If an Offset doesn't make sense (the index isn't continuous, or is used to
   /// access sub-registers at different offsets), return -1.
-  unsigned getSubRegIdxOffset(unsigned Idx) const;
+  Optional<unsigned> getSubRegIdxOffset(unsigned Idx) const;
 
   /// Return the human-readable symbolic target-specific name for the
   /// specified physical register.

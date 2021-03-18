@@ -131,7 +131,8 @@ private:
   const LoopInfo &LI;
 
   // Recognized divergent loops
-  DenseSet<const Loop *> DivergentLoops;
+  DenseSet<const Loop *>
+      DivergentLoops; // FIXME Deprecated. For statistics only.
 
   // The SDA links divergent branches to divergent control-flow joins.
   SyncDependenceAnalysis &SDA;

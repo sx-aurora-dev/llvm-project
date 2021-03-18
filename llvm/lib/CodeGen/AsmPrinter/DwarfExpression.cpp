@@ -10,8 +10,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "DwarfExpression.h"
 #include "DwarfCompileUnit.h"
+#include "DwarfExpression.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallBitVector.h"
 #include "llvm/BinaryFormat/Dwarf.h"
@@ -122,10 +122,12 @@ bool DwarfExpression::addMachineReg(const TargetRegisterInfo &TRI,
     if (Reg >= 0) {
       unsigned Idx = TRI.getSubRegIndex(*SR, MachineReg);
       unsigned Size = TRI.getSubRegIdxSize(Idx);
-      unsigned RegOffset = TRI.getSubRegIdxOffset(Idx);
+      Optional<unsigned> RegOffset = TRI.getSubRegIdxOffset(Idx);
+      if (!RegOffset)
+        continue;
       DwarfRegs.push_back(Register::createRegister(Reg, "super-register"));
       // Use a DW_OP_bit_piece to describe the sub-register.
-      setSubRegisterPiece(Size, RegOffset);
+      setSubRegisterPiece(Size, *RegOffset);
       return true;
     }
   }
@@ -145,7 +147,9 @@ bool DwarfExpression::addMachineReg(const TargetRegisterInfo &TRI,
   for (MCSubRegIterator SR(MachineReg, &TRI); SR.isValid(); ++SR) {
     unsigned Idx = TRI.getSubRegIndex(MachineReg, *SR);
     unsigned Size = TRI.getSubRegIdxSize(Idx);
-    unsigned Offset = TRI.getSubRegIdxOffset(Idx);
+    Optional<unsigned> Offset = TRI.getSubRegIdxOffset(Idx);
+    if (!Offset)
+      continue;
     Reg = TRI.getDwarfRegNum(*SR, false);
     if (Reg < 0)
       continue;
@@ -153,7 +157,7 @@ bool DwarfExpression::addMachineReg(const TargetRegisterInfo &TRI,
     // Used to build the intersection between the bits we already
     // emitted and the bits covered by this subregister.
     SmallBitVector CurSubReg(RegSize, false);
-    CurSubReg.set(Offset, Offset + Size);
+    CurSubReg.set(*Offset, *Offset + Size);
 
     // If this sub-register has a DWARF number and we haven't covered
     // its range, and its range covers the value, emit a DWARF piece for it.
@@ -161,16 +165,16 @@ bool DwarfExpression::addMachineReg(const TargetRegisterInfo &TRI,
       // Emit a piece for any gap in the coverage.
       if (Offset > CurPos)
         DwarfRegs.push_back(Register::createSubRegister(
-            -1, Offset - CurPos, "no DWARF register encoding"));
-      if (Offset == 0 && Size >= MaxSize)
+            -1, *Offset - CurPos, "no DWARF register encoding"));
+      if (*Offset == 0 && Size >= MaxSize)
         DwarfRegs.push_back(Register::createRegister(Reg, "sub-register"));
       else
         DwarfRegs.push_back(Register::createSubRegister(
-            Reg, std::min<unsigned>(Size, MaxSize - Offset), "sub-register"));
+            Reg, std::min<unsigned>(Size, MaxSize - *Offset), "sub-register"));
     }
     // Mark it as emitted.
-    Coverage.set(Offset, Offset + Size);
-    CurPos = Offset + Size;
+    Coverage.set(*Offset, *Offset + Size);
+    CurPos = *Offset + Size;
   }
   // Failed to find any DWARF encoding.
   if (CurPos == 0)

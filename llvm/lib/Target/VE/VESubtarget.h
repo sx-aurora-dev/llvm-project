@@ -34,9 +34,13 @@ class VESubtarget : public VEGenSubtargetInfo {
 
   /// Features {
 
+  // Enable Packed-Mode VPU instructions
+  bool PackedMode;
+
   // Emit VPU instructions
   bool EnableVPU;
-  bool Intrinsic;
+
+  // Fixed SIMD isel patterns.
   bool Simd;
 
   /// } Features
@@ -64,8 +68,8 @@ public:
 
   bool enableMachineScheduler() const override;
 
-  bool enableVPU() const { return EnableVPU; }
-  bool intrinsic() const { return Intrinsic; }
+  bool enableVPU() const { return EnableVPU && !simd(); }
+  bool hasPackedMode() const { return enableVPU() && PackedMode; }
   bool simd() const { return Simd; }
 
   /// ParseSubtargetFeatures - Parses features string setting specified

@@ -80,15 +80,24 @@ public:
   reverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
   /// } Branch Analysis & Modification
 
+  /// Register Copy {
+  MachineInstrBuilder emitVectorRegisterCopy(MachineBasicBlock &MBB,
+                                             MachineBasicBlock::iterator I,
+                                             const DebugLoc &DL,
+                                             MCRegister DestReg,
+                                             MCRegister SrcReg, bool KillSrc,
+                                             MCRegister AVLReg) const;
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator I,
                    const DebugLoc &DL, MCRegister DestReg, MCRegister SrcReg,
                    bool KillSrc) const override;
+  /// } Register Copy
 
   /// Stack Spill & Reload {
   unsigned isLoadFromStackSlot(const MachineInstr &MI,
                                int &FrameIndex) const override;
   unsigned isStoreToStackSlot(const MachineInstr &MI,
                               int &FrameIndex) const override;
+
   void storeRegToStackSlot(MachineBasicBlock &MBB,
                            MachineBasicBlock::iterator MBBI, Register SrcReg,
                            bool isKill, int FrameIndex,

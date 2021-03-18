@@ -149,6 +149,9 @@ ASM_FUNCTION_VE_RE = re.compile(
     r'.Lfunc_end[0-9]+:\n',
     flags=(re.M | re.S))
 
+SCRUB_LOOP_COMMENT_RE = re.compile(
+    r'# =>This Inner Loop Header:.*|# in Loop:.*', flags=re.M)
+
 SCRUB_X86_SHUFFLES_RE = (
     re.compile(
         r'^(\s*\w+) [^#\n]+#+ ((?:[xyz]mm\d+|mem)( \{%k\d+\}( \{z\})?)? = .*)$',

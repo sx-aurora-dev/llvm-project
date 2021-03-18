@@ -246,6 +246,12 @@ endif()
 option(COMPILER_RT_USE_BUILTINS_LIBRARY
   "Use compiler-rt builtins instead of libgcc" ${DEFAULT_COMPILER_RT_USE_BUILTINS_LIBRARY})
 
+if("${COMPILER_RT_DEFAULT_TARGET_ARCH}" MATCHES "ve")
+  # 'crtbegin.o', etc do not exist yet.. that's why we are here in the first
+  # place!
+  message("Performing compile-only tests.")
+  set(TEST_COMPILE_ONLY On)
+endif()
 include(config-ix)
 
 #================================

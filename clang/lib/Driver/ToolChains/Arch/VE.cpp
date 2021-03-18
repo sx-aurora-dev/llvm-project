@@ -32,8 +32,7 @@ ve::FloatABI ve::getVEFloatABI(const Driver &D, const ArgList &Args) {
                 .Case("soft", ve::FloatABI::Soft)
                 .Case("hard", ve::FloatABI::Hard)
                 .Default(ve::FloatABI::Invalid);
-      if (ABI == ve::FloatABI::Invalid &&
-          !StringRef(A->getValue()).empty()) {
+      if (ABI == ve::FloatABI::Invalid && !StringRef(A->getValue()).empty()) {
         D.Diag(clang::diag::err_drv_invalid_mfloat_abi) << A->getAsString(Args);
         ABI = ve::FloatABI::Hard;
       }
@@ -58,22 +57,45 @@ void ve::getVETargetFeatures(const Driver &D, const ArgList &Args,
   if (FloatABI == ve::FloatABI::Soft)
     Features.push_back("+soft-float");
 
-  // Parse -mvevec option.  This option takes one of following arguments.
-  // And pass features respectively.
-  //   -mvevec=intrin -> -mattr=+intrin
-  //   -mvevec=simd   -> -mattr=+simd
-  //   -mvevec=vpu    -> -mattr=+vpu
-  //   -mvevec=none   -> no mattr
-  //   no mvevec      -> -mattr=+intrin
-  if (auto *A = Args.getLastArg(options::OPT_mvevec)) {
-    if (A->containsValue("intrin"))
-      Features.push_back("+intrin");
-    else if (A->containsValue("simd"))
-      Features.push_back("+simd");
-    else if (A->containsValue("vpu"))
-      Features.push_back("+vpu");
-  } else {
-    // Enable -mattr=+intrin by default.
-    Features.push_back("+intrin");
+  // Defaults.
+  bool EnableVPU = true;
+  bool EnablePacked = true;
+  bool EnableSIMD = false;
+
+  // Whether to enable v256 VPU registers and isel.
+  if (auto *A = Args.getLastArg(options::OPT_mvevpu, options::OPT_mno_vevpu)) {
+    if (A->getOption().matches(options::OPT_mno_vevpu))
+      EnableVPU = false;
   }
+
+  // Whether to enable v512 VPU registers and isel.
+  if (auto *A =
+          Args.getLastArg(options::OPT_mvepacked, options::OPT_mno_vepacked)) {
+    if (A->getOption().matches(options::OPT_mno_vepacked))
+      EnablePacked = false;
+  }
+
+  // Whether to enable fixed-SIMD patterns
+  if (auto *A =
+          Args.getLastArg(options::OPT_mvesimd, options::OPT_mno_vesimd)) {
+    if (A->getOption().matches(options::OPT_mvesimd)) {
+      EnableSIMD = true;
+      EnableVPU = false;
+      EnablePacked = false;
+    }
+  }
+
+  // Fixed SIMD
+  if (EnableSIMD) {
+    Features.push_back("-vpu");
+    Features.push_back("-packed");
+    Features.push_back("+simd");
+    return;
+  }
+
+  // VVP
+  if (EnableVPU)
+    Features.push_back("+vpu");
+  if (EnableVPU && EnablePacked)
+    Features.push_back("+packed");
 }

@@ -68,12 +68,18 @@ else()
 endif()
 endmacro()
 
-add_subdirectory(aarch64)
-add_subdirectory(cuda)
-add_subdirectory(ppc64)
-add_subdirectory(ppc64le)
-add_subdirectory(ve)
-add_subdirectory(x86_64)
+# VE -> VH Offloading
+add_subdirectory(vh)
+
+if(NOT "${LIBOMP_ARCH}" STREQUAL "ve")
+  add_subdirectory(aarch64)
+  add_subdirectory(amdgpu)
+  add_subdirectory(cuda)
+  add_subdirectory(ppc64)
+  add_subdirectory(ppc64le)
+  add_subdirectory(ve)
+  add_subdirectory(x86_64)
+endif()
 
 # Make sure the parent scope can see the plugins that will be created.
 set(LIBOMPTARGET_SYSTEM_TARGETS "${LIBOMPTARGET_SYSTEM_TARGETS}" PARENT_SCOPE)

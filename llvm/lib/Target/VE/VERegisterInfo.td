@@ -51,9 +51,12 @@ let Namespace = "VE" in {
   def sub_f32     : SubRegIndex<32>;            // High 32 bit (0..31)
   def sub_even    : SubRegIndex<64>;            // High 64 bit (0..63)
   def sub_odd     : SubRegIndex<64, 64>;        // Low 64 bit (64..127)
-  def sub_vm_even : SubRegIndex<256>;           // High 256 bit (0..255)
-  def sub_vm_odd  : SubRegIndex<256, 256>;      // Low 256 bit (256..511)
-  def AsmName     : RegAltNameIndex;
+  def sub_vm_hi   : SubRegIndex<256, -1>;       // k*128 + 64 bit packs (even slots)
+  def sub_vm_lo   : SubRegIndex<256, -1>;       // 64 + k*128 + 64 bit packs (odd slots)
+  // Over-packed register.
+  def sub_pack_hi  : SubRegIndex<16384, -1>;       // k*128 + 64 bit packs (even slots)
+  def sub_pack_lo  : SubRegIndex<16384, -1>;       // 64 + k*128 + 64 bit packs (odd slots)
+  def AsmName      : RegAltNameIndex;
 }
 
 //-----------------------------------------------------------------------------
@@ -144,17 +147,26 @@ foreach I = 0-31 in
 foreach I = 0-63 in
   def V#I : VEVecReg<I, "v"#I, [], ["v"#I]>, DwarfRegNum<[!add(64,I)]>;
 
+// (Virtual) over-packed vector registers - 64 bits wide 512 elements
+let SubRegIndices = [sub_pack_hi, sub_pack_lo], CoveredBySubRegs = 1 in
+foreach I = 0-31 in
+  def VP#I : VEVecReg<!shl(I,1), "vp"#I,
+                      [!cast<VEVecReg>("V"#!shl(I,1)),
+                       !cast<VEVecReg>("V"#!add(!shl(I,1),1))],
+                      ["v"#!shl(I,1)]>;
+
 // Vector Index Register
 def VIX : VEVecReg<255, "vix", [], ["vix"]>;
 
-// Vector mask registers - 256 bits wide
 foreach I = 0-15 in
   def VM#I : VEMaskReg<I, "vm"#I, [], ["vm"#I]>, DwarfRegNum<[!add(128,I)]>;
 
 // Aliases of VMs to use as a pair of two VM for packed instructions
-let SubRegIndices = [sub_vm_even, sub_vm_odd], CoveredBySubRegs = 1 in
-foreach I = 0-7 in
-  def VMP#I : VEMaskReg<!shl(I,1), "vmp"#I,
+def VMP0 : VEMaskReg<0, "vm0", [], ["vm0"]>;
+
+let SubRegIndices = [sub_vm_hi, sub_vm_lo], CoveredBySubRegs = 1 in
+foreach I = 1-7 in
+  def VMP#I : VEMaskReg<!shl(I,1), "vm"#I,
                         [!cast<VEMaskReg>("VM"#!shl(I,1)),
                          !cast<VEMaskReg>("VM"#!add(!shl(I,1),1))],
                         ["vm"#!shl(I,1)]>;
@@ -182,6 +194,11 @@ def F128 : RegisterClass<"VE", [f128], 128,
                              (sequence "Q%u", 17, 31),
                              (sequence "Q%u", 4, 16))>;
 
+// Over-packed register type that does not exist in the ISA.
+// This allows us to specify a custom layout (odd, even) from this type to V64.
+def VP: RegisterClass<"VE", [v512f64, v512i64], 32, (add (sequence "VP%u", 0, 31))>;
+
+// Fixed-SIMD isel patterns require all vector types to be present.
 def V64 : RegisterClass<"VE",
                         [v256f64, // default type for vector registers
                          v512i32, v512f32,
@@ -195,6 +212,7 @@ def V64 : RegisterClass<"VE",
                          v2i64,   v2i32,   v2f32,   v2f64], 64,
                         (add (sequence "V%u", 0, 63),
                              VIX)>;
+
 
 def V16384 : RegisterClass<"VE",
                         [v256f64, // default type for vector registers

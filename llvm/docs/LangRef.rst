@@ -16715,7 +16715,7 @@ the range:
 
 ::
 
-      0 <= %evl <= W,  where W is the number of vector elements
+      0 <= %evl <= W,  where W is the (total) number of vector elements
 
 Note that for :ref:`scalable vector types <t_vector>` ``W`` is the runtime
 length of the vector.
@@ -17368,6 +17368,47 @@ Examples:
       %also.r = select <4 x i1> %mask, <4 x i32> %t, <4 x i32> undef
 
 
+.. _int_vp_select:
+
+'``llvm.vp.select.*``' Intrinsics
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Syntax:
+"""""""
+This is an overloaded intrinsic.
+
+::
+
+      declare <16 x i32>  @llvm.vp.select.v16i32 (<16 x i1> <mask>, <16 x i32> <left_op>, <16 x i32> <right_op>, i32 <vector_length>)
+      declare <256 x double>  @llvm.vp.select.v256f64 (<256 x i1> <mask>, <256 x double> <left_op>, <256 x double> <right_op>, i32 <vector_length>)
+
+Overview:
+"""""""""
+
+Conditional select with an explicit vector length.
+
+
+Arguments:
+""""""""""
+
+The first three operand and the result are vector types of the same length. The second and third operand, and the result have the same vector type. The fourth operand is the explicit vector length.
+
+Semantics:
+""""""""""
+
+The '``llvm.vp.select``' intrinsic performs conditional select (:ref:`select <i_select>`) of the second and thirs vector operand on each enabled lane.
+If the explicit vector length (the fourth operand) is effective, the result is undefined on lanes at positions greater-equal-than the explicit vector length.
+
+Examples:
+"""""""""
+
+.. code-block:: llvm
+
+      %r = call <4 x i32> @llvm.vp.select.v4i32(<4 x i1> %mask, <4 x i32> %onTrue, <4 x i32> %onFalse, i32 %avl)
+      ;; For all lanes below %avl, %r is lane-wise equivalent to %also.r
+
+      %also.r = select <4 x i1> %mask, <4 x i32> %onTrue, <4 x i32> %onFalse
+
 .. _int_get_active_lane_mask:
 
 '``llvm.get.active.lane.mask.*``' Intrinsics
@@ -17384,12 +17425,10 @@ This is an overloaded intrinsic.
       declare <16 x i1> @llvm.get.active.lane.mask.v16i1.i64(i64 %base, i64 %n)
       declare <vscale x 16 x i1> @llvm.get.active.lane.mask.nxv16i1.i64(i64 %base, i64 %n)
 
-
 Overview:
 """""""""
 
 Create a mask representing active and inactive vector lanes.
-
 
 Arguments:
 """"""""""
@@ -17433,12 +17472,6 @@ This mask ``%m`` can e.g. be used in masked load/store instructions. These
 intrinsics provide a hint to the backend. I.e., for a vector loop, the
 back-edge taken count of the original scalar loop is explicit as the second
 argument.
-
-
-Examples:
-"""""""""
-
-.. code-block:: llvm
 
       %active.lane.mask = call <4 x i1> @llvm.get.active.lane.mask.v4i1.i64(i64 %elem0, i64 429)
       %wide.masked.load = call <4 x i32> @llvm.masked.load.v4i32.p0v4i32(<4 x i32>* %3, i32 4, <4 x i1> %active.lane.mask, <4 x i32> undef)

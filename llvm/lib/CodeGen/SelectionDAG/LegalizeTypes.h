@@ -353,6 +353,9 @@ private:
   SDValue PromoteIntRes_Rotate(SDNode *N);
   SDValue PromoteIntRes_FunnelShift(SDNode *N);
 
+  // vp reduction without start value
+  SDValue PromoteIntRes_VP_REDUCE_nostart(SDNode *N);
+
   // Integer Operand Promotion.
   bool PromoteIntegerOperand(SDNode *N, unsigned OpNo);
   SDValue PromoteIntOp_ANY_EXTEND(SDNode *N);
@@ -390,6 +393,7 @@ private:
   SDValue PromoteIntOp_FIX(SDNode *N);
   SDValue PromoteIntOp_FPOWI(SDNode *N);
   SDValue PromoteIntOp_VECREDUCE(SDNode *N);
+  SDValue PromoteIntOp_VP(SDNode *N, unsigned OpNo);
 
   void PromoteSetCCOperands(SDValue &LHS,SDValue &RHS, ISD::CondCode Code);
 
@@ -814,6 +818,7 @@ private:
   void SplitVecRes_ExtendOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_InregOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_ExtVecInRegOp(SDNode *N, SDValue &Lo, SDValue &Hi);
+  void SplitVecRes_AssertOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_StrictFPOp(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_OverflowOp(SDNode *N, unsigned ResNo,
                               SDValue &Lo, SDValue &Hi);
@@ -822,6 +827,7 @@ private:
 
   void SplitVecRes_BITCAST(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_BUILD_VECTOR(SDNode *N, SDValue &Lo, SDValue &Hi);
+  void SplitVecRes_SPLAT_VECTOR(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_CONCAT_VECTORS(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_EXTRACT_SUBVECTOR(SDNode *N, SDValue &Lo, SDValue &Hi);
   void SplitVecRes_INSERT_SUBVECTOR(SDNode *N, SDValue &Lo, SDValue &Hi);

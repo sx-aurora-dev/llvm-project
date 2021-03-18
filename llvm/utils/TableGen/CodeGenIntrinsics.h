@@ -154,7 +154,10 @@ struct CodeGenIntrinsic {
     WriteOnly,
     ReadNone,
     ImmArg,
-    Alignment
+    Alignment,
+    Mask,
+    VectorLength,
+    Passthru
   };
 
   struct ArgAttribute {

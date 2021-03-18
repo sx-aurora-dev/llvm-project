@@ -116,6 +116,31 @@ inline static uint64_t getFpImmVal(const ConstantFPSDNode *N) {
   return Val;
 }
 
+/// getFpImm - get immediate representation of floating point value as a double value.
+inline static double getFpImm(const ConstantFPSDNode *N) {
+  const APInt &Imm = N->getValueAPF().bitcastToAPInt();
+  uint64_t Val = Imm.getZExtValue();
+  if (Imm.getBitWidth() == 32) {
+    // Immediate value of float place places at higher bits on VE.
+    Val <<= 32;
+    union {
+      uint32_t Data;
+      float FpNumber;
+    } CastUnion;
+    CastUnion.Data = Val;
+    return (double)CastUnion.FpNumber;
+  } else {
+    assert((Imm.getBitWidth() == 64) && "Unexpected bit width");
+    union {
+      uint64_t Data;
+      double FpNumber;
+    } CastUnion;
+    CastUnion.Data = Val;
+    return CastUnion.FpNumber;
+  }
+}
+
+
 //===--------------------------------------------------------------------===//
 /// VEDAGToDAGISel - VE specific code to select VE machine
 /// instructions for SelectionDAG operations.
@@ -145,6 +170,12 @@ public:
   bool selectADDRri(SDValue N, SDValue &Base, SDValue &Offset);
   bool selectADDRzi(SDValue N, SDValue &Base, SDValue &Offset);
 
+  // broadcast matching
+#if 0
+  bool selectBroadcast(SDValue N, SDValue &BCast);
+  SDValue extractScalarOperand(SDNode* BCN);
+#endif
+
   /// SelectInlineAsmMemoryOperand - Implement addressing mode selection for
   /// inline asm expressions.
   bool SelectInlineAsmMemoryOperand(const SDValue &Op,
@@ -166,6 +197,27 @@ private:
 };
 } // end anonymous namespace
 
+#if 0
+static unsigned
+getScalarSubregIndex(EVT ScalarVT) {
+  if (ScalarVT == MVT::i32) return VE::sub_i32;
+  if (ScalarVT == MVT::f32) return VE::sub_f32;
+  llvm_unreachable("not implemented.. or not a direct I64 subreg after all");
+}
+
+SDValue VEDAGToDAGISel::extractScalarOperand(SDNode* BCN) {
+  auto ScaV = BCN->getOperand(0);
+  return ScaV;
+}
+
+bool VEDAGToDAGISel::selectBroadcast(SDValue N, SDValue &BCast) {
+  if (N->getOpcode() != VEISD::VEC_BROADCAST)
+    return false;
+  BCast = N;
+  return true;
+}
+#endif
+
 bool VEDAGToDAGISel::selectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
                                    SDValue &Offset) {
   if (Addr.getOpcode() == ISD::FrameIndex)
@@ -185,11 +237,7 @@ bool VEDAGToDAGISel::selectADDRrri(SDValue Addr, SDValue &Base, SDValue &Index,
     return false;
   }
   if (matchADDRrr(Addr, LHS, RHS)) {
-    // If the input is a pair of a frame-index and a register, move a
-    // frame-index to LHS.  This generates MI with following operands.
-    //    %dest, #FI, %reg, offset
-    // In the eliminateFrameIndex, above MI is converted to the following.
-    //    %dest, %fp, %reg, fi_offset + offset
+    // Move a frameiindex to LHS.
     if (dyn_cast<FrameIndexSDNode>(RHS))
       std::swap(LHS, RHS);
 
@@ -281,7 +329,7 @@ bool VEDAGToDAGISel::selectADDRzi(SDValue Addr, SDValue &Base,
 }
 
 bool VEDAGToDAGISel::matchADDRrr(SDValue Addr, SDValue &Base, SDValue &Index) {
-  if (dyn_cast<FrameIndexSDNode>(Addr))
+  if (isa<FrameIndexSDNode>(Addr))
     return false;
   if (Addr.getOpcode() == ISD::TargetExternalSymbol ||
       Addr.getOpcode() == ISD::TargetGlobalAddress ||
@@ -348,6 +396,38 @@ void VEDAGToDAGISel::Select(SDNode *N) {
   switch (N->getOpcode()) {
   default:
     break;
+
+  // Lower (broadcast 1) and (broadcast 0) to VM[P]0
+  case VEISD::VEC_BROADCAST: {
+    MVT SplatResTy = N->getSimpleValueType(0);
+    if (SplatResTy.getVectorElementType() != MVT::i1)
+      break;
+
+    // broadcasting true?
+    auto BConst = dyn_cast<ConstantSDNode>(N->getOperand(0));
+    if (!BConst)
+      break;
+    bool BCTrueMask = (BConst->getSExtValue() != 0);
+    if (!BCTrueMask)
+      break;
+
+    // Decode the register
+    SDValue New;
+    if (SplatResTy.getVectorNumElements() == 256) {
+      New = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VE::VM0,
+                                   MVT::v256i1);
+    } else if (SplatResTy.getVectorNumElements() == 512) {
+      New = CurDAG->getCopyFromReg(CurDAG->getEntryNode(), SDLoc(N), VE::VMP0,
+                                   MVT::v512i1);
+    } else
+      break;
+
+    // ok replace
+    ReplaceNode(N, New.getNode());
+     return;
+   }
+
+
   case VEISD::GLOBAL_BASE_REG:
     ReplaceNode(N, getGlobalBaseReg());
     return;

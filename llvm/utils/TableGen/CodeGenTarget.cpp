@@ -131,6 +131,7 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::v64i64:   return "MVT::v64i64";
   case MVT::v128i64:  return "MVT::v128i64";
   case MVT::v256i64:  return "MVT::v256i64";
+  case MVT::v512i64:  return "MVT::v512i64";
   case MVT::v1i128:   return "MVT::v1i128";
   case MVT::v2f16:    return "MVT::v2f16";
   case MVT::v3f16:    return "MVT::v3f16";
@@ -171,6 +172,7 @@ StringRef llvm::getEnumName(MVT::SimpleValueType T) {
   case MVT::v64f64:   return "MVT::v64f64";
   case MVT::v128f64:  return "MVT::v128f64";
   case MVT::v256f64:  return "MVT::v256f64";
+  case MVT::v512f64:  return "MVT::v512f64";
   case MVT::nxv1i1:   return "MVT::nxv1i1";
   case MVT::nxv2i1:   return "MVT::nxv2i1";
   case MVT::nxv4i1:   return "MVT::nxv4i1";
@@ -889,6 +891,15 @@ void CodeGenIntrinsic::setProperty(Record *R) {
     unsigned ArgNo = R->getValueAsInt("ArgNo");
     uint64_t Align = R->getValueAsInt("Align");
     ArgumentAttributes.emplace_back(ArgNo, Alignment, Align);
+  } else if (R->isSubClassOf("VectorLength")) {
+    unsigned ArgNo = R->getValueAsInt("ArgNo");
+    ArgumentAttributes.emplace_back(ArgNo, VectorLength, 0);
+  } else if (R->isSubClassOf("Mask")) {
+    unsigned ArgNo = R->getValueAsInt("ArgNo");
+    ArgumentAttributes.emplace_back(ArgNo, Mask, 0);
+  } else if (R->isSubClassOf("Passthru")) {
+    unsigned ArgNo = R->getValueAsInt("ArgNo");
+    ArgumentAttributes.emplace_back(ArgNo, Passthru, 0);
   } else
     llvm_unreachable("Unknown property!");
 }

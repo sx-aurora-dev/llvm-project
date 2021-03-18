@@ -12,10 +12,12 @@
 # components of libomptarget. These are the dependencies we have:
 #
 # libelf : required by some targets to handle the ELF files at runtime.
-# libffi : required to launch target kernels given function and argument 
+# libffi : required to launch target kernels given function and argument
 #          pointers.
 # CUDA : required to control offloading to NVIDIA GPUs.
 # VEOS : required to control offloading to NEC Aurora.
+# VHCALL : required to control offloading from NEC Aurora to the host.
+# VEPSEUDO : required to control offloading from NEC Aurora to the host.
 
 include (FindPackageHandleStandardArgs)
 
@@ -47,18 +49,18 @@ find_library (
     /sw/lib
     ENV LIBRARY_PATH
     ENV LD_LIBRARY_PATH)
-    
+
 set(LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS ${LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIR})
 find_package_handle_standard_args(
-  LIBOMPTARGET_DEP_LIBELF 
+  LIBOMPTARGET_DEP_LIBELF
   DEFAULT_MSG
   LIBOMPTARGET_DEP_LIBELF_LIBRARIES
   LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS)
 
 mark_as_advanced(
-  LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS 
+  LIBOMPTARGET_DEP_LIBELF_INCLUDE_DIRS
   LIBOMPTARGET_DEP_LIBELF_LIBRARIES)
-  
+
 ################################################################################
 # Looking for libffi...
 ################################################################################
@@ -100,15 +102,15 @@ endif()
 
 set(LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIRS ${LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIR})
 find_package_handle_standard_args(
-  LIBOMPTARGET_DEP_LIBFFI 
+  LIBOMPTARGET_DEP_LIBFFI
   DEFAULT_MSG
   LIBOMPTARGET_DEP_LIBFFI_LIBRARIES
   LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIRS)
 
 mark_as_advanced(
-  LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIRS 
+  LIBOMPTARGET_DEP_LIBFFI_INCLUDE_DIRS
   LIBOMPTARGET_DEP_LIBFFI_LIBRARIES)
-  
+
 ################################################################################
 # Looking for CUDA...
 ################################################################################
@@ -142,7 +144,7 @@ set(LIBOMPTARGET_DEP_CUDA_FOUND ${CUDA_FOUND})
 set(LIBOMPTARGET_DEP_CUDA_INCLUDE_DIRS ${CUDA_INCLUDE_DIRS})
 
 mark_as_advanced(
-  LIBOMPTARGET_DEP_CUDA_FOUND 
+  LIBOMPTARGET_DEP_CUDA_FOUND
   LIBOMPTARGET_DEP_CUDA_INCLUDE_DIRS)
 
 ################################################################################
@@ -230,6 +232,72 @@ mark_as_advanced(
   LIBOMPTARGET_DEP_VEO_FOUND
   LIBOMPTARGET_DEP_VEO_INCLUDE_DIRS)
 
+################################################################################
+# Looking for VHCALL (VE side)
+################################################################################
+
+find_path (
+  LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIR
+  NAMES
+    libvhcall.h
+  PATHS
+    /opt/nec/ve/include
+  PATH_SUFFIXES
+    libvhcall)
+
+find_library (
+  LIBOMPTARGET_DEP_VHCALL_LIBRARIES
+  NAMES
+    sysve
+  PATHS
+    /opt/nec/ve/lib)
+
+set(LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIRS ${LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIR})
+find_package_handle_standard_args(
+  LIBOMPTARGET_DEP_VHCALL
+  DEFAULT_MSG
+  LIBOMPTARGET_DEP_VHCALL_LIBRARIES
+  LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIRS)
+
+mark_as_advanced(
+  LIBOMPTARGET_DEP_VHCALL_FOUND
+  LIBOMPTARGET_DEP_VHCALL_INCLUDE_DIRS)
+
+################################################################################
+# Looking for VEPSEUDO (VH side)
+################################################################################
+
+find_path (
+  LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIR
+  NAMES
+    libvepseudo.h
+  PATHS
+    /opt/nec/ve/veos/include
+    ENV CPATH
+  PATH_SUFFIXES
+    libvhcall)
+
+find_library (
+  LIBOMPTARGET_DEP_VEPSEUDO_LIBRARIES
+  NAMES
+    vepseudo
+  PATHS
+    /opt/nec/ve/veos/lib64
+    ENV LIBRARY_PATH
+    ENV LD_LIBRARY_PATH)
+
+set(LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIRS ${LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIR})
+find_package_handle_standard_args(
+  LIBOMPTARGET_DEP_VEPSEUDO
+  DEFAULT_MSG
+  LIBOMPTARGET_DEP_VEPSEUDO_LIBRARIES
+  LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIRS)
+
+mark_as_advanced(
+  LIBOMPTARGET_DEP_VEPSEUDO_FOUND
+  LIBOMPTARGET_DEP_VEPSEUDO_INCLUDE_DIRS)
+
+################################################################################
 # Looking for CUDA libdevice subdirectory
 #
 # Special case for Debian/Ubuntu to have nvidia-cuda-toolkit work

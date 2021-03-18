@@ -180,7 +180,7 @@ elseif("${LIBOMP_ARCH}" STREQUAL "mips") # MIPS architecture
     set(MIPS TRUE)
 elseif("${LIBOMP_ARCH}" STREQUAL "mips64") # MIPS64 architecture
     set(MIPS64 TRUE)
-  elseif("${LIBOMP_ARCH}" STREQUAL "riscv64") # RISCV64 architecture
+elseif("${LIBOMP_ARCH}" STREQUAL "riscv64") # RISCV64 architecture
     set(RISCV64 TRUE)
 elseif("${LIBOMP_ARCH}" STREQUAL "ve") # VE architecture
     set(VE TRUE)

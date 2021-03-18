@@ -1345,13 +1345,23 @@ void Clang::AddPreprocessingOptions(Compilation &C, const JobAction &JA,
   // Add C++ include arguments, if needed.
   if (types::isCXX(Inputs[0].getType())) {
     bool HasStdlibxxIsystem = Args.hasArg(options::OPT_stdlibxx_isystem);
+
+    auto AddSysIncludes = [&Args, &CmdArgs, HasStdlibxxIsystem](const ToolChain &TC) {
+      HasStdlibxxIsystem ? TC.AddClangCXXStdlibIsystemArgs(Args, CmdArgs)
+                         : TC.AddClangCXXStdlibIncludeArgs(Args, CmdArgs);
+    };
+
+    // Only consider the paths of the target tool chain
+    AddSysIncludes(getToolChain());
+
+#if 0
+    // LLVM upstream code path. This does not work for use because it adds the system include paths of the VH and the VE compiling for either (eg the glibc header for x86 are accidentally being used also for VE).
     forAllAssociatedToolChains(
-        C, JA, getToolChain(),
-        [&Args, &CmdArgs, HasStdlibxxIsystem](const ToolChain &TC) {
-          HasStdlibxxIsystem ? TC.AddClangCXXStdlibIsystemArgs(Args, CmdArgs)
-                             : TC.AddClangCXXStdlibIncludeArgs(Args, CmdArgs);
-        });
+        C, JA, getToolChain(), AddSysIncludes);
+#endif
   }
+
+
 
   // Add system include arguments for all targets but IAMCU.
   if (!IsIAMCU)
@@ -6083,8 +6093,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
   // option to simplify the hasFlag logic.
   // Disable vectorization by default for the case of VE temporary,
   // until VE supports vector instructions.
-  const bool IsVE = TC.getTriple().isVE();
-  bool EnableVec = IsVE ? false : shouldEnableVectorizerAtOLevel(Args, false);
+  bool EnableVec = shouldEnableVectorizerAtOLevel(Args, false);
   OptSpecifier VectorizeAliasOption =
       EnableVec ? options::OPT_O_Group : options::OPT_fvectorize;
   if (Args.hasFlag(options::OPT_fvectorize, VectorizeAliasOption,
@@ -6092,7 +6101,7 @@ void Clang::ConstructJob(Compilation &C, const JobAction &JA,
     CmdArgs.push_back("-vectorize-loops");
 
   // -fslp-vectorize is enabled based on the optimization level selected.
-  bool EnableSLPVec = IsVE ? false : shouldEnableVectorizerAtOLevel(Args, true);
+  bool EnableSLPVec = shouldEnableVectorizerAtOLevel(Args, true);
   OptSpecifier SLPVectAliasOption =
       EnableSLPVec ? options::OPT_O_Group : options::OPT_fslp_vectorize;
   if (Args.hasFlag(options::OPT_fslp_vectorize, SLPVectAliasOption,

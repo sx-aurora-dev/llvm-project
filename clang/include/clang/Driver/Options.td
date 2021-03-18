@@ -3975,11 +3975,26 @@ def mno_retpoline_external_thunk : Flag<["-"], "mno-retpoline-external-thunk">, 
 def mvzeroupper : Flag<["-"], "mvzeroupper">, Group<m_x86_Features_Group>;
 def mno_vzeroupper : Flag<["-"], "mno-vzeroupper">, Group<m_x86_Features_Group>;
 
-def mvevec : Separate<["-"], "mvevec">, Flags<[CC1Option]>,
-  HelpText<"The vectorize model (VE only): none|intrin|simd|vpu">,
-  Group<m_ve_Features_Group>, Values<"none,intrin,simd,vpu">;
-def mvevec_EQ : Joined<["-"], "mvevec=">,
-  Flags<[CC1Option]>, Group<m_ve_Features_Group>, Alias<mvevec>;
+def mvevpu : Flag<["-"], "mvevpu">, Group<m_ve_Features_Group>,
+  HelpText<"Emit VPU instructions for VE">,
+  Flags<[CC1Option]>;
+def mno_vevpu : Flag<["-"], "mno-vevpu">, Group<m_ve_Features_Group>,
+  HelpText<"Do not emit VPU instructions for VE">,
+  Flags<[CC1Option]>;
+
+def mvepacked : Flag<["-"], "mvepacked">, Group<m_ve_Features_Group>,
+  HelpText<"Enable Packed mode for VE">,
+  Flags<[CC1Option]>;
+def mno_vepacked : Flag<["-"], "mno-vepacked">, Group<m_ve_Features_Group>,
+  HelpText<"Disable Packed mode for VE">,
+  Flags<[CC1Option]>;
+
+def mvesimd : Flag<["-"], "mvesimd">, Group<m_ve_Features_Group>,
+  HelpText<"Enable Fixed-SIMD isel for VE">,
+  Flags<[CC1Option]>;
+def mno_vesimd : Flag<["-"], "mno-vesimd">, Group<m_ve_Features_Group>,
+  HelpText<"Disable Fixed-SIMD isel for VE">,
+  Flags<[CC1Option]>;
 
 // These are legacy user-facing driver-level option spellings. They are always
 // aliases for options that are spelled using the more common Unix / GNU flag

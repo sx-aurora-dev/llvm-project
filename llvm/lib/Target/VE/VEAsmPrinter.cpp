@@ -55,6 +55,10 @@ public:
   void lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
                                      const MCSubtargetInfo &STI);
 
+  // Expand non-native fp conversions
+  void lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
+                                       const MCSubtargetInfo &STI);
+
   void emitInstruction(const MachineInstr *MI) override;
 
   static const char *getRegisterName(unsigned RegNo) {
@@ -326,14 +330,220 @@ void VEAsmPrinter::lowerGETTLSAddrAndEmitMCInsts(const MachineInstr *MI,
   emitBSIC(*OutStreamer, RegLR, RegS12, STI);
 }
 
-void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
+static void emit_vml_v(MCStreamer &OutStreamer, unsigned OC,
+                       MCOperand &InV,
+                       MCOperand &Mask, MCOperand &VL,
+                       MCOperand &ResV,
+                       MCOperand &Passthru,
+                       const MCSubtargetInfo &STI) {
+  MCInst Inst;
+  Inst.setOpcode(OC);
+  // ins
+  Inst.addOperand(InV); // v
+  Inst.addOperand(Mask); // x
+  Inst.addOperand(VL); // l
+  Inst.addOperand(Passthru); // _v
+  // outs
+  Inst.addOperand(ResV);
+  OutStreamer.emitInstruction(Inst, STI);
+}
 
+static void emit_vml(MCStreamer &OutStreamer, unsigned OC,
+                       MCOperand &InV,
+                       MCOperand &Mask, MCOperand &VL,
+                       MCOperand &ResV,
+                       const MCSubtargetInfo &STI) {
+  MCInst Inst;
+  Inst.setOpcode(OC);
+  // ins
+  Inst.addOperand(InV); // v
+  Inst.addOperand(Mask); // x
+  Inst.addOperand(VL); // l
+  // outs
+  Inst.addOperand(ResV);
+  OutStreamer.emitInstruction(Inst, STI);
+}
+
+static void emit_vl(MCStreamer &OutStreamer, unsigned OC,
+                       MCOperand &InV,
+                       MCOperand &VL,
+                       MCOperand &ResV,
+                       const MCSubtargetInfo &STI) {
+  MCInst Inst;
+  Inst.setOpcode(OC);
+  // ins
+  Inst.addOperand(InV); // v
+  Inst.addOperand(VL); // l
+  // outs
+  Inst.addOperand(ResV);
+  OutStreamer.emitInstruction(Inst, STI);
+}
+
+static void emit_rdvml_v(MCStreamer &OutStreamer, unsigned OC,
+                       MCOperand &RdV,
+                       MCOperand &InV,
+                       MCOperand &Mask, MCOperand &VL,
+                       MCOperand &ResV,
+                       MCOperand &Passthru,
+                       const MCSubtargetInfo &STI) {
+  MCInst Inst;
+  Inst.setOpcode(OC);
+  // ins
+  Inst.addOperand(RdV); // rd (rounding mode operand)
+  Inst.addOperand(InV); // v
+  Inst.addOperand(Mask); // x
+  Inst.addOperand(VL); // l
+  Inst.addOperand(Passthru); // _v
+  // Inst.addOperand(PassthruV); // _v // [implicit]
+  // outs
+  Inst.addOperand(ResV);
+  OutStreamer.emitInstruction(Inst, STI);
+}
+
+static void emit_rdvml(MCStreamer &OutStreamer, unsigned OC,
+                       MCOperand &RdV,
+                       MCOperand &InV,
+                       MCOperand &Mask, MCOperand &VL,
+                       MCOperand &ResV,
+                       const MCSubtargetInfo &STI) {
+  MCInst Inst;
+  Inst.setOpcode(OC);
+  // ins
+  Inst.addOperand(RdV); // rd (rounding mode operand)
+  Inst.addOperand(InV); // v
+  Inst.addOperand(Mask); // x
+  Inst.addOperand(VL); // l
+  // Inst.addOperand(PassthruV); // _v // [implicit]
+  // outs
+  Inst.addOperand(ResV);
+  OutStreamer.emitInstruction(Inst, STI);
+}
+
+static void emit_rdvl(MCStreamer &OutStreamer, unsigned OC,
+                       MCOperand &RdV,
+                       MCOperand &InV,
+                       MCOperand &VL,
+                       MCOperand &ResV,
+                       const MCSubtargetInfo &STI) {
+  MCInst Inst;
+  Inst.setOpcode(OC);
+  // ins
+  Inst.addOperand(RdV); // rd (rounding mode operand)
+  Inst.addOperand(InV); // v
+  Inst.addOperand(VL); // l
+  // outs
+  Inst.addOperand(ResV);
+  OutStreamer.emitInstruction(Inst, STI);
+}
+
+static MCOperand getRegOperand(const MachineOperand& MO) {
+  assert(MO.isReg());
+  return MCOperand::createReg(MO.getReg());
+}
+
+static MCOperand getImmOperand(const MachineOperand& MO) {
+  assert(MO.isImm());
+  return MCOperand::createImm(MO.getImm());
+}
+
+void VEAsmPrinter::lowerFPConversionAndEmitMCInsts(const MachineInstr *MI,
+                                                 const MCSubtargetInfo &STI) {
+  MCOperand ResV, RdOpV, SrcV, Mask, VL, PassThruV;
+  switch (MI->getOpcode()) {
+    // VCVTLS
+    case VE::VCVTLSvl:
+      ResV = getRegOperand(MI->getOperand(0));
+      RdOpV = getImmOperand(MI->getOperand(1));
+      SrcV = getRegOperand(MI->getOperand(2));
+      VL = getRegOperand(MI->getOperand(3));
+      break;
+
+    case VE::VCVTLSvml_v:
+      PassThruV = getRegOperand(MI->getOperand(5));
+      LLVM_FALLTHROUGH;
+    case VE::VCVTLSvml:
+      ResV = getRegOperand(MI->getOperand(0));
+      RdOpV = getImmOperand(MI->getOperand(1));
+      SrcV = getRegOperand(MI->getOperand(2));
+      Mask = getRegOperand(MI->getOperand(3));
+      VL = getRegOperand(MI->getOperand(4));
+      break;
+
+    // VCVTSL
+    case VE::VCVTSLvl:
+      ResV = getRegOperand(MI->getOperand(0));
+      SrcV = getRegOperand(MI->getOperand(1));
+      VL = getRegOperand(MI->getOperand(2));
+      break;
+    case VE::VCVTSLvml_v:
+      PassThruV = getRegOperand(MI->getOperand(4));
+      LLVM_FALLTHROUGH;
+    case VE::VCVTSLvml:
+      ResV = getRegOperand(MI->getOperand(0));
+      SrcV = getRegOperand(MI->getOperand(1));
+      Mask = getRegOperand(MI->getOperand(2));
+      VL = getRegOperand(MI->getOperand(3));
+    break;
+  }
+
+  // VCVTLS
+  // Conversion chain: float -> double -> long.
+  if (RdOpV.isValid()) {
+    // vml_v
+    if (PassThruV.isValid()) {
+      emit_vml_v(*OutStreamer, VE::VCVTDSvml, ResV, SrcV, Mask, VL, PassThruV, STI);
+      emit_rdvml_v(*OutStreamer, VE::VCVTLDvml_v, ResV, RdOpV, ResV, Mask, VL, ResV, STI);
+      return;
+    }
+    // vml
+    if (Mask.isValid()) {
+      emit_vml(*OutStreamer, VE::VCVTDSvml, ResV, SrcV, Mask, VL, STI);
+      emit_rdvml(*OutStreamer, VE::VCVTLDvml, ResV, RdOpV, ResV, Mask, VL, STI);
+      return;
+    }
+
+    // vl
+    emit_vl(*OutStreamer, VE::VCVTDSvl, ResV, SrcV, VL, STI);
+    emit_rdvl(*OutStreamer, VE::VCVTLDvl, ResV, RdOpV, ResV, VL, STI);
+  }
+
+  // VCVTSL
+  // Conversion chain: long -> double -> float.
+  if (PassThruV.isValid()) {
+    // vml_v
+    emit_vml_v(*OutStreamer, VE::VCVTDLvml, ResV, SrcV, Mask, VL, PassThruV,STI);
+    emit_vml_v(*OutStreamer, VE::VCVTSDvml_v, ResV, ResV, Mask, VL, ResV, STI);
+  }
+  // vml
+  if (Mask.isValid()) {
+    emit_vml(*OutStreamer, VE::VCVTDLvml, ResV, SrcV, Mask, VL, STI);
+    emit_vml(*OutStreamer, VE::VCVTSDvml, ResV, ResV, Mask, VL, STI);
+  }
+
+  // vl
+  emit_vl(*OutStreamer, VE::VCVTDLvl, ResV, SrcV, VL, STI);
+  emit_vl(*OutStreamer, VE::VCVTSDvl, ResV, ResV, VL, STI);
+}
+
+
+#define FPCONV_CASES(BASEOPC) \
+case VE::BASEOPC##vl: \
+case VE::BASEOPC##vml_v: \
+case VE::BASEOPC##vml:
+
+void VEAsmPrinter::emitInstruction(const MachineInstr *MI) {
   switch (MI->getOpcode()) {
   default:
     break;
   case TargetOpcode::DBG_VALUE:
     // FIXME: Debug Value.
     return;
+FPCONV_CASES(VCVTLS)
+FPCONV_CASES(VCVTSL)
+#undef FPCONV_CASES
+    lowerFPConversionAndEmitMCInsts(MI, getSubtargetInfo());
+    return;
+
   case VE::GETGOT:
     lowerGETGOTAndEmitMCInsts(MI, getSubtargetInfo());
     return;

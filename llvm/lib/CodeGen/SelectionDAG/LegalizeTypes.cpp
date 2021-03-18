@@ -923,8 +923,16 @@ bool DAGTypeLegalizer::CustomLowerNode(SDNode *N, EVT VT, bool LegalizeResult) {
   SmallVector<SDValue, 8> Results;
   if (LegalizeResult)
     TLI.ReplaceNodeResults(N, Results, DAG);
-  else
-    TLI.LowerOperationWrapper(N, Results, DAG);
+  else {
+    auto PromotionCB = [&](SDValue V) {
+      if (V.getValueType().getScalarType().isInteger())
+        return GetPromotedInteger(V);
+      return GetPromotedFloat(V);
+    };
+    auto WideningCB = [&](SDValue V) { return GetWidenedVector(V); };
+
+    TLI.LowerOperationWrapper(N, Results, DAG, PromotionCB, WideningCB);
+  }
 
   if (Results.empty())
     // The target didn't want to custom lower it after all.

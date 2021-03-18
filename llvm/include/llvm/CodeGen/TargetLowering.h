@@ -1031,11 +1031,21 @@ public:
     return false;
   }
 
+  virtual LegalizeAction getActionForExtendedType(unsigned Op, EVT VT) const {
+    return Expand;
+  }
+
+  /// How to legalize this custom operation?
+  virtual LegalizeAction getCustomOperationAction(SDNode &Op) const {
+    return Legal;
+  }
+
   /// Return how this operation should be treated: either it is legal, needs to
   /// be promoted to a larger size, needs to be expanded to some other code
   /// sequence, or the target has a custom expander for it.
   LegalizeAction getOperationAction(unsigned Op, EVT VT) const {
-    if (VT.isExtended()) return Expand;
+    if (VT.isExtended())
+      return getActionForExtendedType(Op, VT);
     // If a target-specific SDNode requires legalization, require the target
     // to provide custom legalization for it.
     if (Op >= array_lengthof(OpActions[0])) return Custom;
@@ -4043,6 +4053,13 @@ public:
                                      SmallVectorImpl<SDValue> &Results,
                                      SelectionDAG &DAG) const;
 
+  virtual void LowerOperationWrapper(
+      SDNode *N, SmallVectorImpl<SDValue> &Results, SelectionDAG &DAG,
+      std::function<SDValue(SDValue)> GetPromotedOperandCB,
+      std::function<SDValue(SDValue)> GetWidenedOperandCB) const {
+    LowerOperationWrapper(N, Results, DAG);
+  }
+
   /// This callback is invoked for operations that are unsupported by the
   /// target, which are registered to use 'custom' lowering, and whose defined
   /// values are all legal.  If the target has no operations that require custom
@@ -4313,6 +4330,15 @@ public:
                       SDValue LL = SDValue(), SDValue LH = SDValue(),
                       SDValue RL = SDValue(), SDValue RH = SDValue()) const;
 
+  // convenience wrapper
+  void expandSMUL_UMUL_LOHI(SmallVectorImpl<SDValue> &Results, SDNode *Node,
+                            SelectionDAG &DAG) const;
+
+  /// Expand a MULHU_MULHS into MUL_LOHI
+  /// \param Node the MULHU or MULHS node to expand
+  /// \returns the expanded MUL_LOHI
+  SDValue expandMULHU_MULHS(SDNode *Node, SelectionDAG &DAG) const;
+
   /// Expand a MUL into two nodes.  One that computes the high bits of
   /// the result and one that computes the low bits.
   /// \param HiLoVT The value type to use for the Lo and Hi nodes.
@@ -4479,6 +4505,8 @@ public:
   /// expansion was successful and populates the Result and Overflow arguments.
   bool expandMULO(SDNode *Node, SDValue &Result, SDValue &Overflow,
                   SelectionDAG &DAG) const;
+
+  SDValue expandSUDIV(SDNode *Node, SelectionDAG &DAG) const;
 
   /// Expand a VECREDUCE_* into an explicit calculation. If Count is specified,
   /// only the first Count elements of the vector are used.

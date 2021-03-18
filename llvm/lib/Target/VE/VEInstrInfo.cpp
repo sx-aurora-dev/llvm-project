@@ -340,7 +340,14 @@ static void copyPhysSubRegs(MachineBasicBlock &MBB,
 
   for (unsigned Idx = 0; Idx != NumSubRegs; ++Idx) {
     Register SubDest = TRI->getSubReg(DestReg, SubRegIdx[Idx]);
-    Register SubSrc = TRI->getSubReg(SrcReg, SubRegIdx[Idx]);
+    Register SubSrc;
+
+    if (SrcReg == VE::VMP0) {
+      // special case for all-true source reg
+      SubSrc = VE::VM0;
+    } else {
+      SubSrc = TRI->getSubReg(SrcReg, SubRegIdx[Idx]);
+    }
     assert(SubDest && SubSrc && "Bad sub-register");
 
     if (MCID.getOpcode() == VE::ORri) {
@@ -363,15 +370,45 @@ static void copyPhysSubRegs(MachineBasicBlock &MBB,
     MovMI->addRegisterKilled(SrcReg, TRI, true);
 }
 
+MachineInstrBuilder VEInstrInfo::emitVectorRegisterCopy(
+    MachineBasicBlock &MBB, MachineBasicBlock::iterator I, const DebugLoc &DL,
+    MCRegister DestReg, MCRegister SrcReg, bool KillSrc,
+    MCRegister AVLReg) const {
+  return BuildMI(MBB, I, DL, get(VE::VORmvl), DestReg)
+      .addImm(M1(0)) // Represent (0)1.
+      .addReg(SrcReg, getKillRegState(KillSrc))
+      .addReg(AVLReg, getKillRegState(true));
+}
+
 void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
                               MachineBasicBlock::iterator I, const DebugLoc &DL,
                               MCRegister DestReg, MCRegister SrcReg,
                               bool KillSrc) const {
+  const TargetRegisterInfo *TRI = &getRegisterInfo();
+#if 0
+  // FIXME: expandPostRAPseudos expects an instruction to be inserted.
+  // FIXME: this is not necessary in the present case but not adding an instruction corrupts the state.
+  if (TRI->isSuperOrSubRegisterEq(DestReg, SrcReg))
+    return;
+#endif
+
+  const Register AVLTmpReg = VE::SW16;
 
   if (IsAliasOfSX(SrcReg) && IsAliasOfSX(DestReg)) {
     BuildMI(MBB, I, DL, get(VE::ORri), DestReg)
         .addReg(SrcReg, getKillRegState(KillSrc))
         .addImm(0);
+  } else if (VE::VPRegClass.contains(DestReg, SrcReg)) {
+    BuildMI(MBB, I, DL, get(VE::LEAzii), AVLTmpReg)
+        .addImm(0)
+        .addImm(0)
+        .addImm(256);
+
+    for (unsigned Part : {VE::sub_pack_hi, VE::sub_pack_lo})
+      emitVectorRegisterCopy(MBB, I, DL, TRI->getSubReg(DestReg, Part),
+                             TRI->getSubReg(SrcReg, Part), KillSrc, AVLTmpReg);
+
+    // MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true); // FIXME: required?
   } else if (VE::V64RegClass.contains(DestReg, SrcReg)) {
     // Generate following instructions
     //   %sw16 = LEA32zii 256
@@ -379,25 +416,21 @@ void VEInstrInfo::copyPhysReg(MachineBasicBlock &MBB,
     // TODO: reuse a register if vl is already assigned to a register
     // FIXME: it would be better to scavenge a register here instead of
     // reserving SX16 all of the time.
-    const TargetRegisterInfo *TRI = &getRegisterInfo();
-    Register TmpReg = VE::SX16;
-    Register SubTmp = TRI->getSubReg(TmpReg, VE::sub_i32);
-    BuildMI(MBB, I, DL, get(VE::LEAzii), TmpReg)
+    // Register AVLReg = TRI->getSubReg(TmpReg, VE::sub_i32);
+    BuildMI(MBB, I, DL, get(VE::LEAzii), AVLTmpReg)
         .addImm(0)
         .addImm(0)
         .addImm(256);
-    MachineInstrBuilder MIB = BuildMI(MBB, I, DL, get(VE::VORmvl), DestReg)
-                                  .addImm(M1(0)) // Represent (0)1.
-                                  .addReg(SrcReg, getKillRegState(KillSrc))
-                                  .addReg(SubTmp, getKillRegState(true));
-    MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
+
+    emitVectorRegisterCopy(MBB, I, DL, DestReg, SrcReg, KillSrc, AVLTmpReg);
+    // MIB.getInstr()->addRegisterKilled(TmpReg, TRI, true);
   } else if (VE::VMRegClass.contains(DestReg, SrcReg)) {
     BuildMI(MBB, I, DL, get(VE::ANDMmm), DestReg)
         .addReg(VE::VM0)
         .addReg(SrcReg, getKillRegState(KillSrc));
   } else if (VE::VM512RegClass.contains(DestReg, SrcReg)) {
     // Use two instructions.
-    const unsigned SubRegIdx[] = {VE::sub_vm_even, VE::sub_vm_odd};
+    const unsigned SubRegIdx[] = {VE::sub_vm_hi, VE::sub_vm_lo};
     unsigned int NumSubRegs = 2;
     copyPhysSubRegs(MBB, I, DL, DestReg, SrcReg, KillSrc, get(VE::ANDMmm),
                     NumSubRegs, SubRegIdx, &getRegisterInfo());
@@ -452,6 +485,7 @@ unsigned VEInstrInfo::isStoreToStackSlot(const MachineInstr &MI,
       MI.getOpcode() == VE::STUrii ||           // F32
       MI.getOpcode() == VE::STQrii ||           // F128 (pseudo)
       MI.getOpcode() == VE::STVRrii ||          // V64 (pseudo)
+      MI.getOpcode() == VE::STVPrii ||          // VP (pseudo)
       MI.getOpcode() == VE::STVMrii ||          // VM (pseudo)
       MI.getOpcode() == VE::STVM512rii          // VM512 (pseudo)
   ) {
@@ -477,6 +511,8 @@ void VEInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - V64\n";
+    } if (RC == &VE::VPRegClass) {
+      dbgs() << "spill " << printReg(SrcReg, TRI) << " - VP\n";
     } else if (RC == &VE::VMRegClass) {
       dbgs() << "spill " << printReg(SrcReg, TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
@@ -527,6 +563,14 @@ void VEInstrInfo::storeRegToStackSlot(MachineBasicBlock &MBB,
         .addReg(SrcReg, getKillRegState(isKill))
         .addImm(256)
         .addMemOperand(MMO);
+  } else if (RC == &VE::VPRegClass) {
+    BuildMI(MBB, I, DL, get(VE::STVPrii))
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addImm(0)
+        .addReg(SrcReg, getKillRegState(isKill))
+        .addImm(256)
+        .addMemOperand(MMO);
   } else if (RC == &VE::VMRegClass) {
     BuildMI(MBB, I, DL, get(VE::STVMrii))
         .addFrameIndex(FI)
@@ -557,6 +601,8 @@ void VEInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
   if (ShowSpillMessageVec) {
     if (RC == &VE::V64RegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - V64\n";
+    } else if (RC == &VE::VPRegClass) {
+      dbgs() << "restore " << printReg(DestReg, TRI) << " - VP\n";
     } else if (RC == &VE::VMRegClass) {
       dbgs() << "restore " << printReg(DestReg, TRI) << " - VM\n";
     } else if (VE::VM512RegClass.hasSubClassEq(RC)) {
@@ -596,6 +642,13 @@ void VEInstrInfo::loadRegFromStackSlot(MachineBasicBlock &MBB,
         .addMemOperand(MMO);
   } else if (RC == &VE::V64RegClass) {
     BuildMI(MBB, I, DL, get(VE::LDVRrii), DestReg)
+        .addFrameIndex(FI)
+        .addImm(0)
+        .addImm(0)
+        .addImm(256)
+        .addMemOperand(MMO);
+  } else if (RC == &VE::VPRegClass) {
+    BuildMI(MBB, I, DL, get(VE::LDVPrii), DestReg)
         .addFrameIndex(FI)
         .addImm(0)
         .addImm(0)

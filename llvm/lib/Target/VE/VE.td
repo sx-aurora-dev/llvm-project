@@ -22,19 +22,20 @@ def FeatureEnableVPU
   : SubtargetFeature<"vpu", "EnableVPU", "true",
                      "Enable the VPU">;
 
-def FeatureIntrinsic
-  : SubtargetFeature<"intrin", "Intrinsic", "true",
-                     "Enable intrinsic instructions">;
+def FeaturePackedMode
+  : SubtargetFeature<"packed", "PackedMode", "true",
+                     "Enable v512 packed mode (experimental)",[FeatureEnableVPU]>;
 
 def FeatureSimd
   : SubtargetFeature<"simd", "Simd", "true",
                      "Enable simd-style fixed length vectorize (experimental)">;
 
+// Whether to use VVP-based isel.
+def UseVVP : Predicate<"Subtarget->enableVPU()">;
+
+// Whether to use Fixed-SIMD based isel.
 def IsSimdSubTarget : Predicate<"Subtarget->simd()">;
 def IsNotSimdSubTarget : Predicate<"!Subtarget->simd()">;
-
-def IsIntrinsicSubTarget : Predicate<"Subtarget->intrinsic()">;
-def IsNotIntrinsicSubTarget : Predicate<"!Subtarget->intrinsic()">;
 
 def IsNoNaNs : Predicate<"TM.Options.NoNaNsFPMath">;
 
@@ -63,7 +64,7 @@ def VEAsmParser : AsmParser {
 class Proc<string Name, list<SubtargetFeature> Features>
  : Processor<Name, NoItineraries, Features>;
 
-def : Proc<"generic", []>;
+def : Proc<"generic", [FeaturePackedMode]>;
 
 //===----------------------------------------------------------------------===//
 // Declare the target which we are implementing

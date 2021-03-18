@@ -531,7 +531,7 @@ SDValue VETargetLowering::lowerSIMD_BUILD_VECTOR(SDValue Op,
   if (hasConstantStride) {
     SDValue seq = DAG.getNode(
         VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
-        DAG.getConstant(1, DL, elemTy)); // TODO draw strideTy from elements
+        DAG.getConstant(256, DL, MVT::i32)); // TODO draw strideTy from elements
     if (stride == 1) {
       LLVM_DEBUG(dbgs() << "ConstantStride: VEC_SEQ\n");
       LLVM_DEBUG(seq.dump());
@@ -559,7 +559,7 @@ SDValue VETargetLowering::lowerSIMD_BUILD_VECTOR(SDValue Op,
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence =
           DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
-                      DAG.getConstant(1, DL, elemTy));
+                      DAG.getConstant(256, DL, MVT::i32));
       int Length = Op.getSimpleValueType().getVectorNumElements();
       auto VL = DAG.getConstant(Length, DL, MVT::i32);
       SDValue shiftbroadcast =
@@ -584,7 +584,7 @@ SDValue VETargetLowering::lowerSIMD_BUILD_VECTOR(SDValue Op,
     if (pow(2, blockLengthLog) == blockLength) {
       SDValue sequence =
           DAG.getNode(VEISD::VEC_SEQ, DL, Op.getSimpleValueType(),
-                      DAG.getConstant(1, DL, elemTy));
+                      DAG.getConstant(256, DL, MVT::i32));
       int Length = Op.getSimpleValueType().getVectorNumElements();
       auto VL = DAG.getConstant(Length, DL, MVT::i32);
       SDValue modulobroadcast =
@@ -908,4 +908,33 @@ VETargetLowering::lowerSIMD_EXTRACT_VECTOR_ELT(SDValue Op,
 
   // Extraction is legal for other V64 types.
   return Op;
+}
+
+
+SDValue VETargetLowering::LowerOperation_SIMD(SDValue Op, SelectionDAG &DAG) const {
+  LLVM_DEBUG(dbgs() << "LowerOp_SIMD: "; Op.dump(&DAG); dbgs() << "\n";);
+
+  switch (Op.getOpcode()) {
+  default:
+    llvm_unreachable("Should not custom lower this!");
+  // vector composition
+  case ISD::BUILD_VECTOR:
+    return lowerSIMD_BUILD_VECTOR(Op, DAG);
+  case ISD::VECTOR_SHUFFLE:
+    return lowerSIMD_VECTOR_SHUFFLE(Op, DAG);
+  case ISD::INSERT_VECTOR_ELT:
+    return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
+  case ISD::EXTRACT_VECTOR_ELT:
+    return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
+  case ISD::MSCATTER:
+  case ISD::MGATHER:
+    return lowerSIMD_MGATHER_MSCATTER(Op, DAG);
+  case ISD::MLOAD:
+    return lowerSIMD_MLOAD(Op, DAG);
+
+  // Explicit fallthrough.
+  case VEISD::VEC_BROADCAST:
+  case VEISD::VEC_SEQ:
+    return Op;
+  }
 }

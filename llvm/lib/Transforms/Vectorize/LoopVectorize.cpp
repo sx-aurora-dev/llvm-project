@@ -1938,6 +1938,7 @@ struct LoopVectorize : public FunctionPass {
   }
 
   bool runOnFunction(Function &F) override {
+    if (getenv("DISABLE_LV")) return false;
     if (skipFunction(F))
       return false;
 
@@ -6139,6 +6140,7 @@ unsigned LoopVectorizationCostModel::selectInterleaveCount(ElementCount VF,
   // benefit from interleaving.
   if (VF.isVector() && HasReductions) {
     LLVM_DEBUG(dbgs() << "LV: Interleaving because of reductions.\n");
+    assert(IC > 0);
     return IC;
   }
 

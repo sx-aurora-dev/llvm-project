@@ -198,21 +198,6 @@ namespace llvm {
       return isSimple() ? V.is2048BitVector() : isExtended2048BitVector();
     }
 
-    /// Return true if this is a 4096-bit vector type.
-    bool is4096BitVector() const {
-      return isSimple() ? V.is4096BitVector() : isExtended4096BitVector();
-    }
-
-    /// Return true if this is a 8192-bit vector type.
-    bool is8192BitVector() const {
-      return isSimple() ? V.is8192BitVector() : isExtended8192BitVector();
-    }
-
-    /// Return true if this is a 16384-bit vector type.
-    bool is16384BitVector() const {
-      return isSimple() ? V.is16384BitVector() : isExtended16384BitVector();
-    }
-
     /// Return true if this is an overloaded type for TableGen.
     bool isOverloaded() const {
       return (V==MVT::iAny || V==MVT::fAny || V==MVT::vAny || V==MVT::iPTRAny);

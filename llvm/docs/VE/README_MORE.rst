@@ -10,10 +10,6 @@ following command.
 
     $ git diff merged-upstream
 
-We know following flaw(s).
-
- - automatic vectorization is not supported yet
-
 Please file issues if you have problems.
 
 Prerequisites to use
@@ -39,11 +35,12 @@ following pre-compiled programs and libraries.
 
  - clang (C compiler)
  - clang++ (C++ compiler)
- - compier-rt library (runtime library)
+ - compiler-rt library (runtime library)
  - libc++ library (for C++)
  - libc++abi library (for libc++)
  - libunwind library (for libc++abi)
  - openmp library (OpenMP)
+ - libRV library (Region Vectorizer)
 
 Files are installed into /opt/nec/nosupport/llvm-<version> directory.
 

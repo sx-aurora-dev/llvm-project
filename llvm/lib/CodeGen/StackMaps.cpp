@@ -250,7 +250,7 @@ StackMaps::parseOperand(MachineInstr::const_mop_iterator MOI,
     unsigned LLVMRegNum = *TRI->getLLVMRegNum(DwarfRegNum, false);
     unsigned SubRegIdx = TRI->getSubRegIndex(LLVMRegNum, MOI->getReg());
     if (SubRegIdx)
-      Offset = TRI->getSubRegIdxOffset(SubRegIdx);
+      Offset = TRI->getSubRegIdxOffset(SubRegIdx).getValueOr((unsigned)(uint16_t) -1);
 
     Locs.emplace_back(Location::Register, TRI->getSpillSize(*RC),
                       DwarfRegNum, Offset);

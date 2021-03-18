@@ -597,10 +597,9 @@ int TargetTransformInfo::getIntImmCostInst(unsigned Opcode, unsigned Idx,
   return Cost;
 }
 
-int
-TargetTransformInfo::getIntImmCostIntrin(Intrinsic::ID IID, unsigned Idx,
-                                         const APInt &Imm, Type *Ty,
-                                         TTI::TargetCostKind CostKind) const {
+int TargetTransformInfo::getIntImmCostIntrin(
+    Intrinsic::ID IID, unsigned Idx, const APInt &Imm, Type *Ty,
+    TTI::TargetCostKind CostKind) const {
   int Cost = TTIImpl->getIntImmCostIntrin(IID, Idx, Imm, Ty, CostKind);
   assert(Cost >= 0 && "TTI should not produce negative costs!");
   return Cost;
@@ -739,13 +738,12 @@ TargetTransformInfo::getOperandInfo(const Value *V,
 
 int TargetTransformInfo::getArithmeticInstrCost(
     unsigned Opcode, Type *Ty, TTI::TargetCostKind CostKind,
-    OperandValueKind Opd1Info,
-    OperandValueKind Opd2Info, OperandValueProperties Opd1PropInfo,
-    OperandValueProperties Opd2PropInfo, ArrayRef<const Value *> Args,
-    const Instruction *CxtI) const {
-  int Cost = TTIImpl->getArithmeticInstrCost(
-      Opcode, Ty, CostKind, Opd1Info, Opd2Info, Opd1PropInfo, Opd2PropInfo,
-      Args, CxtI);
+    OperandValueKind Opd1Info, OperandValueKind Opd2Info,
+    OperandValueProperties Opd1PropInfo, OperandValueProperties Opd2PropInfo,
+    ArrayRef<const Value *> Args, const Instruction *CxtI) const {
+  int Cost =
+      TTIImpl->getArithmeticInstrCost(Opcode, Ty, CostKind, Opd1Info, Opd2Info,
+                                      Opd1PropInfo, Opd2PropInfo, Args, CxtI);
   assert(Cost >= 0 && "TTI should not produce negative costs!");
   return Cost;
 }
@@ -889,9 +887,8 @@ int TargetTransformInfo::getInterleavedMemoryOpCost(
   return Cost;
 }
 
-int
-TargetTransformInfo::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
-                                           TTI::TargetCostKind CostKind) const {
+int TargetTransformInfo::getIntrinsicInstrCost(const IntrinsicCostAttributes &ICA,
+                            TTI::TargetCostKind CostKind) const {
   int Cost = TTIImpl->getIntrinsicInstrCost(ICA, CostKind);
   assert(Cost >= 0 && "TTI should not produce negative costs!");
   return Cost;
@@ -923,12 +920,11 @@ int TargetTransformInfo::getMemcpyCost(const Instruction *I) const {
   return Cost;
 }
 
-int TargetTransformInfo::getArithmeticReductionCost(unsigned Opcode,
-                                                    VectorType *Ty,
-                                                    bool IsPairwiseForm,
-                                                    TTI::TargetCostKind CostKind) const {
-  int Cost = TTIImpl->getArithmeticReductionCost(Opcode, Ty, IsPairwiseForm,
-                                                 CostKind);
+int TargetTransformInfo::getArithmeticReductionCost(
+    unsigned Opcode, VectorType *Ty, bool IsPairwiseForm,
+    TTI::TargetCostKind CostKind) const {
+  int Cost =
+      TTIImpl->getArithmeticReductionCost(Opcode, Ty, IsPairwiseForm, CostKind);
   assert(Cost >= 0 && "TTI should not produce negative costs!");
   return Cost;
 }
@@ -936,9 +932,8 @@ int TargetTransformInfo::getArithmeticReductionCost(unsigned Opcode,
 int TargetTransformInfo::getMinMaxReductionCost(
     VectorType *Ty, VectorType *CondTy, bool IsPairwiseForm, bool IsUnsigned,
     TTI::TargetCostKind CostKind) const {
-  int Cost =
-      TTIImpl->getMinMaxReductionCost(Ty, CondTy, IsPairwiseForm, IsUnsigned,
-                                      CostKind);
+  int Cost = TTIImpl->getMinMaxReductionCost(Ty, CondTy, IsPairwiseForm,
+                                             IsUnsigned, CostKind);
   assert(Cost >= 0 && "TTI should not produce negative costs!");
   return Cost;
 }
@@ -1035,6 +1030,16 @@ unsigned TargetTransformInfo::getStoreVectorFactor(unsigned VF,
                                                    unsigned ChainSizeInBytes,
                                                    VectorType *VecTy) const {
   return TTIImpl->getStoreVectorFactor(VF, StoreSize, ChainSizeInBytes, VecTy);
+}
+
+bool TargetTransformInfo::shouldFoldVectorLengthIntoMask(
+    const PredicatedInstruction &PI) const {
+  return TTIImpl->shouldFoldVectorLengthIntoMask(PI);
+}
+
+bool TargetTransformInfo::supportsVPOperation(
+    const PredicatedInstruction &PI) const {
+  return TTIImpl->supportsVPOperation(PI);
 }
 
 bool TargetTransformInfo::useReductionIntrinsic(unsigned Opcode, Type *Ty,

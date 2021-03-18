@@ -345,6 +345,8 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
     return "builtin";
   if (hasAttribute(Attribute::Convergent))
     return "convergent";
+  if (hasAttribute(Attribute::VectorLength))
+    return "vlen";
   if (hasAttribute(Attribute::SwiftError))
     return "swifterror";
   if (hasAttribute(Attribute::SwiftSelf))
@@ -361,6 +363,10 @@ std::string Attribute::getAsString(bool InAttrGrp) const {
     return "inreg";
   if (hasAttribute(Attribute::JumpTable))
     return "jumptable";
+  if (hasAttribute(Attribute::Mask))
+    return "mask";
+  if (hasAttribute(Attribute::Passthru))
+    return "passthru";
   if (hasAttribute(Attribute::MinSize))
     return "minsize";
   if (hasAttribute(Attribute::Naked))
@@ -1886,7 +1892,7 @@ AttrBuilder AttributeFuncs::typeIncompatible(Type *Ty) {
     Incompatible.addAttribute(Attribute::SExt)
       .addAttribute(Attribute::ZExt);
 
-  if (!Ty->isPointerTy())
+  if (!Ty->isPtrOrPtrVectorTy())
     // Attribute that only apply to pointers.
     Incompatible.addAttribute(Attribute::Nest)
         .addAttribute(Attribute::NoAlias)

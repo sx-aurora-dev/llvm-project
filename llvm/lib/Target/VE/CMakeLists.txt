@@ -11,10 +11,14 @@ tablegen(LLVM VEGenAsmMatcher.inc -gen-asm-matcher)
 tablegen(LLVM VEGenDAGISel.inc -gen-dag-isel)
 tablegen(LLVM VEGenSubtargetInfo.inc -gen-subtarget)
 tablegen(LLVM VEGenCallingConv.inc -gen-callingconv)
+
 add_public_tablegen_target(VECommonTableGen)
 
 add_llvm_target(VECodeGen
+  CustomDAG.cpp
   LVLGen.cpp
+  MaskView.cpp
+  ShuffleSynthesis.cpp
   VEAsmPrinter.cpp
   VEFrameLowering.cpp
   VEISelDAGToDAG.cpp
@@ -25,7 +29,10 @@ add_llvm_target(VECodeGen
   VERegisterInfo.cpp
   VESubtarget.cpp
   VETargetMachine.cpp
+  VETargetTransformInfo.cpp
   SIMDISelLowering.cpp
+  VVPISelLowering.cpp
+  VVPCombine.cpp
 
   LINK_COMPONENTS
   Analysis

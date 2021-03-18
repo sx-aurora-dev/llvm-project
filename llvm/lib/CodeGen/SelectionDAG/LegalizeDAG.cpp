@@ -1164,10 +1164,19 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
     Action = TLI.getOperationAction(Node->getOpcode(),
                     cast<MaskedScatterSDNode>(Node)->getValue().getValueType());
     break;
+  case ISD::VP_SCATTER:
+    Action = TLI.getOperationAction(Node->getOpcode(),
+                    cast<VPScatterSDNode>(Node)->getValue().getValueType());
+    break;
   case ISD::MSTORE:
     Action = TLI.getOperationAction(Node->getOpcode(),
                     cast<MaskedStoreSDNode>(Node)->getValue().getValueType());
     break;
+  case ISD::VP_STORE:
+    Action = TLI.getOperationAction(Node->getOpcode(),
+                    cast<VPStoreSDNode>(Node)->getValue().getValueType());
+    break;
+  // FIXME add VP reductions
   case ISD::VECREDUCE_FADD:
   case ISD::VECREDUCE_FMUL:
   case ISD::VECREDUCE_ADD:
@@ -1190,7 +1199,7 @@ void SelectionDAGLegalize::LegalizeOp(SDNode *Node) {
     break;
   default:
     if (Node->getOpcode() >= ISD::BUILTIN_OP_END) {
-      Action = TargetLowering::Legal;
+      Action = TLI.getCustomOperationAction(*Node);
     } else {
       Action = TLI.getOperationAction(Node->getOpcode(), Node->getValueType(0));
     }
@@ -3506,61 +3515,20 @@ bool SelectionDAGLegalize::ExpandNode(SDNode *Node) {
       Results.push_back(Tmp1);
     break;
   case ISD::UDIV:
-  case ISD::SDIV: {
-    bool isSigned = Node->getOpcode() == ISD::SDIV;
-    unsigned DivRemOpc = isSigned ? ISD::SDIVREM : ISD::UDIVREM;
-    EVT VT = Node->getValueType(0);
-    if (TLI.isOperationLegalOrCustom(DivRemOpc, VT)) {
-      SDVTList VTs = DAG.getVTList(VT, VT);
-      Tmp1 = DAG.getNode(DivRemOpc, dl, VTs, Node->getOperand(0),
-                         Node->getOperand(1));
+  case ISD::SDIV:
+    Tmp1 = TLI.expandSUDIV(Node, DAG);
+    if (Tmp1) 
       Results.push_back(Tmp1);
+    break;
+  case ISD::MULHU:
+  case ISD::MULHS:
+    if (SDValue Tmp = TLI.expandMULHU_MULHS(Node, DAG)) {
+      Results.push_back(Tmp.getValue(1));
     }
     break;
-  }
-  case ISD::MULHU:
-  case ISD::MULHS: {
-    unsigned ExpandOpcode =
-        Node->getOpcode() == ISD::MULHU ? ISD::UMUL_LOHI : ISD::SMUL_LOHI;
-    EVT VT = Node->getValueType(0);
-    SDVTList VTs = DAG.getVTList(VT, VT);
-
-    Tmp1 = DAG.getNode(ExpandOpcode, dl, VTs, Node->getOperand(0),
-                       Node->getOperand(1));
-    Results.push_back(Tmp1.getValue(1));
-    break;
-  }
   case ISD::UMUL_LOHI:
   case ISD::SMUL_LOHI: {
-    SDValue LHS = Node->getOperand(0);
-    SDValue RHS = Node->getOperand(1);
-    MVT VT = LHS.getSimpleValueType();
-    unsigned MULHOpcode =
-        Node->getOpcode() == ISD::UMUL_LOHI ? ISD::MULHU : ISD::MULHS;
-
-    if (TLI.isOperationLegalOrCustom(MULHOpcode, VT)) {
-      Results.push_back(DAG.getNode(ISD::MUL, dl, VT, LHS, RHS));
-      Results.push_back(DAG.getNode(MULHOpcode, dl, VT, LHS, RHS));
-      break;
-    }
-
-    SmallVector<SDValue, 4> Halves;
-    EVT HalfType = EVT(VT).getHalfSizedIntegerVT(*DAG.getContext());
-    assert(TLI.isTypeLegal(HalfType));
-    if (TLI.expandMUL_LOHI(Node->getOpcode(), VT, dl, LHS, RHS, Halves,
-                           HalfType, DAG,
-                           TargetLowering::MulExpansionKind::Always)) {
-      for (unsigned i = 0; i < 2; ++i) {
-        SDValue Lo = DAG.getNode(ISD::ZERO_EXTEND, dl, VT, Halves[2 * i]);
-        SDValue Hi = DAG.getNode(ISD::ANY_EXTEND, dl, VT, Halves[2 * i + 1]);
-        SDValue Shift = DAG.getConstant(
-            HalfType.getScalarSizeInBits(), dl,
-            TLI.getShiftAmountTy(HalfType, DAG.getDataLayout()));
-        Hi = DAG.getNode(ISD::SHL, dl, VT, Hi, Shift);
-        Results.push_back(DAG.getNode(ISD::OR, dl, VT, Lo, Hi));
-      }
-      break;
-    }
+    TLI.expandSMUL_UMUL_LOHI(Results, Node, DAG);
     break;
   }
   case ISD::MUL: {

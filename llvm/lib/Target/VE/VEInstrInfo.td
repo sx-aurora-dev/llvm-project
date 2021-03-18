@@ -134,6 +134,8 @@ def CCOP : SDNodeXForm<imm, [{
 // Feature predicates.
 //===----------------------------------------------------------------------===//
 
+
+///// Immediates /////
 //===----------------------------------------------------------------------===//
 // Instruction Pattern Stuff
 //===----------------------------------------------------------------------===//
@@ -261,17 +263,29 @@ def mimmfp32 : Operand<i32>, PatLeaf<(fpimm), [{
 }
 
 // other generic patterns to use in pattern matchings
+
 def simm32      : PatLeaf<(imm), [{ return isInt<32>(N->getSExtValue()); }]>;
 def uimm32      : PatLeaf<(imm), [{ return isUInt<32>(N->getZExtValue()); }]>;
+
+def one         : PatLeaf<(imm), [{ return N->getSExtValue() == 1 ; }]>;
+
 def lomsbzero   : PatLeaf<(imm), [{ return (N->getZExtValue() & 0x80000000)
                                       == 0; }]>;
 def lozero      : PatLeaf<(imm), [{ return (N->getZExtValue() & 0xffffffff)
                                       == 0; }]>;
+def fpone       : PatLeaf<(fpimm), [{ return getFpImm(N) == 1.0; }]>;
 def fpzero      : PatLeaf<(fpimm), [{ return getFpImmVal(N) == 0; }]>;
 def fplomsbzero : PatLeaf<(fpimm), [{ return (getFpImmVal(N) & 0x80000000)
                                         == 0; }]>;
 def fplozero    : PatLeaf<(fpimm), [{ return (getFpImmVal(N) & 0xffffffff)
                                         == 0; }]>;
+def ones_l      : PatLeaf<(imm), [{ return N->getZExtValue() == 0xffffffffffffffff; }]>;
+def ones_w      : PatLeaf<(imm), [{ return N->getZExtValue() & 0xffffffff == 0xffffffff; }]>;
+
+def zero_h      : PatLeaf<(fpimm), [{ return N->isZero() == 0; }]>;
+def zero_l      : PatLeaf<(imm), [{ return N->getZExtValue() == 0; }]>;
+def zero_w      : PatLeaf<(imm), [{ return N->getZExtValue() & 0xffffffff == 0; }]>;
+
 def nonzero     : PatLeaf<(imm), [{ return N->getSExtValue() !=0 ; }]>;
 
 def CCSIOp : PatLeaf<(cond), [{
@@ -1271,8 +1285,6 @@ let cx = 1 in defm SUBSWZX : RRNCm<"subs.w.zx", 0x5A, I32, i32>;
 // Section 8.4.6 - SBX (Subtract)
 defm SUBSL : RRNCm<"subs.l", 0x5B, I64, i64, sub>;
 
-} // isReMaterializable, isAsCheapAsAMove
-
 // Section 8.4.7 - MPY (Multiply)
 defm MULUL : RRm<"mulu.l", 0x49, I64, i64>;
 let cx = 1 in defm MULUW : RRm<"mulu.w", 0x49, I32, i32>;
@@ -1321,6 +1333,7 @@ let cx = 1, cw = 1 in defm MINSWZX : RRm<"mins.w.zx", 0x78, I32, i32>;
 // Section 8.4.18 - CMX (Compare and Select Maximum/Minimum)
 defm MAXSL : RRm<"maxs.l", 0x68, I64, i64, smax>;
 let cw = 1 in defm MINSL : RRm<"mins.l", 0x68, I64, i64, smin>;
+}
 
 } // isReMaterializable, isAsCheapAsAMove
 
@@ -1386,6 +1399,7 @@ def : Pat<(i32 (bswap (i32 mimm:$src))),
           (EXTRACT_SUBREG (BSWPmi (MIMM $src), 1), sub_i32)>;
 
 // Section 8.5.11 - CMOV (Conditional Move)
+let isReMaterializable = 1 in {
 let cw = 0, cw2 = 0 in
 defm CMOVL : RRCMOVm<"cmov.l.${cfw}", 0x3B, I64, i64, CMOV>;
 let cw = 1, cw2 = 0 in
@@ -1394,6 +1408,7 @@ let cw = 0, cw2 = 1 in
 defm CMOVD : RRCMOVm<"cmov.d.${cfw}", 0x3B, I64, f64, CMOV, simm7fp>;
 let cw = 1, cw2 = 1 in
 defm CMOVS : RRCMOVm<"cmov.s.${cfw}", 0x3B, F32, f32, CMOV, simm7fp>;
+}
 def : MnemonicAlias<"cmov.l", "cmov.l.at">;
 def : MnemonicAlias<"cmov.w", "cmov.w.at">;
 def : MnemonicAlias<"cmov.d", "cmov.d.at">;
@@ -1403,6 +1418,7 @@ def : MnemonicAlias<"cmov.s", "cmov.s.at">;
 // Section 8.6 - Shift Operation Instructions
 //-----------------------------------------------------------------------------
 
+let isReMaterializable = 1 in {
 // Section 8.6.1 - SLL (Shift Left Logical)
 let isReMaterializable = 1, isAsCheapAsAMove = 1 in
 defm SLL : RRIm<"sll", 0x65, I64, i64, shl>;
@@ -1432,6 +1448,7 @@ let cx = 1 in defm SRAWZX : RRIm<"sra.w.zx", 0x76, I32, i32>;
 
 // Section 8.6.8 - SRAX (Shift Right Arithmetic)
 defm SRAL : RRIm<"sra.l", 0x77, I64, i64, sra>;
+}
 
 } // isReMaterializable, isAsCheapAsAMove
 
@@ -1694,13 +1711,18 @@ def f2l : OutPatFrag<(ops node:$exp),
 def l2f : OutPatFrag<(ops node:$exp),
                      (EXTRACT_SUBREG $exp, sub_f32)>;
 
+def zero_i32 : OutPatFrag<(ops node:$expr),
+                          (ANDrm $expr, 32)>;
+def zero_f32 : OutPatFrag<(ops node:$expr),
+                          (ANDrm $expr, !add(32, 64))>;
+
 // Small immediates.
 def : Pat<(i32 simm7:$val), (l2i (ORim (LO7 $val), 0))>;
 def : Pat<(i64 simm7:$val), (ORim (LO7 $val), 0)>;
 // Medium immediates.
 def : Pat<(i32 simm32:$val), (l2i (LEAzii 0, 0, (LO32 $val)))>;
 def : Pat<(i64 simm32:$val), (LEAzii 0, 0, (LO32 $val))>;
-def : Pat<(i64 uimm32:$val), (ANDrm (LEAzii 0, 0, (LO32 $val)), !add(32, 64))>;
+def : Pat<(i64 uimm32:$val), (zero_f32 (LEAzii 0, 0, (LO32 $val)))>;
 // Arbitrary immediates.
 def : Pat<(i64 lozero:$val),
           (LEASLzii 0, 0, (HI32 imm:$val))>;
@@ -2684,8 +2706,34 @@ def : Pat<(i32 (and (trunc i64:$src), 0xffff)),
 
 // Custom intermediate ISDs.
 class IsVLVT<int OpIdx> : SDTCisVT<OpIdx,i32>;
-def vec_broadcast       : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 2,
-                                 [SDTCisVec<0>, IsVLVT<2>]>>;
+
+/// VEC_* SDNodes
+def vec_tomask      : SDNode<"VEISD::VEC_TOMASK",    SDTypeProfile<1, 2,  [SDTCisSameNumEltsAs<0, 1>, SDTCisVec<0>, IsVLVT<2>]>>;
+def vec_vmv         : SDNode<"VEISD::VEC_VMV",       SDTypeProfile<1, 4,  [SDTCisSameAs<0, 1>, SDTCisVec<0>, SDTCisVec<3>, SDTCisSameNumEltsAs<3,1>, IsVLVT<4>]>>;
+def vec_seq         : SDNode<"VEISD::VEC_SEQ",       SDTypeProfile<1, 1,  [SDTCisVec<0>, IsVLVT<1>]>>;
+def vec_narrow      : SDNode<"VEISD::VEC_NARROW",    SDTypeProfile<1, 2,  [SDTCisVec<0>, SDTCisVec<1>, IsVLVT<2>]>>;
+def vec_broadcast   : SDNode<"VEISD::VEC_BROADCAST", SDTypeProfile<1, 2,  [SDTCisVec<0>, IsVLVT<2>]>>;
+def register        : SDNode<"ISD::Register",        SDTypeProfile<1, 0,  []>, [], "RegisterSDNode">;
+
+///// mask support /////
+def vm_extract     : SDNode<"VEISD::VM_EXTRACT",  SDTypeProfile<1, 2,    [SDTCisVT<0,i64>, SDTCisVec<1>, SDTCisVT<2,i64>]>>;
+def vm_insert      : SDNode<"VEISD::VM_INSERT",   SDTypeProfile<1, 3,    [SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0,1>, SDTCisVT<2,i64>, SDTCisVT<3,i64>]>>;
+def vm_popcount    : SDNode<"VEISD::VM_POPCOUNT", SDTypeProfile<1, 2,    [SDTCisVT<0,i64>, SDTCisVec<1>, IsVLVT<2>]>>;
+
+///// packed mode support /////
+// unpack the v256i32 part of this vector
+def vec_unpack_lo   : SDNode<"VEISD::VEC_UNPACK_LO", SDTypeProfile<1, 2,  [SDTCisVec<0>, SDTCisVec<1>, IsVLVT<2>]>>;
+// unpack the v256f32 part of this vector
+def vec_unpack_hi   : SDNode<"VEISD::VEC_UNPACK_HI", SDTypeProfile<1, 2,  [SDTCisVec<0>, SDTCisVec<1>, IsVLVT<2>]>>;
+// re-pack v256i32, v256f32 back into tone v512.32
+def vec_pack        : SDNode<"VEISD::VEC_PACK", SDTypeProfile<1, 3,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisVec<2>, SDTCisSameNumEltsAs<1,2>, IsVLVT<3>]>>;
+// exchange the odd-even pairs in a v512.32
+def vec_swap        : SDNode<"VEISD::VEC_SWAP", SDTypeProfile<1, 2,       [SDTCisVec<0>, SDTCisVec<1>, SDTCisSameNumEltsAs<0,1>, IsVLVT<2>]>>;
+
+// replicate lower 32bit to upper 32bit (f32 scalar replication)
+def repl_f32        : SDNode<"VEISD::REPL_F32",  SDTypeProfile<1, 1,  [SDTCisInt<0>, SDTCisFP<1>]>>;
+// replicate upper 32bit to lower 32 bit (i32 scalar replication)
+def repl_i32        : SDNode<"VEISD::REPL_I32",  SDTypeProfile<1, 1,  [SDTCisInt<0>, SDTCisInt<1>]>>;
 
 // Whether this is an all-true mask (assuming undef-bits above VL are all-true).
 def true_mask           : PatLeaf<
@@ -2693,6 +2741,11 @@ def true_mask           : PatLeaf<
 // Match any broadcast (ignoring VL).
 def any_broadcast       : PatFrag<(ops node:$sx),
                                   (vec_broadcast node:$sx, (i32 srcvalue))>;
+
+
+
+// whether the avl is ineffective
+def no_avl_256      : PatLeaf<(imm), [{ return (N->getSExtValue() < 0) || (N->getSExtValue() >= 256); }]>;
 
 // Easy to write output patterns for vector instructions.
 //   e.g.  (VLDirl 8, $addr, (EXTRACT_SUBREG (LEAzii 0, 0, 256), sub_i32))
@@ -2703,14 +2756,31 @@ def VLEN : OutPatFrag<(ops node:$length),
 // Vector instructions.
 include "VEInstrVec.td"
 
+// load an immediate into a register
+def lea_imm32_in_i64         : OutPatFrag<(ins node:$imm), (LEAzii 0, 0, (LO32 $imm))>;
+def lea_i32         : OutPatFrag<(ins node:$imm), (EXTRACT_SUBREG (lea_imm32_in_i64 $imm), sub_i32)>;
+def lea_u32         : OutPatFrag<(ins node:$imm), (ANDrm (lea_imm32_in_i64 $imm), 32)>;
+
+// vvp_* SDNode tablegen definitions.
+include "VVPInstrInfo.td"
+
 // The vevlintrin
 include "VEInstrIntrinsicVL.td"
 
-// Patterns and intermediate SD nodes (VEC_*).
-include "VEInstrPatternsVec.td"
+// VE Vector Predicated ISel (Dynamic VL and VP support).
+def packed_fneg_imm       : OutPatFrag<(ins ),
+                            (i64 (SLLri (i64 (ORim 1, (i32 32))), 31))>;
 
-// Patterns and intermediate SD nodes (VVP_*).
-include "VVPInstrPatternsVec.td"
+let Predicates = [UseVVP] in {
+  // Patterns and intermediate SD nodes (VEC_*).
+  include "VEInstrPatternsVec.td"
+
+  // Patterns and intermediate SD nodes (VVP_*).
+  include "VVPInstrPatternsVec.td"
+}
 
 // Patterns and intermediate SD nodes for fixed length vector instructions.
-include "SIMDInstrPatterns.td"
+// let Predicates = [IsSimdSubTarget] in {
+  include "SIMDInstrPatterns.td"
+// }
+// include "SIMDInstrPatternsVec.td"

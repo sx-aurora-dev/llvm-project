@@ -401,7 +401,7 @@ bool TargetInstrInfo::getStackSlotRange(const TargetRegisterClass *RC,
   if (BitSize % 8)
     return false;
 
-  int BitOffset = TRI->getSubRegIdxOffset(SubIdx);
+  int BitOffset = TRI->getSubRegIdxOffset(SubIdx).getValueOr((unsigned)(uint16_t)-1);
   if (BitOffset < 0 || BitOffset % 8)
     return false;
 

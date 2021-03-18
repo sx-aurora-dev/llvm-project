@@ -45,6 +45,8 @@
 #include "llvm/Analysis/Lint.h"
 #include "llvm/Analysis/LoopAccessAnalysis.h"
 #include "llvm/Analysis/LoopCacheAnalysis.h"
+#include "llvm/Analysis/LoopDependenceAnalysis.h"
+#include "llvm/Analysis/LoopHotnessStats.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/Analysis/MemDerefPrinter.h"

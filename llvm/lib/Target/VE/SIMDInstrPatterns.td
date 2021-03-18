@@ -15,14 +15,6 @@
 // Vector Instruction Patterns
 //===----------------------------------------------------------------------===//
 
-// Custom ISDs
-// VEISD::VEC_SEQ - A vector sequence with a stride.
-// VEISD::VEC_BROADCAST - A vector splat of a scalar value into all vector
-//                        lanes.
-
-def vec_seq : SDNode<"VEISD::VEC_SEQ",
-                     SDTypeProfile<1, 1, [SDTCisVec<0>, SDTCisInt<1>]>>;
-
 //===----------------------------------------------------------------------===//
 // Vector broadcast for vector mask registers.
 //===----------------------------------------------------------------------===//
@@ -555,19 +547,19 @@ multiclass simd_ive<int length> {
   defvar vf64 = !cast<ValueType>("v" # !cast<string>(length) # "f64");
 
   def: Pat<(vi32 (insertelt vi32:$vec, i32:$val, uimm7:$idx)),
-           (LSVir_v (LO7 $idx), (i2l $val), $vec)>;
+           (LSVir_v (ULO7 $idx), (i2l $val), $vec)>;
   def: Pat<(vi32 (insertelt vi32:$vec, i32:$val, i64:$idx)),
            (LSVrr_v $idx, (i2l $val), $vec)>;
   def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, uimm7:$idx)),
-           (LSVir_v (LO7 $idx), $val, $vec)>;
+           (LSVir_v (ULO7 $idx), $val, $vec)>;
   def: Pat<(vi64 (insertelt vi64:$vec, i64:$val, i64:$idx)),
            (LSVrr_v $idx, $val, $vec)>;
   def: Pat<(vf32 (insertelt vf32:$vec, f32:$val, uimm7:$idx)),
-           (LSVir_v (LO7 $idx), (f2l $val), $vec)>;
+           (LSVir_v (ULO7 $idx), (f2l $val), $vec)>;
   def: Pat<(vf32 (insertelt vf32:$vec, f32:$val, i64:$idx)),
            (LSVrr_v $idx, (f2l $val), $vec)>;
   def: Pat<(vf64 (insertelt vf64:$vec, f64:$val, uimm7:$idx)),
-           (LSVir_v (LO7 $idx), $val, $vec)>;
+           (LSVir_v (ULO7 $idx), $val, $vec)>;
   def: Pat<(vf64 (insertelt vf64:$vec, f64:$val, i64:$idx)),
            (LSVrr_v $idx, $val, $vec)>;
 }
@@ -593,19 +585,19 @@ multiclass simd_eve<int length> {
   defvar vf64 = !cast<ValueType>("v" # !cast<string>(length) # "f64");
 
   def: Pat<(i32 (extractelt vi32:$vec, uimm7:$idx)),
-           (l2i (LVSvi vi32:$vec, (LO7 $idx)))>;
+           (l2i (LVSvi vi32:$vec, (ULO7 $idx)))>;
   def: Pat<(i32 (extractelt vi32:$vec, i64:$idx)),
            (l2i (LVSvr vi32:$vec, $idx))>;
   def: Pat<(i64 (extractelt vi64:$vec, uimm7:$idx)),
-           (LVSvi vi64:$vec, (LO7 $idx))>;
+           (LVSvi vi64:$vec, (ULO7 $idx))>;
   def: Pat<(i64 (extractelt vi64:$vec, i64:$idx)),
            (LVSvr vi64:$vec, $idx)>;
   def: Pat<(f32 (extractelt vf32:$vec, uimm7:$idx)),
-           (l2f (LVSvi vf32:$vec, (LO7 $idx)))>;
+           (l2f (LVSvi vf32:$vec, (ULO7 $idx)))>;
   def: Pat<(f32 (extractelt vf32:$vec, i64:$idx)),
            (l2f (LVSvr vf32:$vec, $idx))>;
   def: Pat<(f64 (extractelt vf64:$vec, uimm7:$idx)),
-           (LVSvi vf64:$vec, (LO7 $idx))>;
+           (LVSvi vf64:$vec, (ULO7 $idx))>;
   def: Pat<(f64 (extractelt vf64:$vec, i64:$idx)),
            (LVSvr vf64:$vec, $idx)>;
 }
@@ -989,16 +981,16 @@ let Predicates = [IsSimdSubTarget] in {
 
 // Sequence
 let Predicates = [IsSimdSubTarget] in {
-  def : Pat<(v512i32 (vec_seq (i32 1))), (PVSEQl (VLEN 256))>;
+  def : Pat<(v512i32 (vec_seq (i32 srcvalue))), (PVSEQl (VLEN 256))>;
 }
 
 multiclass simd_vseq<int length> {
   defvar vi32 = !cast<ValueType>("v" # !cast<string>(length) # "i32");
   defvar vi64 = !cast<ValueType>("v" # !cast<string>(length) # "i64");
 
-  def : Pat<(vi32 (vec_seq (i32 1))),
+  def : Pat<(vi32 (vec_seq (i32 srcvalue))),
             (PVSEQLOl (VLEN length))>;
-  def : Pat<(vi64 (vec_seq (i64 1))),
+  def : Pat<(vi64 (vec_seq (i32 srcvalue))),
             (VSEQl (VLEN length))>;
 }
 

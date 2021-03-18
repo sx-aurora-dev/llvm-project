@@ -1348,6 +1348,23 @@ inline unsigned getUnorderedFlavor(CondCode Cond) {
 /// SetCC operation.
 CondCode getSetCCInverse(CondCode Operation, EVT Type);
 
+bool isVPOpcode(unsigned Opcode);
+
+/// Vector Predication {
+/// The operand position of the vector mask.
+Optional<unsigned> getVPMaskIdx(unsigned Opcode);
+
+/// The operand position of the explicit vector length parameter.
+Optional<unsigned> getVPExplicitVectorLengthIdx(unsigned Opcode);
+
+/// Translate this VP OpCode to an unpredicated instruction OpCode.
+Optional<unsigned> GetFunctionOpCodeForVP(unsigned VPOpCode, bool hasFPExcept);
+
+/// Translate this non-VP Opcode to its corresponding VP Opcode
+unsigned GetVPForFunctionOpCode(unsigned OpCode);
+
+/// } Vector Predication
+
 namespace GlobalISel {
 /// Return the operation corresponding to !(X op Y), where 'op' is a valid
 /// SetCC operation. The U bit of the condition code has different meanings

@@ -93,6 +93,7 @@
 #include "llvm/IR/ModuleSlotTracker.h"
 #include "llvm/IR/PassManager.h"
 #include "llvm/IR/Statepoint.h"
+#include "llvm/IR/FPEnv.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Use.h"
 #include "llvm/IR/User.h"
@@ -493,6 +494,7 @@ private:
   void visitUserOp2(Instruction &I) { visitUserOp1(I); }
   void visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call);
   void visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI);
+  void visitVPIntrinsic(VPIntrinsic &FPI);
   void visitDbgIntrinsic(StringRef Kind, DbgVariableIntrinsic &DII);
   void visitDbgLabelIntrinsic(StringRef Kind, DbgLabelInst &DLI);
   void visitAtomicCmpXchgInst(AtomicCmpXchgInst &CXI);
@@ -527,6 +529,7 @@ private:
   void verifyStatepoint(const CallBase &Call);
   void verifyFrameRecoverIndices();
   void verifySiblingFuncletUnwinds();
+  void verifyConstrainedFPBundles(const Instruction &);
 
   void verifyFragmentExpression(const DbgVariableIntrinsic &I);
   template <typename ValueOrMetadata>
@@ -1828,11 +1831,14 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
   if (Attrs.isEmpty())
     return;
 
+  bool SawMask = false;
   bool SawNest = false;
+  bool SawPassthru = false;
   bool SawReturned = false;
   bool SawSRet = false;
   bool SawSwiftSelf = false;
   bool SawSwiftError = false;
+  bool SawVectorLength = false;
 
   // Verify return value attributes.
   AttributeSet RetAttrs = Attrs.getRetAttributes();
@@ -1904,11 +1910,32 @@ void Verifier::verifyFunctionAttrs(FunctionType *FT, AttributeList Attrs,
       SawSwiftError = true;
     }
 
+    if (ArgAttrs.hasAttribute(Attribute::VectorLength)) {
+      Assert(!SawVectorLength, "Cannot have multiple 'vlen' parameters!",
+             V);
+      SawVectorLength = true;
+    }
+
+    if (ArgAttrs.hasAttribute(Attribute::Passthru)) {
+      Assert(!SawPassthru, "Cannot have multiple 'passthru' parameters!",
+             V);
+      SawPassthru = true;
+    }
+
+    if (ArgAttrs.hasAttribute(Attribute::Mask)) {
+      Assert(!SawMask, "Cannot have multiple 'mask' parameters!",
+             V);
+      SawMask = true;
+    }
+
     if (ArgAttrs.hasAttribute(Attribute::InAlloca)) {
       Assert(i == FT->getNumParams() - 1,
              "inalloca isn't on the last parameter!", V);
     }
   }
+
+  Assert(!SawPassthru || SawMask,
+      "Cannot have 'passthru' parameter without 'mask' parameter!", V);
 
   if (!Attrs.hasAttributes(AttributeList::FunctionIndex))
     return;
@@ -2293,6 +2320,53 @@ void Verifier::verifySiblingFuncletUnwinds() {
     // Each node only has one successor, so we've walked all the active
     // nodes' successors.
     Active.clear();
+  }
+}
+
+void Verifier::verifyConstrainedFPBundles(const Instruction &I) {
+  auto *CB = dyn_cast<CallBase>(&I);
+  if (!CB)
+    return;
+  auto ExceptBundle = CB->getOperandBundle("cfp-except");
+  auto RoundBundle = CB->getOperandBundle("cfp-round");
+  if (!ExceptBundle && !RoundBundle)
+    return;
+
+  auto *VPIntrin = dyn_cast<VPIntrinsic>(&I);
+  Assert(VPIntrin,
+         "Constraint FP bundles only enabled for Vector Predication Intrinsics",
+         VPIntrin);
+  Assert(!RoundBundle ||
+             VPIntrinsic::HasRoundingMode(VPIntrin->getIntrinsicID()),
+         "Intrinsic does not accept a constraint fp rounding mode.", VPIntrin);
+  Assert(!ExceptBundle ||
+             VPIntrinsic::HasExceptionMode(VPIntrin->getIntrinsicID()),
+         "Intrinsic does not accept a constraint fp exception mode.", VPIntrin);
+
+  if (RoundBundle) {
+    Assert(RoundBundle->Inputs.size() == 1,
+           "Constraint fp rounding mode has only one operand.", VPIntrin);
+    auto &RoundInput = *RoundBundle->Inputs[0];
+    Assert(isa<MetadataAsValue>(RoundInput),
+           "Constraint fp exception mode is not a metadata string.", RoundInput);
+    auto *RoundString = dyn_cast<MDString>(cast<MetadataAsValue>(RoundInput).getMetadata());
+    Assert(RoundString,
+           "Constraint fp rounding mode is not a metadata string.", RoundInput);
+    auto RoundOpt = VPIntrin->getRoundingMode();
+    Assert(RoundOpt.hasValue(), "Invalid rounding mode metadata.", RoundString);
+  }
+
+  if (ExceptBundle) {
+    Assert(ExceptBundle->Inputs.size() == 1,
+           "Constraint fp exception mode has only one operand.", VPIntrin);
+    auto &ExceptInput = *ExceptBundle->Inputs[0];
+    Assert(isa<MetadataAsValue>(ExceptInput),
+           "Constraint fp exception mode is not a metadata string.", ExceptInput);
+    auto *ExceptString = dyn_cast<MDString>(cast<MetadataAsValue>(ExceptInput).getMetadata());
+    Assert(ExceptString,
+           "Constraint fp exception mode is not a metadata string.", ExceptInput);
+    auto ExceptOpt = VPIntrin->getExceptionBehavior();
+    Assert(ExceptOpt.hasValue(), "Invalid exception mode metadata.", ExceptString);
   }
 }
 
@@ -3192,7 +3266,9 @@ void Verifier::visitCallBase(CallBase &Call) {
   // and at most one "preallocated" operand bundle.
   bool FoundDeoptBundle = false, FoundFuncletBundle = false,
        FoundGCTransitionBundle = false, FoundCFGuardTargetBundle = false,
-       FoundPreallocatedBundle = false, FoundGCLiveBundle = false;;
+       FoundPreallocatedBundle = false, FoundGCLiveBundle = false,
+       FoundCFPExceptBundle = false, FoundCFPRoundBundle = false;
+  ;
   for (unsigned i = 0, e = Call.getNumOperandBundles(); i < e; ++i) {
     OperandBundleUse BU = Call.getOperandBundleAt(i);
     uint32_t Tag = BU.getTagID();
@@ -3233,6 +3309,14 @@ void Verifier::visitCallBase(CallBase &Call) {
       Assert(!FoundGCLiveBundle, "Multiple gc-live operand bundles",
              Call);
       FoundGCLiveBundle = true;
+    } else if (Tag == LLVMContext::OB_cfp_round) {
+      Assert(!FoundCFPRoundBundle, "Multiple cfp-round operand bundles",
+             Call);
+      FoundCFPRoundBundle = true;
+    } else if (Tag == LLVMContext::OB_cfp_except) {
+      Assert(!FoundCFPExceptBundle, "Multiple cfp-except operand bundles",
+             Call);
+      FoundCFPExceptBundle = true;
     }
   }
 
@@ -4477,6 +4561,8 @@ void Verifier::visitInstruction(Instruction &I) {
     verifyNotEntryValue(*DII);
   }
 
+  verifyConstrainedFPBundles(I);
+
   SmallVector<std::pair<unsigned, MDNode *>, 4> MDs;
   I.getAllMetadata(MDs);
   for (auto Attachment : MDs) {
@@ -4600,6 +4686,13 @@ void Verifier::visitIntrinsicCall(Intrinsic::ID ID, CallBase &Call) {
 #include "llvm/IR/ConstrainedOps.def"
     visitConstrainedFPIntrinsic(cast<ConstrainedFPIntrinsic>(Call));
     break;
+
+#define REGISTER_VP_INTRINSIC(VPID,MASKPOS,VLENPOS) \
+  case Intrinsic::VPID:
+#include "llvm/IR/VPIntrinsics.def"
+    visitVPIntrinsic(cast<VPIntrinsic>(Call));
+    break;
+
   case Intrinsic::dbg_declare: // llvm.dbg.declare
     Assert(isa<MetadataAsValue>(Call.getArgOperand(0)),
            "invalid llvm.dbg.declare intrinsic call 1", Call);
@@ -5203,6 +5296,18 @@ static DISubprogram *getSubprogram(Metadata *LocalScope) {
   // Just return null; broken scope chains are checked elsewhere.
   assert(!isa<DILocalScope>(LocalScope) && "Unknown type of local scope");
   return nullptr;
+}
+
+void Verifier::visitVPIntrinsic(VPIntrinsic &VPI) {
+  Assert(!VPI.isConstrainedOp(),
+         "VP intrinsics only support the default fp environment for now "
+         "(round.tonearest; fpexcept.ignore).");
+  if (VPI.isConstrainedOp()) {
+    Assert(VPI.getExceptionBehavior() != None,
+           "invalid exception behavior argument", &VPI);
+    Assert(VPI.getRoundingMode() != None, "invalid rounding mode argument",
+           &VPI);
+  }
 }
 
 void Verifier::visitConstrainedFPIntrinsic(ConstrainedFPIntrinsic &FPI) {

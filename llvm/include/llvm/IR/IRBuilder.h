@@ -31,6 +31,7 @@
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/InstrTypes.h"
+#include "llvm/IR/IntrinsicInst.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
@@ -858,6 +859,24 @@ public:
   CallInst *CreateAssumption(Value *Cond,
                              ArrayRef<OperandBundleDef> OpBundles = llvm::None);
 
+
+  /// Call an arithmetic VP intrinsic.
+  Instruction *CreateVectorPredicatedInst(unsigned OC, ArrayRef<Value *>,
+                             Instruction *FMFSource = nullptr,
+                             const Twine &Name = "");
+
+  /// Call an comparison VP intrinsic.
+  Instruction *CreateVectorPredicatedCmp(CmpInst::Predicate Pred,
+                                Value *FirstOp, Value *SndOp, Value *Mask,
+                                Value *VectorLength,
+                                const Twine &Name = "");
+
+  /// Call an comparison VP intrinsic.
+  Instruction *CreateVectorPredicatedReduce(Module &M, CmpInst::Predicate Pred,
+                                   Value *FirstOp, Value *SndOp, Value *Mask,
+                                   Value *VectorLength,
+                                   const Twine &Name = "");
+
   /// Create a llvm.experimental.noalias.scope.decl intrinsic call.
   Instruction *CreateNoAliasScopeDeclaration(Value *Scope);
   Instruction *CreateNoAliasScopeDeclaration(MDNode *ScopeTag) {
@@ -1249,11 +1268,7 @@ private:
     if (Except.hasValue())
       UseExcept = Except.getValue();
 
-    Optional<StringRef> ExceptStr = ExceptionBehaviorToStr(UseExcept);
-    assert(ExceptStr.hasValue() && "Garbage strict exception behavior!");
-    auto *ExceptMDS = MDString::get(Context, ExceptStr.getValue());
-
-    return MetadataAsValue::get(Context, ExceptMDS);
+    return GetConstrainedFPExcept(Context, UseExcept);
   }
 
   Value *getConstrainedFPPredicate(CmpInst::Predicate Predicate) {

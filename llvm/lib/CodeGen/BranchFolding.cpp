@@ -165,7 +165,7 @@ void BranchFolder::RemoveDeadBlock(MachineBasicBlock *MBB) {
 
   // Update call site info.
   std::for_each(MBB->begin(), MBB->end(), [MF](const MachineInstr &MI) {
-    if (MI.shouldUpdateCallSiteInfo())
+    if (MI.isCandidateForCallSiteEntry())
       MF->eraseCallSiteInfo(&MI);
   });
   // Remove the block.

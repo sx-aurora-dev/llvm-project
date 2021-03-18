@@ -685,7 +685,7 @@ private:
   void visitAdd(const User &I)  { visitBinary(I, ISD::ADD); }
   void visitFAdd(const User &I) { visitBinary(I, ISD::FADD); }
   void visitSub(const User &I)  { visitBinary(I, ISD::SUB); }
-  void visitFSub(const User &I) { visitBinary(I, ISD::FSUB); }
+  void visitFSub(const User &I); //  { visitBinary(I, ISD::FSUB); } // VE: on-the-fly fneg folding
   void visitMul(const User &I)  { visitBinary(I, ISD::MUL); }
   void visitFMul(const User &I) { visitBinary(I, ISD::FMUL); }
   void visitURem(const User &I) { visitBinary(I, ISD::UREM); }
@@ -760,6 +760,12 @@ private:
   void visitTargetIntrinsic(const CallInst &I, unsigned Intrinsic);
   void visitConstrainedFPIntrinsic(const ConstrainedFPIntrinsic &FPI);
   void visitVectorPredicationIntrinsic(const VPIntrinsic &VPIntrin);
+  void visitCmpVP(const VPIntrinsic &I);
+  void visitLoadVP(const CallInst &I);
+  void visitStoreVP(const CallInst &I);
+  void visitGatherVP(const CallInst &I);
+  void visitScatterVP(const CallInst &I);
+  void visitReduceVP(const VPIntrinsic &I);
 
   void visitVAStart(const CallInst &I);
   void visitVAArg(const VAArgInst &I);
