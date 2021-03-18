@@ -120,7 +120,7 @@ def VOp(ty, name, instSuffix = None):
     else: raise Exception("unknown type")
 
 def SOp(ty, name):
-    if ty in [T_f64, T_i64, T_u64, T_voidp, T_voidcp]: 
+    if ty in [T_f64, T_i64, T_u64, T_voidp, T_voidcp]:
         return Op("s", ty, name, "I64", "r")
     elif ty == T_f32: return Op("s", ty, name, "F32", "r")
     elif ty == T_i32: return Op("s", ty, name, "I32", "r")
@@ -153,7 +153,7 @@ VMD512 = Op("M", T_v8u64, "ptm", "VM512", "_m") # pass through
 
 class ImmOp(Op):
     def __init__(self, kind, ty, name, immType, instSuffix):
-        regClass = {T_u32:"simm7", T_i32:"simm7", 
+        regClass = {T_u32:"simm7", T_i32:"simm7",
                     T_u64:"simm7", T_i64:"simm7"}[ty]
         super(ImmOp, self).__init__(kind, ty, name, regClass, instSuffix)
         self.immType = immType
@@ -193,7 +193,7 @@ class RDConstOp(Op):
         self.rd_val_ = rd_val
 
 def Args_vvv(ty): return [VX(ty), VY(ty), VZ(ty)]
-def Args_vsv(tyV, tyS = None): 
+def Args_vsv(tyV, tyS = None):
     if tyS is None:
         tyS = tyV
     return [VX(tyV), SY(tyS), VZ(tyV)]
@@ -285,7 +285,7 @@ class Inst(object):
     def llvmIntrinName(self):
         return "int{}{}".format(self.llvmIntrinsicPrefix_, self.intrinsicName())
     def isNotYetImplemented(self): return self.notYetImplemented_
-    def NYI(self, flag = True): 
+    def NYI(self, flag = True):
         self.notYetImplemented_ = flag
         if flag:
             self.hasTest_ = False
@@ -304,7 +304,7 @@ class Inst(object):
     #def isPseudo(self): return self.opc == None
 
     def noLLVMInstDefine(self): self.hasLLVMInstDefine_ = False; return self
-    def hasLLVMInstDefine(self): 
+    def hasLLVMInstDefine(self):
         return self.hasLLVMInstDefine_ and (not self.isDummy())
 
     def hasIntrinsicDef(self): return self.hasIntrinsicDef_
@@ -526,24 +526,24 @@ class TestGenerator:
 
     def test_(self, I):
         head = self.funcHeader(I)
-    
+
         out = I.outs[0]
         body = ""
         indent = " " * 8
-    
+
         #print(I.instName)
-    
+
         if I.isPacked():
             step = 512
             body += indent + "int l = n - i < 512 ? (n - i) / 2UL : 256;\n"
         else:
             step = 256
             body += indent + "int l = n - i < 256 ? n - i : 256;\n"
-    
+
         ins = I.ins
         if I.hasMask() and I.ins[-1].isVReg(): # remove vd when vm, vd
             ins = I.ins[0:-1]
-    
+
         # input
         args = []
         for op in ins:
@@ -575,19 +575,19 @@ class TestGenerator:
             body += indent + "{} = _vel_{}({}, l);\n".format(out.regName(), I.intrinsicName(), ', '.join(args))
         else:
             body += indent + "__vr {} = _vel_{}({}, l);\n".format(out.regName(), I.intrinsicName(), ', '.join(args))
-    
+
         if out.isVReg():
             stride = I.stride(out)
             vld, vst = self.get_vld_vst_inst(I, out)
             body += indent + "_vel_{}({}, {}, {}, l);\n".format(vst, out.regName(), stride, out.formalName())
-    
+
         tmp = []
         for op in (I.outs + ins):
             if op.isVReg() or op.isMask():
                 tmp.append(indent + "p{} += {};".format(op.regName(), "512" if I.isPacked() else "256"))
-    
+
         body += "\n".join(tmp)
-    
+
         func = '''#include "velintrin.h"
 {} {{
     for (int i = 0; i < n; i += {}) {{
@@ -596,7 +596,7 @@ class TestGenerator:
 }}
 '''
         return func.format(head, step, body)
-        
+
     def reference(self, I):
         if not I.hasExpr():
             return None
@@ -695,7 +695,7 @@ class ManualInstPrinter:
                 ins.append("int vl".format(op.ctype()))
             else:
                 raise Exception("unknown register kind: {}".format(op.kind))
-        
+
         func = "{} {}({})".format(outType, I.funcName(), ", ".join(ins))
 
         #if outType:
@@ -908,7 +908,7 @@ class InstTable(object):
         self.Def(opc, instName, "d", name+".d", [[VX(T_f64), VY(T_f64)]], expr)
         self.Def(opc, instName, "s", name+".s", [[VX(T_f32), VY(T_f32)]], expr)
         if hasPacked:
-            self.Def(opc, instName, "p", "p"+name, [[VX(T_f32), VY(T_f32)]], expr) 
+            self.Def(opc, instName, "p", "p"+name, [[VX(T_f32), VY(T_f32)]], expr)
         if hasNex:
             self.Def(opc, instName, "d", name+".d.nex", [[VX(T_f64), VY(T_f64)]], expr)
             self.Def(opc, instName, "s", name+".s.nex", [[VX(T_f32), VY(T_f32)]], expr)
@@ -927,7 +927,7 @@ class InstTable(object):
         self.Def(opc, instName, subop+"d", name+".d", O_f64, expr)
         self.Def(opc, instName, subop+"s", name+".s", O_f32, expr)
         if hasPacked:
-            self.Def(opc, instName, subop+"p", "p"+name, O_pf32, expr) 
+            self.Def(opc, instName, subop+"p", "p"+name, O_pf32, expr)
 
     # 3 operands, u64/u32
     def Inst3u(self, opc, name, instName, expr, hasPacked = True):
@@ -983,7 +983,7 @@ class InstTable(object):
         self.Def(opc, instName, "p", "p" + name + ".lo", O_u32).noTest()
         self.Def(opc, instName, "p", "p" + name + ".up", O_u32).noTest()
         self.Def(opc, instName, "p", "p" + name, O_pu32).noTest()
-        
+
     def Logical3u(self, opc, name, instName, expr):
         O_u32_vsv = [VX(T_u32), SY(T_u64), VZ(T_u32)]
 
@@ -997,7 +997,6 @@ class InstTable(object):
         # self.Def(opc, instName, "p", "p"+name+".lo", O_pu32, expr).noTest()
         # self.Def(opc, instName, "p", "p"+name+".up", O_pu32, expr).noTest()
         self.Def(opc, instName, "p", "p" + name, O_pu32, expr)
-        
 
     def Shift(self, opc, name, instName, ty, expr):
         O_vvv = [VX(ty), VZ(ty), VY(T_u64)]
@@ -1106,11 +1105,11 @@ class InstTableVEL(InstTable):
 
 def createInstructionTable():
     T = InstTableVEL()
-    
+
     #
     # Start of instruction definition
     #
-    
+
     T.Section("Table 3-15 Vector Transfer Instructions", 22)
     T.VLDm(0x81, "VLD", "", "vld")
     T.VLDm(0x82, "VLDU", "", "vldu")
@@ -1142,11 +1141,11 @@ def createInstructionTable():
     T.Def(None, "SVM", "pi", "svm", [[SX(T_u64), VMZ512, ImmN(T_u64)]], noVL=True, llvmInst="SVMyi").noTest()
     T.VBRDm(0x8C)
     T.VMVm()
-    
-    O_VMPD = [[VX(T_i64), VY(T_i32), VZ(T_i32)], 
-              [VX(T_i64), SY(T_i32), VZ(T_i32)], 
+
+    O_VMPD = [[VX(T_i64), VY(T_i32), VZ(T_i32)],
+              [VX(T_i64), SY(T_i32), VZ(T_i32)],
               [VX(T_i64), ImmI(T_i32), VZ(T_i32)]]
-    
+
     T.Section("Table 3-16. Vector Fixed-Point Arithmetic Operation Instructions", 23)
     T.Inst3u(0xC8, "vaddu", "VADD", "{0} = {1} + {2}") # u32, u64
     T.Inst3w(0xCA, "vadds", "VADS", "", "{0} = {1} + {2}") # i32
@@ -1173,7 +1172,7 @@ def createInstructionTable():
     T.Inst3w(0x8A, "vmins", "VCMS", "i", "{0} = min({1}, {2})")
     T.Inst3l(0x9A, "vmaxs", "VCMX", "a", "{0} = max({1}, {2})")
     T.Inst3l(0x9A, "vmins", "VCMX", "i", "{0} = min({1}, {2})")
-    
+
     T.Section("Table 3-17 Vector Logical Arithmetic Operation Instructions", 25)
     T.Logical3u(0xC4, "vand", "VAND", "{0} = {1} & {2}")
     T.Logical3u(0xC5, "vor",  "VOR",  "{0} = {1} | {2}")
@@ -1186,7 +1185,7 @@ def createInstructionTable():
     T.Def(0x99, "VSEQ", "l", "pvseq.lo", [[VX(T_u64)]], "{0} = i").noTest()
     T.Def(0x99, "VSEQ", "u", "pvseq.up", [[VX(T_u64)]], "{0} = i").noTest()
     T.Def(0x99, "VSEQ", "p", "pvseq", [[VX(T_u64)]], "{0} = i").noTest()
-    
+
     T.Section("Table 3-18 Vector Shift Instructions", 27)
     T.Shift(0xE5, "vsll", "VSLL", T_u64, "{0} = {1} << ({2} & 0x3f)")
     T.ShiftPacked(0xE5, "vsll", "VSLL", T_u32, "{0} = {1} << ({2} & 0x1f)")
@@ -1202,11 +1201,11 @@ def createInstructionTable():
     T.Shift(0xF6, "vsra.w.zx", "VSRA", T_i32, "{0} = {1} >> ({2} & 0x1f)")
     T.ShiftPacked(0xF6, "vsra", "VSRA", T_i32, "{0} = {1} >> ({2} & 0x1f)")
     T.Shift(0xD5, "vsra.l", "VSRAX", T_i64, "{0} = {1} >> ({2} & 0x3f)")
-    
+
     O_vsfa = [[VX(T_u64), VZ(T_u64), SY(T_u64), SZ(T_u64)],[VX(T_u64), VZ(T_u64), ImmI(T_u64), SZ(T_u64)]]
     O_vsfa = T.addMask(O_vsfa)
     T.Def(0xD7, "VSFA", "", "vsfa", O_vsfa, "{0} = ({1} << ({2} & 0x7)) + {3}")
-    
+
     T.Section("Table 3-19 Vector Floating-Point Operation Instructions", 28)
     T.Inst3f(0xCC, "vfadd", "VFAD", "", "{0} = {1} + {2}")
     T.Inst3f(0xDC, "vfsub", "VFSB", "", "{0} = {1} - {2}")
@@ -1234,7 +1233,7 @@ def createInstructionTable():
     T.Def(0xB8, "VFLTX", "", "vcvt.d.l", [[VX(T_f64), VY(T_i64)]], "{0} = (double){1}")
     T.Def(0x8F, "VCVD", "", "vcvt.d.s", [[VX(T_f64), VY(T_f32)]], "{0} = (double){1}")
     T.Def(0x9F, "VCVS", "", "vcvt.s.d", [[VX(T_f32), VY(T_f64)]], "{0} = (float){1}")
-    
+
     T.Section("Table 3-20 Vector Mask Arithmetic Instructions", 32)
     T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), VY(T_u64), VZ(T_u64), VM]]).noTest()
     T.Def(0xD6, "VMRG", "", "vmrg", [[VX(T_u64), SY(T_u64), VZ(T_u64), VM]]).noTest()
@@ -1245,7 +1244,7 @@ def createInstructionTable():
     T.Def(0x8D, "VCP", "", "vcp", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
     T.Def(0x9D, "VEX", "", "vex", [[VX(T_u64), VZ(T_u64), VM, VD(T_u64)]]).noTest()
 
-    tmp = ["gt", "lt", "ne", "eq", "ge", "le", "num", "nan", "gtnan", "ltnan", "nenan", "eqnan", "genan", "lenan"] 
+    tmp = ["gt", "lt", "ne", "eq", "ge", "le", "num", "nan", "gtnan", "ltnan", "nenan", "eqnan", "genan", "lenan"]
     T.Def(0xB4, "VFMK", "", "vfmk.l.at", [[VMX]], cc=CC_INT['at'], llvmInst='VFMKLal').noTest() # i64
     T.Def(0xB4, "VFMK", "", "vfmk.l.af", [[VMX]], cc=CC_INT['af'], llvmInst='VFMKLnal').noTest() # i64
     #T.Def(0xB5, "VFMK", "", "pvfmk.w.lo.at", [[VMX]], cc=CC_INT['at'], llvmInst='VFMKWal').noTest() # i32
@@ -1290,7 +1289,7 @@ def createInstructionTable():
     for cc in tmp:
       T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32)]], cc=CC_FLOAT[cc], llvmInst='VFMKSyvl').noTest().noLLVMInstDefine() # Pseudo
       T.Def(None, "VFMF", "p", "pvfmk.s."+cc, [[VMX512, VZ(T_f32), VM512]], cc=CC_FLOAT[cc], llvmInst='VFMKSyvyl').noTest().noLLVMInstDefine() # Pseudo
-   
+
     T.Section("Table 3-21 Vector Recursive Relation Instructions", 32)
     T.VSUM(0xEA, "VSUMS", "sx", "vsum.w.sx", [[VX(T_i32), VY(T_i32)]])
     T.VSUM(0xEA, "VSUMS", "zx", "vsum.w.zx", [[VX(T_i32), VY(T_i32)]])
@@ -1317,7 +1316,7 @@ def createInstructionTable():
     T.NoImpl("VFISM")
     T.NoImpl("VFIMA")
     T.NoImpl("VFIMS")
-    
+
     T.Section("Table 3-22 Vector Gathering/Scattering Instructions", 34)
     T.VGTm(0xA1, "VGT", "", "vgt")
     T.VGTm(0xA2, "VGTU", "", "vgtu")
@@ -1326,7 +1325,7 @@ def createInstructionTable():
     T.VSCm(0xB1, "VSC", "VSC", "vsc")
     T.VSCm(0xB2, "VSCU", "VSCU", "vscu")
     T.VSCm(0xB3, "VSCL", "VSCL", "vscl")
-    
+
     T.Section("Table 3-23 Vector Mask Register Instructions", 34)
     T.Def(0x84, "ANDM", "", "andm", [[VMX, VMY, VMZ]], "{0} = {1} & {2}", noVL=True)
     T.Def(None, "ANDM", "p", "andm", [[VMX512, VMY512, VMZ512]], "{0} = {1} & {2}", noVL=True, llvmInst="ANDMyy")
@@ -1343,11 +1342,11 @@ def createInstructionTable():
     T.Def(0xA4, "PCVM", "", "pcvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA5, "LZVM", "", "lzvm", [[SX(T_u64), VMY]]).noTest();
     T.Def(0xA6, "TOVM", "", "tovm", [[SX(T_u64), VMY]]).noTest();
-    
+
     T.Section("Table 3-24 Vector Control Instructions", 35)
     T.NoImpl("SMVL")
     T.NoImpl("LVIX")
-    
+
     T.Section("Table 3-25 Control Instructions", 35)
     T.Dummy(0x30, "SVOB", "void _vel_svob(void)", "svob");
 
@@ -1364,7 +1363,7 @@ def createInstructionTable():
     T.Dummy(None, "", "unsigned long int _vel_pack_f32p(float const* p0, float const* p1)", "ldu,ldl,or")
     T.Dummy(None, "", "unsigned long int _vel_pack_f32a(float const* p)", "load and mul")
     T.Dummy(None, "", "unsigned long int _vel_pack_i32(int a, int b)", "sll,add,or")
- 
+
     T.Dummy(None, "", "__vm256 _vel_extract_vm512u(__vm512 vm)", "")
     T.Dummy(None, "", "__vm256 _vel_extract_vm512l(__vm512 vm)", "")
     T.Dummy(None, "", "__vm512 _vel_insert_vm512u(__vm512 vmx, __vm256 vmy)", "")
@@ -1443,14 +1442,14 @@ def main():
     parser.add_argument('-l', dest="opt_lowering", action="store_true")
     parser.add_argument('--test-dir', default="../../llvm-ve-intrinsic-test/gen/tests")
     args, others = parser.parse_known_args()
-    
+
     T = createInstructionTable()
     insts = T.insts()
 
     if args.opt_filter:
         insts = [i for i in insts if re.search(args.opt_filter, i.intrinsicName())]
         print("filter: {} -> {}".format(args.opt_filter, len(insts)))
-    
+
     if args.opt_all:
         args.opt_intrin = True
         args.opt_pat = True
@@ -1490,7 +1489,7 @@ def main():
                 if f:
                     print(f)
             continue
-            
+
             if len(i.outs) > 0 and i.outs[0].isMask() and i.hasExpr():
                 f = TestGeneratorMask().gen(i)
                 print(f.reference())
@@ -1502,6 +1501,6 @@ def main():
         HtmlManualPrinter().printAll(T, False)
     if args.html_no_link:
         HtmlManualPrinter().printAll(T, True)
-    
+
 if __name__ == "__main__":
     main()
