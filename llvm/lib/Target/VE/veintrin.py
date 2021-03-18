@@ -970,19 +970,34 @@ class InstTable(object):
         O = self.addMask(O)
         self.Def(opc, instName, subop, name, O, "{0} = {1} / {2}")
 
-    def Logical(self, opc, name, instName, expr):
+    def Logical2u(self, opc, name, instName):
+        O_u64 = [[VX(T_u64), VZ(T_u64)]]
+        O_u32 = [[VX(T_u32), VZ(T_u32)]]
+        O_pu32 = [[VX(T_u32), VZ(T_u32)]]
+
+        O_u64 = self.addMask(O_u64)
+        O_u32 = self.addMask(O_u32)
+        O_pu32 = self.addMask(O_pu32, VM512)
+
+        self.Def(opc, instName, "", name, O_u64).noTest()
+        self.Def(opc, instName, "p", "p" + name + ".lo", O_u32).noTest()
+        self.Def(opc, instName, "p", "p" + name + ".up", O_u32).noTest()
+        self.Def(opc, instName, "p", "p" + name, O_pu32).noTest()
+        
+    def Logical3u(self, opc, name, instName, expr):
         O_u32_vsv = [VX(T_u32), SY(T_u64), VZ(T_u32)]
 
-        Args = [Args_vvv(T_u64), Args_vsv(T_u64)]
-        Args = self.addMask(Args)
+        O_u64 = [Args_vvv(T_u64), Args_vsv(T_u64)]
+        O_u64 = self.addMask(O_u64)
 
-        ArgsP = [Args_vvv(T_u32), O_u32_vsv]
-        ArgsP = self.addMask(ArgsP, VM512)
+        O_pu32 = [Args_vvv(T_u32), O_u32_vsv]
+        O_pu32 = self.addMask(O_pu32, VM512)
 
-        self.Def(opc, instName, "", name, Args, expr)
-        #self.Def(opc, instName, "p", "p"+name+".lo", ArgsP, expr).noTest()
-        #self.Def(opc, instName, "p", "p"+name+".up", ArgsP, expr).noTest()
-        self.Def(opc, instName, "p", "p"+name, ArgsP, expr)
+        self.Def(opc, instName, "", name, O_u64, expr)
+        # self.Def(opc, instName, "p", "p"+name+".lo", O_pu32, expr).noTest()
+        # self.Def(opc, instName, "p", "p"+name+".up", O_pu32, expr).noTest()
+        self.Def(opc, instName, "p", "p" + name, O_pu32, expr)
+        
 
     def Shift(self, opc, name, instName, ty, expr):
         O_vvv = [VX(ty), VZ(ty), VY(T_u64)]
@@ -1160,13 +1175,13 @@ def createInstructionTable():
     T.Inst3l(0x9A, "vmins", "VCMX", "i", "{0} = min({1}, {2})")
     
     T.Section("Table 3-17 Vector Logical Arithmetic Operation Instructions", 25)
-    T.Logical(0xC4, "vand", "VAND", "{0} = {1} & {2}")
-    T.Logical(0xC5, "vor",  "VOR",  "{0} = {1} | {2}")
-    T.Logical(0xC6, "vxor", "VXOR", "{0} = {1} ^ {2}")
-    T.Logical(0xC7, "veqv", "VEQV", "{0} = ~({1} ^ {2})")
-    T.NoImpl("VLDZ")
-    T.NoImpl("VPCNT")
-    T.NoImpl("VBRV")
+    T.Logical3u(0xC4, "vand", "VAND", "{0} = {1} & {2}")
+    T.Logical3u(0xC5, "vor",  "VOR",  "{0} = {1} | {2}")
+    T.Logical3u(0xC6, "vxor", "VXOR", "{0} = {1} ^ {2}")
+    T.Logical3u(0xC7, "veqv", "VEQV", "{0} = ~({1} ^ {2})")
+    T.Logical2u(0xe7, "vldz", "VLDZ")
+    T.Logical2u(0xac, "vpcnt", "VPCNT")
+    T.Logical2u(0xf7, "vbrv", "VBRV")
     T.Def(0x99, "VSEQ", "", "vseq", [[VX(T_u64)]], "{0} = i").noTest()
     T.Def(0x99, "VSEQ", "l", "pvseq.lo", [[VX(T_u64)]], "{0} = i").noTest()
     T.Def(0x99, "VSEQ", "u", "pvseq.up", [[VX(T_u64)]], "{0} = i").noTest()
