@@ -1,4 +1,4 @@
-; RUN: llc < %s -mtriple=ve -mattr=+vpu | FileCheck %s
+; RUN: llc < %s -mtriple=ve -mattr=+vpu,+packed | FileCheck %s
 
 ;;; Test trailing one of vm intrinsic instructions
 ;;;
