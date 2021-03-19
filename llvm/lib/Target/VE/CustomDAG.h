@@ -91,9 +91,7 @@ EVT splitType(EVT);
 // (requiring a packed VL param..)
 bool isPackedType(EVT SomeVT);
 bool isMaskType(EVT VT);
-static inline bool isPackedMaskType(EVT SomeVT) {
-  return isPackedType(SomeVT) && isMaskType(SomeVT);
-}
+bool isPackedMaskType(EVT SomeVT);
 bool isOverPackedType(EVT VT);
 
 // whether this VVP operation has no mask argument
@@ -159,86 +157,38 @@ enum class PackElem : int8_t {
   Hi = 1  // float   (32,  0]
 };
 
-static PackElem getPartForLane(unsigned ElemIdx) {
-  return (ElemIdx % 2 == 0) ? PackElem::Hi : PackElem::Lo;
-}
+PackElem getPartForLane(unsigned ElemIdx);
 
-static PackElem getOtherPart(PackElem Part) {
-  return Part == PackElem::Lo ? PackElem::Hi : PackElem::Lo;
-}
+PackElem getOtherPart(PackElem Part);
 
-static unsigned getOverPackedSubRegIdx(PackElem Part) {
-  return Part == PackElem::Lo ? VE::sub_pack_lo : VE::sub_pack_hi;
-}
+unsigned getOverPackedSubRegIdx(PackElem Part);
 
-static unsigned getPackedMaskSubRegIdx(PackElem Part) {
-  return Part == PackElem::Lo ? VE::sub_vm_lo : VE::sub_vm_hi;
-}
+unsigned getPackedMaskSubRegIdx(PackElem Part);
 
-static inline MVT getMaskVT(Packing P) {
-  return P == Packing::Normal ? MVT::v256i1 : MVT::v512i1;
-}
+MVT getMaskVT(Packing P);
 
-static PackElem getPackElemForVT(EVT VT) {
-  if (VT.isFloatingPoint())
-    return PackElem::Hi;
-  if (VT.isVector())
-    return getPackElemForVT(VT.getVectorElementType());
-  return PackElem::Lo;
-}
+PackElem getPackElemForVT(EVT VT);
 
 // The subregister VT an unpack of part \p Elem from \p VT would source its
 // result from.
-static MVT getUnpackSourceType(EVT VT, PackElem Elem) {
-  if (!VT.isVector())
-    return Elem == PackElem::Hi ? MVT::f32 : MVT::i32;
+MVT getUnpackSourceType(EVT VT, PackElem Elem);
 
-  EVT ElemVT = VT.getVectorElementType();
-  if (isMaskType(VT))
-    return MVT::v256i1;
-  if (isOverPackedType(VT))
-    return ElemVT.isFloatingPoint() ? MVT::v256f64 : MVT::v256i64;
-  return ElemVT.isFloatingPoint() ? MVT::v256f32 : MVT::v256i32;
-}
-
-static inline Packing getPackingForVT(EVT VT) {
-  assert(VT.isVector());
-  return isPackedType(VT) ? Packing::Dense : Packing::Normal;
-}
+Packing getPackingForVT(EVT VT);
 
 template <typename MaskBits> Packing getPackingForMaskBits(const MaskBits MB);
 
 // True, iff this is a VEC_UNPACK_LO/HI, VEC_SWAP or VEC_PACK.
-static inline bool isPackingSupportOpcode(unsigned Opcode) {
-  switch (Opcode) {
-  case VEISD::VEC_UNPACK_LO:
-  case VEISD::VEC_UNPACK_HI:
-  case VEISD::VEC_PACK:
-  case VEISD::VEC_SWAP:
-    return true;
-  }
-  return false;
-}
+bool isPackingSupportOpcode(unsigned Opcode);
 
-static bool isUnpackOp(unsigned OPC) {
-  return (OPC == VEISD::VEC_UNPACK_LO) || (OPC == VEISD::VEC_UNPACK_HI);
-}
+bool isUnpackOp(unsigned OPC);
 
-static PackElem getPartForUnpackOpcode(unsigned OPC) {
-  if (OPC == VEISD::VEC_UNPACK_LO)
-    return PackElem::Lo;
-  if (OPC == VEISD::VEC_UNPACK_HI)
-    return PackElem::Hi;
-  llvm_unreachable("Not an unpack opcode!");
-}
+PackElem getPartForUnpackOpcode(unsigned OPC);
 
-static unsigned getUnpackOpcodeForPart(PackElem Part) {
-  return (Part == PackElem::Lo) ? VEISD::VEC_UNPACK_LO : VEISD::VEC_UNPACK_HI;
-}
+unsigned getUnpackOpcodeForPart(PackElem Part);
 
-static SDValue getUnpackPackOperand(SDValue N) { return N->getOperand(0); }
+SDValue getUnpackPackOperand(SDValue N);
 
-static SDValue getUnpackAVL(SDValue N) { return N->getOperand(1); }
+SDValue getUnpackAVL(SDValue N);
 
 /// } Packing
 
