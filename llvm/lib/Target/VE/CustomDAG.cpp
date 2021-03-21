@@ -25,14 +25,97 @@
 
 namespace llvm {
 
+
 /// Packing {
 
+bool isPackedMaskType(EVT SomeVT) {
+  return isPackedType(SomeVT) && isMaskType(SomeVT);
+}
 template <> Packing getPackingForMaskBits(const LaneBits MB) {
   return Packing::Normal;
 }
 template <> Packing getPackingForMaskBits(const PackedLaneBits MB) {
   return Packing::Dense;
 }
+
+PackElem getPartForLane(unsigned ElemIdx) {
+  return (ElemIdx % 2 == 0) ? PackElem::Hi : PackElem::Lo;
+}
+
+PackElem getOtherPart(PackElem Part) {
+  return Part == PackElem::Lo ? PackElem::Hi : PackElem::Lo;
+}
+
+unsigned getOverPackedSubRegIdx(PackElem Part) {
+  return Part == PackElem::Lo ? VE::sub_pack_lo : VE::sub_pack_hi;
+}
+
+unsigned getPackedMaskSubRegIdx(PackElem Part) {
+  return Part == PackElem::Lo ? VE::sub_vm_lo : VE::sub_vm_hi;
+}
+
+MVT getMaskVT(Packing P) {
+  return P == Packing::Normal ? MVT::v256i1 : MVT::v512i1;
+}
+
+PackElem getPackElemForVT(EVT VT) {
+  if (VT.isFloatingPoint())
+    return PackElem::Hi;
+  if (VT.isVector())
+    return getPackElemForVT(VT.getVectorElementType());
+  return PackElem::Lo;
+}
+
+// The subregister VT an unpack of part \p Elem from \p VT would source its
+// result from.
+MVT getUnpackSourceType(EVT VT, PackElem Elem) {
+  if (!VT.isVector())
+    return Elem == PackElem::Hi ? MVT::f32 : MVT::i32;
+
+  EVT ElemVT = VT.getVectorElementType();
+  if (isMaskType(VT))
+    return MVT::v256i1;
+  if (isOverPackedType(VT))
+    return ElemVT.isFloatingPoint() ? MVT::v256f64 : MVT::v256i64;
+  return ElemVT.isFloatingPoint() ? MVT::v256f32 : MVT::v256i32;
+}
+
+Packing getPackingForVT(EVT VT) {
+  assert(VT.isVector());
+  return isPackedType(VT) ? Packing::Dense : Packing::Normal;
+}
+
+// True, iff this is a VEC_UNPACK_LO/HI, VEC_SWAP or VEC_PACK.
+bool isPackingSupportOpcode(unsigned Opcode) {
+  switch (Opcode) {
+  case VEISD::VEC_UNPACK_LO:
+  case VEISD::VEC_UNPACK_HI:
+  case VEISD::VEC_PACK:
+  case VEISD::VEC_SWAP:
+    return true;
+  }
+  return false;
+}
+
+bool isUnpackOp(unsigned OPC) {
+  return (OPC == VEISD::VEC_UNPACK_LO) || (OPC == VEISD::VEC_UNPACK_HI);
+}
+
+PackElem getPartForUnpackOpcode(unsigned OPC) {
+  if (OPC == VEISD::VEC_UNPACK_LO)
+    return PackElem::Lo;
+  if (OPC == VEISD::VEC_UNPACK_HI)
+    return PackElem::Hi;
+  llvm_unreachable("Not an unpack opcode!");
+}
+
+unsigned getUnpackOpcodeForPart(PackElem Part) {
+  return (Part == PackElem::Lo) ? VEISD::VEC_UNPACK_LO : VEISD::VEC_UNPACK_HI;
+}
+
+SDValue getUnpackPackOperand(SDValue N) { return N->getOperand(0); }
+
+SDValue getUnpackAVL(SDValue N) { return N->getOperand(1); }
 
 /// } Packing
 
@@ -262,16 +345,6 @@ Optional<int> getAVLPos(unsigned Opc) {
     return *MaskOpt + 1;
   }
   return None;
-}
-
-static SDValue getLoadStoreMask(SDValue Op) {
-  if (auto *MaskedN = dyn_cast<MaskedLoadStoreSDNode>(Op.getNode())) {
-    return MaskedN->getMask();
-  }
-  if (auto *VPLoadN = dyn_cast<VPLoadStoreSDNode>(Op.getNode())) {
-    return VPLoadN->getMask();
-  }
-  return SDValue();
 }
 
 // Return the mask operand position for this VVP or VEC op.
