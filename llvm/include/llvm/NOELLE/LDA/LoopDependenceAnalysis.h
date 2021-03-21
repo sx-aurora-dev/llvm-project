@@ -24,6 +24,14 @@ class Loop;
 
 using ConstVF = Optional<size_t>;
 
+static bool operator<(const ConstVF V1, const ConstVF V2) {
+  if (!V1.hasValue())
+    return false;
+  if (!V2.hasValue())
+    return true;
+  return V1.getValue() < V2.getValue();
+}
+
 // Iteration dependence descriptor for a given loop.
 // @baziotis: This is the actual interface. Everyting below is just boilerplate
 // to fit things into LLVM's pass framework.

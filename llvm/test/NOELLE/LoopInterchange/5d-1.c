@@ -1,0 +1,270 @@
+// RUN: python %S/interchange_and_run.py %s | FileCheck %s
+
+#include <stdint.h>
+
+void bar(int, int, int, int, int);
+
+void foo(int lim) {
+# pragma clang loop distribute(enable)
+	for (int l = 0; l < lim; ++l) {
+		for (int o = 0; o < lim; ++o) {
+			for (int k = 0; k < lim; ++k) {
+	  		for (int i = 0; i < lim; ++i) {
+# pragma clang loop distribute(enable)
+	  	  	for (int j = 0; j < lim; ++j) {
+	  	    	printf("%d %d %d %d %d\n", l, o, k, i, j);
+	  	    }
+	  	  }
+	  	}
+	  }
+	}
+}
+
+int main(void) {
+	foo(3);
+	return 0;
+}
+
+// CHECK:      0 0 0 0 0
+// CHECK-NEXT: 1 0 0 0 0
+// CHECK-NEXT: 2 0 0 0 0
+// CHECK-NEXT: 0 0 0 1 0
+// CHECK-NEXT: 1 0 0 1 0
+// CHECK-NEXT: 2 0 0 1 0
+// CHECK-NEXT: 0 0 0 2 0
+// CHECK-NEXT: 1 0 0 2 0
+// CHECK-NEXT: 2 0 0 2 0
+// CHECK-NEXT: 0 0 1 0 0
+// CHECK-NEXT: 1 0 1 0 0
+// CHECK-NEXT: 2 0 1 0 0
+// CHECK-NEXT: 0 0 1 1 0
+// CHECK-NEXT: 1 0 1 1 0
+// CHECK-NEXT: 2 0 1 1 0
+// CHECK-NEXT: 0 0 1 2 0
+// CHECK-NEXT: 1 0 1 2 0
+// CHECK-NEXT: 2 0 1 2 0
+// CHECK-NEXT: 0 0 2 0 0
+// CHECK-NEXT: 1 0 2 0 0
+// CHECK-NEXT: 2 0 2 0 0
+// CHECK-NEXT: 0 0 2 1 0
+// CHECK-NEXT: 1 0 2 1 0
+// CHECK-NEXT: 2 0 2 1 0
+// CHECK-NEXT: 0 0 2 2 0
+// CHECK-NEXT: 1 0 2 2 0
+// CHECK-NEXT: 2 0 2 2 0
+// CHECK-NEXT: 0 1 0 0 0
+// CHECK-NEXT: 1 1 0 0 0
+// CHECK-NEXT: 2 1 0 0 0
+// CHECK-NEXT: 0 1 0 1 0
+// CHECK-NEXT: 1 1 0 1 0
+// CHECK-NEXT: 2 1 0 1 0
+// CHECK-NEXT: 0 1 0 2 0
+// CHECK-NEXT: 1 1 0 2 0
+// CHECK-NEXT: 2 1 0 2 0
+// CHECK-NEXT: 0 1 1 0 0
+// CHECK-NEXT: 1 1 1 0 0
+// CHECK-NEXT: 2 1 1 0 0
+// CHECK-NEXT: 0 1 1 1 0
+// CHECK-NEXT: 1 1 1 1 0
+// CHECK-NEXT: 2 1 1 1 0
+// CHECK-NEXT: 0 1 1 2 0
+// CHECK-NEXT: 1 1 1 2 0
+// CHECK-NEXT: 2 1 1 2 0
+// CHECK-NEXT: 0 1 2 0 0
+// CHECK-NEXT: 1 1 2 0 0
+// CHECK-NEXT: 2 1 2 0 0
+// CHECK-NEXT: 0 1 2 1 0
+// CHECK-NEXT: 1 1 2 1 0
+// CHECK-NEXT: 2 1 2 1 0
+// CHECK-NEXT: 0 1 2 2 0
+// CHECK-NEXT: 1 1 2 2 0
+// CHECK-NEXT: 2 1 2 2 0
+// CHECK-NEXT: 0 2 0 0 0
+// CHECK-NEXT: 1 2 0 0 0
+// CHECK-NEXT: 2 2 0 0 0
+// CHECK-NEXT: 0 2 0 1 0
+// CHECK-NEXT: 1 2 0 1 0
+// CHECK-NEXT: 2 2 0 1 0
+// CHECK-NEXT: 0 2 0 2 0
+// CHECK-NEXT: 1 2 0 2 0
+// CHECK-NEXT: 2 2 0 2 0
+// CHECK-NEXT: 0 2 1 0 0
+// CHECK-NEXT: 1 2 1 0 0
+// CHECK-NEXT: 2 2 1 0 0
+// CHECK-NEXT: 0 2 1 1 0
+// CHECK-NEXT: 1 2 1 1 0
+// CHECK-NEXT: 2 2 1 1 0
+// CHECK-NEXT: 0 2 1 2 0
+// CHECK-NEXT: 1 2 1 2 0
+// CHECK-NEXT: 2 2 1 2 0
+// CHECK-NEXT: 0 2 2 0 0
+// CHECK-NEXT: 1 2 2 0 0
+// CHECK-NEXT: 2 2 2 0 0
+// CHECK-NEXT: 0 2 2 1 0
+// CHECK-NEXT: 1 2 2 1 0
+// CHECK-NEXT: 2 2 2 1 0
+// CHECK-NEXT: 0 2 2 2 0
+// CHECK-NEXT: 1 2 2 2 0
+// CHECK-NEXT: 2 2 2 2 0
+// CHECK-NEXT: 0 0 0 0 1
+// CHECK-NEXT: 1 0 0 0 1
+// CHECK-NEXT: 2 0 0 0 1
+// CHECK-NEXT: 0 0 0 1 1
+// CHECK-NEXT: 1 0 0 1 1
+// CHECK-NEXT: 2 0 0 1 1
+// CHECK-NEXT: 0 0 0 2 1
+// CHECK-NEXT: 1 0 0 2 1
+// CHECK-NEXT: 2 0 0 2 1
+// CHECK-NEXT: 0 0 1 0 1
+// CHECK-NEXT: 1 0 1 0 1
+// CHECK-NEXT: 2 0 1 0 1
+// CHECK-NEXT: 0 0 1 1 1
+// CHECK-NEXT: 1 0 1 1 1
+// CHECK-NEXT: 2 0 1 1 1
+// CHECK-NEXT: 0 0 1 2 1
+// CHECK-NEXT: 1 0 1 2 1
+// CHECK-NEXT: 2 0 1 2 1
+// CHECK-NEXT: 0 0 2 0 1
+// CHECK-NEXT: 1 0 2 0 1
+// CHECK-NEXT: 2 0 2 0 1
+// CHECK-NEXT: 0 0 2 1 1
+// CHECK-NEXT: 1 0 2 1 1
+// CHECK-NEXT: 2 0 2 1 1
+// CHECK-NEXT: 0 0 2 2 1
+// CHECK-NEXT: 1 0 2 2 1
+// CHECK-NEXT: 2 0 2 2 1
+// CHECK-NEXT: 0 1 0 0 1
+// CHECK-NEXT: 1 1 0 0 1
+// CHECK-NEXT: 2 1 0 0 1
+// CHECK-NEXT: 0 1 0 1 1
+// CHECK-NEXT: 1 1 0 1 1
+// CHECK-NEXT: 2 1 0 1 1
+// CHECK-NEXT: 0 1 0 2 1
+// CHECK-NEXT: 1 1 0 2 1
+// CHECK-NEXT: 2 1 0 2 1
+// CHECK-NEXT: 0 1 1 0 1
+// CHECK-NEXT: 1 1 1 0 1
+// CHECK-NEXT: 2 1 1 0 1
+// CHECK-NEXT: 0 1 1 1 1
+// CHECK-NEXT: 1 1 1 1 1
+// CHECK-NEXT: 2 1 1 1 1
+// CHECK-NEXT: 0 1 1 2 1
+// CHECK-NEXT: 1 1 1 2 1
+// CHECK-NEXT: 2 1 1 2 1
+// CHECK-NEXT: 0 1 2 0 1
+// CHECK-NEXT: 1 1 2 0 1
+// CHECK-NEXT: 2 1 2 0 1
+// CHECK-NEXT: 0 1 2 1 1
+// CHECK-NEXT: 1 1 2 1 1
+// CHECK-NEXT: 2 1 2 1 1
+// CHECK-NEXT: 0 1 2 2 1
+// CHECK-NEXT: 1 1 2 2 1
+// CHECK-NEXT: 2 1 2 2 1
+// CHECK-NEXT: 0 2 0 0 1
+// CHECK-NEXT: 1 2 0 0 1
+// CHECK-NEXT: 2 2 0 0 1
+// CHECK-NEXT: 0 2 0 1 1
+// CHECK-NEXT: 1 2 0 1 1
+// CHECK-NEXT: 2 2 0 1 1
+// CHECK-NEXT: 0 2 0 2 1
+// CHECK-NEXT: 1 2 0 2 1
+// CHECK-NEXT: 2 2 0 2 1
+// CHECK-NEXT: 0 2 1 0 1
+// CHECK-NEXT: 1 2 1 0 1
+// CHECK-NEXT: 2 2 1 0 1
+// CHECK-NEXT: 0 2 1 1 1
+// CHECK-NEXT: 1 2 1 1 1
+// CHECK-NEXT: 2 2 1 1 1
+// CHECK-NEXT: 0 2 1 2 1
+// CHECK-NEXT: 1 2 1 2 1
+// CHECK-NEXT: 2 2 1 2 1
+// CHECK-NEXT: 0 2 2 0 1
+// CHECK-NEXT: 1 2 2 0 1
+// CHECK-NEXT: 2 2 2 0 1
+// CHECK-NEXT: 0 2 2 1 1
+// CHECK-NEXT: 1 2 2 1 1
+// CHECK-NEXT: 2 2 2 1 1
+// CHECK-NEXT: 0 2 2 2 1
+// CHECK-NEXT: 1 2 2 2 1
+// CHECK-NEXT: 2 2 2 2 1
+// CHECK-NEXT: 0 0 0 0 2
+// CHECK-NEXT: 1 0 0 0 2
+// CHECK-NEXT: 2 0 0 0 2
+// CHECK-NEXT: 0 0 0 1 2
+// CHECK-NEXT: 1 0 0 1 2
+// CHECK-NEXT: 2 0 0 1 2
+// CHECK-NEXT: 0 0 0 2 2
+// CHECK-NEXT: 1 0 0 2 2
+// CHECK-NEXT: 2 0 0 2 2
+// CHECK-NEXT: 0 0 1 0 2
+// CHECK-NEXT: 1 0 1 0 2
+// CHECK-NEXT: 2 0 1 0 2
+// CHECK-NEXT: 0 0 1 1 2
+// CHECK-NEXT: 1 0 1 1 2
+// CHECK-NEXT: 2 0 1 1 2
+// CHECK-NEXT: 0 0 1 2 2
+// CHECK-NEXT: 1 0 1 2 2
+// CHECK-NEXT: 2 0 1 2 2
+// CHECK-NEXT: 0 0 2 0 2
+// CHECK-NEXT: 1 0 2 0 2
+// CHECK-NEXT: 2 0 2 0 2
+// CHECK-NEXT: 0 0 2 1 2
+// CHECK-NEXT: 1 0 2 1 2
+// CHECK-NEXT: 2 0 2 1 2
+// CHECK-NEXT: 0 0 2 2 2
+// CHECK-NEXT: 1 0 2 2 2
+// CHECK-NEXT: 2 0 2 2 2
+// CHECK-NEXT: 0 1 0 0 2
+// CHECK-NEXT: 1 1 0 0 2
+// CHECK-NEXT: 2 1 0 0 2
+// CHECK-NEXT: 0 1 0 1 2
+// CHECK-NEXT: 1 1 0 1 2
+// CHECK-NEXT: 2 1 0 1 2
+// CHECK-NEXT: 0 1 0 2 2
+// CHECK-NEXT: 1 1 0 2 2
+// CHECK-NEXT: 2 1 0 2 2
+// CHECK-NEXT: 0 1 1 0 2
+// CHECK-NEXT: 1 1 1 0 2
+// CHECK-NEXT: 2 1 1 0 2
+// CHECK-NEXT: 0 1 1 1 2
+// CHECK-NEXT: 1 1 1 1 2
+// CHECK-NEXT: 2 1 1 1 2
+// CHECK-NEXT: 0 1 1 2 2
+// CHECK-NEXT: 1 1 1 2 2
+// CHECK-NEXT: 2 1 1 2 2
+// CHECK-NEXT: 0 1 2 0 2
+// CHECK-NEXT: 1 1 2 0 2
+// CHECK-NEXT: 2 1 2 0 2
+// CHECK-NEXT: 0 1 2 1 2
+// CHECK-NEXT: 1 1 2 1 2
+// CHECK-NEXT: 2 1 2 1 2
+// CHECK-NEXT: 0 1 2 2 2
+// CHECK-NEXT: 1 1 2 2 2
+// CHECK-NEXT: 2 1 2 2 2
+// CHECK-NEXT: 0 2 0 0 2
+// CHECK-NEXT: 1 2 0 0 2
+// CHECK-NEXT: 2 2 0 0 2
+// CHECK-NEXT: 0 2 0 1 2
+// CHECK-NEXT: 1 2 0 1 2
+// CHECK-NEXT: 2 2 0 1 2
+// CHECK-NEXT: 0 2 0 2 2
+// CHECK-NEXT: 1 2 0 2 2
+// CHECK-NEXT: 2 2 0 2 2
+// CHECK-NEXT: 0 2 1 0 2
+// CHECK-NEXT: 1 2 1 0 2
+// CHECK-NEXT: 2 2 1 0 2
+// CHECK-NEXT: 0 2 1 1 2
+// CHECK-NEXT: 1 2 1 1 2
+// CHECK-NEXT: 2 2 1 1 2
+// CHECK-NEXT: 0 2 1 2 2
+// CHECK-NEXT: 1 2 1 2 2
+// CHECK-NEXT: 2 2 1 2 2
+// CHECK-NEXT: 0 2 2 0 2
+// CHECK-NEXT: 1 2 2 0 2
+// CHECK-NEXT: 2 2 2 0 2
+// CHECK-NEXT: 0 2 2 1 2
+// CHECK-NEXT: 1 2 2 1 2
+// CHECK-NEXT: 2 2 2 1 2
+// CHECK-NEXT: 0 2 2 2 2
+// CHECK-NEXT: 1 2 2 2 2
+// CHECK-NEXT: 2 2 2 2 2

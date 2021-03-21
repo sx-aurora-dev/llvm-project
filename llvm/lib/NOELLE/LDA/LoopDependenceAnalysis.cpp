@@ -1,4 +1,4 @@
-﻿//===----------- LoopDependenceAnalysis.cpp - Iter Dependences -------------==//
+//===----------- LoopDependenceAnalysis.cpp - Iter Dependences -------------==//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
 // See https://llvm.org/LICENSE.txt for license information.
@@ -11,17 +11,18 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Analysis/LoopDependenceAnalysis.h"
+#include "llvm/NOELLE/LDA/LoopDependenceAnalysis.h"
+
 #include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/Analysis/AliasSetTracker.h"
 #include "llvm/Analysis/LoopInfo.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/Analysis/VectorUtils.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
 #include "llvm/Transforms/Utils/ScalarEvolutionExpander.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 
 /*
 
@@ -701,11 +702,11 @@ static bool addRecHasPositiveConstStep(ScalarEvolution &SE,
   return true;
 }
 
-static MinMaxSCEVPair getMinMaxOfIncreasingAddRec(ScalarEvolution &SE,
-                                                  const SCEVAddRecExpr *AR) {
+static bool getMinMaxOfIncreasingAddRec(ScalarEvolution &SE,
+                                   const SCEVAddRecExpr *AR, MinMaxSCEVPair &Res) {
   assert(AR);
-  assert(addRecHasPositiveConstStep(SE, AR));
-  MinMaxSCEVPair Res;
+  if (!addRecHasPositiveConstStep(SE, AR))
+    return false;
   // Important: This is valid only because we have already tested
   // that the step is positive.
   // TODO: We don't take wrapping into consideration. It it wraps,
@@ -718,7 +719,7 @@ static MinMaxSCEVPair getMinMaxOfIncreasingAddRec(ScalarEvolution &SE,
   const Loop *TopLevel = nullptr;
   // Again, this works because we have tested that the step is positive.
   Res.Max = SE.getSCEVAtScope(AR, TopLevel);
-  return Res;
+  return true;
 }
 
 bool subscriptsAreWithinBounds(ScalarEvolution &SE,
@@ -744,7 +745,8 @@ bool subscriptsAreWithinBounds(ScalarEvolution &SE,
     }
     const SCEVAddRecExpr *SubAR = dyn_cast<SCEVAddRecExpr>(Sub);
     assert(SubAR);
-    MinMaxPairs[SzIt] = getMinMaxOfIncreasingAddRec(SE, SubAR);
+    if (!getMinMaxOfIncreasingAddRec(SE, SubAR, MinMaxPairs[SzIt]))
+      return false;
   }
 
   return verifyMinMaxPairs(SE, MinMaxPairs, Sizes);
@@ -779,8 +781,10 @@ static bool subscriptsAreLegal(ScalarEvolution &SE,
     }
   }
 
+  /*
   if (!subscriptsAreWithinBounds(SE, Subscripts, Sizes))
     return false;
+  */
 
   return true;
 }
@@ -801,8 +805,10 @@ static const SCEV *getSDivSimpleAddRec(ScalarEvolution &SE,
   const SCEVConstant *Start = dyn_cast<SCEVConstant>(AddRec->getStart());
   const SCEVConstant *Step =
       dyn_cast<SCEVConstant>(AddRec->getStepRecurrence(SE));
-  assert(Start != nullptr);
-  assert(Step != nullptr);
+  if (!Start)
+    return nullptr;
+  if (!Step)
+    return nullptr;
 
   // If the step / start is negative, negate it so that unsigned division
   // works and then negate the result again.
@@ -824,10 +830,10 @@ static const SCEV *getSDivSimpleAddRec(ScalarEvolution &SE,
                                               AddRec->getNoWrapFlags());
 
   // Do the division
-  dbgs() << "AddRec: " << *AddRec << "\n";
-  dbgs() << "Divisor: " << *Divisor << "\n";
+  LLVM_DEBUG(dbgs() << "AddRec: " << *AddRec << "\n");
+  LLVM_DEBUG(dbgs() << "Divisor: " << *Divisor << "\n");
   const SCEV *UDivExpr = SE.getUDivExpr(AddRec, Divisor);
-  dbgs() << "UDivExpr: " << *UDivExpr << "\n";
+  LLVM_DEBUG(dbgs() << "UDivExpr: " << *UDivExpr << "\n");
   const SCEVAddRecExpr *Res = dyn_cast<SCEVAddRecExpr>(UDivExpr);
   assert(Res);
 
@@ -872,6 +878,8 @@ handleFailedDelinearization(ScalarEvolution &SE, const Loop *L,
   uint64_t TypeByteSize = DL.getTypeAllocSize(Ty->getPointerElementType());
   const SCEV *Divisor = SE.getConstant(Ty, TypeByteSize);
   const SCEV *Normalized = getSDivSimpleAddRec(SE, AddRec, Divisor);
+  if (!Normalized)
+    return false;
   LLVM_DEBUG(dbgs() << "Normalized: " << *Normalized << "\n";);
   Subscripts.clear();
   Subscripts.push_back(Normalized);
@@ -1037,7 +1045,7 @@ delinearizePtrOnGlobalArray(ScalarEvolution &SE, Value *Ptr, Value *Obj,
       getSCEVStrippedFromBasePointer(SE, Ptr, NestInfo.InnermostLoop);
   getArraySizes(SE, Obj, Sizes);
   for (const SCEV *Sz : Sizes) {
-    dbgs() << "Sz: " << *Sz << "\n";
+    LLVM_DEBUG(dbgs() << "Sz: " << *Sz << "\n");
   }
   auto &DL = NestInfo.AnalyzedLoop->getHeader()->getModule()->getDataLayout();
   assert(Ptr->getType()->isPointerTy());
@@ -1086,8 +1094,7 @@ struct DepVectorComponent {
 };
 
 struct DepVector {
-  constexpr static size_t MaxComps = 4;
-  SmallVector<DepVectorComponent, MaxComps> Comps;
+  SmallVector<DepVectorComponent, 4> Comps;
 
   DepVector(int Dimensions) : Comps(Dimensions) {
     // Start with everything destined to be squashed
@@ -1095,7 +1102,6 @@ struct DepVector {
     for (DepVectorComponent &DVC : Comps) {
       DVC.Dir = 'S';
     }
-    assert(Dimensions <= MaxComps);
   }
 
   const DepVectorComponent operator[](size_t I) const { return Comps[I]; }
@@ -1349,55 +1355,28 @@ bool isForwardDependence(DepVector &DV, unsigned LoadPosition,
   return false;
 }
 
+static bool pointsToPrevious(DepVector &IterDV, size_t StartFrom = 0) {
+  int64_t FirstNonZero = 0;
+  for (size_t I = StartFrom; I < IterDV.size(); ++I) {
+    if (IterDV[I].Dist != 0) {
+      FirstNonZero = IterDV[I].Dist;
+      break;
+    }
+  }
+  // We didn't find non-zero element.
+  if (FirstNonZero > 0)
+    return false;
+  assert(FirstNonZero <= 0);
+  return true;
+}
+
 /// Reflect if it points to previous iterations - something
 /// that arises because the load accesses memory locations
 /// before the store (in time).
 void reflectIfNeeded(DepVector &IterDV) {
-  if (!IterDV.size())
-    return;
-
-  if (IterDV.size() > 4)
-    return;
-  if (IterDV.size() == 4) {
-    if (IterDV[0].Dist < 0) {
-      IterDV.reflect();
-    } else if (IterDV[0].Dist == 0) {
-      DepVector IterDV3D(3);
-      IterDV3D[0] = IterDV[1];
-      IterDV3D[1] = IterDV[2];
-      IterDV3D[2] = IterDV[3];
-      reflectIfNeeded(IterDV3D);
-      IterDV[1] = IterDV3D[0];
-      IterDV[2] = IterDV3D[1];
-      IterDV[3] = IterDV3D[2];
-    }
-    return;
-  }
-  if (IterDV.size() == 1) {
-    if (IterDV[0].Dist < 0)
-      IterDV[0].negate();
-    return;
-  } else if (IterDV.size() == 2) {
-    if (looksDownwards2D(IterDV) || looksDirectlyLeft2D(IterDV))
-      IterDV.reflect();
-  } else { // 3D case
-    // If it looks backwards, it definitely looks towards
-    // to previous iterations.
-    if (looksBackwards3D(IterDV))
-      IterDV.reflect();
-    // If it looks forwards, it definitely looks towards
-    // later iterations. So the only case left is when
-    // 1st dimension (outermost) is 0, in which case fall-back to
-    // the 2D case for the other two.
-    if (IterDV[0].Dir == '=') {
-      DepVector IterDV2D(2);
-      IterDV2D[0] = IterDV[1];
-      IterDV2D[1] = IterDV[2];
-      reflectIfNeeded(IterDV2D);
-      IterDV[1] = IterDV2D[0];
-      IterDV[2] = IterDV2D[1];
-    }
-  }
+  if (pointsToPrevious(IterDV))
+    IterDV.reflect();
+  return;
 }
 
 static ConstVF getMaxAllowedVecFact(DepVector &);
@@ -1431,19 +1410,8 @@ static ConstVF fallback3D(DepVector &IterDV, int Ignore) {
 static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
   assert(IterDV.verify());
   ConstVF Best = LoopDependence::getBestPossible().VectorizationFactor;
-  ConstVF Worst = LoopDependence::getWorstPossible().VectorizationFactor;
   if (!IterDV.size())
     return Best;
-  if (IterDV.size() > 4)
-    return Worst;
-
-  if (IterDV.size() == 4) {
-    for (int I = 0; I < 4; ++I) {
-      if (IterDV[I].Dist == 0)
-        return fallback3D(IterDV, I);
-    }
-    return Worst;
-  }
 
   if (IterDV.size() == 1) {
     int Dist = IterDV[0].Dist;
@@ -1451,28 +1419,12 @@ static ConstVF getMaxAllowedVecFact(DepVector &IterDV) {
       return Dist;
     }
     return Best;
-  } else {
-    ConstVF Res = Best;
-    if (IterDV.size() == 2) {
-      // Handle outermost loop vectorization in 2-level loop nest.
-      if (looksLeft2D(IterDV) || looksDirectlyUpwards2D(IterDV))
-        Res = (size_t)IterDV[0].Dist;
-      return Res;
-    } else {
-      // If any of the dimensions is 0, then fall-back
-      // to a 2D case.
-      for (int I = 0; I < 3; ++I) {
-        if (IterDV[I].Dist == 0)
-          return fallback2D(IterDV, I);
-      }
-      // Otherwise, the vectorization in z-axis
-      // will always 'grab' a later iteration. So,
-      // it's limited by the distance in 'z'.
-      return IterDV[0].Dist;
-    }
   }
-  assert(0);
-  return Worst;
+
+  // Squash the first dimension which is the equivalent of vectorizing it.
+  if (pointsToPrevious(IterDV, 1))
+    return IterDV[0].Dist;
+  return Best;
 }
 
 enum class TrivialAliasRes {
@@ -1550,8 +1502,11 @@ static CanAliasRes canAlias(ScalarEvolution &SE, LoopInfo &LI,
   if (!S2)
     return CanAliasRes::CAN_ALIAS_NO_INFO;
 
-  AliasCheckInfo.Bounds1 = getMinMaxOfIncreasingAddRec(SE, S1);
-  AliasCheckInfo.Bounds2 = getMinMaxOfIncreasingAddRec(SE, S2);
+
+  if (!getMinMaxOfIncreasingAddRec(SE, S1, AliasCheckInfo.Bounds1))
+    return CanAliasRes::CAN_ALIAS_NO_INFO;
+  if (!getMinMaxOfIncreasingAddRec(SE, S2, AliasCheckInfo.Bounds2))
+    return CanAliasRes::CAN_ALIAS_NO_INFO;
 
   return CanAliasRes::CAN_ALIAS_RTCHECK_INFO;
 }
@@ -1638,19 +1593,6 @@ static bool isInNest(Instruction &I, LoopNestInfo NestInfo) {
   return true;
 }
 
-bool operator<(const ConstVF V1, const ConstVF V2) {
-  if (!V1.hasValue())
-    return false;
-  if (!V2.hasValue())
-    return true;
-  return V1.getValue() < V2.getValue();
-}
-
-// FIXME: factor this out
-#if 0
-// TODO: This should definitely be moved in the transformation part! Note that
-// because this now transforms the loop, certain already verified preconditions
-// (like the loop being simplified) may not hold anymore.
 struct ExpandedMinMaxSCEVPair {
   TrackingVH<Value> Min;
   TrackingVH<Value> Max;
@@ -1660,15 +1602,16 @@ struct ExpandedRTAliasCheckInfo {
   ExpandedMinMaxSCEVPair Bounds1, Bounds2;
 };
 
-static ExpandedMinMaxSCEVPair expandBoundsPair(MinMaxSCEVPair MinMax, Instruction *InsertBefore,
+static ExpandedMinMaxSCEVPair expandBoundsPair(MinMaxSCEVPair MinMax,
+                                               Instruction *InsertBefore,
                                                SCEVExpander &SEExpander) {
   unsigned AddrSpace = MinMax.Min->getType()->getPointerAddressSpace();
   LLVMContext &Ctx = InsertBefore->getContext();
   Type *I8PtrTy = Type::getInt8PtrTy(Ctx, AddrSpace);
-  
+
   Value *Min = nullptr, *Max = nullptr;
   Min = SEExpander.expandCodeFor(MinMax.Min, I8PtrTy, InsertBefore);
-  Max= SEExpander.expandCodeFor(MinMax.Max, I8PtrTy, InsertBefore);
+  Max = SEExpander.expandCodeFor(MinMax.Max, I8PtrTy, InsertBefore);
   LLVM_DEBUG(dbgs() << "Expanded Checks -- Min: " << *MinMax.Min
                     << ", Max: " << *MinMax.Max << "\n";);
   return {Min, Max};
@@ -1687,17 +1630,21 @@ expandBounds(SmallVectorImpl<RTAliasCheckInfo> &AliasChecks,
   return ExpandedAliasChecks;
 }
 
+// TODO: This should definitely be moved in the transformation part! Note that
+// because this now transforms the loop, certain already verified preconditions
+// (like the loop being simplified) may not hold anymore.
 static void
-emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, const Loop *L,
+emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI,
+                       const Loop *L,
                        SmallVectorImpl<RTAliasCheckInfo> &AliasChecks) {
   if (AliasChecks.empty())
     return;
   assert(L->isLoopSimplifyForm());
   BasicBlock *AliasChecksBlock = L->getLoopPreheader();
-  Instruction *InsertBefore = (Instruction *) AliasChecksBlock->getTerminator();
+  Instruction *InsertBefore = (Instruction *)AliasChecksBlock->getTerminator();
 
   const DataLayout &DL = L->getHeader()->getModule()->getDataLayout();
-  
+
   SCEVExpander SEExpander(SE, DL, "induction");
   auto ExpandedChecks = expandBounds(AliasChecks, InsertBefore, SEExpander);
 
@@ -1729,7 +1676,7 @@ emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, con
     // bound1 = (B.Min <= A.Max)
     // bound2 = (A.Min <= B.Max)
     //  TheyAlias = bound0 & bound1
-    
+
     Value *Cmp1 = CheckBuilder.CreateICmpULE(Min1, Max2, "bound1");
     Value *Cmp2 = CheckBuilder.CreateICmpULE(Min2, Max1, "bound2");
     Value *TheyAlias = CheckBuilder.CreateAnd(Cmp1, Cmp2, "pointers.alias");
@@ -1747,7 +1694,7 @@ emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, con
   CheckBuilder.Insert(RuntimeCheck, "rt.alias.check");
 
   AliasChecksBlock->setName("vectorization.alias.checks");
-  
+
   BasicBlock *LoopPreheader =
       SplitBlock(AliasChecksBlock, AliasChecksBlock->getTerminator(), &DT, &LI,
                  nullptr, "loop.ph");
@@ -1760,7 +1707,6 @@ emitRuntimeAliasChecks(ScalarEvolution &SE, DominatorTree &DT, LoopInfo &LI, con
       BranchInst::Create(ExitBlock, LoopPreheader, RuntimeCheck);
   ReplaceInstWithInst(AliasChecksBlock->getTerminator(), AliasCheckBranch);
 }
-#endif
 
 const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
                                                 LoopInfo &LI, DominatorTree &DT,
@@ -1885,7 +1831,7 @@ const LoopDependence getImperfectNestDependence(LoopNestInfo NestInfo,
                                          NestInfo))
           return Bail;
       } else {
-        // Note: Right now we are probably calling getUnderlyingObjects()
+        // Note: Right now we are probably calling GetUnderlyingObjects()
         // a lot of times.
         RTAliasCheckInfo AliasCheckInfo;
         CanAliasRes canAliasRes = canAlias(

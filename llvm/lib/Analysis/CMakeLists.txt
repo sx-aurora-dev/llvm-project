@@ -75,8 +75,6 @@ add_llvm_component_library(LLVMAnalysis
   Lint.cpp
   Loads.cpp
   LoopAccessAnalysis.cpp
-  LoopDependenceAnalysis.cpp
-  LoopHotnessStats.cpp
   LoopAnalysisManager.cpp
   LoopCacheAnalysis.cpp
   LoopNestAnalysis.cpp

@@ -18,9 +18,9 @@
 namespace llvm {
 
 /// Prints loop hotness statistics based on `branch_weights` profiling metadata.
-class LoopHotnessStats : public PassInfoMixin<LoopHotnessStats> {
+class LoopHotness : public PassInfoMixin<LoopHotness> {
 public:
-  explicit LoopHotnessStats(llvm::raw_ostream &os_) : os(os_) {}
+  explicit LoopHotness(llvm::raw_ostream &os_) : os(os_) {}
   llvm::PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 
 private:

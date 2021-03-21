@@ -17,6 +17,11 @@ add_llvm_component_library(LLVMPasses
   Coroutines
   HelloNew
   IPO
+  
+  NOELLE_PDG
+  NOELLE_LDA
+  NOELLE_Transformer
+  
   InstCombine
   ObjCARC
   Scalar

@@ -45,8 +45,6 @@
 #include "llvm/Analysis/Lint.h"
 #include "llvm/Analysis/LoopAccessAnalysis.h"
 #include "llvm/Analysis/LoopCacheAnalysis.h"
-#include "llvm/Analysis/LoopDependenceAnalysis.h"
-#include "llvm/Analysis/LoopHotnessStats.h"
 #include "llvm/Analysis/LoopInfo.h"
 #include "llvm/Analysis/LoopNestAnalysis.h"
 #include "llvm/Analysis/MemDerefPrinter.h"
@@ -75,6 +73,12 @@
 #include "llvm/IR/PrintPasses.h"
 #include "llvm/IR/SafepointIRVerifier.h"
 #include "llvm/IR/Verifier.h"
+
+#include "llvm/NOELLE/PDG/PDGAnalysis.h"
+#include "llvm/NOELLE/Transformer/Transformer.h"
+#include "llvm/NOELLE/LDA/LoopDependenceAnalysis.h"
+#include "llvm/NOELLE/LDA/LoopHotness.h"
+
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
