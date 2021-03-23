@@ -30,7 +30,7 @@ cl::opt<bool>
                        cl::desc("Unroll vector loops (work in progress)"));
 
 cl::opt<bool> ExpensiveVector(
-    "ve-expensive-vector", cl::init(false),
+    "ve-expensive-vector", cl::init(true),
     cl::desc(
         "Discourage vectorization by hiding all vector registers, ops in TTI"),
     cl::NotHidden);

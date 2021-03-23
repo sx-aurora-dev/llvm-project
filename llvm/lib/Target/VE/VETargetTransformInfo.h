@@ -63,10 +63,10 @@ class VETTIImpl : public BasicTTIImplBase<VETTIImpl> {
   static bool makeVectorOpsExpensive();
 
   bool enableVPU() const {
-    return !makeVectorOpsExpensive() && getST()->enableVPU();
+    return getST()->enableVPU();
   }
   bool hasPackedMode() const {
-    return !makeVectorOpsExpensive() && getST()->hasPackedMode();
+    return getST()->hasPackedMode();
   }
 
   static bool isSupportedReduction(Intrinsic::ID ReductionID, bool Unordered) {
@@ -118,7 +118,7 @@ public:
 
   unsigned getNumberOfRegisters(unsigned ClassID) const {
     bool VectorRegs = (ClassID == 1);
-    if ((simd() || enableVPU()) && VectorRegs) {
+    if (!makeVectorOpsExpensive() && (simd() || enableVPU()) && VectorRegs) {
       return 64;
     }
 
@@ -126,14 +126,14 @@ public:
   }
 
   unsigned getRegisterBitWidth(bool Vector) const {
-    if ((simd() || enableVPU()) && Vector) {
+    if (!makeVectorOpsExpensive() && (simd() || enableVPU()) && Vector) {
       return 256 * 64;
     }
     return 0;
   }
 
   unsigned getMinVectorRegisterBitWidth() const {
-    return (simd() || enableVPU()) ? 256 * 64 : 0;
+    return !makeVectorOpsExpensive() && (simd() || enableVPU()) ? 256 * 64 : 0;
   }
 
   static bool isBoolTy(Type *Ty) { return Ty->getPrimitiveSizeInBits() == 1; }
@@ -215,8 +215,8 @@ public:
   /// perform for this target. This number depends on the level of parallelism
   /// and the number of execution units in the CPU.
   unsigned getMaxInterleaveFactor(unsigned VF) const {
-    // 3 FMA units available
-    return enableVPU() ? 3 : 1;
+    // FIXME: Values > 1 trigger miscompiles (invalid BC generated)
+    return 1;
   }
 
   bool prefersVectorizedAddressing() { return true; }
@@ -256,14 +256,15 @@ public:
   getMaskedMemoryOpCost(unsigned Opcode, Type *Src, Align Alignment,
                         unsigned AddressSpace,
                         TargetTransformInfo::TargetCostKind CostKind) const {
-    if (isa<FixedVectorType>(Src) && !isVectorRegisterType(*Src))
+    if (isa<FixedVectorType>(Src) &&
+        (!isVectorRegisterType(*Src)))
       return ProhibitiveCost * GetVectorNumElements(Src);
     return 1;
   }
 
   bool haveFastSqrt(Type *Ty) {
     // float, double or a vector thereof
-    return Ty->isFPOrFPVectorTy() &&
+    return Ty->isFPOrFPVectorTy() && !makeVectorOpsExpensive() &&
            (isVectorLaneType(*Ty) || isVectorRegisterType(*Ty));
   }
   /// } Heuristics
