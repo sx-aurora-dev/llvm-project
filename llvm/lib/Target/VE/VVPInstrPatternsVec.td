@@ -292,6 +292,7 @@ defm : Binary_rv_vv_ShortLong<c_vvp_or,  i64, v256i64, "VOR",  i32, v256i32, "PV
 
 // Floating-point arithmetic (256 elements)
 defm : Unary_ShortLong<vvp_frcp, f64, v256f64, "VRCPD", f32, v256f32, "VRCPS">; 
+defm : Unary_ShortLong<vvp_frsqrt, f64, v256f64, "VRSQRTD", f32, v256f32, "VRSQRTS">; 
 defm : Unary_ShortLong<vvp_fsqrt, f64, v256f64, "VFSQRTD", f32, v256f32, "VFSQRTS">; 
 defm : Binary_rv_vv_ShortLong<c_vvp_fadd, f64, v256f64, "VFADDD", f32, v256f32, "PVFADDUP">;
 defm : Binary_rv_vv_ShortLong<vvp_fsub,  f64, v256f64, "VFSUBD", f32, v256f32, "PVFSUBUP">;
@@ -453,6 +454,7 @@ defm : Binary_vr_vv<vvp_shl, i64, v512i32, v512i1, "PVSLL">;
 
 // Floating-point arithmetic (512 elements)
 defm : Unary<vvp_frcp,    i64, v512f32, v512i1, "PVRCP">;
+defm : Unary<vvp_frsqrt,  i64, v512f32, v512i1, "PVRSQRT">;
 
 defm : Binary_rv_vv<c_vvp_fadd,    i64, v512f32, v512i1, "PVFADD">;
 defm : Binary_rv_vv<c_vvp_fmul,    i64, v512f32, v512i1, "PVFMUL">;
