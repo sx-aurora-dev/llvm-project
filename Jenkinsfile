@@ -70,6 +70,7 @@ pipeline {
                                 credentialsId: 'marukawa-token',
                                 url: "${REPO_URL}/llvm-ve-intrinsic-test.git"
                             sh """
+                                make clean
                                 make CLANG=${TOP}/llvm-dev/install/bin/clang -j8
                                 ./test.sh
                             """
@@ -82,6 +83,10 @@ pipeline {
                             git branch: 'master',
                                 credentialsId: 'marukawa-token',
                                 url: "${REPO_TOP_URL}/ve-tensorflow/vml.git"
+                            // Remove build directory to perform clean-build
+                            sh """
+                                rm -rf build
+                            """
                         }
                         dir('vml/libs/vednn') {
                             git branch: 'vml',
