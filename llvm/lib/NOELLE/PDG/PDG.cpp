@@ -238,9 +238,6 @@ PDG *PDG::createFunctionSubgraph(Function &F) {
 
   // Recreate all edges connected to internal nodes of function
   this->copyEdgesInto(FunctionPDG, /*linkToExternal=*/true);
-  for (auto Edge : FunctionPDG->getEdges()) {
-    assert(!Edge->isLoopCarriedDependence() && "Flag was already set");
-  }
   return FunctionPDG;
 }
 

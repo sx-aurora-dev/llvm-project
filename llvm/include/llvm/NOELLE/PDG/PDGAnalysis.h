@@ -24,24 +24,14 @@ namespace llvm {
 
 class Loop;
 
-// Cheating the PM because we can't normally return a pointer.
-class PDGAnalysisResult {
-public:
-  PDGAnalysisResult(PDG *pdg_) : pdg(pdg_) {}
-  PDG *getPDG() { return pdg; }
-
-private:
-  PDG *pdg;
-};
-
 class PDGAnalysis : public AnalysisInfoMixin<PDGAnalysis> {
   friend AnalysisInfoMixin<PDGAnalysis>;
   static AnalysisKey Key;
 
 public:
-  typedef PDGAnalysisResult Result;
+  using Result = std::unique_ptr<PDG>;
 
-  PDGAnalysisResult run(Module &M, ModuleAnalysisManager &MAM);
+  Result run(Module &M, ModuleAnalysisManager &MAM);
 };
 
 /// Prints PDG in .dot files. Used for visualization.

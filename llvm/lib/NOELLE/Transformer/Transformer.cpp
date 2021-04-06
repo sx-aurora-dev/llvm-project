@@ -143,7 +143,7 @@ static void findSCCUsingMetadata(Function &F, std::set<Instruction *> &SCC) {
 }
 
 static PreservedAnalyses loopDistribute(Module &M, ModuleAnalysisManager &MAM) {
-  PDG *pdg = MAM.getResult<PDGAnalysis>(M).getPDG();
+  PDG *pdg = MAM.getResult<PDGAnalysis>(M).get();
 
   FunctionAnalysisManager &FAM =
       MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
@@ -210,11 +210,6 @@ static PreservedAnalyses loopDistribute(Module &M, ModuleAnalysisManager &MAM) {
       }
     }
   }
-
-
-
-  // TODO - IMPORTANT: This has to be fixed! See comment in PDGAnalysis.cpp
-  // delete pdg;
   return PA;
 }
 

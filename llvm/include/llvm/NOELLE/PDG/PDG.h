@@ -68,8 +68,7 @@ template <class T, class SubT> class DGHyperEdge {
 public:
   DGHyperEdge(DGNode<T> *Src, DGNode<T> *Dst)
       : from(Src), to(Dst), memory(false), must(false),
-        dataDepType(DataDepType::NONE), isControl(false), isLoopCarried(false),
-        isRemovable(false) {}
+        dataDepType(DataDepType::NONE), isControl(false) {}
   DGHyperEdge(const DGHyperEdge<T, SubT> &OtherEdge);
 
   /*
@@ -120,11 +119,8 @@ public:
     bool SameMem = (memory == Other.memory);
     bool SameMust = (must == Other.must);
     bool SameCtrl = (isControl == Other.isControl);
-    bool SameCarried = (isLoopCarried == Other.isLoopCarried);
-    bool SameRemov = (isRemovable == Other.isRemovable);
     bool SameType = (dataDepType == Other.dataDepType);
-    return (SameMem && SameMust && SameCtrl &&
-            SameCarried && SameRemov && SameType);
+    return (SameMem && SameMust && SameCtrl && SameType);
   }
 
   bool operator==(const DGHyperEdge<T, SubT> &B) const {
@@ -137,8 +133,6 @@ public:
     setMemMustType(OtherEdge.isMemoryDependence(), OtherEdge.isMustDependence(),
                    OtherEdge.dataDependenceType());
     setControl(OtherEdge.isControlDependence());
-    setLoopCarried(OtherEdge.isLoopCarriedDependence());
-    setRemovable(OtherEdge.isRemovableDependence());
   }
 
   std::pair<DGNode<T> *, DGNode<T> *> getNodePair() const {
@@ -175,9 +169,7 @@ public:
   bool isRegisterDependence() const {
     return isDataDependence() && !isMemoryDependence();
   }
-  bool isLoopCarriedDependence() const { return isLoopCarried; }
   DataDepType dataDependenceType() const { return dataDepType; }
-  bool isRemovableDependence() const { return isRemovable; }
 
   /*
   std::optional<SetOfRemedies> getRemedies() const {
@@ -191,15 +183,10 @@ public:
     this->must = must;
     this->dataDepType = dataDepType;
   }
-  void setLoopCarried(bool lc) { isLoopCarried = lc; }
-  void setRemovable(bool rem) { isRemovable = rem; }
 
-  void setEdgeAttributes(bool mem, bool must, std::string str, bool ctrl,
-                         bool lc, bool rm) {
+  void setEdgeAttributes(bool mem, bool must, std::string str, bool ctrl) {
     setMemMustType(mem, must, stringToDataDep(str));
     setControl(ctrl);
-    setLoopCarried(lc);
-    setRemovable(rm);
 
     return;
   }
@@ -236,10 +223,11 @@ protected:
   bool memory;
   bool must;
   bool isControl;
-  bool isLoopCarried;
-  bool isRemovable;
 
   DataDepType dataDepType;
+
+public:
+  std::unique_ptr<Dependence> Dep;
 };
 
 /*

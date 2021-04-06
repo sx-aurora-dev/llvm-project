@@ -91,6 +91,8 @@ static void addEdgeFromDepAnalysis(PDG *pdg, DependenceInfo &DI, StoreInst *I,
                           DataDepType::WAW); 
   }
 
+  Edge1->Dep = std::move(Dep);
+
   // TODO - IMPORTANT:
   /////////////// This should absolute be changed but I couldn't pass Dep
   ////////////// as a member in DGEdge. I std::move() the unique_ptr yet
@@ -582,17 +584,17 @@ void constructEdgesFromControl(PDG *pdg, Module &M,
  * it all over again, although we may not need to change anything.
  */
 
-PDGAnalysisResult PDGAnalysis::run(Module &M, ModuleAnalysisManager &MAM) {
-  PDG *pdg = new PDG(M);
+std::unique_ptr<PDG> PDGAnalysis::run(Module &M, ModuleAnalysisManager &MAM) {
+  std::unique_ptr<PDG> pdg = std::make_unique<PDG>(M);
 
   FunctionAnalysisManager &FAM =
       MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 
-  constructEdgesFromUseDefs(pdg);
-  constructEdgesFromDepAnalysis(pdg, M, FAM);
-  constructEdgesFromControl(pdg, M, FAM);
+  constructEdgesFromUseDefs(pdg.get());
+  constructEdgesFromDepAnalysis(pdg.get(), M, FAM);
+  constructEdgesFromControl(pdg.get(), M, FAM);
 
-  return PDGAnalysisResult(pdg);
+  return pdg;
 }
 
 /*
@@ -600,7 +602,7 @@ PDGAnalysisResult PDGAnalysis::run(Module &M, ModuleAnalysisManager &MAM) {
  */
 
 PreservedAnalyses PDGDotPrinter::run(Module &M, ModuleAnalysisManager &MAM) {
-  PDG *pdg = MAM.getResult<PDGAnalysis>(M).getPDG();
+  PDG *pdg = MAM.getResult<PDGAnalysis>(M).get();
 
   PDGPrinter *pdgPrinter = new PDGPrinter();
   llvm::CallGraph &callGraph = MAM.getResult<CallGraphAnalysis>(M);
@@ -612,26 +614,15 @@ PreservedAnalyses PDGDotPrinter::run(Module &M, ModuleAnalysisManager &MAM) {
   };
   pdgPrinter->printPDG(M, callGraph, pdg, getLoopInfo);
 
-  /*
-  *
-  * THIS IS AN IMPORTANT PROBLEM. WE CAN'T FREE pdg HERE BECAUSE
-  * IF THE ANALYSIS RESULT (FROM PDGAnalysis) IS CACHED (WHICH e.g., HAPPENS
-  * IF YOU RUN dot-pdg,print<pdg> BECAUSE THE FIRST RETURNS PreservedAnalysis.all()),
-  * OTHER PLACES CALLING THE ANALYSIS WILL GET AN INVALID POINTER.
-  *
-  */
-
-  //delete pdg;
   return PreservedAnalyses::all();
 }
 
 PreservedAnalyses PDGTextPrinter::run(Module &M, ModuleAnalysisManager &MAM) {
-  PDG *pdg = MAM.getResult<PDGAnalysis>(M).getPDG();
+  PDG *pdg = MAM.getResult<PDGAnalysis>(M).get();
 
   for (DGEdge<Value> *Edge : pdg->getEdges()) {
     os << *Edge << "\n";
   }
   
-  ///delete pdg;
   return PreservedAnalyses::all();
 }
