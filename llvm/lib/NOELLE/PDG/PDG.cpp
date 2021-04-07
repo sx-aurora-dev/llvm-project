@@ -19,6 +19,8 @@
 
 #include "llvm/NOELLE/PDG/PDG.h"
 
+#include "llvm/IR/Value.h"
+
 using namespace llvm;
 using namespace noelle;
 
@@ -193,6 +195,8 @@ PDG::PDG(const Loop *L) {
 
   return;
 }
+
+template class DG<Value>;
 
 DGEdge<Value> *PDG::addEdge(const Value *From, const Value *To) {
   return this->DG<Value>::addEdge(From, To);
