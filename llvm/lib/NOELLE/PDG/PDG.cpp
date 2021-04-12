@@ -27,8 +27,8 @@ namespace llvm {
 
 namespace noelle {
 
-template <class T, class SubT>
-DGHyperEdge<T, SubT>::DGHyperEdge(const DGHyperEdge<T, SubT> &OtherEdge) {
+template <class T>
+DGEdge<T>::DGEdge(const DGEdge<T> &OtherEdge) {
   auto NodePair = OtherEdge.getNodePair();
   auto OtherFrom = NodePair.first;
   auto OtherTo = NodePair.second;

@@ -48,74 +48,14 @@ enum class DataDepType { NONE, RAW, WAR, WAW };
  * Definitions
  */
 
-/*
- * This is a hyper-edge, which means, multiple underlying / sub-edges contribute
- * to its existence. To understand that, imagine a graph G of nodes and a
- * hyper-graph HG of SCCs incident to G. Let's say there are two SCCs, S1, S2
- * and two edges:
- * a) E1: From a node N1 of S1 to a node N2 of S2
- * b) E2: From a node N3 of S1 to a node N4 of S2
- *
- * Both of these edges represent the same thing in HG: S1 points to S2 (in other
- * words, _somehow_, from S1 you can reach S2). So, we group these edges in a
- * single hyper-edge which is created because of E1, E2 (i.e. those are its
- * subedges).
- *
- * Connecting the example above with the class below, T = SCC, SubT = node.
- * Hyper-edges point from T to T and sub-edges from SubT to SubT.
- */
-template <class T, class SubT> class DGHyperEdge {
+template <class T> class DGEdge {
 public:
-  DGHyperEdge(DGNode<T> *Src, DGNode<T> *Dst)
+  DGEdge(DGNode<T> *Src, DGNode<T> *Dst)
       : from(Src), to(Dst), memory(false), must(false),
         dataDepType(DataDepType::NONE), isControl(false) {}
-  DGHyperEdge(const DGHyperEdge<T, SubT> &OtherEdge);
-
-  /*
-  typedef typename std::unordered_set<DGEdge<SubT> *> SubEdgeSetT;
-
-  typedef typename SubEdgeSetT::iterator edges_iterator;
-  typedef typename SubEdgeSetT::const_iterator edges_const_iterator;
-
-  edges_iterator begin_sub_edges() { return subEdges.begin(); }
-  edges_iterator end_sub_edges() { return subEdges.end(); }
-  edges_const_iterator begin_sub_edges() const { return subEdges.begin(); }
-  edges_const_iterator end_sub_edges() const { return subEdges.end(); }
-
-  inline iterator_range<edges_iterator> getSubEdges() {
-    return make_range(subEdges.begin(), subEdges.end());
-  }
-
-  void addSubEdge(DGEdge<SubT> *edge) {
-    subEdges.insert(edge);
-    isLoopCarried |= edge->isLoopCarriedDependence();
-    
-    if (edge->isRemovableDependence() &&
-        (subEdges.size() == 1 || this->isRemovableDependence())) {
-      isRemovable = true;
-      if (auto optional_remeds = edge->getRemedies()) {
-        for (auto &r : *(optional_remeds))
-          this->addRemedies(r);
-      }
-    } else {
-      remeds = nullptr;
-      isRemovable = false;
-    }
-  }
-
-  void removeSubEdge(DGEdge<SubT> *edge) {
-    subEdges.erase(edge);
-  }
-
-  void clearSubEdges() {
-    subEdges.clear();
-    setLoopCarried(false);
-    setRemovable(false);
-  }
-  */
+  DGEdge(const DGEdge<T> &OtherEdge);
   
-  
-  bool hasSameCharacteristics(const DGHyperEdge<T, SubT> &Other) const {
+  bool hasSameCharacteristics(const DGEdge<T> &Other) const {
     bool SameMem = (memory == Other.memory);
     bool SameMust = (must == Other.must);
     bool SameCtrl = (isControl == Other.isControl);
@@ -123,13 +63,13 @@ public:
     return (SameMem && SameMust && SameCtrl && SameType);
   }
 
-  bool operator==(const DGHyperEdge<T, SubT> &B) const {
+  bool operator==(const DGEdge<T> &B) const {
     bool SameFrom = (from == B.from);
     bool SameTo = (to == B.to);
     return (SameFrom && SameTo && hasSameCharacteristics(B));
   }
 
-  void copyEdgeCharacteristics(const DGHyperEdge<T, SubT> &OtherEdge) {
+  void copyEdgeCharacteristics(const DGEdge<T> &OtherEdge) {
     setMemMustType(OtherEdge.isMemoryDependence(), OtherEdge.isMustDependence(),
                    OtherEdge.dataDependenceType());
     setControl(OtherEdge.isControlDependence());
@@ -171,12 +111,6 @@ public:
   }
   DataDepType dataDependenceType() const { return dataDepType; }
 
-  /*
-  std::optional<SetOfRemedies> getRemedies() const {
-    return (remeds) ? std::make_optional<SetOfRemedies>(*remeds) : std::nullopt;
-  }
-  */
-
   void setControl(bool ctrl) { isControl = ctrl; }
   void setMemMustType(bool mem, bool must, DataDepType dataDepType) {
     this->memory = mem;
@@ -217,7 +151,6 @@ public:
 protected:
   DGNode<T> *from;
   DGNode<T> *to;
-  //SubEdgeSetT subEdges;
 
   // TODO: Use LLVM's bit set (keep getters the same)
   bool memory;
@@ -228,18 +161,6 @@ protected:
 
 public:
   std::unique_ptr<Dependence> Dep;
-};
-
-/*
- * This is just a helper class which is used for "normal" edges, i.e. not
- * hyper-edges (we cheat by inheriting from the hyper-edge class but setting T
- * and SubT to the same type).
- */
-
-template <class T> class DGEdge : public DGHyperEdge<T, T> {
-public:
-  DGEdge(DGNode<T> *src, DGNode<T> *dst) : DGHyperEdge<T, T>(src, dst) {}
-  DGEdge(const DGEdge<T> &oldEdge) : DGHyperEdge<T, T>(oldEdge) {}
 };
 
 inline raw_ostream &operator<<(raw_ostream &OS, const DGEdge<Value> &Edge) {
@@ -554,7 +475,6 @@ public:
   /*
    * Add nodes from an IR unit.
    */
-  void addNodesOf(Module &M);
   void addNodesOf(Function &F);
   void addNodesOf(Loop *L);
 
@@ -563,12 +483,6 @@ public:
    */
   PDG *createFunctionSubgraph(Function &F);
   PDG *createLoopSubgraph(const Loop *loop) const;
-
-  PDG *createSubgraphFromValues(std::vector<Value *> &valueList,
-                                bool linkToExternal);
-  PDG *
-  createSubgraphFromValues(std::vector<Value *> &valueList, bool linkToExternal,
-                           std::unordered_set<DGEdge<Value> *> edgesToIgnore);
 
   /*
    * Iterate over the Values J that `ToValue` depends on (i.e. there is
@@ -637,17 +551,8 @@ inline raw_ostream &operator<<(raw_ostream &OS, const DGNode<T> &Node) {
   return OS;
 }
 
-template <class T, class SubT>
-std::string DGHyperEdge<T, SubT>::kindToString() const {
-  /*
-  if (this->subEdges.size() > 0) {
-    std::string edgesStr;
-    raw_string_ostream ros(edgesStr);
-    for (auto edge : this->subEdges)
-      ros << edge->kindToString();
-    return ros.str();
-  }
-  */
+template <class T>
+std::string DGEdge<T>::kindToString() const {
   if (this->isControlDependence())
     return "CTRL";
   std::string edgeStr;
