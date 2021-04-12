@@ -381,10 +381,10 @@ public:
   typedef typename NodeSetT::const_iterator nodes_const_iterator;
 
   typedef typename EdgeSetT::iterator edges_iterator;
-  typedef typename NodeSetT::const_iterator edges_const_iterator;
+  typedef typename EdgeSetT::const_iterator edges_const_iterator;
 
   typedef
-      typename std::unordered_map<T *, DGNode<T> *>::iterator node_map_iterator;
+      typename std::unordered_map<const T *, DGNode<T> *>::iterator node_map_iterator;
 
   /*
    * Node and Edge Iterators
