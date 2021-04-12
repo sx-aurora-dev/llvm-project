@@ -491,7 +491,6 @@ public:
   DGNode<T> *addNode(const T *theT, bool IsInternal);
   DGNode<T> *fetchOrAddNode(const T *theT, bool IsInternal);
   DGNode<T> *fetchNode(const T *theT) const;
-  const DGNode<T> *fetchConstNode(const T *theT) const;
 
   DGEdge<T> *addEdge(const T *From, const T *To);
   bool addEdge(DGEdge<T> *NewEdge);
@@ -514,21 +513,8 @@ public:
     return Edge;
   }
   DGEdge<T> *copyEdge(DGEdge<T> &edgeToCopy);
-
-  /*
-   * Merging/Extracting Graphs
-   */
-  NodeSetT getTopLevelNodes(bool onlyInternal = false);
-  NodeSetT getLeafNodes(bool onlyInternal = false);
-  std::vector<NodeSetT *> getDisconnectedSubgraphs();
-  NodeSetT getNextDepthNodes(DGNode<T> *node);
-  NodeSetT getPreviousDepthNodes(DGNode<T> *node);
   void removeNode(DGNode<T> *node);
   void removeEdge(DGEdge<T> *Edge);
-  void copyNodesIntoNewGraph(DG<T> &newGraph,
-                             std::unordered_set<DGNode<T> *> nodesToPartition,
-                             DGNode<T> *entryNode);
-  void clear();
 
 protected:
 

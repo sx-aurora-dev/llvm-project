@@ -30,13 +30,11 @@ namespace noelle {
 template <class T, class SubT>
 DGHyperEdge<T, SubT>::DGHyperEdge(const DGHyperEdge<T, SubT> &OtherEdge) {
   auto NodePair = OtherEdge.getNodePair();
-  auto From = NodePair.first;
-  auto To = NodePair.second;
+  auto OtherFrom = NodePair.first;
+  auto OtherTo = NodePair.second;
+  this->from = OtherFrom;
+  this->to = OtherTo;
   copyEdgeCharacteristics(OtherEdge);
-  /*
-  for (auto SubEdge : OtherEdge.subEdges)
-    addSubEdge(SubEdge);
-  */
 }
 
 /*
@@ -55,13 +53,12 @@ template <class T> void DGNode<T>::addIncomingEdge(DGEdge<T> *Edge) {
  * *** DG ***
  */
 
-template <class T> DGNode<T> *DG<T>::fetchNode(const T *TheTT) const {
-  T *TheT = (T *)TheTT;
-  auto NodeIt = internalNodeMap.find(TheTT);
+template <class T> DGNode<T> *DG<T>::fetchNode(const T *TheT) const {
+  auto NodeIt = internalNodeMap.find(TheT);
   if (NodeIt != internalNodeMap.end())
     return NodeIt->second;
 
-  NodeIt = externalNodeMap.find(TheTT);
+  NodeIt = externalNodeMap.find(TheT);
   if (NodeIt != externalNodeMap.end())
     return NodeIt->second;
   return nullptr;
@@ -364,8 +361,8 @@ void PDG::copyEdgesInto(
     /*
      * Create appropriate external nodes and associate edge to them
      */
-    auto newFromNode = newPDG->fetchOrAddNode(fromT, fromInclusion);
-    auto newToNode = newPDG->fetchOrAddNode(toT, toInclusion);
+    newPDG->fetchOrAddNode(fromT, fromInclusion);
+    newPDG->fetchOrAddNode(toT, toInclusion);
 
     /*
      * Copy edge to match properties (mem/var, must/may, RAW/WAW/WAR/control)
