@@ -30,8 +30,6 @@ MODULE_ANALYSIS("asan-globals-md", ASanGlobalsMetadataAnalysis())
 MODULE_ANALYSIS("inline-advisor", InlineAdvisorAnalysis())
 MODULE_ANALYSIS("ir-similarity", IRSimilarityAnalysis())
 
-MODULE_ANALYSIS("pdg", PDGAnalysis())
-
 #ifndef MODULE_ALIAS_ANALYSIS
 #define MODULE_ALIAS_ANALYSIS(NAME, CREATE_PASS)                               \
   MODULE_ANALYSIS(NAME, CREATE_PASS)
@@ -44,8 +42,6 @@ MODULE_ALIAS_ANALYSIS("globals-aa", GlobalsAA())
 #define MODULE_PASS(NAME, CREATE_PASS)
 #endif
 
-MODULE_PASS("dot-pdg", PDGDotPrinter())
-MODULE_PASS("print<pdg>", PDGTextPrinter(dbgs()))
 MODULE_PASS("noelle-transformer", NOELLETransformer())
 
 MODULE_PASS("always-inline", AlwaysInlinerPass())
@@ -180,6 +176,7 @@ FUNCTION_ANALYSIS("verify", VerifierAnalysis())
 FUNCTION_ANALYSIS("pass-instrumentation", PassInstrumentationAnalysis(PIC))
 
 FUNCTION_ANALYSIS("loop-dependence", LoopDependenceAnalysis())
+FUNCTION_ANALYSIS("pdg", PDGAnalysis())
 
 #ifndef FUNCTION_ALIAS_ANALYSIS
 #define FUNCTION_ALIAS_ANALYSIS(NAME, CREATE_PASS)                             \
@@ -339,6 +336,8 @@ FUNCTION_PASS("memprof", MemProfilerPass())
 
 FUNCTION_PASS("print<loop-dependence>", LoopDependencePrinter(dbgs()))
 FUNCTION_PASS("print<loop-hotness>", LoopHotness(dbgs()))
+FUNCTION_PASS("dot-pdg", PDGDotPrinter())
+FUNCTION_PASS("print<pdg>", PDGTextPrinter(dbgs()))
 
 #undef FUNCTION_PASS
 

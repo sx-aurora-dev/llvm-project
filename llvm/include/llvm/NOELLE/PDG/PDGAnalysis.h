@@ -31,20 +31,20 @@ class PDGAnalysis : public AnalysisInfoMixin<PDGAnalysis> {
 public:
   using Result = std::unique_ptr<PDG>;
 
-  Result run(Module &M, ModuleAnalysisManager &MAM);
+  Result run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 /// Prints PDG in .dot files. Used for visualization.
 class PDGDotPrinter : public PassInfoMixin<PDGDotPrinter> {
 public:
-  llvm::PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+  llvm::PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 };
 
 /// Prints PDG in .dot files. Used for lit-based tests.
 class PDGTextPrinter : public PassInfoMixin<PDGTextPrinter> {
 public:
   explicit PDGTextPrinter(llvm::raw_ostream &os_) : os(os_) {}
-  llvm::PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM);
+  llvm::PreservedAnalyses run(Function &F, FunctionAnalysisManager &FAM);
 
 private:
   llvm::raw_ostream &os;

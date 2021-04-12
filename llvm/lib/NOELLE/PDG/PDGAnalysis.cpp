@@ -350,20 +350,6 @@ void constructEdgesFromDepAnalysisForFunction(PDG *pdg, Function &F,
 }
 
 static
-void constructEdgesFromDepAnalysis(PDG *pdg, Module &M,
-                                   FunctionAnalysisManager &FAM) {
-
-  // Use dependence analysis on stores and loads to construct PDG edges.
-  for (auto &F : M) {
-    if (F.empty())
-      continue;
-    DependenceInfo &DI = FAM.getResult<DependenceAnalysis>(F);
-    AAResults &AA = FAM.getResult<AAManager>(F);
-    constructEdgesFromDepAnalysisForFunction(pdg, F, DI, AA);
-  }
-}
-
-static
 void constructEdgesFromControlForFunction(PDG *pdg, Function &F, PostDominatorTree &PostDomTree) {
   assert(pdg != nullptr);
 
@@ -555,44 +541,25 @@ void constructEdgesFromControlForFunction(PDG *pdg, Function &F, PostDominatorTr
   return;
 }
 
-static 
-void constructEdgesFromControl(PDG *pdg, Module &M,
-                               FunctionAnalysisManager &FAM) {
-  assert(pdg != nullptr);
-
-  for (auto &F : M) {
-    if (F.empty()) {
-      continue;
-    }
-
-    PostDominatorTree &PostDomTree =
-        FAM.getResult<PostDominatorTreeAnalysis>(F);
-
-    /*
-     * Compute the control dependences of the function based on its
-     * post-dominator tree.
-     */
-    constructEdgesFromControlForFunction(pdg, F, PostDomTree);
-  }
-
-  return;
-}
-
 /*
  * Construct PDG from IR. TODO: We need to worry about caching functions at some point.
  * That is, if I change a function, this analysis will be invalidated and we have to run
  * it all over again, although we may not need to change anything.
  */
 
-std::unique_ptr<PDG> PDGAnalysis::run(Module &M, ModuleAnalysisManager &MAM) {
-  std::unique_ptr<PDG> pdg = std::make_unique<PDG>(M);
+std::unique_ptr<PDG> PDGAnalysis::run(Function &F, FunctionAnalysisManager &FAM) {
+  std::unique_ptr<PDG> pdg = std::make_unique<PDG>(F);
 
-  FunctionAnalysisManager &FAM =
-      MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
+  if (!F.hasExactDefinition())
+    return pdg;
+
+  DependenceInfo &DI = FAM.getResult<DependenceAnalysis>(F);
+  AAResults &AA = FAM.getResult<AAManager>(F);
+  PostDominatorTree &PostDomTree = FAM.getResult<PostDominatorTreeAnalysis>(F);
 
   constructEdgesFromUseDefs(pdg.get());
-  constructEdgesFromDepAnalysis(pdg.get(), M, FAM);
-  constructEdgesFromControl(pdg.get(), M, FAM);
+  constructEdgesFromDepAnalysisForFunction(pdg.get(), F, DI, AA);
+  constructEdgesFromControlForFunction(pdg.get(), F, PostDomTree);
 
   return pdg;
 }
@@ -601,24 +568,22 @@ std::unique_ptr<PDG> PDGAnalysis::run(Module &M, ModuleAnalysisManager &MAM) {
  * Printer Passes
  */
 
-PreservedAnalyses PDGDotPrinter::run(Module &M, ModuleAnalysisManager &MAM) {
-  PDG *pdg = MAM.getResult<PDGAnalysis>(M).get();
+PreservedAnalyses PDGDotPrinter::run(Function &F, FunctionAnalysisManager &FAM) {
+
+  if (!F.hasExactDefinition())
+    return PreservedAnalyses::all();
+
+  PDG *pdg = FAM.getResult<PDGAnalysis>(F).get();
+  LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
 
   PDGPrinter *pdgPrinter = new PDGPrinter();
-  llvm::CallGraph &callGraph = MAM.getResult<CallGraphAnalysis>(M);
-  FunctionAnalysisManager &FAM =
-      MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
-  auto getLoopInfo = [&FAM](Function *F) -> LoopInfo & {
-    LoopInfo &LI = FAM.getResult<LoopAnalysis>(*F);
-    return LI;
-  };
-  pdgPrinter->printPDG(M, callGraph, pdg, getLoopInfo);
+  pdgPrinter->printGraphsForFunction(F, pdg, LI);
 
   return PreservedAnalyses::all();
 }
 
-PreservedAnalyses PDGTextPrinter::run(Module &M, ModuleAnalysisManager &MAM) {
-  PDG *pdg = MAM.getResult<PDGAnalysis>(M).get();
+PreservedAnalyses PDGTextPrinter::run(Function &F, FunctionAnalysisManager &FAM) {
+  PDG *pdg = FAM.getResult<PDGAnalysis>(F).get();
 
   for (DGEdge<Value> *Edge : pdg->getEdges()) {
     os << *Edge << "\n";

@@ -143,7 +143,6 @@ static void findSCCUsingMetadata(Function &F, std::set<Instruction *> &SCC) {
 }
 
 static PreservedAnalyses loopDistribute(Module &M, ModuleAnalysisManager &MAM) {
-  PDG *pdg = MAM.getResult<PDGAnalysis>(M).get();
 
   FunctionAnalysisManager &FAM =
       MAM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
@@ -156,6 +155,7 @@ static PreservedAnalyses loopDistribute(Module &M, ModuleAnalysisManager &MAM) {
   for (Function &F : M) {
     if (!F.hasExactDefinition())
       continue;
+    PDG *pdg = FAM.getResult<PDGAnalysis>(F).get();
     LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
     DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
 
