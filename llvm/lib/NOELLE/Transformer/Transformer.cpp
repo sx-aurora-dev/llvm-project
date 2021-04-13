@@ -155,7 +155,8 @@ static PreservedAnalyses loopDistribute(Module &M, ModuleAnalysisManager &MAM) {
   for (Function &F : M) {
     if (!F.hasExactDefinition())
       continue;
-    PDG *pdg = FAM.getResult<PDGAnalysis>(F).get();
+
+    std::unique_ptr<PDG> &pdg_ptr = FAM.getResult<PDGAnalysis>(F);
     LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
     DominatorTree &DT = FAM.getResult<DominatorTreeAnalysis>(F);
 
@@ -166,7 +167,7 @@ static PreservedAnalyses loopDistribute(Module &M, ModuleAnalysisManager &MAM) {
     if (!SCC.empty()) {
       switch (LoopDistributionAPIGranularity) {
       case 0: {
-        splitSCC(SCC, pdg, LI, DT);
+        splitSCC(SCC, pdg_ptr.get(), LI, DT);
       } break;
       case 1: {
         Loop *SCCLoop = SCCSpansOneLoop(SCC, LI);
@@ -174,14 +175,14 @@ static PreservedAnalyses loopDistribute(Module &M, ModuleAnalysisManager &MAM) {
           continue;
         if (!isLoopDistributable(SCCLoop))
           continue;
-        PDG *LoopPDG = pdg->createLoopSubgraph(SCCLoop);
+        PDG *LoopPDG = pdg_ptr->createLoopSubgraph(SCCLoop);
         if (!isLegalToRemoveSCCFromLoop(SCC, SCCLoop, LoopPDG))
           continue;
         std::set<const Instruction *> InstsToClone;
         findInstsToClone(SCC, LoopPDG, SCCLoop, InstsToClone);
 
         // Now, we don't care if it's trivial, we split and preserve
-        splitSCCUnchecked(SCC, LoopPDG, InstsToClone, pdg, LI, DT, SCCLoop);
+        splitSCCUnchecked(SCC, LoopPDG, InstsToClone, pdg_ptr.get(), LI, DT, SCCLoop);
       } break;
       case 2: {
         Loop *SCCLoop = SCCSpansOneLoop(SCC, LI);
@@ -189,7 +190,7 @@ static PreservedAnalyses loopDistribute(Module &M, ModuleAnalysisManager &MAM) {
           continue;
         if (!isLoopDistributable(SCCLoop))
           continue;
-        PDG *LoopPDG = pdg->createLoopSubgraph(SCCLoop);
+        PDG *LoopPDG = pdg_ptr->createLoopSubgraph(SCCLoop);
         if (!isLegalToRemoveSCCFromLoop(SCC, SCCLoop, LoopPDG))
           continue;
         std::set<const Instruction *> InstsToClone;

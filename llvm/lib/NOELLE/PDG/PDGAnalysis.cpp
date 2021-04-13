@@ -573,19 +573,19 @@ PreservedAnalyses PDGDotPrinter::run(Function &F, FunctionAnalysisManager &FAM) 
   if (!F.hasExactDefinition())
     return PreservedAnalyses::all();
 
-  PDG *pdg = FAM.getResult<PDGAnalysis>(F).get();
+  std::unique_ptr<PDG> &pdg_ptr = FAM.getResult<PDGAnalysis>(F);
   LoopInfo &LI = FAM.getResult<LoopAnalysis>(F);
 
   PDGPrinter *pdgPrinter = new PDGPrinter();
-  pdgPrinter->printGraphsForFunction(F, pdg, LI);
+  pdgPrinter->printGraphsForFunction(F, pdg_ptr.get(), LI);
 
   return PreservedAnalyses::all();
 }
 
 PreservedAnalyses PDGTextPrinter::run(Function &F, FunctionAnalysisManager &FAM) {
-  PDG *pdg = FAM.getResult<PDGAnalysis>(F).get();
+  std::unique_ptr<PDG> &pdg_ptr = FAM.getResult<PDGAnalysis>(F);
 
-  for (DGEdge<Value> *Edge : pdg->getEdges()) {
+  for (DGEdge<Value> *Edge : pdg_ptr->getEdges()) {
     os << *Edge << "\n";
   }
   
