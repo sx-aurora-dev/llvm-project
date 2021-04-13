@@ -215,8 +215,8 @@ public:
   /// perform for this target. This number depends on the level of parallelism
   /// and the number of execution units in the CPU.
   unsigned getMaxInterleaveFactor(unsigned VF) const {
-    // 3 FMA units available
-    return enableVPU() ? 3 : 1;
+    // FIXME: Values > 1 trigger miscompiles (invalid BC generated)
+    return 1;
   }
 
   bool prefersVectorizedAddressing() { return true; }
