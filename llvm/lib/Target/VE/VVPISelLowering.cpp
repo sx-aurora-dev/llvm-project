@@ -2207,22 +2207,80 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
   SDValue SrcV = Op.getOperand(0);
   SDValue ElemV = Op.getOperand(1);
   SDValue IndexV = Op.getOperand(2);
+  CustomDAG CDAG(*this, DAG, Op);
+
   if (SDValue ActualMaskV = PeekForMask(SrcV)) {
     // FIXME: Need to translate index!
     assert((Op.getValueType() == MVT::i64) && "not a proper mask extraction");
-    CustomDAG CDAG(*this, DAG, Op);
     return CDAG.createInsertMask(ActualMaskV, ElemV, IndexV);
+  }
+
+  // FIXME: Fallback to dynamic index implementation.
+  if (!isa<ConstantSDNode>(IndexV)) {
+    return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
+  }
+
+  uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
+
+  // Packed insert.
+  if (VecVT == MVT::v512i32 || VecVT == MVT::v512f32) {
+    // ZExt Idx to i64.
+    auto IdxVT = IndexV.getValueType();
+    if (IdxVT == MVT::i32)
+      IndexV = CDAG.getNode(ISD::ZERO_EXTEND, MVT::i64, IndexV);
+
+    uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
+    SDValue HalfConstIdx = CDAG.getConstant(ConstIdx / 2, MVT::i64);
+
+    MVT ElemVT = ElemV.getSimpleValueType();
+    bool InsertFromLo = ElemVT == MVT::i32;
+    bool InsertIntoLo = ConstIdx % 2;
+
+    // Upcast Val to i64.
+    auto ElemSubRegIdx = (ElemVT == MVT::f32) ? VE::sub_f32 : VE::sub_i32;
+    ElemV = CDAG.getTargetInsertSubreg(ElemSubRegIdx, MVT::i64, ElemV,
+                                       CDAG.getUndef(MVT::i64));
+
+    // TODO: Factor into CustomDAG {
+    // Move to right position and zero-fill opposing 32bit subreg
+    bool ShiftUp = (!InsertIntoLo && InsertFromLo);
+    bool ShiftDown = (InsertIntoLo && !InsertFromLo);
+    if (ShiftUp) {
+      ElemV = CDAG.getNode(ISD::SHL, MVT::i64, {ElemV, CDAG.getConstant(32, MVT::i32)});
+    } else if (ShiftDown) {
+      ElemV = CDAG.getNode(ISD::SRL, MVT::i64, {ElemV, CDAG.getConstant(32, MVT::i32)});
+    } else {
+      // Right position -> only zero fill.
+      // Inverted mask to keep the passthru element.
+      SDValue ElemMask = CDAG.getConstant(
+          InsertFromLo  ? 0x00000000FFFFFFFFUL : 0xFFFFFFFF00000000UL, MVT::i64);
+      ElemV = CDAG.getNode(ISD::AND, MVT::i64, {ElemV, ElemMask});
+    }
+    // } TODO: Factor into CustomDAG
+
+    // Re-cast SrcV (passthru) to v256i64.
+    SDValue Passthru = DAG.getBitcast(MVT::v256i64, SrcV);
+    SDValue PackedElt = CDAG.getNode(ISD::EXTRACT_VECTOR_ELT, MVT::i64, {Passthru, HalfConstIdx});
+    
+    // Extract element and zero out opposing part.
+    SDValue PTMask = CDAG.getConstant(
+        InsertIntoLo ? 0xFFFFFFFF00000000UL : 0x00000000FFFFFFFFUL, MVT::i64);
+    SDValue MaskedPT = CDAG.getNode(ISD::AND, MVT::i64, {PackedElt, PTMask});
+
+    // Blend passthru and new elements
+    PackedElt = CDAG.getNode(ISD::OR, MVT::i64, {ElemV, MaskedPT});
+
+    // Re-insert modifier 64 bit chunk
+    SDValue WithElement = CDAG.getNode(ISD::INSERT_VECTOR_ELT, MVT::v256i64,
+                                       {Passthru, PackedElt, HalfConstIdx});
+
+    // Re-cast to original type.
+    return DAG.getBitcast(VecVT, WithElement);
   }
 
   // Overpacked operation.
   if (VecVT == MVT::v512i64 || VecVT == MVT::v512f64) {
-    if (!isa<ConstantSDNode>(IndexV)) {
-      errs() << "TODO: Cannot lower dynamic index element insert!\n";
-      abort();
-    }
-    uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
     auto Part = getPartForLane(ConstIdx);
-    CustomDAG CDAG(*this, DAG, Op);
 
     // Meaningful AVL, unused in codegen.
     SDValue AVL = CDAG.getConstEVL(256);
@@ -2245,14 +2303,14 @@ SDValue VETargetLowering::lowerVVP_INSERT_VECTOR_ELT(SDValue Op,
     return CDAG.createPack(VecVT, NewLo, NewHi, AVL);
   }
 
-  return lowerSIMD_INSERT_VECTOR_ELT(Op, DAG);
+  llvm_unreachable("Unsupported insert_vector_elt");
 }
 
 SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
                                                       SelectionDAG &DAG) const {
   SDValue SrcV = Op->getOperand(0);
   SDValue IndexV = Op->getOperand(1);
-  EVT VecVT = SrcV.getValueType();
+  MVT VecVT = SrcV.getSimpleValueType();
 
   // Lowering to VM_EXTRACT
   if (SDValue MaskV = PeekForMask(SrcV)) {
@@ -2293,16 +2351,57 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
     return CDAG.DAG.getAnyExtOrTrunc(ResV, CDAG.DL, Op.getValueType());
   }
 
+  if (!isa<ConstantSDNode>(IndexV)) {
+    // Dynamic extraction or packed extract.
+    return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
+  }
+
+  uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
+  auto Part = getPartForLane(ConstIdx);
+  CustomDAG CDAG(*this, DAG, Op);
+  
+  // Packed extract.
+  if (VecVT == MVT::v512i32 || VecVT == MVT::v512f32) {
+    bool ExtractLo = ConstIdx % 2;
+
+    // ZExt Idx to i64.
+    auto IdxVT = IndexV.getValueType();
+    if (IdxVT == MVT::i32)
+      IndexV = CDAG.getNode(ISD::ZERO_EXTEND, MVT::i64, IndexV);
+
+    MVT ElemVT = VecVT.getVectorElementType();
+    SDValue HalfConstIdx = CDAG.getConstant(ConstIdx / 2, MVT::i64);
+
+    // Re-cast SrcV (passthru) to v256i64.
+    SDValue Passthru = DAG.getBitcast(MVT::v256i64, SrcV);
+    SDValue PackedElt = CDAG.getNode(ISD::EXTRACT_VECTOR_ELT, MVT::i64, {Passthru, HalfConstIdx});
+
+    // FIXME: Redundant  
+    // Shift to right position
+    bool ImplicitZExt = false;
+    bool ShiftUp = (ExtractLo && ElemVT == MVT::f32);
+    if (ShiftUp) {
+      PackedElt = CDAG.getNode(ISD::SHL, MVT::i64, {PackedElt, CDAG.getConstant(32, MVT::i32)});
+    }
+    bool ShiftDown = (!ExtractLo && ElemVT == MVT::i32);
+    if (ShiftDown) {
+      PackedElt = CDAG.getNode(ISD::SRL, MVT::i64, {PackedElt, CDAG.getConstant(32, MVT::i32)});
+      ImplicitZExt = true;
+    }
+
+    // Convert type
+    auto ElemSubRegIdx = (ElemVT == MVT::f32) ? VE::sub_f32 : VE::sub_i32;
+    SDValue Res = CDAG.getTargetExtractSubreg(ElemVT, ElemSubRegIdx, PackedElt);
+    if (ElemVT == MVT::i32 && !ImplicitZExt) {
+      // ABI assumes zext i32 in scalar registers.
+      Res = DAG.getZExtOrTrunc(Res, CDAG.DL, MVT::i64);
+      return CDAG.getTargetExtractSubreg(ElemVT, VE::sub_i32, Res);
+    }
+    return Res;
+  }
+
   // Overpacked operation.
   if (VecVT == MVT::v512i64 || VecVT == MVT::v512f64) {
-    if (!isa<ConstantSDNode>(IndexV)) {
-      errs() << "TODO: Cannot lower dynamic index element extract!\n";
-      abort();
-    }
-    uint64_t ConstIdx = cast<ConstantSDNode>(IndexV)->getZExtValue();
-    auto Part = getPartForLane(ConstIdx);
-    CustomDAG CDAG(*this, DAG, Op);
-
     // Meaningful AVL, unused in codegen.
     SDValue AVL = CDAG.getConstEVL(256);
 
@@ -2318,8 +2417,7 @@ SDValue VETargetLowering::lowerVVP_EXTRACT_VECTOR_ELT(SDValue Op,
     return lowerSIMD_EXTRACT_VECTOR_ELT(ExtractFromPart, DAG);
   }
 
-  // Dynamic extraction or packed extract.
-  return lowerSIMD_EXTRACT_VECTOR_ELT(Op, DAG);
+  llvm_unreachable("Unsupported extract_vector_element");
 }
 
 SDValue VETargetLowering::synthesizeView(MaskView &MV, EVT LegalResVT,
