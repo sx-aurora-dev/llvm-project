@@ -125,6 +125,8 @@ public:
     return;
   }
 
+  void setDADep(std::unique_ptr<Dependence> &Dep) { this->Dep = std::move(Dep); }
+
   std::string kindToString() const;
   std::string dataDepToString() const {
     if (this->isRAWDependence())
@@ -158,8 +160,6 @@ protected:
   bool isControl;
 
   DataDepType dataDepType;
-
-public:
   std::unique_ptr<Dependence> Dep;
 };
 

@@ -101,8 +101,8 @@ static void addEdgeFromDepAnalysis(PDG *pdg, DependenceInfo &DI, StoreInst *I,
     Edge2->setMemMustType(/* mem = */ true, /* must = */ Must,
                           DataDepType::WAW); 
   }
-  Edge1->Dep = std::move(Dep1);
-  Edge2->Dep = std::move(Dep2);
+  Edge1->setDADep(Dep1);
+  Edge2->setDADep(Dep2);
 }
 
 // IMPORTANT: You have to be very careful on how you interpret ModRefInfo results.
