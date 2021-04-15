@@ -60,21 +60,31 @@ static void addEdgeFromDepAnalysis(PDG *pdg, DependenceInfo &DI, StoreInst *I,
     assert(0);
   }
   
-  std::unique_ptr<Dependence> Dep = DI.depends(I, J, true);
-  if (Dep == nullptr) {  // No Dep
+  std::unique_ptr<Dependence> Dep1 = DI.depends(I, J, true);
+  if (Dep1 == nullptr) {  // No Dep
     return;
   }
+  // We will insert two edges for each pair, so, we want two
+  // `Dependence`s, one for each. However, the one Dependence
+  // is not irrelevant to the other, for example for the flow
+  // case, the one is a reflected dep vector of the other.
+  // However, we don't have an easy way to e.g., reflect
+  // a Dependence so to be safe, we're calling DA twice.
+  std::unique_ptr<Dependence> Dep2 = DI.depends(J, I, true);
+  assert(Dep2);
 
   bool Must = false;
   // TODO: It seems that isConsistent() is the equivalent of must/may
   // but I may be missing something.
-  if (Dep->isConsistent()) {
+  if (Dep1->isConsistent()) {
+    assert(Dep2->isConsistent());
     Must = true;
   }
 
   DGEdge<Value> *Edge1, *Edge2;
   if (kind == FLOW) {
-    assert(Dep->isFlow());
+    assert(Dep1->isFlow());
+    assert(Dep2->isAnti());
     Edge1 = pdg->addEdge(I, J);
     Edge1->setMemMustType(/* mem = */ true, /* must = */ Must,
                           DataDepType::RAW);
@@ -82,7 +92,8 @@ static void addEdgeFromDepAnalysis(PDG *pdg, DependenceInfo &DI, StoreInst *I,
     Edge2->setMemMustType(/* mem = */ true, /* must = */ Must,
                           DataDepType::WAR); 
   } else {
-    assert(Dep->isOutput());
+    assert(Dep1->isOutput());
+    assert(Dep2->isOutput());
     Edge1 = pdg->addEdge(I, J);
     Edge1->setMemMustType(/* mem = */ true, /* must = */ Must,
                           DataDepType::WAW);
@@ -90,32 +101,8 @@ static void addEdgeFromDepAnalysis(PDG *pdg, DependenceInfo &DI, StoreInst *I,
     Edge2->setMemMustType(/* mem = */ true, /* must = */ Must,
                           DataDepType::WAW); 
   }
-
-  Edge1->Dep = std::move(Dep);
-
-  // TODO - IMPORTANT:
-  /////////////// This should absolute be changed but I couldn't pass Dep
-  ////////////// as a member in DGEdge. I std::move() the unique_ptr yet
-  ////////////// on the other side in loop distribution I get a null pointer.
-  /**** Used for loop distribution to decide if a store (in the SCC) happens before or after a load (outside) */
-  //Edge->safeToDistribute = false;
-  //if (Dep->isLoopIndependent() && Dep->isFlow())
-  //  Edge->safeToDistribute = true;
-  //else {
-  //  unsigned Dir = Dep->getDirection(1);
-  //  // NOTE!: Although we want the distance to be < 0, the direction
-  //  // should be '>'
-  //  bool Valid = Dir == Dependence::DVEntry::GT;
-  //  if (Valid)
-  //    Edge->safeToDistribute = true;
-  //}
-  //dbgs() << "  safeToDistribute: ";
-  //if (Edge->safeToDistribute)
-  //  dbgs() << "True\n";
-  //else
-  //  dbgs() << "False\n";
-
-  //dbgs() << "\n";
+  Edge1->Dep = std::move(Dep1);
+  Edge2->Dep = std::move(Dep2);
 }
 
 // IMPORTANT: You have to be very careful on how you interpret ModRefInfo results.
@@ -281,7 +268,7 @@ void iterateInstForStore(PDG *pdg, Function &F, DependenceInfo &DI,
     for (Instruction &I : BB) {
 
       // We don't check {load, store} combinations because those were
-      // checked when we iterated stores.
+      // checked when we iterated loads.
 
       // Check other stores
       if (auto OtherStore = dyn_cast<StoreInst>(&I)) {
@@ -313,9 +300,6 @@ void iterateInstForCall(PDG *pdg, Function &F, AAResults &AA,
       // We don't iterate loads and stores because {load, call} combinations
       // were considered when we iterated the loads and {store, call}
       // combinations were considered when we iterated the stores.
-
-      // TODO: We should probably do the same for {load, store} combinations
-      // to avoid calling DA twice.
 
       // Check other calls.
       if (auto OtherCall = dyn_cast<CallInst>(&I)) {
