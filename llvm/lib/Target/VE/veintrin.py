@@ -1,14 +1,15 @@
 #! /usr/bin/python
 
 import re
-import sys
 from functools import partial
 
+
 class Type:
-    def __init__(self, ValueType, builtinCode, intrinDefType, ctype, elemType = None):
+    def __init__(self, ValueType, builtinCode, intrinDefType, ctype,
+                 elemType = None):
         self.ValueType = ValueType  # v256f64, f64, f32, i64, ...
         self.builtinCode = builtinCode  # V256d, d, f, ...
-        self.intrinDefType = intrinDefType # LLVMType<f64>, ...
+        self.intrinDefType = intrinDefType  # LLVMType<f64>, ...
         self.ctype = ctype
         self.elemType = elemType
 
@@ -23,21 +24,21 @@ class Type:
                 return 4
         raise Exception("not a vector type")
 
-T_f64     = Type("f64",     "d",      "LLVMType<f64>", "double")
-T_f32     = Type("f32",     "f",      "LLVMType<f32>", "float")
-T_i64     = Type("i64",     "Li",     "LLVMType<i64>", "long int")
-T_i32     = Type("i32",     "i",      "LLVMType<i32>", "int", "I32")
-T_u64     = Type("i64",     "LUi",    "LLVMType<i64>", "unsigned long int")
-T_u32     = Type("i32",     "Ui",     "LLVMType<i32>", "unsigned int")
-T_voidp   = Type("i64",     "v*",     "llvm_ptr_ty",   "void*")
-T_voidcp   = Type("i64",    "vC*",    "llvm_ptr_ty",   "void const*")
+T_f64     = Type("f64",     "d",      "LLVMType<f64>", "double")  # noqa
+T_f32     = Type("f32",     "f",      "LLVMType<f32>", "float")  # noqa
+T_i64     = Type("i64",     "Li",     "LLVMType<i64>", "long int")  # noqa
+T_i32     = Type("i32",     "i",      "LLVMType<i32>", "int", "I32")  # noqa
+T_u64     = Type("i64",     "LUi",    "LLVMType<i64>", "unsigned long int")  # noqa
+T_u32     = Type("i32",     "Ui",     "LLVMType<i32>", "unsigned int")  # noqa
+T_voidp   = Type("i64",     "v*",     "llvm_ptr_ty",   "void*")  # noqa
+T_voidcp  = Type("i64",     "vC*",    "llvm_ptr_ty",   "void const*") # noqa
 
 T_v256f64 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "double*", T_f64)
 T_v256f32 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "float*",  T_f32)
 T_v256i64 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "long int*", T_i64)
 T_v256i32 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "int*", T_i32)
-T_v256u64 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "unsigned long int*", T_u64)
-T_v256u32 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "unsigned int*", T_u32)
+T_v256u64 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "unsigned long int*", T_u64)  # noqa
+T_v256u32 = Type("v256f64", "V256d",  "LLVMType<v256f64>", "unsigned int*", T_u32)  # noqa
 
 T_v4u64   = Type("v256i1",   "V256b",   "LLVMType<v256i1>", "unsigned int*", T_u64) # for VM
 T_v8u64   = Type("v512i1",   "V512b",   "LLVMType<v512i1>", "unsigned int*", T_u64) # for VM512
@@ -161,6 +162,7 @@ class ImmOp(Op):
 def ImmI(ty): return ImmOp("I", ty, "I", "simm7", "i") # kind, type, varname
 def ImmN(ty): return ImmOp("I", ty, "N", "uimm6", "i")
 def UImm7(ty): return ImmOp("I", ty, "N", "uimm7", "i")
+def UImm3(ty): return ImmOp("I", ty, "I", "uimm3", "i")
 def ImmZ(ty): return ImmOp("Z", ty, "Z", "zero", "z")
 
 CC_FLOAT = {'af':'CC_AF',
@@ -217,6 +219,9 @@ def reorderVSTOps(ary):
 def reorderVSCOps(ary):
     return [ary[1], ary[2], ary[3], ary[0]] + ary[4:]
 
+def reorderSCROps(ary):
+    return [ary[1], ary[2], ary[0]]
+
 def addCCConstOp(ary, inst):
     cc = inst.kwargs['cc']
     if cc in ["CC_AT", "CC_AF"]:
@@ -236,6 +241,8 @@ def getLLVMInstArgs(ary, inst = None, inst0 = None):
         return addCCConstOp(ary, inst)
     if tmp in ["VFIX", "VFIXX"] and inst is not None and 'rd' in inst.kwargs:
         return movePassTroughOp(addRDConstOp(ary, inst))
+    if tmp in ["SCR", "TSCR"]:
+        return reorderSCROps(ary)
     return movePassTroughOp(ary)
 
 # inst: instruction in the manual. VFAD
@@ -833,7 +840,9 @@ class InstTable(object):
         baseIntrinName = kwargs['baseIntrinName'] if 'baseIntrinName' in kwargs else re.sub(r'\.', '', asm)
         IL = InstList(self.InstClass)
         for args in ary:
-            func_suffix = "_" + "".join([op.kind for op in args if op])
+            func_suffix = ""
+            if args[0] is not None or len(args) > 1:
+                func_suffix = "_" + "".join([op.kind for op in args if op])
             intrinsicName = baseIntrinName + func_suffix
             intrinsicName = re.sub(r'[INZ]', 's', intrinsicName) # replace Imm to s
             outs = [args[0]] if args[0] else []
@@ -1081,6 +1090,7 @@ class InstTable(object):
         self.DefM(opc, inst, subop, asm, OL, expr, rd='RD_NONE').noLLVMInstDefine();
         expr = "{0} = (" + ty + ")({1})"
         self.DefM(opc, inst, subop + "rz", asm+".rz", OL, expr, rd='RD_RZ').noLLVMInstDefine()
+
 
 class InstTableVEL(InstTable):
     def __init__(self):
@@ -1348,6 +1358,33 @@ def createInstructionTable():
     T.NoImpl("LVIX")
 
     T.Section("Table 3-25 Control Instructions", 35)
+    T.Def('0x40', "LCR", "", "lcr",
+          [[SX(T_u64), SY(T_u64), SZ(T_u64)],
+           [SX(T_u64), SY(T_u64), ImmZ(T_u64)],
+           [SX(T_u64), UImm7(T_u64), SZ(T_u64)],
+           [SX(T_u64), UImm7(T_u64), ImmZ(T_u64)],
+           ], noVL=True).noTest()
+
+    T.Def('0x50', "SCR", "", "scr",
+          [[None, SX(T_u64), SY(T_u64), SZ(T_u64)],
+           [None, SX(T_u64), SY(T_u64), ImmZ(T_u64)],
+           [None, SX(T_u64), UImm7(T_u64), SZ(T_u64)],
+           [None, SX(T_u64), UImm7(T_u64), ImmZ(T_u64)],
+           ], noVL=True).hasSideEffects().noTest()
+
+    T.Def('0x41', "TSCR", "", "tscr",
+          [[SW(T_u64), SX(T_u64), SY(T_u64), SZ(T_u64)],
+           [SW(T_u64), SX(T_u64), SY(T_u64), ImmZ(T_u64)],
+           [SW(T_u64), SX(T_u64), UImm7(T_u64), SZ(T_u64)],
+           [SW(T_u64), SX(T_u64), UImm7(T_u64), ImmZ(T_u64)],
+           ], noVL=True).hasSideEffects().noTest()
+
+    T.Def('0x51', "FIDCR", "", "fidcr",
+          [[SX(T_u64), SY(T_u64), UImm3(T_u32)],
+           [SX(T_u64), UImm7(T_u64), UImm3(T_u32)],
+           ], noVL=True).hasSideEffects().noTest()
+
+    T.Def('0x20', "FENCE", "", "fencei", [[None]], noVL=True).hasSideEffects().noTest()
     T.Dummy(0x30, "SVOB", "void _vel_svob(void)", "svob");
 
     T.Section("Approximate Operations", None)
@@ -1488,14 +1525,6 @@ def main():
                 f = getTestGenerator(I).gen(I).reference()
                 if f:
                     print(f)
-            continue
-
-            if len(i.outs) > 0 and i.outs[0].isMask() and i.hasExpr():
-                f = TestGeneratorMask().gen(i)
-                print(f.reference())
-                continue
-            if i.hasTest() and i.hasExpr():
-                print(TestGenerator().reference(i))
         print('}')
     if args.opt_html:
         HtmlManualPrinter().printAll(T, False)

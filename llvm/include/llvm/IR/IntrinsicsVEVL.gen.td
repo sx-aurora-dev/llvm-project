@@ -1247,3 +1247,7 @@ let TargetPrefix = "ve" in def int_ve_vl_negm_MM : GCCBuiltin<"__builtin_ve_vl_n
 let TargetPrefix = "ve" in def int_ve_vl_pcvm_sml : GCCBuiltin<"__builtin_ve_vl_pcvm_sml">, Intrinsic<[LLVMType<i64>], [LLVMType<v256i1>, LLVMType<i32>], [IntrNoMem]>;
 let TargetPrefix = "ve" in def int_ve_vl_lzvm_sml : GCCBuiltin<"__builtin_ve_vl_lzvm_sml">, Intrinsic<[LLVMType<i64>], [LLVMType<v256i1>, LLVMType<i32>], [IntrNoMem]>;
 let TargetPrefix = "ve" in def int_ve_vl_tovm_sml : GCCBuiltin<"__builtin_ve_vl_tovm_sml">, Intrinsic<[LLVMType<i64>], [LLVMType<v256i1>, LLVMType<i32>], [IntrNoMem]>;
+let TargetPrefix = "ve" in def int_ve_vl_lcr_sss : GCCBuiltin<"__builtin_ve_vl_lcr_sss">, Intrinsic<[LLVMType<i64>], [LLVMType<i64>, LLVMType<i64>], [IntrNoMem]>;
+let TargetPrefix = "ve" in def int_ve_vl_scr_sss : GCCBuiltin<"__builtin_ve_vl_scr_sss">, Intrinsic<[], [LLVMType<i64>, LLVMType<i64>, LLVMType<i64>], [IntrHasSideEffects]>;
+let TargetPrefix = "ve" in def int_ve_vl_tscr_ssss : GCCBuiltin<"__builtin_ve_vl_tscr_ssss">, Intrinsic<[LLVMType<i64>], [LLVMType<i64>, LLVMType<i64>, LLVMType<i64>], [IntrHasSideEffects]>;
+let TargetPrefix = "ve" in def int_ve_vl_fencei : GCCBuiltin<"__builtin_ve_vl_fencei">, Intrinsic<[], [], [IntrHasSideEffects]>;
