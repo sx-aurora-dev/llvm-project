@@ -343,6 +343,11 @@ public:
     return true;
   }
 
+  bool hasActiveVectorLength() const {
+    // FIXME: This implicitly deactivates the LLVM LoopVectorizer (use RV instead).
+    return true;
+  }
+
   /// }
 
   bool shouldExpandReduction(const IntrinsicInst *II) const {
