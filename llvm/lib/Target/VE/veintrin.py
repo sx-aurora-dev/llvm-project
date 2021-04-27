@@ -162,6 +162,7 @@ class ImmOp(Op):
 def ImmI(ty): return ImmOp("I", ty, "I", "simm7", "i") # kind, type, varname
 def ImmN(ty): return ImmOp("I", ty, "N", "uimm6", "i")
 def UImm7(ty): return ImmOp("I", ty, "N", "uimm7", "i")
+def UImm2(ty): return ImmOp("I", ty, "I", "uimm2", "i")
 def UImm3(ty): return ImmOp("I", ty, "I", "uimm3", "i")
 def ImmZ(ty): return ImmOp("Z", ty, "Z", "zero", "z")
 
@@ -349,7 +350,7 @@ class Inst(object):
         return self
 
     def hasSideEffects(self):
-        self.prop_ = ["IntrHasSideEffects"]
+        self.prop_ += ["IntrHasSideEffects"]
 
     def prop(self):
         return self.prop_
@@ -1385,6 +1386,8 @@ def createInstructionTable():
            ], noVL=True).hasSideEffects().noTest()
 
     T.Def('0x20', "FENCE", "", "fencei", [[None]], noVL=True).hasSideEffects().noTest()
+    T.Def('0x20', "FENCE", "", "fencem", [[None, UImm2(T_u32)]], noVL=True, llvmInst="FENCEM").hasSideEffects().noTest()
+    T.Def('0x20', "FENCE", "", "fencec", [[None, UImm3(T_u32)]], noVL=True, llvmInst="FENCEC").hasSideEffects().noTest()
     T.Dummy(0x30, "SVOB", "void _vel_svob(void)", "svob");
 
     T.Section("Approximate Operations", None)
@@ -1441,8 +1444,11 @@ def gen_test(insts, directory):
                 print(data)
 
 def gen_intrinsic_def(insts):
+    done = []
     for I in insts:
-        if not I.hasImmOp() and I.hasIntrinsicDef():
+        intrinName = I.intrinsicName()
+        if I.hasIntrinsicDef() and intrinName not in done:
+            done.append(intrinName)
             print(I.intrinsicDefine())
 
 def gen_pattern(insts):
@@ -1451,13 +1457,19 @@ def gen_pattern(insts):
             print(I.pattern())
 
 def gen_builtin(insts):
+    done = []
     for I in insts:
-        if (not I.hasImmOp()) and I.hasBuiltin():
+        intrinName = I.intrinsicName()
+        if I.hasBuiltin() and intrinName not in done:
+            done.append(intrinName)
             print(I.builtin())
 
 def gen_veintrin_h(insts):
+    done = []
     for I in insts:
-        if (not I.hasImmOp()) and I.hasBuiltin():
+        intrinName = I.intrinsicName()
+        if I.hasBuiltin() and intrinName not in done:
+            done.append(intrinName)
             print(I.veintrin())
 
 

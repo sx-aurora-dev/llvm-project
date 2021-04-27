@@ -1653,3 +1653,5 @@ def : Pat<(int_ve_vl_tscr_ssss i64:$sx, uimm7:$N, zero:$Z), (TSCRizr (ULO7 $N), 
 def : Pat<(int_ve_vl_fidcr_sss i64:$sy, uimm3:$I), (FIDCRri i64:$sy, (LO7 $I))>;
 def : Pat<(int_ve_vl_fidcr_sss uimm7:$N, uimm3:$I), (FIDCRii (ULO7 $N), (LO7 $I))>;
 def : Pat<(int_ve_vl_fencei ), (FENCEI )>;
+def : Pat<(int_ve_vl_fencem_s uimm2:$I), (FENCEM (LO7 $I))>;
+def : Pat<(int_ve_vl_fencec_s uimm3:$I), (FENCEC (LO7 $I))>;
