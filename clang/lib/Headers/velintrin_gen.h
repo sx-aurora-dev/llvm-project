@@ -1254,3 +1254,4 @@
 #define _vel_fencei __builtin_ve_vl_fencei
 #define _vel_fencem_s __builtin_ve_vl_fencem_s
 #define _vel_fencec_s __builtin_ve_vl_fencec_s
+#define _vel_svob __builtin_ve_vl_svob

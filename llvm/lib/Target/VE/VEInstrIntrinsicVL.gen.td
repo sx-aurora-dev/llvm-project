@@ -1655,3 +1655,4 @@ def : Pat<(int_ve_vl_fidcr_sss uimm7:$N, uimm3:$I), (FIDCRii (ULO7 $N), (LO7 $I)
 def : Pat<(int_ve_vl_fencei ), (FENCEI )>;
 def : Pat<(int_ve_vl_fencem_s uimm2:$I), (FENCEM (LO7 $I))>;
 def : Pat<(int_ve_vl_fencec_s uimm3:$I), (FENCEC (LO7 $I))>;
+def : Pat<(int_ve_vl_svob ), (SVOB )>;

@@ -1254,3 +1254,4 @@ let TargetPrefix = "ve" in def int_ve_vl_fidcr_sss : GCCBuiltin<"__builtin_ve_vl
 let TargetPrefix = "ve" in def int_ve_vl_fencei : GCCBuiltin<"__builtin_ve_vl_fencei">, Intrinsic<[], [], [IntrNoMem, IntrHasSideEffects]>;
 let TargetPrefix = "ve" in def int_ve_vl_fencem_s : GCCBuiltin<"__builtin_ve_vl_fencem_s">, Intrinsic<[], [LLVMType<i32>], [IntrNoMem, IntrHasSideEffects]>;
 let TargetPrefix = "ve" in def int_ve_vl_fencec_s : GCCBuiltin<"__builtin_ve_vl_fencec_s">, Intrinsic<[], [LLVMType<i32>], [IntrNoMem, IntrHasSideEffects]>;
+let TargetPrefix = "ve" in def int_ve_vl_svob : GCCBuiltin<"__builtin_ve_vl_svob">, Intrinsic<[], [], [IntrNoMem, IntrHasSideEffects]>;
