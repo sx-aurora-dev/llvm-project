@@ -70,6 +70,9 @@ public:
   Value& CreateContiguousLoad(Value & Pointer, MaybeAlign Alignment);
   Value& CreateScatter(Value & Val, Value & PointerVec, MaybeAlign Alignment);
   Value& CreateGather(Value & PointerVec, MaybeAlign Alignment);
+
+  Value &createSelect(Value &OnTrue, Value &OnFalse, Value &Mask, Value &Pivot,
+                      Twine Name = "");
 };
 
 

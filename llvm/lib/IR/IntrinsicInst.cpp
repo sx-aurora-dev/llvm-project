@@ -539,10 +539,8 @@ static VPIntrinsic::ShortTypeVec getVPIntrinsicTypes(Intrinsic::ID ID,
   case Intrinsic::vp_maxnum:
   case Intrinsic::vp_minnum:
   case Intrinsic::vp_vshift:
-    return VPIntrinsic::ShortTypeVec{VectorTy};
-
   case Intrinsic::vp_select:
-    return VPIntrinsic::ShortTypeVec{VecRetTy};
+    return VPIntrinsic::ShortTypeVec{VectorTy};
 
   case Intrinsic::vp_reduce_and:
   case Intrinsic::vp_reduce_or:
@@ -633,8 +631,7 @@ Function *VPIntrinsic::getDeclarationForParams(Module *M, Intrinsic::ID VPID,
     }
 
   } else if (IsShuffleOp) {
-    VecTy = (VPID == Intrinsic::vp_select) ? Params[1]->getType()
-                                           : Params[0]->getType();
+    VecTy = Params[0]->getType();
   }
 
   auto IntrinTypeVec = getVPIntrinsicTypes(VPID, VecRetTy, VecPtrTy, VecTy);
