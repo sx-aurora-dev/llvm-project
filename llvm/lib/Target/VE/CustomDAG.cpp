@@ -1188,6 +1188,19 @@ SDValue CustomDAG::getLegalBinaryOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue A,
   return V;
 }
 
+SDValue CustomDAG::getLegalSelectOpVVP(EVT ResVT, SDValue OnTrue,
+                                       SDValue OnFalse, SDValue Mask,
+                                       SDValue Pivot) const {
+  if (ResVT.getVectorElementType() != MVT::i1)
+    return createSelect(ResVT, OnTrue, OnFalse, Mask, Pivot);
+
+  // Expand to boolean ops.
+  auto NotMask = createNot(Mask, ResVT);
+  auto MaskOnTrue = getNode(ISD::AND, ResVT, {Mask, OnTrue});
+  auto MaskOnFalse = getNode(ISD::AND, ResVT, {NotMask, OnFalse});
+  return getNode(ISD::OR, ResVT, {MaskOnTrue, MaskOnFalse});
+}
+
 SDValue CustomDAG::foldAndUnpackMask(SDValue MaskVector, SDValue Mask,
                                      PackElem Part, SDValue AVL) const {
   auto PartV = createUnpack(MVT::v256i1, Mask, Part, AVL);

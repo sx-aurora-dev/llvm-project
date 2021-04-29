@@ -475,6 +475,8 @@ struct CustomDAG {
   SDValue getLegalConvOpVVP(unsigned VVPOpcode, EVT ResVT, SDValue VectorV,
                             SDValue Mask, SDValue AVL,
                             SDNodeFlags Flags = SDNodeFlags()) const;
+  SDValue getLegalSelectOpVVP(EVT ResVT, SDValue OnTrue, SDValue OnFalse,
+                              SDValue Mask, SDValue Pivot) const;
 
   SDValue getLegalOpVVP(unsigned VVPOpcode, EVT ResVT, ArrayRef<SDValue> Ops,
                         SDNodeFlags Flags = SDNodeFlags()) const {
@@ -486,6 +488,8 @@ struct CustomDAG {
     if (isVVPBinaryOp(VVPOpcode))
       return getLegalBinaryOpVVP(VVPOpcode, ResVT, Ops[0], Ops[1], Ops[2],
                                  Ops[3], Flags);
+    if (VVPOpcode == VEISD::VVP_SELECT)
+      return getLegalSelectOpVVP(ResVT, Ops[0], Ops[1], Ops[2], Ops[3]);
     return getNode(VVPOpcode, ResVT, Ops, Flags);
   }
 

@@ -778,6 +778,7 @@ void VETargetLowering::initVPUActions() {
   // setOperationAction(ISD::TRUNCATE, MVT::v256i32, Custom); // should not
   // generate invalid valid SETCC in the first place
   setOperationAction(ISD::VSELECT, MVT::v256i1, Custom);
+  setOperationAction(ISD::VSELECT, MVT::v512i1, Custom);
 }
 
 EVT VETargetLowering::LegalizeVectorType(EVT ResTy, SDValue Op,
