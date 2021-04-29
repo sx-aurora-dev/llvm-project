@@ -500,21 +500,25 @@ defm: IExtend_Mask_ForRes<v256i64>;
 
 multiclass Reduce_Sequenced<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string VPOp, string VEInst, string FPToken, SDPatternOperator neutral_elem> {
   // ordered & unmasked
-  def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) (ResVT neutral_elem), VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
-             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(VEInst#FPToken#"vil") $vx, 0, $vl), 0), ResRC)>;
+  // def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) (ResVT neutral_elem), VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
+  //            (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(VEInst#FPToken#"vil") $vx, 0, $vl), 0), ResRC)>;
   def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) ResVT:$sy, VectorVT:$vx, (v256i1 true_mask), i32:$vl)),
-             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi") (!cast<Instruction>(VEInst#FPToken#"vrl") $vx, $sy, $vl), 0), ResRC)>;
+             (COPY_TO_REGCLASS
+               (!cast<Instruction>("LVSvr")
+                 (!cast<Instruction>(VEInst#FPToken#"vrl") $vx, $sy, $vl),
+                 (i2l (SUBUWrm $vl, 127))),
+              ResRC)>;
   
   // ordered & masked
   def : Pat <(ResVT (!cast<SDPatternOperator>("vvp_reduce_seq_"#VPOp) ResVT:$sy, VectorVT:$vx, v256i1:$vm, i32:$vl)),
-             (COPY_TO_REGCLASS (!cast<Instruction>("LVSvi")
+             (COPY_TO_REGCLASS
+               (!cast<Instruction>("LVSvr")
                  (!cast<Instruction>(VEInst#FPToken#"vrl")
-                     (VMRGivml 0, $vx, $vm, $vl),
-                     $sy,
-                     $vl
-                 ),
-                 0
-             ), ResRC)>;
+                   (VMRGivml 0, $vx, $vm, $vl),
+                   $sy,
+                   $vl),
+                 (i2l (SUBUWrm $vl, 127))),
+               ResRC)>;
 }
 
 multiclass Reduce_Unordered<ValueType VectorVT, RegisterClass ResRC, ValueType ResVT, string VPOp, string VEInst, string FPToken> {

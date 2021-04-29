@@ -22,33 +22,36 @@ define fastcc float @test_reduce_fmul(<512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    andm %vm5, %vm0, %vm3
 ; CHECK-NEXT:    andm %vm4, %vm0, %vm2
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    or %s4, 0, %s0
-; CHECK-NEXT:    adds.w.sx %s1, 1, %s4
+; CHECK-NEXT:    or %s5, 0, %s0
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s5
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
-; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    or %s3, 0, %s0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm2
 ; CHECK-NEXT:    lea.sl %s0, 1065353216
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
-; CHECK-NEXT:    vfim.s %v1, %v1, %s0
-; CHECK-NEXT:    lvs %s1, %v1(0)
-; CHECK-NEXT:    # implicit-def: $sx3
-; CHECK-NEXT:    or %s3, 0, %s4
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    srl %s3, %s3, 1
-; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
-; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    vfim.s %v1, %v1, %s2
+; CHECK-NEXT:    subu.w %s1, %s3, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s1, %v1(%s0)
+; CHECK-NEXT:    # implicit-def: $sx4
+; CHECK-NEXT:    or %s4, 0, %s5
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    srl %s4, %s4, 1
+; CHECK-NEXT:    # kill: def $sw4 killed $sw4 killed $sx4
+; CHECK-NEXT:    lvl %s4
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
-; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm3
-; CHECK-NEXT:    vfim.s %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vfim.s %v0, %v0, %s2
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
 ; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    fmul.s %s1, %s0, %s1
@@ -65,33 +68,36 @@ define fastcc float @test_reduce_fmul_start(float %s, <512 x float> %v, <512 x i
 ; CHECK-NEXT:    # implicit-def: $vmp2
 ; CHECK-NEXT:    andm %vm5, %vm0, %vm3
 ; CHECK-NEXT:    andm %vm4, %vm0, %vm2
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    or %s4, 0, %s1
-; CHECK-NEXT:    adds.w.sx %s2, 1, %s4
-; CHECK-NEXT:    # implicit-def: $sx1
-; CHECK-NEXT:    or %s1, 0, %s2
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    srl %s1, %s1, 1
-; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    and %s0, %s1, (32)0
+; CHECK-NEXT:    or %s5, 0, %s0
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s5
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
+; CHECK-NEXT:    or %s3, 0, %s0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm2
-; CHECK-NEXT:    vfim.s %v1, %v1, %s0
-; CHECK-NEXT:    lvs %s1, %v1(0)
-; CHECK-NEXT:    # implicit-def: $sx3
-; CHECK-NEXT:    or %s3, 0, %s4
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    srl %s3, %s3, 1
-; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
 ; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm2
+; CHECK-NEXT:    vfim.s %v1, %v1, %s2
+; CHECK-NEXT:    subu.w %s1, %s3, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s1, %v1(%s0)
+; CHECK-NEXT:    # implicit-def: $sx4
+; CHECK-NEXT:    or %s4, 0, %s5
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    srl %s4, %s4, 1
+; CHECK-NEXT:    # kill: def $sw4 killed $sw4 killed $sx4
+; CHECK-NEXT:    lvl %s4
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
-; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm3
-; CHECK-NEXT:    vfim.s %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vfim.s %v0, %v0, %s2
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
 ; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    fmul.s %s1, %s0, %s1
@@ -109,33 +115,36 @@ define fastcc float @test_reduce_fmul_fast(<512 x float> %v, <512 x i1> %m, i32 
 ; CHECK-NEXT:    andm %vm5, %vm0, %vm3
 ; CHECK-NEXT:    andm %vm4, %vm0, %vm2
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    or %s4, 0, %s0
-; CHECK-NEXT:    adds.w.sx %s1, 1, %s4
+; CHECK-NEXT:    or %s5, 0, %s0
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s5
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
-; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    or %s3, 0, %s0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm2
 ; CHECK-NEXT:    lea.sl %s0, 1065353216
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
-; CHECK-NEXT:    vfim.s %v1, %v1, %s0
-; CHECK-NEXT:    lvs %s1, %v1(0)
-; CHECK-NEXT:    # implicit-def: $sx3
-; CHECK-NEXT:    or %s3, 0, %s4
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    srl %s3, %s3, 1
-; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
-; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    vfim.s %v1, %v1, %s2
+; CHECK-NEXT:    subu.w %s1, %s3, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s1, %v1(%s0)
+; CHECK-NEXT:    # implicit-def: $sx4
+; CHECK-NEXT:    or %s4, 0, %s5
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    srl %s4, %s4, 1
+; CHECK-NEXT:    # kill: def $sw4 killed $sw4 killed $sx4
+; CHECK-NEXT:    lvl %s4
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
-; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm3
-; CHECK-NEXT:    vfim.s %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vfim.s %v0, %v0, %s2
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
 ; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    fmul.s %s1, %s0, %s1
@@ -154,33 +163,36 @@ define fastcc float @test_reduce_fmul_start_fast(float %s, <512 x float> %v, <51
 ; CHECK-NEXT:    andm %vm4, %vm0, %vm2
 ; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
 ; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    or %s5, 0, %s1
-; CHECK-NEXT:    adds.w.sx %s2, 1, %s5
+; CHECK-NEXT:    or %s6, 0, %s1
+; CHECK-NEXT:    adds.w.sx %s2, 1, %s6
 ; CHECK-NEXT:    # implicit-def: $sx1
 ; CHECK-NEXT:    or %s1, 0, %s2
 ; CHECK-NEXT:    and %s1, %s1, (32)0
 ; CHECK-NEXT:    srl %s1, %s1, 1
-; CHECK-NEXT:    or %s3, 0, %s1
+; CHECK-NEXT:    or %s4, 0, %s1
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    lvl %s4
 ; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm2
 ; CHECK-NEXT:    lea.sl %s1, 1065353216
-; CHECK-NEXT:    # kill: def $sf1 killed $sf1 killed $sx1
-; CHECK-NEXT:    vfim.s %v1, %v1, %s1
-; CHECK-NEXT:    lvs %s2, %v1(0)
-; CHECK-NEXT:    # implicit-def: $sx4
-; CHECK-NEXT:    or %s4, 0, %s5
-; CHECK-NEXT:    and %s4, %s4, (32)0
-; CHECK-NEXT:    srl %s4, %s4, 1
-; CHECK-NEXT:    # kill: def $sw4 killed $sw4 killed $sx4
-; CHECK-NEXT:    lvl %s4
+; CHECK-NEXT:    or %s3, 0, %s1
+; CHECK-NEXT:    vfim.s %v1, %v1, %s3
+; CHECK-NEXT:    subu.w %s2, %s4, (63)0
+; CHECK-NEXT:    # implicit-def: $sx1
+; CHECK-NEXT:    or %s1, 0, %s2
+; CHECK-NEXT:    lvs %s2, %v1(%s1)
+; CHECK-NEXT:    # implicit-def: $sx5
+; CHECK-NEXT:    or %s5, 0, %s6
+; CHECK-NEXT:    and %s5, %s5, (32)0
+; CHECK-NEXT:    srl %s5, %s5, 1
+; CHECK-NEXT:    # kill: def $sw5 killed $sw5 killed $sx5
+; CHECK-NEXT:    lvl %s5
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
-; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    lvl %s4
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm3
-; CHECK-NEXT:    vfim.s %v0, %v0, %s1
-; CHECK-NEXT:    lvs %s1, %v0(0)
+; CHECK-NEXT:    vfim.s %v0, %v0, %s3
+; CHECK-NEXT:    lvs %s1, %v0(%s1)
 ; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    or %s2, 0, %s2
 ; CHECK-NEXT:    fmul.s %s1, %s1, %s2
@@ -200,33 +212,36 @@ define fastcc float @test_reduce_fadd(<512 x float> %v, <512 x i1> %m, i32 %n) {
 ; CHECK-NEXT:    andm %vm5, %vm0, %vm3
 ; CHECK-NEXT:    andm %vm4, %vm0, %vm2
 ; CHECK-NEXT:    and %s0, %s0, (32)0
-; CHECK-NEXT:    or %s4, 0, %s0
-; CHECK-NEXT:    adds.w.sx %s1, 1, %s4
+; CHECK-NEXT:    or %s5, 0, %s0
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s5
 ; CHECK-NEXT:    # implicit-def: $sx0
 ; CHECK-NEXT:    or %s0, 0, %s1
 ; CHECK-NEXT:    and %s0, %s0, (32)0
 ; CHECK-NEXT:    srl %s0, %s0, 1
-; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    or %s3, 0, %s0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm2
 ; CHECK-NEXT:    lea.sl %s0, 0
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
-; CHECK-NEXT:    vfia.s %v1, %v1, %s0
-; CHECK-NEXT:    lvs %s1, %v1(0)
-; CHECK-NEXT:    # implicit-def: $sx3
-; CHECK-NEXT:    or %s3, 0, %s4
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    srl %s3, %s3, 1
-; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
-; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    vfia.s %v1, %v1, %s2
+; CHECK-NEXT:    subu.w %s1, %s3, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s1, %v1(%s0)
+; CHECK-NEXT:    # implicit-def: $sx4
+; CHECK-NEXT:    or %s4, 0, %s5
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    srl %s4, %s4, 1
+; CHECK-NEXT:    # kill: def $sw4 killed $sw4 killed $sx4
+; CHECK-NEXT:    lvl %s4
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
-; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm3
-; CHECK-NEXT:    vfia.s %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vfia.s %v0, %v0, %s2
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
 ; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    fadd.s %s1, %s0, %s1
@@ -243,33 +258,36 @@ define fastcc float @test_reduce_fadd_start(float %s, <512 x float> %v, <512 x i
 ; CHECK-NEXT:    # implicit-def: $vmp2
 ; CHECK-NEXT:    andm %vm5, %vm0, %vm3
 ; CHECK-NEXT:    andm %vm4, %vm0, %vm2
-; CHECK-NEXT:    # kill: def $sf0 killed $sf0 killed $sx0
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    or %s4, 0, %s1
-; CHECK-NEXT:    adds.w.sx %s2, 1, %s4
-; CHECK-NEXT:    # implicit-def: $sx1
-; CHECK-NEXT:    or %s1, 0, %s2
-; CHECK-NEXT:    and %s1, %s1, (32)0
-; CHECK-NEXT:    srl %s1, %s1, 1
-; CHECK-NEXT:    or %s2, 0, %s1
+; CHECK-NEXT:    or %s2, 0, %s0
+; CHECK-NEXT:    and %s0, %s1, (32)0
+; CHECK-NEXT:    or %s5, 0, %s0
+; CHECK-NEXT:    adds.w.sx %s1, 1, %s5
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    and %s0, %s0, (32)0
+; CHECK-NEXT:    srl %s0, %s0, 1
+; CHECK-NEXT:    or %s3, 0, %s0
 ; CHECK-NEXT:    lea %s16, 256
 ; CHECK-NEXT:    lvl %s16
 ; CHECK-NEXT:    vor %v1, (0)1, %v0
-; CHECK-NEXT:    lvl %s2
-; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm2
-; CHECK-NEXT:    vfia.s %v1, %v1, %s0
-; CHECK-NEXT:    lvs %s1, %v1(0)
-; CHECK-NEXT:    # implicit-def: $sx3
-; CHECK-NEXT:    or %s3, 0, %s4
-; CHECK-NEXT:    and %s3, %s3, (32)0
-; CHECK-NEXT:    srl %s3, %s3, 1
-; CHECK-NEXT:    # kill: def $sw3 killed $sw3 killed $sx3
 ; CHECK-NEXT:    lvl %s3
+; CHECK-NEXT:    vmrg %v1, 0, %v1, %vm2
+; CHECK-NEXT:    vfia.s %v1, %v1, %s2
+; CHECK-NEXT:    subu.w %s1, %s3, (63)0
+; CHECK-NEXT:    # implicit-def: $sx0
+; CHECK-NEXT:    or %s0, 0, %s1
+; CHECK-NEXT:    lvs %s1, %v1(%s0)
+; CHECK-NEXT:    # implicit-def: $sx4
+; CHECK-NEXT:    or %s4, 0, %s5
+; CHECK-NEXT:    and %s4, %s4, (32)0
+; CHECK-NEXT:    srl %s4, %s4, 1
+; CHECK-NEXT:    # kill: def $sw4 killed $sw4 killed $sx4
+; CHECK-NEXT:    lvl %s4
 ; CHECK-NEXT:    vshf %v0, %v0, %v0, 4
-; CHECK-NEXT:    lvl %s2
+; CHECK-NEXT:    lvl %s3
 ; CHECK-NEXT:    vmrg %v0, 0, %v0, %vm3
-; CHECK-NEXT:    vfia.s %v0, %v0, %s0
-; CHECK-NEXT:    lvs %s0, %v0(0)
+; CHECK-NEXT:    vfia.s %v0, %v0, %s2
+; CHECK-NEXT:    lvs %s0, %v0(%s0)
 ; CHECK-NEXT:    or %s0, 0, %s0
 ; CHECK-NEXT:    or %s1, 0, %s1
 ; CHECK-NEXT:    fadd.s %s1, %s0, %s1
