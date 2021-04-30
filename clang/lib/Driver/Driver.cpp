@@ -734,9 +734,8 @@ void Driver::CreateOffloadingDeviceToolChains(Compilation &C,
 
           // Always use the 've-linux' triple for OpenMP offloading
           // FIXME: In clean code, ToolChains would do this normalization themselves
-          if (TT.getArch() == llvm::Triple::ve) {
-            TT.setOS(llvm::Triple::Linux);
-          }
+          if (TT.getArch() == llvm::Triple::ve)
+	    NormalizedName = "ve-linux";
 
           // Make sure we don't have a duplicate triple.
           auto Duplicate = FoundNormalizedTriples.find(NormalizedName);
